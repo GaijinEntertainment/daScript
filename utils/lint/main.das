@@ -563,7 +563,8 @@ def private scan_arch_folder(path : string; var mds, dases : array<string>; var 
 }
 
 // [arch] citation pass, both directions off one read of each file: forward reports every
-// citation that does not resolve, reverse every anchor no citation names - an anchor is a
+// citation that does not resolve and every .das citation that resolves but sits inside a
+// comment, reverse every anchor no citation names - an anchor is a
 // promise that some code answers for the section, so an uncited one is either code that forgot
 // to say so or a section that was never anyone's contract. The roots are read as ONE set (a
 // daslib citer satisfies a module's anchor), each .md parsed once through the shared index.
@@ -587,6 +588,12 @@ def run_arch_pass(roots : array<string>) : int {
             found += report_arch_citation(f, c, docs)
             continue if (empty(c.anchor))
             cited |> insert("{c.doc}#{c.anchor}")
+        }
+        continue if (!(f |> ends_with(".das")))
+        for (c in collect_commented_arch_citations(f, text)) {
+            continue if (!empty(citation_failure_reason(docs, f, c)))
+            print("{f}:{c.line}: LINT026: [arch] citation sits inside a comment, where it annotates nothing - move it into the declaration's annotation list, or name the section as plain `<doc>.md#<anchor>` (\"{c.raw}\")\n")
+            found ++
         }
     }
     for (md in mds) {

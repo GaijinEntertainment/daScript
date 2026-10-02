@@ -11,6 +11,180 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-02) - the K/V mirror's block codecs on the whole-model driver
+  (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs`, `set_gpu_kv_dtype` / the server's `--kv-dtype`): a
+  q8_0 mirror is 17/32 of the f16 mirror's bytes and tq4 9/32, and on a model whose context was asked whole
+  the bytes they give back are resident layers - the 35B at 131072 positions goes from seven routed layers'
+  experts on the host to none and reads 3.1-3.4x the prompt rate; on a model the card holds whole they cost
+  the long prompt 6% (q8_0) and 16% (tq4) and a token nothing (direction-grade).**
+
+  zen2 (Ryzen 16 threads, RTX 5060 Ti 16 GB on a PCIe 4.0 x8 link), `bin/Release/daslang.exe -jit
+  modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m <file> --ngl 0 -p <P> -n <N> -r <reps> -t 16 --kv <codec>
+  --for-debug-purposes` under `DASLLAMA_ALLOW_UNTUNED=1 DASLLAMA_GPU=1 DAS_JOBQUE_THREADS=16`;
+  `DAS_TUNE_POLICY`, `DASLLAMA_PIN_BACKEND` and `DASLLAMA_COOPMAT` unset (the registry's own pick `x64-gen`
+  served the CPU kernels, the device ran cm2), one process a row - a second load of a model in one process
+  is barred, so the codecs cannot race interleaved. `--kv` asks the mirror's codec and makes the bench's
+  sessions in it, so each row is a served shape. A cell is the mean of its reps and their standard deviation.
+  Every row is its own process, so every comparison between two rows of the tables below is direction-grade.
+
+  Llama-3.2-1B-Instruct Q4_K_M, whole on the card at the model's 131072 positions under every codec, two
+  reps, 1.9-2.1 GB of the card held by the desktop:
+
+  | mirror | pp512 | tg128 | pp8192 | tg64 after 8192 |
+  | :--- | ---: | ---: | ---: | ---: |
+  | f16 | 19337 +/- 69 | 331.0 +/- 25.8 | 16854 +/- 83 | 344.7 +/- 1.2 |
+  | q8_0 | 21873 +/- 44 | 330.7 +/- 5.5 | 15860 +/- 161 | 338.0 +/- 0.0 |
+  | tq4 | 18454 +/- 267 | 344.2 +/- 0.5 | 14150 +/- 5 | 327.9 +/- 2.0 |
+
+  Qwen3-30B-A3B-Instruct-2507 Q4_K_M (17.3 GB, 48 routed layers), `DASLLAMA_GPU_CTX_MAX=32768
+  DASLLAMA_GPU_CTX_STRICT=1` added, three reps, the four processes back to back with 1924 MB of the card
+  held by the desktop:
+
+  | mirror | routed layers' experts on the host | pp512 | tg128 |
+  | :--- | ---: | ---: | ---: |
+  | f16, the round's first process | 25 of 48 | 409.9 +/- 89.6 | 43.7 +/- 2.6 |
+  | q8_0 | 21 of 48 | 572.5 +/- 26.2 | 49.8 +/- 1.7 |
+  | tq4 | 19 of 48 | 586.9 +/- 13.2 | 52.5 +/- 4.0 |
+  | f16, its last | 25 of 48 | 516.0 +/- 3.8 | 46.7 +/- 0.9 |
+
+  Qwen3.6-35B-A3B UD-IQ2_XXS (10.3 GB, 40 layers, a deltanet hybrid), `DASLLAMA_GPU_CTX_MAX=131072
+  DASLLAMA_GPU_CTX_STRICT=1` added, three reps, the four processes back to back with 1916-1930 MB held:
+
+  | mirror | routed layers' experts on the host | pp512 | tg128 |
+  | :--- | ---: | ---: | ---: |
+  | f16, the round's first process | 7 of 40 | 863.2 +/- 35.1 | 89.8 +/- 0.5 |
+  | q8_0 | 3 of 40 | 1544.6 +/- 7.0 | 100.0 +/- 0.8 |
+  | tq4 | none | 2962.7 +/- 34.7 | 111.6 +/- 0.6 |
+  | f16, its last | 7 of 40 | 966.8 +/- 11.3 | 84.7 +/- 1.1 |
+
+  The count of hosted layers follows the room the desktop leaves, so a codec's rows compare only at one
+  share: the entry below reads the 30B under f16 at 28 of 48 layers (517.9 / 41.8) with 4.6 GB held, and
+  its parity run the 35B at 10 of 40; both stand for their share, and the rows above for theirs.
+
+  The NextN round over the codecs: `--mtp-ab -n 64 -r 2` in place of `-p` / `-n` / `-r` (real text, eight
+  prompts, depth 1, the off and on arms in one process a row), the head on the device in every row and no
+  call passed to the CPU rails:
+
+  | model | mirror | off | on | on / off | drafts accepted |
+  | :--- | :--- | ---: | ---: | ---: | ---: |
+  | Qwen3.5-0.8B-MTP Q8_0 | f16 | 316.6 +/- 10.7 | 397.6 +/- 6.8 | 1.26 | 81.9% |
+  | | q8_0 | 317.6 +/- 3.9 | 392.0 +/- 1.3 | 1.23 | 81.3% |
+  | | tq4 | 314.1 +/- 1.1 | 394.8 +/- 0.3 | 1.26 | 82.7% |
+  | Qwen3.5-4B-MTP Q8_0 | f16 | 76.5 +/- 3.1 | 115.4 +/- 0.1 | 1.51 | 81.3% |
+  | | q8_0 | 78.3 +/- 0.3 | 115.8 +/- 0.3 | 1.48 | 82.0% |
+  | | tq4 | 74.5 +/- 5.3 | 114.8 +/- 0.6 | 1.54 | 82.3% |
+  | Qwen3.5-9B-MTP UD-Q5_K_XL | f16 | 59.1 +/- 1.2 | 88.5 +/- 0.2 | 1.50 | 80.7% |
+  | | q8_0 | 59.3 +/- 0.3 | 87.2 +/- 0.5 | 1.47 | 78.8% |
+  | | tq4 | 59.4 +/- 0.6 | 88.9 +/- 1.5 | 1.50 | 82.6% |
+
+  The round's rate does not follow the codec (the on arm moves 1.5% at most across a model's three rows,
+  direction-grade) and neither does the acceptance (78.8-82.7%): the draft and the verify read the blocks
+  through the token command's attention, which the codec does not slow. These nine rows were read at
+  372db0f70, before the codec arms' block loads were factored into shared helpers: the codec stamps' words
+  differ at the tip (`harness/vk_spv_diff.das`: 13 of 13 moved), the arithmetic they encode does not. A
+  re-read of the 0.8B at the tip, the tree merged over master at 42c4013cd and the desktop holding 2.4 GB
+  of the card, accepts the same drafts (81.9%, 81.3%, 82.7%) at lower rates on every engine: the f16 row
+  with master's `dasllama/` and `benchmarks/` checked out in place reads 281-285 off and 327-350 on, this
+  tree 291-292 and 339-340 back to back, its q8_0 row 255 and 332, its tq4 row 272 and 337.
+
+  The per-op rails under the session's codec (`ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block`):
+  Qwen3-30B-A3B-Instruct-2507 Q4_K_M with no context pin - the whole-model driver declines the 17.3 GB
+  file and the per-op rails serve - `-p 512 -n 128 -r 1`, one process a row. The tq4 row before this entry's
+  change is the same command on the tree where the decode block and the prefill chain both refused a tq4
+  session and its attention ran on the CPU, a compare across two commits (direction-grade):
+
+  | session codec | pp512 | tg128 |
+  | :--- | ---: | ---: |
+  | f16 | 662.6 | 59.9 |
+  | q8_0 | 733.5 | 63.6 |
+  | tq4, its attention on the CPU (before) | 274.8 | 31.3 |
+  | tq4, the block's f16 mirror hydrated out of the rotated basis | 688.2 | 65.0 |
+
+  The three served rows land one warm-up argmax and logit (`ency` 15.93165 after the prompt, `and`
+  11.371113 after the first step): the block attends its own float rows under every codec, and the codec
+  is the cache's.
+
+  The 1B's long prompt is the shadow's price (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs`): the
+  flash tiles read f16 rows, so each layer of each window dequantizes the span it attends first, and tq4
+  adds the rotation of the window's rows and the un-rotation of its attention rows. The decode attention
+  reads the blocks natively and the token rate does not follow the codec beyond the rows' own spread (the
+  1B's tg128 reads 331-344 with f16's own two reps 26 apart, and at 8192 positions 328-345; direction-grade).
+  The MoE rows are the reason the codecs exist on this driver: a hosted layer costs a fence round-trip a
+  token and a host callback a window, so every layer the smaller mirror brings back shows in both rates; the
+  35B under q8_0 still hosts three layers and its prompt rate reads half of tq4's, which hosts none
+  (direction-grade).
+
+  What the codecs allocate, beside a mirror 17/32 or 9/32 of the f16 one's bytes. On the device: the f16
+  shadow `ksh_dev` / `vsh_dev`, `(seq_cap x kv_dim + 131072) x 2` B a plane with `kv_dim` the widest
+  attention layer's K/V row - 128.2 MiB a plane on Llama-3.2-1B (512 wide) at 131072 positions, 2.25 MiB on
+  Qwen2.5-0.5B (128 wide) at 8192; the window's staged rows `pf_kst` / `pf_vst`, `512 x kv_dim x 4` B a
+  plane (1 MiB and 256 KiB on the same two); the token command's staged rows `kst_dev` / `vst_dev`,
+  `kv_dim x 4 x nb` B a plane with `nb` the command's rows, eight at most (16 KiB on the 1B at eight rows,
+  512 B on the 0.5B at one), beside `stage_tok`, 32 B a row; tq4's sign row, 2048 B. On the host, the
+  per-op rails' hydrate arrays `g_dat_hyd_k` / `g_dat_hyd_v`, which a tq4 session now reaches: `pos x
+  kv_dim x 4` B each, 8 MiB at 4096 positions of a 512-wide row and 512 KiB at 1024 of a 128-wide one.
+
+  The bars the codec cells hold, each constant with the reading behind it. The readings come from the
+  cells' own logs on zen2 (the box of this entry, `DASLLAMA_GPU=1`, `DASLLAMA_COOPMAT`, `DASLLAMA_PIN_BACKEND`
+  and `DAS_TUNE_POLICY` unset, eight job threads), run through `bin/Release/daslang.exe -jit
+  modules/dasLLAMA/tests/run.das -- --changed`:
+  - `test_gpu_resident_qwen2.das` (Qwen2.5-0.5B Q8_0): `Q8KV_BAR_REL` 0.08 of the step's max logit (reads
+    0.39-0.72 of 9.4-18); `CODEC_DIST_REL` 1.15, the device's summed distance from the f16 chain over the CPU
+    codec chain's own (reads 0.95-1.01, the rows one step off 1.6-3.7); `CODEC_PAIR_REL` 0.8, the two codec
+    chains' distance over that same distance (reads 0.20-0.61, one step off 1.5-3.7); `ROWS_BARS`, the share
+    of layer 0's stored bytes that differ from the CPU cache's - `k` 0.02 (reads 0.002), `v_step` 0.05
+    (reads 0.007-0.010), `v_prefill_of_ctrl` 0.6 of the control's share (reads 0.39 and 0.12 against 0.97);
+    `CODEC_ROWS_CTRL` 0.2 in `_kv_codec_cells.das`, a row against the next one (reads 0.36-0.98), and
+    `CODEC_APPLIED_REL` 0.5 there, the least the device's distance from the f16 chain may be of the CPU
+    codec chain's (every resident carrier reads 0.95-1.08; a driver serving f16 rows in the codec's place
+    would read near 0).
+  - `test_gpu_resident_codec_llama_k.das` / `_llama_iq.das` (Llama-3.2-1B Q4_K_M and IQ4_XS):
+    `Q8KV_BAR_REL` 0.10 (reads 0.25-0.42 of 8.4-9.4); `CODEC_DIST_REL` 1.15 (reads 0.99 and 1.00, one step
+    off 4.7 and 5.0); `CODEC_PAIR_REL` 1.4 (reads 1.02 and 1.13, one step off 4.9 and 5.1) - tq4 moves these
+    carriers a point a row, three times the kernels' rounding, so the two codec chains part as two
+    independent quantizations do.
+  - `test_gpu_perop_kv_codec.das` / `_k.das` / `_iq.das` (Qwen3-0.6B Q8_0, Qwen3-4B Q4_K_M, Qwen2.5-1.5B
+    IQ3_XS): `PeropBars.rows` 0.05, the share of layer 0's cache bytes off the CPU chain's (reads 0 to
+    4e-5); `PeropBars.dist_rel` 1.0, the device's summed distance from the f16 chain over the CPU codec
+    chain's (reads 0.05 and 0.31 on the 0.6B where the device prefilled, 0.90 over rows the CPU quantized,
+    0.28 and 0.80 on the 4B, 0.79 under q8_0 on the 1.5B), and 0.5 for the 1.5B's tq4 cell, whose CPU chain
+    tq4 moves nine points a row (reads 0.11, one step off 0.84).
+  - `test_gpu_resident_hybrid.das`: the block-codec cell holds the NextN draft, verify, warmed head rows
+    and rounds under q8_0 to the file's f16 bars; the gated cell (Qwen3.5-0.8B Q8_0) holds
+    `GATED_Q8KV_BAR_REL` 0.06 (reads 0.21-0.31 of a 10.7-12.3 max logit), `GATED_CODEC_DIST_REL` 1.15
+    (reads 1.08, one step off 9.2) and `GATED_CODEC_PAIR_REL` 0.8 (reads 0.63, one step off 9.3) - the
+    head gate applied twice under tq4 reads 9.2; `DN_LOGIT_BAR_REL_KQ_Q8OUT` 0.08 is the mixed twin's
+    bar (one step reads 0.91 of a 12.3 max logit, the rest 0.42-0.60), and `F32_DIST_REL` 1.15 its
+    witness against the file's f32 chain on the CPU - the device's summed distance from it over the CPU q8
+    chain's own (reads 0.91 at 40 tokens, 3.42 against 3.77, and 0.93 at 600, one step off 21 and 25): at
+    the step the old 6% bar missed, the device sits 0.63 and the CPU chain 0.50 from the f32 row, on
+    either side of it, and the device's pick is the f32 chain's.
+  - `test_gpu_resident_gemma3_1b.das` and `test_gpu_resident_gemma4_e2b.das` hold their block-codec cells
+    to the gemma rig's own bars (`GEMMA_LOGIT_BAR_REL` 0.16 under q8_0: gemma-3-1b at 1100 tokens reads
+    0.46-1.37 against bars of 3.3-5.1; `GEMMA_PPL_RATIO` 1.05 under tq4: 1.022 against the CPU chain's
+    1.033 on gemma-3-1b, 1.032 against 1.032 on E2B). `test_gpu_resident_moe.das` holds its twin under
+    q8_0 to `MOE_LOGIT_BAR_REL` 0.20 (reads 0.83-1.17 against bars of 2.1-2.3, the f16 mirror's reading)
+    and under tq4 to `MOE_CODEC_DIST_REL` 1.15 (reads 1.06, one step off 5.0) and `MOE_CODEC_PAIR_REL`
+    1.4 (reads 1.11, one step off 5.0).
+  - `_resident_regions.das` (the driver against itself): under a tq4 mirror `TQ4_CTRL_SHARE` 0.6 holds a
+    tolerance row to that share of its distance from the one-token-off row (reads 0.09-0.44) in place of
+    a share of the peak, which no tq4 carrier holds - two window splits of one prompt read 0.8-2.0 apart
+    at a 12 max logit, the split q/k norm against the fused one 1.1-3.5 at 13-15 (Qwen3-0.6B; that split
+    form sits 0.94 of the CPU tq4 chain's distance from the f16 chain, the fused one 1.02), and the
+    Llama K-quant carrier, bit for bit under tq4, has a row one off 1.9 away.
+
+  Evidence, through the same run. Kernel cells, `test_vulkan_kv_codec_kernels.das`: `test_vkc_q8_store` and
+  `test_vkc_tq4_store` hold the stores byte for byte the CPU's, `test_vkc_q8_da_attn` and
+  `test_vkc_tq4_da_attn` the attention stamps within 6e-8 to 2.5e-6 of the CPU attention over the
+  dequantized rows at a 1e-4 bar, `test_vkc_shadow` and `test_vkc_tq4_unrot` the shadows and the un-rotation
+  bit for bit. GPU against CPU: the cells of the four bullets above, each log carrying `resident driver
+  armed` with the mirror's codec (the per-op cells the attention block's census witness) and no `resident
+  override passed a call` line for a served call. The driver against itself:
+  `test_gpu_resident_regions_q8kv.das` and `test_gpu_resident_regions_tq4kv.das` (26 cells each), and
+  `test_vulkan_mint_kv_codecs`. On Qwen2.5-0.5B a tq4 mirror sits 51.6 summed over nine rows from the f16
+  chain and the CPU's tq4 chain 54.3 - the codec's own distance, which the distance cells measure on both
+  chains (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis`).
+
 - **MEASURED (2026-10-01) - the attention and router races on the stamps that ship, and the bytes
   the folded snapshot holds.** M5 Max, `bin/daslang -jit modules/dasLLAMA/harness/router_race.das`
   and `.../attn_depth_race.das`, one process each, no flags; both harnesses dispatch the engine's
@@ -73,7 +247,8 @@ what it costs today and what the fix would change.
   dastest/dastest.das -- --test modules/dasLLAMA/tests/test_gpu_resident_moe.das` under `DASLLAMA_GPU=1
   DASLLAMA_PARITY_FULL=1 DAS_JOBQUE_THREADS=8`; the file's one-window hybrid and no-shared-expert cells
   red on the cm2e census floor on this card (117 of 120, 134 of 144) exactly as on master run through
-  this binary (`followup_vulkan.md` row 132's reading), unchanged by this entry.
+  this binary - a miss of the witness's own format list, which lacked `iq3s4`, the form this box serves
+  IQ3_S planes in - unchanged by this entry.
 - **MEASURED (2026-10-01) - the server's ASR worker on the team beside a GPU-decoding LLM: a
   64-second parakeet clip 281 -> 140 ms a transcription.** M5 Max, `dasllama-server` with the
   Qwen3.6-35B-A3B on Metal (streams 1) and parakeet-tdt-0.6b-v3 f32, `POST

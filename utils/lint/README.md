@@ -23,7 +23,10 @@ pointer in a C++ source, or a `<doc>.md#<anchor>` anywhere in any markdown file 
 (a rule document, a ledger, an architecture document's routing alike) - and a markdown citation
 that resolves to no section is a forward finding like a code one; a markdown citation's path is
 joined to the citing file's folder (so `./` and `../` resolve against that folder), then tried at
-each ancestor up to the root as a C++ pointer's is, and the folder-tree rule does not bind it. **LINT027** caps each
+each ancestor up to the root as a C++ pointer's is, and the folder-tree rule does not bind it. An
+`arch(at="...")` written behind a `//` in a `.das` source is a finding when it resolves - a citation
+pasted into a comment annotates nothing and is no citer - and silent when it does not, which is
+prose about the annotation. **LINT027** caps each
 `REVIEW*.md` / `ARCHITECTURE*.md` at 300 lines in every folder that holds one. Two more read
 the checklists' text: **LINT032** reports a `REVIEW*.md` citing a rule by position ("the rule
 above", "see below"), and **LINT033** a `REVIEW*.md` naming a path (a backticked token with a

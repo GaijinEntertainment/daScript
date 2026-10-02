@@ -698,6 +698,24 @@ def set_gpu_ctx_max(n : int64) {
     set_gpu_ctx_max_(n)
 }
 
+def set_gpu_kv_dtype(dt : KVDtype) {
+    //! Ask the whole-model GPU driver to hold its K/V mirror in codec ``dt`` for the models loaded next - the codec of
+    //! their sessions (``gpu_device_session_dtype`` reads what armed). ``q8_0`` is about half the default ``f16`` mirror's
+    //! bytes, ``tq4`` about a quarter; ``f32`` reads as ``f16``, and so does a model whose heads the codec cannot hold.
+    set_gpu_kv_dtype_(dt)
+}
+
+def gpu_kv_dtype_pin() : tuple<pinned : bool; dt : KVDtype> {
+    //! The in-process ask as ``set_gpu_kv_dtype`` left it: ``pinned`` false where no caller asked and ``DASLLAMA_GPU_KV``
+    //! decides. A fixture reads it before it pins, then puts it back with ``set_gpu_kv_dtype`` or ``reset_gpu_kv_dtype``.
+    return gpu_kv_dtype_pin_()
+}
+
+def reset_gpu_kv_dtype() {
+    //! Lift the in-process ask ``set_gpu_kv_dtype`` made: ``DASLLAMA_GPU_KV`` decides the next load's mirror codec again.
+    reset_gpu_kv_dtype_()
+}
+
 def gpu_ctx_pins() : tuple<ctx_max : int64; strict : bool> {
     //! The in-process context pins as set (``set_gpu_ctx_max``, ``set_gpu_ctx_strict``), apart from the
     //! environment's knobs: a fixture reads them before it pins and puts them back after its load.
@@ -769,4 +787,9 @@ def set_resident_prefill_allowed(allowed : bool) {
     //! Allow or pin out the resident prefill arm for HOST-CACHED sessions: more of them than the driver has
     //! K/V regions would strand device-only rows. A device-home session prefills on the device whatever the pin says.
     set_resident_prefill_allowed_(allowed)
+}
+
+def resident_prefill_allowed() : bool {
+    //! The pin as ``set_resident_prefill_allowed`` left it. A fixture reads it before it pins, then puts it back.
+    return resident_prefill_allowed_()
 }

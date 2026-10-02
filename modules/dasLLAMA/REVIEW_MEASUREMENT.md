@@ -3,8 +3,7 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_MEASUREMENT.md`, `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`,
 `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`, `ARCHITECTURE_MEASUREMENT_FAT_START.md`. Planned
-work: `followup_metal.md` for the Metal tier, `followup_vulkan.md` for the Vulkan tier,
-`followup_general.md` for everything else.
+work: `followup_metal.md`, `followup_vulkan.md`, `followup_general.md`.
 
 Every rule below that governs a figure binds a figure this change writes or changes - in the
 repo outside `site*/` (repo root), in a commit message, or in its PR body. It does not bind a
@@ -27,9 +26,10 @@ report), are not one. A harness is the `harness/` script that drove
 a run, where one did.
 
 The flags of a serving run are the tier (`-jit` or not), the `DAS_TUNE_POLICY` value in force,
-the kernel backend it served on, and, on a GPU backend, the device, and on Vulkan the coopmat mode
-(`DASLLAMA_COOPMAT`). The flags of an instrument run are the tier, the `DAS_TUNE_POLICY` value,
-the device, the coopmat mode where the backend has one, and the instrument's arguments. An
+the CPU kernel backend the registry served (the one `DASLLAMA_PIN_BACKEND` pinned, or, with it
+unset, the one the auto-selection picked), the GPU backend where one served (Metal or Vulkan)
+with its device, and on Vulkan the coopmat mode (`DASLLAMA_COOPMAT`). The flags of an instrument run are the tier, the `DAS_TUNE_POLICY` value,
+the device, the coopmat mode where the GPU backend has one, and the instrument's arguments. An
 environment-variable flag the run left unset is named as unset.
 
 An environment override is an env variable given to the run that changes what it compiles,
@@ -56,15 +56,30 @@ A cell, script or exe of this repository is a spawned or manual cell, a script i
 diff's tip, or an exe built from that tree; a script outside the tree is not one, whatever it
 calls.
 
+A box can mint a spawned cell when a rig leg it neither refuses nor skips drives the path the owed
+row measures and `performance/gen_bench_records.das --catalog official` carries the model; a
+manual cell when it runs the documented command's OS and backend and holds its model. A row owed
+for a route that no rig leg drives and no `PROFILE.md` section documents a command for is one no
+box can mint.
+
 **The naming that a rule governing a figure asks for attaches to a figure only by a sentence, a
-table heading or a provenance line that unambiguously covers it, or by a citation of a passage
-or board row whose provenance covers it.** A provenance line is a paragraph whose whole content
-is provenance - the harness, flags, box and exe; it covers the rows it names or, when it names
-none, the paragraphs after it up to the next heading or the next provenance line.
+table heading, a provenance line or a `PERF_LEDGER.md` entry's opening paragraph that
+unambiguously covers it, or by a citation of a passage or board row whose provenance covers
+it.** A provenance line is a paragraph whose whole content is provenance - the harness, flags, box
+and exe; it covers the rows it names or, when it names none, the paragraphs and tables after it
+up to the next heading, the next provenance line, or the end of the `PERF_LEDGER.md` entry it
+sits in.
+
+**Where a paragraph or table of a `PERF_LEDGER.md` entry carries a figure from a run other than
+the one the entry's opening paragraph names, that paragraph or table, or a provenance line
+covering it, names the other run.** The opening paragraph is the one the entry's bold head sits
+in; the provenance it states covers every later paragraph and table of that entry that no naming
+of another run covers.
 
 **A tag (`external`, `direction-grade`, `out-of-process`, `debug-jit`) covers only the figures of
-the sentence it sits in - of the parenthesis, when it sits inside one - or, on a provenance line,
-the figures that line covers.**
+the sentence it sits in - of the parenthesis alone, when it sits inside one beside figures. A tag
+in a figure-free sentence of a provenance line or of a `PERF_LEDGER.md` entry's opening paragraph
+covers the figures that line or paragraph covers.**
 
 **A `PERF_LEDGER.md` entry states a turn wall (the wall of one whole served request, whatever the
 modality) or a tok/s rate of the engine this repository builds only when
@@ -86,7 +101,7 @@ timed.**
 `PERF_LEDGER.md` carries the raw figure of every side no cell, script, or exe of this repository
 produced.**
 
-**A ratio the `-jit` script produced, written into `PERF_LEDGER.md`, names the arm - the side of
+**A ratio of two `-jit` readings, written into `PERF_LEDGER.md`, names the arm - the side of
 the compared pair - it is measured against.**
 
 **A `PERF_LEDGER.md` entry tags its reading `direction-grade` when the reading compares across
@@ -98,10 +113,10 @@ outside the benchmark process.**
 **A diff that writes a `-jit` reading outside `PERF_LEDGER.md` tags it `debug-jit`, and cites the
 committed board row of the same model, served-turn leg and backend where one exists.**
 
-**A figure a diff writes down - in `PERF_LEDGER.md` or any other checked-in text - that no cell,
+**A figure a diff writes down - in any checked-in text - that no cell,
 script, or exe of this repository produced names where it came from: a published figure names its source and the report; a figure
-a third-party program (an exe or a script) produced names that program, its version, the model,
-the command line, and any environment settings the command line does not show; a figure a script
+a third-party program (an exe or a script) produced names its recipe - that program, its version,
+the model, the command line, and any environment settings the command line does not show; a figure a script
 outside the tree produced names it as outside the tree, with the command line it ran.** A citation of an architecture section
 that spells that run - no placeholder in its exe, model or command line - names it.
 
@@ -127,10 +142,7 @@ given no command-line arguments and no environment overrides takes.
 change, an artifact that shows the route ran end to end - a record, a gate output, an
 instrument's print - or the profile output that shows the change is faster
 (`benchmarks/lcpp_bench.das`'s `forward_profile` rows, or the tier's `DASLLAMA_GPU_PROF=1` token
-ledger), with the flags that run took.** A box can mint a spawned cell when a rig leg it neither
-refuses nor skips drives the path the owed row measures and
-`performance/gen_bench_records.das --catalog official` carries the model; a manual cell when it
-runs the documented command's OS and backend and holds its model.
+ledger), with the flags that run took.**
 
 **A diff that changes `dasllama/dasllama_metal_kernels.das` (the kernel library
 `metal_decode_init` compiles), `performance/profile_common.das`, or a `dasllama/` module
@@ -168,9 +180,9 @@ flags and overrides at a named other commit, tagged `direction-grade`; the other
 the number comes from; or a third-party row that cites the architecture section holding its
 recipe.** A number with no alternate beside it cannot be compared to anything.
 
-**A diff that records a third-party row lands that row's recipe - the program, its version, the
-model, the command line, and any environment settings the command line does not show - in the
-same change, in the `ARCHITECTURE_MEASUREMENT*.md` section that describes the harness instrument
+**A diff that records a third-party row lands that row's recipe - the fields a third-party
+program's figure names - in the same change, in the `ARCHITECTURE_MEASUREMENT*.md` section that
+describes the harness instrument
 the row is compared with; where no section describes that instrument, the diff adds one.** The
 next entry re-runs the reference from the section, not from the earlier entry's prose.
 
@@ -198,10 +210,10 @@ clone the shipped exe does not carry.
 end-to-end A/B: it serves a vehicle model in a spawned child, runs two implementations of this
 engine the run could adopt, and picks the winner.
 
-**A diff that pins the kernel backend - `pin_kernel_backend`, `select_kernel_backend`, or
+**A diff that pins the CPU kernel backend - `pin_kernel_backend`, `select_kernel_backend`, or
 `DASLLAMA_PIN_BACKEND` - pins it before the load it governs.** The loader repacks weights into
 the pinned backend's layout, so a pin set after the load never reaches them.
 
-**A diff that adds or changes a kernel-backend pin path makes the run refuse or skip when the
-pin names a backend the box has not registered - never fall through to the default.** A
+**A diff that adds or changes a CPU kernel-backend pin path makes the run refuse or skip when
+the pin names a backend the box has not registered - never fall through to the default.** A
 misspelled pin that falls through measures the default backend under the pinned one's name.

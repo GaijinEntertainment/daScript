@@ -11,6 +11,7 @@ require vulkan/vulkan_boost
 require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_dispatch
 require dasllama/dasllama_kqformat
+require dasllama/dasllama_kv_dtype   // KVDtype: the K/V mirror codec the stamp picks key on
 require dasllama/dasllama_gpu_math
 require dasllama/dasllama_math
 require daslib/typemacro_boost  // [template_struct_instance] — the KV-codec kernel templates
@@ -27,15 +28,34 @@ require math
 // state here — everything else stays structural in the push (--rerecord-ab priced the
 // alternative at -8..-11% tg).
 struct TokMeta {
-    pos : uint      // this token's absolute position (mirror row = layerbase + pos * kvd)
+    pos : uint      // this token's absolute position (mirror row = layerbase + pos * the row's units)
     cnt : uint      // cached positions incl. this one
     parity : uint
-    mirbase : uint  //! the N-row command: this row's K/V mirror region as an element offset; 0 in the one-row command, whose push carries the region
+    mirbase : uint  //! the N-row command: this row's K/V mirror region as a unit offset; 0 in the one-row command, whose push carries the region
     dnslot : uint
     pad0 : uint
     pad1 : uint
     pad2 : uint
 }
+
+let KV_Q8_BLOCK_HALVES = 17u   //! a q8_0 K/V mirror block in halfwords: its f16 scale, then 32 quant bytes (the CPU cache's block)
+let KV_Q8_BLOCK_BYTES = 34u    //! ... and in bytes
+let KV_TQ4_BLOCK_HALVES = 9u   //! a tq4 K/V mirror block in halfwords: its f16 scale, then 16 bytes of two 4-bit quants each (the CPU cache's block)
+let KV_TQ4_BLOCK_BYTES = 18u   //! ... and in bytes
+let KV_TQ4_SIGNS = 512l        //! the rotation's sign row: the widest head a kernel's row slab holds, a narrower head reading its prefix
+
+//! A block's f16 scale: the half at byte `bb` of the mirror, in the word `w` that holds it (a block starts 0 or 2 bytes off a word).
+def kv_blk_scale(w, bb : uint) : float => unpackHalf2x16(w >> ((bb & 2u) * 8u)).x
+
+//! The four bytes at byte `at` of the mirror, `lo` the word that holds byte `at` and `hi` the next.
+def kv_skew_word(lo, hi, at : uint) : uint => (at & 2u) == 0u ? lo : ((lo >> 16u) | (hi << 16u))
+
+//! Byte `k` of `w` as a q8_0 quant.
+def kv_q8_quant(w : uint; k : int) : float => float(int(w << uint(24 - 8 * k)) >> 24)
+
+//! The low and the high nibble of byte `by` as tq4 quants.
+def kv_tq4_quant_lo(by : uint) : float => float(int(by & 15u) - 8)
+def kv_tq4_quant_hi(by : uint) : float => float(int(by >> 4u) - 8)
 
 // ===== add + rmsnorm =====
 
@@ -4775,6 +4795,8 @@ def da_q8_blk_d(o : float) : float => q8k_amax5(abs(o)) / 127.0
 [ |> template_struct_instance]
 class template DaAttnT {
     @template_constant KV16 : bool = false   //!< the f16-mirror stamp: a lane's eight halves of a K row load as one 16-byte word
+    @template_constant KVQ8 : bool = false   //!< the q8_0-mirror stamp: the mirrors are 34-byte blocks read as words, `kbase` / `vbase` and the token's region in blocks
+    @template_constant KVTQ4 : bool = false  //!< the tq4-mirror stamp: 18-byte blocks of 4-bit quants in the rotated basis - the query arrives rotated, the rows leave rotated
     @template_constant SINK : bool = false   //! the sink stamps (gpt-oss): the head's sink logit joins the softmax's max and denominator at the unsplit store; a split piece leaves it to the combine
     @template_constant G : int = 4           //!< the slab's q heads, DA_G or two (`da_slab_heads`): every score and V loop unrolls over them; the workgroup arrays hold four, so no stamp goes wider
     @ssbo @binding = 0 q : array<float>      // roped query rows, one per head
@@ -4939,7 +4961,7 @@ class template DaAttnT {
         store_row(hflat, hs, tid, og, og2, wide)
     }
 
-    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split")]
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs")]
     def run {   // nolint:STYLE037,STYLE038 — the online-softmax pass over a slab of heads, one shape for every head width and form
         let hs = pa.hs
         let nsplit = max(pa.nsplit, 1u)
@@ -5030,14 +5052,77 @@ class template DaAttnT {
                         }
                     }
                 }
-                if (!vec) {
-                    var di = 0u
-                    while (di < hs) {
-                        let kv0 = float(kmir[krow + di])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
+                static_if (KVQ8) {
+                    let kblk = kbase + (c0 + min(tid, clen - 1u)) * (pa.kvd / KQ_B32_ELEMS_U) + kvh * (hs / KQ_B32_ELEMS_U)
+                    var bi = 0u
+                    while (bi < hs / KQ_B32_ELEMS_U) {
+                        let bb = (kblk + bi) * KV_Q8_BLOCK_BYTES
+                        let kd = kv_blk_scale(kmir[bb >> 2u], bb)
+                        let wq = (bb + 2u) >> 2u
+                        var bs : float[4]
                         for [unroll] (j in range(G)) {
-                            pv[j] += qrow[uint(j) * 512u + di] * kv0
+                            bs[j] = 0.0
                         }
-                        di++
+                        var lo = kmir[wq]
+                        for [unroll] (wi in range(8)) {
+                            let hi = kmir[wq + uint(wi) + 1u]
+                            let word = kv_skew_word(lo, hi, bb + 2u)
+                            lo = hi
+                            let b0 = kv_q8_quant(word, 0)
+                            let b1 = kv_q8_quant(word, 1)
+                            let b2 = kv_q8_quant(word, 2)
+                            let b3 = kv_q8_quant(word, 3)
+                            for [unroll] (j in range(G)) {
+                                let qo = uint(j) * 512u + bi * KQ_B32_ELEMS_U + uint(wi) * 4u
+                                bs[j] += (qrow[qo] * b0 + qrow[qo + 1u] * b1) + (qrow[qo + 2u] * b2 + qrow[qo + 3u] * b3)
+                            }
+                        }
+                        for [unroll] (j in range(G)) {
+                            pv[j] += bs[j] * kd
+                        }
+                        bi++
+                    }
+                } static_elif (KVTQ4) {
+                    let kblk = kbase + (c0 + min(tid, clen - 1u)) * (pa.kvd / KQ_B32_ELEMS_U) + kvh * (hs / KQ_B32_ELEMS_U)
+                    var bi = 0u
+                    while (bi < hs / KQ_B32_ELEMS_U) {
+                        let bb = (kblk + bi) * KV_TQ4_BLOCK_BYTES
+                        let kd = kv_blk_scale(kmir[bb >> 2u], bb)
+                        let wq = (bb + 2u) >> 2u
+                        var bs : float[4]
+                        for [unroll] (j in range(G)) {
+                            bs[j] = 0.0
+                        }
+                        var lo = kmir[wq]
+                        for [unroll] (wi in range(4)) {
+                            let hi = kmir[wq + uint(wi) + 1u]
+                            let word = kv_skew_word(lo, hi, bb + 2u)
+                            lo = hi
+                            for [unroll] (bk in range(4)) {
+                                let by = (word >> uint(bk * 8)) & 255u
+                                let e0 = kv_tq4_quant_lo(by)
+                                let e1 = kv_tq4_quant_hi(by)
+                                for [unroll] (j in range(G)) {
+                                    let qo = uint(j) * 512u + bi * KQ_B32_ELEMS_U + uint(wi * 8 + bk * 2)
+                                    bs[j] += qrow[qo] * e0 + qrow[qo + 1u] * e1
+                                }
+                            }
+                        }
+                        for [unroll] (j in range(G)) {
+                            pv[j] += bs[j] * kd
+                        }
+                        bi++
+                    }
+                } else {
+                    if (!vec) {
+                        var di = 0u
+                        while (di < hs) {
+                            let kv0 = float(kmir[krow + di])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
+                            for [unroll] (j in range(G)) {
+                                pv[j] += qrow[uint(j) * 512u + di] * kv0
+                            }
+                            di++
+                        }
                     }
                 }
                 for [unroll] (j in range(G)) {
@@ -5121,12 +5206,45 @@ class template DaAttnT {
                         }
                     }
                 }
-                if (!vec) {
-                    let vrow = vb + (c0 + jj) * pa.kvd
-                    for [unroll] (e in range(8)) {
-                        let v = vld(vrow + uint(e))
-                        for [unroll] (j in range(G)) {
-                            acc[j * 8 + e] += sc[uint(j) * 256u + jj] * v
+                static_if (KVQ8) {
+                    let vbb = (vbase + (c0 + jj) * (pa.kvd / KQ_B32_ELEMS_U) + kvh * (hs / KQ_B32_ELEMS_U) + w / 4u) * KV_Q8_BLOCK_BYTES
+                    let vd = kv_blk_scale(vmir[vbb >> 2u], vbb)
+                    let vq0 = vbb + 2u + (w & 3u) * 8u
+                    let v0 = vmir[vq0 >> 2u]
+                    let v1 = vmir[(vq0 >> 2u) + 1u]
+                    let v2 = vmir[(vq0 >> 2u) + 2u]
+                    let wlo = kv_skew_word(v0, v1, vq0)
+                    let whi = kv_skew_word(v1, v2, vq0)
+                    for [unroll] (j in range(G)) {
+                        let sj = sc[uint(j) * 256u + jj] * vd
+                        for [unroll] (bk in range(4)) {
+                            acc[j * 8 + bk] += sj * kv_q8_quant(wlo, bk)
+                            acc[j * 8 + 4 + bk] += sj * kv_q8_quant(whi, bk)
+                        }
+                    }
+                } static_elif (KVTQ4) {
+                    let vbb = (vbase + (c0 + jj) * (pa.kvd / KQ_B32_ELEMS_U) + kvh * (hs / KQ_B32_ELEMS_U) + w / 4u) * KV_TQ4_BLOCK_BYTES
+                    let vd = kv_blk_scale(vmir[vbb >> 2u], vbb)
+                    let vq0 = vbb + 2u + (w & 3u) * 4u
+                    let v0 = vmir[vq0 >> 2u]
+                    let v1 = vmir[(vq0 >> 2u) + 1u]
+                    let vword = kv_skew_word(v0, v1, vq0)
+                    for [unroll] (j in range(G)) {
+                        let sj = sc[uint(j) * 256u + jj] * vd
+                        for [unroll] (bk in range(4)) {
+                            let by = (vword >> uint(bk * 8)) & 255u
+                            acc[j * 8 + bk * 2] += sj * kv_tq4_quant_lo(by)
+                            acc[j * 8 + bk * 2 + 1] += sj * kv_tq4_quant_hi(by)
+                        }
+                    }
+                } else {
+                    if (!vec) {
+                        let vrow = vb + (c0 + jj) * pa.kvd
+                        for [unroll] (e in range(8)) {
+                            let v = vld(vrow + uint(e))
+                            for [unroll] (j in range(G)) {
+                                acc[j * 8 + e] += sc[uint(j) * 256u + jj] * v
+                            }
                         }
                     }
                 }
@@ -5255,6 +5373,111 @@ class DaAttnF16Sink : DaAttnT {
     typedef KT = float16
     override KV16 = true
     override SINK = true
+}
+
+[vk_dispatch(name = "da_attn_q8_cls", grid = "wgs", params = "wgs : int64")]
+class DaAttnQ8 : DaAttnT {
+    typedef KT = uint
+    override KVQ8 = true
+}
+
+[vk_dispatch(name = "da_attn_q8_g2_cls", grid = "wgs", params = "wgs : int64")]
+class DaAttnQ8G2 : DaAttnT {
+    typedef KT = uint
+    override KVQ8 = true
+    override G = 2
+}
+
+[vk_dispatch(name = "da_attn_q8_sink_cls", grid = "wgs", params = "wgs : int64")]
+class DaAttnQ8Sink : DaAttnT {
+    typedef KT = uint
+    override KVQ8 = true
+    override SINK = true
+}
+
+[vk_dispatch(name = "da_attn_tq4_cls", grid = "wgs", params = "wgs : int64")]
+class DaAttnTq4 : DaAttnT {
+    typedef KT = uint
+    override KVTQ4 = true
+}
+
+[vk_dispatch(name = "da_attn_tq4_g2_cls", grid = "wgs", params = "wgs : int64")]
+class DaAttnTq4G2 : DaAttnT {
+    typedef KT = uint
+    override KVTQ4 = true
+    override G = 2
+}
+
+[vk_dispatch(name = "da_attn_tq4_sink_cls", grid = "wgs", params = "wgs : int64")]
+class DaAttnTq4Sink : DaAttnT {
+    typedef KT = uint
+    override KVTQ4 = true
+    override SINK = true
+}
+
+//! The decode attention's stamp over a mirror in codec `dt`: the sink stamp on a model with attention sinks, else the
+//! two-head slab where `g2` (`da_slab_is_g2`), else the four-head one.
+def da_attn_stamp_ensure(dt : KVDtype; sink, g2 : bool) : bool {
+    if (dt == KVDtype.tq4) return sink ? ensure_da_attn_tq4_sink_cls() : (g2 ? ensure_da_attn_tq4_g2_cls() : ensure_da_attn_tq4_cls())
+    if (dt == KVDtype.q8_0) return sink ? ensure_da_attn_q8_sink_cls() : (g2 ? ensure_da_attn_q8_g2_cls() : ensure_da_attn_q8_cls())
+    if (dt == KVDtype.f16) return sink ? ensure_da_attn_f16_sink_cls() : (g2 ? ensure_da_attn_f16_g2_cls() : ensure_da_attn_f16_cls())
+    return sink ? ensure_da_attn_sink_cls() : (g2 ? ensure_da_attn_g2_cls() : ensure_da_attn_cls())
+}
+
+//! ... its set over the pass's eight planes and, ninth, the sink plane the sink stamps alone bind
+def da_attn_stamp_set(dt : KVDtype; sink : bool; bufs : uint64 const[9]; sizes : int64 const[9]; gbits : uint const[9]) : VkDescriptorSet {
+    if (sink) {
+        if (dt == KVDtype.tq4) return set_da_attn_tq4_sink_cls(bufs, sizes, gbits)
+        if (dt == KVDtype.q8_0) return set_da_attn_q8_sink_cls(bufs, sizes, gbits)
+        return dt == KVDtype.f16 ? set_da_attn_f16_sink_cls(bufs, sizes, gbits) : set_da_attn_sink_cls(bufs, sizes, gbits)
+    }
+    let bufs8 = fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4], bufs[5], bufs[6], bufs[7])
+    let sizes8 = fixed_array(sizes[0], sizes[1], sizes[2], sizes[3], sizes[4], sizes[5], sizes[6], sizes[7])
+    let gbits8 = fixed_array(gbits[0], gbits[1], gbits[2], gbits[3], gbits[4], gbits[5], gbits[6], gbits[7])
+    if (dt == KVDtype.tq4) return set_da_attn_tq4_cls(bufs8, sizes8, gbits8)
+    if (dt == KVDtype.q8_0) return set_da_attn_q8_cls(bufs8, sizes8, gbits8)
+    return dt == KVDtype.f16 ? set_da_attn_f16_cls(bufs8, sizes8, gbits8) : set_da_attn_cls(bufs8, sizes8, gbits8)
+}
+
+def private da_attn_sink_enc(dt : KVDtype; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : DaAttnArgs; wgs : int64) {
+    if (dt == KVDtype.tq4) {
+        enc_da_attn_tq4_sink_cls(raw, h, s, pc, wgs)
+    } elif (dt == KVDtype.q8_0) {
+        enc_da_attn_q8_sink_cls(raw, h, s, pc, wgs)
+    } elif (dt == KVDtype.f16) {
+        enc_da_attn_f16_sink_cls(raw, h, s, pc, wgs)
+    } else {
+        enc_da_attn_sink_cls(raw, h, s, pc, wgs)
+    }
+}
+
+def private da_attn_g2_enc(dt : KVDtype; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : DaAttnArgs; wgs : int64) {
+    if (dt == KVDtype.tq4) {
+        enc_da_attn_tq4_g2_cls(raw, h, s, pc, wgs)
+    } elif (dt == KVDtype.q8_0) {
+        enc_da_attn_q8_g2_cls(raw, h, s, pc, wgs)
+    } elif (dt == KVDtype.f16) {
+        enc_da_attn_f16_g2_cls(raw, h, s, pc, wgs)
+    } else {
+        enc_da_attn_g2_cls(raw, h, s, pc, wgs)
+    }
+}
+
+//! ... and its dispatch
+def da_attn_stamp_enc(dt : KVDtype; sink, g2 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : DaAttnArgs; wgs : int64) {
+    if (sink) {
+        da_attn_sink_enc(dt, raw, h, s, pc, wgs)
+    } elif (g2) {
+        da_attn_g2_enc(dt, raw, h, s, pc, wgs)
+    } elif (dt == KVDtype.tq4) {
+        enc_da_attn_tq4_cls(raw, h, s, pc, wgs)
+    } elif (dt == KVDtype.q8_0) {
+        enc_da_attn_q8_cls(raw, h, s, pc, wgs)
+    } elif (dt == KVDtype.f16) {
+        enc_da_attn_f16_cls(raw, h, s, pc, wgs)
+    } else {
+        enc_da_attn_cls(raw, h, s, pc, wgs)
+    }
 }
 
 // ===== the Q8_0 batch GEMM tile (the sdot4 prefill workhorse) =====
@@ -11834,6 +12057,362 @@ class QknRopeKv : QknRopeKvT {
 [vk_dispatch(name = "qkn_rope_f16_cls", grid = "wgs", params = "wgs : int64")]
 class QknRopeKvF16 : QknRopeKvT {
     typedef KT = float16
+}
+
+struct KvQStoreArgs {
+    kvd : uint        //! a K/V row's elements
+    rows : uint
+    layerbase : uint  //! this layer's base in the mirror, in blocks
+    pos0 : uint       //! the window stamp: staged row 0's absolute position
+}
+
+//! The q8_0 K/V store: a thread a 32-element block, each quant rounded under the unrounded f32 inverse scale as `quantize_q8kv_row` rounds it.
+[ |> template_struct_instance]
+class template KvQ8StoreT {
+    @ssbo @binding = 0 kst : array<float>       //! the staged K rows [rows x kvd]
+    @ssbo @binding = 1 vst : array<float>
+    @ssbo @binding = 2 ksc : array<float16>
+    @ssbo @binding = 2 @role = "alias" kq : array<int8>
+    @ssbo @binding = 3 vsc : array<float16>
+    @ssbo @binding = 3 @role = "alias" vq : array<int8>
+    @ssbo @binding = 4 @template_gate = TOKROW tok : array<TokMeta>
+    @push_constant pa : KvQStoreArgs
+    @template_constant TOKROW : bool = true     //!< each staged row lands at the mirror position its token block names (its region in blocks); off, row `r` lands at position `pos0 + r`
+
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs")]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        let nblk = pa.kvd / KQ_B32_ELEMS_U
+        if (gid < nblk * pa.rows) {
+            let row = gid / nblk
+            let blk = gid % nblk
+            let src = row * pa.kvd + blk * KQ_B32_ELEMS_U
+            var mir_blk = pa.layerbase + blk
+            static_if (TOKROW) {
+                mir_blk += tok[row].mirbase + tok[row].pos * nblk
+            } else {
+                mir_blk += (pa.pos0 + row) * nblk
+            }
+            let sc = mir_blk * KV_Q8_BLOCK_HALVES
+            var kmax = 0.0
+            var vmax = 0.0
+            var i = 0u
+            while (i < KQ_B32_ELEMS_U) {
+                kmax = max(kmax, abs(kst[src + i]))
+                vmax = max(vmax, abs(vst[src + i]))
+                i++
+            }
+            let kd = kmax / 127.0
+            let vd = vmax / 127.0
+            let kid = kd != 0.0 ? 1.0 / kd : 0.0
+            let vid = vd != 0.0 ? 1.0 / vd : 0.0
+            ksc[sc] = float16(min(kd, 65504.0))
+            vsc[sc] = float16(min(vd, 65504.0))
+            let qb = sc * 2u + 2u
+            i = 0u
+            while (i < KQ_B32_ELEMS_U) {
+                kq[qb + i] = q8_quant1(kst[src + i], kid)
+                vq[qb + i] = q8_quant1(vst[src + i], vid)
+                i++
+            }
+        }
+    }
+}
+
+//! the token command's stamp: each staged row at its token block's region and position
+[vk_dispatch(name = "kv_q8_store_cls", grid = "wgs", params = "wgs : int64")]
+class KvQ8Store : KvQ8StoreT {
+}
+
+//! the prefill window's stamp: the staged rows at consecutive positions from `pos0`
+[vk_dispatch(name = "kv_q8_store_b_cls", grid = "wgs", params = "wgs : int64")]
+class KvQ8StoreB : KvQ8StoreT {
+    override TOKROW = false
+}
+
+//! the tq4 rotation's butterfly passes over a workgroup's head: a base shell the store and the un-rotation share
+class KvTq4WhtBase {
+    @workgroup buf : float[512]                 //! the head: hs <= 512, a thread's second element at tid + 256
+
+    //! the unscaled Walsh-Hadamard transform of `buf[0 .. hs)` in place, `hs` a power of two; every pass barrier-ordered
+    def wht(hs : uint) {
+        let tid = gl_LocalInvocationID.x
+        let t1 = tid + 256u
+        var h = 1u
+        while (h < hs) {
+            let a0 = buf[tid & ~h]
+            let b0 = buf[(tid & ~h) | h]
+            let a1 = buf[t1 & ~h]
+            let b1 = buf[(t1 & ~h) | h]
+            barrier()
+            if (tid < hs) {
+                buf[tid] = (tid & h) == 0u ? a0 + b0 : a0 - b0
+            }
+            if (t1 < hs) {
+                buf[t1] = (t1 & h) == 0u ? a1 + b1 : a1 - b1
+            }
+            barrier()
+            h *= 2u
+        }
+    }
+}
+
+struct KvTqStoreArgs {
+    kvd : uint        //! a K/V row's elements
+    hs : uint         //! the head: a power of two, 32 or more
+    layerbase : uint  //! this layer's base in the mirror, in blocks
+    pos0 : uint       //! the window stamp: staged row 0's absolute position
+    nqh : uint        //! q heads a row, rotated in place; 0 on the NextN head's prompt warm
+    nkh : uint        //! k heads a row, and as many v heads; 0 on a shared-KV layer
+    qrow : uint       //! a row's stride in the q plane
+    qstride : uint    //! a q head's stride: hs, or 2 * hs on a gated plane ([q | gate] a head, the gate half left in place)
+    inv_sqrt_hs : float       //! the transform's scale 1 / sqrt(hs), as the host computes it
+}
+
+//! The tq4 store: a workgroup a head. Per 32-element block the scale is the largest-magnitude value over -8 and each quant
+//! truncates value / scale + 8.5, capped at 15, as `quantize_tq4kv_row` does.
+[ |> template_struct_instance]
+class template KvTq4StoreT : KvTq4WhtBase {
+    @ssbo @binding = 0 q : array<float>
+    @ssbo @binding = 1 kst : array<float>       //! the staged K rows [rows x kvd]
+    @ssbo @binding = 2 vst : array<float>
+    @ssbo @binding = 3 ksc : array<float16>     //! the K mirror's block scales
+    @ssbo @binding = 3 @role = "alias" kq : array<int8>
+    @ssbo @binding = 4 vsc : array<float16>
+    @ssbo @binding = 4 @role = "alias" vq : array<int8>
+    @ssbo @binding = 5 @role = "weight" signs : array<float>
+    @ssbo @binding = 6 @template_gate = TOKROW tok : array<TokMeta>
+    @push_constant pa : KvTqStoreArgs
+    @template_constant TOKROW : bool = true     //!< each row lands at the mirror position its token block names (its region in blocks); off, row `r` lands at position `pos0 + r`
+
+    def head_elem(is_q, is_v : bool; qb, sb, e : uint) : float => is_q ? q[qb + e] : (is_v ? vst[sb + e] : kst[sb + e])
+
+    [spirv_kernel(local_size_x = 256, precise = true), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis")]
+    def run {
+        let rowwg = max(1u, pa.nqh + 2u * pa.nkh)
+        let row = gl_WorkGroupID.x / rowwg
+        let wid = gl_WorkGroupID.x % rowwg
+        let is_q = wid < pa.nqh
+        let is_v = wid >= pa.nqh + pa.nkh
+        let hh = is_q ? wid : (is_v ? wid - pa.nqh - pa.nkh : wid - pa.nqh)
+        let hs = pa.hs
+        let tid = gl_LocalInvocationID.x
+        let t1 = tid + 256u
+        let two = t1 < hs
+        let qb = row * pa.qrow + hh * pa.qstride
+        let sb = row * pa.kvd + hh * hs
+        if (tid < hs) {
+            buf[tid] = head_elem(is_q, is_v, qb, sb, tid) * signs[tid]
+        }
+        if (two) {
+            buf[t1] = head_elem(is_q, is_v, qb, sb, t1) * signs[t1]
+        }
+        barrier()
+        wht(hs)
+        if (is_q) {
+            if (tid < hs) {
+                q[qb + tid] = buf[tid] * pa.inv_sqrt_hs
+            }
+            if (two) {
+                q[qb + t1] = buf[t1] * pa.inv_sqrt_hs
+            }
+        } else {
+            let nblk = pa.kvd / KQ_B32_ELEMS_U
+            var mir_blk = pa.layerbase + hh * (hs / KQ_B32_ELEMS_U)
+            static_if (TOKROW) {
+                mir_blk += tok[row].mirbase + tok[row].pos * nblk
+            } else {
+                mir_blk += (pa.pos0 + row) * nblk
+            }
+            var e = tid
+            while (e < hs) {
+                let blk = e / KQ_B32_ELEMS_U
+                var amax = 0.0
+                var mval = 0.0
+                var i = 0u
+                while (i < KQ_B32_ELEMS_U) {   // the first on a tie, as the CPU's strict compare keeps it
+                    let v = buf[blk * KQ_B32_ELEMS_U + i] * pa.inv_sqrt_hs
+                    if (abs(v) > amax) {
+                        amax = abs(v)
+                        mval = v
+                    }
+                    i++
+                }
+                let d = mval / -8.0
+                let id = d != 0.0 ? 1.0 / d : 0.0
+                let sc = (mir_blk + blk) * KV_TQ4_BLOCK_HALVES
+                let lane = e % KQ_B32_ELEMS_U
+                if (lane == 0u) {
+                    if (is_v) {
+                        vsc[sc] = float16(clamp(d, -65504.0, 65504.0))
+                    } else {
+                        ksc[sc] = float16(clamp(d, -65504.0, 65504.0))
+                    }
+                }
+                if ((lane & 1u) == 0u) {
+                    let q0 = min(15, int(buf[e] * pa.inv_sqrt_hs * id + 8.5))
+                    let q1 = min(15, int(buf[e + 1u] * pa.inv_sqrt_hs * id + 8.5))
+                    let at = sc * 2u + 2u + lane / 2u
+                    if (is_v) {
+                        vq[at] = int8(q0 | (q1 << 4))
+                    } else {
+                        kq[at] = int8(q0 | (q1 << 4))
+                    }
+                }
+                e += 256u
+            }
+        }
+    }
+}
+
+//! the token command's stamp: each row at its token block's region and position
+[vk_dispatch(name = "kv_tq4_store_cls", grid = "wgs", params = "wgs : int64")]
+class KvTq4Store : KvTq4StoreT {
+}
+
+//! the prefill window's stamp: the rows at consecutive positions from `pos0`
+[vk_dispatch(name = "kv_tq4_store_b_cls", grid = "wgs", params = "wgs : int64")]
+class KvTq4StoreB : KvTq4StoreT {
+    override TOKROW = false
+}
+
+struct KvTqUnrotArgs {
+    hs : uint         //! the head: a power of two
+    nh : uint
+    orow : uint       //! a row's stride in the attention-out plane
+    qrow : uint       //! a row's stride in the q plane
+    qstride : uint    //! a q head's stride: hs, or 2 * hs on a gated plane, whose gate half the output then takes the sigmoid of
+    inv_sqrt_hs : float
+}
+
+[vk_dispatch(name = "kv_tq4_unrot_cls", grid = "wgs", params = "wgs : int64")]
+class KvTq4Unrot : KvTq4WhtBase {
+    @ssbo @binding = 0 y : array<float>         //! the attention out rows, in place
+    @ssbo @binding = 1 q : array<float>         //! the q plane, read for its gate halves
+    @ssbo @binding = 2 @role = "weight" signs : array<float>
+    @push_constant pa : KvTqUnrotArgs
+
+    [spirv_kernel(local_size_x = 256, precise = true), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis")]
+    def run {
+        let nh = max(1u, pa.nh)
+        let row = gl_WorkGroupID.x / nh
+        let hh = gl_WorkGroupID.x % nh
+        let hs = pa.hs
+        let tid = gl_LocalInvocationID.x
+        let t1 = tid + 256u
+        let two = t1 < hs
+        let ob = row * pa.orow + hh * hs
+        if (tid < hs) {
+            buf[tid] = y[ob + tid]
+        }
+        if (two) {
+            buf[t1] = y[ob + t1]
+        }
+        barrier()
+        wht(hs)
+        let gated = pa.qstride != hs
+        let gb = row * pa.qrow + hh * pa.qstride + hs
+        if (tid < hs) {
+            let o = buf[tid] * pa.inv_sqrt_hs * signs[tid]
+            y[ob + tid] = gated ? o / (1.0 + exp(-q[gb + tid])) : o
+        }
+        if (two) {
+            let o = buf[t1] * pa.inv_sqrt_hs * signs[t1]
+            y[ob + t1] = gated ? o / (1.0 + exp(-q[gb + t1])) : o
+        }
+    }
+}
+
+struct KvQShadowArgs {
+    kvd : uint        //! a K/V row's elements
+    pos0 : uint       //! the first position read
+    rows : uint
+    layerbase : uint  //! the layer's base in its region of the mirror, in blocks
+}
+
+//! A block-codec mirror's f16 shadow: a thread a block stores the block's 32 dequantized K and V values as halves at their
+//! position's row of the shadow planes, what the prefill's attention tiles load. tq4's rows stay in the rotated basis.
+[ |> template_struct_instance]
+class template KvShadowT {
+    @ssbo @binding = 0 kmir : array<uint>
+    @ssbo @binding = 1 vmir : array<uint>
+    @ssbo @binding = 2 ksh : array<float16>     //! the K shadow: [position x kvd] halves
+    @ssbo @binding = 3 vsh : array<float16>
+    @push_constant pa : KvQShadowArgs
+    @template_constant TQ4 : bool = false       //!< the tq4 stamp: 18-byte blocks of four-bit quants
+
+    def shadow_half(quant, scale : float) : float16 => float16(clamp(quant * scale, -65504.0, 65504.0))
+
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs")]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        let nblk = pa.kvd / KQ_B32_ELEMS_U
+        if (gid < nblk * pa.rows) {
+            let pos = pa.pos0 + gid / nblk
+            let blk = gid % nblk
+            var bb = pa.layerbase + pos * nblk + blk
+            static_if (TQ4) {
+                bb *= KV_TQ4_BLOCK_BYTES
+            } else {
+                bb *= KV_Q8_BLOCK_BYTES
+            }
+            let kd = kv_blk_scale(kmir[bb >> 2u], bb)
+            let vd = kv_blk_scale(vmir[bb >> 2u], bb)
+            let wq = (bb + 2u) >> 2u
+            let dst = pos * pa.kvd + blk * KQ_B32_ELEMS_U
+            var klo = kmir[wq]
+            var vlo = vmir[wq]
+            static_if (TQ4) {
+                for [unroll] (wi in range(4)) {
+                    let khi = kmir[wq + uint(wi) + 1u]
+                    let vhi = vmir[wq + uint(wi) + 1u]
+                    let kw = kv_skew_word(klo, khi, bb + 2u)
+                    let vw = kv_skew_word(vlo, vhi, bb + 2u)
+                    klo = khi
+                    vlo = vhi
+                    for [unroll] (bk in range(4)) {
+                        let kby = (kw >> uint(bk * 8)) & 255u
+                        let vby = (vw >> uint(bk * 8)) & 255u
+                        let at = dst + uint(wi * 8 + bk * 2)
+                        ksh[at] = shadow_half(kv_tq4_quant_lo(kby), kd)
+                        ksh[at + 1u] = shadow_half(kv_tq4_quant_hi(kby), kd)
+                        vsh[at] = shadow_half(kv_tq4_quant_lo(vby), vd)
+                        vsh[at + 1u] = shadow_half(kv_tq4_quant_hi(vby), vd)
+                    }
+                }
+            } else {
+                for [unroll] (wi in range(8)) {
+                    let khi = kmir[wq + uint(wi) + 1u]
+                    let vhi = vmir[wq + uint(wi) + 1u]
+                    let kw = kv_skew_word(klo, khi, bb + 2u)
+                    let vw = kv_skew_word(vlo, vhi, bb + 2u)
+                    klo = khi
+                    vlo = vhi
+                    for [unroll] (bk in range(4)) {
+                        let at = dst + uint(wi * 4 + bk)
+                        ksh[at] = shadow_half(kv_q8_quant(kw, bk), kd)
+                        vsh[at] = shadow_half(kv_q8_quant(vw, bk), vd)
+                    }
+                }
+            }
+        }
+    }
+}
+
+[vk_dispatch(name = "kv_q8_shadow_cls", grid = "wgs", params = "wgs : int64")]
+class KvQ8Shadow : KvShadowT {
+}
+
+[vk_dispatch(name = "kv_tq4_shadow_cls", grid = "wgs", params = "wgs : int64")]
+class KvTq4Shadow : KvShadowT {
+    override TQ4 = true
+}
+
+//! every kernel class a block-codec mirror's driver dispatches: the stores, the shadow, tq4's un-rotation, the attention stamps
+def kv_codec_cls_ensure(dt : KVDtype) : bool {
+    let attn = da_attn_stamp_ensure(dt, false, false) && da_attn_stamp_ensure(dt, false, true) && da_attn_stamp_ensure(dt, true, false)
+    if (dt == KVDtype.q8_0) return attn && ensure_kv_q8_store_cls() && ensure_kv_q8_store_b_cls() && ensure_kv_q8_shadow_cls()
+    return attn && ensure_kv_tq4_store_cls() && ensure_kv_tq4_store_b_cls() && ensure_kv_tq4_shadow_cls() && ensure_kv_tq4_unrot_cls()
 }
 
 // ===== the region-GEMV push params (every decode GEMV shares the shape) =====

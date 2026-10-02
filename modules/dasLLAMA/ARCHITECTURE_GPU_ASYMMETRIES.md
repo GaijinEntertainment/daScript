@@ -34,6 +34,10 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
 - **The strict context pin is read by the Vulkan plan alone** (`set_gpu_ctx_strict`,
   `DASLLAMA_GPU_CTX_STRICT`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`): Metal's mirror is the
   model's own context in unified memory, so no plan shortens it and the pin has nothing to hold.
+- **The K/V mirror codec pin is read by the Vulkan plan alone** (`set_gpu_kv_dtype`, `DASLLAMA_GPU_KV`,
+  `ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs`): the Vulkan driver arms one mirror for every
+  session at load, so its codec is asked before the load; Metal mirrors each session in that session's
+  own codec, and the pin has nothing to pick.
 - **The NextN head on the hyper-connection chain is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head`,
   `#hc-verify-rows`): the Vulkan driver runs a routed head as one more chain layer, its experts summed
   on the host, and verifies two rows through the split command; Metal's batch rail runs the same head

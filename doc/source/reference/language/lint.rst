@@ -862,8 +862,13 @@ in the tree they came from.
 Both directions read source text rather than the AST, so a citation is checked
 even in a file the linting environment cannot compile — and so a structure's
 citation, which the compiler accepts unvalidated, is shape-checked here. A
-match with ``//`` earlier on its line is prose and is skipped; one inside a
-string literal is not.
+match with ``//`` earlier on its line cites nothing: where its document and
+anchor do not resolve it is prose and is skipped, and where they do it is a
+finding of its own — an ``arch(at=...)`` pasted into a comment annotates no
+declaration, so the section it names gains no citer. Move it into the
+declaration's annotation list, or name the section as plain
+``<doc>.md#<anchor>``. A match inside a string literal is checked like any
+other.
 
 LINT027 — rule document exceeds 300 lines
 ==========================================

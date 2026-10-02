@@ -79,31 +79,71 @@ def private hold_equal(t : T?; got, want : array<float>; what : string) {
     t |> equal(diff, 0.0, "{what}: bit for bit the session alone (maxdiff {diff})")
 }
 
-//! `got` within `rel` of `want`'s peak, and `control` - logits one token off - outside it
+//! `got` within `rel` of `want`'s peak, and `control` - logits one token off - outside it; under a tq4 mirror, `tq4_within`
 def private hold_within(t : T?; got, want, control : array<float>; what : string; rel : float = SPLIT_BAR_REL) {
     log_peaks(what, got, want)
+    if (mirror_kv_dtype() == KVDtype.tq4) {
+        tq4_within(t, got, want, control, what)
+        return
+    }
     let bar = rel * live_maxabs(want)
-    row_within(t, what, got, want, bar)
-    control_past(t, what, got, control, bar)
+    let diff = row_within(t, what, got, want, bar)
+    let off = control_past(t, what, got, control, bar)
+    to_log(LOG_INFO, "{what}: maxdiff {diff}, the row one off {off}, bar {bar}\n")
 }
 
+//! a tq4 quantizer's step is sixteen times q8_0's, and two passes a float's last bit apart land a quant apart on a rounding
+//! edge: two window splits of one prompt read 0.8-2.0 apart at a 12 max logit and the split q/k norm against the fused one
+//! 1.1-3.5 at 13-15, while a carrier whose rows agree bit for bit has a row one off 1.9 away. The share reads 0.09-0.44
+let private TQ4_CTRL_SHARE = 0.6
+
+//! `got` no further from `want` than `TQ4_CTRL_SHARE` of its distance from `control`: no share of the peak holds a tq4 mirror
+def private tq4_within(t : T?; got, want, control : array<float>; what : string) {
+    let diff = logits_maxdiff(got, want)
+    let off = logits_maxdiff(got, control)
+    t |> success(off > 0.0 && diff <= TQ4_CTRL_SHARE * off, "{what}: within {TQ4_CTRL_SHARE} of the distance to the row one off (maxdiff {diff}, the row one off {off})")
+    to_log(LOG_INFO, "{what}: maxdiff {diff}, the row one off {off}\n")
+}
+
+//! `file` loaded at `regions` regions. A card whose room the plan does not fit registers a skip naming it, any other decline
+//! is a red; either way the driver is left unarmed, which the caller reads off `moe_gpu_resident_active()` before it runs rows.
 def private load_regions(t : T?; file : string; regions : int64) : Model {
     var tr <- load_resident(path_join(models_dir(), file), regions)   //! the rig measures the resident driver: its route is pinned on for the load whatever the environment says
     tr.config.seq_len = min(tr.config.seq_len, REGIONS_RIG_CTX)
+    if (!moe_gpu_resident_active() && moe_gpu_resident_memory_decline()) {
+        t |> skip("the residency plan does not fit this card at {regions} regions ({gpu_resident_decline_()})")
+        return <- tr
+    }
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed at {regions} regions (the load log names any decline)")
+    let asked = gpu_kv_dtype_pin()
+    if (asked.pinned) {
+        t |> equal(mirror_kv_dtype(), asked.dt, "the mirror armed at the codec the file asks")
+    }
     return <- tr
 }
 
 def private load_two_regions(t : T?; file : string) : Model => <- load_regions(t, file, 2l)
 
-def private regions_ready(t : T?; file : string) : bool => resident_ready(t, path_join(models_dir(), file))
+//! the resident gate, and for a file that asks a mirror codec (`set_gpu_kv_dtype` in its `[init]`) the skip where the
+//! environment arms another over it: DASLLAMA_VK_KV32=1's f32 mirror
+def private regions_ready(t : T?; file : string) : bool {
+    return false if (!resident_ready(t, path_join(models_dir(), file)))
+    let asked = gpu_kv_dtype_pin()
+    if (asked.pinned && resident_mirror_dtype() != asked.dt) {
+        t |> skip("the environment arms a {resident_mirror_dtype()} mirror over the {asked.dt} this file asks (DASLLAMA_VK_KV32=1) - its cells need that unset")
+        return false
+    }
+    return true
+}
 
 //! the two-region cell's rig: the gate, `file` loaded at two regions, `body` inside the engine's job queue, the model deleted after
 def private with_regions_rig(t : T?; file : string; body : block<(tr : Model) : void>) {
     if (!regions_ready(t, file)) return
     var tr <- load_two_regions(t, file)
-    with_dasllama_jobque_() {
-        invoke(body, tr)
+    if (moe_gpu_resident_active()) {
+        with_dasllama_jobque_() {
+            invoke(body, tr)
+        }
     }
     delete tr
 }
@@ -383,6 +423,11 @@ def cell_regions_fuse_bisect(t : T?; file : string) {
             with_dasllama_jobque_() {
                 vk_fuse_bisect_pin(0l)
                 var tr0 <- load_two_regions(t, file)
+                if (!moe_gpu_resident_active()) {
+                    delete tr0
+                    vk_fuse_bisect_pin(-1l)
+                    return
+                }
                 var base <- logits_alone(tr0, pa, fa)
                 delete tr0
                 for (bit in fixed_array(1l, 2l, 4l, 8l, 16l, 32l, 64l)) {
@@ -766,6 +811,10 @@ def cell_driver_reports(t : T?; file : string) {
     t |> run("every reason a call can pass to the CPU has words of its own, the plan sizes every region, and the status counts the mirrors") @(t : T?) {
         if (!regions_ready(t, file)) return
         var tr <- load_two_regions(t, file)
+        if (!moe_gpu_resident_active()) {
+            delete tr
+            return
+        }
         let n = gpu_cpu_pass_reason_count()
         t |> success(n >= 10, "the armed driver registered its pass reasons ({n})")
         for (i in range(n)) {
@@ -839,6 +888,10 @@ def cell_passes_with_their_rows(t : T?; file : string) {
         set_gpu_ctx_max(CAPPED_RIG_CTX)
         var tr <- load_two_regions(t, file)
         set_gpu_ctx_max(REGIONS_RIG_CTX)
+        if (!moe_gpu_resident_active()) {
+            delete tr
+            return
+        }
         with_dasllama_jobque_() {
             t |> equal(gpu_device_session_ctx(), CAPPED_RIG_CTX, "the regions armed at the capped context")
             var head <- prose_ids(CAPPED_RIG_CTX - 96l, 0l)
@@ -858,28 +911,34 @@ def cell_passes_with_their_rows(t : T?; file : string) {
     }
 }
 
-//! the kernel census's count over a stamp's two codec twins
-def private stamps_dispatched(stamp_f16, stamp_f32 : string) : int64 {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        return vk_kernel_coverage_of(stamp_f16) + vk_kernel_coverage_of(stamp_f32)
-    } else {
-        return 0l
+//! the census key of the decode attention's `slab` stamp ("", "_g2", "_sink") over the armed mirror codec
+def private da_attn_stamp_key(slab : string) : string {
+    let dt = mirror_kv_dtype()
+    var codec = ""
+    if (dt == KVDtype.f16) {
+        codec = "_f16"
+    } elif (dt == KVDtype.q8_0) {
+        codec = "_q8"
+    } elif (dt == KVDtype.tq4) {
+        codec = "_tq4"
     }
+    return "da_attn{codec}{slab}_cls_spv"
 }
 
-//! a session stepped once through the driver dispatches the stamp (either codec twin) the carrier's shape picks -
-//! the pick a logits compare cannot see, the census can
-def cell_regions_stamp_served(t : T?; file : string; stamp_f16, stamp_f32 : string) {
+//! a session stepped once through the driver dispatches the decode attention's `slab` stamp of the armed mirror codec - the
+//! pick a logits compare cannot see, the census can
+def cell_regions_stamp_served(t : T?; file : string; slab : string) {
     t |> run("the driver's step dispatches the stamp the carrier's shape picks") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
             var pa <- prompt_a()
             var fa <- feed_a()
             var s <- create_session(tr, mirror_kv_dtype())
             forward_prefill(tr, s, pa, long_length(pa), 0l)
-            let before = stamps_dispatched(stamp_f16, stamp_f32)
+            let key = da_attn_stamp_key(slab)
+            let before = census(key)
             forward(tr, s, fa[0], long_length(pa))
-            let after = stamps_dispatched(stamp_f16, stamp_f32)
-            t |> success(after > before, "the step dispatched {stamp_f16} or {stamp_f32} ({after - before} dispatches)")
+            let after = census(key)
+            t |> success(before == NO_CENSUS || after > before, "the step dispatched {key} ({after - before} dispatches)")
             delete s
             delete pa
             delete fa
@@ -950,6 +1009,10 @@ def cell_regions_batched_widen(t : T?; file : string; bar : LogitsBar = LogitsBa
         split_forms_pin(split_forms)
         var tr <- load_regions(t, file, 3l)
         restore_resident_levers(levers)
+        if (!moe_gpu_resident_active()) {
+            delete tr
+            return
+        }
         with_dasllama_jobque_() {
             var pa <- prompt_a()
             var pb <- prompt_b()

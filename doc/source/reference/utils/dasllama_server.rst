@@ -196,7 +196,7 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--kv-dtype``
      -
      - ``f16``
-     - KV-cache codec: ``f32`` | ``f16`` | ``q8_0`` | ``tq4`` (rotated 4-bit; needs a power-of-two head size)
+     - KV-cache codec: ``f32`` | ``f16`` | ``q8_0`` | ``tq4`` (rotated 4-bit; needs a power-of-two head size). Under ``--gpu vulkan`` the whole-model driver holds its cache in the same codec for ``f16``, ``q8_0`` and ``tq4``: ``q8_0`` is about half the ``f16`` cache's VRAM and ``tq4`` about a quarter, which a longer ``--ctx`` or more resident layers take
    * - ``--gpu``
      -
      - ``auto``

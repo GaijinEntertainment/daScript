@@ -113,14 +113,17 @@ reports or exits, makes that instrument exit non-zero when the lever does not ch
 executes - or, when the check runs before the arm, print a warning naming the inert lever.** A
 lever that silently no-ops prints a 1.00x row nobody can tell from a real tie.
 
-**A diff that adds or changes an A/B arm of an instrument over a prompt corpus makes that arm
-report one row per prompt, never one aggregate ratio alone.** Prompts differ in how much the
-lever helps, so a per-prompt loss hides inside a winning mean.
+**A diff that adds an A/B arm of an instrument over a prompt corpus, or changes the lever such an
+arm reads or how the arm reports, makes that arm report one row per prompt, never one aggregate
+ratio alone.** Prompts differ in how much the lever helps, so a per-prompt loss hides inside a
+winning mean.
 
-**A diff that adds or changes a row measured over reps computes every number the row reports
-over all the reps after the warmup reps the instrument's header comment names.**
+**A diff that adds a row measured over reps, or changes what its reps run or how the row is
+computed, computes every number the row reports over all the reps after the warmup reps the
+instrument's header comment names.**
 
-**A diff that adds or changes a row measured over reps drops the whole row when any rep refuses -
-produces no figure, or runs on a backend other than the row's backend stamp, the backend name the
-row records as having served it: the row reports the refusal and its reason and no number.** A
-partial row reads like a measured one and is a different quantity.
+**A diff that adds a row measured over reps, or changes what its reps run (an input picking a
+rep's backend, codec or session shape included) or how the row is computed or reported, prints
+no number on the row when any rep refuses, only the refusal and its reason.** A rep refuses when
+it produces no figure or runs on a backend other than the row's backend stamp, the backend name
+the row records. A partial row reads like a measured one and is a different quantity.

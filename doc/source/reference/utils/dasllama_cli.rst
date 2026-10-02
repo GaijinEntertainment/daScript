@@ -101,7 +101,7 @@ server's names; the config file fills whatever they leave empty (below).
    * - ``--quant`` / ``-q``
      - Weight serving mode: ``fp32`` | ``q8`` (default; the file-format spellings serve natively under ``q8``) | ``q4`` = the legacy requant tier
    * - ``--kv-dtype``
-     - KV cache codec: ``f32`` | ``f16`` (default) | ``q8_0`` | ``tq4``
+     - KV cache codec: ``f32`` | ``f16`` (default) | ``q8_0`` | ``tq4`` (rotated 4-bit; needs a power-of-two head size); under ``--gpu vulkan`` the whole-model driver holds its cache in the same codec for ``f16``, ``q8_0`` and ``tq4``
    * - ``--gpu``
      - GPU backend: ``auto`` (default: metal or vulkan when detected, else CPU) | ``off`` | ``metal`` | ``metal-required`` | ``vulkan``; ``vulkan`` serves a model that fits the card whole from the device, the conversation's cache with it
    * - ``--metal``

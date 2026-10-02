@@ -87,7 +87,7 @@ on: the trunk's post-norm rows copied a row down with the previous window's last
 the embed and carry norms over the shifted rows, the two halves interleaved into the
 `[enorm ; hnorm]` image by two multi-region copies, the eh_proj GEMM into the residual plane, the
 head's attention norm through the prologue set, its feed, its k and v GEMMs over its own planes,
-their norms at the head's q/k slot and the rope store into the head's mirror slot at the rows'
+their norms at the head's q/k slot and the rope store for the head's mirror slot at the rows'
 own rope rows (`pf_head_warm`) - the prefill tiles and encoders the trunk's layers take, the
 head's rows carrying no profiler stamp. The chain writes `npos - 1` head rows a prompt
 (`vk_rdec_head_warm_rows`); the override reads them back into the host cache, uploads the host

@@ -53,7 +53,7 @@ takes a Q8_0 feed and reads no float row; every other head takes the split add-r
 pair, as the site before a routed block does. The row-parallel kernels take the
 rows' planes whole; the rope, the mirror store and the attention run at each row's own position,
 cached count and mirror region, which ride the shared `TokMeta` block a row (`mirbase` an
-element offset; `DaAttnArgs.rowwg` and `qrow` carry the row stride into the attention, `rowwg`
+offset in mirror units; `DaAttnArgs.rowwg` and `qrow` carry the row stride into the attention, `rowwg`
 0 naming a one-row dispatch). The attention's key split is the span's, the ladder the one-row
 command takes below its wide form (`rd_split_pieces` and the layer's window cap,
 `ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split`), so the rows sum as each row does alone while every

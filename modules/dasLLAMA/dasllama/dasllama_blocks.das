@@ -505,7 +505,7 @@ var private g_dat_hyd_v : array<float>
 
 // any codec but f16/f32: the host decodes the rows [0, pos) to f32 (kv_load_row), the block converts
 [cold_path]   // a remedy leg, not the served token
-def private attn_dec_hydrate_codec(var s : Session; l, pos, woq : int64; fq : int; kvd, seq_len : int64) {
+def private attn_dec_hydrate_codec(var s : Session; l, pos, woq : int64; fq : int; kvd, head_size, seq_len : int64) {
     g_dat_hyd_k |> resize(pos * kvd)
     g_dat_hyd_v |> resize(pos * kvd)
     unsafe {
@@ -515,6 +515,7 @@ def private attn_dec_hydrate_codec(var s : Session; l, pos, woq : int64; fq : in
             kv_load_row(kb, s.kv_dtype_k, kvd, r, 0l, kvd, addr(g_dat_hyd_k[r * kvd]))
             kv_load_row(vb, s.kv_dtype_v, kvd, r, 0l, kvd, addr(g_dat_hyd_v[r * kvd]))
         }
+        tq4_unrotate_from_store(s, g_dat_hyd_k, g_dat_hyd_v, pos, kvd, head_size)
         matmul_moe_gpu_attn_dec_hydrate(woq, fq, addr<uint8 const?>(g_dat_hyd_k[0]), addr<uint8 const?>(g_dat_hyd_v[0]), pos, kvd, false)
     }
 }
@@ -524,7 +525,6 @@ def private attn_dec_shape_ok(t : Model; s : Session; l : int64) : bool {
     let c = t.config
     if (!moe_gpu_attn_on_gpu(l) || t.kv_src[l] != l || s.kv_pool != null || c.attn_out_bias
             || c.v_norm || c.attn_sinks || c.attn_logit_softcap != 0.0 || c.q_gated || layer_is_sliding(c, l)
-            || s.kv_dtype_k == KVDtype.tq4 || s.kv_dtype_v == KVDtype.tq4
             || (c.rope_dim > 0l && c.rope_dim != layer_head_size(c, l))
             || c.dim > 8192l || layer_head_size(c, l) > 256l   // the chain's add-rms stages a row of at most AR_MAX_DIM (8192), the attention a head of at most 256
             || layer_kv_dim(c, l) != layer_kv_dim(c, 0l) || layer_head_size(c, l) != layer_head_size(c, 0l)) {   // the block holds ONE geometry
@@ -562,7 +562,7 @@ def private attn_dec_gpu_serves(t : Model; var s : Session; l, pos : int64) : bo
         if (pos == 0l || kv_is_f16 || kv_is_f32) {
             matmul_moe_gpu_attn_dec_hydrate(woq, fq, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), pos, kvd, kv_is_f16)
         } else {
-            attn_dec_hydrate_codec(s, l, pos, woq, fq, kvd, c.seq_len)
+            attn_dec_hydrate_codec(s, l, pos, woq, fq, kvd, layer_head_size(c, l), c.seq_len)
         }
         verdict = moe_gpu_attn_dec_ok(woq, fq, pos, s.dat_gen)
     }
@@ -648,6 +648,7 @@ def private attn_dec_store_kv(t : Model; var s : Session; l, pos : int64) {
             rope_scaled_tab(addr(s.k[0]), head_size, kv_dim, crow, srow)
         }
     }
+    tq4_rotate_for_store(s, s.k, s.v, 1l, kv_dim, head_size)
     var kcl = kv_layer_kbase(s, l, c.seq_len)
     var vcl = kv_layer_vbase(s, l, c.seq_len)
     unsafe {
@@ -1118,6 +1119,7 @@ def attention_gpu_prefill(t : Model; var s : Session; l : int64; npos : int64; g
     prof_add("at_gpu", ts_gpu)
     // the cache store runs the normal CPU codec off the DMA'd k/v rows
     let ts_kv = prof_ticks()
+    tq4_rotate_for_store(s, s.k_b, s.v_b, npos, kv_dim, head_size)
     var kcl = kv_layer_kbase(s, l, c.seq_len)
     var vcl = kv_layer_vbase(s, l, c.seq_len)
     let store_nrun = kv_runs(s, 0l, npos, s.kv_runs)
@@ -1130,12 +1132,11 @@ def attention_gpu_prefill(t : Model; var s : Session; l : int64; npos : int64; g
 }
 
 // npos >= 32 (a batch worth dispatching), start of sequence only (the chain reads the batch's own
-// K/V device-side), tq4 excluded (basis change is CPU-side). A non-causal image span always
+// K/V device-side). A non-causal image span always
 // declines: the GPU chains encode the causal mask — the guard survives lifting start_pos == 0.
 def attn_gpu_prefill_ready(s : Session; l : int64; npos : int64; start_pos : int64) : bool {
     return (npos >= 32l && npos <= 4096l && start_pos == 0l && s.attn_uniform_end == 0l
-        && moe_gpu_attn_on_gpu(l)
-        && s.kv_dtype_k != KVDtype.tq4 && s.kv_dtype_v != KVDtype.tq4)
+        && moe_gpu_attn_on_gpu(l))
 }
 
 // attn-norm → batched QKV(+bias) → RoPE → KV-store → prefill attention → out-proj(+post-norm) → residual.

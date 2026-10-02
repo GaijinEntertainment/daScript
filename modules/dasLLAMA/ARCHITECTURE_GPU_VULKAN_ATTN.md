@@ -1,9 +1,10 @@
 # dasLLAMA Architecture - the Vulkan resident driver's attention
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document
-carries the token command's attention key split, and the attention-side
+carries the token command's attention key split, the attention-side
 planes the resident driver uploads beside its norms - the q/k/v projection bias, gpt-oss's sink
-logits and its output bias - with the flash tiles' sink stamps. The window chain the flash tiles
+logits and its output bias - with the flash tiles' sink stamps, and the K/V mirror's block codecs,
+q8_0 and tq4. The window chain the flash tiles
 serve is `ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`; the token command the decode pass sits in is
 `ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`.
 
@@ -18,7 +19,7 @@ layers, any MHA carrier - scores no dead heads; `da_slab_heads` is the one expre
 `G` and the host's workgroup count derive from); a group wider than the slab takes several slabs,
 a narrower one leaves dead heads whose q rows are zero and whose reductions and stores are skipped
 (`da_attn_row_wgs` counts a row's workgroups, the same count on either slab). The token command
-picks the slab a layer (`rd_enc_da_attn`); the per-op seam (`dasllama_vulkan_seams.das`) and the
+picks the slab a layer (`da_attn_stamp_enc`); the per-op seam (`dasllama_vulkan_seams.das`) and the
 attention-tower chain dispatch the four-head slab whatever the group. The pass is a chain
 of latencies, not a stream of bytes: a workgroup a head walking two keys a step behind a subgroup
 reduction each read Llama-3.2-1B's sixteen layers at 28 us a four-row step and 8.5 a one-row step on
@@ -83,7 +84,8 @@ its group's count last aligns each head's pieces by their maxes, normalizes, gat
 row, and rearms the counter to zero (unsplit, the pass stores it), so no combine dispatch follows
 and the split costs no second launch. The store quantizes the row for the `wo` plane (`rqk`: Q8_0
 blocks by the 32-lane group's amax, Q8_K superblocks by the workgroup's on a head of 256 or 512), so
-no requant dispatch follows either. A split device records the token command as a ladder of
+no requant dispatch follows either - but under a tq4 mirror, where the pass neither gates nor
+requants (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis`). A split device records the token command as a ladder of
 forms over the same sets - the split chain and an unsplit twin at the epoch's record, the wide
 twin on the first step at `RD_WIDE_POS` (a device whose `attn_nsplit` stays within the split
 form's pieces has no wide twin) - and the profiler keeps each form's stamp names and restarts
@@ -129,12 +131,13 @@ each query row's running max with it and its running sum with one, the phantom k
 the pass runs unchanged - the final divide carries the sink's share, the CPU flash form's own seed.
 The stamps sit in their own families (`fa_cm2_sink_cls`, `fa_khr_sink_cls`) for their fifth
 binding, the sink plane. The chunked pair has no sink arm, so a sink model declines at the sink
-upload wherever no flash arm serves the f16 mirrors, before any weight lands.
+upload wherever no flash arm serves the prefill's f16 rows (an f16 mirror's, or a block codec's
+shadow), before any weight lands.
 
 **The sink plane is the bias plane's twin.** `vk_rdec_upload_sinks` uploads every layer's
 `[n_heads]` sink row once; its seat installs separately (`install_moe_gpu_resident_sinks`) so a tier
 without it names the sinks in its decline, and the upload itself declines - naming the reason -
-where no flash arm serves the f16 mirrors or the head is not 64 wide, the sink stamps' one size,
+where no flash arm serves those f16 rows or the head is not 64 wide, the sink stamps' one size,
 pre-flighting the sink stamps the way the prepare pre-flights the plain ones. The token command's
 sink twins (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split`) and the flash tiles' sink stamps read the plane at the layer's row
 (`sinkoff`).
@@ -145,3 +148,103 @@ bias, a zero row on every other model, so no binding changes: the residual step'
 `aboff` (`ArArgs`, `GemvArArgs`) add the row to the add partner - the `wo` GEMV's row - before the
 add and before any post-attention norm, in the plain `cls_ar`, the fused requant twins and the
 `wo` GEMV's epilogue alike, the CPU chain's order.
+
+### The K/V mirror's block codecs: q8_0 and tq4 {#vk-kv-block-codecs}
+
+**The mirror holds the CPU cache's own bytes, in one of four codecs.** A session is served only on
+the armed mirror's codec, and a pass to the CPU rails copies its rows down byte for byte, so a
+device row is the cache's row: f16 or f32 elements, q8_0's 34-byte blocks of 32 elements (an f16
+scale, 32 int8 quants) or tq4's 18-byte blocks (an f16 scale, 32 four-bit quants;
+`dasllama_kv_codec.das` is the truth for both). `resident_mirror_dtype` reads the codec asked -
+`set_gpu_kv_dtype` (`reset_gpu_kv_dtype` lifts it), the server's `--kv-dtype`, `DASLLAMA_GPU_KV`,
+f16 with none - and `resident_mirror_dtype_of` arms f16 on a model the codec cannot hold: a head
+or a K/V row that is not whole 32-element blocks, and under tq4 a head that is not a power of two -
+the NextN head's among them. That test is `kv_codec_geometry_why`, the one the CPU cache panics on
+at a session's creation, so no session of such a model carries the codec. The load announces every
+ask that became f16: an f32 ask (the mirror arms f32 under `DASLLAMA_VK_KV32=1` alone), a
+`DASLLAMA_GPU_KV` value that names no codec, a model's heads. A q8_0 mirror is
+17/32 of the f16 mirror's bytes and tq4 9/32, which is what the codecs are for: the mirror's bytes
+are what a card's context and its resident experts compete for. A block-codec mirror is addressed
+in blocks. `RLayer.mir_base`, a token's `mirbase` and the region stride count units - an element
+under f16 and f32, a block under the block codecs (`kv_row_units`, `kv_unit_bytes` the unit's
+bytes, over `RDec.kv_dt`) - so every base the float kernels compute carries over, and only the
+kernels that touch mirror bytes know a unit's size. Those kernels address a byte in 32 bits
+(`RDEC_CODEC_BYTE_SPAN`), so a block-codec side holds 4 GiB at most whatever range the device
+binds, and the plan caps the context there (`resident_binding_ctx`, `BLOCK_CODEC_SIDE_BYTES`).
+
+**The stores stay the float stamps; a store pass quantizes.** Under a block codec the rope stamps
+(the bias, the q/k norm, the rotation, the V copy) write K and V rows as floats into staged planes:
+`kst_dev` / `vst_dev` in the token command, a row a batch row, addressed through the static token
+block `stage_tok` whose row r sits at position r, and `pf_kst` / `pf_vst` in the window chain. The
+codec's store kernel (`KvQ8StoreT`, `KvTq4StoreT`; the `_b` stamps take the window's rows by
+position; `rd_enc_kv_store` encodes either) then quantizes the staged rows into the mirror at each
+row's region and position, byte for byte the CPU's `quantize_q8kv_row` and `quantize_tq4kv_row`.
+One byte pair differs by design: a block scale past the half range stores as +/-65504 where the
+CPU's convert stores an infinity, since no f16 store into a K/V buffer leaves the finite range.
+Every store form the float mirrors have - the plain rope, the fused q/k norm, the partial rope, a
+shared-KV layer - so serves a block codec with no stamp of its own, and no existing stamp's SPIR-V
+moves. The staged planes ride the
+window chain's V-staging hazard bit (`VHZ_VST`), idle in the token command.
+
+**The decode attention reads the blocks natively; the query stays f32.** `DaAttnT`'s `KVQ8` and
+`KVTQ4` constants replace the pass's row loads: a thread loads its block's scale once and the
+quants as words - a block starts 0 or 2 bytes off a word, and the load shifts by that skew
+(`kv_blk_scale`, `kv_skew_word`). `da_attn_stamp_ensure` / `_set` / `_enc` pick the stamp by the
+mirror's codec, the sinks and the slab. The CPU
+chain quantizes the query to Q8_0 for an integer dot, so the two chains agree to the query's
+quantization and not bit for bit: under q8_0 Qwen2.5-0.5B's logits read 0.4-0.7 apart at a 10-18
+max logit.
+
+**The prefill's attention reads an f16 shadow.** The flash tiles and the chunked pair load K and V
+through tensor layouts in f16 stamps, which a block's interleaved scale does not fit. Before a
+layer's attention a shadow pass (`KvShadowT`, a stamp a codec) dequantizes the rows that layer
+attends - from a sliding layer's first attended tile on - into one f16 plane pair every layer
+shares (`ksh_dev` / `vsh_dev`, the layer's rows from base 0), each half clamped to the finite
+range, and the f16 stamps read that. The
+window's own rows are quantized first, so the prefill attends the rows a later decode step reads.
+The pair is scratch the plan charges (`resident_shadow_bytes`): one layer's rows at the region's
+context, both sides, as halves, with the window chain's staged float rows (`pf_kst` / `pf_vst`)
+beside it; each plane binds as one range, which caps a region's context too (`resident_shadow_ctx`).
+The prepare zero-fills both shadow planes whole, their slack included
+(`RDEC_MIR_SLACK`), so a flash fragment that loads rows past the attended span reads finite
+halves: a masked probability times a finite value stays zero, where a NaN would not. The pair
+rides the split-k scratch hazard bit (`VHZ_SK`), since no split-k reduce runs between a layer's
+shadow pass and the attention that reads it. Its cost is a dequant of the attended span a layer a window:
+Llama-3.2-1B Q4_K_M reads pp8192 15860 under q8_0 against 16854 under f16 (debug-jit, `PERF_LEDGER.md`).
+
+**The NextN head's rows are mirror rows like a layer's.** The draft command runs the head through
+the token command's attention head (`rd_encode_attn_head`), so its row stages, quantizes and
+attends as a trunk row does, addressed through the head's own token block; the window chain's
+prompt warm (`pf_head_kv_store`) stages the head's K and V rows and runs the window store, with
+no q head to rotate under tq4, since the warm attends nothing.
+
+### tq4 attends in the rotated basis {#vk-kv-tq4-basis}
+
+**A tq4 row is the head's row under a sign flip and an orthonormal Walsh-Hadamard transform, and a
+dot product survives the rotation.** `KvTq4StoreT` runs a workgroup a (row, head): it rotates the
+staged K and V heads and quantizes them, and it rotates the row's q heads in place - a shared-KV
+layer stores nothing and still rotates q. The scores are then dots of rotated queries against
+rotated keys, the same dots. The V accumulate sums rotated rows, so the pass's output is the
+attention row in the rotated basis, and `KvTq4Unrot` takes each head back: the inverse transform,
+then the signs (the CPU's `fwht_unsign_row`), a workgroup a (row, head). The signs are the CPU's (`tq4_fill_signs`: one row of
+`KV_TQ4_SIGNS` floats, a head reading its prefix). The butterfly passes (`KvTq4WhtBase`, the base
+shell both kernels derive) run barrier-ordered over a
+workgroup's shared slab under the `precise` kernel option, so each sum rounds as the CPU's does and
+the stored bytes are the CPU's.
+
+**What acts on the attention row acts after the un-rotation.** A gated-q model's gate (`q_gated`)
+and the requant folded into the pass's store (`rqk`) both read the row in the model's basis. Under
+tq4 the pass runs ungated (`rd_attn_gated`) with `DA_RQ_NONE`, the un-rotation applies the gate -
+it reads the gate off the q plane's head stride - and the separate requant follows. The window chain does the same around its tiles: the store rotates the window's q
+rows, the shadow holds rotated rows, the tiles run their ungated stamps into the f32 plane, the
+un-rotation gates, and the f16 feed converts after it.
+
+**A four-bit quantizer amplifies rounding.** A quant on a rounding edge flips on a float's last
+bit, and a tq4 step is an eighth of its block's range where q8_0's is a 127th. Two chains that sum
+in different orders part by whole logits on a small model: on Qwen2.5-0.5B the device and the CPU
+chain read 2-6 apart at a 10-15 max logit, and the CPU chain itself 4-8 from its own f16 rows. So
+no logit bar holds a tq4 mirror to the CPU chain. The kernel cells hold the store to the CPU's
+bytes and the attention to the dequantized rows (`test_vulkan_kv_codec_kernels.das`), and the
+model cells hold comparisons: the device reads no further from the f16 chain than the CPU's tq4
+rows do, and layer 0's stored bytes are the CPU cache's but for a quant on a rounding edge
+(`test_gpu_resident_qwen2.das`).

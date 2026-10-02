@@ -273,7 +273,14 @@ cold load mints the vulkan lane and no planar lane; the trimmed lane, loaded col
 same `MINT_STEPS` greedy tokens as the untrimmed lane and reads the same CPU embed row bit for
 bit; mapped back warm, it generates the same tokens again. Each generation's token count is
 asserted, both streams are decoded in the log, and the whole-model driver is asserted on both
-trimmed loads. On Qwen3.5-0.8B-Q4_K_M the loader keeps the K-quant planes in their file format
+trimmed loads. `test_vulkan_mint_kv_codecs` holds the lane to the K/V mirror's codecs: the trimmed
+lane minted cold under a q8_0 mirror (`set_gpu_kv_dtype`, put back) maps under tq4 and under f16
+with no re-mint (the file's size and time as the mint left them - the lane's identity does not
+fold the codec), each load armed at the asked codec, and at each codec the lane's greedy tokens
+are the staged load's at that codec token for token, both streams decoded in the log; a trimmed
+lane panics on a call passed to the CPU rails, so generating is the served witness, and the
+codecs' token streams differing from the f16 one is the control that the compare tells them
+apart. On Qwen3.5-0.8B-Q4_K_M the loader keeps the K-quant planes in their file format
 (`kq_repacked`), the cold load mints the vulkan lane alone with its plan, and the warm map
 generates the same tokens and the same CPU embed row.
 
@@ -286,6 +293,10 @@ Q4_K_M and UD-IQ2_XXS: the resident MoE block's s stamps (the 32-row column) and
 TTS classes are dispatched by `cov_tower_styletts2` and `cov_tower_pocket` on their carriers, their
 kernel cells the `test_vulkan_tts_*` files, and a box without the carriers reads them at zero - a
 warning, never an entry;
+the K/V mirror's block codecs ride two carriers under q8_0 and tq4 (`vk_cov_codecs`: Qwen2.5-0.5B
+Q8_0 for the four-head slab, gemma-2-2b Q8_0 for the two-head slab) - a prefill and two decode
+steps each, reaching the staged stores, the shadows, the codec attention stamps and tq4's
+un-rotation; the sink stamps over a codec mirror are `VK_CENSUS_NEVER_DISPATCHED` entries;
 every prefill tile family is reached through the qwen3 Q8_0 and Q4_K_M and the 1B llama
 requants, machine-local like the other fixtures - the `-local` ones are
 minted from the bartowski Q8_0 with `llama-quantize --allow-requantize [--imatrix llama32_1b.imatrix] <q8> <out> <type>` (the IQ2/IQ3 types need the imatrix; the exact recipes are the catalog rows in `performance/model_specs.das`) - each
@@ -414,6 +425,33 @@ gated (the shared q8 triple beside the routed pair, its gate logit past the rout
 and ungated (the same at unit gate, a second span record after a reset; the reference without the
 shared expert must miss the device row in both) - plus the `vulkan_moe_span` override reached
 through its registry.
+`test_vulkan_kv_codec_kernels.das` - model-free (a Vulkan device, else skips): the K/V mirror's
+block-codec kernels against the CPU cache's own codec (`dasllama_kv_codec.das`).
+`test_vkc_q8_store` holds the q8_0 store's bytes to `quantize_q8kv_row` at token rows (two regions,
+the layer's base an odd block so its blocks start two bytes off a word) and at window rows (the
+`_b` stamp), every byte outside the stored rows left at its fill, one K block's and one V block's
+values past the half range so each scale stores as 65504 where the CPU's convert stores an infinity
+(the expected bytes clamped the same, one clamped scale a side asserted; either side's clamp
+removed reds the cell). `test_vkc_tq4_store` (a K head and a V head past the half range) holds the
+tq4 store's bytes to `fwht_signs_row` + `quantize_tq4kv_row` and the q rows rotated in place to
+`fwht_signs_row`, bit for bit, at heads of 32, 64, 128 and 512, on a shared-KV layer's dispatch
+(q rotates, nothing stores, the mirror left at its fill), at window rows, and at window rows with
+no q head (the NextN head's prompt warm). `test_vkc_q8_da_attn` and `test_vkc_tq4_da_attn` run one
+arm table (`codec_attn_arms`, 21 arms a codec) over each codec's stamps, dispatched as the driver
+dispatches the pass (a row a `rowwg` workgroups, its region in its token block), against the CPU
+attention over the rows `cvt_q8kv_to_f32` / `cvt_tq4kv_to_f32` read back at 1e-4 relative (reads
+6e-8 to 2.5e-6): the four-head and two-head slabs, a short last slab, heads of 32, 64, 128, 256
+and 512, the keys in one piece and split with the last piece combining, two rows a dispatch over
+two mirror regions, the pass's Q8_0 and Q8_K requant folds (the quants and scales against the CPU
+quantizer), the gated query, a 40-key window, the window under a softcap, and the sink stamps
+unsplit and split. Every arm's control is the oracle without the codec - under q8_0 the rows
+before their quantization, under tq4 the query before its rotation - and an arm that turns a
+mechanism on (the gate, the window, the softcap, the sink, a second row) also holds the device row
+outside the bar of the oracle with that mechanism off. `test_vkc_shadow` holds both codecs' f16
+shadow (`KvShadowT`) to the CPU dequant rounded to half, bit for bit, the rows outside the pass
+left at their sentinel, one block's dequant past the half range landing the clamp.
+`test_vkc_tq4_unrot` holds the un-rotation to `fwht_unsign_row` bit for bit at heads of 32, 64 and
+512 and under the head gate at 128 at the approx bar (the ungated rows the control).
 `test_vulkan_tts_conv_kernels.das` - model-free (a Vulkan device, else skips; the half im2col cell
 also skips where the device serves no f16 tile - neither cm2 nor the KHR tile at subgroup 32): the TTS tower's
 Vulkan sequence classes against the CPU chain - `test_vkt_tts_im2col` feeds the conv im2col
@@ -953,7 +991,10 @@ past the dense lead with all three expert planes, and its dense width is the sha
 plus the KV mirror's binding cap (`resident_binding_ctx`) on a hybrid shell whose layer 0 is
 recurrent, its dense twin, the dense twin with every fourth layer sharing the K/V below it (the cap
 divides by the twenty-four rows the mirror allocates, not the thirty-two layers), and a shell with
-no attention layer. The Metal serving gates ride the
+no attention layer; a block codec's byte cap on a device that binds four times it (an f16 mirror
+taking the wider range the control); and the cap a block codec's f16 shadow puts on a region's
+context (`resident_shadow_ctx`: one binding of the widest K/V row's halves, the same under q8_0
+and tq4, halved by a row twice as wide, none under a scalar codec). The Metal serving gates ride the
 same synthetic shells: `test_moe_metal_expert_formats` sweeps `moe_metal_ok` over the thirteen
 expert plane formats the routed block serves and the two it declines (iq4nl, k2), one
 mixed-format model, and the drift guard walking all fifteen `KqFmt` members - the kernel roster
@@ -979,7 +1020,18 @@ and the binding range over the regions bounding a strict context too (`resident_
 binding's 196608 positions hold 49152 each, under the 131072 asked, which the plan declines rather than shortens).
 `test_resident_region_ctx` is a mirror region's share of its
 side's one binding: the whole of it at one region, a quarter at four, the session's own context
-where that is shorter, and one region for a count under one. `test_mtp_seat_owner` holds the
+where that is shorter, and one region for a count under one. `test_resident_fit_ctx` is the context
+a plan past its room shortens to (`resident_fit_ctx`): the room past the weights, the pool and the
+staged rows over the mirror's and a block codec's shadow's bytes a position, seven eighths of it -
+the shadow charged whole at the asked context holds fewer positions (the control) - and the same
+over the mirror alone under a scalar codec, 0 where the weights pass the room. `test_resident_mirror_codec_ask` is
+the mirror codec the plan arms, on shells: a block codec's geometry (`kv_codec_geometry_why`: a
+96-wide head holds q8_0 and tq4 names it, a 48-wide head q8_0 names, a scalar codec holds any),
+the ask folded to f16 where the model cannot hold it and for an f32 ask
+(`resident_mirror_dtype_of`, under a pin the cell puts back; skips where `DASLLAMA_VK_KV32=1`
+arms f32 over it), the reset lifting the ask, a codec's spelling in any case with an unknown one
+reading f16 (`kv_dtype_named`), and its ordinal across the tier's seam with a bad one panicking by
+name (`kv_dtype_of`). `test_mtp_seat_owner` holds the
 speculative round's seat ownership on a Model shell under two fake decode overrides: with the
 owner refusing the model, and with seats registered under no owner, `mtp_spec_eval` and
 `mtp_spec_round` open the CPU round (its opening refuses the session's parked token, the witness)
@@ -1024,8 +1076,16 @@ The mixed twin is `Qwen3.5-0.8B-Q4_K_M-q8out.gguf`, the same mint with the delta
 Q8_0 - the shape the published Unsloth dynamic quants take. Its recurrent layers decide two feeds
 separately - the x feed (the rows the qkv and z GEMMs read) from the K-quant qkv/z planes, the o
 feed (the rows the out GEMM reads) from the Q8_0 out plane - so on the KHR arm x rides the f16
-feed while o falls to the Q8_0 requant. It runs the same one-window and two-window cells, on the same
-bars and with the same `DASLLAMA_VK_KV32=1` skip. Every K-quant cell - the twin's two and the
+feed while o falls to the Q8_0 requant. It runs the same one-window and two-window cells with the
+same `DASLLAMA_VK_KV32=1` skip, on an 8% bar on the f16 feed (the 10% quant-feed bar off it): its
+CPU chain quantizes the activations twice a recurrent layer, so the device and the CPU chain round
+on either side of the file's f32 chain, and one step reads 0.91 of a 12.3 max logit apart with the
+device's pick the f32 chain's. Both cells therefore carry the same-or-better witness
+(`f32_chain_witness`): the file loaded again at `QuantMode.fp32`, its device state dropped, the
+same tokens through that f32 chain on the CPU, and the device's summed distance from it held within
+1.15 of the CPU q8 chain's own (reads 0.91 and 0.93; the f32 rows one step off 21 and 25, the
+control), every chain's picks decoded in the log (`chain_distances`, `_resident_feed.das`, the
+three-chain sum the codec cells share). Every K-quant cell - the twin's two and the
 mixed twin's two - carries the routing witness: the prefill's Q8_K requant census count, read
 through `vk_kernel_coverage_of("cls_q8k_rq_spv")`, below the recurrent-layer count on the f16
 feed and at or above it off the feed. The mixed twin is the fixture that discriminates: a
@@ -1149,6 +1209,24 @@ as verify_window (`mtp_verify_window_active`), no panic, the driver still armed,
 verify's row 0 within the deltanet bar of the CPU chain's step of the same token over the rows the
 decline brought down, the prompt's logits as the control.
 
+`test_gpu_resident_hybrid_mtp_block_codec` runs the head over a block-codec mirror
+(`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs`), calling the cells above under a
+`set_gpu_kv_dtype` pin it puts back, their sessions on the armed codec (`load_mtp_carrier` asserts
+the mirror armed at the codec asked): under q8_0 the draft, the verify, the warmed head rows and the
+six rounds, on the f16 bars; under tq4 the verify and the forced reject, which hold the driver to
+its own one-row steps bit for bit (a 4-bit head row sits a quant step from the CPU's, past the
+head-row bar). The rounds cell compares the hydrated head rows only up to the round whose draft a
+near-tie flipped: past it the two sessions hold different tokens.
+
+`test_gpu_resident_hybrid_gated_block_codecs` holds the gated attention under a block-codec mirror
+to the CPU chain, on the Q8 carrier through `_kv_codec_cells.das`: the q8_0 mirror in the
+forced-feed form at a 6% bar (reads 0.21-0.31 of a 10.7-12.3 max logit), and the tq4 mirror in the
+distance form - under tq4 the attention pass runs ungated and the un-rotation applies the head
+gate, which only a compare against the CPU chain sees (the hybrid's other tq4 cells hold the
+driver to itself): the device's summed distance from the f16 chain within 1.15 of the CPU tq4
+chain's own (reads 1.08, the control 9.2), the two tq4 chains within 0.8 of that distance of each
+other (reads 0.63, the control 9.3). A gate applied twice reads 9.2 times the CPU chain's distance.
+
 One cell is model-free: `test_kernel_census_by_name` holds that the census accessor panics on a
 kernel name nothing seeded, so a misspelt key cannot read as a zero count.
 
@@ -1156,7 +1234,43 @@ kernel name nothing seeded, so a misspelt key cannot read as a zero count.
 (Qwen2.5-0.5B-Instruct-Q8_0, `DASLLAMA_GPU=1`): the q/k/v projection bias folded into the rope
 stage on the device - the hybrid file's forced-feed logits-tolerance form (its K-quant 6% bar,
 the one-step-off control) at one window and two windows, with the arm witnesses that the model
-carries the bias and the driver armed on it; skips without the model or the armed tier.
+carries the bias and the driver armed on it; skips without the model or the armed tier. The same
+carrier holds the K/V mirror's block codecs (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs`)
+through the rig of `_kv_codec_cells.das`, whose loader (`with_codec_model`) pins the codec through
+`set_gpu_kv_dtype` for the load, puts back the pin it found (or lifts it where nobody had asked),
+asserts the mirror armed at the codec asked, and skips where `DASLLAMA_VK_KV32=1` armed an f32
+mirror. `test_gpu_resident_qwen2_q8kv` is the forced-feed form (`cell_codec_forced_feed`) on q8_0
+sessions at an 8% bar (the CPU chain quantizes each query, the device keeps it f32), one window
+and two; `test_gpu_resident_qwen2_tq4kv` is the distance form (`cell_codec_distance`), since no
+logit bar holds a 4-bit mirror on a 0.5B - three chains over one prompt and eight fed tokens (the
+device at tq4, the CPU at tq4, the CPU at f16), every row asserted finite, the sums of the rows'
+largest differences held as ratios: the device no further from the f16 chain than 1.15 of the CPU
+codec chain's own distance (reads 0.95-1.01), with the f16 rows one step off past that same bound
+as its control (reads 1.6-3.7), and the two codec chains within 0.8 of that distance of each other
+(reads 0.20-0.61), with the CPU codec rows one step off past that bound as its control (reads
+1.5-3.7); `test_gpu_resident_qwen2_codec_rows_up` is the same form with the prompt on the CPU
+rails (the resident prefill pinned off, exactly one `pinned_off` pass asserted, the pin put back
+as found), so the device's steps read rows the CPU wrote and the driver uploaded as the cache's
+own bytes, on q8_0 and tq4; `test_gpu_resident_qwen2_codec_rows` (`cell_codec_stored_rows`) brings
+the mirror down after a 40-token resident prefill and eight resident steps and holds layer 0's
+stored bytes to the CPU cache's on both codecs - the K rows and the steps' V rows within 2% and 5%
+of their bytes (read 0.2% and 1%: a quant on a rounding edge), the prefill's V rows within 0.6 of
+the control's share (its GEMM reads f16 rows where the CPU reads Q8_0 blocks; reads 0.39 and 0.12
+against 0.97), a row held to the next one the control (asserted past 0.2 of its bytes); the same
+cell holds the plan's scratch charge for the codec over the f16 plan's - both shadow planes at the
+context as halves and the window's staged float rows, to the byte. The distance form also holds
+the device no nearer the f16 chain than half the CPU codec chain's distance (`CODEC_APPLIED_REL`):
+a driver that served its f16 rows in the codec's place would read near zero.
+`test_gpu_resident_codec_llama_k.das` and `test_gpu_resident_codec_llama_iq.das` - stocked suite,
+`-jit` only; the same rig on the other two weight formats a format's parity owes - Llama-3.2-1B
+Q4_K_M (a K-quant) and Llama-3.2-1B IQ4_XS (a grid format): the q8_0 mirror in the forced-feed
+form at a 10% bar (reads 0.25-0.42 of an 8.4-9.4 max logit) and the tq4 mirror in the distance
+form, a 40-token prompt and eight fed tokens each - the device's distance from the f16 chain
+within 1.15 of the CPU codec chain's (reads 0.99 and 1.00, the control 4.7 and 5.0), and the two
+codec chains within 1.4 of that distance of each other (reads 1.02 and 1.13, the control 4.9 and
+5.1): tq4 moves these carriers' logits a point a row, three times the kernels' rounding, so the
+two chains part as two independent quantizations do, where the qwen2 carrier's six points a row
+keep them at 0.61; the same skips.
 `test_gpu_resident_hc.das` - stocked suite, `-jit` only; the whole-model resident driver on the hyper-connection
 carrier Qwen3.8-Flash-Next UD-IQ4_XS (three shards, the large tier, `DASLLAMA_GPU=1`): the wide residual's mixer
 seams, the n-gram side input and the deltanet sigmoid out-gate on the device, the routed experts summed on the host
@@ -1302,7 +1416,19 @@ scales with the region count and a count under one plans one, the tier status co
 mirror sides, a load under a switched-off route says `not attempted`), and the two passes that
 bring their rows down first: a prefill that skips positions (`gap`) and one past the region's
 context (`cap`, on a load capped at 4096 positions). Each skips without its model or the armed
-tier.
+tier, and on a card whose room the plan does not fit at the regions the cell asks (`load_regions`
+registers the skip with the driver's own decline text, `moe_gpu_resident_memory_decline`; any other
+decline is a red). `test_gpu_resident_regions_q8kv.das` and `test_gpu_resident_regions_tq4kv.das` run the qwen2
+file's every cell with the K/V mirror asked in a block codec (an `[init]` pins it through
+`set_gpu_kv_dtype`; the sessions take the armed codec, `mirror_kv_dtype`): the staged stores and
+the codec's store pass at one row and at N rows, the decode attention's codec stamps, the
+prefill's attention over the f16 shadow, tq4's un-rotation, the rows a pass brings down as the
+CPU cache's own bytes. Under a tq4 mirror no share of the peak holds a tolerance cell - two window
+splits of one prompt read 0.8-2.0 apart at a 12 max logit (under 0.7 on the other codecs), the
+split q/k norm against the fused one 1.1-3.5 at 13-15 on the qwen3 file, while a carrier whose
+rows agree bit for bit has a row one off 1.9 away - so the rig holds each such row to 0.6 of its
+distance from the one-token-off row instead (`tq4_within`; reads 0.09-0.44), and every bit-for-bit
+cell stays bit for bit. Every tolerance compare logs its difference and the one-off row's.
 `test_gpu_resident_gemma*.das` (`_gemma_resident.das` carries the cells; one model a file:
 `gemma3_1b`, `gemma3_4b`, `gemma2`, `gemma4_12b_q8`, `gemma4_12b_k`, `gemma4_e2b`, `gemma4_e4b`,
 `gemma4_26b`, `gemma4_26b_k`, `gemma4_31b` - a process loads one carrier, so no cell inherits another model's device state, and a GPU run
@@ -1381,7 +1507,19 @@ CPU control of a dense 31B on the reference kernel bodies runs half an hour on a
 26B-A4B Q4_K_M), `g31` (the 31B) - the tokens share no substring, so one arm selects one file. Skips
 without the model or the armed tier, and on a memory decline (`moe_gpu_resident_memory_decline`:
 the plan did not fit the card at the session's context - the 12B Q8_0 file on a 16 GB card arms
-under `DASLLAMA_GPU_MIN_CTX=1024`); a feature decline stays a red.
+under `DASLLAMA_GPU_MIN_CTX=1024`); a feature decline stays a red. Two files carry block-codec
+cells, each pinning the mirror's codec around the rig's own cell (`with_gpu_kv_dtype`,
+`_resident_feed.das`: the ask put back as found, a skip where the environment arms another codec;
+the rig asserts the mirror armed at the codec asked): `test_gpu_resident_gemma3_block_codecs` runs
+gemma-3-1b at 1100 tokens - a third prefill window, which starts past the 512-key sliding window,
+so the f16 shadow of a sliding layer starts a 64-key step under its window - in the forced-feed
+form under q8_0 (reads 0.46-1.37 against bars of 3.3-5.1) and the perplexity form (1100 + 80)
+under tq4 (reads 1.022 against the CPU chain's 1.033, 80 of 80 hits; a 4-bit mirror reads one step
+5.0 of a 33.7 max logit from the CPU's, so no logit bar holds it with room); a shadow that starts
+at the window's first row reads a perplexity of 13844. `test_gpu_resident_gemma4_e2b_block_codecs`
+runs the shared-KV carrier - its upper layers store no K/V row of their own, and under tq4 still
+rotate their query - at forty tokens in the forced-feed form under q8_0 and at 150 + 150 in the
+perplexity form under tq4 (reads 1.032 against 1.032, 148 of 150 hits each).
 `test_gpu_resident_moe.das` (`_moe_resident.das` carries the rig, shared with
 `test_gpu_resident_gptoss.das`) - stocked suite, `-jit` only; the whole-model resident driver on a MoE
 (Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local, `DASLLAMA_GPU=1`): the expert stacks in the arena, the window
@@ -1395,7 +1533,8 @@ per MoE layer per window, the expert schedule's m pieces dispatched the format's
 three expert planes once per MoE layer per window in cm2 mode - exact where the format keeps its
 own e stamp, a floor where its e column is its m stamp (`KQ_CM2E_ALIASES_M`), since that stamp also
 serves the window's dense GEMMs (in mm mode the KHR tile serves them too, so its count is a floor of
-two dispatches a plane per MoE layer per window), the token command's top-k count a whole multiple of the MoE layer count (the command
+two dispatches a plane per MoE layer per window; the count sums the column's stamp of every `KqFmt`
+member, so a plane the box serves in another form - IQ3_S as `iq3s4` - is counted), the token command's top-k count a whole multiple of the MoE layer count (the command
 records once and resubmits), and on a device whose SM count splits the attention keys the
 unsplit twin served every step of the one-window cell and none of the two-window one; the second
 fixture is the Qwen3.6-35B-A3B UD-IQ2_XXS hybrid, whose recurrent layers take the routed block
@@ -1420,13 +1559,41 @@ UD-IQ2_XXS hybrid with the context asked whole (`set_gpu_ctx_max(131072)` + `set
 pins read first and put back after the load), asserting the armed region holds exactly that context
 and experts yielded to it. The census witnesses count the device's routed blocks (the layers less the
 host ones), and the unsplit-twin witness is skipped under host layers (the split command records the
-split form alone).
+split form alone). `test_gpu_resident_moe_block_codecs` runs the twin at one window with the
+mirror asked at a block codec (`with_gpu_kv_dtype`; the rig asserts the mirror armed at the codec
+asked): under q8_0 the forced-feed cell on q8_0 sessions at the same 20% bar (reads 0.83-1.17
+against bars of 2.1-2.3, the f16 mirror's own reading), under tq4 the codec rig's distance form
+(`moe_codec_distance` over `codec_distance_over`) - the device's summed distance from the f16
+chain within 1.15 of the CPU tq4 chain's own (reads 1.06, the control 5.0) and the two tq4 chains
+within 1.4 of that distance of each other (reads 1.11, the control 5.0).
 `test_gpu_resident_gptoss.das` - stocked suite, `-jit` only; the same rig on gpt-oss-20b (the pinned
 upstream `gpt-oss-20b-mxfp4.gguf`, large-tier): the native-MXFP4 routed stacks on the mx4 expert
 rail, the biased router's softmax over its four picks, the gate / up / down bias rows at the act and
 the combine under the clamped swiglu, the per-head attention sinks in the flash tiles and the token
 command's pass, the output bias on the residual step and the 128-key sliding layers, at one window
 and two; the e-column witness counts the mx4 stamps beside the kq, q8 and q51 ones.
+`test_gpu_perop_kv_codec.das` - stocked suite, `-jit` only; the per-op rails under a block-codec
+session (Qwen3-0.6B Q8_0, `DASLLAMA_GPU=1`, the whole-model route pinned off for the load): the
+device's attention block keeps an f16 mirror in the model's basis and the session's cache keeps
+the codec's bytes (`ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block`). A tq4 session at a
+40-token prompt (the device prefill's rows and eight device steps' rows rotated before their
+store) and at 20 tokens (under the device prefill's floor: the block hydrates from tq4 rows the
+CPU prefill wrote, taking them out of the rotated basis), and a q8_0 session at 40 tokens: layer
+0's K and V cache bytes within 5% of the CPU chain's (read 0 - byte for byte - under tq4, 2e-5
+under q8_0) with a row held to the next one the control (reads 0.85-0.88), the device's summed
+distance from the CPU chain at f16 no more than the CPU codec chain's own (reads 2.3 against
+48.7 where the device prefilled, since it attends the rows before their quantization, and 38.4
+against 42.6 over rows the CPU quantized), the f16 rows one step off past the CPU codec chain's
+distance (the bound's control), and the census witnesses: the block's attention stamp served the
+steps (its count on the CPU chains' steps the control), and the prefill stamp ran exactly where
+the prompt reaches the device prefill's 32-token floor; a cell skips where the tier took no
+attention layer of the carrier. The cells are `cell_perop_codec` of `_kv_codec_cells.das`.
+`test_gpu_perop_kv_codec_k.das` and `test_gpu_perop_kv_codec_iq.das` run the tq4 and q8_0 cells at
+40 tokens on the other two weight formats - Qwen3-4B-Instruct Q4_K_M and Qwen2.5-1.5B-Instruct
+IQ3_XS - on the same skips and bars (the device's distance reads 0.28 and 0.80 of the CPU codec
+chain's on the 4B, 0.79 under q8_0 on the 1.5B), but for the 1.5B's tq4 cell: tq4 moves that
+carrier's CPU chain nine points a row, near the distance of rows one step off, so its bar is half
+the CPU codec chain's distance (the device reads 0.11 of it, the control 0.84).
 `test_gpu_moe_shexp.das` - stocked suite, `-jit` only; the shared expert's prefill on the device
 (Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local, the Q4_K_M mint of the Q8_0 carrier, `DASLLAMA_GPU=1`): the
 shexp triple as one region over every position of the routed experts' chain, gated by the tier's

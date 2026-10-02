@@ -60,7 +60,7 @@ struct ServerArgs {
     @clarg_doc = "Weight serving mode: fp32 | q8 (default); file-format spellings q8_0 | q4_0 | q4_k | q5_k | q6_k | mxfp4 | f16 | bf16 select q8, where those planes serve natively; q4 = legacy requant tier"
     quant : string
 
-    @clarg_doc = "KV cache codec: f32 | f16 | q8_0 | tq4 (default f16)"
+    @clarg_doc = "KV cache codec: f32 | f16 | q8_0 | tq4 (rotated 4-bit; needs pow2 head_size) (default f16); under --gpu vulkan the whole-model driver holds its cache in the same codec for f16, q8_0 and tq4"
     kv_dtype : string
 
     @clarg_doc = "Metal (GPU) serving mode: off | auto | required (default off). auto = GPU when a path's gates pass, CPU fallback otherwise; required = a call the GPU cannot serve is a hard failure"
@@ -977,7 +977,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
             let ectx = ent.ctx > 0 ? int64(ent.ctx) : ctx
             if (gpu == "vulkan") {
                 set_gpu_tier_want(i == gpu_idx ? slot_want : GpuTierWant())   // zero want: loads CPU-only
-                gpu_residency_ask(ent.streams > 0 ? int64(ent.streams) : streams, ectx)
+                gpu_residency_ask(ent.streams > 0 ? int64(ent.streams) : streams, ectx, pick_kv_dtype(empty(ent.kv_dtype) ? g_cfg.kv_dtype : ent.kv_dtype))
             }
             print("loading {ent.path} ...\n")
             set_rope_scaling_override(env_rope)

@@ -110,20 +110,6 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    cell, both against the sequential CPU rule; (e) DONE 9/5 - the prefill hands each slot to the
    session (valid, dirty, owned) instead of flushing it home and re-uploading, and window 0 zeroes
    the slots with fills inside the window command: 48 host round trips gone per prefill.
-3. **KV codecs on device.** Vulkan's mirror serves f16 (the armed default) and f32 through the
-   codec-templated kernel stamps; Metal additionally carries q8_0 / tq4, and the CPU cache all four,
-   so a server's `--kv q8_0` or `tq4` under Vulkan passes every session back to the CPU rails as a codec
-   mismatch. The mirror's bytes are what a 16 GB card's context and its resident experts compete for:
-   Qwen3.6-35B-A3B UD-IQ2_XXS held 46203 f16 positions at one stream, 11510 at four, on a user's RTX 5080
-   16 GB (the server's control page, `external`); a context asked whole (131072) moves ten of forty routed
-   layers' experts to the host on the reference card (`test_gpu_resident_moe_ctx_strict`'s load log), and on
-   Qwen3-30B-A3B Q4_K_M the 32768-position f16 mirror costs eight resident layers against the per-op rails
-   (`PERF_LEDGER.md`'s host-layers entry: tg128 41.8 against 64.0, `debug-jit`). A q8_0 mirror halves those
-   bytes, tq4 quarters them: the same context with 8-12 more layers resident, or 92k / 180k positions
-   where 46k fit. Done = the Vulkan decode and flash-attention arms read q8_0 and tq4 mirror rows
-   (`dasllama_convert`'s KV codec functions the truth, the Metal `sq_attn` codec arms the device
-   reference), `resident_mirror_dtype` arms the session's codec, the hc cell's `DASLLAMA_VK_KV32` skip
-   turns into a served codec arm, and the two files above re-measured at the asked context.
 4. **Real batched decode** - the resident mirror is single-sequence; batch rows round-trip
    their KV per step (`rdec_sync_kv` in, `rdec_read_kv` out). Metal has a true batched driver
    (P4). Options: multi-sequence mirror slabs, or per-row device KV like Metal's `KVMirror`.
@@ -2165,17 +2151,6 @@ module) is independent and can land any time - it is pure structure.
     a step); a model-free cell replays a hand-made trace through `heat`, `lru` and `lfu` asserting the
     hits and placements; `test_gpu_tier.das` gains the unset rows seat; the facade predicate is asserted
     true then false around the drop; the rail's declines run under a fixture that lacks a leaf.
-132. **The stocked resident cells written for the pod read red on a 16 GB card beside a desktop.** On
-    the zen2 (RTX 5060 Ti, 2.6-2.7 GB held by other processes) `test_gpu_resident_regions_gemma4`
-    (the 12B: needs 17667 MB of 11649), `_gemma4moe` (needs 20166 of 11647) and `_gptoss` (2 regions
-    of 4667 positions where the cell asks 3) fail on the room the plan finds, and
-    `test_gpu_resident_moe`'s census floor misses by three planes (`_hybrid` 117 of 120, `_no_shexp`
-    134 of 144) on this box on master (934fe7b2e, run through this tree's binary against a detached
-    worktree) as on the arc's tip; `test_gpu_resident_hybrid_kq_q8out` is `followup_general.md` row
-    183. Done = the regions cells skip, naming the room, where the plan cannot arm the regions they
-    ask, and the census floor's miss on this card named (the pieces one layer routes off the cm2e
-    column) or the floor keyed to the card.
-
 133. **The host-layer form's declined folds join the Vulkan dedup pass.** The arc's dupe audit found six
    templatable sets and left them for the pass that closes the Vulkan arc (row 117's shape): the prefill
    host cut in `pf_run` against `pf_run_hc`'s, with the `rdec_host_rows` tier seat that exists to feed it
@@ -2188,3 +2163,24 @@ module) is independent and can land any time - it is pure structure.
    at five sites (a block helper); and the prefill host-sum landings allocated alike in `pf_moe_setup` and
    `pf_hc_setup`. Each fold is behavior-neutral and the MoE cells on the hc carrier and the two host-layer
    fixtures are its proof.
+
+137. **The prefill reads a block codec through an f16 shadow.** Each layer of each window dequantizes the
+   span it attends before the flash tiles run: Llama-3.2-1B Q4_K_M reads pp8192 15860 under q8_0 and 14150
+   under tq4 against 16854 under f16 (debug-jit; `PERF_LEDGER.md`'s block-codec entry), and the shadow holds
+   one layer's rows at the region's context as halves. Done = the flash tile's K and V loads decode the blocks
+   (a cm2 decode function over the block plane, the K-quant tiles' form), the shadow pass and its planes
+   are gone where that arm serves, and the long-prompt rows re-measured against f16.
+
+138. **The block codecs' declined folds join the Vulkan dedup pass.** Two templatable sets and one
+   signature stay for the pass that closes the Vulkan arc (row 117's shape). The decode attention's
+   slab is a three-way choice - four heads, two heads, the sink stamp - that `da_attn_stamp_ensure` /
+   `_set` / `_enc` take as two bools and the tests as a census-key suffix: one enum the trio, the
+   prepare's pre-flight and the kernel cells share. The q8_0 and tq4 arms inside `DaAttnT` - the score
+   arm and the V arm, a pair each - share the block address, the scale load and the skewed word
+   (`kv_blk_scale`, `kv_skew_word`) and differ in block bytes, word count and the per-word decode: one
+   arm over constants with an inner `static_if` for the decode, every codec stamp's generated source
+   diffed. And the K/V sides' tq4 basis change at the Metal prefill's two sites
+   (`dasllama_metal_prefill.das`: the rotate before the store, the un-rotate of the uploaded rows) beside
+   `tq4_rotate_for_store` / `tq4_unrotate_from_store`, which the per-op rails call; the Metal sites need
+   an Apple run. Each fold is behavior-neutral; the proof is `test_vulkan_kv_codec_kernels.das` with the
+   codec stamps' SPIR-V diff for the first and the Metal decode parity arms `arm7b-tq4kv` for the second.

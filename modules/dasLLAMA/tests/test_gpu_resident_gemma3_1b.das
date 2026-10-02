@@ -4,6 +4,7 @@ options persistent_heap   // + explicit deletes in the cells: the model and sess
 options _dasllama_internal = true
 
 require dastest/testing_boost public
+require dasllama/dasllama_kv_dtype   // KVDtype: the block-codec cells' mirror ask
 require _gemma_resident
 
 // gemma-3-1b Q8_0 (the dense base: sandwich norms, sliding layers beside the global ones with their own rope class,
@@ -46,5 +47,25 @@ def test_gpu_resident_gemma3_prefill_vs_decode(t : T?) {
     t |> run("gemma-3-1b: the same at forty tokens") @(t : T?) {
         if (!arm_on(t, "g3")) return
         prefill_vs_decode(t, 40l, GEMMA3_FILE)
+    }
+}
+
+let private PAST_SLIDING_WINDOW = 2l * PF_WINDOW_ROWS + 76l   //! a third prefill window: it starts a window's rows past the 512-key sliding window
+
+[test]
+def test_gpu_resident_gemma3_block_codecs(t : T?) {
+    t |> run("gemma-3-1b: a q8_0 K/V mirror at 1100 tokens - the third window's f16 shadow starts past the sliding layers' window") @(t : T?) {
+        if (!arm_on(t, "g3")) return
+        assert_pf_window(t)
+        with_gpu_kv_dtype(t, KVDtype.q8_0) {
+            gemma_forced_feed(t, PAST_SLIDING_WINDOW, GEMMA3_FILE)
+        }
+    }
+    t |> run("gemma-3-1b: the same prompt over a tq4 mirror, 80 ids teacher-forced after it and scored as a perplexity against the CPU chain") @(t : T?) {
+        if (!arm_on(t, "g3")) return
+        assert_pf_window(t)
+        with_gpu_kv_dtype(t, KVDtype.tq4) {
+            ppl_compare(t, PAST_SLIDING_WINDOW, 80l, GEMMA3_FILE)   //! a 4-bit mirror reads one step 5.0 of a 33.7 max logit from the CPU's: no logit bar holds it with room
+        }
     }
 }

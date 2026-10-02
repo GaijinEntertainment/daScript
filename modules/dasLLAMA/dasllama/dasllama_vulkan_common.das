@@ -12,6 +12,7 @@ require vulkan/vulkan_boost
 require spirv/spirv_dis
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
+require dasllama/dasllama_kv_dtype   // KVDtype and its unit arithmetic: the mirror's codec
 require dasllama/dasllama_gemm_schema
 require dasllama/dasllama_env
 require dasllama/dasllama_config
@@ -329,6 +330,8 @@ let AT_MAX_KV = 2_048l   // an MHA 16 x 128 layer (Qwen1.5-MoE) - the k/v planes
 let AT_MAX_HS = 256l
 let AT_META_BYTES = 128l
 let AR_MAX_DIM = 8_192l   // the add-rms kernels' row stash: 32 KB of the 48 KiB workgroup memory the tier requires of a device
+let RDEC_MIR_SLACK_ROWS = 16l   //! the KV rows a flash fragment may read past a window's end
+let RDEC_MIR_SLACK = RDEC_MIR_SLACK_ROWS * AR_MAX_DIM   //! slack elements past each KV mirror's last plane and past a block codec's shadow rows: one fragment at the widest KV row the prepare admits
 // smalls plane float offsets: [eps, scale] consts, the per-head qk-rms weight rows, then the
 // window's cos/sin rope rows packed contiguously (sin offset = AT_SM_COS + rows*half, meta [13])
 let AT_SM_RMSQ = 16l
@@ -2284,6 +2287,8 @@ struct RLayer {
     s_qkn : VkDescriptorSet         // per-head q/k rmsnorm class set (qk_norm models only)
     s_qkn_rope : VkDescriptorSet    // the fused qk-rmsnorm + rope + KV store (qk_norm models only; per-token words ride the shared TokMeta)
     s_rope : VkDescriptorSet        // rope + KV store class set
+    s_kv_store : VkDescriptorSet    //! a block codec's store of the staged rows into the mirror
+    s_unrot : VkDescriptorSet       //! tq4: the attention rows out of the rotated basis
     s_attn : VkDescriptorSet        // decode attention class set
     s_quant_at : VkDescriptorSet
     s_wo : VkDescriptorSet
@@ -2313,7 +2318,7 @@ struct RLayer {
     hs, qd, kvd, hid, rot : int64   //! head size, query width, kv width, dense FFN width, rotary width per head
     kv_mul : int64                  //! query heads per kv head
     window : int64                  //! positions a sliding layer attends over; 0 = every position
-    mir_base : int64                //! this layer's first element in each K/V mirror side (its rows are seq_cap x kvd from there)
+    mir_base : int64                //! this layer's first unit in each K/V mirror side (its rows are seq_cap x the row's units from there)
     cbase : int64                   //! its rope class's row base inside a position's cos/sin plane
     boff : int64                    //! its row base in the q/k/v bias plane
     pf_fa : bool                    //! the window chain takes the cm2 flash tile on this layer (its head size has a stamp)
@@ -2429,14 +2434,13 @@ struct RDec {
     weight_bytes : int64          // the plan's weight bytes on the device (the warm-up self-check's bandwidth floor)
     n_layers, dim, qd, kv_dim, head_size, n_heads, kv_mul, hidden, vocab, seq_cap : int64
     neox : bool
-    kv16 : bool                   // the mirror codec: f16 rows (the default) vs f32; sessions must match
-    kv_esz : int64                // mirror element bytes (2 or 4)
+    kv_dt : KVDtype               //! the mirror codec
     qk_norm : bool                // per-head q/k rmsnorm role armed (norms buffer carries the rows)
     norms_bytes : int64           // full norms buffer size (grows past the fixed layout under qk_norm)
     ar_scal_off : int64            // eps/ascale pair, appended to the norms buffer (float units) —
                                    // the fused ar+requant needs binding 4 for its scale output
     cos_elems : int64              //! a position's cos/sin plane: every rope class's row (cos[half] + sin[half]) end to end
-    mir_elems : int64              //! one K/V mirror side's elements over every attention layer (seq_cap x its kvd each)
+    mir_units : int64              //! one K/V mirror side's units over every attention layer (seq_cap x its row's units each): elements, or blocks under a block codec
     eps, scale : float
     // per-token device buffers
     x_dev, xb_dev : uint64        // residual, normed activation
@@ -2451,8 +2455,15 @@ struct RDec {
     gate_dev, up_dev : uint64
     ffnout_dev : uint64
     xb2_dev : uint64              // wo output
-    k_mirror, v_mirror : uint64   // `regions` consecutive copies of mir_elems elements of the kv16 codec: each attention layer's [seq_cap x its kvd] rows from RLayer.mir_base
-    regions : int64 = 1l          //! one mirror region per served stream: a region is a session's whole K/V history, addressed as an element offset into both sides
+    k_mirror, v_mirror : uint64   // `regions` consecutive copies of `mir_units` units in the armed codec: each attention layer's seq_cap rows from RLayer.mir_base
+    kst_dev, vst_dev : uint64     //! a block codec's staged rows: the token command's float K and V rows [nb x kv_dim], which the codec's store quantizes into the mirror
+    stage_tok : HostBuf           //! ... and the token block the staging stores read: row r at position r of the staged planes
+    ksh_dev, vsh_dev : uint64     //! a block codec's f16 shadow of one layer's rows [seq_cap x kv_dim], refilled before each layer's prefill attention
+    pf_kst, pf_vst : uint64       //! the prefill window's staged rows [PF_WINDOW x kv_dim]
+    pf_kv_store_set, pf_kv_shadow_set : VkDescriptorSet   //! the window's quant store and its shadow pass
+    pf_unrot_set : VkDescriptorSet  //! tq4: the window's attention rows out of the rotated basis
+    tq4_signs_dev : uint64          //! tq4: the rotation's sign row, `KV_TQ4_SIGNS` floats
+    regions : int64 = 1l          //! one mirror region per served stream: a region is a session's whole K/V history, addressed as a unit offset into both sides
     region : int64                //! the region every mirror address and the submitted token command resolve against (`vk_rdec_select_region`)
     n_attn : int64                // attention layers = mirror slots
     q_gated : bool                // the q GEMV writes [q | gate] per head (2*qd rows); rope/attention read q head-strided
@@ -2747,11 +2758,31 @@ def f16g_shape_ok(dim : int64) : bool => g_gpu.coopmat_mode == COOPMAT_CM2 && di
 
 var g_rd : RDec?
 
-//! a layer's first mirror element in the selected region
-def rd_mir_base(L : RLayer) : int64 => L.mir_base + g_rd.region * g_rd.mir_elems
+//! a layer's first mirror unit in the selected region
+def rd_mir_base(L : RLayer) : int64 => L.mir_base + g_rd.region * g_rd.mir_units
 
 //! one mirror side's binding: all `regions` copies end to end
-def rd_mir_bytes : int64 => g_rd.regions * g_rd.mir_elems * g_rd.kv_esz
+def rd_mir_bytes : int64 => g_rd.regions * g_rd.mir_units * kv_unit_bytes(g_rd.kv_dt)
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs")]
+def rd_kv_row_units(kvd : int64) : int64 => kv_row_units(g_rd.kv_dt, kvd)
+
+def rd_kv16 : bool => g_rd.kv_dt == KVDtype.f16
+def rd_kvq8 : bool => g_rd.kv_dt == KVDtype.q8_0
+def rd_kvtq4 : bool => g_rd.kv_dt == KVDtype.tq4
+def rd_kv_block_codec : bool => kv_block_codec(g_rd.kv_dt)
+
+//! the prefill's attention reads f16 rows: the f16 mirror's own, or a block-codec mirror's shadow
+def rd_pf_reads_f16 : bool => g_rd.kv_dt != KVDtype.f32
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis")]
+def rd_attn_gated : bool => g_rd.q_gated && !rd_kvtq4()
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis")]
+def pf_fa_lands_f16(wo_f16 : bool) : bool => wo_f16 && !rd_kvtq4()
+
+//! one shadow plane's bytes: the widest layer's rows at seq_cap as halves, and the slack a flash fragment reads past them
+def rd_shadow_bytes : int64 => (g_rd.seq_cap * g_rd.kv_dim + RDEC_MIR_SLACK) * 2l
 
 //! the decided-once set families (the fused sites', the N-row rail's, the combine's) rebuild on their next ensure: a
 //! set they read was replaced
@@ -3027,7 +3058,7 @@ let VHZ_XQ = 0x4u         // quantized activations xq+xs
 let VHZ_Q = 0x8u          // q rows
 let VHZ_KVK = 0x10u       // kv panel, k half
 let VHZ_KVV = 0x20u       // kv panel, v half
-let VHZ_VST = 0x40u       // prefill v-GEMM staging (pf_v)
+let VHZ_VST = 0x40u       // prefill v-GEMM staging (pf_v), and a block codec's staged K/V rows
 let VHZ_MIR = 0x80u       // k/v mirrors
 let VHZ_ATT = 0x100u      // attention out
 let VHZ_AQ = 0x200u       // quantized attention out aq+as
@@ -3084,7 +3115,7 @@ let VHS_ACTS = 0x200000u   // an attention feed image (the next layer's q-stack 
 let VHS_GACTS = 0x400000u  // the gate/up feed images
 let VHS_LOG = 0x800000u   // the router logits
 let VHS_META = 0x1000000u  // the three stacks' slot metas + the combine weights
-let VHZ_SK = 0x40000u     // cm2 split-k partial planes (the reduce's input scratch) — shares the VHZ namespace with the roles it interleaves
+let VHZ_SK = 0x40000u     // cm2 split-k partial planes (the reduce's input scratch), and a block codec's f16 shadow — shares the VHZ namespace with the roles it interleaves
 let VHZ_DNP = 0x80000u    // deltanet projection row: the qkv half (the z half rides VHZ_DNZ, so the two GEMVs co-run)
 let VHZ_DNST = 0x100000u  // deltanet per-layer state (in place)
 let VHZ_DNSM = 0x200000u  // deltanet per-layer smalls (beta/g rows + the conv ring)

@@ -841,8 +841,11 @@ def private media_req(m : Model; id : int64; prompt : array<int64>; lo, hi : int
 // The whole prompt as embedding rows — `generate_embd`'s non-causal-span form is the reference
 // the scheduler's non-causal media arm must reproduce (chat.das's image turn runs on it).
 def private embd_span_generate(m : Model; prompt : array<int64>; lo, hi : int64;
-                               params : SamplingParams; max_new : int64) : array<int64> {
+                               params : SamplingParams; max_new : int64; seed : int = 0) : array<int64> {
     var s <- create_session(m)
+    if (seed != 0) {
+        set_seed(s, seed)
+    }
     var e : array<float>
     e |> reserve(long_length(prompt) * m.config.dim)
     e |> resize(long_length(prompt) * m.config.dim)
@@ -852,6 +855,27 @@ def private embd_span_generate(m : Model; prompt : array<int64>; lo, hi : int64;
         out |> push(id)
         return true
     }
+    delete e
+    delete s
+    return <- out
+}
+
+let private SPAN_SEED = 4242
+let private SPAN_MOVES_LOGITS = 0.02   //! of the causal row's peak: the whole-prompt span reads 0.10 of it (3.1 at 29.8)
+
+//! the last row's logits after the same embedding prefill: rows [lo, hi) a non-causal span, every row causal where hi <= lo
+def private embd_span_logits(m : Model; prompt : array<int64>; lo, hi : int64) : array<float> {
+    var s <- create_session(m)
+    var e : array<float>
+    e |> reserve(long_length(prompt) * m.config.dim)
+    e |> resize(long_length(prompt) * m.config.dim)
+    embed_text_rows(m, prompt, e, 0l)
+    if (hi > lo) {
+        eval_embd_span_(m, s, e, long_length(prompt), lo, hi)
+    } else {
+        eval_embd_(m, s, e, long_length(prompt))
+    }
+    var out := s.logits
     delete e
     delete s
     return <- out
@@ -892,15 +916,28 @@ def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model loa
             }
             // the non-causal flag reaches the kernel THROUGH the scheduler: with it set the arm must
             // match generate_embd's span form, not the causal one. The span is [1, np) — everything
-            // past BOS — because a narrow span leaves greedy top-1 unmoved and the check goes vacuous
+            // past BOS — and the streams are sampled under one seed: the span moves the prompt's
+            // logits three points at a thirty-point peak, which leaves the greedy top-1 of eight
+            // tokens unmoved on some kernel builds, and the check goes vacuous there
             let lo = 1l
             let hi = np
-            var causal_ref <- embd_span_generate(m, prompt, 0l, 0l, greedy, 8l)
-            var span_ref <- embd_span_generate(m, prompt, lo, hi, greedy, 8l)
+            let sampled = SamplingParams(temp = 0.8, top_k = 40l)
+            var causal_ref <- embd_span_generate(m, prompt, 0l, 0l, sampled, 8l, SPAN_SEED)
+            var span_ref <- embd_span_generate(m, prompt, lo, hi, sampled, 8l, SPAN_SEED)
+            var causal_logits <- embd_span_logits(m, prompt, 0l, 0l)
+            var span_logits <- embd_span_logits(m, prompt, lo, hi)
+            let moved = logits_maxdiff(span_logits, causal_logits)
+            to_log(LOG_INFO, "the span form's stream: {eyeball_text(m, span_ref)}\n")
+            to_log(LOG_INFO, "the causal form's stream: {eyeball_text(m, causal_ref)}\n")
+            to_log(LOG_INFO, "the prompt's logits: the span form {moved} from the causal form at a {logits_maxabs(causal_logits)} peak\n")
+            t |> success(moved > SPAN_MOVES_LOGITS * logits_maxabs(causal_logits), "the span moves the prompt's logits ({moved} at a {logits_maxabs(causal_logits)} peak)")
+            delete causal_logits
+            delete span_logits
             t |> success(!ids_equal(span_ref, causal_ref), "the span moves the stream (the flag is load-bearing here)")
             var sch_nc <- create_scheduler(m, 1l, 4l, 64l)
             var events_nc : array<SchedEvent>
-            var req_nc <- media_req(m, 7l, prompt, lo, hi, true, greedy, 8l)
+            var req_nc <- media_req(m, 7l, prompt, lo, hi, true, sampled, 8l)
+            req_nc.seed = SPAN_SEED
             t |> success(submit(m, sch_nc, req_nc), "non-causal media stream queued")
             drain(m, sch_nc, events_nc)
             var got_nc <- toks_of(events_nc, 7l)

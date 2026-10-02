@@ -4,18 +4,22 @@
 doc: `ARCHITECTURE_GPU.md`. Planned work: `followup_metal.md` for Metal, `followup_vulkan.md`
 for Vulkan.
 
-**A kernel twin - one of two classes whose compiled bodies differ only on an axis one value
-fixes: a template constant, a typedef, which base shell's method it inherits, or a run-time count
-of live entries inside a fixed extent (a column count, a row count) - that binds a different
-kargs (kernel-argument struct) type than its sibling twin, or shifts a shared field to a
-different binding number, is a defect - even where one twin ignores that field; a field a
-`@template_gate` omits on one twin is a shared field still, and keeps the number the other twin
-binds it at.** A base shell is the dispatch-less base class whose methods the emitter splices
-flat into each deriving class.
+Kernel twins are two classes with the same dispatch grid formula, the same mapping of threads to
+work and the same index and guard arithmetic, whose compiled bodies differ only in expressions,
+constants or unroll counts that one value selects: a template constant, a typedef, which base
+shell's method they inherit, or a run-time count of live entries inside a fixed extent (a column
+count, a row count). A base shell is the dispatch-less base class whose methods the emitter
+splices flat into each deriving class. A stamp is a kernel class that compiles to a shader module -
+standalone, a template instance or a base-shell derivative.
+
+**A kernel twin that binds a different kargs (kernel-argument struct) type than its sibling twin,
+or shifts a shared field to a different binding number, is a defect - even where one twin ignores
+that field; a field a `@template_gate` omits on one twin is a shared field still, and keeps the
+number the other twin binds it at.**
 
 **Kernel twins are written once: as stamps of one `class template`, as classes deriving one base
-shell, or - where the axis is a run-time count - as one class whose body reads the count from its
-kargs.** Two classes with bodies of their own that share a base shell's method are not twins.
+shell, or - where the value that selects the difference is a run-time count - as one class whose
+body reads the count from its kargs.** Two classes with bodies of their own that share a base shell's method are not twins.
 
 **A diff that adds a bit-for-bit compare, or changes text on the path one covers - two kernel
 bodies that compile to separate shader modules, which a cell under `modules/dasLLAMA/tests/`
@@ -28,8 +32,7 @@ fixed by the model architecture the class serves - which every dispatch site und
 passes identically to one stamp never reaches that stamp through a per-dispatch argument channel
 (a uniform, a `@push_constant` field, a kargs field, an `@off` bind offset): stamp it into the
 class as a `@template_constant` where the class's stamps differ on it, or write it as a literal or
-a module `let` in the body - never a module `var`.** A stamp is a kernel class that compiles to a
-shader module - standalone, a template instance or a base-shell derivative.
+a module `let` in the body - never a module `var`.**
 
 **A stamp sets only `@template_constant`s its own compiled body reads: a `static_if` arm, a
 `@template_gate`, an expression, a loop bound, an array extent.** A constant

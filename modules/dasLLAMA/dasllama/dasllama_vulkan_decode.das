@@ -26,8 +26,6 @@ require daslib/strings_boost
 // mirror sync/read seams, the deltanet decode step, the FFN GEMV / qkv-group / classifier
 // decode arms, and the heat-pinned expert cache.
 
-let RDEC_MIR_SLACK_ROWS = 16l   //! the KV rows a flash fragment may read past a window's end
-let RDEC_MIR_SLACK = RDEC_MIR_SLACK_ROWS * AR_MAX_DIM   //! slack elements past each KV mirror's last plane: one fragment at the widest KV row the prepare admits
 let DA_NSPLIT_MAX = 16l   //! the decode attention's key splits a head, at most (the partials plane sizes to it)
 let RD_NB_MAX = 8l   //! the N-row token command's rows, at most, and the same-slab verify's
 let RD_PICK_CHUNKS = int64(CLS_ARGMAX_CHUNKS)   //! the pick's first pass: a workgroup a (row, chunk)
@@ -46,19 +44,31 @@ def da_nsplit(n_heads, sm_count : int64) : int64 {
 
 //! Resident-driver prepare: allocate all per-token + session buffers for a model's geometry. One
 //! resident model at a time (the arbiter guarantees it). Call before set_layer / token.
-//! `kv16` picks the mirror codec (f16 default upstream) — sessions of the same codec byte-copy.
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]
+//! `kv_dtype` is the mirror codec, a `KVDtype`'s ordinal (f16 default upstream) — sessions of the same codec byte-copy.
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis")]
 def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64;
-                    neox : bool; eps, scale : float; qk_norm : bool; kv16 : bool; q_gated : bool; rot : int64; dn : RdecDnGeom;
-                    mir_elems, cos_elems, regions : int64; carry, head : bool; verify_rows : int64) : bool {
-    if (!vk_moe_init()) {
+                    neox : bool; eps, scale : float; qk_norm : bool; kv_dtype : int; q_gated : bool; rot : int64; dn : RdecDnGeom;
+                    mir_units, cos_elems, regions : int64; carry, head : bool; verify_rows : int64) : bool {
+    if (!gpu_want_arms_tier() || !vk_moe_init()) {
         return false
     }
-    let esz = kv16 ? 2l : 4l
+    let dt = kv_dtype_of(kv_dtype)
+    let kvtq4 = dt == KVDtype.tq4
+    let kvq = kv_block_codec(dt)
+    let pf_reads_f16 = dt != KVDtype.f32
+    let unit_bytes = kv_unit_bytes(dt)
+    let mir_slack_units = kv_row_units(dt, RDEC_MIR_SLACK)
+    let gated_stamp = q_gated && !kvtq4
     // every region and its slack bind in one range: past maxStorageBufferRange, or the shaders' uint word index, every mirror read is undefined
-    let mir_bound = (mir_elems + RDEC_MIR_SLACK) * regions
-    if (!vk_range_ok(mir_bound * esz) || mir_bound > 4_294_967_295l) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan resident: KV mirror ({n_attn} layers x {seq_cap} positions, {mir_elems} elements a side plus the {RDEC_MIR_SLACK} slack) exceeds maxStorageBufferRange {vk_max_storage_range()} / the 32-bit word index\n")
+    let mir_bound = (mir_units + mir_slack_units) * regions
+    let byte_offset_ok = !kvq || mir_bound * unit_bytes <= RDEC_CODEC_BYTE_SPAN
+    if (!vk_range_ok(mir_bound * unit_bytes) || mir_bound > 4_294_967_295l || !byte_offset_ok) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: KV mirror ({n_attn} layers x {seq_cap} positions, {mir_units} units a side plus the {mir_slack_units} slack) exceeds maxStorageBufferRange {vk_max_storage_range()} / the 32-bit word index / a block codec's 32-bit byte offset\n")
+        return false
+    }
+    let shadow_bytes = kvq ? (seq_cap * kv_dim + RDEC_MIR_SLACK) * 2l : 0l
+    if (!vk_range_ok(shadow_bytes)) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the block-codec mirror's f16 shadow ({seq_cap} positions x a {kv_dim}-wide row, {shadow_bytes} bytes) exceeds maxStorageBufferRange {vk_max_storage_range()} - resident driver declines, the per-op rails serve\n")
         return false
     }
     // the residual-stream kernels stage a whole row in ar_row, and the per-head ones a whole head
@@ -96,17 +106,21 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     // (the fa tile with its cap stamp at 256, the h128 twin, the chunked pair - a capped or gated
     // layer falls through the ladder) so a declined kernel declines residency PRE-upload
     let fa_hs_ok = head_size == 64l || head_size == 128l || head_size == 256l || head_size == 512l
-    let will_facm2 = cm2_fa_on() && vk_fa_on() && kv16 && fa_hs_ok
-    let will_fakhr = !will_facm2 && khr_kq_tile_on() && vk_fa_on() && kv16 && fa_khr_serves(head_size, 0.0, q_gated)
+    let will_facm2 = cm2_fa_on() && vk_fa_on() && pf_reads_f16 && fa_hs_ok
+    let will_fakhr = !will_facm2 && khr_kq_tile_on() && vk_fa_on() && pf_reads_f16 && fa_khr_serves(head_size, 0.0, gated_stamp)
     var fa_ok = true
     if (will_facm2 || will_fakhr) {
-        let gated256 = q_gated && head_size == 256l   // the gated stamp exists at 256 on the cm2 arm alone
+        let gated256 = gated_stamp && head_size == 256l   // the gated stamp exists at 256 on the cm2 arm alone
         let stamp_ok = fa_stamp_ensure(will_fakhr, head_size, gated256, false, false, false)
         fa_ok = stamp_ok && (head_size != 256l || gated256 || fa_stamp_ensure(will_fakhr, 256l, false, true, false, false))   // an ungated 256 pre-flights its softcap twin
     }
     let chunked_ok = (g_gpu.has_coopmat && head_size == 128l && vk_fa_on()
-        ? (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls())
-        : (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))
+        ? (pf_reads_f16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls())
+        : (pf_reads_f16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))
+    if (kvq && !kv_codec_cls_ensure(dt)) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: a {dt} K/V mirror kernel class declined on this device - resident driver declines, the per-op rails serve\n")
+        return false
+    }
     if (!(fa_ok && chunked_ok)) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the prefill-attention class rail declined on this device - resident driver declines, the per-op rails serve\n")
         return false
@@ -114,7 +128,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     g_rd = new RDec(ready = false, n_layers = n_layers, dim = dim, qd = qd, kv_dim = kv_dim,
                  head_size = head_size, n_heads = n_heads, kv_mul = n_heads / (kv_dim / head_size),
                  hidden = hidden, vocab = vocab, seq_cap = seq_cap, neox = neox, eps = eps, scale = scale,
-                 qk_norm = qk_norm, kv16 = kv16, kv_esz = esz)
+                 qk_norm = qk_norm, kv_dt = dt)
     var r & = unsafe(*g_rd)
     r.q_gated = q_gated
     r.rot = rot
@@ -164,7 +178,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.ffnout_dev = make_device_buf(dim * 4l * nb)
     r.xb2_dev = make_device_buf(dim * 4l * nb)
     r.n_attn = n_attn
-    r.mir_elems = mir_elems + RDEC_MIR_SLACK
+    r.mir_units = mir_units + mir_slack_units
     r.regions = regions
     // the two largest allocations of the load: a heap the last model fragmented can refuse them though the plan fit - decline, never die mid-upload
     r.k_mirror = try_device_buf(rd_mir_bytes())
@@ -176,6 +190,34 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     cmd_one_shot() $(rawz : VkCommandBuffer; var _h : VkHaz) {
         cmd_fill_zero(rawz, r.k_mirror, 0l, rd_mir_bytes())
         cmd_fill_zero(rawz, r.v_mirror, 0l, rd_mir_bytes())
+    }
+    if (kvtq4) {
+        var signs : array<float>
+        tq4_fill_signs(signs, KV_TQ4_SIGNS)
+        r.tq4_signs_dev = make_device_buf(KV_TQ4_SIGNS * 4l)
+        upload_region_at(r.tq4_signs_dev, 0l, unsafe(addr<uint8 const?>(signs[0])), KV_TQ4_SIGNS * 4l)
+        delete signs
+    }
+    if (kvq) {
+        r.kst_dev = make_device_buf(kv_dim * 4l * nb)
+        r.vst_dev = make_device_buf(kv_dim * 4l * nb)
+        r.stage_tok = make_host_buf(TOK_META_BYTES * nb, true)
+        unsafe {
+            var sm = reinterpret<TokMeta?>(r.stage_tok.mapped)
+            for (i in range64(nb)) {
+                sm[i] = TokMeta(pos = uint(i))
+            }
+        }
+        r.ksh_dev = try_device_buf(rd_shadow_bytes())
+        r.vsh_dev = try_device_buf(rd_shadow_bytes())
+        if (r.ksh_dev == 0ul || r.vsh_dev == 0ul) {
+            to_log(LOG_WARNING, "dasLLAMA vulkan resident: the block-codec mirror's f16 shadow ({(2l * rd_shadow_bytes()) >> 20l} MB for ctx {seq_cap}) found no room on the device - resident driver declines, the per-op rails serve\n")
+            return false
+        }
+        cmd_one_shot() $(rawz : VkCommandBuffer; var _h : VkHaz) {
+            cmd_fill_zero(rawz, r.ksh_dev, 0l, rd_shadow_bytes())
+            cmd_fill_zero(rawz, r.vsh_dev, 0l, rd_shadow_bytes())
+        }
     }
     r.hybrid = hybrid
     if (hybrid) {
@@ -402,6 +444,7 @@ def vk_rdec_set_layer(l, mir_idx : int64; bq, bk, bv, bo, b1, b3, b2 : int64; fq
 //! the attention half of a layer's registration: the quad's blocks, formats and sets (f1 / f3 / f2
 //! name the layer's FFN feed forms for the class-rail check); the layer's geometry is set already. `tok` and `cos` are the
 //! TokMeta block and rope rows its rope and attention read: the trunk's, or the NextN head's own
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis")]
 def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64; fq, fk, fv, fo, f1, f3, f2 : int; tok, cos : uint64) {
     unsafe {
         L.recurrent = false
@@ -417,11 +460,13 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
         let pv = (L.vfk || L.kv_shared) ? pk : arena_planes(fv, bv)   //! no v plane: the k planes fill the slot, the v set stays unused
         let po = arena_planes(fo, bo)
         let anykq = kq_sb(fq) || kq_sb(fo) || kq_sb(f1) || kq_sb(f2)   //! kq consumers take the Q8_K quant/act forms
-        let kv16 = g_rd.kv16
+        let dt = g_rd.kv_dt
+        let kv16 = rd_kv16()
+        let kvq = rd_kv_block_codec()
         verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq() && ensure_q8_actrq_cls() && ensure_q8_gemv_gu_cls()
             && (kv16 ? ensure_rope_kv_f16_cls() : ensure_rope_kv_cls())
-            && (kv16 ? ensure_da_attn_f16_cls() : ensure_da_attn_cls())
-            && (g_rd.has_sinks || !da_slab_is_g2(L.kv_mul) || (kv16 ? ensure_da_attn_f16_g2_cls() : ensure_da_attn_g2_cls()))
+            && (kvq || da_attn_stamp_ensure(dt, false, false))
+            && (kvq || g_rd.has_sinks || !da_slab_is_g2(L.kv_mul) || da_attn_stamp_ensure(dt, false, true))
             && (!g_rd.qk_norm || (ensure_qk_rms_cls()
                 && (kv16 ? ensure_qkn_rope_f16_cls() : ensure_qkn_rope_cls())))
             && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls()))
@@ -452,37 +497,48 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
         let mirbytes = rd_mir_bytes()
         let cosbytes = g_rd.cos_elems * 4l
         let bias_bind = rd_bias_bind()
+        let stagebytes = g_rd.kv_dim * 4l * nb
+        let kstore = kvq ? g_rd.kst_dev : g_rd.k_mirror
+        let vstore = kvq ? g_rd.vst_dev : g_rd.v_mirror
+        let storebytes = kvq ? stagebytes : mirbytes
+        let storebit = kvq ? VHZ_VST : VHZ_MIR
+        let storetok = kvq ? g_rd.stage_tok.buf : tok
         if (g_rd.qk_norm) {
             // per-head q/k rmsnorm (class): q rows, k rows (kv_dev — kbase=qd rides the push), norms
             L.s_qkn = set_qk_rms_cls(fixed_array(g_rd.q_dev, g_rd.kv_dev, g_rd.norms_dev),
                 fixed_array(qplane, (qd + 2l * kvd) * 4l * nb, g_rd.norms_bytes),
                 fixed_array(VHZ_Q, VHZ_KVK, 0u))
             // the fused twin (class): norm rows bind the norms buffer, mirror row rides TokMeta, the bias rows their buffer
-            let qrbufs = fixed_array(g_rd.q_dev, g_rd.kv_dev, g_rd.k_mirror, g_rd.v_mirror, cos, g_rd.norms_dev, tok, bias_bind.buf)
-            let qrsizes = fixed_array(qplane, (qd + 2l * kvd) * 4l * nb, mirbytes, mirbytes, cosbytes * nb, g_rd.norms_bytes, TOK_META_BYTES * nb, bias_bind.bytes)
-            let qrbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS, 0u, 0u, 0u)
+            let qrbufs = fixed_array(g_rd.q_dev, g_rd.kv_dev, kstore, vstore, cos, g_rd.norms_dev, storetok, bias_bind.buf)
+            let qrsizes = fixed_array(qplane, (qd + 2l * kvd) * 4l * nb, storebytes, storebytes, cosbytes * nb, g_rd.norms_bytes, TOK_META_BYTES * nb, bias_bind.bytes)
+            let qrbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, storebit, storebit, VHZ_COS, 0u, 0u, 0u)
             L.s_qkn_rope = (kv16 ? set_qkn_rope_f16_cls(qrbufs, qrsizes, qrbits)
                 : set_qkn_rope_cls(qrbufs, qrsizes, qrbits))
         }
         // rope+store (class): per-token mirror row rides TokMeta, the bias rows their buffer
-        let rbufs = fixed_array(g_rd.q_dev, g_rd.kv_dev, g_rd.k_mirror, g_rd.v_mirror, cos, tok, bias_bind.buf)
-        let rsizes = fixed_array(qplane, (qd + 2l * kvd) * 4l * nb, mirbytes, mirbytes, cosbytes * nb, TOK_META_BYTES * nb, bias_bind.bytes)
-        let rbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS, 0u, 0u)
+        let rbufs = fixed_array(g_rd.q_dev, g_rd.kv_dev, kstore, vstore, cos, storetok, bias_bind.buf)
+        let rsizes = fixed_array(qplane, (qd + 2l * kvd) * 4l * nb, storebytes, storebytes, cosbytes * nb, TOK_META_BYTES * nb, bias_bind.bytes)
+        let rbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, storebit, storebit, VHZ_COS, 0u, 0u)
         L.s_rope = kv16 ? set_rope_kv_f16_cls(rbufs, rsizes, rbits) : set_rope_kv_cls(rbufs, rsizes, rbits)
-        // attn (class): per-token cnt rides TokMeta, the scale rides the push
-        let partbytes = (g_rd.attn_cnt_off + g_rd.n_heads * nb) * 4l
-        //! the partials ride the attention-out bit (written and read within the pass); the folded requant lands in the wo feed's aq/as
-        if (g_rd.has_sinks) {   //! the sink twins bind the sink plane past the pass's eight
-            let abufs = fixed_array(g_rd.q_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.attn_dev, tok, g_rd.attn_part_dev, g_rd.aq_dev, g_rd.as_dev, g_rd.sinks_dev)
-            let asizes = fixed_array(qplane, mirbytes, mirbytes, qd * 4l * nb, TOK_META_BYTES * nb, partbytes, qd * nb, (qd / 32l) * 4l * nb, g_rd.sinks_bytes)
-            let abits = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u, VHZ_ATT, VHZ_AQ, VHZ_AQ, 0u)
-            L.s_attn = kv16 ? set_da_attn_f16_sink_cls(abufs, asizes, abits) : set_da_attn_sink_cls(abufs, asizes, abits)
-        } else {
-            let abufs = fixed_array(g_rd.q_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.attn_dev, tok, g_rd.attn_part_dev, g_rd.aq_dev, g_rd.as_dev)
-            let asizes = fixed_array(qplane, mirbytes, mirbytes, qd * 4l * nb, TOK_META_BYTES * nb, partbytes, qd * nb, (qd / 32l) * 4l * nb)
-            let abits = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u, VHZ_ATT, VHZ_AQ, VHZ_AQ)
-            L.s_attn = kv16 ? set_da_attn_f16_cls(abufs, asizes, abits) : set_da_attn_cls(abufs, asizes, abits)
+        if (rd_kvq8()) {
+            L.s_kv_store = set_kv_q8_store_cls(fixed_array(g_rd.kst_dev, g_rd.vst_dev, g_rd.k_mirror, g_rd.v_mirror, tok),
+                fixed_array(stagebytes, stagebytes, mirbytes, mirbytes, TOK_META_BYTES * nb),
+                fixed_array(VHZ_VST, VHZ_VST, VHZ_MIR, VHZ_MIR, 0u))
         }
+        if (rd_kvtq4()) {
+            let signbytes = KV_TQ4_SIGNS * 4l
+            L.s_kv_store = set_kv_tq4_store_cls(fixed_array(g_rd.q_dev, g_rd.kst_dev, g_rd.vst_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.tq4_signs_dev, tok),
+                fixed_array(qplane, stagebytes, stagebytes, mirbytes, mirbytes, signbytes, TOK_META_BYTES * nb),
+                fixed_array(VHZ_Q, VHZ_VST, VHZ_VST, VHZ_MIR, VHZ_MIR, 0u, 0u))
+            L.s_unrot = set_kv_tq4_unrot_cls(fixed_array(g_rd.attn_dev, g_rd.q_dev, g_rd.tq4_signs_dev),
+                fixed_array(qd * 4l * nb, qplane, signbytes), fixed_array(VHZ_ATT, VHZ_Q, 0u))
+        }
+        // the partials ride the attention-out bit (written and read within the pass); the folded requant lands in the wo feed's aq/as
+        let partbytes = (g_rd.attn_cnt_off + g_rd.n_heads * nb) * 4l
+        L.s_attn = da_attn_stamp_set(dt, g_rd.has_sinks,
+            fixed_array(g_rd.q_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.attn_dev, tok, g_rd.attn_part_dev, g_rd.aq_dev, g_rd.as_dev, g_rd.sinks_dev),
+            fixed_array(qplane, mirbytes, mirbytes, qd * 4l * nb, TOK_META_BYTES * nb, partbytes, qd * nb, (qd / 32l) * 4l * nb, g_rd.sinks_bytes),
+            fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u, VHZ_ATT, VHZ_AQ, VHZ_AQ, 0u))
         // quantize attn -> aq/as
         L.s_quant_at = set_rq_cls(fixed_array(g_rd.attn_dev, g_rd.aq_dev, g_rd.as_dev),
             fixed_array(qd * 4l * nb, qd * nb, (qd / 32l) * 4l * nb),
@@ -968,13 +1024,13 @@ def vk_rdec_upload_sinks(rows : array<float>) : bool {
         return true
     }
     assert(g_rd != null, "vk_rdec_upload_sinks before prepare")
-    if (!(g_rd.kv16 && vk_fa_on() && (cm2_fa_on() || khr_kq_tile_on()) && g_rd.head_size == 64l)) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan resident: attention sinks ride the flash tiles at head size 64 - no cm2 or KHR flash arm on the f16 mirrors here, the resident driver declines\n")
+    if (!(rd_pf_reads_f16() && vk_fa_on() && (cm2_fa_on() || khr_kq_tile_on()) && g_rd.head_size == 64l)) {
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: attention sinks ride the flash tiles at head size 64 - no cm2 or KHR flash arm over the prefill's f16 rows here, the resident driver declines\n")
         return false
     }
     let khr = !cm2_fa_on()
     let stamps_ok = (fa_stamp_pair_ensure(khr, 64l, false, false, true, true)
-        && (g_rd.kv16 ? ensure_da_attn_f16_sink_cls() : ensure_da_attn_sink_cls()))
+        && da_attn_stamp_ensure(g_rd.kv_dt, true, false))
     if (!stamps_ok) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: an attention-sink kernel class declined on this device, the resident driver declines\n")
         return false
@@ -2229,34 +2285,46 @@ def private rd_announce_fuse_bisect {
     }
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis")]
 def private rd_attn_rqk(L : RLayer) : uint {
+    return DA_RQ_NONE if (rd_kvtq4())
     if (!kq_sb(L.fo)) return DA_RQ_Q8
     return L.hs % 256l == 0l ? DA_RQ_Q8K : DA_RQ_NONE
 }
 
-def private rd_enc_da_attn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; var pca : DaAttnArgs; awgs : int64) {
-    if (g_rd.has_sinks) {
-        if (g_rd.kv16) {
-            enc_da_attn_f16_sink_cls(raw, h, L.s_attn, pca, awgs)
+//! A block codec's store of `rows` staged rows through set `s`: the token stamp, or under `window` the stamp that lands them
+//! at consecutive positions from `pos0`. tq4's store also rotates `nqh` q heads a row in place (`qrow` a row's stride in the q
+//! plane, `qstride` a head's); `nkh` is the K heads a row stores, 0 on a shared-KV layer.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis")]
+def rd_enc_kv_store(raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; window : bool; kvd, hs, rows, nqh, nkh : int64; layerbase, pos0, qrow, qstride : uint) {
+    if (rd_kvq8() && nkh > 0l) {
+        var pcs = KvQStoreArgs(kvd = uint(kvd), rows = uint(rows), layerbase = layerbase, pos0 = pos0)
+        let wgs = (kv_row_units(KVDtype.q8_0, kvd) * rows + int64(WG_X) - 1l) / int64(WG_X)
+        if (window) {
+            enc_kv_q8_store_b_cls(raw, h, s, pcs, wgs)
         } else {
-            enc_da_attn_sink_cls(raw, h, L.s_attn, pca, awgs)
+            enc_kv_q8_store_cls(raw, h, s, pcs, wgs)
         }
-    } elif (da_slab_is_g2(L.kv_mul)) {
-        if (g_rd.kv16) {
-            enc_da_attn_f16_g2_cls(raw, h, L.s_attn, pca, awgs)
+    } elif (rd_kvtq4() && nqh + nkh > 0l) {
+        var pct = KvTqStoreArgs(kvd = uint(kvd), hs = uint(hs), layerbase = layerbase, pos0 = pos0, nqh = uint(nqh), nkh = uint(nkh),
+            qrow = qrow, qstride = qstride, inv_sqrt_hs = 1.0 / sqrt(float(hs)))
+        if (window) {
+            enc_kv_tq4_store_b_cls(raw, h, s, pct, rows * (nqh + 2l * nkh))
         } else {
-            enc_da_attn_g2_cls(raw, h, L.s_attn, pca, awgs)
+            enc_kv_tq4_store_cls(raw, h, s, pct, rows * (nqh + 2l * nkh))
         }
-    } elif (g_rd.kv16) {
-        enc_da_attn_f16_cls(raw, h, L.s_attn, pca, awgs)
-    } else {
-        enc_da_attn_cls(raw, h, L.s_attn, pca, awgs)
     }
 }
 
+//! tq4's un-rotation of `rows` attention rows of `orow` elements through set `s`; a `qstride` past `hs` gates each head by its gate half after it
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis")]
+def rd_enc_tq4_unrot(raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; hs, rows : int64; orow, qrow, qstride : uint) {
+    var pcu = KvTqUnrotArgs(hs = uint(hs), nh = uint(g_rd.n_heads), orow = orow, qrow = qrow, qstride = qstride, inv_sqrt_hs = 1.0 / sqrt(float(hs)))
+    enc_kv_tq4_unrot_cls(raw, h, s, pcu, g_rd.n_heads * rows)
+}
+
 //! `ncols` the GEMV leaves' columns and `nrow_bx` the N-row bisect bits (the one-row values at one row); `kv_only` the verify's head re-warm, its stamps under `pfx`
-[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis")]
 def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l : int64; fuse_qkr : bool; nlfin, nsplit, nrows : int64; ncols : uint; nrow_bx : int;
                                 kv_only : bool = false; pfx : string = "a:") {
     let dim = g_rd.dim
@@ -2303,15 +2371,16 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
     let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow
     let mirbase = uint(one ? rd_mir_base(L) : L.mir_base)   //! the one-row command's region rides its push; an N-row step's rows carry theirs in TokMeta
     let nkh = L.kv_shared ? 0l : kvd / hs   //! the k-head groups also store the mirror row: none on a shared-KV layer
+    let storebase = rd_kv_block_codec() ? 0u : mirbase
     let nqh = kv_only ? 0l : g_rd.n_heads
     if (fuse_qkr && (nrow_bx & NROW_BX_ROPE) == 0) {
         var pcf = QknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(L.rot / 2l),
-            neox = g_rd.neox ? 1u : 0u, nh = uint(nqh), layerbase = mirbase,
+            neox = g_rd.neox ? 1u : 0u, nh = uint(nqh), layerbase = storebase,
             qwoff = uint(nlfin + dim + l * 2l * hsmax), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hsmax),
             eps = g_rd.eps, qstride = qstride, boff = rd_bias_off(L), hasb = g_rd.has_bias ? 1u : 0u, cbase = uint(L.cbase),
             vfk = L.vfk ? 1u : 0u, vnorm = L.vnorm ? 1u : 0u,
             rowwg = uint(nqh + nkh), kvrow = kvrow, qrow = q_plane_row, cosrow = uint(g_rd.cos_elems))
-        if (g_rd.kv16) {
+        if (rd_kv16()) {
             enc_qkn_rope_f16_cls(raw, h, L.s_qkn_rope, pcf, (nqh + nkh) * nrows)
         } else {
             enc_qkn_rope_cls(raw, h, L.s_qkn_rope, pcf, (nqh + nkh) * nrows)
@@ -2330,25 +2399,31 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         let npairs = qpairs + (L.kv_shared ? 0l : kvd / 2l)   // the k pairs also store the mirror row: none on a shared-KV layer
         var pcr = RopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2l),
             neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qpairs), npairs = uint(npairs),
-            layerbase = mirbase, boff = rd_bias_off(L), hasb = g_rd.has_bias ? 1u : 0u, cbase = uint(L.cbase),
+            layerbase = storebase, boff = rd_bias_off(L), hasb = g_rd.has_bias ? 1u : 0u, cbase = uint(L.cbase),
             rows = nr, kvrow = kvrow, qrow = q_plane_row, cosrow = uint(g_rd.cos_elems))
         let rwgs = (npairs * nrows + int64(WG_X) - 1l) / int64(WG_X)
-        if (g_rd.kv16) {
+        if (rd_kv16()) {
             enc_rope_kv_f16_cls(raw, h, L.s_rope, pcr, rwgs)
         } else {
             enc_rope_kv_cls(raw, h, L.s_rope, pcr, rwgs)
         }
         rd_ts(raw, "{pfx}rope")
     }
+    if ((nrow_bx & NROW_BX_ROPE) == 0) {
+        rd_enc_kv_store(raw, h, L.s_kv_store, false, kvd, hs, nrows, nqh, nkh, mirbase, 0u, q_plane_row, qstride)
+    }
     return if (kv_only)
     let rqk = rd_attn_rqk(L)
     let rowwgs = da_attn_row_wgs(g_rd.n_heads, L.kv_mul, nsplit)   //! a row's workgroups: the kernel's row index and the grid share it
     var pca = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(L.kv_mul),
-        kbase = mirbase, vbase = mirbase, scale = g_rd.scale, qstride = qstride, gated = g_rd.q_gated ? 1u : 0u,
+        kbase = mirbase, vbase = mirbase, scale = g_rd.scale, qstride = qstride, gated = rd_attn_gated() ? 1u : 0u,
         window = uint(L.window), cap = L.attn_cap, nsplit = uint(nsplit), rqk = rqk, sinkoff = uint(l * g_rd.n_heads),
         rowwg = uint(rowwgs), qrow = q_plane_row, cntoff = uint(g_rd.attn_cnt_off))
     if ((nrow_bx & NROW_BX_ATTN) == 0) {
-        rd_enc_da_attn(raw, h, L, pca, rowwgs * nrows)
+        da_attn_stamp_enc(g_rd.kv_dt, g_rd.has_sinks, da_slab_is_g2(L.kv_mul), raw, h, L.s_attn, pca, rowwgs * nrows)
+        if (rd_kvtq4()) {
+            rd_enc_tq4_unrot(raw, h, L.s_unrot, hs, nrows, uint(qd), q_plane_row, qstride)
+        }
     }
     rd_ts(raw, "{pfx}attn")
     if (rqk == DA_RQ_NONE) {   //! a head the fold cannot block (a K-quant wo plane under a head off 256): the separate requant
@@ -3724,12 +3799,12 @@ def private rd_hc_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n 
             tm[i].pos = uint(pos + i)
             tm[i].cnt = uint(pos + i + 1l)
             tm[i].parity = g_rd.hybrid ? uint(par ^ int(i & 1l)) : 0u
-            tm[i].mirbase = uint(r * g_rd.mir_elems)
+            tm[i].mirbase = uint(r * g_rd.mir_units)
             tm[i].dnslot = uint(r)
             hm[i].pos = uint(pos - 1l + i)
             hm[i].cnt = uint(pos + i)
             hm[i].parity = 0u
-            hm[i].mirbase = uint(r * g_rd.mir_elems)
+            hm[i].mirbase = uint(r * g_rd.mir_units)
             hm[i].dnslot = uint(r)
         }
         let t1 = ref_time_ticks()
@@ -3818,12 +3893,12 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int6
             tm[i].pos = uint(pos + i)
             tm[i].cnt = uint(pos + i + 1l)
             tm[i].parity = g_rd.hybrid ? uint(par ^ int(i & 1l)) : 0u
-            tm[i].mirbase = uint(r * g_rd.mir_elems)
+            tm[i].mirbase = uint(r * g_rd.mir_units)
             tm[i].dnslot = uint(r)
             hm[i].pos = uint(pos - 1l + i)
             hm[i].cnt = uint(pos + i)
             hm[i].parity = 0u
-            hm[i].mirbase = uint(r * g_rd.mir_elems)
+            hm[i].mirbase = uint(r * g_rd.mir_units)
             hm[i].dnslot = uint(r)
         }
         var cmd = unsplit ? g_rd.v_cmd_unsplit[vi] : g_rd.v_cmd[vi]
@@ -3969,7 +4044,7 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>;
             tm[i].pos = uint(poss[i])
             tm[i].cnt = uint(cnts[i])
             tm[i].parity = g_rd.hybrid ? uint(g_rd.dn_parity[regs[i]]) : 0u
-            tm[i].mirbase = uint(regs[i] * g_rd.mir_elems)
+            tm[i].mirbase = uint(regs[i] * g_rd.mir_units)
             tm[i].dnslot = uint(regs[i])
         }
         var cmd = unsplit ? g_rd.cmd_n_unsplit[nrows] : g_rd.cmd_n[nrows]
@@ -4024,8 +4099,8 @@ def vk_rdec_sync_kv(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int6
     if (L.mir_idx < 0l) {
         return
     }
-    let rowb = L.kvd * g_rd.kv_esz
-    let base = rd_mir_base(L) * g_rd.kv_esz
+    let rowb = rd_kv_row_units(L.kvd) * kv_unit_bytes(g_rd.kv_dt)
+    let base = rd_mir_base(L) * kv_unit_bytes(g_rd.kv_dt)
     upload_region_at(g_rd.k_mirror, base, kp, npos * rowb)
     upload_region_at(g_rd.v_mirror, base, vp, npos * rowb)
 }
@@ -4056,8 +4131,8 @@ def vk_rdec_head_sync_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?
     assert(g_rd != null && g_rd.head_on, "vk_rdec_head_sync_rows on a driver without the head")
     return if (nrows <= 0l)
     let L & = unsafe(g_rd.head)
-    let rowb = L.kvd * g_rd.kv_esz
-    let base = rd_mir_base(L) * g_rd.kv_esz + row0 * rowb
+    let rowb = rd_kv_row_units(L.kvd) * kv_unit_bytes(g_rd.kv_dt)
+    let base = rd_mir_base(L) * kv_unit_bytes(g_rd.kv_dt) + row0 * rowb
     unsafe {
         upload_region_at(g_rd.k_mirror, base, kp + row0 * rowb, nrows * rowb)
         upload_region_at(g_rd.v_mirror, base, vp + row0 * rowb, nrows * rowb)
@@ -4069,7 +4144,7 @@ def vk_rdec_head_read_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?
     assert(g_rd != null && g_rd.head_on, "vk_rdec_head_read_rows on a driver without the head")
     return if (nrows <= 0l)
     let L & = unsafe(g_rd.head)
-    let rowb = L.kvd * g_rd.kv_esz
+    let rowb = rd_kv_row_units(L.kvd) * kv_unit_bytes(g_rd.kv_dt)
     read_kv_rows_of(L, row0, nrows, unsafe(kp + row0 * rowb), unsafe(vp + row0 * rowb))
 }
 
@@ -4078,14 +4153,14 @@ def private read_kv_rows_of(L : RLayer; row0, nrows : int64; var kp : uint8?; va
     if (L.mir_idx < 0l) {
         return
     }
-    verify(vk_moe_init())
-    let rowb = L.kvd * g_rd.kv_esz
+    assert(g_rd != null, "vk decode: K/V rows read with no resident model on the device")
+    let rowb = rd_kv_row_units(L.kvd) * kv_unit_bytes(g_rd.kv_dt)
     var p0 = 0l
     var raw = alloc_transient_cmd()   // re-recorded per chunk (the pool allows reset), freed below
     while (p0 < nrows) {
         let rows = min(KV_READBACK_ROWS, nrows - p0)
         let bytes = rows * rowb
-        let off = rd_mir_base(L) * g_rd.kv_esz + (row0 + p0) * rowb
+        let off = rd_mir_base(L) * kv_unit_bytes(g_rd.kv_dt) + (row0 + p0) * rowb
         unsafe {
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw, begin), null)

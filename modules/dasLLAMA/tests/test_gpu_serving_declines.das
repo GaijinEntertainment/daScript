@@ -379,6 +379,30 @@ def test_resident_region_ctx(t : T?) {
 }
 
 [test]
+def test_resident_fit_ctx(t : T?) {
+    t |> run("a plan past its room shortens to the context the room holds: a block codec's shadow shortens with the mirror") @(t : T?) {
+        let mb = 1_048_576l
+        let asked = 100000l
+        let kv_pos = 3456l          // 24 layers' K and V rows of 128 elements at tq4's 18 bytes a 32-block
+        let shadow_pos = 512l       // both sides' rows of one layer as halves
+        let staged = 10l * mb
+        var plan = ResidentPlan(usable_bytes = 800l * mb, weight_bytes = 500l * mb, kv_bytes = asked * kv_pos, scratch_bytes = staged + asked * shadow_pos)
+        let room = 800l * mb - 500l * mb - staged
+        let want = (room / 8l * 7l) / (kv_pos + shadow_pos)
+        t |> equal(resident_fit_ctx(plan, asked, shadow_pos), want, "the room past the weights and the staged rows, over the mirror's and the shadow's bytes a position")
+        t |> success(want * (kv_pos + shadow_pos) <= room / 8l * 7l && (want + 1l) * (kv_pos + shadow_pos) > room / 8l * 7l, "the mirror and its shadow at that context fill the room less its slack, and one position more does not fit")
+        let shadow_whole = ((room - asked * shadow_pos) / 8l * 7l) / kv_pos
+        t |> success(want > shadow_whole, "the shadow charged whole at the asked context holds fewer positions ({shadow_whole} against {want})")
+        plan.scratch_bytes = staged
+        t |> equal(resident_fit_ctx(plan, asked, 0l), (room / 8l * 7l) / kv_pos, "a scalar codec has no shadow: the room over the mirror's bytes a position")
+        plan.hot_bytes = 100l * mb
+        t |> equal(resident_fit_ctx(plan, asked, 0l), ((room - 100l * mb) / 8l * 7l) / kv_pos, "the hot pool's bytes come off the room")
+        plan.weight_bytes = 900l * mb
+        t |> equal(resident_fit_ctx(plan, asked, 0l), 0l, "weights past the room: no context fits")
+    }
+}
+
+[test]
 def test_resident_binding_ctx(t : T?) {
     t |> run("the KV mirror's binding cap counts the attention layers' rows, whatever layer 0 is") @(t : T?) {
         let bcap = 4_294_967_295l   //! the 4 GiB maxStorageBufferRange of the NV/AMD drivers
@@ -390,6 +414,13 @@ def test_resident_binding_ctx(t : T?) {
         t |> equal(resident_binding_ctx(hy, KVDtype.f16, bcap), 262143l, "the hybrid's ctx is the range over eight attention rows, not skipped for layer 0's zero width")
         t |> equal(resident_binding_ctx(hy, KVDtype.f32, bcap), 131071l, "f32 rows halve it")
         t |> equal(resident_binding_ctx(hy, KVDtype.f16, 0l), 0l, "no cap known reads 0")
+        //! a block codec's kernels address bytes in 32 bits: past that many bytes the device's range no longer raises the context
+        let wide = 4l * BLOCK_CODEC_SIDE_BYTES
+        t |> equal(resident_binding_ctx(hy, KVDtype.q8_0, wide), resident_binding_ctx(hy, KVDtype.q8_0, BLOCK_CODEC_SIDE_BYTES), "a q8_0 mirror stops at the byte cap on a device that binds four times it")
+        t |> equal(resident_binding_ctx(hy, KVDtype.tq4, wide), resident_binding_ctx(hy, KVDtype.tq4, BLOCK_CODEC_SIDE_BYTES), "... and a tq4 mirror")
+        t |> equal(resident_binding_ctx(hy, KVDtype.f16, wide), 4l * resident_binding_ctx(hy, KVDtype.f16, BLOCK_CODEC_SIDE_BYTES), "control: an f16 mirror, addressed by element, takes the wider range")
+        t |> success(resident_binding_ctx(hy, KVDtype.tq4, bcap) > resident_binding_ctx(hy, KVDtype.q8_0, bcap)
+            && resident_binding_ctx(hy, KVDtype.q8_0, bcap) > resident_binding_ctx(hy, KVDtype.f16, bcap), "under the cap one range holds more tq4 positions than q8_0, and more q8_0 than f16")
         delete hy
         var dense <- shell(32l, 0ul)
         dense.config.n_kv_heads = 8l
@@ -403,6 +434,73 @@ def test_resident_binding_ctx(t : T?) {
         var recr <- shell(4l, 0xFul)
         t |> equal(resident_binding_ctx(recr, KVDtype.f16, bcap), 0l, "no attention layer reads 0")
         delete recr
+    }
+    t |> run("a block codec's f16 shadow caps a region's context at one binding of the widest K/V row's halves") @(t : T?) {
+        let bcap = 4_294_967_295l
+        var hy <- shell(32l, 0x7777_7777ul)
+        hy.config.n_kv_heads = 8l
+        hy.config.head_size = 128l   // a 1024-wide K/V row: 2048 B of halves a position
+        t |> equal(resident_shadow_ctx(hy, KVDtype.q8_0, bcap), 2097151l, "the range over one layer's row as halves, whatever the layer count")
+        t |> equal(resident_shadow_ctx(hy, KVDtype.tq4, bcap), 2097151l, "the shadow is the same halves under tq4")
+        t |> equal(resident_shadow_ctx(hy, KVDtype.f16, bcap), 0l, "control: a scalar codec has no shadow, so no cap")
+        t |> equal(resident_shadow_ctx(hy, KVDtype.q8_0, 0l), 0l, "no cap known reads 0")
+        hy.config.head_size = 256l
+        t |> equal(resident_shadow_ctx(hy, KVDtype.q8_0, bcap), 1048575l, "a row twice as wide halves it")
+        delete hy
+        var recr <- shell(4l, 0xFul)
+        t |> equal(resident_shadow_ctx(recr, KVDtype.q8_0, bcap), 0l, "no attention layer reads 0")
+        delete recr
+    }
+}
+
+[test]
+def test_resident_mirror_codec_ask(t : T?) {
+    t |> run("a block codec's geometry: whole 32-blocks a row and a head, a power-of-two head under tq4") @(t : T?) {
+        var m <- shell(2l, 0ul)
+        t |> success(empty(kv_codec_geometry_why(m.config, KVDtype.q8_0)) && empty(kv_codec_geometry_why(m.config, KVDtype.tq4)), "a 32-wide head holds both block codecs")
+        m.config.head_size = 96l
+        t |> success(empty(kv_codec_geometry_why(m.config, KVDtype.q8_0)), "a 96-wide head is whole blocks: q8_0 holds it")
+        t |> success(find(kv_codec_geometry_why(m.config, KVDtype.tq4), "power-of-two head_size") >= 0, "tq4 names the head it cannot rotate")
+        m.config.head_size = 48l
+        t |> success(find(kv_codec_geometry_why(m.config, KVDtype.q8_0), "multiples of 32") >= 0, "a 48-wide head is no whole block: q8_0 names it")
+        t |> success(empty(kv_codec_geometry_why(m.config, KVDtype.f16)), "a scalar codec holds any head")
+        delete m
+    }
+    t |> run("the mirror codec the plan arms: the ask where the model holds it, f16 where it does not, f16 for an f32 ask") @(t : T?) {
+        let pin0 = gpu_kv_dtype_pin_()
+        set_gpu_kv_dtype_(KVDtype.tq4)
+        if (resident_mirror_dtype() != KVDtype.tq4) {
+            t |> skip("the environment arms a {resident_mirror_dtype()} mirror over the ask (DASLLAMA_VK_KV32=1) - the cell needs that unset")
+        } else {
+            var m <- shell(2l, 0ul)
+            t |> equal(resident_mirror_dtype_of(m), KVDtype.tq4, "tq4 asked of a 32-wide head arms tq4")
+            m.config.head_size = 96l
+            t |> equal(resident_mirror_dtype_of(m), KVDtype.f16, "tq4 asked of a 96-wide head arms f16")
+            set_gpu_kv_dtype_(KVDtype.q8_0)
+            t |> equal(resident_mirror_dtype_of(m), KVDtype.q8_0, "control: q8_0 holds the same head")
+            set_gpu_kv_dtype_(KVDtype.f32)
+            t |> equal(resident_mirror_dtype(), KVDtype.f16, "an f32 ask arms f16: the f32 mirror is DASLLAMA_VK_KV32=1's alone")
+            reset_gpu_kv_dtype_()
+            t |> success(!gpu_kv_dtype_pin_().pinned, "the reset lifts the ask")
+            delete m
+        }
+        if (pin0.pinned) {
+            set_gpu_kv_dtype_(pin0.dt)
+        } else {
+            reset_gpu_kv_dtype_()
+        }
+    }
+    t |> run("a codec's spelling, in any case, and its ordinal across the tier's seam") @(t : T?) {
+        let upper = kv_dtype_named("Q8_0")
+        t |> success(upper.known && upper.dt == KVDtype.q8_0, "an upper-case spelling names the codec")
+        t |> success(kv_dtype_named("tq4").dt == KVDtype.tq4 && kv_dtype_named("f32").dt == KVDtype.f32 && kv_dtype_named("f16").known, "every codec has its spelling")
+        let bogus = kv_dtype_named("bogus")
+        t |> success(!bogus.known && bogus.dt == KVDtype.f16, "a spelling that names no codec reads f16, marked unknown")
+        t |> equal(kv_dtype_of(int(KVDtype.tq4)), KVDtype.tq4, "an ordinal names its codec")
+        let why = panic_text_of() $ {
+            kv_dtype_of(99)
+        }
+        t |> success(find(why, "no KVDtype has ordinal 99") >= 0, "an ordinal no codec carries panics by name: {why}")
     }
 }
 

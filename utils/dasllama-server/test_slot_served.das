@@ -108,16 +108,30 @@ def test_slot_wants_device_kv(t : T?) {
         t |> success(gpu_ctx_asked_whole(2048l), "a short one as much as a long one")
         t |> success(!gpu_ctx_asked_whole(0l), "no --ctx: the model's own context, shortened to the card's room")
     }
-    t |> run("the residency ask pins the context and its strictness for the loads that follow") @(t : T?) {
+    t |> run("the residency ask pins the context, its strictness and the streams' K/V codec for the loads that follow") @(t : T?) {
         let pins0 = gpu_ctx_pins()
+        let kv_pin0 = gpu_kv_dtype_pin()
         gpu_residency_ask(4l, 131072l)
         t |> equal(gpu_ctx_pins().ctx_max, 131072l, "the context asked")
         t |> success(gpu_ctx_pins().strict, "asked whole")
-        gpu_residency_ask(1l, 0l)
+        t |> success(gpu_kv_dtype_pin().pinned && gpu_kv_dtype_pin().dt == KVDtype.f16, "no codec named: the streams' default, f16, is the mirror asked")
+        gpu_residency_ask(1l, 0l, KVDtype.q8_0)
         t |> equal(gpu_ctx_pins().ctx_max, 0l, "no context asked: no pin")
         t |> success(!gpu_ctx_pins().strict, "nothing to hold whole")
+        t |> success(gpu_kv_dtype_pin().pinned && gpu_kv_dtype_pin().dt == KVDtype.q8_0, "the streams' codec is the mirror asked")
         gpu_residency_ask(1l, pins0.ctx_max)   //! one region, the file's own ask (no cell of this file loads a model)
         set_gpu_ctx_strict(pins0.strict)
+        if (kv_pin0.pinned) {
+            set_gpu_kv_dtype(kv_pin0.dt)
+        } else {
+            reset_gpu_kv_dtype()
+        }
+    }
+    t |> run("a --kv-dtype spelling picks the streams' codec, and one that names none picks f16") @(t : T?) {
+        t |> equal(pick_kv_dtype("tq4"), KVDtype.tq4, "tq4")
+        t |> equal(pick_kv_dtype("Q8_0"), KVDtype.q8_0, "any case")
+        t |> equal(pick_kv_dtype(""), KVDtype.f16, "no flag: f16")
+        t |> equal(pick_kv_dtype("bogus"), KVDtype.f16, "a spelling that names no codec: f16, said in the log")
     }
 }
 

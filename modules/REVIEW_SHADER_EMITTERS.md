@@ -45,10 +45,11 @@ is a shape constant.
 specialization path - one compiled variant per constant shape - or records the kernel as having
 none in an `ARCHITECTURE*.md` at the root of the module it ships in.**
 
-**A diff that claims an emitted shape value - in a commit message, a PR body, or an architecture
-line - reads it from the emitted artifact, never from the das source, and states in its PR body
-which artifact was read, the SPIR-V words `dasSpirv` builds or the MSL text `dasMetal` writes, and
-the count or value read there.** Emitted shape is the structure of the emitted kernel - its
+**A diff that claims, in a commit message, a PR body or a line of an `ARCHITECTURE*.md`, an emitted
+shape value or that a kernel's emitted output did not change reads the claim from the emitted
+artifact - the SPIR-V words `dasSpirv` builds or the MSL text `dasMetal` writes - never from the
+das source, and its PR body names the artifact read and the value read there, or, for a no-change
+claim, that the artifacts before and after the diff matched.** Emitted shape is the structure of the emitted kernel - its
 signature, its parameter attributes and binding numbers, its statement forms - and the constants
 that structure carries: a tile, an unroll width, a SPIR-V kernel's local size (the `LocalSize`
 execution mode the SPIR-V words carry), the extent of a local or `@workgroup` array. A grid is not

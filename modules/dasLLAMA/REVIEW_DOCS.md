@@ -22,10 +22,9 @@ number higher than every number that file has ever carried, deleted rows include
 commit on the diff's own branch added and a later one dropped among them.** Text cites
 rows by number.
 
-**A diff that adds, removes, or moves a section of an `ARCHITECTURE_*.md` companion, or adds or
-removes a companion, updates, in the same change, the companion's line in `ARCHITECTURE.md`'s
-routing block (under `File charters` or `Mechanisms`), the companion's own opening, every sibling
-companion's routing sentence that names it, and every citation that names the companion file
-alone for a moved or removed section.** LINT026 resolves a `<doc>.md#<anchor>` citation but not
-one that names a file alone, so a file-only citation of a section that left its file sends the
-reader to nothing.
+**A diff that adds, removes, or moves a `##` or `###` heading of an `ARCHITECTURE_*.md` companion,
+or adds or removes a companion, updates, in the same change, the companion's line in
+`ARCHITECTURE.md`'s routing block (under `File charters` or `Mechanisms`), the companion's own
+opening, every sibling companion's routing sentence that names it, and every citation that names
+the companion file alone for a moved or removed heading.** LINT026 checks a `<doc>.md#<anchor>`
+citation, never one that names a file alone.

@@ -23,12 +23,12 @@ bytes and the upload reserves and places the same list, so the two cannot drift;
 the beta / alpha rows (f16 on the device) and the optional f32 embedding are the terms beside it. KV is reserved BEFORE weights and never
 grows: on a discrete card the two compete directly, and evicting weights to grow KV would mean
 re-uploading gigabytes. The mirror's codec is f16 by default (`resident_mirror_dtype`): the
-flash-attention arms read f16 rows natively, and an f16 row is half an f32 row, so the plan fits
-about twice the context; `DASLLAMA_VK_KV32=1` arms f32 mirrors as an A/B instrument, and then only
-f32 sessions are served. A decline carries a reason, and where the numbers allow one it carries
+flash-attention arms read f16 rows natively, and an f16 row is half an f32 row; a block codec the caller
+asks for (q8_0, tq4: `ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs`) is about half or a quarter of that again, and `DASLLAMA_VK_KV32=1`
+arms f32 mirrors as an A/B instrument. Only sessions of the armed codec are served. A decline carries a reason, and where the numbers allow one it carries
 the remedy that works - a shorter context, because the weights are fixed and the KV is not. The
 plan takes that remedy itself once: a mirror that does not fit is re-planned at seven eighths of
-the room that is left after the weights, as long as that context clears the arming floor - the
+the room that is left after the weights (`resident_fit_ctx`: a block codec's shadow shortens with the mirror), as long as that context clears the arming floor - the
 built-in 4096 positions, `DASLLAMA_GPU_MIN_CTX` where set, and the caller's own context pin
 (`set_gpu_ctx_max`, `DASLLAMA_GPU_CTX_MAX`; `resident_pinned_seq_cap` reads it first and announces
 it once per walk, not for a prediction of the plan) where that sits under either, since a caller that
@@ -46,7 +46,7 @@ cap's 6238 a region asks for more K/V than the weights leave.
 counted.** Each K/V side binds as one SSBO range, so `seq_cap` is at most `maxStorageBufferRange`
 over the side's bytes per position summed across the layers that hold rows of their own - a
 shared-KV layer reads its donor's rows and adds none (`resident_binding_ctx`, over the mirror's own
-row sum `resident_kv_row_bytes`). The sum is
+row sum `resident_kv_row_bytes`; a block codec's f16 shadow caps it too, `resident_shadow_ctx`). The sum is
 what makes a hybrid right: a recurrent layer's KV width is zero, so the stride counts the
 attention layers alone; read from layer 0 instead - recurrent on Qwen3.5 - the stride is zero,
 the cap is skipped, the plan sizes a mirror the device prepare refuses, and the whole driver
@@ -57,7 +57,7 @@ direct callers.
 session's whole history.** A host asks for the count before the load (`set_gpu_resident_regions`, the facade's verb,
 one by default; a server's stream count), the plan sizes every region's K/V at `seq_cap`, and
 the binding cap divides by the count, since both sides stay one buffer and one binding. A region
-is an element offset (`rd_mir_base`: the layer's base plus the selected region's stride), folded
+is an offset in mirror units (`rd_mir_base`: the layer's base plus the selected region's stride), folded
 on the host into the `layerbase` push constant of every kernel that stores or reads a mirror row
 and into the sync, readback and hydrate offsets, so no kernel knows regions exist. The push
 constant is baked as the token command records, so the driver records one command per region

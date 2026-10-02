@@ -308,6 +308,41 @@ def private test_arch_forward_control_tail(t : T?) {
 }
 
 
+//! ok.das: good() cites alpha, `lost_head` opens lost() at line 7, and one comment line spells the annotation with placeholders
+def private plant_comment_cite(dir, lost_head : string) {
+    plant(dir, "ok.das", build_string() $(var w) {
+        w |> write("options gen2\n\n")
+        w |> write("[{ANN}(at=\"ARCHITECTURE.md#alpha\")]\ndef good \{\n\}\n\n")
+        w |> write("{lost_head}\n\}\n\n")
+        w |> write("// the marker reads [{ANN}(at=\"<doc>.md#<anchor>\")] on a declaration\n")
+        w |> write("[export]\ndef main \{\n    good();\n    lost();\n\}\n")
+    })
+}
+
+
+[test]
+def test_arch_comment_citation(t : T?) {
+    t |> run("a citation that resolves but sits inside a comment annotates nothing: a finding, and no citer") @(t : T?) {
+        let dir = path_join(tmp_root(), "incomment")
+        mkdir_rec(dir)
+        plant_doc(dir, "ARCHITECTURE.md", ["alpha", "beta"])
+        plant_comment_cite(dir, "def lost \{   // {ANN}(at=\"ARCHITECTURE.md#beta\")]")
+        var out : string
+        let rc = run_lint(dir, out)
+        t |> equal(count_of(out, "ok.das:7: LINT026: [arch] citation sits inside a comment"), 1, "the pasted citation fires at its line\n{out}")
+        t |> equal(count_of(out, "sits inside a comment"), 1, "the prose with placeholders names no real section and is silent\n{out}")
+        t |> equal(count_of(out, "#beta\} has no citation"), 1, "the comment cites nothing: its anchor is uncited\n{out}")
+        t |> equal(count_of(out, "LINT026"), 2, "two findings, no more\n{out}")
+        t |> equal(rc, 2, "a finding sets the issue exit code\n{out}")
+        plant_comment_cite(dir, "[{ANN}(at=\"ARCHITECTURE.md#beta\")]\ndef lost \{")
+        var fixed : string
+        let rc2 = run_lint(dir, fixed)
+        t |> equal(count_of(fixed, "LINT026"), 0, "the annotation cites, and nothing sits in a comment\n{fixed}")
+        t |> equal(rc2, 0, "and the run is clean\n{fixed}")
+    }
+}
+
+
 [test]
 def test_arch_roots(t : T?) {
     t |> run("a CMake build tree under a root is not source - its documents and files are skipped") @(t : T?) {

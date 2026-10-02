@@ -35,9 +35,11 @@ run through `tests/run.das` is a defect.** A scratch probe's reading may sit in 
 marked as a probe's, never as evidence.
 
 **A diff that cites as parity evidence a `tests/run.das` cell that compares a continuous output
-(logits, a stage's rows, a waveform) other than within a bar, or a discrete output (a counting
-prompt's tokens, served ids against the host's `parallel_argmax` over the same logits, a
-transcript, a frame count) other than exactly, is a defect.**
+other than within a bar, or a discrete output other than exactly, is a defect.** A continuous
+output is floats - logits, a stage's rows, a waveform - or float rows in an encoding that rounds
+them, such as a K/V cache's quantized bytes; a discrete output is ids, tokens or counts - a
+counting prompt's tokens, served ids against the host's `parallel_argmax` over the same logits,
+a transcript, a frame count.
 
 **A diff that adds or changes a parity reading offered as GPU-vs-CPU evidence in a
 `PERF_LEDGER.md`, `followup_metal.md` or `followup_vulkan.md` entry names in that entry the run
@@ -77,9 +79,10 @@ mel; `vulkan_tts_stats`: `encodes` for a TTS seat; `vulkan_wdec_stats`: `windows
 defect.**
 
 **A diff that cites as parity evidence, or as driver-against-itself evidence, a Vulkan run that
-did not arm the mirror codec the changed path reads - the element type, f16 or f32, of the K/V
-mirror (the device copy of the CPU's K/V cache) - is a defect.** `DASLLAMA_VK_KV32=1` arms f32;
-f16 is the default and needs no flag.
+did not arm the mirror codec the changed path reads - the storage form (f16, f32, q8_0 or tq4) of
+the K/V mirror, the device copy of the CPU's K/V cache - is a defect.** `set_gpu_kv_dtype`, the
+server's `--kv-dtype` and `DASLLAMA_GPU_KV` request f16, q8_0 or tq4, and an f32 request through
+them arms f16; `DASLLAMA_VK_KV32=1` arms f32 over all three; f16 is the default.
 
 **A diff that cites as parity evidence, or as driver-against-itself evidence, a Vulkan run whose
 log carries a `resident override passed a call` line for a call the changed path serves on the

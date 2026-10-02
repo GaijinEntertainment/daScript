@@ -4,6 +4,7 @@ options persistent_heap   // + explicit deletes in the cells: the model and sess
 options _dasllama_internal = true
 
 require dastest/testing_boost public
+require dasllama/dasllama_kv_dtype   // KVDtype: the block-codec cells' mirror ask
 require _moe_resident
 
 // The whole-model resident driver on a MoE (Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local, the Q4_K_M mint of
@@ -31,6 +32,27 @@ def test_gpu_resident_moe(t : T?) {
     t |> run("Qwen1.5-MoE-A2.7B-Q4_K_M: the same across two windows") @(t : T?) {
         assert_pf_window(t)
         moe_forced_feed(t, PF_WINDOW_ROWS + 88l, TWIN)
+    }
+}
+
+//! the twin under tq4: the device's summed distance from the f16 chain reads 1.06 of the CPU tq4 chain's own (14.7 against
+//! 13.9, the f16 rows one step off 5.0 times it) and the two tq4 chains 1.11 of it apart (the CPU tq4 rows one step off 5.0):
+//! the router's near-ties part two tq4 chains as far as tq4 parts either from f16. In the forced-feed form the same rows read
+//! 1.4-1.9 against bars of 2.1-2.3
+let private MOE_CODEC_DIST_REL = 1.15
+let private MOE_CODEC_PAIR_REL = 1.4
+
+[test]
+def test_gpu_resident_moe_block_codecs(t : T?) {
+    t |> run("Qwen1.5-MoE-A2.7B-Q4_K_M: the routed chain over a q8_0 K/V mirror vs the CPU chain on q8_0 sessions, one window") @(t : T?) {
+        with_gpu_kv_dtype(t, KVDtype.q8_0) {
+            moe_forced_feed(t, 40l, TWIN)
+        }
+    }
+    t |> run("Qwen1.5-MoE-A2.7B-Q4_K_M: the routed chain over a tq4 mirror - the device, the CPU tq4 chain and the CPU f16 chain over one prompt, the distances held as ratios") @(t : T?) {
+        with_gpu_kv_dtype(t, KVDtype.tq4) {
+            moe_codec_distance(t, 40l, TWIN, KVDtype.tq4, MOE_CODEC_DIST_REL, MOE_CODEC_PAIR_REL)
+        }
     }
 }
 

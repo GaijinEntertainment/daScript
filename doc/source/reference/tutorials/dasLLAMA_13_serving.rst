@@ -171,6 +171,8 @@ One more serving pin: a multi-stream scheduler calls
 ``set_resident_prefill_allowed(false)`` once and leaves it — a host-cached
 stream's chunked prefill would leave device-only KV that a second stream's
 steal strands. ``dasllama-server`` does exactly this.
+``resident_prefill_allowed()`` reads the pin back: code that turns it off for one
+load reads it first and restores what it found.
 
 Streams served from the device
 ==============================
@@ -188,7 +190,12 @@ driver holds it for every region or declines - a MoE the card does not hold
 beside it moves routed layers' experts to the host first - instead of quietly
 shortening the mirror, and the load log says which happened; the server sets
 it for every explicit ``--ctx``. ``gpu_ctx_pins`` reads both pins back, so a
-rig restores what it found. After the load we ask what we got: ``gpu_device_sessions`` answers the
+rig restores what it found. ``set_gpu_kv_dtype`` picks the codec the driver
+holds the cache in, which is the codec its sessions are made in: ``f16`` by
+default, ``q8_0`` about half those bytes and ``tq4`` about a quarter - room a
+longer context takes. ``gpu_kv_dtype_pin`` reads back what was asked and
+whether anyone asked at all, and ``reset_gpu_kv_dtype`` takes the ask away, so
+the environment decides again. After the load we ask what we got: ``gpu_device_sessions`` answers the
 region count (0 on a CPU box, under the per-op rails, and on Metal),
 ``gpu_resident_decline`` says why the driver does not serve,
 ``gpu_device_session_ctx`` answers the positions per region,
@@ -205,9 +212,16 @@ whose speculative round a server leaves off):
    let pins = gpu_ctx_pins()
    set_gpu_ctx_max(8192l)
    set_gpu_ctx_strict(false)   // a cap; true asks for the 8192 whole
+   let kv_pin = gpu_kv_dtype_pin()
+   set_gpu_kv_dtype(KVDtype.f16)   // q8_0 or tq4 here takes sessions made in it
    // ... load_model runs here ...
    set_gpu_ctx_max(pins.ctx_max)
    set_gpu_ctx_strict(pins.strict)
+   if (kv_pin.pinned) {
+       set_gpu_kv_dtype(kv_pin.dt)
+   } else {
+       reset_gpu_kv_dtype()   // nobody had asked: DASLLAMA_GPU_KV decides again
+   }
    let regions = gpu_device_sessions()
    if (regions == 0l) {
        print("no device-home sessions here: {gpu_resident_decline()}\n")

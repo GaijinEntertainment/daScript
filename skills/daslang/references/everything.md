@@ -3272,6 +3272,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `moe_gpu_model_marks_save` - Save the INSTALLED model's GPU tier state into `st` and disarm it — one half of the multi-model slot switch (the engine's tier state is per-process, not per-model).
 - `moe_gpu_tier_arm` - Arm the recorded tier want so a GPU backend can install its hooks — call between `set_gpu_tier_want` and `load_model`.
 - `moe_gpu_weight_budget` - The armed backend's resident-weight VRAM budget in bytes (0 = no GPU backend armed).
+- `resident_prefill_allowed` - The pin as `set_resident_prefill_allowed` left it.
 - `set_gpu_tier_want` - Record the GPU tier request the NEXT `moe_gpu_tier_arm`/`load_model` honors — the programmatic form of the core `DASLLAMA_GPU_*` knobs (an env var present overrides its field; the classifier/dense-arm knobs are env-only).
 - `set_resident_prefill_allowed` - Allow or pin out the resident prefill arm for HOST-CACHED sessions: more of them than the driver has K/V regions would strand device-only rows.
 
@@ -3288,10 +3289,13 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `gpu_device_session_dtype` - The K/V codec a device-home session must carry: the armed driver's.
 - `gpu_device_sessions` - How many DEVICE-HOME sessions (`create_device_session`) the installed model serves at once: the armed driver's region count, 0 when the model is not served whole from the device.
 - `gpu_dn_room` - Tell the GPU driver how many sessions' recurrent state it keeps device-resident at once: a scheduler names its stream count before the first prefill, so no stream's deltanet state evicts under the batched step it rides.
+- `gpu_kv_dtype_pin` - The in-process ask as `set_gpu_kv_dtype` left it: `pinned` false where no caller asked and `DASLLAMA_GPU_KV` decides.
 - `gpu_resident_decline` - Why the whole-model GPU driver does not serve the model loaded last: its decline reason (with the remedy where one exists), or why it was never attempted.
 - `gpu_resident_experts_host` - Whether the whole-model driver serving the model loaded last sums some routed layers' experts on the host (a hyper-connection MoE, or a plain MoE the card does not hold whole) - the form whose speculative round does not pay, so a server slot leaves the round off unless asked.
+- `reset_gpu_kv_dtype` - Lift the in-process ask `set_gpu_kv_dtype` made: `DASLLAMA_GPU_KV` decides the next load's mirror codec again.
 - `set_gpu_ctx_max` - Cap the whole-model GPU driver's K/V context at `n` positions per region for the models loaded next (0 lifts it): a server's `ctx`.
 - `set_gpu_ctx_strict` - The `set_gpu_ctx_max` pin is the context asked, not a cap, for the models loaded next: a K/V mirror the card cannot hold at it declines the whole-model GPU driver instead of shortening the context, and the per-op rails serve the asked context (DASLLAMA_GPU_CTX_STRICT in the environment).
+- `set_gpu_kv_dtype` - Ask the whole-model GPU driver to hold its K/V mirror in codec `dt` for the models loaded next - the codec of their sessions (`gpu_device_session_dtype` reads what armed).
 - `set_gpu_resident_regions` - Ask the whole-model GPU driver for `n` K/V regions on the models loaded next, so `n` sessions keep their K/V on the device at once - a server's stream count.
 
 ## dasllama_tts

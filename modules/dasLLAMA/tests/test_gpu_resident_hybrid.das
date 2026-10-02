@@ -17,11 +17,11 @@ require strings   // find over a panic's text
 require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the hybrid
-require dasllama/dasllama_kv_codec
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode and the kernel census, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_prefill   // pf_f16_feed: the feed admission the driver acts on
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed
+require _kv_codec_cells   // the K/V codec cells' rig: the gated carrier under a block-codec mirror
 
 // The whole-model resident driver on a deltanet hybrid under DASLLAMA_GPU=1: the resident window
 // chain prefills the prompt (the recurrent layers through the conv + chunked scan over their device
@@ -57,6 +57,12 @@ let private DN_LOGIT_BAR_REL = 0.04   // of the step's max |logit| - the deltane
 let private DN_LOGIT_BAR_REL_KQ_F16_FEED = 0.06
 //! the K-quant bar on the quant feed (no coopmat tile serves the planes, the prefill's activations ride Q8_K): the mixed twin's two-window cell under `DASLLAMA_COOPMAT=sdot4` on the RTX 5060 Ti reads 0.084 of an 11.6 max logit at one step, argmax unchanged, the rest under 0.05
 let private DN_LOGIT_BAR_REL_KQ_QUANT_FEED = 0.10
+//! the mixed twin's bar on the f16 feed: its CPU chain quantizes the activations twice a recurrent layer (Q8_K for qkv/z, Q8_0
+//! for out), so the device and the CPU chain round on either side of the file's f32 chain - one step reads 0.91 of a 12.3 max
+//! logit apart (the device 0.63 and the CPU chain 0.50 from the f32 row, the device's pick the f32 chain's), the rest 0.42-0.60
+let private DN_LOGIT_BAR_REL_KQ_Q8OUT = 0.08
+//! the device's summed distance from the file's f32 chain, as a ratio of the CPU q8 chain's own: reads a 0.91 ratio (3.42 against 3.77)
+let private F32_DIST_REL = 1.15
 //! the head's K row is the f16-stored projection of a trunk hidden row that already sits within DN_LOGIT_BAR_REL of the CPU chain's, so the row's own rounding stacks on the trunk's: twice the deltanet bar
 let private HEAD_K_BAR_REL = 0.08
 //! the CPU row one down misses a device row by at least this many bars, or the bar is too wide to tell the row from its neighbour
@@ -93,6 +99,23 @@ def private f16_feed_admits_kq() : bool {
     } else {
         return false
     }
+}
+
+//! The mixed twin's same-or-better witness: the same tokens through the file's f32 chain on the CPU (`path` loaded again at
+//! `QuantMode.fp32`, its device state dropped), and the device no further from it than `F32_DIST_REL` of the CPU q8 chain's
+//! own distance, the f32 rows one step off past that bound. `tr` decodes the logged picks.
+def private f32_chain_witness(t : T?; tr : Model; path : string; n : int64; prompt, toks : array<int64>; fed : FeedPair) {
+    var f32_model <- load_model_(path, QuantMode.fp32)
+    moe_gpu_drop_model()
+    var f32_session <- create_session(f32_model, mirror_kv_dtype())
+    var f32_rows <- feed_logits(f32_model, f32_session, prompt, toks)
+    delete f32_session
+    let what = "{n} tokens against the f32 chain [{tile_arm_tag()}]"
+    let dist = chain_distances(t, tr, what, fed.gpu, fed.cpu, f32_rows, 0, "the f32 chain", "the CPU q8 chain")
+    t |> success(dist.dev_ref <= F32_DIST_REL * dist.cpu_ref, "{what}: the device sits no further from the f32 chain ({dist.dev_ref}) than {F32_DIST_REL} of the CPU q8 chain's own distance ({dist.cpu_ref})")
+    t |> success(dist.dev_ref_ctrl > F32_DIST_REL * dist.cpu_ref, "{what} control: the f32 rows one step off sit past that bound ({dist.dev_ref_ctrl})")
+    delete f32_rows
+    delete f32_model
 }
 
 // prefill `n` tokens + 8 fed steps on the resident driver, then the same on the all-CPU chain; the
@@ -139,8 +162,12 @@ def private hybrid_forced_feed(t : T?; n : int64; file : string; planes : Hybrid
                 t |> success(prefill_q8k_rq >= nrec, "off the f16 feed the K-quant qkv/z pair reads the Q8_K form ({prefill_q8k_rq} Q8_K requants, {nrec} recurrent layers) [{tile_arm_tag()}]")
             }
         }
-        let rel = kq ? (f16_feed_admits_kq() ? DN_LOGIT_BAR_REL_KQ_F16_FEED : DN_LOGIT_BAR_REL_KQ_QUANT_FEED) : DN_LOGIT_BAR_REL
+        let f16_rel = q8out ? DN_LOGIT_BAR_REL_KQ_Q8OUT : DN_LOGIT_BAR_REL_KQ_F16_FEED
+        let rel = kq ? (f16_feed_admits_kq() ? f16_rel : DN_LOGIT_BAR_REL_KQ_QUANT_FEED) : DN_LOGIT_BAR_REL
         feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, toks, rel)
+        if (q8out) {
+            f32_chain_witness(t, tr, path, n, prompt, toks, fed)
+        }
         delete fed
         delete prompt
         delete toks
@@ -194,6 +221,25 @@ def test_gpu_resident_hybrid_kq_q8out(t : T?) {
     t |> run("Qwen3.5-0.8B-Q4_K_M-q8out: the same across two windows") @(t : T?) {
         window_pin(t)
         hybrid_forced_feed(t, PF_WINDOW_ROWS + 88l, "Qwen3.5-0.8B-Q4_K_M-q8out.gguf", HybridPlanes.kq_q8out)
+    }
+}
+
+//! the gated carrier under a block codec: the q8_0 mirror against the CPU chain on q8_0 sessions reads 0.21-0.31 of a
+//! 10.7-12.3 max logit (the f16 mirror's own reading); under tq4 the device's summed distance from the f16 chain reads 1.08
+//! of the CPU tq4 chain's own (9.2 against 8.5, the f16 rows one step off 9.2 times it) and the two tq4 chains 0.63 of it
+//! apart (the CPU tq4 rows one step off 9.3 times it)
+let private GATED_Q8KV_BAR_REL = 0.06
+let private GATED_CODEC_DIST_REL = 1.15
+let private GATED_CODEC_PAIR_REL = 0.8
+
+[test]
+def test_gpu_resident_hybrid_gated_block_codecs(t : T?) {
+    let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
+    t |> run("Qwen3.5-0.8B: a q8_0 K/V mirror under the gated attention - resident prefill + decode vs the CPU chain on q8_0 sessions") @(t : T?) {
+        cell_codec_forced_feed(t, path, 40l, KVDtype.q8_0, GATED_Q8KV_BAR_REL)
+    }
+    t |> run("Qwen3.5-0.8B: a tq4 K/V mirror under the gated attention - the un-rotation applies the head gate - against the CPU chain's tq4 and f16 rows") @(t : T?) {
+        cell_codec_distance(t, path, 40l, KVDtype.tq4, false, GATED_CODEC_DIST_REL, GATED_CODEC_PAIR_REL)
     }
 }
 
@@ -272,6 +318,7 @@ def private load_mtp_carrier(t : T?; regions : int64; head_off : bool = false) :
     tr.config.seq_len = min(tr.config.seq_len, CARRY_RIG_CTX)
     t |> equal(tr.config.n_layer_nextn, 1l, "the -MTP- file carries its NextN head")
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the NextN-headed hybrid at {regions} regions (the load log names any decline)")
+    t |> equal(mirror_kv_dtype(), resident_mirror_dtype(), "the mirror armed at the codec asked")
     return <- tr
 }
 
@@ -928,20 +975,14 @@ def test_gpu_resident_hybrid_mtp_verify_reject_asked(t : T?) {
 
 let private NAN_BITS = 0x7FC00000u
 
-//! the NextN head's K row `row` of the session's cache as floats, whichever codec the session carries
+//! the NextN head's K row `row` of the session's cache as floats, whichever codec the session carries (a tq4 row stays in its rotated basis)
 def private head_k_row_f32(tr : Model; var s : Session; row : int64) : array<float> {
     let c = tr.config
     let kvd = layer_kv_dim(c, c.n_layers)
     let kp = kv_layer_kbase(s, c.n_layers, c.seq_len)
     var out : array<float>
     out |> resize(kvd)
-    unsafe {
-        if (s.kv_dtype_k == KVDtype.f32) {
-            kv_row_to_f32(addr(out[0]), reinterpret<float const?>(kp), row * kvd, kvd)
-        } else {
-            kv_row_to_f32(addr(out[0]), reinterpret<uint16 const?>(kp), row * kvd, kvd)
-        }
-    }
+    kv_load_row(kp, s.kv_dtype_k, kvd, row, 0l, kvd, unsafe(addr(out[0])))
     return <- out
 }
 
@@ -1072,6 +1113,20 @@ def test_gpu_resident_hybrid_mtp_head_warm(t : T?) {
     }
 }
 
+//! the device's hydrated head rows against the CPU session's over the first `agreed_rows` rows - past a round whose draft a
+//! near-tie flipped, the two sessions hold different tokens; `hydrated` is cut to those rows
+def private agreed_rows_within(t : T?; tr : Model; var c : Session; var hydrated : array<array<float>>; agreed_rows : int64) {
+    let nrows = long_length(hydrated)
+    t |> success(agreed_rows >= DRAFT_PROMPT - 1l, "at least the prompt's head rows are compared ({agreed_rows} of {nrows})")
+    var crows <- head_k_rows_f32(tr, c, agreed_rows)
+    for (i in range64(agreed_rows, nrows)) {
+        delete hydrated[i]
+    }
+    hydrated |> resize(agreed_rows)
+    head_rows_within(t, "six rounds, hydrated ({agreed_rows} of {nrows} rows)", hydrated, crows)
+    delete crows
+}
+
 [test]
 def test_gpu_resident_hybrid_mtp_rounds(t : T?) {
     t |> run("Qwen3.5-0.8B-MTP: six speculative rounds on the resident driver against the CPU round from the same prompt - every round's draft the CPU round's or a near-tie of it, accept and position equal while the drafts agree; then two rounds whose draft the seat declines - the CPU head over the head's rows hydrated from the device - against the CPU round, the hydrated rows within twice the deltanet bar, the CPU round on poisoned head rows as the control") @(t : T?) {
@@ -1104,6 +1159,7 @@ def test_gpu_resident_hybrid_mtp_rounds(t : T?) {
             prefill_warm(tr, c, prompt)
             var cpu <- spec_rounds(tr, c, fed, false, false, true)
             var agreed = true   // once a near-tie flips a draft the two sessions part, and the rounds after it are no longer the same round
+            var agreed_head_rows = nrows
             for (r in range64(ROUNDS)) {
                 to_log(LOG_INFO, "round {r}: device draft {gpu[r].draft} '{decode_(tr, [gpu[r].draft])}' hit {gpu[r].hit} at {gpu[r].n_past}, CPU draft {cpu[r].draft} '{decode_(tr, [cpu[r].draft])}' hit {cpu[r].hit} at {cpu[r].n_past}\n")
                 if (!agreed) {
@@ -1114,14 +1170,15 @@ def test_gpu_resident_hybrid_mtp_rounds(t : T?) {
                 if (agreed) {
                     t |> equal(gpu[r].hit, cpu[r].hit, "round {r}: both rounds accepted or both rejected")
                     t |> equal(gpu[r].n_past, cpu[r].n_past, "round {r}: both rounds left the session at one position")
+                } else {
+                    agreed_head_rows = (r == 0l ? DRAFT_PROMPT : cpu[r - 1l].n_past) - 1l
                 }
             }
             if (agreed) {
                 t |> equal(c.n_past - 1l, nrows, "the CPU rounds left the session where the device rounds did")
             }
-            var crows <- head_k_rows_f32(tr, c, nrows)
             t |> equal(long_length(hydrated_rows), nrows, "{nrows} hydrated head rows read back")
-            head_rows_within(t, "six rounds, hydrated", hydrated_rows, crows)
+            agreed_rows_within(t, tr, c, hydrated_rows, agreed_head_rows)
             var c7 <- spec_rounds(tr, c, [toks[ROUNDS]], false, false, true)
             to_log(LOG_INFO, "round 6 (declined draft): CPU head over hydrated rows drafts {round7[0].draft} '{decode_(tr, [round7[0].draft])}' hit {round7[0].hit} at {round7[0].n_past}, the CPU round {c7[0].draft} '{decode_(tr, [c7[0].draft])}' hit {c7[0].hit} at {c7[0].n_past}\n")
             if (agreed && pick_agrees(t, tr, "round 6 draft (the CPU head over the hydrated rows)", round7[0].draft, c7[0].draft_logits, DN_LOGIT_BAR_REL)) {
@@ -1138,7 +1195,6 @@ def test_gpu_resident_hybrid_mtp_rounds(t : T?) {
             delete c7
             delete round8
             delete round7
-            delete crows
             delete hydrated_rows
             delete cpu
             delete gpu
@@ -1371,4 +1427,27 @@ def test_kernel_census_by_name(t : T?) {
             t |> skip("no vulkan module in this build")
         }
     }
+}
+
+[test]
+def test_gpu_resident_hybrid_mtp_block_codec(t : T?) {
+    let pin = gpu_kv_dtype_pin()
+    set_gpu_kv_dtype(KVDtype.q8_0)
+    if (resident_mirror_dtype() != KVDtype.q8_0) {
+        t |> skip("DASLLAMA_VK_KV32=1 arms the f32 mirror over a codec asked - the block-codec cells need it unset")
+        restore_kv_pin(pin)
+        return
+    }
+    t |> run("the NextN head over a q8_0 mirror: the draft, the verify, the warmed head rows, six rounds") @(t : T?) {
+        test_gpu_resident_hybrid_mtp_draft(t)
+        test_gpu_resident_hybrid_mtp_verify(t)
+        test_gpu_resident_hybrid_mtp_head_warm(t)
+        test_gpu_resident_hybrid_mtp_rounds(t)
+    }
+    set_gpu_kv_dtype(KVDtype.tq4)
+    t |> run("the NextN head over a tq4 mirror: the verify and the forced reject against the driver's own one-row steps") @(t : T?) {
+        test_gpu_resident_hybrid_mtp_verify(t)
+        test_gpu_resident_hybrid_mtp_verify_reject(t)
+    }
+    restore_kv_pin(pin)
 }

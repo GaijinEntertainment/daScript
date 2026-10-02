@@ -207,7 +207,7 @@ Run under `-jit` - the interpreter is refused, it is far too slow for inference.
 | `--gpu-attn` | - | on | vulkan: full-attention layers through the device chain |
 | `--gpu-dense` | - | off | vulkan: dense attention-side planes resident |
 | `--gpu-vram-mb` | - | *device* | vulkan: resident-weight VRAM cap override in MB (default: query the device) |
-| `--kv-dtype` | - | `f16` | KV-cache codec: `f32` \| `f16` \| `q8_0` \| `tq4` (rotated 4-bit; needs pow2 head_size) |
+| `--kv-dtype` | - | `f16` | KV-cache codec: `f32` \| `f16` \| `q8_0` \| `tq4` (rotated 4-bit; needs pow2 head_size). Under `--gpu vulkan` the whole-model driver holds its cache in the same codec for `f16`, `q8_0` and `tq4`: `q8_0` is about half the `f16` cache's VRAM and `tq4` about a quarter, which a longer `--ctx` or more resident layers take |
 | `--asr` | `-a` | - | ASR model (whisper/parakeet/qwen3-asr) - enables the `/v1/audio/*` routes |
 | `--asr-workers` | - | `1` | Long-lived ASR request threads; each owns a model and reusable session. Set `2` for two parallel transcriptions |
 | `--mmproj` | - | - | mmproj GGUF for the Qwen3-ASR route (paired with `--asr`) |

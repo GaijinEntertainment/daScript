@@ -2003,7 +2003,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
             vulkan_bake_slice_begin()
             if (load_image(img_v, t, vk_tag)) {
                 if (t.planes_trimmed && !resident_would_serve(t)) {
-                    to_log(LOG_ERROR, "dasLLAMA: the trimmed vulkan lane '{img_v}' maps, and the whole-model driver would not take it under this run's knobs (DASLLAMA_GPU_CTX_MAX, DASLLAMA_VK_KV32 and DASLLAMA_GPU_RESIDENT / set_gpu_resident_route sit outside the lane's identity) - the lane is deleted and minted again\n")
+                    to_log(LOG_ERROR, "dasLLAMA: the trimmed vulkan lane '{img_v}' maps, and the whole-model driver would not take it under this run's knobs (DASLLAMA_GPU_CTX_MAX, DASLLAMA_VK_KV32, DASLLAMA_GPU_KV / set_gpu_kv_dtype and DASLLAMA_GPU_RESIDENT / set_gpu_resident_route sit outside the lane's identity) - the lane is deleted and minted again\n")
                     vulkan_bake_disarm()
                     delete t
                     remove(img_v)

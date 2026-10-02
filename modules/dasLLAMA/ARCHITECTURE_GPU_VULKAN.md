@@ -5,8 +5,8 @@ carries the prefill window chain, the Q8 requant byte store, the decode GEMV fam
 codebook buffer, the tile probe's shared descriptor set layout, the recurrent block of the
 prefill window, the roster of Vulkan capabilities the tier keys its routes on, and how the
 `[vk_dispatch]` lens derives `readonly` from a class family's accesses. The token command's
-attention key split and the attention-side planes (the q/k/v bias, the sink logits, the output
-bias) are in `ARCHITECTURE_GPU_VULKAN_ATTN.md`. The MoE block of that window, the token
+attention key split, the attention-side planes (the q/k/v bias, the sink logits, the output bias)
+and the K/V mirror's block codecs are in `ARCHITECTURE_GPU_VULKAN_ATTN.md`. The MoE block of that window, the token
 command's routed twin and their gemma-4 form are in `ARCHITECTURE_GPU_VULKAN_MOE.md`. The
 cooperative-matrix tiles the chain's GEMMs run on - the cm2 decode spelling, the tile pick and
 the coopmat mode ladder, the class-pipeline build seat, the MoE expert chain on those tiles, and
@@ -138,11 +138,11 @@ subgroup-scope 16x16x16 fragments:** sixteen query rows a workgroup, 64 keys a s
 S = Q K^T (K^T a column-major load straight from the f16 shadow) and, after the softmax runs per element through shared memory, a
 quarter of the head's output columns of P V (f16 fragments a step, summed into each thread's f32 o row). A key chunk that starts past
 the window's end is skipped; the last one may load up to fifteen rows past it, so every KV mirror carries `RDEC_MIR_SLACK` elements past its
-planes and the driver's prepare zero-fills both mirrors whole: the fragment reads the unwritten rows past the window's end, inside a plane and in the slack, and a masked probability times zero stays zero where a garbage NaN would not. The tile stages nothing from the shadows: its q tile and the step's P V plane are sized for the 512-wide head on every stamp, 32 KB of the 49152 B of workgroup memory the tier requires of a device, so K^T and V fragments load straight from the f16 mirrors. It runs its row max under the cm2 tile's 3 ln 2 bias (`FA_MAX_BIAS`). `fa_khr_serves` is the one pick the pre-flight and the window chain share: the tile wants the f16 mirrors and a 32-lane subgroup (its softmax runs eight lanes a row), carries no gated axis - a model whose q plane is `[q | gate]` keeps the chunked attention pair whatever its head size - and serves the softcap at the 256 head alone, its cap stamps.
+planes and the driver's prepare zero-fills both mirrors whole: the fragment reads the unwritten rows past the window's end, inside a plane and in the slack, and a masked probability times zero stays zero where a garbage NaN would not. The block-codec kernels lean on the same slack: a block's quants load as whole words, so a region's last block reads one word past its bytes. The tile stages nothing from the shadows: its q tile and the step's P V plane are sized for the 512-wide head on every stamp, 32 KB of the 49152 B of workgroup memory the tier requires of a device, so K^T and V fragments load straight from the f16 rows - an f16 mirror's, or a block codec's shadow. It runs its row max under the cm2 tile's 3 ln 2 bias (`FA_MAX_BIAS`). `fa_khr_serves` is the one pick the pre-flight and the window chain share: the tile wants those f16 rows and a 32-lane subgroup (its softmax runs eight lanes a row), carries no gated axis - a model whose q plane is `[q | gate]` keeps the chunked attention pair whatever its head size, but under a tq4 mirror, where the un-rotation gates and the tile runs ungated (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis`) - and serves the softcap at the 256 head alone, its cap stamps.
 
 **A hybrid's gated attention rides the batch kernels through a per-head q stride** (`qhs = 2 x hs`):
 the q GEMM writes `[q | gate]` per head, qk-rms and rope read q head-strided in place, the mirror
-attention gates on the sigmoid of the gate half, a partial-rope model rotates a head's first `rot` elements, and at head size 256 the gated twins take the h256 cm2 flash stamps (Br 64, Bc 32), q at the head's q stride, the normalized output gated before the store.
+attention gates on the sigmoid of the gate half (tq4's un-rotation in its place), a partial-rope model rotates a head's first `rot` elements, and at head size 256 the gated twins take the h256 cm2 flash stamps (Br 64, Bc 32), q at the head's q stride, the normalized output gated before the store.
 
 ### The Q8 requant writers store one quant per byte {#q8-requant-byte-store}
 

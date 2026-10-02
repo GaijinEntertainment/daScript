@@ -4,8 +4,8 @@
 docs: `ARCHITECTURE_GPU_VULKAN.md`, `ARCHITECTURE_GPU_VULKAN_ATTN.md`,
 `ARCHITECTURE_GPU_VULKAN_DECODE.md`, `ARCHITECTURE_GPU_VULKAN_GEMM.md`,
 `ARCHITECTURE_GPU_VULKAN_MOE.md`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`,
-`ARCHITECTURE_GPU_VULKAN_NROW.md`, `ARCHITECTURE_GPU_VULKAN_MTP.md`, `ARCHITECTURE_GPU.md`.
-Planned work: `followup_vulkan.md`.
+`ARCHITECTURE_GPU_VULKAN_NROW.md`, `ARCHITECTURE_GPU_VULKAN_MTP.md`,
+`ARCHITECTURE_GPU_VULKAN_HC.md`, `ARCHITECTURE_GPU.md`. Planned work: `followup_vulkan.md`.
 
 **A diff that adds a Vulkan dispatch family - a `[vk_dispatch]` class and the `ensure_<family>` /
 `set_<family>` pair generated from it - or that caches a descriptor set or a host address (a
@@ -50,10 +50,12 @@ false branch or `continue` routes work off the path it armed, to the CPU path or
 path inside the tier - is a defect when it does not log, at load, how many layers or planes it
 routed off and why.** A silent decline is a fallback a user finds only by profiling.
 
-**A Vulkan-tier serving gate that decides per call - a predicate or loop whose false branch or
-`continue` routes work off the path it armed, to the CPU path, to another path inside the tier, or
-to a slower form inside the same path (a host upload in place of a device-to-device copy) -
-that does not log the concrete reason it declined, once per reason per armed model, is a defect.**
+**A Vulkan-tier serving gate that decides per call - a predicate or loop whose true branch
+dispatches through a `moe_gpu_*` or `vk_*` entry, wherever the diff puts it, and whose false
+branch or `continue` routes work off the path it armed, to the CPU path, to another path inside
+the tier, or to a slower form inside the same path (a host upload in place of a device-to-device
+copy) - that does not log the concrete reason it declined, once per reason per armed model, is a
+defect.**
 
 **A `*_decline_words` return that a diff adds or changes, for a reason a `VK_DECLINE_WORDS_*`
 constant in `dasllama/dasllama_vulkan_tower.das` already states, returns that constant or starts
@@ -104,10 +106,23 @@ the wrong rows.
 
 **Never leave a K/V codec unserved by the kernels that read or write the whole-model driver's
 `k_mirror`/`v_mirror` slabs, or the decode block's per-layer `DatLayer.k_mir`/`v_mir` pair - a
-K/V codec is the mirror's element type, f16 or f32.** Two shapes serve both: instances of one
-template cover both codecs, or a single-codec kernel has a sibling that serves the other codec
-behind an arming gate that keys on `kv16`. The whole-model driver serves both codecs, so a
-codec no kernel covers silently drops that codec's GPU path.
+K/V codec is the mirror's storage form: f16 or f32 elements on both, q8_0 or tq4 blocks on the
+driver's slabs alone.** Three shapes serve a codec: stamps of one template cover it; a
+single-codec kernel has a sibling behind an arming gate on the driver's codec (`RDec.kv_dt`); or
+a kernel that reads f16 or f32 rows binds, in the mirror's place, the float rows a block codec's
+store quantizes from (`RDec.kst_dev`/`vst_dev`, `pf_kst`/`pf_vst`) or its f16 copy of one layer's
+rows (`RDec.ksh_dev`/`vsh_dev`). A codec no kernel covers silently drops that codec's GPU path.
+
+**Never write a block codec's mirror bytes from any kernel but the codec's store kernel
+(`KvQ8StoreT`, `KvTq4StoreT`).** When a session passes to the CPU chain, the tier copies the
+mirror's bytes into the CPU K/V cache unchanged, so a second quantizer that rounds another way
+hands the CPU chain rows its own store never writes.
+
+**Under a tq4 mirror, never let anything read an attention output row before `KvTq4Unrot` has run
+on it - the requant folded into the decode attention's store (`DaAttnArgs.rqk`), the head gate
+(`DaAttnArgs.gated`), the f16 feed's conversion of the window tiles' f32 rows, or a reader the
+diff adds: run it after the un-rotation instead.** The attention dispatches leave their rows in tq4's rotated basis
+(`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis`).
 
 **A diff that changes the shared `KqCm2BatchT` - its `cm2_tile`, its `run`, or a
 `@template_constant` default declared there - puts every format's probe rows in the PR body, both
@@ -245,12 +260,12 @@ condition tests that same divisor expression and is false when it is zero.** An 
 by zero is undefined in SPIR-V, and some drivers evaluate both arms of a `?:` select, so neither
 a select nor a test on a field the divisor is computed from guards it.
 
-**A diff that adds or changes a path under `dasllama/` that re-records the one-row token
-command's split form - the chain recorded with the attention at `RD_SPLIT_PIECES` key pieces - or
-replaces a descriptor set it dispatches, makes it clear `RDec.tok_wide_recorded` for the region
-whose split form it re-recorded or whose set it replaced, in the same path.** The wide twin (the
-same chain at `RD_SPLIT_WIDE_PIECES` pieces) dispatches the same sets, so a twin left marked
-recorded runs sets the new record replaced.
+**A diff that adds or changes a path under `dasllama/` that re-records the split form of the
+one-row token command in `RDec.cmd[region]` - the chain recorded there with the attention at
+`RD_SPLIT_PIECES` key pieces - or replaces a descriptor set it dispatches, makes it clear
+`RDec.tok_wide_recorded` for the region whose split form it re-recorded or whose set it replaced,
+in the same path.** The wide twin (the same chain at `RD_SPLIT_WIDE_PIECES` pieces) dispatches the
+same sets, so a twin left marked recorded runs sets the new record replaced.
 
 **A twin's availability flag (`RDec.unsplit_on`, `RDec.wide_on`) is written where the twin's
 command buffers are allocated, in `vk_rdec_prepare`, and nowhere else.** A path that writes

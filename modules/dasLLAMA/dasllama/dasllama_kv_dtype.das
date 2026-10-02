@@ -9,6 +9,8 @@ require daslib/ast
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost
+require daslib/enum_trait   // the enum's members as a loop: the ordinal and spelling lookups
+require strings
 
 //! KV-cache storage codec, chosen per session at create time; K and V carry independent
 //! dtypes. f16 = half the KV bytes, near-lossless; f32 = bit-exact reference;
@@ -24,6 +26,49 @@ enum KVDtype {
 //! q8_0 already owns `uint8 const?` - a distinct newtype over uint8 gives tq4 its own overload
 //! identity at zero runtime cost (byte-strided arithmetic, ABI identical to uint8).
 typedef distinct TQ4B = uint8
+
+//! Bytes per stored element (scalar codecs only; block codecs size via kv_row_bytes directly).
+def kv_elem_bytes(dt : KVDtype) : int64 => dt == KVDtype.f16 ? 2l : 4l
+
+//! A block codec stores whole 32-element blocks and addresses in bytes; the scalar codecs address in elements.
+def kv_block_codec(dt : KVDtype) : bool => dt == KVDtype.q8_0 || dt == KVDtype.tq4
+
+//! Head-slot offset in the side's own units (elements for scalar codecs, bytes for block codecs) — THE
+//! layout seam: q8_0 32-blocks of {f16 d; int8 qs[32]} = 34 B, tq4 32-blocks of {f16 d; uint8 qs[16]} =
+//! 18 B (elems % 32 == 0 by create). The _d wrappers prescale with it so the workers' walks stay unit-correct.
+def kv_side_off(dt : KVDtype; elems : int64) : int64 {
+    if (dt == KVDtype.q8_0) return elems / 32l * 34l
+    if (dt == KVDtype.tq4) return elems / 32l * 18l
+    return elems
+}
+
+//! Byte stride of one position row of width kv_dim under codec dt: the side offset of the whole
+//! row, in bytes for a block codec already, scaled by the element size for a scalar one.
+def kv_row_bytes(dt : KVDtype; kv_dim : int64) : int64 => kv_side_off(dt, kv_dim) * (kv_block_codec(dt) ? 1l : kv_elem_bytes(dt))
+
+//! The units a device mirror addresses `elems` elements in: 32-element blocks under a block codec, elements under a scalar one.
+def kv_row_units(dt : KVDtype; elems : int64) : int64 => kv_block_codec(dt) ? elems / 32l : elems
+
+//! One such unit's bytes.
+def kv_unit_bytes(dt : KVDtype) : int64 => kv_row_bytes(dt, kv_block_codec(dt) ? 32l : 1l)
+
+//! The codec an ordinal names: the device tier's seats carry a `KVDtype` as its int.
+def kv_dtype_of(ordinal : int) : KVDtype {
+    for (dt in type<KVDtype>) {
+        return dt if (int(dt) == ordinal)
+    }
+    panic("no KVDtype has ordinal {ordinal}")
+    return KVDtype.f32
+}
+
+//! The codec a user's spelling names - `f32`, `f16`, `q8_0`, `tq4`, any case; `known` false (and f16) for any other text.
+def kv_dtype_named(name : string) : tuple<dt : KVDtype; known : bool> {
+    let want = to_lower(name)
+    for (dt in type<KVDtype>) {
+        return (dt = dt, known = true) if ("{dt}" == want)
+    }
+    return (dt = KVDtype.f16, known = false)
+}
 
 [call_macro(name = "kv_codec_side")]
 class KvCodecSide : AstCallMacro {
