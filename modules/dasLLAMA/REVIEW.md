@@ -79,22 +79,28 @@ folder's `tests/REVIEW.md` - open it; the walk does not surface it for a `daslla
 
 **A GPU kernel, driver, dispatch class (a class a `[metal_dispatch]` or `[vk_dispatch]`
 declares), or K/V-mirror (the device copy of the K/V cache a GPU decode reads and writes)
-change, a change to a `kv_*` function that a GPU driver file (`dasllama_metal*.das`,
-`dasllama_vulkan*.das`, `dasllama_gpu*.das`) calls, a GPU kernel timing race (two kernels timed against each other to pick one - not a data
+change, or a change to a `kv_*` function that a GPU driver file (`dasllama_metal*.das`,
+`dasllama_vulkan*.das`, `dasllama_gpu*.das`) calls, wherever the diff puts it, applies
+`REVIEW_GPU.md`.**
+
+**A GPU kernel timing race (two kernels timed against each other to pick one - not a data
 race), a call that makes, arms or tears down device-home serving - a session whose K/V region
 lives only on the device (`create_device_session`, `set_device_kv`, `moe_gpu_drop_model`) - a
 knockout (an arm that skips a stage to measure that stage's cost), a hand-binding arm (one that
 writes buffer or kernel-argument (kargs) binding numbers as literals), or a kernel cell or probe
-that fills or binds a `TokMeta` block, wherever the diff puts it - applies `REVIEW_GPU.md`.**
+that fills or binds a `TokMeta` block, wherever the diff puts it, applies `REVIEW_GPU.md`.**
 
 **A kernel body or a function a kernel calls - a `[metal_kernel]` def, a class a
 `[metal_dispatch]` / `[vk_dispatch]` declares, or a fixture the Metal or SPIR-V emitter
 compiles - wherever the diff puts it, applies `modules/REVIEW_SHADER_EMITTERS.md` (repo root) too.**
 
 **A change to the image rail - `dasllama/dasllama_image.das`, or, wherever the diff puts it, a
-`.dlim` mint (building a `.dlim` from a gguf), a `.dlim` load, an image identity, or a flavor
-(the backend-and-layout variant an image is baked for, one part of its identity) - applies
-`REVIEW_IMAGE.md`.**
+`.dlim` mint (building a `.dlim` from a gguf), a `.dlim` load, an image identity, a flavor (the
+backend-and-layout variant an image is baked for, one part of its identity), or what
+`resident_would_serve` answers, or an environment variable or setter it or any function it calls
+reads - applies `REVIEW_IMAGE.md`.** The mint of a
+trimmed image - one written without the weight planes the GPU driver holds - reads that answer
+to decide whether to trim.
 
 **A change to `dasllama/dasllama_audio.das`, `dasllama_audio_io.das`,
 `dasllama_audio_embedder.das`, `dasllama_asr.das`, `dasllama_asr_types.das` or `dasllama_vad.das`
@@ -133,7 +139,7 @@ through `public` requires alone, or adds an `[EnvConfig]` area struct, applies
 
 **A diff that turns a weight-format id - a `KqFmt` member, a GGUF type number, or the int a
 generated kernel takes as its format parameter - into plane strides, or reads a per-block or
-per-element byte count of one format, wherever it sits, applies `REVIEW_KQ_FORMATS.md`.**
+per-element byte count of one weight format, wherever it sits, applies `REVIEW_KQ_FORMATS.md`.**
 
 **A diff that bumps `DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) cites in the PR body the
 maintainer's ruling that rows measured before it can no longer be compared with rows after it.**
@@ -182,10 +188,10 @@ caller's check also gates its own work, compute the decision once and pass it to
 An edit to either copy leaves the caller testing a condition the callee no longer applies.
 
 **Logic or a named constant that two files in one folder both use, and that neither the language
-nor the test contract forces them to restate (an enum-and-int pair of one predicate, a test's CPU
-oracle of the arithmetic), lands once - in a file both already require, or in a new file both
-require when they share none - never as a second copy.** Two spellings drift apart on the first
-edit to one.
+nor the test contract forces them to restate (one predicate written over an enum and again over
+its int value; a test's CPU reference copy of the arithmetic it checks), lands once - in a file
+both already require, or in a new file both require when they share none - never as a second
+copy.** Two spellings drift apart on the first edit to one.
 
 **A piece that two folders both need, neither containing the other, lands in the folder that owns
 the concern, and the other folder requires it - never a copy in each.**
@@ -209,8 +215,8 @@ apart from the ad-hoc profiling an engine file may not carry.
 **A diff that adds an override, or changes what one does - a value it now clamps or ignores
 included - without the announce is a defect.** An announce is the line the run prints where the
 override changes the outcome. An override is an environment knob, a runtime setter the facade
-(`dasllama/dasllama.das`) exports, a command-line flag of a dasLLAMA tool, or
-an on-disk state file - one a run writes or a user places, never data a build ships - that moves
+(`dasllama/dasllama.das`) exports, or an on-disk state file - one a run writes or a user places,
+never data a build ships - that moves
 a gate, policy, or threshold off its default and so changes which code the run takes or what it
 writes, reads, mints, or computes. A measured time, the run's own duration, or a different
 moment at which the same work happens is not such a change; a CLI flag is never an override.

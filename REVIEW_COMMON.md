@@ -141,5 +141,5 @@ obligation is a rule, and it lives in the flat list above.
 **A diff that adds a rule restating one already in the checklist is a defect - extend the
 existing rule instead.**
 
-**A diff that makes a rule longer than the longest rule the file had before the diff splits it,
-or moves its extra prose to the architecture doc.**
+**No diff makes a rule longer, counted in words, than the longest rule its file had before the
+diff - split the rule, or move the extra prose to the architecture doc.**

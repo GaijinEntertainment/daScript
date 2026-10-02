@@ -14,15 +14,14 @@ number, applies `modules/dasLLAMA/REVIEW.md` (repo root) too.**
 to `modules/dasLLAMA/tests/REVIEW.md` (repo root) as well.**
 
 **A diff that adds a `main.das` or `cli_args.das` flag, changes what the flag makes the program
-do, its default, or a file or path it reads or writes, or edits any copy of its text, leaves its
-`@clarg_doc`, every `README.md` passage that names the flag, and its row in
-`doc/source/reference/utils/dasllama_server.rst` or
-`doc/source/reference/utils/dasllama_cli.rst` (repo root) stating the
-flag's behavior, default, and files and paths as the diff leaves them, no copy leaving out one
-that another states.** A change to the value `serving_knobs.das` derives for a knob changes what
-every flag that reads that knob makes the program do. A reason or a measured number a copy gives
-beside the behavior is no part of it. A copy left behind sends the user to a flag that no longer
-does what it says.
+do, its default, or a file or path it reads or writes, or edits any copy of its text, leaves
+every copy of the flag stating the same behavior, default, and files and paths, each as the diff
+leaves them.** A flag's copies are its `@clarg_doc`, every `README.md` passage that names the
+flag, its row in `doc/source/reference/utils/dasllama_server.rst` or
+`doc/source/reference/utils/dasllama_cli.rst` (repo root), and every passage saying it means the
+same as the other file's flag of its name. A change to the value `serving_knobs.das` derives for
+a knob changes what every flag reading that knob does. A copy need not match another's reasons or
+measured numbers.
 
 **Weakening `REVIEW.das` (beside this file) - dropping a check, narrowing what a check scans,
 adding a name to a check's exempt set (the names it does not flag), or blunting a finding
@@ -56,8 +55,9 @@ produce, hand-compose the fixture and name it as hand-composed, with why, in its
 **A diff that adds a key to what a route answers, or changes when the route answers a key or
 what decides that key's value, names the key, when the route answers it and what decides its
 value in the route's `README.md` row, and updates every other `README.md` passage that names any
-of them, in the same change.** The row is where a consumer learns the key exists and when to
-expect it.
+of them, in the same change.** A diff changes what decides a key's value only when it adds or
+removes a value class - one kind of value the key takes, which the row names in one phrase - or
+changes which request field, flag or config key decides the class the key takes.
 
 **A `served` or `served_note` value a diff adds or changes in `openai_server.das` - all of it
 but the engine text it quotes - uses only words a user understands without knowing how the

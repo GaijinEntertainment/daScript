@@ -90,7 +90,10 @@ lands in `dasllama/dasllama_math_default.das`.**
 own file (`dasllama/dasllama_arch_<name>.das` for a text model, `dasllama/dasllama_<family>.das`
 for a media or speech model).**
 
-**A special case only one backend driver needs lands in that driver's file.**
+**Engine code - a `dasllama/` file in no row of the role table of
+`ARCHITECTURE_GPU.md#gpu-backends` - that calls a tier seat (a hook
+`dasllama/dasllama_gpu_tier.das` installs for a backend driver) lands in a file that already
+calls that seat; a seat's first engine-side call lands by its concern's charter line.**
 
 **A branch that is one model family's branch of a kernel two or more model families share lands
 in the kernel's file, and that file's charter line names the condition that selects the

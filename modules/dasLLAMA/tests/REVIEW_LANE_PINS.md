@@ -11,8 +11,10 @@ other `../dasllama/` call that writes process-global state a later load, route c
 dispatch reads. A driver setter's getter is the `../dasllama/` call, or the set of them, that
 returns the values the driver setter last wrote.
 
-**A cell, or the `[init]` of the file where the cell is defined, sets every driver setter whose
-value the cell's claim depends on, even when that value is its DEFAULT.**
+**A cell, the `[test]` function that runs it, or the `[init]` of the file holding that function,
+calls every driver setter whose last-written value decides whether an assert the cell makes
+passes, or is what an assert's expected value is computed from, even when the value it writes is
+the DEFAULT.**
 
 **A cell whose claim depends on a family serving lane pins that lane in the cell itself - through
 a lane setter (`set_<name>_q8`, or whisper's `set_asr_fp32` / `set_asr_tower_fp32`) or a loader
@@ -23,10 +25,10 @@ declining the other lane, instead of pinning, measures whichever lane the box's 
 `reset_<name>_q8` for a lane `set_<name>_q8` pins, and whisper's `set_asr_fp32(false)` and
 `set_asr_tower_fp32(false)`.**
 
-**A cell that sets a lane setter or a driver setter in its own context - directly, through a
+**A cell or `[test]` function that calls a lane setter or a driver setter - directly, through a
 helper it calls, or through a loader parameter that takes the lane - returns with each lane it
-pinned unset through the lane setter's paired unset call, and each driver setter it set back at
-the value that setter's getter returned before the cell set it.** A set made inside a
+pinned unset through the lane setter's paired unset call, and each driver setter it called back
+at the value that setter's getter returned before its first call.** A set made inside a
 `new_thread` block to a module global writes that thread's context alone and owes no restore; a
 set to state every context shares owes it.
 

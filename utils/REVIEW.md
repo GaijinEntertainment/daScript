@@ -38,7 +38,9 @@ the change names that lane. One arm can hold assertions of both kinds.
 own `REVIEW.md`, where one exists, as well as with this checklist.**
 
 **A diff that adds a `[test]` file covering a change to a tool puts that file under the tool's
-directory; a test covering a change under `common/` goes under `common/`, and a test covering
+directory; a test that calls a `common/` module directly goes under `common/`, even when it also
+runs a tool, one that tests a
+`common/` change by running a tool that requires it goes under that tool, and a test covering
 two tools goes under either one.**
 
 **A diff that changes how a tool builds a `.dlim` from a gguf, how one loads it, or what

@@ -14,10 +14,10 @@ takes that value from a `@template_constant`, a literal or a module `let` - neve
 push constant, uniform or kargs (kernel-argument struct) field.** A host-fixed branch
 is a loop bound or branch whose deciding value the host fixes before it records the dispatch: a
 bounds guard, a tail guard, a nested loop's own bound, or an `[unroll]` count whose live
-iterations run different bodies. A per-call extent is a count that differs between two dispatches
-of one kernel instance (one class, one set of template constants) that a model's inference
-records. The main loop is a loop whose trip count grows with the work one thread does, per
-element or per row.
+iterations run different bodies. A per-call extent is a count that can differ between two
+dispatches of one kernel instance (one class, one set of template constants) within the inference
+of at least one model that instance serves. The main loop is a loop whose trip count grows with the work one
+thread does, per element or per row.
 
 **A host-fixed main-loop branch whose deciding value is a per-call extent is never stamped (baked
 into the kernel as a `@template_constant` or literal): peel it (the full chunks run under the

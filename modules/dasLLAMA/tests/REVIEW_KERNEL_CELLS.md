@@ -66,10 +66,11 @@ cell that dispatches only those values passes whether the change is right or wro
 dispatches it on every path its body has.** A path no cell reaches is one a merge can drop and
 every cell still passes.
 
-**Before every kernel run whose output a kernel-unit cell reads - directly or through a later run
-in the same cell - in any assert, the cell fills with a sentinel every range of that run's
-output buffers the run writes without reading.** A stale value is the previous run's, or garbage
-that happens to sit inside the tolerance bar; an unprefilled output can pass by keeping it.
+**Before every kernel run whose output a kernel-unit cell reads in any assert, directly or through
+a later run in the same cell, the cell fills with a sentinel every range of that run's output
+buffers that the run writes without first reading what the range held before the run; a range the
+run writes and then reads back is one of them.** A stale value is the previous run's, or garbage that happens to sit
+inside the tolerance bar; an unprefilled output can pass by keeping it.
 
 **A compare of a kernel against a CPU oracle asserts bit-identity only where the cell fixes the
 floating-point operation order on both sides, or builds operands that keep every intermediate
@@ -78,10 +79,10 @@ sides, or the operands exact by construction, the oracle's result is the kernel'
 construction; an exact compare of indices or schedule words against a CPU oracle is not a
 bit-identity assert.
 
-**A kernel-unit cell whose output buffer is its input buffer, and whose reference - its CPU
-oracle, or the second kernel form it compares against - is not built to differ from that input,
-pairs its compare with an assert that the output differs from the input at a known index.** An
-in-place kernel that never ran leaves the input, which can wrongly satisfy a tolerant compare.
+**A kernel-unit cell whose output buffer is its input buffer asserts, at a known index, that the
+output differs from the input or that its reference - its CPU oracle, or the second kernel form
+it compares against - differs from that input by more than the compare's bar.** An in-place kernel
+that never ran leaves the input, which can wrongly satisfy a tolerant compare.
 
 **A diff that adds or loosens, in a kernel-unit cell, an assert that is not itself a control,
 holding a measured figure within a nonzero tolerance or past a floor or ceiling - a compare on a

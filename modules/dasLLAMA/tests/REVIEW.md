@@ -28,10 +28,11 @@ kept in step with something maintained outside the cell, or that a checked-in ta
 evidence, applies that checklist too.** An assert that compares against a `../dasllama/`
 constant by name, not against a literal copy of it, keeps nothing in step.
 
-**A cell that calls a `set_*` / `pin_*` function in `../dasllama/` whose value a later load, route
-choice or kernel dispatch in the same process reads, passes a loader parameter that takes a
-family's lane, or whose claim depends on which route or serving lane runs it - a lane pin, a
-driver hook, a CPU-vs-GPU compare - applies `REVIEW_LANE_PINS.md` (beside this file) too.**
+**A cell that calls, directly or through helpers at any depth, a `set_*` / `pin_*` function in
+`../dasllama/` whose value a later load, route choice or kernel dispatch in the same process
+reads, passes a loader parameter that takes a family's lane, or whose claim depends on which
+route or serving lane runs it - a lane pin, a driver hook, a CPU-vs-GPU compare - applies
+`REVIEW_LANE_PINS.md` (beside this file) too.**
 
 **A cell that feeds, preprocesses, or asserts on media bytes an encoder consumes - pixels or
 audio samples - compares an encoder's output rows against a second source, or compares ASR
@@ -128,10 +129,11 @@ block and `../CLAUDE.md` in the same change.** A data row in a table `run.das` l
 behind sends its reader to a flag that no longer does what the text says.
 
 **On every platform, a cell that neither asserts nor registers a skip is a defect.** A cell that
-returns without asserting - whatever the reason - registers `t |> skip` there, and one whose
-claim needs something the box provides and may lack - anything the cell neither creates nor
-sets - registers that skip on the fact before it asserts, never a bare return and never a failure;
-`feint` is a print, not a skip.
+returns without asserting registers `t |> skip` there; `feint` is a print, not a skip. A cell
+whose claim holds only on some boxes or run modes - it depends on the device or its memory (a card
+too small for the shape the cell asks), the build, a run-mode knob's value, the value a tune
+companion returns, a host toolchain or the stocked files - registers its skip on that fact before
+the asserts that need it, never a bare return and never a failure.
 
 **A cell's skip condition, and any condition that picks a cell's assert or bar by something
 other than an input the cell sets itself (a format, a shape, a loop value), keys on a fact the
