@@ -13,7 +13,6 @@
 // force_allocate_on_stack alone (no force_escape_free) is enough: it implies escape analysis.
 options gen2
 options persistent_heap
-options no_aot
 options no_optimization
 options force_allocate_on_stack = true
 
@@ -111,6 +110,18 @@ def sum_multi_live() : int {
     return total
 }
 
+// one `let` declaring two pointers: each variable gets its own initializer at the same source
+// position, and each must still get its own slot
+def sum_multi_let() : int {
+    var total = 0
+    for (i in range(N)) {
+        var a, b : Node? = new Node(x = i, y = i * 2)
+        b.x = i + 1
+        total += a.x + b.x
+    }
+    return total
+}
+
 // plain `new` with field stores -> stack frame -> heap stays EXACTLY flat (zero growth)
 [test]
 def test_stack_plain_new(t : T?) {
@@ -159,6 +170,17 @@ def test_stack_multiple_live_objects(t : T?) {
     let grew = heap_bytes_allocated() - before
     // per i: a.x+a.y=3i, b.x+b.y=4i+1, c.x+c.y=5i+2 -> 12i+3
     t |> equal(s, 12 * ((N - 1) * N / 2) + 3 * N)
+    t |> equal(grew, uint64(0))
+}
+
+// the two variables of one `let` keep distinct slots: a write through b leaves a alone + heap flat
+[test]
+def test_stack_multi_variable_let(t : T?) {
+    let before = heap_bytes_allocated()
+    let s = sum_multi_let()
+    let grew = heap_bytes_allocated() - before
+    // per i: a.x=i, b.x=i+1 -> 2i+1 (one shared slot would read 2i+2)
+    t |> equal(s, 2 * ((N - 1) * N / 2) + N)
     t |> equal(grew, uint64(0))
 }
 

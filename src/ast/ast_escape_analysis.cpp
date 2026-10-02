@@ -484,7 +484,7 @@ namespace das {
 
     static bool initIsAllocatedOnStack ( Expression * init ) {
         if ( init && init->rtti_isNewExpr() ) return ((ExprNew *)init)->allocate_on_stack;
-        if ( init && init->rtti_isAscend() ) return ((ExprAscend *)init)->allocate_on_stack;
+        if ( init && init->rtti_isAscend() ) return ((ExprAscend *)init)->allocate_on_stack && !((ExprAscend *)init)->needTypeInfo;
         return false;
     }
 
@@ -492,6 +492,14 @@ namespace das {
     static ExprCall * makeScopeFreeCall ( Variable * var ) {
         auto call = new ExprCall(var->at, "_::builtin_scope_free");
         call->arguments.push_back(new ExprVar(var->at, var->name));
+        call->arguments.push_back(new ExprConstUInt(var->at, var->type->firstType->getSizeOf()));
+        call->alwaysSafe = true;
+        return call;
+    }
+
+    static ExprCall * makeCollectLocalCall ( Variable * var ) {
+        auto call = new ExprCall(var->at, "_::builtin_collect_local");
+        call->arguments.push_back(new ExprPtr2Ref(var->at, new ExprVar(var->at, var->name)));
         call->arguments.push_back(new ExprConstUInt(var->at, var->type->firstType->getSizeOf()));
         call->alwaysSafe = true;
         return call;
@@ -538,19 +546,21 @@ namespace das {
                 // emit the scope-free only when it frees something real: a heap shell (not stack-
                 // allocated) or owned heap members (arrays/tables) inside the pointee. a stack-
                 // allocated POD frees nothing, so skip it - else every scope pays an interop call.
-                bool stacked = forceStack && initIsAllocatedOnStack(var->init);
                 bool ownsHeap = !( var->type->firstType && var->type->firstType->isNoHeapType() );
-                if ( !stacked || ownsHeap ) {
+                if ( !isStackedPointee(var) || ownsHeap ) {
                     pending.push_back({var, blocks.back()});
                 }
             }
             return Visitor::visitLet(expr,var,last);
         }
+        bool isStackedPointee ( Variable * var ) const {
+            return forceStack && initIsAllocatedOnStack(var->init);
+        }
         void emitScopeFree ( ExprBlock * block, Variable * var ) {
             if ( var->type->firstType->getSizeOf64() > 0x7fffffffull ) return;  // skip pointees over the 2^31 (32-bit) size limit - oversized/invalid types that error out anyway
             anyWork = true;
             func->notInferred();
-            block->finalList.insert(block->finalList.begin(), makeScopeFreeCall(var));
+            block->finalList.insert(block->finalList.begin(), isStackedPointee(var) ? makeCollectLocalCall(var) : makeScopeFreeCall(var));
             if ( logs ) {
                 if ( !var->at.empty() && var->at.fileInfo ) {
                     *logs << var->at.fileInfo->name << ":" << var->at.line << ":" << var->at.column << " ";

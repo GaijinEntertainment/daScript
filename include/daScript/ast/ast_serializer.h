@@ -366,7 +366,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 217;   // 217: ExprClone carries its flags word (no_promotion for the raw !:= form)
+            return 218;   // 218: a stack-allocated escape-free local's scope exit collects the pointee's owned heap, never the frame shell
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

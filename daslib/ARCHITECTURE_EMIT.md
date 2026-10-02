@@ -33,7 +33,12 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   spellings.
 - **Stack-frame `new`/ascend**: per-block storage declared once, the USE site
   re-initializes per evaluation (memset for `new`, whole-value overwrite for ascend) -
-  dropping the reinit reuses the previous iteration's value.
+  dropping the reinit reuses the previous iteration's value. At scope exit the escape pass
+  frees such a local by `isStackedPointee` (`src/ast/ast_escape_analysis.cpp`): a stacked
+  pointee gets `builtin_collect_local(*p, size)`, which frees only the heap it owns, and a
+  heap pointee gets `builtin_scope_free(p, size)`, which frees the shell too. The emitter's
+  stack gate (`allocate_on_stack`; an ascend also needs `!needTypeInfo` and a non-handle type)
+  must change together with that predicate; a mismatch fails only the full `test_aot` lane.
 - **fp16 and the 8/16-bit lattice go through the vec4f policy ABI**: `SimPolicy_HalfVec` is
   vec4f-shaped even at width 1, so scalar fp16 always casts across the policy boundary,
   and a lattice-vector policy result must come back typed for `das_equ_val` deduction.
