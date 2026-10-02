@@ -1,6 +1,8 @@
 options gen2
 module review_gate shared
 
+module review_gate
+
 require strings
 require daslib/strings_boost
 require daslib/fio

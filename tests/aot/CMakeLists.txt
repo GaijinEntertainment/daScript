@@ -3,6 +3,7 @@
 
 SET(AOT_TESTING_FILES
     dastest/testing.das
+    dastest/review_gate.das
 )
 
 # AOT all daslib .das files — catches codegen regressions for any module,
@@ -43,6 +44,9 @@ list(APPEND AOT_TESTS_FILES tests/REVIEW.das)
 SET(AOT_DASTEST_MODULE_FILES dastest/review_gate.das)
 # Exclude _-prefixed helper modules (required transitively, not standalone test entry points)
 list(FILTER AOT_TESTS_FILES EXCLUDE REGEX "/_")
+list(APPEND AOT_TESTS_FILES tests/REVIEW.das)
+
+SET(AOT_DASTEST_FILES tests/dastest/test_tests_review_gate.das)
 
 FILE(GLOB AOT_BARE_BLOCK_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/bare_block/*.das")
 list(FILTER AOT_BARE_BLOCK_FILES EXCLUDE REGEX "failed_|cant_|invalid_")

@@ -128,6 +128,18 @@ def private lint022_calls_may_be_inlined(prog : ProgramPtr) : bool {
         && (prog._options |> find_arg("auto_inline_functions") ?as tBool ?? prog.policies.auto_inline_functions))
 }
 
+def private lint022_block_calls_may_be_inlined(prog : ProgramPtr) : bool {
+    return (prog.getOptimize
+        && !(prog._options |> find_arg("disable_auto_inline") ?as tBool ?? prog.policies.disable_auto_inline))
+}
+
+def private lint022_takes_block(fn : Function?) : bool {
+    for (a in fn.arguments) {
+        return true if (a._type != null && a._type.baseType == Type.tBlock)
+    }
+    return false
+}
+
 def private lint022_enabled(prog : ProgramPtr) : bool {
     let configured = prog._options |> find_arg("_unused_private")
     if (configured is tBool) return configured as tBool
@@ -1463,12 +1475,13 @@ class LintVisitor : AstVisitor {
         let mod = prog.getThisModule
         return if (mod == null)
         let check_functions = !lint022_calls_may_be_inlined(prog)
+        let skip_block_functions = lint022_block_calls_may_be_inlined(prog)
         lint022_note_decl_types(mod)
         return if (!lint022_has_candidate(prog, mod, check_functions))
         lint022_collect_generic_refs(mod)
         if (check_functions) {
             for_each_function(mod, "") $(fn) {
-                return if (!lint022_is_unreferenced(fn, mod))
+                return if (!lint022_is_unreferenced(fn, mod) || (skip_block_functions && lint022_takes_block(fn)))
                 lint022_report_at_decl("LINT022: private function '{fn.name}' is never used; remove it, or make it public if another module needs it", fn.at)
             }
         }

@@ -38,7 +38,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x5b97e146ab9f2bebul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x55e4062e26f33ad4ul
 
 [arch(at = "../ARCHITECTURE_FAST_MATH.md#never-fast-math")]
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
@@ -833,9 +833,14 @@ def public run_jit(prog : Program?; var ctx : Context?; cli_opts : JitCliOptions
                 var pair = build_llvm_aot_ctors(g_ctx, g_mod, g_prim_t, funcs, uids, prog)
                 aot_ctor = pair._0
                 aot_dtor = pair._1
+                emit_aot_pull_anchor(g_mod, g_prim_t, base_name(output_path))
             }
             generate_global_ctors_dtors(g_prim_t, emit_aot_object ? false : !(use_dll || gen_exe), aot_ctor, aot_dtor)
             if (emit_aot_object) {
+                let plat = get_platform_name()
+                if (plat == "linux" || plat == "android") {
+                    move_global_ctors_to_init_array(g_mod, g_prim_t, base_name(output_path))
+                }
                 // before optimization: the folding this catches also deletes the evidence
                 let unresolved = collect_unresolved_address_globals(g_mod)
                 if (!(unresolved |> empty())) {

@@ -1377,9 +1377,10 @@ namespace das {
             cast<string *>::from(&istr)
         };
         auto env = daScriptEnvironment::getBound();
+        auto boundBefore = env->g_Program;
         if ( bindGlobalProgram ) env->g_Program = program;
         context->invoke(block, args, nullptr, at);
-        if ( bindGlobalProgram ) env->g_Program.reset();
+        if ( bindGlobalProgram ) env->g_Program = boundBefore;
     }
 
     void rtti_builtin_compile_ex ( char * modName, char * str, const CodeOfPolicies & cop, bool exportAll,

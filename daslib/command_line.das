@@ -29,11 +29,11 @@ def get_das_exe() : string {
     exe = replace(exe, "\\", "/")
     let last_slash = rfind(exe, "/")
     let dir = last_slash >= 0 ? slice(exe, 0, last_slash + 1) : ""
-    let interpreter = get_platform_name() == "windows" ? "daslang.exe" : "daslang"
-    var result = "{dir}{interpreter}"
-    if (get_platform_name() == "windows") {
-        result = replace(result, "/", "\\")
-    }
-    if (!fexist(result)) return args[0]
-    return result
+    let windows = get_platform_name() == "windows"
+    let result = windows ? replace("{dir}daslang.exe", "/", "\\") : "{dir}daslang"
+    if (fexist(result)) return result
+    let self = get_full_file_name(args[0])
+    if (fexist(self)) return self
+    if (windows && fexist("{self}.exe")) return "{self}.exe"
+    return args[0]
 }

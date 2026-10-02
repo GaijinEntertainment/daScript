@@ -290,7 +290,7 @@ def private jit_setup_cop(var cop : CodeOfPolicies; input : string; tool : JitTo
             cop.jit_dll_mode = true
         }
         var out_path = ((tool.aot_object && !empty(tool.aot_object_prefix))
-            ? "{dir_name(input)}/_llvm_aot_generated/{tool.aot_object_prefix}_{base_name(input)}"
+            ? "{dir_name(input)}/_llvm_aot_generated/{tool.aot_object_prefix}_{replace(input, "/", "_")}"
             : tool.output)
         if (!empty(tool.lib_output_dir)) {
             let stem = (base_name(input) |> split("."))[0]

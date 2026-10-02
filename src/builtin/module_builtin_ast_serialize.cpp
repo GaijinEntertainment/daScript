@@ -3188,10 +3188,11 @@ namespace das {
             return das::move(sorted);
         }
 
-        vector<Module*> getDependecyOrdered() {
+        vector<Module*> getDependecyOrderedEndingWith(Module * last) {
             for ( auto mod : input ) {
-                visit(mod);
+                if ( mod != last ) visit(mod);
             }
+            visit(last);
             return das::move(sorted);
         }
 
@@ -3603,7 +3604,7 @@ namespace das {
         if ( ser.writing ) {
             ser.moduleLibrary = &library;
             TopSort ts(library.modules);
-            auto modules = ts.getDependecyOrdered();
+            auto modules = ts.getDependecyOrderedEndingWith(thisModule.get());
 
             vector<Module*> builtinModules;
             for ( auto m : modules ) {

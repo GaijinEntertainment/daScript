@@ -2322,6 +2322,7 @@ namespace das {
         DAS_ASSERTF(policies.no_init_check || (daScriptEnvironment::getBound() && daScriptEnvironment::getBound()->g_modulesInitialized),
             "compileDaScript on an environment that never called Module::Initialize(); "
             "call das::Module::Initialize() after registering modules in this environment.");
+        CompileEnvScope envScope(daScriptEnvironment::getBound());
         gc_guard compile_gc_scope;
         GcCollectOnExit compile_gc_collect(compile_gc_scope);
         ReuseCacheGuard rcg;

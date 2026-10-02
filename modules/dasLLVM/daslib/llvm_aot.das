@@ -105,6 +105,25 @@ def public build_llvm_aot_ctors(ctx : LLVMContextRef; mod : LLVMOpaqueModule?; v
     return emit_aot_register_ctor_dtor(types, funcs, uids, prog, glob_ctor)
 }
 
+//! jam links an AOT object in only through the aot_<obj>_pull symbol its pull list names.
+def public emit_aot_pull_anchor(mod : LLVMOpaqueModule?; var types : PrimitiveTypes?; obj_name : string) {
+    var anchor = LLVMAddGlobal(mod, types.t_int64, "aot_{obj_name}_pull")
+    LLVMSetInitializer(anchor, LLVMConstInt(types.t_int64, 0ul, 0))
+}
+
+//! Moves every llvm.global_ctors entry into .init_array, the section lld and mold run (legacy .ctors they do not).
+def public move_global_ctors_to_init_array(mod : LLVMOpaqueModule?; var types : PrimitiveTypes?; obj_name : string) {
+    var ctors = LLVMGetNamedGlobal(mod, "llvm.global_ctors")
+    if (ctors == null) return
+    var list = LLVMGetInitializer(ctors)
+    for (i in range(LLVMGetNumOperands(list))) {
+        var entry = LLVMAddGlobal(mod, types.LLVMVoidPtrType(), "das_aot_init_{obj_name}_{i}")
+        LLVMSetInitializer(entry, LLVMGetOperand(LLVMGetOperand(list, uint(i)), 1u))
+        LLVMSetSection(entry, ".init_array")
+    }
+    LLVMDeleteGlobal(ctors)
+}
+
 //! Names the DllName.glob() address globals nothing fills at load, for the caller to panic on.
 def public collect_unresolved_address_globals(mod : LLVMOpaqueModule?) : array<string> {
     var bad : array<string>

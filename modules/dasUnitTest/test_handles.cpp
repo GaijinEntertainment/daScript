@@ -40,6 +40,7 @@ MAKE_TYPE_FACTORY(FancyClass, FancyClass)
 
 MAKE_TYPE_FACTORY(SomeDummyType, SomeDummyType)
 MAKE_TYPE_FACTORY(Point3Array, Point3Array)
+MAKE_TYPE_FACTORY(Float3x4List, Float3x4List)
 
 MAKE_TYPE_FACTORY(ByteCode, ByteCode)
 
@@ -532,6 +533,35 @@ void testFooArray(const TBlock<void,FooArray> & blk, Context * context, LineInfo
     context->invoke(blk, args, nullptr, at);
 }
 
+void testFloat3x4List(const TBlock<void,Float3x4List> & blk, Context * context, LineInfoArg * at) {
+    Float3x4List list;
+    for (int32_t x = 0; x != 10; ++x) {
+        float3x4 m;
+        memset(&m, 0, sizeof(m));
+        list.push_back(m);
+    }
+    vec4f args[1];
+    args[0] = cast<Float3x4List *>::from(&list);
+    context->invoke(blk, args, nullptr, at);
+}
+
+struct Float3x4ListAnnotation : ManagedVectorAnnotation<Float3x4List> {
+    TypeDeclPtr parentType;
+    Float3x4ListAnnotation(ModuleLibrary & lib) : ManagedVectorAnnotation<Float3x4List>("Float3x4List", lib) {
+        cppName = " ::Float3x4List";
+        parentType = makeType<das::vector<float3x4>>(lib);
+    }
+    virtual bool canBeSubstituted(TypeAnnotation * passType) const override { return parentType->annotation == passType; }
+    virtual void gc_collect(gc_root * target, gc_root * from) override {
+        ManagedVectorAnnotation<Float3x4List>::gc_collect(target, from);
+        if (parentType) parentType->gc_collect(target, from);
+    }
+    virtual void visitTypeDecls(const das::function<void(TypeDecl *)> & cb) override {
+        ManagedVectorAnnotation<Float3x4List>::visitTypeDecls(cb);
+        if (parentType) cb(parentType);
+    }
+};
+
 void tableMojo ( TTable<char *,int> & in, const TBlock<void,TTable<char *,int>> & block, Context * context, LineInfoArg * at ) {
     vec4f args[1];
     args[0] = cast<Table *>::from(&in);
@@ -726,6 +756,9 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     // foo array
     addExtern<DAS_BIND_FUN(testFooArray)>(*this, lib, "testFooArray",
         SideEffects::modifyExternal, "testFooArray");
+    addAnnotation(new Float3x4ListAnnotation(lib));
+    addExtern<DAS_BIND_FUN(testFloat3x4List)>(*this, lib, "testFloat3x4List",
+        SideEffects::modifyExternal, "testFloat3x4List");
     addExtern<DAS_BIND_FUN(set_foo_data)>(*this, lib, "set_foo_data",
         das::SideEffects::modifyArgument, "set_foo_data");
     // utf8 print

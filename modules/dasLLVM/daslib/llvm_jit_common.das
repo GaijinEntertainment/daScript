@@ -999,14 +999,8 @@ def public create_default_target_machine(opt_level : uint; use_host_cpu : bool) 
     // default (clang-mingw64: prebuilt MSVC clang-cl LLVM.dll defaults to x86_64-pc-windows-msvc,
     // emitting MSVC-ABI .o that mingw's linker can't satisfy). Empty = use LLVM default.
     let host_triple = host_jit_triple()
-    var triple_msg : string
-    var triple_owned_by_llvm = false
-    if (empty(host_triple)) {
-        triple_msg = LLVMGetDefaultTargetTriple()
-        triple_owned_by_llvm = true
-    } else {
-        triple_msg = host_triple
-    }
+    let triple_owned_by_llvm = empty(host_triple)
+    let triple_msg = triple_owned_by_llvm ? LLVMGetDefaultTargetTriple() : host_triple
     let machine = default_target_cpu_features(use_host_cpu)
     let targetMachine = create_target_machine(triple_msg, machine.cpu, machine.features, opt_level)
 
@@ -1107,7 +1101,7 @@ def public emit_object_only(mod : LLVMOpaqueModule?; out_path : string; use_host
         LLVMDisposeMessage(mod_triple)
         LLVMDisposeTargetData(dl)
         let error : string?
-        let file = artifact_path(out_path, JitArtifact.object)
+        let file = get_platform_name() == "windows" ? "{out_path}.obj" : artifact_path(out_path, JitArtifact.object)
         let filetype = LLVMCodeGenFileType.LLVMObjectFile
         let failed = LLVMTargetMachineEmitToFile(targetMachine, mod, file, filetype, error)
         if (failed != 0) {

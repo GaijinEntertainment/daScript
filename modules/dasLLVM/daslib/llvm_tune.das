@@ -1,6 +1,8 @@
 options gen2
 options indenting = 4
 options no_aot = true
+options no_global_variables = false
+options no_aliasing = false
 
 module llvm_tune shared public
 
@@ -235,9 +237,9 @@ def tune_box_identity() : string {
     if (!empty(g_box_identity)) {
         return g_box_identity
     }
-    var model_id = ""
+    var model_id = ""   // nolint:LINT003,LINT019 - only the macOS branch writes it, and a host compile with platform folding drops that branch
     var os_build = ""
-    var cpu = ""
+    var cpu : string
     let plat = get_platform_name()
     if (plat == "windows") {
         var build = ""
