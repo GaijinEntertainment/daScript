@@ -11,12 +11,13 @@ on:
       - 'daslib/**'
       - 'src/builtin/**'
       - 'modules/dasLLAMA/dasllama/**'
+      - 'modules/dasCrypto/**'
+      - 'modules/dasHV/**'
       - 'modules/dasImgui/**'
       - 'modules/dasVulkan/**'
       - 'modules/dasAudio/audio/**'
       - 'modules/dasAudio/strudel/**'
       - 'modules/dasGLTF/gltf/**'
-      - 'modules/dasHV/dashv/**'
       - 'modules/dasOPENAI/openai/**'
       - 'modules/dasPEG/peg/**'
       - 'modules/dasPUGIXML/pugixml/**'
@@ -28,12 +29,13 @@ on:
       - 'daslib/**'
       - 'src/builtin/**'
       - 'modules/dasLLAMA/dasllama/**'
+      - 'modules/dasCrypto/**'
+      - 'modules/dasHV/**'
       - 'modules/dasImgui/**'
       - 'modules/dasVulkan/**'
       - 'modules/dasAudio/audio/**'
       - 'modules/dasAudio/strudel/**'
       - 'modules/dasGLTF/gltf/**'
-      - 'modules/dasHV/dashv/**'
       - 'modules/dasOPENAI/openai/**'
       - 'modules/dasPEG/peg/**'
       - 'modules/dasPUGIXML/pugixml/**'
@@ -73,6 +75,7 @@ jobs:
         cmake --no-warn-unused-cli -B./build \
           -DCMAKE_BUILD_TYPE:STRING=Release \
           -DDAS_HV_DISABLED=OFF \
+          -DDAS_CRYPTO_DISABLED=OFF \
           -DDAS_PUGIXML_DISABLED=OFF \
           -DDAS_LLVM_DISABLED=ON \
           -DDAS_GLFW_DISABLED=OFF \

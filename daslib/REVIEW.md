@@ -183,10 +183,11 @@ it.** The tree must outlive the caller's read, and daslang finalizes neither a r
 field nor a local container at scope exit, so a borrowed view with no named owner leaks the
 whole document per call.
 
-**Never convert a string with `int64` / `uint64` / `double` in a lexer or decoder reachable
-from a file, a socket, or a model - use the non-throwing `to_*` twin and report through the
-code's own error channel.** Those three throw on out-of-range input, and a throw on
-untrusted bytes is a panic.
+**Never use the throwing, one-argument string forms of `int64`, `uint64` or `double`
+in a lexer or decoder reachable from a file, a socket, or a model.** Use the overload
+that returns `ConversionResult` and the consumed count, or the non-throwing `to_*`
+twin after validating the input. Report conversion failures through the parser's
+error channel, not a panic.
 
 **Never branch a parser on the text of its own diagnostics - branch on the token that caused
 the failure.** A message carries user data, so `starts_with` on an error string is an

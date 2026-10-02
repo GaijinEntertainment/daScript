@@ -1,0 +1,7 @@
+// Excerpts from pinned libhv 303f50c7, used to test patch anchors.
+
+    uint32_t            retry_delay;    // unit: ms
+
+    void ParseUrl();
+
+    static char         s_date[32];

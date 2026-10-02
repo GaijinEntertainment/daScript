@@ -37,6 +37,7 @@ One section per module: what the module is for, then its public symbols grouped 
 - [coroutines](#coroutines) - The COROUTINES module provides coroutine infrastructure including the `[coroutine]` function annotation, `yield_from` for delegating to sub-coroutines, and `co_await` for composing asynchronous generators.
 - [cpp_bind](#cpp_bind) - The CPP_BIND module provides utilities for generating daslang bindings to C++ code.
 - [cross_context](#cross_context) - The CROSS_CONTEXT module requires a `shared` module after the prerequisite walk - from a macro, a simulate macro or an `[init]`, never from a running script, which has no compile for the module to join - and calls into its macro context by function name, so a module that is expensive to bring up and only sometimes needed comes in at the point that decides it needs it.
+- [crypto](#crypto) - Native OpenSSL cryptographic primitives.
 - [cuckoo_hash_table](#cuckoo_hash_table) - The CUCKOO_HASH_TABLE module implements a cuckoo hash table data structure.
 - [dap](#dap) - The DAP module implements the Debug Adapter Protocol (DAP) for integrating daslang with external debuggers.
 - [das_source_formatter](#das_source_formatter) - The DAS_SOURCE_FORMATTER module implements source code formatting for daslang.
@@ -860,6 +861,7 @@ The FIO module implements file input/output and filesystem operations. It provid
 - `set_mtime` - Sets the last modification time of a file or directory.
 - `set_mtime_result`
 - `stat` - Returns the file status (size, modification time, etc.) for a file at the given path.
+- `try_fflush` - Flushes a non-null open file and returns whether fflush succeeded.
 
 ### Path manipulation
 
@@ -1055,6 +1057,30 @@ The NETWORK module implements networking facilities including HTTP client/server
 - `make_client` - Creates the native client behind a `Client` class instance: stores it in the instance's `_client` field and wires the instance's `onConnect`, `onDisconnect`, `onData`, `onError` and `onLog` methods as the socket's callbacks.
 - `probe_local_port` - Binds a throwaway TCP socket to `port` on every interface, as a listener would, and returns the port it got: the same port when it is free, the one the system picked when `port` is 0, and -1 when the port is taken or `host` (an IPv4 address, or `localhost`) does not resolve.
 
+## crypto
+
+Native OpenSSL cryptographic primitives. Enable dasCrypto with OpenSSL 3 or newer; this module is unavailable in Emscripten. Byte inputs are bounded to 16 MiB unless a narrower limit is stated. Output-producing functions clear their output on failure and allow output/input aliasing. Callers own key storage and protocol validation.
+
+
+### Randomness and comparison
+
+- `crypto_equal` - Compares equal-length byte arrays in constant time.
+- `crypto_random_bytes` - Fills output with count cryptographically secure random bytes.
+
+### Message authentication
+
+- `crypto_hmac_sha1` - Computes a 20-byte HMAC-SHA1 for protocols requiring it, such as TOTP.
+- `crypto_hmac_sha256` - Computes a 32-byte HMAC-SHA256 from key and message.
+
+### Authenticated encryption
+
+- `crypto_aes256_gcm_open` - Authenticates and decrypts ciphertext followed by its 16-byte AES-256-GCM tag.
+- `crypto_aes256_gcm_seal` - Encrypts and authenticates plain with AES-256-GCM.
+
+### Signature verification
+
+- `crypto_verify_rsa_sha256` - Verifies an RSA PKCS#1 v1.5 SHA-256 signature.
+
 ## dashv
 
 The DASHV module provides HTTP and WebSocket networking built on top of the `libhv`_ library. It exposes WebSocket client/server types, HTTP request/response handling, route registration, cookie and form-data helpers, and an HTTP client for making outbound requests.
@@ -1069,17 +1095,18 @@ The DASHV module provides HTTP and WebSocket networking built on top of the `lib
 
 ### Handled structures
 
-- `HttpRequest` - HTTP request with URL, method, headers, body, and parameters.
-- `HttpContext` - HTTP request/response context passed to route handlers.
 - `HttpMessage` - Base type for HTTP messages, providing header access.
 - `HttpResponse` - HTTP response with status code, headers, and body.
 - `HttpResponseWriter` - HTTP response writer for streaming responses.
+- `HttpRequest` - HTTP request with URL, method, headers, body, and parameters.
+- `HttpContext` - HTTP request/response context passed to route handlers.
 
 ### Handled types
 
 - `WebSocketClient` - Opaque handle to an outbound WebSocket connection.
-- `WebSocketChannel` - Opaque handle to a server-side WebSocket client connection.
 - `WebSocketServer` - Opaque handle to a running HTTP/WebSocket server.
+- `WebSocketAdmission` - Generation-checked ticket for a pending WebSocket upgrade.
+- `WebSocketChannel` - Opaque handle to a server-side WebSocket client connection.
 
 ### WebSocket client
 
@@ -1102,13 +1129,15 @@ The DASHV module provides HTTP and WebSocket networking built on top of the `lib
 
 ### Handle operations
 
+- `WebSocketAdmission!=` - Compares WebSocket admission ticket identity and generation for inequality.
+- `WebSocketAdmission==` - Compares WebSocket admission ticket identity and generation.
 - `WebSocketChannel!=` - Handle inequality: returns true if the two handles refer to different channels (or at least one is null).
 - `WebSocketChannel==` - Handle equality: returns true if both refer to the same channel.
 - `WebSocketClient!=` - Handle inequality: returns true if the two handles refer to different clients (or at least one is null).
 - `WebSocketClient==` - Handle equality: returns true if both refer to the same client.
 - `WebSocketServer!=` - Handle inequality: returns true if the two handles refer to different servers (or at least one is null).
 - `WebSocketServer==` - Handle equality: returns true if both refer to the same live server.
-- `is_alive` - Returns true if the channel handle still refers to a live peer connection.
+- `is_alive` - Returns whether this WebSocket admission ticket is still registered.
 
 ### HTTP route registration
 
@@ -1125,11 +1154,16 @@ The DASHV module provides HTTP and WebSocket networking built on top of the `lib
 ### HTTP server configuration
 
 - `STATIC` - Registers a static-file route: serves files under dir at the URL prefix path.
+- `WEBSOCKET_UPGRADE` - Registers a deferred WebSocket admission callback before server start.
+- `accept_websocket` - Submits acceptance of a live, undecided WebSocket ticket.
 - `allow_cors` - Enables cross-origin resource sharing (CORS) on all server responses.
+- `reject_websocket` - Submits rejection of a live, undecided WebSocket ticket with HTTP status 400–599.
+- `set_access_log` - Enables or disables libhv request access logging before server start.
 - `set_document_root` - Sets the root directory used for serving static files.
 - `set_error_page` - Sets the file served when the server returns an error response.
 - `set_home_page` - Sets the file served when a request maps to a directory (e.g.
 - `set_index_of` - Enables directory listing for the given directory path.
+- `set_limits` - Sets positive HTTP-body, complete WebSocket-message, pending-event count and queued-payload byte limits before start.
 
 ### HTTP response helpers
 
@@ -1145,6 +1179,7 @@ The DASHV module provides HTTP and WebSocket networking built on top of the `lib
 
 - `request` - Sends an HTTP request configured via an `HttpRequest` object and invokes the block with the response.
 - `request_cb` - Sends an HTTP request and invokes `on_body` with each body chunk as a string as it arrives, then calls `on_complete` with the final response.
+- `request_checked` - Performs synchronous verified HTTPS with a response-body limit of 1–16777216 bytes.
 - `status_message` - Returns the status message string for the given HTTP response.
 
 ### Message and header access
@@ -5419,7 +5454,7 @@ The CPP_BIND module provides utilities for generating daslang bindings to C++ co
 
 ### Generation of bindings
 
-- `log_cpp_class_adapter` - Generates C++ class adapter for the Daslang class.
+- `log_cpp_class_adapter` - Generates a C++ adapter for abstract methods and explicitly selected default methods.
 
 ## cuckoo_hash_table
 
@@ -5529,6 +5564,8 @@ The DASHV_BOOST module provides high-level daScript wrapper classes for the low-
 - `HvWebServer.set_bind_host` - Selects the interface to bind before `start` (for example, `127.0.0.1`).
 - `HvWebServer.stop` - Stops the server.
 - `HvWebServer.tick` - Processes pending HTTP and WebSocket events; must be called periodically.
+- `HvWebServer.onWsMessageFrame` - Complete message with authoritative byte count and opcode, including embedded zero bytes.
+- `HvWebServer.set_limits` - Sets positive parser and queue budgets before start.
 - `HvWebServer.onInit`
 - `HvWebServer.GET` - Registers a handler for HTTP GET requests matching `uri`.
 - `HvWebServer.POST` - Registers a handler for HTTP POST requests matching `uri`.
@@ -5544,6 +5581,7 @@ The DASHV_BOOST module provides high-level daScript wrapper classes for the low-
 - `HvWebServer.set_index_of` - Enables directory listing for the specified directory.
 - `HvWebServer.set_error_page` - Sets a custom error page file.
 - `HvWebServer.SSE` - Registers an SSE (Server-Sent Events) handler for `uri`.
+- `HvWebServer.WEBSOCKET_UPGRADE` - Registers admission before HTTP 101; the request is borrowed for the callback.
 - `HvWebServer.STREAM` - Registers a streaming (incremental) handler for `uri` (any HTTP method, like `ANY`).
 
 ### HTTP request helpers
@@ -6199,6 +6237,7 @@ The JSON module implements JSON parsing and serialization. It provides `read_jso
 
 - `JsonValue` - JSON value, wraps any JSON element.
 - `TokenAt` - JSON parsing token.
+- `JsonReadLimits` - Bounds for strict, scalar-safe reads.
 
 ### Value conversion
 
@@ -6208,6 +6247,7 @@ The JSON module implements JSON parsing and serialization. It provides `read_jso
 ### Read and write
 
 - `read_json` - reads JSON from the `text` array of uint8.
+- `read_json_bounded` - Strict read with preflight budgets before recursive tree construction.
 - `write_json` - Overload accepting temporary type
 - `write_json_compact` - `write_json` on one line: no newlines or indentation, `", "` / `": "` separators — the python `json.dumps` / jinja `tojson` shape chat templates and wire protocols carry.
 
@@ -6658,6 +6698,7 @@ The logger module provides a structured, file-backed logging facility for daslan
 - `logger_info` - Informational record.
 - `logger_log` - Generic log entry.
 - `logger_trace` - Verbose trace-level record.
+- `logger_try_log` - True only when the complete JSONL record was written and flushed to the file.
 - `logger_warning` - Warning record.
 
 ### Stdout hook

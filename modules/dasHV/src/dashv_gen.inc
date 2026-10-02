@@ -59,16 +59,20 @@ protected:
     __fn_onWsOpen = 0,
     __fn_onWsClose = 1,
     __fn_onWsMessage = 2,
-    __fn_onTick = 3,
+    __fn_onWsMessageFrame = 3,
+    __fn_onTick = 4,
+    __fn_onInit = 5,
   };
 protected:
-  int _das_class_method_offset[4];
+  int _das_class_method_offset[6];
 public:
   HvWebServer_Adapter ( const StructInfo * info ) {
-      _das_class_method_offset[__fn_onWsOpen] = info->fields[13]->offset;
-      _das_class_method_offset[__fn_onWsClose] = info->fields[14]->offset;
-      _das_class_method_offset[__fn_onWsMessage] = info->fields[15]->offset;
-      _das_class_method_offset[__fn_onTick] = info->fields[16]->offset;
+      _das_class_method_offset[__fn_onWsOpen] = info->fields[14]->offset;
+      _das_class_method_offset[__fn_onWsClose] = info->fields[15]->offset;
+      _das_class_method_offset[__fn_onWsMessage] = info->fields[16]->offset;
+      _das_class_method_offset[__fn_onWsMessageFrame] = info->fields[17]->offset;
+      _das_class_method_offset[__fn_onTick] = info->fields[19]->offset;
+      _das_class_method_offset[__fn_onInit] = info->fields[20]->offset;
   }
   __forceinline Func get_onWsOpen ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_onWsOpen]);
@@ -97,10 +101,28 @@ public:
         (__context__,nullptr,__funcCall__,
           self,channel,msg);
   }
+  __forceinline Func get_onWsMessageFrame ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onWsMessageFrame]);
+  }
+  __forceinline void invoke_onWsMessageFrame ( Context * __context__, Func __funcCall__, void * self, das::Handle<hv::WebSocketChannel> const  channel, char * const  msg, int32_t byte_count, DAS_COMMENT(bound_enum) ws_opcode opcode ) const {
+    das_invoke_function<void>::invoke
+      <void *,das::Handle<hv::WebSocketChannel> const ,char * const ,int32_t,DAS_COMMENT(bound_enum) ws_opcode>
+        (__context__,nullptr,__funcCall__,
+          self,channel,msg,byte_count,opcode);
+  }
   __forceinline Func get_onTick ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_onTick]);
   }
   __forceinline void invoke_onTick ( Context * __context__, Func __funcCall__, void * self ) const {
+    das_invoke_function<void>::invoke
+      <void *>
+        (__context__,nullptr,__funcCall__,
+          self);
+  }
+  __forceinline Func get_onInit ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onInit]);
+  }
+  __forceinline void invoke_onInit ( Context * __context__, Func __funcCall__, void * self ) const {
     das_invoke_function<void>::invoke
       <void *>
         (__context__,nullptr,__funcCall__,

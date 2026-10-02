@@ -1,4 +1,5 @@
 options gen2
+module review_gate shared
 
 require strings
 require daslib/strings_boost

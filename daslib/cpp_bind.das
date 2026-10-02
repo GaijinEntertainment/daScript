@@ -71,22 +71,29 @@ def private fwrite(var cpp_file : StringBuilderWriter; text : string) {
     write(cpp_file, text)
 }
 
-def log_cpp_class_adapter(cpp_file : file; name : string; var cinfo : TypeDeclPtr) {
-    //! Generates C++ class adapter for the Daslang class.
+def log_cpp_class_adapter(cpp_file : file; name : string; var cinfo : TypeDeclPtr; implemented_methods : array<string> = default<array<string>>) {
+    //! Generates a C++ adapter for abstract methods and explicitly selected default methods.
+    //! ``implemented_methods`` preserves callbacks with a daslang fallback implementation.
     fwrite(cpp_file, build_string() $(var writer) {
-        log_cpp_class_adapter(writer, name, cinfo)
+        log_cpp_class_adapter(writer, name, cinfo, implemented_methods)
     })
 }
 
-def log_cpp_class_adapter(var cpp_file : StringBuilderWriter; name : string; var cinfo : TypeDeclPtr) {
-    //! Generates C++ class adapter for the Daslang class.
+def log_cpp_class_adapter(var cpp_file : StringBuilderWriter; name : string; var cinfo : TypeDeclPtr; implemented_methods : array<string> = default<array<string>>) {
+    //! Generates a C++ adapter for abstract methods and explicitly selected default methods.
+    //! ``implemented_methods`` preserves callbacks with a daslang fallback implementation.
     assert(cinfo.isClass, "can only make adapter out of a class")
     var methods : array<tuple<name : string; index : int>>
     var types : array<TypeDeclPtr>
     for (fld, idx in cinfo.structType.fields, count()) {
-        if (!fld._type.isFunction || fld.name == "__finalize" || fld.init != null) continue
+        if (!fld._type.isFunction || fld.name == "__finalize" || (fld.init != null && find_index(implemented_methods, string(fld.name)) < 0)) continue
         push(methods, (name = "{fld.name}", index = idx))
         push_clone(types, fld._type)
+    }
+    for (requested in implemented_methods) {
+        var found = false
+        for (method in methods) { found ||= method.name == requested }
+        if (!found) { panic("adapter method {requested} does not exist") }
     }
     let nmet = length(methods)
     fwrite(cpp_file, "class {name} \{\n")

@@ -1,0 +1,19 @@
+// Excerpts from pinned libhv 303f50c7, used to test patch anchors.
+
+            if (!is_ipaddr(host)) {
+                hio_set_hostname(connio, host);
+            }
+
+    auto iter = conn_pools.find(strAddr);
+
+    ctx->task = task;
+    channel->onconnect = [&channel]() {
+
+                    hlogi("redirect %s => %s", req->url.c_str(), location.c_str());
+                    req->url = location;
+                    req->ParseUrl();
+                    req->headers["Host"] = req->host;
+
+                conn_pools[channel->peeraddr()].add(channel->fd());
+
+        auto iter = conn_pools.find(channel->peeraddr());

@@ -93,6 +93,8 @@ struct public WatchdogConfig {
     jit_dir : string = ".cache/daslang"
     @clarg_doc = "Do not collect crash bundles"
     no_crash_bundle : bool
+    @clarg_doc = "Disable desktop notifications for headless or automated sessions"
+    no_notifications : bool
     @clarg_doc = "Show a status icon in the notification area, where a desktop can reach one"
     tray : bool
     @clarg_doc = "Page the tray icon opens; defaults to the health URL's origin"
@@ -290,13 +292,25 @@ struct public ResolvedConfig {
     cfg : WatchdogConfig = WatchdogConfig()
     error : string
 }
+def private cli_notifications_disabled(args : array<string>; configured : bool) : bool {
+    let raw = find_bool_flag_raw_value(args, "--no-notifications")
+    if (is_some(raw)) {
+        let value = unwrap(raw)
+        if (value == "true") return true
+        if (value == "false") return false
+    }
+    return configured
+}
+def private resolved_config_error(error : string; quiet : bool) : ResolvedConfig {
+    var result = ResolvedConfig(error = error)
+    result.cfg.no_notifications = quiet
+    return <- result
+}
 
 //! Flags over `watchdog.json` beside the program over layout discovery; the log, pid file, dumps
 //! and crash bundles then resolve against `state_dir`, every other path against `cwd`. Everything after the first `--` goes to the child verbatim (the config's
 //! `server_args` when there is no `--`). `error` carries the text of a fatal configuration.
 def public resolve_config(args : array<string>; program_dir : string) : ResolvedConfig {
-    let loaded = load_config(program_dir)
-    if (!empty(loaded.error)) return ResolvedConfig(error = loaded.error)
     var head : array<string>
     var tail : array<string>
     var past_separator = false
@@ -311,10 +325,15 @@ def public resolve_config(args : array<string>; program_dir : string) : Resolved
             head |> push(arg)
         }
     }
+    let loaded = load_config(program_dir)
+    if (!empty(loaded.error)) return resolved_config_error(loaded.error, cli_notifications_disabled(head, false))
+    let configured_quiet = loaded.js?["no_notifications"]
+    let quiet = cli_notifications_disabled(head,
+        configured_quiet != null && configured_quiet is _bool && (configured_quiet as _bool))
     var merged <- config_to_args(loaded.js, head, path_join(program_dir, CONFIG_NAME))
-    if (merged |> is_err) return ResolvedConfig(error = merged |> unwrap_err)
+    if (merged |> is_err) return resolved_config_error(merged |> unwrap_err, quiet)
     var parsed <- parse_args(type<WatchdogConfig>, merged |> move_unwrap)
-    if (parsed |> is_err) return ResolvedConfig(error = "watchdog: {parsed |> unwrap_err}")
+    if (parsed |> is_err) return resolved_config_error("watchdog: {parsed |> unwrap_err}", quiet)
     var cfg <- parsed |> move_unwrap
     if (past_separator) {
         cfg.server_args <- tail
@@ -327,7 +346,7 @@ def public resolve_config(args : array<string>; program_dir : string) : Resolved
     cfg.cwd = get_full_file_name(cfg.cwd)
     if (empty(cfg.program) && empty(cfg.script)) {
         let why = discover_target(cfg, cfg.cwd, program_dir)
-        if (!empty(why)) return ResolvedConfig(error = why)
+        if (!empty(why)) return <- ResolvedConfig(cfg <- cfg, error = why)
     }
     if (empty(cfg.name)) {
         cfg.name = !empty(cfg.program) ? stem(cfg.program) : base_name(cfg.cwd)
@@ -461,8 +480,8 @@ var private g_tray : WatchdogTray?
 //! Through the tray icon while it is up; otherwise Windows: a PowerShell balloon; macOS:
 //! Notification Center via osascript; Linux: notify-send. A platform with none of those gets
 //! nothing - the same never-fatal contract everywhere.
-def public notify(title, message : string; error : bool) {
-    if (!notifications_enabled || (g_tray != null && g_tray->notify(title, message))) return
+def public notify(title, message : string; error : bool; enabled : bool = true) {
+    if (!enabled || !notifications_enabled || (g_tray != null && g_tray->notify(title, message))) return
     let plat = get_platform_name()
     if (plat == "windows") {
         let icon = error ? "Error" : "Info"
@@ -1392,7 +1411,7 @@ class public Supervisor {
         child = unsafe(spawn_process(command, cfg.cwd, child_env))
         if (child == null) {
             log->emit("spawn_failed", JV((error = "could not start {command[0]}")))
-            notify("{cfg.name} watchdog", "Could not start child: {command[0]}", true)
+            notify("{cfg.name} watchdog", "Could not start child: {command[0]}", true, !cfg.no_notifications)
             return false
         }
         child_pid = unsafe(process_pid(child))
@@ -1460,7 +1479,7 @@ class public Supervisor {
     def private poll_health(t : float) {
         if (cfg.no_health) {
             if (recovery_pending && t - started_at >= min(cfg.stable_seconds, 10.0)) {
-                notify("{cfg.name} recovered", "Process is running (pid {child_pid})", false)
+                notify("{cfg.name} recovered", "Process is running (pid {child_pid})", false, !cfg.no_notifications)
                 log->emit("recovered", JV((pid = child_pid)))
                 recovery_pending = false
             }
@@ -1497,7 +1516,7 @@ class public Supervisor {
             next_heartbeat = t + HEALTH_HEARTBEAT_SECONDS
         }
         if (healthy && recovery_pending) {
-            notify("{cfg.name} recovered", "Server is healthy (pid {child_pid})", false)
+            notify("{cfg.name} recovered", "Server is healthy (pid {child_pid})", false, !cfg.no_notifications)
             log->emit("recovered", JV((pid = child_pid)))
             recovery_pending = false
         }
@@ -1579,7 +1598,7 @@ class public Supervisor {
         if (!empty(bundle)) {
             body += "\nBundle: {bundle}"
         }
-        notify("{cfg.name} crashed", body, true)
+        notify("{cfg.name} crashed", body, true, !cfg.no_notifications)
         recovery_pending = true
         restart_at = now() + delay
         capturing = false
@@ -1780,7 +1799,7 @@ def public watchdog_start(args : array<string>; program_dir : string; self_pid :
     var resolved <- resolve_config(args, program_dir)
     if (!empty(resolved.error)) {
         print("{resolved.error}\n")
-        notify("watchdog not started", resolved.error, true)
+        notify("watchdog not started", resolved.error, true, !resolved.cfg.no_notifications)
         exit_code = 2
         return null
     }
@@ -1794,7 +1813,7 @@ def public watchdog_start(args : array<string>; program_dir : string; self_pid :
         let error = install_windows_local_dumps(child_exe_name, cfg.dump_dir, cfg.dump_count)
         if (!empty(error)) {
             log->emit("wer_install_failed", JV((executable = child_exe_name, dump_dir = cfg.dump_dir, error = error)))
-            notify("{cfg.name} dump setup failed", "Run the LocalDumps install from an elevated terminal: {error}", true)
+            notify("{cfg.name} dump setup failed", "Run the LocalDumps install from an elevated terminal: {error}", true, !cfg.no_notifications)
             exit_code = 2
             return null
         }
@@ -1812,7 +1831,7 @@ def public watchdog_start(args : array<string>; program_dir : string; self_pid :
         let reason = policy.dump_type < 0 ? "not configured" : "unsafe dump type {policy.dump_type}"
         log->emit("wer_not_ready", JV((executable = child_exe_name, dump_dir = cfg.dump_dir, reason = reason)))
         if (cfg.require_dumps) {
-            notify("{cfg.name} watchdog not started", "WER normal minidumps are {reason}; run --install-local-dumps elevated", true)
+            notify("{cfg.name} watchdog not started", "WER normal minidumps are {reason}; run --install-local-dumps elevated", true, !cfg.no_notifications)
             exit_code = 2
             return null
         }
@@ -1833,7 +1852,7 @@ def public watchdog_start(args : array<string>; program_dir : string; self_pid :
             log->emit("watchdog_already_running", JV((pid = prior, pid_file = cfg.pid_file)))
             let why = "watchdog: {cfg.name} is already supervised by pid {prior} (per {cfg.pid_file}). Stop it first, or delete the pid file if it is stale."
             print("{why}\n")
-            notify("{cfg.name} watchdog not started", why, true)
+            notify("{cfg.name} watchdog not started", why, true, !cfg.no_notifications)
             exit_code = 2
             return null
         }

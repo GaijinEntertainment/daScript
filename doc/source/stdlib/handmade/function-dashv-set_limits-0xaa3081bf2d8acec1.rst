@@ -1,0 +1,1 @@
+Sets positive HTTP-body, complete WebSocket-message, pending-event count and queued-payload byte limits before start. Returns false for invalid values or a running server. Oversized HTTP bodies return 413; saturated HTTP admission returns 503. WebSocket overflow closes the connection. Never calling this retains legacy unbounded configuration.

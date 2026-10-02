@@ -51,6 +51,7 @@ option(DAS_CLIPBOARD_DISABLED "Disable dasClipboard (system clipboard transport)
 
 option(DAS_PUGIXML_DISABLED "Disable dasPUGIXML (xml parsing library)" OFF)
 option(DAS_SQLITE_DISABLED "Disable dasSQLITE (sqlite3 library)" ON)
+option(DAS_CRYPTO_DISABLED "Disable dasCrypto (OpenSSL cryptographic primitives)" ON)
 option(DAS_TOOLS_DISABLED "Disable dasTools" OFF)
 option(DAS_TREE_SITTER_DISABLED "Disable dasTreeSitter and the tree-sitter-daslang grammar" OFF)
 option(DAS_TERMINAL_DISABLED "Disable the renderless dasTerminal state machine" OFF)

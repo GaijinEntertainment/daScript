@@ -39,6 +39,8 @@ SET(AOT_SPIRV_MODULE_FILES ${DASSPIRV_AOT_FILES} tests/spirv/_spirv_common.das)
 SET(AOT_MSL_MODULE_FILES ${DASMETAL_AOT_FILES} tests/msl/_msl_common.das)
 
 FILE(GLOB AOT_TESTS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/aot/*.das")
+list(APPEND AOT_TESTS_FILES tests/REVIEW.das)
+SET(AOT_DASTEST_MODULE_FILES dastest/review_gate.das)
 # Exclude _-prefixed helper modules (required transitively, not standalone test entry points)
 list(FILTER AOT_TESTS_FILES EXCLUDE REGEX "/_")
 
@@ -75,6 +77,11 @@ SET(AOT_LIVE_HOST_FILES)
 SET(AOT_LIVE_HOST_MODULE_FILES ${DASLIVEHOST_AOT_FILES})
 IF(NOT DAS_HV_DISABLED)
     FILE(GLOB AOT_LIVE_HOST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/live_host/*.das")
+ENDIF()
+
+SET(AOT_CRYPTO_FILES)
+IF(NOT DAS_CRYPTO_DISABLED)
+    FILE(GLOB AOT_CRYPTO_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/crypto/*.das")
 ENDIF()
 
 SET(AOT_DASSQLITE_MODULE_FILES ${DASSQLITE_AOT_FILES})
@@ -155,7 +162,7 @@ ENDIF()
 
 SET(AOT_DASHV_MODULE_FILES ${DASHV_AOT_FILES})
 IF(DASHV_AOT_FILES)
-    LIST(APPEND AOT_DASHV_MODULE_FILES tests/dasHV/_dashv_test_common.das)
+    LIST(APPEND AOT_DASHV_MODULE_FILES tests/dasHV/_dashv_test_common.das tests/dasHV/_server_limits_fixture.das tests/dasHV/_tls_fixture.das)
 ENDIF()
 
 SET(AOT_DASHV_FILES)
@@ -294,6 +301,7 @@ SET(AOT_DASLIB_FILES
     tests/daslib/clargs_test.das
     tests/daslib/test_toml.das
     tests/daslib/test_logger.das
+    tests/daslib/test_logger_checked.das
     tests/daslib/tty_test.das
     tests/daslib/test_sha_256.das
     tests/daslib/test_faker.das
@@ -417,7 +425,7 @@ set(TEST_AOT_ALL_DAS "")   # test-body .das (not module libs); LLVM-AOT corpus e
 
 set(DAS_AOT_SUITES
     algorithm apply archive assert_once ast_match async bare_block base64 bitfields bool_array
-    class_boost daslib dasgltf daspeg data_walker debug debug_agent decs depfile dynamic_cast_rtti fio
+    class_boost daslib dasgltf daspeg dastest data_walker debug debug_agent decs depfile dynamic_cast_rtti fio
     fixed_array flatten fs functional gc glsl handle_types hash_map interfaces jit
     jobque json jsonrpc language linq lint long_array_table loops lpipe lsp
     macro_boost macro_call match math mcp md_boost module_cache module_tests network option promote quote
@@ -434,14 +442,18 @@ foreach(_s IN LISTS DAS_AOT_SUITES)
     set(${_u}_AOT_GENERATED_SRC)
     list(LENGTH AOT_${_u}_FILES _nf)
     if(_nf GREATER 0)
+        if(_s STREQUAL "tests" OR _s STREQUAL "dastest")
+            set(DAS_AOT_EXTRA_DEPENDS ${PROJECT_SOURCE_DIR}/dastest/review_gate.das)
+        endif()
         DAS_AOT("${AOT_${_u}_FILES}" ${_u}_AOT_GENERATED_SRC test_aot_${_s} daslang)
+        set(DAS_AOT_EXTRA_DEPENDS "")
     endif()
     list(APPEND TEST_AOT_TARGETS test_aot_${_s})
     list(APPEND TEST_AOT_GENVARS ${_u}_AOT_GENERATED_SRC)
     list(APPEND TEST_AOT_ALL_DAS ${AOT_${_u}_FILES})
 endforeach()
 
-set(DAS_AOT_MODULE_SUITES daslib decs glsl language linq macro_boost math quote stbimage typemacro)
+set(DAS_AOT_MODULE_SUITES daslib dastest decs glsl language linq macro_boost math quote stbimage typemacro)
 foreach(_s IN LISTS DAS_AOT_MODULE_SUITES)
     string(TOUPPER ${_s} _u)
     add_custom_target(test_aot_${_s}_modules)
@@ -473,6 +485,7 @@ set(DAS_AOT_IRREGULAR
     "live_host|mod|-|-|1"
     "strudel|reg|NOT DAS_AUDIO_DISABLED|-|1"
     "strudel|mod|-|-|1"
+    "crypto|reg|NOT DAS_CRYPTO_DISABLED|-|1"
     "dassqlite|reg|NOT DAS_SQLITE_DISABLED|-|1"
     "dassqlite|mod|-|-|1"
     "sql_conformance|reg|NOT DAS_SQLITE_DISABLED|-|1"
@@ -701,7 +714,7 @@ if(NOT ${DAS_LLVM_DISABLED})
     SET(LLVM_AOT_GENERATED_OBJ)
     # compiling the corpus runs the tests' macros: tests/dasbind's [extern] bindings dlopen the
     # probe library, the same dependency the C++ AOT row above declares
-    set(DAS_AOT_EXTRA_DEPENDS ${DAS_AOT_DASBIND_DEPENDS})
+    set(DAS_AOT_EXTRA_DEPENDS ${DAS_AOT_DASBIND_DEPENDS} ${PROJECT_SOURCE_DIR}/dastest/review_gate.das)
     DAS_LLVM_AOT_LIB("${LLVM_AOT_OBJECT_FILES}" LLVM_AOT_GENERATED_OBJ test_llvm_aot_corpus)
     set(DAS_AOT_EXTRA_DEPENDS "")
 

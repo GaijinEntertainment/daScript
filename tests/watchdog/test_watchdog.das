@@ -1160,3 +1160,43 @@ def test_request_stop_uses_the_stop_file(t : T?) {
         t |> success(cleanup is value && cleanup as value, "temp dir removed")
     }
 }
+
+[test]
+def headless_notification_flag_is_owned_by_watchdog(t : T?) {
+    let resolved <- resolve_config(["--program", das_exe(), "--no-notifications", "--", "child-argument"], getcwd())
+    t |> equal(resolved.error, "")
+    t |> success(resolved.cfg.no_notifications)
+    let command <- child_command(resolved.cfg)
+    t |> success(find_index(command, "--no-notifications") < 0)
+    t |> equal(command[length(command) - 1], "child-argument")
+}
+
+[test]
+def headless_notification_flag_survives_configuration_errors(t : T?) {
+    let root = make_temp(t, "watchdog-quiet-errors-")
+    if (empty(root)) return
+    {
+        let discovery <- resolve_config(["--no-notifications"], root)
+        t |> success(!empty(discovery.error))
+        t |> success(discovery.cfg.no_notifications, "discovery failure retains the parsed notification policy")
+        let child_only <- resolve_config(["--", "--no-notifications"], root)
+        t |> success(!child_only.cfg.no_notifications, "child flags cannot change watchdog notification policy")
+        let parse_failure <- resolve_config(["--unknown-watchdog-option", "--no-notifications"], root)
+        t |> success(!empty(parse_failure.error) && parse_failure.cfg.no_notifications)
+        fwrite(path_join(root, "watchdog.json"), "invalid json")
+        let load_failure <- resolve_config(["--no-notifications"], root)
+        t |> success(!empty(load_failure.error) && load_failure.cfg.no_notifications)
+        let equals_true <- resolve_config(["--no-notifications=true"], root)
+        t |> success(!empty(equals_true.error) && equals_true.cfg.no_notifications)
+        let last_false <- resolve_config(["--no-notifications", "--no-notifications=false"], root)
+        t |> success(!last_false.cfg.no_notifications, "the last CLI value wins even when loading fails")
+        fwrite(path_join(root, "watchdog.json"), "\{\"no_notifications\":true,\"unknown_option\":1\}")
+        let config_failure <- resolve_config([], root)
+        t |> success(!empty(config_failure.error) && config_failure.cfg.no_notifications)
+        let cli_override <- resolve_config(["--no-notifications=false"], root)
+        t |> success(!empty(cli_override.error) && !cli_override.cfg.no_notifications, "CLI false overrides the JSON default")
+    } finally {
+        let removed = rmdir_rec_result(root)
+        t |> success(removed is value && removed as value)
+    }
+}

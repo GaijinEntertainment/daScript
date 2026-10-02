@@ -5,7 +5,7 @@ file(REMOVE_RECURSE "${WORK_DIR}")
 file(MAKE_DIRECTORY "${WORK_DIR}/state")
 execute_process(
     COMMAND "${WATCHDOG}"
-        --program "${DASLANG}" --name smoke --cwd "${WORK_DIR}" --no-health
+        --program "${DASLANG}" --name smoke --cwd "${WORK_DIR}" --no-health --no-notifications
         --stable-seconds 0.1 --max-restart-delay 0.5
         -- -dasroot "${DAS_ROOT}" "${DAS_ROOT}/tests/watchdog/_fixture_watchdog_child.das"
         -- "${WORK_DIR}/state" crash-then-ok

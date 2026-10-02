@@ -276,7 +276,7 @@ def public with_compute_encoder_timed(queue : MetalCommandQueue?; var error : st
     let ts_enc = ref_time_ticks()
     invoke(blk, enc)
     metal_end_encoding(enc)
-    encode_ms = double(get_time_usec(ts_enc)) / 1000.0lf
+    encode_ms = double(get_time_nsec(ts_enc)) / 1000000.0lf
     metal_commit(cb)
     metal_wait_until_completed(cb)
     error = metal_command_buffer_error(cb)

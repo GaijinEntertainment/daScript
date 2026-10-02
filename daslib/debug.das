@@ -938,6 +938,7 @@ class private DAgent : DapiDebugAgent {
             unsafe {
                 delete server
             }
+            server = null
         }
     }
 
@@ -1128,7 +1129,7 @@ class private DAgent : DapiDebugAgent {
 
     def onPause(var ctx : Context; at : LineInfo; reason, text : string) : void {
         //! Main pause handler that stops execution, sends a stopped event, and waits for DAP client commands.
-        if (at.fileInfo == null || server == null
+        if (at.fileInfo == null || server == null || server.disconnected
                 || (!waitConnection && (!server.configurationDone || !server.threadsDone))) return
         let path = "{at.fileInfo.name}" |> resolve_path_cache(workingPaths, pathAliases, pathsCache)
         log("{ctx} `{reason}` breakpoint at {path}:{int(at.line)}\n")
@@ -1158,7 +1159,7 @@ class private DAgent : DapiDebugAgent {
     [arch(at="ARCHITECTURE.md#statement-breakpoint-lookup")]
     def override onSingleStep(var ctx : Context; at : LineInfo) : void {
         //! Handles single-step events, processing pause, step-in, step-over requests, and breakpoint checks.
-        if (at.fileInfo == null || server == null) return
+        if (at.fileInfo == null || server == null || server.disconnected) return
 
         if (ctx.category.debugger_attached) {
             addContext(ctx)
@@ -1711,14 +1712,17 @@ class private DAServer : Server {
 
     def reqDisconnect(seq : double; command : string; data : JsonValue?) {
         //! Handles the DAP disconnect request, resuming all threads and clearing breakpoints.
+        disconnected = true
         sendSuccessResponse(seq, command, null)
         for (ctx in agent.contexts) {
+            if (agent.withInstruments && !ctx.ctx.category.debug_context && !ctx.ctx.category.debugger_tick && !ctx.ctx.category.dead) {
+                *ctx.ctx |> clear_instruments()
+            }
             ctx |> reset_debug_flags()
             ctx.continueRequested = true
         }
         delete_breakpoint_arrays(agent.breakpoints)
         agent.breakpoints |> clear()
-        disconnected = true
     }
 
     def reqTerminate(seq : double; command : string; data : JsonValue?) {

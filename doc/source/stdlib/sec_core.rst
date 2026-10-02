@@ -4,7 +4,7 @@
 Core
 ****
 
-Core modules providing built-in operations, math, and random number generation.
+Core modules providing built-in operations, math, random number generation, and cryptography.
 
 .. toctree::
 
@@ -13,3 +13,4 @@ Core modules providing built-in operations, math, and random number generation.
    generated/math_bits.rst
    generated/math_boost.rst
    generated/random.rst
+   generated/crypto.rst

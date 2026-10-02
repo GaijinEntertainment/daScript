@@ -1,0 +1,1 @@
+Submits acceptance of a live, undecided WebSocket ticket. Returns zero when queued, otherwise an error for an expired ticket, an overly long protocol or CR/LF in it. The ticket becomes unusable after submission. The connection loop then checks protocol syntax and whether the client offered it; a mismatch sends HTTP 400 rather than upgrading.

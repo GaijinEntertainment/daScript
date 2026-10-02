@@ -42,7 +42,7 @@ def private inc_leg(t : T?; queue; pso1; ba; pu; dispatches : int; concurrent : 
         }
     }
     t |> success(ran, "with_compute_encoder_timed ({tag}): {derr}")
-    t |> success(gpu_ms > 0.0lf && enc_ms > 0.0lf, "the {tag} submit reports its GPU and encode windows")
+    t |> success(gpu_ms > 0.0lf && enc_ms > 0.0lf, "the {tag} submit reports its GPU and encode windows: gpu={gpu_ms} ms, encode={enc_ms} ms")
     var bad = 0
     for (k in range(N)) {
         if (unsafe(pu[k]) != uint(k) + times) {
@@ -98,7 +98,9 @@ def test_host_plumbing(t : T?) {
                 }
                 var queue = metal_new_command_queue(dev)
                 inc_leg(t, queue, pso1, ba, pu, 3, false, 3u)
-                inc_leg(t, queue, pso1, ba, pu, 1, true, 4u)
+                for (iteration in range(16)) {
+                    inc_leg(t, queue, pso1, ba, pu, 1, true, uint(iteration) + 4u)
+                }
 
                 // teardown: caller releases what it holds, drains give the rest back
                 pool_release(pool, ba, uint64(N * 4))

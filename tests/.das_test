@@ -25,6 +25,10 @@ def can_visit_folder(folder_name : string; var result : bool?) {
         *result = has_module("clipboard_core")
         return
     }
+    if (folder_name == "crypto") {
+        *result = has_module("crypto")
+        return
+    }
     if (folder_name == "dasHV") {
         *result = has_module("dashv")
         return

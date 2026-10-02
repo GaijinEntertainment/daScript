@@ -14,3 +14,7 @@ void logger_set_file(logger_t* logger, const char* filepath) {
         *suffix = '\0';
     }
 }
+
+void logger_enable_fsync(logger_t* logger, int on) {
+    logger->enable_fsync = on;
+}

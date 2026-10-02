@@ -84,6 +84,7 @@ class HvWebServer {
     server : WebSocketServer
     private http_route_handlers : array<lambda<(var req : HttpRequest?; var resp : HttpResponse?) : http_status>>
     private stream_route_handlers : array<lambda<(var req : HttpRequest?; var writer : HttpResponseWriter?) : void>>
+    private upgrade_handler : lambda<(var req : HttpRequest?#; admission : WebSocketAdmission) : void>
     def init(port : int) {
         //! Initializes an HTTP/WebSocket server on the specified port. Port ``0`` asks the
         //! operating system for any free port; ``bound_port`` reports the one it gave.
@@ -136,6 +137,16 @@ class HvWebServer {
         //! Called when a WebSocket client disconnects. Override to handle disconnections.
     def abstract onWsMessage(channel : WebSocketChannel; msg : string#) : void
         //! Called when a WebSocket message is received. Override to handle messages.
+    def onWsMessageFrame(channel : WebSocketChannel; msg : string#; byte_count : int; opcode : ws_opcode) {
+        //! Complete message with authoritative byte count and opcode, including embedded zero
+        //! bytes. The default preserves the legacy string callback for text and binary messages.
+        onWsMessage(channel, msg)
+    }
+    def set_limits(http_body_bytes, websocket_message_bytes, pending_events, pending_bytes : int) : bool {
+        //! Sets positive parser and queue budgets before start. Returns false while running.
+        //! Zero configuration (never calling this method) retains the legacy unbounded behavior.
+        return set_limits(server, http_body_bytes, websocket_message_bytes, pending_events, pending_bytes)
+    }
     def abstract onTick : void
         //! Called each tick cycle. Override for periodic work.
     def onInit : void {}
@@ -205,6 +216,16 @@ class HvWebServer {
         //! Uses ``ANY`` method matching so any HTTP method reaches this handler.
         http_route_handlers |> push(lmb)
         unsafe(SSE(server, uri, lmb))
+    }
+    def WEBSOCKET_UPGRADE(timeout_ms : int; lmb : lambda<(var req : HttpRequest?#; admission : WebSocketAdmission) : void>) : bool {
+        //! Registers admission before HTTP 101; the request is borrowed for the callback.
+        //! Clone needed data before deferring, then call accept_websocket or reject_websocket.
+        //! The generation-checked admission ticket expires on decision, disconnect or timeout.
+        //! Keep it in the transport owner while an isolated worker decides. Registration
+        //! is only permitted before start; deadlines must be 1 through 60000 milliseconds.
+        let accepted = unsafe(WEBSOCKET_UPGRADE(server, timeout_ms, lmb))
+        if (accepted) { upgrade_handler = lmb }
+        return accepted
     }
     def STREAM(uri : string; lmb : lambda<(var req : HttpRequest?; var writer : HttpResponseWriter?) : void>) : void {
         //! Registers a streaming (incremental) handler for ``uri`` (any HTTP method, like ``ANY``).

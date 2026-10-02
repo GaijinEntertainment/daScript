@@ -1,6 +1,11 @@
 # Modules Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.**
+Architecture doc: `../CLAUDE.md`.
+
+Module subfolders also carry checklists. A module's bindings and script library follow
+that module's checklist even when placed outside its folder; tests follow its tests
+checklist when one exists.
 
 **Module folders under this folder carry their own `REVIEW.md` checklists - a diff applies the
 `REVIEW.md` of every folder between this one and each file it changes.**

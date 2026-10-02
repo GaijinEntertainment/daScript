@@ -1290,31 +1290,44 @@ def with_transaction(db : SqlRunner; mode : SqliteTxnMode; blk : block<() : void
 
 def try_transaction(db : SqlRunner; blk : block<() : void>) : SqlError {
     //! Non-panic 2-arg overload. ``none`` on commit success, ``some(errmsg)`` on BEGIN/COMMIT fail.
-    //! Block panics still ROLLBACK and re-propagate; wrap in your own try/recover to convert.
+    //! A panic requires graceful shutdown/connection close; it is not a returned transaction error.
     return db |> try_transaction(SqliteTxnMode.Deferred, blk)
 }
 
 def try_transaction(db : SqlRunner; mode : SqliteTxnMode; blk : block<() : void>) : SqlError {
     //! Non-panic 3-arg overload. Same semantics as ``try_transaction(db, blk)``
     //! with a SQLite-specific BEGIN modifier.
+    return db |> try_transaction(mode) $() : SqlError {
+        invoke(blk)
+        return none(type<string>)
+    }
+}
+
+def try_transaction(db : SqlRunner; blk : block<() : SqlError>) : SqlError {
+    //! Result-aware transaction: return ``none`` to commit or ``some(error)`` to roll back.
+    return db |> try_transaction(SqliteTxnMode.Deferred, blk)
+}
+
+def try_transaction(db : SqlRunner; mode : SqliteTxnMode; blk : block<() : SqlError>) : SqlError {
+    //! Runs a result-returning block without using panic/recover for ordinary failures.
+    //! Nested calls use a savepoint; a returned error rolls back only this scope.
     let was_in_txn = db |> in_transaction()
     let begin_err = db |> try_exec(txn_begin_sql(was_in_txn, mode))
     if (begin_err |> is_some) return begin_err
-    var success : bool
+    var completed = false
+    var result : SqlError
     {
-        invoke(blk)
-        success = true
+        result = invoke(blk)
+        if (result |> is_none) {
+            result = db |> try_exec(txn_commit_sql(was_in_txn))
+            completed = result |> is_none
+        }
     } finally {
-        if (!success) {
+        if (!completed) {
             txn_best_effort_rollback(db, was_in_txn)
         }
     }
-    // COMMIT/RELEASE can still fail (SQLITE_BUSY/IO); roll back so the connection isn't left mid-transaction.
-    let commit_err = db |> try_exec(txn_commit_sql(was_in_txn))
-    if (commit_err |> is_some) {
-        txn_best_effort_rollback(db, was_in_txn)
-    }
-    return commit_err
+    return result
 }
 
 // ===== PRAGMA helpers =====

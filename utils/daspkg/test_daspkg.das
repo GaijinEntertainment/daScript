@@ -4,6 +4,7 @@ options no_global_variables = false
 require dastest/testing_boost public
 
 require daslib/fio
+require daslib/clargs
 require strings
 require daslib/strings_boost
 
@@ -1487,10 +1488,14 @@ def test_ansi_colors(t : T?) {
         use_tty_colors = false
     }
     t |> run("init_ansi_colors with --color flag") @(t : T?) {
-        use_tty_colors = false
-        init_ansi_colors(["exe", "script.das", "--color"])
-        t |> success(use_tty_colors)
-        use_tty_colors = false
+        with_process([get_host_binary(), "{get_das_root()}/utils/daspkg/fixtures/_fixture_ansi_color.das", "--", "enabled"], "", ["NO_COLOR=0"]) $(var process) {
+            t |> equal(unsafe(process_wait(process, 30.0)), 0)
+        }
+    }
+    t |> run("NO_COLOR overrides the color flag") @(t : T?) {
+        with_process([get_host_binary(), "{get_das_root()}/utils/daspkg/fixtures/_fixture_ansi_color.das", "--", "disabled"], "", ["NO_COLOR=1"]) $(var process) {
+            t |> equal(unsafe(process_wait(process, 30.0)), 0)
+        }
     }
     t |> run("init_ansi_colors with --no-color flag") @(t : T?) {
         use_tty_colors = true

@@ -628,6 +628,7 @@ def private killed_launch(t : T?; var m : Mcp&; file : string; stepping : bool) 
     let pid = launched?["pid"] ?? 0
     delete_json(launched)
     t |> success(pid > 0, "a pid")
+    if (pid <= 0) return // Never turn a failed launch into a process-group kill.
     if (get_running_platform_name() == "windows") {
         unsafe(system("taskkill /F /T /PID {pid}"))
     } else {
@@ -678,4 +679,32 @@ def test_bridge_session(t : T?) {
     t |> run("the bridge over a pipe, stepping debugger") @(t : T?) {
         run_session(t, true)
     }
+}
+
+[test]
+def test_disconnect_removes_runtime_instruments(t : T?) {
+    let argv <- bridge_argv()
+    let rc = unsafe(popen_argv_pipe(argv) $(w, r) {
+        if (w == null || r == null) { t |> failure("could not spawn bridge"); return }
+        var m = Mcp(w = w, r = r)
+        let file = fixture("_fixture_detach_instruments.das")
+        delete_json(tool(t, m, "debug_launch", "\{\"file\":{quoted(file)},\"timeout_sec\":20\}"))
+        let line = source_line(file, "guard++")
+        delete_json(tool(t, m, "debug_set_breakpoints", "\{\"file\":{quoted(file)},\"lines\":[{line}]\}"))
+        delete_json(tool(t, m, "debug_threads", "\{\}"))
+        delete_json(tool(t, m, "debug_configuration_done", "\{\}"))
+        var stopped = tool(t, m, "debug_wait_event", "\{\"event\":\"stopped\",\"timeout_sec\":20\}")
+        t |> equal(stopped?["event"] ?? "", "stopped")
+        delete_json(stopped)
+        var disconnected = tool(t, m, "debug_disconnect", "\{\}")
+        for (_ in range(5)) {
+            if (!((disconnected?["session"]?["return_code"]).value is _null)) break
+            delete_json(disconnected)
+            disconnected = tool(t, m, "debug_disconnect", "\{\}")
+        }
+        t |> equal(disconnected?["session"]?["return_code"] ?? -1, 0, "detached debuggee completes")
+        t |> success(has_line(disconnected?["session"]?["process_output_tail"], "INSTRUMENT_HITS=1"), "only the pre-disconnect instrument fires: {write_json_compact(disconnected?["session"]?["process_output_tail"])}")
+        delete_json(disconnected)
+    })
+    t |> equal(rc, 0)
 }

@@ -1,0 +1,41 @@
+// Excerpts from pinned libhv 303f50c7, used to test patch anchors.
+
+        } else if (g_ssl_ctx) {
+            ssl_ctx = g_ssl_ctx;
+        } else {
+
+        if (!is_ipaddr(host)) {
+            hssl_set_sni_hostname(cli->ssl, host);
+        }
+
+    char recvbuf[1024] = {0};
+    char* data = NULL;
+
+        int nparse = cli->parser->FeedRecvData(recvbuf, nrecv);
+        if (nparse != nrecv) {
+            return ERR_PARSE;
+        }
+
+static int http_client_redirect(HttpRequest* req, HttpResponse* resp) {
+    std::string location = resp->headers["Location"];
+    if (!location.empty()) {
+        hlogi("redirect %s => %s", req->url.c_str(), location.c_str());
+        req->url = location;
+        req->ParseUrl();
+        req->headers["Host"] = req->host;
+        resp->Reset();
+        return http_client_send(req, resp);
+    }
+    return 0;
+}
+
+        return http_client_redirect(req, resp);
+
+            if (cli->parser->IsEof()) {
+                err = 0;
+                goto disconnect;
+            }
+            if (retry_count-- > 0 && left_time > req->retry_delay + connect_timeout * 1000) {
+
+    for (const auto& pair : cli->headers) {
+        if (req->headers.find(pair.first) == req->headers.end()) {
