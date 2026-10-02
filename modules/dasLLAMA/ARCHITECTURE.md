@@ -84,9 +84,10 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   the tile probe's shared descriptor set layout, the recurrent block of the prefill window, the
   device-init roster of the Vulkan capabilities the tier keys its routes on, and the
   `[vk_dispatch]` lens's readonly derivation.
-- `ARCHITECTURE_GPU_VULKAN_ATTN.md` - the token command's attention key split, and the
+- `ARCHITECTURE_GPU_VULKAN_ATTN.md` - the token command's attention key split, the
   attention-side planes the resident driver uploads beside its norms - the q/k/v projection
-  bias, gpt-oss's sink logits with the flash tiles' sink stamps, and its output bias.
+  bias, gpt-oss's sink logits with the flash tiles' sink stamps, and its output bias - and the
+  K/V mirror's block codecs (q8_0, tq4) with tq4's rotated basis.
 - `ARCHITECTURE_GPU_VULKAN_GEMM.md` - the cooperative-matrix tiles the Vulkan tier's GEMMs run
   on - the cm2 decode lanes, the tile pick and the coopmat mode ladder, the class-pipeline build
   seat, the MoE expert chain on those tiles, the KHR arm's hand-staged kq tile - and the decode

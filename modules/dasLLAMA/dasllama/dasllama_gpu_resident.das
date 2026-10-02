@@ -719,15 +719,7 @@ def private resident_router_bytes(c : Config; n_moe : int64) : int64 => (
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def private rdec_scratch_bytes(t : Model) : int64 {
     let c = t.config
-    var qd = 0l
-    var kvd = 0l
-    var hs = 0l
-    for (l in range64(c.n_layers)) {
-        continue if (layer_is_recurrent(c, l))
-        qd = max(qd, layer_qd(c, l))
-        kvd = max(kvd, layer_kv_dim(c, l))
-        hs = max(hs, layer_head_size(c, l))
-    }
+    let (qd, kvd, hs) = resident_attn_maxima(c)
     let hid = resident_hidden(t)
     let wide = max(max(c.dim, qd), hid)
     var moe = 0l
@@ -799,7 +791,34 @@ def resident_region_ctx_declines(asked, region_ctx : int64; asked_whole : bool) 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def resident_binding_ctx(t : Model; dt : KVDtype; bcap : int64) : int64 {
     let side_row_bytes = resident_kv_row_bytes(t, dt, dt).krow
-    return (bcap > 0l && side_row_bytes > 0l) ? bcap / side_row_bytes : 0l
+    let cap = kv_block_codec(dt) ? min(bcap, BLOCK_CODEC_SIDE_BYTES) : bcap
+    return (cap > 0l && side_row_bytes > 0l) ? cap / side_row_bytes : 0l
+}
+
+//! what the plan gives one side of a block-codec mirror, whatever range the device binds: the kernels' byte span less room for every region's slack blocks
+let BLOCK_CODEC_SIDE_BYTES = RDEC_CODEC_BYTE_SPAN - 67_108_864l
+
+//! the positions a block-codec mirror's f16 shadow holds under `bcap`, the tier's binding cap (`moe_gpu_binding_cap`: the
+//! device's range less the slack a plane carries past its rows) - one layer's widest rows as halves, one region's context;
+//! 0 = no cap (a scalar codec, no cap known, no attention layer)
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs")]
+def resident_shadow_ctx(t : Model; dt : KVDtype; bcap : int64) : int64 {
+    let kvd = resident_attn_maxima(t.config).kvd
+    return (kv_block_codec(dt) && bcap > 0l && kvd > 0l) ? bcap / (2l * kvd) : 0l
+}
+
+//! the attention layers' widest q row, K/V row and head
+def private resident_attn_maxima(c : Config) : tuple<qd : int64; kvd : int64; hs : int64> {
+    var qd = 0l
+    var kvd = 0l
+    var hs = 0l
+    for (l in range64(c.n_layers)) {
+        continue if (layer_is_recurrent(c, l))
+        qd = max(qd, layer_qd(c, l))
+        kvd = max(kvd, layer_kv_dim(c, l))
+        hs = max(hs, layer_head_size(c, l))
+    }
+    return (qd = qd, kvd = kvd, hs = hs)
 }
 
 //! one position's K and V mirror bytes over the layers that hold rows of their own (a shared-KV layer reads its donor's), and the
@@ -832,7 +851,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype; hot_cap : int6
     }
     let (krow, vrow) = resident_kv_row_bytes(t, kdt, vdt)
     p.kv_bytes = g_rdec_regions_want * seq_cap * (krow + vrow)
-    p.scratch_bytes = rdec_scratch_bytes(t)
+    p.scratch_bytes = rdec_scratch_bytes(t) + resident_shadow_bytes(t, seq_cap, kdt)
     fill_plan_room(p)
     let n_moe = resident_moe_layers(t)
     p.host_layers = host_layers >= 0l ? min(host_layers, n_moe) : (resident_host_experts(c) ? n_moe : 0l)
@@ -865,8 +884,9 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype; hot_cap : int6
     if (!p.fits) {
         p.memory = true
         // a shorter context is the remedy that actually works — weights are fixed, KV is not
-        let kv_fit = max(usable - p.weight_bytes - p.scratch_bytes - p.hot_bytes, 0l)
-        let cap_fit = (krow + vrow) > 0l ? kv_fit / (krow + vrow) : 0l
+        let shadow_pos = resident_shadow_pos_bytes(t, kdt)
+        let kv_fit = max(usable - p.weight_bytes - p.scratch_bytes + seq_cap * shadow_pos - p.hot_bytes, 0l)
+        let cap_fit = (krow + vrow) > 0l ? kv_fit / (krow + vrow + shadow_pos) : 0l
         var room = ""
         if (p.others_bytes > 0l) {
             room = " - other processes hold {p.others_bytes >> 20l} MB of the card"
@@ -880,8 +900,54 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype; hot_cap : int6
     return p
 }
 
+//! the mirror codec asked, the knob that asked it by the spelling a user sets, and why an ask the mirror cannot arm became f16
+def private resident_mirror_ask() : tuple<dt : KVDtype; knob : string; fold_why : string> {
+    return (dt = KVDtype.f32, knob = "DASLLAMA_VK_KV32", fold_why = "") if (g_env_vulkan.vk_kv32 != 0l)
+    let knob = g_rdec_kv_pinned ? "set_gpu_kv_dtype in process" : "DASLLAMA_GPU_KV"
+    var named = (dt = g_rdec_kv_want, known = true)
+    if (!g_rdec_kv_pinned) {
+        return (dt = KVDtype.f16, knob = "", fold_why = "") if (empty(g_env_gpu.gpu_kv))
+        named = kv_dtype_named(g_env_gpu.gpu_kv)
+    }
+    return (dt = KVDtype.f16, knob = knob, fold_why = "{knob} asked '{g_env_gpu.gpu_kv}', which names no K/V codec (f16 | q8_0 | tq4)") if (!named.known)
+    return (dt = KVDtype.f16, knob = knob, fold_why = "{knob} asked f32, which the mirror arms under DASLLAMA_VK_KV32=1 alone - f32 sessions serve on the CPU rails") if (named.dt == KVDtype.f32)
+    return (dt = named.dt, knob = knob, fold_why = "")
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs")]
+def resident_mirror_dtype() : KVDtype => resident_mirror_ask().dt
+
+//! `announce` prints why an asked codec became f16: the ask itself, or the model's heads
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs")]
+def resident_mirror_dtype_of(t : Model; announce : bool = false) : KVDtype {
+    let ask = resident_mirror_ask()
+    let geometry_why = kv_codec_geometry_why(t.config, ask.dt)
+    if (announce && !empty(ask.fold_why)) {
+        to_log(LOG_WARNING, "dasLLAMA: resident driver - the K/V mirror arms f16: {ask.fold_why}\n")
+    }
+    if (announce && !empty(geometry_why)) {
+        to_log(LOG_WARNING, "dasLLAMA: resident driver - the K/V mirror arms f16, not the {ask.dt} asked ({ask.knob}): {geometry_why}\n")
+    }
+    return empty(geometry_why) ? ask.dt : KVDtype.f16
+}
+
+//! a block-codec mirror's scratch: both sides' f16 shadow of one layer's rows at the context, and the window's staged float rows
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs")]
+def private resident_shadow_bytes(t : Model; seq_cap : int64; dt : KVDtype) : int64 {
+    return 0l if (!kv_block_codec(dt))
+    return seq_cap * resident_shadow_pos_bytes(t, dt) + 2l * RDEC_PF_ROWS * resident_attn_maxima(t.config).kvd * 4l
+}
+
+//! the shadow's bytes a position: both sides' rows of one layer as halves; 0 under a scalar codec
+def private resident_shadow_pos_bytes(t : Model; dt : KVDtype) : int64 => kv_block_codec(dt) ? 2l * resident_attn_maxima(t.config).kvd * 2l : 0l
+
+//! the context `p`, planned at `seq_cap` and past its room, shortens to: the room past the weights, the pool and the scratch
+//! that does not scale, over the mirror's and the shadow's (`shadow_pos`) bytes a position, one part in eight left as slack
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
-def resident_mirror_dtype() : KVDtype => g_env_vulkan.vk_kv32 != 0l ? KVDtype.f32 : KVDtype.f16
+def resident_fit_ctx(p : ResidentPlan; seq_cap, shadow_pos : int64) : int64 {
+    let fixed = p.weight_bytes + p.hot_bytes + p.scratch_bytes - seq_cap * shadow_pos
+    return (max(p.usable_bytes - fixed, 0l) / 8l * 7l) / (p.kv_bytes / seq_cap + shadow_pos)
+}
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def private resident_pinned_seq_cap(t : Model; announce : bool) : int64 {
@@ -904,6 +970,10 @@ def resident_plan_pick(t : Model; rkdt : KVDtype; var seq_cap : int64&; announce
     let asked = seq_cap
     let bctx = resident_binding_ctx(t, rkdt, moe_gpu_binding_cap(g_rdec_regions_want))
     seq_cap = resident_region_ctx(seq_cap, bctx, g_rdec_regions_want)
+    let shadow_ctx = resident_shadow_ctx(t, rkdt, moe_gpu_binding_cap(1l))
+    if (shadow_ctx > 0l) {
+        seq_cap = min(seq_cap, shadow_ctx)
+    }
     if (resident_region_ctx_declines(asked, seq_cap, rdec_ctx_asked_whole())) {
         var short = resident_plan(t, seq_cap, rkdt, rkdt)
         short.fits = false
@@ -914,7 +984,7 @@ def resident_plan_pick(t : Model; rkdt : KVDtype; var seq_cap : int64&; announce
     var plan = resident_plan(t, seq_cap, rkdt, rkdt)
     var room_bound = false
     if (!plan.fits && plan.weight_bytes > 0l && plan.kv_bytes > 0l) {
-        let fit_ctx = (max(plan.usable_bytes - plan.weight_bytes - plan.scratch_bytes - plan.hot_bytes, 0l) / 8l * 7l) / (plan.kv_bytes / seq_cap)
+        let fit_ctx = resident_fit_ctx(plan, seq_cap, resident_shadow_pos_bytes(t, rkdt))
         if (fit_ctx >= rdec_min_ctx()) {
             seq_cap = fit_ctx
             room_bound = true
@@ -1004,7 +1074,7 @@ def private resident_ctx_shortened_say(plan : ResidentPlan; asked, seq_cap : int
     if (room_bound) {
         why = "the card's room: {plan.usable_bytes >> 20l} MB usable, the weights {plan.weight_bytes >> 20l} MB and the scratch {plan.scratch_bytes >> 20l} MB{hot} leave {plan.kv_bytes >> 20l} MB for the K/V mirror at {kv_per_k} MB a thousand positions"
     }
-    to_log(LOG_WARNING, "dasLLAMA: resident driver - K/V mirror {seq_cap} positions{each} of the {asked} asked: {why}; fewer regions, a smaller model or an f16 mirror (DASLLAMA_VK_KV32=0) raise it, and a context asked whole (set_gpu_ctx_strict, DASLLAMA_GPU_CTX_STRICT) declines the driver instead\n")
+    to_log(LOG_WARNING, "dasLLAMA: resident driver - K/V mirror {seq_cap} positions{each} of the {asked} asked: {why}; fewer regions, a smaller model or a smaller mirror codec (f16 over f32: DASLLAMA_VK_KV32=0; q8_0 or tq4 over f16: DASLLAMA_GPU_KV, set_gpu_kv_dtype in process) raise it, and a context asked whole (set_gpu_ctx_strict, DASLLAMA_GPU_CTX_STRICT) declines the driver instead\n")
 }
 
 //! Whether the whole-model driver takes `t`, as far as the plan tells before a byte uploads; a later device refusal (a kernel class, an arena reserve) is the walk's to report
@@ -1018,7 +1088,7 @@ def resident_would_serve(t : Model) : bool {
     }
     return false if (c.n_layer_nextn > 0l && !empty(resident_head_decline(t)))
     var seq_cap = 0l
-    return resident_plan_pick(t, resident_mirror_dtype(), seq_cap, false).fits
+    return resident_plan_pick(t, resident_mirror_dtype_of(t), seq_cap, false).fits
 }
 
 [arch(at="../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
@@ -1112,6 +1182,8 @@ def set_resident_prefill_allowed_(allowed : bool) {
     g_resident_prefill_allowed = allowed
 }
 
+def resident_prefill_allowed_() : bool => g_resident_prefill_allowed
+
 // Bulk-hydrate the session's host KV from the live rows of the mirror region it owns — the rail that
 // keeps host KV authoritative at rest after device-resident prefills/decodes.
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]   // the continuation/steal/drop rail, not the steady-state token path
@@ -1145,6 +1217,8 @@ let private RDEC_ATTN_SPLIT_CAP = 16l   //! the key splits the plan budgets the 
 
 var private g_rdec_ctx_max = 0l   //! the in-process cap on the mirror's positions (0 = none): the test rigs pin 32768, a server keeps the model's context
 var private g_rdec_ctx_strict = false
+var private g_rdec_kv_want = KVDtype.f16   //! the mirror codec the caller asked for the models loaded next: its sessions' codec
+var private g_rdec_kv_pinned = false          //! ... once a caller asked; before that DASLLAMA_GPU_KV decides
 
 //! Cap the resident driver's KV mirror at `n` positions for the models this process loads next (0 lifts the pin):
 //! the in-process form of DASLLAMA_GPU_CTX_MAX. A program serving long contexts leaves it alone.
@@ -1155,6 +1229,19 @@ def set_gpu_ctx_max_(n : int64) {
 def set_gpu_ctx_strict_(on : bool) {
     g_rdec_ctx_strict = on
 }
+
+//! The K/V codec the whole-model driver's mirror arms at for the models loaded next - the codec of the sessions the caller makes.
+def set_gpu_kv_dtype_(dt : KVDtype) {
+    g_rdec_kv_want = dt
+    g_rdec_kv_pinned = true
+}
+
+def reset_gpu_kv_dtype_() {
+    g_rdec_kv_want = KVDtype.f16
+    g_rdec_kv_pinned = false
+}
+
+def gpu_kv_dtype_pin_() : tuple<pinned : bool; dt : KVDtype> => (pinned = g_rdec_kv_pinned, dt = g_rdec_kv_want)
 
 def private rdec_ctx_pin() : int64 => g_rdec_ctx_max > 0l ? g_rdec_ctx_max : g_env_gpu.gpu_ctx_max
 def private rdec_ctx_strict() : bool => g_rdec_ctx_strict || g_env_gpu.gpu_ctx_strict
@@ -1595,19 +1682,13 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     let neox = c.rope_neox
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     // the class maxima size the driver's scratch; each layer's own geometry rides its registration
-    var hs = 0l
-    var qd = 0l
-    var kvd = 0l
-    var mir_elems = 0l
+    let (qd, kvd, hs) = resident_attn_maxima(c)
+    var mir_units = 0l
     for (l in range64(c.n_layers)) {
         let why = resident_layer_decline(t, l)
         if (!empty(why)) return rdec_decline(why)
-        continue if (layer_is_recurrent(c, l))
-        hs = max(hs, layer_head_size(c, l))
-        qd = max(qd, layer_qd(c, l))
-        kvd = max(kvd, layer_kv_dim(c, l))
-        if (t.kv_src[l] == l) {
-            mir_elems += seq_cap * layer_kv_dim(c, l)
+        if (!layer_is_recurrent(c, l) && t.kv_src[l] == l) {
+            mir_units += seq_cap * kv_row_units(rkdt, layer_kv_dim(c, l))
         }
     }
     let head_why = c.n_layer_nextn > 0l ? resident_head_decline(t) : ""
@@ -1615,8 +1696,8 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     if (!empty(head_why)) {
         to_log(LOG_WARNING, "dasLLAMA: resident driver - the NextN draft head stays off the device ({head_why}); the CPU draft serves\n")
     }
-    let head_kv_elems = head ? seq_cap * layer_kv_dim(c, c.n_layers) : 0l
-    mir_elems += head_kv_elems
+    let head_kv_units = head ? seq_cap * kv_row_units(rkdt, layer_kv_dim(c, c.n_layers)) : 0l
+    mir_units += head_kv_units
     let cos_elems = resident_cos_elems(c)
     let dng = rdec_dn_geom(t)
     // tally arena blocks per format
@@ -1651,7 +1732,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     let rot = resident_rot(c)
     if (!rdec_prepare(c.n_layers, n_attn, dim, qd, kvd, hs, c.n_heads, resident_hidden(t), c.vocab_size, seq_cap, neox,
                       c.norm_eps, c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs)), c.qk_norm,
-                      rkdt == KVDtype.f16, c.q_gated, rot, dng, mir_elems, cos_elems, g_rdec_regions_want, rdec_carry_planned(c), head, head ? rdec_verify_rows_want(t) : 0l)) {
+                      int(rkdt), c.q_gated, rot, dng, mir_units, cos_elems, g_rdec_regions_want, rdec_carry_planned(c), head, head ? rdec_verify_rows_want(t) : 0l)) {
         return rdec_decline("the device prepare declined (a kernel class or the mirror range - the tier's line above)")
     }
     rdec_note_weight_bytes(plan.weight_bytes)
@@ -1813,7 +1894,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         }
         if (!kvsh) {
             mir_idx++
-            mir_base += seq_cap * g.kvd
+            mir_base += seq_cap * kv_row_units(rkdt, g.kvd)
         }
     }
     if (ple > 0l) {   //! the pre-step's projection on device where the driver takes it (the cm2 f16 GEMM, or the KHR twin off cm2); the CPU pre-step serves otherwise
@@ -1857,7 +1938,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         resident_hot_arm(t, plan)
     }
     if (head) {
-        resident_place_head(t, mir_base, head_kv_elems * g_rdec_regions_want * (rkdt == KVDtype.f16 ? 2l : 4l) * 2l, mr, kg, wb)
+        resident_place_head(t, mir_base, g_rdec_regions_want * seq_cap * kv_row_bytes(rkdt, layer_kv_dim(c, c.n_layers)) * 2l, mr, kg, wb)
     }
     //! a per-layer-embedding model keeps the CPU embed unless its token table sits on the device too: the pre-step wants both gathers in one
     //! place; a hyper-connection model keeps it too - its window chain reads the pre-step's rows, never token ids
@@ -1952,7 +2033,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     g_rdec_cap = seq_cap
     g_rdec_cos_elems = cos_elems
     g_rdec_kvdt = rkdt
-    let kvname = rkdt == KVDtype.f16 ? "f16" : "f32"
+    let kvname = rkdt == KVDtype.f16 ? "{rkdt}" : "{rkdt} ({resident_mirror_ask().knob})"
     // prefill + decode select together — the device prefill fills the mirror the decode reads
     select_prefill_override("vulkan")
     select_decode_override("vulkan")
@@ -4044,7 +4125,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     // subsumes every rail below; a decline falls through
     let resident_try = (moe_gpu_resident_installed() && gpu_resident_requested() && gpu_want_resident()
         && (t.config.n_expert == 0l || rdec_moe_installed()))
-    let rkdt = resident_mirror_dtype()
+    let rkdt = resident_mirror_dtype_of(t, resident_try)
     var seq_cap = 0l
     var plan : ResidentPlan
     if (resident_try) {

@@ -226,6 +226,7 @@ def section_gpu_slots(m : Model) {
     // for good — a host-cached stream's chunked prefill would leave device-only KV
     // that a second stream's steal strands (dasllama-server does exactly this)
     set_resident_prefill_allowed(false)
+    print("resident prefill for host-cached streams: {resident_prefill_allowed()}\n")
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -242,7 +243,11 @@ def section_gpu_slots(m : Model) {
 // ASKED: the driver holds it for every region or declines (a MoE moves the experts
 // the card cannot hold to the host first) instead of quietly shortening it; the
 // load log says which. gpu_ctx_pins reads both pins back, so a rig puts them
-// where it found them.
+// where it found them. set_gpu_kv_dtype picks the codec the driver holds that
+// cache in, which is the codec its sessions are made in: f16 by default, q8_0
+// about half those bytes and tq4 about a quarter, room a longer context takes.
+// gpu_kv_dtype_pin reads back what was asked and whether anyone asked at all;
+// reset_gpu_kv_dtype takes the ask away, and the environment decides again.
 //
 // After the load, gpu_device_sessions answers how many regions the driver armed
 // (0 on a CPU box, under the per-op rails, and on Metal). gpu_resident_decline
@@ -318,9 +323,16 @@ def main() {
     let pins = gpu_ctx_pins()      // whatever an earlier run of this process pinned
     set_gpu_ctx_max(8192l)         // and at most this many positions in a region
     set_gpu_ctx_strict(false)      // a cap, not a demand: a card short of room shortens it and says so
+    let kv_pin = gpu_kv_dtype_pin()
+    set_gpu_kv_dtype(KVDtype.f16)  // the device cache in the sessions' codec; q8_0 or tq4 here takes sessions made in it
     var m <- load_model(path, QuantMode.q8)
     set_gpu_ctx_max(pins.ctx_max)   // the pins back, for whoever loads next in this process
     set_gpu_ctx_strict(pins.strict)
+    if (kv_pin.pinned) {
+        set_gpu_kv_dtype(kv_pin.dt)
+    } else {
+        reset_gpu_kv_dtype()   // nobody had asked: DASLLAMA_GPU_KV decides the next load again
+    }
     allow_cpu_prefill()   // a CPU tutorial, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
     with_job_que() {
         setup_dasllama_jobque()

@@ -134,6 +134,9 @@ struct public GpuTierEnv {
     @clarg_doc = "The context pin (DASLLAMA_GPU_CTX_MAX, set_gpu_ctx_max) is the context asked, not a cap: a K/V mirror the card cannot hold at it declines the resident driver instead of shortening, and the per-op rails serve the asked context; the load log names the room."
     gpu_ctx_strict : bool = false
 
+    @clarg_doc = "The K/V codec the whole-model driver's mirror is asked to arm at, where no caller set one in process (set_gpu_kv_dtype): f16 (the default), q8_0 (half the mirror's bytes) or tq4 (a quarter). Sessions of the armed codec are served; any other spelling reads as f16."
+    gpu_kv : string = ""
+
     @clarg_doc = "The whole-model resident driver for a model that fits the card, MoE included; 0 keeps the per-op rails (the A/B lever)."
     gpu_resident : bool = true
 

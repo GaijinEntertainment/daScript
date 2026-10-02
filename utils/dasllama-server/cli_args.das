@@ -66,7 +66,7 @@ struct CommonArgs {
     @clarg_doc = "Weight serving mode: fp32 | q8 (default; file-format spellings serve natively under q8) | q4 = legacy requant"
     quant : string
 
-    @clarg_doc = "KV cache codec: f32 | f16 | q8_0 | tq4 (default f16)"
+    @clarg_doc = "KV cache codec: f32 | f16 | q8_0 | tq4 (rotated 4-bit; needs pow2 head_size) (default f16); under --gpu vulkan the whole-model driver holds its cache in the same codec for f16, q8_0 and tq4"
     kv_dtype : string
 
     @clarg_doc = "GPU backend: auto (default: metal/vulkan when detected, else CPU) | off | metal | metal-required | vulkan"

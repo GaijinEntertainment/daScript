@@ -88,6 +88,10 @@ def private gemma_model(t : T?; file : string) : Model {
         return <- Model()
     }
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
+    let asked = gpu_kv_dtype_pin()
+    if (asked.pinned) {
+        t |> equal(mirror_kv_dtype(), asked.dt, "the mirror armed at the codec the cell asks")
+    }
     t |> success(tr.config.pre_post_norm && tr.config.sliding_window > 0l && tr.config.ffn_act == FfnAct.gelu,
         "the fixture carries the sandwich norms, a sliding window and the GeGLU FFN (the arms this file gates)")
     tr.config.seq_len = min(tr.config.seq_len, GEMMA_RIG_CTX)   //! the sessions size their caches to the mirror's cap, not the model's max

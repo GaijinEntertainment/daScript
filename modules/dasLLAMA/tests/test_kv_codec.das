@@ -273,7 +273,7 @@ def test_kv_store_row_f16(t : T?) {
     }
 }
 
-// ===== kv_codec kernel units — byte-level, model-free =====
+// ===== kv_dtype kernel units — byte-level, model-free =====
 // Exactness split: integer-accumulating dots (q8q8kv/q8tq4kv) and per-element kernels
 // (axpy/cvt/quantize) are bit-exact against a scalar reference on ANY tuned perm; the
 // float-reduction dots (dot_q8kv/dot_f16) tolerance-compare (a vectorized perm reorders adds).

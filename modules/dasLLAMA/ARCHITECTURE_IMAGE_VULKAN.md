@@ -46,7 +46,7 @@ anything but the whole-model driver after the plan accepted declines the mint. A
 the CPU embed alone: a call the driver passes to the CPU rails panics by name, the NextN draft's CPU fallback included.
 A model the plan would not take whole keeps its planar families under the trim, and the load says so; the lane's
 identity folds the lever on every tier, the dry tier's included, so a flip re-bakes it. The identity does not fold the
-context pin, the mirror codec or the resident route (`DASLLAMA_GPU_CTX_MAX`, `DASLLAMA_VK_KV32`, `DASLLAMA_GPU_RESIDENT`),
+context pin, the mirror codec or the resident route (`DASLLAMA_GPU_CTX_MAX`, `DASLLAMA_GPU_KV` / `set_gpu_kv_dtype`, `DASLLAMA_VK_KV32`, `DASLLAMA_GPU_RESIDENT`),
 so a trimmed lane the driver would decline under this run's knobs is caught before its upload: the map asks the plan
 again, deletes the lane and mints under the run's knobs. A streamed MoE's expert planes stay planar
 (`VkBakeRole.expert_stream`: decode runs them on the CPU); the eager rail (a gguf that would not open for streaming, a

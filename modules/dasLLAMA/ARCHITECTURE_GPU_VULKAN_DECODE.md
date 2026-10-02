@@ -23,13 +23,13 @@ the q stack's activation image), the qk-norm+rope kernel (or the plain rope) sto
 token's K/V row into the layer's f16 mirror, the decode attention over that mirror, the
 attention row requantized in the `wo` plane's form, and the `wo` GEMV. The `wo` row and the
 RAW k and v projection rows come back - f32, straight off the k/v GEMV output, because the
-qk-norm and rope ran only on the mirror copy - so the host re-derives its own cache row and
+qk-norm and rope ran only on the mirror copy - so the host re-derives its own cache row (rotating it first for a tq4 side, `tq4_rotate_for_store`) and
 keeps every position for the CPU arms: the CPU fallback, and a later window's CPU prefill.
 The PREFILL chain's readback is the other way round; its k rows come home roped.
 
 **The block serves one shape, and `attn_dec_shape_ok` is the whole gate.** The layer's q, k, v
 and o planes are resident, the k source is the layer itself (no shared KV), the session's cache
-is flat (not paged) and neither codec is tq4, the rope covers the whole head, and the model
+is flat (not paged), the rope covers the whole head, and the model
 carries no output bias, no v-norm, no attention sinks, no logit softcap, no q gate and no
 sliding window - the chain's kernels implement none of them. q, k and v also share one quant
 class, because k and v read the q stack's activation image. A q/k/v projection bias (qwen2moe)
@@ -59,8 +59,8 @@ generation it had - a stale one, or none. The session keeps the minted generatio
 layer's count is exactly `pos`. Anything else names its remedy: a stale generation claims fresh
 at the first layer that asks (every layer's count to zero - a session starting with decode, a
 CPU-prefilled session, or a session taking the mirrors over), a count off `pos` HYDRATES the
-layer from the host cache's rows [0, pos) (f16 rows copied, f32 rows converted, any other codec
-decoded to f32 on the host first) - a CPU prefill ahead of the block, or a rewind. A count that
+layer from the host cache's rows [0, pos) (f16 rows copied, f32 rows converted, a block codec's decoded to f32
+on the host first and tq4's taken out of their rotated basis: the mirror holds floats in the model's basis under every codec) - a CPU prefill ahead of the block, or a rewind. A count that
 can never match (past the cap) declines to the CPU chain. The block therefore never depends on
 which arm produced earlier positions; it depends on the host cache being whole, which the
 readback keeps true. The measured figures in this section come from `benchmarks/decode_prof.das
@@ -250,7 +250,7 @@ binds every slot and indexes the row's own from `dnslot` and the head count its 
 with no flush between them, so the N-row command takes a recurrent layer (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command`).
 
 **The K/V mirror has one slot per ATTENTION layer.** A recurrent layer keeps no K/V, so the
-mirror is sized `n_attn x seq_cap x kv_dim` and each attention layer carries its slot index
+mirror is sized `n_attn x seq_cap x kv_dim` elements and each attention layer carries its slot index
 (`RLayer.mir_idx`); the K/V sync, readback and hydrate seams address by slot and return at
 once on a recurrent layer. The attention geometry (head size, q and kv widths) is the first
 attention layer's - on qwen35 layer 0 is recurrent.

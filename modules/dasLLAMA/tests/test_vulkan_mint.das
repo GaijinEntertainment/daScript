@@ -20,7 +20,8 @@ require _compares
 // The vulkan lane's streaming mint on a LIVE tier (the dry twin is test_model_image_vulkan.das): a cold vulkan-armed
 // load of the 0.8B-MTP mints the vulkan lane and no other, the trimmed lane under the lever serves the same greedy
 // tokens off the same device twin and the same CPU embed rows off the packed emb region, and the trimmed lane maps
-// back warm to the same tokens; the K-quant twin's lane mints off its native planes and maps back to the same tokens.
+// back warm to the same tokens; the K-quant twin's lane mints off its native planes and maps back to the same tokens;
+// and a trimmed lane minted under one K/V mirror codec maps under the others and serves each codec's own tokens.
 // Skips when interpreted, without the model, with the image rail off (DASLLAMA_IMAGE=0), without a live armed tier,
 // and when the whole-model driver declines the model on this box.
 
@@ -38,10 +39,9 @@ def private load_cached_q8(path : string) : Model {
 }
 
 //! `MINT_STEPS` greedy tokens over a counting prompt, and the CPU embed row of one token: what the two lanes must agree on
-[cold_path]
-def private mint_witness(tr : Model; var ids : array<int64>; var row : array<float>) {
+def private mint_witness(tr : Model; var ids : array<int64>; var row : array<float>; kv : KVDtype = KVDtype.f16) {
     with_dasllama_jobque_() {
-        var s <- create_session(tr, KVDtype.f16)
+        var s <- create_session(tr, kv)
         var prompt <- [for (i in range64(int64(MINT_PROMPT))); 1000l + i * 7l]
         delete ids
         ids <- generate(tr, s, prompt, MINT_PROMPT + MINT_STEPS)
@@ -202,5 +202,85 @@ def test_vulkan_mint_kquant(tst : T?) {
         delete ids_b
         delete row_a
         delete row_b
+    }
+}
+
+//! the greedy tokens a staged (no image) load of `path` serves on the device at mirror codec `kv`: what a lane serves at that codec
+[cold_path]
+def private staged_tokens_at(t : T?; path : string; kv : KVDtype) : array<int64> {
+    set_gpu_kv_dtype(kv)
+    var m <- load_model_(path, QuantMode.q8)
+    var ids : array<int64>
+    if (moe_gpu_resident_active()) {   // no driver, no tokens: the caller skips
+        t |> equal(mirror_kv_dtype(), kv, "the staged load arms the mirror at the asked codec")
+        var row : array<float>
+        mint_witness(m, ids, row, kv)
+        delete row
+    }
+    delete m
+    moe_gpu_drop_model()
+    return <- ids
+}
+
+[test]
+def test_vulkan_mint_kv_codecs(tst : T?) {
+    tst |> run("Qwen3.5-0.8B-MTP: the trimmed lane minted under a q8_0 mirror maps under tq4 and f16 with no re-mint, and serves at each codec the tokens the staged load serves there") @(t : T?) {
+        if (!family_on(t, "qwen35")) return
+        let path = path_join(models_dir(), MINT_FILE)
+        if (mint_skip(t, path)) return
+        let levers = pin_lane_levers()
+        let kv_pin = gpu_kv_dtype_pin()
+        let codecs = fixed_array(KVDtype.q8_0, KVDtype.tq4, KVDtype.f16)   // the mint's codec first
+        var want : array<array<int64>>
+        want |> reserve(length(codecs))
+        set_gpu_kv_dtype(codecs[0])
+        let ask_overridden = resident_mirror_dtype() != codecs[0]
+        for (kv in codecs) {
+            break if (ask_overridden)
+            want |> emplace <| staged_tokens_at(t, path, kv)
+        }
+        if (ask_overridden) {
+            t |> skip("DASLLAMA_VK_KV32=1 arms the f32 mirror over a codec asked - the codec cell needs it unset")
+        } elif (empty(want[0])) {
+            t |> skip("the whole-model driver did not take the model on this box (the decline line above)")
+        } else {
+            set_vulkan_trim(true)
+            let img_t = image_path_for(path, moe_gpu_bake_tag())
+            remove(img_t)
+            var minted_size = 0ul
+            var minted_at = 0l
+            for (kv, ids_want, i in codecs, want, count()) {
+                set_gpu_kv_dtype(kv)
+                var m <- load_cached_q8(path)
+                t |> success(moe_gpu_resident_active() && mirror_kv_dtype() == kv, "{kv}: the lane is served by the whole-model driver at the asked mirror codec")
+                t |> success(m.image_map != null && m.planes_trimmed, "{kv}: the served image is the trimmed lane")
+                let st = stat(img_t)
+                if (i == 0) {
+                    minted_size = st.size
+                    minted_at = int64(st.mtime)
+                    t |> success(st.is_valid, "the cold load under {kv} minted the trimmed lane")
+                } else {
+                    t |> success(st.size == minted_size && int64(st.mtime) == minted_at, "{kv}: the lane minted under {codecs[0]} mapped as it was - no re-mint ({st.size} bytes)")
+                }
+                var ids : array<int64>
+                var row : array<float>
+                mint_witness(m, ids, row, kv)   // a trimmed lane panics on a call passed to the CPU rails: generating is the served witness
+                log_gen_texts(m, "{kv}: the staged load / the trimmed lane", ids_want, ids)
+                t |> equal(mismatch_exact(ids, ids_want), 0, "{kv}: the trimmed lane's greedy tokens are the staged load's at that codec, token for token")
+                delete ids
+                delete row
+                delete m
+                moe_gpu_drop_model()
+            }
+            t |> success(mismatch_exact(want[0], want[2]) > 0 || mismatch_exact(want[1], want[2]) > 0, "control: a block codec moves the greedy tokens off the f16 mirror's on this prompt, so the per-codec compares tell the codecs apart")
+            remove(img_t)
+        }
+        delete want
+        if (kv_pin.pinned) {
+            set_gpu_kv_dtype(kv_pin.dt)
+        } else {
+            reset_gpu_kv_dtype()
+        }
+        restore_lane_levers(levers)
     }
 }

@@ -21,8 +21,10 @@ require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: 
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the MoE
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode and the kernel census, where the module exists
 require dasllama/dasllama_kqformat
+require daslib/enum_trait   // the KqFmt members as a loop
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed public   // resident_ready, load_resident, resident_prompt, resident_then_cpu_feed, feed_steps_within, tile_arm_tag
+require _kv_codec_cells   // codec_distance_over: the three-chain form of the block-codec cells
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -49,21 +51,10 @@ struct MoeFixture {
 let MOE_LOGIT_BAR_REL = 0.20
 let PF_WINDOW_ROWS = 512l  //! the engine's PF_WINDOW, asserted equal by the two-window cell: a prompt past it runs as sequential windows
 let FED_STEPS = 6l
-let private NO_CENSUS = -1l   //! the census count with no vulkan module: the routed-block witnesses stand down
 
 def assert_pf_window(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         t |> equal(PF_WINDOW, PF_WINDOW_ROWS, "the prompt is sized past the engine's own window")
-    }
-}
-
-
-//! the coverage census's count of a routed-block kernel's dispatches so far; NO_CENSUS with no vulkan module
-def private census(kernel : string) : int64 {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        return vk_kernel_coverage_of(kernel)
-    } else {
-        return NO_CENSUS
     }
 }
 
@@ -96,13 +87,14 @@ def private unsplit_want(nprompt : int64) : int64 {
     }
 }
 
-//! the census over every format's stamp of one tile column - `cm2e` (the expert schedule's m pieces in cm2 mode) or `khr` (every
-//! piece in mm mode) - the expert planes carrying whichever format the file holds: the kq formats, q8, the per-32 q51 and mx4 rails;
-//! a 64-step format's e column is its m stamp (KQ_CM2E_ALIASES_M), so `cm2e` reads that stamp's census for it
+//! the census over every `KqFmt` member's stamp of one tile column - `cm2e` (the expert schedule's m pieces in cm2 mode) or `khr`
+//! (every piece in mm mode) - the expert planes carrying whichever format the file holds and the box serves it in (IQ3_S as
+//! `iq3s` or `iq3s4`); a 64-step format's e column is its m stamp (KQ_CM2E_ALIASES_M), so `cm2e` reads that stamp's census for it
 def private column_census(col : string) : int64 {
-    var n = census("q8_batch_{col == "cm2e" && kq_cm2e_aliases_m("q8") ? "cm2m" : col}_cls_spv") + census("q51_batch_{col}_cls_spv") + census("mx4_batch_{col}_cls_spv")
-    for (f in ["k4", "k5", "k6", "q40", "iq4xs", "k3", "iq3s", "iq3xxs", "iq4nl", "k2", "iq2s", "iq2xs", "iq2xxs"]) {
-        n += census("kq_batch_{f}_{col == "cm2e" && kq_cm2e_aliases_m(f) ? "cm2m" : col}_cls_spv")
+    var n = 0l
+    for (f in type<KqFmt>) {
+        let name = "{f}"
+        n += census("{kq_tile_stem(name)}_{col == "cm2e" && kq_cm2e_aliases_m(name) ? "cm2m" : col}_cls_spv")
     }
     return n
 }
@@ -145,6 +137,10 @@ def private moe_fixture_admitted(t : T?; tr : Model; fx : MoeFixture) : int64 {
     }
     t |> success(moe_gpu_resident_active(), "the whole-model driver took {fx.file} (a decline names its reason in the load log: the plan, a seat, a plane's format)")
     return -1l if (!moe_gpu_resident_active())
+    let asked = gpu_kv_dtype_pin()
+    if (asked.pinned) {
+        t |> equal(mirror_kv_dtype(), asked.dt, "the mirror armed at the codec the cell asks")
+    }
     let host_layers = gpu_resident_host_layers()
     if (fx.expect_host_layers && host_layers == 0l) {
         t |> skip("the card holds every expert stack beside the {fx.strict_ctx}-position mirror - the host-layer form needs a smaller card")
@@ -203,6 +199,20 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
         delete fed
         delete prompt
         delete toks
+    }
+    delete tr
+}
+
+//! the K/V codec rig's distance form (`codec_distance_over`) on a MoE fixture the driver admitted, the mirror asked at `kv`
+//! by the caller's pin: the device at `kv`, the CPU at `kv` and the CPU at f16 over an `n`-token prompt and the rig's fed steps
+def moe_codec_distance(t : T?; n : int64; fx : MoeFixture; kv : KVDtype; dist_rel, pair_rel : float) {
+    let path = path_join(models_dir(), fx.file)
+    if (!resident_ready(t, path)) return
+    var tr <- load_resident(path, 1l, fx.strict_ctx)
+    if (moe_fixture_admitted(t, tr, fx) >= 0l) {
+        with_dasllama_jobque_() {
+            codec_distance_over(t, tr, n, kv, false, dist_rel, pair_rel)
+        }
     }
     delete tr
 }

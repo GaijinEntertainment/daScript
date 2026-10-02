@@ -76,19 +76,63 @@ def restore_resident_levers(l : ResidentLevers) {
     }
 }
 
+//! the K/V mirror's codec ask put back as `gpu_kv_dtype_pin` read it
+def restore_kv_pin(pin : tuple<pinned : bool; dt : KVDtype>) {
+    if (pin.pinned) {
+        set_gpu_kv_dtype(pin.dt)
+    } else {
+        reset_gpu_kv_dtype()
+    }
+}
+
+//! `body` with the K/V mirror asked at `kv`, the ask put back as it was found - the pin for a rig that loads its own model
+//! and makes its sessions on the armed codec; a skip where the environment arms another codec over the ask
+def with_gpu_kv_dtype(t : T?; kv : KVDtype; body : block<void>) {
+    let kv_pin = gpu_kv_dtype_pin()
+    set_gpu_kv_dtype(kv)
+    if (resident_mirror_dtype() == kv) {
+        invoke(body)
+    } else {
+        t |> skip("the environment arms a {resident_mirror_dtype()} mirror over the {kv} asked (DASLLAMA_VK_KV32=1) - the cell needs that unset")
+    }
+    restore_kv_pin(kv_pin)
+}
+
+let NO_CENSUS = -1l   //! the census count with no vulkan module: a census witness stands down
+
+//! the coverage census's count of a kernel's dispatches so far; NO_CENSUS with no vulkan module
+def census(kernel : string) : int64 {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return vk_kernel_coverage_of(kernel)
+    } else {
+        return NO_CENSUS
+    }
+}
+
 //! `path` loaded at q8 with the whole-model route pinned on - at `regions` mirror regions where it is past 0, the context
-//! pinned and asked whole at `strict_ctx` positions where it is past 0, else unpinned - whatever an earlier cell or the environment
-//! left; every lever put back after
+//! pinned and asked whole at `strict_ctx` positions where it is past 0, else at the caller's own context pin, never strict -
+//! whatever an earlier cell left; every lever put back after
 def load_resident(path : string; regions : int64 = 0l; strict_ctx : int64 = 0l) : Model {
     let levers = resident_levers()
     if (regions > 0l) {
         set_gpu_resident_regions_(regions)
     }
-    set_gpu_ctx_max(strict_ctx)
+    if (strict_ctx > 0l) {
+        set_gpu_ctx_max(strict_ctx)
+    }
     set_gpu_ctx_strict(strict_ctx > 0l)
     set_gpu_resident_route(true)
     var tr <- load_model_(path, QuantMode.q8)
     restore_resident_levers(levers)
+    return <- tr
+}
+
+//! `load_resident` with the K/V mirror asked at `kv` for the load, the ask put back as it was found
+def load_resident_at(path : string; kv : KVDtype; regions : int64 = 0l; strict_ctx : int64 = 0l) : Model {
+    let pin = gpu_kv_dtype_pin()
+    set_gpu_kv_dtype(kv)
+    var tr <- load_resident(path, regions, strict_ctx)
+    restore_kv_pin(pin)
     return <- tr
 }
 
@@ -258,4 +302,63 @@ def feed_steps_within(t : T?; tr : Model; tag : string; nprompt : int64; gpu, cp
             to_log(LOG_INFO, "{what}: one-step-off control maxdiff {off} (bar {bar})\n")
         }
     }
+}
+
+//! three chains' summed row distances - the device and the CPU chain each from a reference chain, and from each other -
+//! each `_ctrl` the same compare with its second side a row one step off
+struct ChainDistances {
+    dev_ref : float
+    cpu_ref : float
+    dev_cpu : float
+    dev_ref_ctrl : float
+    dev_cpu_ctrl : float
+}
+
+//! The distances over rows [first, ..) of three chains - the device, the CPU chain `cpu_name` and the reference `ref_name` -
+//! every row logged with each chain's argmax decoded. A NaN in a row reads as an infinite distance, which would pass any
+//! ratio of two sums, so every sum is asserted finite.
+def chain_distances(t : T?; tr : Model; what : string; gpu, cpu, ref_chain : array<array<float>>; first : int; ref_name : string = "f16"; cpu_name : string = "the CPU codec chain") : ChainDistances {
+    var dist : ChainDistances
+    for (st in range(first, length(ref_chain))) {
+        let off = st > 0 ? st - 1 : 1
+        let dd = logits_maxdiff(gpu[st], ref_chain[st])
+        let dc = logits_maxdiff(cpu[st], ref_chain[st])
+        let dp = logits_maxdiff(gpu[st], cpu[st])
+        let af = argmax_of(ref_chain[st])
+        let ac = argmax_of(cpu[st])
+        let ag = argmax_of(gpu[st])
+        to_log(LOG_INFO, "{what}, row {st}: the device {dd} from {ref_name}, {cpu_name} {dc}, the two {dp} apart; argmax {ref_name} {af} '{decode_(tr, [af])}', {cpu_name} {ac} '{decode_(tr, [ac])}', device {ag} '{decode_(tr, [ag])}'\n")
+        dist.dev_ref += dd
+        dist.cpu_ref += dc
+        dist.dev_cpu += dp
+        dist.dev_ref_ctrl += logits_maxdiff(gpu[st], ref_chain[off])
+        dist.dev_cpu_ctrl += logits_maxdiff(gpu[st], cpu[off])
+    }
+    to_log(LOG_INFO, "{what}: summed distances - the device from {ref_name} {dist.dev_ref}, {cpu_name} from {ref_name} {dist.cpu_ref}, the two apart {dist.dev_cpu}; one step off - the device from {ref_name} {dist.dev_ref_ctrl}, from {cpu_name} {dist.dev_cpu_ctrl}\n")
+    let finite = (dist.dev_ref < INFINITE_DIFF && dist.cpu_ref < INFINITE_DIFF && dist.dev_cpu < INFINITE_DIFF
+        && dist.dev_ref_ctrl < INFINITE_DIFF && dist.dev_cpu_ctrl < INFINITE_DIFF)
+    t |> success(finite, "{what}: every chain's rows are finite (a NaN row reads as an infinite distance)")
+    return dist
+}
+
+//! layer `l`'s first `rows` K rows then V rows as `s` holds them
+def layer_rows(tr : Model; var s : Session; l, rows : int64) : array<uint8> {
+    let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(tr.config, l))
+    var bytes : array<uint8>
+    bytes |> resize(2l * rows * rowb)
+    unsafe {
+        memcpy(addr(bytes[0]), kv_layer_kbase(s, l, tr.config.seq_len), rows * rowb)
+        memcpy(addr(bytes[rows * rowb]), kv_layer_vbase(s, l, tr.config.seq_len), rows * rowb)
+    }
+    return <- bytes
+}
+
+//! the share of `n` bytes at which `a` from byte `a_at` differs from `b` from byte `b_at`
+def bytes_differing(a, b : array<uint8>; a_at, b_at, n : int64) : float {
+    var sa <- copy_span(a, a_at, n)
+    var sb <- copy_span(b, b_at, n)
+    let differing = mismatch_exact(sa, sb)
+    delete sa
+    delete sb
+    return float(differing) / float(n)
 }

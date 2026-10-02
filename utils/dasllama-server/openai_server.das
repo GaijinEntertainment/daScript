@@ -67,6 +67,7 @@ struct ModelSlot {
     gpu_regions : int64             //! K/V regions the whole-model driver armed for this slot, one per device-home stream; 0 = not that driver
     gpu_ask_streams : int64         //! the K/V regions and the context this slot's load asked the whole-model driver for:
     gpu_ask_ctx : int64             //! the engine keeps one process-wide ask, so a rearm restores the slot's own first
+    gpu_ask_kv : KVDtype = KVDtype.f16   //! the K/V codec this slot's load asked the device mirror in
     resident_decline : string               //! why the whole-model GPU driver does not serve this slot (its decline, with the remedy where one exists); "" when it does, or no GPU was asked for
     is_default : bool
     last_used : int64
@@ -197,6 +198,7 @@ def add_model(var m : Model; name : string; opts : SlotOpts = SlotOpts(); path :
     slot.opts = opts
     slot.gpu_ask_streams = g_gpu_ask_streams
     slot.gpu_ask_ctx = g_gpu_ask_ctx
+    slot.gpu_ask_kv = g_gpu_ask_kv
     slot_clamp_ctx_to_region(slot)
     // the load's arm outcome (routing marks + resident-driver state) belongs to THIS slot:
     // capture it, so two models' offset-keyed marks never mix. Whichever slot is stepped gets
@@ -275,14 +277,18 @@ def private uninstall_slot_marks() {
 // only called between scheduler steps.
 var private g_gpu_ask_streams = 0l
 var private g_gpu_ask_ctx = 0l
+var private g_gpu_ask_kv = KVDtype.f16
 
-//! before the load or rearm: a K/V region per stream of `ctx` positions, asked whole when `ctx` > 0; 0 = the model's own, shortened to the card's room
-def gpu_residency_ask(streams, ctx : int64) {
+//! before the load or rearm: a K/V region per stream of `ctx` positions, asked whole when `ctx` > 0 (0 = the model's own, shortened
+//! to the card's room), held in the streams' codec `kv`
+def gpu_residency_ask(streams, ctx : int64; kv : KVDtype = KVDtype.f16) {
     g_gpu_ask_streams = streams
     g_gpu_ask_ctx = ctx
+    g_gpu_ask_kv = kv
     set_gpu_resident_regions(streams)
     set_gpu_ctx_max(ctx)
     set_gpu_ctx_strict(gpu_ctx_asked_whole(ctx))
+    set_gpu_kv_dtype(kv)
 }
 
 //! a stream's context is its region's where the driver armed any: a request never runs past the rows the card holds for it
@@ -310,7 +316,7 @@ def private bind_gpu_slot(si : int) {
         prev_note = "from {g_slots[prev].name}, "
     }
     install_slot_marks(si)
-    gpu_residency_ask(g_slots[si].gpu_ask_streams, g_slots[si].gpu_ask_ctx)
+    gpu_residency_ask(g_slots[si].gpu_ask_streams, g_slots[si].gpu_ask_ctx, g_slots[si].gpu_ask_kv)
     // want, arm, resident upload (bake-slice path for a mapped vulkan-flavor image) — the
     // order-sensitive half of the switch lives in the engine
     g_slots[si].backend_effective = gpu_slot_rearm(g_slots[si].gpu_want, g_slots[si].model)
@@ -2438,7 +2444,7 @@ def private handle_model_load(var req : HttpRequest?; var resp : HttpResponse?) 
     var m = Model()
     var failure = ""
     if (!cpu_only) {
-        gpu_residency_ask(g_sched_defaults.max_streams, js?["ctx"] ?? g_boot_ctx)
+        gpu_residency_ask(g_sched_defaults.max_streams, js?["ctx"] ?? g_boot_ctx, g_sched_defaults.kv_dtype)
     }
     var failed = catch_worker_panic(failure) {
         delete m   // fresh above; the delete licenses the move on this heap (PERF030)

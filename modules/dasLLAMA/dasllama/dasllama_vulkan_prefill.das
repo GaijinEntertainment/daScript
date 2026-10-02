@@ -670,7 +670,7 @@ def private pf_moe_addr_next(raw : VkCommandBuffer; var h : VkHaz; l, wlen, nxt 
     }
 }
 
-[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]   // once per residency — buffers, sets, fa arming
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis")]   // once per residency — buffers, sets, fa arming
 def private pf_setup {
     if (g_rd.pf_ready) {
         return
@@ -692,6 +692,10 @@ def private pf_setup {
     let qrow = g_rd.q_gated ? 2l * qd : qd
     g_rd.pf_q = make_device_buf(np * qrow * 4l)
     g_rd.pf_kv = make_device_buf(np * 2l * kvd * 4l)
+    if (rd_kv_block_codec()) {
+        g_rd.pf_kst = make_device_buf(np * kvd * 4l)
+        g_rd.pf_vst = make_device_buf(np * kvd * 4l)
+    }
     g_rd.pf_v = make_device_buf(np * kvd * 4l)   // split-path v GEMM output (copied into pf_kv's v half); idle when the merged k|v GEMM serves the layer
     g_rd.pf_attn = make_device_buf(np * qd * 4l)
     g_rd.pf_aq = make_device_buf(np * qd)
@@ -789,10 +793,15 @@ def private pf_setup {
     }
     let mirbytes = rd_mir_bytes()
     let normbytes = g_rd.norms_bytes
-    let kv16 = g_rd.kv16
+    let kv16 = rd_kv16()
+    let kvq8 = rd_kvq8()
+    let kvtq4 = rd_kvtq4()
+    let kvq = rd_kv_block_codec()
+    let pf_reads_f16 = rd_pf_reads_f16()
+    let gated_stamp = rd_attn_gated()
     // the fa pick is per layer: a model's attention classes may differ in head size, and a class with no fa stamp takes the chunked pair
-    let fa_dev = cm2_fa_on() && vk_fa_on() && kv16
-    let fakhr_dev = !fa_dev && khr_kq_tile_on() && vk_fa_on() && kv16
+    let fa_dev = cm2_fa_on() && vk_fa_on() && pf_reads_f16
+    let fakhr_dev = !fa_dev && khr_kq_tile_on() && vk_fa_on() && pf_reads_f16
     var fa_hs : table<int64>   //! the head sizes the fa tiles serve on this model
     var fakhr_hs : table<int64>   //! ... the KHR flash tile
     var chunked_hs : table<int64>   //! ... and the ones the chunked pair serves
@@ -804,9 +813,9 @@ def private pf_setup {
     for (L in g_rd.layers) {
         continue if (L.recurrent)
         let fa_hs_ok = L.hs == 64l || L.hs == 128l || L.hs == 256l || L.hs == 512l
-        L.pf_fa = (fa_dev && fa_hs_ok && (!g_rd.q_gated || L.hs == 256l)
-            && (L.attn_cap == 0.0 || (L.hs == 256l && !g_rd.q_gated)))
-        L.pf_fakhr = fakhr_dev && fa_khr_serves(L.hs, L.attn_cap, g_rd.q_gated)
+        L.pf_fa = (fa_dev && fa_hs_ok && (!gated_stamp || L.hs == 256l)
+            && (L.attn_cap == 0.0 || (L.hs == 256l && !gated_stamp)))
+        L.pf_fakhr = fakhr_dev && fa_khr_serves(L.hs, L.attn_cap, gated_stamp)
         any_cap = any_cap || (L.pf_fa && L.attn_cap != 0.0)
         any_khr_cap = any_khr_cap || (L.pf_fakhr && L.attn_cap != 0.0)
         g_rd.pf_facm2 = g_rd.pf_facm2 || L.pf_fa
@@ -831,12 +840,14 @@ def private pf_setup {
     }
     verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq_b()
         && (kv16 ? ensure_rope_kv_b_f16_cls() : ensure_rope_kv_b_cls())
-        && (!fa128s || (kv16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls()))
-        && (!narrow_hs || (kv16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))
-        && (!wide_hs || (kv16 ? ensure_da_attn_bw_f16_cls() : ensure_da_attn_bw_cls()))
+        && (!fa128s || (pf_reads_f16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls()))
+        && (!narrow_hs || (pf_reads_f16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))
+        && (!wide_hs || (pf_reads_f16 ? ensure_da_attn_bw_f16_cls() : ensure_da_attn_bw_cls()))
+        && (!kvq8 || (ensure_kv_q8_store_b_cls() && ensure_kv_q8_shadow_cls()))
+        && (!kvtq4 || (ensure_kv_tq4_store_b_cls() && ensure_kv_tq4_shadow_cls() && ensure_kv_tq4_unrot_cls()))
         && (!key_exists(fa_hs, 64l) || fa_stamp_pair_ensure(false, 64l, false, false, sinks, any_f16_feed))
         && (!key_exists(fa_hs, 128l) || fa_stamp_pair_ensure(false, 128l, false, false, false, any_f16_feed))
-        && (!key_exists(fa_hs, 256l) || fa_stamp_pair_ensure(false, 256l, g_rd.q_gated, false, false, any_f16_feed))
+        && (!key_exists(fa_hs, 256l) || fa_stamp_pair_ensure(false, 256l, gated_stamp, false, false, any_f16_feed))
         && (!any_cap || fa_stamp_pair_ensure(false, 256l, false, true, false, any_f16_feed))
         && (!key_exists(fa_hs, 512l) || fa_stamp_pair_ensure(false, 512l, false, false, false, any_f16_feed))
         && (!key_exists(fakhr_hs, 64l) || fa_stamp_pair_ensure(true, 64l, false, false, sinks, any_f16_feed))
@@ -850,10 +861,10 @@ def private pf_setup {
         && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls())),
         "vk prefill: the class rails must engage on a live device")
     if (g_rd.pf_facm2) {
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: cm2 flash attention armed ({long_length(fa_hs)} head size(s), native f16 mirrors; {long_length(chunked_hs)} on the chunked pair)\n")
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: cm2 flash attention armed ({long_length(fa_hs)} head size(s), {kvq ? "the block-codec mirrors' f16 shadow" : "native f16 mirrors"}; {long_length(chunked_hs)} on the chunked pair)\n")
     }
     if (g_rd.pf_fakhr) {
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: KHR flash attention armed ({long_length(fakhr_hs)} head size(s), native f16 mirrors; {long_length(chunked_hs)} on the chunked pair)\n")
+        to_log(LOG_INFO, "dasLLAMA vulkan tier: KHR flash attention armed ({long_length(fakhr_hs)} head size(s), {kvq ? "the block-codec mirrors' f16 shadow" : "native f16 mirrors"}; {long_length(chunked_hs)} on the chunked pair)\n")
     }
     delete fa_hs
     delete fakhr_hs
@@ -891,6 +902,31 @@ def private pf_setup {
                 fixed_array(DN_WS_BYTES, np * di * 2l), fixed_array(VHZ_DNWS, VHZ_HQ))
         }
     }
+    let stagebytes = np * kvd * 4l
+    let shbytes = kvq ? rd_shadow_bytes() : 0l
+    if (kvtq4) {
+        let signbytes = KV_TQ4_SIGNS * 4l
+        g_rd.pf_kv_store_set = set_kv_tq4_store_b_cls(fixed_array(g_rd.pf_q, g_rd.pf_kst, g_rd.pf_vst, g_rd.k_mirror, g_rd.v_mirror, g_rd.tq4_signs_dev),
+            fixed_array(np * qrow * 4l, stagebytes, stagebytes, mirbytes, mirbytes, signbytes), fixed_array(VHZ_Q, VHZ_VST, VHZ_VST, VHZ_MIR, VHZ_MIR, 0u))
+        g_rd.pf_kv_shadow_set = set_kv_tq4_shadow_cls(fixed_array(g_rd.k_mirror, g_rd.v_mirror, g_rd.ksh_dev, g_rd.vsh_dev),
+            fixed_array(mirbytes, mirbytes, shbytes, shbytes), fixed_array(VHZ_MIR, VHZ_MIR, VHZ_SK, VHZ_SK))
+        g_rd.pf_unrot_set = set_kv_tq4_unrot_cls(fixed_array(g_rd.pf_attn, g_rd.pf_q, g_rd.tq4_signs_dev),
+            fixed_array(np * qd * 4l, np * qrow * 4l, signbytes), fixed_array(VHZ_ATT, VHZ_Q, 0u))
+    }
+    if (kvq8) {
+        g_rd.pf_kv_store_set = set_kv_q8_store_b_cls(fixed_array(g_rd.pf_kst, g_rd.pf_vst, g_rd.k_mirror, g_rd.v_mirror),
+            fixed_array(stagebytes, stagebytes, mirbytes, mirbytes), fixed_array(VHZ_VST, VHZ_VST, VHZ_MIR, VHZ_MIR))
+        g_rd.pf_kv_shadow_set = set_kv_q8_shadow_cls(fixed_array(g_rd.k_mirror, g_rd.v_mirror, g_rd.ksh_dev, g_rd.vsh_dev),
+            fixed_array(mirbytes, mirbytes, shbytes, shbytes), fixed_array(VHZ_MIR, VHZ_MIR, VHZ_SK, VHZ_SK))
+    }
+    let kstore = kvq ? g_rd.pf_kst : g_rd.k_mirror
+    let vstore = kvq ? g_rd.pf_vst : g_rd.v_mirror
+    let storebytes = kvq ? stagebytes : mirbytes
+    let storebit = kvq ? VHZ_VST : VHZ_MIR
+    let kread = kvq ? g_rd.ksh_dev : g_rd.k_mirror
+    let vread = kvq ? g_rd.vsh_dev : g_rd.v_mirror
+    let readbytes = kvq ? shbytes : mirbytes
+    let readbit = kvq ? VHZ_SK : VHZ_MIR
     for (l in range64(g_rd.n_layers)) {
         var L & = unsafe(g_rd.layers[l])
         let b = int(l * PF_ROLES)
@@ -902,6 +938,7 @@ def private pf_setup {
         }
         let qkv6 = !L.recurrent && pf_qkv6(l)
         let wo6 = pf_f16_feed(L.fo)
+        let fa_lands_f16 = pf_fa_lands_f16(wo6)
         let gu6 = pf_gu6(l)
         let dn6 = pf_dn6(l)
         // 0 quant_xb: pf_xb -> pf_xq/pf_xs (f16-fed: f16 convert -> pf_xf)
@@ -914,32 +951,32 @@ def private pf_setup {
         // (GEMM roles 1/2/3/7/10/11/13 build lazily per router variant at record time)
         if (!L.recurrent) {
             // 4 rope+store (class: q, kv, Kmir, Vmir, cos, bias)
-            let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_cos, g_rd.has_bias ? g_rd.bias_dev : g_rd.norms_dev)
-            let rsizes = fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, mirbytes, mirbytes, np * g_rd.cos_elems * 4l, g_rd.has_bias ? g_rd.bias_bytes : g_rd.norms_bytes)
-            let rgbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS, 0u)
+            let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, kstore, vstore, g_rd.pf_cos, g_rd.has_bias ? g_rd.bias_dev : g_rd.norms_dev)
+            let rsizes = fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, storebytes, storebytes, np * g_rd.cos_elems * 4l, g_rd.has_bias ? g_rd.bias_bytes : g_rd.norms_bytes)
+            let rgbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, storebit, storebit, VHZ_COS, 0u)
             g_rd.pf_sets[b + 4] = (kv16 ? set_rope_kv_b_f16_cls(rbufs, rsizes, rgbits)
                 : set_rope_kv_b_cls(rbufs, rsizes, rgbits))
         // 5 attn (class: q, Kmir, Vmir, out) — the cm2 fa tile / h128 coopmat twin when they serve this layer's head size
         let fa128l = fa128s && L.hs == 128l
         if ((L.pf_fa || L.pf_fakhr) && g_rd.has_sinks) {
-            let fbufs = fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, wo6 ? g_rd.pf_af : g_rd.pf_attn, g_rd.sinks_dev)
-            let fsizes = fixed_array(np * qrow * 4l, mirbytes, mirbytes, wo6 ? np * qd * 2l : np * qd * 4l, g_rd.sinks_bytes)
-            let fgbits = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, wo6 ? VHZ_AQ : VHZ_ATT, 0u)
+            let fbufs = fixed_array(g_rd.pf_q, kread, vread, fa_lands_f16 ? g_rd.pf_af : g_rd.pf_attn, g_rd.sinks_dev)
+            let fsizes = fixed_array(np * qrow * 4l, readbytes, readbytes, fa_lands_f16 ? np * qd * 2l : np * qd * 4l, g_rd.sinks_bytes)
+            let fgbits = fixed_array(VHZ_Q, readbit, readbit, fa_lands_f16 ? VHZ_AQ : VHZ_ATT, 0u)
             g_rd.pf_sets[b + 5] = fa_stamp_sink_set(L.pf_fakhr, fbufs, fsizes, fgbits)
         } elif (L.pf_fa || L.pf_fakhr) {
-            let fbufs = fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, wo6 ? g_rd.pf_af : g_rd.pf_attn)
-            let fsizes = fixed_array(np * qrow * 4l, mirbytes, mirbytes, wo6 ? np * qd * 2l : np * qd * 4l)
-            let fgbits = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, wo6 ? VHZ_AQ : VHZ_ATT)
+            let fbufs = fixed_array(g_rd.pf_q, kread, vread, fa_lands_f16 ? g_rd.pf_af : g_rd.pf_attn)
+            let fsizes = fixed_array(np * qrow * 4l, readbytes, readbytes, fa_lands_f16 ? np * qd * 2l : np * qd * 4l)
+            let fgbits = fixed_array(VHZ_Q, readbit, readbit, fa_lands_f16 ? VHZ_AQ : VHZ_ATT)
             g_rd.pf_sets[b + 5] = fa_stamp_set(L.pf_fakhr, fbufs, fsizes, fgbits)
         } else {
-            let abufs5 = fixed_array(g_rd.pf_q, g_rd.k_mirror, g_rd.v_mirror, g_rd.pf_attn)
-            let asizes5 = fixed_array(np * qrow * 4l, mirbytes, mirbytes, np * qd * 4l)
-            let agbits5 = fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT)
+            let abufs5 = fixed_array(g_rd.pf_q, kread, vread, g_rd.pf_attn)
+            let asizes5 = fixed_array(np * qrow * 4l, readbytes, readbytes, np * qd * 4l)
+            let agbits5 = fixed_array(VHZ_Q, readbit, readbit, VHZ_ATT)
             g_rd.pf_sets[b + 5] = (fa128l
-                ? (kv16 ? set_da_attn_b_h128_f16_cls(abufs5, asizes5, agbits5) : set_da_attn_b_h128_cls(abufs5, asizes5, agbits5))
+                ? (pf_reads_f16 ? set_da_attn_b_h128_f16_cls(abufs5, asizes5, agbits5) : set_da_attn_b_h128_cls(abufs5, asizes5, agbits5))
                 : (L.hs > 256l
-                    ? (kv16 ? set_da_attn_bw_f16_cls(abufs5, asizes5, agbits5) : set_da_attn_bw_cls(abufs5, asizes5, agbits5))
-                    : (kv16 ? set_da_attn_b_f16_cls(abufs5, asizes5, agbits5) : set_da_attn_b_cls(abufs5, asizes5, agbits5))))
+                    ? (pf_reads_f16 ? set_da_attn_bw_f16_cls(abufs5, asizes5, agbits5) : set_da_attn_bw_cls(abufs5, asizes5, agbits5))
+                    : (pf_reads_f16 ? set_da_attn_b_f16_cls(abufs5, asizes5, agbits5) : set_da_attn_b_cls(abufs5, asizes5, agbits5))))
         }
         // 6 quant_at: pf_attn -> pf_aq/pf_as (f16-fed: f16 convert -> pf_af)
         g_rd.pf_sets[b + 6] = (wo6
@@ -1037,7 +1074,7 @@ def private pf_head_decline(why : string) : bool {
 }
 
 //! the chain's head planes and sets, built once per residency behind the caller's `pf_head_ready` / `pf_head_declined` latches
-[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs")]
 def private pf_head_setup : bool {
     let np = g_rd.pf_np
     let dim = g_rd.dim
@@ -1076,10 +1113,15 @@ def private pf_head_setup : bool {
     let qrow = g_rd.q_gated ? 2l * g_rd.qd : g_rd.qd
     let kvd = g_rd.kv_dim
     let mirbytes = rd_mir_bytes()
-    let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, g_rd.k_mirror, g_rd.v_mirror, g_rd.head_pf_hcos, g_rd.has_bias ? g_rd.bias_dev : g_rd.norms_dev)
-    let rsizes = fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, mirbytes, mirbytes, np * g_rd.cos_elems * 4l, g_rd.has_bias ? g_rd.bias_bytes : normbytes)
-    let rgbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS, 0u)
-    g_rd.pf_sets[hb + 4] = (g_rd.kv16 ? set_rope_kv_b_f16_cls(rbufs, rsizes, rgbits) : set_rope_kv_b_cls(rbufs, rsizes, rgbits))
+    let kvq = rd_kv_block_codec()
+    let kstore = kvq ? g_rd.pf_kst : g_rd.k_mirror
+    let vstore = kvq ? g_rd.pf_vst : g_rd.v_mirror
+    let storebytes = kvq ? np * kvd * 4l : mirbytes
+    let storebit = kvq ? VHZ_VST : VHZ_MIR
+    let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, kstore, vstore, g_rd.head_pf_hcos, g_rd.has_bias ? g_rd.bias_dev : g_rd.norms_dev)
+    let rsizes = fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, storebytes, storebytes, np * g_rd.cos_elems * 4l, g_rd.has_bias ? g_rd.bias_bytes : normbytes)
+    let rgbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, storebit, storebit, VHZ_COS, 0u)
+    g_rd.pf_sets[hb + 4] = (rd_kv16() ? set_rope_kv_b_f16_cls(rbufs, rsizes, rgbits) : set_rope_kv_b_cls(rbufs, rsizes, rgbits))
     if (g_rd.qk_norm) {
         g_rd.pf_sets[hb + 15] = set_qk_rms_cls(fixed_array(g_rd.pf_q, g_rd.pf_kv, g_rd.norms_dev),
             fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, normbytes), fixed_array(VHZ_Q, VHZ_KVK, 0u))
@@ -1178,7 +1220,7 @@ def private pf_hc_head_warm(raw : VkCommandBuffer; var h : VkHaz; w0, wlen, pos0
     g_rd.pf_head_rows += nh
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs")]
 def private pf_head_kv_store(raw : VkCommandBuffer; var h : VkHaz; L : RLayer; nh, pos0 : int64; q6 : bool) {
     let dim = g_rd.dim
     let np = g_rd.pf_np
@@ -1214,18 +1256,22 @@ def private pf_head_kv_store(raw : VkCommandBuffer; var h : VkHaz; L : RLayer; n
         enc_qk_rms_cls(raw, h, g_rd.pf_sets[hb + 15], pcn, nh * (g_rd.n_heads + nkvh + vgroups))
     }
     let pairs = qd / 2 + int(kvd / 2l)
+    let kvq = rd_kv_block_codec()
+    let mirb = uint(rd_mir_base(L))
     var pcr = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(L.rot / 2l),
         neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2), ppp = uint(pairs),
-        layerbase = uint(rd_mir_base(L)), npos = uint(nh), pos0 = uint(pos0),
+        layerbase = kvq ? 0u : mirb, npos = uint(nh), pos0 = kvq ? 0u : uint(pos0),
         voff = voff, kstride = uint(kvd), qhs = uint(qhs),
         boff = uint(L.boff), hasb = g_rd.has_bias ? 1u : 0u,
         cstride = uint(g_rd.cos_elems), cbase = uint(L.cbase))
     let ropewg = (nh * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
-    if (g_rd.kv16) {
+    if (rd_kv16()) {
         enc_rope_kv_b_f16_cls(raw, h, g_rd.pf_sets[hb + 4], pcr, ropewg)
     } else {
         enc_rope_kv_b_cls(raw, h, g_rd.pf_sets[hb + 4], pcr, ropewg)
     }
+    // the warm attends nothing: no q head to rotate under tq4
+    rd_enc_kv_store(raw, h, g_rd.pf_kv_store_set, true, kvd, hs, nh, 0l, kvd / hs, mirb, uint(pos0), uint(g_rd.n_heads * int64(qhs)), uint(qhs))
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]
@@ -1578,7 +1624,7 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
     let ind = g_rd.ngram ? g_rd.ngram_ind : 0l
     assert(!g_rd.ngram || long_length(side) >= npos * ind, "vk prefill: the side rows are short of the prompt")
     let cos_elems = g_rd.cos_elems
-    let fa128s = !(cm2_fa_on() && vk_fa_on() && g_rd.kv16) && g_gpu.has_coopmat && vk_fa_on()
+    let fa128s = !(cm2_fa_on() && vk_fa_on() && rd_pf_reads_f16()) && g_gpu.has_coopmat && vk_fa_on()
     g_rd.pf_head_rows = 0l
     let bp = pf_prologue_block()
     let warm = (g_rd.pf_head_ask && g_rd.head_on && g_rd.carry_live && g_rd.hc_nextn
@@ -1709,6 +1755,7 @@ def vk_rdec_prefill_hc(x_batch : array<float>; cos_batch : array<float>; side : 
     pf_run_hc(x_batch, cos_batch, side, npos, pos0, logits, experts)
 }
 
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis")]
 def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : int; wlen, pos0w : int64; fa128s, feed_fused : bool) {
     let dim = g_rd.dim
     let np = g_rd.pf_np
@@ -1736,6 +1783,9 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
     let fqk = kq_sb(g_rd.layers[l].fq) && !fq6
     let fok = kq_sb(g_rd.layers[l].fo) && !fo6
     let mirb = uint(rd_mir_base(g_rd.layers[l]))
+    let kvtq4 = rd_kvtq4()
+    let kvq = rd_kv_block_codec()
+    let attn_kv_base = kvq ? 0u : mirb   // the rows the attention reads: the mirror's, or a block codec's shadow of this layer from 0
         if (!feed_fused) {
         if (fq6) {
             var pc0 = ActArgs(nelem = uint(wlen * dim), nblk = 0u)
@@ -1792,51 +1842,67 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
     }
     var pcr = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(g_rd.layers[l].rot / 2l),
         neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), ppp = uint(pairs),
-        layerbase = mirb, npos = uint(wlen), pos0 = uint(pos0w),
+        layerbase = kvq ? 0u : mirb, npos = uint(wlen), pos0 = kvq ? 0u : uint(pos0w),   // a block codec's store writes the window's staged rows from 0
         voff = voff, kstride = uint(kv_merged ? 2l * kvd : kvd), qhs = uint(qhs),
         boff = uint(g_rd.layers[l].boff), hasb = g_rd.has_bias ? 1u : 0u,
         cstride = uint(cos_elems), cbase = uint(g_rd.layers[l].cbase))
-    if (g_rd.kv16) {
+    if (rd_kv16()) {
         enc_rope_kv_b_f16_cls(raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
     } else {
         enc_rope_kv_b_cls(raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
     }
+    if (kvq) {
+        rd_enc_kv_store(raw, h, g_rd.pf_kv_store_set, true, kvd, hs, wlen, g_rd.n_heads, kvsh ? 0l : kvd / hs, mirb, uint(pos0w), uint(qrow), uint(qhs))
+        let kvlen = pos0w + wlen
+        let shadow_pos0 = window != 0u && pos0w > int64(window) ? ((pos0w - int64(window)) / 64l) * 64l : 0l   // a sliding layer's tiles start a 64-key step under its window
+        var pch = KvQShadowArgs(kvd = uint(kvd), pos0 = uint(shadow_pos0), rows = uint(kvlen - shadow_pos0), layerbase = mirb)
+        let shwg = (rd_kv_row_units(kvd) * (kvlen - shadow_pos0) + int64(WG_X) - 1l) / int64(WG_X)
+        if (kvtq4) {
+            enc_kv_tq4_shadow_cls(raw, h, g_rd.pf_kv_shadow_set, pch, shwg)
+        } else {
+            enc_kv_q8_shadow_cls(raw, h, g_rd.pf_kv_shadow_set, pch, shwg)
+        }
+    }
     pfq_ts(raw)
+    let fa_lands_f16 = pf_fa_lands_f16(fo6)
     if (g_rd.layers[l].pf_fa || g_rd.layers[l].pf_fakhr) {
         let khr = g_rd.layers[l].pf_fakhr
         var pcf = FaArgs(rows = uint(wlen), w0 = uint(pos0w), qd = uint(qd),
-            kvd = uint(kvd), kv_mul = kv_mul, kvbase = mirb,
+            kvd = uint(kvd), kv_mul = kv_mul, kvbase = attn_kv_base,
             scale = g_rd.scale, qstride = uint(qrow), qhs = uint(qhs), window = window, cap = g_rd.layers[l].attn_cap,
             sinkoff = uint(l * g_rd.n_heads))
-        fa_stamp_enc(khr, hs, hs == 256l && g_rd.q_gated, pcf.cap != 0.0, g_rd.has_sinks, fo6, raw, h, g_rd.pf_sets[b + 5], pcf,
+        fa_stamp_enc(khr, hs, hs == 256l && rd_attn_gated(), pcf.cap != 0.0, g_rd.has_sinks, fa_lands_f16, raw, h, g_rd.pf_sets[b + 5], pcf,
             fa_stamp_wgs(khr, g_rd.n_heads, wlen))
     } else {
         var pca = DaAttnBArgs(npos = uint(wlen), nh = uint(g_rd.n_heads), kvd = uint(kvd),
-            hs = uint(hs), kv_mul = kv_mul, kbase = mirb, vbase = mirb,
-            w0 = uint(pos0w), scale = g_rd.scale, qhs = uint(qhs), gated = g_rd.q_gated ? 1u : 0u, window = window,
+            hs = uint(hs), kv_mul = kv_mul, kbase = attn_kv_base, vbase = attn_kv_base,
+            w0 = uint(pos0w), scale = g_rd.scale, qhs = uint(qhs), gated = rd_attn_gated() ? 1u : 0u, window = window,
             cap = g_rd.layers[l].attn_cap)
         if (fa128) {
-            if (g_rd.kv16) {
+            if (rd_pf_reads_f16()) {
                 enc_da_attn_b_h128_f16_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
             } else {
                 enc_da_attn_b_h128_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
             }
         } elif (wide) {
-            if (g_rd.kv16) {
+            if (rd_pf_reads_f16()) {
                 enc_da_attn_bw_f16_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
             } else {
                 enc_da_attn_bw_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
             }
         } else {
-            if (g_rd.kv16) {
+            if (rd_pf_reads_f16()) {
                 enc_da_attn_b_f16_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
             } else {
                 enc_da_attn_b_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
             }
         }
     }
+    if (kvtq4) {
+        rd_enc_tq4_unrot(raw, h, g_rd.pf_unrot_set, hs, wlen, uint(qd), uint(qrow), uint(qhs))
+    }
     pfq_ts(raw)
-    let attn_landed_f16 = fo6 && (g_rd.layers[l].pf_fa || g_rd.layers[l].pf_fakhr)
+    let attn_landed_f16 = fa_lands_f16 && (g_rd.layers[l].pf_fa || g_rd.layers[l].pf_fakhr)
     if (fo6) {
         if (!attn_landed_f16) {
             var pc6 = ActArgs(nelem = uint(wlen * qd), nblk = 0u)
@@ -1904,7 +1970,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
     let dim = g_rd.dim
     let nlfin = rd_norm_final()
     let cos_elems = g_rd.cos_elems
-    let fa128s = !(cm2_fa_on() && vk_fa_on() && g_rd.kv16) && g_gpu.has_coopmat && vk_fa_on()   //! the h128 coopmat twin serves a 128-head layer where the cm2 tiles do not
+    let fa128s = !(cm2_fa_on() && vk_fa_on() && rd_pf_reads_f16()) && g_gpu.has_coopmat && vk_fa_on()   //! the h128 coopmat twin serves a 128-head layer where the cm2 tiles do not
     g_rd.pf_head_rows = 0l
     let warm = g_rd.pf_head_ask && g_rd.head_on && g_rd.carry_live && (g_rd.pf_head_ready || (!g_rd.pf_head_declined && pf_head_setup()))
     unsafe {

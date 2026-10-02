@@ -2556,22 +2556,29 @@ struct Session {
     mtp_snap : DnSnapshot   //! the rollback for a rejected verify batch, sized on the first snapshot (a 27B hybrid's state is 151 MB) and overwritten after
 }
 
-// Block-codec KV (q8_0/tq4) needs whole 32-blocks everywhere the cache is sliced: rows (kv_dim)
-// and head slots (head_size). Real GGUF targets pass (64/128/256); llama2.c stories15M (48) is
-// rejected by design. tq4 additionally rotates whole heads, so head_size must be a power of two.
-def private kv_validate_q8(c : Config; kdt, vdt : KVDtype) {
-    let tq4 = kdt == KVDtype.tq4 || vdt == KVDtype.tq4
-    if (kdt != KVDtype.q8_0 && vdt != KVDtype.q8_0 && !tq4) {
-        return
-    }
+//! Why a K/V cache in codec `dt` cannot hold the model's rows ("" where it can, a scalar codec always): a block codec is sliced
+//! in whole 32-blocks by row (kv_dim) and by head (head_size), and tq4 rotates whole heads, a power of two wide. Real GGUF
+//! targets pass (64/128/256); llama2.c stories15M (48) is rejected by design.
+def kv_codec_geometry_why(c : Config; dt : KVDtype) : string {
+    return "" if (!kv_block_codec(dt))
     for (l in range64(c.n_layers + c.n_layer_nextn)) {   // + the MTP/NextN block's KV slab
         let kvd = layer_kv_dim(c, l)
         let hs = layer_head_size(c, l)
         if (kvd % 32l != 0l || hs % 32l != 0l) {
-            panic("block-codec KV cache needs layer kv_dim and head_size to be multiples of 32 - layer {l} has kv_dim={kvd}, head_size={hs}")
+            return "block-codec KV cache needs layer kv_dim and head_size to be multiples of 32 - layer {l} has kv_dim={kvd}, head_size={hs}"
         }
-        if (tq4 && (hs & (hs - 1l)) != 0l) {
-            panic("tq4 KV cache needs a power-of-two head_size for the FWHT - layer {l} has head_size={hs}")
+        if (dt == KVDtype.tq4 && (hs & (hs - 1l)) != 0l) {
+            return "tq4 KV cache needs a power-of-two head_size for the FWHT - layer {l} has head_size={hs}"
+        }
+    }
+    return ""
+}
+
+def private kv_validate_q8(c : Config; kdt, vdt : KVDtype) {
+    for (dt in fixed_array(kdt, vdt)) {
+        let why = kv_codec_geometry_why(c, dt)
+        if (!empty(why)) {
+            panic(why)
         }
     }
 }
@@ -3255,27 +3262,8 @@ def private rope_batch_tab(var q_b : array<float>; var k_b : array<float>; cos_t
 }
 
 // ===== KV-cache codec seam =====
-// Coordinates stay DECOMPOSED (layer-base pointer, row index, sub-row offset), so a block codec
-// slots in as a kv_row_bytes case + its own kernel overloads, with zero call-site changes.
-
-//! Bytes per stored element (scalar codecs only; block codecs size via kv_row_bytes directly).
-def kv_elem_bytes(dt : KVDtype) : int64 => dt == KVDtype.f16 ? 2l : 4l
-
-//! A block codec stores whole 32-element blocks and addresses in bytes; the scalar codecs address in elements.
-def kv_block_codec(dt : KVDtype) : bool => dt == KVDtype.q8_0 || dt == KVDtype.tq4
-
-//! Head-slot offset in the side's own units (elements for scalar codecs, bytes for block codecs) — THE
-//! layout seam: q8_0 32-blocks of {f16 d; int8 qs[32]} = 34 B, tq4 32-blocks of {f16 d; uint8 qs[16]} =
-//! 18 B (elems % 32 == 0 by create). The _d wrappers prescale with it so the workers' walks stay unit-correct.
-def kv_side_off(dt : KVDtype; elems : int64) : int64 {
-    if (dt == KVDtype.q8_0) return elems / 32l * 34l
-    if (dt == KVDtype.tq4) return elems / 32l * 18l
-    return elems
-}
-
-//! Byte stride of one position row of width kv_dim under codec dt: the side offset of the whole
-//! row, in bytes for a block codec already, scaled by the element size for a scalar one.
-def kv_row_bytes(dt : KVDtype; kv_dim : int64) : int64 => kv_side_off(dt, kv_dim) * (kv_block_codec(dt) ? 1l : kv_elem_bytes(dt))
+// Coordinates stay DECOMPOSED (layer-base pointer, row index, sub-row offset), so a block codec slots in as a
+// kv_row_bytes case (`dasllama_kv_dtype.das`) + its own kernel overloads, with zero call-site changes.
 
 //! Layer l's slab base (BYTES) in the key cache; the byte analog of kv_cache_off, reading the
 //! LIVE seq_len so post-load seq_len caps keep working.
@@ -3818,6 +3806,26 @@ def tq4_unrotate_batch(var buf : array<float>; nrows, stride, head_size : int64;
         for (sg in range64(nrows * (stride / head_size))) {
             fwht_unsign_row(p + sg * head_size, signs, head_size)
         }
+    }
+}
+
+//! K and V rows a device pass attended in the model's basis, rotated into the basis a tq4 side of `s`'s cache stores
+def tq4_rotate_for_store(s : Session; var k, v : array<float>; nrows, kv_dim, head_size : int64) {
+    if (s.kv_dtype_k == KVDtype.tq4) {
+        tq4_rotate_batch(k, nrows, kv_dim, head_size, unsafe(addr<float const?>(s.kv_signs[0])))
+    }
+    if (s.kv_dtype_v == KVDtype.tq4) {
+        tq4_rotate_batch(v, nrows, kv_dim, head_size, unsafe(addr<float const?>(s.kv_signs[0])))
+    }
+}
+
+//! ... and rows a tq4 side of the cache dequantized, taken back into the model's basis for a device mirror of floats
+def tq4_unrotate_from_store(s : Session; var k, v : array<float>; nrows, kv_dim, head_size : int64) {
+    if (s.kv_dtype_k == KVDtype.tq4) {
+        tq4_unrotate_batch(k, nrows, kv_dim, head_size, unsafe(addr<float const?>(s.kv_signs[0])))
+    }
+    if (s.kv_dtype_v == KVDtype.tq4) {
+        tq4_unrotate_batch(v, nrows, kv_dim, head_size, unsafe(addr<float const?>(s.kv_signs[0])))
     }
 }
 

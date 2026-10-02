@@ -131,6 +131,9 @@ struct Args {
     @clarg_doc = "Weight quant mode (default: q8)"
     quant : QuantMode = QuantMode.q8
 
+    @clarg_doc = "K/V cache codec of the flat rows' sessions, and the codec the whole-model GPU driver's mirror is asked to arm at: f16 | q8_0 | tq4 | f32 (default: f16)"
+    kv : KVDtype = KVDtype.f16
+
     @clarg_doc = "A/B the dense GPU rail in-process: every row runs twice, dense routing OFF then ON. Needs DASLLAMA_GPU_DENSE=1 (uploads + marks); both arms share one process/residency, so cross-run pp drift cancels"
     dense_ab : bool
 
@@ -1602,7 +1605,12 @@ def main() : int {
                 }
             }
         }
+        set_gpu_kv_dtype(cfg.kv)   // the mirror arms at the rows' codec, or the rows pass to the CPU rails as a codec mismatch
         var t <- load_model_cached(mpath, cfg.quant)
+        if (gpu_device_sessions() > 0l && gpu_device_session_dtype() != cfg.kv) {
+            say(fmt, "REFUSED every row - --kv {cfg.kv} asked and the whole-model driver's mirror armed {gpu_device_session_dtype()} (the load log says why): the rows' sessions would run on the CPU rails under the device's stamp\n")
+            panic("lcpp_bench: the K/V codec --kv asked did not arm - see the REFUSED line")
+        }
         set_gpu_ctx_max(0l)   //! the pin served this load; the next model's row sets its own
         var sched_ctx = 0l   //! the batched row's context: the flat rows' session narrows `seq_len` to its own rows, the scheduler's streams need theirs back
         // the tg-real row continues REAL prompts, so its KV must cover the longest one + the window
@@ -1664,7 +1672,7 @@ def main() : int {
         if (cfg.prof) {
             dispatch_census(t, fmt)
         }
-        var s <- bench_session(t, flat_row_plen(plen, ngen, t.config.seq_len, real_row), ngen, KVDtype.f16, KVDtype.f16)   // the cap above already bounds t.config at the rows' size; nothing serves this model afterwards, so nothing restores it
+        var s <- bench_session(t, flat_row_plen(plen, ngen, t.config.seq_len, real_row), ngen, cfg.kv, cfg.kv)   // the cap above already bounds t.config at the rows' size; nothing serves this model afterwards, so nothing restores it
         var pp_off : array<double>
         pp_off |> resize(length(toks))
         for (arm in range(ab ? 2 : 1)) {
@@ -1699,7 +1707,7 @@ def main() : int {
                     var rep_gen = 0l
                     let passes0 = cpu_pass_total()
                     for (pi in range(length(toks))) {
-                        var rs <- make_run_state(c, KVDtype.f16, KVDtype.f16)
+                        var rs <- make_run_state(c, cfg.kv, cfg.kv)
                         let pl = long_length(toks[pi])
                         forward_prefill(t, rs, toks[pi], pl, 0l)
                         if (sp.temp > 0.0) {
@@ -1804,7 +1812,7 @@ def main() : int {
                     // untimed bucket window for THIS arm — the prefill lands BEFORE the reset, so
                     // the report is pure decode (or pure draft+verify on the on arm). Running it
                     // per arm is the point: the off/on bucket delta is what attributes the draft.
-                    var ps <- make_run_state(c, KVDtype.f16, KVDtype.f16)
+                    var ps <- make_run_state(c, cfg.kv, cfg.kv)
                     let pl0 = long_length(toks[0])
                     forward_prefill(t, ps, toks[0], pl0, 0l)
                     forward_profile_reset()
@@ -1888,7 +1896,7 @@ def main() : int {
                 }
                 for (rep in range(breps)) {
                     break if (!empty(refused))
-                    let br = bench_tg_batched_rep(t, npl, bplen, ngen, int64(rep), cfg.npl_mtp)
+                    let br = bench_tg_batched_rep(t, npl, bplen, ngen, int64(rep), cfg.npl_mtp, cfg.kv)
                     if (!empty(br.why)) {
                         refused = br.why
                         break
@@ -1900,7 +1908,7 @@ def main() : int {
                     static_if (typeinfo builtin_module_exists(das_metal)) {
                         metal_decode_stage_reset()
                     }
-                    let br = bench_tg_batched_rep(t, npl, bplen, ngen, int64(breps), cfg.npl_mtp)
+                    let br = bench_tg_batched_rep(t, npl, bplen, ngen, int64(breps), cfg.npl_mtp, cfg.kv)
                     if (empty(br.why)) {
                         say(fmt, "--- forward_profile: tg{ngen}@{npl}{dtag} (one rep at {br.tps:.1f} tok/s summed; the buckets sum {npl} streams' prefills and {ngen} steps) ---\n")
                         forward_profile_report()

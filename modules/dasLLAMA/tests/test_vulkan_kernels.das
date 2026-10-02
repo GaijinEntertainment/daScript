@@ -3473,25 +3473,25 @@ def private da_attn_shape_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit, nrows : i
         let kvd = (nheads / kv_mul) * hs
         let qdim = nheads * hs
         let scale = 0.125
-        let mir_elems = cnt * kvd
+        let mir_units = cnt * kvd
         var qh : array<float>
         var kh : array<float>
         var vh : array<float>
         qh |> resize(qdim * nrows)
-        kh |> resize(mir_elems * nrows)
-        vh |> resize(mir_elems * nrows)
+        kh |> resize(mir_units * nrows)
+        vh |> resize(mir_units * nrows)
         for (r in range(nrows)) {
             let rs = 1.0 + 0.5 * float(r)
             for (i in range(qdim)) {
                 qh[r * qdim + i] = (float(((i + r * 17) * 41) % 73) * 0.05 - 1.8) * rs
             }
-            for (i in range(mir_elems)) {
-                kh[r * mir_elems + i] = (float((i * 17) % 97) * 0.03 - 1.4) * rs
-                vh[r * mir_elems + i] = (float((i * 53) % 89) * 0.04 - 1.7) * rs
+            for (i in range(mir_units)) {
+                kh[r * mir_units + i] = (float((i * 17) % 97) * 0.03 - 1.4) * rs
+                vh[r * mir_units + i] = (float((i * 53) % 89) * 0.04 - 1.7) * rs
             }
         }
         let q_bytes = int64(qdim * nrows) * 4l
-        let m_bytes = int64(mir_elems) * int64(nrows) * 4l
+        let m_bytes = int64(mir_units) * int64(nrows) * 4l
         let tok_bytes = TOK_META_BYTES * int64(nrows)
         let rowwg = da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit))
         let rowgroups = int(da_attn_row_wgs(int64(nheads), int64(kv_mul), 1l))   //! the (kv head, slab) groups a row: a counter each
@@ -3519,7 +3519,7 @@ def private da_attn_shape_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit, nrows : i
                 tm[r].pos = uint(cnt - 1)
                 tm[r].cnt = uint(cnt)
                 tm[r].parity = 0u
-                tm[r].mirbase = uint(r * mir_elems)
+                tm[r].mirbase = uint(r * mir_units)
             }
             var sc = set_da_attn_cls(fixed_array(qd, kd, vd, yd, tokb.buf, partd, yd, yd),   //! unfolded: the quant bindings take the out rows (unwritten)
                 fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, tok_bytes, p_bytes, q_bytes, q_bytes),
@@ -3544,7 +3544,7 @@ def private da_attn_shape_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit, nrows : i
         y_ref |> resize(qdim * nrows)
         for (r in range(nrows)) {
             for (hh in range(nheads)) {
-                attn_row_oracle(qh, r * qdim + hh * hs, kh, r * mir_elems, vh, r * mir_elems, kvd, hh, hs, kv_mul, cnt, scale, y_ref, r * qdim + hh * hs)
+                attn_row_oracle(qh, r * qdim + hh * hs, kh, r * mir_units, vh, r * mir_units, kvd, hh, hs, kv_mul, cnt, scale, y_ref, r * qdim + hh * hs)
             }
         }
         let arm = "hs {hs} x {nheads} heads, {kv_mul} a kv head, {cnt} keys, {nsplit} split(s), {nrows} row(s){slab2 ? ", the two-head slab" : ""}"

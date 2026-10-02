@@ -28,9 +28,8 @@ require _compares public
 // (incl. gemma-4-E2B at 4.97GB) from the 7.7GB+ heavies.
 let LARGE_TIER_BYTES = 6ul * 1024ul * 1024ul * 1024ul
 
-//! The KV codec a session takes to be served by the armed mirror: f16, or f32 where DASLLAMA_VK_KV32
-//! arms f32 mirrors - a session on the other codec rides the CPU rails.
-def mirror_kv_dtype() : KVDtype => resident_mirror_dtype()
+//! The KV codec a session takes to be served by the mirror the last load armed - a session on another codec rides the CPU rails.
+def mirror_kv_dtype() : KVDtype => gpu_device_session_dtype_()
 
 let SUPPRESSED_LOGIT = -1.0e30   //! a pinned id's logit on both arms
 

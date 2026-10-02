@@ -1930,15 +1930,6 @@
    witness of the span rows against the causal rows, or a prompt whose top-1 the span moves on
    every backend.
 
-183. **`test_gpu_resident_hybrid_kq_q8out`'s one-window cell misses its bar on the RTX 5060 Ti.**
-   The mixed twin (Qwen3.5-0.8B-Q4_K_M-q8out: K-quant qkv/z, a Q8_0 out plane) at step 4 (fed
-   2212) reads `logits: resident within 0.7384794 of the CPU chain (maxdiff 0.9107542)` under
-   coopmat mode 4, the same figures on three runs and on the arc base 20981ff0b, while the pure
-   K-quant twin's cells and every other step pass; the bar was read on the pod. Done = the drift's
-   cause named (the o feed's Q8_0 requant rounding beside the x feed's f16 rows is the suspect, the
-   `_resident_regions` census witness the instrument) or the bar re-read on this box with the
-   one-step-off control still past it.
-
 184. **The fp16 tiles are unwritten.** The fp16 tiles of Granite Rapids (`amx-fp16`, probed,
    gating nothing) are a perm variant of the bf16 emitter with `TDPFP16PS` and an f16 panel - the
    same panel companions with an f16 convert in place of the bf16 one, an f16 activation widen,
