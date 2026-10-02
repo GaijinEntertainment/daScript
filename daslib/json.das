@@ -541,7 +541,63 @@ def private parse_value(var itv : iterator<TokenAt>; var error : string&) : Json
     return parse_value(itv, ahead, error)
 }
 
-def private parse_value(var itv : iterator<TokenAt>; var ahead : TokenAt; var error : string&) : JsonValue? {  // nolint:STYLE037,STYLE038 - recursive descent shares the token cursor and error path, one arm per JSON production
+def private parse_array_items(var itv : iterator<TokenAt>; var ahead : TokenAt; var arr : array<JsonValue?>; var error : string&) : bool {
+    //! parses the elements after `[` into `arr`; false sets `error`, and the caller frees what `arr` holds.
+    var element : TokenAt
+    while (next(itv, element)) {
+        if (empty(arr) && (element.value is _symbol) && (element.value as _symbol) == ']') return true
+        var value = parse_value(itv, element, error)
+        if (value == null) return false
+        push(arr, value)
+        if (!expect_token(itv, ahead, Token_symbol, error)) return false
+        let sepsym = ahead.value as _symbol
+        if (sepsym == ']') return true
+        if (sepsym != ',') {
+            error = "unexpected array separator symbol `{to_char(sepsym)}` aka ASCII {sepsym} at {ahead.line}:{ahead.row}"
+            return false
+        }
+    }
+    error = "unexpected eos"
+    return false
+}
+
+def private parse_object_items(var itv : iterator<TokenAt>; var ahead : TokenAt; var tab : table<string; JsonValue?>; var error : string&) : bool {
+    //! parses the key/value pairs after `{` into `tab`; false sets `error`, and the caller frees what `tab` holds.
+    while (!empty(itv)) {
+        if (!expect_token(itv, ahead, Token_string, error)) {
+            if ((ahead.value is _symbol) && (ahead.value as _symbol) == '}' && empty(tab)) {
+                error = ""
+                return true
+            }
+            return false
+        }
+        let key = ahead.value as _string
+        if (!expect_symbol(itv, ahead, ':', error)) return false
+        var value = parse_value(itv, error)
+        if (value == null) return false
+        if (!allow_duplicate_keys && key_exists(tab, key)) {
+            delete_json(value)
+            error = "duplicate key {key} at {ahead.line}:{ahead.row}"
+            return false
+        }
+        tab |> insert(key, value)
+        if (!expect_token(itv, ahead, Token_symbol, error)) return false
+        let sepsym = ahead.value as _symbol
+        if (sepsym == '}') {
+            break
+        } elif (sepsym != ',') {
+            error = "unexpected object separator symbol `{to_char(sepsym)}` aka ASCII {sepsym} at {ahead.line}:{ahead.row}"
+            return false
+        }
+    }
+    if (empty(itv)) {
+        error = "unexpected eos"
+        return false
+    }
+    return true
+}
+
+def private parse_value(var itv : iterator<TokenAt>; var ahead : TokenAt; var error : string&) : JsonValue? {
     //! parses a JSON value whose first token `ahead` has already been read.
     if (ahead.value is _symbol) {
         let sym = ahead.value as _symbol
@@ -551,60 +607,18 @@ def private parse_value(var itv : iterator<TokenAt>; var ahead : TokenAt; var er
         }
         if (sym == '[') {
             var arr : array<JsonValue?>
-            {
-            var element : TokenAt
-            while (next(itv, element)) {
-                if (empty(arr) && (element.value is _symbol) && (element.value as _symbol) == ']') return JV(arr)
-                var value = parse_value(itv, element, error)
-                if (value == null) return null
-                push(arr, value)
-                if (!expect_token(itv, ahead, Token_symbol, error)) return null
-                let sepsym = ahead.value as _symbol
-                if (sepsym == ']') return JV(arr)
-                if (sepsym != ',') {
-                    error = "unexpected array separator symbol `{to_char(sepsym)}` aka ASCII {sepsym} at {ahead.line}:{ahead.row}";
-                    return null;
-                }
+            if (parse_array_items(itv, ahead, arr, error)) return JV(arr)
+            unsafe {
+                delete arr
             }
-            error = "unexpected eos";
-            return null;
-            } finally { unsafe { delete arr } }
+            return null
         } elif (sym == '{') {
-            var tab : table<string; JsonValue?>;
-            {
-            while (!empty(itv)) {
-                if (!expect_token(itv, ahead, Token_string, error)) {
-                    if ((ahead.value is _symbol) && (ahead.value as _symbol) == '}' && empty(tab)) {
-                        error = "";
-                        return JV(tab);
-                    }
-                    return null;
-                }
-                let key = ahead.value as _string;
-                if (!expect_symbol(itv, ahead, ':', error)) return null;
-                var value = parse_value(itv, error);
-                if (value == null) return null;
-                if (!allow_duplicate_keys && key_exists(tab, key)) {
-                    delete_json(value)
-                    error = "duplicate key {key} at {ahead.line}:{ahead.row}";
-                    return null;
-                }
-                tab |> insert(key, value);
-                if (!expect_token(itv, ahead, Token_symbol, error)) return null;
-                let sepsym = ahead.value as _symbol;
-                if (sepsym == '}') {
-                    break;
-                } elif (sepsym != ',') {
-                    error = "unexpected object separator symbol `{to_char(sepsym)}` aka ASCII {sepsym} at {ahead.line}:{ahead.row}";
-                    return null;
-                }
+            var tab : table<string; JsonValue?>
+            if (parse_object_items(itv, ahead, tab, error)) return JV(tab)
+            unsafe {
+                delete tab
             }
-            if (empty(itv)) {
-                error = "unexpected eos";
-                return null;
-            }
-            return JV(tab);
-            } finally { unsafe { delete tab } }
+            return null
         } else {
             error = "unexpected symbol `{to_char(sym)}` aka ASCII {sym} at {ahead.line}:{ahead.row}";
             return null;
