@@ -862,16 +862,7 @@ def private vt_upload(var r : VtResident; key : uint64; qblob : PlaneI8; qscales
     }
     delete wq
     delete ws
-    var norms : array<float>
-    norms |> reserve_resize(rows_n + ones_n)
-    unsafe {
-        memcpy(addr<void?>(norms[0]), reinterpret<void?>(plane_at(blob, rows_off)), rows_n * 4l)
-    }
-    for (i in range64(rows_n, rows_n + ones_n)) {
-        norms[i] = 1.0
-    }
-    upload_region_at(r.norms_dev, 0l, unsafe(addr<uint8 const?>(norms[0])), r.norms_bytes)
-    delete norms
+    upload_float_ranges(r.norms_dev, [(p = plane_at(blob, rows_off), n = rows_n)], ones_n)
     r.cap_rows = 0l
     vt_unbind_batch_sets(r)
     return true
@@ -2317,13 +2308,6 @@ def private vt_aud_front_slab(var r : VtResident; t : AudioTower) : bool {
     var slab16 <- cvt_f32_to_f16_sat_array(slab)
     delete slab
     let rows = 2l * d + t.n_ctx * d
-    var rows_f : array<float>
-    rows_f |> reserve_resize(rows)
-    unsafe {
-        memcpy(addr<void?>(rows_f[0]), reinterpret<void?>(plane_at(t.fblob, t.conv1_b_off)), d * 4l)
-        memcpy(addr<void?>(rows_f[d]), reinterpret<void?>(plane_at(t.fblob, t.conv2_b_off)), d * 4l)
-        memcpy(addr<void?>(rows_f[2l * d]), reinterpret<void?>(plane_at(t.fblob, t.pos_off)), t.n_ctx * d * 4l)
-    }
     r.fw16_bytes = d * kdp * 2l
     r.fw16_dev = vt_dev_buf(r, r.fw16_bytes)
     r.fnorm_bytes = rows * 4l
@@ -2331,10 +2315,10 @@ def private vt_aud_front_slab(var r : VtResident; t : AudioTower) : bool {
     r.front = true
     if (!r.oom) {
         upload_region_at(r.fw16_dev, 0l, unsafe(addr<uint8 const?>(slab16[0])), r.fw16_bytes)
-        upload_region_at(r.fnorm_dev, 0l, unsafe(addr<uint8 const?>(rows_f[0])), r.fnorm_bytes)
+        upload_float_ranges(r.fnorm_dev, [(p = plane_at(t.fblob, t.conv1_b_off), n = d), (p = plane_at(t.fblob, t.conv2_b_off), n = d),
+                                          (p = plane_at(t.fblob, t.pos_off), n = t.n_ctx * d)])
     }
     delete slab16
-    delete rows_f
     return !r.oom
 }
 

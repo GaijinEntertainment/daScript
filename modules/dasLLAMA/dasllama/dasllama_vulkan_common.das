@@ -3820,6 +3820,31 @@ def cached(@scratch var tab : table<int; auto(TT)>; key : int; build : block<() 
     return tab[key]
 }
 
+//! float `ranges` (a source and its element count each) laid end to end with `ones_n` ones after them, staged into `dev`
+//! from its first byte in one upload
+def upload_float_ranges(dev : uint64; ranges : array<tuple<p : float const?; n : int64>>; ones_n : int64 = 0l) {
+    var total = ones_n
+    for (r in ranges) {
+        total += r.n
+    }
+    var rows : array<float>
+    rows |> reserve_resize(total)
+    var at = 0l
+    for (r in ranges) {
+        if (r.n > 0l) {
+            unsafe {
+                memcpy(addr<void?>(rows[at]), reinterpret<void?>(r.p), r.n * 4l)
+            }
+        }
+        at += r.n
+    }
+    for (i in range64(at, total)) {
+        rows[i] = 1.0
+    }
+    upload_region_at(dev, 0l, unsafe(addr<uint8 const?>(rows[0])), total * 4l)
+    delete rows
+}
+
 //! batch GEMM schedule record `rid` = [wblk0, row0, rows, 0] at word 4 rid and its map of `groups` words at the cursor;
 //! returns the map's word offset and advances the cursor
 def batch_sched_map(var mp : uint?; var cur : int64&; rid : int64; wblk0, rows, groups : int64; row0 : int64 = 0l) : uint {

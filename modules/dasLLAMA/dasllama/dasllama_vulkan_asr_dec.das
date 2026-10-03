@@ -419,17 +419,10 @@ def private wd_upload_norms(w : WhisperModel) {
     r.final_ln_b_off = rows_n + d
     r.norms_bytes = (rows_n + 2l * d) * 4l
     r.norms_dev = wd_dev_buf(r.norms_bytes)
-    var norms : array<float>
-    norms |> reserve_resize(rows_n + 2l * d)
-    unsafe {
-        memcpy(addr<void?>(norms[0]), reinterpret<void?>(plane_at(w.dblob, w.dlayers_off)), rows_n * 4l)
-        memcpy(addr<void?>(norms[rows_n]), reinterpret<void?>(plane_at(w.dblob, w.d_ln_w_off)), d * 4l)
-        memcpy(addr<void?>(norms[rows_n + d]), reinterpret<void?>(plane_at(w.dblob, w.d_ln_b_off)), d * 4l)
-    }
     if (!r.oom) {
-        upload_region_at(r.norms_dev, 0l, unsafe(addr<uint8 const?>(norms[0])), r.norms_bytes)
+        upload_float_ranges(r.norms_dev, [(p = plane_at(w.dblob, w.dlayers_off), n = rows_n), (p = plane_at(w.dblob, w.d_ln_w_off), n = d),
+                                          (p = plane_at(w.dblob, w.d_ln_b_off), n = d)])
     }
-    delete norms
 }
 
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-asr-decoder")]
