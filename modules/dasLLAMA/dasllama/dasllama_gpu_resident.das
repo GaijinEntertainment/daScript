@@ -655,13 +655,26 @@ def private rdec_verify_rows_want(t : Model) : int64 => (resident_head_on(t) && 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
 def private resident_host_experts(c : Config) : bool => c.hyper_conn && c.n_expert > 0l && rdec_hc_installed()
 
+//! one mixer site's q8 pair: down [lr x hc_dim] and up [hc_dim x lr]
+def private push_hc_mixer_planes(c : Config; var planes : array<tuple<n : int64; rows : int64; f : KqFmt>>) {
+    planes |> push((n = hc_dim(c), rows = c.hc_low_rank, f = KqFmt.q8))
+    planes |> push((n = c.hc_low_rank, rows = hc_dim(c), f = KqFmt.q8))
+}
+
+//! one mixer site's q8 pair placed in the arena, `down_off` [lr x hc_dim] and `up_off` [hc_dim x lr]; `ok` false when a placement failed
+def private resident_place_hc_mixer(t : Model; down_off, up_off : int64; mr, kg, wb : int64) : tuple<bd : int64; bu : int64; ok : bool> {
+    let hcd = hc_dim(t.config)
+    let lr = t.config.hc_low_rank
+    let bd = resident_place(t, KqFmt.q8, down_off, hcd, lr, mr, kg, wb)
+    let bu = resident_place(t, KqFmt.q8, up_off, lr, hcd, mr, kg, wb)
+    return (bd = bd, bu = bu, ok = bd >= 0l && bu >= 0l)
+}
+
 //! a hyper-connection layer's planes: two mixer sites' q8 down [lr x hc_dim] and up [hc_dim x lr]; the side input's layer adds key [hc_dim x ind] and value [dim x ind]
 def private resident_hc_layer_planes(c : Config; l : int64; var planes : array<tuple<n : int64; rows : int64; f : KqFmt>>) {
     planes |> reserve(length(planes) + 6)
-    for (_s in range(2)) {
-        planes |> push((n = hc_dim(c), rows = c.hc_low_rank, f = KqFmt.q8))
-        planes |> push((n = c.hc_low_rank, rows = hc_dim(c), f = KqFmt.q8))
-    }
+    push_hc_mixer_planes(c, planes)
+    push_hc_mixer_planes(c, planes)
     if (has_ple_ngram(c) && l == c.ple_layer) {
         planes |> push((n = ple_in_dim(c), rows = hc_dim(c), f = KqFmt.q8))
         planes |> push((n = ple_in_dim(c), rows = c.dim, f = KqFmt.q8))
@@ -725,8 +738,7 @@ def private resident_planes(t : Model; dng : RdecDnGeom; ple_tbl : bool; host_la
     }
     planes |> push((n = dim, rows = c.vocab_size, f = cls_fmt))
     if (c.hyper_conn) {   //! the head mixer's pair
-        planes |> push((n = hc_dim(c), rows = c.hc_low_rank, f = KqFmt.q8))
-        planes |> push((n = c.hc_low_rank, rows = hc_dim(c), f = KqFmt.q8))
+        push_hc_mixer_planes(c, planes)
     }
     if (ple_tbl) {
         planes |> push((n = c.n_layers * c.n_embd_per_layer, rows = c.vocab_size, f = KqFmt.q8))
@@ -747,8 +759,7 @@ def private resident_head_plan_planes(t : Model; var planes : array<tuple<n : in
     }
     if (c.hyper_conn) {
         resident_hc_layer_planes(c, c.n_layers, planes)
-        planes |> push((n = hc_dim(c), rows = c.hc_low_rank, f = KqFmt.q8))
-        planes |> push((n = c.hc_low_rank, rows = hc_dim(c), f = KqFmt.q8))
+        push_hc_mixer_planes(c, planes)
     }
 }
 
@@ -1360,25 +1371,21 @@ def private resident_upload_hc(t : Model; nextn : bool; mr, kg, wb : int64) : st
     down_blks |> reserve(n_sites)
     up_blks |> reserve(n_sites)
     for (site in range64(n_sites)) {
-        let bd = resident_place(t, KqFmt.q8, t.hc_down_offs[site], hcd, lr, mr, kg, wb)
-        let bu = resident_place(t, KqFmt.q8, t.hc_up_offs[site], lr, hcd, mr, kg, wb)
-        if (bd < 0l || bu < 0l) return "arena placement failed at mixer site {site} (the hyper-connection planes)"
-        down_blks |> push(bd)
-        up_blks |> push(bu)
+        let b = resident_place_hc_mixer(t, t.hc_down_offs[site], t.hc_up_offs[site], mr, kg, wb)
+        if (!b.ok) return "arena placement failed at mixer site {site} (the hyper-connection planes)"
+        down_blks |> push(b.bd)
+        up_blks |> push(b.bu)
     }
-    let bhd = resident_place(t, KqFmt.q8, t.hc_head_down_off, hcd, lr, mr, kg, wb)
-    let bhu = resident_place(t, KqFmt.q8, t.hc_head_up_off, lr, hcd, mr, kg, wb)
-    if (bhd < 0l || bhu < 0l) return "arena placement failed at the head mixer (the hyper-connection planes)"
+    let bh = resident_place_hc_mixer(t, t.hc_head_down_off, t.hc_head_up_off, mr, kg, wb)
+    if (!bh.ok) return "arena placement failed at the head mixer (the hyper-connection planes)"
     let mtp_norm <- fblob_rows(t, t.mtp_hc_head_norm_off, nextn ? hcd : 0l)
     let hnorm_rows <- fblob_rows(t, t.mtp_hnorm_off, nextn ? hcd : 0l)
-    var bmd = -1l
-    var bmu = -1l
+    var bm = (bd = -1l, bu = -1l, ok = true)
     if (nextn) {
-        bmd = resident_place(t, KqFmt.q8, t.mtp_hc_head_down_off, hcd, lr, mr, kg, wb)
-        bmu = resident_place(t, KqFmt.q8, t.mtp_hc_head_up_off, lr, hcd, mr, kg, wb)
-        if (bmd < 0l || bmu < 0l) return "arena placement failed at the NextN head's head mixer (the hyper-connection planes)"
+        bm = resident_place_hc_mixer(t, t.mtp_hc_head_down_off, t.mtp_hc_head_up_off, mr, kg, wb)
+        if (!bm.ok) return "arena placement failed at the NextN head's head mixer (the hyper-connection planes)"
     }
-    if (!rdec_set_hc(hc, lr, n_sites, norm_rows, inject_rows, down_blks, up_blks, head_norm, bhd, bhu, mtp_norm, bmd, bmu, hnorm_rows)) {
+    if (!rdec_set_hc(hc, lr, n_sites, norm_rows, inject_rows, down_blks, up_blks, head_norm, bh.bd, bh.bu, mtp_norm, bm.bd, bm.bu, hnorm_rows)) {
         return "the hyper-connection seats declined (the tier's line above)"
     }
     if (has_ple_ngram(c)) {
