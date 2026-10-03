@@ -4204,23 +4204,25 @@ def private fa_stamp_refuse(khr : bool; hs : int64; gated, cap, sink, f16, bidir
     }
 }
 
-def private fa_sink_ensure(khr, f16 : bool) : bool
-    => khr ? (f16 ? ensure_fa_khr_h64_sink_f16_cls() : ensure_fa_khr_h64_sink_cls()) : (f16 ? ensure_fa_cm2_h64_sink_f16_cls() : ensure_fa_cm2_h64_sink_cls())
+//! every flash stamp's stem, four a form - cm2 f32, KHR f32, cm2 f16, KHR f16 - over the forms h64, h128, h256, h512, gated h256,
+//! capped h256, the h64 sink and the h64 and h128 bidirectional twins; `-` where a form has no such stamp
+let private FA_STAMPS = "fa_cm2_h64 fa_khr_h64 fa_cm2_h64_f16 fa_khr_h64_f16 fa_cm2_h128 fa_khr_h128 fa_cm2_h128_f16 fa_khr_h128_f16 fa_cm2_h256 fa_khr_h256 fa_cm2_h256_f16 fa_khr_h256_f16 fa_cm2_h512 fa_khr_h512 fa_cm2_h512_f16 fa_khr_h512_f16 fa_cm2_h256_g - fa_cm2_h256_g_f16 - fa_cm2_h256_cap fa_khr_h256_cap fa_cm2_h256_cap_f16 fa_khr_h256_cap_f16 fa_cm2_h64_sink fa_khr_h64_sink fa_cm2_h64_sink_f16 fa_khr_h64_sink_f16 fa_cm2_h64_bidir fa_khr_h64_bidir - - fa_cm2_h128_bidir fa_khr_h128_bidir - -"
+
+//! the flash stamp's ordinal in FA_STAMPS, once the refusals passed
+def private fa_stamp_key(khr : bool; hs : int64; gated, cap, sink, f16, bidir : bool) : int {
+    fa_stamp_refuse(khr, hs, gated, cap, sink, f16, bidir)
+    let form = bidir ? (hs == 64l ? 7 : 8) : (sink ? 6 : (hs == 64l ? 0 : (hs == 128l ? 1 : (hs == 512l ? 3 : (gated ? 4 : (cap ? 5 : 2))))))
+    return form * 4 + (f16 ? 2 : 0) + (khr ? 1 : 0)
+}
 
 //! `bidir` picks the vision towers' bidirectional twins (h64 and h128, f32 output, no gate, cap or sink)
-def fa_stamp_ensure(khr : bool; hs : int64; gated, cap, sink, f16 : bool; bidir : bool = false) : bool {   // nolint:STYLE037 — one pick over every flash stamp; a split per arm is the twin ladder this replaces
-    fa_stamp_refuse(khr, hs, gated, cap, sink, f16, bidir)
-    if (bidir) {
-        if (hs == 64l) return khr ? ensure_fa_khr_h64_bidir_cls() : ensure_fa_cm2_h64_bidir_cls()
-        return khr ? ensure_fa_khr_h128_bidir_cls() : ensure_fa_cm2_h128_bidir_cls()
+def fa_stamp_ensure(khr : bool; hs : int64; gated, cap, sink, f16 : bool; bidir : bool = false) : bool {   // nolint:STYLE037 — stamp_ladder's generated arms, one a flash stamp
+    let key = fa_stamp_key(khr, hs, gated, cap, sink, f16, bidir)
+    var r = false
+    stamp_ladder(key, FA_STAMPS) <| $() {
+        r = stamp_ensure_cls()
     }
-    if (sink) return fa_sink_ensure(khr, f16)
-    if (hs == 64l) return khr ? (f16 ? ensure_fa_khr_h64_f16_cls() : ensure_fa_khr_h64_cls()) : (f16 ? ensure_fa_cm2_h64_f16_cls() : ensure_fa_cm2_h64_cls())
-    if (hs == 128l) return khr ? (f16 ? ensure_fa_khr_h128_f16_cls() : ensure_fa_khr_h128_cls()) : (f16 ? ensure_fa_cm2_h128_f16_cls() : ensure_fa_cm2_h128_cls())
-    if (hs == 512l) return khr ? (f16 ? ensure_fa_khr_h512_f16_cls() : ensure_fa_khr_h512_cls()) : (f16 ? ensure_fa_cm2_h512_f16_cls() : ensure_fa_cm2_h512_cls())
-    if (gated) return f16 ? ensure_fa_cm2_h256_g_f16_cls() : ensure_fa_cm2_h256_g_cls()
-    if (cap) return khr ? (f16 ? ensure_fa_khr_h256_cap_f16_cls() : ensure_fa_khr_h256_cap_cls()) : (f16 ? ensure_fa_cm2_h256_cap_f16_cls() : ensure_fa_cm2_h256_cap_cls())
-    return khr ? (f16 ? ensure_fa_khr_h256_f16_cls() : ensure_fa_khr_h256_cls()) : (f16 ? ensure_fa_cm2_h256_f16_cls() : ensure_fa_cm2_h256_cls())
+    return r
 }
 
 def fa_stamp_pair_ensure(khr : bool; hs : int64; gated, cap, sink, with_f16 : bool) : bool
@@ -4233,60 +4235,10 @@ def fa_stamp_set(khr : bool; bufs : uint64 const[4]; sizes : int64 const[4]; gbi
 def fa_stamp_sink_set(khr : bool; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet
     => khr ? set_fa_khr_sink_cls(bufs, sizes, gbits) : set_fa_cm2_sink_cls(bufs, sizes, gbits)
 
-def private fa_sink_enc(khr, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaArgs; wgs : int64) {
-    if (khr) {
-        if (f16) { enc_fa_khr_h64_sink_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_khr_h64_sink_cls(raw, h, s, pc, wgs) }
-    } else {
-        if (f16) { enc_fa_cm2_h64_sink_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h64_sink_cls(raw, h, s, pc, wgs) }
-    }
-}
-
-def private fa_bidir_enc(khr : bool; hs : int64; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaArgs; wgs : int64) {
-    if (khr) {
-        if (hs == 64l) { enc_fa_khr_h64_bidir_cls(raw, h, s, pc, wgs) } else { enc_fa_khr_h128_bidir_cls(raw, h, s, pc, wgs) }
-    } else {
-        if (hs == 64l) { enc_fa_cm2_h64_bidir_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h128_bidir_cls(raw, h, s, pc, wgs) }
-    }
-}
-
-def fa_stamp_enc(khr : bool; hs : int64; gated, cap, sink, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaArgs; wgs : int64; bidir : bool = false) {   // nolint:STYLE037 — one pick over every flash stamp; a split per arm is the twin ladder this replaces
-    fa_stamp_refuse(khr, hs, gated, cap, sink, f16, bidir)
-    if (bidir) {
-        fa_bidir_enc(khr, hs, raw, h, s, pc, wgs)
-    } elif (sink) {
-        fa_sink_enc(khr, f16, raw, h, s, pc, wgs)
-    } elif (hs == 64l) {
-        if (khr) {
-            if (f16) { enc_fa_khr_h64_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_khr_h64_cls(raw, h, s, pc, wgs) }
-        } else {
-            if (f16) { enc_fa_cm2_h64_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h64_cls(raw, h, s, pc, wgs) }
-        }
-    } elif (hs == 128l) {
-        if (khr) {
-            if (f16) { enc_fa_khr_h128_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_khr_h128_cls(raw, h, s, pc, wgs) }
-        } else {
-            if (f16) { enc_fa_cm2_h128_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h128_cls(raw, h, s, pc, wgs) }
-        }
-    } elif (hs == 512l) {
-        if (khr) {
-            if (f16) { enc_fa_khr_h512_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_khr_h512_cls(raw, h, s, pc, wgs) }
-        } else {
-            if (f16) { enc_fa_cm2_h512_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h512_cls(raw, h, s, pc, wgs) }
-        }
-    } else {
-        if (gated) {
-            if (f16) { enc_fa_cm2_h256_g_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h256_g_cls(raw, h, s, pc, wgs) }
-        } elif (cap) {
-            if (khr) {
-                if (f16) { enc_fa_khr_h256_cap_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_khr_h256_cap_cls(raw, h, s, pc, wgs) }
-            } else {
-                if (f16) { enc_fa_cm2_h256_cap_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h256_cap_cls(raw, h, s, pc, wgs) }
-            }
-        } elif (khr) {
-            if (f16) { enc_fa_khr_h256_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_khr_h256_cls(raw, h, s, pc, wgs) }
-        } else {
-            if (f16) { enc_fa_cm2_h256_f16_cls(raw, h, s, pc, wgs) } else { enc_fa_cm2_h256_cls(raw, h, s, pc, wgs) }
-        }
+def fa_stamp_enc(khr : bool; hs : int64; gated, cap, sink, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : FaArgs; wgs : int64; bidir : bool = false) {   // nolint:STYLE037 — stamp_ladder's generated arms, one a flash stamp
+    let key = fa_stamp_key(khr, hs, gated, cap, sink, f16, bidir)
+    stamp_ladder(key, FA_STAMPS) <| $() {
+        stamp_enc_cls(raw, h, s, pc, wgs)
     }
 }
 
