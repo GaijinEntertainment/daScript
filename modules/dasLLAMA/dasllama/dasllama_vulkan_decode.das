@@ -1836,41 +1836,24 @@ def vk_rdec_token_split(x : array<float>; cossin : array<float>; side : array<fl
         }
         rd_tok_row(pos, cnt)
         let t1 = ref_time_ticks()
-        var host_us = 0l
-        for (seg in range64(g_rd.nseg - 1l)) {
-            var cmd = g_rd.cmd_seg[seg0 + seg]
-            submit_wait(cmd)
-            let th = ref_time_ticks()
-            invoke(experts, g_rd.seg_layer[seg], reinterpret<float const?>(g_rd.hx_host.mapped), reinterpret<float const?>(g_rd.hlog_host.mapped), reinterpret<float?>(g_rd.hacc_host.mapped))
-            host_us += int64(get_time_usec(th))
+        let host_us = rd_run_host_segments(g_rd.cmd_seg, seg0) $(l : int64) {
+            invoke(experts, l, reinterpret<float const?>(g_rd.hx_host.mapped), reinterpret<float const?>(g_rd.hlog_host.mapped), reinterpret<float?>(g_rd.hacc_host.mapped))
         }
         var last = g_rd.cmd_seg[seg0 + g_rd.nseg - 1l]
-        let t2 = ref_time_ticks()
-        rd_submit_land(last, 1l, picks_only)
-        rd_wait_land()
-        let t3 = ref_time_ticks()
+        let t = rd_submit_wait(last, 1l, picks_only, prof)
         picked = rd_land_one(pick_only, logits)
         if (prof) {
-            rdq_host_add(g_rdq_token_ledger, ts0, t1, t2, t3, ref_time_ticks())
+            rdq_host_add(g_rdq_token_ledger, ts0, t1, t.t1, t.t3, ref_time_ticks())
             g_rdq_token_ledger.host_experts_us += double(host_us)
         }
     }
-    g_rd.tokens_served++
-    if (guard) {
-        rd_logits_guard(unsafe(reinterpret<float const?>(g_rd.logits_host.mapped)), g_rd.vocab)
-    }
-    if (g_rd.tokens_served == 8l) {
-        rd_warmup_check(int64(get_time_usec(ts0)))
-    }
+    rd_token_close(ts0, guard)
     if (prof) {
         g_rdq_token_ledger.wall_us += double(get_time_usec(ts0))
         g_rdq_token_ledger.count++
         if (g_rdq_token_ledger.count % 32l == 0l) {
             rdq_host_report(g_rdq_token_ledger, "token", 1l)
         }
-    }
-    if (g_rd.hybrid) {
-        rd_dn_advance_parity(g_rd.region)
     }
     return picked
 }
@@ -3098,7 +3081,6 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
     if (unsplit) {
         g_rd.unsplit_served++
     }
-    var picked = -1l
     let guard = rd_guard_step(g_rd.tokens_served)
     let picks_only = pick_only && !guard
     unsafe {
@@ -3108,38 +3090,19 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
             assert(long_length(ple_row) >= g_rd.n_layers * g_rd.ple, "vk_rdec_token: the per-layer-embedding row is short")
             memcpy(g_rd.ple_host.mapped, addr<void?>(ple_row[0]), g_rd.n_layers * g_rd.ple * 4l)
         }
-        rd_tok_row(pos, cnt)
-        if (prof) {   //! the profiled form splits the wall into its pieces; the served form is one call
-            let t1 = ref_time_ticks()
-            rd_submit_land(cmd, 1l, picks_only)
-            let t2 = ref_time_ticks()
-            rd_wait_land()
-            let t3 = ref_time_ticks()
-            picked = rd_land_one(pick_only, logits)
-            rdq_host_add(g_rdq_token_ledger, ts0, t1, t2, t3, ref_time_ticks())
-        } else {
-            rd_submit_land(cmd, 1l, picks_only)
-            rd_wait_land()
-            picked = rd_land_one(pick_only, logits)
-        }
     }
-    g_rd.tokens_served++
-    if (guard) {
-        rd_logits_guard(unsafe(reinterpret<float const?>(g_rd.logits_host.mapped)), g_rd.vocab)
-    }
-    if (g_rd.tokens_served == 8l) {
-        rd_warmup_check(int64(get_time_usec(ts0)))
-    }
+    rd_tok_row(pos, cnt)
+    let t = rd_submit_wait(cmd, 1l, picks_only, prof)
+    let picked = rd_land_one(pick_only, logits)
     if (prof) {
+        rdq_host_add(g_rdq_token_ledger, ts0, t.t1, t.t2, t.t3, ref_time_ticks())
+    }
+    rd_token_close(ts0, guard)
+    if (prof) {   // the ledger reads the submitted form's stamps: a run crossing a form edge, or arriving from the N-row command, restarts its averages
         g_rdq_token_ledger.wall_us += double(get_time_usec(ts0))
         if (g_rdq_token_ledger.count % 32l == 31l) {
             rdq_host_report(g_rdq_token_ledger, "token", 1l)
         }
-    }
-    if (g_rd.hybrid) {
-        rd_dn_advance_parity(g_rd.region)
-    }
-    if (prof) {   // the ledger reads the submitted form's stamps: a run crossing a form edge, or arriving from the N-row command, restarts its averages
         if (g_rdq_token_ledger.count > 0l && (form != g_rdq_attn_form || g_rdq_form_n)) {
             rdq_form_switch(form, pos)
         }
@@ -3666,6 +3629,40 @@ def private rd_verify_close(n : int64; guard : bool) {
     }
 }
 
+def private rd_token_close(ts0 : int64; guard : bool) {
+    g_rd.tokens_served++
+    if (guard) {
+        rd_logits_guard(unsafe(reinterpret<float const?>(g_rd.logits_host.mapped)), g_rd.vocab)
+    }
+    if (g_rd.tokens_served == 8l) {
+        rd_warmup_check(int64(get_time_usec(ts0)))
+    }
+    if (g_rd.hybrid) {
+        rd_dn_advance_parity(g_rd.region)
+    }
+}
+
+def private rd_submit_wait(var cmd : VkCommandBuffer; n : int64; picks_only, prof : bool) : tuple<t1 : int64; t2 : int64; t3 : int64> {
+    let t1 = prof ? ref_time_ticks() : 0l
+    rd_submit_land(cmd, n, picks_only)
+    let t2 = prof ? ref_time_ticks() : 0l
+    rd_wait_land()
+    let t3 = prof ? ref_time_ticks() : 0l
+    return (t1 = t1, t2 = t2, t3 = t3)
+}
+
+def private rd_run_host_segments(var cmds : array<VkCommandBuffer>; seg0 : int64; host : block<(l : int64) : void>) : int64 {
+    var host_us = 0l
+    for (seg in range64(g_rd.nseg - 1l)) {
+        var cmd = cmds[seg0 + seg]
+        submit_wait(cmd)
+        let th = ref_time_ticks()
+        invoke(host, g_rd.seg_layer[seg])
+        host_us += int64(get_time_usec(th))
+    }
+    return host_us
+}
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]   //! per speculative round, reached through the tier's registered seat
 def private rd_hc_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool {
     if (g_rd.v_rail == NRail.unasked) {
@@ -3694,7 +3691,6 @@ def private rd_hc_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n 
     g_rd_verify_landed_logits = !picks_only
     let prof = vk_prof()
     let ts0 = ref_time_ticks()
-    var host_us = 0l
     rd_verify_stage(x, cossin, hcos, pos, n)
     unsafe {
         memcpy(g_rd.hemb_host.mapped, addr<void?>(hemb[0]), dim * 4l * n)
@@ -3703,21 +3699,14 @@ def private rd_hc_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n 
             memcpy(g_rd.ple_emb_host.mapped, addr<void?>(side[0]), g_rd.ngram_ind * 4l * n)
         }
         let t1 = ref_time_ticks()
-        for (seg in range64(g_rd.nseg - 1l)) {
-            var cmd = g_rd.hc_v_seg[seg0 + seg]
-            submit_wait(cmd)
-            let th = ref_time_ticks()
-            invoke(experts, g_rd.seg_layer[seg], reinterpret<float const?>(g_rd.hx_host.mapped), reinterpret<float const?>(g_rd.hlog_host.mapped), reinterpret<float?>(g_rd.hacc_host.mapped), 0l, n)
-            host_us += int64(get_time_usec(th))
+        let host_us = rd_run_host_segments(g_rd.hc_v_seg, seg0) $(l : int64) {
+            invoke(experts, l, reinterpret<float const?>(g_rd.hx_host.mapped), reinterpret<float const?>(g_rd.hlog_host.mapped), reinterpret<float?>(g_rd.hacc_host.mapped), 0l, n)
         }
         var last = g_rd.hc_v_seg[seg0 + g_rd.nseg - 1l]
-        let t2 = ref_time_ticks()
-        rd_submit_land(last, n, picks_only)
-        rd_wait_land()
-        let t3 = ref_time_ticks()
+        let t = rd_submit_wait(last, n, picks_only, prof)
         rd_verify_land(n, hcd, picks_only, logits, picks, hid)
         if (prof) {
-            rdq_host_add(g_rdq_verify_ledger, ts0, t1, t2, t3, ref_time_ticks())
+            rdq_host_add(g_rdq_verify_ledger, ts0, t1, t.t1, t.t3, ref_time_ticks())
             g_rdq_verify_ledger.host_experts_us += double(host_us)
         }
     }
@@ -3752,9 +3741,6 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int6
     g_rd_verify_landed_logits = !picks_only
     let prof = vk_prof()
     let ts0 = ref_time_ticks()
-    var t1 = ts0
-    var t2 = ts0
-    var t3 = ts0
     rd_verify_stage(x, cossin, hcos, pos, n)
     unsafe {
         let cat = reinterpret<uint8?>(g_rd.head_cat_host.mapped)
@@ -3762,21 +3748,12 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int6
             memcpy(reinterpret<void?>(cat + 2l * i * dim * 4l), addr<void?>(hemb[i * dim]), dim * 4l)
         }
         memcpy(reinterpret<void?>(cat + dim * 4l), addr<void?>(h0[0]), dim * 4l)
-        var cmd = unsplit ? g_rd.v_cmd_unsplit[vi] : g_rd.v_cmd[vi]
-        if (prof) {
-            t1 = ref_time_ticks()
-            rd_submit_land(cmd, n, picks_only)
-            t2 = ref_time_ticks()
-            rd_wait_land()
-            t3 = ref_time_ticks()
-        } else {
-            rd_submit_land(cmd, n, picks_only)
-            rd_wait_land()
-        }
     }
+    var cmd = unsplit ? g_rd.v_cmd_unsplit[vi] : g_rd.v_cmd[vi]
+    let t = rd_submit_wait(cmd, n, picks_only, prof)
     rd_verify_land(n, dim, picks_only, logits, picks, hid)
     if (prof) {
-        rdq_host_add(g_rdq_verify_ledger, ts0, t1, t2, t3, ref_time_ticks())
+        rdq_host_add(g_rdq_verify_ledger, ts0, t.t1, t.t2, t.t3, ref_time_ticks())
     }
     if (unsplit) {
         g_rd.unsplit_served += n
@@ -3890,18 +3867,10 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>;
                 mirbase = uint(regs[i] * g_rd.mir_units), dnslot = uint(regs[i]))
         }
         var cmd = unsplit ? g_rd.cmd_n_unsplit[nrows] : g_rd.cmd_n[nrows]
-        if (prof) {   // the profiled form splits the wall into its pieces, as the one-row submit does
-            let t1 = ref_time_ticks()
-            rd_submit_land(cmd, nrows, all_pick)
-            let t2 = ref_time_ticks()
-            rd_wait_land()
-            let t3 = ref_time_ticks()
-            rd_land_rows_n(lrows, picks, nrows)
-            rdq_host_add(g_rdq_token_ledger, ts0, t1, t2, t3, ref_time_ticks())
-        } else {
-            rd_submit_land(cmd, nrows, all_pick)
-            rd_wait_land()
-            rd_land_rows_n(lrows, picks, nrows)
+        let t = rd_submit_wait(cmd, nrows, all_pick, prof)
+        rd_land_rows_n(lrows, picks, nrows)
+        if (prof) {
+            rdq_host_add(g_rdq_token_ledger, ts0, t.t1, t.t2, t.t3, ref_time_ticks())
         }
     }
     g_rd.tokens_served += nrows
