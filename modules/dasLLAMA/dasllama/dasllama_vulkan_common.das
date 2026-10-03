@@ -22,6 +22,7 @@ require strings
 require daslib/strings_boost
 require daslib/fio
 require daslib/enum_trait
+require daslib/algorithm
 
 // The Vulkan backend's shared infrastructure: device state (GpuState/g_gpu), buffer/descriptor
 // makers, upload + stacks + host-import, the weight arena, command/submit plumbing, the
@@ -2794,24 +2795,12 @@ def rd_unmake_sets {
 
 //! every region's token and draft commands and the verify commands re-record: the sets or planes they reference were replaced
 def rd_invalidate_token {
-    for (rec in g_rd.tok_recorded) {
-        rec = false
-    }
-    for (rec in g_rd.seg_recorded) {
-        rec = false
-    }
-    for (rec in g_rd.tok_wide_recorded) {
-        rec = false
-    }
-    for (rec in g_rd.tok_n_recorded) {
-        rec = false
-    }
-    for (rec in g_rd.head_draft_recorded) {
-        rec = false
-    }
-    for (rec in g_rd.v_recorded) {
-        rec = false
-    }
+    fill(g_rd.tok_recorded, false)
+    fill(g_rd.seg_recorded, false)
+    fill(g_rd.tok_wide_recorded, false)
+    fill(g_rd.tok_n_recorded, false)
+    fill(g_rd.head_draft_recorded, false)
+    fill(g_rd.v_recorded, false)
 }
 
 let RD_UNSPLIT_POS = 512l   //! the token command submits its unsplit attention twin under this position (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split`)

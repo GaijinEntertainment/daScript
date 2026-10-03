@@ -20,6 +20,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
 require math
 require daslib/strings_boost
+require daslib/algorithm
 
 // The Vulkan DECODE driver (dasllama_metal_decode's twin): the resident whole-stack token step
 // (prepare/set_layer/set_cls + the once-per-epoch recorded command + vk_rdec_token), the KV
@@ -3093,12 +3094,8 @@ def rd_carry_sync {
     g_rd.carry_live = want
     rd_unmake_sets()
     rd_invalidate_token()
-    for (rec in g_rd.xlog_recorded) {
-        rec = false
-    }
-    for (rec in g_rd.xlog_pick_recorded) {
-        rec = false
-    }
+    fill(g_rd.xlog_recorded, false)
+    fill(g_rd.xlog_pick_recorded, false)
 }
 
 //! Resident-driver token: the whole stack on device from the embedded residual `x` and this position's rope row -> logits, or
