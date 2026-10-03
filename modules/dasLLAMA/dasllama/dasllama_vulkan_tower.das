@@ -663,14 +663,8 @@ def private vt_rel_proj_set(var r : VtResident; t : VtTile) : VkDescriptorSet {
 [cold_path]
 def private vt_rel_proj_build(r : VtResident; t : VtTile) : VkDescriptorSet {
     let b_relq = r.rel_cap_rows * r.d
-    let b_rel = b_relq * 4l
-    if (t.tc > 0l) {
-        let b_relh = (r.rel_cap_rows + TILE_READ_SLACK) * r.d * 2l
-        return cm2_cls_set(int(KqFmt.q8), t.tc, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.rel_tabh_dev, r.rel_proj_dev),
-            fixed_array(r.wq_bytes, r.ws_bytes, r.meta_bytes, b_relh, b_rel), fixed_array(0u, 0u, 0u, VT_REL_TABQ, VT_REL_PROJ))
-    }
-    return q8_batch_cls_set(t.v, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.rel_tabq_dev, r.rel_tabs_dev, r.rel_proj_dev),
-        fixed_array(r.wq_bytes, r.ws_bytes, r.meta_bytes, b_relq, b_relq / kq_elems(KqFmt.q8) * 4l, b_rel), fixed_array(0u, 0u, 0u, VT_REL_TABQ, VT_REL_TABQ, VT_REL_PROJ))
+    return vt_tile_cls_set(t, r.wq_dev, r.ws_dev, r.wq_bytes, r.ws_bytes, r.meta.buf, r.meta_bytes, r.rel_tabh_dev, (r.rel_cap_rows + TILE_READ_SLACK) * r.d * 2l,
+        r.rel_tabq_dev, r.rel_tabs_dev, b_relq, VT_REL_TABQ, r.rel_proj_dev, b_relq * 4l, VT_REL_PROJ)
 }
 
 def private vt_conformer_sets(var r : VtResident; v, vff, v2d, v_rel : VtTile) : tuple<s_h2 : VkDescriptorSet; s_rel : VkDescriptorSet> {
@@ -1755,22 +1749,11 @@ def private vt_sets_ln(var r : VtResident) {
 }
 
 [cold_path]
-def private vt_cm2_set(r : VtResident; tc : int64; y_dev : uint64; y_bytes : int64; y_bit : uint) : VkDescriptorSet {
-    let bxh = (r.cap_rows + TILE_READ_SLACK) * max(r.d, r.ff) * 2l
-    return cm2_cls_set(int(KqFmt.q8), tc, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.xh_dev, y_dev),
-        fixed_array(r.wq_bytes, r.ws_bytes, r.meta_bytes, bxh, y_bytes), fixed_array(0u, 0u, 0u, VT_XQ, y_bit))
+def private vt_tile_set(r : VtResident; t : VtTile; y_dev : uint64; y_bytes : int64; y_bit : uint) : VkDescriptorSet {
+    let w = max(r.d, r.ff)
+    return vt_tile_cls_set(t, r.wq_dev, r.ws_dev, r.wq_bytes, r.ws_bytes, r.meta.buf, r.meta_bytes, r.xh_dev, (r.cap_rows + TILE_READ_SLACK) * w * 2l,
+        r.xq_dev, r.xs_dev, r.cap_rows * w, VT_XQ, y_dev, y_bytes, y_bit)
 }
-
-[cold_path]
-def private vt_batch_set(r : VtResident; v : int; y_dev : uint64; y_bytes : int64; y_bit : uint) : VkDescriptorSet {
-    let bq = r.cap_rows * max(r.d, r.ff)
-    return q8_batch_cls_set(v, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.xq_dev, r.xs_dev, y_dev),
-        fixed_array(r.wq_bytes, r.ws_bytes, r.meta_bytes, bq, bq / kq_elems(KqFmt.q8) * 4l, y_bytes), fixed_array(0u, 0u, 0u, VT_XQ, VT_XQ, y_bit))
-}
-
-[cold_path]
-def private vt_tile_set(r : VtResident; t : VtTile; y_dev : uint64; y_bytes : int64; y_bit : uint) : VkDescriptorSet
-    => t.tc > 0l ? vt_cm2_set(r, t.tc, y_dev, y_bytes, y_bit) : vt_batch_set(r, t.v, y_dev, y_bytes, y_bit)
 
 def private vt_tile_words(t : VtTile) : string => t.tc > 0l ? "token column {t.tc}" : "variant {t.v}"
 
@@ -1971,7 +1954,7 @@ def private vt_sk_ensure(var r : VtResident; tc, nsplit : int64) : bool {
         return false
     }
     cached(r.sets_sk, int(tc)) $() : VkDescriptorSet {
-        return vt_cm2_set(r, tc, r.sk_dev, r.sk_bytes, VT_SPLITK_PLANES)
+        return vt_tile_set(r, VtTile(tc = tc), r.sk_dev, r.sk_bytes, VT_SPLITK_PLANES)
     }
     return true
 }

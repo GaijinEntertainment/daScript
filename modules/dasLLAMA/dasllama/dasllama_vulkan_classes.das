@@ -14533,6 +14533,18 @@ def vt_tile_groups(t : VtTile; width, rows : int64) : int64 => t.tc > 0l ? cm2_t
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def vt_tile_rows(t : VtTile; rows : int64) : int64 => t.tc == 256l ? round_up(rows, 256l) : rows
 
+//! a tower GEMM tile's set: the q8 planes, the schedule meta, the feed the tile reads - the halves at `xh` on the cm2 tile,
+//! else the Q8_0 quants and scales at `xq` / `xs` over `xq_elems` - its hazard bit, and the output
+def vt_tile_cls_set(t : VtTile; wq, ws : uint64; wqb, wsb : int64; meta : uint64; meta_bytes : int64; xh : uint64; xh_bytes : int64;
+                    xq, xs : uint64; xq_elems : int64; xbit : uint; y : uint64; y_bytes : int64; ybit : uint) : VkDescriptorSet {
+    if (t.tc > 0l) {
+        return cm2_cls_set(int(KqFmt.q8), t.tc, fixed_array(wq, ws, meta, xh, y), fixed_array(wqb, wsb, meta_bytes, xh_bytes, y_bytes),
+            fixed_array(0u, 0u, 0u, xbit, ybit))
+    }
+    return q8_batch_cls_set(t.v, fixed_array(wq, ws, meta, xq, xs, y), fixed_array(wqb, wsb, meta_bytes, xq_elems, xq_elems / kq_elems(KqFmt.q8) * 4l, y_bytes),
+        fixed_array(0u, 0u, 0u, xbit, xbit, ybit))
+}
+
 def vt_tile_enc(raw : VkCommandBuffer; var h : VkHaz; t : VtTile; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
     if (t.tc > 0l) {
         cm2_cls_enc(int(KqFmt.q8), t.tc, raw, h, s, pc, groups)

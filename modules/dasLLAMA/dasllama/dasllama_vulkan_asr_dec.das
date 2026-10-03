@@ -296,14 +296,8 @@ def private wd_site_meta(woffs : array<int64>) : HostBuf {
 [cold_path]
 def private wd_xkv_set : VkDescriptorSet {
     let r & = g_wd
-    let bt = r.ta_tile_rows * r.d * 4l
-    if (r.xkv_tile.tc > 0l) {
-        return cm2_cls_set(int(KqFmt.q8), r.xkv_tile.tc, fixed_array(r.wq_dev, r.ws_dev, r.xkv_meta.buf, r.xh_dev, r.xkv_proj_dev),
-            fixed_array(r.wq_bytes, r.ws_bytes, r.xkv_meta_bytes, (r.ta_tile_rows + TILE_READ_SLACK) * r.d * 2l, bt), fixed_array(0u, 0u, 0u, WD_XFEED, WD_TMP))
-    }
-    let bq = r.ta * r.d
-    return q8_batch_cls_set(r.xkv_tile.v, fixed_array(r.wq_dev, r.ws_dev, r.xkv_meta.buf, r.xkv_q_dev, r.xkv_s_dev, r.xkv_proj_dev),
-        fixed_array(r.wq_bytes, r.ws_bytes, r.xkv_meta_bytes, bq, bq / kq_elems(KqFmt.q8) * 4l, bt), fixed_array(0u, 0u, 0u, WD_XFEED, WD_XFEED, WD_TMP))
+    return vt_tile_cls_set(r.xkv_tile, r.wq_dev, r.ws_dev, r.wq_bytes, r.ws_bytes, r.xkv_meta.buf, r.xkv_meta_bytes, r.xh_dev,
+        (r.ta_tile_rows + TILE_READ_SLACK) * r.d * 2l, r.xkv_q_dev, r.xkv_s_dev, r.ta * r.d, WD_XFEED, r.xkv_proj_dev, r.ta_tile_rows * r.d * 4l, WD_TMP)
 }
 
 //! the decoder's buffer sizes in bytes from its geometry: the row-cap planes (`bx` floats, `bq` / `bs` their Q8_0 quants and
