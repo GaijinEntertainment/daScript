@@ -14,8 +14,6 @@ require daslib/algorithm   // fill
 require daslib/math_bits   // uint_bits_to_float: the NaN sentinel as a float
 require dastest/testing_boost   // T?: check asserts through the cell's handle
 require dasllama/dasllama_math   // parallel_argmax
-require daslib/rtti   // this_context().last_exception: a panic's text read back
-require strings   // rtrim over a panic's text
 
 let POISON = 7.5   //! the slots a kernel must never read or write: a large finite value, so a stray read lands in the sum
 let SLAB_GAP = 3   //! the poisoned slots `put_run` leaves before a run of a slab plane
@@ -451,17 +449,6 @@ def top2_margin(a : array<float>; n : int64) : float {
         }
     }
     return m1 - m2
-}
-
-//! `body` run with any panic's text caught: "" where none fired
-def panic_text_of(body : block<void>) : string {
-    var why = ""
-    try {
-        invoke(body)
-    } recover {
-        why = this_context().last_exception |> rtrim
-    }
-    return why
 }
 
 //! true under the JIT; else the cell has registered the JIT-only skip and its caller returns

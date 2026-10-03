@@ -16,8 +16,7 @@ require dasllama/dasllama_gguf   // set_mtp_head_path - the split-head fixture n
 require dasllama/dasllama_kv_dtype   // kv_row_bytes / kv_layer_kbase: the head's K row the seam writes
 require daslib/jobque_boost
 require daslib/fio
-require daslib/rtti   // this_context().last_exception: a panic's text read back
-require strings   // find / rtrim over a panic's text
+require strings   // find over a panic's text
 require _model_tier   // models_dir() + model_available() presence/size-tier gate (see the file's header)
 require _resident_feed   // head_k_row_bytes
 
@@ -443,11 +442,9 @@ def private verify_window_panic(tr : Model) : string {
         forward_prefill(tr, s2, MTP_PROMPT, np, 0l)   // the prompt through the probe: the flag must read down here
         g_probe_window_outside = g_probe_window_active
         delete s2
-        try {
+        why = panic_text() $ {
             var acc = 0l
             mtp_spec_eval(tr, s, tok, acc)
-        } recover {
-            why = this_context().last_exception |> rtrim
         }
         g_probe_window_after = mtp_verify_window_active(s)
         select_prefill_override(prefill0)

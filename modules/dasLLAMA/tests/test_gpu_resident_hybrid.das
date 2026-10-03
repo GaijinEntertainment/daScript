@@ -1222,7 +1222,7 @@ def test_gpu_resident_hybrid_mtp_nonfinite(t : T?) {
                 s.mtp_h[i] = nan
             }
             let drafts0 = moe_gpu_resident_drafts()
-            let why = panic_text_of() $ {
+            let why = panic_text() $ {
                 forward_mtp(tr, s, DRAFT_TOKEN, row)
             }
             to_log(LOG_INFO, "NaN carry draft at row {row}: {empty(why) ? "no panic" : why}\n")
@@ -1253,7 +1253,7 @@ def private pass_arm_round(tr : Model; var s : Session; tok : int64) : string {
     let spec0 = get_mtp_spec()
     set_mtp_spec(true)
     var hit = false
-    let why = panic_text_of() $ {
+    let why = panic_text() $ {
         var acc = 0l
         hit = mtp_spec_eval(tr, s, tok, acc)
     }

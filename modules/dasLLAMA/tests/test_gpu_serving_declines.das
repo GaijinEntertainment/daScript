@@ -11,7 +11,6 @@ require ?vulkan dasllama/dasllama_vulkan_decode   // rd_routed_slots_fit - the N
 require dasllama/dasllama_metal_shapes   // moe_metal_ok - the Metal routed block's admission, portable
 require strings
 require daslib/strings_boost
-require _compares   // panic_text_of: a panic's text read back
 require daslib/enum_trait   // the format-set drift guard walks the whole KqFmt enum
 
 [unused_argument(rows)]
@@ -497,7 +496,7 @@ def test_resident_mirror_codec_ask(t : T?) {
         let bogus = kv_dtype_named("bogus")
         t |> success(!bogus.known && bogus.dt == KVDtype.f16, "a spelling that names no codec reads f16, marked unknown")
         t |> equal(kv_dtype_of(int(KVDtype.tq4)), KVDtype.tq4, "an ordinal names its codec")
-        let why = panic_text_of() $ {
+        let why = panic_text() $ {
             kv_dtype_of(99)
         }
         t |> success(find(why, "no KVDtype has ordinal 99") >= 0, "an ordinal no codec carries panics by name: {why}")
@@ -862,7 +861,7 @@ def private round_seats_arm(pick, truth : int64; rollback_ok : bool) {
 def private round_under(name : string; var s : Session; m : Model; var hit : bool&) : string {
     let prev = active_decode_override()
     select_decode_override(name)
-    let why = panic_text_of() $ {
+    let why = panic_text() $ {
         var acc = 0l
         hit = mtp_spec_eval(m, s, ROUND_TOKEN, acc)
     }
