@@ -342,14 +342,9 @@ def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
     let p1 = arena_planes(f1, b1)
     let p3 = arena_planes(f3, b3)
     let p2 = arena_planes(f2, b2)
+    rd_tail_sets_bare(L, f1, f3, f2)
     L.b1 = b1; L.b3 = b3; L.b2 = b2
-    L.f1 = f1; L.f3 = f3; L.f2 = f2
     L.m_gate = rd_meta(); L.m_up = rd_meta(); L.m_down = rd_meta()
-    // addrms (class): x += xb2, norms, xb out — and the fused twin quantizing in place of xb
-    L.s_addr_ffn = rd_ar_set(g_rd.xb2_dev, VHZ_XB2, g_rd.xb_dev, VHZ_XB)
-    rd_unmake_sets()
-    // quantize xb (post-ffn-norm) -> xq/xs
-    L.s_quant_xb2 = rd_quant_xb_set()
     // gate/up GEMV
     L.s_gate = arena_gemv_set_x(f1, p1, L.m_gate.buf, g_rd.gate_dev, hid * 4l * nb, VHZ_GATE)
     L.s_up = arena_gemv_set_x(f3, p3, L.m_up.buf, g_rd.up_dev, hid * 4l * nb, VHZ_UP)
@@ -367,8 +362,6 @@ def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
     }
     // down GEMV -> ffnout
     L.s_down = arena_gemv_set(f2, p2, L.m_down.buf, META_BYTES, 0u, g_gpu.hq_dev, g_gpu.hs_dev, hid * nb, (hid / 32l) * 4l * nb, VHZ_HQ, g_rd.ffnout_dev, dim * 4l * nb, VHZ_FFO)
-    // addrms next: x += ffnout, xb = rms_att[l+1]|final — the fused twin also serves the last layer's final norm
-    L.s_addr_next = rd_ar_set(g_rd.ffnout_dev, VHZ_FFO, g_rd.xb_dev, VHZ_XB)
 }
 
 def private rd_quant_xb_set() : VkDescriptorSet => rd_rq_set(g_rd.xb_dev, VHZ_XB, g_rd.xq_dev, g_rd.xs_dev, VHZ_XQ, g_rd.dim)
