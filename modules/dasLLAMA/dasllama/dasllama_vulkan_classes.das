@@ -517,7 +517,7 @@ class template ArCombBase : ArBase {
         let p = base / pa.dim
         var g = 1.0
         if (pa.gated != 0u) {
-            g = 1.0 / (1.0 + exp(-logits[p * pa.lstride + pa.lstride - 1u]))
+            g = sigmoid_f32(logits[p * pa.lstride + pa.lstride - 1u])
         }
         let pk = p * pa.slots
         let nreg = min(pa.slots, 8u)
@@ -1285,7 +1285,7 @@ class template DecCombineT {
                 j++
             }
             static_if (SH) {
-                let g = pa.gated != 0u ? 1.0 / (1.0 + exp(-gate[pa.gidx])) : 1.0
+                let g = pa.gated != 0u ? sigmoid_f32(gate[pa.gidx]) : 1.0
                 xout[i] = xin[i] + acc + g * sh_row[i]
             } else {
                 xout[i] = xin[i] + acc
@@ -2838,7 +2838,7 @@ class template DnStepFusedT : WgReduceBase {
             ds8[1u] = sk
             let graw = smalls[pa.g_off + row * nvh + h] + smalls[pa.dt_off + h]
             ds8[2u] = exp(smalls[pa.a_off + h] * (graw > 20.0 ? graw : log(1.0 + exp(graw))))
-            ds8[3u] = 1.0 / (1.0 + exp(-smalls[pa.beta_off + row * pa.beta_row_stride + h]))
+            ds8[3u] = sigmoid_f32(smalls[pa.beta_off + row * pa.beta_row_stride + h])
             ds8[4u] = qkr * sq * sk
         }
         barrier()
@@ -3010,7 +3010,7 @@ class DnScan {
         while (ti < pa.npos) {
             let graw = smalls[pa.g_off + ti * pa.nvh + h] + dtb
             egs[ti] = exp(aa * (graw > 20.0 ? graw : log(1.0 + exp(graw))))
-            bts[ti] = 1.0 / (1.0 + exp(-smalls[pa.beta_off + ti * pa.nvh + h]))
+            bts[ti] = sigmoid_f32(smalls[pa.beta_off + ti * pa.nvh + h])
             ti += 128u
         }
         barrier()
@@ -3707,7 +3707,7 @@ def facm2_tail(r, c : uint; v : float; kbase, kvlen : uint) : float => kbase + c
 def facm2_recip(r, c : uint; v : float) : float => v == 0.0 ? 0.0 : 1.0 / v
 
 [spirv_per_element, unused_argument(r, c)]
-def facm2_sigmoid(r, c : uint; v : float) : float => 1.0 / (1.0 + exp(-v))
+def facm2_sigmoid(r, c : uint; v : float) : float => sigmoid_f32(v)
 
 struct FaArgs {
     rows : uint     // window query rows
