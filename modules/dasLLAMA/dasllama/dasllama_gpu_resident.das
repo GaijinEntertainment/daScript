@@ -2378,11 +2378,11 @@ def private rdec_take_mirror(t : Model; var s : Session; r, pos : int64) {
 }
 
 //! a row's recurrent state into its selected region's slots before the step: the state from zero at position 0, its position advanced
-def private rdec_dn_row_own(var s : Session; c : Config; pos : int64; n : int64 = 1l) {
+def private rdec_dn_row_own(var s : Session; c : Config; pos : int64) {
     if (pos == 0l) {
         dn_reset(s)
     }
-    s.dn_pos = pos + n
+    s.dn_pos = pos + 1l
     rdec_dn_own_all(s, c.n_layers)
 }
 
@@ -2679,7 +2679,11 @@ def private vulkan_resident_verify_go(t : Model; var s : Session; toks : array<i
     let ce = g_rdec_cos_elems
     kv_ensure(s, pos + n)
     if (c.recr_mask != 0ul) {
-        rdec_dn_row_own(s, c, pos, n)
+        if (pos == 0l) {
+            dn_reset(s)
+        }
+        s.dn_pos = pos + n
+        rdec_dn_own_all(s, c.n_layers)
     }
     let carry_dim = mtp_h_dim(c)
     g_rdec_x_n |> grow_resize(dim * n)
