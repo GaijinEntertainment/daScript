@@ -2572,12 +2572,11 @@ def private vulkan_resident_draft_go(t : Model; var s : Session; token, row : in
     embed_row(t, token, unsafe(addr(g_rdec_x[0])))   // unscaled, as `forward_mtp` embeds
     g_rdec_cossin |> grow_resize(g_rdec_cos_elems)
     rdec_rope_rows(t, row, g_rdec_cossin, 0l)
-    g_rdec_hx_t = unsafe(addr(t))
-    g_rdec_hx_s = unsafe(addr(s))
-    let pick = rdec_draft(g_rdec_x, s.mtp_h, g_rdec_cossin, row, min(g_rdec_regions[r].head_cnt, row),
-        kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), pick_only, s.logits, @@rdec_host_experts_step)
-    g_rdec_hx_t = null
-    g_rdec_hx_s = null
+    var pick = -1l
+    with_host_experts(t, s) {
+        pick = rdec_draft(g_rdec_x, s.mtp_h, g_rdec_cossin, row, min(g_rdec_regions[r].head_cnt, row),
+            kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), pick_only, s.logits, @@rdec_host_experts_step)
+    }
     return -1l if (pick < 0l)
     if (!pick_only) {
         rdec_landed_finite(s.logits, 0l, pick, "draft", row)
@@ -2694,14 +2693,13 @@ def private vulkan_resident_verify_go(t : Model; var s : Session; toks : array<i
     s.mtp_picks |> resize(n)
     verify(long_length(s.mtp_xb_save) >= carry_dim, "dasLLAMA resident verify: the round saved no pre-draft carry in mtp_xb_save - engine bug")
     verify(g_rdec_regions[r].head_cnt >= pos - 1l, "dasLLAMA resident verify: the device holds no head rows below the re-warm's first row - the round's draft leaves them there; engine bug")
-    g_rdec_hx_t = unsafe(addr(t))
-    g_rdec_hx_s = unsafe(addr(s))
-    g_rdec_verify_rows_in_flight = true
-    let ok = rdec_verify(g_rdec_x_n, g_rdec_cos_n, g_rdec_verify_head_embeds, g_rdec_verify_head_rope, s.mtp_xb_save, s.ple_emb_b, pos, n, pick_only,
-        s.mtp_logits_b, s.mtp_picks, s.mtp_hrows, @@rdec_host_experts_rows)
-    g_rdec_verify_rows_in_flight = false
-    g_rdec_hx_t = null
-    g_rdec_hx_s = null
+    var ok = false
+    with_host_experts(t, s) {
+        g_rdec_verify_rows_in_flight = true
+        ok = rdec_verify(g_rdec_x_n, g_rdec_cos_n, g_rdec_verify_head_embeds, g_rdec_verify_head_rope, s.mtp_xb_save, s.ple_emb_b, pos, n, pick_only,
+            s.mtp_logits_b, s.mtp_picks, s.mtp_hrows, @@rdec_host_experts_rows)
+        g_rdec_verify_rows_in_flight = false
+    }
     verify(ok, "dasLLAMA resident verify: the driver declined rows it answered it steps - engine bug")
     g_rdec_verify_picks |> resize(n)
     for (i in range64(n)) {
@@ -2837,12 +2835,20 @@ var private g_rdec_hx_s : Session?
 //! the caller leaves the row in `g_rdec_x` and the rope in `g_rdec_cossin`
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
 def private rdec_token_split_host(t : Model; var s : Session; pos, cnt : int64; pick_only : bool; var logits : array<float>) : int64 {
+    var picked = -1l
+    with_host_experts(t, s) {
+        picked = rdec_token_split(g_rdec_x, g_rdec_cossin, t.config.hyper_conn ? s.ple_emb : g_rdec_no_side, pos, cnt, pick_only, logits, @@rdec_host_experts_step)
+    }
+    return picked
+}
+
+//! `blk` runs with the host's routed sums pointed at model `t` and session `s`
+def private with_host_experts(t : Model; var s : Session; blk : block<() : void>) {
     g_rdec_hx_t = unsafe(addr(t))
     g_rdec_hx_s = unsafe(addr(s))
-    let picked = rdec_token_split(g_rdec_x, g_rdec_cossin, t.config.hyper_conn ? s.ple_emb : g_rdec_no_side, pos, cnt, pick_only, logits, @@rdec_host_experts_step)
+    invoke(blk)
     g_rdec_hx_t = null
     g_rdec_hx_s = null
-    return picked
 }
 
 var private g_rdec_no_side : array<float>
@@ -3294,11 +3300,9 @@ def private rdec_prefill_hc_run(t : Model; var s : Session; cb : array<float>; n
     if (start_pos == 0l) {
         rdec_trace_prompt_start()
     }
-    g_rdec_hx_t = unsafe(addr(t))
-    g_rdec_hx_s = unsafe(addr(s))
-    rdec_prefill_hc(s.x_b, cb, s.ple_emb_b, npos, start_pos, s.logits, @@rdec_host_experts_rows)
-    g_rdec_hx_t = null
-    g_rdec_hx_s = null
+    with_host_experts(t, s) {
+        rdec_prefill_hc(s.x_b, cb, s.ple_emb_b, npos, start_pos, s.logits, @@rdec_host_experts_rows)
+    }
     s.embed_gpu_pending = false
     s.ple_gpu_pending = false
     s.ple_ring_device = has_ple_ngram(t.config)
@@ -3559,23 +3563,19 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
     if (c.hyper_conn) {
         rdec_prefill_hc_run(t, s, cb, npos, start_pos)
     } else {
-        if (g_rdec_experts_host) {
-            g_rdec_hx_t = unsafe(addr(t))
-            g_rdec_hx_s = unsafe(addr(s))
+        with_host_experts(t, s) {
+            if (s.embed_gpu_pending) {
+                rdec_prefill_ids(s.embed_gpu_tokens, c.embed_scale, cb, npos, start_pos, s.logits)
+                s.embed_gpu_pending = false
+                s.ple_gpu_pending = false   //! the ids form gathers the side rows on device too: no late CPU pre-step
+            } elif (s.ple_gpu_pending) {
+                us_gather = resident_prefill_ple_rows(t, s.ple_gpu_tokens, npos)
+                rdec_prefill(s.x_b, cb, g_rdec_ple_rows, true, npos, start_pos, s.logits)
+                s.ple_gpu_pending = false
+            } else {
+                rdec_prefill(s.x_b, cb, s.ple_inp, false, npos, start_pos, s.logits)   //! forward_prefill ran the PLE pre-step into s.ple_inp (position-major) before the override; empty elsewhere
+            }
         }
-        if (s.embed_gpu_pending) {
-            rdec_prefill_ids(s.embed_gpu_tokens, c.embed_scale, cb, npos, start_pos, s.logits)
-            s.embed_gpu_pending = false
-            s.ple_gpu_pending = false   //! the ids form gathers the side rows on device too: no late CPU pre-step
-        } elif (s.ple_gpu_pending) {
-            us_gather = resident_prefill_ple_rows(t, s.ple_gpu_tokens, npos)
-            rdec_prefill(s.x_b, cb, g_rdec_ple_rows, true, npos, start_pos, s.logits)
-            s.ple_gpu_pending = false
-        } else {
-            rdec_prefill(s.x_b, cb, s.ple_inp, false, npos, start_pos, s.logits)   //! forward_prefill ran the PLE pre-step into s.ple_inp (position-major) before the override; empty elsewhere
-        }
-        g_rdec_hx_t = null
-        g_rdec_hx_s = null
     }
     rdec_stash_carry(c, s, 0l, start_pos + npos)
     if (g_env_gpu.gpu_prof) {
