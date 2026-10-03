@@ -48,6 +48,7 @@ int das_accept_websocket(Handle<WebSocketAdmission> admission, const char * prot
 int das_reject_websocket(Handle<WebSocketAdmission> admission, int status);
 bool das_wss_set_access_log(Handle<hv::WebSocketServer> h, bool enabled);
 bool das_wss_set_limits(Handle<hv::WebSocketServer> h, int http_bytes, int ws_bytes, int events, int queue_bytes);
+bool das_wss_set_connection_limits(Handle<hv::WebSocketServer> h, int messages, int bytes, int write_bytes);
 int das_wss_start ( Handle<hv::WebSocketServer> h );
 int das_wss_bound_port ( Handle<hv::WebSocketServer> h );
 void das_wss_tick ( Handle<hv::WebSocketServer> h );

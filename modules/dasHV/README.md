@@ -45,8 +45,9 @@ violations close the connection without delivering a partial message.
 
 The event budget includes callbacks currently executing, not only queued callbacks.
 Deferred writers and admitted/pending WebSocket channels also have count bounds.
-Closed deferred writers remain leased until `close_writer`/`respond` releases them;
-release every acquired writer. `is_writer_connected` reports peer disconnection.
+Deferred writers are released when the peer disconnects. Complete a live writer
+with `close_writer`/`respond`, or transfer it to `SERVE_FILE_STREAM`.
+`is_writer_connected` reports whether that writer is still admitted.
 Ordinary asynchronous HTTP/1 replies retain request order. While a reply is pending,
 up to 64 KiB of subsequent socket data may wait; additional data closes the connection.
 This pipeline bound is independent of the per-request body limit.
@@ -56,6 +57,29 @@ messages with an authoritative byte count and opcode, including embedded NUL byt
 Its default implementation calls the existing `onWsMessage` callback. Copy borrowed
 message/request data before retaining it beyond the callback; do not share script
 objects with other contexts.
+
+## Bounded file responses
+
+From a `STREAM` handler, call
+`SERVE_FILE_STREAM(server, writer, filepath, max_bytes)`. The byte limit must be
+positive. Zero return means the operation accepted ownership; a negative return
+means an invalid server/writer/argument and leaves the caller responsible for any
+still-live response. After acceptance, do not issue other operations on that writer.
+
+The native event loop opens a regular file through the UTF-8 file API, checks its
+size, and transfers it using a 64 KiB source buffer. It reads another chunk only
+after the preceding write drains. OS/TLS buffers are separate from that bound.
+Caller headers are retained, except transfer framing is set to the actual file size.
+Without a content type, the response uses `application/octet-stream`. Missing or
+non-regular files return 404; an oversized file returns 413. An error after headers
+closes the connection instead of completing a truncated body as a successful reply.
+HEAD returns the same file length as GET without reading or sending the body.
+Empty files and keepalive/pipelined requests retain correct response framing.
+
+Completion, peer disconnect and server shutdown close the file before releasing writer
+admission. This operation does not replace application authentication or path policy;
+authorize before calling it and do not construct trusted paths from unchecked input.
+The existing writer `SERVE_FILE` remains the buffered helper.
 
 ## WebSocket admission before upgrade
 
@@ -119,3 +143,28 @@ TLS tests do not require public network access or installed test roots. Raw-wire
 and subprocess tests live in `tests/dasHV/no_aot`; the remaining tests also join AOT.
 The CTest cases `hv_parser_limits` and `dashv_patch_libhv` check parser limits and
 repeatable application of patches to the pinned libhv source excerpts.
+
+## Per-connection WebSocket budgets
+
+`set_connection_limits(server, pending_messages, pending_bytes, write_buffer_bytes)`
+sets additional per-WebSocket budgets before the server starts. All values must be
+positive; attempts to change them after `start` return false. Pending message count
+and payload bytes include the batch currently draining on the owner thread. A peer
+that exceeds either limit is closed without consuming another peer's allowance.
+These limits supplement, rather than replace, the global pending queue budgets.
+The write limit bounds libhv's unsent socket buffer; it is not a maximum message
+size or a bound on bytes already accepted by the operating system. A full buffer
+refuses the write and closes the connection. Leaving this configuration unset keeps
+the existing behavior.
+
+## Opened WebSocket request
+
+Override `onWsOpenRequest(channel, request)` to read the handshake request associated
+with a newly opened channel. The adapter delivers a request snapshot on the owner's
+tick thread and charges its headers/body to the pending-byte budget. The request is
+borrowed for this callback only; clone strings needed after it returns.
+
+An override replaces `onWsOpen` for that server. Servers which do not override it
+retain their existing `onWsOpen(channel, url)` callback. Admission decisions still
+belong in `WEBSOCKET_UPGRADE`, before the HTTP 101 response. Rebuild the native
+module and generated/AOT consumers when updating the callback interface.

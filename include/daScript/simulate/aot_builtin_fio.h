@@ -62,6 +62,7 @@ namespace das {
             ctime_sec = int64_t(st.st_ctime);
             mtime_sec = int64_t(st.st_mtime);
         }
+        uint32_t mode_bits() const { return mode; }
         uint64_t size() const   { return bytes; }
         Time     atime() const  { return { time_t(atime_sec) }; }
         Time     ctime() const  { return { time_t(ctime_sec) }; }
@@ -81,6 +82,7 @@ namespace das {
     // API. Queries are never populated (builtin_stat/fstat are stubs).
     struct FStat {
         bool     is_valid = false;
+        uint32_t mode_bits() const { return 0; }
         uint64_t size() const   { return 0; }
         Time     atime() const  { return Time{}; }
         Time     ctime() const  { return Time{}; }
@@ -93,6 +95,8 @@ namespace das {
 
     DAS_API const FILE * builtin_fopen  ( const char * name, const char * mode, Context * context, LineInfoArg * at );
     DAS_API void builtin_fclose ( const FILE * f, Context * context, LineInfoArg * at );
+    //! Tries an exclusive OS lock without waiting; false includes unsupported hosts. Close FILE to release; keep the path while contenders may hold it open.
+    DAS_API bool builtin_try_lock_file ( const FILE * file );
     DAS_API void builtin_fflush ( const FILE * f, Context * context, LineInfoArg * at );
     DAS_API bool builtin_try_fflush ( const FILE * f );
     DAS_API void builtin_fprint ( const FILE * f, const char * text, Context * context, LineInfoArg * at );

@@ -69,6 +69,7 @@ namespace das {
     int das_writer_sse_event ( Handle<hv::WebSocketServer> h, hv::HttpResponseWriter * w, const char * data, const char * event );
     int das_writer_write_chunked ( Handle<hv::WebSocketServer> h, hv::HttpResponseWriter * w, const char * data );
     void das_writer_set_keepalive_timeout ( Handle<hv::WebSocketServer> h, hv::HttpResponseWriter * w, int32_t timeout_ms );
+    int das_writer_serve_file_stream(Handle<hv::WebSocketServer> h, hv::HttpResponseWriter * w, const char * filepath, int64_t max_bytes);
     void das_writer_close ( Handle<hv::WebSocketServer> h, hv::HttpResponseWriter * w );
     void das_writer_release ( Handle<hv::WebSocketServer> h, hv::HttpResponseWriter * w );
     bool das_writer_is_connected ( Handle<hv::WebSocketServer> h, hv::HttpResponseWriter * w );
