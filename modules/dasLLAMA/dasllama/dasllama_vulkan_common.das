@@ -3820,6 +3820,23 @@ def cached(@scratch var tab : table<int; auto(TT)>; key : int; build : block<() 
     return tab[key]
 }
 
+//! batch GEMM schedule record `rid` = [wblk0, row0, rows, 0] at word 4 rid and its map of `groups` words at the cursor;
+//! returns the map's word offset and advances the cursor
+def batch_sched_map(var mp : uint?; var cur : int64&; rid : int64; wblk0, rows, groups : int64; row0 : int64 = 0l) : uint {
+    unsafe {
+        mp[rid * 4l] = uint(wblk0)
+        mp[rid * 4l + 1l] = uint(row0)
+        mp[rid * 4l + 2l] = uint(rows)
+        mp[rid * 4l + 3l] = 0u
+        let at = cur
+        for (g in range64(groups)) {
+            mp[at + g] = uint(rid)
+        }
+        cur += groups
+        return uint(at)
+    }
+}
+
 //! a device buffer of `bytes` whose words `fill` writes into the staging buffer, staged up once
 def make_staged_buf(bytes : int64; fill : block<(var words : uint?) : void>) : uint64 {
     let dev = make_device_buf(bytes)

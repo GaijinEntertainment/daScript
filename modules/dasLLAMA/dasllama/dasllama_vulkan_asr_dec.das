@@ -570,8 +570,8 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
     var cur = 2l * nl * 4l
     for (l in range64(nl)) {
         let lo = dec_layer_offsets(w, l)
-        g_wd_maps[l * 2l] = vt_sched_map(mp, cur, l * 2l, lo.ck_w / q8e, r.ta_tile_rows, groups)
-        g_wd_maps[l * 2l + 1l] = vt_sched_map(mp, cur, l * 2l + 1l, lo.cv_w / q8e, r.ta_tile_rows, groups)
+        g_wd_maps[l * 2l] = batch_sched_map(mp, cur, l * 2l, lo.ck_w / q8e, r.ta_tile_rows, groups)
+        g_wd_maps[l * 2l + 1l] = batch_sched_map(mp, cur, l * 2l + 1l, lo.cv_w / q8e, r.ta_tile_rows, groups)
     }
     let enc_dev = vulkan_tower_enc_out(unsafe(addr<float const?>(enc_out[0])), bt)
     if (enc_dev == 0ul) {

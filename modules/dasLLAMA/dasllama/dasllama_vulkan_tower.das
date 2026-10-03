@@ -1212,11 +1212,11 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
                 let rid = l * VT_G4A_GEMMS + g
                 let rows = g == VT_G4A_REL ? rel_cap_rows : vt_tile_rows(rec_tiles[g], npos)   // the rel record keeps its raw rows: its planes are sized to them, and a forced l column would read past them
                 let groups = g == VT_G4A_REL ? g_rel : (g == VT_G4A_PW1 ? g_2d : ((g == VT_G4A_FF_UP || g == VT_G4A_FF_UP_1) ? g_ff : g_d))
-                g_vt_maps[rid] = vt_sched_map(mp, cur, rid, recs[g].woff / q8e, rows, groups)
+                g_vt_maps[rid] = batch_sched_map(mp, cur, rid, recs[g].woff / q8e, rows, groups)
             }
         }
-        g_vt_maps[nrec - 2l] = vt_sched_map(mp, cur, nrec - 2l, t.outproj_w / q8e, vt_tile_rows(vp, npos), g_p)
-        g_vt_maps[nrec - 1l] = vt_sched_map(mp, cur, nrec - 1l, t.mmproj_w / q8e, vt_tile_rows(vp, npos), g_p)
+        g_vt_maps[nrec - 2l] = batch_sched_map(mp, cur, nrec - 2l, t.outproj_w / q8e, vt_tile_rows(vp, npos), g_p)
+        g_vt_maps[nrec - 1l] = batch_sched_map(mp, cur, nrec - 1l, t.mmproj_w / q8e, vt_tile_rows(vp, npos), g_p)
     }
     let bx = npos * d * 4l
     let bo = npos * tail_dim * 4l
@@ -1543,7 +1543,7 @@ def private vulkan_canary_blocks(t : CanaryEncoder; var s : CanaryState; npos, w
                 let rid = l * VT_CN_GEMMS + g
                 let rows = vt_tile_rows(rec_tiles[g], g == VT_CN_POS ? ww : npos)
                 let groups = g == VT_CN_POS ? g_rel : (g == VT_CN_PW1 ? g_2d : ((g == VT_CN_FF1A || g == VT_CN_FF2A) ? g_ff : g_d))
-                g_vt_maps[rid] = vt_sched_map(mp, cur, rid, recs[g].woff / q8e, rows, groups)
+                g_vt_maps[rid] = batch_sched_map(mp, cur, rid, recs[g].woff / q8e, rows, groups)
             }
         }
     }
@@ -1853,22 +1853,6 @@ def private vt_sets_q3v(var r : VtResident) {
     r.s_post_d_ln = set_tower_post_add_ln_cls(fixed_array(r.x_dev, r.yd_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, bx, r.norms_bytes), fixed_array(VT_X, VT_YD, VT_XB, 0u))
 }
 
-//! record `rid` = [wblk0, 0, rows, 0] at word 4 rid and its map of `groups` words at the cursor; returns the map's word offset and advances the cursor
-def vt_sched_map(var mp : uint?; var cur : int64&; rid : int64; wblk0, rows, groups : int64) : uint {
-    unsafe {
-        mp[rid * 4l] = uint(wblk0)
-        mp[rid * 4l + 1l] = 0u
-        mp[rid * 4l + 2l] = uint(rows)
-        mp[rid * 4l + 3l] = 0u
-        let at = cur
-        for (g in range64(groups)) {
-            mp[at + g] = uint(rid)
-        }
-        cur += groups
-        return uint(at)
-    }
-}
-
 //! the tier's want (DASLLAMA_GPU) and then the device init - the gate every chain and every twin cell reads first: nothing
 //! reads `g_gpu` ahead of this answer
 def public vulkan_tower_arms : bool => gpu_want_arms_tier() && vk_moe_init()
@@ -2054,7 +2038,7 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
             for (g in range64(VT_LN_GEMMS)) {
                 let rid = l * VT_LN_GEMMS + g
                 let tile = g == VT_LN_FC1 ? tile_ff : (g == VT_LN_FC2 ? tile_fc2 : tile_d)
-                g_vt_maps[rid] = vt_sched_map(mp, cur, rid, recs[g].woff / q8e, vt_tile_rows(tile, npos), g == VT_LN_FC1 ? g_ff : (g == VT_LN_FC2 ? g_fc2 : g_d))
+                g_vt_maps[rid] = batch_sched_map(mp, cur, rid, recs[g].woff / q8e, vt_tile_rows(tile, npos), g == VT_LN_FC1 ? g_ff : (g == VT_LN_FC2 ? g_fc2 : g_d))
             }
         }
     }
@@ -2452,7 +2436,7 @@ def private vulkan_audio_conv_front(t : AudioTower; var s : EncoderState; mel : 
     }
     var mp = unsafe(reinterpret<uint?>(r.meta.mapped))
     var cur = 4l
-    let map_off = vt_sched_map(mp, cur, 0l, t.conv2_w_off / kq_elems(KqFmt.q8), vt_tile_rows(VtTile(v = 0, tc = tc_d), tt), g_d)
+    let map_off = batch_sched_map(mp, cur, 0l, t.conv2_w_off / kq_elems(KqFmt.q8), vt_tile_rows(VtTile(v = 0, tc = tc_d), tt), g_d)
     upload_region_at(r.fxin_dev, 0l, unsafe(addr<uint8 const?>(mel.data[0])), nm * tin * 4l)
     let act = t.gelu_tanh ? BIAS_ACT_GELU_TANH : BIAS_ACT_GELU_ERF
     let bx = tt * d * 4l
@@ -2614,7 +2598,7 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
         vt_q3v_regions(t, l, recs)
         for (g in range64(QWEN3V_GEMMS)) {
             let rid = l * QWEN3V_GEMMS + g
-            g_vt_maps[rid] = vt_sched_map(mp, cur, rid, recs[g].woff / q8e, npos, rec_groups[g])
+            g_vt_maps[rid] = batch_sched_map(mp, cur, rid, recs[g].woff / q8e, npos, rec_groups[g])
         }
     }
     let bx = npos * d * 4l
@@ -2928,7 +2912,7 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
             let o = gemma4v_block_offs(t, l)
             for (g in range64(GEMMA4V_GEMMS)) {
                 let rid = l * GEMMA4V_GEMMS + g
-                g_vt_maps[rid] = vt_sched_map(mp, cur, rid, o.w[g] / q8e, npos, g == GEMMA4V_GEMM_GATE || g == GEMMA4V_GEMM_UP ? g_ff : g_d)
+                g_vt_maps[rid] = batch_sched_map(mp, cur, rid, o.w[g] / q8e, npos, g == GEMMA4V_GEMM_GATE || g == GEMMA4V_GEMM_UP ? g_ff : g_d)
             }
         }
     }
@@ -3211,7 +3195,7 @@ def private vulkan_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; 
     let g_cout = cm2_tiles_at(d, npos, tc)
     var mp = unsafe(reinterpret<uint?>(r.meta.mapped))
     var cur = 4l
-    let map_off = vt_sched_map(mp, cur, 0l, t.cout_w_off / kq_elems(KqFmt.q8), npos, g_cout)
+    let map_off = batch_sched_map(mp, cur, 0l, t.cout_w_off / kq_elems(KqFmt.q8), npos, g_cout)
     let xin_n = QWEN3A_CHUNK * nm
     g_vt_q3a_xin |> reserve(n_chunks * xin_n)
     g_vt_q3a_xin |> resize(n_chunks * xin_n)
@@ -3418,7 +3402,7 @@ def private vulkan_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len
     let g_in = cm2_tiles_at(d, npos, tc)
     var mp = unsafe(reinterpret<uint?>(r.fmeta.mapped))
     var cur = 4l
-    let map_off = vt_sched_map(mp, cur, 0l, t.inproj_w / kq_elems(KqFmt.q8), npos, g_in)
+    let map_off = batch_sched_map(mp, cur, 0l, t.inproj_w / kq_elems(KqFmt.q8), npos, g_in)
     upload_region_at(r.fxin_dev, 0l, unsafe(addr<uint8 const?>(s.xw[0])), n_len * n_fft * 4l)
     let bx = npos * d * 4l
     vt_chain_one_shot("gemma4a-front", 2l, npos) $(raw : VkCommandBuffer; var h : VkHaz) {
@@ -3648,9 +3632,9 @@ def private vulkan_canary_front(t : CanaryEncoder; var s : CanaryState) : int64 
     let q8e = kq_elems(KqFmt.q8)
     var mp = unsafe(reinterpret<uint?>(r.fmeta.mapped))
     var cur = 12l
-    let map3 = vt_sched_map(mp, cur, 0l, t.c3_w / q8e, rows2, g_pw3)
-    let map6 = vt_sched_map(mp, cur, 1l, t.c6_w / q8e, rows3, g_pw6)
-    let mapx = vt_sched_map(mp, cur, 2l, t.pre_w / q8e, tt, g_pre)
+    let map3 = batch_sched_map(mp, cur, 0l, t.c3_w / q8e, rows2, g_pw3)
+    let map6 = batch_sched_map(mp, cur, 1l, t.c6_w / q8e, rows3, g_pw6)
+    let mapx = batch_sched_map(mp, cur, 2l, t.pre_w / q8e, tt, g_pre)
     upload_region_at(r.fxin_dev, 0l, unsafe(addr<uint8 const?>(s.xw[0])), n_len * n_fft * 4l)
     let bx = tt * d * 4l
     vt_chain_one_shot("canary-front", 3l, tt) $(raw : VkCommandBuffer; var h : VkHaz) {

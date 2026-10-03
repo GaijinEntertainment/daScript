@@ -2302,16 +2302,8 @@ def private fill_arena_batch_sched(hb : HostBuf; d, blk, npos : int64; fmt : int
     let rtiles = (npos + (tc > 0l ? tc : te.tc) - 1l) / (tc > 0l ? tc : te.tc)
     let total = rtiles * wtiles * nsplit
     assert((4l + total) * 4l <= BATCH_META_BYTES, "dasLLAMA vulkan arena: batch schedule exceeds capacity")
-    unsafe {
-        var mp = reinterpret<uint?>(hb.mapped)
-        mp[0] = uint(arena_local_blk(blk))   // slab-local block base (already in fmt units)
-        mp[1] = uint(row0)  // rb0 - r0
-        mp[2] = uint(npos)  // cnt
-        mp[3] = 0u          // wg base
-        for (g in range64(total)) {
-            mp[4l + g] = 0u
-        }
-    }
+    var cur = 4l
+    batch_sched_map(unsafe(reinterpret<uint?>(hb.mapped)), cur, 0l, arena_local_blk(blk), npos, total, row0)
     return uint(total)
 }
 
