@@ -4919,11 +4919,11 @@ class template DaAttnT {
                         }
                     }
                 }
-                static_if (KVQ8) {
+                static_if (KVQ8 || KVTQ4) {
                     let kblk = kbase + (c0 + min(tid, clen - 1u)) * (pa.kvd / KQ_B32_ELEMS_U) + kvh * (hs / KQ_B32_ELEMS_U)
                     var bi = 0u
                     while (bi < hs / KQ_B32_ELEMS_U) {
-                        let bb = (kblk + bi) * KV_Q8_BLOCK_BYTES
+                        let bb = (kblk + bi) * (KVQ8 ? KV_Q8_BLOCK_BYTES : KV_TQ4_BLOCK_BYTES)
                         let kd = kv_blk_scale(kmir[bb >> 2u], bb)
                         let wq = (bb + 2u) >> 2u
                         var bs : float[4]
@@ -4931,47 +4931,28 @@ class template DaAttnT {
                             bs[j] = 0.0
                         }
                         var lo = kmir[wq]
-                        for [unroll] (wi in range(8)) {
+                        for [unroll] (wi in range(KVQ8 ? 8 : 4)) {
                             let hi = kmir[wq + uint(wi) + 1u]
                             let word = kv_skew_word(lo, hi, bb + 2u)
                             lo = hi
-                            let b0 = kv_q8_quant(word, 0)
-                            let b1 = kv_q8_quant(word, 1)
-                            let b2 = kv_q8_quant(word, 2)
-                            let b3 = kv_q8_quant(word, 3)
-                            for [unroll] (j in range(G)) {
-                                let qo = uint(j) * 512u + bi * KQ_B32_ELEMS_U + uint(wi) * 4u
-                                bs[j] += (qrow[qo] * b0 + qrow[qo + 1u] * b1) + (qrow[qo + 2u] * b2 + qrow[qo + 3u] * b3)
-                            }
-                        }
-                        for [unroll] (j in range(G)) {
-                            pv[j] += bs[j] * kd
-                        }
-                        bi++
-                    }
-                } static_elif (KVTQ4) {
-                    let kblk = kbase + (c0 + min(tid, clen - 1u)) * (pa.kvd / KQ_B32_ELEMS_U) + kvh * (hs / KQ_B32_ELEMS_U)
-                    var bi = 0u
-                    while (bi < hs / KQ_B32_ELEMS_U) {
-                        let bb = (kblk + bi) * KV_TQ4_BLOCK_BYTES
-                        let kd = kv_blk_scale(kmir[bb >> 2u], bb)
-                        let wq = (bb + 2u) >> 2u
-                        var bs : float[4]
-                        for [unroll] (j in range(G)) {
-                            bs[j] = 0.0
-                        }
-                        var lo = kmir[wq]
-                        for [unroll] (wi in range(4)) {
-                            let hi = kmir[wq + uint(wi) + 1u]
-                            let word = kv_skew_word(lo, hi, bb + 2u)
-                            lo = hi
-                            for [unroll] (bk in range(4)) {
-                                let by = (word >> uint(bk * 8)) & 255u
-                                let e0 = kv_tq4_quant_lo(by)
-                                let e1 = kv_tq4_quant_hi(by)
+                            static_if (KVQ8) {
+                                let b0 = kv_q8_quant(word, 0)
+                                let b1 = kv_q8_quant(word, 1)
+                                let b2 = kv_q8_quant(word, 2)
+                                let b3 = kv_q8_quant(word, 3)
                                 for [unroll] (j in range(G)) {
-                                    let qo = uint(j) * 512u + bi * KQ_B32_ELEMS_U + uint(wi * 8 + bk * 2)
-                                    bs[j] += qrow[qo] * e0 + qrow[qo + 1u] * e1
+                                    let qo = uint(j) * 512u + bi * KQ_B32_ELEMS_U + uint(wi) * 4u
+                                    bs[j] += (qrow[qo] * b0 + qrow[qo + 1u] * b1) + (qrow[qo + 2u] * b2 + qrow[qo + 3u] * b3)
+                                }
+                            } else {
+                                for [unroll] (bk in range(4)) {
+                                    let by = (word >> uint(bk * 8)) & 255u
+                                    let e0 = kv_tq4_quant_lo(by)
+                                    let e1 = kv_tq4_quant_hi(by)
+                                    for [unroll] (j in range(G)) {
+                                        let qo = uint(j) * 512u + bi * KQ_B32_ELEMS_U + uint(wi * 8 + bk * 2)
+                                        bs[j] += qrow[qo] * e0 + qrow[qo + 1u] * e1
+                                    }
                                 }
                             }
                         }
@@ -5073,35 +5054,32 @@ class template DaAttnT {
                         }
                     }
                 }
-                static_if (KVQ8) {
-                    let vbb = (vbase + (c0 + jj) * (pa.kvd / KQ_B32_ELEMS_U) + kvh * (hs / KQ_B32_ELEMS_U) + w / 4u) * KV_Q8_BLOCK_BYTES
+                static_if (KVQ8 || KVTQ4) {
+                    let vbb = (vbase + (c0 + jj) * (pa.kvd / KQ_B32_ELEMS_U) + kvh * (hs / KQ_B32_ELEMS_U) + w / 4u) * (KVQ8 ? KV_Q8_BLOCK_BYTES : KV_TQ4_BLOCK_BYTES)
                     let vd = kv_blk_scale(vmir[vbb >> 2u], vbb)
-                    let vq0 = vbb + 2u + (w & 3u) * 8u
+                    let vq0 = vbb + 2u + (w & 3u) * (KVQ8 ? 8u : 4u)
                     let v0 = vmir[vq0 >> 2u]
                     let v1 = vmir[(vq0 >> 2u) + 1u]
-                    let v2 = vmir[(vq0 >> 2u) + 2u]
-                    let wlo = kv_skew_word(v0, v1, vq0)
-                    let whi = kv_skew_word(v1, v2, vq0)
-                    for [unroll] (j in range(G)) {
-                        let sj = sc[uint(j) * 256u + jj] * vd
-                        for [unroll] (bk in range(4)) {
-                            acc[j * 8 + bk] += sj * kv_q8_quant(wlo, bk)
-                            acc[j * 8 + 4 + bk] += sj * kv_q8_quant(whi, bk)
+                    static_if (KVQ8) {
+                        let v2 = vmir[(vq0 >> 2u) + 2u]
+                        let wlo = kv_skew_word(v0, v1, vq0)
+                        let whi = kv_skew_word(v1, v2, vq0)
+                        for [unroll] (j in range(G)) {
+                            let sj = sc[uint(j) * 256u + jj] * vd
+                            for [unroll] (bk in range(4)) {
+                                acc[j * 8 + bk] += sj * kv_q8_quant(wlo, bk)
+                                acc[j * 8 + 4 + bk] += sj * kv_q8_quant(whi, bk)
+                            }
                         }
-                    }
-                } static_elif (KVTQ4) {
-                    let vbb = (vbase + (c0 + jj) * (pa.kvd / KQ_B32_ELEMS_U) + kvh * (hs / KQ_B32_ELEMS_U) + w / 4u) * KV_TQ4_BLOCK_BYTES
-                    let vd = kv_blk_scale(vmir[vbb >> 2u], vbb)
-                    let vq0 = vbb + 2u + (w & 3u) * 4u
-                    let v0 = vmir[vq0 >> 2u]
-                    let v1 = vmir[(vq0 >> 2u) + 1u]
-                    let vword = kv_skew_word(v0, v1, vq0)
-                    for [unroll] (j in range(G)) {
-                        let sj = sc[uint(j) * 256u + jj] * vd
-                        for [unroll] (bk in range(4)) {
-                            let by = (vword >> uint(bk * 8)) & 255u
-                            acc[j * 8 + bk * 2] += sj * kv_tq4_quant_lo(by)
-                            acc[j * 8 + bk * 2 + 1] += sj * kv_tq4_quant_hi(by)
+                    } else {
+                        let vword = kv_skew_word(v0, v1, vq0)
+                        for [unroll] (j in range(G)) {
+                            let sj = sc[uint(j) * 256u + jj] * vd
+                            for [unroll] (bk in range(4)) {
+                                let by = (vword >> uint(bk * 8)) & 255u
+                                acc[j * 8 + bk * 2] += sj * kv_tq4_quant_lo(by)
+                                acc[j * 8 + bk * 2 + 1] += sj * kv_tq4_quant_hi(by)
+                            }
                         }
                     }
                 } else {
