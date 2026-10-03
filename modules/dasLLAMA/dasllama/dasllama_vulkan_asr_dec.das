@@ -702,7 +702,7 @@ def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks 
             let lo = dec_layer_offsets(w, l)
             let site = int(l * WD_LAYER_SITES)
             if (l == 0l) {
-                var pc = TowerLnArgs(d = uint(d), rows = uint(n), woff = uint(lo.ln1_w - r.norms_base), boff = uint(lo.ln1_b - r.norms_base), eps = w.eps)
+                var pc = TowerLnArgs(d = uint(d), rows = uint(n), eps = w.eps, ln_on = 1u, lnoff = uint(lo.ln1_w - r.norms_base), lnboff = uint(lo.ln1_b - r.norms_base))
                 enc_tower_ln_rq_cls(raw, h, r.s_ln_rq, pc, n)
                 vt_pt(raw, VtProfRole.ln)
             }

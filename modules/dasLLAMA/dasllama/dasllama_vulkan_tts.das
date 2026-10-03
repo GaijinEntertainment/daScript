@@ -389,7 +389,7 @@ def private ts_ln(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; ns : TtsN
 //! layernorm rows from x into y (y may be x) against scale and shift rows at `woff` / `boff` of `wn` (the slab, or the aux rows fc(style) landed in)
 def private ts_ln_at(raw : VkCommandBuffer; var h : VkHaz; wn : TsRows; woff, boff : int64; x, y : TsRows; rows, d : int64; eps : float) {
     var s = set_tower_ln_cls(fixed_array(x.dev, y.dev, wn.dev), fixed_array(x.bytes, y.bytes, wn.bytes), fixed_array(x.bit, y.bit, wn.bit))
-    var pa = TowerLnArgs(d = uint(d), rows = uint(rows), woff = uint(woff), boff = uint(boff), eps = eps, ln_on = 0u, lnoff = 0u, lnboff = 0u, ascale = 1.0)
+    var pa = TowerLnArgs(d = uint(d), rows = uint(rows), eps = eps, ln_on = 1u, lnoff = uint(woff), lnboff = uint(boff))
     enc_tower_ln_cls(raw, h, s, pa, rows)
     vt_pt(raw, VtProfRole.tts_ln)
 }

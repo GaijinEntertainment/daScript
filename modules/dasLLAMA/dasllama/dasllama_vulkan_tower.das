@@ -1560,7 +1560,7 @@ def private vulkan_canary_blocks(t : CanaryEncoder; var s : CanaryState; npos, w
     var pc_glu = TowerConvModArgs(d = uint(d), nelem = uint(nd))
     var pc_dw = DwConvRowsArgs(c = uint(d), k = uint(t.conv_kernel), t_in = uint(npos))
     var pc_attn_r = TowerCnAttnRArgs(d = uint(d), npos = uint(npos), buoff = 0u, hoff = 0u)
-    var pc_ln = TowerLnArgs(d = uint(d), rows = uint(npos), woff = 0u, boff = 0u, eps = t.eps, ln_on = 0u, lnoff = 0u, lnboff = 0u, ascale = 1.0)
+    var pc_ln = TowerLnArgs(d = uint(d), rows = uint(npos), eps = t.eps, ln_on = 1u)
     var pc_post = TowerLnArgs(d = uint(d), rows = uint(npos), woff = 0u, boff = 0u, eps = t.eps, ln_on = 1u, lnoff = 0u, lnboff = 0u, ascale = 1.0)
     let no_clamp = Clamp()
     var s_none : VkDescriptorSet
@@ -1572,8 +1572,8 @@ def private vulkan_canary_blocks(t : CanaryEncoder; var s : CanaryState; npos, w
         for (l in range64(t.n_layer)) {
             let lo = t.layers[l]
             let rb = l * VT_CN_GEMMS
-            pc_ln.woff = uint(lo.nf1_w)
-            pc_ln.boff = uint(lo.nf1_b)
+            pc_ln.lnoff = uint(lo.nf1_w)
+            pc_ln.lnboff = uint(lo.nf1_b)
             enc_tower_ln_cls(raw, h, r.s_ln, pc_ln, npos)
             vt_pt(raw, VtProfRole.ln)
             vt_mm_clamped(raw, h, no_clamp, r.s_rq_xb, nd, r.s_hg, vff, d, ff, g_vt_maps[rb + VT_CN_FF1A], g_ff, s_none, 0l)
@@ -1665,8 +1665,8 @@ def private vulkan_canary_blocks(t : CanaryEncoder; var s : CanaryState; npos, w
             enc_tower_post_add_ln_cls(raw, h, r.s_post_d_ln, pc_post, npos)
             vt_pt(raw, VtProfRole.post_add)
             pc_post.ln_on = 1u
-            pc_ln.woff = uint(lo.nout_w)
-            pc_ln.boff = uint(lo.nout_b)
+            pc_ln.lnoff = uint(lo.nout_w)
+            pc_ln.lnboff = uint(lo.nout_b)
             enc_tower_ln_cls(raw, h, r.s_ln_x, pc_ln, npos)
             vt_pt(raw, VtProfRole.ln)
         }
@@ -2054,7 +2054,7 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
             let o = offs[l]
             let rb = l * VT_LN_GEMMS
             if (l == 0l) {
-                var pc = TowerLnArgs(d = uint(d), rows = uint(npos), woff = uint(o.ln1_w - norms_base), boff = uint(o.ln1_b - norms_base), eps = eps)
+                var pc = TowerLnArgs(d = uint(d), rows = uint(npos), eps = eps, ln_on = 1u, lnoff = uint(o.ln1_w - norms_base), lnboff = uint(o.ln1_b - norms_base))
                 if (cm2) {
                     enc_tower_ln16_cls(raw, h, r.s_ln16, pc, npos)
                 } else {
@@ -2609,7 +2609,7 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
             let o = qwen3v_block_offs(t, l)
             let rb = l * QWEN3V_GEMMS
             if (l == 0l) {
-                var pc = TowerLnArgs(d = uint(d), rows = uint(npos), woff = uint(o.ln1_w - norms_base), boff = uint(o.ln1_b - norms_base), eps = t.eps)
+                var pc = TowerLnArgs(d = uint(d), rows = uint(npos), eps = t.eps, ln_on = 1u, lnoff = uint(o.ln1_w - norms_base), lnboff = uint(o.ln1_b - norms_base))
                 enc_tower_ln_cls(raw, h, r.s_ln, pc, npos)
             }
             enc_tower_clamp_rq_cls(raw, h, r.s_rq_xb, pc_rq, wg_nd)

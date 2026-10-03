@@ -10833,98 +10833,31 @@ class TowerGeglu {
 struct TowerLnArgs {
     d : uint
     rows : uint
-    woff : uint     //! the norm weight row's base in wn, its bias row at boff
+    woff : uint     //! the branch's post-norm weight row's base in wn, its output bias row at boff
     boff : uint
     eps : float
     ln_on : uint
-    lnoff : uint
+    lnoff : uint    //! the layernorm's weight row's base in wn, its bias row at lnboff
     lnboff : uint
     ascale : float  //! the post-add's residual weight (canary's macaron halves add 0.5 of the branch)
-}
-
-//! layernorm rows against a weight and a bias row: out[r] = (x[r] - mean) . inv . w + b, the CPU `layernorm`'s form with
-//! its mean and variance as workgroup sums - one workgroup a row; the OUT_Q8 stamp quantizes the normed row into Q8_0 blocks
-//! (`outq`, `outs`) in place of storing it, so the value never lands in f32
-[ |> template_struct_instance]
-class template TowerLnT : WgReduceBase {
-    @template_constant OUT16 : bool = false   //! the normed rows as f16 (the cm2 tile's feed), else f32
-    @template_constant OUT32 : bool = true
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 @template_gate = OUT32 outx : array<float>
-    @ssbo @binding = 2 @role = "weight" wn : array<float>
-    @ssbo @binding = 3 @template_gate = OUT16 outh : array<float16>
-    @ssbo @binding = 6 @template_gate = OUT_Q8 outq : array<int8>
-    @ssbo @binding = 7 @template_gate = OUT_Q8 outs : array<float>
-    @push_constant pa : TowerLnArgs
-
-    [spirv_kernel(local_size_x = 256)]
-    def run {
-        let base = gl_WorkGroupID.x * pa.d
-        let tid = gl_LocalInvocationID.x
-        var s1 = 0.0
-        var i = tid
-        while (i < pa.d) {
-            s1 += x[base + i]
-            i += 256u
-        }
-        let s1w = wg_sum(s1, 0u)
-        let mean = s1w / float(pa.d)
-        var s2 = 0.0
-        i = tid
-        while (i < pa.d) {
-            let dv = x[base + i] - mean
-            s2 += dv * dv
-            i += 256u
-        }
-        let inv = wg_rms_inv(s2, pa.d, pa.eps, 1u)
-        static_if (OUT_Q8) {
-            blk_pass(base, pa.d / KQ_B32_ELEMS_U, gl_WorkGroupID.x * (pa.d / KQ_B32_ELEMS_U), mean, inv)
-        } else {
-            i = tid
-            while (i < pa.d) {
-                let o = mad((x[base + i] - mean) * inv, wn[pa.woff + i], wn[pa.boff + i])
-                static_if (OUT16) {
-                    outh[base + i] = half_sat(o)
-                } else {
-                    outx[base + i] = o
-                }
-                i += 256u
-            }
-        }
-    }
-
-    def override normed_at(e : uint; mean, inv : float) : float => mad((x[e] - mean) * inv, wn[pa.woff + e % max(1u, pa.d)], wn[pa.boff + e % max(1u, pa.d)])
-}
-
-[vk_dispatch(name = "tower_ln_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TowerLn : TowerLnT {}
-
-[vk_dispatch(name = "tower_ln16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TowerLn16 : TowerLnT {
-    override OUT16 = true
-    override OUT32 = false
-}
-
-[vk_dispatch(name = "tower_ln_rq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TowerLnRq : TowerLnT {
-    override OUT_Q8 = true
-    override OUT32 = false
 }
 
 //! the residual seam of a block, one workgroup a row: x[r] += ascale . branch, where the branch is y[r] + b (BIAS: the branch's
 //! output bias at `boff`), rmsnorm(y[r]) . wpost (POST_NORM: the branch's post-norm at `woff`, the gemma towers) or y[r] as it is
 //! (the conv module's plain add); then under `ln_on` the next branch's pre-norm - xb[r] = layernorm(x[r]) . wln + bln at `lnoff` /
 //! `lnboff`, or rms(x[r]) . wln on an RMS stamp (POST_NORM implies RMS: the two reduces take slots 0 and 1); the OUT_Q8 stamp (the
-//! layernorm arm) quantizes the next norm into Q8_0 blocks in place of storing it
+//! layernorm arm) quantizes the next norm into Q8_0 blocks in place of storing it; with ADD off the stamp is the layernorm alone -
+//! x left as it is, its rows normed under `ln_on` as the seam's next norm is
 [ |> template_struct_instance]
 class template TowerPostAddLnT : WgReduceBase {
+    @template_constant ADD : bool = true   //! the seam's add before the norm
     @template_constant RMS : bool = false   //! the next pre-norm is the weighted rms (qwen25v, the gemma towers), not the layernorm
     @template_constant POST_NORM : bool = false  //! the branch rows carry their post-norm before the add
     @template_constant BIAS : bool = true   //! the branch rows carry their output bias before the add
     @template_constant OUT16 : bool = false   //! the normed rows as f16 (the cm2 tile's feed), else f32
     @template_constant OUT32 : bool = true
     @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 y : array<float>
+    @ssbo @binding = 1 @template_gate = ADD y : array<float>
     @ssbo @binding = 2 @template_gate = OUT32 xb : array<float>
     @ssbo @binding = 3 @role = "weight" wn : array<float>
     @ssbo @binding = 4 @template_gate = OUT16 xbh : array<float16>
@@ -10944,13 +10877,17 @@ class template TowerPostAddLnT : WgReduceBase {
 
     //! the branch's element `i` of the row at `base` as the add takes it
     def branch(base, i : uint; inv_post : float) : float {
-        static_if (POST_NORM) {
-            return (y[base + i] * inv_post) * wn[pa.woff + i]
+        static_if (!ADD) {
+            return 0.0
         } else {
-            static_if (BIAS) {
-                return y[base + i] + wn[pa.boff + i]
+            static_if (POST_NORM) {
+                return (y[base + i] * inv_post) * wn[pa.woff + i]
             } else {
-                return y[base + i]
+                static_if (BIAS) {
+                    return y[base + i] + wn[pa.boff + i]
+                } else {
+                    return y[base + i]
+                }
             }
         }
     }
@@ -10978,15 +10915,22 @@ class template TowerPostAddLnT : WgReduceBase {
         let inv_post = post_inv(base)
         var s1 = 0.0
         var i = tid
-        while (i < pa.d) {
-            let xv = x[base + i] + pa.ascale * branch(base, i, inv_post)
-            x[base + i] = xv
-            static_if (RMS) {
-                s1 += xv * xv
-            } else {
-                s1 += xv
+        static_if (ADD) {
+            while (i < pa.d) {
+                let xv = x[base + i] + pa.ascale * branch(base, i, inv_post)
+                x[base + i] = xv
+                static_if (RMS) {
+                    s1 += xv * xv
+                } else {
+                    s1 += xv
+                }
+                i += 256u
             }
-            i += 256u
+        } else {
+            while (i < pa.d) {
+                s1 += x[base + i]
+                i += 256u
+            }
         }
         if (pa.ln_on != 0u) {
             static_if (RMS) {
@@ -11008,8 +10952,10 @@ class template TowerPostAddLnT : WgReduceBase {
                 }
                 let inv = wg_rms_inv(s2, pa.d, pa.eps, 1u)
                 static_if (OUT_Q8) {
-                    memoryBarrierBuffer()   // every lane's in-place x writes visible before the block pass reads the row across lanes
-                    barrier()
+                    static_if (ADD) {
+                        memoryBarrierBuffer()   // every lane's in-place x writes visible before the block pass reads the row across lanes
+                        barrier()
+                    }
                     blk_pass(base, pa.d / KQ_B32_ELEMS_U, gl_WorkGroupID.x * (pa.d / KQ_B32_ELEMS_U), mean, inv)
                 } else {
                     i = tid
@@ -11056,6 +11002,28 @@ class TowerPostAddPlain : TowerPostAddLnT {
 [vk_dispatch(name = "tower_post_add_rms_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TowerPostAddRms : TowerPostAddLnT {
     override RMS = true
+}
+
+//! layernorm rows (`ln_on` set) against the weight and bias rows at `lnoff` / `lnboff`: xb[r] = (x[r] - mean) . inv . w + b, the CPU
+//! `layernorm`'s form with its mean and variance as workgroup sums - one workgroup a row; the Rq stamp quantizes the normed row
+//! into Q8_0 blocks (`outq`, `outs`) in place of storing it, so the value never lands in f32
+[vk_dispatch(name = "tower_ln_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerLn : TowerPostAddLnT {
+    override ADD = false
+}
+
+[vk_dispatch(name = "tower_ln16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerLn16 : TowerPostAddLnT {
+    override ADD = false
+    override OUT16 = true
+    override OUT32 = false
+}
+
+[vk_dispatch(name = "tower_ln_rq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerLnRq : TowerPostAddLnT {
+    override ADD = false
+    override OUT_Q8 = true
+    override OUT32 = false
 }
 
 let BIAS_ACT_NONE = 0u        //! `TowerBiasArgs.act`: the bias row alone

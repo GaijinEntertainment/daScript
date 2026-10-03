@@ -222,7 +222,7 @@ def private wdec_fused_rq_shape(t : T?; d, rows, nch : int) {   // nolint:STYLE0
             var s_comb = cp |> cls_set(fixed_array(pmsp, pyp, ycp), @@set_tower_wdec_attn_comb_cls)
             var s_rq4 = cp |> cls_set(fixed_array(ycp, qp[6], sp[6]), @@set_tower_clamp_rq_cls)
             var s_combrq = cp |> cls_set(fixed_array(pmsp, pyp, qp[7], sp[7]), @@set_tower_wdec_attn_comb_rq_cls)
-            var pa_ln = TowerLnArgs(d = uint(d), rows = uint(rows), woff = 0u, boff = uint(d), eps = ROWS_EPS)   // nolint:LINT003 - the encoders take the push block by value, and the lambda below captures it
+            var pa_ln = TowerLnArgs(d = uint(d), rows = uint(rows), eps = ROWS_EPS, ln_on = 1u, lnoff = 0u, lnboff = uint(d))   // nolint:LINT003 - the encoders take the push block by value, and the lambda below captures it
             var pa_rq = RqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = -3.0e38, hi = 3.0e38)   // nolint:LINT003 - the same
             var pa_rqh = RqArgs(inbase = 0u, nblk = uint(nff / q8e), lo = -3.0e38, hi = 3.0e38)   // nolint:LINT003 - the same
             var pa_post = TowerLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 1u, lnoff = uint(3 * d), lnboff = uint(4 * d), ascale = 1.0)   // nolint:LINT003 - the same
@@ -822,7 +822,7 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
                 var s_pad = cp |> cls_set(fixed_array(qp, qpp), @@set_tower_hpad_cls)
                 var s_pad16 = cp |> cls_set(fixed_array(qp, qphp), @@set_tower_hpad16_cls)
                 var s_unpad = cp |> cls_set(fixed_array(qpp, qcp), @@set_tower_hunpad_cls)
-                var pa_ln = TowerLnArgs(d = uint(d), rows = uint(rows), woff = 0u, boff = uint(d), eps = ROWS_EPS)
+                var pa_ln = TowerLnArgs(d = uint(d), rows = uint(rows), eps = ROWS_EPS, ln_on = 1u, lnoff = 0u, lnboff = uint(d))
                 var pa_post = TowerLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 1u, lnoff = uint(3 * d), lnboff = uint(d), ascale = 1.0)
                 var pa_post0 = TowerLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 0u, lnoff = uint(3 * d), lnboff = uint(d), ascale = 1.0)
                 var pa_post_half = TowerLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 0u, lnoff = uint(3 * d), lnboff = uint(d), ascale = 0.5)
@@ -1005,7 +1005,7 @@ def test_vkt_tower_f16_feeds(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                 var s_padb = cp |> cls_set(fixed_array(qp, qpp, wp), @@set_tower_hpad_b_cls)
                 var s_pad16b = cp |> cls_set(fixed_array(qp, qphp, wp), @@set_tower_hpad16_b_cls)
                 var s_unpad16 = cp |> cls_set(fixed_array(qpp, qchp), @@set_tower_hunpad16_cls)
-                var pa_ln = TowerLnArgs(d = uint(d), rows = uint(rows), woff = 0u, boff = uint(d), eps = ROWS_EPS)
+                var pa_ln = TowerLnArgs(d = uint(d), rows = uint(rows), eps = ROWS_EPS, ln_on = 1u, lnoff = 0u, lnboff = uint(d))
                 var pa_post = TowerLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 1u, lnoff = uint(3 * d), lnboff = uint(d), ascale = 1.0)
                 var pa_post0 = TowerLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 0u, lnoff = uint(3 * d), lnboff = uint(d), ascale = 1.0)
                 var pa_rs = TowerRestrideArgs(rows = uint(rows), rows_pad = uint(rows_pad), nheads = uint(ROWS_HEADS), hs = uint(LN_HS), hsp = uint(LN_HSP),
