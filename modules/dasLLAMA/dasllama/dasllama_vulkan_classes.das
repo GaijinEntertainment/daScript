@@ -11503,20 +11503,43 @@ struct RopeKvArgs {
     cosrow : uint
 }
 
-// fused rope + KV-row store (decode, one token): one thread per rotation pair, each owning
-// 2 distinct K + 2 V slots. KT is the mirror element type; f16 stores clamp +-65504 (the
-// metal CLAMP16 contract — an inf in the mirror poisons attention)
+//! the K/V mirror stores the rope-store stamps share: the K plane at binding 2, the V plane at 3, KT the mirror element type;
+//! the f16 stamps clamp +-65504 (the metal CLAMP16 contract - an inf in the mirror poisons attention)
 [ |> template_struct_instance]
-class template RopeKvStoreT {
-    @ssbo @binding = 0 qrows : array<float>    // q, roped in place
-    @ssbo @binding = 1 kvsrc : array<float>    // the projection buffer: [q | k | v] rows
+class template KvMirStoreT : WgReduceBase {
     @ssbo @binding = 2 kmir : array<KT>        // the K mirror plane
     @ssbo @binding = 3 vmir : array<KT>        // the V mirror plane
+    @template_constant CLAMP16 : bool = true
+
+    //! one K mirror element, clamped into f16 on the f16 stamp
+    def st_k(i : uint; v : float) {
+        static_if (CLAMP16) {
+            kmir[i] = half_sat(v)
+        } else {
+            kmir[i] = v
+        }
+    }
+
+    //! ... and one V mirror element
+    def st_v(i : uint; v : float) {
+        static_if (CLAMP16) {
+            vmir[i] = half_sat(v)
+        } else {
+            vmir[i] = v
+        }
+    }
+}
+
+// fused rope + KV-row store (decode, one token): one thread per rotation pair, each owning
+// 2 distinct K + 2 V slots
+[ |> template_struct_instance]
+class template RopeKvStoreT : KvMirStoreT {
+    @ssbo @binding = 0 qrows : array<float>    // q, roped in place
+    @ssbo @binding = 1 kvsrc : array<float>    // the projection buffer: [q | k | v] rows
     @ssbo @binding = 4 cossin : array<float>   // this position's cos row then sin row
     @ssbo @binding = 5 tok : array<TokMeta>    // the shared per-token block (element 0)
     @ssbo @binding = 6 @role = "weight" bias : array<float>   // per-layer [q | k | v] projection biases (hasb), else a placeholder
     @push_constant pa : RopeKvArgs
-    @template_constant CLAMP16 : bool = true
 
     [spirv_kernel(local_size_x = 256)]
     def run {
@@ -11544,17 +11567,10 @@ class template RopeKvStoreT {
                 let bv = pa.boff + pa.qd + pa.kvd + h * pa.hs
                 let v0 = kvsrc[vb + e0] + (pa.hasb != 0u ? bias[bv + e0] : 0.0)
                 let v1 = kvsrc[vb + e1] + (pa.hasb != 0u ? bias[bv + e1] : 0.0)
-                static_if (CLAMP16) {
-                    kmir[mrow + h * pa.hs + e0] = half_sat(a0 * fcr - a1 * fci)
-                    kmir[mrow + h * pa.hs + e1] = half_sat(a0 * fci + a1 * fcr)
-                    vmir[mrow + h * pa.hs + e0] = half_sat(v0)
-                    vmir[mrow + h * pa.hs + e1] = half_sat(v1)
-                } else {
-                    kmir[mrow + h * pa.hs + e0] = a0 * fcr - a1 * fci
-                    kmir[mrow + h * pa.hs + e1] = a0 * fci + a1 * fcr
-                    vmir[mrow + h * pa.hs + e0] = v0
-                    vmir[mrow + h * pa.hs + e1] = v1
-                }
+                st_k(mrow + h * pa.hs + e0, a0 * fcr - a1 * fci)
+                st_k(mrow + h * pa.hs + e1, a0 * fci + a1 * fcr)
+                st_v(mrow + h * pa.hs + e0, v0)
+                st_v(mrow + h * pa.hs + e1, v1)
             } else {
                 let qb = row * pa.qrow + h * pa.hs
                 let bq = pa.boff + h * pa.hs
@@ -11600,17 +11616,14 @@ struct RopeKvBArgs {
 }
 
 // batched rope + KV-store (prefill, npos positions): q roped in place, k/v from the projection
-// buffer into the mirrors at absolute positions. KT/CLAMP16 as in RopeKvStoreT
+// buffer into the mirrors at absolute positions
 [ |> template_struct_instance]
-class template RopeKvStoreBT {
+class template RopeKvStoreBT : KvMirStoreT {
     @ssbo @binding = 0 qrows : array<float>    // q rows, roped in place
     @ssbo @binding = 1 kvrows : array<float>   // k rows at 0, v rows at voff
-    @ssbo @binding = 2 kmir : array<KT>
-    @ssbo @binding = 3 vmir : array<KT>
     @ssbo @binding = 4 cossin : array<float>   // per-position cos row then sin row (hs floats each)
     @ssbo @binding = 5 @role = "weight" bias : array<float>   // per-layer [q | k | v] projection biases (hasb), else a placeholder
     @push_constant pa : RopeKvBArgs
-    @template_constant CLAMP16 : bool = true
 
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
     def run {
@@ -11642,17 +11655,10 @@ class template RopeKvStoreBT {
                 let vb = pa.voff + p * pa.kstride + h * pa.hs
                 let v0 = kvrows[vb + e0] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + pa.kvd + bhead + e0] : 0.0)
                 let v1 = kvrows[vb + e1] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + pa.kvd + bhead + e1] : 0.0)
-                static_if (CLAMP16) {
-                    kmir[mo + e0] = half_sat(a0 * fcr - a1 * fci)
-                    kmir[mo + e1] = half_sat(a0 * fci + a1 * fcr)
-                    vmir[mo + e0] = half_sat(v0)
-                    vmir[mo + e1] = half_sat(v1)
-                } else {
-                    kmir[mo + e0] = a0 * fcr - a1 * fci
-                    kmir[mo + e1] = a0 * fci + a1 * fcr
-                    vmir[mo + e0] = v0
-                    vmir[mo + e1] = v1
-                }
+                st_k(mo + e0, a0 * fcr - a1 * fci)
+                st_k(mo + e1, a0 * fci + a1 * fcr)
+                st_v(mo + e0, v0)
+                st_v(mo + e1, v1)
             } elif (rot || pa.hasb != 0u) {   // a pass-through q pair (fcr 1, fci 0) is rewritten only when a bias lands on it
                 let qhs = pa.qhs == 0u ? pa.hs : pa.qhs   // 0 = compact (non-gated); a gated model passes 2 * hs
                 let qb = p * (pa.qd / pa.hs) * qhs + h * qhs
@@ -11716,14 +11722,12 @@ struct QknRopeArgs {
     cosrow : uint   //! a row's stride in the cos/sin plane
 }
 
-// qk_rms + rope_kv_store in ONE dispatch (qk_norm models); KT/CLAMP16 as in RopeKvStoreT.
+// qk_rms + rope_kv_store in ONE dispatch (qk_norm models).
 // A head past 256 (gemma-4's global layers, 512) gives each thread a second element at tid + 256.
 [ |> template_struct_instance]
-class template QknRopeKvT : WgReduceBase {
+class template QknRopeKvT : KvMirStoreT {
     @ssbo @binding = 0 qrows : array<float>    // q rows, normed + roped in place
     @ssbo @binding = 1 kvsrc : array<float>    // the projection buffer: [q | k | v] rows
-    @ssbo @binding = 2 kmir : array<KT>
-    @ssbo @binding = 3 vmir : array<KT>
     @ssbo @binding = 4 cossin : array<float>
     @ssbo @binding = 5 wn : array<float>       // the q/k norm weight rows (its OWN member now —
                                                // the old kernel packed them into the cos buffer)
@@ -11731,25 +11735,6 @@ class template QknRopeKvT : WgReduceBase {
     @ssbo @binding = 7 @role = "weight" bias : array<float>   // per-layer [q | k | v] projection biases (hasb), else a placeholder
     @push_constant pa : QknRopeArgs
     @workgroup row : float[512]                // this head's normed q or k row (hs <= 512)
-    @template_constant CLAMP16 : bool = true
-
-    //! one K mirror element, clamped into f16 on the f16 stamp
-    def st_k(i : uint; v : float) {
-        static_if (CLAMP16) {
-            kmir[i] = half_sat(v)
-        } else {
-            kmir[i] = v
-        }
-    }
-
-    //! ... and one V mirror element
-    def st_v(i : uint; v : float) {
-        static_if (CLAMP16) {
-            vmir[i] = half_sat(v)
-        } else {
-            vmir[i] = v
-        }
-    }
 
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
     def run {   // nolint:STYLE037,STYLE038 — the verbatim norm + rotation + store pass, parity-locked to the shipped kernel; the V forms and the wide arm ride the same head row
