@@ -1492,33 +1492,37 @@ def save_model_image_streaming(var t : Model; m : GGUFMeta; bytes : array<uint8>
 def private borrow_plane(bp : uint8 const?; msize : uint64; path : string;
                          by_name : table<string; ImgSection>; var ok : bool&;
                          name : string; var field : array<auto(TT)>) {
-    if (!key_exists(by_name, name)) {
-        return
-    }
-    let sec = by_name?[name] ?? ImgSection()
     let esz = uint64(typeinfo sizeof(field[0]))
-    if (sec.off % uint64(IMAGE_PAGE) != 0ul || sec.bytes > msize || sec.off > msize - sec.bytes || sec.bytes % esz != 0ul) {
-        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - section '{name}' at {sec.off}+{sec.bytes} (esz {esz}) is malformed\n")
-        ok = false
-    } else {
+    let s = image_section(by_name, msize, path, name, esz, " (esz {esz})", ok)
+    if (s.found) {
         unsafe {
-            _builtin_make_temp_array_i64(field, reinterpret<void?>(bp + int64(sec.off)), int64(sec.bytes / esz))
+            _builtin_make_temp_array_i64(field, reinterpret<void?>(bp + int64(s.sec.off)), int64(s.sec.bytes / esz))
         }
     }
+}
+
+//! the table's section `name` when it is page-aligned inside the `msize` mapping in whole `esz`-byte elements; a malformed
+//! one declines through `ok`, its line carrying `detail`; `found` false for a section the table does not name
+def private image_section(by_name : table<string; ImgSection>; msize : uint64; path, name : string; esz : uint64; detail : string;
+                          var ok : bool&) : tuple<found : bool; sec : ImgSection> {
+    if (!key_exists(by_name, name)) {
+        return (found = false, sec = ImgSection())
+    }
+    let sec = by_name?[name] ?? ImgSection()
+    if (sec.off % uint64(IMAGE_PAGE) != 0ul || sec.bytes > msize || sec.off > msize - sec.bytes || sec.bytes % esz != 0ul) {
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - section '{name}' at {sec.off}+{sec.bytes}{detail} is malformed\n")
+        ok = false
+        return (found = false, sec = sec)
+    }
+    return (found = true, sec = sec)
 }
 
 def private bind_plane_section(bp : uint8 const?; msize : uint64; path : string;
                                by_name : table<string; ImgSection>; var ok : bool&;
                                name : string; var pl) {
-    if (!key_exists(by_name, name)) {
-        return
-    }
-    let sec = by_name?[name] ?? ImgSection()
-    if (sec.off % uint64(IMAGE_PAGE) != 0ul || sec.bytes > msize || sec.off > msize - sec.bytes) {
-        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - section '{name}' at {sec.off}+{sec.bytes} is malformed\n")
-        ok = false
-        return
-    }
+    let s = image_section(by_name, msize, path, name, 1ul, "", ok)
+    return if (!s.found)
+    let sec = s.sec
     if (!_::plane_bind(pl, bp, int64(sec.off), int64(sec.bytes))) {
         to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - section '{name}' is {sec.bytes} bytes, not a whole number of elements\n")
         ok = false
