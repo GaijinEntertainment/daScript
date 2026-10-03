@@ -1689,6 +1689,43 @@ def private rd_host_resume(var raw : VkCommandBuffer&; var next : VkCommandBuffe
     rd_encode_routed_sum(raw, h, l, nrows)
 }
 
+def private rd_encode_hc_layer(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nrows : int64; seq, fuse_qkr : bool; nlfin : int64) {
+    let dim = g_rd.dim
+    let ncols = uint(nrows)
+    rd_encode_hc_mix(raw, h, 2l * l, false, nrows)
+    rq_enc(raw, h, L.s_quant_xb, L.recurrent ? L.fqkv : L.fq, dim * nrows)
+    if (L.recurrent) {
+        rd_encode_dn_head(raw, h, L, nrows, ncols, seq)
+    } else {
+        rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, rd_split_pieces()), nrows, ncols, 0)
+    }
+    rd_encode_hc_scatter(raw, h, L, false, nrows)
+    rd_encode_hc_mix(raw, h, 2l * l + 1l, false, nrows)
+    rq_enc(raw, h, L.s_quant_xb2, L.f1, dim * nrows)
+    if (has_dense_triple(L)) {
+        rd_encode_ffn(raw, h, L, l, nlfin, nrows, ncols, 0)
+    }
+}
+
+def private rd_encode_hc_cat_eh(raw : VkCommandBuffer; var h : VkHaz; nrows : int64; src_dev : uint64; pfx : string) {
+    let dim = g_rd.dim
+    let hc = g_rd.hc_n
+    let rowb = dim * 4l
+    for (i in range64(nrows)) {
+        for (c in range64(hc)) {
+            let cat_row = i * hc + c
+            if (src_dev != g_rd.head_cat_dev || cat_row != 0l) {
+                cmd_copy_range(raw, src_dev, i * rowb, g_rd.head_cat_dev, cat_row * 2l * rowb, rowb)
+            }
+            cmd_copy_range(raw, g_rd.hcxn_dev, cat_row * rowb, g_rd.head_cat_dev, cat_row * 2l * rowb + rowb, rowb)
+        }
+    }
+    rq_enc(raw, h, g_rd.head_s_cat_rq, g_rd.head_eh_fmt, 2l * dim * hc * nrows)
+    rd_ts(raw, "{pfx}cat")
+    rd_gemv(g_rd.head_eh_fmt, raw, h, g_rd.head_s_eh_hc, 2l * dim, dim, uint(hc * nrows), uint(dim))
+    rd_ts(raw, "{pfx}eh")
+}
+
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]
 def private rd_record_hc_segments_n(nrows : int64; seq : bool; var segs : array<VkCommandBuffer>; seg0 : int64) {
     rd_fill_gemv_regions_all()
@@ -1718,19 +1755,7 @@ def private rd_record_hc_segments_n(nrows : int64; seq : bool; var segs : array<
             if (g_rd.ngram && l == g_rd.ngram_layer) {
                 rd_encode_hc_side(raw, h, nrows)
             }
-            rd_encode_hc_mix(raw, h, 2l * l, false, nrows)
-            rq_enc(raw, h, L.s_quant_xb, L.recurrent ? L.fqkv : L.fq, dim * nrows)
-            if (L.recurrent) {
-                rd_encode_dn_head(raw, h, L, nrows, ncols, seq)
-            } else {
-                rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, rd_split_pieces()), nrows, ncols, 0)
-            }
-            rd_encode_hc_scatter(raw, h, L, false, nrows)
-            rd_encode_hc_mix(raw, h, 2l * l + 1l, false, nrows)
-            rq_enc(raw, h, L.s_quant_xb2, L.f1, dim * nrows)
-            if (has_dense_triple(L)) {
-                rd_encode_ffn(raw, h, L, l, nlfin, nrows, ncols, 0)
-            }
+            rd_encode_hc_layer(raw, h, L, l, nrows, seq, fuse_qkr, nlfin)
             if (L.moe) {
                 verify(L.experts_host, "vk decode: the hyper-connection chain serves routed experts on the host alone")
                 rd_encode_host_cut(raw, h, L, nrows, "")
@@ -1789,17 +1814,7 @@ def private rd_encode_hc_verify_warm(raw : VkCommandBuffer; var h : VkHaz; nrows
     var pcn = HcNormArgs(dim = uint(dim), hc = uint(hc), woff = uint(g_rd.hc_hnorm_row * hcd), row0 = 0u, eps = g_rd.eps)
     enc_hc_norm_cls(raw, h, g_rd.s_hc_norm_vsrc, pcn, hc * nrows)
     vhz_dep(raw, h, VHZ_XB2, VHZ_XB, true)
-    for (i in range64(nrows)) {
-        for (c in range64(hc)) {
-            let cat_row = i * hc + c
-            cmd_copy_range(raw, g_rd.xb2_dev, i * rowb, g_rd.head_cat_dev, cat_row * 2l * rowb, rowb)
-            cmd_copy_range(raw, g_rd.hcxn_dev, cat_row * rowb, g_rd.head_cat_dev, cat_row * 2l * rowb + rowb, rowb)
-        }
-    }
-    rq_enc(raw, h, g_rd.head_s_cat_rq, g_rd.head_eh_fmt, 2l * dim * hc * nrows)
-    rd_ts(raw, "t:warm_cat")
-    rd_gemv(g_rd.head_eh_fmt, raw, h, g_rd.head_s_eh_hc, 2l * dim, dim, uint(hc * nrows), uint(dim))
-    rd_ts(raw, "t:warm_eh")
+    rd_encode_hc_cat_eh(raw, h, nrows, g_rd.xb2_dev, "t:warm_")
     rd_encode_hc_mix(raw, h, 2l * g_rd.n_layers, false, nrows)
     rq_enc(raw, h, L.s_quant_xb, L.fq, dim * nrows)
     rd_encode_attn_head(raw, h, L, g_rd.n_layers, rd_head_fuse_qkr(), rd_norm_final(), rd_layer_pieces(L, rd_split_pieces()), nrows, uint(nrows), 0, true, "t:warm_")
@@ -3358,25 +3373,8 @@ def private rd_record_hc_draft {
     var pcn = HcNormArgs(dim = uint(dim), hc = uint(hc), woff = uint(g_rd.hc_hnorm_row * hcd), row0 = 0u, eps = g_rd.eps)
     enc_hc_norm_cls(raw, h, g_rd.s_hc_norm_carry, pcn, hc)
     vhz_dep(raw, h, VHZ_XB | VHZ_XB2, VHZ_XB, true)
-    for (c in range64(hc)) {
-        if (c > 0l) {
-            cmd_copy_range(raw, g_rd.head_cat_dev, 0l, g_rd.head_cat_dev, c * 2l * dim * 4l, dim * 4l)
-        }
-        cmd_copy_range(raw, g_rd.hcxn_dev, c * dim * 4l, g_rd.head_cat_dev, (c * 2l + 1l) * dim * 4l, dim * 4l)
-    }
-    rq_enc(raw, h, g_rd.head_s_cat_rq, g_rd.head_eh_fmt, 2l * dim * hc)
-    rd_ts(raw, "p:draft_cat")
-    rd_gemv(g_rd.head_eh_fmt, raw, h, g_rd.head_s_eh_hc, 2l * dim, dim, uint(hc), uint(dim))
-    rd_ts(raw, "p:draft_eh")
-    rd_encode_hc_mix(raw, h, 2l * l, false)
-    rq_enc(raw, h, L.s_quant_xb, L.fq, dim)
-    rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, rd_split_pieces()), 1l, 1u, 0)
-    rd_encode_hc_scatter(raw, h, L, false)
-    rd_encode_hc_mix(raw, h, 2l * l + 1l, false)
-    rq_enc(raw, h, L.s_quant_xb2, L.f1, dim)
-    if (has_dense_triple(L)) {
-        rd_encode_ffn(raw, h, L, l, nlfin, 1l, 1u, 0)
-    }
+    rd_encode_hc_cat_eh(raw, h, 1l, g_rd.head_cat_dev, "p:draft_")
+    rd_encode_hc_layer(raw, h, L, l, 1l, false, fuse_qkr, nlfin)
     rd_encode_host_cut(raw, h, L, 1l, "")
     pfq_end(raw)
     cmd_close(raw)
