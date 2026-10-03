@@ -1896,92 +1896,49 @@ def private cm2_b32_require_s_column(fmt : int; tc : int64) {
     }
 }
 
-def private cm2_dense_ensure(fmt : int; tc : int64) : bool {
-    var r = false
-    kq_tile_stamp(fmt, "q51 mx4 iq4nl32") <| $() {
-        r = tc == 256l ? tile_ensure_cm2l_cls() : (tc == 128l ? tile_ensure_cm2m_cls() : tile_ensure_cm2s_cls())
-    }
-    return r
-}
+let private CM2_TILE_TAILS = "khr_cls cm2e_cls cm2l_cls cm2m_cls cm2s_cls"   //! the cm2 class ladders' tiles, by `cm2_tile_tail`
+//! the (format, tile) pairs no stamp serves: a per-32 expert plane has no dense l or m column
+let private CM2_TILE_NONE = "q51/cm2l_cls q51/cm2m_cls mx4/cm2l_cls mx4/cm2m_cls iq4nl32/cm2l_cls iq4nl32/cm2m_cls"
 
-def private cm2_dense_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
-    var r : VkDescriptorSet
-    kq_tile_stamp(fmt, "q51 mx4 iq4nl32") <| $() {
-        if (tc == 256l) {
-            r = tile_set_cm2l_cls(bufs, sizes, gbits)
-        } elif (tc == 128l) {
-            r = tile_set_cm2m_cls(bufs, sizes, gbits)
-        } else {
-            r = tile_set_cm2s_cls(bufs, sizes, gbits)
-        }
+//! the tile a cm2 class pick takes, its ordinal in CM2_TILE_TAILS: the KHR tile on a KHR-mode card, the e column for the expert
+//! schedule's m pieces, the s column on a per-32 expert plane, else the dense column of `tc`
+def private cm2_tile_tail(fmt : int; tc : int64) : int {
+    verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk classes: a cm2 tile column the pick never returns")
+    if (g_gpu.coopmat_mode == COOPMAT_MM) return 0
+    if (tc == CM2_TC_E) return 1
+    if (cm2_b32_routed(fmt)) {
+        cm2_b32_require_s_column(fmt, tc)
+        return 4
     }
-    return r
-}
-
-def private cm2_dense_enc(fmt : int; tc : int64; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
-    kq_tile_stamp(fmt, "q51 mx4 iq4nl32") <| $() {
-        if (tc == 256l) {
-            tile_enc_cm2l_cls(raw, h, s, pc, groups)
-        } elif (tc == 128l) {
-            tile_enc_cm2m_cls(raw, h, s, pc, groups)
-        } else {
-            tile_enc_cm2s_cls(raw, h, s, pc, groups)
-        }
-    }
+    return tc == 256l ? 2 : (tc == 128l ? 3 : 4)
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
-def cm2_cls_ensure(fmt : int; tc : int64) : bool {
+def cm2_cls_ensure(fmt : int; tc : int64) : bool {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a (format, tile) stamp
     verify(fmt == int(KqFmt.q8) || kq_block32(fmt) || kq_sb(fmt), "vk classes: a cm2 tile for a format the f16 feed never admits")
-    verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk classes: a cm2 tile column the pick never returns")
-    if (g_gpu.coopmat_mode == COOPMAT_MM) {
-        return khr_cls_ensure(fmt)
+    let tail = cm2_tile_tail(fmt, tc)
+    var r = false
+    kq_tile_stamp(fmt, CM2_TILE_NONE, "batch", tail, CM2_TILE_TAILS) <| $() {
+        r = tile_ensure()
     }
-    if (tc == CM2_TC_E) {
-        return cm2e_cls_ensure(fmt)
-    }
-    if (cm2_b32_routed(fmt)) {
-        cm2_b32_require_s_column(fmt, tc)
-        return fmt == int(KqFmt.q51) ? ensure_q51_batch_cm2s_cls() : (fmt == int(KqFmt.mx4) ? ensure_mx4_batch_cm2s_cls() : ensure_iq4nl32_batch_cm2s_cls())
-    }
-    return cm2_dense_ensure(fmt, tc)
+    return r
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
-def cm2_cls_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
-    verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk classes: a cm2 tile column the pick never returns")
-    if (g_gpu.coopmat_mode == COOPMAT_MM) {
-        return khr_cls_set(fmt, bufs, sizes, gbits)
+def cm2_cls_set(fmt : int; tc : int64; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a (format, tile) stamp
+    let tail = cm2_tile_tail(fmt, tc)
+    var r : VkDescriptorSet
+    kq_tile_stamp(fmt, CM2_TILE_NONE, "batch", tail, CM2_TILE_TAILS) <| $() {
+        r = tile_set(bufs, sizes, gbits)
     }
-    if (tc == CM2_TC_E) {
-        return cm2e_cls_set(fmt, bufs, sizes, gbits)
-    }
-    if (cm2_b32_routed(fmt)) {
-        cm2_b32_require_s_column(fmt, tc)
-        return (fmt == int(KqFmt.q51) ? set_q51_batch_cm2s_cls(bufs, sizes, gbits)
-            : (fmt == int(KqFmt.mx4) ? set_mx4_batch_cm2s_cls(bufs, sizes, gbits) : set_iq4nl32_batch_cm2s_cls(bufs, sizes, gbits)))
-    }
-    return cm2_dense_set(fmt, tc, bufs, sizes, gbits)
+    return r
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
-def cm2_cls_enc(fmt : int; tc : int64; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
-    verify(tc == 256l || tc == 128l || tc == 32l || tc == CM2_TC_E, "vk classes: a cm2 tile column the pick never returns")
-    if (g_gpu.coopmat_mode == COOPMAT_MM) {
-        khr_cls_enc(fmt, raw, h, s, pc, groups)
-    } elif (tc == CM2_TC_E) {
-        cm2e_cls_enc(fmt, raw, h, s, pc, groups)
-    } elif (cm2_b32_routed(fmt)) {
-        cm2_b32_require_s_column(fmt, tc)
-        if (fmt == int(KqFmt.q51)) {
-            enc_q51_batch_cm2s_cls(raw, h, s, pc, groups)
-        } elif (fmt == int(KqFmt.mx4)) {
-            enc_mx4_batch_cm2s_cls(raw, h, s, pc, groups)
-        } else {
-            enc_iq4nl32_batch_cm2s_cls(raw, h, s, pc, groups)
-        }
-    } else {
-        cm2_dense_enc(fmt, tc, raw, h, s, pc, groups)
+def cm2_cls_enc(fmt : int; tc : int64; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a (format, tile) stamp
+    let tail = cm2_tile_tail(fmt, tc)
+    kq_tile_stamp(fmt, CM2_TILE_NONE, "batch", tail, CM2_TILE_TAILS) <| $() {
+        tile_enc(raw, h, s, pc, groups)
     }
 }
 

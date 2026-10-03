@@ -419,8 +419,8 @@ and a decode GEMV in `Q8Gemv`'s shape (`Q51Gemv`, `Mx4Gemv`: one lane a block, `
 `KqGemvK4Gu`'s shape, `Mx4GemvGu`). Its census rows land in `VK_CENSUS_NEVER_DISPATCHED` while no
 stocked small carrier holds such a plane. Its stamps spell `<fmt>_batch_<tail>` the way q8's do, so
 the format joins `kq_tile_stem`'s per-32 list (`dasllama_kqformat.das`) and, since its dense column
-is refused, the `"q51 mx4"` skip lists of the `cm2_cls_*` ladders with an explicit branch of its own
-beside them (`dasllama_vulkan_classes.das`). The module gate (`REVIEW.das`) reads it twice: the
+is refused, the `CM2_TILE_NONE` pairs of the `cm2_cls_*` ladders (its l and m columns) and the s-column
+route of `cm2_tile_tail` (`cm2_b32_routed`, `dasllama_vulkan_classes.das`). The module gate (`REVIEW.das`) reads it twice: the
 template ships the KHR trio like every format on the cm2 template (`CM2_KHR_EXEMPT` is empty), and
 `cm2_dispatch_name` learns that the format spells its expert stamp `<fmt>_batch_cm2e_cls` the way q8
 does.
