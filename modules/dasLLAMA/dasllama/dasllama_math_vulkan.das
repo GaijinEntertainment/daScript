@@ -94,17 +94,23 @@ def vk_drop_model {
     vk_drop_model_state()
 }
 
+def private stream_group_of(offs1 : int64 const?; f1 : int) : int {
+    let w0 = unsafe(offs1[0])
+    return -1 if (find_stack_idx(w0, f1) >= 0)
+    let g = find_stream_group(w0, f1)
+    if (g < 0) {
+        panic("dasLLAMA vulkan tier: dispatch against a region that is neither resident nor streamed (fmt {f1} element offset {w0})")
+    }
+    return g
+}
+
 //! MoeGpuFfnFn: routed experts' whole FFN chain (gate+up GEMMs, activation, requant, down GEMM)
 //! as device-side submit chains over resident stacks — hidden activations, and (npos > 0) the
 //! combined output, never cross PCIe. Streamed layers route through the slot rail; else panics.
 def vk_moe_ffn(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; wp : float const?; invp : uint const?; n, nfe, nrows, npos : int64; f1, f3, f2 : int; is_gelu : bool) {
     ensure_ffn_state()
-    if (find_stack_idx(unsafe(offs1[0]), f1) < 0) {
-        let w0 = unsafe(offs1[0])
-        let g = find_stream_group(w0, f1)
-        if (g < 0) {
-            panic("dasLLAMA vulkan tier: dispatch against a region that is neither resident nor streamed (fmt {f1} element offset {w0})")
-        }
+    let g = stream_group_of(offs1, f1)
+    if (g >= 0) {
         vk_moe_ffn_streamed(g, goutp, offs1, offs3, offs2, nregions, xqp, xsp, wp, invp, n, nfe, nrows, npos, f1, f3, f2, is_gelu)
         return
     }
@@ -120,12 +126,8 @@ def vk_moe_ffn(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?; o
 //! window's f32 rows; resident stacks dispatch directly, a streamed group binds its slot first.
 def vk_moe_ffn_xf(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xp : float const?; wp : float const?; invp : uint const?; n, nfe, nrows, npos : int64; f1, f3, f2 : int; is_gelu : bool) {
     ensure_ffn_state()
-    if (find_stack_idx(unsafe(offs1[0]), f1) < 0) {
-        let w0 = unsafe(offs1[0])
-        let g = find_stream_group(w0, f1)
-        if (g < 0) {
-            panic("dasLLAMA vulkan tier: dispatch against a region that is neither resident nor streamed (fmt {f1} element offset {w0})")
-        }
+    let g = stream_group_of(offs1, f1)
+    if (g >= 0) {
         vk_moe_ffn_streamed_xf(g, goutp, offs1, offs3, offs2, nregions, xp, wp, invp, n, nfe, nrows, npos, f1, f3, f2, is_gelu)
         return
     }
@@ -136,12 +138,8 @@ def vk_moe_ffn_xf(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?
 //! regions' experts (the split's share), a resident layer dispatches directly; join collects.
 def vk_moe_ffn_xf_begin(offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xp : float const?; wp : float const?; invp : uint const?; n, nfe, nrows, npos : int64; f1, f3, f2 : int; is_gelu : bool) {
     ensure_ffn_state()
-    if (find_stack_idx(unsafe(offs1[0]), f1) < 0) {
-        let w0 = unsafe(offs1[0])
-        let g = find_stream_group(w0, f1)
-        if (g < 0) {
-            panic("dasLLAMA vulkan tier: dispatch against a region that is neither resident nor streamed (fmt {f1} element offset {w0})")
-        }
+    let g = stream_group_of(offs1, f1)
+    if (g >= 0) {
         stream_group_bind_partial(g, nrows, f3, f2, offs1, nregions, nfe * n)
     }
     vk_moe_ffn_batch_xf_begin(offs1, offs3, offs2, nregions, xp, wp, invp, n, nfe, nrows, npos, f1, f3, f2, is_gelu)
