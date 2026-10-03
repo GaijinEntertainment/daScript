@@ -32,6 +32,11 @@ Multiple annotations can be combined with commas:
 
 Some annotations accept arguments:
 
+Decimal integer arguments may use the ``l`` suffix for signed 64-bit values or ``ul``
+for unsigned 64-bit values. The same forms work in field metadata, for example
+``@limit=4102444800l``. Reflection and macro argument access preserve both the
+integer type and all 64 bits.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -760,4 +765,3 @@ after ``let``/``var`` (and after ``inscope``), before the name:
 Variable metadata reaches macros and lints through ``Variable.annotation`` on the AST; it has no
 runtime effect of its own. ``@exact_size`` is the lint contract PERF032 checks
 (:ref:`lint <perf_lint>`); ``@scratch`` is read by the hot-path rules.
-

@@ -751,12 +751,33 @@
       "type": "CHOICE",
       "members": [
         {
+          "type": "SYMBOL",
+          "name": "_annotation_signed_number"
+        },
+        {
           "type": "ALIAS",
           "content": {
             "type": "TOKEN",
             "content": {
               "type": "PATTERN",
-              "value": "[0-9][0-9_]*"
+              "value": "[0-9][0-9_]*[uU][lL]|0[xX][0-9a-fA-F][0-9a-fA-F_]*[uU]?[lL]"
+            }
+          },
+          "named": true,
+          "value": "integer_literal"
+        }
+      ]
+    },
+    "_annotation_signed_number": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "TOKEN",
+            "content": {
+              "type": "PATTERN",
+              "value": "[0-9][0-9_]*[lL]?"
             }
           },
           "named": true,
@@ -800,7 +821,7 @@
             },
             {
               "type": "SYMBOL",
-              "name": "_annotation_number"
+              "name": "_annotation_signed_number"
             }
           ]
         },

@@ -23,15 +23,26 @@ namespace das {
         return arg ? arg->iValue : def;
     }
 
+    static bool annotationUInt64(const AnnotationArgumentList & args, const string & name, uint64_t & value) {
+        for (const auto & arg : args) {
+            if (arg.name != name) continue;
+            switch (arg.type) {
+            case Type::tInt: value = uint64_t(arg.iValue); return true;
+            case Type::tInt64: value = uint64_t(arg.lValue); return true;
+            case Type::tUInt64: value = arg.ulValue; return true;
+            default: break;
+            }
+        }
+        return false;
+    }
+
     uint64_t AnnotationArgumentList::getUInt64Option(const string & name, uint64_t def) const {
-        auto arg = find(name, Type::tInt);
-        return arg ? uint64_t(arg->iValue) : def;
+        uint64_t value;
+        return annotationUInt64(*this, name, value) ? value : def;
     }
 
     uint64_t AnnotationArgumentList::getUInt64OptionEx(const string & name, const string & name2, uint64_t def) const {
-        auto arg = find(name, Type::tInt);
-        if (arg) return uint64_t(arg->iValue);
-        arg = find(name2, Type::tInt);
-        return arg ? uint64_t(arg->iValue) : def;
+        uint64_t value;
+        return annotationUInt64(*this, name, value) || annotationUInt64(*this, name2, value) ? value : def;
     }
 }

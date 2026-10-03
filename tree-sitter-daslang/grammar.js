@@ -270,7 +270,12 @@ module.exports = grammar({
     ),
 
     _annotation_number: $ => choice(
-      alias(token(/[0-9][0-9_]*/), $.integer_literal),
+      $._annotation_signed_number,
+      alias(token(/[0-9][0-9_]*[uU][lL]|0[xX][0-9a-fA-F][0-9a-fA-F_]*[uU]?[lL]/), $.integer_literal),
+    ),
+
+    _annotation_signed_number: $ => choice(
+      alias(token(/[0-9][0-9_]*[lL]?/), $.integer_literal),
       alias(token(/([0-9]*\.[0-9]+([eE][+-]?[0-9]+)?|[0-9]+[eE][+-]?[0-9]+)[fF]?|[0-9]+[fF]/), $.float_literal),
     ),
 
@@ -278,7 +283,7 @@ module.exports = grammar({
       $.string_literal,
       $.identifier,
       $._annotation_number,
-      seq('-', $._annotation_number),
+      seq('-', $._annotation_signed_number),
       'true',
       'false',
       seq('@@', $.identifier),  // function pointer value (e.g., @@hash)
