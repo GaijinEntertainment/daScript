@@ -8,6 +8,7 @@ require dasllama/dasllama_lint public
 require dasllama/dasllama_env      // env-driven route defaults + noisy gate
 require dasllama/dasllama_config   // DlimVulkanConfig — the dry-bake seam's config argument
 require daslib/fio                 // describe_pending_dynamic_modules — the absent-backend diagnostic
+require daslib/algorithm
 require math
 
 // The device-COOPERATION seam (SPI): hook types, install/unset slots, route/mark/want/status
@@ -1893,9 +1894,7 @@ def public gpu_cpu_pass_reason_count() : int => length(g_gpu_cpu_pass_reasons)
 
 //! No call has passed yet: the counts are the armed model's, so a drop and every load zero them.
 def public reset_gpu_cpu_passes() {
-    for (n in g_gpu_cpu_pass_counts) {
-        n = 0l
-    }
+    g_gpu_cpu_pass_counts |> fill(0l)
 }
 
 def public note_gpu_cpu_pass(reason_slot : int) {
