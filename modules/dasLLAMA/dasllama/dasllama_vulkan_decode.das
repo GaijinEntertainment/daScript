@@ -180,15 +180,12 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.mir_units = mir_units + mir_slack_units
     r.regions = regions
     // the two largest allocations of the load: a heap the last model fragmented can refuse them though the plan fit - decline, never die mid-upload
-    r.k_mirror = try_device_buf(rd_mir_bytes())
-    r.v_mirror = try_device_buf(rd_mir_bytes())
+    let mir = zeroed_pair(rd_mir_bytes())
+    r.k_mirror = mir.a
+    r.v_mirror = mir.b
     if (r.k_mirror == 0ul || r.v_mirror == 0ul) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the KV mirror ({(2l * rd_mir_bytes()) >> 20l} MB for {regions} regions of ctx {seq_cap}) found no room on the device - resident driver declines, the per-op rails serve\n")
         return false
-    }
-    cmd_one_shot() $(rawz : VkCommandBuffer; var _h : VkHaz) {
-        cmd_fill_zero(rawz, r.k_mirror, 0l, rd_mir_bytes())
-        cmd_fill_zero(rawz, r.v_mirror, 0l, rd_mir_bytes())
     }
     if (kvtq4) {
         var signs : array<float>
@@ -207,15 +204,12 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
                 sm[i] = TokMeta(pos = uint(i))
             }
         }
-        r.ksh_dev = try_device_buf(rd_shadow_bytes())
-        r.vsh_dev = try_device_buf(rd_shadow_bytes())
+        let sh = zeroed_pair(rd_shadow_bytes())
+        r.ksh_dev = sh.a
+        r.vsh_dev = sh.b
         if (r.ksh_dev == 0ul || r.vsh_dev == 0ul) {
             to_log(LOG_WARNING, "dasLLAMA vulkan resident: the block-codec mirror's f16 shadow ({(2l * rd_shadow_bytes()) >> 20l} MB for ctx {seq_cap}) found no room on the device - resident driver declines, the per-op rails serve\n")
             return false
-        }
-        cmd_one_shot() $(rawz : VkCommandBuffer; var _h : VkHaz) {
-            cmd_fill_zero(rawz, r.ksh_dev, 0l, rd_shadow_bytes())
-            cmd_fill_zero(rawz, r.vsh_dev, 0l, rd_shadow_bytes())
         }
     }
     r.hybrid = hybrid
@@ -281,6 +275,18 @@ def private alloc_cmds(var arr : array<VkCommandBuffer>; n : int64; on : bool; x
     for (_i in range64(n)) {
         arr |> push(!on ? VkCommandBuffer() : (xfer ? alloc_xfer_cmd() : alloc_cmd()))
     }
+}
+
+def private zeroed_pair(bytes : int64) : tuple<a : uint64; b : uint64> {
+    let a = try_device_buf(bytes)
+    let b = try_device_buf(bytes)
+    if (a != 0ul && b != 0ul) {
+        cmd_one_shot() $(raw : VkCommandBuffer; var _h : VkHaz) {
+            cmd_fill_zero(raw, a, 0l, bytes)
+            cmd_fill_zero(raw, b, 0l, bytes)
+        }
+    }
+    return (a = a, b = b)
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
