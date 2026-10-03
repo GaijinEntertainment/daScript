@@ -1578,14 +1578,7 @@ def private rd_record_hot(l, nhit : int64; nrows : int64 = 1l) {
     var cmd = alloc_cmd()
     record_cmd(cmd, false) $(raw : VkCommandBuffer; var h : VkHaz) {
         rq_enc(raw, h, g_rd.s_hot_rq, H.f1, dim * nrows)
-        var pcg = GemvArgs(n = uint(dim), d = uint(nfe), nreg = uint(nhit), ybase = 0u)
-        gemv_enc(H.f1, raw, h, H.s_gate, pcg, nhit * nfe)
-        gemv_enc(H.f3, raw, h, H.s_up, pcg, nhit * nfe)
-        let dkq = kq_sb(H.f2)
-        var pca = ActArgs(nelem = uint(nhit * nfe), act = act_code(g_rd.act_oai, g_rd.is_gelu), nblk = uint(nhit * nfe / kq_unit(dkq)))
-        actrq_enc(raw, h, g_rd.s_hot_act, dkq, pca, nhit * nfe)
-        var pcd = GemvArgs(n = uint(nfe), d = uint(dim), nreg = uint(nhit), ybase = 0u)
-        gemv_enc(H.f2, raw, h, H.s_down, pcd, nhit * dim)
+        enc_routed_ffn(raw, h, H.f1, H.f3, H.f2, H.s_gate, H.s_up, g_rd.s_hot_act, H.s_down, dim, nfe, nhit, act_code(g_rd.act_oai, g_rd.is_gelu))
     }
     H.cmds[nhit] = cmd
     H.recorded[nhit] = true
@@ -4275,13 +4268,17 @@ def private ffn_chain_enc(raw : VkCommandBuffer; var h : VkHaz; var fc : FfnCmd;
     var uset = stack_gemv_cls_set(s3)
     hz_set_bits(gset, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
     hz_set_bits(uset, 0u, 0u, 0u, 0u, 0u, VHG_Y2)
-    var pcg = GemvArgs(n = uint(n), d = uint(nfe), nreg = uint(nrows), ybase = 0u)
-    gemv_enc(g_gpu.stacks[s1].fmt, raw, h, gset, pcg, nrows * nfe)
-    gemv_enc(g_gpu.stacks[s3].fmt, raw, h, uset, pcg, nrows * nfe)
-    var pca = ActArgs(nelem = uint(nrows * nfe), act = is_gelu ? ACT_GELU : ACT_SILU)
-    actrq_enc(raw, h, fc.actrq_set, kq_sb(g_gpu.stacks[s2].fmt), pca, nrows * nfe)
-    var pcd = GemvArgs(n = uint(nfe), d = uint(n), nreg = uint(nrows), ybase = 0u)
-    gemv_enc(g_gpu.stacks[s2].fmt, raw, h, fc.down_set, pcd, nrows * n)
+    enc_routed_ffn(raw, h, g_gpu.stacks[s1].fmt, g_gpu.stacks[s3].fmt, g_gpu.stacks[s2].fmt, gset, uset, fc.actrq_set, fc.down_set, n, nfe, nrows, act_code(false, is_gelu))
+}
+
+def private enc_routed_ffn(raw : VkCommandBuffer; var h : VkHaz; f1, f3, f2 : int; var sg, su, sa, sd : VkDescriptorSet; n, nfe, nreg : int64; act : uint) {
+    var pcg = GemvArgs(n = uint(n), d = uint(nfe), nreg = uint(nreg), ybase = 0u)
+    gemv_enc(f1, raw, h, sg, pcg, nreg * nfe)
+    gemv_enc(f3, raw, h, su, pcg, nreg * nfe)
+    var pca = ActArgs(nelem = uint(nreg * nfe), act = act)
+    actrq_enc(raw, h, sa, kq_sb(f2), pca, nreg * nfe)
+    var pcd = GemvArgs(n = uint(nfe), d = uint(n), nreg = uint(nreg), ybase = 0u)
+    gemv_enc(f2, raw, h, sd, pcd, nreg * n)
 }
 
 def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64; is_gelu : bool) : VkCommandBuffer {
