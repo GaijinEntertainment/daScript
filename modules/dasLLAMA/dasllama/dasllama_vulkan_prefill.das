@@ -580,8 +580,7 @@ def private pf_moe_router(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64)
         enc_f16cvt_cls(raw, h, L.pf_router_cvt_set, pcc, (wlen * dim / 4l + 255l) / 256l)
         pf_f16g_enc(raw, h, L.pf_f16g_router_set, L.pf_f16g_router_red_set, dim, ner, wlen, L.router_slot * ner * dim, 0l)
     } else {
-        var pcr = RouterGemmArgs(npos = uint(wlen), ne = uint(ner), dim = uint(dim), woff = uint(L.router_slot * ner * dim), ostride = uint(ner))
-        enc_router_gemm_cls(raw, h, L.pf_router_set, pcr, ((wlen + int64(ROUTER_TP) - 1l) / int64(ROUTER_TP)) * ((ner + int64(ROUTER_TE) - 1l) / int64(ROUTER_TE)))
+        router_gemm_enc(raw, h, L.pf_router_set, wlen, ner, dim, L.router_slot * ner * dim)
     }
     pfq_ts(raw)
 }
@@ -1529,8 +1528,7 @@ def private pf_hc_mix(raw : VkCommandBuffer; var h : VkHaz; site, wlen : int64; 
     var pcn = HcNormArgs(dim = uint(dim), hc = uint(hc), woff = uint(site * hcd), row0 = uint(head ? wlen - 1l : 0l), eps = g_rd.eps)
     enc_hc_norm_cls(raw, h, g_rd.pf_s_hc_norm, pcn, rows * hc)
     if (!head) {
-        var pci = RouterGemmArgs(npos = uint(rows), ne = uint(hc), dim = uint(hcd), woff = uint(site * hc * hcd), ostride = uint(hc))
-        enc_router_gemm_cls(raw, h, g_rd.pf_s_hc_inj, pci, ((rows + int64(ROUTER_TP) - 1l) / int64(ROUTER_TP)) * ((hc + int64(ROUTER_TE) - 1l) / int64(ROUTER_TE)))
+        router_gemm_enc(raw, h, g_rd.pf_s_hc_inj, rows, hc, hcd, site * hc * hcd)
     }
     rq_enc(raw, h, g_rd.pf_s_hc_xnrq, false, 0l, rows * hcd)
     let q8 = int(KqFmt.q8)
@@ -1656,8 +1654,7 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
                 }
                 if (L.moe) {
                     verify(L.experts_host, "vk prefill: the hyper-connection chain serves routed experts on the host alone")
-                    var pcr = RouterGemmArgs(npos = uint(wlen), ne = uint(g_rd.ner), dim = uint(dim), woff = uint(L.router_slot * g_rd.ner * dim), ostride = uint(g_rd.ner))
-                    enc_router_gemm_cls(raw, h, L.pf_router_set, pcr, ((wlen + int64(ROUTER_TP) - 1l) / int64(ROUTER_TP)) * ((g_rd.ner + int64(ROUTER_TE) - 1l) / int64(ROUTER_TE)))
+                    router_gemm_enc(raw, h, L.pf_router_set, wlen, g_rd.ner, dim, L.router_slot * g_rd.ner * dim)
                     seg++
                     pf_host_cut(raw, g_rd.pf_seg[seg], h, l, wlen, ffn_row0, experts)
                 }

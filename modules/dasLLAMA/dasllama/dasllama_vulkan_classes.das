@@ -1895,6 +1895,12 @@ class RouterGemm {
     }
 }
 
+//! npos rows of ne router logits at a row stride of ne, over the router rows at woff: one workgroup per 64 rows x 32 router rows
+def router_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; var rset : VkDescriptorSet; npos, ne, dim, woff : int64) {
+    var pc = RouterGemmArgs(npos = uint(npos), ne = uint(ne), dim = uint(dim), woff = uint(woff), ostride = uint(ne))
+    enc_router_gemm_cls(raw, h, rset, pc, ((npos + int64(ROUTER_TP) - 1l) / int64(ROUTER_TP)) * ((ne + int64(ROUTER_TE) - 1l) / int64(ROUTER_TE)))
+}
+
 struct SchedArgs {
     nk : uint          //! slot rows (npos x k)
     ne : uint          //! experts (at most 256: one thread per expert)
