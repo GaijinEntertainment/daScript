@@ -418,6 +418,35 @@ def private moe_gpu_gather_upload(t : Model; f : KqFmt; woff : int64; n, rows, s
     return ok
 }
 
+//! one plane of a gather-upload group: `rows` rows of `n`, gathered `slice_rows` rows a slice
+struct private PlaneUp {
+    f : KqFmt
+    woff : int64
+    n : int64
+    rows : int64
+    slice_rows : int64
+}
+
+def private plane_up(f : KqFmt; woff, n, rows : int64; slice_rows : int64 = -1l) : PlaneUp {
+    return PlaneUp(f = f, woff = woff, n = n, rows = rows, slice_rows = slice_rows < 0l ? rows : slice_rows)
+}
+
+//! Gathers and uploads `ups` as one group: a refused plane drops the planes the group placed back out (a dangling plane of a partial group hijacks the tier's residency check) and answers false
+def private gather_upload_group(t : Model; ups : array<PlaneUp>; mr, kgroup, wbias : int64;
+                                var wq : array<uint8>; var ws : array<uint8>; stream : bool = false) : bool {
+    var got = 0
+    for (u in ups) {
+        if (!moe_gpu_gather_upload(t, u.f, u.woff, u.n, u.rows, u.slice_rows, mr, kgroup, wbias, wq, ws, stream)) {
+            if (got > 0) {
+                moe_gpu_drop_stacks(got, stream)
+            }
+            return false
+        }
+        got++
+    }
+    return true
+}
+
 //! What a whole-model resident load would cost on the device. The resident driver is all-or-nothing
 //! by construction — a half-resident whole-stack driver cannot run at all — so this is the decision,
 //! and it is computed from Model metadata BEFORE a single byte uploads.
@@ -4084,7 +4113,7 @@ def private dense_ffn_cpu_say(t : Model) {
 // the end of every load rail so DASLLAMA_GPU_MOE_LAYERS behaves identically however the model
 // arrived. Layers go resident from the end while the tier's VRAM budget holds.
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span"), arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#gpu-slot-marks")]
-def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven sequential rail walks sharing one rollback cursor; splitting them hides the partial-group unwind
+def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven sequential rail walks over one gather scratch, each reading the marks the walks before it set
     moe_gpu_drop_installed_before_load(t.config.n_layers)
     reset_gpu_cpu_passes()
     reset_moe_gpu_marks(t.config.n_layers, t.config.n_layers)   // nothing resident until an upload lands
@@ -4272,27 +4301,15 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         let she = dim * nsh
         var sh_marked = 0l
         for (l in range64(layers)) {
-            var uploads <- [(woff = t.wsh1_off + l * she, n = dim, rows = nsh),
-                            (woff = t.wsh3_off + l * she, n = dim, rows = nsh),
-                            (woff = t.wsh2_off + l * she, n = nsh, rows = dim)]
-            var ok = true
-            var done = 0
-            for (u in uploads) {
-                if (!moe_gpu_gather_upload(t, KqFmt.q8, u.woff, u.n, u.rows, u.rows, mr, kgroup, wbias, wq, ws)) {
-                    ok = false
-                    break
-                }
-                done++
-            }
-            if (!ok) {
-                moe_gpu_drop_stacks(done, false)   // partial triple rolls back (the resident-walk rule)
-                delete uploads
-                break
-            }
+            var ups <- [plane_up(KqFmt.q8, t.wsh1_off + l * she, dim, nsh),
+                        plane_up(KqFmt.q8, t.wsh3_off + l * she, dim, nsh),
+                        plane_up(KqFmt.q8, t.wsh2_off + l * she, nsh, dim)]
+            let ok = gather_upload_group(t, ups, mr, kgroup, wbias, wq, ws)
+            delete ups
+            break if (!ok)
             //! the shexp mark, not set_moe_gpu_dense_off: the shared triple rides the expert chain, not the dense rail
             set_moe_gpu_shexp_layer(l)
             sh_marked++
-            delete uploads
         }
         if (sh_marked > 0l) {
             to_log(LOG_INFO, "dasLLAMA: GPU MoE tier: shared experts of {sh_marked} layers resident\n")
@@ -4304,7 +4321,6 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     vulkan_bake_role(VkBakeRole.dn)
     if (dn_want) {
         var dn_marked = 0l
-        var dn_stop = false
         var dn_skips : WalkSkips
         for (l in range64(layers)) {
             continue if (!layer_is_recurrent(t.config, l))
@@ -4327,24 +4343,15 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
             }
             let cd = dn_conv_dim(t.config)
             let di = t.config.ssm_d_inner
-            var got = 0
-            if (moe_gpu_gather_upload(t, KqFmt.q8, t.dnqkv_offs[l], dim, cd, cd, mr, kgroup, wbias, wq, ws)) {
-                got++
-            }
-            if (got == 1 && moe_gpu_gather_upload(t, KqFmt.q8, t.dngate_offs[l], dim, di, di, mr, kgroup, wbias, wq, ws)) {
-                got++
-            }
-            if (got == 2 && moe_gpu_gather_upload(t, KqFmt.q8, t.dnout_offs[l], di, dim, dim, mr, kgroup, wbias, wq, ws)) {
-                got++
-            }
-            if (got < 3) {
-                if (got > 0) {
-                    moe_gpu_drop_stacks(got, false)
-                }
-                dn_stop = true
+            var ups <- [plane_up(KqFmt.q8, t.dnqkv_offs[l], dim, cd),
+                        plane_up(KqFmt.q8, t.dngate_offs[l], dim, di),
+                        plane_up(KqFmt.q8, t.dnout_offs[l], di, dim)]
+            let ok = gather_upload_group(t, ups, mr, kgroup, wbias, wq, ws)
+            delete ups
+            if (!ok) {
                 walk_budget_say("deltanet rail", l, layers)
+                break
             }
-            break if (dn_stop)
             set_moe_gpu_dn_layer(l, t.dnqkv_offs[l])
             dn_marked++
         }
@@ -4361,7 +4368,6 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         let c = t.config
         let arch_ok = empty(attn_chain_unserved_features(c))
         var at_marked = 0l
-        var at_stop = false
         var at_skips : WalkSkips
         if (!arch_ok) {
             to_log(LOG_INFO, "dasLLAMA: GPU MoE tier: the attention-quad rail declined - no arm for: {attn_chain_unserved_features(c)}\n")
@@ -4405,28 +4411,18 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
                 walk_skip(at_skips, l, "geometry outside the chain (hs {hs}, qd {qd}, kvd {kvd}, heads {c.n_heads}, rot {rot})")
                 continue
             }
-            var uploads : array<tuple<f : KqFmt; woff : int64; n : int64; rows : int64>>
+            var ups : array<PlaneUp>
             if (!moe_gpu_dense_on_gpu(int(fq), t.wq_offs[l])) {
-                uploads |> push((f = fq, woff = t.wq_offs[l], n = dim, rows = c.q_gated ? 2l * qd : qd))
+                ups |> push(plane_up(fq, t.wq_offs[l], dim, c.q_gated ? 2l * qd : qd))
             }
-            uploads |> push((f = fk, woff = t.wk_offs[l], n = dim, rows = kvd))
-            uploads |> push((f = fv, woff = t.wv_offs[l], n = dim, rows = kvd))
+            ups |> push(plane_up(fk, t.wk_offs[l], dim, kvd))
+            ups |> push(plane_up(fv, t.wv_offs[l], dim, kvd))
             if (!moe_gpu_dense_on_gpu(int(fo), t.wo_offs[l])) {
-                uploads |> push((f = fo, woff = t.wo_offs[l], n = qd, rows = dim))
+                ups |> push(plane_up(fo, t.wo_offs[l], qd, dim))
             }
-            var got = 0
-            for (u in uploads) {
-                if (!moe_gpu_gather_upload(t, u.f, u.woff, u.n, u.rows, u.rows, mr, kgroup, wbias, wq, ws)) {
-                    at_stop = true
-                    break
-                }
-                got++
-            }
-            delete uploads
-            if (at_stop) {
-                if (got > 0) {
-                    moe_gpu_drop_stacks(got, false)
-                }
+            let ok = gather_upload_group(t, ups, mr, kgroup, wbias, wq, ws)
+            delete ups
+            if (!ok) {
                 walk_budget_say("attention-quad rail", l, layers)
                 break
             }
@@ -4459,21 +4455,12 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
                 walk_skip(qkv_skips, l, "q/k/v formats {int(fq)}/{int(fk)}/{int(fv)} not tier-servable as one image")
                 continue
             }
-            var uploads <- [(f = fq, woff = t.wq_offs[l], n = dim, rows = t.config.q_gated ? 2l * qd : qd),
-                            (f = fk, woff = t.wk_offs[l], n = dim, rows = kv),
-                            (f = fv, woff = t.wv_offs[l], n = dim, rows = kv)]
-            var done = 0
-            var ok = true
-            for (u in uploads) {
-                if (!moe_gpu_gather_upload(t, u.f, u.woff, u.n, u.rows, u.rows, mr, kgroup, wbias, wq, ws)) {
-                    ok = false
-                    break
-                }
-                done++
-            }
-            delete uploads
+            var ups <- [plane_up(fq, t.wq_offs[l], dim, t.config.q_gated ? 2l * qd : qd),
+                        plane_up(fk, t.wk_offs[l], dim, kv),
+                        plane_up(fv, t.wv_offs[l], dim, kv)]
+            let ok = gather_upload_group(t, ups, mr, kgroup, wbias, wq, ws)
+            delete ups
             if (!ok) {
-                moe_gpu_drop_stacks(done, false)   // partial triple rolls back
                 walk_budget_say("q/k/v rail", l, layers)
                 break
             }
@@ -4502,25 +4489,12 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
             to_log(LOG_INFO, "dasLLAMA: GPU MoE tier: the expert walk stopped at layer {l} - gate/up/down formats {int(f1)}/{int(f3)}/{int(f2)} cannot share the tier's activation image; layers 0..{l} stay on the CPU\n")
             break
         }
-        var got = 0
-        if (moe_gpu_gather_upload(t, f1, t.we1_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws)) {
-            got++
-        }
-        if (got == 1 && moe_gpu_gather_upload(t, f3, t.we3_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws)) {
-            got++
-        }
-        if (got == 2 && moe_gpu_gather_upload(t, f2, t.we2_offs[l], nfe, ne * dim, dim, mr, kgroup, wbias, wq, ws)) {
-            got++
-        }
-        if (got < 3) {
-            // VRAM budget hit — this and lower layers stay on CPU. A partial triple MUST roll
-            // back: a dangling gate/up plane hijacks the tier's residency check when this layer
-            // re-enters as streamed (or CPU prefill probes it) — non-resident-region panic
-            if (got > 0) {
-                moe_gpu_drop_stacks(got, false)
-            }
-            break
-        }
+        var ups <- [plane_up(f1, t.we1_offs[l], dim, ne * nfe, nfe),
+                    plane_up(f3, t.we3_offs[l], dim, ne * nfe, nfe),
+                    plane_up(f2, t.we2_offs[l], nfe, ne * dim, dim)]
+        let ok = gather_upload_group(t, ups, mr, kgroup, wbias, wq, ws)
+        delete ups
+        break if (!ok)   // VRAM budget hit — this and lower layers stay on CPU
         from_l = l
     }
     // streamed tail: DASLLAMA_GPU_MOE_STREAM=N marks the next N layers below the resident set for
@@ -4543,25 +4517,12 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
             to_log(LOG_INFO, "dasLLAMA: GPU MoE tier: the streamed walk stopped at layer {l} - gate/up/down formats {int(f1)}/{int(f3)}/{int(f2)} cannot share the tier's activation image; layers 0..{l} stay on the CPU\n")
             break
         }
-        var got = 0
-        if (moe_gpu_gather_upload(t, f1, t.we1_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws, [stream = true])) {
-            got++
-        }
-        if (got == 1 && moe_gpu_gather_upload(t, f3, t.we3_offs[l], dim, ne * nfe, nfe, mr, kgroup, wbias, wq, ws, [stream = true])) {
-            got++
-        }
-        if (got == 2 && moe_gpu_gather_upload(t, f2, t.we2_offs[l], nfe, ne * dim, dim, mr, kgroup, wbias, wq, ws, [stream = true])) {
-            got++
-        }
-        if (got < 3) {
-            // pinned-mirror budget hit — this and lower layers stay CPU-only. Roll back a
-            // partial triple: the stream registry's group arithmetic assumes whole gate/up/down
-            // triples, and a phantom gate would match the group scan at dispatch
-            if (got > 0) {
-                moe_gpu_drop_stacks(got, true)
-            }
-            break
-        }
+        var ups <- [plane_up(f1, t.we1_offs[l], dim, ne * nfe, nfe),
+                    plane_up(f3, t.we3_offs[l], dim, ne * nfe, nfe),
+                    plane_up(f2, t.we2_offs[l], nfe, ne * dim, dim)]
+        let ok = gather_upload_group(t, ups, mr, kgroup, wbias, wq, ws, [stream = true])
+        delete ups
+        break if (!ok)   // pinned-mirror budget hit — this and lower layers stay CPU-only
         sfrom = l
     }
     delete wq
