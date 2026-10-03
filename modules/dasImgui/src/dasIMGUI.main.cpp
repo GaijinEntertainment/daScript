@@ -31,10 +31,14 @@ namespace das {
     }
 
     void InstallCoreClipboardBackend() {
+#ifdef __EMSCRIPTEN__
+        return;
+#else
         ImGuiPlatformIO & platformIO = ImGui::GetPlatformIO();
         platformIO.Platform_GetClipboardTextFn = CoreClipboardGetText;
         platformIO.Platform_SetClipboardTextFn = CoreClipboardSetText;
         platformIO.Platform_ClipboardUserData = nullptr;
+#endif
     }
 
     ImU32 GetActiveID() {

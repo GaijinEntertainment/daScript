@@ -5,6 +5,7 @@
 parses a pinned set of constructs (`test_grammar_canary.das`) - applies
 `tree-sitter-daslang/REVIEW.md` (repo root) too.
 
-**Never hardcode a platform-specific path, a path separator, or an OS-only assumption in a
-test** - resolve every location through `get_das_root()`, never an absolute or machine-local
-path.
+**Tests never hardcode machine-local host paths or host path separators.** Resolve
+SDK resources through `get_das_root()` in daslang and use portable path APIs in
+external drivers. HTTP URL paths and browser virtual-filesystem paths are not
+host filesystem locations.

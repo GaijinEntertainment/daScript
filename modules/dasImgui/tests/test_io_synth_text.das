@@ -5,6 +5,7 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 
 require dastest/testing_boost public
+require imgui public
 require imgui/imgui_playwright public
 require daslib/json public
 require daslib/json_boost public
@@ -58,5 +59,23 @@ def test_imgui_type_text_buffer_fills(t : T?) {
         t |> equal(multi?["ok"] ?? false, true, "type_text into multiline returned ok")
         let multi_done = wait_for_string_value(d, "MAIN_WIN/DEMO_MULTI", "value", "a\nb", 300)
         t |> success(multi_done, "DEMO_MULTI.value == 'a\\nb' (single newline, not doubled)")
+    }
+}
+
+[test]
+def test_multiline_shift_enter_inserts_newline(t : T?) {
+    with_imgui_app(IO_SYNTH_TEXT_FEATURE) $(d) {
+        let ready = wait_for_widget(d, "MAIN_WIN/DEMO_MULTI", 15.0f)
+        t |> success(ready != null)
+        if (ready == null) return
+        let typed = type_text(d, "MAIN_WIN/DEMO_MULTI", "before")
+        t |> success(typed?["ok"] ?? false)
+        t |> success(wait_for_string_value(d, "MAIN_WIN/DEMO_MULTI", "value", "before", 300))
+        key_chord_tap(d, ["Shift"], int(ImGuiKey.Enter))
+        t |> success(wait_for_string_value(d, "MAIN_WIN/DEMO_MULTI", "value", "before\n", 120),
+                     "Shift+Enter inserts a newline in the active multiline editor")
+        key_chord_tap(d, ["Shift"], int(ImGuiKey.KeypadEnter))
+        t |> success(wait_for_string_value(d, "MAIN_WIN/DEMO_MULTI", "value", "before\n\n", 120),
+                     "Shift+KeypadEnter follows the same multiline policy")
     }
 }
