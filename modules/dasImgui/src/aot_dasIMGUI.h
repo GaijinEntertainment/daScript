@@ -1,4 +1,5 @@
 #pragma once
+#include "imgui_backend_state.h"
 
 namespace das {
 
@@ -31,6 +32,7 @@ namespace das {
     DAS_MOD_API void TextUnformatted ( const char * txt );
     DAS_MOD_API void BulletText ( const char * txt );
     DAS_MOD_API void SetTooltip ( const char * txt );
+    DAS_MOD_API void InputTextReload(const char * label);
     DAS_MOD_API bool InputTextMultiline(vec4f vdiit, const char* label, const ImVec2& size, ImGuiInputTextFlags_ flags, LineInfoArg * at, Context * context );
     DAS_MOD_API bool InputText(vec4f vdiit, const char * label, ImGuiInputTextFlags_ flags, LineInfoArg * at, Context * context );
     DAS_MOD_API bool InputTextWithHint(vec4f vdiit, const char * label, const char * hint, ImGuiInputTextFlags_ flags, LineInfoArg * at, Context * context );
@@ -42,7 +44,6 @@ namespace das {
         int32_t flags, const MarkdownEventBlock & block, Context * context, LineInfoArg * at);
     DAS_MOD_API char* text_range_string(ImGuiTextFilter::ImGuiTextRange &r, das::Context *context, das::LineInfoArg *at);
     DAS_MOD_API void AddText( ImDrawList & drawList, const ImVec2& pos, ImU32 col, const char* text );
-    DAS_MOD_API void InstallCoreClipboardBackend();
     DAS_MOD_API ImVec2 CalcTextSizeForFont(ImFont * font, float font_size, const char * text);
     DAS_MOD_API ImVec2 CalcTextSizeForFontRange(ImFont * font, float font_size, const char * text,
         int32_t text_size, int32_t start_byte, int32_t end_byte);

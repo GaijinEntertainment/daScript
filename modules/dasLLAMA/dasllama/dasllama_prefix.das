@@ -15,12 +15,15 @@ require math   // min
 // Hashes route, tokens verify: every hit compares the stored token ids before attaching.
 
 //! One cached page: the pool group holding P consecutive positions of some evaled token history,
-//! keyed by the chained hash of every token up to and including this page.
+//! keyed by the chained hash of every token up to and including this page. A donation's last,
+//! partial page is an entry too - its tokens fewer than P. The page that followed this one in its
+//! donation is linked, so a prompt sharing only that page's leading rows gets a COPY of it.
 struct PrefixEntry {
     group : int                 // page-group id in the pool (held: its refcnt includes this entry)
-    tokens : array<int64>       // the page's P token ids — verified on every hit
+    tokens : array<int64>       // the page's token ids, P of them or a tail's fewer — verified on every hit
     last_use : int64            // LRU clock value of the last attach/insert touch
     chain : int64               // owning PrefixChain id (0 = none; duplicates keep their original)
+    next : uint64               //! the key of the page that followed in the first donation to continue past this one (0 = none)
 }
 
 //! One donated prefix chain, for dashboards: created when a donation contributes at least one
@@ -49,7 +52,7 @@ struct PrefixState {
 //! Page-granular prefix cache over the sessions of ONE ``KVPool`` (``create_prefix_cache_``).
 //! Pure data — every verb takes the pool explicitly, so the cache can live inside any owner
 //! struct without interior pointers. Not thread-safe; drive it from the pool's owning thread.
-[arch(at="../ARCHITECTURE_ENGINE.md#prefix-recurrent-checkpoints")]
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#prefix-recurrent-checkpoints")]
 struct PrefixCache {
     entries : table<uint64; PrefixEntry>   // chained page hash -> cached page
     chains : table<int64; PrefixChain>     // chain id -> donation summary (dashboards)
@@ -59,6 +62,7 @@ struct PrefixCache {
     n_hit_pages : int64         // pages attached across all lookups
     n_insert_pages : int64      // pages donated
     n_evicted_pages : int64     // pages LRU-dropped
+    n_hit_partial : int64       //! pages copied into a taker for the leading rows it shares
     states : array<PrefixState> // a recurrent model's checkpoints
     max_states : int64          // checkpoint budget (LRU-drops past it); 0 = a recurrent model caches nothing
     n_state_hits : int64
@@ -118,7 +122,7 @@ def private shared_opening(a, b : array<int64>) : int64 {
 //! Where a recurrent session's prefill of `prompt` stops to leave a checkpoint, `matched` tokens attached: the caller's
 //! stable opening (`stable_at`, 0 = unknown), else the longest opening an earlier checkpoint's tokens share with the
 //! prompt - each only a page or more past the hit, under which a checkpoint saves less than it costs. 0 = nowhere.
-[arch(at="../ARCHITECTURE_ENGINE.md#prefix-recurrent-checkpoints")]
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#prefix-recurrent-checkpoints")]
 def prefix_checkpoint_at_(cache : PrefixCache; pool : KVPool; s : Session; prompt : array<int64>; matched, stable_at : int64) : int64 {
     if (empty(s.dn_state_prefix) || cache.max_states <= 0l) {
         return 0l
@@ -226,6 +230,7 @@ def prefix_held_groups_(cache : PrefixCache) : int64 {
 //! Attach the longest cached prefix of ``prompt`` to a FRESH paged session of ``pool``, copying matched
 //! groups into the block table and setting ``n_past`` accordingly; returns the matched count, capped
 //! at one token short of the prompt so the tail eval always produces sampling logits.
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#prefix-tail-page")]
 def prefix_attach_(var cache : PrefixCache; var pool : KVPool; var s : Session; prompt : array<int64>) : int64 {
     if (s.kv_pool == null || s.kv_pool != unsafe(addr(pool))) {
         panic("prefix_attach: the session is not paged out of this pool")
@@ -239,19 +244,20 @@ def prefix_attach_(var cache : PrefixCache; var pool : KVPool; var s : Session; 
     let np = long_length(prompt)
     let pr = pool.page_rows
     let pages_max = np > 0l ? (np - 1l) / pr : 0l
-    var h = 0ul
+    var hit_hash = 0ul
     var matched = 0l
     var hit_chain = 0l
     for (i in range64(pages_max)) {
-        h = chain_page_hash(h, prompt, i * pr, (i + 1l) * pr)
-        if (!key_exists(cache.entries, h)) {
+        let nh = chain_page_hash(hit_hash, prompt, i * pr, (i + 1l) * pr)
+        if (!key_exists(cache.entries, nh)) {
             break
         }
         // interior pointer into the table — nothing inserts before the loop exits
-        var e = unsafe(cache.entries?[h])
-        if (e == null || !page_tokens_match(*e, prompt, i * pr)) {
+        var e = unsafe(cache.entries?[nh])
+        if (e == null || long_length(e.tokens) != pr || !page_tokens_match(*e, prompt, i * pr)) {
             break   // hash collision or corrupted entry: tokens are the truth
         }
+        hit_hash = nh
         cache.tick ++
         e.last_use = cache.tick
         hit_chain = e.chain
@@ -259,6 +265,23 @@ def prefix_attach_(var cache : PrefixCache; var pool : KVPool; var s : Session; 
         pool.refcnt[e.group] ++
         matched += pr
         cache.n_hit_pages ++
+    }
+    if (matched > 0l) {
+        let nk = cache.entries[hit_hash].next
+        if (nk != 0ul && key_exists(cache.entries, nk)) {
+            var e = unsafe(cache.entries?[nk])
+            var rows = 0l
+            while (e != null && rows < long_length(e.tokens) && matched + rows < np - 1l && e.tokens[rows] == prompt[matched + rows]) {
+                rows ++
+            }
+            if (rows > 0l) {
+                cache.tick ++
+                e.last_use = cache.tick
+                s.block_table |> push(kv_pool_copy_group(pool, e.group))
+                matched += rows
+                cache.n_hit_partial ++
+            }
+        }
     }
     if (hit_chain != 0l) {
         var c = unsafe(cache.chains?[hit_chain])
@@ -303,6 +326,7 @@ def private prefix_evict_lru(var cache : PrefixCache; var pool : KVPool) {
 //! Donate a finished session's pages into the cache, bumping pool refcnt so they survive release;
 //! only tokens up to ``n_past`` are eligible, and pages past the budget LRU-drop. Call right before
 //! ``release_kv_pages``. ``preview`` labels the donation's chain on the dashboard surface.
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#prefix-tail-page")]
 def prefix_insert_(var cache : PrefixCache; var pool : KVPool; var s : Session; tokens : array<int64>; preview : string = "") {
     if (s.kv_pool == null || s.kv_pool != unsafe(addr(pool))) {
         panic("prefix_insert: the session is not paged out of this pool")
@@ -313,30 +337,37 @@ def prefix_insert_(var cache : PrefixCache; var pool : KVPool; var s : Session; 
     }
     let pr = pool.page_rows
     let covered = min(long_length(tokens), s.n_past)
-    let pages = covered / pr
+    let pages = (covered + pr - 1l) / pr
     var h = 0ul
+    var prev = 0ul
     var chain_id = 0l
     for (i in range64(pages)) {
-        h = chain_page_hash(h, tokens, i * pr, (i + 1l) * pr)
+        let lo = i * pr
+        let hi = min(lo + pr, covered)
+        h = chain_page_hash(h, tokens, lo, hi)
         cache.tick ++
         if (key_exists(cache.entries, h)) {
             // interior pointer into the table — released before anything inserts
             var e = unsafe(cache.entries?[h])
             e.last_use = cache.tick
-            continue
+        } else {
+            if (chain_id == 0l) {   // first NEW page: this donation gets a dashboard chain
+                cache.next_chain_id ++
+                chain_id = cache.next_chain_id
+                cache.chains[chain_id] <- PrefixChain(id = chain_id, born_at = ref_time_ticks(), preview = preview)   // clock: control — chain age, eviction bookkeeping
+            }
+            var e <- PrefixEntry(group = s.block_table[i], last_use = cache.tick, chain = chain_id)
+            e.tokens <- [for (j in range64(lo, hi)); tokens[j]]
+            cache.entries[h] <- e
+            pool.refcnt[s.block_table[i]] ++
+            cache.n_insert_pages ++
+            cache.chains[chain_id].pages_live ++
+            cache.chains[chain_id].n_tokens += hi - lo   // NEW pages only — a partially-cached donation must not over-report
         }
-        if (chain_id == 0l) {   // first NEW page: this donation gets a dashboard chain
-            cache.next_chain_id ++
-            chain_id = cache.next_chain_id
-            cache.chains[chain_id] <- PrefixChain(id = chain_id, born_at = ref_time_ticks(), preview = preview)   // clock: control — chain age, eviction bookkeeping
+        if (prev != 0ul && cache.entries[prev].next == 0ul) {
+            cache.entries[prev].next = h
         }
-        var e <- PrefixEntry(group = s.block_table[i], last_use = cache.tick, chain = chain_id)
-        e.tokens <- [for (j in range64(i * pr, (i + 1l) * pr)); tokens[j]]
-        cache.entries[h] <- e
-        pool.refcnt[s.block_table[i]] ++
-        cache.n_insert_pages ++
-        cache.chains[chain_id].pages_live ++
-        cache.chains[chain_id].n_tokens += pr   // NEW pages only — a partially-cached donation must not over-report
+        prev = h
     }
     if (cache.max_groups > 0l) {
         while (long_length(cache.entries) > cache.max_groups) {

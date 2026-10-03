@@ -439,59 +439,87 @@ def private sq_partb_gate(t : T?; var dev, queue; codec : string; cnts : array<i
 let private D_HS = 128
 let private D_NHEADS = 2
 let private D_KVMUL = 2
+let private D_CAP = 0.05   //! a logit cap inside the fixture's score range: an uncapped kernel lands outside the bar
 
-def private sq_d_gate(t : T?; var dev, queue; codec : string; cnts : array<int>; nsgs : int; hs : int = D_HS) {
-    let nheads = D_NHEADS * (D_HS / hs)   //! a narrower head keeps the fixture's kv_dim and qd: more heads, the same slab
-    let tag = "sq_attn_d_{codec} B={length(cnts)} nsgs={nsgs} hs={hs}"
+//! `lead` route rows sit ahead of the cell's own and both kernels bind the table past them (the verify's layer offset):
+//! each is the first stream's slab at ONE key, so a kernel reading the table from its start lands outside the bar
+//! A head of 256 (the WIDE stamps, float codecs) reads the same slab as ONE head over rows twice as wide: each stream holds
+//! `cnts / 2` keys of 256, and the combine takes the partials as two heads of 128. A head of 512 reads it as rows four times
+//! as wide - `cnts / 4` keys, four heads of 128 to the combine - over a query row as wide as the head.
+//! `window` keys of sliding span (0 = the whole context) and, under `sinks`, a sink logit a head that differs head to head.
+//! `softcap` > 0 caps every logit; the ragged counts leave lanes past a slice's rows, which must still weigh nothing under it.
+def private sq_d_gate(t : T?; var dev, queue; codec : string; cnts : array<int>; nsgs : int; hs : int = D_HS; lead : int = 0;
+                      window : int = 0; sinks : bool = false; softcap : float = 0.0) {
+    let halves = hs > D_HS ? hs / D_HS : 1
+    let wide = halves > 1
+    let rowx = wide ? halves : (D_HS % hs == 0 ? 1 : 3)   //! fixture rows read as ONE kernel row: a wide head's halves, three for a head of 96 (four K/V heads of 96)
+    let kvdim = rowx * KV_DIM
+    let kvmul = wide ? 1 : D_KVMUL
+    let nheads = wide ? 1 : (kvdim / hs) * kvmul   //! a narrower head keeps the slab's bytes: more heads over the same rows
+    let qd_row = max(QD, nheads * hs)
+    let tag = "sq_attn_d_{codec} B={length(cnts)} nsgs={nsgs} hs={hs} lead={lead} window={window} sinks={sinks} cap={softcap}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let quant = codec == "q8" || codec == "tq4"
-        let sp = codec == "f16" ? stamp_of(@@enc_attnd16_c) : stamp_of(@@enc_attnd32_c)
-        let sq = codec == "q8" ? stamp_of(@@enc_attnd_q8_c) : stamp_of(@@enc_attnd_tq4_c)
+        let sp = (halves == 4 ? (codec == "f16" ? stamp_of(@@enc_attndx16_c) : stamp_of(@@enc_attndx32_c))
+            : wide ? (codec == "f16" ? stamp_of(@@enc_attndw16_c) : stamp_of(@@enc_attndw32_c))
+            : (codec == "f16" ? stamp_of(@@enc_attnd16_c) : stamp_of(@@enc_attnd32_c)))
+        let sq = (halves == 4 ? (codec == "q8" ? stamp_of(@@enc_attndx_q8_c) : stamp_of(@@enc_attndx_tq4_c))
+            : wide ? (codec == "q8" ? stamp_of(@@enc_attndw_q8_c) : stamp_of(@@enc_attndw_tq4_c))
+            : (codec == "q8" ? stamp_of(@@enc_attnd_q8_c) : stamp_of(@@enc_attnd_tq4_c)))
         let sc = stamp_of(@@enc_attncombd_c)
         var pso_d = quant ? (mc |> keep_stamp(sq, err)) : (mc |> keep_stamp(sp, err))
         let part_ok = pso_ok(t, "{tag} part", pso_d, err)
         var pso_c = mc |> keep_stamp(sc, err)
         return if (!pso_ok(t, "{tag} comb", pso_c, err) || !part_ok)
         let nb2 = length(cnts)
-        let qstride = QD + 36                   // q reads through a float4 view — keep the stride % 4
+        let qstride = qd_row + 36               // q reads through a float4 view — keep the stride % 4
         var inscope fx : BatchAttnFix
         build_batch_fix(codec, cnts, qstride, fx)
         let scale = 1.0 / sqrt(float(hs))
         var inscope want : array<float>
-        want |> resize(nb2 * QD)
+        want |> resize(nb2 * qd_row)
+        var inscope snk <- [for (h in range(nheads)); 0.375 + 0.25 * float(h)]
         for (r in range(nb2)) {
+            let keys = cnts[r] / rowx
+            let kstart = window > 0 && keys > window ? keys - window : 0
             for (h in range(nheads)) {
-                attn_row_oracle(fx.q, r * qstride + h * hs, fx.kdeq, fx.roff[r], fx.vdeq, fx.roff[r], KV_DIM, h, hs, D_KVMUL, cnts[r], scale,
-                    want, r * QD + h * hs)
+                attn_row_oracle(fx.q, r * qstride + h * hs, fx.kdeq, fx.roff[r], fx.vdeq, fx.roff[r], kvdim, h, hs, kvmul, keys, scale,
+                    want, r * qd_row + h * hs, kstart, softcap, sinks, snk[h])
             }
         }
+        let bsink = mc |> in_(snk)
         let kv = mc |> kv_planes(codec, fx)
         let bq = mc |> in_(fx.q)
-        let bpart = mc |> out_words(nb2 * nheads * nsgs * (hs + 4), -1000.0)
-        let by = mc |> out_words(nb2 * QD, -1000.0)
-        let brt = mc |> in_plain(fx.rt)
-        var kad = SqAttnDArgs(lay = uint(B_LAY), kstride = uint(quant ? NBLK : KV_DIM), nheads = uint(nheads),
-            kv_mul = uint(D_KVMUL), hs = uint(hs), scale = scale, qstride = uint(qstride), nsgs = uint(nsgs))
-        var kac = SqAttnCombDArgs(nchmax = uint(nsgs), nheads = uint(nheads), hs = uint(hs))
+        let bpart = mc |> out_words(nb2 * nheads * halves * nsgs * (hs / halves + 4), -1000.0)
+        let by = mc |> out_words(nb2 * qd_row, -1000.0)
+        var inscope routes <- [for (_ in range(lead)); uint4(fx.rt[0].x, fx.rt[0].y, fx.rt[0].z, 1u)]
+        routes |> push_from([for (row in fx.rt); uint4(row.x, row.y, row.z, row.w / uint(rowx))])
+        let brt = mc |> in_plain(routes)
+        let rtoff = uint64(lead * 16)
+        var kad = SqAttnDArgs(lay = uint(B_LAY), kstride = uint(quant ? NBLK * rowx : kvdim), nheads = uint(nheads),
+            kv_mul = uint(kvmul), hs = uint(hs), scale = scale, qstride = uint(qstride), nsgs = uint(nsgs), window = uint(window),
+            softcap = softcap)
+        var kac = SqAttnCombDArgs(nchmax = uint(nsgs), nheads = uint(nheads * halves), hs = uint(hs / halves),
+            hass = sinks ? 1u : 0u, hdiv = uint(halves))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             let (k, v, q, p, rt) = (mc.buf[kv.x], mc.buf[kv.y], mc.buf[bq], mc.buf[bpart], mc.buf[brt])
             let (nh, ns, nr) = (int64(nheads), int64(nsgs), int64(nb2))
             if (quant) {
                 stamp_run(sq, pso_d) {
-                    invoke(sq.enc, enc, k, k, v, v, q, p, rt, kad, nh, ns, nr)
+                    invoke(sq.enc, enc, k, k, v, v, q, p, rt, rtoff, kad, nh, ns, nr)
                 }
             } else {
                 stamp_run(sp, pso_d) {
-                    invoke(sp.enc, enc, k, v, q, p, rt, kad, nh, ns, nr)
+                    invoke(sp.enc, enc, k, v, q, p, rt, rtoff, kad, nh, ns, nr)
                 }
             }
             stamp_run(sc, pso_c) {
-                invoke(sc.enc, enc, p, mc.buf[by], rt, kac, nh, nr)
+                invoke(sc.enc, enc, p, mc.buf[by], rt, rtoff, kac, mc.buf[bsink], nh * int64(halves), nr)
             }
         }
         return if (!ran)
-        check_buf(t, tag, mc.buf[by], want, BAR_ATTN, Shape(row_width = QD, head_width = hs))
+        check_buf(t, tag, mc.buf[by], want, BAR_ATTN, Shape(row_width = qd_row, head_width = hs))
     }
 }
 
@@ -503,7 +531,7 @@ def test_metal_attn_codec_kernels(t : T?) {
                 sq_codec_single_gate(t, dev, queue, "f32", 40, 0.0, false)
                 sq_codec_single_gate(t, dev, queue, "f32", 40, 0.0, true)
                 sq_codec_single_gate(t, dev, queue, "q8", 40, 0.0, false)
-                sq_codec_single_gate(t, dev, queue, "q8", 40, 30.0, false)
+                sq_codec_single_gate(t, dev, queue, "q8", 40, D_CAP, false)
                 sq_codec_single_gate(t, dev, queue, "tq4", 40, 0.0, false)
                 sq_codec_single_gate(t, dev, queue, "tq4", 40, 0.0, true)
                 sq_codec_part_gate(t, dev, queue, "f32", 100, 0)
@@ -517,7 +545,7 @@ def test_metal_attn_codec_kernels(t : T?) {
                 sq_b_gate(t, dev, queue, "f16", [30, 90], 0.0, true)
                 sq_b_gate(t, dev, queue, "f32", [21, 64, 127], 0.0, false)
                 sq_b_gate(t, dev, queue, "q8", [21, 64, 127], 0.0, false)
-                sq_b_gate(t, dev, queue, "q8", [30, 90], 30.0, false)
+                sq_b_gate(t, dev, queue, "q8", [30, 90], D_CAP, false)
                 sq_b_gate(t, dev, queue, "tq4", [21, 64, 127], 0.0, false)
                 // batched split-K + the batched comb (per-row chunk counts, window, sinks)
                 sq_partb_gate(t, dev, queue, "f16", [30, 100, 200], 0, false)
@@ -530,10 +558,47 @@ def test_metal_attn_codec_kernels(t : T?) {
                 // the fused single-pass D family (hs = 128): slice-group counts off the 4-sg grid
                 sq_d_gate(t, dev, queue, "f16", [21, 64, 200], 3)
                 sq_d_gate(t, dev, queue, "f32", [40, 130], 5)
-                sq_d_gate(t, dev, queue, "f16", [21, 64, 200], 3, 64)
-                sq_d_gate(t, dev, queue, "f32", [40, 130], 5, 64)
+                sq_d_gate(t, dev, queue, "f16", [21, 64, 200], 3, hs = 64)
+                sq_d_gate(t, dev, queue, "f32", [40, 130], 5, hs = 64)
+                sq_d_gate(t, dev, queue, "f16", [21, 64, 200], 3, hs = 64, lead = 2)
+                sq_d_gate(t, dev, queue, "f16", [42, 128, 200], 3, hs = 256)   //! the wide stamps: 21, 64 and 100 keys of a 256 head, the last past the slice groups
+                sq_d_gate(t, dev, queue, "f32", [80, 132], 5, hs = 256)
+                sq_d_gate(t, dev, queue, "f16", [42, 128, 200], 2, hs = 256, lead = 2)
+                sq_d_gate(t, dev, queue, "q8", [21, 64, 200], 3, lead = 3)
+                sq_d_gate(t, dev, queue, "f16", [21, 64, 200], 3, hs = 64, window = 40, sinks = true)
+                sq_d_gate(t, dev, queue, "f16", [21, 64, 200], 5, window = 100)
+                sq_d_gate(t, dev, queue, "f32", [40, 130], 5, hs = 64, sinks = true)
+                sq_d_gate(t, dev, queue, "f16", [42, 128, 200], 3, hs = 256, window = 30, sinks = true)
+                sq_d_gate(t, dev, queue, "q8", [21, 64, 200], 3, window = 40, sinks = true)
+                sq_d_gate(t, dev, queue, "tq4", [30, 100], 2, lead = 1, window = 300)
+                sq_d_gate(t, dev, queue, "f16", [84, 128, 200], 3, hs = 512)   //! the head-of-512 stamps: 21, 32 and 50 keys, the last past the slice groups
+                sq_d_gate(t, dev, queue, "f32", [160, 132], 2, hs = 512)
+                sq_d_gate(t, dev, queue, "f16", [84, 128, 200], 2, hs = 512, lead = 2, window = 30, sinks = true)
+                sq_d_gate(t, dev, queue, "f16", [84, 128, 200], 3, hs = 512, softcap = D_CAP)
+                sq_d_gate(t, dev, queue, "f16", [21, 64, 200], 3, softcap = D_CAP)
+                sq_d_gate(t, dev, queue, "f16", [21, 64, 200], 3, hs = 64, window = 40, sinks = true, softcap = D_CAP)
+                sq_d_gate(t, dev, queue, "f32", [40, 130], 5, softcap = D_CAP)
+                sq_d_gate(t, dev, queue, "f16", [42, 128, 200], 3, hs = 256, softcap = D_CAP)
+                sq_d_gate(t, dev, queue, "q8", [21, 64, 200], 3, softcap = D_CAP)
+                sq_d_gate(t, dev, queue, "tq4", [30, 100], 2, softcap = D_CAP)
                 sq_d_gate(t, dev, queue, "q8", [21, 64, 200], 3)
                 sq_d_gate(t, dev, queue, "tq4", [30, 100], 2)
+                sq_d_gate(t, dev, queue, "q8", [21, 64, 200], 3, hs = 64)
+                sq_d_gate(t, dev, queue, "tq4", [30, 100], 2, hs = 64, window = 40, sinks = true)
+                sq_d_gate(t, dev, queue, "q8", [42, 128, 200], 3, hs = 256)
+                sq_d_gate(t, dev, queue, "q8", [42, 128, 200], 2, hs = 256, lead = 2, window = 30, sinks = true, softcap = D_CAP)
+                sq_d_gate(t, dev, queue, "tq4", [60, 200], 2, hs = 256)
+                sq_d_gate(t, dev, queue, "q8", [84, 128, 200], 3, hs = 512)
+                sq_d_gate(t, dev, queue, "tq4", [120, 200], 2, hs = 512, lead = 1, window = 30, sinks = true)
+                sq_d_gate(t, dev, queue, "f32", [80, 132], 3, hs = 256, window = 30, sinks = true, softcap = D_CAP)    // the wide and quant wide stamps under a window and the cap
+                sq_d_gate(t, dev, queue, "f32", [160, 132], 2, hs = 512, window = 20, softcap = D_CAP)
+                sq_d_gate(t, dev, queue, "tq4", [60, 200], 2, hs = 256, window = 30, sinks = true, softcap = D_CAP)
+                sq_d_gate(t, dev, queue, "q8", [84, 128, 200], 2, hs = 512, lead = 1, window = 20, softcap = D_CAP)
+                sq_d_gate(t, dev, queue, "tq4", [120, 200], 2, hs = 512, softcap = D_CAP)
+                sq_d_gate(t, dev, queue, "f16", [21, 63, 198], 3, hs = 96)   //! a head of 96 (phi-3): 24 lanes own a quad, three 32-element blocks a head on the block codecs
+                sq_d_gate(t, dev, queue, "f32", [60, 198], 3, hs = 96, lead = 1, window = 20, sinks = true, softcap = D_CAP)
+                sq_d_gate(t, dev, queue, "q8", [21, 63, 198], 3, hs = 96)
+                sq_d_gate(t, dev, queue, "tq4", [60, 198], 2, hs = 96, window = 30, sinks = true)
             }
         } else {
             t |> skip("das_metal is not built on this platform; attention codec kernel checks skipped")

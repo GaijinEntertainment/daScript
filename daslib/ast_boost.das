@@ -1051,6 +1051,22 @@ def add_annotation_argument(var arguments : AnnotationArgumentList; argName : st
     return argIdx
 }
 
+def add_annotation_argument(var arguments : AnnotationArgumentList; argName : string; val : int64) {
+    //! Adds a signed 64-bit annotation argument.
+    let argIdx = arguments |> add_annotation_argument(argName)
+    arguments[argIdx].basicType = Type.tInt64
+    arguments[argIdx].lValue = val
+    return argIdx
+}
+
+def add_annotation_argument(var arguments : AnnotationArgumentList; argName : string; val : uint64) {
+    //! Adds an unsigned 64-bit annotation argument.
+    let argIdx = arguments |> add_annotation_argument(argName)
+    arguments[argIdx].basicType = Type.tUInt64
+    arguments[argIdx].ulValue = val
+    return argIdx
+}
+
 def add_annotation_argument(var arguments : AnnotationArgumentList; argName : string; val : float) {
     //! Adds a float annotation argument to an argument list.
     let argIdx = arguments |> add_annotation_argument(argName)
@@ -1075,6 +1091,10 @@ def add_annotation_argument(var arguments : AnnotationArgumentList; ann : rtti::
         arguments[argIdx].bValue = ann.bValue
     } elif (ann.basicType == Type.tInt) {
         arguments[argIdx].iValue = ann.iValue
+    } elif (ann.basicType == Type.tInt64) {
+        arguments[argIdx].lValue = ann.lValue
+    } elif (ann.basicType == Type.tUInt64) {
+        arguments[argIdx].ulValue = ann.ulValue
     } elif (ann.basicType == Type.tFloat) {
         arguments[argIdx].fValue = ann.fValue
     } elif (ann.basicType == Type.tString) {

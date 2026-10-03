@@ -620,6 +620,35 @@ def mtp_walk_sampled(var s : Session; k, vocab : int64) : int64 {
     return a
 }
 
+//! The assistant drafter's seams, where a driver carries one (the gemma-4 drafter sidecar): the sidecar beside a model
+//! file, the attach, and whether `t` has one attached. Unset = no assistant.
+struct MtpAssistantSeams {
+    sidecar : function<(model_path : string) : string>
+    attach : function<(t : Model; path : string) : bool>
+    attached : function<(t : Model) : bool>
+}
+var private g_mtp_assistant : MtpAssistantSeams
+
+def register_mtp_assistant(seams : MtpAssistantSeams) {
+    g_mtp_assistant = seams
+}
+
+//! The assistant drafter file beside `model_path` ("" where none, or no driver carries one).
+def mtp_drafter_sidecar_(model_path : string) : string
+    => g_mtp_assistant.sidecar != null ? invoke(g_mtp_assistant.sidecar, model_path) : ""
+
+//! Attach the assistant drafter at `path` to `t`; false where no driver carries one or it refused.
+def attach_mtp_drafter_(t : Model; path : string) : bool
+    => g_mtp_assistant.attach != null && invoke(g_mtp_assistant.attach, t, path)
+
+//! An assistant drafter is attached to `t`.
+def mtp_assistant_attached_(t : Model) : bool
+    => g_mtp_assistant.attached != null && invoke(g_mtp_assistant.attached, t)
+
+//! `t` can run a speculative round: a NextN head of its own, or an assistant drafter attached.
+def mtp_capable_(t : Model) : bool
+    => t.config.n_layer_nextn > 0l || mtp_assistant_attached_(t)
+
 //! One speculative round at the configured depth (get_mtp_depth): commits `tok`, returns the
 //! accepted draft count a with the accepted drafts in s.mtp_vbatch[1..a]. The active decode
 //! override's round seat serves any depth where it owns `t` (`mtp_seats_own`); else the rail is the depth-1 mtp_spec_eval.
@@ -639,6 +668,11 @@ def mtp_spec_round(t : Model; var s : Session; tok : int64) : int64 {
 def register_mtp_seam_override(name : string; fn : MtpSeamOverrideFn) {
     g_mtp_seam_overrides[name] = fn
 }
+
+var private g_mtp_seam_declines = 0l
+
+//! Lifetime continuation windows whose seam seat declined on a blob model, leaving the draft head's seam row stale.
+def mtp_seam_declines_() : int64 => g_mtp_seam_declines
 
 // "would the metal drivers serve this loaded model?" — the model-level gate, registered by the
 // metal driver module at [init] (it owns the path masks). load_model consults it to pick the
@@ -2195,6 +2229,16 @@ struct KVPool {
     vblobs : array<array<uint8>>
     free_groups : array<int>     // LIFO free list
     refcnt : array<int>          // per group; 0/1 today (the prefix cache bumps it later)
+    gen : array<uint64>          //!< per group: the process-wide stamp of its allocation - a group freed and taken again reads a new one
+}
+
+var private g_kv_group_gen = 0ul
+
+var private g_kv_release_listeners : array<function<(var s : Session) : void>>
+
+//! Subscribe to a paged session returning its pages (`release_kv_pages_`), called before the first group is released.
+def public register_kv_release_listener(f : function<(var s : Session) : void>) {
+    g_kv_release_listeners |> push(f)
 }
 
 //! Allocated KV pool bytes (capacity, not just referenced pages) — the sum of every blob's
@@ -3388,6 +3432,7 @@ def private kv_pool_grow(var p : KVPool) {
         p.vblobs[b] |> reserve_resize(newcap * p.page_rows * p.vrow_bytes[b])
     }
     p.refcnt |> resize(newcap)
+    p.gen |> resize(newcap)
     var g = int(newcap)
     while (g > int(oldcap)) {   // push high->low so the LOWEST new group pops first
         g --
@@ -3404,6 +3449,8 @@ def kv_pool_alloc_group(var p : KVPool) : int {
     let g = p.free_groups[length(p.free_groups) - 1]
     p.free_groups |> pop()
     p.refcnt[g] = 1
+    g_kv_group_gen ++
+    p.gen[g] = g_kv_group_gen
     return g
 }
 
@@ -3441,6 +3488,9 @@ def release_kv_pages_(var s : Session) {
     if (s.kv_pool == null) {
         return
     }
+    for (f in g_kv_release_listeners) {
+        invoke(f, s)
+    }
     for (g in s.block_table) {
         kv_pool_release_group(*s.kv_pool, g)
     }
@@ -3455,6 +3505,29 @@ def private kv_grow_block_table(var s : Session; np : int64) {
     while (long_length(s.block_table) < np) {
         s.block_table |> push(kv_pool_alloc_group(*s.kv_pool))
     }
+}
+
+//! The rows of context the armed GPU driver holds a session's K/V for under `kdt` / `vdt` - both planes of every layer that
+//! keeps rows of its own a row - never past the model's context; no driver bounds nothing.
+def device_kv_max_rows_(t : Model; kdt, vdt : KVDtype) : int64 {
+    let total = kv_row_total_(t)
+    return min(t.config.seq_len, gpu_kv_room_rows(kv_row_bytes(kdt, total) + kv_row_bytes(vdt, total)))
+}
+
+//! true when layer l reads another layer's KV (no rows of its own — Q-only attention)
+def kv_shared_layer(t : Model; l : int64) : bool => l < long_length(t.kv_src) && t.kv_src[l] != l
+
+//! The K/V elements one session row holds over the layers that own rows of their own - the MTP draft slab
+//! (trunk-shaped attention) included under `with_head`, a layer aliasing its source's slab (the E-series) left out.
+def kv_row_total_(t : Model; with_head : bool = true) : int64 {
+    let c = t.config
+    var tot = 0l
+    for (l in range64(c.n_layers + (with_head ? c.n_layer_nextn : 0l))) {
+        if (!kv_shared_layer(t, l)) {
+            tot += layer_kv_dim(c, l)
+        }
+    }
+    return tot
 }
 
 // The eval capacity tripwire: every session buffer (KV planes, att scratch, run tables) is sized
@@ -4468,15 +4541,6 @@ def max_ffn_width(c : Config) : int64 => max(c.hidden_dim, max(c.n_ff_exp, c.n_f
 def max_kv_dim(c : Config) : int64 => (max(c.n_kv_heads * c.head_size,
     (c.n_kv_heads_swa > 0l ? c.n_kv_heads_swa : c.n_kv_heads) * (c.head_size_swa > 0l ? c.head_size_swa : c.head_size)))
 
-//! Total KV width of one position across all layers (the KV cache holds seq_len of these).
-def kv_row_total(c : Config) : int64 {
-    var total = 0l
-    for (l in range64(c.n_layers)) {
-        total += layer_kv_dim(c, l)
-    }
-    return total
-}
-
 //! Layer `l`'s base offset into the KV cache. Reads seq_len LIVE (tests cap it after load), so this
 //! is a function of Config, never baked into the Model at load. The definitional walking form; the
 //! hot paths use the O(1) Model overload below (same value via the load-time prefix array).
@@ -5389,10 +5453,19 @@ def private mtp_reject(t : Model; var s : Session; tok, pos : int64; served, lan
 //! is stream i's accepted draft or -1; returns how many streams' rows a joint verify carried (0 = none)
 [hot_path]   // the per-step entry the scheduler re-enters once per tick
 def mtp_spec_eval_batch(t : Model; var sessions : array<Session?>; toks : array<int64>; var accepted : array<int64>) : int64 {
+    let n = long_length(sessions)
+    if (mtp_assistant_attached_(t) && mtp_seated(t, g_mtp_round_overrides)) {
+        //! an assistant drafter's model: the round seat draws each stream's one draft, the joint verify being the NextN head's
+        accepted |> resize(n)   // nolint:PERF026 — the caller's reused per-stream row: it grows to the stream count once and keeps its capacity
+        for (i in range64(n)) {
+            let a = invoke(g_mtp_round_overrides[g_decode_override_name], t, *sessions[i], toks[i], 1l)   // nolint:PERF026 — mtp_seated holds key_exists, so the index cannot insert
+            accepted[i] = a > 0l ? sessions[i].mtp_vbatch[1] : -1l
+        }
+        return 0l
+    }
     if (mtp_seated(t, g_mtp_spec_batch_overrides)) {
         return invoke(g_mtp_spec_batch_overrides[g_decode_override_name], t, sessions, toks, accepted)   // nolint:PERF026 — mtp_seated holds key_exists, so the index cannot insert
     }
-    let n = long_length(sessions)
     accepted |> resize(n)   // nolint:PERF026 — the caller's reused per-stream row: it grows to the stream count once and keeps its capacity
     for (i in range64(n)) {
         var a = 0l
@@ -6124,6 +6197,7 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
         } elif (!served && seat) {
             // quality-only miss: the stale seam row dents draft acceptance until the next
             // draft rewrites it (the verify keeps outputs exact) — loud so a dip is traceable
+            g_mtp_seam_declines++
             to_log(LOG_WARNING, "dasLLAMA: MTP seam row declined at pos {start_pos} - draft acceptance may dip this window\n")   // nolint:PERF028,PERF026 - fires only on a seam decline; loud by design so a quality dip is traceable
         }
     }

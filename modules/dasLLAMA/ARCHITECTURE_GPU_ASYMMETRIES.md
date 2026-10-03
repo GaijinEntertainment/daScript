@@ -57,7 +57,12 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   `MTLResidencySet` pin in `_common` (`DASLLAMA_METAL_RESIDENCY`) plus its keep-alive
   heartbeat (`DASLLAMA_METAL_HEARTBEAT_S`, a dasMetal background re-request that stops the OS
   collecting the set over a CPU-only window, `ARCHITECTURE_RUNTIME.md#the-post-cpu-burn-gpu-ramp-and`) - a
-  driver-cost shield, not a placement mechanism; memory is still memory.
+  driver-cost shield, not a placement mechanism; memory is still memory. The collection is per
+  allocation: a buffer outside the set that no submission references for about a second is
+  un-wired while the GPU stays busy on other buffers - a decode turn is such a window for a plane
+  only the prefill reads - and the next submission to reference it pays the driver span for its
+  bytes (20 ms for the 5.4 GB baked dev-W plane of Llama-3.2-3B Q8_0). The first `residency_note`
+  therefore makes the set, so a region cached before any driver entry flushes is in it.
 - **The weights-epoch drop reaches the two tiers through different seams.** `bump_weights_epoch`'s
   listener seat (`register_weights_epoch_listener`) has two subscribers: `_common`'s `metal_weights_drop`,
   which runs the registered reload preps (`register_reload_prep`; the decode driver registers
@@ -83,6 +88,17 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
 - **The joint speculative tick is Metal-only.** `register_mtp_spec_batch_override("metal", ...)`
   has one registrant, `metal_mtp_spec_eval_batch`: the scheduler's tick hands every speculative
   stream to it and one same-slab verify carries all their rows (`ARCHITECTURE_GPU_MTP.md#mtp-joint-verify`); on Vulkan and the CPU the tick steps each stream through its own round.
+- **The assistant drafter's seams are Metal-only.** `register_mtp_assistant` has one registrant, the gemma drafter
+  driver (`ARCHITECTURE_ENGINE.md`, the `dasllama_mtp_gemma.das` charter): `mtp_drafter_sidecar_` reads "" and
+  `attach_mtp_drafter_` false on a build with no Metal, so a scheduler on Vulkan or the CPU speculates on a
+  NextN head alone.
+- **The device KV room seat is Metal-only.** `set_gpu_kv_room_hook` has one registrant, the Metal mirror's ceiling
+  (`mirror_rows_within_ceiling`); `gpu_kv_room_rows` reads unbounded elsewhere and `device_kv_max_rows` the model's
+  own context, since the Vulkan plan sizes its regions at the load (`set_gpu_ctx_max`).
+- **The mirror-fed prefill window and mirror adoption are Metal-only** (`ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-kv-mirror`,
+  the knobs `DASLLAMA_METAL_PF_MIRROR` and `DASLLAMA_METAL_MIRROR_ADOPT`, the counters `metal_prefill_mirror_served`,
+  `metal_mirror_uploaded_rows` and `metal_mirror_adopted_rows`): the Vulkan resident driver's window chain writes its
+  K/V into the region the decode reads, so it has no mirror to feed or adopt.
 - **The NextN draft seat is Vulkan-only.** `register_mtp_draft_override("vulkan", ...)` has one registrant, the resident driver's head (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`); Metal drafts inside its round seat. Each backend's owner (`register_mtp_seat_owner`, `mtp_seats_own`) claims the round its own way: Metal's a blob model alone, so a planar one under the metal overrides runs the CPU round, Vulkan's the resident driver armed on a NextN model. The head's prompt warm is a seat on Vulkan alone (`install_rdec_head_warm`: the window chain's extra layer, `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm`), where Metal's prefill driver warms the slab inside its own loop; the CPU warm stands down behind either once the driver landed the logits (`prefill_override_logits_done`).
 - **Lens depth**: both lenses generate `enc_*` builders from kernel classes - Metal via
   `[metal_dispatch]`, Vulkan via `[vk_dispatch]` (per-class set layouts + push constants, and

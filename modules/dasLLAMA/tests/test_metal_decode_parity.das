@@ -1020,17 +1020,36 @@ def test_metal_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm list, o
                 t |> success(long_length(deep_p) >= 2030l, "deep prompt reaches 2030 tokens")
                 deep_p |> resize(2030)
                 let dcpu16 <- continuation(trd, trd, deep_p, 40, KVDtype.f16)
-                select_decode_override("metal")
-                before = metal_decode_stats().decodes
-                let dgpu16 <- continuation(trd, trdg, deep_p, 40, KVDtype.f16)
-                select_decode_override("")
-                t |> success(metal_decode_stats().decodes - before > 30l, "deep arm: decode steps past 2048 served on the GPU")
-                t |> success(ids_equal(dcpu16, dgpu16), "40-token continuation crossing depth 2048 matches the CPU control")
-                let dcpu8 <- continuation(trd, trd, deep_p, 40, KVDtype.q8_0)
-                select_decode_override("metal")
-                let dgpu8 <- continuation(trd, trdg, deep_p, 40, KVDtype.q8_0)
-                select_decode_override("")
-                t |> success(ids_equal(dcpu8, dgpu8), "40-token q8_0-KV continuation crossing depth 2048 matches the CPU control")
+                with_metal_attn_d(true) $ {
+                    select_decode_override("metal")
+                    before = metal_decode_stats().decodes
+                    metal_kernel_coverage_reset()
+                    let dgpu16 <- continuation(trd, trdg, deep_p, 40, KVDtype.f16)
+                    select_decode_override("")
+                    t |> success(metal_decode_stats().decodes - before > 30l, "deep arm: decode steps past 2048 served on the GPU")
+                    t |> success(ids_equal(dcpu16, dgpu16), "40-token continuation crossing depth 2048 matches the CPU control")
+                    let fused16 = metal_kernel_count("MetalSqAttnDF16_metal_sq_attn_d")
+                    t |> success(fused16 >= 30l * trd.config.n_layers && fused16 % trd.config.n_layers == 0l, "the fused attention served every layer of the deep steps under DASLLAMA_METAL_ATTN_D pinned on ({fused16} dispatches)")
+                    t |> equal(metal_kernel_count("MetalSqAttnPartF16_metal_sq_attn_part"), 0l, "and the chunked pair none")
+                    let dcpu8 <- continuation(trd, trd, deep_p, 40, KVDtype.q8_0)
+                    select_decode_override("metal")
+                    metal_kernel_coverage_reset()
+                    let dgpu8 <- continuation(trd, trdg, deep_p, 40, KVDtype.q8_0)
+                    select_decode_override("")
+                    t |> success(ids_equal(dcpu8, dgpu8), "40-token q8_0-KV continuation crossing depth 2048 matches the CPU control")
+                    let fused8 = metal_kernel_count("MetalSqAttnDQ8_metal_sq_attn_d")
+                    t |> success(fused8 >= 30l * trd.config.n_layers && fused8 % trd.config.n_layers == 0l, "the fused attention served every layer of the deep q8_0 steps under DASLLAMA_METAL_ATTN_D pinned on ({fused8} dispatches)")
+                    t |> equal(metal_kernel_count("MetalSqAttnPartQ8_metal_sq_attn_part"), 0l, "and the chunked pair none")
+                    // the control: the knob off puts every deep step on the chunked pair and none on the fused form
+                    set_metal_attn_d(false)
+                    select_decode_override("metal")
+                    metal_kernel_coverage_reset()
+                    let dgpu_ctl <- continuation(trd, trdg, deep_p, 40, KVDtype.f16)
+                    select_decode_override("")
+                    t |> success(ids_equal(dcpu16, dgpu_ctl), "the chunked pair's 40-token continuation matches the CPU control too")
+                    t |> success(metal_kernel_count("MetalSqAttnPartF16_metal_sq_attn_part") >= 30l * trd.config.n_layers && metal_kernel_count("MetalSqAttnDF16_metal_sq_attn_d") == 0l,
+                        "DASLLAMA_METAL_ATTN_D off: the chunked pair serves every deep step and the fused form none ({metal_kernel_count("MetalSqAttnPartF16_metal_sq_attn_part")} chunked, {metal_kernel_count("MetalSqAttnDF16_metal_sq_attn_d")} fused)")
+                }
                 delete deep_p
                 delete trd
                 delete trdg

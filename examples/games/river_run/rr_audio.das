@@ -31,10 +31,6 @@ var audio_initialized = false
 var asch : AudioSystemChannels
 
 var music_initialized = false
-// The strudel player has two arms: a worker thread (strudel_init/strudel_play)
-// where the runtime can host one, and a main-thread channel (strudel_create_channel
-// + per-frame strudel_tick) where it cannot. Same music engine either way; only
-// where a command runs differs (music_dispatch below). Arm choice is init_audio's.
 var music_enabled = false
 var music_threaded = false
 var g_music_tracks : table<string; int>
@@ -498,10 +494,8 @@ def start_section_music(section : int) {
     }
 }
 
-[unsafe_heap_collect]   //! the strudel thread's entry: no daslang frame sits below it, as with strudel_play, which it calls
 def strudel_music_main() {
     start_menu_music()
-    strudel_play(@@music_cmd)
 }
 
 def update_music_state() {
@@ -575,7 +569,7 @@ def init_audio() {
             (get_platform_name() != "emscripten" || is_standalone_exe())
         )
         if (music_threaded) {
-            strudel_init(@@strudel_music_main)
+            strudel_init(@@strudel_music_main, @@music_cmd)
         } else {
             strudel_create_channel()
             start_menu_music()

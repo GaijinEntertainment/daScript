@@ -92,7 +92,6 @@ def yard_music() {
     strudel_add_track(drone)
     strudel_add_track(metal)
     strudel_add_track(pulse)
-    strudel_play(@@yard_music_event)
 }
 
 def init_yard_audio() {
@@ -126,7 +125,7 @@ def init_yard_audio() {
     set_volume(drill_sid, 0.0)
     set_volume(grind_sid, 0.0)
     speech_status = seq_box_create()
-    strudel_init(@@yard_music)
+    strudel_init(@@yard_music, @@yard_music_event)
     strudel_set_volume(music_volume, 1.5)
     previous_avatar = avatar
     last_patch = patch_position

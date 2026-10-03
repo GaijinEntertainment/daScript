@@ -1745,7 +1745,7 @@ namespace das {
 
     void AnnotationArgument::serialize ( AstSerializer & ser ) {
         ser.dtag(HASH_TAG("AnnotationArgument"));
-        ser << type << name << sValue << iValue << at;
+        ser << type << name << sValue << ulValue << at;
     }
 
     void AnnotationArgumentList::serialize ( AstSerializer & ser ) {

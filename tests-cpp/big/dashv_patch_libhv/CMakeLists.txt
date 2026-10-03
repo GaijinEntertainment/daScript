@@ -11,6 +11,12 @@ add_test(
 set_tests_properties(dashv_patch_libhv PROPERTIES LABELS "small")
 
 if(TARGET libDasModuleHV)
+    add_executable(test_hv_file_pump test_file_pump.cpp)
+    target_link_libraries(test_hv_file_pump PRIVATE doctest)
+    target_compile_features(test_hv_file_pump PRIVATE cxx_std_17)
+    add_test(NAME hv_file_pump COMMAND test_hv_file_pump)
+    set_tests_properties(hv_file_pump PROPERTIES LABELS "small")
+    add_dependencies(test-small test_hv_file_pump)
     add_executable(test_hv_parser_limits test_parser_limits.cpp)
     target_compile_definitions(test_hv_parser_limits PRIVATE HV_STATICLIB)
     target_include_directories(test_hv_parser_limits SYSTEM PRIVATE ${DAS_HV_DIR}/hv/$<CONFIG>/include)

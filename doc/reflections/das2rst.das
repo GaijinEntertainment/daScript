@@ -230,7 +230,7 @@ def document_module_fio(_root : string) {
     var groups <- array<DocGroup>(
         hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin%%)),
         group_by_regex("Direct IO and mapping advice", mod, %regex~(dwrite_open|dwrite_append|dwrite_band|dwrite_commit|dwrite_stat|dwrite_close|prefetch_map)$%%),
-        group_by_regex("File manipulation", mod, %regex~(try_fflush|f|long_f|stat$|getchar|remove|rename|copy_file|file_size|equivalent|is_symlink|is_reparse_point|set_mtime)%%),
+        group_by_regex("File manipulation", mod, %regex~(try_fflush|try_lock_file|f|long_f|stat$|getchar|remove|rename|copy_file|file_size|equivalent|is_symlink|is_reparse_point|set_mtime)%%),
         group_by_regex("Path manipulation", mod, %regex~(base_name|dir_name|get_full_file_name|extension|stem|replace_extension|path_join|normalize|to_generic_path|tilde_home|is_absolute|relative|relative_result|parent)$%%),
         group_by_regex("Directory manipulation", mod, %regex~(dir|dir_rec|mkdir|mkdir_rec|mkdir_result|rmdir|rmdir_rec|rmdir_rec_result|rmdir_result|chdir|getcwd)$%%),
         group_by_regex("Glob and pattern matching", mod, %regex~(match_glob|glob|glob_filtered|is_glob_pattern|expand_glob|parse_file_list)$%%),
@@ -289,8 +289,8 @@ def document_module_dashv(_root : string) {
         group_by_regex("WebSocket channel send", mod, %regex~(send)$%%),
         group_by_regex("Handle operations", mod, %regex~(is_alive|==|!=)$%%),
         group_by_regex("HTTP route registration", mod, %regex~(GET|POST|PUT|DELETE|PATCH|HEAD|ANY|SSE|STREAM)$%%),
-        group_by_regex("HTTP server configuration", mod, %regex~(set_limits|set_access_log|WEBSOCKET_UPGRADE|accept_websocket|reject_websocket|STATIC|allow_cors|set_document_root|set_home_page|set_index_of|set_error_page)$%%),
-        group_by_regex("HTTP response helpers", mod, %regex~(TEXT_PLAIN|JSON|REDIRECT|SERVE_FILE|DATA|set_header|set_content_type)$%%),
+        group_by_regex("HTTP server configuration", mod, %regex~(set_limits|set_connection_limits|set_access_log|WEBSOCKET_UPGRADE|accept_websocket|reject_websocket|STATIC|allow_cors|set_document_root|set_home_page|set_index_of|set_error_page)$%%),
+        group_by_regex("HTTP response helpers", mod, %regex~(TEXT_PLAIN|JSON|REDIRECT|SERVE_FILE|SERVE_FILE_STREAM|DATA|set_header|set_content_type)$%%),
         group_by_regex("HTTP client requests", mod, %regex~(request|request_checked|request_cb|status_message)$%%),
         group_by_regex("Message and header access", mod, %regex~(get_header|each_header|client_ip|.*content_length)$%%),
         group_by_regex("Request configuration", mod, %regex~(set_basic_auth|set_bearer_token_auth|set_timeout|set_connect_timeout|allow_redirect|set_param|get_param|each_param)$%%),
@@ -342,7 +342,7 @@ def private dasllama_type_stanza(f : FILE const?; lab : string; tname : string; 
 def document_module_dasllama(_root : string) {
     var mod = find_module("dasllama")
     var groups <- array<DocGroup>(
-        group_by_regex("Model loading and sessions", mod, %regex~(load_model|create_session|create_kv_pool|release_kv_pages|create_batch_workspace|setup_dasllama_jobque|with_dasllama_jobque|caps)$%%),
+        group_by_regex("Model loading and sessions", mod, %regex~(load_model|create_session|create_kv_pool|release_kv_pages|create_batch_workspace|setup_dasllama_jobque|with_dasllama_jobque|caps|mtp_drafter_sidecar|attach_mtp_drafter|mtp_capable)$%%),
         group_by_regex("Prefix cache", mod, %regex~(create_prefix_cache|prefix_attach|prefix_insert|prefix_checkpoint_at|prefix_release|prefix_held_groups|prefix_chain_list)$%%),
         group_by_regex("Tokenizer", mod, %regex~(encode|decode|piece)$%%),
         group_by_regex("Evaluation and sampling", mod, %regex~(eval|eval_embd|eval_embd_span|eval_embd_span_mrope|eval_batch|sample|set_seed|stats)$%%),
@@ -354,7 +354,7 @@ def document_module_dasllama(_root : string) {
         group_by_regex("Reasoning (thinking models)", mod, %regex~(split_reasoning|make_think_stream|think_feed|think_finish|think_drain|effective_stop_ids|turn_stop_ids|make_nothink_guard|nothink_stop_here)$%%),
         group_by_regex("Operations: prepared images and dispatch", mod, %regex~(dlim_inventory|dlim_clean|set_dispatch_worker_limit|get_dispatch_worker_limit|set_jobque_spin_us|get_jobque_spin_us|set_jobque_spin_gpu_us|get_jobque_spin_gpu_us|get_jobque_spin_in_force|set_single_thread|get_single_thread|select_matmul_backend_for_load|kernel_backend_available)$%%),
         group_by_regex("Operations: GPU tier and model slots", mod, %regex~(gpu_tier_status|set_gpu_tier_want|moe_gpu_tier_arm|moe_gpu_weight_budget|gpu_model_marks_init|gpu_slot_capture|gpu_slot_rearm|moe_gpu_model_marks_save|moe_gpu_model_marks_restore|moe_gpu_hydrate_session|moe_gpu_drop_model|set_resident_prefill_allowed|resident_prefill_allowed)$%%),
-        group_by_regex("Operations: serving from the device", mod, %regex~(create_device_session|gpu_device_sessions|gpu_dn_room|gpu_device_prefill_continues|gpu_device_prefill_window|gpu_device_kv_park|gpu_device_kv_adopt|gpu_device_session_ctx|gpu_device_session_dtype|set_gpu_resident_regions|set_gpu_ctx_max|set_gpu_ctx_strict|gpu_ctx_pins|set_gpu_kv_dtype|gpu_kv_dtype_pin|reset_gpu_kv_dtype|gpu_resident_decline|gpu_resident_experts_host|gpu_cpu_passes)$%%)
+        group_by_regex("Operations: serving from the device", mod, %regex~(create_device_session|gpu_device_sessions|gpu_dn_room|gpu_device_prefill_continues|gpu_device_prefill_window|gpu_device_kv_park|gpu_device_kv_adopt|gpu_device_session_ctx|gpu_device_session_dtype|set_gpu_resident_regions|set_gpu_ctx_max|set_gpu_ctx_strict|gpu_ctx_pins|set_gpu_kv_dtype|gpu_kv_dtype_pin|reset_gpu_kv_dtype|gpu_resident_decline|gpu_resident_experts_host|gpu_cpu_passes|device_kv_max_rows)$%%)
     )
     var hook = DocsHook()
     hook.afterEnums <- @(var f : FILE const?; _was_enums : bool) {
@@ -685,7 +685,7 @@ def document_module_jobque(_root : string) {
         group_by_regex("Channel, JobStatus, Lockbox, SeqBox, Stream", mod, %regex~(append|notify|join|channel_create|channel_remove|stream_create|stream_remove|add_ref|release|notify_and_release|lock_box_create|lock_box_remove|job_status_create|job_status_remove|seq_box_create|seq_box_release)$%%),
         group_by_regex("Queries", mod, %regex~(get_total_hw_jobs|get_total_hw_threads|get_total_hw_cores|get_total_perf_cores|is_slow_tier_compute|is_job_que_shutting_down|is_job_que_available|count_jobque_leaks)$%%),
         group_by_regex("Event tracing", mod, %regex~(jobque_trace_start|jobque_trace_stop|jobque_trace_save|jobque_trace_tag|jobque_trace_category|jobque_trace_marker_name|jobque_trace_marker)$%%),
-        group_by_regex("Internal invocations", mod, %regex~(new_job_invoke|new_thread_invoke|new_debugger_thread|set_jobque_fork_pool|get_jobque_fork_pool|set_jobque_fork_skip_heap_reset|set_jobque_worker_spin|set_jobque_batch_dispatch|set_jobque_join_spin|set_jobque_team_mode|get_jobque_team_mode|set_jobque_thread_team_mode|get_jobque_thread_team_mode|set_current_thread_priority|get_current_processor|set_current_thread_affinity|set_jobque_threads_cap|set_jobque_threads|get_jobque_threads|set_jobque_affinity|get_jobque_affinity|set_jobque_worker_limit|get_jobque_worker_limit|set_jobque_team_rank_gate|get_jobque_team_rank_gate|set_jobque_team_prof|reset_jobque_team_prof|get_jobque_team_prof|get_jobque_team_prof_counts|get_jobque_team_prof_react|team_parallel_for_invoke|team_parallel_for_indexed_invoke|team_parallel_stages_invoke|flush_jobque_batch|jobque_try_run_one|_builtin_seq_box_publish|_builtin_seq_box_read)$%%),
+        group_by_regex("Internal invocations", mod, %regex~(new_job_invoke|new_thread_invoke|new_thread_loop_invoke|is_thread_loop_capture|new_debugger_thread|set_jobque_fork_pool|get_jobque_fork_pool|set_jobque_fork_skip_heap_reset|set_jobque_worker_spin|set_jobque_batch_dispatch|set_jobque_join_spin|set_jobque_team_mode|get_jobque_team_mode|set_jobque_thread_team_mode|get_jobque_thread_team_mode|set_current_thread_priority|get_current_processor|set_current_thread_affinity|set_jobque_threads_cap|set_jobque_threads|get_jobque_threads|set_jobque_affinity|get_jobque_affinity|set_jobque_worker_limit|get_jobque_worker_limit|set_jobque_team_rank_gate|get_jobque_team_rank_gate|set_jobque_team_prof|reset_jobque_team_prof|get_jobque_team_prof|get_jobque_team_prof_counts|get_jobque_team_prof_react|team_parallel_for_invoke|team_parallel_for_indexed_invoke|team_parallel_stages_invoke|flush_jobque_batch|jobque_try_run_one|_builtin_seq_box_publish|_builtin_seq_box_read)$%%),
         group_by_regex("Construction", mod, %regex~(with_channel|with_stream|with_job_status|with_job_que|with_lock_box|with_seq_box|create_job_que|destroy_job_que)$%%),
         group_by_regex("SeqBox operations", mod, %regex~(clear)$%%),
         group_by_regex("Atomic", mod, %regex~(atomic32_create|atomic32_remove|with_atomic32|atomic64_create|atomic64_remove|with_atomic64|get|set|inc|dec)$%%)
@@ -696,7 +696,7 @@ def document_module_jobque(_root : string) {
 def document_module_jobque_boost(_root : string) {
     var mod = find_module("jobque_boost")
     var groups <- array<DocGroup>(
-        group_by_regex("Invocations", mod, %regex~(new_job|new_thread)$%%),
+        group_by_regex("Invocations", mod, %regex~(new_job|new_thread|new_thread_loop)$%%),
         group_by_regex("Iteration", mod, %regex~(for_each|each|each_clone|for_each_clone)$%%),
         group_by_regex("Passing data", mod, %regex~(push|push_clone|push_batch|push_batch_clone|push_archive)$%%),
         group_by_regex("Receiving data", mod, %regex~(gather|gather_ex|gather_and_forward|peek|pop|pop_one|pop_and_clone_one|try_pop|try_pop_clone|pop_with_timeout|pop_with_timeout_clone|pop_archive|try_pop_archive|pop_archive_with_timeout|gather_archive)$%%),
@@ -1839,7 +1839,7 @@ def document_module_strudel_player(_root : string) {
         group_by_regex("Tempo and timing", mod, %regex~strudel_(set_bpm|set_cps|get_bpm|get_cps|get_playback_time|set_look_ahead)$%%),
         group_by_regex("Volume", mod, %regex~strudel_(set_volume|get_volume)$%%),
         group_by_regex("Asset loading", mod, %regex~strudel_(load_sound|load_sample_dir|load_sf2|get_sf2_path|has_sf2)$%%),
-        group_by_regex("Track management", mod, %regex~strudel_(add_track|add_track_immediate|remove_track|fade_track)$%%),
+        group_by_regex("Track management", mod, %regex~strudel_(add_track|add_track_immediate|remove_track|fade_track|track_gain)$%%),
         group_by_regex("One-shots", mod, %regex~strudel_(one_shot|active_tracks)$%%),
         group_by_regex("Orbit levels", mod, %regex~strudel_(fade_orbit|set_orbit_gain|orbit_gain)$%%),
         group_by_regex("State serialization", mod, %regex~strudel_(save_state|restore_state|save_sf2_state|restore_sf2_state)$%%),

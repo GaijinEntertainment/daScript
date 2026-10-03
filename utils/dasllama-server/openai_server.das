@@ -170,6 +170,7 @@ var g_events : array<SchedEvent>
 struct private StreamWire {
     @do_not_delete writer : HttpResponseWriter?
     streaming : bool
+    include_usage : bool
     is_chat : bool                  // chat.completion.chunk vs text_completion framing
     slot : int                      // the ModelSlot this stream runs on (flush sets g_cur from it)
     id : string                     // "chatcmpl-N" / "cmpl-N"
@@ -1606,11 +1607,21 @@ struct private OaiChoice {
     finish_reason : string
 }
 
+struct private OaiPromptDetails {
+    cached_tokens : int64
+}
+
 struct private OaiUsage {
     prompt_tokens : int64
     completion_tokens : int64
     total_tokens : int64
+    prompt_tokens_details : OaiPromptDetails
 }
+
+//! a finished turn's token counts, the prefix-cache hit among them
+def private usage_of(e : SchedEvent) : OaiUsage
+    => OaiUsage(prompt_tokens = e.n_prompt, completion_tokens = e.n_gen, total_tokens = e.n_prompt + e.n_gen,
+        prompt_tokens_details = OaiPromptDetails(cached_tokens = e.n_cached))
 
 struct private OaiChatResponse {
     id : string
@@ -1649,6 +1660,21 @@ struct private OaiStreamChunk {
     created : int64
     model : string
     choices : array<OaiStreamChoice>
+}
+
+struct private OaiStreamTimings {
+    ttft_ms : float
+    gen_ms : float
+}
+
+struct private OaiUsageChunk {
+    id : string
+    @rename = "object" _object : string
+    created : int64
+    model : string
+    choices : array<OaiStreamChoice>
+    usage : OaiUsage
+    timings : OaiStreamTimings
 }
 
 struct private OaiComplStreamChoice {
@@ -1877,6 +1903,18 @@ def private send_chat_chunk(srv : WebSocketServer; var writer : HttpResponseWrit
     delete chunk
 }
 
+//! The chunk a stream that asked for `stream_options.include_usage` ends on, before `[DONE]`: no choices, the turn's
+//! token counts with the prefix-cache hit among them, and the scheduler's own clock for the turn.
+def private send_usage_chunk(srv : WebSocketServer; var writer : HttpResponseWriter?;
+                             id : string; created : int64; is_chat : bool; e : SchedEvent) {
+    var chunk = OaiUsageChunk(id = id, _object = is_chat ? "chat.completion.chunk" : "text_completion",
+                              created = created, model = cur_name(),
+                              usage = usage_of(e),
+                              timings = OaiStreamTimings(ttft_ms = float(e.ttft_us) / 1000.0, gen_ms = float(e.gen_us) / 1000.0))
+    sse_event(srv, writer, sprint_json(chunk, false), "")
+    delete chunk
+}
+
 // The whole call set of a streaming reply as ONE tool_calls delta (index enumerates calls per the
 // OpenAI incremental framing); the caller follows with the finish_reason="tool_calls" chunk.
 def private send_chat_tool_calls_chunk(srv : WebSocketServer; var writer : HttpResponseWriter?;
@@ -2055,10 +2093,10 @@ def private tmpdir() : string {
 let CHAT_FIELDS : table<string> <- { "model", "messages", "stream", "temperature", "top_k", "top_p", "min_p",
                                      "presence_penalty", "frequency_penalty", "repeat_penalty", "seed",
                                      "max_tokens", "max_completion_tokens", "tools", "tool_choice",
-                                     "enable_thinking", "chat_template_kwargs", "truncation" }
+                                     "enable_thinking", "chat_template_kwargs", "truncation", "stream_options" }
 let COMPL_FIELDS : table<string> <- { "model", "prompt", "stream", "temperature", "top_k", "top_p", "min_p",
                                      "presence_penalty", "frequency_penalty", "repeat_penalty", "seed",
-                                     "max_tokens" }
+                                     "max_tokens", "stream_options" }
 let EMB_FIELDS : table<string> <- { "model", "input" }
 
 // Sampling knobs shared by both completion routes — OpenAI names, plus the llama.cpp-style
@@ -2463,6 +2501,7 @@ def private handle_model_load(var req : HttpRequest?; var resp : HttpResponse?) 
     }
     var opts = SlotOpts()
     opts.backend = cpu_only ? "cpu" : "auto"
+    clamp_ctx_to_device_room(m, id, slot_kv_dtype(opts))   // the codec the scheduler will inherit, not SlotOpts' f16 seed
     failed = catch_worker_panic(failure) {
         // the KV-geometry validate inside create_scheduler can refuse the pool — caught, so an
         // operator POST cannot abort the tick thread
@@ -2642,7 +2681,8 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
                              seed : int = 0; think : ThinkStream = ThinkStream();
                              tool_mode : ToolMode = ToolMode.none; reuse_id : int64 = 0l;
                              media_is_audio : bool = false; media_grid : int2 = int2(0);
-                             var nothink : NothinkStopGuard = NothinkStopGuard(); stable_at : int64 = 0l) {
+                             var nothink : NothinkStopGuard = NothinkStopGuard(); stable_at : int64 = 0l;
+                             include_usage : bool = false) {
     if (bench_hold_active()) {
         service_unavailable(srv, writer, ibench_hold_text())
         return
@@ -2677,7 +2717,7 @@ def private register_request(srv : WebSocketServer; var writer : HttpResponseWri
     g_slots[g_cur].last_used = ref_time_ticks()
     set_writer_keepalive_timeout(srv, writer, LLM_WRITER_KEEPALIVE_MS)
     to_log(LOG_INFO, "[req {rid}] {prefix}: prompt={np} tok, stream={streaming}, max_new={max_new}\n")
-    var wire <- StreamWire(writer = writer, streaming = streaming, is_chat = is_chat,
+    var wire <- StreamWire(writer = writer, streaming = streaming, include_usage = include_usage, is_chat = is_chat,
                            slot = g_cur, id = cid, created = created,
                            has_tools = tools_declared && tool_mode != ToolMode.none,
                            last_keepalive_ticks = ref_time_ticks(),
@@ -3096,8 +3136,11 @@ def private handle_chat_tail(srv : WebSocketServer; var writer : HttpResponseWri
     register_request(srv, writer, prompt, stop_ids, close, media, media_at, n_media, params, max_new,
                      streaming, true, "chatcmpl",
                      has_tools, call_open, call_close, seed, think_stream, wire_tool_mode, resume_rid,
-                     media_is_audio, media_grid, nothink, stable_at)
+                     media_is_audio, media_grid, nothink, stable_at, wants_usage(js))
 }
+
+//! whether a request asks its stream to end on the usage chunk (`stream_options.include_usage`)
+def private wants_usage(js : JsonValue?) : bool => js?["stream_options"]?["include_usage"] ?? false
 
 def private handle_completion(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {
     if (reject_deferred_while_draining(srv, writer) || reject_while_benching(srv, writer)) {
@@ -3131,7 +3174,7 @@ def private handle_completion(srv : WebSocketServer; var req : HttpRequest?; var
     var no_media : array<float>
     register_request(srv, writer, toks, none_stop, none_close, no_media, 0l, 0l,
                      params, max_new, streaming, false, "cmpl",
-                     [seed = seed])
+                     [seed = seed, include_usage = wants_usage(js)])
 }
 
 // Evict streams whose client vanished: is_writer_connected reads false once the connection is
@@ -3337,6 +3380,9 @@ def private flush_events(srv : WebSocketServer) {   // nolint:STYLE037,STYLE038 
             } else {
                 send_compl_chunk(srv, w.writer, w.id, w.created, "", finish)
             }
+            if (w.include_usage) {
+                send_usage_chunk(srv, w.writer, w.id, w.created, w.is_chat, e)
+            }
             sse_event(srv, w.writer, "[DONE]", "")
             close_writer(srv, w.writer)
         } elif (w.is_chat) {
@@ -3359,16 +3405,14 @@ def private flush_events(srv : WebSocketServer) {   // nolint:STYLE037,STYLE038 
                                                                    reasoning_content = rsn,
                                                                    tool_calls <- calls),
                                              finish_reason = finish))
-            out.usage = OaiUsage(prompt_tokens = e.n_prompt, completion_tokens = e.n_gen,
-                                 total_tokens = e.n_prompt + e.n_gen)
+            out.usage = usage_of(e)
             set_writer_keepalive_timeout(srv, w.writer, DEFAULT_WRITER_KEEPALIVE_MS)
             respond(srv, w.writer, int(http_status.OK), "application/json", sprint_json(out, false))
             delete out
         } else {
             var out = OaiComplResponse(id = w.id, _object = "text_completion", created = w.created, model = cur_name())
             out.choices |> push(OaiComplChoice(index = 0, text = join(w.reply_parts, ""), finish_reason = e.finish))
-            out.usage = OaiUsage(prompt_tokens = e.n_prompt, completion_tokens = e.n_gen,
-                                 total_tokens = e.n_prompt + e.n_gen)
+            out.usage = usage_of(e)
             set_writer_keepalive_timeout(srv, w.writer, DEFAULT_WRITER_KEEPALIVE_MS)
             respond(srv, w.writer, int(http_status.OK), "application/json", sprint_json(out, false))
             delete out
@@ -5573,6 +5617,23 @@ def private gpu_decoding_slots : int {
     return n
 }
 
+//! A model served from its image alone has no CPU stack to fall to, so its context ends where the device
+//! holds a session's K/V: `seq_len` is cut to `device_kv_max_rows` under the `kdt` codec, with a warning.
+def clamp_ctx_to_device_room(var m : Model; name : string; kdt : KVDtype) {
+    return if (!m.metal_blob)
+    let room = device_kv_max_rows(m, kdt, kdt)
+    if (room < m.config.seq_len) {
+        to_log(LOG_WARNING, "dasllama-server: {name} ctx {m.config.seq_len} -> {room}: the device KV mirror holds that many rows of this model under DASLLAMA_METAL_KV_MIRROR_MB (hard max 4096 MB)\n")
+        m.config.seq_len = room
+    }
+}
+
+//! the K/V codec a slot's scheduler runs on: the slot's own where one was asked, else the server default
+def slot_kv_dtype(opts : SlotOpts) : KVDtype => opts.kv_dtype_set ? opts.kv_dtype : g_sched_defaults.kv_dtype
+
+//! the server-wide K/V codec a slot that asked for none inherits
+def sched_default_kv_dtype() : KVDtype => g_sched_defaults.kv_dtype
+
 def private init_one_scheduler(var s : ModelSlot) {
     let s_streams = s.opts.streams >= 0l ? s.opts.streams : g_sched_defaults.max_streams
     let s_chunk = s.opts.chunk >= 0l ? s.opts.chunk : g_sched_defaults.chunk_tokens
@@ -5585,16 +5646,20 @@ def private init_one_scheduler(var s : ModelSlot) {
     if (pfx < 0l) {
         pfx = 0l   // explicit unbounded
     }
-    let s_kv = s.opts.kv_dtype_set ? s.opts.kv_dtype : g_sched_defaults.kv_dtype
+    let s_kv = slot_kv_dtype(s.opts)
     let want = s.opts.mtp >= 0 ? s.opts.mtp : g_sched_defaults.mtp
     var spec = want > 0 || (want < 0 && mtp_auto_arms(s_streams, slot_flavor(s) == "metal", s.backend_effective, gpu_resident_experts_host()))
     if (spec && s.model.config.n_layer_nextn <= 0l) {
-        if (want > 0) {
-            to_log(LOG_WARNING, "dasllama-server: mtp requested for {s.name} but the model has no NextN head — self-spec stays off\n")
+        let side = mtp_drafter_sidecar(s.path)
+        if (!empty(side) && attach_mtp_drafter(s.model, side)) {
+            to_log(LOG_INFO, "dasllama-server: {s.name} speculates through the assistant drafter {base_name(side)}\n")
+        } elif (want > 0) {
+            to_log(LOG_WARNING, "dasllama-server: mtp requested for {s.name} but the model has no NextN head and no assistant drafter beside it — self-spec stays off\n")
+            spec = false
         } else {
-            to_log(LOG_INFO, "dasllama-server: {s.name} has no NextN head — the single-stream self-spec default stays off\n")
+            to_log(LOG_INFO, "dasllama-server: {s.name} has no NextN head and no assistant drafter beside it — the single-stream self-spec default stays off\n")
+            spec = false
         }
-        spec = false
     }
     s.sched <- create_scheduler(s.model, s_streams, g_sched_defaults.max_queue, s_chunk, s_pages, pfx, s_kv, spec, s_idle)
     slot_default_chunk(s)

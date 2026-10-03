@@ -136,6 +136,7 @@ FetchContent_Declare(imgui_src
     SOURCE_DIR ${DAS_IMGUI_DIR}/imgui
 )
 FetchContent_MakeAvailable(imgui_src)
+INCLUDE(${DAS_IMGUI_DIR}/patches/input_routing.cmake)
 
 # Patch: add data() method to ImVector (needed by daScript's ast_handle.h ManagedVectorAnnotation)
 FILE(READ ${DAS_IMGUI_DIR}/imgui/imgui.h IMGUI_H_CONTENT)

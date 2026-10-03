@@ -789,6 +789,10 @@ def private writeAnnotationArgInit(var sb : StringBuilderWriter; arg : Annotatio
         write(sb, "AnnotationArgumentInfo(\"{arg.name}\", \"{c_literal(arg.sValue)}\")")
     } elif (arg.basicType == Type.tInt) {
         write(sb, "AnnotationArgumentInfo(\"{arg.name}\", {arg.iValue})")
+    } elif (arg.basicType == Type.tInt64) {
+        write(sb, "AnnotationArgumentInfo(\"{arg.name}\", int64_t(uint64_t({uint64(arg.lValue)}ull)))")
+    } elif (arg.basicType == Type.tUInt64) {
+        write(sb, "AnnotationArgumentInfo(\"{arg.name}\", uint64_t({arg.ulValue}ull))")
     } elif (arg.basicType == Type.tFloat) {
         write(sb, "AnnotationArgumentInfo(\"{arg.name}\", {to_cpp_float(arg.fValue)})")
     }
@@ -3260,7 +3264,8 @@ class public CppAot : AstVisitor {
         }
     }
     def override preVisitExprCast(expr : ExprCast?) {
-        write(*ss, "{(expr.castFlags.upcastCast ? "das_upcast" : "das_cast")}<{describeCppType(expr.castType,DescribeConfig(cross_platform=cross_platform))}>::cast(");
+        let target = expr.castFlags.reinterpretCast && expr._type.flags.ref ? expr._type : expr.castType;
+        write(*ss, "{(expr.castFlags.upcastCast ? "das_upcast" : "das_cast")}<{describeCppType(target,DescribeConfig(cross_platform=cross_platform))}>::cast(");
     }
     def override visitExprCast(var expr : ExprCast?) : ExpressionPtr {
         write(*ss, ")");

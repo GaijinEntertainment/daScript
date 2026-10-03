@@ -35,7 +35,6 @@ def worker_setup() {
     strudel_add_track(note_pattern("<[a2 a2] [a2 a2] [f2 f2] [g2 g2]> <[a2 a2] [c3 c3] [d3 d3] [e3 e3]>", "square"), 0.3)
     strudel_add_track(note_pattern("<a4 c5 e5 a5> <g5 e5 c5 ~> <[a4 b4] c5 e5 ~>", "sawtooth"), 0.25)
     strudel_add_track(note_pattern("<[a4 c5 e5 a5 c6 a5 e5 c5]> <[e5 a5 c6 e6 c6 a5 e5 a4]>", "triangle"), 0.12)
-    strudel_play()
 }
 
 struct Stretch {

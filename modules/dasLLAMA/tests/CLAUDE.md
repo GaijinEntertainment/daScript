@@ -87,7 +87,10 @@ arm6-churn arm7-q8kv arm7b-tq4kv arm8-s16 arm9-reload arm10-kq arm11-depth arm12
 arm13-conc arm14-poison arm15-spec-hint` (arm14 = the shared-region collision gate: a foreign GPU
 prefill must not degrade a later forced-feed decode - Qwen2.5-0.5B, its own `[test]` block; arm15 =
 the single-row driver's greedy chain stands down for a decode sampled at temp > 0 and rides for a
-greedy one),
+greedy one; arm11 = the 2030-token depth cell, which also holds the single row's attention form by
+the kernel census - the fused single-pass stamp once a layer a step on the f16 mirror and its q8_0
+twin on the q8_0 mirror, no chunked dispatch on either; `DASLLAMA_METAL_ATTN_D=0` is the control
+that reds it),
 batch test: `batch` (whole test), `batchB7-partd`, `batchB8-kq`, `batch-ff` (real-text forced feed,
 GPU single vs GPU batch at B=2/B=4 on identical tokens, logits tolerance).
 
@@ -112,7 +115,10 @@ step); ffk = the
 same at depth 2 and 4, every round a k+1-row verify plus the recurrent replay, which re-runs row 0
 from the pre-verify recurrent state; vff = the same-slab batch verify's four rows vs four plain
 steps; count = speculative free-run == plain free-run, token-exact, counting prompt, at depth 1, 2
-and 4; `mtp-count8-<tag>` = the same at depth 8, the deepest round - nine verify rows;
+and 4, and by the kernel census the verify's rows on the fused single-pass attention wherever the
+kernel carries the model's shape (every head class of 64, 96, 128, 256 or 512 on the f16 mirrors, the
+three stamps' counts summed, no chunked dispatch) and on the chunked pair elsewhere, both counts
+logged; `mtp-count8-<tag>` = the same at depth 8, the deepest round - nine verify rows;
 `mtp-sampled-<tag>` = the sampled accept walk - speculative free-run == plain SAMPLED free-run,
 seeded, at depth 1 and 2, temp 0.7 / top-k 1 / penalty 1.1 so every draw is the penalized argmax
 and the stream stays deterministic; on a verify tag it rides the assistant round inside the
@@ -124,7 +130,10 @@ at B=2/B=4 on identical real-text tokens plus one CPU reference row (the batch r
 the support matrix's batch cell only proves ENGAGE); `mtp-vff-<tag>` takes both tag families;
 `mtp-vff1-<tag>` = one row through the batch driver (the encoder alone, no row mixing);
 `mtp-vff5-<tag>` = five rows through the batch driver; `mtp-vff9-<tag>` = nine rows, the deepest
-verify the round can ask for (MTP_MAX_ROWS); `mtp-dff8-<tag>` = distinct sessions at B=5 and B=8. `mtp-count-<tag>` on a verify tag attaches the `mtp-*` assistant sidecar beside a
+verify the round can ask for (MTP_MAX_ROWS); `mtp-vffc-<tag>` = the nine rows again under a 64 MB
+mirror ceiling that holds the session's slice once and not nine times (the drivers shut down first,
+so the arena comes back at the ceiling) - the rows share one slice, and the step must serve;
+`mtp-dff8-<tag>` = distinct sessions at B=5 and B=8. `mtp-count-<tag>` on a verify tag attaches the `mtp-*` assistant sidecar beside a
 gemma-4 target first (skips when none) and runs the counting free-run at depth 1, 2, 4; the
 diagnostic arms `mtp-count-cpu` (drafts through the CPU oracle), `mtp-count-trace` (drafts vs
 truth logged per round) and `mtp-count-pre` (the pre-norm residual as the drafter's h) ride along
@@ -139,11 +148,24 @@ the sidecar resolver's two refusals), `mtp-gdraft-load` (the 440 MiB
 `mtp-gemma-4-26B-A4B-it-Q8_0.gguf` sidecar's whole struct - geometry, per-layer head/kv classes,
 blob and fblob sizes against the tensor sum, 32-byte tensor alignment, the p-RoPE table),
 `mtp-gdraft-cpu` (the CPU oracle's one step over a live gemma-4-26B-A4B session - PARITY_FULL,
-finiteness and range only; it carries no numeric oracle) and `mtp-gdraft-gpu` (attach plus one
-GPU draft step with Metal required).
+finiteness and range only; it carries no numeric oracle), `mtp-gdraft-gpu` (attach plus one
+GPU draft step with Metal required) and `mtp-gdraft-sched` (the served round: a gemma-4 target
+cannot speculate until the facade attaches the sidecar beside it, then a scheduler told to
+speculate keeps `mtp` on and walks the counting prompt token for token with the plain scheduler,
+drafting and accepting as it goes, both streams decoded in the log, and the same walk with the
+drafter detached as the control that drafts nothing - PARITY_FULL, Metal required). The gpu and
+sched arms load the 26B target through `load_model_cached`, so the file mints a `.dlim` for it
+under the same ledgered exception as the parity file's: the Metal MTP rail is what the image
+flavor serves.
 
 Prefill parity: `base mm-tail s16
-kq cont attn-dev span span-fused span-mrope span-ds dim qkv` (attn-dev = the device attention pair
+kq cont attn-dev mirror span span-fused span-mrope span-ds dim qkv` (mirror = the mirror-fed window
+against the f32 panels on one blob twin under the pair's pinned crown - a 300-row window and a
+20-row continuation, the last row's logits within 0.4% of the largest and the census naming each
+form's kernels; the decode step after them uploads no row on the mirror-fed form and every row on
+the panels form; a paged taker adopts a released donor's mirror for the whole pages a prefix cache
+hands it and uploads the copied partial page's rows alone, to the bit of the same run with adoption off, and a reused group id under a
+new stamp adopts nothing; attn-dev = the device attention pair
 against the staged trio on one blob twin under the pair's pinned crown - a 300-row window on the
 32-row stamps, then a 384-row continuation on the 128-row ones, the last row's logits within
 0.4% of the largest, the continuation started one token later as the control, the same next
@@ -172,7 +194,8 @@ a skipped add hides from them).
 Support matrix: `cells-q8 window cells-s16 mode kq tensor dim8b dim70b` + the
 family matrix `fam-qwen3 fam-qwen2 fam-phi3 fam-gemma2 fam-gemma3 fam-gemma4 fam-qwen3moe
 fam-gemma4moe fam-gptoss fam-gemma4e fam-qwen35 fam-qwen35moe fam-qwen2moe` (needs-derivation pins +
-per-path cells; fam-gemma2 also carries the sliding-window masking parity row;
+per-path cells; fam-gemma2 also carries the sliding-window masking parity row, whose census holds
+the capped rows past the single-dispatch ceiling on the fused attention's wide stamp and off the chunked pair;
 fam-gemma4/fam-qwen3moe/fam-gemma4moe/fam-gptoss/fam-qwen35moe/fam-qwen2moe are
 DASLLAMA_PARITY_FULL-gated - 7.4/18.5/26.9/12.1/22/15GB; fam-gemma4moe and fam-gptoss are ENGAGE
 + shallow logits TOLERANCE cells only - token parity is not a valid instrument for the 26B, whose double-router
@@ -331,7 +354,19 @@ child builds (up to 120 s each) proving the lens refuses a `[metal_dispatch]` cl
 `@workgroup` members and no `tgmem=`, twin fixture as the must-compile control; its siblings
 `test_lens_requires_gate`, `test_lens_params_gate` (a `params=` name no `grid=`, `tg=`,
 `requires=` or `@span` reads is refused; one only a `requires=` item reads compiles),
-`test_lens_stamp_gate` and `test_lens_call_macro_gates` spawn the same way. Two cells need no
+`test_lens_stamp_gate` and `test_lens_call_macro_gates` spawn the same way. The attn file's fused
+single-pass cells (`sq_d_gate`) run the part and combine stamps against the CPU attention row at
+heads of 128, 64 and 96 (three fixture rows read as one of four heads of 96), on the WIDE stamps at a head of 256 (one head over rows twice as wide, the
+combine reading two heads of 128) and 512 (four times as wide, four heads of 128), each on the
+float and the block-codec (q8_0, tq4) stamps, with the route table bound past foreign rows whose key
+count is 1 - the offset a kernel reading the table from its start would miss the bar on - and
+under a sliding window (inside one slice, cutting a slice, wider than every stream), a sink
+logit that differs head to head and the logit cap, on the float, quantized and wide stamps. The
+gemm file's device pair arms (`attn_qk_mm_gate` with `pair_mt`, `attn_dev_pair_gate`) run both
+tile heights at a head of 96 too - QK's reduction width is the head, AV's 64-wide tiles plus the
+32-column tail stamp - and the misc file's `embed_f32_gate` the greedy chain's fp32-table gather (the
+row gather at one row under the embed scale) at a 96-wide row and past a lead of foreign floats. Two
+cells need no
 kernel: the misc file's `test_metal_served` (a driver's forward answer through `metal_served`: a
 decline passes through and leaves the pool's spin window, a served one opens it, a later decline
 keeps it) and the prefill file's `test_resident_panel_charge` (the resident panel registry on the
@@ -1349,7 +1384,7 @@ path over one set of bytes: the mirror gathers the pool's rows verbatim), each s
 decode steps counted on their own with a one-token reply as the floor's control, both streams
 decoded in the log (a recurrent layer owns no K/V rows, so its pool blob is empty and the
 mirror's walk reads no base for it); the MTP carrier also runs the prefix checkpoint cells
-(`ARCHITECTURE_ENGINE.md#prefix-recurrent-checkpoints`): `test_metal_prefix_checkpoint` - three
+(`ARCHITECTURE_ENGINE_SERVING.md#prefix-recurrent-checkpoints`): `test_metal_prefix_checkpoint` - three
 prompts on one shared opening (asserted past two 64-row pages and off a page boundary) through one speculative scheduler: the first two attach nothing,
 the second's prefill stops at the opening and leaves the checkpoint, the third attaches it, and the
 second and third reply token for token as on a scheduler with no cache whose chunk is the opening
@@ -1727,6 +1762,21 @@ identity gate a kernel fold's "byte-identical" claim rests on) - its four bins o
 dumps (a changed byte and a changed length both read as moved, name order), the verdict's refusal
 of a dump with no stamp in it, and the directory read by stem. Requires the harness by relative
 path.
+`test_served_bench.das` - model-free: the served-turn instrument (`harness/served_bench.das`, required
+by relative path; it loads no engine module - its wire is `dasOPENAI`'s `chat_stream`, whose
+reader cells are `modules/dasOPENAI/tests/test_chat_stream_mock.das`'s: the reasoning delta, the
+usage chunk's counts, cache hit and timings, a usage chunk without details reading no cache hit) -
+the system prompt (its nonce leads, two nonces part at once, the asked characters cycle the corpus),
+the corpus as its `%%` segments over a temp file, the row statistic and the brackets beside a row, and whole turns
+against a fake chat server on its own thread that answers by the request's `model` field: a complete
+stream (counts, both spans past the server's 30 ms pauses, the server's own TTFT), and the four
+refusals - no usage chunk, no reply text, a reply of one token (no decode span to time), HTTP 500 -
+plus no server at the address. The speech rows
+run against a fake speech server on a second thread: a transcription's wall holds the server's
+300 ms pause, a failed and a blank answer say why, a row answers the text its reps read and refuses
+reps that read different texts or a text other than the one asked, and the loaded row stands while
+the fake chat turn outlasts two fast reps and is refused when the reps outlive the turn, when the
+turn carries no reply text, and when the loaded text differs from the idle one.
 `test_site_records.das` - model-free: the records-vs-site drift gate - `merge_site_records`
 (required by relative path, pays the engine compile) regenerated in memory and byte-compared
 against the committed `site/files/dasllama/bench_records.json` and its first-paint projection
@@ -1783,7 +1833,22 @@ checkpoint shares, a token short of a prompt an earlier one holds whole, nowhere
 the hit or on a model with no recurrent state), and the side state (the n-gram input's last tokens
 and conv history ride the checkpoint; a snapshot of another state size is refused and leaves the
 session as it stood); model-gated (stories15M): attached pages plus a tail eval read the cold
-prefill's logits bit for bit.
+prefill's logits bit for bit, and the page past the whole hits (`test_prefix_tail_copy`): a
+donation's partial tail page is an entry beside its whole ones, a prompt that shares rows with it
+takes a COPY (the donor's page stays the cache's alone, `n_hit_partial` counts the take) and lands
+the cold prefill's logits bit for bit - the tail whole, three of its five rows, and four leading rows
+of a whole page - every page back in the pool at the end; its model-free edges
+(`test_prefix_tail_edges`): a prompt whose first row past the whole hits the next page does not
+share copies nothing, the link past a page stays the FIRST donation's (a second donation sharing
+the page relinks nothing), and a partial take is an LRU touch - the taken page outlives an older
+untouched one when the budget evicts.
+`test_facade.das` - model-free: the facade's own seams over constructed Models; among them
+`test_facade_device_kv_rows` - the rows a device holds a session's K/V for (`device_kv_max_rows`):
+the installed room seam (`set_gpu_kv_room_hook`, put back) over the model's K/V bytes a row, both
+planes of every layer that keeps rows of its own (a `kv_src` layer owns none), f32 halving the f16
+count, never past the model's context, and no seam bounding nothing but the context; on a Metal
+box the installed seam itself - the mirror ceiling (`set_metal_decode_mirror_cap_mb`, put back)
+over the row's bytes, 64 MiB holding 32768 rows of 2048 bytes and 128 MiB twice that.
 `test_metal_role_infer.das` - model-free: the `@role` derivation over the `_role_fixtures/` kernels,
 each compiled at run time - the grid micro-grammar, a buffer passed whole taking the callee
 parameter's direction (a contradicting `@role` refused), a pointer into a tracked buffer taking the
@@ -2488,7 +2553,12 @@ kitten arm), `kokoro`, `pocket` (the coverage census TTS rows),
 `gemma4e` (support-matrix rows under `fam-gemma4e` - E4B PARITY_FULL-gated; E2B Q8_0 and
 Q4_K_M small-tier always-on, carrying the per-layer-FFN-width and blob-kq-PLE-gather coverage.
 Both E2B rows assert parity through their forced-feed cells, not token equality, because
-freeform continuations from a 2B sit on near-ties; plus the coverage-census E4B row; `gptoss`/`qwen2moe`/`qwen3moe` carry census rows too - all PARITY_FULL-gated).
+freeform continuations from a 2B sit on near-ties. Every row ends on the depth cell (`depth_cell`):
+three forced steps past a 120-number prompt within the row's bar of the CPU's, the census holding
+the full-context layers on the head-of-512 fused stamp, the sliding ones on the head-of-256 stamp,
+and none on the chunked pair; the same cell closes every ENGAGE row of a head-96 carrier
+(`fam-phi3`), its census the narrow fused stamp - the head off the 64 lattice admitted past the
+ceiling; plus the coverage-census E4B row; `gptoss`/`qwen2moe`/`qwen3moe` carry census rows too - all PARITY_FULL-gated).
 When profiling one family across formats, gate each round with
 `--arm <arms> --family <fam>` instead of the whole zoo. The family tag on a new
 model-loading block is `REVIEW.md`'s obligation.
@@ -2540,7 +2610,11 @@ Every `[test]` file requiring a `dasllama/*` module outside this folder, each wi
 - `utils/dasllama-server/test_worker_dispatch.das` - requires the server (`openai_server`) by
   bare same-dir name, like the server suites beside it.
 - `utils/dasllama-server/test_server_flags.das` - requires the server's program root (`main`) and
-  `openai_server` by bare same-dir name.
+  `openai_server` by bare same-dir name; its ctx-clamp cell doubles the engine's K/V room seam
+  (`dasllama_gpu_tier`) under the internal escape, so a blob-only Model shell's `seq_len` is cut to
+  the rows the seam answers while a planar shell's stands; its slot-codec cell holds the K/V codec
+  a slot runs on (`slot_kv_dtype`, which the live-load clamp reads): the server default for a slot
+  that asked for none, its own for one that asked.
 - `utils/dasllama-server/test_exchange_client.das` - requires `dasllama/dasllama_exchange` by
   registered name (nothing pins it to that directory); it stays beside the server suites
   because its fixed test port is coordinated with theirs (see its `TEST_PORT` note).

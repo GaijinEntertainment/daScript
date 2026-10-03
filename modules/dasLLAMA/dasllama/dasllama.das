@@ -638,6 +638,32 @@ def moe_gpu_weight_budget() : int64 {
     return moe_gpu_weight_budget_()
 }
 
+def mtp_drafter_sidecar(model_path : string) : string {
+    //! The assistant drafter file a model ships beside it (gemma-4: `mtp-<stem>-Q8_0.gguf`), "" where
+    //! there is none or no driver carries one. A model with no NextN head of its own speculates
+    //! through it once attached.
+    return mtp_drafter_sidecar_(model_path)
+}
+
+def attach_mtp_drafter(model : Model; path : string) : bool {
+    //! Attach the assistant drafter at `path` to `model` for speculative decode; false where the
+    //! driver refused it (a drafter made for another target) or no driver carries one.
+    return attach_mtp_drafter_(model, path)
+}
+
+def mtp_capable(model : Model) : bool {
+    //! Whether `model` can run a speculative round: a NextN head of its own, or an assistant
+    //! drafter attached - what a scheduler's `mtp` asks for.
+    return mtp_capable_(model)
+}
+
+def device_kv_max_rows(model : Model; kdt : KVDtype = KVDtype.f16; vdt : KVDtype = KVDtype.f16) : int64 {
+    //! The rows of context the armed GPU driver holds a session's K/V for under these codecs - the
+    //! model's own context where no driver bounds it. A server sizes its context by it: a blob-only
+    //! model's session past it has no CPU stack to fall back to.
+    return device_kv_max_rows_(model, kdt, vdt)
+}
+
 def gpu_dn_room(n : int64) {
     //! Tell the GPU driver how many sessions' recurrent state it keeps device-resident at once:
     //! a scheduler names its stream count before the first prefill, so no stream's deltanet state

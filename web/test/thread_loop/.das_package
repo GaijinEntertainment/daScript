@@ -1,0 +1,12 @@
+options gen2
+require daslib/daspkg
+[export]
+def package() { package_name("thread_loop") }
+[export]
+def release() {
+    release_main("../../../tests/jobque/_fixture_thread_loop_collect.das")
+    release_include_symbols()
+    release_emcc_arg("-sASSERTIONS=2")
+    release_emcc_arg("-sSAFE_HEAP=2")
+    release_emcc_arg("-sSTACK_OVERFLOW_CHECK=2")
+}

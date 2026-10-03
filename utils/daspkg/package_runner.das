@@ -218,8 +218,10 @@ def private run_das_package(das_package_path : string; func_name : string; args 
                         to_log(LOG_ERROR, "Error simulating {das_package_path}:\n{serrors}\n")
                         return
                     }
+                    var failed = false
                     try {
                         unsafe {
+                          if (has_function(*ctx, func_name)) {
                             let n = length(args)
                             if (n == 0) {
                                 invoke_in_context(ctx, func_name)
@@ -228,10 +230,13 @@ def private run_das_package(das_package_path : string; func_name : string; args 
                             } elif (n == 2) {
                                 invoke_in_context(ctx, func_name, args[0], args[1])
                             }
+                          }
                         }
                     } recover {
-                        pass
+                        to_log(LOG_ERROR, "Error running {das_package_path}::{func_name}: {ctx.exception}\n")
+                        failed = true
                     }
+                    if (failed) { return }
                     invoke(blk, ctx)
                     ok = true
                 }

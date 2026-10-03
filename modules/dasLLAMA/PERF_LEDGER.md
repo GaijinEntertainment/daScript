@@ -184,6 +184,211 @@ what it costs today and what the fix would change.
   `test_vulkan_mint_kv_codecs`. On Qwen2.5-0.5B a tq4 mirror sits 51.6 summed over nine rows from the f16
   chain and the CPU's tq4 chain 54.3 - the codec's own distance, which the distance cells measure on both
   chains (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis`).
+- **MEASURED (2026-10-02) - the remaining families through the server, smallest up.** M5 Max, Metal,
+  `dasllama-server` against the pinned llama-server, `harness/served_bench.das` as the qwen ladder
+  ran it; the 24B and up at 2 reps (the rows' turns run 17 s a reply on a 40 GB model). Every
+  served entry of this date read its system prompt off the corpus a line at a time; the
+  instrument reads it a `%%` segment at a time since (`harness/_corpus.das`), the prompt's
+  characters pinned by `--sizes` either way, so a re-run's token counts differ by a few. Decode
+  tok/s at 3k / 9k, then warm TTFT ms, then cold TTFT:
+  - Mistral-7B Q4_K_M 100.5 / 83.1 vs 98.7 / 85.0; 38.4 / 50.8 vs 68.7 / 94.0; 1015 / 4103 vs
+    1377 / 5998. Decode a tie at the weight-read floor.
+  - Llama-3.1-8B Q8_0 62.8 / 54.3 vs 61.8 / 55.7; 44.2 / 62.1 vs 64.9 / 84.0; 1028 / 4266 vs
+    1265 / 6212. The same.
+  - Qwen1.5-MoE-A2.7B Q8_0 146.3 / 113.8 vs 134.8 / 105.8; 44.0 / 50.0 vs 48.2 / 61.8; 576 / 1513
+    vs 693 / 2702.
+  - Mistral-Small-3.1-24B Q4_K_M 35.8 / 23.6 vs 34.9 / 22.8 (both 9k rows void at cv 14-15%: the
+    14 GB dense model runs hot); 94 / 167 vs 180 / 369; 3253 / 12966 vs 4151 / 16834.
+  - Qwen3.8-27B UD-Q3_K_XL, self-speculative (the file carries its NextN layer, `blk.64`, so
+    `--mtp` arms with no head sidecar): 35.7 / 32.0 vs 29.7 / 29.7; 133 / 128 vs 282 / 297;
+    3586 / 12520 vs 4553 / 15455. Plain (a TOML `mtp = false` - the `--mtp` flag is a bool and
+    `--mtp 0` reads as on) 29.2 at 3k: the round is +22% served, as it is in a flat session
+    (`q27probe`: 29.5 -> 36.3 tok/s, 45 of 55 drafts accepted; a paged session 36.2). The split
+    `mtp-Qwen3.8-27B-Q8_0.gguf` pinned over it reads 34.8 / 31.4 - the same head, a separate
+    `metal-mtp` image lane.
+  - Llama-3.3-70B Q4_K_M 12.0 / 7.9 vs 11.5 / 7.8; 243 / 390 vs 601 / 912; 10911 / 40055 vs
+    14121 / 55697. Decode at the floor on both; the 3k-to-9k fall is 80 layers of 1024-wide f16
+    K/V (2.9 GB a step) on top of the 40 GB of weights.
+  - Qwen3-4B Q4_K_M again after the partial-page attach: warm TTFT 36.4 / 67.6 -> 32.4 / 42.4,
+    decode 144.1 / 110.9 unchanged.
+
+- **MEASURED (2026-10-02, `direction-grade`) - phi-3 through the server: a head of 96 and an untied K-quant embedding.**
+  M5 Max, Metal, Phi-3.5-mini-instruct Q4_K_M (32 heads of 96 over 32 K/V heads - 384 KB of f16 K/V
+  a row, so the mirror clamps the context to 10922 and a 9k step reads 3.4 GB of K/V) against the
+  pinned llama-server, `harness/served_bench.das` as the qwen ladder ran it.
+  - Before: decode 107.5 / 64.4 tok/s at 3k / 9k against 125.7 / 81.5, warm TTFT 96.9 / 213.7 ms
+    against 43.6 / 65.1, cold 9k 4894 ms against 4298 - the one family the reference led on every
+    row. Three shapes: the fused decode attention's gate refused a head of 96 (the chunked pair at
+    depth), the device prefill pair's gate wanted a head on the 64 lattice (the staged trio and the
+    panels form, no mirror-fed window), and the greedy chain gathered a winner's row from a Q8 or
+    tied-K6 table alone (the untied Q4_K embedding keeps its fp32 table: no chain, a host turnaround
+    a step).
+  - After the three: decode 125.1 / 80.4 (a tie at the K/V read floor: 7.8 / 12.0 ms a step on the
+    trace, 14.1 ms chunked at 9k), warm TTFT 34.4 / 53.2, cold 603 / 2856, the windows `kv=mirror`.
+  - The fp32 gather chains every untied K-quant carrier that never chained: the Q4_K_M mistrals and
+    llamas, Qwen3-4B Q4_K_M (its 9k row read a tie), gemma-3-12b Q4_K_M.
+
+- **MEASURED (2026-10-02) - the qwen ladder through the server, smallest up.** M5 Max, Metal,
+  `dasllama-server` against the pinned llama-server, `harness/served_bench.das` (tagged `served`, `out-of-process`, `direction-grade`,
+  f16 KV, 200-token replies, 5 reps, a rest before each life; `--mtp` on the NextN carriers,
+  which llama-server serves plain). Decode tok/s at 3k / 9k of context, ours against the reference,
+  then warm TTFT ms:
+  - Qwen2.5-0.5B Q8_0 498.5 / 409.9 vs 312.5 / 310.8; 11.8 / 18.8 vs 25.5 / 38.4.
+  - Qwen3-0.6B Q8_0 366.8 / 252.2 vs 275.8 / 217.5; 13.2 / 21.1 vs 25.6 / 39.1. Both fall with
+    depth on the f16 K/V read - 28 layers of a 1024-wide K/V, about a gigabyte a step at 9k.
+  - Qwen3.5-0.8B-MTP Q8_0 381.7 / 355.6 vs 244.8 / 267.5; 13.6 / 16.1 vs 27.2 / 33.3.
+  - Qwen3-4B Q4_K_M 144.0 / 110.6 vs 137.7 / 111.2; 36.4 / 67.6 vs 51.3 / 69.5 - a tie at 9k:
+    the 3k-to-9k cost (2.1 ms a step over 36 layers of 1024-wide f16 K/V) is the read both pay.
+  - Qwen3.5-4B-MTP Q8_0 130.3 / 125.3 vs 90.3 / 86.6; 37.7 / 44.1 vs 62.4 / 72.8.
+  - Qwen3.5-9B-MTP UD-Q5_K_XL 86.2 / 84.6 vs 71.5 / 68.2; 46.5 / 49.6 vs 93.2 / 106.8.
+  - Qwen3.6-27B-MTP Q4_K_M 37.1 / 34.8 vs 26.2 / 18.4; 133.6 / 133.5 vs 276.0 / 497.9. The 16 GB
+    dense model sits at the bandwidth floor plain (26 tok/s) and runs hot: its rows read cv 10-22%
+    on both servers, the 9k row re-measured alone after a rest (23.7 right after the 3k rows).
+  - Qwen3-30B-A3B Q4_K_M 131.2 / 102.2 vs 117.8 / 95.1; warm TTFT 69.0 / 98.3 vs 66.6 / 89.8 -
+    the one row the reference led: the prefix cache attached whole 64-row pages (2944 of 3000,
+    8768 of 8844 cached) where llama-server reuses all but the turn's new tokens (2981, 8825), so
+    the warm turn prefilled 57-76 tokens through the routed experts against its 19. With the page
+    past the whole hits copied for its shared rows (`ARCHITECTURE_ENGINE_SERVING.md#prefix-tail-page`)
+    the same run reads 2981 / 8825 cached and warm TTFT 48.9 / 61.1 ms; decode 132.8 / 102.4.
+  - Qwen3.6-35B-A3B-MTP UD-Q4_K_M 141.3 / 132.1 vs 92.8 / 89.4; 56.8 / 58.2 vs 86.7 / 98.1.
+
+- **MEASURED (2026-10-02, `direction-grade`) - the fused decode attention's block-codec stamps carry every head class.**
+  M5 Max, Metal, `benchmarks/decode_step_trace.das -p 9000 -n 128 --bucket 128 --kv q8_0`, GPU ms a
+  step, `DASLLAMA_METAL_ATTN_D=0` (the chunked pair) against the fused form.
+  - Llama-3.2-1B Q8_0 (a head of 64, 8 K/V heads): 5.98 / 5.99 chunked, 4.87 / 4.89 fused - 167 ->
+    205 tok/s at 9k on the q8_0 mirror, where the head of 64 had no quant stamp and paid the pair.
+  - gemma-3-1b Q8_0 (a head of 256, one global layer in six at 9k, the rest a 512-key window):
+    3.97 chunked, 4.02 fused on the q8_0 mirror - level; the f16 mirror's own A/B on the same run
+    reads 3.35 -> 3.17. The wide quant stamp buys nothing a model this light on attention can
+    show; it exists so the block codecs leave the chunked pair with the float mirrors.
+
+- **MEASURED (2026-10-02, `direction-grade`) - the server attaches gemma-4's assistant drafter, and the same-slab
+  verify's arena demand is the session's slice once.** M5 Max, Metal, gemma-4-26B-A4B-it Q4_K_M
+  with `mtp-gemma-4-26B-A4B-it-Q8_0.gguf` beside it, through `dasllama-server --mtp` and
+  `harness/served_bench.das` (tagged `served`, `out-of-process`, `direction-grade`, f16 KV, 200-token replies, 5 reps, a rest before
+  each life).
+  - Plain, the 26B decodes 112.9 / 107.0 tok/s at 3k / 9k of context (the pinned llama-server
+    92.6 / 87.1). The server never attached the drafter: its speculation gate asked for a NextN head.
+    Attached, 139.8 (void) / 49.8 - the 9k row a regression, every round a draft, a declined verify
+    and a plain step. The batch driver summed each verify row's `mirror_arena_demand`, and the
+    same-slab verify names ONE session for every row: at 9k the 26B's slice is a 16384-row cap, and
+    five of it pass the 4096 MB arena ceiling, where five of the 4096-row slice at 3k did not.
+    Counted once: 136.7 (cv 3.7%) / 131.2 (cv 4.0%) tok/s, warm TTFT 51.8 / 66.8 ms; the decode
+    cv is the rounds' acceptance moving turn to turn, and sits past the 3% bar on both rows.
+  - The scheduler probe (a 60-token free run on a number ramp at 9k, `MetalMode.required`): the
+    exception `batch decode declined: mirror` before, 10.6 ms a token after, 42 drafted / 16
+    accepted - the ramp accepts poorly, prose through the server far better.
+
+- **MEASURED (2026-10-02, `direction-grade`) - the fused decode attention serves a head of 512 and a model of two head
+  classes, its wide stamps a slice group a threadgroup.** M5 Max, Metal, gemma-4-E2B-it Q8_0 (a
+  head of 512 on the full-context layers, of 256 under a 512-key window on the sliding ones, 8
+  heads over one K/V head) through `dasllama-server` and `harness/served_bench.das` (tagged
+  `served`, f16 KV, 200-token replies, 5 reps, a rest before each life).
+  - Decode at 3k / 9k of context: 141.2 / 126.6 tok/s on the chunked pair, 145.0 / 139.2 on the
+    fused form; the pinned llama-server 130.3 / 122.5. The same run: warm TTFT 27.9 / 35.8 ms
+    against 51.2 / 63.5, cold 304 ms (void) / 956 against 511 / 1705.
+  - The wide stamps' first form - a lane walking two or four quads of the head in turn - lost to
+    the chunked pair at every depth (`decode_step_trace`, GPU ms a step at 400 / 3000 / 9000
+    keys: 6.07 / 6.44 / 7.33 chunked, 6.63 / 7.17 / 7.78 fused): a decode step is some 540
+    serial dispatches, so a dispatch costs what its longest threadgroup takes, and a slice took a
+    wide head four times a narrow one's time. With a threadgroup per slice group and a simdgroup
+    per 128 dims, a slice's scores summed through threadgroup memory, the fused form reads 6.07 /
+    6.26 / 6.56. More slice groups on a wide head (64 against 16) read worse at depth (6.70 at
+    9000 with the split form), so the cap stays at 16.
+  - The head-of-256 stamp takes the same form: gemma-2-2b-it Q8_0 decodes 154.0 / 143.0 tok/s at
+    3k / 7k (145.3 / 135.0 on the lane-walking form, llama-server 140.8 / 132.2), and
+    Qwen3.6-35B-A3B under self-speculation 144.9 (void) / 134.3 at 3k / 9k (144.4 / 132.1).
+  - The narrow row (Llama-3.2-1B Q8_0, two streams at 512 / 9000) reads 532.9 / 391.0 tok/s
+    against 533.3 / 394.2 before: the narrow stamps' source is unchanged.
+
+- **MEASURED (2026-10-02, `direction-grade`) - the fused decode attention carries the attention logit soft cap.**
+  M5 Max, Metal, gemma-2-2b-it Q8_0 (a head of 256, the cap, a sliding window on alternate
+  layers; context 8192) through `dasllama-server` and `harness/served_bench.das` (tagged
+  `served`, f16 KV, 200-token replies, 5 reps, a rest before each life). Decode at 3k / 7k of
+  context: 142.3 / 124.4 tok/s on the chunked pair, 145.3 / 135.0 on the fused form; the pinned
+  llama-server 141.4 / 132.5. The same run: warm TTFT 25.3 / 30.4 ms against 118.1 / 63.3, cold
+  3k 288 ms (void) against 467. The two-stream batch row on a model with no cap (Llama-3.2-1B
+  Q8_0, `lcpp_bench --npl 2 --npl-plen 512 | 9000`) reads 535.3 / 393.3 tok/s after the kernel
+  took the uniform, 533.3 / 394.2 before. The kernel cells' cap was 30 on a fixture whose scores
+  stay under 1, where an uncapped kernel passed; they cap at 0.05 now.
+
+- **MEASURED (2026-10-02, `direction-grade`) - a prefill window's K/V rows live in the KV mirror, and a released
+  session's mirror goes to the next session on the same pages**
+  (`ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-kv-mirror`). M5 Max, Metal, `dasllama-server`
+  through `harness/served_bench.das` (tagged `served`, `out-of-process`, `direction-grade`, f16 KV, 200-token replies, 5 reps, a rest
+  before each model, the same text on both servers). Before: every continuation gathered the
+  cached rows on the host into f32 panels (11 ms at 3k of context, 33 ms at 9k on Llama-3.2-3B),
+  and the first decode step uploaded them again into the f16 mirror. After: a warm turn's window
+  finds the previous turn's mirror under its attached pages and copies nothing.
+  - Warm TTFT at 3k / 9k of context, ms, before -> after (reference):
+    Llama-3.2-3B Q8_0 42.8 / 77.6 -> 29.4 / 34.9 (pinned llama-server 38.2 / 51.5, the 9k row
+    void at cv 3.9%); Llama-3.2-1B Q8_0 19.9 / 33 -> 16.2 / 19.8 (llama-server 24.2 / 24.3, both
+    void); gpt-oss-20b mxfp4 58.5 / 82.3 -> 51.6 / 59.1 (llama-server 85.7 / 103.9, the earlier
+    rested run - today's reference life answered 503 at its calibration turn);
+    Qwen3.6-35B-A3B UD-Q4_K_M with self-speculation 65 / 79 -> 51.8 / 56.2 (mlx_lm.server on the
+    4-bit MLX quant 72.4 / 87.5).
+  - The 3B's warm window at 3k: host setup 11.4 -> 0.07 ms, GPU 25.9 -> 23.1 ms for the 52
+    uncached rows; a cold window's K/V readback 20 -> 6 ms (halves copied, no host convert); the
+    two-row window that closes a turn 30-45 -> 17 ms.
+  - Cold TTFT and decode read inside their run-to-run spread on every model (the cold rows void
+    on both servers at these reps).
+  - The form serves under the `attn_dev` crown on f16 KV only (`followup_metal.md` row 36).
+    `MetalCvtHalf` and `MetalKvTwin` are `MetalHalfRows` now: one half converter, scaled, at a
+    byte offset.
+
+- **MEASURED (2026-10-02, `direction-grade`) - a weight plane cached before the residency set existed was never
+  pinned, and a prefill after a decode turn repaid its wiring.** M5 Max, Metal, Llama-3.2-3B
+  Q8_0, `dasllama-server` through `harness/served_bench.das` (tagged `served`, `out-of-process`, `direction-grade`, f16 KV, 200-token
+  replies, 5 reps). The image's baked dev-W plane (5.4 GB, a page wrap of the mapped file) is
+  seeded ahead of the first `residency_flush`, and `residency_note` was a no-op until that flush
+  made the set. A decode turn longer than about a second un-wires the plane; the first command
+  buffer of the next prefill then spends 20 to 24 ms in the kernel driver span (kernelStart ->
+  kernelEnd), its GPU time unchanged. A 100-token reply (0.76 s) does not show it, a 150-token one
+  (1.15 s) does; `DASLLAMA_METAL_RESIDENCY=0` reads the same, the plane being outside the set
+  either way.
+  - The first note makes the set. Warm TTFT at 3k / 9k of context: 61.7 / 100.0 ms before,
+    42.8 / 77.6 after (the pinned llama-server, rested: 37.2 / 52.6). A cold prefill that follows
+    a decode turn loses the same span.
+  - What is left of a warm turn at 3k: 11 ms gathering the cached history into the f32 K/V panels
+    on the CPU (33 ms at 9k - it scales with the cached rows), 26 ms of GPU for the 52 uncached
+    rows, 4 ms of HTTP. The gather is the next cost: the decode mirror holds the same rows in
+    f16, and a continuation that read its history there would copy nothing.
+
+- **MEASURED (2026-10-02, `direction-grade`) - the single row's decode takes the fused single-pass attention past the
+  single-dispatch ceiling.** M5 Max, Metal, Llama-3.2-1B Q8_0 (16 layers, 32 heads of 64 over 8 KV
+  heads), f16 KV, `bin/daslang -jit modules/dasLLAMA/benchmarks/decode_step_trace.das -- -m <gguf>
+  -p <depth> -n 256 --bucket 256`, one process a depth, greedy chain adaptive; debug-jit readings,
+  not board rows. The step's wall is its GPU time at every depth.
+  - ms a step at depth 0 / 3000 / 9000: 2.90 / 3.61 / 5.41 on the chunked pair (the single row's
+    form before), 2.77 / 3.02 / 3.50 on the fused form - 344 / 275 / 182 tok/s against
+    361 / 329 / 280. The chunked pair costs about 0.28 us a cached key a token, the fused form
+    about 0.08.
+  - The chunked pair's depth cost does not follow the bytes it reads: at depth 9000 it adds 2.51 ms
+    on the f16 mirror, 3.06 on f32, 2.80 on q8_0 and 2.54 on tq4.
+  - At this entry's reading the chunked pair still served a head of 64 or 256 on a block-codec
+    mirror and every model with a soft cap or a second head class; the entries above it moved each
+    of those to the fused form, and the pair stays as its `DASLLAMA_METAL_ATTN_D=0` control.
+  - The fused form carries a sliding layer's window and a layer's attention sinks. gpt-oss-20b
+    mxfp4 (a head of 64, sinks, 128-key sliding layers on alternate layers), `decode_step_trace`
+    as above with `DASLLAMA_METAL_ATTN_D` 0 then 1: 134.8 tok/s at depth 3000 and 101.5 at 9000
+    on the chunked pair, 154.6 and 140.2 on the fused form. Through `dasllama-server`
+    (`harness/served_bench.das`, tagged `served`, `out-of-process`, `direction-grade`, a rested box, the same text on both servers):
+    decode 132.1 / 99.9 tok/s at 3k / 9k of context before, 150.5 / 135.4 after; the pinned
+    reference server reads 143.0 / 133.1. A probe reading, not a parity cell: against the CPU
+    chain over 400 forced steps (`harness/forced_feed_probe.das <gguf> --steps 400`) the fused
+    form's largest logit difference is 3.48 and its mean 1.02 with no argmax flip, the chunked
+    pair's 3.45 and 1.01; the gates are arm11 of the decode suite and the matrix's two-class cell.
+  - The speculative verify's rows and a head of 256 (the WIDE stamps) take the fused form too.
+    Qwen3.6-35B-A3B UD-Q4_K_M under self-speculation, one stream through `dasllama-server`
+    (`harness/served_bench.das --sizes 3000,9000 --reply 200 --reps 5`, tagged `served`, `out-of-process`, `direction-grade`, both
+    decode rows past the 3% cv bar - the accept rate moves with the reply): 138 tok/s at 3k of
+    context and 115 at 9k on the chunked pair, 147 and 133 on the fused form; `mlx_lm.server`
+    on its 4-bit build reads 116 and 112 in the same series.
+  - The four narrow stamps' source moved by the shared rescale helper and two regrouped
+    expressions, the arithmetic unchanged; the batch row that rides them
+    (`lcpp_bench --ngl 99 --npl 2 --npl-plen 512|9000 -r 3 --for-debug-purposes`, Llama-3.2-1B
+    Q8_0) reads 540.9 / 396.6 tok/s summed before, 535.0 / 394.9 after the rescale helper, and
+    533.3 / 394.2 with the window start and the masked key in the slice loop.
 
 - **MEASURED (2026-10-01) - the attention and router races on the stamps that ship, and the bytes
   the folded snapshot holds.** M5 Max, `bin/daslang -jit modules/dasLLAMA/harness/router_race.das`

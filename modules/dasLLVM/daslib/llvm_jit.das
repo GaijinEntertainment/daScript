@@ -5119,8 +5119,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def get_llvm_type_for_annotation_argument_info() : LLVMTypeRef {
-        // iValue covers the bool/int/float union
-        return jit_struct_type(type<tuple<typeCode : int; name : void?; sValue : void?; iValue : int>>)
+        return jit_struct_type(type<tuple<typeCode : int; name : void?; sValue : void?; ulValue : uint64>>)
     }
 
     def get_llvm_type_for_annotation_info() : LLVMTypeRef {
@@ -5187,7 +5186,7 @@ class public LlvmJitVisitor : AstVisitor {
             types.ConstI32(uint64(int(arg.basicType))),
             get_string_constant_ptr(g_builder, arg.name),
             arg.basicType == Type.tString ? get_string_constant_ptr(g_builder, arg.sValue) : LLVMConstPointerNull(types.LLVMVoidPtrType()),
-            types.ConstI32(uint64(uint(arg.iValue))))
+            types.ConstI64(arg.ulValue))
         return LLVMConstNamedStruct(ann_ty, array_data_ptr(fields), 4u)
     }
 

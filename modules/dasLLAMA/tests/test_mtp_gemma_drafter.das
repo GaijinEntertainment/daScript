@@ -18,6 +18,8 @@ require daslib/fio
 require math
 require _model_tier   // models_dir() + model_available() presence/size-tier gate (see the file's header)
 require _scratch_dir   // scratch_path: the refusal fixtures' files
+require _scheduler_rig   // make_req / drain / toks_of - the served round rides the scheduler
+require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting_prompt, read only inside the das_metal static_if half
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -26,7 +28,9 @@ def private allow_cpu_prefill_intent() {
 
 // The gemma-4 assistant drafter (`dasllama/dasllama_mtp_gemma`): the sidecar loader's shape and
 // refusal contract, and one step of the CPU reference forward against a live target session.
-// The drafter sidecar is a 440 MiB small-tier file; the 15.8 GiB target is PARITY_FULL-gated.
+// The drafter sidecar is a 440 MiB small-tier file; the 15.8 GiB target is PARITY_FULL-gated. The
+// GPU cells skip on a build without das_metal, and the served cell on a box whose image of the
+// target is not the metal-blob flavor or that has no `mtp-*` sidecar beside the target.
 
 let private TARGET_FILE = "gemma-4-26B-A4B-it-Q4_K_M.gguf"
 let private TARGET_LAYERS = 30l
@@ -285,6 +289,88 @@ def test_gemma_drafter_gpu_step(t : T?) {
                 delete dr
                 delete trg
                 t |> equal(metal_live_object_count(), 0l, "no leaked Metal objects after shutdown")
+            }
+        }
+    } else {
+        t |> skip("no das_metal on this build")
+    }
+}
+
+[test]
+def test_gemma_drafter_served(t : T?) {
+    if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-sched")) {
+        return
+    }
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_dasllama_jobque_() {
+            t |> run("a scheduler speculates through the attached drafter and matches the plain scheduler") @(t : T?) {
+                let target = path_join(models_dir(), TARGET_FILE)
+                return if (!jit_model_available(t, target))
+                let side = mtp_drafter_sidecar(target)
+                if (empty(side)) {
+                    t |> skip("no mtp-* drafter sidecar beside {TARGET_FILE}")
+                    return
+                }
+                let prior = get_metal_mode()
+                set_metal_mode(MetalMode.required)
+                var trg <- load_model_cached(target, QuantMode.q8)
+                set_metal_mode(prior)
+                trg.config.seq_len = min(trg.config.seq_len, 512l)
+                if (!trg.metal_blob) {
+                    t |> skip("the served image is not the metal-blob flavor on this box")
+                    delete trg
+                    return
+                }
+                t |> success(!mtp_capable(trg), "a gemma-4 target with no drafter attached cannot speculate")
+                let prev_prefill = active_prefill_override()
+                let prev_decode = active_decode_override()
+                let prev_min_npos = get_metal_prefill_min_npos()
+                select_prefill_override("metal")
+                select_decode_override("metal")
+                set_metal_prefill_min_npos(1l)
+                var prompt <- encode(trg, counting_prompt(1, 30), true, false)
+                var plain_ev : array<SchedEvent>
+                var plain <- create_scheduler(trg, 1l, 4l, 0l, 64l, 0l, KVDtype.f16, false)
+                t |> success(submit(trg, plain, make_req(1l, prompt, 24l)), "the plain scheduler takes the request")
+                drain(trg, plain, plain_ev)
+                var plain_toks <- toks_of(plain_ev, 1l)
+                t |> success(attach_mtp_drafter(trg, side), "the facade attaches the drafter")
+                t |> success(mtp_capable(trg), "and the target speculates from here on")
+                var spec_ev : array<SchedEvent>
+                var spec <- create_scheduler(trg, 1l, 4l, 0l, 64l, 0l, KVDtype.f16, true)
+                t |> success(spec.mtp, "a scheduler told to speculate keeps it on for the drafter's model")
+                t |> success(submit(trg, spec, make_req(2l, prompt, 24l)), "the speculating scheduler takes the request")
+                drain(trg, spec, spec_ev)
+                var spec_toks <- toks_of(spec_ev, 2l)
+                t |> equal(length(spec_toks), 24, "the speculating scheduler emits the whole budget")
+                log_gen_texts(trg, "gdraft sched (plain, speculating)", plain_toks, spec_toks)
+                t |> success(ids_equal(spec_toks, plain_toks), "the drafter's rounds walk the counting prompt as the plain scheduler does")
+                t |> success(spec.mtp_drafted > 0l && spec.mtp_accepted > 0l, "the rounds drafted and accepted ({spec.mtp_accepted} of {spec.mtp_drafted})")
+                to_log(LOG_INFO, "gdraft sched: {spec.mtp_accepted} of {spec.mtp_drafted} drafts accepted over {spec.decode_steps} ticks for 24 tokens\n")
+                // the control: the drafter detached, a scheduler told to speculate has nothing to draft with
+                detach_gemma_drafter()
+                t |> success(!mtp_capable(trg), "detached, the target cannot speculate")
+                var off_ev : array<SchedEvent>
+                var off <- create_scheduler(trg, 1l, 4l, 0l, 64l, 0l, KVDtype.f16, true)
+                t |> success(!off.mtp, "a scheduler told to speculate stands down for it")
+                t |> success(submit(trg, off, make_req(3l, prompt, 24l)), "the stood-down scheduler takes the request")
+                drain(trg, off, off_ev)
+                t |> equal(off.mtp_drafted, 0l, "and drafts nothing")
+                set_metal_prefill_min_npos(prev_min_npos)
+                select_decode_override(prev_decode)
+                select_prefill_override(prev_prefill)
+                delete plain
+                delete spec
+                delete off
+                delete off_ev
+                metal_decode_shutdown()
+                metal_prefill_shutdown()
+                delete plain_ev
+                delete spec_ev
+                delete plain_toks
+                delete spec_toks
+                delete prompt
+                delete trg
             }
         }
     } else {

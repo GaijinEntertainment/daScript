@@ -62,9 +62,10 @@ protected:
     __fn_onWsMessageFrame = 3,
     __fn_onTick = 4,
     __fn_onInit = 5,
+    __fn_onWsOpenRequest = 6,
   };
 protected:
-  int _das_class_method_offset[6];
+  int _das_class_method_offset[7];
 public:
   HvWebServer_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_onWsOpen] = info->fields[14]->offset;
@@ -73,6 +74,7 @@ public:
       _das_class_method_offset[__fn_onWsMessageFrame] = info->fields[17]->offset;
       _das_class_method_offset[__fn_onTick] = info->fields[19]->offset;
       _das_class_method_offset[__fn_onInit] = info->fields[20]->offset;
+      _das_class_method_offset[__fn_onWsOpenRequest] = info->fields[37]->offset;
   }
   __forceinline Func get_onWsOpen ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_onWsOpen]);
@@ -127,6 +129,15 @@ public:
       <void *>
         (__context__,nullptr,__funcCall__,
           self);
+  }
+  __forceinline Func get_onWsOpenRequest ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onWsOpenRequest]);
+  }
+  __forceinline void invoke_onWsOpenRequest ( Context * __context__, Func __funcCall__, void * self, das::Handle<hv::WebSocketChannel> const  channel, HttpRequest * request ) const {
+    das_invoke_function<void>::invoke
+      <void *,das::Handle<hv::WebSocketChannel> const ,HttpRequest *>
+        (__context__,nullptr,__funcCall__,
+          self,channel,request);
   }
 };
 

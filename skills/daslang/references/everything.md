@@ -788,6 +788,7 @@ The FIO module implements file input/output and filesystem operations. It provid
 ### Handled structures
 
 - `FStat.size` - Returns the size of the file in bytes.
+- `FStat.mode` - Returns the unsigned mode value supplied by stat or fstat.
 - `FStat.atime` - Returns the last access time of the file as a clock value.
 - `FStat.ctime` - Returns the creation time of the file as a clock value.
 - `FStat.mtime` - Returns the last modification time of the file as a clock value.
@@ -862,6 +863,7 @@ The FIO module implements file input/output and filesystem operations. It provid
 - `set_mtime_result`
 - `stat` - Returns the file status (size, modification time, etc.) for a file at the given path.
 - `try_fflush` - Flushes a non-null open file and returns whether fflush succeeded.
+- `try_lock_file` - Attempts to acquire an exclusive file lock without waiting.
 
 ### Path manipulation
 
@@ -1159,6 +1161,7 @@ The DASHV module provides HTTP and WebSocket networking built on top of the `lib
 - `allow_cors` - Enables cross-origin resource sharing (CORS) on all server responses.
 - `reject_websocket` - Submits rejection of a live, undecided WebSocket ticket with HTTP status 400–599.
 - `set_access_log` - Enables or disables libhv request access logging before server start.
+- `set_connection_limits` - Sets per-WebSocket pending message, pending byte, and write-buffer limits before server start.
 - `set_document_root` - Sets the root directory used for serving static files.
 - `set_error_page` - Sets the file served when the server returns an error response.
 - `set_home_page` - Sets the file served when a request maps to a directory (e.g.
@@ -1171,6 +1174,7 @@ The DASHV module provides HTTP and WebSocket networking built on top of the `lib
 - `JSON` - Sends a JSON response with the given status code.
 - `REDIRECT` - Sends an HTTP redirect response to the specified location.
 - `SERVE_FILE` - Sends a file as the response body, setting the content type automatically.
+- `SERVE_FILE_STREAM` - Queues a bounded regular-file response through a live streaming writer.
 - `TEXT_PLAIN` - Sends a plain-text response with the given status code.
 - `set_content_type` - Sets the Content-Type header on a response or request.
 - `set_header` - Sets a response or request header.
@@ -1240,6 +1244,7 @@ A pure-daslang client for OpenAI-compatible REST APIs — OpenAI itself, plus an
 
 - `OpenAIClient` - Connection + auth config.
 - `OpenAIError` - Unified error.
+- `PromptTokensDetails` - The prompt's token breakdown, when the server reports one.
 - `Usage` - Token accounting returned with most responses.
 - `HttpOutcome` - Internal transport result of a JSON request (`post_json` / `get_json`).
 - `BytesOutcome` - Internal transport result of a binary request (`post_for_bytes`).
@@ -1249,6 +1254,7 @@ A pure-daslang client for OpenAI-compatible REST APIs — OpenAI itself, plus an
 - `ToolCallFunction` - The function a tool call targets.
 - `ToolCall` - A tool call requested by the model.
 - `ChatMessage` - A single chat message.
+- `StreamOptions` - `stream_options` of a streamed request.
 - `ChatCompletionRequest` - Request body for `/chat/completions`.
 - `ChatChoice` - One completion choice.
 - `ChatCompletionResponse` - Response body for a non-streaming `/chat/completions` call.
@@ -1258,6 +1264,7 @@ A pure-daslang client for OpenAI-compatible REST APIs — OpenAI itself, plus an
 - `ChatMessageDelta` - Incremental message fields in a streamed chunk (object == "chat.completion.chunk").
 - `ChunkChoice` - One choice within a streamed chunk.
 - `ChatCompletionChunk` - One streamed delta frame.
+- `StreamTimings` - A server's own timing of a streamed turn, in milliseconds.
 - `ChatStreamResult` - Outcome of `chat_stream`: `content` is the full accumulated assistant text.
 - `EmbeddingRequest` - Request body for `/embeddings`.
 - `EmbeddingUsage` - Token accounting for an embeddings request.
@@ -2456,7 +2463,6 @@ Module strudel_player
 
 - `strudel_command` - Send a user command string from the main thread to the strudel playback thread.
 - `strudel_noop_cmd` - No-op command handler — default argument when no user command dispatcher is needed.
-- `strudel_play` - Blocking multi-track tick loop for threaded playback.
 - `strudel_set_pause` - Pause or resume audio output.
 - `strudel_tick` - Single main-thread tick: query all tracks, render audio, mix, append to the PCM stream.
 - `strudel_tick_offline` - Offline tick: same as strudel_tick but without an audio driver.
@@ -2486,6 +2492,7 @@ Module strudel_player
 - `strudel_add_track_immediate` - Like strudel_add_track but aligns the track's cycle origin to the current cycle floor, guaranteeing that a note at degree 0 fires on the very first scheduler tick.
 - `strudel_fade_track` - Fade a track's gain to target_gain over the given time in seconds (time=0 snaps instantly).
 - `strudel_remove_track` - Remove a track by index (shuts down its scheduler and sets the slot to null).
+- `strudel_track_gain` - Current mixed gain in the calling playback context; zero for a retired track.
 
 ### One-shots
 
@@ -3156,11 +3163,14 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 
 ### Model loading and sessions
 
+- `attach_mtp_drafter` - Attach the assistant drafter at `path` to `model` for speculative decode; false where the driver refused it (a drafter made for another target) or no driver carries one.
 - `caps` - What `model` honestly supports at the chat layer (see LlmCaps) — e.g.
 - `create_batch_workspace` - Create the caller-owned scratch that `eval_batch` steps through — one per concurrent batch, reused across calls (buffers grow to the largest batch seen).
 - `create_kv_pool` - Create a caller-owned PAGED KV pool over `model`'s cache geometry.
 - `create_session` - Create a fresh session (KV cache + scratch) sized to `model.config.seq_len` — one model, many independent conversations.
 - `load_model` - Load a model AND its tokenizer from a GGUF file — architecture and tokenizer backend are auto-selected from metadata; `mode` picks the weight quantization.
+- `mtp_capable` - Whether `model` can run a speculative round: a NextN head of its own, or an assistant drafter attached - what a scheduler's `mtp` asks for.
+- `mtp_drafter_sidecar` - The assistant drafter file a model ships beside it (gemma-4: `mtp-<stem>-Q8_0.gguf`), "" where there is none or no driver carries one.
 - `release_kv_pages` - Return `session`'s KV pages to its pool (no-op on flat sessions).
 - `setup_dasllama_jobque` - Configure the job queue for dasLLAMA's fork/join matmul dispatch: pooled fork contexts, batched dispatch, the worker spin-before-park window (`jobque_spin_us`; 0 disables).
 - `with_dasllama_jobque` - Run `blk` inside a fresh `with_job_que()` that `setup_dasllama_jobque()` has configured — the one-call form of the pair.
@@ -3279,6 +3289,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 ### Operations: serving from the device
 
 - `create_device_session` - Create a DEVICE-HOME session: its K/V cache lives only in the armed GPU driver's region - no host cache, nothing over the bus per token.
+- `device_kv_max_rows` - The rows of context the armed GPU driver holds a session's K/V for under these codecs - the model's own context where no driver bounds it.
 - `gpu_cpu_passes` - Calls the armed GPU path handed back to the CPU rails since the model armed, one row per reason that fired: its name, the same in words a status page prints, the count.
 - `gpu_ctx_pins` - The in-process context pins as set (`set_gpu_ctx_max`, `set_gpu_ctx_strict`), apart from the environment's knobs: a fixture reads them before it pins and puts them back after its load.
 - `gpu_device_kv_adopt` - Hand the first `npos` rows a kept `claim` holds to the fresh device-home `session`, whose `n_past` becomes `npos`.
@@ -3497,7 +3508,7 @@ The RTTI module exposes runtime type information and program introspection facil
 - `Program.getOptimize` - Property-like accessor that returns `true` when the optimizer runs for the given `Program`: false under the host's `no_optimizations` policy or any of the program's `options optimize = false`, `options no_optimization`, `options no_optimizations`.
 - `Program.failed` - Property-like accessor that returns `true` when the `Program` failed to compile; its errors are in `Program.errors`.
 - `Program` - Object representing full information about Daslang program during and after compilation (but not the simulated result of the program).
-- `AnnotationArgumentInfo` - One argument of an annotation, deep-copied into the context debug heap (never points into the AST).
+- `AnnotationArgumentInfo` - One annotation argument, deep-copied into the context debug heap without AST pointers.
 - `CodeOfPolicies` - Object which holds compilation and simulation settings and restrictions.
 - `LocalVariableInfo` - Object which represents local variable declaration.
 - `AstSerializer` - Dummy annotation to strengthen type system.
@@ -3551,7 +3562,7 @@ The RTTI module exposes runtime type information and program introspection facil
 - `FuncInfo` - Object which represents function declaration.
 - `SimFunction.lineInfo` - Property-like accessor that returns the `LineInfo` (source location) associated with the given function's `FuncInfo`.
 - `SimFunction` - Object which represents simulated function in the `Context`.
-- `AnnotationArgument` - Single argument of the annotation, typically part of the `AnnotationArgumentList`.
+- `AnnotationArgument` - One AST annotation argument, usually held in an AnnotationArgumentList.
 - `DebugInfoHelper` - Helper object which holds debug information about the simulated program.
 - `AnnotationDeclaration` - Annotation declaration, its location, and arguments.
 - `AnnotationInfo` - One annotation attached to a structure, function, or enumeration - name, declaring module, and arguments, deep-copied into the context debug heap so it stays valid after the Program is released.
@@ -4637,10 +4648,12 @@ The JOBQUE module provides low-level job queue and threading primitives. It incl
 - `get_jobque_thread_team_mode` - Reads the calling OS thread's team-mode override (see `set_jobque_thread_team_mode`).
 - `get_jobque_threads` - Returns the standing thread request set by set_jobque_threads, or 0 when none is set.
 - `get_jobque_worker_limit` - Returns the current worker limit set by set_jobque_worker_limit.
+- `is_thread_loop_capture` - Returns whether an address lies inside this thread's active repeated-lambda capture.
 - `jobque_try_run_one` - Pop one queued job off the fifo and run it on the calling thread (the same cloned-closure job a worker would run — full capture semantics), returning false if the fifo is empty; any batch pending on this thread (see set_jobque_batch_dispatch) is flushed first.
 - `new_debugger_thread` - Creates a new debugger tick thread for servicing debug connections.
 - `new_job_invoke` - Clones the current context, moves the attached lambda into it, and submits it to the job queue.
 - `new_thread_invoke` - Clones the current context, moves the attached lambda into it, and runs it on a new dedicated thread.
+- `new_thread_loop_invoke` - Internal dispatch used by new_thread_loop.
 - `reset_jobque_team_prof` - Resets the accumulated team dispatch profiling counters to zero.
 - `set_current_thread_affinity` - Binds the calling thread to logical processor `cpu`.
 - `set_current_thread_priority` - Sets the OS priority of the calling thread on the jobque `JobPriority` scale, -2 (Minimum) ..
@@ -6054,6 +6067,7 @@ The JOBQUE_BOOST module provides high-level job queue abstractions built on the 
 
 - `new_job` - Create a new job.
 - `new_thread` - Creates a new thread with a cloned context and invokes the cloned lambda on that thread.
+- `new_thread_loop` - Runs steps on a cloned-context thread.
 
 ### Iteration
 

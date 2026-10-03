@@ -1,0 +1,6 @@
+options gen2
+require daslib/daspkg
+[export]
+def package(){package_name("lifecycle_only")}
+[export]
+def release(){release_main("main.das"); release_include_symbols()}

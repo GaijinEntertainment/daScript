@@ -144,23 +144,29 @@ namespace das
     // POD mirrors of AST annotation data, deep-copied into the DebugInfoAllocator so that
     // debug info never outlives its strings (a Context can outlive its Program).
     struct AnnotationArgumentInfo {
-        Type            type;       // only tBool, tInt, tFloat, tString
+        Type            type;       // tBool, tInt, tInt64, tUInt64, tFloat, tString
         const char *    name;
         const char *    sValue;
         union {
             bool        bValue;
             int32_t     iValue;
+            int64_t     lValue;
+            uint64_t    ulValue;
             float       fValue;
         };
         AnnotationArgumentInfo() = default;
         AnnotationArgumentInfo ( const char * n, bool b )
-            : type(Type::tBool), name(n), sValue(nullptr), bValue(b) {}
+            : type(Type::tBool), name(n), sValue(nullptr), ulValue(0) { bValue = b; }
         AnnotationArgumentInfo ( const char * n, int32_t i )
-            : type(Type::tInt), name(n), sValue(nullptr), iValue(i) {}
+            : type(Type::tInt), name(n), sValue(nullptr), ulValue(0) { iValue = i; }
+        AnnotationArgumentInfo ( const char * n, int64_t i )
+            : type(Type::tInt64), name(n), sValue(nullptr), lValue(i) {}
+        AnnotationArgumentInfo ( const char * n, uint64_t i )
+            : type(Type::tUInt64), name(n), sValue(nullptr), ulValue(i) {}
         AnnotationArgumentInfo ( const char * n, float f )
-            : type(Type::tFloat), name(n), sValue(nullptr), fValue(f) {}
+            : type(Type::tFloat), name(n), sValue(nullptr), ulValue(0) { fValue = f; }
         AnnotationArgumentInfo ( const char * n, const char * s )
-            : type(Type::tString), name(n), sValue(s), iValue(0) {}
+            : type(Type::tString), name(n), sValue(s), ulValue(0) {}
     };
 
     struct AnnotationInfo {

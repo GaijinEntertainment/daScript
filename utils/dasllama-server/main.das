@@ -112,7 +112,7 @@ struct ServerArgs {
     @clarg_doc = "Long-lived asynchronous ASR worker threads (default 1; 2 permits two parallel transcriptions)"
     asr_workers : int
 
-    @clarg_doc = "Context length in tokens, served whole: the whole-model GPU driver holds it for every stream or declines to the per-op rails (the load log names the room). Default: the model's trained context_length, shortened to what the card holds"
+    @clarg_doc = "Context length in tokens, served whole: the whole-model GPU driver holds it for every stream or declines to the per-op rails (the load log names the room). Default: the model's trained context_length, shortened to what the card holds. A Metal model served from its image alone (no host weights) is cut to the rows its device KV mirror holds (DASLLAMA_METAL_KV_MIRROR_MB), with a warning."
     ctx : int
 
     @clarg_doc = "Default reply token budget when a request omits max_tokens (default 16384; clamped to ctx per request)"
@@ -147,7 +147,7 @@ struct ServerArgs {
     @clarg_doc = "Flat preallocated KV sessions — disables paged serving and the prefix cache"
     flat : bool
 
-    @clarg_doc = "MTP/NextN self-speculative decode. Unset: a slot turns it on when it runs one stream (--streams 1) on a GPU - Metal, or the whole model resident on a Vulkan device - and off at several streams, on the CPU, on a model the device serves in part, or where the resident driver sums a MoE's routed experts on the host (the card does not hold them); an armed round keeps every stream's cache on the host, so a drafting Vulkan slot serves host-cached sessions in place of device-home ones; true/false sets it outright. Needs a model with an in-file NextN head (the -MTP- GGUFs) - any other model serves plain with a log line. A sampled or penalized request draws each verify row with its own sampler, keeping its distribution at a lower acceptance rate"
+    @clarg_doc = "MTP/NextN self-speculative decode. Unset: a slot turns it on when it runs one stream (--streams 1) on a GPU - Metal, or the whole model resident on a Vulkan device - and off at several streams, on the CPU, on a model the device serves in part, or where the resident driver sums a MoE's routed experts on the host (the card does not hold them); an armed round keeps every stream's cache on the host, so a drafting Vulkan slot serves host-cached sessions in place of device-home ones; true/false sets it outright. Needs a model with an in-file NextN head (the -MTP- GGUFs), or an assistant drafter GGUF beside the model file (gemma-4: mtp-<stem>-Q8_0.gguf), which the load attaches - any other model serves plain with a log line. A sampled or penalized request draws each verify row with its own sampler, keeping its distribution at a lower acceptance rate"
     mtp : bool
 
     @clarg_doc = "RoPE scaling override for the load: yarn | linear | none (default: the model file's own rope.scaling keys; none drops them, a file's per-pair factor tensors stay). The Qwen families publish the YaRN recipe and enable it as a setting, for long conversations only: --rope-scaling yarn --rope-scale 4; no other vendor validates it, and a non-Qwen file logs a warning. The override is baked into the prepared image under its own lane (model.gguf.metal-yarn4.dlim). Per-model in a [[models]] roster: rope_scaling"
@@ -987,6 +987,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
             if (ectx > 0l) {
                 m.config.seq_len = min(m.config.seq_len, ectx)
             }
+            clamp_ctx_to_device_room(m, ent.name, pick_kv_dtype(!empty(ent.kv_dtype) ? ent.kv_dtype : (empty(g_cfg.kv_dtype) ? "f16" : g_cfg.kv_dtype)))
             let ctx_note = ectx > 0l ? "" : " (model default)"
             to_log(LOG_INFO, "dasllama-server: {empty(ent.name) ? base_name(ent.path) : ent.name} ctx {m.config.seq_len}{ctx_note}\n")
             var opts = SlotOpts(backend = empty(ent.backend) ? "auto" : ent.backend)

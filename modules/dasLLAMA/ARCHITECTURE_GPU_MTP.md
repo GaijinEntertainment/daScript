@@ -24,7 +24,15 @@ post-output_norm hidden, carried in `s.mtp_h` by the decode on head-less models
 (`set_metal_mtp_carry_hidden`); the pre-norm residual is a lever that measured worse. The two-row
 verify's GPU cost over a one-row step (the rows' weight stream; the per-box margins are in
 `PERF_LEDGER.md`'s MTP section) is the physics the round cannot recover; everything the host did
-between the drafts and the verify was.
+between the drafts and the verify was. The verify's rows name ONE session, so the batch driver's
+arena reservation (`batch_rows_prepare`) counts that session's slice once, not once a row: a deep
+session's slice is a 16384-row cap, and k+1 of it would pass the arena ceiling a single one fits.
+The continuation window's seam - the draft head's row `start_pos - 1`, written ahead of the window
+by the Metal seam seat (`metal_mtp_seam_row`, the draft forward with no logits) - prepares the
+session's mirror to the seam first: a new session's mirror is adopted or built by that prepare,
+an attached one stands at its whole pages, and the rows to the seam come up from the cache as a
+step's would. A seam the seat declines on a blob model stays stale and dents the window's first
+draft (`mtp_seam_declines_` counts them).
 
 **The accept walk and the commit.** Row i of the verify is the truth for draft i+1, so the walk
 takes `a` = the length of the leading run where a row's argmax equals the draft it verifies. The

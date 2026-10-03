@@ -398,8 +398,16 @@ var g_pso_attnpb_tq4 : MetalComputePipeline?
 var g_pso_attncombb : MetalComputePipeline?
 var g_pso_attnd16 : MetalComputePipeline?   // fused single-pass batch attention (hs 128)
 var g_pso_attnd32 : MetalComputePipeline?
-var g_pso_attnd_q8 : MetalComputePipeline?
+var g_pso_attndw16 : MetalComputePipeline?   // ... its head-of-256 pair
+var g_pso_attndw32 : MetalComputePipeline?
+var g_pso_attndx16 : MetalComputePipeline?   // ... and its head-of-512 pair
+var g_pso_attndx32 : MetalComputePipeline?
+var g_pso_attnd_q8 : MetalComputePipeline?   // the block-codec twins, a head of 64, 96 or 128 ...
 var g_pso_attnd_tq4 : MetalComputePipeline?
+var g_pso_attndw_q8 : MetalComputePipeline?   // ... of 256 ...
+var g_pso_attndw_tq4 : MetalComputePipeline?
+var g_pso_attndx_q8 : MetalComputePipeline?   // ... and of 512
+var g_pso_attndx_tq4 : MetalComputePipeline?
 var g_pso_attncombd : MetalComputePipeline?
 var g_pso_rpstb16 : MetalComputePipeline?
 var g_pso_rpstb32 : MetalComputePipeline?
@@ -453,6 +461,9 @@ def arena_free_slice(off : uint64; size : uint64) {
 def public set_metal_decode_mirror_cap_mb(v : int) {
     g_mirror_cap_mb = v
 }
+
+//! The cap as set: negative = the env default stands.
+def public get_metal_decode_mirror_cap_mb() : int => g_mirror_cap_mb
 
 //! Pin the CPU final-norm/classifier step (logits-on-GPU off) — the A/B and fallback rail.
 //! `DASLLAMA_METAL_LOGITS=0` pins it process-wide (shared with the prefill driver).
@@ -764,6 +775,7 @@ def public metal_decode_stage_report {
 
 
 def mirror_release(var mr : KVMirror) {
+    mirror_sig_drop(mr.uid)
     if (mr.bytes > 0ul) {
         arena_free_slice(mr.koff, mr.bytes)
     }
@@ -785,11 +797,21 @@ var private g_rset_dirty = false
 var private g_rset_count = 0l
 var private @scratch g_rset_seen : table<uint64; bool>   // buffer handles already pinned - grow-only, reused across evals (pool recycles re-note)
 
+//! The set, made on the first ask; false when the knob is off or the OS answers null (below macOS 15).
+def private residency_ensure : bool {
+    if (g_rset == null && !g_rset_tried && g_env_metal.residency && g_dev != null) {
+        g_rset_tried = true
+        g_rset = metal_new_residency_set(g_dev)
+        residency_note(g_signs)
+    }
+    return g_rset != null
+}
+
 //! Pin one buffer that lives until the next reset (weight regions/planes, pool buffers — the
 //! binding has no remove, so per-session mirrors and the rebuild-prone arena stay out). Cheap
-//! and idempotent; a no-op until `residency_flush` creates the set.
+//! and idempotent; the first note makes the set, so a region cached before any flush is pinned.
 def residency_note(buf : MetalBuffer?) {
-    if (buf == null || g_rset == null) {
+    if (buf == null || !residency_ensure()) {
         return
     }
     let key = intptr(buf)
@@ -802,19 +824,10 @@ def residency_note(buf : MetalBuffer?) {
     g_rset_dirty = true
 }
 
-//! Driver-entry hook: create the set on the first served step, then commit+request any
-//! pending adds. Cheap when clean.
+//! Driver-entry hook: commit+request any pending adds. Cheap when clean.
 def residency_flush {
-    if (g_rset == null) {
-        if (g_rset_tried || !g_env_metal.residency) {
-            return
-        }
-        g_rset_tried = true
-        g_rset = metal_new_residency_set(g_dev)
-        if (g_rset == null) {   // the API answers null below macOS 15 - stay on the old behavior
-            return
-        }
-        residency_note(g_signs)
+    if (!residency_ensure()) {
+        return
     }
     if (g_rset_dirty) {
         metal_residency_set_commit(g_rset)
@@ -831,6 +844,18 @@ def residency_flush {
 
 //! Buffers pinned so far (0 = off or not yet created) — the knob's test witness.
 def residency_pinned : int64 => g_rset_count
+
+//! Cached weight regions the set does not hold — zero under a live set.
+def weight_regions_unpinned : int64 {
+    var n = 0l
+    for (e in values(g_regions)) {
+        n += (g_rset_seen?[intptr(e.buf)] ?? false) ? 0l : 1l
+    }
+    for (e in values(g_regions_cat3)) {
+        n += (g_rset_seen?[intptr(e.buf)] ?? false) ? 0l : 1l
+    }
+    return n
+}
 
 //! True when a residency set is live (knob on AND the OS serves the API — macOS 15+).
 def residency_active : bool => g_rset != null
@@ -960,12 +985,14 @@ def blob_of(dev : MetalDevice?; t : Model; off : int64) : tuple<buf : MetalBuffe
     }
 }
 
-//! The kept-bf16 plane (E-series model_proj) + one tensor's byte offset within it — zero-copy
-//! page wrap on image-mapped models, one-time resident copy otherwise (cached per base).
-def bf16_of(dev : MetalDevice?; t : Model; off : int64) : tuple<buf : MetalBuffer?; boff : uint64> {
+//! One of the model's kept planes (`t.fblob`, the fp32 plane the spec chain's embed gather reads the token table through;
+//! `t.bf16blob`, the E-series model_proj) + one tensor's byte offset within it — zero-copy page wrap on image-mapped
+//! models, one-time resident copy otherwise (cached per base).
+def plane_of(dev : MetalDevice?; t : Model; plane : array<auto(TT)>; off : int64) : tuple<buf : MetalBuffer?; boff : uint64> {
+    let esz = int64(typeinfo sizeof(type<TT>))
     unsafe {
-        return (buf = plane_buffer(dev, addr < void? >(t.bf16blob[0]), uint64(long_length(t.bf16blob) * 2l), t.image_map != null),
-                boff = uint64(off * 2l))
+        return (buf = plane_buffer(dev, addr<void?>(plane[0]), uint64(long_length(plane) * esz), t.image_map != null),
+                boff = uint64(off * esz))
     }
 }
 
@@ -1123,33 +1150,19 @@ def mirror_evict_to_cap(cap_bytes : uint64; keep : uint64) {
 }
 
 
-// Hetero-safe per-layer mirror addressing (gemma4's two kv-head classes): every KV codec is
-// linear bytes-per-element for kvd % 32 == 0, so the layout_offsets element prefix scales
-// straight to bytes. Uniform models reduce to the old l * cap * rowb addresses exactly.
-def mirror_row_total(t : Model) : int64 {
-    let c = t.config
-    var tot = 0l
-    for (l in range64(c.n_layers + c.n_layer_nextn)) {   // + the MTP draft slab (trunk-shaped attention)
-        if (!kv_shared_layer(t, l)) {   // shared layers (E-series) alias their source's slab
-            tot += layer_kv_dim(c, l)
-        }
-    }
-    return tot
-}
-
-//! layer l's slab base (bytes) within a mirror K or V plane of cap rows
+//! layer l's slab base (bytes) within a mirror K or V plane of cap rows: every KV codec is linear bytes-per-element for
+//! kvd % 32 == 0, so the layout's element prefix scales straight to bytes (gemma4's two kv-head classes included)
 def mirror_lbase(t : Model; dt : KVDtype; cap, l : int64) : int64 => cap * kv_row_bytes(dt, t.kv_row_prefix[l])
 
 // the slice mirror_prepare would build for (s, pos): chunked high-water cap (pow2 from 256,
 // never past the session's own seq cap) and the K/V plane sizes
-def private mirror_slice_shape(t : Model; s : Session; pos : int64) : tuple<cap : int64; kbytes : uint64; vbytes : uint64> {
-    let needed = pos + 1l
+def private mirror_slice_shape(t : Model; s : Session; needed : int64) : tuple<cap : int64; kbytes : uint64; vbytes : uint64> {
     var cap = 256l
     while (cap < needed) {
         cap *= 2l
     }
     cap = clamp(cap, needed, t.config.seq_len)
-    let total = mirror_row_total(t)
+    let total = kv_row_total_(t)
     return (cap = cap, kbytes = uint64(cap * kv_row_bytes(s.kv_dtype_k, total)),
             vbytes = uint64(cap * kv_row_bytes(s.kv_dtype_v, total)))
 }
@@ -1187,7 +1200,7 @@ def mirror_arena_demand(t : Model; s : Session; pos : int64) : uint64 {
             return mr0.bytes
         }
     }
-    let shp = mirror_slice_shape(t, s, pos)
+    let shp = mirror_slice_shape(t, s, pos + 1l)
     return shp.kbytes + shp.vbytes
 }
 
@@ -1236,9 +1249,142 @@ def mirror_defrag(total : uint64) : bool {
 // Ensure s.uid's mirror exists, is big enough, and holds logical rows [0, pos) — the watermark
 // contract (module header). Returns arena byte offsets; caller writes row `pos` GPU-side and
 // advances the watermark only after the step + writeback complete. ok=false ⇒ decline to CPU.
-def mirror_prepare(t : Model; var s : Session; pos : int64) : tuple<ok : bool; koff : uint64; voff : uint64; cap : int64> {   // nolint:STYLE038 — evict/rebuild/grow/upload is one sequential decision on shared locals
+def mirror_prepare(t : Model; var s : Session; pos : int64) : tuple<ok : bool; koff : uint64; voff : uint64; cap : int64> {
+    return mirror_prepare_rows(t, s, pos, pos + 1l)
+}
+
+//! A released paged session's mirror stays for the next session whose leading pages are the same groups:
+//! page i's allocation stamp, by the released session's uid.
+var @scratch g_mirror_sigs : table<uint64; array<uint64>>
+var private g_mirror_adopted_rows = 0l
+
+//! Lifetime rows a session took over from a released session's mirror instead of uploading them.
+def public metal_mirror_adopted_rows : int64 => g_mirror_adopted_rows
+
+[cold_path]   //! a released mirror's signature goes once: at its adoption or its eviction
+def private mirror_sig_drop(uid : uint64) {
+    if (key_exists(g_mirror_sigs, uid)) {
+        delete g_mirror_sigs[uid]
+        g_mirror_sigs |> erase(uid)
+    }
+}
+
+[cold_path]   // a session's release, reached through the pool's listener
+def private mirror_orphan(var s : Session) {
+    mirror_quiesce()
+    if (!key_exists(g_mirrors, s.uid)) {
+        return
+    }
+    let pr = s.kv_pool.page_rows
+    let pages = min(min(g_mirrors[s.uid].watermark, s.n_past) / pr, long_length(s.block_table))
+    if (pages > 0l && g_mirror_adopt) {
+        g_mirror_sigs[s.uid] <- [for (i in range64(pages)); s.kv_pool.gen[s.block_table[i]]]
+    }
+}
+
+var private g_mirror_adopt = true
+var private g_mirror_uploaded_rows = 0l
+
+//! A/B seat: a released session's mirror kept for the next session on the same pages - `DASLLAMA_METAL_MIRROR_ADOPT`'s setter twin.
+def public set_metal_mirror_adopt(v : bool) {
+    g_mirror_adopt = v
+}
+
+def public get_metal_mirror_adopt() : bool => g_mirror_adopt
+
+//! Lifetime rows copied from a host KV cache into a mirror - what adoption and the mirror-fed prefill leave out.
+def public metal_mirror_uploaded_rows : int64 => g_mirror_uploaded_rows
+
+//! The rows a session of `row_bytes` a row fits in the arena at its ceiling - one slice holds both planes.
+def private mirror_rows_within_ceiling(row_bytes : int64) : int64 => int64(mirror_ceiling_bytes()) / max(row_bytes, 1l)
+
+[init]
+def private mirror_orphan_register {
+    register_kv_release_listener(@@mirror_orphan)
+    set_gpu_kv_room_hook(@@mirror_rows_within_ceiling)
+    register_reload_prep(@@mirror_sigs_drop_all)
+    g_mirror_adopt = g_env_metal.mirror_adopt
+    if (!g_mirror_adopt) {
+        to_log(LOG_WARNING, "dasLLAMA metal decode: DASLLAMA_METAL_MIRROR_ADOPT=0 - a released session's mirror goes back to the arena and the next session uploads its rows\n")
+    }
+}
+
+[cold_path]   // a model swap: the released mirrors' signatures name pages of the model going out
+def private mirror_sigs_drop_all {
+    delete g_mirror_sigs
+}
+
+//! Hand the released mirror sharing the most leading pages with `s` to `s`, its watermark at their end.
+[arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-kv-mirror")]
+def private mirror_adopt(s : Session; needed : int64) {
+    if (s.kv_pool == null || empty(g_mirror_sigs)) {
+        return
+    }
+    var best = 0ul
+    var best_pages = 0l
+    for (uid, sig in keys(g_mirror_sigs), values(g_mirror_sigs)) {
+        continue if (!key_exists(g_mirrors, uid) || key_exists(g_pin, uid))
+        let mr = g_mirrors[uid]
+        continue if (mr.kdt != s.kv_dtype_k || mr.vdt != s.kv_dtype_v || mr.cap_rows < needed)
+        let top = min(long_length(sig), long_length(s.block_table))
+        var n = 0l
+        while (n < top && sig[n] == s.kv_pool.gen[s.block_table[n]]) {
+            n ++
+        }
+        if (n > best_pages) {
+            best = uid
+            best_pages = n
+        }
+    }
+    if (best_pages == 0l) {
+        return
+    }
+    var mr = g_mirrors[best]
+    g_mirrors |> erase(best)
+    mirror_sig_drop(best)
+    mr.uid = s.uid
+    mr.watermark = best_pages * s.kv_pool.page_rows
+    g_mirrors[s.uid] = mr
+    g_mirror_adopted_rows += mr.watermark
+}
+
+var private g_mirror_quiesce : array<function<void>>
+
+//! Subscribe a driver's retire-what-is-encoded-ahead step: `mirror_quiesce` runs it before the arena's slices move.
+def register_mirror_quiesce(f : function<void>) {
+    g_mirror_quiesce |> push(f)
+}
+
+//! No step that could still write a mirror row is in flight or encoded ahead.
+def mirror_quiesce {
+    for (f in g_mirror_quiesce) {
+        invoke(f)
+    }
+    finish_pending_step()
+}
+
+//! `s` has a mirror of its codecs with room for `needed` rows, holding exactly rows [0, pos): preparing it moves nothing.
+def mirror_stands(s : Session; pos, needed : int64) : bool {
+    if (!key_exists(g_mirrors, s.uid)) {
+        return false
+    }
+    let mr = g_mirrors[s.uid]
+    return mr.cap_rows >= needed && mr.kdt == s.kv_dtype_k && mr.vdt == s.kv_dtype_v && mr.watermark == pos
+}
+
+//! The rows `uid`'s mirror holds after a driver wrote them device-side: [0, rows).
+def mirror_set_watermark(uid : uint64; rows : int64) {
+    if (key_exists(g_mirrors, uid)) {
+        g_mirrors[uid].watermark = rows
+    }
+}
+
+//! `mirror_prepare` with the capacity asked apart from the rows held: rows [0, pos) mirrored, room for `needed` rows.
+def mirror_prepare_rows(t : Model; var s : Session; pos, needed : int64) : tuple<ok : bool; koff : uint64; voff : uint64; cap : int64> {   // nolint:STYLE038 — evict/rebuild/grow/upload is one sequential decision on shared locals
     let c = t.config
-    let needed = pos + 1l
+    if (!key_exists(g_mirrors, s.uid)) {
+        mirror_adopt(s, needed)
+    }
     if (key_exists(g_mirrors, s.uid)) {
         // uid is never reused, so dtype can't legitimately change — a mismatch means a stale
         // record; capacity growth rebuilds too (watermark 0 → full re-upload from the CPU cache)
@@ -1259,7 +1405,7 @@ def mirror_prepare(t : Model; var s : Session; pos : int64) : tuple<ok : bool; k
             g_arena_free |> clear()
             g_arena_free |> push((off = 0ul, size = g_arena_bytes))
         }
-        let shp = mirror_slice_shape(t, s, pos)
+        let shp = mirror_slice_shape(t, s, needed)
         let cap = shp.cap
         let kbytes = shp.kbytes
         let vbytes = shp.vbytes
@@ -1324,6 +1470,7 @@ def mirror_prepare(t : Model; var s : Session; pos : int64) : tuple<ok : bool; k
                 }
             }
         }
+        g_mirror_uploaded_rows += pos - wm
         g_mirrors[s.uid].watermark = pos
     }
     return (ok = true, koff = koff, voff = voff, cap = cap)
@@ -1673,6 +1820,16 @@ def public metal_kernel_coverage() : table<string; int64> {
         out[name] += n
     }
     return <- out
+}
+
+//! One kernel's dispatch count under its census name since the last reset. A name no compiled kernel carries panics,
+//! so a misspelt key cannot read as a zero count.
+def public metal_kernel_coverage_of(kernel : string) : int64 {
+    var inscope cov <- metal_kernel_coverage()
+    if (!key_exists(cov, kernel)) {
+        panic("dasLLAMA metal: no compiled kernel named '{kernel}' in the coverage census")
+    }
+    return cov?[kernel] ?? 0l
 }
 
 def public metal_kernel_coverage_reset {

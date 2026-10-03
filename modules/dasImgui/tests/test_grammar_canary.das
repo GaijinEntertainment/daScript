@@ -30,6 +30,8 @@ let CANARY_SECTIONS : array<CanarySection> <- [
         snippet = "struct private CanS \{\n    a : int = 7\n    @safe_when_uninitialized b : int\n\}"),
     CanarySection(name = "signed annotation numbers",
         snippet = "[comment(min=-2, offset=-1.5, values=(-3, -2.5))]\nstruct CanSigned \{\n    @min=-2 @offset=-1.5\n    value : int\n\}"),
+    CanarySection(name = "wide annotation numbers",
+        snippet = "[comment(big=9007199254740991l, low=-9223372036854775808l, unsigned=18446744073709551615ul, hex=0x100000000l)]\nstruct CanWide \{\n    @limit=4102444800l\n    value : int64\n\}"),
     CanarySection(name = "bitfield declaration",
         snippet = "bitfield CanFlags \{\n    alpha\n    beta\n    gamma\n\}"),
     CanarySection(name = "variant declaration",
