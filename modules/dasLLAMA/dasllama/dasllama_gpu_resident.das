@@ -1263,7 +1263,7 @@ def private rdec_hydrate_host(t : Model; var s : Session) {
     let cnt = g_rdec_regions[s.rdec_region].cnt
     if (!s.rdec_host_current) {
         for (l in range64(c.n_layers)) {
-            continue if (layer_is_recurrent(c, l) || t.kv_src[l] != l)   // a shared-KV layer reads its donor's slab, gathered once through the donor
+            continue if (!layer_owns_kv(t, l))   // a shared-KV layer reads its donor's slab, gathered once through the donor
             rdec_read_kv_bulk(l, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), cnt)
         }
         s.rdec_host_current = true
@@ -1575,6 +1575,9 @@ def resident_layer_decline(t : Model; l : int64) : string {
     return ""
 }
 
+//! layer `l` attends over K/V rows of its own on the mirror: an attention layer that shares no donor's
+def private layer_owns_kv(t : Model; l : int64) : bool => !layer_is_recurrent(t.config, l) && t.kv_src[l] == l
+
 //! layer `l` has no v plane and takes V off its k row (gemma-4's global layers)
 def resident_v_from_k(c : Config; l : int64) : bool => l < 64l && ((c.v_from_k_mask >> uint64(l)) & 1ul) != 0ul
 
@@ -1744,7 +1747,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     for (l in range64(c.n_layers)) {
         let why = resident_layer_decline(t, l)
         if (!empty(why)) return rdec_decline(why)
-        if (!layer_is_recurrent(c, l) && t.kv_src[l] == l) {
+        if (layer_owns_kv(t, l)) {
             mir_units += seq_cap * kv_row_units(rkdt, layer_kv_dim(c, l))
         }
     }
@@ -2396,7 +2399,7 @@ def private rdec_take_mirror(t : Model; var s : Session; r, pos : int64) {
         return
     }
     for (l in range64(c.n_layers)) {
-        continue if (layer_is_recurrent(c, l) || t.kv_src[l] != l)
+        continue if (!layer_owns_kv(t, l))
         rdec_sync_kv(l, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), pos)
     }
     rdec_claim(s, r, pos)
@@ -3716,7 +3719,7 @@ def private rdec_row_bind(t : Model; var s : Session; r, pos, i : int64; form : 
 def private rdec_read_row_kv(t : Model; var s : Session; pos : int64) {
     let c = t.config
     for (l in range64(c.n_layers)) {
-        continue if (layer_is_recurrent(c, l) || t.kv_src[l] != l)
+        continue if (!layer_owns_kv(t, l))
         let kvd = layer_kv_dim(c, l)
         let krowb = kv_row_bytes(s.kv_dtype_k, kvd)
         let vrowb = kv_row_bytes(s.kv_dtype_v, kvd)
@@ -4449,7 +4452,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         var qkv_marked = 0l
         var qkv_skips : WalkSkips
         for (l in range64(layers)) {
-            continue if (layer_is_recurrent(t.config, l) || t.kv_src[l] != l || moe_gpu_attn_on_gpu(l))
+            continue if (!layer_owns_kv(t, l) || moe_gpu_attn_on_gpu(l))
             let qd = layer_qd(t.config, l)
             let kv = layer_kv_dim(t.config, l)
             let fq = fmt_at(t.wq_fmt, l)
