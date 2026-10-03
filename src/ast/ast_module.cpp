@@ -663,9 +663,6 @@ namespace das {
         if ( fn->result && !fn->result->ref && fn->result->isWorkhorseType() && !fn->result->isPointer() ) {
             fn->result->constant = true;
         }
-        if ( fn->builtIn ) {
-            cumulativeHash = wyhash(mangledName.c_str(), mangledName.size(), cumulativeHash);
-        }
         if ( fn->builtIn && fn->sideEffectFlags==uint32_t(SideEffects::modifyArgument)  ) {
             bool anyRW = false;
             for ( const auto & arg : fn->arguments ) {
