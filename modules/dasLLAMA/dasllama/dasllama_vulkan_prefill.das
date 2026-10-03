@@ -50,8 +50,9 @@ def public pf_f16_feed(f : int) : bool {
 }
 
 [arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
-def private pf_qkv6(l : int64) : bool => (pf_f16_feed(g_rd.layers[l].fq)
-    && pf_f16_feed(g_rd.layers[l].fk) && pf_f16_feed(g_rd.layers[l].fv))
+def private pf_qkv6(l : int64) : bool => qkv6_of(g_rd.layers[l])
+[arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
+def private qkv6_of(L : RLayer) : bool => pf_f16_feed(L.fq) && pf_f16_feed(L.fk) && pf_f16_feed(L.fv)
 [arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
 def private pf_gu6(l : int64) : bool => g_env_vulkan.vk_f16_ffn && pf_f16_feed(g_rd.layers[l].f1) && pf_f16_feed(g_rd.layers[l].f3)
 //! the down GEMM's feed: the hidden rows as f16 where the tile admits the plane and the FFN lever leaves the group on it (off it the rows quantize to the Q8 blocks the CPU chain uses)
@@ -1076,7 +1077,7 @@ def private pf_prologue_block : int => int(g_rd.n_layers * PF_ROLES)
 //! past the prologue set and the last row's final quantize
 def private pf_head_block : int => pf_prologue_block() + 2
 
-def private pf_head_qkv6 : bool => pf_f16_feed(g_rd.head.fq) && pf_f16_feed(g_rd.head.fk) && pf_f16_feed(g_rd.head.fv)
+def private pf_head_qkv6 : bool => qkv6_of(g_rd.head)
 
 [cold_path]
 def private pf_head_decline(why : string) : bool {
