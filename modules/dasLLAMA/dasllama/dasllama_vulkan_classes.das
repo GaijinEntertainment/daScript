@@ -918,50 +918,48 @@ class Q8kActRq : ActRqT {
 }
 
 // act straight to the f16 hidden plane (the cm2 route — no quantization)
-[vk_dispatch(name = "actf16_cls", grid = "wgs", params = "wgs : int64")]
-class ActF16 {
+[ |> template_struct_instance]
+class template ActF16T {
+    @template_constant BIASED : bool = false   //!< the window's bucket rows: row r's expert in `rex` (the schedule's bucket row -> expert map), its gate and up bias rows joining before the activation
     @ssbo @binding = 0 gate : array<float>
     @ssbo @binding = 1 up : array<float>
     @ssbo @binding = 2 outh : array<float16>
+    @ssbo @binding = 3 @role = "weight" @template_gate = BIASED gb : array<float>   //! the gate-bias plane
+    @ssbo @binding = 4 @role = "weight" @template_gate = BIASED ub : array<float>   //! the up-bias plane
+    @ssbo @binding = 5 @template_gate = BIASED rex : array<uint>     //! bucket row -> its expert
     @push_constant pa : ActArgs
 
     def act_mul(v, u : float) : float => act_mul_sel(v, u, pa.act)
 
-    [spirv_kernel(local_size_x = 256, name = "actf16_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+    //! element `e`'s activation as a saturated half
+    def hval(e : uint) : float16 {
+        static_if (BIASED) {
+            let ex = rex[e / pa.brow]
+            let c = e % pa.brow
+            return half_sat(act_mul(gate[e] + gb[pa.gboff + ex * pa.brow + c], up[e] + ub[pa.uboff + ex * pa.brow + c]))
+        } else {
+            return half_sat(act_mul(gate[e], up[e]))
+        }
+    }
+
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
     def run {
         let e = pa.elem0 + gl_GlobalInvocationID.x * 4u
         if (e < pa.elem0 + pa.nelem) {
-            outh[e] = half_sat(act_mul(gate[e], up[e]))
-            outh[e + 1u] = half_sat(act_mul(gate[e + 1u], up[e + 1u]))
-            outh[e + 2u] = half_sat(act_mul(gate[e + 2u], up[e + 2u]))
-            outh[e + 3u] = half_sat(act_mul(gate[e + 3u], up[e + 3u]))
+            outh[e] = hval(e)
+            outh[e + 1u] = hval(e + 1u)
+            outh[e + 2u] = hval(e + 2u)
+            outh[e + 3u] = hval(e + 3u)
         }
     }
 }
 
-//! the biased twin of the f16 act: the window's bucket rows, row r's expert in `rex` (the schedule's bucket row -> expert map), its gate and up bias rows joining before the activation
+[vk_dispatch(name = "actf16_cls", grid = "wgs", params = "wgs : int64")]
+class ActF16 : ActF16T {}
+
 [vk_dispatch(name = "actf16_b_cls", grid = "wgs", params = "wgs : int64")]
-class ActF16B : ActF16 {
-    @ssbo @binding = 3 @role = "weight" gb : array<float>   //! the gate-bias plane
-    @ssbo @binding = 4 @role = "weight" ub : array<float>   //! the up-bias plane
-    @ssbo @binding = 5 rex : array<uint>     //! bucket row -> its expert
-
-    def bact(e : uint) : float16 {
-        let ex = rex[e / pa.brow]
-        let c = e % pa.brow
-        return half_sat(act_mul(gate[e] + gb[pa.gboff + ex * pa.brow + c], up[e] + ub[pa.uboff + ex * pa.brow + c]))
-    }
-
-    [spirv_kernel(local_size_x = 256, name = "actf16_b_cls_spv")]
-    def override run {
-        let e = pa.elem0 + gl_GlobalInvocationID.x * 4u
-        if (e < pa.elem0 + pa.nelem) {
-            outh[e] = bact(e)
-            outh[e + 1u] = bact(e + 1u)
-            outh[e + 2u] = bact(e + 2u)
-            outh[e + 3u] = bact(e + 3u)
-        }
-    }
+class ActF16B : ActF16T {
+    override BIASED = true
 }
 
 struct EmbArgs {
