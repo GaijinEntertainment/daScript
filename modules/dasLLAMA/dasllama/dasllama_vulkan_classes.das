@@ -5682,6 +5682,32 @@ class KqBatchBase : MoeCmBase {
         return bs
     }
 
+    //! one 32-weight block's split-half integer dots: the low and the high 16-weight half's four column dots, and each half's x block sum
+    def split_dots(bu, grp, word : uint; var l, h : int4&; var blo, bhi : int&) {
+        let kL = bu * 2u
+        let kH = bu * 2u + 1u
+        let xwL = xw4[grp * 17u + kL]
+        let xwH = xw4[grp * 17u + kH]
+        blo = sdot4(xwL.x, 0x01010101) + sdot4(xwL.y, 0x01010101) + sdot4(xwL.z, 0x01010101) + sdot4(xwL.w, 0x01010101)
+        bhi = sdot4(xwH.x, 0x01010101) + sdot4(xwH.y, 0x01010101) + sdot4(xwH.z, 0x01010101) + sdot4(xwH.w, 0x01010101)
+        let wL0 = ww4[word * 17u + kL]
+        let wL1 = ww4[(word + 8u) * 17u + kL]
+        let wL2 = ww4[(word + 16u) * 17u + kL]
+        let wL3 = ww4[(word + 24u) * 17u + kL]
+        let wH0 = ww4[word * 17u + kH]
+        let wH1 = ww4[(word + 8u) * 17u + kH]
+        let wH2 = ww4[(word + 16u) * 17u + kH]
+        let wH3 = ww4[(word + 24u) * 17u + kH]
+        l.x = sdot4(wL0.x, xwL.x) + sdot4(wL0.y, xwL.y) + sdot4(wL0.z, xwL.z) + sdot4(wL0.w, xwL.w)
+        l.y = sdot4(wL1.x, xwL.x) + sdot4(wL1.y, xwL.y) + sdot4(wL1.z, xwL.z) + sdot4(wL1.w, xwL.w)
+        l.z = sdot4(wL2.x, xwL.x) + sdot4(wL2.y, xwL.y) + sdot4(wL2.z, xwL.z) + sdot4(wL2.w, xwL.w)
+        l.w = sdot4(wL3.x, xwL.x) + sdot4(wL3.y, xwL.y) + sdot4(wL3.z, xwL.z) + sdot4(wL3.w, xwL.w)
+        h.x = sdot4(wH0.x, xwH.x) + sdot4(wH0.y, xwH.y) + sdot4(wH0.z, xwH.z) + sdot4(wH0.w, xwH.w)
+        h.y = sdot4(wH1.x, xwH.x) + sdot4(wH1.y, xwH.y) + sdot4(wH1.z, xwH.z) + sdot4(wH1.w, xwH.w)
+        h.z = sdot4(wH2.x, xwH.x) + sdot4(wH2.y, xwH.y) + sdot4(wH2.z, xwH.z) + sdot4(wH2.w, xwH.w)
+        h.w = sdot4(wH3.x, xwH.x) + sdot4(wH3.y, xwH.y) + sdot4(wH3.z, xwH.z) + sdot4(wH3.w, xwH.w)
+    }
+
     // per-block FMA, d/min form: xscl * (d*sc*idot - dmin*mn*bsum)
     def fma_dm(bu, grp, word : uint; xscl : float) : float4 {
         var i = int4(0)
@@ -6063,32 +6089,15 @@ class KqBatchK6 : KqBatchBase {
     // the split-half FMA: each 16-weight half keeps its own dot, sum, and signed sub-scale
     def override blk_fma(bu, grp, word : uint; xscl : float) : float4 {
         let off = q_off()
-        let kL = bu * 2u
-        let kH = bu * 2u + 1u
-        let xwL = xw4[grp * 17u + kL]
-        let xwH = xw4[grp * 17u + kH]
-        let blo = sdot4(xwL.x, 0x01010101) + sdot4(xwL.y, 0x01010101) + sdot4(xwL.z, 0x01010101) + sdot4(xwL.w, 0x01010101)
-        let bhi = sdot4(xwH.x, 0x01010101) + sdot4(xwH.y, 0x01010101) + sdot4(xwH.z, 0x01010101) + sdot4(xwH.w, 0x01010101)
-        let wL0 = ww4[word * 17u + kL]
-        let wL1 = ww4[(word + 8u) * 17u + kL]
-        let wL2 = ww4[(word + 16u) * 17u + kL]
-        let wL3 = ww4[(word + 24u) * 17u + kL]
-        let wH0 = ww4[word * 17u + kH]
-        let wH1 = ww4[(word + 8u) * 17u + kH]
-        let wH2 = ww4[(word + 16u) * 17u + kH]
-        let wH3 = ww4[(word + 24u) * 17u + kH]
-        let l0 = sdot4(wL0.x, xwL.x) + sdot4(wL0.y, xwL.y) + sdot4(wL0.z, xwL.z) + sdot4(wL0.w, xwL.w)
-        let l1 = sdot4(wL1.x, xwL.x) + sdot4(wL1.y, xwL.y) + sdot4(wL1.z, xwL.z) + sdot4(wL1.w, xwL.w)
-        let l2 = sdot4(wL2.x, xwL.x) + sdot4(wL2.y, xwL.y) + sdot4(wL2.z, xwL.z) + sdot4(wL2.w, xwL.w)
-        let l3 = sdot4(wL3.x, xwL.x) + sdot4(wL3.y, xwL.y) + sdot4(wL3.z, xwL.z) + sdot4(wL3.w, xwL.w)
-        let h0 = sdot4(wH0.x, xwH.x) + sdot4(wH0.y, xwH.y) + sdot4(wH0.z, xwH.z) + sdot4(wH0.w, xwH.w)
-        let h1 = sdot4(wH1.x, xwH.x) + sdot4(wH1.y, xwH.y) + sdot4(wH1.z, xwH.z) + sdot4(wH1.w, xwH.w)
-        let h2 = sdot4(wH2.x, xwH.x) + sdot4(wH2.y, xwH.y) + sdot4(wH2.z, xwH.z) + sdot4(wH2.w, xwH.w)
-        let h3 = sdot4(wH3.x, xwH.x) + sdot4(wH3.y, xwH.y) + sdot4(wH3.z, xwH.z) + sdot4(wH3.w, xwH.w)
-        return float4(xscl * (wsw[bu * 32u + word] * float(l0 - off * blo) + wsw2[bu * 32u + word] * float(h0 - off * bhi)),
-            xscl * (wsw[bu * 32u + word + 8u] * float(l1 - off * blo) + wsw2[bu * 32u + word + 8u] * float(h1 - off * bhi)),
-            xscl * (wsw[bu * 32u + word + 16u] * float(l2 - off * blo) + wsw2[bu * 32u + word + 16u] * float(h2 - off * bhi)),
-            xscl * (wsw[bu * 32u + word + 24u] * float(l3 - off * blo) + wsw2[bu * 32u + word + 24u] * float(h3 - off * bhi)))
+        var l = int4(0)
+        var h = int4(0)
+        var blo = 0
+        var bhi = 0
+        split_dots(bu, grp, word, l, h, blo, bhi)
+        return float4(xscl * (wsw[bu * 32u + word] * float(l.x - off * blo) + wsw2[bu * 32u + word] * float(h.x - off * bhi)),
+            xscl * (wsw[bu * 32u + word + 8u] * float(l.y - off * blo) + wsw2[bu * 32u + word + 8u] * float(h.y - off * bhi)),
+            xscl * (wsw[bu * 32u + word + 16u] * float(l.z - off * blo) + wsw2[bu * 32u + word + 16u] * float(h.z - off * bhi)),
+            xscl * (wsw[bu * 32u + word + 24u] * float(l.w - off * blo) + wsw2[bu * 32u + word + 24u] * float(h.w - off * bhi)))
     }
 
     [spirv_kernel(local_size_x = 256, name = "kq_batch_k6_cls_spv")]
@@ -6174,32 +6183,15 @@ class KqBatchK2 : KqBatchK6 {
 
     // the split-half fma with the min planes: xscl * (sc_lo*l + sc_hi*h - mn_lo*blo - mn_hi*bhi)
     def override blk_fma(bu, grp, word : uint; xscl : float) : float4 {
-        let kL = bu * 2u
-        let kH = bu * 2u + 1u
-        let xwL = xw4[grp * 17u + kL]
-        let xwH = xw4[grp * 17u + kH]
-        let blo = sdot4(xwL.x, 0x01010101) + sdot4(xwL.y, 0x01010101) + sdot4(xwL.z, 0x01010101) + sdot4(xwL.w, 0x01010101)
-        let bhi = sdot4(xwH.x, 0x01010101) + sdot4(xwH.y, 0x01010101) + sdot4(xwH.z, 0x01010101) + sdot4(xwH.w, 0x01010101)
-        let wL0 = ww4[word * 17u + kL]
-        let wL1 = ww4[(word + 8u) * 17u + kL]
-        let wL2 = ww4[(word + 16u) * 17u + kL]
-        let wL3 = ww4[(word + 24u) * 17u + kL]
-        let wH0 = ww4[word * 17u + kH]
-        let wH1 = ww4[(word + 8u) * 17u + kH]
-        let wH2 = ww4[(word + 16u) * 17u + kH]
-        let wH3 = ww4[(word + 24u) * 17u + kH]
-        let l0 = sdot4(wL0.x, xwL.x) + sdot4(wL0.y, xwL.y) + sdot4(wL0.z, xwL.z) + sdot4(wL0.w, xwL.w)
-        let l1 = sdot4(wL1.x, xwL.x) + sdot4(wL1.y, xwL.y) + sdot4(wL1.z, xwL.z) + sdot4(wL1.w, xwL.w)
-        let l2 = sdot4(wL2.x, xwL.x) + sdot4(wL2.y, xwL.y) + sdot4(wL2.z, xwL.z) + sdot4(wL2.w, xwL.w)
-        let l3 = sdot4(wL3.x, xwL.x) + sdot4(wL3.y, xwL.y) + sdot4(wL3.z, xwL.z) + sdot4(wL3.w, xwL.w)
-        let h0 = sdot4(wH0.x, xwH.x) + sdot4(wH0.y, xwH.y) + sdot4(wH0.z, xwH.z) + sdot4(wH0.w, xwH.w)
-        let h1 = sdot4(wH1.x, xwH.x) + sdot4(wH1.y, xwH.y) + sdot4(wH1.z, xwH.z) + sdot4(wH1.w, xwH.w)
-        let h2 = sdot4(wH2.x, xwH.x) + sdot4(wH2.y, xwH.y) + sdot4(wH2.z, xwH.z) + sdot4(wH2.w, xwH.w)
-        let h3 = sdot4(wH3.x, xwH.x) + sdot4(wH3.y, xwH.y) + sdot4(wH3.z, xwH.z) + sdot4(wH3.w, xwH.w)
-        return float4(xscl * (wsw[bu * 32u + word] * float(l0) + wsw2[bu * 32u + word] * float(h0) - wsw3[bu * 32u + word] * float(blo) - wsw4[bu * 32u + word] * float(bhi)),
-            xscl * (wsw[bu * 32u + word + 8u] * float(l1) + wsw2[bu * 32u + word + 8u] * float(h1) - wsw3[bu * 32u + word + 8u] * float(blo) - wsw4[bu * 32u + word + 8u] * float(bhi)),
-            xscl * (wsw[bu * 32u + word + 16u] * float(l2) + wsw2[bu * 32u + word + 16u] * float(h2) - wsw3[bu * 32u + word + 16u] * float(blo) - wsw4[bu * 32u + word + 16u] * float(bhi)),
-            xscl * (wsw[bu * 32u + word + 24u] * float(l3) + wsw2[bu * 32u + word + 24u] * float(h3) - wsw3[bu * 32u + word + 24u] * float(blo) - wsw4[bu * 32u + word + 24u] * float(bhi)))
+        var l = int4(0)
+        var h = int4(0)
+        var blo = 0
+        var bhi = 0
+        split_dots(bu, grp, word, l, h, blo, bhi)
+        return float4(xscl * (wsw[bu * 32u + word] * float(l.x) + wsw2[bu * 32u + word] * float(h.x) - wsw3[bu * 32u + word] * float(blo) - wsw4[bu * 32u + word] * float(bhi)),
+            xscl * (wsw[bu * 32u + word + 8u] * float(l.y) + wsw2[bu * 32u + word + 8u] * float(h.y) - wsw3[bu * 32u + word + 8u] * float(blo) - wsw4[bu * 32u + word + 8u] * float(bhi)),
+            xscl * (wsw[bu * 32u + word + 16u] * float(l.z) + wsw2[bu * 32u + word + 16u] * float(h.z) - wsw3[bu * 32u + word + 16u] * float(blo) - wsw4[bu * 32u + word + 16u] * float(bhi)),
+            xscl * (wsw[bu * 32u + word + 24u] * float(l.w) + wsw2[bu * 32u + word + 24u] * float(h.w) - wsw3[bu * 32u + word + 24u] * float(blo) - wsw4[bu * 32u + word + 24u] * float(bhi)))
     }
 
     [spirv_kernel(local_size_x = 256, name = "kq_batch_k2_cls_spv")]
@@ -6231,30 +6223,15 @@ class KqBatchIq2Base : KqBatchK6 {
 
     // the split-half fma with UNSIGNED strips: xscl * (d*s0*l + d*s1*h) - no offset, no min
     def override blk_fma(bu, grp, word : uint; xscl : float) : float4 {
-        let kL = bu * 2u
-        let kH = bu * 2u + 1u
-        let xwL = xw4[grp * 17u + kL]
-        let xwH = xw4[grp * 17u + kH]
-        let wL0 = ww4[word * 17u + kL]
-        let wL1 = ww4[(word + 8u) * 17u + kL]
-        let wL2 = ww4[(word + 16u) * 17u + kL]
-        let wL3 = ww4[(word + 24u) * 17u + kL]
-        let wH0 = ww4[word * 17u + kH]
-        let wH1 = ww4[(word + 8u) * 17u + kH]
-        let wH2 = ww4[(word + 16u) * 17u + kH]
-        let wH3 = ww4[(word + 24u) * 17u + kH]
-        let l0 = sdot4(wL0.x, xwL.x) + sdot4(wL0.y, xwL.y) + sdot4(wL0.z, xwL.z) + sdot4(wL0.w, xwL.w)
-        let l1 = sdot4(wL1.x, xwL.x) + sdot4(wL1.y, xwL.y) + sdot4(wL1.z, xwL.z) + sdot4(wL1.w, xwL.w)
-        let l2 = sdot4(wL2.x, xwL.x) + sdot4(wL2.y, xwL.y) + sdot4(wL2.z, xwL.z) + sdot4(wL2.w, xwL.w)
-        let l3 = sdot4(wL3.x, xwL.x) + sdot4(wL3.y, xwL.y) + sdot4(wL3.z, xwL.z) + sdot4(wL3.w, xwL.w)
-        let h0 = sdot4(wH0.x, xwH.x) + sdot4(wH0.y, xwH.y) + sdot4(wH0.z, xwH.z) + sdot4(wH0.w, xwH.w)
-        let h1 = sdot4(wH1.x, xwH.x) + sdot4(wH1.y, xwH.y) + sdot4(wH1.z, xwH.z) + sdot4(wH1.w, xwH.w)
-        let h2 = sdot4(wH2.x, xwH.x) + sdot4(wH2.y, xwH.y) + sdot4(wH2.z, xwH.z) + sdot4(wH2.w, xwH.w)
-        let h3 = sdot4(wH3.x, xwH.x) + sdot4(wH3.y, xwH.y) + sdot4(wH3.z, xwH.z) + sdot4(wH3.w, xwH.w)
-        return float4(xscl * (wsw[bu * 32u + word] * float(l0) + wsw2[bu * 32u + word] * float(h0)),
-            xscl * (wsw[bu * 32u + word + 8u] * float(l1) + wsw2[bu * 32u + word + 8u] * float(h1)),
-            xscl * (wsw[bu * 32u + word + 16u] * float(l2) + wsw2[bu * 32u + word + 16u] * float(h2)),
-            xscl * (wsw[bu * 32u + word + 24u] * float(l3) + wsw2[bu * 32u + word + 24u] * float(h3)))
+        var l = int4(0)
+        var h = int4(0)
+        var blo = 0
+        var bhi = 0
+        split_dots(bu, grp, word, l, h, blo, bhi)
+        return float4(xscl * (wsw[bu * 32u + word] * float(l.x) + wsw2[bu * 32u + word] * float(h.x)),
+            xscl * (wsw[bu * 32u + word + 8u] * float(l.y) + wsw2[bu * 32u + word + 8u] * float(h.y)),
+            xscl * (wsw[bu * 32u + word + 16u] * float(l.z) + wsw2[bu * 32u + word + 16u] * float(h.z)),
+            xscl * (wsw[bu * 32u + word + 24u] * float(l.w) + wsw2[bu * 32u + word + 24u] * float(h.w)))
     }
 }
 
