@@ -450,10 +450,14 @@ def private resident_expert_ups(t : Model; l : int64) : array<PlaneUp> {
     return <- ups
 }
 
-//! the per-op tier's expert chain takes these formats: gate and up share one activation image, down is free
-def private tier_expert_fmts_ok(f1, f3, f2 : KqFmt) : bool {
-    return ((f1 == KqFmt.q8) == (f3 == KqFmt.q8) && (f1 == KqFmt.q8 || (kq_sb(f1) && kq_sb(f3)))
-        && (f2 == KqFmt.q8 || kq_sb(f2)))
+//! true, logged as the stop of the per-op `walk`, when layer l's expert formats are not the tier's: gate and up share one activation image, down is free
+def private tier_expert_walk_stops(t : Model; l : int64; walk : string) : bool {
+    let f1 = rdec_efmt(t, t.we1_fmt, l)
+    let f3 = rdec_efmt(t, t.we3_fmt, l)
+    let f2 = rdec_efmt(t, t.we2_fmt, l)
+    return false if ((f1 == KqFmt.q8) == (f3 == KqFmt.q8) && (f1 == KqFmt.q8 || (kq_sb(f1) && kq_sb(f3))) && (f2 == KqFmt.q8 || kq_sb(f2)))
+    to_log(LOG_INFO, "dasLLAMA: GPU MoE tier: the {walk} walk stopped at layer {l} - gate/up/down formats {int(f1)}/{int(f3)}/{int(f2)} cannot share the tier's activation image; layers 0..{l} stay on the CPU\n")
+    return true
 }
 
 //! Gathers and uploads `ups` as one group: a refused plane drops the planes the group placed back out (a dangling plane of a partial group hijacks the tier's residency check) and answers false
@@ -4452,16 +4456,9 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     vulkan_bake_role(VkBakeRole.expert)
     for (i in range64(want)) {
         let l = layers - 1l - i
-        let f1 = rdec_efmt(t, t.we1_fmt, l)
-        let f2 = rdec_efmt(t, t.we2_fmt, l)
-        let f3 = rdec_efmt(t, t.we3_fmt, l)
         // The Q4_K_M MoE recipe bumps ffn_down_exps to Q5_0/Q8_0, so k4/k4/q8 is the COMMON shape (glm4moe,
         // gemma). The walk stops on refusal so the resident set stays contiguous from the end.
-        break if (l < t.config.n_layer_dense_lead || t.we1_offs[l] < 0l)
-        if (!tier_expert_fmts_ok(f1, f3, f2)) {
-            to_log(LOG_INFO, "dasLLAMA: GPU MoE tier: the expert walk stopped at layer {l} - gate/up/down formats {int(f1)}/{int(f3)}/{int(f2)} cannot share the tier's activation image; layers 0..{l} stay on the CPU\n")
-            break
-        }
+        break if (l < t.config.n_layer_dense_lead || t.we1_offs[l] < 0l || tier_expert_walk_stops(t, l, "expert"))
         var ups <- resident_expert_ups(t, l)
         let ok = gather_upload_group(t, ups, mr, kgroup, wbias, wq, ws)
         delete ups
@@ -4475,16 +4472,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     var sfrom = from_l
     for (i in range64(has_experts ? max(nstream, 0l) : 0l)) {
         let l = from_l - 1l - i
-        if (l < t.config.n_layer_dense_lead || t.we1_offs[l] < 0l) {
-            break
-        }
-        let f1 = rdec_efmt(t, t.we1_fmt, l)
-        let f2 = rdec_efmt(t, t.we2_fmt, l)
-        let f3 = rdec_efmt(t, t.we3_fmt, l)
-        if (!tier_expert_fmts_ok(f1, f3, f2)) {
-            to_log(LOG_INFO, "dasLLAMA: GPU MoE tier: the streamed walk stopped at layer {l} - gate/up/down formats {int(f1)}/{int(f3)}/{int(f2)} cannot share the tier's activation image; layers 0..{l} stay on the CPU\n")
-            break
-        }
+        break if (l < t.config.n_layer_dense_lead || t.we1_offs[l] < 0l || tier_expert_walk_stops(t, l, "streamed"))
         var ups <- resident_expert_ups(t, l)
         let ok = gather_upload_group(t, ups, mr, kgroup, wbias, wq, ws, [stream = true])
         delete ups
