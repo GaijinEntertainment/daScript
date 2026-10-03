@@ -913,10 +913,6 @@ def private pf_setup {
         g_rd.pf_kv_shadow_set = set_kv_q8_shadow_cls(fixed_array(g_rd.k_mirror, g_rd.v_mirror, g_rd.ksh_dev, g_rd.vsh_dev),
             fixed_array(mirbytes, mirbytes, shbytes, shbytes), fixed_array(VHZ_MIR, VHZ_MIR, VHZ_SK, VHZ_SK))
     }
-    let kstore = kvq ? g_rd.pf_kst : g_rd.k_mirror
-    let vstore = kvq ? g_rd.pf_vst : g_rd.v_mirror
-    let storebytes = kvq ? stagebytes : mirbytes
-    let storebit = kvq ? VHZ_VST : VHZ_MIR
     let kread = kvq ? g_rd.ksh_dev : g_rd.k_mirror
     let vread = kvq ? g_rd.vsh_dev : g_rd.v_mirror
     let readbytes = kvq ? shbytes : mirbytes
@@ -945,11 +941,7 @@ def private pf_setup {
         // (GEMM roles 1/2/3/7/10/11/13 build lazily per router variant at record time)
         if (!L.recurrent) {
             // 4 rope+store (class: q, kv, Kmir, Vmir, cos, bias)
-            let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, kstore, vstore, g_rd.pf_cos, g_rd.has_bias ? g_rd.bias_dev : g_rd.norms_dev)
-            let rsizes = fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, storebytes, storebytes, np * g_rd.cos_elems * 4l, g_rd.has_bias ? g_rd.bias_bytes : g_rd.norms_bytes)
-            let rgbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, storebit, storebit, VHZ_COS, 0u)
-            g_rd.pf_sets[b + 4] = (kv16 ? set_rope_kv_b_f16_cls(rbufs, rsizes, rgbits)
-                : set_rope_kv_b_cls(rbufs, rsizes, rgbits))
+            g_rd.pf_sets[b + 4] = pf_rope_kv_set(g_rd.pf_cos)
         // 5 attn (class: q, Kmir, Vmir, out) — the cm2 fa tile / h128 coopmat twin when they serve this layer's head size
         let fa128l = fa128s && L.hs == 128l
         if ((L.pf_fa || L.pf_fakhr) && g_rd.has_sinks) {
@@ -1022,9 +1014,7 @@ def private pf_setup {
                 fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, VHZ_XQ)))
         // 15 qk rmsnorm (qk_norm models; class: q, k rows, norm rows)
         if (g_rd.qk_norm && !L.recurrent) {
-            g_rd.pf_sets[b + 15] = set_qk_rms_cls(fixed_array(g_rd.pf_q, g_rd.pf_kv, g_rd.norms_dev),
-                fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, normbytes),
-                fixed_array(VHZ_Q, VHZ_KVK, 0u))
+            g_rd.pf_sets[b + 15] = pf_qk_rms_set()
         }
         // 16 ple_x: the stream rows as they are -> pf_xf (the f16 feed) or pf_xq/pf_xs; 18 ple_act: gelu(gate rows) x the side rows -> hq/hs (17 / 19 are GEMM roles: sets on the encode)
         if (L.ple) {
@@ -1083,42 +1073,20 @@ def private pf_head_setup : bool {
     g_rd.head_pf_wemb = make_device_buf(np * dim * 4l)
     g_rd.head_pf_hsrc = make_device_buf(np * dim * 4l)
     g_rd.head_pf_hcos = make_device_buf(np * g_rd.cos_elems * 4l)
-    g_rd.head_pf_cat = make_device_buf(catb)
-    if (e6) {
-        g_rd.head_pf_catf = make_device_buf(np * 2l * dim * 2l)
-    } else {
-        g_rd.head_pf_catq = make_device_buf(np * 2l * dim)
-        g_rd.head_pf_cats = make_device_buf(np * (2l * dim / Q8_BLOCK_ELEMS) * 4l)
-    }
+    g_rd.pf_sets[hb + 8] = pf_head_cat_set(1l)
     let normbytes = g_rd.norms_bytes
     let xb = np * dim * 4l
     g_rd.pf_sets[hb + 6] = set_cls_ar(fixed_array(g_rd.head_pf_wemb, g_rd.head_pf_wemb, g_rd.norms_dev, g_rd.pf_xb2),
         fixed_array(xb, xb, normbytes, xb), fixed_array(VHZ_UP, VHZ_UP, 0u, VHZ_XB2))
     g_rd.pf_sets[hb + 7] = set_cls_ar(fixed_array(g_rd.head_pf_hsrc, g_rd.head_pf_hsrc, g_rd.norms_dev, g_rd.pf_ffnout),
         fixed_array(xb, xb, normbytes, xb), fixed_array(VHZ_GATE, VHZ_GATE, 0u, VHZ_FFO))
-    g_rd.pf_sets[hb + 8] = (e6
-        ? set_f16cvt_cls(fixed_array(g_rd.head_pf_cat, g_rd.head_pf_catf), fixed_array(catb, np * 2l * dim * 2l), fixed_array(VHZ_ATT, VHZ_AQ))
-        : set_rq_cls(fixed_array(g_rd.head_pf_cat, g_rd.head_pf_catq, g_rd.head_pf_cats), fixed_array(catb, np * 2l * dim, np * (2l * dim / Q8_BLOCK_ELEMS) * 4l),
-            fixed_array(VHZ_ATT, VHZ_AQ, VHZ_AQ)))
     g_rd.pf_sets[hb + 0] = (q6
         ? set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf), fixed_array(xb, np * dim * 2l), fixed_array(VHZ_XB, VHZ_XQ))
         : set_rq_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xq, g_rd.pf_xs), fixed_array(xb, np * dim, np * (dim / 32l) * 4l),
             fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ)))
-    let qrow = g_rd.q_gated ? 2l * g_rd.qd : g_rd.qd
-    let kvd = g_rd.kv_dim
-    let mirbytes = rd_mir_bytes()
-    let kvq = rd_kv_block_codec()
-    let kstore = kvq ? g_rd.pf_kst : g_rd.k_mirror
-    let vstore = kvq ? g_rd.pf_vst : g_rd.v_mirror
-    let storebytes = kvq ? np * kvd * 4l : mirbytes
-    let storebit = kvq ? VHZ_VST : VHZ_MIR
-    let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, kstore, vstore, g_rd.head_pf_hcos, g_rd.has_bias ? g_rd.bias_dev : g_rd.norms_dev)
-    let rsizes = fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, storebytes, storebytes, np * g_rd.cos_elems * 4l, g_rd.has_bias ? g_rd.bias_bytes : normbytes)
-    let rgbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, storebit, storebit, VHZ_COS, 0u)
-    g_rd.pf_sets[hb + 4] = (rd_kv16() ? set_rope_kv_b_f16_cls(rbufs, rsizes, rgbits) : set_rope_kv_b_cls(rbufs, rsizes, rgbits))
+    g_rd.pf_sets[hb + 4] = pf_rope_kv_set(g_rd.head_pf_hcos)
     if (g_rd.qk_norm) {
-        g_rd.pf_sets[hb + 15] = set_qk_rms_cls(fixed_array(g_rd.pf_q, g_rd.pf_kv, g_rd.norms_dev),
-            fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, normbytes), fixed_array(VHZ_Q, VHZ_KVK, 0u))
+        g_rd.pf_sets[hb + 15] = pf_qk_rms_set()
     }
     g_rd.pf_head_ready = true
     return true
@@ -1131,20 +1099,9 @@ def private pf_hc_head_setup : bool {
     let hc = g_rd.hc_n
     let hcd = hc * dim
     let hb = pf_head_block()
-    let e6 = pf_f16_feed(g_rd.head_eh_fmt)
     let catb = np * hc * 2l * dim * 4l
     if (!vk_range_ok(catb)) return pf_head_decline("the hc head rows' cat plane ({catb} bytes: {hc} streams a row over the {np}-row window) passes the device's storage range {vk_max_storage_range()}")
-    g_rd.head_pf_cat = make_device_buf(catb)
-    if (e6) {
-        g_rd.head_pf_catf = make_device_buf(np * hc * 2l * dim * 2l)
-    } else {
-        g_rd.head_pf_catq = make_device_buf(np * hc * 2l * dim)
-        g_rd.head_pf_cats = make_device_buf(np * hc * (2l * dim / Q8_BLOCK_ELEMS) * 4l)
-    }
-    g_rd.pf_sets[hb + 8] = (e6
-        ? set_f16cvt_cls(fixed_array(g_rd.head_pf_cat, g_rd.head_pf_catf), fixed_array(catb, np * hc * 2l * dim * 2l), fixed_array(VHZ_ATT, VHZ_AQ))
-        : set_rq_cls(fixed_array(g_rd.head_pf_cat, g_rd.head_pf_catq, g_rd.head_pf_cats), fixed_array(catb, np * hc * 2l * dim, np * hc * (2l * dim / Q8_BLOCK_ELEMS) * 4l),
-            fixed_array(VHZ_ATT, VHZ_AQ, VHZ_AQ)))
+    g_rd.pf_sets[hb + 8] = pf_head_cat_set(hc)
     g_rd.head_pf_hsrc_w = make_device_buf(np * hcd * 4l)
     g_rd.head_pf_wsm = make_device_buf(np * hcd * 4l)
     g_rd.head_pf_s_hnorm = set_hc_norm_cls(fixed_array(g_rd.head_pf_hsrc_w, g_rd.pf_hcxn, g_rd.hcn_dev),
@@ -1181,14 +1138,7 @@ def private pf_hc_head_warm(raw : VkCommandBuffer; var h : VkHaz; w0, wlen, pos0
             cmd_copy_rows(raw, g_rd.pf_xb2, src_row0 * rowb, rowb, g_rd.head_pf_cat, c * nh * 2l * rowb, 2l * rowb, rowb, nh)
             cmd_copy_rows(raw, g_rd.pf_hcxn, (src_row0 * hc + c) * rowb, wrowb, g_rd.head_pf_cat, c * nh * 2l * rowb + rowb, 2l * rowb, rowb, nh)
         }
-        let e6 = pf_f16_feed(g_rd.head_eh_fmt)
-        let ncat = nh * hc
-        pf_feed_enc(raw, h, g_rd.pf_sets[hb + 8], e6, kq_sb(g_rd.head_eh_fmt), 0l, ncat * 2l * dim)
-        let pe = arena_planes(g_rd.head_eh_fmt, g_rd.head_eh_blk)
-        let cf = pf_feed_planes(e6, g_rd.head_pf_catf, g_rd.head_pf_catq, g_rd.head_pf_cats, hc * 2l * dim)
-        pf_gemm_enc(raw, h, hb + 0, g_rd.head_eh_fmt, pe.wq, pe.ws, cf.q, cf.s, g_rd.head_pf_wsm,
-            pe.wqb, pe.wsb, cf.qn, cf.sn, np * hcd * 4l, VHZ_AQ, VHZ_X,
-            2l * dim, dim, g_rd.head_eh_blk, ncat, e6, 0l, 0l, false)
+        pf_head_eh_enc(raw, h, nh, hc, g_rd.head_pf_wsm, np * hcd * 4l)
     }
     //! the next window's prev_row row lands in slot 0 only after the norm above read the previous one there
     vhz_dep(raw, h, VHZ_X | VHZ_GATE, VHZ_GATE, true)
@@ -1199,18 +1149,18 @@ def private pf_hc_head_warm(raw : VkCommandBuffer; var h : VkHaz; w0, wlen, pos0
         cmd_copy_rows(raw, g_rd.head_pf_wsm, c * nh * rowb, rowb, g_rd.pf_hcres, c * rowb, wrowb, rowb, nh)
     }
     pf_hc_mix(raw, h, 2l * g_rd.n_layers, nh, false)
-    let q6 = pf_head_qkv6()
-    pf_feed_enc(raw, h, g_rd.pf_sets[hb + 0], q6, kq_sb(L.fq), 0l, nh * dim)
-    pf_head_kv_store(raw, h, L, nh, pos0 + w0 - prev_row, q6)
-    g_rd.pf_head_rows += nh
+    pf_head_kv_store(raw, h, L, nh, pos0 + w0 - prev_row)
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs")]
-def private pf_head_kv_store(raw : VkCommandBuffer; var h : VkHaz; L : RLayer; nh, pos0 : int64; q6 : bool) {
+def private pf_head_kv_store(raw : VkCommandBuffer; var h : VkHaz; L : RLayer; nh, pos0 : int64) {
     let dim = g_rd.dim
     let np = g_rd.pf_np
     let hb = pf_head_block()
     let kvd = L.kvd
+    let q6 = pf_head_qkv6()
+    pf_feed_enc(raw, h, g_rd.pf_sets[hb + 0], q6, kq_sb(L.fq), 0l, nh * dim)
+    g_rd.pf_head_rows += nh
     let xf = pf_feed_planes(q6, g_rd.pf_xf, g_rd.pf_xq, g_rd.pf_xs, dim)
     let pk = arena_planes(L.fk, L.bk)
     let tkv = cm2_tiles(kvd, nh)
@@ -1279,19 +1229,61 @@ def private pf_head_warm(raw : VkCommandBuffer; var h : VkHaz; w0, wlen, pos0 : 
     vhz_dep(raw, h, VHZ_XB2 | VHZ_FFO, VHZ_ATT, true)
     cmd_copy_rows(raw, g_rd.pf_xb2, src_row0 * rowb, rowb, g_rd.head_pf_cat, 0l, 2l * rowb, rowb, nh)
     cmd_copy_rows(raw, g_rd.pf_ffnout, src_row0 * rowb, rowb, g_rd.head_pf_cat, rowb, 2l * rowb, rowb, nh)
-    let e6 = pf_f16_feed(g_rd.head_eh_fmt)
-    pf_feed_enc(raw, h, g_rd.pf_sets[hb + 8], e6, kq_sb(g_rd.head_eh_fmt), 0l, nh * 2l * dim)
-    let pe = arena_planes(g_rd.head_eh_fmt, g_rd.head_eh_blk)
-    let cf = pf_feed_planes(e6, g_rd.head_pf_catf, g_rd.head_pf_catq, g_rd.head_pf_cats, 2l * dim)
-    pf_gemm_enc(raw, h, hb + 0, g_rd.head_eh_fmt, pe.wq, pe.ws, cf.q, cf.s, g_rd.pf_x,
-        pe.wqb, pe.wsb, cf.qn, cf.sn, np * dim * 4l, VHZ_AQ, VHZ_X,
-        2l * dim, dim, g_rd.head_eh_blk, nh, e6, 0l, 0l, false)
+    pf_head_eh_enc(raw, h, nh, 1l, g_rd.pf_x, np * dim * 4l)
     var pca = ArArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_ATT * dim), eps = g_rd.eps, ascale = 1.0)
     enc_cls_ar(raw, h, g_rd.pf_sets[pf_prologue_block()], pca, nh)
-    let q6 = pf_head_qkv6()
-    pf_feed_enc(raw, h, g_rd.pf_sets[hb + 0], q6, kq_sb(L.fq), 0l, nh * dim)
-    pf_head_kv_store(raw, h, L, nh, pos0 + w0 - carry, q6)
-    g_rd.pf_head_rows += nh
+    pf_head_kv_store(raw, h, L, nh, pos0 + w0 - carry)
+}
+
+def private pf_head_eh_enc(raw : VkCommandBuffer; var h : VkHaz; nh, streams : int64; y : uint64; ybytes : int64) {
+    let dim = g_rd.dim
+    let hb = pf_head_block()
+    let ncat = nh * streams
+    let e6 = pf_f16_feed(g_rd.head_eh_fmt)
+    pf_feed_enc(raw, h, g_rd.pf_sets[hb + 8], e6, kq_sb(g_rd.head_eh_fmt), 0l, ncat * 2l * dim)
+    let pe = arena_planes(g_rd.head_eh_fmt, g_rd.head_eh_blk)
+    let cf = pf_feed_planes(e6, g_rd.head_pf_catf, g_rd.head_pf_catq, g_rd.head_pf_cats, streams * 2l * dim)
+    pf_gemm_enc(raw, h, hb + 0, g_rd.head_eh_fmt, pe.wq, pe.ws, cf.q, cf.s, y,
+        pe.wqb, pe.wsb, cf.qn, cf.sn, ybytes, VHZ_AQ, VHZ_X,
+        2l * dim, dim, g_rd.head_eh_blk, ncat, e6, 0l, 0l, false)
+}
+
+def private pf_head_cat_set(streams : int64) : VkDescriptorSet {
+    let width = streams * 2l * g_rd.dim
+    let e6 = pf_f16_feed(g_rd.head_eh_fmt)
+    let np = g_rd.pf_np
+    g_rd.head_pf_cat = make_device_buf(np * width * 4l)
+    if (e6) {
+        g_rd.head_pf_catf = make_device_buf(np * width * 2l)
+    } else {
+        g_rd.head_pf_catq = make_device_buf(np * width)
+        g_rd.head_pf_cats = make_device_buf(np * (width / Q8_BLOCK_ELEMS) * 4l)
+    }
+    let catb = np * width * 4l
+    return (e6
+        ? set_f16cvt_cls(fixed_array(g_rd.head_pf_cat, g_rd.head_pf_catf), fixed_array(catb, np * width * 2l), fixed_array(VHZ_ATT, VHZ_AQ))
+        : set_rq_cls(fixed_array(g_rd.head_pf_cat, g_rd.head_pf_catq, g_rd.head_pf_cats), fixed_array(catb, np * width, np * (width / Q8_BLOCK_ELEMS) * 4l),
+            fixed_array(VHZ_ATT, VHZ_AQ, VHZ_AQ)))
+}
+
+def private pf_rope_kv_set(cos : uint64) : VkDescriptorSet {
+    let np = g_rd.pf_np
+    let kvd = g_rd.kv_dim
+    let qrow = g_rd.q_gated ? 2l * g_rd.qd : g_rd.qd
+    let kvq = rd_kv_block_codec()
+    let storebytes = kvq ? np * kvd * 4l : rd_mir_bytes()
+    let storebit = kvq ? VHZ_VST : VHZ_MIR
+    let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, kvq ? g_rd.pf_kst : g_rd.k_mirror, kvq ? g_rd.pf_vst : g_rd.v_mirror, cos, g_rd.has_bias ? g_rd.bias_dev : g_rd.norms_dev)
+    let rsizes = fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, storebytes, storebytes, np * g_rd.cos_elems * 4l, g_rd.has_bias ? g_rd.bias_bytes : g_rd.norms_bytes)
+    let rgbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, storebit, storebit, VHZ_COS, 0u)
+    return rd_kv16() ? set_rope_kv_b_f16_cls(rbufs, rsizes, rgbits) : set_rope_kv_b_cls(rbufs, rsizes, rgbits)
+}
+
+def private pf_qk_rms_set : VkDescriptorSet {
+    let np = g_rd.pf_np
+    let qrow = g_rd.q_gated ? 2l * g_rd.qd : g_rd.qd
+    return set_qk_rms_cls(fixed_array(g_rd.pf_q, g_rd.pf_kv, g_rd.norms_dev),
+        fixed_array(np * qrow * 4l, np * 2l * g_rd.kv_dim * 4l, g_rd.norms_bytes), fixed_array(VHZ_Q, VHZ_KVK, 0u))
 }
 
 //! the ask stands until the next ask
