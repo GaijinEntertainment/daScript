@@ -216,6 +216,19 @@ def private vk_bake_collect(fmt : int; woff, n, rows : int64; wq, ws : array<uin
 def private vk_mint_gather(fmt : int; woff, n, rows, slice_rows, mr, kgroup, wbias : int64; var wq : array<uint8>; var ws : array<uint8>) : bool
     => g_vk_mint_on && invoke(g_vk_mint_gather, fmt, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
 
+//! the slice's answer where the walk leaves the baked plan: a gather the tier refuses anyway takes the refusal (empty planes,
+//! true); any other gather turns the slice off and regathers live (false), the warning saying `why`
+def private vk_bake_slice_off(n, rows : int64; fmt : int; var wq : array<uint8>; var ws : array<uint8>; why : string) : bool {
+    if (!moe_gpu_would_accept(n, rows, fmt, g_vk_bake_role == VkBakeRole.expert_stream)) {
+        wq |> resize(0)
+        ws |> resize(0)
+        return true
+    }
+    to_log(LOG_WARNING, "dasLLAMA vulkan image: {why} - regathering live from here\n")
+    g_vk_bake = VkBakeMode.off
+    return false
+}
+
 def private vk_bake_slice(t : Model; fmt : int; woff, n, rows : int64;
                           var wq : array<uint8>; var ws : array<uint8>) : bool {
     if (g_vk_bake != VkBakeMode.slice) {
@@ -223,25 +236,12 @@ def private vk_bake_slice(t : Model; fmt : int; woff, n, rows : int64;
     }
     // the bake records only ACCEPTED gathers — serve a would-refuse mismatch EMPTY (the refusal is pure arithmetic), hold the cursor: the walk re-refuses, rolls back, and re-syncs with the plan
     if (g_vk_bake_cursor >= long_length(t.vkplan)) {
-        if (!moe_gpu_would_accept(n, rows, fmt, g_vk_bake_role == VkBakeRole.expert_stream)) {
-            wq |> resize(0)
-            ws |> resize(0)
-            return true
-        }
-        to_log(LOG_WARNING, "dasLLAMA vulkan image: the GPU walk overran the baked plan at gather {g_vk_bake_cursor} - regathering live from here\n")
-        g_vk_bake = VkBakeMode.off
-        return false
+        return vk_bake_slice_off(n, rows, fmt, wq, ws, "the GPU walk overran the baked plan at gather {g_vk_bake_cursor}")
     }
     let e = t.vkplan[int(g_vk_bake_cursor)]
     if (e.fmt != fmt || e.woff != woff || e.n != n || e.rows != rows || e.role != int(g_vk_bake_role)) {
-        if (!moe_gpu_would_accept(n, rows, fmt, g_vk_bake_role == VkBakeRole.expert_stream)) {
-            wq |> resize(0)
-            ws |> resize(0)
-            return true
-        }
-        to_log(LOG_WARNING, "dasLLAMA vulkan image: baked gather {g_vk_bake_cursor} is (fmt {e.fmt} role {e.role} woff {e.woff} {e.n}x{e.rows}), the walk wants (fmt {fmt} role {int(g_vk_bake_role)} woff {woff} {n}x{rows}) - regathering live from here\n")
-        g_vk_bake = VkBakeMode.off
-        return false
+        return vk_bake_slice_off(n, rows, fmt, wq, ws,
+            "baked gather {g_vk_bake_cursor} is (fmt {e.fmt} role {e.role} woff {e.woff} {e.n}x{e.rows}), the walk wants (fmt {fmt} role {int(g_vk_bake_role)} woff {woff} {n}x{rows})")
     }
     g_vk_bake_cursor++
     if (e.wq_off + e.wq_bytes > long_length(t.vkblob) || e.ws_off + e.ws_bytes > long_length(t.vkblob)) {
@@ -2991,7 +2991,7 @@ def private resident_hot_arm(t : Model; plan : ResidentPlan) {
     let slot_bytes = resident_hot_slot_bytes_host_layers(t, plan.host_layers)
     let slots = plan.hot_slots
     let asked = resident_hot_ask()
-    let ask =(asked == HOT_SLOTS_AUTO ? "" : " (DASLLAMA_GPU_HEAT={asked})") + (rdec_ctx_asked_whole() ? " under the context asked whole (set_gpu_ctx_strict, DASLLAMA_GPU_CTX_STRICT), which the pool yields to" : "")
+    let ask = (asked == HOT_SLOTS_AUTO ? "" : " (DASLLAMA_GPU_HEAT={asked})") + (rdec_ctx_asked_whole() ? " under the context asked whole (set_gpu_ctx_strict, DASLLAMA_GPU_CTX_STRICT), which the pool yields to" : "")
     if (slots == 0l) {
         let room = plan.usable_bytes - plan.weight_bytes - plan.kv_bytes - plan.scratch_bytes
         let why = c.n_expert_used > int64(RDEC_HOT_PICKS) ? "{c.n_expert_used} picks a step pass the {RDEC_HOT_PICKS} routed slots" : (asked == HOT_SLOTS_NONE ? "none asked" : "{room >> 20l} MB left past the plan, {slot_bytes >> 20l} MB a slot across the routed layers")
