@@ -31,6 +31,7 @@ namespace das {
     DAS_MOD_API void TextUnformatted ( const char * txt );
     DAS_MOD_API void BulletText ( const char * txt );
     DAS_MOD_API void SetTooltip ( const char * txt );
+    DAS_MOD_API void InputTextReload(const char * label);
     DAS_MOD_API bool InputTextMultiline(vec4f vdiit, const char* label, const ImVec2& size, ImGuiInputTextFlags_ flags, LineInfoArg * at, Context * context );
     DAS_MOD_API bool InputText(vec4f vdiit, const char * label, ImGuiInputTextFlags_ flags, LineInfoArg * at, Context * context );
     DAS_MOD_API bool InputTextWithHint(vec4f vdiit, const char * label, const char * hint, ImGuiInputTextFlags_ flags, LineInfoArg * at, Context * context );
