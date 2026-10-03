@@ -350,6 +350,26 @@ class template ArBase : ResidualT {
     def override stashed(k : uint) : float => row[k]
     def override pre_partner(base, k : uint) : float => row[k]
 
+    //! the step over the workgroup's row, `row0` past it - the f16 stamps' rows start at row 0
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        static_if (OUT_F16) {
+            step_row(gl_WorkGroupID.x)
+        } else {
+            step_row(gl_WorkGroupID.x + pa.row0)
+        }
+    }
+
+    //! row `r` stepped, its normed row stored in the stamp's out form or quantized into its Q8_0 blocks
+    def step_row(r : uint) {
+        let base = r * pa.dim
+        static_if (OUT_Q8) {
+            quant32(r * (pa.dim / 32u), rms_inv(accum_row(base)))
+        } else {
+            store_out(base, rms_inv(accum_row(base)))
+        }
+    }
+
     [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma")]
     def store_out(base : uint; inv : float) {
         let last = pa.dim - 1u
@@ -387,15 +407,9 @@ class template ArBase : ResidualT {
     }
 }
 
-[vk_dispatch(name = "cls_ar", grid = "nrows", params = "nrows : int64")]
+[vk_dispatch(name = "cls_ar", kernel = "run", grid = "nrows", params = "nrows : int64")]
 class ClsArAddRms : ArBase {
     override OUT_F32 = true
-
-    [spirv_kernel(local_size_x = 256, name = "cls_ar_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
-    def run {
-        let base = (gl_WorkGroupID.x + pa.row0) * pa.dim
-        store_out(base, rms_inv(accum_row(base)))
-    }
 }
 
 // ar_add_rms + Q8_0 requant in ONE dispatch: the normed row quantizes out of the row stash, so
@@ -415,7 +429,7 @@ class template ArRqBase : ArBase {
 [vk_dispatch(name = "cls_ar_rq_b", grid = "nrows", params = "nrows : int64")]
 class ClsArAddRmsRqB : ArRqBase {
     [spirv_kernel(local_size_x = 256, name = "cls_ar_rq_b_spv")]
-    def run {
+    def override run {
         rq_row(gl_WorkGroupID.x * pa.dim, gl_WorkGroupID.x * (pa.dim / 32u))
     }
 }
@@ -439,7 +453,7 @@ class template ArRqT : ArRqBase {
     }
 
     [spirv_kernel(local_size_x = 256)]
-    def run {
+    def override run {
         let ss = accum_row(0u)
         let inv = row_inv(ss)
         static_if (STOREX) {
@@ -491,6 +505,7 @@ class template ArCombBase : ArBase {
     //! the same row off registers: `rb` the slot's row base, `bb` its bias row base
     def drow_at(rb, bb, k : uint) : float => down_rows[rb + k] + dbias[bb + k]
 
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
     def override accum_row(base : uint) : float {
         let p = base / pa.dim
         var g = 1.0
@@ -567,38 +582,20 @@ class template ArCombBase : ArBase {
     }
 }
 
-[vk_dispatch(name = "cls_ar_comb", grid = "nrows", params = "nrows : int64")]
+[vk_dispatch(name = "cls_ar_comb", kernel = "run", grid = "nrows", params = "nrows : int64")]
 class ClsArComb : ArCombBase {
     override OUT_F32 = true
-
-    [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
-    def run {
-        let base = (gl_WorkGroupID.x + pa.row0) * pa.dim
-        store_out(base, rms_inv(accum_row(base)))
-    }
 }
 
 //! the plain combine's quantizing twin (`ClsArCombG4Rq`'s form): the normed row into Q8_0 blocks at the combine's free bindings, so no requant dispatch follows
-[vk_dispatch(name = "cls_ar_comb_rq", grid = "nrows", params = "nrows : int64")]
+[vk_dispatch(name = "cls_ar_comb_rq", kernel = "run", grid = "nrows", params = "nrows : int64")]
 class ClsArCombRq : ArCombBase {
     override OUT_Q8 = true
-
-    [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_rq_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
-    def run {
-        let base = (gl_WorkGroupID.x + pa.row0) * pa.dim
-        quant32((gl_WorkGroupID.x + pa.row0) * (pa.dim / 32u), rms_inv(accum_row(base)))
-    }
 }
 
-[vk_dispatch(name = "cls_ar_comb_f16_b", grid = "nrows", params = "nrows : int64")]
+[vk_dispatch(name = "cls_ar_comb_f16_b", kernel = "run", grid = "nrows", params = "nrows : int64")]
 class ClsArCombF16B : ArCombBase {
     override OUT_F16 = true
-
-    [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_f16_b_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
-    def run {
-        let rbase = gl_WorkGroupID.x * pa.dim
-        store_out(rbase, rms_inv(accum_row(rbase)))
-    }
 }
 
 //! the gemma-4 MoE combine: x = (x + post3(post2(sum_j w_j d_j) + post1(dense))) * ascale, the dense row always on and ungated
@@ -633,6 +630,7 @@ class template ArCombG4Base : ArBase {
         return f
     }
 
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
     def override accum_row(base : uint) : float {
         let pk = (base / pa.dim) * pa.slots
         var sr = 0.0
@@ -674,54 +672,24 @@ class template ArCombG4Base : ArBase {
     }
 }
 
-[vk_dispatch(name = "cls_ar_comb_g4", grid = "nrows", params = "nrows : int64")]
+[vk_dispatch(name = "cls_ar_comb_g4", kernel = "run", grid = "nrows", params = "nrows : int64")]
 class ClsArCombG4 : ArCombG4Base {
     override OUT_F32 = true
-
-    [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_g4_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
-    def run {
-        let base = (gl_WorkGroupID.x + pa.row0) * pa.dim
-        let ss = accum_row(base)
-        let inv = rms_inv(ss)
-        var k = gl_LocalInvocationID.x
-        while (k < pa.dim) {
-            yo[base + k] = normed_at(k, 0.0, inv)
-            k += 256u
-        }
-    }
 }
 
-[vk_dispatch(name = "cls_ar_comb_g4_f16_b", grid = "nrows", params = "nrows : int64")]
+[vk_dispatch(name = "cls_ar_comb_g4_f16_b", kernel = "run", grid = "nrows", params = "nrows : int64")]
 class ClsArCombG4F16B : ArCombG4Base {
     override OUT_F16 = true
-
-    [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_g4_f16_b_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
-    def run {
-        let rbase = gl_WorkGroupID.x * pa.dim
-        store_out(rbase, rms_inv(accum_row(rbase)))
-    }
 }
 
-[vk_dispatch(name = "cls_ar_comb_g4_rq", grid = "nrows", params = "nrows : int64")]
+[vk_dispatch(name = "cls_ar_comb_g4_rq", kernel = "run", grid = "nrows", params = "nrows : int64")]
 class ClsArCombG4Rq : ArCombG4Base {
     override OUT_Q8 = true
-
-    [spirv_kernel(local_size_x = 256, name = "cls_ar_comb_g4_rq_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
-    def run {
-        let base = (gl_WorkGroupID.x + pa.row0) * pa.dim
-        quant32((gl_WorkGroupID.x + pa.row0) * (pa.dim / 32u), rms_inv(accum_row(base)))
-    }
 }
 
-[vk_dispatch(name = "cls_ar_f16_b", grid = "nrows", params = "nrows : int64")]
+[vk_dispatch(name = "cls_ar_f16_b", kernel = "run", grid = "nrows", params = "nrows : int64")]
 class ClsArAddRmsF16B : ArBase {
     override OUT_F16 = true
-
-    [spirv_kernel(local_size_x = 256, name = "cls_ar_f16_b_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
-    def run {
-        let rbase = gl_WorkGroupID.x * pa.dim
-        store_out(rbase, rms_inv(accum_row(rbase)))
-    }
 }
 
 struct RqArgs {
