@@ -12188,15 +12188,15 @@ class template KvShadowT {
             let dst = pos * pa.kvd + blk * KQ_B32_ELEMS_U
             var klo = kmir[wq]
             var vlo = vmir[wq]
-            static_if (TQ4) {
-                for [unroll] (wi in range(4)) {
-                    let khi = kmir[wq + uint(wi) + 1u]
-                    let vhi = vmir[wq + uint(wi) + 1u]
-                    let kw = kv_skew_word(klo, khi, bb + 2u)
-                    let vw = kv_skew_word(vlo, vhi, bb + 2u)
-                    klo = khi
-                    vlo = vhi
-                    for [unroll] (bk in range(4)) {
+            for [unroll] (wi in range(TQ4 ? 4 : 8)) {
+                let khi = kmir[wq + uint(wi) + 1u]
+                let vhi = vmir[wq + uint(wi) + 1u]
+                let kw = kv_skew_word(klo, khi, bb + 2u)
+                let vw = kv_skew_word(vlo, vhi, bb + 2u)
+                klo = khi
+                vlo = vhi
+                for [unroll] (bk in range(4)) {
+                    static_if (TQ4) {
                         let kby = (kw >> uint(bk * 8)) & 255u
                         let vby = (vw >> uint(bk * 8)) & 255u
                         let at = dst + uint(wi * 8 + bk * 2)
@@ -12204,17 +12204,7 @@ class template KvShadowT {
                         ksh[at + 1u] = shadow_half(kv_tq4_quant_hi(kby), kd)
                         vsh[at] = shadow_half(kv_tq4_quant_lo(vby), vd)
                         vsh[at + 1u] = shadow_half(kv_tq4_quant_hi(vby), vd)
-                    }
-                }
-            } else {
-                for [unroll] (wi in range(8)) {
-                    let khi = kmir[wq + uint(wi) + 1u]
-                    let vhi = vmir[wq + uint(wi) + 1u]
-                    let kw = kv_skew_word(klo, khi, bb + 2u)
-                    let vw = kv_skew_word(vlo, vhi, bb + 2u)
-                    klo = khi
-                    vlo = vhi
-                    for [unroll] (bk in range(4)) {
+                    } else {
                         let at = dst + uint(wi * 4 + bk)
                         ksh[at] = shadow_half(kv_q8_quant(kw, bk), kd)
                         vsh[at] = shadow_half(kv_q8_quant(vw, bk), vd)
