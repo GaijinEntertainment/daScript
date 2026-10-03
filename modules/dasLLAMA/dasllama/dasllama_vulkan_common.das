@@ -3812,6 +3812,14 @@ def upload_fill(dev : uint64; off, bytes : int64; word : uint) {
     }
 }
 
+//! `tab[key]`, built by `build` on its first ask: the drivers' int-keyed set caches
+def cached(@scratch var tab : table<int; auto(TT)>; key : int; build : block<() : TT>) : TT {
+    if (!key_exists(tab, key)) {
+        tab[key] = invoke(build)
+    }
+    return tab[key]
+}
+
 //! a device buffer of `bytes` whose words `fill` writes into the staging buffer, staged up once
 def make_staged_buf(bytes : int64; fill : block<(var words : uint?) : void>) : uint64 {
     let dev = make_device_buf(bytes)

@@ -155,49 +155,46 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
         let yon = split ? g_rd.pf_splitk_bytes : yn
         let yog = split ? VHZ_SK : ybit
         let key = idx * 16 + (cm2_tc == 256l ? (split ? 9 : 8) : (cm2_tc == 128l ? (split ? 11 : 10) : (split ? 14 : 13)))
-        if (!key_exists(g_rd.pf_cls_gemm, key)) {
+        var gset = cached(g_rd.pf_cls_gemm, key) $ {
             verify(cm2_cls_ensure(fmt, cm2_tc), "vk prefill: the cm2 tile class rail must engage")
-            g_rd.pf_cls_gemm[key] = cm2_cls_set(fmt, cm2_tc,
+            return cm2_cls_set(fmt, cm2_tc,
                 fixed_array(wq, ws, g_rd.pf_meta[idx].buf, ab, yob),
                 fixed_array(wqn, wsn, BATCH_META_BYTES, an, yon),
                 fixed_array(0u, 0u, 0u, abit, yog))
         }
-        cm2_cls_enc(fmt, cm2_tc, raw, h, g_rd.pf_cls_gemm[key], pc, groups)
+        cm2_cls_enc(fmt, cm2_tc, raw, h, gset, pc, groups)
         if (split) {
-            let rkey = idx * 16 + 12
-            if (!key_exists(g_rd.pf_cls_gemm, rkey)) {
+            var rset = cached(g_rd.pf_cls_gemm, idx * 16 + 12) $ {
                 verify(ensure_splitk_reduce_cls(), "vk prefill: the split-k reduce class rail must engage")
-                g_rd.pf_cls_gemm[rkey] = set_splitk_reduce_cls(
+                return set_splitk_reduce_cls(
                     fixed_array(g_rd.pf_splitk, yb),
                     fixed_array(g_rd.pf_splitk_bytes, yn),
                     fixed_array(VHZ_SK, ybit))
             }
             var pcr = SkRedArgs(nelem = uint(rows * d), k = uint(nsplit))
-            enc_splitk_reduce_cls(raw, h, g_rd.pf_cls_gemm[rkey], pcr, (rows * d + 1_023l) / 1_024l)
+            enc_splitk_reduce_cls(raw, h, rset, pcr, (rows * d + 1_023l) / 1_024l)
         }
     } elif (kq_sb(fmt)) {
         // the role's format is static, so the slot never collides with the q8 router's variants
         let q40cm = fmt == int(KqFmt.q40) && g_gpu.coopmat_mode == COOPMAT_F16
-        let key = idx * 16 + 6
-        if (!key_exists(g_rd.pf_cls_gemm, key)) {
+        var kset = cached(g_rd.pf_cls_gemm, idx * 16 + 6) $ {
             verify(kq_batch_cls_ensure(fmt, q40cm), "vk prefill: the kq batch class rail must engage")
-            g_rd.pf_cls_gemm[key] = kq_batch_cls_set_for(fmt, q40cm,
+            return kq_batch_cls_set_for(fmt, q40cm,
                 fixed_array(wq, ws, g_rd.pf_meta[idx].buf, ab, sb, yb),
                 fixed_array(wqn, wsn, BATCH_META_BYTES, an, sn, yn),
                 fixed_array(0u, 0u, 0u, abit, abit, ybit))
         }
-        kq_batch_cls_enc_for(fmt, q40cm, raw, h, g_rd.pf_cls_gemm[key], pc, groups)
+        kq_batch_cls_enc_for(fmt, q40cm, raw, h, kset, pc, groups)
     } else {
         let v = q8_batch_cls_variant(q8_batch_tile_for(d, rows), q8_batch_aligned(d, rows))
-        let key = idx * 16 + v
-        if (!key_exists(g_rd.pf_cls_gemm, key)) {
+        var qset = cached(g_rd.pf_cls_gemm, idx * 16 + v) $ {
             verify(q8_batch_cls_ensure(v), "vk prefill: the q8 batch class rail must engage")
-            g_rd.pf_cls_gemm[key] = q8_batch_cls_set(v,
+            return q8_batch_cls_set(v,
                 fixed_array(wq, ws, g_rd.pf_meta[idx].buf, ab, sb, yb),
                 fixed_array(wqn, wsn, BATCH_META_BYTES, an, sn, yn),
                 fixed_array(0u, 0u, 0u, abit, abit, ybit))
         }
-        q8_batch_cls_enc(v, raw, h, g_rd.pf_cls_gemm[key], pc, groups)
+        q8_batch_cls_enc(v, raw, h, qset, pc, groups)
     }
     if (ts) {   // the head warm's GEMMs stamp nothing: the profile's role table counts the layers' stamps and the tail's
         pfq_ts(raw)
@@ -2257,16 +2254,14 @@ def private ensure_af_state(f2 : int) {
 // down chain — losing it would let the down GEMV race the act+requant write).
 def private af_role_set(var sets : table<int; VkDescriptorSet>; fmt : int; blk : int64;
                         mbuf, xqbuf, xsbuf, ybuf : uint64; xqbytes, xsbytes : int64; xbit, ybit : uint) : VkDescriptorSet {
-    let sl = arena_slab_idx(blk)
-    if (!key_exists(sets, sl)) {
+    return cached(sets, arena_slab_idx(blk)) $ {
         verify(gemv_cls_ensure(fmt), "vulkan arena: the gemv class rail must engage on a live device")
         let p = arena_planes(fmt, blk)
-        sets[sl] = gemv_cls_set(fmt,
+        return gemv_cls_set(fmt,
             fixed_array(p.wq, p.ws, mbuf, xqbuf, xsbuf, ybuf),
             fixed_array(p.wqb, p.wsb, META_BYTES, xqbytes, xsbytes, Y_BYTES),
             fixed_array(0u, 0u, 0u, xbit, xbit, ybit))
     }
-    return sets[sl]
 }
 
 //! Arena seam: one dense FFN layer against arena-resident planes — gate GEMV, up GEMV, fused
@@ -2342,10 +2337,10 @@ def vk_arena_gemm(var y : array<float>; blk : int64; n, d, npos : int64; fmt : i
     let skey = arena_slab_idx(blk) * 8 + v
     unsafe {
         var a & = g_gpu.arenas[fmt]
-        if (!key_exists(a.cls_batch_sets, skey)) {   // dies with the arena on model drop
+        var bset = cached(a.cls_batch_sets, skey) $ {   // dies with the arena on model drop
             verify(q8_batch_cls_ensure(v), "vulkan arena: the batch class rail must engage on a live device")
             let p = arena_planes(fmt, blk)
-            a.cls_batch_sets[skey] = q8_batch_cls_set(v,
+            return q8_batch_cls_set(v,
                 fixed_array(p.wq, p.ws, a.batch_meta.buf, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, g_gpu.batch_y1_dev),
                 fixed_array(p.wqb, p.wsb, BATCH_META_BYTES, BATCH_XQ_BYTES, BATCH_XS_BYTES, BATCH_Y_BYTES),
                 fixed_array(0u, 0u, 0u, 0u, 0u, VHG_YO))
@@ -2355,7 +2350,7 @@ def vk_arena_gemm(var y : array<float>; blk : int64; n, d, npos : int64; fmt : i
         upload_region_at(g_gpu.batch_xs_dev, 0l, addr<uint8 const?>(xs[0]), npos * (n / 32l) * 4l)
         cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
             var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-            q8_batch_cls_enc(v, raw, h, a.cls_batch_sets[skey], pc, int64(groups))
+            q8_batch_cls_enc(v, raw, h, bset, pc, int64(groups))
             vhz_dep(raw, h, VHG_YO, 0u, true)
             cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, npos * d * 4l)
         }
