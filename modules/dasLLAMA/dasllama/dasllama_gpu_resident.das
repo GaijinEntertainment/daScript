@@ -3698,6 +3698,20 @@ def private rdec_batch_ple_row(t : Model; ws : BatchWorkspace; i : int64) {
     rdec_ple_side_rows(t, g_rdec_one_tok, 1l, ws, i * t.config.n_layers * t.config.n_embd_per_layer)
 }
 
+//! batch row `i`'s session takes region `r` at `pos` (the host's rows up where it does not own them; rows another session
+//! superseded before their hydration panic, naming the `form` of decode) and owns its recurrent slot
+def private rdec_row_bind(t : Model; var s : Session; r, pos, i : int64; form : string) {
+    if (!rdec_owns(s, r) || g_rdec_regions[r].cnt != pos) {
+        if (!rdec_owns(s, r) && s.rdec_gen != 0l && !s.rdec_host_current) {
+            panic("dasLLAMA resident {form} decode: row {i}'s mirror rows were superseded before hydration (region {r}, gen {s.rdec_gen}, pos {pos}) - engine bug (the steal path must hydrate first)")
+        }
+        rdec_take_mirror(t, s, r, pos)
+    }
+    if (t.config.recr_mask != 0ul) {
+        rdec_dn_row_own(s, t.config, pos)
+    }
+}
+
 //! the step's rows through the N-row token command, one weight pass for all; false when the rows' regions do not serve
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
@@ -3726,15 +3740,7 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
                 return false
             }
         }
-        if (!rdec_owns(s, r) || g_rdec_regions[r].cnt != pos) {
-            if (!rdec_owns(s, r) && s.rdec_gen != 0l && !s.rdec_host_current) {
-                panic("dasLLAMA resident batch decode: row {i}'s mirror rows were superseded before hydration (region {r}, gen {s.rdec_gen}, pos {pos}) - engine bug (the steal path must hydrate first)")
-            }
-            rdec_take_mirror(t, s, r, pos)
-        }
-        if (c.recr_mask != 0ul) {
-            rdec_dn_row_own(s, c, pos)
-        }
+        rdec_row_bind(t, s, r, pos, i, "batch")
         copy_floats(ws.scr.x_b, i * dim, g_rdec_x_n, i * dim, dim)
         rdec_rope_rows(t, ws.rope_positions[i], g_rdec_cos_n, i * g_rdec_cos_elems)
         g_rdec_poss[i] = pos
@@ -3803,15 +3809,7 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
             rdec_unland_picks(sessions, i)
             return false   //! the CPU rails redo the whole step: rows already stepped here rewrite the same position, and their regions resync from the host
         }
-        if (!rdec_owns(s, r) || g_rdec_regions[r].cnt != pos) {
-            if (!rdec_owns(s, r) && s.rdec_gen != 0l && !s.rdec_host_current) {
-                panic("dasLLAMA resident row-at-a-time decode: row {i}'s mirror rows were superseded before hydration (region {r}, gen {s.rdec_gen}, pos {pos}) - engine bug (the steal path must hydrate first)")
-            }
-            rdec_take_mirror(t, s, r, pos)
-        }
-        if (c.recr_mask != 0ul) {
-            rdec_dn_row_own(s, c, pos)
-        }
+        rdec_row_bind(t, s, r, pos, i, "row-at-a-time")
         // this row's embedded residual is already in ws.scr.x_b; its rope row for pos
         copy_floats(ws.scr.x_b, i * dim, g_rdec_x, 0l, dim)
         rdec_rope_rows(t, ws.rope_positions[i], g_rdec_cossin, 0l)
