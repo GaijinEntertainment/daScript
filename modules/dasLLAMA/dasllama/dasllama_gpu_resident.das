@@ -86,6 +86,8 @@ def vulkan_bake_begin {
     g_vk_bake = VkBakeMode.collect
     g_vk_bake_role = VkBakeRole.none
     g_vk_mint_on = false
+    g_vk_mint_sink = @@vk_bake_blob_sink
+    g_vk_mint_sink_off = 0l
     g_vk_bake_blob |> clear()
     g_vk_bake_plan |> clear()
 }
@@ -108,7 +110,7 @@ def vulkan_bake_take(var t : Model) : bool {
 //! the mint's gather: `fmt`, the entry's element window and its gather geometry, answered from a source other than the
 //! model's planes (the gguf mapping, one job at a time); false = the source has no such entry, the model's planes serve
 typedef VkMintGatherFn = function<(fmt : int; woff, n, rows, slice_rows, mr, kgroup, wbias : int64; var wq : array<uint8>; var ws : array<uint8>) : bool>
-//! the mint's sink: where a collected entry's bytes go instead of the RAM blob (the image writer)
+//! the bake's sink: where a collected entry's bytes go - the RAM blob, or the image writer under the streaming mint
 typedef VkMintSinkFn = function<(p : void?; nbytes : uint64) : void>
 
 var private g_vk_mint_on = false
@@ -175,11 +177,10 @@ def vulkan_bake_disarm {
     g_vk_mint_on = false
 }
 
-def private vk_bake_append(a : array<uint8>) : int64 {
-    // long_ forms — the blob crosses the int32 array rail
-    let off = round_up(long_length(g_vk_bake_blob), VK_ENTRY_ALIGN)
-    let abytes = long_length(a)
-    let need = off + abytes
+//! the RAM blob as the bake's sink: `nbytes` from `p` appended (long_ forms - the blob crosses the int32 array rail)
+def private vk_bake_blob_sink(p : void?; nbytes : uint64) {
+    let at = long_length(g_vk_bake_blob)
+    let need = at + int64(nbytes)
     // growth capped at 2GB steps past 4GB — doubling a multi-GB blob wastes up to half its size
     if (long_capacity(g_vk_bake_blob) < need) {
         let cap = long_capacity(g_vk_bake_blob)
@@ -187,12 +188,9 @@ def private vk_bake_append(a : array<uint8>) : int64 {
         g_vk_bake_blob |> reserve(max(need, grown))
     }
     g_vk_bake_blob |> resize(need)
-    if (abytes > 0l) {
-        unsafe {
-            memcpy(addr<void?>(g_vk_bake_blob[off]), addr<void?>(a[0]), abytes)
-        }
+    unsafe {
+        memcpy(addr<void?>(g_vk_bake_blob[at]), p, int64(nbytes))
     }
-    return off
 }
 
 // Called AFTER the tier accepted the upload/placement (a refused gather must not enter the
@@ -203,13 +201,8 @@ def private vk_bake_collect(fmt : int; woff, n, rows : int64; wq, ws : array<uin
     }
     var e = VkPlanEntry(fmt = fmt, role = int(g_vk_bake_role), woff = woff, n = n, rows = rows,
                         wq_bytes = long_length(wq), ws_bytes = long_length(ws))
-    if (g_vk_mint_on) {
-        e.wq_off = vk_mint_sink_append(wq)
-        e.ws_off = vk_mint_sink_append(ws)
-    } else {
-        e.wq_off = vk_bake_append(wq)
-        e.ws_off = vk_bake_append(ws)
-    }
+    e.wq_off = vk_mint_sink_append(wq)
+    e.ws_off = vk_mint_sink_append(ws)
     g_vk_bake_plan |> push(e)
 }
 
