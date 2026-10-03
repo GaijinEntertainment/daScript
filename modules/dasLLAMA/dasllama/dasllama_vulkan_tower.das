@@ -655,17 +655,9 @@ def private vt_rel_release(var r : VtResident) {
 
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_rel_proj_set(var r : VtResident; t : VtTile) : VkDescriptorSet {
-    return vt_cached(r.sets_rel_proj, vt_tile_key(t)) $() : VkDescriptorSet {
+    return cached(r.sets_rel_proj, vt_tile_key(t)) $() : VkDescriptorSet {
         return vt_rel_proj_build(r, t)
     }
-}
-
-//! the set (or set bundle) cached under `key`, built through `build` on the first ask
-def private vt_cached(@scratch var tab : table<int; auto(TT)>; key : int; build : block<() : TT>) : TT {
-    if (!key_exists(tab, key)) {
-        tab[key] = invoke(build)
-    }
-    return tab[key]
 }
 
 [cold_path]
@@ -1106,7 +1098,7 @@ def private vt_tail_bufs(var r : VtResident; tail_dim : int64) : bool {
 
 //! the tail's GEMM set over its tile: the out-proj into the pt rows, the mm-proj into the po rows, built once per tile key
 def private vt_tail_gemm_set(var r : VtResident; v : VtTile; mmproj : bool) : VkDescriptorSet {
-    return vt_cached(r.sets_front, (mmproj ? VT_G4A_MMPROJ_KEY : VT_G4A_OUTPROJ_KEY) + vt_tile_key(v)) $() : VkDescriptorSet {
+    return cached(r.sets_front, (mmproj ? VT_G4A_MMPROJ_KEY : VT_G4A_OUTPROJ_KEY) + vt_tile_key(v)) $() : VkDescriptorSet {
         return vt_tile_set(r, v, mmproj ? r.tail_proj_dev : r.tail_out_dev, r.tail_cap * r.tail_dim * 4l, mmproj ? VT_TAIL_PROJ : VT_TAIL_OUT)
     }
 }
@@ -1778,7 +1770,7 @@ def private vt_tile_words(t : VtTile) : string => t.tc > 0l ? "token column {t.t
 
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_sets_d(var r : VtResident; t : VtTile) : VtBatchSetsD {
-    return vt_cached(r.sets_d, vt_tile_key(t)) $() : VtBatchSetsD {
+    return cached(r.sets_d, vt_tile_key(t)) $() : VtBatchSetsD {
         let bx = r.cap_rows * r.d * 4l
         to_log(LOG_INFO, "dasLLAMA vulkan tower: d-wide sets at {r.cap_rows} rows - {vt_tile_words(t)} (d {r.d})\n")
         return VtBatchSetsD(s_q = vt_tile_set(r, t, r.q_dev, bx, VT_Q), s_k = vt_tile_set(r, t, r.k_dev, bx, VT_K),
@@ -1788,7 +1780,7 @@ def private vt_sets_d(var r : VtResident; t : VtTile) : VtBatchSetsD {
 
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_sets_ff(var r : VtResident; t : VtTile) : VtBatchSetsFf {
-    return vt_cached(r.sets_ff, vt_tile_key(t)) $() : VtBatchSetsFf {
+    return cached(r.sets_ff, vt_tile_key(t)) $() : VtBatchSetsFf {
         return vt_sets_ff_build(r, t)
     }
 }
@@ -1802,7 +1794,7 @@ def private vt_sets_ff_build(r : VtResident; t : VtTile) : VtBatchSetsFf {
 
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_set_qkv(var r : VtResident; t : VtTile) : VkDescriptorSet {
-    return vt_cached(r.sets_qkv, vt_tile_key(t)) $() : VkDescriptorSet {
+    return cached(r.sets_qkv, vt_tile_key(t)) $() : VkDescriptorSet {
         to_log(LOG_INFO, "dasLLAMA vulkan tower: fused qkv set at {r.cap_rows} rows - {vt_tile_words(t)} (3d {3l * r.d})\n")
         return vt_tile_set(r, t, r.qkv_dev, 3l * r.cap_rows * r.d * 4l, VT_QKV)
     }
@@ -1988,8 +1980,8 @@ def private vt_sk_ensure(var r : VtResident; tc, nsplit : int64) : bool {
     if (!vk_range_ok(need) || (r.sk_bytes < need && !vt_sk_build(r, nsplit, need))) {
         return false
     }
-    if (!key_exists(r.sets_sk, int(tc))) {
-        r.sets_sk[int(tc)] = vt_cm2_set(r, tc, r.sk_dev, r.sk_bytes, VT_SPLITK_PLANES)
+    cached(r.sets_sk, int(tc)) $() : VkDescriptorSet {
+        return vt_cm2_set(r, tc, r.sk_dev, r.sk_bytes, VT_SPLITK_PLANES)
     }
     return true
 }
@@ -2455,12 +2447,11 @@ def private vulkan_audio_conv_front(t : AudioTower; var s : EncoderState; mel : 
         }
     }
     let skey = VTA_CONV2_KEY + int(tc_d)
-    if (!key_exists(r.sets_front, skey)) {
+    var s_conv2 = cached(r.sets_front, skey) $() : VkDescriptorSet {
         let bxh = (r.cap_rows + TILE_READ_SLACK) * max(r.d, r.ff) * 2l
-        r.sets_front[skey] = cm2_cls_set(int(KqFmt.q8), tc_d, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.xh_dev, r.x_dev),
+        return cm2_cls_set(int(KqFmt.q8), tc_d, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.xh_dev, r.x_dev),
             fixed_array(r.wq_bytes, r.ws_bytes, r.meta_bytes, bxh, r.cap_rows * d * 4l), fixed_array(0u, 0u, 0u, VT_XQ, VT_X))
     }
-    var s_conv2 = r.sets_front[skey]
     var mp = unsafe(reinterpret<uint?>(r.meta.mapped))
     var cur = 4l
     let map_off = vt_sched_map(mp, cur, 0l, t.conv2_w_off / kq_elems(KqFmt.q8), vt_tile_rows(VtTile(v = 0, tc = tc_d), tt), g_d)
@@ -3214,12 +3205,11 @@ def private vulkan_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; 
             return vt_decline(r, VulkanTowerDecline.memory)
         }
     }
-    if (!key_exists(r.sets_rel_proj, int(tc))) {
+    var s_cout = cached(r.sets_rel_proj, int(tc)) $() : VkDescriptorSet {
         let bfeat = (r.cap_rows + TILE_READ_SLACK) * featw * 2l
-        r.sets_rel_proj[int(tc)] = cm2_cls_set(int(KqFmt.q8), tc, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.ffeat_dev, r.fx_dev),
+        return cm2_cls_set(int(KqFmt.q8), tc, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.ffeat_dev, r.fx_dev),
             fixed_array(r.wq_bytes, r.ws_bytes, r.meta_bytes, bfeat, r.cap_rows * d * 4l), fixed_array(0u, 0u, 0u, VTF_FEAT, VTF_X))
     }
-    var s_cout = r.sets_rel_proj[int(tc)]
     let g_cout = cm2_tiles_at(d, npos, tc)
     var mp = unsafe(reinterpret<uint?>(r.meta.mapped))
     var cur = 4l
@@ -3422,12 +3412,11 @@ def private vulkan_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len
             return -1l
         }
     }
-    if (!key_exists(r.sets_front, int(tc))) {
+    var s_in = cached(r.sets_front, int(tc)) $() : VkDescriptorSet {
         let cap2 = (r.front_cap - 1l) / 4l + 1l
-        r.sets_front[int(tc)] = cm2_cls_set(int(KqFmt.q8), tc, fixed_array(r.wq_dev, r.ws_dev, r.fmeta.buf, r.ffeat_dev, r.fx_dev),
+        return cm2_cls_set(int(KqFmt.q8), tc, fixed_array(r.wq_dev, r.ws_dev, r.fmeta.buf, r.ffeat_dev, r.fx_dev),
             fixed_array(r.wq_bytes, r.ws_bytes, r.fmeta_bytes, (cap2 + TILE_READ_SLACK) * feat * 2l, cap2 * d * 4l), fixed_array(0u, 0u, 0u, VTF_FEAT, VTF_X))
     }
-    var s_in = r.sets_front[int(tc)]
     let g_in = cm2_tiles_at(d, npos, tc)
     var mp = unsafe(reinterpret<uint?>(r.fmeta.mapped))
     var cur = 4l
@@ -3585,7 +3574,7 @@ def private vt_cn_front_scratch(var r : VtResident; t : CanaryEncoder; cap : int
 
 //! the front's cm2 GEMM set of one stage (the pointwise convs into y3 and y6, the input projection into x) at a token column
 def private vt_cn_front_set(var r : VtResident; stage : int; tc : int64; y_dev : uint64; y_bytes : int64; y_bit : uint) : VkDescriptorSet {
-    return vt_cached(r.sets_front, stage * VT_CN_FRONT_KEY + int(tc)) $() : VkDescriptorSet {
+    return cached(r.sets_front, stage * VT_CN_FRONT_KEY + int(tc)) $() : VkDescriptorSet {
         return cm2_cls_set(int(KqFmt.q8), tc, fixed_array(r.wq_dev, r.ws_dev, r.fmeta.buf, r.fcn_feed16_dev, y_dev),
             fixed_array(r.wq_bytes, r.ws_bytes, r.fmeta_bytes, r.fh_bytes, y_bytes), fixed_array(0u, 0u, 0u, VTF_H, y_bit))
     }
