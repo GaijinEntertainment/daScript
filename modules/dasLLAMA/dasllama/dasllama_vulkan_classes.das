@@ -1473,49 +1473,17 @@ let NO_DSCALE = 0xFFFFFFFFu   //! the top-k forms' "no per-expert down scale" se
 //! the select over one logit row, shared by the decode's single-row and the window's per-row
 //! classes: thread tid holds logit lg, live = tid < ne, the picks land in pick / pickw for the
 //! deriving class to write
-class TopKCore {
-    @workgroup part : float[64]
+[ |> template_struct_instance]
+class template TopKCore : WgReduceBase {
     @workgroup parti : uint[64]
     @workgroup pick : uint[64]
     @workgroup pickw : float[64]
-    @workgroup wg_max : float[1]
-    @workgroup wg_sum : float[1]
 
     def select_row(lg : float; live : bool; ne, k : uint) {
         let tid = gl_LocalInvocationID.x
-        let m0 = subgroupMax(lg)
-        if (gl_SubgroupInvocationID == 0u) {
-            part[gl_SubgroupID] = m0
-        }
-        barrier()
-        if (tid == 0u) {
-            var m = part[0u]
-            var sgi = 1u
-            while (sgi < gl_NumSubgroups) {
-                m = max(m, part[sgi])
-                sgi++
-            }
-            wg_max[0u] = m
-        }
-        barrier()
-        let wmax = wg_max[0u]
+        let wmax = wg_max(lg, 0u)
         let e = live ? exp(max(lg - wmax, -80.0)) : 0.0
-        let s0 = subgroupAdd(e)
-        if (gl_SubgroupInvocationID == 0u) {
-            part[gl_SubgroupID] = s0
-        }
-        barrier()
-        if (tid == 0u) {
-            var tot = 0.0
-            var sgi = 0u
-            while (sgi < gl_NumSubgroups) {
-                tot += part[sgi]
-                sgi++
-            }
-            wg_sum[0u] = tot
-        }
-        barrier()
-        let wsum = wg_sum[0u]
+        let wsum = wg_sum(e, 1u)
         var p = live ? e / wsum : -3.0e38
         var j = 0u
         while (j < k) {
@@ -1571,7 +1539,8 @@ class TopKCore {
 }
 
 //! the decode top-k's records: row `p`'s picks land in slots `p * k + j`
-class TopKRecords : TopKCore {
+[ |> template_struct_instance]
+class template TopKRecords : TopKCore {
     @ssbo @binding = 0 logits : array<float>  //! [npos x lstride]
     @ssbo @binding = 1 meta1 : array<uint>   //! the gate stack's (wblock, xblock) per slot row
     @ssbo @binding = 2 meta3 : array<uint>
