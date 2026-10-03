@@ -765,16 +765,16 @@ def private resident_head_plan_planes(t : Model; var planes : array<tuple<n : in
 //! the model's f32 rows), no arena block
 def private resident_dn_ba_f32_bytes(t : Model) : int64 {
     let c = t.config
-    if (!t.dn_ba_f32) {
-        return 0l
-    }
+    return t.dn_ba_f32 ? resident_recurrent_layers(c) * 2l * c.ssm_dt_rank * c.dim * 2l : 0l
+}
+
+//! the trunk's recurrent (deltanet) layers
+def private resident_recurrent_layers(c : Config) : int64 {
     var n = 0l
     for (l in range64(c.n_layers)) {
-        if (layer_is_recurrent(c, l)) {
-            n++
-        }
+        n += layer_is_recurrent(c, l) ? 1l : 0l
     }
-    return n * 2l * c.ssm_dt_rank * c.dim * 2l
+    return n
 }
 
 //! the router planes: every MoE layer's f32 rows, the shared expert's gate row beside them when it is gated, and the f16 mirror the cm2 route's window GEMM reads (counted whatever the route, the plan's other terms run high too)
@@ -808,13 +808,7 @@ def private rdec_rollback_bytes(t : Model) : int64 {
     let rows = rdec_verify_rows_want(t) - 1l
     return 0l if (c.recr_mask == 0ul || rows <= 0l || !rdec_rollback_installed())
     let dng = rdec_dn_geom(t)
-    var nrec = 0l
-    for (l in range64(c.n_layers)) {
-        if (layer_is_recurrent(c, l)) {
-            nrec++
-        }
-    }
-    return rows * nrec * (dng.nvh * dng.ds * dng.ds + 2l * dng.cd * (dng.dconv - 1l)) * 4l
+    return rows * resident_recurrent_layers(c) * (dng.nvh * dng.ds * dng.ds + 2l * dng.cd * (dng.dconv - 1l)) * 4l
 }
 
 //! The auto arm's headroom where no OS answers: the WDDM share on Windows (the demotion collapse
@@ -1723,21 +1717,11 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     let c = t.config
     let feats = resident_unserved_features(c)
     if (!empty(feats)) return rdec_decline("no arm for: {feats}")
-    var n_attn = 0l
-    var l_attn0 = -1l
-    for (l in range64(c.n_layers)) {
-        if (!layer_is_recurrent(c, l)) {
-            n_attn++
-            if (l_attn0 < 0l) {
-                l_attn0 = l
-            }
-        }
-    }
-    if (n_attn == 0l) return rdec_decline("no attention layer (the whole-model driver serves attention or hybrid stacks)")
+    let n_recurrent = resident_recurrent_layers(c)
+    if (n_recurrent == c.n_layers) return rdec_decline("no attention layer (the whole-model driver serves attention or hybrid stacks)")
     let host_layers = plan.host_layers
     let host_experts = host_layers > 0l
     if (c.hyper_conn && g_rdec_regions_want > 1l) return rdec_decline("hyper-connection residual (qwen4exp) - the split token command serves one mirror region")
-    let n_recurrent = c.n_layers - n_attn
     let dim = c.dim
     let neox = c.rope_neox
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
@@ -1790,7 +1774,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     let kg = lay.kgroup
     let wb = lay.wbias
     let rot = resident_rot(c)
-    if (!rdec_prepare(c.n_layers, n_attn, dim, qd, kvd, hs, c.n_heads, resident_hidden(t), c.vocab_size, seq_cap, neox,
+    if (!rdec_prepare(c.n_layers, c.n_layers - n_recurrent, dim, qd, kvd, hs, c.n_heads, resident_hidden(t), c.vocab_size, seq_cap, neox,
                       c.norm_eps, c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs)), c.qk_norm,
                       int(rkdt), c.q_gated, rot, dng, mir_units, cos_elems, g_rdec_regions_want, rdec_carry_planned(c), head, head ? rdec_verify_rows_want(t) : 0l)) {
         return rdec_decline("the device prepare declined (a kernel class or the mirror range - the tier's line above)")
