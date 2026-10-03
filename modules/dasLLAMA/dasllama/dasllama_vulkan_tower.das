@@ -836,6 +836,26 @@ def vt_gather_regions(qblob : PlaneI8; qscales : PlaneF; regions : array<VtRegio
     }
 }
 
+//! one GEMM record of a chain's schedule: its weight block, its rows and its workgroup groups
+struct VtSchedRec {
+    wblk0 : int64
+    rows : int64
+    groups : int64
+}
+
+//! a chain's batch schedule written into `meta`: `nrec` records at its head and their maps after them, record `rid`'s
+//! weight block, rows and groups answered by `rec` in record order; `maps` takes each record's map offset
+def vt_sched_walk(@scratch var maps : array<uint>; meta : HostBuf; nrec : int64; rec : block<(rid : int64) : VtSchedRec>) {
+    maps |> reserve(nrec)
+    maps |> resize(nrec)
+    var mp = unsafe(reinterpret<uint?>(meta.mapped))
+    var cur = nrec * 4l
+    for (rid in range64(nrec)) {
+        let rr = invoke(rec, rid)
+        maps[rid] = batch_sched_map(mp, cur, rid, rr.wblk0, rr.rows, rr.groups)
+    }
+}
+
 //! the q8 planes' regions gathered into the device layout and uploaded, `wq_bytes` of quants to `wq_dev` and `ws_bytes` of
 //! halfword scales to `ws_dev`
 [cold_path]
@@ -1197,24 +1217,19 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
     var s_rel = sets.s_rel
     var s_outproj = vt_tail_gemm_set(r, vp, false)
     var s_mmproj = vt_tail_gemm_set(r, vp, true)
-    g_vt_maps |> reserve(nrec)
-    g_vt_maps |> resize(nrec)
-    unsafe {
-        var mp = reinterpret<uint?>(r.meta.mapped)
-        var cur = nrec * 4l
-        var recs : VtRegion[int(VT_G4A_GEMMS)]
-        let rec_tiles = fixed_array(vff, v, v, v, v, v, v_rel, v2d, v, vff, v)
-        for (l in range64(t.n_layer)) {
-            vt_g4a_regions(t.layers[l], d, ff, recs)
-            for (g in range64(VT_G4A_GEMMS)) {
-                let rid = l * VT_G4A_GEMMS + g
-                let rows = g == VT_G4A_REL ? rel_cap_rows : vt_tile_rows(rec_tiles[g], npos)   // the rel record keeps its raw rows: its planes are sized to them, and a forced l column would read past them
-                let groups = g == VT_G4A_REL ? g_rel : (g == VT_G4A_PW1 ? g_2d : ((g == VT_G4A_FF_UP || g == VT_G4A_FF_UP_1) ? g_ff : g_d))
-                g_vt_maps[rid] = batch_sched_map(mp, cur, rid, recs[g].woff / q8e, rows, groups)
-            }
+    var recs : VtRegion[int(VT_G4A_GEMMS)]
+    let rec_tiles = fixed_array(vff, v, v, v, v, v, v_rel, v2d, v, vff, v)
+    vt_sched_walk(g_vt_maps, r.meta, nrec) $(rid : int64) : VtSchedRec {
+        if (rid >= nrec - 2l) {
+            return VtSchedRec(wblk0 = (rid == nrec - 2l ? t.outproj_w : t.mmproj_w) / q8e, rows = vt_tile_rows(vp, npos), groups = g_p)
         }
-        g_vt_maps[nrec - 2l] = batch_sched_map(mp, cur, nrec - 2l, t.outproj_w / q8e, vt_tile_rows(vp, npos), g_p)
-        g_vt_maps[nrec - 1l] = batch_sched_map(mp, cur, nrec - 1l, t.mmproj_w / q8e, vt_tile_rows(vp, npos), g_p)
+        let g = rid % VT_G4A_GEMMS
+        if (g == 0l) {
+            vt_g4a_regions(t.layers[rid / VT_G4A_GEMMS], d, ff, recs)
+        }
+        let rows = g == VT_G4A_REL ? rel_cap_rows : vt_tile_rows(rec_tiles[g], npos)   // the rel record keeps its raw rows: its planes are sized to them, and a forced l column would read past them
+        let groups = g == VT_G4A_REL ? g_rel : (g == VT_G4A_PW1 ? g_2d : ((g == VT_G4A_FF_UP || g == VT_G4A_FF_UP_1) ? g_ff : g_d))
+        return VtSchedRec(wblk0 = recs[g].woff / q8e, rows = rows, groups = groups)
     }
     let bx = npos * d * 4l
     let bo = npos * tail_dim * 4l
@@ -1528,22 +1543,15 @@ def private vulkan_canary_blocks(t : CanaryEncoder; var s : CanaryState; npos, w
     var sets = vt_conformer_sets(r, v, vff, v2d, v_rel)
     var s_h2 = sets.s_h2
     var s_rel = sets.s_rel
-    g_vt_maps |> reserve(nrec)
-    g_vt_maps |> resize(nrec)
-    unsafe {
-        var mp = reinterpret<uint?>(r.meta.mapped)
-        var cur = nrec * 4l
-        var recs : VtRegion[int(VT_CN_GEMMS)]
-        let rec_tiles = fixed_array(vff, v, v, v, v, v_rel, v, v2d, v, vff, v)
-        for (l in range64(t.n_layer)) {
-            vt_cn_regions(t.layers[l], d, ff, recs)
-            for (g in range64(VT_CN_GEMMS)) {
-                let rid = l * VT_CN_GEMMS + g
-                let rows = vt_tile_rows(rec_tiles[g], g == VT_CN_POS ? ww : npos)
-                let groups = g == VT_CN_POS ? g_rel : (g == VT_CN_PW1 ? g_2d : ((g == VT_CN_FF1A || g == VT_CN_FF2A) ? g_ff : g_d))
-                g_vt_maps[rid] = batch_sched_map(mp, cur, rid, recs[g].woff / q8e, rows, groups)
-            }
+    var recs : VtRegion[int(VT_CN_GEMMS)]
+    let rec_tiles = fixed_array(vff, v, v, v, v, v_rel, v, v2d, v, vff, v)
+    vt_sched_walk(g_vt_maps, r.meta, nrec) $(rid : int64) : VtSchedRec {
+        let g = rid % VT_CN_GEMMS
+        if (g == 0l) {
+            vt_cn_regions(t.layers[rid / VT_CN_GEMMS], d, ff, recs)
         }
+        let groups = g == VT_CN_POS ? g_rel : (g == VT_CN_PW1 ? g_2d : ((g == VT_CN_FF1A || g == VT_CN_FF2A) ? g_ff : g_d))
+        return VtSchedRec(wblk0 = recs[g].woff / q8e, rows = vt_tile_rows(rec_tiles[g], g == VT_CN_POS ? ww : npos), groups = groups)
     }
     let bx = npos * d * 4l
     upload_region_at(r.x_dev, 0l, unsafe(addr<uint8 const?>(s.x[0])), bx)
@@ -2025,20 +2033,14 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
     let tile_d = VtTile(v = v, tc = tc_d)
     let tile_ff = VtTile(v = vff, tc = tc_ff)
     let tile_fc2 = VtTile(v = v, tc = cm2 ? sk.tc : 0l)
-    g_vt_maps |> reserve(nrec)
-    g_vt_maps |> resize(nrec)
-    unsafe {
-        var mp = reinterpret<uint?>(r.meta.mapped)
-        var cur = nrec * 4l
-        var recs : VtRegion[int(VT_LN_GEMMS)]
-        for (l in range64(nl)) {
-            vt_ln_regions(offs[l], d, ff, recs)
-            for (g in range64(VT_LN_GEMMS)) {
-                let rid = l * VT_LN_GEMMS + g
-                let tile = g == VT_LN_FC1 ? tile_ff : (g == VT_LN_FC2 ? tile_fc2 : tile_d)
-                g_vt_maps[rid] = batch_sched_map(mp, cur, rid, recs[g].woff / q8e, vt_tile_rows(tile, npos), g == VT_LN_FC1 ? g_ff : (g == VT_LN_FC2 ? g_fc2 : g_d))
-            }
+    var recs : VtRegion[int(VT_LN_GEMMS)]
+    vt_sched_walk(g_vt_maps, r.meta, nrec) $(rid : int64) : VtSchedRec {
+        let g = rid % VT_LN_GEMMS
+        if (g == 0l) {
+            vt_ln_regions(offs[rid / VT_LN_GEMMS], d, ff, recs)
         }
+        let tile = g == VT_LN_FC1 ? tile_ff : (g == VT_LN_FC2 ? tile_fc2 : tile_d)
+        return VtSchedRec(wblk0 = recs[g].woff / q8e, rows = vt_tile_rows(tile, npos), groups = g == VT_LN_FC1 ? g_ff : (g == VT_LN_FC2 ? g_fc2 : g_d))
     }
     let bx = npos * d * 4l
     if (r.x_ready) {
@@ -2579,18 +2581,14 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
         vt_sets_q3v(r)
     }
     vt_bind_tile_sets(r, VtTile(v = v, tc = 0l), VtTile(v = vff, tc = 0l), VtTile(v = vqkv, tc = 0l))
-    g_vt_maps |> reserve(nrec)
-    g_vt_maps |> resize(nrec)
-    var mp = unsafe(reinterpret<uint?>(r.meta.mapped))
-    var cur = nrec * 4l
     var recs : VtRegion[int(QWEN3V_GEMMS)]
     let rec_groups = fixed_array(g_qkv, g_d, g_ff, g_d)
-    for (l in range64(t.n_layer)) {
-        vt_q3v_regions(t, l, recs)
-        for (g in range64(QWEN3V_GEMMS)) {
-            let rid = l * QWEN3V_GEMMS + g
-            g_vt_maps[rid] = batch_sched_map(mp, cur, rid, recs[g].woff / q8e, npos, rec_groups[g])
+    vt_sched_walk(g_vt_maps, r.meta, nrec) $(rid : int64) : VtSchedRec {
+        let g = rid % QWEN3V_GEMMS
+        if (g == 0l) {
+            vt_q3v_regions(t, rid / QWEN3V_GEMMS, recs)
         }
+        return VtSchedRec(wblk0 = recs[g].woff / q8e, rows = npos, groups = rec_groups[g])
     }
     let bx = npos * d * 4l
     let half = hs / 2l
@@ -2894,18 +2892,13 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
         vt_sets_g4v(r)
     }
     vt_bind_tile_sets(r, VtTile(v = v, tc = 0l), VtTile(v = vff, tc = 0l))
-    g_vt_maps |> reserve(nrec)
-    g_vt_maps |> resize(nrec)
-    unsafe {
-        var mp = reinterpret<uint?>(r.meta.mapped)
-        var cur = nrec * 4l
-        for (l in range64(t.n_layer)) {
-            let o = gemma4v_block_offs(t, l)
-            for (g in range64(GEMMA4V_GEMMS)) {
-                let rid = l * GEMMA4V_GEMMS + g
-                g_vt_maps[rid] = batch_sched_map(mp, cur, rid, o.w[g] / q8e, npos, g == GEMMA4V_GEMM_GATE || g == GEMMA4V_GEMM_UP ? g_ff : g_d)
-            }
+    var sched_o = gemma4v_block_offs(t, 0l)
+    vt_sched_walk(g_vt_maps, r.meta, nrec) $(rid : int64) : VtSchedRec {
+        let g = rid % GEMMA4V_GEMMS
+        if (g == 0l) {
+            sched_o = gemma4v_block_offs(t, rid / GEMMA4V_GEMMS)
         }
+        return VtSchedRec(wblk0 = sched_o.w[g] / q8e, rows = npos, groups = g == GEMMA4V_GEMM_GATE || g == GEMMA4V_GEMM_UP ? g_ff : g_d)
     }
     let pairs = hs / 4l
     g_vt_rope2d_tabs |> reserve(npos * 4l * pairs)
