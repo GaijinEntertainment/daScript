@@ -354,10 +354,10 @@ class template ArBase : ResidualT {
             let k1 = min(k + 256u, last)
             let k2 = min(k + 512u, last)
             let k3 = min(k + 768u, last)
-            let n0 = normed(k, inv)
-            let n1 = normed(k1, inv)
-            let n2 = normed(k2, inv)
-            let n3 = normed(k3, inv)
+            let n0 = normed_at(k, 0.0, inv)
+            let n1 = normed_at(k1, 0.0, inv)
+            let n2 = normed_at(k2, 0.0, inv)
+            let n3 = normed_at(k3, 0.0, inv)
             static_if (OUT_F32) {
                 yo[base + k] = n0
                 if (k + 256u < pa.dim) {
@@ -385,8 +385,6 @@ class template ArBase : ResidualT {
             k += 1024u
         }
     }
-
-    def normed(k : uint; inv : float) : float => wn[pa.woff + k] * (row[k] * inv)
 }
 
 [vk_dispatch(name = "cls_ar", grid = "nrows", params = "nrows : int64")]
@@ -439,8 +437,7 @@ class template ArRqT : ArRqBase {
             var vals : float[8]
             var m = 0.0
             for [unroll] (r in range(8)) {
-                let e = base + uint(r) * 32u
-                let v = norm_weight(e) * (row[e] * inv)
+                let v = normed_at(base + uint(r) * 32u, 0.0, inv)
                 vals[r] = v
                 m = max(m, abs(v))
             }
@@ -463,7 +460,7 @@ class template ArRqT : ArRqBase {
         static_if (STOREX) {
             var k = gl_LocalInvocationID.x
             while (k < pa.dim) {
-                ystore[k] = norm_weight(k) * (row[k] * inv)
+                ystore[k] = normed_at(k, 0.0, inv)
                 k += 256u
             }
         }
@@ -711,7 +708,7 @@ class ClsArCombG4 : ArCombG4Base {
         let inv = rms_inv(ss)
         var k = gl_LocalInvocationID.x
         while (k < pa.dim) {
-            yo[base + k] = wn[pa.woff + k] * (row[k] * inv)
+            yo[base + k] = normed_at(k, 0.0, inv)
             k += 256u
         }
     }
