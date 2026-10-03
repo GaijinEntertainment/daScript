@@ -451,12 +451,7 @@ def private pf_moe_setup {
     if (g_rd.experts_host) {
         verify(ensure_router_gemm_cls() && (g_rd.hc || ensure_cls_ar_comb() && ensure_cls_ar_comb_f16_b()), "vk prefill: the router and host-combine class rails must engage on a live device")
         g_rd.pf_mlog = make_device_buf(np * g_rd.ner * 4l)
-        if (g_rd.pf_hacc_dev == 0ul) {
-            g_rd.pf_hacc_dev = make_device_buf(np * dim * 4l)
-            g_rd.pf_hx_host = make_host_buf(np * dim * 4l, false, [cached = true])
-            g_rd.pf_hlog_host = make_host_buf(np * g_rd.ner * 4l, false, [cached = true])
-            g_rd.pf_hacc_host = make_host_buf(np * dim * 4l, false, [cached = true])
-        }
+        pf_host_sum_ensure()
         g_rd.pf_ident_dev = make_ramp_buf(np, 0l)
         g_rd.pf_ones_dev = make_device_buf(np * 4l)
         upload_fill(g_rd.pf_ones_dev, 0l, np * 4l, F32_ONE_WORD)
@@ -591,6 +586,15 @@ def private pf_moe_router(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64)
         enc_router_gemm_cls(raw, h, L.pf_router_set, pcr, ((wlen + int64(ROUTER_TP) - 1l) / int64(ROUTER_TP)) * ((ner + int64(ROUTER_TE) - 1l) / int64(ROUTER_TE)))
     }
     pfq_ts(raw)
+}
+
+def private pf_host_sum_ensure {
+    return if (g_rd.pf_hacc_dev != 0ul)
+    let xbytes = g_rd.pf_np * g_rd.dim * 4l
+    g_rd.pf_hacc_dev = make_device_buf(xbytes)
+    g_rd.pf_hx_host = make_host_buf(xbytes, false, [cached = true])
+    g_rd.pf_hlog_host = make_host_buf(g_rd.pf_np * g_rd.ner * 4l, false, [cached = true])
+    g_rd.pf_hacc_host = make_host_buf(xbytes, false, [cached = true])
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
@@ -1463,12 +1467,7 @@ def private pf_hc_setup {
     g_rd.pf_hclo = make_device_buf(np * lr * 4l)
     g_rd.pf_hcup = make_device_buf(np * hcd * 4l)
     g_rd.pf_hcinj = make_device_buf(np * hc * 4l)
-    if (g_rd.pf_hacc_dev == 0ul) {
-        g_rd.pf_hacc_dev = make_device_buf(np * dim * 4l)
-        g_rd.pf_hx_host = make_host_buf(np * dim * 4l, false, [cached = true])
-        g_rd.pf_hlog_host = make_host_buf(np * ner * 4l, false, [cached = true])
-        g_rd.pf_hacc_host = make_host_buf(np * dim * 4l, false, [cached = true])
-    }
+    pf_host_sum_ensure()
     let n_sites = long_length(g_rd.hc_sites)
     g_rd.pf_hc_meta0 = length(g_rd.pf_meta)
     g_rd.pf_meta |> reserve(long_length(g_rd.pf_meta) + n_sites * 2l + 2l)
