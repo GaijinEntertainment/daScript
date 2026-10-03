@@ -85,6 +85,38 @@ def pf_ffn_slice_row0(l, n_layers, wlen : int64; f16_gate, f16_down : bool) : in
     return g_pf_ffn_slice && g_env_vulkan.vk_ffn_slice && l + 1l == n_layers && f16_gate && f16_down ? max(wlen - 32l, 0l) : 0l
 }
 
+//! the h128 coopmat twin serves a 128-head layer where the cm2 flash tiles do not
+def private pf_fa128s : bool => !(cm2_fa_on() && vk_fa_on() && rd_pf_reads_f16()) && g_gpu.has_coopmat && vk_fa_on()
+
+//! a window's rows from `w0`: the last window keeps at least the conv taps, so only window 0 can be shorter, and its history is zero
+def private pf_window_len(npos, w0 : int64) : int64 {
+    let taps = max(g_rd.dn_dconv - 1l, 0l)
+    var wlen = min(g_rd.pf_np, npos - w0)
+    let rem = npos - w0 - wlen
+    if (rem > 0l && rem < taps) {
+        wlen -= taps - rem
+    }
+    assert(wlen >= taps || w0 == 0l, "vk prefill: a later window shorter than the conv taps")
+    return wlen
+}
+
+def private pf_warm_cos(cos_batch : array<float>; w0, wlen : int64) {
+    let hcarry = w0 > 0l ? 1l : 0l
+    let nhead = wlen - 1l + hcarry
+    if (nhead > 0l) {
+        let ce = g_rd.cos_elems
+        upload_region_at(g_rd.head_pf_hcos, 0l, unsafe(addr<uint8 const?>(cos_batch[int((w0 - hcarry) * ce)])), nhead * ce * 4l)
+    }
+}
+
+def private pf_cls_enc(raw : VkCommandBuffer; var h : VkHaz) {
+    var pcc = GemvArgs(n = uint(g_rd.dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u)
+    gemv_enc(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, g_rd.vocab)
+    if (rd_cls_epi_on()) {
+        rd_enc_cls_epi(raw, h)
+    }
+}
+
 //! A cm2 role's tile column and split pick; a region starting above row 0 never splits
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def pf_split_pick(fmt : int; d, rows, n, row0, sib_tiles : int64) : tuple<tc : int64; nsplit : int64; ksplit : int64> {
@@ -822,7 +854,7 @@ def private pf_setup {
             chunked_hs |> insert(L.hs)
         }
     }
-    let fa128s = !fa_dev && g_gpu.has_coopmat && vk_fa_on() && key_exists(chunked_hs, 128l)
+    let fa128s = pf_fa128s() && key_exists(chunked_hs, 128l)
     var wide_hs = false   //! a head past 256 takes the wide chunked kernel
     var narrow_hs = false
     for (hsv in keys(chunked_hs)) {
@@ -1589,20 +1621,14 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
     let ind = g_rd.ngram ? g_rd.ngram_ind : 0l
     assert(!g_rd.ngram || long_length(side) >= npos * ind, "vk prefill: the side rows are short of the prompt")
     let cos_elems = g_rd.cos_elems
-    let fa128s = !(cm2_fa_on() && vk_fa_on() && rd_pf_reads_f16()) && g_gpu.has_coopmat && vk_fa_on()
     g_rd.pf_head_rows = 0l
     let bp = pf_prologue_block()
     let warm = (g_rd.pf_head_ask && g_rd.head_on && g_rd.carry_live && g_rd.hc_nextn
         && (g_rd.pf_hc_head_ready || (!g_rd.pf_head_declined && pf_head_setup() && pf_hc_head_setup())))
     unsafe {
         var w0 = 0l
-        let taps = max(g_rd.dn_dconv - 1l, 0l)
         while (w0 < npos) {
-            var wlen = min(g_rd.pf_np, npos - w0)
-            let rem = npos - w0 - wlen
-            if (rem > 0l && rem < taps) {
-                wlen -= taps - rem   // the last window keeps at least the conv taps: only window 0 can be shorter, and its history is zero
-            }
+            let wlen = pf_window_len(npos, w0)
             let last = w0 + wlen >= npos
             let pos0w = pos0 + w0
             rd_tok_row(pos0w, wlen)
@@ -1612,11 +1638,7 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
                 upload_region_at(g_rd.pf_hcemb, 0l, addr<uint8 const?>(side[int(w0 * ind)]), wlen * ind * 4l)
             }
             if (warm) {
-                let hcarry = w0 > 0l ? 1l : 0l
-                let nhead = wlen - 1l + hcarry
-                if (nhead > 0l) {
-                    upload_region_at(g_rd.head_pf_hcos, 0l, addr<uint8 const?>(cos_batch[int((w0 - hcarry) * cos_elems)]), nhead * cos_elems * 4l)
-                }
+                pf_warm_cos(cos_batch, w0, wlen)
             }
             if (pos0w == 0l && g_rd.hybrid) {
                 g_rd.dn_parity[g_rd.region] = 0
@@ -1642,7 +1664,7 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
                 if (L.recurrent) {
                     rd_pf_recurrent(raw, h, l, b, wlen, last)
                 } else {
-                    pf_attn_block(raw, h, l, b, wlen, pos0w, fa128s, false)
+                    pf_attn_block(raw, h, l, b, wlen, pos0w, false)
                 }
                 pf_hc_scatter(raw, h, L, wlen, 0l, false)
                 pf_hc_mix(raw, h, 2l * l + 1l, wlen, false)
@@ -1673,11 +1695,7 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
             pf_hc_mix(raw, h, g_rd.hc_final_site, wlen, true)
             if (last) {
                 rq_enc(raw, h, g_rd.pf_sets[bp + 1], kq_sb(g_rd.cls_fmt_marker), 0l, dim)
-                var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u)
-                gemv_enc(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, g_rd.vocab)
-                if (rd_cls_epi_on()) {
-                    rd_enc_cls_epi(raw, h)
-                }
+                pf_cls_enc(raw, h)
                 vhz_dep(raw, h, VHZ_LOG, 0u, true)
                 cmd_copy_whole(raw, g_rd.logits_dev, g_rd.pf_logits_host.buf, g_rd.vocab * 4l)
                 if (g_rd.carry_live) {
@@ -1705,7 +1723,7 @@ def vk_rdec_prefill_hc(x_batch : array<float>; cos_batch : array<float>; side : 
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis")]
-def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : int; wlen, pos0w : int64; fa128s, feed_fused : bool) {
+def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : int; wlen, pos0w : int64; feed_fused : bool) {
     let dim = g_rd.dim
     let np = g_rd.pf_np
     let nlfin = rd_norm_final()   // nolint:LINT021 — the norm row offsets multiply 64-bit before the push-field narrow
@@ -1720,7 +1738,7 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
     let kvsh = g_rd.layers[l].kv_shared
     let pairs = int(qd / 2l + (kvsh ? 0l : kvd / 2l))
     let ropewg = (wlen * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
-    let fa128 = fa128s && hs == 128l
+    let fa128 = pf_fa128s() && hs == 128l
     let wide = hs > 256l
     let attnwg = fa128 ? g_rd.n_heads * ((wlen + 31l) / 32l) : (wide ? g_rd.n_heads * ((wlen + 3l) / 4l) : g_rd.n_heads * ((wlen + 7l) / 8l))
     let vfk = g_rd.layers[l].vfk
@@ -1897,28 +1915,17 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
     let dim = g_rd.dim
     let nlfin = rd_norm_final()
     let cos_elems = g_rd.cos_elems
-    let fa128s = !(cm2_fa_on() && vk_fa_on() && rd_pf_reads_f16()) && g_gpu.has_coopmat && vk_fa_on()   //! the h128 coopmat twin serves a 128-head layer where the cm2 tiles do not
     g_rd.pf_head_rows = 0l
     let warm = g_rd.pf_head_ask && g_rd.head_on && g_rd.carry_live && (g_rd.pf_head_ready || (!g_rd.pf_head_declined && pf_head_setup()))
     unsafe {
         var w0 = 0l
         var last_wlen = 0l
-        let taps = max(g_rd.dn_dconv - 1l, 0l)
         while (w0 < npos) {
             let tp0 = ref_time_ticks()
-            var wlen = min(g_rd.pf_np, npos - w0)
-            let rem = npos - w0 - wlen
-            if (rem > 0l && rem < taps) {
-                wlen -= taps - rem   // the last window keeps at least the conv taps: only window 0 can be shorter, and its history is zero
-            }
-            assert(wlen >= taps || w0 == 0l, "vk prefill: a later window shorter than the conv taps")
+            let wlen = pf_window_len(npos, w0)
             let last = w0 + wlen >= npos
             if (warm) {
-                let hcarry = w0 > 0l ? 1l : 0l
-                let nhead = wlen - 1l + hcarry
-                if (nhead > 0l) {
-                    upload_region_at(g_rd.head_pf_hcos, 0l, addr<uint8 const?>(cos_batch[int((w0 - hcarry) * cos_elems)]), nhead * cos_elems * 4l)
-                }
+                pf_warm_cos(cos_batch, w0, wlen)
             }
             if (use_ids) {
                 g_pf_ids_stage |> resize(wlen)
@@ -2009,7 +2016,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 if (g_rd.layers[l].recurrent) {
                     rd_pf_recurrent(raw, h, l, b, wlen, last)
                 } else {
-                pf_attn_block(raw, h, l, b, wlen, pos0 + w0, fa128s, l > 0l && pf_qkv_feed_fused(l))
+                pf_attn_block(raw, h, l, b, wlen, pos0 + w0, l > 0l && pf_qkv_feed_fused(l))
                 }
                 let pre_on = g_rd.layers[l].pre_post ? 1u : 0u
                 var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(rd_norm_off(l, RD_NORM_FFN)), eps = g_rd.eps, ascale = 1.0,
@@ -2080,11 +2087,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             if (last) {
                 rq_enc(raw, h, g_rd.pf_sets[bp + 1], kq_sb(g_rd.cls_fmt_marker), (wlen - 1l) * dim, dim)
                 pfq_ts(raw)
-                var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u)
-                gemv_enc(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, g_rd.vocab)
-                if (rd_cls_epi_on()) {
-                    rd_enc_cls_epi(raw, h)   // bills to the classifier's stamp
-                }
+                pf_cls_enc(raw, h)   // the epilogue bills to the classifier's stamp
                 pfq_ts(raw)
                 vhz_dep(raw, h, VHZ_LOG, 0u, true)
                 cmd_copy_whole(raw, g_rd.logits_dev, g_rd.pf_logits_host.buf, g_rd.vocab * 4l)
