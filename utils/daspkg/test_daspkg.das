@@ -19,6 +19,7 @@ require index
 require commands
 require daslib/result
 require package_runner public
+require test_package_runner_errors
 
 // On Darwin daspkg release emits a clickable `.app`; everything else is the
 // flat `<out_dir>/<name>/...` layout. These helpers let release tests assert
@@ -3110,4 +3111,9 @@ def test_parse_args_update_index_flags(t : T?) {
         t |> success(parsed2.dry_run)
         t |> success(!parsed2.commit)
     }
+}
+
+[test]
+def test_package_hook_failures(t : T?) {
+    failing_package_hooks_do_not_publish_partial_metadata(t)
 }

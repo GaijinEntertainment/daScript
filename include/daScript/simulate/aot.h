@@ -585,6 +585,14 @@ namespace das {
     };
 
     template <typename TT>
+    struct das_cast<TT &> {
+        template <typename QQ>
+        static __forceinline TT & cast ( const QQ & expr ) {
+            return das_reinterpret<TT>::pass(const_cast<QQ &>(expr));
+        }
+    };
+
+    template <typename TT>
     struct das_cast<const TT> : das_cast<TT> {};
 
     template <typename TT>

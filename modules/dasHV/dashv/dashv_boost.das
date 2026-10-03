@@ -230,12 +230,17 @@ class HvWebServer {
     def STREAM(uri : string; lmb : lambda<(var req : HttpRequest?; var writer : HttpResponseWriter?) : void>) : void {
         //! Registers a streaming (incremental) handler for ``uri`` (any HTTP method, like ``ANY``).
         //! Unlike GET/POST, the handler receives a live ``HttpResponseWriter`` and runs on the tick
-        //! thread; drive it with ``respond`` (whole body) or ``sse_event`` + ``close_writer`` (Server-
+        //! thread; drive it with ``respond`` (whole body), ``SERVE_FILE_STREAM`` (bounded file),
+        //! or ``sse_event`` + ``close_writer`` (Server-
         //! Sent Events) — each call marshals the actual socket write onto the server's event loop, so
         //! tokens flush to the client as they are produced. Pass ``server`` (the field) to those ops.
         stream_route_handlers |> push(lmb)
         unsafe(STREAM(server, uri, lmb))
     }
+    def abstract onWsOpenRequest(channel : WebSocketChannel; var request : HttpRequest?#) : void
+        //! onWsOpenRequest receives a borrowed upgrade-request snapshot; clone retained strings.
+        //! Without an onWsOpenRequest override, the native adapter calls onWsOpen.
+
 }
 
 def with_http_request(blk : block<(var req : HttpRequest?#) : void>) {

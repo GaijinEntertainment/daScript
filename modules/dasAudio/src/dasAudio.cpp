@@ -4,12 +4,13 @@
 #include "daScript/ast/ast_interop.h"
 #include "daScript/ast/ast_handle.h"
 #include "daScript/simulate/bind_enum.h"
+#include "daScript/misc/performance_time.h"
 
 #include <atomic>
 #include <thread>
-#include <chrono>
 #if defined(__EMSCRIPTEN__) && defined(__EMSCRIPTEN_PTHREADS__)
 #include <emscripten/threading.h>
+#include <emscripten/emscripten.h>
 #endif
 
 // include vorbis extras before miniaudio
@@ -346,11 +347,11 @@ static std::atomic<uint32_t> playback_queued{0};
 static PlaybackRecoveryState playback_recovery;
 static uint64_t playback_last_callback_us = 0;
 static uint64_t playback_wall_us() {
-    return uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+    return uint64_t(emscripten_date_now() * 1000.0);
 }
 static uint64_t playback_elapsed(uint64_t now, uint64_t then) { return now >= then ? now - then : 0; }
 static uint64_t playback_clock_us() {
-    return uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
+    return uint64_t(ref_time_ticks() / 1000);
 }
 static void playback_peak(std::atomic<uint64_t> & peak, uint64_t value) {
     uint64_t prior = peak.load(std::memory_order_relaxed);
@@ -381,7 +382,7 @@ static bool fill_playback_ring() {
     memset(output, 0, (size_t)count * g_channels * sizeof(float));
     auto started = playback_clock_us();
     mix_audio(output, count);
-    playback_peak(playback_max_mix_us, playback_clock_us() - started);
+    playback_peak(playback_max_mix_us, playback_elapsed(playback_clock_us(), started));
     playback_refills.fetch_add(1, std::memory_order_relaxed);
     ma_pcm_rb_commit_write(&g_playback_rb, count);
     return true;

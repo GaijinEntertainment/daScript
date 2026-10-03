@@ -15,6 +15,8 @@ static_assert(offsetof(AnnotationArgumentInfo, type) == 0, DAS_PIN_MSG);
 static_assert(offsetof(AnnotationArgumentInfo, name) == 8, DAS_PIN_MSG);
 static_assert(offsetof(AnnotationArgumentInfo, sValue) == 16, DAS_PIN_MSG);
 static_assert(offsetof(AnnotationArgumentInfo, iValue) == 24, DAS_PIN_MSG);
+static_assert(offsetof(AnnotationArgumentInfo, lValue) == 24, DAS_PIN_MSG);
+static_assert(offsetof(AnnotationArgumentInfo, ulValue) == 24, DAS_PIN_MSG);
 static_assert(sizeof(AnnotationInfo) == 40, DAS_PIN_MSG);
 static_assert(offsetof(AnnotationInfo, name) == 0, DAS_PIN_MSG);
 static_assert(offsetof(AnnotationInfo, module_name) == 8, DAS_PIN_MSG);

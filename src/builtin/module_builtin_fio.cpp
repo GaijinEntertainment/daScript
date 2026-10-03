@@ -197,6 +197,8 @@ namespace das {
     void builtin_fclose ( const FILE * f, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     void builtin_fflush ( const FILE * f, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     bool builtin_try_fflush ( const FILE * ) { return false; }
+    bool builtin_try_lock_file ( const FILE * ) { return false; }
+    FILE * das_fopen_regular_read_utf8 ( const char *, uint64_t & size ) { size = 0; return nullptr; }
     void builtin_map_file(const FILE* f, const TBlock<void, TTemporary<TArray<uint8_t>>>& blk, Context* context, LineInfoArg * at) GENERATE_IO_STUB
     void * builtin_fmap_open ( const char * name, uint64_t * size, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     void * builtin_fmap_open_rw ( const char * name, uint64_t * size, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
@@ -346,6 +348,7 @@ namespace das {
 #else
 #include <fcntl.h>
 #include <poll.h>
+#include <sys/file.h>
 #include <signal.h>
 #include <sys/wait.h>
 #include <unistd.h>         // isatty, STDOUT_FILENO
@@ -419,6 +422,43 @@ namespace das {
     }
 #endif
 
+    // src/builtin/ARCHITECTURE_FIO.md#regular-file-buffered-read
+    FILE * das_fopen_regular_read_utf8 ( const char * name, uint64_t & size ) {
+        size = 0;
+#if defined(_WIN32)
+        auto wideName = utf8_file_path_to_wide(name);
+        if (wideName.empty()) return nullptr;
+        HANDLE handle = CreateFileW(wideName.c_str(), GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (handle == INVALID_HANDLE_VALUE) return nullptr;
+        BY_HANDLE_FILE_INFORMATION info;
+        if (GetFileType(handle) != FILE_TYPE_DISK || !GetFileInformationByHandle(handle, &info)
+                || (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            CloseHandle(handle);
+            return nullptr;
+        }
+        const uint64_t bytes = (uint64_t(info.nFileSizeHigh) << 32) | info.nFileSizeLow;
+        const int fd = _open_osfhandle(intptr_t(handle), _O_RDONLY | _O_BINARY | _O_NOINHERIT);
+        if (fd == -1) { CloseHandle(handle); return nullptr; }
+        FILE * file = _fdopen(fd, "rb");
+        if (!file) { _close(fd); return nullptr; }
+#else
+        const int fd = open(name, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+        if (fd == -1) return nullptr;
+        struct stat info;
+        if (fstat(fd, &info) != 0 || !S_ISREG(info.st_mode) || info.st_size < 0) {
+            close(fd);
+            return nullptr;
+        }
+        const uint64_t bytes = uint64_t(info.st_size);
+        FILE * file = fdopen(fd, "rb");
+        if (!file) { close(fd); return nullptr; }
+#endif
+        size = bytes;
+        return file;
+    }
+
     // das strings are UTF-8 by convention. On Windows both fs::path(char*) and
     // path::string() convert through the ANSI codepage - misreading UTF-8 names on the
     // way in, and throwing system_error on the way out for names the codepage cannot
@@ -463,6 +503,22 @@ namespace das {
         if ( !f ) return false;
         auto stream = const_cast<FILE *>(f);
         return ::fflush(stream) == 0 && ::ferror(stream) == 0;
+    }
+
+    bool builtin_try_lock_file ( const FILE * file ) {
+        if (!file) return false;
+#if defined(__EMSCRIPTEN__)
+        return false;
+#elif defined(_WIN32)
+        const intptr_t handle = _get_osfhandle(_fileno(const_cast<FILE *>(file)));
+        if (handle == -1) return false;
+        OVERLAPPED overlap = {};
+        return LockFileEx(reinterpret_cast<HANDLE>(handle),
+            LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY, 0,
+            MAXDWORD, MAXDWORD, &overlap) != 0;
+#else
+        return flock(fileno(const_cast<FILE *>(file)), LOCK_EX | LOCK_NB) == 0;
+#endif
     }
 
     const FILE * builtin_stdin() {
@@ -3055,6 +3111,7 @@ namespace das {
             validationNeverFails = true;
             addField<DAS_BIND_MANAGED_FIELD(is_valid)>("is_valid");
             addProperty<DAS_BIND_MANAGED_PROP(size)>("size");
+            addProperty<DAS_BIND_MANAGED_PROP(mode_bits)>("mode", "mode_bits");
             addProperty<DAS_BIND_MANAGED_PROP(atime)>("atime");
             addProperty<DAS_BIND_MANAGED_PROP(ctime)>("ctime");
             addProperty<DAS_BIND_MANAGED_PROP(mtime)>("mtime");
@@ -3127,6 +3184,9 @@ namespace das {
                     ->args({"file","context","line"});
             addExtern<DAS_BIND_FUN(builtin_try_fflush)>(*this, lib, "try_fflush",
                 SideEffects::modifyExternal, "builtin_try_fflush")
+                    ->args({"file"})->setNoDiscard();
+            addExtern<DAS_BIND_FUN(builtin_try_lock_file)>(*this, lib, "try_lock_file",
+                SideEffects::modifyExternal, "builtin_try_lock_file")
                     ->args({"file"})->setNoDiscard();
             addExtern<DAS_BIND_FUN(builtin_fprint)>(*this, lib, "fprint",
                 SideEffects::modifyExternal, "builtin_fprint")

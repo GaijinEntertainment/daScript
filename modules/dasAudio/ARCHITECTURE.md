@@ -110,11 +110,13 @@ push through, and a `set_` on reload takes a reference per reload that the real 
 never drop. `REVIEW.das` reports those calls in any program that requires `live/audio_live`;
 a program whose reload design tears audio down drops the require instead.
 
-## The waits cascade
+## The waits cascade {#strudel-worker-backpressure}
 
-`strudel_init` spawns the worker; the worker runs the caller's function, which calls
-`strudel_play`; `strudel_play` ends in the PCM wait; `done_status` is notified only after all of
-that returns. So an ungrabbed buffer wedges the worker, and a wedged worker wedges
+`strudel_init(setup, command)` spawns a stepped worker. Setup initializes tracks and
+returns; each subsequent step handles commands and produces at most one PCM chunk.
+The native worker loop collects only between completed steps, with persistent state
+in the worker context's globals. Shutdown ends in the PCM wait; `done_status` is
+notified only after cleanup returns. So an ungrabbed buffer wedges the worker, and a wedged worker wedges
 `strudel_shutdown` on the main thread. This is why the worker-exit budget must exceed the PCM one.
 
 PCM stream status includes exact queued frames, consumed frames, and cumulative
@@ -129,6 +131,16 @@ refill timing. Threaded playback publishes a separate 64-byte SeqBox snapshot;
 readers never inspect worker-owned arrays. Main-thread playback reads the ordinary
 stream status. The counters observe buffering without changing queue policy.
 
+The worker handles commands before checking PCM readiness or buffered frames.
+At four chunks of buffered output it returns without rendering another chunk,
+so a paused consumer bounds production while shutdown and track commands remain
+responsive.
+
+Global pause stops channel status publication. Buffered frames are the larger of
+reported queued frames and cumulative generated frames minus acknowledged consumed
+frames, clamped at zero. This includes appended output awaiting acknowledgement,
+so stale status cannot allow unbounded production.
+
 ## The biquad ticks carry `[never_fast_math]` {#biquad-never-fast-math}
 
 `formant_biquad_tick` (`strudel/strudel_synth.das`) and `sf2_biquad_tick`
@@ -139,3 +151,25 @@ registers that round apart: the formant filter reaches NaN inside 130 samples on
 target, while an AVX2 target stays exact, so a clean run on one machine proves nothing. The
 annotation keeps the tick's arithmetic exact on every LLVM tier, inlined or not
 (`modules/dasLLVM/ARCHITECTURE_FAST_MATH.md`, repo root).
+
+### Threaded playback migration
+
+Setup callbacks no longer call the blocking `strudel_play` function. Remove that
+call and pass its optional command handler as the second argument to `strudel_init`.
+The setup frame has returned before playback or collection begins, so setup locals
+cannot remain unrooted across a compiled collection boundary.
+
+## WebAudio asynchronous startup
+
+The non-blocking miniaudio initialization patch copies the completed playback and
+capture descriptors into its heap-owned callback record. Channel selection and
+callback descriptor writes use those copies, never initialization-stack pointers.
+Clearing the pointers is insufficient because channel selection dereferences them.
+The callback uses the long-lived device type rather than the caller's config.
+
+`tests/test_web_audio_startup.cjs` builds the fetched, patched miniaudio header and
+checks delayed mono/stereo/four-channel playback plus fake-input capture and duplex.
+Run with `MINIAUDIO_H` naming the fetched header, `EMCC` naming Emscripten's compiler,
+and Playwright available to Node. `BROWSER_EXECUTABLE` optionally selects a browser.
+The test uses a temporary directory and removes it afterward. It verifies patch
+idempotence, requested node channels and actual audio callbacks.

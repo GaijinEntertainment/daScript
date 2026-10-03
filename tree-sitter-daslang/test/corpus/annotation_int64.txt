@@ -1,0 +1,43 @@
+==================
+Wide integer annotation arguments
+==================
+[comment(maximum=9223372036854775807l, minimum=-9223372036854775808l, unsigned_max=18446744073709551615ul, hexadecimal=0xffffffffffffffffl, signed=-12l, unsigned=12ul)]
+struct Wide {}
+---
+
+(source_file
+  (structure_declaration
+    (annotation_list
+      (annotation_declaration
+        (annotation_name
+          (identifier))
+        (annotation_argument_list
+          (annotation_argument
+            (identifier)
+            (integer_literal))
+          (annotation_argument
+            (identifier)
+            (integer_literal))
+          (annotation_argument
+            (identifier)
+            (integer_literal))
+          (annotation_argument
+            (identifier)
+            (integer_literal))
+          (annotation_argument
+            (identifier)
+            (integer_literal))
+          (annotation_argument
+            (identifier)
+            (integer_literal)))))
+    (identifier)))
+
+==================
+Negative unsigned long annotation rejected
+:error
+==================
+[comment(value=-12ul)]
+struct Bad {}
+---
+
+(ERROR)

@@ -56,7 +56,6 @@ def strudel_main() {
     //   s("bd sd hh cp") |> speed(1.5)
     strudel_add_track(s("bd [hh hh] sd [hh cp]"))
     strudel_set_bpm(120.0lf)
-    strudel_play()
 }
 
 def load_samples() {

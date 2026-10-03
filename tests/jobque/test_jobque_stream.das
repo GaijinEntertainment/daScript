@@ -343,3 +343,29 @@ def test_stream_push_batch(t : T?) {
         }
     }
 }
+
+struct InitializedStreamValue {
+    name : string = "default"
+    count : int = 7
+}
+
+[test]
+def archive_stream_receivers_accept_initialized_records(t : T?) {
+    with_stream() $(var stream : Stream?) {
+        var input = InitializedStreamValue(name = "sent", count = 42)
+        for (method in range(4)) {
+            stream |> push_archive(input)
+            var calls = 0
+            let receive = $(var value : InitializedStreamValue) {
+                calls++
+                t |> equal(value.name, "sent")
+                t |> equal(value.count, 42)
+            }
+            if (method == 0) { t |> success(stream |> pop_archive(receive)) }
+            elif (method == 1) { t |> success(stream |> try_pop_archive(receive)) }
+            elif (method == 2) { t |> success(stream |> pop_archive_with_timeout(10, receive)) }
+            else { stream |> gather_archive(receive) }
+            t |> equal(calls, 1)
+        }
+    }
+}

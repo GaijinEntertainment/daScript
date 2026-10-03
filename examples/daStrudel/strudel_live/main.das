@@ -27,7 +27,6 @@ def strudel_main() {
     let drums = strudel_add_track(s("bd [hh hh] sd [hh cp]"))
     g_track_names["drums"] = drums
     strudel_set_bpm(120.0lf)
-    strudel_play(@@strudel_on_command)
 }
 
 def strudel_on_command(cmd : string) {
@@ -134,7 +133,7 @@ def init() {
     print("daStrudel live\n")
     asch = audio_live_system()
     load_samples()
-    strudel_init(@@strudel_main)
+    strudel_init(@@strudel_main, @@strudel_on_command)
     print("playing...\n")
 }
 

@@ -46,7 +46,6 @@ def strudel_main() {
         note("<[a2,c3,e3] [f2,a2,c3] [c2,e2,g2] [g2,b2,d3]>")
             |> sf2("string_ensemble") |> gain(0.2)
     ]))
-    strudel_play()
 }
 
 [export]

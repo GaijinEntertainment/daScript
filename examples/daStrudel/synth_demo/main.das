@@ -17,7 +17,6 @@ def strudel_main() {
         note("c2 c2 f2 g2", "sine") |> gain(0.4),
         note("<e4 d4> <c4 d4> <e4 f4> <g4 e4>", "sawtooth") |> gain(0.3)
     ]))
-    strudel_play()
 }
 
 [export]

@@ -172,6 +172,8 @@ namespace das {
                 ss << aarg.name << "=";
                 switch (aarg.type) {
                 case Type::tInt:    ss << aarg.iValue; break;
+                case Type::tInt64:    ss << aarg.lValue << "l"; break;
+                case Type::tUInt64:    ss << aarg.ulValue << "ul"; break;
                 case Type::tFloat:  ss << aarg.fValue; break;
                 case Type::tBool:   ss << aarg.bValue; break;
                 case Type::tString: ss << "\"" << aarg.sValue << "\""; break;
@@ -216,6 +218,8 @@ namespace das {
                     ss << arg.name << "=";
                     switch ( arg.type ) {
                         case Type::tInt:        ss << arg.iValue; break;
+                        case Type::tInt64:        ss << arg.lValue << "l"; break;
+                        case Type::tUInt64:        ss << arg.ulValue << "ul"; break;
                         case Type::tFloat:      ss << arg.fValue; break;
                         case Type::tBool:       ss << (arg.bValue ? "true" : "false"); break;
                         case Type::tString:     ss << "\"" << arg.sValue << "\""; break;

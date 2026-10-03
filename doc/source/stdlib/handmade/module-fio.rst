@@ -73,3 +73,10 @@ CLI tools that take a user-supplied pattern or a comma/newline-separated list of
     }
 
 For runnable examples covering every flavor, see ``tutorials/language/54_glob.das``.
+
+``try_lock_file(file)`` attempts an exclusive native file lock without waiting.
+It returns false for contention, invalid input, unsupported hosts, or an OS error.
+Close the file to release ownership. Keep the lock file at a stable path: removing
+or replacing it while another process has it open can let contenders lock different
+files. On POSIX the lock is advisory; cooperating processes must use the same lock.
+Windows uses an exclusive byte-range lock. Browser and no-file-I/O builds return false.

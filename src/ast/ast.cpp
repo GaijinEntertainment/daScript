@@ -28,6 +28,8 @@ namespace das {
                 switch (arg.type) {
                 case Type::tBool:       tw << (arg.bValue ? "true" : "false"); break;
                 case Type::tInt:        tw << arg.iValue; break;
+                case Type::tInt64:        tw << arg.lValue << "l"; break;
+                case Type::tUInt64:        tw << arg.ulValue << "ul"; break;
                 case Type::tFloat:      tw << arg.fValue; break;
                 case Type::tString:     tw << "\"" << arg.sValue << "\""; break;
                 default:                tw << "error"; break;

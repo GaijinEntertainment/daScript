@@ -44,7 +44,6 @@ def strudel_main() {
     let drums <- s("bd ~ sd ~") |> gain(0.5)
     strudel_add_track(stack([piano, drums]))
     strudel_set_bpm(100.0lf)
-    strudel_play()
 }
 
 [export]

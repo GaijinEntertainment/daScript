@@ -27,6 +27,8 @@ namespace das {
 
     DAS_API string normalizeFileName ( const char * fileName );
     DAS_API FILE * das_fopen_utf8 ( const char * fileName, const char * mode );
+    //! Returns an owned FILE for regular-file reading without waiting on a FIFO; size comes from the opened object.
+    DAS_API FILE * das_fopen_regular_read_utf8 ( const char * fileName, uint64_t & size );
 
     string get_prefix ( const string & req );   // blah.... \ foo.bar - returns blah....
     string get_suffix ( const string & req );   // blah.... \ foo.bar - returns foo.bar

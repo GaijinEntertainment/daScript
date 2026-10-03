@@ -227,6 +227,22 @@ def arms_deferred(t : T?; fx : Fixture) {
     }
 }
 
+def arm_math_container_cache(t : T?; fx : Fixture) {
+    t |> run("math caches survive eager and deferred matrix-vector consumers") @(t : T?) {
+        let driver = path_join(fx.tmp, "math_cache.das")
+        fwrite(driver, "options gen2\nrequire math\n[export]\ndef main \{\n    print(\"MATH \{identity3x4()[0].x\}\\n\")\n\}\n")
+        for (eagerFirst in [true, false]) {
+            let cache = "-module-cache \"{path_join(fx.tmp, eagerFirst ? "math_eager.bin" : "math_lazy.bin")}\""
+            var cold : string
+            t |> success(run_child_reported(t, "math cold", child_cmd(fx, driver, eagerFirst ? "-ignore-manifest" : "", cache), cold, "MATH 1"), "the first loading order writes the cache")
+            var warm : string
+            t |> success(run_child_reported(t, "math warm", child_cmd(fx, driver, eagerFirst ? "" : "-ignore-manifest", cache), warm, "MATH 1"), "the other loading order runs correctly")
+            t |> equal(-1, find(warm, "cumulative hash"), "loading matrix-vector consumers does not change math's interface:\n{warm}")
+            t |> success(find(warm, "deser: clean") >= 0, "the other loading order serves every cached module:\n{warm}")
+        }
+    }
+}
+
 def arms_guards_and_caches(t : T?; fx : Fixture) {
     t |> run("a require guard loads a waiting module, whatever else the compile requires") @(t : T?) {
         var alone : string
@@ -401,6 +417,7 @@ def test_deferred_modules(t : T?) {
     let fx = make_fixture(tmp, artifact)
     arms_deferred(t, fx)
     arms_guards_and_caches(t, fx)
+    arm_math_container_cache(t, fx)
     arms_nameless_rows(t, fx)
     arm_fallback(t, fx)
     var err : string

@@ -166,7 +166,7 @@ namespace das {
         auto args = (AnnotationArgumentInfo *) debugInfo->allocate(uint32_t(sizeof(AnnotationArgumentInfo) * list.size()));
         for ( const auto & arg : list ) {
             switch ( arg.type ) {
-            case Type::tBool: case Type::tInt: case Type::tFloat: case Type::tString:
+            case Type::tBool: case Type::tInt: case Type::tInt64: case Type::tUInt64: case Type::tFloat: case Type::tString:
                 break;
             default:
                 continue;   // nested aList args only exist during parsing
@@ -175,7 +175,7 @@ namespace das {
             ai.type = arg.type;
             ai.name = debugInfo->allocateCachedName(arg.name);
             ai.sValue = arg.type==Type::tString ? debugInfo->allocateCachedName(arg.sValue) : nullptr;
-            ai.iValue = arg.iValue; // raw union copy covers bool/int/float
+            memcpy(&ai.ulValue, &arg.ulValue, sizeof(ai.ulValue));
         }
         return count ? args : nullptr;
     }

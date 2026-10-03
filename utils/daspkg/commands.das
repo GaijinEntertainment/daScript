@@ -19,6 +19,7 @@ require lockfile
 require utils
 require index
 require package_runner
+require release_workspace
 
 
 [CommandLineArgs]
@@ -2385,7 +2386,7 @@ def private release_note_ship_manifest(manifest : string; var ship_manifest : st
     }
 }
 
-def cmd_release(root : string; out_dir : string; paranoid = false; quick = false; fat = "") : int { // nolint:STYLE037,STYLE038 — phased orchestrator sharing bundle state end to end; the real split belongs to the daspkg cleanup pass
+def private release_in_workspace(root, out_dir, workspace : string; paranoid, quick : bool; fat : string) : int { // nolint:STYLE037,STYLE038 — phased orchestrator sharing bundle state end to end; the real split belongs to the daspkg cleanup pass
     let release_t0 = ref_time_ticks()
     if (paranoid && quick) {
         to_log(LOG_WARNING, "release: --paranoid no longer changes the tuner's budget; --quick wins\n")
@@ -2550,7 +2551,7 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
     //    contain dylibs daspkg's own code references — too narrow).
     let exe_path = bundle_exe_path(bundle_dir, bundle_name)
     run_cmd_counter ++
-    let deps_file = "{get_das_root()}/_daspkg_release_deps_{run_cmd_counter}.json"
+    let deps_file = path_join(workspace, "main.json")
     let main_path = path_join(root, spec.main_script)
     var output : string
     let daslang = get_daslang_path()
@@ -2573,9 +2574,6 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
     let rc = run_cmd(cmd, output)
     if (rc != 0) {
         to_log(LOG_ERROR, "release: daslang -exe failed (rc={rc}):\n{output}\n")
-        if (fexist(deps_file)) {
-            remove(deps_file)
-        }
         return 1
     }
     log("  build: standalone exe in {release_elapsed(build_t0)}s\n")
@@ -2593,9 +2591,6 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
             let refusal = release_fat_gate(deps0, fat)
             if (!empty(refusal)) {
                 to_log(LOG_ERROR, "{refusal}\n")
-                if (fexist(deps_file)) {
-                    remove(deps_file)
-                }
                 return 1
             }
             for (ts in deps0.tune_scopes) {
@@ -2604,9 +2599,6 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
         } else {
             // the deps JSON is the only place the fat gate can read; without it the gate never ran
             to_log(LOG_ERROR, "release --fat {fat}: the release-deps JSON {deps_file} cannot be read, so the fat gate never ran - the build line above says why\n")
-            if (fexist(deps_file)) {
-                remove(deps_file)
-            }
             return 1
         }
     } else {
@@ -2639,9 +2631,6 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
                     // a nonzero tuner is a REFUSAL (noise gate, validation) or a failure —
                     // either way the winners were not measured, and unmeasured winners do not ship
                     to_log(LOG_ERROR, "release: tuner for scope `{ts.name}` refused/failed after {tune_seconds}s (rc={trc}) — not shipping unmeasured winners; quiet the box and re-run, --quick to inherit a complete sidecar, or DAS_TUNE_NOISE_OVERRIDE=1 to mint anyway (stamped in provenance)\n{tout}\n")
-                    if (fexist(deps_file)) {
-                        remove(deps_file)
-                    }
                     return 1
                 }
                 log("  tune: scope `{ts.name}` finished in {tune_seconds}s — ships {sidecar_provenance_line(ts.manifest)}\n")
@@ -2655,9 +2644,6 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
                 let rc2 = run_cmd(cmd, out2)
                 if (rc2 != 0) {
                     to_log(LOG_ERROR, "release: daslang -exe rebuild failed (rc={rc2}):\n{out2}\n")
-                    if (fexist(deps_file)) {
-                        remove(deps_file)
-                    }
                     return 1
                 }
                 log("  rebuild: standalone exe in {release_elapsed(rebuild_t0)}s\n")
@@ -2694,16 +2680,9 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
     let main_scopes <- [for (ts in main_deps.tune_scopes); ts.name; where main_read]
     for (p in programs) {
         run_cmd_counter ++
-        let pdeps = "{get_das_root()}/_daspkg_release_deps_{run_cmd_counter}.json"
+        let pdeps = path_join(workspace, "companion_{run_cmd_counter}.json")
         let rc_p = release_build_program(daslang, path_join(root, p.script), bundle_dir, p.name, pdeps, fat, ship_manifest, force_args, main_scopes, is_mac_app, shipped)
         if (rc_p != 0) {
-            for (d in program_deps) {
-                remove(d)
-            }
-            if (fexist(pdeps)) {
-                remove(pdeps)
-            }
-            remove(deps_file)
             return rc_p
         }
         program_deps |> push(pdeps)
@@ -2715,14 +2694,13 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
     var deps : ReleaseDeps
     if (!read_release_deps(deps_file, deps)) {
         to_log(LOG_ERROR, "release: cannot read deps file at {deps_file}\n")
-        remove(deps_file)
         return 1
     }
-    remove(deps_file)
+
     for (d in program_deps) {
         var pd : ReleaseDeps
         let ok = read_release_deps(d, pd)
-        remove(d)
+
         if (!ok) {
             to_log(LOG_ERROR, "release: cannot read a companion program's deps file at {d}\n")
             return 1
@@ -2953,6 +2931,12 @@ def cmd_release(root : string; out_dir : string; paranoid = false; quick = false
     }
     log("Released to: {is_mac_app ? app_root : bundle_dir} ({release_elapsed(release_t0)}s)\n")
     return 0
+}
+
+def cmd_release(root : string; out_dir : string; paranoid = false; quick = false; fat = "") : int {
+    return with_release_workspace() $(workspace) : int {
+        return release_in_workspace(root, out_dir, workspace, paranoid, quick, fat)
+    }
 }
 
 // ── release wasm (wasm64 compiled artifacts) ───────────────────────────

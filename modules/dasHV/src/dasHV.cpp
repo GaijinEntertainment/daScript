@@ -8,6 +8,10 @@
 #include "../../../src/builtin/module_builtin_rtti.h"
 
 #include "dasHV.h"
+#include "http_request_snapshot.h"
+#include "bounded_file_pump.h"
+#include "daScript/misc/sysos.h"
+#include <sys/stat.h>
 
 #include <hv/hlog.h>
 #include <hv/hasync.h>
@@ -342,6 +346,16 @@ struct WebSocketAdmission {
     std::chrono::steady_clock::time_point deadline;
 };
 
+struct ConnectionPending {
+    size_t messages = 0, bytes = 0;
+};
+
+struct WriterRegistration {
+    HttpResponseWriterPtr writer;
+    shared_ptr<atomic<bool>> open;
+    bool head_only = false;
+};
+
 class WebServer_Adapter : public hv::WebSocketServer, public HvWebServer_Adapter {
 public:
     // modules/dasHV/ARCHITECTURE.md#websocket-admission-capacity
@@ -365,8 +379,9 @@ public:
                 }
             }
             if (!h) { channel->close(); return; }
-            std::string urlStr = url ? url->url : std::string();
-            if (!enqueue([this, h, urlStr](){ onWsOpen(h, urlStr); }, urlStr.size())) {
+            if (max_connection_write_bytes) channel->setMaxWriteBufsize(uint32_t(max_connection_write_bytes));
+            auto request = url ? snapshot_received_http_request(*url) : make_shared<HttpRequest>();
+            if (!enqueue([this, h, request](){ onWsOpen(h, request.get()); }, request_size(*request))) {
                 {
                     lock_guard<mutex> cguard(channel_lock);
                     channel_handles.erase(channel.get());
@@ -410,7 +425,7 @@ public:
             }
             if ( !h ) return;
             const auto opcode = channel->opcode;
-            if (!enqueue([this, h, msg, opcode](){ onWsMessageFrame(h, msg, opcode); }, msg.size())) {
+            if (!enqueue([this, h, msg, opcode](){ onWsMessageFrame(h, msg, opcode); }, msg.size(), false, channel.get())) {
                 channel->close();
             }
         };
@@ -432,9 +447,11 @@ public:
         }
         admissions.clear();
     }
-    void onWsOpen ( Handle<hv::WebSocketChannel> h, const std::string & url ) {
-        if ( auto fnOnOpen = get_onWsOpen(classPtr) ) {
-            invoke_onWsOpen(context,fnOnOpen,classPtr,h,(char *)url.c_str());
+    void onWsOpen ( Handle<hv::WebSocketChannel> h, HttpRequest * request ) {
+        if ( auto fn = get_onWsOpenRequest(classPtr) ) {
+            invoke_onWsOpenRequest(context,fn,classPtr,h,request);
+        } else if ( auto fn = get_onWsOpen(classPtr) ) {
+            invoke_onWsOpen(context,fn,classPtr,h,(char *)request->url.c_str());
         }
     }
     void onWsClose ( Handle<hv::WebSocketChannel> h ) {
@@ -460,6 +477,14 @@ public:
                 lock_guard<mutex> guard(lock);
                 --pending_events;
                 pending_bytes -= event.bytes;
+                if (event.channel) {
+                    auto found = connection_pending.find(event.channel);
+                    if (found != connection_pending.end()) {
+                        --found->second.messages;
+                        found->second.bytes -= event.bytes;
+                        if (!found->second.messages) connection_pending.erase(found);
+                    }
+                }
             }
         }
         // onTick runs user das code on the main thread and touches none of the
@@ -486,8 +511,7 @@ public:
             // lives on — the send must run here, not on the tick thread.
             auto connLoop = this->loop();
             auto resp = make_shared<HttpResponse>(*ctx->response);
-            auto req = make_shared<HttpRequest>(*ctx->request);
-            req->http_cb = nullptr;
+            auto req = snapshot_received_http_request(*ctx->request);
             if (!enqueue([context,at,lmb,ctx,connLoop,resp,req](){
                 int st = das_invoke_lambda<int>::invoke<HttpRequest*,HttpResponse*>(
                     context, at, lmb, req.get(), resp.get());
@@ -574,29 +598,45 @@ public:
     }
     void release_writer ( hv::HttpResponseWriter * w ) {
         lock_guard<mutex> guard(writer_lock);
-        active_writers.erase(w);
+        auto it = active_writers.find(w);
+        if (it != active_writers.end()) {
+            it->second.open->store(false);
+            active_writers.erase(it);
+        }
+    }
+    WriterRegistration writer_registration(hv::HttpResponseWriter * w) {
+        lock_guard<mutex> guard(writer_lock);
+        auto it = active_writers.find(w);
+        return it != active_writers.end() ? it->second : WriterRegistration();
+    }
+    void release_writer(hv::HttpResponseWriter * w, const shared_ptr<atomic<bool>> & token) {
+        lock_guard<mutex> guard(writer_lock);
+        auto it = active_writers.find(w);
+        if (it != active_writers.end() && it->second.open == token) {
+            token->store(false);
+            active_writers.erase(it);
+        }
     }
     bool is_writer_open ( hv::HttpResponseWriter * w ) {
         lock_guard<mutex> guard(writer_lock);
         auto it = active_writers.find(w);
-        return it != active_writers.end() && it->second.second->load();
+        return it != active_writers.end() && it->second.open->load();
     }
     HttpResponseWriterPtr find_writer ( hv::HttpResponseWriter * w ) {
         lock_guard<mutex> guard(writer_lock);
         auto it = active_writers.find(w);
-        return it != active_writers.end() ? it->second.first : HttpResponseWriterPtr();
+        return it != active_writers.end() ? it->second.writer : HttpResponseWriterPtr();
     }
     http_ctx_handler makeDeferredHandler(Lambda lmb, Context * context, LineInfoArg * at) {
         return [this,context,at,lmb](const HttpContextPtr & ctx) -> int {
-            auto req = make_shared<HttpRequest>(*ctx->request);
-            req->http_cb = nullptr;
+            auto req = snapshot_received_http_request(*ctx->request);
             auto writer = ctx->writer;
             auto open = make_shared<atomic<bool>>(true);
-            writer->onclose = [open](){ open->store(false); };
+            writer->onclose = [this, open, pointer = writer.get()](){ open->store(false); release_writer(pointer, open); };
             {
                 lock_guard<mutex> wguard(writer_lock);
                 if (max_pending_events && active_writers.size() >= max_pending_events) return HTTP_STATUS_SERVICE_UNAVAILABLE;
-                active_writers[writer.get()] = make_pair(writer, open);
+                active_writers[writer.get()] = {writer, open, req->method == HTTP_HEAD};
             }
             if (!enqueue([context,at,lmb,req,writer](){
                 das_invoke_lambda<void>::invoke<HttpRequest*,hv::HttpResponseWriter*>(
@@ -631,8 +671,7 @@ public:
             const auto handle = admission->handle;
             auto key = ctx->request.get();
             ctx->writer->onclose = [this,key,handle](){ release_admission(key, handle); };
-            auto request = make_shared<HttpRequest>(*ctx->request);
-            request->http_cb = nullptr;
+            auto request = snapshot_received_http_request(*ctx->request);
             if (!enqueue([handle,request,lmb,context,at](){
                 if (HandleRegistry<WebSocketAdmission>::instance().is_alive(handle)) {
                     das_invoke_lambda<void>::invoke<HttpRequest*,Handle<WebSocketAdmission>>(
@@ -670,6 +709,13 @@ public:
         max_pending_bytes = size_t(queue_bytes);
         return true;
     }
+    bool set_connection_limits(int messages, int bytes, int write_bytes) {
+        if (started || messages <= 0 || bytes <= 0 || write_bytes <= 0) return false;
+        max_connection_messages = size_t(messages);
+        max_connection_bytes = size_t(bytes);
+        max_connection_write_bytes = size_t(write_bytes);
+        return true;
+    }
     bool started = false;
 
 protected:
@@ -682,29 +728,40 @@ protected:
         function<void()> invoke;
         size_t bytes;
         bool cleanup;
+        hv::WebSocketChannel * channel;
     };
     vector<PendingEvent> que;
     size_t max_pending_events = 0, max_pending_bytes = 0;
     size_t pending_events = 0, pending_bytes = 0;
+    size_t max_connection_messages = 0, max_connection_bytes = 0, max_connection_write_bytes = 0;
+    map<hv::WebSocketChannel *, ConnectionPending> connection_pending;
     static size_t request_size(const HttpRequest & req) {
         size_t bytes = 256 + req.body.size() + req.url.size() * 2;
         for (const auto & header : req.headers) bytes += 128 + header.first.size() + header.second.size();
         for (const auto & cookie : req.cookies) bytes += 128 + cookie.name.size() + cookie.value.size();
         return bytes;
     }
-    bool enqueue(function<void()> invoke, size_t bytes, bool cleanup = false) {
+    bool enqueue(function<void()> invoke, size_t bytes, bool cleanup = false, hv::WebSocketChannel * channel = nullptr) {
         lock_guard<mutex> guard(lock);
         if (!cleanup) {
             if ((max_pending_events && pending_events >= max_pending_events) ||
                 (max_pending_bytes && (bytes > max_pending_bytes || pending_bytes > max_pending_bytes - bytes))) return false;
+            if (channel) {
+                const auto found = connection_pending.find(channel);
+                const size_t count = found == connection_pending.end() ? 0 : found->second.messages;
+                const size_t used = found == connection_pending.end() ? 0 : found->second.bytes;
+                if ((max_connection_messages && count >= max_connection_messages) ||
+                    (max_connection_bytes && (bytes > max_connection_bytes || used > max_connection_bytes - bytes))) return false;
+                connection_pending[channel] = {count + 1, used + bytes};
+            }
             ++pending_events;
             pending_bytes += bytes;
         }
-        que.push_back(PendingEvent{std::move(invoke), bytes, cleanup});
+        que.push_back(PendingEvent{std::move(invoke), bytes, cleanup, channel});
         return true;
     }
     mutex       writer_lock;
-    map<hv::HttpResponseWriter*, pair<HttpResponseWriterPtr, shared_ptr<atomic<bool>>>>  active_writers;
+    map<hv::HttpResponseWriter*, WriterRegistration> active_writers;
     mutex       channel_lock;
     map<hv::WebSocketChannel*, Handle<hv::WebSocketChannel>>  channel_handles;
     map<HttpRequest*,shared_ptr<WebSocketAdmission>> admissions;
@@ -798,6 +855,10 @@ bool das_wss_set_access_log(Handle<hv::WebSocketServer> h, bool enabled) {
 bool das_wss_set_limits(Handle<hv::WebSocketServer> h, int http_bytes, int ws_bytes, int events, int queue_bytes) {
     auto adapter = lookup_server(h);
     return adapter && adapter->set_limits(http_bytes, ws_bytes, events, queue_bytes);
+}
+bool das_wss_set_connection_limits(Handle<hv::WebSocketServer> h, int messages, int bytes, int write_bytes) {
+    auto adapter = lookup_server(h);
+    return adapter && adapter->set_connection_limits(messages, bytes, write_bytes);
 }
 
 int das_wss_start ( Handle<hv::WebSocketServer> h ) {
@@ -1000,6 +1061,130 @@ int das_writer_serve_file ( Handle<hv::WebSocketServer> h, hv::HttpResponseWrite
         }
         wr->End();
         if ( adapter ) adapter->release_writer(w);
+    });
+    return 0;
+}
+
+class WriterFileStream : public std::enable_shared_from_this<WriterFileStream> {
+public:
+    // modules/dasHV/ARCHITECTURE.md#bounded-file-transfer-lifecycle
+    WriterFileStream(const shared_ptr<hv::WebSocketServer> & server, const HttpResponseWriterPtr & writer,
+                     shared_ptr<atomic<bool>> token, FILE * file, uint64_t bytes)
+        : server_(server), writer_(writer), token_(std::move(token)), file_(file, fclose), pump_(bytes) {}
+
+    // modules/dasHV/ARCHITECTURE.md#bounded-file-transfer-lifecycle
+    void start(uint64_t bytes, bool head_only) {
+        auto writer = writer_.lock();
+        if (!writer) return;
+        auto self = shared_from_this();
+        previous_close_ = writer->onclose;
+        writer->onclose = [self]() {
+            auto keep = self;
+            keep->finish(false);
+            if (keep->previous_close_) keep->previous_close_();
+        };
+        writer->onwrite = [self](hv::Buffer *) { self->schedule(); };
+        writer->response->body.clear();
+        writer->response->headers.erase("Transfer-Encoding");
+        writer->response->content_length = int64_t(bytes);
+        writer->response->SetHeader("Content-Length", std::to_string(bytes));
+        if (!bytes) {
+            writer->WriteResponse(writer->response.get());
+            finish(true);
+            return;
+        }
+        if (writer->EndHeaders() < 0) { finish(false); return; }
+        if (head_only) { finish(true); return; }
+        schedule();
+    }
+
+private:
+    // modules/dasHV/ARCHITECTURE.md#bounded-file-transfer-lifecycle
+    void schedule() {
+        if (finished_ || scheduled_) return;
+        auto server = server_.lock();
+        auto adapter = static_cast<WebServer_Adapter *>(server.get());
+        auto loop = adapter ? adapter->loop(0) : nullptr;
+        if (!loop) { finish(false); return; }
+        scheduled_ = true;
+        auto self = shared_from_this();
+        loop->queueInLoop([self]() { self->scheduled_ = false; self->step(); });
+    }
+    void step() {
+        if (finished_) return;
+        auto writer = writer_.lock();
+        if (!writer || !writer->isConnected() || !token_->load()) { finish(false); return; }
+        const auto result = pump_.step(writer->isWriteComplete(),
+            [this](char * bytes, size_t count) { return fread(bytes, 1, count, file_.get()); },
+            [&writer](const char * bytes, size_t count) { return writer->WriteBody(bytes, int(count)) >= 0; });
+        if (result == FilePumpResult::failed) { finish(false); }
+        else if (result == FilePumpResult::complete) { finish(true); }
+        else if (result == FilePumpResult::progress && writer->isWriteComplete()) { schedule(); }
+    }
+    // modules/dasHV/ARCHITECTURE.md#bounded-file-transfer-lifecycle
+    void finish(bool success) {
+        if (finished_) return;
+        finished_ = true;
+        pump_.cancel();
+        file_.reset();
+        auto server = server_.lock();
+        auto writer = writer_.lock();
+        auto adapter = static_cast<WebServer_Adapter *>(server.get());
+        if (!writer || !adapter) return;
+        auto registration = adapter->writer_registration(writer.get());
+        if (registration.open != token_) return;
+        writer->onwrite = nullptr;
+        writer->onclose = previous_close_;
+        adapter->release_writer(writer.get(), token_);
+        if (success) writer->End();
+        else if (writer->isConnected()) writer->close(true);
+    }
+    std::weak_ptr<hv::WebSocketServer> server_;
+    std::weak_ptr<hv::HttpResponseWriter> writer_;
+    shared_ptr<atomic<bool>> token_;
+    std::unique_ptr<FILE, decltype(&fclose)> file_;
+    BoundedFilePump pump_;
+    std::function<void()> previous_close_;
+    bool scheduled_ = false, finished_ = false;
+};
+
+int das_writer_serve_file_stream(Handle<hv::WebSocketServer> h, hv::HttpResponseWriter * w,
+                                const char * filepath, int64_t max_bytes) {
+    if (!w || !filepath || !*filepath || max_bytes <= 0) return -1;
+    auto server = HandleRegistry<hv::WebSocketServer>::instance().lookup(h);
+    auto adapter = static_cast<WebServer_Adapter *>(server.get());
+    if (!adapter) return -1;
+    auto registration = adapter->writer_registration(w);
+    auto loop = adapter->loop(0);
+    if (!registration.writer || !registration.open->load() || !loop) return -1;
+    const std::string path(filepath);
+    const std::weak_ptr<hv::WebSocketServer> weak_server = server;
+    loop->queueInLoop([weak_server, registration, path, max_bytes]() {
+        auto server = weak_server.lock();
+        if (!server) return;
+        auto adapter = static_cast<WebServer_Adapter *>(server.get());
+        auto writer = registration.writer;
+        if (!registration.open->load() || !writer->isConnected() || writer->state != hv::HttpResponseWriter::SEND_BEGIN) return;
+        writer->response->headers.erase("Transfer-Encoding");
+        if (writer->response->GetHeader("Content-Type").empty() && writer->response->content_type == CONTENT_TYPE_NONE) {
+            writer->response->SetHeader("Content-Type", "application/octet-stream");
+        }
+        uint64_t bytes = 0;
+        std::unique_ptr<FILE, decltype(&fclose)> file(das_fopen_regular_read_utf8(path.c_str(), bytes), fclose);
+        const int status = !file ? 404 : bytes > uint64_t(max_bytes) ? 413 : 200;
+        if (status != 200) {
+            file.reset();
+            writer->response->body.clear();
+            writer->response->status_code = http_status(status);
+            writer->response->content_length = 0;
+            writer->response->SetHeader("Content-Length", "0");
+            adapter->release_writer(writer.get(), registration.open);
+            writer->WriteResponse(writer->response.get());
+            writer->End();
+            return;
+        }
+        auto transfer = std::make_shared<WriterFileStream>(server, writer, registration.open, file.release(), bytes);
+        transfer->start(bytes, registration.head_only);
     });
     return 0;
 }
@@ -1699,6 +1884,9 @@ public:
         addExtern<DAS_BIND_FUN(das_wss_set_limits)>(*this, lib, "set_limits",
             SideEffects::worstDefault, "das_wss_set_limits")
             ->args({"server", "http_body_bytes", "websocket_message_bytes", "pending_events", "pending_bytes"});
+        addExtern<DAS_BIND_FUN(das_wss_set_connection_limits)>(*this, lib, "set_connection_limits",
+            SideEffects::worstDefault, "das_wss_set_connection_limits")
+            ->args({"server", "pending_messages", "pending_bytes", "write_buffer_bytes"});
         addExtern<DAS_BIND_FUN(das_wss_set_bind_host)> (*this, lib, "set_bind_host",
             SideEffects::worstDefault, "das_wss_set_bind_host")
                 ->args({"server","host"});
@@ -1969,6 +2157,9 @@ public:
         addExtern<DAS_BIND_FUN(das_writer_serve_file)> (*this, lib, "SERVE_FILE",
             SideEffects::worstDefault, "das_writer_serve_file")
                 ->args({"server","writer","filepath"});
+        addExtern<DAS_BIND_FUN(das_writer_serve_file_stream)> (*this, lib, "SERVE_FILE_STREAM",
+            SideEffects::worstDefault, "das_writer_serve_file_stream")
+                ->args({"server","writer","filepath","max_bytes"});
         addExtern<DAS_BIND_FUN(das_writer_close)> (*this, lib, "close_writer",
             SideEffects::worstDefault, "das_writer_close")
                 ->args({"server","writer"});

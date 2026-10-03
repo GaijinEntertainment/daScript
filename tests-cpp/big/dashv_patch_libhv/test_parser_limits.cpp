@@ -1,12 +1,16 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
 #include <hv/HttpParser.h>
+#include <hv/HttpServer.h>
+#include "../../../modules/dasHV/src/http_request_snapshot.h"
 #include <hv/WebSocketParser.h>
 #include <hv/wsdef.h>
 #include <hv/hlog.h>
 #include <memory>
 #include <atomic>
 #include <thread>
+#include <future>
+#include <chrono>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -193,4 +197,37 @@ TEST_CASE("Logger fsync configuration is safe across serving threads") {
     start.store(true, std::memory_order_release);
     one.join();
     two.join();
+}
+
+TEST_CASE("Received request snapshots own body bytes independently of parser storage") {
+    HttpRequest source;
+    const std::string body(4096, 'a');
+    source.body = body;
+    source.Content();
+    source.http_cb = [](HttpMessage *, http_parser_state, const char *, size_t) {};
+    const auto snapshot = das::snapshot_received_http_request(source);
+    source.body.assign(body.size(), 'z');
+    CHECK(snapshot->body == body);
+    CHECK(std::string(static_cast<const char *>(snapshot->Content()), snapshot->ContentLength()) == body);
+    CHECK_FALSE(bool(snapshot->http_cb));
+}
+
+TEST_CASE("server startup publishes default static routes before workers") {
+    hlog_disable();
+    for (int trial = 0; trial != 32; ++trial) {
+        hv::HttpService routes;
+        routes.document_root = "/startup-root";
+        std::promise<void> started;
+        auto ready = started.get_future();
+        hv::HttpServer server(&routes);
+        server.setPort(0, 0);
+        server.setThreadNum(1);
+        server.onWorkerStart = [&started]() { started.set_value(); };
+        REQUIRE(server.start() == 0);
+        const auto path = routes.GetStaticFilepath("/asset.txt");
+        const auto ready_status = ready.wait_for(std::chrono::seconds(5));
+        server.stop();
+        REQUIRE(ready_status == std::future_status::ready);
+        CHECK(path == "/startup-root/asset.txt");
+    }
 }

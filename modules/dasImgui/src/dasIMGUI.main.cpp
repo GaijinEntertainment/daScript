@@ -31,10 +31,14 @@ namespace das {
     }
 
     void InstallCoreClipboardBackend() {
+#ifdef __EMSCRIPTEN__
+        return;
+#else
         ImGuiPlatformIO & platformIO = ImGui::GetPlatformIO();
         platformIO.Platform_GetClipboardTextFn = CoreClipboardGetText;
         platformIO.Platform_SetClipboardTextFn = CoreClipboardSetText;
         platformIO.Platform_ClipboardUserData = nullptr;
+#endif
     }
 
     ImU32 GetActiveID() {
@@ -214,6 +218,11 @@ namespace das {
     // duration of the ImGui call. ImGui's InputText/Combo callbacks fire
     // synchronously inside that call, so the thunk's lifetime is one C frame —
     // no ABI pinning, no struct field, no per-widget mirror struct.
+
+    void InputTextReload ( const char * label ) {
+        if (auto * state = ImGui::GetInputTextState(ImGui::GetID(label)))
+            state->ReloadUserBufAndMoveToEnd();
+    }
 
     bool InputTextBasic ( uint8_t * buf, int buf_size, const char * label, ImGuiInputTextFlags_ flags ) {
         return ImGui::InputText(label, (char *)buf, buf_size, flags);
@@ -794,6 +803,8 @@ namespace das {
         addExtern<DAS_BIND_FUN(das::InputTextMultiline), SimNode_ExtFuncCall, imguiTempFn>(*this, lib, "_builtin_InputTextMultiline",
             SideEffects::worstDefault, "das::InputTextMultiline");
         // Phase 0b.4 — buffer-as-pointer InputText path (no DasImguiInputText mirror).
+        addExtern<DAS_BIND_FUN(das::InputTextReload)>(*this, lib, "_builtin_InputText_reload",
+            SideEffects::worstDefault, "das::InputTextReload");
         addExtern<DAS_BIND_FUN(das::InputTextBasic)>(*this, lib, "_builtin_InputText_basic",
             SideEffects::worstDefault, "das::InputTextBasic");
         addExtern<DAS_BIND_FUN(das::InputTextWithHintBasic)>(*this, lib, "_builtin_InputTextWithHint_basic",
