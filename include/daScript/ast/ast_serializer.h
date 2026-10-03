@@ -366,7 +366,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 219;   // 219: annotation numeric payloads retain 64 bits
+            return 220;   // 220: (a type back-reference stays inside its module's record vs annotation numeric payloads retain 64 bits)
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

@@ -3017,6 +3017,10 @@ class public CppAot : AstVisitor {
             if (length(expr.fields) == 1) {
                 let mask = fixed_array('x', 'y', 'z', 'w');
                 let is64bit = expr._type.baseType == Type.tInt64 || expr._type.baseType == Type.tUInt64;
+                if (expr._type.baseType == Type.tUInt || expr._type.baseType == Type.tUInt64) {
+                    // the component of a uint vector is uint, but v_extract_*i returns int32 (int64)
+                    write(*ss, is64bit ? "uint64_t(" : "uint32_t(")
+                }
                 write(*ss, "v_extract_")
                 *ss |> write_char(mask[int(expr.fields[0])]);
                 if (expr._type.baseType != Type.tFloat) {
@@ -3058,6 +3062,7 @@ class public CppAot : AstVisitor {
         } else {
             if (length(expr.fields) == 1) {
                 if (expr._type.baseType != Type.tFloat) write(*ss, ")");
+                if (expr._type.baseType == Type.tUInt || expr._type.baseType == Type.tUInt64) write(*ss, ")");
                 write(*ss, ")");
             } else {
                 write(*ss, ")");

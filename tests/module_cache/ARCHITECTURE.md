@@ -41,6 +41,12 @@ this document states what the folder is and why its tests take the shape they do
   clean on the warm run with no cumulative hash warning.
 - `test_generic_instance_origin.das` - a generic instance restored from the cache keeps its
   origin generic, so a fresh program compiled in the same process after the restore resolves it.
+- `test_type_backref_record.das` - one host process compiles two scripts requiring `json_boost`,
+  a `shared` module, under the default cache in the temp directory: on the warm run the first
+  script's compile holds it, so the second script's stream reads its record into a throwaway
+  copy, and the second script's `JV` call - a main-module type equal to one in that record -
+  still serves and runs; the stream's type table restarts at each module's record, so no
+  back-reference reaches the copy.
 - `test_descriptor_manifest.das` - the manifest the module scan keeps beside each `.das_module`
   descriptor, replaying its registrations instead of compiling the descriptor, on a project root
   the test writes, three modules in it: one whose descriptor registers
@@ -122,7 +128,7 @@ this document states what the folder is and why its tests take the shape they do
   its own compile reads clean on two warm runs, rewrites nothing, and keeps the good cache when
   a later edit breaks the compile.
 - `_fixtures/` - the driver and module scripts the spawned children compile (`mc_dep_*`,
-  `mc_generic_origin_*`, `mc_cf_drv` - the `compile_file` driver, the file it compiles and
+  `mc_generic_origin_*`, `mc_backref_*` - the two scripts one process compiles over `json_boost`, `mc_cf_drv` - the `compile_file` driver, the file it compiles and
   whether it caches on its argv; the `mc_late_*` set a late require targets: a shared module with a
   macro context, one without, one that is not shared, one that does not compile, one declaring
   another name, and a macro module whose call macro requires the first from inside a compile);

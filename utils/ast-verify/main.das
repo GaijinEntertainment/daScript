@@ -12,8 +12,8 @@ let FILE_TIMEOUT = 120.0
 
 [CommandLineArgs]
 struct Config {
-    @clarg_doc = "Verify this one file"
-    file : string
+    @clarg_doc = "Verify this file (repeatable: the files compile in one process, and a report reruns them one by one)"
+    file : array<string>
 
     @clarg_doc = "Verify every .das changed against origin/<base-ref>"
     changed : bool
@@ -39,10 +39,14 @@ def private report(out, needle : string; limit : int) {
     }
 }
 
-def private verify_one(daslang, file : string; changed_mode : bool) : bool {
+def private is_unverifiable(file : string; changed_mode : bool) : bool {
     let name = base_name(file)
-    if (name |> starts_with("cant_") || name |> starts_with("failed_") || name |> starts_with("invalid_")
-            || (changed_mode && find(file, "ast-fuzz/selftest/") >= 0)) {
+    return (name |> starts_with("cant_") || name |> starts_with("failed_") || name |> starts_with("invalid_")
+            || (changed_mode && find(file, "ast-fuzz/selftest/") >= 0))
+}
+
+def private verify_one(daslang, file : string; changed_mode : bool) : bool {
+    if (is_unverifiable(file, changed_mode)) {
         return true
     }
     let timeout = changed_mode ? CHANGED_TIMEOUT : FILE_TIMEOUT
@@ -76,6 +80,26 @@ def private verify_one(daslang, file : string; changed_mode : bool) : bool {
     return true
 }
 
+def private verify_batch(daslang; files : array<string>) : bool {
+    var argv <- [daslang, "--ast-verify-batch", "-compile-only"]
+    argv |> push_from([for (f in files); f; where !is_unverifiable(f, false)])
+    if (length(argv) == 3) {
+        return true
+    }
+    var out : string
+    let ec = run_and_capture(argv, out, FILE_TIMEOUT * float(length(argv) - 3))
+    if (find(out, "AST verify") < 0 && find(out, "CRASH:") < 0 && ec != popen_timed_out && ec < 128) {
+        return true
+    }
+    var ok = true
+    for (f in files) {
+        if (!verify_one(daslang, f, false)) {
+            ok = false
+        }
+    }
+    return ok
+}
+
 def private changed_files(base_ref : string) : ChangedSet {
     var out : string
     let ec = run_and_capture([
@@ -100,8 +124,11 @@ def main() : int {
     }
     let cfg <- r |> move_unwrap
     let daslang = get_host_binary()
-    if (!empty(cfg.file)) {
-        return verify_one(daslang, cfg.file, false) ? 0 : 1
+    if (length(cfg.file) == 1) {
+        return verify_one(daslang, cfg.file[0], false) ? 0 : 1
+    }
+    if (length(cfg.file) > 1) {
+        return verify_batch(daslang, cfg.file) ? 0 : 1
     }
     if (!cfg.changed) {
         to_log(LOG_ERROR, "error: pass --file <path> or --changed\n")

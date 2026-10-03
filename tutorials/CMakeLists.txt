@@ -163,13 +163,15 @@ list(APPEND ALL_TUTORIAL_SOURCES ${DASLLAMA_TUTORIAL_SOURCES})
 
 add_custom_target(dry_run_tutorials)
 
-foreach(tutor ${ALL_TUTORIAL_SOURCES})
-    get_filename_component(input_name ${tutor} NAME)
-    add_das_target(${input_name}_dry
-        COMMAND daslang -dry-run ${tutor}
+list(LENGTH ALL_TUTORIAL_SOURCES _tutorial_count)
+math(EXPR _tutorial_size "(${_tutorial_count} + 63) / 64")
+DAS_CHUNKS(_tutorial_batches ${_tutorial_size} ${ALL_TUTORIAL_SOURCES})
+foreach(_n ${_tutorial_batches})
+    add_das_target(dry_run_tutorials_${_n}
+        COMMAND daslang -dry-run ${_tutorial_batches_${_n}}
         DEPENDS daslang
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-        COMMENT "Testing tutorial ${tutor}"
+        COMMENT "Testing tutorial chunk ${_n}"
     )
-    add_dependencies(dry_run_tutorials ${input_name}_dry)
+    add_dependencies(dry_run_tutorials dry_run_tutorials_${_n})
 endforeach()

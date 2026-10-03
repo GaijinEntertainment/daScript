@@ -14,6 +14,10 @@ def funV(v : int3) : int3 {
     return v
 }
 
+def funU(v : uint4) : uint4 {
+    return v
+}
+
 def test_vec2_swizzle(tt : T?; a : auto(vec2) -const -&) {
     var f2_x = vec2(1, 2)
     let _x : auto(numT) = f2_x[0]
@@ -149,4 +153,13 @@ def test_vec_swizzle(t : T?) {
         fv.v.xyz = int3(11, 22, 33)
         t |> equal(fv.v.xyz, int3(11, 22, 33))
     }
+}
+
+[test]
+def test_uint_component_of_value(t : T?) {
+    let u = uint4(0x80000000u, 1u, 2u, 0xfffffffeu)
+    t |> equal(uint64(funU(u).x), 0x80000000ul)
+    t |> equal(funU(u).x >> 1u, 0x40000000u)
+    t |> equal(funU(u).w / 2u, 0x7fffffffu)
+    t |> equal("{funU(u).x}", "0x80000000")
 }

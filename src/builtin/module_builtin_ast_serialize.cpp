@@ -1521,6 +1521,9 @@ namespace das {
 
     AstSerializer & AstSerializer::serializeModule ( Module & module, bool already_exists ) {
         thisModule = &module;
+        writeTypes.clear();
+        writeFreshTypeCount = 0;
+        readTypes.clear();
         if ( writing ) {
             module.serialize(*this, already_exists);
             return *this;
