@@ -2373,20 +2373,27 @@ def private rdec_take_mirror(t : Model; var s : Session; r, pos : int64) {
 }
 
 //! a row's recurrent state into its selected region's slots before the step: the state from zero at position 0, its position advanced
-def private rdec_dn_row_own(var s : Session; c : Config; pos : int64) {
+def private rdec_dn_row_own(var s : Session; c : Config; pos : int64; n : int64 = 1l) {
     if (pos == 0l) {
         dn_reset(s)
     }
-    s.dn_pos = pos + 1l
+    s.dn_pos = pos + n
     rdec_dn_own_all(s, c.n_layers)
 }
 
+//! every recurrent layer's state and conv history of `s` handed to the driver - the window chain's seat under `prefill`
 [hot_path]
-def private rdec_dn_own_all(var s : Session; n_layers : int64) {
+def private rdec_dn_own_all(var s : Session; n_layers : int64; prefill : bool = false) {
     for (l in range64(n_layers)) {
         continue if (s.dn_state_prefix[l] < 0l)
         unsafe {
-            rdec_dn_own(l, addr(s.dn_state[s.dn_state_prefix[l]]), addr(s.dn_conv_state[s.dn_conv_prefix[l]]))
+            let stp = addr(s.dn_state[s.dn_state_prefix[l]])
+            let histp = addr(s.dn_conv_state[s.dn_conv_prefix[l]])
+            if (prefill) {
+                rdec_dn_prefill_own(l, stp, histp)
+            } else {
+                rdec_dn_own(l, stp, histp)
+            }
         }
     }
 }
@@ -2667,11 +2674,7 @@ def private vulkan_resident_verify_go(t : Model; var s : Session; toks : array<i
     let ce = g_rdec_cos_elems
     kv_ensure(s, pos + n)
     if (c.recr_mask != 0ul) {
-        if (pos == 0l) {
-            dn_reset(s)
-        }
-        s.dn_pos = pos + n
-        rdec_dn_own_all(s, c.n_layers)
+        rdec_dn_row_own(s, c, pos, n)
     }
     let carry_dim = mtp_h_dim(c)
     g_rdec_x_n |> grow_resize(dim * n)
@@ -2798,14 +2801,11 @@ def private vulkan_resident_decode_go(t : Model; var s : Session; token, pos : i
         rdec_take_mirror(t, s, r, pos)
     }
     if (c.recr_mask != 0ul) {
-        if (pos == 0l) {
-            dn_reset(s)
-        } elif (pos != s.dn_pos) {
+        if (pos != 0l && pos != s.dn_pos) {
             rdec_pass_once(RdecPass.rewind, pos, s.dn_pos)
             return false
         }
-        s.dn_pos = pos + 1l
-        rdec_dn_own_all(s, c.n_layers)
+        rdec_dn_row_own(s, c, pos)
     }
     let dim = c.dim
     g_rdec_x |> grow_resize(dim)
@@ -3594,12 +3594,7 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
         to_log(LOG_INFO, "dasLLAMA: resident prefill host: {npos} rows, rope rows {us_rope} us, ple gather {us_gather} us, the driver's run {get_time_usec(ts_run) - us_gather} us\n")   // nolint:PERF026,PERF028 — the profile flag's report leg
     }
     if (c.recr_mask != 0ul) {
-        for (l in range64(c.n_layers)) {
-            continue if (s.dn_state_prefix[l] < 0l)
-            unsafe {
-                rdec_dn_prefill_own(l, addr(s.dn_state[s.dn_state_prefix[l]]), addr(s.dn_conv_state[s.dn_conv_prefix[l]]))
-            }
-        }
+        rdec_dn_own_all(s, c.n_layers, true)
         s.dn_pos = npos
     }
     if (start_pos == 0l) {
