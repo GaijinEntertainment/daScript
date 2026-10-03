@@ -4,7 +4,6 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require _compares
-require _vk_kq_fixtures
 require daslib/math_bits
 require daslib/rtti   // LineInfo: the probe handle's log hook
 require math
@@ -42,13 +41,13 @@ def test_mismatch_counts(t : T?) {
         t |> equal(mismatch_exact([1, 2], [1, 2, 3]), 1, "a truncated output is one element short")
         t |> equal(mismatch_exact([1, 9, 3, 4, 5], [1, 2, 3]), 3, "one off and two past the end")
     }
-    t |> run("the relative count and the fixture's bar count take a NaN as off") @(t : T?) {
+    t |> run("the relative count takes a NaN as off") @(t : T?) {
         let want <- [1.0, 2.0, 3.0]
         let got <- [1.0, NAN_SENTINEL, 3.0]
         t |> equal(mismatch_rel("nan", got, want, APPROX_REL), 1, "mismatch_rel counts the NaN")
-        t |> equal(count_bad(got, want, 1.0e-3, 1.0e-3), 1, "count_bad counts the NaN")
-        t |> equal(count_bad(want, want, 1.0e-3, 1.0e-3), 0, "control: equal rows")
-        t |> equal(count_bad([1.0, 2.5, 3.0], want, 1.0e-3, 1.0e-3), 1, "control: a finite miss")
+        t |> equal(mismatch_rel("nan", got, want, 0.0, 1.0e-3), 1, "mismatch_rel at an absolute floor counts the NaN")
+        t |> equal(mismatch_rel("equal", want, want, 0.0, 1.0e-3), 0, "control: equal rows")
+        t |> equal(mismatch_rel("miss", [1.0, 2.5, 3.0], want, 0.0, 1.0e-3), 1, "control: a finite miss")
     }
 }
 

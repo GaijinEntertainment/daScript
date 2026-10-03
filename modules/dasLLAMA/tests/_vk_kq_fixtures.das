@@ -169,19 +169,6 @@ def fill_q8_stack(rows, n : int64; seed : int64; var wqb : array<uint8>; var wsb
     }
 }
 
-//! the device-vs-reference bars every Vulkan cell shares: an element is off when it misses BOTH
-//! the absolute bar and the relative one (a fraction of the reference row's max); a NaN is inside neither
-def count_bad(gpu, refv : array<float>; abs_bar, rel_bar : float) : int {
-    var bad = 0
-    for (g, r in gpu, refv) {
-        let d = abs(g - r)
-        if (!(d <= max(abs_bar, rel_bar))) {
-            bad++
-        }
-    }
-    return bad
-}
-
 //! one hashed word of synthetic quant bytes for index i - the kernel suite's and the probes' plane filler
 def hash_word(i : uint) : uint {
     var h = i * 2654435761u

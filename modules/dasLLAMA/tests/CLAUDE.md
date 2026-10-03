@@ -1828,11 +1828,11 @@ return - the stamped tile reads a bf16 panel over 32 tokens, and `test_prefill_c
 reaches it through the batch kernel.
 `test_softmax.das` - model-free: `softmax`, `parallel_argmax` (the FIRST maximum on ties, the
 empty row a no-op) and `hlse`.
-`test_compares.das` - model-free: the suites' shared compares (`_compares.das`, and `count_bad`
-of `_vk_kq_fixtures.das`) over hand-built rows - a NaN on either side reads as an infinite
+`test_compares.das` - model-free: the suites' shared compares (`_compares.das`) over hand-built
+rows - a NaN on either side reads as an infinite
 `logits_maxdiff` wherever it sits, `maxdiff_at` lands on it, `logits_maxabs` scales no bar over
 it, rows of two lengths read infinite, `mismatch_exact` counts every element past the shorter
-row's end, and `mismatch_rel` and `count_bad` count a NaN as off; each with equal rows and a
+row's end, and `mismatch_rel`, at a relative bar and at an absolute floor, counts a NaN as off; each with equal rows and a
 finite difference as its controls. `check` runs on a probe handle whose failed asserts are counted:
 each bar kind (`rel_of_larger`, `exact`, `rel_of_max`, `envelope` and `per_element`, a float and a
 double expectation) passes rows inside it and reds one element past it, a NaN on either side and a
