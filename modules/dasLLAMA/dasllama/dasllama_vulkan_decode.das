@@ -4725,6 +4725,15 @@ def private dec_prof_attn(ts0, ts1, wait_us, woq : int64) {
 // Shared activation image + shared y (per-plane bases via the GEMV meta) ⇒ ONE submit, not three
 // (~74us each would eat the win). Serial-chain work: pays on GPU read speed, nothing hides here.
 
+def private qkv_gemv_enc(raw : VkCommandBuffer; var h : VkHaz; fq, fk, fv : int; var sq, sk, sv : VkDescriptorSet; n, dq, dk, dv : int64) {
+    var pcq = GemvArgs(n = uint(n), d = uint(dq), nreg = 1u, ybase = 0u)
+    gemv_enc(fq, raw, h, sq, pcq, dq)
+    var pck = GemvArgs(n = uint(n), d = uint(dk), nreg = 1u, ybase = uint(dq))
+    gemv_enc(fk, raw, h, sk, pck, dk)
+    var pcv = GemvArgs(n = uint(n), d = uint(dv), nreg = 1u, ybase = uint(dq + dk))
+    gemv_enc(fv, raw, h, sv, pcv, dv)
+}
+
 def private qkv_cmd_make(sq, sk, sv : int; woq, wok, wov : int64; n, dq, dk, dv : int64) {
     pin_stack_region(sq, woq)
     pin_stack_region(sk, wok)
@@ -4743,12 +4752,7 @@ def private qkv_cmd_make(sq, sk, sv : int; woq, wok, wov : int64; n, dq, dk, dv 
     var qset = stack_gemv_cls_set(sq)
     hz_set_bits(qset, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
     record_cmd(qc.cmd, false) $(raw : VkCommandBuffer; var h : VkHaz) {
-        var pcq = GemvArgs(n = uint(n), d = uint(dq), nreg = 1u, ybase = 0u)
-        gemv_enc(fq, raw, h, qset, pcq, dq)
-        var pck = GemvArgs(n = uint(n), d = uint(dk), nreg = 1u, ybase = uint(dq))
-        gemv_enc(fk, raw, h, qc.k_set, pck, dk)
-        var pcv = GemvArgs(n = uint(n), d = uint(dv), nreg = 1u, ybase = uint(dq + dk))
-        gemv_enc(fv, raw, h, qc.v_set, pcv, dv)
+        qkv_gemv_enc(raw, h, fq, fk, fv, qset, qc.k_set, qc.v_set, n, dq, dk, dv)
         vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_Y3, 0u, true)
         cmd_copy_whole(raw, g_gpu.stacks[sq].y_dev, g_gpu.stacks[sq].y.buf, qc.ybytes)
     }
@@ -5150,12 +5154,7 @@ def vk_moe_attn_dec_hydrate(woq : int64; fq : int; kp : uint8 const?; vp : uint8
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]
 def private at_chain_enc(raw : VkCommandBuffer; var h : VkHaz; var L : DatLayer; fq, fk, fv, fo : int; dim, qd, kvd, hs, n_heads, kv_mul : int64; scale, eps : float; neox, qk_norm : bool) {
-    var pcq = GemvArgs(n = uint(dim), d = uint(qd), nreg = 1u, ybase = 0u)
-    gemv_enc(fq, raw, h, L.s_q, pcq, qd)
-    var pck = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 1u, ybase = uint(qd))
-    gemv_enc(fk, raw, h, L.s_k, pck, kvd)
-    var pcv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 1u, ybase = uint(qd + kvd))
-    gemv_enc(fv, raw, h, L.s_v, pcv, kvd)
+    qkv_gemv_enc(raw, h, fq, fk, fv, L.s_q, L.s_k, L.s_v, dim, qd, kvd, kvd)
     let hb = L.has_bias ? 1u : 0u   // the layer's own row is bound, so boff stays 0
     if (qk_norm) {
         var pcf = QknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2l),
