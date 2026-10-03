@@ -376,6 +376,11 @@ def private rd_ar_set(add : uint64; abit : uint; out : uint64; obit : uint) : Vk
     return set_cls_ar(fixed_array(g_rd.x_dev, add, g_rd.norms_dev, out), fixed_array(rb, rb, g_rd.norms_bytes, rb), fixed_array(VHZ_X, abit, 0u, obit))
 }
 
+def private rd_quad_all(L : RLayer; pred : block<(f : int) : bool>) : bool
+    => invoke(pred, L.fq) && (L.kv_shared || (invoke(pred, L.fk) && (L.vfk || invoke(pred, L.fv)))) && invoke(pred, L.fo)
+
+def private rd_triple_all(f1, f3, f2 : int; pred : block<(f : int) : bool>) : bool => invoke(pred, f1) && invoke(pred, f3) && invoke(pred, f2)
+
 def private rd_layer_slot(l : int64) {
     while (long_length(g_rd.layers) <= l) {
         g_rd.layers |> emplace(RLayer())
@@ -445,8 +450,8 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
             && (!g_rd.qk_norm || (ensure_qk_rms_cls()
                 && (kv16 ? ensure_qkn_rope_f16_cls() : ensure_qkn_rope_cls())))
             && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls()))
-            && gemv_cls_ensure(fq) && (L.kv_shared || (gemv_cls_ensure(fk) && (L.vfk || gemv_cls_ensure(fv)))) && gemv_cls_ensure(fo)
-            && gemv_cls_ensure(f1) && gemv_cls_ensure(f3) && gemv_cls_ensure(f2),
+            && (rd_quad_all(L) $(f) => gemv_cls_ensure(f))
+            && (rd_triple_all(f1, f3, f2) $(f) => gemv_cls_ensure(f)),
             "vk decode: the class rails must engage on a live device")
         L.m_q = rd_meta(); L.m_k = rd_meta(); L.m_v = rd_meta(); L.m_wo = rd_meta()
         L.s_quant_xb = rd_quant_xb_set()
@@ -664,7 +669,7 @@ def private rd_moe_sets(var L : RLayer) {
     let pe1 = arena_planes(L.fe1, L.be1)
     let pe3 = arena_planes(L.fe3, L.be3)
     let pe2 = arena_planes(L.fe2, L.be2)
-    verify(gemv_cls_ensure(L.fe1) && gemv_cls_ensure(L.fe3) && gemv_cls_ensure(L.fe2)
+    verify((rd_triple_all(L.fe1, L.fe3, L.fe2) $(f) => gemv_cls_ensure(f))
         && (kq_sb(L.fe1) ? ensure_cls_q8k_rq() : ensure_cls_dn_rq())
         && (kq_sb(L.fe2) ? ensure_q8k_actrq_cls() : ensure_q8_actrq_cls()),
         "vk decode: the expert class rails must engage on a live device")
@@ -887,9 +892,9 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
     verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq() && ensure_q8_actrq_cls()
         && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls()))
         && (!kq_sb(fout) || ensure_cls_q8k_rq())
-        && gemv_cls_ensure(fqkv) && gemv_cls_ensure(fz) && gemv_cls_ensure(fout)
+        && (rd_triple_all(fqkv, fz, fout) $(f) => gemv_cls_ensure(f))
         && (g_rd.dn_ba_f32 || gemv_cls_ensure(int(KqFmt.q8)))
-        && gemv_cls_ensure(f1) && gemv_cls_ensure(f3) && gemv_cls_ensure(f2),
+        && (rd_triple_all(f1, f3, f2) $(f) => gemv_cls_ensure(f)),
         "vk decode: the class rails must engage on a live device")
     L.m_dnqkv = rd_meta(); L.m_dnz = rd_meta(); L.m_dnout = rd_meta()
     L.s_quant_xb = rd_quant_xb_set()
@@ -1475,7 +1480,7 @@ def vk_rdec_hot_layer(l, slots : int64; f1, f3, f2 : int) : tuple<base : int64; 
         to_log(LOG_INFO, "dasLLAMA vulkan resident: the hot expert pool skips layer {l} (formats {f1}/{f3}/{f2}, {k} picks a step: a biased stack, a mixed gate and up feed, a row off its block lattice, or more picks than the region records or the hidden plane hold)\n")
         return none
     }
-    if (!(gemv_cls_ensure(f1) && gemv_cls_ensure(f3) && gemv_cls_ensure(f2) && (kq_sb(f1) ? ensure_cls_q8k_rq() : ensure_cls_dn_rq())
+    if (!((rd_triple_all(f1, f3, f2) $(f) => gemv_cls_ensure(f)) && (kq_sb(f1) ? ensure_cls_q8k_rq() : ensure_cls_dn_rq())
             && (kq_sb(f2) ? ensure_q8k_actrq_cls() : ensure_q8_actrq_cls()) && ensure_combine_cls())) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the hot expert pool's class rails declined on this device (layer {l}, formats {f1}/{f3}/{f2})\n")
         return none
@@ -3150,15 +3155,15 @@ def vk_rdec_token_n_rows : int64 {
     if (!gemv_cls_has_n(g_rd.cls_fmt_marker)) return rd_n_decline("the classifier's format has no N-column GEMV leaf")
     for (L in g_rd.layers) {
         if (L.recurrent) {
-            if (!(gemv_cls_has_n(L.fqkv) && gemv_cls_has_n(L.fz) && gemv_cls_has_n(L.fout))) return rd_n_decline("a recurrent layer's weight format with no N-column GEMV leaf")
-            if (has_dense_triple(L) && !(gemv_cls_has_n(L.f1) && gemv_cls_has_n(L.f3) && gemv_cls_has_n(L.f2))) return rd_n_decline("a recurrent layer's FFN weight format with no N-column GEMV leaf")
+            if (!(rd_triple_all(L.fqkv, L.fz, L.fout) $(f) => gemv_cls_has_n(f))) return rd_n_decline("a recurrent layer's weight format with no N-column GEMV leaf")
+            if (has_dense_triple(L) && !(rd_triple_all(L.f1, L.f3, L.f2) $(f) => gemv_cls_has_n(f))) return rd_n_decline("a recurrent layer's FFN weight format with no N-column GEMV leaf")
             continue
         }
         if (L.moe && L.experts_host && !g_rd.hc) return rd_n_decline("a routed layer whose experts serve on the host (the split command steps a row at a time)")
         if (L.moe && !rd_routed_slots_fit(g_rd.nb, g_rd.k)) return rd_n_decline("more routed slots than the block's slot planes hold")
         if (L.moe && L.ple) return rd_n_decline("a per-layer-embedding layer with a routed block")
-        if (!(gemv_cls_has_n(L.fq) && (L.kv_shared || (gemv_cls_has_n(L.fk) && (L.vfk || gemv_cls_has_n(L.fv)))) && gemv_cls_has_n(L.fo))
-                || (has_dense_triple(L) && !(gemv_cls_has_n(L.f1) && gemv_cls_has_n(L.f3) && gemv_cls_has_n(L.f2)))
+        if (!(rd_quad_all(L) $(f) => gemv_cls_has_n(f))
+                || (has_dense_triple(L) && !(rd_triple_all(L.f1, L.f3, L.f2) $(f) => gemv_cls_has_n(f)))
                 || (L.ple && !gemv_cls_has_n(L.fpg))) return rd_n_decline("a weight format with no N-column GEMV leaf")
     }
     if (g_rd.n_rail == NRail.unasked) {   //! the command's kernel classes build once, before any step commits to it
@@ -3178,10 +3183,10 @@ def private rd_ensure_n_rail : bool {
             to_log(LOG_INFO, "vk_rdec n rail: layer recurrent {L.recurrent} moe {L.moe} ple {L.ple} dense {has_dense_triple(L)} fq {L.fq} fk {L.fk} fv {L.fv} fo {L.fo} fqkv {L.fqkv} fz {L.fz} fout {L.fout} f1 {L.f1} f3 {L.f3} f2 {L.f2} fpg {L.fpg}\n")
         }
         let head_ok = (L.recurrent   //! its own statement: a `?:` binds looser than the `&&` chain below, which would then be the else arm alone
-                ? (gemv_cls_ensure_n(L.fqkv, nb) && gemv_cls_ensure_n(L.fz, nb) && gemv_cls_ensure_n(L.fout, nb) && (g_rd.dn_ba_f32 || gemv_cls_ensure_n(int(KqFmt.q8), nb)))
-                : (gemv_cls_ensure_n(L.fq, nb) && (L.kv_shared || (gemv_cls_ensure_n(L.fk, nb) && (L.vfk || gemv_cls_ensure_n(L.fv, nb)))) && gemv_cls_ensure_n(L.fo, nb)))
+                ? ((rd_triple_all(L.fqkv, L.fz, L.fout) $(f) => gemv_cls_ensure_n(f, nb)) && (g_rd.dn_ba_f32 || gemv_cls_ensure_n(int(KqFmt.q8), nb)))
+                : (rd_quad_all(L) $(f) => gemv_cls_ensure_n(f, nb)))
         ok = (head_ok
-            && (!has_dense_triple(L) || (gemv_cls_ensure_n(L.f1, nb) && gemv_cls_ensure_n(L.f3, nb) && gemv_cls_ensure_n(L.f2, nb)))
+            && (!has_dense_triple(L) || (rd_triple_all(L.f1, L.f3, L.f2) $(f) => gemv_cls_ensure_n(f, nb)))
             && (!L.gu_on || q8_gemv_gu_n_ensure(nb))   //! the fused gate-up's N form declines the rail whole, as the GEMV leaves do
             && (!L.moe || ensure_topk_n_cls())
             && (!L.ple || gemv_cls_ensure_n(L.fpg, nb)))
