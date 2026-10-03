@@ -169,6 +169,25 @@ struct DlimPeek {
     layout : uint64       //!< the header's meta-layout fingerprint - what parse_image refuses on
 }
 
+//! the leading 64 KiB of the meta blob at `meta_off`, read through `read`; answers whether the reads stayed inside it
+[arch(at = "../ARCHITECTURE_IMAGE.md#dlim-meta-head")]
+def private read_meta_head(bp : uint8 const?; meta_off, meta_bytes : uint64; read : block<(var arch : Archive) : void>) : bool {
+    var head : array<uint8>
+    head |> resize(int64(min(meta_bytes, 65536ul)))
+    unsafe {
+        memcpy(addr(head[0]), reinterpret<void?>(bp + int64(meta_off)), uint64(long_length(head)))
+    }
+    var hmeta <- new MemSerializer(head)
+    var harch = Archive(reading = true, stream = hmeta)
+    invoke(read, harch)
+    let ok = hmeta->OK()
+    delete head
+    unsafe {
+        delete hmeta
+    }
+    return ok
+}
+
 [arch(at = "../ARCHITECTURE_IMAGE.md#dlim-meta-head")]
 def image_peek(path : string) : DlimPeek {
     var p = DlimPeek()
@@ -193,22 +212,13 @@ def image_peek(path : string) : DlimPeek {
         && read_u64(bp, 32l) == msize && meta_bytes != 0ul && meta_bytes <= msize
         && meta_off <= msize - meta_bytes && meta_bytes <= uint64(INT_MAX))
     if (p.valid && p.version >= 7) {
-        var head : array<uint8>
-        head |> resize(int64(min(meta_bytes, 65536ul)))
-        unsafe {
-            memcpy(addr(head[0]), reinterpret<void?>(bp + int64(meta_off)), uint64(long_length(head)))
+        let read = read_meta_head(bp, meta_off, meta_bytes) $(var harch : Archive) {
+            harch |> serialize(p.identity)
+            harch |> serialize(p.config_json)
         }
-        var hmeta <- new MemSerializer(head)
-        var harch = Archive(reading = true, stream = hmeta)
-        harch |> serialize(p.identity)
-        harch |> serialize(p.config_json)
-        if (!hmeta->OK()) {
+        if (!read) {
             p.identity = ""
             p.config_json = ""
-        }
-        delete head
-        unsafe {
-            delete hmeta
         }
     }
     unsafe(fmap_close(base, msize))
@@ -1546,20 +1556,11 @@ def private parse_image(base : void?; msize : uint64; path : string; var t; tag 
     }
     let want_ident = image_identity(tag, quant)
     if (read_u64(bp, 40l) != hash(want_ident)) {
-        var head : array<uint8>
-        head |> resize(int(min(meta_bytes, 65536ul)))
-        unsafe {
-            memcpy(addr(head[0]), reinterpret<void?>(bp + int64(meta_off)), uint64(long_length(head)))
-        }
-        var hmeta <- new MemSerializer(head)
-        var harch = Archive(reading = true, stream = hmeta)
         var baked_ident = ""
-        harch |> serialize(baked_ident)
-        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - baked for '{hmeta->OK() ? baked_ident : "(unreadable)"}', this run is '{want_ident}'\n")
-        delete head
-        unsafe {
-            delete hmeta
+        let read = read_meta_head(bp, meta_off, meta_bytes) $(var harch : Archive) {
+            harch |> serialize(baked_ident)
         }
+        to_log(LOG_WARNING, "dasLLAMA image: '{path}' declined - baked for '{read ? baked_ident : "(unreadable)"}', this run is '{want_ident}'\n")
         return false
     }
     var meta_blob : array<uint8>
