@@ -1886,7 +1886,7 @@ def test_vkd_act_family(t0 : T?) {
                 s_cls |> resize(nblk)
                 let wgs = 1l   // 256 threads cover both shapes at nelem = 1024
                 unsafe {
-                    fill_upload(hq2, 0l, q_bytes, I8_SENTINEL_BITS)
+                    upload_fill(hq2, 0l, q_bytes, I8_SENTINEL_BITS)
                     nan_sentinel_upload(hs2, s_bytes)
                     // the class kernel: gate@0, up@1, outq@2, outs@3
                     var sc = set_actrq_cls(fixed_array(gd, ud, hq2, hs2),
@@ -4243,7 +4243,7 @@ def test_vkd_requant_family(t0 : T?) {
                     upload_region_at(x2, 0l, addr<uint8 const?>(x[0]), e_bytes)
                     upload_region_at(ad, 0l, addr<uint8 const?>(a[0]), e_bytes)
                     upload_region_at(wd, 0l, addr<uint8 const?>(w[0]), e_bytes)
-                    fill_upload(q2, 0l, q_bytes, I8_SENTINEL_BITS)
+                    upload_fill(q2, 0l, q_bytes, I8_SENTINEL_BITS)
                     nan_sentinel_upload(s2, s_bytes)
                     // the class kernel: x@0, a@1, w@2, outq@3, outs@4
                     var sc = set_cls_ar_rq_b(fixed_array(x2, ad, wd, q2, s2),
@@ -4295,7 +4295,7 @@ def test_vkd_requant_family(t0 : T?) {
                     unsafe {
                         upload_region_at(x2, 0l, addr<uint8 const?>(x[0]), e_bytes)
                         upload_region_at(wbd, 0l, addr<uint8 const?>(wb[0]), 2l * e_bytes)
-                        fill_upload(q2, 0l, q_bytes, I8_SENTINEL_BITS)
+                        upload_fill(q2, 0l, q_bytes, I8_SENTINEL_BITS)
                         nan_sentinel_upload(s2, s_bytes)
                         var scb = set_cls_ar_rq_b(fixed_array(x2, ad, wbd, q2, s2),
                             fixed_array(e_bytes, e_bytes, 2l * e_bytes, q_bytes, s_bytes),
@@ -4445,7 +4445,7 @@ def test_vkd_requant_family(t0 : T?) {
                 let wgs = (nsb * 32 + 255) / 256
                 unsafe {
                     upload_region_at(sd, 0l, addr<uint8 const?>(src[0]), e_bytes)
-                    fill_upload(q2, 0l, q_bytes, I8_SENTINEL_BITS)
+                    upload_fill(q2, 0l, q_bytes, I8_SENTINEL_BITS)
                     nan_sentinel_upload(s2, s_bytes)
                     // the class kernel: src@0, outq@1, outs@2
                     var sc = set_rq_cls(fixed_array(sd, q2, s2),
