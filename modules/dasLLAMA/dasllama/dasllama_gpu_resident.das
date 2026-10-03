@@ -1819,10 +1819,8 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     // per layer: its mirror base and slot (a shared-KV layer records its donor's), for the layers above it that share
     var mir_bases : array<int64>
     var mir_slots : array<int64>
-    mir_bases |> reserve(c.n_layers)
-    mir_bases |> resize(c.n_layers)
-    mir_slots |> reserve(c.n_layers)
-    mir_slots |> resize(c.n_layers)
+    mir_bases |> reserve_resize(c.n_layers)
+    mir_slots |> reserve_resize(c.n_layers)
     let ple = has_ple(c) ? c.n_embd_per_layer : 0l
     if (ple > 0l && !rdec_set_ple(ple)) return rdec_decline("the per-layer-embedding width {ple} is not a 32-multiple")
     var ple_tbl_placed = false
@@ -1950,8 +1948,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     if (ple > 0l) {   //! the pre-step's projection on device where the driver takes it (the cm2 f16 GEMM, or the KHR twin off cm2); the CPU pre-step serves otherwise
         let all = c.n_layers * ple
         var w : array<float>
-        w |> reserve(all * dim)   // E4B: 27.5M floats - the guard wants the final size reserved first
-        w |> resize(all * dim)
+        w |> reserve_resize(all * dim)   // E4B: 27.5M floats - the guard wants the final size reserved first
         if (t.ple_model_bf16) {
             for (i in range64(all * dim)) {
                 w[i] = unsafe(reinterpret<float>(uint(t.bf16blob[t.ple_model_off + i]) << 16u))
@@ -2015,8 +2012,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     g_rdec_emb_gpu = emb_q8_placed || emb_f32_placed
     var norms : array<float>
     let norms_len = rdec_norms_len(c.n_layers, dim, c.qk_norm ? hs : 0l, head)
-    norms |> reserve(norms_len)
-    norms |> resize(norms_len)
+    norms |> reserve_resize(norms_len)
     for (l in range64(c.n_layers)) {
         let lb = l * RDEC_NORM_ROWS * dim
         if (!c.hyper_conn) {
@@ -2131,8 +2127,7 @@ def private resident_prepare_moe(t : Model; n_moe : int64; sh_gated : bool) : bo
     let ne = c.n_expert
     let ner = ne + (sh_gated ? 1l : 0l)
     var router : array<float>
-    router |> reserve(n_moe * ner * dim)
-    router |> resize(n_moe * ner * dim)
+    router |> reserve_resize(n_moe * ner * dim)
     var li = 0l
     for (l in range64(resident_routed_layers(t))) {
         continue if (!layer_is_moe(t, l))
@@ -3024,8 +3019,7 @@ def private resident_hot_arm(t : Model; plan : ResidentPlan) {
         to_log(LOG_INFO, "dasLLAMA: resident driver - no hot expert pool{ask}: {why}; DASLLAMA_GPU_HEAT=<slots> asks a count, 0 none\n")
         return
     }
-    g_rdec_hot |> reserve(resident_routed_layers(t))
-    g_rdec_hot |> resize(resident_routed_layers(t))
+    g_rdec_hot |> reserve_resize(resident_routed_layers(t))
     var armed = 0l
     var routed_idx = 0l
     for (l in range64(resident_routed_layers(t))) {
