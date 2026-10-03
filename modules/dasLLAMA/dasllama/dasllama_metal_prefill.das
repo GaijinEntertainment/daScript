@@ -7854,15 +7854,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     memcpy(addr < void? >(s.v_b[0]), reinterpret<void?>(vpan + koff_l), npos * kvd_l * 4l)
                     //! tq4 sessions store in the ROTATED basis: the GPU ran attention unrotated, so rotate the
                     //! readback rows per head before the codec store
-                    if (s.kv_dtype_k == KVDtype.tq4 || s.kv_dtype_v == KVDtype.tq4) {
-                        let sgp = addr < float const? >(s.kv_signs[0])
-                        if (s.kv_dtype_k == KVDtype.tq4) {
-                            tq4_rotate_batch(s.k_b, npos, kvd_l, hs_l, sgp)
-                        }
-                        if (s.kv_dtype_v == KVDtype.tq4) {
-                            tq4_rotate_batch(s.v_b, npos, kvd_l, hs_l, sgp)
-                        }
-                    }
+                    tq4_rotate_for_store(s, s.k_b, s.v_b, npos, kvd_l, hs_l)
                     kv_store_batch(kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len),
                         s.kv_dtype_k, s.kv_dtype_v, s.k_b, s.v_b, runsp, store_nrun, start_pos, npos, kvd_l)
                 }
