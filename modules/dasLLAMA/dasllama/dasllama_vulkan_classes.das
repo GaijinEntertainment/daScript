@@ -12366,6 +12366,15 @@ struct GemvArgs {
 
 // ===== the Q8_0 decode GEMV pair =====
 
+//! a lane pair's Q8_0 half-blocks dotted: the four sdot4 over this lane's 16 bytes, the partner lane's sum added (xor 1)
+def private q8_pair_dot(w, x : uint4) : int {
+    var i = sdot4(w.x, x.x)
+    i += sdot4(w.y, x.y)
+    i += sdot4(w.z, x.z)
+    i += sdot4(w.w, x.w)
+    return i + subgroupShuffleXor(i, 1u)
+}
+
 // q8_moe_groupn's class twin: TWO lanes per 32-block (a uint4 each), xor-1 fold, even lane folds
 // the scales. The workhorse decode GEMV.
 [vk_dispatch(name = "q8_gemv_cls", grid = "wgs", params = "wgs : int64")]
@@ -12394,13 +12403,7 @@ class Q8Gemv {
             while (bi0 < nb) {
                 let b = bi0 + lane / 2u
                 if (b < nb) {
-                    let wv = wq4[(wb0 + bi0) * 2u + lane]
-                    let xv = xq4[(xb0 + bi0) * 2u + lane]
-                    var idot = sdot4(wv.x, xv.x)
-                    idot += sdot4(wv.y, xv.y)
-                    idot += sdot4(wv.z, xv.z)
-                    idot += sdot4(wv.w, xv.w)
-                    idot += subgroupShuffleXor(idot, 1u)
+                    let idot = q8_pair_dot(wq4[(wb0 + bi0) * 2u + lane], xq4[(xb0 + bi0) * 2u + lane])
                     if (lane % 2u == 0u) {
                         acc += float(idot) * float(wsh[wb0 + b]) * axs[xb0 + b]
                     }
@@ -12431,15 +12434,6 @@ class template Q8GemvNT {
     @template_constant NC : int = 4       //!< the columns a lane dots per weight word
     @template_constant R2 : bool = false  //!< two output rows a subgroup
 
-    //! the row pair's second weight word and scale at block `b`, dotted against the same activation word
-    def pair_dot(wv1 : uint4; xv : uint4) : int {
-        var i1 = sdot4(wv1.x, xv.x)
-        i1 += sdot4(wv1.y, xv.y)
-        i1 += sdot4(wv1.z, xv.z)
-        i1 += sdot4(wv1.w, xv.w)
-        return i1 + subgroupShuffleXor(i1, 1u)
-    }
-
     [spirv_kernel(local_size_x = 64, local_size_x_id = 0)]
     def run {
         let sg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
@@ -12468,9 +12462,9 @@ class template Q8GemvNT {
                     for [unroll] (c in range(NC)) {
                         let xb = xb0 + min(uint(c), clast) * nb
                         let xv = xq4[(xb + bi0) * 2u + lane]
-                        let i0 = pair_dot(wv0, xv)
+                        let i0 = q8_pair_dot(wv0, xv)
                         static_if (R2) {
-                            let i1 = pair_dot(wq4[(wb0 + nb + bi0) * 2u + lane], xv)
+                            let i1 = q8_pair_dot(wq4[(wb0 + nb + bi0) * 2u + lane], xv)
                             if (lane % 2u == 0u) {
                                 let xs = axs[xb + b]
                                 acc0[c] += float(i0) * ws0 * xs
@@ -12608,13 +12602,8 @@ class Q8GemvAr : ResidualT {
             while (bi0 < nb) {
                 let b = bi0 + lane / 2u
                 if (b < nb) {
-                    let wv = wq4[(wb0 + bi0) * 2u + lane]
                     let xbase = (pa.xblk + bi0) * 8u + lane * 4u
-                    var idot = sdot4(wv.x, xqw[xbase])
-                    idot += sdot4(wv.y, xqw[xbase + 1u])
-                    idot += sdot4(wv.z, xqw[xbase + 2u])
-                    idot += sdot4(wv.w, xqw[xbase + 3u])
-                    idot += subgroupShuffleXor(idot, 1u)
+                    let idot = q8_pair_dot(wq4[(wb0 + bi0) * 2u + lane], uint4(xqw[xbase], xqw[xbase + 1u], xqw[xbase + 2u], xqw[xbase + 3u]))
                     if (lane % 2u == 0u) {
                         acc += float(idot) * float(wsh[wb0 + b]) * axs[pa.xblk + b]
                     }
@@ -12694,16 +12683,8 @@ class template Q8GemvGuNT {
                 for [unroll] (c in range(NC)) {
                     let xb = min(uint(c), clast) * nb
                     let xv = xq4[(xb + bi0) * 2u + lane]
-                    var gd = sdot4(gv.x, xv.x)
-                    gd += sdot4(gv.y, xv.y)
-                    gd += sdot4(gv.z, xv.z)
-                    gd += sdot4(gv.w, xv.w)
-                    var ud = sdot4(uv.x, xv.x)
-                    ud += sdot4(uv.y, xv.y)
-                    ud += sdot4(uv.z, xv.z)
-                    ud += sdot4(uv.w, xv.w)
-                    gd += subgroupShuffleXor(gd, 1u)
-                    ud += subgroupShuffleXor(ud, 1u)
+                    let gd = q8_pair_dot(gv, xv)
+                    let ud = q8_pair_dot(uv, xv)
                     if (lane % 2u == 0u) {
                         let xs = axs[xb + b]
                         accg[c] += float(gd) * gs * xs
@@ -12868,15 +12849,11 @@ class Q8GemvPleAct {
                 let inb = b < nb
                 let wv = inb ? wq4[(wb0 + bi0) * 2u + lane] : uint4(0u)
                 let ws = inb ? float(wsh[wb0 + min(b, nb - 1u)]) : 0.0
-                let xbase = inb ? bi0 * 8u + lane * 4u : 0u   //! a dead lane's index stays inside the words whatever the emitter makes of the ternaries below
+                let xbase = inb ? bi0 * 8u + lane * 4u : 0u   //! a dead lane reads words inside the slab, and its zero weight word dots them to 0
                 var c2 = 0u
                 while (c2 < nc) {
                     let xb = c2 * 64u + xbase
-                    var idot = inb ? sdot4(wv.x, xw[xb]) : 0
-                    idot += inb ? sdot4(wv.y, xw[xb + 1u]) : 0
-                    idot += inb ? sdot4(wv.z, xw[xb + 2u]) : 0
-                    idot += inb ? sdot4(wv.w, xw[xb + 3u]) : 0
-                    idot += subgroupShuffleXor(idot, 1u)
+                    let idot = q8_pair_dot(wv, uint4(xw[xb], xw[xb + 1u], xw[xb + 2u], xw[xb + 3u]))
                     if (inb && lane % 2u == 0u) {
                         acc[c2] += float(idot) * ws * xs[c2 * 8u + b]
                     }
