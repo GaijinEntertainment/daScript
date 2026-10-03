@@ -4134,10 +4134,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         var sgu = 0l
         var sdn = 0l
         for (sl in range64(t.config.n_layers + t.config.n_layer_nextn)) {
-            if (sl < t.config.n_layer_dense_lead || long_length(t.we1_offs) <= sl
-                    || t.we1_offs[sl] < 0l || t.we2_offs[sl] < 0l || t.we3_offs[sl] < 0l) {
-                continue
-            }
+            continue if (!layer_is_moe(t, sl))
             let sne = t.config.n_expert
             let snfe = t.config.n_ff_exp
             sgu = max(sgu, moe_gpu_plane_bytes(t.config.dim, sne * snfe, int(rdec_efmt(t, t.we1_fmt, sl))))
