@@ -3338,18 +3338,29 @@ def private rd_record_draft {
     rd_encode_ffn(raw, h, L, l, nxt, 1l, 1u, 0)
     var pco = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
     enc_cls_ar(raw, h, L.s_addr_next, pco, 1l)
-    rq_enc(raw, h, g_rd.s_quant_final, g_rd.cls_fmt_marker, dim)
+    rd_encode_draft_pick(raw, h)
+    if (!g_rd.log_xfer || !g_rd.carry_live) {   //! the head's own hidden lands whatever the knob says: the draft command copies it wherever the transfer command will not
+        vhz_dep(raw, h, VHZ_XB, 0u, true)
+        cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hid_host.buf, dim * 4l)
+    }
+    rd_close_draft(raw, h)
+    rd_take_stamps(g_rdq_draft, g_pfq_n)
+    rd_put_back_stamps(one)
+    g_rd.head_draft_recorded[g_rd.region] = true
+}
+
+def private rd_encode_draft_pick(raw : VkCommandBuffer; var h : VkHaz) {
+    rq_enc(raw, h, g_rd.s_quant_final, g_rd.cls_fmt_marker, g_rd.dim)
     rd_ts(raw, "t:draft_norm")
-    rd_gemv(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, dim, g_rd.vocab, 1u, uint(g_rd.vocab))
+    rd_gemv(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, g_rd.dim, g_rd.vocab, 1u, uint(g_rd.vocab))
     rd_ts(raw, "t:draft_cls")
     var pcp = ArgmaxArgs(vocab = uint(g_rd.vocab))
     enc_cls_argmax_part(raw, h, g_rd.s_pick_part, pcp, RD_PICK_CHUNKS)
     enc_cls_argmax_fin(raw, h, g_rd.s_pick_fin, pcp, 1l)
     rd_ts(raw, "t:draft_pick")
-    if (!g_rd.log_xfer || !g_rd.carry_live) {   //! the head's own hidden lands whatever the knob says: the draft command copies it wherever the transfer command will not
-        vhz_dep(raw, h, VHZ_XB, 0u, true)
-        cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hid_host.buf, dim * 4l)
-    }
+}
+
+def private rd_close_draft(raw : VkCommandBuffer; var h : VkHaz) {
     if (!g_rd.log_xfer) {
         vhz_dep(raw, h, VHZ_LOG, 0u, true)
         cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l)
@@ -3358,9 +3369,6 @@ def private rd_record_draft {
     }
     pfq_end(raw)
     cmd_close(raw)
-    rd_take_stamps(g_rdq_draft, g_pfq_n)
-    rd_put_back_stamps(one)
-    g_rd.head_draft_recorded[g_rd.region] = true
 }
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head")]   //! once per region and set epoch
@@ -3425,22 +3433,8 @@ def private rd_record_hc_draft {
         cmd_copy_whole(raw, g_rd.hccarry_out_dev, g_rd.hid_host.buf, hcd * 4l)
     }
     rd_encode_hc_mix(raw, h, g_rd.hc_mtp_site, true)
-    rq_enc(raw, h, g_rd.s_quant_final, g_rd.cls_fmt_marker, dim)
-    rd_ts(raw, "t:draft_norm")
-    rd_gemv(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, dim, g_rd.vocab, 1u, uint(g_rd.vocab))
-    rd_ts(raw, "t:draft_cls")
-    var pcp = ArgmaxArgs(vocab = uint(g_rd.vocab))
-    enc_cls_argmax_part(raw, h, g_rd.s_pick_part, pcp, RD_PICK_CHUNKS)
-    enc_cls_argmax_fin(raw, h, g_rd.s_pick_fin, pcp, 1l)
-    rd_ts(raw, "t:draft_pick")
-    if (!g_rd.log_xfer) {
-        vhz_dep(raw, h, VHZ_LOG, 0u, true)
-        cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l)
-        cmd_copy_whole(raw, g_rd.pick_dev, g_rd.pick_host.buf, 4l)
-        rd_ts(raw, "t:dma")
-    }
-    pfq_end(raw)
-    cmd_close(raw)
+    rd_encode_draft_pick(raw, h)
+    rd_close_draft(raw, h)
     rd_take_stamps(g_rdq_hc_draft_tail, g_pfq_n)
     rd_put_back_stamps(one)
     g_rd.head_draft_recorded[g_rd.region] = true
