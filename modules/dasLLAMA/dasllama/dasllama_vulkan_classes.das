@@ -130,6 +130,28 @@ class template Q8BlockStoreT {
 
     def normed_at(e : uint; mean, inv : float) : float => 0.0   //! the normed value at plane element `e` of the row whose statistics are `mean` and `inv`
 
+    //! the Q8_K superblock `b` from `normed_at` under `inv`: a 32-lane subgroup the superblock, lane `lane` its eight elements from `e0`, 32 apart
+    [arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
+    def sblk_store(b, lane, e0 : uint; inv : float) {
+        static_if (OUT_Q8) {
+            var vals : float[8]
+            var m = 0.0
+            for [unroll] (r in range(8)) {
+                let v = normed_at(e0 + uint(r) * 32u, 0.0, inv)
+                vals[r] = v
+                m = max(m, abs(v))
+            }
+            let d = q8k_amax5(m) / 127.0
+            if (lane == 0u) {
+                outs[b] = d
+            }
+            let id = d != 0.0 ? 1.0 / d : 0.0
+            for [unroll] (r in range(8)) {
+                outq[e0 + uint(r) * 32u] = q8_quant1(vals[r], id)
+            }
+        }
+    }
+
     //! the row's `nblk` blocks from plane element `base` quantized from `normed_at` into the blocks from `qb0` (32 blocks a pass over 256 lanes)
     def blk_pass(base, nblk, qb0 : uint; mean, inv : float) {
         static_if (OUT_Q8) {
@@ -411,22 +433,7 @@ class template ArRqT : ArRqBase {
         let lane = gl_LocalInvocationID.x & 31u
         var b = gl_LocalInvocationID.x >> 5u
         while (b < nblk) {
-            let base = b * 256u + lane
-            var vals : float[8]
-            var m = 0.0
-            for [unroll] (r in range(8)) {
-                let v = normed_at(base + uint(r) * 32u, 0.0, inv)
-                vals[r] = v
-                m = max(m, abs(v))
-            }
-            let d = q8k_amax5(m) / 127.0
-            if (lane == 0u) {
-                outs[b] = d
-            }
-            let id = d != 0.0 ? 1.0 / d : 0.0
-            for [unroll] (r in range(8)) {
-                outq[base + uint(r) * 32u] = q8_quant1(vals[r], id)
-            }
+            sblk_store(b, lane, b * 256u + lane, inv)
             b += 8u   //! the 256-thread workgroup's eight blocks
         }
     }
@@ -730,16 +737,7 @@ class template RqT : Q8BlockStoreT {
 
     def abstract load1(e : uint) : float     //! element `e` (the superblock form)
     def load4(eb : uint) : float4 => float4(load1(eb), load1(eb + 1u), load1(eb + 2u), load1(eb + 3u))   //! the four elements from `eb` (the 32-block form)
-
-    //! the superblock's scale to outs[b] from the subgroup's amax, its inverse back
-    [arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
-    def blk_scale(b, lane : uint; m0 : float) : float {
-        let d = q8k_amax5(m0) / 127.0
-        if (lane == 0u) {
-            outs[b] = d
-        }
-        return d != 0.0 ? 1.0 / d : 0.0
-    }
+    def override normed_at(e : uint; mean, inv : float) : float => load1(e)
 
     [spirv_kernel(local_size_x = 256)]
     def run {
@@ -748,18 +746,7 @@ class template RqT : Q8BlockStoreT {
         static_if (KBLK) {
             let b = gid / 32u
             if (b < pa.nblk) {
-                let base = b * 256u
-                var vals : float[8]
-                var m = 0.0
-                for [unroll] (r in range(8)) {
-                    let v = load1(base + uint(r) * 32u + lane)
-                    vals[r] = v
-                    m = max(m, abs(v))
-                }
-                let id = blk_scale(b, lane, m)
-                for [unroll] (r in range(8)) {
-                    outq[base + uint(r) * 32u + lane] = q8_quant1(vals[r], id)
-                }
+                sblk_store(b, lane, b * 256u + lane, 0.0)
             }
         } else {
             let sg = gid / 32u
