@@ -219,7 +219,6 @@ def private pf_f16g_enc(raw : VkCommandBuffer; var h : VkHaz; var gset, rset : V
     enc_splitk_reduce_cls(raw, h, rset, pcr, (rows * d + 1_023l) / 1_024l)
 }
 
-//! a GEMM's feed of `elems` floats: the f16 convert under `f16`, else the requant from element `inbase` (to Q8_K under `kq`)
 def private pf_feed_enc(raw : VkCommandBuffer; var h : VkHaz; var fset : VkDescriptorSet; f16, kq : bool; inbase, elems : int64) {
     if (f16) {
         var pc = ActArgs(nelem = uint(elems), nblk = 0u)
@@ -229,11 +228,17 @@ def private pf_feed_enc(raw : VkCommandBuffer; var h : VkHaz; var fset : VkDescr
     }
 }
 
-//! a GEMM's feed planes over the window's rows of `width` floats: the f16 rows under `f16`, else the Q8_0 quants and scales
 def private pf_feed_planes(f16 : bool; f16buf, qbuf, sbuf : uint64; width : int64) : tuple<q : uint64; s : uint64; qn : int64; sn : int64> {
     let np = g_rd.pf_np
     return (f16 ? (q = f16buf, s = g_rd.dummy, qn = np * width * 2l, sn = 256l)
         : (q = qbuf, s = sbuf, qn = np * width, sn = np * (width / 32l) * 4l))
+}
+
+def private pf_feed_set(f16 : bool; src : uint64; sbit : uint; f16buf, qbuf, sbuf : uint64; width : int64; obit : uint) : VkDescriptorSet {
+    let srcb = g_rd.pf_np * width * 4l
+    let p = pf_feed_planes(f16, f16buf, qbuf, sbuf, width)
+    return (f16 ? set_f16cvt_cls(fixed_array(src, p.q), fixed_array(srcb, p.qn), fixed_array(sbit, obit))
+        : set_rq_cls(fixed_array(src, p.q, p.s), fixed_array(srcb, p.qn, p.sn), fixed_array(sbit, obit, obit)))
 }
 
 //! one recurrent layer's prefill window sets; the o feed sets (`pf_dnof_set` / `pf_dnrq_set`) are shared by every recurrent layer
@@ -964,12 +969,7 @@ def private pf_setup {
         let gu6 = pf_gu6(l)
         let dn6 = pf_dn6(l)
         // 0 quant_xb: pf_xb -> pf_xq/pf_xs (f16-fed: f16 convert -> pf_xf)
-        g_rd.pf_sets[b + 0] = (qkv6
-            ? set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf),
-                fixed_array(np * dim * 4l, np * dim * 2l), fixed_array(VHZ_XB, VHZ_XQ))
-            : set_rq_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xq, g_rd.pf_xs),
-                fixed_array(np * dim * 4l, np * dim, np * (dim / 32l) * 4l),
-                fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ)))
+        g_rd.pf_sets[b + 0] = pf_feed_set(qkv6, g_rd.pf_xb, VHZ_XB, g_rd.pf_xf, g_rd.pf_xq, g_rd.pf_xs, dim, VHZ_XQ)
         // (GEMM roles 1/2/3/7/10/11/13 build lazily per router variant at record time)
         if (!L.recurrent) {
             // 4 rope+store (class: q, kv, Kmir, Vmir, cos, bias)
@@ -993,24 +993,14 @@ def private pf_setup {
             g_rd.pf_sets[b + 5] = da_attn_b_stamp_set(fa128l, L.hs > 256l, pf_reads_f16, abufs5, asizes5, agbits5)
         }
         // 6 quant_at: pf_attn -> pf_aq/pf_as (f16-fed: f16 convert -> pf_af)
-        g_rd.pf_sets[b + 6] = (wo6
-            ? set_f16cvt_cls(fixed_array(g_rd.pf_attn, g_rd.pf_af),
-                fixed_array(np * qd * 4l, np * qd * 2l), fixed_array(VHZ_ATT, VHZ_AQ))
-            : set_rq_cls(fixed_array(g_rd.pf_attn, g_rd.pf_aq, g_rd.pf_as),
-                fixed_array(np * qd * 4l, np * qd, np * (qd / 32l) * 4l),
-                fixed_array(VHZ_ATT, VHZ_AQ, VHZ_AQ)))
+        g_rd.pf_sets[b + 6] = pf_feed_set(wo6, g_rd.pf_attn, VHZ_ATT, g_rd.pf_af, g_rd.pf_aq, g_rd.pf_as, qd, VHZ_AQ)
         }
         // 8 addr_ffn (class: x, add partner, norms, xb out)
         g_rd.pf_sets[b + 8] = set_cls_ar(fixed_array(g_rd.pf_x, g_rd.pf_xb2, g_rd.norms_dev, g_rd.pf_xb),
             fixed_array(np * dim * 4l, np * dim * 4l, normbytes, np * dim * 4l),
             fixed_array(VHZ_X, VHZ_XB2, 0u, VHZ_XB))
         // 9 quant_xb2: pf_xb -> pf_xq (f16-fed: f16 convert -> pf_xf)
-        g_rd.pf_sets[b + 9] = (gu6
-            ? set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf),
-                fixed_array(np * dim * 4l, np * dim * 2l), fixed_array(VHZ_XB, VHZ_XQ))
-            : set_rq_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xq, g_rd.pf_xs),
-                fixed_array(np * dim * 4l, np * dim, np * (dim / 32l) * 4l),
-                fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ)))
+        g_rd.pf_sets[b + 9] = pf_feed_set(gu6, g_rd.pf_xb, VHZ_XB, g_rd.pf_xf, g_rd.pf_xq, g_rd.pf_xs, dim, VHZ_XQ)
         // 12 actrq (class: gate, up, quants out, scales out; f16-fed: actf16 -> pf_hf)
         g_rd.pf_sets[b + 12] = (dn6
             ? set_actf16_cls(fixed_array(g_rd.pf_gate, g_rd.pf_up, g_rd.pf_hf),
@@ -1047,13 +1037,7 @@ def private pf_setup {
         // 16 ple_x: the stream rows as they are -> pf_xf (the f16 feed) or pf_xq/pf_xs; 18 ple_act: gelu(gate rows) x the side rows -> hq/hs (17 / 19 are GEMM roles: sets on the encode)
         if (L.ple) {
             let ple = g_rd.ple
-            g_rd.pf_sets[b + 16] = (pf_f16_feed(L.fpg)
-                ? set_f16cvt_cls(fixed_array(g_rd.pf_x, g_rd.pf_xf),
-                    fixed_array(np * dim * 4l, np * dim * 2l),
-                    fixed_array(VHZ_X, VHZ_XQ))
-                : set_rq_cls(fixed_array(g_rd.pf_x, g_rd.pf_xq, g_rd.pf_xs),
-                    fixed_array(np * dim * 4l, np * dim, np * (dim / 32l) * 4l),
-                    fixed_array(VHZ_X, VHZ_XQ, VHZ_XQ)))
+            g_rd.pf_sets[b + 16] = pf_feed_set(pf_f16_feed(L.fpg), g_rd.pf_x, VHZ_X, g_rd.pf_xf, g_rd.pf_xq, g_rd.pf_xs, dim, VHZ_XQ)
             g_rd.pf_sets[b + 18] = set_actrq_cls(fixed_array(g_rd.pf_gate, g_rd.pf_ple, g_gpu.hq_dev, g_gpu.hs_dev),
                 fixed_array(np * ple * 4l, np * g_rd.n_layers * ple * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
                 fixed_array(VHZ_GATE, VHZ_COS, VHZ_HQ, VHZ_HQ))
@@ -1108,10 +1092,7 @@ def private pf_head_setup : bool {
         fixed_array(xb, xb, normbytes, xb), fixed_array(VHZ_UP, VHZ_UP, 0u, VHZ_XB2))
     g_rd.pf_sets[hb + 7] = set_cls_ar(fixed_array(g_rd.head_pf_hsrc, g_rd.head_pf_hsrc, g_rd.norms_dev, g_rd.pf_ffnout),
         fixed_array(xb, xb, normbytes, xb), fixed_array(VHZ_GATE, VHZ_GATE, 0u, VHZ_FFO))
-    g_rd.pf_sets[hb + 0] = (q6
-        ? set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf), fixed_array(xb, np * dim * 2l), fixed_array(VHZ_XB, VHZ_XQ))
-        : set_rq_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xq, g_rd.pf_xs), fixed_array(xb, np * dim, np * (dim / 32l) * 4l),
-            fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ)))
+    g_rd.pf_sets[hb + 0] = pf_feed_set(q6, g_rd.pf_xb, VHZ_XB, g_rd.pf_xf, g_rd.pf_xq, g_rd.pf_xs, dim, VHZ_XQ)
     g_rd.pf_sets[hb + 4] = pf_rope_kv_set(g_rd.head_pf_hcos)
     if (g_rd.qk_norm) {
         g_rd.pf_sets[hb + 15] = pf_qk_rms_set()
@@ -1283,11 +1264,7 @@ def private pf_head_cat_set(streams : int64) : VkDescriptorSet {
         g_rd.head_pf_catq = make_device_buf(np * width)
         g_rd.head_pf_cats = make_device_buf(np * (width / Q8_BLOCK_ELEMS) * 4l)
     }
-    let catb = np * width * 4l
-    return (e6
-        ? set_f16cvt_cls(fixed_array(g_rd.head_pf_cat, g_rd.head_pf_catf), fixed_array(catb, np * width * 2l), fixed_array(VHZ_ATT, VHZ_AQ))
-        : set_rq_cls(fixed_array(g_rd.head_pf_cat, g_rd.head_pf_catq, g_rd.head_pf_cats), fixed_array(catb, np * width, np * (width / Q8_BLOCK_ELEMS) * 4l),
-            fixed_array(VHZ_ATT, VHZ_AQ, VHZ_AQ)))
+    return pf_feed_set(e6, g_rd.head_pf_cat, VHZ_ATT, g_rd.head_pf_catf, g_rd.head_pf_catq, g_rd.head_pf_cats, width, VHZ_AQ)
 }
 
 def private pf_rope_kv_set(cos : uint64) : VkDescriptorSet {
