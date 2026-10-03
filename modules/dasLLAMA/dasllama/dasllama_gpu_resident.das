@@ -3712,6 +3712,20 @@ def private rdec_row_bind(t : Model; var s : Session; r, pos, i : int64; form : 
     }
 }
 
+//! row `pos` of every attention layer that keeps its own K/V, brought from the selected region into `s`'s host cache
+def private rdec_read_row_kv(t : Model; var s : Session; pos : int64) {
+    let c = t.config
+    for (l in range64(c.n_layers)) {
+        continue if (layer_is_recurrent(c, l) || t.kv_src[l] != l)
+        let kvd = layer_kv_dim(c, l)
+        let krowb = kv_row_bytes(s.kv_dtype_k, kvd)
+        let vrowb = kv_row_bytes(s.kv_dtype_v, kvd)
+        unsafe {
+            rdec_read_kv(l, pos, kv_layer_kbase(s, l, c.seq_len) + pos * krowb, kv_layer_vbase(s, l, c.seq_len) + pos * vrowb)
+        }
+    }
+}
+
 //! the step's rows through the N-row token command, one weight pass for all; false when the rows' regions do not serve
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
@@ -3765,16 +3779,7 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
         rdec_stash_carry(c, s, i, pos + 1l)
         if (!s.device_kv) {
             rdec_select_region(r)   //! the readback reads the selected region: this row's, bound above
-            for (l in range64(c.n_layers)) {
-                continue if (layer_is_recurrent(c, l) || t.kv_src[l] != l)
-                let kvd = layer_kv_dim(c, l)
-                let krowb = kv_row_bytes(s.kv_dtype_k, kvd)
-                let vrowb = kv_row_bytes(s.kv_dtype_v, kvd)
-                unsafe {
-                    rdec_read_kv(l, pos, kv_layer_kbase(s, l, c.seq_len) + pos * krowb,
-                        kv_layer_vbase(s, l, c.seq_len) + pos * vrowb)
-                }
-            }
+            rdec_read_row_kv(t, s, pos)
         }
         g_rdec_regions[r].cnt = pos + 1l
         s.rdec_host_current = !s.device_kv
@@ -3818,15 +3823,8 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
         }
         let picked = g_rdec_experts_host ? rdec_token_split_host(t, s, pos, pos + 1l, s.pick_asked, g_rdec_tmp) : rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, pos, pos + 1l, s.pick_asked, g_rdec_tmp)
         rdec_stash_carry(c, s, 0l, pos + 1l)
-        for (l in range64(c.n_layers)) {
-            continue if (s.device_kv || layer_is_recurrent(c, l) || t.kv_src[l] != l)
-            let kvd = layer_kv_dim(c, l)
-            let krowb = kv_row_bytes(s.kv_dtype_k, kvd)
-            let vrowb = kv_row_bytes(s.kv_dtype_v, kvd)
-            unsafe {
-                rdec_read_kv(l, pos, kv_layer_kbase(s, l, c.seq_len) + pos * krowb,
-                    kv_layer_vbase(s, l, c.seq_len) + pos * vrowb)
-            }
+        if (!s.device_kv) {
+            rdec_read_row_kv(t, s, pos)
         }
         g_rdec_regions[r].cnt = pos + 1l
         s.rdec_host_current = !s.device_kv
