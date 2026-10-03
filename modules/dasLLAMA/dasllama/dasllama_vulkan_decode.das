@@ -251,53 +251,36 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.pick_host = make_host_buf(4l * nb, false, [cached = true, xfer_shared = r.log_xfer])
     r.xlog_recorded |> resize(nb + 1l)
     r.xlog_pick_recorded |> resize(nb + 1l)
-    r.xlog_cmd |> reserve(nb + 1l)
-    r.xlog_pick_cmd |> reserve(nb + 1l)
-    for (_i in range64(nb + 1l)) {
-        r.xlog_cmd |> push(r.log_xfer ? alloc_xfer_cmd() : VkCommandBuffer())
-        r.xlog_pick_cmd |> push(r.log_xfer ? alloc_xfer_cmd() : VkCommandBuffer())
-    }
+    alloc_cmds(r.xlog_cmd, nb + 1l, r.log_xfer, true)
+    alloc_cmds(r.xlog_pick_cmd, nb + 1l, r.log_xfer, true)
     r.unsplit_on = r.attn_nsplit > 1l   //! the twins' availability is the device's, decided where their buffers are allocated: never a record's side effect
     r.wide_on = r.attn_nsplit > RD_SPLIT_PIECES
     r.tok_n_recorded |> resize(nb + 1l)
-    r.cmd_n |> reserve(nb + 1l)
-    r.cmd_n_unsplit |> reserve(nb + 1l)
-    for (_i in range64(nb + 1l)) {
-        r.cmd_n |> push(alloc_cmd())
-        r.cmd_n_unsplit |> push(r.unsplit_on ? alloc_cmd() : VkCommandBuffer())
-    }
+    alloc_cmds(r.cmd_n, nb + 1l, true)
+    alloc_cmds(r.cmd_n_unsplit, nb + 1l, r.unsplit_on)
     r.kv_readback = make_host_buf(2l * kv_dim * 4l * KV_READBACK_ROWS, false, [cached = true])
     ensure_ffn_state()   // hq_dev/hs_dev for the FFN act+requant
     r.tok_recorded |> resize(regions)
-    r.cmd |> reserve(regions)
-    r.cmd_unsplit |> resize(regions)
     r.tok_wide_recorded |> resize(regions)
-    r.cmd_wide |> resize(regions)
-    r.head_draft_cmd |> resize(head ? regions : 0l)
     r.head_draft_recorded |> resize(head ? regions : 0l)
     if (head) {
         let vsets = (hybrid ? regions : 1l) * (nb + 1l)
         r.v_recorded |> resize(vsets)
-        r.v_cmd |> reserve(vsets)
-        r.v_cmd_unsplit |> reserve(vsets)
-        for (_i in range64(vsets)) {
-            r.v_cmd |> push(alloc_cmd())
-            r.v_cmd_unsplit |> push(r.unsplit_on ? alloc_cmd() : VkCommandBuffer())
-        }
+        alloc_cmds(r.v_cmd, vsets, true)
+        alloc_cmds(r.v_cmd_unsplit, vsets, r.unsplit_on)
     }
-    for (ri in range64(regions)) {
-        r.cmd |> push(alloc_cmd())
-        if (r.unsplit_on) {
-            r.cmd_unsplit[ri] = alloc_cmd()
-        }
-        if (r.wide_on) {
-            r.cmd_wide[ri] = alloc_cmd()
-        }
-        if (head) {
-            r.head_draft_cmd[ri] = alloc_cmd()
-        }
-    }
+    alloc_cmds(r.cmd, regions, true)
+    alloc_cmds(r.cmd_unsplit, regions, r.unsplit_on)
+    alloc_cmds(r.cmd_wide, regions, r.wide_on)
+    alloc_cmds(r.head_draft_cmd, head ? regions : 0l, true)
     return true
+}
+
+def private alloc_cmds(var arr : array<VkCommandBuffer>; n : int64; on : bool; xfer : bool = false) {
+    arr |> reserve(long_length(arr) + n)
+    for (_i in range64(n)) {
+        arr |> push(!on ? VkCommandBuffer() : (xfer ? alloc_xfer_cmd() : alloc_cmd()))
+    }
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
@@ -1275,10 +1258,7 @@ def vk_rdec_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_row
         r.head_cat_host = make_host_buf((dim + hcd) * 4l, false, [cached = true])
         r.hcatq_dev = make_device_buf(2l * dim * hc * nb)
         r.hcats_dev = make_device_buf((2l * dim * hc / Q8_BLOCK_ELEMS) * 4l * nb)
-        r.hc_draft_cmd |> resize(long_length(r.head_draft_cmd))
-        for (ri in range64(long_length(r.hc_draft_cmd))) {
-            r.hc_draft_cmd[ri] = alloc_cmd()
-        }
+        alloc_cmds(r.hc_draft_cmd, long_length(r.head_draft_cmd), true)
     }
     r.hc_sites |> resize(n_sites + 1l + (r.hc_nextn ? 1l : 0l))
     for (si in range64(long_length(r.hc_sites))) {
@@ -1307,10 +1287,7 @@ def private rd_host_segments_setup(var r : RDec) {
     }
     r.seg_layer |> push(-1l)
     r.cmd_seg |> clear()
-    r.cmd_seg |> reserve(r.regions * r.nseg)
-    for (_i in range64(r.regions * r.nseg)) {
-        r.cmd_seg |> push(alloc_cmd())
-    }
+    alloc_cmds(r.cmd_seg, r.regions * r.nseg, true)
     r.seg_recorded |> clear()
     r.seg_recorded |> resize(r.regions)
 }
@@ -3595,11 +3572,7 @@ def private rd_record_verify(n : int64) {
 //! once a driver: the verify's segment command buffers, a region's `nseg`, and the per-region recorded flags
 [cold_path]
 def private rd_hc_v_seg_alloc() {
-    g_rd.hc_v_seg |> reserve(g_rd.regions * g_rd.nseg)
-    g_rd.hc_v_seg |> resize(g_rd.regions * g_rd.nseg)
-    for (i in range64(long_length(g_rd.hc_v_seg))) {
-        g_rd.hc_v_seg[i] = alloc_cmd()
-    }
+    alloc_cmds(g_rd.hc_v_seg, g_rd.regions * g_rd.nseg, true)
     g_rd.hc_v_recorded |> reserve(g_rd.regions)
     g_rd.hc_v_recorded |> resize(g_rd.regions)
 }
