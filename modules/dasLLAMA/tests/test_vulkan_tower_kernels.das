@@ -555,29 +555,6 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
 let private G4A_PAST = int(gemma4a_attn_past())   //! the RPE table carries past + 1 rows
 let private G4A_CAP = gemma4a_softcap()
 
-//! the CPU form of the windowed RPE attention, spelled as `gemma4a_encode`'s loop
-def private g4a_attn_ref(q, k, v, rpe, pds : array<float>; rows, d, heads, hs : int; qscale, kscale, cap : float) : array<float> {
-    var ao : array<float>
-    ao |> resize(rows * d)
-    for (hh in range(heads)) {
-        let hoff = hh * hs
-        for (i in range(rows)) {
-            attn_row_scored(v, hoff, d, hs, max(0, i - (G4A_PAST - 1)), i + 1, ao, i * d + hoff, false, 0.0) $(j : int) : float {
-                let rr = (G4A_PAST - (i - j)) * d
-                var cs = 0.0
-                var rs = 0.0
-                for (n in range(hs)) {
-                    let qv = q[i * d + hoff + n] * qscale * pds[n]
-                    cs += qv * (k[j * d + hoff + n] * kscale)
-                    rs += qv * rpe[rr + hoff + n]
-                }
-                return cap * tanh((cs + rs) / cap)
-            }
-        }
-    }
-    return <- ao
-}
-
 [test]
 def test_vkt_tower_conformer(t0 : T?) {   // nolint:STYLE038 — one flat gate over the four classes: the fixture, one command buffer, the oracles and their controls
     t0 |> run("the Conformer row classes (silu, GLU, depthwise conv, windowed RPE attention) == the CPU forms") <| @(t : T?) {
@@ -656,10 +633,10 @@ def test_vkt_tower_conformer(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                     }
                 }
                 check_rows(t, "tower_dw_conv5 causal depthwise taps vs the CPU loop", c_dev, c_ref, BAR_APPROX, d)
-                let ao_ref <- g4a_attn_ref(q, k, v, rpe, wn, rows, d, ROWS_HEADS, hs, qscale, kscale, G4A_CAP)
+                let ao_ref <- g4a_attn_oracle(q, k, v, rpe, wn, rows, d, ROWS_HEADS, hs, G4A_PAST, qscale, kscale, G4A_CAP)
                 check_rows(t, "tower_g4a_attn (64-wide stamp) windowed RPE attention vs the CPU loop", ao_dev, ao_ref, BAR_APPROX, d, hs)
                 let k_scaled <- scaled_copy(k, 1.5)
-                let ao_ctl <- g4a_attn_ref(q, k_scaled, v, rpe, wn, rows, d, ROWS_HEADS, hs, qscale, kscale, G4A_CAP)
+                let ao_ctl <- g4a_attn_oracle(q, k_scaled, v, rpe, wn, rows, d, ROWS_HEADS, hs, G4A_PAST, qscale, kscale, G4A_CAP)
                 let moved = mismatch_approx(ao_dev, ao_ctl)
                 t |> success(moved > nd / 4, "tower_g4a_attn control: scaled keys land the oracle elsewhere ({moved} of {nd} moved)")
                 // the 128-wide stamp (the served carriers' head) over the same rows read as two heads, the queries scaled up so
@@ -676,9 +653,9 @@ def test_vkt_tower_conformer(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                     enc_tower_g4a_attn_cls(raw, h, s_attn128, pa_attn128, int64((rows * heads2 + 63) / 64))
                 }
                 let ao_knee_dev <- cp |> plane_run(aop)
-                let ao_capped_ref <- g4a_attn_ref(q_at_cap_knee, k, v, rpe, wn, rows, d, heads2, hs2, qscale2, kscale, G4A_CAP)
+                let ao_capped_ref <- g4a_attn_oracle(q_at_cap_knee, k, v, rpe, wn, rows, d, heads2, hs2, G4A_PAST, qscale2, kscale, G4A_CAP)
                 check_rows(t, "tower_g4a_attn (128-wide stamp) windowed RPE attention over scaled queries vs the CPU loop", ao_knee_dev, ao_capped_ref, BAR_APPROX, d, hs2)
-                let ao_cap4_ref <- g4a_attn_ref(q_at_cap_knee, k, v, rpe, wn, rows, d, heads2, hs2, qscale2, kscale, 4.0 * G4A_CAP)
+                let ao_cap4_ref <- g4a_attn_oracle(q_at_cap_knee, k, v, rpe, wn, rows, d, heads2, hs2, G4A_PAST, qscale2, kscale, 4.0 * G4A_CAP)
                 let moved_cap4 = mismatch_approx(ao_knee_dev, ao_cap4_ref)
                 t |> success(moved_cap4 > nd / 4, "tower_g4a_attn 128 control: the softcap engages on the scaled queries - the oracle at four times the cap lands elsewhere ({moved_cap4} of {nd} moved)")
             }
