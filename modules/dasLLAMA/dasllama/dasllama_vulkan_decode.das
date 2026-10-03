@@ -602,8 +602,7 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     if (r.router_bias) {
         assert(long_length(rbias) == n_moe * ne, "vk_rdec_prepare_moe: the router-bias plane is not [n_moe x ne]")
         r.moe_rb_bytes = long_length(rbias) * 4l
-        r.moe_rb_dev = make_device_buf(r.moe_rb_bytes)
-        upload_region_at(r.moe_rb_dev, 0l, unsafe(addr<uint8 const?>(rbias[0])), r.moe_rb_bytes)
+        r.moe_rb_dev = rd_upload_rows(rbias)
     }
     r.moe_gb_dev = r.dummy
     r.moe_ub_dev = r.dummy
@@ -621,27 +620,17 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
         }
         r.moe_gub_bytes = long_length(gbias) * 4l
         r.moe_db_bytes = long_length(dbias) * 4l
-        r.moe_gb_dev = make_device_buf(r.moe_gub_bytes)
-        r.moe_ub_dev = make_device_buf(r.moe_gub_bytes)
-        r.moe_db_dev = make_device_buf(r.moe_db_bytes)
-        upload_region_at(r.moe_gb_dev, 0l, unsafe(addr<uint8 const?>(gbias[0])), r.moe_gub_bytes)
-        upload_region_at(r.moe_ub_dev, 0l, unsafe(addr<uint8 const?>(ubias[0])), r.moe_gub_bytes)
-        upload_region_at(r.moe_db_dev, 0l, unsafe(addr<uint8 const?>(dbias[0])), r.moe_db_bytes)
+        r.moe_gb_dev = rd_upload_rows(gbias)
+        r.moe_ub_dev = rd_upload_rows(ubias)
+        r.moe_db_dev = rd_upload_rows(dbias)
     }
     r.moe_eidx_dev = make_device_buf(MAX_ROUTED_SLOTS * 4l)
     r.router_bytes = long_length(router) * 4l
     assert(r.router_bytes == n_moe * r.ner * dim * 4l, "vk_rdec_prepare_moe: the router plane is not [n_moe x ner x dim]")
-    r.router_dev = make_device_buf(r.router_bytes)
-    upload_region_at(r.router_dev, 0l, unsafe(addr<uint8 const?>(router[0])), r.router_bytes)
+    r.router_dev = rd_upload_rows(router)
     if (f16g_shape_ok(dim)) {   //! the f16 mirror serves the cm2 route's window GEMM alone
-        var half : array<float16>
-        half |> reserve(long_length(router))
-        half |> resize(long_length(router))
-        cvt_f32_to_f16(unsafe(addr<uint16?>(half[0])), unsafe(addr(router[0])), long_length(router))
-        r.router16_bytes = long_length(half) * 2l
-        r.router16_dev = make_device_buf(r.router16_bytes)
-        upload_region_at(r.router16_dev, 0l, unsafe(addr<uint8 const?>(half[0])), r.router16_bytes)
-        delete half
+        r.router16_bytes = long_length(router) * 2l
+        r.router16_dev = rd_upload_rows_f16(router)
     }
     if (empty(dscale)) {
         r.moe_ds_dev = r.dummy
@@ -649,8 +638,7 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     } else {
         assert(long_length(dscale) == n_moe * ne, "vk_rdec_prepare_moe: the down-scale plane is not [n_moe x ne]")
         r.moe_ds_bytes = long_length(dscale) * 4l
-        r.moe_ds_dev = make_device_buf(r.moe_ds_bytes)
-        upload_region_at(r.moe_ds_dev, 0l, unsafe(addr<uint8 const?>(dscale[0])), r.moe_ds_bytes)
+        r.moe_ds_dev = rd_upload_rows(dscale)
     }
     r.moe_ident_dev = make_ramp_buf(MAX_ROUTED_SLOTS, 0l)
     let nb = r.nb
@@ -984,8 +972,7 @@ def vk_rdec_upload_bias(rows : array<float>) {
     }
     assert(g_rd != null, "vk_rdec_upload_bias before prepare")
     g_rd.bias_bytes = long_length(rows) * 4l
-    g_rd.bias_dev = make_device_buf(g_rd.bias_bytes)
-    upload_region_at(g_rd.bias_dev, 0l, unsafe(addr<uint8 const?>(rows[0])), g_rd.bias_bytes)
+    g_rd.bias_dev = rd_upload_rows(rows)
     g_rd.has_bias = true
 }
 
@@ -1007,8 +994,7 @@ def vk_rdec_upload_sinks(rows : array<float>) : bool {
         return false
     }
     g_rd.sinks_bytes = long_length(rows) * 4l
-    g_rd.sinks_dev = make_device_buf(g_rd.sinks_bytes)
-    upload_region_at(g_rd.sinks_dev, 0l, unsafe(addr<uint8 const?>(rows[0])), g_rd.sinks_bytes)
+    g_rd.sinks_dev = rd_upload_rows(rows)
     g_rd.has_sinks = true
     return true
 }
@@ -1028,14 +1014,27 @@ def vk_rdec_upload_dn_ba(rows : array<float>) {
         return
     }
     assert(g_rd != null && g_rd.hybrid, "vk_rdec_upload_dn_ba before a hybrid prepare")
+    g_rd.dn_ba_bytes = long_length(rows) * 2l
+    g_rd.dn_ba_dev = rd_upload_rows_f16(rows)
+}
+
+def private rd_upload_rows(rows : array<float>) : uint64 {
+    let bytes = long_length(rows) * 4l
+    let dev = make_device_buf(bytes)
+    upload_region_at(dev, 0l, unsafe(addr<uint8 const?>(rows[0])), bytes)
+    return dev
+}
+
+def private rd_upload_rows_f16(rows : array<float>) : uint64 {
     var half : array<float16>
     half |> reserve(long_length(rows))
     half |> resize(long_length(rows))
     cvt_f32_to_f16(unsafe(addr<uint16?>(half[0])), unsafe(addr(rows[0])), long_length(rows))
-    g_rd.dn_ba_bytes = long_length(half) * 2l
-    g_rd.dn_ba_dev = make_device_buf(g_rd.dn_ba_bytes)
-    upload_region_at(g_rd.dn_ba_dev, 0l, unsafe(addr<uint8 const?>(half[0])), g_rd.dn_ba_bytes)
+    let bytes = long_length(half) * 2l
+    let dev = make_device_buf(bytes)
+    upload_region_at(dev, 0l, unsafe(addr<uint8 const?>(half[0])), bytes)
     delete half
+    return dev
 }
 
 def private rd_dn_advance_parity(slot : int64) {
@@ -1248,8 +1247,7 @@ def vk_rdec_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_row
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the hyper-connection inject rows ({n_sites} sites x {hc} x {hcd}) pass the device's storage range {vk_max_storage_range()}\n")
         return false
     }
-    r.hcinjw_dev = make_device_buf(r.hcinjw_bytes)
-    upload_region_at(r.hcinjw_dev, 0l, unsafe(addr<uint8 const?>(inject_rows[0])), r.hcinjw_bytes)
+    r.hcinjw_dev = rd_upload_rows(inject_rows)
     r.s_hc_norm = set_hc_norm_cls(fixed_array(r.hcres_dev, r.hcxn_dev, r.hcn_dev), fixed_array(hcd * 4l * nb, hcd * 4l * nb, r.hcn_bytes), fixed_array(VHZ_X, VHZ_XB2, 0u))
     r.s_hc_inj = set_router_gemv_cls(fixed_array(r.hcinjw_dev, r.hcxn_dev, r.hcinj_dev, r.norms_dev),
         fixed_array(r.hcinjw_bytes, hcd * 4l * nb, hc * 4l * nb, r.norms_bytes), fixed_array(0u, VHZ_XB2, VHZ_MRT, 0u))
