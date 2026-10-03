@@ -306,22 +306,24 @@ def private wd_xkv_set : VkDescriptorSet {
         fixed_array(r.wq_bytes, r.ws_bytes, r.xkv_meta_bytes, bq, bq / kq_elems(KqFmt.q8) * 4l, bt), fixed_array(0u, 0u, 0u, WD_XFEED, WD_XFEED, WD_TMP))
 }
 
+//! the decoder's buffer sizes in bytes from its geometry: the row-cap planes (`bx` floats, `bq` / `bs` their Q8_0 quants and
+//! scales, `bh` the FFN's), the self K/V planes (`bkc`), the cross K/V planes as halves and floats (`bkx`, `bkxf`), the
+//! encoder rows (`bt`) and the attention's chunk partials (`bpms`, `bpy`)
+def private wd_sizes(r : WdResident) : tuple<bx : int64; bq : int64; bs : int64; bh : int64; bkc : int64; bkx : int64; bkxf : int64; bt : int64; bpms : int64; bpy : int64> {
+    let d = r.d
+    let bq = WD_ROW_CAP * 4l * d
+    let nch_cap = (max(r.ta, r.tmax) + int64(WDEC_CHUNK) - 1l) / int64(WDEC_CHUNK)
+    return (bx = WD_ROW_CAP * d * 4l, bq = bq, bs = bq / kq_elems(KqFmt.q8) * 4l, bh = WD_ROW_CAP * 4l * d * 4l,
+        bkc = r.nl * d * r.tmax * 2l, bkx = r.nl * d * r.ta * 2l, bkxf = r.nl * d * r.ta * 4l, bt = r.ta * d * 4l,
+        bpms = nch_cap * r.hh * WD_ROW_CAP * 2l * 4l, bpy = nch_cap * r.hh * WD_ROW_CAP * r.hs * 4l)
+}
+
 [cold_path]
 def private wd_sets {
     var r & = g_wd
     let d = r.d
     let q8e = kq_elems(KqFmt.q8)
-    let bx = WD_ROW_CAP * d * 4l
-    let bq = WD_ROW_CAP * 4l * d
-    let bs = bq / q8e * 4l
-    let bh = WD_ROW_CAP * 4l * d * 4l
-    let bkc = r.nl * d * r.tmax * 2l
-    let bkx = r.nl * d * r.ta * 2l
-    let bkxf = r.nl * d * r.ta * 4l
-    let nch_cap = (max(r.ta, r.tmax) + int64(WDEC_CHUNK) - 1l) / int64(WDEC_CHUNK)
-    let bpms = nch_cap * r.hh * WD_ROW_CAP * 2l * 4l
-    let bpy = nch_cap * r.hh * WD_ROW_CAP * r.hs * 4l
-    let bt = r.ta * r.d * 4l
+    let (bx, bq, bs, bh, bkc, bkx, bkxf, bt, bpms, bpy) = wd_sizes(r)
     r.s_kv_k = set_tower_wdec_kv_cls(fixed_array(r.qkv_dev, r.kc_dev, r.kx_dev, r.norms_dev), fixed_array(3l * bx, bkc, bkxf, r.norms_bytes), fixed_array(WD_QKV, WD_KC, WD_KX, 0u))
     r.s_kv_v = set_tower_wdec_kv_cls(fixed_array(r.qkv_dev, r.vc_dev, r.vx_dev, r.norms_dev), fixed_array(3l * bx, bkc, bkxf, r.norms_bytes), fixed_array(WD_QKV, WD_VC, WD_VX, 0u))
     r.s_attn_self = set_tower_wdec_attn_part_cls(fixed_array(r.qkv_dev, r.kc_dev, r.vc_dev, r.pms_dev, r.py_dev, r.norms_dev),
@@ -455,25 +457,22 @@ def private wd_build(w : WhisperModel; key : uint64) : bool {
     r.key = key
     wd_upload_weights(w)
     wd_upload_norms(w)
-    let bx = WD_ROW_CAP * d * 4l
-    let bq = WD_ROW_CAP * 4l * d
-    let bt = r.ta * d * 4l
-    let nch_cap = (max(r.ta, r.tmax) + int64(WDEC_CHUNK) - 1l) / int64(WDEC_CHUNK)
-    r.kxr_dev = wd_dev_buf(nl * d * r.ta * 2l)
-    r.vxr_dev = wd_dev_buf(nl * d * r.ta * 2l)
-    r.kc_dev = wd_dev_buf(nl * d * r.tmax * 2l)
-    r.vc_dev = wd_dev_buf(nl * d * r.tmax * 2l)
-    r.x_dev = wd_dev_buf(bx)
-    r.xq_dev = wd_dev_buf(bq)
-    r.xs_dev = wd_dev_buf(bq / q8e * 4l)
-    r.qkv_dev = wd_dev_buf(3l * bx)
-    r.cq_dev = wd_dev_buf(bx)
-    r.yo_dev = wd_dev_buf(bx)
-    r.h_dev = wd_dev_buf(4l * bx)
-    r.pms_dev = wd_dev_buf(nch_cap * r.hh * WD_ROW_CAP * 2l * 4l)
-    r.py_dev = wd_dev_buf(nch_cap * r.hh * WD_ROW_CAP * r.hs * 4l)
+    let z = wd_sizes(r)
+    r.kxr_dev = wd_dev_buf(z.bkx)
+    r.vxr_dev = wd_dev_buf(z.bkx)
+    r.kc_dev = wd_dev_buf(z.bkc)
+    r.vc_dev = wd_dev_buf(z.bkc)
+    r.x_dev = wd_dev_buf(z.bx)
+    r.xq_dev = wd_dev_buf(z.bq)
+    r.xs_dev = wd_dev_buf(z.bs)
+    r.qkv_dev = wd_dev_buf(3l * z.bx)
+    r.cq_dev = wd_dev_buf(z.bx)
+    r.yo_dev = wd_dev_buf(z.bx)
+    r.h_dev = wd_dev_buf(z.bh)
+    r.pms_dev = wd_dev_buf(z.bpms)
+    r.py_dev = wd_dev_buf(z.bpy)
     r.logits_dev = wd_dev_buf(r.nvocab * 4l)
-    r.xin_dev = wd_dev_buf(bt)
+    r.xin_dev = wd_dev_buf(z.bt)
     if (r.cm2) {
         r.xh_dev = wd_dev_buf((r.ta_tile_rows + TILE_READ_SLACK) * d * 2l)
         r.xkv_q_dev = wd_dev_buf(64l)
@@ -484,13 +483,13 @@ def private wd_build(w : WhisperModel; key : uint64) : bool {
         r.xkv_s_dev = wd_dev_buf(r.ta * d / q8e * 4l)
     }
     r.xkv_proj_dev = wd_dev_buf(r.ta_tile_rows * d * 4l)
-    r.kx_dev = wd_dev_buf(nl * d * r.ta * 4l)
-    r.vx_dev = wd_dev_buf(nl * d * r.ta * 4l)
+    r.kx_dev = wd_dev_buf(z.bkxf)
+    r.vx_dev = wd_dev_buf(z.bkxf)
     let groups = vt_tile_groups(r.xkv_tile, d, r.ta)
     r.xkv_meta_bytes = max((2l * nl * 4l + 2l * nl * groups) * 4l, BATCH_META_BYTES)
     r.xkv_meta = wd_host_buf(r.xkv_meta_bytes, false)
-    r.xhost = wd_host_buf(max(bx, r.nvocab * 4l), true)
-    r.kvhost = wd_host_buf(2l * nl * d * r.ta * 4l, true)
+    r.xhost = wd_host_buf(max(z.bx, r.nvocab * 4l), true)
+    r.kvhost = wd_host_buf(2l * z.bkxf, true)
     if (r.oom) {
         wd_release()
         return false
@@ -583,8 +582,8 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
     let nl = r.nl
     let ta = r.ta
     let hh = r.hh
-    let bt = ta * d * 4l
-    let bkxf = nl * d * ta * 4l
+    let z = wd_sizes(r)
+    let bt = z.bt
     assert(long_length(ds.kx) >= nl * d * ta && long_length(ds.vx) >= nl * d * ta)
     wd_drop_pending()
     let groups = vt_tile_groups(r.xkv_tile, d, ta)
@@ -634,7 +633,7 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
         }
     }
     g_wd_pend_uid = uid
-    g_wd_pend_bytes = bkxf
+    g_wd_pend_bytes = z.bkxf
     g_wd_windows++
     g_wd_window_uid = uid
     g_wd_window_live = true
