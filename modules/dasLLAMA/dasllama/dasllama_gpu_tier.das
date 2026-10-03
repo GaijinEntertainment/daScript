@@ -108,16 +108,9 @@ var g_moe_gpu_drop = @@moe_gpu_unset_drop
 var g_moe_gpu_dn = @@moe_gpu_unset_dn
 var g_moe_gpu_attn = @@moe_gpu_unset_attn
 var g_moe_gpu_installed = false
-var g_moe_gpu_layer_count = 0l         // K = layers offloaded from the END (env-driven, set by the tier)
-var g_moe_gpu_from_layer = 1000000l    // first offloaded layer (n_layers - K, set by the loader)
-var g_moe_gpu_cls_off = -1l            // element offset of the resident classifier plane (loader contract)
 var g_moe_gpu_cls_route = true         // runtime routing gate over the resident classifier (--cls-ab lever)
-var g_moe_gpu_stream_from = 1000000l   // first STREAMED layer (streamed range = [stream_from, from_layer))
-var g_moe_gpu_dense_offs : table<int64>   // resident dense planes, keyed woff * 8 + fmt (per-format offset spaces)
 var g_moe_gpu_dense_route = true       // runtime routing gate over the marks (in-process A/B lever)
-var g_moe_gpu_dn_layers : table<int64; int64>   // recurrent layer -> its qkv plane offset (tier-resident triples)
 var g_moe_gpu_dn_route = true          // runtime routing gate over the deltanet marks (--dn-ab lever)
-var g_moe_gpu_attn_layers : table<int64>  // full-attention layers whose q/k/v/o quad is tier-resident
 var g_moe_gpu_attn_route = true        // runtime routing gate over the attention marks (--attn-ab lever)
 
 // ===== the resident whole-stack decode driver hooks =====
@@ -846,44 +839,44 @@ def public install_moe_gpu_tier(ffn : MoeGpuFfnFn; upload : MoeGpuUploadFn; cls 
 }
 
 def public set_moe_gpu_layer_count(k : int64) {
-    g_moe_gpu_layer_count = k
+    g_marks.layer_count = k
 }
 
 def public moe_gpu_layer_count : int64 {
-    return g_moe_gpu_installed ? g_moe_gpu_layer_count : 0l
+    return g_moe_gpu_installed ? g_marks.layer_count : 0l
 }
 
 //! Loader contract: called once per load after the resident set is known (layers - K .. layers).
 def public set_moe_gpu_from_layer(from_layer : int64) {
-    g_moe_gpu_from_layer = from_layer
+    g_marks.from_layer = from_layer
 }
 
 def public moe_gpu_layer_on_gpu(l : int64) : bool {
     // upper bound is load-bearing: the MTP draft block sits at index n_layers, above every uploaded
     // range, so an unbounded `l >= from_layer` dispatches against a region never uploaded.
     // total 0 = loader never reported it; keep the old unbounded answer
-    return (g_moe_gpu_installed && l >= g_moe_gpu_from_layer
-        && (g_moe_gpu_total_layers <= 0l || l < g_moe_gpu_total_layers))
+    return (g_moe_gpu_installed && l >= g_marks.from_layer
+        && (g_marks.total_layers <= 0l || l < g_marks.total_layers))
 }
 
 //! Loader contract: first streamed layer (streamed range = [from, the resident set); reset per
 //! load). Streamed layers keep their CPU planes — only PREFILL batches dispatch on the GPU,
 //! the expert stacks DMA-streamed from pinned host mirrors; decode stays on the CPU.
 def public set_moe_gpu_stream_from(from_layer : int64) {
-    g_moe_gpu_stream_from = from_layer
+    g_marks.stream_from = from_layer
 }
 
 def public moe_gpu_layer_streamed(l : int64) : bool {
-    return g_moe_gpu_installed && l >= g_moe_gpu_stream_from && l < g_moe_gpu_from_layer
+    return g_moe_gpu_installed && l >= g_marks.stream_from && l < g_marks.from_layer
 }
 
 //! Loader contract: the resident classifier plane's element offset (-1 = none; reset per load).
 def public set_moe_gpu_cls_off(woff : int64) {
-    g_moe_gpu_cls_off = woff
+    g_marks.cls_off = woff
 }
 
 def public moe_gpu_cls_on_gpu(woff : int64) : bool {
-    return g_moe_gpu_installed && g_moe_gpu_cls_route && woff == g_moe_gpu_cls_off
+    return g_moe_gpu_installed && g_moe_gpu_cls_route && woff == g_marks.cls_off
 }
 
 //! Runtime routing gate over the resident classifier plane (the --cls-ab in-process lever).
@@ -896,15 +889,11 @@ def public set_moe_gpu_cls_route(on : bool) {
 //! (fmt, element offset) — the same identity the tier resolves stacks by, so the batch GEMM
 //! funnels route any marked weight without knowing layers or arches. Reset per load.
 def public set_moe_gpu_dense_off(fmt : int; woff : int64) {
-    g_moe_gpu_dense_offs |> insert(woff * 8l + int64(fmt))
-}
-
-def public reset_moe_gpu_dense_offs {
-    g_moe_gpu_dense_offs |> clear()
+    g_marks.dense_offs |> insert(woff * 8l + int64(fmt))
 }
 
 def public moe_gpu_dense_on_gpu(fmt : int; woff : int64) : bool {
-    return g_moe_gpu_installed && g_moe_gpu_dense_route && key_exists(g_moe_gpu_dense_offs, woff * 8l + int64(fmt))
+    return g_moe_gpu_installed && g_moe_gpu_dense_route && key_exists(g_marks.dense_offs, woff * 8l + int64(fmt))
 }
 
 //! Runtime routing gate over the dense marks: uploads stay resident, only the funnels' routing
@@ -917,20 +906,20 @@ def public set_moe_gpu_dense_route(on : bool) {
 //! Loader contract: mark one recurrent layer's deltanet triple resident on the tier (reset per
 //! load). woq = the qkv plane's element offset — the decode-step state hooks key tier state by it.
 def public set_moe_gpu_dn_layer(l : int64; woq : int64) {
-    g_moe_gpu_dn_layers |> insert(l, woq)
+    g_marks.dn_layers |> insert(l, woq)
 }
 
 //! The marked layer's qkv plane offset (-1 when the layer carries no resident triple).
 def public moe_gpu_dn_layer_key(l : int64) : int64 {
-    return g_moe_gpu_dn_layers?[l] ?? -1l
+    return g_marks.dn_layers?[l] ?? -1l
 }
 
 def public reset_moe_gpu_dn_layers {
-    g_moe_gpu_dn_layers |> clear()
+    g_marks.dn_layers |> clear()
 }
 
 def public moe_gpu_dn_on_gpu(l : int64) : bool {
-    return g_moe_gpu_installed && g_moe_gpu_dn_route && key_exists(g_moe_gpu_dn_layers, l)
+    return g_moe_gpu_installed && g_moe_gpu_dn_route && key_exists(g_marks.dn_layers, l)
 }
 
 //! Runtime routing gate over the deltanet marks (the --dn-ab in-process lever; uploads stay).
@@ -977,7 +966,7 @@ def public set_moe_gpu_dn_room_hook(room : MoeGpuDnRoomFn) {
 }
 
 def public moe_gpu_dnd_on_gpu(l : int64) : bool {
-    return g_moe_gpu_installed && g_moe_gpu_dnd_route && key_exists(g_moe_gpu_dn_layers, l)
+    return g_moe_gpu_installed && g_moe_gpu_dnd_route && key_exists(g_marks.dn_layers, l)
 }
 
 //! Runtime routing gate over the deltanet DECODE step (the --dnd-ab in-process lever).
@@ -1020,15 +1009,11 @@ def public moe_gpu_dn_release(state_lo : uint64; state_hi : uint64) {
 //! Loader contract: mark one full-attention layer's q/k/v/o plane quad resident on the tier —
 //! the prefill attention block then runs as one device chain. Reset per load.
 def public set_moe_gpu_attn_layer(l : int64) {
-    g_moe_gpu_attn_layers |> insert(l)
-}
-
-def public reset_moe_gpu_attn_layers {
-    g_moe_gpu_attn_layers |> clear()
+    g_marks.attn_layers |> insert(l)
 }
 
 def public moe_gpu_attn_on_gpu(l : int64) : bool {
-    return g_moe_gpu_installed && g_moe_gpu_attn_route && key_exists(g_moe_gpu_attn_layers, l)
+    return g_moe_gpu_installed && g_moe_gpu_attn_route && key_exists(g_marks.attn_layers, l)
 }
 
 //! Runtime routing gate over the attention marks (the --attn-ab in-process lever; uploads stay).
@@ -1174,22 +1159,16 @@ def public vk_rdec_rerecord_on : bool => g_vk_rdec_rerecord
 
 // ===== shared-expert residency (decode, async behind the routed experts) =====
 
-var g_moe_gpu_shexp_layers : table<int64>   // layers whose shexp gate/up/down triple is resident
 var g_moe_gpu_shexp_route = true
 var private g_moe_gpu_shexp_said : table<string>   // the prefill's shared-expert decline reasons said for this model
 
 //! Loader contract: mark one layer's shared-expert triple resident on the tier. Reset per load.
 def public set_moe_gpu_shexp_layer(l : int64) {
-    g_moe_gpu_shexp_layers |> insert(l)
-}
-
-def public reset_moe_gpu_shexp_layers {
-    g_moe_gpu_shexp_layers |> clear()
-    g_moe_gpu_shexp_said |> clear()
+    g_marks.shexp_layers |> insert(l)
 }
 
 def public moe_gpu_shexp_on_gpu(l : int64) : bool {
-    return g_moe_gpu_installed && g_moe_gpu_shexp_route && key_exists(g_moe_gpu_shexp_layers, l)
+    return g_moe_gpu_installed && g_moe_gpu_shexp_route && key_exists(g_marks.shexp_layers, l)
 }
 
 //! The prefill's shared expert stays on the CPU for `why`: said once per reason per model while the tier is armed.
@@ -1224,7 +1203,6 @@ def private moe_gpu_unset_qkv(var yq : float?; var yk : float?; var yv : float?;
 }
 
 var g_moe_gpu_qkv = @@moe_gpu_unset_qkv
-var g_moe_gpu_qkv_layers : table<int64>
 var g_moe_gpu_qkv_route = true
 
 //! Tier registration of the decode q/k/v group (beside install_moe_gpu_tier).
@@ -1234,15 +1212,11 @@ def public set_moe_gpu_qkv_hook(f : MoeGpuQkvFn) {
 
 //! Loader contract: mark one attention layer's q/k/v triple resident. Reset per load.
 def public set_moe_gpu_qkv_layer(l : int64) {
-    g_moe_gpu_qkv_layers |> insert(l)
-}
-
-def public reset_moe_gpu_qkv_layers {
-    g_moe_gpu_qkv_layers |> clear()
+    g_marks.qkv_layers |> insert(l)
 }
 
 def public moe_gpu_qkv_on_gpu(l : int64) : bool {
-    return g_moe_gpu_installed && g_moe_gpu_qkv_route && key_exists(g_moe_gpu_qkv_layers, l)
+    return g_moe_gpu_installed && g_moe_gpu_qkv_route && key_exists(g_marks.qkv_layers, l)
 }
 
 //! Runtime routing gate over the qkv marks (the --qkv-ab in-process lever; uploads stay).
@@ -1270,78 +1244,45 @@ struct MoeGpuMarks {
     unsupported : string
 }
 
+var private g_marks = MoeGpuMarks()   // the installed model's marks
+
 //! Move the installed marks out into `m`; the globals read as no-marks after (routing gates —
 //! the process-wide A/B levers — stay put).
 def public moe_gpu_marks_save(var m : MoeGpuMarks) {
-    m.layer_count = g_moe_gpu_layer_count
-    m.from_layer = g_moe_gpu_from_layer
-    m.stream_from = g_moe_gpu_stream_from
-    m.total_layers = g_moe_gpu_total_layers
-    m.cls_off = g_moe_gpu_cls_off
-    m.dense_offs <- g_moe_gpu_dense_offs
-    m.dn_layers <- g_moe_gpu_dn_layers
-    m.attn_layers <- g_moe_gpu_attn_layers
-    m.shexp_layers <- g_moe_gpu_shexp_layers
-    m.qkv_layers <- g_moe_gpu_qkv_layers
-    m.unsupported = g_moe_gpu_unsupported
-    g_moe_gpu_layer_count = 0l
-    g_moe_gpu_from_layer = 1000000l
-    g_moe_gpu_stream_from = 1000000l
-    g_moe_gpu_total_layers = 0l
-    g_moe_gpu_cls_off = -1l
-    g_moe_gpu_unsupported = ""
+    delete m
+    m <- g_marks
+    delete g_marks
+    g_marks <- MoeGpuMarks()
 }
 
-//! Does a saved mark set carry any armed state? A multi-model host uses this to attribute a
+//! Does a mark set carry any armed state? A multi-model host uses this to attribute a
 //! load's arm outcome to the slot that captured it — the process-global VRAM counter cannot
 //! tell WHOSE planes are resident.
 def public moe_gpu_marks_armed(m : MoeGpuMarks) : bool {
-    return moe_gpu_marks_armed_of(m.dense_offs, m.dn_layers, m.attn_layers, m.shexp_layers, m.qkv_layers,
-        m.cls_off, m.total_layers, m.from_layer, m.stream_from)
+    return (!empty(m.dense_offs) || !empty(m.dn_layers) || !empty(m.attn_layers)
+        || !empty(m.shexp_layers) || !empty(m.qkv_layers) || m.cls_off >= 0l
+        || (m.total_layers > 0l && (m.from_layer < m.total_layers || m.stream_from < m.total_layers)))
 }
 
 //! Do the INSTALLED marks carry any armed state? A load asks before installing its model: a
 //! model deleted without the drop leaves its marks and its device state behind.
-def public moe_gpu_installed_marks_armed() : bool {
-    return moe_gpu_marks_armed_of(g_moe_gpu_dense_offs, g_moe_gpu_dn_layers, g_moe_gpu_attn_layers,
-        g_moe_gpu_shexp_layers, g_moe_gpu_qkv_layers, g_moe_gpu_cls_off, g_moe_gpu_total_layers,
-        g_moe_gpu_from_layer, g_moe_gpu_stream_from)
-}
+def public moe_gpu_installed_marks_armed() : bool => moe_gpu_marks_armed(g_marks)
 
-def private moe_gpu_marks_armed_of(dense_offs : table<int64>; dn_layers : table<int64; int64>;
-                                   attn_layers, shexp_layers, qkv_layers : table<int64>;
-                                   cls_off, total_layers, from_layer, stream_from : int64) : bool {
-    return (!empty(dense_offs) || !empty(dn_layers) || !empty(attn_layers)
-        || !empty(shexp_layers) || !empty(qkv_layers) || cls_off >= 0l
-        || (total_layers > 0l && (from_layer < total_layers || stream_from < total_layers)))
-}
-
-// Release what is installed, then take `src`'s. The restore is public and nothing enforces the
-// save/restore pairing, so an unpaired restore would otherwise drop the old set unreleased.
-def private install_mark_table(var dst : table<auto(KT); auto(VT)>; var src : table<KT; VT>) {
-    delete dst
-    dst <- src
-}
-
-//! Install `m` as the global marks (moves the tables in; `m` reads as no-marks after).
+//! Install `m` as the global marks (moves the tables in; `m` reads as no-marks after). The
+//! installed set is released first: nothing enforces the save/restore pairing.
 def public moe_gpu_marks_restore(var m : MoeGpuMarks) {
-    g_moe_gpu_layer_count = m.layer_count
-    g_moe_gpu_from_layer = m.from_layer
-    g_moe_gpu_stream_from = m.stream_from
-    g_moe_gpu_total_layers = m.total_layers
-    g_moe_gpu_cls_off = m.cls_off
-    install_mark_table(g_moe_gpu_dense_offs, m.dense_offs)
-    install_mark_table(g_moe_gpu_dn_layers, m.dn_layers)
-    install_mark_table(g_moe_gpu_attn_layers, m.attn_layers)
-    install_mark_table(g_moe_gpu_shexp_layers, m.shexp_layers)
-    install_mark_table(g_moe_gpu_qkv_layers, m.qkv_layers)
-    g_moe_gpu_unsupported = m.unsupported
-    m.layer_count = 0l
-    m.from_layer = 1000000l
-    m.stream_from = 1000000l
-    m.total_layers = 0l
-    m.cls_off = -1l
-    m.unsupported = ""
+    delete g_marks
+    g_marks <- m
+    delete m
+    m <- MoeGpuMarks()
+}
+
+//! Install a no-marks set for a load of `total` layers whose resident and streamed ranges start at `from`, the asked layer count kept
+def public reset_moe_gpu_marks(from, total : int64) {
+    let layer_count = g_marks.layer_count
+    delete g_marks
+    g_marks <- MoeGpuMarks(layer_count = layer_count, from_layer = from, stream_from = from, total_layers = total)
+    g_moe_gpu_shexp_said |> clear()
 }
 
 typedef MoeGpuDropModelFn = function<() : void>
@@ -1431,8 +1372,6 @@ struct GpuTierWant {
 
 var g_gpu_want = GpuTierWant()
 var g_moe_gpu_backend = ""            // name registered with the arm hook ("vulkan")
-var g_moe_gpu_unsupported = ""        // loader contract: why the loaded model can't ride the armed tier
-var g_moe_gpu_total_layers = 0l       // loader contract: n_layers of the loaded model (status math)
 
 def private moe_gpu_no_arm : bool => false
 def private moe_gpu_no_vram : int64 => 0l
@@ -1760,7 +1699,7 @@ def public moe_gpu_tier_installed : bool {
 
 //! Loader contract: total transformer layers of the loaded model (resident/streamed counts).
 def public set_moe_gpu_total_layers(n : int64) {
-    g_moe_gpu_total_layers = n
+    g_marks.total_layers = n
 }
 
 var private g_moe_gpu_stream_need = 0l
@@ -1895,7 +1834,7 @@ def public matmul_moe_gpu_span_dec(var a : MoeSpanDec) {
 //! Loader contract: "" = the loaded model rides the armed tier; otherwise the human reason it
 //! cannot (reset per load; meaningless while the tier is unarmed).
 def public set_moe_gpu_model_support(reason : string) {
-    g_moe_gpu_unsupported = reason
+    g_marks.unsupported = reason
 }
 
 //! Live GPU-tier status (the control-page badge): actual post-load residency and routing.
@@ -1917,20 +1856,20 @@ def gpu_tier_status_() : GpuTierStatus {
     if (!g_moe_gpu_installed) {
         return GpuTierStatus(reason = "no GPU tier installed")
     }
-    let total = g_moe_gpu_total_layers
-    let resident = total > 0l ? max(total - g_moe_gpu_from_layer, 0l) : 0l
-    let streamed = total > 0l ? max(min(g_moe_gpu_from_layer, total) - min(g_moe_gpu_stream_from, total), 0l) : 0l
+    let total = g_marks.total_layers
+    let resident = total > 0l ? max(total - g_marks.from_layer, 0l) : 0l
+    let streamed = total > 0l ? max(min(g_marks.from_layer, total) - min(g_marks.stream_from, total), 0l) : 0l
     return GpuTierStatus(
         backend = g_moe_gpu_backend,
         device = invoke(g_moe_gpu_device_report),
-        supported = empty(g_moe_gpu_unsupported),
-        reason = g_moe_gpu_unsupported,
+        supported = empty(g_marks.unsupported),
+        reason = g_marks.unsupported,
         resident_layers = resident,
         streamed_layers = streamed,
-        dn_layers = long_length(g_moe_gpu_dn_layers),
-        attn_layers = long_length(g_moe_gpu_attn_layers),
-        dense_planes = long_length(g_moe_gpu_dense_offs),
-        cls_resident = g_moe_gpu_cls_off >= 0l,
+        dn_layers = long_length(g_marks.dn_layers),
+        attn_layers = long_length(g_marks.attn_layers),
+        dense_planes = long_length(g_marks.dense_offs),
+        cls_resident = g_marks.cls_off >= 0l,
         vram_bytes = invoke(g_moe_gpu_vram_report))
 }
 

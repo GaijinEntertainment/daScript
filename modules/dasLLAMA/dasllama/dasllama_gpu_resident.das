@@ -4012,17 +4012,8 @@ def moe_gpu_drop_model_() {
     set_moe_gpu_stream_need(0l)
     set_moe_gpu_dat_need(0l)
     // loader-contract reset — the same clean slate moe_gpu_upload_resident starts from
+    reset_moe_gpu_marks(1000000l, 0l)
     set_moe_gpu_layer_count(0l)
-    set_moe_gpu_from_layer(1000000l)
-    set_moe_gpu_stream_from(1000000l)
-    set_moe_gpu_total_layers(0l)
-    set_moe_gpu_cls_off(-1l)
-    reset_moe_gpu_dense_offs()
-    reset_moe_gpu_dn_layers()
-    reset_moe_gpu_attn_layers()
-    reset_moe_gpu_shexp_layers()
-    reset_moe_gpu_qkv_layers()
-    set_moe_gpu_model_support("")
 }
 
 //! The upload rail's first step: a model still installed on the tier (its marks armed, or the
@@ -4096,16 +4087,7 @@ def private dense_ffn_cpu_say(t : Model) {
 def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven sequential rail walks sharing one rollback cursor; splitting them hides the partial-group unwind
     moe_gpu_drop_installed_before_load(t.config.n_layers)
     reset_gpu_cpu_passes()
-    set_moe_gpu_from_layer(t.config.n_layers)   // nothing resident until an upload lands
-    set_moe_gpu_stream_from(t.config.n_layers)
-    set_moe_gpu_total_layers(t.config.n_layers)
-    set_moe_gpu_cls_off(-1l)
-    reset_moe_gpu_dense_offs()
-    reset_moe_gpu_dn_layers()
-    reset_moe_gpu_attn_layers()
-    reset_moe_gpu_shexp_layers()
-    reset_moe_gpu_qkv_layers()
-    set_moe_gpu_model_support("")
+    reset_moe_gpu_marks(t.config.n_layers, t.config.n_layers)   // nothing resident until an upload lands
     // -1 = auto: ask for every layer and let the walk's own budget stops place the split (the
     // resident loop drops a partial triple and breaks, the streamed loop does the same on the
     // pinned-mirror budget) — that is what makes auto degrade on a smaller card instead of failing
