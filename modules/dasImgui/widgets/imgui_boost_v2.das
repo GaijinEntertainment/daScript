@@ -262,16 +262,15 @@ class WidgetCallMacro : AstCallMacro {
                 }
             }
         }
-        if (is_container) {
-            // Containers end in `blk : block`, and daslang won't auto-fill mid-position defaults around a trailing block — so emit a FULLY-explicit positional config list, then append the block.
-            if (length(expr.arguments) <= firstUserArg) {
+        if (is_container || (hasNamedTuple && maxNamedArgIdx >= renderArgStart)) {
+            if (is_container && length(expr.arguments) <= firstUserArg) {
                 macro_error(prog, expr.at, "{kind_name}(...): container requires a body block")
                 return false
             }
-            let blockIdx = length(expr.arguments) - 1
-            let lastConfig = length(render_fn.arguments) - 2   // exclude trailing blk
+            let configEnd = length(expr.arguments) - (is_container ? 1 : 0)
+            let lastConfig = is_container ? length(render_fn.arguments) - 2 : maxNamedArgIdx
             var positionalConfig : array<ExpressionPtr>
-            for (i in range(firstUserArg, blockIdx)) {
+            for (i in range(firstUserArg, configEnd)) {
                 let a = expr.arguments[i]
                 continue if (a is ExprMakeTuple)
                 positionalConfig |> push(clone_expression(a))
@@ -298,32 +297,8 @@ class WidgetCallMacro : AstCallMacro {
                 newCall.arguments |> push(positionalConfig[posCursor])
                 posCursor++
             }
-            newCall.arguments |> push(clone_expression(expr.arguments[blockIdx]))
+            if (is_container) { newCall.arguments |> push(clone_expression(expr.arguments[configEnd])) }
             return true
-        }
-        if (hasNamedTuple && maxNamedArgIdx >= renderArgStart) {
-            // Reorder: fill render_fn.arguments[renderArgStart..maxNamedArgIdx] in
-            // order. Each slot: user-provided value if named, otherwise clone the
-            // arg's default `init` expression.
-            for (k in range(renderArgStart, maxNamedArgIdx + 1)) {
-                let argName = string(render_fn.arguments[k].name)
-                if (key_exists(namedFields, argName)) {
-                    newCall.arguments |> push(namedFields[argName])
-                } elif (render_fn.arguments[k].init != null) {
-                    newCall.arguments |> push(clone_expression(render_fn.arguments[k].init))
-                } else {
-                    macro_error(prog, expr.at,
-                        "{kind_name}(...): required argument '{argName}' has no default but was skipped by the user's named-tuple call")
-                    return false
-                }
-            }
-            // Any remaining expr.arguments that weren't tuples (positional
-            // after the tuple) still need forwarding — uncommon but possible.
-            for (i in range(firstUserArg, length(expr.arguments))) {
-                let a = expr.arguments[i]
-                if (a is ExprMakeTuple) continue
-                newCall.arguments |> push(clone_expression(a))
-            }
         } else {
             // No named-tuple form: keep the original positional forwarding.
             // Destructure any tuple (e.g. empty-tuple call forms) in source order.
@@ -817,19 +792,7 @@ class WidgetCallMacro : AstCallMacro {
         // Rewrite call to wrapperName(indexExpr, …). `__::` constrains overload resolution to the user module where we just installed the wrapper.
         var newCall = new ExprCall(at = expr.at, name := "__::{wrapperName}")
         newCall.arguments |> push(indexExpr)
-        for (i in range(1, length(expr.arguments))) {
-            let a = expr.arguments[i]
-            if (a is ExprMakeTuple) {
-                let mt = a as ExprMakeTuple
-                if (length(mt.recordNames) == length(mt.values) && !empty(mt.recordNames)) {
-                    for (j in range(length(mt.recordNames))) {
-                        newCall.arguments |> push(clone_expression(mt.values[j]))
-                    }
-                    continue
-                }
-            }
-            newCall.arguments |> push(clone_expression(a))
-        }
+        return <- default<ExpressionPtr> if (!emit_user_args(prog, expr, newCall, 1, 2))
         return <- newCall
     }
 }
