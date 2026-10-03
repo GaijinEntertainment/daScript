@@ -1164,10 +1164,7 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<
         g_rd.s_quant_final = rd_quant_xb_set()
         // cls GEMV (class): a device one-pair regions buffer replaces the device-filled meta
         // (device for the same reason — every vocab-row subgroup reads it)
-        g_rd.cls_regions_dev = make_staged_buf(CLS_META_BYTES) $(var words : uint?) {
-            words[0] = uint(arena_local_blk(cls_block))
-            words[1] = 0u
-        }
+        g_rd.cls_regions_dev = cls_regions_buf(uint(arena_local_blk(cls_block)))
         let pc = arena_planes(cls_fmt, cls_block)
         g_rd.cls_set = arena_gemv_set(cls_fmt, pc, g_rd.cls_regions_dev, CLS_META_BYTES, 0u, g_rd.xq_dev, g_rd.xs_dev, dim * nb, (dim / 32l) * 4l * nb, VHZ_XQ, g_rd.logits_dev, vocab * 4l * nb, VHZ_LOG)
         g_rd.cls_fmt_marker = cls_fmt
@@ -4944,6 +4941,15 @@ def vk_moe_heat_query(l : int64; idx : int64 const?; k : int64; var hit : int8?;
 // One-time dispatch state for a resident classifier plane: the regions pair never changes (ONE
 // region covering the whole plane, activations at image row 0), so it uploads device-local once
 // and the command buffer records once — per token only the activation refresh and the submit remain.
+def private cls_regions_buf(base : uint) : uint64 {
+    return make_staged_buf(CLS_META_BYTES) $(var words : uint?) {
+        unsafe {
+            words[0] = base
+            words[1] = 0u
+        }
+    }
+}
+
 def private ensure_cls(si : int; woff, n, d : int64) {
     if (g_gpu.stacks[si].cls_made) {
         return
@@ -4951,12 +4957,7 @@ def private ensure_cls(si : int; woff, n, d : int64) {
     ensure_gemv_scratch(si)
     let fmt = g_gpu.stacks[si].fmt
     verify(gemv_cls_ensure(fmt), "vk decode: the gemv class rail must engage on a live device")
-    g_gpu.stacks[si].cls_regions_dev = make_staged_buf(CLS_META_BYTES) $(var words : uint?) {
-        unsafe {
-            words[0] = span_meta_base(woff, si, fmt)
-            words[1] = 0u
-        }
-    }
+    g_gpu.stacks[si].cls_regions_dev = cls_regions_buf(span_meta_base(woff, si, fmt))
     g_gpu.stacks[si].cls_set = stack_gemv_set(si, g_gpu.stacks[si].cls_regions_dev, CLS_META_BYTES, g_gpu.stacks[si].xq.buf, g_gpu.stacks[si].xs.buf, XQ_BYTES, XS_BYTES, 0u, g_gpu.stacks[si].y_dev, Y_BYTES, VHG_YO)
     var cmd = alloc_cmd()
     record_cmd(cmd, false) $(raw : VkCommandBuffer; var h : VkHaz) {
