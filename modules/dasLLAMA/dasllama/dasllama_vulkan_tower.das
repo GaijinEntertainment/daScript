@@ -1136,7 +1136,7 @@ def private vt_sets_cm2_feed(var r : VtResident) {
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_mm_clamped(raw : VkCommandBuffer; var h : VkHaz; c : Clamp; var s_rq : VkDescriptorSet; nin : int64; var s_gemm : VkDescriptorSet; v : VtTile;
                           n, dout : int64; map_off : uint; groups : int64; var s_cl : VkDescriptorSet; nout : int64) {
-    var pc_rq = TowerClampRqArgs(inbase = 0u, nblk = uint(nin / kq_elems(KqFmt.q8)), lo = vt_lo(c, true), hi = vt_hi(c, true))
+    var pc_rq = RqArgs(inbase = 0u, nblk = uint(nin / kq_elems(KqFmt.q8)), lo = vt_lo(c, true), hi = vt_hi(c, true))
     vt_feed_enc(raw, h, v.tc > 0l, s_rq, pc_rq, nin)
     var pc_g = BatchArgs(n = uint(n), d = uint(dout), map_off = map_off)
     vt_tile_enc(raw, h, v, s_gemm, pc_g, groups)
@@ -1232,7 +1232,7 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
     let nff = npos * ff
     let n2d = npos * 2l * d
     let wg_attn = (npos * t.n_head + 63l) / 64l
-    var pc_rq_rel = TowerClampRqArgs(inbase = 0u, nblk = uint(rel_cap_rows * d / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+    var pc_rq_rel = RqArgs(inbase = 0u, nblk = uint(rel_cap_rows * d / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
     var pc_rel = BatchArgs(n = uint(d), d = uint(d), map_off = 0u)
     var pc_glu = TowerConvModArgs(d = uint(d), nelem = uint(nd))
     var pc_dw = DwConvRowsArgs(c = uint(d), t_in = uint(npos))
@@ -1554,8 +1554,8 @@ def private vulkan_canary_blocks(t : CanaryEncoder; var s : CanaryState; npos, w
     let nff = npos * ff
     let n2d = npos * 2l * d
     let wg_attn = (npos + 63l) / 64l
-    var pc_rq_rel = TowerClampRqArgs(inbase = 0u, nblk = uint(ww * d / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
-    var pc_rq_xb = TowerClampRqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+    var pc_rq_rel = RqArgs(inbase = 0u, nblk = uint(ww * d / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+    var pc_rq_xb = RqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
     var pc_rel = BatchArgs(n = uint(d), d = uint(d), map_off = 0u)
     var pc_glu = TowerConvModArgs(d = uint(d), nelem = uint(nd))
     var pc_dw = DwConvRowsArgs(c = uint(d), k = uint(t.conv_kernel), t_in = uint(npos))
@@ -2041,8 +2041,8 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
     let wg_fa = fa_stamp_wgs(khr, nheads, npos)
     var pc_fa = FaArgs(rows = uint(npos), w0 = 0u, qd = uint(dp), kvd = uint(dp), kv_mul = 1u, kvbase = 0u, scale = 1.0 / sqrt(float(hs)), window = 0u, sinkoff = 0u)
     var pc_rs = TowerRestrideArgs(rows = uint(npos), rows_pad = uint(npos_pad), nheads = uint(nheads), hs = uint(hs), hsp = uint(hsp), sstride = uint(d), soff = 0u)
-    var pc_rq = TowerClampRqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
-    var pc_rqh = TowerClampRqArgs(inbase = 0u, nblk = uint(nff / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+    var pc_rq = RqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+    var pc_rqh = RqArgs(inbase = 0u, nblk = uint(nff / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
     var pc_gd = BatchArgs(n = uint(d), d = uint(d), map_off = 0u)
     var pc_gff = BatchArgs(n = uint(d), d = uint(ff), map_off = 0u)
     var pc_dn = BatchArgs(n = uint(ff), d = uint(d), map_off = 0u, ksplit = uint(sk.ksplit))
@@ -2596,8 +2596,8 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
     var pc_pad_qkv = TowerRestrideArgs(rows = uint(npos), rows_pad = uint(npos_pad), nheads = uint(t.n_head), hs = uint(hs), hsp = uint(hsp), sstride = uint(3l * d), soff = 0u)
     var pc_unpad = TowerRestrideArgs(rows = uint(npos), rows_pad = uint(npos_pad), nheads = uint(t.n_head), hs = uint(hs), hsp = uint(hsp), sstride = uint(d), soff = 0u)   //! the attention rows are d-wide
     var pc_rope = RopeTabArgs(rows = uint(npos), qs = uint(3l * d), col = 0u, d = uint(t.n_head * hs), dh = uint(hs), coff = 0u, soff = 0u)
-    var pc_rq = TowerClampRqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
-    var pc_rqh = TowerClampRqArgs(inbase = 0u, nblk = uint(nff / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+    var pc_rq = RqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+    var pc_rqh = RqArgs(inbase = 0u, nblk = uint(nff / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
     var pc_gqkv = BatchArgs(n = uint(d), d = uint(3l * d), map_off = 0u)
     var pc_gd = BatchArgs(n = uint(d), d = uint(d), map_off = 0u)
     var pc_gff = BatchArgs(n = uint(d), d = uint(ff), map_off = 0u)
@@ -2936,7 +2936,7 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
             var pc_post = TowerLnArgs(d = uint(d), rows = uint(npos), woff = uint(o.attn_post - norms_base), boff = 0u, eps = t.eps, ln_on = 1u,
                 lnoff = uint(o.ln2 - norms_base), lnboff = 0u, ascale = 1.0)
             enc_tower_post_add_cls(raw, h, r.s_post_o, pc_post, npos)
-            var pc_rq = TowerClampRqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = vt_lo(cg, true), hi = vt_hi(cg, true))
+            var pc_rq = RqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = vt_lo(cg, true), hi = vt_hi(cg, true))
             enc_tower_clamp_rq_cls(raw, h, r.s_rq_xb, pc_rq, wg_nd)
             pc_gff.map_off = g_vt_maps[rb + GEMMA4V_GEMM_GATE]
             q8_batch_cls_enc(vff, raw, h, r.s_hg, pc_gff, g_ff)

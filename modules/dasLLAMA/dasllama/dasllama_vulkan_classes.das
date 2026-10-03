@@ -727,6 +727,8 @@ class ClsArAddRmsF16B : ArBase {
 struct RqArgs {
     inbase : uint   // element base of the source rows
     nblk : uint     // block / superblock count
+    lo : float      //! with `hi`, the range a `CLAMP` stamp clamps each source element to
+    hi : float
 }
 
 //! the Q8 requant of a plane's elements - Q8_0 32-blocks, or Q8_K superblocks under `KBLK` - over the stamp's element load (`load4` / `load1`)
@@ -758,15 +760,22 @@ class template RqT : Q8BlockStoreT {
     }
 }
 
-//! the straight requant of a float plane from `inbase`
+//! the straight requant of a float plane from `inbase`, its elements clamped to `lo`..`hi` under `CLAMP`
 [ |> template_struct_instance]
 class template RqPlainT : RqT {
     @ssbo @binding = 0 src : array<float>
     @ssbo @binding = 1 outq : array<int8>
     @ssbo @binding = 2 outs : array<float>
     @push_constant pa : RqArgs
+    @template_constant CLAMP : bool = false
 
-    def override load1(e : uint) : float => src[pa.inbase + e]
+    def override load1(e : uint) : float {
+        static_if (CLAMP) {
+            return clamp(src[pa.inbase + e], pa.lo, pa.hi)
+        } else {
+            return src[pa.inbase + e]
+        }
+    }
 }
 
 [vk_dispatch(name = "cls_dn_rq", kernel = "run", family = "rq_cls", grid = "wgs", params = "wgs : int64")]
@@ -9870,26 +9879,11 @@ class TowerClampCvt : TowerClampT {
 //! `tower_clamp_cvt_cls`'s push over `nelem` floats at the half range's bounds: the plain f32 -> f16 rows
 def f16_rows_args(nelem : uint) : TowerClampArgs => TowerClampArgs(nelem = nelem, lo = -65504.0, hi = 65504.0)
 
-struct TowerClampRqArgs {
-    inbase : uint
-    nblk : uint
-    lo : float
-    hi : float
-}
-
 //! the Q8_0 feed of a clamped GEMM input: the requant over the clamped elements (the mm and KHR modes' tile feed)
-[ |> template_struct_instance]
-class template TowerClampRqT : RqT {
-    @ssbo @binding = 0 src : array<float>
-    @ssbo @binding = 1 outq : array<int8>
-    @ssbo @binding = 2 outs : array<float>
-    @push_constant pa : TowerClampRqArgs
-
-    def override load1(e : uint) : float => clamp(src[pa.inbase + e], pa.lo, pa.hi)
-}
-
 [vk_dispatch(name = "tower_clamp_rq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TowerClampRq : TowerClampRqT {}
+class TowerClampRq : RqPlainT {
+    override CLAMP = true
+}
 
 struct TowerIm2colArgs {
     iw : uint         //! the source block's width (frames), height (mel rows / channels' rows) and channel count
@@ -13916,7 +13910,7 @@ def vt_tile_enc(raw : VkCommandBuffer; var h : VkHaz; t : VtTile; var s : VkDesc
 }
 
 //! a GEMM input's feed off its f32 rows: the clamp + halfword store on the cm2 feed, the clamp + Q8_0 requant on the mul_mm tiles
-def vt_feed_enc(raw : VkCommandBuffer; var h : VkHaz; cm2 : bool; var s_rq : VkDescriptorSet; var pc_rq : TowerClampRqArgs; nelem : int64) {
+def vt_feed_enc(raw : VkCommandBuffer; var h : VkHaz; cm2 : bool; var s_rq : VkDescriptorSet; var pc_rq : RqArgs; nelem : int64) {
     if (cm2) {
         var pc = TowerClampArgs(nelem = uint(nelem), lo = pc_rq.lo, hi = pc_rq.hi)
         enc_tower_clamp_cvt_cls(raw, h, s_rq, pc, (nelem / 4l + 255l) / 256l)

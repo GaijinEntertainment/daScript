@@ -594,7 +594,7 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
     } else {
         g_wd_handoffs++
     }
-    var pc_rq = TowerClampRqArgs(inbase = 0u, nblk = uint(ta * d / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+    var pc_rq = RqArgs(inbase = 0u, nblk = uint(ta * d / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
     var pc_g = BatchArgs(n = uint(d), d = uint(d), map_off = 0u)
     let total = ta * hh * hs
     let wg_kv = (total + 255l) / 256l
