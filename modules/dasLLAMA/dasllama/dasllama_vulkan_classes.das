@@ -1547,13 +1547,15 @@ class template TopKCore : WgReduceBase {
     }
 }
 
-//! the decode top-k's records: row `p`'s picks land in slots `p * k + j`
+//! the top-k's records: row `p`'s picks land in slots `p * k + j` - the expert and its weight, and under `META` the slot's
+//! GEMV records (the decode's), off it the two alone (the window's per-row select, which the bucket schedule reads)
 [ |> template_struct_instance]
 class template TopKRecords : TopKCore {
+    @template_constant META : bool = true
     @ssbo @binding = 0 logits : array<float>  //! [npos x lstride]
-    @ssbo @binding = 1 meta1 : array<uint>   //! the gate stack's (wblock, xblock) per slot row
-    @ssbo @binding = 2 meta3 : array<uint>
-    @ssbo @binding = 3 meta2 : array<uint>
+    @ssbo @binding = 1 @template_gate = META meta1 : array<uint>   //! the gate stack's (wblock, xblock) per slot row
+    @ssbo @binding = 2 @template_gate = META meta3 : array<uint>
+    @ssbo @binding = 3 @template_gate = META meta2 : array<uint>
     @ssbo @binding = 4 w : array<float>      //! the routing weights, a slot each
     @ssbo @binding = 5 @role = "weight" ds : array<float>     //! the per-expert down scales (gemma-4), read at dsoff when the push names a row
     @ssbo @binding = 6 @role = "weight" rb : array<float>     //! the router biases ([ne] a layer, gpt-oss), read at rboff under `rbias_on`
@@ -1583,12 +1585,14 @@ class template TopKRecords : TopKCore {
             }
             w[s] = wj
             eidx[s] = ex
-            meta1[s * 2u] = pa.base1 + ex * pa.stride1
-            meta1[s * 2u + 1u] = p * pa.xnb1
-            meta3[s * 2u] = pa.base3 + ex * pa.stride3
-            meta3[s * 2u + 1u] = p * pa.xnb1
-            meta2[s * 2u] = pa.base2 + ex * pa.stride2
-            meta2[s * 2u + 1u] = s * pa.xnb2
+            static_if (META) {
+                meta1[s * 2u] = pa.base1 + ex * pa.stride1
+                meta1[s * 2u + 1u] = p * pa.xnb1
+                meta3[s * 2u] = pa.base3 + ex * pa.stride3
+                meta3[s * 2u + 1u] = p * pa.xnb1
+                meta2[s * 2u] = pa.base2 + ex * pa.stride2
+                meta2[s * 2u + 1u] = s * pa.xnb2
+            }
             jj++
         }
     }
@@ -1602,48 +1606,13 @@ class TopKN : TopKRecords {
     }
 }
 
-struct TopkRowsArgs {
-    npos : uint
-    ne : uint
-    k : uint
-    norm : uint      //! renormalize the selected weights to sum 1
-    lstride : uint   //! the logits row stride (elements)
-    wscale : float   //! 0 or 1 = none
-    dsoff : uint     //! this layer's row base in the per-expert down-scale plane; NO_DSCALE = none
-    rbias_on : uint  //! the router bias (gpt-oss): logit e takes rb[rboff + e] before the pick
-    rboff : uint
-}
-
 [vk_dispatch(name = "topk_rows_cls", grid = "npos", params = "npos : int64")]
-class TopKRows : TopKCore {
-    @ssbo @binding = 0 logits : array<float>   //! [npos x lstride]
-    @ssbo @binding = 1 idx : array<uint>       //! [npos x k] the picked expert per slot
-    @ssbo @binding = 2 w : array<float>        //! ... and its routing weight
-    @ssbo @binding = 3 @role = "weight" ds : array<float>       //! the per-expert down scales (gemma-4), read at dsoff when the push names a row
-    @ssbo @binding = 4 @role = "weight" rb : array<float>       //! the router biases ([ne] a layer, gpt-oss), read at rboff under `rbias_on`
-    @push_constant pa : TopkRowsArgs
+class TopKRows : TopKRecords {
+    override META = false
 
     [spirv_kernel(local_size_x = 256, name = "topk_rows_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
     def run {
-        let tid = gl_LocalInvocationID.x
-        let p = gl_WorkGroupID.x
-        let live = tid < pa.ne
-        let e = min(tid, pa.ne - 1u)
-        let lv = logits[p * pa.lstride + e] + (pa.rbias_on != 0u ? rb[pa.rboff + e] : 0.0)
-        select_row(live ? lv : -3.0e38, live, pa.ne, pa.k)
-        if (tid == 0u) {
-            var jj = 0u
-            while (jj < pa.k) {
-                let ex = min(pick[jj], pa.ne - 1u)
-                var wj = pick_weight(jj, pa.k, pa.norm, pa.wscale)
-                if (pa.dsoff != NO_DSCALE) {
-                    wj *= ds[pa.dsoff + ex]
-                }
-                w[p * pa.k + jj] = wj
-                idx[p * pa.k + jj] = ex
-                jj++
-            }
-        }
+        row_picks(gl_WorkGroupID.x)
     }
 }
 

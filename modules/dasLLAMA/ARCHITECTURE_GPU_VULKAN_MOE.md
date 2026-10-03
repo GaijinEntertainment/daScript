@@ -53,8 +53,8 @@ except where a probe arm is named.
   why the MoE seats ask for a 64-multiple row width. The router plane holds every MoE layer's
   f32 rows, and a gated shared expert's gate vector rides as one more row past the experts, so
   one dispatch writes the logits row `[ne | gate]` per position.
-- **The per-row select** (`TopKRows`, one workgroup per position) is the decode top-k's core
-  over each row: the softmax, k picks largest-first with ties to the lower index, the
+- **The per-row select** (`TopKRows`, one workgroup per position) is the decode top-k's records
+  without the GEMV meta (`TopKRecords` with `META` off) over each row: the softmax, k picks largest-first with ties to the lower index, the
   renormalized or scaled weights - the host `moe_select_core`'s arithmetic - written
   position-major as the picked expert and its weight per slot.
 - **The bucket schedule** (`MoeSched`, one workgroup) writes what the host fill writes for the
@@ -220,7 +220,7 @@ learned input scale over sqrt(dim), which the norms plane carries as one weight 
 token command's router GEMV takes that rms itself, every expert workgroup over the same x
 (`RouterArgs.norm_on`, `rtn_fused`), so no norm dispatch precedes it.
 The top-k folds the checkpoint's per-expert down scale into each routing weight after the
-renormalization (`TopkArgs.dsoff` / `TopkRowsArgs.dsoff` name the layer's row in the
+renormalization (`TopkArgs.dsoff`, in the decode's and the window's top-k alike, names the layer's row in the
 `[n_moe x ne]` scale plane `rdec_prepare_moe` uploads; `NO_DSCALE` on every other model, the
 binding filled and never read), where the CPU chain scales the picked weights before the expert
 GEMVs. The combine (`ClsArCombG4`, the f16 normed-row twin `ClsArCombG4F16B`) is the residual step

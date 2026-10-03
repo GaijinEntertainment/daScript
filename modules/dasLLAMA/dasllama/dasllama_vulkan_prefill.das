@@ -521,8 +521,8 @@ def private pf_moe_layer_sets(l : int64) {
         L.pf_f16g_router_red_set = set_splitk_reduce_cls(fixed_array(g_rd.pf_splitk, g_rd.pf_mlog),
             fixed_array(g_rd.pf_splitk_bytes, np * ner * 4l), fixed_array(VHZ_SK, VHZ_MRT))
     }
-    L.pf_topk_set = set_topk_rows_cls(fixed_array(g_rd.pf_mlog, g_rd.pf_midx, g_rd.pf_mw, g_rd.moe_ds_dev, g_rd.moe_rb_dev),
-        fixed_array(np * ner * 4l, nk * 4l, nk * 4l, g_rd.moe_ds_bytes, g_rd.moe_rb_bytes), fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT, 0u, 0u))
+    L.pf_topk_set = set_topk_rows_cls(fixed_array(g_rd.pf_mlog, g_rd.pf_mw, g_rd.moe_ds_dev, g_rd.moe_rb_dev, g_rd.pf_midx),
+        fixed_array(np * ner * 4l, nk * 4l, g_rd.moe_ds_bytes, g_rd.moe_rb_bytes, nk * 4l), fixed_array(VHZ_MRT, VHZ_MRT, 0u, 0u, VHZ_MRT))
     L.pf_sched_set = set_moe_sched_cls(fixed_array(g_rd.pf_midx, g_rd.pf_minv, g_rd.pf_msch1, g_rd.pf_msch3, g_rd.pf_msch2, g_rd.pf_bex),
         fixed_array(nk * 4l, nk * 4l, BATCH_META_BYTES, BATCH_META_BYTES, BATCH_META_BYTES, nk * 4l),
         fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT))
@@ -622,7 +622,7 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     let nk = wlen * k
     let addrms_set = int(l * PF_ROLES) + 8
     pf_moe_router(raw, h, l, wlen)
-    var pct = TopkRowsArgs(npos = uint(wlen), ne = uint(ne), k = uint(k), norm = g_rd.norm_topk ? 1u : 0u, lstride = ner, wscale = g_rd.wscale,
+    var pct = TopkArgs(ne = uint(ne), k = uint(k), norm = g_rd.norm_topk ? 1u : 0u, lstride = ner, wscale = g_rd.wscale,
         dsoff = L.moe_g4 ? uint(L.router_slot * ne) : NO_DSCALE, rbias_on = g_rd.router_bias ? 1u : 0u, rboff = uint(L.router_slot * ne))
     enc_topk_rows_cls(raw, h, L.pf_topk_set, pct, wlen)
     pfq_ts(raw)

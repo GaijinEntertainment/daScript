@@ -9772,8 +9772,8 @@ def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float; gate : MoeGat
             upload_region_at(rbd, 0l, addr<uint8 const?>(rb[0]), rb_bytes)
             nan_sentinel_upload(idxd, s_bytes)
             nan_sentinel_upload(wd, s_bytes)
-            var sc = set_topk_rows_cls(fixed_array(ld, idxd, wd, ld, rbd), fixed_array(l_bytes, s_bytes, s_bytes, l_bytes, rb_bytes), fixed_array(1u, 2u, 4u, 1u, 0u))   //! no down scale: the logits fill the ds binding, never read at NO_DSCALE
-            var pc = TopkRowsArgs(npos = uint(MR_NPOS), ne = uint(MR_NE), k = uint(MR_K), norm = norm || gate == MoeGate.softmax_weight ? 1u : 0u, lstride = uint(MR_NER), wscale = wscale, dsoff = NO_DSCALE,
+            var sc = set_topk_rows_cls(fixed_array(ld, wd, ld, rbd, idxd), fixed_array(l_bytes, s_bytes, l_bytes, rb_bytes, s_bytes), fixed_array(1u, 4u, 1u, 0u, 2u))   //! no down scale: the logits fill the ds binding, never read at NO_DSCALE
+            var pc = TopkArgs(ne = uint(MR_NE), k = uint(MR_K), norm = norm || gate == MoeGate.softmax_weight ? 1u : 0u, lstride = uint(MR_NER), wscale = wscale, dsoff = NO_DSCALE,
                 rbias_on = rbias ? 1u : 0u, rboff = uint(MR_NE))
             cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_topk_rows_cls(raw, h, sc, pc, int64(MR_NPOS))
