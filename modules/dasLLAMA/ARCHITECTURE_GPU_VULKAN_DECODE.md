@@ -120,7 +120,7 @@ gate/up feed requants, the router GEMV over an f32 plane
 (`router_gemv_cls`: one workgroup per expert row, f32 in and f32 out - the host router's own
 arithmetic rather than a quant chain, so the device's picks track the CPU's up to summation
 order) and
-the softmax + top-k (`topk_cls`), the FFN chain, the routed combine
+the softmax + top-k (`topk_n_cls` at one workgroup), the FFN chain, the routed combine
 onto the residual row, and the next layer's attention rms + requant into that layer's feed
 image; the residual row and every layer's raw k/v rows come home in one staging buffer after
 the one fence. The streamed layers below l0 keep the per-layer path (their FFN is the CPU's),

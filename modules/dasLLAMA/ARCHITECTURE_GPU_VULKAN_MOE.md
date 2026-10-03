@@ -147,7 +147,7 @@ block over arena expert planes.** After the layer's attention head and the FFN n
 with a shared expert runs the dense tail over the shared triple (gate, up, the act, down into
 `ffnout`), then the routed block: the router GEMV (`RouterGemv`) over the f32 normed row reads
 the driver's router plane - every MoE layer's rows and, when the shared expert is gated, its gate
-row last - into one logits row; the top-k (`TopK`, the span's kernel over the decode's core)
+row last - into one logits row; the top-k (`TopKN` at one workgroup, the span's kernel over the decode's core)
 writes the k routing weights and the three expert GEMVs' slot regions, each a `(block, feed
 block)` pair whose block is the expert plane's slab-local base plus the pick's stride; gate and
 up run the class GEMV over k regions, the act writes k hidden rows (Q4_K gate and up stacks in one

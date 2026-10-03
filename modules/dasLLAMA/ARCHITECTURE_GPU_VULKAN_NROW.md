@@ -82,8 +82,8 @@ q plane's `2 x qd` row where the gate is on, the projection row's width where it
 **A MoE layer's routed block steps the rows as regions of the one-row leaves.** The router GEMV
 takes the rows as columns of one dispatch (`RouterArgs.ncols`: a workgroup an expert row, its
 weights read once and dotted against every column, the logits a row at `obase + c * ne`); the per-row top-k
-stamp (`TopKN`, a row a workgroup over the record base `TopKRecords` the one-row stamp `TopK`
-splices too) writes row p's k slots at `p * k` - the gate and up region records reading row p's
+stamp (`TopKN`, a row a workgroup over the record base `TopKRecords`; the one-row command
+dispatches the same stamp at one workgroup) writes row p's k slots at `p * k` - the gate and up region records reading row p's
 feed blocks (`TopkArgs.xnb1`), the down records each slot's hidden row; and the gate, up and
 down GEMVs are the one-row leaves over `nrows * k` regions (`GemvArgs.nreg`), the act over every
 slot, the combine per row (`ClsArComb`'s position is its workgroup). The rows take the split

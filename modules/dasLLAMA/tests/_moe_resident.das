@@ -176,7 +176,7 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
         var toks <- resident_feed(FED_STEPS)
         let sched0 = census("moe_sched_cls_spv")
         let rows0 = census("topk_rows_cls_spv")
-        let topk0 = census("topk_cls_spv")
+        let topk0 = census("topk_n_cls_spv")
         let ecol = expert_column()
         let e0 = column_census(ecol.col)
         let un0 = unsplit_tokens()
@@ -188,7 +188,7 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
             t |> equal(census("moe_sched_cls_spv") - sched0, device_routed_layers * windows, "the device bucket schedule ran once per device-routed layer per window ({device_routed_layers} layers, {windows} windows)")
             t |> equal(census("topk_rows_cls_spv") - rows0, device_routed_layers * windows, "the window's per-row select ran once per device-routed layer per window")
             //! the token command records once and resubmits: the census counts its recording, one top-k per MoE layer per recorded form (a split device records the unsplit twin too)
-            let topk = census("topk_cls_spv") - topk0
+            let topk = census("topk_n_cls_spv") - topk0
             t |> success(topk >= device_routed_layers && topk % device_routed_layers == 0l, "the token command recorded a top-k per device-routed layer ({topk} over {device_routed_layers} layers)")
             let edelta = column_census(ecol.col) - e0
             let ewant = 3l * ecol.per_plane * device_routed_layers * windows

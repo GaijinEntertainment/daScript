@@ -593,7 +593,7 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     r.wscale = wscale
     r.router_bias = !empty(rbias)
     r.exps_bias = !empty(gbias)
-    if (!(ensure_router_gemv_cls() && ensure_topk_cls() && ensure_cls_ar_comb()
+    if (!(ensure_router_gemv_cls() && ensure_topk_n_cls() && ensure_cls_ar_comb()
             && ensure_q8_actrq_cls() && ensure_q8k_actrq_cls() && (!r.exps_bias || ensure_q8_actrq_b_cls()))) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the routing class rails declined on this device\n")
         return false
@@ -715,7 +715,7 @@ def private rd_moe_sets(var L : RLayer) {
     L.s_router = set_router_gemv_cls(fixed_array(g_rd.router_dev, L.rtn_fused ? g_rd.x_dev : g_rd.xb_dev, g_rd.moe_dlog_dev, g_rd.norms_dev),
         fixed_array(g_rd.router_bytes, rows_bytes, g_rd.ner * 4l * nb, g_rd.norms_bytes), fixed_array(0u, L.rtn_fused ? VHZ_X : VHZ_XB, VHZ_MRT, 0u))
     let tk = rd_topk_binds()
-    L.s_topk = set_topk_cls(tk.bufs, tk.sizes, tk.bits)
+    L.s_topk = set_topk_n_cls(tk.bufs, tk.sizes, tk.bits)
     L.s_egate = gemv_planes_set(L.fe1, pe1, g_rd.moe_meta1_dev, META_BYTES, VHZ_MRT, xqb, xsb, xq_bytes, xs_bytes, VHZ_XQ, g_rd.egate_dev, egu_bytes, VHZ_GATE)
     L.s_eup = gemv_planes_set(L.fe3, pe3, g_rd.moe_meta3_dev, META_BYTES, VHZ_MRT, xqb, xsb, xq_bytes, xs_bytes, VHZ_XQ, g_rd.eup_dev, egu_bytes, VHZ_UP)
     if (g_rd.exps_bias) {   //! the biased act: the picks' gate and up bias rows join before the activation
@@ -2598,7 +2598,7 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         base2 = uint(arena_local_blk(L.be2)), stride2 = uint(nfe * dim / kq_unit(L.fe2)),
         xnb2 = uint(nfe / kq_unit(L.fe2)), lstride = uint(g_rd.ner), xnb1 = uint(dim / kq_unit(L.fe1)))
     if (one) {
-        enc_topk_cls(raw, h, L.s_topk, pct, 1l)
+        enc_topk_n_cls(raw, h, L.s_topk, pct, 1l)
     } else {
         enc_topk_n_cls(raw, h, L.s_topk_n, pct, nrows)
     }
@@ -4457,7 +4457,7 @@ def private span_layer_sets(a : MoeSpanDec; li : int64) : SpanLayer {
     SL.s_rq_g3 = span_rq_set(SL.s3, nb, VHS_GACTS)
     SL.s_router = set_router_gemv_cls(fixed_array(g_gpu.span_router_dev, g_gpu.span_xb_dev, g_gpu.span_logits_dev, g_gpu.span_xb_dev),
         fixed_array(nl * a.ne * nb, nb, MOE_MAX_EXPERTS * 4l, nb), fixed_array(0u, VHS_XB, VHS_LOG, 0u))   //! the norms slot: the span's router reads the normed row, never the norm
-    SL.s_topk = set_topk_cls(   //! the span folds no down scale: the logits row fills the ds binding, never read at NO_DSCALE
+    SL.s_topk = set_topk_n_cls(   //! the span folds no down scale: the logits row fills the ds binding, never read at NO_DSCALE
         fixed_array(g_gpu.span_logits_dev, g_gpu.stacks[SL.s1].meta.buf, g_gpu.stacks[SL.s3].meta.buf, g_gpu.stacks[SL.s2].meta.buf, g_gpu.span_w_dev, g_gpu.span_logits_dev, g_gpu.span_logits_dev, g_gpu.span_eidx_dev),
         fixed_array(MOE_MAX_EXPERTS * 4l, META_BYTES, META_BYTES, META_BYTES, MAX_ROUTED_SLOTS * 4l, MOE_MAX_EXPERTS * 4l, MOE_MAX_EXPERTS * 4l, MAX_ROUTED_SLOTS * 4l),
         fixed_array(VHS_LOG, VHS_META, VHS_META, VHS_META, VHS_META, VHS_LOG, VHS_LOG, VHS_META))
@@ -4535,7 +4535,7 @@ def private span_record(a : MoeSpanDec) {
             base3 = span_meta_base(a.we3[li], SL.s3, a.f3[li]), stride3 = uint(a.nfe * dim / kq_unit(a.f3[li])),
             base2 = span_meta_base(a.we2[li], SL.s2, a.f2[li]), stride2 = uint(a.nfe * dim / kq_unit(a.f2[li])),
             xnb2 = uint(a.nfe / kq_unit(a.f2[li])))
-        enc_topk_cls(raw, h, SL.s_topk, pct, 1l)
+        enc_topk_n_cls(raw, h, SL.s_topk, pct, 1l)
         vhz_dep(raw, h, VHS_META, 0u)
         var fc = g_gpu.ffn_cmds[ffn_cmd_key(SL.s1, SL.s3, SL.s2)]
         ffn_chain_enc(raw, h, fc, SL.s1, SL.s3, SL.s2, a.k, dim, a.nfe, a.is_gelu)
@@ -4592,7 +4592,7 @@ def private ensure_span_state(a : MoeSpanDec) {
         return
     }
     assert(a.ne <= MOE_MAX_EXPERTS && a.k <= MAX_ROUTED_SLOTS, "dasLLAMA vulkan tier: decode span routing exceeds the top-k kernel's reach")
-    verify(ensure_router_gemv_cls() && ensure_topk_cls() && ensure_dec_combine_cls() && ensure_cls_ar()
+    verify(ensure_router_gemv_cls() && ensure_topk_n_cls() && ensure_dec_combine_cls() && ensure_cls_ar()
             && ensure_cls_q8k_rq() && ensure_cls_dn_rq() && (a.nsh == 0l || ensure_dec_combine_sh_cls()),
         "vk decode span: the class rails must engage on a live device")
     let dim = a.dim

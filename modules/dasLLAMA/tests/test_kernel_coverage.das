@@ -954,9 +954,6 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // (the batched rows need a region a row; the stocked regions files - test_gpu_resident_regions_qwen3.das and the
     // gemma files - reach them at two regions); their coverage is test_vkd_q8_gemv_gu_n in test_vulkan_kernels.das
     "q8_gemv_gu_n2_cls_spv", "q8_gemv_gu_n4_cls_spv", "q8_gemv_gu_n8_cls_spv",
-    // the N-row command's per-row top-k: the census steps every session a row at a time (the batched step needs two sessions
-    // over two regions - the gpt-oss and Qwen3-30B regions files serve it); its coverage is test_vkd_topk_n in test_vulkan_kernels.das
-    "topk_n_cls_spv",
     // the sink stamps over a block-codec K/V mirror (gpt-oss with the mirror asked in q8_0 or tq4: the census loads no sink
     // carrier); their coverage is the sink arms of test_vkc_q8_da_attn and test_vkc_tq4_da_attn in test_vulkan_kv_codec_kernels.das
     "da_attn_q8_sink_cls_spv", "da_attn_tq4_sink_cls_spv"]

@@ -10371,9 +10371,9 @@ def private topk_n_arm(t : T?; gptoss_router_bias : bool) {
             2u | 4u | 8u | 16u | 32u,
             $(p : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
                 upload_region_at(ld1, 0l, unsafe(addr<uint8 const?>(lh[p * lstride])), l1_bytes)
-                var sc1 = set_topk_cls(fixed_array(ld1, o.bufs[0], o.bufs[1], o.bufs[2], o.bufs[3], dsd, rbd, o.bufs[4]),
+                var sc1 = set_topk_n_cls(fixed_array(ld1, o.bufs[0], o.bufs[1], o.bufs[2], o.bufs[3], dsd, rbd, o.bufs[4]),
                     fixed_array(l1_bytes, o.bytes[0], o.bytes[1], o.bytes[2], o.bytes[3], ds_bytes, rb_bytes, o.bytes[4]), gbits)
-                enc_topk_cls(raw, h, sc1, pc1, 1l)
+                enc_topk_n_cls(raw, h, sc1, pc1, 1l)
             },
             $(nrows : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
                 var scN = set_topk_n_cls(fixed_array(ld, o.bufs[0], o.bufs[1], o.bufs[2], o.bufs[3], dsd, rbd, o.bufs[4]),
@@ -10414,7 +10414,7 @@ def private topk_n_arm(t : T?; gptoss_router_bias : bool) {
 def test_vkd_topk_n(t0 : T?) {
     t0 |> run("the N-row command's top-k == the one-row top-k a row at a time, bit for bit, and the host select") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!(ensure_topk_cls() && ensure_topk_n_cls())) {
+            if (!ensure_topk_n_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }

@@ -1668,17 +1668,9 @@ class TopKRecords : TopKCore {
     }
 }
 
-[vk_dispatch(name = "topk_cls", grid = "one", params = "one : int64")]
-class TopK : TopKRecords {
-    [spirv_kernel(local_size_x = 256, name = "topk_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
-    def run {
-        row_picks(0u)
-    }
-}
-
 [vk_dispatch(name = "topk_n_cls", grid = "npos", params = "npos : int64")]
 class TopKN : TopKRecords {
-    [spirv_kernel(local_size_x = 256, name = "topk_n_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
+    [spirv_kernel(local_size_x = 256, name = "topk_n_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
     def run {
         row_picks(gl_WorkGroupID.x)
     }
