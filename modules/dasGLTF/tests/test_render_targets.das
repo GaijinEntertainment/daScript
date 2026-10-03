@@ -149,6 +149,27 @@ def private check_draw_opacity(t : T?; renderer : GltfPbrRenderer; var model : G
     model.meshes[0].primitives[0].material = -1
 }
 
+def private check_silhouette_clip(t : T?; var renderer : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene){
+    var color_only = GL_COLOR_ATTACHMENT0; glDrawBuffers(1, safe_addr(color_only))
+    let color = float4(0.25, 0.5, 0.75, 1.0)
+    glClearColor(0.0, 0.0, 0.0, 0.0); glClear(GL_COLOR_BUFFER_BIT)
+    gltf_pbr_render_silhouette(renderer, model, scene, identity4x4(), identity4x4(), color)
+    t |> success(length(read_rgba(GL_COLOR_ATTACHMENT0) - color) < 0.01, "omitted plane preserves geometry")
+    for (sign in fixed_array(1.0, -1.0)){
+        glClear(GL_COLOR_BUFFER_BIT)
+        gltf_pbr_render_silhouette(renderer, model, scene, identity4x4(), identity4x4(), color, float4(sign, 0.0, 0.0, 0.0))
+        var left, right : float4
+        glReadPixels(0, 1, 1, 1, GL_RGBA, GL_FLOAT, unsafe(addr(left)))
+        glReadPixels(3, 1, 1, 1, GL_RGBA, GL_FLOAT, unsafe(addr(right)))
+        t |> success(length(left - (sign > 0.0 ? float4(0.0) : color)) < 0.01, "negative half-space is discarded")
+        t |> success(length(right - (sign > 0.0 ? color : float4(0.0))) < 0.01, "positive half-space is retained")
+    }
+    glClear(GL_COLOR_BUFFER_BIT)
+    gltf_pbr_render_silhouette(renderer, model, scene, identity4x4(), identity4x4(), color)
+    t |> success(length(read_rgba(GL_COLOR_ATTACHMENT0) - color) < 0.01, "default resets a previous clipping plane")
+    t |> equal(uint(GL_NO_ERROR), glGetError())
+}
+
 [test]
 def gltf_surface_motion_and_shadow_fallback_render_on_gl(t : T?){
     if (glfwInit() == 0){t |> skip("GLFW display unavailable"); return }
@@ -202,4 +223,5 @@ def gltf_surface_motion_and_shadow_fallback_render_on_gl(t : T?){
 
     check_draw_opacity(t, renderer, model, scene)
     check_shadow_filters(t, renderer, model, scene)
+    check_silhouette_clip(t, renderer, model, scene)
 }
