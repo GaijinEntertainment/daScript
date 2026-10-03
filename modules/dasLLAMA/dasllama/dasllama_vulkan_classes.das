@@ -12754,12 +12754,15 @@ class Q8GemvPleAct {
     }
 }
 
-//! Q5_1 x Q8_0 decode GEMV, `q8_gemv_cls`'s shape with ONE lane per 32-block: the block's five words (four
-//! nibble words, the qh word), the low and high nibbles raised to bytes with their fifth bit, sdot4 against the
-//! activation words; (d * isum + m * asum) * xs per block - `dot_q51q8_scalar`'s float order, reassociated by lane
-class Q51GemvBase {
-    @ssbo @binding = 0 wq : array<uint>        // weight quant words, five per block
-    @ssbo @binding = 1 wsu : array<uint>       // per-block f16 d | f16 m
+//! the per-32 x Q8_0 decode GEMVs, `q8_gemv_cls`'s shape with ONE lane per 32-block, the block's decode the format's:
+//! Q5_1's five words (four nibble words and the qh word) with (d * isum + m * asum) * xs, IQ4_NL's codebook words with
+//! d * isum * xs, MXFP4's doubled magnitudes under the halved E8M0 scale - each format's scalar dot's float order, reassociated by lane
+[ |> template_struct_instance]
+class template Blk32GemvT {
+    @template_constant Q51 : bool = false      //!< a Q5_1 plane
+    @template_constant MX4 : bool = false      //!< an MXFP4 plane; neither constant: an IQ4_NL per-32 plane
+    @ssbo @binding = 0 wq : array<uint>        // weight quant words, five a block on q51, four elsewhere
+    @ssbo @binding = 1 wsu : array<uint>       // per-block scales: f16 d | f16 m (q51), f16 d two blocks a word (iq4nl32), E8M0 bytes four blocks a word (mx4)
     @ssbo @binding = 2 regions : array<uint>   // (rel_wblock, xblock) pairs per region
     @ssbo @binding = 3 xqw : array<uint>       // activation quant words
     @ssbo @binding = 4 axs : array<float>      // per-block activation scales
@@ -12774,21 +12777,48 @@ class Q51GemvBase {
         while (bi0 < nb) {
             let b = bi0 + lane
             if (b < nb) {
-                let wbase = (wb0 + b) * 5u
-                let xbase = (xb0 + b) * 8u
-                let qh = wq[wbase + 4u]
-                var idot = 0
-                var asum = 0
-                for [unroll_full] (c in range(4)) {
-                    let w = wq[wbase + uint(c)]
-                    let xl = xqw[xbase + uint(c)]
-                    let xh = xqw[xbase + 4u + uint(c)]
-                    idot += sdot4((w & 0x0F0F0F0Fu) | k5_dep(qh >> (uint(c) * 4u)), xl)
-                    idot += sdot4(((w >> 4u) & 0x0F0F0F0Fu) | k5_dep(qh >> (16u + uint(c) * 4u)), xh)
-                    asum += sdot4(xl, 0x01010101u) + sdot4(xh, 0x01010101u)
+                static_if (Q51) {
+                    let wbase = (wb0 + b) * 5u
+                    let xbase = (xb0 + b) * 8u
+                    let qh = wq[wbase + 4u]
+                    var idot = 0
+                    var asum = 0
+                    for [unroll_full] (c in range(4)) {
+                        let w = wq[wbase + uint(c)]
+                        let xl = xqw[xbase + uint(c)]
+                        let xh = xqw[xbase + 4u + uint(c)]
+                        idot += sdot4((w & 0x0F0F0F0Fu) | k5_dep(qh >> (uint(c) * 4u)), xl)
+                        idot += sdot4(((w >> 4u) & 0x0F0F0F0Fu) | k5_dep(qh >> (16u + uint(c) * 4u)), xh)
+                        asum += sdot4(xl, 0x01010101u) + sdot4(xh, 0x01010101u)
+                    }
+                    let dm = unpackHalf2x16(wsu[wb0 + b])
+                    acc += (dm.x * float(idot) + dm.y * float(asum)) * axs[xb0 + b]
+                } static_elif (!MX4) {
+                    let wbase = (wb0 + b) * 4u
+                    let xbase = (xb0 + b) * 8u
+                    var idot = 0
+                    for [unroll_full] (c in range(4)) {
+                        let w = wq[wbase + uint(c)]
+                        idot += sdot4(iq4_word(w & 0x0F0F0F0Fu), xqw[xbase + uint(c)])
+                        idot += sdot4(iq4_word((w >> 4u) & 0x0F0F0F0Fu), xqw[xbase + 4u + uint(c)])
+                    }
+                    let sb = wb0 + b
+                    let dp = unpackHalf2x16(wsu[sb >> 1u])
+                    let d = (sb & 1u) == 0u ? dp.x : dp.y
+                    acc += d * float(idot) * axs[xb0 + b]
+                } else {
+                    let wbase = (wb0 + b) * 4u
+                    let xbase = (xb0 + b) * 8u
+                    var idot = 0
+                    for [unroll_full] (c in range(4)) {
+                        let w = wq[wbase + uint(c)]
+                        idot += mx4_sdot(w & 0x0F0F0F0Fu, xqw[xbase + uint(c)])
+                        idot += mx4_sdot((w >> 4u) & 0x0F0F0F0Fu, xqw[xbase + 4u + uint(c)])
+                    }
+                    let sb = wb0 + b
+                    let ex = (wsu[sb >> 2u] >> ((sb & 3u) * 8u)) & 0xFFu
+                    acc += float(idot) * mx4_e8m0_half(ex) * axs[xb0 + b]
                 }
-                let dm = unpackHalf2x16(wsu[wb0 + b])
-                acc += (dm.x * float(idot) + dm.y * float(asum)) * axs[xb0 + b]
             }
             bi0 += gl_SubgroupSize
         }
@@ -12796,9 +12826,10 @@ class Q51GemvBase {
     }
 }
 
-[vk_dispatch(name = "q51_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class Q51Gemv : Q51GemvBase {
-    [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "q51_gemv_cls_spv")]
+//! the region-interleaved one-row form: a subgroup a (region, row), the regions interleaved a row at a time
+[ |> template_struct_instance]
+class template Blk32GemvRunT : Blk32GemvT {
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0)]
     def run {
         let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
         if (rg < pa.nreg * pa.d) {
@@ -12813,9 +12844,15 @@ class Q51Gemv : Q51GemvBase {
     }
 }
 
+[vk_dispatch(name = "q51_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class Q51Gemv : Blk32GemvRunT {
+    override Q51 = true
+}
+
 //! the routed down GEMV summed under the routing weights: a subgroup a row of the model dim, y[row] = sum_r w[r] dot_r
 [vk_dispatch(name = "q51_gemv_sum_cls", grid = "wgs", params = "wgs : int64")]
-class Q51GemvSum : Q51GemvBase {
+class Q51GemvSum : Blk32GemvT {
+    override Q51 = true
     @ssbo @binding = 6 sw : array<float>   //! the k routing weights (the per-expert down scale folded in)
 
     [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "q51_gemv_sum_cls_spv")]
@@ -12836,61 +12873,8 @@ class Q51GemvSum : Q51GemvBase {
     }
 }
 
-//! IQ4_NL per-32 x Q8_0 decode GEMV, `q8_gemv_cls`'s shape with ONE lane per 32-block: the block's four nibble words through
-//! the codebook (`iq4_word`, signed int8 lanes), sdot4 against the activation words; d * isum * xs per block -
-//! `dot_iq4nl32q8_scalar`'s float order, reassociated by lane
-class Iq4nl32GemvBase {
-    @ssbo @binding = 0 wq : array<uint>        // weight quant words, four per block
-    @ssbo @binding = 1 wsu : array<uint>       // per-block f16 d, two blocks a word
-    @ssbo @binding = 2 regions : array<uint>   // (rel_wblock, xblock) pairs per region
-    @ssbo @binding = 3 xqw : array<uint>       // activation quant words
-    @ssbo @binding = 4 axs : array<float>      // per-block activation scales
-    @ssbo @binding = 5 y : array<float>
-    @push_constant pa : GemvArgs
-
-    //! one row's dot over `nb` blocks from weight block `wb0` and activation block `xb0`: a lane a block, the subgroup's sum
-    def row_dot(wb0, xb0, nb : uint) : float {
-        let lane = gl_SubgroupInvocationID
-        var acc = 0.0
-        var bi0 = 0u
-        while (bi0 < nb) {
-            let b = bi0 + lane
-            if (b < nb) {
-                let wbase = (wb0 + b) * 4u
-                let xbase = (xb0 + b) * 8u
-                var idot = 0
-                for [unroll_full] (c in range(4)) {
-                    let w = wq[wbase + uint(c)]
-                    idot += sdot4(iq4_word(w & 0x0F0F0F0Fu), xqw[xbase + uint(c)])
-                    idot += sdot4(iq4_word((w >> 4u) & 0x0F0F0F0Fu), xqw[xbase + 4u + uint(c)])
-                }
-                let sb = wb0 + b
-                let dp = unpackHalf2x16(wsu[sb >> 1u])
-                let d = (sb & 1u) == 0u ? dp.x : dp.y
-                acc += d * float(idot) * axs[xb0 + b]
-            }
-            bi0 += gl_SubgroupSize
-        }
-        return subgroupAdd(acc)
-    }
-}
-
 [vk_dispatch(name = "iq4nl32_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class Iq4nl32Gemv : Iq4nl32GemvBase {
-    [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "iq4nl32_gemv_cls_spv")]
-    def run {
-        let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
-        if (rg < pa.nreg * pa.d) {
-            let r = rg % pa.nreg
-            let row = rg / pa.nreg
-            let nb = pa.n / 32u
-            let total = row_dot(regions[r * 2u] + row * nb, regions[r * 2u + 1u], nb)
-            if (subgroupElect()) {
-                y[pa.ybase + r * pa.d + row] = total
-            }
-        }
-    }
-}
+class Iq4nl32Gemv : Blk32GemvRunT {}
 
 //! the sdot4 of four MXFP4 nibbles (one per byte of `nib`) against four Q8_0 activation bytes: the doubled magnitudes, the sign applied by subtracting the negative bytes twice
 def mx4_sdot(nib, x : uint) : int {
@@ -12899,62 +12883,15 @@ def mx4_sdot(nib, x : uint) : int {
     return sdot4(mag2, x) - 2 * sdot4(neg, x)
 }
 
-//! MXFP4 x Q8_0 decode GEMV, `q8_gemv_cls`'s shape with ONE lane per 32-block: `dot_mx4q8_scalar`'s float order, reassociated by lane
-class Mx4GemvBase {
-    @ssbo @binding = 0 wq : array<uint>        // weight quant words, four per block
-    @ssbo @binding = 1 wex : array<uint>       // per-block E8M0 exponent bytes, four blocks a word
-    @ssbo @binding = 2 regions : array<uint>   // (rel_wblock, xblock) pairs per region
-    @ssbo @binding = 3 xqw : array<uint>       // activation quant words
-    @ssbo @binding = 4 axs : array<float>      // per-block activation scales
-    @ssbo @binding = 5 y : array<float>
-    @push_constant pa : GemvArgs
-
-    //! one row's dot over `nb` blocks from weight block `wb0` and activation block `xb0`: a lane a block, the subgroup's sum
-    def row_dot(wb0, xb0, nb : uint) : float {
-        let lane = gl_SubgroupInvocationID
-        var acc = 0.0
-        var bi0 = 0u
-        while (bi0 < nb) {
-            let b = bi0 + lane
-            if (b < nb) {
-                let wbase = (wb0 + b) * 4u
-                let xbase = (xb0 + b) * 8u
-                var idot = 0
-                for [unroll_full] (c in range(4)) {
-                    let w = wq[wbase + uint(c)]
-                    idot += mx4_sdot(w & 0x0F0F0F0Fu, xqw[xbase + uint(c)])
-                    idot += mx4_sdot((w >> 4u) & 0x0F0F0F0Fu, xqw[xbase + 4u + uint(c)])
-                }
-                let sb = wb0 + b
-                let ex = (wex[sb >> 2u] >> ((sb & 3u) * 8u)) & 0xFFu
-                acc += float(idot) * mx4_e8m0_half(ex) * axs[xb0 + b]
-            }
-            bi0 += gl_SubgroupSize
-        }
-        return subgroupAdd(acc)
-    }
-}
-
 [vk_dispatch(name = "mx4_gemv_cls", grid = "wgs", params = "wgs : int64")]
-class Mx4Gemv : Mx4GemvBase {
-    [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "mx4_gemv_cls_spv")]
-    def run {
-        let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
-        if (rg < pa.nreg * pa.d) {
-            let r = rg % pa.nreg
-            let row = rg / pa.nreg
-            let nb = pa.n / 32u
-            let total = row_dot(regions[r * 2u] + row * nb, regions[r * 2u + 1u], nb)
-            if (subgroupElect()) {
-                y[pa.ybase + r * pa.d + row] = total
-            }
-        }
-    }
+class Mx4Gemv : Blk32GemvRunT {
+    override MX4 = true
 }
 
 //! bindings 10 and 11 sit at the hazard rail's cap (`SetBits` holds twelve): a thirteenth plane here is a rail change, not a line
 [vk_dispatch(name = "mx4_gemv_gu_cls", grid = "wgs", params = "wgs : int64")]
-class Mx4GemvGu : Mx4GemvBase {
+class Mx4GemvGu : Blk32GemvT {
+    override MX4 = true
     @ssbo @binding = 6 regions3 : array<uint>   // the up stack's (rel_wblock, xblock) pairs per slot
     @ssbo @binding = 7 @role = "weight" gb : array<float>   //! the gate-bias plane ([ne x d] rows a layer), read under `bias_on`
     @ssbo @binding = 8 @role = "weight" ub : array<float>   //! ... and the up-bias plane
