@@ -4108,23 +4108,22 @@ def private ensure_dnd_state {
     to_log(LOG_INFO, "dasLLAMA vulkan tier: deltanet decode step engaged\n")
 }
 
+//! stack `si`'s GEMV scratch made and its one region pinned to the plane at `wo` (feed rows `xnb` blocks apart): the per-op stacks serve no other decode GEMV
+def private pin_stack_region(si : int; wo : int64; xnb : int64 = 0l) {
+    ensure_gemv_scratch(si)
+    var region = fixed_array(wo, 0l, 1l)
+    fill_stack_sched_rows(si, unsafe(addr(region[0])), 1l, 1l, xnb)
+}
+
 // create one layer's step chain: per-layer state/smalls buffers, the three sets, the once-filled
 // GEMV metas (dn stacks never serve FFN GEMVs, so their host metas are ours to pin), and the
 // warm cmd — per token only acts/β/γ refresh and the cmd resubmits as-is.
 [cold_path]
 def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
                           dim, cd, kd, di, nvh, nkh, ds, taps : int64; eps : float) {
-    ensure_gemv_scratch(s_qkv)
-    ensure_gemv_scratch(s_z)
-    ensure_gemv_scratch(s_o)
-    var qkv_region = fixed_array(woq, 0l, 1l)
-    var z_region = fixed_array(woz, 0l, 1l)
-    var o_region = fixed_array(woo, 0l, 1l)
-    unsafe {   // regions are ours to pin: dn stacks never serve FFN GEMVs
-        fill_stack_sched_rows(s_qkv, addr(qkv_region[0]), 1l, 1l, 0l)
-        fill_stack_sched_rows(s_z, addr(z_region[0]), 1l, 1l, 0l)
-        fill_stack_sched_rows(s_o, addr(o_region[0]), 1l, 1l, 0l)
-    }
+    pin_stack_region(s_qkv, woq)
+    pin_stack_region(s_z, woz)
+    pin_stack_region(s_o, woo)
     var st = DnStep(state_dev = make_device_buf(nvh * ds * ds * 4l),
                     smalls_dev = make_device_buf(DND_SMALLS_BYTES),
                     cmd = alloc_cmd(), s_qkv = s_qkv, s_z = s_z, s_o = s_o,
@@ -4588,17 +4587,9 @@ def private span_layer_sets(a : MoeSpanDec; li : int64) : SpanLayer {
         SL.sh1 = find_stack(a.wsh1[li], q8, "span shared gate")
         SL.sh3 = find_stack(a.wsh3[li], q8, "span shared up")
         SL.sh2 = find_stack(a.wsh2[li], q8, "span shared down")
-        ensure_gemv_scratch(SL.sh1)
-        ensure_gemv_scratch(SL.sh3)
-        ensure_gemv_scratch(SL.sh2)
-        var reg1 = fixed_array(a.wsh1[li], 0l, 1l)
-        var reg3 = fixed_array(a.wsh3[li], 0l, 1l)
-        var reg2 = fixed_array(a.wsh2[li], 0l, 1l)
-        unsafe {
-            fill_stack_sched_rows(SL.sh1, addr(reg1[0]), 1l, 1l, dim / 32l)
-            fill_stack_sched_rows(SL.sh3, addr(reg3[0]), 1l, 1l, dim / 32l)
-            fill_stack_sched_rows(SL.sh2, addr(reg2[0]), 1l, 1l, a.nsh / 32l)
-        }
+        pin_stack_region(SL.sh1, a.wsh1[li], dim / 32l)
+        pin_stack_region(SL.sh3, a.wsh3[li], dim / 32l)
+        pin_stack_region(SL.sh2, a.wsh2[li], a.nsh / 32l)
         SL.s_rq_sh1 = set_rq_cls(fixed_array(g_gpu.span_xb_dev, g_gpu.stacks[SL.sh1].xq.buf, g_gpu.stacks[SL.sh1].xs.buf),
             fixed_array(nb, XQ_BYTES, XS_BYTES), fixed_array(VHS_XB, VHS_GACTS, VHS_GACTS))
         SL.s_rq_sh3 = set_rq_cls(fixed_array(g_gpu.span_xb_dev, g_gpu.stacks[SL.sh3].xq.buf, g_gpu.stacks[SL.sh3].xs.buf),
@@ -4809,17 +4800,9 @@ def vk_moe_span_dec(var a : MoeSpanDec) {
 // (~74us each would eat the win). Serial-chain work: pays on GPU read speed, nothing hides here.
 
 def private qkv_cmd_make(sq, sk, sv : int; woq, wok, wov : int64; n, dq, dk, dv : int64) {
-    ensure_gemv_scratch(sq)
-    ensure_gemv_scratch(sk)
-    ensure_gemv_scratch(sv)
-    var qreg = fixed_array(woq, 0l, 1l)
-    var kreg = fixed_array(wok, 0l, 1l)
-    var vreg = fixed_array(wov, 0l, 1l)
-    unsafe {   // regions are ours to pin: these stacks serve no other decode GEMV
-        fill_stack_sched_rows(sq, addr(qreg[0]), 1l, 1l, 0l)
-        fill_stack_sched_rows(sk, addr(kreg[0]), 1l, 1l, 0l)
-        fill_stack_sched_rows(sv, addr(vreg[0]), 1l, 1l, 0l)
-    }
+    pin_stack_region(sq, woq)
+    pin_stack_region(sk, wok)
+    pin_stack_region(sv, wov)
     var qc = QkvCmd(cmd = alloc_cmd(), sq = sq, ybytes = (dq + dk + dv) * 4l)
     assert(qc.ybytes <= Y_BYTES, "dasLLAMA vulkan tier: qkv group exceeds output capacity")
     let fk = g_gpu.stacks[sk].fmt
@@ -5113,20 +5096,10 @@ def private dat_layer_sets(woq, wok, wov, woo : int64; fq, fk, fv, fo : int; rms
     let sk = find_stack(wok, fk, "decode attn k")
     let sv = find_stack(wov, fv, "decode attn v")
     let so = find_stack(woo, fo, "decode attn o")
-    ensure_gemv_scratch(sq)
-    ensure_gemv_scratch(sk)
-    ensure_gemv_scratch(sv)
-    ensure_gemv_scratch(so)
-    var qreg = fixed_array(woq, 0l, 1l)
-    var kreg = fixed_array(wok, 0l, 1l)
-    var vreg = fixed_array(wov, 0l, 1l)
-    var oreg = fixed_array(woo, 0l, 1l)
-    unsafe {   // regions are ours to pin: these stacks serve no other decode GEMV
-        fill_stack_sched_rows(sq, addr(qreg[0]), 1l, 1l, 0l)
-        fill_stack_sched_rows(sk, addr(kreg[0]), 1l, 1l, 0l)
-        fill_stack_sched_rows(sv, addr(vreg[0]), 1l, 1l, 0l)
-        fill_stack_sched_rows(so, addr(oreg[0]), 1l, 1l, 0l)
-    }
+    pin_stack_region(sq, woq)
+    pin_stack_region(sk, wok)
+    pin_stack_region(sv, wov)
+    pin_stack_region(so, woo)
     verify(gemv_cls_ensure(fq) && gemv_cls_ensure(fk) && gemv_cls_ensure(fv) && gemv_cls_ensure(fo),
         "vk decode attention: the gemv class rail must engage on a live device")
     let qd = g_gpu.dat_qd
