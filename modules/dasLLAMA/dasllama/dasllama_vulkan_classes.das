@@ -13469,45 +13469,11 @@ def kq_batch_cls_enc_for(fmt : int; q40cm : bool; raw : VkCommandBuffer; var h :
 // shares the 6-buffer shape (wq, ws, regions, xq, xs, y) and GemvArgs.
 
 def gemv_cls_ensure(fmt : int) : bool {
-    if (fmt == int(KqFmt.q8)) {
-        return ensure_q8_gemv_cls()
-    } elif (fmt == int(KqFmt.q51)) {
-        return ensure_q51_gemv_cls()
-    } elif (fmt == int(KqFmt.mx4)) {
-        return ensure_mx4_gemv_cls()
-    } elif (fmt == int(KqFmt.iq4nl32)) {
-        return ensure_iq4nl32_gemv_cls()
-    } elif (fmt == int(KqFmt.k4)) {
-        return ensure_kq_gemv_k4_cls()
-    } elif (fmt == int(KqFmt.k5)) {
-        return ensure_kq_gemv_k5_cls()
-    } elif (fmt == int(KqFmt.k6)) {
-        return ensure_kq_gemv_k6_cls()
-    } elif (fmt == int(KqFmt.q40)) {
-        return ensure_kq_gemv_q40_cls()
-    } elif (fmt == int(KqFmt.iq4xs)) {
-        return ensure_kq_gemv_iq4xs_cls()
-    } elif (fmt == int(KqFmt.iq3s4)) {
-        return ensure_kq_gemv_iq3s4_cls()
-    } elif (fmt == int(KqFmt.k3)) {
-        return ensure_kq_gemv_k3_cls()
-    } elif (fmt == int(KqFmt.iq3s)) {
-        return ensure_kq_gemv_iq3s_cls()
-    } elif (fmt == int(KqFmt.iq3xxs)) {
-        return ensure_kq_gemv_iq3xxs_cls()
-    } elif (fmt == int(KqFmt.iq4nl)) {
-        return ensure_kq_gemv_iq4nl_cls()
-    } elif (fmt == int(KqFmt.k2)) {
-        return ensure_kq_gemv_k2_cls()
-    } elif (fmt == int(KqFmt.iq2s)) {
-        return ensure_kq_gemv_iq2s_cls()
-    } elif (fmt == int(KqFmt.iq2xs)) {
-        return ensure_kq_gemv_iq2xs_cls()
-    } elif (fmt == int(KqFmt.iq2xxs)) {
-        return ensure_kq_gemv_iq2xxs_cls()
+    var r = false
+    kq_tile_stamp(fmt, "", "gemv") <| $() {
+        r = tile_ensure_cls()
     }
-    panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
-    return false
+    return r
 }
 
 def gemv_cls_set(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbits : uint const[6]) : VkDescriptorSet {
@@ -13538,44 +13504,8 @@ def gemv_planes_set(fmt : int; p : tuple<wq : uint64; ws : uint64; wqb : int64; 
 }
 
 def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {
-    if (fmt == int(KqFmt.q8)) {
-        enc_q8_gemv_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.q51)) {
-        enc_q51_gemv_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.mx4)) {
-        enc_mx4_gemv_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq4nl32)) {
-        enc_iq4nl32_gemv_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.k4)) {
-        enc_kq_gemv_k4_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.k5)) {
-        enc_kq_gemv_k5_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.k6)) {
-        enc_kq_gemv_k6_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.q40)) {
-        enc_kq_gemv_q40_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq4xs)) {
-        enc_kq_gemv_iq4xs_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq3s4)) {
-        enc_kq_gemv_iq3s4_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.k3)) {
-        enc_kq_gemv_k3_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq3s)) {
-        enc_kq_gemv_iq3s_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq3xxs)) {
-        enc_kq_gemv_iq3xxs_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq4nl)) {
-        enc_kq_gemv_iq4nl_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.k2)) {
-        enc_kq_gemv_k2_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq2s)) {
-        enc_kq_gemv_iq2s_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq2xs)) {
-        enc_kq_gemv_iq2xs_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq2xxs)) {
-        enc_kq_gemv_iq2xxs_cls(raw, h, set_, pc, wgs)
-    } else {
-        panic("dasLLAMA vulkan tier: no GEMV class for format {fmt}")
+    kq_tile_stamp(fmt, "", "gemv") <| $() {
+        tile_enc_cls(raw, h, set_, pc, wgs)
     }
 }
 
@@ -13620,6 +13550,9 @@ def gemv_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescr
 //! the formats with an N-column leaf: every kq leaf and the q8 stamps; the per-32 expert GEMVs (q51, mx4) have no N form, so a dense plane in one steps a row at a time
 def gemv_cls_has_n(fmt : int) : bool => fmt == int(KqFmt.q8) || kq_sb(fmt)
 
+//! the formats the kq N-column ladders skip: q8 (its own stamps, picked by row count) and the per-32 expert GEMVs
+let private GEMV_NO_N_LEAF = "q8 q51 mx4 iq4nl32"
+
 //! the decode GEMV family's roster - q8 and every kq leaf, in enum order: what the kernel cells and the probe's ruler walk
 def kq_gemv_fmts() : array<KqFmt> {
     return <- [for (f in type<KqFmt>); f; where gemv_cls_has_n(int(f))]
@@ -13643,37 +13576,12 @@ def gemv_cls_ensure_n(fmt : int; nb : int64 = 8l) : bool {
             ok = ok && ensure_q8_gemv_n8_cls() && (!pair || ensure_q8_gemv_n8p_cls())
         }
         return ok
-    } elif (fmt == int(KqFmt.k4)) {
-        return ensure_kq_gemv_k4_n_cls()
-    } elif (fmt == int(KqFmt.k5)) {
-        return ensure_kq_gemv_k5_n_cls()
-    } elif (fmt == int(KqFmt.k6)) {
-        return ensure_kq_gemv_k6_n_cls()
-    } elif (fmt == int(KqFmt.q40)) {
-        return ensure_kq_gemv_q40_n_cls()
-    } elif (fmt == int(KqFmt.iq4xs)) {
-        return ensure_kq_gemv_iq4xs_n_cls()
-    } elif (fmt == int(KqFmt.iq3s4)) {
-        return ensure_kq_gemv_iq3s4_n_cls()
-    } elif (fmt == int(KqFmt.k3)) {
-        return ensure_kq_gemv_k3_n_cls()
-    } elif (fmt == int(KqFmt.iq3s)) {
-        return ensure_kq_gemv_iq3s_n_cls()
-    } elif (fmt == int(KqFmt.iq3xxs)) {
-        return ensure_kq_gemv_iq3xxs_n_cls()
-    } elif (fmt == int(KqFmt.iq4nl)) {
-        return ensure_kq_gemv_iq4nl_n_cls()
-    } elif (fmt == int(KqFmt.k2)) {
-        return ensure_kq_gemv_k2_n_cls()
-    } elif (fmt == int(KqFmt.iq2s)) {
-        return ensure_kq_gemv_iq2s_n_cls()
-    } elif (fmt == int(KqFmt.iq2xs)) {
-        return ensure_kq_gemv_iq2xs_n_cls()
-    } elif (fmt == int(KqFmt.iq2xxs)) {
-        return ensure_kq_gemv_iq2xxs_n_cls()
     }
-    panic("dasLLAMA vulkan tier: no N-column GEMV class for format {fmt}")
-    return false
+    var r = false
+    kq_tile_stamp(fmt, GEMV_NO_N_LEAF, "gemv") <| $() {
+        r = tile_ensure_n_cls()
+    }
+    return r
 }
 
 //! the q8 stamps share one layout of their own, so the narrowest stamp's set - the one every row count builds - binds them all; a kq leaf shares the family's
@@ -13711,36 +13619,10 @@ def private q8_gemv_n_enc(raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDes
 def gemv_cls_enc_n(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {
     if (fmt == int(KqFmt.q8)) {
         q8_gemv_n_enc(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.k4)) {
-        enc_kq_gemv_k4_n_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.k5)) {
-        enc_kq_gemv_k5_n_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.k6)) {
-        enc_kq_gemv_k6_n_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.q40)) {
-        enc_kq_gemv_q40_n_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq4xs)) {
-        enc_kq_gemv_iq4xs_n_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq3s4)) {
-        enc_kq_gemv_iq3s4_n_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.k3)) {
-        enc_kq_gemv_k3_n_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq3s)) {
-        enc_kq_gemv_iq3s_n_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq3xxs)) {
-        enc_kq_gemv_iq3xxs_n_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq4nl)) {
-        enc_kq_gemv_iq4nl_n_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.k2)) {
-        enc_kq_gemv_k2_n_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq2s)) {
-        enc_kq_gemv_iq2s_n_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq2xs)) {
-        enc_kq_gemv_iq2xs_n_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq2xxs)) {
-        enc_kq_gemv_iq2xxs_n_cls(raw, h, set_, pc, wgs)
-    } else {
-        panic("dasLLAMA vulkan tier: no N-column GEMV class for format {fmt}")
+        return
+    }
+    kq_tile_stamp(fmt, GEMV_NO_N_LEAF, "gemv") <| $() {
+        tile_enc_n_cls(raw, h, set_, pc, wgs)
     }
 }
 

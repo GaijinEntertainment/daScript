@@ -150,31 +150,70 @@ let KQ_CM2E_ALIASES_M = "q8 k4 k5 k6 q40 iq4xs iq3s4 iq4nl k3 k2"
 
 def kq_cm2e_aliases_m(fmt_name : string) : bool => word_in(KQ_CM2E_ALIASES_M, fmt_name)
 
-//! the stem of a format's batch-tile stamp functions: `ensure_<stem>_<tail>` and its set/enc twins
-def kq_tile_stem(fmt_name : string) : string {
-    return fmt_name == "q8" || fmt_name == "q51" || fmt_name == "mx4" || fmt_name == "iq4nl32" ? "{fmt_name}_batch" : "kq_batch_{fmt_name}"
+//! the stem of a format's stamp functions in a stamp family - `batch` (the batch tiles) or `gemv` (the decode GEMVs):
+//! `<verb>_<stem>_<tail>`, the stem `<fmt>_<family>` on q8 and the per-32 formats, `kq_<family>_<fmt>` on a kq format
+def kq_tile_stem(fmt_name : string; family : string = "batch") : string {
+    return fmt_name == "q8" || fmt_name == "q51" || fmt_name == "mx4" || fmt_name == "iq4nl32" ? "{fmt_name}_{family}" : "kq_{family}_{fmt_name}"
 }
 
-//! `tile_<verb>_<tail>` -> the format's `<verb>_<stem>_<tail>`; a `cm2e_cls` tail on an aliasing format takes `cm2m_cls`
-def private kq_tile_target(placeholder, fmt_name : string) : string {
-    let rest = slice(placeholder, length("tile_"))
+//! a `<prefix><verb>[_<tail>]` placeholder -> `<verb>_<stem>_<tail>`, the tail the placeholder's or, where it names none, `arm_tail`
+def private stamp_target(placeholder, prefix, stem, arm_tail : string) : string {
+    let rest = slice(placeholder, length(prefix))
     let cut = find(rest, "_")
-    let verb = slice(rest, 0, cut)
-    var tail = slice(rest, cut + 1)
-    if (tail == "cm2e_cls" && kq_cm2e_aliases_m(fmt_name)) {
-        tail = "cm2m_cls"
-    }
-    return "{verb}_{kq_tile_stem(fmt_name)}_{tail}"
+    let verb = cut < 0 ? rest : slice(rest, 0, cut)
+    let tail = cut < 0 ? arm_tail : slice(rest, cut + 1)
+    return "{verb}_{stem}_{tail}"
 }
 
-class private TileCallNames : AstVisitor {
+//! `tile_<verb>[_<tail>]` -> the format's `<verb>_<stem>_<tail>` in `family`; a `cm2e_cls` tail on an aliasing format takes `cm2m_cls`
+def private kq_tile_target(placeholder, fmt_name, family, arm_tail : string) : string {
+    let target = stamp_target(placeholder, "tile_", kq_tile_stem(fmt_name, family), arm_tail)
+    return target |> ends_with("_cm2e_cls") && kq_cm2e_aliases_m(fmt_name) ? "{slice(target, 0, length(target) - length("cm2e_cls"))}cm2m_cls" : target
+}
+
+class private PrefixCallNames : AstVisitor {
+    prefix : string
     names : array<string>
     def override visitExprCall(var expr : ExprCall?) : ExpressionPtr {
         let n = "{expr.name}"
-        if (n |> starts_with("tile_") && find_index(names, n) < 0) {
+        if (n |> starts_with(prefix) && find_index(names, n) < 0) {
             names |> push(n)
         }
         return <- expr
+    }
+}
+
+//! the distinct names of the calls a block makes that start with `prefix` (a stamp macro's placeholders)
+def private placeholder_names(var root : ExpressionPtr; prefix : string) : array<string> {
+    var collector = new PrefixCallNames(prefix = prefix)
+    make_visitor(*collector) $(adapter) {
+        visit_expression(root, adapter)
+    }
+    var names <- collector.names
+    unsafe {
+        delete collector
+    }
+    return <- names
+}
+
+//! the block cloned with every placeholder in `names` renamed by `target`
+def private renamed_arm(at : LineInfo; root : ExpressionPtr; names : array<string>; target : block<(n : string) : string>) : ExpressionPtr {
+    var body = clone_expression(root)
+    return apply_template(at, body) $(var r : Template) {
+        for (n in names) {
+            r |> renameCall(n, target |> invoke(n))
+        }
+    }
+}
+
+//! `ladder` behind one more arm: `arm` where `key` reads `ord`, else what `ladder` already picks
+def private ladder_arm(var key, arm, ladder : ExpressionPtr; ord : int) : ExpressionPtr {
+    return qmacro_expr() {
+        if ($e(key) == $v(ord)) {
+            $e(arm)
+        } else {
+            $e(ladder)
+        }
     }
 }
 
@@ -185,46 +224,74 @@ def private word_in(list, word : string) : bool {
     return false
 }
 
+//! a stamp macro's word list: a string literal, or a module `let` of one in the module the call compiles in
+def private macro_words(prog : ProgramPtr; arg : ExpressionPtr) : string {
+    if (arg is ExprConstString) {
+        return string((arg as ExprConstString).value)
+    }
+    var words = ""
+    if (arg is ExprVar) {
+        let name = "{(arg as ExprVar).name}"
+        for_each_global(prog.getThisModule) $(v) {
+            if ("{v.name}" == name && v.init is ExprConstString) {
+                words = string((v.init as ExprConstString).value)
+            }
+        }
+    }
+    return words
+}
+
+//! `macro_words`' words, empty ones dropped; no argument reads none
+def private macro_word_list(prog : ProgramPtr; arg : ExpressionPtr) : array<string> {
+    return <- arg == null ? array<string>() : [for (w in split(macro_words(prog, arg), " ")); w; where !empty(w)]
+}
+
+//! the block of an argument-less `<| $() { ... }` the stamp macros take last
+def private stamp_block(prog : ProgramPtr; var expr : ExprCallMacro?; what : string) : ExpressionPtr {
+    var emb = expr.arguments[length(expr.arguments) - 1] as ExprMakeBlock
+    macro_verify(emb._block is ExprBlock, prog, expr.at, "{what}: expecting a block body, got {describe(emb._block)}")
+    let blk = emb._block as ExprBlock
+    macro_verify(empty(blk.arguments) && empty(blk.finalList), prog, expr.at, "{what}: expecting an argument-less block and no finally section")
+    return emb._block
+}
+
 [call_macro(name = "kq_tile_stamp")]
 class KqTileStamp : AstCallMacro {
-    //! ``kq_tile_stamp(fmt[, "skip list"]) <| $() { ... tile_<verb>_<tail>(...) ... }`` stamps the block once per
-    //! ``KqFmt`` member behind a ladder on ``fmt`` (an int), every ``tile_<verb>_<tail>`` call renamed to the member's stamp
-    //! function (``kq_tile_target``); the members ``skip`` names get no arm, and a format past every arm panics
+    //! ``kq_tile_stamp(fmt[, skip[, family[, tail, tails]]]) <| $() { ... tile_<verb>_<tail>(...) ... }``: the block once per KqFmt member
+    //! on a ladder over ``fmt``, each placeholder renamed by ``kq_tile_target``; ``skip`` members get no arm. With ``tail``/``tails``
+    //! a ``tile_<verb>`` placeholder takes arm ``j``'s word from ``tails`` on an inner ladder over ``tail``, ``<fmt>/<tail>`` skips a pair
     def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
         let nargs = length(expr.arguments)
-        macro_verify((nargs == 2 || nargs == 3) && expr.arguments[nargs - 1] is ExprMakeBlock, prog, expr.at,
-            "expecting kq_tile_stamp(fmt[, \"skip list\"]) followed by a block")
+        macro_verify((nargs >= 2 && nargs <= 4 || nargs == 6) && expr.arguments[nargs - 1] is ExprMakeBlock, prog, expr.at,
+            "expecting kq_tile_stamp(fmt[, skip[, family[, tail, tails]]]) followed by a block")
         macro_verify(expr.arguments[0] is ExprVar, prog, expr.at,
             "kq_tile_stamp takes a plain variable for the format, got {describe(expr.arguments[0])}")
-        var skip = ""
-        if (nargs == 3) {
-            macro_verify(expr.arguments[1] is ExprConstString, prog, expr.at, "kq_tile_stamp's skip list is a string literal")
-            skip = string((expr.arguments[1] as ExprConstString).value)
-        }
-        var emb = expr.arguments[nargs - 1] as ExprMakeBlock
-        macro_verify(emb._block is ExprBlock, prog, expr.at, "expecting a block body, got {describe(emb._block)}")
-        var blk = emb._block as ExprBlock
-        macro_verify(empty(blk.arguments) && empty(blk.finalList), prog, expr.at,
-            "expecting an argument-less block and no finally section")
-        var collector = new TileCallNames()
-        var root : ExpressionPtr = emb._block
-        make_visitor(*collector) $(adapter) {
-            visit_expression(root, adapter)
-        }
-        var names <- collector.names
-        unsafe {
-            delete collector
-        }
+        let skip = nargs >= 3 ? macro_words(prog, expr.arguments[1]) : ""
+        let family = nargs >= 4 ? macro_words(prog, expr.arguments[2]) : "batch"
+        macro_verify(!empty(family), prog, expr.at, "kq_tile_stamp's family is a string literal or a module `let` of one")
+        let tails <- macro_word_list(prog, nargs == 6 ? expr.arguments[4] : null)
+        macro_verify(nargs != 6 || (!empty(tails) && expr.arguments[3] is ExprVar), prog, expr.at,
+            "kq_tile_stamp's tail key is a plain variable and its tails a string literal or a module `let` of one")
+        var root = stamp_block(prog, expr, "kq_tile_stamp")
+        let names <- placeholder_names(root, "tile_")
         macro_verify(!empty(names), prog, expr.at, "kq_tile_stamp: the block calls no `tile_<verb>_<tail>` placeholder")
         var fmt = expr.arguments[0]
         var ladder : ExpressionPtr
         for (f in type<KqFmt>) {
             let fname = "{f}"
             continue if (word_in(skip, fname))
-            var body = clone_expression(emb._block)
-            var arm = apply_template(expr.at, body) $(var r : Template) {
-                for (n in names) {
-                    r |> renameCall(n, kq_tile_target(n, fname))
+            var arm : ExpressionPtr
+            if (empty(tails)) {
+                arm = renamed_arm(expr.at, root, names) $(n) => kq_tile_target(n, fname, family, "")
+            } else {
+                var tail = expr.arguments[3]
+                arm = qmacro_block() {
+                    panic("kq_tile_stamp: tail {$e(tail)} has no tile arm for {$v(fname)}")
+                }
+                for (t, j in tails, count()) {
+                    continue if (word_in(skip, "{fname}/{t}"))
+                    var tarm = renamed_arm(expr.at, root, names) $(n) => kq_tile_target(n, fname, family, t)
+                    arm = ladder_arm(tail, tarm, arm, j)
                 }
             }
             if (ladder == null) {
@@ -243,6 +310,33 @@ class KqTileStamp : AstCallMacro {
                     }
                 }
             }
+        }
+        return ladder
+    }
+}
+
+[call_macro(name = "stamp_ladder")]
+class StampLadder : AstCallMacro {
+    //! ``stamp_ladder(key, stems) <| $() { ... stamp_<verb>_<tail>(...) ... }``: the block once per word of ``stems`` on a ladder over
+    //! the int variable ``key``, arm ``i`` renaming each placeholder to ``<verb>_<word i>_<tail>``; a ``-`` word, and a key past
+    //! every word, panics
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
+        macro_verify(length(expr.arguments) == 3 && expr.arguments[2] is ExprMakeBlock, prog, expr.at,
+            "expecting stamp_ladder(key, stems) followed by a block")
+        macro_verify(expr.arguments[0] is ExprVar, prog, expr.at, "stamp_ladder takes a plain variable for the key, got {describe(expr.arguments[0])}")
+        let stems <- macro_word_list(prog, expr.arguments[1])
+        macro_verify(!empty(stems), prog, expr.at, "stamp_ladder's stems are a string literal or a module `let` of one")
+        var root = stamp_block(prog, expr, "stamp_ladder")
+        let names <- placeholder_names(root, "stamp_")
+        macro_verify(!empty(names), prog, expr.at, "stamp_ladder: the block calls no `stamp_<verb>_<tail>` placeholder")
+        var key = expr.arguments[0]
+        var ladder = qmacro_block() {
+            panic("stamp_ladder: key {$e(key)} has no stamp")
+        }
+        for (s, i in stems, count()) {
+            continue if (s == "-")
+            var arm = renamed_arm(expr.at, root, names) $(n) => stamp_target(n, "stamp_", s, "")
+            ladder = ladder_arm(key, arm, ladder, i)
         }
         return ladder
     }
