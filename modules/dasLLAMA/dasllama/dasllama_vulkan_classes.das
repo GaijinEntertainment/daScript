@@ -3574,8 +3574,7 @@ class template AtAttnTileT {
                 var v = (jj == 0u ? o0 : (jj == 1u ? o1 : (jj == 2u ? o2 : (jj == 3u ? o3
                     : (jj == 4u ? o4 : (jj == 5u ? o5 : (jj == 6u ? o6 : o7))))))) * inv
                 if (pa.gated != 0u) {
-                    let g = qpanel[gb + jj * 32u]
-                    v = v / (1.0 + exp(-g))
+                    v = sig_gate(v, qpanel[gb + jj * 32u])
                 }
                 outp[ob + jj * 32u] = v
                 jj++
@@ -3662,8 +3661,7 @@ class AtAttn : AtAttnTileT {
                 var v = (jj == 0u ? o0 : (jj == 1u ? o1 : (jj == 2u ? o2 : (jj == 3u ? o3
                     : (jj == 4u ? o4 : (jj == 5u ? o5 : (jj == 6u ? o6 : o7))))))) * inv
                 if (gated != 0u) {
-                    let g = outp[ob + jj * 32u]
-                    v = v / (1.0 + exp(-g))
+                    v = sig_gate(v, outp[ob + jj * 32u])
                 }
                 outp[ob + jj * 32u] = v
                 jj++
@@ -4989,9 +4987,9 @@ class template DaAttnT {
         var og = o
         var og2 = o2
         if (pa.gated != 0u && (wide || tid < hs)) {
-            og = og / (1.0 + exp(-q[qb + h * qstride + hs + tid]))
+            og = sig_gate(og, q[qb + h * qstride + hs + tid])
             if (wide) {
-                og2 = og2 / (1.0 + exp(-q[qb + h * qstride + hs + tid + 256u]))
+                og2 = sig_gate(og2, q[qb + h * qstride + hs + tid + 256u])
             }
         }
         store_row(hflat, hs, tid, og, og2, wide)
@@ -10869,7 +10867,7 @@ class TowerGluSig {
             let dd = max(1u, pa.d)
             let t = e / dd
             let c = e % dd
-            y[e] = h[t * 2u * pa.d + c] / (1.0 + exp(-h[t * 2u * pa.d + pa.d + c]))
+            y[e] = sig_gate(h[t * 2u * pa.d + c], h[t * 2u * pa.d + pa.d + c])
         }
     }
 }
@@ -12372,11 +12370,11 @@ class KvTq4Unrot : KvTq4WhtBase {
         let gb = row * pa.qrow + hh * pa.qstride + hs
         if (tid < hs) {
             let o = buf[tid] * pa.inv_sqrt_hs * signs[tid]
-            y[ob + tid] = gated ? o / (1.0 + exp(-q[gb + tid])) : o
+            y[ob + tid] = gated ? sig_gate(o, q[gb + tid]) : o
         }
         if (two) {
             let o = buf[t1] * pa.inv_sqrt_hs * signs[t1]
-            y[ob + t1] = gated ? o / (1.0 + exp(-q[gb + t1])) : o
+            y[ob + t1] = gated ? sig_gate(o, q[gb + t1]) : o
         }
     }
 }

@@ -32,6 +32,9 @@ def sigmoid_f32(v : float) : float => 1.0 / (1.0 + exp(-v))
 //! SiLU as the one quotient v / (1 + exp(-v)), the CPU `silu`'s form
 def silu_f32(v : float) : float => v / (1.0 + exp(-v))
 
+//! `x` gated by the logistic of `g` as the one quotient x / (1 + exp(-g)), not x times `sigmoid_f32(g)`
+def sig_gate(x, g : float) : float => x / (1.0 + exp(-g))
+
 //! the CPU `gelu`'s tanh form in f32 (not the f16 LUT form the vision towers read), its tanh clamped by `tts_tanh`
 def tts_gelu_tanh(v : float) : float => 0.5 * v * (1.0 + tts_tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))
 
