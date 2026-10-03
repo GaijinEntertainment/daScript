@@ -20,12 +20,22 @@ def tail(s : string) : string {
     return slice(s, max(0, length(s) - 400))
 }
 
-def run_capture(cmd : string; var out : string&) : int {
-    return unsafe(popen_timeout(cmd, 300.0, $(f) {
+def run_capture(cmd : string; var out : string&; timeout = 300.0) : int {
+    return unsafe(popen_timeout(cmd, timeout, $(f) {
         if (f != null) {
             out = fread(f)
         }
     }))
+}
+
+def run_standalone(exe, command_args : string; var out : string&; timeout = 300.0) : int {
+    //! Run with the SDK runtime on PATH; command_args is a trusted, already-quoted shell tail.
+    let bin_dir = dir_name(das_exe())
+    var cmd = "PATH=\"{bin_dir}:$PATH\" \"{exe}\" {command_args} 2>&1"
+    if (get_platform_name() == "windows") {
+        cmd = "set \"PATH={bin_dir};%PATH%\"&& \"{exe}\" {command_args} 2>&1"
+    }
+    return run_capture(cmd, out, timeout)
 }
 
 //! the major in a clang driver's `--version` line, 0 when the text carries none
@@ -91,13 +101,8 @@ def build_and_run(t : T?; dir : string; tag : string; root : string; jit_args : 
         t |> success(stat(exe).is_valid, "the exe artifact exists at -output ({tag})")
         return ""
     }
-    let bin_dir = dir_name(das_exe())
-    var cmd = "PATH=\"{bin_dir}:$PATH\" \"{exe}\" 2>&1"
-    if (get_platform_name() == "windows") {
-        cmd = "set \"PATH={bin_dir};%PATH%\"&& \"{exe}\" 2>&1"
-    }
     var out = ""
-    let rc = run_capture(cmd, out)
+    let rc = run_standalone(exe, "", out)
     t |> equal(0, rc, "the exe ({tag}) runs clean: {tail(out)}")
     return rc == 0 ? out : ""
 }

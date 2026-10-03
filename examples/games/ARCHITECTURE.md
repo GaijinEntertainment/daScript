@@ -17,7 +17,7 @@ body owns the GC boundary: `live_end_frame` only swaps buffers.
 
 ## 2. Music has two arms
 
-The strudel player runs either on a worker thread (`strudel_init`/`strudel_play`) or on
+The strudel player runs either on a worker thread (`strudel_init`) or on
 the main thread (`strudel_create_channel` + per-frame `strudel_tick`). A game picks the
 arm once, at audio init: the worker arm needs a real thread and a threaded audio
 backend - any native build qualifies, and so does the standalone wasm card (pthread pool

@@ -35,6 +35,14 @@ def new_thread(var l : lambda) {
     invoke(l)
 }
 
+[tag_function(new_job_tag)]
+def new_thread_loop(var l : lambda<bool>) {
+    //! Runs steps on a cloned-context thread. True continues; false finishes.
+    //! Collection may run between steps, after all step-local frames return.
+    //! Keep state in captures/globals and release handles on the final step; panics terminate like new_thread.
+    while (invoke(l)) {}
+}
+
 [tag_function_macro(tag="new_job_tag")]
 class private NewJobMacro : AstFunctionAnnotation {
     //! this macro handles `new_job` and `new_thread` calls.
@@ -775,35 +783,45 @@ def public capture_jobque_seq_box(var box : SeqBox?) : SeqBox? {
     return box
 }
 
-def public release_capture_jobque_channel(ch : Channel?) {
+[arch(at="ARCHITECTURE_JOBQUE.md#thread-loop-final-release")]
+def public release_capture_jobque_channel(ch : Channel? const&) {
+    if (is_thread_loop_capture(unsafe(addr(ch)))) { return }
     //! this function is used to release a channel that is used by the jobque.
     if (ch != null) {
         panic("Channel has not been released. missing channel|>release or channel|>notify_and_release")
     }
 }
 
-def public release_capture_jobque_job_status(js : JobStatus?) {
+[arch(at="ARCHITECTURE_JOBQUE.md#thread-loop-final-release")]
+def public release_capture_jobque_job_status(js : JobStatus? const&) {
+    if (is_thread_loop_capture(unsafe(addr(js)))) { return }
     //! this function is used to release a job status that is used by the jobque.
     if (js != null) {
         panic("JobStatus has not been released. missing status|>release or status|>notify_and_release")
     }
 }
 
-def public release_capture_jobque_lock_box(js : LockBox?) {
+[arch(at="ARCHITECTURE_JOBQUE.md#thread-loop-final-release")]
+def public release_capture_jobque_lock_box(js : LockBox? const&) {
+    if (is_thread_loop_capture(unsafe(addr(js)))) { return }
     //! this function is used to release a lock box that is used by the jobque.
     if (js != null) {
         panic("LockBox has not been released. missing box|>release or box|>notify_and_release")
     }
 }
 
-def public release_capture_jobque_stream(s : Stream?) {
+[arch(at="ARCHITECTURE_JOBQUE.md#thread-loop-final-release")]
+def public release_capture_jobque_stream(s : Stream? const&) {
+    if (is_thread_loop_capture(unsafe(addr(s)))) { return }
     //! this function is used to release a stream that is used by the jobque.
     if (s != null) {
         panic("Stream has not been released. missing stream|>release or stream|>notify_and_release")
     }
 }
 
-def public release_capture_jobque_seq_box(box : SeqBox?) {
+[arch(at="ARCHITECTURE_JOBQUE.md#thread-loop-final-release")]
+def public release_capture_jobque_seq_box(box : SeqBox? const&) {
+    if (is_thread_loop_capture(unsafe(addr(box)))) { return }
     //! this function is used to release a seq box that is used by the jobque.
     // seq_box_release, not the family `release` - the latter only drops a share, so the last
     // reference dropped through it leaks the box

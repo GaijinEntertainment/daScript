@@ -696,7 +696,7 @@ def document_module_jobque(_root : string) {
 def document_module_jobque_boost(_root : string) {
     var mod = find_module("jobque_boost")
     var groups <- array<DocGroup>(
-        group_by_regex("Invocations", mod, %regex~(new_job|new_thread)$%%),
+        group_by_regex("Invocations", mod, %regex~(new_job|new_thread|new_thread_loop)$%%),
         group_by_regex("Iteration", mod, %regex~(for_each|each|each_clone|for_each_clone)$%%),
         group_by_regex("Passing data", mod, %regex~(push|push_clone|push_batch|push_batch_clone|push_archive)$%%),
         group_by_regex("Receiving data", mod, %regex~(gather|gather_ex|gather_and_forward|peek|pop|pop_one|pop_and_clone_one|try_pop|try_pop_clone|pop_with_timeout|pop_with_timeout_clone|pop_archive|try_pop_archive|pop_archive_with_timeout|gather_archive)$%%),

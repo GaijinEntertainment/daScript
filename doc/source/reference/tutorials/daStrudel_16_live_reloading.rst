@@ -64,7 +64,6 @@ serialised — ``strudel_init`` re-adds them on every reload:
     def strudel_main() {
         strudel_add_track(s("bd [hh hh] sd [hh cp]"))
         strudel_set_bpm(120.0lf)
-        strudel_play()
     }
 
     [export] def init() {

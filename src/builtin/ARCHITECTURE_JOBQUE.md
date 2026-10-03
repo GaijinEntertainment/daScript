@@ -34,3 +34,11 @@ there, as before.
 `Channel::pop` waits on a condition variable until an item arrives or all producers
 complete. Pushes and producer completion notify that condition, so an idle consumer
 needs no periodic timeout or host-clock query.
+
+### Thread-loop collection boundaries {#thread-loop-collection}
+
+`invoke_job_lambda` roots the repeated lambda's capture throughout the loop. Heap
+collection runs only after a step returns true, when that step's stack has unwound
+and persistent values reside in globals or the rooted capture. A false return is
+the final step: it releases captured handles, skips collection, and proceeds to
+capture-release verification.

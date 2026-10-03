@@ -60,7 +60,6 @@ def strudel_main() {
         |> gain(0.35)
     )
     strudel_add_track(stack([bumblebee, left_pad, right_pluck]))
-    strudel_play()
 }
 
 [export]
