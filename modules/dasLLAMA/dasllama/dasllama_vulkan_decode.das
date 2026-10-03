@@ -1681,6 +1681,27 @@ def private rd_encode_routed_sum(raw : VkCommandBuffer; var h : VkHaz; l : int64
     }
 }
 
+[arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
+def private rd_encode_host_cut(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; nrows : int64; stamp : string) {
+    let dim = g_rd.dim
+    var pcr = RouterArgs(ne = uint(g_rd.ner), dim = uint(dim), woff = uint(L.router_slot * g_rd.ner * dim), obase = 0u,
+        norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ncols = uint(nrows))
+    enc_router_gemv_cls(raw, h, L.s_router, pcr, g_rd.ner)
+    if (!empty(stamp)) {
+        rd_ts(raw, stamp)
+    }
+    vhz_dep(raw, h, VHZ_XB | VHZ_MRT, 0u, true)
+    cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hx_host.buf, dim * 4l * nrows)
+    cmd_copy_whole(raw, g_rd.moe_dlog_dev, g_rd.hlog_host.buf, g_rd.ner * 4l * nrows)
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool")]
+def private rd_host_resume(var raw : VkCommandBuffer&; var next : VkCommandBuffer; var h : VkHaz; l, nrows : int64) {
+    h = cmd_reopen(raw, next)
+    raw = next
+    rd_encode_routed_sum(raw, h, l, nrows)
+}
+
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]
 def private rd_record_hc_segments_n(nrows : int64; seq : bool; var segs : array<VkCommandBuffer>; seg0 : int64) {
     rd_fill_gemv_regions_all()
@@ -1725,16 +1746,9 @@ def private rd_record_hc_segments_n(nrows : int64; seq : bool; var segs : array<
             }
             if (L.moe) {
                 verify(L.experts_host, "vk decode: the hyper-connection chain serves routed experts on the host alone")
-                var pcr = RouterArgs(ne = uint(g_rd.ner), dim = uint(dim), woff = uint(L.router_slot * g_rd.ner * dim), obase = 0u,
-                    norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ncols = ncols)
-                enc_router_gemv_cls(raw, h, L.s_router, pcr, g_rd.ner)
-                vhz_dep(raw, h, VHZ_XB | VHZ_MRT, 0u, true)
-                cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hx_host.buf, dim * 4l * nrows)
-                cmd_copy_whole(raw, g_rd.moe_dlog_dev, g_rd.hlog_host.buf, g_rd.ner * 4l * nrows)
+                rd_encode_host_cut(raw, h, L, nrows, "")
                 seg++
-                h = cmd_reopen(raw, segs[seg0 + seg])
-                raw = segs[seg0 + seg]
-                rd_encode_routed_sum(raw, h, l, nrows)
+                rd_host_resume(raw, segs[seg0 + seg], h, l, nrows)
             }
             rd_encode_hc_scatter(raw, h, L, true, nrows)
         }
@@ -2768,17 +2782,9 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
             }
             if (L.moe && L.experts_host) {
                 verify(one && split_seg_base >= 0l, "vk decode: a host layer takes the one-row split command alone")
-                var pcr = RouterArgs(ne = uint(g_rd.ner), dim = uint(dim), woff = uint(L.router_slot * g_rd.ner * dim), obase = 0u,
-                    norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ncols = 1u)
-                enc_router_gemv_cls(raw, h, L.s_router, pcr, g_rd.ner)
-                rd_ts(raw, "m:router")
-                vhz_dep(raw, h, VHZ_XB | VHZ_MRT, 0u, true)
-                cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hx_host.buf, dim * 4l)
-                cmd_copy_whole(raw, g_rd.moe_dlog_dev, g_rd.hlog_host.buf, g_rd.ner * 4l)
+                rd_encode_host_cut(raw, h, L, 1l, "m:router")
                 seg++
-                h = cmd_reopen(raw, g_rd.cmd_seg[split_seg_base + seg])
-                raw = g_rd.cmd_seg[split_seg_base + seg]
-                rd_encode_routed_sum(raw, h, l, 1l)
+                rd_host_resume(raw, g_rd.cmd_seg[split_seg_base + seg], h, l, 1l)
                 var pc14h = rd_ar_comb_args(L, l, nxt)
                 enc_cls_ar_comb(raw, h, L.s_addr_next, pc14h, 1l)
                 rd_ts(raw, "m:ar2")
@@ -3417,12 +3423,7 @@ def private rd_record_hc_draft {
     if (has_dense_triple(L)) {
         rd_encode_ffn(raw, h, L, l, nlfin, 1l, 1u, 0)
     }
-    var pcr = RouterArgs(ne = uint(g_rd.ner), dim = uint(dim), woff = uint(L.router_slot * g_rd.ner * dim), obase = 0u,
-        norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ncols = 1u)
-    enc_router_gemv_cls(raw, h, L.s_router, pcr, g_rd.ner)
-    vhz_dep(raw, h, VHZ_XB | VHZ_MRT, 0u, true)
-    cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hx_host.buf, dim * 4l)
-    cmd_copy_whole(raw, g_rd.moe_dlog_dev, g_rd.hlog_host.buf, g_rd.ner * 4l)
+    rd_encode_host_cut(raw, h, L, 1l, "")
     pfq_end(raw)
     cmd_close(raw)
     rd_take_stamps(g_rdq_draft, g_pfq_n)
