@@ -216,7 +216,7 @@ cm2 mode, since a forced mode enables no coopmat2 extension - the fa knob is on,
 not gated - this chain wires neither the h256 stamps nor their gated epilogue, so gated models
 keep the flash-style `at_attn` pass. The tile reads f16 K/V: the chain keeps its f32 roped-k /
 raw-v planes at absolute positions for the host readback the CPU cache store consumes, and
-fills f16 shadows of them with the base-less `f16cvt` over the whole attended prefix each window; the fa
+fills f16 shadows of them with the base-less `tower_clamp_cvt` at the half range (`f16_rows_args`) over the whole attended prefix each window; the fa
 output lands in the same out plane `at_attn` writes, so the requant and `wo` stages never learn which pass ran.
 
 **The per-op attention chain adds a q/k/v projection bias (qwen2moe) in its prep stage.** The

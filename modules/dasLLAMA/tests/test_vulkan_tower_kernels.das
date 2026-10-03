@@ -70,20 +70,20 @@ def private fa_bidir_arm(t : T?; khr : bool; hs : int) {
             let vhp = cp |> out_words(sh_bytes, F16_SENTINEL_BITS)
             let yp = cp |> out_(rows * qd)
             let ycp = cp |> out_(rows * qd)
-            var sck = cp |> cls_set(fixed_array(kp, khp), @@set_f16cvt_cls)
-            var scv = cp |> cls_set(fixed_array(vp, vhp), @@set_f16cvt_cls)
+            var sck = cp |> cls_set(fixed_array(kp, khp), @@set_tower_clamp_cvt_cls)
+            var scv = cp |> cls_set(fixed_array(vp, vhp), @@set_tower_clamp_cvt_cls)
             let fa = fixed_array(qp, khp, vhp, yp)
             let fc = fixed_array(qp, khp, vhp, ycp)
             var sfa = fa_stamp_set(khr, gather_planes(cp.dev, fa), gather_planes(cp.bytes, fa), gather_planes(cp.hazard_bit, fa))
             var sfc = fa_stamp_set(khr, gather_planes(cp.dev, fc), gather_planes(cp.bytes, fc), gather_planes(cp.hazard_bit, fc))
-            var pcv = ActArgs(nelem = uint(kpad * qd), nblk = 0u)
+            var pcv = f16_rows_args(uint(kpad * qd))
             var pcf = FaArgs(rows = uint(rows), w0 = 0u, qd = uint(qd), kvd = uint(qd), kv_mul = 1u, kvbase = 0u,
                 scale = TOWER_SCALE, window = 0u, sinkoff = 0u)
             let cvtwgs = int64((kpad * qd / 4 + 255) / 256)
             let wgs = fa_stamp_wgs(khr, int64(nheads), int64(rows))
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_f16cvt_cls(raw, h, sck, pcv, cvtwgs)
-                enc_f16cvt_cls(raw, h, scv, pcv, cvtwgs)
+                enc_tower_clamp_cvt_cls(raw, h, sck, pcv, cvtwgs)
+                enc_tower_clamp_cvt_cls(raw, h, scv, pcv, cvtwgs)
                 fa_stamp_enc(khr, int64(hs), false, false, false, false, raw, h, sfa, pcf, wgs, true)
                 fa_stamp_enc(khr, int64(hs), false, false, false, false, raw, h, sfc, pcf, wgs)
             }
@@ -118,7 +118,7 @@ def private fa_bidir_arm(t : T?; khr : bool; hs : int) {
 def test_vkt_fa_bidir(t0 : T?) {
     t0 |> run("bidirectional flash attention (h64 and the padded h128, cm2 and KHR arms) == the CPU oracle over every key") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init() || !ensure_f16cvt_cls()) {
+            if (!vk_moe_init() || !ensure_tower_clamp_cvt_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }

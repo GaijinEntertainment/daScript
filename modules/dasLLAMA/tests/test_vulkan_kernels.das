@@ -594,7 +594,7 @@ def test_vkd_readonly_stamp(t0 : T?) {
 def test_vkd_fa_stamp_words(t0 : T?) {
     t0 |> run("the folded flash template's stamps: the KHR arm's shared-memory tiles exist on its stamps alone, and each arm asks for its own cooperative-matrix capability") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_f16cvt_cls()) {   // engage the device without touching coopmat rails
+            if (!ensure_tower_clamp_cvt_cls()) {   // engage the device without touching coopmat rails
                 t |> skip("no Vulkan device")
                 return
             }
@@ -3793,9 +3793,9 @@ def private fa_tile_run(t : T?; khr : bool) {   // nolint:STYLE037 — one arm l
                 upload_region_at(yh16_split, 0l, addr<uint8 const?>(y16_split[0]), h16_bytes)
                 upload_region_at(sinkd, 0l, addr<uint8 const?>(sinkh[0]), sink_bytes)
                 nan_sentinel_upload(yd, q_bytes)
-                var sck = set_f16cvt_cls(fixed_array(kdev, khdev),
+                var sck = set_tower_clamp_cvt_cls(fixed_array(kdev, khdev),
                     fixed_array(m_bytes, sh_bytes), fixed_array(2u, 16u))
-                var scv = set_f16cvt_cls(fixed_array(vdev, vhdev),
+                var scv = set_tower_clamp_cvt_cls(fixed_array(vdev, vhdev),
                     fixed_array(m_bytes, sh_bytes), fixed_array(8u, 32u))
                 var sfa = (sink
                     ? fa_stamp_sink_set(khr, fixed_array(qdev, khdev, vhdev, yd, sinkd),
@@ -3811,20 +3811,20 @@ def private fa_tile_run(t : T?; khr : bool) {   // nolint:STYLE037 — one arm l
                     : fa_stamp_set(khr, fixed_array(qdev, khdev, vhdev, yh16_fused),
                         fixed_array(q_bytes, sh_bytes, sh_bytes, h16_bytes),
                         fixed_array(1u, 16u, 32u, 64u)))
-                var scy = set_f16cvt_cls(fixed_array(yd, yh16_split),
+                var scy = set_tower_clamp_cvt_cls(fixed_array(yd, yh16_split),
                     fixed_array(q_bytes, h16_bytes), fixed_array(4u, 128u))
-                var pcv = ActArgs(nelem = uint(kpad * kvd), nblk = 0u)
+                var pcv = f16_rows_args(uint(kpad * kvd))
                 let cvtwgs = int64((kpad * kvd / 4 + 255) / 256)
                 var pcf = FaArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd),
                     kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u, scale = scale, window = uint(window), sinkoff = 0u)
-                var pcy = ActArgs(nelem = uint(rows * qd), nblk = 0u)
+                var pcy = f16_rows_args(uint(rows * qd))
                 cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                    enc_f16cvt_cls(raw2, h2, sck, pcv, cvtwgs)
-                    enc_f16cvt_cls(raw2, h2, scv, pcv, cvtwgs)
+                    enc_tower_clamp_cvt_cls(raw2, h2, sck, pcv, cvtwgs)
+                    enc_tower_clamp_cvt_cls(raw2, h2, scv, pcv, cvtwgs)
                     enc_fa_tile(khr, hs, false, false, sink, false, raw2, h2, sfa, pcf, nheads, rows)
                     enc_fa_tile(khr, hs, false, false, sink, true, raw2, h2, sfa16, pcf, nheads, rows)
                     // the split pair's own convert: f16cvt over the f32 out - the fused twin's true peer
-                    enc_f16cvt_cls(raw2, h2, scy, pcy, int64((rows * qd / 4 + 255) / 256))
+                    enc_tower_clamp_cvt_cls(raw2, h2, scy, pcy, int64((rows * qd / 4 + 255) / 256))
                     vhz_dep(raw2, h2, 4u | 64u | 128u, 0u, true)
                     cmd_copy_whole(raw2, yd, host.buf, q_bytes)
                     cmd_copy_range(raw2, yh16_fused, 0l, host16.buf, 0l, h16_bytes)
@@ -3907,7 +3907,7 @@ def private fa_tile_run(t : T?; khr : bool) {   // nolint:STYLE037 — one arm l
 def test_vkd_fa_cm2(t0 : T?) {
     t0 |> run("cm2 flash-attention family == the CPU oracle (h64 + h128 + h256, f16cvt-staged planes)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_f16cvt_cls()) {   // engage the device without touching coopmat rails
+            if (!ensure_tower_clamp_cvt_cls()) {   // engage the device without touching coopmat rails
                 t |> skip("no Vulkan device")
                 return
             }
@@ -3927,7 +3927,7 @@ def test_vkd_fa_cm2(t0 : T?) {
 def test_vkd_fa_khr(t0 : T?) {
     t0 |> run("KHR flash-attention family == the CPU oracle (h64 + h128 + h256 + h512, the window arm, f16cvt-staged planes)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_f16cvt_cls()) {
+            if (!ensure_tower_clamp_cvt_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }
@@ -3994,20 +3994,20 @@ def private fa_h256_run(nheads, kv_mul, rows, w0 : int; gated : bool; cap : floa
             upload_region_at(kdev, 0l, addr<uint8 const?>(kh[0]), m_bytes)
             upload_region_at(vdev, 0l, addr<uint8 const?>(vh[0]), m_bytes)
         }
-        var sck = set_f16cvt_cls(fixed_array(kdev, khdev), fixed_array(m_bytes, sh_bytes), fixed_array(2u, 16u))
-        var scv = set_f16cvt_cls(fixed_array(vdev, vhdev), fixed_array(m_bytes, sh_bytes), fixed_array(8u, 32u))
+        var sck = set_tower_clamp_cvt_cls(fixed_array(kdev, khdev), fixed_array(m_bytes, sh_bytes), fixed_array(2u, 16u))
+        var scv = set_tower_clamp_cvt_cls(fixed_array(vdev, vhdev), fixed_array(m_bytes, sh_bytes), fixed_array(8u, 32u))
         var sfa = fa_stamp_set(khr, fixed_array(qdev, khdev, vhdev, yd),
             fixed_array(qp_bytes, sh_bytes, sh_bytes, o_bytes), fixed_array(1u, 16u, 32u, 4u))
         var sfa16 = fa_stamp_set(khr, fixed_array(qdev, khdev, vhdev, yh16),
             fixed_array(qp_bytes, sh_bytes, sh_bytes, o16_bytes), fixed_array(1u, 16u, 32u, 64u))
-        var pcv = ActArgs(nelem = uint(kpad * kvd), nblk = 0u)
+        var pcv = f16_rows_args(uint(kpad * kvd))
         let cvtwgs = int64((kpad * kvd / 4 + 255) / 256)
         var pcf = FaArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u,
             scale = scale, cap = cap, qstride = gated ? uint(qrow) : 0u, qhs = gated ? uint(qhs) : 0u)
         let capped = !gated
         cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-            enc_f16cvt_cls(raw2, h2, sck, pcv, cvtwgs)
-            enc_f16cvt_cls(raw2, h2, scv, pcv, cvtwgs)
+            enc_tower_clamp_cvt_cls(raw2, h2, sck, pcv, cvtwgs)
+            enc_tower_clamp_cvt_cls(raw2, h2, scv, pcv, cvtwgs)
             enc_fa_tile(khr, hs, gated, capped, false, false, raw2, h2, sfa, pcf, nheads, rows)
             enc_fa_tile(khr, hs, gated, capped, false, true, raw2, h2, sfa16, pcf, nheads, rows)
             cmd_copy_planes(raw2, h2, fixed_array(yd, yh16), host, fixed_array(o_bytes, o16_bytes), 4u | 64u)
@@ -4068,7 +4068,7 @@ def private fa_h256_run(nheads, kv_mul, rows, w0 : int; gated : bool; cap : floa
 //! oracle element, the f16-out twin matches the f32 stamp rounded
 def private fa_h256_gated_cell(t : T?; tag : string; nheads, kv_mul, rows, w0 : int) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        if (!ensure_f16cvt_cls()) {
+        if (!ensure_tower_clamp_cvt_cls()) {
             t |> skip("no Vulkan device")
             return
         }
@@ -4098,7 +4098,7 @@ def test_vkd_fa_cm2_h256_gated(t0 : T?) {
 def test_vkd_fa_cm2_h256_softcap(t0 : T?) {
     t0 |> run("cm2 flash-attention h256 softcap stamps == the CPU oracle under cap 50 (gemma-2's shape; the uncapped oracle as the control)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_f16cvt_cls()) {
+            if (!ensure_tower_clamp_cvt_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }
@@ -4121,7 +4121,7 @@ def test_vkd_fa_cm2_h256_softcap(t0 : T?) {
 def test_vkd_fa_khr_h256_softcap(t0 : T?) {
     t0 |> run("KHR flash-attention h256 softcap stamps == the CPU oracle under cap 50 (gemma-2's shape; the uncapped oracle as the control)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_f16cvt_cls()) {
+            if (!ensure_tower_clamp_cvt_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }
@@ -6045,7 +6045,7 @@ def test_vkd_cvt_family(t0 : T?) {
             }
             // the f16 converters: act-f16, f16 convert (mode-free classes)
             {
-                verify(ensure_actf16_cls() && ensure_f16cvt_cls(),
+                verify(ensure_actf16_cls() && ensure_tower_clamp_cvt_cls(),
                     "the cvt class rails must engage on a live device")
                 let nelem = 2048
                 var gh : array<float>
@@ -6077,10 +6077,10 @@ def test_vkd_cvt_family(t0 : T?) {
                                 var pc = ActArgs(nelem = uint(nelem), act = arm == 3 ? ACT_OAI : ACT_GELU, nblk = 0u)
                                 enc_actf16_cls(raw2, h2, sc, pc, int64(wgs))
                             } else {
-                                sc = set_f16cvt_cls(fixed_array(ud, hd2),
+                                sc = set_tower_clamp_cvt_cls(fixed_array(ud, hd2),
                                     fixed_array(g_bytes, h_bytes), fixed_array(1u, 4u))
-                                var pc = ActArgs(nelem = uint(nelem), nblk = 0u)
-                                enc_f16cvt_cls(raw2, h2, sc, pc, int64(wgs))
+                                var pc = f16_rows_args(uint(nelem))
+                                enc_tower_clamp_cvt_cls(raw2, h2, sc, pc, int64(wgs))
                             }
                             cmd_copy_planes(raw2, h2, fixed_array(hd2), host, fixed_array(h_bytes), 4u)
                         }
@@ -9547,7 +9547,7 @@ def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
 def test_vkd_ar_f16_fused(t0 : T?) {
     t0 |> run("fused batch ar+f16 == the split cls_ar + f16cvt_cls pair, bit-exact") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_cls_ar() || !ensure_f16cvt_cls() || !ensure_cls_ar_f16_b()) {
+            if (!ensure_cls_ar() || !ensure_tower_clamp_cvt_cls() || !ensure_cls_ar_f16_b()) {
                 t |> skip("no Vulkan device")
                 return
             }
@@ -9588,16 +9588,16 @@ def test_vkd_ar_f16_fused(t0 : T?) {
                 var sca = set_cls_ar(fixed_array(x_split, aad, wnd, yod),
                     fixed_array(row_bytes, row_bytes, wn_bytes, row_bytes),
                     fixed_array(1u, 2u, 0u, 4u))
-                var scc = set_f16cvt_cls(fixed_array(yod, f16_split),
+                var scc = set_tower_clamp_cvt_cls(fixed_array(yod, f16_split),
                     fixed_array(row_bytes, h_bytes), fixed_array(4u, 8u))
                 var scf = set_cls_ar_f16_b(fixed_array(x_fused, aad, wnd, f16_fused),
                     fixed_array(row_bytes, row_bytes, wn_bytes, h_bytes),
                     fixed_array(16u, 2u, 0u, 32u))
                 var pca = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(woff), eps = 1e-5, ascale = 1.0)
-                var pcc = ActArgs(nelem = uint(nrows * dim), nblk = 0u)
+                var pcc = f16_rows_args(uint(nrows * dim))
                 cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_cls_ar(raw, h, sca, pca, int64(nrows))
-                    enc_f16cvt_cls(raw, h, scc, pcc, int64((nrows * dim / 4 + 255) / 256))
+                    enc_tower_clamp_cvt_cls(raw, h, scc, pcc, int64((nrows * dim / 4 + 255) / 256))
                     enc_cls_ar_f16_b(raw, h, scf, pca, int64(nrows))
                     cmd_copy_planes(raw, h, fixed_array(f16_split, f16_fused, x_split, x_fused), host, fixed_array(h_bytes, h_bytes, row_bytes, row_bytes), 8u | 32u | 16u | 1u)
                 }

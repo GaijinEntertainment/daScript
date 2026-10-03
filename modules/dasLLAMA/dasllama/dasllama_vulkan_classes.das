@@ -1001,25 +1001,6 @@ class ActF16B : ActF16 {
     }
 }
 
-// straight f32 -> f16 rows (the arena cm2 chain's activation feed)
-[vk_dispatch(name = "f16cvt_cls", grid = "wgs", params = "wgs : int64")]
-class F16Cvt {
-    @ssbo @binding = 0 src : array<float>
-    @ssbo @binding = 1 outh : array<float16>
-    @push_constant pa : ActArgs
-
-    [spirv_kernel(local_size_x = 256, name = "f16cvt_cls_spv")]
-    def run {
-        let e = gl_GlobalInvocationID.x * 4u
-        if (e < pa.nelem) {
-            outh[e] = half_sat(src[e])
-            outh[e + 1u] = half_sat(src[e + 1u])
-            outh[e + 2u] = half_sat(src[e + 2u])
-            outh[e + 3u] = half_sat(src[e + 3u])
-        }
-    }
-}
-
 struct EmbArgs {
     npos : uint
     dim : uint
@@ -10113,17 +10094,18 @@ struct TowerClampArgs {
 
 //! rows clamped to [lo, hi] in place (a gemma4v ClippableLinear's output bounds), or under OUT16 stored as halves into `outh`
 //! with the bounds cut to the half range - the f16 feed of a clamped GEMM input, the input bounds applied on the way into the
-//! tile so the normed rows stay whole for the next GEMM's own bounds (at the float range's bounds: the plain f32 -> f16 rows)
+//! tile so the normed rows stay whole for the next GEMM's own bounds (at the half range's bounds, `f16_rows_args`: the plain f32 -> f16 rows)
 [ |> template_struct_instance]
 class template TowerClampT {
     @template_constant OUT16 : bool = false
-    @ssbo @binding = 0 x : array<float>
+    @ssbo @binding = 0 @template_gate = "!OUT16" x : array<float>
+    @ssbo @binding = 0 @template_gate = OUT16 src : array<float>
     @ssbo @binding = 1 @template_gate = OUT16 outh : array<float16>
     @push_constant pa : TowerClampArgs
 
     def store_clamped(e : uint) : void {
         static_if (OUT16) {
-            outh[e] = float16(clamp(x[e], max(pa.lo, -65504.0), min(pa.hi, 65504.0)))
+            outh[e] = float16(clamp(src[e], max(pa.lo, -65504.0), min(pa.hi, 65504.0)))
         } else {
             x[e] = clamp(x[e], pa.lo, pa.hi)
         }
@@ -10148,6 +10130,9 @@ class TowerClamp : TowerClampT {}
 class TowerClampCvt : TowerClampT {
     override OUT16 = true
 }
+
+//! `tower_clamp_cvt_cls`'s push over `nelem` floats at the half range's bounds: the plain f32 -> f16 rows
+def f16_rows_args(nelem : uint) : TowerClampArgs => TowerClampArgs(nelem = nelem, lo = -65504.0, hi = 65504.0)
 
 struct TowerClampRqArgs {
     inbase : uint

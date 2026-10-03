@@ -217,8 +217,8 @@ def private pf_f16g_enc(raw : VkCommandBuffer; var h : VkHaz; var gset, rset : V
 
 def private pf_feed_enc(raw : VkCommandBuffer; var h : VkHaz; var fset : VkDescriptorSet; f16, kq : bool; inbase, elems : int64) {
     if (f16) {
-        var pc = ActArgs(nelem = uint(elems), nblk = 0u)
-        enc_f16cvt_cls(raw, h, fset, pc, rq_wgs(false, elems))
+        var pc = f16_rows_args(uint(elems))
+        enc_tower_clamp_cvt_cls(raw, h, fset, pc, rq_wgs(false, elems))
     } else {
         rq_enc(raw, h, fset, kq, inbase, elems)
     }
@@ -233,7 +233,7 @@ def private pf_feed_planes(f16 : bool; f16buf, qbuf, sbuf : uint64; width : int6
 def private pf_feed_set(f16 : bool; src : uint64; sbit : uint; f16buf, qbuf, sbuf : uint64; width : int64; obit : uint) : VkDescriptorSet {
     let srcb = g_rd.pf_np * width * 4l
     let p = pf_feed_planes(f16, f16buf, qbuf, sbuf, width)
-    return (f16 ? set_f16cvt_cls(fixed_array(src, p.q), fixed_array(srcb, p.qn), fixed_array(sbit, obit))
+    return (f16 ? set_tower_clamp_cvt_cls(fixed_array(src, p.q), fixed_array(srcb, p.qn), fixed_array(sbit, obit))
         : set_rq_cls(fixed_array(src, p.q, p.s), fixed_array(srcb, p.qn, p.sn), fixed_array(sbit, obit, obit)))
 }
 
@@ -268,7 +268,7 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
             fixed_array(0u, VHZ_XB, VHZ_DNSM))
     }
     if (pf_dnx6(l)) {
-        L.pf_dn_cvt_set = set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf),
+        L.pf_dn_cvt_set = set_tower_clamp_cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf),
             fixed_array(np * dim * 4l, np * dim * 2l), fixed_array(VHZ_XB, VHZ_XQ))
     }
     if (g_rd.dn_ba_f32 && pf_dnx6(l) && pf_f16g_on()) {
@@ -330,8 +330,8 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     let st & = unsafe(L.dn[g_rd.region])
     let hist_off = uint(st.hist_off)
     if (x6) {
-        var pcc0 = ActArgs(nelem = uint(wlen * dim), nblk = 0u)
-        enc_f16cvt_cls(raw, h, L.pf_dn_cvt_set, pcc0, (wlen * dim / 4l + 255l) / 256l)
+        var pcc0 = f16_rows_args(uint(wlen * dim))
+        enc_tower_clamp_cvt_cls(raw, h, L.pf_dn_cvt_set, pcc0, (wlen * dim / 4l + 255l) / 256l)
     }
     if (xq8k || !x6 || !g_rd.dn_ba_f32) {
         rq_enc(raw, h, g_rd.pf_sets[b + 0], xq8k, 0l, wlen * dim)
@@ -513,8 +513,8 @@ def private pf_moe_layer_sets(l : int64) {
     verify(cm2_cls_ensure(L.fe1, tcs) && cm2_cls_ensure(L.fe3, tcs) && cm2_cls_ensure(L.fe2, tcs)
         && cm2_cls_ensure(L.fe1, tce) && cm2_cls_ensure(L.fe3, tce) && cm2_cls_ensure(L.fe2, tce), "vk prefill: the expert tile class rails must engage")
     if (pf_f16g_on()) {
-        verify(f16_gemm_ensure(false) && ensure_splitk_reduce_cls() && ensure_f16cvt_cls(), "vk prefill: the router's f16 GEMM rails must engage")
-        L.pf_router_cvt_set = set_f16cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf),
+        verify(f16_gemm_ensure(false) && ensure_splitk_reduce_cls() && ensure_tower_clamp_cvt_cls(), "vk prefill: the router's f16 GEMM rails must engage")
+        L.pf_router_cvt_set = set_tower_clamp_cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf),
             fixed_array(np * dim * 4l, np * dim * 2l), fixed_array(VHZ_XB, VHZ_XQ))
         L.pf_f16g_router_set = f16_gemm_set(false, fixed_array(g_rd.router16_dev, g_rd.pf_xf, g_rd.pf_splitk),
             fixed_array(g_rd.router16_bytes, np * dim * 2l, g_rd.pf_splitk_bytes), fixed_array(0u, VHZ_XQ, VHZ_SK))
@@ -577,8 +577,8 @@ def private pf_moe_router(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64)
         pfq_ts(raw)
     }
     if (pf_f16g_on() && !L.experts_host) {
-        var pcc = ActArgs(nelem = uint(wlen * dim), nblk = 0u)
-        enc_f16cvt_cls(raw, h, L.pf_router_cvt_set, pcc, (wlen * dim / 4l + 255l) / 256l)
+        var pcc = f16_rows_args(uint(wlen * dim))
+        enc_tower_clamp_cvt_cls(raw, h, L.pf_router_cvt_set, pcc, (wlen * dim / 4l + 255l) / 256l)
         pf_f16g_enc(raw, h, L.pf_f16g_router_set, L.pf_f16g_router_red_set, dim, ner, wlen, L.router_slot * ner * dim, 0l)
     } else {
         router_gemm_enc(raw, h, L.pf_router_set, wlen, ner, dim, L.router_slot * ner * dim)
@@ -761,10 +761,10 @@ def private pf_setup {
         if (g_rd.ple_gpu) {
             // the pre-step on device: f16 embedding rows -> the projected plane -> the side rows finished in place
             let ple_khr = g_gpu.coopmat_mode != COOPMAT_CM2
-            verify(ensure_f16cvt_cls() && f16_gemm_ensure(ple_khr) && ensure_cls_ar(), "vk prefill: the per-layer-embedding pre-step's rails must engage")
+            verify(ensure_tower_clamp_cvt_cls() && f16_gemm_ensure(ple_khr) && ensure_cls_ar(), "vk prefill: the per-layer-embedding pre-step's rails must engage")
             g_rd.pf_plexf = make_device_buf(np * dim * 2l)
             g_rd.pf_plep = make_device_buf(np * all * 4l)
-            g_rd.pf_ple_cvt_set = set_f16cvt_cls(fixed_array(g_rd.pf_x, g_rd.pf_plexf),
+            g_rd.pf_ple_cvt_set = set_tower_clamp_cvt_cls(fixed_array(g_rd.pf_x, g_rd.pf_plexf),
                 fixed_array(np * dim * 4l, np * dim * 2l), fixed_array(VHZ_X, VHZ_SK))
             let gbufs = fixed_array(g_rd.ple_w16_dev, g_rd.pf_plexf, g_rd.pf_plep)
             let gsizes = fixed_array(g_rd.ple_w16_bytes, np * dim * 2l, np * all * 4l)
@@ -905,7 +905,7 @@ def private pf_setup {
         && (!key_exists(fakhr_hs, 512l) || fa_stamp_pair_ensure(true, 512l, false, false, false, any_f16_feed))
         && (!sinks || long_length(chunked_hs) == 0l)   //! the sink rides the flash tiles alone: a sink model whose layer fell to the chunked pair declined at the sink upload
         && ensure_q8_actrq_cls() && (!g_rd.qk_norm || ensure_qk_rms_cls())
-        && (!any_f16_feed || (ensure_f16cvt_cls() && ensure_actf16_cls() && ensure_cls_ar_f16_b()))
+        && (!any_f16_feed || (ensure_tower_clamp_cvt_cls() && ensure_actf16_cls() && ensure_cls_ar_f16_b()))
         && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls())),
         "vk prefill: the class rails must engage on a live device")
     if (g_rd.pf_facm2) {
@@ -946,7 +946,7 @@ def private pf_setup {
             fixed_array(VHZ_DNWS, VHZ_HQ, VHZ_HQ))
         if (any_f16_feed) {
             g_rd.pf_dnof = make_device_buf(np * di * 2l)
-            g_rd.pf_dnof_set = set_f16cvt_cls(fixed_array(g_gpu.dn_ws_dev, g_rd.pf_dnof),
+            g_rd.pf_dnof_set = set_tower_clamp_cvt_cls(fixed_array(g_gpu.dn_ws_dev, g_rd.pf_dnof),
                 fixed_array(DN_WS_BYTES, np * di * 2l), fixed_array(VHZ_DNWS, VHZ_HQ))
         }
     }
@@ -1921,8 +1921,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             }
             if (ple_raw) {   //! the per-layer-embedding pre-step's finish: the projection of the scaled embedding rows, normed per slice and averaged into the gathered rows
                 let all = g_rd.n_layers * g_rd.ple
-                var pcc = ActArgs(nelem = uint(wlen * dim), nblk = 0u)
-                enc_f16cvt_cls(raw, h, g_rd.pf_ple_cvt_set, pcc, (wlen * dim / 4l + 255l) / 256l)
+                var pcc = f16_rows_args(uint(wlen * dim))
+                enc_tower_clamp_cvt_cls(raw, h, g_rd.pf_ple_cvt_set, pcc, (wlen * dim / 4l + 255l) / 256l)
                 var pcg = F16GemmArgs(n = uint(dim), d = uint(all), rows = uint(wlen), woff = 0u, ybase = 0u, ystride = uint(all), ksplit = 0u)
                 let ple_khr = g_gpu.coopmat_mode != COOPMAT_CM2
                 f16_gemm_enc(ple_khr, raw, h, g_rd.pf_ple_gemm_set, pcg, wlen, all)
@@ -2954,15 +2954,15 @@ def private ensure_at_fa_state(hs : int64) {
     if (g_gpu.at_fa_ready) {
         return
     }
-    verify(ensure_f16cvt_cls() && fa_stamp_ensure(false, hs, false, false, false, false),
+    verify(ensure_tower_clamp_cvt_cls() && fa_stamp_ensure(false, hs, false, false, false, false),
         "vk attention chain: the fa class rails must engage on a live device")
     let kvbytes = AT_CTX * AT_MAX_KV * 4l
     let kv16bytes = AT_CTX * AT_MAX_KV * 2l
     g_gpu.at_k16_dev = make_device_buf(kv16bytes)
     g_gpu.at_v16_dev = make_device_buf(kv16bytes)
-    g_gpu.at_k16cvt_set = set_f16cvt_cls(fixed_array(g_gpu.at_k_dev, g_gpu.at_k16_dev),
+    g_gpu.at_k16cvt_set = set_tower_clamp_cvt_cls(fixed_array(g_gpu.at_k_dev, g_gpu.at_k16_dev),
         fixed_array(kvbytes, kv16bytes), fixed_array(VHB_ATK, VHB_ATK16))
-    g_gpu.at_v16cvt_set = set_f16cvt_cls(fixed_array(g_gpu.at_v_dev, g_gpu.at_v16_dev),
+    g_gpu.at_v16cvt_set = set_tower_clamp_cvt_cls(fixed_array(g_gpu.at_v_dev, g_gpu.at_v16_dev),
         fixed_array(kvbytes, kv16bytes), fixed_array(VHB_ATV, VHB_ATV16))
     g_gpu.at_fa_set = fa_stamp_set(false,
         fixed_array(g_gpu.at_q_dev, g_gpu.at_k16_dev, g_gpu.at_v16_dev, g_gpu.at_g_dev),
@@ -3017,10 +3017,10 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
     vhz_dep(raw, h, VHB_VRAW, VHB_ATV, true)
     cmd_copy_range(raw, g_gpu.at_vraw_dev, 0l, g_gpu.at_v_dev, w0 * kv_dim * 4l, rows * kv_dim * 4l)
     if (fa) {
-        var pcv = ActArgs(nelem = uint((w0 + rows) * kv_dim), nblk = 0u)
+        var pcv = f16_rows_args(uint((w0 + rows) * kv_dim))
         let cvtwgs = ((w0 + rows) * kv_dim / 4l + 255l) / 256l
-        enc_f16cvt_cls(raw, h, g_gpu.at_k16cvt_set, pcv, cvtwgs)
-        enc_f16cvt_cls(raw, h, g_gpu.at_v16cvt_set, pcv, cvtwgs)
+        enc_tower_clamp_cvt_cls(raw, h, g_gpu.at_k16cvt_set, pcv, cvtwgs)
+        enc_tower_clamp_cvt_cls(raw, h, g_gpu.at_v16cvt_set, pcv, cvtwgs)
         if (w0 + rows <= DAT_MIRROR_ROWS) {
             let dkey = dat_key(woq, g_gpu.stacks[s_q].fmt)
             dat_layer_ensure(dkey, kv_dim)
