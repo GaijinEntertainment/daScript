@@ -13436,39 +13436,12 @@ def q8_batch_cls_enc(v : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : V
 // no s8-native for nibbles) carries its own. The stack and resident-prefill encoders share it.
 
 def kq_batch_cls_ensure(fmt : int; q40cm : bool) : bool {
-    if (q40cm) {
-        return ensure_kq_batch_q40_cmf16_cls()
-    } elif (fmt == int(KqFmt.k4)) {
-        return ensure_kq_batch_k4_cls()
-    } elif (fmt == int(KqFmt.k5)) {
-        return ensure_kq_batch_k5_cls()
-    } elif (fmt == int(KqFmt.k6)) {
-        return ensure_kq_batch_k6_cls()
-    } elif (fmt == int(KqFmt.q40)) {
-        return ensure_kq_batch_q40_cls()
-    } elif (fmt == int(KqFmt.iq4xs)) {
-        return ensure_kq_batch_iq4xs_cls()
-    } elif (fmt == int(KqFmt.iq3s4)) {
-        return ensure_kq_batch_iq3s4_cls()
-    } elif (fmt == int(KqFmt.k3)) {
-        return ensure_kq_batch_k3_cls()
-    } elif (fmt == int(KqFmt.iq3s)) {
-        return ensure_kq_batch_iq3s_cls()
-    } elif (fmt == int(KqFmt.iq3xxs)) {
-        return ensure_kq_batch_iq3xxs_cls()
-    } elif (fmt == int(KqFmt.iq4nl)) {
-        return ensure_kq_batch_iq4nl_cls()
-    } elif (fmt == int(KqFmt.k2)) {
-        return ensure_kq_batch_k2_cls()
-    } elif (fmt == int(KqFmt.iq2s)) {
-        return ensure_kq_batch_iq2s_cls()
-    } elif (fmt == int(KqFmt.iq2xs)) {
-        return ensure_kq_batch_iq2xs_cls()
-    } elif (fmt == int(KqFmt.iq2xxs)) {
-        return ensure_kq_batch_iq2xxs_cls()
+    if (q40cm) return ensure_kq_batch_q40_cmf16_cls()
+    var r = false
+    kq_tile_stamp(fmt, "q8 q51 mx4 iq4nl32") <| $() {
+        r = tile_ensure_cls()
     }
-    panic("dasLLAMA vulkan tier: no kq batch class for format {fmt}")
-    return false
+    return r
 }
 
 def kq_batch_cls_set_for(fmt : int; q40cm : bool; bufs : uint64 const[6]; sizes : int64 const[6]; gbits : uint const[6]) : VkDescriptorSet {
@@ -13484,36 +13457,10 @@ def kq_batch_cls_set_for(fmt : int; q40cm : bool; bufs : uint64 const[6]; sizes 
 def kq_batch_cls_enc_for(fmt : int; q40cm : bool; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : BatchArgs; wgs : int64) {
     if (q40cm) {
         enc_kq_batch_q40_cmf16_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.k4)) {
-        enc_kq_batch_k4_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.k5)) {
-        enc_kq_batch_k5_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.k6)) {
-        enc_kq_batch_k6_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.q40)) {
-        enc_kq_batch_q40_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq4xs)) {
-        enc_kq_batch_iq4xs_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq3s4)) {
-        enc_kq_batch_iq3s4_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.k3)) {
-        enc_kq_batch_k3_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq3s)) {
-        enc_kq_batch_iq3s_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq3xxs)) {
-        enc_kq_batch_iq3xxs_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq4nl)) {
-        enc_kq_batch_iq4nl_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.k2)) {
-        enc_kq_batch_k2_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq2s)) {
-        enc_kq_batch_iq2s_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq2xs)) {
-        enc_kq_batch_iq2xs_cls(raw, h, set_, pc, wgs)
-    } elif (fmt == int(KqFmt.iq2xxs)) {
-        enc_kq_batch_iq2xxs_cls(raw, h, set_, pc, wgs)
-    } else {
-        panic("dasLLAMA vulkan tier: no kq batch class for format {fmt}")
+        return
+    }
+    kq_tile_stamp(fmt, "q8 q51 mx4 iq4nl32") <| $() {
+        tile_enc_cls(raw, h, set_, pc, wgs)
     }
 }
 
