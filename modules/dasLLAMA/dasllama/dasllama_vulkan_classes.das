@@ -11506,7 +11506,7 @@ struct RopeKvArgs {
 //! the K/V mirror stores the rope-store stamps share: the K plane at binding 2, the V plane at 3, KT the mirror element type;
 //! the f16 stamps clamp +-65504 (the metal CLAMP16 contract - an inf in the mirror poisons attention)
 [ |> template_struct_instance]
-class template KvMirStoreT : WgReduceBase {
+class template KvMirStoreT {
     @ssbo @binding = 2 kmir : array<KT>        // the K mirror plane
     @ssbo @binding = 3 vmir : array<KT>        // the V mirror plane
     @template_constant CLAMP16 : bool = true
@@ -11725,9 +11725,11 @@ struct QknRopeArgs {
 // qk_rms + rope_kv_store in ONE dispatch (qk_norm models).
 // A head past 256 (gemma-4's global layers, 512) gives each thread a second element at tid + 256.
 [ |> template_struct_instance]
-class template QknRopeKvT : KvMirStoreT {
+class template QknRopeKvT : WgReduceBase {
     @ssbo @binding = 0 qrows : array<float>    // q rows, normed + roped in place
     @ssbo @binding = 1 kvsrc : array<float>    // the projection buffer: [q | k | v] rows
+    @ssbo @binding = 2 kmir : array<KT>
+    @ssbo @binding = 3 vmir : array<KT>
     @ssbo @binding = 4 cossin : array<float>
     @ssbo @binding = 5 wn : array<float>       // the q/k norm weight rows (its OWN member now —
                                                // the old kernel packed them into the cos buffer)
@@ -11735,6 +11737,25 @@ class template QknRopeKvT : KvMirStoreT {
     @ssbo @binding = 7 @role = "weight" bias : array<float>   // per-layer [q | k | v] projection biases (hasb), else a placeholder
     @push_constant pa : QknRopeArgs
     @workgroup row : float[512]                // this head's normed q or k row (hs <= 512)
+    @template_constant CLAMP16 : bool = true
+
+    //! one K mirror element, clamped into f16 on the f16 stamp (KvMirStoreT's: this class sits on WgReduceBase)
+    def st_k(i : uint; v : float) {
+        static_if (CLAMP16) {
+            kmir[i] = half_sat(v)
+        } else {
+            kmir[i] = v
+        }
+    }
+
+    //! ... and one V mirror element
+    def st_v(i : uint; v : float) {
+        static_if (CLAMP16) {
+            vmir[i] = half_sat(v)
+        } else {
+            vmir[i] = v
+        }
+    }
 
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
     def run {   // nolint:STYLE037,STYLE038 — the verbatim norm + rotation + store pass, parity-locked to the shipped kernel; the V forms and the wide arm ride the same head row
