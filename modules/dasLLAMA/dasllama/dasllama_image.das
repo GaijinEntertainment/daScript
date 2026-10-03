@@ -1391,6 +1391,77 @@ def private vk_mint_walk(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; 
     }
 }
 
+//! Writes the page-aligned section `name` that `fill` streams and pushes it to `sections`. A fill that
+//! fails, or writes other than `want` bytes (a short plane maps back as a silently truncated borrow),
+//! kills the sink so the tmp never gets promoted; the abort lines name `fail`, `writer` and `plan`, and the sink's `what`
+def private w_stream_section(var w : ImgWriter; var sections : array<ImgSection>; name, fail, writer, plan, what : string;
+                             want : int64; fill : block<() : bool>) {
+    w_zeros(w, pad_to_page(w.cur) - w.cur)
+    let at = w.cur
+    if (!invoke(fill)) {
+        to_log(LOG_ERROR, "dasLLAMA image: {fail} failed - image {what} aborted\n")
+        w.ok = false
+    }
+    if (w.ok && w.cur - at != uint64(want)) {
+        to_log(LOG_ERROR, "dasLLAMA image: {writer} wrote {int64(w.cur - at)} bytes, {plan} {want} - image {what} aborted\n")
+        w.ok = false
+    }
+    sections |> push(ImgSection(name = name, off = at, bytes = w.cur - at))
+}
+
+//! what a streaming mint adds to the eager walk: the dev-W panel bytes, the vulkan lane's walk armed, and the bytes past the eager planes
+struct private StreamSave {
+    devw_bytes : int64
+    vk_mint : bool
+    extra : uint64
+}
+
+//! The two streaming sinks' prologue. The baked dev-W panels' tables fill BEFORE the build (they serialize as
+//! regular planes); the panel plane itself streams from the gguf mapping at its field's turn
+def private stream_save_prologue(var t : Model; jobs : array<FillJob>; tag : string) : StreamSave {
+    let devw_bytes = t.metal_blob ? devw_bake_tables(t, jobs) : 0l
+    let vk_mint = vk_mint_arm_walk(tag)
+    let vk_extra = vk_mint ? vk_mint_extra_bytes(t, jobs) : 0ul
+    let planar_extra = vk_mint && t.planes_trimmed ? 0ul : stream_extra_bytes(t, jobs)   // a trimmed lane writes no streamed family
+    return StreamSave(devw_bytes = devw_bytes, vk_mint = vk_mint,
+        extra = planar_extra + uint64(devw_bytes) + (devw_bytes > 0l ? uint64(IMAGE_PAGE) : 0ul) + vk_extra)
+}
+
+//! One plane's turn in either streaming sink: the vulkan lane's planes, the dev-W panel plane and a streamed
+//! plane write here and answer true; false hands the plane to the eager walk. `what` is the sink's verb in
+//! its abort lines, `say_devw` logs the panel's bake time
+def private stream_plane_turn(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; name : string; var w : ImgWriter;
+                              var sections : array<ImgSection>; jobs : array<FillJob>; regs : array<StreamReg>;
+                              ss : StreamSave; what : string; say_devw : bool) : bool {
+    if (ss.vk_mint && vk_mint_plane(m, bytes, t, name, w, sections, jobs, regs)) {
+        return true
+    }
+    if (name == "devwf16" && ss.devw_bytes > 0l) {
+        let ts_dw = ref_time_ticks()
+        w_stream_section(w, sections, name, "devwf16 bake", "devwf16 plane", "tables say", what, ss.devw_bytes) $ {
+            return fill_devwf16_plane(m, bytes, t, jobs) $(p : void?; nb : uint64) { w_append(w, p, nb) }
+        }
+        if (say_devw) {
+            let dw_ms = int64(get_time_usec(ts_dw)) / 1000l
+            to_log(LOG_INFO, "dasLLAMA image:   plane devwf16 {ss.devw_bytes >> 20l} MB baked in {dw_ms} ms ({length(t.devwf16_key)} sites)\n")
+        }
+        return true
+    }
+    let want = stream_plane_bytes(t, jobs, name)
+    if (want <= 0l) {
+        // a blob build's kq scale strips take their device form as each one's turn comes, before its bytes are written;
+        // a dead sink leaves the carrier untouched - the in-memory fallback re-fills it with the disk stride
+        if (w.ok && t.metal_blob) {
+            blob_stream_scale_plane(t, name)
+        }
+        return false   // not a streamed plane — the walk writes it from RAM
+    }
+    w_stream_section(w, sections, name, "streamed fill of plane '{name}'", "streamed plane '{name}'", "plan says", what, want) $ {
+        return fill_stream_plane(m, bytes, t, name, jobs, regs) $(p : void?; nb : uint64) { w_append(w, p, nb) }
+    }
+    return true
+}
+
 //! save_image's STREAMING form (Model-only): planes with recorded FillJobs are transcoded from the
 //! gguf mapping straight into the image and never materialize in RAM; empty `jobs` degrades to the
 //! eager walk exactly. Call from load_gguf_streaming's block — m/bytes must still be alive.
@@ -1398,57 +1469,9 @@ def save_model_image_streaming(var t : Model; m : GGUFMeta; bytes : array<uint8>
                                var jobs : array<FillJob>; path : string; tag : string = ""; quant : string = "q8") : bool {
     var regs : array<StreamReg>
     stream_collect_regions(t, regs)
-    //! the baked dev-W panels: tables fill BEFORE the build (they serialize as regular planes),
-    //! the panel plane itself streams from the gguf mapping at its field's turn below
-    let devw_bytes = t.metal_blob ? devw_bake_tables(t, jobs) : 0l
-    let vk_mint = vk_mint_arm_walk(tag)
-    let vk_extra = vk_mint ? vk_mint_extra_bytes(t, jobs) : 0ul
-    let planar_extra = vk_mint && t.planes_trimmed ? 0ul : stream_extra_bytes(t, jobs)   // a trimmed lane writes no streamed family
-    let ok = save_image_to_file(t, path, planar_extra + uint64(devw_bytes) + (devw_bytes > 0l ? uint64(IMAGE_PAGE) : 0ul) + vk_extra, tag, quant, layout_fingerprint(t)) $(name : string;
-                                                                                                                                                                           var w : ImgWriter; var sections : array<ImgSection>) {
-        if (vk_mint && vk_mint_plane(m, bytes, t, name, w, sections, jobs, regs)) {
-            return true
-        }
-        if (name == "devwf16" && devw_bytes > 0l) {
-            w_zeros(w, pad_to_page(w.cur) - w.cur)
-            let at = w.cur
-            let ts_dw = ref_time_ticks()
-            if (!fill_devwf16_plane(m, bytes, t, jobs) $(p : void?; nb : uint64) { w_append(w, p, nb) }) {
-                to_log(LOG_ERROR, "dasLLAMA image: devwf16 bake failed - image save aborted\n")
-                w.ok = false
-            }
-            if (w.ok && w.cur - at != uint64(devw_bytes)) {
-                to_log(LOG_ERROR, "dasLLAMA image: devwf16 plane wrote {int64(w.cur - at)} bytes, tables say {devw_bytes} - image save aborted\n")
-                w.ok = false
-            }
-            let dw_ms = int64(get_time_usec(ts_dw)) / 1000l
-            to_log(LOG_INFO, "dasLLAMA image:   plane devwf16 {devw_bytes >> 20l} MB baked in {dw_ms} ms ({length(t.devwf16_key)} sites)\n")
-            sections |> push(ImgSection(name = "devwf16", off = at, bytes = w.cur - at))
-            return true
-        }
-        let want = stream_plane_bytes(t, jobs, name)
-        if (want <= 0l) {
-            // a blob build's kq scale strips take their device form as each one's turn comes, before its bytes are written;
-            // a dead sink leaves the carrier untouched - the in-memory fallback re-fills it with the disk stride
-            if (w.ok && t.metal_blob) {
-                blob_stream_scale_plane(t, name)
-            }
-            return false   // not a streamed plane — the walk writes it from RAM
-        }
-        w_zeros(w, pad_to_page(w.cur) - w.cur)
-        let at = w.cur
-        if (!fill_stream_plane(m, bytes, t, name, jobs, regs) $(p : void?; nb : uint64) { w_append(w, p, nb) }) {
-            // a failed transcode IS a failed write: kill the sink so the tmp never gets promoted
-            to_log(LOG_ERROR, "dasLLAMA image: streamed fill of plane '{name}' failed - image save aborted\n")
-            w.ok = false
-        }
-        // a plane short of its plan maps back as a silently-truncated borrow — that too is a failed write
-        if (w.ok && w.cur - at != uint64(want)) {
-            to_log(LOG_ERROR, "dasLLAMA image: streamed plane '{name}' wrote {int64(w.cur - at)} bytes, plan says {want} - image save aborted\n")
-            w.ok = false
-        }
-        sections |> push(ImgSection(name = name, off = at, bytes = w.cur - at))
-        return true
+    let ss = stream_save_prologue(t, jobs, tag)
+    let ok = save_image_to_file(t, path, ss.extra, tag, quant, layout_fingerprint(t)) $(name : string; var w : ImgWriter; var sections : array<ImgSection>) {
+        return stream_plane_turn(m, bytes, t, name, w, sections, jobs, regs, ss, "save", true)
     }
     delete regs
     return ok
@@ -1722,51 +1745,9 @@ def image_from_model_streaming(var t : Model; var out : Model; m : GGUFMeta; byt
                                tag : string = ""; quant : string = "q8") : bool {
     var regs : array<StreamReg>
     stream_collect_regions(t, regs)
-    //! sink parity: one image identity has one plane set - the in-memory mint bakes devwf16
-    //! exactly like the file mint above, or the two sinks serve different images
-    let devw_bytes = t.metal_blob ? devw_bake_tables(t, jobs) : 0l
-    let vk_mint = vk_mint_arm_walk(tag)
-    let vk_extra = vk_mint ? vk_mint_extra_bytes(t, jobs) : 0ul
-    let planar_extra = vk_mint && t.planes_trimmed ? 0ul : stream_extra_bytes(t, jobs)   // a trimmed lane writes no streamed family
-    let ok = chunk_rail(t, out, save_to, planar_extra + uint64(devw_bytes) + (devw_bytes > 0l ? uint64(IMAGE_PAGE) : 0ul) + vk_extra, tag, quant) $(name : string;
-                                                                                                                                                    var w : ImgWriter; var sections : array<ImgSection>) {
-        if (vk_mint && vk_mint_plane(m, bytes, t, name, w, sections, jobs, regs)) {
-            return true
-        }
-        if (name == "devwf16" && devw_bytes > 0l) {
-            w_zeros(w, pad_to_page(w.cur) - w.cur)
-            let at = w.cur
-            if (!fill_devwf16_plane(m, bytes, t, jobs) $(p : void?; nb : uint64) { w_append(w, p, nb) }) {
-                to_log(LOG_ERROR, "dasLLAMA image: devwf16 bake failed - image build aborted\n")
-                w.ok = false
-            }
-            if (w.ok && w.cur - at != uint64(devw_bytes)) {
-                to_log(LOG_ERROR, "dasLLAMA image: devwf16 plane wrote {int64(w.cur - at)} bytes, tables say {devw_bytes} - image build aborted\n")
-                w.ok = false
-            }
-            sections |> push(ImgSection(name = "devwf16", off = at, bytes = w.cur - at))
-            return true
-        }
-        let want = stream_plane_bytes(t, jobs, name)
-        if (want <= 0l) {
-            if (w.ok && t.metal_blob) {   // the kq scale strips take their device form — see the file saver
-                blob_stream_scale_plane(t, name)
-            }
-            return false   // not a streamed plane — the walk writes it from RAM
-        }
-        w_zeros(w, pad_to_page(w.cur) - w.cur)
-        let at = w.cur
-        if (!fill_stream_plane(m, bytes, t, name, jobs, regs) $(p : void?; nb : uint64) { w_append(w, p, nb) }) {
-            to_log(LOG_ERROR, "dasLLAMA image: streamed fill of plane '{name}' failed - image build aborted\n")
-            w.ok = false
-        }
-        // a plane short of its plan maps back as a silently-truncated borrow — that too is a failed write
-        if (w.ok && w.cur - at != uint64(want)) {
-            to_log(LOG_ERROR, "dasLLAMA image: streamed plane '{name}' wrote {int64(w.cur - at)} bytes, plan says {want} - image build aborted\n")
-            w.ok = false
-        }
-        sections |> push(ImgSection(name = name, off = at, bytes = w.cur - at))
-        return true
+    let ss = stream_save_prologue(t, jobs, tag)
+    let ok = chunk_rail(t, out, save_to, ss.extra, tag, quant) $(name : string; var w : ImgWriter; var sections : array<ImgSection>) {
+        return stream_plane_turn(m, bytes, t, name, w, sections, jobs, regs, ss, "build", false)
     }
     delete regs
     return ok
