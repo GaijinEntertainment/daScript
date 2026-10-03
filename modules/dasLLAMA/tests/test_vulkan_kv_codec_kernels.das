@@ -464,8 +464,8 @@ def private codec_attn_arm(t : T?; a : CodecAttn) {
         let kvd = a.nheads / a.kv_mul * a.hs
         let qdim = a.nheads * a.hs
         let qstride = a.gated ? 2 * a.hs : a.hs
-        let slab2 = !a.sink && da_slab_is_g2(int64(a.kv_mul))
-        let tag = codec_attn_tag(a, a.sink ? "_sink" : (slab2 ? "_g2" : ""))
+        let slab = da_slab_of(a.sink, int64(a.kv_mul))
+        let tag = codec_attn_tag(a, slab == DaSlab.sink ? "_sink" : (slab == DaSlab.two ? "_g2" : ""))
         let blk = a.fold == Fold.q8_k ? 256 : 32
         let rqk = a.fold == Fold.none ? DA_RQ_NONE : (a.fold == Fold.q8_k ? DA_RQ_Q8K : DA_RQ_Q8)
         t |> equal(KV_TQ4_SIGNS, SIGN_ROW, "the fixtures' sign row is the driver's")
@@ -494,12 +494,12 @@ def private codec_attn_arm(t : T?; a : CodecAttn) {
             let asp = cp |> out_(a.nrows * qdim / blk)
             let sp = cp |> in_(f.sinks)
             let planes = fixed_array(qp, kp, vp, yp, tp, pp, aqp, asp, sp)
-            var s = da_attn_stamp_set(a.kv, a.sink, gather_planes(cp.dev, planes), gather_planes(cp.bytes, planes), gather_planes(cp.hazard_bit, planes))
+            var s = da_attn_stamp_set(a.kv, slab, gather_planes(cp.dev, planes), gather_planes(cp.bytes, planes), gather_planes(cp.hazard_bit, planes))
             var pa = DaAttnArgs(kvd = uint(kvd), hs = uint(a.hs), kv_mul = uint(a.kv_mul), kbase = uint(QA_BASE_BLOCKS), vbase = uint(QA_BASE_BLOCKS),
                 scale = 1.0 / sqrt(float(a.hs)), qstride = uint(qstride), gated = a.gated ? 1u : 0u, window = uint(a.window), cap = a.cap,
                 nsplit = uint(a.nsplit), rqk = rqk, sinkoff = 0u, rowwg = uint(rowwgs), qrow = uint(a.nheads * qstride), cntoff = uint(cnt_off))
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
-                da_attn_stamp_enc(a.kv, a.sink, slab2, raw, h, s, pa, rowwgs * int64(a.nrows))
+                da_attn_stamp_enc(a.kv, slab, raw, h, s, pa, rowwgs * int64(a.nrows))
             }
             var got <- cp |> plane_run(yp)
             check_rows(t, "{tag} vs the CPU attention over the dequantized rows", got, want, QA_BAR, qdim, a.hs)

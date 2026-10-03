@@ -465,8 +465,8 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
         let kvq = rd_kv_block_codec()
         verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq_b() && ensure_q8_actrq_cls() && ensure_q8_gemv_gu_n1_cls()
             && (kv16 ? ensure_rope_kv_f16_cls() : ensure_rope_kv_cls())
-            && (kvq || da_attn_stamp_ensure(dt, false, false))
-            && (kvq || g_rd.has_sinks || !da_slab_is_g2(L.kv_mul) || da_attn_stamp_ensure(dt, false, true))
+            && (kvq || da_attn_stamp_ensure(dt, DaSlab.four))
+            && (kvq || da_slab_of(g_rd.has_sinks, L.kv_mul) != DaSlab.two || da_attn_stamp_ensure(dt, DaSlab.two))
             && (!g_rd.qk_norm || (ensure_qk_rms_cls()
                 && (kv16 ? ensure_qkn_rope_f16_cls() : ensure_qkn_rope_cls())))
             && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls()))
@@ -535,7 +535,7 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
         }
         // the partials ride the attention-out bit (written and read within the pass); the folded requant lands in the wo feed's aq/as
         let partbytes = (g_rd.attn_cnt_off + g_rd.n_heads * nb) * 4l
-        L.s_attn = da_attn_stamp_set(dt, g_rd.has_sinks,
+        L.s_attn = da_attn_stamp_set(dt, da_slab_of(g_rd.has_sinks, L.kv_mul),
             fixed_array(g_rd.q_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.attn_dev, tok, g_rd.attn_part_dev, g_rd.aq_dev, g_rd.as_dev, g_rd.sinks_dev),
             fixed_array(qplane, mirbytes, mirbytes, qd * 4l * nb, TOK_META_BYTES * nb, partbytes, qd * nb, (qd / 32l) * 4l * nb, g_rd.sinks_bytes),
             fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u, VHZ_ATT, VHZ_AQ, VHZ_AQ, 0u))
@@ -988,7 +988,7 @@ def vk_rdec_upload_sinks(rows : array<float>) : bool {
     }
     let khr = !cm2_fa_on()
     let stamps_ok = (fa_stamp_pair_ensure(khr, 64l, false, false, true, true)
-        && da_attn_stamp_ensure(g_rd.kv_dt, true, false))
+        && da_attn_stamp_ensure(g_rd.kv_dt, DaSlab.sink))
     if (!stamps_ok) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: an attention-sink kernel class declined on this device, the resident driver declines\n")
         return false
@@ -2346,7 +2346,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         window = uint(L.window), cap = L.attn_cap, nsplit = uint(nsplit), rqk = rqk, sinkoff = uint(l * g_rd.n_heads),
         rowwg = uint(rowwgs), qrow = q_plane_row, cntoff = uint(g_rd.attn_cnt_off))
     if ((nrow_bx & NROW_BX_ATTN) == 0) {
-        da_attn_stamp_enc(g_rd.kv_dt, g_rd.has_sinks, da_slab_is_g2(L.kv_mul), raw, h, L.s_attn, pca, rowwgs * nrows)
+        da_attn_stamp_enc(g_rd.kv_dt, da_slab_of(g_rd.has_sinks, L.kv_mul), raw, h, L.s_attn, pca, rowwgs * nrows)
         if (rd_kvtq4()) {
             rd_enc_tq4_unrot(raw, h, L.s_unrot, hs, nrows, uint(qd), q_plane_row, qstride)
         }

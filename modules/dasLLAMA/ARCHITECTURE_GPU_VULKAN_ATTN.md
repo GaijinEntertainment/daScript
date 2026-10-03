@@ -19,7 +19,8 @@ layers, any MHA carrier - scores no dead heads; `da_slab_heads` is the one expre
 `G` and the host's workgroup count derive from); a group wider than the slab takes several slabs,
 a narrower one leaves dead heads whose q rows are zero and whose reductions and stores are skipped
 (`da_attn_row_wgs` counts a row's workgroups, the same count on either slab). The token command
-picks the slab a layer (`da_attn_stamp_enc`); the per-op seam (`dasllama_vulkan_seams.das`) and the
+picks the slab a layer (`da_slab_of` names it a `DaSlab` - four, two, or the sink stamp - and
+`da_attn_stamp_enc` dispatches it); the per-op seam (`dasllama_vulkan_seams.das`) and the
 attention-tower chain dispatch the four-head slab whatever the group. The pass is a chain
 of latencies, not a stream of bytes: a workgroup a head walking two keys a step behind a subgroup
 reduction each read Llama-3.2-1B's sixteen layers at 28 us a four-row step and 8.5 a one-row step on

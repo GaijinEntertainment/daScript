@@ -5175,18 +5175,35 @@ class DaAttnTq4Sink : DaAttnT {
     override SINK = true
 }
 
-//! The decode attention's stamp over a mirror in codec `dt`: the sink stamp on a model with attention sinks, else the
-//! two-head slab where `g2` (`da_slab_is_g2`), else the four-head one.
-def da_attn_stamp_ensure(dt : KVDtype; sink, g2 : bool) : bool {
-    if (dt == KVDtype.tq4) return sink ? ensure_da_attn_tq4_sink_cls() : (g2 ? ensure_da_attn_tq4_g2_cls() : ensure_da_attn_tq4_cls())
-    if (dt == KVDtype.q8_0) return sink ? ensure_da_attn_q8_sink_cls() : (g2 ? ensure_da_attn_q8_g2_cls() : ensure_da_attn_q8_cls())
-    if (dt == KVDtype.f16) return sink ? ensure_da_attn_f16_sink_cls() : (g2 ? ensure_da_attn_f16_g2_cls() : ensure_da_attn_f16_cls())
-    return sink ? ensure_da_attn_sink_cls() : (g2 ? ensure_da_attn_g2_cls() : ensure_da_attn_cls())
+//! The decode attention's slab: the four-head group, the two-head one, or the sink stamp (four heads, the sink plane bound).
+enum DaSlab {
+    four
+    two
+    sink
+}
+
+//! The slab a layer's attention takes: the sink stamp on a model with attention sinks, else the two-head slab where
+//! `da_slab_is_g2`, else the four-head one.
+def da_slab_of(has_sinks : bool; kv_mul : int64) : DaSlab => has_sinks ? DaSlab.sink : (da_slab_is_g2(kv_mul) ? DaSlab.two : DaSlab.four)
+
+//! every decode attention stamp's stem, a `DaSlab` each over the mirror codecs in `KVDtype` order
+let private DA_STAMPS = "da_attn da_attn_g2 da_attn_sink da_attn_f16 da_attn_f16_g2 da_attn_f16_sink da_attn_q8 da_attn_q8_g2 da_attn_q8_sink da_attn_tq4 da_attn_tq4_g2 da_attn_tq4_sink"
+
+def private da_stamp_key(dt : KVDtype; slab : DaSlab) : int => int(dt) * 3 + int(slab)
+
+//! The decode attention's stamp over a mirror in codec `dt` at `slab`.
+def da_attn_stamp_ensure(dt : KVDtype; slab : DaSlab) : bool {
+    let key = da_stamp_key(dt, slab)
+    var r = false
+    stamp_ladder(key, DA_STAMPS) <| $() {
+        r = stamp_ensure_cls()
+    }
+    return r
 }
 
 //! ... its set over the pass's eight planes and, ninth, the sink plane the sink stamps alone bind
-def da_attn_stamp_set(dt : KVDtype; sink : bool; bufs : uint64 const[9]; sizes : int64 const[9]; gbits : uint const[9]) : VkDescriptorSet {
-    if (sink) {
+def da_attn_stamp_set(dt : KVDtype; slab : DaSlab; bufs : uint64 const[9]; sizes : int64 const[9]; gbits : uint const[9]) : VkDescriptorSet {
+    if (slab == DaSlab.sink) {
         if (dt == KVDtype.tq4) return set_da_attn_tq4_sink_cls(bufs, sizes, gbits)
         if (dt == KVDtype.q8_0) return set_da_attn_q8_sink_cls(bufs, sizes, gbits)
         return dt == KVDtype.f16 ? set_da_attn_f16_sink_cls(bufs, sizes, gbits) : set_da_attn_sink_cls(bufs, sizes, gbits)
@@ -5199,44 +5216,11 @@ def da_attn_stamp_set(dt : KVDtype; sink : bool; bufs : uint64 const[9]; sizes :
     return dt == KVDtype.f16 ? set_da_attn_f16_cls(bufs8, sizes8, gbits8) : set_da_attn_cls(bufs8, sizes8, gbits8)
 }
 
-def private da_attn_sink_enc(dt : KVDtype; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : DaAttnArgs; wgs : int64) {
-    if (dt == KVDtype.tq4) {
-        enc_da_attn_tq4_sink_cls(raw, h, s, pc, wgs)
-    } elif (dt == KVDtype.q8_0) {
-        enc_da_attn_q8_sink_cls(raw, h, s, pc, wgs)
-    } elif (dt == KVDtype.f16) {
-        enc_da_attn_f16_sink_cls(raw, h, s, pc, wgs)
-    } else {
-        enc_da_attn_sink_cls(raw, h, s, pc, wgs)
-    }
-}
-
-def private da_attn_g2_enc(dt : KVDtype; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : DaAttnArgs; wgs : int64) {
-    if (dt == KVDtype.tq4) {
-        enc_da_attn_tq4_g2_cls(raw, h, s, pc, wgs)
-    } elif (dt == KVDtype.q8_0) {
-        enc_da_attn_q8_g2_cls(raw, h, s, pc, wgs)
-    } elif (dt == KVDtype.f16) {
-        enc_da_attn_f16_g2_cls(raw, h, s, pc, wgs)
-    } else {
-        enc_da_attn_g2_cls(raw, h, s, pc, wgs)
-    }
-}
-
 //! ... and its dispatch
-def da_attn_stamp_enc(dt : KVDtype; sink, g2 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : DaAttnArgs; wgs : int64) {
-    if (sink) {
-        da_attn_sink_enc(dt, raw, h, s, pc, wgs)
-    } elif (g2) {
-        da_attn_g2_enc(dt, raw, h, s, pc, wgs)
-    } elif (dt == KVDtype.tq4) {
-        enc_da_attn_tq4_cls(raw, h, s, pc, wgs)
-    } elif (dt == KVDtype.q8_0) {
-        enc_da_attn_q8_cls(raw, h, s, pc, wgs)
-    } elif (dt == KVDtype.f16) {
-        enc_da_attn_f16_cls(raw, h, s, pc, wgs)
-    } else {
-        enc_da_attn_cls(raw, h, s, pc, wgs)
+def da_attn_stamp_enc(dt : KVDtype; slab : DaSlab; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : DaAttnArgs; wgs : int64) {
+    let key = da_stamp_key(dt, slab)
+    stamp_ladder(key, DA_STAMPS) <| $() {
+        stamp_enc_cls(raw, h, s, pc, wgs)
     }
 }
 
@@ -12076,7 +12060,7 @@ class KvTq4Shadow : KvShadowT {
 
 //! every kernel class a block-codec mirror's driver dispatches: the stores, the shadow, tq4's un-rotation, the attention stamps
 def kv_codec_cls_ensure(dt : KVDtype) : bool {
-    let attn = da_attn_stamp_ensure(dt, false, false) && da_attn_stamp_ensure(dt, false, true) && da_attn_stamp_ensure(dt, true, false)
+    let attn = da_attn_stamp_ensure(dt, DaSlab.four) && da_attn_stamp_ensure(dt, DaSlab.two) && da_attn_stamp_ensure(dt, DaSlab.sink)
     if (dt == KVDtype.q8_0) return attn && ensure_kv_q8_store_cls() && ensure_kv_q8_store_b_cls() && ensure_kv_q8_shadow_cls()
     return attn && ensure_kv_tq4_store_cls() && ensure_kv_tq4_store_b_cls() && ensure_kv_tq4_shadow_cls() && ensure_kv_tq4_unrot_cls()
 }
