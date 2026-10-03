@@ -1,6 +1,7 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
 #include <hv/HttpParser.h>
+#include <hv/HttpServer.h>
 #include "../../../modules/dasHV/src/http_request_snapshot.h"
 #include <hv/WebSocketParser.h>
 #include <hv/wsdef.h>
@@ -8,6 +9,8 @@
 #include <memory>
 #include <atomic>
 #include <thread>
+#include <future>
+#include <chrono>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -207,4 +210,24 @@ TEST_CASE("Received request snapshots own body bytes independently of parser sto
     CHECK(snapshot->body == body);
     CHECK(std::string(static_cast<const char *>(snapshot->Content()), snapshot->ContentLength()) == body);
     CHECK_FALSE(bool(snapshot->http_cb));
+}
+
+TEST_CASE("server startup publishes default static routes before workers") {
+    hlog_disable();
+    for (int trial = 0; trial != 32; ++trial) {
+        hv::HttpService routes;
+        routes.document_root = "/startup-root";
+        std::promise<void> started;
+        auto ready = started.get_future();
+        hv::HttpServer server(&routes);
+        server.setPort(0, 0);
+        server.setThreadNum(1);
+        server.onWorkerStart = [&started]() { started.set_value(); };
+        REQUIRE(server.start() == 0);
+        const auto path = routes.GetStaticFilepath("/asset.txt");
+        const auto ready_status = ready.wait_for(std::chrono::seconds(5));
+        server.stop();
+        REQUIRE(ready_status == std::future_status::ready);
+        CHECK(path == "/startup-root/asset.txt");
+    }
 }
