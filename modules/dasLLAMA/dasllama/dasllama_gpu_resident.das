@@ -366,19 +366,41 @@ def trim_model_planes(var t : Model) : bool {
     delete t.qscales16
     delete t.wblob
     delete t.bf16blob
-    for (p in t.kq) {
-        delete p.q
-        delete p.s
-    }
-    delete t.q51q
-    delete t.q51s
-    delete t.iq4nl32q
-    delete t.iq4nl32s
-    delete t.mxq
-    delete t.mxs
     delete t.q4blob
     delete t.q4scales
+    for (f in type<KqFmt>) {
+        kq_plane_pair(t, f) $(var q : array<uint8>; var s : array<uint8>) {
+            delete q
+            delete s
+        }
+    }
     return true
+}
+
+//! format `f`'s quant and scale planes in `t` through `blk` - a superblock format's kq-table slot, or the per-32 and mx4
+//! formats' own pair; false for a format that keeps no such pair
+def kq_plane_pair(var t : Model; f : KqFmt; blk : block<(var q : array<uint8>; var s : array<uint8>) : void>) : bool {
+    if (kq_sb(f)) {
+        invoke(blk, t.kq[int(f)].q, t.kq[int(f)].s)
+    } elif (f == KqFmt.q51) {
+        invoke(blk, t.q51q, t.q51s)
+    } elif (f == KqFmt.iq4nl32) {
+        invoke(blk, t.iq4nl32q, t.iq4nl32s)
+    } elif (f == KqFmt.mx4) {
+        invoke(blk, t.mxq, t.mxs)
+    } else {
+        return false
+    }
+    return true
+}
+
+//! the section names of `f`'s plane pair (`kq_plane_pair`); "" for a format that keeps none
+def kq_plane_pair_names(f : KqFmt) : tuple<q : string; s : string> {
+    if (kq_sb(f)) return (q = kq_plane_name(f, "q"), s = kq_plane_name(f, "s"))
+    if (f == KqFmt.q51) return (q = "q51q", s = "q51s")
+    if (f == KqFmt.iq4nl32) return (q = "iq4nl32q", s = "iq4nl32s")
+    if (f == KqFmt.mx4) return (q = "mxq", s = "mxs")
+    return (q = "", s = "")
 }
 
 // ===== GPU MoE tier upload (post-prepare, loader-agnostic) =====
@@ -1157,12 +1179,10 @@ def resident_would_serve(t : Model) : bool {
 [arch(at="../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
 def trim_plane_dropped(name : string) : bool {
     return true if (name == "qblob" || name == "qscales" || name == "qscales16" || name == "wblob" || name == "bf16blob"
-        || name == "q51q" || name == "q51s" || name == "iq4nl32q" || name == "iq4nl32s" || name == "mxq" || name == "mxs"
         || name == "q4blob" || name == "q4scales")
     for (f in type<KqFmt>) {
-        if (kq_sb(f) && (name == kq_plane_name(f, "q") || name == kq_plane_name(f, "s"))) {
-            return true
-        }
+        let pn = kq_plane_pair_names(f)
+        return true if (!empty(pn.q) && (name == pn.q || name == pn.s))
     }
     return false
 }

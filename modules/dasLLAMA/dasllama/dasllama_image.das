@@ -1279,22 +1279,12 @@ def private vk_mint_zero_view(f : KqFmt; woff, n : int64) {
     g_vk_mint_view_run |> clear()
     g_vk_mint_view_rebase = woff
     g_vk_mint_job_view.quant = g_vk_mint_streamed_model.quant
-    if (kq_sb(f) || kq_b32_planes(f) || f == KqFmt.mx4) {
-        let units = n / kq_elems(f) + 1l
-        if (kq_sb(f)) {
-            g_vk_mint_job_view.kq[int(f)].q |> resize(units * kq_qsb(f))
-            g_vk_mint_job_view.kq[int(f)].s |> resize(units * kq_ssb(f))
-        } elif (f == KqFmt.q51) {
-            g_vk_mint_job_view.q51q |> resize(units * kq_qsb(f))
-            g_vk_mint_job_view.q51s |> resize(units * kq_ssb(f))
-        } elif (f == KqFmt.iq4nl32) {
-            g_vk_mint_job_view.iq4nl32q |> resize(units * kq_qsb(f))
-            g_vk_mint_job_view.iq4nl32s |> resize(units * kq_ssb(f))
-        } else {
-            g_vk_mint_job_view.mxq |> resize(units * kq_qsb(f))
-            g_vk_mint_job_view.mxs |> resize(units * kq_ssb(f))
-        }
-    } else {
+    let units = n / kq_elems(f) + 1l
+    let paired = kq_plane_pair(g_vk_mint_job_view, f) $(var q : array<uint8>; var s : array<uint8>) {
+        q |> resize(units * kq_qsb(f))
+        s |> resize(units * kq_ssb(f))
+    }
+    if (!paired) {
         g_vk_mint_job_view.qblob |> resize(n)
         g_vk_mint_job_view.qscales |> resize(n / Q8_BLOCK_ELEMS + 1l)
     }
