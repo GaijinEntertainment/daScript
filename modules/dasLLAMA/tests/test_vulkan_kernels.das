@@ -18,7 +18,7 @@ require ?vulkan vulkan/vulkan_boost
 require ?vulkan dasllama/dasllama_vulkan_common
 require ?vulkan dasllama/dasllama_env   // g_env_vulkan.coopmat - the resolved-default ladder cell pins and restores it
 require ?vulkan dasllama/dasllama_vulkan_classes
-require ?vulkan dasllama/dasllama_gpu_math   // softcap_exp - the softcap cells' oracle
+require dasllama/dasllama_gpu_math   // softcap_exp - the softcap cells' oracle
 require ?vulkan dasllama/dasllama_vulkan_prefill
 require ?vulkan dasllama/dasllama_vulkan_decode   // da_nsplit - the decode attention's key-split pick the tile-pick cell pins
 require ?vulkan dasllama/dasllama_vulkan_seams
@@ -3536,7 +3536,7 @@ def test_vkd_at_attn(t0 : T?) {
                 }
                 if (gated) {
                     for (i in range(rows * qd)) {
-                        y_ref[i] = y_ref[i] / (1.0 + exp(-gh[i]))
+                        y_ref[i] = sig_gate(y_ref[i], gh[i])
                     }
                 }
                 let bad = mismatch_approx(y_cls, y_ref)
@@ -6439,7 +6439,7 @@ def test_vkd_hc_seams(t0 : T?) {
             act |> resize(HCT_LR)
             for (i in range(HCT_LR)) {
                 let v = lo[i] / float(HCT_HC)
-                act[i] = v / (1.0 + exp(-v))
+                act[i] = silu_f32(v)
             }
             var q_ref : array<int8>
             var s_ref : array<float>
@@ -6774,7 +6774,7 @@ def private ple_side_case(t : T?; pos : int) {
                     co += wn[3 * hcd + e * PLT_KERN + k] * hist_ref[(src_pos % PLT_NROWS) * hcd + e]
                 }
             }
-            res_ref[e] = (res[e] + gated_ref[e]) + co / (1.0 + exp(-co))
+            res_ref[e] = (res[e] + gated_ref[e]) + silu_f32(co)
         }
         var toks <- [TokMeta(pos = uint(pos), cnt = uint(pos + 1), dnslot = 0u)]
         with_cell_planes() $(var cp : CellPlanes) {
@@ -6869,7 +6869,7 @@ def private ple_panel_case(t : T?; rows, pos0 : int; tok_pos : bool = false) {
                         from_ring += e == 0 ? 1 : 0
                     }
                 }
-                res_ref[r * hcd + e] = (res[r * hcd + e] + gated_ref[r * hcd + e]) + co / (1.0 + exp(-co))
+                res_ref[r * hcd + e] = (res[r * hcd + e] + gated_ref[r * hcd + e]) + silu_f32(co)
             }
         }
         t |> success(from_ring > 0 && from_panel > 0, "the fixture's taps read both the ring and the panel ({from_ring} ring, {from_panel} panel)")
@@ -7019,7 +7019,7 @@ def test_vkd_dn_family(t0 : T?) {
                             }
                             acc += xv * smh[taps_off + ch * dconv + k]
                         }
-                        o_ref[p * cd + ch] = acc / (1.0 + exp(-acc))
+                        o_ref[p * cd + ch] = silu_f32(acc)
                     }
                     for (b in range(2 * kd / ds)) {
                         var sum = 0.0
@@ -7097,7 +7097,7 @@ def test_vkd_dn_family(t0 : T?) {
                             for (k in range(taps)) {
                                 acc += smh[rrb + ch * taps + k] * smh[taps_off + ch * dconv + k]
                             }
-                            let sv = acc / (1.0 + exp(-acc))
+                            let sv = silu_f32(acc)
                             if (sl == 0) {
                                 dq[j] = sv
                             } elif (sl == 1) {
@@ -7116,7 +7116,7 @@ def test_vkd_dn_family(t0 : T?) {
                     let sq = (1.0 / max(sqrt(sumq), eps)) * qscale
                     let sk = 1.0 / max(sqrt(sumk), eps)
                     let graw = smh[g_off + hh] + smh[dt_off + hh]
-                    let eg = exp(smh[a_off + hh] * (graw > 20.0 ? graw : log(1.0 + exp(graw))))
+                    let eg = exp(smh[a_off + hh] * softplus(graw))
                     let bt = sigmoid_f32(smh[beta_off + hh])
                     var qk = 0.0
                     for (j in range(ds)) {
@@ -7149,7 +7149,7 @@ def test_vkd_dn_family(t0 : T?) {
                     let inv = 1.0 / sqrt(sum / float(ds) + eps)
                     for (j in range(ds)) {
                         let zv = projh[cd + hh * ds + j]
-                        out_ref[hh * ds + j] = dout[j] * inv * smh[wnorm_off + j] * (zv / (1.0 + exp(-zv)))
+                        out_ref[hh * ds + j] = dout[j] * inv * smh[wnorm_off + j] * silu_f32(zv)
                         out_ref_sig[hh * ds + j] = dout[j] * inv * smh[wnorm_off + j] * sigmoid_f32(zv)
                     }
                     delete dq
@@ -7279,7 +7279,7 @@ def test_vkd_dn_family(t0 : T?) {
                     for (tt in range(npos)) {
                         let crow = tt * cd
                         let graw = smh[g_off + tt * nvh + hh] + smh[dt_off + hh]
-                        let gt = smh[a_off + hh] * (graw > 20.0 ? graw : log(1.0 + exp(graw)))
+                        let gt = smh[a_off + hh] * softplus(graw)
                         gcum += gt
                         let eg = exp(gt)
                         let bt = sigmoid_f32(smh[beta_off + tt * nvh + hh])
@@ -7309,7 +7309,7 @@ def test_vkd_dn_family(t0 : T?) {
                         let inv = 1.0 / sqrt(sum / float(ds) + eps)
                         for (j in range(ds)) {
                             let zv = zh[tt * di + hh * ds + j]
-                            o_ref[tt * di + hh * ds + j] = orow[j] * inv * smh[wnorm_off + j] * (zv / (1.0 + exp(-zv)))
+                            o_ref[tt * di + hh * ds + j] = orow[j] * inv * smh[wnorm_off + j] * silu_f32(zv)
                             o_ref_sig[tt * di + hh * ds + j] = orow[j] * inv * smh[wnorm_off + j] * sigmoid_f32(zv)
                         }
                         delete dvn
@@ -7891,7 +7891,7 @@ def private dn_scan_cell(t : T?; tag : string; ds, nkh, nvh, npos : int) {
                 for (tt in range(npos)) {
                     let crow = tt * cd
                     let graw = smh[g_off + tt * nvh + hh] + smh[dt_off + hh]
-                    let eg = exp(smh[a_off + hh] * (graw > 20.0 ? graw : log(1.0 + exp(graw))))
+                    let eg = exp(smh[a_off + hh] * softplus(graw))
                     let bt = sigmoid_f32(smh[beta_off + tt * nvh + hh])
                     for (j in range(ds)) {
                         var ks = 0.0

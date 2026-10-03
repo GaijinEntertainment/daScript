@@ -5,6 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_math
+require dasllama/dasllama_gpu_math
 require ?vulkan dasllama/dasllama_rope   // build_rope_row_packed: the rope cells' cos|sin row
 require ?vulkan dasllama/dasllama_math_vulkan  // the MoE GPU tier under test; the test installs its hooks explicitly (no env gate)
 require ?vulkan dasllama/dasllama_vulkan_seams  // the single-op seams (vk_add_rms / rope_kv / decode_attn) on the class rail
@@ -233,7 +234,7 @@ def private ref_ffn(offs1, offs3, offs2 : array<int64>; bases : Bases; nreg : in
                 up[i] = au
             }
             for (i in range(nfe)) {
-                h[i] = (gate[i] / (1.0 + exp(-gate[i]))) * up[i]
+                h[i] = silu_f32(gate[i]) * up[i]
             }
             requant_blocks(h, 32l, hq, hs)
             for (o in range(nn)) {
@@ -664,7 +665,7 @@ def private ref_ffn_kq(offs1, offs3, offs2 : array<int64>; bases : Bases; nreg :
                 up[i] = float(au)
             }
             for (i in range(knfe)) {
-                h[i] = (gate[i] / (1.0 + exp(-gate[i]))) * up[i]
+                h[i] = silu_f32(gate[i]) * up[i]
             }
             requant_blocks(h, int64(midblk), hq, hs)
             for (o in range(kn)) {
@@ -1074,7 +1075,7 @@ def private ref_dn_core(qkvy, zy : array<float>; bts, gts, tapsv, wnormv, av, dt
                 let xv = sp >= 0l ? qkvy[int(sp * DNCD + ch)] : hist[int(ch * DNTAPS + p + k)]
                 acc += xv * tapsv[int(ch * DNCONV + k)]
             }
-            conv[int(p * DNCD + ch)] = acc / (1.0 + exp(-acc))
+            conv[int(p * DNCD + ch)] = silu_f32(acc)
         }
         for (blk in range64(2l * DNKD / DNDS)) {   // q/k L2 norm; q folds the pre-scale
             var sum = 0.0lf
@@ -1122,9 +1123,9 @@ def private ref_dn_core(qkvy, zy : array<float>; bts, gts, tapsv, wnormv, av, dt
             let cl = min(CS, npos - c0)
             var gacc = 0.0
             for (i in range64(cl)) {
-                bv[int(i)] = 1.0 / (1.0 + exp(-bts[int((c0 + i) * DNVH + h)]))
+                bv[int(i)] = sigmoid_f32(bts[int((c0 + i) * DNVH + h)])
                 let graw = gts[int((c0 + i) * DNVH + h)] + dtv[int(h)]
-                gacc += av[int(h)] * (graw > 20.0 ? graw : log(1.0 + exp(graw)))
+                gacc += av[int(h)] * softplus(graw)
                 gcum[int(i)] = gacc
                 egc[int(i)] = exp(gacc)
                 for (j in range64(DNDS)) {
@@ -1232,7 +1233,7 @@ def private ref_dn_core(qkvy, zy : array<float>; bts, gts, tapsv, wnormv, av, dt
                 for (j in range64(DNDS)) {
                     let zv = zy[int((c0 + i) * DNDI + h * DNDS + j)]
                     let xn = p_oc[int(i * DNDS + j)] * scale * wnormv[int(j)]
-                    o[int((c0 + i) * DNDI + h * DNDS + j)] = xn * (zv / (1.0 + exp(-zv)))
+                    o[int((c0 + i) * DNDI + h * DNDS + j)] = xn * silu_f32(zv)
                 }
             }
             let glast = gcum[int(cl - 1l)]
@@ -1642,7 +1643,7 @@ def private ref_at_attn(qp, kp, vp, gatep : array<float>; npos : int64; gated : 
             attn_row_oracle(qp, ob, kp, 0, vp, 0, int(ATKVD), int(h), hs, kv_mul, int(p + 1l), scale, op, ob)
             if (gated) {
                 for (dd in range(hs)) {
-                    op[ob + dd] = op[ob + dd] / (1.0 + exp(-gatep[ob + dd]))
+                    op[ob + dd] = sig_gate(op[ob + dd], gatep[ob + dd])
                 }
             }
         }

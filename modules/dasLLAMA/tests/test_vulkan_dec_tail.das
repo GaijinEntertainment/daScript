@@ -6,6 +6,7 @@ module test_vulkan_dec_tail
 
 require dastest/testing_boost public
 require dasllama/dasllama_math
+require dasllama/dasllama_gpu_math
 require dasllama/dasllama_rope
 require dasllama/dasllama_common   // MoeGate, select_decode_override
 require dasllama/dasllama_blocks   // registers the vulkan_moe_span decode override at init
@@ -422,7 +423,7 @@ def private ffn_ref_sel(f : Ffn; fd : array<float>; idx : array<int64>; w : arra
         var hrow : array<float>
         hrow |> resize(NFE)
         for (i in range64(NFE)) {
-            hrow[i] = silu(gg[i]) * u[i]
+            hrow[i] = silu_f32(gg[i]) * u[i]
         }
         let hr <- q8_roundtrip(hrow, NFE, true)
         for (i in range64(N * NFE)) {
@@ -572,7 +573,7 @@ def private span_layer_ref_sh(var q : Quad; f : Ffn; sh : Shexp; router : array<
     for (i in range64(N)) {
         gl += sh.gate[li * N + i] * r.xb[i]
     }
-    let g = gated ? 1.0 / (1.0 + exp(-gl)) : 1.0
+    let g = gated ? sigmoid_f32(gl) : 1.0
     let fd <- feed_ref(x, f.norm, 1)
     let fd0 <- feed_ref(x, f.norm, 0)
     ffn_ref_sel(f, fd.deq, r.idx, r.w, x)
@@ -583,7 +584,7 @@ def private span_layer_ref_sh(var q : Quad; f : Ffn; sh : Shexp; router : array<
     var hrow : array<float>
     hrow |> resize(NFE)
     for (i in range64(NFE)) {
-        hrow[i] = silu(gg[i]) * u[i]
+        hrow[i] = silu_f32(gg[i]) * u[i]
     }
     let hr <- q8_roundtrip(hrow, NFE, false)
     var d : array<float>

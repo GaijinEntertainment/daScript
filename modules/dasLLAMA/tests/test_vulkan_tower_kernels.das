@@ -22,6 +22,7 @@ require _compares   // nolint:STYLE030,LINT019 — the compares, inside the vulk
 require _attn_oracle   // attn_row_scored: the softmax row the attention oracles share
 require _vk_kq_fixtures   // nolint:STYLE030,LINT019 — f16r, inside the vulkan arms alone
 require dasllama/dasllama_math
+require dasllama/dasllama_gpu_math
 require daslib/jobque_boost
 require daslib/linq   // nolint:STYLE030,LINT019 — count: the sentinel words a dispatch left, the pads' zero tails, inside the vulkan arms alone
 
@@ -614,7 +615,7 @@ def test_vkt_tower_conformer(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                 for (r in range(rows)) {
                     for (c in range(d)) {
                         let gate = glu_pw_rows[r * 2 * d + d + c]
-                        g_ref[r * d + c] = glu_pw_rows[r * 2 * d + c] * (1.0 / (1.0 + exp(-gate)))
+                        g_ref[r * d + c] = glu_pw_rows[r * 2 * d + c] * sigmoid_f32(gate)
                     }
                 }
                 check_rows(t, "tower_glu_sig value . sigmoid(gate) off the pointwise rows", g_dev, g_ref, BAR_APPROX, d)
@@ -731,7 +732,7 @@ def test_vkt_tower_fastconformer(t0 : T?) {
                             }
                         }
                         let bv = acc * wn[bnw_off + c] + wn[bnb_off + c]
-                        c_ref[r * d + c] = bv * (1.0 / (1.0 + exp(-bv)))
+                        c_ref[r * d + c] = bv * sigmoid_f32(bv)
                     }
                 }
                 check_rows(t, "tower_cn_dw centered taps, folded BatchNorm and silu vs the CPU loop", c_dev, c_ref, BAR_APPROX, d)

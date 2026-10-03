@@ -6,8 +6,9 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_math
+require dasllama/dasllama_gpu_math
 require ?vulkan dasllama/dasllama_math_vulkan  // the MoE GPU tier under test; the test installs its hooks explicitly (no env gate)
-require _vk_kq_fixtures   // f16r and silu: the CPU reference rounds where the device stages halves, on every lane
+require _vk_kq_fixtures   // f16r: the CPU reference rounds where the device stages halves, on every lane
 require ?vulkan _compares   // read inside the vulkan cells only, so a lane without dasVulkan sees no use
 require ?vulkan dasllama/dasllama_vulkan_common   // find_stack_idx: the fresh-base guard; a build with no Vulkan module skips the cells
 require ?vulkan dasllama/dasllama_env   // the split knob the streamed cells name in their tags
@@ -59,7 +60,7 @@ def private ref_chain(w1, w3, w2 : array<float>; x : array<float>; inv : array<u
                 g += double(w1[(e * knfe + o) * kn + i]) * xv
                 u += double(w3[(e * knfe + o) * kn + i]) * xv
             }
-            h16[o] = f16r(silu(float(g)) * float(u))
+            h16[o] = f16r(silu_f32(float(g)) * float(u))
         }
         for (o2 in range(kn)) {
             var d = 0.0lf
