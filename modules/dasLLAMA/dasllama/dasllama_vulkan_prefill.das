@@ -3272,7 +3272,7 @@ def private copy_stream_group_partial(si, g : int; offs1 : int64 const?; nregion
     var raw = stream_copy_begin()
     for (k in range(3)) {
         let sk = g * 3 + k
-        let psi = k == 0 ? slot.s1 : (k == 1 ? slot.s3 : slot.s2)
+        let psi = stream_slot_stack(slot, k)
         let nexp = g_gpu.stream_stacks[sk].elems / ege
         let qlen = g_gpu.stream_stacks[sk].wqbytes / nexp
         let slen = g_gpu.stream_stacks[sk].wsbytes / nexp
@@ -3293,7 +3293,7 @@ def private copy_stream_group(si, g : int; sync : bool) {
     var raw = stream_copy_begin()
     for (k in range(3)) {
         let sk = g * 3 + k
-        let psi = k == 0 ? slot.s1 : (k == 1 ? slot.s3 : slot.s2)
+        let psi = stream_slot_stack(slot, k)
         cmd_copy_whole(raw, g_gpu.stream_stacks[sk].hwq.buf, g_gpu.stacks[psi].wqbuf, g_gpu.stream_stacks[sk].wqbytes)
         if (g_gpu.stream_stacks[sk].wsbytes > 0l) {
             cmd_copy_whole(raw, g_gpu.stream_stacks[sk].hws.buf, g_gpu.stacks[psi].wsbuf, g_gpu.stream_stacks[sk].wsbytes)
@@ -3325,10 +3325,7 @@ def private stream_copy_end(si : int; var raw : VkCommandBuffer; sync : bool) {
 //! bind group g's slot for a batch dispatch: prefetch miss cold-copies the slot, the pseudo stacks
 //! rebase onto it, and the slot's transfer-queue fill hands off — the next compute submit waits the timeline
 def private stream_group_bind(g : int; nrows : int64; f3, f2 : int) {
-    assert(nrows >= BATCH_TILE, "dasLLAMA vulkan tier: streamed layers serve prefill batches only")
-    assert(g_gpu.stream_stacks[g * 3 + 1].fmt == f3 && g_gpu.stream_stacks[g * 3 + 2].fmt == f2,
-        "dasLLAMA vulkan tier: streamed group format mismatch")
-    ensure_stream_slots()
+    stream_group_check(g, nrows, f3, f2)
     var si = -1
     for (i in range(length(g_gpu.stream_slots))) {
         if (g_gpu.stream_slots[i].group == g) {
@@ -3339,6 +3336,17 @@ def private stream_group_bind(g : int; nrows : int64; f3, f2 : int) {
         si = g % length(g_gpu.stream_slots)
         copy_stream_group(si, g, true)
     }
+    stream_slot_handoff(si, g)
+}
+
+def private stream_group_check(g : int; nrows : int64; f3, f2 : int) {
+    assert(nrows >= BATCH_TILE, "dasLLAMA vulkan tier: streamed layers serve prefill batches only")
+    assert(g_gpu.stream_stacks[g * 3 + 1].fmt == f3 && g_gpu.stream_stacks[g * 3 + 2].fmt == f2,
+        "dasLLAMA vulkan tier: streamed group format mismatch")
+    ensure_stream_slots()
+}
+
+def private stream_slot_handoff(si, g : int) {
     rebase_pseudo(g_gpu.stream_slots[si].s1, g_gpu.stream_stacks[g * 3])
     rebase_pseudo(g_gpu.stream_slots[si].s3, g_gpu.stream_stacks[g * 3 + 1])
     rebase_pseudo(g_gpu.stream_slots[si].s2, g_gpu.stream_stacks[g * 3 + 2])
@@ -3348,6 +3356,8 @@ def private stream_group_bind(g : int; nrows : int64; f3, f2 : int) {
     }
 }
 
+def private stream_slot_stack(slot : StreamSlot; k : int) : int => k == 0 ? slot.s1 : (k == 1 ? slot.s3 : slot.s2)
+
 var private g_split_announced = false
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#streamed-layer-split")]
@@ -3356,19 +3366,10 @@ def stream_group_bind_partial(g : int; nrows : int64; f3, f2 : int; offs1 : int6
         g_split_announced = true
         to_log(LOG_INFO, "dasLLAMA vulkan tier: streamed prefill split engaged (DASLLAMA_GPU_MOE_SPLIT=0 streams whole layers)\n")
     }
-    assert(nrows >= BATCH_TILE, "dasLLAMA vulkan tier: streamed layers serve prefill batches only")
-    assert(g_gpu.stream_stacks[g * 3 + 1].fmt == f3 && g_gpu.stream_stacks[g * 3 + 2].fmt == f2,
-        "dasLLAMA vulkan tier: streamed group format mismatch")
-    ensure_stream_slots()
+    stream_group_check(g, nrows, f3, f2)
     let si = g % length(g_gpu.stream_slots)
     copy_stream_group_partial(si, g, offs1, nregions, ege)
-    rebase_pseudo(g_gpu.stream_slots[si].s1, g_gpu.stream_stacks[g * 3])
-    rebase_pseudo(g_gpu.stream_slots[si].s3, g_gpu.stream_stacks[g * 3 + 1])
-    rebase_pseudo(g_gpu.stream_slots[si].s2, g_gpu.stream_stacks[g * 3 + 2])
-    if (g_gpu.stream_slots[si].wait_value > 0ul) {
-        g_gpu.pend_wait = g_gpu.stream_slots[si].wait_value
-        g_gpu.stream_slots[si].wait_value = 0ul
-    }
+    stream_slot_handoff(si, g)
 }
 
 //! prefetch of the next group runs descending while prefill runs ascending
