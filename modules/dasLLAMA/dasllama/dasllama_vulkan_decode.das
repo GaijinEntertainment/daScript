@@ -1834,6 +1834,13 @@ def private rd_encode_hc_verify_warm(raw : VkCommandBuffer; var h : VkHaz; nrows
     rd_encode_attn_head(raw, h, L, g_rd.n_layers, rd_head_fuse_qkr(), rd_norm_final(), rd_layer_pieces(L, rd_split_pieces()), nrows, uint(nrows), 0, true, "t:warm_")
 }
 
+//! the one-row command's TokMeta row at `pos` with `cnt` cached positions (the window chain's: its first position and its rows): the region rides the push, so `mirbase` is 0
+def rd_tok_row(pos, cnt : int64) {
+    var tm = unsafe(reinterpret<TokMeta?>(g_rd.tok_meta.mapped))
+    unsafe(tm[0]) = TokMeta(pos = uint(pos), cnt = uint(cnt), parity = g_rd.hybrid ? uint(g_rd.dn_parity[g_rd.region]) : 0u,
+        mirbase = 0u, dnslot = uint(g_rd.region))
+}
+
 //! The split token (`RdecTokenSplitFn`); `side` is the n-gram side input's gathered row, empty on a model without one.
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
 def vk_rdec_token_split(x : array<float>; cossin : array<float>; side : array<float>; pos, cnt : int64; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64 {
@@ -1856,12 +1863,7 @@ def vk_rdec_token_split(x : array<float>; cossin : array<float>; side : array<fl
             assert(long_length(side) >= g_rd.ngram_ind, "vk_rdec_token_split: the side input's row is short")
             memcpy(g_rd.ple_emb_host.mapped, addr<void?>(side[0]), g_rd.ngram_ind * 4l)
         }
-        var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
-        tm.pos = uint(pos)
-        tm.cnt = uint(cnt)
-        tm.parity = g_rd.hybrid ? uint(g_rd.dn_parity[g_rd.region]) : 0u
-        tm.mirbase = 0u
-        tm.dnslot = uint(g_rd.region)
+        rd_tok_row(pos, cnt)
         let t1 = ref_time_ticks()
         var host_us = 0l
         for (seg in range64(g_rd.nseg - 1l)) {
@@ -3148,12 +3150,7 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
             assert(long_length(ple_row) >= g_rd.n_layers * g_rd.ple, "vk_rdec_token: the per-layer-embedding row is short")
             memcpy(g_rd.ple_host.mapped, addr<void?>(ple_row[0]), g_rd.n_layers * g_rd.ple * 4l)
         }
-        var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
-        tm.pos = uint(pos)   // every carrier composes its mirror row as layerbase + pos * kvd
-        tm.cnt = uint(cnt)
-        tm.parity = g_rd.hybrid ? uint(g_rd.dn_parity[g_rd.region]) : 0u
-        tm.mirbase = 0u   //! the one-row command's region rides its push; an N-row step leaves its row 0 entry here
-        tm.dnslot = uint(g_rd.region)
+        rd_tok_row(pos, cnt)
         if (prof) {   //! the profiled form splits the wall into its pieces; the served form is one call
             let t1 = ref_time_ticks()
             rd_submit_land(cmd, 1l, picks_only)
@@ -3530,11 +3527,7 @@ def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row
         memcpy(reinterpret<void?>(reinterpret<uint8?>(g_rd.head_cat_host.mapped) + dim * 4l), addr<void?>(h[0]), rd_carry_width() * 4l)
         memcpy(g_rd.head_cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l)
         var tm = reinterpret<TokMeta?>(g_rd.head_tok.mapped)
-        tm.pos = uint(row)
-        tm.cnt = uint(row + 1l)
-        tm.parity = 0u   // the head is an attention layer: no deltanet step reads its block
-        tm.mirbase = 0u   // the head's region rides the draft command's push
-        tm.dnslot = uint(g_rd.region)
+        tm[0] = TokMeta(pos = uint(row), cnt = uint(row + 1l), parity = 0u, mirbase = 0u, dnslot = uint(g_rd.region))   // the head's region rides the draft command's push
         var cmd = g_rd.head_draft_cmd[g_rd.region]
         let t1 = ref_time_ticks()
         if (g_rd.hc_nextn) {
@@ -3747,16 +3740,9 @@ def private rd_hc_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n 
         var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
         var hm = reinterpret<TokMeta?>(g_rd.head_tok.mapped)
         for (i in range64(n)) {
-            tm[i].pos = uint(pos + i)
-            tm[i].cnt = uint(pos + i + 1l)
-            tm[i].parity = g_rd.hybrid ? uint(par ^ int(i & 1l)) : 0u
-            tm[i].mirbase = uint(r * g_rd.mir_units)
-            tm[i].dnslot = uint(r)
-            hm[i].pos = uint(pos - 1l + i)
-            hm[i].cnt = uint(pos + i)
-            hm[i].parity = 0u
-            hm[i].mirbase = uint(r * g_rd.mir_units)
-            hm[i].dnslot = uint(r)
+            tm[i] = TokMeta(pos = uint(pos + i), cnt = uint(pos + i + 1l), parity = g_rd.hybrid ? uint(par ^ int(i & 1l)) : 0u,
+                mirbase = uint(r * g_rd.mir_units), dnslot = uint(r))
+            hm[i] = TokMeta(pos = uint(pos - 1l + i), cnt = uint(pos + i), parity = 0u, mirbase = uint(r * g_rd.mir_units), dnslot = uint(r))
         }
         let t1 = ref_time_ticks()
         for (seg in range64(g_rd.nseg - 1l)) {
@@ -3841,16 +3827,9 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int6
         var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
         var hm = reinterpret<TokMeta?>(g_rd.head_tok.mapped)
         for (i in range64(n)) {
-            tm[i].pos = uint(pos + i)
-            tm[i].cnt = uint(pos + i + 1l)
-            tm[i].parity = g_rd.hybrid ? uint(par ^ int(i & 1l)) : 0u
-            tm[i].mirbase = uint(r * g_rd.mir_units)
-            tm[i].dnslot = uint(r)
-            hm[i].pos = uint(pos - 1l + i)
-            hm[i].cnt = uint(pos + i)
-            hm[i].parity = 0u
-            hm[i].mirbase = uint(r * g_rd.mir_units)
-            hm[i].dnslot = uint(r)
+            tm[i] = TokMeta(pos = uint(pos + i), cnt = uint(pos + i + 1l), parity = g_rd.hybrid ? uint(par ^ int(i & 1l)) : 0u,
+                mirbase = uint(r * g_rd.mir_units), dnslot = uint(r))
+            hm[i] = TokMeta(pos = uint(pos - 1l + i), cnt = uint(pos + i), parity = 0u, mirbase = uint(r * g_rd.mir_units), dnslot = uint(r))
         }
         var cmd = unsplit ? g_rd.v_cmd_unsplit[vi] : g_rd.v_cmd[vi]
         if (prof) {
@@ -3992,11 +3971,8 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>;
         }
         var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
         for (i in range64(nrows)) {
-            tm[i].pos = uint(poss[i])
-            tm[i].cnt = uint(cnts[i])
-            tm[i].parity = g_rd.hybrid ? uint(g_rd.dn_parity[regs[i]]) : 0u
-            tm[i].mirbase = uint(regs[i] * g_rd.mir_units)
-            tm[i].dnslot = uint(regs[i])
+            tm[i] = TokMeta(pos = uint(poss[i]), cnt = uint(cnts[i]), parity = g_rd.hybrid ? uint(g_rd.dn_parity[regs[i]]) : 0u,
+                mirbase = uint(regs[i] * g_rd.mir_units), dnslot = uint(regs[i]))
         }
         var cmd = unsplit ? g_rd.cmd_n_unsplit[nrows] : g_rd.cmd_n[nrows]
         if (prof) {   // the profiled form splits the wall into its pieces, as the one-row submit does
@@ -4258,9 +4234,7 @@ def vk_moe_dn_step(var yp : float?; s_qkv, s_z, s_o : int; woq, woz, woo : int64
         memcpy(reinterpret<void?>(bg), reinterpret<void?>(bp), nvh * 4l)
         memcpy(reinterpret<void?>(bg + nvh), reinterpret<void?>(gp), nvh * 4l)
         var tm = reinterpret<TokMeta?>(st.tok.mapped)
-        tm.parity = uint(st.parity)
-        tm.mirbase = 0u
-        tm.dnslot = 0u
+        tm[0] = TokMeta(pos = 0u, cnt = 0u, parity = uint(st.parity), mirbase = 0u, dnslot = 0u)
     }
     let ts1 = ref_time_ticks()
     submit_wait(st.cmd)
@@ -4813,9 +4787,7 @@ def vk_moe_span_dec(var a : MoeSpanDec) {
         memcpy(g_gpu.span_xin.mapped, reinterpret<void?>(a.x), a.dim * 4l)
         memcpy(g_gpu.dat_cos.mapped, reinterpret<void?>(a.cossin), a.hs * 4l)
         var tm = reinterpret<TokMeta?>(g_gpu.dat_tok.mapped)
-        tm.pos = uint(a.pos)
-        tm.cnt = uint(a.pos + 1l)
-        tm.mirbase = 0u   //! the block's mirror rides the push: the attention adds the row's base to it
+        tm[0] = TokMeta(pos = uint(a.pos), cnt = uint(a.pos + 1l), parity = 0u, mirbase = 0u, dnslot = 0u)   //! the block's mirror rides the push: the attention adds the row's base to it
     }
     let ts1 = ref_time_ticks()
     submit_wait(g_gpu.span_cmd)
@@ -5353,9 +5325,7 @@ def vk_moe_attn_dec(var xb2p : float?; var kp : float?; var vp : float?; woq, wo
     unsafe {
         memcpy(g_gpu.dat_cos.mapped, reinterpret<void?>(cosp), hs * 4l)
         var tm = reinterpret<TokMeta?>(g_gpu.dat_tok.mapped)
-        tm.pos = uint(pos)
-        tm.cnt = uint(pos + 1l)
-        tm.mirbase = 0u
+        tm[0] = TokMeta(pos = uint(pos), cnt = uint(pos + 1l), parity = 0u, mirbase = 0u, dnslot = 0u)
     }
     let ts1 = ref_time_ticks()
     submit_wait(L.cmd)

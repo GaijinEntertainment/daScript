@@ -1603,8 +1603,6 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
     let warm = (g_rd.pf_head_ask && g_rd.head_on && g_rd.carry_live && g_rd.hc_nextn
         && (g_rd.pf_hc_head_ready || (!g_rd.pf_head_declined && pf_head_setup() && pf_hc_head_setup())))
     unsafe {
-        var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
-        tm.dnslot = uint(g_rd.region)
         var w0 = 0l
         let taps = max(g_rd.dn_dconv - 1l, 0l)
         while (w0 < npos) {
@@ -1615,10 +1613,7 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
             }
             let last = w0 + wlen >= npos
             let pos0w = pos0 + w0
-            tm.pos = uint(pos0w)
-            tm.cnt = uint(wlen)
-            tm.parity = g_rd.hybrid ? uint(g_rd.dn_parity[g_rd.region]) : 0u
-            tm.mirbase = 0u
+            rd_tok_row(pos0w, wlen)
             upload_region_at(g_rd.pf_x, 0l, addr<uint8 const?>(x_batch[int(w0 * dim)]), wlen * dim * 4l)
             upload_region_at(g_rd.pf_cos, 0l, addr<uint8 const?>(cos_batch[int(w0 * cos_elems)]), wlen * cos_elems * 4l)
             if (g_rd.ngram) {
