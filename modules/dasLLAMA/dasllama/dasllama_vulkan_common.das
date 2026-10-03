@@ -3190,25 +3190,14 @@ var g_vkd_spv_keep = false
 var g_vkd_spv_kept : table<string; array<uint>>
 
 // once-per-class named decline log for the workgroup-footprint gate below
-var private g_wg_declined : table<string>
+var private g_wg_decline : VkDeclineCounter
 
 // the [vk_dispatch]-generated ensure_ calls this BEFORE building the pipeline: a class whose
 // @workgroup members exceed the device's shared-memory cap declines by name instead of dying
 // in vkCreateComputePipelines (MoltenVK: "Threadgroup memory size exceeds the maximum")
 def vkd_wg_fits(wg_bytes : int; kname : string) : bool {
-    if (uint(wg_bytes) <= g_gpu.max_wg_bytes) {
-        return true
-    }
-    vkd_wg_decline(wg_bytes, kname)
-    return false
-}
-
-[cold_path]   // once per declined kernel name
-def private vkd_wg_decline(wg_bytes : int; kname : string) {
-    if (!key_exists(g_wg_declined, kname)) {
-        g_wg_declined |> insert(kname)
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: {kname}: workgroup footprint {wg_bytes} B exceeds device cap {int(g_gpu.max_wg_bytes)} B - kernel declined\n")
-    }
+    return true if (uint(wg_bytes) <= g_gpu.max_wg_bytes)
+    return note(g_wg_decline, kname, "workgroup", "the workgroup footprint {wg_bytes} B exceeds the device cap {int(g_gpu.max_wg_bytes)} B")
 }
 
 [cold_path]   // family layout creation — once per class family
