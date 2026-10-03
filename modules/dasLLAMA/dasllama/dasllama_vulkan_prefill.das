@@ -592,6 +592,24 @@ def private pf_moe_router(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64)
     pfq_ts(raw)
 }
 
+[arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
+def private pf_host_cut(var raw : VkCommandBuffer&; var next : VkCommandBuffer; var h : VkHaz; l, wlen, row0 : int64; experts : RdecHostExpertsRowsFn) {
+    let dim = g_rd.dim
+    vhz_dep(raw, h, VHZ_XB | VHZ_MRT, 0u, true)
+    cmd_copy_whole(raw, g_rd.pf_xb, g_rd.pf_hx_host.buf, wlen * dim * 4l)
+    cmd_copy_whole(raw, g_rd.pf_mlog, g_rd.pf_hlog_host.buf, wlen * g_rd.ner * 4l)
+    cmd_close(raw)
+    submit_wait(raw)
+    unsafe {
+        invoke(experts, l, reinterpret<float const?>(g_rd.pf_hx_host.mapped), reinterpret<float const?>(g_rd.pf_hlog_host.mapped),
+            reinterpret<float?>(g_rd.pf_hacc_host.mapped), 0l, wlen)
+    }
+    raw = next
+    h = cmd_open(raw, true)
+    vhz_dep(raw, h, 0u, VHZ_MDN, true)
+    cmd_copy_range(raw, g_rd.pf_hacc_host.buf, row0 * dim * 4l, g_rd.pf_hacc_dev, row0 * dim * 4l, (wlen - row0) * dim * 4l)
+}
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
 def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) {
     var L & = unsafe(g_rd.layers[l])
@@ -1646,18 +1664,8 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
                     verify(L.experts_host, "vk prefill: the hyper-connection chain serves routed experts on the host alone")
                     var pcr = RouterGemmArgs(npos = uint(wlen), ne = uint(g_rd.ner), dim = uint(dim), woff = uint(L.router_slot * g_rd.ner * dim), ostride = uint(g_rd.ner))
                     enc_router_gemm_cls(raw, h, L.pf_router_set, pcr, ((wlen + int64(ROUTER_TP) - 1l) / int64(ROUTER_TP)) * ((g_rd.ner + int64(ROUTER_TE) - 1l) / int64(ROUTER_TE)))
-                    vhz_dep(raw, h, VHZ_XB | VHZ_MRT, 0u, true)
-                    cmd_copy_whole(raw, g_rd.pf_xb, g_rd.pf_hx_host.buf, wlen * dim * 4l)
-                    cmd_copy_whole(raw, g_rd.pf_mlog, g_rd.pf_hlog_host.buf, wlen * g_rd.ner * 4l)
-                    cmd_close(raw)
-                    submit_wait(raw)
-                    invoke(experts, l, reinterpret<float const?>(g_rd.pf_hx_host.mapped), reinterpret<float const?>(g_rd.pf_hlog_host.mapped),
-                        reinterpret<float?>(g_rd.pf_hacc_host.mapped), 0l, wlen)
                     seg++
-                    raw = g_rd.pf_seg[seg]
-                    h = cmd_open(raw, true)
-                    vhz_dep(raw, h, 0u, VHZ_MDN, true)
-                    cmd_copy_range(raw, g_rd.pf_hacc_host.buf, ffn_row0 * dim * 4l, g_rd.pf_hacc_dev, ffn_row0 * dim * 4l, (wlen - ffn_row0) * dim * 4l)
+                    pf_host_cut(raw, g_rd.pf_seg[seg], h, l, wlen, ffn_row0, experts)
                 }
                 pf_hc_scatter(raw, h, L, wlen, ffn_row0, true)
             }
@@ -1993,16 +2001,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 }
                 if (moe && g_rd.layers[l].experts_host) {
                     pf_moe_router(raw, h, l, wlen)
-                    vhz_dep(raw, h, VHZ_XB | VHZ_MRT, 0u, true)
-                    cmd_copy_whole(raw, g_rd.pf_xb, g_rd.pf_hx_host.buf, wlen * dim * 4l)
-                    cmd_copy_whole(raw, g_rd.pf_mlog, g_rd.pf_hlog_host.buf, wlen * g_rd.ner * 4l)
-                    cmd_close(raw)
-                    submit_wait(raw)
-                    rdec_host_rows(l, reinterpret<float const?>(g_rd.pf_hx_host.mapped), reinterpret<float const?>(g_rd.pf_hlog_host.mapped),
-                        reinterpret<float?>(g_rd.pf_hacc_host.mapped), 0l, wlen)
-                    h = cmd_open(raw, true)
-                    vhz_dep(raw, h, 0u, VHZ_MDN, true)
-                    cmd_copy_whole(raw, g_rd.pf_hacc_host.buf, g_rd.pf_hacc_dev, wlen * dim * 4l)
+                    pf_host_cut(raw, raw, h, l, wlen, 0l, @@rdec_host_rows)
                 } elif (moe) {
                     pf_moe_block(raw, h, l, wlen)
                 }
