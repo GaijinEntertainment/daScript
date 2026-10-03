@@ -3255,7 +3255,8 @@ class public CppAot : AstVisitor {
         }
     }
     def override preVisitExprCast(expr : ExprCast?) {
-        write(*ss, "{(expr.castFlags.upcastCast ? "das_upcast" : "das_cast")}<{describeCppType(expr.castType,DescribeConfig(cross_platform=cross_platform))}>::cast(");
+        let target = expr.castFlags.reinterpretCast && expr._type.flags.ref ? expr._type : expr.castType;
+        write(*ss, "{(expr.castFlags.upcastCast ? "das_upcast" : "das_cast")}<{describeCppType(target,DescribeConfig(cross_platform=cross_platform))}>::cast(");
     }
     def override visitExprCast(var expr : ExprCast?) : ExpressionPtr {
         write(*ss, ")");
