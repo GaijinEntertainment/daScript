@@ -31,6 +31,7 @@ require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_gemm_schema
 require _vk_probe_fixture   // hash_word, cool_f16_pair: the synthetic planes both probes build
+require ../tests/_compares.das
 
 let private DISPATCHES = 20
 let private SUBMITS = 5
@@ -65,13 +66,12 @@ def private probe_fill(seed : uint; wq_words, ws_words, xq_words, xs_words, bloc
     var wqh : array<uint>
     var wsh : array<uint>
     var xqh : array<uint>
-    var xsh : array<float>
+    var xsh <- row_fill(xs_words, 1, 0, 0.25, -0.5, 7)
     wqh |> reserve(wq_words)
     wqh |> resize(wq_words)
     wsh |> reserve(ws_words)
     wsh |> resize(ws_words)
     xqh |> resize(xq_words)
-    xsh |> resize(xs_words)
     for (i in range(wq_words)) {
         wqh[i] = hash_word(uint(i) + seed * 77777u)
     }
@@ -80,9 +80,6 @@ def private probe_fill(seed : uint; wq_words, ws_words, xq_words, xs_words, bloc
     }
     for (i in range(xq_words)) {
         xqh[i] = hash_word(uint(i) * 31u + 5u)
-    }
-    for (i in range(xs_words)) {
-        xsh[i] = 0.5 + float(i % 7) * 0.25
     }
     p.wq_bytes = int64(wq_words) * 4l
     p.ws_bytes = int64(ws_words) * 4l

@@ -1026,14 +1026,12 @@ def test_vkd_ar_class(t0 : T?) {
             //! the biased add partner (gpt-oss's attention output bias): the bias row rides the norms plane past the norm row, the
             //! kernel adds it to the partner before the add; the seam fed the pre-added partner is the bit-exact reference
             {
-                var b : array<float>
+                var b <- row_fill(dim, 23, 0, 0.09, 3.1, 71)
                 var ab : array<float>
                 var wb : array<float>
-                b |> resize(dim)
                 ab |> resize(dim)
                 wb |> resize(2 * dim)
                 for (i in range(dim)) {
-                    b[i] = float((i * 23) % 71) * 0.09 - 3.1
                     ab[i] = a[i] + b[i]
                     wb[i] = w[i]
                     wb[dim + i] = b[i]
@@ -1189,11 +1187,7 @@ def test_vkd_cls_epi_rows(t0 : T?) {
             let rows = 4l
             let cap = 30.0
             var supp <- [3u, 777u, 999u]
-            var y : array<float>
-            y |> resize(vocab * rows)
-            for (i in range64(vocab * rows)) {
-                y[i] = float((i * 37l) % 211l) * 0.7 - 60.0   //! reaches past the cap on both sides
-            }
+            var y <- row_fill(int(vocab * rows), 37, 0, 0.7, 60.0, 211)   //! reaches past the cap on both sides
             var want : array<float>   // the CPU form: the cap in the exp form the kernel takes, then the pins
             want |> resize(vocab * rows)
             for (i in range64(vocab * rows)) {
@@ -1425,14 +1419,8 @@ def test_vkd_actf16_base(t0 : T?) {
             let total = nelem * 2
             let g_bytes = int64(total) * 4l
             let h_bytes = int64(total) * 2l
-            var gh : array<float>
-            var uh : array<float>
-            gh |> resize(total)
-            uh |> resize(total)
-            for (i in range(total)) {
-                gh[i] = float((i * 29) % 61) * 0.06 - 1.9
-                uh[i] = float((i * 43) % 83) * 0.05 - 2.1
-            }
+            var gh <- row_fill(total, 29, 0, 0.06, 1.9, 61)
+            var uh <- row_fill(total, 43, 0, 0.05, 2.1, 83)
             // arm 0: the second row's data at the front, base 0; arm 1: the plane as is, base nelem
             var g0 : array<float>
             var u0 : array<float>
@@ -1919,14 +1907,8 @@ def test_vkd_act_family(t0 : T?) {
                 return
             }
             let nelem = 1024
-            var gh : array<float>
-            var uh : array<float>
-            gh |> resize(nelem)
-            uh |> resize(nelem)
-            for (i in range(nelem)) {
-                gh[i] = float((i * 29) % 61) * 0.21 - 6.0
-                uh[i] = float((i * 11) % 47) * 0.17 - 4.0
-            }
+            var gh <- row_fill(nelem, 29, 0, 0.21, 6.0, 61)
+            var uh <- row_fill(nelem, 11, 0, 0.17, 4.0, 47)
             let e_bytes = int64(nelem) * 4l
             let gd = make_device_buf(e_bytes)
             let ud = make_device_buf(e_bytes)
@@ -1992,18 +1974,12 @@ def test_vkd_act_family(t0 : T?) {
                 let nrow = 3
                 let nb = nrow * brow
                 var rex <- [uint(2), uint(0), uint(5)]
-                var gb : array<float>
-                var ub : array<float>
+                var gb <- row_fill(ne * brow, 13, 0, 0.3, 4.5, 31)   //! biases past the 7 clamp on some elements: the clamps must engage
+                var ub <- row_fill(ne * brow, 17, 0, 0.4, 5.6, 29)
                 var gh2 : array<float>
                 var uh2 : array<float>
-                gb |> resize(ne * brow)
-                ub |> resize(ne * brow)
                 gh2 |> resize(nb)
                 uh2 |> resize(nb)
-                for (i in range(ne * brow)) {
-                    gb[i] = float((i * 13) % 31) * 0.3 - 4.5   //! biases past the 7 clamp on some elements: the clamps must engage
-                    ub[i] = float((i * 17) % 29) * 0.4 - 5.6
-                }
                 for (e in range(nb)) {
                     let ex = int(rex[e / brow])
                     gh2[e] = gh[e] + gb[ex * brow + e % brow]
@@ -2099,17 +2075,13 @@ def test_vkd_act_family(t0 : T?) {
                 let nrows = 8
                 var sidx : array<uint>
                 var sw : array<float>
-                var rows : array<float>
                 sidx |> resize(npos * k)
                 sw |> resize(npos * k)
-                rows |> resize(nrows * n)
                 for (i in range(npos * k)) {
                     sidx[i] = hash_word(uint(i)) % uint(nrows)
                     sw[i] = 0.125 + float(i % 5) * 0.25
                 }
-                for (i in range(nrows * n)) {
-                    rows[i] = float((i * 7) % 93) * 0.13 - 5.5
-                }
+                var rows <- row_fill(nrows * n, 7, 0, 0.13, 5.5, 93)
                 let si_bytes = int64(npos * k) * 4l
                 let ro_bytes = int64(nrows * n) * 4l
                 let ac_bytes = int64(npos * n) * 4l
@@ -2261,18 +2233,10 @@ def test_vkd_rope_family(t0 : T?) {
             {
                 let npairs = (nh + nkvh) * half
                 let kpair0 = nh * half
-                var qh : array<float>
-                var kvh : array<float>
+                var qh <- row_fill(qd, 23, 0, 0.09, 3.0, 71)
+                var kvh <- row_fill(qd + 2 * kvd, 19, 0, 0.07, 2.9, 83)
                 var csh : array<float>
-                qh |> resize(qd)
-                kvh |> resize(qd + 2 * kvd)
                 csh |> resize(hs)
-                for (i in range(qd)) {
-                    qh[i] = float((i * 23) % 71) * 0.09 - 3.0
-                }
-                for (i in range(qd + 2 * kvd)) {
-                    kvh[i] = float((i * 19) % 83) * 0.07 - 2.9
-                }
                 for (i in range(half)) {
                     csh[i] = 0.3 + float(i % 9) * 0.07          // cos row
                     csh[half + i] = 0.1 + float(i % 7) * 0.11   // sin row
@@ -2347,20 +2311,12 @@ def test_vkd_rope_family(t0 : T?) {
                 let qstride = qd
                 let kstride = kvd
                 let eps = 1e-5
-                var qh : array<float>
-                var kh : array<float>
+                var qh <- row_fill(rows * qd, 31, 0, 0.08, 2.5, 67)
+                var kh <- row_fill(rows * kvd, 43, 0, 0.06, 1.7, 59)
                 var wh : array<float>
                 var eh : array<float>
-                qh |> resize(rows * qd)
-                kh |> resize(rows * kvd)
                 wh |> resize(2 * hs)
                 eh |> resize(1)
-                for (i in range(rows * qd)) {
-                    qh[i] = float((i * 31) % 67) * 0.08 - 2.5
-                }
-                for (i in range(rows * kvd)) {
-                    kh[i] = float((i * 43) % 59) * 0.06 - 1.7
-                }
                 for (i in range(2 * hs)) {
                     wh[i] = 0.4 + float(i % 13) * 0.06
                 }
@@ -3113,19 +3069,9 @@ def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk :
         let qdim = nheads * hs
         let scale = 0.125
         let blk = rqk == DA_RQ_Q8K ? 256 : 32
-        var qh : array<float>
-        var kh : array<float>
-        var vh : array<float>
-        qh |> resize(qdim)
-        kh |> resize(cnt * kvd)
-        vh |> resize(cnt * kvd)
-        for (i in range(qdim)) {
-            qh[i] = float((i * 41) % 73) * 0.05 - 1.8
-        }
-        for (i in range(cnt * kvd)) {
-            kh[i] = float((i * 17) % 97) * 0.03 - 1.4
-            vh[i] = float((i * 53) % 89) * 0.04 - 1.7
-        }
+        var qh <- row_fill(qdim, 41, 0, 0.05, 1.8, 73)
+        var kh <- row_fill(cnt * kvd, 17, 0, 0.03, 1.4, 97)
+        var vh <- row_fill(cnt * kvd, 53, 0, 0.04, 1.7, 89)
         let q_bytes = int64(qdim) * 4l
         let m_bytes = int64(cnt * kvd) * 4l
         let cnt_off = nheads * nsplit * (hs + 2)   //! the arrival counters past the pieces
@@ -3269,21 +3215,11 @@ def test_vkd_da_attn(t0 : T?) {
             let kvd = (nheads / kv_mul) * hs
             let cnt = 300   // crosses the 256-position chunk boundary: the alpha-rescale path runs
             let scale = 0.125
-            var qh : array<float>
-            var kh : array<float>
-            var vh : array<float>
+            var qh <- row_fill(nheads * hs, 41, 0, 0.05, 1.8, 73)
+            var kh <- row_fill(cnt * kvd, 17, 0, 0.03, 1.4, 97)
+            var vh <- row_fill(cnt * kvd, 53, 0, 0.04, 1.7, 89)
             var sh : array<float>
-            qh |> resize(nheads * hs)
-            kh |> resize(cnt * kvd)
-            vh |> resize(cnt * kvd)
             sh |> resize(1)
-            for (i in range(nheads * hs)) {
-                qh[i] = float((i * 41) % 73) * 0.05 - 1.8
-            }
-            for (i in range(cnt * kvd)) {
-                kh[i] = float((i * 17) % 97) * 0.03 - 1.4
-                vh[i] = float((i * 53) % 89) * 0.04 - 1.7
-            }
             sh[0] = scale
             let q_bytes = int64(nheads * hs) * 4l
             let m_bytes = int64(cnt * kvd) * 4l
@@ -3630,22 +3566,10 @@ def test_vkd_at_attn(t0 : T?) {
                 let qd = nheads * hs
                 let kvd = (nheads / kv_mul) * hs
                 let kpos = w0 + rows   // K/V panels hold absolute positions [0, w0+rows)
-                var qh : array<float>
-                var kh : array<float>
-                var vh : array<float>
-                var gh : array<float>
-                qh |> resize(rows * qd)
-                kh |> resize(kpos * kvd)
-                vh |> resize(kpos * kvd)
-                gh |> resize(rows * qd)
-                for (i in range(rows * qd)) {
-                    qh[i] = float((i * 41) % 73) * 0.05 - 1.8
-                    gh[i] = float((i * 29) % 61) * 0.06 - 1.9
-                }
-                for (i in range(kpos * kvd)) {
-                    kh[i] = float((i * 17) % 97) * 0.03 - 1.4
-                    vh[i] = float((i * 53) % 89) * 0.04 - 1.7
-                }
+                var qh <- row_fill(rows * qd, 41, 0, 0.05, 1.8, 73)
+                var kh <- row_fill(kpos * kvd, 17, 0, 0.03, 1.4, 97)
+                var vh <- row_fill(kpos * kvd, 53, 0, 0.04, 1.7, 89)
+                var gh <- row_fill(rows * qd, 29, 0, 0.06, 1.9, 61)
                 let q_bytes = int64(rows * qd) * 4l
                 let m_bytes = int64(kpos * kvd) * 4l
                 let qdev = make_device_buf(q_bytes)
@@ -3717,7 +3641,7 @@ def private fa_arm_ensure(khr : bool) : bool {
 }
 
 //! the f16-out twin is held to the f32 stamp's output through f16cvt, not to the oracle: the two stamps must agree bit for bit
-def private fa_tile_run(t : T?; khr : bool) {   // nolint:STYLE037 — one arm loop: the fixture, both stamps, the oracle and its controls
+def private fa_tile_run(t : T?; khr : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = khr ? "fa_khr" : "fa_cm2"
         let nheads = 4
@@ -3743,19 +3667,11 @@ def private fa_tile_run(t : T?; khr : bool) {   // nolint:STYLE037 — one arm l
             let kvd = (nheads / kv_mul) * hs
             let kpos = w0 + rows
             let kpad = kpos + FA_SHADOW_SLACK_ROWS
-            var qh : array<float>
-            var kh : array<float>
-            var vh : array<float>
-            qh |> resize(rows * qd)
+            var qh <- row_fill(rows * qd, 41, 0, 0.05, 1.8, 73)
+            var kh <- row_fill(kpos * kvd, 17, 0, 0.03, 1.4, 97)
+            var vh <- row_fill(kpos * kvd, 53, 0, 0.04, 1.7, 89)
             kh |> resize(kpad * kvd)
             vh |> resize(kpad * kvd)
-            for (i in range(rows * qd)) {
-                qh[i] = float((i * 41) % 73) * 0.05 - 1.8
-            }
-            for (i in range(kpos * kvd)) {
-                kh[i] = float((i * 17) % 97) * 0.03 - 1.4
-                vh[i] = float((i * 53) % 89) * 0.04 - 1.7
-            }
             for (i in range(kpos * kvd, kpad * kvd)) {   //! the slack rows carry a large finite value, not zero: a masked probability that is not exactly zero would drag it into the output
                 kh[i] = 10000.0
                 vh[i] = 10000.0
@@ -3961,19 +3877,12 @@ def private fa_h256_run(nheads, kv_mul, rows, w0 : int; gated : bool; cap : floa
         let kvd = (nheads / kv_mul) * hs
         let kpos = w0 + rows
         let kpad = kpos + FA_SHADOW_SLACK_ROWS
-        var qp : array<float>
-        var kh : array<float>
-        var vh : array<float>
-        qp |> resize(rows * qrow)
+        //! the softcap fixture's wide q and k values: the scaled scores run past the cap, so the cap is load-bearing
+        var qp <- row_fill(rows * qrow, 41, 0, gated ? 0.05 : 0.25, gated ? 1.8 : 9.0, 73)
+        var kh <- row_fill(kpos * kvd, 17, 0, gated ? 0.03 : 0.15, gated ? 1.4 : 7.0, 97)
+        var vh <- row_fill(kpos * kvd, 53, 0, 0.04, 1.7, 89)
         kh |> resize(kpad * kvd)
         vh |> resize(kpad * kvd)
-        for (i in range(rows * qrow)) {   //! the softcap fixture's wide q and k values: the scaled scores run past the cap, so the cap is load-bearing
-            qp[i] = gated ? float((i * 41) % 73) * 0.05 - 1.8 : float((i * 41) % 73) * 0.25 - 9.0
-        }
-        for (i in range(kpos * kvd)) {
-            kh[i] = gated ? float((i * 17) % 97) * 0.03 - 1.4 : float((i * 17) % 97) * 0.15 - 7.0
-            vh[i] = float((i * 53) % 89) * 0.04 - 1.7
-        }
         let qp_bytes = int64(rows * qrow) * 4l
         let m_bytes = int64(kpad * kvd) * 4l
         let sh_bytes = int64(kpad * kvd) * 2l
@@ -4379,15 +4288,11 @@ def test_vkd_requant_family(t0 : T?) {
                 let eps = 1e-5
                 let ascale = 1.25
                 let nblk = dim / 32
-                var x : array<float>
-                var a : array<float>
+                var x <- row_fill(dim, 37, 0, 0.09, 4.2, 101)
+                var a <- row_fill(dim, 13, 0, 0.06, 2.6, 89)
                 var w : array<float>
-                x |> resize(dim)
-                a |> resize(dim)
                 w |> resize(dim)
                 for (i in range(dim)) {
-                    x[i] = float((i * 37) % 101) * 0.09 - 4.2
-                    a[i] = float((i * 13) % 89) * 0.06 - 2.6
                     w[i] = 0.5 + float(i % 17) * 0.04
                 }
                 let e_bytes = int64(dim) * 4l
@@ -4444,12 +4349,10 @@ def test_vkd_requant_family(t0 : T?) {
                 t |> success(bad == 0, "ar+requant fused matches the CPU oracle ({bad} elements off)")
                 //! the biased add partner (gpt-oss's output bias) on the fused stamp: the bias row rides the norms plane past the norm row
                 {
-                    var b : array<float>
+                    var b <- row_fill(dim, 23, 0, 0.09, 3.1, 71)
                     var wb : array<float>
-                    b |> resize(dim)
                     wb |> resize(2 * dim)
                     for (i in range(dim)) {
-                        b[i] = float((i * 23) % 71) * 0.09 - 3.1
                         wb[i] = w[i]
                         wb[dim + i] = b[i]
                     }
@@ -4598,11 +4501,7 @@ def test_vkd_requant_family(t0 : T?) {
             {
                 let nsb = 4
                 let nelem = nsb * 256
-                var src : array<float>
-                src |> resize(nelem)
-                for (i in range(nelem)) {
-                    src[i] = float((i * 61) % 113) * 0.05 - 2.8
-                }
+                var src <- row_fill(nelem, 61, 0, 0.05, 2.8, 113)
                 let e_bytes = int64(nelem) * 4l
                 let q_bytes = int64(nelem)
                 let s_bytes = int64(nsb) * 4l
@@ -5020,16 +4919,8 @@ def private q8_gemv_pleact_run(t; n, d : int) {
     let ws_bytes = int64(totblk) * 2l
     var wqh, wsh : array<uint>
     q8_plane(totblk, 5u, 19u, 3u, 7u, wqh, wsh)
-    var gh : array<float>
-    var sh : array<float>
-    gh |> resize(n)
-    sh |> resize(3 * n)   // three layers' side rows: the cell reads the middle one
-    for (i in range(n)) {
-        gh[i] = float((i * 37) % 101) * 0.06 - 3.0
-    }
-    for (i in range(3 * n)) {
-        sh[i] = float((i * 29) % 83) * 0.05 - 2.0
-    }
+    var gh <- row_fill(n, 37, 0, 0.06, 3.0, 101)
+    var sh <- row_fill(3 * n, 29, 0, 0.05, 2.0, 83)   // three layers' side rows: the cell reads the middle one
     let g_bytes = int64(n) * 4l
     let s_bytes = int64(3 * n) * 4l
     let y_bytes = int64(d) * 4l
@@ -5133,7 +5024,7 @@ def private q8_gemv_ar_fixture(n, d : int) : GemvArFixture {
     fx.wsh |> resize(totblk / 2 + 1)
     fx.xqh |> resize(nb * 8)
     fx.xsh |> resize(nb)
-    fx.xres |> resize(d)
+    fx.xres <- row_fill(d, 43, 0, 0.4, 19.0, 97)
     fx.wnh |> resize(3 * d)
     for (i in range(totblk * 8)) {
         fx.wqh[i] = hash_word(uint(i) * 3u + 29u)
@@ -5146,9 +5037,6 @@ def private q8_gemv_ar_fixture(n, d : int) : GemvArFixture {
     }
     for (i in range(nb)) {
         fx.xsh[i] = 0.2 + float(i % 7) * 0.1
-    }
-    for (i in range(d)) {
-        fx.xres[i] = float((i * 43) % 97) * 0.4 - 19.0
     }
     for (i in range(2 * d)) {
         fx.wnh[i] = 0.8 + float(i % 9) * 0.05
@@ -5754,16 +5642,8 @@ def private q8_gemv_pleact_cols_run(t; n, d, ncols : int) {
     let ncol_max = 8
     var wqh, wsh : array<uint>
     q8_plane(totblk, 5u, 19u, 3u, 7u, wqh, wsh)
-    var gh : array<float>
-    var sh : array<float>
-    gh |> resize(ncol_max * n)
-    sh |> resize(ncol_max * all)
-    for (i in range(ncol_max * n)) {
-        gh[i] = float((i * 37) % 101) * 0.06 - 3.0
-    }
-    for (i in range(ncol_max * all)) {
-        sh[i] = float((i * 29) % 83) * 0.05 - 2.0
-    }
+    var gh <- row_fill(ncol_max * n, 37, 0, 0.06, 3.0, 101)
+    var sh <- row_fill(ncol_max * all, 29, 0, 0.05, 2.0, 83)
     let g_bytes = int64(ncols * n) * 4l
     let s_bytes = int64(ncols * all) * 4l
     let g1_bytes = int64(n) * 4l
@@ -6007,11 +5887,7 @@ def test_vkd_cvt_family(t0 : T?) {
             {
                 let nblk = 24
                 let inbase = 64
-                var srch : array<float>
-                srch |> resize(inbase + nblk * 32)
-                for (i in range(inbase + nblk * 32)) {
-                    srch[i] = float((i * 37) % 113) * 0.04 - 2.2
-                }
+                var srch <- row_fill(inbase + nblk * 32, 37, 0, 0.04, 2.2, 113)
                 let src_bytes = int64(inbase + nblk * 32) * 4l
                 let q_bytes = int64(nblk) * 32l
                 let s_bytes = int64(nblk) * 4l
@@ -6048,14 +5924,8 @@ def test_vkd_cvt_family(t0 : T?) {
                 verify(ensure_actf16_cls() && ensure_tower_clamp_cvt_cls(),
                     "the cvt class rails must engage on a live device")
                 let nelem = 2048
-                var gh : array<float>
-                var uh : array<float>
-                gh |> resize(nelem)
-                uh |> resize(nelem)
-                for (i in range(nelem)) {
-                    gh[i] = float((i * 29) % 61) * 0.06 - 1.9
-                    uh[i] = float((i * 43) % 83) * 0.05 - 2.1
-                }
+                var gh <- row_fill(nelem, 29, 0, 0.06, 1.9, 61)
+                var uh <- row_fill(nelem, 43, 0, 0.05, 2.1, 83)
                 let g_bytes = int64(nelem) * 4l
                 let h_bytes = int64(nelem) * 2l
                 let gd = make_device_buf(g_bytes)
@@ -6135,21 +6005,9 @@ def test_vkd_rope_b_pair(t0 : T?) {
                 let ppp = (nh + nkvh) * half
                 let kpair0 = nh * half
                 let mirn = layerbase + (pos0 + npos) * kvd
-                var q0h : array<float>
-                var kvh : array<float>
-                var csh : array<float>
-                q0h |> resize(npos * qd)
-                kvh |> resize(voff + npos * kvd)
-                csh |> resize(npos * hs)
-                for (i in range(npos * qd)) {
-                    q0h[i] = float((i * 31) % 67) * 0.05 - 1.6
-                }
-                for (i in range(voff + npos * kvd)) {
-                    kvh[i] = float((i * 23) % 71) * 0.04 - 1.5
-                }
-                for (i in range(npos * hs)) {
-                    csh[i] = float((i * 13) % 41) * 0.045 - 0.9
-                }
+                var q0h <- row_fill(npos * qd, 31, 0, 0.05, 1.6, 67)
+                var kvh <- row_fill(voff + npos * kvd, 23, 0, 0.04, 1.5, 71)
+                var csh <- row_fill(npos * hs, 13, 0, 0.045, 0.9, 41)
                 let q_bytes = int64(npos * qd) * 4l
                 let kv_bytes = int64(voff + npos * kvd) * 4l
                 let cs_bytes = int64(npos * hs) * 4l
@@ -6289,23 +6147,11 @@ def test_vkd_rope_b_pair(t0 : T?) {
                 let vrow = 192
                 let eps = 0.00001
                 let mirn2 = vrow + nkvh * hs
-                var q0h : array<float>
-                var kvh : array<float>
-                var csh : array<float>
+                var q0h <- row_fill(qd, 31, 0, 0.05, 1.6, 67)
+                var kvh <- row_fill(qd + 2 * kvd, 23, 0, 0.04, 1.5, 71)
+                var csh <- row_fill(hs, 13, 0, 0.045, 0.9, 41)
                 var wnh : array<float>
-                q0h |> resize(qd)
-                kvh |> resize(qd + 2 * kvd)
-                csh |> resize(hs)
                 wnh |> resize(2 * hs)
-                for (i in range(qd)) {
-                    q0h[i] = float((i * 31) % 67) * 0.05 - 1.6
-                }
-                for (i in range(qd + 2 * kvd)) {
-                    kvh[i] = float((i * 23) % 71) * 0.04 - 1.5
-                }
-                for (i in range(hs)) {
-                    csh[i] = float((i * 13) % 41) * 0.045 - 0.9
-                }
                 for (i in range(2 * hs)) {
                     wnh[i] = 0.75 + float(i % 11) * 0.05
                 }
@@ -6537,26 +6383,10 @@ def test_vkd_at_prep(t0 : T?) {
             let cos_off = 16 + 2 * hs
             let sin_off = cos_off + rows * half
             let sm_n = sin_off + rows * half
-            var srcqh : array<float>
-            var srckh : array<float>
-            var smh : array<float>
-            var bh : array<float>   //! the projection bias: [q (qd) | k (kvd)], the k pass reads at boff = qd
-            srcqh |> resize(rows * 2 * qd)
-            srckh |> resize(rows * kvd)
-            smh |> resize(sm_n)
-            bh |> resize(qd + kvd)
-            for (i in range(rows * 2 * qd)) {
-                srcqh[i] = float((i * 19) % 79) * 0.045 - 1.7
-            }
-            for (i in range(rows * kvd)) {
-                srckh[i] = float((i * 27) % 59) * 0.055 - 1.4
-            }
-            for (i in range(sm_n)) {
-                smh[i] = float((i * 11) % 37) * 0.05 - 0.8
-            }
-            for (i in range(qd + kvd)) {
-                bh[i] = float((i * 7) % 23) * 0.03 - 0.3
-            }
+            var srcqh <- row_fill(rows * 2 * qd, 19, 0, 0.045, 1.7, 79)
+            var srckh <- row_fill(rows * kvd, 27, 0, 0.055, 1.4, 59)
+            var smh <- row_fill(sm_n, 11, 0, 0.05, 0.8, 37)
+            var bh <- row_fill(qd + kvd, 7, 0, 0.03, 0.3, 23)   //! the projection bias: [q (qd) | k (kvd)], the k pass reads at boff = qd
             smh[0] = eps
             let srcq_bytes = int64(rows * 2 * qd) * 4l
             let srck_bytes = int64(rows * kvd) * 4l
@@ -7277,16 +7107,8 @@ def test_vkd_dn_family(t0 : T?) {
                 let taps_off = 16
                 let hist_off = taps_off + cd * dconv
                 let sm_n = hist_off + cd * taps
-                var srch : array<float>
-                var smh : array<float>
-                srch |> resize(npos * cd)
-                smh |> resize(sm_n)
-                for (i in range(npos * cd)) {
-                    srch[i] = float((i * 19) % 79) * 0.03 - 1.1
-                }
-                for (i in range(sm_n)) {
-                    smh[i] = float((i * 11) % 37) * 0.02 - 0.35
-                }
+                var srch <- row_fill(npos * cd, 19, 0, 0.03, 1.1, 79)
+                var smh <- row_fill(sm_n, 11, 0, 0.02, 0.35, 37)
                 smh[0] = eps
                 smh[1] = qscale
                 let src_bytes = int64(npos * cd) * 4l
@@ -7360,21 +7182,9 @@ def test_vkd_dn_family(t0 : T?) {
                 let hist_off = wnorm_off + ds
                 let sm_n = hist_off + 2 * cd * taps
                 let nblk = nvh * ds / 32
-                var projh : array<float>
-                var sth : array<float>
-                var smh : array<float>
-                projh |> resize(cd + nvh * ds)
-                sth |> resize(nvh * ds * ds)
-                smh |> resize(sm_n)
-                for (i in range(cd + nvh * ds)) {
-                    projh[i] = float((i * 23) % 71) * 0.03 - 1.0
-                }
-                for (i in range(nvh * ds * ds)) {
-                    sth[i] = float((i * 13) % 53) * 0.02 - 0.5
-                }
-                for (i in range(sm_n)) {
-                    smh[i] = float((i * 17) % 43) * 0.02 - 0.4
-                }
+                var projh <- row_fill(cd + nvh * ds, 23, 0, 0.03, 1.0, 71)
+                var sth <- row_fill(nvh * ds * ds, 13, 0, 0.02, 0.5, 53)
+                var smh <- row_fill(sm_n, 17, 0, 0.02, 0.4, 43)
                 smh[0] = eps
                 smh[1] = qscale
                 smh[2] = float(par)
@@ -7527,25 +7337,13 @@ def test_vkd_dn_family(t0 : T?) {
                 let wnorm_off = dt_off + nvh
                 let sm_n = wnorm_off + ds
                 var convh : array<float>
-                var zh : array<float>
-                var sth : array<float>
-                var smh : array<float>
                 convh |> resize(npos * cd)
-                zh |> resize(npos * di)
-                sth |> resize(nvh * ds * ds)
-                smh |> resize(sm_n)
                 for (i in range(npos * cd)) {   //! unit-scale q/k rows, the conv stage's L2-normed shape: on unnormed rows the delta rule's recurrence overflows float range within the window at ds 128
                     convh[i] = (float((i * 19) % 79) * 0.025 - 0.9) * 0.15
                 }
-                for (i in range(npos * di)) {
-                    zh[i] = float((i * 29) % 61) * 0.05 - 1.5
-                }
-                for (i in range(nvh * ds * ds)) {
-                    sth[i] = float((i * 13) % 53) * 0.02 - 0.5
-                }
-                for (i in range(sm_n)) {
-                    smh[i] = float((i * 17) % 43) * 0.03 - 0.6
-                }
+                var zh <- row_fill(npos * di, 29, 0, 0.05, 1.5, 61)
+                var sth <- row_fill(nvh * ds * ds, 13, 0, 0.02, 0.5, 53)
+                var smh <- row_fill(sm_n, 17, 0, 0.03, 0.6, 43)
                 smh[0] = eps
                 for (i in range(nvh)) {
                     smh[a_off + i] = -0.4 - float(i) * 0.1
@@ -7864,18 +7662,9 @@ def private dn_fixture(nrows, nslots, ds : int; out_f32 : bool) : DnFixture {
     f.nblk = f.nvh * ds / 32
     f.orow = out_f32 ? f.nvh * ds : f.nblk * 8
     f.offs = fixed_array(f.beta_off, f.g_off, a_off, dt_off, taps_off, wnorm_off, f.hist_off, f.bstride)
-    f.projh |> resize(nrows * f.prow)
-    f.sth |> resize(nslots * f.st_n)
-    f.smh |> resize(f.sm_n)
-    for (i in range(nrows * f.prow)) {
-        f.projh[i] = float((i * 29) % 67) * 0.03 - 1.0
-    }
-    for (i in range(nslots * f.st_n)) {
-        f.sth[i] = float((i * 13) % 53) * 0.02 - 0.5
-    }
-    for (i in range(f.sm_n)) {
-        f.smh[i] = float((i * 17) % 43) * 0.02 - 0.4
-    }
+    f.projh <- row_fill(nrows * f.prow, 29, 0, 0.03, 1.0, 67)
+    f.sth <- row_fill(nslots * f.st_n, 13, 0, 0.02, 0.5, 53)
+    f.smh <- row_fill(f.sm_n, 17, 0, 0.02, 0.4, 43)
     f.smh[0] = f.eps
     f.smh[1] = f.qscale
     for (i in range(f.nvh)) {
@@ -8175,20 +7964,12 @@ def private dn_scan_cell(t : T?; tag : string; ds, nkh, nvh, npos : int) {
             let o_off = 64   // the o rows sit past a header the kernel must leave alone
             let o_n = o_off + npos * di
             var convh : array<float>
-            var sth : array<float>
-            var smh : array<float>
             convh |> resize(npos * cd)
-            sth |> resize(nvh * ds * ds)
-            smh |> resize(sm_n)
             for (i in range(npos * cd)) {   // unit-scale q/k rows keep the 512-step recurrence bounded
                 convh[i] = (float((i * 19) % 79) * 0.025 - 0.9) * 0.15
             }
-            for (i in range(nvh * ds * ds)) {
-                sth[i] = float((i * 13) % 53) * 0.02 - 0.5
-            }
-            for (i in range(sm_n)) {
-                smh[i] = float((i * 17) % 43) * 0.03 - 0.6
-            }
+            var sth <- row_fill(nvh * ds * ds, 13, 0, 0.02, 0.5, 53)
+            var smh <- row_fill(sm_n, 17, 0, 0.03, 0.6, 43)
             for (i in range(nvh)) {
                 smh[a_off + i] = -0.4 - float(i) * 0.1
             }
@@ -8530,18 +8311,10 @@ def test_vkd_kv16_writers(t0 : T?) {
             for (biased in fixed_array(false, true)) {
                 let npairs = (nh + nkvh) * half
                 let kpair0 = nh * half
-                var qh : array<float>
-                var kvh : array<float>
+                var qh <- row_fill(qd, 23, 0, 0.09, 3.0, 71)
+                var kvh <- row_fill(qd + 2 * kvd, 19, 0, 0.07, 2.9, 83)
                 var csh : array<float>
-                qh |> resize(qd)
-                kvh |> resize(qd + 2 * kvd)
                 csh |> resize(hs)
-                for (i in range(qd)) {
-                    qh[i] = float((i * 23) % 71) * 0.09 - 3.0
-                }
-                for (i in range(qd + 2 * kvd)) {
-                    kvh[i] = float((i * 19) % 83) * 0.07 - 2.9
-                }
                 for (i in range(half)) {
                     csh[i] = 0.3 + float(i % 9) * 0.07
                     csh[half + i] = 0.1 + float(i % 7) * 0.11
@@ -8625,21 +8398,9 @@ def test_vkd_kv16_writers(t0 : T?) {
                 let ppp = (nh + nkvh) * half
                 let kpair0 = nh * half
                 let mirn = layerbase + (pos0 + npos) * kvd
-                var q0h : array<float>
-                var kvh : array<float>
-                var csh : array<float>
-                q0h |> resize(npos * qd)
-                kvh |> resize(voff + npos * kvd)
-                csh |> resize(npos * hs)
-                for (i in range(npos * qd)) {
-                    q0h[i] = float((i * 31) % 67) * 0.05 - 1.6
-                }
-                for (i in range(voff + npos * kvd)) {
-                    kvh[i] = float((i * 23) % 71) * 0.04 - 1.5
-                }
-                for (i in range(npos * hs)) {
-                    csh[i] = float((i * 13) % 41) * 0.045 - 0.9
-                }
+                var q0h <- row_fill(npos * qd, 31, 0, 0.05, 1.6, 67)
+                var kvh <- row_fill(voff + npos * kvd, 23, 0, 0.04, 1.5, 71)
+                var csh <- row_fill(npos * hs, 13, 0, 0.045, 0.9, 41)
                 let q_bytes = int64(npos * qd) * 4l
                 let kv_bytes = int64(voff + npos * kvd) * 4l
                 let cs_bytes = int64(npos * hs) * 4l
@@ -8770,23 +8531,11 @@ def test_vkd_kv16_writers(t0 : T?) {
                 let krow = 192
                 let eps = 0.00001
                 let mirn2 = krow + nkvh * hs
-                var q0h : array<float>
-                var kvh : array<float>
-                var csh : array<float>
+                var q0h <- row_fill(qd, 31, 0, 0.05, 1.6, 67)
+                var kvh <- row_fill(qd + 2 * kvd, 23, 0, 0.04, 1.5, 71)
+                var csh <- row_fill(hs, 13, 0, 0.045, 0.9, 41)
                 var wnh : array<float>
-                q0h |> resize(qd)
-                kvh |> resize(qd + 2 * kvd)
-                csh |> resize(hs)
                 wnh |> resize(2 * hs)
-                for (i in range(qd)) {
-                    q0h[i] = float((i * 31) % 67) * 0.05 - 1.6
-                }
-                for (i in range(qd + 2 * kvd)) {
-                    kvh[i] = float((i * 23) % 71) * 0.04 - 1.5
-                }
-                for (i in range(hs)) {
-                    csh[i] = float((i * 13) % 41) * 0.045 - 0.9
-                }
                 for (i in range(2 * hs)) {
                     wnh[i] = 0.75 + float(i % 11) * 0.05
                 }
@@ -8891,15 +8640,11 @@ def test_vkd_kv16_readers(t0 : T?) {
                 let kvd = (nheads / kv_mul) * hs
                 let cnt = 300
                 let scale = 0.125
-                var qh : array<float>
+                var qh <- row_fill(nheads * hs, 41, 0, 0.05, 1.8, 73)
                 var kh : array<float>
                 var vh : array<float>
-                qh |> resize(nheads * hs)
                 kh |> resize(cnt * kvd)
                 vh |> resize(cnt * kvd)
-                for (i in range(nheads * hs)) {
-                    qh[i] = float((i * 41) % 73) * 0.05 - 1.8
-                }
                 for (i in range(cnt * kvd)) {
                     kh[i] = f16r(float((i * 17) % 97) * 0.03 - 1.4)
                     vh[i] = f16r(float((i * 53) % 89) * 0.04 - 1.7)
@@ -9923,18 +9668,15 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
         let eps = 1.0e-6
         var sidx : array<uint>
         var sw : array<float>
-        var rows : array<float>
-        var xs : array<float>
-        var sh : array<float>
+        var rows <- row_fill(nrows * n, 7, 0, 0.13, 5.5, 93)
+        var xs <- row_fill(npos * n, 11, 0, 0.1, 1.7, 37)
+        var sh <- row_fill(npos * n, 5, 0, 0.2, 3.0, 41)
         var wn : array<float>
         var lg : array<float>
         var sex : array<uint>
         var db : array<float>
         sidx |> resize(nrows)
         sw |> resize(nrows)
-        rows |> resize(nrows * n)
-        xs |> resize(npos * n)
-        sh |> resize(npos * n)
         wn |> resize(n)
         lg |> resize(npos * MR_NER)
         sex |> resize(nrows)
@@ -9947,13 +9689,6 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
         }
         for (i in range(dbn)) {
             db[i] = dbias ? (i < ne * n ? 9.0 : float((i * 19) % 23) * 0.25 - 2.75) : 0.0   //! the first layer's rows are a decoy
-        }
-        for (i in range(nrows * n)) {
-            rows[i] = float((i * 7) % 93) * 0.13 - 5.5
-        }
-        for (i in range(npos * n)) {
-            xs[i] = float((i * 11) % 37) * 0.1 - 1.7
-            sh[i] = float((i * 5) % 41) * 0.2 - 3.0
         }
         for (i in range(n)) {
             wn[i] = 0.5 + float(i % 7) * 0.125
@@ -10142,26 +9877,16 @@ def private moe_ar_comb_g4_arm(t : T?) {
         let ascale = 0.75
         var sidx : array<uint>
         var sw : array<float>
-        var rows : array<float>
-        var xs : array<float>
-        var sh : array<float>
+        var rows <- row_fill(nrows * n, 7, 0, 0.13, 5.5, 93)
+        var xs <- row_fill(npos * n, 11, 0, 0.1, 1.7, 37)
+        var sh <- row_fill(npos * n, 5, 0, 0.2, 3.0, 41)
         var wn : array<float>   //! four norm rows: the next norm, the dense post norm, the routed post norm, the layer's post norm
         sidx |> resize(nrows)
         sw |> resize(nrows)
-        rows |> resize(nrows * n)
-        xs |> resize(npos * n)
-        sh |> resize(npos * n)
         wn |> resize(4 * n)
         for (i in range(nrows)) {
             sidx[i] = uint((i * 7) % nrows)
             sw[i] = 0.125 + float(i % 5) * 0.25
-        }
-        for (i in range(nrows * n)) {
-            rows[i] = float((i * 7) % 93) * 0.13 - 5.5
-        }
-        for (i in range(npos * n)) {
-            xs[i] = float((i * 11) % 37) * 0.1 - 1.7
-            sh[i] = float((i * 5) % 41) * 0.2 - 3.0
         }
         for (i in range(4 * n)) {
             wn[i] = 0.5 + float((i * 3) % 7) * 0.125

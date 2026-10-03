@@ -43,6 +43,7 @@ require dasllama/dasllama_kqformat
 require daslib/typemacro_boost
 require _vk_probe_fixture   // hash_word, cool_f16_pair: the synthetic planes both probes build
 require ../tests/_vkd_oracles.das   // k4f16_gemm_oracle: the CPU reference the khrx baseline arm is checked against
+require ../tests/_compares.das
 
 let private MM_TILE = 128
 let private DISPATCHES = 16
@@ -662,21 +663,9 @@ def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measur
         let hist_off = wnorm_off + ds
         let sm_n = hist_off + 2 * cd * taps
         let nblk = di / 32
-        var projh : array<float>
-        var sth : array<float>
-        var smh : array<float>
-        projh |> resize(cd + di)
-        sth |> resize(nvh * ds * ds)
-        smh |> resize(sm_n)
-        for (i in range(length(projh))) {
-            projh[i] = float((i * 23) % 71) * 0.03 - 1.0
-        }
-        for (i in range(length(sth))) {
-            sth[i] = float((i * 13) % 53) * 0.02 - 0.5
-        }
-        for (i in range(sm_n)) {
-            smh[i] = float((i * 17) % 43) * 0.02 - 0.4
-        }
+        var projh <- row_fill(cd + di, 23, 0, 0.03, 1.0, 71)
+        var sth <- row_fill(nvh * ds * ds, 13, 0, 0.02, 0.5, 53)
+        var smh <- row_fill(sm_n, 17, 0, 0.02, 0.4, 43)
         for (i in range(nvh)) {
             smh[a_off + i] = -0.4 - float(i) * 0.1
         }
@@ -3167,16 +3156,14 @@ def private run_lastwg(dim : int) {   // nolint:STYLE038 — one linear measurem
     let wnd = make_device_buf(nb)
     var wh : array<float>
     var wnh : array<float>
-    var x0 : array<float>
+    var x0 <- row_fill(dim, 1, 0, 0.001, -0.5, 17)
     wh |> resize(dim * dim)
     wnh |> resize(dim)
-    x0 |> resize(dim)
     for (i in range(dim * dim)) {
         wh[i] = (float(hash_word(uint(i) + 3u) % 2001u) - 1000.0) * 0.00005 / float(dim) * 1152.0
     }
     for (i in range(dim)) {
         wnh[i] = 0.9 + 0.2 * float(i % 7) / 7.0
-        x0[i] = 0.001 * float(i % 17) + 0.5
     }
     unsafe {
         upload_region_at(wd, 0l, addr<uint8 const?>(wh[0]), w_bytes)
@@ -3277,11 +3264,7 @@ def private run_barrier_forms(dim : int) {
     let ad = make_device_buf(nb)
     let wnd = make_device_buf(nb)
     let yd = make_device_buf(nb)
-    var ones : array<float>
-    ones |> resize(dim)
-    for (i in range(dim)) {
-        ones[i] = 0.001 * float(i % 17) + 0.5
-    }
+    var ones <- row_fill(dim, 1, 0, 0.001, -0.5, 17)
     unsafe {
         upload_region_at(xd, 0l, addr<uint8 const?>(ones[0]), nb)
         upload_region_at(ad, 0l, addr<uint8 const?>(ones[0]), nb)
@@ -3363,11 +3346,7 @@ def private run_small_kernels(dim : int) {
     let yd = make_device_buf(nb)
     let xqd = make_device_buf(int64(dim))
     let xsd = make_device_buf(int64(dim / 32) * 4l)
-    var ones : array<float>
-    ones |> resize(dim)
-    for (i in range(dim)) {
-        ones[i] = 0.001 * float(i % 17) + 0.5
-    }
+    var ones <- row_fill(dim, 1, 0, 0.001, -0.5, 17)
     unsafe {
         upload_region_at(xd, 0l, addr<uint8 const?>(ones[0]), nb)
         upload_region_at(ad, 0l, addr<uint8 const?>(ones[0]), nb)
