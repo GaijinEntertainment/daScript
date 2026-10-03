@@ -2418,11 +2418,9 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
         gemv_enc(int(KqFmt.q8), raw, h, L.s_dnalpha, pcg, nvh)
     }
     rd_ts(raw, "d:ba")
-    var pcd = DnStepArgs(cd = uint(cd), kd = uint(g_rd.dn_kd), nkh = uint(g_rd.dn_nkh), ds = uint(g_rd.dn_ds),
-        dconv = uint(g_rd.dn_dconv), beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G),
-        taps_off = uint(DN_SM_TAPS), wnorm_off = uint(DN_SM_WNORM), a_off = uint(DN_SM_A),
-        dt_off = uint(DN_SM_DT), hist_off = uint(DN_SM_HIST),
-        eps = g_rd.eps, qscale = 1.0 / sqrt(float(g_rd.dn_ds)), out_f32 = kq_sb(L.fout) ? 1u : 0u, beta_row_stride = bstride)
+    var pcd = dn_step_args(cd, g_rd.dn_kd, g_rd.dn_nkh, g_rd.dn_ds, g_rd.dn_dconv, g_rd.eps)
+    pcd.out_f32 = kq_sb(L.fout) ? 1u : 0u
+    pcd.beta_row_stride = bstride
     if (seq) {
         for (i in range64(nrows)) {
             pcd.row0 = uint(i)
@@ -4040,6 +4038,14 @@ def private pin_stack_region(si : int; wo : int64; xnb : int64 = 0l) {
 // create one layer's step chain: per-layer state/smalls buffers, the three sets, the once-filled
 // GEMV metas (dn stacks never serve FFN GEMVs, so their host metas are ours to pin), and the
 // warm cmd — per token only acts/β/γ refresh and the cmd resubmits as-is.
+def private dn_step_args(cd, kd, nkh, ds, dconv : int64; eps : float) : DnStepArgs {
+    return DnStepArgs(cd = uint(cd), kd = uint(kd), nkh = uint(nkh), ds = uint(ds),
+        dconv = uint(dconv), beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G),
+        taps_off = uint(DN_SM_TAPS), wnorm_off = uint(DN_SM_WNORM), a_off = uint(DN_SM_A),
+        dt_off = uint(DN_SM_DT), hist_off = uint(DN_SM_HIST),
+        eps = eps, qscale = 1.0 / sqrt(float(ds)))
+}
+
 [cold_path]
 def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
                           dim, cd, kd, di, nvh, nkh, ds, taps : int64; eps : float) {
@@ -4077,11 +4083,7 @@ def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
         gemv_enc(fqkv, raw, h, qset, pcqkv, cd)
         var pcz = GemvArgs(n = uint(dim), d = uint(di), nreg = 1u, ybase = uint(cd))
         gemv_enc(fz, raw, h, st.z_set, pcz, di)
-        var pcd = DnStepArgs(cd = uint(cd), kd = uint(kd), nkh = uint(nkh), ds = uint(ds),
-            dconv = uint(taps + 1l), beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G),
-            taps_off = uint(DN_SM_TAPS), wnorm_off = uint(DN_SM_WNORM), a_off = uint(DN_SM_A),
-            dt_off = uint(DN_SM_DT), hist_off = uint(DN_SM_HIST),
-            eps = eps, qscale = 1.0 / sqrt(float(ds)))
+        var pcd = dn_step_args(cd, kd, nkh, ds, taps + 1l, eps)
         enc_dn_step_cls(raw, h, st.fused_set, pcd, nvh)
         var pco = GemvArgs(n = uint(di), d = uint(dim), nreg = 1u, ybase = 0u)
         gemv_enc(fo, raw, h, st.out_set, pco, dim)
