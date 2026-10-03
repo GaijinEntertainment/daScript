@@ -353,9 +353,9 @@ def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
     //! the fused form: gate and up q8 planes over the Q8_0 x, the hidden row's Q8_0 quants out (DASLLAMA_VK_FUSE=0 keeps the three dispatches)
     L.gu_on = rd_gu_fits(f1, f3, f2) && vk_fuse_on() && (vk_fuse_bisect_bits() & FUSE_BX_GU) == 0l
     if (L.gu_on) {
-        verify(ensure_q8_gemv_gu_cls(), "vk decode: the fused gate-up class rail must engage on a live device")
+        verify(ensure_q8_gemv_gu_n1_cls(), "vk decode: the fused gate-up class rail must engage on a live device")
         let gu = rd_gu_binds(L)
-        L.s_gu = set_q8_gemv_gu_cls(gu.bufs, gu.sizes, gu.bits)
+        L.s_gu = set_q8_gemv_gu_n1_cls(gu.bufs, gu.sizes, gu.bits)
     }
     // down GEMV -> ffnout
     L.s_down = gemv_planes_set(f2, p2, L.m_down.buf, META_BYTES, 0u, g_gpu.hq_dev, g_gpu.hs_dev, hid * nb, (hid / 32l) * 4l * nb, VHZ_HQ, g_rd.ffnout_dev, dim * 4l * nb, VHZ_FFO)
@@ -463,7 +463,7 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
         let dt = g_rd.kv_dt
         let kv16 = rd_kv16()
         let kvq = rd_kv_block_codec()
-        verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq_b() && ensure_q8_actrq_cls() && ensure_q8_gemv_gu_cls()
+        verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq_b() && ensure_q8_actrq_cls() && ensure_q8_gemv_gu_n1_cls()
             && (kv16 ? ensure_rope_kv_f16_cls() : ensure_rope_kv_cls())
             && (kvq || da_attn_stamp_ensure(dt, false, false))
             && (kvq || g_rd.has_sinks || !da_slab_is_g2(L.kv_mul) || da_attn_stamp_ensure(dt, false, true))
@@ -2504,8 +2504,8 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     let nr = uint(nrows)
     if (L.gu_on && (nrow_bx & (NROW_BX_NCOL1 | NROW_BX_ACTRQ)) == 0) {
         if (one) {
-            var pcgu = GuArgs(n = uint(dim), d = uint(hid), gblk = uint(arena_local_blk(L.b1)), ublk = uint(arena_local_blk(L.b3)), act = act)
-            enc_q8_gemv_gu_cls(raw, h, L.s_gu, pcgu, hid / 32l)
+            var pcgu = GuNArgs(n = uint(dim), d = uint(hid), gblk = uint(arena_local_blk(L.b1)), ublk = uint(arena_local_blk(L.b3)), act = act, ncols = 1u)
+            enc_q8_gemv_gu_n1_cls(raw, h, L.s_gu, pcgu, hid / 32l)
         } else {
             var pcgu = GuNArgs(n = uint(dim), d = uint(hid), gblk = uint(arena_local_blk(L.b1)), ublk = uint(arena_local_blk(L.b3)), act = act, ncols = nr)
             q8_gemv_gu_n_enc(raw, h, L.s_gu_n, pcgu, hid / 32l)

@@ -4944,12 +4944,12 @@ def private q8_gemv_gu_run(t; n, hid : int; gelu : bool) {
         upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[0]), xs_bytes)
         nan_sentinel_upload(oqd, oq_bytes)
         nan_sentinel_upload(osd, os_bytes)
-        var s_cls = set_q8_gemv_gu_cls(fixed_array(gqd, gsd, uqd, usd, xqd, xsd, oqd, osd),
+        var s_cls = set_q8_gemv_gu_n1_cls(fixed_array(gqd, gsd, uqd, usd, xqd, xsd, oqd, osd),
             fixed_array(wq_bytes, ws_bytes, wq_bytes, ws_bytes, xq_bytes, xs_bytes, oq_bytes, os_bytes),
             fixed_array(1u, 2u, 4u, 8u, 16u, 32u, 64u, 64u))
-        var pc = GuArgs(n = uint(n), d = uint(hid), gblk = 0u, ublk = 0u, act = gelu ? ACT_GELU : ACT_SILU)
+        var pc = GuNArgs(n = uint(n), d = uint(hid), gblk = 0u, ublk = 0u, act = gelu ? ACT_GELU : ACT_SILU, ncols = 1u)
         cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-            enc_q8_gemv_gu_cls(raw2, h2, s_cls, pc, int64(nblk_out))
+            enc_q8_gemv_gu_n1_cls(raw2, h2, s_cls, pc, int64(nblk_out))
             cmd_copy_planes(raw2, h2, fixed_array(oqd, osd), host, fixed_array(oq_bytes, os_bytes), 64u)
         }
     }
@@ -4998,7 +4998,7 @@ def private q8_gemv_gu_run(t; n, hid : int; gelu : bool) {
 def test_vkd_q8_gemv_gu(t0 : T?) {
     t0 |> run("fused q8 gate + up GEMV + act + Q8_0 requant == the CPU oracle (gelu and silu; 36 and 16 blocks deep)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_q8_gemv_gu_cls()) {
+            if (!ensure_q8_gemv_gu_n1_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }
@@ -5702,10 +5702,10 @@ def private q8_gemv_gu_n_run(t; n, hid, ncols : int; act : uint) {
                 upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[c * nb * 8]), xq_bytes)
                 upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[c * nb]), xs_bytes)
             }
-            var s_one = set_q8_gemv_gu_cls(fixed_array(gqd, gsd, uqd, usd, xqd, xsd, o.bufs[0], o.bufs[1]),
+            var s_one = set_q8_gemv_gu_n1_cls(fixed_array(gqd, gsd, uqd, usd, xqd, xsd, o.bufs[0], o.bufs[1]),
                 fixed_array(wq_bytes, ws_bytes, wq_bytes, ws_bytes, xq_bytes, xs_bytes, o.bytes[0], o.bytes[1]), gbits)
-            var pc1 = GuArgs(n = uint(n), d = uint(hid), gblk = 0u, ublk = 0u, act = act)
-            enc_q8_gemv_gu_cls(raw, h, s_one, pc1, int64(nblk_out))
+            var pc1 = GuNArgs(n = uint(n), d = uint(hid), gblk = 0u, ublk = 0u, act = act, ncols = 1u)
+            enc_q8_gemv_gu_n1_cls(raw, h, s_one, pc1, int64(nblk_out))
         },
         $(nc : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
             var s_n = q8_gemv_gu_n_set(fixed_array(gqd, gsd, uqd, usd, xqd_n, xsd_n, o.bufs[0], o.bufs[1]),
@@ -5727,7 +5727,7 @@ def private q8_gemv_gu_n_run(t; n, hid, ncols : int; act : uint) {
 def test_vkd_q8_gemv_gu_n(t0 : T?) {
     t0 |> run("fused q8 gate-up GEMV's N-column stamps == the one-row kernel a column at a time, bit for bit; the one-row rows == the CPU chain") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!(ensure_q8_gemv_gu_cls() && q8_gemv_gu_n_ensure(8l))) {
+            if (!(ensure_q8_gemv_gu_n1_cls() && q8_gemv_gu_n_ensure(8l))) {
                 t |> skip("no Vulkan device")
                 return
             }
