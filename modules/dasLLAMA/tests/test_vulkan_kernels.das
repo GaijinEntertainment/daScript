@@ -94,11 +94,7 @@ struct TileFixture {
 def private tile_fixture(n, blk_k : int; var wqh, wsh : array<uint>; xf_mul, xf_add : uint) : TileFixture {
     let rows = TILE_CELL_ROWS0 + TILE_CELL_ROWS1
     let xf_words = (rows + TILE_SLACK_ROWS) * n / 2
-    var xfh : array<uint>
-    xfh |> resize(xf_words)
-    for (i in range(xf_words)) {
-        xfh[i] = ws_word(uint(i) * xf_mul + xf_add)   // f16 activation pairs
-    }
+    var xfh <- ws_plane(xf_words, xf_mul, xf_add)   // f16 activation pairs
     var f = TileFixture(n = n, blk_k = blk_k, rows = rows, wq_bytes = long_length(wqh) * 4l, ws_bytes = long_length(wsh) * 4l,
         xf_bytes = int64(xf_words) * 4l, y_bytes = int64(rows * TILE_CELL_D) * 4l)
     f.wqh <- wqh
@@ -126,14 +122,10 @@ def private tile_fixture_upload(var f : TileFixture) {
 def private q8_plane(totblk : int; wq_mul, wq_add, ws_mul, ws_add : uint; var wqh, wsh : array<uint>) {
     let qwords = totblk * int(Q8_BLOCK_ELEMS / 4l)   //! a byte an element: q8 has no `kq_desc` stride row (`kq_qsb` panics on it by design)
     let swords = (totblk * 2 + 3) / 4   //! an f16 scale a block
-    wqh |> resize(qwords)
-    wsh |> resize(swords)
-    for (i in range(qwords)) {
-        wqh[i] = hash_word(uint(i) * wq_mul + wq_add)
-    }
-    for (i in range(swords)) {
-        wsh[i] = ws_word(uint(i) * ws_mul + ws_add)
-    }
+    delete wqh
+    delete wsh
+    wqh <- hashed_words(qwords, wq_mul, wq_add)
+    wsh <- ws_plane(swords, ws_mul, ws_add)
 }
 
 //! the tile cells' q8 fmt-0 host planes from two seeds, K = n over both weight planes
@@ -250,10 +242,8 @@ def private fmt_tile_rows() : array<FmtTile> {
 def private fmt_tile_planes(row : FmtTile; var wqh, wsh : array<uint>) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let units = 2 * TILE_CELL_D * (row.n / row.blk_k)
-        wqh |> resize(units * row.wq_words)
-        for (i in range(units * row.wq_words)) {
-            wqh[i] = hash_word(uint(i) + row.wq_seed)
-        }
+        delete wqh
+        wqh <- hashed_words(units * row.wq_words, 1u, row.wq_seed)
         if (row.form == ScaleForm.d_dmin_hash || row.form == ScaleForm.d_pairs || row.form == ScaleForm.hash_d) {
             wsh |> resize(units * 5)
         } elif (row.form == ScaleForm.d_hi_hash) {
@@ -378,19 +368,10 @@ struct private Sdot4Planes {
 //! their scales 0.375 + (i % 9) / 16 times `xs_mul`
 def private q8_sdot4_planes(units, wq_words, ws_words : int; ws_bytes : int64; xunits, xq_words : int; xs_mul : float) : Sdot4Planes {
     var p = Sdot4Planes(ws_bytes = ws_bytes)
-    p.wqh |> resize(units * wq_words)
-    p.wsh |> resize(ws_words)
-    p.xqh |> resize(xunits * xq_words)
+    p.wqh <- hashed_words(units * wq_words, 1u, 3u)
+    p.wsh <- ws_plane(ws_words, 1u, 7u)
+    p.xqh <- hashed_words(xunits * xq_words, 13u, 1u)
     p.xsh |> resize(xunits)
-    for (i in range(units * wq_words)) {
-        p.wqh[i] = hash_word(uint(i) + 3u)
-    }
-    for (i in range(ws_words)) {
-        p.wsh[i] = ws_word(uint(i) + 7u)
-    }
-    for (i in range(xunits * xq_words)) {
-        p.xqh[i] = hash_word(uint(i) * 13u + 1u)
-    }
     for (i in range(xunits)) {
         p.xsh[i] = (0.375 + float(i % 9) * 0.0625) * xs_mul
     }
@@ -1495,6 +1476,11 @@ def private ws_word(i : uint) : uint {
     return safe_half(i * 7u + 3u) | (safe_half(i * 3u + 1u) << 16u)
 }
 
+//! `n` scale words `ws_word(i * mul + add)`: two finite halves a word
+def private ws_plane(n : int; mul, add : uint) : array<uint> {
+    return <- [for (i in range(n)); ws_word(uint(i) * mul + add)]
+}
+
 // ===== CPU oracles =====
 // The reference side of every arm: plain sequential math (the Metal kernel-unit pattern), or the
 // class's own per-block methods driven lane-free. Device subgroup/tile folds reassociate float
@@ -1573,21 +1559,8 @@ struct private GemvFix {
 //! `hash_word(i * xq_mul + xq_add)`, its scales `xs0 + (i % xs_mod) * xs_step`
 def private gemv_fix(nreg, d, units, wq_words : int; wq_seed : uint; var wsh : array<uint>; xunits, xq_words : int; xq_mul, xq_add : uint;
                      xs0, xs_step : float; xs_mod : int) : GemvFix {
-    var f : GemvFix
-    let wq_n = nreg * d * units * wq_words
-    f.wqh |> resize(wq_n)
-    for (i in range(wq_n)) {
-        f.wqh[i] = hash_word(uint(i) + wq_seed)
-    }
-    f.wsh <- wsh
-    f.xqh |> resize(xunits * xq_words)
-    for (i in range(xunits * xq_words)) {
-        f.xqh[i] = hash_word(uint(i) * xq_mul + xq_add)
-    }
-    f.xsh |> resize(xunits)
-    for (i in range(xunits)) {
-        f.xsh[i] = xs0 + float(i % xs_mod) * xs_step
-    }
+    var f <- GemvFix(wqh <- hashed_words(nreg * d * units * wq_words, 1u, wq_seed), wsh <- wsh,
+        xqh <- hashed_words(xunits * xq_words, xq_mul, xq_add), xsh <- row_fill(xunits, 1, 0, xs_step, -xs0, xs_mod))
     f.regs |> resize(nreg * 2)
     for (r in range(nreg)) {
         f.regs[r * 2] = uint(r * d * units)
@@ -1695,11 +1668,7 @@ def test_vkd_kq_gemv_family(t0 : T?) {
             for (fmt in KQ_LEAF_FMTS) {
                 let sb_words = int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l)
                 let ws_words_n = rows * nsb * int(kq_dev_ssb_i(fmt) / 4l)
-                var wsh : array<uint>
-                wsh |> resize(ws_words_n)
-                for (i in range(ws_words_n)) {
-                    wsh[i] = ws_word(uint(i) + uint(fmt) * 13u)
-                }
+                var wsh <- ws_plane(ws_words_n, 1u, uint(fmt) * 13u)
                 var f <- gemv_fix(nreg, d, nsb, sb_words, uint(fmt) * 77777u, wsh, nsb, 64, 31u, 5u, 0.5, 0.25, 7)
                 var y_ref <- kq_gemv_oracle(fmt, f.wqh, f.wsh, f.xqh, f.xsh, f.regs, nsb * 256, d, nreg)
                 with_cell_planes() $(var cp : CellPlanes) {
@@ -1761,26 +1730,10 @@ def test_vkd_kq_gemv_k4_gu(t0 : T?) {
             let nwsb = 2 * rows * nsb   // the gate stack's rows, then the up stack's
             let wq_words = nwsb * 32
             let ws_words_n = nwsb * int(kq_dev_ssb_i(fmt) / 4l)
-            var wqh : array<uint>
-            var wsh : array<uint>
-            var xqh : array<uint>
-            var xsh : array<float>
-            wqh |> resize(wq_words)
-            wsh |> resize(ws_words_n)
-            xqh |> resize(nsb * 64)
-            xsh |> resize(nsb)
-            for (i in range(wq_words)) {
-                wqh[i] = hash_word(uint(i) * 7u + 4441u)
-            }
-            for (i in range(ws_words_n)) {
-                wsh[i] = ws_word(uint(i) * 3u + 91u)
-            }
-            for (i in range(nsb * 64)) {
-                xqh[i] = hash_word(uint(i) * 23u + 17u)
-            }
-            for (i in range(nsb)) {
-                xsh[i] = 0.5 + float(i % 5) * 0.25
-            }
+            var wqh <- hashed_words(wq_words, 7u, 4441u)
+            var wsh <- ws_plane(ws_words_n, 3u, 91u)
+            var xqh <- hashed_words(nsb * 64, 23u, 17u)
+            var xsh <- row_fill(nsb, 1, 0, 0.25, -0.5, 5)
             var regs : array<uint>
             var regs3 : array<uint>
             regs |> resize(nreg * 2)
@@ -2442,22 +2395,10 @@ def test_vkd_kq_batch_family(t0 : T?) {
                 let sb_words = int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l)
                 let wswords = totsb * int(kq_dev_ssb_i(fmt) / 4l)
                 var p = Sdot4Planes(ws_bytes = int64(wswords) * 4l)
-                p.wqh |> resize(totsb * sb_words)
-                p.wsh |> resize(wswords)
-                p.xqh |> resize(rows * nsb * 64)
-                p.xsh |> resize(rows * nsb)
-                for (i in range(totsb * sb_words)) {
-                    p.wqh[i] = hash_word(uint(i) + uint(fmt) * 131u)
-                }
-                for (i in range(wswords)) {
-                    p.wsh[i] = ws_word(uint(i) + uint(fmt) * 17u)
-                }
-                for (i in range(rows * nsb * 64)) {
-                    p.xqh[i] = hash_word(uint(i) * 7u + 2u)
-                }
-                for (i in range(rows * nsb)) {
-                    p.xsh[i] = 0.3 + float(i % 11) * 0.05
-                }
+                p.wqh <- hashed_words(totsb * sb_words, 1u, uint(fmt) * 131u)
+                p.wsh <- ws_plane(wswords, 1u, uint(fmt) * 17u)
+                p.xqh <- hashed_words(rows * nsb * 64, 7u, 2u)
+                p.xsh <- row_fill(rows * nsb, 1, 0, 0.05, -0.3, 11)
                 //! one family set serves every format; region 1's weights follow region 0's stack in superblock units
                 var r <- sdot4_tile_run(n, d, cnt0, cnt1, 32, d * nsb, p) $(bufs : uint64[6]; sizes : int64[6]; raw2 : VkCommandBuffer; var h2 : VkHaz; wgs : int64) {
                     var sc = set_kq_batch_cls(bufs, sizes, fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
@@ -2948,21 +2889,9 @@ def test_vkd_cm2l_split(t0 : T?) {
             let ttiles = (rows + 255) / 256
             let wgs = wtiles * ttiles * nsplit
             let totblk = d * nbb
-            var wqh : array<uint>
-            var wsh : array<uint>
-            var xfh : array<uint>
-            wqh |> resize(totblk * 8)
-            wsh |> resize((totblk + 1) / 2)
-            xfh |> resize(rows * n / 2)
-            for (i in range(totblk * 8)) {
-                wqh[i] = hash_word(uint(i) + 43u)     // arbitrary bytes — s8 quants
-            }
-            for (i in range((totblk + 1) / 2)) {
-                wsh[i] = ws_word(uint(i) + 337u)      // f16 scale pairs, finite halves
-            }
-            for (i in range(rows * n / 2)) {
-                xfh[i] = ws_word(uint(i) * 7u + 3u)   // f16 activation pairs
-            }
+            var wqh <- hashed_words(totblk * 8, 1u, 43u)     // arbitrary bytes — s8 quants
+            var wsh <- ws_plane((totblk + 1) / 2, 1u, 337u)   // f16 scale pairs, finite halves
+            var xfh <- ws_plane(rows * n / 2, 7u, 3u)   // f16 activation pairs
             let wq_bytes = int64(totblk) * 32l
             let ws_bytes = int64(length(wsh)) * 4l
             let xf_bytes = int64(rows * n) * 2l
@@ -4614,28 +4543,16 @@ def private mx4_gemv_gu_run(t : T?; d, nreg : int; bias : bool) {
         let nblk = rows / 32
         let ne = 6
         let totblk = 2 * rows * nb   // the gate stack's blocks, then the up stack's
-        var wqh : array<uint>
-        var xqh : array<uint>
-        var xsh : array<float>
+        var wqh <- hashed_words(totblk * 4, 5u, 977u)
+        var xqh <- hashed_words(nb * 8, 29u, 11u)
+        var xsh <- row_fill(nb, 1, 0, 0.125, -0.25, 5)
         var gb : array<float>
         var ub : array<float>
         var rex : array<uint>
-        wqh |> resize(totblk * 4)
-        xqh |> resize(nb * 8)
-        xsh |> resize(nb)
         gb |> resize(ne * d)
         ub |> resize(ne * d)
         rex |> resize(nreg)
-        for (i in range(totblk * 4)) {
-            wqh[i] = hash_word(uint(i) * 5u + 977u)
-        }
         var wsh <- mx4_scale_words(totblk)
-        for (i in range(nb * 8)) {
-            xqh[i] = hash_word(uint(i) * 29u + 11u)
-        }
-        for (i in range(nb)) {
-            xsh[i] = 0.25 + float(i % 5) * 0.125
-        }
         for (i in range(ne * d)) {   //! biases of the dots' own magnitude, some past the 7 clamp
             gb[i] = bias ? float((i * 13) % 31) * 0.5 - 7.5 : 0.0
             ub[i] = bias ? float((i * 17) % 29) * 0.6 - 8.4 : 0.0
@@ -4811,16 +4728,8 @@ def private q8_gemv_gu_run(t; n, hid : int; gelu : bool) {
     var gqh, gsh, uqh, ush : array<uint>
     q8_plane(totblk, 1u, 71u, 1u, 3u, gqh, gsh)
     q8_plane(totblk, 3u, 5u, 7u, 11u, uqh, ush)
-    var xqh : array<uint>
-    var xsh : array<float>
-    xqh |> resize(nb * 8)
-    xsh |> resize(nb)
-    for (i in range(nb * 8)) {
-        xqh[i] = hash_word(uint(i) * 17u + 9u)
-    }
-    for (i in range(nb)) {
-        xsh[i] = 0.25 + float(i % 5) * 0.125
-    }
+    var xqh <- hashed_words(nb * 8, 17u, 9u)
+    var xsh <- row_fill(nb, 1, 0, 0.125, -0.25, 5)
     let xq_bytes = int64(nb) * 32l
     let xs_bytes = int64(nb) * 4l
     let oq_bytes = int64(hid)
@@ -5019,25 +4928,9 @@ struct GemvArFixture {
 def private q8_gemv_ar_fixture(n, d : int) : GemvArFixture {
     let nb = n / 32
     let totblk = d * nb
-    var fx : GemvArFixture
-    fx.wqh |> resize(totblk * 8)
-    fx.wsh |> resize(totblk / 2 + 1)
-    fx.xqh |> resize(nb * 8)
-    fx.xsh |> resize(nb)
-    fx.xres <- row_fill(d, 43, 0, 0.4, 19.0, 97)
+    var fx <- GemvArFixture(wqh <- hashed_words(totblk * 8, 3u, 29u), wsh <- ws_plane(totblk / 2 + 1, 5u, 1u),
+        xqh <- hashed_words(nb * 8, 13u, 7u), xsh <- row_fill(nb, 1, 0, 0.1, -0.2, 7), xres <- row_fill(d, 43, 0, 0.4, 19.0, 97))
     fx.wnh |> resize(3 * d)
-    for (i in range(totblk * 8)) {
-        fx.wqh[i] = hash_word(uint(i) * 3u + 29u)
-    }
-    for (i in range(totblk / 2 + 1)) {
-        fx.wsh[i] = ws_word(uint(i) * 5u + 1u)
-    }
-    for (i in range(nb * 8)) {
-        fx.xqh[i] = hash_word(uint(i) * 13u + 7u)
-    }
-    for (i in range(nb)) {
-        fx.xsh[i] = 0.2 + float(i % 7) * 0.1
-    }
     for (i in range(2 * d)) {
         fx.wnh[i] = 0.8 + float(i % 9) * 0.05
     }
@@ -5555,16 +5448,8 @@ def private q8_gemv_gu_n_run(t; n, hid, ncols : int; act : uint) {
     var gqh, gsh, uqh, ush : array<uint>
     q8_plane(totblk, 1u, 71u, 1u, 3u, gqh, gsh)
     q8_plane(totblk, 3u, 5u, 7u, 11u, uqh, ush)
-    var xqh : array<uint>
-    var xsh : array<float>
-    xqh |> resize(nb * 8 * ncol_max)
-    xsh |> resize(nb * ncol_max)
-    for (i in range(nb * 8 * ncol_max)) {
-        xqh[i] = hash_word(uint(i) * 17u + 9u)
-    }
-    for (i in range(nb * ncol_max)) {
-        xsh[i] = 0.25 + float(i % 5) * 0.125
-    }
+    var xqh <- hashed_words(nb * 8 * ncol_max, 17u, 9u)
+    var xsh <- row_fill(nb * ncol_max, 1, 0, 0.125, -0.25, 5)
     let gqd = make_device_buf(wq_bytes)
     let gsd = make_device_buf(ws_bytes)
     let uqd = make_device_buf(wq_bytes)
@@ -5771,27 +5656,11 @@ def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
         if (q8) {
             q8_plane(d * xblk, 1u, uint(fmt) * 77777u, 1u, uint(fmt) * 13u, wqh, wsh)
         } else {
-            let wq_words = d * xblk * int(kq_qsb(f) / 4l)
-            let ws_words = d * xblk * int(kq_dev_ssb(f) / 4l)
-            wqh |> resize(wq_words)
-            wsh |> resize(ws_words)
-            for (i in range(wq_words)) {
-                wqh[i] = hash_word(uint(i) + uint(fmt) * 77777u)
-            }
-            for (i in range(ws_words)) {
-                wsh[i] = ws_word(uint(i) + uint(fmt) * 13u)
-            }
+            wqh |> push_from(hashed_words(d * xblk * int(kq_qsb(f) / 4l), 1u, uint(fmt) * 77777u))
+            wsh |> push_from(ws_plane(d * xblk * int(kq_dev_ssb(f) / 4l), 1u, uint(fmt) * 13u))
         }
-        var xqh : array<uint>
-        var xsh : array<float>
-        xqh |> resize(xq_col * ncol_max)
-        xsh |> resize(xblk * ncol_max)
-        for (i in range(xq_col * ncol_max)) {
-            xqh[i] = hash_word(uint(i) * 31u + 5u)
-        }
-        for (i in range(xblk * ncol_max)) {
-            xsh[i] = 0.5 + float(i % 7) * 0.25
-        }
+        var xqh <- hashed_words(xq_col * ncol_max, 31u, 5u)
+        var xsh <- row_fill(xblk * ncol_max, 1, 0, 0.25, -0.5, 7)
         let wq_bytes = long_length(wqh) * 4l
         let ws_bytes = long_length(wsh) * 4l
         let xq_bytes = int64(xq_col * ncol_max) * 4l
@@ -7876,18 +7745,10 @@ def private dn_ba_cell(t : T?; tag : string; dim, nvh, npos, woff : int; poison_
         let ob_b = 16
         let ob_g = ob_b + npos * ostride + 8
         let out_n = ob_g + npos * ostride
-        var wh : array<float>
-        var xh : array<float>
+        var wh <- hash_fill(woff + ne * dim, 0u, 1000u, 500.0, 1.0)
+        var xh <- hash_fill(npos * dim, 77777u, 1000u, 500.0, 1.0)
         var want : array<float>
-        wh |> resize(woff + ne * dim)
-        xh |> resize(npos * dim)
         want |> resize(out_n)
-        for (i in range(length(wh))) {
-            wh[i] = float(hash_word(uint(i)) % 1000u) / 500.0 - 1.0
-        }
-        for (i in range(length(xh))) {
-            xh[i] = float(hash_word(uint(i) + 77777u) % 1000u) / 500.0 - 1.0
-        }
         var wh16 <- pack_f16(wh)   // the device keeps the rows f16: the oracle dots the rounded weights
         for (p in range(npos)) {
             for (e in range(ne)) {
@@ -8150,18 +8011,10 @@ def test_vkd_router_gemv_f16(t0 : T?) {
             let woff = ne * dim   // the second layer's alpha rows
             let obase = 16
             let out_n = obase + ne + 8
-            var wh : array<float>
-            var xh : array<float>
+            var wh <- hash_fill(woff + ne * dim, 4242u, 1000u, 500.0, 1.0)
+            var xh <- hash_fill(dim, 99u, 1000u, 500.0, 1.0)
             var want : array<float>
-            wh |> resize(woff + ne * dim)
-            xh |> resize(dim)
             want |> resize(out_n)
-            for (i in range(length(wh))) {
-                wh[i] = float(hash_word(uint(i) + 4242u) % 1000u) / 500.0 - 1.0
-            }
-            for (i in range(dim)) {
-                xh[i] = float(hash_word(uint(i) + 99u) % 1000u) / 500.0 - 1.0
-            }
             var wh16 <- pack_f16(wh)
             for (e in range(ne)) {
                 var acc = 0.0
@@ -8221,11 +8074,7 @@ def test_vkd_router_gemv_f16(t0 : T?) {
             t |> success(bad2 == 0 && gap == 0, "router_gemv_f16 two bases: {bad2} of {ne} outputs off the CPU dot, {gap} of 4 gap words written")
             //! the norm-folded form: every expert row's dot over x under the norm row at nwoff, scaled by the row's weightless rms
             let nwoff = 64
-            var wnh : array<float>
-            wnh |> resize(nwoff + dim)
-            for (i in range(length(wnh))) {
-                wnh[i] = float(hash_word(uint(i) + 777u) % 1000u) / 1000.0 + 0.5
-            }
+            var wnh <- hash_fill(nwoff + dim, 777u, 1000u, 1000.0, -0.5)
             let eps = 1.0e-6
             var ssn = 0.0
             for (k in range(dim)) {
@@ -8749,15 +8598,11 @@ def test_vkd_emb_gather_pair(t0 : T?) {
             let scale = 1.25
             let wblk0 = 3              // the plane sits 3 blocks into its slab - the serving shape, never block 0
             let totblk = wblk0 + vocab * nbb
-            var wqh : array<uint>
+            var wqh <- hashed_words(totblk * 8, 1u, 5u)
             var wsh16 : array<float16>
             var idsh : array<uint>
-            wqh |> resize(totblk * 8)
             wsh16 |> resize(totblk)
             idsh |> resize(npos)
-            for (i in range(totblk * 8)) {
-                wqh[i] = hash_word(uint(i) + 5u)
-            }
             for (i in range(totblk)) {
                 wsh16[i] = float16(0.0625 + float(i % 7) * 0.03125)
             }
@@ -8851,24 +8696,19 @@ def test_vkd_hot_combine(t0 : T?) {
             let n = 300   //! past one workgroup's 256 threads: the strided loop's second trip
             let k = 5
             let nhit = 3
-            var miss : array<float>
+            var miss <- hash_steps(n, 71u)
             var w : array<float>
-            var down : array<float>
+            var down <- hash_steps(k * n, 83u)
             var ident1 : array<uint>
-            miss |> resize(n)
             w |> resize(k)
-            down |> resize(k * n)
             ident1 |> resize(k)
-            for (i in range(n)) {
-                miss[i] = float(int(hash_word(uint(i) + 71u) % 2001u)) * 0.001 - 1.0
-            }
             for (j in range(k)) {
                 w[j] = j < nhit ? 0.05 + float(j) * 0.07 : 0.0
                 ident1[j] = uint(j + 1)
             }
             let nan = unsafe(reinterpret<float>(0x7FC00000u))
-            for (i in range(k * n)) {
-                down[i] = i < nhit * n ? float(int(hash_word(uint(i) + 83u) % 2001u)) * 0.001 - 1.0 : nan   // a miss's row is stale: no hit chain wrote it
+            for (i in range(nhit * n, k * n)) {
+                down[i] = nan   // a miss's row is stale: no hit chain wrote it
             }
             let x_bytes = int64(n) * 4l
             let w_bytes = int64(k) * 4l
@@ -8946,25 +8786,15 @@ def test_vkd_dec_combine_pair(t0 : T?) {
             let k = 5
             let ngate = 8
             let gidx = 6
-            var xin : array<float>
+            var xin <- hash_steps(n, 11u)
             var w : array<float>
-            var down : array<float>
-            var sh : array<float>
+            var down <- hash_steps(k * n, 37u)
+            var sh <- hash_steps(n, 23u)
             var gate : array<float>
-            xin |> resize(n)
             w |> resize(k)
-            down |> resize(k * n)
-            sh |> resize(n)
             gate |> resize(ngate)
-            for (i in range(n)) {
-                xin[i] = float(int(hash_word(uint(i) + 11u) % 2001u)) * 0.001 - 1.0
-                sh[i] = float(int(hash_word(uint(i) + 23u) % 2001u)) * 0.001 - 1.0
-            }
             for (j in range(k)) {
                 w[j] = 0.05 + float(j) * 0.07
-            }
-            for (i in range(k * n)) {
-                down[i] = float(int(hash_word(uint(i) + 37u) % 2001u)) * 0.001 - 1.0
             }
             for (i in range(ngate)) {
                 gate[i] = float(i) * 0.5 - 2.0   // gate[gidx] = 1.0: a sigmoid off 0.5, so an ungated arm reads apart
@@ -10219,19 +10049,9 @@ def private router_cols_arm(t : T?; ncols : int; norm_on, f16 : bool) {
         let ne = 24
         let obase = 8
         let ncol_max = 8
-        var wh, xh, nh : array<float>
-        wh |> resize(ne * dim)
-        xh |> resize(ncol_max * dim)
-        nh |> resize(dim)
-        for (i in range(ne * dim)) {
-            wh[i] = float(hash_word(uint(i) + 777u) % 1000u) / 500.0 - 1.0
-        }
-        for (i in range(ncol_max * dim)) {
-            xh[i] = float(hash_word(uint(i) + 31u) % 1000u) / 500.0 - 1.0
-        }
-        for (i in range(dim)) {
-            nh[i] = float(hash_word(uint(i) + 9u) % 1000u) / 1000.0 + 0.5
-        }
+        var wh <- hash_fill(ne * dim, 777u, 1000u, 500.0, 1.0)
+        var xh <- hash_fill(ncol_max * dim, 31u, 1000u, 500.0, 1.0)
+        var nh <- hash_fill(dim, 9u, 1000u, 1000.0, -0.5)
         var wh16 <- pack_f16(wh)
         var wdev : array<float>   //! the weights as the device reads them: the f16 stamp's rounded, the f32 stamp's as given
         wdev |> resize(ne * dim)

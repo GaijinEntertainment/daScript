@@ -190,3 +190,18 @@ def hash_word(i : uint) : uint {
     return h ^ (h >> 13u)
 }
 
+//! `n` hashed words `hash_word(i * mul + add)`: a synthetic quant plane
+def hashed_words(n : int; mul, add : uint) : array<uint> {
+    return <- [for (i in range(n)); hash_word(uint(i) * mul + add)]
+}
+
+//! `n` hashed floats `float(hash_word(i + salt) % modulus) / div - off`: a cell's unit-range input fill
+def hash_fill(n : int; salt, modulus : uint; div, off : float) : array<float> {
+    return <- [for (i in range(n)); float(hash_word(uint(i) + salt) % modulus) / div - off]
+}
+
+//! `n` hashed floats `float(hash_word(i + salt) % 2001) * 0.001 - 1`: the combine cells' rows, in steps of 1e-3 over [-1, 1]
+def hash_steps(n : int; salt : uint) : array<float> {
+    return <- [for (i in range(n)); float(hash_word(uint(i) + salt) % 2001u) * 0.001 - 1.0]
+}
+
