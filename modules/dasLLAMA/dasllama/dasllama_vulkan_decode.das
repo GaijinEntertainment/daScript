@@ -1442,8 +1442,11 @@ def private rd_encode_hc_side(raw : VkCommandBuffer; var h : VkHaz; nrows : int6
 //! one stack serves both the window's expert chain and the decode hit chain
 def private rd_hot_stack(base : int64; fmt : int; slots, blocks, elems : int64) : int {
     let bb = arena_block_bytes(fmt)
-    return make_stack_shell(base, slots * elems, fmt, slots * blocks * bb.wq, slots * blocks * bb.ws)
+    return rd_hot_stack(base, fmt, slots, elems, (wq = blocks * bb.wq, ws = blocks * bb.ws))
 }
+
+def private rd_hot_stack(base : int64; fmt : int; slots, elems : int64; pb : tuple<wq : int64; ws : int64>) : int
+    => make_stack_shell(base, slots * elems, fmt, slots * pb.wq, slots * pb.ws)
 
 def private rd_hot_planes(si : int) : tuple<wq : uint64; ws : uint64; wqb : int64; wsb : int64>
     => (wq = g_gpu.stacks[si].wqbuf, ws = g_gpu.stacks[si].wsbuf, wqb = g_gpu.stacks[si].wqbytes, wsb = ws_range(si))
@@ -4818,9 +4821,9 @@ def private heat_pool_make(l : int64; b1, b3, b2 : int64; f1, f3, f2 : int; n, n
         return
     }
     let base = HEAT_BASE + l * 3l * HEAT_STRIDE
-    pool.s1 = make_stack_shell(base, c * pool.ege, f1, c * pb1.wq, c * pb1.ws)
-    pool.s3 = make_stack_shell(base + HEAT_STRIDE, c * pool.ege, f3, c * pb3.wq, c * pb3.ws)
-    pool.s2 = make_stack_shell(base + 2l * HEAT_STRIDE, c * pool.ege, f2, c * pb2.wq, c * pb2.ws)
+    pool.s1 = rd_hot_stack(base, f1, c, pool.ege, pb1)
+    pool.s3 = rd_hot_stack(base + HEAT_STRIDE, f3, c, pool.ege, pb3)
+    pool.s2 = rd_hot_stack(base + 2l * HEAT_STRIDE, f2, c, pool.ege, pb2)
     ensure_gemv_scratch(pool.s1)
     ensure_gemv_scratch(pool.s3)
     ensure_gemv_scratch(pool.s2)
