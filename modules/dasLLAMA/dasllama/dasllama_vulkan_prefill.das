@@ -2122,6 +2122,20 @@ def private pf_moe_bucket_report(wlen : int64) {
     delete cnt
 }
 
+def private add_stamps(var acc : auto; qi : uint; n : int64) {
+    for (s in range64(n)) {
+        acc[s] += pfq_us(qi + uint(s))
+    }
+}
+
+def private stamp_sum(v : auto) : double {
+    var t = 0.0lf
+    for (x in v) {
+        t += x
+    }
+    return t
+}
+
 [cold_path]   // DASLLAMA_GPU_PROF=1 report leg
 def private pf_prof_report(npos : int64) {
     var want = 5u
@@ -2149,46 +2163,26 @@ def private pf_prof_report(npos : int64) {
             qi += uint(n)
             continue
         }
-        for (s in range64(n)) {
-            if (L.recurrent && L.moe) {
-                dnm[s] += pfq_us(qi + uint(s))
-            } elif (L.recurrent) {
-                dn[s] += pfq_us(qi + uint(s))
-            } elif (L.moe) {
-                moe[s] += pfq_us(qi + uint(s))
-            } else {
-                att[s] += pfq_us(qi + uint(s))
-            }
-        }
-        qi += uint(n)
         if (L.recurrent && L.moe) {
+            add_stamps(dnm, qi, n)
             ndnm++
         } elif (L.recurrent) {
+            add_stamps(dn, qi, n)
             ndn++
         } elif (L.moe) {
+            add_stamps(moe, qi, n)
             nmoe++
         } else {
+            add_stamps(att, qi, n)
             natt++
         }
+        qi += uint(n)
     }
-    var tot = pfq_us(2u) + pfq_us(qi) + pfq_us(qi + 1u)
-    var tatt = 0.0lf
-    for (v in att) {
-        tatt += v
-    }
-    var tdn = 0.0lf
-    for (v in dn) {
-        tdn += v
-    }
-    var tmoe = 0.0lf
-    for (v in moe) {
-        tmoe += v
-    }
-    var tdnm = 0.0lf
-    for (v in dnm) {
-        tdnm += v
-    }
-    tot += tatt + tdn + tmoe + tdnm
+    let tatt = stamp_sum(att)
+    let tdn = stamp_sum(dn)
+    let tmoe = stamp_sum(moe)
+    let tdnm = stamp_sum(dnm)
+    let tot = pfq_us(2u) + pfq_us(qi) + pfq_us(qi + 1u) + (tatt + tdn + tmoe + tdnm)
     to_log(LOG_INFO, "vk_rdpf gpu ({npos} tokens, last window) prologue {int(pfq_us(2u))} fin_rq {int(pfq_us(qi))} cls {int(pfq_us(qi + 1u))} attention layers {natt}: {int(tatt)} recurrent layers {ndn}: {int(tdn)} MoE layers {nmoe}: {int(tmoe)} recurrent MoE layers {ndnm}: {int(tdnm)} total {int(tot)} us\n")
     var has_shexp = false
     var has_g4 = false
