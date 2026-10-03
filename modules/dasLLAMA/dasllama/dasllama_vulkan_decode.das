@@ -1410,12 +1410,10 @@ def private rd_encode_hc_mix(raw : VkCommandBuffer; var h : VkHaz; site : int64;
         enc_router_gemv_cls(raw, h, g_rd.s_hc_inj, pci, hc)
     }
     rq_enc(raw, h, g_rd.s_hc_xnrq, false, 0l, hcd * nrows)
-    var pcd = GemvArgs(n = uint(hcd), d = uint(lr), nreg = 1u, ybase = 0u, ncols = uint(nrows), ystride = uint(lr))
-    gemv_enc(int(KqFmt.q8), raw, h, S.s_down, pcd, lr)
+    rd_gemv(int(KqFmt.q8), raw, h, S.s_down, hcd, lr, uint(nrows), uint(lr))
     var pcl = HcLoArgs(nblk = uint(lr * nrows / Q8_BLOCK_ELEMS), inv_hc = 1.0 / float(hc))
     enc_hc_lo_rq_cls(raw, h, g_rd.s_hc_lorq, pcl, rq_wgs(false, lr * nrows))
-    var pcu = GemvArgs(n = uint(lr), d = uint(hcd), nreg = 1u, ybase = 0u, ncols = uint(nrows), ystride = uint(hcd))
-    gemv_enc(int(KqFmt.q8), raw, h, S.s_up, pcu, hcd)
+    rd_gemv(int(KqFmt.q8), raw, h, S.s_up, lr, hcd, uint(nrows), uint(hcd))
     var pcm = HcMixArgs(dim = uint(dim), hc = uint(hc), rows = uint(nrows))
     enc_hc_mix_cls(raw, h, g_rd.s_hc_mix, pcm, (dim * nrows + 255l) / 256l)
 }
@@ -1436,10 +1434,8 @@ def private rd_encode_hc_side(raw : VkCommandBuffer; var h : VkHaz; nrows : int6
     let hcd = hc * dim
     let ind = g_rd.ngram_ind
     rq_enc(raw, h, g_rd.s_ple_rq, false, 0l, ind * nrows)
-    var pck = GemvArgs(n = uint(ind), d = uint(hcd), nreg = 1u, ybase = 0u, ncols = uint(nrows), ystride = uint(hcd))
-    gemv_enc(int(KqFmt.q8), raw, h, g_rd.s_ple_key, pck, hcd)
-    var pcv = GemvArgs(n = uint(ind), d = uint(dim), nreg = 1u, ybase = 0u, ncols = uint(nrows), ystride = uint(dim))
-    gemv_enc(int(KqFmt.q8), raw, h, g_rd.s_ple_val, pcv, dim)
+    rd_gemv(int(KqFmt.q8), raw, h, g_rd.s_ple_key, ind, hcd, uint(nrows), uint(hcd))
+    rd_gemv(int(KqFmt.q8), raw, h, g_rd.s_ple_val, ind, dim, uint(nrows), uint(dim))
     let win = nrows > 1l
     var pcg = PleGateArgs(dim = uint(dim), hc = uint(hc), nrows = uint(g_rd.ngram_nrows), rows = win ? uint(nrows) : 0u, pos0 = win ? PLE_POS_TOK : 0u, eps = g_rd.eps, inv_sq = 1.0 / sqrt(float(dim)))
     enc_ple_gate_cls(raw, h, g_rd.s_ple_gate, pcg, hc * nrows)
@@ -1801,8 +1797,7 @@ def private rd_encode_hc_verify_warm(raw : VkCommandBuffer; var h : VkHaz; nrows
     }
     rq_enc(raw, h, g_rd.head_s_cat_rq, g_rd.head_eh_fmt, 2l * dim * hc * nrows)
     rd_ts(raw, "t:warm_cat")
-    var pceh = GemvArgs(n = uint(2l * dim), d = uint(dim), nreg = 1u, ybase = 0u, ncols = uint(hc * nrows), ystride = uint(dim))
-    gemv_enc(g_rd.head_eh_fmt, raw, h, g_rd.head_s_eh_hc, pceh, dim)
+    rd_gemv(g_rd.head_eh_fmt, raw, h, g_rd.head_s_eh_hc, 2l * dim, dim, uint(hc * nrows), uint(dim))
     rd_ts(raw, "t:warm_eh")
     rd_encode_hc_mix(raw, h, 2l * g_rd.n_layers, false, nrows)
     rq_enc(raw, h, L.s_quant_xb, L.fq, dim * nrows)
@@ -2288,8 +2283,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         gemv_enc(L.fq, raw, h, L.s_qkv, pcqkv, nreg * kvd)
         rd_ts(raw, "{pfx}qkv")
     } elif (!kv_only) {
-        var pcq = GemvArgs(n = uint(dim), d = uint(qrows), nreg = 1u, ybase = 0u, ncols = ncols, ystride = q_plane_row)
-        gemv_enc(L.fq, raw, h, L.s_q, pcq, qrows)
+        rd_gemv(L.fq, raw, h, L.s_q, dim, qrows, ncols, q_plane_row)
         rd_ts(raw, "{pfx}q")
     }
     if (L.kv_shared || L.qkv_merged) {   //! a shared-KV layer projects Q only: the donor layer's rows already sit in the mirror
@@ -2308,8 +2302,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         }
     }
     if ((nrow_bx & (NROW_BX_ATTN | NROW_BX_ROPE)) == (NROW_BX_ATTN | NROW_BX_ROPE)) {
-        var pcw0 = GemvArgs(n = uint(qd), d = uint(dim), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(dim))
-        gemv_enc(L.fo, raw, h, L.s_wo, pcw0, dim)
+        rd_gemv(L.fo, raw, h, L.s_wo, qd, dim, ncols, uint(dim))
         rd_ts(raw, "{pfx}wo")
         return
     }
@@ -2384,13 +2377,17 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         rd_ts(raw, "{pfx}wo_ar")
         return
     }
-    var pcw = GemvArgs(n = uint(qd), d = uint(dim), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(dim))
-    gemv_enc(L.fo, raw, h, L.s_wo, pcw, dim)
+    rd_gemv(L.fo, raw, h, L.s_wo, qd, dim, ncols, uint(dim))
     rd_ts(raw, "{pfx}wo")
 }
 
 //! the epilogue GEMV's workgroups: eight rows a 256-thread workgroup (four times the family's 64-thread rows)
 def private rd_ar_wgs(rows : int64) : int64 => (rows + 4l * g_gpu.rows_per_wg - 1l) / (4l * g_gpu.rows_per_wg)
+
+def private rd_gemv(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; n, d : int64; ncols, ystride : uint) {
+    var pc = GemvArgs(n = uint(n), d = uint(d), nreg = 1u, ybase = 0u, ncols = ncols, ystride = ystride)
+    gemv_enc(fmt, raw, h, s, pc, d)
+}
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
 def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; nrows : int64; ncols : uint; seq : bool) {
@@ -2399,8 +2396,7 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
     let di = g_rd.dn_di
     let nvh = g_rd.dn_nvh
     let nr = uint(nrows)
-    var pcqkv = GemvArgs(n = uint(dim), d = uint(cd), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(cd + di))
-    gemv_enc(L.fqkv, raw, h, L.s_dnqkv, pcqkv, cd)
+    rd_gemv(L.fqkv, raw, h, L.s_dnqkv, dim, cd, ncols, uint(cd + di))
     rd_ts(raw, "d:qkv")
     var pcz = GemvArgs(n = uint(dim), d = uint(di), nreg = 1u, ybase = uint(cd), ncols = ncols, ystride = uint(cd + di))
     gemv_enc(L.fz, raw, h, L.s_dnz, pcz, di)
@@ -2443,8 +2439,7 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
     if (kq_sb(L.fout)) {   // no stamp here - the requant bills to the out role
         rq_enc(raw, h, L.s_quant_dno, L.fout, di * nrows)
     }
-    var pco = GemvArgs(n = uint(di), d = uint(dim), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(dim))
-    gemv_enc(L.fout, raw, h, L.s_dnout, pco, dim)
+    rd_gemv(L.fout, raw, h, L.s_dnout, di, dim, ncols, uint(dim))
     rd_ts(raw, "d:out")
 }
 
@@ -2532,10 +2527,9 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         }
         rd_ts(raw, L.moe ? "m:sh_gu" : "{pfx}gu")
     } else {
-        var pcg = GemvArgs(n = uint(dim), d = uint(hid), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(hid))
-        gemv_enc(L.f1, raw, h, L.s_gate, pcg, hid)
+        rd_gemv(L.f1, raw, h, L.s_gate, dim, hid, ncols, uint(hid))
         rd_ts(raw, "{pfx}gate")
-        gemv_enc(L.f3, raw, h, L.s_up, pcg, hid)
+        rd_gemv(L.f3, raw, h, L.s_up, dim, hid, ncols, uint(hid))
         rd_ts(raw, "{pfx}up")
         if ((nrow_bx & NROW_BX_ACTRQ) == 0) {
             var pc_act = ActArgs(nelem = uint(hid) * nr, act = act)
@@ -2551,8 +2545,7 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         rd_ts(raw, "{pfx}down_ar")
         return
     }
-    var pcd = GemvArgs(n = uint(hid), d = uint(dim), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(dim))
-    gemv_enc(L.f2, raw, h, L.s_down, pcd, dim)
+    rd_gemv(L.f2, raw, h, L.s_down, hid, dim, ncols, uint(dim))
     rd_ts(raw, "{pfx}down")
 }
 
@@ -2565,8 +2558,7 @@ def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         rq_enc(raw, h, L.s_ple_x, false, 0l, dim * nrows)
         rd_ts(raw, "p:rq_x")
     }
-    var pcg = GemvArgs(n = uint(dim), d = uint(ple), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(ple))
-    gemv_enc(L.fpg, raw, h, L.s_ple_gate, pcg, ple)
+    rd_gemv(L.fpg, raw, h, L.s_ple_gate, dim, ple, ncols, uint(ple))
     rd_ts(raw, "p:gate")
     if (L.ple_fused) {
         var pcf = PleActArgs(n = uint(ple), d = uint(dim), wblk = uint(arena_local_blk(L.bpp)), ubase = uint(l * ple), act = ACT_GELU,
@@ -2579,8 +2571,7 @@ def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         ubase = uint(l * ple), ustride = uint(g_rd.n_layers * ple), ulen = uint(ple))
     enc_q8_actrq_cls(raw, h, L.s_ple_act, pca, (ple * nrows / 4l + 255l) / 256l)
     rd_ts(raw, "p:act")
-    var pcp = GemvArgs(n = uint(ple), d = uint(dim), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(dim))
-    gemv_enc(L.fpg, raw, h, L.s_ple_proj, pcp, dim)
+    rd_gemv(L.fpg, raw, h, L.s_ple_proj, ple, dim, ncols, uint(dim))
     rd_ts(raw, "p:proj")
 }
 
@@ -2863,8 +2854,7 @@ def private rd_encode_tail(raw : VkCommandBuffer; var h : VkHaz; nrows : int64; 
         rq_enc(raw, h, g_rd.s_quant_final, g_rd.cls_fmt_marker, dim * nrows)
         rd_ts(raw, "t:fin_rq")
     }
-    var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(g_rd.vocab))
-    gemv_enc(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, g_rd.vocab)
+    rd_gemv(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, dim, g_rd.vocab, ncols, uint(g_rd.vocab))
     rd_ts(raw, "t:cls")
     if (rd_cls_epi_on()) {
         rd_enc_cls_epi(raw, h, nrows)
@@ -3358,8 +3348,7 @@ def private rd_record_draft {
     enc_cls_ar(raw, h, L.s_addr_next, pco, 1l)
     rq_enc(raw, h, g_rd.s_quant_final, g_rd.cls_fmt_marker, dim)
     rd_ts(raw, "t:draft_norm")
-    var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u, ncols = 1u, ystride = uint(g_rd.vocab))
-    gemv_enc(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, g_rd.vocab)
+    rd_gemv(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, dim, g_rd.vocab, 1u, uint(g_rd.vocab))
     rd_ts(raw, "t:draft_cls")
     var pcp = ArgmaxArgs(vocab = uint(g_rd.vocab))
     enc_cls_argmax_part(raw, h, g_rd.s_pick_part, pcp, RD_PICK_CHUNKS)
@@ -3417,8 +3406,7 @@ def private rd_record_hc_draft {
     }
     rq_enc(raw, h, g_rd.head_s_cat_rq, g_rd.head_eh_fmt, 2l * dim * hc)
     rd_ts(raw, "p:draft_cat")
-    var pceh = GemvArgs(n = uint(2l * dim), d = uint(dim), nreg = 1u, ybase = 0u, ncols = uint(hc), ystride = uint(dim))
-    gemv_enc(g_rd.head_eh_fmt, raw, h, g_rd.head_s_eh_hc, pceh, dim)
+    rd_gemv(g_rd.head_eh_fmt, raw, h, g_rd.head_s_eh_hc, 2l * dim, dim, uint(hc), uint(dim))
     rd_ts(raw, "p:draft_eh")
     rd_encode_hc_mix(raw, h, 2l * l, false)
     rq_enc(raw, h, L.s_quant_xb, L.fq, dim)
@@ -3452,8 +3440,7 @@ def private rd_record_hc_draft {
     rd_encode_hc_mix(raw, h, g_rd.hc_mtp_site, true)
     rq_enc(raw, h, g_rd.s_quant_final, g_rd.cls_fmt_marker, dim)
     rd_ts(raw, "t:draft_norm")
-    var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u, ncols = 1u, ystride = uint(g_rd.vocab))
-    gemv_enc(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, g_rd.vocab)
+    rd_gemv(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, dim, g_rd.vocab, 1u, uint(g_rd.vocab))
     rd_ts(raw, "t:draft_cls")
     var pcp = ArgmaxArgs(vocab = uint(g_rd.vocab))
     enc_cls_argmax_part(raw, h, g_rd.s_pick_part, pcp, RD_PICK_CHUNKS)
@@ -3587,8 +3574,7 @@ def private rd_encode_head_cat_eh(raw : VkCommandBuffer; var h : VkHaz; nrows : 
     }
     rq_enc(raw, h, g_rd.head_s_cat_rq, g_rd.head_eh_fmt, 2l * dim * nrows)
     rd_ts(raw, "{pfx}cat")
-    var pceh = GemvArgs(n = uint(2l * dim), d = uint(dim), nreg = 1u, ybase = 0u, ncols = uint(nrows), ystride = uint(dim))
-    gemv_enc(g_rd.head_eh_fmt, raw, h, g_rd.head_s_eh, pceh, dim)
+    rd_gemv(g_rd.head_eh_fmt, raw, h, g_rd.head_s_eh, 2l * dim, dim, uint(nrows), uint(dim))
     rd_ts(raw, "{pfx}eh")
     var pca = ArArgs(dim = uint(dim), add_on = 0u, woff = hb + uint(RDEC_HEAD_ATT * dim), eps = g_rd.eps, ascale = 1.0)
     enc_cls_ar(raw, h, norm_set, pca, nrows)
