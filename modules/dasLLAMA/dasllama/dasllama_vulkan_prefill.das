@@ -419,20 +419,9 @@ def private pf_moe_setup {
             g_rd.pf_hlog_host = make_host_buf(np * g_rd.ner * 4l, false, [cached = true])
             g_rd.pf_hacc_host = make_host_buf(np * dim * 4l, false, [cached = true])
         }
-        g_rd.pf_ident_dev = make_device_buf(np * 4l)
+        g_rd.pf_ident_dev = make_ramp_buf(np, 0l)
         g_rd.pf_ones_dev = make_device_buf(np * 4l)
-        unsafe {
-            var mp = reinterpret<uint?>(g_gpu.staging.mapped)
-            for (i in range64(np)) {
-                mp[i] = uint(i)
-            }
-            staged_upload(g_rd.pf_ident_dev, 0l, np * 4l)
-            var fp = reinterpret<float?>(g_gpu.staging.mapped)
-            for (i in range64(np)) {
-                fp[i] = 1.0
-            }
-            staged_upload(g_rd.pf_ones_dev, 0l, np * 4l)
-        }
+        upload_fill(g_rd.pf_ones_dev, 0l, np * 4l, F32_ONE_WORD)
         return if (!any_dev)
     }
     verify(ensure_router_gemm_cls() && ensure_topk_rows_cls() && ensure_moe_sched_cls() && ensure_moe_gather_f16_cls()

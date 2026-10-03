@@ -614,11 +614,7 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     if (!r.exps_bias) {   //! the combine reads the down-bias row unconditionally at row base 0: a biasless model binds a ZERO ROW of the model dim, never the one-float dummy
         r.moe_db_bytes = dim * 4l
         r.moe_db_dev = make_device_buf(r.moe_db_bytes)
-        var zrow : array<float>
-        zrow |> reserve(dim)
-        zrow |> resize(dim)
-        upload_region_at(r.moe_db_dev, 0l, unsafe(addr<uint8 const?>(zrow[0])), r.moe_db_bytes)
-        delete zrow
+        upload_zeros(r.moe_db_dev, 0l, r.moe_db_bytes)
     } else {
         assert(long_length(gbias) == n_moe * ne * nfe && long_length(ubias) == n_moe * ne * nfe && long_length(dbias) == n_moe * ne * dim,
             "vk_rdec_prepare_moe: the expert-bias planes are not [n_moe x ne x nfe] / [n_moe x ne x dim]")
@@ -659,24 +655,11 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
         r.moe_ds_dev = make_device_buf(r.moe_ds_bytes)
         upload_region_at(r.moe_ds_dev, 0l, unsafe(addr<uint8 const?>(dscale[0])), r.moe_ds_bytes)
     }
-    r.moe_ident_dev = make_device_buf(MAX_ROUTED_SLOTS * 4l)
-    unsafe {
-        var mp = reinterpret<uint?>(g_gpu.staging.mapped)
-        for (i in range64(MAX_ROUTED_SLOTS)) {
-            mp[i] = uint(i)
-        }
-        staged_upload(r.moe_ident_dev, 0l, MAX_ROUTED_SLOTS * 4l)
-    }
+    r.moe_ident_dev = make_ramp_buf(MAX_ROUTED_SLOTS, 0l)
     let nb = r.nb
     if (g_rd_has_host_layers) {
         r.ones_dev = make_device_buf(MAX_ROUTED_SLOTS * 4l)
-        unsafe {
-            var mp = reinterpret<float?>(g_gpu.staging.mapped)
-            for (i in range64(MAX_ROUTED_SLOTS)) {
-                mp[i] = 1.0
-            }
-            staged_upload(r.ones_dev, 0l, MAX_ROUTED_SLOTS * 4l)
-        }
+        upload_fill(r.ones_dev, 0l, MAX_ROUTED_SLOTS * 4l, F32_ONE_WORD)
         r.hacc_dev = make_device_buf(dim * 4l * nb)
         r.hx_host = make_host_buf(dim * 4l * nb, false, [cached = true])
         r.hlog_host = make_host_buf(r.ner * 4l * nb, false, [cached = true])
@@ -1179,12 +1162,11 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<
             var supp_bytes = 256l
             if (g_rd.nsupp > 0l) {
                 supp_bytes = g_rd.nsupp * 4l
-                g_rd.supp_dev = make_device_buf(supp_bytes)
-                var sp = reinterpret<uint?>(g_gpu.staging.mapped)
-                for (i in range64(g_rd.nsupp)) {
-                    sp[i] = uint(supp[i])
+                g_rd.supp_dev = make_staged_buf(supp_bytes) $(var words : uint?) {
+                    for (i in range64(g_rd.nsupp)) {
+                        words[i] = uint(supp[i])
+                    }
                 }
-                staged_upload(g_rd.supp_dev, 0l, supp_bytes)
             }
             g_rd.cls_epi_set = set_cls_epi(fixed_array(g_rd.logits_dev, g_rd.nsupp > 0l ? g_rd.supp_dev : g_rd.dummy),
                 fixed_array(vocab * 4l * nb, supp_bytes), fixed_array(VHZ_LOG, 0u))
@@ -1198,11 +1180,10 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<
         g_rd.s_quant_final = rd_quant_xb_set()
         // cls GEMV (class): a device one-pair regions buffer replaces the device-filled meta
         // (device for the same reason — every vocab-row subgroup reads it)
-        g_rd.cls_regions_dev = make_device_buf(CLS_META_BYTES)
-        var mp = reinterpret<uint?>(g_gpu.staging.mapped)
-        mp[0] = uint(arena_local_blk(cls_block))
-        mp[1] = 0u
-        staged_upload(g_rd.cls_regions_dev, 0l, CLS_META_BYTES)
+        g_rd.cls_regions_dev = make_staged_buf(CLS_META_BYTES) $(var words : uint?) {
+            words[0] = uint(arena_local_blk(cls_block))
+            words[1] = 0u
+        }
         let pc = arena_planes(cls_fmt, cls_block)
         g_rd.cls_set = arena_gemv_set(cls_fmt, pc, g_rd.cls_regions_dev, CLS_META_BYTES, 0u, g_rd.xq_dev, g_rd.xs_dev, dim * nb, (dim / 32l) * 4l * nb, VHZ_XQ, g_rd.logits_dev, vocab * 4l * nb, VHZ_LOG)
         g_rd.cls_fmt_marker = cls_fmt
@@ -1516,15 +1497,12 @@ def private rd_hot_shared(slots : int64) {
     r.hot_meta3 = rd_meta()
     r.hot_meta2 = rd_meta()
     r.hot_w = make_host_buf(slots_bytes, true)
-    r.hot_ident1_dev = make_device_buf(slots_bytes)
+    r.hot_ident1_dev = make_ramp_buf(MAX_ROUTED_SLOTS, 1l)
     unsafe {
         var wp = reinterpret<float?>(r.hot_w.mapped)
-        var mp = reinterpret<uint?>(g_gpu.staging.mapped)
         for (i in range64(MAX_ROUTED_SLOTS)) {
             wp[i] = 0.0
-            mp[i] = uint(i + 1l)
         }
-        staged_upload(r.hot_ident1_dev, 0l, slots_bytes)
     }
     ensure_ffn_state()
     r.s_hot_rq = set_rq_cls(fixed_array(r.xb_dev, r.moe_xq_dev, r.moe_xs_dev),
@@ -5100,13 +5078,12 @@ def private ensure_cls(si : int; woff, n, d : int64) {
     ensure_gemv_scratch(si)
     let fmt = g_gpu.stacks[si].fmt
     verify(gemv_cls_ensure(fmt), "vk decode: the gemv class rail must engage on a live device")
-    unsafe {
-        var mp = reinterpret<uint?>(g_gpu.staging.mapped)
-        mp[0] = span_meta_base(woff, si, fmt)
-        mp[1] = 0u
+    g_gpu.stacks[si].cls_regions_dev = make_staged_buf(CLS_META_BYTES) $(var words : uint?) {
+        unsafe {
+            words[0] = span_meta_base(woff, si, fmt)
+            words[1] = 0u
+        }
     }
-    g_gpu.stacks[si].cls_regions_dev = make_device_buf(CLS_META_BYTES)
-    staged_upload(g_gpu.stacks[si].cls_regions_dev, 0l, CLS_META_BYTES)
     g_gpu.stacks[si].cls_set = stack_gemv_set(si, g_gpu.stacks[si].cls_regions_dev, CLS_META_BYTES, g_gpu.stacks[si].xq.buf, g_gpu.stacks[si].xs.buf, XQ_BYTES, XS_BYTES, 0u, g_gpu.stacks[si].y_dev, Y_BYTES, VHG_YO)
     var cmd = alloc_cmd()
     record_cmd(cmd, false) $(raw : VkCommandBuffer; var h : VkHaz) {

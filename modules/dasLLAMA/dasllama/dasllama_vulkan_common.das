@@ -3801,8 +3801,32 @@ def alloc_xfer_cmd : VkCommandBuffer => alloc_owned_cmd(g_gpu.xfer_pool, g_gpu.m
 
 //! `bytes` of a device buffer from `off` zeroed by a fill command, no host array
 def upload_zeros(dev : uint64; off, bytes : int64) {
+    upload_fill(dev, off, bytes, 0u)
+}
+
+//! `bytes` of a device buffer from `off` set to the 32-bit `word` by a fill command (`0x3F800000u` is 1.0f), no host array
+def upload_fill(dev : uint64; off, bytes : int64; word : uint) {
     cmd_one_shot() $(raw : VkCommandBuffer; var _h : VkHaz) {
-        cmd_fill_zero(raw, dev, off, bytes)
+        vkCmdFillBuffer(raw, unsafe(reinterpret<VkBuffer>(dev)), uint64(off), uint64(bytes), word)
+    }
+}
+
+//! a device buffer of `bytes` whose words `fill` writes into the staging buffer, staged up once
+def make_staged_buf(bytes : int64; fill : block<(var words : uint?) : void>) : uint64 {
+    let dev = make_device_buf(bytes)
+    invoke(fill, unsafe(reinterpret<uint?>(g_gpu.staging.mapped)))
+    staged_upload(dev, 0l, bytes)
+    return dev
+}
+
+let F32_ONE_WORD = 0x3F800000u   //! 1.0f as the word `upload_fill` writes
+
+//! a device buffer of `n` words counting up from `base`: the slot and row identity maps
+def make_ramp_buf(n, base : int64) : uint64 {
+    return make_staged_buf(n * 4l) $(var words : uint?) {
+        for (i in range64(n)) {
+            unsafe(words[i]) = uint(base + i)
+        }
     }
 }
 
