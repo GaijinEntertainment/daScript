@@ -3614,19 +3614,61 @@ def free_transient_cmd(var raw : VkCommandBuffer) {
 def cmd_one_shot(rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) {
     var raw = alloc_transient_cmd()
     var h : VkHaz
-    record_submit_wait(raw) $(r : VkCommandBuffer) {
+    record_submit_wait(raw, false) $(r : VkCommandBuffer) {
         invoke(rec, r, h)
     }
     free_transient_cmd(raw)
 }
 
-//! `rec` recorded into `raw`, submitted on the compute queue and waited: the one-shot commands' shared body
-def private record_submit_wait(var raw : VkCommandBuffer; rec : block<(raw : VkCommandBuffer) : void>) {
+//! `rec` recorded into `raw` (reset first under `reset`), submitted on the compute queue and waited: the one-shot commands' shared body
+def record_submit_wait(var raw : VkCommandBuffer; reset : bool; rec : block<(raw : VkCommandBuffer) : void>) {
+    cmd_open(raw, reset)
+    invoke(rec, raw)
+    cmd_close(raw)
+    submit_wait(raw)
+}
+
+//! `raw` begun, reset first under `reset`; returns the fresh hazard rail its recording starts on
+def cmd_open(raw : VkCommandBuffer; reset : bool) : VkHaz {
+    if (reset) {
+        let rf : VkCommandBufferResetFlags
+        vk_check(vkResetCommandBuffer(raw, rf), null)
+    }
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
-    invoke(rec, raw)
+    return VkHaz()
+}
+
+def cmd_close(raw : VkCommandBuffer) {
     vk_check(vkEndCommandBuffer(raw), null)
-    submit_wait(raw)
+}
+
+//! `raw` ended and `next` reset and begun: a recorder's cut between two commands, on a fresh hazard rail
+def cmd_reopen(raw, next : VkCommandBuffer) : VkHaz {
+    cmd_close(raw)
+    return cmd_open(next, true)
+}
+
+//! `raw` recorded by `rec` between `cmd_open` and `cmd_close`
+def record_cmd(raw : VkCommandBuffer; reset : bool; rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) {
+    var h = cmd_open(raw, reset)
+    invoke(rec, raw, h)
+    cmd_close(raw)
+}
+
+//! the same, the rail's node and barrier counts logged under `tag` at DASLLAMA_GPU_PROF=1
+def record_cmd(raw : VkCommandBuffer; reset : bool; tag : string; rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) {
+    var h = cmd_open(raw, reset)
+    invoke(rec, raw, h)
+    cmd_close(raw, h, tag)
+}
+
+//! `raw` ended, its rail's node and barrier counts logged under `tag` at DASLLAMA_GPU_PROF=1
+def cmd_close(raw : VkCommandBuffer; h : VkHaz; tag : string) {
+    if (vk_prof()) {
+        to_log(LOG_INFO, "{tag} hz: {h.disp} nodes, {h.barriers} barriers\n")
+    }
+    cmd_close(raw)
 }
 
 //! the DASLLAMA_GPU_PROF=1 ledger of an encode chain: the role of every GPU timestamp the chain wrote (stamp 0 is the baseline)
@@ -3741,9 +3783,7 @@ def readback_range(dev : uint64; bits : uint; off : int64; hb : HostBuf; var dst
 //! the same on the shared batch command buffer, reset first: the decode's cold state uploads and readbacks
 def batch_cmd_one_shot(rec : block<(raw : VkCommandBuffer) : void>) {
     var raw = g_gpu.batch_cmd
-    let rf : VkCommandBufferResetFlags
-    vk_check(vkResetCommandBuffer(raw, rf), null)
-    record_submit_wait(raw, rec)
+    record_submit_wait(raw, true, rec)
 }
 
 //! a persistent command on `pool`, model-owned through `owned` (the list the model drop frees)

@@ -1663,11 +1663,7 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
             }
             var seg = 0l
             var raw = g_rd.pf_seg[seg]
-            let rf : VkCommandBufferResetFlags
-            vk_check(vkResetCommandBuffer(raw, rf), null)
-            let begin = VkCommandBufferBeginInfo()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
-            var h : VkHaz
+            var h = cmd_open(raw, true)
             if (pos0w == 0l && g_rd.hybrid) {
                 pf_dn_zero_region(raw, h)
             }
@@ -1707,15 +1703,13 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
                     vhz_dep(raw, h, VHZ_XB | VHZ_MRT, 0u, true)
                     cmd_copy_whole(raw, g_rd.pf_xb, g_rd.pf_hx_host.buf, wlen * dim * 4l)
                     cmd_copy_whole(raw, g_rd.pf_mlog, g_rd.pf_hlog_host.buf, wlen * g_rd.ner * 4l)
-                    vk_check(vkEndCommandBuffer(raw), null)
+                    cmd_close(raw)
                     submit_wait(raw)
                     invoke(experts, l, reinterpret<float const?>(g_rd.pf_hx_host.mapped), reinterpret<float const?>(g_rd.pf_hlog_host.mapped),
                         reinterpret<float?>(g_rd.pf_hacc_host.mapped), 0l, wlen)
                     seg++
                     raw = g_rd.pf_seg[seg]
-                    vk_check(vkResetCommandBuffer(raw, rf), null)
-                    vk_check(vkBeginCommandBuffer(raw, begin), null)
-                    h = VkHaz()
+                    h = cmd_open(raw, true)
                     vhz_dep(raw, h, 0u, VHZ_MDN, true)
                     cmd_copy_range(raw, g_rd.pf_hacc_host.buf, ffn_row0 * dim * 4l, g_rd.pf_hacc_dev, ffn_row0 * dim * 4l, (wlen - ffn_row0) * dim * 4l)
                 }
@@ -1739,7 +1733,7 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
             if (warm) {
                 pf_hc_head_warm(raw, h, w0, wlen, pos0)
             }
-            vk_check(vkEndCommandBuffer(raw), null)
+            cmd_close(raw)
             verify(seg + 1l == long_length(g_rd.pf_seg), "vk prefill: the window's segments must be the routed layers plus one")
             submit_wait(raw)
             w0 += wlen
@@ -2018,13 +2012,9 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             let t_prep = get_time_usec(tp0)
             // record
             var raw = g_rd.pf_cmd
-            let rf : VkCommandBufferResetFlags
-            vk_check(vkResetCommandBuffer(raw, rf), null)
-            let begin = VkCommandBufferBeginInfo()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
+            var h = cmd_open(raw, true)
             pfq_begin(raw)
             pfq_ts(raw)   // q0: submit start
-            var h : VkHaz
             if (pos0 + w0 == 0l && g_rd.hybrid) {
                 pf_dn_zero_region(raw, h)
             }
@@ -2068,15 +2058,12 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             var nchunk = 0
             for (l in range64(g_rd.n_layers)) {
                 if (overlap && l == nextb) {
-                    vk_check(vkEndCommandBuffer(raw), null)
+                    cmd_close(raw)
                     submit_nofence(raw)
                     assert(nchunk < length(g_rd.pf_cmd_ring), "vk prefill: overlap ring exhausted")
                     raw = g_rd.pf_cmd_ring[nchunk]
                     nchunk++
-                    let rfc : VkCommandBufferResetFlags
-                    vk_check(vkResetCommandBuffer(raw, rfc), null)
-                    let beginc = VkCommandBufferBeginInfo()
-                    vk_check(vkBeginCommandBuffer(raw, beginc), null)
+                    cmd_open(raw, true)
                     cstep = min(cstep * 2l, PF_CHUNK_MAX)
                     nextb += cstep
                 }
@@ -2125,13 +2112,11 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     vhz_dep(raw, h, VHZ_XB | VHZ_MRT, 0u, true)
                     cmd_copy_whole(raw, g_rd.pf_xb, g_rd.pf_hx_host.buf, wlen * dim * 4l)
                     cmd_copy_whole(raw, g_rd.pf_mlog, g_rd.pf_hlog_host.buf, wlen * g_rd.ner * 4l)
-                    vk_check(vkEndCommandBuffer(raw), null)
+                    cmd_close(raw)
                     submit_wait(raw)
                     rdec_host_rows(l, reinterpret<float const?>(g_rd.pf_hx_host.mapped), reinterpret<float const?>(g_rd.pf_hlog_host.mapped),
                         reinterpret<float?>(g_rd.pf_hacc_host.mapped), 0l, wlen)
-                    vk_check(vkResetCommandBuffer(raw, rf), null)
-                    vk_check(vkBeginCommandBuffer(raw, begin), null)
-                    h = VkHaz()
+                    h = cmd_open(raw, true)
                     vhz_dep(raw, h, 0u, VHZ_MDN, true)
                     cmd_copy_whole(raw, g_rd.pf_hacc_host.buf, g_rd.pf_hacc_dev, wlen * dim * 4l)
                 } elif (moe) {
@@ -2189,7 +2174,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 }
             }
             pfq_end(raw)
-            vk_check(vkEndCommandBuffer(raw), null)
+            cmd_close(raw)
             let t_record = get_time_usec(tp0) - t_prep
             submit_wait(raw)
             if (vk_prof()) {
@@ -2748,6 +2733,17 @@ def private cmd_copy_batch_meta(raw : VkCommandBuffer; si : int) {
                     nonowning_buf(g_gpu.stacks[si].batch_meta_dev), regions)
 }
 
+def private batch_acts_head(raw : VkCommandBuffer; var h : VkHaz; axq_bytes, axs_bytes : int64) {
+    vhz_dep(raw, h, 0u, VHB_ACT, true)
+    cmd_copy_batch_acts(raw, axq_bytes, axs_bytes)
+    vhz_dep(raw, h, 0u, VHB_META, true)
+}
+
+def private batch_y1_land(raw : VkCommandBuffer; var h : VkHaz; bytes : int64) {
+    vhz_dep(raw, h, VHB_Y1, 0u, true)
+    cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, bytes)
+}
+
 // one reusable cmd buffer, re-recorded per submit — prefill submits are few and multi-ms, so
 // recording cost is noise. comb_npos > 0: down rows stay device-side, accumulating into comb_y_dev;
 // only the last chunk appends the k-fold-smaller combined DMA. Hidden planes never leave the device.
@@ -2757,15 +2753,8 @@ def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, 
                                  comb_wi_bytes : int64 = 0l; comb_y_bytes : int64 = 0l;
                                  comb_n : int64 = 0l; comb_k : int64 = 0l; comb_r0 : int64 = 0l; comb_r1 : int64 = 0l) {
     let raw = g_gpu.batch_cmd
-    let rf : VkCommandBufferResetFlags
-    vk_check(vkResetCommandBuffer(raw, rf), null)
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
-    var h : VkHaz
-    // one declaration per same-region copy GROUP — per-copy would fake WAW on the shared bit
-    vhz_dep(raw, h, 0u, VHB_ACT, true)
-    cmd_copy_batch_acts(raw, axq_bytes, axs_bytes)
-    vhz_dep(raw, h, 0u, VHB_META, true)
+    var h = cmd_open(raw, true)
+    batch_acts_head(raw, h, axq_bytes, axs_bytes)
     cmd_copy_batch_meta(raw, s1)
     cmd_copy_batch_meta(raw, s3)
     cmd_copy_batch_meta(raw, s2)
@@ -2788,13 +2777,9 @@ def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, 
             cmd_copy_whole(raw, g_gpu.comb_y_dev, g_gpu.comb_y.buf, comb_y_bytes)
         }
     } else {
-        vhz_dep(raw, h, VHB_Y1, 0u, true)
-        cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, gout_bytes)
+        batch_y1_land(raw, h, gout_bytes)
     }
-    if (vk_prof()) {
-        to_log(LOG_INFO, "vk_ffnb hz: {h.disp} nodes, {h.barriers} barriers\n")
-    }
-    vk_check(vkEndCommandBuffer(raw), null)
+    cmd_close(raw, h, "vk_ffnb")
 }
 
 // batch arm: chunked over row windows, down GEMM reuses y1 for output. npos > 0: the combine
@@ -2866,20 +2851,12 @@ def vk_moe_ffn_batch(var goutp : float?; offs1 : int64 const?; offs3 : int64 con
 // one dense chunk: acts + meta staging copies, one tile GEMM over the single whole-plane
 // region, y DMA
 def private record_dense_cmd(si : int; nwg : uint; n, d, y_bytes : int64; axq_bytes, axs_bytes : int64) {
-    let raw = g_gpu.batch_cmd
-    let rf : VkCommandBufferResetFlags
-    vk_check(vkResetCommandBuffer(raw, rf), null)
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
-    var h : VkHaz
-    vhz_dep(raw, h, 0u, VHB_ACT, true)
-    cmd_copy_batch_acts(raw, axq_bytes, axs_bytes)
-    vhz_dep(raw, h, 0u, VHB_META, true)
-    cmd_copy_batch_meta(raw, si)
-    stack_batch_enc(raw, h, si, nwg, n, d)
-    vhz_dep(raw, h, VHB_Y1, 0u, true)
-    cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, y_bytes)
-    vk_check(vkEndCommandBuffer(raw), null)
+    record_cmd(g_gpu.batch_cmd, true) $(raw : VkCommandBuffer; var h : VkHaz) {
+        batch_acts_head(raw, h, axq_bytes, axs_bytes)
+        cmd_copy_batch_meta(raw, si)
+        stack_batch_enc(raw, h, si, nwg, n, d)
+        batch_y1_land(raw, h, y_bytes)
+    }
 }
 
 //! MoeGpuDenseFn: dense batched GEMM — y [nrows x d] = X · Wᵀ over the resident plane
@@ -2952,16 +2929,10 @@ def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;
                           rows, cd, kd, di, dim, taps, nvh, nkh, ds : int64;
                           axq_bytes, axs_bytes : int64; first, last : bool; eps : float) {
     let raw = g_gpu.batch_cmd
-    let rf : VkCommandBufferResetFlags
-    vk_check(vkResetCommandBuffer(raw, rf), null)
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
-    var h : VkHaz
+    var h = cmd_open(raw, true)
     pfq_begin(raw)
     pfq_ts(raw)   // q0: submit start
-    vhz_dep(raw, h, 0u, VHB_ACT, true)
-    cmd_copy_batch_acts(raw, axq_bytes, axs_bytes)
-    vhz_dep(raw, h, 0u, VHB_META, true)
+    batch_acts_head(raw, h, axq_bytes, axs_bytes)
     cmd_copy_batch_meta(raw, s_qkv)
     cmd_copy_batch_meta(raw, s_z)
     cmd_copy_batch_meta(raw, s_o)
@@ -3006,13 +2977,9 @@ def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;
     pfq_ts(raw)   // q7: o requant
     stack_batch_enc(raw, h, s_o, nwg_out, di, dim)
     pfq_ts(raw)   // q8: out GEMM
-    vhz_dep(raw, h, VHB_Y1, 0u, true)
-    cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, rows * dim * 4l)
+    batch_y1_land(raw, h, rows * dim * 4l)
     pfq_end(raw)
-    if (vk_prof()) {
-        to_log(LOG_INFO, "vk_dn hz: {h.disp} nodes, {h.barriers} barriers\n")
-    }
-    vk_check(vkEndCommandBuffer(raw), null)
+    cmd_close(raw, h, "vk_dn")
 }
 
 //! MoeGpuDnFn: one recurrent layer's whole deltanet attention block as one submit chain per
@@ -3180,16 +3147,10 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
                           axq_bytes, axs_bytes, sm_bytes : int64; o_kq, gated, qknorm, fa, hasb : bool;
                           eps, scale : float; woq : int64) {
     let raw = g_gpu.batch_cmd
-    let rf : VkCommandBufferResetFlags
-    vk_check(vkResetCommandBuffer(raw, rf), null)
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
-    var h : VkHaz
+    var h = cmd_open(raw, true)
     pfq_begin(raw)
     pfq_ts(raw)
-    vhz_dep(raw, h, 0u, VHB_ACT, true)
-    cmd_copy_batch_acts(raw, axq_bytes, axs_bytes)
-    vhz_dep(raw, h, 0u, VHB_META, true)
+    batch_acts_head(raw, h, axq_bytes, axs_bytes)
     cmd_copy_batch_meta(raw, s_q)
     cmd_copy_batch_meta(raw, s_k)
     cmd_copy_batch_meta(raw, s_v)
@@ -3250,8 +3211,7 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
     pfq_ts(raw)
     stack_batch_enc(raw, h, s_o, nwg_o, qd, dim)
     pfq_ts(raw)
-    vhz_dep(raw, h, VHB_Y1, 0u, true)
-    cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, rows * dim * 4l)
+    batch_y1_land(raw, h, rows * dim * 4l)
     //! the K/V host DMAs stay at the END of the chain (ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain: a driver drops the in-cmd barrier)
     vhz_dep(raw, h, VHB_ATK, 0u, true)
     cmd_copy_range(raw, g_gpu.at_k_dev, w0 * kv_dim * 4l, g_gpu.at_kv_host.buf, 0l, rows * kv_dim * 4l)
@@ -3259,10 +3219,7 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
     cmd_copy_range(raw, g_gpu.at_vraw_dev, 0l, g_gpu.at_kv_host.buf, AT_WINDOW * AT_MAX_KV * 4l, rows * kv_dim * 4l)
     pfq_ts(raw)
     pfq_end(raw)
-    if (vk_prof()) {
-        to_log(LOG_INFO, "vk_attn hz: {h.disp} nodes, {h.barriers} barriers\n")
-    }
-    vk_check(vkEndCommandBuffer(raw), null)
+    cmd_close(raw, h, "vk_attn")
 }
 
 //! MoeGpuAttnFn: one full-attention layer's whole softmax attention block as one submit chain per
@@ -3422,10 +3379,7 @@ def private stream_copy_begin : VkCommandBuffer {
         xfer_wait(g_gpu.xfer_value, false)
     }
     var raw = xfer ? g_gpu.xfer_cmd : g_gpu.stream_cmd
-    let rf : VkCommandBufferResetFlags
-    vk_check(vkResetCommandBuffer(raw, rf), null)
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
+    cmd_open(raw, true)
     return raw
 }
 
@@ -3473,7 +3427,7 @@ def private copy_stream_group(si, g : int; sync : bool) {
 //! GPU-side wait), single-queue mode keeps the old unfenced rail; `sync` blocks the host either way
 def private stream_copy_end(si : int; var raw : VkCommandBuffer; sync : bool) {
     let xfer = g_gpu.xfer_fam >= 0
-    vk_check(vkEndCommandBuffer(raw), null)
+    cmd_close(raw)
     if (xfer) {
         let sig = xfer_submit_after(raw, XFER_NO_WAIT)
         if (sync) {
@@ -3606,11 +3560,7 @@ def private ffn_cm2_chunk_rows(n, nfe : int64) : int64 {
 def private record_ffn_cm2_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, n, nfe, nk, npos : int64;
                                r0, r1 : int64; is_gelu : bool) {
     let raw = g_gpu.batch_cmd
-    let rf : VkCommandBufferResetFlags
-    vk_check(vkResetCommandBuffer(raw, rf), null)
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
-    var h : VkHaz
+    var h = cmd_open(raw, true)
     if (r0 == 0l) {
         vhz_dep(raw, h, 0u, VHB_XF, true)
         cmd_copy_whole(raw, g_gpu.staging.buf, g_gpu.batch_xf_dev, npos * n * 4l)
@@ -3636,10 +3586,7 @@ def private record_ffn_cm2_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, n,
         vhz_dep(raw, h, VHB_CY, 0u, true)
         cmd_copy_whole(raw, g_gpu.comb_y_dev, g_gpu.comb_y.buf, npos * n * 4l)
     }
-    if (vk_prof()) {
-        to_log(LOG_INFO, "vk_ffnc hz: {h.disp} nodes, {h.barriers} barriers\n")
-    }
-    vk_check(vkEndCommandBuffer(raw), null)
+    cmd_close(raw, h, "vk_ffnc")
 }
 
 //! the chain's stacks, sets and host staging (x rows, the combine's w/inv planes) - shared by the

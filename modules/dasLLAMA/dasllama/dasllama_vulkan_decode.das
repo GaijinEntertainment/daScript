@@ -1625,21 +1625,19 @@ def private rd_record_hot(l, nhit : int64; nrows : int64 = 1l) {
     var H & = unsafe(g_rd.hot_layers[l])
     let dim = g_rd.dim
     let nfe = g_rd.nfe
-    var raw = alloc_cmd()
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
-    var h : VkHaz
-    rq_enc(raw, h, g_rd.s_hot_rq, H.f1, dim * nrows)
-    var pcg = GemvArgs(n = uint(dim), d = uint(nfe), nreg = uint(nhit), ybase = 0u)
-    gemv_enc(H.f1, raw, h, H.s_gate, pcg, nhit * nfe)
-    gemv_enc(H.f3, raw, h, H.s_up, pcg, nhit * nfe)
-    let dkq = kq_sb(H.f2)
-    var pca = ActArgs(nelem = uint(nhit * nfe), act = act_code(g_rd.act_oai, g_rd.is_gelu), nblk = uint(nhit * nfe / kq_unit(dkq)))
-    actrq_enc(raw, h, g_rd.s_hot_act, dkq, pca, nhit * nfe)
-    var pcd = GemvArgs(n = uint(nfe), d = uint(dim), nreg = uint(nhit), ybase = 0u)
-    gemv_enc(H.f2, raw, h, H.s_down, pcd, nhit * dim)
-    vk_check(vkEndCommandBuffer(raw), null)
-    H.cmds[nhit] = raw
+    var cmd = alloc_cmd()
+    record_cmd(cmd, false) $(raw : VkCommandBuffer; var h : VkHaz) {
+        rq_enc(raw, h, g_rd.s_hot_rq, H.f1, dim * nrows)
+        var pcg = GemvArgs(n = uint(dim), d = uint(nfe), nreg = uint(nhit), ybase = 0u)
+        gemv_enc(H.f1, raw, h, H.s_gate, pcg, nhit * nfe)
+        gemv_enc(H.f3, raw, h, H.s_up, pcg, nhit * nfe)
+        let dkq = kq_sb(H.f2)
+        var pca = ActArgs(nelem = uint(nhit * nfe), act = act_code(g_rd.act_oai, g_rd.is_gelu), nblk = uint(nhit * nfe / kq_unit(dkq)))
+        actrq_enc(raw, h, g_rd.s_hot_act, dkq, pca, nhit * nfe)
+        var pcd = GemvArgs(n = uint(nfe), d = uint(dim), nreg = uint(nhit), ybase = 0u)
+        gemv_enc(H.f2, raw, h, H.s_down, pcd, nhit * dim)
+    }
+    H.cmds[nhit] = cmd
     H.recorded[nhit] = true
 }
 
@@ -1746,11 +1744,7 @@ def private rd_record_hc_segments_n(nrows : int64; seq : bool; var segs : array<
     var seg = 0l
     var raw = segs[seg0]
     unsafe {
-        let rf : VkCommandBufferResetFlags
-        vk_check(vkResetCommandBuffer(raw, rf), null)
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
+        var h = cmd_open(raw, true)
         vhz_dep(raw, h, 0u, VHZ_X, true)
         cmd_copy_whole(raw, g_rd.x_host.buf, g_rd.x_dev, dim * 4l * nrows)
         vhz_dep(raw, h, 0u, VHZ_COS, true)
@@ -1788,12 +1782,9 @@ def private rd_record_hc_segments_n(nrows : int64; seq : bool; var segs : array<
                 vhz_dep(raw, h, VHZ_XB | VHZ_MRT, 0u, true)
                 cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hx_host.buf, dim * 4l * nrows)
                 cmd_copy_whole(raw, g_rd.moe_dlog_dev, g_rd.hlog_host.buf, g_rd.ner * 4l * nrows)
-                vk_check(vkEndCommandBuffer(raw), null)
                 seg++
+                h = cmd_reopen(raw, segs[seg0 + seg])
                 raw = segs[seg0 + seg]
-                vk_check(vkResetCommandBuffer(raw, rf), null)
-                vk_check(vkBeginCommandBuffer(raw, begin), null)
-                h = VkHaz()
                 rd_encode_routed_sum(raw, h, l, nrows)
             }
             rd_encode_hc_scatter(raw, h, L, true, nrows)
@@ -1805,7 +1796,7 @@ def private rd_record_hc_segments_n(nrows : int64; seq : bool; var segs : array<
         if (nrows > 1l) {
             rd_encode_hc_verify_warm(raw, h, nrows)
         }
-        vk_check(vkEndCommandBuffer(raw), null)
+        cmd_close(raw)
     }
     verify(seg + 1l == g_rd.nseg, "vk decode: the split command's segments must be the host-expert layers plus one")
 }
@@ -2750,12 +2741,8 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
     var raw : VkCommandBuffer = first_seg_raw
     var seg = 0l
     unsafe {
-        let rf : VkCommandBufferResetFlags
-        vk_check(vkResetCommandBuffer(raw, rf), null)
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var h = cmd_open(raw, true)
         rd_stamps_begin(raw)
-        var h : VkHaz
         vhz_dep(raw, h, 0u, VHZ_X, true)
         cmd_copy_whole(raw, g_rd.x_host.buf, g_rd.x_dev, dim * 4l * nrows)
         vhz_dep(raw, h, 0u, VHZ_COS, true)
@@ -2842,12 +2829,9 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
                 vhz_dep(raw, h, VHZ_XB | VHZ_MRT, 0u, true)
                 cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hx_host.buf, dim * 4l)
                 cmd_copy_whole(raw, g_rd.moe_dlog_dev, g_rd.hlog_host.buf, g_rd.ner * 4l)
-                vk_check(vkEndCommandBuffer(raw), null)
                 seg++
+                h = cmd_reopen(raw, g_rd.cmd_seg[split_seg_base + seg])
                 raw = g_rd.cmd_seg[split_seg_base + seg]
-                vk_check(vkResetCommandBuffer(raw, rf), null)
-                vk_check(vkBeginCommandBuffer(raw, begin), null)
-                h = VkHaz()
                 rd_encode_routed_sum(raw, h, l, 1l)
                 var pc14h = rd_ar_comb_args(L, l, nxt)
                 enc_cls_ar_comb(raw, h, L.s_addr_next, pc14h, 1l)
@@ -2913,7 +2897,7 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
         }
         rd_encode_tail(raw, h, nrows, ncols, verify, xq_ready)
         pfq_end(raw)
-        vk_check(vkEndCommandBuffer(raw), null)
+        cmd_close(raw)
     }
     verify(split_seg_base < 0l || seg + 1l == g_rd.nseg, "vk decode: the split command's segments must be the host layers plus one")
 }
@@ -3076,26 +3060,25 @@ def private rd_warmup_check(wall_us : int64) {
 //! the logits' trip to host memory on the transfer queue: the copy command for `nrows` rows (the rows' picks behind them), or
 //! under `picks_only` the picks alone, each recorded on first use
 def private rd_xlog(nrows : int64; picks_only : bool) : VkCommandBuffer {
-    var raw = picks_only ? g_rd.xlog_pick_cmd[nrows] : g_rd.xlog_cmd[nrows]
+    var cmd = picks_only ? g_rd.xlog_pick_cmd[nrows] : g_rd.xlog_cmd[nrows]
     let recorded = picks_only ? g_rd.xlog_pick_recorded[nrows] : g_rd.xlog_recorded[nrows]
     if (!recorded) {
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        if (!picks_only) {
-            cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l * nrows)
+        record_cmd(cmd, false) $(raw : VkCommandBuffer; var _h : VkHaz) {
+            if (!picks_only) {
+                cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l * nrows)
+            }
+            cmd_copy_whole(raw, g_rd.pick_dev, g_rd.pick_host.buf, 4l * nrows)
+            if (g_rd.carry_live) {
+                cmd_copy_whole(raw, rd_carry_src(), g_rd.hid_host.buf, rd_carry_width() * 4l * nrows)
+            }
         }
-        cmd_copy_whole(raw, g_rd.pick_dev, g_rd.pick_host.buf, 4l * nrows)
-        if (g_rd.carry_live) {
-            cmd_copy_whole(raw, rd_carry_src(), g_rd.hid_host.buf, rd_carry_width() * 4l * nrows)
-        }
-        vk_check(vkEndCommandBuffer(raw), null)
         if (picks_only) {
             g_rd.xlog_pick_recorded[nrows] = true
         } else {
             g_rd.xlog_recorded[nrows] = true
         }
     }
-    return raw
+    return cmd
 }
 
 var private g_rd_xlog_wait = 0ul   //! the transfer timeline value the step's landing (logits or picks) completes at (0 = the command carried its own copy, the fence is the wait)
@@ -3416,14 +3399,10 @@ def private rd_record_draft {
     var L & = unsafe(g_rd.head)
     rd_fill_head_regions()
     var raw = g_rd.head_draft_cmd[g_rd.region]
-    let rf : VkCommandBufferResetFlags
-    vk_check(vkResetCommandBuffer(raw, rf), null)
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
+    var h = cmd_open(raw, true)
     var one : RdqStamps
     rd_take_stamps(one, g_rdq_n)
     rd_stamps_begin(raw)
-    var h : VkHaz
     rd_encode_head_cat_eh(raw, h, 1l, "p:upload", "p:draft_", g_rd.s_prologue, L.s_quant_xb)
     rd_encode_attn_head(raw, h, L, l, rd_head_fuse_qkr(), rd_norm_final(), rd_layer_pieces(L, rd_split_pieces()), 1l, 1u, 0)
     var pcf = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(hb + RDEC_HEAD_FFN * dim), eps = g_rd.eps, ascale = 1.0)
@@ -3455,7 +3434,7 @@ def private rd_record_draft {
         rd_ts(raw, "t:dma")
     }
     pfq_end(raw)
-    vk_check(vkEndCommandBuffer(raw), null)
+    cmd_close(raw)
     rd_take_stamps(g_rdq_draft, g_pfq_n)
     rd_put_back_stamps(one)
     g_rd.head_draft_recorded[g_rd.region] = true
@@ -3472,15 +3451,11 @@ def private rd_record_hc_draft {
     var L & = unsafe(g_rd.head)
     verify(L.moe && L.experts_host, "vk decode: the hyper-connection chain's NextN head serves its routed experts on the host")
     rd_fill_head_regions()
-    let rf : VkCommandBufferResetFlags
-    let begin = VkCommandBufferBeginInfo()
     var raw = g_rd.head_draft_cmd[g_rd.region]
-    vk_check(vkResetCommandBuffer(raw, rf), null)
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
+    var h = cmd_open(raw, true)
     var one : RdqStamps
     rd_take_stamps(one, g_rdq_n)
     rd_stamps_begin(raw)
-    var h : VkHaz
     vhz_dep(raw, h, 0u, VHZ_X, true)
     cmd_copy_whole(raw, g_rd.head_cat_host.buf, g_rd.head_cat_in_dev, dim * 4l)
     cmd_copy_range(raw, g_rd.head_cat_host.buf, dim * 4l, g_rd.hccarry_dev, 0l, hcd * 4l)
@@ -3519,13 +3494,11 @@ def private rd_record_hc_draft {
     cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hx_host.buf, dim * 4l)
     cmd_copy_whole(raw, g_rd.moe_dlog_dev, g_rd.hlog_host.buf, g_rd.ner * 4l)
     pfq_end(raw)
-    vk_check(vkEndCommandBuffer(raw), null)
+    cmd_close(raw)
     rd_take_stamps(g_rdq_draft, g_pfq_n)
     raw = g_rd.hc_draft_cmd[g_rd.region]
-    vk_check(vkResetCommandBuffer(raw, rf), null)
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
+    h = cmd_open(raw, true)
     rd_stamps_begin(raw)
-    h = VkHaz()
     rd_encode_routed_sum(raw, h, l)
     rd_encode_hc_scatter(raw, h, L, true)
     vhz_dep(raw, h, VHZ_X, rd_carry_bit(), true)
@@ -3551,7 +3524,7 @@ def private rd_record_hc_draft {
         rd_ts(raw, "t:dma")
     }
     pfq_end(raw)
-    vk_check(vkEndCommandBuffer(raw), null)
+    cmd_close(raw)
     rd_take_stamps(g_rdq_hc_draft_tail, g_pfq_n)
     rd_put_back_stamps(one)
     g_rd.head_draft_recorded[g_rd.region] = true
@@ -4161,13 +4134,11 @@ def private read_kv_rows_of(L : RLayer; row0, nrows : int64; var kp : uint8?; va
         let rows = min(KV_READBACK_ROWS, nrows - p0)
         let bytes = rows * rowb
         let off = rd_mir_base(L) * kv_unit_bytes(g_rd.kv_dt) + (row0 + p0) * rowb
+        record_submit_wait(raw, false) $(r : VkCommandBuffer) {
+            cmd_copy_range(r, g_rd.k_mirror, off, g_rd.kv_readback.buf, 0l, bytes)
+            cmd_copy_range(r, g_rd.v_mirror, off, g_rd.kv_readback.buf, bytes, bytes)
+        }
         unsafe {
-            let begin = VkCommandBufferBeginInfo()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
-            cmd_copy_range(raw, g_rd.k_mirror, off, g_rd.kv_readback.buf, 0l, bytes)
-            cmd_copy_range(raw, g_rd.v_mirror, off, g_rd.kv_readback.buf, bytes, bytes)
-            vk_check(vkEndCommandBuffer(raw), null)
-            submit_wait(raw)
             memcpy(reinterpret<void?>(kp + p0 * rowb), g_rd.kv_readback.mapped, bytes)
             memcpy(reinterpret<void?>(vp + p0 * rowb), reinterpret<uint8?>(g_rd.kv_readback.mapped) + bytes, bytes)
         }
@@ -4234,31 +4205,25 @@ def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
     // the qkv stack's class set plays Y1 in this chain (role-fluid sets re-declare per record)
     var qset = stack_gemv_cls_set(s_qkv)
     hz_set_bits(qset, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
-    let raw = st.cmd
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
-    var h : VkHaz
-    vhz_dep(raw, h, 0u, VHG_SM, true)   // one declaration for the smalls copy group
-    cmd_copy_range(raw, g_gpu.dnd_bg.buf, 0l, st.smalls_dev, DN_SM_BETA * 4l, nvh * 4l)
-    cmd_copy_range(raw, g_gpu.dnd_bg.buf, nvh * 4l, st.smalls_dev, DN_SM_G * 4l, nvh * 4l)
-    var pcqkv = GemvArgs(n = uint(dim), d = uint(cd), nreg = 1u, ybase = 0u)
-    gemv_enc(fqkv, raw, h, qset, pcqkv, cd)
-    var pcz = GemvArgs(n = uint(dim), d = uint(di), nreg = 1u, ybase = uint(cd))
-    gemv_enc(fz, raw, h, st.z_set, pcz, di)
-    var pcd = DnStepArgs(cd = uint(cd), kd = uint(kd), nkh = uint(nkh), ds = uint(ds),
-        dconv = uint(taps + 1l), beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G),
-        taps_off = uint(DN_SM_TAPS), wnorm_off = uint(DN_SM_WNORM), a_off = uint(DN_SM_A),
-        dt_off = uint(DN_SM_DT), hist_off = uint(DN_SM_HIST),
-        eps = eps, qscale = 1.0 / sqrt(float(ds)))
-    enc_dn_step_cls(raw, h, st.fused_set, pcd, nvh)
-    var pco = GemvArgs(n = uint(di), d = uint(dim), nreg = 1u, ybase = 0u)
-    gemv_enc(fo, raw, h, st.out_set, pco, dim)
-    vhz_dep(raw, h, VHG_YO, 0u, true)
-    cmd_copy_whole(raw, g_gpu.stacks[s_o].y_dev, g_gpu.stacks[s_o].y.buf, dim * 4l)
-    if (vk_prof()) {
-        to_log(LOG_INFO, "vk_dnd hz: {h.disp} nodes, {h.barriers} barriers\n")
+    record_cmd(st.cmd, false, "vk_dnd") $(raw : VkCommandBuffer; var h : VkHaz) {
+        vhz_dep(raw, h, 0u, VHG_SM, true)   // one declaration for the smalls copy group
+        cmd_copy_range(raw, g_gpu.dnd_bg.buf, 0l, st.smalls_dev, DN_SM_BETA * 4l, nvh * 4l)
+        cmd_copy_range(raw, g_gpu.dnd_bg.buf, nvh * 4l, st.smalls_dev, DN_SM_G * 4l, nvh * 4l)
+        var pcqkv = GemvArgs(n = uint(dim), d = uint(cd), nreg = 1u, ybase = 0u)
+        gemv_enc(fqkv, raw, h, qset, pcqkv, cd)
+        var pcz = GemvArgs(n = uint(dim), d = uint(di), nreg = 1u, ybase = uint(cd))
+        gemv_enc(fz, raw, h, st.z_set, pcz, di)
+        var pcd = DnStepArgs(cd = uint(cd), kd = uint(kd), nkh = uint(nkh), ds = uint(ds),
+            dconv = uint(taps + 1l), beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G),
+            taps_off = uint(DN_SM_TAPS), wnorm_off = uint(DN_SM_WNORM), a_off = uint(DN_SM_A),
+            dt_off = uint(DN_SM_DT), hist_off = uint(DN_SM_HIST),
+            eps = eps, qscale = 1.0 / sqrt(float(ds)))
+        enc_dn_step_cls(raw, h, st.fused_set, pcd, nvh)
+        var pco = GemvArgs(n = uint(di), d = uint(dim), nreg = 1u, ybase = 0u)
+        gemv_enc(fo, raw, h, st.out_set, pco, dim)
+        vhz_dep(raw, h, VHG_YO, 0u, true)
+        cmd_copy_whole(raw, g_gpu.stacks[s_o].y_dev, g_gpu.stacks[s_o].y.buf, dim * 4l)
     }
-    vk_check(vkEndCommandBuffer(raw), null)
     g_gpu.dnd_steps |> insert(woq, st)
 }
 
@@ -4486,21 +4451,11 @@ def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64; is_gelu : bool)
     let key = ffn_cmd_key(s1, s3, s2)
     var fc = g_gpu.ffn_cmds[key]
     if (fc.nrows != nrows || fc.gelu != is_gelu) {
-        if (fc.nrows != 0l) {
-            let rf : VkCommandBufferResetFlags
-            vk_check(vkResetCommandBuffer(fc.cmd, rf), null)
+        record_cmd(fc.cmd, fc.nrows != 0l, "vk_ffng") $(raw : VkCommandBuffer; var h : VkHaz) {
+            ffn_chain_enc(raw, h, fc, s1, s3, s2, nrows, n, nfe, is_gelu)
+            vhz_dep(raw, h, VHG_YO, 0u, true)
+            cmd_copy_whole(raw, g_gpu.stacks[s2].y_dev, g_gpu.stacks[s2].y.buf, nrows * n * 4l)
         }
-        let raw = fc.cmd
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
-        ffn_chain_enc(raw, h, fc, s1, s3, s2, nrows, n, nfe, is_gelu)
-        vhz_dep(raw, h, VHG_YO, 0u, true)
-        cmd_copy_whole(raw, g_gpu.stacks[s2].y_dev, g_gpu.stacks[s2].y.buf, nrows * n * 4l)
-        if (vk_prof()) {
-            to_log(LOG_INFO, "vk_ffng hz: {h.disp} nodes, {h.barriers} barriers\n")
-        }
-        vk_check(vkEndCommandBuffer(raw), null)
         g_gpu.ffn_cmds[key] = FfnCmd(cmd = fc.cmd, actrq_set = fc.actrq_set,
             down_set = fc.down_set, nrows = nrows, gelu = is_gelu)
     }
@@ -4613,22 +4568,16 @@ def private tail_cmd_for(s1, s3, s2, sq : int; woq_next : int64; fq_next : int; 
             fixed_array(n * 4l, n * 4l, n * 4l, n * 4l), fixed_array(VHG_XRES, VHG_XRES, 0u, VHG_XB))
         tc.s_rq = set_rq_cls(fixed_array(g_gpu.tail_xb_dev, g_gpu.stacks[sq].xq.buf, g_gpu.stacks[sq].xs.buf),
             fixed_array(n * 4l, XQ_BYTES, XS_BYTES), fixed_array(VHG_XB, VHG_ACTS, VHG_ACTS))
-        let raw = tc.cmd
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
-        ffn_chain_enc(raw, h, fc, s1, s3, s2, nrows, n, nfe, is_gelu)
-        var pcc = DecCombineArgs(n = uint(n), k = uint(nrows))
-        enc_dec_combine_cls(raw, h, tc.s_comb, pcc, (n + 255l) / 256l)
-        var pca = ArArgs(dim = uint(n), add_on = 0u, woff = 0u, eps = eps, ascale = 1.0)
-        enc_cls_ar(raw, h, tc.s_ar, pca, 1l)
-        rq_enc(raw, h, tc.s_rq, fq_next, n)
-        vhz_dep(raw, h, VHG_XRES | VHG_ACTS, 0u, true)
-        cmd_copy_whole(raw, g_gpu.tail_xres_dev, g_gpu.tail_xres.buf, n * 4l)
-        if (vk_prof()) {
-            to_log(LOG_INFO, "vk_ffn_tail hz: {h.disp} nodes, {h.barriers} barriers\n")
+        record_cmd(tc.cmd, false, "vk_ffn_tail") $(raw : VkCommandBuffer; var h : VkHaz) {
+            ffn_chain_enc(raw, h, fc, s1, s3, s2, nrows, n, nfe, is_gelu)
+            var pcc = DecCombineArgs(n = uint(n), k = uint(nrows))
+            enc_dec_combine_cls(raw, h, tc.s_comb, pcc, (n + 255l) / 256l)
+            var pca = ArArgs(dim = uint(n), add_on = 0u, woff = 0u, eps = eps, ascale = 1.0)
+            enc_cls_ar(raw, h, tc.s_ar, pca, 1l)
+            rq_enc(raw, h, tc.s_rq, fq_next, n)
+            vhz_dep(raw, h, VHG_XRES | VHG_ACTS, 0u, true)
+            cmd_copy_whole(raw, g_gpu.tail_xres_dev, g_gpu.tail_xres.buf, n * 4l)
         }
-        vk_check(vkEndCommandBuffer(raw), null)
         g_gpu.tail_cmds |> insert(woq_next, tc)
     }
     var tc = g_gpu.tail_cmds[woq_next]
@@ -4750,10 +4699,8 @@ def private span_record(a : MoeSpanDec) {
     let qd = a.qd
     let kvd = a.kvd
     g_gpu.span_cmd = alloc_cmd()
-    var raw = g_gpu.span_cmd
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
-    var h : VkHaz
+    let raw = g_gpu.span_cmd
+    var h = cmd_open(raw, false)
     vhz_dep(raw, h, 0u, VHS_X, true)
     cmd_copy_whole(raw, g_gpu.span_xin.buf, g_gpu.span_x_dev, dim * 4l)
     for (li in range64(nl)) {
@@ -4806,7 +4753,7 @@ def private span_record(a : MoeSpanDec) {
     if (vk_prof()) {
         to_log(LOG_INFO, "vk_span hz: {h.disp} nodes, {h.barriers} barriers over {nl} layers\n")
     }
-    vk_check(vkEndCommandBuffer(raw), null)
+    cmd_close(raw)
 }
 
 //! Forget the recorded span so the next token records anew: the span records once per model and
@@ -4943,23 +4890,20 @@ def private qkv_cmd_make(sq, sk, sv : int; woq, wok, wov : int64; n, dq, dk, dv 
     // three disjoint row levels on the shared y (Y1/Y2/Y3): k/v sets ride the q stack's acts image
     qc.k_set = stack_gemv_set_x(sk, sq, g_gpu.stacks[sq].y_dev, Y_BYTES, VHG_Y2)
     qc.v_set = stack_gemv_set_x(sv, sq, g_gpu.stacks[sq].y_dev, Y_BYTES, VHG_Y3)
-    let raw = qc.cmd
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
     let fq = g_gpu.stacks[sq].fmt
     // the q stack's class set plays Y1 in this chain (role-fluid, re-declared per record)
     var qset = stack_gemv_cls_set(sq)
     hz_set_bits(qset, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
-    var h : VkHaz
-    var pcq = GemvArgs(n = uint(n), d = uint(dq), nreg = 1u, ybase = 0u)
-    gemv_enc(fq, raw, h, qset, pcq, dq)
-    var pck = GemvArgs(n = uint(n), d = uint(dk), nreg = 1u, ybase = uint(dq))
-    gemv_enc(fk, raw, h, qc.k_set, pck, dk)
-    var pcv = GemvArgs(n = uint(n), d = uint(dv), nreg = 1u, ybase = uint(dq + dk))
-    gemv_enc(fv, raw, h, qc.v_set, pcv, dv)
-    vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_Y3, 0u, true)
-    cmd_copy_whole(raw, g_gpu.stacks[sq].y_dev, g_gpu.stacks[sq].y.buf, qc.ybytes)
-    vk_check(vkEndCommandBuffer(raw), null)
+    record_cmd(qc.cmd, false) $(raw : VkCommandBuffer; var h : VkHaz) {
+        var pcq = GemvArgs(n = uint(n), d = uint(dq), nreg = 1u, ybase = 0u)
+        gemv_enc(fq, raw, h, qset, pcq, dq)
+        var pck = GemvArgs(n = uint(n), d = uint(dk), nreg = 1u, ybase = uint(dq))
+        gemv_enc(fk, raw, h, qc.k_set, pck, dk)
+        var pcv = GemvArgs(n = uint(n), d = uint(dv), nreg = 1u, ybase = uint(dq + dk))
+        gemv_enc(fv, raw, h, qc.v_set, pcv, dv)
+        vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_Y3, 0u, true)
+        cmd_copy_whole(raw, g_gpu.stacks[sq].y_dev, g_gpu.stacks[sq].y.buf, qc.ybytes)
+    }
     g_gpu.qkv_cmds |> insert(woq, qc)
 }
 
@@ -5102,10 +5046,7 @@ def vk_moe_heat_advise(l : int64; b1, b3, b2 : int64; f1, f3, f2 : int; n, nfe :
         }
         break if (free_s >= pool.nslots)
         if (up == 0) {
-            let rf : VkCommandBufferResetFlags
-            vk_check(vkResetCommandBuffer(raw, rf), null)
-            let begin = VkCommandBufferBeginInfo()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
+            cmd_open(raw, true)
         }
         heat_record_slice(raw, pool.src1, pool.s1, e, int64(free_s), n, pool.ege)
         heat_record_slice(raw, pool.src3, pool.s3, e, int64(free_s), n, pool.ege)
@@ -5115,7 +5056,7 @@ def vk_moe_heat_advise(l : int64; b1, b3, b2 : int64; f1, f3, f2 : int; n, nfe :
         up++
     }
     if (up > 0) {
-        vk_check(vkEndCommandBuffer(raw), null)
+        cmd_close(raw)
         submit_wait(raw)
     }
 }
@@ -5167,16 +5108,14 @@ def private ensure_cls(si : int; woff, n, d : int64) {
     g_gpu.stacks[si].cls_regions_dev = make_device_buf(CLS_META_BYTES)
     staged_upload(g_gpu.stacks[si].cls_regions_dev, 0l, CLS_META_BYTES)
     g_gpu.stacks[si].cls_set = stack_gemv_set(si, g_gpu.stacks[si].cls_regions_dev, CLS_META_BYTES, g_gpu.stacks[si].xq.buf, g_gpu.stacks[si].xs.buf, XQ_BYTES, XS_BYTES, 0u, g_gpu.stacks[si].y_dev, Y_BYTES, VHG_YO)
-    var raw = alloc_cmd()
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
-    var h : VkHaz
-    var pc = GemvArgs(n = uint(n), d = uint(d), nreg = 1u, ybase = 0u)
-    gemv_enc(fmt, raw, h, g_gpu.stacks[si].cls_set, pc, d)
-    vhz_dep(raw, h, VHG_YO, 0u, true)
-    cmd_copy_whole(raw, g_gpu.stacks[si].y_dev, g_gpu.stacks[si].y.buf, d * 4l)
-    vk_check(vkEndCommandBuffer(raw), null)
-    g_gpu.stacks[si].cls_cmd = raw
+    var cmd = alloc_cmd()
+    record_cmd(cmd, false) $(raw : VkCommandBuffer; var h : VkHaz) {
+        var pc = GemvArgs(n = uint(n), d = uint(d), nreg = 1u, ybase = 0u)
+        gemv_enc(fmt, raw, h, g_gpu.stacks[si].cls_set, pc, d)
+        vhz_dep(raw, h, VHG_YO, 0u, true)
+        cmd_copy_whole(raw, g_gpu.stacks[si].y_dev, g_gpu.stacks[si].y.buf, d * 4l)
+    }
+    g_gpu.stacks[si].cls_cmd = cmd
     g_gpu.stacks[si].cls_made = true
 }
 
@@ -5402,24 +5341,17 @@ def private at_chain_enc(raw : VkCommandBuffer; var h : VkHaz; var L : DatLayer;
 //! submit move. k and v come back raw - the host derives its cache row.
 [cold_path]   // recording leg (also the rerecord A/B probe) - not the steady-state token path
 def private at_record_layer(var L : DatLayer; fq, fk, fv, fo : int; dim, qd, kvd, hs, n_heads, kv_mul : int64; scale, eps : float; neox, qk_norm : bool) {
-if (!L.recorded || vk_rdec_rerecord_on()) {
+    return if (L.recorded && !vk_rdec_rerecord_on())
     if (!L.recorded) {
         L.cmd = alloc_cmd()
-    } else {
-        let rf : VkCommandBufferResetFlags
-        vk_check(vkResetCommandBuffer(L.cmd, rf), null)
     }
-    var raw = L.cmd
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
-    var h : VkHaz
-    at_chain_enc(raw, h, L, fq, fk, fv, fo, dim, qd, kvd, hs, n_heads, kv_mul, scale, eps, neox, qk_norm)
-    vhz_dep(raw, h, VHZ_XB2 | VHZ_KVK | VHZ_KVV, 0u, true)
-    cmd_copy_whole(raw, g_gpu.dat_xb2_dev, g_gpu.dat_out.buf, dim * 4l)
-    cmd_copy_range(raw, g_gpu.dat_kv_dev, qd * 4l, g_gpu.dat_out.buf, dim * 4l, 2l * kvd * 4l)
-    vk_check(vkEndCommandBuffer(raw), null)
+    record_cmd(L.cmd, L.recorded) $(raw : VkCommandBuffer; var h : VkHaz) {
+        at_chain_enc(raw, h, L, fq, fk, fv, fo, dim, qd, kvd, hs, n_heads, kv_mul, scale, eps, neox, qk_norm)
+        vhz_dep(raw, h, VHZ_XB2 | VHZ_KVK | VHZ_KVV, 0u, true)
+        cmd_copy_whole(raw, g_gpu.dat_xb2_dev, g_gpu.dat_out.buf, dim * 4l)
+        cmd_copy_range(raw, g_gpu.dat_kv_dev, qd * 4l, g_gpu.dat_out.buf, dim * 4l, 2l * kvd * 4l)
+    }
     L.recorded = true
-}
 }
 
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]   // per token
