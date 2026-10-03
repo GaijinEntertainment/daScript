@@ -276,8 +276,8 @@ def vulkan_wdec_shutdown {
 def private wd_gemv_set(meta : HostBuf; y_dev : uint64; y_bytes : int64; y_bit : uint) : VkDescriptorSet {
     let r & = g_wd
     let bq = WD_ROW_CAP * 4l * r.d
-    return gemv_cls_set(int(KqFmt.q8), fixed_array(r.wq_dev, r.ws_dev, meta.buf, r.xq_dev, r.xs_dev, y_dev),
-        fixed_array(r.wq_bytes, r.ws_bytes, WD_SITE_META_BYTES, bq, bq / kq_elems(KqFmt.q8) * 4l, y_bytes), fixed_array(0u, 0u, 0u, WD_XQ, WD_XQ, y_bit))
+    return gemv_planes_set(int(KqFmt.q8), (wq = r.wq_dev, ws = r.ws_dev, wqb = r.wq_bytes, wsb = r.ws_bytes), meta.buf, WD_SITE_META_BYTES, 0u,
+        r.xq_dev, r.xs_dev, bq, bq / kq_elems(KqFmt.q8) * 4l, WD_XQ, y_dev, y_bytes, y_bit)
 }
 
 //! a site's region pairs: each region's first weight block, its activation rows at block 0

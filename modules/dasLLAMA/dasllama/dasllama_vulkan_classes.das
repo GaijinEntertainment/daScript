@@ -13817,6 +13817,14 @@ def gemv_cls_set(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbit
     return VkDescriptorSet()
 }
 
+//! a decode GEMV set over a plane pair `p` (an arena's `arena_planes`, a stack's or a driver's own weights): the quant and
+//! scale planes, the region meta buffer with its hazard bit, the activation pair the GEMV reads (one bit for both) and its output
+def gemv_planes_set(fmt : int; p : tuple<wq : uint64; ws : uint64; wqb : int64; wsb : int64>; meta : uint64; meta_bytes : int64; meta_bit : uint;
+                    xq, xs : uint64; xq_bytes, xs_bytes : int64; xbit : uint; y : uint64; y_bytes : int64; ybit : uint) : VkDescriptorSet {
+    return gemv_cls_set(fmt, fixed_array(p.wq, p.ws, meta, xq, xs, y), fixed_array(p.wqb, p.wsb, meta_bytes, xq_bytes, xs_bytes, y_bytes),
+        fixed_array(0u, 0u, meta_bit, xbit, xbit, ybit))
+}
+
 def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {
     if (fmt == int(KqFmt.q8)) {
         enc_q8_gemv_cls(raw, h, set_, pc, wgs)

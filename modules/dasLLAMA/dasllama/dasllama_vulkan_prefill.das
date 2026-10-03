@@ -2245,11 +2245,7 @@ def private af_role_set(var sets : table<int; VkDescriptorSet>; fmt : int; blk :
                         mbuf, xqbuf, xsbuf, ybuf : uint64; xqbytes, xsbytes : int64; xbit, ybit : uint) : VkDescriptorSet {
     return cached(sets, arena_slab_idx(blk)) $ {
         verify(gemv_cls_ensure(fmt), "vulkan arena: the gemv class rail must engage on a live device")
-        let p = arena_planes(fmt, blk)
-        return gemv_cls_set(fmt,
-            fixed_array(p.wq, p.ws, mbuf, xqbuf, xsbuf, ybuf),
-            fixed_array(p.wqb, p.wsb, META_BYTES, xqbytes, xsbytes, Y_BYTES),
-            fixed_array(0u, 0u, 0u, xbit, xbit, ybit))
+        return gemv_planes_set(fmt, arena_planes(fmt, blk), mbuf, META_BYTES, 0u, xqbuf, xsbuf, xqbytes, xsbytes, xbit, ybuf, Y_BYTES, ybit)
     }
 }
 
