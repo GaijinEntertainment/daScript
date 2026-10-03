@@ -520,7 +520,7 @@ def private vulkan_styletts2_albert(a : St2Albert; ids : array<int>; @scratch @e
     for (id in ids) {
         return ts_decline("albert", VulkanTtsDecline.shape) if (id < 0 || int64(id + 1) * a.emb_dim > long_length(a.word_emb.a))
     }
-    if (!vulkan_tower_arms() || !ts_albert_ensure()) {
+    if (!ts_arm_ensure("albert", @@ts_albert_ensure)) {
         return ts_decline("albert", VulkanTtsDecline.device)
     }
     let d = a.hidden
@@ -632,7 +632,7 @@ def private vulkan_styletts2_text(te : St2TextEncoder; ids : array<int>; @scratc
     for (id in ids) {
         return ts_decline("text", VulkanTtsDecline.shape) if (id < 0 || int64(id + 1) * cc > long_length(te.emb.a))
     }
-    if (!vulkan_tower_arms() || !ts_text_ensure()) {
+    if (!ts_arm_ensure("text", @@ts_text_ensure)) {
         return ts_decline("text", VulkanTtsDecline.device)
     }
     let hd = te.lstm.fwd.hidden
@@ -802,7 +802,7 @@ def private vulkan_styletts2_dur_enc(p : St2Predictor; bert : array<float>; t : 
     if (!ts_dur_enc_shape_ok(p, t, sd) || long_length(bert) < t * hidden) {
         return ts_decline("dur_enc", VulkanTtsDecline.shape)
     }
-    if (!vulkan_tower_arms() || !ts_pred_ensure()) {
+    if (!ts_arm_ensure("dur_enc", @@ts_pred_ensure)) {
         return ts_decline("dur_enc", VulkanTtsDecline.device)
     }
     let hd = cc / 2l
@@ -871,7 +871,7 @@ def private vulkan_styletts2_durations(p : St2Predictor; d : array<float>; t : i
         || speed <= 0.0 || long_length(d) < t * width || !tts_pred_ok(p, TS_LSTM_MAX_HIDDEN)) {
         return ts_decline("durations", VulkanTtsDecline.shape)
     }
-    if (!vulkan_tower_arms() || !ts_pred_ensure()) {
+    if (!ts_arm_ensure("durations", @@ts_pred_ensure)) {
         return ts_decline("durations", VulkanTtsDecline.device)
     }
     var fl : TsFloats
@@ -1127,7 +1127,7 @@ def private vulkan_styletts2_prosody(p : St2Predictor; en : array<float>; cc, fr
     if (tf < 0l || tn < 0l || tf != tn) {
         return ts_decline("prosody", VulkanTtsDecline.shape)
     }
-    if (!vulkan_tower_arms() || !ts_pred_ensure()) {
+    if (!ts_arm_ensure("prosody", @@ts_pred_ensure)) {
         return ts_decline("prosody", VulkanTtsDecline.device)
     }
     let fl = ts_pr_floats(sh, cc, hd, frames)
@@ -1522,7 +1522,7 @@ def private vulkan_styletts2_decode(d : St2Decoder; text_c : int64; source : Sin
         || long_length(f0) < f2 || long_length(nrg) < f2) {
         return ts_decline("decode", VulkanTtsDecline.shape)
     }
-    if (!vulkan_tower_arms() || !ts_dec_ensure()) {
+    if (!ts_arm_ensure("decode", @@ts_dec_ensure)) {
         return ts_decline("decode", VulkanTtsDecline.device)
     }
     let nh = source.n_harm
@@ -1585,7 +1585,7 @@ def private vulkan_styletts2_generator(d : St2Decoder; x_rows : array<float>; cx
     if (cx % 32l != 0l || !tts_gen_shape(d, cx, t, har_frames, TS_MAX_STAGES, sh) || !tts_dec_ok(d) || long_length(x_rows) < t * cx || long_length(har_spec) < spec_floats) {
         return ts_decline("generator", VulkanTtsDecline.shape)
     }
-    if (!vulkan_tower_arms() || !ts_dec_ensure()) {
+    if (!ts_arm_ensure("generator", @@ts_dec_ensure)) {
         return ts_decline("generator", VulkanTtsDecline.device)
     }
     var fl = ts_gen_floats(d, sh)
