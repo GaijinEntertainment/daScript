@@ -12,6 +12,7 @@ require dasllama/dasllama_batch   // nolint:STYLE030,LINT019 — verify_batch_st
 require dasllama/dasllama_mtp_gemma   // nolint:STYLE030,LINT019 — gemma_drafter_sidecar in the das_metal halves
 require ?das_metal dasllama/dasllama_metal_mtp_gemma   // attach_gemma_drafter — the gemma spec round rides the verify fixtures
 require ?das_metal dasllama/dasllama_metal_decode   // stats + the forced-reject lever + shutdown
+require ?das_metal dasllama/dasllama_metal_kernels   // attn_d_head_ok - the fused attention's head admission
 require ?das_metal dasllama/dasllama_metal_prefill   // the metal prefill override for the pair's prompts
 require ?das_metal metal/das_metal_boost   // metal_live_object_count for the leak gate
 require daslib/jobque_boost
@@ -20,6 +21,7 @@ require math
 require strings
 require _model_tier
 require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting_prompt, read only inside the das_metal static_if halves
+require _metal_blob_twin   // metal_kernel_count - the census reader
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -242,18 +244,36 @@ def private ff_cell(t : T?; tr, trg : Model; tag, pn : string; prompt : array<in
     }
 }
 
-// the process-wide knobs every exit path of run_fixture puts back
 def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int64>; depth : int64; sampled : bool = false) {
     var plain : array<int64>
     var spec : array<int64>
     var drafted = 0l
     var parked = 0l
     mtp_pos_reset()
-    let served = free_run_pair(tr, trg, count, COUNT_STEPS, plain, spec, depth, drafted, parked, sampled)
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        metal_kernel_coverage_reset()
+    }
+    var served = 0l
+    with_metal_attn_d(true) $ {
+        served = free_run_pair(tr, trg, count, COUNT_STEPS, plain, spec, depth, drafted, parked, sampled)
+    }
     let kind = sampled ? "sampled" : "counting"
     if (served == 0l) {
         t |> skip("metal decode declined (no Metal device?)")
     } else {
+        let c = tr.config
+        var fused_shape = false
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            fused_shape = attn_d_head_ok(c.head_size) && (c.head_size_swa == 0l || attn_d_head_ok(c.head_size_swa))
+        }
+        let chunked = metal_kernel_count("MetalSqAttnPartBF16_metal_sq_attn_part_b")
+        let fused = metal_kernel_count("MetalSqAttnDF16_metal_sq_attn_d") + metal_kernel_count("MetalSqAttnDWF16_metal_sq_attn_d") + metal_kernel_count("MetalSqAttnDXF16_metal_sq_attn_d")
+        to_log(LOG_INFO, "{tag} {kind} k{depth}: prompt {long_length(count)} tokens, head {c.head_size}, fused shape {fused_shape}: {fused} fused dispatches, {chunked} chunked\n")
+        if (long_length(count) > 64l && fused_shape) {
+            t |> success(fused > 0l && chunked == 0l, "{tag} {kind} k{depth}: the verify's rows took the fused attention under DASLLAMA_METAL_ATTN_D pinned on ({fused} fused dispatches, {chunked} chunked)")
+        } elif (long_length(count) > 64l) {
+            t |> success(chunked > 0l, "{tag} {kind} k{depth}: a shape the fused kernel does not carry keeps the verify on the chunked pair ({chunked} dispatches)")
+        }
         log_gen_texts(tr, "{tag} {kind} k{depth}", plain, spec)
         t |> success(drafted > 0l, "{tag} {kind} k{depth}: the spec rail engaged ({drafted} drafts) - a plain fallback would pass vacuously")
         let positions = mtp_pos_report()
@@ -768,6 +788,38 @@ def private vff1_cells(t : T?; tr, trg : Model; tag : string; prompt : array<int
     }
 }
 
+//! the nine-row verify under a mirror ceiling ONE slice fits and nine do not: the rows share the
+//! session's slice, so the step's arena demand is that slice once, not once a row
+def private vffc_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; tol : float) {   // nolint:LINT012,LINT019 — the body is the das_metal half
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        metal_decode_shutdown()
+        metal_prefill_shutdown()
+        let prev_cap = get_metal_decode_mirror_cap_mb()
+        set_metal_decode_mirror_cap_mb(64)
+        vff_cell(t, tr, trg, "{tag} ceiling 64MB", prompt, trg.kquant_native ? max(tol, MM_TOL) : tol, 9l, true)
+        set_metal_decode_mirror_cap_mb(prev_cap)
+    }
+}
+
+//! the same-slab verify arms by row count
+def private vff_arms(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; tol : float; must_serve : bool; expect_decline : string) {
+    if (arm_on(t, "mtp-vff-{tag}")) {
+        vff_cell(t, tr, trg, tag, prompt, tol, 4l, must_serve, expect_decline)
+    }
+    if (arm_on(t, "mtp-vff1-{tag}")) {   // one row through the batch driver: the encoder alone, no row mixing
+        vff1_cells(t, tr, trg, tag, prompt, tol, must_serve, expect_decline)
+    }
+    if (arm_on(t, "mtp-vff5-{tag}")) {   // five rows: the batch driver's GEMM rail (mp 32) under the same-slab verify
+        vff_cell(t, tr, trg, tag, prompt, tol, 5l, must_serve, expect_decline)
+    }
+    if (arm_on(t, "mtp-vff9-{tag}")) {   // nine rows = MTP_MAX_ROWS: the batch driver's mul_mm rail (kq planes stage x to half)
+        vff9_cell(t, tr, trg, tag, prompt, tol, must_serve, expect_decline)
+    }
+    if (arm_on(t, "mtp-vffc-{tag}") && empty(expect_decline)) {
+        vffc_cell(t, tr, trg, tag, prompt, tol)
+    }
+}
+
 def private run_verify_fixture(t : T?; file, tag : string; tol : float; must_serve : bool = false; expect_decline : string = "") {   // nolint:LINT012,LINT019 — the body is the das_metal half
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let path = path_join(models_dir(), file)
@@ -796,18 +848,7 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float; must_ser
         if (arm_on(t, "mtp-dff8-{tag}")) {   // B=5 and B=8: the GEMM / mv8 rails of the batch driver
             dff_cell(t, tr, trg, tag, prose_a, prose_b, tol, true)
         }
-        if (arm_on(t, "mtp-vff-{tag}")) {
-            vff_cell(t, tr, trg, tag, prose_a, tol, 4l, must_serve, expect_decline)
-        }
-        if (arm_on(t, "mtp-vff1-{tag}")) {   // one row through the batch driver: the encoder alone, no row mixing
-            vff1_cells(t, tr, trg, tag, prose_a, tol, must_serve, expect_decline)
-        }
-        if (arm_on(t, "mtp-vff5-{tag}")) {   // five rows: the batch driver's GEMM rail (mp 32) under the same-slab verify
-            vff_cell(t, tr, trg, tag, prose_a, tol, 5l, must_serve, expect_decline)
-        }
-        if (arm_on(t, "mtp-vff9-{tag}")) {   // nine rows = MTP_MAX_ROWS: the batch driver's mul_mm rail (kq planes stage x to half)
-            vff9_cell(t, tr, trg, tag, prose_a, tol, must_serve, expect_decline)
-        }
+        vff_arms(t, tr, trg, tag, prose_a, tol, must_serve, expect_decline)
         // the assistant drafter's round (gemma-4 targets with an mtp-* sidecar beside them): counting
         // free-run, speculative == plain at depth 1, 2 and 4
         if (arm_on(t, "mtp-count-{tag}")) {

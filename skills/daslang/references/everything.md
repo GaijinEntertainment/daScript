@@ -1240,6 +1240,7 @@ A pure-daslang client for OpenAI-compatible REST APIs — OpenAI itself, plus an
 
 - `OpenAIClient` - Connection + auth config.
 - `OpenAIError` - Unified error.
+- `PromptTokensDetails` - The prompt's token breakdown, when the server reports one.
 - `Usage` - Token accounting returned with most responses.
 - `HttpOutcome` - Internal transport result of a JSON request (`post_json` / `get_json`).
 - `BytesOutcome` - Internal transport result of a binary request (`post_for_bytes`).
@@ -1249,6 +1250,7 @@ A pure-daslang client for OpenAI-compatible REST APIs — OpenAI itself, plus an
 - `ToolCallFunction` - The function a tool call targets.
 - `ToolCall` - A tool call requested by the model.
 - `ChatMessage` - A single chat message.
+- `StreamOptions` - `stream_options` of a streamed request.
 - `ChatCompletionRequest` - Request body for `/chat/completions`.
 - `ChatChoice` - One completion choice.
 - `ChatCompletionResponse` - Response body for a non-streaming `/chat/completions` call.
@@ -1258,6 +1260,7 @@ A pure-daslang client for OpenAI-compatible REST APIs — OpenAI itself, plus an
 - `ChatMessageDelta` - Incremental message fields in a streamed chunk (object == "chat.completion.chunk").
 - `ChunkChoice` - One choice within a streamed chunk.
 - `ChatCompletionChunk` - One streamed delta frame.
+- `StreamTimings` - A server's own timing of a streamed turn, in milliseconds.
 - `ChatStreamResult` - Outcome of `chat_stream`: `content` is the full accumulated assistant text.
 - `EmbeddingRequest` - Request body for `/embeddings`.
 - `EmbeddingUsage` - Token accounting for an embeddings request.
@@ -3156,11 +3159,14 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 
 ### Model loading and sessions
 
+- `attach_mtp_drafter` - Attach the assistant drafter at `path` to `model` for speculative decode; false where the driver refused it (a drafter made for another target) or no driver carries one.
 - `caps` - What `model` honestly supports at the chat layer (see LlmCaps) — e.g.
 - `create_batch_workspace` - Create the caller-owned scratch that `eval_batch` steps through — one per concurrent batch, reused across calls (buffers grow to the largest batch seen).
 - `create_kv_pool` - Create a caller-owned PAGED KV pool over `model`'s cache geometry.
 - `create_session` - Create a fresh session (KV cache + scratch) sized to `model.config.seq_len` — one model, many independent conversations.
 - `load_model` - Load a model AND its tokenizer from a GGUF file — architecture and tokenizer backend are auto-selected from metadata; `mode` picks the weight quantization.
+- `mtp_capable` - Whether `model` can run a speculative round: a NextN head of its own, or an assistant drafter attached - what a scheduler's `mtp` asks for.
+- `mtp_drafter_sidecar` - The assistant drafter file a model ships beside it (gemma-4: `mtp-<stem>-Q8_0.gguf`), "" where there is none or no driver carries one.
 - `release_kv_pages` - Return `session`'s KV pages to its pool (no-op on flat sessions).
 - `setup_dasllama_jobque` - Configure the job queue for dasLLAMA's fork/join matmul dispatch: pooled fork contexts, batched dispatch, the worker spin-before-park window (`jobque_spin_us`; 0 disables).
 - `with_dasllama_jobque` - Run `blk` inside a fresh `with_job_que()` that `setup_dasllama_jobque()` has configured — the one-call form of the pair.
@@ -3279,6 +3285,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 ### Operations: serving from the device
 
 - `create_device_session` - Create a DEVICE-HOME session: its K/V cache lives only in the armed GPU driver's region - no host cache, nothing over the bus per token.
+- `device_kv_max_rows` - The rows of context the armed GPU driver holds a session's K/V for under these codecs - the model's own context where no driver bounds it.
 - `gpu_cpu_passes` - Calls the armed GPU path handed back to the CPU rails since the model armed, one row per reason that fired: its name, the same in words a status page prints, the count.
 - `gpu_ctx_pins` - The in-process context pins as set (`set_gpu_ctx_max`, `set_gpu_ctx_strict`), apart from the environment's knobs: a fixture reads them before it pins and puts them back after its load.
 - `gpu_device_kv_adopt` - Hand the first `npos` rows a kept `claim` holds to the fresh device-home `session`, whose `n_past` becomes `npos`.

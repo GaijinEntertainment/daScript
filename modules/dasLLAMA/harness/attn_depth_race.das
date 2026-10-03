@@ -98,7 +98,7 @@ def main {   // nolint:STYLE038 — one-shot race harness; buffers + PSOs stay l
         var qk_p = pipeline_from_source(dev, MetalAttnQKMmTH_metal_attn_qk_mm_t_msl, MetalAttnQKMmTH_metal_attn_qk_mm_t_msl_entry, MetalAttnQKMmTH_metal_attn_qk_mm_t_msl_fastmath, err)
         var rs_p = pipeline_from_source(dev, metal_attn_rowstat_msl, metal_attn_rowstat_msl_entry, metal_attn_rowstat_msl_fastmath, err)
         var av_p = pipeline_from_source(dev, MetalAttnAVMmP_metal_attn_av_mm_msl, MetalAttnAVMmP_metal_attn_av_mm_msl_entry, MetalAttnAVMmP_metal_attn_av_mm_msl_fastmath, err)
-        var tw_d = pipeline_from_source(dev, metal_kv_twin_msl, metal_kv_twin_msl_entry, metal_kv_twin_msl_fastmath, err)
+        var tw_d = pipeline_from_source(dev, metal_half_rows_msl, metal_half_rows_msl_entry, metal_half_rows_msl_fastmath, err)
         var qk_d = pipeline_from_source(dev, MetalAttnQKDev128_metal_attn_qk_dev_msl, MetalAttnQKDev128_metal_attn_qk_dev_msl_entry, MetalAttnQKDev128_metal_attn_qk_dev_msl_fastmath, err)
         var px_d = pipeline_from_source(dev, metal_attn_pexp_msl, metal_attn_pexp_msl_entry, metal_attn_pexp_msl_fastmath, err)
         var av_d = pipeline_from_source(dev, MetalAttnAVDev128_metal_attn_av_dev_msl, MetalAttnAVDev128_metal_attn_av_dev_msl_entry, MetalAttnAVDev128_metal_attn_av_dev_msl_fastmath, err)
@@ -136,7 +136,8 @@ def main {   // nolint:STYLE038 — one-shot race harness; buffers + PSOs stay l
         var ka = AttnArgs(qd = uint(QD), kv_dim = uint(KVD), head_size = uint(HS), kv_mul = uint(KV_MUL),
             npos = uint(NK), np32 = uint(NK), scale = scale, qoff = uint(QOFF), qrows = uint(MP),
             window = 0u, softcap = 0.0, hass = 0u)
-        var tka = KvTwinArgs(total = uint(NK * KVD), scale = scale)
+        var tka = HalfRowsArgs(total = uint(NK * KVD), scale = scale)
+        var tva = HalfRowsArgs(total = uint(NK * KVD), scale = 1.0)
         let gfma = double(MP) * double(NK) * double(HS) * double(HEADS) / 1.0e9lf
         print("attention at depth: {MP} queries at {QOFF}, {NK} keys, {HEADS} heads of {HS} over {HEADS / KV_MUL} KV heads - {gfma} G multiply-adds a GEMM\n")
         for (stage in range(4)) {
@@ -152,14 +153,15 @@ def main {   // nolint:STYLE038 — one-shot race harness; buffers + PSOs stay l
                 }
             }, $(enc) {
                 if (stage == 3) {
-                    enc_kv_twin_pso(enc, tw_d, bk, bv, bkh, bvh, tka, int64(NK * KVD))
+                    enc_half_rows_pso(enc, tw_d, bk, bkh, 0ul, tka, int64(NK * KVD))
+                    enc_half_rows_pso(enc, tw_d, bv, bvh, 0ul, tva, int64(NK * KVD))
                 }
-                enc_qk_dev128_c_pso(enc, qk_d, bqh, bkh, batt_b, ka, int64(MP), int64(NK), int64(HEADS))
+                enc_qk_dev128_c_pso(enc, qk_d, bqh, bkh, 0ul, batt_b, ka, int64(MP), int64(NK), int64(HEADS))
                 if (stage >= 1) {
                     enc_attn_pexp_pso(enc, px_d, batt_b, ka, bstat_b, bsink, int64(MP), int64(HEADS))
                 }
                 if (stage >= 2) {
-                    enc_av_dev128_c_pso(enc, av_d, batt_b, bvh, bxb_b, ka, bstat_b, int64(MP), int64(HEADS), int64(HS))
+                    enc_av_dev128_c_pso(enc, av_d, batt_b, bvh, 0ul, bxb_b, ka, bstat_b, int64(MP), int64(HEADS), int64(HS / 64))
                 }
             })
             var note = ""

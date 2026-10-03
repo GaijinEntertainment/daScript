@@ -1,10 +1,12 @@
 options gen2
 options persistent_heap
+options _dasllama_internal = true   // the K/V room seam the ctx-clamp cell doubles is the engine's, not the facade's
 
 require dastest/testing_boost public
 require main                                            // the program root: cli_has_flag, mtp_setting, mtp_default_resolved (sibling by bare name)
-require openai_server                                   // mtp_auto_arms, and serving_knobs' Metal-mode pair through it
-require dasllama/dasllama                               // nolint:STYLE029 - MetalMode through the facade, the one door into the engine
+require openai_server                                   // mtp_auto_arms, clamp_ctx_to_device_room, and serving_knobs' Metal-mode pair through it
+require dasllama/dasllama                               // MetalMode through the facade
+require dasllama/dasllama_gpu_tier                      // the K/V room seam a cell doubles
 require daslib/clargs                                   // get_user_args / flag_present: the match cli_has_flag rests on
 require strings
 
@@ -127,4 +129,41 @@ def test_mtp_setting_tri_state(t : T?) {
         t |> success(metal_mode_of("").mode == MetalMode.off && metal_mode_of("").known && metal_mode_of("off").known)
         t |> success(metal_mode_of("fast").mode == MetalMode.off && !metal_mode_of("fast").known)
     }
+}
+
+def private room_of_a_megabyte(row_bytes : int64) : int64 => 1000000l / row_bytes
+
+//! The context clamp a blob-only model gets: its `seq_len` cut to the rows the device's KV room holds, a planar model and a
+//! context under the room left alone.
+[test]
+def test_ctx_clamp_to_device_room(t : T?) {
+    var m = Model()
+    m.config.n_layers = 3l
+    m.config.head_size = 128l
+    m.config.n_kv_heads = 2l
+    m.kv_src <- [0l, 1l, 2l]
+    let prior = gpu_kv_room_hook()
+    set_gpu_kv_room_hook(@@room_of_a_megabyte)   // f16 K and V over three layers of 256: 3072 bytes a row, 325 rows in the megabyte
+    m.config.seq_len = 1000l
+    clamp_ctx_to_device_room(m, "planar", KVDtype.f16)
+    t |> equal(1000l, m.config.seq_len, "a planar model keeps its context: it falls to the CPU stack")
+    m.metal_blob = true
+    clamp_ctx_to_device_room(m, "blob", KVDtype.f16)
+    t |> equal(325l, m.config.seq_len, "a blob-only model is cut to the device's rows")
+    clamp_ctx_to_device_room(m, "blob", KVDtype.f16)
+    t |> equal(325l, m.config.seq_len, "a context already under the room stands")
+    set_gpu_kv_room_hook(prior)
+    delete m
+}
+
+//! The K/V codec a slot runs on, which the live-load clamp reads too: a slot that asked for none inherits the server default
+//! (never SlotOpts' f16 seed), one that asked keeps its own.
+[test]
+def test_slot_kv_dtype(t : T?) {
+    let plain = SlotOpts()
+    t |> success(slot_kv_dtype(plain) == sched_default_kv_dtype(), "an unset slot inherits the server default")
+    let asked = SlotOpts(kv_dtype = KVDtype.q8_0, kv_dtype_set = true)
+    t |> success(slot_kv_dtype(asked) == KVDtype.q8_0, "a slot that asked keeps its own codec")
+    let seeded = SlotOpts(kv_dtype = KVDtype.q8_0)   // the seed alone, not asked: the server default still rules
+    t |> success(slot_kv_dtype(seeded) == sched_default_kv_dtype(), "a codec written without the ask is the seed, not a choice")
 }

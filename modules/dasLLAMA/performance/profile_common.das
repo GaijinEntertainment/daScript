@@ -25,6 +25,7 @@ require dasllama/dasllama_bench           // bench_row — the batched reference
 require daslib/strings_convert            // try_to_float — the batched reference exe's table cells
 require [tune_framework]                  // nolint:STYLE030,LINT019 — tune_status, the stamp provenance; empty without the framework
 require model_specs public                // the model-set table + its llm/official views
+require ../harness/_corpus.das public     // load_corpus - the prompt corpus reader the served instrument shares
 require box_ident                         // derive_box_name — the hardware-keyed box tag
 
 // ===== Box + model roots =====
@@ -307,23 +308,6 @@ struct PlatformInfo {
     // gen-kernel stamp provenance ("fname=suffix (manifest|fallback|reference)") — an untuned
     // box publishing fallback-tier numbers must be visible in the profile itself
     @optional tune : string
-}
-
-//! a prompt corpus file's prompts: segments separated by lines of two percent signs, stripped, the empty and '#' ones skipped
-def load_corpus(path : string) : array<string> {
-    var texts : array<string>
-    fopen(path, "rb") $(f) {
-        if (f == null) {
-            panic("can't open prompt corpus {path}")
-        }
-        for (p in split(fread(f), "%%")) {
-            let tp = strip(p)
-            if (!empty(tp) && !starts_with(tp, "#")) {
-                texts |> push(clone_string(tp))
-            }
-        }
-    }
-    return <- texts
 }
 
 //! Run a child STREAMING: every line it emits (stdout+stderr, merged by popen_argv) prints to OUR

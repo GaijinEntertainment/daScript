@@ -213,7 +213,7 @@ def create_scheduler(model : Model; max_streams : int64 = 4l; max_queue : int64 
     var sch <- Scheduler(ws <- create_batch_workspace(model), max_streams = max(1l, max_streams),
                          max_queue = max(1l, max_queue), chunk_tokens = chunk_tokens > 0l ? chunk_tokens : dflt.chunk,
                          idle_chunk_tokens = idle_chunk_tokens >= 0l ? idle_chunk_tokens : dflt.idle,
-                         kv_dtype = kv_dtype, mtp = mtp && model.config.n_layer_nextn > 0l)
+                         kv_dtype = kv_dtype, mtp = mtp && mtp_capable_(model))
     gpu_dn_room(sch.max_streams)   //! every stream's recurrent state device-resident at once, before the first prefill
     if (page_rows > 0l) {
         sch.paged = true
@@ -429,7 +429,7 @@ def evict(var sch : Scheduler; id : int64; var events : array<SchedEvent>) : boo
 //! over every decoding stream, at most ONE prefill chunk (`chunk_tokens`, or `prefill_chunk`'s wider one on an idle tick and in device mode; FCFS; the final chunk's
 //! logits sample the first token inline), then reap finished streams. Events append to `events`
 //! (the caller drains it). Returns true while any stream or queued request remains.
-[arch(at="../ARCHITECTURE_ENGINE.md#scheduler-step")]
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#scheduler-step")]
 def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent>) : bool {  // nolint:STYLE037,STYLE038 - admit/decode/prefill/reap, one linear pass
     // (0) drop finished-stream linger entries past their poll window (bounded backstop at 32).
     // get_time_nsec, NOT get_time_usec: the usec helper returns int and wraps at ~35.8 min,

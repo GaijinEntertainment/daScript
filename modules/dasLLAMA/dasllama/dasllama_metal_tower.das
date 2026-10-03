@@ -695,9 +695,8 @@ def private fc_twin_attach(blob : PlaneF; bblob : MetalBuffer?) : MetalBuffer? {
         return null
     }
     var err = ""
-    var cka = CvtArgs(total = uint(blen))
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
-        enc_cvt_half(enc, bblob, twin, cka, blen)
+        enc_cvt_half(enc, bblob, twin, blen)
     }
     if (!ran) {
         release_handle(twin)
@@ -1558,8 +1557,7 @@ def private tw_mm(enc : MetalComputeEncoder?; f16w, bf16w : bool; bwh, bblob : M
                   bx, bxh, by : MetalBuffer?; yoff : uint64; bk, bn : MetalBuffer?;
                   rows, nd, kdim : int64; cvt : bool) {
     if ((f16w || (bf16w && bxh != null)) && cvt) {
-        var cka = CvtArgs(total = uint(rows * kdim))
-        enc_cvt_half(enc, bx, bxh, cka, rows * kdim)
+        enc_cvt_half(enc, bx, bxh, rows * kdim)
     }
     if (f16w) {
         pf_enc_hmm(enc, bwh, bxh, by, yoff, bk, bn, rows, nd, nd, kdim, uint64(welem * 2l))
@@ -1905,7 +1903,7 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : 
     let bf16w = bf16_route && bwh != null
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
         enc_f32_mm(enc, bblob, uint64(t.patch_w * 4l), bx0, braw, 0ul, u_pd, u_d, mp, d)
-        var kg = RowGatherArgs(c = uint(d), add_b = 0u, add_c = 0u, total = uint(npos * d))
+        var kg = RowGatherArgs(c = uint(d), add_b = 0u, add_c = 0u, total = uint(npos * d), scale = 1.0)
         enc_row_gather(enc, braw, 0ul, bsrc, g_one, 0ul, g_one, 0ul, bx, kg, npos * d)
         for (l in range64(t.n_layer)) {
             let o = qwen25v_block_offs(t, l)
@@ -2974,7 +2972,7 @@ def private st2_res_blk(enc : MetalComputeEncoder?; var c : St2GpuCtx; b : St2Ad
     st2_conv(enc, c, sl.c2, b.conv2, r.bc1, t1, bout)
     let n = t1 * b.dim_out
     if (b.upsample) {
-        var kg = RowGatherArgs(c = uint(b.dim_in_s), add_b = 0u, add_c = 0u, total = uint(t1 * b.dim_in_s))
+        var kg = RowGatherArgs(c = uint(b.dim_in_s), add_b = 0u, add_c = 0u, total = uint(t1 * b.dim_in_s), scale = 1.0)
         enc_row_gather(enc, bin, 0ul, r.bidx, bin, 0ul, bin, 0ul, r.bsc, kg, t1 * b.dim_in_s)
         if (b.learned_sc) {
             st2_conv(enc, c, sl.c1x1, b.conv1x1, r.bsc, t1, r.bsc2)
@@ -3598,7 +3596,7 @@ def private metal_styletts2_albert(a : St2Albert; ids : array<int>; @scratch @ex
     let sl & = g_tw_st2_albert
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
-        var kg = RowGatherArgs(c = uint(a.emb_dim), add_b = 1u, add_c = 1u, total = uint(t * a.emb_dim))
+        var kg = RowGatherArgs(c = uint(a.emb_dim), add_b = 1u, add_c = 1u, total = uint(t * a.emb_dim), scale = 1.0)
         enc_row_gather(enc, c.slab, sl.word_emb, bids, c.slab, sl.pos_emb, c.slab, sl.type_emb, be, kg, t * a.emb_dim)
         st2_ln(enc, c, be, be, t, a.emb_dim, ST2_ALBERT_EPS, c.slab, sl.emb_ln.gwoff, sl.emb_ln.gboff)
         st2_lin(enc, c, sl.map_in, be, t, bx)
@@ -3668,7 +3666,7 @@ def private metal_styletts2_text(te : St2TextEncoder; ids : array<int>; @scratch
     let sl & = g_tw_st2_text
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
-        var kg = RowGatherArgs(c = uint(cc), add_b = 0u, add_c = 0u, total = uint(t * cc))
+        var kg = RowGatherArgs(c = uint(cc), add_b = 0u, add_c = 0u, total = uint(t * cc), scale = 1.0)
         enc_row_gather(enc, c.slab, sl.emb, bids, c.slab, 0ul, c.slab, 0ul, ba, kg, t * cc)
         for (i in range(length(te.cnn))) {
             let src = i % 2 == 0 ? ba : bb

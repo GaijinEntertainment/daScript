@@ -26,9 +26,11 @@ A companion's sections are listed in three places: its line in this document's r
 (under `File charters` or `Mechanisms`), the companion's own opening, and the routing sentence of
 any sibling companion that sends a reader to it.
 
-- `ARCHITECTURE_ENGINE.md` - the engine core, arch-registration, support and serving charters, and
+- `ARCHITECTURE_ENGINE.md` - the engine core, arch-registration and support charters, and
   the decode pick tape a parity cell pins one arm's routing on another with
-  (`ARCHITECTURE_ENGINE.md#moe-pick-tape`), and the prefix cache's checkpoints on a recurrent model.
+  (`ARCHITECTURE_ENGINE.md#moe-pick-tape`).
+- `ARCHITECTURE_ENGINE_SERVING.md` - the serving charter, the prefix cache's partial page
+  (`ARCHITECTURE_ENGINE_SERVING.md#prefix-tail-page`) and its checkpoints on a recurrent model.
 - `ARCHITECTURE_ENGINE_FORMATS.md` - the format, load-rail and CPU-kernel-tier charters, plus
   the shapes they key off - the bigram merge heap both tokenizer backends run
   (`ARCHITECTURE_ENGINE_FORMATS.md#bpe-merge-heap`), the one RoPE fill over a position source
@@ -77,8 +79,10 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
 - `ARCHITECTURE_GPU_PREFILL_MOE.md` - the Metal prefill driver's routed block - the MoE bucket
   rail, its tensor-twin scaffold, and the split-format expert twins.
 - `ARCHITECTURE_GPU_PREFILL_WINDOW.md` - the Metal prefill driver's device attention pair (the
-  K/V twins, the device-direct QK and AV, the row softmax written in place), the recurrent scan
-  over half rows, and how a kernel's hot loads are addressed.
+  K/V twins, the device-direct QK and AV with the tail stamp of a head off the 64 lattice, the row
+  softmax written in place), the mirror-fed window and mirror adoption
+  (`ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-kv-mirror`), the recurrent scan over half rows, and
+  how a kernel's hot loads are addressed.
 - `ARCHITECTURE_GPU_VULKAN.md` - the Vulkan resident driver's prefill chain and byte stores - the
   prefill window chain, the Q8 requant byte store, the decode GEMV family's grid codebook buffer,
   the tile probe's shared descriptor set layout, the recurrent block of the prefill window, the
@@ -130,6 +134,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   wall in the sidecar's provenance, and the speculative round's ruler record.
 - `ARCHITECTURE_MEASUREMENT_FAT_START.md` - a fat exe's first-start race and its per-user
   sidecar (`ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`).
+- `ARCHITECTURE_MEASUREMENT_SERVED.md` - the client clock around a live chat server's turns and
+  what its figures are (`ARCHITECTURE_MEASUREMENT_SERVED.md#served-turn-instrument`).
 - `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` - the Vulkan GEMM probe's arms, the shapes they run
   at, and the alternates they are read against.
 - `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md` - the instruments that time a kernel away from the

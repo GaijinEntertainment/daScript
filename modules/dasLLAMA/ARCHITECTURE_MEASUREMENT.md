@@ -6,7 +6,8 @@ bench's fixture - and the timing-race vocabulary
 (`ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#timing-race-vocabulary`) are
 `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`; the Vulkan GEMM probe's arms, shapes and alternates are
 `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe`; a fat exe's first-start race and where
-it keeps its sidecar are `ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`.
+it keeps its sidecar are `ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`; the client clock
+around a live server's turns is `ARCHITECTURE_MEASUREMENT_SERVED.md#served-turn-instrument`.
 
 ### There is ONE benchmark rig, and the records are the baseline {#one-benchmark-rig}
 

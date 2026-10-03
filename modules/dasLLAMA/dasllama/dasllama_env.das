@@ -244,7 +244,7 @@ struct public MetalEnv {
     @clarg_doc = "Serve the whisper DECODE STEP on the GPU too (needs wdec). Small decoders (n_text_state under the 1024 floor; set_metal_wdec_step_min_d) keep the CPU rail - the per-dispatch latency floor beats them."
     wdec_step : bool = true
 
-    @clarg_doc = "Fused single-pass decode attention (a head of 128 on every KV codec, a head of 64 on the f16/f32 mirrors); 0 is the A/B rail to the chunked pair."
+    @clarg_doc = "Fused single-pass decode attention (a head of 64, 96, 128, 256 or 512 on every KV codec; sliding windows, attention sinks, the logit soft cap and a second head class included), on the single row, the speculative verify's rows and the batch; 0 is the A/B rail to the chunked pair."
     attn_d : bool = true
 
     @clarg_doc = "Row count below which attention uses the single-chunk kernel; clamped to 128."
@@ -306,6 +306,12 @@ struct public MetalEnv {
 
     @clarg_doc = "Ceiling in MiB for the device-side KV mirror, clamped 64..4096."
     kv_mirror_mb : int = 4096
+
+    @clarg_doc = "A released paged session's KV mirror goes to the next session whose leading pages are the same pool groups, its rows not uploaded again; 0 uploads every attached row - the A/B rail."
+    mirror_adopt : bool = true
+
+    @clarg_doc = "An f16-KV prefill writes its K/V rows into the session's KV mirror and its attention reads the cached rows there (the device pair, at any row count), so a continuation gathers nothing on the CPU and the first decode step uploads nothing; 0 keeps the f32 panels and the gather - the A/B rail."
+    pf_mirror : bool = true
 
     @clarg_doc = "Pin the served working set (weight regions, planes, the recycled pool buffers) in an MTLResidencySet, macOS 15+: the per-commit residency pass stays a no-op, so the first submission after a CPU-only window stops repaying it (~15 ms/encode on the M1 Max released-rig image cell; ARCHITECTURE_RUNTIME.md 2.12); 0 is the A/B rail."
     residency : bool = true

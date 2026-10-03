@@ -6,6 +6,8 @@ require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — public-path tests exercise the API through it (engine + arch registrations + chat)
 require dasllama/dasllama_tokenizer
 require dasllama/dasllama_bpe
+require dasllama/dasllama_gpu_tier   // the K/V room seam a cell doubles
+require ?das_metal dasllama/dasllama_metal_common   // the mirror ceiling behind that seam on a Metal box
 require daslib/fio
 require _model_tier
 
@@ -115,4 +117,38 @@ def test_facade_model(t : T?) {
         t |> success(ok, "model.tok populated + encode/piece delegate")
         delete m
     }
+}
+
+def private room_of_a_megabyte(row_bytes : int64) : int64 => 1000000l / row_bytes
+
+//! The rows a device holds a session's K/V for: the installed room seam over the model's K/V bytes a row, both planes of every
+//! layer that keeps rows of its own, never past the model's context; no seam bounds nothing.
+[test]
+def test_facade_device_kv_rows(t : T?) {
+    var m = Model()
+    m.config.n_layers = 3l
+    m.config.head_size = 128l
+    m.config.n_kv_heads = 2l
+    m.config.seq_len = 1000l
+    m.kv_src <- [0l, 1l, 1l]   //! the third layer reads the second's rows
+    let prior = gpu_kv_room_hook()
+    set_gpu_kv_room_hook(@@room_of_a_megabyte)
+    t |> equal(device_kv_max_rows(m, KVDtype.f16, KVDtype.f16), 488l, "f16 K and V over two owning layers of 256: 2048 bytes a row, 488 rows in the megabyte")
+    t |> equal(device_kv_max_rows(m, KVDtype.f32, KVDtype.f32), 244l, "f32 doubles a row and halves the rows")
+    m.config.seq_len = 300l
+    t |> equal(device_kv_max_rows(m, KVDtype.f16, KVDtype.f16), 300l, "a context under the room is the bound")
+    set_gpu_kv_room_hook(prior)
+    m.config.seq_len = 1000l
+    t |> success(device_kv_max_rows(m, KVDtype.f16, KVDtype.f16) <= 1000l, "the installed seam bounds a model by its own context at most")
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        //! the Metal seam itself: the mirror ceiling over the row's bytes - 64 MiB holds 32768 rows of 2048 bytes, 128 MiB twice that
+        let prev_cap = get_metal_decode_mirror_cap_mb()
+        m.config.seq_len = 1000000l
+        set_metal_decode_mirror_cap_mb(64)
+        t |> equal(device_kv_max_rows(m, KVDtype.f16, KVDtype.f16), 32768l, "a 64 MiB mirror ceiling holds 32768 rows of 2048 bytes")
+        set_metal_decode_mirror_cap_mb(128)
+        t |> equal(device_kv_max_rows(m, KVDtype.f16, KVDtype.f16), 65536l, "a 128 MiB ceiling twice as many")
+        set_metal_decode_mirror_cap_mb(prev_cap)
+    }
+    delete m
 }

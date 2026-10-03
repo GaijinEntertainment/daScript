@@ -223,11 +223,6 @@ def kv_share_ok(t : Model; l : int64) : bool {
         layer_head_size(t.config, l) == layer_head_size(t.config, src))
 }
 
-//! true when layer l reads another layer's KV (no rows of its own — Q-only attention)
-def kv_shared_layer(t : Model; l : int64) : bool {
-    return l < long_length(t.kv_src) && t.kv_src[l] != l
-}
-
 // Wave D serve gate for the deltanet kernel set: fixed d_state 128 (the scan/l2/gate lane math
 // bakes 32 lanes x 4), conv taps <= 8 (hist registers). β/α projections: q8 planes ride the
 // site GEMVs; f32-on-disk (dn_ba_f32) rides the router-slab f32 GEMV off the fblob offsets.

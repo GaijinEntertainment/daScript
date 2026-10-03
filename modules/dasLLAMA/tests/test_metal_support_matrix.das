@@ -631,6 +631,9 @@ def private family_cells(t : T?; path, family, tag : string; expect_needs : uint
                 select_decode_override("metal")
                 select_prefill_override("metal")
                 set_metal_prefill_min_npos(1l)
+                metal_kernel_coverage_reset()
+                let mirror_before = metal_prefill_mirror_served()
+                let spec_before = metal_decode_spec_stats().hits
                 var s2 = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
                 let ids2 <- generate(trg, s2, prompt, length(prompt) + 8)
                 gpu_ids := ids2
@@ -638,6 +641,18 @@ def private family_cells(t : T?; path, family, tag : string; expect_needs : uint
                 set_metal_prefill_min_npos(64l)
                 select_decode_override("")
                 select_prefill_override("")
+                if (!tr.emb_q8 && !cls_kq(tr) && !tr.planes_trimmed) {
+                    let hits = metal_decode_spec_stats().hits - spec_before
+                    t |> success(hits > 0l, "{tag}: the greedy chain ran on the fp32 token table ({hits} hits)")
+                }
+                if (tr.config.head_size % 64l != 0l) {
+                    if (metal_prefill_mirror_served() > mirror_before) {
+                        let tails = metal_kernel_count("MetalAttnAVDevTail_metal_attn_av_dev") + metal_kernel_count("MetalAttnAVDev128Tail_metal_attn_av_dev")
+                        t |> success(tails > 0l, "{tag}: the device pair's tail stamp served the head's columns past its 64-wide tiles ({tails} dispatches)")
+                    } else {
+                        t |> skip("{tag}: the mirror-fed window did not serve (no attn_dev crown on this box) - the tail stamp's witness stands down")
+                    }
+                }
             }
             log_gen_texts(tr, tag, cpu_ids, gpu_ids)
             t |> success(ids_equal(cpu_ids, gpu_ids),
@@ -646,6 +661,11 @@ def private family_cells(t : T?; path, family, tag : string; expect_needs : uint
             delete gpu_ids
             if (cont_tol > 0.0) {
                 cont_logits_cell(t, tr, trg, tag, cont_tol)
+            }
+            if (tr.config.head_size == 96l) {
+                //! a head off the 64 lattice: the single row past the ceiling takes the narrow fused stamp (a lane a quad, the lanes past
+                //! the head idle); the bar is twice the K-quant row's reading (1.82 of a 29-logit row, the q8 row 0.46, the argmax agreeing)
+                depth_cell(t, tr, trg, tag, 4.0, ["MetalSqAttnDF16_metal_sq_attn_d"])
             }
             delete trg
         } else {
@@ -995,6 +1015,62 @@ def private qwen2moe_row(t : T?; path : string) {
     }
 }
 
+//! Decode past the single-dispatch ceiling: a 120-number prompt, then three forced steps on the driver against the CPU's
+//! within `bar`, and the census holding every attention row on the fused `stamps` (each dispatched) and off the chunked
+//! pair. A model of two head classes names both classes' stamps - the head-of-512 one for the full-context layers, the
+//! head-of-256 one for the sliding class; a head off the 64 lattice names the narrow stamp.
+[unused_argument(t, tr, trg, tag, bar, stamps)]   //! off-Apple the gated body is empty
+def private depth_cell(t : T?; tr, trg : Model; tag : string; bar : float; stamps : array<string>) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let prompt <- encode(tr, counting_prompt(1, 120), true, false)
+        t |> success(long_length(prompt) > 224l, "{tag} depth: the prompt ({long_length(prompt)} tokens) sits past the single-dispatch ceiling")
+        let vocab = tr.config.vocab_size
+        var maxd = 0.0
+        var picks = ""
+        with_dasllama_jobque() {
+            var sc = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
+            eval_(tr, sc, prompt)
+            let prev_prefill = active_prefill_override()
+            let prev_decode = active_decode_override()
+            let prev_min_npos = get_metal_prefill_min_npos()
+            select_prefill_override("metal")
+            select_decode_override("metal")
+            set_metal_prefill_min_npos(1l)
+            var sg = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+            with_metal_attn_d(true) $ {
+                eval_(trg, sg, prompt)
+                metal_kernel_coverage_reset()
+                for (_i in range(3)) {
+                    var one <- [argmax_of(sc.logits, vocab)]
+                    eval_(tr, sc, one)
+                    eval_(trg, sg, one)
+                    delete one
+                    maxd = max(maxd, logits_maxdiff(sc.logits, sg.logits))   // a NaN on either side reads as infinite
+                    picks += " {argmax_of(sc.logits, vocab)}/{argmax_of(sg.logits, vocab)}"
+                }
+            }
+            set_metal_prefill_min_npos(prev_min_npos)
+            select_decode_override(prev_decode)
+            select_prefill_override(prev_prefill)
+            delete sc
+            delete sg
+        }
+        t |> success(maxd <= bar, "{tag} depth: three forced steps' logits within {bar} of the CPU's (maxd {maxd}; argmax cpu/gpu per step{picks})")
+        var every = true
+        let counts = build_string() $(var w) {
+            for (stamp in stamps) {
+                let n = metal_kernel_count(stamp)
+                every = every && n > 0l
+                w |> write(" {stamp}: {n}")
+            }
+        }
+        let chunked = metal_kernel_count("MetalSqAttnPartF16_metal_sq_attn_part")
+        to_log(LOG_INFO, "{tag} depth: maxd {maxd} (bar {bar}); argmax cpu/gpu per step{picks}; census{counts}, chunked {chunked}\n")
+        t |> success(every && chunked == 0l,
+            "{tag} depth: every attention row took the fused stamps under DASLLAMA_METAL_ATTN_D pinned on ({counts}; chunked: {chunked})")
+    }
+}
+
 [unused_argument(t, path, tag, hetero_hidden, tokexact)]   // off-Apple the gated body is empty
 def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false; tokexact : bool = true) {
     // gemma-4 E-series (E4B): PLE (per-layer embeddings — MetalNeed.ple) + cross-layer KV
@@ -1152,6 +1228,7 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             select_decode_override("")
             select_prefill_override("")
         }
+        depth_cell(t, tr, trg, tag, 8.0, ["MetalSqAttnDXF16_metal_sq_attn_d", "MetalSqAttnDWF16_metal_sq_attn_d"])
         log_gen_texts(tr, "{tag}", cpu_ids, gpu_ids)
         if (tokexact) {
             t |> success(ids_equal(cpu_ids, gpu_ids),
@@ -1199,6 +1276,7 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
         var lg0 : array<float>
         var lg1 : array<float>
         var t0 = 0l
+        var t1 = 0l
         with_dasllama_jobque() {
             var s = make_run_state(c, KVDtype.f16, KVDtype.f16)
             eval_(tr, s, prompt)
@@ -1208,6 +1286,7 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
             eval_(tr, s, one)
             delete one
             lg1 := s.logits
+            t1 = argmax_of(s.logits, vocab)
             delete s
         }
         delete tr
@@ -1246,7 +1325,7 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
         t |> success(served == 2l, "{tag}: GPU prefill + forced step both served ({served}/2)")
         t |> success(mpf <= tol_pf, "{tag}: post-prefill logits within {tol_pf} of the CPU truth (measured {mpf})")
         t |> success(m1 <= tol_step, "{tag}: one forced step within {tol_step} of the CPU truth (measured {m1})")
-        to_log(LOG_INFO, "{tag} tolerance cells: post-prefill maxd={mpf} (tol {tol_pf}), forced step maxd={m1} (tol {tol_step}); eyeball CPU '{eyeball_str(piece_(trg, t0))}'/'{eyeball_str(piece_(trg, argmax_of(lg1, vocab)))}' vs GPU '{eyeball_str(piece_(trg, gpk0))}'/'{eyeball_str(piece_(trg, gpk1))}'\n")
+        to_log(LOG_INFO, "{tag} tolerance cells: post-prefill maxd={mpf} (tol {tol_pf}), forced step maxd={m1} (tol {tol_step}); eyeball CPU '{eyeball_str(piece_(trg, t0))}'/'{eyeball_str(piece_(trg, t1))}' vs GPU '{eyeball_str(piece_(trg, gpk0))}'/'{eyeball_str(piece_(trg, gpk1))}'\n")
         delete lg0
         delete lg1
         delete prompt
@@ -1278,6 +1357,7 @@ def private gptoss_row(t : T?; path : string) {
         var lg0 : array<float>
         var lg1 : array<float>
         var t0 = 0l
+        var t1 = 0l
         with_dasllama_jobque() {
             var s = make_run_state(c, KVDtype.f16, KVDtype.f16)
             eval_(tr, s, prompt)
@@ -1287,6 +1367,7 @@ def private gptoss_row(t : T?; path : string) {
             eval_(tr, s, one)
             delete one
             lg1 := s.logits
+            t1 = argmax_of(s.logits, vocab)
             delete s
         }
         delete tr
@@ -1325,7 +1406,7 @@ def private gptoss_row(t : T?; path : string) {
         t |> success(served == 2l, "gptoss-20b: GPU prefill + forced step both served ({served}/2)")
         t |> success(mpf <= 2.0, "gptoss-20b: post-prefill logits within 2.0 of the CPU truth (measured {mpf})")
         t |> success(m1 <= 4.0, "gptoss-20b: one forced step within 4.0 of the CPU truth (measured {m1})")
-        to_log(LOG_INFO, "gptoss-20b tolerance cells: post-prefill maxd={mpf} (tol 2), forced step maxd={m1} (tol 4); eyeball CPU '{eyeball_str(piece_(trg, t0))}'/'{eyeball_str(piece_(trg, argmax_of(lg1, vocab)))}' vs GPU '{eyeball_str(piece_(trg, gpk0))}'/'{eyeball_str(piece_(trg, gpk1))}'\n")
+        to_log(LOG_INFO, "gptoss-20b tolerance cells: post-prefill maxd={mpf} (tol 2), forced step maxd={m1} (tol 4); eyeball CPU '{eyeball_str(piece_(trg, t0))}'/'{eyeball_str(piece_(trg, t1))}' vs GPU '{eyeball_str(piece_(trg, gpk0))}'/'{eyeball_str(piece_(trg, gpk1))}'\n")
         delete lg0
         delete lg1
         delete prompt
@@ -1365,10 +1446,13 @@ def private gemma2_window_row(t : T?; path : string) {
             select_decode_override("metal")
             select_prefill_override("metal")
             set_metal_prefill_min_npos(1l)
-            var s2 = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
-            let ids2 <- generate(trg, s2, prompt, length(prompt) + 16)
-            gpu_ids := ids2
-            delete s2
+            with_metal_attn_d(true) $ {
+                metal_kernel_coverage_reset()
+                var s2 = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+                let ids2 <- generate(trg, s2, prompt, length(prompt) + 16)
+                gpu_ids := ids2
+                delete s2
+            }
             set_metal_prefill_min_npos(64l)
             select_decode_override("")
             select_prefill_override("")
@@ -1377,6 +1461,8 @@ def private gemma2_window_row(t : T?; path : string) {
         }
         t |> success(served_de > 0l && served_pf > 0l,
             "gemma2-2b/window: both GPU paths engaged (decode {served_de}, prefill {served_pf})")
+        t |> success(metal_kernel_count("MetalSqAttnDWF16_metal_sq_attn_d") > 0l && metal_kernel_count("MetalSqAttnPartF16_metal_sq_attn_part") == 0l,
+            "gemma2-2b/window: the capped rows past the single-dispatch ceiling took the fused attention under DASLLAMA_METAL_ATTN_D pinned on (wide stamp {metal_kernel_count("MetalSqAttnDWF16_metal_sq_attn_d")}, chunked {metal_kernel_count("MetalSqAttnPartF16_metal_sq_attn_part")})")
         log_gen_texts(tr, "gemma2-2b/window", cpu_ids, gpu_ids)
         t |> success(ids_equal(cpu_ids, gpu_ids),
             "gemma2-2b/window: window-crossing generate matches the CPU truth token-for-token")
