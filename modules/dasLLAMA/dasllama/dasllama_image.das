@@ -456,9 +456,12 @@ def dlim_wipe(gguf_path : string) : tuple<removed : int; freed : int64> {
 }
 
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-page-alignment")]
-def pad_to_page(cur : uint64) : uint64 {
-    let page = uint64(IMAGE_PAGE)
-    return (cur + page - 1ul) / page * page
+def pad_to_page(cur : uint64) : uint64 => round_up(cur, uint64(IMAGE_PAGE))
+
+//! pad the writer to the next page and answer that offset, where the next section starts
+def w_page(var w : ImgWriter) : uint64 {
+    w_zeros(w, pad_to_page(w.cur) - w.cur)
+    return w.cur
 }
 
 let private DWRITE_STAGING_BAND = 16l * 1024l * 1024l
@@ -906,8 +909,7 @@ def private write_plane(var w : ImgWriter; var sections : array<ImgSection>;
         return
     }
     let nbytes = uint64(long_length(field)) * uint64(typeinfo sizeof(field[0]))
-    let at = pad_to_page(w.cur)
-    w_zeros(w, at - w.cur)
+    let at = w_page(w)
     let ts = ref_time_ticks()
     unsafe {
         w_append(w, addr<void?>(field[0]), nbytes)
@@ -1045,8 +1047,7 @@ def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
                 w_append(w, addr<void?>(meta_blob[0]), meta_bytes)
             }
         }
-        fend = pad_to_page(w.cur)
-        w_zeros(w, fend - w.cur)
+        fend = w_page(w)
         delete meta_blob
         unsafe {
             delete smeta
@@ -1342,8 +1343,7 @@ def private vk_mint_trim_decline(m : GGUFMeta; bytes : array<uint8> | #; var t :
 [arch(at="../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
 def private vk_mint_walk(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; var w : ImgWriter;
                          var sections : array<ImgSection>; jobs : array<FillJob>; regs : array<StreamReg>) {
-    w_zeros(w, pad_to_page(w.cur) - w.cur)
-    let at = w.cur
+    let at = w_page(w)
     let ts = ref_time_ticks()
     unsafe {
         g_vk_mint_walk_writer = addr(w)
@@ -1396,8 +1396,7 @@ def private vk_mint_walk(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; 
 //! kills the sink so the tmp never gets promoted; the abort lines name `fail`, `writer` and `plan`, and the sink's `what`
 def private w_stream_section(var w : ImgWriter; var sections : array<ImgSection>; name, fail, writer, plan, what : string;
                              want : int64; fill : block<() : bool>) {
-    w_zeros(w, pad_to_page(w.cur) - w.cur)
-    let at = w.cur
+    let at = w_page(w)
     if (!invoke(fill)) {
         to_log(LOG_ERROR, "dasLLAMA image: {fail} failed - image {what} aborted\n")
         w.ok = false
@@ -1791,8 +1790,7 @@ def private write_metal_blob_plane(var t : Model; var w : ImgWriter; var section
         return
     }
     let nbytes = uint64(sh.blocks * sh.stride)
-    let at = pad_to_page(w.cur)
-    w_zeros(w, at - w.cur)
+    let at = w_page(w)
     let ts = ref_time_ticks()
     var band : array<uint8>
     band |> reserve(min(sh.blocks, METAL_BAND_BLOCKS) * sh.stride)

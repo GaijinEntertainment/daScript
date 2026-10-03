@@ -135,7 +135,7 @@ def vulkan_mint_end {
 let VK_ENTRY_ALIGN = 4096l
 
 def private vk_mint_sink_append(a : array<uint8>) : int64 {
-    let off = (g_vk_mint_sink_off + VK_ENTRY_ALIGN - 1l) / VK_ENTRY_ALIGN * VK_ENTRY_ALIGN
+    let off = round_up(g_vk_mint_sink_off, VK_ENTRY_ALIGN)
     let pad = off - g_vk_mint_sink_off
     if (pad > 0l) {
         if (long_length(g_vk_mint_zeros) < VK_ENTRY_ALIGN) {
@@ -177,7 +177,7 @@ def vulkan_bake_disarm {
 
 def private vk_bake_append(a : array<uint8>) : int64 {
     // long_ forms — the blob crosses the int32 array rail
-    let off = (long_length(g_vk_bake_blob) + VK_ENTRY_ALIGN - 1l) / VK_ENTRY_ALIGN * VK_ENTRY_ALIGN
+    let off = round_up(long_length(g_vk_bake_blob), VK_ENTRY_ALIGN)
     let abytes = long_length(a)
     let need = off + abytes
     // growth capped at 2GB steps past 4GB — doubling a multi-GB blob wastes up to half its size

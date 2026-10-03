@@ -762,7 +762,7 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
 let private IMAGE_LAYOUT_STAMP_VERSION = 44
-let private IMAGE_LAYOUT_STAMP_HASH = 0x4e64f128eb806584ul
+let private IMAGE_LAYOUT_STAMP_HASH = 0x52e01c586b1c4c6ful
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, the header's scalar stores, the lattice
@@ -770,7 +770,7 @@ let private IMAGE_LAYOUT_STAMP_HASH = 0x4e64f128eb806584ul
 // conv's stacked-row gather the q8 mint quantizes. Changing one moves every plane offset (or
 // renames every lattice section) while every serializer body reads the same.
 var private LAYOUT_HELPERS <- {
-    "pad_to_page", "plane_end", "image_total_bytes",
+    "pad_to_page", "w_page", "plane_end", "image_total_bytes",
     "w_append", "w_zeros", "w_header", "store_u32", "store_u64", "kq_plane_name",
     "blob_push", "weight_slot", "conv1d_weight_row",
     "vk_mint_plane", "vk_mint_walk", "vk_mint_sink_append"
@@ -952,7 +952,7 @@ def private check_image_layout_stamp {
     return if (h == IMAGE_LAYOUT_STAMP_HASH && version == IMAGE_LAYOUT_STAMP_VERSION)
     if (version == IMAGE_LAYOUT_STAMP_VERSION) {
         gate_finding(IMAGE_FILE,
-            "the image layout closure changed (every Archive serializer, build_image, parse_image, every *_prepare mint of dasllama_tts_blocks.das, the layout helpers pad_to_page/plane_end/image_total_bytes/w_append/w_zeros/w_header/store_u32/store_u64/kq_plane_name/blob_push/weight_slot/conv1d_weight_row, and the layout constants IMAGE_PAGE/IMAGE_HEADER_BYTES/SECTION_TABLE_SLACK/DWRITE_STAGING_BAND/METAL_BAND_BLOCKS/BLOB_ALIGN_FLOATS): re-stamp IMAGE_LAYOUT_STAMP_HASH = {h}ul in modules/dasLLAMA/REVIEW.das; bump IMAGE_VERSION (still {version}) and IMAGE_LAYOUT_STAMP_VERSION with it only if the bytes moved, because a stale image at an unchanged path stays structurally valid and serves different bytes")
+            "the image layout closure changed (every Archive serializer, build_image, parse_image, every *_prepare mint of dasllama_tts_blocks.das, the layout helpers pad_to_page/w_page/plane_end/image_total_bytes/w_append/w_zeros/w_header/store_u32/store_u64/kq_plane_name/blob_push/weight_slot/conv1d_weight_row, and the layout constants IMAGE_PAGE/IMAGE_HEADER_BYTES/SECTION_TABLE_SLACK/DWRITE_STAGING_BAND/METAL_BAND_BLOCKS/BLOB_ALIGN_FLOATS): re-stamp IMAGE_LAYOUT_STAMP_HASH = {h}ul in modules/dasLLAMA/REVIEW.das; bump IMAGE_VERSION (still {version}) and IMAGE_LAYOUT_STAMP_VERSION with it only if the bytes moved, because a stale image at an unchanged path stays structurally valid and serves different bytes")
     } else {
         gate_finding("modules/dasLLAMA/REVIEW.das",
             "the layout stamp is behind IMAGE_VERSION {version} - re-stamp: IMAGE_LAYOUT_STAMP_HASH = {h}ul, IMAGE_LAYOUT_STAMP_VERSION = {version}")
