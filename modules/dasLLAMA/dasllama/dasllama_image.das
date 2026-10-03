@@ -1850,11 +1850,7 @@ def cache_via_image_staged_hooked(var st; var out; img : string; extra : uint64;
     if (img != "" && image_save_enabled()) {
         let ts = ref_time_ticks()
         if (save_image_to_file(st, img, extra, tag, quant, layout_fingerprint(out), plane)) {
-            to_log(LOG_INFO, "dasLLAMA: prepared image written in {get_time_usec(ts) / 1000} ms - {img}\n")
-            delete st
-            if (!load_image(img, out, tag, quant)) {
-                panic("dasLLAMA: '{img}' was just written and verified, and will not map back - see the decline above")
-            }
+            map_written_image(st, out, img, tag, quant, ts)
             return true
         }
         to_log(LOG_WARNING, "dasLLAMA: could not write '{img}' - building the image in memory instead\n")
@@ -1879,12 +1875,18 @@ def private cache_via_image_(var m; var out; img : string; tag : string; quant :
         out <- m   // nolint:PERF030 — `out` is the caller's fresh destination (the cache_via_image contract); m is spent
         return false
     }
+    map_written_image(m, out, img, tag, quant, ts)
+    return true
+}
+
+//! the image just written to `img` from `src`: the write time logged, `src` released, `out` mapped back from the file -
+//! a written image that will not map back panics
+def private map_written_image(var src; var out; img, tag, quant : string; ts : int64) {
     to_log(LOG_INFO, "dasLLAMA: prepared image written in {get_time_usec(ts) / 1000} ms - {img}\n")
-    delete m
+    delete src
     if (!load_image(img, out, tag, quant)) {
         panic("dasLLAMA: '{img}' was just written and verified, and will not map back - see the decline above")
     }
-    return true
 }
 
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-interp-load"), arch(at = "../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
