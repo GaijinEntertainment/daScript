@@ -3106,6 +3106,21 @@ def private rdec_hot_slot_for(H : HotLayer; e : int; idx : int64 const?; k : int
     return (victim >= 0 && H.heat[e] > 2.0 * H.heat[H.expert_of[victim]] + 1.0) ? victim : -1
 }
 
+//! the pool takes the `n` picks at `idx` it does not hold, each into the slot `rdec_hot_slot_for` offers, up to a step's
+//! fill or swap budget for each of `nrows` rows
+def private rdec_hot_fill(t : Model; l : int64; var H : HotLayer; idx : int64 const?; n, nrows : int64) {
+    var budget = (H.nfree > 0l ? RDEC_HOT_FILLS_STEP : RDEC_HOT_SWAPS_STEP) * nrows
+    for (j in range64(n)) {
+        break if (budget == 0l)
+        let e = int(unsafe(idx[j]))
+        continue if (H.slot_of[e] >= 0)
+        let slot = rdec_hot_slot_for(H, e, idx, n)
+        continue if (slot < 0)
+        rdec_hot_place(t, l, H, e, slot)
+        budget--
+    }
+}
+
 //! returns the miss count: the misses packed to the front of s.moe_idx / s.moe_w, the hits handed to the device
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool")]
 def private rdec_hot_step(t : Model; var s : Session; l : int64) : int64 {
@@ -3117,16 +3132,7 @@ def private rdec_hot_step(t : Model; var s : Session; l : int64) : int64 {
     var km = 0l
     let idx = unsafe(addr<int64 const?>(s.moe_idx[0]))
     rdec_hot_note(H, idx, k, 1l)
-    var budget = H.nfree > 0l ? RDEC_HOT_FILLS_STEP : RDEC_HOT_SWAPS_STEP
-    for (j in range64(k)) {
-        break if (budget == 0l)
-        let e = int(s.moe_idx[j])
-        continue if (H.slot_of[e] >= 0)
-        let slot = rdec_hot_slot_for(H, e, idx, k)
-        continue if (slot < 0)
-        rdec_hot_place(t, l, H, e, slot)
-        budget--
-    }
+    rdec_hot_fill(t, l, H, idx, k, 1l)
     for (j in range64(k)) {
         let sl = H.slot_of[s.moe_idx[j]]
         if (sl >= 0) {
@@ -3347,16 +3353,7 @@ def private rdec_hot_rows_step(t : Model; var s : Session; l, nrows : int64) : b
     }
     let idx = unsafe(addr<int64 const?>(s.moe_idx_b[0]))
     rdec_hot_note(H, idx, nk, nrows)
-    var budget = (H.nfree > 0l ? RDEC_HOT_FILLS_STEP : RDEC_HOT_SWAPS_STEP) * nrows
-    for (j in range64(nk)) {
-        break if (budget == 0l)
-        let e = int(s.moe_idx_b[j])
-        continue if (H.slot_of[e] >= 0)
-        let slot = rdec_hot_slot_for(H, e, idx, nk)
-        continue if (slot < 0)
-        rdec_hot_place(t, l, H, e, slot)
-        budget--
-    }
+    rdec_hot_fill(t, l, H, idx, nk, nrows)
     s.moe_exp_gpu |> grow_resize(ne)
     for (e in range64(ne)) {
         s.moe_exp_gpu[e] = int8(0)
