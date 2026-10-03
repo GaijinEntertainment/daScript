@@ -133,6 +133,21 @@ def private mk_not(at : LineInfo; var e : Expression?) : ExpressionPtr {
     return new ExprOp1(at = at, op := "!", subexpr = e)
 }
 
+def private access_fail(var errors : das_string; msg : string; var res : AccessResult; var tracked : table<string>) : bool {
+    errors := msg
+    delete res
+    delete tracked
+    return false
+}
+
+def private add_generated(at : LineInfo; name : string; var result : TypeDeclPtr; var body : array<ExpressionPtr>; decorate : block<(var fn : Function?) : void>) : bool {
+    var fn = new Function(at = at, atDecl = at, name := name, flags = FunctionFlags.generated, result = result)
+    invoke(decorate, fn)
+    fn.body = make_expression_block(body)
+    fn.body |> force_at(at)
+    return compiling_module() |> add_function(fn)
+}
+
 [structure_macro(name = vk_dispatch)]
 class VkDispatch : AstStructureAnnotation {
     // multi-kernel ordinal state: st.annotations is EMPTY at apply time (probe-verified
@@ -292,10 +307,7 @@ class VkDispatch : AstStructureAnnotation {
         }
         var res <- classify_field_access(kfn, compiling_module(), st, tracked)
         if (!empty(res.err)) {
-            errors := "[vk_dispatch] {base}: {res.err}"
-            delete res
-            delete tracked
-            return false
+            return access_fail(errors, "[vk_dispatch] {base}: {res.err}", res, tracked)
         }
         var rmask = 0u
         var wmask = 0u
@@ -304,10 +316,7 @@ class VkDispatch : AstStructureAnnotation {
             let decl = bf.role
             if (decl == "weight") {
                 if (key_exists(res.writes, bf.name)) {
-                    errors := "[vk_dispatch] {base}: member '{bf.name}' declares @role='weight' but the kernel body writes it"
-                    delete res
-                    delete tracked
-                    return false
+                    return access_fail(errors, "[vk_dispatch] {base}: member '{bf.name}' declares @role='weight' but the kernel body writes it", res, tracked)
                 }
             } elif (multi) {
                 // per-kernel view of shared members: unused-here is fine (a sibling kernel uses
@@ -315,22 +324,13 @@ class VkDispatch : AstStructureAnnotation {
                 let cov = (empty(dr) || decl == "" || decl == "alias" || decl == dr
                     || (decl == "readwrite" && (dr == "read" || dr == "write")))
                 if (!cov) {
-                    errors := "[vk_dispatch] {base}: member '{bf.name}' declares @role='{decl}' but kernel '{kern}' derives '{dr}' - the declared role must cover every kernel"
-                    delete res
-                    delete tracked
-                    return false
+                    return access_fail(errors, "[vk_dispatch] {base}: member '{bf.name}' declares @role='{decl}' but kernel '{kern}' derives '{dr}' - the declared role must cover every kernel", res, tracked)
                 }
             } elif (decl != "" && decl != "alias" && decl != dr) {
                 let drName = empty(dr) ? "unused" : dr
-                errors := "[vk_dispatch] {base}: member '{bf.name}' declares @role='{decl}' but the body derives '{drName}' - fix whichever is wrong"
-                delete res
-                delete tracked
-                return false
+                return access_fail(errors, "[vk_dispatch] {base}: member '{bf.name}' declares @role='{decl}' but the body derives '{drName}' - fix whichever is wrong", res, tracked)
             } elif (decl == "" && empty(dr)) {
-                errors := "[vk_dispatch] {base}: @ssbo member '{bf.name}' is never accessed by the kernel body - declare @role (weight/alias) or drop the binding"
-                delete res
-                delete tracked
-                return false
+                return access_fail(errors, "[vk_dispatch] {base}: @ssbo member '{bf.name}' is never accessed by the kernel body - declare @role (weight/alias) or drop the binding", res, tracked)
             }
             let bit = 1u << uint(bf.binding)
             if (key_exists(res.reads, bf.name)) {
@@ -396,12 +396,7 @@ class VkDispatch : AstStructureAnnotation {
             body |> push(mk_if_do(at, mk_not(at, new ExprField(at = at, value = mk_gvar(at, gname), name := "ready")), ci))
             body |> push(mk_if_do(at, mk_not(at, pm), cp))
             body |> push(mk_ret_bool(at, true))
-            var fn = new Function(at = at, atDecl = at, name := "ensure_{base}",
-                flags = FunctionFlags.generated,
-                result = new TypeDecl(at = at, baseType = Type.tBool))
-            fn.body = make_expression_block(body)
-            fn.body |> force_at(at)
-            if (!(compiling_module() |> add_function(fn))) {
+            if (!add_generated(at, "ensure_{base}", new TypeDecl(at = at, baseType = Type.tBool), body) $(var _fn : Function?) {}) {
                 errors := "[vk_dispatch] {base}: failed to add ensure_{base}"
                 return false
             }
@@ -415,14 +410,10 @@ class VkDispatch : AstStructureAnnotation {
             cs.arguments |> emplace_new <| new ExprConstUInt(at = at, value = rmask)
             cs.arguments |> emplace_new <| new ExprConstUInt(at = at, value = wmask)
             var body <- array<ExpressionPtr>(cs)
-            var fn = new Function(at = at, atDecl = at, name := "{base}`census",
-                flags = FunctionFlags.generated,
-                result = new TypeDecl(at = at, baseType = Type.tVoid))
-            fn.flags.init = true
-            fn.flags.privateFunction = true
-            fn.body = make_expression_block(body)
-            fn.body |> force_at(at)
-            if (!(compiling_module() |> add_function(fn))) {
+            if (!add_generated(at, "{base}`census", new TypeDecl(at = at, baseType = Type.tVoid), body) $(var fn : Function?) {
+                    fn.flags.init = true
+                    fn.flags.privateFunction = true
+                }) {
                 errors := "[vk_dispatch] {base}: failed to add the census [init]"
                 return false
             }
@@ -438,21 +429,17 @@ class VkDispatch : AstStructureAnnotation {
             ws.arguments |> emplace_new <| mk_gvar(at, "sizes")
             ws.arguments |> emplace_new <| mk_gvar(at, "gbits")
             body |> push(new ExprReturn(at = at, subexpr = ws))
-            var fn = new Function(at = at, atDecl = at, name := "set_{family}",
-                flags = FunctionFlags.generated,
-                result = mk_alias_t(at, "VkDescriptorSet", false))
             var bufs_t = make_fixed_array_type(nb, new TypeDecl(at = at, baseType = Type.tUInt64))
             bufs_t.flags.constant = true
             var sizes_t = make_fixed_array_type(nb, new TypeDecl(at = at, baseType = Type.tInt64))
             sizes_t.flags.constant = true
             var gbits_t = make_fixed_array_type(nb, new TypeDecl(at = at, baseType = Type.tUInt))
             gbits_t.flags.constant = true
-            fn.arguments |> emplace_new <| new Variable(at = at, name := "bufs", _type = bufs_t)
-            fn.arguments |> emplace_new <| new Variable(at = at, name := "sizes", _type = sizes_t)
-            fn.arguments |> emplace_new <| new Variable(at = at, name := "gbits", _type = gbits_t)
-            fn.body = make_expression_block(body)
-            fn.body |> force_at(at)
-            if (!(compiling_module() |> add_function(fn))) {
+            if (!add_generated(at, "set_{family}", mk_alias_t(at, "VkDescriptorSet", false), body) $(var fn : Function?) {
+                    fn.arguments |> emplace_new <| new Variable(at = at, name := "bufs", _type = bufs_t)
+                    fn.arguments |> emplace_new <| new Variable(at = at, name := "sizes", _type = sizes_t)
+                    fn.arguments |> emplace_new <| new Variable(at = at, name := "gbits", _type = gbits_t)
+                }) {
                 errors := "[vk_dispatch] {base}: failed to add set_{family}"
                 return false
             }
