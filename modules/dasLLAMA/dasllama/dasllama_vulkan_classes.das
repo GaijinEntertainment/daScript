@@ -39,9 +39,7 @@ struct TokMeta {
 }
 
 let KV_Q8_BLOCK_HALVES = 17u   //! a q8_0 K/V mirror block in halfwords: its f16 scale, then 32 quant bytes (the CPU cache's block)
-let KV_Q8_BLOCK_BYTES = 34u    //! ... and in bytes
 let KV_TQ4_BLOCK_HALVES = 9u   //! a tq4 K/V mirror block in halfwords: its f16 scale, then 16 bytes of two 4-bit quants each (the CPU cache's block)
-let KV_TQ4_BLOCK_BYTES = 18u   //! ... and in bytes
 let KV_TQ4_SIGNS = 512l        //! the rotation's sign row: the widest head a kernel's row slab holds, a narrower head reading its prefix
 
 //! A block's f16 scale: the half at byte `bb` of the mirror, in the word `w` that holds it (a block starts 0 or 2 bytes off a word).
