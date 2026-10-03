@@ -431,6 +431,23 @@ def private plane_up(f : KqFmt; woff, n, rows : int64; slice_rows : int64 = -1l)
     return PlaneUp(f = f, woff = woff, n = n, rows = rows, slice_rows = slice_rows < 0l ? rows : slice_rows)
 }
 
+//! layer l's routed expert stacks as one gather-upload group, gate, up and down, each sliced an expert at a time
+def private resident_expert_ups(t : Model; l : int64) : array<PlaneUp> {
+    var ups : array<PlaneUp>
+    ups |> reserve(3)
+    for (k in [1, 3, 2]) {
+        let p = resident_expert_plane(t, l, k)
+        ups |> push(plane_up(p.f, p.off, p.n, t.config.n_expert * p.rows, p.rows))
+    }
+    return <- ups
+}
+
+//! the per-op tier's expert chain takes these formats: gate and up share one activation image, down is free
+def private tier_expert_fmts_ok(f1, f3, f2 : KqFmt) : bool {
+    return ((f1 == KqFmt.q8) == (f3 == KqFmt.q8) && (f1 == KqFmt.q8 || (kq_sb(f1) && kq_sb(f3)))
+        && (f2 == KqFmt.q8 || kq_sb(f2)))
+}
+
 //! Gathers and uploads `ups` as one group: a refused plane drops the planes the group placed back out (a dangling plane of a partial group hijacks the tier's residency check) and answers false
 def private gather_upload_group(t : Model; ups : array<PlaneUp>; mr, kgroup, wbias : int64;
                                 var wq : array<uint8>; var ws : array<uint8>; stream : bool = false) : bool {
@@ -510,6 +527,26 @@ def private resident_shexp_plane(t : Model; l : int64; kind : int) : tuple<f : K
     }
     if (l < long_length(t.wshk2_offs) && t.wshk2_offs[l] >= 0l) return (f = fmt_at(t.wsh2_fmt, l), off = t.wshk2_offs[l])
     return (f = KqFmt.q8, off = t.wsh2_off + l * she)
+}
+
+//! layer l's routed expert stack of `kind` (1 gate, 3 up, 2 down): its format, its offset, and one expert's row length and rows
+def private resident_expert_plane(t : Model; l : int64; kind : int) : tuple<f : KqFmt; off : int64; n : int64; rows : int64> {
+    let c = t.config
+    if (kind == 1) return (f = rdec_efmt(t, t.we1_fmt, l), off = t.we1_offs[l], n = c.dim, rows = c.n_ff_exp)
+    if (kind == 3) return (f = rdec_efmt(t, t.we3_fmt, l), off = t.we3_offs[l], n = c.dim, rows = c.n_ff_exp)
+    return (f = rdec_efmt(t, t.we2_fmt, l), off = t.we2_offs[l], n = c.n_ff_exp, rows = c.dim)
+}
+
+//! the gate, up and down formats of layer l's routed experts, as the seats take them
+def private resident_expert_fmts(t : Model; l : int64) : tuple<f1 : int; f3 : int; f2 : int> {
+    return (f1 = int(rdec_efmt(t, t.we1_fmt, l)), f3 = int(rdec_efmt(t, t.we3_fmt, l)), f2 = int(rdec_efmt(t, t.we2_fmt, l)))
+}
+
+//! an FFN triple's planes in the plan: gate and up at `hid` rows of `dim`, down at `dim` rows of `hid`
+def private push_ffn_planes(var planes : array<tuple<n : int64; rows : int64; f : KqFmt>>; dim, hid : int64; f1, f3, f2 : KqFmt) {
+    planes |> push((n = dim, rows = hid, f = f1))
+    planes |> push((n = dim, rows = hid, f = f3))
+    planes |> push((n = hid, rows = dim, f = f2))
 }
 
 //! the deltanet geometry of the driver's recurrent layers; the zero record on a model with none
@@ -647,20 +684,16 @@ def private resident_planes(t : Model; dng : RdecDnGeom; ple_tbl : bool; host_la
         }
         if (layer_is_moe(t, l)) {
             if (routed_idx >= host_layers) {
-                planes |> push((n = dim, rows = c.n_expert * c.n_ff_exp, f = rdec_efmt(t, t.we1_fmt, l)))
-                planes |> push((n = dim, rows = c.n_expert * c.n_ff_exp, f = rdec_efmt(t, t.we3_fmt, l)))
-                planes |> push((n = c.n_ff_exp, rows = c.n_expert * dim, f = rdec_efmt(t, t.we2_fmt, l)))
+                for (k in [1, 3, 2]) {
+                    let p = resident_expert_plane(t, l, k)
+                    planes |> push((n = p.n, rows = c.n_expert * p.rows, f = p.f))
+                }
             }
             routed_idx++
             if (c.moe_dense_shexp) {
-                let hid_l = layer_hidden(t, l)
-                planes |> push((n = dim, rows = hid_l, f = lf.f1))
-                planes |> push((n = dim, rows = hid_l, f = lf.f3))
-                planes |> push((n = hid_l, rows = dim, f = lf.f2))
+                push_ffn_planes(planes, dim, layer_hidden(t, l), lf.f1, lf.f3, lf.f2)
             } elif (c.n_ff_shexp > 0l) {
-                planes |> push((n = dim, rows = c.n_ff_shexp, f = resident_shexp_plane(t, l, 1).f))
-                planes |> push((n = dim, rows = c.n_ff_shexp, f = resident_shexp_plane(t, l, 3).f))
-                planes |> push((n = c.n_ff_shexp, rows = dim, f = resident_shexp_plane(t, l, 2).f))
+                push_ffn_planes(planes, dim, c.n_ff_shexp, resident_shexp_plane(t, l, 1).f, resident_shexp_plane(t, l, 3).f, resident_shexp_plane(t, l, 2).f)
             }
         }
         if (layer_is_recurrent(c, l)) {
@@ -684,10 +717,7 @@ def private resident_planes(t : Model; dng : RdecDnGeom; ple_tbl : bool; host_la
             planes |> push((n = qd_l, rows = dim, f = lf.fo))
         }
         if (!layer_is_moe(t, l)) {
-            let hid_l = resident_dense_width(t, l)
-            planes |> push((n = dim, rows = hid_l, f = lf.f1))
-            planes |> push((n = dim, rows = hid_l, f = lf.f3))
-            planes |> push((n = hid_l, rows = dim, f = lf.f2))
+            push_ffn_planes(planes, dim, resident_dense_width(t, l), lf.f1, lf.f3, lf.f2)
         }
         if (has_ple(c)) {
             planes |> push((n = dim, rows = c.n_embd_per_layer, f = KqFmt.q8))
@@ -1037,9 +1067,12 @@ def resident_host_layers_ok(c : Config) : bool => c.n_expert > 0l && !c.hyper_co
 
 //! the bytes of a routed layer's gate, up and down planes over `n_exp` experts in device layout
 def private resident_expert_planes_bytes(t : Model; l, n_exp : int64) : int64 {
-    let c = t.config
-    return (moe_gpu_plane_bytes(c.dim, n_exp * c.n_ff_exp, int(rdec_efmt(t, t.we1_fmt, l))) + moe_gpu_plane_bytes(c.dim, n_exp * c.n_ff_exp, int(rdec_efmt(t, t.we3_fmt, l)))
-        + moe_gpu_plane_bytes(c.n_ff_exp, n_exp * c.dim, int(rdec_efmt(t, t.we2_fmt, l))))
+    var bytes = 0l
+    for (k in [1, 3, 2]) {
+        let p = resident_expert_plane(t, l, k)
+        bytes += moe_gpu_plane_bytes(p.n, n_exp * p.rows, int(p.f))
+    }
+    return bytes
 }
 
 def private resident_moe_layers(t : Model) : int64 {
@@ -1820,19 +1853,15 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         var lf = resident_layer_fmts(t, l)
         let moe = layer_is_moe(t, l)
         let hid_l = resident_dense_width(t, l)
-        var b1 = -1l
-        var b3 = -1l
-        var b2 = -1l
+        var fb = (b1 = -1l, b3 = -1l, b2 = -1l)
         if (moe) {
             //! a layer with no shared expert keeps -1 dense blocks and takes the experts' feed form
             if (c.moe_dense_shexp) {
                 if (rdec_quant_class(lf.f1) != rdec_quant_class(lf.f3)) {
                     return rdec_decline("layer {l} mixes activation-quant forms (the dense shared expert {int(lf.f1)}/{int(lf.f3)})")
                 }
-                b1 = resident_place(t, lf.f1, t.w1_offs[l], dim, hid_l, mr, kg, wb)
-                b3 = resident_place(t, lf.f3, t.w3_offs[l], dim, hid_l, mr, kg, wb)
-                b2 = resident_place(t, lf.f2, t.w2_offs[l], hid_l, dim, mr, kg, wb)
-                if (b1 < 0l || b3 < 0l || b2 < 0l) return rdec_decline("arena placement failed at layer {l} (the dense shared expert)")
+                fb = resident_place_ffn(t, lf.f1, lf.f3, lf.f2, t.w1_offs[l], t.w3_offs[l], t.w2_offs[l], hid_l, mr, kg, wb)
+                if (fb.b1 < 0l) return rdec_decline("arena placement failed at layer {l} (the dense shared expert)")
             } elif (c.n_ff_shexp > 0l) {
                 let p1 = resident_shexp_plane(t, l, 1)
                 let p3 = resident_shexp_plane(t, l, 3)
@@ -1840,10 +1869,8 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
                 lf.f1 = p1.f
                 lf.f3 = p3.f
                 lf.f2 = p2.f
-                b1 = resident_place(t, p1.f, p1.off, dim, c.n_ff_shexp, mr, kg, wb)
-                b3 = resident_place(t, p3.f, p3.off, dim, c.n_ff_shexp, mr, kg, wb)
-                b2 = resident_place(t, p2.f, p2.off, c.n_ff_shexp, dim, mr, kg, wb)
-                if (b1 < 0l || b3 < 0l || b2 < 0l) return rdec_decline("arena placement failed at layer {l} (the shared expert)")
+                fb = resident_place_ffn(t, p1.f, p3.f, p2.f, p1.off, p3.off, p2.off, c.n_ff_shexp, mr, kg, wb)
+                if (fb.b1 < 0l) return rdec_decline("arena placement failed at layer {l} (the shared expert)")
             } else {
                 lf.f1 = rdec_efmt(t, t.we1_fmt, l)
                 lf.f3 = rdec_efmt(t, t.we3_fmt, l)
@@ -1853,10 +1880,8 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             if (rdec_quant_class(lf.f1) != rdec_quant_class(lf.f3)) {
                 return rdec_decline("layer {l} mixes activation-quant forms (ffn {int(lf.f1)}/{int(lf.f3)})")
             }
-            b1 = resident_place(t, lf.f1, t.w1_offs[l], dim, hid_l, mr, kg, wb)
-            b3 = resident_place(t, lf.f3, t.w3_offs[l], dim, hid_l, mr, kg, wb)
-            b2 = resident_place(t, lf.f2, t.w2_offs[l], hid_l, dim, mr, kg, wb)
-            if (b1 < 0l || b3 < 0l || b2 < 0l) return rdec_decline("arena placement failed at layer {l}")
+            fb = resident_place_ffn(t, lf.f1, lf.f3, lf.f2, t.w1_offs[l], t.w3_offs[l], t.w2_offs[l], hid_l, mr, kg, wb)
+            if (fb.b1 < 0l) return rdec_decline("arena placement failed at layer {l}")
         }
         if (layer_is_recurrent(c, l)) {
             let fqkv = fmt_at(t.dnqkv_fmt, l)
@@ -1871,7 +1896,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
                 return rdec_decline("arena placement failed at recurrent layer {l}")
             }
             unsafe {
-                rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, rec_idx * 2l * dng.nvh * dim,
+                rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, fb.b1, fb.b3, fb.b2, rec_idx * 2l * dng.nvh * dim,
                     int(fqkv), int(fz), int(fout), int(lf.f1), int(lf.f3), int(lf.f2),
                     addr<float const?>(t.fblob[t.dn_conv_off + l * c.ssm_d_conv * dng.cd]),
                     addr<float const?>(t.fblob[t.dn_norm_off + l * dng.ds]),
@@ -1883,7 +1908,8 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
                 let is_host_layer = router_slot < host_layers
                 let eb = resident_place_experts_or_host(t, l, is_host_layer, mr, kg, wb)
                 if (eb.be1 < 0l && !is_host_layer) return rdec_decline("arena placement failed at recurrent layer {l} (the expert stacks)")
-                rdec_set_moe_experts(l, router_slot, eb.be1, eb.be3, eb.be2, int(rdec_efmt(t, t.we1_fmt, l)), int(rdec_efmt(t, t.we3_fmt, l)), int(rdec_efmt(t, t.we2_fmt, l)))
+                let ef = resident_expert_fmts(t, l)
+                rdec_set_moe_experts(l, router_slot, eb.be1, eb.be3, eb.be2, ef.f1, ef.f3, ef.f2)
                 router_slot++
             }
             continue
@@ -1907,12 +1933,12 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             let is_host_layer = router_slot < host_layers
             let eb = resident_place_experts_or_host(t, l, is_host_layer, mr, kg, wb)
             if (eb.be1 < 0l && !is_host_layer) return rdec_decline("arena placement failed at layer {l} (the expert stacks)")
-            rdec_set_moe_layer(l, mir_idx, router_slot, bq, bk, bv, bo, b1, b3, b2, eb.be1, eb.be3, eb.be2,
-                int(lf.fq), int(lf.fk), int(lf.fv), int(lf.fo), int(lf.f1), int(lf.f3), int(lf.f2),
-                int(rdec_efmt(t, t.we1_fmt, l)), int(rdec_efmt(t, t.we3_fmt, l)), int(rdec_efmt(t, t.we2_fmt, l)), g)
+            let ef = resident_expert_fmts(t, l)
+            rdec_set_moe_layer(l, mir_idx, router_slot, bq, bk, bv, bo, fb.b1, fb.b3, fb.b2, eb.be1, eb.be3, eb.be2,
+                int(lf.fq), int(lf.fk), int(lf.fv), int(lf.fo), int(lf.f1), int(lf.f3), int(lf.f2), ef.f1, ef.f3, ef.f2, g)
             router_slot++
         } else {
-            rdec_set_layer(l, mir_slots[l], bq, bk, bv, bo, b1, b3, b2,
+            rdec_set_layer(l, mir_slots[l], bq, bk, bv, bo, fb.b1, fb.b3, fb.b2,
                 int(lf.fq), int(lf.fk), int(lf.fv), int(lf.fo), int(lf.f1), int(lf.f3), int(lf.f2), g)
         }
         if (ple > 0l) {
@@ -2099,7 +2125,8 @@ def private resident_place_head(t : Model; mir_base, slot_bytes, mr, kg, wb : in
         for (i in range64(c.n_layers)) {
             slot += layer_is_moe(t, i) ? 1l : 0l
         }
-        rdec_set_moe_experts(l, slot, -1l, -1l, -1l, int(rdec_efmt(t, t.we1_fmt, l)), int(rdec_efmt(t, t.we3_fmt, l)), int(rdec_efmt(t, t.we2_fmt, l)))
+        let ef = resident_expert_fmts(t, l)
+        rdec_set_moe_experts(l, slot, -1l, -1l, -1l, ef.f1, ef.f3, ef.f2)
     }
     to_log(LOG_INFO, "dasLLAMA: resident driver - the NextN draft head in the arena ({plane_bytes >> 10l} KB of planes, a {slot_bytes >> 10l} KB K/V slot over every region): the draft runs on the device\n")
 }
@@ -2185,13 +2212,23 @@ def private resident_prepare_moe(t : Model; n_moe : int64; sh_gated : bool) : bo
 
 //! the expert triple of an MoE layer into the arena, sliced per expert as the per-op walk gathers it
 def private resident_place_experts(t : Model; l : int64; mr, kg, wb : int64) : tuple<be1 : int64; be3 : int64; be2 : int64> {
-    let c = t.config
-    let ne = c.n_expert
-    let nfe = c.n_ff_exp
-    let be1 = resident_place(t, rdec_efmt(t, t.we1_fmt, l), t.we1_offs[l], c.dim, ne * nfe, mr, kg, wb, nfe)
-    let be3 = be1 < 0l ? -1l : resident_place(t, rdec_efmt(t, t.we3_fmt, l), t.we3_offs[l], c.dim, ne * nfe, mr, kg, wb, nfe)
-    let be2 = be3 < 0l ? -1l : resident_place(t, rdec_efmt(t, t.we2_fmt, l), t.we2_offs[l], nfe, ne * c.dim, mr, kg, wb, c.dim)
-    return (be1 = be1, be3 = be3, be2 = be2)
+    var be = fixed_array(-1l, -1l, -1l)
+    for (i, k in range(3), [1, 3, 2]) {
+        let p = resident_expert_plane(t, l, k)
+        be[i] = resident_place(t, p.f, p.off, p.n, t.config.n_expert * p.rows, mr, kg, wb, p.rows)
+        break if (be[i] < 0l)
+    }
+    return (be1 = be[0], be3 = be[1], be2 = be[2])
+}
+
+//! a dense FFN triple placed in the arena, gate and up at `hid` rows of the model's width and down at its width of `hid`;
+//! `b1` is -1 when any of the three placements failed
+def private resident_place_ffn(t : Model; f1, f3, f2 : KqFmt; o1, o3, o2, hid : int64; mr, kg, wb : int64) : tuple<b1 : int64; b3 : int64; b2 : int64> {
+    let dim = t.config.dim
+    let b1 = resident_place(t, f1, o1, dim, hid, mr, kg, wb)
+    let b3 = resident_place(t, f3, o3, dim, hid, mr, kg, wb)
+    let b2 = resident_place(t, f2, o2, hid, dim, mr, kg, wb)
+    return (b1 = (b1 < 0l || b3 < 0l || b2 < 0l) ? -1l : b1, b3 = b3, b2 = b2)
 }
 
 //! One position's cos/sin plane for the resident device kernels (`build_rope_row_packed` is the one
@@ -3014,7 +3051,8 @@ def private resident_hot_arm(t : Model; plan : ResidentPlan) {
         continue if (!layer_is_moe(t, l))
         routed_idx++
         break if (routed_idx > plan.host_layers)
-        let at = rdec_hot_layer(l, slots, int(rdec_efmt(t, t.we1_fmt, l)), int(rdec_efmt(t, t.we3_fmt, l)), int(rdec_efmt(t, t.we2_fmt, l)))
+        let ef = resident_expert_fmts(t, l)
+        let at = rdec_hot_layer(l, slots, ef.f1, ef.f3, ef.f2)
         continue if (at.base < 0l)
         var H & = unsafe(g_rdec_hot[l])
         H.on = true
@@ -3031,15 +3069,19 @@ def private resident_hot_arm(t : Model; plan : ResidentPlan) {
     to_log(LOG_INFO, "dasLLAMA: resident driver - hot expert pool{ask}: {slots} slots on {armed} routed layers ({(armed > 0l ? slots * slot_bytes : 0l) >> 20l} MB); the host sums the picks outside it\n")
 }
 
+//! expert `e`'s plane of `kind` on layer `l`, gathered in device layout into `wq` / `ws`
+def private rdec_hot_gather(t : Model; l : int64; kind, e : int; var wq : array<uint8>; var ws : array<uint8>) {
+    let p = resident_expert_plane(t, l, kind)
+    let lay = active_q8_repack_layout(g_active_needs_repack)
+    layout_gather_dispatch(t, p.f, p.off + int64(e) * p.n * p.rows, p.n, p.rows, p.rows, lay.mr, lay.kgroup, lay.wbias, wq, ws)
+}
+
 //! expert `e` of layer `l` gathered into the scratch planes and uploaded into `slot`, whose expert leaves the pool
 def private rdec_hot_place(t : Model; l : int64; var H : HotLayer; e, slot : int) {
-    let c = t.config
-    let ege = c.dim * c.n_ff_exp
-    let lay = active_q8_repack_layout(g_active_needs_repack)
     let t0 = ref_time_ticks()
-    layout_gather_dispatch(t, rdec_efmt(t, t.we1_fmt, l), t.we1_offs[l] + int64(e) * ege, c.dim, c.n_ff_exp, c.n_ff_exp, lay.mr, lay.kgroup, lay.wbias, g_hot_wq1, g_hot_ws1)
-    layout_gather_dispatch(t, rdec_efmt(t, t.we3_fmt, l), t.we3_offs[l] + int64(e) * ege, c.dim, c.n_ff_exp, c.n_ff_exp, lay.mr, lay.kgroup, lay.wbias, g_hot_wq3, g_hot_ws3)
-    layout_gather_dispatch(t, rdec_efmt(t, t.we2_fmt, l), t.we2_offs[l] + int64(e) * ege, c.n_ff_exp, c.dim, c.dim, lay.mr, lay.kgroup, lay.wbias, g_hot_wq2, g_hot_ws2)
+    rdec_hot_gather(t, l, 1, e, g_hot_wq1, g_hot_ws1)
+    rdec_hot_gather(t, l, 3, e, g_hot_wq3, g_hot_ws3)
+    rdec_hot_gather(t, l, 2, e, g_hot_wq2, g_hot_ws2)
     let t1 = ref_time_ticks()
     rdec_hot_upload(l, int64(slot), g_hot_wq1, g_hot_ws1, g_hot_wq3, g_hot_ws3, g_hot_wq2, g_hot_ws2)
     g_rdec_hot_gather_us += int64(get_time_usec(t0)) - int64(get_time_usec(t1))
@@ -3412,25 +3454,23 @@ def private rdec_hot_rows_begin(t : Model; var s : Session; l, nrows : int64) : 
     let c = t.config
     let nk = nrows * c.n_expert_used
     rdec_hot_window(t, s, l, nrows)
-    let f1 = int(rdec_efmt(t, t.we1_fmt, l))
-    let f3 = int(rdec_efmt(t, t.we3_fmt, l))
-    let f2 = int(rdec_efmt(t, t.we2_fmt, l))
+    let ef = resident_expert_fmts(t, l)
     if (nrows < RDEC_HOT_WINDOW_MIN) {
         return 0l   // a short window's picks are the host's by design: no line
     }
     let chunk = moe_gpu_ffn_xf_async_rows(c.dim, c.n_ff_exp)
     if (nk > chunk) {
-        rdec_hot_window_declined(true, nk, chunk, nrows, f1, f3, f2)
+        rdec_hot_window_declined(true, nk, chunk, nrows, ef.f1, ef.f3, ef.f2)
         return 0l
     }
-    if (!moe_gpu_ffn_xf_ok(nrows, c.dim, f1, f3, f2)) {
-        rdec_hot_window_declined(false, nk, chunk, nrows, f1, f3, f2)
+    if (!moe_gpu_ffn_xf_ok(nrows, c.dim, ef.f1, ef.f3, ef.f2)) {
+        rdec_hot_window_declined(false, nk, chunk, nrows, ef.f1, ef.f3, ef.f2)
         return 0l
     }
     let nreg = rdec_hot_regions(t, s, l, nrows)
     if (nreg > 0l) {
         matmul_moe_gpu_ffn_combined_xf_begin(s.moe_offs1, s.moe_offs3, s.moe_offs2, nreg, s.xb_b, s.moe_w_gpu, s.moe_inv,
-            c.dim, c.n_ff_exp, nk, nrows, f1, f3, f2, c.ffn_act == FfnAct.gelu)
+            c.dim, c.n_ff_exp, nk, nrows, ef.f1, ef.f3, ef.f2, c.ffn_act == FfnAct.gelu)
         g_rdec_hot_window_rows += nk
         for (oe in s.moe_ord) {
             g_rdec_hot_window_hits += int64(oe.y)
@@ -4208,12 +4248,10 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     let ts_gpu = ref_time_ticks()
     let layers = t.config.n_layers
     let dim = t.config.dim
-    let ne = t.config.n_expert
-    let nfe = t.config.n_ff_exp
     let want_raw = moe_gpu_layer_count()
     // a dense arch has no expert stacks at all — we*_offs are never populated (they are built only
     // under n_expert > 0), so the expert + streamed walks below MUST resolve to zero iterations
-    let has_experts = ne > 0l
+    let has_experts = t.config.n_expert > 0l
     let want = has_experts ? (want_raw < 0l ? layers : min(want_raw, layers)) : 0l   // -1 = auto: fill the budget
     set_moe_gpu_layer_count(want)   // publish the resolved count — downstream status reads it
     let lay = active_q8_repack_layout(g_active_needs_repack)
@@ -4478,20 +4516,14 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         let f1 = rdec_efmt(t, t.we1_fmt, l)
         let f2 = rdec_efmt(t, t.we2_fmt, l)
         let f3 = rdec_efmt(t, t.we3_fmt, l)
-        // gate/up must share a form (one activation image); down is free. The Q4_K_M MoE
-        // recipe bumps ffn_down_exps to Q5_0/Q8_0, so k4/k4/q8 is the COMMON shape (glm4moe,
+        // The Q4_K_M MoE recipe bumps ffn_down_exps to Q5_0/Q8_0, so k4/k4/q8 is the COMMON shape (glm4moe,
         // gemma). The walk stops on refusal so the resident set stays contiguous from the end.
-        let gu_ok = ((f1 == KqFmt.q8) == (f3 == KqFmt.q8)
-            && (f1 == KqFmt.q8 || (kq_sb(f1) && kq_sb(f3))))
-        let dn_ok = f2 == KqFmt.q8 || kq_sb(f2)
         break if (l < t.config.n_layer_dense_lead || t.we1_offs[l] < 0l)
-        if (!(gu_ok && dn_ok)) {
+        if (!tier_expert_fmts_ok(f1, f3, f2)) {
             to_log(LOG_INFO, "dasLLAMA: GPU MoE tier: the expert walk stopped at layer {l} - gate/up/down formats {int(f1)}/{int(f3)}/{int(f2)} cannot share the tier's activation image; layers 0..{l} stay on the CPU\n")
             break
         }
-        var ups <- [plane_up(f1, t.we1_offs[l], dim, ne * nfe, nfe),
-                    plane_up(f3, t.we3_offs[l], dim, ne * nfe, nfe),
-                    plane_up(f2, t.we2_offs[l], nfe, ne * dim, dim)]
+        var ups <- resident_expert_ups(t, l)
         let ok = gather_upload_group(t, ups, mr, kgroup, wbias, wq, ws)
         delete ups
         break if (!ok)   // VRAM budget hit — this and lower layers stay on CPU
@@ -4510,16 +4542,11 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         let f1 = rdec_efmt(t, t.we1_fmt, l)
         let f2 = rdec_efmt(t, t.we2_fmt, l)
         let f3 = rdec_efmt(t, t.we3_fmt, l)
-        // same rule as the resident walk: gate/up share one activation image, down is free
-        let gu_ok = ((f1 == KqFmt.q8) == (f3 == KqFmt.q8)
-            && (f1 == KqFmt.q8 || (kq_sb(f1) && kq_sb(f3))))
-        if (!(gu_ok && (f2 == KqFmt.q8 || kq_sb(f2)))) {
+        if (!tier_expert_fmts_ok(f1, f3, f2)) {
             to_log(LOG_INFO, "dasLLAMA: GPU MoE tier: the streamed walk stopped at layer {l} - gate/up/down formats {int(f1)}/{int(f3)}/{int(f2)} cannot share the tier's activation image; layers 0..{l} stay on the CPU\n")
             break
         }
-        var ups <- [plane_up(f1, t.we1_offs[l], dim, ne * nfe, nfe),
-                    plane_up(f3, t.we3_offs[l], dim, ne * nfe, nfe),
-                    plane_up(f2, t.we2_offs[l], nfe, ne * dim, dim)]
+        var ups <- resident_expert_ups(t, l)
         let ok = gather_upload_group(t, ups, mr, kgroup, wbias, wq, ws, [stream = true])
         delete ups
         break if (!ok)   // pinned-mirror budget hit — this and lower layers stay CPU-only
