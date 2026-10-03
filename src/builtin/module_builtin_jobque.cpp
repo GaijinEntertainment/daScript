@@ -109,19 +109,10 @@ namespace das {
         mCond.notify_all();  // notify_one??
     }
 
+    // src/builtin/ARCHITECTURE_JOBQUE.md#channel-idle-wait
     void Channel::pop ( const TBlock<void,void *> & blk, Context * context, LineInfoArg * at ) {
-        while ( true ) {
-            unique_lock<mutex> uguard(mCompleteMutex);
-            if ( !mCond.wait_for(uguard, std::chrono::milliseconds(mSleepMs), [&]() {
-                bool continue_waiting = (mRemaining>0) && pipe.empty();
-                return !continue_waiting;
-            }) ) {
-                this_thread::yield();
-            } else {
-                break;
-            }
-        }
-        lock_guard<mutex> guard(mCompleteMutex);
+        unique_lock<mutex> guard(mCompleteMutex);
+        mCond.wait(guard, [&]() { return mRemaining <= 0 || !pipe.empty(); });
         if ( pipe.empty() ) {
             tail.clear();
         } else {
@@ -328,20 +319,10 @@ namespace das {
     }
 
     void Stream::pop ( const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at ) {
-        while ( true ) {
-            unique_lock<mutex> uguard(mCompleteMutex);
-            if ( !mCond.wait_for(uguard, std::chrono::milliseconds(mSleepMs), [&]() {
-                bool continue_waiting = (mRemaining>0) && pipe.empty();
-                return !continue_waiting;
-            }) ) {
-                this_thread::yield();
-            } else {
-                break;
-            }
-        }
         vector<uint8_t> item;
         {
-            lock_guard<mutex> guard(mCompleteMutex);
+            unique_lock<mutex> guard(mCompleteMutex);
+            mCond.wait(guard, [&]() { return mRemaining <= 0 || !pipe.empty(); });
             if ( !pipe.empty() ) {
                 item = das::move(pipe.front());
                 pipe.pop_front();
