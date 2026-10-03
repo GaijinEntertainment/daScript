@@ -902,20 +902,29 @@ def private write_plane(var w : ImgWriter; var sections : array<ImgSection>;
         return
     }
     let nbytes = uint64(long_length(field)) * uint64(typeinfo sizeof(field[0]))
+    // >=256 MB only: a per-plane rate separates systemic cost from stalls, and small models stay quiet
+    write_section(w, sections, name, nbytes, 256ul * 1024ul * 1024ul, "") $ {
+        unsafe {
+            w_append(w, addr<void?>(field[0]), nbytes)
+        }
+    }
+}
+
+//! One plane section of `nbytes`, page-aligned, the bytes `fill` appends: a failed write logged and left out of the table,
+//! a written one logged with its rate from `rate_from` bytes up (`how` names what produced the bytes) and pushed to `sections`
+def private write_section(var w : ImgWriter; var sections : array<ImgSection>; name : string; nbytes, rate_from : uint64; how : string;
+                          fill : block<() : void>) {
     let at = w_page(w)
     let ts = ref_time_ticks()
-    unsafe {
-        w_append(w, addr<void?>(field[0]), nbytes)
-    }
-    // >=256 MB only: a per-plane rate separates systemic cost from stalls, and small models stay quiet
-    if (nbytes >= 256ul * 1024ul * 1024ul) {
-        let ms = int64(get_time_usec(ts)) / 1000l
-        let mb = int64(nbytes) >> 20l
-        to_log(LOG_INFO, "dasLLAMA image:   plane {name} {mb} MB in {ms} ms = {ms > 0l ? mb * 1000l / ms : 0l} MB/s\n")
-    }
+    invoke(fill)
     if (!w.ok) {
         to_log(LOG_ERROR, "dasLLAMA image: plane '{name}' failed writing {int64(nbytes)} bytes at offset {int64(at)} - disk full? image save aborted\n")
         return
+    }
+    if (nbytes >= rate_from) {
+        let ms = int64(get_time_usec(ts)) / 1000l
+        let mb = int64(nbytes) >> 20l
+        to_log(LOG_INFO, "dasLLAMA image:   plane {name} {mb} MB {how}in {ms} ms = {ms > 0l ? mb * 1000l / ms : 0l} MB/s\n")
     }
     sections |> push(ImgSection(name = name, off = at, bytes = nbytes))
 }
@@ -1782,28 +1791,19 @@ def private write_metal_blob_plane(var t : Model; var w : ImgWriter; var section
     if (sh.blocks <= 0l) {
         return
     }
-    let nbytes = uint64(sh.blocks * sh.stride)
-    let at = w_page(w)
-    let ts = ref_time_ticks()
-    var band : array<uint8>
-    band |> reserve(min(sh.blocks, METAL_BAND_BLOCKS) * sh.stride)
-    band |> resize_no_init(min(sh.blocks, METAL_BAND_BLOCKS) * sh.stride)
-    var b0 = 0l
-    while (b0 < sh.blocks && w.ok) {
-        let n = min(METAL_BAND_BLOCKS, sh.blocks - b0)
-        metal_blob_fill_blocks(t, b0, n, band)
-        w_append(w, unsafe(addr<void?>(band[0])), uint64(n * sh.stride))
-        b0 += n
+    write_section(w, sections, "mblob", uint64(sh.blocks * sh.stride), 0ul, "derived+written ") $ {
+        var band : array<uint8>
+        band |> reserve(min(sh.blocks, METAL_BAND_BLOCKS) * sh.stride)
+        band |> resize_no_init(min(sh.blocks, METAL_BAND_BLOCKS) * sh.stride)
+        var b0 = 0l
+        while (b0 < sh.blocks && w.ok) {
+            let n = min(METAL_BAND_BLOCKS, sh.blocks - b0)
+            metal_blob_fill_blocks(t, b0, n, band)
+            w_append(w, unsafe(addr<void?>(band[0])), uint64(n * sh.stride))
+            b0 += n
+        }
+        delete band
     }
-    delete band
-    if (!w.ok) {
-        to_log(LOG_ERROR, "dasLLAMA image: plane 'mblob' failed writing {int64(nbytes)} bytes at offset {int64(at)} - disk full? image save aborted\n")
-        return
-    }
-    let ms = int64(get_time_usec(ts)) / 1000l
-    let mb = int64(nbytes) >> 20l
-    to_log(LOG_INFO, "dasLLAMA image:   plane mblob {mb} MB derived+written in {ms} ms = {ms > 0l ? mb * 1000l / ms : 0l} MB/s\n")
-    sections |> push(ImgSection(name = "mblob", off = at, bytes = nbytes))
 }
 
 //! The metal flavor's plane hook: the blob layout IS qblob+qscales interleaved, so those three
