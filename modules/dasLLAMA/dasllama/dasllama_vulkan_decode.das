@@ -106,8 +106,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     // all-or-nothing: pre-flight every prefill-attention class pf_setup may pick for this head size
     // (the fa tile with its cap stamp at 256, the h128 twin, the chunked pair - a capped or gated
     // layer falls through the ladder) so a declined kernel declines residency PRE-upload
-    let fa_hs_ok = head_size == 64l || head_size == 128l || head_size == 256l || head_size == 512l
-    let will_facm2 = cm2_fa_on() && vk_fa_on() && pf_reads_f16 && fa_hs_ok
+    let will_facm2 = cm2_fa_on() && vk_fa_on() && pf_reads_f16 && fa_head_ok(head_size)
     let will_fakhr = !will_facm2 && khr_kq_tile_on() && vk_fa_on() && pf_reads_f16 && fa_khr_serves(head_size, 0.0, gated_stamp)
     var fa_ok = true
     if (will_facm2 || will_fakhr) {

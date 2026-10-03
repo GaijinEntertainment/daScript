@@ -862,9 +862,7 @@ def private pf_setup {
     g_rd.pf_fakhr = false
     for (L in g_rd.layers) {
         continue if (L.recurrent)
-        let fa_hs_ok = L.hs == 64l || L.hs == 128l || L.hs == 256l || L.hs == 512l
-        L.pf_fa = (fa_dev && fa_hs_ok && (!gated_stamp || L.hs == 256l)
-            && (L.attn_cap == 0.0 || (L.hs == 256l && !gated_stamp)))
+        L.pf_fa = fa_dev && fa_cm2_serves(L.hs, L.attn_cap, gated_stamp)
         L.pf_fakhr = fakhr_dev && fa_khr_serves(L.hs, L.attn_cap, gated_stamp)
         any_cap = any_cap || (L.pf_fa && L.attn_cap != 0.0)
         any_khr_cap = any_khr_cap || (L.pf_fakhr && L.attn_cap != 0.0)

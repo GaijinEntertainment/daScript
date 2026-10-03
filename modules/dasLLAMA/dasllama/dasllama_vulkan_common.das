@@ -128,7 +128,14 @@ def cm2_fa_on : bool => g_gpu.has_coopmat2_fa && g_gpu.coopmat_mode == COOPMAT_C
 
 //! the KHR flash tile serves a head of 64, 128, 256 or 512 on an ungated model, the softcap at 256 alone (its cap stamps); the pre-flight and the window chain pick from this one predicate
 def fa_khr_serves(hs : int64; cap : float; gated : bool) : bool
-    => (hs == 64l || hs == 128l || hs == 256l || hs == 512l) && !gated && (cap == 0.0 || hs == 256l)
+    => fa_head_ok(hs) && !gated && (cap == 0.0 || hs == 256l)
+
+//! the cm2 flash tile serves a head of 64, 128, 256 or 512, gated at 256 alone, the softcap at an ungated 256 alone
+def fa_cm2_serves(hs : int64; cap : float; gated : bool) : bool
+    => fa_head_ok(hs) && (!gated || hs == 256l) && (cap == 0.0 || (hs == 256l && !gated))
+
+//! the head sizes a flash tile is stamped at
+def fa_head_ok(hs : int64) : bool => hs == 64l || hs == 128l || hs == 256l || hs == 512l
 
 //! the per-32 formats that serve as routed expert planes only: their one cm2 column is the s tile
 def cm2_b32_routed(fmt : int) : bool => fmt == int(KqFmt.q51) || fmt == int(KqFmt.mx4) || fmt == int(KqFmt.iq4nl32)
