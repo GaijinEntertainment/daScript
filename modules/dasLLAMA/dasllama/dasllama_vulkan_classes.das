@@ -247,10 +247,7 @@ class template ResidualT : WgReduceBase {
         var k = gl_LocalInvocationID.x
         if (pa.pre_on != 0u) {   //! the sandwich form: the partner off the row stash, a column a round
             while (k < dim) {
-                let vv = pa.add_on != 0u ? mad(wn[pa.pwoff + k], pre_partner(base, k) * ainv, xin(base + k)) * pa.ascale : xin(base + k)
-                xout(base + k, vv)
-                stash(k, vv)
-                ss += vv * vv
+                keep(base, k, pa.add_on != 0u ? mad(wn[pa.pwoff + k], pre_partner(base, k) * ainv, xin(base + k)) * pa.ascale : xin(base + k), ss)
                 k += 256u
             }
             return ss
@@ -274,27 +271,26 @@ class template ResidualT : WgReduceBase {
                 v2 = (v2 + a2) * pa.ascale
                 v3 = (v3 + a3) * pa.ascale
             }
-            xout(base + k, v0)
-            stash(k, v0)
-            ss += v0 * v0
+            keep(base, k, v0, ss)
             if (k + 256u < dim) {
-                xout(base + k1, v1)
-                stash(k1, v1)
-                ss += v1 * v1
+                keep(base, k1, v1, ss)
             }
             if (k + 512u < dim) {
-                xout(base + k2, v2)
-                stash(k2, v2)
-                ss += v2 * v2
+                keep(base, k2, v2, ss)
             }
             if (k + 768u < dim) {
-                xout(base + k3, v3)
-                stash(k3, v3)
-                ss += v3 * v3
+                keep(base, k3, v3, ss)
             }
             k += 1024u
         }
         return ss
+    }
+
+    //! column `k` of the row at `base` kept: written back, stashed for the re-read, its square added to `ss`
+    def keep(base, k : uint; v : float; var ss : float&) {
+        xout(base + k, v)
+        stash(k, v)
+        ss += v * v
     }
 
     // workgroup-wide rms inverse from per-thread sum-of-squares partials (slot 1: the add partner's norm took slot 0)
@@ -358,31 +354,27 @@ class template ArBase : ResidualT {
             let n1 = normed_at(k1, 0.0, inv)
             let n2 = normed_at(k2, 0.0, inv)
             let n3 = normed_at(k3, 0.0, inv)
-            static_if (OUT_F32) {
-                yo[base + k] = n0
-                if (k + 256u < pa.dim) {
-                    yo[base + k1] = n1
-                }
-                if (k + 512u < pa.dim) {
-                    yo[base + k2] = n2
-                }
-                if (k + 768u < pa.dim) {
-                    yo[base + k3] = n3
-                }
+            put_out(base + k, n0)
+            if (k + 256u < pa.dim) {
+                put_out(base + k1, n1)
             }
-            static_if (OUT_F16) {
-                outh[base + k] = float16(n0)
-                if (k + 256u < pa.dim) {
-                    outh[base + k1] = float16(n1)
-                }
-                if (k + 512u < pa.dim) {
-                    outh[base + k2] = float16(n2)
-                }
-                if (k + 768u < pa.dim) {
-                    outh[base + k3] = float16(n3)
-                }
+            if (k + 512u < pa.dim) {
+                put_out(base + k2, n2)
+            }
+            if (k + 768u < pa.dim) {
+                put_out(base + k3, n3)
             }
             k += 1024u
+        }
+    }
+
+    //! the normed row's element `i` stored in the stamp's out form: floats to `yo`, halves to `outh`
+    def put_out(i : uint; v : float) {
+        static_if (OUT_F32) {
+            yo[i] = v
+        }
+        static_if (OUT_F16) {
+            outh[i] = float16(v)
         }
     }
 }
@@ -506,7 +498,7 @@ class template ArCombBase : ArBase {
     //! the same row off registers: `rb` the slot's row base, `bb` its bias row base
     def drow_at(rb, bb, k : uint) : float => down_rows[rb + k] + dbias[bb + k]
 
-    def override accum_row(base : uint) : float {   // nolint:STYLE038 — one row pass: the hoisted metas, the four-column round, the memory tail
+    def override accum_row(base : uint) : float {
         let p = base / pa.dim
         var g = 1.0
         if (pa.gated != 0u) {
@@ -566,23 +558,15 @@ class template ArCombBase : ArBase {
             let v1 = (xs[base + k1] + f1) * pa.ascale
             let v2 = (xs[base + k2] + f2) * pa.ascale
             let v3 = (xs[base + k3] + f3) * pa.ascale
-            xs[base + k] = v0
-            row[k] = v0
-            ss += v0 * v0
+            keep(base, k, v0, ss)
             if (k + 256u < pa.dim) {
-                xs[base + k1] = v1
-                row[k1] = v1
-                ss += v1 * v1
+                keep(base, k1, v1, ss)
             }
             if (k + 512u < pa.dim) {
-                xs[base + k2] = v2
-                row[k2] = v2
-                ss += v2 * v2
+                keep(base, k2, v2, ss)
             }
             if (k + 768u < pa.dim) {
-                xs[base + k3] = v3
-                row[k3] = v3
-                ss += v3 * v3
+                keep(base, k3, v3, ss)
             }
             k += 1024u
         }
