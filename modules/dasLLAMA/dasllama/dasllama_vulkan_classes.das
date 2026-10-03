@@ -5728,6 +5728,19 @@ class KqBatchBase : MoeCmBase {
         load_dm(wsb0, wt, nsb, s, tid % 32u, tid / 32u)
     }
 
+    //! the per-32 f16 d scale stage of the Q4_0-plane formats (q40, iq4nl): block `tid / 32`'s d of row `tid % 32`, two d a word
+    def stage_d32(wsb0, wt, nsb, s, tid : uint) {
+        let slane = tid % 32u
+        let sblk = tid / 32u
+        var sa = 0.0
+        if (wt * 32u + slane < pa.d) {
+            let wsb = wsb0 + (wt * 32u + slane) * nsb + s
+            let dp = unpackHalf2x16(wsu[wsb * 5u + sblk / 2u])
+            sa = sblk % 2u == 0u ? dp.x : dp.y
+        }
+        wsw[sblk * 32u + slane] = sa
+    }
+
     def blk_fma(bu, grp, word : uint; xscl : float) : float4 {
         return fma_dm(bu, grp, word, xscl)
     }
@@ -5803,15 +5816,7 @@ class KqBatchK4 : KqBatchBase {
 [vk_dispatch(name = "kq_batch_q40_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
 class KqBatchQ40 : KqBatchK4 {
     def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
-        let slane = tid % 32u
-        let sblk = tid / 32u
-        var sa = 0.0
-        if (wt * 32u + slane < pa.d) {
-            let wsb = wsb0 + (wt * 32u + slane) * nsb + s
-            let dp = unpackHalf2x16(wsu[wsb * 5u + sblk / 2u])
-            sa = sblk % 2u == 0u ? dp.x : dp.y
-        }
-        wsw[sblk * 32u + slane] = sa
+        stage_d32(wsb0, wt, nsb, s, tid)
     }
 
     def override blk_fma(bu, grp, word : uint; xscl : float) : float4 {
@@ -6002,15 +6007,7 @@ class KqBatchIq2xxs : KqBatchGridBase {
 [vk_dispatch(name = "kq_batch_iq4nl_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
 class KqBatchIq4nl : KqBatchIq4xs {
     def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
-        let slane = tid % 32u
-        let sblk = tid / 32u
-        var sa = 0.0
-        if (wt * 32u + slane < pa.d) {
-            let wsb = wsb0 + (wt * 32u + slane) * nsb + s
-            let dp = unpackHalf2x16(wsu[wsb * 5u + sblk / 2u])
-            sa = sblk % 2u == 0u ? dp.x : dp.y
-        }
-        wsw[sblk * 32u + slane] = sa
+        stage_d32(wsb0, wt, nsb, s, tid)
     }
 
     [spirv_kernel(local_size_x = 256, name = "kq_batch_iq4nl_cls_spv")]
