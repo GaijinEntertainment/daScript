@@ -2080,8 +2080,6 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
     var pc_gff = BatchArgs(n = uint(d), d = uint(ff), map_off = 0u)
     var pc_dn = BatchArgs(n = uint(ff), d = uint(d), map_off = 0u, ksplit = uint(sk.ksplit))
     let nd_fc2 = vt_tile_rows(tile_fc2, npos) * d
-    var pc_red = SkRedArgs(nelem = uint(nd_fc2), k = uint(sk.nsplit), ybase = 0u)
-    let wg_red = (nd_fc2 + 1_023l) / 1_024l
     var pc_bias = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = 0u, act = BIAS_ACT_NONE)
     var pc_gelu = TowerBiasArgs(d = uint(ff), nelem = uint(nff), boff = 0u, act = fc1_act)
     vt_chain_one_shot("whisper-class", nl, npos) $(raw : VkCommandBuffer; var h : VkHaz) {
@@ -2183,7 +2181,7 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
             vt_tile_enc(raw, h, tile_fc2, s_fc2, pc_dn, g_fc2)
             vt_pt(raw, VtProfRole.gemm_fc2)
             if (split) {
-                enc_splitk_reduce_cls(raw, h, r.s_splitk_reduce, pc_red, wg_red)
+                splitk_reduce_enc(raw, h, r.s_splitk_reduce, nd_fc2, sk.nsplit)
                 vt_pt(raw, VtProfRole.sk_reduce)
             }
             let last = l + 1l == nl
