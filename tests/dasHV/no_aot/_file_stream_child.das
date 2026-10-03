@@ -23,7 +23,9 @@ def main() : int {
     server.path = clone_string(get_platform_name() == "windows" ? "NUL" : "{root}/special")
     server->init(0)
     if (server->start() != 0) { return 3 }
-    verify(fwrite("{root}/ready", "{server->bound_port()}"))
+    verify(fwrite("{root}/ready.tmp", "{server->bound_port()}"))
+    let published = rename_result("{root}/ready.tmp", "{root}/ready")
+    verify(published is value && published as value)
     while (!fexist("{root}/release")) { server->tick(); sleep(1u) }
     server->stop(); server->cleanup()
     unsafe { delete server }

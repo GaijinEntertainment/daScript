@@ -1334,6 +1334,13 @@ def private apply_pending_text(var state : InputTextState; text : string) {
     }
 }
 
+def private sync_input_text_edit(var state : InputTextState; result : bool) {
+    state.changed = IsItemEdited()
+    if (state.changed || result) {
+        sync_value_from_buffer(state)
+    }
+}
+
 [widget]
 def input_text(var state : InputTextState; text : string;
                flags : ImGuiInputTextFlags = ImGuiInputTextFlags.None) : bool {
@@ -1342,13 +1349,10 @@ def input_text(var state : InputTextState; text : string;
     //! 256). For grow-on-overflow use `input_text_growable`.
     input_text_buffer_init(state)
     apply_pending_text(state, text)
-    let changed = _builtin_InputText_basic(unsafe(addr(state.buffer[0])), state.capacity, text, flags)
-    state.changed = changed
-    if (changed) {
-        sync_value_from_buffer(state)
-    }
+    let result = _builtin_InputText_basic(unsafe(addr(state.buffer[0])), state.capacity, text, flags)
+    sync_input_text_edit(state, result)
     text_value_finalize(widget_ident, "input_text", state)
-    return changed
+    return result
 }
 
 [widget]
@@ -1358,13 +1362,10 @@ def input_text_with_hint(var state : InputTextState; text : string; hint : strin
     //! buffer is empty.
     input_text_buffer_init(state)
     apply_pending_text(state, text)
-    let changed = _builtin_InputTextWithHint_basic(unsafe(addr(state.buffer[0])), state.capacity, text, hint, flags)
-    state.changed = changed
-    if (changed) {
-        sync_value_from_buffer(state)
-    }
+    let result = _builtin_InputTextWithHint_basic(unsafe(addr(state.buffer[0])), state.capacity, text, hint, flags)
+    sync_input_text_edit(state, result)
     text_value_finalize(widget_ident, "input_text_with_hint", state)
-    return changed
+    return result
 }
 
 [widget]
@@ -1376,13 +1377,10 @@ def input_text_multiline(var state : InputTextState; text : string;
     //! size for editor-style panels.
     input_text_buffer_init(state)
     apply_pending_text(state, text)
-    let changed = _builtin_InputTextMultiline_basic(unsafe(addr(state.buffer[0])), state.capacity, text, size, flags)
-    state.changed = changed
-    if (changed) {
-        sync_value_from_buffer(state)
-    }
+    let result = _builtin_InputTextMultiline_basic(unsafe(addr(state.buffer[0])), state.capacity, text, size, flags)
+    sync_input_text_edit(state, result)
     text_value_finalize(widget_ident, "input_text_multiline", state)
-    return changed
+    return result
 }
 
 [widget]
@@ -1404,7 +1402,7 @@ def input_text_growable(var state : InputTextState; text : string;
         _builtin_InputText_reload(text)
     }
     let cb_flags = flags | ImGuiInputTextFlags.CallbackResize
-    var changed : bool
+    var result : bool
     unsafe {
         let resize_cb <- @ capture(& state) (var data : ImGuiInputTextCallbackData) : int {
             if (data.EventFlag == ImGuiInputTextFlags.CallbackResize) {
@@ -1417,14 +1415,11 @@ def input_text_growable(var state : InputTextState; text : string;
             }
             return 0
         }
-        changed = _builtin_InputText_cb(addr(state.buffer[0]), state.capacity, text, cb_flags, resize_cb)
+        result = _builtin_InputText_cb(addr(state.buffer[0]), state.capacity, text, cb_flags, resize_cb)
     }
-    state.changed = changed
-    if (changed) {
-        sync_value_from_buffer(state)
-    }
+    sync_input_text_edit(state, result)
     text_value_finalize(widget_ident, "input_text_growable", state)
-    return changed
+    return result
 }
 
 [widget]
@@ -1436,16 +1431,13 @@ def input_text_callback(var state : InputTextState; text : string;
     //! `data` pointer is valid only during the synchronous call. For resize use `input_text_growable`.
     input_text_buffer_init(state)
     apply_pending_text(state, text)
-    var changed : bool
+    var result : bool
     unsafe {
-        changed = _builtin_InputText_cb(addr(state.buffer[0]), state.capacity, text, flags, cb)
+        result = _builtin_InputText_cb(addr(state.buffer[0]), state.capacity, text, flags, cb)
     }
-    state.changed = changed
-    if (changed) {
-        sync_value_from_buffer(state)
-    }
+    sync_input_text_edit(state, result)
     text_value_finalize(widget_ident, "input_text_callback", state)
-    return changed
+    return result
 }
 
 // ===== Filter family =====
