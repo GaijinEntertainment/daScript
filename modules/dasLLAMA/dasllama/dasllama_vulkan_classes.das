@@ -728,8 +728,8 @@ class template RqT : Q8BlockStoreT {
     override OUT_Q8 = true
     @template_constant KBLK : bool = false   //!< Q8_K superblocks instead of Q8_0's 32-blocks
 
-    def abstract load4(eb : uint) : float4   //! the four elements from `eb` (the 32-block form)
     def abstract load1(e : uint) : float     //! element `e` (the superblock form)
+    def load4(eb : uint) : float4 => float4(load1(eb), load1(eb + 1u), load1(eb + 2u), load1(eb + 3u))   //! the four elements from `eb` (the 32-block form)
 
     //! the superblock's scale to outs[b] from the subgroup's amax, its inverse back
     [arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
@@ -779,10 +779,6 @@ class template RqPlainT : RqT {
     @ssbo @binding = 2 outs : array<float>
     @push_constant pa : RqArgs
 
-    def override load4(eb : uint) : float4 {
-        let e = pa.inbase + eb
-        return float4(src[e], src[e + 1u], src[e + 2u], src[e + 3u])
-    }
     def override load1(e : uint) : float => src[pa.inbase + e]
 }
 
@@ -2257,9 +2253,7 @@ class HcLoRq : RqT {
     @ssbo @binding = 2 outs : array<float>
     @push_constant pa : HcLoArgs
 
-    def lo(e : uint) : float => silu_f32(src[e] * pa.inv_hc)
-    def override load4(eb : uint) : float4 => float4(lo(eb), lo(eb + 1u), lo(eb + 2u), lo(eb + 3u))
-    def override load1(e : uint) : float => lo(e)
+    def override load1(e : uint) : float => silu_f32(src[e] * pa.inv_hc)
 }
 
 struct HcMixArgs {
@@ -10066,10 +10060,6 @@ class template TowerClampRqT : RqT {
     @ssbo @binding = 2 outs : array<float>
     @push_constant pa : TowerClampRqArgs
 
-    def override load4(eb : uint) : float4 {
-        let e = pa.inbase + eb
-        return float4(clamp(src[e], pa.lo, pa.hi), clamp(src[e + 1u], pa.lo, pa.hi), clamp(src[e + 2u], pa.lo, pa.hi), clamp(src[e + 3u], pa.lo, pa.hi))
-    }
     def override load1(e : uint) : float => clamp(src[pa.inbase + e], pa.lo, pa.hi)
 }
 
@@ -11319,9 +11309,7 @@ class TowerBiasActRq : RqT {
     @ssbo @binding = 3 outs : array<float>
     @push_constant pa : TowerBiasRqArgs
 
-    def biased(e : uint) : float => tower_gelu_tanh(x[e] + wn[pa.boff + e % max(1u, pa.d)])
-    def override load4(eb : uint) : float4 => float4(biased(eb), biased(eb + 1u), biased(eb + 2u), biased(eb + 3u))
-    def override load1(e : uint) : float => biased(e)
+    def override load1(e : uint) : float => tower_gelu_tanh(x[e] + wn[pa.boff + e % max(1u, pa.d)])
 }
 
 //! a GEMM output's bias row added in place, then the activation `pa.act` names (`tower_act`); a stamp overriding `biased`
