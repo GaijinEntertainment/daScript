@@ -1703,7 +1703,7 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
             submit_wait(raw)
             w0 += wlen
         }
-        memcpy(addr<void?>(logits[0]), g_rd.pf_logits_host.mapped, g_rd.vocab * 4l)
+        host_buf_read(g_rd.pf_logits_host, addr<void?>(logits[0]), g_rd.vocab * 4l)
     }
 }
 
@@ -2086,7 +2086,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             w0 += wlen
             last_wlen = wlen
         }
-        memcpy(addr<void?>(logits[0]), g_rd.pf_logits_host.mapped, g_rd.vocab * 4l)
+        host_buf_read(g_rd.pf_logits_host, addr<void?>(logits[0]), g_rd.vocab * 4l)
         // per-role GPU aggregation, LAST window, only when every stamp landed; overlapped levels (q|k|v, gate|up) bill the level on the last member's delta
         if (vk_prof()) {
             pf_prof_report(npos)
@@ -2385,7 +2385,7 @@ def vk_arena_gemm(var y : array<float>; blk : int64; n, d, npos : int64; fmt : i
             vhz_dep(raw, h, VHG_YO, 0u, true)
             cmd_copy_whole(raw, g_gpu.batch_y1_dev, g_gpu.batch_y1.buf, npos * d * 4l)
         }
-        memcpy(addr<void?>(y[0]), g_gpu.batch_y1.mapped, npos * d * 4l)
+        host_buf_read(g_gpu.batch_y1, addr<void?>(y[0]), npos * d * 4l)
     }
 }
 

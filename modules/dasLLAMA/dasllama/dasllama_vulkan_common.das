@@ -3775,8 +3775,13 @@ def readback_range(dev : uint64; bits : uint; off : int64; hb : HostBuf; var dst
         vhz_dep(raw, h, bits, 0u, true)
         cmd_copy_range(raw, dev, off, hb.buf, 0l, bytes)
     }
+    host_buf_read(hb, unsafe(reinterpret<void?>(dst)), bytes)
+}
+
+//! `bytes` of a host buffer's mapped memory from byte `off` copied to `dst`
+def host_buf_read(hb : HostBuf; var dst : void?; bytes : int64; off : int64 = 0l) {
     unsafe {
-        memcpy(reinterpret<void?>(dst), hb.mapped, bytes)
+        memcpy(dst, reinterpret<void?>(reinterpret<uint8?>(hb.mapped) + off), bytes)
     }
 }
 

@@ -52,12 +52,12 @@ def vk_add_rms(var x : array<float>; a : array<float>; w : array<float>; var y :
             vhz_dep(raw, h, VHG_YO, 0u, true)   // x reads back post-fence in the second cmd
             cmd_copy_whole(raw, g_gpu.ar_y_dev, g_gpu.ar_host.buf, bytes)
         }
-        memcpy(addr<void?>(y[0]), g_gpu.ar_host.mapped, bytes)
+        host_buf_read(g_gpu.ar_host, addr<void?>(y[0]), bytes)
         // x is the residual stream: read the updated row back too
         cmd_one_shot() $(raw : VkCommandBuffer; var _h : VkHaz) {
             cmd_copy_whole(raw, g_gpu.ar_x_dev, g_gpu.ar_host.buf, bytes)
         }
-        memcpy(addr<void?>(x[0]), g_gpu.ar_host.mapped, bytes)
+        host_buf_read(g_gpu.ar_host, addr<void?>(x[0]), bytes)
     }
 }
 
@@ -110,9 +110,9 @@ def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow :
             cmd_copy_range(raw, g_gpu.rks_k_dev, pos * kv_dim * 4l, g_gpu.rks_kv_host.buf, 0l, kv_dim * 4l)
             cmd_copy_range(raw, g_gpu.rks_v_dev, pos * kv_dim * 4l, g_gpu.rks_kv_host.buf, kv_dim * 4l, kv_dim * 4l)
         }
-        memcpy(addr<void?>(qout[0]), g_gpu.rks_q_host.mapped, qd * 4l)
-        memcpy(addr<void?>(krow[0]), g_gpu.rks_kv_host.mapped, kv_dim * 4l)
-        memcpy(addr<void?>(vrow[0]), reinterpret<float?>(g_gpu.rks_kv_host.mapped) + kv_dim, kv_dim * 4l)
+        host_buf_read(g_gpu.rks_q_host, addr<void?>(qout[0]), qd * 4l)
+        host_buf_read(g_gpu.rks_kv_host, addr<void?>(krow[0]), kv_dim * 4l)
+        host_buf_read(g_gpu.rks_kv_host, addr<void?>(vrow[0]), kv_dim * 4l, kv_dim * 4l)
     }
 }
 
@@ -151,6 +151,6 @@ def vk_decode_attn(var q : array<float>; var out : array<float>; cnt, qd, kv_dim
             vhz_dep(raw, h, VHG_YO, 0u, true)
             cmd_copy_whole(raw, g_gpu.da_out_dev, g_gpu.da_out_host.buf, qd * 4l)
         }
-        memcpy(addr<void?>(out[0]), g_gpu.da_out_host.mapped, qd * 4l)
+        host_buf_read(g_gpu.da_out_host, addr<void?>(out[0]), qd * 4l)
     }
 }

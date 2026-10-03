@@ -1407,13 +1407,7 @@ def vk_rdec_ngram_ring(var host : float?; up : bool) {
         upload_region_at(g_rd.plehist_dev, off, unsafe(reinterpret<uint8 const?>(host)), bytes)
     } else {
         var stage = make_host_buf(bytes, false, [cached = true])
-        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            vhz_dep(raw, h, VHZ_DNSM, 0u, true)
-            cmd_copy_range(raw, g_rd.plehist_dev, off, stage.buf, 0l, bytes)
-        }
-        unsafe {
-            memcpy(reinterpret<void?>(host), stage.mapped, bytes)
-        }
+        readback_range(g_rd.plehist_dev, VHZ_DNSM, off, stage, host, bytes)
         destroy_host_buf(stage)
     }
 }
@@ -3333,9 +3327,7 @@ def private rd_land_one(pick_only : bool; var logits : array<float>) : int64 {
     if (pick_only) {
         return rd_landed_pick(0l)
     }
-    unsafe {
-        memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l)
-    }
+    host_buf_read(g_rd.logits_host, unsafe(addr<void?>(logits[0])), g_rd.vocab * 4l)
     return -1l
 }
 
@@ -3351,9 +3343,7 @@ def vk_rdec_land_carry(row : int64; var dst : array<float>) {
     assert(g_rd != null && g_rd.carry, "vk_rdec_land_carry on a driver prepared without the carry")
     let row_bytes = rd_carry_width() * 4l
     assert(row >= 0l && row < g_rd.nb && long_length(dst) * 4l >= row_bytes, "vk_rdec_land_carry: the row is past the landed rows, or the destination is short of a row")
-    unsafe {
-        memcpy(addr<void?>(dst[0]), reinterpret<void?>(reinterpret<uint8?>(g_rd.hid_host.mapped) + row * row_bytes), row_bytes)
-    }
+    host_buf_read(g_rd.hid_host, unsafe(addr<void?>(dst[0])), row_bytes, row * row_bytes)
 }
 
 def private rd_fill_head_regions {
@@ -3714,12 +3704,10 @@ def private rd_verify_stage(x, cossin, hcos : array<float>; pos, n : int64) {
 }
 
 def private rd_verify_land(n, width : int64; picks_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>) {
-    unsafe {
-        if (!picks_only) {
-            memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l * n)
-        }
-        memcpy(addr<void?>(hid[0]), g_rd.hid_host.mapped, width * 4l * n)
+    if (!picks_only) {
+        host_buf_read(g_rd.logits_host, unsafe(addr<void?>(logits[0])), g_rd.vocab * 4l * n)
     }
+    host_buf_read(g_rd.hid_host, unsafe(addr<void?>(hid[0])), width * 4l * n)
     for (i in range64(n)) {
         picks[i] = rd_landed_pick(i)
     }
