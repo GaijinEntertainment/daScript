@@ -358,7 +358,7 @@ def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
         fixed_array(hid * 4l * nb, hid * 4l * nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),
         fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ))
     //! the fused form: gate and up q8 planes over the Q8_0 x, the hidden row's Q8_0 quants out (DASLLAMA_VK_FUSE=0 keeps the three dispatches)
-    L.gu_on = f1 == int(KqFmt.q8) && f3 == int(KqFmt.q8) && !kq_sb(f2) && vk_fuse_on() && (vk_fuse_bisect_bits() & FUSE_BX_GU) == 0l
+    L.gu_on = rd_gu_fits(f1, f3, f2) && vk_fuse_on() && (vk_fuse_bisect_bits() & FUSE_BX_GU) == 0l
     if (L.gu_on) {
         verify(ensure_q8_gemv_gu_cls(), "vk decode: the fused gate-up class rail must engage on a live device")
         let gu = rd_gu_binds(L)
@@ -367,6 +367,12 @@ def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
     // down GEMV -> ffnout
     L.s_down = arena_gemv_set(f2, p2, L.m_down.buf, META_BYTES, 0u, g_gpu.hq_dev, g_gpu.hs_dev, hid * nb, (hid / 32l) * 4l * nb, VHZ_HQ, g_rd.ffnout_dev, dim * 4l * nb, VHZ_FFO)
 }
+
+def private rd_gu_fits(f1, f3, f2 : int) : bool => f1 == int(KqFmt.q8) && f3 == int(KqFmt.q8) && !kq_sb(f2)
+
+def private rd_wo_ar_fits(L : RLayer) : bool => !L.recurrent && L.fo == int(KqFmt.q8) && L.rq_ffn_stamp == RqStamp.rq
+
+def private rd_down_ar_fits(L : RLayer) : bool => has_dense_triple(L) && L.f2 == int(KqFmt.q8) && (L.ple || L.rq_next_stamp == RqStamp.rq)
 
 def private rd_gu_binds(L : RLayer) : tuple<bufs : uint64[8]; sizes : int64[8]; bits : uint[8]> {
     let dim = g_rd.dim
@@ -2161,7 +2167,7 @@ def private rd_ensure_fused_sets {
     for (l in range64(nl)) {
         var L & = unsafe(g_rd.layers[l])
         L.s_addr_ffn_rq = set_ar_rq_stamp(L.rq_ffn_stamp, g_rd.xb2_dev, VHZ_XB2, g_rd.xq_dev, g_rd.xs_dev)
-        L.wo_ar = !L.recurrent && L.fo == int(KqFmt.q8) && L.rq_ffn_stamp == RqStamp.rq && (vk_fuse_bisect_bits() & (FUSE_BX_WO_AR | FUSE_BX_POST_ATT_RQ)) == 0l && ensure_q8_gemv_ar_cls()
+        L.wo_ar = rd_wo_ar_fits(L) && (vk_fuse_bisect_bits() & (FUSE_BX_WO_AR | FUSE_BX_POST_ATT_RQ)) == 0l && ensure_q8_gemv_ar_cls()
         if (L.wo_ar) {
             let po = arena_planes(L.fo, L.bo)
             let nb = g_rd.nb
@@ -2172,7 +2178,7 @@ def private rd_ensure_fused_sets {
         if (!L.moe) {
             L.s_addr_next_rq = set_ar_rq_stamp(L.rq_next_stamp, g_rd.ffnout_dev, VHZ_FFO, g_rd.xq_dev, g_rd.xs_dev)
             //! a PLE layer joins whatever its next stamp is: its step quantizes the row as it is, for the gate's feed
-            L.down_ar = has_dense_triple(L) && L.f2 == int(KqFmt.q8) && (L.ple || L.rq_next_stamp == RqStamp.rq) && (vk_fuse_bisect_bits() & (FUSE_BX_DOWN_AR | FUSE_BX_POST_FFN_RQ)) == 0l && ensure_q8_gemv_ar_cls()
+            L.down_ar = rd_down_ar_fits(L) && (vk_fuse_bisect_bits() & (FUSE_BX_DOWN_AR | FUSE_BX_POST_FFN_RQ)) == 0l && ensure_q8_gemv_ar_cls()
             if (L.down_ar) {
                 let p2 = arena_planes(L.f2, L.b2)
                 let rows = g_rd.nb
@@ -2198,9 +2204,9 @@ def private rd_announce_fuse_bisect {
     var down_elig = false
     var gu_elig = false
     for (L in g_rd.layers) {
-        wo_elig = wo_elig || (!L.recurrent && L.fo == int(KqFmt.q8) && L.rq_ffn_stamp == RqStamp.rq)
-        down_elig = down_elig || (has_dense_triple(L) && L.f2 == int(KqFmt.q8) && (L.ple || L.rq_next_stamp == RqStamp.rq))
-        gu_elig = gu_elig || (L.f1 == int(KqFmt.q8) && L.f3 == int(KqFmt.q8) && !kq_sb(L.f2))
+        wo_elig = wo_elig || rd_wo_ar_fits(L)
+        down_elig = down_elig || rd_down_ar_fits(L)
+        gu_elig = gu_elig || rd_gu_fits(L.f1, L.f3, L.f2)
     }
     let names <- [
         (bit = FUSE_BX_WO_AR, name = "the wo epilogue", live = wo_elig),
