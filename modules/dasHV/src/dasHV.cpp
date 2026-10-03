@@ -8,6 +8,7 @@
 #include "../../../src/builtin/module_builtin_rtti.h"
 
 #include "dasHV.h"
+#include "http_request_snapshot.h"
 
 #include <hv/hlog.h>
 #include <hv/hasync.h>
@@ -486,8 +487,7 @@ public:
             // lives on — the send must run here, not on the tick thread.
             auto connLoop = this->loop();
             auto resp = make_shared<HttpResponse>(*ctx->response);
-            auto req = make_shared<HttpRequest>(*ctx->request);
-            req->http_cb = nullptr;
+            auto req = snapshot_received_http_request(*ctx->request);
             if (!enqueue([context,at,lmb,ctx,connLoop,resp,req](){
                 int st = das_invoke_lambda<int>::invoke<HttpRequest*,HttpResponse*>(
                     context, at, lmb, req.get(), resp.get());
@@ -588,8 +588,7 @@ public:
     }
     http_ctx_handler makeDeferredHandler(Lambda lmb, Context * context, LineInfoArg * at) {
         return [this,context,at,lmb](const HttpContextPtr & ctx) -> int {
-            auto req = make_shared<HttpRequest>(*ctx->request);
-            req->http_cb = nullptr;
+            auto req = snapshot_received_http_request(*ctx->request);
             auto writer = ctx->writer;
             auto open = make_shared<atomic<bool>>(true);
             writer->onclose = [open](){ open->store(false); };
@@ -631,8 +630,7 @@ public:
             const auto handle = admission->handle;
             auto key = ctx->request.get();
             ctx->writer->onclose = [this,key,handle](){ release_admission(key, handle); };
-            auto request = make_shared<HttpRequest>(*ctx->request);
-            request->http_cb = nullptr;
+            auto request = snapshot_received_http_request(*ctx->request);
             if (!enqueue([handle,request,lmb,context,at](){
                 if (HandleRegistry<WebSocketAdmission>::instance().is_alive(handle)) {
                     das_invoke_lambda<void>::invoke<HttpRequest*,Handle<WebSocketAdmission>>(

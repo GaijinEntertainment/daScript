@@ -1,6 +1,7 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
 #include <hv/HttpParser.h>
+#include "../../../modules/dasHV/src/http_request_snapshot.h"
 #include <hv/WebSocketParser.h>
 #include <hv/wsdef.h>
 #include <hv/hlog.h>
@@ -193,4 +194,17 @@ TEST_CASE("Logger fsync configuration is safe across serving threads") {
     start.store(true, std::memory_order_release);
     one.join();
     two.join();
+}
+
+TEST_CASE("Received request snapshots own body bytes independently of parser storage") {
+    HttpRequest source;
+    const std::string body(4096, 'a');
+    source.body = body;
+    source.Content();
+    source.http_cb = [](HttpMessage *, http_parser_state, const char *, size_t) {};
+    const auto snapshot = das::snapshot_received_http_request(source);
+    source.body.assign(body.size(), 'z');
+    CHECK(snapshot->body == body);
+    CHECK(std::string(static_cast<const char *>(snapshot->Content()), snapshot->ContentLength()) == body);
+    CHECK_FALSE(bool(snapshot->http_cb));
 }
