@@ -3196,7 +3196,11 @@ var private g_wg_decline : VkDeclineCounter
 // @workgroup members exceed the device's shared-memory cap declines by name instead of dying
 // in vkCreateComputePipelines (MoltenVK: "Threadgroup memory size exceeds the maximum")
 def vkd_wg_fits(wg_bytes : int; kname : string) : bool {
-    return true if (uint(wg_bytes) <= g_gpu.max_wg_bytes)
+    return uint(wg_bytes) <= g_gpu.max_wg_bytes || vkd_wg_decline(wg_bytes, kname)
+}
+
+[cold_path]
+def private vkd_wg_decline(wg_bytes : int; kname : string) : bool {
     return note(g_wg_decline, kname, "workgroup", "the workgroup footprint {wg_bytes} B exceeds the device cap {int(g_gpu.max_wg_bytes)} B")
 }
 
