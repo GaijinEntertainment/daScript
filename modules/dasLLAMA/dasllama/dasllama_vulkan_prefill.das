@@ -2444,6 +2444,16 @@ def private ensure_batch_set(si : int; ybuf, xqbuf, xsbuf : uint64; xqbytes, xsb
     g_gpu.stacks[si].batch_ybit = ybit
 }
 
+def private ensure_batch_sets3(s1, s3, s2 : int) {
+    ensure_batch_set(s1, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y1)
+    ensure_batch_set(s3, g_gpu.batch_y2_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y2)
+    ensure_batch_set(s2, g_gpu.batch_y1_dev, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES, VHB_HQ, VHB_Y1)
+}
+
+def private ffn_stacks(offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; f1, f3, f2 : int) : tuple<s1 : int; s3 : int; s2 : int>
+    => (s1 = find_stack(unsafe(offs1[0]), f1, "prefill ffn gate"), s3 = find_stack(unsafe(offs3[0]), f3, "prefill ffn up"),
+        s2 = find_stack(unsafe(offs2[0]), f2, "prefill ffn down"))
+
 // chunk row cap: the gathered x window, both hidden planes, the requant planes, and the down
 // output (which reuses y1) must all fit their buffers. Two activation units: `in` = gate/up
 // image, `mid` = intermediate (follows the DOWN stack, may differ). 32 for Q8_0, 256 for Q8_K.
@@ -2648,9 +2658,7 @@ def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, 
 // batch arm: chunked over row windows, down GEMM reuses y1 for output. npos > 0: the combine
 // kernel folds each chunk's down rows into comb_y_dev, read back once after the last chunk.
 def vk_moe_ffn_batch(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; wp : float const?; invp : uint const?; n, nfe, nrows, npos : int64; f1, f3, f2 : int; is_gelu : bool) {
-    let s1 = find_stack(unsafe(offs1[0]), f1, "prefill ffn gate")
-    let s3 = find_stack(unsafe(offs3[0]), f3, "prefill ffn up")
-    let s2 = find_stack(unsafe(offs2[0]), f2, "prefill ffn down")
+    let (s1, s3, s2) = ffn_stacks(offs1, offs3, offs2, f1, f3, f2)
     // gate/up share one activation image (forms must agree); down's intermediate is its own unit
     let kq_in = !kq_block32(f1)
     verify(!kq_block32(f3) == kq_in,
@@ -2659,9 +2667,7 @@ def vk_moe_ffn_batch(var goutp : float?; offs1 : int64 const?; offs3 : int64 con
     let xunit_mid = kq_unit(f2)
     ensure_batch_state()
     ensure_batch_acts_cls()
-    ensure_batch_set(s1, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y1)
-    ensure_batch_set(s3, g_gpu.batch_y2_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y2)
-    ensure_batch_set(s2, g_gpu.batch_y1_dev, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES, VHB_HQ, VHB_Y1)
+    ensure_batch_sets3(s1, s3, s2)
     let comb = npos > 0l
     var comb_k = 0l
     if (comb) {
@@ -2856,9 +2862,7 @@ def vk_moe_dn(var yp : float?; woq, woz, woo : int64;
     ensure_batch_state()
     ensure_dn_state()
     ensure_dn_cls_sets()
-    ensure_batch_set(s_qkv, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y1)
-    ensure_batch_set(s_z, g_gpu.batch_y2_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y2)
-    ensure_batch_set(s_o, g_gpu.batch_y1_dev, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES, VHB_HQ, VHB_Y1)
+    ensure_batch_sets3(s_qkv, s_z, s_o)
     unsafe {
         var sp = reinterpret<float?>(g_gpu.dn_smalls.mapped)
         sp[0] = eps
@@ -3444,16 +3448,12 @@ def private record_ffn_cm2_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, n,
 //! the chain's stacks, sets and host staging (x rows, the combine's w/inv planes) - shared by the
 //! synchronous chunk loop and the async single-chunk begin
 def private xf_prepare(offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; xp : float const?; wp : float const?; invp : uint const?; n, nrows, npos : int64; f1, f3, f2 : int) : tuple<s1 : int; s3 : int; s2 : int> {
-    let s1 = find_stack(unsafe(offs1[0]), f1, "prefill ffn gate")
-    let s3 = find_stack(unsafe(offs3[0]), f3, "prefill ffn up")
-    let s2 = find_stack(unsafe(offs2[0]), f2, "prefill ffn down")
+    let (s1, s3, s2) = ffn_stacks(offs1, offs3, offs2, f1, f3, f2)
     assert(npos > 0l && nrows % npos == 0l, "dasLLAMA vulkan tier: the cm2 expert chain serves the combined form only")
     assert(nrows * 4l <= COMB_WI_BYTES && npos * n * 4l <= BATCH_Y_BYTES,
         "dasLLAMA vulkan tier: combined output exceeds capacity")
     ensure_xf_state()
-    ensure_batch_set(s1, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y1)
-    ensure_batch_set(s3, g_gpu.batch_y2_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y2)
-    ensure_batch_set(s2, g_gpu.batch_y1_dev, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES, VHB_HQ, VHB_Y1)
+    ensure_batch_sets3(s1, s3, s2)
     unsafe {
         par_memcpy(g_gpu.staging.mapped, reinterpret<void?>(xp), npos * n * 4l)
         var cp = reinterpret<uint8?>(g_gpu.comb_stage.mapped)
