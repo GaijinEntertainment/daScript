@@ -4744,6 +4744,12 @@ let DA_RQ_NONE = 2u  //! ... no fold: a separate requant serves (or nothing read
 //! the Q8_0 block scale of a head row's dim: the 32-lane group's amax over 127 (the group is the block on a 32- or 64-wide subgroup)
 def da_q8_blk_d(o : float) : float => q8k_amax5(abs(o)) / 127.0
 
+//! a lane's 32-lane Q8_0 block of `v`: the block scale (`da_q8_blk_d`) and its inverse, the factor `q8_quant1` takes
+def q8_lane_scale(v : float) : float2 {
+    let d = da_q8_blk_d(v)
+    return float2(d, d != 0.0 ? 1.0 / d : 0.0)
+}
+
 [ |> template_struct_instance]
 class template DaAttnT {
     @template_constant KV16 : bool = false   //!< the f16-mirror stamp: a lane's eight halves of a K row load as one 16-byte word
@@ -4805,18 +4811,18 @@ class template DaAttnT {
         }
         if (pa.rqk == DA_RQ_Q8) {
             if (live) {   // a 32-aligned head keeps every lane of a block live together
-                let dq = da_q8_blk_d(o)
+                let s = q8_lane_scale(o)
                 if ((d & 31u) == 0u) {
-                    aqs[(h * hs + d) >> 5u] = dq
+                    aqs[(h * hs + d) >> 5u] = s.x
                 }
-                aq[h * hs + d] = q8_quant1(o, dq != 0.0 ? 1.0 / dq : 0.0)
+                aq[h * hs + d] = q8_quant1(o, s.y)
             }
             if (wide) {
-                let dq2 = da_q8_blk_d(o2)
+                let s2 = q8_lane_scale(o2)
                 if ((d & 31u) == 0u) {
-                    aqs[(h * hs + d + 256u) >> 5u] = dq2
+                    aqs[(h * hs + d + 256u) >> 5u] = s2.x
                 }
-                aq[h * hs + d + 256u] = q8_quant1(o2, dq2 != 0.0 ? 1.0 / dq2 : 0.0)
+                aq[h * hs + d + 256u] = q8_quant1(o2, s2.y)
             }
         } elif (pa.rqk == DA_RQ_Q8K) {   // every thread of the workgroup takes part: the head is 256 or 512 wide
             let m1 = subgroupMax(abs(o))
@@ -12723,13 +12729,12 @@ class template Q8GemvGuNT {
             let lane = gl_SubgroupInvocationID
             let li = min(lane, 31u)
             let a = lane < 32u ? act_mul_sel(wg_g[c * 32u + li], wg_u[c * 32u + li], pa.act) : 0.0
-            let d = da_q8_blk_d(a)
-            let id = d != 0.0 ? 1.0 / d : 0.0
+            let s = q8_lane_scale(a)
             if (lane == 0u) {
-                outs[c * (pa.d / 32u) + gl_WorkGroupID.x] = d
+                outs[c * (pa.d / 32u) + gl_WorkGroupID.x] = s.x
             }
             if (lane < 32u) {
-                outq[c * pa.d + row0 + lane] = q8_quant1(a, id)
+                outq[c * pa.d + row0 + lane] = q8_quant1(a, s.y)
             }
             c += nsg
         }
@@ -12821,12 +12826,11 @@ class Q8GemvPleAct {
         var c0 = 0u
         while (c0 < nc) {
             let v = tid < pa.n ? act_mul_sel(gate[c0 * pa.n + e], side[pa.ubase + c0 * pa.sstride + e], pa.act) : 0.0
-            let d = da_q8_blk_d(v)
-            let id = d != 0.0 ? 1.0 / d : 0.0
-            let q = uint(int(round(v * id))) & 0xFFu
+            let s = q8_lane_scale(v)
+            let q = uint(int(round(v * s.y))) & 0xFFu
             atomicOr(xw[c0 * 64u + tid / 4u], q << ((tid % 4u) * 8u))
             if ((tid & 31u) == 0u) {
-                xs[c0 * 8u + tid / 32u] = d
+                xs[c0 * 8u + tid / 32u] = s.x
             }
             c0++
         }
@@ -13123,13 +13127,12 @@ class Mx4GemvGu : Mx4GemvBase {
                 uv += ub[pa.uboff + ex * pa.d + c]
             }
             let a = lane < 32u ? act_mul_sel(gv, uv, pa.act) : 0.0
-            let dq = da_q8_blk_d(a)
-            let id = dq != 0.0 ? 1.0 / dq : 0.0
+            let s = q8_lane_scale(a)
             if (lane == 0u) {
-                outs[gl_WorkGroupID.x] = dq
+                outs[gl_WorkGroupID.x] = s.x
             }
             if (lane < 32u) {
-                outq[row0 + lane] = q8_quant1(a, id)
+                outq[row0 + lane] = q8_quant1(a, s.y)
             }
         }
     }
@@ -13904,13 +13907,12 @@ class KqGemvK4Gu : K4GemvT {
         if (gl_SubgroupID == 0u) {   // the block's activation and Q8_0 quant: one lane an output row
             let li = min(lane, 31u)
             let a = lane < 32u ? act_mul_sel(wg_g[li], wg_u[li], pa.act) : 0.0
-            let dq = da_q8_blk_d(a)
-            let id = dq != 0.0 ? 1.0 / dq : 0.0
+            let s = q8_lane_scale(a)
             if (lane == 0u) {
-                outs[gl_WorkGroupID.x] = dq
+                outs[gl_WorkGroupID.x] = s.x
             }
             if (lane < 32u) {
-                outq[row0 + lane] = q8_quant1(a, id)
+                outq[row0 + lane] = q8_quant1(a, s.y)
             }
         }
     }
