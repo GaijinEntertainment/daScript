@@ -836,6 +836,23 @@ def vt_gather_regions(qblob : PlaneI8; qscales : PlaneF; regions : array<VtRegio
     }
 }
 
+//! the q8 planes' regions gathered into the device layout and uploaded, `wq_bytes` of quants to `wq_dev` and `ws_bytes` of
+//! halfword scales to `ws_dev`
+[cold_path]
+def vt_upload_regions(qblob : PlaneI8; qscales : PlaneF; regions : array<VtRegion>; lay : Q8RepackLayout; wq_dev, ws_dev : uint64; wq_bytes, ws_bytes : int64) {
+    var wq : array<uint8>
+    var ws : array<uint8>
+    wq |> reserve_resize(wq_bytes)
+    ws |> reserve_resize(ws_bytes)
+    vt_gather_regions(qblob, qscales, regions, lay, wq, ws)
+    unsafe {
+        upload_region_at(wq_dev, 0l, addr<uint8 const?>(wq[0]), wq_bytes)
+        upload_region_at(ws_dev, 0l, addr<uint8 const?>(ws[0]), ws_bytes)
+    }
+    delete wq
+    delete ws
+}
+
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_upload(var r : VtResident; key : uint64; qblob : PlaneI8; qscales : PlaneF; regions : array<VtRegion>;
                       blob : PlaneF; rows_off, rows_n, ones_n : int64; lay : Q8RepackLayout) : bool {
@@ -851,17 +868,7 @@ def private vt_upload(var r : VtResident; key : uint64; qblob : PlaneI8; qscales
         vt_release(r)
         return false
     }
-    var wq : array<uint8>
-    var ws : array<uint8>
-    wq |> reserve_resize(r.wq_bytes)
-    ws |> reserve_resize(r.ws_bytes)
-    vt_gather_regions(qblob, qscales, regions, lay, wq, ws)
-    unsafe {
-        upload_region_at(r.wq_dev, 0l, addr<uint8 const?>(wq[0]), r.wq_bytes)
-        upload_region_at(r.ws_dev, 0l, addr<uint8 const?>(ws[0]), r.ws_bytes)
-    }
-    delete wq
-    delete ws
+    vt_upload_regions(qblob, qscales, regions, lay, r.wq_dev, r.ws_dev, r.wq_bytes, r.ws_bytes)
     upload_float_ranges(r.norms_dev, [(p = plane_at(blob, rows_off), n = rows_n)], ones_n)
     r.cap_rows = 0l
     vt_unbind_batch_sets(r)

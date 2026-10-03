@@ -393,20 +393,10 @@ def private wd_upload_weights(w : WhisperModel) {
         r.site_meta |> push(wd_site_meta([lo.fc2_w]))
     }
     r.site_meta |> push(wd_site_meta([w.d_te_q_off]))
-    var wq : array<uint8>
-    var ws : array<uint8>
-    wq |> reserve_resize(r.wq_bytes)
-    ws |> reserve_resize(r.ws_bytes)
-    vt_gather_regions(w.dqblob, w.dqscales, regions, lay, wq, ws)
-    delete regions
     if (!r.oom) {
-        unsafe {
-            upload_region_at(r.wq_dev, 0l, addr<uint8 const?>(wq[0]), r.wq_bytes)
-            upload_region_at(r.ws_dev, 0l, addr<uint8 const?>(ws[0]), r.ws_bytes)
-        }
+        vt_upload_regions(w.dqblob, w.dqscales, regions, lay, r.wq_dev, r.ws_dev, r.wq_bytes, r.ws_bytes)
     }
-    delete wq
-    delete ws
+    delete regions
 }
 
 [cold_path]
