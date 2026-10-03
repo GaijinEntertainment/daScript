@@ -139,12 +139,18 @@ let public RDEC_HEAD_OUT = 4l
 
 //! `qk_hs` = 0 on a model without q/k norms
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]
-def public rdec_head_norm_base(n_layers, dim, qk_hs : int64) : int64 => (n_layers * RDEC_NORM_ROWS + 1l) * dim + (n_layers + 1l) * 2l * qk_hs
+def public rdec_head_norm_base(n_layers, dim, qk_hs : int64) : int64 => rdec_norms_qk_base(n_layers, dim) + (n_layers + 1l) * 2l * qk_hs
+
+//! the norms plane's final-norm row, past every layer's `RDEC_NORM_ROWS` rows
+def public rdec_norms_final_base(n_layers, dim : int64) : int64 => n_layers * RDEC_NORM_ROWS * dim
+
+//! the norms plane's q/k rows, past the final-norm row
+def public rdec_norms_qk_base(n_layers, dim : int64) : int64 => rdec_norms_final_base(n_layers, dim) + dim
 
 //! the norms plane's floats before the eps/ascale pair: the layers' rows, the final norm and the q/k rows, then under `head` the head's q/k slot and block
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]
 def public rdec_norms_len(n_layers, dim, qk_hs : int64; head : bool) : int64
-    => head ? rdec_head_norm_base(n_layers, dim, qk_hs) + RDEC_HEAD_NORM_ROWS * dim : (n_layers * RDEC_NORM_ROWS + 1l) * dim + n_layers * 2l * qk_hs
+    => head ? rdec_head_norm_base(n_layers, dim, qk_hs) + RDEC_HEAD_NORM_ROWS * dim : rdec_norms_qk_base(n_layers, dim) + n_layers * 2l * qk_hs
 
 //! One attention layer's geometry for the resident driver - its attention class (gemma-4's sliding and
 //! global layers differ in head size, kv width and rope), its dense FFN width, and where its rows sit.

@@ -2017,10 +2017,10 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         }
     }
     if (!c.hyper_conn) {
-        copy_floats(t.fblob, t.rms_final_off, norms, c.n_layers * RDEC_NORM_ROWS * dim, dim)
+        copy_floats(t.fblob, t.rms_final_off, norms, rdec_norms_final_base(c.n_layers, dim), dim)
     }
     if (c.qk_norm) {
-        let qkw = c.n_layers * RDEC_NORM_ROWS * dim + dim
+        let qkw = rdec_norms_qk_base(c.n_layers, dim)
         for (l in range64(c.n_layers + (head ? 1l : 0l))) {
             continue if (layer_is_recurrent(c, l))   // no q/k norm rows on a recurrent layer; its slots stay zero
             copy_floats(t.fblob, t.rms_q_offs[l], norms, qkw + l * 2l * hs, layer_head_size(c, l))
