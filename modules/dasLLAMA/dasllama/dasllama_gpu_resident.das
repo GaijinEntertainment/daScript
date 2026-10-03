@@ -1339,13 +1339,15 @@ def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
     return blk
 }
 
-//! a routed layer's expert triple: placed in the arena, or -1 blocks where the host serves them
-def private resident_place_experts_or_host(t : Model; l : int64; host_experts : bool; mr, kg, wb : int64) : tuple<be1 : int64; be3 : int64; be2 : int64> {
-    if (host_experts) {
-        return (be1 = -1l, be3 = -1l, be2 = -1l)
+//! routed layer l's expert triple: placed in the arena, or -1 blocks where the host serves them (its router slot under
+//! `host_layers`); `ok` false when the arena refused a stack
+def private resident_place_experts_or_host(t : Model; l, router_slot, host_layers : int64; mr, kg, wb : int64) : tuple<be1 : int64; be3 : int64; be2 : int64; ok : bool> {
+    if (router_slot < host_layers) {
+        return (be1 = -1l, be3 = -1l, be2 = -1l, ok = true)
     }
     let eb = resident_place_experts(t, l, mr, kg, wb)
-    return (be1 = (eb.be1 < 0l || eb.be3 < 0l || eb.be2 < 0l) ? -1l : eb.be1, be3 = eb.be3, be2 = eb.be2)
+    let ok = eb.be1 >= 0l && eb.be3 >= 0l && eb.be2 >= 0l
+    return (be1 = ok ? eb.be1 : -1l, be3 = eb.be3, be2 = eb.be2, ok = ok)
 }
 
 //! "" when the seats took every hyper-connection plane, else the decline reason
@@ -1882,9 +1884,8 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             }
             rec_idx++
             if (moe) {
-                let is_host_layer = router_slot < host_layers
-                let eb = resident_place_experts_or_host(t, l, is_host_layer, mr, kg, wb)
-                if (eb.be1 < 0l && !is_host_layer) return rdec_decline("arena placement failed at recurrent layer {l} (the expert stacks)")
+                let eb = resident_place_experts_or_host(t, l, router_slot, host_layers, mr, kg, wb)
+                if (!eb.ok) return rdec_decline("arena placement failed at recurrent layer {l} (the expert stacks)")
                 let ef = resident_expert_fmts(t, l)
                 rdec_set_moe_experts(l, router_slot, eb.be1, eb.be3, eb.be2, ef.f1, ef.f3, ef.f2)
                 router_slot++
@@ -1907,9 +1908,8 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         // a placement can fail (arena exhausted); fail closed to the CPU loop rather than wire a -1 block
         if (bq < 0l || (!kvsh && bk < 0l) || (!g.vfk && !kvsh && bv < 0l) || bo < 0l) return rdec_decline("arena placement failed at layer {l}")
         if (moe) {
-            let is_host_layer = router_slot < host_layers
-            let eb = resident_place_experts_or_host(t, l, is_host_layer, mr, kg, wb)
-            if (eb.be1 < 0l && !is_host_layer) return rdec_decline("arena placement failed at layer {l} (the expert stacks)")
+            let eb = resident_place_experts_or_host(t, l, router_slot, host_layers, mr, kg, wb)
+            if (!eb.ok) return rdec_decline("arena placement failed at layer {l} (the expert stacks)")
             let ef = resident_expert_fmts(t, l)
             rdec_set_moe_layer(l, mir_idx, router_slot, bq, bk, bv, bo, fb.b1, fb.b3, fb.b2, eb.be1, eb.be3, eb.be2,
                 int(lf.fq), int(lf.fk), int(lf.fv), int(lf.fo), int(lf.f1), int(lf.f3), int(lf.f2), ef.f1, ef.f3, ef.f2, g)
