@@ -418,6 +418,14 @@ def private moe_gpu_gather_upload(t : Model; f : KqFmt; woff : int64; n, rows, s
     return ok
 }
 
+//! `n` floats of the model's f32 blob from `off`, as a fresh array
+def private fblob_rows(t : Model; off, n : int64) : array<float> {
+    var rows : array<float>
+    rows |> reserve_resize(n)
+    copy_floats(t.fblob, off, rows, 0l, n)
+    return <- rows
+}
+
 //! one plane of a gather-upload group: `rows` rows of `n`, gathered `slice_rows` rows a slice
 struct private PlaneUp {
     f : KqFmt
@@ -1358,19 +1366,9 @@ def private resident_upload_hc(t : Model; nextn : bool; mr, kg, wb : int64) : st
     let hcd = hc_dim(c)
     let lr = c.hc_low_rank
     let n_sites = 2l * (c.n_layers + (nextn ? 1l : 0l))
-    var norm_rows : array<float>
-    norm_rows |> reserve(n_sites * hcd)
-    norm_rows |> resize(n_sites * hcd)
-    for (i in range64(n_sites * hcd)) {
-        norm_rows[i] = t.fblob[t.hc_norm_off + i]
-    }
-    var inject_rows : array<float>
-    inject_rows |> reserve(n_sites * hc * hcd)
-    inject_rows |> resize(n_sites * hc * hcd)
-    for (i in range64(n_sites * hc * hcd)) {
-        inject_rows[i] = t.fblob[t.hc_inject_off + i]
-    }
-    let head_norm <- [for (i in range64(hcd)); t.fblob[t.hc_head_norm_off + i]]
+    let norm_rows <- fblob_rows(t, t.hc_norm_off, n_sites * hcd)
+    let inject_rows <- fblob_rows(t, t.hc_inject_off, n_sites * hc * hcd)
+    let head_norm <- fblob_rows(t, t.hc_head_norm_off, hcd)
     var down_blks : array<int64>
     var up_blks : array<int64>
     down_blks |> reserve(n_sites)
@@ -1385,8 +1383,8 @@ def private resident_upload_hc(t : Model; nextn : bool; mr, kg, wb : int64) : st
     let bhd = resident_place(t, KqFmt.q8, t.hc_head_down_off, hcd, lr, mr, kg, wb)
     let bhu = resident_place(t, KqFmt.q8, t.hc_head_up_off, lr, hcd, mr, kg, wb)
     if (bhd < 0l || bhu < 0l) return "arena placement failed at the head mixer (the hyper-connection planes)"
-    let mtp_norm <- [for (i in range64(nextn ? hcd : 0l)); t.fblob[t.mtp_hc_head_norm_off + i]]
-    let hnorm_rows <- [for (i in range64(nextn ? hcd : 0l)); t.fblob[t.mtp_hnorm_off + i]]
+    let mtp_norm <- fblob_rows(t, t.mtp_hc_head_norm_off, nextn ? hcd : 0l)
+    let hnorm_rows <- fblob_rows(t, t.mtp_hnorm_off, nextn ? hcd : 0l)
     var bmd = -1l
     var bmu = -1l
     if (nextn) {
@@ -1404,14 +1402,11 @@ def private resident_upload_hc(t : Model; nextn : bool; mr, kg, wb : int64) : st
         let bval = resident_place(t, KqFmt.q8, t.ple_val_off, ind, dim, mr, kg, wb)
         if (bkey < 0l || bval < 0l) return "arena placement failed at the n-gram side input's planes"
         var side_norms : array<float>
-        side_norms |> reserve(3l * hcd)
-        side_norms |> resize(3l * hcd)
-        for (i in range64(hcd)) {
-            side_norms[i] = t.fblob[t.ple_nkey_off + i]
-            side_norms[hcd + i] = t.fblob[t.ple_nquery_off + i]
-            side_norms[2l * hcd + i] = t.fblob[t.ple_nconv_off + i]
-        }
-        let taps <- [for (i in range64(hcd * kern)); t.fblob[t.ple_conv_off + i]]
+        side_norms |> reserve_resize(3l * hcd)
+        copy_floats(t.fblob, t.ple_nkey_off, side_norms, 0l, hcd)
+        copy_floats(t.fblob, t.ple_nquery_off, side_norms, hcd, hcd)
+        copy_floats(t.fblob, t.ple_nconv_off, side_norms, 2l * hcd, hcd)
+        let taps <- fblob_rows(t, t.ple_conv_off, hcd * kern)
         if (!rdec_set_ngram(c.ple_layer, ind, ple_hist_rows(c), kern, c.ple_ngram_size, bkey, bval, side_norms, taps)) {
             return "the n-gram side input's seats declined (the tier's line above)"
         }
@@ -1962,11 +1957,9 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
                 w[i] = unsafe(reinterpret<float>(uint(t.bf16blob[t.ple_model_off + i]) << 16u))
             }
         } else {
-            for (i in range64(all * dim)) {
-                w[i] = t.fblob[t.ple_model_off + i]
-            }
+            copy_floats(t.fblob, t.ple_model_off, w, 0l, all * dim)
         }
-        var pnorm <- [for (i in range64(ple)); t.fblob[t.ple_pnorm_off + i]]
+        var pnorm <- fblob_rows(t, t.ple_pnorm_off, ple)
         let on = rdec_set_ple_proj(w, pnorm, all)
         to_log(LOG_INFO, "dasLLAMA: resident driver: the per-layer-embedding pre-step's projection {on ? "runs on device" : "stays on the CPU"}\n")
         delete w
@@ -2027,51 +2020,39 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     for (l in range64(c.n_layers)) {
         let lb = l * RDEC_NORM_ROWS * dim
         if (!c.hyper_conn) {
-            for (i in range64(dim)) {
-                norms[lb + i] = t.fblob[t.rms_att_off + l * dim + i]
-                norms[lb + dim + i] = t.fblob[t.rms_ffn_off + l * dim + i]
-            }
+            copy_floats(t.fblob, t.rms_att_off + l * dim, norms, lb, dim)
+            copy_floats(t.fblob, t.rms_ffn_off + l * dim, norms, lb + dim, dim)
         }
         if (c.pre_post_norm) {
-            for (i in range64(dim)) {
-                norms[lb + 2l * dim + i] = t.fblob[t.rms_post_att_off + l * dim + i]
-                norms[lb + 3l * dim + i] = t.fblob[t.rms_post_ffn_off + l * dim + i]
-            }
+            copy_floats(t.fblob, t.rms_post_att_off + l * dim, norms, lb + 2l * dim, dim)
+            copy_floats(t.fblob, t.rms_post_ffn_off + l * dim, norms, lb + 3l * dim, dim)
         }
         if (has_ple(c)) {
-            for (i in range64(dim)) {
-                norms[lb + 4l * dim + i] = t.fblob[t.ple_post_off + l * dim + i]
-            }
+            copy_floats(t.fblob, t.ple_post_off + l * dim, norms, lb + 4l * dim, dim)
         }
         if (c.moe_dense_shexp && layer_is_moe(t, l)) {   //! the router's learned input scale rides the norms plane as a weight row, over sqrt(dim)
             let inv_d = 1.0 / sqrt(float(dim))
             for (i in range64(dim)) {
                 norms[lb + 5l * dim + i] = t.fblob[t.moe_router_scale_off + l * dim + i] * inv_d
-                norms[lb + 6l * dim + i] = t.fblob[t.rms_pre_ffn2_off + l * dim + i]
-                norms[lb + 7l * dim + i] = t.fblob[t.rms_post_ffn1_off + l * dim + i]
-                norms[lb + 8l * dim + i] = t.fblob[t.rms_post_ffn2_off + l * dim + i]
             }
+            copy_floats(t.fblob, t.rms_pre_ffn2_off + l * dim, norms, lb + 6l * dim, dim)
+            copy_floats(t.fblob, t.rms_post_ffn1_off + l * dim, norms, lb + 7l * dim, dim)
+            copy_floats(t.fblob, t.rms_post_ffn2_off + l * dim, norms, lb + 8l * dim, dim)
         }
         if (c.attn_out_bias) {   //! the attention output bias rides the norms plane as a row the residual step adds to the wo GEMV's row
-            for (i in range64(dim)) {
-                norms[lb + 9l * dim + i] = t.bo[l * dim + i]
-            }
+            copy_floats(t.bo, l * dim, norms, lb + 9l * dim, dim)
         }
     }
     if (!c.hyper_conn) {
-        for (i in range64(dim)) {
-            norms[c.n_layers * RDEC_NORM_ROWS * dim + i] = t.fblob[t.rms_final_off + i]
-        }
+        copy_floats(t.fblob, t.rms_final_off, norms, c.n_layers * RDEC_NORM_ROWS * dim, dim)
     }
     if (c.qk_norm) {
         let qkw = c.n_layers * RDEC_NORM_ROWS * dim + dim
         for (l in range64(c.n_layers + (head ? 1l : 0l))) {
             continue if (layer_is_recurrent(c, l))   // no q/k norm rows on a recurrent layer; its slots stay zero
-            for (i in range64(layer_head_size(c, l))) {
-                norms[qkw + l * 2l * hs + i] = t.fblob[t.rms_q_offs[l] + i]
-                if (t.kv_src[l] == l) {   //! a shared-KV layer norms no K of its own; its k row stays zero
-                    norms[qkw + (l * 2l + 1l) * hs + i] = t.fblob[t.rms_k_offs[l] + i]
-                }
+            copy_floats(t.fblob, t.rms_q_offs[l], norms, qkw + l * 2l * hs, layer_head_size(c, l))
+            if (t.kv_src[l] == l) {   //! a shared-KV layer norms no K of its own; its k row stays zero
+                copy_floats(t.fblob, t.rms_k_offs[l], norms, qkw + (l * 2l + 1l) * hs, layer_head_size(c, l))
             }
         }
     }
@@ -3838,9 +3819,7 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
             rdec_dn_row_own(s, c, pos)
         }
         // this row's embedded residual is already in ws.scr.x_b; its rope row for pos
-        for (k in range64(dim)) {
-            g_rdec_x[int(k)] = ws.scr.x_b[i * dim + k]
-        }
+        copy_floats(ws.scr.x_b, i * dim, g_rdec_x, 0l, dim)
         rdec_rope_rows(t, ws.rope_positions[i], g_rdec_cossin, 0l)
         if (ple) {
             rdec_batch_ple_row(t, ws, i)
