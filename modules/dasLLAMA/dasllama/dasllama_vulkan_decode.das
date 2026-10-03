@@ -356,12 +356,28 @@ def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
     L.gu_on = f1 == int(KqFmt.q8) && f3 == int(KqFmt.q8) && !kq_sb(f2) && vk_fuse_on() && (vk_fuse_bisect_bits() & FUSE_BX_GU) == 0l
     if (L.gu_on) {
         verify(ensure_q8_gemv_gu_cls(), "vk decode: the fused gate-up class rail must engage on a live device")
-        L.s_gu = set_q8_gemv_gu_cls(fixed_array(p1.wq, p1.ws, p3.wq, p3.ws, g_rd.xq_dev, g_rd.xs_dev, g_gpu.hq_dev, g_gpu.hs_dev),
-            fixed_array(p1.wqb, p1.wsb, p3.wqb, p3.wsb, dim * nb, (dim / 32l) * 4l * nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),
-            fixed_array(0u, 0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_HQ, VHZ_HQ))
+        let gu = rd_gu_binds(L)
+        L.s_gu = set_q8_gemv_gu_cls(gu.bufs, gu.sizes, gu.bits)
     }
     // down GEMV -> ffnout
     L.s_down = arena_gemv_set(f2, p2, L.m_down.buf, META_BYTES, 0u, g_gpu.hq_dev, g_gpu.hs_dev, hid * nb, (hid / 32l) * 4l * nb, VHZ_HQ, g_rd.ffnout_dev, dim * 4l * nb, VHZ_FFO)
+}
+
+def private rd_gu_binds(L : RLayer) : tuple<bufs : uint64[8]; sizes : int64[8]; bits : uint[8]> {
+    let dim = g_rd.dim
+    let nb = g_rd.nb
+    let p1 = arena_planes(L.f1, L.b1)
+    let p3 = arena_planes(L.f3, L.b3)
+    return (bufs = fixed_array(p1.wq, p1.ws, p3.wq, p3.ws, g_rd.xq_dev, g_rd.xs_dev, g_gpu.hq_dev, g_gpu.hs_dev),
+        sizes = fixed_array(p1.wqb, p1.wsb, p3.wqb, p3.wsb, dim * nb, (dim / 32l) * 4l * nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+        bits = fixed_array(0u, 0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_HQ, VHZ_HQ))
+}
+
+def private rd_topk_binds() : tuple<bufs : uint64[8]; sizes : int64[8]; bits : uint[8]> {
+    let slots_bytes = MAX_ROUTED_SLOTS * 4l
+    return (bufs = fixed_array(g_rd.moe_dlog_dev, g_rd.moe_meta1_dev, g_rd.moe_meta3_dev, g_rd.moe_meta2_dev, g_rd.moe_dw_dev, g_rd.moe_ds_dev, g_rd.moe_rb_dev, g_rd.moe_eidx_dev),
+        sizes = fixed_array(g_rd.ner * 4l * g_rd.nb, META_BYTES, META_BYTES, META_BYTES, slots_bytes, g_rd.moe_ds_bytes, g_rd.moe_rb_bytes, slots_bytes),
+        bits = fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, 0u, 0u, VHZ_MRT))
 }
 
 def private rd_quant_xb_set() : VkDescriptorSet => rd_rq_set(g_rd.xb_dev, VHZ_XB, g_rd.xq_dev, g_rd.xs_dev, VHZ_XQ, g_rd.dim)
@@ -694,9 +710,8 @@ def private rd_moe_sets(var L : RLayer) {
     L.rtn_fused = L.moe_g4 && vk_fuse_on()
     L.s_router = set_router_gemv_cls(fixed_array(g_rd.router_dev, L.rtn_fused ? g_rd.x_dev : g_rd.xb_dev, g_rd.moe_dlog_dev, g_rd.norms_dev),
         fixed_array(g_rd.router_bytes, rows_bytes, g_rd.ner * 4l * nb, g_rd.norms_bytes), fixed_array(0u, L.rtn_fused ? VHZ_X : VHZ_XB, VHZ_MRT, 0u))
-    L.s_topk = set_topk_cls(fixed_array(g_rd.moe_dlog_dev, g_rd.moe_meta1_dev, g_rd.moe_meta3_dev, g_rd.moe_meta2_dev, g_rd.moe_dw_dev, g_rd.moe_ds_dev, g_rd.moe_rb_dev, g_rd.moe_eidx_dev),
-        fixed_array(g_rd.ner * 4l * nb, META_BYTES, META_BYTES, META_BYTES, slots_bytes, g_rd.moe_ds_bytes, g_rd.moe_rb_bytes, slots_bytes),
-        fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, 0u, 0u, VHZ_MRT))
+    let tk = rd_topk_binds()
+    L.s_topk = set_topk_cls(tk.bufs, tk.sizes, tk.bits)
     L.s_egate = arena_gemv_set(L.fe1, pe1, g_rd.moe_meta1_dev, META_BYTES, VHZ_MRT, xqb, xsb, xq_bytes, xs_bytes, VHZ_XQ, g_rd.egate_dev, egu_bytes, VHZ_GATE)
     L.s_eup = arena_gemv_set(L.fe3, pe3, g_rd.moe_meta3_dev, META_BYTES, VHZ_MRT, xqb, xsb, xq_bytes, xs_bytes, VHZ_XQ, g_rd.eup_dev, egu_bytes, VHZ_UP)
     if (g_rd.exps_bias) {   //! the biased act: the picks' gate and up bias rows join before the activation
@@ -3206,8 +3221,6 @@ def private rd_ensure_n_rail : bool {
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rd_ensure_n_sets {
     if (g_rd.n_sets_made) return
-    let dim = g_rd.dim
-    let nb = g_rd.nb
     if (rd_rows_fuse(rd_head_feed(g_rd.layers[0]))) {
         g_rd.s_prologue_rq_b = set_ar_rq_stamp(RqStamp.rq_b, g_rd.x_dev, VHZ_X, g_rd.xq_dev, g_rd.xs_dev)
     }
@@ -3220,17 +3233,12 @@ def private rd_ensure_n_sets {
             L.s_addr_next_rq_b = set_ar_rq_stamp(RqStamp.rq_b, g_rd.ffnout_dev, VHZ_FFO, g_rd.xq_dev, g_rd.xs_dev)
         }
         if (L.gu_on) {   // the rail ensured the class before any row count recorded
-            let p1 = arena_planes(L.f1, L.b1)
-            let p3 = arena_planes(L.f3, L.b3)
-            L.s_gu_n = q8_gemv_gu_n_set(fixed_array(p1.wq, p1.ws, p3.wq, p3.ws, g_rd.xq_dev, g_rd.xs_dev, g_gpu.hq_dev, g_gpu.hs_dev),
-                fixed_array(p1.wqb, p1.wsb, p3.wqb, p3.wsb, dim * nb, (dim / 32l) * 4l * nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),
-                fixed_array(0u, 0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_HQ, VHZ_HQ))
+            let gu = rd_gu_binds(L)
+            L.s_gu_n = q8_gemv_gu_n_set(gu.bufs, gu.sizes, gu.bits)
         }
         if (L.moe) {
-            let slots_bytes = MAX_ROUTED_SLOTS * 4l
-            L.s_topk_n = set_topk_n_cls(fixed_array(g_rd.moe_dlog_dev, g_rd.moe_meta1_dev, g_rd.moe_meta3_dev, g_rd.moe_meta2_dev, g_rd.moe_dw_dev, g_rd.moe_ds_dev, g_rd.moe_rb_dev, g_rd.moe_eidx_dev),
-                fixed_array(g_rd.ner * 4l * nb, META_BYTES, META_BYTES, META_BYTES, slots_bytes, g_rd.moe_ds_bytes, g_rd.moe_rb_bytes, slots_bytes),
-                fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, 0u, 0u, VHZ_MRT))
+            let tk = rd_topk_binds()
+            L.s_topk_n = set_topk_n_cls(tk.bufs, tk.sizes, tk.bits)
         }
         if (L.ple && L.ple_fused) {
             L.s_ple_ar_rq_n = set_ar_rq_stamp(RqStamp.rq_b, g_rd.ffnout_dev, VHZ_FFO, g_rd.xq_dev, g_rd.xs_dev)
