@@ -4237,8 +4237,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
                 let fo = fmt_at(t.wo_fmt, l)
                 if (t.wq_offs[l] < 0l || t.wo_offs[l] < 0l) {
                     walk_skip(dense_skips, l, "no q/o planes")
-                } elif (!((fq == KqFmt.q8 || kq_sb(fq)) && (fo == KqFmt.q8 || kq_sb(fo))
-                        && kq_servable(t, fq) && kq_servable(t, fo))) {
+                } elif (!dense_plane_ok(t, fq) || !dense_plane_ok(t, fo)) {
                     walk_skip(dense_skips, l, "q/o formats {int(fq)}/{int(fo)} not tier-servable")
                 } else {
                     uploads |> push((f = fq, woff = t.wq_offs[l], n = dim, rows = t.config.q_gated ? 2l * qd : qd))
@@ -4376,7 +4375,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
             let kq_cls = fq != KqFmt.q8
             var fmts_ok = (fk != KqFmt.q8) == kq_cls && (fv != KqFmt.q8) == kq_cls
             for (f in [fq, fk, fv, fo]) {
-                fmts_ok = fmts_ok && (f == KqFmt.q8 || kq_sb(f)) && kq_servable(t, f)
+                fmts_ok = fmts_ok && dense_plane_ok(t, f)
             }
             if (!fmts_ok) {
                 walk_skip(at_skips, l, "q/k/v/o formats {int(fq)}/{int(fk)}/{int(fv)}/{int(fo)} not tier-servable as one chain")
