@@ -330,3 +330,7 @@ choices, so requesting symbols alone does not silently enable those checks.
 With emsdk active, `node utils/daspkg/test_wasm_external.cjs` checks external-file
 staging and failure propagation through real WASM releases. Set `DASLANG_BIN` and
 `DASLANG_WASM_LIB` to override the local compiler and `web/output64/lib` defaults.
+
+Optional manifest hooks may be absent. A hook that exists but throws is a failure;
+its partial declarations are not returned to the caller. The diagnostic identifies
+the manifest, hook and exception so a release cannot silently ship a partial bundle.
