@@ -599,16 +599,9 @@ def private image_total_bytes(var t; meta_bytes : uint64) : uint64 {
     return pad_to_page(cur + meta_bytes)
 }
 
-def private store_u32(var b : array<uint8>; at : int; v : uint) {
+def private store_at(var b : array<uint8>; at : int; v : auto(TT)) {
     unsafe {
-        var p = unsafe(addr < uint? >(b[at]))
-        p[0] = v
-    }
-}
-
-def private store_u64(var b : array<uint8>; at : int; v : uint64) {
-    unsafe {
-        var p = unsafe(addr < uint64? >(b[at]))
+        var p = addr<TT -const?>(b[at])
         p[0] = v
     }
 }
@@ -1059,15 +1052,15 @@ def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
     if (w.ok) {
         var hdr : array<uint8>
         hdr |> resize(int(IMAGE_HEADER_BYTES))
-        store_u32(hdr, 0, IMAGE_MAGIC)
-        store_u32(hdr, 4, uint(IMAGE_VERSION))
-        store_u32(hdr, 8, uint(IMAGE_PAGE))
-        store_u32(hdr, 12, uint(nsections))
-        store_u64(hdr, 16, meta_off)
-        store_u64(hdr, 24, meta_bytes)
-        store_u64(hdr, 32, fend)
-        store_u64(hdr, 40, hash(ident))
-        store_u64(hdr, 48, layout)
+        store_at(hdr, 0, IMAGE_MAGIC)
+        store_at(hdr, 4, uint(IMAGE_VERSION))
+        store_at(hdr, 8, uint(IMAGE_PAGE))
+        store_at(hdr, 12, uint(nsections))
+        store_at(hdr, 16, meta_off)
+        store_at(hdr, 24, meta_bytes)
+        store_at(hdr, 32, fend)
+        store_at(hdr, 40, hash(ident))
+        store_at(hdr, 48, layout)
         w.ok = w_header(w, dst, hdr)
         if (!w.ok) {
             to_log(LOG_ERROR, "dasLLAMA image: '{dst}' header write failed - image build aborted\n")
