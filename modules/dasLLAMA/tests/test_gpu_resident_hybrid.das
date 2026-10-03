@@ -13,7 +13,7 @@ def private allow_cpu_prefill_intent() {
 }
 require daslib/jobque_boost
 require daslib/fio
-require strings   // find over a panic's text
+require daslib/strings_boost
 require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the hybrid
@@ -470,8 +470,6 @@ def private row_within(t : T?; what : string; gpu, cpu, off : array<float>) {
     delete g
     delete c
 }
-
-def private says(s : string; part : string) : bool => find(s, part) >= 0
 
 [test]
 def test_gpu_resident_hybrid_mtp_draft(t : T?) {
@@ -1226,7 +1224,7 @@ def test_gpu_resident_hybrid_mtp_nonfinite(t : T?) {
                 forward_mtp(tr, s, DRAFT_TOKEN, row)
             }
             to_log(LOG_INFO, "NaN carry draft at row {row}: {empty(why) ? "no panic" : why}\n")
-            t |> success(says(why, "landed non-finite logits") && says(why, "resident draft") && says(why, "row {row}"), "the draft panics on the non-finite row it landed, naming the row: '{why}'")
+            t |> success(contains(why, "landed non-finite logits") && contains(why, "resident draft") && contains(why, "row {row}"), "the draft panics on the non-finite row it landed, naming the row: '{why}'")
             t |> equal(moe_gpu_resident_drafts(), drafts0, "no draft was counted: the panic fired before the pick landed")
             delete s
             delete prompt
@@ -1361,7 +1359,7 @@ def test_gpu_resident_hybrid_mtp_rewind_refused(t : T?) {
             s.dn_pos = DRAFT_PROMPT - 1l
             let arm = pass_arm_begin("rewind")
             let why = pass_arm_round(tr, s, DRAFT_TOKEN)
-            t |> success(says(why, "deltanet state is forward-only") && says(why, "position {DRAFT_PROMPT}") && says(why, "session is at {DRAFT_PROMPT - 1l}"), "the CPU verify refused the rewind by name, both positions in the text: '{why}'")
+            t |> success(contains(why, "deltanet state is forward-only") && contains(why, "position {DRAFT_PROMPT}") && contains(why, "session is at {DRAFT_PROMPT - 1l}"), "the CPU verify refused the rewind by name, both positions in the text: '{why}'")
             pass_arm_counted(t, arm, 1l, 1l)
             delete s
             delete prompt

@@ -16,7 +16,7 @@ require dasllama/dasllama_gguf   // set_mtp_head_path - the split-head fixture n
 require dasllama/dasllama_kv_dtype   // kv_row_bytes / kv_layer_kbase: the head's K row the seam writes
 require daslib/jobque_boost
 require daslib/fio
-require strings   // find over a panic's text
+require daslib/strings_boost
 require _model_tier   // models_dir() + model_available() presence/size-tier gate (see the file's header)
 require _resident_feed   // head_k_row_bytes
 
@@ -408,15 +408,13 @@ def test_mtp_verify_window(t : T?) {
         moe_gpu_drop_model()   // the CPU round is the cell's subject: an armed driver whose mirror matches the session's codec would serve the verify itself, and no window opens
         let why = verify_window_panic(tr)
         to_log(LOG_INFO, "served verify window: {empty(why) ? "no panic" : why}\n")
-        t |> success(says(why, "served a speculative verify window") && says(why, PROBE_PREFILL), "the CPU round panics naming the prefill driver that served its verify window: '{why}'")
+        t |> success(contains(why, "served a speculative verify window") && contains(why, PROBE_PREFILL), "the CPU round panics naming the prefill driver that served its verify window: '{why}'")
         t |> success(g_probe_window_active, "the session's verify window was up while the driver served it")
         t |> success(!g_probe_window_after, "... and is down on the session outside the round")
         t |> success(!g_probe_window_outside, "... and was down for the prompt's own prefill under the same driver")
         delete tr
     }
 }
-
-def private says(s : string; part : string) : bool => find(s, part) >= 0
 
 var private g_probe_window_outside = false
 var private g_probe_window_after = false

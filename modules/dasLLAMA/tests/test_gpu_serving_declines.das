@@ -39,8 +39,6 @@ def private shell(n_layers : int64; recr_mask : uint64) : Model {
     return <- m
 }
 
-def private says(s : string; part : string) : bool => find(s, part) >= 0
-
 [test]
 def test_resident_unserved_features(t : T?) {
     t |> run("a plain dense config has no unserved feature") @(t : T?) {
@@ -57,8 +55,8 @@ def test_resident_unserved_features(t : T?) {
         t |> equal(resident_unserved_features(c), "")
         c.qk_norm = false
         let s = resident_unserved_features(c)
-        t |> success(says(s, "gated attention without qk-norm"), "gated attention named: {s}")
-        t |> success(says(s, "partial rotary (64 of 256) without qk-norm"), "partial rotary named with its widths: {s}")
+        t |> success(contains(s, "gated attention without qk-norm"), "gated attention named: {s}")
+        t |> success(contains(s, "partial rotary (64 of 256) without qk-norm"), "partial rotary named with its widths: {s}")
         t |> equal(length(split(s, ", ")), 2)
     }
     t |> run("one feature alone is one name, no separator") @(t : T?) {
@@ -122,7 +120,7 @@ def test_resident_layer_decline(t : T?) {
     t |> run("a recurrent layer without deltanet planes is named by number; the attention layers around it pass") @(t : T?) {
         var m <- shell(3l, 2ul)
         t |> equal(resident_layer_decline(m, 0l), "")
-        t |> success(says(resident_layer_decline(m, 1l), "layer 1 lacks a deltanet plane"), "layer 1 named")
+        t |> success(contains(resident_layer_decline(m, 1l), "layer 1 lacks a deltanet plane"), "layer 1 named")
         t |> equal(resident_layer_decline(m, 2l), "")
         m.dnqkv_offs <- [-1l, 0l, -1l]
         m.dngate_offs <- [-1l, 0l, -1l]
@@ -135,13 +133,13 @@ def test_resident_layer_decline(t : T?) {
         m.dngate_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
         m.dnout_fmt <- [KqFmt.q8, KqFmt.q8, KqFmt.q8]
         let sq = resident_layer_decline(m, 1l)
-        t |> success(!says(sq, "kq-tagged") && !says(sq, "do not serve"), "a K-quant qkv/z pair is no format decline: '{sq}'")
+        t |> success(!contains(sq, "kq-tagged") && !contains(sq, "do not serve"), "a K-quant qkv/z pair is no format decline: '{sq}'")
         m.dnout_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
         let so = resident_layer_decline(m, 1l)
-        t |> success(!says(so, "out plane"), "a K-quant out plane is no format decline: '{so}'")
+        t |> success(!contains(so, "out plane"), "a K-quant out plane is no format decline: '{so}'")
         //! an inner width off the format's block leaves the out plane untileable - the decline names it
         m.config.ssm_d_inner = 100l
-        t |> success(says(resident_layer_decline(m, 1l), "layer 1's deltanet out plane carries a format"), "an untileable out plane is named")
+        t |> success(contains(resident_layer_decline(m, 1l), "layer 1's deltanet out plane carries a format"), "an untileable out plane is named")
         delete m
     }
     t |> run("shared K/V, a missing plane and a head size off the kernels' shape each name the layer; a differing FFN width or a sliding window is served") @(t : T?) {
@@ -149,14 +147,14 @@ def test_resident_layer_decline(t : T?) {
         m.kv_src[2] = 1l
         t |> equal(resident_layer_decline(m, 2l), "", "a layer sharing the K/V of a layer below it is served (Q only, the donor's rows)")
         m.kv_src[1] = 2l
-        t |> success(says(resident_layer_decline(m, 1l), "layer 1 shares layer 2's K/V, a layer above it"), "a donor above the sharing layer is named")
+        t |> success(contains(resident_layer_decline(m, 1l), "layer 1 shares layer 2's K/V, a layer above it"), "a donor above the sharing layer is named")
         m.kv_src[1] = 1l
         m.kv_src[2] = 2l
         m.wq_offs[0] = -1l
-        t |> success(says(resident_layer_decline(m, 0l), "layer 0 lacks a q/k plane"), "missing plane named")
+        t |> success(contains(resident_layer_decline(m, 0l), "layer 0 lacks a q/k plane"), "missing plane named")
         m.wq_offs[0] = 0l
         m.wv_offs[0] = -1l
-        t |> success(says(resident_layer_decline(m, 0l), "layer 0 lacks a v plane"), "a missing v plane is named where the layer is not V-from-K")
+        t |> success(contains(resident_layer_decline(m, 0l), "layer 0 lacks a v plane"), "a missing v plane is named where the layer is not V-from-K")
         m.config.v_from_k_mask = 1ul
         t |> equal(resident_layer_decline(m, 0l), "", "a V-from-K layer needs no v plane: V is its k row at its own rms")
         m.ffn_w <- [64l, 96l, 64l]
@@ -167,9 +165,9 @@ def test_resident_layer_decline(t : T?) {
         m.config.head_size = 512l
         t |> equal(resident_layer_decline(m, 1l), "", "a 512 head is served (two elements a thread)")
         m.config.head_size = 544l
-        t |> success(says(resident_layer_decline(m, 1l), "layer 1 head size 544"), "a head past the kernels' 512 is named by layer")
+        t |> success(contains(resident_layer_decline(m, 1l), "layer 1 head size 544"), "a head past the kernels' 512 is named by layer")
         m.config.head_size = 40l
-        t |> success(says(resident_layer_decline(m, 1l), "layer 1 head size 40"), "a head off the 32-multiple is named by layer")
+        t |> success(contains(resident_layer_decline(m, 1l), "layer 1 head size 40"), "a head off the 32-multiple is named by layer")
         delete m
     }
     t |> run("a MoE layer's dense width is its shared expert's; a layer past the dense lead without expert planes is named") @(t : T?) {
@@ -186,7 +184,7 @@ def test_resident_layer_decline(t : T?) {
         t |> success(!layer_is_moe(m, 0l) && layer_is_moe(m, 1l) && !layer_is_moe(m, 2l), "a layer routes only past the dense lead with all three expert planes")
         t |> equal(resident_dense_width(m, 0l), 64l, "the dense-lead layer's width is its FFN's")
         t |> equal(resident_dense_width(m, 1l), 512l, "an MoE layer's width is the shared expert's")
-        t |> success(says(resident_layer_decline(m, 2l), "layer 2 lacks an expert plane"), "a layer past the dense lead without its expert planes is named")
+        t |> success(contains(resident_layer_decline(m, 2l), "layer 2 lacks an expert plane"), "a layer past the dense lead without its expert planes is named")
         t |> equal(resident_layer_decline(m, 0l), "", "the dense-lead layer's own width is its registration's, whatever the shared expert's")
         delete m
     }
@@ -207,13 +205,13 @@ def test_resident_unserved_moe_features(t : T?) {
         c.moe_router_bias = true
         c.moe_exp_probs = true
         let s = resident_unserved_features(c)
-        t |> success(!says(s, "router bias") && says(s, "an expert selection bias"), "the router bias is served (the select adds it), the expert selection bias named: {s}")
+        t |> success(!contains(s, "router bias") && contains(s, "an expert selection bias"), "the router bias is served (the select adds it), the expert selection bias named: {s}")
         c.moe_router_bias = false
         c.moe_exp_probs = false
         c.n_expert = 300l
         c.n_expert_used = 70l
         let g = resident_unserved_features(c)
-        t |> success(says(g, "300 experts") && says(g, "70 routed experts"), "the kernels' reach named with the counts: {g}")
+        t |> success(contains(g, "300 experts") && contains(g, "70 routed experts"), "the kernels' reach named with the counts: {g}")
         c.n_expert = 60l
         c.n_expert_used = 4l
         c.moe_exps_bias = true
@@ -276,11 +274,11 @@ def test_moe_metal_expert_formats(t : T?) {
     t |> run("the resident driver names a biased expert stack feeding a K-quant down plane by layer; a per-32 down plane draws no such decline") @(t : T?) {
         var kb <- moe_shell(KqFmt.k6)
         kb.config.moe_exps_bias = true
-        t |> success(says(resident_layer_decline(kb, 0l), "layer 0's biased expert stacks feed a K-quant down plane"), "the biased K-quant down is named")
+        t |> success(contains(resident_layer_decline(kb, 0l), "layer 0's biased expert stacks feed a K-quant down plane"), "the biased K-quant down is named")
         delete kb
         var qb <- moe_shell(KqFmt.q8)
         qb.config.moe_exps_bias = true
-        t |> success(!says(resident_layer_decline(qb, 0l), "biased expert stacks"), "a biased stack over a Q8_0 down plane draws no bias decline")
+        t |> success(!contains(resident_layer_decline(qb, 0l), "biased expert stacks"), "a biased stack over a Q8_0 down plane draws no bias decline")
         delete qb
     }
     t |> run("the kernel roster and the site-alignment gate name ONE format set - every KqFmt reads the same on both") @(t : T?) {
@@ -881,13 +879,13 @@ def test_mtp_round_panics(t : T?) {
         var hit = false
         let asked = round_under(ROUND_SEATS, s, m, hit)
         to_log(LOG_INFO, "pick ask beside a sampled walk: {empty(asked) ? "no panic" : asked}\n")
-        t |> success(says(asked, "asked for a pick") && says(asked, "sample"), "a pick ask beside a sampled walk panics, naming both: '{asked}'")
+        t |> success(contains(asked, "asked for a pick") && contains(asked, "sample"), "a pick ask beside a sampled walk panics, naming both: '{asked}'")
         t |> equal(g_round_draft_calls, 0l, "the panic fired before the draft")
         s.spec_params = null
         s.pick_asked = false
         let declined = round_under(ROUND_SEATS, s, m, hit)
         to_log(LOG_INFO, "rollback seat declining after a served verify: {empty(declined) ? "no panic" : declined}\n")
-        t |> success(says(declined, "rollback seat declined a reject after its verify seat served") && says(declined, ROUND_SEATS), "the reject panics naming the override whose rollback seat declined: '{declined}'")
+        t |> success(contains(declined, "rollback seat declined a reject after its verify seat served") && contains(declined, ROUND_SEATS), "the reject panics naming the override whose rollback seat declined: '{declined}'")
         t |> equal(g_round_verify_calls, 1l, "the verify seat served the round")
         t |> equal(g_round_rollback_calls, 1l, "the rollback seat was asked once and declined")
         delete s
