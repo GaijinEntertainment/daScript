@@ -1394,29 +1394,27 @@ def vk_rdec_prefill_dn_own(l : int64; stp : float?; histp : float?) {
 //! False when the gather rail cannot build on this device (the caller keeps the CPU embed)
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def vk_rdec_set_emb(emb_block : int64) : bool {
-    if (g_gpu != null && g_gpu.dry) {
-        return true
+    return rd_gather_seat(g_rd != null, "vk_rdec_set_emb before prepare") $ {
+        g_rd.emb_blk = emb_block
     }
-    assert(g_rd != null, "vk_rdec_set_emb before prepare")
-    if (!ensure_emb_gather_cls()) {
-        return false
+}
+
+def private rd_gather_seat(ready : bool; what : string; seat : block) : bool {
+    return true if (g_gpu != null && g_gpu.dry)
+    if (!ready) {
+        panic(what)
     }
-    g_rd.emb_blk = emb_block
+    return false if (!ensure_emb_gather_cls())
+    invoke(seat)
     return true
 }
 
 //! The per-layer-embedding token table in the arena: the ids prefill gathers the side rows from it (the embed gather's kernel at
 //! the row width layers x ple, scaled by sqrt(ple)) where the host gathered and uploaded them a window at a time
 def vk_rdec_set_ple_table(blk : int64) : bool {
-    if (g_gpu != null && g_gpu.dry) {
-        return true
+    return rd_gather_seat(g_rd != null && g_rd.ple > 0l, "vk_rdec_set_ple_table before set_ple") $ {
+        g_rd.ple_tbl_blk = blk
     }
-    assert(g_rd != null && g_rd.ple > 0l, "vk_rdec_set_ple_table before set_ple")
-    if (!ensure_emb_gather_cls()) {
-        return false
-    }
-    g_rd.ple_tbl_blk = blk
-    return true
 }
 
 //! the ids prefill gathers and finishes the pre-step on device: the table placed and the projection held
