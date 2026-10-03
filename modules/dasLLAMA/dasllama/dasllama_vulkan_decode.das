@@ -4707,13 +4707,17 @@ def vk_moe_span_dec(var a : MoeSpanDec) {
         L.cnt = a.pos + 1l
     }
     if (vk_prof()) {
-        g_dec_prof_attn_rec_us += int64(get_time_usec(ts0)) - int64(get_time_usec(ts1))
-        g_dec_prof_attn_wait_us += int64(get_time_usec(ts1))
-        g_dec_prof_attn_us += int64(get_time_usec(ts0))
-        g_dec_prof_attn_n++
-        if (g_dec_prof_first_woq < 0l) {
-            g_dec_prof_first_woq = a.woq[0]
-        }
+        dec_prof_attn(ts0, ts1, int64(get_time_usec(ts1)), a.woq[0])
+    }
+}
+
+def private dec_prof_attn(ts0, ts1, wait_us, woq : int64) {
+    g_dec_prof_attn_rec_us += int64(get_time_usec(ts0)) - int64(get_time_usec(ts1))
+    g_dec_prof_attn_wait_us += wait_us
+    g_dec_prof_attn_us += int64(get_time_usec(ts0))
+    g_dec_prof_attn_n++
+    if (g_dec_prof_first_woq < 0l) {
+        g_dec_prof_first_woq = woq
     }
 }
 
@@ -5213,10 +5217,7 @@ def vk_moe_attn_dec(var xb2p : float?; var kp : float?; var vp : float?; woq, wo
     }
     let ts1 = ref_time_ticks()
     submit_wait(L.cmd)
-    if (vk_prof()) {
-        g_dec_prof_attn_rec_us += int64(get_time_usec(ts0)) - int64(get_time_usec(ts1))
-        g_dec_prof_attn_wait_us += int64(get_time_usec(ts1))
-    }
+    let wait_us = vk_prof() ? int64(get_time_usec(ts1)) : 0l
     unsafe {
         var op = reinterpret<uint8?>(g_gpu.dat_out.mapped)
         memcpy(reinterpret<void?>(xb2p), reinterpret<void?>(op), dim * 4l)
@@ -5232,11 +5233,7 @@ def vk_moe_attn_dec(var xb2p : float?; var kp : float?; var vp : float?; woq, wo
         g_gpu.tail_xout = null
     }
     if (vk_prof()) {
-        g_dec_prof_attn_us += int64(get_time_usec(ts0))
-        g_dec_prof_attn_n++
-        if (g_dec_prof_first_woq < 0l) {
-            g_dec_prof_first_woq = woq
-        }
+        dec_prof_attn(ts0, ts1, wait_us, woq)
         if (woq == g_dec_prof_first_woq) {
             g_dec_prof_tokens++
             if (g_dec_prof_tokens % 32l == 0l) {
