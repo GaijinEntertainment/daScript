@@ -638,14 +638,8 @@ def private resident_head_decline(t : Model) : string {
     }
     let cq = rdec_quant_class(lf.fq)
     if (cq != rdec_quant_class(lf.fk) || cq != rdec_quant_class(lf.fv) || rdec_quant_class(lf.f1) != rdec_quant_class(lf.f3)) return "its planes mix activation-quant forms"
-    var hs = 0l
-    var kvd = 0l
-    for (i in range64(l)) {
-        continue if (layer_is_recurrent(c, i))
-        hs = max(hs, layer_head_size(c, i))
-        kvd = max(kvd, layer_kv_dim(c, i))
-    }
-    if (layer_head_size(c, l) != hs || layer_kv_dim(c, l) > kvd) return "its head size {layer_head_size(c, l)} or kv width {layer_kv_dim(c, l)} is off the trunk's {hs} / {kvd}"
+    let m = resident_attn_maxima(c)
+    if (layer_head_size(c, l) != m.hs || layer_kv_dim(c, l) > m.kvd) return "its head size {layer_head_size(c, l)} or kv width {layer_kv_dim(c, l)} is off the trunk's {m.hs} / {m.kvd}"
     if (layer_hidden(t, l) > resident_hidden(t)) return "its FFN width {layer_hidden(t, l)} is past the trunk's {resident_hidden(t)}"
     return ""
 }
