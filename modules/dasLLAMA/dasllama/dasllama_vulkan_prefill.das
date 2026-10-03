@@ -865,10 +865,10 @@ def private pf_setup {
         }
     }
     verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq_b()
-        && (kv16 ? ensure_rope_kv_b_f16_cls() : ensure_rope_kv_b_cls())
-        && (!fa128s || (pf_reads_f16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls()))
-        && (!narrow_hs || (pf_reads_f16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))
-        && (!wide_hs || (pf_reads_f16 ? ensure_da_attn_bw_f16_cls() : ensure_da_attn_bw_cls()))
+        && rope_kv_b_stamp_ensure(kv16)
+        && (!fa128s || da_attn_b_stamp_ensure(true, false, pf_reads_f16))
+        && (!narrow_hs || da_attn_b_stamp_ensure(false, false, pf_reads_f16))
+        && (!wide_hs || da_attn_b_stamp_ensure(false, true, pf_reads_f16))
         && (!kvq8 || (ensure_kv_q8_store_b_cls() && ensure_kv_q8_shadow_cls()))
         && (!kvtq4 || (ensure_kv_tq4_store_b_cls() && ensure_kv_tq4_shadow_cls() && ensure_kv_tq4_unrot_cls()))
         && (!key_exists(fa_hs, 64l) || fa_stamp_pair_ensure(false, 64l, false, false, sinks, any_f16_feed))
@@ -990,11 +990,7 @@ def private pf_setup {
             let abufs5 = fixed_array(g_rd.pf_q, kread, vread, g_rd.pf_attn)
             let asizes5 = fixed_array(np * qrow * 4l, readbytes, readbytes, np * qd * 4l)
             let agbits5 = fixed_array(VHZ_Q, readbit, readbit, VHZ_ATT)
-            g_rd.pf_sets[b + 5] = (fa128l
-                ? (pf_reads_f16 ? set_da_attn_b_h128_f16_cls(abufs5, asizes5, agbits5) : set_da_attn_b_h128_cls(abufs5, asizes5, agbits5))
-                : (L.hs > 256l
-                    ? (pf_reads_f16 ? set_da_attn_bw_f16_cls(abufs5, asizes5, agbits5) : set_da_attn_bw_cls(abufs5, asizes5, agbits5))
-                    : (pf_reads_f16 ? set_da_attn_b_f16_cls(abufs5, asizes5, agbits5) : set_da_attn_b_cls(abufs5, asizes5, agbits5))))
+            g_rd.pf_sets[b + 5] = da_attn_b_stamp_set(fa128l, L.hs > 256l, pf_reads_f16, abufs5, asizes5, agbits5)
         }
         // 6 quant_at: pf_attn -> pf_aq/pf_as (f16-fed: f16 convert -> pf_af)
         g_rd.pf_sets[b + 6] = (wo6
@@ -1229,11 +1225,7 @@ def private pf_head_kv_store(raw : VkCommandBuffer; var h : VkHaz; L : RLayer; n
         boff = uint(L.boff), hasb = g_rd.has_bias ? 1u : 0u,
         cstride = uint(g_rd.cos_elems), cbase = uint(L.cbase))
     let ropewg = (nh * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
-    if (rd_kv16()) {
-        enc_rope_kv_b_f16_cls(raw, h, g_rd.pf_sets[hb + 4], pcr, ropewg)
-    } else {
-        enc_rope_kv_b_cls(raw, h, g_rd.pf_sets[hb + 4], pcr, ropewg)
-    }
+    rope_kv_b_stamp_enc(rd_kv16(), raw, h, g_rd.pf_sets[hb + 4], pcr, ropewg)
     // the warm attends nothing: no q head to rotate under tq4
     rd_enc_kv_store(raw, h, g_rd.pf_kv_store_set, true, kvd, hs, nh, 0l, kvd / hs, mirb, uint(pos0), uint(g_rd.n_heads * int64(qhs)), uint(qhs))
 }
@@ -1308,7 +1300,7 @@ def private pf_rope_kv_set(cos : uint64) : VkDescriptorSet {
     let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, kvq ? g_rd.pf_kst : g_rd.k_mirror, kvq ? g_rd.pf_vst : g_rd.v_mirror, cos, g_rd.has_bias ? g_rd.bias_dev : g_rd.norms_dev)
     let rsizes = fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, storebytes, storebytes, np * g_rd.cos_elems * 4l, g_rd.has_bias ? g_rd.bias_bytes : g_rd.norms_bytes)
     let rgbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, storebit, storebit, VHZ_COS, 0u)
-    return rd_kv16() ? set_rope_kv_b_f16_cls(rbufs, rsizes, rgbits) : set_rope_kv_b_cls(rbufs, rsizes, rgbits)
+    return rope_kv_b_stamp_set(rd_kv16(), rbufs, rsizes, rgbits)
 }
 
 def private pf_qk_rms_set : VkDescriptorSet {
@@ -1805,11 +1797,7 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
         voff = voff, kstride = uint(kv_merged ? 2l * kvd : kvd), qhs = uint(qhs),
         boff = uint(g_rd.layers[l].boff), hasb = g_rd.has_bias ? 1u : 0u,
         cstride = uint(cos_elems), cbase = uint(g_rd.layers[l].cbase))
-    if (rd_kv16()) {
-        enc_rope_kv_b_f16_cls(raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
-    } else {
-        enc_rope_kv_b_cls(raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
-    }
+    rope_kv_b_stamp_enc(rd_kv16(), raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
     if (kvq) {
         rd_enc_kv_store(raw, h, g_rd.pf_kv_store_set, true, kvd, hs, wlen, g_rd.n_heads, kvsh ? 0l : kvd / hs, mirb, uint(pos0w), uint(qrow), uint(qhs))
         let kvlen = pos0w + wlen
@@ -1837,25 +1825,7 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
             hs = uint(hs), kv_mul = kv_mul, kbase = attn_kv_base, vbase = attn_kv_base,
             w0 = uint(pos0w), scale = g_rd.scale, qhs = uint(qhs), gated = rd_attn_gated() ? 1u : 0u, window = window,
             cap = g_rd.layers[l].attn_cap)
-        if (fa128) {
-            if (rd_pf_reads_f16()) {
-                enc_da_attn_b_h128_f16_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
-            } else {
-                enc_da_attn_b_h128_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
-            }
-        } elif (wide) {
-            if (rd_pf_reads_f16()) {
-                enc_da_attn_bw_f16_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
-            } else {
-                enc_da_attn_bw_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
-            }
-        } else {
-            if (rd_pf_reads_f16()) {
-                enc_da_attn_b_f16_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
-            } else {
-                enc_da_attn_b_cls(raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
-            }
-        }
+        da_attn_b_stamp_enc(fa128, wide, rd_pf_reads_f16(), raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
     }
     if (kvtq4) {
         rd_enc_tq4_unrot(raw, h, g_rd.pf_unrot_set, hs, wlen, uint(qd), uint(qrow), uint(qhs))

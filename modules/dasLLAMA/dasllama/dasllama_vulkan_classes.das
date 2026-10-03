@@ -4747,6 +4747,38 @@ class DaAttnBH128F16 : DaAttnBH128T {
     typedef KT = float16
 }
 
+//! The chunked prefill attention's stamp: the h128 coopmat twin under `h128`, the wide pass under `wide` (a head past 256),
+//! else the narrow pass; `f16` picks each one's f16-mirror twin
+def da_attn_b_stamp_ensure(h128, wide, f16 : bool) : bool {
+    if (h128) return f16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls()
+    if (wide) return f16 ? ensure_da_attn_bw_f16_cls() : ensure_da_attn_bw_cls()
+    return f16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()
+}
+
+//! ... its set
+def da_attn_b_stamp_set(h128, wide, f16 : bool; bufs : uint64 const[4]; sizes : int64 const[4]; gbits : uint const[4]) : VkDescriptorSet {
+    if (h128) return f16 ? set_da_attn_b_h128_f16_cls(bufs, sizes, gbits) : set_da_attn_b_h128_cls(bufs, sizes, gbits)
+    if (wide) return f16 ? set_da_attn_bw_f16_cls(bufs, sizes, gbits) : set_da_attn_bw_cls(bufs, sizes, gbits)
+    return f16 ? set_da_attn_b_f16_cls(bufs, sizes, gbits) : set_da_attn_b_cls(bufs, sizes, gbits)
+}
+
+//! ... and its dispatch
+def da_attn_b_stamp_enc(h128, wide, f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : DaAttnBArgs; wgs : int64) {
+    if (h128 && f16) {
+        enc_da_attn_b_h128_f16_cls(raw, h, s, pc, wgs)
+    } elif (h128) {
+        enc_da_attn_b_h128_cls(raw, h, s, pc, wgs)
+    } elif (wide && f16) {
+        enc_da_attn_bw_f16_cls(raw, h, s, pc, wgs)
+    } elif (wide) {
+        enc_da_attn_bw_cls(raw, h, s, pc, wgs)
+    } elif (f16) {
+        enc_da_attn_b_f16_cls(raw, h, s, pc, wgs)
+    } else {
+        enc_da_attn_b_cls(raw, h, s, pc, wgs)
+    }
+}
+
 // ===== decode attention =====
 
 struct DaAttnArgs {
@@ -11888,6 +11920,22 @@ class RopeKvStoreB : RopeKvStoreBT {
 [vk_dispatch(name = "rope_kv_b_f16_cls", grid = "wgs", params = "wgs : int64")]
 class RopeKvStoreBF16 : RopeKvStoreBT {
     typedef KT = float16
+}
+
+//! The window rope-and-store's stamp: the f16-mirror twin under `kv16`, else the f32 one
+def rope_kv_b_stamp_ensure(kv16 : bool) : bool => kv16 ? ensure_rope_kv_b_f16_cls() : ensure_rope_kv_b_cls()
+
+//! ... its set
+def rope_kv_b_stamp_set(kv16 : bool; bufs : uint64 const[6]; sizes : int64 const[6]; gbits : uint const[6]) : VkDescriptorSet
+    => kv16 ? set_rope_kv_b_f16_cls(bufs, sizes, gbits) : set_rope_kv_b_cls(bufs, sizes, gbits)
+
+//! ... and its dispatch
+def rope_kv_b_stamp_enc(kv16 : bool; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : RopeKvBArgs; wgs : int64) {
+    if (kv16) {
+        enc_rope_kv_b_f16_cls(raw, h, s, pc, wgs)
+    } else {
+        enc_rope_kv_b_cls(raw, h, s, pc, wgs)
+    }
 }
 
 struct QknRopeArgs {

@@ -114,9 +114,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
         let stamp_ok = fa_stamp_ensure(will_fakhr, head_size, gated256, false, false, false)
         fa_ok = stamp_ok && (head_size != 256l || gated256 || fa_stamp_ensure(will_fakhr, 256l, false, true, false, false))   // an ungated 256 pre-flights its softcap twin
     }
-    let chunked_ok = (g_gpu.has_coopmat && head_size == 128l && vk_fa_on()
-        ? (pf_reads_f16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls())
-        : (pf_reads_f16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))
+    let chunked_ok = da_attn_b_stamp_ensure(g_gpu.has_coopmat && head_size == 128l && vk_fa_on(), false, pf_reads_f16)
     if (kvq && !kv_codec_cls_ensure(dt)) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: a {dt} K/V mirror kernel class declined on this device - resident driver declines, the per-op rails serve\n")
         return false
