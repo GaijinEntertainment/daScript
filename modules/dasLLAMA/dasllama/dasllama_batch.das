@@ -95,7 +95,7 @@ def private batch_decode_alloc(t : Model; var s : Session; nrows : int64) {
 // One layer's batched-decode attention: shared prefix (norm → QKV GEMM → qk/v-norm → per-row RoPE
 // via the positions table) → scatter-store each row's k/v into ITS session's cache → per-(row, head)
 // decode attention through the codec seam worker → shared suffix (wo GEMM → post-norm → residual).
-def attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions : array<Session?>; l, nrows : int64) { // nolint:STYLE037,STYLE038 — per-(row, head) attention over B sessions: cache-geometry arms are flat and share the hoisted row pointers
+def attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions : array<Session?>; l, nrows : int64) { // nolint:STYLE038 — per-(row, head) attention over B sessions: cache-geometry arms are flat and share the hoisted row pointers
     let c = t.config
     let kv_dim = layer_kv_dim(c, l)
     let head_size = layer_head_size(c, l)
@@ -122,16 +122,7 @@ def attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions : array<
     if (ktq4 || vtq4) {
         // tq4 basis change at the RoPE seam (see attention_std_decode); xb_b un-rotates below
         let ts_rot = prof_ticks()
-        let sgp = unsafe(addr < float const? >(ws.scr.kv_signs[0]))
-        if (ktq4) {
-            tq4_rotate_batch(ws.scr.q_b, nrows, qd, head_size, sgp)
-            if (!kv_shared) {
-                tq4_rotate_batch(ws.scr.k_b, nrows, kv_dim, head_size, sgp)
-            }
-        }
-        if (vtq4 && !kv_shared) {
-            tq4_rotate_batch(ws.scr.v_b, nrows, kv_dim, head_size, sgp)
-        }
+        tq4_rotate_qkv(ws.scr.q_b, ws.scr.k_b, ws.scr.v_b, nrows, qd, kv_dim, head_size, unsafe(addr < float const? >(ws.scr.kv_signs[0])), ktq4, vtq4, kv_shared)
         prof_add("tq4_rot", ts_rot)
     }
     if (kdt == KVDtype.q8_0 || ktq4) {

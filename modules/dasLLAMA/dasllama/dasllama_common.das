@@ -3789,51 +3789,63 @@ def kv_store_batch(var kcp : uint8?; var vcp : uint8?;
     }
 }
 
-// tq4 basis change over a batch buffer: rotate (or un-rotate) every head segment of every row in
-// place — q_b rows at stride qd, k_b/v_b rows at stride kv_dim, xb_b rows at stride qd. Segments
-// are independent; the cost is O(rows · stride · log head_size), noise next to the GEMMs.
-def tq4_rotate_batch(var buf : array<float>; nrows, stride, head_size : int64; signs : float const?) {
-    unsafe {
-        var p = addr(buf[0])
-        for (sg in range64(nrows * (stride / head_size))) {
-            fwht_signs_row(p + sg * head_size, signs, head_size)
+// tq4 basis change over rows in place: rotate (or, under `inverse`, un-rotate) every head segment of every row -
+// q_b rows at stride qd, k_b/v_b rows at stride kv_dim, xb_b rows at stride qd. Segments are independent; the cost
+// is O(rows · stride · log head_size), noise next to the GEMMs.
+def tq4_basis_rows(var p : float?; nrows, stride, head_size : int64; signs : float const?; inverse : bool) {
+    for (sg in range64(nrows * (stride / head_size))) {
+        if (inverse) {
+            fwht_unsign_row(unsafe(p + sg * head_size), signs, head_size)
+        } else {
+            fwht_signs_row(unsafe(p + sg * head_size), signs, head_size)
         }
     }
 }
+
+def tq4_rotate_batch(var buf : array<float>; nrows, stride, head_size : int64; signs : float const?) {
+    tq4_basis_rows(unsafe(addr(buf[0])), nrows, stride, head_size, signs, false)
+}
+
 def tq4_unrotate_batch(var buf : array<float>; nrows, stride, head_size : int64; signs : float const?) {
-    unsafe {
-        var p = addr(buf[0])
-        for (sg in range64(nrows * (stride / head_size))) {
-            fwht_unsign_row(p + sg * head_size, signs, head_size)
-        }
+    tq4_basis_rows(unsafe(addr(buf[0])), nrows, stride, head_size, signs, true)
+}
+
+//! the K rows at `kp` and V rows at `vp` of `s`'s tq4 cache sides rotated in place into tq4's basis, or under `inverse`
+//! taken back out of it; a side that is not tq4 is left alone
+def tq4_sides(s : Session; var kp, vp : float?; nrows, kv_dim, head_size : int64; inverse : bool) {
+    let ktq4 = s.kv_dtype_k == KVDtype.tq4
+    let vtq4 = s.kv_dtype_v == KVDtype.tq4
+    return if (!ktq4 && !vtq4)
+    let sgp = unsafe(addr<float const?>(s.kv_signs[0]))
+    if (ktq4) {
+        tq4_basis_rows(kp, nrows, kv_dim, head_size, sgp, inverse)
+    }
+    if (vtq4) {
+        tq4_basis_rows(vp, nrows, kv_dim, head_size, sgp, inverse)
     }
 }
 
 //! K and V rows a device pass attended in the model's basis, rotated into the basis a tq4 side of `s`'s cache stores
 def tq4_rotate_for_store(s : Session; var k, v : array<float>; nrows, kv_dim, head_size : int64) {
-    if (s.kv_dtype_k == KVDtype.tq4) {
-        tq4_rotate_batch(k, nrows, kv_dim, head_size, unsafe(addr<float const?>(s.kv_signs[0])))
-    }
-    if (s.kv_dtype_v == KVDtype.tq4) {
-        tq4_rotate_batch(v, nrows, kv_dim, head_size, unsafe(addr<float const?>(s.kv_signs[0])))
-    }
+    tq4_sides(s, unsafe(addr(k[0])), unsafe(addr(v[0])), nrows, kv_dim, head_size, false)
 }
 
 //! ... and rows a tq4 side of the cache dequantized, taken back into the model's basis for a device mirror of floats
 def tq4_unrotate_from_store(s : Session; var k, v : array<float>; nrows, kv_dim, head_size : int64) {
-    if (s.kv_dtype_k == KVDtype.tq4) {
-        tq4_unrotate_batch(k, nrows, kv_dim, head_size, unsafe(addr<float const?>(s.kv_signs[0])))
-    }
-    if (s.kv_dtype_v == KVDtype.tq4) {
-        tq4_unrotate_batch(v, nrows, kv_dim, head_size, unsafe(addr<float const?>(s.kv_signs[0])))
-    }
+    tq4_sides(s, unsafe(addr(k[0])), unsafe(addr(v[0])), nrows, kv_dim, head_size, true)
 }
 
-// tq4_unrotate_batch's raw-pointer twin — the Metal prefill continuation un-rotates gathered
-// panel rows in place (the GPU attention runs in the raw basis)
-def tq4_unrotate_rows(var p : float?; nrows, stride, head_size : int64; signs : float const?) {
-    for (sg in range64(nrows * (stride / head_size))) {
-        fwht_unsign_row(unsafe(p + sg * head_size), signs, head_size)
+//! a window's q, k and v rows moved into tq4's basis at the RoPE seam: q and k under a tq4 K side, v under a tq4 V side;
+//! a layer that reads another layer's K/V stores none, so its k and v rows stay
+def tq4_rotate_qkv(var q, k, v : array<float>; nrows, qd, kv_dim, head_size : int64; signs : float const?; ktq4, vtq4, kv_shared : bool) {
+    if (ktq4) {
+        tq4_rotate_batch(q, nrows, qd, head_size, signs)
+        if (!kv_shared) {
+            tq4_rotate_batch(k, nrows, kv_dim, head_size, signs)
+        }
+    }
+    if (vtq4 && !kv_shared) {
+        tq4_rotate_batch(v, nrows, kv_dim, head_size, signs)
     }
 }
 

@@ -6967,7 +6967,6 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         unsafe {
             let gather_nrun = kv_runs(s, 0l, start_pos, s.kv_runs)
             let runsg = addr < KVRun const? >(s.kv_runs[0])
-            let sgp = (s.kv_dtype_k == KVDtype.tq4 || s.kv_dtype_v == KVDtype.tq4) ? addr < float const? >(s.kv_signs[0]) : null
             for (l in range64(c.n_layers + c.n_layer_nextn)) {
                 continue if (bks[l] == null || kv_shared_layer(t, l))
                 var kdst = reinterpret<float?>(metal_buffer_contents(bks[l]))
@@ -6981,12 +6980,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     kv_load_row(kcp, s.kv_dtype_k, kvd_l, rowbase + runsg[r].j0, 0l, cnt, kdst + runsg[r].j0 * kvd_l)
                     kv_load_row(vcp, s.kv_dtype_v, kvd_l, rowbase + runsg[r].j0, 0l, cnt, vdst + runsg[r].j0 * kvd_l)
                 }
-                if (s.kv_dtype_k == KVDtype.tq4) {
-                    tq4_unrotate_rows(kdst, start_pos, kvd_l, layer_head_size(c, l), sgp)
-                }
-                if (s.kv_dtype_v == KVDtype.tq4) {
-                    tq4_unrotate_rows(vdst, start_pos, kvd_l, layer_head_size(c, l), sgp)
-                }
+                tq4_sides(s, kdst, vdst, start_pos, kvd_l, layer_head_size(c, l), true)
             }
         }
     }

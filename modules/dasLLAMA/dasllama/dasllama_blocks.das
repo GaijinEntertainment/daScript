@@ -1164,16 +1164,7 @@ def attention_std_prefill(t : Model; var s : Session; l : int64; npos : int64; s
     if (ktq4 || vtq4) {
         // tq4 basis change at the RoPE seam (see attention_std_decode); xb_b un-rotates below
         let ts_rot = prof_ticks()
-        let sgp = unsafe(addr < float const? >(s.kv_signs[0]))
-        if (ktq4) {
-            tq4_rotate_batch(s.q_b, npos, qd, head_size, sgp)
-            if (!kv_shared) {
-                tq4_rotate_batch(s.k_b, npos, kv_dim, head_size, sgp)
-            }
-        }
-        if (vtq4 && !kv_shared) {
-            tq4_rotate_batch(s.v_b, npos, kv_dim, head_size, sgp)
-        }
+        tq4_rotate_qkv(s.q_b, s.k_b, s.v_b, npos, qd, kv_dim, head_size, unsafe(addr < float const? >(s.kv_signs[0])), ktq4, vtq4, kv_shared)
         prof_add("tq4_rot", ts_rot)
     }
     // separate pass (provably identical to interleaving); shared-KV layers store nothing — already cached
