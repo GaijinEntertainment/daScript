@@ -511,6 +511,31 @@ def private wd_announce {
     to_log(LOG_INFO, "dasLLAMA vulkan wdec: the whisper decoder serves on the device (d {g_wd.d}, {g_wd.nl} layers)\n")
 }
 
+//! one decoder attention pass: the chunk partials over the K/V rows at element `kvoff` (the query's bias row at `qboff`),
+//! then their combine with its requant
+def private wd_attn(raw : VkCommandBuffer; var h : VkHaz; var s_part : VkDescriptorSet; var pc : TowerWdecAttnArgs; var pc_comb : TowerWdecCombArgs;
+                    kvoff, qboff : uint; wg_part, wg_comb : int64) {
+    pc.koff = kvoff
+    pc.voff = kvoff
+    pc.qboff = qboff
+    enc_tower_wdec_attn_part_cls(raw, h, s_part, pc, wg_part)
+    enc_tower_wdec_attn_comb_rq_cls(raw, h, g_wd.s_comb_rq, pc_comb, wg_comb)
+    vt_pt(raw, VtProfRole.attn)
+}
+
+//! a site's GEMV over `n` rows, then the residual seam that adds its bias row `boff` and norms the next block's input
+//! (the weight and bias rows at `lnoff` / `lnboff`)
+def private wd_gemv_post(raw : VkCommandBuffer; var h : VkHaz; site : int; n_in, d_out, n : int64; role : VtProfRole; var pc_post : TowerLnArgs;
+                         boff, lnoff, lnboff : uint) {
+    wd_gemv(raw, h, site, n_in, d_out, 1l, n)
+    vt_pt(raw, role)
+    pc_post.boff = boff
+    pc_post.lnoff = lnoff
+    pc_post.lnboff = lnboff
+    enc_tower_post_add_ln_rq_cls(raw, h, g_wd.s_post_rq, pc_post, n)
+    vt_pt(raw, VtProfRole.post_add)
+}
+
 //! one side of a layer's cross K/V: its GEMM over the encoder rows (the schedule map at `map_off`), then its f16-plane and
 //! f32-row stores at element `off`, the bias row at `boff`
 def private wd_xkv_side(raw : VkCommandBuffer; var h : VkHaz; var pc_g : BatchArgs; map_off : uint; groups : int64; gemm_role : VtProfRole;
@@ -679,6 +704,7 @@ def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks 
     var pc_cc = pc_cs
     pc_cc.nchunks = uint(nch_c)
     var pc_gelu = TowerBiasRqArgs(d = uint(4l * d), nblk = uint(nff / q8e), boff = 0u)
+    var pc_post = TowerLnArgs(d = uint(d), rows = uint(n), eps = w.eps, ln_on = 1u, ascale = 1.0)
     let wg_attn_s = nch_s * hh * n
     let wg_attn_c = nch_c * hh * n
     let wg_comb = hh * n
@@ -703,46 +729,23 @@ def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks 
             pc_kv.boff = uint(lo.v_b - r.norms_base)
             enc_tower_wdec_kv_cls(raw, h, r.s_kv_v, pc_kv, wg_kv)
             vt_pt(raw, VtProfRole.kv_store)
-            pc_as.koff = uint(l * d * tmax)
-            pc_as.voff = pc_as.koff
-            pc_as.qboff = uint(lo.q_b - r.norms_base)
-            enc_tower_wdec_attn_part_cls(raw, h, r.s_attn_self, pc_as, wg_attn_s)
-            enc_tower_wdec_attn_comb_rq_cls(raw, h, r.s_comb_rq, pc_cs, wg_comb)
-            vt_pt(raw, VtProfRole.attn)
-            wd_gemv(raw, h, site + int(WD_S_O), d, d, 1l, n)
-            vt_pt(raw, VtProfRole.gemm_o)
-            var pc_post = TowerLnArgs(d = uint(d), rows = uint(n), boff = uint(lo.o_b - r.norms_base), eps = w.eps,
-                ln_on = 1u, lnoff = uint(lo.cln_w - r.norms_base), lnboff = uint(lo.cln_b - r.norms_base), ascale = 1.0)
-            enc_tower_post_add_ln_rq_cls(raw, h, r.s_post_rq, pc_post, n)
-            vt_pt(raw, VtProfRole.post_add)
+            wd_attn(raw, h, r.s_attn_self, pc_as, pc_cs, uint(l * d * tmax), uint(lo.q_b - r.norms_base), wg_attn_s, wg_comb)
+            wd_gemv_post(raw, h, site + int(WD_S_O), d, d, n, VtProfRole.gemm_o, pc_post,
+                uint(lo.o_b - r.norms_base), uint(lo.cln_w - r.norms_base), uint(lo.cln_b - r.norms_base))
             wd_gemv(raw, h, site + int(WD_S_CQ), d, d, 1l, n)
             vt_pt(raw, VtProfRole.gemm_q)
-            pc_ac.koff = uint(l * d * ta)
-            pc_ac.voff = pc_ac.koff
-            pc_ac.qboff = uint(lo.cq_b - r.norms_base)
-            enc_tower_wdec_attn_part_cls(raw, h, r.s_attn_cross, pc_ac, wg_attn_c)
-            enc_tower_wdec_attn_comb_rq_cls(raw, h, r.s_comb_rq, pc_cc, wg_comb)
-            vt_pt(raw, VtProfRole.attn)
-            wd_gemv(raw, h, site + int(WD_S_CO), d, d, 1l, n)
-            vt_pt(raw, VtProfRole.gemm_o)
-            pc_post.boff = uint(lo.co_b - r.norms_base)
-            pc_post.lnoff = uint(lo.ln2_w - r.norms_base)
-            pc_post.lnboff = uint(lo.ln2_b - r.norms_base)
-            enc_tower_post_add_ln_rq_cls(raw, h, r.s_post_rq, pc_post, n)
-            vt_pt(raw, VtProfRole.post_add)
+            wd_attn(raw, h, r.s_attn_cross, pc_ac, pc_cc, uint(l * d * ta), uint(lo.cq_b - r.norms_base), wg_attn_c, wg_comb)
+            wd_gemv_post(raw, h, site + int(WD_S_CO), d, d, n, VtProfRole.gemm_o, pc_post,
+                uint(lo.co_b - r.norms_base), uint(lo.ln2_w - r.norms_base), uint(lo.ln2_b - r.norms_base))
             wd_gemv(raw, h, site + int(WD_S_FC1), d, 4l * d, 1l, n)
             vt_pt(raw, VtProfRole.gemm_fc1)
             pc_gelu.boff = uint(lo.fc1_b - r.norms_base)
             enc_tower_bias_act_rq_cls(raw, h, r.s_bias_h_rq, pc_gelu, wg_nff)
             vt_pt(raw, VtProfRole.bias)
-            wd_gemv(raw, h, site + int(WD_S_FC2), 4l * d, d, 1l, n)
-            vt_pt(raw, VtProfRole.gemm_fc2)
             let last = l + 1l == nl
-            pc_post.boff = uint(lo.fc2_b - r.norms_base)
-            pc_post.lnoff = uint(last ? r.final_ln_w_off : dec_layer_offsets(w, l + 1l).ln1_w - r.norms_base)
-            pc_post.lnboff = uint(last ? r.final_ln_b_off : dec_layer_offsets(w, l + 1l).ln1_b - r.norms_base)
-            enc_tower_post_add_ln_rq_cls(raw, h, r.s_post_rq, pc_post, n)
-            vt_pt(raw, VtProfRole.post_add)
+            wd_gemv_post(raw, h, site + int(WD_S_FC2), 4l * d, d, n, VtProfRole.gemm_fc2, pc_post, uint(lo.fc2_b - r.norms_base),
+                uint(last ? r.final_ln_w_off : dec_layer_offsets(w, l + 1l).ln1_w - r.norms_base),
+                uint(last ? r.final_ln_b_off : dec_layer_offsets(w, l + 1l).ln1_b - r.norms_base))
         }
         wd_gemv(raw, h, int(nl * WD_LAYER_SITES), d, r.nvocab, 1l, 1l)
         vt_pt(raw, VtProfRole.logits)
