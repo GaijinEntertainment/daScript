@@ -1968,12 +1968,18 @@ def private rd_form_at(pos : int64) : RdForm {
 //! the wide twin: the same chain at RD_SPLIT_WIDE_PIECES into `cmd_wide`, its stamp names kept apart (ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split)
 [cold_path]
 def private rd_record_wide_twin {
-    var split : RdqStamps
-    rd_take_stamps(split, g_rdq_n)
-    rd_encode_token(g_rd.cmd_wide[g_rd.region], 1l, rd_wide_pieces())
-    rd_take_stamps(g_rdq_wide, g_pfq_n)
-    rd_put_back_stamps(split)
+    rd_with_form_stamps() {
+        rd_encode_token(g_rd.cmd_wide[g_rd.region], 1l, rd_wide_pieces())
+        rd_take_stamps(g_rdq_wide, g_pfq_n)
+    }
     g_rd.tok_wide_recorded[g_rd.region] = true
+}
+
+def private rd_with_form_stamps(rec : block<() : void>) {
+    var one : RdqStamps
+    rd_take_stamps(one, g_rdq_n)
+    invoke(rec)
+    rd_put_back_stamps(one)
 }
 
 //! the recorder's working list moved into a form's own slot, with the stamp count `n` (`g_pfq_n` right after the form's encode,
@@ -3236,15 +3242,14 @@ def private rd_ensure_n_sets {
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rd_record_n_form(var raw : VkCommandBuffer; nrows, nsplit : int64; form : RdForm) {
-    var one : RdqStamps
-    rd_take_stamps(one, g_rdq_n)
-    rd_encode_token(raw, nrows, nsplit)
-    if (form == RdForm.split) {
-        rd_take_stamps(g_rdq_nrow, g_pfq_n)
-    } else {
-        rd_take_stamps(g_rdq_nrow_unsplit, g_pfq_n)
+    rd_with_form_stamps() {
+        rd_encode_token(raw, nrows, nsplit)
+        if (form == RdForm.split) {
+            rd_take_stamps(g_rdq_nrow, g_pfq_n)
+        } else {
+            rd_take_stamps(g_rdq_nrow_unsplit, g_pfq_n)
+        }
     }
-    rd_put_back_stamps(one)
 }
 
 
@@ -3555,15 +3560,14 @@ def private rd_record_verify(n : int64) {
         g_rdq_verify |> resize(n + 1l)
         g_rdq_verify_unsplit |> resize(n + 1l)
     }
-    var one : RdqStamps
-    rd_take_stamps(one, g_rdq_n)
-    rd_encode_token(g_rd.v_cmd[vi], n, rd_split_pieces(), true)
-    rd_take_stamps(g_rdq_verify[n], g_pfq_n)
-    if (g_rd.unsplit_on) {
-        rd_encode_token(g_rd.v_cmd_unsplit[vi], n, 1l, true)
-        rd_take_stamps(g_rdq_verify_unsplit[n], g_pfq_n)
+    rd_with_form_stamps() {
+        rd_encode_token(g_rd.v_cmd[vi], n, rd_split_pieces(), true)
+        rd_take_stamps(g_rdq_verify[n], g_pfq_n)
+        if (g_rd.unsplit_on) {
+            rd_encode_token(g_rd.v_cmd_unsplit[vi], n, 1l, true)
+            rd_take_stamps(g_rdq_verify_unsplit[n], g_pfq_n)
+        }
     }
-    rd_put_back_stamps(one)
     g_rd.v_recorded[vi] = true
 }
 
