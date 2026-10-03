@@ -890,11 +890,11 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // kernel coverage is test_vkt_tower_f16_feeds in test_vulkan_tower_kernels.das
     "tower_ln16_cls_spv", "tower_post_add_ln16_cls_spv", "tower_hpad_b_cls_spv", "tower_hpad16_b_cls_spv", "tower_hunpad16_cls_spv",
     "tower_bias_act_cvt16_cls_spv",
-    // the gemma4v tower's row classes (the norms, clamps, feeds, the two-axis rope, the post-add and the GEGLU): the stocked
+    // the gemma4v tower's row classes (the clamps, feeds, the two-axis rope, the post-add and the GEGLU; its rms rows are hc_norm's): the stocked
     // mmproj-gemma-4-E2B-it-bf16.gguf, dispatched by test_gemma4v_vulkan_twin in test_gemma4v.das - no zoo row; their kernel
     // coverage is test_vkt_tower_rows in test_vulkan_tower_kernels.das (the clamp + halfword feed is no entry: it is the LLM
     // prefill's f32 -> f16 rows too, which the zoo rows dispatch)
-    "tower_rms_cls_spv", "tower_clamp_cls_spv", "tower_clamp_rq_cls_spv", "tower_rope2d_cls_spv",
+    "tower_clamp_cls_spv", "tower_clamp_rq_cls_spv", "tower_rope2d_cls_spv",
     "tower_post_add_cls_spv", "tower_geglu_cls_spv",
     // the biased-block (SigLIP) row classes: the bias with its GELU, the head restrides to the flash tile's width (the
     // stocked mmproj-gemma-3-4b-it-F16.gguf, dispatched by test_gemma3v_vulkan_twin in test_gemma3v.das; the rope on a

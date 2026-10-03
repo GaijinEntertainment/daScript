@@ -783,7 +783,7 @@ def private vt_sets_q25v(var r : VtResident) {
     let bph = cap * r.pad_dp * 2l
     let btab = cap * (r.hs / 2l) * 4l
     let bwl = (r.win_cap + 1l) * 4l
-    r.s_rms = set_tower_rms_cls(fixed_array(r.x_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_XB, 0u))
+    r.s_rms = set_hc_norm_cls(fixed_array(r.x_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_XB, 0u))
     r.s_cvt_xb = set_tower_clamp_cvt_cls(fixed_array(r.xb_dev, r.xh_dev), fixed_array(bx, bxh), fixed_array(VT_XB, VT_XQ))
     r.s_cvt_att = set_tower_clamp_cvt_cls(fixed_array(r.att_dev, r.xh_dev), fixed_array(bx, bxh), fixed_array(VT_ATT, VT_XQ))
     r.s_q = f16_gemm_set(gemm_khr, fixed_array(r.wq_dev, r.xh_dev, r.q_dev), fixed_array(r.wq_bytes, bxh, bx), fixed_array(0u, VT_XQ, VT_Q))
@@ -1033,9 +1033,9 @@ def private vt_sets_g4a(var r : VtResident) {
     let b_relq = r.rel_cap_rows * r.d
     let b_rel = b_relq * 4l
     let b_rels = b_relq / q8e * 4l
-    r.s_rms = set_tower_rms_cls(fixed_array(r.x_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_XB, 0u))
-    r.s_rms_yd = set_tower_rms_cls(fixed_array(r.yd_dev, r.yd_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_YD, VT_YD, 0u))
-    r.s_rms_x = set_tower_rms_cls(fixed_array(r.x_dev, r.x_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_X, 0u))
+    r.s_rms = set_hc_norm_cls(fixed_array(r.x_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_XB, 0u))
+    r.s_rms_yd = set_hc_norm_cls(fixed_array(r.yd_dev, r.yd_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_YD, VT_YD, 0u))
+    r.s_rms_x = set_hc_norm_cls(fixed_array(r.x_dev, r.x_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_X, 0u))
     r.s_rq_xb = set_tower_clamp_rq_cls(fixed_array(r.xb_dev, r.xq_dev, r.xs_dev), fixed_array(bx, bq, bs), fixed_array(VT_XB, VT_XQ, VT_XQ))
     r.s_rq_att = set_tower_clamp_rq_cls(fixed_array(r.att_dev, r.xq_dev, r.xs_dev), fixed_array(bx, bq, bs), fixed_array(VT_ATT, VT_XQ, VT_XQ))
     r.s_rq_hg = set_tower_clamp_rq_cls(fixed_array(r.hg_dev, r.xq_dev, r.xs_dev), fixed_array(bff, bq, bs), fixed_array(VT_HG, VT_XQ, VT_XQ))
@@ -1104,7 +1104,7 @@ def private vt_tail_bufs(var r : VtResident; tail_dim : int64) : bool {
         r.s_feed_pt = set_tower_clamp_rq_cls(fixed_array(r.tail_out_dev, r.xq_dev, r.xs_dev), fixed_array(bp, bq, bs), fixed_array(VT_TAIL_OUT, VT_XQ, VT_XQ))
     }
     r.s_bias_pt = set_tower_bias_act_cls(fixed_array(r.tail_out_dev, r.norms_dev), fixed_array(bp, r.norms_bytes), fixed_array(VT_TAIL_OUT, 0u))
-    r.s_rms_pt = set_tower_rms_cls(fixed_array(r.tail_out_dev, r.tail_out_dev, r.norms_dev), fixed_array(bp, bp, r.norms_bytes), fixed_array(VT_TAIL_OUT, VT_TAIL_OUT, 0u))
+    r.s_rms_pt = set_hc_norm_cls(fixed_array(r.tail_out_dev, r.tail_out_dev, r.norms_dev), fixed_array(bp, bp, r.norms_bytes), fixed_array(VT_TAIL_OUT, VT_TAIL_OUT, 0u))
     return true
 }
 
@@ -1170,7 +1170,7 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
     if (!vk_range_ok(t.qblob.n) || !vk_range_ok(t.blob.n * 4l) || !vk_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, 0l, 0l, false, false))) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
-    if (!ensure_tower_rms_cls() || !ensure_tower_clamp_cls() || !ensure_tower_clamp_rq_cls() || !ensure_tower_post_add_cls()
+    if (!ensure_hc_norm_cls() || !ensure_tower_clamp_cls() || !ensure_tower_clamp_rq_cls() || !ensure_tower_post_add_cls()
             || !ensure_tower_post_add_plain_cls() || !ensure_tower_act_cls() || !ensure_tower_glu_sig_cls() || !ensure_tower_dw_conv5_cls()
             || !(hs == 64l ? ensure_tower_g4a_attn64_cls() : ensure_tower_g4a_attn_cls())) {
         return vt_decline(r, VulkanTowerDecline.device)
@@ -1239,7 +1239,7 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
     var pc_silu_ff = TowerBiasArgs(d = uint(ff), nelem = uint(nff), boff = 0u, act = BIAS_ACT_SILU)
     var pc_silu_d = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = 0u, act = BIAS_ACT_SILU)
     var pc_attn = TowerG4aAttnArgs(d = uint(d), npos = uint(npos), pdsoff = 0u)
-    var pc_rms = TowerRowArgs(d = uint(d), rows = uint(npos), woff = 0u, eps = t.eps, ln_on = 0u, lnoff = 0u, ascale = 1.0)
+    var pc_rms = tower_rms_args(uint(d), 0u, t.eps)
     var pc_post = TowerLnArgs(d = uint(d), rows = uint(npos), woff = 0u, boff = 0u, eps = t.eps, ln_on = 1u, lnoff = 0u, lnboff = 0u, ascale = 1.0)
     let attn64 = hs == 64l
     vt_chain_one_shot("gemma4a", t.n_layer, npos) $(raw : VkCommandBuffer; var h : VkHaz) {
@@ -1249,7 +1249,7 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
             let lo = t.layers[l]
             let rb = l * VT_G4A_GEMMS
             pc_rms.woff = uint(lo.ff_norm)
-            enc_tower_rms_cls(raw, h, r.s_rms, pc_rms, npos)
+            enc_hc_norm_cls(raw, h, r.s_rms, pc_rms, npos)
             vt_pt(raw, VtProfRole.rms)
             vt_mm_clamped(raw, h, lo.c_ff_up, r.s_rq_xb, nd, r.s_hg, vff, d, ff, g_vt_maps[rb + VT_G4A_FF_UP], g_ff, r.s_clamp_hg, nff)
             vt_pt(raw, VtProfRole.gemm_fc1)
@@ -1293,7 +1293,7 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
             enc_tower_dw_conv5_cls(raw, h, r.s_dw, pc_dw, (nd + 255l) / 256l)
             vt_pt(raw, VtProfRole.dwconv)
             pc_rms.woff = uint(lo.conv_norm)
-            enc_tower_rms_cls(raw, h, r.s_rms_yd, pc_rms, npos)
+            enc_hc_norm_cls(raw, h, r.s_rms_yd, pc_rms, npos)
             vt_pt(raw, VtProfRole.rms)
             enc_tower_act_cls(raw, h, r.s_silu_yd, pc_silu_d, rq_wgs(false, nd))
             vt_pt(raw, VtProfRole.silu)
@@ -1316,15 +1316,15 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
             vt_pt(raw, VtProfRole.post_add)
             pc_post.ln_on = 1u
             pc_rms.woff = uint(lo.ln2)
-            enc_tower_rms_cls(raw, h, r.s_rms_x, pc_rms, npos)
+            enc_hc_norm_cls(raw, h, r.s_rms_x, pc_rms, npos)
             vt_pt(raw, VtProfRole.rms)
         }
         vt_mm_clamped(raw, h, Clamp(), r.s_feed_x, nd, s_outproj, vp, d, tail_dim, g_vt_maps[nrec - 2l], g_p, r.s_clamp_yd, 0l)
         vt_pt(raw, VtProfRole.gemm_o)
         vt_bias_act(raw, h, r.s_bias_pt, tail_dim, npos * tail_dim, t.outproj_b, BIAS_ACT_NONE)
         vt_pt(raw, VtProfRole.bias)
-        var pc_rms_pt = TowerRowArgs(d = uint(tail_dim), rows = uint(npos), woff = uint(r.ones_off), eps = t.eps, ln_on = 0u, lnoff = 0u, ascale = 1.0)
-        enc_tower_rms_cls(raw, h, r.s_rms_pt, pc_rms_pt, npos)
+        var pc_rms_pt = tower_rms_args(uint(tail_dim), uint(r.ones_off), t.eps)
+        enc_hc_norm_cls(raw, h, r.s_rms_pt, pc_rms_pt, npos)
         vt_pt(raw, VtProfRole.rms)
         vt_mm_clamped(raw, h, Clamp(), r.s_feed_pt, npos * tail_dim, s_mmproj, vp, tail_dim, tail_dim, g_vt_maps[nrec - 1l], g_p, r.s_clamp_yd, 0l)
         vt_pt(raw, VtProfRole.gemm_o)
@@ -1688,7 +1688,7 @@ def private vt_sets_g4v(var r : VtResident) {
     let bh = cap * r.d * 2l
     let btabs = cap * r.hs * 4l
     let khr = r.fa_khr
-    r.s_rms = set_tower_rms_cls(fixed_array(r.x_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_XB, 0u))
+    r.s_rms = set_hc_norm_cls(fixed_array(r.x_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_XB, 0u))
     r.s_rq_xb = set_tower_clamp_rq_cls(fixed_array(r.xb_dev, r.xq_dev, r.xs_dev), fixed_array(bx, bq, bs), fixed_array(VT_XB, VT_XQ, VT_XQ))
     r.s_rq_att = set_tower_clamp_rq_cls(fixed_array(r.att_dev, r.xq_dev, r.xs_dev), fixed_array(bx, bq, bs), fixed_array(VT_ATT, VT_XQ, VT_XQ))
     r.s_rq_hg = set_tower_clamp_rq_cls(fixed_array(r.hg_dev, r.xq_dev, r.xs_dev), fixed_array(bff, bq, bs), fixed_array(VT_HG, VT_XQ, VT_XQ))
@@ -1697,9 +1697,9 @@ def private vt_sets_g4v(var r : VtResident) {
     r.s_clamp_v = set_tower_clamp_cls(fixed_array(r.v_dev), fixed_array(bx), fixed_array(VT_V))
     r.s_clamp_yo = set_tower_clamp_cls(fixed_array(r.yo_dev), fixed_array(bx), fixed_array(VT_YO))
     r.s_clamp_yd = set_tower_clamp_cls(fixed_array(r.yd_dev), fixed_array(bx), fixed_array(VT_YD))
-    r.s_hrms_q = set_tower_rms_cls(fixed_array(r.q_dev, r.q2_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_Q, VT_Q2, 0u))
-    r.s_hrms_k = set_tower_rms_cls(fixed_array(r.k_dev, r.k2_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_K, VT_K2, 0u))
-    r.s_hrms_v = set_tower_rms_cls(fixed_array(r.v_dev, r.v2_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_V, VT_V2, 0u))
+    r.s_hrms_q = set_hc_norm_cls(fixed_array(r.q_dev, r.q2_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_Q, VT_Q2, 0u))
+    r.s_hrms_k = set_hc_norm_cls(fixed_array(r.k_dev, r.k2_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_K, VT_K2, 0u))
+    r.s_hrms_v = set_hc_norm_cls(fixed_array(r.v_dev, r.v2_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_V, VT_V2, 0u))
     r.s_rope_q = set_tower_rope2d_cls(fixed_array(r.q2_dev, r.tabs_dev), fixed_array(bx, btabs), fixed_array(VT_Q2, 0u))
     r.s_rope_k = set_tower_rope2d_cls(fixed_array(r.k2_dev, r.tabs_dev), fixed_array(bx, btabs), fixed_array(VT_K2, 0u))
     r.s_cvt_k = set_tower_clamp_cvt_cls(fixed_array(r.k2_dev, r.k16_dev), fixed_array(bx, bh), fixed_array(VT_K2, VT_K16))
@@ -2700,7 +2700,7 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
         return vt_decline(r, VulkanTowerDecline.shape)
     }
     let fa_ok = fa_stamp_ensure(khr, hsp, false, false, false, false, true)
-    if (!fa_ok || !f16_gemm_ensure(gemm_khr) || !ensure_tower_clamp_cvt_cls() || !ensure_tower_rms_cls() || !ensure_tower_bias_act_cls()
+    if (!fa_ok || !f16_gemm_ensure(gemm_khr) || !ensure_tower_clamp_cvt_cls() || !ensure_hc_norm_cls() || !ensure_tower_bias_act_cls()
             || !ensure_tower_rope_tab_cls() || !ensure_tower_hpad_cls() || !ensure_tower_hpad16_cls() || !ensure_tower_hunpad_cls()
             || !ensure_tower_win_attn_cls() || !ensure_tower_post_add_rms_cls() || !ensure_actf16_b_cls()) {
         return vt_decline(r, VulkanTowerDecline.device)
@@ -2752,8 +2752,8 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
             let o = qwen25v_block_offs(t, l)
             let full = qwen25v_layer_full(t, l)
             if (l == 0l) {
-                var pc = TowerRowArgs(d = uint(d), rows = uint(npos), woff = uint(o.ln1_w - norms_base), eps = t.eps)
-                enc_tower_rms_cls(raw, h, r.s_rms, pc, npos)
+                var pc = tower_rms_args(uint(d), uint(o.ln1_w - norms_base), t.eps)
+                enc_hc_norm_cls(raw, h, r.s_rms, pc, npos)
             }
             vt_cvt16(raw, h, r.s_cvt_xb, nd)
             pc_gd.woff = uint(o.w[QWEN25V_GEMM_Q] - w_off)
@@ -2850,7 +2850,7 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
         return vt_decline(r, VulkanTowerDecline.shape)
     }
     let fa_ok = fa_stamp_ensure(khr, hs, false, false, false, false, true)
-    if (!fa_ok || !ensure_tower_rms_cls() || !ensure_tower_clamp_cls() || !ensure_tower_clamp_rq_cls() || !ensure_tower_rope2d_cls()
+    if (!fa_ok || !ensure_hc_norm_cls() || !ensure_tower_clamp_cls() || !ensure_tower_clamp_rq_cls() || !ensure_tower_rope2d_cls()
             || !ensure_tower_post_add_cls() || !ensure_tower_geglu_cls() || !ensure_tower_clamp_cvt_cls()) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
@@ -2914,19 +2914,19 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
             let cd = gemma4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_DOWN])
             let rb = l * GEMMA4V_GEMMS
             if (l == 0l) {
-                var pc = TowerRowArgs(d = uint(d), rows = uint(npos), woff = uint(o.ln1 - norms_base), eps = t.eps)
-                enc_tower_rms_cls(raw, h, r.s_rms, pc, npos)
+                var pc = tower_rms_args(uint(d), uint(o.ln1 - norms_base), t.eps)
+                enc_hc_norm_cls(raw, h, r.s_rms, pc, npos)
             }
             let tile = VtTile(v = v, tc = 0l)
             vt_mm_clamped(raw, h, cq, r.s_rq_xb, nd, r.s_q, tile, d, d, g_vt_maps[rb + GEMMA4V_GEMM_Q], g_d, r.s_clamp_q, nd)
             vt_mm_clamped(raw, h, ck, r.s_rq_xb, nd, r.s_k, tile, d, d, g_vt_maps[rb + GEMMA4V_GEMM_K], g_d, r.s_clamp_k, nd)
             vt_mm_clamped(raw, h, cv, r.s_rq_xb, nd, r.s_v, tile, d, d, g_vt_maps[rb + GEMMA4V_GEMM_V], g_d, r.s_clamp_v, nd)
-            var pc_h = TowerRowArgs(d = uint(hs), rows = uint(npos * t.n_head), woff = uint(o.q_norm - norms_base), eps = t.eps)
-            enc_tower_rms_cls(raw, h, r.s_hrms_q, pc_h, npos * t.n_head)
+            var pc_h = tower_rms_args(uint(hs), uint(o.q_norm - norms_base), t.eps)
+            enc_hc_norm_cls(raw, h, r.s_hrms_q, pc_h, npos * t.n_head)
             pc_h.woff = uint(o.k_norm - norms_base)
-            enc_tower_rms_cls(raw, h, r.s_hrms_k, pc_h, npos * t.n_head)
+            enc_hc_norm_cls(raw, h, r.s_hrms_k, pc_h, npos * t.n_head)
             pc_h.woff = uint(r.ones_off)
-            enc_tower_rms_cls(raw, h, r.s_hrms_v, pc_h, npos * t.n_head)
+            enc_hc_norm_cls(raw, h, r.s_hrms_v, pc_h, npos * t.n_head)
             enc_tower_rope2d_cls(raw, h, r.s_rope_q, pc_rope, wg_rope)
             enc_tower_rope2d_cls(raw, h, r.s_rope_k, pc_rope, wg_rope)
             vt_cvt16(raw, h, r.s_cvt_k, nd)

@@ -2257,7 +2257,7 @@ struct HcNormArgs {
 }
 
 //! the grouped rms of the wide residual rows: stream c of a row normalizes over dim and scales by gamma row c - one workgroup
-//! a stream row, the CPU `rmsnorm`'s (x . inv) . w order; `TowerRms`'s pass with the gamma row picked per stream
+//! a stream row, the CPU `rmsnorm`'s (x . inv) . w order; at one stream and `row0` 0 it is the towers' rms rows (`tower_rms_args`)
 [vk_dispatch(name = "hc_norm_cls", grid = "wgs", params = "wgs : int64")]
 class HcNorm : WgReduceBase {
     @ssbo @binding = 0 res : array<float>    //! the wide rows, [rows x hc x dim]
@@ -2287,6 +2287,9 @@ class HcNorm : WgReduceBase {
         }
     }
 }
+
+//! `hc_norm_cls`'s push at one stream: rms rows of width `d` against the weight row at `woff`, a workgroup a row (a per-head norm at `d` = the head width)
+def tower_rms_args(d, woff : uint; eps : float) : HcNormArgs => HcNormArgs(dim = d, hc = 1u, woff = woff, row0 = 0u, eps = eps)
 
 struct HcLoArgs {
     nblk : uint      //! the low-rank row's 32-blocks
@@ -10043,45 +10046,6 @@ class QkRms : WgReduceBase {
             if (two) {
                 krows[vb + t1] = v1 * inv
             }
-        }
-    }
-}
-
-struct TowerRowArgs {
-    d : uint
-    rows : uint     //! rows in the dispatch (one workgroup each)
-    woff : uint     //! the norm weight row's base in wn
-    eps : float
-    ln_on : uint
-    lnoff : uint
-    ascale : float  //! the residual add's weight (gemma4a's macaron halves add 0.5 of the branch)
-}
-
-//! rms rows against a weight row: out[r] = rmsnorm(x[r]) . w in the CPU `rmsnorm`'s (x . inv) . w order - one workgroup
-//! a row; a per-head norm is this with `d` = the head width and `rows` = tokens x heads (a weightless one reads a ones row)
-[vk_dispatch(name = "tower_rms_cls", grid = "wgs", params = "wgs : int64")]
-class TowerRms : WgReduceBase {
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 outx : array<float>
-    @ssbo @binding = 2 @role = "weight" wn : array<float>
-    @push_constant pa : TowerRowArgs
-
-    [spirv_kernel(local_size_x = 256, name = "tower_rms_cls_spv")]
-    def run {
-        let base = gl_WorkGroupID.x * pa.d
-        let tid = gl_LocalInvocationID.x
-        var ss = 0.0
-        var i = tid
-        while (i < pa.d) {
-            let v = x[base + i]
-            ss += v * v
-            i += 256u
-        }
-        let inv = wg_rms_inv(ss, pa.d, pa.eps, 0u)
-        i = tid
-        while (i < pa.d) {
-            outx[base + i] = (x[base + i] * inv) * wn[pa.woff + i]
-            i += 256u
         }
     }
 }
