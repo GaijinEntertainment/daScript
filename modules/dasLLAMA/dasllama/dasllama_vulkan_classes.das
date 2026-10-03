@@ -153,23 +153,9 @@ class template WgReduceBase : Q8BlockStoreT {
     @workgroup part : float[128]   //! two slots of 64 partials, one per subgroup (subgroupSize >= 4 floor)
 
     //! `slot` alternates 0 / 1 between consecutive reduces of one kernel
-    def wg_rms_inv(ss0 : float; n : uint; eps : float; slot : uint) : float {
-        let ss = subgroupAdd(ss0)
-        if (gl_SubgroupInvocationID == 0u) {
-            part[slot * 64u + gl_SubgroupID] = ss
-        }
-        barrier()
-        var tot = 0.0
-        var sgi = 0u
-        while (sgi < gl_NumSubgroups) {
-            tot += part[slot * 64u + sgi]
-            sgi++
-        }
-        return 1.0 / sqrt(tot / float(n) + eps)   // the CPU rmsnorm's own form
-    }
+    def wg_rms_inv(ss0 : float; n : uint; eps : float; slot : uint) : float => 1.0 / sqrt(wg_sum(ss0, slot) / float(n) + eps)   // the CPU rmsnorm's own form
 
-    //! the workgroup sum every thread holds alike (the layernorm's mean and variance ride it); its text is `wg_rms_inv`'s
-    //! reduce, kept apart because the fold moves every decode stamp on this base by 108 bytes
+    //! the workgroup sum every thread holds alike (the layernorm's mean and variance ride it, and `wg_rms_inv`)
     def wg_sum(v0 : float; slot : uint) : float {
         let ss = subgroupAdd(v0)
         if (gl_SubgroupInvocationID == 0u) {
