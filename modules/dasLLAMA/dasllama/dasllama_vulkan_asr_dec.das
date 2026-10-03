@@ -511,6 +511,22 @@ def private wd_announce {
     to_log(LOG_INFO, "dasLLAMA vulkan wdec: the whisper decoder serves on the device (d {g_wd.d}, {g_wd.nl} layers)\n")
 }
 
+//! one side of a layer's cross K/V: its GEMM over the encoder rows (the schedule map at `map_off`), then its f16-plane and
+//! f32-row stores at element `off`, the bias row at `boff`
+def private wd_xkv_side(raw : VkCommandBuffer; var h : VkHaz; var pc_g : BatchArgs; map_off : uint; groups : int64; gemm_role : VtProfRole;
+                        var s_kv : VkDescriptorSet; var pc16, pcx : TowerWdecKvArgs; off, boff : uint; wg_kv : int64) {
+    pc_g.map_off = map_off
+    vt_tile_enc(raw, h, g_wd.xkv_tile, g_wd.s_xkv, pc_g, groups)
+    vt_pt(raw, gemm_role)
+    pc16.dst_off = off
+    pc16.boff = boff
+    enc_tower_wdec_kv_cls(raw, h, s_kv, pc16, wg_kv)
+    pcx.dst_off = off
+    pcx.boff = boff
+    enc_tower_wdec_kv_cls(raw, h, s_kv, pcx, wg_kv)
+    vt_pt(raw, VtProfRole.kv_store)
+}
+
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-asr-decoder")]
 def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_out : array<float>) : bool {   // nolint:STYLE038 - the dispatch chain is the shape
     let uid = wd_uid(ds)
@@ -588,24 +604,8 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
         for (l in range64(nl)) {
             let lo = dec_layer_offsets(w, l)
             let off = uint(l * d * ta)
-            pc_g.map_off = g_wd_maps[l * 2l]
-            vt_tile_enc(raw, h, r.xkv_tile, r.s_xkv, pc_g, groups)
-            vt_pt(raw, VtProfRole.gemm_k)
-            pc_k16.dst_off = off
-            enc_tower_wdec_kv_cls(raw, h, r.s_kvx_k, pc_k16, wg_kv)
-            pc_kx.dst_off = off
-            enc_tower_wdec_kv_cls(raw, h, r.s_kvx_k, pc_kx, wg_kv)
-            vt_pt(raw, VtProfRole.kv_store)
-            pc_g.map_off = g_wd_maps[l * 2l + 1l]
-            vt_tile_enc(raw, h, r.xkv_tile, r.s_xkv, pc_g, groups)
-            vt_pt(raw, VtProfRole.gemm_v)
-            pc_v16.dst_off = off
-            pc_v16.boff = uint(lo.cv_b - r.norms_base)
-            enc_tower_wdec_kv_cls(raw, h, r.s_kvx_v, pc_v16, wg_kv)
-            pc_vx.dst_off = off
-            pc_vx.boff = pc_v16.boff
-            enc_tower_wdec_kv_cls(raw, h, r.s_kvx_v, pc_vx, wg_kv)
-            vt_pt(raw, VtProfRole.kv_store)
+            wd_xkv_side(raw, h, pc_g, g_wd_maps[l * 2l], groups, VtProfRole.gemm_k, r.s_kvx_k, pc_k16, pc_kx, off, 0u, wg_kv)
+            wd_xkv_side(raw, h, pc_g, g_wd_maps[l * 2l + 1l], groups, VtProfRole.gemm_v, r.s_kvx_v, pc_v16, pc_vx, off, uint(lo.cv_b - r.norms_base), wg_kv)
         }
     }
     g_wd_pend_uid = uid
