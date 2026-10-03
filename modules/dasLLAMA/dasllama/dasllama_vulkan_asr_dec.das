@@ -767,9 +767,7 @@ def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks 
         cmd_copy_range(raw, r.logits_dev, 0l, r.xhost.buf, 0l, r.nvocab * 4l)
         vt_pt(raw, VtProfRole.copy_out)
     }
-    unsafe {
-        memcpy(addr<void?>(ds.logits[0]), r.xhost.mapped, r.nvocab * 4l)
-    }
+    host_buf_read(r.xhost, unsafe(addr<void?>(ds.logits[0])), r.nvocab * 4l)
     g_wd_us_gpu += int64(get_time_usec(t0))
     g_wd_us_encode += int64(get_time_usec(te0)) - int64(get_time_usec(t0))
     g_wd_steps++

@@ -1897,19 +1897,12 @@ def private vt_arm(r : VtResident; gemm_off_cm2 : bool = false) : tuple<ok : boo
     return (ok = true, khr = khr, gemm_khr = gemm_khr)
 }
 
-//! `bytes` of a host readback buffer the chain's own command filled, from byte `src_off`, landed in `x`
-def private vt_readback_copy(var x : array<float>; hb : HostBuf; bytes : int64; src_off : int64 = 0l) {
-    unsafe {
-        memcpy(addr<void?>(x[0]), reinterpret<void?>(intptr(hb.mapped) + uint64(src_off)), bytes)
-    }
-}
-
 //! the encode's landing, one text for every chain: the residual rows back to the host, the counters, the announcement once
 def private vt_served(var r : VtResident; var x : array<float>; bx, npos, n_layer : int64) : bool
     => vt_served_from(r, r.host, x, bx, npos, n_layer)
 
 def private vt_served_from(var r : VtResident; hb : HostBuf; var x : array<float>; bx, npos, n_layer : int64) : bool {
-    vt_readback_copy(x, hb, bx)
+    host_buf_read(hb, unsafe(addr<void?>(x[0])), bx)
     g_vt_encodes++
     g_vt_rows += npos
     g_vt_blocks += n_layer
@@ -2727,7 +2720,7 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
         }
     }
     if (nds > 0l) {
-        vt_readback_copy(s.ds_xtaps, r.host, nds * bx, bx)
+        host_buf_read(r.host, unsafe(addr<void?>(s.ds_xtaps[0])), nds * bx, bx)
     }
     return vt_served(r, s.x, bx, npos, t.n_layer)
 }
@@ -3270,7 +3263,7 @@ def private vulkan_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; 
         cmd_copy_range(raw, r.fx_dev, 0l, r.host.buf, 0l, bx)
         vt_pt(raw, VtProfRole.copy_out)
     }
-    vt_readback_copy(s.x, r.host, bx)
+    host_buf_read(r.host, unsafe(addr<void?>(s.x[0])), bx)
     g_vt_convs += n_chunks
     vt_announce(r)
     return true
@@ -3477,7 +3470,7 @@ def private vulkan_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len
         vt_pt(raw, VtProfRole.copy_out)
     }
     ensure_length(s.x, npos * d)
-    vt_readback_copy(s.x, r.fhost, bx)
+    host_buf_read(r.fhost, unsafe(addr<void?>(s.x[0])), bx)
     g_vt_convs++
     if (!vulkan_gemma4a_blocks(t, s, npos)) {
         return -1l
@@ -3725,7 +3718,7 @@ def private vulkan_canary_front(t : CanaryEncoder; var s : CanaryState) : int64 
         vt_pt(raw, VtProfRole.copy_out)
     }
     ensure_length(s.x, tt * d)
-    vt_readback_copy(s.x, r.fhost, bx)
+    host_buf_read(r.fhost, unsafe(addr<void?>(s.x[0])), bx)
     g_vt_convs++
     return tt
 }
@@ -3796,7 +3789,7 @@ def private vulkan_q3a_mel(xw : array<float>; n_len, n_fft, n_bins, n_mel : int6
         cmd_copy_range(raw, r.yo_dev, 0l, r.host.buf, 0l, bout)
         vt_pt(raw, VtProfRole.copy_out)
     }
-    vt_readback_copy(m.data, r.host, bout)
+    host_buf_read(r.host, unsafe(addr<void?>(m.data[0])), bout)
     vt_announce(r)
     g_vt_mels++
     return true
