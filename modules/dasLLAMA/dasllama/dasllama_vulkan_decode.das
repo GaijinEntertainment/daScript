@@ -363,9 +363,7 @@ def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
     L.f1 = f1; L.f3 = f3; L.f2 = f2
     L.m_gate = rd_meta(); L.m_up = rd_meta(); L.m_down = rd_meta()
     // addrms (class): x += xb2, norms, xb out — and the fused twin quantizing in place of xb
-    L.s_addr_ffn = set_cls_ar(fixed_array(g_rd.x_dev, g_rd.xb2_dev, g_rd.norms_dev, g_rd.xb_dev),
-        fixed_array(dim * 4l * nb, dim * 4l * nb, g_rd.norms_bytes, dim * 4l * nb),
-        fixed_array(VHZ_X, VHZ_XB2, 0u, VHZ_XB))
+    L.s_addr_ffn = rd_ar_set(g_rd.xb2_dev, VHZ_XB2, g_rd.xb_dev, VHZ_XB)
     rd_unmake_sets()
     // quantize xb (post-ffn-norm) -> xq/xs
     L.s_quant_xb2 = rd_quant_xb_set()
@@ -387,17 +385,19 @@ def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
     // down GEMV -> ffnout
     L.s_down = arena_gemv_set(f2, p2, L.m_down.buf, META_BYTES, 0u, g_gpu.hq_dev, g_gpu.hs_dev, hid * nb, (hid / 32l) * 4l * nb, VHZ_HQ, g_rd.ffnout_dev, dim * 4l * nb, VHZ_FFO)
     // addrms next: x += ffnout, xb = rms_att[l+1]|final — the fused twin also serves the last layer's final norm
-    L.s_addr_next = set_cls_ar(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev),
-        fixed_array(dim * 4l * nb, dim * 4l * nb, g_rd.norms_bytes, dim * 4l * nb),
-        fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB))
+    L.s_addr_next = rd_ar_set(g_rd.ffnout_dev, VHZ_FFO, g_rd.xb_dev, VHZ_XB)
 }
 
-def private rd_quant_xb_set() : VkDescriptorSet {
-    let dim = g_rd.dim
+def private rd_quant_xb_set() : VkDescriptorSet => rd_rq_set(g_rd.xb_dev, VHZ_XB, g_rd.xq_dev, g_rd.xs_dev, VHZ_XQ, g_rd.dim)
+
+def private rd_rq_set(src : uint64; sbit : uint; q, s : uint64; qbit : uint; n : int64) : VkDescriptorSet {
     let nb = g_rd.nb
-    return set_rq_cls(fixed_array(g_rd.xb_dev, g_rd.xq_dev, g_rd.xs_dev),
-        fixed_array(dim * 4l * nb, dim * nb, (dim / 32l) * 4l * nb),
-        fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
+    return set_rq_cls(fixed_array(src, q, s), fixed_array(n * 4l * nb, n * nb, (n / 32l) * 4l * nb), fixed_array(sbit, qbit, qbit))
+}
+
+def private rd_ar_set(add : uint64; abit : uint; out : uint64; obit : uint) : VkDescriptorSet {
+    let rb = g_rd.dim * 4l * g_rd.nb
+    return set_cls_ar(fixed_array(g_rd.x_dev, add, g_rd.norms_dev, out), fixed_array(rb, rb, g_rd.norms_bytes, rb), fixed_array(VHZ_X, abit, 0u, obit))
 }
 
 def private rd_layer_slot(l : int64) {
@@ -539,9 +539,7 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
             fixed_array(qplane, mirbytes, mirbytes, qd * 4l * nb, TOK_META_BYTES * nb, partbytes, qd * nb, (qd / 32l) * 4l * nb, g_rd.sinks_bytes),
             fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u, VHZ_ATT, VHZ_AQ, VHZ_AQ, 0u))
         // quantize attn -> aq/as
-        L.s_quant_at = set_rq_cls(fixed_array(g_rd.attn_dev, g_rd.aq_dev, g_rd.as_dev),
-            fixed_array(qd * 4l * nb, qd * nb, (qd / 32l) * 4l * nb),
-            fixed_array(VHZ_ATT, VHZ_AQ, VHZ_AQ))
+        L.s_quant_at = rd_rq_set(g_rd.attn_dev, VHZ_ATT, g_rd.aq_dev, g_rd.as_dev, VHZ_AQ, qd)
         // wo GEMV -> xb2
         L.s_wo = arena_gemv_set(fo, po, L.m_wo.buf, META_BYTES, 0u, g_rd.aq_dev, g_rd.as_dev, qd * nb, (qd / 32l) * 4l * nb, VHZ_AQ, g_rd.xb2_dev, dim * 4l * nb, VHZ_XB2)
     }
@@ -716,8 +714,7 @@ def private rd_moe_sets(var L : RLayer) {
     let edn_bytes = nb * k * dim * 4l
     let slots_bytes = MAX_ROUTED_SLOTS * 4l
     if (L.xe_own) {
-        L.s_quant_xe = set_rq_cls(fixed_array(g_rd.xb_dev, g_rd.moe_xq_dev, g_rd.moe_xs_dev),
-            fixed_array(rows_bytes, xq_bytes, xs_bytes), fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
+        L.s_quant_xe = rd_rq_set(g_rd.xb_dev, VHZ_XB, g_rd.moe_xq_dev, g_rd.moe_xs_dev, VHZ_XQ, dim)
     }
     L.pre2_fused = L.moe_g4 && L.xe_own && vk_fuse_on()
     if (L.pre2_fused) {
@@ -812,17 +809,11 @@ def private rd_ensure_comb_sets {
 //! a layer without a dense triple (an MoE layer with no shared expert): the tail sets the token
 //! command encodes around the routed block - the FFN norm, its requant and the residual step
 def private rd_tail_sets_bare(var L : RLayer; f1, f3, f2 : int) {
-    let dim = g_rd.dim
-    let nb = g_rd.nb
     L.b1 = -1l; L.b3 = -1l; L.b2 = -1l
     L.f1 = f1; L.f3 = f3; L.f2 = f2
-    L.s_addr_ffn = set_cls_ar(fixed_array(g_rd.x_dev, g_rd.xb2_dev, g_rd.norms_dev, g_rd.xb_dev),
-        fixed_array(dim * 4l * nb, dim * 4l * nb, g_rd.norms_bytes, dim * 4l * nb),
-        fixed_array(VHZ_X, VHZ_XB2, 0u, VHZ_XB))
+    L.s_addr_ffn = rd_ar_set(g_rd.xb2_dev, VHZ_XB2, g_rd.xb_dev, VHZ_XB)
     L.s_quant_xb2 = rd_quant_xb_set()
-    L.s_addr_next = set_cls_ar(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev),
-        fixed_array(dim * 4l * nb, dim * 4l * nb, g_rd.norms_bytes, dim * 4l * nb),
-        fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB))
+    L.s_addr_next = rd_ar_set(g_rd.ffnout_dev, VHZ_FFO, g_rd.xb_dev, VHZ_XB)
     rd_unmake_sets()
 }
 
@@ -974,9 +965,7 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
     let step_bits = fixed_array(VHZ_DNP | VHZ_DNZ, VHZ_DNST, VHZ_DNSM, VHZ_DNO, VHZ_DNO, 0u, VHZ_DNO)
     L.s_dnstep = g_rd.dn_zsig ? set_dn_step_sig_cls(step_bufs, step_bytes, step_bits) : set_dn_step_cls(step_bufs, step_bytes, step_bits)
     if (kq_sb(fout)) {
-        L.s_quant_dno = set_rq_cls(fixed_array(g_rd.dn_of_dev, g_rd.dn_oq_dev, g_rd.dn_os_dev),
-            fixed_array(DND_OQ_BYTES * 4l * nb, DND_OQ_BYTES * nb, DND_OS_BYTES * nb),
-            fixed_array(VHZ_DNO, VHZ_DNO, VHZ_DNO))
+        L.s_quant_dno = rd_rq_set(g_rd.dn_of_dev, VHZ_DNO, g_rd.dn_oq_dev, g_rd.dn_os_dev, VHZ_DNO, DND_OQ_BYTES)
     }
     L.s_dnout = arena_gemv_set(fout, pout, L.m_dnout.buf, META_BYTES, 0u, g_rd.dn_oq_dev, g_rd.dn_os_dev, di * nb, (di / 32l) * 4l * nb, VHZ_DNO, g_rd.xb2_dev, dim * 4l * nb, VHZ_XB2)
     if (b1 >= 0l) {
@@ -1114,9 +1103,7 @@ def vk_rdec_set_ple_layer(l, bgate, bproj : int64; fmt : int) {
     L.m_pg = rd_meta(); L.m_pp = rd_meta()
     let all = g_rd.n_layers * ple
     // the residual row as it is -> xq/xs (the gate reads the unnormed stream)
-    L.s_ple_x = set_rq_cls(fixed_array(g_rd.x_dev, g_rd.xq_dev, g_rd.xs_dev),
-        fixed_array(dim * 4l * nb, dim * nb, (dim / 32l) * 4l * nb),
-        fixed_array(VHZ_X, VHZ_XQ, VHZ_XQ))
+    L.s_ple_x = rd_rq_set(g_rd.x_dev, VHZ_X, g_rd.xq_dev, g_rd.xs_dev, VHZ_XQ, dim)
     // gate GEMV [dim -> ple] into pleg (the FFN gate plane's hazard bit, free by then)
     L.s_ple_gate = arena_gemv_set_x(fmt, pg, L.m_pg.buf, g_rd.pleg_dev, ple * 4l * nb, VHZ_GATE)
     // gelu(gate) x this layer's side-input row -> hq/hs (the row's layer base rides the push; the side rows ride the cos plane's bit)
@@ -1171,9 +1158,7 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<
                 fixed_array(vocab * 4l * nb, supp_bytes), fixed_array(VHZ_LOG, 0u))
         }
         // prologue (class): xb = rms_att[0](x), add off — the aa slot binds x itself (add_on=0 never reads it)
-        g_rd.s_prologue = set_cls_ar(fixed_array(g_rd.x_dev, g_rd.x_dev, g_rd.norms_dev, g_rd.xb_dev),
-            fixed_array(dim * 4l * nb, dim * 4l * nb, g_rd.norms_bytes, dim * 4l * nb),
-            fixed_array(VHZ_X, VHZ_X, 0u, VHZ_XB))
+        g_rd.s_prologue = rd_ar_set(g_rd.x_dev, VHZ_X, g_rd.xb_dev, VHZ_XB)
         rd_unmake_sets()
         // quantize final xb
         g_rd.s_quant_final = rd_quant_xb_set()
@@ -1268,7 +1253,7 @@ def vk_rdec_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_row
     r.s_hc_norm = set_hc_norm_cls(fixed_array(r.hcres_dev, r.hcxn_dev, r.hcn_dev), fixed_array(hcd * 4l * nb, hcd * 4l * nb, r.hcn_bytes), fixed_array(VHZ_X, VHZ_XB2, 0u))
     r.s_hc_inj = set_router_gemv_cls(fixed_array(r.hcinjw_dev, r.hcxn_dev, r.hcinj_dev, r.norms_dev),
         fixed_array(r.hcinjw_bytes, hcd * 4l * nb, hc * 4l * nb, r.norms_bytes), fixed_array(0u, VHZ_XB2, VHZ_MRT, 0u))
-    r.s_hc_xnrq = set_rq_cls(fixed_array(r.hcxn_dev, r.hcxnq_dev, r.hcxns_dev), fixed_array(hcd * 4l * nb, hcd * nb, (hcd / Q8_BLOCK_ELEMS) * 4l * nb), fixed_array(VHZ_XB2, VHZ_XQ, VHZ_XQ))
+    r.s_hc_xnrq = rd_rq_set(r.hcxn_dev, VHZ_XB2, r.hcxnq_dev, r.hcxns_dev, VHZ_XQ, hcd)
     r.s_hc_lorq = set_hc_lo_rq_cls(fixed_array(r.hclo_dev, r.hcloq_dev, r.hclos_dev), fixed_array(lr * 4l * nb, lr * nb, (lr / Q8_BLOCK_ELEMS) * 4l * nb), fixed_array(VHZ_GATE, VHZ_HQ, VHZ_HQ))
     r.s_hc_mix = set_hc_mix_cls(fixed_array(r.hcxn_dev, r.hcgate_dev, r.xb_dev), fixed_array(hcd * 4l * nb, hcd * 4l * nb, dim * 4l * nb), fixed_array(VHZ_XB2, VHZ_UP, VHZ_XB))
     r.s_hc_comb_a = set_hc_comb_cls(fixed_array(r.hcres_dev, r.xb2_dev, r.hcinj_dev, r.dummy, r.dummy),
@@ -1381,7 +1366,7 @@ def vk_rdec_set_ngram(l, ind, nrows, kern, dil, bkey, bval : int64; norm_rows : 
     r.plew_dev = make_device_buf(r.plew_bytes)
     upload_region_at(r.plew_dev, 0l, unsafe(addr<uint8 const?>(norm_rows[0])), 3l * hcd * 4l)
     upload_region_at(r.plew_dev, 3l * hcd * 4l, unsafe(addr<uint8 const?>(conv_taps[0])), hcd * kern * 4l)
-    r.s_ple_rq = set_rq_cls(fixed_array(r.ple_emb_dev, r.pleq_dev, r.ples_dev), fixed_array(ind * 4l * nb, ind * nb, (ind / Q8_BLOCK_ELEMS) * 4l * nb), fixed_array(VHZ_COS, VHZ_XQ, VHZ_XQ))
+    r.s_ple_rq = rd_rq_set(r.ple_emb_dev, VHZ_COS, r.pleq_dev, r.ples_dev, VHZ_XQ, ind)
     r.s_ple_key = rd_hc_gemv_set(bkey, r.m_ple_key, r.pleq_dev, r.ples_dev, ind, VHZ_XQ, r.plekey_dev, hcd, VHZ_Q)
     r.s_ple_val = rd_hc_gemv_set(bval, r.m_ple_val, r.pleq_dev, r.ples_dev, ind, VHZ_XQ, r.pleval_dev, dim, VHZ_ATT)
     r.s_ple_gate = set_ple_gate_cls(fixed_array(r.plekey_dev, r.hcres_dev, r.pleval_dev, r.plegated_dev, r.plehist_dev, r.plew_dev, r.tok_meta.buf, r.plepanel_dev),
@@ -1498,8 +1483,7 @@ def private rd_hot_shared(slots : int64) {
         }
     }
     ensure_ffn_state()
-    r.s_hot_rq = set_rq_cls(fixed_array(r.xb_dev, r.moe_xq_dev, r.moe_xs_dev),
-        fixed_array(dim * 4l * nb, dim * nb, (dim / 32l) * 4l * nb), fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
+    r.s_hot_rq = rd_rq_set(r.xb_dev, VHZ_XB, r.moe_xq_dev, r.moe_xs_dev, VHZ_XQ, dim)
     r.s_hot_act = set_actrq_cls(fixed_array(r.egate_dev, r.eup_dev, g_gpu.hq_dev, g_gpu.hs_dev),
         fixed_array(egu_bytes, egu_bytes, BATCH_HQ_BYTES, BATCH_HS_BYTES), fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ))
     r.s_hot_comb = set_combine_cls(fixed_array(r.hacc_dev, r.hot_ident1_dev, r.hot_w.buf, r.edown_dev),
@@ -4555,10 +4539,8 @@ def private span_layer_sets(a : MoeSpanDec; li : int64) : SpanLayer {
     ensure_gemv_scratch(SL.s2)
     SL.s_ar_ffn = set_cls_ar(fixed_array(g_gpu.span_x_dev, g_gpu.dat_xb2_dev, g_gpu.span_norms_dev, g_gpu.span_xb_dev),
         fixed_array(nb, nb, nl * 2l * nb, nb), fixed_array(VHS_X, VHZ_XB2, 0u, VHS_XB))
-    SL.s_rq_g1 = set_rq_cls(fixed_array(g_gpu.span_xb_dev, g_gpu.stacks[SL.s1].xq.buf, g_gpu.stacks[SL.s1].xs.buf),
-        fixed_array(nb, XQ_BYTES, XS_BYTES), fixed_array(VHS_XB, VHS_GACTS, VHS_GACTS))
-    SL.s_rq_g3 = set_rq_cls(fixed_array(g_gpu.span_xb_dev, g_gpu.stacks[SL.s3].xq.buf, g_gpu.stacks[SL.s3].xs.buf),
-        fixed_array(nb, XQ_BYTES, XS_BYTES), fixed_array(VHS_XB, VHS_GACTS, VHS_GACTS))
+    SL.s_rq_g1 = span_rq_set(SL.s1, nb, VHS_GACTS)
+    SL.s_rq_g3 = span_rq_set(SL.s3, nb, VHS_GACTS)
     SL.s_router = set_router_gemv_cls(fixed_array(g_gpu.span_router_dev, g_gpu.span_xb_dev, g_gpu.span_logits_dev, g_gpu.span_xb_dev),
         fixed_array(nl * a.ne * nb, nb, MOE_MAX_EXPERTS * 4l, nb), fixed_array(0u, VHS_XB, VHS_LOG, 0u))   //! the norms slot: the span's router reads the normed row, never the norm
     SL.s_topk = set_topk_cls(   //! the span folds no down scale: the logits row fills the ds binding, never read at NO_DSCALE
@@ -4575,10 +4557,8 @@ def private span_layer_sets(a : MoeSpanDec; li : int64) : SpanLayer {
         pin_stack_region(SL.sh1, a.wsh1[li], dim / 32l)
         pin_stack_region(SL.sh3, a.wsh3[li], dim / 32l)
         pin_stack_region(SL.sh2, a.wsh2[li], a.nsh / 32l)
-        SL.s_rq_sh1 = set_rq_cls(fixed_array(g_gpu.span_xb_dev, g_gpu.stacks[SL.sh1].xq.buf, g_gpu.stacks[SL.sh1].xs.buf),
-            fixed_array(nb, XQ_BYTES, XS_BYTES), fixed_array(VHS_XB, VHS_GACTS, VHS_GACTS))
-        SL.s_rq_sh3 = set_rq_cls(fixed_array(g_gpu.span_xb_dev, g_gpu.stacks[SL.sh3].xq.buf, g_gpu.stacks[SL.sh3].xs.buf),
-            fixed_array(nb, XQ_BYTES, XS_BYTES), fixed_array(VHS_XB, VHS_GACTS, VHS_GACTS))
+        SL.s_rq_sh1 = span_rq_set(SL.sh1, nb, VHS_GACTS)
+        SL.s_rq_sh3 = span_rq_set(SL.sh3, nb, VHS_GACTS)
         if (a.sh_gated) {
             SL.s_shgate = set_router_gemv_cls(fixed_array(g_gpu.span_shgate_dev, g_gpu.span_xb_dev, g_gpu.span_logits_dev, g_gpu.span_xb_dev),
                 fixed_array(nl * nb, nb, SPAN_LOGITS_BYTES, nb), fixed_array(0u, VHS_XB, VHS_LOG, 0u))
@@ -4593,11 +4573,14 @@ def private span_layer_sets(a : MoeSpanDec; li : int64) : SpanLayer {
         ensure_gemv_scratch(sqn)
         SL.s_ar_att = set_cls_ar(fixed_array(g_gpu.span_x_dev, g_gpu.span_x_dev, g_gpu.span_norms_dev, g_gpu.span_xb_dev),
             fixed_array(nb, nb, nl * 2l * nb, nb), fixed_array(VHS_X, VHS_X, 0u, VHS_XB))
-        SL.s_rq_att = set_rq_cls(fixed_array(g_gpu.span_xb_dev, g_gpu.stacks[sqn].xq.buf, g_gpu.stacks[sqn].xs.buf),
-            fixed_array(nb, XQ_BYTES, XS_BYTES), fixed_array(VHS_XB, VHS_ACTS, VHS_ACTS))
+        SL.s_rq_att = span_rq_set(sqn, nb, VHS_ACTS)
     }
     return SL
 }
+
+def private span_rq_set(si : int; row_bytes : int64; bit : uint) : VkDescriptorSet
+    => set_rq_cls(fixed_array(g_gpu.span_xb_dev, g_gpu.stacks[si].xq.buf, g_gpu.stacks[si].xs.buf),
+        fixed_array(row_bytes, XQ_BYTES, XS_BYTES), fixed_array(VHS_XB, bit, bit))
 
 let private SPAN_LOGITS_BYTES = (MOE_MAX_EXPERTS + 1l) * 4l   //! the router logits, then the shared expert's gate logit
 
