@@ -460,7 +460,7 @@ def pop_archive(stream : Stream?; blk : block<(var value : auto(TT)&) : void>) :
     //! Blocking pop + deserialize via ``daslib/archive``. Returns true if a value was consumed.
     //! The block receives an owned reference — safe to pass fields to functions expecting ``const``.
     var any = false
-    var value : TT -# -& -const
+    var value : TT -# -& -const = default<TT -# -& -const>
     _builtin_stream_pop(stream) $(bytes : array<uint8># -const) {
         if (!empty(bytes)) {
             any = true
@@ -479,7 +479,7 @@ def pop_archive(stream : Stream?; blk : block<(var value : auto(TT)&) : void>) :
 def try_pop_archive(stream : Stream?; blk : block<(var value : auto(TT)&) : void>) : bool {
     //! Non-blocking pop + deserialize. Returns true if a value was consumed.
     var any = false
-    var value : TT -# -& -const
+    var value : TT -# -& -const = default<TT -# -& -const>
     any = _builtin_stream_try_pop(stream) $(bytes : array<uint8># -const) {
         mem_archive_load(bytes, value)
     }
@@ -496,7 +496,7 @@ def pop_archive_with_timeout(stream : Stream?; timeout_ms : int; blk : block<(va
     //! Pop + deserialize, waiting at most ``timeout_ms``. Returns true if a value was consumed in time;
     //! false says nothing arrived, so a consumer can do its idle work and wait again.
     var any = false
-    var value : TT -# -& -const
+    var value : TT -# -& -const = default<TT -# -& -const>
     _builtin_stream_pop_with_timeout(stream, timeout_ms) $(bytes : array<uint8># -const) {
         if (!empty(bytes)) {
             any = true
@@ -515,7 +515,7 @@ def pop_archive_with_timeout(stream : Stream?; timeout_ms : int; blk : block<(va
 def gather_archive(stream : Stream?; blk : block<(var value : auto(TT)&) : void>) {
     //! Drain the stream, deserializing each blob via ``daslib/archive`` and invoking the block on each.
     _builtin_stream_gather(stream) $(bytes : array<uint8># -const) {
-        var value : TT -# -& -const
+        var value : TT -# -& -const = default<TT -# -& -const>
         mem_archive_load(bytes, value)
         invoke(blk, value)
         unsafe {
