@@ -3235,8 +3235,7 @@ def private rdec_host_experts_step(l : int64; xb : float const?; logits : float 
         moe_select(c, addr(s.moe_logits[0]), s.moe_idx, s.moe_w, 0l, ebp)
         moe_routed_note(t, s, l)
         rdec_trace_picks(l, 1l, c.n_expert_used, addr<int64 const?>(s.moe_idx[0]), addr<float const?>(s.moe_w[0]))
-        let pooled = l < long_length(g_rdec_hot) && g_rdec_hot[l].on
-        moe_routed_sum_k(t, s, l, pooled ? rdec_hot_step(t, s, l) : c.n_expert_used)
+        moe_routed_sum_k(t, s, l, rdec_hot_on(l) ? rdec_hot_step(t, s, l) : c.n_expert_used)
         memcpy(reinterpret<void?>(acc), addr<void const?>(s.moe_acc[0]), c.dim * 4l)
     }
 }
