@@ -10017,9 +10017,6 @@ class MetalDnL2Norm {
     }
 }
 
-//! the gated delta rule's decay for a head's `a` = -exp(A_log) and its raw gate plus dt_bias
-def dn_decay(a, g : float) : float => exp(a * softplus(g))
-
 [ |> template_struct_instance]
 class template MetalDnScanT {
     @template_constant PREP : bool = false   //! braw / graw hold beta and the decay (MetalDnPrep wrote them), not the raw projections

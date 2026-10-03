@@ -2968,9 +2968,6 @@ def silu(var x : array<float> | #; size : int64) {
     silu(unsafe(addr(x[0])), size)
 }
 
-//! Softplus with the standard large-x shortcut: x > 20 → x, else log(1 + exp(x)).
-def softplus(x : float) : float => x > 20.0 ? x : log(1.0 + exp(x))
-
 //! Row-wise L2 normalization in place: scale = 1 / max(sqrt(Σx²), eps), the
 //! square-sum accumulated in double. Used on the deltanet q/k heads.
 [hint(noalias = v)]

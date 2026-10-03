@@ -8,7 +8,8 @@ require dasllama/dasllama_lint public
 require dasllama/dasllama_common
 require dasllama/dasllama_blocks   // the gated-attention path shares the std attention + FFN block helpers
 require dasllama/dasllama_batch   // attention_batch_decode + BatchWorkspace: the hybrid's batched decode layer rides the std batched attention on its attention layers
-require dasllama/dasllama_math   // the moved DeltaNet kernels call silu/softplus/l2_norm_rows/rope_*/get_dispatch_lanes
+require dasllama/dasllama_math   // the moved DeltaNet kernels call silu/l2_norm_rows/rope_*/get_dispatch_lanes
+require dasllama/dasllama_gpu_math   // softplus: the one form the CPU chain and the kernel homes share
 require dasllama/dasllama_par    // maybe_parallel_for: the prefill kernels thread over rows
 require math
 require dasllama/dasllama_convert   // quantize_q8_0_into: the Q8_0 activation image the deltanet GEMVs consume

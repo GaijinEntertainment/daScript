@@ -2837,7 +2837,7 @@ class template DnStepFusedT : WgReduceBase {
             ds8[0u] = sq
             ds8[1u] = sk
             let graw = smalls[pa.g_off + row * nvh + h] + smalls[pa.dt_off + h]
-            ds8[2u] = exp(smalls[pa.a_off + h] * (graw > 20.0 ? graw : log(1.0 + exp(graw))))
+            ds8[2u] = dn_decay(smalls[pa.a_off + h], graw)
             ds8[3u] = sigmoid_f32(smalls[pa.beta_off + row * pa.beta_row_stride + h])
             ds8[4u] = qkr * sq * sk
         }
@@ -3009,7 +3009,7 @@ class DnScan {
         var ti = gl_LocalInvocationID.x
         while (ti < pa.npos) {
             let graw = smalls[pa.g_off + ti * pa.nvh + h] + dtb
-            egs[ti] = exp(aa * (graw > 20.0 ? graw : log(1.0 + exp(graw))))
+            egs[ti] = dn_decay(aa, graw)
             bts[ti] = sigmoid_f32(smalls[pa.beta_off + ti * pa.nvh + h])
             ti += 128u
         }
