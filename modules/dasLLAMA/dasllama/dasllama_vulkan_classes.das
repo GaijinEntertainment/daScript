@@ -7322,6 +7322,14 @@ class template KqCm2BatchT : MoeCmBase {
     //! a KHR stamp's format writes weight row `blk`'s 16 values e0 .. e0 + 16 into khr_ao[sbase .. sbase + 8) as f16 pairs, read from the plane's words; the cm2 stamps never call it
     def abstract khr_stage16(blk, e0, sbase : uint) : void
 
+    //! four decoded weights into the KHR stage as two f16 pairs at `at`: (x, y) there, (z, w) at `at + 1`
+    def khr_put4(at : uint; v : float4) {
+        static_if (KHR) {
+            khr_ao[at] = packHalf2x16(v.xy)
+            khr_ao[at + 1u] = packHalf2x16(v.zw)
+        }
+    }
+
     [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
     def khr_tile(wblk0, row0, cnt, k0, k1, ybase, xt, wt : uint) {   // nolint:STYLE038 — the staged k loop and its fast/edge store are one register set
         static_if (KHR) {   // the gated staging arrays exist on the KHR instantiations alone
@@ -7437,8 +7445,7 @@ class template Q8Cm2T : KqCm2BatchT {
             let d = float(ws[blk])
             for [unroll_full] (c in range(4)) {
                 let q = float4(int4(unpack8(int(w4[c])))) * d
-                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(q.xy)
-                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(q.zw)
+                khr_put4(sbase + uint(c) * 2u, q)
             }
         }
     }
@@ -7462,8 +7469,8 @@ class template K4Cm2T : KqCm2BatchT {
                 let ds = unpackHalf2x16(w0).x * float(iq_sub_sc(w0, ws[srow + 1u], g))
                 for [unroll_full] (c in range(4)) {
                     let w = w4[c] >> sh
-                    khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(ds * float(iq4lut[int(w & 0xFu)]), ds * float(iq4lut[int((w >> 8u) & 0xFu)])))
-                    khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(ds * float(iq4lut[int((w >> 16u) & 0xFu)]), ds * float(iq4lut[int((w >> 24u) & 0xFu)])))
+                    khr_put4(sbase + uint(c) * 2u, float4(ds * float(iq4lut[int(w & 0xFu)]), ds * float(iq4lut[int((w >> 8u) & 0xFu)]),
+                        ds * float(iq4lut[int((w >> 16u) & 0xFu)]), ds * float(iq4lut[int((w >> 24u) & 0xFu)])))
                 }
             } else {
                 let srow = blk * 5u
@@ -7472,8 +7479,8 @@ class template K4Cm2T : KqCm2BatchT {
                 let dmn = dm.y * float((ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
                 for [unroll_full] (c in range(4)) {
                     let w = w4[c] >> sh
-                    khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(ds * float(w & 0xFu) - dmn, ds * float((w >> 8u) & 0xFu) - dmn))
-                    khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(ds * float((w >> 16u) & 0xFu) - dmn, ds * float((w >> 24u) & 0xFu) - dmn))
+                    khr_put4(sbase + uint(c) * 2u, float4(ds * float(w & 0xFu) - dmn, ds * float((w >> 8u) & 0xFu) - dmn,
+                        ds * float((w >> 16u) & 0xFu) - dmn, ds * float((w >> 24u) & 0xFu) - dmn))
                 }
             }
         }
@@ -7541,8 +7548,7 @@ class template K6Cm2T : KqCm2BatchT {
                 let q1 = int(((lw >> 8u) & 0xFu) | (((hw >> 8u) & 3u) << 4u)) - 32
                 let q2 = int(((lw >> 16u) & 0xFu) | (((hw >> 16u) & 3u) << 4u)) - 32
                 let q3 = int(((lw >> 24u) & 0xFu) | (((hw >> 24u) & 3u) << 4u)) - 32
-                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(ds * float(q0), ds * float(q1)))
-                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(ds * float(q2), ds * float(q3)))
+                khr_put4(sbase + uint(c) * 2u, float4(ds * float(q0), ds * float(q1), ds * float(q2), ds * float(q3)))
             }
         }
     }
@@ -7628,8 +7634,7 @@ class template K5Cm2T : KqCm2BatchT {
                 let q1 = ((w >> 8u) & 0xFu) | (((hb >> 1u) & 1u) << 4u)
                 let q2 = ((w >> 16u) & 0xFu) | (((hb >> 2u) & 1u) << 4u)
                 let q3 = ((w >> 24u) & 0xFu) | (((hb >> 3u) & 1u) << 4u)
-                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(ds * float(q0) - dmn, ds * float(q1) - dmn))
-                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(ds * float(q2) - dmn, ds * float(q3) - dmn))
+                khr_put4(sbase + uint(c) * 2u, float4(ds * float(q0) - dmn, ds * float(q1) - dmn, ds * float(q2) - dmn, ds * float(q3) - dmn))
             }
         }
     }
@@ -7688,11 +7693,11 @@ class template Q40Cm2T : KqCm2BatchT {
             for [unroll_full] (c in range(4)) {
                 let w = w4[c] >> sh
                 static_if (IQLUT) {
-                    khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(d * float(iq4lut[int(w & 0xFu)]), d * float(iq4lut[int((w >> 8u) & 0xFu)])))
-                    khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(d * float(iq4lut[int((w >> 16u) & 0xFu)]), d * float(iq4lut[int((w >> 24u) & 0xFu)])))
+                    khr_put4(sbase + uint(c) * 2u, float4(d * float(iq4lut[int(w & 0xFu)]), d * float(iq4lut[int((w >> 8u) & 0xFu)]),
+                        d * float(iq4lut[int((w >> 16u) & 0xFu)]), d * float(iq4lut[int((w >> 24u) & 0xFu)])))
                 } else {
-                    khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(d * (float(w & 0xFu) - 8.0), d * (float((w >> 8u) & 0xFu) - 8.0)))
-                    khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(d * (float((w >> 16u) & 0xFu) - 8.0), d * (float((w >> 24u) & 0xFu) - 8.0)))
+                    khr_put4(sbase + uint(c) * 2u, float4(d * (float(w & 0xFu) - 8.0), d * (float((w >> 8u) & 0xFu) - 8.0),
+                        d * (float((w >> 16u) & 0xFu) - 8.0), d * (float((w >> 24u) & 0xFu) - 8.0)))
                 }
             }
         }
@@ -7757,8 +7762,7 @@ class template Q51Cm2T : KqCm2BatchT {
                 let q1 = float(((w >> 8u) & 0xFu) | (((hb >> 1u) & 1u) << 4u))
                 let q2 = float(((w >> 16u) & 0xFu) | (((hb >> 2u) & 1u) << 4u))
                 let q3 = float(((w >> 24u) & 0xFu) | (((hb >> 3u) & 1u) << 4u))
-                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(dm.x * q0 + dm.y, dm.x * q1 + dm.y))
-                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(dm.x * q2 + dm.y, dm.x * q3 + dm.y))
+                khr_put4(sbase + uint(c) * 2u, float4(dm.x * q0 + dm.y, dm.x * q1 + dm.y, dm.x * q2 + dm.y, dm.x * q3 + dm.y))
             }
         }
     }
@@ -7808,8 +7812,8 @@ class template Iq4nl32Cm2T : KqCm2BatchT {
             let d = (blk & 1u) == 0u ? dp.x : dp.y
             for [unroll_full] (c in range(4)) {
                 let w = w4[c] >> sh
-                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(d * float(iq4lut[int(w & 0xFu)]), d * float(iq4lut[int((w >> 8u) & 0xFu)])))
-                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(d * float(iq4lut[int((w >> 16u) & 0xFu)]), d * float(iq4lut[int((w >> 24u) & 0xFu)])))
+                khr_put4(sbase + uint(c) * 2u, float4(d * float(iq4lut[int(w & 0xFu)]), d * float(iq4lut[int((w >> 8u) & 0xFu)]),
+                    d * float(iq4lut[int((w >> 16u) & 0xFu)]), d * float(iq4lut[int((w >> 24u) & 0xFu)])))
             }
         }
     }
@@ -7856,8 +7860,7 @@ class template Mx4Cm2T : KqCm2BatchT {
             let sc = mx4_e8m0_half(ex)
             for [unroll_full] (c in range(4)) {
                 let v = mx4_dec4((w4[c] >> sh) & 0x0F0F0F0Fu, sc)
-                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(v.x, v.y))
-                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(v.z, v.w))
+                khr_put4(sbase + uint(c) * 2u, float4(v.x, v.y, v.z, v.w))
             }
         }
     }
@@ -7947,8 +7950,7 @@ class template K3Cm2T : KqCm2BatchT {
                 let q1 = int((qw >> 8u) & 3u) - (((hw >> 8u) & 1u) == 0u ? 4 : 0)
                 let q2 = int((qw >> 16u) & 3u) - (((hw >> 16u) & 1u) == 0u ? 4 : 0)
                 let q3 = int((qw >> 24u) & 3u) - (((hw >> 24u) & 1u) == 0u ? 4 : 0)
-                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(ds * float(q0), ds * float(q1)))
-                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(ds * float(q2), ds * float(q3)))
+                khr_put4(sbase + uint(c) * 2u, float4(ds * float(q0), ds * float(q1), ds * float(q2), ds * float(q3)))
             }
         }
     }
@@ -8011,8 +8013,8 @@ class template K2Cm2T : KqCm2BatchT {
             let dmn = dm.y * float(pb >> 4u)
             for [unroll_full] (c in range(4)) {
                 let qw = qw4[c] >> qs2
-                khr_ao[sbase + uint(c) * 2u] = packHalf2x16(float2(ds * float(qw & 3u) - dmn, ds * float((qw >> 8u) & 3u) - dmn))
-                khr_ao[sbase + uint(c) * 2u + 1u] = packHalf2x16(float2(ds * float((qw >> 16u) & 3u) - dmn, ds * float((qw >> 24u) & 3u) - dmn))
+                khr_put4(sbase + uint(c) * 2u, float4(ds * float(qw & 3u) - dmn, ds * float((qw >> 8u) & 3u) - dmn,
+                    ds * float((qw >> 16u) & 3u) - dmn, ds * float((qw >> 24u) & 3u) - dmn))
             }
         }
     }
@@ -8076,8 +8078,8 @@ class template Iq3sCm2T : KqCm2BatchT {
                 let g1 = float((gw >> 8u) & 0xFFu)
                 let g2 = float((gw >> 16u) & 0xFFu)
                 let g3 = float(gw >> 24u)
-                khr_ao[sbase + uint(i) * 2u] = packHalf2x16(float2(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)))
-                khr_ao[sbase + uint(i) * 2u + 1u] = packHalf2x16(float2(ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
+                khr_put4(sbase + uint(i) * 2u, float4(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1),
+                    ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
             }
         }
     }
@@ -8157,8 +8159,8 @@ class template Iq3xxsCm2T : KqCm2BatchT {
                 let g1 = float((gw >> 8u) & 0xFFu)
                 let g2 = float((gw >> 16u) & 0xFFu)
                 let g3 = float(gw >> 24u)
-                khr_ao[sbase + uint(i) * 2u] = packHalf2x16(float2(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)))
-                khr_ao[sbase + uint(i) * 2u + 1u] = packHalf2x16(float2(ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
+                khr_put4(sbase + uint(i) * 2u, float4(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1),
+                    ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
             }
         }
     }
@@ -8250,8 +8252,8 @@ class template Iq2sCm2T : KqCm2BatchT {
                 let g1 = float((gw >> 8u) & 0xFFu)
                 let g2 = float((gw >> 16u) & 0xFFu)
                 let g3 = float(gw >> 24u)
-                khr_ao[sbase + uint(i) * 2u] = packHalf2x16(float2(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)))
-                khr_ao[sbase + uint(i) * 2u + 1u] = packHalf2x16(float2(ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
+                khr_put4(sbase + uint(i) * 2u, float4(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1),
+                    ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
             }
         }
     }
@@ -8328,8 +8330,8 @@ class template Iq2xsCm2T : KqCm2BatchT {
                 let g1 = float((gw >> 8u) & 0xFFu)
                 let g2 = float((gw >> 16u) & 0xFFu)
                 let g3 = float(gw >> 24u)
-                khr_ao[sbase + uint(i) * 2u] = packHalf2x16(float2(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)))
-                khr_ao[sbase + uint(i) * 2u + 1u] = packHalf2x16(float2(ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
+                khr_put4(sbase + uint(i) * 2u, float4(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1),
+                    ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
             }
         }
     }
@@ -8405,8 +8407,8 @@ class template Iq2xxsCm2T : KqCm2BatchT {
                 let g1 = float((gw >> 8u) & 0xFFu)
                 let g2 = float((gw >> 16u) & 0xFFu)
                 let g3 = float(gw >> 24u)
-                khr_ao[sbase + uint(i) * 2u] = packHalf2x16(float2(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)))
-                khr_ao[sbase + uint(i) * 2u + 1u] = packHalf2x16(float2(ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
+                khr_put4(sbase + uint(i) * 2u, float4(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1),
+                    ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
             }
         }
     }
