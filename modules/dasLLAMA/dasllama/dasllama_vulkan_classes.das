@@ -13019,6 +13019,30 @@ class KqGemvBase {
         return float4(dm.x * sc, -dm.y * mn, dm.x * sc, -dm.y * mn)
     }
 
+    //! the per-16 signed sub-scale fold terms (Q3_K, Q6_K): each half's d x int8 sub-scale, and its block-sum term at quant offset `off`
+    def k6_terms(wsb, blk : uint; off : float) : float4 {
+        let s4 = int4(unpack8(int(wsu[wsb * 5u + blk / 2u])))   // 4 signed sub-scales
+        let slo = float((blk % 2u) == 0u ? s4.x : s4.z)
+        let shi = float((blk % 2u) == 0u ? s4.y : s4.w)
+        let dd = unpackHalf2x16(wsu[wsb * 5u + 4u]).x
+        return float4(dd * slo, -off * dd * slo, dd * shi, -off * dd * shi)
+    }
+
+    //! the per-16 UNSIGNED strip fold terms (IQ2_S, IQ2_XS): each half's d x strip byte, no block-sum term
+    def strip_terms(wsb, blk : uint) : float4 {
+        let sw = wsu[wsb * 5u + 1u + blk / 2u]
+        let s0 = float((sw >> ((blk % 2u) * 16u)) & 255u)
+        let s1 = float((sw >> ((blk % 2u) * 16u + 8u)) & 255u)
+        let dd = unpackHalf2x16(wsu[wsb * 5u]).x
+        return float4(dd * s0, 0.0, dd * s1, 0.0)
+    }
+
+    //! the per-32 grid sub-scale fold terms (the iq3 and iq2xxs grids): d x `grid_sc`, no block-sum term
+    def grid_terms(wsb, blk : uint) : float4 {
+        let a = unpackHalf2x16(wsu[wsb * 2u]).x * float(grid_sc(wsu[wsb * 2u + 1u], blk))
+        return float4(a, 0.0, a, 0.0)
+    }
+
     //! the decoded block's dot against activation block `xsb`; the one-column and N-column forms both add its result to
     //! their accumulator as a plain product, so the two modules compile one text and sum bit for bit - a `mad` here
     //! would be a fused multiply-add the CPU oracle's `mad` (a multiply, then an add) does not reproduce
@@ -13579,14 +13603,13 @@ class template Iq4xsGemvT : KqGemvLeafT {
 
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         let wv = wq4[wsb * 8u + blk]
-        let w0 = wsu[wsb * 2u]
-        let w1 = wsu[wsb * 2u + 1u]
         static_if (IQODD) {
             wl = uint4(iq3s4_word(wv.x & KQC_LOW), iq3s4_word(wv.y & KQC_LOW), iq3s4_word(wv.z & KQC_LOW), iq3s4_word(wv.w & KQC_LOW))
             wh = uint4(iq3s4_word((wv.x >> 4u) & KQC_LOW), iq3s4_word((wv.y >> 4u) & KQC_LOW), iq3s4_word((wv.z >> 4u) & KQC_LOW), iq3s4_word((wv.w >> 4u) & KQC_LOW))
-            let a = unpackHalf2x16(w0).x * float(grid_sc(w1, blk))
-            return float4(a, 0.0, a, 0.0)
+            return grid_terms(wsb, blk)
         } else {
+            let w0 = wsu[wsb * 2u]
+            let w1 = wsu[wsb * 2u + 1u]
             iq4_split(wv, wl, wh)
             let a = unpackHalf2x16(w0).x * float(iq4xs_sc(w0, w1, blk))
             return float4(a, 0.0, a, 0.0)
@@ -13630,8 +13653,7 @@ class template Iq3sGemvT : KqGemvLeafT {
         let sgw = wq[wsb * 26u + 18u + blk]
         wl = iq3s_quad(wq[qb], qh, sgw, 0u)
         wh = iq3s_quad(wq[qb + 1u], qh, sgw, 2u)
-        let a = unpackHalf2x16(wsu[wsb * 2u]).x * float(grid_sc(wsu[wsb * 2u + 1u], blk))
-        return float4(a, 0.0, a, 0.0)
+        return grid_terms(wsb, blk)
     }
 }
 
@@ -13660,8 +13682,7 @@ class template Iq3xxsGemvT : KqGemvLeafT {
         let aux = wq[wsb * 24u + 16u + blk]
         wl = iq3xxs_quad(wq[qb], aux, 0u)
         wh = iq3xxs_quad(wq[qb + 1u], aux, 2u)
-        let a = unpackHalf2x16(wsu[wsb * 2u]).x * float(grid_sc(wsu[wsb * 2u + 1u], blk))
-        return float4(a, 0.0, a, 0.0)
+        return grid_terms(wsb, blk)
     }
 
 }
@@ -13704,11 +13725,7 @@ class template K3GemvT : KqGemvLeafT {
         let sh = (blk % 4u) * 2u
         wl = k3_quad(wq4[q4], wq4[wsb * 6u + 4u], sh, blk)
         wh = k3_quad(wq4[q4 + 1u], wq4[wsb * 6u + 5u], sh, blk)
-        let s4 = int4(unpack8(int(wsu[wsb * 5u + blk / 2u])))   // 4 signed sub-scales
-        let slo = float((blk % 2u) == 0u ? s4.x : s4.z)
-        let shi = float((blk % 2u) == 0u ? s4.y : s4.w)
-        let dd = unpackHalf2x16(wsu[wsb * 5u + 4u]).x
-        return float4(dd * slo, -4.0 * dd * slo, dd * shi, -4.0 * dd * shi)
+        return k6_terms(wsb, blk, 4.0)
     }
 
     def override fold_reads_bsum : bool => true
@@ -13783,11 +13800,7 @@ class template K6GemvT : KqGemvLeafT {
         nib_split(wq4[wsb * 12u + blk], nl, nh)
         wl = k6_quad(nl, wq4[qh4], shift)
         wh = k6_quad(nh, wq4[qh4 + 1u], shift)
-        let s4 = int4(unpack8(int(wsu[wsb * 5u + blk / 2u])))   // 4 signed sub-scales
-        let slo = float((blk % 2u) == 0u ? s4.x : s4.z)
-        let shi = float((blk % 2u) == 0u ? s4.y : s4.w)
-        let dd = unpackHalf2x16(wsu[wsb * 5u + 4u]).x
-        return float4(dd * slo, -32.0 * dd * slo, dd * shi, -32.0 * dd * shi)
+        return k6_terms(wsb, blk, 32.0)
     }
 
     def override fold_reads_bsum : bool => true
@@ -13818,11 +13831,7 @@ class template Iq2sGemvT : KqGemvLeafT {
         let qh = (wq[wsb * 18u + 16u + blk / 4u] >> ((blk % 4u) * 8u)) & 255u
         wl = iq2s_quad(qw, qh, sgw, 0u)
         wh = iq2s_quad(qw, qh, sgw, 2u)
-        let sw = wsu[wsb * 5u + 1u + blk / 2u]
-        let s0 = float((sw >> ((blk % 2u) * 16u)) & 255u)
-        let s1 = float((sw >> ((blk % 2u) * 16u + 8u)) & 255u)
-        let dd = unpackHalf2x16(wsu[wsb * 5u]).x
-        return float4(dd * s0, 0.0, dd * s1, 0.0)
+        return strip_terms(wsb, blk)
     }
 
 }
@@ -13849,11 +13858,7 @@ class template Iq2xsGemvT : KqGemvLeafT {
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         wl = iq2xs_quad(wq[wsb * 16u + blk * 2u])
         wh = iq2xs_quad(wq[wsb * 16u + blk * 2u + 1u])
-        let sw = wsu[wsb * 5u + 1u + blk / 2u]
-        let s0 = float((sw >> ((blk % 2u) * 16u)) & 255u)
-        let s1 = float((sw >> ((blk % 2u) * 16u + 8u)) & 255u)
-        let dd = unpackHalf2x16(wsu[wsb * 5u]).x
-        return float4(dd * s0, 0.0, dd * s1, 0.0)
+        return strip_terms(wsb, blk)
     }
 
 }
@@ -13882,8 +13887,7 @@ class template Iq2xxsGemvT : KqGemvLeafT {
         let aux = wq[wsb * 16u + blk * 2u + 1u]
         wl = iq2xxs_quad(gw, aux, 0u)
         wh = iq2xxs_quad(gw, aux, 1u)
-        let a = unpackHalf2x16(wsu[wsb * 2u]).x * float(grid_sc(wsu[wsb * 2u + 1u], blk))
-        return float4(a, 0.0, a, 0.0)
+        return grid_terms(wsb, blk)
     }
 
 }
