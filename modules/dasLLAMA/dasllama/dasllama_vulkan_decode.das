@@ -463,7 +463,7 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
         let dt = g_rd.kv_dt
         let kv16 = rd_kv16()
         let kvq = rd_kv_block_codec()
-        verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq() && ensure_q8_actrq_cls() && ensure_q8_gemv_gu_cls()
+        verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq_b() && ensure_q8_actrq_cls() && ensure_q8_gemv_gu_cls()
             && (kv16 ? ensure_rope_kv_f16_cls() : ensure_rope_kv_cls())
             && (kvq || da_attn_stamp_ensure(dt, false, false))
             && (kvq || g_rd.has_sinks || !da_slab_is_g2(L.kv_mul) || da_attn_stamp_ensure(dt, false, true))
@@ -908,7 +908,7 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
     let nvh = g_rd.dn_nvh
     let ds = g_rd.dn_ds
     let anykq = kq_sb(f1) || kq_sb(f2)
-    verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq() && ensure_q8_actrq_cls()
+    verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq_b() && ensure_q8_actrq_cls()
         && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls()))
         && (!kq_sb(fout) || ensure_cls_q8k_rq())
         && (rd_triple_all(fqkv, fz, fout) $(f) => gemv_cls_ensure(f))
@@ -1111,7 +1111,7 @@ def vk_rdec_set_ple_layer(l, bgate, bproj : int64; fmt : int) {
         fixed_array(VHZ_GATE, VHZ_COS, VHZ_HQ, VHZ_HQ))
     // proj GEMV [ple -> dim] into ffnout (the residual step's add partner slot)
     L.s_ple_proj = gemv_planes_set(fmt, pp, L.m_pp.buf, META_BYTES, 0u, g_gpu.hq_dev, g_gpu.hs_dev, ple * nb, (ple / 32l) * 4l * nb, VHZ_HQ, g_rd.ffnout_dev, dim * 4l * nb, VHZ_FFO)
-    L.ple_fused = vk_fuse_on() && fmt == int(KqFmt.q8) && ple <= 256l && ple % 32l == 0l && ensure_cls_ar_rq() && ensure_q8_gemv_pleact_cls()
+    L.ple_fused = vk_fuse_on() && fmt == int(KqFmt.q8) && ple <= 256l && ple % 32l == 0l && ensure_cls_ar_rq_b() && ensure_q8_gemv_pleact_cls()
     if (L.ple_fused) {
         L.s_ple_ar_rq = set_ar_rq_stamp(RqStamp.rq, g_rd.ffnout_dev, VHZ_FFO, g_rd.xq_dev, g_rd.xs_dev)
         L.s_ple_pa = set_q8_gemv_pleact_cls(fixed_array(pp.wq, pp.ws, g_rd.pleg_dev, g_rd.ple_dev, g_rd.ffnout_dev),
@@ -1136,7 +1136,7 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<
     g_rd.cls_cap = cap
     g_rd.nsupp = long_length(supp)
     unsafe {
-        verify(ensure_cls_ar() && ensure_cls_ar_rq() && ensure_cls_dn_rq() && gemv_cls_ensure(cls_fmt)
+        verify(ensure_cls_ar() && ensure_cls_ar_rq_b() && ensure_cls_dn_rq() && gemv_cls_ensure(cls_fmt)
             && (!kq_sb(cls_fmt) || ensure_cls_q8k_rq())
             && (!rd_cls_epi_on() || ensure_cls_epi()) && ensure_cls_argmax_part() && ensure_cls_argmax_fin(),
             "vk decode: the class rails must engage on a live device")
@@ -2078,8 +2078,7 @@ def private set_ar_rq_stamp(stamp : RqStamp; add : uint64; aclass : uint; xq, xs
     let bufs = fixed_array(g_rd.x_dev, add, g_rd.norms_dev, xq, xs)
     let sizes = fixed_array(xbytes, xbytes, norms_bytes, dim * rows, (dim / 32l) * 4l * rows)
     let bits = fixed_array(VHZ_X, aclass, 0u, VHZ_XQ, VHZ_XQ)
-    if (stamp == RqStamp.rq) return set_cls_ar_rq(bufs, sizes, bits)
-    if (stamp == RqStamp.rq_b) return set_cls_ar_rq_b(bufs, sizes, bits)
+    if (stamp == RqStamp.rq || stamp == RqStamp.rq_b) return set_cls_ar_rq_b(bufs, sizes, bits)
     if (stamp == RqStamp.rqk) return set_cls_ar_rqk(bufs, sizes, bits)
     let bufs_x = fixed_array(g_rd.x_dev, add, g_rd.norms_dev, xq, xs, g_rd.xb_dev)
     let sizes_x = fixed_array(xbytes, xbytes, norms_bytes, dim * rows, (dim / 32l) * 4l * rows, xbytes)
@@ -2089,8 +2088,7 @@ def private set_ar_rq_stamp(stamp : RqStamp; add : uint64; aclass : uint; xq, xs
 }
 
 def private ensure_ar_rq_stamp(stamp : RqStamp) : bool {
-    if (stamp == RqStamp.rq) return ensure_cls_ar_rq()
-    if (stamp == RqStamp.rq_b) return ensure_cls_ar_rq_b()
+    if (stamp == RqStamp.rq || stamp == RqStamp.rq_b) return ensure_cls_ar_rq_b()
     if (stamp == RqStamp.rqx) return ensure_cls_ar_rqx()
     if (stamp == RqStamp.rqk) return ensure_cls_ar_rqk()
     return ensure_cls_ar_rqkx()
@@ -2098,10 +2096,8 @@ def private ensure_ar_rq_stamp(stamp : RqStamp) : bool {
 
 //! the stamp's dispatch: one workgroup on the one-row stamps, a workgroup a row on the rows stamp
 def private enc_ar_rq_stamp(stamp : RqStamp; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : ArArgs; rows : int64 = 1l) {
-    if (stamp == RqStamp.rq) {
-        enc_cls_ar_rq(raw, h, s, pc, 1l)
-    } elif (stamp == RqStamp.rq_b) {
-        enc_cls_ar_rq_b(raw, h, s, pc, rows)
+    if (stamp == RqStamp.rq || stamp == RqStamp.rq_b) {
+        enc_cls_ar_rq_b(raw, h, s, pc, stamp == RqStamp.rq ? 1l : rows)
     } elif (stamp == RqStamp.rqx) {
         enc_cls_ar_rqx(raw, h, s, pc, 1l)
     } elif (stamp == RqStamp.rqk) {
@@ -2143,7 +2139,7 @@ def private rd_ensure_fused_sets {
             used[int(L.rq_next_stamp)] = true
         }
     }
-    verify((!used[int(RqStamp.rq)] || ensure_cls_ar_rq()) && (!used[int(RqStamp.rqx)] || ensure_cls_ar_rqx())
+    verify((!used[int(RqStamp.rq)] || ensure_cls_ar_rq_b()) && (!used[int(RqStamp.rqx)] || ensure_cls_ar_rqx())
         && (!used[int(RqStamp.rqk)] || ensure_cls_ar_rqk()) && (!used[int(RqStamp.rqkx)] || ensure_cls_ar_rqkx()),
         "vk decode: the fused add+rms+requant rails must engage on a live device")
     let dim = g_rd.dim

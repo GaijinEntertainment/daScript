@@ -475,10 +475,6 @@ class template ArRqT : ArRqBase {
     }
 }
 
-[vk_dispatch(name = "cls_ar_rq", grid = "wgs", params = "wgs : int64")]
-class ArAddRmsRq : ArRqT {
-}
-
 [vk_dispatch(name = "cls_ar_rqx", grid = "wgs", params = "wgs : int64")]
 class ArAddRmsRqX : ArRqT {
     override STOREX = true

@@ -3351,7 +3351,7 @@ def private probe_barrier(raw : VkCommandBuffer; form : int; buf : uint64; bytes
     }
 }
 
-//! the token command's small-kernel floor: the add+rms step (`cls_ar`) and its fused requant twin (`cls_ar_rq`) at
+//! the token command's small-kernel floor: the add+rms step (`cls_ar`) and its fused requant twin (`cls_ar_rq_b`) at
 //! a row width, 64 dispatches chained through the hazard rail (each reads what the last wrote, a barrier between)
 //! against the same 64 with no dependency declared - the per-dispatch cost of a one-workgroup row kernel, with
 //! and without the barrier
@@ -3373,7 +3373,7 @@ def private run_small_kernels(dim : int) {
         upload_region_at(ad, 0l, addr<uint8 const?>(ones[0]), nb)
         upload_region_at(wnd, 0l, addr<uint8 const?>(ones[0]), nb)
     }
-    verify(ensure_cls_ar() && ensure_cls_ar_rq(), "the add+rms class rails must engage")
+    verify(ensure_cls_ar() && ensure_cls_ar_rq_b(), "the add+rms class rails must engage")
     var pc = ArArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = 1.0e-6, ascale = 1.0)
     let begin = VkCommandBufferBeginInfo()
     for (dep in range(2)) {
@@ -3387,16 +3387,16 @@ def private run_small_kernels(dim : int) {
         }
         vk_check(vkEndCommandBuffer(raw), null)
         let us = usec_per_dispatch(raw)
-        var scq = set_cls_ar_rq(fixed_array(xd, ad, wnd, xqd, xsd), fixed_array(nb, nb, nb, int64(dim), int64(dim / 32) * 4l), fixed_array(bit, 0u, 0u, 2u * bit, 2u * bit))
+        var scq = set_cls_ar_rq_b(fixed_array(xd, ad, wnd, xqd, xsd), fixed_array(nb, nb, nb, int64(dim), int64(dim / 32) * 4l), fixed_array(bit, 0u, 0u, 2u * bit, 2u * bit))
         var rawq = alloc_cmd()
         vk_check(vkBeginCommandBuffer(rawq, begin), null)
         var hzq : VkHaz
         for (_k in range(DISPATCHES)) {
-            enc_cls_ar_rq(rawq, hzq, scq, pc, 1l)
+            enc_cls_ar_rq_b(rawq, hzq, scq, pc, 1l)
         }
         vk_check(vkEndCommandBuffer(rawq), null)
         let usq = usec_per_dispatch(rawq)
-        print("small dim={dim} {dep == 1 ? "chained (barrier between)" : "independent"}: cls_ar {us} us/dispatch, cls_ar_rq {usq} us/dispatch | timing-only\n")
+        print("small dim={dim} {dep == 1 ? "chained (barrier between)" : "independent"}: cls_ar {us} us/dispatch, cls_ar_rq_b {usq} us/dispatch | timing-only\n")
     }
     delete ones
 }

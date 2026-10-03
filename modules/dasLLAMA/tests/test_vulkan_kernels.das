@@ -4369,7 +4369,7 @@ def test_vkd_da_attn_b_h128(t0 : T?) {
 def test_vkd_requant_family(t0 : T?) {
     t0 |> run("fused ar+requant + q8k requant class kernels == the CPU oracle") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!(ensure_cls_ar_rq() && ensure_cls_q8k_rq() && ensure_cls_ar_rqx() && ensure_cls_ar_rqk() && ensure_cls_ar_rqkx())) {
+            if (!(ensure_cls_ar_rq_b() && ensure_cls_q8k_rq() && ensure_cls_ar_rqx() && ensure_cls_ar_rqk() && ensure_cls_ar_rqkx())) {
                 t |> skip("no Vulkan device")
                 return
             }
@@ -4412,12 +4412,12 @@ def test_vkd_requant_family(t0 : T?) {
                     fill_upload(q2, 0l, q_bytes, I8_SENTINEL_BITS)
                     nan_sentinel_upload(s2, s_bytes)
                     // the class kernel: x@0, a@1, w@2, outq@3, outs@4
-                    var sc = set_cls_ar_rq(fixed_array(x2, ad, wd, q2, s2),
+                    var sc = set_cls_ar_rq_b(fixed_array(x2, ad, wd, q2, s2),
                         fixed_array(e_bytes, e_bytes, e_bytes, q_bytes, s_bytes),
                         fixed_array(1u, 2u, 4u, 16u, 8u))
                     var pc = ArArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = ascale)
                     cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                        enc_cls_ar_rq(raw2, h2, sc, pc, 1l)
+                        enc_cls_ar_rq_b(raw2, h2, sc, pc, 1l)
                         cmd_copy_planes(raw2, h2, fixed_array(q2), host, fixed_array(q_bytes), 1u | 8u | 16u)
                     }
                     memcpy(addr<void?>(q_cls[0]), host.mapped, q_bytes)
@@ -4465,12 +4465,12 @@ def test_vkd_requant_family(t0 : T?) {
                         upload_region_at(wbd, 0l, addr<uint8 const?>(wb[0]), 2l * e_bytes)
                         fill_upload(q2, 0l, q_bytes, I8_SENTINEL_BITS)
                         nan_sentinel_upload(s2, s_bytes)
-                        var scb = set_cls_ar_rq(fixed_array(x2, ad, wbd, q2, s2),
+                        var scb = set_cls_ar_rq_b(fixed_array(x2, ad, wbd, q2, s2),
                             fixed_array(e_bytes, e_bytes, 2l * e_bytes, q_bytes, s_bytes),
                             fixed_array(1u, 2u, 4u, 16u, 8u))
                         var pcb = ArArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = ascale, abias_on = 1u, aboff = uint(dim))
                         cmd_one_shot() $(rawb : VkCommandBuffer; var hb : VkHaz) {
-                            enc_cls_ar_rq(rawb, hb, scb, pcb, 1l)
+                            enc_cls_ar_rq_b(rawb, hb, scb, pcb, 1l)
                             cmd_copy_planes(rawb, hb, fixed_array(q2), host, fixed_array(q_bytes), 1u | 8u | 16u)
                         }
                         memcpy(addr<void?>(qb_cls[0]), host.mapped, q_bytes)
