@@ -1593,55 +1593,25 @@ def private rd_record_hot(l, nhit : int64; nrows : int64 = 1l) {
 //! The hits of layer `l`'s routed step (`RdecHotSubmitFn`): their region records and weights written, the hit chain submitted unwaited.
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool")]
 def vk_rdec_hot_submit(l, nhit : int64; slots : int64 const?; w : float const?) {
-    var H & = unsafe(g_rd.hot_layers[l])
+    let H & = unsafe(g_rd.hot_layers[l])
     assert(H.on && nhit <= g_rd.k, "vk_rdec_hot_submit: a layer with no pool, or more hits than routed slots")
-    unsafe {
-        var m1 = reinterpret<uint?>(g_rd.hot_meta1.mapped)
-        var m3 = reinterpret<uint?>(g_rd.hot_meta3.mapped)
-        var m2 = reinterpret<uint?>(g_rd.hot_meta2.mapped)
-        var wp = reinterpret<float?>(g_rd.hot_w.mapped)
-        for (j in range64(g_rd.k)) {
-            wp[j] = j < nhit ? w[j] : 0.0
-        }
-        for (j in range64(nhit)) {
-            m1[j * 2l] = uint(slots[j] * H.blk1)
-            m1[j * 2l + 1l] = 0u
-            m3[j * 2l] = uint(slots[j] * H.blk3)
-            m3[j * 2l + 1l] = 0u
-            m2[j * 2l] = uint(slots[j] * H.blk2)
-            m2[j * 2l + 1l] = uint(j * H.xnb2)
-        }
-    }
+    rd_hot_stage(H, nhit, g_rd.k, slots, w)
     return if (nhit == 0l)
-    if (!H.recorded[nhit]) {
-        rd_record_hot(l, nhit)
-    }
-    submit_nofence(H.cmds[nhit])
-    g_rd.hot_submits++
+    rd_hot_go(l, nhit, 1l)
     g_rd.hot_hits += nhit
 }
 
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]
-def vk_rdec_hot_submit_rows(l, nrows : int64; slots : int64 const?; w : float const?) {
-    var H & = unsafe(g_rd.hot_layers[l])
-    let k = g_rd.k
-    let nreg = nrows * k
-    if (!H.on) {
-        panic("vk_rdec_hot_submit_rows: layer {l} has no pool")
-    }
-    if (nreg > MAX_ROUTED_SLOTS || nrows > g_rd.nb) {
-        panic("vk_rdec_hot_submit_rows: {nrows} rows x {k} = {nreg} regions against {MAX_ROUTED_SLOTS}, the planes hold {g_rd.nb} rows")
-    }
+def private rd_hot_stage(H : RdHotLayer; nreg, wlen : int64; slots : int64 const?; w : float const?) {
     unsafe {
         var m1 = reinterpret<uint?>(g_rd.hot_meta1.mapped)
         var m3 = reinterpret<uint?>(g_rd.hot_meta3.mapped)
         var m2 = reinterpret<uint?>(g_rd.hot_meta2.mapped)
         var wp = reinterpret<float?>(g_rd.hot_w.mapped)
-        for (j in range64(MAX_ROUTED_SLOTS)) {
+        for (j in range64(wlen)) {
             wp[j] = j < nreg ? w[j] : 0.0
         }
         for (j in range64(nreg)) {
-            let xrow = uint((j / k) * H.xnb1)
+            let xrow = uint((j / g_rd.k) * H.xnb1)
             m1[j * 2l] = uint(slots[j] * H.blk1)
             m1[j * 2l + 1l] = xrow
             m3[j * 2l] = uint(slots[j] * H.blk3)
@@ -1650,11 +1620,30 @@ def vk_rdec_hot_submit_rows(l, nrows : int64; slots : int64 const?; w : float co
             m2[j * 2l + 1l] = uint(j * H.xnb2)
         }
     }
+}
+
+def private rd_hot_go(l, nreg, nrows : int64) {
+    var H & = unsafe(g_rd.hot_layers[l])
     if (!H.recorded[nreg]) {
         rd_record_hot(l, nreg, nrows)
     }
     submit_nofence(H.cmds[nreg])
     g_rd.hot_submits++
+}
+
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]
+def vk_rdec_hot_submit_rows(l, nrows : int64; slots : int64 const?; w : float const?) {
+    let H & = unsafe(g_rd.hot_layers[l])
+    let k = g_rd.k
+    let nreg = nrows * k
+    if (!H.on) {
+        panic("vk_rdec_hot_submit_rows: layer {l} has no pool")
+    }
+    if (nreg > MAX_ROUTED_SLOTS || nrows > g_rd.nb) {
+        panic("vk_rdec_hot_submit_rows: {nrows} rows x {k} = {nreg} regions against {MAX_ROUTED_SLOTS}, the planes hold {g_rd.nb} rows")
+    }
+    rd_hot_stage(H, nreg, MAX_ROUTED_SLOTS, slots, w)
+    rd_hot_go(l, nreg, nrows)
     var hits = 0l
     for (j in range64(nreg)) {
         hits += unsafe(w[j]) != 0.0 ? 1l : 0l
