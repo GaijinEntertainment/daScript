@@ -653,6 +653,12 @@ def private apply_roster(root : JsonValue?; var cfg : CliConfig) {
         cfg.yarn_orig_ctx = int(pick?["yarn_orig_ctx"] ?? 0l)
     }
 }
+// the first table of an array-of-tables key, null when the key holds anything else
+def private first_table(root : JsonValue?; key : string) : JsonValue const? {
+    let v = root?[key]
+    return null if (v == null || !(v.value is _array) || empty(v.value as _array))
+    return (v.value as _array)[0]
+}
 
 //! Parse a config file's text into the keys the CLI understands; unknown keys are ignored.
 def parse_cli_config(body : string; var cfg : CliConfig) : bool {
@@ -664,11 +670,14 @@ def parse_cli_config(body : string; var cfg : CliConfig) : bool {
     }
     cfg.model = root?["model"] ?? ""
     cfg.image_mmproj = root?["image_mmproj"] ?? ""
-    cfg.asr = root?["asr"] ?? ""
-    cfg.mmproj = root?["mmproj"] ?? ""
-    cfg.tts = root?["tts"] ?? ""
-    cfg.tts_lane = root?["tts_lane"] ?? ""
-    cfg.tts_voices_dir = root?["tts_voices_dir"] ?? ""
+    // a speech key is one path, or an [[asr]] / [[tts]] roster whose first table is the default model
+    let asr0 = first_table(root, "asr")
+    cfg.asr = asr0 != null ? (asr0?["path"] ?? "") : (root?["asr"] ?? "")
+    cfg.mmproj = asr0 != null ? (asr0?["mmproj"] ?? "") : (root?["mmproj"] ?? "")
+    let tts0 = first_table(root, "tts")
+    cfg.tts = tts0 != null ? (tts0?["path"] ?? "") : (root?["tts"] ?? "")
+    cfg.tts_lane = tts0 != null ? (tts0?["lane"] ?? "") : (root?["tts_lane"] ?? "")
+    cfg.tts_voices_dir = tts0 != null ? (tts0?["voices_dir"] ?? "") : (root?["tts_voices_dir"] ?? "")
     cfg.quant = root?["quant"] ?? ""
     cfg.kv_dtype = root?["kv_dtype"] ?? ""
     cfg.gpu = root?["gpu"] ?? ""

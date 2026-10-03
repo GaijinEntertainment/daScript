@@ -16,14 +16,14 @@ require math   // min
 
 //! One cached page: the pool group holding P consecutive positions of some evaled token history,
 //! keyed by the chained hash of every token up to and including this page. A donation's last,
-//! partial page is an entry too - its tokens fewer than P. The page that followed this one in its
-//! donation is linked, so a prompt sharing only that page's leading rows gets a COPY of it.
+//! partial page is an entry too - its tokens fewer than P. The pages that followed this one, a
+//! donation each, are linked, so a prompt sharing only a following page's leading rows gets a COPY of it.
 struct PrefixEntry {
     group : int                 // page-group id in the pool (held: its refcnt includes this entry)
     tokens : array<int64>       // the page's token ids, P of them or a tail's fewer — verified on every hit
     last_use : int64            // LRU clock value of the last attach/insert touch
     chain : int64               // owning PrefixChain id (0 = none; duplicates keep their original)
-    next : uint64               //! the key of the page that followed in the first donation to continue past this one (0 = none)
+    nexts : array<uint64>       //! the keys of the pages that followed this one, a donation each (a key the cache dropped misses)
 }
 
 //! One donated prefix chain, for dashboards: created when a donation contributes at least one
@@ -63,6 +63,7 @@ struct PrefixCache {
     n_insert_pages : int64      // pages donated
     n_evicted_pages : int64     // pages LRU-dropped
     n_hit_partial : int64       //! pages copied into a taker for the leading rows it shares
+    roots : array<uint64>       //! the keys of the first pages donated: a prompt no whole page serves copies the one it shares the most leading rows with
     states : array<PrefixState> // a recurrent model's checkpoints
     max_states : int64          // checkpoint budget (LRU-drops past it); 0 = a recurrent model caches nothing
     n_state_hits : int64
@@ -227,6 +228,27 @@ def prefix_held_groups_(cache : PrefixCache) : int64 {
     return held
 }
 
+//! `key` among the pages `links` names, once; the keys of pages the cache has dropped go first, so a list holds live pages
+def private link_page(cache : PrefixCache; var links : array<uint64>; key : uint64) {
+    var live <- [for (k in links); k; where k != key && key_exists(cache.entries, k)]
+    live |> push(key)
+    delete links
+    links <- live
+}
+
+//! the rows of `prompt` from `at` on that the page under `key` opens with, short of the prompt's last token; 0 for a
+//! key the cache does not hold
+def private shared_rows(cache : PrefixCache; key : uint64; prompt : array<int64>; at : int64) : int64 {
+    return 0l if (key == 0ul || !key_exists(cache.entries, key))
+    let e = unsafe(cache.entries?[key])
+    let np = long_length(prompt)
+    var rows = 0l
+    while (rows < long_length(e.tokens) && at + rows < np - 1l && e.tokens[rows] == prompt[at + rows]) {
+        rows ++
+    }
+    return rows
+}
+
 //! Attach the longest cached prefix of ``prompt`` to a FRESH paged session of ``pool``, copying matched
 //! groups into the block table and setting ``n_past`` accordingly; returns the matched count, capped
 //! at one token short of the prompt so the tail eval always produces sampling logits.
@@ -266,22 +288,27 @@ def prefix_attach_(var cache : PrefixCache; var pool : KVPool; var s : Session; 
         matched += pr
         cache.n_hit_pages ++
     }
-    if (matched > 0l) {
-        let nk = cache.entries[hit_hash].next
-        if (nk != 0ul && key_exists(cache.entries, nk)) {
-            var e = unsafe(cache.entries?[nk])
-            var rows = 0l
-            while (e != null && rows < long_length(e.tokens) && matched + rows < np - 1l && e.tokens[rows] == prompt[matched + rows]) {
-                rows ++
-            }
-            if (rows > 0l) {
-                cache.tick ++
-                e.last_use = cache.tick
-                s.block_table |> push(kv_pool_copy_group(pool, e.group))
-                matched += rows
-                cache.n_hit_partial ++
-            }
+    // the page past the whole hits: of the pages that followed the last hit - the first pages when there is none -
+    // the one that shares the most leading rows with the prompt
+    var take = 0ul
+    var rows = 0l
+    for (key in matched > 0l ? cache.entries[hit_hash].nexts : cache.roots) {
+        let opens = shared_rows(cache, key, prompt, matched)
+        if (opens > rows) {
+            rows = opens
+            take = key
         }
+    }
+    if (rows > 0l) {
+        var e = unsafe(cache.entries?[take])
+        cache.tick ++
+        e.last_use = cache.tick
+        if (hit_chain == 0l) {
+            hit_chain = e.chain
+        }
+        s.block_table |> push(kv_pool_copy_group(pool, e.group))
+        matched += rows
+        cache.n_hit_partial ++
     }
     if (hit_chain != 0l) {
         var c = unsafe(cache.chains?[hit_chain])
@@ -310,6 +337,10 @@ def private prefix_evict_lru(var cache : PrefixCache; var pool : KVPool) {
     kv_pool_release_group(pool, cache.entries[lru_key].group)
     delete cache.entries[lru_key]   // erase is a raw remove — finalize the owned tokens first
     cache.entries |> erase(lru_key)
+    let root_at = find_index(cache.roots, lru_key)
+    if (root_at >= 0) {
+        cache.roots |> erase(root_at)
+    }
     cache.n_evicted_pages ++
     if (ch != 0l) {
         var c = unsafe(cache.chains?[ch])
@@ -363,9 +394,12 @@ def prefix_insert_(var cache : PrefixCache; var pool : KVPool; var s : Session; 
             cache.n_insert_pages ++
             cache.chains[chain_id].pages_live ++
             cache.chains[chain_id].n_tokens += hi - lo   // NEW pages only — a partially-cached donation must not over-report
+            if (i == 0l) {
+                link_page(cache, cache.roots, h)
+            }
         }
-        if (prev != 0ul && cache.entries[prev].next == 0ul) {
-            cache.entries[prev].next = h
+        if (prev != 0ul) {
+            link_page(cache, cache.entries[prev].nexts, h)
         }
         prev = h
     }
@@ -384,6 +418,7 @@ def prefix_release_(var cache : PrefixCache; var pool : KVPool) {
     }
     delete cache.entries
     delete cache.chains
+    delete cache.roots
     while (!empty(cache.states)) {
         prefix_state_drop(cache, pool, length(cache.states) - 1)
     }

@@ -111,7 +111,7 @@ def test_prefix_lru_budget(t : T?) {
 
 [test]
 def test_prefix_tail_edges(t : T?) {
-    t |> run("the page past the whole hits: a prompt sharing none of its rows copies nothing, the link stays the first donation's, a partial take is an LRU touch") @(t : T?) {
+    t |> run("the page past the whole hits: a prompt sharing none of its rows copies nothing, each donation's page past the hit is a candidate, a partial take is an LRU touch") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 32l)
         var pool <- create_kv_pool_(c, 4l, KVDtype.f32, KVDtype.f32)
         var cache <- create_prefix_cache_()
@@ -127,7 +127,7 @@ def test_prefix_tail_edges(t : T?) {
         kv_ensure(sb, 12l)
         sb.n_past = 12l
         var tb <- [for (i in range64(12l)); i < 4l ? 100l + i : 700l + i]
-        prefix_insert_(cache, pool, sb, tb)   // A0 again, then B1 B2: A0's link stays A1's
+        prefix_insert_(cache, pool, sb, tb)   // A0 again, then B1 B2: A0 links A1 and B1
         let gb1 = sb.block_table[1]
         release_kv_pages_(sb)
         t |> equal(5l, prefix_held_groups_(cache))
@@ -137,12 +137,20 @@ def test_prefix_tail_edges(t : T?) {
         t |> equal(4l, prefix_attach_(cache, pool, w0, none))
         t |> equal(1, length(w0.block_table), "a page sharing no row is not copied")
         t |> equal(0l, cache.n_hit_partial)
-        // one whole hit, then two rows of A1 - the first donation's page past A0, not B1's
+        // one whole hit, then two rows of A1 - of the two pages past A0, the one the prompt shares rows with
         var two <- [100l, 101l, 102l, 103l, 104l, 105l, 999l, 998l]
         var w1 <- make_run_state_paged(c, pool)
-        t |> equal(6l, prefix_attach_(cache, pool, w1, two), "the link past A0 is the first donation's page, whose two rows the prompt shares")
+        t |> equal(6l, prefix_attach_(cache, pool, w1, two), "A1 follows A0 and the prompt shares its two rows")
         t |> equal(1l, cache.n_hit_partial)
         t |> success(w1.block_table[1] != ga1 && w1.block_table[1] != gb1, "the partly shared page is a copy")
+        // the same hit, then three rows of B1: the second donation's page past A0 serves a prompt that follows it
+        var like_b <- [100l, 101l, 102l, 103l, 704l, 705l, 706l, 999l, 998l]
+        var w2 <- make_run_state_paged(c, pool)
+        t |> equal(7l, prefix_attach_(cache, pool, w2, like_b), "B1 follows A0 too, and the prompt shares three of its rows")
+        t |> success(w2.block_table[1] != ga1 && w2.block_table[1] != gb1, "and its page is a copy as well")
+        release_kv_pages_(w2)
+        delete w2
+        delete like_b
         // the partial take touched A1: with room for five of the six pages a sixth donation evicts A2, the one left untouched
         cache.max_groups = 5l
         var sc <- make_run_state_paged(c, pool)
@@ -154,6 +162,14 @@ def test_prefix_tail_edges(t : T?) {
         t |> equal(1l, cache.n_evicted_pages)
         t |> equal(1, pool.refcnt[ga1], "A1, touched by the partial take, stays held by the cache")
         t |> equal(0, pool.refcnt[ga2], "A2, untouched since its donation, is the page evicted")
+        // A1 still links A2, whose page the cache dropped: a prompt running on into it stops at the two whole pages
+        var into_gone <- [for (i in range64(11l)); 100l + i]
+        var w3 <- make_run_state_paged(c, pool)
+        t |> equal(8l, prefix_attach_(cache, pool, w3, into_gone), "a link to a dropped page attaches nothing past the whole hits")
+        t |> equal(2, length(w3.block_table))
+        release_kv_pages_(w3)
+        delete w3
+        delete into_gone
         release_kv_pages_(w0)
         release_kv_pages_(w1)
         prefix_release_(cache, pool)
@@ -165,6 +181,80 @@ def test_prefix_tail_edges(t : T?) {
         delete two
         delete w0
         delete w1
+        delete sa
+        delete sb
+        delete sc
+        delete cache
+        delete pool
+    }
+}
+
+[test]
+def test_prefix_first_page_edges(t : T?) {
+    t |> run("no whole hit: the first page sharing the most leading rows is copied, a prompt sharing none takes nothing, an evicted first page is no candidate") @(t : T?) {
+        let c = mk_config(2l, 4l, 2l, 16l, 32l)
+        var pool <- create_kv_pool_(c, 4l, KVDtype.f32, KVDtype.f32)
+        var cache <- create_prefix_cache_()
+        var sa <- make_run_state_paged(c, pool)
+        kv_ensure(sa, 3l)
+        sa.n_past = 3l
+        var ta <- [100l, 101l, 102l]
+        prefix_insert_(cache, pool, sa, ta)   // a first page of three rows
+        let ga = sa.block_table[0]
+        release_kv_pages_(sa)
+        var sb <- make_run_state_paged(c, pool)
+        kv_ensure(sb, 8l)
+        sb.n_past = 8l
+        var tb <- [for (i in range64(8l)); i < 2l ? 100l + i : 500l + i]
+        prefix_insert_(cache, pool, sb, tb)   // a whole first page opening on the same two tokens, and a second page
+        let gb = sb.block_table[0]
+        release_kv_pages_(sb)
+        t |> equal(2, length(cache.roots), "each donation's first page is a candidate")
+        var like_a <- [100l, 101l, 102l, 900l, 901l]
+        var w0 <- make_run_state_paged(c, pool)
+        t |> equal(3l, prefix_attach_(cache, pool, w0, like_a), "three rows of A's page beat two of B's")
+        var chains <- prefix_chain_list_(cache)
+        t |> equal(1l, [for (ch in chains); ch.hits] |> sum(), "the chain whose first page was copied is credited the hit")
+        delete chains
+        t |> success(length(w0.block_table) == 1 && w0.block_table[0] != ga && w0.block_table[0] != gb, "the page is a copy")
+        var like_b <- [100l, 101l, 502l, 900l, 901l]
+        var w1 <- make_run_state_paged(c, pool)
+        t |> equal(3l, prefix_attach_(cache, pool, w1, like_b), "three leading rows of B's whole page")
+        var same_a <- [100l, 101l, 102l]
+        var w2 <- make_run_state_paged(c, pool)
+        t |> equal(2l, prefix_attach_(cache, pool, w2, same_a), "the same prompt again stops a token short, so the tail eval lands logits")
+        var none <- [777l, 100l, 101l]
+        var w3 <- make_run_state_paged(c, pool)
+        t |> equal(0l, prefix_attach_(cache, pool, w3, none))
+        t |> success(empty(w3.block_table), "a prompt sharing no first row takes no page")
+        t |> equal(3l, cache.n_hit_partial)
+        // B's two pages were touched after A's: a budget of two pages evicts A's first page, and its candidate with it
+        cache.tick ++
+        cache.entries[cache.roots[1]].last_use = cache.tick
+        cache.max_groups = 2l
+        var sc <- make_run_state_paged(c, pool)
+        kv_ensure(sc, 1l)
+        sc.n_past = 1l
+        var tc <- [300l]
+        prefix_insert_(cache, pool, sc, tc)
+        release_kv_pages_(sc)
+        t |> success(find_index(cache.roots, 0ul) < 0 && length(cache.roots) == length([for (k in cache.roots); k; where key_exists(cache.entries, k)]), "every candidate is a held page: {cache.roots}")
+        for (w in [w0, w1, w2, w3]) {
+            release_kv_pages_(w)
+        }
+        prefix_release_(cache, pool)
+        t |> equal(long_length(pool.free_groups), pool.capacity_groups, "every page is back in the pool")
+        delete ta
+        delete tb
+        delete tc
+        delete like_a
+        delete like_b
+        delete same_a
+        delete none
+        delete w0
+        delete w1
+        delete w2
+        delete w3
         delete sa
         delete sb
         delete sc
@@ -575,6 +665,7 @@ def private attach_as_cold(t : T?; tr : Model; var cache : PrefixCache; var pool
     t |> success(warm.block_table[length(warm.block_table) - 1] != donor_page, "{what}: the partly shared page is a copy, not the donor's")
     var rest <- [for (j in range64(rows, long_length(prompt))); prompt[j]]
     eval_(tr, warm, rest)
+    to_log(LOG_INFO, "{what}: argmax {argmax_of(warm.logits)} after the attach, {argmax_of(cold.logits)} cold, {mismatch_exact(warm.logits, cold.logits)} of {length(cold.logits)} logits differ\n")
     t |> equal(0, mismatch_exact(warm.logits, cold.logits), "{what}: the logits are the cold prefill's")
     release_kv_pages_(warm)
     release_kv_pages_(cold)
@@ -610,6 +701,7 @@ def test_prefix_tail_copy(t : T?) {
             prefix_insert_(cache, pool, donor, history)
             let tail_group = donor.block_table[3]
             let page2_group = donor.block_table[2]
+            let page0_group = donor.block_table[0]
             t |> equal(4l, cache.n_insert_pages, "the donation's partial page is an entry beside its three whole ones")
             release_kv_pages_(donor)
             t |> equal(1, pool.refcnt[tail_group], "the cache alone holds the tail page")
@@ -622,6 +714,10 @@ def test_prefix_tail_copy(t : T?) {
             var inner <- [for (i in range64(24l)); i < 20l ? history[i] : 9l + i]
             attach_as_cold(t, tr, cache, pool, inner, 20l, page2_group, "two whole pages and four rows of the third")
             t |> equal(3l, cache.n_hit_partial, "three partial takes")
+            var opening <- [for (i in range64(12l)); i < 5l ? history[i] : 11l + i]
+            attach_as_cold(t, tr, cache, pool, opening, 5l, page0_group, "five rows of the first page, no whole page shared")
+            t |> equal(4l, cache.n_hit_partial, "the first page was copied for its leading rows")
+            delete opening
             prefix_release_(cache, pool)
             t |> equal(long_length(pool.free_groups), pool.capacity_groups, "every page is back in the pool")
             delete inner

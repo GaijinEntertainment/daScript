@@ -4,6 +4,7 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require dastest/testing_boost public
+require _openai_live
 require openai/openai_chat
 require strings
 require daslib/fio
@@ -66,6 +67,7 @@ def test_chat_response_decode(t : T?) {
 [test]
 def test_chat_live_ollama(t : T?) {
     t |> run("live chat against Ollama") @(t : T?) {
+        return if (!live_server(t, "http://localhost:11434/v1"))
         let client = openai_client("http://localhost:11434/v1")
         let req = ChatCompletionRequest(
             model = "hf.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF:Q4_K_M",
@@ -83,10 +85,7 @@ def test_chat_live_ollama(t : T?) {
 [test]
 def test_chat_live_openrouter(t : T?) {
     t |> run("live chat against OpenRouter (validates Bearer auth)") @(t : T?) {
-        if (!has_env_variable("OPENROUTER_API_KEY")) {
-            t |> success(true, "OPENROUTER_API_KEY not set - skipped")
-            return
-        }
+        return if (!live_key(t, "OPENROUTER_API_KEY"))
         let client = openai_client("https://openrouter.ai/api/v1", get_env_variable("OPENROUTER_API_KEY"))
         let req = ChatCompletionRequest(
             model = "liquid/lfm-2.5-1.2b-instruct:free",

@@ -26,18 +26,21 @@ anchor.
 
 The page cache shares the whole pages a prompt matches and COPIES the one page after them for the
 leading rows the prompt shares with it. `prefix_insert_` enters a donation's pages whole and its last
-page partial (keyed by the hash of the history each closes), and links each entry to the page that
-followed it in the first donation to continue past it (`PrefixEntry.next`). `prefix_attach_` walks
-the whole pages by hash, then follows the last hit's link and counts the rows that page shares with
-the prompt, short of the prompt's last token; the taker gets `kv_pool_copy_group` of it and writes
+page partial (keyed by the hash of the history each closes), and links each entry to the pages that
+followed it, a donation each (`PrefixEntry.nexts`). `prefix_attach_` walks the whole pages by hash,
+then takes, of the pages linked past the last hit, the one sharing the most leading rows with the
+prompt, short of the prompt's last token; the taker gets `kv_pool_copy_group` of it and writes
 the page's remaining rows itself, the donor's page staying the cache's hold alone. A conversation's
 next turn therefore attaches all of the history it repeats, not its whole pages - the served turn's
 shape is a reply that filled the page the prompt ends in: with 64-row pages a turn prefilled 57 to 76
 tokens through a 128-expert MoE where the reference prefilled the turn's own 19, and that was the
-one served row it led (`PERF_LEDGER.md`, the qwen ladder). The link is weak: an evicted page's key
-misses and the attach stops at the whole pages; a page reaching nothing cached past it attaches
-nothing partial. The link hangs off a matched page, so a prompt that shares less than one whole
-page with the cache attaches nothing - the rows at stake are under a page.
+one served row it led (`PERF_LEDGER.md`, the qwen ladder). A link is weak: an evicted page's key
+misses, and a page reaching nothing cached past it attaches nothing partial. A prompt no whole
+page serves reads the same kind of list off the cache itself - the key of every donation's first
+page (`PrefixCache.roots`) - and copies the first page it shares the most leading rows with. The
+match is therefore the longest common prefix of the prompt and a cached history at any length - a
+request that repeats an earlier one's opening and changes a word reuses the rows before the word,
+under a page or past it.
 
 ### The prefix cache on a recurrent model {#prefix-recurrent-checkpoints}
 

@@ -39,23 +39,7 @@ def private with_audio_server(port : int; blk : block<(base_url : string) : void
             run_server(port)   // blocks until POST /shutdown
             finished |> notify_and_release
         }
-        let base_url = "http://127.0.0.1:{port}"
-        var ready = false
-        for (_attempt in range(1200)) {   // up to ~120s: the load + both towers + JIT
-            GET("{base_url}/v1/models") $(resp) {
-                if (resp != null && resp.status_code == http_status.OK) {
-                    ready = true
-                }
-            }
-            if (ready) {
-                break
-            }
-            sleep(100u)
-        }
-        if (ready) {
-            invoke(blk, base_url)
-        }
-        POST("{base_url}/shutdown", "") $(_resp) {}
+        let ready = serve_clients(port, 1200, "/v1/models", blk)   // up to ~120s: the load + both towers + JIT
         finished |> join
         assert(ready, "dasllama audio server became ready")
     }

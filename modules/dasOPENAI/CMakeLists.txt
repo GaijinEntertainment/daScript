@@ -17,4 +17,10 @@ IF ((NOT DAS_OPENAI_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasOPENAI/.das_module
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasOPENAI
     )
+
+    # The client's own tests: the wire shapes, and the stream reader against an in-process mock. A cell that
+    # talks to a server this repo does not start (Ollama, a speech server, OpenRouter) skips without it.
+    if(NOT DAS_TOOLS_DISABLED)
+        das_lane_dastest_target(run_tests_dasopenai COMMENT "Testing dasOPENAI" FILES modules/dasOPENAI/tests)
+    endif()
 ENDIF()

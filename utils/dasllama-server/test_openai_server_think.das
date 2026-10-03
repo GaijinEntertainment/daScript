@@ -50,23 +50,7 @@ def private with_think_server(t : T?; model_path : string; port : int; ready_s :
             run_server(port)   // blocks (with_job_que + tick loop) until POST /shutdown
             finished |> notify_and_release
         }
-        let base_url = "http://127.0.0.1:{port}"
-        var ready = false
-        for (_attempt in range(ready_s * 10)) {
-            GET("{base_url}/v1/models") $(resp) {
-                if (resp != null && resp.status_code == http_status.OK) {
-                    ready = true
-                }
-            }
-            if (ready) {
-                break
-            }
-            sleep(100u)
-        }
-        if (ready) {
-            invoke(blk, base_url)
-        }
-        POST("{base_url}/shutdown", "") $(_resp) {}
+        let ready = serve_clients(port, ready_s * 10, "/v1/models", blk)
         finished |> join
         t |> success(ready, "dasllama server became ready")
     }

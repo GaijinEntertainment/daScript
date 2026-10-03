@@ -325,7 +325,7 @@ def document_module_openai(_root : string) {
         group_by_regex("Audio (TTS and STT)", mod, %regex~(speech|speak|transcribe|translate)$%%),
         group_by_regex("Moderations", mod, %regex~(moderations)$%%),
         group_by_regex("Image generation", mod, %regex~(generate_image)$%%),
-        group_by_regex("Vision", mod, %regex~(chat_vision|vision_request_body)$%%)
+        group_by_regex("Vision", mod, %regex~(chat_vision|vision_request_body|image_file_data_uri)$%%)
     )
     documents("OpenAI-compatible API client (chat, embeddings, audio, vision, ...)", mod, "openai.rst", groups)
 }
@@ -1740,7 +1740,7 @@ def document_module_audio_boost(_root : string) {
 def document_module_audio_wav(_root : string) {
     var mod = find_module("audio_wav")
     var groups <- array<DocGroup>(
-        group_by_regex("WAV I/O", mod, %regex~(read_wav|write_wav)$%%)
+        group_by_regex("WAV I/O", mod, %regex~(read_wav|decode_wav|write_wav)$%%)
     )
     document("WAV file reading and writing", mod, "audio_wav.rst", groups)
 }

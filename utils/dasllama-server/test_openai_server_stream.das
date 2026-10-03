@@ -5,6 +5,7 @@ options fast_math = true  // ggml-parity FP laxity — this is an inference tool
 options _dasllama_internal = true
 
 require dastest/testing_boost public
+require _server_rig                                     // serve_clients (sibling)
 require openai_server                                   // the scheduler-wired server (sibling — bare require, hyphenated dir)
 require dasllama/dasllama                               // load_model / QuantMode
 require daslib/jobque_boost                             // with_job_status / with_channel (threads + results)
@@ -13,7 +14,6 @@ require daslib/strings_boost                            // split / trim_prefix
 require daslib/fio                                      // get_env_variable / stat / path_join / sleep
 require strings                                         // starts_with / build_string
 require math                                            // min
-require dasllama/dasllama_env
 
 // S3/S4 conformance for the continuous-batching server wiring: SSE chunk framing on a streaming
 // chat, the mandatory 400 on a prompt that cannot fit the context (the scheduler would panic), two
@@ -26,9 +26,6 @@ require dasllama/dasllama_env
 let TEST_PORT = 18105   // 18099 + 2 = 18101 is test_openai_server.das's; 18097-18147 and 18150-18156 belong to the sibling suites
 let TEST_CTX = 1024l   // big enough that the eviction arm's 900-token budget outlasts a 1s client timeout
 
-def private models_dir() : string {
-    return models_dir_resolved()   // the ONE resolution: DASLLAMA_MODELS_DIR, else the rig default
-}
 let MODEL_PATH = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
 
 def private model_missing(t : T?) : bool {
@@ -55,23 +52,7 @@ def private with_stream_server(t : T?; model_path : string; port : int; blk : bl
             run_server(port)
             finished |> notify_and_release
         }
-        let base_url = "http://127.0.0.1:{port}"
-        var ready = false
-        for (_attempt in range(300)) {   // up to ~30s for load + JIT
-            GET("{base_url}/v1/models") $(resp) {
-                if (resp != null && resp.status_code == http_status.OK) {
-                    ready = true
-                }
-            }
-            if (ready) {
-                break
-            }
-            sleep(100u)
-        }
-        if (ready) {
-            invoke(blk, base_url)
-        }
-        POST("{base_url}/shutdown", "") $(_resp) {}
+        let ready = serve_clients(port, 300, "/v1/models", blk)   // up to ~30s for load + JIT
         finished |> join
         t |> success(ready, "dasllama server became ready")
     }

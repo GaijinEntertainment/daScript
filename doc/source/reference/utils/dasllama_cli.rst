@@ -345,7 +345,8 @@ The ``dasllama-server.toml`` in the current directory, else in
 ``~/.dasllama`` (where the server's control page saves it), else beside the
 program - the server's own lookup - fills whatever the flags leave empty: the model (a ``[[models]]``
 roster's default entry included), its ``image_mmproj``, the ``asr`` and
-``mmproj`` pair, the ``tts`` model and its lane, ``gpu`` and the Vulkan detail
+``mmproj`` pair, the ``tts`` model and its lane (an ``[[asr]]`` / ``[[tts]]``
+roster's first table), ``gpu`` and the Vulkan detail
 keys, ``threads``, ``ctx``, ``models_dir``. On a box the server's setup page
 configured, ``dasllama-cli chat`` with no flags talks to the served model on
 the served backend. Explicit flags win; ``--config`` names another file.

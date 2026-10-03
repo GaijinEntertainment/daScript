@@ -232,27 +232,27 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--asr``
      - ``-a``
      - ---
-     - ASR model (whisper / parakeet / qwen3-asr) --- enables the ``/v1/audio/*`` routes
+     - ASR model (whisper / parakeet / qwen3-asr) --- enables the ``/v1/audio/*`` routes. Repeatable: each model serves under its file's stem, the first is the default (``--mmproj`` and ``--asr-workers`` are the first one's); the config's ``[[asr]]`` tables give each model its own ``id``, ``mmproj`` and ``workers``
    * - ``--asr-workers``
      -
      - ``1``
-     - Long-lived ASR request threads; each owns a model and a reusable session. ``2`` permits two parallel transcriptions
+     - Long-lived ASR request threads; each owns a model and a reusable session. ``2`` permits two parallel transcriptions. With several ASR models, the first one's
    * - ``--mmproj``
      -
      - ---
-     - mmproj GGUF for the Qwen3-ASR route (paired with ``--asr``)
+     - mmproj GGUF for the Qwen3-ASR route (paired with ``--asr``; with several ASR models, the first one's)
    * - ``--tts``
      -
      - ---
-     - TTS model GGUF (kitten-nano, kitten-mini, kokoro-82m with the front-end packs ``tts_g2p.bin`` + ``tts_postag.bin`` beside them; or a ``pocket-tts-<lang>-q8`` file, which reads text, needs no pack and clones a voice) --- enables ``/v1/audio/speech``
+     - TTS model GGUF (kitten-nano, kitten-mini, kokoro-82m with the front-end packs ``tts_g2p.bin`` + ``tts_postag.bin`` beside them; or a ``pocket-tts-<lang>-q8`` file, which reads text, needs no pack and clones a voice) --- enables ``/v1/audio/speech``. Repeatable: each model serves under its file's stem, the first is the default (``--tts-lane`` and ``--tts-voices-dir`` are the first one's); the config's ``[[tts]]`` tables give each model its own ``id``, ``lane`` and ``voices_dir``
    * - ``--tts-lane``
      -
      - ``q8``
-     - Weight lane the speech worker pins around its load: ``q8`` (the prepared quant image beside the GGUF) or ``f32`` (the file's own planes). An unknown spelling warns and serves ``q8``
+     - Weight lane the speech worker pins around its load: ``q8`` (the prepared quant image beside the GGUF) or ``f32`` (the file's own planes). An unknown spelling warns and serves ``q8``. With several TTS models, the first one's
    * - ``--tts-voices-dir``
      -
      - ---
-     - Directory of voice clips (wav / flac / mp3 / ogg, a few seconds of one speaker each, 60 s at most) a cloning speech model adds to its voices at boot, each under its file's stem; a clip that does not decode or runs past 60 s is logged and skipped, the key on a model that cannot clone is logged and ignored
+     - Directory of voice clips (wav / flac / mp3 / ogg, a few seconds of one speaker each, 60 s at most) a cloning speech model adds to its voices at boot (with several TTS models, the first one's), each under its file's stem; a clip that does not decode or runs past 60 s is logged and skipped, the key on a model that cannot clone is logged and ignored
    * - ``--image-mmproj``
      -
      - ---
@@ -351,6 +351,35 @@ picks a different one:
    threads = 16       # matmul dispatch lane cap; -1 = all cores
    team_dispatch = "hybrid"
    asr_workers = 2    # two independent transcription requests; each worker owns an ASR model
+
+Several speech models serve side by side, each on worker threads of its own, so
+a request to one never waits behind another. ``asr`` and ``tts`` are then
+rosters instead of paths --- a table a model, the first the default (the model a
+request with no ``model`` field gets):
+
+.. code-block:: toml
+
+   [[asr]]
+   path = "models/parakeet-tdt-0.6b-v3.bin"
+
+   [[asr]]
+   id = "qwen-asr"                              # the id requests name; default: the file's stem
+   path = "models/Qwen3-ASR-1.7B-Q8_0.gguf"
+   mmproj = "models/mmproj-Qwen3-ASR-1.7B-bf16.gguf"
+   workers = 2
+
+   [[tts]]
+   path = "models/kokoro-82m.gguf"
+
+   [[tts]]
+   path = "models/pocket-tts-en-q8.gguf"
+   voices_dir = "voices"
+   lane = "q8"
+
+With a roster, the flat ``mmproj`` / ``asr_workers`` / ``tts_lane`` /
+``tts_voices_dir`` config keys are not read --- each table carries its own ---
+while the same flag on the command line overrides the first table's value. Two models
+may not share an id: the second is logged and left out.
 
 Config precedence is ``defaults < config TOML < explicit CLI flags`` - unless
 the TOML carries ``authoritative = true`` (what the control page saves), which
@@ -510,7 +539,7 @@ Endpoints
      - The control page (``control.html`` beside the server): live stats and charts, the models panel (per-slot cards with state and GPU badges, prefix hit rate, activate buttons), the stream swimlane, a chat panel (every sampling knob, thinking inline, mic input, a speaker button under ``--tts``), a speech studio, the config editor with the ``[[models]]`` roster and save/restart, GC and drain buttons. Polls ``/v1/stats`` and ``/v1/streams`` at 1 Hz
    * - ``GET``
      - ``/v1/models``
-     - Lists every served slot, plus the ``--asr`` and ``--tts`` models when loaded; requests route on these ids through their ``"model"`` field
+     - Lists every served slot, every TTS model under its id, and the ASR models: the default one as ``<default slot>-asr`` beside an LLM, and each under its own id when several serve or no LLM does; requests route on these ids through their ``"model"`` field
    * - ``POST``
      - ``/v1/models/activate``
      - ``{"model": name}`` --- make ``name`` the default + stepped slot and move the GPU tier to it now (loopback-only; 409 while work is live)
@@ -531,16 +560,16 @@ Endpoints
      - Mean-pooled, L2-normalized sentence embeddings
    * - ``POST``
      - ``/v1/audio/transcriptions``
-     - Speech to text (multipart upload; needs ``--asr``); ``response_format=verbose_json`` adds timed segments
+     - Speech to text (multipart upload; needs ``--asr``). One ASR model takes every request, whatever ``model`` says; with several, ``model`` names one by its id (none, or the ``<default slot>-asr`` id: the first; any other name: 404); ``language`` defaults to English, and to detection on a model that only detects. ``response_format=verbose_json`` adds timed segments
    * - ``POST``
      - ``/v1/audio/translations``
-     - Speech to English text (needs ``--asr``)
+     - Speech to English text (needs ``--asr``); ``model`` and ``language`` are read as the transcription route reads them
    * - ``POST``
      - ``/v1/audio/speech``
-     - Text to speech (needs ``--tts``): ``{"input", "voice"?, "speed"?, "response_format"?}``; ``wav`` (default) is 16-bit PCM at the model's rate, ``pcm`` the raw samples, the compressed formats answer 400. One synthesis at a time, 16 queued
+     - Text to speech (needs ``--tts``): ``{"model"?, "input", "voice"?, "speed"?, "response_format"?}``; ``model`` names the TTS model (none: the first; an id no model serves: 404), ``wav`` (default) is 16-bit PCM at the model's rate, ``pcm`` the raw samples, the compressed formats answer 400. One synthesis at a time a model, 16 queued
    * - ``POST``
      - ``/v1/audio/phonemes``
-     - ``{"input", "voice"?}`` gives the normalized text, the dialect the voice speaks (``lang``) and, per chunk a synthesis would take, its phoneme string --- empty for a text-reading model such as Pocket (needs ``--tts``)
+     - ``{"model"?, "input", "voice"?}`` (``model`` as the speech route reads it) gives the normalized text, the dialect the voice speaks (``lang``) and, per chunk a synthesis would take, its phoneme string --- empty for a text-reading model such as Pocket (needs ``--tts``)
    * - ``GET``
      - ``/v1/stats``
      - Scheduler counters (``gen_tokens``, ``prefill_tokens``, TTFT, ``mtp_drafted`` / ``mtp_accepted``, the media counters), memory footprint, the hardware line, the ASR and speech worker state, the ``tts`` block while a speech model is configured, ``gpu_cpu_passes``, and ``models[]`` --- one entry per slot with ``served``, ``served_note``, the towers it loaded and its cache counters
