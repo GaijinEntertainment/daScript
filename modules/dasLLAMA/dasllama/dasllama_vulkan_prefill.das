@@ -595,9 +595,7 @@ def private pf_moe_router(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
 def private pf_host_cut(var raw : VkCommandBuffer&; var next : VkCommandBuffer; var h : VkHaz; l, wlen, row0 : int64; experts : RdecHostExpertsRowsFn) {
     let dim = g_rd.dim
-    vhz_dep(raw, h, VHZ_XB | VHZ_MRT, 0u, true)
-    cmd_copy_whole(raw, g_rd.pf_xb, g_rd.pf_hx_host.buf, wlen * dim * 4l)
-    cmd_copy_whole(raw, g_rd.pf_mlog, g_rd.pf_hlog_host.buf, wlen * g_rd.ner * 4l)
+    host_land(raw, h, g_rd.pf_xb, g_rd.pf_hx_host, g_rd.pf_mlog, g_rd.pf_hlog_host, wlen)
     cmd_close(raw)
     submit_wait(raw)
     unsafe {

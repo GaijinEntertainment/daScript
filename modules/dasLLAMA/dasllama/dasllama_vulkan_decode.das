@@ -1683,16 +1683,13 @@ def private rd_encode_routed_sum(raw : VkCommandBuffer; var h : VkHaz; l : int64
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
 def private rd_encode_host_cut(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; nrows : int64; stamp : string) {
-    let dim = g_rd.dim
-    var pcr = RouterArgs(ne = uint(g_rd.ner), dim = uint(dim), woff = uint(L.router_slot * g_rd.ner * dim), obase = 0u,
+    var pcr = RouterArgs(ne = uint(g_rd.ner), dim = uint(g_rd.dim), woff = uint(L.router_slot * g_rd.ner * g_rd.dim), obase = 0u,
         norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ncols = uint(nrows))
     enc_router_gemv_cls(raw, h, L.s_router, pcr, g_rd.ner)
     if (!empty(stamp)) {
         rd_ts(raw, stamp)
     }
-    vhz_dep(raw, h, VHZ_XB | VHZ_MRT, 0u, true)
-    cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hx_host.buf, dim * 4l * nrows)
-    cmd_copy_whole(raw, g_rd.moe_dlog_dev, g_rd.hlog_host.buf, g_rd.ner * 4l * nrows)
+    host_land(raw, h, g_rd.xb_dev, g_rd.hx_host, g_rd.moe_dlog_dev, g_rd.hlog_host, nrows)
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool")]

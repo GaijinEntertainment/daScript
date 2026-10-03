@@ -3767,6 +3767,13 @@ def readback_range(dev : uint64; bits : uint; off : int64; hb : HostBuf; var dst
     host_buf_read(hb, unsafe(reinterpret<void?>(dst)), bytes)
 }
 
+//! a host cut's landing: `rows` x rows from `xsrc` and their router logits from `logsrc` into the host buffers the host's routed sum reads
+def host_land(raw : VkCommandBuffer; var h : VkHaz; xsrc : uint64; xhost : HostBuf; logsrc : uint64; loghost : HostBuf; rows : int64) {
+    vhz_dep(raw, h, VHZ_XB | VHZ_MRT, 0u, true)
+    cmd_copy_whole(raw, xsrc, xhost.buf, g_rd.dim * 4l * rows)
+    cmd_copy_whole(raw, logsrc, loghost.buf, g_rd.ner * 4l * rows)
+}
+
 //! `bytes` of a host buffer's mapped memory from byte `off` copied to `dst`
 def host_buf_read(hb : HostBuf; var dst : void?; bytes : int64; off : int64 = 0l) {
     unsafe {
