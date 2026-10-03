@@ -292,15 +292,35 @@ def private pf_dn_zero_region(raw : VkCommandBuffer; var h : VkHaz) {
     }
 }
 
+def private dn_window_enc(raw : VkCommandBuffer; var h : VkHaz; var conv_set, scan_set, p3_set : VkDescriptorSet; rows, cd, kd, nvh, nkh, ds, di, dconv : int64;
+                          hist_mode, hist_off, state_base : uint; sig : bool; eps : float) {
+    var pcc = DnConvArgs(npos = uint(rows), cd = uint(cd), kd = uint(kd), ds = uint(ds), dconv = uint(dconv),
+        hist_mode = hist_mode, taps_off = uint(DN_SM_TAPS), hist_off = hist_off,
+        eps = eps, qscale = 1.0 / sqrt(float(ds)))
+    enc_dn_conv_cls(raw, h, conv_set, pcc, dn_conv_wgs(cd, rows))
+    pfq_ts(raw)
+    var pcs = DnScanArgs(npos = uint(rows), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
+        beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G), a_off = uint(DN_SM_A), dt_off = uint(DN_SM_DT),
+        o_off = uint(DN_O_OFF), di = uint(di), region_state_base = state_base)
+    enc_dn_scan_cls(raw, h, scan_set, pcs, dn_scan_wgs(nvh, ds))
+    pfq_ts(raw)
+    var pc3 = DnScanP3Args(npos = uint(rows), nvh = uint(nvh), di = uint(di), ds = uint(ds), o_off = uint(DN_O_OFF),
+        wnorm_off = uint(DN_SM_WNORM), eps = eps)
+    if (sig) {
+        enc_dn_scan_p3_sig_cls(raw, h, p3_set, pc3, rows)
+    } else {
+        enc_dn_scan_p3_cls(raw, h, p3_set, pc3, rows)
+    }
+    pfq_ts(raw)
+}
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : int; wlen : int64; last : bool) {
     var L & = unsafe(g_rd.layers[l])
     let dim = g_rd.dim
     let cd = g_rd.dn_cd
-    let kd = int(g_rd.dn_kd)
     let di = g_rd.dn_di
     let nvh = g_rd.dn_nvh
-    let nkh = int(g_rd.dn_nkh)
     let ds = g_rd.dn_ds
     let dconv = g_rd.dn_dconv
     let taps = dconv - 1l
@@ -350,24 +370,8 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
         vhz_dep(raw, h, VHZ_DNBG, VHZ_DNSM, true)
         cmd_copy_range(raw, g_rd.pf_dnbg, 0l, st.smalls_dev, DN_SM_G * 4l, wlen * nvh * 4l)
     }
-    var pcc = DnConvArgs(npos = uint(wlen), cd = uint(cd), kd = uint(kd), ds = uint(ds), dconv = uint(dconv),
-        hist_mode = 2u, taps_off = uint(DN_SM_TAPS), hist_off = hist_off,
-        eps = eps, qscale = 1.0 / sqrt(float(ds)))
-    enc_dn_conv_cls(raw, h, L.pf_dn_conv_set, pcc, dn_conv_wgs(cd, wlen))
-    pfq_ts(raw)
-    var pcs = DnScanArgs(npos = uint(wlen), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
-        beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G), a_off = uint(DN_SM_A), dt_off = uint(DN_SM_DT),
-        o_off = uint(DN_O_OFF), di = uint(di), region_state_base = uint(st.state_byte_off / 4l))
-    enc_dn_scan_cls(raw, h, L.pf_dn_scan_set, pcs, dn_scan_wgs(nvh, ds))
-    pfq_ts(raw)
-    var pc3 = DnScanP3Args(npos = uint(wlen), nvh = uint(nvh), di = uint(di), ds = uint(ds), o_off = uint(DN_O_OFF),
-        wnorm_off = uint(DN_SM_WNORM), eps = eps)
-    if (g_rd.dn_zsig) {
-        enc_dn_scan_p3_sig_cls(raw, h, L.pf_dn_scan_p3_set, pc3, wlen)
-    } else {
-        enc_dn_scan_p3_cls(raw, h, L.pf_dn_scan_p3_set, pc3, wlen)
-    }
-    pfq_ts(raw)
+    dn_window_enc(raw, h, L.pf_dn_conv_set, L.pf_dn_scan_set, L.pf_dn_scan_p3_set, wlen, cd, g_rd.dn_kd, nvh, g_rd.dn_nkh, ds, di, dconv,
+        2u, hist_off, uint(st.state_byte_off / 4l), g_rd.dn_zsig, eps)
     if (last) {
         // a window shorter than the taps is window 0 alone, whose history is zero: the ring's leading rows read as zero
         var pct = DnTailArgs(cd = uint(cd), taps = uint(taps), row0 = uint(max(wlen - taps, 0l)), hist_off = hist_off,
@@ -2813,20 +2817,8 @@ def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;
     stack_batch_enc(raw, h, s_qkv, nwg_qkv, dim, cd)
     stack_batch_enc(raw, h, s_z, nwg_z, dim, di)
     pfq_ts(raw)   // q2: qkv+z GEMMs
-    var pcc = DnConvArgs(npos = uint(rows), cd = uint(cd), kd = uint(kd), ds = uint(ds), dconv = uint(taps + 1l),
-        hist_mode = first ? 1u : 2u, taps_off = uint(DN_SM_TAPS), hist_off = uint(DN_SM_HIST),
-        eps = eps, qscale = 1.0 / sqrt(float(ds)))
-    enc_dn_conv_cls(raw, h, g_gpu.dn_conv_set, pcc, dn_conv_wgs(cd, rows))
-    pfq_ts(raw)   // q3: conv
-    var pcs = DnScanArgs(npos = uint(rows), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
-        beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G), a_off = uint(DN_SM_A), dt_off = uint(DN_SM_DT),
-        o_off = uint(DN_O_OFF), di = uint(di))
-    enc_dn_scan_cls(raw, h, g_gpu.dn_scan_set, pcs, dn_scan_wgs(nvh, ds))
-    pfq_ts(raw)   // q4: the scan
-    var pc3 = DnScanP3Args(npos = uint(rows), nvh = uint(nvh), di = uint(di), ds = uint(ds), o_off = uint(DN_O_OFF),
-        wnorm_off = uint(DN_SM_WNORM), eps = eps)
-    enc_dn_scan_p3_cls(raw, h, g_gpu.dn_scan_p3_set, pc3, rows)
-    pfq_ts(raw)   // q5: the out-norm
+    dn_window_enc(raw, h, g_gpu.dn_conv_set, g_gpu.dn_scan_set, g_gpu.dn_scan_p3_set, rows, cd, kd, nvh, nkh, ds, di, taps + 1l,
+        first ? 1u : 2u, uint(DN_SM_HIST), 0u, false, eps)   // q3 conv, q4 the scan, q5 the out-norm
     // conv-tail extraction: last `taps` RAW qkv rows out of y1 before out-proj reuses it
     if (!last) {
         vhz_dep(raw, h, VHB_Y1, VHB_SM, true)
