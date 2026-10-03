@@ -118,7 +118,7 @@ def private qk_rope_gate(t : T?; var dev, queue; hx, donorm, neox, partial : boo
         let bts = mc |> in_(ts)
         let bxh = hx ? (mc |> out_words(nrows * rstride, float16(-77.0))) : -1
         var ka = QkRopeArgs(rstride = uint(rstride), hs = uint(hs), eps = EPS,
-            donorm = donorm ? 1u : 0u, neox = neox || partial ? 1u : 0u, rot = uint(rot), nreal = uint(nreal))
+            donorm = donorm ? 1u : 0u, neox = neox || partial ? 1u : 0u, rot = uint(rot), nreal = uint(nreal), hscale = 1.0)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             if (hx) {
                 invoke(krh.enc, enc, pso, mc.buf[bx], 0ul, mc.buf[bw], mc.buf[btc], mc.buf[bts], ka, mc.buf[bxh], int64(nh), int64(nrows), int64(hs / 2))
@@ -1396,7 +1396,7 @@ def private st2_gather_gate(t : T?; var dev, queue) {
         var bidx = mc.buf[pidx]
         var bo = mc.buf[po]
         let run <- @(bax : MetalBuffer?; add_b, add_c : uint) : bool {
-            var ka = RowGatherArgs(c = uint(c), add_b = add_b, add_c = add_c, total = uint(nrows * c))
+            var ka = RowGatherArgs(c = uint(c), add_b = add_b, add_c = add_c, total = uint(nrows * c), scale = 1.0)
             return queue_record(t, queue, "{tag} add_b {add_b} add_c {add_c}") $(enc : MetalComputeEncoder?) {
                 stamp_run(st, pso) {
                     invoke(st.enc, enc, bax, 0ul, bidx, bb, 0ul, bcv, 0ul, bo, ka, int64(nrows * c))
@@ -2548,7 +2548,7 @@ def private tower_gather_gate(t : T?; var dev, queue) {
         let px = mc |> in_(xv)
         let ps = mc |> in_plain(src)
         let py = mc |> out_words(nr * d, -1.0e30)
-        var ka = RowGatherArgs(c = uint(d), add_b = 0u, add_c = 0u, total = uint(nr * d))
+        var ka = RowGatherArgs(c = uint(d), add_b = 0u, add_c = 0u, total = uint(nr * d), scale = 1.0)
         for (leg in range(2)) {
             if (leg == 1) {
                 src[nr / 2] = src[nr / 2] == 0u ? 1u : 0u

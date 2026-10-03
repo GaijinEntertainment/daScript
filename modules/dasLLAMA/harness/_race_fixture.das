@@ -10,6 +10,7 @@ module _race_fixture shared public
 
 require math
 require ../tests/_compares.das   // nan_fill: the suites' NaN sentinel, an element the walk leaves reading outside every bound
+require _row_stats   // spread_of: the row statistic the served bench shares
 
 typedef Held = tuple<diff : float; bound : float; ok : bool>
 
@@ -83,17 +84,7 @@ def compare_words(h : Held; against : string; region : string) : string {
 //! an arm's best, median (the upper middle) and population cv of its round times, in ms
 def stats(us : array<int>) : tuple<best : float; median : float; cv : float> {
     var ms <- [for (u in us); float(u) / 1000.0]
-    sort(ms)
-    var mean = 0.0
-    for (v in ms) {
-        mean += v
-    }
-    mean /= float(length(ms))
-    var sq = 0.0
-    for (v in ms) {
-        sq += (v - mean) * (v - mean)
-    }
-    return (best = ms[0], median = ms[length(ms) / 2], cv = sqrt(sq / float(length(ms))) / mean * 100.0)
+    return spread_of(ms)
 }
 
 //! one shape's answer into the tally: its row count, or a refusal when it answered -1

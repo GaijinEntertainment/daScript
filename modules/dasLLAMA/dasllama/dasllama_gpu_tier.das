@@ -976,6 +976,22 @@ def public set_moe_gpu_dn_room_hook(room : MoeGpuDnRoomFn) {
     g_moe_gpu_dn_room = room
 }
 
+//! How many rows of context the armed driver holds a session's K/V for, given the bytes a row takes
+//! over every layer's two planes; a driver with no bound answers the largest count
+typedef GpuKvRoomFn = function<(row_bytes : int64) : int64>
+[unused_argument(row_bytes)]
+def private gpu_kv_room_unbounded(row_bytes : int64) : int64 => 9223372036854775807l
+var g_gpu_kv_room = @@gpu_kv_room_unbounded
+
+def gpu_kv_room_rows(row_bytes : int64) : int64 => invoke(g_gpu_kv_room, row_bytes)
+
+//! Tier registration of the K/V room seam; the installed one is `gpu_kv_room_hook`, for a cell that doubles it and restores it.
+def public set_gpu_kv_room_hook(f : GpuKvRoomFn) {
+    g_gpu_kv_room = f
+}
+
+def public gpu_kv_room_hook() : GpuKvRoomFn => g_gpu_kv_room
+
 def public moe_gpu_dnd_on_gpu(l : int64) : bool {
     return g_moe_gpu_installed && g_moe_gpu_dnd_route && key_exists(g_moe_gpu_dn_layers, l)
 }
@@ -2305,6 +2321,9 @@ def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat 
     }
     if (g_moe_gpu_dn_room == null) {
         g_moe_gpu_dn_room = @@moe_gpu_noop_dn_room
+    }
+    if (g_gpu_kv_room == null) {
+        g_gpu_kv_room = @@gpu_kv_room_unbounded
     }
     if (g_moe_gpu_heat_query == null) {
         g_moe_gpu_heat_query = @@moe_gpu_unset_heat_query

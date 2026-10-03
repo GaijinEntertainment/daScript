@@ -157,6 +157,33 @@ def private embed_q8_gate(t : T?; var dev, queue; dim, vocab, tok : int) {
     }
 }
 
+//! the greedy chain's fp32-table gather - the row gather at one row under the embed scale: the winner's row off a table
+//! bound past a lead of foreign floats, times the scale, the adds off
+def private embed_f32_gate(t : T?; var dev, queue; dim, vocab, tok, lead : int) {
+    let tag = "embed_f32 dim={dim} vocab={vocab} tok={tok} lead={lead}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_row_gather)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let escale = 0.5
+        var inscope rows <- [for (i in range(lead + vocab * dim)); i < lead ? 977.0 : float((i * 7 + 3) % 31 - 15) * 0.125]
+        var inscope want <- [for (i in range(dim)); rows[lead + tok * dim + i] * escale]
+        let btab = mc |> in_plain(rows)
+        let btok = mc |> in_plain([uint(tok)])
+        let bxo = mc |> out_words(dim, -1000.0)
+        let bnone = mc |> in_plain([1.0e9])   // the add planes, bound and never read
+        var ka = RowGatherArgs(c = uint(dim), add_b = 0u, add_c = 0u, total = uint(dim), scale = escale)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[btab], uint64(lead * 4), mc.buf[btok], mc.buf[bnone], 0ul, mc.buf[bnone], 0ul, mc.buf[bxo], ka, int64(dim))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bxo], want, BAR_BITS, FLAT_SHAPE)
+    }
+}
+
 def private embed_k6_gate(t : T?; var dev, queue; dim, vocab, tok : int) {
     let tag = "embed_k6 dim={dim} vocab={vocab} tok={tok}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
@@ -1745,6 +1772,8 @@ def test_metal_misc_kernels(t : T?) {
                 argmax_rows_gate(t, dev, queue, 9, 700)         // MTP_MAX_ROWS rows, n below one threadgroup
                 embed_q8_gate(t, dev, queue, 512, 3, 2)
                 embed_k6_gate(t, dev, queue, 512, 3, 1)
+                embed_f32_gate(t, dev, queue, 96, 5, 3, 0)
+                embed_f32_gate(t, dev, queue, 512, 3, 2, 64)
                 add_rms_gate(t, dev, queue, false, 1500, 1, 1.0)
                 add_rms_gate(t, dev, queue, false, 1024, 1, 0.5)    // the gemma4 layer_out_scale slot
                 add_rms_gate(t, dev, queue, true, 1500, 3, 1.0)

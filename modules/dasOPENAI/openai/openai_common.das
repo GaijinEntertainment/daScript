@@ -57,11 +57,17 @@ struct private OpenAIErrorEnvelope {
 
 // ===== Shared types =====
 
+struct PromptTokensDetails {
+    //! The prompt's token breakdown, when the server reports one.
+    @optional cached_tokens : int   //!< Prompt tokens served from the server's prompt cache (``chat_stream`` leaves -1 when the server reported none).
+}
+
 struct Usage {
     //! Token accounting returned with most responses.
     prompt_tokens : int       //!< Tokens consumed by the prompt.
     completion_tokens : int   //!< Tokens in the generated completion.
     total_tokens : int        //!< Prompt + completion tokens.
+    @optional prompt_tokens_details : PromptTokensDetails   //!< The cache hit, when reported.
 }
 
 // ===== Transport =====

@@ -562,8 +562,12 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
     return a
 }
 
+[unused_argument(t), hot_path]   //! one drafter a process: the attach checked it against its target; the batch tick asks every step
+def private gemma_drafter_attached_to(t : Model) : bool => g_gemma_attached
+
 [init]
 def gemma_mtp_init {
     register_mtp_round_override("metal", @@gemma_mtp_spec_round)
     register_reload_prep(@@detach_gemma_drafter)
+    register_mtp_assistant(MtpAssistantSeams(sidecar = @@gemma_drafter_sidecar, attach = @@attach_gemma_drafter, attached = @@gemma_drafter_attached_to))
 }

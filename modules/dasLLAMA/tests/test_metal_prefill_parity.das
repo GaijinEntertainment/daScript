@@ -41,27 +41,65 @@ def private crowns_without(crowns : string; drop : array<string>) : string {
     return join(kept, ",")
 }
 
-//! the last row's logits after two prefill windows on one session
-def private two_window_logits(trp : Model; w1, w2 : array<int64>) : array<float> {
+//! the last row's logits after two prefill windows on one f16 session - and one decode step of `step_tok` after them when
+//! it is a token (-1 = none)
+def private two_window_logits(trp : Model; w1, w2 : array<int64>; step_tok : int64 = -1l) : array<float> {
     var out : array<float>
     with_dasllama_jobque() {
         var s = make_run_state(trp.config, KVDtype.f16, KVDtype.f16)
         eval_(trp, s, w1)
         eval_(trp, s, w2)
+        if (step_tok >= 0l) {
+            var one <- [step_tok]
+            eval_(trp, s, one)
+            delete one
+        }
         out := s.logits
         delete s
     }
     return <- out
 }
 
-//! one kernel's dispatch count since the census reset, 0 for a kernel that never ran
-def private kernel_count(name : string) : int64 {
+struct private AdoptRun {
+    logits : array<float>
+    matched : int64
+    adopted : int64     //!< rows the taker's mirror took over from the donor's
+    uploaded : int64    //!< rows the taker's mirror took from the host cache
+}
+
+//! A paged donor evals `opening` and returns its pages - donated to a prefix cache when `donate` - then a paged taker
+//! attaches what the cache holds of `whole` and evals the rest of it: the taker's last-row logits and where its mirror's rows came from.
+def private adopt_run(trp : Model; opening, whole : array<int64>; donate : bool) : AdoptRun {
+    var res : AdoptRun
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        var inscope cov <- metal_kernel_coverage()
-        return cov?[name] ?? 0l
-    } else {
-        return 0l
+        with_dasllama_jobque() {
+            var pool <- create_kv_pool_(trp.config, 64l, KVDtype.f16, KVDtype.f16)
+            var cache <- create_prefix_cache_()
+            var donor <- make_run_state_paged(trp.config, pool)
+            eval_(trp, donor, opening)
+            if (donate) {
+                prefix_insert_(cache, pool, donor, opening)
+            }
+            release_kv_pages_(donor)
+            delete donor
+            var taker <- make_run_state_paged(trp.config, pool)
+            res.matched = prefix_attach_(cache, pool, taker, whole)
+            let adopted0 = metal_mirror_adopted_rows()
+            let uploaded0 = metal_mirror_uploaded_rows()
+            var rest <- [for (i in range64(res.matched, long_length(whole))); whole[i]]
+            eval_(trp, taker, rest)
+            delete rest
+            res.adopted = metal_mirror_adopted_rows() - adopted0
+            res.uploaded = metal_mirror_uploaded_rows() - uploaded0
+            res.logits := taker.logits
+            release_kv_pages_(taker)
+            delete taker
+            prefix_release_(cache, pool)
+            delete cache
+            delete pool
+        }
     }
+    return <- res
 }
 
 // chunked prompt-to-continuation: eval chunk 1, eval chunk 2 (start_pos > 0 on the second),
@@ -475,6 +513,16 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 t |> success(!get_dispatch_gpu_served(), "a weights load returns the pool to the CPU spin window")
                 t |> equal(weight_regions_cached(), 0l, "a weights-epoch bump alone drops the address-keyed region caches")
                 t |> success(reload_preps_run() > preps0, "the drop ran the registered reload preps (decode's discard_pre reached through the registry)")
+                //! the drop took the residency set: a plane cached before any driver entry flushes stands where the baked dev-W plane does at a first forward
+                if (g_env_metal.residency && api_probe != null) {
+                    var early : array<float>
+                    early |> resize(4096)
+                    let eb = plane_buffer(dasllama_metal_common::g_dev, unsafe(addr < void? >(early[0])), 16384ul, false)
+                    t |> success(eb != null && weight_regions_cached() == 1l, "a plane cached with no residency set live")
+                    t |> equal(weight_regions_unpinned(), 0l, "a region cached before the first flush is in the residency set")
+                    bump_weights_epoch()
+                    delete early
+                }
             }
 
             // mm-tail arm: the GEMV-tail residue fixtures — npos % 32 == 1 (the reduction-split
@@ -754,18 +802,18 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 let was_held = set_metal_prefill_held("attn_dev", true)
                 metal_kernel_coverage_reset()
                 var staged <- two_window_logits(trag, w1, w2)
-                let pexp_staged = kernel_count("metal_attn_pexp")
+                let pexp_staged = metal_kernel_count("metal_attn_pexp")
                 set_metal_prefill_held("attn_dev", false)
                 t |> success(pf_attn_dev_ready(), "the device pair's stamps compiled under its crown")
                 metal_kernel_coverage_reset()
                 var device <- two_window_logits(trag, w1, w2)
                 let n_attn = trag.config.n_layers
                 t |> equal(pexp_staged, 0l, "the held leg ran the staged trio")
-                t |> equal(kernel_count("metal_attn_pexp"), n_attn * 2l, "the device leg wrote every attention layer's rows in both windows")
-                t |> equal(kernel_count("MetalAttnQKDev_metal_attn_qk_dev"), n_attn, "the 32-row QK stamp served the first window")
-                t |> equal(kernel_count("MetalAttnQKDev128_metal_attn_qk_dev"), n_attn, "the 128-row QK stamp served the continuation")
-                t |> equal(kernel_count("MetalAttnAVDev_metal_attn_av_dev"), n_attn, "the 32-row AV stamp served the first window")
-                t |> equal(kernel_count("MetalAttnAVDev128_metal_attn_av_dev"), n_attn, "the 128-row AV stamp served the continuation")
+                t |> equal(metal_kernel_count("metal_attn_pexp"), n_attn * 2l, "the device leg wrote every attention layer's rows in both windows")
+                t |> equal(metal_kernel_count("MetalAttnQKDev_metal_attn_qk_dev"), n_attn, "the 32-row QK stamp served the first window")
+                t |> equal(metal_kernel_count("MetalAttnQKDev128_metal_attn_qk_dev"), n_attn, "the 128-row QK stamp served the continuation")
+                t |> equal(metal_kernel_count("MetalAttnAVDev_metal_attn_av_dev"), n_attn, "the 32-row AV stamp served the first window")
+                t |> equal(metal_kernel_count("MetalAttnAVDev128_metal_attn_av_dev"), n_attn, "the 128-row AV stamp served the continuation")
                 var device_off <- two_window_logits(trag, w1, w2_off)
                 set_metal_prefill_held("attn_dev", was_held)
                 select_prefill_override(prev_override)
@@ -796,6 +844,107 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 delete w2
                 delete w2_off
                 delete trag
+            }
+
+            if (arm_on(t, "mirror")) {
+                set_wscale_f16(false)
+                pin_kernel_backend("portable")
+                var trmg <- blob_twin(t, path, 2048l)
+                let longp <- encode(tr, counting_prompt(ATTN_DEV_COUNT_TO), true, false)
+                let short_w = 20
+                var w1 <- [for (i in range(ATTN_DEV_W1)); longp[i]]
+                var w2 <- [for (i in range(ATTN_DEV_W1, ATTN_DEV_W1 + short_w)); longp[i]]
+                var w2_off <- [for (i in range(ATTN_DEV_W1 + 1, ATTN_DEV_W1 + short_w + 1)); longp[i]]
+                var whole <- [for (i in range(ATTN_DEV_W1 + short_w)); longp[i]]
+                let step_tok = longp[ATTN_DEV_W1 + short_w]
+                let prev_crowns = get_metal_tensor_crowns()
+                pin_metal_tensor_crowns("mulmm_q8,attn_qkmm,attn_dev")
+                metal_prefill_shutdown()
+                let prev_override = active_prefill_override()
+                let prev_decode = active_decode_override()
+                let prev_min_npos = get_metal_prefill_min_npos()
+                let prev_mirror = get_metal_prefill_mirror()
+                let prev_adopt = get_metal_mirror_adopt()
+                select_prefill_override("metal")
+                set_metal_prefill_min_npos(1l)
+                let n_attn = trmg.config.n_layers
+                set_metal_prefill_mirror(false)
+                metal_kernel_coverage_reset()
+                let served0 = metal_prefill_mirror_served()
+                var panels <- two_window_logits(trmg, w1, w2)
+                t |> equal(metal_prefill_mirror_served() - served0, 0l, "the knob off serves no window on the mirror-fed form")
+                let half_panels = metal_kernel_count("metal_half_rows")   //! the 300-row window's K and V twins and its activation twins
+                t |> equal(metal_kernel_count("MetalAttnQKDev_metal_attn_qk_dev"), n_attn, "the device pair serves the 300-row window alone - 20 rows sit under its floor")
+                set_metal_prefill_mirror(true)
+                metal_kernel_coverage_reset()
+                var mirror <- two_window_logits(trmg, w1, w2)
+                t |> equal(metal_prefill_mirror_served() - served0, 2l, "both windows ran the mirror-fed form")
+                t |> equal(metal_kernel_count("metal_half_rows") - half_panels, n_attn * 2l, "the continuation's K and V rows convert too: a layer's two passes more than the panels form's")
+                t |> equal(metal_kernel_count("MetalAttnQKDev_metal_attn_qk_dev"), n_attn * 2l, "the device pair serves the 20-row continuation too")
+                var mirror_off <- two_window_logits(trmg, w1, w2_off)
+                let mag = logits_maxabs(panels)
+                let diff = logits_maxdiff(mirror, panels)
+                let diff_off = logits_maxdiff(mirror_off, panels)
+                to_log(LOG_INFO, "mirror: mirror-fed vs panels, last-row logits max difference {diff} of max {mag} (bar {ATTN_DEV_BAR * mag}); one token off {diff_off}\n")
+                t |> success(diff <= ATTN_DEV_BAR * mag, "the mirror-fed form's logits sit within the bar of the panels form's ({diff} of {mag})")
+                t |> success(diff_off > ATTN_DEV_BAR * mag, "the prompt one token off lands outside the bar ({diff_off})")
+                select_decode_override("metal")
+                set_metal_prefill_mirror(false)
+                let up0 = metal_mirror_uploaded_rows()
+                var step_panels <- two_window_logits(trmg, w1, w2, step_tok)
+                let up_panels = metal_mirror_uploaded_rows() - up0
+                set_metal_prefill_mirror(true)
+                var step_mirror <- two_window_logits(trmg, w1, w2, step_tok)
+                let up_mirror = metal_mirror_uploaded_rows() - up0 - up_panels
+                t |> equal(up_panels, int64(ATTN_DEV_W1 + short_w), "after a panels prefill the first decode step uploads every row")
+                t |> equal(up_mirror, 0l, "after a mirror-fed prefill it uploads none")
+                let smag = logits_maxabs(step_panels)
+                let sdiff = logits_maxdiff(step_mirror, step_panels)
+                var pick_mirror = 0l
+                var pick_panels = 0l
+                with_dasllama_jobque() {
+                    pick_mirror = argmax_of(step_mirror)
+                    pick_panels = argmax_of(step_panels)
+                }
+                t |> success(sdiff <= ATTN_DEV_BAR * smag, "the step's logits sit within the bar across the two forms ({sdiff} of {smag}; argmax {pick_mirror} / {pick_panels})")
+                set_metal_mirror_adopt(true)
+                var took <- adopt_run(trmg, w1, whole, true)
+                t |> equal(took.matched, 300l, "the cache hands the taker the opening's four whole pages and a copy of the fifth for its 44 rows")
+                t |> equal(took.adopted, 256l, "the taker's mirror takes the whole pages' rows from the donor's")
+                t |> equal(took.uploaded, 44l, "and uploads the copied page's rows alone")
+                set_metal_mirror_adopt(false)
+                var copied <- adopt_run(trmg, w1, whole, true)
+                set_metal_mirror_adopt(prev_adopt)
+                t |> equal(copied.adopted, 0l, "the knob off adopts nothing")
+                t |> equal(copied.uploaded, copied.matched, "and uploads the attached rows")
+                t |> equal(logits_maxdiff(took.logits, copied.logits), 0.0, "the adopted rows are the uploaded rows: the logits agree to the bit")
+                var fresh <- adopt_run(trmg, w1, whole, false)
+                t |> equal(fresh.matched, 0l, "nothing donated, nothing attached")
+                t |> equal(fresh.adopted, 0l, "a reused group id under a new stamp adopts nothing")
+                select_decode_override(prev_decode)
+                select_prefill_override(prev_override)
+                set_metal_prefill_min_npos(prev_min_npos)
+                set_metal_prefill_mirror(prev_mirror)
+                unpin_metal_tensor_crowns()
+                set_metal_tensor_crowns(prev_crowns)
+                metal_prefill_shutdown()
+                metal_decode_shutdown()
+                clear_kernel_backend_pin()
+                select_kernel_backend(prior_backend)
+                set_wscale_f16(prior_wscale)
+                delete panels
+                delete mirror
+                delete mirror_off
+                delete step_panels
+                delete step_mirror
+                delete took
+                delete copied
+                delete fresh
+                delete w1
+                delete w2
+                delete w2_off
+                delete whole
+                delete trmg
             }
 
             // span arm (metal-media): the media eval shape — causal head, non-causal embd span

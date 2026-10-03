@@ -62,6 +62,7 @@ def section_raw(m : Model) {
     var pool <- create_kv_pool(m, 16l)
     var ws <- create_batch_workspace(m)
     gpu_dn_room(3l)   // a GPU-served deltanet hybrid keeps this many streams' recurrent state resident: name the count BEFORE the first prefill (create_scheduler does it for you)
+    print("the GPU driver holds a session's K/V for {device_kv_max_rows(m)} rows of this model\n")   // a blob-only model's session past it has no CPU to fall back to: a server sizes its context by it
     var s0 = create_session(m, pool)
     var s1 = create_session(m, pool)
     var s2 = create_session(m, pool)
@@ -338,7 +339,11 @@ def main() {
         setup_dasllama_jobque()
         section_raw(m)
 
-        var sch <- create_scheduler(m, STREAMS, 32l, 64l, 16l)   // paged KV, prefix cache on
+        let drafter = mtp_drafter_sidecar(path)   // a gemma-4 model ships its assistant drafter beside it (mtp-<stem>-Q8_0.gguf), "" elsewhere
+        if (!empty(drafter) && attach_mtp_drafter(m, drafter)) {   // false where the drafter was made for another target
+            print("the assistant drafter {drafter} speculates for this model\n")
+        }
+        var sch <- create_scheduler(m, STREAMS, 32l, 64l, 16l, 0l, KVDtype.f16, mtp_capable(m))   // paged KV, prefix cache on, speculative where the model can
         let batched = run_round(m, sch, 1l, "batched, cold", QUESTIONS)
         let seq = sequential_round(m)
         print("four conversations: batched {batched / 1000l}ms vs sequential {seq / 1000l}ms\n\n")

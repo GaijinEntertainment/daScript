@@ -1280,17 +1280,23 @@ def private moe_mulmm_mx4_gate(t : T?; var dev, queue; tensor : bool; kdim, ndim
 // height instead - MetalAttnQKDev[128] on the Q twin and the scaled K twin; its operands are
 // f16-exact, so the device differs by the half accumulate and the half store, 2^-11 of a
 // magnitude each, under the bar's 2e-3 of the envelope.
+//! `klead` > 0 puts that many foreign rows ahead of the device pair's K halves and binds K past them - a layer's slab inside a shared buffer.
 def private attn_qk_mm_gate(t : T?; var dev, queue; tensor : bool; heads, hs, kv_mul, mp, np32, qoff, window : int;
-                            uend : int = 0; halfq : bool = false; pair_mt : int = 0) {
+                            uend : int = 0; halfq : bool = false; pair_mt : int = 0; klead : int = 0) {
     let pair = pair_mt > 0
     let mt = pair ? pair_mt : 32
     let form = pair ? "_dev mt={mt}" : "_mm{tensor ? "t" : ""}{halfq ? " halfq" : ""}"
-    let tag = "attn_qk{form} h={heads} hs={hs} m={mp} n={np32} qoff={qoff} w={window} u={uend}"
+    let tag = "attn_qk{form} h={heads} hs={hs} m={mp} n={np32} qoff={qoff} w={window} u={uend} klead={klead}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let kqk = (pair_mt == 128 ? kernel_of(@@enc_qk_dev128_c) : pair ? kernel_of(@@enc_qk_dev_c)
-            : halfq ? kernel_of(@@enc_qk_mm_th_c) : tensor ? kernel_of(@@enc_qk_mm_t_c) : kernel_of(@@enc_qk_mm_c))
-        var pso = mc |> keep_stamp(kqk, err)
+        var pso : MetalComputePipeline?
+        if (pair_mt == 128) {
+            pso = mc |> keep_stamp(kernel_of(@@enc_qk_dev128_c), err)
+        } elif (pair) {
+            pso = mc |> keep_stamp(kernel_of(@@enc_qk_dev_c), err)
+        } else {
+            pso = mc |> keep_stamp(halfq ? kernel_of(@@enc_qk_mm_th_c) : tensor ? kernel_of(@@enc_qk_mm_t_c) : kernel_of(@@enc_qk_mm_c), err)
+        }
         return if (!(tensor || pair ? tensor_pso_or_skip(t, tag, pso, dev, err) : pso_ok(t, tag, pso, err)))
         let qd = heads * hs
         let kvd = (heads / kv_mul) * hs
@@ -1344,12 +1350,29 @@ def private attn_qk_mm_gate(t : T?; var dev, queue; tensor : bool; heads, hs, kv
             npos = uint(np32), np32 = uint(np32), scale = scale, qoff = uint(qoff), qrows = uint(mp),
             window = uint(window), uend = uint(uend))
         var inscope qh <- [for (v in qv); float16(v)]
-        var inscope kh <- [for (v in kv); float16(v * scale)]   // k x scale is f16-exact here: the K twin's own values
+        var inscope kh : array<float16>
+        kh |> reserve((klead + np32) * kvd)
+        for (_i in range(klead * kvd)) {
+            kh |> push(float16(977.0))
+        }
+        for (v in kv) {
+            kh |> push(float16(v * scale))   // k x scale is f16-exact here: the K twin's own values
+        }
         let bq = halfq || pair ? (mc |> in_plain(qh)) : (mc |> in_(qv))
         let bk = pair ? (mc |> in_plain(kh)) : (mc |> in_(kv))
         let batt = mc |> out_words(heads * mp * np32, float16(-1000.0))   // f16 slab; the sentinel is f16-exact
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            invoke(kqk.enc, enc, pso, mc.buf[bq], mc.buf[bk], mc.buf[batt], ka, int64(mp), int64(np32), int64(heads))
+            if (pair_mt == 128) {
+                enc_qk_dev128_c_pso(enc, pso, mc.buf[bq], mc.buf[bk], uint64(klead * kvd * 2), mc.buf[batt], ka, int64(mp), int64(np32), int64(heads))
+            } elif (pair) {
+                enc_qk_dev_c_pso(enc, pso, mc.buf[bq], mc.buf[bk], uint64(klead * kvd * 2), mc.buf[batt], ka, int64(mp), int64(np32), int64(heads))
+            } elif (halfq) {
+                enc_qk_mm_th_c_pso(enc, pso, mc.buf[bq], mc.buf[bk], mc.buf[batt], ka, int64(mp), int64(np32), int64(heads))
+            } elif (tensor) {
+                enc_qk_mm_t_c_pso(enc, pso, mc.buf[bq], mc.buf[bk], mc.buf[batt], ka, int64(mp), int64(np32), int64(heads))
+            } else {
+                enc_qk_mm_c_pso(enc, pso, mc.buf[bq], mc.buf[bk], mc.buf[batt], ka, int64(mp), int64(np32), int64(heads))
+            }
         }
         return if (!ran)
         check_buf_h(t, tag, mc.buf[batt], want, env_bar(2e-3, env), Shape(row_width = np32), env)
@@ -1436,48 +1459,45 @@ def private attn_av_mm_gate(t : T?; var dev, queue; tensor : bool; heads, hs, kv
     }
 }
 
-//! MetalKvTwin against the RNE narrow of the same f32 values, K under the folded scale: one multiply a value, so the
-//! device rounds as the host does and the bar is no difference at all. The dispatch runs a threadgroup past `total`
-//! over planes that carry that much slack under a sentinel, so the grid guard is what keeps the slack.
-def private kv_twin_gate(t : T?; var dev, queue) {
-    let tag = "kv_twin"
+//! MetalHalfRows against the RNE narrow of the scaled f32 values - one multiply a value, so the device rounds as the host
+//! does and the bar is no difference at all - written past `lead` halves of a target that keeps them and the slack after
+//! `total` under a sentinel: the offset bind and the grid guard both hold. Two inputs sit past the half range on either sign
+//! and must land the clamp (a bare narrow writes an infinity). A poisoned input reruns each scale as the control.
+def private half_rows_gate(t : T?; var dev, queue) {
+    let tag = "half_rows"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let kt = kernel_of(@@enc_kv_twin)
-        var pso = mc |> keep_stamp(kt, err)
+        let kh = kernel_of(@@enc_half_rows)
+        var pso = mc |> keep_stamp(kh, err)
         return if (!pso_ok(t, tag, pso, err))
-        let total = 3 * 256
+        let total = 3 * 256 - 40
+        let lead = 512
         let slack = 256
-        let scale = 0.0883883
-        var inscope kv <- [for (i in range(total + slack)); float(float16(0.07 * float((i * 13) % 41) - 1.3))]
-        var inscope vv <- [for (i in range(total + slack)); float(float16(0.05 * float((i * 7) % 53) - 1.1))]
-        var inscope wk <- [for (i in range(total + slack)); i < total ? float(float16(kv[i] * scale)) : -77.0]
-        var inscope wv <- [for (i in range(total + slack)); i < total ? float(float16(vv[i])) : -77.0]
-        let bk = mc |> in_(kv)
-        let bv = mc |> in_(vv)
-        let bkh = mc |> out_words(total + slack, float16(-77.0))
-        let bvh = mc |> out_words(total + slack, float16(-77.0))
-        var ka = KvTwinArgs(total = uint(total), scale = scale)
-        // one poisoned input per rerun, the previous one's clean plane back first: each compare has its own control
-        for (leg in range(3)) {
-            if (leg == 1) {
-                mc |> plane_upload(bk, poisoned_copy(kv, 300, 2.0))
-            } elif (leg == 2) {
-                mc |> plane_upload(bk, kv)
-                mc |> plane_upload(bv, poisoned_copy(vv, 500, 2.0))
-            }
-            let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-                invoke(kt.enc, enc, pso, mc.buf[bk], mc.buf[bv], mc.buf[bkh], mc.buf[bvh], ka, int64(total + slack))
-            }
-            if (leg == 0) {
+        for (scale in [1.0, 0.0883883]) {
+            var inscope xv <- [for (i in range(total + slack)); float(float16(0.07 * float((i * 13) % 41) - 1.3))]
+            xv[5] = 70000.0
+            xv[total - 3] = -70000.0
+            var inscope want <- [for (i in range(lead + total + slack)); i >= lead && i < lead + total ? float(float16(clamp(xv[i - lead] * scale, -65504.0, 65504.0))) : -77.0]
+            let bx = mc |> in_(xv)
+            let bh = mc |> out_words(lead + total + slack, float16(-77.0))
+            var ka = HalfRowsArgs(total = uint(total), scale = scale)
+            for (leg in range(2)) {
+                if (leg == 1) {
+                    mc |> plane_upload(bx, poisoned_copy(xv, 300, 2.0))
+                    mc |> plane_refill(bh)   // the sentinel back before the run that must write the plane anew
+                }
+                let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+                    invoke(kh.enc, enc, pso, mc.buf[bx], mc.buf[bh], uint64(lead * 2), ka, int64(total + slack))
+                }
                 return if (!ran)
-                check_buf_h(t, "{tag} K x scale", mc.buf[bkh], wk, Bar(rel = 0.0), Shape(row_width = 256))
-                check_buf_h(t, "{tag} V", mc.buf[bvh], wv, Bar(rel = 0.0), Shape(row_width = 256))
-            } elif (ran) {
-                var inscope halves <- buf_download(mc.buf[leg == 1 ? bkh : bvh], total + slack, type<float16>)
-                var inscope got <- [for (h in halves); float(h)]
-                t |> success(mismatch_rel("{tag} poison (MUST mismatch)", got, leg == 1 ? wk : wv, 0.0, 0.0) > 0,
-                    "{tag}: a poisoned {leg == 1 ? "K" : "V"} element reds its twin")
+                if (leg == 0) {
+                    check_buf_h(t, "{tag} scale={scale}", mc.buf[bh], want, Bar(rel = 0.0), Shape(row_width = 256))
+                } else {
+                    var inscope halves <- buf_download(mc.buf[bh], lead + total + slack, type<float16>)
+                    var inscope got <- [for (h in halves); float(h)]
+                    t |> success(mismatch_rel("{tag} poison (MUST mismatch)", got, want, 0.0, 0.0) > 0,
+                        "{tag} scale={scale}: a poisoned element reds its half")
+                }
             }
         }
     }
@@ -1485,9 +1505,10 @@ def private kv_twin_gate(t : T?; var dev, queue) {
 
 //! MetalAttnPExp + MetalAttnAVDev[128] in one record against a double softmax; garbage V pads and raw columns past each span red a walk past it.
 //! The bar: each weight is stored a half (2^-11 of its magnitude) and the products accumulate in half, under 2e-3 of the envelope
+//! `vlead` > 0 puts that many foreign rows ahead of the V halves and binds V past them.
 def private attn_dev_pair_gate(t : T?; var dev, queue; mt, heads, hs, kv_mul, mp, np32, npos, qoff, window : int;
-                               uend : int = 0; softcap : float = 0.0; hass : bool = false; ulo : int = 0) {
-    let tag = "attn_pexp+av_dev mt={mt} h={heads} hs={hs} m={mp} n={np32} npos={npos} qoff={qoff} w={window} u={ulo}..{uend} cap={softcap} sink={hass}"
+                               uend : int = 0; softcap : float = 0.0; hass : bool = false; ulo : int = 0; vlead : int = 0) {
+    let tag = "attn_pexp+av_dev mt={mt} h={heads} hs={hs} m={mp} n={np32} npos={npos} qoff={qoff} w={window} u={ulo}..{uend} cap={softcap} sink={hass} vlead={vlead}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let kpx = kernel_of(@@enc_attn_pexp)
@@ -1496,6 +1517,10 @@ def private attn_dev_pair_gate(t : T?; var dev, queue; mt, heads, hs, kv_mul, mp
         return if (!pso_ok(t, tag, pso_px, err))
         var pso_av = mc |> keep_stamp(kav, err)
         return if (!tensor_pso_or_skip(t, tag, pso_av, dev, err))
+        let tail = hs % 64 != 0   //! a head off the 64 lattice: its last 32 columns ride the tail stamp
+        let kavt = mt == 128 ? kernel_of(@@enc_av_dev128_t_c) : kernel_of(@@enc_av_dev_t_c)
+        var pso_avt = tail ? (mc |> keep_stamp(kavt, err)) : null
+        return if (tail && !tensor_pso_or_skip(t, tag, pso_avt, dev, err))
         let qd = heads * hs
         let kvd = (heads / kv_mul) * hs
         var inscope attf : array<float16>
@@ -1552,7 +1577,14 @@ def private attn_dev_pair_gate(t : T?; var dev, queue; mt, heads, hs, kv_mul, mp
         var ka = AttnArgs(qd = uint(qd), kv_dim = uint(kvd), head_size = uint(hs), kv_mul = uint(kv_mul),
             npos = uint(npos), np32 = uint(np32), scale = 1.0, qoff = uint(qoff), qrows = uint(mp),
             window = uint(window), softcap = softcap, hass = hass ? 1u : 0u, uend = uint(uend), ulo = uint(ulo))
-        var inscope vh <- [for (v in vv); float16(v)]
+        var inscope vh : array<float16>
+        vh |> reserve((vlead + np32) * kvd)
+        for (_i in range(vlead * kvd)) {
+            vh |> push(float16(977.0))
+        }
+        for (v in vv) {
+            vh |> push(float16(v))
+        }
         let batt = mc |> in_plain(attf)
         let bstat = mc |> out_words(heads * mp, -1000.0)
         let bsink = mc |> in_(sinks)
@@ -1560,7 +1592,10 @@ def private attn_dev_pair_gate(t : T?; var dev, queue; mt, heads, hs, kv_mul, mp
         let bxb = mc |> out_words(mp * qd, -1000.0)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             invoke(kpx.enc, enc, pso_px, mc.buf[batt], ka, mc.buf[bstat], mc.buf[bsink], int64(mp), int64(heads))
-            invoke(kav.enc, enc, pso_av, mc.buf[batt], mc.buf[bv], mc.buf[bxb], ka, mc.buf[bstat], int64(mp), int64(heads), int64(hs))
+            invoke(kav.enc, enc, pso_av, mc.buf[batt], mc.buf[bv], uint64(vlead * kvd * 2), mc.buf[bxb], ka, mc.buf[bstat], int64(mp), int64(heads), int64(hs / 64))
+            if (tail) {
+                invoke(kavt.enc, enc, pso_avt, mc.buf[batt], mc.buf[bv], uint64(vlead * kvd * 2), mc.buf[bxb], ka, mc.buf[bstat], int64(mp), int64(heads), int64(hs))
+            }
         }
         return if (!ran)
         check_buf(t, tag, mc.buf[bxb], want, env_bar(2e-3, env), Shape(row_width = qd, head_width = hs), env)
@@ -1741,15 +1776,26 @@ def test_metal_gemm_kernels(t : T?) {
                 attn_av_mm_gate(t, dev, queue, false, 4, 64, 2, 64, 128, 96, 0, uend = 96)
                 attn_av_mm_gate(t, dev, queue, true, 4, 64, 2, 64, 128, 96, 0, uend = 96)
                 // the device pair: both tile heights, continuation, window skip, GQA, uniform span, V pads, softcap, sinks
-                kv_twin_gate(t, dev, queue)
                 attn_qk_mm_gate(t, dev, queue, true, 4, 64, 2, 64, 128, 0, 0, pair_mt = 32)
                 attn_qk_mm_gate(t, dev, queue, true, 4, 64, 2, 128, 256, 128, 0, pair_mt = 128)
                 attn_qk_mm_gate(t, dev, queue, true, 4, 64, 2, 32, 256, 224, 128, pair_mt = 32)
                 attn_qk_mm_gate(t, dev, queue, true, 2, 128, 1, 128, 384, 256, 192, pair_mt = 128)
                 attn_qk_mm_gate(t, dev, queue, true, 4, 64, 2, 64, 128, 0, 0, uend = 128, pair_mt = 32)
                 attn_qk_mm_gate(t, dev, queue, true, 4, 64, 2, 32, 256, 224, 128, uend = 192, pair_mt = 32)
+                attn_qk_mm_gate(t, dev, queue, true, 4, 64, 2, 32, 256, 224, 0, pair_mt = 32, klead = 96)
+                attn_qk_mm_gate(t, dev, queue, true, 2, 128, 1, 128, 384, 256, 0, pair_mt = 128, klead = 96)
+                attn_qk_mm_gate(t, dev, queue, true, 4, 96, 2, 64, 128, 0, 0, pair_mt = 32)
+                attn_qk_mm_gate(t, dev, queue, true, 4, 96, 2, 128, 256, 128, 0, pair_mt = 128)
+                attn_dev_pair_gate(t, dev, queue, 32, 4, 64, 2, 32, 256, 256, 224, 0, vlead = 96)
+                attn_dev_pair_gate(t, dev, queue, 128, 4, 64, 2, 128, 256, 256, 128, 0, vlead = 96)
+                half_rows_gate(t, dev, queue)
                 attn_dev_pair_gate(t, dev, queue, 32, 4, 64, 2, 64, 128, 128, 64, 0)
                 attn_dev_pair_gate(t, dev, queue, 32, 4, 64, 2, 64, 128, 96, 32, 0)        // V pads past npos
+                attn_dev_pair_gate(t, dev, queue, 32, 4, 96, 2, 64, 128, 100, 32, 0)
+                attn_dev_pair_gate(t, dev, queue, 128, 4, 96, 2, 128, 256, 200, 64, 40, vlead = 96)
+                attn_dev_pair_gate(t, dev, queue, 32, 4, 96, 2, 64, 128, 100, 32, 24, softcap = 0.5, hass = true)   // the tail under a window, the cap and sinks
+                attn_dev_pair_gate(t, dev, queue, 32, 4, 96, 2, 32, 96, 96, 64, 0, uend = 96)                      // ... and over a uniform span
+                attn_dev_pair_gate(t, dev, queue, 128, 4, 96, 2, 128, 256, 200, 0, 0, uend = 128, softcap = 0.5, ulo = 32)
                 attn_dev_pair_gate(t, dev, queue, 128, 4, 64, 2, 128, 256, 256, 128, 0)
                 attn_dev_pair_gate(t, dev, queue, 128, 2, 128, 1, 128, 320, 300, 172, 0)   // the last tile's span ends at npos
                 attn_dev_pair_gate(t, dev, queue, 32, 4, 64, 2, 32, 256, 256, 224, 128)    // a sliding window

@@ -114,6 +114,10 @@ let private CENSUS_NEVER_DISPATCHED <- [
     "MetalKqMulMmIq3sT", "MetalKqMulMmIq3sTH", "MetalKqMulMmIq3xxsT", "MetalKqMulMmIq3xxsTH",
     "MetalKqMulMmIq2sT", "MetalKqMulMmIq2sTH", "MetalKqMulMmIq2xsT", "MetalKqMulMmIq2xsTH",
     "MetalKqMulMmIq2xxsT", "MetalKqMulMmIq2xxsTH",
+    // the device attention pair's 128-row AV tail: it serves a head off the 64 lattice (phi-3's 96) when the
+    // window's query panel divides by 128, and the census prompt's never does (its 32-row twin serves every
+    // phi3 window). Its coverage is attn_dev_pair_gate's mt=128 hs=96 arm in test_metal_gemm_kernels.das
+    "MetalAttnAVDev128Tail",
     // the MTP round's kernels: the same-slab verify's per-row argmax dispatches only inside a
     // speculative round (the census prompt never speculates), and the k4 two-row tile only under
     // the kq_mvb2_k4_r2 crown. Their coverage is the argmax_rows gate in test_metal_misc_kernels.das,
@@ -279,9 +283,12 @@ def private census_zoo(t : T?) {
     cov_model(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q5_K_M.gguf"), "llama",
         [KVDtype.f16], [2, 4, 8])
     // gemma2: K-quant weights x softcap/sliding/geglu/wide heads; B=4/8 drive the
-    // k4/k6 batch tiles
+    // k4/k6 batch tiles; the three codecs reach the head-of-256 fused attention's three stamps
     cov_model(t, path_join(models_dir(), "gemma-2-2b-it-Q4_K_M.gguf"), "gemma2",
-        [KVDtype.f16, KVDtype.q8_0], [2, 4, 8])
+        [KVDtype.f16, KVDtype.q8_0, KVDtype.tq4], [2, 4, 8])
+    //! phi3: a head of 96 (the fused attention's narrow stamps, the device pair's AV tail) and an untied K-quant embedding (the greedy chain's fp32 gather)
+    cov_model(t, path_join(models_dir(), "Phi-3.5-mini-instruct-Q4_K_M.gguf"), "phi3",
+        [KVDtype.f16, KVDtype.q8_0], [2])
     // qwen3: qk_norm + qd != dim
     cov_model(t, path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf"), "qwen3",
         [KVDtype.f16, KVDtype.tq4], [2])
@@ -292,10 +299,11 @@ def private census_zoo(t : T?) {
     cov_model(t, path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf"), "qwen35",
         [KVDtype.f16], [2])
     // gemma4e: PLE + V-from-K (no PLE batch arm — a blob-twin CPU batch fallback
-    // would trip the blob-only panic, so no batch shapes here); large tier
+    // would trip the blob-only panic, so no batch shapes here); large tier; the three codecs
+    // reach the head-of-512 fused attention's three stamps on the full-context layers
     let none : array<int>
     cov_model(t, path_join(models_dir(), "gemma-4-E4B-it-Q8_0.gguf"), "gemma4e",
-        [KVDtype.f16], none)
+        [KVDtype.f16, KVDtype.q8_0, KVDtype.tq4], none)
     // gemma4: the checkpoint suppress list (suppress_tokens metadata rides the 12B
     // family, NOT the E-series) + K-quant at 12B shapes; large tier
     cov_model(t, path_join(models_dir(), "gemma-4-12B-it-Q4_K_M.gguf"), "gemma4",

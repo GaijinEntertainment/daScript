@@ -99,30 +99,66 @@ def private mock_stream_tool_calls_body() : string {
     return body
 }
 
+// A thinking model's stream under stream_options.include_usage: a role-only opening delta, a reasoning
+// delta, two content deltas, then the usage chunk (no choices) with the server's own timings; a request
+// whose model id carries "nodetails" gets a usage chunk without prompt_tokens_details, one carrying
+// "nousage" none at all. The request's stream_options and chat_template_kwargs are echoed as content
+// so a test can see what reached the wire.
+def private mock_stream_usage_body(body : string; details, usage : bool) : string {
+    let opening = ChatCompletionChunk(id = "chatcmpl-mock", _object = "chat.completion.chunk", created = 0, model = "mock-model",
+        choices <- [ChunkChoice(index = 0, delta <- ChatMessageDelta(role = "assistant"))])
+    let thought = ChatCompletionChunk(id = "chatcmpl-mock", _object = "chat.completion.chunk", created = 0, model = "mock-model",
+        choices <- [ChunkChoice(index = 0, delta <- ChatMessageDelta(reasoning_content = "hm"))])
+    let wire = "{find(body, "\"include_usage\":true") >= 0 ? "usage-asked" : "usage-unasked"} {find(body, "\"enable_thinking\":false") >= 0 ? "thinking-off" : "thinking-on"}"
+    var frames <- [sse_frame(sprint_json(opening, false)), sse_frame(sprint_json(thought, false)),
+        sse_frame(content_chunk("ok ")), sse_frame(content_chunk(wire)), sse_frame(finish_chunk("stop"))]
+    if (usage) {
+        let det = details ? ",\"prompt_tokens_details\":\{\"cached_tokens\":40}" : ""
+        frames |> push(sse_frame("\{\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"mock-model\",\"choices\":[],\"usage\":\{\"prompt_tokens\":100,\"completion_tokens\":3,\"total_tokens\":103{det}},\"timings\":\{\"ttft_ms\":12.5,\"gen_ms\":20}}"))
+    }
+    frames |> push("data: [DONE]\n\n")
+    let out = join(frames, "")
+    delete frames
+    return out
+}
+
 class MockStreamServer : HvWebServer {
     def override onInit {
-        POST("/v1/chat/completions") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+        // a STREAM route: the client reads a chunked event stream, never a buffered body
+        STREAM("/v1/chat/completions") <| @(var req : HttpRequest?; var writer : HttpResponseWriter?) {
             let body = string(req.body)
-            set_header(resp, "Content-Type", "text/event-stream")
+            var script = ""
             if (find(body, "\"tools\":") >= 0) {
-                return resp |> TEXT_PLAIN(mock_stream_tool_calls_body())
+                script = mock_stream_tool_calls_body()
+            } elif (find(body, "stream-crlf") >= 0) {
+                script = mock_stream_body_crlf()
+            } elif (find(body, "stream-usage") >= 0) {
+                script = mock_stream_usage_body(body, find(body, "nodetails") < 0, find(body, "nousage") < 0)
+            } else {
+                script = mock_stream_body()
             }
-            if (find(body, "stream-crlf") >= 0) {
-                return resp |> TEXT_PLAIN(mock_stream_body_crlf())
-            }
-            return resp |> TEXT_PLAIN(mock_stream_body())
+            set_header(server, writer, "Content-Type", "text/event-stream")
+            write_chunked(server, writer, script)   // the first chunk ends the headers as a chunked transfer
+            close_writer(server, writer)
         }
     }
 }
 
-def with_stream_server(port : int; blk : block<(base_url : string) : void>) {
+//! the mock on its own thread and an ephemeral port (a fixed port is refused on a box where it is taken, and the
+//! client then times out instead of failing)
+def with_stream_server(blk : block<(base_url : string) : void>) {
     with_job_status(1) $(started) {
         with_job_status(1) $(finished) {
+            with_atomic32() $(bound) {
             with_atomic32() $(stop_flag) {
                 new_thread() @() {
                     var server = new MockStreamServer()
-                    server->init(port)
-                    server->start()
+                    server->init(0)
+                    var port = -1
+                    if (server->start() == 0) {
+                        port = server->bound_port()
+                    }
+                    bound |> set(port)
                     started |> notify_and_release
                     while (stop_flag |> get == 0) {
                         server->tick()
@@ -136,10 +172,11 @@ def with_stream_server(port : int; blk : block<(base_url : string) : void>) {
                     finished |> notify_and_release
                 }
                 started |> join
-                let base_url = "http://127.0.0.1:{port}/v1"
-                invoke(blk, base_url)
+                let port = bound |> get
+                invoke(blk, "http://127.0.0.1:{port}/v1")
                 stop_flag |> set(1)
                 finished |> join
+            }
             }
         }
     }

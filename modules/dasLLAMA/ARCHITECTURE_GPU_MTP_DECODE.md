@@ -119,6 +119,12 @@ the session `sampled` whenever its pick can differ from the raw argmax - a tempe
 or a penalty at temp 0 (`sampler_is_argmax` is the negation) - and the driver never chains such a
 session, because the chain predicts the raw argmax the penalty then rejects. Only a bare argmax
 sampler (temp 0, penalties off) and a caller feeding the argmax directly keep the adaptive chain.
+The winner's embed gather reads the table the host's `embed_row` would: the Q8 linear copy
+(`cls_q8`, `MetalEmbedQ8`), a tied K6 classifier's planes (`MetalEmbedK6`), or the fp32 token
+table in fblob (one row through `MetalRowGather` under the embed scale, the plane wrapped zero-copy
+through `plane_of`) - an untied model
+whose embedding is a K-quant keeps that copy (phi-3, mistral, the Q4_K_M llamas), and chained
+nowhere before the f32 gather. A recurrent model never chains (`spec_cls_capable`).
 
 **The step wait spins on the GPU end time, then blocks.** `finish_step` polls the command
 buffer's `GPUEndTime` until it is set and only then enters `waitUntilCompleted`, because a

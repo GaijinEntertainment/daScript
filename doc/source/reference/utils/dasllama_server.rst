@@ -260,7 +260,7 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--ctx``
      -
      - *model*
-     - Context length in tokens, served whole: the whole-model GPU driver holds it for every stream or declines to the per-op rails, and the load log names the room. Default: the model's trained ``context_length``, shortened to what the card holds (the log says by how much and why)
+     - Context length in tokens, served whole: the whole-model GPU driver holds it for every stream or declines to the per-op rails, and the load log names the room. Default: the model's trained ``context_length``, shortened to what the card holds (the log says by how much and why). A Metal model served from its image alone (no host weights) is cut to the rows its device KV mirror holds (``DASLLAMA_METAL_KV_MIRROR_MB``), with a warning --- a boot load and a live ``/v1/models/load`` alike.
    * - ``--max-tokens``
      -
      - ``16384``
@@ -304,7 +304,7 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--mtp``
      -
      - *auto*
-     - MTP/NextN self-speculative decode. Unset, a slot turns it on when it runs one stream (``streams = 1``) on a GPU --- Metal, or the whole model resident on a Vulkan device with its routed experts on the card --- and leaves it off otherwise: at one stream on Metal the draft-and-verify round cuts decode time on the dense Qwen3.5 MTP models (0.8B 1.20x, 4B 1.21x, 9B 1.10x), on a Vulkan device more unless the driver sums a MoE's routed experts on the host (there the verify rows' host sums cost more than a plain token), on the CPU the round's second verify row costs a second decode step and the round is slower than plain decode, and at several streams the plain batched step is faster. An armed round keeps every stream's cache on the host, so a drafting Vulkan slot (``--gpu vulkan``) serves host-cached sessions in place of device-home ones. ``true`` / ``false`` set it outright. It needs a model with an in-file NextN head (the ``-MTP-`` GGUFs); on any other model the server logs one line and serves plain. Greedy requests are output-invariant; a sampled request draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. ``/v1/stats`` reports ``mtp_drafted`` / ``mtp_accepted``
+     - MTP/NextN self-speculative decode. Unset, a slot turns it on when it runs one stream (``streams = 1``) on a GPU --- Metal, or the whole model resident on a Vulkan device with its routed experts on the card --- and leaves it off otherwise: at one stream on Metal the draft-and-verify round cuts decode time on the dense Qwen3.5 MTP models (0.8B 1.20x, 4B 1.21x, 9B 1.10x), on a Vulkan device more unless the driver sums a MoE's routed experts on the host (there the verify rows' host sums cost more than a plain token), on the CPU the round's second verify row costs a second decode step and the round is slower than plain decode, and at several streams the plain batched step is faster. An armed round keeps every stream's cache on the host, so a drafting Vulkan slot (``--gpu vulkan``) serves host-cached sessions in place of device-home ones. ``true`` / ``false`` set it outright. It needs a model with an in-file NextN head (the ``-MTP-`` GGUFs), or an assistant drafter GGUF beside the model file (gemma-4: ``mtp-<stem>-Q8_0.gguf``), which the load attaches; on any other model the server logs one line and serves plain. Greedy requests are output-invariant; a sampled request draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. ``/v1/stats`` reports ``mtp_drafted`` / ``mtp_accepted``
    * - ``--rope-scaling``
      -
      - *file*
@@ -522,10 +522,10 @@ Endpoints
      - ``{"model": name}`` --- free the slot's weights, KV and VRAM; the default slot refuses (loopback-only)
    * - ``POST``
      - ``/v1/chat/completions``
-     - Chat; ``stream: true`` gives SSE, else a buffered reply. OpenAI function calling (``tools``); ``image_url`` parts under ``--image-mmproj``; ``input_audio`` parts when the mmproj carries the audio tower (one image or one clip per request, on the final user message)
+     - Chat; ``stream: true`` gives SSE, else a buffered reply. OpenAI function calling (``tools``); ``image_url`` parts under ``--image-mmproj``; ``input_audio`` parts when the mmproj carries the audio tower (one image or one clip per request, on the final user message). A stream sent with ``stream_options: {"include_usage": true}`` ends, before ``[DONE]``, on one chunk with an empty ``choices`` list: ``usage`` (``prompt_tokens``, ``completion_tokens``, ``total_tokens``, and ``prompt_tokens_details.cached_tokens`` --- the prompt tokens the prefix cache attached) and ``timings`` (``ttft_ms``, the scheduler's admit-to-first-token wall, and ``gen_ms``, first token to finish); a stream that does not ask carries no such chunk
    * - ``POST``
      - ``/v1/completions``
-     - Raw completion; ``stream: true`` gives SSE, else buffered
+     - Raw completion; ``stream: true`` gives SSE, else buffered; the same ``stream_options.include_usage`` closing chunk as the chat route
    * - ``POST``
      - ``/v1/embeddings``
      - Mean-pooled, L2-normalized sentence embeddings
@@ -814,8 +814,8 @@ in :ref:`the dasLLAMA knob reference <dasllama_env>`)::
   native-audio content parts and the thinking control.
 - ``test_openai_server_mtp.das`` --- the self-speculation default: a
   NextN-headed slot drafts at one stream on Metal and decodes plain at four or
-  on the CPU, an explicit ``mtp`` wins either way, a head-less model serves
-  plain; the Metal cells skip on a box with no Metal backend; needs
+  on the CPU, an explicit ``mtp`` wins either way, a head-less model with no
+  drafter beside it serves plain; the Metal cells skip on a box with no Metal backend; needs
   ``Qwen3.5-0.8B-MTP-Q8_0.gguf`` and the TinyLlama file.
 - ``test_exchange_client.das``, ``test_model_catalog.das``,
   ``test_setup_mode.das`` --- model-free: the sidecar exchange client against a

@@ -415,6 +415,9 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             parity <- ev_qwen_count()),
         ModelSpec(file = "SmolLM2-1.7B-Instruct-Q8_0.gguf", display = "SmolLM2-1.7B",
             parity <- ev_smollm2()),
+        ModelSpec(file = "Phi-3.5-mini-instruct-Q4_K_M.gguf",   // the coverage census's phi3 carrier
+            url = "{HF}/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf",
+            bytes = 2393232672l, sha256 = "e4165e3a71af97f1b4820da61079826d8752a2088e313af0c7d346796c38eff5"),
         ModelSpec(file = "gemma-2-2b-it-Q8_0.gguf", display = "gemma-2-2B",
             parity <- ev_gemma2()),
         // the tool-format live-leg carriers (REVIEW recognition-test rule): each family's

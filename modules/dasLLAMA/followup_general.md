@@ -1188,16 +1188,17 @@
    through `sample_` (the row copied into `s.logits`, `s.recent` advanced per accepted token) and
    accepts while the draw equals the draft, the scheduler gate drops to "MTP on", and a seeded
    counting run at temp 0.8 matches plain sampled decode token for token.
-102. **The NextN draft chain is k command buffers because untied embeddings have no GPU gather.**
+102. **The NextN draft chain is k command buffers, a submit and a wait a draft.**
    `metal_mtp_spec_round` runs k `metal_mtp_draft_forward` calls - a submit, a wait, a 1 MB logits
    readback and a CPU argmax each (about 0.4 ms of a 2.8 ms draft on Qwen3.8-27B, M5: `lcpp_bench
    --mtp-ab --prof --for-debug-purposes` under `JOBQUE_PROFILING=1`, the `mtp.draft.*` sections) - where the
    gemma round chains its drafts in one command buffer with `enc_argmax` and `enc_embed` on the
    device. The NextN chain cannot: `embed_row` for an untied model reads the fp32 token table in
-   `fblob` (`t.tok_emb_off`; 5 GB on Qwen3.8-27B, carried in the image), and the GPU gathers exist
-   only for tied Q8 (`MetalEmbedQ8`) and tied K6 (`MetalEmbedK6`). Done = a K-quant embed gather
-   over the token table's own plane (k4 first) that also retires the fp32 table from blob images,
-   then the round in the gemma shape: one command buffer, `bvtok` chaining, one wait.
+   `fblob` (`t.tok_emb_off`; 5 GB on Qwen3.8-27B, carried in the image), which the row gather
+   (`MetalRowGather`) reads on the device beside the tied Q8 (`MetalEmbedQ8`) and tied K6 (`MetalEmbedK6`)
+   gathers - so the gather is no longer what holds the chain to k buffers. Done = a K-quant embed
+   gather over the token table's own plane (k4 first) that retires the fp32 table from blob
+   images, then the round in the gemma shape: one command buffer, `bvtok` chaining, one wait.
 103. **A sampled stream's round has no break-even guard.** The sampled accept walk (#101) pays the
    round cost c (about 1.45 steps on gemma-26B at depth 1) whether or not the draws match, and
    acceptance under sampling is the target's probability of the draft, which a hot sampler
