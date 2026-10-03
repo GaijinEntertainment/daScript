@@ -9483,6 +9483,12 @@ class SplitKReduce {
     }
 }
 
+//! sums k partial planes of nelem floats into y at ybase, four floats per lane
+def splitk_reduce_enc(raw : VkCommandBuffer; var h : VkHaz; var rset : VkDescriptorSet; nelem, k : int64; ybase : int64 = 0l) {
+    var pcr = SkRedArgs(nelem = uint(nelem), k = uint(k), ybase = uint(ybase))
+    enc_splitk_reduce_cls(raw, h, rset, pcr, (nelem + 1_023l) / 1_024l)
+}
+
 struct F16GemmArgs {
     n : uint        //! K, the row width (elements), a 64-multiple
     d : uint        //! M, the weight rows

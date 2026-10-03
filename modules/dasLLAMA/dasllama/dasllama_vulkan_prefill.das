@@ -171,8 +171,7 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
                     fixed_array(g_rd.pf_splitk_bytes, yn),
                     fixed_array(VHZ_SK, ybit))
             }
-            var pcr = SkRedArgs(nelem = uint(rows * d), k = uint(nsplit))
-            enc_splitk_reduce_cls(raw, h, rset, pcr, (rows * d + 1_023l) / 1_024l)
+            splitk_reduce_enc(raw, h, rset, rows * d, nsplit)
         }
     } elif (kq_sb(fmt)) {
         // the role's format is static, so the slot never collides with the q8 router's variants
@@ -212,8 +211,7 @@ def private pf_f16g_enc(raw : VkCommandBuffer; var h : VkHaz; var gset, rset : V
     verify(F16G_SPLIT * rows * d * 4l <= g_rd.pf_splitk_bytes, "vk prefill: the f16 GEMM's partial planes exceed the split-k scratch")
     var pc = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = uint(woff), ybase = 0u, ystride = uint(d), ksplit = uint(n / F16G_SPLIT))
     enc_f16_gemm_cm2_cls(raw, h, gset, pc, f16_gemm_wgs(false, rows, d) * F16G_SPLIT)   //! the split-k route is cm2-only (`f16g_shape_ok`), so the cm2 builder and its grid times the split
-    var pcr = SkRedArgs(nelem = uint(rows * d), k = uint(F16G_SPLIT), ybase = uint(ybase))
-    enc_splitk_reduce_cls(raw, h, rset, pcr, (rows * d + 1_023l) / 1_024l)
+    splitk_reduce_enc(raw, h, rset, rows * d, F16G_SPLIT, ybase)
 }
 
 def private pf_feed_enc(raw : VkCommandBuffer; var h : VkHaz; var fset : VkDescriptorSet; f16, kq : bool; inbase, elems : int64) {
