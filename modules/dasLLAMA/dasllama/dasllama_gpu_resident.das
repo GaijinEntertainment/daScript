@@ -946,9 +946,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype; hot_cap : int6
     if (!p.fits) {
         p.memory = true
         // a shorter context is the remedy that actually works — weights are fixed, KV is not
-        let shadow_pos = resident_shadow_pos_bytes(t, kdt)
-        let kv_fit = max(usable - p.weight_bytes - p.scratch_bytes + seq_cap * shadow_pos - p.hot_bytes, 0l)
-        let cap_fit = (krow + vrow) > 0l ? kv_fit / (krow + vrow + shadow_pos) : 0l
+        let cap_fit = (krow + vrow) > 0l ? resident_fit_ctx(p, seq_cap, resident_shadow_pos_bytes(t, kdt)) : 0l
         var room = ""
         if (p.others_bytes > 0l) {
             room = " - other processes hold {p.others_bytes >> 20l} MB of the card"
