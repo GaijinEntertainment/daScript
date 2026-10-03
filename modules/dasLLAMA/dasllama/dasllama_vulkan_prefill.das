@@ -2477,12 +2477,8 @@ def private upload_batch_acts(xqp : int8 const?; xsp : float const?; r0, rows, n
 
 // the chain-head acts copies the fold above defers to record time
 def private cmd_copy_batch_acts(raw : VkCommandBuffer; xq_bytes, xs_bytes : int64) {
-    var qregions : array<BufferCopy>
-    qregions |> push(BufferCopy(srcOffset = 0ul, dstOffset = 0ul, size = uint64(xq_bytes)))
-    cmd_copy_buffer(vk_value_to_boost(raw), nonowning_buf(g_gpu.staging.buf), nonowning_buf(g_gpu.batch_xq_dev), qregions)
-    var sregions : array<BufferCopy>
-    sregions |> push(BufferCopy(srcOffset = uint64(BATCH_XQ_BYTES), dstOffset = 0ul, size = uint64(xs_bytes)))
-    cmd_copy_buffer(vk_value_to_boost(raw), nonowning_buf(g_gpu.staging.buf), nonowning_buf(g_gpu.batch_xs_dev), sregions)
+    cmd_copy_range(raw, g_gpu.staging.buf, 0l, g_gpu.batch_xq_dev, 0l, xq_bytes)
+    cmd_copy_range(raw, g_gpu.staging.buf, BATCH_XQ_BYTES, g_gpu.batch_xs_dev, 0l, xs_bytes)
 }
 
 // build the chunk's schedule: regions clipped to the row window [r0, r1) (row0 re-based to the
@@ -2604,10 +2600,7 @@ def private stack_batch_enc(raw : VkCommandBuffer; var h : VkHaz; si : int; nwg 
 }
 
 def private cmd_copy_batch_meta(raw : VkCommandBuffer; si : int) {
-    var regions : array<BufferCopy>
-    regions |> push(BufferCopy(srcOffset = 0ul, dstOffset = 0ul, size = uint64(BATCH_META_BYTES)))
-    cmd_copy_buffer(vk_value_to_boost(raw), nonowning_buf(g_gpu.stacks[si].batch_meta.buf),
-                    nonowning_buf(g_gpu.stacks[si].batch_meta_dev), regions)
+    cmd_copy_whole(raw, g_gpu.stacks[si].batch_meta.buf, g_gpu.stacks[si].batch_meta_dev, BATCH_META_BYTES)
 }
 
 def private batch_acts_head(raw : VkCommandBuffer; var h : VkHaz; axq_bytes, axs_bytes : int64) {
