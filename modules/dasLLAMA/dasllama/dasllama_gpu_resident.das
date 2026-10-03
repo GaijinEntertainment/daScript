@@ -919,8 +919,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype; hot_cap : int6
     if (p.host_layers > 0l && rdec_hot_installed() && c.n_expert_used <= int64(RDEC_HOT_PICKS)) {
         let room = p.usable_bytes - p.weight_bytes - p.scratch_bytes
         let floor_kv = g_rdec_regions_want * resident_hot_floor_ctx(seq_cap, rdec_ctx_asked_whole()) * (krow + vrow) * 8l / 7l
-        let slots_ask = g_env_gpu.gpu_heat ?? (gpu_want_heat() > 0l ? gpu_want_heat() : HOT_SLOTS_AUTO)
-        let fit = resident_hot_fit(slots_ask, hot_cap, room - p.kv_bytes, room - floor_kv, resident_hot_slot_bytes_host_layers(t, p.host_layers), c.n_expert)
+        let fit = resident_hot_fit(resident_hot_ask(), hot_cap, room - p.kv_bytes, room - floor_kv, resident_hot_slot_bytes_host_layers(t, p.host_layers), c.n_expert)
         p.hot_slots = fit.slots
         p.hot_bytes = fit.hot_bytes
         p.scratch_bytes += fit.chain_bytes
@@ -2938,6 +2937,9 @@ def private resident_hot_slot_bytes_host_layers(t : Model; host_layers : int64) 
     return bytes
 }
 
+//! the pool's slot count asked: `DASLLAMA_GPU_HEAT`, else the want's count, else the auto arm
+def private resident_hot_ask() : int64 => g_env_gpu.gpu_heat ?? (gpu_want_heat() > 0l ? gpu_want_heat() : HOT_SLOTS_AUTO)
+
 //! The slots a routed layer's pool takes from the room beside the whole mirror (`room_bytes`) or beside a mirror at its
 //! floor (`floor_bytes`), a slot costing `slot_bytes_all_layers` over the routed layers; `want` > 0 is a count asked, < 0 the auto arm, 0 no pool
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool")]
@@ -2984,8 +2986,8 @@ def private resident_hot_arm(t : Model; plan : ResidentPlan) {
     }
     let slot_bytes = resident_hot_slot_bytes_host_layers(t, plan.host_layers)
     let slots = plan.hot_slots
-    let asked = g_env_gpu.gpu_heat ?? (gpu_want_heat() > 0l ? gpu_want_heat() : HOT_SLOTS_AUTO)
-    let ask = (asked == HOT_SLOTS_AUTO ? "" : " (DASLLAMA_GPU_HEAT={asked})") + (rdec_ctx_asked_whole() ? " under the context asked whole (set_gpu_ctx_strict, DASLLAMA_GPU_CTX_STRICT), which the pool yields to" : "")
+    let asked = resident_hot_ask()
+    let ask =(asked == HOT_SLOTS_AUTO ? "" : " (DASLLAMA_GPU_HEAT={asked})") + (rdec_ctx_asked_whole() ? " under the context asked whole (set_gpu_ctx_strict, DASLLAMA_GPU_CTX_STRICT), which the pool yields to" : "")
     if (slots == 0l) {
         let room = plan.usable_bytes - plan.weight_bytes - plan.kv_bytes - plan.scratch_bytes
         let why = c.n_expert_used > int64(RDEC_HOT_PICKS) ? "{c.n_expert_used} picks a step pass the {RDEC_HOT_PICKS} routed slots" : (asked == HOT_SLOTS_NONE ? "none asked" : "{room >> 20l} MB left past the plan, {slot_bytes >> 20l} MB a slot across the routed layers")
