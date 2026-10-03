@@ -3696,6 +3696,50 @@ def private rd_v_rows_mismatch(n : int64) : bool {
     return false
 }
 
+def private rd_verify_stage(x, cossin, hcos : array<float>; pos, n : int64) {
+    let r = g_rd.region
+    let par = g_rd.hybrid ? g_rd.dn_parity[r] : 0
+    unsafe {
+        memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l * n)
+        memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l * n)
+        memcpy(g_rd.head_cos_host.mapped, addr<void?>(hcos[0]), g_rd.cos_elems * 4l * n)
+        var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
+        var hm = reinterpret<TokMeta?>(g_rd.head_tok.mapped)
+        for (i in range64(n)) {
+            tm[i] = TokMeta(pos = uint(pos + i), cnt = uint(pos + i + 1l), parity = g_rd.hybrid ? uint(par ^ int(i & 1l)) : 0u,
+                mirbase = uint(r * g_rd.mir_units), dnslot = uint(r))
+            hm[i] = TokMeta(pos = uint(pos - 1l + i), cnt = uint(pos + i), parity = 0u, mirbase = uint(r * g_rd.mir_units), dnslot = uint(r))
+        }
+    }
+}
+
+def private rd_verify_land(n, width : int64; picks_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>) {
+    unsafe {
+        if (!picks_only) {
+            memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l * n)
+        }
+        memcpy(addr<void?>(hid[0]), g_rd.hid_host.mapped, width * 4l * n)
+    }
+    for (i in range64(n)) {
+        picks[i] = rd_landed_pick(i)
+    }
+}
+
+def private rd_verify_close(n : int64; guard : bool) {
+    let r = g_rd.region
+    g_rd.tokens_served += n
+    if (guard) {
+        rd_logits_guard(unsafe(reinterpret<float const?>(g_rd.logits_host.mapped)), g_rd.vocab)
+    }
+    if (g_rd.hybrid) {
+        for (_i in range64(n)) {
+            rd_dn_advance_parity(r)
+        }
+        g_rd.roll_region = g_rd.roll_dev != 0ul ? r : -1l
+        g_rd.roll_vrows = n
+    }
+}
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]   //! per speculative round, reached through the tier's registered seat
 def private rd_hc_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool {
     if (g_rd.v_rail == NRail.unasked) {
@@ -3719,28 +3763,18 @@ def private rd_hc_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n 
         rd_record_hc_segments_n(n, true, g_rd.hc_v_seg, seg0)
         g_rd.hc_v_recorded[r] = true
     }
-    let par = g_rd.hybrid ? g_rd.dn_parity[r] : 0
     let guard = rd_guard_rows(g_rd.tokens_served, n)
     let picks_only = pick_only && !guard
     g_rd_verify_landed_logits = !picks_only
     let prof = vk_prof()
     let ts0 = ref_time_ticks()
     var host_us = 0l
+    rd_verify_stage(x, cossin, hcos, pos, n)
     unsafe {
-        memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), dim * 4l * n)
-        memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l * n)
-        memcpy(g_rd.head_cos_host.mapped, addr<void?>(hcos[0]), g_rd.cos_elems * 4l * n)
         memcpy(g_rd.hemb_host.mapped, addr<void?>(hemb[0]), dim * 4l * n)
         memcpy(reinterpret<void?>(reinterpret<uint8?>(g_rd.head_cat_host.mapped) + dim * 4l), addr<void?>(h0[0]), hcd * 4l)
         if (g_rd.ngram) {
             memcpy(g_rd.ple_emb_host.mapped, addr<void?>(side[0]), g_rd.ngram_ind * 4l * n)
-        }
-        var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
-        var hm = reinterpret<TokMeta?>(g_rd.head_tok.mapped)
-        for (i in range64(n)) {
-            tm[i] = TokMeta(pos = uint(pos + i), cnt = uint(pos + i + 1l), parity = g_rd.hybrid ? uint(par ^ int(i & 1l)) : 0u,
-                mirbase = uint(r * g_rd.mir_units), dnslot = uint(r))
-            hm[i] = TokMeta(pos = uint(pos - 1l + i), cnt = uint(pos + i), parity = 0u, mirbase = uint(r * g_rd.mir_units), dnslot = uint(r))
         }
         let t1 = ref_time_ticks()
         for (seg in range64(g_rd.nseg - 1l)) {
@@ -3755,29 +3789,13 @@ def private rd_hc_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n 
         rd_submit_land(last, n, picks_only)
         rd_wait_land()
         let t3 = ref_time_ticks()
-        if (!picks_only) {
-            memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l * n)
-        }
-        memcpy(addr<void?>(hid[0]), g_rd.hid_host.mapped, hcd * 4l * n)
+        rd_verify_land(n, hcd, picks_only, logits, picks, hid)
         if (prof) {
             rdq_host_add(g_rdq_verify_ledger, ts0, t1, t2, t3, ref_time_ticks())
             g_rdq_verify_ledger.host_experts_us += double(host_us)
         }
     }
-    for (i in range64(n)) {
-        picks[i] = rd_landed_pick(i)
-    }
-    g_rd.tokens_served += n
-    if (guard) {
-        rd_logits_guard(unsafe(reinterpret<float const?>(g_rd.logits_host.mapped)), g_rd.vocab)
-    }
-    if (g_rd.hybrid) {
-        for (_i in range64(n)) {
-            rd_dn_advance_parity(r)
-        }
-        g_rd.roll_region = g_rd.roll_dev != 0ul ? r : -1l
-        g_rd.roll_vrows = n
-    }
+    rd_verify_close(n, guard)
     if (prof) {
         g_rdq_verify_ledger.wall_us += double(get_time_usec(ts0))
         g_rdq_verify_ledger.count++
@@ -3796,7 +3814,6 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int6
     return rd_v_rows_mismatch(n) if (n < 2l || n > vk_rdec_verify_rows())
     rd_carry_sync()
     let dim = g_rd.dim
-    let r = g_rd.region
     verify(pos >= 1l && long_length(logits) >= n * g_rd.vocab && long_length(picks) >= n && long_length(hid) >= n * dim,
         "vk_rdec_verify: a verify below row 1 (the head's first row is pos - 1), or a landing short of its rows")
     let vi = rd_v_idx(n)
@@ -3804,7 +3821,6 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int6
         rd_record_verify(n)
     }
     let unsplit = g_rd.unsplit_on && pos + n - 1l < RD_UNSPLIT_POS
-    let par = g_rd.hybrid ? g_rd.dn_parity[r] : 0
     let guard = rd_guard_rows(g_rd.tokens_served, n)
     let picks_only = pick_only && !guard
     g_rd_verify_landed_logits = !picks_only
@@ -3813,22 +3829,13 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int6
     var t1 = ts0
     var t2 = ts0
     var t3 = ts0
+    rd_verify_stage(x, cossin, hcos, pos, n)
     unsafe {
-        memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), dim * 4l * n)
-        memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l * n)
-        memcpy(g_rd.head_cos_host.mapped, addr<void?>(hcos[0]), g_rd.cos_elems * 4l * n)
         let cat = reinterpret<uint8?>(g_rd.head_cat_host.mapped)
         for (i in range64(n)) {
             memcpy(reinterpret<void?>(cat + 2l * i * dim * 4l), addr<void?>(hemb[i * dim]), dim * 4l)
         }
         memcpy(reinterpret<void?>(cat + dim * 4l), addr<void?>(h0[0]), dim * 4l)
-        var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
-        var hm = reinterpret<TokMeta?>(g_rd.head_tok.mapped)
-        for (i in range64(n)) {
-            tm[i] = TokMeta(pos = uint(pos + i), cnt = uint(pos + i + 1l), parity = g_rd.hybrid ? uint(par ^ int(i & 1l)) : 0u,
-                mirbase = uint(r * g_rd.mir_units), dnslot = uint(r))
-            hm[i] = TokMeta(pos = uint(pos - 1l + i), cnt = uint(pos + i), parity = 0u, mirbase = uint(r * g_rd.mir_units), dnslot = uint(r))
-        }
         var cmd = unsplit ? g_rd.v_cmd_unsplit[vi] : g_rd.v_cmd[vi]
         if (prof) {
             t1 = ref_time_ticks()
@@ -3840,31 +3847,15 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int6
             rd_submit_land(cmd, n, picks_only)
             rd_wait_land()
         }
-        if (!picks_only) {
-            memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l * n)
-        }
-        memcpy(addr<void?>(hid[0]), g_rd.hid_host.mapped, dim * 4l * n)
     }
-    for (i in range64(n)) {
-        picks[i] = rd_landed_pick(i)
-    }
+    rd_verify_land(n, dim, picks_only, logits, picks, hid)
     if (prof) {
         rdq_host_add(g_rdq_verify_ledger, ts0, t1, t2, t3, ref_time_ticks())
-    }
-    g_rd.tokens_served += n
-    if (guard) {
-        rd_logits_guard(unsafe(reinterpret<float const?>(g_rd.logits_host.mapped)), g_rd.vocab)
     }
     if (unsplit) {
         g_rd.unsplit_served += n
     }
-    if (g_rd.hybrid) {
-        for (_i in range64(n)) {
-            rd_dn_advance_parity(r)
-        }
-        g_rd.roll_region = g_rd.roll_dev != 0ul ? r : -1l
-        g_rd.roll_vrows = n
-    }
+    rd_verify_close(n, guard)
     if (prof) {
         g_rdq_verify_ledger.wall_us += double(get_time_usec(ts0))
         if (g_rdq_verify_ledger.count % 32l == 31l) {
