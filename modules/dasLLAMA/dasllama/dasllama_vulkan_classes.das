@@ -968,10 +968,10 @@ class ActF16 {
     def run {
         let e = pa.elem0 + gl_GlobalInvocationID.x * 4u
         if (e < pa.elem0 + pa.nelem) {
-            outh[e] = float16(clamp(act_mul(gate[e], up[e]), -65504.0, 65504.0))
-            outh[e + 1u] = float16(clamp(act_mul(gate[e + 1u], up[e + 1u]), -65504.0, 65504.0))
-            outh[e + 2u] = float16(clamp(act_mul(gate[e + 2u], up[e + 2u]), -65504.0, 65504.0))
-            outh[e + 3u] = float16(clamp(act_mul(gate[e + 3u], up[e + 3u]), -65504.0, 65504.0))
+            outh[e] = half_sat(act_mul(gate[e], up[e]))
+            outh[e + 1u] = half_sat(act_mul(gate[e + 1u], up[e + 1u]))
+            outh[e + 2u] = half_sat(act_mul(gate[e + 2u], up[e + 2u]))
+            outh[e + 3u] = half_sat(act_mul(gate[e + 3u], up[e + 3u]))
         }
     }
 }
@@ -986,7 +986,7 @@ class ActF16B : ActF16 {
     def bact(e : uint) : float16 {
         let ex = rex[e / pa.brow]
         let c = e % pa.brow
-        return float16(clamp(act_mul(gate[e] + gb[pa.gboff + ex * pa.brow + c], up[e] + ub[pa.uboff + ex * pa.brow + c]), -65504.0, 65504.0))
+        return half_sat(act_mul(gate[e] + gb[pa.gboff + ex * pa.brow + c], up[e] + ub[pa.uboff + ex * pa.brow + c]))
     }
 
     [spirv_kernel(local_size_x = 256, name = "actf16_b_cls_spv")]
@@ -1012,10 +1012,10 @@ class F16Cvt {
     def run {
         let e = gl_GlobalInvocationID.x * 4u
         if (e < pa.nelem) {
-            outh[e] = float16(clamp(src[e], -65504.0, 65504.0))
-            outh[e + 1u] = float16(clamp(src[e + 1u], -65504.0, 65504.0))
-            outh[e + 2u] = float16(clamp(src[e + 2u], -65504.0, 65504.0))
-            outh[e + 3u] = float16(clamp(src[e + 3u], -65504.0, 65504.0))
+            outh[e] = half_sat(src[e])
+            outh[e + 1u] = half_sat(src[e + 1u])
+            outh[e + 2u] = half_sat(src[e + 2u])
+            outh[e + 3u] = half_sat(src[e + 3u])
         }
     }
 }
@@ -2236,7 +2236,7 @@ class MoeGatherF16 {
         let dst = (b - pa.r0) * pa.n
         var i = gl_LocalInvocationID.x
         while (i < pa.n) {
-            xg[dst + i] = float16(clamp(x[src + i], -65504.0, 65504.0))
+            xg[dst + i] = half_sat(x[src + i])
             i += 256u
         }
     }
@@ -10505,7 +10505,7 @@ class TowerWdecKv {
             }
             let t = pa.p0 + r
             if (pa.mode == WDEC_KV_F16) {
-                dsth[pa.dst_off + (h * pa.tstride + t) * hs + j] = float16(clamp(v, -65504.0, 65504.0))
+                dsth[pa.dst_off + (h * pa.tstride + t) * hs + j] = half_sat(v)
             } elif (pa.mode == WDEC_KV_KX) {
                 dstf[pa.dst_off + (h * hs + j) * pa.tstride + t] = v * (1.0 / sqrt(sqrt(float(WDEC_HS))))   //! the CPU chain's hs^-0.25 pre-scale on the keys
             } else {
@@ -11173,7 +11173,7 @@ class template TowerLnT : WgReduceBase {
             while (i < pa.d) {
                 let o = mad((x[base + i] - mean) * inv, wn[pa.woff + i], wn[pa.boff + i])
                 static_if (OUT16) {
-                    outh[base + i] = float16(clamp(o, -65504.0, 65504.0))
+                    outh[base + i] = half_sat(o)
                 } else {
                     outx[base + i] = o
                 }
@@ -11223,7 +11223,7 @@ class template TowerPostAddLnT : WgReduceBase {
 
     def store(i : uint; v : float) : void {
         static_if (OUT16) {
-            xbh[i] = float16(clamp(v, -65504.0, 65504.0))
+            xbh[i] = half_sat(v)
         } else {
             static_if (OUT32) {
                 xb[i] = v
@@ -11443,7 +11443,7 @@ class template TowerBiasActT {
 
     def store(e : uint; v : float) : void {
         static_if (OUT16) {
-            outh[e] = float16(clamp(v, -65504.0, 65504.0))
+            outh[e] = half_sat(v)
         } else {
             x[e] = v
         }
@@ -11526,14 +11526,14 @@ class template TowerRestrideT {
                     }
                 }
                 static_if (OUT16) {
-                    dsth[gid] = float16(clamp(v, -65504.0, 65504.0))
+                    dsth[gid] = half_sat(v)
                 } else {
                     dst[gid] = v
                 }
             } else {
                 if (lane < pa.hs) {
                     static_if (OUT16) {
-                        dsth[ci] = float16(clamp(src[gid], -65504.0, 65504.0))
+                        dsth[ci] = half_sat(src[gid])
                     } else {
                         dst[ci] = src[gid]
                     }
@@ -11798,10 +11798,10 @@ class template RopeKvStoreT {
                 let v0 = kvsrc[vb + e0] + (pa.hasb != 0u ? bias[bv + e0] : 0.0)
                 let v1 = kvsrc[vb + e1] + (pa.hasb != 0u ? bias[bv + e1] : 0.0)
                 static_if (CLAMP16) {
-                    kmir[mrow + h * pa.hs + e0] = float16(clamp(a0 * fcr - a1 * fci, -65504.0, 65504.0))
-                    kmir[mrow + h * pa.hs + e1] = float16(clamp(a0 * fci + a1 * fcr, -65504.0, 65504.0))
-                    vmir[mrow + h * pa.hs + e0] = float16(clamp(v0, -65504.0, 65504.0))
-                    vmir[mrow + h * pa.hs + e1] = float16(clamp(v1, -65504.0, 65504.0))
+                    kmir[mrow + h * pa.hs + e0] = half_sat(a0 * fcr - a1 * fci)
+                    kmir[mrow + h * pa.hs + e1] = half_sat(a0 * fci + a1 * fcr)
+                    vmir[mrow + h * pa.hs + e0] = half_sat(v0)
+                    vmir[mrow + h * pa.hs + e1] = half_sat(v1)
                 } else {
                     kmir[mrow + h * pa.hs + e0] = a0 * fcr - a1 * fci
                     kmir[mrow + h * pa.hs + e1] = a0 * fci + a1 * fcr
@@ -11896,10 +11896,10 @@ class template RopeKvStoreBT {
                 let v0 = kvrows[vb + e0] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + pa.kvd + bhead + e0] : 0.0)
                 let v1 = kvrows[vb + e1] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + pa.kvd + bhead + e1] : 0.0)
                 static_if (CLAMP16) {
-                    kmir[mo + e0] = float16(clamp(a0 * fcr - a1 * fci, -65504.0, 65504.0))
-                    kmir[mo + e1] = float16(clamp(a0 * fci + a1 * fcr, -65504.0, 65504.0))
-                    vmir[mo + e0] = float16(clamp(v0, -65504.0, 65504.0))
-                    vmir[mo + e1] = float16(clamp(v1, -65504.0, 65504.0))
+                    kmir[mo + e0] = half_sat(a0 * fcr - a1 * fci)
+                    kmir[mo + e1] = half_sat(a0 * fci + a1 * fcr)
+                    vmir[mo + e0] = half_sat(v0)
+                    vmir[mo + e1] = half_sat(v1)
                 } else {
                     kmir[mo + e0] = a0 * fcr - a1 * fci
                     kmir[mo + e1] = a0 * fci + a1 * fcr
@@ -11989,7 +11989,7 @@ class template QknRopeKvT : WgReduceBase {
     //! one K mirror element, clamped into f16 on the f16 stamp
     def st_k(i : uint; v : float) {
         static_if (CLAMP16) {
-            kmir[i] = float16(clamp(v, -65504.0, 65504.0))
+            kmir[i] = half_sat(v)
         } else {
             kmir[i] = v
         }
@@ -11998,7 +11998,7 @@ class template QknRopeKvT : WgReduceBase {
     //! ... and one V mirror element
     def st_v(i : uint; v : float) {
         static_if (CLAMP16) {
-            vmir[i] = float16(clamp(v, -65504.0, 65504.0))
+            vmir[i] = half_sat(v)
         } else {
             vmir[i] = v
         }
@@ -12300,9 +12300,9 @@ class template KvTq4StoreT : KvTq4WhtBase {
                 let lane = e % KQ_B32_ELEMS_U
                 if (lane == 0u) {
                     if (is_v) {
-                        vsc[sc] = float16(clamp(d, -65504.0, 65504.0))
+                        vsc[sc] = half_sat(d)
                     } else {
-                        ksc[sc] = float16(clamp(d, -65504.0, 65504.0))
+                        ksc[sc] = half_sat(d)
                     }
                 }
                 if ((lane & 1u) == 0u) {
@@ -12397,7 +12397,7 @@ class template KvShadowT {
     @push_constant pa : KvQShadowArgs
     @template_constant TQ4 : bool = false       //!< the tq4 stamp: 18-byte blocks of four-bit quants
 
-    def shadow_half(quant, scale : float) : float16 => float16(clamp(quant * scale, -65504.0, 65504.0))
+    def shadow_half(quant, scale : float) : float16 => half_sat(quant * scale)
 
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs")]
     def run {
@@ -14615,7 +14615,7 @@ class template TtsIm2colT {
 
     def put16(e : uint; v : float) {
         static_if (HALF) {
-            col16[pa.coloff + e] = float16(clamp(v, -65504.0, 65504.0))
+            col16[pa.coloff + e] = half_sat(v)
         }
     }
 

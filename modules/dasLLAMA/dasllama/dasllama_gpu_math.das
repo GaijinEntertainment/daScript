@@ -35,6 +35,9 @@ def silu_f32(v : float) : float => v / (1.0 + exp(-v))
 //! `x` gated by the logistic of `g` as the one quotient x / (1 + exp(-g)), not x times `sigmoid_f32(g)`
 def sig_gate(x, g : float) : float => x / (1.0 + exp(-g))
 
+//! `v` stored as a half, saturated at the half's largest finite magnitude instead of overflowing to infinity
+def half_sat(v : float) : float16 => float16(clamp(v, -65504.0, 65504.0))
+
 //! Softplus with the standard large-x shortcut: x > 20 → x, else log(1 + exp(x)).
 def softplus(x : float) : float => x > 20.0 ? x : log(1.0 + exp(x))
 
