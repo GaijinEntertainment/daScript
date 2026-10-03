@@ -2287,14 +2287,6 @@ enum private RdecPass {
 
 var private g_rdec_pass_said : table<int>
 
-def private kvdt_name(v : int64) : string {
-    if (v == int64(int(KVDtype.f32))) return "f32"
-    if (v == int64(int(KVDtype.f16))) return "f16"
-    if (v == int64(int(KVDtype.q8_0))) return "q8_0"
-    if (v == int64(int(KVDtype.tq4))) return "tq4"
-    return "codec {v}"
-}
-
 var private g_rdec_last_pass : tuple<kind : RdecPass; a : int64; b : int64>   //! the pass just counted, for the device-home panic's text
 var private g_rdec_pass_seq = 0l   //! bumped per counted pass: the device-home guard tells a pass of its own call from one left by an earlier call
 
@@ -2343,7 +2335,7 @@ def private rdec_pass_words(kind : RdecPass) : string {
 def private rdec_pass_text(kind : RdecPass; a, b : int64) : string {
     var why = ""
     if (kind == RdecPass.codec) {
-        why = "the session's K/V codec {kvdt_name(a)}/{kvdt_name(b)} is not the armed mirror codec {kvdt_name(int64(int(g_rdec_kvdt)))} (a session made for the CPU rails)"
+        why = "the session's K/V codec {kv_dtype_of(int(a))}/{kv_dtype_of(int(b))} is not the armed mirror codec {g_rdec_kvdt} (a session made for the CPU rails)"
     } elif (kind == RdecPass.paged) {
         why = "the session uses a paged K/V cache; the mirror serves the flat cache only"
     } elif (kind == RdecPass.gap) {
