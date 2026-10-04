@@ -90,9 +90,7 @@ def private f16_feed_admits_kq() : bool {
 def private f32_chain_witness(t : T?; tr : Model; path : string; n : int64; prompt, toks : array<int64>; fed : FeedPair) {
     var f32_model <- load_model_(path, QuantMode.fp32)
     moe_gpu_drop_model()
-    var f32_session <- create_session(f32_model, mirror_kv_dtype())
-    var f32_rows <- feed_logits(f32_model, f32_session, prompt, toks)
-    delete f32_session
+    var f32_rows <- feed_alone(f32_model, mirror_kv_dtype(), prompt, toks)
     let what = "{n} tokens against the f32 chain [{tile_arm_tag()}]"
     let dist = chain_distances(t, tr, what, fed.gpu, fed.cpu, f32_rows, 0, "the f32 chain", "the CPU q8 chain")
     t |> success(dist.dev_ref <= F32_DIST_REL * dist.cpu_ref, "{what}: the device sits no further from the f32 chain ({dist.dev_ref}) than {F32_DIST_REL} of the CPU q8 chain's own distance ({dist.cpu_ref})")
@@ -338,9 +336,7 @@ def private with_warm_carrier(t : T?; body : block<(var tr : Model; prompt : arr
 def private feed_under_spec(tr : Model; prompt, toks : array<int64>; spec : bool) : array<array<float>> {
     let spec0 = get_mtp_spec()
     set_mtp_spec(spec)
-    var s <- create_session(tr, mirror_kv_dtype())
-    var out <- feed_logits(tr, s, prompt, toks)
-    delete s
+    var out <- feed_alone(tr, mirror_kv_dtype(), prompt, toks)
     set_mtp_spec(spec0)
     return <- out
 }
@@ -1364,7 +1360,7 @@ def test_gpu_resident_hybrid_mtp_block_codec(t : T?) {
     set_gpu_kv_dtype(KVDtype.q8_0)
     if (resident_mirror_dtype() != KVDtype.q8_0) {
         t |> skip("DASLLAMA_VK_KV32=1 arms the f32 mirror over a codec asked - the block-codec cells need it unset")
-        restore_gpu_kv_dtype(pin)
+        restore_gpu_kv_dtype_(pin)
         return
     }
     t |> run("the NextN head over a q8_0 mirror: the draft, the verify, the warmed head rows, six rounds") @(t : T?) {
@@ -1378,5 +1374,5 @@ def test_gpu_resident_hybrid_mtp_block_codec(t : T?) {
         test_gpu_resident_hybrid_mtp_verify(t)
         test_gpu_resident_hybrid_mtp_verify_reject(t)
     }
-    restore_gpu_kv_dtype(pin)
+    restore_gpu_kv_dtype_(pin)
 }

@@ -49,7 +49,7 @@ def pin_file_kv(dt : KVDtype) {
 
 //! the codec pin `pin_file_kv` found put back, from the same file's `[finalize]`
 def unpin_file_kv() {
-    restore_gpu_kv_dtype(g_file_kv_found)
+    restore_gpu_kv_dtype_(g_file_kv_found)
 }
 
 let private STEPS = 8l
@@ -62,12 +62,7 @@ def private prompt_c() : array<int64> => <- ramp_ids(48l, 0l, 1500l, 59l, 5500l)
 def private feed_c() : array<int64> => <- ramp_ids(STEPS, 0l, 2200l, 67l, 4200l)
 
 //! one session alone: the prefill's logits, then each fed step's
-def private logits_alone(tr : Model; prompt, toks : array<int64>) : array<array<float>> {
-    var s <- create_session(tr, mirror_kv_dtype())
-    var out <- feed_logits(tr, s, prompt, toks)
-    delete s
-    return <- out
-}
+def private logits_alone(tr : Model; prompt, toks : array<int64>) : array<array<float>> => <- feed_alone(tr, mirror_kv_dtype(), prompt, toks)
 
 def private log_peaks(what : string; got, want : array<float>) {
     let pg = argmax_of(got)

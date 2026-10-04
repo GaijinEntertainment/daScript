@@ -707,7 +707,7 @@ def set_gpu_kv_dtype(dt : KVDtype) {
 
 def gpu_kv_dtype_pin() : tuple<pinned : bool; dt : KVDtype> {
     //! The in-process ask as ``set_gpu_kv_dtype`` left it: ``pinned`` false where no caller asked and ``DASLLAMA_GPU_KV``
-    //! decides. A fixture reads it before it pins, then puts it back with ``restore_gpu_kv_dtype``.
+    //! decides. A fixture reads it before it pins, then puts it back with ``set_gpu_kv_dtype`` or ``reset_gpu_kv_dtype``.
     return gpu_kv_dtype_pin_()
 }
 
@@ -715,12 +715,6 @@ def reset_gpu_kv_dtype() {
     //! Lift the in-process ask ``set_gpu_kv_dtype`` made: ``DASLLAMA_GPU_KV`` decides the next load's mirror codec again.
     reset_gpu_kv_dtype_()
 }
-
-def restore_gpu_kv_dtype(pin : tuple<pinned : bool; dt : KVDtype>) {
-    //! Put the in-process ask back as ``gpu_kv_dtype_pin`` read it: the codec it held, or no ask where it found none.
-    restore_gpu_kv_dtype_(pin)
-}
-
 def gpu_ctx_pins() : tuple<ctx_max : int64; strict : bool> {
     //! The in-process context pins as set (``set_gpu_ctx_max``, ``set_gpu_ctx_strict``), apart from the
     //! environment's knobs: a fixture reads them before it pins and puts them back after its load.

@@ -88,12 +88,8 @@ def codec_distance_over(t : T?; tr : Model; n : int64; kv : KVDtype; cpu_prefill
     t |> success(moe_gpu_resident_active(), "the driver stayed armed through the run")
     delete sg
     moe_gpu_drop_model()
-    var sc <- create_session(tr, kv)
-    var cpu <- feed_logits(tr, sc, prompt, toks)
-    delete sc
-    var sf <- create_session(tr, KVDtype.f16)
-    var f16_rows <- feed_logits(tr, sf, prompt, toks)
-    delete sf
+    var cpu <- feed_alone(tr, kv, prompt, toks)
+    var f16_rows <- feed_alone(tr, KVDtype.f16, prompt, toks)
     let what = "{kv}, {n} tokens{cpu_prefill ? ", the prompt on the CPU rails" : ""}"
     let dist = chain_distances(t, tr, what, gpu, cpu, f16_rows, cpu_prefill ? 1 : 0)
     t |> success(dist.cpu_ref > 0.0, "{what}: the codec moves the CPU chain off its f16 rows")
@@ -224,9 +220,7 @@ def private perop_codec_compare(t : T?; tr : Model; n : int64; kv : KVDtype; bar
     var cpu <- feed_logits(tr, sc, prompt, toks)
     var host <- layer_rows(tr, sc, 0l, rows)
     delete sc
-    var sf <- create_session(tr, KVDtype.f16)
-    var f16_rows <- feed_logits(tr, sf, prompt, toks)
-    delete sf
+    var f16_rows <- feed_alone(tr, KVDtype.f16, prompt, toks)
     let what = "{kv}, {n} tokens on the per-op rails"
     if (attn0 != NO_CENSUS) {
         t |> success(attn1 - attn0 >= CODEC_FED_STEPS, "{what}: the device's attention block served the steps ({attn1 - attn0} dispatches)")

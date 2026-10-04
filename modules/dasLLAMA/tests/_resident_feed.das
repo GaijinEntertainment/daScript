@@ -95,7 +95,7 @@ def with_gpu_kv_dtype(t : T?; kv : KVDtype; body : block<void>) {
     } else {
         t |> skip("the environment arms a {resident_mirror_dtype()} mirror over the {kv} asked (DASLLAMA_VK_KV32=1) - the cell needs that unset")
     }
-    restore_gpu_kv_dtype(kv_pin)
+    restore_gpu_kv_dtype_(kv_pin)
 }
 
 //! where a cell pinned a mirror codec, the armed mirror holds it
@@ -152,7 +152,7 @@ def load_resident_at(path : string; kv : KVDtype; regions : int64 = 0l; strict_c
     let pin = gpu_kv_dtype_pin()
     set_gpu_kv_dtype(kv)
     var tr <- load_resident(path, regions, strict_ctx)
-    restore_gpu_kv_dtype(pin)
+    restore_gpu_kv_dtype_(pin)
     return <- tr
 }
 
@@ -323,6 +323,14 @@ def feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks : array
     return <- feed_logits(tr, s, prompt, toks) $ {}
 }
 
+//! `feed_logits` on a fresh session of codec `kv`, the session gone after
+def feed_alone(tr : Model; kv : KVDtype; prompt, toks : array<int64>) : array<array<float>> {
+    var s <- create_session(tr, kv)
+    var rows <- feed_logits(tr, s, prompt, toks)
+    delete s
+    return <- rows
+}
+
 //! the two arms' logits rows: the resident driver's, then the CPU chain's
 struct FeedPair {
     gpu : array<array<float>>
@@ -342,9 +350,7 @@ def resident_then_cpu_feed(t : T?; tr : Model; prompt, toks : array<int64>; afte
     invoke(after_gpu)
     delete sg
     moe_gpu_drop_model()
-    var sc <- create_session(tr, mirror_kv_dtype())
-    pair.cpu <- feed_logits(tr, sc, prompt, toks)
-    delete sc
+    pair.cpu <- feed_alone(tr, mirror_kv_dtype(), prompt, toks)
     return <- pair
 }
 

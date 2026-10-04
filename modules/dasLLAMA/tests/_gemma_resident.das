@@ -139,12 +139,8 @@ def prefill_vs_decode(t : T?; n : int64; gf : GemmaFile) {
                 moe_gpu_drop_model()
             }
             let name = arm == RESIDENT ? "resident" : "cpu"
-            var sa <- create_session(tr, mirror_kv_dtype())
-            var a <- feed_logits(tr, sa, window_prompt, window_steps)
-            delete sa
-            var sb <- create_session(tr, mirror_kv_dtype())
-            var b <- feed_logits(tr, sb, token_prompt, token_steps)
-            delete sb
+            var a <- feed_alone(tr, mirror_kv_dtype(), window_prompt, window_steps)
+            var b <- feed_alone(tr, mirror_kv_dtype(), token_prompt, token_steps)
             var worst = 0.0
             var worst_off = 0.0
             for (k in range64(long_length(a))) {
