@@ -2132,6 +2132,66 @@ def private qkn_rope_rows(q0h, kvh, bh, wnh, csh : array<float>; bpad, nh, nkvh,
     return <- (q = q, mk = mk, mv = mv)
 }
 
+//! the rope + K/V store (`rope_kv_cls`, or under `f16` its half-mirror twin) on one row against the CPU oracle: the q rows roped
+//! in place, k roped and v raw into the mirrors at row 0, with the q/k/v bias rows past a pad under `biased` - the oracle adds
+//! the bias first, then the engine's NEOX table rotation, the mirrors on the half grid under `f16`; the approx bars ride out
+//! the device's fma contraction
+def private rope_kv_arm(t : T?; f16, biased : bool) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let hs = 64
+        let half = hs / 2
+        let nh = 4
+        let nkvh = 2
+        let qd = nh * hs
+        let kvd = nkvh * hs
+        let npairs = (nh + nkvh) * half
+        var qh <- row_fill(qd, 23, 0, 0.09, 3.0, 71)
+        var kvh <- row_fill(qd + 2 * kvd, 19, 0, 0.07, 2.9, 83)
+        var csh : array<float>
+        csh |> resize(hs)
+        for (i in range(half)) {
+            csh[i] = 0.3 + float(i % 9) * 0.07          // cos row
+            csh[half + i] = 0.1 + float(i % 7) * 0.11   // sin row
+        }
+        let bpad = biased ? 64 : 0   // the bias rows sit past a pad, so boff is exercised off its default
+        var bh <- biased ? bias_past_pad(bpad, qd + 2 * kvd, 13, 0.05, 0.7, 29, 55.0) : array<float>()
+        var ref <- rope_kv_rows(qh, kvh, bh, csh, 0, qd, qd + kvd, 0, bpad, nh, nkvh, hs) $(x : float) => f16 ? f16r(x) : x
+        with_cell_planes() $(var cp : CellPlanes) {
+            //! the class kernel: q@0, kvsrc@1, kmir@2, vmir@3, cossin@4, tok@5 (pos 0 -> row 0), bias@6
+            let pq = cp |> io_(qh)
+            let pkv = cp |> in_(kvh)
+            let pkm = mirror_plane(cp, kvd, f16)
+            let pvm = mirror_plane(cp, kvd, f16)
+            let pcs = cp |> in_(csh)
+            let ptok = cp |> in_plain([TokMeta()])
+            let pb = biased ? in_(cp, bh) : pcs
+            let planes = fixed_array(pq, pkv, pkm, pvm, pcs, ptok, pb)
+            var sc = f16 ? cls_set(cp, planes, @@set_rope_kv_f16_cls) : cls_set(cp, planes, @@set_rope_kv_cls)
+            var pc = RopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(half),
+                neox = 1u, kpair0 = uint(nh * half), npairs = uint(npairs), layerbase = 0u, boff = uint(bpad), hasb = biased ? 1u : 0u)
+            cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                if (f16) {
+                    enc_rope_kv_f16_cls(raw2, h2, sc, pc, int64((npairs + 255) / 256))
+                } else {
+                    enc_rope_kv_cls(raw2, h2, sc, pc, int64((npairs + 255) / 256))
+                }
+            }
+            var cls_q <- cp |> plane_run(pq)
+            var m <- mirror_pair(cp, pkm, pvm, kvd, f16)
+            let tag = "{f16 ? "rope_kv_f16" : "rope_kv_store"}{biased ? " with the q/k/v bias" : ""}"
+            check_rows(t, "{tag}, q", cls_q, ref.q, BAR_APPROX_CTRL, qd, hs)
+            mirror_rows_check(t, tag, m, ref.k, ref.v, 0, kvd, kvd)
+            delete cls_q
+            delete m
+        }
+        delete qh
+        delete kvh
+        delete csh
+        delete bh
+        delete ref
+    }
+}
+
 [test]
 def test_vkd_rope_family(t0 : T?) {
     t0 |> run("rope_kv_store + qk_rms class kernels == the CPU oracle") <| @(t : T?) {
@@ -2140,69 +2200,12 @@ def test_vkd_rope_family(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
+            rope_kv_arm(t, false, true)
             let hs = 64
-            let half = hs / 2
             let nh = 4
             let nkvh = 2
             let qd = nh * hs
             let kvd = nkvh * hs
-            // ===== rope + KV store =====
-            {
-                let npairs = (nh + nkvh) * half
-                let kpair0 = nh * half
-                var qh <- row_fill(qd, 23, 0, 0.09, 3.0, 71)
-                var kvh <- row_fill(qd + 2 * kvd, 19, 0, 0.07, 2.9, 83)
-                var csh : array<float>
-                csh |> resize(hs)
-                for (i in range(half)) {
-                    csh[i] = 0.3 + float(i % 9) * 0.07          // cos row
-                    csh[half + i] = 0.1 + float(i % 7) * 0.11   // sin row
-                }
-                let bpad = 64   // the bias rows sit past a pad, so boff is exercised off its default
-                var bh : array<float>
-                bh |> resize(bpad + qd + 2 * kvd)
-                for (i in range(bpad + qd + 2 * kvd)) {
-                    bh[i] = i < bpad ? 55.0 : float((i * 13) % 29) * 0.05 - 0.7
-                }
-                var cls_q : array<float>
-                var cls_k : array<float>
-                var cls_v : array<float>
-                with_cell_planes() $(var cp : CellPlanes) {
-                    //! the class kernel: q@0, kvsrc@1, kmir@2, vmir@3, cossin@4, tok@5 (pos 0 -> row 0), bias@6
-                    let pq = cp |> io_(qh)
-                    let pkv = cp |> in_(kvh)
-                    let pkm = cp |> out_(kvd)
-                    let pvm = cp |> out_(kvd)
-                    let pcs = cp |> in_(csh)
-                    let ptok = cp |> in_plain([TokMeta()])
-                    let pb = cp |> in_(bh)
-                    var sc = cp |> cls_set(fixed_array(pq, pkv, pkm, pvm, pcs, ptok, pb), @@set_rope_kv_cls)
-                    var pc = RopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(half),
-                        neox = 1u, kpair0 = uint(kpair0), npairs = uint(npairs), layerbase = 0u, boff = uint(bpad), hasb = 1u)
-                    cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                        enc_rope_kv_cls(raw2, h2, sc, pc, int64((npairs + 255) / 256))
-                    }
-                    delete cls_q
-                    delete cls_k
-                    delete cls_v
-                    cls_q <- cp |> plane_run(pq)
-                    cls_k <- cp |> plane_run(pkm)
-                    cls_v <- cp |> plane_run(pvm)
-                }
-                //! oracle: bias first, then the engine's NEOX table rotation; v is raw plus bias — the approx bars ride out the device's fma contraction
-                var ref <- rope_kv_rows(qh, kvh, bh, csh, 0, qd, qd + kvd, 0, bpad, nh, nkvh, hs) $(x : float) => x
-                check_rows(t, "rope_kv_store with the q/k/v bias, q", cls_q, ref.q, BAR_APPROX_CTRL, qd, hs)
-                check_rows(t, "rope_kv_store with the q/k/v bias, k", cls_k, ref.k, BAR_APPROX_CTRL, kvd, hs)
-                check_rows(t, "rope_kv_store with the q/k/v bias, v", cls_v, ref.v, BAR_APPROX_CTRL, kvd, hs)
-                delete qh
-                delete kvh
-                delete csh
-                delete bh
-                delete ref
-                delete cls_q
-                delete cls_k
-                delete cls_v
-            }
             // ===== qk_rms =====
             {
                 let rows = 2
@@ -4941,6 +4944,16 @@ def private mirror_rows_check(t : T?; tag : string; m, mk, mv : array<float>; w0
     delete poisoned
 }
 
+//! a KV writer cell's mirror plane of `n` elements - halves under `f16` - under the NaN sentinel
+def private mirror_plane(var cp; n : int; f16 : bool) : int => f16 ? out_words(cp, int64(n) * 2l, NAN_SENTINEL_BITS) : out_(cp, n)
+
+//! the K mirror plane `pk` then the V one `pv`, `n` elements each, as floats: `mirror_rows_off`'s operand
+def private mirror_pair(cp; pk, pv, n : int; f16 : bool) : array<float> {
+    var m <- f16 ? unpack_f16(plane_as(cp, pk, type<float16>, n)) : plane_as(cp, pk, type<float>, n)
+    m |> push_from(f16 ? unpack_f16(plane_as(cp, pv, type<float16>, n)) : plane_as(cp, pv, type<float>, n))
+    return <- m
+}
+
 //! the batched KV writer's oracle over `npos` positions of the four-head, two-kv-head, 64-wide fixture: the bias row at
 //! `bpad` first, then each position's NEOX pairs off its cos row; the roped q rows, and k roped + v raw (plus bias) at the
 //! absolute mirror rows from `pos0` past `layerbase`, on the half grid under `f16`
@@ -4975,7 +4988,7 @@ def private rope_kv_b_ref(q0h, kvh, bh, csh : array<float>; npos, pos0, layerbas
 //! the batched rope + K/V store (`rope_kv_b_cls`, or under `f16` its half-mirror twin) over five positions into the mirrors
 //! at absolute rows against the CPU oracle - the split k / v projection rows, then the merged [k | v] rows over a mirror
 //! sentinel - with the q/k/v bias rows past a pad under `biased`; the f32 stamp's in-place q rows compare too
-def private rope_kv_b_arm(t : T?; f16, biased : bool) {   // nolint:STYLE037 — one flat gate: two projection layouts over either mirror width, each pick a ternary
+def private rope_kv_b_arm(t : T?; f16, biased : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let nh = 4
         let nkvh = 2
@@ -4994,27 +5007,15 @@ def private rope_kv_b_arm(t : T?; f16, biased : bool) {   // nolint:STYLE037 —
         var q0h <- row_fill(npos * qd, 31, 0, 0.05, 1.6, 67)
         var kvh <- row_fill(voff + npos * kvd, 23, 0, 0.04, 1.5, 71)
         var csh <- row_fill(npos * hs, 13, 0, 0.045, 0.9, 41)
-        let q_bytes = int64(npos * qd) * 4l
-        let kv_bytes = int64(voff + npos * kvd) * 4l
-        let cs_bytes = int64(npos * hs) * 4l
-        let m_bytes = int64(mirn) * (f16 ? 2l : 4l)
         let bpad = biased ? 96 : 0   // the bias rows sit past a pad, so boff is exercised off its default
         var bh <- biased ? bias_past_pad(bpad, qd + 2 * kvd, 19, 0.02, 0.3, 31, 77.0) : array<float>()
-        let b_bytes = biased ? long_length(bh) * 4l : cs_bytes
-        let qd2 = make_device_buf(q_bytes)
-        let kvdv = make_device_buf(kv_bytes)
-        let csd = make_device_buf(cs_bytes)
-        let bd = biased ? make_device_buf(b_bytes) : csd
-        let km2 = make_device_buf(m_bytes)
-        let vm2 = make_device_buf(m_bytes)
-        let host = make_host_buf(q_bytes + 2l * m_bytes, true, [cached = true])
         let wgs = (npos * ppp + 255) / 256
         var oref <- rope_kv_b_ref(q0h, kvh, bh, csh, npos, pos0, layerbase, bpad, f16)
         let q_ref & = oref.q
         let mk_ref & = oref.mk
         let mv_ref & = oref.mv
         // the merged k|v projection layout (the DASLLAMA_VK_KV_MERGE default): [k | v] per position at stride 2*kvd, v at
-        // +kvd - the same oracle rows must land; the mirrors take a sentinel first
+        // +kvd - the same oracle rows must land
         var kvm_h : array<float>
         kvm_h |> resize(npos * 2 * kvd)
         for (p in range(npos)) {
@@ -5023,52 +5024,40 @@ def private rope_kv_b_arm(t : T?; f16, biased : bool) {   // nolint:STYLE037 —
                 kvm_h[p * 2 * kvd + kvd + c] = kvh[voff + p * kvd + c]
             }
         }
-        var msent <- plane_of(mirn, -999.25)
-        var msent16 <- pack_f16(msent)
         let w0 = layerbase + pos0 * kvd
         for (merged in fixed_array(false, true)) {
-            unsafe {
-                upload_region_at(qd2, 0l, addr<uint8 const?>(q0h[0]), q_bytes)
-                upload_region_at(kvdv, 0l, merged ? addr<uint8 const?>(kvm_h[0]) : addr<uint8 const?>(kvh[0]), kv_bytes)
-                if (biased) {
-                    upload_region_at(bd, 0l, addr<uint8 const?>(bh[0]), b_bytes)
-                }
-                if (merged) {
-                    for (md in fixed_array(km2, vm2)) {
-                        upload_region_at(md, 0l, f16 ? addr<uint8 const?>(msent16[0]) : addr<uint8 const?>(msent[0]), m_bytes)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let pq = cp |> io_(q0h)
+                let pkv = merged ? in_(cp, kvm_h) : in_(cp, kvh)
+                let pkm = mirror_plane(cp, mirn, f16)
+                let pvm = mirror_plane(cp, mirn, f16)
+                let pcs = cp |> in_(csh)
+                let pb = biased ? in_(cp, bh) : pcs
+                let planes = fixed_array(pq, pkv, pkm, pvm, pcs, pb)
+                var sc = f16 ? cls_set(cp, planes, @@set_rope_kv_b_f16_cls) : cls_set(cp, planes, @@set_rope_kv_b_cls)
+                var pc = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs),
+                    half = uint(half), neox = 1u, kpair0 = uint(kpair0),
+                    ppp = uint(ppp), layerbase = uint(layerbase), npos = uint(npos),
+                    pos0 = uint(pos0), voff = uint(merged ? kvd : voff), kstride = uint(merged ? 2 * kvd : kvd), boff = uint(bpad), hasb = biased ? 1u : 0u)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    if (f16) {
+                        enc_rope_kv_b_f16_cls(raw, h, sc, pc, int64(wgs))
+                    } else {
+                        enc_rope_kv_b_cls(raw, h, sc, pc, int64(wgs))
                     }
                 }
-            }
-            upload_region_at(csd, 0l, unsafe(addr<uint8 const?>(csh[0])), cs_bytes)
-            let sbufs = fixed_array(qd2, kvdv, km2, vm2, csd, bd)
-            let ssizes = fixed_array(q_bytes, kv_bytes, m_bytes, m_bytes, cs_bytes, b_bytes)
-            let sbits = fixed_array(1u, 16u, 2u, 4u, 8u, 0u)
-            var sc = f16 ? set_rope_kv_b_f16_cls(sbufs, ssizes, sbits) : set_rope_kv_b_cls(sbufs, ssizes, sbits)
-            var pc = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs),
-                half = uint(half), neox = 1u, kpair0 = uint(kpair0),
-                ppp = uint(ppp), layerbase = uint(layerbase), npos = uint(npos),
-                pos0 = uint(pos0), voff = uint(merged ? kvd : voff), kstride = uint(merged ? 2 * kvd : kvd), boff = uint(bpad), hasb = biased ? 1u : 0u)
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                if (f16) {
-                    enc_rope_kv_b_f16_cls(raw, h, sc, pc, int64(wgs))
-                } else {
-                    enc_rope_kv_b_cls(raw, h, sc, pc, int64(wgs))
+                var q_cls <- cp |> plane_run(pq)
+                var m_cls <- mirror_pair(cp, pkm, pvm, mirn, f16)
+                let form = merged ? " over merged k|v rows (kstride 2*kvd, voff kvd)" : ""
+                if (!f16) {
+                    check_rows(t, "{name}{form}, q", q_cls, q_ref, BAR_APPROX_CTRL, qd, hs)
                 }
-                cmd_copy_planes(raw, h, fixed_array(qd2, km2, vm2), host, fixed_array(q_bytes, m_bytes, m_bytes), 8u)
+                mirror_rows_check(t, "{name}{form}", m_cls, mk_ref, mv_ref, w0, npos * kvd, mirn)
+                delete q_cls
+                delete m_cls
             }
-            var q_cls <- staged(host.mapped, 0l, npos * qd, type<float>)
-            var m_cls <- f16 ? unpack_f16(staged(host.mapped, q_bytes, 2 * mirn, type<float16>)) : staged(host.mapped, q_bytes, 2 * mirn, type<float>)
-            let form = merged ? " over merged k|v rows (kstride 2*kvd, voff kvd)" : ""
-            if (!f16) {
-                check_rows(t, "{name}{form}, q", q_cls, q_ref, BAR_APPROX_CTRL, qd, hs)
-            }
-            mirror_rows_check(t, "{name}{form}", m_cls, mk_ref, mv_ref, w0, npos * kvd, mirn)
-            delete q_cls
-            delete m_cls
         }
         delete kvm_h
-        delete msent
-        delete msent16
         delete q0h
         delete kvh
         delete csh
@@ -5098,63 +5087,46 @@ def private qkn_rope_arm(t : T?; f16, biased : bool) {
         var q0h <- row_fill(qd, 31, 0, 0.05, 1.6, 67)
         var kvh <- row_fill(qd + 2 * kvd, 23, 0, 0.04, 1.5, 71)
         var csh <- row_fill(hs, 13, 0, 0.045, 0.9, 41)
-        var wnh : array<float>
-        wnh |> resize(2 * hs)
-        for (i in range(2 * hs)) {
-            wnh[i] = 0.75 + float(i % 11) * 0.05
-        }
-        let q_bytes = int64(qd) * 4l
-        let kv_bytes = int64(qd + 2 * kvd) * 4l
-        let cs_bytes = int64(hs) * 4l
-        let wn_bytes = int64(2 * hs) * 4l
-        let m_bytes = int64(mirn2) * (f16 ? 2l : 4l)
+        var wnh <- [for (i in range(2 * hs)); 0.75 + float(i % 11) * 0.05]
         let bpad = biased ? 96 : 0   // the bias rows sit past a pad, so boff is exercised off its default
         var bh <- biased ? bias_past_pad(bpad, qd + 2 * kvd, 17, 0.02, 0.28, 29, 77.0) : array<float>()
-        let b_bytes = biased ? long_length(bh) * 4l : cs_bytes
-        let qd2 = make_device_buf(q_bytes)
-        let kvdv = make_device_buf(kv_bytes)
-        let csd = make_device_buf(cs_bytes)
-        let bd = biased ? make_device_buf(b_bytes) : csd
-        let wnd = make_device_buf(wn_bytes)
-        let km2 = make_device_buf(m_bytes)
-        let vm2 = make_device_buf(m_bytes)
-        let host = make_host_buf(q_bytes + 2l * m_bytes, true, [cached = true])
         let wgs = nh + nkvh
-        unsafe {
-            upload_region_at(kvdv, 0l, addr<uint8 const?>(kvh[0]), kv_bytes)
-            upload_region_at(csd, 0l, addr<uint8 const?>(csh[0]), cs_bytes)
-            upload_region_at(wnd, 0l, addr<uint8 const?>(wnh[0]), wn_bytes)
-            upload_region_at(qd2, 0l, addr<uint8 const?>(q0h[0]), q_bytes)
-            if (biased) {
-                upload_region_at(bd, 0l, addr<uint8 const?>(bh[0]), b_bytes)
-            }
-        }
-        let tok = tok_buf([TokMeta()])   // mirror row = layerbase alone
-        let sbufs = fixed_array(qd2, kvdv, km2, vm2, csd, wnd, tok, bd)
-        let ssizes = fixed_array(q_bytes, kv_bytes, m_bytes, m_bytes, cs_bytes, wn_bytes, TOK_META_BYTES, b_bytes)
-        let sbits = fixed_array(16u, 1u, 2u, 4u, 8u, 8u, 0u, 0u)
-        var sc = f16 ? set_qkn_rope_f16_cls(sbufs, ssizes, sbits) : set_qkn_rope_cls(sbufs, ssizes, sbits)
         var pc = QknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs),
             half = uint(half), neox = uint(neox), nh = uint(nh),
             layerbase = uint(krow), qwoff = 0u,
             kwoff = uint(hs), eps = eps, boff = uint(bpad), hasb = biased ? 1u : 0u)
-        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            if (f16) {
-                enc_qkn_rope_f16_cls(raw, h, sc, pc, int64(wgs))
-            } else {
-                enc_qkn_rope_cls(raw, h, sc, pc, int64(wgs))
+        var q_cls : array<float>
+        var m_cls : array<float>
+        with_cell_planes() $(var cp : CellPlanes) {
+            let pq = cp |> io_(q0h)
+            let pkv = cp |> in_(kvh)
+            let pkm = mirror_plane(cp, mirn2, f16)
+            let pvm = mirror_plane(cp, mirn2, f16)
+            let pcs = cp |> in_(csh)
+            let pwn = cp |> in_(wnh)
+            let ptok = cp |> in_plain([TokMeta()])   // mirror row = layerbase alone
+            let pb = biased ? in_(cp, bh) : pcs
+            let planes = fixed_array(pq, pkv, pkm, pvm, pcs, pwn, ptok, pb)
+            var sc = f16 ? cls_set(cp, planes, @@set_qkn_rope_f16_cls) : cls_set(cp, planes, @@set_qkn_rope_cls)
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                if (f16) {
+                    enc_qkn_rope_f16_cls(raw, h, sc, pc, int64(wgs))
+                } else {
+                    enc_qkn_rope_cls(raw, h, sc, pc, int64(wgs))
+                }
             }
-            cmd_copy_planes(raw, h, fixed_array(qd2, km2, vm2), host, fixed_array(q_bytes, m_bytes, m_bytes), 8u)
+            delete q_cls
+            delete m_cls
+            q_cls <- cp |> plane_run(pq)
+            m_cls <- mirror_pair(cp, pkm, pvm, mirn2, f16)
         }
-        var q_cls <- staged(host.mapped, 0l, qd, type<float>)
-        var m_cls <- f16 ? unpack_f16(staged(host.mapped, q_bytes, 2 * mirn2, type<float16>)) : staged(host.mapped, q_bytes, 2 * mirn2, type<float>)
         // oracle: the bias row at boff, then per-head rms-norm with its weight row, then NEOX rope off the normed row; k lands
         // at the mirror row, v copies raw plus its bias, on the half grid under `f16`
         var ref <- qkn_rope_rows(q0h, kvh, bh, wnh, csh, bpad, nh, nkvh, hs, krow, mirn2, eps) $(x : float) => f16 ? f16r(x) : x
         check_rows(t, "{name}, q", q_cls, ref.q, BAR_APPROX_CTRL, qd, hs)
         mirror_rows_check(t, name, m_cls, ref.mk, ref.mv, krow, nkvh * hs, mirn2)
         if (!f16) {
-            qkn_rope_n_rows(t, q0h, kvh, csh, q_cls, m_cls, wnd, bd, b_bytes, pc)
+            qkn_rope_n_rows(t, q0h, kvh, csh, wnh, bh, q_cls, m_cls, pc)
         }
         delete q0h
         delete kvh
@@ -5167,9 +5139,10 @@ def private qkn_rope_arm(t : T?; f16, biased : bool) {
     }
 }
 
-//! `qkn_rope_cls`'s N-row form over two stacked rows of `qkn_rope_arm`'s fixture (`pc` its one-row arguments), each row at its
-//! own token meta, against the one-row kernel on that row alone bit for bit (`q_cls`, `m_cls`: row 0's one-row run)
-def private qkn_rope_n_rows(t : T?; q0h, kvh, csh, q_cls, m_cls : array<float>; wnd, bd : uint64; b_bytes : int64; pc) {
+//! `qkn_rope_cls`'s N-row form over two stacked rows of `qkn_rope_arm`'s fixture (`pc` its one-row arguments, `wnh` / `bh` its
+//! norm and bias rows - no bias plane where `bh` is empty), each row at its own token meta, against the one-row kernel on that row
+//! alone bit for bit (`q_cls`, `m_cls`: row 0's one-row run)
+def private qkn_rope_n_rows(t : T?; q0h, kvh, csh, wnh, bh, q_cls, m_cls : array<float>; pc) {
     let nh = 4
     let nkvh = 2
     let hs = 64
@@ -5178,10 +5151,6 @@ def private qkn_rope_n_rows(t : T?; q0h, kvh, csh, q_cls, m_cls : array<float>; 
     let krow = 192
     let mirn2 = krow + nkvh * hs
     let wgs = nh + nkvh
-    let q_bytes = int64(qd) * 4l
-    let kv_bytes = int64(qd + 2 * kvd) * 4l
-    let cs_bytes = int64(hs) * 4l
-    let wn_bytes = int64(2 * hs) * 4l
     let kvrow = qd + 2 * kvd
     let mn = krow + 2 * kvd   // row 0 at position 0 and row 1 at position 1: two mirror rows past layerbase
     var q2h : array<float>
@@ -5202,86 +5171,67 @@ def private qkn_rope_n_rows(t : T?; q0h, kvh, csh, q_cls, m_cls : array<float>; 
         cs2h[i] = csh[i]
         cs2h[hs + i] = csh[hs - 1 - i] * 0.9
     }
-    let mn_bytes = int64(mn) * 4l
-    let q1d = make_device_buf(q_bytes)
-    let kv1d = make_device_buf(kv_bytes)
-    let cs1d = make_device_buf(cs_bytes)
-    let km1 = make_device_buf(mn_bytes)
-    let vm1 = make_device_buf(mn_bytes)
-    let q2d = make_device_buf(2l * q_bytes)
-    let kv2d = make_device_buf(2l * kv_bytes)
-    let cs2d = make_device_buf(2l * cs_bytes)
-    let kmn = make_device_buf(mn_bytes)
-    let vmn = make_device_buf(mn_bytes)
-    let host2 = make_host_buf(3l * q_bytes + 4l * mn_bytes, true, [cached = true])
-    unsafe {
-        upload_region_at(q1d, 0l, addr<uint8 const?>(q2h[qd]), q_bytes)
-        upload_region_at(kv1d, 0l, addr<uint8 const?>(kv2h[kvrow]), kv_bytes)
-        upload_region_at(cs1d, 0l, addr<uint8 const?>(cs2h[hs]), cs_bytes)
-        upload_region_at(q2d, 0l, addr<uint8 const?>(q2h[0]), 2l * q_bytes)
-        upload_region_at(kv2d, 0l, addr<uint8 const?>(kv2h[0]), 2l * kv_bytes)
-        upload_region_at(cs2d, 0l, addr<uint8 const?>(cs2h[0]), 2l * cs_bytes)
-        nan_sentinel_upload(km1, mn_bytes)
-        nan_sentinel_upload(vm1, mn_bytes)
-        nan_sentinel_upload(kmn, mn_bytes)
-        nan_sentinel_upload(vmn, mn_bytes)
-        let tok1 = tok_buf([TokMeta(pos = 1u)])
-        let tok2 = tok_buf([TokMeta(pos = 0u), TokMeta(pos = 1u)])
-        var s1 = set_qkn_rope_cls(fixed_array(q1d, kv1d, km1, vm1, cs1d, wnd, tok1, bd),
-            fixed_array(q_bytes, kv_bytes, mn_bytes, mn_bytes, cs_bytes, wn_bytes, TOK_META_BYTES, b_bytes),
-            fixed_array(16u, 1u, 2u, 4u, 8u, 8u, 0u, 0u))
-        var s2 = set_qkn_rope_cls(fixed_array(q2d, kv2d, kmn, vmn, cs2d, wnd, tok2, bd),
-            fixed_array(2l * q_bytes, 2l * kv_bytes, mn_bytes, mn_bytes, 2l * cs_bytes, wn_bytes, 2l * TOK_META_BYTES, b_bytes),
-            fixed_array(16u, 1u, 2u, 4u, 8u, 8u, 0u, 0u))
-        var pc1 = pc
-        var pc2 = pc
-        pc2.rowwg = uint(wgs)
-        pc2.kvrow = uint(kvrow)
-        pc2.qrow = uint(qd)
-        pc2.cosrow = uint(hs)
-        cmd_one_shot() $(rawn : VkCommandBuffer; var hn : VkHaz) {
-            enc_qkn_rope_cls(rawn, hn, s1, pc1, int64(wgs))
-            enc_qkn_rope_cls(rawn, hn, s2, pc2, int64(wgs) * 2l)
-            cmd_copy_planes(rawn, hn, fixed_array(q1d, km1, vm1, q2d, kmn, vmn), host2,
-                fixed_array(q_bytes, mn_bytes, mn_bytes, 2l * q_bytes, mn_bytes, mn_bytes), 8u)
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        with_cell_planes() $(var cp : CellPlanes) {
+            let pwn = cp |> in_(wnh)
+            //! the one-row kernel on row 1 alone, at its own position
+            let pq1 = cp |> io_(copy_span(q2h, qd, qd))
+            let pkv1 = cp |> in_(copy_span(kv2h, kvrow, kvrow))
+            let pkm1 = cp |> out_(mn)
+            let pvm1 = cp |> out_(mn)
+            let pcs1 = cp |> in_(copy_span(cs2h, hs, hs))
+            let ptok1 = cp |> in_plain([TokMeta(pos = 1u)])
+            let pb1 = empty(bh) ? pcs1 : in_(cp, bh)
+            //! the N-row form over both rows
+            let pq2 = cp |> io_(q2h)
+            let pkv2 = cp |> in_(kv2h)
+            let pkmn = cp |> out_(mn)
+            let pvmn = cp |> out_(mn)
+            let pcs2 = cp |> in_(cs2h)
+            let ptok2 = cp |> in_plain([TokMeta(pos = 0u), TokMeta(pos = 1u)])
+            let pb2 = empty(bh) ? pcs2 : pb1
+            var s1 = cp |> cls_set(fixed_array(pq1, pkv1, pkm1, pvm1, pcs1, pwn, ptok1, pb1), @@set_qkn_rope_cls)
+            var s2 = cp |> cls_set(fixed_array(pq2, pkv2, pkmn, pvmn, pcs2, pwn, ptok2, pb2), @@set_qkn_rope_cls)
+            var pc1 = pc
+            var pc2 = pc
+            pc2.rowwg = uint(wgs)
+            pc2.kvrow = uint(kvrow)
+            pc2.qrow = uint(qd)
+            pc2.cosrow = uint(hs)
+            cp |> cell_record() $(rawn : VkCommandBuffer; var hn : VkHaz) {
+                enc_qkn_rope_cls(rawn, hn, s1, pc1, int64(wgs))
+                enc_qkn_rope_cls(rawn, hn, s2, pc2, int64(wgs) * 2l)
+            }
+            var q1 <- cp |> plane_as(pq1, type<uint>, qd)
+            var km1 <- cp |> plane_as(pkm1, type<uint>, mn)
+            var vm1 <- cp |> plane_as(pvm1, type<uint>, mn)
+            var q2 <- cp |> plane_as(pq2, type<uint>, 2 * qd)
+            var kmn <- cp |> plane_as(pkmn, type<uint>, mn)
+            var vmn <- cp |> plane_as(pvmn, type<uint>, mn)
+            var badn = 0
+            for (i in range(qd)) {   // row 0's q against the one-row run above, row 1's against its own
+                badn += q2[i] != float_bits_to_uint(q_cls[i]) ? 1 : 0
+                badn += q2[qd + i] != q1[i] ? 1 : 0
+            }
+            for (i in range(kvd)) {   // row 0's mirror rows against the one-row run's, row 1's (one row past) against its own
+                badn += kmn[krow + i] != float_bits_to_uint(m_cls[krow + i]) ? 1 : 0
+                badn += vmn[krow + i] != float_bits_to_uint(m_cls[mirn2 + krow + i]) ? 1 : 0
+                badn += kmn[krow + kvd + i] != km1[krow + kvd + i] ? 1 : 0
+                badn += vmn[krow + kvd + i] != vm1[krow + kvd + i] ? 1 : 0
+            }
+            t |> success(badn == 0, "qkn_rope_kv over two rows: each row's q and mirror rows are the one-row kernel's bit for bit ({badn} off)")
+            var stalen = 0
+            for (i in range(krow)) {   // nothing lands under layerbase on either mirror
+                stalen += kmn[i] != NAN_SENTINEL_BITS || vmn[i] != NAN_SENTINEL_BITS ? 1 : 0
+            }
+            t |> success(stalen == 0, "qkn_rope_kv over two rows: the mirror rows under layerbase keep the sentinel ({stalen} written)")
+            delete q1
+            delete km1
+            delete vm1
+            delete q2
+            delete kmn
+            delete vmn
         }
-        let f = reinterpret<float?>(host2.mapped)
-        let km1o = qd
-        let vm1o = qd + mn
-        let q2o = qd + 2 * mn
-        let kmno = 3 * qd + 2 * mn
-        let vmno = 3 * qd + 3 * mn
-        var badn = 0
-        for (i in range(qd)) {   // row 0's q against the one-row run above, row 1's against its own
-            if (float_bits_to_uint(f[q2o + i]) != float_bits_to_uint(q_cls[i])) {
-                badn++
-            }
-            if (float_bits_to_uint(f[q2o + qd + i]) != float_bits_to_uint(f[i])) {
-                badn++
-            }
-        }
-        for (i in range(kvd)) {   // row 0's mirror rows against the one-row run's, row 1's (one row past) against its own
-            if (float_bits_to_uint(f[kmno + krow + i]) != float_bits_to_uint(m_cls[krow + i])) {
-                badn++
-            }
-            if (float_bits_to_uint(f[vmno + krow + i]) != float_bits_to_uint(m_cls[mirn2 + krow + i])) {
-                badn++
-            }
-            if (float_bits_to_uint(f[kmno + krow + kvd + i]) != float_bits_to_uint(f[km1o + krow + kvd + i])) {
-                badn++
-            }
-            if (float_bits_to_uint(f[vmno + krow + kvd + i]) != float_bits_to_uint(f[vm1o + krow + kvd + i])) {
-                badn++
-            }
-        }
-        t |> success(badn == 0, "qkn_rope_kv over two rows: each row's q and mirror rows are the one-row kernel's bit for bit ({badn} off)")
-        var stalen = 0
-        for (i in range(krow)) {   // nothing lands under layerbase on either mirror
-            if (float_bits_to_uint(f[kmno + i]) != NAN_SENTINEL_BITS || float_bits_to_uint(f[vmno + i]) != NAN_SENTINEL_BITS) {
-                stalen++
-            }
-        }
-        t |> success(stalen == 0, "qkn_rope_kv over two rows: the mirror rows under layerbase keep the sentinel ({stalen} written)")
     }
     delete q2h
     delete kv2h
@@ -5338,47 +5288,34 @@ def test_vkd_at_prep(t0 : T?) {
             var smh <- row_fill(sm_n, 11, 0, 0.05, 0.8, 37)
             var bh <- row_fill(qd + kvd, 7, 0, 0.03, 0.3, 23)   //! the projection bias: [q (qd) | k (kvd)], the k pass reads at boff = qd
             smh[0] = eps
-            let srcq_bytes = int64(rows * 2 * qd) * 4l
-            let srck_bytes = int64(rows * kvd) * 4l
-            let sm_bytes = int64(sm_n) * 4l
-            let b_bytes = int64(qd + kvd) * 4l
-            let qp_bytes = int64(rows * qd) * 4l
-            let kp_bytes = int64((w0 + rows) * kvd) * 4l
-            let srcqd = make_device_buf(srcq_bytes)
-            let srckd = make_device_buf(srck_bytes)
-            let smd = make_device_buf(sm_bytes)
-            let bd = make_device_buf(b_bytes)
-            let qp2 = make_device_buf(qp_bytes)
-            let g2 = make_device_buf(qp_bytes)
-            let kp2 = make_device_buf(kp_bytes)
-            let host = make_host_buf(2l * qp_bytes + kp_bytes, true, [cached = true])
-            unsafe {
-                upload_region_at(srcqd, 0l, addr<uint8 const?>(srcqh[0]), srcq_bytes)
-                upload_region_at(srckd, 0l, addr<uint8 const?>(srckh[0]), srck_bytes)
-                upload_region_at(smd, 0l, addr<uint8 const?>(smh[0]), sm_bytes)
-                upload_region_at(bd, 0l, addr<uint8 const?>(bh[0]), b_bytes)
+            var o_cls : array<float>
+            with_cell_planes() $(var cp : CellPlanes) {
+                let psq = cp |> in_(srcqh)
+                let psk = cp |> in_(srckh)
+                let psm = cp |> in_(smh)
+                let pb = cp |> in_(bh)
+                let pqp = cp |> out_(rows * qd)
+                let pg = cp |> out_(rows * qd)
+                let pkp = cp |> out_((w0 + rows) * kvd)
+                // the class collapse: ONE kernel, two dispatches with different push values
+                var scq = cp |> cls_set(fixed_array(psq, pqp, pg, psm, pb), @@set_at_prep_cls)
+                var sck = cp |> cls_set(fixed_array(psk, pkp, pg, psm, pb), @@set_at_prep_cls)
+                var pcq = AtPrepArgs(d = uint(qd), nh = uint(nh), hs = uint(hs),
+                    half = uint(half), flags = uint(flags), rms_off = uint(rmsq_off),
+                    cos_off = uint(cos_off), sin_off = uint(sin_off), obase = 0u,
+                    qsrc = 1u, boff = 0u, hasb = 1u, eps = eps)
+                var pck = AtPrepArgs(d = uint(kvd), nh = uint(nkvh), hs = uint(hs),
+                    half = uint(half), flags = uint(flags), rms_off = uint(rmsk_off),
+                    cos_off = uint(cos_off), sin_off = uint(sin_off), obase = uint(w0),
+                    qsrc = 0u, boff = uint(qd), hasb = 1u, eps = eps)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_at_prep_cls(raw, h, scq, pcq, int64(rows))
+                    enc_at_prep_cls(raw, h, sck, pck, int64(rows))
+                }
+                for (p in fixed_array(pqp, pg, pkp)) {
+                    o_cls |> push_from(cp |> plane_run(p))
+                }
             }
-            // the class collapse: ONE kernel, two dispatches with different push values
-            var scq = set_at_prep_cls(fixed_array(srcqd, qp2, g2, smd, bd),
-                fixed_array(srcq_bytes, qp_bytes, qp_bytes, sm_bytes, b_bytes),
-                fixed_array(8u, 1u, 2u, 4u, 32u))
-            var sck = set_at_prep_cls(fixed_array(srckd, kp2, g2, smd, bd),
-                fixed_array(srck_bytes, kp_bytes, qp_bytes, sm_bytes, b_bytes),
-                fixed_array(8u, 16u, 0u, 4u, 32u))
-            var pcq = AtPrepArgs(d = uint(qd), nh = uint(nh), hs = uint(hs),
-                half = uint(half), flags = uint(flags), rms_off = uint(rmsq_off),
-                cos_off = uint(cos_off), sin_off = uint(sin_off), obase = 0u,
-                qsrc = 1u, boff = 0u, hasb = 1u, eps = eps)
-            var pck = AtPrepArgs(d = uint(kvd), nh = uint(nkvh), hs = uint(hs),
-                half = uint(half), flags = uint(flags), rms_off = uint(rmsk_off),
-                cos_off = uint(cos_off), sin_off = uint(sin_off), obase = uint(w0),
-                qsrc = 0u, boff = uint(qd), hasb = 1u, eps = eps)
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_at_prep_cls(raw, h, scq, pcq, int64(rows))
-                enc_at_prep_cls(raw, h, sck, pck, int64(rows))
-                cmd_copy_planes(raw, h, fixed_array(qp2, g2, kp2), host, fixed_array(qp_bytes, qp_bytes, kp_bytes), 1u | 2u | 16u)
-            }
-            var o_cls <- staged(host.mapped, 0l, 2 * rows * qd + (w0 + rows) * kvd, type<float>)
             //! oracle: deinterleave (gated q), bias, per-head rms with the pass's weight row, partial NEOX rope over dims [0, 2*half), panel rows at obase + p
             var o_ref : array<float>
             o_ref |> resize(2 * rows * qd + (w0 + rows) * kvd)
@@ -7003,90 +6940,9 @@ def test_vkd_kv16_writers(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let nh = 4
-            let nkvh = 2
-            let hs = 64
-            let half = hs / 2
-            let qd = nh * hs
-            let kvd = nkvh * hs
-            // --- rope_kv_f16: q roped f32 in place, k/v rows land f16; unbiased, then the f32 twin's bias rows ---
+            // --- rope_kv_f16: q roped f32 in place, k/v rows land f16 (the clamp a no-op at these magnitudes); unbiased, then the f32 twin's bias rows ---
             for (biased in fixed_array(false, true)) {
-                let npairs = (nh + nkvh) * half
-                let kpair0 = nh * half
-                var qh <- row_fill(qd, 23, 0, 0.09, 3.0, 71)
-                var kvh <- row_fill(qd + 2 * kvd, 19, 0, 0.07, 2.9, 83)
-                var csh : array<float>
-                csh |> resize(hs)
-                for (i in range(half)) {
-                    csh[i] = 0.3 + float(i % 9) * 0.07
-                    csh[half + i] = 0.1 + float(i % 7) * 0.11
-                }
-                let bpad = biased ? 64 : 0   // the bias rows sit past a pad, so boff is exercised off its default
-                var bh : array<float>
-                if (biased) {
-                    bh |> resize(bpad + qd + 2 * kvd)
-                    for (i in range(bpad + qd + 2 * kvd)) {
-                        bh[i] = i < bpad ? 55.0 : float((i * 13) % 29) * 0.05 - 0.7
-                    }
-                }
-                let q_bytes = int64(qd) * 4l
-                let kv_bytes = int64(qd + 2 * kvd) * 4l
-                let m_bytes = int64(kvd) * 2l   // f16 rows
-                let cs_bytes = int64(hs) * 4l
-                let b_bytes = biased ? long_length(bh) * 4l : cs_bytes
-                let kvd_dev = make_device_buf(kv_bytes)
-                let csd = make_device_buf(cs_bytes)
-                let bd = biased ? make_device_buf(b_bytes) : csd
-                let q2 = make_device_buf(q_bytes)
-                let km2 = make_device_buf(m_bytes)
-                let vm2 = make_device_buf(m_bytes)
-                var host = make_host_buf(q_bytes + 2l * m_bytes, true, [cached = true])
-                var cls_q : array<float>
-                var k16 : array<float16>
-                var v16 : array<float16>
-                cls_q |> resize(qd)
-                k16 |> resize(kvd)
-                v16 |> resize(kvd)
-                let wgs = int64((npairs + 255) / 256)
-                unsafe {
-                    upload_region_at(kvd_dev, 0l, addr<uint8 const?>(kvh[0]), kv_bytes)
-                    upload_region_at(csd, 0l, addr<uint8 const?>(csh[0]), cs_bytes)
-                    upload_region_at(q2, 0l, addr<uint8 const?>(qh[0]), q_bytes)
-                    if (biased) {
-                        upload_region_at(bd, 0l, addr<uint8 const?>(bh[0]), b_bytes)
-                    }
-                    let tok = tok_buf([TokMeta()])
-                    var sc = set_rope_kv_f16_cls(fixed_array(q2, kvd_dev, km2, vm2, csd, tok, bd),
-                        fixed_array(q_bytes, kv_bytes, m_bytes, m_bytes, cs_bytes, TOK_META_BYTES, b_bytes),
-                        fixed_array(16u, 1u, 2u, 4u, 8u, 0u, 0u))
-                    var pc = RopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(half),
-                        neox = 1u, kpair0 = uint(kpair0), npairs = uint(npairs), layerbase = 0u, boff = uint(bpad), hasb = biased ? 1u : 0u)
-                    cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                        enc_rope_kv_f16_cls(raw2, h2, sc, pc, wgs)
-                        cmd_copy_planes(raw2, h2, fixed_array(q2, km2, vm2), host, fixed_array(q_bytes, m_bytes, m_bytes), 2u | 4u | 16u)
-                    }
-                    memcpy(addr<void?>(cls_q[0]), host.mapped, q_bytes)
-                    memcpy(addr<void?>(k16[0]), reinterpret<void?>(intptr(host.mapped) + uint64(q_bytes)), m_bytes)
-                    memcpy(addr<void?>(v16[0]), reinterpret<void?>(intptr(host.mapped) + uint64(q_bytes + m_bytes)), m_bytes)
-                }
-                var cls_k <- unpack_f16(k16)
-                var cls_v <- unpack_f16(v16)
-                // oracle: the f32 rotation lands on the f16 grid (clamp is a no-op at these magnitudes)
-                var ref <- rope_kv_rows(qh, kvh, bh, csh, 0, qd, qd + kvd, 0, bpad, nh, nkvh, hs) $(x : float) => f16r(x)
-                let tag = "rope_kv_f16{biased ? " with the q/k/v bias" : ""}"
-                check_rows(t, "{tag}, q", cls_q, ref.q, BAR_APPROX_CTRL, qd, hs)
-                check_rows(t, "{tag}, k", cls_k, ref.k, BAR_APPROX_CTRL, kvd, hs)
-                check_rows(t, "{tag}, v", cls_v, ref.v, BAR_APPROX_CTRL, kvd, hs)
-                delete qh
-                delete kvh
-                delete csh
-                delete bh
-                delete ref
-                delete cls_q
-                delete cls_k
-                delete cls_v
-                delete k16
-                delete v16
+                rope_kv_arm(t, true, biased)
             }
             for (biased in fixed_array(false, true)) {
                 rope_kv_b_arm(t, true, biased)
