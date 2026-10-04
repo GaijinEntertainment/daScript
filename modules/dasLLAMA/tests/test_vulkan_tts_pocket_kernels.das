@@ -327,10 +327,8 @@ def private pk_gemv_fixture(quad : bool) : PkGemvFix {
         mods <- row_fill(2 * nin + nout, 31, 7, 0.01, 0.5), x0 <- row_fill(nout, 43, 13, 0.04, 1.8),
         y0 <- row_fill(nout, 47, 17, 0.03, 1.1))
     var wst <- poison_plane(nout * PG_STRIDE)
-    for (o in range(nout)) {
-        for (k in range(nin)) {
-            wst[o * PG_STRIDE + k] = f.lin.w[o * nin + k]
-        }
+    for (o in range64(f.lin.nout)) {
+        linear_weight_row(f.lin, o, wst, o * int64(PG_STRIDE))
     }
     f.woff = quad ? put_run4(f.slab, wst) : put_run(f.slab, wst)
     f.boff = put_run(f.slab, f.lin.b)
@@ -542,16 +540,12 @@ def private pk_fused_fixture() : PkFusedFix {
         norm <- TtsNorm(w <- row_fill(d, 29, 5, 0.01, -0.5), b <- row_fill(d, 31, 2, 0.02, 0.9)),
         x <- row_fill(d, 41, 7, 0.05, 2.1), y0 <- row_fill(d, 47, 17, 0.03, 1.1), scale <- row_fill(d, 37, 5, 0.03, 1.3))
     var wq <- poison_plane(3 * d * PF_STRIDE)
-    for (o in range(3 * d)) {
-        for (k in range(d)) {
-            wq[o * PF_STRIDE + k] = f.qkv.w[o * d + k]
-        }
+    for (o in range64(f.qkv.nout)) {
+        linear_weight_row(f.qkv, o, wq, o * int64(PF_STRIDE))
     }
     var ws <- poison_plane(d * PF_STRIDE)
-    for (o in range(d)) {
-        for (k in range(d)) {
-            ws[o * PF_STRIDE + k] = f.sq.w[o * d + k]
-        }
+    for (o in range64(f.sq.nout)) {
+        linear_weight_row(f.sq, o, ws, o * int64(PF_STRIDE))
     }
     f.woff_q = put_run(f.slab, wq)
     f.boff_q = put_run(f.slab, f.qkv.b)
