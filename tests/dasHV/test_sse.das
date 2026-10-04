@@ -37,6 +37,12 @@ class SseTestServer : HvWebServer {
             set_header(resp, "Content-Type", "text/event-stream")
             return resp |> TEXT_PLAIN(sse_format(string(req.body), "echo"))
         }
+        // a streamed answer: events, then the close - no Content-Length on it
+        STREAM("/streamed") <| @(var req : HttpRequest?; var writer : HttpResponseWriter?) {
+            sse_event(server, writer, "one", "message")
+            sse_event(server, writer, "two", "message")
+            close_writer(server, writer)
+        }
         // Plain text endpoint
         GET("/plain") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return resp |> TEXT_PLAIN("hello plain")
@@ -51,6 +57,15 @@ class SseTestServer : HvWebServer {
 [test]
 def test_sse_basic(t : T?) {
     with_test_server(type<SseTestServer>) $(base_url) {
+        t |> run("get_body_bytes sizes a body by the body: a streamed answer carries no Content-Length") @(t : T?) {
+            GET("{base_url}/streamed") $(var resp) {
+                var bytes <- get_body_bytes(resp)
+                t |> equal(resp.content_length, 0)
+                t |> equal(length(bytes), length(resp.body))
+                t |> success(!empty(bytes), "the streamed body arrived ({length(bytes)} bytes)")
+                delete bytes
+            }
+        }
         t |> run("SSE endpoint returns event-stream content type") @(t : T?) {
             GET("{base_url}/events") $(var resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))

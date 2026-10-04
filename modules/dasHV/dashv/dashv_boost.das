@@ -255,13 +255,15 @@ def with_http_request(blk : block<(var req : HttpRequest?#) : void>) {
 
 def get_body_bytes(resp : HttpResponse?) : array<uint8> {
     //! Extracts the response body as an ``array<uint8>``.
-    //! Returns an empty array if the response is null, non-OK, or has no content.
+    //! Returns an empty array if the response is null, non-OK, or has no content. The size is the body's own:
+    //! a chunked response carries no ``Content-Length``, and a ``HEAD`` answer carries one with no body.
     var bytes : array<uint8>
-    if (resp == null || resp.status_code != http_status.OK || resp.content_length == 0) return <- bytes
-    bytes |> resize(resp.content_length)
+    let size = resp == null || resp.status_code != http_status.OK ? 0 : length(resp.body)
+    if (size == 0) return <- bytes
+    bytes |> resize(size)
     peek(resp.body) $(bodybytes) {
         unsafe {
-            memcpy(addr(bytes[0]), reinterpret<void?>(bodybytes), resp.content_length)
+            memcpy(addr(bytes[0]), reinterpret<void?>(bodybytes), size)
         }
     }
     return <- bytes
