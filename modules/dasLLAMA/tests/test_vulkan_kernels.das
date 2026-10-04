@@ -1008,15 +1008,8 @@ def test_vkd_ar_class(t0 : T?) {
             //! kernel adds it to the partner before the add; the seam fed the pre-added partner is the bit-exact reference
             {
                 var b <- row_fill(dim, 23, 0, 0.09, 3.1, 71)
-                var ab : array<float>
-                var wb : array<float>
-                ab |> resize(dim)
-                wb |> resize(2 * dim)
-                for (i in range(dim)) {
-                    ab[i] = a[i] + b[i]
-                    wb[i] = w[i]
-                    wb[dim + i] = b[i]
-                }
+                var ab <- [for (i in range(dim)); a[i] + b[i]]
+                var wb <- biased_norms(w, b)
                 var x3 := x
                 var y3 : array<float>
                 y3 |> resize(dim)
@@ -1076,12 +1069,20 @@ def test_vkd_ar_class(t0 : T?) {
     }
 }
 
-//! the cls_ar fixture's rows: `n` residual and partner elements (whole rows of `dim`), the `dim`-wide norm row
-def private ar_fixture(n, dim : int) : tuple<x : array<float>; a : array<float>; w : array<float>> {
-    var x <- [for (i in range(n)); float((i * 37) % 101) * 0.11 - 5.0]
-    var a <- [for (i in range(n)); float((i * 13) % 89) * 0.07 - 3.0]
-    var w <- [for (i in range(dim)); 0.5 + float(i % 17) * 0.05]
+//! the residual-step fixture's rows: `n` residual and partner elements (whole rows of `dim`) on two modular ramps scaled by `xs`
+//! and `as_`, offset by `xo` and `ao`, and the `dim`-wide norm row 0.5 up on a ramp of step `ws`
+def private ar_fixture(n, dim : int; xs : float = 0.11; xo : float = 5.0; as_ : float = 0.07; ao : float = 3.0; ws : float = 0.05) : tuple<x : array<float>; a : array<float>; w : array<float>> {
+    var x <- row_fill(n, 37, 0, xs, xo, 101)
+    var a <- row_fill(n, 13, 0, as_, ao, 89)
+    var w <- row_fill(dim, 1, 0, ws, -0.5, 17)
     return <- (x = x, a = a, w = w)
+}
+
+//! the norms plane of a step with an output bias: the norm row `w`, then the bias row `b` past it
+def private biased_norms(w, b : array<float>) : array<float> {
+    var wb := w
+    wb |> push_from(b)
+    return <- wb
 }
 
 //! one cls_ar dispatch over `nrows` rows (`pc` the class's ArArgs): the norm plane `w` whole, the residual `x` read and written in
@@ -4191,13 +4192,10 @@ def test_vkd_requant_family(t0 : T?) {
                 let eps = 1e-5
                 let ascale = 1.25
                 let nblk = dim / 32
-                var x <- row_fill(dim, 37, 0, 0.09, 4.2, 101)
-                var a <- row_fill(dim, 13, 0, 0.06, 2.6, 89)
-                var w : array<float>
-                w |> resize(dim)
-                for (i in range(dim)) {
-                    w[i] = 0.5 + float(i % 17) * 0.04
-                }
+                var fx <- ar_fixture(dim, dim, 0.09, 4.2, 0.06, 2.6, 0.04)
+                var x <- fx.x
+                var a <- fx.a
+                var w <- fx.w
                 let e_bytes = int64(dim) * 4l
                 let q_bytes = int64(dim)
                 let s_bytes = int64(nblk) * 4l
@@ -4251,12 +4249,7 @@ def test_vkd_requant_family(t0 : T?) {
                 //! the biased add partner (gpt-oss's output bias) on the fused stamp: the bias row rides the norms plane past the norm row
                 {
                     var b <- row_fill(dim, 23, 0, 0.09, 3.1, 71)
-                    var wb : array<float>
-                    wb |> resize(2 * dim)
-                    for (i in range(dim)) {
-                        wb[i] = w[i]
-                        wb[dim + i] = b[i]
-                    }
+                    var wb <- biased_norms(w, b)
                     let wbd = make_device_buf(2l * e_bytes)
                     var qb_cls : array<uint>
                     var sb_cls : array<float>
