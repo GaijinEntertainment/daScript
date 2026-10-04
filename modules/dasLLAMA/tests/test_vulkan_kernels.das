@@ -407,7 +407,6 @@ def test_vkd_class_dispatch(t0 : T?) {
                 return
             }
             let n = 250   // deliberately not a multiple of 64 — the in-kernel guard covers the pad
-            let bytes = int64(n) * 4l
             var xs : array<float>
             xs |> resize(n)
             for (i in range(n)) {
@@ -424,24 +423,19 @@ def test_vkd_class_dispatch(t0 : T?) {
                 k->run()
             }
             // device: SSBOs + the generated set/encoder, one submit, readback
-            let xdev = make_device_buf(bytes)
-            let ydev = make_device_buf(bytes)
-            let host = make_host_buf(bytes, true, [cached = true])
-            upload_region_at(xdev, 0l, unsafe(addr<uint8 const?>(xs[0])), bytes)
-            var s = set_vkd_toy(fixed_array(xdev, ydev), fixed_array(bytes, bytes), fixed_array(1u, 2u))
-            var pc = VtArgs(n = uint(n), gain = 2.5)
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_vkd_toy(raw, h, s, pc, int64(n))
-                cmd_copy_planes(raw, h, fixed_array(ydev), host, fixed_array(bytes), 2u)
-            }
-            var gpu <- staged(host.mapped, 0l, n, type<float>)
-            var bad = 0
-            for (i in range(n)) {
-                if (gpu[i] != k.ys[i]) {
-                    bad++
+            var gpu : array<float>
+            with_cell_planes() $(var cp : CellPlanes) {
+                let px = cp |> in_(xs)
+                let py = cp |> out_(n)
+                var s = cp |> cls_set(fixed_array(px, py), @@set_vkd_toy)
+                var pc = VtArgs(n = uint(n), gain = 2.5)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_vkd_toy(raw, h, s, pc, int64(n))
                 }
+                delete gpu
+                gpu <- cp |> plane_run(py)
             }
-            t |> success(bad == 0, "GPU == CPU on all {n} lanes ({bad} diverge)")
+            check_exact(t, "GPU vs CPU on all {n} lanes", gpu, k.ys)
             delete xs
             delete gpu
             unsafe {
@@ -878,44 +872,25 @@ def test_vkd_direct_decode(t0 : T?) {
                 gl_GlobalInvocationID = uint3(uint(i), 0u, 0u)
                 k->run()
             }
-            let wq_bytes = 2l * 32l
-            let ws_bytes = 2l * 2l
-            let y_bytes = int64(n) * 4l
-            let wqd = make_device_buf(wq_bytes)
-            let wsd = make_device_buf(ws_bytes)
-            let yd = make_device_buf(y_bytes)
-            let host = make_host_buf(y_bytes, true, [cached = true])
-            unsafe {
-                upload_region_at(wqd, 0l, addr<uint8 const?>(k.wq[0].qs[0]), wq_bytes)
-                upload_region_at(wsd, 0l, addr<uint8 const?>(k.ws[0]), ws_bytes)
+            var gpu : array<float>
+            with_cell_planes() $(var cp : CellPlanes) {
+                let pwq = cp |> in_plain(k.wq)
+                let pws = cp |> in_plain(k.ws)
+                let py = cp |> out_(n)
+                var s = cp |> cls_set(fixed_array(pwq, pws, py), @@set_vkd_direct_decode)
+                var pc = VdArgs(n = uint(n))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_vkd_direct_decode(raw, h, s, pc, 1l)
+                }
+                delete gpu
+                gpu <- cp |> plane_run(py)
             }
-            var s = set_vkd_direct_decode(fixed_array(wqd, wsd, yd), fixed_array(wq_bytes, ws_bytes, y_bytes), fixed_array(1u, 2u, 4u))
-            var pc = VdArgs(n = uint(n))
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_vkd_direct_decode(raw, h, s, pc, 1l)
-                cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(y_bytes), 4u)
-            }
-            var gpu <- staged(host.mapped, 0l, n, type<float>)
-            var bad = 0
             var nonzero = 0
-            for (i in range(n)) {
-                if (gpu[i] != k.y[i]) {
-                    bad++
-                }
-                if (k.y[i] != 0.0) {
-                    nonzero++
-                }
+            for (v in k.y) {
+                nonzero += v != 0.0 ? 1 : 0
             }
             t |> success(nonzero > 48, "the oracle is non-trivial ({nonzero} of {n} lanes non-zero)")
-            t |> success(bad == 0, "GPU == CPU on all {n} lanes through the direct decode call ({bad} diverge)")
-            var poisoned = 0   // the control: one oracle lane pushed off must red the same compare
-            gpu[3]++
-            for (i in range(n)) {
-                if (gpu[i] != k.y[i]) {
-                    poisoned++
-                }
-            }
-            t |> success(poisoned == 1, "the exact compare reds a poisoned lane ({poisoned} diverge)")
+            check_exact(t, "GPU vs CPU on all {n} lanes through the direct decode call", gpu, k.y)
             delete gpu
             unsafe {
                 delete k
