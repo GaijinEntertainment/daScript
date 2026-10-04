@@ -371,12 +371,12 @@ decoded scale row needs no upload work - only the id bridge and the kernels. IQ4
    (`(tbl[q >> 2] >> ((q & 3) * 8)) & 0xFF`): a `fixed_array` local indexed per nibble lowers
    to Function storage the driver spills, and decodes at a third of the speed
    (`followup_general.md` item 136).
-3. `KqBatchIq4xs : KqBatchBase` - `stage_w` decodes the staged words through `iq4_word`
-   (k4's staging otherwise), `stage_ws` fills ONE plane with `d * sc`, `blk_fma` is
+3. `KqBatchIq4xs : KqBatchBase` - `w_quad` decodes the staged words through `iq4_word`
+   (k4's staging otherwise; the base's `stage_w` walks a thread's chunks and calls it), `stage_ws` fills ONE plane with `d * sc`, `blk_fma` is
    `xscl * ws * idot` (q40's without the `- 8 * bsum`). A class child is declared after its
    parent in the file - the class rail resolves parents in declaration order and reports
    "parent structure not found" otherwise. The word compose the GEMV leaf's `blk_decode` and the
-   tile's `stage_w` both need is ONE free function beside `k5_dep` - a k-lattice format's
+   tile's `w_quad` both need is ONE free function beside `k5_dep` - a k-lattice format's
    `<fmt>_quad` over a `uint4` of packed words, a grid format's `<fmt>_idx4` / `<fmt>_sgn4` pick
    (the four grid words and their sign nibbles; the class gathers them through its own grid slab,
    the leaf through `grid4`) - never a second spelling in the tile.

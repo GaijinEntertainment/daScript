@@ -5469,9 +5469,22 @@ class KqBatchBase : MoeCmBase {
         return xscl * (ws * float4(i) - wsb2 * float(bs))
     }
 
-    // the variant points — every [spirv_kernel] leaf overrides stage_w; q40/k6 also stage_ws/blk_fma
+    // the variant points — every [spirv_kernel] leaf overrides w_quad; q40/k6 also stage_ws/blk_fma
+    //! the format's staged int8 lanes of chunk `k` - block `bu`'s half `hh` - of the weight superblock at `wsb`
+    [unused_argument(wsb, bu, hh, k)]
+    def w_quad(wsb, bu, hh, k : uint) : uint4 {
+        return uint4(0u)
+    }
+
     def stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
-        pass
+        for (ki in range(2)) {
+            let k = word + uint(ki) * 8u
+            var wv = uint4(0u)
+            if (wcol < pa.d) {
+                wv = w_quad(wsb0 + wcol * nsb + s, k / 2u, k % 2u, k)
+            }
+            ww4[grp * 17u + k] = wv
+        }
     }
 
     def stage_ws(wsb0, wt, nsb, s, tid : uint) {
@@ -5531,28 +5544,18 @@ class KqBatchBase : MoeCmBase {
 // Q4_K tile: per block acc += xs * (d*sc*idot - dmin*mn*bsum)
 [vk_dispatch(name = "kq_batch_k4_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
 class KqBatchK4 : KqBatchBase {
-    def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
-        for (ki in range(2)) {
-            let k = word + uint(ki) * 8u
-            let bu = k / 2u
-            let hh = k % 2u
-            var wv = uint4(0u)
-            if (wcol < pa.d) {
-                let wsb = wsb0 + wcol * nsb + s
-                let rb4 = wsb * 32u + bu * 4u
-                let r0 = wq[rb4]
-                let r1 = wq[rb4 + 1u]
-                let r2 = wq[rb4 + 2u]
-                let r3 = wq[rb4 + 3u]
-                if (hh == 0u) {
-                    wv = uint4(r0 & 0x0F0F0F0F, r1 & 0x0F0F0F0F, r2 & 0x0F0F0F0F, r3 & 0x0F0F0F0F)
-                } else {
-                    wv = uint4((r0 >> 4u) & 0x0F0F0F0F, (r1 >> 4u) & 0x0F0F0F0F,
-                        (r2 >> 4u) & 0x0F0F0F0F, (r3 >> 4u) & 0x0F0F0F0F)
-                }
-            }
-            ww4[grp * 17u + k] = wv
+    [unused_argument(k)]
+    def override w_quad(wsb, bu, hh, k : uint) : uint4 {
+        let rb4 = wsb * 32u + bu * 4u
+        let r0 = wq[rb4]
+        let r1 = wq[rb4 + 1u]
+        let r2 = wq[rb4 + 2u]
+        let r3 = wq[rb4 + 3u]
+        if (hh == 0u) {
+            return uint4(r0 & 0x0F0F0F0F, r1 & 0x0F0F0F0F, r2 & 0x0F0F0F0F, r3 & 0x0F0F0F0F)
         }
+        return uint4((r0 >> 4u) & 0x0F0F0F0F, (r1 >> 4u) & 0x0F0F0F0F,
+            (r2 >> 4u) & 0x0F0F0F0F, (r3 >> 4u) & 0x0F0F0F0F)
     }
 
     [spirv_kernel(local_size_x = 256, name = "kq_batch_k4_cls_spv")]
@@ -5591,20 +5594,12 @@ class KqBatchIq4xs : KqBatchBase {
     def cb_word(n : uint) : uint => iq4_word(n)
     def sub_sc(w0, w1, blk : uint) : int => iq4xs_sc(w0, w1, blk)
 
-    def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
-        for (ki in range(2)) {
-            let k = word + uint(ki) * 8u
-            let bu = k / 2u
-            let sh = (k % 2u) * 4u
-            var wv = uint4(0u)
-            if (wcol < pa.d) {
-                let wsb = wsb0 + wcol * nsb + s
-                let rb4 = wsb * 32u + bu * 4u
-                wv = uint4(cb_word((wq[rb4] >> sh) & 0x0F0F0F0F), cb_word((wq[rb4 + 1u] >> sh) & 0x0F0F0F0F),
-                    cb_word((wq[rb4 + 2u] >> sh) & 0x0F0F0F0F), cb_word((wq[rb4 + 3u] >> sh) & 0x0F0F0F0F))
-            }
-            ww4[grp * 17u + k] = wv
-        }
+    [unused_argument(k)]
+    def override w_quad(wsb, bu, hh, k : uint) : uint4 {
+        let rb4 = wsb * 32u + bu * 4u
+        let sh = hh * 4u
+        return uint4(cb_word((wq[rb4] >> sh) & 0x0F0F0F0F), cb_word((wq[rb4 + 1u] >> sh) & 0x0F0F0F0F),
+            cb_word((wq[rb4 + 2u] >> sh) & 0x0F0F0F0F), cb_word((wq[rb4 + 3u] >> sh) & 0x0F0F0F0F))
     }
 
     def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
@@ -5657,22 +5652,13 @@ class KqBatchIq3s4 : KqBatchGridBase {
 class KqBatchIq3s : KqBatchGridBase {
     @workgroup gridw : uint[512]
 
-    def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
-        for (ki in range(2)) {
-            let k = word + uint(ki) * 8u
-            let bu = k / 2u
-            let hh = k % 2u
-            var wv = uint4(0u)
-            if (wcol < pa.d) {
-                let wsb = wsb0 + wcol * nsb + s
-                let qsw = wq[wsb * 26u + bu * 2u + hh]
-                let qh = (wq[wsb * 26u + 16u + bu / 4u] >> ((bu % 4u) * 8u)) & 255u
-                let i = iq3s_idx4(qsw, qh, hh * 2u)
-                let sg = sign_word_sgn4(wq[wsb * 26u + 18u + bu], hh * 2u)
-                wv = uint4(iq3s_signed(gridw[i.x], sg.x), iq3s_signed(gridw[i.y], sg.y), iq3s_signed(gridw[i.z], sg.z), iq3s_signed(gridw[i.w], sg.w))
-            }
-            ww4[grp * 17u + k] = wv
-        }
+    [unused_argument(k)]
+    def override w_quad(wsb, bu, hh, k : uint) : uint4 {
+        let qsw = wq[wsb * 26u + bu * 2u + hh]
+        let qh = (wq[wsb * 26u + 16u + bu / 4u] >> ((bu % 4u) * 8u)) & 255u
+        let i = iq3s_idx4(qsw, qh, hh * 2u)
+        let sg = sign_word_sgn4(wq[wsb * 26u + 18u + bu], hh * 2u)
+        return uint4(iq3s_signed(gridw[i.x], sg.x), iq3s_signed(gridw[i.y], sg.y), iq3s_signed(gridw[i.z], sg.z), iq3s_signed(gridw[i.w], sg.w))
     }
 
     [spirv_kernel(local_size_x = 256, name = "kq_batch_iq3s_cls_spv")]
@@ -5692,20 +5678,11 @@ class KqBatchIq3s : KqBatchGridBase {
 class KqBatchIq3xxs : KqBatchGridBase {
     @workgroup gridw : uint[256]
 
-    def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
-        for (ki in range(2)) {
-            let k = word + uint(ki) * 8u
-            let bu = k / 2u
-            let hh = k % 2u
-            var wv = uint4(0u)
-            if (wcol < pa.d) {
-                let wsb = wsb0 + wcol * nsb + s
-                let i = iq3xxs_idx4(wq[wsb * 24u + bu * 2u + hh])
-                let sg = iq3xxs_sgn4(wq[wsb * 24u + 16u + bu], hh * 2u)
-                wv = uint4(iq3s_signed(gridw[i.x], sg.x), iq3s_signed(gridw[i.y], sg.y), iq3s_signed(gridw[i.z], sg.z), iq3s_signed(gridw[i.w], sg.w))
-            }
-            ww4[grp * 17u + k] = wv
-        }
+    [unused_argument(k)]
+    def override w_quad(wsb, bu, hh, k : uint) : uint4 {
+        let i = iq3xxs_idx4(wq[wsb * 24u + bu * 2u + hh])
+        let sg = iq3xxs_sgn4(wq[wsb * 24u + 16u + bu], hh * 2u)
+        return uint4(iq3s_signed(gridw[i.x], sg.x), iq3s_signed(gridw[i.y], sg.y), iq3s_signed(gridw[i.z], sg.z), iq3s_signed(gridw[i.w], sg.w))
     }
 
     [spirv_kernel(local_size_x = 256, name = "kq_batch_iq3xxs_cls_spv")]
@@ -5725,20 +5702,11 @@ class KqBatchIq3xxs : KqBatchGridBase {
 class KqBatchIq2xxs : KqBatchGridBase {
     @workgroup gridw : uint[512]
 
-    def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
-        for (ki in range(2)) {
-            let k = word + uint(ki) * 8u
-            let bu = k / 2u
-            let hh = k % 2u
-            var wv = uint4(0u)
-            if (wcol < pa.d) {
-                let wsb = wsb0 + wcol * nsb + s
-                let i = iq2xxs_idx4(wq[wsb * 16u + bu * 2u], hh)
-                let sg = iq2xxs_sgn4(wq[wsb * 16u + bu * 2u + 1u], hh)
-                wv = uint4(iq3s_signed(gridw[i.x], sg.x), iq3s_signed(gridw[i.y], sg.y), iq3s_signed(gridw[i.z], sg.z), iq3s_signed(gridw[i.w], sg.w))
-            }
-            ww4[grp * 17u + k] = wv
-        }
+    [unused_argument(k)]
+    def override w_quad(wsb, bu, hh, k : uint) : uint4 {
+        let i = iq2xxs_idx4(wq[wsb * 16u + bu * 2u], hh)
+        let sg = iq2xxs_sgn4(wq[wsb * 16u + bu * 2u + 1u], hh)
+        return uint4(iq3s_signed(gridw[i.x], sg.x), iq3s_signed(gridw[i.y], sg.y), iq3s_signed(gridw[i.z], sg.z), iq3s_signed(gridw[i.w], sg.w))
     }
 
     [spirv_kernel(local_size_x = 256, name = "kq_batch_iq2xxs_cls_spv")]
@@ -5768,19 +5736,10 @@ class KqBatchIq4nl : KqBatchIq4xs {
 // Q5_K tile: the k4 compose with the 5th bit OR'd in from the 40B block's qh words
 [vk_dispatch(name = "kq_batch_k5_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
 class KqBatchK5 : KqBatchBase {
-    def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
-        for (ki in range(2)) {
-            let k = word + uint(ki) * 8u
-            let bu = k / 2u
-            let hh = k % 2u
-            var wv = uint4(0u)
-            if (wcol < pa.d) {
-                let wsb = wsb0 + wcol * nsb + s
-                let rb4 = wsb * 40u + bu * 4u
-                wv = k5_quad(uint4(wq[rb4], wq[rb4 + 1u], wq[rb4 + 2u], wq[rb4 + 3u]), wq[wsb * 40u + 32u + bu], hh * 4u)
-            }
-            ww4[grp * 17u + k] = wv
-        }
+    [unused_argument(k)]
+    def override w_quad(wsb, bu, hh, k : uint) : uint4 {
+        let rb4 = wsb * 40u + bu * 4u
+        return k5_quad(uint4(wq[rb4], wq[rb4 + 1u], wq[rb4 + 2u], wq[rb4 + 3u]), wq[wsb * 40u + 32u + bu], hh * 4u)
     }
 
     [spirv_kernel(local_size_x = 256, name = "kq_batch_k5_cls_spv")]
@@ -5793,22 +5752,13 @@ class KqBatchK5 : KqBatchBase {
 // sum — the lo/hi word split IS the sub-scale split
 [vk_dispatch(name = "kq_batch_k6_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
 class KqBatchK6 : KqBatchBase {
-    def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
-        for (ki in range(2)) {
-            let k = word + uint(ki) * 8u
-            let bu = k / 2u
-            let hh = k % 2u
-            var wv = uint4(0u)
-            if (wcol < pa.d) {
-                let wsb = wsb0 + wcol * nsb + s
-                let rb4 = wsb * 48u + bu * 4u
-                let qb4 = wsb * 48u + 32u + (bu / 4u) * 8u + hh * 4u
-                let sh = hh * 4u
-                let nib = uint4((wq[rb4] >> sh) & KQC_LOW, (wq[rb4 + 1u] >> sh) & KQC_LOW, (wq[rb4 + 2u] >> sh) & KQC_LOW, (wq[rb4 + 3u] >> sh) & KQC_LOW)
-                wv = k6_quad(nib, uint4(wq[qb4], wq[qb4 + 1u], wq[qb4 + 2u], wq[qb4 + 3u]), (bu % 4u) * 2u)
-            }
-            ww4[grp * 17u + k] = wv
-        }
+    [unused_argument(k)]
+    def override w_quad(wsb, bu, hh, k : uint) : uint4 {
+        let rb4 = wsb * 48u + bu * 4u
+        let qb4 = wsb * 48u + 32u + (bu / 4u) * 8u + hh * 4u
+        let sh = hh * 4u
+        let nib = uint4((wq[rb4] >> sh) & KQC_LOW, (wq[rb4 + 1u] >> sh) & KQC_LOW, (wq[rb4 + 2u] >> sh) & KQC_LOW, (wq[rb4 + 3u] >> sh) & KQC_LOW)
+        return k6_quad(nib, uint4(wq[qb4], wq[qb4 + 1u], wq[qb4 + 2u], wq[qb4 + 3u]), (bu % 4u) * 2u)
     }
 
     def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
@@ -5857,20 +5807,11 @@ class KqBatchK6 : KqBatchBase {
 // OR the hmask words 16 + hh*4.. bit bu, shifted up two
 [vk_dispatch(name = "kq_batch_k3_cls", kernel = "run", family = "kq_batch_cls", grid = "wgs", params = "wgs : int64")]
 class KqBatchK3 : KqBatchK6 {
-    def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
-        for (ki in range(2)) {
-            let k = word + uint(ki) * 8u
-            let bu = k / 2u
-            let hh = k % 2u
-            var wv = uint4(0u)
-            if (wcol < pa.d) {
-                let wsb = wsb0 + wcol * nsb + s
-                let qb4 = wsb * 24u + (bu / 4u) * 8u + hh * 4u
-                let hb4 = wsb * 24u + 16u + hh * 4u
-                wv = k3_quad(uint4(wq[qb4], wq[qb4 + 1u], wq[qb4 + 2u], wq[qb4 + 3u]), uint4(wq[hb4], wq[hb4 + 1u], wq[hb4 + 2u], wq[hb4 + 3u]), (bu % 4u) * 2u, bu)
-            }
-            ww4[grp * 17u + k] = wv
-        }
+    [unused_argument(k)]
+    def override w_quad(wsb, bu, hh, k : uint) : uint4 {
+        let qb4 = wsb * 24u + (bu / 4u) * 8u + hh * 4u
+        let hb4 = wsb * 24u + 16u + hh * 4u
+        return k3_quad(uint4(wq[qb4], wq[qb4 + 1u], wq[qb4 + 2u], wq[qb4 + 3u]), uint4(wq[hb4], wq[hb4 + 1u], wq[hb4 + 2u], wq[hb4 + 3u]), (bu % 4u) * 2u, bu)
     }
 
     def override q_off : int => 4
@@ -5888,19 +5829,10 @@ class KqBatchK2 : KqBatchK6 {
     @workgroup wsw3 : float[256]   // dmin*mn, lo half
     @workgroup wsw4 : float[256]   // dmin*mn, hi half
 
-    def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
-        for (ki in range(2)) {
-            let k = word + uint(ki) * 8u
-            let bu = k / 2u
-            let hh = k % 2u
-            var wv = uint4(0u)
-            if (wcol < pa.d) {
-                let wsb = wsb0 + wcol * nsb + s
-                let qb4 = wsb * 16u + (bu / 4u) * 8u + hh * 4u
-                wv = k2_quad(uint4(wq[qb4], wq[qb4 + 1u], wq[qb4 + 2u], wq[qb4 + 3u]), (bu % 4u) * 2u)
-            }
-            ww4[grp * 17u + k] = wv
-        }
+    [unused_argument(k)]
+    def override w_quad(wsb, bu, hh, k : uint) : uint4 {
+        let qb4 = wsb * 16u + (bu / 4u) * 8u + hh * 4u
+        return k2_quad(uint4(wq[qb4], wq[qb4 + 1u], wq[qb4 + 2u], wq[qb4 + 3u]), (bu % 4u) * 2u)
     }
 
     def override stage_ws(wsb0, wt, nsb, s, tid : uint) {
@@ -5988,21 +5920,12 @@ class KqBatchIq2Base : KqBatchK6 {
 class KqBatchIq2s : KqBatchIq2Base {
     @workgroup gridw : uint[2048]
 
-    def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
-        for (ki in range(2)) {
-            let k = word + uint(ki) * 8u
-            let bu = k / 2u
-            let hh = k % 2u
-            var wv = uint4(0u)
-            if (wcol < pa.d) {
-                let wsb = wsb0 + wcol * nsb + s
-                let qh = (wq[wsb * 18u + 16u + bu / 4u] >> ((bu % 4u) * 8u)) & 255u
-                let i = iq2s_idx4(wq[wsb * 18u + bu], qh, hh * 2u)
-                let sg = sign_word_sgn4(wq[wsb * 18u + 8u + bu], hh * 2u)
-                wv = uint4(iq3s_signed(gridw[i.x], sg.x), iq3s_signed(gridw[i.y], sg.y), iq3s_signed(gridw[i.z], sg.z), iq3s_signed(gridw[i.w], sg.w))
-            }
-            ww4[grp * 17u + k] = wv
-        }
+    [unused_argument(k)]
+    def override w_quad(wsb, bu, hh, k : uint) : uint4 {
+        let qh = (wq[wsb * 18u + 16u + bu / 4u] >> ((bu % 4u) * 8u)) & 255u
+        let i = iq2s_idx4(wq[wsb * 18u + bu], qh, hh * 2u)
+        let sg = sign_word_sgn4(wq[wsb * 18u + 8u + bu], hh * 2u)
+        return uint4(iq3s_signed(gridw[i.x], sg.x), iq3s_signed(gridw[i.y], sg.y), iq3s_signed(gridw[i.z], sg.z), iq3s_signed(gridw[i.w], sg.w))
     }
 
     [spirv_kernel(local_size_x = 256, name = "kq_batch_iq2s_cls_spv")]
@@ -6023,19 +5946,12 @@ class KqBatchIq2s : KqBatchIq2Base {
 class KqBatchIq2xs : KqBatchIq2Base {
     @workgroup gridw : uint[1024]
 
-    def override stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
-        for (ki in range(2)) {
-            let k = word + uint(ki) * 8u
-            var wv = uint4(0u)
-            if (wcol < pa.d) {
-                let wsb = wsb0 + wcol * nsb + s
-                let qw = wq[wsb * 16u + k]
-                let i = iq2xs_idx4(qw)
-                let sg = iq2xs_sgn4(qw)
-                wv = uint4(iq3s_signed(gridw[i.x], sg.x), iq3s_signed(gridw[i.y], sg.y), iq3s_signed(gridw[i.z], sg.z), iq3s_signed(gridw[i.w], sg.w))
-            }
-            ww4[grp * 17u + k] = wv
-        }
+    [unused_argument(bu, hh)]
+    def override w_quad(wsb, bu, hh, k : uint) : uint4 {
+        let qw = wq[wsb * 16u + k]
+        let i = iq2xs_idx4(qw)
+        let sg = iq2xs_sgn4(qw)
+        return uint4(iq3s_signed(gridw[i.x], sg.x), iq3s_signed(gridw[i.y], sg.y), iq3s_signed(gridw[i.z], sg.z), iq3s_signed(gridw[i.w], sg.w))
     }
 
     [spirv_kernel(local_size_x = 256, name = "kq_batch_iq2xs_cls_spv")]
