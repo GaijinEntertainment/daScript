@@ -8703,6 +8703,103 @@ def private ar_fused_residual_check(t : T?; xh, x_split, x_fused : array<float>)
     t |> success(badx == 0, "fused residual update == split ({badx} of {length(xh)} off)")
 }
 
+//! the fused residual step against the split pair over six 128-wide rows, bit for bit: under `rq` the Q8_0 requant fold
+//! (`cls_ar_rq_b` against `cls_ar` + `cls_dn_rq`, the quant words and the scales), else the half store (`cls_ar_f16_b`
+//! against `cls_ar` + `tower_clamp_cvt_cls`, the half words); the compared planes of each leg under its own sentinel
+def private ar_fused_arm(t : T?; rq : bool) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let dim = 128
+        let nrows = 6
+        let woff = 64
+        let nblk = nrows * (dim / 32)
+        var fx <- ar_fused_fixture(dim, nrows, woff)
+        let row_bytes = int64(nrows * dim) * 4l
+        let wn_bytes = int64(woff + dim) * 4l
+        let out_bytes = rq ? fixed_array(int64(nblk) * 32l, int64(nblk) * 4l) : fixed_array(int64(nrows * dim) * 2l, 0l)
+        let leg_bytes = out_bytes[0] + out_bytes[1]
+        let x_split = make_device_buf(row_bytes)
+        let x_fused = make_device_buf(row_bytes)
+        let aad = make_device_buf(row_bytes)
+        let wnd = make_device_buf(wn_bytes)
+        let yod = make_device_buf(row_bytes)
+        let a_split = make_device_buf(out_bytes[0])
+        let a_fused = make_device_buf(out_bytes[0])
+        let b_split = rq ? make_device_buf(out_bytes[1]) : 0ul
+        let b_fused = rq ? make_device_buf(out_bytes[1]) : 0ul
+        // two DIFFERENT sentinels on the compared planes: a dead leg on either side reads as a mismatch
+        var sent_split <- plane_of(nrows * dim, -999.25)
+        var sent_fused <- plane_of(nrows * dim, -777.5)
+        var sent16_split <- pack_f16(sent_split)
+        var sent16_fused <- pack_f16(sent_fused)
+        let host = make_host_buf(leg_bytes * 2l + row_bytes * 2l, true, [cached = true])
+        unsafe {
+            upload_region_at(x_split, 0l, addr<uint8 const?>(fx.x[0]), row_bytes)
+            upload_region_at(x_fused, 0l, addr<uint8 const?>(fx.x[0]), row_bytes)
+            upload_region_at(aad, 0l, addr<uint8 const?>(fx.aa[0]), row_bytes)
+            upload_region_at(wnd, 0l, addr<uint8 const?>(fx.wn[0]), wn_bytes)
+            upload_region_at(a_split, 0l, rq ? addr<uint8 const?>(sent_split[0]) : addr<uint8 const?>(sent16_split[0]), out_bytes[0])
+            upload_region_at(a_fused, 0l, rq ? addr<uint8 const?>(sent_fused[0]) : addr<uint8 const?>(sent16_fused[0]), out_bytes[0])
+            if (rq) {
+                upload_region_at(b_split, 0l, addr<uint8 const?>(sent_split[0]), out_bytes[1])
+                upload_region_at(b_fused, 0l, addr<uint8 const?>(sent_fused[0]), out_bytes[1])
+            }
+        }
+        var sca = set_cls_ar(fixed_array(x_split, aad, wnd, yod), fixed_array(row_bytes, row_bytes, wn_bytes, row_bytes), fixed_array(1u, 2u, 0u, 4u))
+        var scs = (rq
+            ? set_rq_cls(fixed_array(yod, a_split, b_split), fixed_array(row_bytes, out_bytes[0], out_bytes[1]), fixed_array(4u, 8u, 8u))
+            : set_tower_clamp_cvt_cls(fixed_array(yod, a_split), fixed_array(row_bytes, out_bytes[0]), fixed_array(4u, 8u)))
+        var scf = (rq
+            ? set_cls_ar_rq_b(fixed_array(x_fused, aad, wnd, a_fused, b_fused), fixed_array(row_bytes, row_bytes, wn_bytes, out_bytes[0], out_bytes[1]),
+                fixed_array(16u, 2u, 0u, 32u, 32u))
+            : set_cls_ar_f16_b(fixed_array(x_fused, aad, wnd, a_fused), fixed_array(row_bytes, row_bytes, wn_bytes, out_bytes[0]), fixed_array(16u, 2u, 0u, 32u)))
+        var pca = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(woff), eps = 1e-5, ascale = 1.0)
+        var pcr = RqArgs(inbase = 0u, nblk = uint(nblk))
+        var pcc = f16_rows_args(uint(nrows * dim))
+        let swgs = int64((nrows * dim / 4 + 255) / 256)
+        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+            enc_cls_ar(raw, h, sca, pca, int64(nrows))
+            if (rq) {
+                enc_cls_dn_rq(raw, h, scs, pcr, swgs)
+                enc_cls_ar_rq_b(raw, h, scf, pca, int64(nrows))
+                cmd_copy_planes(raw, h, fixed_array(a_split, b_split, a_fused, b_fused, x_split, x_fused), host,
+                    fixed_array(out_bytes[0], out_bytes[1], out_bytes[0], out_bytes[1], row_bytes, row_bytes), 8u | 32u | 16u | 1u)
+            } else {
+                enc_tower_clamp_cvt_cls(raw, h, scs, pcc, swgs)
+                enc_cls_ar_f16_b(raw, h, scf, pca, int64(nrows))
+                cmd_copy_planes(raw, h, fixed_array(a_split, a_fused, x_split, x_fused), host, fixed_array(out_bytes[0], out_bytes[0], row_bytes, row_bytes),
+                    8u | 32u | 16u | 1u)
+            }
+        }
+        let nw = int(out_bytes[0] / 4l)
+        var a_split_h <- staged(host.mapped, 0l, nw, type<uint>)
+        var a_fused_h <- staged(host.mapped, leg_bytes, nw, type<uint>)
+        let bada = mismatch_qbytes(a_split_h, a_fused_h, 0)
+        if (rq) {
+            t |> success(bada == 0, "fused quant words == split ({bada} of {nw} off)")
+            var s_split_h <- staged(host.mapped, out_bytes[0], nblk, type<float>)
+            var s_fused_h <- staged(host.mapped, leg_bytes + out_bytes[0], nblk, type<float>)
+            let bads = mismatch_exact(s_split_h, s_fused_h)
+            t |> success(bads == 0, "fused scales == split ({bads} of {nblk} off)")
+            delete s_split_h
+            delete s_fused_h
+        } else {
+            t |> success(bada == 0, "fused f16 rows == split ({bada} of {nw} words off)")
+        }
+        var x_split_h <- staged(host.mapped, leg_bytes * 2l, nrows * dim, type<float>)
+        var x_fused_h <- staged(host.mapped, leg_bytes * 2l + row_bytes, nrows * dim, type<float>)
+        ar_fused_residual_check(t, fx.x, x_split_h, x_fused_h)
+        delete a_split_h
+        delete a_fused_h
+        delete x_split_h
+        delete x_fused_h
+        delete sent_split
+        delete sent_fused
+        delete sent16_split
+        delete sent16_fused
+        delete fx
+    }
+}
+
 [test]
 def test_vkd_ar_rq_fused(t0 : T?) {
     t0 |> run("fused batch ar+rq == the split cls_ar + cls_dn_rq pair, bit-exact") <| @(t : T?) {
@@ -8711,87 +8808,7 @@ def test_vkd_ar_rq_fused(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let dim = 128
-            let nrows = 6
-            let woff = 64
-            let nblk = nrows * (dim / 32)
-            var fx <- ar_fused_fixture(dim, nrows, woff)
-            var xh <- fx.x
-            var aah <- fx.aa
-            var wnh <- fx.wn
-            let row_bytes = int64(nrows * dim) * 4l
-            let wn_bytes = int64(woff + dim) * 4l
-            let q_bytes = int64(nblk) * 32l
-            let s_bytes = int64(nblk) * 4l
-            let x_split = make_device_buf(row_bytes)
-            let x_fused = make_device_buf(row_bytes)
-            let aad = make_device_buf(row_bytes)
-            let wnd = make_device_buf(wn_bytes)
-            let yod = make_device_buf(row_bytes)
-            let q_split = make_device_buf(q_bytes)
-            let s_split = make_device_buf(s_bytes)
-            let q_fused = make_device_buf(q_bytes)
-            let s_fused = make_device_buf(s_bytes)
-            // two DIFFERENT sentinels on the compared planes: a dead leg on either side reads as a mismatch
-            var sent_split : array<float>
-            var sent_fused : array<float>
-            sent_split |> resize(nrows * dim)
-            sent_fused |> resize(nrows * dim)
-            for (i in range(nrows * dim)) {
-                sent_split[i] = -999.25
-                sent_fused[i] = -777.5
-            }
-            let host = make_host_buf((q_bytes + s_bytes) * 2l + row_bytes * 2l, true, [cached = true])
-            unsafe {
-                upload_region_at(x_split, 0l, addr<uint8 const?>(xh[0]), row_bytes)
-                upload_region_at(x_fused, 0l, addr<uint8 const?>(xh[0]), row_bytes)
-                upload_region_at(aad, 0l, addr<uint8 const?>(aah[0]), row_bytes)
-                upload_region_at(wnd, 0l, addr<uint8 const?>(wnh[0]), wn_bytes)
-                upload_region_at(q_split, 0l, addr<uint8 const?>(sent_split[0]), q_bytes)
-                upload_region_at(s_split, 0l, addr<uint8 const?>(sent_split[0]), s_bytes)
-                upload_region_at(q_fused, 0l, addr<uint8 const?>(sent_fused[0]), q_bytes)
-                upload_region_at(s_fused, 0l, addr<uint8 const?>(sent_fused[0]), s_bytes)
-                var sca = set_cls_ar(fixed_array(x_split, aad, wnd, yod),
-                    fixed_array(row_bytes, row_bytes, wn_bytes, row_bytes),
-                    fixed_array(1u, 2u, 0u, 4u))
-                var scr = set_rq_cls(fixed_array(yod, q_split, s_split),
-                    fixed_array(row_bytes, q_bytes, s_bytes),
-                    fixed_array(4u, 8u, 8u))
-                var scf = set_cls_ar_rq_b(fixed_array(x_fused, aad, wnd, q_fused, s_fused),
-                    fixed_array(row_bytes, row_bytes, wn_bytes, q_bytes, s_bytes),
-                    fixed_array(16u, 2u, 0u, 32u, 32u))
-                var pca = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(woff), eps = 1e-5, ascale = 1.0)
-                var pcr = RqArgs(inbase = 0u, nblk = uint(nblk))
-                cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                    enc_cls_ar(raw, h, sca, pca, int64(nrows))
-                    enc_cls_dn_rq(raw, h, scr, pcr, int64((nrows * dim / 4 + 255) / 256))
-                    enc_cls_ar_rq_b(raw, h, scf, pca, int64(nrows))
-                    cmd_copy_planes(raw, h, fixed_array(q_split, s_split, q_fused, s_fused, x_split, x_fused), host,
-                        fixed_array(q_bytes, s_bytes, q_bytes, s_bytes, row_bytes, row_bytes), 8u | 32u | 16u | 1u)
-                }
-                var q_split_h <- staged(host.mapped, 0l, nblk * 8, type<uint>)
-                var s_split_h <- staged(host.mapped, q_bytes, nblk, type<float>)
-                var q_fused_h <- staged(host.mapped, q_bytes + s_bytes, nblk * 8, type<uint>)
-                var s_fused_h <- staged(host.mapped, q_bytes * 2l + s_bytes, nblk, type<float>)
-                var x_split_h <- staged(host.mapped, (q_bytes + s_bytes) * 2l, nrows * dim, type<float>)
-                var x_fused_h <- staged(host.mapped, (q_bytes + s_bytes) * 2l + row_bytes, nrows * dim, type<float>)
-                let badq = mismatch_qbytes(q_split_h, q_fused_h, 0)
-                t |> success(badq == 0, "fused quant words == split ({badq} of {nblk * 8} off)")
-                let bads = mismatch_exact(s_split_h, s_fused_h)
-                t |> success(bads == 0, "fused scales == split ({bads} of {nblk} off)")
-                ar_fused_residual_check(t, xh, x_split_h, x_fused_h)
-                delete q_split_h
-                delete q_fused_h
-                delete s_split_h
-                delete s_fused_h
-                delete x_split_h
-                delete x_fused_h
-            }
-            delete sent_split
-            delete sent_fused
-            delete xh
-            delete aah
-            delete wnh
+            ar_fused_arm(t, true)
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -8916,74 +8933,7 @@ def test_vkd_ar_f16_fused(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let dim = 128
-            let nrows = 6
-            let woff = 64
-            var fx <- ar_fused_fixture(dim, nrows, woff)
-            var xh <- fx.x
-            var aah <- fx.aa
-            var wnh <- fx.wn
-            let row_bytes = int64(nrows * dim) * 4l
-            let wn_bytes = int64(woff + dim) * 4l
-            let h_bytes = int64(nrows * dim) * 2l
-            let x_split = make_device_buf(row_bytes)
-            let x_fused = make_device_buf(row_bytes)
-            let aad = make_device_buf(row_bytes)
-            let wnd = make_device_buf(wn_bytes)
-            let yod = make_device_buf(row_bytes)
-            let f16_split = make_device_buf(h_bytes)
-            let f16_fused = make_device_buf(h_bytes)
-            // two DIFFERENT sentinels on the compared planes: a dead leg on either side reads as a mismatch
-            var sent_split : array<float16>
-            var sent_fused : array<float16>
-            sent_split |> resize(nrows * dim)
-            sent_fused |> resize(nrows * dim)
-            for (i in range(nrows * dim)) {
-                sent_split[i] = float16(-999.25)
-                sent_fused[i] = float16(-777.5)
-            }
-            let host = make_host_buf(h_bytes * 2l + row_bytes * 2l, true, [cached = true])
-            unsafe {
-                upload_region_at(x_split, 0l, addr<uint8 const?>(xh[0]), row_bytes)
-                upload_region_at(x_fused, 0l, addr<uint8 const?>(xh[0]), row_bytes)
-                upload_region_at(aad, 0l, addr<uint8 const?>(aah[0]), row_bytes)
-                upload_region_at(wnd, 0l, addr<uint8 const?>(wnh[0]), wn_bytes)
-                upload_region_at(f16_split, 0l, addr<uint8 const?>(sent_split[0]), h_bytes)
-                upload_region_at(f16_fused, 0l, addr<uint8 const?>(sent_fused[0]), h_bytes)
-                var sca = set_cls_ar(fixed_array(x_split, aad, wnd, yod),
-                    fixed_array(row_bytes, row_bytes, wn_bytes, row_bytes),
-                    fixed_array(1u, 2u, 0u, 4u))
-                var scc = set_tower_clamp_cvt_cls(fixed_array(yod, f16_split),
-                    fixed_array(row_bytes, h_bytes), fixed_array(4u, 8u))
-                var scf = set_cls_ar_f16_b(fixed_array(x_fused, aad, wnd, f16_fused),
-                    fixed_array(row_bytes, row_bytes, wn_bytes, h_bytes),
-                    fixed_array(16u, 2u, 0u, 32u))
-                var pca = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(woff), eps = 1e-5, ascale = 1.0)
-                var pcc = f16_rows_args(uint(nrows * dim))
-                cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                    enc_cls_ar(raw, h, sca, pca, int64(nrows))
-                    enc_tower_clamp_cvt_cls(raw, h, scc, pcc, int64((nrows * dim / 4 + 255) / 256))
-                    enc_cls_ar_f16_b(raw, h, scf, pca, int64(nrows))
-                    cmd_copy_planes(raw, h, fixed_array(f16_split, f16_fused, x_split, x_fused), host, fixed_array(h_bytes, h_bytes, row_bytes, row_bytes), 8u | 32u | 16u | 1u)
-                }
-                let nw = nrows * dim / 2
-                var f16_split_h <- staged(host.mapped, 0l, nw, type<uint>)
-                var f16_fused_h <- staged(host.mapped, h_bytes, nw, type<uint>)
-                var x_split_h <- staged(host.mapped, h_bytes * 2l, nrows * dim, type<float>)
-                var x_fused_h <- staged(host.mapped, h_bytes * 2l + row_bytes, nrows * dim, type<float>)
-                let badh = mismatch_qbytes(f16_split_h, f16_fused_h, 0)
-                t |> success(badh == 0, "fused f16 rows == split ({badh} of {nw} words off)")
-                ar_fused_residual_check(t, xh, x_split_h, x_fused_h)
-                delete f16_split_h
-                delete f16_fused_h
-                delete x_split_h
-                delete x_fused_h
-            }
-            delete sent_split
-            delete sent_fused
-            delete xh
-            delete aah
-            delete wnh
+            ar_fused_arm(t, false)
         } else {
             t |> skip("dasVulkan not present")
         }
