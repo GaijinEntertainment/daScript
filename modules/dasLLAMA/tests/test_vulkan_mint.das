@@ -26,7 +26,8 @@ require _resident_feed
 // admits what the whole-model driver serves: under a foreign prefill override both decline with one text, and a trimmed
 // lane on disk maps under it as a lane minted again with its planar families.
 // Skips when interpreted, without the model, with the image rail off (DASLLAMA_IMAGE=0), without a live armed tier,
-// and when the whole-model driver declines the model on this box.
+// and when the whole-model driver declines the model on this box; the K/V codecs cell also skips where DASLLAMA_VK_KV32=1
+// arms an f32 mirror over the codec it asks.
 
 let private MINT_FILE = "Qwen3.5-0.8B-MTP-Q8_0.gguf"
 let private KQ_FILE = "Qwen3.5-0.8B-Q4_K_M.gguf"

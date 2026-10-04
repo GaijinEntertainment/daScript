@@ -16,7 +16,7 @@ require _model_tier
 // The OFFLINE vulkan bake (plan-as-data): the dry tier runs the load walk's accept/refuse
 // arithmetic against the config's numbers with NO device — the converter's `-f vulkan` rail.
 // Drive through run.das --suite image-vulkan (it arms DASLLAMA_GPU + a small VRAM budget);
-// unarmed contexts skip cleanly, so the file is safe in any suite.
+// unarmed contexts skip cleanly, as does a build without the vulkan module, so the file is safe in any suite.
 
 //! the minted twin against the eager dry bake's - the walk over the prepared RAM planes, the mint's reference: the same
 //! entries in the same order, every entry's device bytes equal, a poisoned byte in the reference missing the compare
@@ -116,6 +116,8 @@ def test_vulkan_dry_bake(tst : T?) {
             delete b
             delete m
             remove(img)
+        } else {
+            t |> skip("dasVulkan not present")
         }
     }
 }
@@ -172,6 +174,8 @@ def test_vulkan_inline_bake(tst : T?) {
             t |> success(!stat(img_p).is_valid, "still no planar lane")
             delete b
             remove(img_v)
+        } else {
+            t |> skip("dasVulkan not present")
         }
     }
 }

@@ -60,6 +60,31 @@ def test_symbol_map(t : T?) {
     }
 }
 
+//! the asserts `spectrum_diff` fails on a probe over a two-bin, two-frame spectrum `ours` against `ref`
+def private spectrum_fails(ours, ref : array<float>) : int {
+    return probe_fails() $(p) {
+        spectrum_diff(p, "probe", ours, ref, 2l, 2l)
+    }
+}
+
+[test]
+def test_spectrum_diff_reds_a_nan(t : T?) {
+    let ref <- [1.0, 2.0, 3.0, 4.0, 0.1, 0.2, 0.3, 0.4]
+    let ours <- [for (v in ref); v + 1e-6]
+    let nan = NAN_SENTINEL
+    t |> equal(spectrum_fails(ours, ref), 0, "control: the clean spectrum holds both bars")
+    for (at in [1, 3, 5, 7]) {
+        var bad := ours
+        bad[at] = nan
+        t |> success(spectrum_fails(bad, ref) > 0, "a NaN in our {at < 4 ? "magnitude" : "phase"} element {at} reds the compare")
+    }
+    for (at in [1, 3]) {
+        var bad := ref
+        bad[at] = nan
+        t |> success(spectrum_fails(ours, bad) > 0, "a NaN in the reference magnitude element {at} reds the compare")
+    }
+}
+
 def private oracle_dir(size : string) : string {
     return path_join(models_dir(), "tts_oracle/kitten_{size}")
 }

@@ -2078,7 +2078,9 @@ British is the control), and the directory rule of `g2p_pack_path` - the full pa
 both sit, the American twin serves alone, an empty directory panics naming it.
 `test_tts_kitten.das` - stocked suite; the symbol-map and token-rule cells run everywhere
 (the front end's inventory into espeak-style IPA against the reference rewrite over the corpus,
-the reference driver's re-spacing and wrapping), the model-gated cells (`kitten-<size>.gguf` +
+the reference driver's re-spacing and wrapping), as does `test_spectrum_diff_reds_a_nan` (the
+parity rail's source-spectrum compare on a synthetic two-bin spectrum through a probe handle: a
+NaN in our magnitude, our phase or the reference magnitude reds it, the clean rows the control), the model-gated cells (`kitten-<size>.gguf` +
 `tts_oracle/kitten_<size>/` under the models dir, both from `performance/build_tts_data.das`)
 run the parity rail of `_tts_parity.das` per size and a facade smoke cell that speaks one
 sentence and checks the PCM is finite, non-silent, of speech length, and carries its timings;

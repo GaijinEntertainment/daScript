@@ -180,17 +180,20 @@ def spectrum_diff(t : T?; tag : string; ours, ref : array<float>; bins, frames :
     }
     var peak = 0.0
     for (i in range64(n)) {
-        peak = max(peak, abs(ref[i]))
+        if (!is_nan(ref[i])) {
+            peak = max(peak, abs(ref[i]))
+        }
     }
-    var mag_d = 0.0
+    let mag_d = span_maxdiff(ours, ref, 0, 0, int(n)).diff
     var ph_d = 0.0
     var gated = 0l
     for (i in range64(n)) {
-        mag_d = max(mag_d, abs(ours[i] - ref[i]))
         if (ref[i] > 1e-3 * peak) {
             gated++
             var d = abs(ours[n + i] - ref[n + i])
-            if (d > PI) {
+            if (is_nan(d)) {
+                d = INFINITE_DIFF
+            } elif (d > PI) {
                 d = 2.0 * PI - d
             }
             ph_d = max(ph_d, d)
