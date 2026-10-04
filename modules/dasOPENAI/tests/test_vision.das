@@ -28,6 +28,9 @@ def test_vision_body_serialization(t : T?) {
         let heard = audio_request_body("m", "What is said?", "QUJD", 8, "", true)
         t |> success(find(heard, "input_audio") >= 0 && find(heard, "QUJD") >= 0 && find(heard, "\"format\": \"wav\"") >= 0, "an audio body carries the clip as an input_audio part: {heard}")
         t |> success(find(heard, "input_audio") < find(heard, "What is said?"), "the clip leads under audio_first")
+        t |> success(find(body, "enable_thinking") < 0, "no thinking field unless asked")
+        let quiet = vision_request_body("m", "What is this?", "https://example.com/x.png", 8, "", false, true)
+        t |> success(find(quiet, "\"enable_thinking\": false") >= 0 && find(quiet, "chat_template_kwargs") >= 0, "no_think sends both spellings: {quiet}")
     }
 }
 

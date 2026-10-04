@@ -47,7 +47,7 @@ def private audio_part(audio_base64, format : string) : JsonValue? {
 
 //! the JSON body of a one-shot request: a user turn of `text` and one media part, the media ahead of the text under
 //! `media_first`, under a system message when `system` is not empty
-def private media_request_body(model, text : string; var media : JsonValue?; max_tokens : int; system : string; media_first : bool) : string {
+def private media_request_body(model, text : string; var media : JsonValue?; max_tokens : int; system : string; media_first, no_think : bool) : string {
     var content <- media_first ? [media, vision_text_part(text)] : [vision_text_part(text), media]
     var msg <- { "role" => JV("user"), "content" => JV(content) }
     var msgs : array<JsonValue?>
@@ -61,35 +61,41 @@ def private media_request_body(model, text : string; var media : JsonValue?; max
         "messages" => JV(msgs),
         "max_tokens" => JV(max_tokens)
     }
+    if (no_think) {   // both spellings: a server reads the flat field or the template's keyword arguments
+        var kwargs <- { "enable_thinking" => JV(false) }
+        body_tree["enable_thinking"] = JV(false)
+        body_tree["chat_template_kwargs"] = JV(kwargs)
+    }
     return write_json_compact(JV(body_tree))
 }
 
-def vision_request_body(model, text, image_url : string; max_tokens : int = 300; system : string = ""; image_first : bool = false) : string {
+def vision_request_body(model, text, image_url : string; max_tokens : int = 300; system : string = ""; image_first : bool = false; no_think : bool = false) : string {
     //! Builds the JSON body for a one-shot vision request (a user turn with text + one image, the image ahead of
-    //! the text under ``image_first``), under a system message when ``system`` is not empty.
-    return media_request_body(model, text, vision_image_part(image_url), max_tokens, system, image_first)
+    //! the text under ``image_first``), under a system message when ``system`` is not empty; ``no_think`` asks a
+    //! thinking model to answer directly.
+    return media_request_body(model, text, vision_image_part(image_url), max_tokens, system, image_first, no_think)
 }
 
-def audio_request_body(model, text, audio_base64 : string; max_tokens : int = 300; system : string = ""; audio_first : bool = false; format : string = "wav") : string {
+def audio_request_body(model, text, audio_base64 : string; max_tokens : int = 300; system : string = ""; audio_first : bool = false; format : string = "wav"; no_think : bool = false) : string {
     //! Builds the JSON body for a one-shot audio request: a user turn with text + one ``input_audio`` part carrying
     //! the base64 of an audio file, the clip ahead of the text under ``audio_first``.
-    return media_request_body(model, text, audio_part(audio_base64, format), max_tokens, system, audio_first)
+    return media_request_body(model, text, audio_part(audio_base64, format), max_tokens, system, audio_first, no_think)
 }
 
-def chat_audio(client : OpenAIClient; model, text, audio_base64 : string; max_tokens : int = 300; system : string = ""; audio_first : bool = false) : ChatResult {
+def chat_audio(client : OpenAIClient; model, text, audio_base64 : string; max_tokens : int = 300; system : string = ""; audio_first : bool = false; no_think : bool = false) : ChatResult {
     //! One-shot audio request: a single user turn with text plus an audio clip (the base64 of its file).
     //! Returns the normal chat result (assistant text in choices[0].message.content).
     var response : ChatCompletionResponse
     let err = post_and_decode(client, "/chat/completions",
-        audio_request_body(model, text, audio_base64, max_tokens, system, audio_first), response)
+        audio_request_body(model, text, audio_base64, max_tokens, system, audio_first, "wav", no_think), response)
     return ChatResult(ok = empty(err.kind), response <- response, error = err)
 }
 
-def chat_vision(client : OpenAIClient; model, text, image_url : string; max_tokens : int = 300; system : string = ""; image_first : bool = false) : ChatResult {
+def chat_vision(client : OpenAIClient; model, text, image_url : string; max_tokens : int = 300; system : string = ""; image_first : bool = false; no_think : bool = false) : ChatResult {
     //! One-shot vision request: a single user turn with text plus an image (http(s) URL or
     //! a ``data:`` URL). Returns the normal chat result (assistant text in choices[0].message.content).
     var response : ChatCompletionResponse
     let err = post_and_decode(client, "/chat/completions",
-        vision_request_body(model, text, image_url, max_tokens, system, image_first), response)
+        vision_request_body(model, text, image_url, max_tokens, system, image_first, no_think), response)
     return ChatResult(ok = empty(err.kind), response <- response, error = err)
 }

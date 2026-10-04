@@ -629,8 +629,9 @@ let EYEBALL_TOKENS = 96   //!< the untimed request's reply budget: enough to rea
 def see(plan : Plan; system, question, payload : string; is_audio : bool = false; max_tokens : int = 1) : Seen {
     var seen = Seen()
     let t0 = ref_time_ticks()
-    var res <- (is_audio ? chat_audio(client_of(plan.url), plan.model, question, payload, max_tokens, system, true)
-        : chat_vision(client_of(plan.url), plan.model, question, payload, max_tokens, system, true))
+    let eyeball = max_tokens > 1   //! the request whose reply is read asks a thinking model for the answer, not its thought
+    var res <- (is_audio ? chat_audio(client_of(plan.url), plan.model, question, payload, max_tokens, system, true, eyeball)
+        : chat_vision(client_of(plan.url), plan.model, question, payload, max_tokens, system, true, eyeball))
     seen.wall_us = int64(get_time_usec(t0))
     seen.prompt_tokens = int64(res.response.usage.prompt_tokens)
     seen.text = empty(res.response.choices) ? "" : res.response.choices[0].message.content
