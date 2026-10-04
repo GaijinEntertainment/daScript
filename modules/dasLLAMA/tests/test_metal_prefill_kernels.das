@@ -906,6 +906,41 @@ def private tw_tail_rows_gate(t : T?; var dev, queue) {
     }
 }
 
+//! A vision tail's row standardize, in place, at a width off the 64-thread group: (x * scale - b[c]) * m[c] against the
+//! host form, two rows past the run left as they were; the form with no scale misses on most elements (asserted on the host).
+def private tw_affine_gate(t : T?; var dev, queue) {
+    let tag = "tw_affine_rows"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kd = kernel_of(@@enc_tw_affine_rows)
+        var pso = mc |> keep_stamp(kd, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let width = 70
+        let rows = 5
+        let total = rows * width
+        let scale = 27.712812   // sqrt(768)
+        var inscope x <- [for (i in range((rows + 2) * width)); float((i * 37) % 101 - 50) * 0.043]
+        var inscope b <- [for (i in range(width)); float((i * 7) % 13 - 6) * 0.31]
+        var inscope m <- [for (i in range(width)); 0.5 + float((i * 5) % 11) * 0.17]
+        var inscope want := x
+        var apart = 0
+        for (i in range(total)) {
+            want[i] = (x[i] * scale - b[i % width]) * m[i % width]
+            apart += abs(want[i] - (x[i] - b[i % width]) * m[i % width]) > 1e-3 ? 1 : 0
+        }
+        t |> success(apart > total / 2, "{tag}: the fixture tells the scale apart ({apart} of {total})")
+        var ka = TwAffineArgs(width = uint(width), total = uint(total), scale = scale)
+        let bx = mc |> io_(x)
+        let bb = mc |> in_(b)
+        let bm = mc |> in_(m)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            invoke(kd.enc, enc, pso, mc.buf[bx], mc.buf[bb], mc.buf[bm], ka, int64(total))
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bx], want, BAR_APPROX, Shape(row_width = width))
+    }
+}
+
 //! A vision tail's grid mean pool at a width off the 64-thread group: a 6 x 4 row grid pooled 2 x 2 into 3 x 2 rows
 //! against the host mean of each block; the pool along the other axis alone misses on most elements (asserted on the host).
 def private tw_pool2d_gate(t : T?; var dev, queue) {
@@ -2864,6 +2899,7 @@ def test_metal_prefill_kernels(t : T?) {
                 cn_melnorm_gate(t, dev, queue)
                 tw_tail_rows_gate(t, dev, queue)
                 tw_pool2d_gate(t, dev, queue)
+                tw_affine_gate(t, dev, queue)
                 bias_relu_rows_gate(t, dev, queue)
                 st2_conv_gate(t, dev, queue, false, false)
                 st2_conv_gate(t, dev, queue, true, false)

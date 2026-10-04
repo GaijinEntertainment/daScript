@@ -103,6 +103,8 @@ struct Gemma4vState {
     @scratch pos_x : array<int64>; @scratch pos_y : array<int64>   // the grid's patch columns / rows
     grid_w : int64       // the grid the tables were built for (0 = none yet)
     grid_h : int64
+    @scratch tail : array<float>   // [nout × proj_dim] soft tokens a device chain landed behind its blocks
+    tail_ready : bool    //! `tail` holds this encode's soft tokens: the CPU tail stands down
 }
 
 // the tower owns exactly one thing — its image backing. Every plane borrows.
@@ -221,10 +223,14 @@ typedef Gemma4vGpuServesFn = function<() : bool>
 var private g_g4v_gpu : Gemma4vGpuBlocksFn
 var private g_g4v_gpu_serves : Gemma4vGpuServesFn
 var private g_g4v_gpu_set = false
+var private g_g4v_gpu_stem = false   //! the registered chain runs the stem's patch conv and position adds itself, off `s.x0`
 
-def register_gemma4v_gpu(fn : Gemma4vGpuBlocksFn; serves : Gemma4vGpuServesFn) {
+//! `stem` says the chain takes the stem's columns (`s.x0`) and runs the patch conv and the position adds itself; a
+//! chain registered without it is handed the finished residual stream in `s.x`.
+def register_gemma4v_gpu(fn : Gemma4vGpuBlocksFn; serves : Gemma4vGpuServesFn; stem : bool = false) {
     g_g4v_gpu = fn
     g_g4v_gpu_serves = serves
+    g_g4v_gpu_stem = stem
     g_g4v_gpu_set = true
 }
 
@@ -684,9 +690,8 @@ def private g4v_block(t : Gemma4vTower; var s : Gemma4vState; l, npos : int64) {
     asr_prof_add("g4v.norm", tp)
 }
 
-// the stem: im2col → x·2−1 → patch conv → x/y position-table adds, leaving the residual stream in
-// s.x (npos rows); sizes every block buffer for this canvas
-def private g4v_stem(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>; w, h, n_cols : int64) : int64 {
+// the stem's columns: im2col → x·2−1 into s.x0 (npos rows); sizes every block buffer for this canvas
+def private g4v_stem_cols(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>; w, h : int64) : int64 {
     let d = t.n_embd
     let npos = im2col_rgb_patches(planes, w, h, t.patch, s.x0)
     // inp_raw_scaled: pixels [0, 1] -> [-1, 1] ahead of the conv
@@ -704,6 +709,13 @@ def private g4v_stem(t : Gemma4vTower; var s : Gemma4vState; planes : array<floa
     ensure_length(s.vv, npos * d)
     ensure_length(s.hg, npos * t.n_ff)
     ensure_length(s.hu, npos * t.n_ff)
+    return npos
+}
+
+// the stem's finish: the patch conv over the columns and the x/y position-table adds, leaving the residual stream in
+// s.x - a device chain runs both itself off s.x0
+def private g4v_stem_finish(t : Gemma4vTower; var s : Gemma4vState; npos, n_cols : int64) {
+    let d = t.n_embd
     mm_plane_b(s.x, t.patch_bf16, t.wblob, t.blob, t.patch_w, s.x0, t.patch_dim, d, npos)
     unsafe {
         var xp = addr(s.x[0])
@@ -717,7 +729,6 @@ def private g4v_stem(t : Gemma4vTower; var s : Gemma4vState; planes : array<floa
             }
         }
     }
-    return npos
 }
 
 // the tail: Gemma4VisionPooler (merge×merge mean, ×√d), the std guard, then the
@@ -765,17 +776,39 @@ def gemma4v_encode(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>
     let n_rows = h / t.patch
     dispatch_phase_encode(n_cols * n_rows)
     var tp = ref_time_ticks()
-    let npos = g4v_stem(t, s, planes, w, h, n_cols)
+    let npos = g4v_stem_cols(t, s, planes, w, h)
     g4v_rope_tables(t, s, n_cols, n_rows)
     asr_prof_add("g4v.stem", tp)
     var gpu_served = false
+    let finished = !g_g4v_gpu_set || !g_g4v_gpu_stem
+    if (finished) {
+        tp = ref_time_ticks()
+        g4v_stem_finish(t, s, npos, n_cols)
+        asr_prof_add("g4v.stem", tp)
+    }
+    s.tail_ready = false
     if (g_g4v_gpu_set) {
+        tp = ref_time_ticks()
         gpu_served = invoke(g_g4v_gpu, t, s, npos)
+        asr_prof_add("g4v.gpu", tp)
     }
     if (!gpu_served) {
+        if (!finished) {
+            tp = ref_time_ticks()
+            g4v_stem_finish(t, s, npos, n_cols)
+            asr_prof_add("g4v.stem", tp)
+        }
         for (l in range64(t.n_layer)) {
             g4v_block(t, s, l, npos)
         }
+    }
+    if (gpu_served && s.tail_ready) {   // the device chain ran the tail behind its blocks
+        let n_out = (n_cols / t.merge) * (n_rows / t.merge)
+        ensure_length(out, n_out * t.proj_dim)
+        unsafe {
+            memcpy(addr(out[0]), addr(s.tail[0]), uint64(n_out * t.proj_dim * 4l))
+        }
+        return n_out
     }
     tp = ref_time_ticks()
     let nout = g4v_tail(t, s, n_cols, n_rows, out)

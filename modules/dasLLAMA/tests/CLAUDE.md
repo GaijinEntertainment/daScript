@@ -405,7 +405,10 @@ loops, the sums asserted to take both signs so the first conv's ReLU and the dep
 lack of one both show; the feature permute bit for bit with its row pad zero under a sentinel
 fill; the bias-and-ReLU row pass against max(x + b, 0) over sums of both signs. The whisper-class projector tail's
 two row kernels (`tw_tail_rows_gate`): the pair pool and the row-split gate at a 70-wide row over
-five rows against their host forms, the gate's fixture asserted to tell its halves apart. Canary's mel
+five rows against their host forms, the gate's fixture asserted to tell its halves apart; the vision
+tails' row kernels - the grid mean pool (`tw_pool2d_gate`: a 6 x 4 row grid pooled 2 x 2 against the
+host mean, a one-axis pool told apart) and the standardize (`tw_affine_gate`: in place against
+(x * scale - b) * m, two rows past the run kept, the form with no scale told apart). Canary's mel
 normalization (`cn_melnorm`): the log and the per-feature normalization in place against a double
 form at 70 features (off the 64-thread group), 11 frames of which 7 are valid - the rest zero - and
 two rows past the mel left as they were. The FastConformer
@@ -2026,7 +2029,7 @@ the five fixtures vary content, not geometry; exact lane on the 2e-4 + 4e-3*toke
 q8 serving lane on its measured 3.2e-1*rms bar (27 blocks, ffn served at the layout's padded
 4352 width so every GEMM quantizes), plus the fixed-canvas panic gate and the carrier
 sniff/exec_fmt cells. On Apple builds the CPU gate pins the tower knob off, and a GPU rung
-gates two fixtures through the Metal block loop on its measured 4e-2*rms bar - engage proven
+gates two fixtures through the Metal chain (the blocks and, behind them, the projector tail) on its measured 4e-2*rms bar - engage proven
 per fixture by the encodes/blocks counters, plus the knob-off decline leg (the 72-wide heads
 restride to the attention tiles' 128 on the driver), the q8-decline leg (a PINNED-q8 tower with
 the knob ARMED must never dispatch and must record the `quant_mode` decline - its Q8_0 planes
@@ -2045,6 +2048,9 @@ the device chain must EXCEED the bar), then the exact-lane tower's `quant_mode` 
 canvas only, since the exact chain at 4096 rows x 27 blocks is the cell's cost. The Vulkan rung and
 the twin skip without a Vulkan device under `DASLLAMA_GPU=1`, and on a build with das_metal, where
 the Metal driver owns the tower hooks.
+`test_gemma3v_tail_gpu` holds the device tail alone, dump-free: the soft tokens with the tail on the
+device against the CPU tail over the same device block rows (`set_metal_tower_tail` off) within 1e-3
+rel-l2 (reads 1.3e-4), the tail counter up by the device leg alone, another canvas outside the bar.
 `test_qwen3v.das` - stocked suite; the qwen3v tower tier-1 parity vs the `-p encode` dumps minted on
 f32-widened mmprojs, CPU (`qwen3vl-vision-oracle/mint.sh` + `mint_4b.sh`): the Omni leg
 (`qwen3vl_merger` no deepstack) on seven fixtures (cb96 = the pos-table downscale arm,

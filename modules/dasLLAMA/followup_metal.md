@@ -909,6 +909,8 @@ Each is a stage and the models it holds for, read off the drivers' own gates:
 - **The whisper-class chat towers' mel** (`log_mel_chunks`; Qwen2-Audio, Qwen2.5-Omni, Ultravox,
   Voxtral) runs on the CPU: 48 ms of a chunk's 158, beside 99 of blocks and 9 of stem on the device.
   A q8 tower's projector tail runs on the CPU too - its projector planes are not on the device.
+- **The vision towers' im2col** (gemma3v, gemma4v: under 1 ms) and the q8 lane's whole chain run on the
+  CPU; qwen3v and qwen25v have had no stage-by-stage check of their merger tails.
 - **Qwen3-Omni** has had no stage-by-stage check.
 
 The work: each stage on the device, and a counter per stage a gate can read, so a served model's

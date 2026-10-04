@@ -78,6 +78,15 @@ on the device - answering which it served (`TowerTailServed`), so the CPU tail r
 the device one did not. Its engage counter is `metal_tower_tail_encodes`, its lever
 `set_metal_tower_tail`.
 
+The vision chains run their ends on the device too. The gemma3v chain ends in its tail - the
+post-norm, the grid mean pool (`MetalTwPool2d`), the soft norm and the projection (`g3v_tail_body`).
+The gemma4v chain takes the stem's columns and runs the patch conv and the position adds itself
+(`g4v_stem_body`; the family registers its seat with `stem` set, and a chain registered without it is
+handed the finished residual stream), then ends in its tail: the grid pool, the sqrt(d) scale and the
+standardize in one row pass (`MetalTwAffineRows`), the weightless rms, and the projection between its
+two clamps (`g4v_tail_body`). With the tail on the device the soft tokens alone come back; the block
+rows stay there.
+
 The gemma4a chain ends in the projector tail, in the blocks' command buffer: the out projection
 and its bias at the encoder's own output width (`gemma4a_mid_dim`, the length of the weightless
 norm's ones row), that norm, then the audio embedder to the decoder's width (`proj_dim`). The

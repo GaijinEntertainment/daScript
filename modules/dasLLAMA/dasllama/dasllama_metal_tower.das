@@ -1660,6 +1660,140 @@ def private metal_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len 
     return npos
 }
 
+//! the gemma4v chain's two ends on the device: the stem's columns and position rows ahead of the blocks, the projector
+//! tail's rows behind them
+struct private G4vEnds {
+    tail : bool             //!< the tail rides this encode's command buffer
+    n_cols : int64          //!< the patch grid's width
+    nout : int64            //!< soft tokens: the pooled grid's rows
+    mpo : int64             //!< `nout` on the GEMM's 32-row lattice
+    bx0 : MetalBuffer?      //!< the stem's columns [mp x patch_dim]
+    bpos : MetalBuffer?     //!< each row's x + y position-table rows, summed
+    bpool : MetalBuffer?    //!< the pooled rows [mpo x d]
+    bclamp : MetalBuffer?   //!< their clamped copy, the projection's input
+    bout : MetalBuffer?     //!< the soft tokens [mpo x proj_dim]
+    bstd_b : MetalBuffer?   //!< the standardize bias row (zeros where the tower has none)
+    bstd_m : MetalBuffer?   //!< its scale row (ones)
+    u_pd : MetalBuffer?
+    u_proj : MetalBuffer?
+    u_totpool : MetalBuffer?
+    u_totout : MetalBuffer?
+    bytes_x0 : uint64
+    bytes_pos : uint64
+    bytes_pool : uint64
+    bytes_out : uint64
+    bytes_std : uint64
+}
+
+//! The stem's operands up, and the tail's rows where the lever allows, its kernels are compiled, the grid pools whole and
+//! the projection sits on its GEMM's lattice.
+def private g4v_ends_make(t : Gemma4vTower; s : Gemma4vState; npos, mp : int64) : G4vEnds {
+    let d = t.n_embd
+    let n_cols = s.grid_w
+    var e = G4vEnds(n_cols = n_cols, bytes_x0 = uint64(mp * t.patch_dim * 4l), bytes_pos = uint64(mp * d * 4l))
+    e.bx0 = pool_acquire_pinned(g_tw_pool, g_dev, e.bytes_x0)
+    e.bpos = pool_acquire_pinned(g_tw_pool, g_dev, e.bytes_pos)
+    e.u_pd = uniform_u32(uint(t.patch_dim))
+    unsafe {
+        upload_rows_padded(e.bx0, addr<float const?>(s.x0[0]), npos, mp, t.patch_dim)
+        var pp = reinterpret<float?>(metal_buffer_contents(e.bpos))
+        let tbl = plane_at(t.blob, t.pos_w)
+        for (pi in range64(npos)) {
+            let ex = tbl + (pi % n_cols) * d
+            let ey = tbl + (t.pos_entries + pi / n_cols) * d
+            for (i in range64(d)) {
+                pp[pi * d + i] = ex[i] + ey[i]
+            }
+        }
+    }
+    e.tail = (g_tw_tail && pf_tw_tail_ready() && n_cols % t.merge == 0l && s.grid_h % t.merge == 0l
+        && d <= int64(TW_ONES_DIM) && t.proj_dim % 64l == 0l)
+    return e if (!e.tail)
+    e.nout = (n_cols / t.merge) * (s.grid_h / t.merge)
+    e.mpo = round_up(e.nout, 32l)
+    e.bytes_pool = uint64(e.mpo * d * 4l)
+    e.bytes_out = uint64(e.mpo * t.proj_dim * 4l)
+    e.bytes_std = uint64(d * 4l)
+    e.bpool = pool_acquire_pinned(g_tw_pool, g_dev, e.bytes_pool)
+    e.bclamp = pool_acquire_pinned(g_tw_pool, g_dev, e.bytes_pool)
+    e.bout = pool_acquire_pinned(g_tw_pool, g_dev, e.bytes_out)
+    e.bstd_b = pool_acquire_pinned(g_tw_pool, g_dev, e.bytes_std)
+    e.bstd_m = pool_acquire_pinned(g_tw_pool, g_dev, e.bytes_std)
+    e.u_proj = uniform_u32(uint(t.proj_dim))
+    e.u_totpool = uniform_u32(uint(e.nout * d))
+    e.u_totout = uniform_u32(uint(e.nout * t.proj_dim))
+    unsafe {
+        var bp = reinterpret<float?>(metal_buffer_contents(e.bstd_b))
+        var mp_ = reinterpret<float?>(metal_buffer_contents(e.bstd_m))
+        for (i in range64(d)) {
+            bp[i] = t.has_std ? plane_at(t.blob, t.std_bias)[i] : 0.0
+            mp_[i] = t.has_std ? plane_at(t.blob, t.std_scale)[i] : 1.0
+        }
+    }
+    return e
+}
+
+//! one GEMM off the tower's weights: the halfword twin where the tensor is stored bf16, the f32 blob otherwise
+def private g4v_plane_mm(enc : MetalComputeEncoder?; bf16 : bool; bblob, bwblob : MetalBuffer?; woff : int64;
+                         bsrc, bdst, u_k, u_n : MetalBuffer?; rows, ndim, kdim : int64) {
+    if (bf16) {
+        pf_enc_bf16_mm(enc, bwblob, uint64(woff * 2l), bsrc, bdst, u_k, u_n, rows, ndim, kdim = kdim)
+    } else {
+        enc_f32_mm(enc, bblob, uint64(woff * 4l), bsrc, bdst, 0ul, u_k, u_n, rows, ndim)
+    }
+}
+
+//! The stem on the device: the patch conv over the columns, then each row's position rows.
+[arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
+def private g4v_stem_body(enc : MetalComputeEncoder?; t : Gemma4vTower; e : G4vEnds; bblob, bwblob, bx : MetalBuffer?;
+                          u_d, u_totd : MetalBuffer?; mp, npos : int64) {
+    let d = t.n_embd
+    g4v_plane_mm(enc, t.patch_bf16, bblob, bwblob, t.patch_w, e.bx0, bx, e.u_pd, u_d, mp, d, t.patch_dim)
+    enc_add(enc, bx, 0ul, e.bpos, 0ul, u_totd, npos * d)
+}
+
+//! The CPU tail's steps behind the blocks: the grid mean pool, the sqrt(d) scale and the standardize, the weightless
+//! rms, then the projection between its two clamps.
+[arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
+def private g4v_tail_body(enc : MetalComputeEncoder?; t : Gemma4vTower; e : G4vEnds; bblob, bwblob, bx : MetalBuffer?;
+                          u_d, u_eps, u_in, u_out : MetalBuffer?) {
+    return if (!e.tail)
+    let d = t.n_embd
+    let nout = e.nout
+    let cb = uint64(t.proj_clamp * 4l)
+    enc_tw_pool2d(enc, bx, e.bpool, TwPool2dArgs(width = uint(d), gw = uint(e.n_cols), k = uint(t.merge),
+        ow = uint(e.n_cols / t.merge), total = uint(nout * d)), nout * d)
+    enc_tw_affine_rows(enc, e.bpool, e.bstd_b, e.bstd_m, TwAffineArgs(width = uint(d), total = uint(nout * d), scale = sqrt(float(d))), nout * d)
+    pf_enc_rms(enc, e.bpool, 0ul, g_tw_ones, e.bpool, u_d, u_eps, nout)
+    enc_clamp(enc, e.bpool, 0ul, e.bclamp, 0ul, bblob, cb, u_in, e.u_totpool, nout * d)
+    g4v_plane_mm(enc, t.proj_bf16, bblob, bwblob, t.proj_w, e.bclamp, e.bout, u_d, e.u_proj, e.mpo, t.proj_dim, d)
+    enc_clamp(enc, e.bout, 0ul, e.bout, 0ul, bblob, cb, u_out, e.u_totout, nout * t.proj_dim)
+}
+
+//! the tail's soft tokens into `s.tail` where the command buffer ran, the CPU tail told to stand down; the ends' buffers released
+def private g4v_ends_land(t : Gemma4vTower; var e : G4vEnds; ran : bool; var s : Gemma4vState) {
+    pool_release(g_tw_pool, e.bx0, e.bytes_x0)
+    pool_release(g_tw_pool, e.bpos, e.bytes_pos)
+    pool_release(g_upool, e.u_pd, 4ul)
+    return if (!e.tail)
+    if (ran) {
+        ensure_length(s.tail, e.nout * t.proj_dim)
+        unsafe {
+            memcpy(addr(s.tail[0]), metal_buffer_contents(e.bout), uint64(e.nout * t.proj_dim * 4l))
+        }
+        s.tail_ready = true
+        g_tower_tail_encodes++
+    }
+    pool_release(g_tw_pool, e.bpool, e.bytes_pool)
+    pool_release(g_tw_pool, e.bclamp, e.bytes_pool)
+    pool_release(g_tw_pool, e.bout, e.bytes_out)
+    pool_release(g_tw_pool, e.bstd_b, e.bytes_std)
+    pool_release(g_tw_pool, e.bstd_m, e.bytes_std)
+    pool_release(g_upool, e.u_proj, 4ul)
+    pool_release(g_upool, e.u_totpool, 4ul)
+    pool_release(g_upool, e.u_totout, 4ul)
+}
+
 // The gemma4v ViT block loop as ONE command buffer on the file's planes (bf16 GEMMs through the
 // bf16 mul_mm, f32 norms/clamps) — the CPU g4v_block chain dispatch for dispatch, the attention
 // trio at uend = npos / scale 1. Stem and tail stay CPU; a q8-lane tower declines (quant_mode).
@@ -1676,7 +1810,7 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
     let ff = t.n_ff
     // bf16 GEMMs only; hs 64 = one attention K-slab; GEMM regions bind as ushort4 views (8-aligned halfword offsets)
     if (!t.blk_bf16 || d % 64l != 0l || ff % 64l != 0l || hs != 64l || t.layer_w % 8l != 0l
-            || t.layer_w_stride % 8l != 0l) {
+            || t.layer_w_stride % 8l != 0l || t.patch_dim % 32l != 0l || s.grid_w * s.grid_h != npos) {
         return tw_decline(MetalTowerDecline.shape)
     }
     if (!metal_tower_init()) {   // per-encode: re-arms after any shutdown seat
@@ -1706,11 +1840,9 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
     var batt = pool_acquire_pinned(g_tw_pool, g_dev, bytes_att)
     var bstat = pool_acquire_pinned(g_tw_pool, g_dev, bytes_stat)
     var btabs = pool_acquire_pinned(g_tw_pool, g_dev, bytes_tabs)
-    unsafe {
-        upload_rows_padded(bx, addr(s.x[0]), npos, mp, d)
-        zero_rows(bk, npos, nk64, d)
-        gemma4v_pack_rope_tabs(s, npos, pairs, reinterpret<float?>(metal_buffer_contents(btabs)))
-    }
+    var ends = g4v_ends_make(t, s, npos, mp)
+    zero_rows(bk, npos, nk64, d)
+    gemma4v_pack_rope_tabs(s, npos, pairs, unsafe(reinterpret<float?>(metal_buffer_contents(btabs))))
     var u_d = uniform_u32(uint(d))
     var u_ff = uniform_u32(uint(ff))
     var u_hs = uniform_u32(uint(hs))
@@ -1726,6 +1858,7 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
         qoff = 0u, qrows = uint(mp), window = 0u, softcap = 0.0, hass = 0u, uend = uint(npos))
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+        g4v_stem_body(enc, t, ends, bblob, bwblob, bx, u_d, u_totd, mp, npos)
         for (l in range64(t.n_layer)) {
             let o = gemma4v_block_offs(t, l)
             let cb_q = uint64(o.clamp[GEMMA4V_GEMM_Q] * 4l)
@@ -1781,15 +1914,20 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
             pf_enc_rms(enc, bxb, 0ul, bw_fp, bxb, u_d, u_eps, npos)
             enc_add(enc, bx, 0ul, bxb, 0ul, u_totd, npos * d)
         }
+        g4v_tail_body(enc, t, ends, bblob, bwblob, bx, u_d, u_eps, u_in, u_out)
     }
     var served = false
     if (ran) {
-        unsafe {
-            memcpy(addr(s.x[0]), metal_buffer_contents(bx), uint64(npos * d * 4l))
+        if (!ends.tail) {   // with the tail on the device the soft tokens alone come back
+            unsafe {
+                memcpy(addr(s.x[0]), metal_buffer_contents(bx), uint64(npos * d * 4l))
+            }
         }
         tw_count_encode(npos, t.n_layer, false)
+        g_tower_convs++
         served = true
     }
+    g4v_ends_land(t, ends, ran, s)
     pool_release(g_tw_pool, bx, bytes_row)
     pool_release(g_tw_pool, bxb, bytes_row)
     pool_release(g_tw_pool, bxb2, bytes_row)
@@ -1851,9 +1989,7 @@ def private g3v_tail_make(t : Gemma3vTower; npos : int64) : G3vTail {
     tl.bout = pool_acquire_pinned(g_tw_pool, g_dev, tl.bytes_out)
     tl.bsoft = pool_acquire_pinned(g_tw_pool, g_dev, tl.bytes_soft)
     tl.u_proj = uniform_u32(uint(t.proj_dim))
-    unsafe {
-        memcpy(metal_buffer_contents(tl.bsoft), plane_at(t.blob, t.soft_norm_w), tl.bytes_soft)
-    }
+    unsafe(memcpy(metal_buffer_contents(tl.bsoft), plane_at(t.blob, t.soft_norm_w), tl.bytes_soft))
     return tl
 }
 
@@ -5100,7 +5236,7 @@ def dasllama_metal_tower_register {
         to_log(LOG_INFO, "dasLLAMA metal tower: DASLLAMA_METAL_TOWER_FLASH=0 - the dk72 one-pass attention stays off, the slab trio serves\n")
     }
     register_gemma4uv_gpu(@@metal_gemma4uv_encode)
-    register_gemma4v_gpu(@@metal_gemma4v_blocks, @@metal_tower_serves)
+    register_gemma4v_gpu(@@metal_gemma4v_blocks, @@metal_tower_serves, true)
     register_gemma3v_gpu(@@metal_gemma3v_blocks, @@metal_tower_serves)
     register_qwen3v_gpu(@@metal_qwen3v_blocks, @@metal_tower_serves)
     register_qwen25v_gpu(@@metal_qwen25v_blocks)
