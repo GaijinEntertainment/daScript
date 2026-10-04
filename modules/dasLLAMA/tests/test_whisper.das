@@ -777,6 +777,38 @@ def test_whisper_vulkan_wdec_flush(t : T?) {
     }
 }
 
+//! A whisper.cpp q8_0 bin loads: its Q8_0 tensors read as their blocks' scale times the quants, and it transcribes what the
+//! f16 bin of the same model does.
+[test]
+def test_whisper_q8_0_file(t : T?) {
+    t |> run("ggml-tiny-q8_0.bin: a q8_0 bin loads and reads jfk as the f16 bin does") @(tt : T?) {
+        let f16_path = path_join(whisper_dir(), "ggml-tiny.bin")
+        let q8_path = path_join(whisper_dir(), "ggml-tiny-q8_0.bin")
+        return if (!jit_model_available(tt, f16_path) || !jit_model_available(tt, q8_path))
+        let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+        if (empty(samples)) {
+            tt |> skip("jfk.wav not present")
+            return
+        }
+        set_asr_fp32(false)
+        set_asr_tower_fp32(false)
+        var inscope m16 <- mint_asr_whisper(f16_path)
+        var inscope m8 <- mint_asr_whisper(q8_path)
+        var from_f16 = ""
+        var from_q8 = ""
+        with_dasllama_jobque_() {
+            var inscope s16 <- create_session(m16)
+            from_f16 = transcribe(m16, s16, samples)
+            var inscope s8 <- create_session(m8)
+            from_q8 = transcribe(m8, s8, samples)
+        }
+        to_log(LOG_INFO, "whisper tiny f16 bin: '{from_f16}'\n")
+        to_log(LOG_INFO, "whisper tiny q8_0 bin: '{from_q8}'\n")
+        tt |> success(!empty(from_q8), "the q8_0 bin transcribes")
+        tt |> equal(from_q8, from_f16, "and reads what the f16 bin reads")
+    }
+}
+
 //! the largest element difference of two row images over the reference's largest magnitude; 2 where a length differs
 def private rows_rel_max(got, want : array<float>) : float {
     return 2.0 if (length(got) != length(want) || empty(want))
