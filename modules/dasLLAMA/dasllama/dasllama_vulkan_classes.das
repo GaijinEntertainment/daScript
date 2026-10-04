@@ -3039,44 +3039,48 @@ struct AtAttnArgs {
     scale : float
 }
 
-// the flash Q-tile core (AtAttn and DaAttnB share it; the h128 coopmat twin does not): staged
-// K/V tiles at stride 257, per-row online softmax. KT is the K/V plane element type (staging and
-// compute stay f32 — the f16 arm converts on load). The template also carries the mirror-window
-// kernel (DaAttnB's run); AtAttn authors its own run over the same core. Leaves bring their own
-// out plane + push args, so the methods take every varying scalar as a param
+// the flash Q-tile core (AtAttn, DaAttnB and the wide DaAttnBW share it; the h128 coopmat twin does
+// not): a TQ-row q tile, staged K/V tiles of KS positions at row stride LD, per-row online softmax.
+// KT is the K/V plane element type (staging and compute stay f32 — the f16 arm converts on load).
+// The template's run is the 8-row pass over 32-position tiles (DaAttnB's mirror window); AtAttn
+// authors its own run over its own push, the wide twin (4 rows, 16 positions) its own V walk.
+// Leaves bring their own out plane + push args, so the methods take every varying scalar as a param
 [ |> template_struct_instance]
 class template AtAttnTileT {
     @ssbo @binding = 0 qpanel : array<float>   // the prepped/roped q rows
     @ssbo @binding = 1 kpanel : array<KT>      // the K plane (panel or mirror — kbase offsets)
     @ssbo @binding = 2 vpanel : array<KT>      // the V plane (raw rows or mirror — vbase offsets)
-    @workgroup fq : float[2048]    // the tile's 8 q rows
-    @workgroup fkv : float[8224]   // one 32-row K/V stage, stride 257 (bank-spread)
-    @workgroup fp : float[256]     // the 8x32 score/probability tile
-    @workgroup fm : float[8]       // per-row online-softmax state
-    @workgroup fl : float[8]
-    @workgroup fal : float[8]
+    @template_constant TQ : uint = 8u          //!< the q tile's rows
+    @template_constant KS : uint = 32u         //!< the K/V stage's positions
+    @template_constant LD : uint = 257u        //!< the K/V stage's row stride (one past the widest head: bank-spread)
+    @workgroup fq : float[2048]    // the tile's q rows
+    @workgroup fkv : float[int(KS * LD)]   // one K/V stage
+    @workgroup fp : float[int(TQ * KS)]    // the score/probability tile
+    @workgroup fm : float[int(TQ)]         // per-row online-softmax state
+    @workgroup fl : float[int(TQ)]
+    @workgroup fal : float[int(TQ)]
 
-    // stage the 8-query tile and reset the online-softmax state
+    // stage the TQ-query tile and reset the online-softmax state
     def load_q(q0, nrows, qstride, h, hs, qhs : uint) {
         let tid = gl_LocalInvocationID.x
         var i = tid
-        while (i < 8u * hs) {
+        while (i < TQ * hs) {
             let qr = q0 + i / hs
             fq[i] = qr < nrows ? qpanel[qr * qstride + h * qhs + i % hs] : 0.0
             i += 256u
         }
-        if (tid < 8u) {
+        if (tid < TQ) {
             fm[tid] = -3.0e38
             fl[tid] = 0.0
         }
     }
 
-    // stage one 32-position K tile from kpanel at kbase
+    // stage one KS-position K tile from kpanel at kbase
     def load_k(k0, kend, kbase, kvd, kvh, hs : uint) {
         var i = gl_LocalInvocationID.x
-        while (i < 32u * hs) {
+        while (i < KS * hs) {
             let kr = k0 + i / hs
-            fkv[(i / hs) * 257u + i % hs] = kr < kend ? float(kpanel[kbase + kr * kvd + kvh * hs + i % hs]) : 0.0   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
+            fkv[(i / hs) * LD + i % hs] = kr < kend ? float(kpanel[kbase + kr * kvd + kvh * hs + i % hs]) : 0.0   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
             i += 256u
         }
     }
@@ -3084,9 +3088,9 @@ class template AtAttnTileT {
     // ... and the V tile reuse of the K staging at vbase (call only after all K reads completed)
     def load_v(k0, kend, vbase, kvd, kvh, hs : uint) {
         var i = gl_LocalInvocationID.x
-        while (i < 32u * hs) {
+        while (i < KS * hs) {
             let kr = k0 + i / hs
-            fkv[(i / hs) * 257u + i % hs] = kr < kend ? float(vpanel[vbase + kr * kvd + kvh * hs + i % hs]) : 0.0   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
+            fkv[(i / hs) * LD + i % hs] = kr < kend ? float(vpanel[vbase + kr * kvd + kvh * hs + i % hs]) : 0.0   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
             i += 256u
         }
     }
@@ -3097,36 +3101,36 @@ class template AtAttnTileT {
         var s = 0.0
         var j = 0u
         while (j < hs) {   // 4-wide manual unroll (hs % 32 == 0)
-            s += fq[r * hs + j] * fkv[c * 257u + j]
-            s += fq[r * hs + j + 1u] * fkv[c * 257u + j + 1u]
-            s += fq[r * hs + j + 2u] * fkv[c * 257u + j + 2u]
-            s += fq[r * hs + j + 3u] * fkv[c * 257u + j + 3u]
+            s += fq[r * hs + j] * fkv[c * LD + j]
+            s += fq[r * hs + j + 1u] * fkv[c * LD + j + 1u]
+            s += fq[r * hs + j + 2u] * fkv[c * LD + j + 2u]
+            s += fq[r * hs + j + 3u] * fkv[c * LD + j + 3u]
             j += 4u
         }
         let gk = k0 + c
         let inwin = win == 0u || gk + win > gq
-        fp[r * 32u + c] = (gk <= gq && inwin && q0 + r < nrows) ? attn_softcap(s * scale, cap) : -3.0e38
+        fp[r * KS + c] = (gk <= gq && inwin && q0 + r < nrows) ? attn_softcap(s * scale, cap) : -3.0e38
     }
 
     //! the first K/V tile a window's queries can see: a sliding layer's tile below every query's window start skips whole
-    def k_first(w0, q0, win : uint) : uint => (win != 0u && w0 + q0 > win) ? ((w0 + q0 - win) / 32u) * 32u : 0u
+    def k_first(w0, q0, win : uint) : uint => (win != 0u && w0 + q0 > win) ? ((w0 + q0 - win) / KS) * KS : 0u
 
     // per-row online-softmax update: max, rescale, exponentiate in place
     def softmax_update {
         let tid = gl_LocalInvocationID.x
-        if (tid < 8u) {
+        if (tid < TQ) {
             var mt = fm[tid]
             var j2 = 0u
-            while (j2 < 32u) {
-                mt = max(mt, fp[tid * 32u + j2])
+            while (j2 < KS) {
+                mt = max(mt, fp[tid * KS + j2])
                 j2++
             }
             let alpha = exp(fm[tid] - mt)
             var lsum = 0.0
             j2 = 0u
-            while (j2 < 32u) {
-                let e = exp(fp[tid * 32u + j2] - mt)
-                fp[tid * 32u + j2] = e
+            while (j2 < KS) {
+                let e = exp(fp[tid * KS + j2] - mt)
+                fp[tid * KS + j2] = e
                 lsum += e
                 j2++
             }
@@ -3139,7 +3143,7 @@ class template AtAttnTileT {
     // the mirror-window kernel (DaAttnB's pass): batched causal attention over the decode
     // mirrors, K/V read at kbase/vbase; q read head-strided (qhs), the gated epilogue multiplies
     // by the sigmoid of the head's gate half; dpl-guarded accumulators serve hs 32..256.
-    // pa/outp are instance-declared (DaAttnBArgs); AtAttn overrides run
+    // pa/outp are instance-declared (DaAttnBArgs); AtAttn and the wide twin override run
     [spirv_kernel(local_size_x = 256)]
     def run {   // nolint:STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
         let qd = pa.nh * pa.hs
@@ -3995,21 +3999,15 @@ struct DaAttnBArgs {
 // 16-position K/V stages in the same shared memory, 64 lanes scoring, every thread accumulating eight
 // output dims of one row; the window and causal masks as the 8-row kernel's
 [ |> template_struct_instance]
-class template DaAttnBWT {
-    @ssbo @binding = 0 qpanel : array<float>   // the prepped/roped q rows
-    @ssbo @binding = 1 kpanel : array<KT>      // the K mirror plane (kbase offsets)
-    @ssbo @binding = 2 vpanel : array<KT>      // the V mirror plane (vbase offsets)
+class template DaAttnBWT : AtAttnTileT {
     @ssbo @binding = 3 outp : array<float>     // attention out rows
     @push_constant pa : DaAttnBArgs
-    @workgroup fq : float[2048]    // the tile's 4 q rows (hs <= 512)
-    @workgroup fkv : float[8208]   // one 16-row K/V stage, stride 513 (bank-spread)
-    @workgroup fp : float[64]      // the 4x16 score/probability tile
-    @workgroup fm : float[4]       // per-row online-softmax state
-    @workgroup fl : float[4]
-    @workgroup fal : float[4]
+    override TQ = 4u
+    override KS = 16u
+    override LD = 513u
 
     [spirv_kernel(local_size_x = 256)]
-    def run {   // nolint:STYLE037,STYLE038 — the whole flash pass over one q tile, the shape its 8-row sibling takes
+    def override run {
         let hs = pa.hs
         let qd = pa.nh * hs
         let qhs = pa.qhs == 0u ? hs : pa.qhs
@@ -4019,16 +4017,7 @@ class template DaAttnBWT {
         let q0 = (gl_WorkGroupID.x % qtiles) * 4u
         let tid = gl_LocalInvocationID.x
         let kvh = h / pa.kv_mul
-        var i = tid
-        while (i < 4u * hs) {
-            let qr = q0 + i / hs
-            fq[i] = qr < pa.npos ? qpanel[qr * qrow + h * qhs + i % hs] : 0.0
-            i += 256u
-        }
-        if (tid < 4u) {
-            fm[tid] = -3.0e38
-            fl[tid] = 0.0
-        }
+        load_q(q0, pa.npos, qrow, h, hs, qhs)
         var o : float[8]   // row vr's dims vc + 64 * z
         for (z in range(8)) {
             o[z] = 0.0
@@ -4037,64 +4026,21 @@ class template DaAttnBWT {
         let vc = tid % 64u
         barrier()
         let kend = pa.w0 + min(q0 + 4u, pa.npos)   // causal bound (exclusive) of the tile's last row
-        var k0 = (pa.window != 0u && pa.w0 + q0 > pa.window) ? ((pa.w0 + q0 - pa.window) / 16u) * 16u : 0u
+        var k0 = k_first(pa.w0, q0, pa.window)
         while (k0 < kend) {
-            i = tid
-            while (i < 16u * hs) {
-                let kr = k0 + i / hs
-                fkv[(i / hs) * 513u + i % hs] = kr < kend ? float(kpanel[pa.kbase + kr * pa.kvd + kvh * hs + i % hs]) : 0.0   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
-                i += 256u
-            }
+            load_k(k0, kend, pa.kbase, pa.kvd, kvh, hs)
             barrier()
             if (tid < 64u) {   // lane (r, c) scores query r against position k0 + c
-                let r = tid / 16u
-                let c = tid % 16u
-                var s = 0.0
-                var j = 0u
-                while (j < hs) {   // 4-wide manual unroll (hs % 32 == 0)
-                    s += fq[r * hs + j] * fkv[c * 513u + j]
-                    s += fq[r * hs + j + 1u] * fkv[c * 513u + j + 1u]
-                    s += fq[r * hs + j + 2u] * fkv[c * 513u + j + 2u]
-                    s += fq[r * hs + j + 3u] * fkv[c * 513u + j + 3u]
-                    j += 4u
-                }
-                let gq = pa.w0 + q0 + r
-                let gk = k0 + c
-                let inwin = pa.window == 0u || gk + pa.window > gq
-                fp[r * 16u + c] = (gk <= gq && inwin && q0 + r < pa.npos) ? attn_softcap(s * pa.scale, pa.cap) : -3.0e38
+                qk_score(tid / 16u, tid % 16u, hs, k0, pa.w0 + q0 + tid / 16u, q0, pa.npos, pa.window, pa.scale, pa.cap)
             }
             barrier()
-            if (tid < 4u) {   // per-row online softmax: max, rescale, exponentiate in place
-                var mt = fm[tid]
-                var j2 = 0u
-                while (j2 < 16u) {
-                    mt = max(mt, fp[tid * 16u + j2])
-                    j2++
-                }
-                let alpha = exp(fm[tid] - mt)
-                var lsum = 0.0
-                j2 = 0u
-                while (j2 < 16u) {
-                    let e = exp(fp[tid * 16u + j2] - mt)
-                    fp[tid * 16u + j2] = e
-                    lsum += e
-                    j2++
-                }
-                fl[tid] = fl[tid] * alpha + lsum
-                fm[tid] = mt
-                fal[tid] = alpha
-            }
+            softmax_update()
             barrier()
             let av = fal[vr]
             for (z in range(8)) {
                 o[z] *= av
             }
-            i = tid
-            while (i < 16u * hs) {   // the V stage reuses the K staging
-                let kr = k0 + i / hs
-                fkv[(i / hs) * 513u + i % hs] = kr < kend ? float(vpanel[pa.vbase + kr * pa.kvd + kvh * hs + i % hs]) : 0.0   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
-                i += 256u
-            }
+            load_v(k0, kend, pa.vbase, pa.kvd, kvh, hs)
             barrier()
             var c2 = 0u
             while (c2 < 16u) {
