@@ -4,6 +4,7 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require dastest/testing_boost public
+require _openai_live
 require openai/openai_vision
 require strings
 require daslib/fio
@@ -18,16 +19,16 @@ def test_vision_body_serialization(t : T?) {
         t |> success(find(body, "image_url") >= 0, "image_url part present")
         t |> success(find(body, "What is this?") >= 0, "text part present")
         t |> success(find(body, "https://example.com/x.png") >= 0, "image url present")
+        t |> success(find(body, "\"system\"") < 0, "no system message unless one is given")
+        let under = vision_request_body("m", "What is this?", "https://example.com/x.png", 8, "Be brief.")
+        t |> success(find(under, "\"role\": \"system\"") >= 0 && find(under, "Be brief.") < find(under, "What is this?"), "the system message leads: {under}")
     }
 }
 
 [test]
 def test_vision_live_openrouter(t : T?) {
     t |> run("live vision (image input) against OpenRouter") @(t : T?) {
-        if (!has_env_variable("OPENROUTER_API_KEY")) {
-            t |> success(true, "OPENROUTER_API_KEY not set - skipped")
-            return
-        }
+        return if (!live_key(t, "OPENROUTER_API_KEY"))
         let client = openai_client("https://openrouter.ai/api/v1", get_env_variable("OPENROUTER_API_KEY"))
         let res = chat_vision(client, "google/gemma-4-31b-it:free", "Describe this image in one word.", PIXEL_PNG)
         if (!res.ok && res.error.status == 429) {

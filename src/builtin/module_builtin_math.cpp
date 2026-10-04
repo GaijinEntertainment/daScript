@@ -903,6 +903,12 @@ namespace das {
             addAnnotation(new float4x4_ann(lib));
             addAnnotation(new float3x4_ann(lib));
             addAnnotation(new float3x3_ann(lib));
+            // Matrix containers live in math, so bind them before any consumer loads.
+            // Letting a dependent module create them changes math's cumulative hash
+            // between eager and deferred module loading and invalidates valid caches.
+            makeType<vector<float3x3>>(lib);
+            makeType<vector<float3x4>>(lib);
+            makeType<vector<float4x4>>(lib);
             // c-tor
             addFunction ( new MatrixCTorFn< SimNode_MatrixCtor<float3x3>,float3x3 >("float3x3",lib) );
             addFunction ( new MatrixCTorFn< SimNode_MatrixCtor<float3x4>,float3x4 >("float3x4",lib) );

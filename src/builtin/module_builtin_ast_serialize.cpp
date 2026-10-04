@@ -1521,6 +1521,9 @@ namespace das {
 
     AstSerializer & AstSerializer::serializeModule ( Module & module, bool already_exists ) {
         thisModule = &module;
+        writeTypes.clear();
+        writeFreshTypeCount = 0;
+        readTypes.clear();
         if ( writing ) {
             module.serialize(*this, already_exists);
             return *this;
@@ -1742,7 +1745,7 @@ namespace das {
 
     void AnnotationArgument::serialize ( AstSerializer & ser ) {
         ser.dtag(HASH_TAG("AnnotationArgument"));
-        ser << type << name << sValue << iValue << at;
+        ser << type << name << sValue << ulValue << at;
     }
 
     void AnnotationArgumentList::serialize ( AstSerializer & ser ) {

@@ -1188,16 +1188,17 @@
    through `sample_` (the row copied into `s.logits`, `s.recent` advanced per accepted token) and
    accepts while the draw equals the draft, the scheduler gate drops to "MTP on", and a seeded
    counting run at temp 0.8 matches plain sampled decode token for token.
-102. **The NextN draft chain is k command buffers because untied embeddings have no GPU gather.**
+102. **The NextN draft chain is k command buffers, a submit and a wait a draft.**
    `metal_mtp_spec_round` runs k `metal_mtp_draft_forward` calls - a submit, a wait, a 1 MB logits
    readback and a CPU argmax each (about 0.4 ms of a 2.8 ms draft on Qwen3.8-27B, M5: `lcpp_bench
    --mtp-ab --prof --for-debug-purposes` under `JOBQUE_PROFILING=1`, the `mtp.draft.*` sections) - where the
    gemma round chains its drafts in one command buffer with `enc_argmax` and `enc_embed` on the
    device. The NextN chain cannot: `embed_row` for an untied model reads the fp32 token table in
-   `fblob` (`t.tok_emb_off`; 5 GB on Qwen3.8-27B, carried in the image), and the GPU gathers exist
-   only for tied Q8 (`MetalEmbedQ8`) and tied K6 (`MetalEmbedK6`). Done = a K-quant embed gather
-   over the token table's own plane (k4 first) that also retires the fp32 table from blob images,
-   then the round in the gemma shape: one command buffer, `bvtok` chaining, one wait.
+   `fblob` (`t.tok_emb_off`; 5 GB on Qwen3.8-27B, carried in the image), which the row gather
+   (`MetalRowGather`) reads on the device beside the tied Q8 (`MetalEmbedQ8`) and tied K6 (`MetalEmbedK6`)
+   gathers - so the gather is no longer what holds the chain to k buffers. Done = a K-quant embed
+   gather over the token table's own plane (k4 first) that retires the fp32 table from blob
+   images, then the round in the gemma shape: one command buffer, `bvtok` chaining, one wait.
 103. **A sampled stream's round has no break-even guard.** The sampled accept walk (#101) pays the
    round cost c (about 1.45 steps on gemma-26B at depth 1) whether or not the draws match, and
    acceptance under sampling is the target's probability of the draft, which a hot sampler
@@ -2080,3 +2081,25 @@
    64 tokens is 50 ms on a 0.8B and 460 ms on a 7B (`PERF_LEDGER.md`, the CPU chunk entry). Done =
    a measure action on the server (the control page and a route) that times the loaded model's
    prefill at a few chunk sizes and sets the largest chunk whose stall fits a limit the user gives.
+208. **A model load or an activate holds the engine.** The server's engine thread owns every LLM
+   slot, so `POST /v1/models/load`, `/unload` and `/v1/models/activate` run in-handler and every
+   slot's streams stall for their length; the front answers the status routes and the speech
+   thread the speech routes meanwhile. Done = a thread a slot (the engine one instance among
+   several, a model loaded by the thread that serves it), so one slot's load holds no other's stream.
+209. **An activate while streams are live is refused.** `POST /v1/models/activate` answers 409
+   ("retry when idle") and the caller retries. Done = the switch queued and taken at the next idle
+   gap (202 and a pending state on the stats surface and the page), with a rule for the requests
+   that arrive while it is pending.
+210. **An image stream neither reads nor writes the prefix cache.** A second question about the
+   same image under the same system line re-encodes the image and prefills its rows again, where
+   a server that keeps the image's rows answers it from its cache
+   (`harness/served_bench.das --image <file>` prints both walls: the first token, and asked
+   again). Done = the image's soft-token rows keyed in the cache (by the image's bytes and the
+   encoder), a turn that repeats the image attaching them, and the encode skipped for an image
+   already encoded.
+211. **A speech or media worker releases its channels after its last event.** The worker pushes
+   `stopped` and then drops its references, so the thread that removes the channel can find it
+   still held ("channel being deleted while being used"); the front and the speech thread give
+   the reference up with the channel's pending count in one step and their owner joins. Several
+   workers share one events channel, so the count does not fit them as it stands. Done = a worker
+   exit the owner can wait on - a status a worker, or the count sized to the workers.

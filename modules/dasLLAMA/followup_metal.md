@@ -841,3 +841,56 @@ file is untouched: its scales are halfwords already. The work: an f32-scale blob
 frames GEMV (a 36-byte block, or the scales as a separate row the kernel reads beside the
 quants), its kernel arm, and the frames q8 cell on a float-minted file reading the CPU lane's
 weights exactly.
+
+## 34. The single-row NextN verify under a window or sinks still asks the chunked pair
+
+The fused single-pass attention (`MetalSqAttnD*`, `ARCHITECTURE_GPU.md`'s batched-driver
+paragraph) costs about a quarter of the chunked pair a cached key, and one row shape still asks
+the pair: the single-row driver's NextN verify rows on a model with a sliding window or attention
+sinks (the batch driver's verify, which the assistant drafter rides, takes the fused form there) -
+a shape no served NextN carrier has. The work: the NextN verify asks the fused form's window and
+sinks as the batch step does. The chunked pair itself stays: it is the `DASLLAMA_METAL_ATTN_D=0`
+control the fused form's cells red against, and a control is kept, not retired.
+
+## 35. No pass has deleted a Metal kernel the serving paths stopped reaching
+
+`tests/test_kernel_coverage.das` counts every compiled stamp's dispatches over the zoo and warns
+on a zero; it deletes nothing, because a zero says only that no stocked carrier reached the stamp.
+Stamps a later form replaced stay compiled, tested and maintained. The work: for each stamp the
+census reads at zero on a full large-tier run, the reachability audit of its dispatch predicate -
+the gate, the knob and the model shapes that select it - and either a carrier that reaches it or
+its deletion with its kernel cell, its `[metal_dispatch]` builder and its census entry.
+
+## 36. The mirror-fed prefill window serves only an f16 KV session on a box crowned `attn_dev`
+
+`ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-kv-mirror`: every other window keeps the f32 K/V
+panels, gathers the cached rows on the host each continuation (about 3.7 us a cached row on
+Llama-3.2-3B, M5 Max), and leaves the decode driver to upload them again. Three shapes stay there:
+
+- **A box without the `attn_dev` crown.** The crown races the device pair against the staged trio
+  at one shape, the pair paying its whole-panel twin pass; the mirror-fed form has no such pass, so
+  the race does not price it. The work: a race arm for the mirror-fed form (a continuation of a
+  few dozen rows over a deep context), and the form's gate reading its own verdict.
+- **A q8_0 or tq4 KV session.** The mirror holds codec blocks, the device pair reads halves. The
+  work: the pair's K and V operands dequantized from the mirror's blocks, or a twin of the mirror
+  kept beside it.
+- **A mirror that grows past its row capacity** re-uploads every row (`mirror_prepare_rows`
+  releases the slice and takes a larger one). The work: the old slice's rows copied device-side
+  into the new one.
+
+## 37. A served Qwen3-ASR transcription runs its decoder on the CPU
+
+The server's ASR worker context carries no Metal mode, so a family whose decoder is an LLM
+(Qwen3-ASR) prefills and decodes it on the CPU arm while the reference server runs the same file
+offloaded. The row is `harness/served_bench.das --asr-url <server> --clip <wav>` on both servers.
+The work: the worker serving the decoder on the device where one is armed, and that row beside
+the reference's.
+
+## 38. Two ASR models transcribing at once slow each other
+
+Two ASR models asked for the same clip at the same instant each take several times their idle
+wall, under every `team_dispatch` mode, while one model beside a decoding chat turn takes its
+idle wall. The rows are `harness/served_bench.das --scene --scene-asr <id> --scene-asr <id>`
+(each lane's median alone beside its median in the scene). The work: a kernel profile of the
+scene that says where the two transcriptions meet, and the dispatch the speech workers take set
+from it.

@@ -5,6 +5,7 @@ options fast_math = true  // ggml-parity FP laxity — this is an inference tool
 options _dasllama_internal = true
 
 require dastest/testing_boost public
+require _server_rig                                     // serve_clients (sibling)
 require openai_server                                   // the scheduler-wired server (sibling — bare require, hyphenated dir)
 require dasllama/dasllama                               // load_model / QuantMode
 require daslib/jobque_boost                             // with_job_status / with_channel (threads + results)
@@ -13,7 +14,6 @@ require daslib/strings_boost                            // split / trim_prefix
 require daslib/fio                                      // get_env_variable / stat / path_join / sleep
 require strings                                         // starts_with / build_string
 require math                                            // min
-require dasllama/dasllama_env
 
 // S3/S4 conformance for the continuous-batching server wiring: SSE chunk framing on a streaming
 // chat, the mandatory 400 on a prompt that cannot fit the context (the scheduler would panic), two
@@ -26,9 +26,6 @@ require dasllama/dasllama_env
 let TEST_PORT = 18105   // 18099 + 2 = 18101 is test_openai_server.das's; 18097-18147 and 18150-18156 belong to the sibling suites
 let TEST_CTX = 1024l   // big enough that the eviction arm's 900-token budget outlasts a 1s client timeout
 
-def private models_dir() : string {
-    return models_dir_resolved()   // the ONE resolution: DASLLAMA_MODELS_DIR, else the rig default
-}
 let MODEL_PATH = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
 
 def private model_missing(t : T?) : bool {
@@ -55,23 +52,7 @@ def private with_stream_server(t : T?; model_path : string; port : int; blk : bl
             run_server(port)
             finished |> notify_and_release
         }
-        let base_url = "http://127.0.0.1:{port}"
-        var ready = false
-        for (_attempt in range(300)) {   // up to ~30s for load + JIT
-            GET("{base_url}/v1/models") $(resp) {
-                if (resp != null && resp.status_code == http_status.OK) {
-                    ready = true
-                }
-            }
-            if (ready) {
-                break
-            }
-            sleep(100u)
-        }
-        if (ready) {
-            invoke(blk, base_url)
-        }
-        POST("{base_url}/shutdown", "") $(_resp) {}
+        let ready = serve_clients(port, 300, "/v1/models", blk)   // up to ~30s for load + JIT
         finished |> join
         t |> success(ready, "dasllama server became ready")
     }
@@ -176,6 +157,40 @@ def test_openai_server_stream(t : T?) {   // nolint:STYLE038 — one live server
                 t |> success(content_events >= 1, "at least one content delta ({content_events})")
                 t |> success(finish == "stop" || finish == "length", "terminating chunk carries finish_reason (got '{finish}')")
                 delete datas
+            }
+        }
+        t |> run("stream_options.include_usage: the stream ends on a usage chunk, and only when asked") @(t : T?) {
+            for (route, payload in ["chat/completions", "completions"],
+                 ["\"messages\":[\{\"role\":\"user\",\"content\":\"Say hi.\"}]", "\"prompt\":\"Once upon a time\""]) {
+                POST("{base_url}/v1/{route}",
+                     "\{{payload},\"max_tokens\":6,\"stream\":true,\"stream_options\":\{\"include_usage\":true}}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.OK))
+                    var datas <- sse_datas(string(resp.body))
+                    t |> success(length(datas) >= 3, "{route}: a usage chunk and [DONE] behind the reply ({length(datas)} events)")
+                    if (length(datas) >= 3) {
+                        t |> equal(datas[length(datas) - 1], "[DONE]")
+                        var perr = ""
+                        var js = read_json(datas[length(datas) - 2], perr)
+                        t |> success(js != null, "{route}: the usage chunk parses")
+                        if (js != null) {
+                            let np = js?["usage"]?["prompt_tokens"] ?? 0l
+                            let ng = js?["usage"]?["completion_tokens"] ?? 0l
+                            t |> success(np > 0l, "{route}: prompt tokens counted ({np})")
+                            t |> success(ng >= 1l && ng <= 6l, "{route}: completion tokens inside the budget ({ng})")
+                            t |> equal(js?["usage"]?["total_tokens"] ?? 0l, np + ng, "{route}: the total is the sum")
+                            t |> success((js?["usage"]?["prompt_tokens_details"]?["cached_tokens"] ?? -1l) >= 0l, "{route}: the cache hit rides the details")
+                            t |> success((js?["timings"]?["ttft_ms"] ?? 0.0) > 0.0, "{route}: the server's own time to first token")
+                            t |> equal(length((js?["choices"]).value as _array), 0, "{route}: the usage chunk carries no choice")
+                            unsafe {
+                                delete js
+                            }
+                        }
+                    }
+                    delete datas
+                }
+                POST("{base_url}/v1/{route}", "\{{payload},\"max_tokens\":6,\"stream\":true}") $(resp) {
+                    t |> success(find(string(resp.body), "\"usage\"") < 0, "{route}: a stream that did not ask carries no usage chunk")
+                }
             }
         }
         t |> run("over-long prompt answers 400 before the scheduler (mandatory pre-check)") @(t : T?) {

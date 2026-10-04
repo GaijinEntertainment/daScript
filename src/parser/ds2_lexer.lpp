@@ -456,6 +456,11 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         auto res = fast_float::from_chars(temptext, temptext+templength, yylval_param->i64);
         if ( res.ec == std::errc::result_out_of_range ) {
+            uint64_t magnitude = 0;
+            auto wide = fast_float::from_chars(temptext, temptext+templength-1, magnitude);
+            if (wide.ec == std::errc() && wide.ptr == temptext+templength-1 && magnitude == (uint64_t(1) << 63)) {
+                return LONG_INTEGER_MIN;
+            }
             das2_yyfatalerror(yylloc_param,yyscanner,"int64 constant out of range", CompilationError::exceeds_constant);
         } else if ( res.ec != std::errc() || res.ptr != temptext+templength-1 ) {
             return LEXER_ERROR;

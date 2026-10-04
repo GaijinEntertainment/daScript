@@ -19,7 +19,11 @@ IF ((NOT DAS_AUDIO_INCLUDED) AND ((NOT ${DAS_AUDIO_DISABLED}) OR (NOT DEFINED DA
 	# buffer (fatal). Idempotent; a no-op on wasm32. See patches/.
 	execute_process(COMMAND ${CMAKE_COMMAND}
 		-DMINIAUDIO_H=${miniaudio_SOURCE_DIR}/miniaudio.h
-		-P ${DAS_AUDIO_DIR}/patches/miniaudio_memory64.cmake)
+		-P ${DAS_AUDIO_DIR}/patches/miniaudio_memory64.cmake
+        RESULT_VARIABLE AUDIO_PATCH_RESULT)
+    IF(NOT AUDIO_PATCH_RESULT STREQUAL "0")
+        MESSAGE(FATAL_ERROR "miniaudio WebAudio patch failed")
+    ENDIF()
 	# a change to the patch script reconfigures, so an already-fetched header receives it
 	SET_PROPERTY(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${DAS_AUDIO_DIR}/patches/miniaudio_memory64.cmake)
 

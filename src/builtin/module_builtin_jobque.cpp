@@ -109,19 +109,10 @@ namespace das {
         mCond.notify_all();  // notify_one??
     }
 
+    // src/builtin/ARCHITECTURE_JOBQUE.md#channel-idle-wait
     void Channel::pop ( const TBlock<void,void *> & blk, Context * context, LineInfoArg * at ) {
-        while ( true ) {
-            unique_lock<mutex> uguard(mCompleteMutex);
-            if ( !mCond.wait_for(uguard, std::chrono::milliseconds(mSleepMs), [&]() {
-                bool continue_waiting = (mRemaining>0) && pipe.empty();
-                return !continue_waiting;
-            }) ) {
-                this_thread::yield();
-            } else {
-                break;
-            }
-        }
-        lock_guard<mutex> guard(mCompleteMutex);
+        unique_lock<mutex> guard(mCompleteMutex);
+        mCond.wait(guard, [&]() { return mRemaining <= 0 || !pipe.empty(); });
         if ( pipe.empty() ) {
             tail.clear();
         } else {
@@ -328,20 +319,10 @@ namespace das {
     }
 
     void Stream::pop ( const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at ) {
-        while ( true ) {
-            unique_lock<mutex> uguard(mCompleteMutex);
-            if ( !mCond.wait_for(uguard, std::chrono::milliseconds(mSleepMs), [&]() {
-                bool continue_waiting = (mRemaining>0) && pipe.empty();
-                return !continue_waiting;
-            }) ) {
-                this_thread::yield();
-            } else {
-                break;
-            }
-        }
         vector<uint8_t> item;
         {
-            lock_guard<mutex> guard(mCompleteMutex);
+            unique_lock<mutex> guard(mCompleteMutex);
+            mCond.wait(guard, [&]() { return mRemaining <= 0 || !pipe.empty(); });
             if ( !pipe.empty() ) {
                 item = das::move(pipe.front());
                 pipe.pop_front();
@@ -834,13 +815,55 @@ namespace das {
         }
     }
 
-    __forceinline void invoke_job_lambda ( Context * forkContext, LineInfoArg * lineinfo, Lambda & flambda, bool detached, JobCaptures * caps ) {
+    static thread_local uintptr_t g_loopCaptureBegin = 0;
+    static thread_local uintptr_t g_loopCaptureEnd = 0;
+
+    bool is_thread_loop_capture ( void * address ) {
+        auto value = reinterpret_cast<uintptr_t>(address);
+        return value >= g_loopCaptureBegin && value < g_loopCaptureEnd;
+    }
+
+    static void verify_loop_capture_released ( Context * context, const Lambda & lambda, LineInfoArg * at ) {
+        auto header = *reinterpret_cast<TypeInfo **>(lambda.capture - 16);
+        if ( !header || !header->structType ) return;
+        auto info = header->structType;
+        for ( uint32_t i = 0; i != info->count; ++i ) {
+            auto field = info->fields[i];
+            if ( !field || field->type != Type::tPointer || !field->firstType || field->firstType->type != Type::tHandle ) continue;
+            auto annotation = field->firstType->getAnnotation();
+            if ( !annotation || !annotation->module || annotation->module->name != "jobque" || (annotation->name != "Channel" && annotation->name != "JobStatus" &&
+                 annotation->name != "LockBox" && annotation->name != "SeqBox" && annotation->name != "Stream") ) continue;
+            if ( *reinterpret_cast<void **>(lambda.capture + field->offset) ) {
+                context->throw_error_at(at, "%s has not been released by the thread loop's final step", annotation->name.c_str());
+            }
+        }
+    }
+
+    // src/builtin/ARCHITECTURE_JOBQUE.md#thread-loop-collection
+    __forceinline void invoke_job_lambda ( Context * forkContext, LineInfoArg * lineinfo, Lambda & flambda, bool detached, JobCaptures * caps, bool repeat = false, int32_t captureSize = 0 ) {
         GcRootLambda root(flambda, forkContext);
         auto outerCaptures = g_jobCaptures;
         g_jobCaptures = caps;
+        const auto outerLoopBegin = g_loopCaptureBegin;
+        const auto outerLoopEnd = g_loopCaptureEnd;
+        g_loopCaptureBegin = repeat ? reinterpret_cast<uintptr_t>(flambda.capture) : 0;
+        g_loopCaptureEnd = repeat ? g_loopCaptureBegin + captureSize : 0;
         bool ok = forkContext->runWithCatch([&]() {
-            das_invoke_lambda<void>::invoke(forkContext, lineinfo, flambda);
+            if ( repeat ) {
+                auto header = *reinterpret_cast<TypeInfo **>(flambda.capture - 16);
+                if ( !header || !header->structType ) {
+                    forkContext->throw_error_at(lineinfo, "thread loop requires capture type metadata");
+                }
+                while ( das_invoke_lambda<bool>::invoke(forkContext, lineinfo, flambda) ) {
+                    forkContext->collectHeapIfMostlyFree(lineinfo);
+                }
+                verify_loop_capture_released(forkContext, flambda, lineinfo);
+            } else {
+                das_invoke_lambda<void>::invoke(forkContext, lineinfo, flambda);
+            }
         });
+        g_loopCaptureBegin = outerLoopBegin;
+        g_loopCaptureEnd = outerLoopEnd;
         g_jobCaptures = outerCaptures;
         if ( !ok ) {
             if ( detached ) {
@@ -1352,7 +1375,7 @@ namespace das {
         return JobStatus::CountJobQueLeaks();
     }
 
-    void new_thread_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
+    static void start_thread ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo, bool repeat ) {
         shared_ptr<Context> forkContext;
         forkContext.reset(get_clone_context(context, uint32_t(ContextCategory::thread_clone)));
         forkContext->sharedPtrContext = true;
@@ -1368,12 +1391,20 @@ namespace das {
         thread([=]() mutable {
             daScriptEnvironment::setBound(bound);
             Lambda flambda(ptr);
-            invoke_job_lambda(forkContext.get(), lineinfo, flambda, true, nullptr);
+            invoke_job_lambda(forkContext.get(), lineinfo, flambda, true, nullptr, repeat, lambdaSize);
             das_delete<Lambda>::clear(forkContext.get(), flambda);
             shutdownThreadLocalDebugAgent();
             forkContext.reset();
             g_jobQueTotalThreads --;    // src/builtin/ARCHITECTURE.md#thread-leaves-count-last
         }).detach();
+    }
+
+    void new_thread_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
+        start_thread(lambda, fn, lambdaSize, context, lineinfo, false);
+    }
+
+    void new_thread_loop_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
+        start_thread(lambda, fn, lambdaSize, context, lineinfo, true);
     }
 
     uint64_t debuggerThreadStarted ( Context & context );
@@ -2004,6 +2035,12 @@ namespace das {
                 SideEffects::accessExternal, "getJobqueAffinity");
             addExtern<DAS_BIND_FUN(new_thread_invoke)>(*this, lib,  "new_thread_invoke",
                 SideEffects::modifyExternal, "new_thread_invoke")
+                    ->args({"lambda","function","lambdaSize","context","line"});
+            addExtern<DAS_BIND_FUN(is_thread_loop_capture)>(*this, lib, "is_thread_loop_capture",
+                SideEffects::accessExternal, "is_thread_loop_capture")
+                    ->args({"address"});
+            addExtern<DAS_BIND_FUN(new_thread_loop_invoke)>(*this, lib, "new_thread_loop_invoke",
+                SideEffects::modifyExternal, "new_thread_loop_invoke")
                     ->args({"lambda","function","lambdaSize","context","line"});
             addExtern<DAS_BIND_FUN(new_debugger_thread)>(*this, lib,  "new_debugger_thread",
                 SideEffects::modifyExternal, "new_debugger_thread")

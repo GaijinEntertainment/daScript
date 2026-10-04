@@ -25,7 +25,8 @@ require daslib/typemacro_boost   // [template_struct_instance] — the layer enc
 //                             downstream dispatches bind at byte offsets
 //   metal_sq_attn16/32        single-query attention over the KV mirror, one threadgroup per
 //                             (stream, head), simdgroup-cooperative coalesced K scoring; depth
-//                             > 128 rows takes metal_sq_attn_part16/32 + metal_sq_attn_comb
+//                             > 128 rows takes the fused single-pass metal_sq_attn_d where it
+//                             serves the model, else metal_sq_attn_part16/32 + metal_sq_attn_comb
 //                             (chunked split-K: occupancy scales with depth)
 //   metal_rope_store16/32     fused rope + KV-row store: q ropes in place, k ropes straight
 //                             into the mirror with cvt_f32_to_f16's exact ±65504 clamp (CPU
@@ -90,12 +91,15 @@ def private decode_decline(t : Model; s : Session; pos : int64) : MetalDecodeDec
 
 
 // Can the speculative chain feed itself on this model? It needs a GPU embed gather for the
-// argmax winner: the q8 linear copy (cls_q8), or a tied k6 classifier (every K-quant file on
-// the current boards ties a Q6_K token_embd — MetalEmbedK6 gathers straight off the kq planes).
+// argmax winner: the q8 linear copy (cls_q8), a tied k6 classifier (MetalEmbedK6 gathers straight
+// off the kq planes), or the fp32 token table an untied K-quant embedding keeps (one row through MetalRowGather).
 def private spec_cls_capable(t : Model) : bool {
     // recurrent models never chain: a mispredicted spec step already advanced the GPU dn state (no repair)
-    return (t.cls_q8 || (t.config.shared_weights && t.emb_fmt == KqFmt.k6)) && t.config.recr_mask == 0ul
+    return (t.cls_q8 || (t.config.shared_weights && t.emb_fmt == KqFmt.k6) || spec_emb_f32(t)) && t.config.recr_mask == 0ul
 }
+
+//! the chain's embed gather reads the fp32 token table: an untied model with no Q8 embedding copy keeps it in fblob
+def private spec_emb_f32(t : Model) : bool => !t.emb_q8 && !cls_kq(t) && !t.planes_trimmed
 
 // ===== the per-step resource bundle + encode-ahead pipelining =====
 
@@ -108,6 +112,8 @@ struct private BatchTier {
     nrows : int64
     bpsk : MetalBuffer?
 }
+
+let private ROUTE_ROW_BYTES = 16ul   //! one KV route row: k base, v base, cap, key count
 
 // Everything one step's command buffer owns. The encode-ahead rail (g_pre) keeps ONE pre-encoded
 // for the predicted next position; forward() pokes the token-dependent bytes (embed row + rope
@@ -623,7 +629,20 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
     r.chunked = top + nrows > g_attn_single_max
     let nchunks = (top + nrows + ATTN_CHUNK_ROWS - 1l) / ATTN_CHUNK_ROWS
     r.bytes_part = uint64(nrows * n_heads * nchunks * (hs_mx + 2l) * 4l)
-    if (r.chunked) {
+    r.attn_d = r.chunked && attn_d_serves(head_size, hs_sw) && (nrows == 1l || (c.sliding_window == 0l && !c.attn_sinks))
+    if (r.attn_d) {
+        r.d_nsgs = attn_d_groups(top + nrows)
+        r.bytes_part = uint64(attn_d_part_floats(nrows, n_heads, hs_mx, r.d_nsgs) * 4l)
+        r.bpart = pool_acquire(g_pool, g_dev, r.bytes_part)
+    }
+    if (r.attn_d && nrows == 1l) {
+        r.brt = pool_acquire_untracked(g_upool, g_dev, ROUTE_ROW_BYTES)
+        let esz = uint64(blockc0 ? 1l : kv_row_bytes(r.kdt, 1l))   // nolint:LINT021 — divides uint64 arena offsets; only the quotient narrows
+        var route = fixed_array(uint(koff / esz), uint(voff / esz), uint(cap), uint(pos + 1l))
+        unsafe {
+            memcpy(metal_buffer_contents(r.brt), addr<void?>(route[0]), int64(ROUTE_ROW_BYTES))
+        }
+    } elif (r.chunked && !r.attn_d) {
         r.bpart = pool_acquire(g_pool, g_dev, r.bytes_part)
         r.u_nch = uniform_u32(uint(nchunks))
     }
@@ -777,7 +796,36 @@ def private rope_store_single(var e : SingleLayerEnc; t : Model; enc : MetalComp
     }
 }
 
-//! the single row's attention: the chunked pair past the single-form ceiling, else one dispatch
+//! Whether the fused single-pass attention serves a model's rows: a lane owns one quad of the head (a head of 64, 96 or 128),
+//! a simdgroup 128 dims of a wide one (a head of 256 or 512), on every mirror codec. A model's two head classes each
+//! need their stamp: `hs_sw` is the sliding class's head, the base head where there is one class.
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def private attn_d_serves(head_size, hs_sw : int64) : bool
+    => attn_d_head_ok(head_size) && attn_d_head_ok(hs_sw) && g_env_attn_d
+
+//! Layer `l`'s fused single-pass attention over the rows of `r.brt` at `rtoff`, merged into `r.bxb`. Under `route_per_layer` each
+//! route base is already the layer's; else the kernel steps a stream's slab to the layer. `window` is a sliding layer's span in
+//! keys (0 = the whole context), `bsnk` the layer's sink logits (null = none).
+def private encode_attn_d(t : Model; r : StepRes; enc : MetalComputeEncoder?; l, head_size, n_heads : int64;
+                          window : uint; bsnk : MetalBuffer?; rtoff : uint64 = 0ul; route_per_layer : bool = false) {
+    let blockc = r.kdt == KVDtype.q8_0 || r.kdt == KVDtype.tq4
+    let c = t.config
+    let kvd = uint(layer_kv_dim(c, l))
+    let lay = route_per_layer ? 0u : uint(blockc ? kv_row_bytes(r.kdt, t.kv_row_prefix[l]) : t.kv_row_prefix[l])
+    //! the layer's own head class: `head_size` and the K/V row are its, so its heads a K/V head and its score scale follow
+    var dka = SqAttnDArgs(lay = lay, kstride = blockc ? kvd / 32u : kvd, nheads = uint(n_heads),
+        kv_mul = uint(n_heads * head_size) / kvd, hs = uint(head_size),
+        scale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size)),
+        qstride = uint(n_heads * head_size) + 2u * kvd, nsgs = uint(r.d_nsgs),
+        window = window, softcap = c.attn_logit_softcap)
+    enc_attn_d(enc, r.kdt, r.bqkv, r.bpart, r.brt, dka, r.d_nsgs, r.nrows, n_heads, rtoff)
+    let halves = attn_d_halves(head_size)   // the wide head's partials are two or four heads of 128 to the combine
+    var cka = SqAttnCombDArgs(nchmax = uint(r.d_nsgs), nheads = uint(n_heads * halves), hs = uint(head_size / halves),
+        hass = bsnk != null ? 1u : 0u, hdiv = uint(halves))
+    enc_attncombd_c(enc, r.bpart, r.bxb, r.brt, rtoff, cka, bsnk, n_heads * halves, r.nrows)
+}
+
+//! the single row's attention: past the single-form ceiling the fused single-pass form where it serves the model and the chunked pair elsewhere, else one dispatch
 [unused_argument(l)]
 def private attention_single(var e : SingleLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64; lsl, het : bool;
                              bsnk : MetalBuffer?; lkoff, lvoff : uint64; nchunks, head_size, n_heads : int64) {
@@ -790,7 +838,9 @@ def private attention_single(var e : SingleLayerEnc; t : Model; enc : MetalCompu
     let scale_u = het ? r.k_scale_sw : r.k_scale
     let hs_u = het ? r.k_hs_sw : r.k_hs
     let hass_u = c.attn_sinks ? 1u : 0u
-    if (r.chunked) {
+    if (r.attn_d) {
+        encode_attn_d(t, r, enc, l, head_size, n_heads, lsl ? uint(c.sliding_window) : 0u, bsnk)
+    } elif (r.chunked) {
         var pka = SqAttnPartArgs(cnt = cnt, kstride = kstride_l, nheads = uint(n_heads),
             kv_mul = kvm_u, hs = hs_u, scale = scale_u, nchunks = uint(nchunks),
             softcap = c.attn_logit_softcap, window = lsl ? uint(c.sliding_window) : 0u)
@@ -1571,23 +1621,25 @@ def private finish_draft_step(t : Model; var s : Session; r : StepRes; seam : bo
     return ok
 }
 
-//! forward_mtp's GPU twin: the draft head against a resident blob model. `pos` is the trunk
-//! position (n_past); the draft row lands at pos-1 (rotary is delta-invariant). Needs a
-//! GPU-current session (KV mirror holds rows [0, pos)) and GPU logits. false = declined.
-[hot_path, arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-nextn-chain")]
+//! forward_mtp's GPU twin: the draft head against a resident blob model. `pos` is the trunk position (n_past); the draft row
+//! lands at pos-1 (rotary is delta-invariant). Prepares the session's mirror to rows [0, pos) itself (adopted, built or
+//! uploaded from the cache); needs GPU logits. false = declined.
+[hot_path, arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-nextn-chain"), arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
 def metal_mtp_draft_forward(t : Model; var s : Session; token, pos : int64; seam : bool = false; wm_pos : int64 = -1l) : bool {
     let c = t.config
-    if (g_dev == null || !t.metal_blob || c.n_layer_nextn <= 0l || pos < 1l ||
-            !key_exists(g_mirrors, s.uid)) {
+    if (g_dev == null || !t.metal_blob || c.n_layer_nextn <= 0l || pos < 1l) {
         return false
     }
     let ts_prep = prof_ticks()
     finish_pending_step()
     discard_batch_pre()   // the round advances the rows a pre-encoded batch step was built for
-    let mr = g_mirrors[s.uid]
     let dpos = pos - 1l
     let need_wm = wm_pos >= 0l ? wm_pos : pos
-    if (mr.watermark < need_wm || mr.cap_rows < pos || mr.kdt != s.kv_dtype_k || mr.vdt != s.kv_dtype_v) {
+    if (!key_exists(g_mirrors, s.uid) || g_mirrors[s.uid].watermark < need_wm) {
+        return false if (!mirror_prepare(t, s, need_wm).ok)
+    }
+    let mr = g_mirrors[s.uid]
+    if (mr.cap_rows < pos || mr.kdt != s.kv_dtype_k || mr.vdt != s.kv_dtype_v) {
         return false
     }
     var r = acquire_step(t, s, dpos, mr.koff, mr.voff, mr.cap_rows, [draft = true])
@@ -1767,7 +1819,9 @@ def private attention_verify(var e : VerifyLayerEnc; t : Model; enc : MetalCompu
     let qkvd = uint(n_heads * head_size) + 2u * kv_dim
     let rtoff = uint64(l * 16l * r.nrows)
     let vscale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size))
-    if (r.chunked) {
+    if (r.attn_d) {
+        encode_attn_d(t, r, enc, l, head_size, n_heads, 0u, null, rtoff, true)
+    } elif (r.chunked) {
         var pka = SqAttnPartBArgs(lay = 0u, kstride = kv_dim, nheads = uint(n_heads),
             kv_mul = uint(n_heads / c.n_kv_heads), hs = uint(head_size), scale = vscale,
             qstride = qkvd, nchmax = uint(nchunks), softcap = c.attn_logit_softcap, window = 0u)
@@ -2578,6 +2632,10 @@ def private encode_step(t : Model; var r : StepRes; commit_now : bool; var prev_
         if (t.cls_q8) {
             let bemb = blob_of(g_dev, t, t.emb_q8_off)
             enc_embed(enc, bemb.buf, bemb.boff, r.btok, r.bx, r.u_dim, r.u_embscale, dim)
+        } elif (spec_emb_f32(t)) {
+            let bemb = plane_of(g_dev, t, t.fblob, t.tok_emb_off)
+            var kg = RowGatherArgs(c = uint(dim), add_b = 0u, add_c = 0u, total = uint(dim), scale = c.embed_scale)
+            enc_row_gather(enc, bemb.buf, bemb.boff, r.btok, g_one, 0ul, g_one, 0ul, r.bx, kg, dim)
         } else {
             let bembq = kq_quants_of(g_dev, t, KqFmt.k6, t.wcls_off)
             let bembs = kq_scales_of(g_dev, t, KqFmt.k6, t.wcls_off)
@@ -2720,7 +2778,12 @@ def private release_step(var r : StepRes) {   // nolint:STYLE037,STYLE038 — fl
         }
         pool_release(g_upool, r.u_vocab, 4ul)
     }
-    if (r.chunked) {
+    if (r.attn_d) {
+        pool_release(g_pool, r.bpart, r.bytes_part)
+        if (!r.verify) {   //! the verify's route table is its group's, released with it
+            pool_release(g_upool, r.brt, ROUTE_ROW_BYTES)
+        }
+    } elif (r.chunked) {
         pool_release(g_pool, r.bpart, r.bytes_part)
         pool_release(g_upool, r.u_nch, 4ul)
     }
@@ -2877,6 +2940,7 @@ def private discard_pre {
 }
 
 //! Both drivers' pre-encoded steps retired: the single-row chain's and the batch driver's.
+[cold_path]   // a mirror move or upload, reached through the prefill's quiesce hook
 def private discard_pre_encoded_steps {
     discard_pre()
     discard_batch_pre()
@@ -3280,11 +3344,7 @@ def private attention_batch(var e : BatchLayerEnc; t : Model; enc : MetalCompute
     let window_l = lsl && c.sliding_window > 0l ? uint(c.sliding_window) : 0u
     let hass_u = c.attn_sinks ? 1u : 0u
     if (r.attn_d) {
-        var dka = SqAttnDArgs(lay = lay_l, kstride = kstride_l, nheads = uint(n_heads),
-            kv_mul = kvm_l, hs = uint(head_size), scale = scale_l, qstride = qkvd, nsgs = uint(r.d_nsgs))
-        enc_attn_d(enc, r.kdt, r.bqkv, r.bpart, r.brt, dka, r.d_nsgs, r.nrows, n_heads)
-        var cka = SqAttnCombDArgs(nchmax = uint(r.d_nsgs), nheads = uint(n_heads), hs = uint(head_size))
-        enc_attncombd_c(enc, r.bpart, r.bxb, r.brt, cka, n_heads, r.nrows)
+        encode_attn_d(t, r, enc, l, head_size, n_heads, window_l, bsnk)
     } elif (r.chunked) {
         // each row derives wstart from its own cnt; the comb skips that row's below-window chunks
         var pka = SqAttnPartBArgs(lay = lay_l, kstride = kstride_l, nheads = uint(n_heads),
@@ -3475,6 +3535,7 @@ def private batch_step_land(t : Model; ws : BatchWorkspace; var sessions : array
 }
 
 //! `maxcnt` is the deepest row's count; `ok = false` is a failed reserve or prepare - the caller chooses between declining and standing down.
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
 def batch_rows_prepare(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows, poff : int64) : tuple<ok : bool; maxcnt : int64> {
     let kdt = ws.scr.kv_dtype_k
     let blockc = kdt == KVDtype.q8_0 || kdt == KVDtype.tq4   // block codec: the row table carries byte offsets
@@ -3482,9 +3543,10 @@ def batch_rows_prepare(t : Model; ws : BatchWorkspace; var sessions : array<Sess
     // reserve the whole step's arena demand BEFORE pinning — growth is a release-all rebuild
     // and cannot run once the batch's rows are pinned (the readiness check above already
     // finished any in-flight step when a session needs a new slice)
+    let same = batch_same_slab()
     var demand = 0ul
-    for (i in range64(nrows)) {
-        demand += mirror_arena_demand(t, *sessions[i], ws.positions[i] + poff)
+    for (i in range64(same ? 1l : nrows)) {
+        demand += mirror_arena_demand(t, *sessions[i], ws.positions[same ? nrows - 1l : i] + poff)
     }
     if (!mirror_reserve(demand)) {
         return (ok = false, maxcnt = 0l)
@@ -3499,7 +3561,6 @@ def batch_rows_prepare(t : Model; ws : BatchWorkspace; var sessions : array<Sess
     g_b_caps |> resize(nrows)
     var maxcnt = 0l
     var rows_ok = false
-    let same = batch_same_slab()
     var mir_same = (ok = false, koff = 0ul, voff = 0ul, cap = 0l)
     for (attempt in range(2)) {
         rows_ok = true
@@ -3723,13 +3784,8 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     let fuse13 = g_bfuse && !mv && !use_gemm && !use_mm && empty(g_skip) && !t.kquant_native && !geglu
     let chunked = maxcnt > g_attn_single_max
     let nchmax = (maxcnt + ATTN_CHUNK_ROWS - 1l) / ATTN_CHUNK_ROWS
-    // partD (walkthrough kernel-2 winner): fused single-pass slice kernel + parallel comb — a lane owns
-    // one quad of the head (32 lanes x half4 = 128; a head of 64 idles the lanes past it, f16/f32 mirrors
-    // only); no softcap/window uniforms, so those models take the chunked pair. DASLLAMA_METAL_ATTN_D=0 = the A/B rail
-    let use_attn_d = ((head_size == 128l || (head_size == 64l && !blockc)) && !hetero && c.attn_logit_softcap <= 0.0 && c.sliding_window == 0l &&
-        !c.attn_sinks &&   // partD's online softmax has no sink seed — sink models take the chunked pair
-        g_env_attn_d)
-    let d_nsgs = min((maxcnt + 31l) / 32l, 16l)
+    let use_attn_d = attn_d_serves(head_size, hs_sw)
+    let d_nsgs = attn_d_groups(maxcnt)
     // logits-on-GPU (default ON): the batched final rms + classifier ride the same cb and the
     // CPU tail's classifier (one full weight-plane stream per step — ~6ms of the small-B wall)
     // is skipped via batch_decode_override_logits_done. Gates mirror the single-stream driver's.
@@ -3756,7 +3812,7 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     let bytes_tab = uint64(nrows * ((c.rope_dim > 0l ? c.rope_dim : head_size) / 2l) * 4l)   //! the rows are built at the ROTATED width (a partial carrier: rope_dim/2) - the copy below reads exactly them
     let bytes_tab_sw = uint64(nrows * half_sw * 4l)   // the swa pair's rows are ITS class's hs/2
     let bytes_rt = uint64(nrows * 16l)
-    let bytes_part = uint64(use_attn_d ? nrows * n_heads * d_nsgs * (head_size + 4l) * 4l :
+    let bytes_part = uint64(use_attn_d ? attn_d_part_floats(nrows, n_heads, hs_mx, d_nsgs) * 4l :
         nrows * n_heads * nchmax * (hs_mx + 2l) * 4l)
     var bx = pool_acquire(g_pool, g_dev, bytes_x)
     var bxb = pool_acquire(g_pool, g_dev, bytes_xb)
@@ -4291,12 +4347,15 @@ def public set_metal_mtp_debug(mode : string) {
     g_env_mtp_debug = mode
 }
 
-//! Test and race lever over `DASLLAMA_METAL_ATTN_D`: the batched step's split single-pass attention
-//! against the chunked per-(row, head) pair, flipped inside one process.
+//! Test and race lever over `DASLLAMA_METAL_ATTN_D`: the single row's and the batched step's split single-pass
+//! attention against the chunked per-(row, head) pair, flipped inside one process.
 def public set_metal_attn_d(on : bool) {
     g_env_attn_d = on
-    discard_batch_pre()   // a step encoded under the other form would serve it one step late
+    discard_pre()         // a step encoded under the other form would serve it one step late
+    discard_batch_pre()
 }
+
+def public get_metal_attn_d() : bool => g_env_attn_d
 
 [cold_path]   // one-time env resolution for the batched decode knobs; the caller tests one global
 def private load_batch_knobs() {
@@ -4331,6 +4390,7 @@ def dasllama_metal_decode_register() {
     register_decode_override("metal", @@metal_decode_served)
     register_batch_decode_override("metal", @@metal_batch_decode_served)
     register_reload_prep(@@discard_pre_encoded_steps)   // a reload orphans the pre-encoded steps — retire them before the regions drop
+    register_mirror_quiesce(@@discard_pre_encoded_steps)
     register_mtp_spec_override("metal", @@metal_mtp_spec_eval)
     register_mtp_spec_batch_override("metal", @@metal_mtp_spec_eval_batch)
     register_mtp_round_override("metal", @@metal_mtp_spec_round)
@@ -4339,6 +4399,9 @@ def dasllama_metal_decode_register() {
     g_env_logits = g_env_metal.logits
     g_env_batch_mm = g_env_metal.batch_mm
     g_env_attn_d = g_env_metal.attn_d
+    if (!g_env_attn_d) {
+        to_log(LOG_WARNING, "dasLLAMA metal decode: DASLLAMA_METAL_ATTN_D=0 - the single row, the verify's rows and the batch step take the chunked attention pair past the single-dispatch ceiling (the fused form's control)\n")
+    }
     g_env_mtp_debug = g_env_metal.mtp_debug
     g_wait_spin = g_env_metal.wait_spin   // the single-row finish_step reads it too, so it resolves here, not in the batch driver's knob loader
     if (!empty(g_env_metal.decode_skip)) {

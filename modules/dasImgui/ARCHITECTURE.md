@@ -37,3 +37,38 @@ the content. When the fingers lift, the last delta decays over a few frames as a
 function of the finger list, and `imgui_touch_inject` feeds a test's fingers into the same path;
 injected fingers persist until the next injection, because a headless host runs thousands of
 frames between two commands.
+
+## 3. Modified Enter shortcuts
+
+The pinned ImGui 1.92.6 input editor uses exact modifier shortcuts for Enter.
+`patches/input_routing.cmake` adds Shift+Enter and Shift+KeypadEnter to that routing;
+the existing multiline newline/validation policy still decides what they do. The
+configure step is idempotent and refuses an unrecognized upstream implementation,
+so an ImGui update requires reviewing the patch rather than silently dropping it.
+The headless `test_io_synth_text.das` test drives both modified keys into a real
+multiline widget and checks its resulting buffer. The same patch set preserves queued
+text-before-mouse ordering so a mouse click cannot redirect an earlier text commit
+into the newly focused editor.
+
+## 4. Browser clipboard
+
+The GLFW browser platform layer installs its own clipboard callbacks. The native
+clipboard installer leaves them intact on Emscripten, where the desktop clipboard
+module reports unsupported. Browser paste events supply bounded plain-text bytes;
+`TextEncoder` converts DOM UTF-16 to well-formed UTF-8. ImGui consumes those bytes
+through its normal paste operation, preserving selection replacement and undo.
+Ordinary HTML inputs are excluded from the canvas clipboard listener.
+
+The current backend owns the listener and buffer, gates them with real input and
+text focus, and clears them on shutdown or owner replacement. Clipboard writes use
+the asynchronous browser API without substituting an internal fake clipboard on
+failure. Initial browser platform setup detects macOS so its Command shortcuts use
+ImGui's logical Control mapping. Browser keyboard/paste coverage lives in
+`tests/browser_input.cjs`; native key synthesis alone does not exercise this path.
+
+## Browser composition ordering {#browser-composition-ordering}
+
+The browser input bridge commits pending composition text in a capture-phase
+`pointerdown` listener before GLFW queues the following `mousedown`. The committed
+text therefore precedes the click that can focus another editor in ImGui's input
+queue.

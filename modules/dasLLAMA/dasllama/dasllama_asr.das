@@ -304,10 +304,13 @@ def caps(m : AsrModel) : AsrCaps {
 }
 
 def create_session(m : AsrModel; lang : string = "en") : AsrSession {
-    //! Create a transcription session. ``lang`` is a language code from ``caps().languages``,
-    //! or "auto" to detect (whisper multilingual models; Qwen3-ASR always detects — it only
-    //! accepts "auto"). Validation lives with each family.
+    //! Create a transcription session. ``lang`` is a code from ``caps().languages``, "auto" to detect (whisper
+    //! multilingual models; Qwen3-ASR only accepts "auto"), or "" for the family's default: detection where the
+    //! family only detects, English elsewhere. Validation lives with each family.
     guard_interp_inference("ASR session creation")   // whisper/parakeet never cross make_run_state
+    if (empty(lang)) {
+        return <- create_session(m, m.kind == AsrKind.qwen3a ? "auto" : "en")
+    }
     var s = AsrSession()
     if (m.kind == AsrKind.parakeet) {
         parakeet_check_lang(m.pk, lang)   // no language conditioning — validate, then unused

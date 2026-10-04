@@ -514,12 +514,16 @@ struct SqAttnDArgs {
     scale : float
     qstride : uint
     nsgs : uint
+    window : uint   //! a sliding layer's span in keys, 0 on a full layer
+    softcap : float //! the attention-logit soft cap, 0 where the model has none
 }
 
 struct SqAttnCombDArgs {
     nchmax : uint
     nheads : uint
     hs : uint
+    hass : uint     // the layer carries attention sinks
+    hdiv : uint     // the combine's heads a model head: 2 or 4 where a wide head lands as parts of 128
 }
 
 // One threadgroup per (stream, head), head_size threads — lane owns one V column. Pass 1 scores
@@ -668,7 +672,7 @@ class template MetalSqAttnPartKvT {
         let nrows = c1 - c0
         // sliding window (gemma2): rows < wstart are outside the span. A chunk fully below the
         // window exits whole-tg with its partial UNWRITTEN — the comb twin skips those chunks.
-        let wstart = window > 0u && cnt > window ? cnt - window : 0u
+        let wstart = sqd_window_start(window, cnt)
         if (c1 <= wstart) {
             return
         }
@@ -738,7 +742,7 @@ class template MetalSqAttnPartQuantT {
         let nrows = c1 - c0
         // sliding window (gemma2): rows < wstart are outside the span. A chunk fully below the
         // window exits whole-tg with its partial UNWRITTEN — the comb twin skips those chunks.
-        let wstart = window > 0u && cnt > window ? cnt - window : 0u
+        let wstart = sqd_window_start(window, cnt)
         if (c1 <= wstart) {
             return
         }
@@ -800,7 +804,7 @@ class template MetalSqAttnCombT {
             // row's below-window chunks
             let cnt = rt[bb].w
             nch = min((cnt + 63u) / 64u, nchmax)   // a row deeper than the dispatch's plane reads a prefix, never its neighbours' partials
-            let wstart = ka.window > 0u && cnt > ka.window ? cnt - ka.window : 0u
+            let wstart = sqd_window_start(ka.window, cnt)
             chlo = wstart / 64u
         }
         let base = (bb * nheads + h) * nchmax
@@ -2531,7 +2535,7 @@ class template MetalSqAttnPartBKvT {
         let nrows = c1 - c0
         // sliding window (gemma2): rows < wstart are outside the span. A chunk fully below the
         // window exits whole-tg with its partial UNWRITTEN — the comb twin skips those chunks.
-        let wstart = window > 0u && cnt > window ? cnt - window : 0u
+        let wstart = sqd_window_start(window, cnt)
         if (c1 <= wstart) {
             return
         }
@@ -2612,7 +2616,7 @@ class template MetalSqAttnPartBQuantT {
         let nrows = c1 - c0
         // sliding window (gemma2): rows < wstart are outside the span. A chunk fully below the
         // window exits whole-tg with its partial UNWRITTEN — the comb twin skips those chunks.
-        let wstart = window > 0u && cnt > window ? cnt - window : 0u
+        let wstart = sqd_window_start(window, cnt)
         if (c1 <= wstart) {
             return
         }
@@ -2976,16 +2980,33 @@ def private sqd_vacc_blk(var vp : auto(VP) const?; w : float; nrows, kv4 : uint)
     return bacc
 }
 
+def private sqd_window_start(window, cnt : uint) : uint => window > 0u && cnt > window ? cnt - window : 0u
+
+def private sqd_wide_sum(var wsc : float[128]; hp, sl : uint; share : float; four : bool) : float {
+    wsc[hp * 32u + sl] = share
+    barrier()
+    var keep = wsc[sl] + wsc[32u + sl]
+    if (four) {
+        keep += wsc[64u + sl] + wsc[96u + sl]
+    }
+    barrier()
+    return keep
+}
+
+def private sqd_rescale(var wacc : float[512]; wo : uint; bacc : float4; r1, r2 : float) {
+    wacc[wo] = wacc[wo] * r1 + bacc.x * r2
+    wacc[wo + 1u] = wacc[wo + 1u] * r1 + bacc.y * r2
+    wacc[wo + 2u] = wacc[wo + 2u] * r1 + bacc.z * r2
+    wacc[wo + 3u] = wacc[wo + 3u] * r1 + bacc.w * r2
+}
+
 // online merge into the running slice-group state (first pass: r1 = exp(-inf) = 0)
 def private sqd_merge(var wacc : float[512]; wo : uint; bacc : float4; bm, btot : float;
                       var mm : float&; var tot : float&) {
     let nm = max(mm, bm)
     let r1 = exp(mm - nm)
     let r2 = exp(bm - nm)
-    wacc[wo] = wacc[wo] * r1 + bacc.x * r2
-    wacc[wo + 1u] = wacc[wo + 1u] * r1 + bacc.y * r2
-    wacc[wo + 2u] = wacc[wo + 2u] * r1 + bacc.z * r2
-    wacc[wo + 3u] = wacc[wo + 3u] * r1 + bacc.w * r2
+    sqd_rescale(wacc, wo, bacc, r1, r2)
     tot = tot * r1 + btot * r2
     mm = nm
 }
@@ -3005,18 +3026,38 @@ def private sqd_store(var part : array<float>; wacc : float[512]; pbase, wo, sl,
     }
 }
 
+//! the first 32-key slice this slice group scores: the group's own slice at or past the window's start
+def private sqd_first_slice(gsg, nsgs, wstart : uint) : uint => gsg + ((wstart / 32u + nsgs - 1u - gsg) / nsgs) * nsgs
+
+//! a slice's softmax weights for this lane's key from its raw score: the entry under the scale and cap for a key inside the
+//! slice and the window (-inf elsewhere), the slice max in `bm`, the weights' sum in `btot`
+def private sqd_block_weights(raw : float; sl, nrows, c0, wstart : uint; scale, softcap : float; var bm : float&; var btot : float&) : float {
+    let keep = sl < nrows && c0 + sl >= wstart ? sq_score_entry(raw, scale, softcap) : -3.0e38
+    bm = simd_max(keep)
+    let w = exp(keep - bm)
+    btot = simd_sum(w)
+    return w
+}
+
+//! the partial record's base for this simdgroup's slice group: a wide head's part records are 132 floats (128 dims, m,
+//! tot and a pad), a narrow head's hs + 4
+def private sqd_part_base(bb, nheads, h, hp, gsg, nsgs, hs : uint; wide : bool; parts : uint) : uint
+    => wide ? (((bb * nheads + h) * parts + hp) * nsgs + gsg) * 132u : ((bb * nheads + h) * nsgs + gsg) * (hs + 4u)
+
 // Fused single-pass batched attention: beats the upstream vector form at every depth 512-16K. One
-// simdgroup per (row, head, 32-slice-group), scores in-register, V lane-private; a lane owns one quad
-// of the head (hs 128 fills the simdgroup, hs 64 idles the lanes past it); grid is HEAD-FASTEST for SLC locality.
+// simdgroup per (row, head, 32-slice-group), scores in-register, V lane-private; grid is HEAD-FASTEST.
 [ |> template_struct_instance]
 class template MetalSqAttnDKvT {
     @ssbo @binding = 0 @role = "read" kc : array<KT>
     @ssbo @binding = 1 @role = "read" vc : array<KT>
     @ssbo @binding = 2 @role = "read" q : array<float4>
     @ssbo @binding = 3 @role = "write" part : array<float>
-    @ssbo @binding = 4 @role = "read" rt : array<uint4>
+    @ssbo @binding = 4 @role = "read" @off = "rtoff" rt : array<uint4>
     @uniform @binding = 5 ka : SqAttnDArgs
     @workgroup wacc : float[512]
+    @workgroup @template_gate = WIDE wsc : float[128]   // a slice's scores, a simdgroup's share of each key
+    @template_constant WIDE : bool = false
+    @template_constant PARTS : uint = 1u     // the 128-dim parts of a wide head
 
     [metal_kernel]
     def metal_sq_attn_d {
@@ -3030,7 +3071,8 @@ class template MetalSqAttnDKvT {
         let nsgs = ka.nsgs
         let h = gl_WorkGroupID.x
         let bb = gl_WorkGroupID.z
-        let gsg = gl_WorkGroupID.y * 4u + gl_SubgroupID
+        let hp = WIDE ? gl_SubgroupID : 0u   // the part of a wide head this simdgroup owns
+        let gsg = WIDE ? gl_WorkGroupID.y : gl_WorkGroupID.y * 4u + gl_SubgroupID
         let rrow = rt[bb]
         let cnt = rrow.w
         if (gsg >= nsgs || gsg * 32u >= cnt) {
@@ -3046,28 +3088,31 @@ class template MetalSqAttnDKvT {
         // re-reading a valid quad with a zero q, so they score nothing and their sums are never stored
         let ld = hs / 4u
         let slc = sl % ld
-        let q4 = sl < ld ? float4(q[qoff / 4u + slc]) : float4(0.0)
-        let wo = gl_SubgroupID * 128u + sl * 4u
+        let q4 = sl < ld ? float4(q[qoff / 4u + hp * 32u + slc]) : float4(0.0)
+        let wo = (gl_SubgroupID * 32u + sl) * 4u
         sqd_zero(wacc, wo)
         var mm = -3.0e38
         var tot = 0.0
-        var ss = gsg
+        let wstart = sqd_window_start(ka.window, cnt)
+        var ss = sqd_first_slice(gsg, nsgs, wstart)
         while (ss * 32u < cnt) {
             let c0 = ss * 32u
             let nrows = min(c0 + 32u, cnt) - c0
-            var kp = unsafe(addr(kc[(kb0 + c0 * kv_dim + khoff) / 4u + slc]))
-            var vp = unsafe(addr(vc[(vb0 + c0 * kv_dim + khoff) / 4u + slc]))
+            var kp = unsafe(addr(kc[(kb0 + c0 * kv_dim + khoff) / 4u + hp * 32u + slc]))
+            var vp = unsafe(addr(vc[(vb0 + c0 * kv_dim + khoff) / 4u + hp * 32u + slc]))
             // invalid tail lanes keep the -inf seed -> weight 0
-            let keep = sqd_score_blk(kp, q4, -3.0e38, nrows, kv4, sl) * scale
-            let bm = simd_max(keep)
-            let w = exp(keep - bm)
-            let btot = simd_sum(w)
+            var keep = sqd_score_blk(kp, q4, WIDE ? 0.0 : -3.0e38, nrows, kv4, sl)
+            static_if (WIDE) {
+                keep = sqd_wide_sum(wsc, hp, sl, keep, PARTS == 4u)
+            }
+            var bm = 0.0
+            var btot = 0.0
+            let w = sqd_block_weights(keep, sl, nrows, c0, wstart, scale, ka.softcap, bm, btot)
             let bacc = sqd_vacc_blk(vp, w, nrows, kv4)
             sqd_merge(wacc, wo, bacc, bm, btot, mm, tot)
             ss += nsgs
         }
-        let pbase = ((bb * nheads + h) * nsgs + gsg) * (hs + 4u)
-        sqd_store(part, wacc, pbase, wo, sl, hs, mm, tot)
+        sqd_store(part, wacc, sqd_part_base(bb, nheads, h, hp, gsg, nsgs, hs, WIDE, PARTS), wo, sl, WIDE ? 128u : hs, mm, tot)
     }
 }
 
@@ -3082,14 +3127,45 @@ class MetalSqAttnDF32 : MetalSqAttnDKvT {
     typedef KT = float4
 }
 
+// the head-of-256 pair: a threadgroup a slice group, two simdgroups each half the head
+[metal_dispatch(name = "enc_attndw16_c", pso = "g_pso_attndw16", tgmem = "MetalSqAttnDWF16_metal_sq_attn_d_msl_tgmem", tg = 64, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+class MetalSqAttnDWF16 : MetalSqAttnDKvT {
+    typedef KT = half4
+    override WIDE = true
+    override PARTS = 2u
+}
+
+[metal_dispatch(name = "enc_attndw32_c", pso = "g_pso_attndw32", tgmem = "MetalSqAttnDWF32_metal_sq_attn_d_msl_tgmem", tg = 64, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+class MetalSqAttnDWF32 : MetalSqAttnDKvT {
+    typedef KT = float4
+    override WIDE = true
+    override PARTS = 2u
+}
+
+// the head-of-512 pair: four simdgroups each a quarter of the head
+[metal_dispatch(name = "enc_attndx16_c", pso = "g_pso_attndx16", tgmem = "MetalSqAttnDXF16_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+class MetalSqAttnDXF16 : MetalSqAttnDKvT {
+    typedef KT = half4
+    override WIDE = true
+    override PARTS = 4u
+}
+
+[metal_dispatch(name = "enc_attndx32_c", pso = "g_pso_attndx32", tgmem = "MetalSqAttnDXF32_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+class MetalSqAttnDXF32 : MetalSqAttnDKvT {
+    typedef KT = float4
+    override WIDE = true
+    override PARTS = 4u
+}
+
 // Cross-slice combine for the D entries: PARALLEL over entries (4 sgs online-merge their
 // subsets with float4 loads — m and l arrive in ONE float4), a single tgmem cross-sg merge.
 [metal_dispatch(name = "enc_attncombd_c", pso = "g_pso_attncombd", tgmem = "metal_sq_attn_comb_d_msl_tgmem", tg = 128, grid = "nheads, nrows", params = "nheads : int64, nrows : int64")]
 class MetalSqAttnCombD {
     @ssbo @binding = 0 @role = "read" part : array<float4>
     @ssbo @binding = 1 @role = "write" yo : array<float>
-    @ssbo @binding = 2 @role = "read" rt : array<uint4>
+    @ssbo @binding = 2 @role = "read" @off = "rtoff" rt : array<uint4>
     @uniform @binding = 3 ka : SqAttnCombDArgs
+    @ssbo @binding = 20 @role = "weight" @default = g_one sink : array<float> //! [model heads] this layer's attention sinks (hass models)
     @workgroup wacc : float[512]
     @workgroup wml : float[8]
 
@@ -3139,12 +3215,13 @@ class MetalSqAttnCombD {
         let m1 = wml[2]
         let m2 = wml[4]
         let m3 = wml[6]
-        let gm = max(max(m0, m1), max(m2, m3))
+        let snk = ka.hass != 0u ? sink[h / ka.hdiv] : -3.0e38
+        let gm = max(max(max(m0, m1), max(m2, m3)), snk)
         let r0 = exp(m0 - gm)
         let r1 = exp(m1 - gm)
         let r2 = exp(m2 - gm)
         let r3 = exp(m3 - gm)
-        let l = wml[1] * r0 + wml[3] * r1 + wml[5] * r2 + wml[7] * r3
+        let l = wml[1] * r0 + wml[3] * r1 + wml[5] * r2 + wml[7] * r3 + exp(max(snk - gm, -80.0)) * float(ka.hass)
         let acc = wacc[lid] * r0 + wacc[128u + lid] * r1 + wacc[256u + lid] * r2 + wacc[384u + lid] * r3
         if (lid < hs) {
             yo[bb * (nheads * hs) + h * hs + lid] = acc / l
@@ -3237,7 +3314,7 @@ class MetalRopeStoreBF32 : MetalRopeStoreBKvT {
     typedef KT = float
     override CLAMP16 = false
 }
-// Quant partD twin pair (hs == 128 only, DF16 shape): one sg per (row, head, 32-position
+// Quant partD twin pair (the DF16 shape over block codecs): one sg per (row, head, 32-position
 // slice), online slice merge, byte-offset row table. The sqd_*_blk_q stages overload on the
 // byte-view type, so only LANE_BYTES (quant bytes per lane's 4 elements) tells them apart.
 [ |> template_struct_instance]
@@ -3248,10 +3325,13 @@ class template MetalSqAttnDQuantT {
     @ssbo @binding = 3 @role = "read" vqb : array<QB>
     @ssbo @binding = 4 @role = "read" q : array<float4>
     @ssbo @binding = 5 @role = "write" part : array<float>
-    @ssbo @binding = 6 @role = "read" rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
+    @ssbo @binding = 6 @role = "read" @off = "rtoff" rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
     @uniform @binding = 7 ka : SqAttnDArgs
     @workgroup wacc : float[512]
+    @workgroup @template_gate = WIDE wsc : float[128]   // a slice's scores, a simdgroup's share of each key
     @template_constant LANE_BYTES : uint = 4u
+    @template_constant WIDE : bool = false
+    @template_constant PARTS : uint = 1u     // the 128-dim parts of a wide head
 
     [metal_kernel]
     def metal_sq_attn_d {
@@ -3265,7 +3345,8 @@ class template MetalSqAttnDQuantT {
         let nsgs = ka.nsgs
         let h = gl_WorkGroupID.x
         let bb = gl_WorkGroupID.z
-        let gsg = gl_WorkGroupID.y * 4u + gl_SubgroupID
+        let hp = WIDE ? gl_SubgroupID : 0u   // the part of a wide head this simdgroup owns
+        let gsg = WIDE ? gl_WorkGroupID.y : gl_WorkGroupID.y * 4u + gl_SubgroupID
         let rrow = rt[bb]
         let cnt = rrow.w
         if (gsg >= nsgs || gsg * 32u >= cnt) {
@@ -3276,30 +3357,34 @@ class template MetalSqAttnDQuantT {
         let vb0b = rrow.y + lay * rrow.z
         let kb0h = kb0b / 2u
         let vb0h = vb0b / 2u
-        let khblk = (h / kv_mul) * (hs / 32u)
+        let khblk = (h / kv_mul) * (hs / 32u) + hp * 4u
         let qoff = bb * qstride + h * hs
-        let q4 = float4(q[qoff / 4u + sl])
-        let blkoff = khblk + sl / 8u            // this lane's block within the row
-        let inb = (sl % 8u) * LANE_BYTES        // lane's byte offset inside its block (4 quant bytes / 2 nibble bytes)
+        let ld = hs / 4u
+        let slc = sl % ld
+        let q4 = sl < ld ? float4(q[qoff / 4u + hp * 32u + slc]) : float4(0.0)
+        let blkoff = khblk + slc / 8u           // this lane's block within the row
+        let inb = (slc % 8u) * LANE_BYTES       // lane's byte offset inside its block (4 quant bytes / 2 nibble bytes)
         let wo = gl_SubgroupID * 128u + sl * 4u
         sqd_zero(wacc, wo)
         var mm = -3.0e38
         var tot = 0.0
-        var ss = gsg
+        let wstart = sqd_window_start(ka.window, cnt)
+        var ss = sqd_first_slice(gsg, nsgs, wstart)
         while (ss * 32u < cnt) {
             let c0 = ss * 32u
             let nrows = min(c0 + 32u, cnt) - c0
-            // invalid tail lanes keep the -inf seed -> weight 0
-            let keep = sqd_score_blk_q(kqb, ksh, q4, -3.0e38, c0, nrows, nblk, blkoff, kb0b, kb0h, inb, sl) * scale
-            let bm = simd_max(keep)
-            let w = exp(keep - bm)
-            let btot = simd_sum(w)
+            var keep = sqd_score_blk_q(kqb, ksh, q4, WIDE ? 0.0 : -3.0e38, c0, nrows, nblk, blkoff, kb0b, kb0h, inb, sl)
+            static_if (WIDE) {
+                keep = sqd_wide_sum(wsc, hp, sl, keep, PARTS == 4u)
+            }
+            var bm = 0.0
+            var btot = 0.0
+            let w = sqd_block_weights(keep, sl, nrows, c0, wstart, scale, ka.softcap, bm, btot)
             let bacc = sqd_vacc_blk_q(vqb, vsh, w, c0, nrows, nblk, blkoff, vb0b, vb0h, inb)
             sqd_merge(wacc, wo, bacc, bm, btot, mm, tot)
             ss += nsgs
         }
-        let pbase = ((bb * nheads + h) * nsgs + gsg) * (hs + 4u)
-        sqd_store(part, wacc, pbase, wo, sl, hs, mm, tot)
+        sqd_store(part, wacc, sqd_part_base(bb, nheads, h, hp, gsg, nsgs, hs, WIDE, PARTS), wo, sl, WIDE ? 128u : hs, mm, tot)
     }
 }
 
@@ -3315,6 +3400,38 @@ class MetalSqAttnDQ8 : MetalSqAttnDQuantT {
 class MetalSqAttnDTq4 : MetalSqAttnDQuantT {
     typedef QB = uint8
     override LANE_BYTES = 2u
+}
+
+// the head-of-256 quant pair: a threadgroup a slice group, two simdgroups each half the head
+[metal_dispatch(name = "enc_attndw_q8_c", pso = "g_pso_attndw_q8", tgmem = "MetalSqAttnDWQ8_metal_sq_attn_d_msl_tgmem", tg = 64, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+class MetalSqAttnDWQ8 : MetalSqAttnDQuantT {
+    typedef QB = int8
+    override WIDE = true
+    override PARTS = 2u
+}
+
+[metal_dispatch(name = "enc_attndw_tq4_c", pso = "g_pso_attndw_tq4", tgmem = "MetalSqAttnDWTq4_metal_sq_attn_d_msl_tgmem", tg = 64, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+class MetalSqAttnDWTq4 : MetalSqAttnDQuantT {
+    typedef QB = uint8
+    override LANE_BYTES = 2u
+    override WIDE = true
+    override PARTS = 2u
+}
+
+// the head-of-512 quant pair: four simdgroups each a quarter of the head
+[metal_dispatch(name = "enc_attndx_q8_c", pso = "g_pso_attndx_q8", tgmem = "MetalSqAttnDXQ8_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+class MetalSqAttnDXQ8 : MetalSqAttnDQuantT {
+    typedef QB = int8
+    override WIDE = true
+    override PARTS = 4u
+}
+
+[metal_dispatch(name = "enc_attndx_tq4_c", pso = "g_pso_attndx_tq4", tgmem = "MetalSqAttnDXTq4_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+class MetalSqAttnDXTq4 : MetalSqAttnDQuantT {
+    typedef QB = uint8
+    override LANE_BYTES = 2u
+    override WIDE = true
+    override PARTS = 4u
 }
 
 // q8_0-mirror batched rope + KV-row store: the RopeStoreQ8 shape with the byte-offset row table
@@ -3761,8 +3878,16 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_attncombb = compile_stamp(MetalSqAttnCombB_metal_sq_attn_comb_msl, ok)
     g_pso_attnd16 = compile_stamp(MetalSqAttnDF16_metal_sq_attn_d_msl, ok)
     g_pso_attnd32 = compile_stamp(MetalSqAttnDF32_metal_sq_attn_d_msl, ok)
+    g_pso_attndw16 = compile_stamp(MetalSqAttnDWF16_metal_sq_attn_d_msl, ok)
+    g_pso_attndw32 = compile_stamp(MetalSqAttnDWF32_metal_sq_attn_d_msl, ok)
+    g_pso_attndx16 = compile_stamp(MetalSqAttnDXF16_metal_sq_attn_d_msl, ok)
+    g_pso_attndx32 = compile_stamp(MetalSqAttnDXF32_metal_sq_attn_d_msl, ok)
     g_pso_attnd_q8 = compile_stamp(MetalSqAttnDQ8_metal_sq_attn_d_msl, ok)
     g_pso_attnd_tq4 = compile_stamp(MetalSqAttnDTq4_metal_sq_attn_d_msl, ok)
+    g_pso_attndw_q8 = compile_stamp(MetalSqAttnDWQ8_metal_sq_attn_d_msl, ok)
+    g_pso_attndw_tq4 = compile_stamp(MetalSqAttnDWTq4_metal_sq_attn_d_msl, ok)
+    g_pso_attndx_q8 = compile_stamp(MetalSqAttnDXQ8_metal_sq_attn_d_msl, ok)
+    g_pso_attndx_tq4 = compile_stamp(MetalSqAttnDXTq4_metal_sq_attn_d_msl, ok)
     g_pso_attncombd = compile_stamp(metal_sq_attn_comb_d_msl, ok)
     g_pso_rpstb16 = compile_stamp(MetalRopeStoreBF16_metal_rope_store_b_msl, ok)
     g_pso_rpstb32 = compile_stamp(MetalRopeStoreBF32_metal_rope_store_b_msl, ok)
@@ -4448,15 +4573,52 @@ def enc_attn_part_b(enc : MetalComputeEncoder?; kdt : KVDtype; bq, bpart, brt : 
 }
 
 // HEAD-FASTEST launch (grid.x = heads): consecutive tgs share position rows (SLC locality at depth)
-def enc_attn_d(enc : MetalComputeEncoder?; kdt : KVDtype; bq, bpart, brt : MetalBuffer?; var ka : SqAttnDArgs; nsgs, nrows, nheads : int64) {
-    if (kdt == KVDtype.q8_0) {
-        enc_attnd_q8_c(enc, g_arena, g_arena, g_arena, g_arena, bq, bpart, brt, ka, nheads, nsgs, nrows)
+//! Whether the fused attention has a stamp for a head: 64, 96 and 128 on the narrow stamps (a lane a quad, the lanes past a
+//! narrow head idle), the wide 256 and 512, on every mirror codec. A block codec needs a whole number of 32-element blocks a head.
+def attn_d_head_ok(head_size : int64) : bool
+    => head_size == 64l || head_size == 96l || head_size == 128l || head_size == 256l || head_size == 512l
+
+//! the slice groups a row of `keys` keys splits over: a slice of 32 keys a group, sixteen groups at most
+def attn_d_groups(keys : int64) : int64 => min((keys + 31l) / 32l, 16l)
+
+//! the heads of 128 the fused attention's partials make of one head: two of a 256 head, four of a 512 head, the head itself otherwise
+def attn_d_halves(head_size : int64) : int64 => head_size > 128l ? head_size / 128l : 1l
+
+//! the fused attention's partial plane in floats: an entry a row, head half and slice group, each the half's sums plus its max and total
+def attn_d_part_floats(nrows, n_heads, head_size, nsgs : int64) : int64 {
+    let halves = attn_d_halves(head_size)
+    return nrows * n_heads * halves * nsgs * (head_size / halves + 4l)
+}
+
+def enc_attn_d(enc : MetalComputeEncoder?; kdt : KVDtype; bq, bpart, brt : MetalBuffer?; var ka : SqAttnDArgs; nsgs, nrows, nheads : int64; rtoff : uint64 = 0ul) {
+    if (ka.hs == 512u) {
+        if (kdt == KVDtype.q8_0) {
+            enc_attndx_q8_c(enc, g_arena, g_arena, g_arena, g_arena, bq, bpart, brt, rtoff, ka, nheads, nsgs, nrows)
+        } elif (kdt == KVDtype.tq4) {
+            enc_attndx_tq4_c(enc, g_arena, g_arena, g_arena, g_arena, bq, bpart, brt, rtoff, ka, nheads, nsgs, nrows)
+        } elif (kdt == KVDtype.f16) {
+            enc_attndx16_c(enc, g_arena, g_arena, bq, bpart, brt, rtoff, ka, nheads, nsgs, nrows)
+        } else {
+            enc_attndx32_c(enc, g_arena, g_arena, bq, bpart, brt, rtoff, ka, nheads, nsgs, nrows)
+        }
+    } elif (ka.hs == 256u) {
+        if (kdt == KVDtype.q8_0) {
+            enc_attndw_q8_c(enc, g_arena, g_arena, g_arena, g_arena, bq, bpart, brt, rtoff, ka, nheads, nsgs, nrows)
+        } elif (kdt == KVDtype.tq4) {
+            enc_attndw_tq4_c(enc, g_arena, g_arena, g_arena, g_arena, bq, bpart, brt, rtoff, ka, nheads, nsgs, nrows)
+        } elif (kdt == KVDtype.f16) {
+            enc_attndw16_c(enc, g_arena, g_arena, bq, bpart, brt, rtoff, ka, nheads, nsgs, nrows)
+        } else {
+            enc_attndw32_c(enc, g_arena, g_arena, bq, bpart, brt, rtoff, ka, nheads, nsgs, nrows)
+        }
+    } elif (kdt == KVDtype.q8_0) {
+        enc_attnd_q8_c(enc, g_arena, g_arena, g_arena, g_arena, bq, bpart, brt, rtoff, ka, nheads, nsgs, nrows)
     } elif (kdt == KVDtype.tq4) {
-        enc_attnd_tq4_c(enc, g_arena, g_arena, g_arena, g_arena, bq, bpart, brt, ka, nheads, nsgs, nrows)
+        enc_attnd_tq4_c(enc, g_arena, g_arena, g_arena, g_arena, bq, bpart, brt, rtoff, ka, nheads, nsgs, nrows)
     } elif (kdt == KVDtype.f16) {
-        enc_attnd16_c(enc, g_arena, g_arena, bq, bpart, brt, ka, nheads, nsgs, nrows)
+        enc_attnd16_c(enc, g_arena, g_arena, bq, bpart, brt, rtoff, ka, nheads, nsgs, nrows)
     } else {
-        enc_attnd32_c(enc, g_arena, g_arena, bq, bpart, brt, ka, nheads, nsgs, nrows)
+        enc_attnd32_c(enc, g_arena, g_arena, bq, bpart, brt, rtoff, ka, nheads, nsgs, nrows)
     }
 }
 
@@ -4537,6 +4699,8 @@ def metal_kernels_release {
     release_handles(g_pso_skred, g_pso_gemm64_b, g_pso_mm, g_pso_attnb16, g_pso_attnb32, g_pso_attnb_q8)
     release_handles(g_pso_attnb_tq4, g_pso_attnpb16, g_pso_attnpb32, g_pso_attnpb_q8, g_pso_attnpb_tq4, g_pso_attncombb)
     release_handles(g_pso_attnd16, g_pso_attnd32, g_pso_attnd_q8, g_pso_attnd_tq4, g_pso_attncombd, g_pso_rpstb16)
+    release_handles(g_pso_attndw16, g_pso_attndw32, g_pso_attndx16, g_pso_attndx32)
+    release_handles(g_pso_attndw_q8, g_pso_attndw_tq4, g_pso_attndx_q8, g_pso_attndx_tq4)
     release_handles(g_pso_rpstb32, g_pso_rpstb_q8, g_pso_rpstb_tq4)
 }
 
@@ -10732,13 +10896,15 @@ class MetalSt2Reflect1 {
     }
 }
 
-//! o [t x c] = a[idx[r]] (+ b [t x c] when add_b) (+ cvec [c] when add_c): the row gather - a stem's
-//! window-sort reorder with the adds off, an embedding lookup with its position and type rows on.
+//! o [t x c] = scale * a[idx[r]] (+ b [t x c] when add_b) (+ cvec [c] when add_c): the row gather - a stem's
+//! window-sort reorder with the adds off, an embedding lookup with its position and type rows on, the greedy chain's
+//! one-row gather from the fp32 token table under the model's embed scale.
 struct RowGatherArgs {
     c : uint
     add_b : uint
     add_c : uint
     total : uint
+    scale : float
 }
 
 [metal_dispatch(name = "enc_row_gather", pso = "g_pso_row_gather", tg = 64, grid = "total/64", params = "total : int64")]
@@ -10758,7 +10924,7 @@ class MetalRowGather {
         }
         let r = gid / ka.c
         let ci = gid % ka.c
-        var v = a[idx[r] * ka.c + ci]
+        var v = a[idx[r] * ka.c + ci] * ka.scale
         if (ka.add_b != 0u) {
             v += b[gid]
         }

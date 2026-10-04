@@ -462,7 +462,7 @@ def test_scheduler_prefix_cache(t : T?) {   // nolint:STYLE038 — one model loa
             drain(m, sch, events)
             var warm <- toks_of(events, 2l)
             let fin2 = finished_of(events, 2l)
-            t |> equal(fin2.n_cached, (np - 1l) / 16l * 16l)   // whole pages, capped below np
+            t |> equal(fin2.n_cached, np - 1l)   // the whole pages shared and the rows of the next page copied, capped one token below np
             t |> success(ids_equal(warm, cold), "warm stream identical to cold")
             t |> equal(sch.cached_tokens, fin2.n_cached)
             // idle scheduler: the only live page holds are the cache's

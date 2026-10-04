@@ -3,6 +3,7 @@
 Companion to `ARCHITECTURE.md`; a section is cited by its anchor.
 
 `ARCHITECTURE_ENGINE_FORMATS.md` holds the format, load-rail and CPU-kernel-tier charters.
+`ARCHITECTURE_ENGINE_SERVING.md` holds the serving charter and the prefix cache's mechanisms.
 
 `REVIEW.das`'s `check_exe_fn_global_restore` walks every `dasllama/` file and licenses no
 names: each `var g_x = @@fn` declaration carries an `if (g_x == null)` boot-restore guard in
@@ -94,7 +95,12 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
   encoder is scored against. That oracle carries its own Q8_0 dot and GEMV and its own attention
   dot over decoded rows - reference arithmetic, not a tier kernel or a codec primitive, so no
   tier specializes it. A refusal is `ok = false` plus a `why`, never a panic - a drafter is
-  optional and a bad sidecar must degrade to plain decode.
+  optional and a bad sidecar must degrade to plain decode. A server or scheduler reaches the
+  drafter through the engine's assistant seams (`MtpAssistantSeams` in `dasllama_common`:
+  `mtp_drafter_sidecar_`, `attach_mtp_drafter_`, `mtp_capable_`), which the Metal drafter driver
+  registers at init and which read as "no assistant" where no driver did - `mtp_capable_` is what
+  a scheduler's `mtp` asks for, a NextN head of the model's own or an attached drafter, so a
+  head-less target speculates once attached and never before.
 - **`dasllama_sampling.das`** - token sampling and the generation drivers: the sampler over
   `dasllama_common`'s `SamplingParams`. A top-k within `SAMPLE_TOPK_FAST_CAP` is a candidate-list
   sampler - one pass over the row selects the k largest logits into a heap (ties at the k-th all
@@ -274,27 +280,3 @@ moves the whole row past any logits bar: on Qwen3.8-Flash-Next the CPU chain on 
 kernel bodies parts from the tuned chain by 3-7 logits with argmax flips on three rows of seven,
 so a compare of two arms reads the seams only with the routing pinned
 (`tests/test_gpu_resident_hc.das`; the arms' own picks off the tape are logged, never asserted).
-
-### Serving {#scheduler-step}
-
-- **`dasllama_scheduler.das`** - the continuous-batching scheduler, the serving layer over the
-  facade (its one engine require is `dasllama/dasllama`). One synchronous thread: each
-  `scheduler_step` admits queued requests, runs one `eval_batch` decode step over every
-  decoding stream (a self-speculative scheduler instead ticks every stream's round through
-  `mtp_spec_eval_batch`, one joint verify where a driver seats one, and counts the tick as a
-  batched step only when every stream's rows rode it), then at most one prefill chunk FCFS - `chunk_tokens` while
-  a stream decodes, since the chunk is the stall every decoding stream waits out, and at least `idle_chunk_tokens`
-  while none does, since a prefill window's cost is mostly fixed and nothing waits on it; `chunk_defaults` names
-  both sizes per serving backend (the chunk 512 where a GPU prefills and 64 on the CPU, whose chunk costs its token count, so the stall follows it down; idle 512,
-  2048 on Metal, where four windows in one call run within a few percent of the whole prompt's rate); paged serving donates finished streams'
-  KV pages to the prefix cache, device mode parks their regions. Results flow out as `SchedEvent`s - no HTTP here.
-  `utils/dasllama-server` owns the writers; `tutorials/dasLLAMA/13_serving.das` is the
-  teaching consumer; `tests/test_scheduler.das` gates it against `generate()` references.
-  The step clears its gather arrays (`batch_rows`, `batch_toks`, `batch_idx`) before it reaps
-  finished streams: `batch_rows` holds borrowed pointers into the sessions the reap deletes,
-  and a validating heap collect between steps walks every pointer the array still holds.
-
-### The prefix cache on a recurrent model {#prefix-recurrent-checkpoints}
-
-A deltanet hybrid's K/V pages continue nothing alone: its recurrent state exists at one position only, so `dasllama_prefix.das` caches a CHECKPOINT (`PrefixState`) - the evaled tokens, their page groups, and a `DnSnapshot` (`dn_snapshot_take`: the state brought to the host through `dn_state_to_host`, where a device driver registers its mirror's copy-down; the n-gram ring; the draft head's carry). A prompt attaches the deepest checkpoint whose every token opens it: the pages below the last row's are shared, the last row's page is copied even when whole (the draft head rewrites row n - 1 for the token that follows), the snapshot is restored. Because the position is exact, the scheduler STOPS a prefill there (`prefix_checkpoint_at`): at the caller's stable opening (`PendingReq.stable_at`, the server's `render_turn_marked` - every earlier turn plus the first turn's system block), else at the longest opening an earlier checkpoint shares; a checkpoint within a chunk and a half ends the chunk, so the stop adds no window. A finished turn leaves one more past its close tokens, which the conversation's next turn attaches. `max_states` (4) bounds them, the one used longest ago dropped first.
-

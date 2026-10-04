@@ -53,9 +53,14 @@ struct ChatMessage {
     @optional tool_call_id : string     //!< For ``role`` "tool": the id of the call this message answers.
 }
 
+struct StreamOptions {
+    //! ``stream_options`` of a streamed request.
+    include_usage : bool   //!< Ask the server to end the stream on a chunk with no choices carrying ``usage``.
+}
+
 struct ChatCompletionRequest {
     //! Request body for ``/chat/completions``. Default-valued optional fields are omitted on send.
-    model : string                       //!< Chat model id.
+    @optional model : string             //!< Chat model id; empty = the server's own default model (local servers).
     messages : array<ChatMessage>        //!< The conversation, in order.
     @optional temperature : float        //!< Sampling temperature.
     @optional top_p : float              //!< Nucleus-sampling probability mass.
@@ -71,6 +76,8 @@ struct ChatCompletionRequest {
     @optional @embed response_format : string //!< JSON-mode format (see ``json_object_format``).
     @optional tools : array<Tool>        //!< Tools the model may call.
     @optional tool_choice : string       //!< Tool selection ("auto", "none", or a specific name).
+    @optional stream_options : StreamOptions  //!< ``include_usage``: a streamed reply ends on a usage chunk (``ChatStreamResult.usage``).
+    @optional @embed chat_template_kwargs : string //!< Raw JSON for the server's chat template, e.g. ``{"enable_thinking":false}`` (llama.cpp-family servers).
 }
 
 struct ChatChoice {
@@ -117,6 +124,7 @@ struct ChatMessageDelta {
     //! Incremental message fields in a streamed chunk (object == "chat.completion.chunk").
     @optional role : string                    //!< Role, sent on the first delta.
     @optional content : string                 //!< Incremental text content.
+    @optional reasoning_content : string       //!< Incremental reasoning text (a thinking model's channel).
     @optional tool_calls : array<ToolCallDelta> //!< Incremental tool-call fragments (reassembled by ``chat_stream``).
 }
 
@@ -133,15 +141,26 @@ struct ChatCompletionChunk {
     @rename = "object" _object : string  //!< Object type ("chat.completion.chunk").
     created : int64                      //!< Unix creation time.
     model : string                       //!< Model producing the stream.
-    choices : array<ChunkChoice>         //!< Incremental choices in this frame.
+    choices : array<ChunkChoice>         //!< Incremental choices in this frame; empty on the usage chunk.
+    @optional usage : Usage              //!< Token accounting, on the chunk ``stream_options.include_usage`` asks for.
+    @optional timings : StreamTimings    //!< The server's own clock for the turn, when it reports one (llama.cpp-family servers).
+}
+
+struct StreamTimings {
+    //! A server's own timing of a streamed turn, in milliseconds.
+    @optional ttft_ms : float   //!< Admission to the first token.
+    @optional gen_ms : float    //!< The first token to the finish.
 }
 
 struct ChatStreamResult {
     //! Outcome of ``chat_stream``: ``content`` is the full accumulated assistant text.
     ok : bool                       //!< True on a successful stream.
     content : string                //!< Full accumulated assistant text.
+    reasoning : string              //!< Full accumulated reasoning text (empty from a model with no thinking channel).
     finish_reason : string          //!< Why generation stopped ("stop", "tool_calls", ...).
     tool_calls : array<ToolCall>    //!< Reassembled tool calls (empty unless the model streamed any).
+    usage : Usage                   //!< The usage chunk's counts (``prompt_tokens`` 0 when no chunk carried them).
+    timings : StreamTimings         //!< The server's own clock from that chunk, zeros when it reports none.
     error : OpenAIError             //!< Error detail on failure.
 }
 
@@ -179,16 +198,19 @@ def chat_stream(client : OpenAIClient; var req : ChatCompletionRequest; // nolin
     //! Streams a ``/chat/completions`` response, invoking ``on_delta`` with each text
     //! increment as it arrives. Returns the full accumulated content plus status.
     //!
-    //! Text deltas (``choices[0].delta.content``) are accumulated into ``result.content``;
-    //! streamed tool-call fragments are reassembled by ``index`` into ``result.tool_calls``
-    //! (``on_delta`` fires for text only). Tolerates CRLF line endings and SSE comment lines.
+    //! Text deltas (``choices[0].delta.content``) are accumulated into ``result.content`` and reasoning
+    //! deltas (``reasoning_content``) into ``result.reasoning``, ``on_delta`` firing for either as it arrives;
+    //! streamed tool-call fragments are reassembled by ``index`` into ``result.tool_calls``; a chunk
+    //! carrying ``usage`` (``stream_options.include_usage``) fills ``result.usage`` and ``result.timings``.
+    //! Tolerates CRLF line endings and SSE comment lines.
     req.stream = true
     let body_json = sprint_json(req, false)
     let url = "{client.base_url}/chat/completions"
 
-    var result : ChatStreamResult
+    var result = ChatStreamResult(usage = Usage(prompt_tokens_details = PromptTokensDetails(cached_tokens = -1)))
     var buffer = ""
     var parts : array<string>   // accumulate deltas, join once at the end (avoid O(n^2) string growth)
+    var thoughts : array<string>
     var tools : array<ToolCall> // reassembled per-index from streamed tool-call fragments
     var finish = ""
 
@@ -215,12 +237,23 @@ def chat_stream(client : OpenAIClient; var req : ChatCompletionRequest; // nolin
                         if (starts_with(bytes, consumed, "data: ")) {
                             let payload = slice(bytes, consumed + 6, line_end)
                             if (payload != "[DONE]") {
-                                var frame : ChatCompletionChunk
-                                if (sscan_json(payload, frame) && !empty(frame.choices)) {
+                                // -1 survives a usage chunk with no details: the server reported no cache hit
+                                var frame = ChatCompletionChunk(usage = Usage(prompt_tokens_details = PromptTokensDetails(cached_tokens = -1)))
+                                let parsed = sscan_json(payload, frame)
+                                if (parsed && frame.usage.prompt_tokens > 0) {
+                                    result.usage = frame.usage
+                                    result.timings = frame.timings
+                                }
+                                if (parsed && !empty(frame.choices)) {
                                     let delta = frame.choices[0].delta.content
                                     if (!empty(delta)) {
                                         parts |> push(delta)
                                         invoke(on_delta, delta)
+                                    }
+                                    let thought = frame.choices[0].delta.reasoning_content
+                                    if (!empty(thought)) {
+                                        thoughts |> push(thought)
+                                        invoke(on_delta, thought)
                                     }
                                     for (tcd in frame.choices[0].delta.tool_calls) {
                                         let idx = tcd.index
@@ -263,7 +296,9 @@ def chat_stream(client : OpenAIClient; var req : ChatCompletionRequest; // nolin
             })
     }
     result.content = join(parts, "")
+    result.reasoning = join(thoughts, "")
     delete parts
+    delete thoughts
     result.tool_calls <- tools
     result.finish_reason = finish
     return <- result

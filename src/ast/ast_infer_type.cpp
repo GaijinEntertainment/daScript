@@ -2804,6 +2804,12 @@ namespace das {
                             case Type::tInt:
                                 reportAstChanged();
                                 return new ExprConstInt(expr->at, ita->iValue);
+                            case Type::tInt64:
+                                reportAstChanged();
+                                return new ExprConstInt64(expr->at, ita->lValue);
+                            case Type::tUInt64:
+                                reportAstChanged();
+                                return new ExprConstUInt64(expr->at, ita->ulValue);
                             case Type::tFloat:
                                 reportAstChanged();
                                 return new ExprConstFloat(expr->at, ita->fValue);

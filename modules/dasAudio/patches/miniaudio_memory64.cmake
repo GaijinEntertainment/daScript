@@ -20,17 +20,14 @@ endif()
 
 file(READ "${MINIAUDIO_H}" _ma)
 
-# Idempotency guard: key on the LAST-added patch marker (the capture-rate patch),
-# not the first (toPtr). Otherwise a tree already patched by an older version of
-# this script would early-return and never receive a newly-added block. With this
-# marker, an older-patched tree still runs the script; the earlier string(REPLACE)s
-# are no-ops (targets already gone) and only the new block applies (block 6b is
-# the form of block 6 that targets a tree carrying the previous non-blocking text).
-string(FIND "${_ma}" "daslang capture-rate patch" _already)
+# Key the guard on the latest patch, so older configured trees still receive it.
+string(FIND "${_ma}" "pInitParameters->pDescriptorPlayback = &pInitParameters->ownedPlayback" _already)
 if(_already GREATER -1)
-    message(STATUS "miniaudio_memory64.cmake: already patched, skipping ${MINIAUDIO_H}")
     return()
 endif()
+
+string(FIND "${_ma}" "daslang capture-rate patch" _capture_patch)
+if(_capture_patch LESS 0)
 
 # 1) Install the toPtr helper right after the device-state setup ($5 = sizeof(void*)==8).
 string(REPLACE
@@ -159,6 +156,8 @@ string(REPLACE
                 ma_channel_map_init_standard(]==]
     _ma "${_ma}")
 
+endif() # capture-rate patch and its prerequisites
+
 # 7) AudioWorklet dangling-config fix. The processor-created callback runs long
 # after ma_device_init returns (non-blocking, block 6), so pConfig — a local of
 # the generic ma_device_init — is dead. Read the device type from the long-lived
@@ -169,6 +168,42 @@ string(REPLACE
 [==[pParameters->pConfig->deviceType]==]
 [==[pParameters->pDevice->type]==]
     _ma "${_ma}")
+
+# 8) Async descriptor ownership. Non-blocking initialization returns before the
+# processor callback runs. That callback reads channels as well as updating the
+# descriptors, so nulling the expired pointers is not sufficient. Keep snapshots
+# in the already heap-owned initialization record instead.
+string(REPLACE
+[==[    ma_device_descriptor* pDescriptorCapture;
+} ma_audio_worklet_thread_initialized_data;]==]
+[==[    ma_device_descriptor* pDescriptorCapture;
+    ma_device_descriptor ownedPlayback;
+    ma_device_descriptor ownedCapture;
+} ma_audio_worklet_thread_initialized_data;]==]
+    _ma "${_ma}")
+string(REPLACE
+[==[            /* The descriptors are LOCALS of the generic ma_device_init and die when
+               it returns (right after this non-blocking init). The generic init has
+               already read back our pre-filled values above, so NULL the worklet
+               callback's copies (it null-guards them) to stop it writing through the
+               now-dangling pointers when it fires asynchronously. */
+            pInitParameters->pDescriptorPlayback = NULL;
+            pInitParameters->pDescriptorCapture  = NULL;]==]
+[==[            /* daslang async descriptor ownership: keep the pre-filled values
+               alive for channel selection and descriptor updates in the callback. */
+            if (pDescriptorPlayback != NULL) {
+                pInitParameters->ownedPlayback = *pDescriptorPlayback;
+                pInitParameters->pDescriptorPlayback = &pInitParameters->ownedPlayback;
+            }
+            if (pDescriptorCapture != NULL) {
+                pInitParameters->ownedCapture = *pDescriptorCapture;
+                pInitParameters->pDescriptorCapture = &pInitParameters->ownedCapture;
+            }]==]
+    _ma "${_ma}")
+string(FIND "${_ma}" "pInitParameters->pDescriptorPlayback = &pInitParameters->ownedPlayback" _owned)
+if(_owned LESS 0)
+    message(FATAL_ERROR "miniaudio async descriptor patch anchor not found")
+endif()
 
 file(WRITE "${MINIAUDIO_H}" "${_ma}")
 

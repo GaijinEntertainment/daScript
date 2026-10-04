@@ -365,6 +365,7 @@
 
 %token<i>       INTEGER                 "integer constant"
 %token<i64>     LONG_INTEGER            "long integer constant"
+%token          LONG_INTEGER_MIN        "int64 minimum magnitude (requires minus)"
 %token<ui>      UNSIGNED_INTEGER        "unsigned integer constant"
 %token<ui64>    UNSIGNED_LONG_INTEGER   "unsigned long integer constant"
 %token<ui>      UNSIGNED_INT8           "unsigned int8 constant"
@@ -1170,6 +1171,10 @@ annotation_argument_value
     :   string_constant[value]   { $$ = new AnnotationArgument("",*$value); delete $value; }
     |   NAME[value]              { $$ = new AnnotationArgument("",*$value); delete $value; }
     |   INTEGER[value]           { $$ = new AnnotationArgument("",$value); }
+    |   LONG_INTEGER[value]      { $$ = new AnnotationArgument("",int64_t($value)); }
+    |   '-' LONG_INTEGER[value]  { $$ = new AnnotationArgument("",int64_t(0ull - uint64_t($value))); }
+    |   '-' LONG_INTEGER_MIN     { $$ = new AnnotationArgument("",int64_t(INT64_MIN)); }
+    |   UNSIGNED_LONG_INTEGER[value] { $$ = new AnnotationArgument("",uint64_t($value)); }
     |   '-' INTEGER[value]       { $$ = new AnnotationArgument("",int32_t(0u - uint32_t($value))); }
     |   DAS_FLOAT[value]         { $$ = new AnnotationArgument("",float($value)); }
     |   '-' DAS_FLOAT[value]     { $$ = new AnnotationArgument("",-float($value)); }
@@ -1202,6 +1207,10 @@ annotation_argument
     |   annotation_argument_name[name] '=' NAME[value]              { $$ = new AnnotationArgument(*$name,*$value,tokAt(scanner,@name)); delete $value; delete $name; }
     |   annotation_argument_name[name] '=' DOUBLE_AT NAME[value]      { $$ = new AnnotationArgument(*$name,*$value,tokAt(scanner,@name)); delete $value; delete $name; }
     |   annotation_argument_name[name] '=' INTEGER[value]           { $$ = new AnnotationArgument(*$name,$value,tokAt(scanner,@name)); delete $name; }
+    |   annotation_argument_name[name] '=' LONG_INTEGER[value] { $$ = new AnnotationArgument(*$name,int64_t($value),tokAt(scanner,@name)); delete $name; }
+    |   annotation_argument_name[name] '=' '-' LONG_INTEGER[value] { $$ = new AnnotationArgument(*$name,int64_t(0ull - uint64_t($value)),tokAt(scanner,@name)); delete $name; }
+    |   annotation_argument_name[name] '=' '-' LONG_INTEGER_MIN { $$ = new AnnotationArgument(*$name,int64_t(INT64_MIN),tokAt(scanner,@name)); delete $name; }
+    |   annotation_argument_name[name] '=' UNSIGNED_LONG_INTEGER[value] { $$ = new AnnotationArgument(*$name,uint64_t($value),tokAt(scanner,@name)); delete $name; }
     |   annotation_argument_name[name] '=' '-' INTEGER[value]       { $$ = new AnnotationArgument(*$name,int32_t(0u - uint32_t($value)),tokAt(scanner,@name)); delete $name; }
     |   annotation_argument_name[name] '=' DAS_FLOAT[value]         { $$ = new AnnotationArgument(*$name,float($value),tokAt(scanner,@name)); delete $name; }
     |   annotation_argument_name[name] '=' '-' DAS_FLOAT[value]     { $$ = new AnnotationArgument(*$name,-float($value),tokAt(scanner,@name)); delete $name; }
@@ -2094,6 +2103,7 @@ expr_numeric_const
     :   INTEGER[const]                        { $$ = newConstLiteral<ExprConstInt>(tokAt(scanner,@const),(int32_t)$const); }
     |   UNSIGNED_INTEGER[const]               { $$ = newConstLiteral<ExprConstUInt>(tokAt(scanner,@const),(uint32_t)$const); }
     |   LONG_INTEGER[const]                   { $$ = newConstLiteral<ExprConstInt64>(tokAt(scanner,@const),(int64_t)$const); }
+    |   '-' LONG_INTEGER_MIN[const]          { $$ = newConstLiteral<ExprConstInt64>(tokAt(scanner,@const),int64_t(INT64_MIN)); }
     |   UNSIGNED_LONG_INTEGER[const]          { $$ = newConstLiteral<ExprConstUInt64>(tokAt(scanner,@const),(uint64_t)$const); }
     |   UNSIGNED_INT8[const]                  { $$ = newConstLiteral<ExprConstUInt8>(tokAt(scanner,@const),(uint8_t)$const); }
     |   DAS_FLOAT[const]                      { $$ = newConstLiteral<ExprConstFloat>(tokAt(scanner,@const),(float)$const); }

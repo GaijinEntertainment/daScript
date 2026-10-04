@@ -1425,6 +1425,7 @@ def public emit_standalone_context_init(builder : LLVMBuilderRef; fusion_builder
 
     return needs_whole_lib
 }
+[arch(at="../ARCHITECTURE_EXE.md#browser-lifecycle-entry")]
 def public inject_main(program_context : Context?; ctx : LLVMContextRef; // nolint:STYLE037,STYLE038 — the standalone-exe entry emitter: one emission block per runtime feature, in startup order
                        prog : Program ?; entry_point : string; mod : LLVMOpaqueModule?;
                        var types : PrimitiveTypes?, var uids : UidNodes?; strict : bool;
@@ -1450,10 +1451,6 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
     let start_fn_name = found.name
     let no_return = found.no_return
     let bool_return = found.bool_return
-    if (start_fn_name |> empty()) {
-        to_log(LOG_ERROR, "entrypoint `{entry_point}()` not found in input file.\n")
-        return (fn = null, link_whole_lib = false)
-    }
 
     let main_fn_type = LLVMFunctionType(types.t_int32,
         fixed_array<LLVMTypeRef>(
@@ -1551,6 +1548,11 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef; // noli
             to_log(LOG_INFO, "LLVM EXE: wasm browser lifecycle installed (init/update/shutdown); `main` bypassed\n")
             return (fn = main_fn, link_whole_lib = needs_whole_lib)
         }
+    }
+
+    if (start_fn_name |> empty()) {
+        to_log(LOG_ERROR, "entrypoint `{entry_point}()` not found in input file.\n")
+        return (fn = null, link_whole_lib = false)
     }
 
     // Route main through the runtime's catch boundary (jit_run_main_guarded) — a das panic must

@@ -563,6 +563,8 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(sValue)>("sValue");
             addField<DAS_BIND_MANAGED_FIELD(bValue)>("bValue");
             addField<DAS_BIND_MANAGED_FIELD(iValue)>("iValue");
+            addField<DAS_BIND_MANAGED_FIELD(lValue)>("lValue");
+            addField<DAS_BIND_MANAGED_FIELD(ulValue)>("ulValue");
             addField<DAS_BIND_MANAGED_FIELD(fValue)>("fValue");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
         }
@@ -575,6 +577,8 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(sValue)>("sValue");
             addField<DAS_BIND_MANAGED_FIELD(bValue)>("bValue");
             addField<DAS_BIND_MANAGED_FIELD(iValue)>("iValue");
+            addField<DAS_BIND_MANAGED_FIELD(lValue)>("lValue");
+            addField<DAS_BIND_MANAGED_FIELD(ulValue)>("ulValue");
             addField<DAS_BIND_MANAGED_FIELD(fValue)>("fValue");
         }
     };
@@ -1323,6 +1327,8 @@ namespace das {
         switch (info.type) {
         case Type::tBool:   return RttiValue::create<bool, RttiBool>(info.bValue, align);
         case Type::tInt:    return RttiValue::create<int32_t, RttiInt32>(info.iValue, align);
+        case Type::tInt64:  return RttiValue::create<int64_t, RttiInt64>(info.lValue, align);
+        case Type::tUInt64: return RttiValue::create<uint64_t, RttiUint64>(info.ulValue, align);
         case Type::tFloat:  return RttiValue::create<float, RttiFloat>(info.fValue, align);
         case Type::tString: return RttiValue::create<char*, RttiString>(context->allocateString(info.sValue, at), align);
         default: DAS_ASSERT(false); // I guess unreachable?
@@ -1335,6 +1341,8 @@ namespace das {
         switch (info.type) {
         case Type::tBool:   return RttiValue::create<bool, RttiBool>(info.bValue, align);
         case Type::tInt:    return RttiValue::create<int32_t, RttiInt32>(info.iValue, align);
+        case Type::tInt64:  return RttiValue::create<int64_t, RttiInt64>(info.lValue, align);
+        case Type::tUInt64: return RttiValue::create<uint64_t, RttiUint64>(info.ulValue, align);
         case Type::tFloat:  return RttiValue::create<float, RttiFloat>(info.fValue, align);
         case Type::tString: {
             const char * sval = info.sValue ? info.sValue : "";
@@ -1427,7 +1435,7 @@ namespace das {
                 a.type = arg.type;
                 a.name = arg.name;
                 if ( arg.type==Type::tString ) a.sValue = arg.sValue ? arg.sValue : "";
-                a.iValue = arg.iValue;
+                memcpy(&a.ulValue, &arg.ulValue, sizeof(a.ulValue));
                 arguments.push_back(a);
             }
             vec4f args[2] = {

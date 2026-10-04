@@ -4,6 +4,7 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require dastest/testing_boost public
+require _openai_live
 require openai/openai_embeddings
 require strings
 
@@ -44,6 +45,7 @@ def test_embeddings_response_decode(t : T?) {
 [test]
 def test_embeddings_live_ollama(t : T?) {
     t |> run("live embeddings against Ollama (nomic-embed-text)") @(t : T?) {
+        return if (!live_server(t, "http://localhost:11434/v1"))
         let client = openai_client("http://localhost:11434/v1")
         let v = embed(client, "nomic-embed-text", "hello world")
         t |> success(!empty(v), "embedding vector non-empty")

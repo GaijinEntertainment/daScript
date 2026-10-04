@@ -69,3 +69,12 @@ keeps it), and the link runs regular LTO - one merged module, its optimization s
 the codegen level every exe pins (under LTO the linker is the codegen), with `lto_linker_args`:
 `/opt:lldlto=3` through lld-link, `-flto -O3` through the POSIX driver. `DAS_JIT_PROBE_LTO` is the DLL path's dev twin of the rail and takes the same stamp
 and the same object-free pool; it never reaches an exe.
+
+## Browser lifecycle entry {#browser-lifecycle-entry}
+
+`inject_main` runs strict standalone-function collection before selecting an entry
+path. On a wasm target, exactly one emitted zero-argument `update` returning void,
+int, or bool installs the browser lifecycle, with optional `init` and `shutdown`,
+and needs no native entry function. Other paths require the requested native
+entry. Entry validation follows lifecycle selection so a browser-only module can
+build without weakening the checks on its included functions.

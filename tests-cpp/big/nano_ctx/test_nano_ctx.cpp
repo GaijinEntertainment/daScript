@@ -77,6 +77,31 @@ static void capture_print ( const char * text ) {
 int main () {
     das_nano_set_print(&capture_print);
 
+    {
+        Context ctx(16 * 1024, true);
+        CodeOfPolicies policies;
+        policies.persistent_heap = true;
+        ctx.setup(0, 0, policies, AnnotationArgumentList());
+        auto first = ctx.allocateString("queued allocation", 17, nullptr);
+        ctx.freeTempString(first, nullptr);
+        expect_int("temporary queued", ctx.stringDisposeQue == first, 1);
+        auto unrelated = ctx.allocateString("unrelated", 9, nullptr);
+        expect_int("unrelated release", ctx.freeString(unrelated, 9, nullptr), 1);
+        expect_int("queued owner preserved", ctx.stringDisposeQue == first, 1);
+        expect_int("queued allocation released", ctx.freeString(first, 17, nullptr), 1);
+        expect_int("explicit release cancels temporary", ctx.stringDisposeQue == nullptr, 1);
+        auto second = ctx.allocateString("second allocation", 17, nullptr);
+        auto third = ctx.allocateString("third allocation!", 17, nullptr);
+        ctx.freeTempString(second, nullptr);
+        auto frees = ctx.stringHeap->getTotalFrees();
+        ctx.freeTempString(third, nullptr);
+        expect_int("queue replacement releases one string", int(ctx.stringHeap->getTotalFrees() - frees), 1);
+        expect_int("queue replacement keeps newest owner", ctx.stringDisposeQue == third, 1);
+        expect_int("queued replacement remains valid", strcmp(third, "third allocation!"), 0);
+        ctx.freeTempString(nullptr, nullptr);
+        expect_int("temporary queue drained", ctx.stringDisposeQue == nullptr, 1);
+    }
+
     {   // tier A - POD compute, no das heap
         ctx_pure_math::Standalone ctx;
         ctx_pure_math::Vec3 a; a.x = 1.0f; a.y = 2.0f; a.z = 3.0f;

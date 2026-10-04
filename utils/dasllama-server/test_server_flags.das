@@ -1,12 +1,15 @@
 options gen2
 options persistent_heap
+options _dasllama_internal = true   // the K/V room seam the ctx-clamp cell doubles is the engine's, not the facade's
 
 require dastest/testing_boost public
 require main                                            // the program root: cli_has_flag, mtp_setting, mtp_default_resolved (sibling by bare name)
-require openai_server                                   // mtp_auto_arms, and serving_knobs' Metal-mode pair through it
-require dasllama/dasllama                               // nolint:STYLE029 - MetalMode through the facade, the one door into the engine
+require openai_server                                   // mtp_auto_arms, clamp_ctx_to_device_room, and serving_knobs' Metal-mode pair through it
+require dasllama/dasllama                               // MetalMode through the facade
+require dasllama/dasllama_gpu_tier                      // the K/V room seam a cell doubles
 require daslib/clargs                                   // get_user_args / flag_present: the match cli_has_flag rests on
 require strings
+require daslib/fio                                      // the roster cell writes its config
 
 // Model-free unit coverage for the flag-presence test behind the config surface's provenance:
 // a flag the process was given reads present, in both spellings, and an absent one reads absent;
@@ -126,5 +129,114 @@ def test_mtp_setting_tri_state(t : T?) {
         t |> success(metal_mode_of("auto").mode == MetalMode.when_available && metal_mode_of("when_available").known)
         t |> success(metal_mode_of("").mode == MetalMode.off && metal_mode_of("").known && metal_mode_of("off").known)
         t |> success(metal_mode_of("fast").mode == MetalMode.off && !metal_mode_of("fast").known)
+    }
+}
+
+def private room_of_a_megabyte(row_bytes : int64) : int64 => 1000000l / row_bytes
+
+//! The context clamp a blob-only model gets: its `seq_len` cut to the rows the device's KV room holds, a planar model and a
+//! context under the room left alone.
+[test]
+def test_ctx_clamp_to_device_room(t : T?) {
+    var m = Model()
+    m.config.n_layers = 3l
+    m.config.head_size = 128l
+    m.config.n_kv_heads = 2l
+    m.kv_src <- [0l, 1l, 2l]
+    let prior = gpu_kv_room_hook()
+    set_gpu_kv_room_hook(@@room_of_a_megabyte)   // f16 K and V over three layers of 256: 3072 bytes a row, 325 rows in the megabyte
+    m.config.seq_len = 1000l
+    clamp_ctx_to_device_room(m, "planar", KVDtype.f16)
+    t |> equal(1000l, m.config.seq_len, "a planar model keeps its context: it falls to the CPU stack")
+    m.metal_blob = true
+    clamp_ctx_to_device_room(m, "blob", KVDtype.f16)
+    t |> equal(325l, m.config.seq_len, "a blob-only model is cut to the device's rows")
+    clamp_ctx_to_device_room(m, "blob", KVDtype.f16)
+    t |> equal(325l, m.config.seq_len, "a context already under the room stands")
+    set_gpu_kv_room_hook(prior)
+    delete m
+}
+
+//! The K/V codec a slot runs on, which the live-load clamp reads too: a slot that asked for none inherits the server default
+//! (never SlotOpts' f16 seed), one that asked keeps its own.
+[test]
+def test_slot_kv_dtype(t : T?) {
+    let plain = SlotOpts()
+    t |> success(slot_kv_dtype(plain) == sched_default_kv_dtype(), "an unset slot inherits the server default")
+    let asked = SlotOpts(kv_dtype = KVDtype.q8_0, kv_dtype_set = true)
+    t |> success(slot_kv_dtype(asked) == KVDtype.q8_0, "a slot that asked keeps its own codec")
+    let seeded = SlotOpts(kv_dtype = KVDtype.q8_0)   // the seed alone, not asked: the server default still rules
+    t |> success(slot_kv_dtype(seeded) == sched_default_kv_dtype(), "a codec written without the ask is the seed, not a choice")
+}
+
+//! An [[asr]] / [[tts]] roster in the config: every table is a served model in file order, the flat keys read as the
+//! first one, and a one-path `asr` / `tts` key is a roster of one.
+[test]
+def test_speech_roster_from_toml(t : T?) {
+    let path = "_test_speech_roster.toml"
+    t |> run("the tables are the roster, the first is the default") @(t : T?) {
+        fopen(path, "wb") $(f) {
+            f |> fwrite("tts = \"k.gguf\"\ntts_lane = \"f32\"\n\n[[asr]]\npath = \"a.gguf\"\nmmproj = \"mm.gguf\"\nworkers = 2\n\n[[asr]]\nid = \"big\"\npath = \"b.gguf\"\n\n[[asr]]\nid = \"lost\"\n")
+        }
+        var cfg = ServerArgs(config = path)
+        t |> success(apply_config(cfg), "the config reads")
+        t |> equal(cfg.asr, "a.gguf", "the flat key reads as the first table")
+        t |> equal(cfg.mmproj, "mm.gguf")
+        t |> equal(cfg.asr_workers, 2)
+        t |> equal(cfg.tts, "k.gguf", "a one-path key stays a path")
+        var asr <- speech_roster_ids(false)
+        t |> success(length(asr) == 2 && asr[0] == "a.gguf" && asr[1] == "big", "a table with no path is skipped: {asr}")
+        delete asr
+    }
+    t |> run("the [[tts]] tables are a roster too, and a flag overrides the first table of a config that is not authoritative") @(t : T?) {
+        fopen(path, "wb") $(f) {
+            f |> fwrite("[[asr]]\npath = \"a.gguf\"\nworkers = 2\n\n[[tts]]\npath = \"k.gguf\"\nlane = \"f32\"\n\n[[tts]]\nid = \"second\"\npath = \"p.gguf\"\n")
+        }
+        var cfg = ServerArgs(config = path, asr_workers = 4)
+        set_cli_source("asr_workers", true)
+        t |> success(apply_config(cfg), "the config reads")
+        set_cli_source("asr_workers", false)
+        t |> equal(cfg.asr_workers, 4, "--asr-workers is the first ASR table's, over the table's own 2")
+        t |> equal(cfg.tts, "k.gguf")
+        t |> equal(cfg.tts_lane, "f32", "a flag not given leaves the first table's lane")
+        var tts <- speech_roster_ids(true)
+        t |> success(length(tts) == 2 && tts[0] == "k.gguf" && tts[1] == "second", "both TTS tables, in file order: {tts}")
+        delete tts
+        fopen(path, "wb") $(f) {
+            f |> fwrite("authoritative = true\n\n[[asr]]\npath = \"a.gguf\"\nworkers = 2\n")
+        }
+        var saved = ServerArgs(config = path, asr_workers = 4)
+        set_cli_source("asr_workers", true)
+        t |> success(apply_config(saved), "the authoritative config reads")
+        set_cli_source("asr_workers", false)
+        t |> equal(saved.asr_workers, 2, "an authoritative config wins over the flag")
+    }
+    remove(path)
+}
+
+//! The roster a kind's flags make: the flat key's model first, with its own keys, then every other path named; a
+//! repeated flag's first value is the default, whatever clargs kept.
+[test]
+def test_roster_from_flags(t : T?) {
+    t |> run("one flag is a roster of one, several keep their order, and a config's flat key takes no flag's paths") @(t : T?) {
+        var none : array<string>
+        var one <- ["a.gguf"]
+        var two <- ["a.gguf", "b.gguf"]
+        var empty_roster <- roster_from_flags(SpeechEntry(), none, false)
+        t |> success(empty(empty_roster), "no model, no roster")
+        var single <- roster_from_flags(SpeechEntry(path = "a.gguf", mmproj = "mm.gguf", workers = 2), one, true)
+        t |> success(length(single) == 1 && single[0].mmproj == "mm.gguf" && single[0].workers == 2, "the one model keeps the flat keys")
+        var both <- roster_from_flags(SpeechEntry(path = "b.gguf", mmproj = "mm.gguf"), two, true)   // clargs kept the LAST value
+        t |> success(length(both) == 2 && both[0].path == "a.gguf" && both[0].mmproj == "mm.gguf" && both[1].path == "b.gguf" && empty(both[1].mmproj),
+            "the first path named is the default and carries the flat keys: {[for (e in both); e.path]}")
+        var from_toml <- roster_from_flags(SpeechEntry(path = "t.gguf"), two, false)
+        t |> success(length(from_toml) == 1 && from_toml[0].path == "t.gguf", "a key the config set is a roster of one: the flags' paths are not its")
+        delete none
+        delete one
+        delete two
+        delete empty_roster
+        delete single
+        delete both
+        delete from_toml
     }
 }

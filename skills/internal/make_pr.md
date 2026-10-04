@@ -72,6 +72,11 @@ harvester itself (one per module root, in one message).
 
 **0a2** - `style-hygiene-auditor` (`.claude/agents/style-hygiene-auditor.md`): one instance over the whole changed set for a small diff, one per file cluster (directory or language) for a large one, reports merged. Same registry caveat.
 
+**Every auditor's report is on disk.** Each agent of 0a and 0a2, and the dragon, writes the report it returns to
+`logs/audits/<branch>/<tip>-<agent>-<subject>.md` in the main checkout (gitignored) and names the file on its last
+line. Read a finding you did not act on from there in a later session - a checklist's self-review defects among
+them - before running the audit again.
+
 **0a3** - no agent: the damper, the verify-before-believing loop, and the no-codex-on-PATH fallback are all in `skills/internal/woodpecker.md`.
 
 ## 0b. Build-config drift

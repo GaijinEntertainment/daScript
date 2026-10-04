@@ -115,11 +115,6 @@ var g_last_pass_us = 0                // wall time of the last agent pass (worke
 var g_smooth_steps = 0.0lf            // exponentially-smoothed simulation steps/sec
 var g_sim_frame = 0                       // completed passes
 
-// ----- audio: strudel on its own thread where the runtime hosts one (strudel_init/strudel_play), on
-// the main thread otherwise (strudel_create_channel + strudel_tick() in update). Each layer's
-// per-ORBIT gain is faded live - no pattern rebuild (track gain stays at 1.0; a track whose gain
-// reaches 0 is removed). Ambient always plays; the lead swells while the mouse attracts the slime;
-// the percussion swells while a slider is being dragged.
 var g_asch : AudioSystemChannels
 var g_audio_owned = false             // true only if WE created the audio system (else the host owns it)
 var g_music_threaded = false
@@ -531,10 +526,8 @@ def music_cmd(cmd : string) {
     }
 }
 
-[unsafe_heap_collect]   //! the strudel thread's entry: no daslang frame sits below it, as with strudel_play, which it calls
 def music_main {
     build_tracks()
-    strudel_play(@@music_cmd)
 }
 
 def set_layer(name : string; on : bool) {
@@ -557,7 +550,7 @@ def setup_audio {
         (get_platform_name() != "emscripten" || is_standalone_exe())
     )
     if (g_music_threaded) {
-        strudel_init(@@music_main)
+        strudel_init(@@music_main, @@music_cmd)
     } else {
         strudel_create_channel()
         build_tracks()

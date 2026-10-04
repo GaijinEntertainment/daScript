@@ -338,10 +338,8 @@ def strudel_music_cmd(cmd : string) {
     }
 }
 
-[unsafe_heap_collect]   //! the strudel thread's entry: no daslang frame sits below it, as with strudel_play, which it calls
 def strudel_music_main() {
     tune_menu()
-    strudel_play(@@strudel_music_cmd)
 }
 
 // Route a music command to wherever the engine runs: the strudel thread in the
@@ -652,10 +650,6 @@ var @live game_speed = 1.0
 var @live prev_music_state = GameState.menu
 var music_initialized = false
 var music_enabled = false
-// The strudel player has two arms: a worker thread (strudel_init/strudel_play)
-// where the runtime can host one, and a main-thread channel (strudel_create_channel
-// + per-frame strudel_tick) where it cannot. Same music engine either way; only
-// where a command runs differs (music_dispatch below). Arm choice is init's.
 var music_threaded = false
 
 
@@ -1831,7 +1825,7 @@ def init() {
     if (!music_initialized) {
         music_threaded = !audio_is_single_threaded()
         if (music_threaded) {
-            strudel_init(@@strudel_music_main)
+            strudel_init(@@strudel_music_main, @@strudel_music_cmd)
         } else {
             strudel_create_channel()
             tune_menu()

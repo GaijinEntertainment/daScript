@@ -5,6 +5,7 @@ options fast_math = true  // ggml-parity FP laxity — this is an inference tool
 options _dasllama_internal = true
 
 require dastest/testing_boost public
+require _server_rig                                     // serve_clients (sibling)
 require openai_server                                   // the server: OpenAiServer + set_model + run_server (sibling)
 require dasllama/dasllama                               // load_model / QuantMode / embed
 require daslib/jobque_boost                             // with_job_status (server-thread lifecycle)
@@ -13,12 +14,12 @@ require daslib/fio                                      // get_env_variable / st
 require daslib/toml                                     // read_toml: POST /config round-trip check
 require math                                            // sqrt
 require strings                                         // find (control-page content-type/body checks)
-require dasllama/dasllama_env
 
 // End-to-end conformance for the OpenAI-compatible server: spin it up on its own thread (a separate
 // context — so the model loads INSIDE that thread, since g_model is a per-context module global),
 // then drive /v1/models, /v1/embeddings and /v1/chat/completions over the real dashv HTTP client.
-// Model-gated + JIT-only, so it's a real regression locally and a clean skip in CI (no GGUF).
+// Model-gated (tinyllama-1.1b-chat-v1.0.Q8_0.gguf; the held-engine cell also skips on a box that runs its
+// embeddings forward in under 400 ms) + JIT-only, so it's a real regression locally and a clean skip in CI (no GGUF).
 // Lives here (not modules/dasLLAMA/tests/) because a require path can't contain the '-' in "dasllama-server":
 // a require_module_name is NAME tokens joined by / . % .. — so hyphenated-dir tools keep tests in-dir
 // and require the sibling module by BARE name (same convention as detect-dupe / find-dupe / mcp).
@@ -33,9 +34,6 @@ def private test_save_path() : string {
 }
 let TEST_SAVE_PATH = test_save_path()
 
-def private models_dir() : string {
-    return models_dir_resolved()   // the ONE resolution: DASLLAMA_MODELS_DIR, else the rig default
-}
 let MODEL_PATH = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
 
 // Response shapes we assert on (from_JV ignores the object/model/usage fields we don't check).
@@ -99,23 +97,7 @@ def private with_llama_server(model_path : string; port : int; mode : MetalMode 
             run_server(port)   // blocks (with_job_que + tick loop) until POST /shutdown
             finished |> notify_and_release
         }
-        let base_url = "http://127.0.0.1:{port}"
-        var ready = false
-        for (_attempt in range(300)) {   // up to ~30s for load + JIT
-            GET("{base_url}/v1/models") $(resp) {
-                if (resp != null && resp.status_code == http_status.OK) {
-                    ready = true
-                }
-            }
-            if (ready) {
-                break
-            }
-            sleep(100u)
-        }
-        if (ready) {
-            invoke(blk, base_url)
-        }
-        POST("{base_url}/shutdown", "") $(_resp) {}
+        let ready = serve_clients(port, 300, "/v1/models", blk)   // up to ~30s for load + JIT
         finished |> join
         assert(ready, "dasllama server became ready")
     }
@@ -406,6 +388,9 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 remove(TEST_SAVE_PATH)
             }
             // POST /config validation — unknown keys and wrong types are honest 400s
+            GET("{base_url}/v1/chat/completions") $(resp) {   // a known path under a method it does not take is no route
+                t |> equal(int(resp.status_code), int(http_status.NOT_FOUND))
+            }
             POST("{base_url}/config", "\{\"bogus\":1}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
             }
@@ -746,6 +731,46 @@ def test_bench_inprocess(t : T?) {   // nolint:STYLE038 — one live server sess
     }
 }
 
+let TEST_PORT_HELD = 18161   // 18150-18156 are test_openai_server_mtp.das's, 18170-18174 test_openai_server_speech_multi.das's
+
+//! The HTTP front answers a status route from the engine's last answer while a handler holds the engine: an embeddings
+//! forward over a long input runs in-handler for hundreds of milliseconds, and /v1/stats still answers in a fraction of
+//! that, marked stale. The control is a route the engine answers itself (/config), asked inside the hold: it waits the
+//! hold out, and every status answer lands in under a quarter of that wait.
+[test]
+def test_status_answers_while_engine_held(t : T?) {
+    t |> run("a status route answers from the last answer while a handler holds the engine (needs tinyllama q8)") @(t : T?) {
+        return if (model_missing(t, MODEL_PATH))
+        with_llama_server(MODEL_PATH, TEST_PORT_HELD) $(base_url) {
+            var primed = false
+            GET("{base_url}/v1/stats") $(resp) {
+                primed = resp != null && resp.status_code == http_status.OK && empty(get_header(resp, "X-Dasllama-Stale-Ms"))
+            }
+            t |> success(primed, "an idle engine answers /v1/stats itself, with no stale mark")
+            var asked = 0
+            var stale = 0
+            let read = hold_engine(base_url, 10) {
+                GET("{base_url}/v1/stats") $(resp) {
+                    if (resp != null && resp.status_code == http_status.OK) {
+                        asked++
+                        if (!empty(get_header(resp, "X-Dasllama-Stale-Ms"))) {
+                            stale++
+                        }
+                    }
+                }
+            }
+            to_log(LOG_INFO, "engine held {read.hold_ms} ms by the embeddings forward: {asked} /v1/stats answers, {stale} stale, the slowest {read.worst_ms} ms; /config waited {read.engine_ms} ms\n")
+            return if (!held_engine_bars(t, read))
+            t |> success(asked >= 2 && stale >= 1, "status answers landed during the hold ({asked}), from the last answer ({stale} stale)")
+            var fresh = false
+            GET("{base_url}/v1/stats") $(resp) {
+                fresh = resp != null && resp.status_code == http_status.OK && empty(get_header(resp, "X-Dasllama-Stale-Ms"))
+            }
+            t |> success(fresh, "the engine answers itself again once the handler returns")
+        }
+    }
+}
+
 [test]
 def test_same_model_path(t : T?) {
     t |> run("path identity: separators, dot-dot, and (windows) case") @(t : T?) {
@@ -965,25 +990,46 @@ def private with_llama_server2(path_a, path_b : string; port : int; blk : block<
             run_server(port)   // blocks until POST /shutdown
             finished |> notify_and_release
         }
-        let base_url = "http://127.0.0.1:{port}"
-        var ready = false
-        for (_attempt in range(600)) {   // up to ~60s: two loads + JIT
-            GET("{base_url}/v1/models") $(resp) {
-                if (resp != null && resp.status_code == http_status.OK) {
-                    ready = true
-                }
-            }
-            if (ready) {
-                break
-            }
-            sleep(100u)
-        }
-        if (ready) {
-            invoke(blk, base_url)
-        }
-        POST("{base_url}/shutdown", "") $(_resp) {}
+        let ready = serve_clients(port, 600, "/v1/models", blk)   // up to ~60s: two loads + JIT
         finished |> join
         assert(ready, "dasllama two-slot server became ready")
+    }
+}
+
+// POST /config with a speech roster: `asr` / `tts` saved as [[asr]] / [[tts]] tables, the one-path
+// spelling of the same key still a string, and a bad roster an honest 400
+def private check_speech_roster_save(t : T?; base_url : string) {
+    POST("{base_url}/config",
+         "\{\"asr\":[\{\"path\":\"a.gguf\",\"mmproj\":\"mm.gguf\",\"workers\":2},\{\"id\":\"big\",\"path\":\"b.gguf\"}],\"tts\":\"k.gguf\"}") $(resp) {
+        t |> equal(int(resp.status_code), int(http_status.OK), string(resp.body))
+    }
+    var terr : string
+    var troot = read_toml(fread(TEST_SAVE_PATH), terr)
+    t |> success(troot != null, "the saved speech roster re-parses as TOML: {terr}")
+    if (troot != null) {
+        let av = troot?["asr"]
+        t |> success(av != null && av.value is _array && length(av.value as _array) == 2, "[[asr]] survives the TOML round-trip")
+        if (av != null && av.value is _array) {
+            t |> equal((av.value as _array)[0]?["workers"] ?? 0l, 2l)
+            t |> equal((av.value as _array)[1]?["id"] ?? "", "big")
+        }
+        t |> equal(troot?["tts"] ?? "", "k.gguf", "one TTS path stays the flat key")
+        unsafe {
+            delete troot
+        }
+    }
+    remove(TEST_SAVE_PATH)
+    let refused <- [
+        "\{\"tts\":[\{\"path\":\"a.gguf\"},\{\"path\":\"dir/a.gguf\"}]}",       // two entries, one id (the stem)
+        "\{\"asr\":[\{\"id\":\"x\"}]}",                                         // no path
+        "\{\"tts\":[\{\"path\":\"a.gguf\",\"workers\":2}]}",                    // an ASR key on a TTS entry
+        "\{\"asr\":[\{\"path\":\"a.gguf\",\"workers\":\"two\"}]}",              // a key of the wrong kind
+        "\{\"models\":[\{\"path\":\"a.gguf\",\"default\":true},\{\"path\":\"b.gguf\",\"default\":true}]}"   // two defaults
+    ]
+    for (body in refused) {
+        POST("{base_url}/config", body) $(resp) {
+            t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), body)
+        }
     }
 }
 
@@ -1153,6 +1199,7 @@ def test_openai_server_multimodel(t : T?) {   // nolint:STYLE038 — one live tw
             POST("{base_url}/config", "\{\"models\":[\{\"name\":\"x\"}]}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
             }
+            check_speech_roster_save(t, base_url)
         }
     }
 }

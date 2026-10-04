@@ -70,7 +70,9 @@ def private post_audio_file(client : OpenAIClient; path, file_path, model : stri
         hreq.url := "{client.base_url}{path}"
         configure_request(hreq, client)
         set_form_file(hreq, "file", file_path)
-        set_form_data(hreq, "model", model)
+        if (!empty(model)) {   // a local server with one speech model takes none
+            set_form_data(hreq, "model", model)
+        }
         set_form_data(hreq, "response_format", "json")
         request(hreq) $(var resp : HttpResponse?) {
             if (resp == null) {

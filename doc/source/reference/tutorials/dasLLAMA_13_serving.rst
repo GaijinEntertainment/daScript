@@ -36,6 +36,7 @@ which is where the throughput comes from:
    var pool <- create_kv_pool(m, 16l)
    var ws <- create_batch_workspace(m)
    gpu_dn_room(2l)                 // a GPU-served deltanet hybrid: this many streams' recurrent state stays resident
+   let room = device_kv_max_rows(m)   // rows of context the GPU driver holds a session's K/V for: a blob-only model's context ends there
    var s0 = create_session(m, pool)
    var s1 = create_session(m, pool)
    var rows <- [unsafe(addr(s0)), unsafe(addr(s1))]
@@ -78,9 +79,14 @@ stream, then at most one bounded prefill chunk — a long prompt stalls the
 others by a chunk, not by its whole length. Results come back as
 ``SchedEvent`` values:
 
+.. das-doc: given let path = "gemma-4-26B-A4B-it-Q4_K_M.gguf"
 .. code-block:: das
 
-   var sch <- create_scheduler(m, 4l, 32l, 64l, 16l)   // 4 streams, paged KV, prefix cache
+   let drafter = mtp_drafter_sidecar(path)   // a gemma-4 model ships its assistant drafter beside it (mtp-<stem>-Q8_0.gguf), "" elsewhere
+   if (!empty(drafter)) {
+       attach_mtp_drafter(m, drafter)       // false where the drafter was made for another target
+   }
+   var sch <- create_scheduler(m, 4l, 32l, 64l, 16l, 0l, KVDtype.f16, mtp_capable(m))   // 4 streams, paged KV, prefix cache, speculative where the model can
    submit(m, sch, req)
    var events : array<SchedEvent>
    while (scheduler_step(m, sch, events)) {

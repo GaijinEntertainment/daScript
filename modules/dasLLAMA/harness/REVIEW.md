@@ -1,12 +1,13 @@
 # dasLLAMA harness Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `../ARCHITECTURE_MEASUREMENT.md`, `../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`. Planned
+doc: `../ARCHITECTURE_MEASUREMENT.md` (it routes to its companions). Planned
 work: `../followup_general.md`, `../followup_metal.md`, `../followup_vulkan.md`.
 
-**In `tune_kernels.das`, every race or bench that calls `pin_kernel_backend`, directly or through
-a helper, runs after every one that does not.** The pin holds for the rest of the process, so a
-timing after it runs against the pinned backend instead of the one it would have picked.
+**A diff that places a race or bench in `tune_kernels.das` that calls `pin_kernel_backend`,
+directly or through a helper, ahead of one that does not, is a defect - it moves after them.** The
+pin holds for the rest of the process, so a timing after it runs against the pinned backend
+instead of the one it would have picked.
 
 **Weakening `check_last_bench_row` (`REVIEW.das` beside this file) is a defect.**
 

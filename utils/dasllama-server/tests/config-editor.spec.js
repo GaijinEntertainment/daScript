@@ -66,6 +66,58 @@ test('the tts model path is an override the save carries', async ({ page }) => {
     expect(lastJson(posts.filter(p => p.path === '/config')).tts).toBe('D:/models/kitten-nano.gguf');
 });
 
+// a config surface whose `tts_models` holds two entries: the captured one, and a clone of it under another id and path
+function twoTtsModels() {
+    const c = { ...fx('config_tts') };
+    const second = { ...c.surface.tts_models[0], id: 'pocket', path: 'D:/models/pocket-tts-en-q8.gguf', voices_dir: 'D:/voices' };
+    c.surface = { ...c.surface, tts_models: [c.surface.tts_models[0], second] };
+    return { c, second };
+}
+
+test('one speech model saves as a path, not a roster', async ({ page }) => {
+    const { posts } = await openControl(page, { config: fx('config_tts') });   // one tts_models entry
+    await page.locator('#en-tts').check();
+    await page.locator('#b-save').click();
+    await expect(page.locator('#cfg-note')).toHaveText('saved — restart to apply');
+    expect(typeof lastJson(posts.filter(p => p.path === '/config')).tts).toBe('string');
+});
+
+test('a speech roster rides the save whole: the form edits its first entry, the rest pass through', async ({ page }) => {
+    const { c, second } = twoTtsModels();
+    const { posts } = await openControl(page, { config: c });
+
+    await page.locator('#en-tts').check();
+    await page.locator('#f-tts').fill('D:/models/kokoro-82m.gguf');
+    await page.locator('#en-tts_lane').check();
+    await page.locator('#f-tts_lane').selectOption('f32');
+    await page.locator('#b-save').click();
+    await expect(page.locator('#cfg-note')).toHaveText('saved — restart to apply');
+
+    const body = lastJson(posts.filter(p => p.path === '/config'));
+    expect(Array.isArray(body.tts)).toBe(true);
+    expect(body.tts).toHaveLength(2);
+    expect(body.tts[0].path).toBe('D:/models/kokoro-82m.gguf');
+    expect(body.tts[0].lane).toBe('f32');          // the flat lane the form carried is the first entry's
+    expect('tts_lane' in body).toBe(false);        // and no flat key rides beside the roster
+    expect(body.tts[1]).toEqual(second);
+});
+
+test('a speech roster whose first path is cleared saves the rest, and an unticked path saves no roster', async ({ page }) => {
+    const { c, second } = twoTtsModels();
+    const { posts } = await openControl(page, { config: c });
+
+    await page.locator('#en-tts').check();
+    await page.locator('#f-tts').fill('');
+    await page.locator('#b-save').click();
+    await expect(page.locator('#cfg-note')).toHaveText('saved — restart to apply');
+    expect(lastJson(posts.filter(p => p.path === '/config')).tts).toEqual([second]);
+
+    await page.locator('#en-tts').uncheck();
+    await page.locator('#b-save').click();
+    await expect(page.locator('#cfg-note')).toHaveText('saved — restart to apply');
+    expect('tts' in lastJson(posts.filter(p => p.path === '/config'))).toBe(false);   // an omitted key is the engine default's, roster and all
+});
+
 test('save is blocked while the exchange policy has not loaded', async ({ page }) => {
     const { posts } = await openControl(page, { exchange: { status: 500, json: {} } });
     await page.locator('#b-save').click();

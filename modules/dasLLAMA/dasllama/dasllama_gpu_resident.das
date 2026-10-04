@@ -954,16 +954,8 @@ def private resident_attn_maxima(c : Config) : tuple<qd : int64; kvd : int64; hs
 //! one position's K and V mirror bytes over the layers that hold rows of their own (a shared-KV layer reads its donor's), and the
 //! NextN head's slot where the driver takes the head
 def private resident_kv_row_bytes(t : Model; kdt, vdt : KVDtype) : tuple<krow : int64; vrow : int64> {
-    let c = t.config
-    var krow = 0l
-    var vrow = 0l
-    let head = resident_head_on(t)
-    for (l in range64(c.n_layers + (head ? 1l : 0l))) {
-        continue if (t.kv_src[l] != l)
-        krow += kv_row_bytes(kdt, layer_kv_dim(c, l))
-        vrow += kv_row_bytes(vdt, layer_kv_dim(c, l))
-    }
-    return (krow = krow, vrow = vrow)
+    let total = kv_row_total(t, resident_head_on(t))
+    return (krow = kv_row_bytes(kdt, total), vrow = kv_row_bytes(vdt, total))
 }
 
 //! `hot_cap` holds the pool at the slots an earlier plan of this pick settled on; -1 = this plan sizes it

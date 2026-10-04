@@ -6,6 +6,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 // setup, every inference route fails closed, and the catalog routes serve.
 
 require dastest/testing_boost public
+require _server_rig                                     // serve_clients (sibling)
 require openai_server
 require model_catalog
 require dashv/dashv_boost
@@ -68,23 +69,7 @@ def private with_setup_server(port : int; blk : block<(base_url : string) : void
             run_server(port)   // blocks until POST /shutdown
             finished |> notify_and_release
         }
-        let base_url = "http://127.0.0.1:{port}"
-        var ready = false
-        for (_attempt in range(300)) {
-            GET("{base_url}/v1/stats") $(resp) {
-                if (resp != null && resp.status_code == http_status.OK) {
-                    ready = true
-                }
-            }
-            if (ready) {
-                break
-            }
-            sleep(100u)
-        }
-        if (ready) {
-            invoke(blk, base_url)
-        }
-        POST("{base_url}/shutdown", "") $(_resp) {}
+        let ready = serve_clients(port, 300, "/v1/stats", blk)
         finished |> join
         remove_picker_dir()
         assert(ready, "setup-mode server became ready")

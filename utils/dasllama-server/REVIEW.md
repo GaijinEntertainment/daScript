@@ -19,9 +19,13 @@ every copy of the flag stating the same behavior, default, and files and paths, 
 leaves them.** A flag's copies are its `@clarg_doc`, every `README.md` passage that names the
 flag, its row in `doc/source/reference/utils/dasllama_server.rst` or
 `doc/source/reference/utils/dasllama_cli.rst` (repo root), and every passage saying it means the
-same as the other file's flag of its name. A change to the value `serving_knobs.das` derives for
-a knob changes what every flag reading that knob does. A copy need not match another's reasons or
-measured numbers.
+same as the other file's flag of its name. A copy need not match another's reasons or measured
+numbers.
+
+**A diff that changes the value `serving_knobs.das` derives for a knob, or what a `dasllama/*`
+facade call a flag's handler makes does, changes what every flag reading it does - the flag's
+copies answer to the flag-copies rule (the README section, the RST row and every passage saying
+the same).** The flag's text is read beside the engine, not beside the flag.
 
 **Weakening `REVIEW.das` (beside this file) - dropping a check, narrowing what a check scans,
 adding a name to a check's exempt set (the names it does not flag), or blunting a finding
@@ -39,11 +43,13 @@ place `control.html` sends that field, in the same change.**
 before - a new route requires all of its fields - adds that field to every `control.html`
 request to that route, in the same change.**
 
-**A diff that changes the shape a route answers - a key, an item in a list it answers, or a value
-the code sets itself, whether this folder's code or a `dasllama/*` module's - re-captures every
-fixture under `tests/fixtures/` that records that route, in the same change; a value the traffic
-since boot, the configuration, the loaded model or the machine decides is not shape.** The
-fixtures are the recorded response shape.
+**A diff that changes the response a fixture's recorded request gets - a key, an item in a list
+it answers, or a value the code sets itself, whether this folder's code or a `dasllama/*`
+module's - re-captures every fixture under `tests/fixtures/` that records that route, in the same
+change; a value the traffic since boot, the configuration, the loaded model or the machine
+decides is not shape, and a key only a request field the fixture does not send can produce
+needs no re-capture when a test in the diff sends that field and reads the key.** The fixtures
+are the recorded response shape.
 
 **A diff that adds a read of a response key in `control.html` or in a Playwright `.spec.js`,
 wherever the diff puts it, or edits a line that reads one, and no fixture under

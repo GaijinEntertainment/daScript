@@ -119,8 +119,36 @@ that a question answered for one backend has an obvious address in the other. Th
   blob-only model's declined step falls to the single-row forward. The batch's split single-pass
   attention (`MetalSqAttnDKvT` and its combine) takes the head width at run time from one
   compiled variant - a lane owns one quad of the head, a head of 128 fills the simdgroup and a
-  head of 64 idles the lanes past it (zero query, no store) - serving both on the f16/f32 mirrors
-  with no per-head stamp; the block codecs keep the chunked per-(row, head) pair at head 64.
+  head of 64 or 96 idles the lanes past it (zero query, no store) - serving all three on every mirror codec
+  with no per-head stamp (the block codecs' twin template, `MetalSqAttnDQuantT`, reads a lane's
+  quad as four quants of a 32-element block and its scale). A head of 256 or 512 takes the WIDE
+  stamps of either template: a threadgroup is one slice group, and its two or four simdgroups each
+  own 128 dims of the head - four blocks of a block codec. A key's score is the sum of every
+  simdgroup's share, posted to threadgroup memory and read back between two barriers a slice
+  (`sqd_wide_sum`; the two templates differ only in how a lane reads its quad, and share the slice
+  walk, the weights, the merge and the store as `sqd_*` helpers), so a slice costs a wide head what it costs a head of 128 - a lane
+  walking the head's quads in turn costs two to four times that and loses to the chunked pair on
+  a model of few heads. The partials land as two or four heads of 128 under one softmax - each an
+  entry carrying the slice group's max and sum - so the combine kernel reads them with that many
+  times the heads and no stamp of its own (`attn_d_halves`, `attn_d_part_floats`). A model's two
+  head classes (gemma-4: a head of 512 on the full-context layers, of 256 on
+  the sliding ones) each take their own stamp layer by layer - the encode derives the heads a K/V
+  head and the score scale from the layer's own head and K/V row, and the partial plane is sized
+  for the wider class. The single row takes the fused form past the
+  single-dispatch ceiling, and so do the speculative verify's rows (`attn_d_serves` is the one
+  gate the three row shapes ask, `encode_attn_d` the one encode): the single row's route table is
+  one row, written when the step's resources are acquired, and the verify binds its per-layer
+  table at the layer's offset, each base already the layer's. A sliding layer hands the kernel its
+  span: a slice group starts at its first slice that reaches the window and a key below the
+  window weighs nothing, so a 128-key layer reads four or five slices whatever the context. A
+  layer's attention sinks join the combine alone - one more logit a head in the final max and sum,
+  carrying no value. An attention logit soft cap is a uniform of the kernel, applied to a live
+  key's scaled score before the slice's max - a lane past the slice's rows is named dead there,
+  since the cap would lift its seed to minus the cap. The single-row driver's NextN verify rows
+  alone keep the chunked pair, on a model with a window or sinks - the base geometry that pair
+  serves, and a shape no served NextN carrier has. The fused form's cost per cached
+  key is about a quarter of the chunked pair's, so it is what keeps a stream's decode rate from
+  falling with context.
 - **Family-shared kernel classes live in `dasllama_metal_kernels`.** The `[metal_dispatch]` lens
   generates `enc_*` builders and MSL globals into the module the class COMPILES in, so co-location
   follows the class, never "the builder needs the driver module". Each builder has a

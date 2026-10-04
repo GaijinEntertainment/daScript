@@ -28,5 +28,4 @@ def main() {
 def strudel_main() {
     strudel_add_track(s("bd sd [hh hh] cp"))
     strudel_set_bpm(120.0lf)
-    strudel_play()
 }

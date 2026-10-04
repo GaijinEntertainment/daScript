@@ -7,6 +7,7 @@
 #include "../imgui/backends/imgui_impl_glfw.h"
 #ifdef __EMSCRIPTEN__
 #include <emscripten/html5.h>
+#include "browser_input.h"
 #endif
 
 using namespace das;
@@ -48,8 +49,22 @@ static void imgui_browser_mouse_button(GLFWwindow * window, int button, int acti
 #endif
 
 #ifdef __EMSCRIPTEN__
+static void imgui_browser_key(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    if (action != GLFW_RELEASE && das_browser_block_key()) return;
+    ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
+}
+static void imgui_browser_character(GLFWwindow* window, unsigned int codepoint) {
+    if (das_browser_block_character()) return;
+    ImGui_ImplGlfw_CharCallback(window, codepoint);
+}
+#endif
+
+#ifdef __EMSCRIPTEN__
 static void install_imgui_browser_callbacks(GLFWwindow * window) {
     ImGui_ImplGlfw_InstallEmscriptenCallbacks(window, "#canvas");
+    browser_clipboard_install();
+    glfwSetKeyCallback(window, imgui_browser_key);
+    glfwSetCharCallback(window, imgui_browser_character);
 #ifndef EMSCRIPTEN_USE_PORT_CONTRIB_GLFW3
     g_emscripten_callback_owner = ImGui::GetCurrentContext();
     glfwSetMouseButtonCallback(window, imgui_browser_mouse_button);
@@ -69,6 +84,9 @@ DAS_MOD_API bool das_imgui_init_glfw_for_opengl ( GLFWwindow * window, bool inst
 
 // modules/dasImgui/ARCHITECTURE.md#browser-callback-routing
 DAS_MOD_API void das_imgui_shutdown_glfw() {
+#ifdef __EMSCRIPTEN__
+    browser_clipboard_shutdown();
+#endif
 #if defined(__EMSCRIPTEN__) && !defined(EMSCRIPTEN_USE_PORT_CONTRIB_GLFW3)
     if (g_emscripten_callback_owner == ImGui::GetCurrentContext()) {
         emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, false, nullptr);
@@ -123,8 +141,17 @@ DAS_MOD_API void das_imgui_set_real_input_callbacks ( bool enabled ) {
     if ( enabled ) ImGui_ImplGlfw_InstallCallbacks(w);
     else ImGui_ImplGlfw_RestoreCallbacks(w);
 #ifdef __EMSCRIPTEN__
+    browser_clipboard_enabled = enabled;
+    browser_clipboard_tick();
     if ( enabled ) install_imgui_browser_callbacks(w);
     else emscripten_set_wheel_callback("#canvas", nullptr, false, nullptr);
+#endif
+}
+
+DAS_MOD_API void das_imgui_glfw_new_frame() {
+    ImGui_ImplGlfw_NewFrame();
+#ifdef __EMSCRIPTEN__
+    browser_clipboard_tick();
 #endif
 }
 
@@ -176,8 +203,8 @@ public:
             SideEffects::worstDefault, "ImGui_ImplGlfw_InitForOther");
         addExtern<DAS_BIND_FUN(das_imgui_shutdown_glfw)>(*this,lib,"ImGui_ImplGlfw_Shutdown",
             SideEffects::worstDefault, "das_imgui_shutdown_glfw");
-        addExtern<DAS_BIND_FUN(ImGui_ImplGlfw_NewFrame)>(*this,lib,"ImGui_ImplGlfw_NewFrame",
-            SideEffects::worstDefault, "ImGui_ImplGlfw_NewFrame");
+        addExtern<DAS_BIND_FUN(das_imgui_glfw_new_frame)>(*this,lib,"ImGui_ImplGlfw_NewFrame",
+            SideEffects::worstDefault, "das_imgui_glfw_new_frame");
         // Detach/reattach the backend's GLFW input callbacks at runtime — used by
         // imgui_live_core to suppress real input AT THE SOURCE when user control is off.
         addExtern<DAS_BIND_FUN(das_imgui_set_real_input_callbacks)>(*this,lib,"imgui_set_real_input_callbacks",
@@ -219,6 +246,7 @@ public:
         tw << "DAS_MOD_API void das_imgui_synth_key ( int key, bool down );\n";
         tw << "DAS_MOD_API void das_imgui_synth_input_char ( uint32_t cp );\n";
         tw << "DAS_MOD_API void das_imgui_set_real_input_callbacks ( bool enabled );\n";
+        tw << "DAS_MOD_API void das_imgui_glfw_new_frame();\n";
         tw << "DAS_MOD_API void das_imgui_set_default_cursor ( GLFWwindow * window );\n";
         return ModuleAotType::cpp;
     }

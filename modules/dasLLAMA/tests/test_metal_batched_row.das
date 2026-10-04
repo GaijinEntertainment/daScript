@@ -6,6 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama   // nolint:STYLE030,LINT019 - the public facade, reached inside the das_metal halves
 require dasllama/dasllama_math   // with_dasllama_jobque_
+require dasllama/dasllama_common   // nolint:STYLE030,LINT019 - mtp_seam_declines, inside the das_metal halves
 require _metal_blob_twin   // blob_twin - the blob-flavor carrier every Metal serving cell loads
 require dasllama/dasllama_batch   // nolint:STYLE030,LINT019 - batch_step_census, inside the das_metal halves
 require dasllama/dasllama_bench   // nolint:STYLE030,LINT019 - bench_tg_batched_rep, inside the das_metal halves
@@ -522,10 +523,12 @@ def test_metal_prefix_checkpoint(t : T?) {
                 var sch <- create_scheduler(tr, 1l, 4l, 64l, 64l, 0l, KVDtype.f16, true)
                 var ra <- serve_one(t, tr, sch, 1l, pa, CKPT_NEW)
                 var rb <- serve_one(t, tr, sch, 2l, pb, CKPT_NEW)
+                let seam_declines = mtp_seam_declines()
                 var rc <- serve_one(t, tr, sch, 3l, pc, CKPT_NEW)
                 t |> equal(ra.cached, 0l, "the first prompt attaches nothing")
                 t |> equal(rb.cached, 0l, "the second attaches nothing: no checkpoint stands at the opening yet")
                 t |> equal(rc.cached, cut, "the third attaches the opening")
+                t |> equal(mtp_seam_declines(), seam_declines, "the continuation window's seam row was written on the device, not declined")
                 t |> equal(sch.prefix.n_state_hits, 1l, "one checkpoint hit")
                 t |> success(sch.mtp_accepted > 0l, "the rounds drafted and accepted ({sch.mtp_accepted} of {sch.mtp_drafted})")
                 // the reference prefills every prompt as [0, cut) and the rest, with no cache: the cached run's own cuts

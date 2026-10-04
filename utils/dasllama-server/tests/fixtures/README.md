@@ -21,6 +21,10 @@ bin/daslang -jit utils/dasllama-server/main.das -- --config capture-server.toml 
 (`--affinity -1` on the command line is what makes the `affinity` key read `cli` in every
 `/config` capture - keep it, or the config fixtures move for no reason.)
 
+Run the capture under an empty `HOME` (`HOME=<empty dir> bin/daslang ...`, with
+`DAS_TUNE_MANIFEST` given as an absolute path): `status.model_files` also lists the per-user
+models directory, and whatever sits in yours does not belong in a fixture.
+
 with `capture-server.toml`:
 
 ```toml

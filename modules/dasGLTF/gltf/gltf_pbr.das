@@ -272,8 +272,10 @@ def gltf_pbr_fs {
 }
 
 var @uniform u_silhouette_color : float4
+var @uniform u_silhouette_clip_plane : float4
 [fragment_program]
 def gltf_pbr_silhouette_fs {
+    if (dot(float4(v_world_pos, 1.0), u_silhouette_clip_plane) < 0.0) { discard() }
     let base = texture(u_base_color_tex, v_uv0) * u_base_color_factor
     if (u_alpha_mode > 0.5 && base.w < u_alpha_cutoff){discard()}
     o_color = u_silhouette_color
@@ -496,9 +498,10 @@ def gltf_pbr_render_normals(var r : GltfPbrRenderer; model : GltfGlModel; scene 
 //! Draw opaque/masked geometry with a flat color and the ordinary skinning path.
 //! Caller owns depth test/write state. Draw hidden before visible geometry to avoid self-overlays.
 def gltf_pbr_render_silhouette(var r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene;
-                               root, vp : float4x4; color : float4) {
+                               root, vp : float4x4; color : float4; clip_plane : float4 = float4(0.0, 0.0, 0.0, 1.0)) {
+    //! The optional world-space plane retains its positive half-space; the default disables clipping.
     if (r.silhouetteProgram == 0u){r.silhouetteProgram = create_shader_program(@@gltf_pbr_vs, @@gltf_pbr_silhouette_fs)}
-    gl_use_program_filtered(r.silhouetteProgram); u_viewProj = vp; u_silhouette_color = color
+    gl_use_program_filtered(r.silhouetteProgram); u_viewProj = vp; u_silhouette_color = color; u_silhouette_clip_plane = clip_plane
     var palette = -1
     for (node in scene.nodes){
         if (node.mesh < 0 || node.mesh >= length(model.meshes)){continue}
