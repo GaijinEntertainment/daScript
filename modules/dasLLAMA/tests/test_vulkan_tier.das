@@ -90,10 +90,22 @@ def private make_offs(experts : array<int64>; row0s : array<int64>; cnts : array
     return <- offs
 }
 
+struct private OffsTriple {
+    gate : array<int64>
+    up : array<int64>
+    down : array<int64>
+}
+
+//! the gate, up and down region lists of one expert / row partition over `woffs`' stacks (gate and up nfe x n, down n x nfe)
+def private offs_triple(experts, row0s, cnts : array<int64>; woffs : Bases; n, nfe : int64) : OffsTriple {
+    return <- OffsTriple(gate <- make_offs(experts, row0s, cnts, woffs.gate, nfe * n), up <- make_offs(experts, row0s, cnts, woffs.up, nfe * n),
+        down <- make_offs(experts, row0s, cnts, woffs.down, n * nfe))
+}
+
 //! the two FFN arm shapes' regions: decode = 2 rows, one each over experts 1 and 2 (the engine's k = 2 GEMV shape); batch = 40
 //! rows (>= the 32-row tile, deliberately unpadded), 24 over expert 0 and 16 over expert 2
-def private region_offs(decode : bool; woff, ege : int64) : array<int64> {
-    return <- decode ? make_offs([1l, 2l], [0l, 1l], [1l, 1l], woff, ege) : make_offs([0l, 2l], [0l, 24l], [24l, 16l], woff, ege)
+def private region_triple(decode : bool; woffs : Bases; n, nfe : int64) : OffsTriple {
+    return <- decode ? offs_triple([1l, 2l], [0l, 1l], [1l, 1l], woffs, n, nfe) : offs_triple([0l, 2l], [0l, 24l], [24l, 16l], woffs, n, nfe)
 }
 
 //! One FFN arm through matmul_moe_gpu_ffn: the decode or the batch shape over the stacks at `woffs` in formats `fmts` (gate, up,
@@ -108,21 +120,17 @@ def private ffn_arm(t : T?; tag : string; decode : bool; woffs : Bases; n, nfe :
     } else {
         fill_acts_kq(xq, xs, nrows)
     }
-    var offs1 <- region_offs(decode, woffs.gate, nfe * n)
-    var offs3 <- region_offs(decode, woffs.up, nfe * n)
-    var offs2 <- region_offs(decode, woffs.down, n * nfe)
+    var o <- region_triple(decode, woffs, n, nfe)
     var gout : array<float>
     gout |> resize(nrows * n)
-    matmul_moe_gpu_ffn(gout, offs1, offs3, offs2, 2l, xq, xs, n, nfe, nrows, fmts.x, fmts.y, fmts.z, false)
+    matmul_moe_gpu_ffn(gout, o.gate, o.up, o.down, 2l, xq, xs, n, nfe, nrows, fmts.x, fmts.y, fmts.z, false)
     var refv : array<float>
-    invoke(refer, offs1, offs3, offs2, xq, xs, nrows, refv)
+    invoke(refer, o.gate, o.up, o.down, xq, xs, nrows, refv)
     let arm = decode ? "decode" : "batch"
     held_nontrivial(t, "{tag} {arm} arm", gout, refv, REL_TOL, n)
     delete xq
     delete xs
-    delete offs1
-    delete offs3
-    delete offs2
+    delete o
     delete refv
     return <- gout
 }
@@ -239,8 +247,6 @@ def test_vulkan_moe_ffn_vs_ref(t : T?) {
             }
             t |> success(q8_upload(wq3, ws3, WOFF3, N, NE * NFE), "up stack uploaded")
             t |> success(q8_upload(wq2, ws2, WOFF2, NFE, NE * N), "down stack uploaded")
-            let ege1 = NFE * N     // one expert's element span in the gate/up planes
-            let ege2 = N * NFE     // ... and the down plane
             var gout : array<float>   //! the batch arm's device rows: the combined arms' input
             for (decode in fixed_array(true, false)) {
                 var arm_gout <- ffn_arm(t, "q8", decode, WOFFS, N, NFE, int3(0)) $(o1, o3, o2, xq, xs, nrows, refv) {
@@ -256,9 +262,7 @@ def test_vulkan_moe_ffn_vs_ref(t : T?) {
             var xq : array<int8>
             var xs : array<float>
             fill_acts(xq, xs, 40l)
-            var boffs1 <- region_offs(false, WOFF1, ege1)
-            var boffs3 <- region_offs(false, WOFF3, ege1)
-            var boffs2 <- region_offs(false, WOFF2, ege2)
+            var bo <- region_triple(false, WOFFS, N, NFE)
             var cw : array<float>
             var cinv : array<uint>
             cw |> resize(40)
@@ -269,7 +273,7 @@ def test_vulkan_moe_ffn_vs_ref(t : T?) {
             }
             var comb : array<float>
             comb |> resize(int(10l * N))
-            matmul_moe_gpu_ffn_combined(comb, boffs1, boffs3, boffs2, 2l, xq, xs, cw, cinv, N, NFE, 40l, 10l, 0, 0, 0, false)
+            matmul_moe_gpu_ffn_combined(comb, bo.gate, bo.up, bo.down, 2l, xq, xs, cw, cinv, N, NFE, 40l, 10l, 0, 0, 0, false)
             var combref <- combine_ref(gout, cw, cinv, 10l)
             held_nontrivial(t, "combined arm", comb, combref, REL_TOL, N)
 
@@ -278,11 +282,9 @@ def test_vulkan_moe_ffn_vs_ref(t : T?) {
             // position's slots land in both chunks (the cross-chunk r0 > 0 path)
             let CNK = 8200l
             fill_acts(xq, xs, CNK)
-            var coffs1 <- make_offs([0l, 2l], [0l, 4096l], [4096l, CNK - 4096l], WOFF1, ege1)
-            var coffs3 <- make_offs([0l, 2l], [0l, 4096l], [4096l, CNK - 4096l], WOFF3, ege1)
-            var coffs2 <- make_offs([0l, 2l], [0l, 4096l], [4096l, CNK - 4096l], WOFF2, ege2)
+            var co <- offs_triple([0l, 2l], [0l, 4096l], [4096l, CNK - 4096l], WOFFS, N, NFE)
             gout |> resize(int(CNK * N))
-            matmul_moe_gpu_ffn(gout, coffs1, coffs3, coffs2, 2l, xq, xs, N, NFE, CNK, 0, 0, 0, false)
+            matmul_moe_gpu_ffn(gout, co.gate, co.up, co.down, 2l, xq, xs, N, NFE, CNK, 0, 0, 0, false)
             cw |> resize(int(CNK))
             cinv |> resize(int(CNK))
             for (g in range(int(CNK))) {
@@ -291,7 +293,7 @@ def test_vulkan_moe_ffn_vs_ref(t : T?) {
             }
             let CNP = CNK / 4l
             comb |> resize(int(CNP * N))
-            matmul_moe_gpu_ffn_combined(comb, coffs1, coffs3, coffs2, 2l, xq, xs, cw, cinv, N, NFE, CNK, CNP, 0, 0, 0, false)
+            matmul_moe_gpu_ffn_combined(comb, co.gate, co.up, co.down, 2l, xq, xs, cw, cinv, N, NFE, CNK, CNP, 0, 0, 0, false)
             delete combref
             combref <- combine_ref(gout, cw, cinv, CNP)
             held_nontrivial(t, "two-chunk combined arm", comb, combref, REL_TOL, N)
@@ -299,12 +301,8 @@ def test_vulkan_moe_ffn_vs_ref(t : T?) {
             delete cinv
             delete comb
             delete combref
-            delete coffs1
-            delete coffs3
-            delete coffs2
-            delete boffs1
-            delete boffs3
-            delete boffs2
+            delete co
+            delete bo
             delete gout
             delete xq
             delete xs
@@ -404,8 +402,6 @@ def test_vulkan_moe_heat_cache(t : T?) {
             var want = GpuTierWant()
             want.heat = 2l   // two slots: the eviction/reuse choreography below assumes C = 2
             set_gpu_tier_want_(want)
-            let ege1 = NFE * N
-            let ege2 = N * NFE
             var wq1 : array<int8>
             var ws1 : array<float>
             var wq3 : array<int8>
@@ -445,11 +441,9 @@ def test_vulkan_moe_heat_cache(t : T?) {
             var hoffs2 <- heat_hit_offs(o2, nh)
             matmul_moe_gpu_ffn_begin(hoffs1, hoffs3, hoffs2, nh, xq, xs, N, NFE, nh, 0, 0, 0, false)
             // the CPU reference runs BETWEEN begin and join — the overlap the split arm relies on
-            var roffs1 <- make_offs([0l, 2l], [0l, 1l], [1l, 1l], WOFF1, ege1)
-            var roffs3 <- make_offs([0l, 2l], [0l, 1l], [1l, 1l], WOFF3, ege1)
-            var roffs2 <- make_offs([0l, 2l], [0l, 1l], [1l, 1l], WOFF2, ege2)
+            var ro <- offs_triple([0l, 2l], [0l, 1l], [1l, 1l], WOFFS, N, NFE)
             var refv : array<float>
-            ref_ffn(roffs1, roffs3, roffs2, WOFFS, 2, wq1, ws1, wq3, ws3, wq2, ws2, xq, xs, 2l, refv)
+            ref_ffn(ro.gate, ro.up, ro.down, WOFFS, 2, wq1, ws1, wq3, ws3, wq2, ws2, xq, xs, 2l, refv)
             var gout : array<float>
             gout |> resize(int(2l * N))
             matmul_moe_gpu_ffn_join(gout)
@@ -465,10 +459,8 @@ def test_vulkan_moe_heat_cache(t : T?) {
             var eoffs3 <- heat_hit_offs(o3, nh)
             var eoffs2 <- heat_hit_offs(o2, nh)
             matmul_moe_gpu_ffn_begin(eoffs1, eoffs3, eoffs2, nh, xq, xs, N, NFE, nh, 0, 0, 0, false)
-            var poffs1 <- make_offs([1l], [0l], [1l], WOFF1, ege1)
-            var poffs3 <- make_offs([1l], [0l], [1l], WOFF3, ege1)
-            var poffs2 <- make_offs([1l], [0l], [1l], WOFF2, ege2)
-            ref_ffn(poffs1, poffs3, poffs2, WOFFS, 1, wq1, ws1, wq3, ws3, wq2, ws2, xq, xs, 1l, refv)
+            var po <- offs_triple([1l], [0l], [1l], WOFFS, N, NFE)
+            ref_ffn(po.gate, po.up, po.down, WOFFS, 1, wq1, ws1, wq3, ws3, wq2, ws2, xq, xs, 1l, refv)
             gout |> resize(int(N))
             matmul_moe_gpu_ffn_join(gout)
             held_nontrivial(t, "post-eviction hit dispatch", gout, refv, REL_TOL, N)
@@ -487,12 +479,8 @@ def test_vulkan_moe_heat_cache(t : T?) {
             delete eoffs1
             delete eoffs3
             delete eoffs2
-            delete roffs1
-            delete roffs3
-            delete roffs2
-            delete poffs1
-            delete poffs3
-            delete poffs2
+            delete ro
+            delete po
             delete refv
             delete gout
             delete wq1
@@ -1892,11 +1880,9 @@ def test_vulkan_arena_ffn(t : T?) {
             y |> resize(int(N))
             vk_arena_ffn(y, t1.blk, t3.blk, t2.blk, N, NFE, 0, 0, 0, xq, xs, false)
             // CPU mirror: the fused-FFN reference over one region, the triple's only expert
-            var roffs1 <- make_offs([0l], [0l], [1l], WOFF1, NFE * N)
-            var roffs3 <- make_offs([0l], [0l], [1l], WOFF3, NFE * N)
-            var roffs2 <- make_offs([0l], [0l], [1l], WOFF2, N * NFE)
+            var ro <- offs_triple([0l], [0l], [1l], WOFFS, N, NFE)
             var refy : array<float>
-            ref_ffn(roffs1, roffs3, roffs2, WOFFS, 1, t1.wq, t1.ws, t3.wq, t3.ws, t2.wq, t2.ws, xq, xs, 1l, refy)
+            ref_ffn(ro.gate, ro.up, ro.down, WOFFS, 1, t1.wq, t1.ws, t3.wq, t3.ws, t2.wq, t2.ws, xq, xs, 1l, refy)
             held(t, "arena FFN", y, refy, REL_TOL, N)
             delete t1
             delete t3
@@ -1904,9 +1890,7 @@ def test_vulkan_arena_ffn(t : T?) {
             delete xq
             delete xs
             delete y
-            delete roffs1
-            delete roffs3
-            delete roffs2
+            delete ro
             delete refy
         } else {
             t |> skip("dasVulkan not installed; arena FFN untestable here")
