@@ -5952,6 +5952,41 @@ def private dn_cells_gate(t : T?) : bool {
     }
 }
 
+//! The sequential delta rule the dn scan cells hold the chunked scan to: every value head's `npos` steps over the conv rows
+//! `convh` (q | k | v rows `cd` wide) from the state `sth`, the step's beta, gate, decay and dt at their offsets into the smalls
+//! `smh` - the raw o rows [npos x nvh x ds], then the final states [nvh x ds x ds].
+def private dn_delta_ref(convh, sth, smh : array<float>; npos, nkh, nvh, ds, beta_off, g_off, a_off, dt_off : int) : array<float> {
+    let kd = nkh * ds
+    let di = nvh * ds
+    let cd = 2 * kd + di
+    var ref : array<float>
+    ref |> resize(npos * di + nvh * ds * ds)
+    var st_h : array<float>
+    var dvn : array<float>
+    st_h |> resize(ds * ds)
+    dvn |> resize(ds)
+    for (hh in range(nvh)) {
+        let kh = hh % nkh
+        for (e in range(ds * ds)) {
+            st_h[e] = sth[hh * ds * ds + e]
+        }
+        for (tt in range(npos)) {
+            let crow = tt * cd
+            let gt = smh[a_off + hh] * softplus(smh[g_off + tt * nvh + hh] + smh[dt_off + hh])
+            unsafe {
+                dn_delta_head(addr(st_h[0]), addr(convh[crow + kh * ds]), addr(convh[crow + kd + kh * ds]), addr(convh[crow + 2 * kd + hh * ds]),
+                    addr(ref[tt * di + hh * ds]), addr(dvn[0]), gt, sigmoid_f32(smh[beta_off + tt * nvh + hh]), int64(ds))
+            }
+        }
+        for (e in range(ds * ds)) {
+            ref[npos * di + hh * ds * ds + e] = st_h[e]
+        }
+    }
+    delete st_h
+    delete dvn
+    return <- ref
+}
+
 [test]
 def test_vkd_dn_family(t0 : T?) {
     t0 |> run("deltanet class kernels == the CPU oracle (conv, fused step, 2-phase scan)") <| @(t : T?) {
@@ -6220,47 +6255,24 @@ def test_vkd_dn_family(t0 : T?) {
                 var o_cls <- outs[0]
                 var o_cls_sig <- outs[1]
                 // oracle: the SEQUENTIAL delta rule — the chunked WY form equals it in exact
-                // arithmetic, so the drift is pure reassociation; peak-floored bars absorb it
-                var o_ref : array<float>
-                o_ref |> resize(cmp_n)
-                var o_ref_sig : array<float>   //! the same rows under the sigmoid out-gate (the `dn_scan_p3_sig_cls` stamp's), the state part alike
-                o_ref_sig |> resize(cmp_n)
-                for (hh in range(nvh)) {
-                    let kh = hh % nkh
-                    var st_h : array<float>
-                    st_h |> resize(ds * ds)
-                    for (e in range(ds * ds)) {
-                        st_h[e] = sth[hh * ds * ds + e]
-                    }
-                    for (tt in range(npos)) {
-                        let crow = tt * cd
-                        let gt = smh[a_off + hh] * softplus(smh[g_off + tt * nvh + hh] + smh[dt_off + hh])
-                        var dvn : array<float>
-                        dvn |> resize(ds)
-                        var orow : array<float>
-                        orow |> resize(ds)
-                        unsafe {
-                            dn_delta_head(addr(st_h[0]), addr(convh[crow + kh * ds]), addr(convh[crow + kd + kh * ds]), addr(convh[crow + 2 * kd + hh * ds]),
-                                addr(orow[0]), addr(dvn[0]), gt, sigmoid_f32(smh[beta_off + tt * nvh + hh]), int64(ds))
-                        }
+                // arithmetic, so the drift is pure reassociation; peak-floored bars absorb it - then the out-norm over each raw o row
+                var o_ref <- dn_delta_ref(convh, sth, smh, npos, nkh, nvh, ds, beta_off, g_off, a_off, dt_off)
+                var o_ref_sig := o_ref   //! the same rows under the sigmoid out-gate (the `dn_scan_p3_sig_cls` stamp's), the state part alike
+                for (tt in range(npos)) {
+                    for (hh in range(nvh)) {
+                        let at = tt * di + hh * ds
                         var sum = 0.0
-                        for (q in orow) {
-                            sum += q * q
+                        for (j in range(ds)) {
+                            sum += o_ref[at + j] * o_ref[at + j]
                         }
                         let inv = 1.0 / sqrt(sum / float(ds) + eps)
                         for (j in range(ds)) {
-                            let zv = zh[tt * di + hh * ds + j]
-                            o_ref[tt * di + hh * ds + j] = orow[j] * inv * smh[wnorm_off + j] * silu_f32(zv)
-                            o_ref_sig[tt * di + hh * ds + j] = orow[j] * inv * smh[wnorm_off + j] * sigmoid_f32(zv)
+                            let zv = zh[at + j]
+                            let normed = o_ref[at + j] * inv * smh[wnorm_off + j]
+                            o_ref[at + j] = normed * silu_f32(zv)
+                            o_ref_sig[at + j] = normed * sigmoid_f32(zv)
                         }
-                        delete dvn
-                        delete orow
                     }
-                    for (e in range(ds * ds)) {
-                        o_ref[npos * di + hh * ds * ds + e] = st_h[e]
-                        o_ref_sig[npos * di + hh * ds * ds + e] = st_h[e]
-                    }
-                    delete st_h
                 }
                 let floor = 1e-2 * logits_maxabs(o_ref)
                 let bad = mismatch_rel("", o_cls, o_ref, 1e-2, floor)
@@ -6708,30 +6720,7 @@ def private dn_scan_cell(t : T?; tag : string; ds, nkh, nvh, npos : int) {
                 delete whole
             }
             t |> equal(head_kept, o_off, "dn_scan {tag}: the {o_off}-word header ahead of the o rows keeps its sentinel")
-            // oracle: the sequential delta rule per head, raw o rows (the out-norm is phase 3's)
-            var ref : array<float>
-            ref |> resize(length(got))
-            var st_h : array<float>
-            var dvn : array<float>
-            st_h |> resize(ds * ds)
-            dvn |> resize(ds)
-            for (hh in range(nvh)) {
-                let kh = hh % nkh
-                for (e in range(ds * ds)) {
-                    st_h[e] = sth[hh * ds * ds + e]
-                }
-                for (tt in range(npos)) {
-                    let crow = tt * cd
-                    let gt = smh[a_off + hh] * softplus(smh[g_off + tt * nvh + hh] + smh[dt_off + hh])
-                    unsafe {
-                        dn_delta_head(addr(st_h[0]), addr(convh[crow + kh * ds]), addr(convh[crow + kd + kh * ds]), addr(convh[crow + 2 * kd + hh * ds]),
-                            addr(ref[tt * di + hh * ds]), addr(dvn[0]), gt, sigmoid_f32(smh[beta_off + tt * nvh + hh]), int64(ds))
-                    }
-                }
-                for (e in range(ds * ds)) {
-                    ref[npos * di + hh * ds * ds + e] = st_h[e]
-                }
-            }
+            var ref <- dn_delta_ref(convh, sth, smh, npos, nkh, nvh, ds, beta_off, g_off, a_off, dt_off)   // raw o rows: the out-norm is phase 3's
             let floor = 1e-2 * logits_maxabs(ref)
             let bad = mismatch_rel("", got, ref, 1e-2, floor)
             t |> success(bad == 0, "dn_scan {tag}: {bad} of {length(got)} o-row and state values off the sequential oracle")
@@ -6744,8 +6733,6 @@ def private dn_scan_cell(t : T?; tag : string; ds, nkh, nvh, npos : int) {
             delete smh
             delete got
             delete ref
-            delete st_h
-            delete dvn
         }
     }
 }
