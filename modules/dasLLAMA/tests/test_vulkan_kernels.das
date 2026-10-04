@@ -6883,28 +6883,21 @@ def test_vkd_dn_family(t0 : T?) {
                 var smh <- row_fill(sm_n, 11, 0, 0.02, 0.35, 37)
                 smh[0] = eps
                 smh[1] = qscale
-                let src_bytes = int64(npos * cd) * 4l
-                let sm_bytes = int64(sm_n) * 4l
-                let out_bytes = int64(npos * cd) * 4l
-                let srcd = make_device_buf(src_bytes)
-                let smd = make_device_buf(sm_bytes)
-                let od2 = make_device_buf(out_bytes)
-                let host = make_host_buf(out_bytes, true, [cached = true])
-                unsafe {
-                    upload_region_at(srcd, 0l, addr<uint8 const?>(srch[0]), src_bytes)
-                    upload_region_at(smd, 0l, addr<uint8 const?>(smh[0]), sm_bytes)
+                var o_cls : array<float>
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let psrc = cp |> in_(srch)
+                    let psm = cp |> in_(smh)
+                    let po = cp |> out_(npos * cd)
+                    var sc = cp |> cls_set(fixed_array(psrc, po, psm), @@set_dn_conv_cls)
+                    var pc = DnConvArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd), ds = uint(ds),
+                        dconv = uint(dconv), hist_mode = uint(hist_mode), taps_off = uint(taps_off),
+                        hist_off = uint(hist_off), eps = eps, qscale = qscale)
+                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        enc_dn_conv_cls(raw, h, sc, pc, dn_conv_wgs(int64(cd), int64(npos)))
+                    }
+                    delete o_cls
+                    o_cls <- cp |> plane_run(po)
                 }
-                var sc = set_dn_conv_cls(fixed_array(srcd, od2, smd),
-                    fixed_array(src_bytes, out_bytes, sm_bytes),
-                    fixed_array(8u, 1u, 4u))
-                var pc = DnConvArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd), ds = uint(ds),
-                    dconv = uint(dconv), hist_mode = uint(hist_mode), taps_off = uint(taps_off),
-                    hist_off = uint(hist_off), eps = eps, qscale = qscale)
-                cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                    enc_dn_conv_cls(raw2, h2, sc, pc, dn_conv_wgs(int64(cd), int64(npos)))
-                    cmd_copy_planes(raw2, h2, fixed_array(od2), host, fixed_array(out_bytes), 1u)
-                }
-                var o_cls <- staged(host.mapped, 0l, npos * cd, type<float>)
                 // oracle: depthwise conv (history rows below position 0) + SiLU, then per-ds-block
                 // L2 norm over the q/k regions with qscale on the q blocks
                 var o_ref : array<float>
@@ -7088,7 +7081,6 @@ def test_vkd_dn_family(t0 : T?) {
                 let slab_stride = 7 * CS * ds + 2 * CS * CS + 4 * CS
                 let st_off = nvh * nch * slab_stride
                 let o_off = st_off + nvh * (ds * ds + CS * ds)
-                let slab_n = o_off + npos * di
                 let beta_off = 16
                 let g_off = beta_off + npos * nvh
                 let a_off = g_off + npos * nvh
@@ -7110,24 +7102,7 @@ def test_vkd_dn_family(t0 : T?) {
                 for (i in range(ds)) {
                     smh[wnorm_off + i] = 0.8 + float(i % 9) * 0.04
                 }
-                let conv_bytes = int64(npos * cd) * 4l
-                let z_bytes = int64(npos * di) * 4l
-                let st_bytes = int64(nvh * ds * ds) * 4l
-                let sm_bytes = int64(sm_n) * 4l
-                let slab_bytes = int64(slab_n) * 4l
-                let convd = make_device_buf(conv_bytes)
-                let zd = make_device_buf(z_bytes)
-                let st2 = make_device_buf(st_bytes)
-                let smd = make_device_buf(sm_bytes)
-                let sl2 = make_device_buf(slab_bytes)
-                let o_bytes = int64(npos * di) * 4l
-                var host = make_host_buf(o_bytes + st_bytes, true, [cached = true])
                 let cmp_n = npos * di + nvh * ds * ds
-                unsafe {
-                    upload_region_at(convd, 0l, addr<uint8 const?>(convh[0]), conv_bytes)
-                    upload_region_at(zd, 0l, addr<uint8 const?>(zh[0]), z_bytes)
-                    upload_region_at(smd, 0l, addr<uint8 const?>(smh[0]), sm_bytes)
-                }
                 var pcs = DnScanArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd),
                     nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
                     beta_off = uint(beta_off), g_off = uint(g_off), a_off = uint(a_off),
@@ -7138,34 +7113,35 @@ def test_vkd_dn_family(t0 : T?) {
                 //! stamp (`dn_scan_p3_sig_cls`, qwen4exp)
                 var outs : array<array<float>>
                 outs |> reserve(2)
-                for (sig in fixed_array(false, true)) {
-                    var o : array<float>
-                    o |> resize(cmp_n)
-                    nan_sentinel_upload(sl2, o_bytes, int64(o_off) * 4l)   //! the o rows under the sentinel: a row the scan or the out-norm skips reds
-                    unsafe {
-                        upload_region_at(st2, 0l, addr<uint8 const?>(sth[0]), st_bytes)
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let pconv = cp |> in_(convh)
+                    let pz = cp |> in_(zh)
+                    let pst = cp |> io_(sth)
+                    let psm = cp |> in_(smh)
+                    let pslab = cp |> out_(npos * di, o_off)   //! the o rows past the scan's workspace under the sentinel: a row the scan or the out-norm skips reds
+                    var sc1 = cp |> cls_set(fixed_array(pconv, pst, psm, pslab), @@set_dn_scan_cls)
+                    for (sig in fixed_array(false, true)) {
                         if (sig) {
                             verify(ensure_dn_scan_p3_sig_cls(), "the sigmoid out-norm stamp must compile on a device that compiled the silu one")
+                            cp |> plane_upload(pst, sth)
+                            cp |> plane_refill(pslab)
                         }
-                        var sc1 = set_dn_scan_cls(fixed_array(convd, st2, smd, sl2), fixed_array(conv_bytes, st_bytes, sm_bytes, slab_bytes), fixed_array(1u, 2u, 8u, 4u))
-                        let p3bufs = fixed_array(zd, sl2, smd)
-                        let p3sizes = fixed_array(z_bytes, slab_bytes, sm_bytes)
-                        let p3bits = fixed_array(16u, 4u, 8u)
-                        var sc3 = sig ? set_dn_scan_p3_sig_cls(p3bufs, p3sizes, p3bits) : set_dn_scan_p3_cls(p3bufs, p3sizes, p3bits)
-                        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        let p3 = fixed_array(pz, pslab, psm)
+                        var sc3 = sig ? cp |> cls_set(p3, @@set_dn_scan_p3_sig_cls) : cp |> cls_set(p3, @@set_dn_scan_p3_cls)
+                        cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                             enc_dn_scan_cls(raw, h, sc1, pcs, dn_scan_wgs(int64(nvh), int64(ds)))
                             if (sig) {
                                 enc_dn_scan_p3_sig_cls(raw, h, sc3, pc3, int64(npos))
                             } else {
                                 enc_dn_scan_p3_cls(raw, h, sc3, pc3, int64(npos))
                             }
-                            vhz_dep(raw, h, 2u | 4u, 0u, true)
-                            cmd_copy_range(raw, sl2, int64(o_off) * 4l, host.buf, 0l, o_bytes)
-                            cmd_copy_range(raw, st2, 0l, host.buf, o_bytes, st_bytes)
                         }
-                        memcpy(addr<void?>(o[0]), host.mapped, o_bytes + st_bytes)
+                        var o <- cp |> plane_run(pslab)
+                        var st_got <- cp |> plane_run(pst)
+                        o |> push_from(st_got)
+                        delete st_got
+                        outs |> emplace(o)
                     }
-                    outs |> emplace(o)
                 }
                 var o_cls <- outs[0]
                 var o_cls_sig <- outs[1]
