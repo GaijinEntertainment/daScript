@@ -777,6 +777,69 @@ def test_whisper_vulkan_wdec_flush(t : T?) {
     }
 }
 
+//! The Metal decoder leaves a window's cross-KV layouts on the device while its step serves; a first batch past the step's
+//! 32-row cap hands the window to the CPU chain, and the layouts land first.
+[test]
+def test_whisper_metal_wdec_flush(t : T?) {
+    t |> run("ggml-tiny.bin: the waiting cross-KV readback lands when the step declines; the CPU chain over it matches the knob-off chain") @(tt : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
+            return if (!jit_model_available(tt, model_path))
+            let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                tt |> skip("jfk.wav not present")
+                return
+            }
+            set_asr_fp32(false)
+            set_asr_tower_fp32(false)
+            var inscope m <- mint_asr_whisper(model_path)
+            let batch <- [for (i in range(33)); m.whisper.tok_sot + i]   // one past the step's cap, the first batch of a window
+            var batch_moved := batch
+            batch_moved[length(batch_moved) - 1]++
+            var cpu_logits : array<float>
+            var cpu_moved : array<float>
+            var dev_logits : array<float>
+            with_dasllama_jobque_() {
+                set_metal_wdec(false)
+                var inscope sc <- create_session(m)
+                transcribe(m, sc, samples) $(_seg) {}
+                sc.w.ds.n_past = 0l
+                whisper_decode_batch(m.whisper, sc.w.ds, batch)
+                cpu_logits := sc.w.ds.logits
+                sc.w.ds.n_past = 0l
+                whisper_decode_batch(m.whisper, sc.w.ds, batch_moved)
+                cpu_moved := sc.w.ds.logits
+                set_metal_wdec(true)
+                set_metal_wdec_step(true)
+                set_metal_wdec_step_min_d(0l)   // tiny sits under the step's serving floor: with it lifted the step serves and the layouts wait
+                let d0 = metal_wdec_stats()
+                var inscope sg <- create_session(m)
+                transcribe(m, sg, samples) $(_seg) {}
+                let d1 = metal_wdec_stats()
+                tt |> success(d1.windows - d0.windows >= 1l && d1.steps > d0.steps, "the device served the window's cross-KV and its steps ({d1.windows - d0.windows}, {d1.steps - d0.steps})")
+                for (i in range(length(sg.w.ds.kx))) {   // the host layouts are stale by construction: only a flush makes the CPU chain right
+                    sg.w.ds.kx[i] = 0.0
+                }
+                sg.w.ds.n_past = 0l
+                sg.w.ds.gpu_kv_gen = 0l
+                whisper_decode_batch(m.whisper, sg.w.ds, batch)
+                tt |> equal(metal_wdec_stats().steps, d1.steps, "the device served no step of the wide batch: the CPU chain decoded it over the flushed memory")
+                dev_logits := sg.w.ds.logits
+                wdec_flush_compare(tt, m.whisper, cpu_logits, dev_logits, cpu_moved)   // inside the queue: the argmax is the parallel one
+                set_metal_wdec_step_min_d(1024l)
+            }
+            delete cpu_logits
+            delete cpu_moved
+            delete dev_logits
+            delete m
+            metal_wdec_shutdown()
+            metal_tower_shutdown()
+        } else {
+            tt |> skip("dasMetal not present")
+        }
+    }
+}
+
 //! a lifetime cell's seat: tiny on jfk, both drivers on, the q8 default load, one session created for `body` the way a serving
 //! worker reuses one - the decoder's window lifetime across that session's transcriptions is the claim
 def private wdec_lifetime_cell(tt : T?; body : block<(m : AsrModel; var s : AsrSession; samples : array<float>) : void>) {

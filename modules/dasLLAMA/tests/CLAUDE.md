@@ -1706,7 +1706,11 @@ token and bar, the batch with its last token changed landing outside the bar as 
 CPU blocks over them transcribe the all-CPU chain's text), `test_whisper_vulkan_wdec_lifetime` (tiny, one session reused the way a
 serving worker reuses one: a model drop between two transcriptions - the second serves again and reads the same; the decoder knob
 turned off between two - the second reads as a fresh knob-off session; the block hooks pinned off after a served window - no
-handoff for the CPU-encoded windows, the text of the CPU-encoder chain), the ASR knob cells (`set_asr_fp32`, `set_asr_tower_fp32` - the mixed
+handoff for the CPU-encoded windows, the text of the CPU-encoder chain), `test_whisper_metal_wdec_flush`
+(tiny, the step's floor lifted so the Metal step serves and the window's cross-KV layouts wait on
+the device: the host layouts zeroed, a 33-row first batch hands the window to the CPU chain, the
+layouts land first and its logits match the knob-off chain's token and bar, the batch with its
+last token changed the control), the ASR knob cells (`set_asr_fp32`, `set_asr_tower_fp32` - the mixed
 f32-enc/q8-dec serving mode and its `asr_exec_fmt` stamp; the strict token-identity cell
 pins the simdgroup lane, and its tolerance-graded twin pins the crowns ON and asserts WORD
 equality - the tensor twins' quality gate), the q8-gate CPU-vs-CPU claims
