@@ -1101,13 +1101,9 @@ def private run_k4_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 
             let ttile = v == 1 ? 128 : (v == 3 ? 32 : 256)
             let wtile = v == 3 ? 32 : 128
             let wgs = ((cnt + ttile - 1) / ttile) * ((d + wtile - 1) / wtile)
-            var sched : array<uint>
-            sched |> resize(4 + wgs)
-            sched[2] = uint(cnt)
-            let sc_bytes = int64(4 + wgs) * 4l
-            let scd = make_device_buf(sc_bytes)
-            upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
-            delete sched
+            let sched = one_region_sched(cnt, wgs)
+            let scd = sched.buf
+            let sc_bytes = sched.bytes
             var raw = alloc_cmd()
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -2023,13 +2019,9 @@ def private run_khr_shape(name : string; d, n, cnt : int; prof : bool = false) {
             }
             let tile = v == KHR_ARM_KQ ? 32 : 128
             let wgs = ((cnt + tile - 1) / tile) * ((d + tile - 1) / tile)
-            var sched : array<uint>
-            sched |> resize(4 + wgs)
-            sched[2] = uint(cnt)
-            let sc_bytes = int64(4 + wgs) * 4l
-            let scd = make_device_buf(sc_bytes)
-            upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
-            delete sched
+            let sched = one_region_sched(cnt, wgs)
+            let scd = sched.buf
+            let sc_bytes = sched.bytes
             var sa = khr_arm_set(v, fmt, wqd, wsd, scd, xfd, xqd, axsd, yd, wq_bytes, ws_bytes, sc_bytes, xf_bytes, xq_bytes, axs_bytes, y_bytes)
             var sb = khr_arm_set(v, fmt, wqd, wsd, scd, xfd, xqd, axsd, yd2, wq_bytes, ws_bytes, sc_bytes, xf_bytes, xq_bytes, axs_bytes, y_bytes)
             var raw = alloc_cmd()
@@ -2589,13 +2581,9 @@ def private run_mmq_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038
             let ttile = v == 0 ? 32 : 64
             let wtile = v == 2 ? 128 : (v >= 3 ? 64 : 32)
             let wgs = ((cnt + ttile - 1) / ttile) * ((d + wtile - 1) / wtile)
-            var sched : array<uint>
-            sched |> resize(4 + wgs)
-            sched[2] = uint(cnt)
-            let sc_bytes = int64(4 + wgs) * 4l
-            let scd = make_device_buf(sc_bytes)
-            upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
-            delete sched
+            let sched = one_region_sched(cnt, wgs)
+            let scd = sched.buf
+            let sc_bytes = sched.bytes
             let gbits = fixed_array(1u, 2u, 0u, 4u, 8u, 16u)
             let asizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, axs_bytes, y_bytes)
             var sa = mmq_arm_set(v, fmt, fixed_array(wqd, wsd, scd, xqd, axsd, yd), asizes, gbits)
@@ -2698,13 +2686,9 @@ def private run_k6_shape(name : string; d, n, cnt : int; bisect : bool = false) 
             let ttile = v == 1 ? 128 : (v == 3 ? 32 : 256)
             let wtile = v == 3 ? 32 : 128
             let wgs = ((cnt + ttile - 1) / ttile) * ((d + wtile - 1) / wtile)
-            var sched : array<uint>
-            sched |> resize(4 + wgs)
-            sched[2] = uint(cnt)
-            let sc_bytes = int64(4 + wgs) * 4l
-            let scd = make_device_buf(sc_bytes)
-            upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
-            delete sched
+            let sched = one_region_sched(cnt, wgs)
+            let scd = sched.buf
+            let sc_bytes = sched.bytes
             var raw = alloc_cmd()
             let begin = VkCommandBufferBeginInfo()
             vk_check(vkBeginCommandBuffer(raw, begin), null)
@@ -2806,9 +2790,6 @@ def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = tru
     let xsd = make_device_buf(xs_bytes)
     let xfd = make_device_buf(xf_dev_bytes)
     let yd = make_device_buf(y_bytes)
-    var sched : array<uint>
-    sched |> resize(4 + wgs)
-    sched[2] = uint(cnt)   // one region: [wblk0 = 0, row0 = 0, cnt, wg0 = 0], map all zeros
     var per_us : double
     var cm2l_us = 0.0lf
     var cm2m_us = 0.0lf
@@ -2820,9 +2801,9 @@ def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = tru
         upload_region_at(xqd, 0l, addr<uint8 const?>(b.xq[0]), xq_bytes)
         upload_region_at(xsd, 0l, addr<uint8 const?>(b.xs[0]), xs_bytes)
         upload_region_at(xfd, 0l, addr<uint8 const?>(b.xf[0]), xf_bytes)
-        let sc_bytes = int64(4 + wgs) * 4l
-        let scd = make_device_buf(sc_bytes)
-        upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
+        let sched = one_region_sched(cnt, wgs)
+        let scd = sched.buf
+        let sc_bytes = sched.bytes
         let bufs = fixed_array(wqd, wsd, scd, xqd, xsd, yd)
         let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, xs_bytes, y_bytes)
         let gbits = fixed_array(1u, 2u, 0u, 4u, 8u, 16u)
@@ -2880,7 +2861,6 @@ def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = tru
         print("{name}: cm2l wgs={lwgs}  {cm2l_us / 1000.0lf} ms/dispatch  {ltf} TFLOP/s  timing-only\n")
         print("{name}: cm2m wgs={mwgs}  {cm2m_us / 1000.0lf} ms/dispatch  {mtf} TFLOP/s  timing-only\n")
     }
-    delete sched
     delete b
 }
 
@@ -2908,9 +2888,6 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int; khr : bool =
         delete b
         return
     }
-    var sched : array<uint>
-    sched |> resize(4 + lwgs)
-    sched[2] = uint(cnt)   // one region: [wblk0 = 0, row0 = 0, cnt, wg0 = 0], map all zeros; the tile reads its split plane and tile off its own workgroup id
     var cm2l_us : double
     var cm2m_us : double
     var red_us : double
@@ -2919,9 +2896,9 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int; khr : bool =
         upload_region_at(wqd, 0l, addr<uint8 const?>(b.wq[0]), wq_bytes)
         upload_region_at(wsd, 0l, addr<uint8 const?>(b.ws[0]), ws_bytes)
         upload_region_at(xfd, 0l, addr<uint8 const?>(b.xf[0]), xf_bytes)
-        let sc_bytes = int64(4 + lwgs) * 4l
-        let scd = make_device_buf(sc_bytes)
-        upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
+        let sched = one_region_sched(cnt, lwgs)   // the tile reads its split plane and tile off its own workgroup id
+        let scd = sched.buf
+        let sc_bytes = sched.bytes
         let cbufs = fixed_array(wqd, wsd, scd, xfd, yd)
         let csizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_dev_bytes, y_bytes)
         let cgbits = fixed_array(1u, 2u, 0u, 4u, 16u)
@@ -2975,7 +2952,6 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int; khr : bool =
         print("{name} split{nsplit} (chunk {ck}): cm2m wgs={mwgs}  {cm2m_us / 1000.0lf} ms/dispatch  {flop / (cm2m_us * 1000000.0lf)} TFLOP/s  timing-only\n")
     }
     print("{name} split{nsplit} (chunk {ck}): reduce {red_us} us, {khr ? "tile" : "l"} + reduce chained {chain_us} us  timing-only\n")
-    delete sched
     delete b
 }
 
@@ -3390,17 +3366,14 @@ def private run_cm2x_shape(name : string; d, n, cnt : int) {   // nolint:STYLE03
     let xfd = make_device_buf(xf_bytes)
     let yd = make_device_buf(y_bytes)
     let lwgs = ((cnt + 255) / 256) * ((d + 127) / 128)
-    var sched : array<uint>
-    sched |> resize(4 + lwgs)
-    sched[2] = uint(cnt)
     let flop = 2.0lf * double(rows) * double(d) * double(n)
     unsafe {
         upload_region_at(wqd, 0l, addr<uint8 const?>(b.wq[0]), wq_bytes)
         upload_region_at(wsd, 0l, addr<uint8 const?>(b.ws[0]), ws_bytes)
         upload_region_at(xfd, 0l, addr<uint8 const?>(b.xf[0]), xf_bytes)
-        let sc_bytes = int64(4 + lwgs) * 4l
-        let scd = make_device_buf(sc_bytes)
-        upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
+        let sched = one_region_sched(cnt, lwgs)
+        let scd = sched.buf
+        let sc_bytes = sched.bytes
         let cbufs = fixed_array(wqd, wsd, scd, xfd, yd)
         let csizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
         let cgbits = fixed_array(1u, 2u, 0u, 4u, 16u)
@@ -3412,19 +3385,15 @@ def private run_cm2x_shape(name : string; d, n, cnt : int) {   // nolint:STYLE03
         let fgbits = fixed_array(1u, 0u, 4u, 16u)
         let vnames = fixed_array("cm2l", "lit ", "flat", "nil ", "f16a", "nobar", "mmnb ", "push")
         let mm_wgs = ((cnt + 127) / 128) * ((d + 127) / 128)
-        var mmsched : array<uint>
-        mmsched |> resize(4 + mm_wgs)
-        mmsched[2] = uint(cnt)
-        let msc_bytes = int64(4 + mm_wgs) * 4l
-        let mscd = make_device_buf(msc_bytes)
-        upload_region_at(mscd, 0l, addr<uint8 const?>(mmsched[0]), msc_bytes)
+        let msc = one_region_sched(cnt, mm_wgs)
+        let mscd = msc.buf
+        let msc_bytes = msc.bytes
         let xq_bytes = int64(rows * nbb) * 32l
         let xs_bytes = int64(rows * nbb) * 4l
         let xqd = make_device_buf(xq_bytes)
         let xsd = make_device_buf(xs_bytes)
         upload_region_at(xqd, 0l, addr<uint8 const?>(b.xq[0]), xq_bytes)
         upload_region_at(xsd, 0l, addr<uint8 const?>(b.xs[0]), xs_bytes)
-        delete mmsched
         for (v in range(8)) {
             var raw = alloc_cmd()
             let begin = VkCommandBufferBeginInfo()
@@ -3485,7 +3454,6 @@ def private run_cm2x_shape(name : string; d, n, cnt : int) {   // nolint:STYLE03
             print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
         }
     }
-    delete sched
     delete b
 }
 
