@@ -358,35 +358,26 @@ def private pair_cell(t : T?; f : Ffn; fmt : int; base : int64; tag : string; ne
 
 // the reference routed FFN over a host-selected slot list (the span's device router + top-k
 // picks) onto the residual row - ffn_ref over (idx, w) instead of the fixed pair
+//! one expert's FFN row over the feed `fd`: silu(w1 . fd) x (w3 . fd) through the engine's requant (Q8_K under `qk`, else Q8_0), then w2 over it
+def private expert_ffn_ref(w1, w3, w2, fd : array<float>; qk : bool) : array<float> {
+    var gg : array<float>
+    var u : array<float>
+    gemv_ref(w1, NFE, N, fd, gg)
+    gemv_ref(w3, NFE, N, fd, u)
+    var hrow <- [for (i in range64(NFE)); silu_f32(gg[i]) * u[i]]
+    let hr <- q8_roundtrip(hrow, NFE, qk)
+    var d : array<float>
+    gemv_ref(w2, N, NFE, hr.deq, d)
+    return <- d
+}
+
 def private ffn_ref_sel(f : Ffn; fd : array<float>; idx : array<int64>; w : array<float>; var x1 : array<float>) {
     let ege = NFE * N
     var acc : array<float>
     acc |> resize(N)
-    var wsl : array<float>
-    wsl |> resize(NFE * N)
     for (j in range64(K)) {
         let e = idx[j]
-        var gg : array<float>
-        var u : array<float>
-        for (i in range64(NFE * N)) {
-            wsl[i] = f.w1[e * ege + i]
-        }
-        gemv_ref(wsl, NFE, N, fd, gg)
-        for (i in range64(NFE * N)) {
-            wsl[i] = f.w3[e * ege + i]
-        }
-        gemv_ref(wsl, NFE, N, fd, u)
-        var hrow : array<float>
-        hrow |> resize(NFE)
-        for (i in range64(NFE)) {
-            hrow[i] = silu_f32(gg[i]) * u[i]
-        }
-        let hr <- q8_roundtrip(hrow, NFE, true)
-        for (i in range64(N * NFE)) {
-            wsl[i] = f.w2[e * ege + i]
-        }
-        var d : array<float>
-        gemv_ref(wsl, N, NFE, hr.deq, d)
+        let d <- expert_ffn_ref(copy_span(f.w1, e * ege, ege), copy_span(f.w3, e * ege, ege), copy_span(f.w2, e * ege, ege), fd, true)
         for (i in range64(N)) {
             acc[i] += w[j] * d[i]
         }
@@ -533,18 +524,7 @@ def private span_layer_ref_sh(var q : Quad; f : Ffn; sh : Shexp; router : array<
     let fd <- feed_ref(x, f.norm, 1)
     let fd0 <- feed_ref(x, f.norm, 0)
     ffn_ref_sel(f, fd.deq, r.idx, r.w, x)
-    var gg : array<float>
-    var u : array<float>
-    gemv_ref(sh.w1, NFE, N, fd0.deq, gg)
-    gemv_ref(sh.w3, NFE, N, fd0.deq, u)
-    var hrow : array<float>
-    hrow |> resize(NFE)
-    for (i in range64(NFE)) {
-        hrow[i] = silu_f32(gg[i]) * u[i]
-    }
-    let hr <- q8_roundtrip(hrow, NFE, false)
-    var d : array<float>
-    gemv_ref(sh.w2, N, NFE, hr.deq, d)
+    let d <- expert_ffn_ref(sh.w1, sh.w3, sh.w2, fd0.deq, false)
     for (i in range64(N)) {
         x[i] += g * d[i]
     }
