@@ -837,7 +837,7 @@ slab stamp on the groups it serves, two heads and one, at 64, 256 and 512), `tes
 restricted horizon), `test_vkd_fa_cm2_h256_softcap` (the gemma-2 softcap tile, the no-cap control in
 the same run) and `test_vkd_fa_cm2`'s h512 arm (gemma-4's global heads, the f16 O twin against the
 f32 stamp); the KHR twins `test_vkd_fa_khr` and `test_vkd_fa_khr_h256_softcap` run the same fixture
-(`fa_tile_run`, `fa_h256_softcap_run`) through the KHR flash tile wherever the device has KHR
+(`fa_tile_run`, `fa_h256_softcap_cell`) through the KHR flash tile wherever the device has KHR
 cooperative matrices at subgroup 32, so a coopmat2 card covers both families.
 `test_bench_rows.das` - stocked (stories15M, skips without it): the bench rows' contracts on a
 real model - the pp rows' capacity refusal (a warmup or a timed rep on a session sized under its

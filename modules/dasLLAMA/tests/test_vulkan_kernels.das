@@ -3907,49 +3907,41 @@ def test_vkd_fa_cm2_h256_gated(t0 : T?) {
     }
 }
 
+//! the h256 softcap stamps under cap 50 on the cm2 tile or the KHR one (`khr`), 4 heads over 2 kv heads at 77 rows from
+//! position 64 (a partial 64-tile, a nonzero window base): the capped oracle matches, the uncapped one misses, the f16-out twin
+//! matches the f32 stamp rounded
+def private fa_h256_softcap_cell(t : T?; khr : bool) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (!ensure_tower_clamp_cvt_cls()) {
+            t |> skip("no Vulkan device")
+            return
+        }
+        if (khr ? !(g_gpu.has_coopmat && khr_kq_tile_on()) : !g_gpu.has_coopmat2_fa) {
+            t |> skip(khr ? "device lacks KHR cooperative matrices at subgroup 32" : "device lacks the cm2 flash-attention trio")
+            return
+        }
+        let tag = khr ? "fa_khr" : "fa_cm2"
+        verify(fa_stamp_pair_ensure(khr, 256l, false, true, false, true), "the softcap h256 fa rails must engage on a device that serves the tile")
+        let r = fa_h256_run(4, 2, 77, 64, false, 50.0, khr)
+        t |> success(r.n > 0, "the softcap fixture's scores reach the cap (the uncapped oracle misses the kernel)")
+        t |> success(r.bad == 0, "{tag} h256 softcap matches the capped CPU oracle ({r.bad} of {r.n} off)")
+        t |> success(r.bad16 == 0, "{tag} h256 softcap f16-out twin == the f32 stamp rounded ({r.bad16} of {r.n} off)")
+    } else {
+        t |> skip("dasVulkan not present")
+    }
+}
+
 [test]
 def test_vkd_fa_cm2_h256_softcap(t0 : T?) {
     t0 |> run("cm2 flash-attention h256 softcap stamps == the CPU oracle under cap 50 (gemma-2's shape; the uncapped oracle as the control)") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_tower_clamp_cvt_cls()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!g_gpu.has_coopmat2_fa) {
-                t |> skip("device lacks the cm2 flash-attention trio")
-                return
-            }
-            verify(fa_stamp_pair_ensure(false, 256l, false, true, false, true), "the softcap h256 fa rails must engage on an fa-capable device")
-            let r = fa_h256_run(4, 2, 77, 64, false, 50.0, false)   // partial 64-tile, a nonzero window base
-            t |> success(r.n > 0, "the softcap fixture's scores reach the cap (the uncapped oracle misses the kernel)")
-            t |> success(r.bad == 0, "fa_cm2 h256 softcap matches the capped CPU oracle ({r.bad} of {r.n} off)")
-            t |> success(r.bad16 == 0, "fa_cm2 h256 softcap f16-out twin == the f32 stamp rounded ({r.bad16} of {r.n} off)")
-        } else {
-            t |> skip("dasVulkan not present")
-        }
+        fa_h256_softcap_cell(t, false)
     }
 }
 
 [test]
 def test_vkd_fa_khr_h256_softcap(t0 : T?) {
     t0 |> run("KHR flash-attention h256 softcap stamps == the CPU oracle under cap 50 (gemma-2's shape; the uncapped oracle as the control)") <| @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_tower_clamp_cvt_cls()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!(g_gpu.has_coopmat && khr_kq_tile_on())) {
-                t |> skip("device lacks KHR cooperative matrices at subgroup 32")
-                return
-            }
-            verify(fa_stamp_pair_ensure(true, 256l, false, true, false, true), "the softcap h256 KHR fa rails must engage on a coopmat device")
-            let r = fa_h256_run(4, 2, 77, 64, false, 50.0, true)
-            t |> success(r.n > 0, "the softcap fixture's scores reach the cap (the uncapped oracle misses the kernel)")
-            t |> success(r.bad == 0, "fa_khr h256 softcap matches the capped CPU oracle ({r.bad} of {r.n} off)")
-            t |> success(r.bad16 == 0, "fa_khr h256 softcap f16-out twin == the f32 stamp rounded ({r.bad16} of {r.n} off)")
-        } else {
-            t |> skip("dasVulkan not present")
-        }
+        fa_h256_softcap_cell(t, true)
     }
 }
 
