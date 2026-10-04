@@ -3,10 +3,12 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `ARCHITECTURE.md`.
 
-**Never add or change a dasImgui test file - a `.das` file that requires an `imgui/*` module and
-either declares a `[test]` function or is named `test_*.das`, `failed_imgui_*.das`, or
-`record_*.das` - outside `modules/dasImgui/tests` - put it under that folder instead.** A dasImgui test file, wherever the diff puts it, also
-answers to the `tests/` subfolder's checklist (`modules/dasImgui/tests/REVIEW.md`).
+**A dasImgui test file - a `.das` file that requires an `imgui/*` module and is run as a test,
+by dastest (a `[test]` function) or by a CTest row in this folder's `CMakeLists.txt` - lives
+under `modules/dasImgui/tests`; a diff that adds or changes one anywhere else is a defect.**
+
+**A dasImgui test file, wherever the diff puts it, also answers to the `tests/` subfolder's
+checklist (`modules/dasImgui/tests/REVIEW.md`).**
 
 **A diff that changes any non-`.md` file under this folder, beyond comments, runs the test suite
 on the author's host OS before the PR: `preflight --only imgui`.**
