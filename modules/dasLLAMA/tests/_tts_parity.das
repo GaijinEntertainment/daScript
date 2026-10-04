@@ -156,16 +156,9 @@ def bar_diff(t : T?; tag : string; ours, ref : array<float>; bar : float; metric
         t |> success(rel_l2(ours, poisoned) >= bar, "{tag}: the bar discriminates an expectation shifted by {shift}")
         return
     }
-    let peak = logits_maxabs(ref)
-    let lim = metric == BarMetric.absolute ? bar : bar * peak
-    let d = max_abs_diff(ours, ref)
-    to_log(LOG_INFO, "{tag}: maxdiff {d} over {length(ref)} (reference peak {peak})\n")
-    t |> success(d <= lim, "{tag}: maxdiff {d} <= {lim}")
-    if (!empty(ref)) {
-        var inscope poisoned := ref
-        poisoned[0] += 2.0 * lim
-        t |> success(max_abs_diff(ours, poisoned) > lim, "{tag}: the bar discriminates a poisoned expectation")
-    }
+    let of_peak = metric == BarMetric.of_peak
+    check(t, tag, ours, ref, Bar(kind = of_peak ? BarKind.rel_of_max : BarKind.rel_of_larger, rel = of_peak ? bar : 0.0, abs_floor = of_peak ? 0.0 : bar,
+        poison = 2.0 * bar, poison_of_max = of_peak, poison_at = 0), FLAT_SHAPE)
 }
 
 //! One stage against its dump within BAR (of the oracle's peak, or absolute); a stage the dump lacks is skipped.
