@@ -5570,11 +5570,9 @@ class KqBatchBase : MoeCmBase {
         var sbv = 0.0
         if (wt * 32u + slane < pa.d) {
             let wsb = wsb0 + (wt * 32u + slane) * nsb + s
-            let dm = unpackHalf2x16(wsu[wsb * 5u])
-            let sc = int((wsu[wsb * 5u + 1u + sblk / 4u] >> ((sblk % 4u) * 8u)) & 0xFF)
-            let mn = int((wsu[wsb * 5u + 3u + sblk / 4u] >> ((sblk % 4u) * 8u)) & 0xFF)
-            sa = dm.x * float(sc)
-            sbv = dm.y * float(mn)
+            let sm = k4_scale_min(unpackHalf2x16(wsu[wsb * 5u]), wsu[wsb * 5u + 1u + sblk / 4u], wsu[wsb * 5u + 3u + sblk / 4u], sblk)
+            sa = sm.x
+            sbv = sm.y
         }
         wsw[sblk * 32u + slane] = sa
         wsw2[sblk * 32u + slane] = sbv
@@ -5652,8 +5650,7 @@ class KqBatchBase : MoeCmBase {
         var sa = 0.0
         if (wt * 32u + slane < pa.d) {
             let wsb = wsb0 + (wt * 32u + slane) * nsb + s
-            let dp = unpackHalf2x16(wsu[wsb * 5u + sblk / 2u])
-            sa = sblk % 2u == 0u ? dp.x : dp.y
+            sa = q40_d_of(wsu[wsb * 5u + sblk / 2u], sblk)
         }
         wsw[sblk * 32u + slane] = sa
     }
@@ -6800,8 +6797,7 @@ class KqQ40CmF16 : CmF16Base {
             if (wcol < pa.d) {
                 let wsb = wblk0 + wcol * nblk + s
                 r = wq[wsb * 32u + c]
-                let dp = unpackHalf2x16(wsu[wsb * 5u + bu / 2u])
-                db = bu % 2u == 0u ? dp.x : dp.y
+                db = q40_d_of(wsu[wsb * 5u + bu / 2u], bu)
             }
             let k = bu * 32u + w * 4u
             for (j in range(4)) {
@@ -7043,8 +7039,7 @@ class template KqCm2BatchT : MoeCmBase {
                 let w1 = ws_words[srow + (s0 >> 2u) + 1u]
                 for [unroll] (i in range(8)) {
                     let w = i < 4 ? w0 : w1
-                    let sc = int(w << ((3u - uint(i & 3)) * 8u)) >> 24
-                    sc6_cache[(s0 + uint(i)) * SC_STRIDE + r] = d * float(sc)
+                    sc6_cache[(s0 + uint(i)) * SC_STRIDE + r] = d * float(k6_sc(w, uint(i)))
                 }
             } else {
                 let srow = (wblk0 + row * (pa.n >> 8u) + sb) * 5u
@@ -7052,8 +7047,7 @@ class template KqCm2BatchT : MoeCmBase {
                 let scw = ws_words[srow + 1u + (g0 >> 2u)]
                 let mnw = ws_words[srow + 3u + (g0 >> 2u)]
                 for [unroll] (i in range(4)) {
-                    let sh = uint(i) * 8u
-                    sc_cache[(g0 + uint(i)) * SC_STRIDE + r] = float2(dm.x * float((scw >> sh) & 0xFFu), dm.y * float((mnw >> sh) & 0xFFu))
+                    sc_cache[(g0 + uint(i)) * SC_STRIDE + r] = k4_scale_min(dm, scw, mnw, uint(i))
                 }
             }
         }
@@ -7388,13 +7382,11 @@ class template K4Cm2T : KqCm2BatchT {
                 }
             } else {
                 let srow = blk * 5u
-                let dm = unpackHalf2x16(ws[srow])
-                let ds = dm.x * float((ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
-                let dmn = dm.y * float((ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
+                let sm = k4_scale_min(unpackHalf2x16(ws[srow]), ws[srow + 1u + (g >> 2u)], ws[srow + 3u + (g >> 2u)], g)
                 for [unroll_full] (c in range(4)) {
                     let w = w4[c] >> sh
-                    khr_put4(sbase + uint(c) * 2u, float4(ds * float(w & 0xFu) - dmn, ds * float((w >> 8u) & 0xFu) - dmn,
-                        ds * float((w >> 16u) & 0xFu) - dmn, ds * float((w >> 24u) & 0xFu) - dmn))
+                    khr_put4(sbase + uint(c) * 2u, float4(sm.x * float(w & 0xFu) - sm.y, sm.x * float((w >> 8u) & 0xFu) - sm.y,
+                        sm.x * float((w >> 16u) & 0xFu) - sm.y, sm.x * float((w >> 24u) & 0xFu) - sm.y))
                 }
             }
         }
@@ -7452,8 +7444,7 @@ class template K6Cm2T : KqCm2BatchT {
             let hs = (bu & 3u) * 2u
             let srow = blk * 5u
             let sidx = e0 >> 4u
-            let sc = int(ws[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
-            let ds = unpackHalf2x16(ws[srow + 4u]).x * float(sc)
+            let ds = unpackHalf2x16(ws[srow + 4u]).x * float(k6_sc(ws[srow + (sidx >> 2u)], sidx))
             for [unroll_full] (c in range(4)) {
                 let lw = lw4[c] >> ls
                 let hw = hw4[c] >> hs
@@ -7487,7 +7478,7 @@ class template K6Cm2T : KqCm2BatchT {
             ds = sc6_cache[sidx * SC_STRIDE + (bc.x - wg_m0)]
         } else {
             let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-            let sc = int(ws[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
+            let sc = k6_sc(ws[srow + (sidx >> 2u)], sidx)
             ds = unpackHalf2x16(ws[srow + 4u]).x * float(sc)
         }
         return float16(ds * float(q6))
@@ -7515,7 +7506,7 @@ class template K6Cm2T : KqCm2BatchT {
             ds = sc6_cache[sidx * SC_STRIDE + (bc.x - wg_m0)]
         } else {
             let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-            let sc = int(ws[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
+            let sc = k6_sc(ws[srow + (sidx >> 2u)], sidx)
             ds = unpackHalf2x16(ws[srow + 4u]).x * float(sc)
         }
         return half4(float4(ds * float(int(p0 & 0xFFu) - 32), ds * float(int(p0 >> 8u) - 32), ds * float(int(p1 & 0xFFu) - 32), ds * float(int(p1 >> 8u) - 32)))
@@ -7537,9 +7528,7 @@ class template K5Cm2T : KqCm2BatchT {
             let w4 = wq4[blk * 10u + g]
             let hw = wq4[blk * 10u + 8u + (g >> 2u)][int(g & 3u)] >> sh   //! sub-block g's four 5th-bit bytes; byte c holds j = 4c .. 4c + 3 at bit (j & 3) + h * 4
             let srow = blk * 5u
-            let dm = unpackHalf2x16(ws[srow])
-            let ds = dm.x * float((ws[srow + 1u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
-            let dmn = dm.y * float((ws[srow + 3u + (g >> 2u)] >> ((g & 3u) * 8u)) & 0xFFu)
+            let sm = k4_scale_min(unpackHalf2x16(ws[srow]), ws[srow + 1u + (g >> 2u)], ws[srow + 3u + (g >> 2u)], g)
             for [unroll_full] (c in range(4)) {
                 let w = w4[c] >> sh
                 let hb = hw >> (uint(c) * 8u)
@@ -7547,7 +7536,7 @@ class template K5Cm2T : KqCm2BatchT {
                 let q1 = ((w >> 8u) & 0xFu) | (((hb >> 1u) & 1u) << 4u)
                 let q2 = ((w >> 16u) & 0xFu) | (((hb >> 2u) & 1u) << 4u)
                 let q3 = ((w >> 24u) & 0xFu) | (((hb >> 3u) & 1u) << 4u)
-                khr_put4(sbase + uint(c) * 2u, float4(ds * float(q0) - dmn, ds * float(q1) - dmn, ds * float(q2) - dmn, ds * float(q3) - dmn))
+                khr_put4(sbase + uint(c) * 2u, float4(sm.x * float(q0) - sm.y, sm.x * float(q1) - sm.y, sm.x * float(q2) - sm.y, sm.x * float(q3) - sm.y))
             }
         }
     }
@@ -7601,8 +7590,7 @@ class template Q40Cm2T : KqCm2BatchT {
             let g = e0 >> 5u
             let sh = ((e0 >> 4u) & 1u) * 4u
             let w4 = wq4[blk * 8u + g]
-            let dp = unpackHalf2x16(ws[blk * 5u + (g >> 1u)])
-            let d = (g & 1u) == 0u ? dp.x : dp.y
+            let d = q40_d_of(ws[blk * 5u + (g >> 1u)], g)
             for [unroll_full] (c in range(4)) {
                 let w = w4[c] >> sh
                 static_if (IQLUT) {
@@ -7622,9 +7610,8 @@ class template Q40Cm2T : KqCm2BatchT {
         let e = cib.y & 31u
         let bidx = g * 16u + (e & 15u)
         let q = (uint(int(blk.qs[int(bidx >> 1u)])) >> ((bidx & 1u) * 8u + (e >> 4u) * 4u)) & 0xFu
-        let srow =(wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let dp = unpackHalf2x16(ws[srow + (g >> 1u)])
-        let d = (g & 1u) == 0u ? dp.x : dp.y
+        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let d = q40_d_of(ws[srow + (g >> 1u)], g)
         static_if (IQLUT) {
             return float16(d * float(iq4lut[int(q)]))
         } else {
@@ -7641,8 +7628,7 @@ class template Q40Cm2T : KqCm2BatchT {
         let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
         let sh = (e >> 4u) * 4u
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
-        let dp = unpackHalf2x16(ws[srow + (g >> 1u)])
-        let d = (g & 1u) == 0u ? dp.x : dp.y
+        let d = q40_d_of(ws[srow + (g >> 1u)], g)
         static_if (IQLUT) {
             return half4(float4(d * float(iq4lut[int((l0 >> sh) & 0xFu)]), d * float(iq4lut[int((l0 >> (sh + 8u)) & 0xFu)]),
                 d * float(iq4lut[int((l1 >> sh) & 0xFu)]), d * float(iq4lut[int((l1 >> (sh + 8u)) & 0xFu)])))
@@ -7720,8 +7706,7 @@ class template Iq4nl32Cm2T : KqCm2BatchT {
         static_if (KHR) {   //! the block's 16 nibble bytes as one word4: the low nibbles are elements 0..15, the high 16..31
             let sh = (e0 >> 4u) * 4u
             let w4 = wq4[blk]
-            let dp = unpackHalf2x16(ws[blk >> 1u])
-            let d = (blk & 1u) == 0u ? dp.x : dp.y
+            let d = q40_d_of(ws[blk >> 1u], blk)
             for [unroll_full] (c in range(4)) {
                 let w = w4[c] >> sh
                 khr_put4(sbase + uint(c) * 2u, float4(d * float(iq4lut[int(w & 0xFu)]), d * float(iq4lut[int((w >> 8u) & 0xFu)]),
@@ -7737,8 +7722,7 @@ class template Iq4nl32Cm2T : KqCm2BatchT {
         let by = ((uint(int(blk.qs[int(j >> 1u)])) & 0xFFFFu) >> ((j & 1u) * 8u)) & 0xFFu
         let q = (by >> ((e >> 4u) * 4u)) & 0xFu
         let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
-        let dp = unpackHalf2x16(ws[idx >> 1u])
-        let d = (idx & 1u) == 0u ? dp.x : dp.y
+        let d = q40_d_of(ws[idx >> 1u], idx)
         return float16(d * float(iq4lut[int(q)]))
     }
 
@@ -7750,8 +7734,7 @@ class template Iq4nl32Cm2T : KqCm2BatchT {
         let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
         let sh = (e >> 4u) * 4u
         let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
-        let dp = unpackHalf2x16(ws[idx >> 1u])
-        let d = (idx & 1u) == 0u ? dp.x : dp.y
+        let d = q40_d_of(ws[idx >> 1u], idx)
         return half4(float4(d * float(iq4lut[int((l0 >> sh) & 0xFu)]), d * float(iq4lut[int((l0 >> (sh + 8u)) & 0xFu)]),
             d * float(iq4lut[int((l1 >> sh) & 0xFu)]), d * float(iq4lut[int((l1 >> (sh + 8u)) & 0xFu)])))
     }
@@ -7853,7 +7836,7 @@ class template K3Cm2T : KqCm2BatchT {
             let qs2 = (g & 3u) * 2u
             let srow = blk * 5u
             let sidx = e0 >> 4u
-            let sc = int(ws[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
+            let sc = k6_sc(ws[srow + (sidx >> 2u)], sidx)
             let ds = unpackHalf2x16(ws[srow + 4u]).x * float(sc)
             for [unroll_full] (c in range(4)) {
                 let qw = qw4[c] >> qs2
@@ -7878,7 +7861,7 @@ class template K3Cm2T : KqCm2BatchT {
         let q3 = int((qby >> ((g & 3u) * 2u)) & 3u) - (((hby >> g) & 1u) == 0u ? 4 : 0)
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let sidx = e >> 4u
-        let sc = int(ws[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
+        let sc = k6_sc(ws[srow + (sidx >> 2u)], sidx)
         let d = unpackHalf2x16(ws[srow + 4u]).x
         return float16(d * float(sc) * float(q3))
     }
@@ -7901,7 +7884,7 @@ class template K3Cm2T : KqCm2BatchT {
         let q3_3 = int((q1w >> (qs2 + 8u)) & 3u) - (((h1w >> (g + 8u)) & 1u) == 0u ? 4 : 0)
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let sidx = e >> 4u
-        let sc = int(ws[srow + (sidx >> 2u)] << ((3u - (sidx & 3u)) * 8u)) >> 24
+        let sc = k6_sc(ws[srow + (sidx >> 2u)], sidx)
         let ds = unpackHalf2x16(ws[srow + 4u]).x * float(sc)
         return half4(float4(ds * float(q3_0), ds * float(q3_1), ds * float(q3_2), ds * float(q3_3)))
     }
@@ -12653,8 +12636,7 @@ class template Blk32GemvT {
                         idot += sdot4(iq4_word((w >> 4u) & 0x0F0F0F0Fu), xqw[xbase + 4u + uint(c)])
                     }
                     let sb = wb0 + b
-                    let dp = unpackHalf2x16(wsu[sb >> 1u])
-                    let d = (sb & 1u) == 0u ? dp.x : dp.y
+                    let d = q40_d_of(wsu[sb >> 1u], sb)
                     acc += d * float(idot) * axs[xb0 + b]
                 } else {
                     let wbase = (wb0 + b) * 4u
@@ -12878,10 +12860,8 @@ class KqGemvBase {
     }
 
     def dm_terms(wsb, blk : uint) : float4 {
-        let dm = unpackHalf2x16(wsu[wsb * 5u])
-        let sc = float((wsu[wsb * 5u + 1u + blk / 4u] >> ((blk % 4u) * 8u)) & 0xFFu)
-        let mn = float((wsu[wsb * 5u + 3u + blk / 4u] >> ((blk % 4u) * 8u)) & 0xFFu)
-        return float4(dm.x * sc, -dm.y * mn, dm.x * sc, -dm.y * mn)
+        let sm = k4_scale_min(unpackHalf2x16(wsu[wsb * 5u]), wsu[wsb * 5u + 1u + blk / 4u], wsu[wsb * 5u + 3u + blk / 4u], blk)
+        return float4(sm.x, -sm.y, sm.x, -sm.y)
     }
 
     //! the per-16 signed sub-scale fold terms (Q3_K, Q6_K): each half's d x int8 sub-scale, and its block-sum term at quant offset `off`
@@ -13438,10 +13418,7 @@ class KqGemvK4Gu : K4GemvT {
 // Q4_0: w = d*(q - 8) — the k4 nibble tiling with no min plane; -8 folds against the block sum
 [ |> template_struct_instance]
 class template Q40GemvT : KqGemvLeafT {
-    def q40_d(wsb, blk : uint) : float {
-        let dp = unpackHalf2x16(wsu[wsb * 5u + blk / 2u])
-        return blk % 2u == 0u ? dp.x : dp.y
-    }
+    def q40_d(wsb, blk : uint) : float => q40_d_of(wsu[wsb * 5u + blk / 2u], blk)
 
     def override blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
         nib_split(wq4[wsb * 8u + blk], wl, wh)

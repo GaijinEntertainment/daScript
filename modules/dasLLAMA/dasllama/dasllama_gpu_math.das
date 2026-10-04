@@ -4,6 +4,7 @@ options gen2
 module dasllama_gpu_math shared public
 require dasllama/dasllama_lint public
 require math
+require daslib/shader_lingua_franca
 
 //! ksigns_iq2xs without the table: bit 7 of the sign byte is the EVEN PARITY of the 7-bit index - five ALU ops, nothing staged.
 def ksign7(v : uint) : uint {
@@ -19,6 +20,21 @@ def iq3s_signed(g, nib : uint) : uint {
     let mask = m1 * 255u
     return (g ^ mask) + m1
 }
+
+//! Q4_K / Q5_K: sub-block `blk`'s d x scale and dmin x min, off the row's unpacked (d, dmin) and the words that hold its scale and its min byte
+def k4_scale_min(dm : float2; scw, mnw, blk : uint) : float2 {
+    let sh = (blk & 3u) * 8u
+    return float2(dm.x * float((scw >> sh) & 0xFFu), dm.y * float((mnw >> sh) & 0xFFu))
+}
+
+//! Q4_0 / IQ4_NL: block `blk`'s f16 d, off the word that packs it beside its neighbour's
+def q40_d_of(w, blk : uint) : float {
+    let dp = unpackHalf2x16(w)
+    return (blk & 1u) == 0u ? dp.x : dp.y
+}
+
+//! Q6_K / Q3_K: the signed int8 sub-block scale `i` (mod 4) of its scale word
+def k6_sc(w, i : uint) : int => int(w << ((3u - (i & 3u)) * 8u)) >> 24
 
 //! gemma's soft cap cap * tanh(v / cap) in softcap4's exp form: a shader tanh NaNs past ~44, while exp(INF) zeroes the term and saturates.
 def softcap_exp(v, cap : float) : float => cap * (1.0 - 2.0 / (1.0 + exp(2.0 * v / cap)))
