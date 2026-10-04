@@ -22,8 +22,9 @@ anchor.
   span's rows stand in it as ids of the media's content (`media_position_id`), so the prefix cache matches,
   attaches and donates across an image or a clip as across text. A span evals as one body, and up to
   a chunk of the text either side of it rides that body (`prefill_media_body`) - a prefill call's cost is mostly
-  fixed, so a turn's opening, its media and its closing text are one call where three would each pay the floor; a
-  gemma-4 E-series span stands in a body of its own, its text rows taking their own tokens' per-layer input.
+  fixed, so a turn's opening, its media and its closing text are one call where three would each pay the floor. On a
+  gemma-4 E-series decoder the body carries each row's token id (`Session.embd_ids`, 0 for a media row): a text row
+  takes its own token's per-layer input and only the media rows the padding token's.
   A span attaches
   whole - a hit ending inside one counts as no hit - and a hit past a grid-roped span restores the span's
   rope advance on the session. A request may leave a span's rows out where it counts on the cache to hold

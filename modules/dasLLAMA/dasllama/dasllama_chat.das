@@ -1685,13 +1685,13 @@ def respond_(m : Model; var c : ChatSession; params : SamplingParams;
 // the media-quantum embd rows: head/tail text around the spliced media. Deepstack decoders
 // take (1+n)·dim-wide rows — text tails stay zero (the eval seam splits slice 0 and adds the
 // rest per layer); audio rows are dim-wide on every family, zero-tailed like text.
-def private assemble_media_embd(m : Model; c : ChatSession; head, tail : array<int64>;
+def private assemble_media_embd(m : Model; var c : ChatSession; head, tail : array<int64>;
                                 is_image : bool; var embd : array<float>) {
     let dim = m.config.dim
     if (is_image) {   // the embedder's rows match the decoder's stride (the create_chat pair check)
-        media_body_rows_(m, head, c.image_rows, c.n_image_rows, dim * (1l + m.config.n_deepstack), tail, embd)
+        media_body_rows_(m, c.session, head, c.image_rows, c.n_image_rows, dim * (1l + m.config.n_deepstack), tail, embd)
     } else {
-        media_body_rows_(m, head, c.audio_rows, c.n_audio_rows, dim, tail, embd)
+        media_body_rows_(m, c.session, head, c.audio_rows, c.n_audio_rows, dim, tail, embd)
     }
 }
 

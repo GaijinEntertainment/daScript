@@ -193,10 +193,10 @@ def eval_embd_body(model : Model; var session : Session; embd : array<float>; np
     eval_embd_body_(model, session, embd, npos, span_lo, span_hi, grid)
 }
 
-def media_body_rows(model : Model; head : array<int64>; rows : array<float>; n_media, src_w : int64;
+def media_body_rows(model : Model; var session : Session; head : array<int64>; rows : array<float>; n_media, src_w : int64;
                     tail : array<int64>; var embd : array<float>) {
-    //! One prefill body's rows: ``head`` text, ``n_media`` media rows of width ``src_w``, ``tail`` text.
-    media_body_rows_(model, head, rows, n_media, src_w, tail, embd)
+    //! One prefill body's rows for ``eval_embd_body`` on ``session``: ``head`` text, ``n_media`` media rows of width ``src_w``, ``tail`` text.
+    media_body_rows_(model, session, head, rows, n_media, src_w, tail, embd)
 }
 
 def eval_embd_span(model : Model; var session : Session; embd : array<float>; npos, span_lo, span_hi : int64) {

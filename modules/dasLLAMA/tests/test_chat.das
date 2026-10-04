@@ -11,6 +11,7 @@ def private allow_cpu_prefill_intent() {
     allow_cpu_prefill()   // render/eval-seam test, CPU by design: on a Metal build the prefill guard panics otherwise
 }
 require dasllama/dasllama_tokenizer
+require dasllama/dasllama_blocks   // embed_text_rows: the media body cell builds rows from the prompt's own tokens
 require dasllama/dasllama_bpe
 require daslib/jobque_boost
 require daslib/fio
@@ -450,6 +451,72 @@ def test_chat_gemma4_instruct_text_turn(t : T?) {
             t |> success(find(sp.content, "<channel|>") < 0 && find(sp.content, "<|channel>") < 0, "no channel marker reaches the content half")
             t |> success(stats(c.session).n_gen < 64l, "the turn ended on a stop, not the budget ({stats(c.session).n_gen} tokens)")
             delete c
+        }
+        delete m
+    }
+}
+
+//! the last row's logits of `toks` prefilled with rows [lo, hi) as embedding rows: one fused body, or text / rows / text as three calls
+def private e_series_body_logits(m : Model; toks : array<int64>; lo, hi : int64; fused, with_ids : bool) : array<float> {
+    var head <- [for (k in range64(lo)); toks[k]]
+    var mid <- [for (k in range64(lo, hi)); toks[k]]
+    var tail <- [for (k in range64(hi, long_length(toks))); toks[k]]
+    var rows : array<float>
+    rows |> resize((hi - lo) * m.config.dim)
+    embed_text_rows(m, mid, rows, 0l)
+    var s <- create_session(m)
+    if (fused) {
+        var body : array<float>
+        media_body_rows(m, s, head, rows, hi - lo, m.config.dim, tail, body)
+        if (!with_ids) {
+            s.embd_ids |> clear()
+        }
+        eval_embd_body(m, s, body, long_length(toks), 0l, 0l, int2(0))
+        delete body
+    } else {
+        eval(m, s, head)
+        eval_embd(m, s, rows, hi - lo)
+        eval(m, s, tail)
+    }
+    var out := s.logits
+    delete s
+    delete head
+    delete mid
+    delete tail
+    delete rows
+    return <- out
+}
+
+let private E_BODY_NEAR = 0.25   //! of the logits' peak: one body against three calls differs by call shape alone - 0.11 here, and the same tokens as ids read 0.14 apart in one call and in three
+let private E_BODY_FAR = 1.0     //! of the peak: text rows under the padding token's per-layer input are another prompt - 1.9 here
+
+[test]
+def test_gemma4_e_media_body(t : T?) {
+    t |> run("an E-series media body gives its text rows their own tokens' per-layer input: one call == text / rows / text (needs gemma-4-E2B)") @(t : T?) {
+        let path = path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf")
+        if (!stat(path).is_valid) {
+            t |> skip("{path} not present")
+            return
+        }
+        var m <- load_capped(path)
+        allow_cpu_prefill()
+        with_dasllama_jobque() {
+            var toks <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches from a small hill near the old village bakery", true, false)
+            let np = long_length(toks)
+            t |> success(np > 16l, "the prompt holds a head, a span and a tail ({np} tokens)")
+            var split <- e_series_body_logits(m, toks, 5l, 11l, false, true)
+            var fused <- e_series_body_logits(m, toks, 5l, 11l, true, true)
+            var padded <- e_series_body_logits(m, toks, 5l, 11l, true, false)
+            let peak = logits_maxabs(split)
+            let near = logits_maxdiff(fused, split)
+            let far = logits_maxdiff(padded, split)
+            to_log(LOG_INFO, "E-series media body: one call {near} from three, the padding-id body {far}, at a {peak} peak\n")
+            t |> success(near < E_BODY_NEAR * peak, "one call reads as three ({near} at a {peak} peak)")
+            t |> success(far > E_BODY_FAR * peak, "the ids are load-bearing: a body without them reads another prompt ({far} at a {peak} peak)")
+            delete split
+            delete fused
+            delete padded
+            delete toks
         }
         delete m
     }

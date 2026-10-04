@@ -385,6 +385,20 @@ def ple_pre_prefill_pad(t : Model; var s : Session; npos : int64) {
     invoke(g_ple_pre_prefill_pad, t, s, npos)
 }
 
+//! The prefill pre-step over rows `tokens[off ..]`: offered to the device driver with the ids stashed, the CPU
+//! pre-step on decline. The model_proj GEMM inside the finish is the whole cost, so an eligible driver gets the offer.
+def ple_pre_prefill_gated(t : Model; var s : Session; tokens : array<int64>; off, npos, start_pos : int64) {
+    s.ple_gpu_tokens |> resize(npos)
+    for (p in range64(npos)) {
+        s.ple_gpu_tokens[p] = tokens[off + p]
+    }
+    if (g_ple_gpu_gate_set && invoke(g_ple_gpu_gate, t, s, npos, start_pos)) {
+        s.ple_gpu_pending = true
+    } else {
+        ple_pre_prefill(t, s, s.ple_gpu_tokens, npos)
+    }
+}
+
 //! The embd-prefill twin of the token path's PLE gate: offer the pre-step to the device driver
 //! (pad ids stashed — the media path has no tokens), CPU pad impl on decline. The model_proj
 //! GEMM inside the finish is the whole cost, so an eligible driver must get the offer here too.
@@ -2523,6 +2537,7 @@ struct Session {
     @scratch ple_proj : array<float>     // model-proj scratch for the pre-step (npos x n_layers x ple)
     @scratch ple_gate : array<float>     // per-(position) gate vector for the layer block (npos x ple)
     @scratch ple_gpu_tokens : array<int64>  // stashed token rows for a driver-owned pre-step (see register_ple_gpu_gate)
+    @scratch embd_ids : array<int64>        //!< the token id of each row of the embedding body about to prefill, 0 for a media row; empty = every row the padding token's
     ple_gpu_pending : bool      // forward_prefill skipped the CPU pre-step — the engaged driver builds it
     @scratch embed_gpu_tokens : array<int64>
     embed_gpu_pending : bool
@@ -6204,15 +6219,7 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
     }
     if (has_ple(c)) {  // gemma-4 E-series: build each position's per-(layer) side input before the stack
         let ts_ple = prof_ticks()
-        if (g_ple_gpu_gate_set && invoke(g_ple_gpu_gate, t, s, npos, start_pos)) {
-            s.ple_gpu_tokens |> resize(npos)
-            for (p in range64(npos)) {
-                s.ple_gpu_tokens[p] = tokens[p]
-            }
-            s.ple_gpu_pending = true
-        } else {
-            ple_pre_prefill(t, s, tokens, npos)
-        }
+        ple_pre_prefill_gated(t, s, tokens, 0l, npos, start_pos)
         prof_add("ple", ts_ple)
     }
 

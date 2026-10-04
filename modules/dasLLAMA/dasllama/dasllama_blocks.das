@@ -2218,7 +2218,11 @@ def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, 
     prof_add("embed", ts_embed)
     if (has_ple(t.config)) {  // gemma-4 E-series: PLE side input (padding-token gather for the media path)
         let ts_ple = prof_ticks()
-        ple_pre_prefill_pad_gated(t, s, npos, start_pos)
+        if (long_length(s.embd_ids) >= src_off + npos) {   // a media body: its text rows take their own tokens' side input
+            ple_pre_prefill_gated(t, s, s.embd_ids, src_off, npos, start_pos)
+        } else {
+            ple_pre_prefill_pad_gated(t, s, npos, start_pos)
+        }
         prof_add("ple", ts_ple)
     }
     // the non-causal image span (gemma vision): span queries attend
@@ -2257,8 +2261,9 @@ def embed_text_rows_strided(t : Model; tokens : array<int64>; var dst : array<fl
 
 //! One prefill body's rows at the decoder's row stride: ``head`` text, ``n_media`` media rows of width ``src_w``,
 //! ``tail`` text. A deepstack decoder's stride is (1+n)·dim - a text row and a dim-wide media row keep a zero tail.
-def media_body_rows_(t : Model; head : array<int64>; rows : array<float>; n_media, src_w : int64;
-                        tail : array<int64>; var embd : array<float>) {
+//! On a gemma-4 E-series decoder the session takes each row's token id for ``eval_embd_body_``, which spends them.
+def media_body_rows_(t : Model; var s : Session; head : array<int64>; rows : array<float>; n_media, src_w : int64;
+                     tail : array<int64>; var embd : array<float>) {
     let rw = t.config.dim * (1l + t.config.n_deepstack)
     let n_head = long_length(head)
     let npos = n_head + n_media + long_length(tail)
@@ -2272,6 +2277,16 @@ def media_body_rows_(t : Model; head : array<int64>; rows : array<float>; n_medi
         }
     }
     embed_text_rows_strided(t, tail, embd, n_head + n_media, rw)
+    s.embd_ids |> clear()
+    if (has_ple(t.config)) {
+        s.embd_ids |> resize(npos)
+        for (p in range64(n_head)) {
+            s.embd_ids[p] = head[p]
+        }
+        for (p in range64(long_length(tail))) {
+            s.embd_ids[n_head + n_media + p] = tail[p]
+        }
+    }
 }
 
 //! Prefill ``npos`` rows whose [span_lo, span_hi) are a NON-CAUSAL span (span_hi <= span_lo = every row causal);
@@ -2284,6 +2299,7 @@ def eval_embd_body_(t : Model; var s : Session; embd : array<float>; npos, span_
     } else {
         eval_embd_(t, s, embd, npos)
     }
+    s.embd_ids |> clear()
 }
 
 //! Fill ``dst[at*dim ..]`` with the embedding rows of ``tokens`` (embed_scale applied) — the

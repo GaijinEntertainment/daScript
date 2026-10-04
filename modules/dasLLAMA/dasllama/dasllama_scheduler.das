@@ -739,10 +739,9 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
 }
 
 //! One eval for span `si` and the text around it, up to a chunk of text: a prefill call's cost is mostly fixed, so
-//! the text either side of a span rides the span's call. False where the body is not one eval - a gemma-4
-//! E-series text row takes its own token's per-layer input, a recurrent checkpoint ends a chunk, the span stands bare.
+//! the text either side of a span rides the span's call. False where the body is not one eval - a recurrent
+//! checkpoint ends a chunk, the span stands bare.
 def private prefill_media_body(m : Model; var sch : Scheduler; var st : Stream; si : int) : bool {
-    return false if (has_ple(m.config))
     let lo = st.n_prefilled
     let at = st.spans[si].at
     let sn = st.spans[si].n
@@ -761,7 +760,7 @@ def private prefill_media_body(m : Model; var sch : Scheduler; var st : Stream; 
     for (k in range64(ntail)) {
         sch.chunk_tail[k] = st.prompt[at + sn + k]
     }
-    media_body_rows(m, sch.chunk, st.spans[si].rows, sn, long_length(st.spans[si].rows) / sn, sch.chunk_tail, sch.body)
+    media_body_rows(m, st.session, sch.chunk, st.spans[si].rows, sn, long_length(st.spans[si].rows) / sn, sch.chunk_tail, sch.body)
     let masked = st.spans[si].non_causal || st.spans[si].grid.x > 0
     eval_embd_body(m, st.session, sch.body, hi - lo, masked ? head : 0l, masked ? head + sn : 0l, st.spans[si].grid)
     st.spans[si].done = true
