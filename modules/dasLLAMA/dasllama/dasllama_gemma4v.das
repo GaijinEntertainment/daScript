@@ -409,7 +409,7 @@ def stage_gemma4v_tower(path : string) : Gemma4vStaging {
     // the staged mint holds source + image at once; past the line a carrier streams like a decoder,
     // and this tower has no streamed mint — the shipped vision mmprojs sit under it (E2B bf16 0.99 GB)
     if (stat(path).size >= GEMMA4V_STAGE_CAP) {
-        panic("dasLLAMA gemma4v: '{path}' is {stat(path).size / 1048576ul} MB - at or past the 1 GiB staged-mint line; serve the bf16 mmproj (an f32-widened twin is an oracle artifact, not a serving file)")
+        panic("dasLLAMA gemma4v: '{path}' is {int64(stat(path).size / 1048576ul)} MB - at or past the 1 GiB staged-mint line; serve the bf16 mmproj (an f32-widened twin is an oracle artifact, not a serving file)")
     }
     fmap(f) $(var bytes : array<uint8>#) {
         var inscope m <- parse_gguf_meta(bytes)

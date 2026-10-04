@@ -440,7 +440,7 @@ def stage_gemma3v_tower(path : string) : Gemma3vStaging {
         panic("dasLLAMA: cannot open mmproj gguf '{path}'")
     }
     if (stat(path).size >= GEMMA3V_STAGE_CAP) {
-        panic("dasLLAMA gemma3v: '{path}' is {stat(path).size / 1048576ul} MB - at or past the 1 GiB staged-mint line; serve the f16 mmproj (an f32-widened twin is an oracle artifact, not a serving file)")
+        panic("dasLLAMA gemma3v: '{path}' is {int64(stat(path).size / 1048576ul)} MB - at or past the 1 GiB staged-mint line; serve the f16 mmproj (an f32-widened twin is an oracle artifact, not a serving file)")
     }
     fmap(f) $(var bytes : array<uint8>#) {
         var inscope m <- parse_gguf_meta(bytes)
