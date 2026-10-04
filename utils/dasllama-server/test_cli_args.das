@@ -285,7 +285,7 @@ def test_config_speech_roster(t : T?) {
 
 [test]
 def test_config_file(t : T?) {
-    let body = "model = \"a.gguf\"\ngpu = \"vulkan\"\ngpu_layers = 3\nthreads = 6\nasr = \"asr.bin\"\ntts = \"t.gguf\"\nimage_mmproj = \"v.gguf\"\nmodels_dir = \"/m\"\n"
+    let body = "model = \"a.gguf\"\ngpu = \"vulkan\"\ngpu_layers = 3\nthreads = 6\nasr = \"asr.bin\"\ntts = \"t.gguf\"\nimage_mmproj = \"v.gguf\"\naudio_mmproj = \"au.gguf\"\nmodels_dir = \"/m\"\n"
     t |> run("the flat keys land") @(t : T?) {
         var cfg = CliConfig()
         t |> success(parse_cli_config(body, cfg), "parses")
@@ -299,14 +299,16 @@ def test_config_file(t : T?) {
         t |> equal(cfg.asr, "asr.bin")
         t |> equal(cfg.tts, "t.gguf")
         t |> equal(cfg.image_mmproj, "v.gguf")
+        t |> equal(cfg.audio_mmproj, "au.gguf")
         t |> equal(cfg.models_dir, "/m")
     }
     t |> run("a roster's default entry supplies the model and its overrides") @(t : T?) {
-        let roster = "gpu = \"off\"\n[[models]]\npath = \"first.gguf\"\n[[models]]\npath = \"second.gguf\"\ndefault = true\nimage_mmproj = \"v2.gguf\"\nctx = 2048\nquant = \"q4_k\"\n"
+        let roster = "gpu = \"off\"\n[[models]]\npath = \"first.gguf\"\n[[models]]\npath = \"second.gguf\"\ndefault = true\nimage_mmproj = \"v2.gguf\"\naudio_mmproj = \"au2.gguf\"\nctx = 2048\nquant = \"q4_k\"\n"
         var cfg = CliConfig()
         t |> success(parse_cli_config(roster, cfg), "parses")
         t |> equal(cfg.model, "second.gguf")
         t |> equal(cfg.image_mmproj, "v2.gguf")
+        t |> equal(cfg.audio_mmproj, "au2.gguf")
         t |> equal(cfg.ctx, 2048)
         t |> equal(cfg.quant, "q4_k")
     }

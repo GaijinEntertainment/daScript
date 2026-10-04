@@ -167,6 +167,7 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
 
    bin/daslang -jit utils/dasllama-server/main.das -- --model <model.gguf> [--port 8080] [--quant q8] \
        [--asr <asr.bin>] [--asr-workers 2] [--mmproj <mmproj.gguf>] [--image-mmproj <mmproj.gguf>] \
+       [--audio-mmproj <mmproj.gguf>] \
        [--ctx 4096] [--streams 4] [--chunk 512] [--chunk-idle 2048] [--page-rows 64] [--prefix N] [--tune]
 
 .. list-table::
@@ -256,7 +257,11 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--image-mmproj``
      -
      - ---
-     - Vision mmproj (gemma4uv, gemma4v or gemma3v, sniffed) for the default model --- the chat route then accepts ``image_url`` content parts. When the file also carries a gemma4a audio encoder (the E-series mmproj carries both towers) the same flag arms native audio: ``input_audio`` parts serve through the same slot
+     - Vision mmproj (gemma4uv, gemma4v or gemma3v, sniffed) for the default model --- the chat route then accepts ``image_url`` content parts. When the file also carries an audio encoder (the gemma-4 E-series and the Qwen Omni mmprojs carry both towers) the same flag arms native audio: ``input_audio`` parts serve through the same slot
+   * - ``--audio-mmproj``
+     -
+     - ---
+     - Audio mmproj for the default model --- the chat route then accepts ``input_audio`` content parts: a whisper-class tower with its projector (Qwen2-Audio, Qwen2.5-Omni, Ultravox, Voxtral) or the gemma-4 Conformer. Not needed when ``--image-mmproj`` names a file that carries the audio tower too
    * - ``--ctx``
      -
      - *model*
@@ -394,7 +399,7 @@ model's GPU state lives in VRAM at a time (the tier drops and re-arms on
 switch; ``backend = "cpu"`` slots never evict the GPU owner). Blank keys
 inherit the flat defaults; ``backend`` is ``auto`` | ``cpu`` | ``gpu``, and
 per-entry ``ctx``, ``quant``, ``kv_dtype``, ``streams``, ``chunk``, ``chunk_idle``,
-``page_rows``, ``prefix``, ``mtp``, ``rope_scaling``, ``rope_scale``, ``yarn_orig_ctx`` and ``image_mmproj`` override per model:
+``page_rows``, ``prefix``, ``mtp``, ``rope_scaling``, ``rope_scale``, ``yarn_orig_ctx``, ``image_mmproj`` and ``audio_mmproj`` override per model:
 
 .. code-block:: toml
 
@@ -550,13 +555,13 @@ Endpoints
      - ``{"model": name}`` --- make ``name`` the default + stepped slot and move the GPU tier to it now (loopback-only; 409 while work is live)
    * - ``POST``
      - ``/v1/models/load``
-     - ``{"path", "id"?, "backend"?, "quant"?, "ctx"?, "image_mmproj"?, "activate"?}`` --- load a GGUF into a new serving slot with no restart (loopback-only; 409 on a live stream set, a taken id, or a GGUF another slot already serves)
+     - ``{"path", "id"?, "backend"?, "quant"?, "ctx"?, "image_mmproj"?, "audio_mmproj"?, "activate"?}`` --- load a GGUF into a new serving slot with no restart (loopback-only; 409 on a live stream set, a taken id, or a GGUF another slot already serves)
    * - ``POST``
      - ``/v1/models/unload``
      - ``{"model": name}`` --- free the slot's weights, KV and VRAM; the default slot refuses (loopback-only)
    * - ``POST``
      - ``/v1/chat/completions``
-     - Chat; ``stream: true`` gives SSE, else a buffered reply. OpenAI function calling (``tools``); ``image_url`` parts under ``--image-mmproj``; ``input_audio`` parts when the mmproj carries the audio tower (one image or one clip per request, on the final user message). A stream sent with ``stream_options: {"include_usage": true}`` ends, before ``[DONE]``, on one chunk with an empty ``choices`` list: ``usage`` (``prompt_tokens``, ``completion_tokens``, ``total_tokens``, and ``prompt_tokens_details.cached_tokens`` --- the prompt tokens the prefix cache attached) and ``timings`` (``ttft_ms``, the scheduler's admit-to-first-token wall, and ``gen_ms``, first token to finish); a stream that does not ask carries no such chunk
+     - Chat; ``stream: true`` gives SSE, else a buffered reply. OpenAI function calling (``tools``); ``image_url`` parts under ``--image-mmproj``; ``input_audio`` parts under ``--audio-mmproj``, or when the image mmproj carries the audio tower (one image or one clip per request, on the final user message; its soft tokens splice where the part sits among the message's text parts). A stream sent with ``stream_options: {"include_usage": true}`` ends, before ``[DONE]``, on one chunk with an empty ``choices`` list: ``usage`` (``prompt_tokens``, ``completion_tokens``, ``total_tokens``, and ``prompt_tokens_details.cached_tokens`` --- the prompt tokens the prefix cache attached) and ``timings`` (``ttft_ms``, the scheduler's admit-to-first-token wall, and ``gen_ms``, first token to finish); a stream that does not ask carries no such chunk
    * - ``POST``
      - ``/v1/completions``
      - Raw completion; ``stream: true`` gives SSE, else buffered; the same ``stream_options.include_usage`` closing chunk as the chat route

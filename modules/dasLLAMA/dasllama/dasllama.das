@@ -321,11 +321,11 @@ def add_user_image_rows(model : Model; var chat : ChatSession; var rows : array<
     add_user_image_rows_(model, chat, rows, n_rows, grid)
 }
 
-def add_user_audio_rows(model : Model; var chat : ChatSession; var rows : array<float>; n_rows : int64) {
-    //! Queue PRE-ENCODED audio soft-token rows (what ``encode_audio`` emits — ``dim``-wide on
-    //! every family, length-checked) for the next ``respond``. MOVES ``rows``; works on a plain
-    //! chat — no tower needed: the carrier-served families (the gemma-4 E-series) hear this way.
-    add_user_audio_rows_(model, chat, rows, n_rows)
+def add_user_audio_rows(model : Model; var chat : ChatSession; var rows : array<float>; n_rows : int64; bare : bool = false) {
+    //! Queue PRE-ENCODED audio soft-token rows (what ``encode_audio`` emits — ``dim``-wide, length-checked) for the
+    //! next ``respond``. MOVES ``rows``; works on a plain chat, no tower needed. Pass the encoder's
+    //! ``audio_span_bare`` as ``bare``: an ultravox span takes no marker, so a stock template serves it.
+    add_user_audio_rows_(model, chat, rows, n_rows, bare)
 }
 
 def encode_image(embedder : VisionEmbedder; var scratch : VisionState; img : VisionImage;
@@ -377,18 +377,18 @@ def render_turn_marked(model : Model; chat : ChatSession) : RenderedTurn {
     return <- render_turn_marked_(model, chat)
 }
 
-def render_turn_image(model : Model; chat : ChatSession; var head : array<int64>; var tail : array<int64>) {
-    //! ``render_turn``'s IMAGE twin: the turn's prefill as the two token spans that bracket the
-    //! image soft-token splice — ``head`` before the rows, ``tail`` after. Render-only (no KV, no
-    //! embedder): the rows come from ``encode_image``, and a scheduler prefills head, rows, tail.
-    render_turn_image_(model, chat, head, tail)
+def render_turn_image(model : Model; chat : ChatSession; var head : array<int64>; var tail : array<int64>; text_before : int = 0) {
+    //! ``render_turn``'s IMAGE twin: the two token spans that bracket the image soft-token splice — ``head`` before the
+    //! rows, ``tail`` after. Render-only (no KV, no embedder): the rows come from ``encode_image``.
+    //! ``text_before`` bytes of the user text render ahead of the image (0: the image leads the turn).
+    render_turn_image_(model, chat, head, tail, text_before)
 }
 
-def render_turn_audio(model : Model; chat : ChatSession; var head : array<int64>; var tail : array<int64>) {
+def render_turn_audio(model : Model; chat : ChatSession; var head : array<int64>; var tail : array<int64>; text_before : int = 0) {
     //! ``render_turn``'s AUDIO twin: the same two-span contract around the audio soft-token splice
     //! (the template's audio span markers). Render-only (no KV, no encoder): the rows come from
-    //! ``encode_audio``, and a scheduler prefills head, rows, tail.
-    render_turn_audio_(model, chat, head, tail)
+    //! ``encode_audio``, and a scheduler prefills head, rows, tail. ``text_before`` as in ``render_turn_image``.
+    render_turn_audio_(model, chat, head, tail, text_before)
 }
 
 def render_assistant(model : Model; var chat : ChatSession; text : string; var out : array<int64>) {

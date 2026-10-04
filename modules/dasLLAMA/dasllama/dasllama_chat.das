@@ -156,6 +156,35 @@ def private chat_template_of_kind(kind : string) : ChatTemplate {
     return <- arch_chat(kind)
 }
 
+//! the literal system text of the first `opener` ... `<|im_end|>` span of a template that holds no Jinja expression;
+//! `quoted`: the span sits inside a string literal, where a quote ends the literal and an expression follows
+def private chatml_literal_system(src, opener : string; quoted : bool) : string {
+    var at = find(src, opener)
+    while (at >= 0) {
+        let from = at + length(opener)
+        let to = find(src, "<|im_end|>", from)
+        break if (to < 0)
+        let text = chatml_literal(src, from, to, quoted)
+        return text if (!empty(text))
+        at = find(src, opener, at + 1)
+    }
+    return ""
+}
+
+//! `src[from, to)` where it is literal text, "" where a Jinja expression sits in it (the caller's own system turn)
+def private chatml_literal(src : string; from, to : int; quoted : bool) : string {
+    let text = slice(src, from, to)
+    let expr = find(text, "\{") >= 0 || (quoted && (find(text, "'") >= 0 || find(text, "\"") >= 0))
+    return expr ? "" : text
+}
+
+//! The system text a ChatML template states for a conversation that opens with no system message, "" where it
+//! states none; the newline after the role is written out in a template's text and escaped in its string literals
+def private chatml_default_system(src : string) : string {
+    let plain = chatml_literal_system(src, "<|im_start|>system\n", false)
+    return empty(plain) ? chatml_literal_system(src, "<|im_start|>system\\n", true) : plain
+}
+
 //! The chat template for a loaded model: sniff the GGUF's embedded `tokenizer.chat_template`
 //! first, falling back to the arch heuristic. GGUF general.architecture is "llama" for both
 //! Llama-3 (BPE) and Llama-2 (SentencePiece), so the fallback disambiguates by tokenizer backend.
@@ -164,6 +193,7 @@ def chat_template(m : Model) : ChatTemplate {
     if (!empty(kind)) {
         var ct <- chat_template_of_kind(kind)
         if (kind == "qwen2") {
+            ct.default_system = chatml_default_system(m.chat_template_str)
             let gen = rfind(m.chat_template_str, "add_generation_prompt")
             if (gen >= 0) {
                 let tail = slice(m.chat_template_str, gen)
@@ -368,11 +398,12 @@ def private render_assistant_open(m : Model; c : ChatSession; var out : array<in
 // mode — the tool block wrapping the verbatim tool JSONs (one per line, the Qwen shape). The
 // other modes place their definitions elsewhere (developer turn, <|tool> blocks, user prefix).
 def private system_content(c : ChatSession) : string {
+    let base = empty(c.system) ? c.tmpl.default_system : c.system
     if (empty(c.tools_json) || c.tmpl.tool_mode != ToolMode.hermes) {
-        return c.system
+        return base
     }
     var parts : array<string>
-    parts |> push(empty(c.system) ? c.tmpl.tool_sys_prelude : "{c.system}\n\n{c.tmpl.tool_sys_prelude}")
+    parts |> push(empty(base) ? c.tmpl.tool_sys_prelude : "{base}\n\n{c.tmpl.tool_sys_prelude}")
     parts |> push_from(c.tools_json)
     parts |> push(c.tmpl.tool_sys_epilogue)
     let s = join(parts, "\n")
@@ -559,20 +590,20 @@ def private render_tool_results(m : Model; c : ChatSession; var out : array<int6
 //! Render an AUDIO turn's prefill as two spans around the soft-token splice point — the text
 //! chunks break at the media boundary so BPE merges never cross the media (the llama-mtmd-cli
 //! shape). Public with ``create_chat_renderer_``: the render-only seam.
-def render_prompt_audio(m : Model; c : ChatSession; var head : array<int64>; var tail : array<int64>) {
-    render_prompt_media(m, c, c.tmpl.audio_pre.parts, c.tmpl.audio_post.parts, head, tail)
+def render_prompt_audio(m : Model; c : ChatSession; var head : array<int64>; var tail : array<int64>; text_before : int = 0) {
+    render_prompt_media(m, c, c.tmpl.audio_pre.parts, c.tmpl.audio_post.parts, head, tail, text_before)
 }
 
 //! Render an IMAGE turn's prefill: same two-span contract as ``render_prompt_audio`` (gemma-4:
 //! `<|image>` … `<image|>`).
-def render_prompt_image(m : Model; c : ChatSession; var head : array<int64>; var tail : array<int64>) {
-    render_prompt_media(m, c, c.tmpl.image_pre.parts, c.tmpl.image_post.parts, head, tail)
+def render_prompt_image(m : Model; c : ChatSession; var head : array<int64>; var tail : array<int64>; text_before : int = 0) {
+    render_prompt_media(m, c, c.tmpl.image_pre.parts, c.tmpl.image_post.parts, head, tail, text_before)
 }
 
-// Two spans around the media splice point (head before, tail after) — matches llama-mtmd-cli
-// exactly, whose text chunks break at media boundaries so BPE merges never cross the media.
+//! Two spans around the media splice (head before, tail after): the text chunks break at the media, so no BPE merge
+//! crosses it. `text_before` bytes of the pending user text render ahead of the media: 0 puts it at the head of the turn.
 def private render_prompt_media(m : Model; c : ChatSession; pre_parts, post_parts : array<ChatPart>;
-                                var head : array<int64>; var tail : array<int64>) {
+                                var head : array<int64>; var tail : array<int64>; text_before : int = 0) {
     if (c.first && c.tmpl.add_bos) {
         head |> push(bos_id(m))
     }
@@ -598,8 +629,16 @@ def private render_prompt_media(m : Model; c : ChatSession; pre_parts, post_part
             before |> push(p)
         }
     }
-    render_parts(m, before, "", head)
+    // the folded system text, where the family folds one, rides ahead of the user text
+    let lead = text_before > 0 ? length(user_content) - length(c.pending) + min(text_before, length(c.pending)) : 0
+    if (lead > 0) {
+        before |> push(chat_content())
+    }
+    render_parts(m, before, lead > 0 ? slice(user_content, 0, lead) : "", head)
     render_parts(m, pre_parts, "", head)
+    if (lead > 0) {
+        user_content = slice(user_content, lead)
+    }
     var tail_parts := post_parts
     tail_parts |> push(chat_content())
     if (think_turn_active_(c) && !empty(c.tmpl.assistant_open_think.parts)) {
@@ -774,14 +813,14 @@ def add_user_image_rows_(m : Model; var c : ChatSession; var rows : array<float>
     c.image_grid = grid
 }
 
-//! Queue PRE-ENCODED audio soft-token rows (what `encode_audio` emits — `dim`-wide on every
-//! family, length-checked) for the next respond(). MOVES `rows`; works on a plain chat — no
-//! tower needed: the carrier path for a model whose audio arm the AudioEmbedder serves.
-def add_user_audio_rows_(m : Model; var c : ChatSession; var rows : array<float>; n_rows : int64) {
+//! Queue PRE-ENCODED audio soft-token rows (what `encode_audio` emits — `dim`-wide, length-checked) for the next
+//! respond(). MOVES `rows`; works on a plain chat, no tower needed. `bare` is the encoder's `audio_span_bare`: its
+//! rows take no span marker, so the template owes none.
+def add_user_audio_rows_(m : Model; var c : ChatSession; var rows : array<float>; n_rows : int64; bare : bool = false) {
     if (c.n_image_rows > 0l) {
         panic("dasLLAMA chat: an image is already queued this turn - one media kind per turn")
     }
-    if (empty(c.tmpl.audio_pre.parts) || !audio_vocab_ok(m, c.tmpl)) {
+    if (!bare && (empty(c.tmpl.audio_pre.parts) || !audio_vocab_ok(m, c.tmpl))) {
         panic("dasLLAMA chat: this model's chat template declares no usable audio span markers - it has no audio arm")
     }
     if (long_length(rows) != n_rows * m.config.dim) {
@@ -858,15 +897,15 @@ def render_turn_marked_(m : Model; c : ChatSession) : RenderedTurn {
 //! `render_turn_`'s IMAGE twin: the turn's prefill as the two token spans that bracket the image
 //! soft-token splice — `head` before the rows, `tail` (generation prompt, think-suppress) after.
 //! Render-only: no KV, no embedder — the rows come from `encode_image` on the caller's own.
-def render_turn_image_(m : Model; c : ChatSession; var head : array<int64>; var tail : array<int64>) {
-    render_prompt_image(m, c, head, tail)
+def render_turn_image_(m : Model; c : ChatSession; var head : array<int64>; var tail : array<int64>; text_before : int = 0) {
+    render_prompt_image(m, c, head, tail, text_before)
     render_think_suppress(m, c, tail)
 }
 
 //! `render_turn_`'s AUDIO twin: the same two-span contract around the audio soft-token splice
 //! (the template's audio span markers). The rows come from the family's audio encoder.
-def render_turn_audio_(m : Model; c : ChatSession; var head : array<int64>; var tail : array<int64>) {
-    render_prompt_audio(m, c, head, tail)
+def render_turn_audio_(m : Model; c : ChatSession; var head : array<int64>; var tail : array<int64>; text_before : int = 0) {
+    render_prompt_audio(m, c, head, tail, text_before)
     render_think_suppress(m, c, tail)
 }
 

@@ -1513,6 +1513,7 @@ struct ChatTemplate {
     add_bos : bool = false                    // prepend the tokenizer BOS at conversation start
     prelude : ChatTurn = ChatTurn()           // conversation-start parts after BOS (glm4moe: [gMASK]<sop>)
     system : ChatTurn = ChatTurn()
+    default_system : string = ""              // the system text the model's own template states for a conversation that opens with none
     user : ChatTurn = ChatTurn()
     assistant_open : ChatTurn = ChatTurn()
     assistant_close : ChatTurn = ChatTurn()   // empty = derive from the user turn's tail parts

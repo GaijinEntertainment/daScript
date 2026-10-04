@@ -187,3 +187,87 @@ def test_openai_server_audio(t : T?) {   // nolint:STYLE038 — one live server 
         }
     }
 }
+
+// A WHISPER-CLASS tower on a stock decoder: the ultravox mmproj arms Llama-3.2-1B's audio through the audio flag alone
+// (no vision tower in the file), its rows splice with no span marker, after the text the message puts ahead of them.
+
+let TOWER_PORT = 18177
+let UV_DEC_PATH = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
+let UV_MM_PATH = path_join(models_dir(), "mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf")
+let UV_ROWS = 187   // a chunk's soft tokens: 1500 encoder positions over the stack of 8
+
+def private with_tower_audio_server(port : int; blk : block<(base_url : string) : void>) {
+    with_job_status(1) $(finished) {
+        new_thread() @() {
+            allow_cpu_prefill()
+            var m <- load_model(UV_DEC_PATH, QuantMode.q8)
+            set_model(m, "test-uv")
+            set_model_audio("test-uv", UV_MM_PATH)
+            set_default_max_tokens(48l)
+            run_server(port)
+            finished |> notify_and_release
+        }
+        let ready = serve_clients(port, 1200, "/v1/models", blk)
+        finished |> join
+        assert(ready, "dasllama tower-audio server became ready")
+    }
+}
+
+def private prompt_tokens_of(t : T?; body : string; tag : string) : int {
+    var err : string
+    var js = read_json(body, err)
+    t |> success(js != null, "{tag}: chat JSON parses")
+    return 0 if (js == null)
+    let n = int(js?["usage"]?["prompt_tokens"] ?? 0l)
+    to_log(LOG_INFO, "{tag}: prompt {n}, reply '{js?["choices"]?[0]?["message"]?["content"] ?? ""}'\n")
+    t |> success(!empty(js?["choices"]?[0]?["message"]?["content"] ?? ""), "{tag}: the turn answers")
+    unsafe {
+        delete js
+    }
+    return n
+}
+
+[test]
+def test_openai_server_audio_tower(t : T?) {
+    t |> run("an ultravox mmproj arms a stock decoder's audio: bare rows after the text (needs Llama-3.2-1B + the ultravox mmproj)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA server tests are JIT-only)")
+            return
+        }
+        for (p in [UV_DEC_PATH, UV_MM_PATH, JFK_PATH]) {
+            if (!stat(p).is_valid) {
+                t |> skip("{base_name(p)} not present (set DASLLAMA_MODELS_DIR)")
+                return
+            }
+        }
+        let b64 = jfk_b64()
+        let text = "Transcribe this audio."
+        with_tower_audio_server(TOWER_PORT) $(base_url) {
+            GET("{base_url}/v1/stats") $(resp) {
+                var err : string
+                var js = read_json(string(resp.body), err)
+                t |> success(js != null && (js?["audio"] ?? false), "stats declares the audio arm")
+                t |> success(js != null && !(js?["vision"] ?? true), "and no vision arm: the file carries none")
+                if (js != null) {
+                    unsafe {
+                        delete js
+                    }
+                }
+            }
+            var plain = 0
+            POST("{base_url}/v1/chat/completions", "\{\"temperature\":0,\"messages\":[\{\"role\":\"user\",\"content\":\"{text}\"}]}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK))
+                plain = prompt_tokens_of(t, string(resp.body), "text alone")
+            }
+            let text_first = "\{\"temperature\":0,\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"text\",\"text\":\"{text}\"},\{\"type\":\"input_audio\",\"input_audio\":\{\"data\":\"{b64}\",\"format\":\"wav\"}}]}]}"
+            POST("{base_url}/v1/chat/completions", text_first) $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK))
+                t |> equal(prompt_tokens_of(t, string(resp.body), "text, then audio"), plain + UV_ROWS, "the clip adds its rows and no marker token")
+            }
+            POST("{base_url}/v1/chat/completions", audio_chat_body(b64, text)) $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK))
+                t |> equal(prompt_tokens_of(t, string(resp.body), "audio, then text"), plain + UV_ROWS, "the same count with the clip ahead of the text")
+            }
+        }
+    }
+}

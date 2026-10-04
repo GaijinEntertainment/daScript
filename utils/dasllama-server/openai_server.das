@@ -687,13 +687,14 @@ def private arm_slot_audio(mi : int; path : string) : string {
     }
     let proj_dim = audio_probe_proj_dim(path)
     if (proj_dim == 0l) {
-        return "{base_name(path)} carries no audio encoder dasLLAMA serves (gemma4a) - it cannot arm audio for {g_slots[mi].name}"
+        return "{base_name(path)} carries no audio encoder dasLLAMA serves (gemma4a, or a whisper-class tower: qwen2a, qwen2.5o, ultravox, voxtral) - it cannot arm audio for {g_slots[mi].name}"
     }
     if (proj_dim != g_slots[mi].model.config.dim) {
         return "{base_name(path)}'s audio encoder projects to {proj_dim} but {g_slots[mi].name} is {g_slots[mi].model.config.dim}-wide - mismatched pair"
     }
     var probe <- create_chat_renderer(g_slots[mi].model, "", 1l)
-    let no_markers = empty(probe.tmpl.audio_pre.parts) || !audio_vocab_ok(g_slots[mi].model, probe.tmpl)
+    // an ultravox span takes no marker: the stock decoder it pairs with declares none
+    let no_markers = !audio_probe_span_bare(path) && (empty(probe.tmpl.audio_pre.parts) || !audio_vocab_ok(g_slots[mi].model, probe.tmpl))
     delete probe
     if (no_markers) {
         return "{g_slots[mi].name}'s chat template or vocab carries no audio span markers - it has no audio arm"
@@ -704,8 +705,9 @@ def private arm_slot_audio(mi : int; path : string) : string {
     return ""
 }
 
-//! Give slot `name` an audio arm: the mmproj at `path` must carry a gemma4a audio encoder (the
-//! E-series mmproj carries BOTH towers, so the same file arms vision and audio). The chat route
+//! Give slot `name` an audio arm: the mmproj at `path` must carry an audio encoder the engine serves - gemma4a,
+//! or a whisper-class tower (an E-series or Omni mmproj carries BOTH towers, so the same file arms vision
+//! and audio). The chat route
 //! then accepts `input_audio` content parts — the clip serves through THIS slot, no second
 //! decoder copy. Same call contract as ``set_model_vision``: once per slot, before
 //! ``init_server`` (the media worker snapshots the arms at init); a bad pair PANICS here.
@@ -2435,6 +2437,19 @@ def private message_parts(mv : JsonValue?; route : string; var images : array<st
     return ""
 }
 
+//! How many bytes of a message's text sit ahead of its first media part: where the media splices in the rendered turn
+def media_text_before(mv : JsonValue?) : int {
+    let cv = mv?["content"]
+    return 0 if (cv == null || !(cv.value is _array))
+    var n = 0
+    for (pv in (cv.value as _array)) {
+        let ptype = pv?["type"] ?? ""
+        return n if (ptype == "image_url" || ptype == "input_image" || ptype == "input_audio")
+        n += ptype == "text" ? length(pv?["text"] ?? "") : 0
+    }
+    return 0
+}
+
 // `message_parts` for routes with no media path: image/audio parts warn and drop.
 def private message_text(mv : JsonValue?; route : string) : string {
     var images : array<string>
@@ -2673,15 +2688,17 @@ def private unwind_failed_runtime_load(id : string; prev_owner : int) {
 // Arm towers on a runtime-loaded slot from its mmproj; the returned note is "" or the
 // client-facing reason the slot serves text-only. Panics (a non-GGUF file, a bad projector)
 // are caught here — the model itself already serves.
-def private arm_runtime_towers(mi : int; mmproj : string) : string {
+def private arm_runtime_towers(mi : int; mmproj, audio_mmproj : string) : string {
     var note = ""
     var failure = ""
     let failed = catch_worker_panic(failure) {
-        let verr = arm_slot_vision(mi, mmproj)
-        if (!empty(verr)) {
-            note = verr
-        } elif (audio_probe_proj_dim(mmproj) > 0l) {
-            note = arm_slot_audio(mi, mmproj)   // the E-series file arms audio too
+        if (!empty(mmproj)) {
+            note = arm_slot_vision(mi, mmproj)
+        }
+        if (empty(note) && !empty(audio_mmproj)) {
+            note = arm_slot_audio(mi, audio_mmproj)
+        } elif (empty(note) && audio_probe_proj_dim(mmproj) > 0l) {
+            note = arm_slot_audio(mi, mmproj)   // a file with both towers arms audio too
         }
     }
     if (failed) {
@@ -2802,7 +2819,8 @@ def private handle_model_load(req : FrontReq; var resp : Reply) : http_status { 
     }
     let mi_new = length(g_slots) - 1
     let mmproj = js?["image_mmproj"] ?? ""
-    let tower_note = empty(mmproj) ? "" : arm_runtime_towers(mi_new, mmproj)
+    let audio_mmproj = js?["audio_mmproj"] ?? ""
+    let tower_note = empty(mmproj) && empty(audio_mmproj) ? "" : arm_runtime_towers(mi_new, mmproj, audio_mmproj)
     if (js?["activate"] ?? true) {
         set_default_model(id)   // the default is the slot model-less (page) requests land on
         g_active = mi_new
@@ -3134,10 +3152,12 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
         // the scheduler gets one flat prompt plus the index the rows splice at
         var head : array<int64>
         var tail : array<int64>
+        let n_msgs = length(msgs_v.value as _array)
+        let text_before = media_text_before((msgs_v.value as _array)[n_msgs - 1])   // the media rides the final message
         if (media_is_audio) {
-            render_turn_audio(cur_model(), chat, head, tail)
+            render_turn_audio(cur_model(), chat, head, tail, text_before)
         } else {
-            render_turn_image(cur_model(), chat, head, tail)
+            render_turn_image(cur_model(), chat, head, tail, text_before)
         }
         media_at = long_length(rendered) + long_length(head)
         rendered |> push_from(head, tail)
@@ -3248,7 +3268,7 @@ def private park_media_request(srv : FrontLink; writer : WriterRef;
     }
     let is_audio = !empty(audios)
     if (is_audio && !g_slots[g_cur].audio_armed) {
-        bad_request(srv, writer, "model '{cur_name()}' has no audio arm — start the server with its (audio-carrying) mmproj for it to accept input_audio parts")
+        bad_request(srv, writer, "model '{cur_name()}' has no audio arm — start the server with --audio-mmproj (or an --image-mmproj that carries an audio tower) for it to accept input_audio parts")
         return MediaPark.answered
     }
     if (!is_audio && g_slots[g_cur].vision.kind == VisionKind.none) {
@@ -4041,14 +4061,14 @@ let private CONFIG_KEY_KINDS <- {
     "ctx" => "i", "max_tokens" => "i", "streams" => "i", "threads" => "i", "team_dispatch" => "s",
     "affinity" => "i", "chunk" => "i", "chunk_idle" => "i", "page_rows" => "i", "prefix" => "i", "flat" => "b",
     "mtp" => "b", "rope_scaling" => "s", "rope_scale" => "f", "yarn_orig_ctx" => "i",
-    "lcpp_bin" => "s", "models_dir" => "s", "image_mmproj" => "s", "models" => "a",
+    "lcpp_bin" => "s", "models_dir" => "s", "image_mmproj" => "s", "audio_mmproj" => "s", "models" => "a",
     "exchange_url" => "s", "exchange_accept" => "s", "exchange_submit" => "s"
 }
 
 let private MODEL_KEY_KINDS <- {
     "name" => "s", "path" => "s", "backend" => "s", "ctx" => "i", "quant" => "s",
     "kv_dtype" => "s", "streams" => "i", "chunk" => "i", "chunk_idle" => "i", "page_rows" => "i", "prefix" => "i",
-    "mtp" => "b", "default" => "b", "image_mmproj" => "s",
+    "mtp" => "b", "default" => "b", "image_mmproj" => "s", "audio_mmproj" => "s",
     "rope_scaling" => "s", "rope_scale" => "f", "yarn_orig_ctx" => "i"
 }
 

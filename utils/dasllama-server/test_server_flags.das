@@ -9,6 +9,7 @@ require dasllama/dasllama                               // MetalMode through the
 require dasllama/dasllama_gpu_tier                      // the K/V room seam a cell doubles
 require daslib/clargs                                   // get_user_args / flag_present: the match cli_has_flag rests on
 require strings
+require daslib/json_boost                               // read_json: the content-part cases
 require daslib/fio                                      // the roster cell writes its config
 
 // Model-free unit coverage for the flag-presence test behind the config surface's provenance:
@@ -136,6 +137,28 @@ def private room_of_a_megabyte(row_bytes : int64) : int64 => 1000000l / row_byte
 
 //! The context clamp a blob-only model gets: its `seq_len` cut to the rows the device's KV room holds, a planar model and a
 //! context under the room left alone.
+[test]
+def test_media_text_before(t : T?) {
+    t |> run("a media part splices after the text parts ahead of it in the message") @(t : T?) {
+        let cases = [
+            (body = "\{\"content\":[\{\"type\":\"input_audio\",\"input_audio\":\{\"data\":\"AAAA\"}},\{\"type\":\"text\",\"text\":\"hello\"}]}", want = 0),
+            (body = "\{\"content\":[\{\"type\":\"text\",\"text\":\"hello\"},\{\"type\":\"input_audio\",\"input_audio\":\{\"data\":\"AAAA\"}}]}", want = 5),
+            (body = "\{\"content\":[\{\"type\":\"text\",\"text\":\"ab\"},\{\"type\":\"text\",\"text\":\"cde\"},\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"x\"}},\{\"type\":\"text\",\"text\":\"tail\"}]}", want = 5),
+            (body = "\{\"content\":[\{\"type\":\"text\",\"text\":\"only text\"}]}", want = 0),
+            (body = "\{\"content\":\"a plain string\"}", want = 0)
+        ]
+        for (c in cases) {
+            var err : string
+            var js = read_json(c.body, err)
+            t |> success(js != null, "the case parses: {err}")
+            t |> equal(media_text_before(js), c.want, c.body)
+            unsafe {
+                delete js
+            }
+        }
+    }
+}
+
 [test]
 def test_ctx_clamp_to_device_room(t : T?) {
     var m = Model()

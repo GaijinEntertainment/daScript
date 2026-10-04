@@ -291,8 +291,10 @@ def test_chat_tools_hermes(t : T?) {   // nolint:STYLE038 — flat expected-toke
         let tco = special_id(m, "<tool_call>")
         let tcc = special_id(m, "</tool_call>")
 
-        // no system, no tools: the replay shape alone. The assistant called get_weather...
+        // no system, no tools: the replay shape alone - the conversation opens with the system turn the model's own
+        // template states for one that carries none. The assistant called get_weather...
         var c = create_chat_renderer(m, "", 8l)
+        t |> equal(c.tmpl.default_system, "You are Qwen, created by Alibaba Cloud. You are a helpful assistant.", "the template's default system text, read off its escaped string literal")
         add_user(c, USR)
         var toks : array<int64>
         let call = "\{\"name\": \"get_weather\", \"arguments\": \{\"city\": \"Paris\"}}"
@@ -300,6 +302,10 @@ def test_chat_tools_hermes(t : T?) {   // nolint:STYLE038 — flat expected-toke
         calls |> push(call)
         render_assistant_calls(m, c, "", calls, toks)
         var want : array<int64>
+        want |> push(ims)
+        want |> push_from(bpe_encode(raw, "system\n{c.tmpl.default_system}"))
+        want |> push(ime)
+        want |> push_from(bpe_encode(raw, "\n"))
         want |> push(ims)
         want |> push_from(bpe_encode(raw, "user\n{USR}"))
         want |> push(ime)
@@ -996,6 +1002,51 @@ def private detok(m : Model; ids : array<int64>) : string {
     return replace(raw, "\n", "\\n")
 }
 
+// The system text a ChatML template states for a conversation with no system message, read off the three shapes the
+// stocked templates take; a span that carries an expression is the caller's own system turn and yields none.
+[test]
+def test_chatml_default_system(t : T?) {
+    t |> run("the default system text is the template's literal, never one of its expressions") @(t : T?) {
+        let cases = [
+            (name = "template text (Qwen2.5-Omni)", want = "You are a helpful assistant.",
+             src = "\{% if loop.first and message['role'] != 'system' %}<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n\{% endif %}<|im_start|>\{\{ message['role'] }}"),
+            (name = "a string literal (Qwen2.5)", want = "You are Qwen, created by Alibaba Cloud. You are a helpful assistant.",
+             src = "\{\{- '<|im_start|>system\\n' + messages[0]['content'] + '<|im_end|>\\n' }}\{%- else %}\{\{- '<|im_start|>system\\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\\n' }}"),
+            (name = "an expression alone (Qwen3.5)", want = "",
+             src = "\{\{- '<|im_start|>system\\n' }}\{\{- \"# Tools\" }}<|im_end|>\{\{- '<|im_start|>system\\n' + content + '<|im_end|>\\n' }}"),
+            (name = "no system literal at all", want = "",
+             src = "\{\{- '<|im_start|>' + message.role + '\\n' + content + '<|im_end|>' }}")
+        ]
+        for (c in cases) {
+            var m = Model()
+            m.chat_template_str = c.src
+            var inscope tmpl <- chat_template(m)
+            t |> equal(tmpl.default_system, c.want, c.name)
+            delete m
+        }
+    }
+}
+
+//! one audio turn rendered with `before` bytes of the user text ahead of the splice: the head closes with the opening marker
+//! and carries exactly that text, the tail the rest
+def private audio_splice_cell(t : T?; m : Model; before : int) {
+    var c <- create_chat_renderer_(m)
+    add_user(c, USR)
+    c.n_audio_rows = 3l
+    var inscope head : array<int64>
+    var inscope tail : array<int64>
+    render_prompt_audio(m, c, head, tail, before)
+    let h = detok(m, head)
+    let tl = detok(m, tail)
+    let lead = slice(USR, 0, max(before, 4))
+    let rest = slice(USR, before)
+    to_log(LOG_INFO, "voxtral audio at {before}: '{h}' [audio x3] '{tl}'\n")
+    t |> equal(head[length(head) - 1], special_id(m, "[BEGIN_AUDIO]"), "{before}: the head still closes with the opening marker")
+    t |> success(before == 0 ? find(h, lead) < 0 : find(h, lead) >= 0, "{before}: the head carries exactly the text ahead of the audio")
+    t |> success(before == length(USR) ? find(tl, "time") < 0 : find(tl, rest) >= 0, "{before}: the tail carries the text after it")
+    delete c
+}
+
 // The chat-audio marker gate: render_prompt_audio must bracket the soft-token splice in the
 // family's audio markers — the render-side half of the chat-audio rail (encoder numerics are
 // test_audio's; nothing else pins these template tags against a real vocab).
@@ -1019,6 +1070,17 @@ def test_chat_audio_markers(t : T?) {
         t |> equal(head[length(head) - 1], ba, "head closes with the opening audio marker")
         t |> success(!empty(tail) && tail[0] != ba, "no closing marker - the tail starts with text")
         delete c
+        delete m
+    }
+    t |> run("the audio splices where the message put it: ahead of the text, after it, inside it") @(t : T?) {
+        let path = path_join(models_dir(), "voxtral-mini-3b-q8_0.gguf")
+        if (!model_available(t, path)) {
+            return
+        }
+        var m <- load_capped(path)
+        for (before in [0, 4, length(USR)]) {
+            audio_splice_cell(t, m, before)
+        }
         delete m
     }
     t |> run("qwen2audio audio turn is bracketed by <|audio_bos|>/<|audio_eos|>") @(t : T?) {

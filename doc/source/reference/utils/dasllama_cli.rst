@@ -344,7 +344,7 @@ where the server's catalog downloads land; ``DASLLAMA_MODELS_DIR`` overrides).
 The ``dasllama-server.toml`` in the current directory, else in
 ``~/.dasllama`` (where the server's control page saves it), else beside the
 program - the server's own lookup - fills whatever the flags leave empty: the model (a ``[[models]]``
-roster's default entry included), its ``image_mmproj``, the ``asr`` and
+roster's default entry included), its ``image_mmproj`` and ``audio_mmproj``, the ``asr`` and
 ``mmproj`` pair, the ``tts`` model and its lane (an ``[[asr]]`` / ``[[tts]]``
 roster's first table), ``gpu`` and the Vulkan detail
 keys, ``threads``, ``ctx``, ``models_dir``. On a box the server's setup page
