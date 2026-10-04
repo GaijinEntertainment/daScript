@@ -109,6 +109,7 @@ def metal_tower_shutdown {
     st2_slab_free(g_tw_q3a_wpad)
     st2_slab_free(g_tw_fc_twin)
     st2_slab_free(g_tw_q8)
+    st2_slab_free(g_tw_conv1_pad)
     st2_slab_drop()
     pool_drain(g_tw_pool)
     g_tw_failed = false
@@ -2142,6 +2143,32 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : 
     return true
 }
 
+var private g_tw_conv1_pad : St2SlabBase   //!< the served whisper-class tower's first conv with its columns zero-padded to the 32 lattice
+
+//! The first conv's weight rows at `k1` columns - the file's 3 x n_mel and zeros past them - on the device, once a tower:
+//! the im2col pass pads its rows to the same lattice with zeros. Null where the buffer cannot be made.
+[cold_path]
+def private tw_conv1_pad_attach(t : AudioTower; k1 : int64) : MetalBuffer? {
+    let key = hash_combine64(tw_plane_key(t.fblob), uint64(t.conv1_w_off))
+    return g_tw_conv1_pad.buf if (st2_slab_current(g_tw_conv1_pad, key))
+    st2_slab_free(g_tw_conv1_pad)
+    let d = t.d_model
+    let k = 3l * t.n_mel
+    var pad = metal_new_buffer(g_dev, uint64(d * k1 * 4l))
+    return null if (pad == null)
+    unsafe {
+        var p = reinterpret<float?>(metal_buffer_contents(pad))
+        for (r in range64(d)) {
+            for (c in range64(k1)) {
+                p[r * k1 + c] = c < k ? t.fblob[t.conv1_w_off + r * k + c] : 0.0
+            }
+        }
+    }
+    g_tw_conv1_pad.buf = pad
+    g_tw_conv1_pad.key = key
+    return pad
+}
+
 //! the stem's second conv as a GEMM over its im2col rows: the device q8 blob's region on a q8 tower, the f32 blob otherwise
 def private conv2_mm(enc : MetalComputeEncoder?; t : AudioTower; bblob, bx2, bx2h, bxo, u_3d, u_d : MetalBuffer?; mp2 : int64) {
     let d = t.d_model
@@ -2159,7 +2186,7 @@ def private conv2_mm(enc : MetalComputeEncoder?; t : AudioTower; bblob, bx2, bx2
 // one command buffer, s.x readback. BEST-EFFORT inside the tower knob: any decline is a
 // silent false (no counter noise — the CPU conv serves and the blocks still ride the GPU).
 [hot_path]
-def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelChunk) : bool {
+def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelChunk) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {
         return false
     }
@@ -2167,8 +2194,13 @@ def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelC
     let tt = t.n_ctx
     let d = t.d_model
     let nm = t.n_mel
-    // tiny's 3x80 im2col width stays CPU; init re-arms after any shutdown seat
-    if ((3l * nm) % 32l != 0l || d % 64l != 0l || (3l * d) % 32l != 0l || !metal_tower_init() || (t.q8 && !tw_q8_attach(t))) {
+    // the first conv's 3 x n_mel columns ride the GEMM's 32 lattice: 80 mels' 240 pad to 256 through a padded weight copy
+    let k1 = round_up(3l * nm, 32l)
+    if (d % 64l != 0l || (3l * d) % 32l != 0l || !metal_tower_init() || (t.q8 && !tw_q8_attach(t))) {
+        return false
+    }
+    var bw1 = k1 == 3l * nm ? null : tw_conv1_pad_attach(t, k1)
+    if (k1 != 3l * nm && bw1 == null) {
         return false
     }
     let mp1 = round_up(tin, 32l)
@@ -2176,7 +2208,7 @@ def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelC
     let mapped = t.image_map != null
     var bblob = plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.fblob, 0l))), uint64(length(t.fblob) * 4l), mapped)
     let bytes_mel = uint64(nm * tin * 4l)
-    let bytes_x1 = uint64(mp1 * 3l * nm * 4l)
+    let bytes_x1 = uint64(mp1 * k1 * 4l)
     let bytes_y1 = uint64(mp1 * d * 4l)
     let bytes_x2 = uint64(mp2 * 3l * d * 4l)
     let bytes_xo = uint64(mp2 * d * 4l)
@@ -2189,17 +2221,21 @@ def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelC
     unsafe {
         memcpy(metal_buffer_contents(bmel), addr(mel.data[0]), bytes_mel)
     }
-    var u_nm3 = uniform_u32(uint(3l * nm))
+    var u_nm3 = uniform_u32(uint(k1))
     var u_d = uniform_u32(uint(d))
     var u_3d = uniform_u32(uint(3l * d))
     var u_totd1 = uniform_u32(uint(tin * d))
     var u_totd2 = uniform_u32(uint(tt * d))
-    var k1 = St2ConvArgs(cin = uint(nm), k = 3u, stride = 1u, pad_l = 1u, dil = 1u, t_in = uint(tin), r0 = 0u, rows = uint(tin), xs = uint(nm))
+    var ka1 = St2ConvArgs(cin = uint(nm), k = 3u, stride = 1u, pad_l = 1u, dil = 1u, t_in = uint(tin), r0 = 0u, rows = uint(tin), xs = uint(nm))
     var k2 = St2ConvArgs(cin = uint(d), k = 3u, stride = 2u, pad_l = 1u, dil = 1u, t_in = uint(tin), r0 = 0u, rows = uint(tt), xs = uint(d))
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
-        enc_st2_im2col_cm(enc, bmel, bx1, k1, mp1 * 3l * nm)
-        enc_f32_mm(enc, bblob, uint64(t.conv1_w_off * 4l), bx1, by1, 0ul, u_nm3, u_d, mp1, d)
+        enc_st2_im2col_cm(enc, bmel, bx1, ka1, mp1 * k1)
+        if (bw1 != null) {
+            enc_f32_mm(enc, bw1, 0ul, bx1, by1, 0ul, u_nm3, u_d, mp1, d)
+        } else {
+            enc_f32_mm(enc, bblob, uint64(t.conv1_w_off * 4l), bx1, by1, 0ul, u_nm3, u_d, mp1, d)
+        }
         enc_add_bias_rows(enc, by1, 0ul, bblob, uint64(t.conv1_b_off * 4l), u_d, u_totd1, tin * d)
         if (t.gelu_tanh) {
             enc_gelu_lut(enc, by1, 0ul, u_totd1, tin * d)
@@ -4666,6 +4702,7 @@ def private tw_weights_drop {
     st2_slab_free(g_tw_q3a_wpad)
     st2_slab_free(g_tw_fc_twin)
     st2_slab_free(g_tw_q8)
+    st2_slab_free(g_tw_conv1_pad)
     st2_slab_drop()
 }
 

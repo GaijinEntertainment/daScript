@@ -60,7 +60,9 @@ transform the ASR-decoder driver uploads its planes through), and every site run
 ladder (`pf_enc_q8_mm`) with the activations converted to one half panel where that ladder reads
 one. The device blob is 34/32 of the q8 planes and no image carries it; it drops with the weights
 epoch and the tower shutdown. The stem's first conv reads the f32 blob on both lanes - its
-3 x n_mel columns are not quantized.
+3 x n_mel columns are not quantized - and where those columns are off the GEMM's 32 lattice (80
+mels: 240) it reads a device copy of its rows zero-padded to the lattice (`tw_conv1_pad_attach`),
+the im2col pass padding its own rows with zeros to the same width.
 
 The gemma4a chain ends in the projector tail, in the blocks' command buffer: the out projection
 and its bias at the encoder's own output width (`gemma4a_mid_dim`, the length of the weightless

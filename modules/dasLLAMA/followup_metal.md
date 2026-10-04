@@ -892,8 +892,7 @@ from it.
 A Metal chain serves every stage of its family on the device (`REVIEW_TOWER.md`); these do not.
 Each is a stage and the models it holds for, read off the drivers' own gates:
 
-- **The whisper mel** runs on the CPU on every whisper size, and the whisper-class conv stem on a
-  model whose 3 x n_mel im2col width is off the 32 lattice (tiny, base, small, medium: 80 mels).
+- **The whisper mel** runs on the CPU on every whisper size.
 - **The whisper decode step** serves on the device from a text width of 512 up
   (`METAL_WDEC_STEP_MIN_D`); tiny's (384) runs on the CPU, where the device step is the slower
   one - 21.8 ms a request's decode against 17.8.

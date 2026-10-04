@@ -1303,7 +1303,7 @@ def test_whisper_metal_tower(tst : T?) {
             t |> equal(chunks, 1l, "jfk is one 30s chunk")
             t |> equal(s2.blocks - s1.blocks, 4l * chunks, "blocks delta = n_layer x chunks (tiny = 4)")
             t |> equal(s2.rows - s1.rows, 1500l * chunks, "rows delta = n_ctx x chunks")
-            t |> equal(s2.convs - s1.convs, 0l, "tiny's 3x80 im2col width keeps the CPU conv (the shape carve-out)")
+            t |> equal(s2.convs - s1.convs, chunks, "tiny's 3 x 80 conv columns pad to 256: the conv front served on the device")
             to_log(LOG_INFO, "whisper tiny mtower CPU eyeball: '{cpu.text}'\n")
             to_log(LOG_INFO, "whisper tiny mtower GPU eyeball: '{gpu.text}'\n")
             t |> success(!empty(gpu.text), "non-empty transcript")
