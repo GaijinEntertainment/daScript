@@ -1514,6 +1514,9 @@ struct ChatTemplate {
     prelude : ChatTurn = ChatTurn()           // conversation-start parts after BOS (glm4moe: [gMASK]<sop>)
     system : ChatTurn = ChatTurn()
     default_system : string = ""              // the system text the model's own template states for a conversation that opens with none
+    system_lead : string = ""                 // text the template writes ahead of every system turn's content (Llama-3.1+: the knowledge-cutoff line)
+    system_dated : bool = false               // the template follows `system_lead` with a "Today Date:" line, so a system turn renders on every conversation
+    system_date : string = ""                 // that line's date where the template fixes one; "" = the day the turn renders
     user : ChatTurn = ChatTurn()
     assistant_open : ChatTurn = ChatTurn()
     assistant_close : ChatTurn = ChatTurn()   // empty = derive from the user turn's tail parts

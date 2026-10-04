@@ -327,6 +327,12 @@ def add_user_image_rows(model : Model; var chat : ChatSession; var rows : array<
     add_user_image_rows_(model, chat, rows, n_rows, grid)
 }
 
+def set_chat_date(date : string) {
+    //! Pin the date a Llama-3.1+ system turn states (``"26 Jul 2024"``); ``""`` returns it to the day the turn
+    //! renders. For a prompt that must not move with the calendar - a pinned test stream, a benchmark.
+    set_chat_date_(date)
+}
+
 def add_user_span(model : Model; var chat : ChatSession; key : uint64; n_rows : int64; text_before : int; is_image : bool; bare : bool = false) {
     //! Mark the pending user turn as carrying a media span inline: ``render_turn`` and ``render_assistant`` then lay
     //! ``n_rows`` position ids (``media_position_id`` over the media's content ``key``) where the media sits,

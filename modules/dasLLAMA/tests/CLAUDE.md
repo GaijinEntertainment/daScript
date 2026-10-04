@@ -1004,7 +1004,11 @@ stray `<channel|>` the E2B emits after its answer). Model-free beside them,
 literal, none where the span holds an expression or the template states no system turn. Beside it,
 `test_gemma4_instruct_opener`: a gemma-4 template's non-thinking generation prompt keeps the closed
 empty thought where the template writes one (the 12B form) and is the bare model turn where it does
-not (the E-series form); the E2B cells' pinned streams carry the bare opener.
+not (the E-series form); the E2B cells' pinned streams carry the bare opener. `test_llama_system_header`: a
+Llama-3.1+ template's system header read off the template - the cutoff line, the date the template
+fixes (3.1) or none where it has a clock (3.2), nothing on a template with no header (3.0); the
+Llama-3 prefill cell pins the date (`set_chat_date`) and holds the header ahead of the system text,
+on a conversation with no system message too, and the unpinned stream differing.
 `test_think_split.das` - the reply-side reasoning matcher, model-free: every
 thinking family's wire shape, whole-string and per-chunk down to 1 byte, and the
 instruct-mode stop guard (`nothink_stop_here_`): a channel marker before the reply's first

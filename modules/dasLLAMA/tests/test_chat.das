@@ -176,10 +176,13 @@ def test_chat_llama3(t : T?) {
         let sh = special_id(raw, "<|start_header_id|>")
         let eh = special_id(raw, "<|end_header_id|>")
         let eot = special_id(raw, "<|eot_id|>")
-        // old llama3_chat.das: BOS, header(system), "\n\n{sys}", eot, header(user), "\n\n{usr}", eot, header(assistant), "\n\n"
+        // the model's own template: every system turn opens with its knowledge-cutoff line and a date line, the
+        // caller's system text after them - and a conversation with no system message still carries the two lines
+        set_chat_date("26 Jul 2024")
+        let header = "Cutting Knowledge Date: December 2023\nToday Date: 26 Jul 2024\n\n"
         var want <- [raw.bos_id, sh]
         want |> push_from(bpe_encode(raw, "system")); want |> push(eh)
-        want |> push_from(bpe_encode(raw, "\n\n{SYS}"))
+        want |> push_from(bpe_encode(raw, "\n\n{header}{SYS}"))
         want |> push(eot)
         want |> push(sh); want |> push_from(bpe_encode(raw, "user")); want |> push(eh)
         want |> push_from(bpe_encode(raw, "\n\n{USR}"))
@@ -187,6 +190,13 @@ def test_chat_llama3(t : T?) {
         want |> push(sh); want |> push_from(bpe_encode(raw, "assistant")); want |> push(eh)
         want |> push_from(bpe_encode(raw, "\n\n"))
         t |> success(ids_equal(engine_prefill(m, SYS, USR), want), "llama3 header prefill token-for-token")
+        var inscope bare <- engine_prefill(m, "", USR)
+        var inscope lead <- bpe_encode(raw, "\n\n{header}")
+        t |> success(length(bare) > 4 + length(lead) && ids_equal([for (k in range(length(lead))); bare[4 + k]], lead),
+            "with no system message the turn still states the cutoff and the date")
+        set_chat_date("")
+        var inscope today <- engine_prefill(m, "", USR)
+        t |> success(!ids_equal(today, bare), "unpinned, the date is the day the turn renders")
         delete raw
         delete m
     }
@@ -1038,6 +1048,32 @@ def test_gemma4_instruct_opener(t : T?) {
             var inscope tmpl <- chat_template(m)
             t |> equal(length(tmpl.assistant_open.parts), c.parts, c.name)
             t |> equal(length(tmpl.assistant_open_think.parts), 2, "{c.name}: the thinking opener is the bare model turn")
+            delete m
+        }
+    }
+}
+
+// A Llama-3.1+ template's system header is read off the template: the cutoff line, and the date line's date where the
+// template fixes one; a template with a clock states the day, and one with no header (Llama-3.0) states nothing.
+[test]
+def test_llama_system_header(t : T?) {
+    t |> run("the dated system header follows the template") @(t : T?) {
+        let head = "\{\{- \"<|start_header_id|>system<|end_header_id|>\\n\\n\" }}\{\{- \"Cutting Knowledge Date: December 2023\\n\" }}\{\{- \"Today Date: \" + date_string + \"\\n\\n\" }}"
+        let cases = [
+            (name = "a fixed date (3.1)", dated = true, date = "26 Jul 2024",
+             src = "\{%- set date_string = \"26 Jul 2024\" %}{head}"),
+            (name = "a clock (3.2)", dated = true, date = "",
+             src = "\{%- if strftime_now is defined %}\{%- set date_string = strftime_now(\"%d %b %Y\") %}\{%- else %}\{%- set date_string = \"26 Jul 2024\" %}\{%- endif %}{head}"),
+            (name = "no header (3.0)", dated = false, date = "",
+             src = "\{\{- '<|start_header_id|>' + message['role'] + '<|end_header_id|>\\n\\n' }}")
+        ]
+        for (c in cases) {
+            var m = Model()
+            m.chat_template_str = c.src
+            var inscope tmpl <- chat_template(m)
+            t |> equal(tmpl.system_dated, c.dated, c.name)
+            t |> equal(tmpl.system_date, c.date, "{c.name}: the date the template fixes")
+            t |> equal(tmpl.system_lead, c.dated ? "Cutting Knowledge Date: December 2023\n" : "", "{c.name}: the cutoff line")
             delete m
         }
     }

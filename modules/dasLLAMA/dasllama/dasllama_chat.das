@@ -207,6 +207,26 @@ def private chatml_default_system(src : string) : string {
     return empty(plain) ? chatml_literal_system(src, "<|im_start|>system\\n", true) : plain
 }
 
+//! `src` from `at` up to the next `stop`, "" where either is missing
+def private text_between(src, open, stop : string) : string {
+    let at = find(src, open)
+    return "" if (at < 0)
+    let from = at + length(open)
+    let to = find(src, stop, from)
+    return to < 0 ? "" : slice(src, from, to)
+}
+
+//! The header a Llama-3.1+ template writes into every system turn, read off the template: its knowledge-cutoff line,
+//! and the date line's fixed date where the template has no clock to ask. A template with no such header (Llama-3.0)
+//! leaves the fields as they stand.
+def private llama_system_header(src : string; var ct : ChatTemplate) {
+    let cutoff = text_between(src, "Cutting Knowledge Date: ", "\\n")
+    return if (empty(cutoff) || find(src, "Today Date: ") < 0)
+    ct.system_lead = "Cutting Knowledge Date: {cutoff}\n"
+    ct.system_dated = true
+    ct.system_date = find(src, "strftime_now") >= 0 ? "" : text_between(src, "set date_string = \"", "\"")
+}
+
 //! The chat template for a loaded model: sniff the GGUF's embedded `tokenizer.chat_template`
 //! first, falling back to the arch heuristic. GGUF general.architecture is "llama" for both
 //! Llama-3 (BPE) and Llama-2 (SentencePiece), so the fallback disambiguates by tokenizer backend.
@@ -218,6 +238,9 @@ def chat_template(m : Model) : ChatTemplate {
             // the E-series template opens a non-thinking model turn bare, where the larger models' closes an empty
             // thought channel first: with that channel ahead of it an E-series model writes its reasoning as the answer
             ct.assistant_open.parts := ct.assistant_open_think.parts
+        }
+        if (kind == "llama") {
+            llama_system_header(m.chat_template_str, ct)
         }
         if (kind == "qwen2") {
             ct.default_system = chatml_default_system(m.chat_template_str)
@@ -425,7 +448,8 @@ def private render_assistant_open(m : Model; c : ChatSession; var out : array<in
 // mode — the tool block wrapping the verbatim tool JSONs (one per line, the Qwen shape). The
 // other modes place their definitions elsewhere (developer turn, <|tool> blocks, user prefix).
 def private system_content(c : ChatSession) : string {
-    let base = empty(c.system) ? c.tmpl.default_system : c.system
+    let said = empty(c.system) ? c.tmpl.default_system : c.system
+    let base = c.tmpl.system_dated ? dated_system(c, said) : said
     if (empty(c.tools_json) || c.tmpl.tool_mode != ToolMode.hermes) {
         return base
     }
@@ -436,6 +460,21 @@ def private system_content(c : ChatSession) : string {
     let s = join(parts, "\n")
     delete parts
     return s
+}
+
+var private g_chat_date = ""   //! the date a dated system turn states in place of today's (`set_chat_date_`)
+
+//! Pin the date a dated system turn states ("26 Jul 2024"); "" returns it to the day the turn renders. For a caller
+//! whose prompt must not move with the calendar: a test's pinned stream, a benchmark's fixed prompt.
+def set_chat_date_(date : string) {
+    g_chat_date = date
+}
+
+//! A Llama-3.1+ system turn's content: the environment line a tool-carrying turn opens with, the template's lead
+//! (its knowledge-cutoff line), the date line, then the caller's system text.
+def private dated_system(c : ChatSession; said : string) : string {
+    let date = !empty(g_chat_date) ? g_chat_date : (!empty(c.tmpl.system_date) ? c.tmpl.system_date : format_time(get_clock(), "%d %b %Y"))
+    return "{empty(c.tools_json) ? "" : "Environment: ipython\n"}{c.tmpl.system_lead}Today Date: {date}\n\n{strip(said)}"
 }
 
 // The first-turn system block, shared by the text and audio prompt paths: the think gate spliced
