@@ -1090,7 +1090,7 @@ mixed twin's two - carries the routing witness: the prefill's Q8_K requant censu
 through `vk_kernel_coverage_of("cls_q8k_rq_spv")`, below the recurrent-layer count on the f16
 feed and at or above it off the feed. The mixed twin is the fixture that discriminates: a
 per-layer feed decision would send qkv/z to the sdot4 tile for the out plane's sake, and the
-witness reds it there. The witness reads `RQ_NO_CENSUS` and stands down in a build with no vulkan
+witness reds it there. The witness reads `NO_CENSUS` (`census`, `_resident_feed.das`) and stands down in a build with no vulkan
 module.
 
 Every fixture makes its session on the mirror codec the box arms. Under `DASLLAMA_VK_KV32=1` the

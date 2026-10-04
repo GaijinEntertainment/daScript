@@ -67,22 +67,12 @@ let private F32_DIST_REL = 1.15
 let private HEAD_K_BAR_REL = 0.08
 //! the CPU row one down misses a device row by at least this many bars, or the bar is too wide to tell the row from its neighbour
 let private HEAD_K_CONTROL_BARS = 2.0
-let private RQ_NO_CENSUS = -1l        //! the census count with no vulkan module: the routing witness stands down
 
 //! the plane formats a fixture's deltanet layers carry: all Q8_0, all K-quant, or K-quant qkv/z beside a Q8_0 out plane
 enum HybridPlanes {
     q8
     kq
     kq_q8out
-}
-
-//! the coverage census's count of Q8_K requant dispatches so far; RQ_NO_CENSUS with no vulkan module
-def private q8k_requants() : int64 {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        return vk_kernel_coverage_of("cls_q8k_rq_spv")
-    } else {
-        return RQ_NO_CENSUS
-    }
 }
 
 //! the driver's own answer: does the prefill's f16 feed admit a K-quant plane on the armed coopmat mode
@@ -141,12 +131,12 @@ def private hybrid_forced_feed(t : T?; n : int64; file : string; planes : Hybrid
     with_dasllama_jobque_() {
         var prompt <- resident_prompt(n)
         var toks <- resident_feed(8l)
-        let rq0 = q8k_requants()
-        var prefill_q8k_rq = RQ_NO_CENSUS
+        let rq0 = census("cls_q8k_rq_spv")
+        var prefill_q8k_rq = NO_CENSUS
         var fed <- resident_then_cpu_feed(t, tr, prompt, toks, $ {
-            prefill_q8k_rq = rq0 == RQ_NO_CENSUS ? RQ_NO_CENSUS : q8k_requants() - rq0
+            prefill_q8k_rq = rq0 == NO_CENSUS ? NO_CENSUS : census("cls_q8k_rq_spv") - rq0
         }) $ {}
-        if (kq && prefill_q8k_rq != RQ_NO_CENSUS) {
+        if (kq && prefill_q8k_rq != NO_CENSUS) {
             //! off the f16 feed the x route requants once per recurrent layer per window - the threshold both arms read
             to_log(LOG_INFO, "prefill ({n} tokens) [{tile_arm_tag()}]: {prefill_q8k_rq} Q8_K requants over {nrec} recurrent layers, f16 feed admits kq {f16_feed_admits_kq()}\n")
             if (f16_feed_admits_kq()) {
