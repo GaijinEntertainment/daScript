@@ -204,6 +204,7 @@ struct Seen {
     why : string
     wall_us : int64
     prompt_tokens : int64
+    text : string    //!< the reply, for a request that asked for more than its one timed token
 }
 
 //! one synthesis request as the client saw it; `why` is non-empty when it cannot enter a row
@@ -620,16 +621,19 @@ def private speech_rows(speech : Speech; clips : array<string>; reps : int; unde
     return tally
 }
 
+let EYEBALL_TOKENS = 96   //!< the untimed request's reply budget: enough to read whether the model saw the part
+
 //! One question about a media part - an image's data URI, or the base64 of an audio file under `is_audio` - answered
 //! in one token: the wall is the part's encode, the prompt's prefill and that token. The part leads the message, so
 //! another question about it shares the prompt up to the part's end.
-def see(plan : Plan; system, question, payload : string; is_audio : bool = false) : Seen {
+def see(plan : Plan; system, question, payload : string; is_audio : bool = false; max_tokens : int = 1) : Seen {
     var seen = Seen()
     let t0 = ref_time_ticks()
-    var res <- (is_audio ? chat_audio(client_of(plan.url), plan.model, question, payload, 1, system, true)
-        : chat_vision(client_of(plan.url), plan.model, question, payload, 1, system, true))
+    var res <- (is_audio ? chat_audio(client_of(plan.url), plan.model, question, payload, max_tokens, system, true)
+        : chat_vision(client_of(plan.url), plan.model, question, payload, max_tokens, system, true))
     seen.wall_us = int64(get_time_usec(t0))
     seen.prompt_tokens = int64(res.response.usage.prompt_tokens)
+    seen.text = empty(res.response.choices) ? "" : res.response.choices[0].message.content
     if (!res.ok) {
         seen.why = "HTTP {res.error.status}"
     } elif (seen.prompt_tokens == 0l) {
@@ -669,12 +673,14 @@ def media_rows(plan : Plan; files : array<string>; run : string; is_audio : bool
     for (path in files) {
         let name = base_name(path)
         let payload = is_audio ? file_base64(path) : image_file_data_uri(path)
-        let warmup = empty(payload) ? "the file is not there" : see(plan, "", ask, payload, is_audio).why   //! the untimed request ahead of the row
-        if (!empty(warmup)) {
-            print("{plan.tag}  {what} {name}  REFUSED: {warmup}\n")
+        //! the untimed request ahead of the row asks for a whole answer: the reply is printed, so a row is read with what the model said
+        let first = empty(payload) ? Seen(why = "the file is not there") : see(plan, "", ask, payload, is_audio, EYEBALL_TOKENS)
+        if (!empty(first.why)) {
+            print("{plan.tag}  {what} {name}  REFUSED: {first.why}\n")
             tally.refused++
             continue
         }
+        print("{plan.tag}  {what} {name} says: {replace(first.text, "\n", " ")}\n")
         var prompt_tokens = 0l
         var walls <- collect_reps(plan.reps) $(rep) {
             let system = "Session {run}-{name}-{rep}. Answer briefly."

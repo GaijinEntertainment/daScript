@@ -214,6 +214,11 @@ def chat_template(m : Model) : ChatTemplate {
     let kind = detect_chat_kind(m.chat_template_str)
     if (!empty(kind)) {
         var ct <- chat_template_of_kind(kind)
+        if (kind == "gemma4" && find(m.chat_template_str, "thought\\n<channel|>") < 0) {
+            // the E-series template opens a non-thinking model turn bare, where the larger models' closes an empty
+            // thought channel first: with that channel ahead of it an E-series model writes its reasoning as the answer
+            ct.assistant_open.parts := ct.assistant_open_think.parts
+        }
         if (kind == "qwen2") {
             ct.default_system = chatml_default_system(m.chat_template_str)
             let gen = rfind(m.chat_template_str, "add_generation_prompt")

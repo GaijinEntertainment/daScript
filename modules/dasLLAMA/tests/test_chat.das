@@ -447,7 +447,7 @@ def test_chat_gemma4_instruct_text_turn(t : T?) {
 
 [test]
 def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-token stream, one push per run
-    t |> run("default = thinking; instruct opt-out = closed empty thought (needs gemma-4-E2B)") @(t : T?) {
+    t |> run("default = thinking; instruct opt-out = the template's bare model turn (needs gemma-4-E2B)") @(t : T?) {
         let path = path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf")
         if (!stat(path).is_valid) {
             t |> skip("{path} not present")
@@ -464,8 +464,7 @@ def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-t
 
         var c = create_chat_renderer(m, "", 8l)
         t |> success(c.enable_thinking, "gemma-4 defaults to thinking on (thinking-trained family)")
-        // instruct opt-out: the closed empty thought prefill — the exact pre-thinking-arc token
-        // stream, pinned so the assistant_open restructure changes nothing
+        // instruct opt-out: the E-series template opens the model turn bare
         set_thinking(c, false)
         // instruct mode stops at a stray channel marker; thinking-ON must NOT (they frame the thought)
         let base_stops = length(c.stop_ids)
@@ -486,9 +485,6 @@ def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-t
         want |> push_from(encode(m, "\n", false, false))
         want |> push(trn)
         want |> push_from(encode(m, "model\n", false, false))
-        want |> push(cho)
-        want |> push_from(encode(m, "thought\n", false, false))
-        want |> push(chc)
         t |> success(ids_equal(got, want), "default prefill token-for-token (instruct shape)")
         delete c
 
@@ -544,7 +540,7 @@ def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-t
         add_user(c5, "and again?")
         let got5 <- render_turn(m, c5)
         t |> success(find_index(got5, thk) < 0, "no late gate materializes")
-        t |> equal(got5[length(got5) - 1], chc, "the opener keeps the closed empty thought")
+        t |> success(find_index(got5, chc) < 0, "the opener is the E-series template's bare model turn: no closed thought ahead of the answer")
         var eff5 <- effective_stop_ids(c5)
         t |> success(find_index(eff5, chc) >= 0, "the channel-marker stops stay armed (thinking never armed)")
         delete eff5
@@ -644,8 +640,6 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         var m <- load_capped(path)
         let trn = special_id(m, "<|turn>")
         let trc = special_id(m, "<turn|>")
-        let cho = special_id(m, "<|channel>")
-        let chc = special_id(m, "<channel|>")
         let tlo = special_id(m, "<|tool>")
         let tlc = special_id(m, "<tool|>")
         let tco = special_id(m, "<|tool_call>")
@@ -696,9 +690,6 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         want |> push_from(encode(m, "\n", false, false))
         want |> push(trn)
         want |> push_from(encode(m, "model\n", false, false))
-        want |> push(cho)
-        want |> push_from(encode(m, "thought\n", false, false))
-        want |> push(chc)
         t |> success(ids_equal(got, want), "defs turn token-for-token")
         delete c
 
@@ -716,9 +707,6 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         want2 |> push_from(encode(m, "\n", false, false))
         want2 |> push(trn)
         want2 |> push_from(encode(m, "model\n", false, false))
-        want2 |> push(cho)
-        want2 |> push_from(encode(m, "thought\n", false, false))
-        want2 |> push(chc)
         want2 |> push(tco)
         want2 |> push_from(encode(m, "call:get_weather\{city:", false, false))
         want2 |> push(q)
@@ -753,8 +741,6 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         var m <- load_capped(path)
         let trn = special_id(m, "<|turn>")
         let trc = special_id(m, "<turn|>")
-        let cho = special_id(m, "<|channel>")
-        let chc = special_id(m, "<channel|>")
         let tro = special_id(m, "<|tool_response>")
         let trr = special_id(m, "<tool_response|>")
 
@@ -787,9 +773,6 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         want |> push_from(encode(m, "\n", false, false))
         want |> push(trn)
         want |> push_from(encode(m, "model\n", false, false))
-        want |> push(cho)
-        want |> push_from(encode(m, "thought\n", false, false))
-        want |> push(chc)
         t |> success(ids_equal(got, want), "displaced results + close + user turn token-for-token")
         delete c
 
@@ -811,9 +794,6 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         want2 |> push_from(encode(m, "\n", false, false))
         want2 |> push(trn)
         want2 |> push_from(encode(m, "model\n", false, false))
-        want2 |> push(cho)
-        want2 |> push_from(encode(m, "thought\n", false, false))
-        want2 |> push(chc)
         t |> success(ids_equal(got2, want2), "the leaked open turn closes before the user turn")
         delete c2
         delete m
@@ -1038,6 +1018,28 @@ def test_chat_inline_span(t : T?) {
         t |> success(is_media_position(media_position_id(key, 0l)) && media_position_id(key, 0l) != media_position_id(key, 1l)
             && media_position_id(key, 0l) != media_position_id(key + 1ul, 0l), "a position id is no token id, and differs by row and by key")
         delete m
+    }
+}
+
+// A gemma-4 template's non-thinking generation prompt is read off the model's own template: the larger models close
+// an empty thought channel after the model turn's opener, the E-series opens the turn bare.
+[test]
+def test_gemma4_instruct_opener(t : T?) {
+    t |> run("the non-thinking opener follows the template: a closed thought where it writes one, bare where it does not") @(t : T?) {
+        let cases = [
+            (name = "the 12B form", parts = 5,
+             src = "\{\{- '<|turn>model\\n' -}}\{%- if not enable_thinking -%}\{\{- '<|channel>thought\\n<channel|>' -}}\{%- endif -%}"),
+            (name = "the E-series form", parts = 2,
+             src = "\{\{- '<|turn>model\\n' -}}\{%- elif enable_thinking -%}\{\{- '<|channel>thought\\n' -}}\{%- endif -%}")
+        ]
+        for (c in cases) {
+            var m = Model()
+            m.chat_template_str = c.src
+            var inscope tmpl <- chat_template(m)
+            t |> equal(length(tmpl.assistant_open.parts), c.parts, c.name)
+            t |> equal(length(tmpl.assistant_open_think.parts), 2, "{c.name}: the thinking opener is the bare model turn")
+            delete m
+        }
     }
 }
 

@@ -1001,7 +1001,10 @@ the instruct-mode TEXT turn through `respond` (greedy "2+2": the answer, no chan
 the content half, the turn ending on a stop - red when the guard does not end the turn on the
 stray `<channel|>` the E2B emits after its answer). Model-free beside them,
 `test_chatml_default_system`: the default system text read off template text and off a string
-literal, none where the span holds an expression or the template states no system turn.
+literal, none where the span holds an expression or the template states no system turn. Beside it,
+`test_gemma4_instruct_opener`: a gemma-4 template's non-thinking generation prompt keeps the closed
+empty thought where the template writes one (the 12B form) and is the bare model turn where it does
+not (the E-series form); the E2B cells' pinned streams carry the bare opener.
 `test_think_split.das` - the reply-side reasoning matcher, model-free: every
 thinking family's wire shape, whole-string and per-chunk down to 1 byte, and the
 instruct-mode stop guard (`nothink_stop_here_`): a channel marker before the reply's first
