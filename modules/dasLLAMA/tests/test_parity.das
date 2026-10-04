@@ -41,46 +41,6 @@ def private with_parity_backend(t : T?; blk : block<() : void>) {
     invoke(blk)
 }
 
-// The pinned-kernel generate-and-compare core: greedily continue `prompt` on a loaded model and
-// return whether the continuation matches `want` token-for-token. Kept free of T? so the [test]'s
-// run()-lambda captures no array by move.
-def private parity_gen_ok(tr : Model; prompt, want : array<int64>; dn_chunked : bool = false; eyeball : bool = false) : bool {
-    let n_gen = length(want)
-    var ok = false
-    // Token-exact oracle gate => run the BIT-EXACT classic prefill attention, not the (default) flash:
-    // flash's online-softmax FP reorder is not bit-exact and can flip a greedy token under the
-    // interpreter (whose FP differs from JIT, where the fixtures were frozen). Flash staying within
-    // tolerance is what test_flash covers. Restore the prior mode so we don't leak global state.
-    let prev_attn = get_prefill_attn_mode()
-    set_prefill_attn_mode(AttnPrefillMode.classic)
-    // ...and the scalar libm silu/gelu, not the default exp4 gate (~2 ulp) — same token-exact-oracle
-    // reasoning as the attention pin above. exp4 staying within tolerance is covered by test_silu.
-    let prev_act = get_act_vec()
-    set_act_vec(false)
-    // ...and the per-token recurrent deltanet prefill (the form the hybrid fixtures were frozen
-    // in), not the (default) chunked — same reasoning again; chunked gets its own explicit arms.
-    let prev_dn = get_deltanet_prefill_mode()
-    set_deltanet_prefill_mode(dn_chunked ? DnPrefillMode.chunked : DnPrefillMode.recurrent)
-    with_dasllama_jobque() {
-        var s = make_run_state(tr.config)
-        let ids <- generate(tr, s, prompt, length(prompt) + n_gen)
-        // generate echoes prompt[1..] then the continuation, so the first generated token is at
-        // index length(prompt)-1 (the same slice harness/parity.das compares)
-        let echo = length(prompt) - 1
-        let got <- [for (i in range(n_gen)); ids[echo + i]; where echo + i < length(ids)]
-        ok = ids_equal(got, want)
-        if (eyeball) {   // opt-in: needs a tokenizer-bearing load (load_model_, not load_gguf)
-            to_log(LOG_INFO, "eyeball want: {eyeball_text(tr, want)}\n")
-            to_log(LOG_INFO, "eyeball got:  {eyeball_text(tr, got)}\n")
-        }
-        delete s
-    }
-    set_prefill_attn_mode(prev_attn)
-    set_act_vec(prev_act)
-    set_deltanet_prefill_mode(prev_dn)
-    return ok
-}
-
 // cls_q8 invariant: a tied Q8 load of a Q8_0 embedding drops the fp32 table (the classifier
 // matmuls the disk quants; rows dequant on demand from the linear transcode at emb_q8_off) — and
 // those rows must be bit-identical to the fp32 table a fp32 load decodes from the same disk data.

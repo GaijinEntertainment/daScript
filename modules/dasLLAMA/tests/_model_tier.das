@@ -21,6 +21,7 @@ require math   // the tower-parity statistics
 require dasllama/dasllama_gguf   // gguf_shard_paths — split models tier on their TOTAL size
 require dasllama/dasllama_common   // decode_ — the eyeball rail detokenizes through the model
 require dasllama/dasllama_env
+require dasllama/dasllama_math
 require dasllama/dasllama_gpu_resident   // resident_mirror_dtype — the mirror codec the box arms
 require _compares public
 
@@ -104,6 +105,49 @@ def eyeball_text(m : Model; ids : array<int64>) : string => eyeball_str(decode_(
 def log_gen_texts(m : Model; tag : string; cpu_ids, gpu_ids : array<int64>) {
     to_log(LOG_INFO, "{tag} CPU text: {eyeball_text(m, cpu_ids)}\n")
     to_log(LOG_INFO, "{tag} GPU text: {eyeball_text(m, gpu_ids)}\n")
+}
+
+//! `body` under the bit-exact kernel modes a token-exact oracle needs - classic prefill attention, the scalar libm activations and
+//! the per-token recurrent deltanet prefill (chunked under `dn_chunked`) - the previous modes put back after
+def with_pinned_kernels(dn_chunked : bool; body : block) {
+    let prev_attn = get_prefill_attn_mode()
+    set_prefill_attn_mode(AttnPrefillMode.classic)
+    let prev_act = get_act_vec()
+    set_act_vec(false)
+    let prev_dn = get_deltanet_prefill_mode()
+    set_deltanet_prefill_mode(dn_chunked ? DnPrefillMode.chunked : DnPrefillMode.recurrent)
+    invoke(body)
+    set_prefill_attn_mode(prev_attn)
+    set_act_vec(prev_act)
+    set_deltanet_prefill_mode(prev_dn)
+}
+
+//! `body` under the pinned kernels with the recurrent deltanet prefill
+def with_pinned_kernels(body : block) {
+    with_pinned_kernels(false, body)
+}
+
+//! `prompt` greedily continued on a fresh session under the pinned kernels, the continuation against `want` token for token (the
+//! first generated id sits at `length(prompt) - 1`, past generate's echo); `eyeball` logs both decoded. Free of T?, so it JITs
+//! and the engine chain runs on the native stack.
+def parity_gen_ok(tr : Model; prompt, want : array<int64>; dn_chunked : bool = false; eyeball : bool = false) : bool {
+    let n_gen = length(want)
+    var ok = false
+    with_pinned_kernels(dn_chunked) {
+        with_dasllama_jobque_() {
+            var s = make_run_state(tr.config)
+            let ids <- generate(tr, s, prompt, length(prompt) + n_gen)
+            let echo = length(prompt) - 1
+            let got <- [for (i in range(n_gen)); ids[echo + i]; where echo + i < length(ids)]
+            ok = ids_equal(got, want)
+            if (eyeball) {
+                to_log(LOG_INFO, "eyeball want: {eyeball_text(tr, want)}\n")
+                to_log(LOG_INFO, "eyeball got:  {eyeball_text(tr, got)}\n")
+            }
+            delete s
+        }
+    }
+    return ok
 }
 
 //! `steps` greedy decode steps through `s` from BOS at position 0: each step's pick into `ids`, the last step's logits into `logits`

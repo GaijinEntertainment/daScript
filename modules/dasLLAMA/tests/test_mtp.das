@@ -28,7 +28,7 @@ require _resident_feed   // head_k_row_bytes
 //      the plain (non-MTP) file — trunk equality was proven with the simple_ids reference decode on both;
 //   2. output-invariance: generate_mtp_greedy() == generate() token-for-token — greedy self-spec
 //      changes wall time, never tokens (accept path reads batch-kernel logits, so this holds only
-//      under the PINNED bit-exact kernels, same reasoning as test_parity's parity_gen_ok);
+//      under the PINNED bit-exact kernels, same reasoning as _model_tier's parity_gen_ok);
 //   3. rollback: a poisoned 2-row verify batch + mtp_state_restore replays plain decode exactly
 //      (the deltanet conv+S state is the only thing a rejected draft leaves behind — KV rows get
 //      overwritten by construction).
@@ -46,22 +46,6 @@ let MTP_PROMPT <- [2427l, 494l, 799l, 310l, 16570l, 25l, 799l, 11l, 1330l, 11l, 
 let MTP_WANT <- [2943l, 11l, 4097l, 11l, 4590l, 11l, 7840l, 11l, 7810l, 11l, 11292l, 11l, 5600l, 11l,
                  42744l, 11l, 28279l, 11l, 58614l, 11l, 60163l, 11l, 35442l, 11l, 56091l, 11l, 78592l,
                  11l, 59942l, 11l, 90600l, 11l, 16570l, 13l, 198l, 2427l, 494l, 799l, 310l, 16570l]
-
-// Pin the bit-exact kernel modes around `body` and restore the previous modes — classic prefill
-// attention (not flash), scalar libm activations (not exp4), per-token recurrent deltanet prefill
-// (not chunked). Token-exact gates must not ride near-tie kernel variance; see parity_gen_ok.
-def private with_pinned_kernels(body : block) {
-    let prev_attn = get_prefill_attn_mode()
-    set_prefill_attn_mode(AttnPrefillMode.classic)
-    let prev_act = get_act_vec()
-    set_act_vec(false)
-    let prev_dn = get_deltanet_prefill_mode()
-    set_deltanet_prefill_mode(DnPrefillMode.recurrent)
-    invoke(body)
-    set_prefill_attn_mode(prev_attn)
-    set_act_vec(prev_act)
-    set_deltanet_prefill_mode(prev_dn)
-}
 
 // Plain greedy reference over one fresh session (generate()'s echo contract: prompt[1..] then the
 // continuation).
@@ -86,26 +70,10 @@ def private gen_spec(tr : Model; prompt : array<int64>; total : int; var nd, na 
     return <- out
 }
 
-// Spec-off pinned generate-and-compare (parity_gen_ok's shape). Helpers like this stay plain
-// functions on purpose: they JIT-compile, so the deep forward chain runs on the native stack —
-// calling the engine from the [test] run-lambda's interpreted frame overflows its 16K das stack.
-def private specoff_gen_ok(tr : Model; prompt, want : array<int64>) : bool {
-    var ok = false
-    with_dasllama_jobque() {
-        var s = make_run_state(tr.config)
-        let ids <- generate(tr, s, prompt, length(prompt) + length(want))
-        let echo = length(prompt) - 1
-        let got <- [for (i in range(length(want))); ids[echo + i]; where echo + i < length(ids)]
-        ok = ids_equal(got, want)
-        delete s
-    }
-    return ok
-}
-
 //! the manual reject over the CPU restore: a poisoned 2-row verify (the draft a fixed garbage token) advances the deltanet
 //! state past a wrong row, and the restore plus one plain forward must leave it as if the batch never ran; answers the tokens
 //! decoded after it (first = the prefill argmax) and fills `want` with the plain-decode slice they must equal. Free of T? like
-//! specoff_gen_ok: a T? param keeps the helper off the JIT, and the engine chain overflows the interpreter stack
+//! parity_gen_ok: a T? param keeps the helper off the JIT, and the engine chain overflows the interpreter stack
 def private reject_rollback_ids(tr : Model; n_check : int64; var want : array<int64>) : array<int64> {
     var got : array<int64>
     with_dasllama_jobque() {
@@ -216,9 +184,7 @@ def test_mtp_loader(t : T?) {
         t |> success(tr.mtp_headnorm_off >= 0l, "nextn shared_head_norm loaded (qwen35 MTP files ship it)")
         tr.config.seq_len = 2048l
         // spec OFF: the -MTP- file's trunk must continue the fixture exactly like the plain file
-        with_pinned_kernels() {
-            t |> success(specoff_gen_ok(tr, MTP_PROMPT, MTP_WANT), "spec-off token-for-token vs the plain-file oracle")
-        }
+        t |> success(parity_gen_ok(tr, MTP_PROMPT, MTP_WANT), "spec-off token-for-token vs the plain-file oracle")
         delete tr
     }
 }
