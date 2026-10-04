@@ -475,12 +475,8 @@ def private prefill_warm(tr : Model; var s : Session; prompt : array<int64>; sta
 }
 
 //! one device row `gpu` within the deltanet bar of the CPU row `cpu`, the CPU row `off` - one step or one row away - as the control past it
-def private row_within(t : T?; what : string; gpu, cpu, off : array<float>) {
-    var g <- [ <- clone_to_move(gpu)]
-    var c <- [ <- clone_to_move(cpu), <- clone_to_move(off)]
-    rows_within_control(t, what, g, c, DN_LOGIT_BAR_REL, 1l, 1.0, $(_r) => "(the CPU row one away as the control)")
-    delete g
-    delete c
+def private dn_row_within(t : T?; what : string; gpu, cpu, off : array<float>) {
+    row_within_ctrl(t, what, gpu, cpu, off, DN_LOGIT_BAR_REL, "(the CPU row one away as the control)")
 }
 
 [test]
@@ -504,8 +500,8 @@ def test_gpu_resident_hybrid_mtp_draft(t : T?) {
             let ag = argmax_of(gpu.logits)
             let ac = argmax_of(cpu.logits)
             to_log(LOG_INFO, "draft (row {row}, token {DRAFT_TOKEN}): argmax cpu {ac} '{decode_(tr, [ac])}' ({cpu.logits[ac]}), resident {ag} '{decode_(tr, [ag])}' ({gpu.logits[ag]}), device pick {pick}\n")
-            row_within(t, "draft logits", gpu.logits, cpu.logits, one_row_back.logits)
-            row_within(t, "draft hidden", gpu.h, cpu.h, one_row_back.h)
+            dn_row_within(t, "draft logits", gpu.logits, cpu.logits, one_row_back.logits)
+            dn_row_within(t, "draft hidden", gpu.h, cpu.h, one_row_back.h)
             t |> equal(pick, ag, "the device pick is the argmax of the logits it landed")
             pick_agrees(t, tr, "draft (row {row}, token {DRAFT_TOKEN})", pick, cpu.logits, DN_LOGIT_BAR_REL)
             delete gpu
@@ -1339,7 +1335,7 @@ def test_gpu_resident_hybrid_mtp_head_off(t : T?) {
             let at = argmax_of(truth)
             let ac = argmax_of(step)
             to_log(LOG_INFO, "head off: the CPU verify's row 0 argmax {at} '{decode_(tr, [at])}' ({truth[at]}), the CPU chain's step {ac} '{decode_(tr, [ac])}' ({step[ac]}); maxdiff {logits_maxdiff(truth, step)}\n")
-            row_within(t, "head off: the CPU verify's row 0 over the rows the decline brought down", truth, step, pf)
+            dn_row_within(t, "head off: the CPU verify's row 0 over the rows the decline brought down", truth, step, pf)
             delete step
             delete pf
             delete c

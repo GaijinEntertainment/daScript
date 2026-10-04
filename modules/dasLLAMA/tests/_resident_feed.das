@@ -244,6 +244,16 @@ def rows_within_control(t : T?; what : string; gpu, cpu : array<array<float>>; r
     to_log(LOG_INFO, "{what}: {n} rows, the widest miss {worst} at row {worst_row} (bar {worst_bar}); the tightest control {tight_off} at row {tight_row} (bar {tight_bar}, {tight_bar > 0.0 ? tight_off / tight_bar : 0.0} bars)\n")
 }
 
+//! `rows_within_control` on one row: `gpu` within `rel` of `cpu`'s scale, and `off` - the row one away - past the same bar,
+//! `tail` naming the control in every message
+def row_within_ctrl(t : T?; what : string; gpu, cpu, off : array<float>; rel : float; tail : string) {
+    var g <- [ <- clone_to_move(gpu)]
+    var c <- [ <- clone_to_move(cpu), <- clone_to_move(off)]
+    rows_within_control(t, what, g, c, rel, 1l, 1.0, $(_r) => tail)
+    delete g
+    delete c
+}
+
 //! the prefill's logits, then each fed step's, through `s`; `after_prefill` runs between the prefill and the first step
 def feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks : array<int64>; after_prefill : block<void>) : array<array<float>> {
     let n = long_length(prompt)

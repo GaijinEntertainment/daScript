@@ -133,13 +133,6 @@ def private lane_steps(tr : Model; var s : Session; tok0, tok1, k : int64; carry
     return <- r
 }
 
-//! `rows_within_control` over rows handed as literals, the arrays freed after the compare
-def private within(t : T?; name : string; var g : array<array<float>>; var c : array<array<float>>; bar : float; tail : string) {
-    rows_within_control(t, name, g, c, bar, 1l, 1.0, $(_r) => tail)
-    delete g
-    delete c
-}
-
 //! one speculative round on the device (the draft, the two-row verify, the accept or the rollback): its two rows and wide carry rows
 //! against the split command's one-row steps and the CPU's on the round's pick lanes, the other row as each row's control
 [test]
@@ -167,10 +160,10 @@ def test_gpu_resident_hc_mtp_verify(t : T?) {
             set_mtp_spec(spec1)
             delete sd
             t |> equal(ds.seen, 2l * nl, "the two split steps replayed the rows' lanes, a select a routed layer each")
-            within(t, "hc verify row 0 against the split command's one-row step, picks alike (DASLLAMA_GPU_HEAT {heat})", [ <- clone_to_move(r.dev0)], [ <- clone_to_move(ds.l0), <- clone_to_move(ds.l1)], SPLIT_BAR_REL, "(the split command's row 1 as the control)")
-            within(t, "hc verify row 1 against the split command's one-row step, picks alike (DASLLAMA_GPU_HEAT {heat})", [ <- clone_to_move(r.dev1)], [ <- clone_to_move(ds.l1), <- clone_to_move(ds.l0)], SPLIT_BAR_REL, "(the split command's row 0 as the control)")
-            within(t, "hc verify carry row 0 against the split command's one-row step, picks alike (DASLLAMA_GPU_HEAT {heat})", [ <- clone_to_move(r.devh0)], [ <- clone_to_move(ds.h0), <- clone_to_move(ds.h1)], SPLIT_CARRY_BAR_REL, "(the split command's carry row 1 as the control)")
-            within(t, "hc verify carry row 1 against the split command's one-row step, picks alike (DASLLAMA_GPU_HEAT {heat})", [ <- clone_to_move(r.devh1)], [ <- clone_to_move(ds.h1), <- clone_to_move(ds.h0)], SPLIT_CARRY_BAR_REL, "(the split command's carry row 0 as the control)")
+            row_within_ctrl(t, "hc verify row 0 against the split command's one-row step, picks alike (DASLLAMA_GPU_HEAT {heat})", r.dev0, ds.l0, ds.l1, SPLIT_BAR_REL, "(the split command's row 1 as the control)")
+            row_within_ctrl(t, "hc verify row 1 against the split command's one-row step, picks alike (DASLLAMA_GPU_HEAT {heat})", r.dev1, ds.l1, ds.l0, SPLIT_BAR_REL, "(the split command's row 0 as the control)")
+            row_within_ctrl(t, "hc verify carry row 0 against the split command's one-row step, picks alike (DASLLAMA_GPU_HEAT {heat})", r.devh0, ds.h0, ds.h1, SPLIT_CARRY_BAR_REL, "(the split command's carry row 1 as the control)")
+            row_within_ctrl(t, "hc verify carry row 1 against the split command's one-row step, picks alike (DASLLAMA_GPU_HEAT {heat})", r.devh1, ds.h1, ds.h0, SPLIT_CARRY_BAR_REL, "(the split command's carry row 0 as the control)")
             delete ds
             moe_gpu_drop_model()
             var sc <- create_session(tr, mirror_kv_dtype())
@@ -183,10 +176,10 @@ def test_gpu_resident_hc_mtp_verify(t : T?) {
             t |> equal(tape_d.seen + cs.seen, 1l + 2l * nl, "the CPU draft and the two token steps replayed the round's selects, a lane each")
             let cpu_a = argmax_of(cpu_draft.logits)
             to_log(LOG_INFO, "hc round: the CPU draft's argmax {cpu_a} '{decode_(tr, [cpu_a])}' against the device's draft {r.draft} '{decode_(tr, [r.draft])}'; tape: {tape_d.seen + cs.seen} selects replayed, {tape_d.miss} of the CPU draft's own picks off the device head's\n")
-            within(t, "hc verify row 1 logits against the CPU's one-row step", [ <- clone_to_move(r.dev1)], [ <- clone_to_move(cs.l1), <- clone_to_move(cs.l0)], WIDE_BAR_REL, "(the CPU's row 0 as the control)")
-            within(t, "hc verify row 0 logits against the CPU's one-row step", [ <- clone_to_move(r.dev0)], [ <- clone_to_move(cs.l0), <- clone_to_move(cs.l1)], WIDE_BAR_REL, "(the CPU's row 1 as the control)")
-            within(t, "hc verify wide carry row 0 against the CPU's one-row step", [ <- clone_to_move(r.devh0)], [ <- clone_to_move(cs.h0), <- clone_to_move(cs.h1)], WIDE_CARRY_BAR_REL, "(the CPU's carry row 1 as the control)")
-            within(t, "hc verify wide carry row 1 against the CPU's one-row step", [ <- clone_to_move(r.devh1)], [ <- clone_to_move(cs.h1), <- clone_to_move(cs.h0)], WIDE_CARRY_BAR_REL, "(the CPU's carry row 0 as the control)")
+            row_within_ctrl(t, "hc verify row 1 logits against the CPU's one-row step", r.dev1, cs.l1, cs.l0, WIDE_BAR_REL, "(the CPU's row 0 as the control)")
+            row_within_ctrl(t, "hc verify row 0 logits against the CPU's one-row step", r.dev0, cs.l0, cs.l1, WIDE_BAR_REL, "(the CPU's row 1 as the control)")
+            row_within_ctrl(t, "hc verify wide carry row 0 against the CPU's one-row step", r.devh0, cs.h0, cs.h1, WIDE_CARRY_BAR_REL, "(the CPU's carry row 1 as the control)")
+            row_within_ctrl(t, "hc verify wide carry row 1 against the CPU's one-row step", r.devh1, cs.h1, cs.h0, WIDE_CARRY_BAR_REL, "(the CPU's carry row 0 as the control)")
             delete cs
             delete cpu_draft
             delete sc
@@ -242,8 +235,8 @@ def test_gpu_resident_hc_mtp_draft(t : T?) {
             let ac = argmax_of(cpu.logits)
             to_log(LOG_INFO, "hc draft (row {row}, token {DRAFT_TOKEN}): argmax cpu {ac} ({cpu.logits[ac]}), resident {ag} ({gpu.logits[ag]}), device pick {pick}; tape: {tape.seen} selects replayed, {tape.miss} of the CPU head's own picks off the device's\n")
             t |> equal(tape.seen, 1l, "the CPU head replayed the device head's one select")
-            within(t, "hc draft logits", [ <- clone_to_move(gpu.logits)], [ <- clone_to_move(cpu.logits), <- clone_to_move(one_row_back.logits)], LOGIT_BAR_REL, "(the CPU draft one row back as the control)")
-            within(t, "hc draft wide carry", [ <- clone_to_move(gpu.h)], [ <- clone_to_move(cpu.h), <- clone_to_move(one_row_back.h)], CARRY_BAR_REL, "(the CPU draft one row back as the control)")
+            row_within_ctrl(t, "hc draft logits", gpu.logits, cpu.logits, one_row_back.logits, LOGIT_BAR_REL, "(the CPU draft one row back as the control)")
+            row_within_ctrl(t, "hc draft wide carry", gpu.h, cpu.h, one_row_back.h, CARRY_BAR_REL, "(the CPU draft one row back as the control)")
             t |> equal(pick, ag, "the device pick is the argmax of the logits it landed")
             pick_agrees(t, tr, "hc draft (row {row}, token {DRAFT_TOKEN})", pick, cpu.logits, LOGIT_BAR_REL)
             t |> equal(int(moe_pick_tape_mode().mode), int(tape_before.mode), "the pick tape is back at the mode the cell found")
