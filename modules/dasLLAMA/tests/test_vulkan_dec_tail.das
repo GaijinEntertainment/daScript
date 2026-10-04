@@ -293,6 +293,19 @@ def private token_cell(t : T?; var qa : Quad; var qb : Quad; f : Ffn; pos : int6
     held_row(t, "{tag} pos {pos} layer B raw k row", kout, krawb_ref)
 }
 
+//! a fresh claim with both layers hydrated empty and serving position 0 after; with `unseen` (two layers the block has not
+//! seen) each asks for its hydrate at position 0 first (zero rows create it), the second still asking after the first one's; the claim
+def private claim_hydrated(t : T?; qa, qb : Quad; tag : string; unseen : bool = true) : int64 {
+    let gen = moe_gpu_attn_dec_claim(true)
+    t |> success(!unseen || moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 0l, gen) == DAT_HYDRATE, "{tag}: an unseen layer asks for a hydrate at position 0")
+    matmul_moe_gpu_attn_dec_hydrate(qa.woq, qa.fmt, null, null, 0l, KVD, true)
+    t |> success(!unseen || moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 0l, gen) == DAT_HYDRATE, "{tag}: the second layer is still unseen after the first one's hydrate")
+    matmul_moe_gpu_attn_dec_hydrate(qb.woq, qb.fmt, null, null, 0l, KVD, true)
+    t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 0l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 0l, gen) == DAT_SERVE,
+        "{tag}: both layers serve position 0 after the empty hydrates")
+    return gen
+}
+
 //! two layers whose q planes sit at ONE offset in two format planes (a mixed-format file's shape): the block keys a layer by
 //! its offset under its format, so each layer serves its own quad and mirror; false = no device
 def private collide_cell(t : T?; f : Ffn; base : int64; tag : string) : bool {
@@ -302,13 +315,7 @@ def private collide_cell(t : T?; f : Ffn; base : int64; tag : string) : bool {
         return false
     }
     t |> success(quad_up(qb, 0, base, 63l, 0.8, true, false), "{tag}: the q8 quad uploaded at the k4 quad's offset")
-    let gen = moe_gpu_attn_dec_claim(true)
-    matmul_moe_gpu_attn_dec_hydrate(qa.woq, qa.fmt, null, null, 0l, KVD, true)
-    t |> success(moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 0l, gen) == DAT_HYDRATE, "{tag}: the second layer at the shared offset is still unseen after the first one's hydrate")
-    matmul_moe_gpu_attn_dec_hydrate(qb.woq, qb.fmt, null, null, 0l, KVD, true)
-    t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 0l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 0l, gen) == DAT_SERVE,
-        "{tag}: both layers serve position 0")
-    two_positions(t, qa, qb, f, gen, tag)
+    two_positions(t, qa, qb, f, claim_hydrated(t, qa, qb, tag), tag)
     return true
 }
 
@@ -329,14 +336,7 @@ def private pair_cell(t : T?; f : Ffn; fmt : int; base : int64; tag : string; ne
         return false
     }
     t |> success(quad_up(qb, fmt, base + 10l * STRIDE, 33l + int64(fmt), 0.7, neox, hasb), "{tag}: layer B's quad uploaded")
-    let gen = moe_gpu_attn_dec_claim(true)
-    // a layer the block has never seen hydrates first (zero rows at position 0 creates it), then serves
-    t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 0l, gen) == DAT_HYDRATE, "{tag}: an unseen layer asks for a hydrate at position 0")
-    matmul_moe_gpu_attn_dec_hydrate(qa.woq, qa.fmt, null, null, 0l, KVD, true)
-    matmul_moe_gpu_attn_dec_hydrate(qb.woq, qb.fmt, null, null, 0l, KVD, true)
-    t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 0l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 0l, gen) == DAT_SERVE,
-        "{tag}: both layers serve position 0 after the empty hydrate")
-    two_positions(t, qa, qb, f, gen, tag)
+    two_positions(t, qa, qb, f, claim_hydrated(t, qa, qb, tag), tag)
     // the hydrate arms: a fresh claim empties both mirrors; A refills from f32 rows, B from f16 rows
     let gen2 = moe_gpu_attn_dec_claim(true)
     t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 2l, gen2) == DAT_HYDRATE, "{tag}: a fresh claim empties the mirrors - position 2 asks for a hydrate")
@@ -588,11 +588,7 @@ def test_vulkan_dec_span(t : T?) {
         var qb : Quad
         t |> success(quad_up(qa, 1, 60l * STRIDE, 51l, 0.4, true, false), "dec span: layer A's quad uploaded")
         t |> success(quad_up(qb, 1, 70l * STRIDE, 63l, 0.8, true, false), "dec span: layer B's quad uploaded")
-        let gen = moe_gpu_attn_dec_claim(true)
-        matmul_moe_gpu_attn_dec_hydrate(qa.woq, qa.fmt, null, null, 0l, KVD, true)
-        matmul_moe_gpu_attn_dec_hydrate(qb.woq, qb.fmt, null, null, 0l, KVD, true)
-        t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 0l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 0l, gen) == DAT_SERVE,
-            "dec span: both layers serve position 0")
+        let gen = claim_hydrated(t, qa, qb, "dec span")
         var sp <- span_planes(qa, qb, f)
         var a <- span_args(qa, qb, f)
         var kout : array<float>
@@ -651,11 +647,7 @@ def test_vulkan_dec_span_shexp(t : T?) {
         for (gated in fixed_array(true, false)) {
             vk_span_reset()   //! the record keys on the shared expert's gate: the ungated arm is a new span
             let tag = gated ? "gated" : "ungated"
-            let gen = moe_gpu_attn_dec_claim(true)
-            matmul_moe_gpu_attn_dec_hydrate(qa.woq, qa.fmt, null, null, 0l, KVD, true)
-            matmul_moe_gpu_attn_dec_hydrate(qb.woq, qb.fmt, null, null, 0l, KVD, true)
-            t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 0l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 0l, gen) == DAT_SERVE,
-                "dec span shexp ({tag}): both layers serve position 0")
+            claim_hydrated(t, qa, qb, "dec span shexp ({tag})", false)
             var a <- span_args_sh(qa, qb, f, sh, gated)
             var kout : array<float>
             var vout : array<float>
