@@ -44,6 +44,8 @@ require daslib/typemacro_boost
 require _vk_probe_fixture   // hash_word, cool_f16_pair: the synthetic planes both probes build
 require ../tests/_vkd_oracles.das   // k4f16_gemm_oracle: the CPU reference the khrx baseline arm is checked against
 require ../tests/_compares.das
+require _race_fixture   // time_rounds, held, compare_words: the races' round loop and their compare
+require daslib/linq   // min: an arm's best round
 
 let private MM_TILE = 128
 let private DISPATCHES = 16
@@ -1726,7 +1728,7 @@ let private KHR_ARM_NAMES = fixed_array("nil   ", "ship  ", "dec4  ", "khr   ", 
 let private KHR_ARM_KHR = 3   //! the shipped class: the compared arms' reference and the CPU check's subject
 let private KHR_ARM_KQ = 4    //! the sdot4 kq tile, 32 x 32 where every other arm tiles 128 x 128
 let private KHR_ARM_COMPARED = fixed_array(false, true, true, false, false, true, true, true)   //! khr is the reference; nil stages constants and kq reads its own Q8 activation fixture: timing-only
-let private KHR_ARM_REL_BOUND = 2e-2lf   //! a compared arm passes within this relative difference of the shipped class; the copies read 0, the f32-accumulator arm 0.005-0.009
+let private KHR_ARM_REL_BOUND = 2e-2   //! a compared arm passes within this relative difference of the shipped class; the copies read 0, the f32-accumulator arm 0.005-0.009
 
 //! the bisect arms stage and store whole 128-row tiles - only the two shipped tiles clamp token rows to the window's count, so only they run on a partial window
 def private khr_arm_clamps(v : int) : bool => v == KHR_ARM_KHR || v == KHR_ARM_KQ
@@ -1734,34 +1736,18 @@ let private MMQ_ARMS = 5
 var private g_prof_arm = ""
 var private g_probe_exit = 0   //! the process exit code: a decline, a compared arm over its bound, or a profiler run that dispatched nothing
 
-//! the interleaved timing of one sweep's arms: after a two-submit warm-up each, every round times
-//! SUBMITS / ROUNDS submits of every arm in turn, and an arm's figure is its best round
+//! the interleaved timing of one sweep's arms (`_race_fixture.das`' `time_rounds`): after one dropped warm-up round, every
+//! round times SUBMITS / ROUNDS submits of every arm in turn, and an arm's figure is its best round a dispatch; a null arm reads 0
 def private sweep_best_us(var raws : array<VkCommandBuffer>) : array<double> {
-    var best : array<double>
-    best |> resize(length(raws))
-    for (raw, bv in raws, best) {
-        bv = 1.0e30lf
-        if (raw == null) {
-            continue
-        }
-        submit_wait(raw)
-        submit_wait(raw)
-    }
-    for (_r in range(ROUNDS)) {
-        for (raw, bv in raws, best) {
-            if (raw == null) {
-                continue
-            }
-            let t0 = ref_time_ticks()
+    var times <- time_rounds(length(raws), ROUNDS, 1) $(i : int) {
+        if (raws[i] != null) {
             for (_s in range(SUBMITS / ROUNDS)) {
-                submit_wait(raw)
-            }
-            let us = double(get_time_usec(t0)) / double((SUBMITS / ROUNDS) * DISPATCHES)
-            if (us < bv) {
-                bv = us
+                submit_wait(raws[i])
             }
         }
     }
+    var best <- [for (ts, raw in times, raws); raw == null ? 0.0lf : double(ts |> min()) / double((SUBMITS / ROUNDS) * DISPATCHES)]
+    delete times
     return <- best
 }
 
@@ -1877,16 +1863,9 @@ def private khr_report(name : string; var raws : array<VkCommandBuffer>; best : 
         var tail = "timing-only"
         if (KHR_ARM_COMPARED[v]) {
             read_back_y(raws[v], last_out, y_bytes, y_arm)
-            let mrd = max_rel_diff(y_arm, y_ref)
-            if (mrd == 0.0lf) {
-                tail = "bit-exact vs khr"
-            } else {
-                let within = mrd <= KHR_ARM_REL_BOUND
-                tail = "max rel diff {mrd:.5f} vs khr ({within ? "within" : "OVER"} {KHR_ARM_REL_BOUND})"
-                if (!within) {
-                    g_probe_exit = 1
-                }
-            }
+            let hd = held(y_arm, y_ref, KHR_ARM_REL_BOUND)
+            tail = compare_words(hd, "khr", "the whole output")
+            g_probe_exit = hd.ok ? g_probe_exit : 1
         }
         print("{name} {KHR_ARM_NAMES[v]}: {best[v] / 1000.0lf} ms/dispatch  {tf} TFLOP/s  {tail}\n")
     }
