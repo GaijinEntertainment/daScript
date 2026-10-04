@@ -15,7 +15,13 @@ anchor.
   while none does, since a prefill window's cost is mostly fixed and nothing waits on it; `chunk_defaults` names
   both sizes per serving backend (the chunk 512 where a GPU prefills and 64 on the CPU, whose chunk costs its token count, so the stall follows it down; idle 512,
   2048 on Metal, where four windows in one call run within a few percent of the whole prompt's rate); paged serving donates finished streams'
-  KV pages to the prefix cache, device mode parks their regions. Results flow out as `SchedEvent`s - no HTTP here.
+  KV pages to the prefix cache, device mode parks their regions. A prompt is one position stream: a media
+  span's rows stand in it as ids of the media's content (`media_position_id`), so the prefix cache matches,
+  attaches and donates across an image or a clip as across text. A span evals as one body and attaches
+  whole - a hit ending inside one counts as no hit - and a hit past a grid-roped span restores the span's
+  rope advance on the session. A request may leave a span's rows out where it counts on the cache to hold
+  the span (`prefix_match_len` is the probe for that); if the cache has lost it by admission the stream
+  finishes `media_lost` and its caller brings the rows. Results flow out as `SchedEvent`s - no HTTP here.
   `utils/dasllama-server` owns the writers; `tutorials/dasLLAMA/13_serving.das` is the
   teaching consumer; `tests/test_scheduler.das` gates it against `generate()` references.
   The step clears its gather arrays (`batch_rows`, `batch_toks`, `batch_idx`) before it reaps

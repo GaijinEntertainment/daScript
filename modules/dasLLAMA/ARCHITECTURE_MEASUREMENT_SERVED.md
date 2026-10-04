@@ -42,11 +42,13 @@ ends before they do or the text differs from the idle row's. Where the speech en
 beside the chat model on the GPU or on the CPU team - is the server's launch, not the
 instrument's: each placement is one run.
 
-Its image rows time a question about an image answered in one token, so the wall is the image's
-encode, the prompt's prefill and that token: per rep a question under a system line no server has
-seen, then a second question under the same line, which a server that keeps the image's rows
-answers from its cache. The row carries the prompt tokens the image and the text make, the same
-on every rep or the row is refused; the first question's cv is the one that voids it.
+Its media rows (`--image`, and `--chat-clip` for an audio clip sent as an `input_audio` part) time a
+question about the part answered in one token, the part ahead of the text, so the wall is the
+part's encode, the prompt's prefill and that token: per rep a question under a system line no
+server has seen, then a second question under the same line - asked again, which a server that
+pays for a part once answers from its cache, neither encoding nor prefilling the part a second
+time. The row carries the prompt tokens the part and the text make, the same on every rep or the
+row is refused; the first question's cv is the one that voids it.
 
 Its synthesis rows time a whole `/v1/audio/speech` request, one row a model: the answer is the
 finished WAV, so the wall is the time to first audio, printed beside the seconds of speech the

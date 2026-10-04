@@ -988,7 +988,10 @@ prefill stream), the tool wires (the Qwen2.5 hermes cell holding the system turn
 states for a conversation that opens with none - its text read off the template's escaped string
 literal, its tokens ahead of the first user turn), the audio marker cells (voxtral's opening
 marker, qwen2audio's pair, and the splice at the text offset the message gives - ahead of the text,
-inside it, after it - the head and tail carrying exactly the text on their side), and the gemma-4 E2B cells: the
+inside it, after it - the head and tail carrying exactly the text on their side), the inline-span cell
+(`test_chat_inline_span`: a turn marked with `add_user_span_` renders the splice pair's head, the span's
+position ids and its tail as one stream at each text offset, a replayed turn keeps its span, and a position
+id is no token id and differs by row and by key), and the gemma-4 E2B cells: the
 thinking renderer pins (the instruct prefill token for token, the gate + bare opener, the
 thinking-off extras on `effective_stop_ids`, a mid-conversation toggle staying instruct) and
 the instruct-mode TEXT turn through `respond` (greedy "2+2": the answer, no channel marker in
@@ -1009,7 +1012,13 @@ The SmolLM cells drop the loaded model's GPU state (`moe_gpu_drop_model`) so the
 the CPU rails under `DASLLAMA_GPU=1` too: their bit-exact claims hold on one lane, and the
 tier's device prefill, resident batch decode and CPU prefill round differently. Its two-stream
 deltanet cell needs Qwen3.5-0.8B-Q8_0 and `DASLLAMA_GPU=1` on a box whose tier serves the
-deltanet decode step, and skips otherwise. `test_scheduler_idle_quantum` holds the prefill
+deltanet decode step, and skips otherwise. `test_scheduler_media_splice` holds a media span as part of
+the prompt the prefix cache matches: a splice at the head, middle and tail equals the all-token stream;
+the non-causal flag reaches the kernel; and on a paged scheduler the text ahead of a span attaches and the
+hit stops at the span, the media stream donates, the same media asked again attaches past the span and
+reads the same stream, a request with no rows is served off the cache, other rows at the same place share
+only the text ahead of them (the control), and a rowless request on a cold cache finishes `media_lost` and
+donates nothing. `test_scheduler_idle_quantum` holds the prefill
 quantum's two sizes by the tokens one tick prefills: a lone stream's first tick takes the whole
 prompt under the idle quantum and one chunk with it off (`idle_chunk_tokens = 0`), the two streams
 token for token alike under classic prefill, both decoded in the log; a prompt admitted beside a
@@ -1813,7 +1822,7 @@ the corpus as its `%%` segments over a temp file, the row statistic and the brac
 against a fake chat server on its own thread that answers by the request's `model` field: a complete
 stream (counts, both spans past the server's 30 ms pauses, the server's own TTFT), and the four
 refusals - no usage chunk, no reply text, a reply of one token (no decode span to time), HTTP 500 -
-plus no server at the address, the follow-up row standing over complete turns and refused by a failed one, and the image cells - a file as a data URI and a missing one as none, an image question's wall and prompt tokens off the fake's buffered completion, HTTP 500 saying why, an image row standing over a file and refused without one. The speech rows
+plus no server at the address, the follow-up row standing over complete turns and refused by a failed one, and the media cells (an image row and a chat-clip row, the clip an `input_audio` part, each over a file and refused without one) - a file as a data URI and a missing one as none, an image question's wall and prompt tokens off the fake's buffered completion, HTTP 500 saying why, an image row standing over a file and refused without one. The speech rows
 run against a fake speech server on a second thread: a transcription's wall holds the server's
 300 ms pause, a failed and a blank answer say why, every request of a row uploads a clip the fake
 has not heard (a WAV's four reps read `new` four times; a clip that is no WAV goes up as it is, the
@@ -1877,7 +1886,8 @@ the `max_unreserved_size` guard that must not panic.
 `test_from_template.das` - model-free: the `[from_template]` stamp (`dasllama/dasllama_tune`) - a
 placeholder call renames to the annotation's target per stub, and the stub's signature types the
 clone so one template stamps both plane overloads.
-`test_kv_prefix.das` - stocked suite; model-free cells on a synthetic Config: the prefix cache's page
+`test_kv_prefix.das` - stocked suite; beside each attach below, the probe `prefix_match_len_` reads the
+count the attach then attaches (0 on a recurrent cache, which attaches at checkpoints); model-free cells on a synthetic Config: the prefix cache's page
 accounting, the LRU budget and the token verify, then a recurrent session's checkpoints - one
 checkpoint a donation with the page of its last row copied, the `max_states` budget, where a
 prefill stops (`prefix_checkpoint_at_`: the caller's stable opening, else the opening an earlier
