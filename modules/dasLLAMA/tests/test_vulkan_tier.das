@@ -12,6 +12,7 @@ require ?vulkan dasllama/dasllama_vulkan_seams  // the single-op seams (vk_add_r
 require daslib/f16_cvt
 require math
 require _vk_kq_fixtures   // the synthetic kq stacks + pow2 scale sets (shared with test_vulkan_moe_cm2)
+require _kq_fixtures
 require _compares   // check: every compare's rel_of_max bar, largest-difference log and poisoned-element control
 require _attn_oracle   // attn_row_oracle: the attention cells' softmax rows
 
@@ -96,22 +97,6 @@ def private fill_acts_of(var xq : array<int8>; var xs : array<float>; nrows, wid
 
 def private fill_acts(var xq : array<int8>; var xs : array<float>; nrows : int64) {
     fill_acts_of(xq, xs, nrows, N, 32l, 11l, 3l, 2l)
-}
-
-//! `h` requantized in blocks of `blk` as the device does: scale amax / 127, each quant round(h * 127 / amax)
-def private requant_blocks(h : array<float>; blk : int64; var hq : array<auto(QT)>; var hs : array<float>) {
-    for (b in range64(long_length(h) / blk)) {
-        var amax = 0.0
-        for (j in range64(blk)) {
-            amax = max(amax, abs(h[b * blk + j]))
-        }
-        let d = amax / 127.0
-        let id = d != 0.0 ? 1.0 / d : 0.0
-        hs[b] = d
-        for (j in range64(blk)) {
-            hq[b * blk + j] = QT(int(round(h[b * blk + j] * id)))
-        }
-    }
 }
 
 //! a stack triple's base element offsets: gate, up, down
@@ -201,13 +186,9 @@ def private ref_ffn(offs1, offs3, offs2 : array<int64>; bases : Bases; nreg : in
     var gate : array<float>
     var up : array<float>
     var h : array<float>
-    var hq : array<int>
-    var hs : array<float>
     gate |> resize(NFE)
     up |> resize(NFE)
     h |> resize(NFE)
-    hq |> resize(NFE)
-    hs |> resize(nbh)
     for (r in range(nreg)) {
         let rb1 = int((offs1[r * 3] - bases.gate) / N)      // first gate-plane row of this region's expert
         let rb3 = int((offs3[r * 3] - bases.up) / N)
@@ -236,18 +217,19 @@ def private ref_ffn(offs1, offs3, offs2 : array<int64>; bases : Bases; nreg : in
             for (i in range(nfe)) {
                 h[i] = silu_f32(gate[i]) * up[i]
             }
-            requant_blocks(h, 32l, hq, hs)
+            var hr <- q8_roundtrip(h, NFE, false)
             for (o in range(nn)) {
                 var y = 0.0
                 for (b in range(nbh)) {
                     var dd = 0
                     for (j in range(32)) {
-                        dd += int(wq2[(rb2 + o) * int(NFE) + b * 32 + j]) * hq[b * 32 + j]
+                        dd += int(wq2[(rb2 + o) * int(NFE) + b * 32 + j]) * int(hr.xq[b * 32 + j])
                     }
-                    y += float(dd) * ws2[(rb2 + o) * nbh + b] * hs[b]
+                    y += float(dd) * ws2[(rb2 + o) * nbh + b] * hr.xs[b]
                 }
                 gout[rw * int(N) + o] = y
             }
+            delete hr
         }
     }
 }
@@ -632,13 +614,9 @@ def private ref_ffn_kq(offs1, offs3, offs2 : array<int64>; bases : Bases; nreg :
     var gate : array<float>
     var up : array<float>
     var h : array<float>
-    var hq : array<int>
-    var hs : array<float>
     gate |> resize(KNFE)
     up |> resize(KNFE)
     h |> resize(KNFE)
-    hq |> resize(KNFE)
-    hs |> resize(nsbh)
     for (r in range(nreg)) {
         let rb1 = int((offs1[r * 3] - bases.gate) / KN)
         let rb3 = int((offs3[r * 3] - bases.up) / KN)
@@ -667,18 +645,19 @@ def private ref_ffn_kq(offs1, offs3, offs2 : array<int64>; bases : Bases; nreg :
             for (i in range(knfe)) {
                 h[i] = silu_f32(gate[i]) * up[i]
             }
-            requant_blocks(h, int64(midblk), hq, hs)
+            var hr <- q8_roundtrip(h, KNFE, midblk == 256)
             for (o in range(kn)) {
                 var y = 0.0lf
                 for (sb in range(nsbh)) {
                     var dd = 0.0lf
                     for (j in range(midblk)) {
-                        dd += double(w2[(rb2 + o) * int(KNFE) + sb * midblk + j]) * double(hq[sb * midblk + j])
+                        dd += double(w2[(rb2 + o) * int(KNFE) + sb * midblk + j]) * double(hr.xq[sb * midblk + j])
                     }
-                    y += dd * double(hs[sb])
+                    y += dd * double(hr.xs[sb])
                 }
                 gout[rw * int(KN) + o] = float(y)
             }
+            delete hr
         }
     }
 }
@@ -1254,15 +1233,10 @@ def private ref_dn_core(qkvy, zy : array<float>; bts, gts, tapsv, wnormv, av, dt
         }
     }
     // Q8_0 requant of the o rows, then the out projection off the quantized image
-    var oq : array<int8>
-    var os : array<float>
-    oq |> resize(npos * DNDI)
-    os |> resize(npos * DNDI / 32l)
-    requant_blocks(o, 32l, oq, os)
-    ref_q8_gemm(wo, wso, oq, os, DNDI, DND, npos, yout)
+    var orq <- q8_roundtrip(o, npos * DNDI, false)
+    ref_q8_gemm(wo, wso, orq.xq, orq.xs, DNDI, DND, npos, yout)
     delete o
-    delete oq
-    delete os
+    delete orq
     delete p_qc
     delete p_kc
     delete p_kb
@@ -1653,21 +1627,14 @@ def private ref_at_attn(qp, kp, vp, gatep : array<float>; npos : int64; gated : 
 //! the o rows requantized in the wo stack's form - blocks of 256 for the k4 wo (dequantized `wo4`), Q8_0 for the q8 one
 //! (`wo`, `wso`) - then the wo GEMM
 def private ref_wo_gemm(op : array<float>; npos : int64; wo_k4 : bool; wo4 : array<float>; wo : array<int8>; wso : array<float>) : array<float> {
-    if (wo_k4) {
-        var oq : array<int>
-        var os : array<float>
-        oq |> resize(npos * ATQD)
-        os |> resize(npos * ATQD / 256l)
-        requant_blocks(op, 256l, oq, os)
-        return <- ref_deq_gemm(wo4, oq, os, ATQD, ATD, npos)
-    }
-    var oq : array<int8>
-    var os : array<float>
-    oq |> resize(npos * ATQD)
-    os |> resize(npos * ATQD / 32l)
-    requant_blocks(op, 32l, oq, os)
+    var orq <- q8_roundtrip(op, npos * ATQD, wo_k4)
     var refy : array<float>
-    ref_q8_gemm(wo, wso, oq, os, ATQD, ATD, npos, refy)
+    if (wo_k4) {
+        refy <- ref_deq_gemm(wo4, orq.xq, orq.xs, ATQD, ATD, npos)
+    } else {
+        ref_q8_gemm(wo, wso, orq.xq, orq.xs, ATQD, ATD, npos, refy)
+    }
+    delete orq
     return <- refy
 }
 
