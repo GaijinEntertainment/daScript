@@ -3311,6 +3311,10 @@ def private rd_encode_draft_pick(raw : VkCommandBuffer; var h : VkHaz) {
     rd_ts(raw, "t:draft_norm")
     rd_gemv(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, g_rd.dim, g_rd.vocab, 1u, uint(g_rd.vocab))
     rd_ts(raw, "t:draft_cls")
+    if (rd_cls_epi_on()) {
+        rd_enc_cls_epi(raw, h)
+        rd_ts(raw, "t:draft_epi")
+    }
     var pcp = ArgmaxArgs(vocab = uint(g_rd.vocab))
     enc_cls_argmax_part(raw, h, g_rd.s_pick_part, pcp, RD_PICK_CHUNKS)
     enc_cls_argmax_fin(raw, h, g_rd.s_pick_fin, pcp, 1l)

@@ -1142,7 +1142,11 @@ unset seat (the device's row count stays below them, the host's reaches past), d
 two rows past the device's (the host's two go up with the draft: the device's count reaches past
 the drafted row, the host's stops below it), brings the drafted row down on the next pass (the
 host's count past it, the host K row moved) and holds the device pick tie-aware against the CPU
-draft's logits over the same rows.
+draft's logits over the same rows. `test_gpu_resident_hybrid_mtp_draft_suppressed` drafts once on
+the device, then re-arms the driver (`gpu_slot_capture`, `moe_gpu_drop_model`,
+`gpu_slot_rearm`) with that pick among the model's suppressed ids and drafts again over the same
+prompt: the draft's logit for the id is pinned, the pick is another id and the argmax of the
+logits it landed (the first draft's pick against its own logits the control).
 `test_gpu_resident_hybrid_mtp_verify` holds the round's same-slab verify: after the same 40-token
 prefill (the host holding the warm's rows below the prompt's last), one device draft at the
 prompt's last row (the device's rows reaching past it, the host's stopping below it), a pass

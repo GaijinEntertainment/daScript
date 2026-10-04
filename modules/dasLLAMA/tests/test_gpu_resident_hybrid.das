@@ -545,6 +545,55 @@ def test_gpu_resident_hybrid_mtp_draft_upload(t : T?) {
     }
 }
 
+//! the device draft of `DRAFT_TOKEN` at the prompt's last row on a fresh session over `prompt`: the landed logits, the device pick
+def private device_draft(tr : Model; prompt : array<int64>) : tuple<logits : array<float>; pick : int64> {
+    var s <- create_session(tr, mirror_kv_dtype())
+    prefill_warm(tr, s, prompt)
+    var h0 <- [for (x in s.mtp_h); x]
+    var d <- draft_from(tr, s, DRAFT_TOKEN, DRAFT_PROMPT - 1l, h0)
+    let pick = moe_gpu_resident_draft_pick()
+    var res : tuple<logits : array<float>; pick : int64>
+    res.logits <- d.logits
+    res.pick = pick
+    delete d
+    delete h0
+    delete s
+    return <- res
+}
+
+[test]
+def test_gpu_resident_hybrid_mtp_draft_suppressed(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP re-armed with the head draft's own pick among the suppressed ids: the device draft pins it and picks another") @(t : T?) {
+        with_mtp_carrier(t, 1l) $(var tr) {
+            var prompt <- resident_prompt(DRAFT_PROMPT)
+            var free <- device_draft(tr, prompt)
+            t |> equal(free.pick, argmax_of(free.logits), "control: with no suppressed id the device pick is the argmax of the logits it landed")
+            var slot = gpu_model_marks_init()
+            gpu_slot_capture(slot)
+            moe_gpu_drop_model()
+            tr.suppress <- [free.pick]
+            moe_gpu_model_marks_restore(slot)
+            let levers = resident_levers()
+            set_gpu_resident_route(true)
+            let armed = gpu_slot_rearm(g_gpu_want, tr)
+            restore_resident_levers(levers)
+            t |> equal(armed, "gpu:resident", "the whole-model driver re-armed with the suppressed id")
+            let drafts0 = moe_gpu_resident_drafts()
+            var held <- device_draft(tr, prompt)
+            t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the resident head drafted")
+            let ag = argmax_of(held.logits)
+            to_log(LOG_INFO, "draft before the suppression: pick {free.pick} '{decode_(tr, [free.pick])}' ({free.logits[free.pick]}); after: pick {held.pick} '{decode_(tr, [held.pick])}', the suppressed id's logit {held.logits[free.pick]}\n")
+            t |> success(held.pick != free.pick, "the device draft never picks the suppressed id {free.pick}")
+            t |> success(held.logits[free.pick] <= SUPPRESSED_LOGIT * 0.1, "the suppressed id's draft logit is pinned ({held.logits[free.pick]})")
+            t |> equal(held.pick, ag, "the device pick is the argmax of the logits it landed")
+            served_every_call(t)
+            delete free
+            delete held
+            delete prompt
+        }
+    }
+}
+
 //! a verify row against the one-row step of the same token, bit for bit: its logits and its post-norm hidden, the argmax both
 //! sides read logged, and the step one row off (the other row's) as the control the compare can fail
 def private verify_row_is_step(t : T?; tr : Model; row : int64; vlog, vhid : array<float>; step_log, step_h, off_log : array<float>) {

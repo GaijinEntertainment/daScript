@@ -222,7 +222,8 @@ N-column leaf ensured for hc columns), then the head's block as a trunk layer's 
 mixer, the shared expert, the router - and lands the FFN-mixed row and the router logits; the host sums
 the head's picks (`rdec_host_experts_step` at layer `n_layers`, the pool's slots where they hit); the
 second segment takes the sum, scatters it, copies the head's wide residual aside as the carry, runs the
-head's head mixer, the classifier and the pick. The seat passes the host step as `RdecDraftFn`'s
+head's head mixer, the classifier, its epilogue and the pick (the plain draft's tail,
+`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`). The seat passes the host step as `RdecDraftFn`'s
 `experts`. The window chain warms the head's slab over the prompt in the hc form (`pf_hc_head_warm`
 after the window's head mixer and tail): head row j pairs the window's embed row j + 1 - carry with the
 trunk's wide residual at the row before it (the previous window's last row for row 0, kept in
