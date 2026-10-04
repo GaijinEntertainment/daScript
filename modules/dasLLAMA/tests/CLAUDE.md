@@ -443,7 +443,11 @@ tq4 store's bytes to `fwht_signs_row` + `quantize_tq4kv_row` and the q rows rota
 `fwht_signs_row`, bit for bit, at heads of 32, 64, 128 and 512, on a shared-KV layer's dispatch
 (q rotates, nothing stores, the mirror left at its fill), at window rows, and at window rows with
 no q head (the NextN head's prompt warm). `test_vkc_q8_da_attn` and `test_vkc_tq4_da_attn` run one
-arm table (`codec_attn_arms`, 21 arms a codec) over each codec's stamps, dispatched as the driver
+arm table (`codec_attn_arms` in `_vk_codec_attn.das`, 21 arms a codec; test_vulkan_kernels'
+`test_vkd_da_attn` runs it over the f32 mirror and `test_vkd_kv16_readers` over the f16 one, where
+no codec control exists - the f32 mirror stores the rows as they are and the fixture's rounding to
+half stays inside the bar - and the poisoned expectation and the mechanism controls stand) over each
+codec's stamps, dispatched as the driver
 dispatches the pass (a row a `rowwg` workgroups, its region in its token block), against the CPU
 attention over the rows `cvt_q8kv_to_f32` / `cvt_tq4kv_to_f32` read back at 1e-4 relative (reads
 6e-8 to 2.5e-6): the four-head and two-head slabs, a short last slab, heads of 32, 64, 128, 256
@@ -838,8 +842,10 @@ a 40-key window; the token command's f32 and f16 sink twins unsplit and split, t
 combine seeding the sink), each with the sink-free oracle as the control, and `test_vkd_fa_stamp_refusals` covers
 the sink refusals -
 `test_vkd_da_attn_rqk` (the decode attention with the Q8_0 and Q8_K requant folded into its store,
-unsplit and split - the pass stores the row either way, its last piece combining - and the two-head
-slab stamp on the groups it serves, two heads and one, at 64, 256 and 512), `test_vkd_da_attn_bw` (the batched windowed decode attention over a
+unsplit and split - the pass stores the row either way, its last piece combining - on the two-head
+slab stamp over the groups it serves, two heads and one, at 64, 256 and 512, each held bit for bit
+to the four-head stamp, and on the four-head slab's own store at 64; every decode attention cell of
+the file rides `_vk_codec_attn.das`' `codec_attn_arm` at its 1e-4 bar), `test_vkd_da_attn_bw` (the batched windowed decode attention over a
 restricted horizon), `test_vkd_da_attn_b_gated` (a gated model's chunked attention - q read at the
 head's [q | gate] stride, the output under the gate's sigmoid - on the 8-row tile at 128, the wide
 tile at 512 and the h128 coopmat tile, each against the gated oracle with the ungated oracle as the

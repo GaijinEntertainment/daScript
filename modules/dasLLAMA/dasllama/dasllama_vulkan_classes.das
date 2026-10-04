@@ -11517,8 +11517,11 @@ class KvTq4Shadow : KvShadowT {
 }
 
 //! every kernel class a block-codec mirror's driver dispatches: the stores, the shadow, tq4's un-rotation, the attention stamps
+//! a mirror codec's three decode attention stamps - the four-head slab, the two-head one and the sink stamp
+def da_attn_stamps_ensure(dt : KVDtype) : bool => da_attn_stamp_ensure(dt, DaSlab.four) && da_attn_stamp_ensure(dt, DaSlab.two) && da_attn_stamp_ensure(dt, DaSlab.sink)
+
 def kv_codec_cls_ensure(dt : KVDtype) : bool {
-    let attn = da_attn_stamp_ensure(dt, DaSlab.four) && da_attn_stamp_ensure(dt, DaSlab.two) && da_attn_stamp_ensure(dt, DaSlab.sink)
+    let attn = da_attn_stamps_ensure(dt)
     if (dt == KVDtype.q8_0) return attn && ensure_kv_q8_store_cls() && ensure_kv_q8_store_b_cls() && ensure_kv_q8_shadow_cls()
     return attn && ensure_kv_tq4_store_cls() && ensure_kv_tq4_store_b_cls() && ensure_kv_tq4_shadow_cls() && ensure_kv_tq4_unrot_cls()
 }

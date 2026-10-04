@@ -14,6 +14,7 @@ require _vk_kq_fixtures
 require _kq_fixtures
 require ?vulkan _vkd_toy
 require ?vulkan _vkd_oracles
+require ?vulkan _vk_codec_attn   // codec_attn_arm: the decode attention cells over the f32 and f16 mirrors
 require ?vulkan vulkan
 require ?vulkan vulkan/vulkan_boost
 require ?vulkan dasllama/dasllama_vulkan_common
@@ -3006,9 +3007,6 @@ def test_vkd_cm2l_split(t0 : T?) {
     }
 }
 
-//! a decode attention dispatch's token meta: one row of `cnt` keys from mirror row 0; the host buffer's handle
-def private da_tok(cnt : int) : uint64 => tok_buf([TokMeta(cnt = uint(cnt))])
-
 //! a host buffer of token records holding `rows`, every field of each written - the pads included: a host buffer is not zeroed
 def private tok_buf(rows : array<TokMeta>) : uint64 {
     static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -3023,159 +3021,25 @@ def private tok_buf(rows : array<TokMeta>) : uint64 {
     }
 }
 
-//! one decode attention dispatch: `yd` under the sentinel, `rec` sets and encodes the class over a fresh `da_tok` at `cnt` keys,
-//! then the `n`-float y plane copies back behind hazard bit 16
-def private da_attn_run(cnt, n : int; yd : uint64; rec) : array<float> {
-    var y : array<float>
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        let y_bytes = int64(n) * 4l
-        var host = make_host_buf(y_bytes, true, [cached = true])
-        nan_sentinel_upload(yd, y_bytes)
-        let tok = da_tok(cnt)
-        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            invoke(rec, tok, raw, h)
-            cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(y_bytes), 16u)
-        }
-        y <- staged(host.mapped, 0l, n, type<float>)
-        destroy_host_buf(host)
-    }
-    return <- y
-}
-
-//! the decode attention's folded requant: the pass (nsplit 1) or the combine (nsplit > 1) quantizes the head rows it
-//! stores - Q8_0 blocks of 32 (`DA_RQ_Q8`) or Q8_K superblocks of 256 (`DA_RQ_Q8K`, a head of 256 or 512) - against the
-//! CPU oracle's row quantized the same way: every scale within a hair, every quant within one step (the row itself
-//! carries the f32 noise the plain arms allow), on a sentinel fill; the row store itself is held to the oracle too
-def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk : uint; slab2 : bool = false) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        let kvd = (nheads / kv_mul) * hs
-        let qdim = nheads * hs
-        let scale = 0.125
-        let blk = rqk == DA_RQ_Q8K ? 256 : 32
-        var qh <- row_fill(qdim, 41, 0, 0.05, 1.8, 73)
-        var kh <- row_fill(cnt * kvd, 17, 0, 0.03, 1.4, 97)
-        var vh <- row_fill(cnt * kvd, 53, 0, 0.04, 1.7, 89)
-        let q_bytes = int64(qdim) * 4l
-        let m_bytes = int64(cnt * kvd) * 4l
-        let cnt_off = nheads * nsplit * (hs + 2)   //! the arrival counters past the pieces
-        let p_bytes = int64(cnt_off + int(da_attn_row_wgs(int64(nheads), int64(kv_mul), 1l))) * 4l
-        let s_bytes = int64(qdim / blk) * 4l
-        let qd = make_device_buf(q_bytes)
-        let kd = make_device_buf(m_bytes)
-        let vd = make_device_buf(m_bytes)
-        let yd = make_device_buf(q_bytes)
-        let partd = make_device_buf(p_bytes)
-        let aqd = make_device_buf(int64(qdim))
-        let asd = make_device_buf(s_bytes)
-        let host = make_host_buf(q_bytes * 2l, true, [cached = true])
-        verify(ensure_da_attn_cls() && (!slab2 || ensure_da_attn_g2_cls()), "the decode attention class rail must engage on a live device")
-        unsafe {
-            upload_region_at(qd, 0l, addr<uint8 const?>(qh[0]), q_bytes)
-            upload_region_at(kd, 0l, addr<uint8 const?>(kh[0]), m_bytes)
-            upload_region_at(vd, 0l, addr<uint8 const?>(vh[0]), m_bytes)
-            nan_sentinel_upload(yd, q_bytes)
-            nan_sentinel_upload(partd, int64(cnt_off) * 4l)
-            upload_zeros(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
-            nan_sentinel_upload(aqd, int64(qdim))
-            nan_sentinel_upload(asd, s_bytes)
-            var sc = set_da_attn_cls(fixed_array(qd, kd, vd, yd, da_tok(cnt), partd, aqd, asd),
-                fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, TOK_META_BYTES, p_bytes, int64(qdim), s_bytes),
-                fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 64u, 64u))
-            var pc = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u,
-                scale = scale, nsplit = uint(nsplit), rqk = rqk, cntoff = uint(cnt_off))
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                if (slab2) {
-                    enc_da_attn_g2_cls(raw, h, sc, pc, da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit)))
-                } else {
-                    enc_da_attn_cls(raw, h, sc, pc, da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit)))
-                }
-                cmd_copy_planes(raw, h, fixed_array(yd, aqd, asd), host, fixed_array(q_bytes, int64(qdim), s_bytes), 16u | 64u)
-            }
-        }
-        var y_cls <- staged(host.mapped, 0l, qdim, type<float>)
-        var q_cls <- staged(host.mapped, q_bytes, qdim, type<int8>)
-        var s_cls <- staged(host.mapped, q_bytes + int64(qdim), qdim / blk, type<float>)
-        var y_ref : array<float>
-        y_ref |> resize(qdim)
-        attn_heads_oracle(qh, 0, kh, 0, vh, 0, kvd, nheads, hs, kv_mul, cnt, scale, y_ref, 0)
-        let arm = "hs {hs} x {nheads} heads, {nsplit} split(s), {rqk == DA_RQ_Q8K ? "Q8_K" : "Q8_0"}{slab2 ? ", the two-head slab" : ""}"
-        let bad = mismatch_approx(y_cls, y_ref)
-        t |> success(bad == 0, "folded-requant attention ({arm}): the row matches the CPU oracle ({bad} of {qdim} off)")
-        y_ref[hs / 2] += 0.5
-        t |> equal(mismatch_approx(y_cls, y_ref), 1, "folded-requant attention ({arm}): the row's bar reds one poisoned element")
-        y_ref[hs / 2] -= 0.5
-        if (slab2) {   //! the second lane: the four-head slab at the same shape, whose dead lanes contribute zero - the two round alike
-            var y_g4 <- da_attn_run(cnt, qdim, yd) $(tok : uint64; raw4 : VkCommandBuffer; var h4 : VkHaz) {
-                var sc4 = set_da_attn_cls(fixed_array(qd, kd, vd, yd, tok, partd, aqd, asd),
-                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, TOK_META_BYTES, p_bytes, int64(qdim), s_bytes),
-                    fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 64u, 64u))
-                var pc4 = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u,
-                    scale = scale, nsplit = uint(nsplit), rqk = rqk, cntoff = uint(cnt_off))
-                enc_da_attn_cls(raw4, h4, sc4, pc4, da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit)))
-            }
-            var apart = 0
-            for (i in range(qdim)) {
-                if (y_g4[i] != y_cls[i]) {
-                    apart++
-                }
-            }
-            t |> success(apart == 0, "folded-requant attention ({arm}): the two-head slab is the four-head slab bit for bit ({apart} of {qdim} apart)")
-            delete y_g4
-        }
-        // the oracle's own quantization of its row: the block's amax over 127, the quants rounded against it
-        var bad_s = 0
-        var bad_q = 0
-        for (b in range(qdim / blk)) {
-            var m = 0.0
-            for (i in range(blk)) {
-                m = max(m, abs(y_ref[b * blk + i]))
-            }
-            let d = m / 127.0
-            if (!(abs(s_cls[b] - d) <= 1.0e-6 + 1.0e-3 * d)) {
-                bad_s++
-            }
-            let id = d != 0.0 ? 1.0 / d : 0.0
-            for (i in range(blk)) {
-                let want = int(round(y_ref[b * blk + i] * id))
-                if (abs(int(q_cls[b * blk + i]) - want) > 1) {
-                    bad_q++
-                }
-            }
-        }
-        t |> success(bad_s == 0, "folded-requant attention ({arm}): every block scale matches the oracle row's ({bad_s} of {qdim / blk} off)")
-        t |> success(bad_q == 0, "folded-requant attention ({arm}): every quant within one step of the oracle row's ({bad_q} of {qdim} off)")
-        delete qh
-        delete kh
-        delete vh
-        delete y_ref
-        delete y_cls
-        delete q_cls
-        delete s_cls
-    }
-}
-
 [test]
 def test_vkd_da_attn_rqk(t0 : T?) {
     t0 |> run("decode attention with the requant folded into its store == the CPU oracle's row, quantized: Q8_0 and Q8_K, the pass and the combine, the 256 and 512 heads") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_da_attn_cls()) {
+            if (!da_attn_stamps_ensure(KVDtype.f32)) {
                 t |> skip("no Vulkan device")
                 return
             }
-            da_attn_rqk_arm(t, 64, 4, 2, 300, 1, DA_RQ_Q8)     //! the pass's own Q8_0 store
-            da_attn_rqk_arm(t, 64, 4, 2, 300, 8, DA_RQ_Q8)     //! the last piece's combine storing Q8_0 (three empty pieces)
-            da_attn_rqk_arm(t, 256, 2, 2, 70, 1, DA_RQ_Q8K)    //! one superblock a head, the pass
-            da_attn_rqk_arm(t, 256, 2, 1, 70, 4, DA_RQ_Q8K)    //! ... the last piece's combine
-            da_attn_rqk_arm(t, 512, 2, 2, 70, 4, DA_RQ_Q8K)    //! the wide head: two superblocks, the last piece's combine
-            da_attn_rqk_arm(t, 512, 2, 2, 70, 1, DA_RQ_Q8)     //! the wide head's Q8_0 blocks, the pass
-            //! the two-head slab stamp on the groups it serves: two heads a group (gemma-4's shape at 256 and 512), one head a
-            //! group (the dead lane through the pass's store and through the combine)
-            da_attn_rqk_arm(t, 64, 4, 2, 300, 1, DA_RQ_Q8, true)
-            da_attn_rqk_arm(t, 64, 4, 2, 300, 8, DA_RQ_Q8, true)
-            da_attn_rqk_arm(t, 256, 2, 2, 70, 1, DA_RQ_Q8K, true)
-            da_attn_rqk_arm(t, 256, 2, 1, 70, 1, DA_RQ_Q8K, true)
-            da_attn_rqk_arm(t, 256, 2, 1, 70, 4, DA_RQ_Q8K, true)
-            da_attn_rqk_arm(t, 512, 2, 2, 70, 4, DA_RQ_Q8K, true)
+            //! the two-head slab on the groups it serves - two heads a group (gemma-4's shape at 256 and 512), one head a group
+            //! (the dead lane through the pass's store and through the combine) - each held bit for bit to the four-head stamp
+            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 4, kv_mul = 2, fold = Fold.q8_0, g4_twin = true))   //! the pass's own Q8_0 store
+            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 4, kv_mul = 2, fold = Fold.q8_0, nsplit = 8, g4_twin = true))   //! the last piece's combine (three empty pieces)
+            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 256, nheads = 2, kv_mul = 2, keys = 70, fold = Fold.q8_k, g4_twin = true))   //! one superblock a head, the pass
+            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 256, nheads = 2, kv_mul = 1, keys = 70, fold = Fold.q8_k, g4_twin = true))
+            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 256, nheads = 2, kv_mul = 1, keys = 70, fold = Fold.q8_k, nsplit = 4, g4_twin = true))   //! ... the last piece's combine
+            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 512, nheads = 2, kv_mul = 2, keys = 70, fold = Fold.q8_k, nsplit = 4, g4_twin = true))   //! the wide head: two superblocks
+            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 512, nheads = 2, kv_mul = 2, keys = 70, fold = Fold.q8_0))   //! the wide head's Q8_0 blocks, the pass
+            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 4, kv_mul = 4, fold = Fold.q8_0))   //! the four-head slab's own store
+            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 4, kv_mul = 4, fold = Fold.q8_0, nsplit = 8))   //! ... and its combine's
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -3186,280 +3050,23 @@ def test_vkd_da_attn_rqk(t0 : T?) {
 def test_vkd_da_attn(t0 : T?) {
     t0 |> run("decode attention class kernel == the CPU oracle (chunk boundary)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_da_attn_cls()) {
+            if (!(da_attn_stamps_ensure(KVDtype.f32) && da_attn_stamps_ensure(KVDtype.f16))) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let hs = 64
-            let kv_mul = 2
-            let nheads = 4
-            let kvd = (nheads / kv_mul) * hs
-            let cnt = 300   // crosses the 256-position chunk boundary: the alpha-rescale path runs
-            let scale = 0.125
-            var qh <- row_fill(nheads * hs, 41, 0, 0.05, 1.8, 73)
-            var kh <- row_fill(cnt * kvd, 17, 0, 0.03, 1.4, 97)
-            var vh <- row_fill(cnt * kvd, 53, 0, 0.04, 1.7, 89)
-            var sh : array<float>
-            sh |> resize(1)
-            sh[0] = scale
-            let q_bytes = int64(nheads * hs) * 4l
-            let m_bytes = int64(cnt * kvd) * 4l
-            let qd = make_device_buf(q_bytes)
-            let kd = make_device_buf(m_bytes)
-            let vd = make_device_buf(m_bytes)
-            let yd2 = make_device_buf(q_bytes)
-            unsafe {
-                upload_region_at(qd, 0l, addr<uint8 const?>(qh[0]), q_bytes)
-                upload_region_at(kd, 0l, addr<uint8 const?>(kh[0]), m_bytes)
-                upload_region_at(vd, 0l, addr<uint8 const?>(vh[0]), m_bytes)
+            codec_attn_arms(t, KVDtype.f32)
+            //! a two-head group's softcap (gemma-2's 4.0 cap the scaled scores overrun), whole and in eight key pieces
+            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 4, kv_mul = 2, cap = 4.0))
+            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 4, kv_mul = 2, cap = 4.0, nsplit = 8))
+            //! the sink stamp over a two-head group (gpt-oss): the pass folding the sink at its store, and the last piece's
+            //! combine seeding it - over the f32 mirror and over the f16 one (the resident driver's kv16 form)
+            for (kv in fixed_array(KVDtype.f32, KVDtype.f16)) {
+                codec_attn_arm(t, CodecAttn(kv = kv, hs = 64, nheads = 4, kv_mul = 2, sink = true))
+                codec_attn_arm(t, CodecAttn(kv = kv, hs = 64, nheads = 4, kv_mul = 2, sink = true, nsplit = 8))
             }
-            // the class kernel: q@0, K@1, V@2, y@3, tok@4 (cnt rides TokMeta)
-            var y_cls <- da_attn_run(cnt, nheads * hs, yd2) $(tok : uint64; raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                var sc = set_da_attn_cls(fixed_array(qd, kd, vd, yd2, tok, yd2, yd2, yd2),   //! unsplit, unfolded: the out rows fill the partials and quant bindings
-                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, TOK_META_BYTES, q_bytes, q_bytes, q_bytes),
-                    fixed_array(1u, 2u, 4u, 16u, 0u, 16u, 16u, 16u))
-                var pc = DaAttnArgs(kvd = uint(kvd), hs = uint(hs),
-                    kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, rqk = DA_RQ_NONE)
-                enc_da_attn_cls(raw2, h2, sc, pc, da_attn_row_wgs(int64(nheads), int64(kv_mul), 1l))
-            }
-            var y_ref : array<float>
-            y_ref |> resize(nheads * hs)
-            attn_heads_oracle(qh, 0, kh, 0, vh, 0, kvd, nheads, hs, kv_mul, cnt, scale, y_ref, 0)
-            check_rows(t, "da_attn against the CPU oracle", y_cls, y_ref, BAR_APPROX_CTRL, nheads * hs, hs)
-            // the softcap arm (gemma-2): a cap the scaled scores overrun, the kernel's exp form against the oracle's
-            let cap = 4.0
-            delete y_cls
-            y_cls <- da_attn_run(cnt, nheads * hs, yd2) $(tok : uint64; raw3 : VkCommandBuffer; var h3 : VkHaz) {
-                var sc2 = set_da_attn_cls(fixed_array(qd, kd, vd, yd2, tok, yd2, yd2, yd2),
-                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, TOK_META_BYTES, q_bytes, q_bytes, q_bytes),
-                    fixed_array(1u, 2u, 4u, 16u, 0u, 16u, 16u, 16u))
-                var pc3 = DaAttnArgs(kvd = uint(kvd), hs = uint(hs),
-                    kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, cap = cap, rqk = DA_RQ_NONE)
-                enc_da_attn_cls(raw3, h3, sc2, pc3, da_attn_row_wgs(int64(nheads), int64(kv_mul), 1l))
-            }
-            let moved = mismatch_approx(y_cls, y_ref)
-            t |> success(moved > 0, "control: the {cap} cap moves the uncapped output ({moved} of {nheads * hs})")
-            attn_heads_oracle(qh, 0, kh, 0, vh, 0, kvd, nheads, hs, kv_mul, cnt, scale, y_ref, 0, 0, cap)
-            let badc = mismatch_approx(y_cls, y_ref)
-            t |> success(badc == 0, "da_attn under a {cap} softcap matches the CPU oracle ({badc} of {nheads * hs} off)")
-            //! the split arm: eight key splits of the 300 (64-key pieces, the last 44 keys wide, three pieces empty),
-            //! the partials combined by the last-arriving piece inside the pass, under the same cap against the same oracle
-            let nsplit = 8
-            let cnt_off = nheads * nsplit * (hs + 2)   //! the arrival counters past the pieces
-            let p_bytes = int64(cnt_off + int(da_attn_row_wgs(int64(nheads), int64(kv_mul), 1l))) * 4l
-            let partd = make_device_buf(p_bytes)
-            nan_sentinel_upload(partd, int64(cnt_off) * 4l)
-            upload_zeros(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
-            delete y_cls
-            y_cls <- da_attn_run(cnt, nheads * hs, yd2) $(tok : uint64; raw4 : VkCommandBuffer; var h4 : VkHaz) {
-                var sc4 = set_da_attn_cls(fixed_array(qd, kd, vd, yd2, tok, partd, yd2, yd2),
-                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, TOK_META_BYTES, p_bytes, q_bytes, q_bytes),
-                    fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 16u, 16u))
-                var pc4 = DaAttnArgs(kvd = uint(kvd), hs = uint(hs),
-                    kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, cap = cap, nsplit = uint(nsplit), rqk = DA_RQ_NONE, cntoff = uint(cnt_off))
-                enc_da_attn_cls(raw4, h4, sc4, pc4, da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit)))
-            }
-            let bads = mismatch_approx(y_cls, y_ref)
-            t |> success(bads == 0, "da_attn split {nsplit} ways, its last piece combining, matches the CPU oracle under the cap ({bads} of {nheads * hs} off)")
-            y_ref[hs + 3] += 0.5
-            t |> success(mismatch_approx(y_cls, y_ref) == 1, "split attention control: the bar reds one poisoned element")
-            //! the sink arms (gpt-oss): a per-head sink logit, the unsplit pass folding it at its store and the split pass leaving it
-            //! to its last piece's combine, both against the oracle with the sink; the sink-free oracle is the control
-            t |> success(ensure_da_attn_sink_cls(), "the sink twin compiles on this device")
-            var sinkh <- sink_logits(qh, kh, nheads, hs, kv_mul, cnt, kvd, scale)
-            let sink_bytes = int64(nheads) * 4l
-            let sinkd = make_device_buf(sink_bytes)
-            var y_sink : array<float>
-            y_sink |> resize(nheads * hs)
-            attn_heads_oracle(qh, 0, kh, 0, vh, 0, kvd, nheads, hs, kv_mul, cnt, scale, y_sink, 0, sinkh)
-            var y_free : array<float>
-            y_free |> resize(nheads * hs)
-            attn_heads_oracle(qh, 0, kh, 0, vh, 0, kvd, nheads, hs, kv_mul, cnt, scale, y_free, 0)
-            t |> success(mismatch_approx(y_sink, y_free) > 0, "sink control: the sink moves the oracle's own output ({mismatch_approx(y_sink, y_free)} of {nheads * hs})")
-            for (split in fixed_array(1, nsplit)) {
-                upload_region_at(sinkd, 0l, unsafe(addr<uint8 const?>(sinkh[0])), sink_bytes)
-                nan_sentinel_upload(partd, int64(cnt_off) * 4l)
-                upload_zeros(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
-                delete y_cls
-                y_cls <- da_attn_run(cnt, nheads * hs, yd2) $(tok : uint64; raw5 : VkCommandBuffer; var h5 : VkHaz) {
-                    var sc5 = set_da_attn_sink_cls(fixed_array(qd, kd, vd, yd2, tok, partd, yd2, yd2, sinkd),
-                        fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, TOK_META_BYTES, p_bytes, q_bytes, q_bytes, sink_bytes),
-                        fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 16u, 16u, 0u))
-                    var pc5 = DaAttnArgs(kvd = uint(kvd), hs = uint(hs),
-                        kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, nsplit = uint(split), rqk = DA_RQ_NONE, sinkoff = 0u, cntoff = uint(cnt_off))
-                    enc_da_attn_sink_cls(raw5, h5, sc5, pc5, da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(split)))
-                }
-                let badk = mismatch_approx(y_cls, y_sink)
-                t |> success(badk == 0, "da_attn sink twin split {split} ways matches the CPU oracle with the sink ({badk} of {nheads * hs} off)")
-                t |> success(mismatch_approx(y_cls, y_free) > 0, "da_attn sink twin split {split} ways: the sink-free oracle reds the compare")
-            }
-            //! the f16-mirror sink twin (the resident driver's kv16 form): the same rows over f16 K/V, the oracle over the f16-rounded values
-            t |> success(ensure_da_attn_f16_sink_cls(), "the f16 sink twin compiles on this device")
-            {
-                var kh16 : array<float>
-                var vh16 : array<float>
-                kh16 |> resize(cnt * kvd)
-                vh16 |> resize(cnt * kvd)
-                for (i in range(cnt * kvd)) {
-                    kh16[i] = f16r(kh[i])
-                    vh16[i] = f16r(vh[i])
-                }
-                var k16 <- pack_f16(kh16)
-                var v16 <- pack_f16(vh16)
-                let m16_bytes = int64(cnt * kvd) * 2l
-                let kd16 = make_device_buf(m16_bytes)
-                let vd16 = make_device_buf(m16_bytes)
-                var y_sink16 : array<float>
-                var y_free16 : array<float>
-                y_sink16 |> resize(nheads * hs)
-                y_free16 |> resize(nheads * hs)
-                attn_heads_oracle(qh, 0, kh16, 0, vh16, 0, kvd, nheads, hs, kv_mul, cnt, scale, y_sink16, 0, sinkh)
-                attn_heads_oracle(qh, 0, kh16, 0, vh16, 0, kvd, nheads, hs, kv_mul, cnt, scale, y_free16, 0)
-                for (split in fixed_array(1, nsplit)) {
-                    unsafe {
-                        upload_region_at(kd16, 0l, addr<uint8 const?>(k16[0]), m16_bytes)
-                        upload_region_at(vd16, 0l, addr<uint8 const?>(v16[0]), m16_bytes)
-                    }
-                    nan_sentinel_upload(partd, int64(cnt_off) * 4l)
-                    upload_zeros(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
-                    delete y_cls
-                    y_cls <- da_attn_run(cnt, nheads * hs, yd2) $(tok : uint64; raw6 : VkCommandBuffer; var h6 : VkHaz) {
-                        var sc6 = set_da_attn_f16_sink_cls(fixed_array(qd, kd16, vd16, yd2, tok, partd, yd2, yd2, sinkd),
-                            fixed_array(q_bytes, m16_bytes, m16_bytes, q_bytes, TOK_META_BYTES, p_bytes, q_bytes, q_bytes, sink_bytes),
-                            fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 16u, 16u, 0u))
-                        var pc6 = DaAttnArgs(kvd = uint(kvd), hs = uint(hs),
-                            kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, nsplit = uint(split), rqk = DA_RQ_NONE, sinkoff = 0u, cntoff = uint(cnt_off))
-                        enc_da_attn_f16_sink_cls(raw6, h6, sc6, pc6, da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(split)))
-                    }
-                    let badk16 = mismatch_approx(y_cls, y_sink16)
-                    t |> success(badk16 == 0, "da_attn f16 sink twin split {split} ways matches the CPU oracle with the sink ({badk16} of {nheads * hs} off)")
-                    t |> success(mismatch_approx(y_cls, y_free16) > 0, "da_attn f16 sink twin split {split} ways: the sink-free oracle reds the compare")
-                }
-                delete kh16
-                delete vh16
-                delete k16
-                delete v16
-                delete y_sink16
-                delete y_free16
-            }
-            delete sinkh
-            delete y_sink
-            delete y_free
-            delete qh
-            delete kh
-            delete vh
-            delete sh
-            delete y_ref
-            delete y_cls
         } else {
             t |> skip("dasVulkan not present")
         }
-    }
-}
-
-//! the decode attention pass at one (head width, slab, key split, row count) shape against `attn_row_oracle` per (row, head):
-//! `nrows` rows through one dispatch, row r's q past r x qdim and its K/V in its own mirror region (`tok[r].mirbase`, the
-//! second region's content scaled by 1.5), each row against the oracle over its own region; the split arm submits the
-//! same command a second time, so the arrival counters the pass resets must have rearmed; every bar with its poison
-def private da_attn_shape_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit, nrows : int; slab2 : bool = false) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        let kvd = (nheads / kv_mul) * hs
-        let qdim = nheads * hs
-        let scale = 0.125
-        let mir_units = cnt * kvd
-        var qh : array<float>
-        var kh : array<float>
-        var vh : array<float>
-        qh |> resize(qdim * nrows)
-        kh |> resize(mir_units * nrows)
-        vh |> resize(mir_units * nrows)
-        for (r in range(nrows)) {
-            let rs = 1.0 + 0.5 * float(r)
-            for (i in range(qdim)) {
-                qh[r * qdim + i] = (float(((i + r * 17) * 41) % 73) * 0.05 - 1.8) * rs
-            }
-            for (i in range(mir_units)) {
-                kh[r * mir_units + i] = (float((i * 17) % 97) * 0.03 - 1.4) * rs
-                vh[r * mir_units + i] = (float((i * 53) % 89) * 0.04 - 1.7) * rs
-            }
-        }
-        let q_bytes = int64(qdim * nrows) * 4l
-        let m_bytes = int64(mir_units) * int64(nrows) * 4l
-        let tok_bytes = TOK_META_BYTES * int64(nrows)
-        let rowwg = da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit))
-        let rowgroups = int(da_attn_row_wgs(int64(nheads), int64(kv_mul), 1l))   //! the (kv head, slab) groups a row: a counter each
-        let cnt_off = nrows * nheads * nsplit * (hs + 2)   //! the arrival counters past every row's pieces
-        let p_bytes = int64(cnt_off + nrows * rowgroups) * 4l
-        let qd = make_device_buf(q_bytes)
-        let kd = make_device_buf(m_bytes)
-        let vd = make_device_buf(m_bytes)
-        let yd = make_device_buf(q_bytes)
-        let partd = make_device_buf(p_bytes)
-        var host = make_host_buf(q_bytes, true, [cached = true])
-        var y_cls : array<float>
-        y_cls |> resize(qdim * nrows)
-        var raw = alloc_cmd()
-        unsafe {
-            upload_region_at(qd, 0l, addr<uint8 const?>(qh[0]), q_bytes)
-            upload_region_at(kd, 0l, addr<uint8 const?>(kh[0]), m_bytes)
-            upload_region_at(vd, 0l, addr<uint8 const?>(vh[0]), m_bytes)
-            nan_sentinel_upload(yd, q_bytes)
-            nan_sentinel_upload(partd, int64(cnt_off) * 4l)
-            upload_zeros(partd, int64(cnt_off) * 4l, p_bytes - int64(cnt_off) * 4l)
-            let tok = tok_buf([for (r in range(nrows)); TokMeta(pos = uint(cnt - 1), cnt = uint(cnt), mirbase = uint(r * mir_units))])
-            var sc = set_da_attn_cls(fixed_array(qd, kd, vd, yd, tok, partd, yd, yd),   //! unfolded: the quant bindings take the out rows (unwritten)
-                fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, tok_bytes, p_bytes, q_bytes, q_bytes),
-                fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 16u, 16u))
-            let begin = VkCommandBufferBeginInfo()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
-            var h : VkHaz
-            var pc = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale,
-                nsplit = uint(nsplit), rqk = DA_RQ_NONE, cntoff = uint(cnt_off),
-                rowwg = nrows > 1 ? uint(rowwg) : 0u, qrow = nrows > 1 ? uint(qdim) : 0u)
-            if (slab2) {
-                enc_da_attn_g2_cls(raw, h, sc, pc, rowwg * int64(nrows))
-            } else {
-                enc_da_attn_cls(raw, h, sc, pc, rowwg * int64(nrows))
-            }
-            cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(q_bytes), 16u)
-            vk_check(vkEndCommandBuffer(raw), null)
-            submit_wait(raw)   // the kept buffer: the split arm submits it again to prove the arrival counters rearm
-            memcpy(addr<void?>(y_cls[0]), host.mapped, q_bytes)
-        }
-        var y_ref : array<float>
-        y_ref |> resize(qdim * nrows)
-        for (r in range(nrows)) {
-            attn_heads_oracle(qh, r * qdim, kh, r * mir_units, vh, r * mir_units, kvd, nheads, hs, kv_mul, cnt, scale, y_ref, r * qdim)
-        }
-        let arm = "hs {hs} x {nheads} heads, {kv_mul} a kv head, {cnt} keys, {nsplit} split(s), {nrows} row(s){slab2 ? ", the two-head slab" : ""}"
-        check_rows(t, "decode attention ({arm}), every row against its own oracle", y_cls, y_ref, BAR_APPROX_CTRL, qdim, hs)
-        if (nsplit > 1) {
-            unsafe {
-                nan_sentinel_upload(yd, q_bytes)
-                submit_wait(raw)
-                memcpy(addr<void?>(y_cls[0]), host.mapped, q_bytes)
-            }
-            let bad2 = mismatch_approx(y_cls, y_ref)
-            t |> success(bad2 == 0, "decode attention ({arm}): the same command submitted again matches the oracle ({bad2} of {qdim * nrows} off) - the arrival counters rearmed")
-        }
-        if (nrows > 1) {
-            var y_x : array<float>
-            y_x |> resize(qdim * nrows)
-            attn_heads_oracle(qh, qdim, kh, 0, vh, 0, kvd, nheads, hs, kv_mul, cnt, scale, y_x, qdim)
-            let crossed = mismatch_rel("decode attention ({arm}) row 1 vs row 0's oracle (MUST mismatch)", copy_span(y_cls, qdim, qdim), copy_span(y_x, qdim, qdim), APPROX_REL)
-            t |> success(crossed > 0, "decode attention ({arm}): row 1 read its own region - the oracle over row 0's misses ({crossed} of {qdim})")
-            delete y_x
-        }
-        for (r in range(nrows)) {
-            y_ref[r * qdim + hs + 3] += 0.5
-            t |> success(mismatch_rel("decode attention ({arm}) row {r} poison", copy_span(y_cls, r * qdim, qdim), copy_span(y_ref, r * qdim, qdim), APPROX_REL) == 1,
-                "decode attention ({arm}): row {r}'s bar reds one poisoned element")
-        }
-        delete qh
-        delete kh
-        delete vh
-        delete y_ref
-        delete y_cls
     }
 }
 
@@ -3467,20 +3074,22 @@ def private da_attn_shape_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit, nrows : i
 def test_vkd_da_attn_shapes(t0 : T?) {
     t0 |> run("decode attention at the shapes the fixed cells leave out == the CPU oracle: ragged key groups, a full four-head slab, a short last slab, a 24-word head, two rows a dispatch") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!(ensure_da_attn_cls() && ensure_da_attn_g2_cls())) {
+            if (!da_attn_stamps_ensure(KVDtype.f32)) {
                 t |> skip("no Vulkan device")
                 return
             }
-            da_attn_shape_arm(t, 96, 4, 1, 300, 1, 1)    //! 21 key groups of 12 words: the ragged group count, no fold
-            da_attn_shape_arm(t, 96, 4, 1, 300, 4, 1)
-            da_attn_shape_arm(t, 128, 8, 4, 300, 1, 1)   //! a full four-head slab (`live` 4): two fold rounds at subgroup 32
-            da_attn_shape_arm(t, 128, 8, 4, 300, 8, 1)
-            da_attn_shape_arm(t, 64, 10, 5, 300, 1, 1)   //! a short last slab: `live` 1 on each kv head's second slab
-            da_attn_shape_arm(t, 192, 2, 2, 70, 1, 1)    //! 24 words a V row, not a power of two: no fold
-            da_attn_shape_arm(t, 64, 4, 2, 300, 1, 2)    //! two rows a dispatch, each over its own mirror region
-            da_attn_shape_arm(t, 64, 4, 2, 300, 4, 2)
-            da_attn_shape_arm(t, 64, 4, 2, 300, 1, 2, true)   //! the two-head slab over the rows: the row index and the slab arithmetic together
-            da_attn_shape_arm(t, 64, 4, 2, 300, 4, 4, true)
+            //! every split arm dispatches twice over the counters the first left: the arrival counters the pass resets rearm
+            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 96, nheads = 4, kv_mul = 1))   //! 21 key groups of 12 words: the ragged group count, no fold
+            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 96, nheads = 4, kv_mul = 1, nsplit = 4, resubmit = true))
+            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 128, nheads = 8, kv_mul = 4))   //! a full four-head slab (`live` 4): two fold rounds at subgroup 32
+            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 128, nheads = 8, kv_mul = 4, nsplit = 8, resubmit = true))
+            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 10, kv_mul = 5))   //! a short last slab: `live` 1 on each kv head's second slab
+            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 192, nheads = 2, kv_mul = 2, keys = 70))   //! 24 words a V row, not a power of two: no fold
+            //! two rows a dispatch, each over its own mirror region: the row index and the slab arithmetic together, the
+            //! four-head stamp over the same rows held to the two-head slab bit for bit
+            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 4, kv_mul = 2, nrows = 2, g4_twin = true))
+            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 4, kv_mul = 2, nrows = 2, nsplit = 4, resubmit = true, g4_twin = true))
+            codec_attn_arm(t, CodecAttn(kv = KVDtype.f32, hs = 64, nheads = 4, kv_mul = 2, nrows = 4, nsplit = 4, resubmit = true))
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -7943,76 +7552,15 @@ def test_vkd_kv16_readers(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            if (!(ensure_da_attn_f16_cls() && ensure_da_attn_b_f16_cls() && ensure_da_attn_f16_g2_cls())) {
+            if (!(da_attn_stamps_ensure(KVDtype.f16) && ensure_da_attn_b_f16_cls())) {
                 t |> skip("f16 attention classes declined on this device")
                 return
             }
-            // --- da_attn_f16: decode row over f16 mirrors (chunk boundary) - the scalar head (64), the one-word lane (256) and the two-word lane (512) ---
+            // --- da_attn_f16: every path of the decode pass over the f16 mirror, then a two-head group at the scalar head (64), the
+            // one-word lane (256) and the two-word lane (512), the four-head stamp held to the two-head slab bit for bit ---
+            codec_attn_arms(t, KVDtype.f16)
             for (hs in [64, 256, 512]) {
-                let kv_mul = 2
-                let nheads = 4
-                let kvd = (nheads / kv_mul) * hs
-                let cnt = 300
-                let scale = 0.125
-                var qh <- row_fill(nheads * hs, 41, 0, 0.05, 1.8, 73)
-                var kh : array<float>
-                var vh : array<float>
-                kh |> resize(cnt * kvd)
-                vh |> resize(cnt * kvd)
-                for (i in range(cnt * kvd)) {
-                    kh[i] = f16r(float((i * 17) % 97) * 0.03 - 1.4)
-                    vh[i] = f16r(float((i * 53) % 89) * 0.04 - 1.7)
-                }
-                var k16 <- pack_f16(kh)
-                var v16 <- pack_f16(vh)
-                let q_bytes = int64(nheads * hs) * 4l
-                let m_bytes = int64(cnt * kvd) * 2l
-                let qdv = make_device_buf(q_bytes)
-                let kd = make_device_buf(m_bytes)
-                let vd = make_device_buf(m_bytes)
-                let yd2 = make_device_buf(q_bytes)
-                unsafe {
-                    upload_region_at(qdv, 0l, addr<uint8 const?>(qh[0]), q_bytes)
-                    upload_region_at(kd, 0l, addr<uint8 const?>(k16[0]), m_bytes)
-                    upload_region_at(vd, 0l, addr<uint8 const?>(v16[0]), m_bytes)
-                }
-                var y_cls <- da_attn_run(cnt, nheads * hs, yd2) $(tok : uint64; raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                    var sc = set_da_attn_f16_cls(fixed_array(qdv, kd, vd, yd2, tok, yd2, yd2, yd2),
-                        fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, TOK_META_BYTES, q_bytes, q_bytes, q_bytes),
-                        fixed_array(1u, 2u, 4u, 16u, 0u, 16u, 16u, 16u))
-                    var pc = DaAttnArgs(kvd = uint(kvd), hs = uint(hs),
-                        kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, rqk = DA_RQ_NONE)
-                    enc_da_attn_f16_cls(raw2, h2, sc, pc, da_attn_row_wgs(int64(nheads), int64(kv_mul), 1l))
-                }
-                // oracle over the SAME f16-grid values the device loads — plain f32 attention
-                var y_ref : array<float>
-                y_ref |> resize(nheads * hs)
-                attn_heads_oracle(qh, 0, kh, 0, vh, 0, kvd, nheads, hs, kv_mul, cnt, scale, y_ref, 0)
-                check_rows(t, "da_attn_f16 at head {hs} against the CPU oracle", y_cls, y_ref, BAR_APPROX_CTRL, nheads * hs, hs)
-                //! the two-head slab's f16 stamp (the one a two-head group serves on the f16 mirror) at the same shape: the oracle, and the four-head stamp bit for bit
-                var y_g2 <- da_attn_run(cnt, nheads * hs, yd2) $(tok : uint64; raw3 : VkCommandBuffer; var h3 : VkHaz) {
-                    var sc2 = set_da_attn_f16_cls(fixed_array(qdv, kd, vd, yd2, tok, yd2, yd2, yd2),
-                        fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, TOK_META_BYTES, q_bytes, q_bytes, q_bytes),
-                        fixed_array(1u, 2u, 4u, 16u, 0u, 16u, 16u, 16u))
-                    var pc3 = DaAttnArgs(kvd = uint(kvd), hs = uint(hs),
-                        kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, rqk = DA_RQ_NONE)
-                    enc_da_attn_f16_g2_cls(raw3, h3, sc2, pc3, da_attn_row_wgs(int64(nheads), int64(kv_mul), 1l))
-                }
-                let bad_g2 = mismatch_approx(y_g2, y_ref)
-                t |> success(bad_g2 == 0, "da_attn_f16_g2 at head {hs} matches the CPU oracle ({bad_g2} of {nheads * hs} off)")
-                let apart = mismatch_exact(y_g2, y_cls)
-                t |> success(apart == 0, "da_attn_f16_g2 at head {hs} is da_attn_f16 bit for bit ({apart} of {nheads * hs} apart)")
-                y_ref[hs / 2] += 0.5
-                t |> equal(mismatch_approx(y_g2, y_ref), 1, "da_attn_f16_g2 at head {hs}: the bar reds one poisoned element")
-                y_ref[hs / 2] -= 0.5
-                delete y_g2
-                delete qh
-                delete kh
-                delete vh
-                delete y_ref
-                delete y_cls
-                delete k16
-                delete v16
+                codec_attn_arm(t, CodecAttn(kv = KVDtype.f16, hs = hs, nheads = 4, kv_mul = 2, g4_twin = true))
             }
             // --- da_attn_b_f16: batched window over f16 mirrors (dpl 1 and 8 arms) ---
             for (hs in [32, 256]) {
