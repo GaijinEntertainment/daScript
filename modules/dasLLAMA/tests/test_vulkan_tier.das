@@ -1020,21 +1020,10 @@ def private synth_f(i, seed : int64; amp : float) : float {
 // q8 image GEMM mirror (int block dots, double-accumulated): y [nrows x d] = X . W^T
 def private ref_q8_gemm(wq : array<int8>; ws : array<float>; xq : array<int8>; xs : array<float>;
                         n, d, nrows : int64; var y : array<float>) {
-    let nri = int(nrows)
-    let di = int(d)
     y |> resize(nrows * d)
-    let nb = int(n / 32l)
-    for (r in range(nri)) {
-        for (c in range(di)) {
-            var acc = 0.0lf
-            for (b in range(nb)) {
-                var id = 0
-                for (k in range(32)) {
-                    id += int(xq[r * int(n) + b * 32 + k]) * int(wq[c * int(n) + b * 32 + k])
-                }
-                acc += double(ws[c * nb + b]) * double(xs[r * nb + b]) * double(id)
-            }
-            y[r * int(d) + c] = float(acc)
+    for (r in range64(nrows)) {
+        for (c in range64(d)) {
+            y[r * d + c] = float(ref_dot_q8_f64(wq, ws, c * n, xq, xs, r * n, n).dot)
         }
     }
 }
