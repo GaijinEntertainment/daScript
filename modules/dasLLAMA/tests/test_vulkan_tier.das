@@ -1789,9 +1789,7 @@ def test_vulkan_decode_attn(t : T?) {
             // CPU reference: per head, softmax(q.k*scale) then weighted V
             var refo : array<float>
             refo |> resize(int(QD))
-            for (h in range(int(NH))) {
-                attn_row_oracle(q, h * int(HS), cpuK, 0, cpuV, 0, int(KVD), h, int(HS), int(kv_mul), int(CNT), SCALE, refo, h * int(HS))
-            }
+            attn_heads_oracle(q, 0, cpuK, 0, cpuV, 0, int(KVD), int(NH), int(HS), int(kv_mul), int(CNT), SCALE, refo, 0)
             held(t, "decode attention", out, refo, REL_TOL, HS, 1e-5)
             delete cpuK
             delete cpuV

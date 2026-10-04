@@ -80,9 +80,7 @@ def private feed_ref(x : array<float>; wn : array<float>; fmt : int) : Q8Round {
 // one head group's decode attention over the f16 mirror rows [0, cnt)
 def private attn_ref(q : array<float>; kmir, vmir : array<float>; cnt : int64; var y : array<float>) {
     y |> resize(QD)
-    for (h in range64(NH)) {
-        attn_row_oracle(q, int(h * HS), kmir, 0, vmir, 0, int(KVD), int(h), int(HS), int(KVM), int(cnt), ATTN_SCALE, y, int(h * HS))
-    }
+    attn_heads_oracle(q, 0, kmir, 0, vmir, 0, int(KVD), int(NH), int(HS), int(KVM), int(cnt), ATTN_SCALE, y, 0)
 }
 
 //! `got` against a non-trivial reference row at ROW_BAR

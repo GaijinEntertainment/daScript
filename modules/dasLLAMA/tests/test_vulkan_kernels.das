@@ -3019,9 +3019,7 @@ def private da_attn_rqk_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit : int; rqk :
         var s_cls <- staged(host.mapped, q_bytes + int64(qdim), qdim / blk, type<float>)
         var y_ref : array<float>
         y_ref |> resize(qdim)
-        for (hh in range(nheads)) {
-            attn_row_oracle(qh, hh * hs, kh, 0, vh, 0, kvd, hh, hs, kv_mul, cnt, scale, y_ref, hh * hs)
-        }
+        attn_heads_oracle(qh, 0, kh, 0, vh, 0, kvd, nheads, hs, kv_mul, cnt, scale, y_ref, 0)
         let arm = "hs {hs} x {nheads} heads, {nsplit} split(s), {rqk == DA_RQ_Q8K ? "Q8_K" : "Q8_0"}{slab2 ? ", the two-head slab" : ""}"
         let bad = mismatch_approx(y_cls, y_ref)
         t |> success(bad == 0, "folded-requant attention ({arm}): the row matches the CPU oracle ({bad} of {qdim} off)")
@@ -3148,9 +3146,7 @@ def test_vkd_da_attn(t0 : T?) {
             }
             var y_ref : array<float>
             y_ref |> resize(nheads * hs)
-            for (hh in range(nheads)) {
-                attn_row_oracle(qh, hh * hs, kh, 0, vh, 0, kvd, hh, hs, kv_mul, cnt, scale, y_ref, hh * hs)
-            }
+            attn_heads_oracle(qh, 0, kh, 0, vh, 0, kvd, nheads, hs, kv_mul, cnt, scale, y_ref, 0)
             let bad = mismatch_approx(y_cls, y_ref)
             t |> success(bad == 0, "da_attn matches the CPU oracle ({bad} of {nheads * hs} off)")
             // the softcap arm (gemma-2): a cap the scaled scores overrun, the kernel's exp form against the oracle's
@@ -3166,9 +3162,7 @@ def test_vkd_da_attn(t0 : T?) {
             }
             let moved = mismatch_approx(y_cls, y_ref)
             t |> success(moved > 0, "control: the {cap} cap moves the uncapped output ({moved} of {nheads * hs})")
-            for (hh in range(nheads)) {
-                attn_row_oracle(qh, hh * hs, kh, 0, vh, 0, kvd, hh, hs, kv_mul, cnt, scale, y_ref, hh * hs, 0, cap)
-            }
+            attn_heads_oracle(qh, 0, kh, 0, vh, 0, kvd, nheads, hs, kv_mul, cnt, scale, y_ref, 0, 0, cap)
             let badc = mismatch_approx(y_cls, y_ref)
             t |> success(badc == 0, "da_attn under a {cap} softcap matches the CPU oracle ({badc} of {nheads * hs} off)")
             //! the split arm: eight key splits of the 300 (64-key pieces, the last 44 keys wide, three pieces empty),
@@ -3213,14 +3207,10 @@ def test_vkd_da_attn(t0 : T?) {
             let sinkd = make_device_buf(sink_bytes)
             var y_sink : array<float>
             y_sink |> resize(nheads * hs)
-            for (hh in range(nheads)) {
-                attn_row_oracle(qh, hh * hs, kh, 0, vh, 0, kvd, hh, hs, kv_mul, cnt, scale, y_sink, hh * hs, 0, 0.0, true, sinkh[hh])
-            }
+            attn_heads_oracle(qh, 0, kh, 0, vh, 0, kvd, nheads, hs, kv_mul, cnt, scale, y_sink, 0, sinkh)
             var y_free : array<float>
             y_free |> resize(nheads * hs)
-            for (hh in range(nheads)) {
-                attn_row_oracle(qh, hh * hs, kh, 0, vh, 0, kvd, hh, hs, kv_mul, cnt, scale, y_free, hh * hs)
-            }
+            attn_heads_oracle(qh, 0, kh, 0, vh, 0, kvd, nheads, hs, kv_mul, cnt, scale, y_free, 0)
             t |> success(mismatch_approx(y_sink, y_free) > 0, "sink control: the sink moves the oracle's own output ({mismatch_approx(y_sink, y_free)} of {nheads * hs})")
             for (split in fixed_array(1, nsplit)) {
                 upload_region_at(sinkd, 0l, unsafe(addr<uint8 const?>(sinkh[0])), sink_bytes)
@@ -3259,10 +3249,8 @@ def test_vkd_da_attn(t0 : T?) {
                 var y_free16 : array<float>
                 y_sink16 |> resize(nheads * hs)
                 y_free16 |> resize(nheads * hs)
-                for (hh in range(nheads)) {
-                    attn_row_oracle(qh, hh * hs, kh16, 0, vh16, 0, kvd, hh, hs, kv_mul, cnt, scale, y_sink16, hh * hs, 0, 0.0, true, sinkh[hh])
-                    attn_row_oracle(qh, hh * hs, kh16, 0, vh16, 0, kvd, hh, hs, kv_mul, cnt, scale, y_free16, hh * hs)
-                }
+                attn_heads_oracle(qh, 0, kh16, 0, vh16, 0, kvd, nheads, hs, kv_mul, cnt, scale, y_sink16, 0, sinkh)
+                attn_heads_oracle(qh, 0, kh16, 0, vh16, 0, kvd, nheads, hs, kv_mul, cnt, scale, y_free16, 0)
                 for (split in fixed_array(1, nsplit)) {
                     unsafe {
                         upload_region_at(kd16, 0l, addr<uint8 const?>(k16[0]), m16_bytes)
@@ -3377,9 +3365,7 @@ def private da_attn_shape_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit, nrows : i
         var y_ref : array<float>
         y_ref |> resize(qdim * nrows)
         for (r in range(nrows)) {
-            for (hh in range(nheads)) {
-                attn_row_oracle(qh, r * qdim + hh * hs, kh, r * mir_units, vh, r * mir_units, kvd, hh, hs, kv_mul, cnt, scale, y_ref, r * qdim + hh * hs)
-            }
+            attn_heads_oracle(qh, r * qdim, kh, r * mir_units, vh, r * mir_units, kvd, nheads, hs, kv_mul, cnt, scale, y_ref, r * qdim)
         }
         let arm = "hs {hs} x {nheads} heads, {kv_mul} a kv head, {cnt} keys, {nsplit} split(s), {nrows} row(s){slab2 ? ", the two-head slab" : ""}"
         for (r in range(nrows)) {
@@ -3398,9 +3384,7 @@ def private da_attn_shape_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit, nrows : i
         if (nrows > 1) {
             var y_x : array<float>
             y_x |> resize(qdim * nrows)
-            for (hh in range(nheads)) {
-                attn_row_oracle(qh, qdim + hh * hs, kh, 0, vh, 0, kvd, hh, hs, kv_mul, cnt, scale, y_x, qdim + hh * hs)
-            }
+            attn_heads_oracle(qh, qdim, kh, 0, vh, 0, kvd, nheads, hs, kv_mul, cnt, scale, y_x, qdim)
             let crossed = mismatch_rel("decode attention ({arm}) row 1 vs row 0's oracle (MUST mismatch)", copy_span(y_cls, qdim, qdim), copy_span(y_x, qdim, qdim), APPROX_REL)
             t |> success(crossed > 0, "decode attention ({arm}): row 1 read its own region - the oracle over row 0's misses ({crossed} of {qdim})")
             delete y_x
@@ -3498,10 +3482,7 @@ def test_vkd_at_attn(t0 : T?) {
                 var y_ref : array<float>
                 y_ref |> resize(rows * qd)
                 for (r in range(rows)) {
-                    for (hh in range(nheads)) {
-                        attn_row_oracle(qh, r * qd + hh * hs, kh, 0, vh, 0, kvd, hh, hs, kv_mul,
-                            w0 + r + 1, scale, y_ref, r * qd + hh * hs)
-                    }
+                    attn_heads_oracle(qh, r * qd, kh, 0, vh, 0, kvd, nheads, hs, kv_mul, w0 + r + 1, scale, y_ref, r * qd)
                 }
                 if (gated) {
                     for (i in range(rows * qd)) {
@@ -3685,11 +3666,8 @@ def private fa_tile_run(t : T?; khr : bool) {
                 var y_nosink : array<float>
                 y_nosink |> resize(rows * qd)
                 for (r in range(rows)) {
-                    for (hh in range(nheads)) {
-                        let cnt = w0 + r + 1
-                        attn_row_oracle(qh2, r * qd + hh * hs, kh2, 0, vh2, 0, kvd, hh, hs, kv_mul,
-                            cnt, 1.0, y_nosink, r * qd + hh * hs, window > 0 && cnt > window ? cnt - window : 0)
-                    }
+                    let cnt = w0 + r + 1
+                    attn_heads_oracle(qh2, r * qd, kh2, 0, vh2, 0, kvd, nheads, hs, kv_mul, cnt, 1.0, y_nosink, r * qd, window > 0 && cnt > window ? cnt - window : 0)
                 }
                 let moved = mismatch_approx(y_cls, y_nosink)
                 t |> success(moved > 0, "{tag} hs {hs} window {window} sink control: the sink moves the output off the sink-free oracle ({moved} of {rows * qd})")
@@ -3980,10 +3958,7 @@ def private da_attn_b_ref(f : DaAttnBFix; scale : float; window : int; cap : flo
     for (r in range(f.npos)) {
         let cnt = f.w0 + r + 1
         let kstart = window > 0 && cnt > window ? cnt - window : 0
-        for (hh in range(f.nheads)) {
-            attn_row_oracle(f.qh, r * qd + hh * f.hs, f.kh, f.kbase, f.vh, f.vbase, kvd, hh, f.hs,
-                f.kv_mul, cnt, scale, y, r * qd + hh * f.hs, kstart, cap)
-        }
+        attn_heads_oracle(f.qh, r * qd, f.kh, f.kbase, f.vh, f.vbase, kvd, f.nheads, f.hs, f.kv_mul, cnt, scale, y, r * qd, kstart, cap)
     }
     return <- y
 }
@@ -7979,9 +7954,7 @@ def test_vkd_kv16_readers(t0 : T?) {
                 // oracle over the SAME f16-grid values the device loads — plain f32 attention
                 var y_ref : array<float>
                 y_ref |> resize(nheads * hs)
-                for (hh in range(nheads)) {
-                    attn_row_oracle(qh, hh * hs, kh, 0, vh, 0, kvd, hh, hs, kv_mul, cnt, scale, y_ref, hh * hs)
-                }
+                attn_heads_oracle(qh, 0, kh, 0, vh, 0, kvd, nheads, hs, kv_mul, cnt, scale, y_ref, 0)
                 let bad = mismatch_approx(y_cls, y_ref)
                 t |> success(bad == 0, "da_attn_f16 at head {hs} matches the CPU oracle ({bad} of {nheads * hs} off)")
                 //! the two-head slab's f16 stamp (the one a two-head group serves on the f16 mirror) at the same shape: the oracle, and the four-head stamp bit for bit

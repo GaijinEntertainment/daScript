@@ -93,10 +93,8 @@ def private fa_bidir_arm(t : T?; khr : bool; hs : int) {
             var yc <- cp |> plane_run(ycp)
             var y_ref : array<float>
             y_ref |> resize(rows * qd)
-            for (hh in range(nheads)) {
-                for (r in range(rows)) {
-                    attn_row_oracle(qh, r * qd + hh * hs, kh, 0, vh, 0, qd, hh, hs, 1, rows, TOWER_SCALE, y_ref, r * qd + hh * hs)
-                }
+            for (r in range(rows)) {
+                attn_heads_oracle(qh, r * qd, kh, 0, vh, 0, qd, nheads, hs, 1, rows, TOWER_SCALE, y_ref, r * qd)
             }
             // `approx` covers the tile's f16 Q and P staging and the coopmat's reassociated sums; K and V are f16 on both sides
             check_rows(t, "{tag} every query row attending every key vs the CPU oracle", y, y_ref, Bar(rel = APPROX_REL, poison = 1.5), qd, hs)
