@@ -4870,83 +4870,66 @@ def private q8_gemv_ar_fixture(n, d : int) : GemvArFixture {
     return <- fx
 }
 
+//! the q8 GEMV + residual step's ten planes over the fixture, in `set_q8_gemv_ar_cls`'s binding order: the GEMV's y row at 4,
+//! the residual row in place at 5, the norm rows at 6, the quants at 7, the scales at 8
+def private gemv_ar_planes(var cp : CellPlanes; fx : GemvArFixture; d : int) : int[10] {
+    let pwq = cp |> in_plain(fx.wqh)
+    let pws = cp |> in_plain(fx.wsh)
+    let pxq = cp |> in_plain(fx.xqh)
+    let pxs = cp |> in_plain(fx.xsh)
+    let py = cp |> out_(d)
+    let pxr = cp |> io_(fx.xres)
+    let pwn = cp |> in_(fx.wnh)
+    let poq = cp |> out_words(int64(d), NAN_SENTINEL_BITS)
+    let pos = cp |> out_(d / 32)
+    let pcnt = cp |> out_words(16l, 0u)
+    return fixed_array(pwq, pws, pxq, pxs, py, pxr, pwn, poq, pos, pcnt)
+}
+
 def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float; abias : bool = false) {
-    let nb = n / 32
-    let totblk = d * nb
     let nblk_out = d / 32
-    let wq_bytes = int64(totblk) * 32l
-    let ws_bytes = int64(totblk) * 2l
     var fx <- q8_gemv_ar_fixture(n, d)
-    var wqh <- fx.wqh
-    var wsh <- fx.wsh
-    var xqh <- fx.xqh
-    var xsh <- fx.xsh
-    var xres <- fx.xres
-    var wnh <- fx.wnh
-    let xq_bytes = int64(nb) * 32l
-    let xs_bytes = int64(nb) * 4l
-    let r_bytes = int64(d) * 4l
-    let wn_bytes = int64(3 * d) * 4l
-    let oq_bytes = int64(d)
-    let os_bytes = int64(nblk_out) * 4l
-    let wqd = make_device_buf(wq_bytes)
-    let wsd = make_device_buf(ws_bytes)
-    let xqd = make_device_buf(xq_bytes)
-    let xsd = make_device_buf(xs_bytes)
-    let yd = make_device_buf(r_bytes)
-    let xrd = make_device_buf(r_bytes)
-    let wnd = make_device_buf(wn_bytes)
-    let oqd = make_device_buf(oq_bytes)
-    let osd = make_device_buf(os_bytes)
-    let cntd = make_device_buf(16l)
-    var zeros : array<uint>
-    zeros |> resize(4)
-    let host = make_host_buf(r_bytes + oq_bytes + os_bytes + 16l, true, [cached = true])
     let eps = 1.0e-6
-    unsafe {
-        upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
-        upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
-        upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
-        upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[0]), xs_bytes)
-        upload_region_at(xrd, 0l, addr<uint8 const?>(xres[0]), r_bytes)
-        upload_region_at(wnd, 0l, addr<uint8 const?>(wnh[0]), wn_bytes)
-        upload_region_at(cntd, 0l, addr<uint8 const?>(zeros[0]), 16l)
-        nan_sentinel_upload(yd, r_bytes)
-        nan_sentinel_upload(oqd, oq_bytes)
-        nan_sentinel_upload(osd, os_bytes)
-        var s_cls = set_q8_gemv_ar_cls(fixed_array(wqd, wsd, xqd, xsd, yd, xrd, wnd, oqd, osd, cntd),
-            fixed_array(wq_bytes, ws_bytes, xq_bytes, xs_bytes, r_bytes, r_bytes, wn_bytes, oq_bytes, os_bytes, 16l),
-            fixed_array(1u, 2u, 4u, 8u, 16u, 32u, 0u, 64u, 64u, 16u))
+    var xr_cls : array<float>
+    var oq : array<int8>
+    var os : array<float>
+    var cnt_after : array<uint>
+    with_cell_planes() $(var cp : CellPlanes) {
+        let pl = gemv_ar_planes(cp, fx, d)
+        var s_cls = cp |> cls_set(pl, @@set_q8_gemv_ar_cls)
         var pc = GemvArArgs(n = uint(n), d = uint(d), wblk = 0u, xblk = 0u, add_on = 1u, woff = uint(d), pwoff = 0u,
             pre_on = pre_on ? 1u : 0u, no_norm = raw ? 1u : 0u, eps = eps, ascale = ascale, abias_on = abias ? 1u : 0u, aboff = uint(2 * d))
         let rpw = 4l * g_gpu.rows_per_wg
-        cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-            enc_q8_gemv_ar_cls(raw2, h2, s_cls, pc, (int64(d) + rpw - 1l) / rpw)
-            cmd_copy_planes(raw2, h2, fixed_array(xrd, oqd, osd, cntd), host, fixed_array(r_bytes, oq_bytes, os_bytes, 16l), 16u | 32u | 64u)
+        cp |> cell_record() $(rw : VkCommandBuffer; var h : VkHaz) {
+            enc_q8_gemv_ar_cls(rw, h, s_cls, pc, (int64(d) + rpw - 1l) / rpw)
         }
+        delete xr_cls
+        xr_cls <- cp |> plane_run(pl[5])
+        delete oq
+        oq <- cp |> plane_as(pl[7], type<int8>, d)
+        delete os
+        os <- cp |> plane_run(pl[8])
+        delete cnt_after
+        cnt_after <- cp |> plane_as(pl[9], type<uint>, 4)
     }
-    var xr_cls <- staged(host.mapped, 0l, d, type<float>)
-    var oq <- staged(host.mapped, r_bytes, d, type<int8>)
-    var os <- staged(host.mapped, r_bytes + oq_bytes, nblk_out, type<float>)
-    var cnt_after <- staged(host.mapped, r_bytes + oq_bytes + os_bytes, 4, type<uint>)
     // the oracle: the q8 GEMM oracle over one record with the x row as its one column, then the residual step's math
     let one_row <- [0u, 0u, 1u, 0u]
     var y : array<float>
     y |> resize(d)
-    q8_gemm_oracle(wqh, wsh, xqh, xsh, one_row, 1, n, d, y)
+    q8_gemm_oracle(fx.wqh, fx.wsh, fx.xqh, fx.xsh, one_row, 1, n, d, y)
     if (abias) {
         for (k in range(d)) {
-            y[k] += wnh[2 * d + k]
+            y[k] += fx.wnh[2 * d + k]
         }
     }
     var aref := y   //! the add partner the step sees: the normed GEMV row under pre_on, the raw row otherwise
     if (pre_on) {
-        rmsnorm(unsafe(addr<float?>(aref[0])), unsafe(addr<float const?>(y[0])), unsafe(addr<float const?>(wnh[0])), int64(d), eps)
+        rmsnorm(unsafe(addr<float?>(aref[0])), unsafe(addr<float const?>(y[0])), unsafe(addr<float const?>(fx.wnh[0])), int64(d), eps)
     }
-    var xr_ref <- [for (k in range(d)); (xres[k] + aref[k]) * ascale]
+    var xr_ref <- [for (k in range(d)); (fx.xres[k] + aref[k]) * ascale]
     var normed := xr_ref
     if (!raw) {
-        rmsnorm(unsafe(addr<float?>(normed[0])), unsafe(addr<float const?>(xr_ref[0])), unsafe(addr<float const?>(wnh[d])), int64(d), eps)
+        rmsnorm(unsafe(addr<float?>(normed[0])), unsafe(addr<float const?>(xr_ref[0])), unsafe(addr<float const?>(fx.wnh[d])), int64(d), eps)
     }
     //! the residual bar: the step's own rounding on the row, plus the GEMV's on the partner it adds - a 512-deep dot whose
     //! terms cancel lands a few 1e-4 of its magnitude off the oracle's order (two rows of 2816 read 3e-4 at gemma-4-26B's width)
@@ -4969,13 +4952,7 @@ def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float; ab
     t |> success(off.values == 0, "q8 gemv+ar {tag}: the dequantized row sits within a quant step ({off.values} of {d} off)")
     t |> success(cnt_after[0] == 0u, "q8 gemv+ar {tag}: the arrival counter reads zero after the dispatch ({cnt_after[0]})")
     t |> success(off.poison_inside == 0, "q8 gemv+ar {tag}: the bar reds a poisoned oracle element in every block ({off.poison_inside} passed)")
-    delete wqh
-    delete wsh
-    delete xqh
-    delete xsh
-    delete xres
-    delete wnh
-    delete zeros
+    delete fx
     delete xr_cls
     delete oq
     delete os
@@ -5010,73 +4987,43 @@ def test_vkd_q8_gemv_ar(t0 : T?) {
 //! updated row, the quants and the scales bit for bit: the N-row command's sites take the row kernel where the one-row
 //! command's take the epilogue, and the regions cells hold the two commands bit for bit
 def private q8_gemv_ar_twin_run(t; n, d : int; pre_on : bool; ascale : float) {
-    let nb = n / 32
-    let totblk = d * nb
     let nblk_out = d / 32
-    let wq_bytes = int64(totblk) * 32l
-    let ws_bytes = int64(totblk) * 2l
     var fx <- q8_gemv_ar_fixture(n, d)
-    let xq_bytes = int64(nb) * 32l
-    let xs_bytes = int64(nb) * 4l
-    let r_bytes = int64(d) * 4l
-    let wn_bytes = int64(3 * d) * 4l
-    let oq_bytes = int64(d)
-    let os_bytes = int64(nblk_out) * 4l
-    let wqd = make_device_buf(wq_bytes)
-    let wsd = make_device_buf(ws_bytes)
-    let xqd = make_device_buf(xq_bytes)
-    let xsd = make_device_buf(xs_bytes)
-    let yd = make_device_buf(r_bytes)
-    let xr_epi = make_device_buf(r_bytes)
-    let xr_row = make_device_buf(r_bytes)
-    let wnd = make_device_buf(wn_bytes)
-    let oq_epi = make_device_buf(oq_bytes)
-    let os_epi = make_device_buf(os_bytes)
-    let oq_row = make_device_buf(oq_bytes)
-    let os_row = make_device_buf(os_bytes)
-    let cntd = make_device_buf(16l)
-    var zeros : array<uint>
-    zeros |> resize(4)
-    let leg_bytes = r_bytes + oq_bytes + os_bytes
-    let host = make_host_buf(leg_bytes * 2l, true, [cached = true])
     let eps = 1.0e-6
-    unsafe {
-        upload_region_at(wqd, 0l, addr<uint8 const?>(fx.wqh[0]), wq_bytes)
-        upload_region_at(wsd, 0l, addr<uint8 const?>(fx.wsh[0]), ws_bytes)
-        upload_region_at(xqd, 0l, addr<uint8 const?>(fx.xqh[0]), xq_bytes)
-        upload_region_at(xsd, 0l, addr<uint8 const?>(fx.xsh[0]), xs_bytes)
-        upload_region_at(xr_epi, 0l, addr<uint8 const?>(fx.xres[0]), r_bytes)
-        upload_region_at(xr_row, 0l, addr<uint8 const?>(fx.xres[0]), r_bytes)
-        upload_region_at(wnd, 0l, addr<uint8 const?>(fx.wnh[0]), wn_bytes)
-        upload_region_at(cntd, 0l, addr<uint8 const?>(zeros[0]), 16l)
-        nan_sentinel_upload(yd, r_bytes)
-        nan_sentinel_upload(oq_epi, oq_bytes)
-        nan_sentinel_upload(os_epi, os_bytes)
-        nan_sentinel_upload(oq_row, oq_bytes)
-        nan_sentinel_upload(os_row, os_bytes)
-        var s_epi = set_q8_gemv_ar_cls(fixed_array(wqd, wsd, xqd, xsd, yd, xr_epi, wnd, oq_epi, os_epi, cntd),
-            fixed_array(wq_bytes, ws_bytes, xq_bytes, xs_bytes, r_bytes, r_bytes, wn_bytes, oq_bytes, os_bytes, 16l),
-            fixed_array(1u, 2u, 4u, 8u, 16u, 32u, 0u, 64u, 64u, 16u))
-        var s_row = set_cls_ar_rq_b(fixed_array(xr_row, yd, wnd, oq_row, os_row),
-            fixed_array(r_bytes, r_bytes, wn_bytes, oq_bytes, os_bytes),
-            fixed_array(128u, 16u, 0u, 256u, 256u))
+    var xr_epi_h : array<float>
+    var oq_epi_h : array<uint>
+    var os_epi_h : array<float>
+    var xr_row_h : array<float>
+    var oq_row_h : array<uint>
+    var os_row_h : array<float>
+    with_cell_planes() $(var cp : CellPlanes) {
+        let pl = gemv_ar_planes(cp, fx, d)
+        let pxr_row = cp |> io_(fx.xres)
+        let poq_row = cp |> out_words(int64(d), NAN_SENTINEL_BITS)
+        let pos_row = cp |> out_(nblk_out)
+        var s_epi = cp |> cls_set(pl, @@set_q8_gemv_ar_cls)
+        var s_row = cp |> cls_set(fixed_array(pxr_row, pl[4], pl[6], poq_row, pos_row), @@set_cls_ar_rq_b)
         var pc = GemvArArgs(n = uint(n), d = uint(d), wblk = 0u, xblk = 0u, add_on = 1u, woff = uint(d), pwoff = 0u,
             pre_on = pre_on ? 1u : 0u, no_norm = 0u, eps = eps, ascale = ascale, abias_on = 0u, aboff = uint(2 * d))
         let rpw = 4l * g_gpu.rows_per_wg
         var pca = ArArgs(dim = uint(d), add_on = 1u, woff = uint(d), eps = eps, ascale = ascale, pre_on = pre_on ? 1u : 0u, pwoff = 0u)
-        cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-            enc_q8_gemv_ar_cls(raw2, h2, s_epi, pc, (int64(d) + rpw - 1l) / rpw)
-            enc_cls_ar_rq_b(raw2, h2, s_row, pca, 1l)   //! the row kernel reads the y row the epilogue's GEMV wrote (the hazard on binding 16)
-            cmd_copy_planes(raw2, h2, fixed_array(xr_epi, oq_epi, os_epi, xr_row, oq_row, os_row), host,
-                fixed_array(r_bytes, oq_bytes, os_bytes, r_bytes, oq_bytes, os_bytes), 32u | 64u | 128u | 256u)
+        cp |> cell_record() $(rw : VkCommandBuffer; var h : VkHaz) {
+            enc_q8_gemv_ar_cls(rw, h, s_epi, pc, (int64(d) + rpw - 1l) / rpw)
+            enc_cls_ar_rq_b(rw, h, s_row, pca, 1l)
         }
+        delete xr_epi_h
+        xr_epi_h <- cp |> plane_run(pl[5])
+        delete oq_epi_h
+        oq_epi_h <- cp |> plane_as(pl[7], type<uint>, d / 4)
+        delete os_epi_h
+        os_epi_h <- cp |> plane_run(pl[8])
+        delete xr_row_h
+        xr_row_h <- cp |> plane_run(pxr_row)
+        delete oq_row_h
+        oq_row_h <- cp |> plane_as(poq_row, type<uint>, d / 4)
+        delete os_row_h
+        os_row_h <- cp |> plane_run(pos_row)
     }
-    var xr_epi_h <- staged(host.mapped, 0l, d, type<float>)
-    var oq_epi_h <- staged(host.mapped, r_bytes, d / 4, type<uint>)
-    var os_epi_h <- staged(host.mapped, r_bytes + oq_bytes, nblk_out, type<float>)
-    var xr_row_h <- staged(host.mapped, leg_bytes, d, type<float>)
-    var oq_row_h <- staged(host.mapped, leg_bytes + r_bytes, d / 4, type<uint>)
-    var os_row_h <- staged(host.mapped, leg_bytes + r_bytes + oq_bytes, nblk_out, type<float>)
     let tag = "n {n} d {d} pre {pre_on ? 1 : 0}"
     t |> success(xr_epi_h[0] != fx.xres[0], "q8 gemv+ar twin {tag}: the epilogue wrote the residual row")
     t |> success(xr_row_h[0] != fx.xres[0], "q8 gemv+ar twin {tag}: the row kernel wrote the residual row")
@@ -5097,7 +5044,6 @@ def private q8_gemv_ar_twin_run(t; n, d : int; pre_on : bool; ascale : float) {
     let badq = mismatch_qbytes(oq_epi_h, oq_row_h, 0)
     t |> success(badq == 0, "q8 gemv+ar twin {tag}: the epilogue's quants == the row kernel's ({badq} of {d} off)")
     delete fx
-    delete zeros
     delete xr_epi_h
     delete xr_row_h
     delete oq_epi_h
