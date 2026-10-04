@@ -29,6 +29,7 @@ require ?vulkan spirv/spirv_grammar   // SpvOp / SpvDecoration / SpvStorageClass
 require dasllama/dasllama_gemm_schema   // Q8_BLOCK_ELEMS sizes the q8 plane helper outside the vulkan arm; kq_dev_ssb_i - the fixtures size their device scale planes per format
 require ?vulkan daslib/shader_lingua_franca   // gl_GlobalInvocationID — the CPU replay drives it per lane (only vulkan-guarded arms replay)
 require dasllama/dasllama_common   // MoeGate: the routing cells' select oracle takes the softmax router
+require dasllama/dasllama_arch_qwen35
 require ?vulkan dasllama/dasllama_moe   // moe_select_core: the host select the window's per-row top-k mirrors
 require daslib/fio   // the lens readonly gate's spawned compiles
 require daslib/strings_boost   // join: the spawned fixture's source
@@ -6171,20 +6172,17 @@ let private HCT_LR = 32         //! one Q8_0 block of low-rank row
 let private HCT_HCD = HCT_HC * HCT_DIM
 let private HCT_EPS = 1e-6
 
-//! the hc_mix oracle over `rows` wide rows: each row's streams gated by sigmoid(gate), their mean one block input row
+//! the hc_mix oracle over `rows` wide rows: the engine's mixer tail with no scatter logits, the mean of each row's sigmoid-gated streams
 def private hc_mix_ref(xn, gate : array<float>; rows : int) : array<float> {
     var want : array<float>
     want |> resize(rows * HCT_DIM)
+    var gated := xn
     for (r in range(rows)) {
-        for (i in range(HCT_DIM)) {
-            var acc = 0.0
-            for (c in range(HCT_HC)) {
-                let e = r * HCT_HCD + c * HCT_DIM + i
-                acc += xn[e] * sigmoid_f32(gate[e])
-            }
-            want[r * HCT_DIM + i] = acc * (1.0 / float(HCT_HC))
+        unsafe {
+            hc_mix_tail(addr(gated[r * HCT_HCD]), addr(gate[r * HCT_HCD]), null, null, addr(want[r * HCT_DIM]), int64(HCT_DIM), int64(HCT_HC))
         }
     }
+    delete gated
     return <- want
 }
 
@@ -6198,15 +6196,9 @@ def private hct_rms(x : array<float>; xo : int; w : array<float>; wo : int; n : 
 //! the scatter's CPU form: res_c += out x 2 sigmoid(inj_c / hc), `out` the block row, or under `moe` the routed sum plus the shared row at `g`
 def private hct_comb_ref(res : array<float>; outr, inj, acc : array<float>; moe, sh : bool; g : float) : array<float> {
     var r := res
-    for (c in range(HCT_HC)) {
-        let w = 2.0 / (1.0 + exp(-inj[c] / float(HCT_HC)))
-        for (i in range(HCT_DIM)) {
-            var v = outr[i]
-            if (moe) {
-                v = acc[i] + (sh ? v * g : 0.0)
-            }
-            r[c * HCT_DIM + i] += v * w
-        }
+    let v <- [for (i in range(HCT_DIM)); moe ? acc[i] + (sh ? outr[i] * g : 0.0) : outr[i]]
+    unsafe {
+        hc_combine(addr(r[0]), addr(v[0]), addr(inj[0]), int64(HCT_DIM), int64(HCT_HC))
     }
     return <- r
 }
@@ -6223,8 +6215,8 @@ def test_vkd_hc_seams(t0 : T?) {
             let wn <- row_fill(2 * HCT_HCD, 13, 5, 0.03, 1.1)   //! two sites' gamma rows: the dispatch reads the second site's
             var want : array<float>
             want |> resize(HCT_HCD)
-            for (c in range(HCT_HC)) {
-                hct_rms(res, c * HCT_DIM, wn, HCT_HCD + c * HCT_DIM, HCT_DIM, want, c * HCT_DIM)
+            unsafe {
+                hc_grouped_norm(addr(want[0]), addr(res[0]), addr(wn[HCT_HCD]), int64(HCT_DIM), int64(HCT_HC), HCT_EPS)
             }
             with_cell_planes() $(var cp : CellPlanes) {
                 let rp = cp |> in_(res)
@@ -7053,36 +7045,20 @@ def test_vkd_dn_family(t0 : T?) {
                     for (e in range(ds * ds)) {
                         st_h[e] = sth[hh * ds * ds + e]
                     }
-                    var gcum = 0.0
                     for (tt in range(npos)) {
                         let crow = tt * cd
-                        let graw = smh[g_off + tt * nvh + hh] + smh[dt_off + hh]
-                        let gt = smh[a_off + hh] * softplus(graw)
-                        gcum += gt
-                        let eg = exp(gt)
-                        let bt = sigmoid_f32(smh[beta_off + tt * nvh + hh])
+                        let gt = smh[a_off + hh] * softplus(smh[g_off + tt * nvh + hh] + smh[dt_off + hh])
                         var dvn : array<float>
                         dvn |> resize(ds)
-                        for (j in range(ds)) {
-                            var ks = 0.0
-                            for (i in range(ds)) {
-                                ks += convh[crow + kd + kh * ds + i] * st_h[i * ds + j]
-                            }
-                            dvn[j] = bt * (convh[crow + 2 * kd + hh * ds + j] - eg * ks)
-                        }
-                        for (e in range(ds * ds)) {
-                            st_h[e] = st_h[e] * eg + convh[crow + kd + kh * ds + e / ds] * dvn[e % ds]
-                        }
                         var orow : array<float>
                         orow |> resize(ds)
+                        unsafe {
+                            dn_delta_head(addr(st_h[0]), addr(convh[crow + kh * ds]), addr(convh[crow + kd + kh * ds]), addr(convh[crow + 2 * kd + hh * ds]),
+                                addr(orow[0]), addr(dvn[0]), gt, sigmoid_f32(smh[beta_off + tt * nvh + hh]), int64(ds))
+                        }
                         var sum = 0.0
-                        for (j in range(ds)) {
-                            var qs = 0.0
-                            for (i in range(ds)) {
-                                qs += convh[crow + kh * ds + i] * st_h[i * ds + j]
-                            }
-                            orow[j] = qs
-                            sum += qs * qs
+                        for (q in orow) {
+                            sum += q * q
                         }
                         let inv = 1.0 / sqrt(sum / float(ds) + eps)
                         for (j in range(ds)) {
@@ -7559,25 +7535,10 @@ def private dn_scan_cell(t : T?; tag : string; ds, nkh, nvh, npos : int) {
                 }
                 for (tt in range(npos)) {
                     let crow = tt * cd
-                    let graw = smh[g_off + tt * nvh + hh] + smh[dt_off + hh]
-                    let eg = exp(smh[a_off + hh] * softplus(graw))
-                    let bt = sigmoid_f32(smh[beta_off + tt * nvh + hh])
-                    for (j in range(ds)) {
-                        var ks = 0.0
-                        for (i in range(ds)) {
-                            ks += convh[crow + kd + kh * ds + i] * st_h[i * ds + j]
-                        }
-                        dvn[j] = bt * (convh[crow + 2 * kd + hh * ds + j] - eg * ks)
-                    }
-                    for (e in range(ds * ds)) {
-                        st_h[e] = st_h[e] * eg + convh[crow + kd + kh * ds + e / ds] * dvn[e % ds]
-                    }
-                    for (j in range(ds)) {
-                        var qs = 0.0
-                        for (i in range(ds)) {
-                            qs += convh[crow + kh * ds + i] * st_h[i * ds + j]
-                        }
-                        ref[tt * di + hh * ds + j] = qs
+                    let gt = smh[a_off + hh] * softplus(smh[g_off + tt * nvh + hh] + smh[dt_off + hh])
+                    unsafe {
+                        dn_delta_head(addr(st_h[0]), addr(convh[crow + kh * ds]), addr(convh[crow + kd + kh * ds]), addr(convh[crow + 2 * kd + hh * ds]),
+                            addr(ref[tt * di + hh * ds]), addr(dvn[0]), gt, sigmoid_f32(smh[beta_off + tt * nvh + hh]), int64(ds))
                     }
                 }
                 for (e in range(ds * ds)) {

@@ -2990,7 +2990,7 @@ def rms_batch(var out : array<float>; src : array<float>; t : Model; woff : int6
 // ===== hyper-connections (config.hyper_conn): the wide residual and the block seams =====
 
 //! grouped RMSNorm of one wide row: stream ch of res normalizes over dim and scales by gamma row ch of w
-def private hc_grouped_norm(var out : float?; res : float const?; w : float const?; dim, nh : int64; eps : float) {
+def hc_grouped_norm(var out : float?; res : float const?; w : float const?; dim, nh : int64; eps : float) {
     unsafe {
         for (ch in range64(nh)) {
             rmsnorm(out + ch * dim, res + ch * dim, w + ch * dim, dim, eps)
@@ -2999,7 +2999,7 @@ def private hc_grouped_norm(var out : float?; res : float const?; w : float cons
 }
 
 //! the mixer's tail over one normed wide row: `inj_w` null = the head mixer (no scatter logits); xb <- the mean of the sigmoid-gated streams
-def private hc_mix_tail(var xn : float?; gate : float const?; inj_w : float const?; var inject : float?; var xb : float?; dim, nh : int64) {
+def hc_mix_tail(var xn : float?; gate : float const?; inj_w : float const?; var inject : float?; var xb : float?; dim, nh : int64) {
     let hcd = nh * dim
     unsafe {
         if (inj_w != null) {   // the scatter logits read the normed streams BEFORE the gate lands in them
@@ -3091,7 +3091,7 @@ def hc_mix_b(t : Model; var s : Session; norm_off, down_off, up_off, inject_off,
 }
 
 //! Scatter one block output row into its wide row r: stream ch += out * 2 sigmoid(inject_ch / hc)
-def private hc_combine(var r : float?; out : float const?; inject : float const?; dim, nh : int64) {
+def hc_combine(var r : float?; out : float const?; inject : float const?; dim, nh : int64) {
     unsafe {
         for (ch in range64(nh)) {
             let w = 2.0 / (1.0 + exp(-inject[ch] / float(nh)))

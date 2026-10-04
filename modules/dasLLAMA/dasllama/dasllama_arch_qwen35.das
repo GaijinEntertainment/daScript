@@ -85,7 +85,7 @@ def private dn_conv_step(var outp : float?; var st : float?; inp : float const?;
 // One delta-rule step for one v-head, autoregressive form: S decays by
 // exp(g); sk = kᵀS; d = (v - sk)·β; S += k⊗d; o = qᵀS (q pre-scaled by 1/sqrt(d_state)).
 // Row-by-row accumulation over k - the fixed order keeps it bit-exact against the reference.
-def private dn_delta_head(var st : float?; q, k, v : float const?; var o : float?; var skd : float?; g, beta : float; ds : int64) {
+def dn_delta_head(var st : float?; q, k, v : float const?; var o : float?; var skd : float?; g, beta : float; ds : int64) {
     unsafe {
         let decay = exp(g)
         for (j in range64(ds)) {
