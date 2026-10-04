@@ -126,17 +126,6 @@ def khr_kq_tile_on : bool => g_gpu.has_coopmat && g_gpu.subgroup_size == 32l
 //! the cm2 flash tiles serve where the device was created in cm2 mode AND the mode still reads cm2 - a test that forces the mode in-process moves the pick with it
 def cm2_fa_on : bool => g_gpu.has_coopmat2_fa && g_gpu.coopmat_mode == COOPMAT_CM2
 
-//! the KHR flash tile serves a head of 64, 128, 256 or 512 on an ungated model, the softcap at 256 alone (its cap stamps); the pre-flight and the window chain pick from this one predicate
-def fa_khr_serves(hs : int64; cap : float; gated : bool) : bool
-    => fa_head_ok(hs) && !gated && (cap == 0.0 || hs == 256l)
-
-//! the cm2 flash tile serves a head of 64, 128, 256 or 512, gated at 256 alone, the softcap at an ungated 256 alone
-def fa_cm2_serves(hs : int64; cap : float; gated : bool) : bool
-    => fa_head_ok(hs) && (!gated || hs == 256l) && (cap == 0.0 || (hs == 256l && !gated))
-
-//! the head sizes a flash tile is stamped at
-def fa_head_ok(hs : int64) : bool => hs == 64l || hs == 128l || hs == 256l || hs == 512l
-
 //! the per-32 formats that serve as routed expert planes only: their one cm2 column is the s tile
 def cm2_b32_routed(fmt : int) : bool => fmt == int(KqFmt.q51) || fmt == int(KqFmt.mx4) || fmt == int(KqFmt.iq4nl32)
 
@@ -3196,19 +3185,28 @@ def vkd_pipes_rebuild() {
 var g_vkd_spv_keep = false
 var g_vkd_spv_kept : table<string; array<uint>>
 
+//! the class-build gate's one decline: the kernel's `@workgroup` footprint over the device's shared-memory cap
+enum VkdBuildDecline {
+    workgroup
+}
+
 // once-per-class named decline log for the workgroup-footprint gate below
 var private g_wg_decline : VkDeclineCounter
+var private g_wg_declined : table<string>   //! the classes already declined, so a re-ensure (the TTS stages ask every chunk) builds no string
 
 // the [vk_dispatch]-generated ensure_ calls this BEFORE building the pipeline: a class whose
 // @workgroup members exceed the device's shared-memory cap declines by name instead of dying
 // in vkCreateComputePipelines (MoltenVK: "Threadgroup memory size exceeds the maximum")
 def vkd_wg_fits(wg_bytes : int; kname : string) : bool {
-    return uint(wg_bytes) <= g_gpu.max_wg_bytes || vkd_wg_decline(wg_bytes, kname)
+    return true if (uint(wg_bytes) <= g_gpu.max_wg_bytes)
+    return false if (key_exists(g_wg_declined, kname))
+    return vkd_wg_decline(wg_bytes, kname)
 }
 
 [cold_path]
 def private vkd_wg_decline(wg_bytes : int; kname : string) : bool {
-    return note(g_wg_decline, kname, "workgroup", "the workgroup footprint {wg_bytes} B exceeds the device cap {int(g_gpu.max_wg_bytes)} B")
+    g_wg_declined |> insert(kname)
+    return note(g_wg_decline, kname, "{VkdBuildDecline.workgroup}", "the workgroup footprint {wg_bytes} B exceeds the device cap {int(g_gpu.max_wg_bytes)} B")
 }
 
 [cold_path]   // family layout creation — once per class family
@@ -3803,6 +3801,14 @@ def alloc_xfer_cmd : VkCommandBuffer => alloc_owned_cmd(g_gpu.xfer_pool, g_gpu.m
 //! `bytes` of a device buffer from `off` zeroed by a fill command, no host array
 def upload_zeros(dev : uint64; off, bytes : int64) {
     upload_fill(dev, off, bytes, 0u)
+}
+
+//! a device buffer holding `a` whole
+def dev_upload(a : array<auto(TT)>) : uint64 {
+    let bytes = long_length(a) * int64(typeinfo sizeof(type<TT>))
+    let dev = make_device_buf(bytes)
+    upload_region_at(dev, 0l, unsafe(addr<uint8 const?>(a[0])), bytes)
+    return dev
 }
 
 //! `bytes` of a device buffer from `off` set to the 32-bit `word` by a fill command (`0x3F800000u` is 1.0f), no host array

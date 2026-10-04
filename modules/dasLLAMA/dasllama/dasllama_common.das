@@ -3897,13 +3897,18 @@ def tq4_sides(s : Session; var kp, vp : float?; nrows, kv_dim, head_size : int64
     }
 }
 
+//! whether either cache side of `s` is tq4: the rotations below touch the rows only then
+def private tq4_any_side(s : Session) : bool => s.kv_dtype_k == KVDtype.tq4 || s.kv_dtype_v == KVDtype.tq4
+
 //! K and V rows a device pass attended in the model's basis, rotated into the basis a tq4 side of `s`'s cache stores
 def tq4_rotate_for_store(s : Session; var k, v : array<float>; nrows, kv_dim, head_size : int64) {
+    return if (!tq4_any_side(s) || nrows <= 0l)
     tq4_sides(s, unsafe(addr(k[0])), unsafe(addr(v[0])), nrows, kv_dim, head_size, false)
 }
 
 //! ... and rows a tq4 side of the cache dequantized, taken back into the model's basis for a device mirror of floats
 def tq4_unrotate_from_store(s : Session; var k, v : array<float>; nrows, kv_dim, head_size : int64) {
+    return if (!tq4_any_side(s) || nrows <= 0l)
     tq4_sides(s, unsafe(addr(k[0])), unsafe(addr(v[0])), nrows, kv_dim, head_size, true)
 }
 

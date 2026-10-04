@@ -1018,21 +1018,14 @@ def vk_rdec_upload_dn_ba(rows : array<float>) {
     g_rd.dn_ba_dev = rd_upload_rows_f16(rows)
 }
 
-def private rd_upload_rows(rows : array<float>) : uint64 {
-    let bytes = long_length(rows) * 4l
-    let dev = make_device_buf(bytes)
-    upload_region_at(dev, 0l, unsafe(addr<uint8 const?>(rows[0])), bytes)
-    return dev
-}
+def private rd_upload_rows(rows : array<float>) : uint64 => dev_upload(rows)
 
 def private rd_upload_rows_f16(rows : array<float>) : uint64 {
     var half : array<float16>
     half |> reserve(long_length(rows))
     half |> resize(long_length(rows))
     cvt_f32_to_f16(unsafe(addr<uint16?>(half[0])), unsafe(addr(rows[0])), long_length(rows))
-    let bytes = long_length(half) * 2l
-    let dev = make_device_buf(bytes)
-    upload_region_at(dev, 0l, unsafe(addr<uint8 const?>(half[0])), bytes)
+    let dev = dev_upload(half)
     delete half
     return dev
 }
@@ -3888,7 +3881,8 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>;
 //! session codec matches the mirror codec (the arm gate), so the rows byte-copy
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]   //! per batch-decode row and per prefill, reached through the tier's registered seat
 def vk_rdec_kv_sync(l, row0, nrows : int64; kp : uint8 const?; vp : uint8 const?) {
-    assert(g_rd != null && (l < g_rd.n_layers || g_rd.head_on), "vk_rdec_kv_sync: a head row on a driver without the head")
+    assert(g_rd != null, "vk_rdec_kv_sync before prepare")
+    assert(l < g_rd.n_layers || (l == g_rd.n_layers && g_rd.head_on), "vk_rdec_kv_sync: a layer past the trunk, or a head row on a driver without the head")
     return if (nrows <= 0l)
     let L & = unsafe(l == g_rd.n_layers ? g_rd.head : g_rd.layers[l])
     return if (L.mir_idx < 0l)
@@ -3904,7 +3898,8 @@ def vk_rdec_kv_sync(l, row0, nrows : int64; kp : uint8 const?; vp : uint8 const?
 //! KV_READBACK_ROWS rows a submit - the hydration rail, the batch decode's row writeback and the head's pass
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]   //! per layer per batch-decode row, reached through the tier's registered seat
 def vk_rdec_kv_read(l, row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
-    assert(g_rd != null && (l < g_rd.n_layers || g_rd.head_on), "vk_rdec_kv_read: a head row on a driver without the head")
+    assert(g_rd != null, "vk_rdec_kv_read before prepare")
+    assert(l < g_rd.n_layers || (l == g_rd.n_layers && g_rd.head_on), "vk_rdec_kv_read: a layer past the trunk, or a head row on a driver without the head")
     return if (nrows <= 0l)
     let L & = unsafe(l == g_rd.n_layers ? g_rd.head : g_rd.layers[l])
     return if (L.mir_idx < 0l)

@@ -20,6 +20,56 @@ require daslib/enum_trait   // kq_gemv_fmts walks the enum
 require daslib/strings_boost
 require math
 
+//! the flash tiles' head gates - the pre-flight and the window chain pick from these predicates over their arguments alone
+//! the head sizes a flash tile is stamped at
+def fa_head_ok(hs : int64) : bool => hs == 64l || hs == 128l || hs == 256l || hs == 512l
+
+//! the KHR flash tile serves a head of 64, 128, 256 or 512 on an ungated model, the softcap at 256 alone (its cap stamps)
+def fa_khr_serves(hs : int64; cap : float; gated : bool) : bool
+    => fa_head_ok(hs) && !gated && (cap == 0.0 || hs == 256l)
+
+//! the cm2 flash tile serves a head of 64, 128, 256 or 512, gated at 256 alone, the softcap at an ungated 256 alone
+def fa_cm2_serves(hs : int64; cap : float; gated : bool) : bool
+    => fa_head_ok(hs) && (!gated || hs == 256l) && (cap == 0.0 || (hs == 256l && !gated))
+
+//! the Vulkan kernel bodies' own decode helpers - pure ALU over packed words, spliced into the shader bodies below and nowhere else
+//! a grid word's four magnitude bytes under scale `ds`, byte i negated where bit i of `sgn` is set
+def grid_sv4(gw, sgn : uint; ds : float) : float4 {
+    let g0 = float(gw & 0xFFu)
+    let g1 = float((gw >> 8u) & 0xFFu)
+    let g2 = float((gw >> 16u) & 0xFFu)
+    let g3 = float(gw >> 24u)
+    return float4(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1),
+        ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3))
+}
+
+//! `grid_sv4`'s pair twin: the low two magnitude bytes of `gp` signed by bits 0 and 1 of `sgn`, the second where `e` is odd
+def grid_sv1(gp, sgn, e : uint; ds : float) : float {
+    let g0 = float(gp & 0xFFu)
+    let g1 = float((gp >> 8u) & 0xFFu)
+    let v0 = ds * ((sgn & 1u) != 0u ? -g0 : g0)
+    let v1 = ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)
+    return (e & 1u) != 0u ? v1 : v0
+}
+
+//! Q4_K / Q5_K: sub-block `blk`'s d x scale and dmin x min, off the row's unpacked (d, dmin) and the words that hold its scale and its min byte
+def k4_scale_min(dm : float2; scw, mnw, blk : uint) : float2 {
+    let sh = (blk & 3u) * 8u
+    return float2(dm.x * float((scw >> sh) & 0xFFu), dm.y * float((mnw >> sh) & 0xFFu))
+}
+
+//! Q4_0 / IQ4_NL: block `blk`'s f16 d, off the word that packs it beside its neighbour's
+def q40_d_of(w, blk : uint) : float {
+    let dp = unpackHalf2x16(w)
+    return (blk & 1u) == 0u ? dp.x : dp.y
+}
+
+//! Q6_K / Q3_K: the signed int8 sub-block scale `i` (mod 4) of its scale word
+def k6_sc(w, i : uint) : int => int(w << ((3u - (i & 3u)) * 8u)) >> 24
+
+//! `v` stored as a half, saturated at the half's largest finite magnitude instead of overflowing to infinity
+def half_sat(v : float) : float16 => float16(clamp(v, -65504.0, 65504.0))
+
 // The Vulkan KERNEL home: every kernel is a [spirv_kernel]/[vk_dispatch] class — families are
 // one base class + per-format overrides, devirtualized at emission. Kernels carry clean
 // per-member bindings and push-constant params; region lists stay SSBO.
@@ -1780,31 +1830,6 @@ def khr_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescr
     }
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
-def cm2e_cls_ensure(fmt : int) : bool {
-    var r = false
-    kq_tile_stamp(fmt) <| $() {
-        r = tile_ensure_cm2e_cls()
-    }
-    return r
-}
-
-[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
-def cm2e_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
-    var r : VkDescriptorSet
-    kq_tile_stamp(fmt) <| $() {
-        r = tile_set_cm2e_cls(bufs, sizes, gbits)
-    }
-    return r
-}
-
-[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
-def cm2e_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
-    kq_tile_stamp(fmt) <| $() {
-        tile_enc_cm2e_cls(raw, h, s, pc, groups)
-    }
-}
-
 def private cm2_b32_require_s_column(fmt : int; tc : int64) {
     if (tc != 32l) {
         panic("vk classes: a per-32 expert plane ({kq_fmt_of_slot(fmt)}) reached a dense tile column - its one cm2 stamp is the s tile")
@@ -3143,12 +3168,12 @@ class template AtAttnTileT {
         let qhs = pa.qhs == 0u ? pa.hs : pa.qhs   // 0 = compact (non-gated); a gated model passes 2 * hs
         let qrow = pa.nh * qhs
         let dpl = pa.hs / 32u
-        let qtiles = (pa.npos + 7u) / 8u
+        let qtiles = (pa.npos + (TQ - 1u)) / TQ
         let h = gl_WorkGroupID.x / qtiles
-        let q0 = (gl_WorkGroupID.x % qtiles) * 8u
+        let q0 = (gl_WorkGroupID.x % qtiles) * TQ
         let tid = gl_LocalInvocationID.x
-        let r = tid / 32u
-        let c = tid % 32u
+        let r = tid / KS
+        let c = tid % KS
         let kvh = h / pa.kv_mul
         load_q(q0, pa.npos, qrow, h, pa.hs, qhs)
         var o0 = 0.0
@@ -3161,7 +3186,7 @@ class template AtAttnTileT {
         var o7 = 0.0
         barrier()
         let gq = pa.w0 + q0 + r
-        let kend = pa.w0 + min(q0 + 8u, pa.npos)   // causal bound (exclusive) of the tile's last row
+        let kend = pa.w0 + min(q0 + TQ, pa.npos)   // causal bound (exclusive) of the tile's last row
         var k0 = k_first(pa.w0, q0, pa.window)
         while (k0 < kend) {
             load_k(k0, kend, pa.kbase, pa.kvd, kvh, pa.hs)
@@ -3188,9 +3213,9 @@ class template AtAttnTileT {
             load_v(k0, kend, pa.vbase, pa.kvd, kvh, pa.hs)
             barrier()
             var c2 = 0u
-            while (c2 < 32u) {
-                let pw = score_tile[r * 32u + c2]
-                let vb = c2 * 257u + c
+            while (c2 < KS) {
+                let pw = score_tile[r * KS + c2]
+                let vb = c2 * LD + c
                 o0 += pw * kv_stage[vb]
                 if (dpl > 1u) {
                     o1 += pw * kv_stage[vb + 32u]
@@ -3208,7 +3233,7 @@ class template AtAttnTileT {
                 c2++
             }
             barrier()
-            k0 += 32u
+            k0 += KS
         }
         if (q0 + r < pa.npos) {
             let inv = 1.0 / fl[r]
@@ -3238,12 +3263,12 @@ class AtAttn : AtAttnTileT {
 
     [spirv_kernel(local_size_x = 256, name = "at_attn_cls_spv")]
     def override run {
-        let qtiles = (pa.rows + 7u) / 8u
+        let qtiles = (pa.rows + (TQ - 1u)) / TQ
         let h = gl_WorkGroupID.x / qtiles
-        let q0 = (gl_WorkGroupID.x % qtiles) * 8u
+        let q0 = (gl_WorkGroupID.x % qtiles) * TQ
         let tid = gl_LocalInvocationID.x
-        let r = tid / 32u
-        let c = tid % 32u
+        let r = tid / KS
+        let c = tid % KS
         let kvh = h / pa.kv_mul
         load_q(q0, pa.rows, pa.qd, h, pa.hs, pa.hs)
         var o0 = 0.0
@@ -3256,7 +3281,7 @@ class AtAttn : AtAttnTileT {
         var o7 = 0.0
         barrier()
         let gq = pa.w0 + q0 + r
-        let kend = pa.w0 + min(q0 + 8u, pa.rows)   // causal bound (exclusive) of the tile's last row
+        let kend = pa.w0 + min(q0 + TQ, pa.rows)   // causal bound (exclusive) of the tile's last row
         var k0 = 0u
         while (k0 < kend) {
             load_k(k0, kend, 0u, pa.kvd, kvh, pa.hs)
@@ -3279,9 +3304,9 @@ class AtAttn : AtAttnTileT {
             load_v(k0, kend, 0u, pa.kvd, kvh, pa.hs)
             barrier()
             var c2 = 0u
-            while (c2 < 32u) {
-                let pw = score_tile[r * 32u + c2]
-                let vb = c2 * 257u + c
+            while (c2 < KS) {
+                let pw = score_tile[r * KS + c2]
+                let vb = c2 * LD + c
                 o0 += pw * kv_stage[vb]
                 o1 += pw * kv_stage[vb + 32u]
                 o2 += pw * kv_stage[vb + 64u]
@@ -3295,7 +3320,7 @@ class AtAttn : AtAttnTileT {
                 c2++
             }
             barrier()
-            k0 += 32u
+            k0 += KS
         }
         if (q0 + r < pa.rows) {
             let inv = 1.0 / fl[r]
@@ -4005,9 +4030,9 @@ class template DaAttnBWT : AtAttnTileT {
         let qd = pa.nh * hs
         let qhs = pa.qhs == 0u ? hs : pa.qhs
         let qrow = pa.nh * qhs
-        let qtiles = (pa.npos + 3u) / 4u
+        let qtiles = (pa.npos + (TQ - 1u)) / TQ
         let h = gl_WorkGroupID.x / qtiles
-        let q0 = (gl_WorkGroupID.x % qtiles) * 4u
+        let q0 = (gl_WorkGroupID.x % qtiles) * TQ
         let tid = gl_LocalInvocationID.x
         let kvh = h / pa.kv_mul
         load_q(q0, pa.npos, qrow, h, hs, qhs)
@@ -4018,13 +4043,13 @@ class template DaAttnBWT : AtAttnTileT {
         let vr = tid / 64u
         let vc = tid % 64u
         barrier()
-        let kend = pa.w0 + min(q0 + 4u, pa.npos)   // causal bound (exclusive) of the tile's last row
+        let kend = pa.w0 + min(q0 + TQ, pa.npos)   // causal bound (exclusive) of the tile's last row
         var k0 = k_first(pa.w0, q0, pa.window)
         while (k0 < kend) {
             load_k(k0, kend, pa.kbase, pa.kvd, kvh, hs)
             barrier()
-            if (tid < 64u) {   // lane (r, c) scores query r against position k0 + c
-                qk_score(tid / 16u, tid % 16u, hs, k0, pa.w0 + q0 + tid / 16u, q0, pa.npos, pa.window, pa.scale, pa.cap)
+            if (tid < TQ * KS) {   // lane (r, c) scores query r against position k0 + c
+                qk_score(tid / KS, tid % KS, hs, k0, pa.w0 + q0 + tid / KS, q0, pa.npos, pa.window, pa.scale, pa.cap)
             }
             barrier()
             softmax_update()
@@ -4036,16 +4061,16 @@ class template DaAttnBWT : AtAttnTileT {
             load_v(k0, kend, pa.vbase, pa.kvd, kvh, hs)
             barrier()
             var c2 = 0u
-            while (c2 < 16u) {
-                let pw = score_tile[vr * 16u + c2]
-                let vb = c2 * 513u + vc
+            while (c2 < KS) {
+                let pw = score_tile[vr * KS + c2]
+                let vb = c2 * LD + vc
                 for [unroll] (z in range(8)) {
                     o[z] += pw * kv_stage[vb + 64u * uint(z)]
                 }
                 c2++
             }
             barrier()
-            k0 += 16u
+            k0 += KS
         }
         if (q0 + vr < pa.npos) {
             let inv = 1.0 / fl[vr]
@@ -4674,7 +4699,7 @@ class template DaAttnT {
                         while (di < hs) {
                             let kv0 = float(kmir[krow + di])   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
                             for [unroll] (j in range(G)) {
-                                pv[j] += qrow[uint(j) * 512u + di] * kv0
+                                pv[j] = mad(qrow[uint(j) * 512u + di], kv0, pv[j])
                             }
                             di++
                         }
@@ -4748,14 +4773,14 @@ class template DaAttnT {
                                 let d = unpackHalf2x16(vw[b].w)
                                 for [unroll] (j in range(G)) {
                                     let sj = sc[uint(j) * 256u + kb]
-                                    acc[j * 8] += sj * a.x
-                                    acc[j * 8 + 1] += sj * a.y
-                                    acc[j * 8 + 2] += sj * bb.x
-                                    acc[j * 8 + 3] += sj * bb.y
-                                    acc[j * 8 + 4] += sj * cc.x
-                                    acc[j * 8 + 5] += sj * cc.y
-                                    acc[j * 8 + 6] += sj * d.x
-                                    acc[j * 8 + 7] += sj * d.y
+                                    acc[j * 8] = mad(sj, a.x, acc[j * 8])
+                                    acc[j * 8 + 1] = mad(sj, a.y, acc[j * 8 + 1])
+                                    acc[j * 8 + 2] = mad(sj, bb.x, acc[j * 8 + 2])
+                                    acc[j * 8 + 3] = mad(sj, bb.y, acc[j * 8 + 3])
+                                    acc[j * 8 + 4] = mad(sj, cc.x, acc[j * 8 + 4])
+                                    acc[j * 8 + 5] = mad(sj, cc.y, acc[j * 8 + 5])
+                                    acc[j * 8 + 6] = mad(sj, d.x, acc[j * 8 + 6])
+                                    acc[j * 8 + 7] = mad(sj, d.y, acc[j * 8 + 7])
                                 }
                             }
                         }
@@ -4795,7 +4820,7 @@ class template DaAttnT {
                         for [unroll] (e in range(8)) {
                             let v = vld(vrow + uint(e))
                             for [unroll] (j in range(G)) {
-                                acc[j * 8 + e] += sc[uint(j) * 256u + jj] * v
+                                acc[j * 8 + e] = mad(sc[uint(j) * 256u + jj], v, acc[j * 8 + e])
                             }
                         }
                     }
@@ -10301,7 +10326,8 @@ class template TowerPostAddLnT : WgReduceBase {
                 i += 256u
             }
         }
-        if (pa.ln_on != 0u) {
+        let ln_on = ADD ? pa.ln_on != 0u : true   //! the seam's norm is the caller's switch; the plain norm stamps (no add) always norm
+        if (ln_on) {
             static_if (RMS) {
                 let inv = wg_rms_inv(s1, pa.d, pa.eps, POST_NORM ? 1u : 0u)
                 i = tid
@@ -11854,15 +11880,16 @@ class template Q8GemvGuNT {
                     let ud = q8_pair_dot(uv, xv)
                     if (lane % 2u == 0u) {
                         let xs = axs[xb + b]
-                        accg[c] += float(gd) * gs * xs
-                        accu[c] += float(ud) * us * xs
+                        accg[c] = mad(float(gd) * gs, xs, accg[c])
+                        accu[c] = mad(float(ud) * us, xs, accu[c])
                     }
                 }
             }
             bi0 += bpp
         }
+        let ncols = NC == 1 ? uint(NC) : pa.ncols   //! the one-column stamp has one column by construction, not by its push block
         for [unroll] (c in range(NC)) {
-            if (uint(c) < pa.ncols) {
+            if (uint(c) < ncols) {
                 let g = subgroupAdd(accg[c])
                 let u = subgroupAdd(accu[c])
                 if (subgroupElect()) {

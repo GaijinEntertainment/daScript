@@ -503,6 +503,7 @@ def private ts_albert_shape_ok(a : St2Albert; t : int64) : bool {
         && long_length(a.pos_emb.a) >= t * a.emb_dim && long_length(a.type_emb.a) >= a.emb_dim && a.n_layers >= 1l && tts_albert_ok(a))
 }
 
+[hot_path]   //! every PL-BERT chunk re-asks through `ts_arm_ensure`'s invoke, which the perf lint's walk cannot follow - the annotation keeps the chain under the lint
 def private ts_albert_ensure : bool {
     return (ensure_f32_gemm_cls() && ensure_f32_gemm_b_cls() && ensure_tower_ln_cls() && ensure_tower_post_add_ln_cls()
         && ensure_tts_row_gather_cls() && ensure_tts_gelu_tanh_cls() && ensure_tts_attn_cls())
@@ -605,6 +606,7 @@ def private ts_text_shape_ok(te : St2TextEncoder; t : int64) : bool {
     return tts_text_ok(te, TS_LSTM_MAX_HIDDEN)
 }
 
+[hot_path]   //! re-asked every chunk through `ts_arm_ensure`'s invoke
 def private ts_text_ensure : bool {
     return (ts_lstm_wg_ok() && ensure_f32_gemm_b_cls() && ensure_tower_ln_cls() && ensure_tts_row_gather_cls() && ensure_tts_leaky_cls()
         && ensure_tts_im2col_cls() && ensure_tts_lstm_dir_cls())
@@ -762,6 +764,7 @@ def private ts_add_scale(raw : VkCommandBuffer; var h : VkHaz; a, b, o : TsRows;
     vt_pt(raw, VtProfRole.tts_rows)
 }
 
+[hot_path]   //! re-asked every chunk through `ts_arm_ensure`'s invoke
 def private ts_pred_ensure : bool {
     return (ts_lstm_wg_ok() && ensure_f32_gemm_b_cls() && ensure_tower_ln_cls() && ensure_tts_row_gather_cls() && ensure_tts_im2col_cls() && ensure_tts_lstm_dir_cls()
         && ensure_tts_concat_cls() && ensure_tts_sigsum_cls() && ensure_tts_colpart_sum_cls() && ensure_tts_colpart_sq_cls()
@@ -1494,6 +1497,7 @@ def private ts_decoder_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows
     }
 }
 
+[hot_path]   //! re-asked every chunk through `ts_arm_ensure`'s invoke
 def private ts_dec_ensure : bool {
     return (ts_pred_ensure() && (!f16_gemm_on() || (ensure_tts_im2col16_cls() && f16_gemm_ensure(f16_gemm_khr()))) && ensure_tower_bias_act_cls()
         && ensure_tts_leaky_cls() && ensure_tts_adain_snake_cls() && ensure_tts_axpy_cls() && ensure_tts_pk_rows_cls() && ensure_tts_src_noise_cls()

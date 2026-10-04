@@ -281,6 +281,9 @@ class VkDispatch : AstStructureAnnotation {
         } elif (kfn == null) {
             errors := "[vk_dispatch] {base}: no [spirv_kernel] method '{kern}' on {st.name}"
             return false
+        } elif (nmatch != 1) {
+            errors := "[vk_dispatch] {base}: kernel='{kern}' names {nmatch} [spirv_kernel] methods on {st.name} - a prefix picks exactly one"
+            return false
         }
         var tracked : table<string>
         for (bf in bufs) {

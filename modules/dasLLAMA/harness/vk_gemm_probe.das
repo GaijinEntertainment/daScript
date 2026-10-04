@@ -1791,7 +1791,7 @@ def private khr_cpu_check(wqh, wsuh, xfh : array<uint>; y_gpu : array<float>; d,
     let nsb = n / 256
     var ymax = 0.0
     for (v in y_gpu) {
-        if (!is_nan(v)) {
+        if (is_finite(v)) {   //! an infinity would make the floor infinite and pass every sample; the compare below reads it as off
             ymax = max(ymax, abs(v))
         }
     }
@@ -2096,7 +2096,7 @@ class MmqPxK4Blk : MoeCmBase {
                     let r3 = wq[rb4 + 3u]
                     w0 = uint4(r0 & 0x0F0F0F0F, r1 & 0x0F0F0F0F, r2 & 0x0F0F0F0F, r3 & 0x0F0F0F0F)
                     w1 = uint4((r0 >> 4u) & 0x0F0F0F0F, (r1 >> 4u) & 0x0F0F0F0F, (r2 >> 4u) & 0x0F0F0F0F, (r3 >> 4u) & 0x0F0F0F0F)
-                    sm = k4_dmin(unpackHalf2x16(wsu[wsb * 5u]), wsu[wsb * 5u + 1u + uint(bu) / 4u], wsu[wsb * 5u + 3u + uint(bu) / 4u], uint(bu))
+                    sm = k4_scale_min(unpackHalf2x16(wsu[wsb * 5u]), wsu[wsb * 5u + 1u + uint(bu) / 4u], wsu[wsb * 5u + 3u + uint(bu) / 4u], uint(bu))
                 }
                 bw4[tid * 2u] = w0
                 bw4[tid * 2u + 1u] = w1
@@ -2147,13 +2147,6 @@ def dot8(wa, wb, xa, xb : uint4) : int {
 def bsum8(xa, xb : uint4) : int {
     return (sdot4(xa.x, 0x01010101) + sdot4(xa.y, 0x01010101) + sdot4(xa.z, 0x01010101) + sdot4(xa.w, 0x01010101)
         + sdot4(xb.x, 0x01010101) + sdot4(xb.y, 0x01010101) + sdot4(xb.z, 0x01010101) + sdot4(xb.w, 0x01010101))
-}
-
-//! a k4 superblock's block `sblk` scale pair: the f16 (d, min) pair `dm` times the block's 8-bit scale and min, which sit in the
-//! scale and min words `scw` / `mnw` that hold blocks 4 * (sblk / 4) up
-def k4_dmin(dm : float2; scw, mnw, sblk : uint) : float2 {
-    let sh = (sblk % 4u) * 8u
-    return float2(dm.x * float(int((scw >> sh) & 0xFF)), dm.y * float(int((mnw >> sh) & 0xFF)))
 }
 
 [ |> template_struct_instance]
@@ -2238,7 +2231,7 @@ class template MmqPxK4CT {   //! standalone: a harness template cannot derive fr
                             let rb4 = wsb * 32u + uint(bu) * 4u
                             let sh = (ct % 2u) * 4u
                             wv = uint4((wq[rb4] >> sh) & 0x0F0F0F0F, (wq[rb4 + 1u] >> sh) & 0x0F0F0F0F, (wq[rb4 + 2u] >> sh) & 0x0F0F0F0F, (wq[rb4 + 3u] >> sh) & 0x0F0F0F0F)
-                            sm = k4_dmin(unpackHalf2x16(wsu[wsb * 5u]), wsu[wsb * 5u + 1u + uint(bu) / 4u], wsu[wsb * 5u + 3u + uint(bu) / 4u], uint(bu))
+                            sm = k4_scale_min(unpackHalf2x16(wsu[wsb * 5u]), wsu[wsb * 5u + 1u + uint(bu) / 4u], wsu[wsb * 5u + 3u + uint(bu) / 4u], uint(bu))
                         }
                     }
                     bw4[ct] = wv
