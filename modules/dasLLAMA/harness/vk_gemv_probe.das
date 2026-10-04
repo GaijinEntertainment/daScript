@@ -162,12 +162,7 @@ def private probe_time(fmt : KqFmt; ncols : int; p : ProbePlanes; b : tuple<wqd 
         }
         vk_check(vkEndCommandBuffer(raw), null)
     }
-    submit_wait(raw)   //! the warm-up: pipeline compile, first-touch
-    let t0 = ref_time_ticks()
-    for (_i in range(SUBMITS)) {
-        submit_wait(raw)
-    }
-    let us = double(get_time_usec(t0)) / double(SUBMITS * DISPATCHES)
+    let us = submit_avg_us(raw, SUBMITS, DISPATCHES, 1)
     let mb = double(p.wq_bytes + p.ws_bytes) / 1048576.0lf
     return (mb = g_cold ? mb / double(p.copies) : mb, us = us)
 }

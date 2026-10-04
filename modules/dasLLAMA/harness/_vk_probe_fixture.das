@@ -35,6 +35,19 @@ def pfq_avg_us(var raw : VkCommandBuffer; submits, stamps : int) : double {
     return us / double(submits * stamps)
 }
 
+//! a recorded command's host wall per dispatch: `warmups` warm-up submits (pipeline compile, first-touch), then `submits`
+//! timed submits over `submits` x `dispatches`
+def submit_avg_us(var raw : VkCommandBuffer; submits, dispatches, warmups : int) : double {
+    for (_w in range(warmups)) {
+        submit_wait(raw)
+    }
+    let t0 = ref_time_ticks()
+    for (_s in range(submits)) {
+        submit_wait(raw)
+    }
+    return double(get_time_usec(t0)) / double(submits * dispatches)
+}
+
 //! two packed f16 scales per word, small positive values (the kernel-suite fixture shape)
 def cool_f16_pair(i : uint) : uint {
     let h = 0x2c00u + (i % 64u)

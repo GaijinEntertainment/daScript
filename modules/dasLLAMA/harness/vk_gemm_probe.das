@@ -2723,15 +2723,7 @@ def private run_k6_shape(name : string; d, n, cnt : int; bisect : bool = false) 
 }
 
 // two warmup submits (pipeline compile + clocks settle), then the timed window
-def private usec_per_dispatch(var raw : VkCommandBuffer; dispatches : int = DISPATCHES) : double {
-    submit_wait(raw)
-    submit_wait(raw)
-    let t0 = ref_time_ticks()
-    for (_s in range(SUBMITS)) {
-        submit_wait(raw)
-    }
-    return double(get_time_usec(t0)) / double(SUBMITS * dispatches)
-}
+def private usec_per_dispatch(var raw : VkCommandBuffer; dispatches : int = DISPATCHES) : double => submit_avg_us(raw, SUBMITS, dispatches, 2)
 
 //! `with_sdot4_mm` off skips the sdot4 mm tile (the row a shape's cm2 question does not need)
 def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = true) {   // nolint:STYLE038 — one linear measurement sweep
