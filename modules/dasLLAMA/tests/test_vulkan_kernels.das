@@ -479,9 +479,6 @@ def private kept_stamp_shape(kernel : string) : tuple<wg_vars : int; caps : tabl
 //! the kernel cells' approx bar with a poison past the expectation's largest magnitude, outside the bar at any scale
 let private BAR_APPROX_CTRL = Bar(rel = APPROX_REL, poison_of_max = true, poison_abs = 0.5)
 
-//! the coopmat tiles' bar: 2e-2 of the larger magnitude floored at 4e-3 of `ref`'s largest, its poison past that largest
-def private cm_bar(ref : array<float>) : Bar => Bar(rel = 2e-2, abs_floor = 4e-3 * logits_maxabs(ref), poison_of_max = true, poison_abs = 0.5)
-
 //! a kept stamp's GLSL.std.450 Tanh instructions (x) and those of them whose operand is an FClamp's result (y)
 def private kept_tanh_reads(kernel : string) : int2 {
     var res = int2(0, 0)
