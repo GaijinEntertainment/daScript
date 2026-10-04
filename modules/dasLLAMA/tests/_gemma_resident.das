@@ -181,17 +181,8 @@ def prefill_vs_decode(t : T?; n : int64; gf : GemmaFile) {
 
 // log-softmax of `target` over the live logits (a pinned id at -1e30 drops out of the sum on its own)
 def private target_logp(v : array<float>; target : int64) : float {
-    var m = SUPPRESSED_LOGIT
-    for (x in v) {
-        if (x > m) {
-            m = x
-        }
-    }
-    var sum = 0.0
-    for (x in v) {
-        sum += exp(x - m)
-    }
-    return v[target] - m - log(sum)
+    let m = max(SUPPRESSED_LOGIT, hmax(unsafe(addr<float const?>(v[0])), long_length(v)))
+    return v[target] - m - float(log(hlse(v, m)))
 }
 
 //! teacher-forced negative log-likelihood over `steps` positions after `n` prefilled ids: the sum over the
