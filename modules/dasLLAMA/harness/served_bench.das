@@ -9,7 +9,7 @@ options indenting = 4
 //       [--model <id>] [--sizes 3000,9000] [--reply 200] [--reps 3] [--settle 0] [--corpus <file>] [--think] [--follow-up]
 //       [--asr-url <base> --clip a.wav --clip b.wav [--asr-model <id>] [--under-load [--load-tokens 1500]]] [--no-chat]
 //       [--tts-url <base> [--tts-model <id> ...] [--tts-voice <name>] [--tts-text <text>]]
-//       [--scene [--scene-asr <id> ...] [--scene-flood]] [--image a.jpg ...]
+//       [--scene [--scene-asr <id> ...] [--scene-flood]] [--image a.jpg ...] [--chat-clip a.wav ...]
 //
 // Per prompt size, `--reps` pairs of streamed chat turns under one system prompt of about that many
 // tokens, greedy, thinking off unless --think:
@@ -37,9 +37,10 @@ options indenting = 4
 // the finished WAV, so the wall is the time to first audio - over `--reps` reps behind one untimed request,
 // beside the seconds of speech it carried and the real-time factor the two imply.
 //
-// Image rows (`--image`, one row each, at `--url`): a question about the image answered in ONE token, so the wall is
-// the image's encode, the prompt's prefill and that token - per rep under a system line no server has seen, then a
-// second question under the same line (a server that keeps the image's rows answers that one from its cache).
+// Media rows (`--image` and `--chat-clip`, one row a file, at `--url`): a question about the image or the clip, the
+// part ahead of the text, answered in ONE token, so the wall is the part's encode, the prompt's prefill and that token
+// - per rep under a system line no server has seen, then a second question under the same line (asked again: a server
+// that pays for a part once neither encodes nor prefills it a second time).
 //
 // The scene (`--scene`): a chat turn of `--load-tokens` tokens decodes at `--url` while every `--scene-asr`
 // model transcribes the first `--clip` and the first `--tts-model` speaks, each lane on a thread of its own from
@@ -56,6 +57,7 @@ require openai/openai_vision   // chat_vision: the image row's request
 require audio/audio_wav   // decode_wav / read_wav: the seconds of speech an answer carries
 require daslib/strings_convert   // try_to_int: the --sizes list
 require daslib/fio
+require daslib/base64   // the --chat-clip file as an input_audio part
 require strings
 require math
 require daslib/jobque_boost   // the load turn's thread: its job over a Stream, its state in an atomic
@@ -140,6 +142,10 @@ struct Args {
 
     @clarg_doc = "An image to ask the chat server about (repeatable, jpg or png), one row each"
     image : array<string>
+
+    @clarg_name = "chat-clip"
+    @clarg_doc = "An audio clip to ask the chat server about as an input_audio part (repeatable, wav), one row each"
+    chat_clip : array<string>
 
     @clarg_short = "?"
     @clarg_name = "show-help"
@@ -614,11 +620,14 @@ def private speech_rows(speech : Speech; clips : array<string>; reps : int; unde
     return tally
 }
 
-//! one question about an image, answered in one token: the wall is the image's encode, the prompt's prefill and that token
-def see(plan : Plan; system, question, uri : string) : Seen {
+//! One question about a media part - an image's data URI, or the base64 of an audio file under `is_audio` - answered
+//! in one token: the wall is the part's encode, the prompt's prefill and that token. The part leads the message, so
+//! another question about it shares the prompt up to the part's end.
+def see(plan : Plan; system, question, payload : string; is_audio : bool = false) : Seen {
     var seen = Seen()
     let t0 = ref_time_ticks()
-    var res <- chat_vision(client_of(plan.url), plan.model, question, uri, 1, system)
+    var res <- (is_audio ? chat_audio(client_of(plan.url), plan.model, question, payload, 1, system, true)
+        : chat_vision(client_of(plan.url), plan.model, question, payload, 1, system, true))
     seen.wall_us = int64(get_time_usec(t0))
     seen.prompt_tokens = int64(res.response.usage.prompt_tokens)
     if (!res.ok) {
@@ -630,24 +639,47 @@ def see(plan : Plan; system, question, uri : string) : Seen {
     return seen
 }
 
+//! the base64 of the file at `path`, "" for a file that cannot be read
+def private file_base64(path : string) : string {
+    var bytes : array<uint8>
+    fopen(path, "rb") $(f) {
+        if (f != null) {
+            bytes |> resize(int64(fstat(f).size))
+            fread(f, bytes)
+        }
+    }
+    let text = empty(bytes) ? "" : base64_encode(bytes)
+    delete bytes
+    return text
+}
+
 //! The image rows, one an image: per rep a question under a system line no server has seen, then another question
 //! under the same line - what the first token of each waits for, and the prompt tokens the image and the text make.
-def image_rows(plan : Plan; images : array<string>; run : string) : Tally {
+def image_rows(plan : Plan; images : array<string>; run : string) : Tally
+    => media_rows(plan, images, run, false)
+
+//! The media rows, one a file - an image, or an audio clip in a chat turn under `is_audio`: per rep a question about
+//! it under a system line no server has seen, then another question under the same line. A server that pays for a
+//! part once answers the second from its cache: the part is neither encoded nor prefilled again.
+def media_rows(plan : Plan; files : array<string>; run : string; is_audio : bool) : Tally {
     var tally = Tally()
-    for (path in images) {
+    let what = is_audio ? "chat clip" : "image"
+    let ask = is_audio ? "Transcribe this audio." : "What is in this picture?"
+    let ask_again = is_audio ? "What language is spoken in this audio?" : "What colors stand out in this picture?"
+    for (path in files) {
         let name = base_name(path)
-        let uri = image_file_data_uri(path)
-        let warmup = empty(uri) ? "the file is not there" : see(plan, "", "What is in this picture?", uri).why   //! the untimed request ahead of the row
+        let payload = is_audio ? file_base64(path) : image_file_data_uri(path)
+        let warmup = empty(payload) ? "the file is not there" : see(plan, "", ask, payload, is_audio).why   //! the untimed request ahead of the row
         if (!empty(warmup)) {
-            print("{plan.tag}  image {name}  REFUSED: {warmup}\n")
+            print("{plan.tag}  {what} {name}  REFUSED: {warmup}\n")
             tally.refused++
             continue
         }
         var prompt_tokens = 0l
         var walls <- collect_reps(plan.reps) $(rep) {
             let system = "Session {run}-{name}-{rep}. Answer briefly."
-            let a = see(plan, system, "What is in this picture?", uri)
-            let b = empty(a.why) ? see(plan, system, "What colors stand out in this picture?", uri) : a
+            let a = see(plan, system, ask, payload, is_audio)
+            let b = empty(a.why) ? see(plan, system, ask_again, payload, is_audio) : a
             return RepWall(why = b.why) if (!empty(b.why))
             if (rep > 0 && a.prompt_tokens != prompt_tokens) {
                 return RepWall(why = "{a.prompt_tokens} prompt tokens, {prompt_tokens} the rep before")
@@ -658,10 +690,10 @@ def image_rows(plan : Plan; images : array<string>; run : string) : Tally {
         if (empty(walls.why)) {
             let first_s = spread_of(walls.first)
             let again_s = spread_of(walls.again)
-            print("{plan.tag}  image {name}: {prompt_tokens} prompt tokens, first token {first_s.median:.1f} ms (cv {first_s.cv:.1f}%), asked again {again_s.median:.1f} ms (cv {again_s.cv:.1f}%){flag(first_s.cv)}\n")
+            print("{plan.tag}  {what} {name}: {prompt_tokens} prompt tokens, first token {first_s.median:.1f} ms (cv {first_s.cv:.1f}%), asked again {again_s.median:.1f} ms (cv {again_s.cv:.1f}%){flag(first_s.cv)}\n")
             tally.rows++
         } else {
-            print("{plan.tag}  image {name}  REFUSED {walls.why}\n")
+            print("{plan.tag}  {what} {name}  REFUSED {walls.why}\n")
             tally.refused++
         }
         delete walls
@@ -959,8 +991,8 @@ def args_error(cfg : Args; reps : int) : string {
     if (cfg.under_load && (empty(cfg.url) || !speech_on)) {
         return "--under-load times --clip rows at --asr-url beside a chat turn at --url - it needs all three"
     }
-    if (!empty(cfg.image) && empty(cfg.url)) {
-        return "--image asks the chat server at --url about each image - it needs --url"
+    if ((!empty(cfg.image) || !empty(cfg.chat_clip)) && empty(cfg.url)) {
+        return "--image and --chat-clip ask the chat server at --url about each file - they need --url"
     }
     if (cfg.follow_up && (empty(cfg.url) || cfg.no_chat)) {
         return "--follow-up is one of the chat rows at --url - it needs --url, and not --no-chat"
@@ -1025,8 +1057,13 @@ def main : int {
         tally.rows += looked.rows
         tally.refused += looked.refused
     }
-    if (!chat_on && !speech_on && !tts_on && !cfg.scene && empty(cfg.image)) {
-        print("error: nothing to time - give --url for the chat rows (and --image for the image rows), --asr-url with --clip for the transcription rows, --tts-url for the synthesis rows, --scene for all of them at once\n")
+    if (!empty(cfg.url) && !empty(cfg.chat_clip)) {
+        let heard = media_rows(Plan(url = cfg.url, tag = tag, model = cfg.model, reps = reps), cfg.chat_clip, "{ref_time_ticks()}", true)
+        tally.rows += heard.rows
+        tally.refused += heard.refused
+    }
+    if (!chat_on && !speech_on && !tts_on && !cfg.scene && empty(cfg.image) && empty(cfg.chat_clip)) {
+        print("error: nothing to time - give --url for the chat rows (and --image / --chat-clip for the media rows), --asr-url with --clip for the transcription rows, --tts-url for the synthesis rows, --scene for all of them at once\n")
     }
     return tally.rows == 0 || tally.refused > 0 ? 1 : 0
 }

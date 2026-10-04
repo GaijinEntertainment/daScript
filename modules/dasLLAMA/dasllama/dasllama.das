@@ -117,6 +117,12 @@ def prefix_checkpoint_at(cache : PrefixCache; pool : KVPool; session : Session; 
     return prefix_checkpoint_at_(cache, pool, session, prompt, matched, stable_at)
 }
 
+def prefix_match_len(cache : PrefixCache; pool : KVPool; prompt : array<int64>) : int64 {
+    //! How many leading positions of ``prompt`` a ``prefix_attach`` would attach right now, attaching nothing: a probe
+    //! for a caller deciding what a request must bring (a media span's rows). 0 on a recurrent model's cache.
+    return prefix_match_len_(cache, pool, prompt)
+}
+
 def prefix_attach(var cache : PrefixCache; var pool : KVPool; var session : Session; prompt : array<int64>) : int64 {
     //! Attach the longest cached prefix of ``prompt`` to a FRESH paged ``session`` of ``pool``:
     //! matched pages join the session's block table and ``n_past`` advances past them, so the

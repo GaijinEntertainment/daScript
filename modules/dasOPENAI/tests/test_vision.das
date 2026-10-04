@@ -22,6 +22,12 @@ def test_vision_body_serialization(t : T?) {
         t |> success(find(body, "\"system\"") < 0, "no system message unless one is given")
         let under = vision_request_body("m", "What is this?", "https://example.com/x.png", 8, "Be brief.")
         t |> success(find(under, "\"role\": \"system\"") >= 0 && find(under, "Be brief.") < find(under, "What is this?"), "the system message leads: {under}")
+        t |> success(find(body, "What is this?") < find(body, "image_url"), "the text leads the image by default")
+        let first = vision_request_body("m", "What is this?", "https://example.com/x.png", 8, "", true)
+        t |> success(find(first, "image_url") < find(first, "What is this?"), "the image leads under image_first")
+        let heard = audio_request_body("m", "What is said?", "QUJD", 8, "", true)
+        t |> success(find(heard, "input_audio") >= 0 && find(heard, "QUJD") >= 0 && find(heard, "\"format\": \"wav\"") >= 0, "an audio body carries the clip as an input_audio part: {heard}")
+        t |> success(find(heard, "input_audio") < find(heard, "What is said?"), "the clip leads under audio_first")
     }
 }
 

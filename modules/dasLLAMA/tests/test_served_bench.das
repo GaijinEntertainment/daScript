@@ -34,7 +34,7 @@ class FakeChatServer : HvWebServer {
                 respond(server, writer, int(http_status.INTERNAL_SERVER_ERROR), "application/json", "\{\"error\":\"down\"}")
                 return
             }
-            if (find(body, "image_url") >= 0) {   // the image question: one buffered completion, the image's rows in its prompt count
+            if (find(body, "image_url") >= 0 || find(body, "input_audio") >= 0) {   // the media question: one buffered completion, the part's rows in its prompt count
                 respond(server, writer, int(http_status.OK), "application/json", find(body, "\"nousage\"") >= 0 ? replace(SEEN, "\"prompt_tokens\":300", "\"prompt_tokens\":0") : SEEN)
                 return
             }
@@ -394,6 +394,10 @@ def test_turns_against_a_fake_server(t : T?) {
                 var gone <- ["{file}.absent"]
                 let missed = image_rows(Plan(url = base_url, model = "ok", reps = 2), gone, "run")
                 t |> success(missed.rows == 0 && missed.refused == 1, "a missing file refuses its row")
+                let heard = media_rows(Plan(url = base_url, model = "ok", reps = 2), files, "run", true)
+                t |> success(heard.rows == 1 && heard.refused == 0, "one row a chat clip: the file goes up as an input_audio part")
+                let unheard = media_rows(Plan(url = base_url, model = "ok", reps = 2), gone, "run", true)
+                t |> success(unheard.rows == 0 && unheard.refused == 1, "a missing clip refuses its row")
                 delete files
                 delete gone
             }

@@ -3228,6 +3228,7 @@ struct private MediaRef {
     n_rows : int64
     grid : int2
     rows : array<float>
+    want_rows : bool            // known, but the prefix cache does not hold its span under this prompt: encode it
 }
 
 //! what a slot remembers of media it encoded: the span's shape, which a transcript needs to lay the span out
@@ -3279,7 +3280,8 @@ def private collect_media_refs(msgs_v : JsonValue?; var refs : array<MediaRef>) 
 //! encoded; a job's id maps back to its ref. False with `why` when a part does not decode.
 def private encode_media_refs(rid : int64; var wire : MediaWire; force : bool; var why : string&) : bool {
     for (r, ri in wire.refs, count()) {
-        continue if (!force && r.n_rows > 0l)
+        continue if (!empty(r.rows) || (!force && !r.want_rows && r.n_rows > 0l))
+        r.want_rows = false
         var file_bytes : array<uint8>
         let decoded = (r.is_audio ? decode_base64_bytes(r.payload, file_bytes, why)
             : decode_data_uri_bytes(r.payload, file_bytes, why))
@@ -3357,7 +3359,7 @@ def private park_media_request(srv : FrontLink; writer : WriterRef;
     if (wire.jobs_left > 0) {
         to_log(LOG_INFO, "[req {rid}] {wire.jobs_left} media part(s) parked for the media worker, {length(wire.refs) - wire.jobs_left} known ({g_media_pending} queued or in flight)\n")
     } else {
-        to_log(LOG_INFO, "[req {rid}] {length(wire.refs)} media part(s), every one known: no encode\n")
+        to_log(LOG_INFO, "[req {rid}] {length(wire.refs)} media part(s), every one known\n")
         resume_media_request(srv, rid)
     }
     return MediaPark.parked
@@ -3383,7 +3385,8 @@ def private resume_media_request(srv : FrontLink; rid : int64) {
     return if (wire == null)
     wire.submitted = true
     handle_chat_tail(srv, wire.writer, wire.js, wire.slot, wire.refs, rid, wire.retried)
-    if (!key_exists(g_wires, rid)) {   // answered with an error: no stream to wait on
+    wire = unsafe(g_media_wires?[rid])
+    if (wire != null && wire.submitted && !key_exists(g_wires, rid)) {   // answered with an error: no stream to wait on
         drop_media_wire(rid, true)
     }
 }
@@ -3518,11 +3521,43 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
         delete nothink
         delete close
     }
+    if (resume_rid != 0l && uncovered_media(prompt, refs)) {
+        // a part this slot knows, under a prompt whose cached prefix stops short of it: the worker encodes it, and
+        // the request resumes here with its rows
+        var wire = unsafe(g_media_wires?[resume_rid])
+        var why = ""
+        if (wire != null && encode_media_refs(resume_rid, *wire, false, why) && wire.jobs_left > 0) {
+            wire.submitted = false
+            return
+        }
+    }
     var spans <- media_spans(prompt, refs)
     register_request(srv, writer, prompt, stop_ids, close, spans, params, max_new,
                      streaming, true, "chatcmpl",
                      has_tools, call_open, call_close, seed, think_stream, wire_tool_mode, resume_rid,
                      nothink, stable_at, wants_usage(js), resumed)
+}
+
+//! Marks the refs that bring no rows and whose span the slot's prefix cache does not hold under `prompt`; true when
+//! there is one. A flat (unpaged) scheduler holds nothing, so every rowless ref is marked.
+def private uncovered_media(prompt : array<int64>; var refs : array<MediaRef>) : bool {
+    let covered = cur_sched().paged ? prefix_match_len(cur_sched().prefix, cur_sched().pool, prompt) : 0l
+    var any = false
+    var from = 0l
+    for (r in refs) {
+        let first = media_position_id(r.key, 0l)
+        var at = from
+        while (at < long_length(prompt) && prompt[at] != first) {
+            at++
+        }
+        continue if (at >= long_length(prompt))
+        from = at + r.n_rows
+        if (empty(r.rows) && from > covered) {
+            r.want_rows = true
+            any = true
+        }
+    }
+    return any
 }
 
 //! The spans of a rendered prompt: each ref's run of position ids, in prompt order, with the ref's rows moved in. A ref
