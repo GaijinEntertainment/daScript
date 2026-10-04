@@ -4294,6 +4294,45 @@ class MetalTwPool2 {
     }
 }
 
+struct TwPool2dArgs {
+    width : uint    //!< a row's width
+    gw : uint       //!< the source grid's width, in rows
+    k : uint        //!< the pool's side
+    ow : uint       //!< the pooled grid's width
+    total : uint    //!< output elements
+}
+
+//! A vision tail's mean pool: y [oh*ow x width] the mean of each k x k block of the row grid x [gh*gw x width].
+[metal_dispatch(name = "enc_tw_pool2d", pso = "g_pf_pso_tw_pool2d", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalTwPool2d {
+    @ssbo @binding = 0 @role = "read" x : array<float>
+    @ssbo @binding = 1 @role = "write" y : array<float>
+    @uniform @binding = 2 ka : TwPool2dArgs
+
+    [metal_kernel(name="metal_tw_pool2d_msl")]
+    def metal_tw_pool2d {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= ka.total) {
+            return
+        }
+        let o = gid / ka.width
+        let c = gid % ka.width
+        let oy = o / ka.ow
+        let ox = o % ka.ow
+        var sum = 0.0
+        var dy = 0u
+        while (dy < ka.k) {
+            var dx = 0u
+            while (dx < ka.k) {
+                sum += x[((oy * ka.k + dy) * ka.gw + ox * ka.k + dx) * ka.width + c]
+                dx++
+            }
+            dy++
+        }
+        y[gid] = sum / float(ka.k * ka.k)
+    }
+}
+
 //! The ultravox projector's gate: y [rows x width] = silu(second half of x's row) * its first half, x [rows x 2 width].
 [metal_dispatch(name = "enc_tw_swiglu_rows", pso = "g_pf_pso_tw_swiglu_rows", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalTwSwigluRows {
@@ -4568,6 +4607,7 @@ var private g_pf_pso_pk_xf : MetalComputePipeline?       //!< its feature rows f
 var private g_pf_pso_cn_melnorm : MetalComputePipeline?  //!< canary's log and per-feature normalization over the mel
 var private g_pf_pso_tw_pool2 : MetalComputePipeline?    //!< the whisper-class projector tails' pair pool
 var private g_pf_pso_tw_swiglu_rows : MetalComputePipeline?   //!< the ultravox projector's row-split gate
+var private g_pf_pso_tw_pool2d : MetalComputePipeline?   //!< a vision tail's k x k mean pool over the row grid
 var private g_pf_pso_bias_relu : MetalComputePipeline?   //!< a 1x1 conv's bias and ReLU over its GEMM's rows
 var private g_pf_pso_g4a_attn : MetalComputePipeline?    //!< the gemma4a sliding-window RPE attention
 var private g_pf_pso_g4a_glu : MetalComputePipeline?     //!< its conv-module GLU halves
@@ -4997,7 +5037,7 @@ def public metal_prefill_shutdown {
     release_handles(g_pf_pso_twr_flash, g_pf_pso_twr_kvhc, g_pf_pso_twr_win)
     release_handles(g_pf_pso_fc_pack, g_pf_pso_fc_softmax, g_pf_pso_fc_unpack, g_pf_pso_cn_dw, g_pf_pso_pk_dw)
     release_handles(g_pf_pso_pk_conv0, g_pf_pso_pk_dw2d, g_pf_pso_pk_xf, g_pf_pso_bias_relu)
-    release_handles(g_pf_pso_cn_melnorm, g_pf_pso_tw_pool2, g_pf_pso_tw_swiglu_rows)
+    release_handles(g_pf_pso_cn_melnorm, g_pf_pso_tw_pool2, g_pf_pso_tw_swiglu_rows, g_pf_pso_tw_pool2d)
     release_handles(g_pf_pso_g4a_attn, g_pf_pso_g4a_glu, g_pf_pso_g4a_dw, g_pf_pso_g4a_silu, g_pf_pso_g4a_axpy)
     release_handles(g_pf_pso_g4a_mag, g_pf_pso_g4a_logmel, g_pf_pso_g4a_lnrelu)
     release_handles(g_pf_pso_q3a_shuffle, g_pf_pso_q3a_finish, g_pf_pso_q3a_pow, g_pf_pso_q3a_logmel_t)
@@ -5183,6 +5223,7 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     g_pf_pso_cn_melnorm = compile_stamp(metal_cn_melnorm_msl, ok)
     g_pf_pso_tw_pool2 = compile_stamp(metal_tw_pool2_msl, ok)
     g_pf_pso_tw_swiglu_rows = compile_stamp(metal_tw_swiglu_rows_msl, ok)
+    g_pf_pso_tw_pool2d = compile_stamp(metal_tw_pool2d_msl, ok)
     g_pf_pso_bias_relu = compile_stamp(metal_bias_relu_rows_msl, ok)
     g_pf_pso_g4a_attn = compile_stamp(metal_g4a_attn_msl, ok)
     g_pf_pso_g4a_glu = compile_stamp(metal_g4a_glu_msl, ok)
@@ -5485,8 +5526,8 @@ def pf_pk_front_ready() : bool => psos_ready(fixed_array(g_pf_pso_pk_conv0, g_pf
 //! The canary front's kernels compiled - the parakeet front's, the spectrum's and the mel normalization.
 def pf_cn_front_ready() : bool => pf_pk_front_ready() && psos_ready(fixed_array(g_pf_pso_cn_melnorm, g_pf_pso_q3a_pow))
 
-//! The whisper-class projector tail's two kernels compiled.
-def pf_tw_tail_ready() : bool => psos_ready(fixed_array(g_pf_pso_tw_pool2, g_pf_pso_tw_swiglu_rows))
+//! The projector tails' row kernels compiled: the whisper-class pair pool and gate, the vision grid pool.
+def pf_tw_tail_ready() : bool => psos_ready(fixed_array(g_pf_pso_tw_pool2, g_pf_pso_tw_swiglu_rows, g_pf_pso_tw_pool2d))
 
 //! The gemma4a Conformer kernel set compiled — its tower driver's device gate.
 def pf_g4a_ready() : bool => psos_ready(fixed_array(g_pf_pso_g4a_attn, g_pf_pso_g4a_glu, g_pf_pso_g4a_dw, g_pf_pso_g4a_silu, g_pf_pso_g4a_axpy))

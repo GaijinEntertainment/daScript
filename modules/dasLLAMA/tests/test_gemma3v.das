@@ -176,6 +176,56 @@ def test_gemma3v_tier1_gpu(t : T?) {
     }
 }
 
+// The projector tail on the device against the CPU tail over the SAME device block rows (the tail lever off): the soft
+// tokens within 1e-3 rel-l2, the tail counter up by the device leg alone, another canvas outside the bar (the control).
+[test]
+def test_gemma3v_tail_gpu(t : T?) {
+    t |> run("the post-norm, grid pool, soft norm and projection ride the device behind the blocks") @(tt : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let mm = path_join(models_dir(), "mmproj-gemma-3-4b-it-F16.gguf")
+            return if (!jit_model_available(tt, mm))
+            var tw <- mint_tower(mm, false)
+            var st = Gemma3vState()
+            let px = int(tw.image_px)
+            var inscope cb <- make_planes("cb", px, px)
+            var inscope green <- make_planes("green", px, px)
+            let tower_was = metal_tower_knob()
+            let tail_was = metal_tower_tail_knob()
+            set_metal_tower(true)
+            with_dasllama_jobque_() {
+                var inscope cpu_tail : array<float>
+                var inscope dev_tail : array<float>
+                var inscope other : array<float>
+                set_metal_tower_tail(false)
+                let e0 = metal_tower_stats().encodes
+                let t0 = metal_tower_tail_encodes()
+                let n = gemma3v_encode(tw, st, cb, tw.image_px, tw.image_px, cpu_tail)
+                tt |> equal(metal_tower_stats().encodes - e0, 1l, "lever off: the blocks still ride the device")
+                tt |> equal(metal_tower_tail_encodes() - t0, 0l, "lever off: the tail stays on the CPU")
+                set_metal_tower_tail(true)
+                tt |> equal(gemma3v_encode(tw, st, cb, tw.image_px, tw.image_px, dev_tail), n, "the same row count")
+                tt |> equal(metal_tower_tail_encodes() - t0, 1l, "lever on: the tail rides the device behind the blocks")
+                gemma3v_encode(tw, st, green, tw.image_px, tw.image_px, other)
+                var inscope a <- copy_span(cpu_tail, 0l, n * tw.proj_dim)
+                var inscope b <- copy_span(dev_tail, 0l, n * tw.proj_dim)
+                var inscope c <- copy_span(other, 0l, n * tw.proj_dim)
+                var got = TowerParityStats()
+                var ctl = TowerParityStats()
+                if (tower_parity_stats(tt, "gemma3v tail", a, b, got) && tower_parity_stats(tt, "gemma3v tail control", a, c, ctl)) {
+                    tt |> success(got.rel_l2 <= 1e-3lf, "device tail vs CPU tail rel_l2 {got.rel_l2}")
+                    tt |> success(ctl.rel_l2 > 1e-3lf, "another canvas lands outside the bar (rel_l2 {ctl.rel_l2}) - the control")
+                }
+            }
+            set_metal_tower_tail(tail_was)
+            set_metal_tower(tower_was)
+            delete st
+            delete tw
+        } else {
+            feint("das_metal is not built on this platform - the device tail is Apple-only\n")
+        }
+    }
+}
+
 // The q8 serving lane (the CPU default): the same dumps on its own scale-relative bar.
 [test]
 def test_gemma3v_tier1_q8(t : T?) {

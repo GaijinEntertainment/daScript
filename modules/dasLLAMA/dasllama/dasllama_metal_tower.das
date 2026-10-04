@@ -1819,6 +1819,74 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
 
 def private metal_tower_serves() : bool => g_tw_env_tower
 
+//! the gemma3v projector tail's device rows: the pooled rows, the soft tokens, the soft-norm's weight row
+struct private G3vTail {
+    on : bool           //!< the tail rides this encode's command buffer
+    n_side : int64      //!< the patch grid's side
+    nout : int64        //!< soft tokens: the pooled grid's rows
+    mpo : int64         //!< `nout` on the GEMM's 32-row lattice
+    bpool : MetalBuffer?
+    bout : MetalBuffer?
+    bsoft : MetalBuffer?
+    u_proj : MetalBuffer?
+    bytes_pool : uint64
+    bytes_out : uint64
+    bytes_soft : uint64
+}
+
+//! The tail rides the chain where the lever allows, its kernels compiled, its GEMM on the f32 tile's lattice (K a multiple
+//! of 32, N of 64) and the patch grid pools whole.
+def private g3v_tail_make(t : Gemma3vTower; npos : int64) : G3vTail {
+    let d = t.n_embd
+    let n_side = t.image_px / t.patch
+    var tl = G3vTail(n_side = n_side, nout = (n_side / t.merge) * (n_side / t.merge))
+    tl.on = (g_tw_tail && pf_tw_tail_ready() && d % 32l == 0l && t.proj_dim % 64l == 0l
+        && n_side * n_side == npos && n_side % t.merge == 0l)
+    return tl if (!tl.on)
+    tl.mpo = round_up(tl.nout, 32l)
+    tl.bytes_pool = uint64(tl.mpo * d * 4l)
+    tl.bytes_out = uint64(tl.mpo * t.proj_dim * 4l)
+    tl.bytes_soft = uint64(d * 4l)
+    tl.bpool = pool_acquire_pinned(g_tw_pool, g_dev, tl.bytes_pool)
+    tl.bout = pool_acquire_pinned(g_tw_pool, g_dev, tl.bytes_out)
+    tl.bsoft = pool_acquire_pinned(g_tw_pool, g_dev, tl.bytes_soft)
+    tl.u_proj = uniform_u32(uint(t.proj_dim))
+    unsafe {
+        memcpy(metal_buffer_contents(tl.bsoft), plane_at(t.blob, t.soft_norm_w), tl.bytes_soft)
+    }
+    return tl
+}
+
+//! The CPU tail's four steps behind the blocks: the post-norm, the grid mean pool, the weighted rms, the projection.
+[arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
+def private g3v_tail_body(enc : MetalComputeEncoder?; t : Gemma3vTower; tl : G3vTail; bblob, bx, bs : MetalBuffer?;
+                          u_d, u_eps : MetalBuffer?; npos : int64) {
+    return if (!tl.on)
+    let d = t.n_embd
+    enc_ln(enc, bx, bblob, uint64(t.post_ln_w * 4l), bblob, uint64(t.post_ln_b * 4l), bs, 0ul, u_d, u_eps, npos)
+    enc_tw_pool2d(enc, bs, tl.bpool, TwPool2dArgs(width = uint(d), gw = uint(tl.n_side), k = uint(t.merge),
+        ow = uint(tl.n_side / t.merge), total = uint(tl.nout * d)), tl.nout * d)
+    pf_enc_rms(enc, tl.bpool, 0ul, tl.bsoft, tl.bpool, u_d, u_eps, tl.nout)
+    enc_f32_mm(enc, bblob, uint64(t.proj_w * 4l), tl.bpool, tl.bout, 0ul, u_d, tl.u_proj, tl.mpo, t.proj_dim)
+}
+
+//! the tail's soft tokens into `s.tail` where the command buffer ran, the CPU tail told to stand down; its buffers released
+def private g3v_tail_land(t : Gemma3vTower; var tl : G3vTail; ran : bool; var s : Gemma3vState) {
+    return if (!tl.on)
+    if (ran) {
+        ensure_length(s.tail, tl.nout * t.proj_dim)
+        unsafe {
+            memcpy(addr(s.tail[0]), metal_buffer_contents(tl.bout), uint64(tl.nout * t.proj_dim * 4l))
+        }
+        s.tail_ready = true
+        g_tower_tail_encodes++
+    }
+    pool_release(g_tw_pool, tl.bpool, tl.bytes_pool)
+    pool_release(g_tw_pool, tl.bout, tl.bytes_out)
+    pool_release(g_tw_pool, tl.bsoft, tl.bytes_soft)
+    pool_release(g_upool, tl.u_proj, 4ul)
+}
+
 // The gemma3v SigLIP block loop as ONE command buffer on the f32 blob — LN(w,b), biased f32 GEMMs,
 // scaled attention, GELU. The 72-wide heads restride to the attention tiles' 128 (zero pads exact,
 // scale stays 1/sqrt(72)); ffn serves at the layout's ff_pad. Stem/tail stay CPU; q8 declines.
@@ -1894,6 +1962,7 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     var kaf = AttnArgs(qd = uint(d), kv_dim = uint(d), head_size = uint(hs), kv_mul = 1u,
         npos = uint(npos), np32 = uint(npos), scale = 1.0 / sqrt(float(hs)),
         qoff = 0u, qrows = uint(mp), window = 0u, softcap = 0.0, hass = 0u, uend = uint(npos))
+    var tl = g3v_tail_make(t, npos)
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
         //! the stem: padded patch GEMM + conv bias + the learned positions (all row-aligned)
@@ -1939,15 +2008,19 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
             enc_add_bias_rows(enc, bxb2, 0ul, bblob, uint64(o.b[GEMMA3V_GEMM_DOWN] * 4l), u_d, u_totd, npos * d)
             enc_add(enc, bx, 0ul, bxb2, 0ul, u_totd, npos * d)
         }
+        g3v_tail_body(enc, t, tl, bblob, bx, bxb, u_d, u_eps, npos)
     }
     var served = false
     if (ran) {
-        unsafe {
-            memcpy(addr(s.x[0]), metal_buffer_contents(bx), uint64(npos * d * 4l))
+        if (!tl.on) {   // with the tail on the device the soft tokens alone come back: the block rows stay there
+            unsafe {
+                memcpy(addr(s.x[0]), metal_buffer_contents(bx), uint64(npos * d * 4l))
+            }
         }
         tw_count_encode(npos, t.n_layer, f16w)
         served = true
     }
+    g3v_tail_land(t, tl, ran, s)
     pool_release(g_tw_pool, bx, bytes_row)
     pool_release(g_tw_pool, bxb, bytes_row)
     pool_release(g_tw_pool, bxb2, bytes_row)

@@ -906,6 +906,55 @@ def private tw_tail_rows_gate(t : T?; var dev, queue) {
     }
 }
 
+//! A vision tail's grid mean pool at a width off the 64-thread group: a 6 x 4 row grid pooled 2 x 2 into 3 x 2 rows
+//! against the host mean of each block; the pool along the other axis alone misses on most elements (asserted on the host).
+def private tw_pool2d_gate(t : T?; var dev, queue) {
+    let tag = "tw_pool2d"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kd = kernel_of(@@enc_tw_pool2d)
+        var pso = mc |> keep_stamp(kd, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let width = 70
+        let gw = 6
+        let gh = 4
+        let k = 2
+        let ow = gw / k
+        let total = ow * (gh / k) * width
+        var inscope x <- [for (i in range(gw * gh * width)); float((i * 37) % 101 - 50) * 0.043]
+        var inscope want : array<float>
+        var inscope row_only : array<float>
+        for (i in range(total)) {
+            let o = i / width
+            let c = i % width
+            var sum = 0.0lf
+            var row = 0.0lf
+            for (dy in range(k)) {
+                for (dx in range(k)) {
+                    let v = double(x[(((o / ow) * k + dy) * gw + (o % ow) * k + dx) * width + c])
+                    sum += v
+                    row += dy == 0 ? v : 0.0lf
+                }
+            }
+            want |> push(float(sum / double(k * k)))
+            row_only |> push(float(row / double(k)))
+        }
+        var apart = 0
+        for (a, b in want, row_only) {
+            apart += abs(a - b) > 1e-3 ? 1 : 0
+        }
+        t |> success(apart > total / 2, "{tag}: the fixture tells a one-axis pool apart ({apart} of {total})")
+        var ka = TwPool2dArgs(width = uint(width), gw = uint(gw), k = uint(k), ow = uint(ow), total = uint(total))
+        let bx = mc |> in_(x)
+        let by = mc |> out_(total)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            invoke(kd.enc, enc, pso, mc.buf[bx], mc.buf[by], ka, int64(total))
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], want, BAR_APPROX, Shape(row_width = width))
+    }
+}
+
 //! A 1x1 conv's bias and ReLU over its rows, in place: max(x + b, 0) against the same f32 form, the fixture on
 //! both sides of zero.
 def private bias_relu_rows_gate(t : T?; var dev, queue) {
@@ -2814,6 +2863,7 @@ def test_metal_prefill_kernels(t : T?) {
                 pk_xf_gate(t, dev, queue)
                 cn_melnorm_gate(t, dev, queue)
                 tw_tail_rows_gate(t, dev, queue)
+                tw_pool2d_gate(t, dev, queue)
                 bias_relu_rows_gate(t, dev, queue)
                 st2_conv_gate(t, dev, queue, false, false)
                 st2_conv_gate(t, dev, queue, true, false)
