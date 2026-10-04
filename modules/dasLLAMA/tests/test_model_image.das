@@ -607,19 +607,6 @@ def test_image_mechanics(t : T?) {
 
 // ===== real carriers: gguf load vs mapped image load =====
 
-// greedy continuation ids on a loaded model (no kernel pins: both sides of every compare run
-// in this process with identical knobs, so determinism is per-run, not per-fixture)
-def private gen_ids(tr : Model; prompt : array<int64>; n_gen : int) : array<int64> {
-    var out : array<int64>
-    with_dasllama_jobque() {
-        var s = make_run_state(tr.config)
-        var ids <- generate(tr, s, prompt, length(prompt) + n_gen)
-        out <- ids
-        delete s
-    }
-    return <- out
-}
-
 // first config field whose value differs between two loads ("" = none) — catches an arch
 // configure clobbering serialized gguf overrides even when short gens can't (sliding_window
 // only bites past the window)
@@ -654,7 +641,7 @@ def private text_image_roundtrip(t : T?; path : string; n_gen : int) {
         g.config.seq_len = 2048l
     }
     var prompt <- encode(g, "Once upon a time")
-    var ga <- gen_ids(g, prompt, n_gen)
+    var ga <- greedy_gen(g, prompt, n_gen)
     delete g
     var a <- load_model(path, QuantMode.q8)
     t |> success(a.image_map != null, "cold load serves the image it built")
@@ -662,7 +649,7 @@ def private text_image_roundtrip(t : T?; path : string; n_gen : int) {
     if (a.config.seq_len > 2048l) {
         a.config.seq_len = 2048l
     }
-    var gcold <- gen_ids(a, prompt, n_gen)
+    var gcold <- greedy_gen(a, prompt, n_gen)
     t |> success(!empty(ga) && count_mismatch(ga, gcold) == 0l, "gguf vs cold-built image tokens")
     delete gcold
     delete a
@@ -681,7 +668,7 @@ def private text_image_roundtrip(t : T?; path : string; n_gen : int) {
     if (b.config.seq_len > 2048l) {
         b.config.seq_len = 2048l
     }
-    var gb <- gen_ids(b, prompt, n_gen)
+    var gb <- greedy_gen(b, prompt, n_gen)
     t |> success(!empty(ga) && count_mismatch(ga, gb) == 0l, "gguf vs image tokens")
     delete b   // unmaps
     var c <- load_model(path, QuantMode.q8)   // the file survives an unmap — map again
@@ -689,7 +676,7 @@ def private text_image_roundtrip(t : T?; path : string; n_gen : int) {
     if (c.config.seq_len > 2048l) {
         c.config.seq_len = 2048l
     }
-    var gc <- gen_ids(c, prompt, n_gen)
+    var gc <- greedy_gen(c, prompt, n_gen)
     t |> success(count_mismatch(ga, gc) == 0l, "re-mapped tokens")
     delete c
     delete ga
@@ -789,7 +776,7 @@ def test_metal_flavor_image(tst : T?) {
             var tc <- load_model(path, QuantMode.q8)
             t |> success(!tc.metal_blob, "CPU-mode load stays planar")
             var prompt <- counting_ids(tc)
-            var g_cpu <- gen_ids(tc, prompt, 16)
+            var g_cpu <- greedy_gen(tc, prompt, 16)
             delete tc
             // cold metal mint: the blob flavor regenerates + saves under its own identity tag
             let img_m = image_path_for(path, METAL_IMAGE_TAG)
@@ -800,7 +787,7 @@ def test_metal_flavor_image(tst : T?) {
             t |> success(tm.image_map != null, "cold metal load serves the image it built")
             t |> success(stat(img_m).is_valid, "cold metal load saved the metal-flavor image")
             t |> success(empty(tm.qblob), "planar q8 planes are gone")
-            var g_mint <- gen_ids(tm, prompt, 16)   // a blob model CANNOT silently CPU-serve —
+            var g_mint <- greedy_gen(tm, prompt, 16)   // a blob model CANNOT silently CPU-serve —
                                                     // completing at all proves the GPU served
             // teacher-forced parity vs a fresh planar CPU control (engine entry, no image
             // cache) — probe-measured noise ~0.75, breakage class 15+; 4.0 = ~4x SNR
@@ -817,18 +804,18 @@ def test_metal_flavor_image(tst : T?) {
             // warm map + the direct-.dlim path form (both flavors' identities probed)
             var tw <- load_model(path, QuantMode.q8)
             t |> success(tw.image_map != null && tw.metal_blob, "warm metal load maps the blob image")
-            var g_map <- gen_ids(tw, prompt, 16)
+            var g_map <- greedy_gen(tw, prompt, 16)
             t |> success(count_mismatch(g_mint, g_map) == 0l, "mint vs mapped tokens")
             delete tw
             var td <- load_model(img_m, QuantMode.q8)
             t |> success(td.metal_blob, "direct .dlim load resolves the metal identity")
-            var g_dir <- gen_ids(td, prompt, 16)
+            var g_dir <- greedy_gen(td, prompt, 16)
             t |> success(count_mismatch(g_mint, g_dir) == 0l, "direct-path tokens")
             // the CPU tripwire: with the overrides off, any inference on a blob model panics
             set_metal_mode(MetalMode.off)
             var tripped = false
             try {
-                var g_bad <- gen_ids(td, prompt, 2)
+                var g_bad <- greedy_gen(td, prompt, 2)
                 delete g_bad
             } recover {
                 tripped = true
@@ -866,7 +853,7 @@ def test_metal_flavor_image(tst : T?) {
             t |> success(!tc.metal_blob && tc.emb_q8 && !tc.cls_q8, "CPU-mode load stays planar and serves the untied q8 table")
             let table_floats = tc.config.vocab_size * tc.config.dim
             var prompt <- counting_ids(tc)
-            var g_cpu <- gen_ids(tc, prompt, 16)
+            var g_cpu <- greedy_gen(tc, prompt, 16)
             delete tc
             let img_m = image_path_for(path, METAL_IMAGE_TAG)
             remove(img_m)
@@ -876,7 +863,7 @@ def test_metal_flavor_image(tst : T?) {
             t |> success(tm.image_map != null && stat(img_m).is_valid, "cold metal load saved and serves the metal-flavor image")
             t |> success(tm.emb_q8 && !tm.cls_q8 && tm.tok_emb_off < 0l && long_length(tm.fblob) < table_floats,
                 "the blob flavor keeps the untied q8 table and no fp32 copy (fblob {long_length(tm.fblob)} floats against a {table_floats}-float table)")
-            var g_mint <- gen_ids(tm, prompt, 16)   // every token's embedding row read from the blob copy
+            var g_mint <- greedy_gen(tm, prompt, 16)   // every token's embedding row read from the blob copy
             var tp <- load_model_(path, QuantMode.q8)
             let np = long_length(prompt)
             var teach <- [for (i in range64(np - 1l, long_length(g_cpu))); g_cpu[i]]
@@ -887,7 +874,7 @@ def test_metal_flavor_image(tst : T?) {
             delete tm
             var tw <- load_model(path, QuantMode.q8)
             t |> success(tw.image_map != null && tw.metal_blob && tw.emb_q8 && !tw.cls_q8, "warm metal load maps the blob image with the untied q8 table")
-            var g_map <- gen_ids(tw, prompt, 16)
+            var g_map <- greedy_gen(tw, prompt, 16)
             t |> success(count_mismatch(g_mint, g_map) == 0l, "mint vs mapped tokens")
             delete tw
             delete g_cpu
@@ -926,14 +913,14 @@ def test_gemma4e_flavor_image(tst : T?) {
             t |> success(tm.metal_blob, "metal-mode load is blob-form")
             t |> success(stat(img_m).is_valid, "cold metal load saved the metal-flavor image")
             var prompt <- counting_ids(tm)
-            var g_mint <- gen_ids(tm, prompt, 8)
+            var g_mint <- greedy_gen(tm, prompt, 8)
             t |> success(length(g_mint) > length(prompt), "mint-backed blob model serves a continuation")
             delete tm
             // warm map: the tripwire's after-borrows seam again, now off the mapped planes
             var tw <- load_model(path, QuantMode.q8)
             tw.config.seq_len = min(tw.config.seq_len, 512l)
             t |> success(tw.image_map != null && tw.metal_blob, "warm metal load maps the blob image")
-            var g_map <- gen_ids(tw, prompt, 8)
+            var g_map <- greedy_gen(tw, prompt, 8)
             log_gen_texts(tw, "E2B mint-vs-mapped", g_mint, g_map)
             t |> success(count_mismatch(g_mint, g_map) == 0l,
                 "mapped-image tokens match the mint's ({count_mismatch(g_mint, g_map)} differ)")
@@ -2587,20 +2574,20 @@ def test_fp32_decoder_image_roundtrip(t : T?) {
         var g <- load_model_(path, QuantMode.fp32)
         g.config.seq_len = min(g.config.seq_len, 2048l)
         var prompt <- encode(g, "Once upon a time")
-        var ga <- gen_ids(g, prompt, 16)
+        var ga <- greedy_gen(g, prompt, 16)
         delete g
         var a <- load_model_cached(path, QuantMode.fp32, planar_only = true, image_fp32 = true)
         t |> success(a.image_map != null, "cold load serves the image it built")
         t |> success(stat(img).is_valid, "cold load saved an image")
         a.config.seq_len = min(a.config.seq_len, 2048l)
-        var gcold <- gen_ids(a, prompt, 16)
+        var gcold <- greedy_gen(a, prompt, 16)
         t |> success(!empty(ga) && count_mismatch(ga, gcold) == 0l, "gguf vs cold-built image tokens")
         delete gcold
         delete a
         var b <- load_model_cached(path, QuantMode.fp32, planar_only = true, image_fp32 = true)
         t |> success(b.image_map != null, "warm load is image-backed")
         b.config.seq_len = min(b.config.seq_len, 2048l)
-        var gb <- gen_ids(b, prompt, 16)
+        var gb <- greedy_gen(b, prompt, 16)
         t |> success(!empty(ga) && count_mismatch(ga, gb) == 0l, "gguf vs image tokens")
         delete b
         delete ga

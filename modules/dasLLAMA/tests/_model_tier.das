@@ -107,6 +107,30 @@ def log_gen_texts(m : Model; tag : string; cpu_ids, gpu_ids : array<int64>) {
     to_log(LOG_INFO, "{tag} GPU text: {eyeball_text(m, gpu_ids)}\n")
 }
 
+//! `prompt` greedily continued `n_gen` ids through `generate` on a fresh session: the prompt's echo past its first id, then the
+//! continuation
+def greedy_gen(tr : Model; prompt : array<int64>; n_gen : int) : array<int64> {
+    var out : array<int64>
+    with_dasllama_jobque_() {
+        var s = make_run_state(tr.config)
+        out <- generate(tr, s, prompt, length(prompt) + n_gen)
+        delete s
+    }
+    return <- out
+}
+
+//! `n` greedy steps through `s` from position `pos`, each pick the argmax of the logits the step before left
+def greedy_from(tr : Model; var s : Session; pos, n : int64) : array<int64> {
+    var ids : array<int64>
+    ids |> reserve(n)
+    for (i in range64(n)) {
+        let next = argmax(s, tr.config.vocab_size)
+        ids |> push(next)
+        forward(tr, s, next, pos + i)
+    }
+    return <- ids
+}
+
 //! `body` under the bit-exact kernel modes a token-exact oracle needs - classic prefill attention, the scalar libm activations and
 //! the per-token recurrent deltanet prefill (chunked under `dn_chunked`) - the previous modes put back after
 def with_pinned_kernels(dn_chunked : bool; body : block) {
@@ -134,17 +158,13 @@ def parity_gen_ok(tr : Model; prompt, want : array<int64>; dn_chunked : bool = f
     let n_gen = length(want)
     var ok = false
     with_pinned_kernels(dn_chunked) {
-        with_dasllama_jobque_() {
-            var s = make_run_state(tr.config)
-            let ids <- generate(tr, s, prompt, length(prompt) + n_gen)
-            let echo = length(prompt) - 1
-            let got <- [for (i in range(n_gen)); ids[echo + i]; where echo + i < length(ids)]
-            ok = ids_equal(got, want)
-            if (eyeball) {
-                to_log(LOG_INFO, "eyeball want: {eyeball_text(tr, want)}\n")
-                to_log(LOG_INFO, "eyeball got:  {eyeball_text(tr, got)}\n")
-            }
-            delete s
+        let ids <- greedy_gen(tr, prompt, n_gen)
+        let echo = length(prompt) - 1
+        let got <- [for (i in range(n_gen)); ids[echo + i]; where echo + i < length(ids)]
+        ok = ids_equal(got, want)
+        if (eyeball) {
+            to_log(LOG_INFO, "eyeball want: {eyeball_text(tr, want)}\n")
+            to_log(LOG_INFO, "eyeball got:  {eyeball_text(tr, got)}\n")
         }
     }
     return ok

@@ -19,17 +19,10 @@ require _model_tier
 
 def private synth_id(i : int64) : int64 => 1000l + ((i * 17l + 131l) % 5000l)
 
-def private run_ids(tr : Model; var s : Session; plen, ngen : int64; var ids : array<int64>) {
+def private run_ids(tr : Model; var s : Session; plen, ngen : int64) : array<int64> {
     let prompt <- [for (i in range64(plen)); synth_id(i)]
     forward_prefill(tr, s, prompt, plen, 0l)
-    ids |> reserve(ngen)
-    var pos = plen
-    for (_g in range64(ngen)) {
-        let best = argmax(s, tr.config.vocab_size)
-        ids |> push(best)
-        forward(tr, s, best, pos)
-        pos++
-    }
+    return <- greedy_from(tr, s, plen, ngen)
 }
 
 struct private SwapResult {
@@ -57,23 +50,14 @@ def private slot_swap_cycle(path : string) : SwapResult {
             let plen = 64l
             // CTRL: the truth trajectory, straight through on the resident driver
             var sc = make_run_state(tr.config)
-            var ctrl : array<int64>
-            run_ids(tr, sc, plen, 32l, ctrl)
+            var ctrl <- run_ids(tr, sc, plen, 32l)
             // A: 16 resident tokens, hydrate + drop, 16 more on the CPU over the hydrated KV
             var sa = make_run_state(tr.config)
-            var a1 : array<int64>
-            run_ids(tr, sa, plen, 16l, a1)
+            var a1 <- run_ids(tr, sa, plen, 16l)
             moe_gpu_hydrate_session_(tr, sa)
             moe_gpu_drop_model_()
             r.dropped_off = !moe_gpu_resident_active()
-            var pos = plen + 16l
-            var a2 : array<int64>
-            for (_g in range64(16l)) {
-                let best = argmax(sa, tr.config.vocab_size)
-                a2 |> push(best)
-                forward(tr, sa, best, pos)
-                pos++
-            }
+            var a2 <- greedy_from(tr, sa, plen + 16l, 16l)
             r.a_par = ids_equal(copy_span(ctrl, 0, 16), a1) && ids_equal(copy_span(ctrl, 16, 16), a2)
             // B: re-arm (the switch-in path) + a fresh trajectory
             let t0 = ref_time_ticks()
@@ -83,15 +67,13 @@ def private slot_swap_cycle(path : string) : SwapResult {
             r.rearm_us = int64(get_time_usec(t0))
             r.rearm_on = moe_gpu_resident_active()
             var sb = make_run_state(tr.config)
-            var b : array<int64>
-            run_ids(tr, sb, plen, 32l, b)
+            var b <- run_ids(tr, sb, plen, 32l)
             r.b_par = ids_equal(copy_span(ctrl, 0, 32), b)
             // D: a second full drop/re-arm cycle (registry regrowth smoke)
             moe_gpu_drop_model_()
             moe_gpu_upload_resident(tr)
             var sd = make_run_state(tr.config)
-            var d : array<int64>
-            run_ids(tr, sd, plen, 32l, d)
+            var d <- run_ids(tr, sd, plen, 32l)
             r.d_par = ids_equal(copy_span(ctrl, 0, 32), d) && moe_gpu_resident_active()
             delete sc
             delete sa

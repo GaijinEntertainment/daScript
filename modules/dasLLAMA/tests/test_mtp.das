@@ -47,18 +47,6 @@ let MTP_WANT <- [2943l, 11l, 4097l, 11l, 4590l, 11l, 7840l, 11l, 7810l, 11l, 112
                  42744l, 11l, 28279l, 11l, 58614l, 11l, 60163l, 11l, 35442l, 11l, 56091l, 11l, 78592l,
                  11l, 59942l, 11l, 90600l, 11l, 16570l, 13l, 198l, 2427l, 494l, 799l, 310l, 16570l]
 
-// Plain greedy reference over one fresh session (generate()'s echo contract: prompt[1..] then the
-// continuation).
-def private gen_plain(tr : Model; prompt : array<int64>; total : int) : array<int64> {
-    var out : array<int64>
-    with_dasllama_jobque() {
-        var s = make_run_state(tr.config)
-        out <- generate(tr, s, prompt, total)
-        delete s
-    }
-    return <- out
-}
-
 // Depth-1 self-spec greedy over one fresh session; accept telemetry lands in nd/na.
 def private gen_spec(tr : Model; prompt : array<int64>; total : int; var nd, na : int64&) : array<int64> {
     var out : array<int64>
@@ -76,14 +64,11 @@ def private gen_spec(tr : Model; prompt : array<int64>; total : int; var nd, na 
 //! parity_gen_ok: a T? param keeps the helper off the JIT, and the engine chain overflows the interpreter stack
 def private reject_rollback_ids(tr : Model; n_check : int64; var want : array<int64>) : array<int64> {
     var got : array<int64>
+    let np = long_length(MTP_PROMPT)
+    let ref_ids <- greedy_gen(tr, MTP_PROMPT, int(n_check + 1l))
+    delete want
+    want <- copy_span(ref_ids, np - 1l, n_check + 1l)
     with_dasllama_jobque() {
-        let np = long_length(MTP_PROMPT)
-        // plain-decode reference (echo convention: ids[np-1] is the first generated token)
-        var s1 = make_run_state(tr.config)
-        let ref_ids <- generate(tr, s1, MTP_PROMPT, int(np + n_check + 1l))
-        delete s1
-        delete want
-        want <- [for (i in range64(n_check + 1l)); ref_ids[np - 1l + i]]
         var s = make_run_state(tr.config)
         forward_prefill(tr, s, MTP_PROMPT, np, 0l)
         let tok = parallel_argmax(s.logits, tr.config.vocab_size)
@@ -93,13 +78,9 @@ def private reject_rollback_ids(tr : Model; n_check : int64; var want : array<in
         forward_prefill(tr, s, vbatch, 2l, np)
         mtp_state_restore(s)
         forward(tr, s, tok, np)   // re-advance through the accepted token alone
-        var pos = np + 1l
-        for (_i in range64(n_check)) {
-            let next = parallel_argmax(s.logits, tr.config.vocab_size)
-            got |> push(next)
-            forward(tr, s, next, pos)
-            pos++
-        }
+        var tail <- greedy_from(tr, s, np + 1l, n_check)
+        got |> push_from(tail)
+        delete tail
         delete s
         delete vbatch
     }
@@ -118,12 +99,10 @@ struct private RejectRound {
 [cold_path]
 def private reject_round_ids(tr : Model; n_check : int64) : RejectRound {
     var out : RejectRound
+    let np = long_length(MTP_PROMPT)
+    let ref_ids <- greedy_gen(tr, MTP_PROMPT, int(n_check + 1l))
+    out.want <- copy_span(ref_ids, np - 1l, n_check + 1l)
     with_dasllama_jobque() {
-        let np = long_length(MTP_PROMPT)
-        var s1 = make_run_state(tr.config)
-        let ref_ids <- generate(tr, s1, MTP_PROMPT, int(np + n_check + 1l))
-        delete s1
-        out.want <- [for (i in range64(n_check + 1l)); ref_ids[np - 1l + i]]
         let spec0 = get_mtp_spec()
         set_mtp_spec(true)   // the prompt's head warm and the round both key off it, as generate_mtp_greedy arms it
         var s = make_run_state(tr.config)
@@ -133,13 +112,9 @@ def private reject_round_ids(tr : Model; n_check : int64) : RejectRound {
         out.got |> push(tok)
         out.hit = forced_reject_round(tr, s, tok)
         set_mtp_spec(spec0)
-        var pos = np + 1l
-        for (_i in range64(n_check)) {
-            let next = parallel_argmax(s.logits, tr.config.vocab_size)
-            out.got |> push(next)
-            forward(tr, s, next, pos)
-            pos++
-        }
+        var tail <- greedy_from(tr, s, np + 1l, n_check)
+        out.got |> push_from(tail)
+        delete tail
         delete s
     }
     return <- out
@@ -149,7 +124,7 @@ def private reject_round_ids(tr : Model; n_check : int64) : RejectRound {
 // plus sane accept telemetry. `tag` distinguishes the arms in the report.
 def private invariance_ok(t : T?; tr : Model; prompt : array<int64>; n_gen : int; tag : string) : array<int64> {
     let total = length(prompt) + n_gen
-    var ref_ids <- gen_plain(tr, prompt, total)
+    var ref_ids <- greedy_gen(tr, prompt, n_gen)
     var nd = 0l
     var na = 0l
     let spec_ids <- gen_spec(tr, prompt, total, nd, na)
