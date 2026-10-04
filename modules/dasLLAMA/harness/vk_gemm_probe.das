@@ -631,21 +631,13 @@ def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measur
         let kd = nkh * ds
         let di = nvh * ds
         let cd = 2 * kd + di
-        let taps = dconv - 1
-        let beta_off = 16
-        let g_off = beta_off + nvh
-        let a_off = g_off + nvh
-        let dt_off = a_off + nvh
-        let taps_off = dt_off + nvh
-        let wnorm_off = taps_off + cd * dconv
-        let hist_off = wnorm_off + ds
-        let sm_n = hist_off + 2 * cd * taps
+        let sm_n = int(DND_SMALLS_BYTES / 4l)
         let nblk = di / 32
         var projh <- row_fill(cd + di, 23, 0, 0.03, 1.0, 71)
         var sth <- row_fill(nvh * ds * ds, 13, 0, 0.02, 0.5, 53)
         var smh <- row_fill(sm_n, 17, 0, 0.02, 0.4, 43)
         for (i in range(nvh)) {
-            smh[a_off + i] = -0.4 - float(i) * 0.1
+            smh[int(DN_SM_A) + i] = -0.4 - float(i) * 0.1
         }
         let proj_bytes = long_length(projh) * 4l
         let st_bytes = long_length(sth) * 4l
@@ -677,8 +669,8 @@ def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measur
             vk_check(vkBeginCommandBuffer(raw, begin), null)
             var hz : VkHaz
             var pc = DnStepArgs(cd = uint(cd), kd = uint(kd), nkh = uint(nkh), ds = uint(ds), dconv = uint(dconv),
-                beta_off = uint(beta_off), g_off = uint(g_off), taps_off = uint(taps_off), wnorm_off = uint(wnorm_off),
-                a_off = uint(a_off), dt_off = uint(dt_off), hist_off = uint(hist_off), eps = 1e-6, qscale = 1.0 / sqrt(float(ds)),
+                beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G), taps_off = uint(DN_SM_TAPS), wnorm_off = uint(DN_SM_WNORM),
+                a_off = uint(DN_SM_A), dt_off = uint(DN_SM_DT), hist_off = uint(DN_SM_HIST), eps = 1e-6, qscale = 1.0 / sqrt(float(ds)),
                 out_f32 = uint(oform))
             for (_k in range(DISPATCHES)) {
                 enc_dn_step_cls(raw, hz, s, pc, int64(nvh))
