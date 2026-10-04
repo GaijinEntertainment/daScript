@@ -6787,28 +6787,7 @@ def test_vkd_dn_family(t0 : T?) {
                 }
                 // oracle: depthwise conv (history rows below position 0) + SiLU, then per-ds-block
                 // L2 norm over the q/k regions with qscale on the q blocks
-                var o_ref : array<float>
-                o_ref |> resize(npos * cd)
-                for (p in range(npos)) {
-                    for (ch in range(cd)) {
-                        var acc = 0.0
-                        for (k in range(dconv)) {
-                            let sp = p + k - taps
-                            var xv = 0.0
-                            if (sp >= 0) {
-                                xv = srch[sp * cd + ch]
-                            } else {
-                                xv = smh[hist_off + ch * taps + p + k]   // hist_mode 1
-                            }
-                            acc += xv * smh[taps_off + ch * dconv + k]
-                        }
-                        o_ref[p * cd + ch] = silu_f32(acc)
-                    }
-                    l2_norm_rows(unsafe(addr(o_ref[p * cd])), int64(2 * kd / ds), int64(ds), eps)
-                    for (j in range(kd)) {
-                        o_ref[p * cd + j] *= qscale
-                    }
-                }
+                var o_ref <- dn_conv_ref(srch, smh, hist_off, smh, taps_off, npos, cd, dconv, kd, ds, eps, qscale)
                 let bad = mismatch_approx(o_cls, o_ref)
                 t |> success(bad == 0, "dn_conv matches the CPU oracle at ds {ds} ({bad} of {npos * cd} off)")
                 delete srch

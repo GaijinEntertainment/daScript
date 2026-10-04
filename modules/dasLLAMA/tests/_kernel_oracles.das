@@ -59,6 +59,30 @@ def act_mul_ref(v, u : float; gelu : bool) : float {
         : (v / (1.0 + exp(-v))) * u)
 }
 
+//! the deltanet causal conv over `npos` rows `cd` wide - `dconv` taps a channel at `taps[toff + ch * dconv]`, the rows before row 0
+//! from the per-channel history at `hist[hoff + ch * (dconv - 1)]` - through silu, then the `kd`-wide q and k heads (`ds` wide)
+//! l2-normed at `eps` and the q heads scaled by `qscale`
+def dn_conv_ref(src, hist : array<float>; hoff : int; taps : array<float>; toff, npos, cd, dconv, kd, ds : int; eps, qscale : float) : array<float> {
+    let ntap = dconv - 1
+    var o : array<float>
+    o |> resize(npos * cd)
+    for (p in range(npos)) {
+        for (ch in range(cd)) {
+            var acc = 0.0
+            for (k in range(dconv)) {
+                let sp = p + k - ntap
+                acc += (sp >= 0 ? src[sp * cd + ch] : hist[hoff + ch * ntap + p + k]) * taps[toff + ch * dconv + k]
+            }
+            o[p * cd + ch] = acc / (1.0 + exp(-acc))
+        }
+        l2_norm_rows(unsafe(addr(o[p * cd])), int64(2 * kd / ds), int64(ds), eps)
+        for (j in range(kd)) {
+            o[p * cd + j] *= qscale
+        }
+    }
+    return <- o
+}
+
 //! A dense GEMM's reference: `want[r * ndim + j]` is weight row j dotted with row r of `x`, accumulated in double, and
 //! `env` the same sum over the products' magnitudes - the scale a relative bar multiplies.
 struct DenseRef {

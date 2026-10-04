@@ -861,32 +861,8 @@ def private ref_q8_gemm(wq : array<int8>; ws : array<float>; xq : array<int8>; x
 def private ref_dn_core(qkvy, zy : array<float>; bts, gts, tapsv, wnormv, av, dtv : array<float>;   // nolint:STYLE037 — one flat CPU mirror of the deltanet chain; its stages share the chunk buffers
                         var state : array<float>; hist : array<float>; npos : int64;
                         wo : array<int8>; wso : array<float>; var yout : array<float>; var conv : array<float>) {
-    conv |> resize(npos * DNCD)
-    for (p in range64(npos)) {
-        for (ch in range64(DNCD)) {
-            var acc = 0.0
-            for (k in range64(DNCONV)) {
-                let sp = p - DNTAPS + k
-                let xv = sp >= 0l ? qkvy[int(sp * DNCD + ch)] : hist[int(ch * DNTAPS + p + k)]
-                acc += xv * tapsv[int(ch * DNCONV + k)]
-            }
-            conv[int(p * DNCD + ch)] = silu_f32(acc)
-        }
-        for (blk in range64(2l * DNKD / DNDS)) {   // q/k L2 norm; q folds the pre-scale
-            var sum = 0.0lf
-            for (j in range64(DNDS)) {
-                let v = conv[int(p * DNCD + blk * DNDS + j)]
-                sum += double(v * v)
-            }
-            var scale = 1.0 / max(sqrt(float(sum)), DN_EPS)
-            if (blk < DNKD / DNDS) {
-                scale *= 1.0 / sqrt(float(DNDS))
-            }
-            for (j in range64(DNDS)) {
-                conv[int(p * DNCD + blk * DNDS + j)] *= scale
-            }
-        }
-    }
+    delete conv
+    conv <- dn_conv_ref(qkvy, hist, 0, tapsv, 0, int(npos), int(DNCD), int(DNCONV), int(DNKD), int(DNDS), DN_EPS, 1.0 / sqrt(float(DNDS)))
     let CS = 64l
     var o : array<float>
     o |> resize(npos * DNDI)
