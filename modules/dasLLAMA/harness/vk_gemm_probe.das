@@ -3599,6 +3599,14 @@ def private run_ref_gemm(d, n, cnt : int) {   // nolint:STYLE038 — one linear 
     delete xf
 }
 
+//! the per-format arm `a` names - its `<arm>:` prefix, the format name past it - or "" where it names none
+def private fmt_arm_of(a : string) : string {
+    for (pre in fixed_array("cm2:", "cm2d:", "cm2w:", "moe:", "cm2g:", "moesk:", "ts:", "cold:")) {
+        return pre if (a |> starts_with(pre))
+    }
+    return ""
+}
+
 [arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
 def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape dispatcher
     g_probe_exit = 1   //! every early return below is a run with no result row; the sweeps clear it
@@ -3625,38 +3633,10 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
     for (a in get_command_line_arguments()) {
         if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "gemma" || a == "wh" || a == "splitk" || a == "khrsk" || a == "small" || a == "lastwg" || a == "barform" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
             only = a
-        } elif (a |> starts_with("cm2:")) {
-            only = "cm2:"
+        } elif (fmt_arm_of(a) != "") {
+            only = fmt_arm_of(a)
             var pf : KqFmt
-            cm2_fmt = kq_fmt_of_name(slice(a, 4), pf) ? int(pf) : -1
-        } elif (a |> starts_with("cm2d:")) {
-            only = "cm2d:"
-            var pf : KqFmt
-            cm2_fmt = kq_fmt_of_name(slice(a, 5), pf) ? int(pf) : -1
-        } elif (a |> starts_with("cm2w:")) {
-            only = "cm2w:"
-            var pf : KqFmt
-            cm2_fmt = kq_fmt_of_name(slice(a, 5), pf) ? int(pf) : -1
-        } elif (a |> starts_with("moe:")) {
-            only = "moe:"
-            var pf : KqFmt
-            cm2_fmt = kq_fmt_of_name(slice(a, 4), pf) ? int(pf) : -1
-        } elif (a |> starts_with("cm2g:")) {
-            only = "cm2g:"
-            var pf : KqFmt
-            cm2_fmt = kq_fmt_of_name(slice(a, 5), pf) ? int(pf) : -1
-        } elif (a |> starts_with("moesk:")) {
-            only = "moesk:"
-            var pf : KqFmt
-            cm2_fmt = kq_fmt_of_name(slice(a, 6), pf) ? int(pf) : -1
-        } elif (a |> starts_with("ts:")) {
-            only = "ts:"
-            var pf : KqFmt
-            cm2_fmt = kq_fmt_of_name(slice(a, 3), pf) ? int(pf) : -1
-        } elif (a |> starts_with("cold:")) {
-            only = "cold:"
-            var pf : KqFmt
-            cm2_fmt = kq_fmt_of_name(slice(a, 5), pf) ? int(pf) : -1
+            cm2_fmt = kq_fmt_of_name(slice(a, length(only)), pf) ? int(pf) : -1
         } elif (a |> starts_with("khrprof:")) {
             only = "khrprof"
             g_prof_arm = slice(a, 8)
