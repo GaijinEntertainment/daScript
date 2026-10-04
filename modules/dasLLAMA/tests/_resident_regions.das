@@ -451,6 +451,16 @@ def cell_regions_fuse_bisect(t : T?; file : string) {
     }
 }
 
+//! one one-row step on each of `sa` and `sb`, fed `ta` and `tb`
+def private pair_step(tr : Model; var sa, sb : Session; ta, tb : int64) {
+    var one_a <- [ta]
+    var one_b <- [tb]
+    eval(tr, sa, one_a)
+    eval(tr, sb, one_b)
+    delete one_a
+    delete one_b
+}
+
 //! a batched step before any one-row step, a one-row step on each row, a batched step again - every row under the unsplit
 //! position, so the batched steps take the unsplit twin whether or not a one-row record came first
 def cell_regions_batched_first(t : T?; file : string) {
@@ -469,12 +479,7 @@ def cell_regions_batched_first(t : T?; file : string) {
             with_batch_rows(tr, sa, sb) $(var ws; var sess) {
                 for (st in range64(STEPS)) {
                     if (st == 1l) {
-                        var one_a <- [fa[st]]
-                        var one_b <- [fb[st]]
-                        eval(tr, sa, one_a)
-                        eval(tr, sb, one_b)
-                        delete one_a
-                        delete one_b
+                        pair_step(tr, sa, sb, fa[st], fb[st])
                     } else {
                         var toks <- [fa[st], fb[st]]
                         eval_batch(tr, ws, sess, toks)
@@ -955,12 +960,7 @@ def private widen_step(tr : Model; var ws : BatchWorkspace; var sa, sb : Session
         eval_batch(tr, ws, two, toks)
         delete toks
     } elif (st == 1l) {
-        var one_a <- [fa[st]]
-        var one_b <- [fb[st]]
-        eval(tr, sa, one_a)
-        eval(tr, sb, one_b)
-        delete one_a
-        delete one_b
+        pair_step(tr, sa, sb, fa[st], fb[st])
     } else {
         var toks <- [fa[st], fb[st], fc[st - 2l]]
         eval_batch(tr, ws, three, toks)
