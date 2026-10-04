@@ -901,7 +901,13 @@ Each is a stage and the models it holds for, read off the drivers' own gates:
   on the device.
 - **The q8 encoder lane** declines `quant_mode` on gemma4a, canary and parakeet, so those families
   serve their f32 lane on the device at the larger image; the whisper-class tower reads q8.
-- **Qwen3-ASR, Qwen3-Omni and Canary-Qwen** have had no stage-by-stage check.
+- **The canary mel and subsample front** run on the CPU (the front seat is filled by the Vulkan
+  driver alone): of a 64 s clip's 1274 ms they are 239 and 258, beside 80 of blocks on the device,
+  and the perception projection (7) is on the CPU too. Its stage clock is `cn.mel`, `cn.front`,
+  `cn.blocks.gpu`, `cn.proj`.
+- **The Qwen3-ASR projector** (`q3a.proj`, 1.6 ms a chunk) runs on the CPU, and its mel's windowing
+  and clamp around the device spectrum.
+- **Qwen3-Omni** has had no stage-by-stage check.
 
 The work: each stage on the device, and a counter per stage a gate can read, so a served model's
 row names the stages it ran and where.

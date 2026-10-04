@@ -1160,18 +1160,26 @@ def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
     dispatch_phase_encode(conv_s2_out(conv_s2_out(conv_s2_out(st.n_len))))
 
     var tt = -1l
+    var ts = ref_time_ticks()
     if (g_cn_front_set) {
         tt = invoke(g_cn_front, m, st)
+        if (tt >= 0l) {
+            asr_prof_add("cn.front.gpu", ts)
+        }
     }
     if (tt < 0l) {
         if (!st.mel_ready) {
             canary_mel_spectrum(m, st)
+            asr_prof_add("cn.mel", ts)
+            ts = ref_time_ticks()
         }
         tt = cn_front_cpu(m, st)
+        asr_prof_add("cn.front", ts)
     }
 
     let ww = 2l * tt - 1l
     var gpu_served = false
+    ts = ref_time_ticks()
     if (g_cn_gpu_set) {
         gpu_served = invoke(g_cn_gpu, m, st, tt, ww)
     }
@@ -1179,11 +1187,14 @@ def canary_encode(m : CanaryEncoder; var st : CanaryState) : int64 {
         canary_pos_table(m, st, tt, ww)
         cn_blocks_cpu(m, st, tt, ww)
     }
+    asr_prof_add(gpu_served ? "cn.blocks.gpu" : "cn.blocks", ts)
 
     // perception.proj: encoder rows (d) -> decoder embedding (proj_dim)
+    ts = ref_time_ticks()
     ensure_length(st.out, tt * m.proj_dim)
     cn_mm_rq(m, st.out, m.proj_w, st.x, st.xqi, st.xsi, d, m.proj_dim, tt)
     add_bias_rows(st.out, m.blob, m.proj_b, m.proj_dim, tt)
+    asr_prof_add("cn.proj", ts)
     return tt
 }
 
