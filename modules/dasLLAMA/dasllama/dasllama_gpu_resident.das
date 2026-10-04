@@ -1208,12 +1208,8 @@ def resident_decline_reason(t : Model) : string {
     if (!moe_gpu_resident_installed()) return "the tier installed no resident-driver seams"
     if (t.quant != QuantMode.q8) return "weights are not in the q8 serving mode ({t.quant})"
     if (c.n_expert > 0l && !rdec_moe_installed()) return "routed experts ({c.n_expert}) - the tier installed no MoE seats; the per-op tier's expert rails serve"
-    // the driver is all-or-nothing across prefill AND decode (the KV lives in the device mirror
-    // only), so a pin away from it declines BEFORE any upload — the per-op rails take over
-    let pin = g_env_engine.pin_prefill
-    if (!empty(pin) && pin != "vulkan") return "prefill is pinned to '{pin}' (DASLLAMA_PIN_PREFILL)"
-    let ov = active_prefill_override()
-    if (!empty(ov) && ov != "vulkan") return "the '{ov}' prefill override is active"
+    let run = resident_run_mode_decline()
+    if (!empty(run)) return run
     let feats = resident_unserved_features(c)
     if (!empty(feats)) return "no arm for: {feats}"
     if (resident_recurrent_layers(c) == c.n_layers) return "no attention layer (the whole-model driver serves attention or hybrid stacks)"
@@ -1225,13 +1221,26 @@ def resident_decline_reason(t : Model) : string {
     return ""
 }
 
+//! the driver's run-mode declines - a prefill pinned or overridden away from it: the driver is all-or-nothing across prefill AND
+//! decode (the KV lives in the device mirror only), so a pin away from it declines BEFORE any upload, and the per-op rails take over
+def resident_run_mode_decline : string {
+    let pin = g_env_engine.pin_prefill
+    if (!empty(pin) && pin != "vulkan") return "prefill is pinned to '{pin}' (DASLLAMA_PIN_PREFILL)"
+    let ov = active_prefill_override()
+    if (!empty(ov) && ov != "vulkan") return "the '{ov}' prefill override is active"
+    return ""
+}
+
+let private TRIM_ROUTE_DECLINE = "the whole-model driver is not asked for (DASLLAMA_GPU_RESIDENT, set_gpu_resident_route)"
+let private TRIM_PLAN_DECLINE = "the residency plan does not fit the card"
+
 //! Why a trimmed vulkan lane of `t` cannot serve under this run's knobs, "" where it can: the driver asked for, a dense model with no
 //! hyper-connection residual or per-layer embedding, `resident_decline_reason`'s chain, a NextN head the driver homes (the CPU draft
 //! reads planar families the trim drops) and a plan that fits; a later device refusal (a kernel class, an arena reserve) is the walk's to report
 [arch(at="../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
 def resident_trim_decline(t : Model) : string {
     let c = t.config
-    if (!(gpu_resident_requested() && gpu_want_resident())) return "the whole-model driver is not asked for (DASLLAMA_GPU_RESIDENT, set_gpu_resident_route)"
+    if (!(gpu_resident_requested() && gpu_want_resident())) return TRIM_ROUTE_DECLINE
     if (c.n_expert > 0l || c.hyper_conn || has_ple(c)) return "the trim serves dense models without a hyper-connection residual or per-layer embeddings"
     let why = resident_decline_reason(t)
     if (!empty(why)) return why
@@ -1240,7 +1249,17 @@ def resident_trim_decline(t : Model) : string {
         if (!empty(head_why)) return "the NextN draft head stays off the device ({head_why})"
     }
     var seq_cap = 0l
-    return resident_plan_pick(t, resident_mirror_dtype_of(t), seq_cap, false).fits ? "" : "the residency plan does not fit the card"
+    return resident_plan_pick(t, resident_mirror_dtype_of(t), seq_cap, false).fits ? "" : TRIM_PLAN_DECLINE
+}
+
+//! whether `why`, a `resident_trim_decline` answer, is this RUN's and not the model's: the route, the tier's seams, a prefill pin or
+//! override, the plan's fit on this card - another run, box or knob set answers differently, so a lane minted under it would be wrong
+//! for the next run; a model-shape decline (experts, the residual, a feature, a layer) holds for every run of the file
+[arch(at="../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
+def resident_trim_decline_is_run_mode(why : string) : bool {
+    return false if (empty(why))
+    return true if (why == TRIM_ROUTE_DECLINE || why == TRIM_PLAN_DECLINE || why == resident_run_mode_decline() || why == "the tier installed no resident-driver seams")
+    return (why |> starts_with("routed experts (")) && (why |> ends_with("expert rails serve"))
 }
 
 //! Whether the whole-model driver takes `t` and a trimmed lane of it serves (`resident_trim_decline` answers why not)

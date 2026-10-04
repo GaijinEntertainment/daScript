@@ -1905,7 +1905,10 @@ def load_model_image(path : string; var t : Model; tag : string = ""; quant : st
         let why = resident_trim_decline(t)
         if (!empty(why)) {
             vulkan_bake_disarm()
-            panic("dasLLAMA: '{path}' is a trimmed vulkan lane, and the whole-model driver would not serve it under this run's knobs ({why}) - a trimmed lane carries no planar families for the per-op rails; lift the knob, or load the source gguf to mint a lane for it")
+            if (resident_trim_decline_is_run_mode(why)) {
+                panic("dasLLAMA: '{path}' is a trimmed vulkan lane, and the whole-model driver would not serve it under this run's knobs ({why}) - a trimmed lane carries no planar families for the per-op rails; lift the knob, or load the source gguf, which serves planar from memory")
+            }
+            panic("dasLLAMA: '{path}' is a trimmed vulkan lane the whole-model driver no longer serves ({why}) - a trimmed lane carries no planar families for the per-op rails; load the source gguf, which mints the lane again with its planar families")
         }
     }
     // after the plane borrows: the PLE tripwire and the MoE gather both need bound planes
@@ -1975,28 +1978,39 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
         }
         // the GPU walk slices baked device-layout planes off the mapping; any vulkan config switch changes the tag and rebakes
         let vk_tag = (planar_only || want_metal || mode != QuantMode.q8) ? "" : moe_gpu_bake_tag()
+        var kept_why = ""   //! a trimmed lane this run cannot serve but keeps on disk: the decline is the run's, not the model's
         if (vk_tag != "") {
             let img_v = image_path_for(path, vk_tag)
             vulkan_bake_slice_begin()
             if (load_image(img_v, t, vk_tag)) {
                 let trim_why = t.planes_trimmed ? resident_trim_decline(t) : ""
-                if (!empty(trim_why)) {
-                    to_log(LOG_ERROR, "dasLLAMA: the trimmed vulkan lane '{img_v}' maps, and the whole-model driver would not take it under this run's knobs ({trim_why}; DASLLAMA_GPU_CTX_MAX, DASLLAMA_VK_KV32, DASLLAMA_GPU_KV / set_gpu_kv_dtype and DASLLAMA_GPU_RESIDENT / set_gpu_resident_route sit outside the lane's identity) - the lane is deleted and minted again\n")
-                    vulkan_bake_disarm()
-                    delete t
-                    remove(img_v)
-                } else {
+                if (empty(trim_why)) {
                     ple_check_table(t, "prepared image '{img_v}'")
                     moe_gpu_upload_resident(t)
                     vulkan_bake_slice_end(t)
                     to_log(LOG_INFO, "dasLLAMA: prepared vulkan image mapped in {get_time_usec(ts_img) / 1000} ms - {img_v}\n")
                     return <- t
                 }
+                vulkan_bake_disarm()
+                delete t
+                //! a run-mode decline (the route, a prefill pin or override, this card's room) keeps the lane for the next run and
+                //! serves this one planar from memory; a model-shape decline means the trim rule moved, so the lane is minted again;
+                //! frozen artifacts are never deleted
+                if (resident_trim_decline_is_run_mode(trim_why)) {
+                    kept_why = trim_why
+                    to_log(LOG_WARNING, "dasLLAMA: the trimmed vulkan lane '{img_v}' maps, and this run cannot serve it ({trim_why}; DASLLAMA_GPU_CTX_MAX, DASLLAMA_VK_KV32, DASLLAMA_GPU_KV / set_gpu_kv_dtype, DASLLAMA_GPU_RESIDENT / set_gpu_resident_route and the prefill pin or override sit outside the lane's identity) - the lane stays on disk and the streamed build serves planar from memory\n")
+                } elif (g_image_frozen) {
+                    panic("dasLLAMA: the trimmed vulkan lane '{img_v}' maps, and the whole-model driver no longer serves it ({trim_why}) - artifacts are frozen, so it is kept; mint it again with the artifacts unfrozen")
+                } else {
+                    to_log(LOG_ERROR, "dasLLAMA: the trimmed vulkan lane '{img_v}' maps, and the whole-model driver no longer serves it ({trim_why}) - the lane is deleted and minted again with its planar families\n")
+                    remove(img_v)
+                }
             } else {
                 vulkan_bake_disarm()
             }
             if (g_image_frozen) {
-                panic("dasLLAMA: no prepared vulkan image for '{path}' ({image_path_for(path, vk_tag)}) and artifacts are frozen - pre-mint it")
+                panic(empty(kept_why) ? "dasLLAMA: no prepared vulkan image for '{path}' ({image_path_for(path, vk_tag)}) and artifacts are frozen - pre-mint it"
+                    : "dasLLAMA: the trimmed vulkan lane '{img_v}' cannot serve this run ({kept_why}) and artifacts are frozen - lift the knob, or run with the artifacts unfrozen")
             }
             vulkan_bake_begin()   // whatever loads below runs the GPU walk — collect and bake
         }
@@ -2039,9 +2053,16 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                     return false
                 }
                 if (vk_tag != "" && vulkan_trim()) {
-                    mt.planes_trimmed = resident_would_serve(mt)
+                    let trim_why = resident_trim_decline(mt)
+                    mt.planes_trimmed = empty(trim_why)
                     if (!mt.planes_trimmed) {
-                        to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_TRIM / set_vulkan_trim asked for the trimmed vulkan lane, and the whole-model driver would not take '{path}' whole - the lane keeps its planar families\n")
+                        //! a run-mode decline writes NO lane: an untrimmed lane saved under the trimmed identity would keep serving
+                        //! untrimmed once the knob lifts, and the load-time recheck reads trimmed lanes alone
+                        if (resident_trim_decline_is_run_mode(trim_why)) {
+                            to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_TRIM / set_vulkan_trim asked for the trimmed vulkan lane, and this run cannot mint it ({trim_why}) - no lane is written; the streamed build serves planar from memory\n")
+                            return false
+                        }
+                        to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_TRIM / set_vulkan_trim asked for the trimmed vulkan lane, and the whole-model driver would not take '{path}' whole ({trim_why}) - the lane keeps its planar families\n")
                     }
                 }
                 if (save) {

@@ -450,6 +450,37 @@ def test_resident_binding_ctx(t : T?) {
     }
 }
 
+let private TRIM_KIND_PROBE = "trim-kind-probe"
+
+//! a prefill override that passes every call to the CPU layer loop: the foreign override the trim-kind cell selects
+[unused_argument(tr, s, npos, start_pos)]
+def private pass_prefill_probe(tr : Model; var s : Session; npos : int64; start_pos : int64) : bool => false
+
+//! the trim's admission tells this run's declines (the route, a prefill pin or override, the tier's seams, the card's room) from the
+//! model's (experts, the residual, a feature): a lane minted under the first would be wrong for the next run, so the mint writes none
+[test]
+def test_trim_decline_kind(t : T?) {
+    t |> run("a trimmed lane's decline is this run's or the model's") @(t : T?) {
+        t |> success(resident_trim_decline_is_run_mode("the whole-model driver is not asked for (DASLLAMA_GPU_RESIDENT, set_gpu_resident_route)"), "the route is the run's")
+        t |> success(resident_trim_decline_is_run_mode("the residency plan does not fit the card"), "the card's room is the run's")
+        t |> success(resident_trim_decline_is_run_mode("the tier installed no resident-driver seams"), "the tier's seams are the run's")
+        t |> success(resident_trim_decline_is_run_mode("routed experts (64) - the tier installed no MoE seats; the per-op tier's expert rails serve"), "the MoE seats are the run's")
+        t |> success(!resident_trim_decline_is_run_mode("the trim serves dense models without a hyper-connection residual or per-layer embeddings"), "the model's shape is the model's")
+        t |> success(!resident_trim_decline_is_run_mode("no arm for: sinks"), "a feature is the model's")
+        t |> success(!resident_trim_decline_is_run_mode(""), "an empty decline is no decline")
+    }
+    t |> run("a foreign prefill override selected in-process is a run-mode decline the chain names") @(t : T?) {
+        let found = active_prefill_override()
+        register_prefill_override(TRIM_KIND_PROBE, @@pass_prefill_probe)
+        select_prefill_override(TRIM_KIND_PROBE)
+        let why = resident_run_mode_decline()
+        t |> equal(why, "the '{TRIM_KIND_PROBE}' prefill override is active")
+        t |> success(resident_trim_decline_is_run_mode(why), "the override's decline is this run's")
+        select_prefill_override(found)
+        t |> success(empty(resident_run_mode_decline()) || active_prefill_override() == found, "control: the override put back, the decline reads as the process found it")
+    }
+}
+
 [test]
 def test_resident_mirror_codec_ask(t : T?) {
     t |> run("a block codec's geometry: whole 32-blocks a row and a head, a power-of-two head under tq4") @(t : T?) {
@@ -482,6 +513,20 @@ def test_resident_mirror_codec_ask(t : T?) {
             delete m
         }
         restore_gpu_kv_dtype(pin0)
+    }
+    t |> run("the fixtures' put-back of the codec ask: the pin again where one stood, the reset where none did") @(t : T?) {
+        let found = gpu_kv_dtype_pin_()
+        set_gpu_kv_dtype_(KVDtype.q8_0)
+        let pinned = gpu_kv_dtype_pin_()
+        set_gpu_kv_dtype_(KVDtype.tq4)
+        restore_gpu_kv_dtype(pinned)
+        t |> success(gpu_kv_dtype_pin_().pinned && gpu_kv_dtype_pin_().dt == KVDtype.q8_0, "a pinned ask comes back as the pin it was, not the one set after it")
+        reset_gpu_kv_dtype_()
+        let lifted = gpu_kv_dtype_pin_()
+        set_gpu_kv_dtype_(KVDtype.tq4)
+        restore_gpu_kv_dtype(lifted)
+        t |> success(!gpu_kv_dtype_pin_().pinned, "an unpinned ask comes back lifted")
+        restore_gpu_kv_dtype(found)
     }
     t |> run("a codec's spelling, in any case, and its ordinal across the tier's seam") @(t : T?) {
         let upper = kv_dtype_named("Q8_0")
