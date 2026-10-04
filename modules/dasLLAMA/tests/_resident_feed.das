@@ -258,6 +258,20 @@ def control_past(t : T?; what : string; got, control : array<float>; bar : float
     return off
 }
 
+//! a tq4 quantizer's step is sixteen times q8_0's, and two passes a float's last bit apart land a quant apart on a rounding
+//! edge: two window splits of one prompt read 0.8-2.0 apart at a 12 max logit and the split q/k norm against the fused one
+//! 1.1-3.5 at 13-15, while a carrier whose rows agree bit for bit has a row one off 1.9 away. The share reads 0.09-0.44
+let TQ4_CTRL_SHARE = 0.6
+
+//! `got` no further from `want` than `TQ4_CTRL_SHARE` of its distance from `control`: no share of the peak holds a tq4 mirror.
+//! A NaN in `got` or `want` reads an infinite difference, past every share
+def tq4_within(t : T?; got, want, control : array<float>; what : string) {
+    let diff = logits_maxdiff(got, want)
+    let off = logits_maxdiff(got, control)
+    t |> success(diff < INFINITE_DIFF && off > 0.0 && diff <= TQ4_CTRL_SHARE * off, "{what}: within {TQ4_CTRL_SHARE} of the distance to the row one off (maxdiff {diff}, the row one off {off})")
+    to_log(LOG_INFO, "{what}: maxdiff {diff}, the row one off {off}\n")
+}
+
 //! every row r of `gpu` within `rel` of the max |value| of `cpu[r]`, and the control row `cpu[r + ctrl_off]` - where one exists -
 //! past `ctrl_bars` bars of the same row: the widest miss and the tightest control logged with their rows; `row_tag` names a row
 def rows_within_control(t : T?; what : string; gpu, cpu : array<array<float>>; rel : float; ctrl_off : int64; ctrl_bars : float; row_tag : block<(r : int64) : string>) {

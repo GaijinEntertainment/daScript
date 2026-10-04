@@ -5,7 +5,6 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require _compares
 require daslib/math_bits
-require daslib/rtti   // LineInfo: the probe handle's log hook
 require math
 
 let INF = uint_bits_to_float(0x7f800000u)
@@ -53,23 +52,6 @@ def test_mismatch_counts(t : T?) {
         t |> equal(mismatch_rel("equal", want, want, 0.0, 1.0e-3), 0, "control: equal rows")
         t |> equal(mismatch_rel("miss", [1.0, 2.5, 3.0], want, 0.0, 1.0e-3), 1, "control: a finite miss")
     }
-}
-
-//! the asserts `blk` makes on a probe handle that fail, counted instead of failing the cell
-def private probe_fails(blk : block<(p : T?) : void>) : int {
-    var fails = 0
-    var p = new T("probe", ref_time_ticks(), false)
-    unsafe {
-        p.onFail <- @ capture(& fails)(now : bool) {
-            fails++
-        }
-    }
-    p.onLog <- @(msg : string; at : LineInfo) {}
-    invoke(blk, p)
-    unsafe {
-        delete p
-    }
-    return fails
 }
 
 //! `check` of `got` against `want` at `bar` on a probe: the count it returns and the asserts that failed

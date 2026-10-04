@@ -64,21 +64,22 @@ def private feed_c() : array<int64> => <- ramp_ids(STEPS, 0l, 2200l, 67l, 4200l)
 //! one session alone: the prefill's logits, then each fed step's
 def private logits_alone(tr : Model; prompt, toks : array<int64>) : array<array<float>> => <- feed_alone(tr, mirror_kv_dtype(), prompt, toks)
 
-def private log_peaks(what : string; got, want : array<float>) {
+//! both rows' argmax, each with its logit and the piece `tr` decodes it to
+def private log_peaks(tr : Model; what : string; got, want : array<float>) {
     let pg = argmax_of(got)
     let pw = argmax_of(want)
-    to_log(LOG_INFO, "{what}: argmax {pg} ({got[pg]}) against {pw} ({want[pw]})\n")
+    to_log(LOG_INFO, "{what}: argmax {pg} '{decode_(tr, [pg])}' ({got[pg]}) against {pw} '{decode_(tr, [pw])}' ({want[pw]})\n")
 }
 
-def private hold_equal(t : T?; got, want : array<float>; what : string) {
-    log_peaks(what, got, want)
+def private hold_equal(t : T?; tr : Model; got, want : array<float>; what : string) {
+    log_peaks(tr, what, got, want)
     let diff = logits_maxdiff(got, want)
     t |> equal(diff, 0.0, "{what}: bit for bit the session alone (maxdiff {diff})")
 }
 
 //! `got` within `rel` of `want`'s peak, and `control` - logits one token off - outside it; under a tq4 mirror, `tq4_within`
-def private hold_within(t : T?; got, want, control : array<float>; what : string; rel : float = SPLIT_BAR_REL) {
-    log_peaks(what, got, want)
+def private hold_within(t : T?; tr : Model; got, want, control : array<float>; what : string; rel : float = SPLIT_BAR_REL) {
+    log_peaks(tr, what, got, want)
     if (mirror_kv_dtype() == KVDtype.tq4) {
         tq4_within(t, got, want, control, what)
         return
@@ -87,19 +88,6 @@ def private hold_within(t : T?; got, want, control : array<float>; what : string
     let diff = row_within(t, what, got, want, bar)
     let off = control_past(t, what, got, control, bar)
     to_log(LOG_INFO, "{what}: maxdiff {diff}, the row one off {off}, bar {bar}\n")
-}
-
-//! a tq4 quantizer's step is sixteen times q8_0's, and two passes a float's last bit apart land a quant apart on a rounding
-//! edge: two window splits of one prompt read 0.8-2.0 apart at a 12 max logit and the split q/k norm against the fused one
-//! 1.1-3.5 at 13-15, while a carrier whose rows agree bit for bit has a row one off 1.9 away. The share reads 0.09-0.44
-let private TQ4_CTRL_SHARE = 0.6
-
-//! `got` no further from `want` than `TQ4_CTRL_SHARE` of its distance from `control`: no share of the peak holds a tq4 mirror
-def private tq4_within(t : T?; got, want, control : array<float>; what : string) {
-    let diff = logits_maxdiff(got, want)
-    let off = logits_maxdiff(got, control)
-    t |> success(off > 0.0 && diff <= TQ4_CTRL_SHARE * off, "{what}: within {TQ4_CTRL_SHARE} of the distance to the row one off (maxdiff {diff}, the row one off {off})")
-    to_log(LOG_INFO, "{what}: maxdiff {diff}, the row one off {off}\n")
 }
 
 //! `file` loaded at `regions` regions. A card whose room the plan does not fit registers a skip naming it, any other decline
@@ -177,15 +165,15 @@ def private interleaved_single_steps_body(t : T?; tr : Model; pa, pb : array<int
     var sa <- create_session(tr, mirror_kv_dtype())
     var sb <- create_session(tr, mirror_kv_dtype())
     forward_prefill(tr, sa, pa, long_length(pa), 0l)
-    hold_equal(t, sa.logits, al.ra[0], "session A's prefill")
+    hold_equal(t, tr, sa.logits, al.ra[0], "session A's prefill")
     forward_prefill(tr, sb, pb, long_length(pb), 0l)
-    hold_equal(t, sb.logits, al.rb[0], "session B's prefill, A's rows live beside it")
+    hold_equal(t, tr, sb.logits, al.rb[0], "session B's prefill, A's rows live beside it")
     t |> success(sa.rdec_region != sb.rdec_region, "the sessions sit in different regions ({sa.rdec_region}, {sb.rdec_region})")
     for (st in range64(STEPS)) {
         forward(tr, sa, al.fa[st], long_length(pa) + st)
-        hold_equal(t, sa.logits, al.ra[st + 1l], "session A step {st}")
+        hold_equal(t, tr, sa.logits, al.ra[st + 1l], "session A step {st}")
         forward(tr, sb, al.fb[st], long_length(pb) + st)
-        hold_equal(t, sb.logits, al.rb[st + 1l], "session B step {st}")
+        hold_equal(t, tr, sb.logits, al.rb[st + 1l], "session B step {st}")
     }
     served_every_call(t)
     delete sa
@@ -256,13 +244,13 @@ def private continue_at(t : T?; tr : Model; n, cut : int64) {
     forward_prefill(tr, split, head, cut, 0l)
     forward_prefill(tr, split, tail, n - cut, cut)
     t |> equal(moe_gpu_resident_prefills(), served0 + 3l, "{n} tokens cut at {cut}: the window chain served all three calls, the continuation among them")
-    hold_within(t, split.logits, whole.logits, short_logits, "{n} tokens cut at {cut}: the continued prefill against the one-call prefill")
+    hold_within(t, tr, split.logits, whole.logits, short_logits, "{n} tokens cut at {cut}: the continued prefill against the one-call prefill")
     delete short_logits
     for (st in range64(4l)) {
         var before <- logits_of(whole, tr.config.vocab_size)
         forward(tr, whole, feed[st], n + st)
         forward(tr, split, feed[st], n + st)
-        hold_within(t, split.logits, whole.logits, before, "{n} tokens cut at {cut}, step {st}: decoding over the continued rows")
+        hold_within(t, tr, split.logits, whole.logits, before, "{n} tokens cut at {cut}, step {st}: decoding over the continued rows")
         delete before
     }
     delete whole
@@ -303,7 +291,7 @@ def cell_prefill_continues_on_the_device(t : T?; file : string) {
             }
             var before <- logits_of(steps, tr.config.vocab_size)
             forward(tr, steps, turn2[19], 40l + STEPS + 19l)
-            hold_within(t, chat.logits, steps.logits, before, "the second turn through the window chain against the same tokens stepped one by one")
+            hold_within(t, tr, chat.logits, steps.logits, before, "the second turn through the window chain against the same tokens stepped one by one")
             delete before
             served_every_call(t)
             delete chat
@@ -329,11 +317,11 @@ let private WIDE_BAR_REL = 0.10
 
 //! a row's logits against its session alone under `bar`: bit for bit, or within the split or wide bar with `control` - the
 //! row's previous step - outside it
-def private hold_bar(t : T?; got, want, control : array<float>; bar : LogitsBar; what : string) {
+def private hold_bar(t : T?; tr : Model; got, want, control : array<float>; bar : LogitsBar; what : string) {
     if (bar == LogitsBar.bit_exact) {
-        hold_equal(t, got, want, what)
+        hold_equal(t, tr, got, want, what)
     } else {
-        hold_within(t, got, want, control, what, bar == LogitsBar.wide_bar ? WIDE_BAR_REL : SPLIT_BAR_REL)
+        hold_within(t, tr, got, want, control, what, bar == LogitsBar.wide_bar ? WIDE_BAR_REL : SPLIT_BAR_REL)
     }
 }
 
@@ -366,8 +354,8 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : 
             var toks <- [al.fa[st], al.fb[st]]
             eval_batch(tr, ws, sess, toks)
             delete toks
-            hold_bar(t, sa.logits, al.ra[st + 1l], al.ra[st], bar, "batched step {st}, row A")
-            hold_bar(t, sb.logits, al.rb[st + 1l], al.rb[st], bar, "batched step {st}, row B")
+            hold_bar(t, tr, sa.logits, al.ra[st + 1l], al.ra[st], bar, "batched step {st}, row A")
+            hold_bar(t, tr, sb.logits, al.rb[st + 1l], al.rb[st], bar, "batched step {st}, row B")
         }
     }
     if (hybrid) {
@@ -440,7 +428,7 @@ def cell_regions_fuse_bisect(t : T?; file : string) {
                     var tr <- load_two_regions(t, file)
                     var got <- logits_alone(tr, pa, fa)
                     for (st in range64(STEPS)) {
-                        hold_within(t, got[st + 1l], base[st + 1l], base[st], "bisect bit {bit} step {st}")
+                        hold_within(t, tr, got[st + 1l], base[st + 1l], base[st], "bisect bit {bit} step {st}")
                     }
                     delete got
                     if (bit == 64l) {
@@ -503,8 +491,8 @@ def cell_regions_batched_first(t : T?; file : string) {
             var ra <- logits_alone(tr, pa, fa)
             var rb <- logits_alone(tr, pb, fb)
             for (st in range64(STEPS)) {
-                hold_equal(t, got_a[st], ra[st + 1l], "batched-first step {st}, row A")
-                hold_equal(t, got_b[st], rb[st + 1l], "batched-first step {st}, row B")
+                hold_equal(t, tr, got_a[st], ra[st + 1l], "batched-first step {st}, row A")
+                hold_equal(t, tr, got_b[st], rb[st + 1l], "batched-first step {st}, row B")
             }
             delete sa
             delete sb
@@ -546,16 +534,16 @@ def cell_device_home_sessions(t : T?; file : string) {
             set_resident_prefill_allowed(false)   // the server's setting: the pin binds host-cached sessions, a device-home one prefills on the device all the same
             with_device_pair(tr, pa, pb) $(var sa; var sb) {
                 t |> equal(length(sa.key_cache) + length(sa.value_cache), 0, "a device-home session allocates no host cache")
-                hold_equal(t, sa.logits, al.ra[0], "device-home A's prefill")
-                hold_equal(t, sb.logits, al.rb[0], "device-home B's prefill")
+                hold_equal(t, tr, sa.logits, al.ra[0], "device-home A's prefill")
+                hold_equal(t, tr, sb.logits, al.rb[0], "device-home B's prefill")
                 let half = STEPS / 2l
                 for (st in range64(half)) {
                     var ta <- [al.fa[st]]
                     var tb <- [al.fb[st]]
                     eval(tr, sa, ta)
-                    hold_equal(t, sa.logits, al.ra[st + 1l], "device-home A single step {st}")
+                    hold_equal(t, tr, sa.logits, al.ra[st + 1l], "device-home A single step {st}")
                     eval(tr, sb, tb)
-                    hold_equal(t, sb.logits, al.rb[st + 1l], "device-home B single step {st}")
+                    hold_equal(t, tr, sb.logits, al.rb[st + 1l], "device-home B single step {st}")
                     delete ta
                     delete tb
                 }
@@ -566,8 +554,8 @@ def cell_device_home_sessions(t : T?; file : string) {
                         var toks <- [al.fa[st], al.fb[st]]
                         eval_batch(tr, ws, sess, toks)
                         delete toks
-                        hold_equal(t, sa.logits, al.ra[st + 1l], "device-home batched step {st}, row A")
-                        hold_equal(t, sb.logits, al.rb[st + 1l], "device-home batched step {st}, row B")
+                        hold_equal(t, tr, sa.logits, al.ra[st + 1l], "device-home batched step {st}, row A")
+                        hold_equal(t, tr, sb.logits, al.rb[st + 1l], "device-home batched step {st}, row B")
                     }
                 }
                 set_resident_prefill_allowed(true)
@@ -596,9 +584,9 @@ def private cell_device_home_pin(t : T?; file : string) {
                 var ta <- [al.fa[0]]
                 var tb <- [al.fb[0]]
                 eval(tr, sa, ta)
-                hold_equal(t, sa.logits, al.ra[1], "owner A's next step, its region untouched")
+                hold_equal(t, tr, sa.logits, al.ra[1], "owner A's next step, its region untouched")
                 eval(tr, sb, tb)
-                hold_equal(t, sb.logits, al.rb[1], "owner B's next step, its region untouched")
+                hold_equal(t, tr, sb.logits, al.rb[1], "owner B's next step, its region untouched")
                 gpu_device_kv_park(sa)
                 var late <- create_session(tr, mirror_kv_dtype())
                 let served0 = moe_gpu_resident_prefills()
@@ -635,7 +623,7 @@ def cell_device_kv_park_adopt(t : T?; file : string) {
             t |> equal(second.n_past, 40l, "the adopter continues from the adopted rows")
             eval(tr, second, tail)
             t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "one device prefill: the seventeen tokens past the adopted rows")
-            hold_within(t, second.logits, want, short_logits, "the adopter against the whole prompt prefilled in one call")
+            hold_within(t, tr, second.logits, want, short_logits, "the adopter against the whole prompt prefilled in one call")
             delete short_logits
             var third <- device_session(tr)
             t |> success(!gpu_device_kv_adopt(third, claim, 40l), "a claim is spent by its adoption: nobody else takes the rows")
@@ -782,7 +770,7 @@ def cell_device_home_guards(t : T?; file : string) {
                 only_pass(t, "busy", "the refused call was counted as busy, and only it")
                 var ta <- [fa[0]]
                 eval(tr, sa, ta)
-                hold_equal(t, sa.logits, ra[1], "owner A's next step after the refused session")
+                hold_equal(t, tr, sa.logits, ra[1], "owner A's next step after the refused session")
                 gpu_device_kv_park(third)
                 delete ta
                 delete third
@@ -954,9 +942,9 @@ def private widen_step(tr : Model; var ws : BatchWorkspace; var sa, sb : Session
 }
 
 //! a row's stepped logits against its session alone, from the step it joined at
-def private widen_hold(t : T?; got, ref : array<array<float>>; bar : LogitsBar; row : string; first : int64) {
+def private widen_hold(t : T?; tr : Model; got, ref : array<array<float>>; bar : LogitsBar; row : string; first : int64) {
     for (st in range64(long_length(got))) {
-        hold_bar(t, got[st], ref[st + 1l], ref[st], bar, "widened step {st + first}, {row}")
+        hold_bar(t, tr, got[st], ref[st + 1l], ref[st], bar, "widened step {st + first}, {row}")
     }
 }
 
@@ -1001,9 +989,9 @@ def cell_regions_batched_widen(t : T?; file : string; bar : LogitsBar = LogitsBa
             var rb <- logits_alone(tr, pb, fb)
             var fc_short <- [for (i in range64(STEPS - 2l)); fc[i]]
             var rc <- logits_alone(tr, pc, fc_short)
-            widen_hold(t, got_a, ra, bar, "row A", 0l)
-            widen_hold(t, got_b, rb, bar, "row B", 0l)
-            widen_hold(t, got_c, rc, bar, "row C", 2l)
+            widen_hold(t, tr, got_a, ra, bar, "row A", 0l)
+            widen_hold(t, tr, got_b, rb, bar, "row B", 0l)
+            widen_hold(t, tr, got_c, rc, bar, "row C", 2l)
             two |> clear()
             three |> clear()
             unsafe {

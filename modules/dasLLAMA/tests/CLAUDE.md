@@ -1236,11 +1236,14 @@ driver to itself): the device's summed distance from the f16 chain within 1.15 o
 chain's own (reads 1.08, the control 9.2), the two tq4 chains within 0.8 of that distance of each
 other (reads 0.63, the control 9.3). A gate applied twice reads 9.2 times the CPU chain's distance.
 
-Two cells are model-free: `test_kernel_census_by_name` holds that the census accessor panics on a
+Three cells are model-free: `test_kernel_census_by_name` holds that the census accessor panics on a
 kernel name nothing seeded, so a misspelt key cannot read as a zero count; `test_row_bar_nan_reference`
 holds the resident rigs' bar (`row_bar`, `_resident_feed.das`: rel of the CPU row's largest live
 |logit|) - a NaN in the reference row scales no bar and reads past it, while a bar scaled by
-`logits_maxabs` is infinite over the NaN and the same row holds it (the control).
+`logits_maxabs` is infinite over the NaN and the same row holds it (the control); `test_row_bars_red_a_nan`
+runs the rigs' two row bars - `rows_within_control` and the regions files' `tq4_within` - on synthetic rows
+through a probe handle (`probe_fails`, `_compares.das`): a NaN in the device row or the reference row reds
+each, the clean rows hold each (the control).
 
 `test_gpu_resident_qwen2.das` - stocked suite, `-jit` only; the whole-model resident driver on a qwen2
 (Qwen2.5-0.5B-Instruct-Q8_0, `DASLLAMA_GPU=1`): the q/k/v projection bias folded into the rope

@@ -13,6 +13,7 @@ require daslib/linq   // sequence_equal, count, all
 require daslib/algorithm   // fill
 require daslib/math_bits   // uint_bits_to_float: the NaN sentinel as a float
 require dastest/testing_boost   // T?: check asserts through the cell's handle
+require daslib/rtti   // LineInfo: the probe handle's log hook
 require dasllama/dasllama_math   // parallel_argmax
 require daslib/fio
 require daslib/command_line
@@ -294,6 +295,23 @@ def private max_magnitude(want : array<auto(WT)>) : WT {
         }
     }
     return scale
+}
+
+//! the asserts `blk` makes on a probe handle that fail, counted instead of failing the cell
+def probe_fails(blk : block<(p : T?) : void>) : int {
+    var fails = 0
+    var p = new T("probe", ref_time_ticks(), false)
+    unsafe {
+        p.onFail <- @ capture(& fails)(now : bool) {
+            fails++
+        }
+    }
+    p.onLog <- @(msg : string; at : LineInfo) {}
+    invoke(blk, p)
+    unsafe {
+        delete p
+    }
+    return fails
 }
 
 //! `check`'s count alone, with no assert and no log: the elements of `got` outside `bar` of `want` (a NaN on either side, and

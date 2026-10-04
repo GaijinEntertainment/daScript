@@ -1354,6 +1354,45 @@ def test_row_bar_nan_reference(t : T?) {
     t |> success(logits_maxdiff(gpu, nan_cpu) <= rel * logits_maxabs(nan_cpu), "control: the NaN-scaled bar is infinite and the same row holds it")
 }
 
+//! the asserts `rows_within_control` fails on a probe over the one device row `g` against the reference `c`, `off` its row one off
+def private rows_bar_fails(g, c, off : array<float>) : int {
+    var gr <- [ <- clone_to_move(g)]
+    var cr <- [ <- clone_to_move(c), <- clone_to_move(off)]
+    let fails = probe_fails() $(p) {
+        rows_within_control(p, "probe", gr, cr, 0.04, 1l, 1.0) $(_r) => "row"
+    }
+    delete gr
+    delete cr
+    return fails
+}
+
+//! the asserts `tq4_within` fails on a probe over `g` against `c`, `off` its row one off
+def private tq4_bar_fails(g, c, off : array<float>) : int {
+    return probe_fails() $(p) {
+        tq4_within(p, g, c, off, "probe")
+    }
+}
+
+//! the resident rigs' row bars on synthetic rows, run on a probe handle: a NaN in the device row or the reference row reds
+//! `rows_within_control` and `tq4_within`, the clean rows hold both (the control)
+[test]
+def test_row_bars_red_a_nan(t : T?) {
+    let cpu <- [1.0, -4.0, 2.0, 0.5]
+    let off <- [3.0, -1.0, -2.0, 4.5]
+    var gpu := cpu
+    gpu[0] += 0.05
+    var nan_gpu := gpu
+    nan_gpu[1] = unsafe(reinterpret<float>(NAN_BITS))
+    var nan_cpu := cpu
+    nan_cpu[2] = unsafe(reinterpret<float>(NAN_BITS))
+    t |> equal(rows_bar_fails(gpu, cpu, off), 0, "control: rows_within_control holds a device row within the bar, its row one off past it")
+    t |> success(rows_bar_fails(nan_gpu, cpu, off) > 0, "rows_within_control reds a NaN in the device row")
+    t |> success(rows_bar_fails(gpu, nan_cpu, off) > 0, "rows_within_control reds a NaN in the reference row")
+    t |> equal(tq4_bar_fails(gpu, cpu, off), 0, "control: tq4_within holds a device row nearer the reference than its share of the row one off")
+    t |> success(tq4_bar_fails(nan_gpu, cpu, off) > 0, "tq4_within reds a NaN in the device row")
+    t |> success(tq4_bar_fails(gpu, nan_cpu, off) > 0, "tq4_within reds a NaN in the reference row")
+}
+
 [test]
 def test_gpu_resident_hybrid_mtp_block_codec(t : T?) {
     let pin = gpu_kv_dtype_pin()
