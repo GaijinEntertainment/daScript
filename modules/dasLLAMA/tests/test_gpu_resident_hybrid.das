@@ -1364,7 +1364,7 @@ def test_gpu_resident_hybrid_mtp_block_codec(t : T?) {
     set_gpu_kv_dtype(KVDtype.q8_0)
     if (resident_mirror_dtype() != KVDtype.q8_0) {
         t |> skip("DASLLAMA_VK_KV32=1 arms the f32 mirror over a codec asked - the block-codec cells need it unset")
-        restore_kv_pin(pin)
+        restore_gpu_kv_dtype(pin)
         return
     }
     t |> run("the NextN head over a q8_0 mirror: the draft, the verify, the warmed head rows, six rounds") @(t : T?) {
@@ -1378,5 +1378,5 @@ def test_gpu_resident_hybrid_mtp_block_codec(t : T?) {
         test_gpu_resident_hybrid_mtp_verify(t)
         test_gpu_resident_hybrid_mtp_verify_reject(t)
     }
-    restore_kv_pin(pin)
+    restore_gpu_kv_dtype(pin)
 }

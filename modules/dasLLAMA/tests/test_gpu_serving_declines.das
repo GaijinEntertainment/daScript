@@ -481,11 +481,7 @@ def test_resident_mirror_codec_ask(t : T?) {
             t |> success(!gpu_kv_dtype_pin_().pinned, "the reset lifts the ask")
             delete m
         }
-        if (pin0.pinned) {
-            set_gpu_kv_dtype_(pin0.dt)
-        } else {
-            reset_gpu_kv_dtype_()
-        }
+        restore_gpu_kv_dtype_(pin0)
     }
     t |> run("a codec's spelling, in any case, and its ordinal across the tier's seam") @(t : T?) {
         let upper = kv_dtype_named("Q8_0")

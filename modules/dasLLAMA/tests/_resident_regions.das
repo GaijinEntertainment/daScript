@@ -49,7 +49,7 @@ def pin_file_kv(dt : KVDtype) {
 
 //! the codec pin `pin_file_kv` found put back, from the same file's `[finalize]`
 def unpin_file_kv() {
-    restore_kv_pin(g_file_kv_found)
+    restore_gpu_kv_dtype(g_file_kv_found)
 }
 
 let private STEPS = 8l

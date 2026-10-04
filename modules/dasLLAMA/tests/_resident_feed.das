@@ -85,15 +85,6 @@ def restore_resident_levers(l : ResidentLevers) {
     }
 }
 
-//! the K/V mirror's codec ask put back as `gpu_kv_dtype_pin` read it
-def restore_kv_pin(pin : tuple<pinned : bool; dt : KVDtype>) {
-    if (pin.pinned) {
-        set_gpu_kv_dtype(pin.dt)
-    } else {
-        reset_gpu_kv_dtype()
-    }
-}
-
 //! `body` with the K/V mirror asked at `kv`, the ask put back as it was found - the pin for a rig that loads its own model
 //! and makes its sessions on the armed codec; a skip where the environment arms another codec over the ask
 def with_gpu_kv_dtype(t : T?; kv : KVDtype; body : block<void>) {
@@ -104,7 +95,7 @@ def with_gpu_kv_dtype(t : T?; kv : KVDtype; body : block<void>) {
     } else {
         t |> skip("the environment arms a {resident_mirror_dtype()} mirror over the {kv} asked (DASLLAMA_VK_KV32=1) - the cell needs that unset")
     }
-    restore_kv_pin(kv_pin)
+    restore_gpu_kv_dtype(kv_pin)
 }
 
 //! where a cell pinned a mirror codec, the armed mirror holds it
@@ -161,7 +152,7 @@ def load_resident_at(path : string; kv : KVDtype; regions : int64 = 0l; strict_c
     let pin = gpu_kv_dtype_pin()
     set_gpu_kv_dtype(kv)
     var tr <- load_resident(path, regions, strict_ctx)
-    restore_kv_pin(pin)
+    restore_gpu_kv_dtype(pin)
     return <- tr
 }
 

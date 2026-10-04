@@ -1326,6 +1326,14 @@ def reset_gpu_kv_dtype_() {
 
 def gpu_kv_dtype_pin_() : tuple<pinned : bool; dt : KVDtype> => (pinned = g_rdec_kv_pinned, dt = g_rdec_kv_want)
 
+def restore_gpu_kv_dtype_(pin : tuple<pinned : bool; dt : KVDtype>) {
+    if (pin.pinned) {
+        set_gpu_kv_dtype_(pin.dt)
+    } else {
+        reset_gpu_kv_dtype_()
+    }
+}
+
 def private rdec_ctx_pin() : int64 => g_rdec_ctx_max > 0l ? g_rdec_ctx_max : g_env_gpu.gpu_ctx_max
 def private rdec_ctx_strict() : bool => g_rdec_ctx_strict || g_env_gpu.gpu_ctx_strict
 def private rdec_ctx_asked_whole() : bool => rdec_ctx_strict() && rdec_ctx_pin() > 0l

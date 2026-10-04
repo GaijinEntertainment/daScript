@@ -984,11 +984,7 @@ def private vk_cov_codec_model(t : T?; path, family : string; kv : KVDtype) {
         let pin = gpu_kv_dtype_pin_()
         set_gpu_kv_dtype_(kv)
         var tr <- load_model_(path, QuantMode.q8)
-        if (pin.pinned) {
-            set_gpu_kv_dtype_(pin.dt)
-        } else {
-            reset_gpu_kv_dtype_()
-        }
+        restore_gpu_kv_dtype_(pin)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         with_dasllama_jobque() {
             var s = make_run_state(tr.config, kv, kv)
