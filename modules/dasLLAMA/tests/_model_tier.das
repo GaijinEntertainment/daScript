@@ -46,17 +46,14 @@ def live_maxabs(v : array<float>) : float {
     return m
 }
 
+//! a machine-local root: `set` (an environment record's field) where it is set, else the default `dflt`
+def root_or(set, dflt : string) : string => empty(set) ? dflt : set
+
 // Machine-local model root; override with DASLLAMA_MODELS_DIR (e.g. the x64 handoff box).
-def models_dir() : string {
-    let env = g_env_harness.models_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
-}
+def models_dir() : string => root_or(g_env_harness.models_dir, "/Users/borisbatkin/Work/llama.cpp/models/")
 
 //! the machine-local llama2.c checkout (stories15M.bin, tokenizer.bin); override with DASLLAMA_LLAMA2C_DIR (e.g. the x64 handoff box)
-def llama2c_dir() : string {
-    let env = g_env_test.llama2c_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
-}
+def llama2c_dir() : string => root_or(g_env_test.llama2c_dir, "/Users/borisbatkin/Work/llama2.c")
 
 // True when the large tier is enabled for this run (the pre-PR full sweep).
 def parity_full_mode() : bool {
@@ -275,10 +272,7 @@ def tower_parity_deep(t : T?; tag : string; cpu, gpu : array<float>; n_layers : 
 }
 
 // Machine-local whisper-model root; override with DASLLAMA_WHISPER_DIR.
-def whisper_dir() : string {
-    let env = g_env_test.whisper_dir
-    return empty(env) ? "/Users/borisbatkin/Work/whisper.cpp/models/" : env
-}
+def whisper_dir() : string => root_or(g_env_test.whisper_dir, "/Users/borisbatkin/Work/whisper.cpp/models/")
 
 
 //! The TTS cells' data gate: the model, then the g2p pack (and the tagger pack when `postag`); a missing one skips loudly and answers true.

@@ -39,10 +39,7 @@ require _tower_twin
 // device under DASLLAMA_GPU=1, on a build with das_metal, and when interpreted.
 
 // the ASR corpus (jfk + LibriSpeech clips) lives under the repo's benchmarks/asr, gitignored
-def private corpus_dir() : string {
-    let env = g_env_test.corpus_dir
-    return empty(env) ? "/Users/borisbatkin/Work/daScript/modules/dasLLAMA/benchmarks/asr/corpus/" : env
-}
+def private corpus_dir() : string => root_or(g_env_test.corpus_dir, "/Users/borisbatkin/Work/daScript/modules/dasLLAMA/benchmarks/asr/corpus/")
 
 [test]
 def test_f32_to_f16(t : T?) {
