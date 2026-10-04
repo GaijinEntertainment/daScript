@@ -1448,8 +1448,9 @@ prefill's attention over the f16 shadow, tq4's un-rotation, the rows a pass brin
 CPU cache's own bytes. Under a tq4 mirror no share of the peak holds a tolerance cell - two window
 splits of one prompt read 0.8-2.0 apart at a 12 max logit (under 0.7 on the other codecs), the
 split q/k norm against the fused one 1.1-3.5 at 13-15 on the qwen3 file, while a carrier whose
-rows agree bit for bit has a row one off 1.9 away - so the rig holds each such row to 0.6 of its
-distance from the one-token-off row instead (`tq4_within`; reads 0.09-0.44), and every bit-for-bit
+rows agree bit for bit has a row one off 1.9 away - so the rig holds each such row to 0.85 of its
+distance from the one-token-off row instead (`tq4_within`; reads 0.09-0.44 on the RTX 5060 Ti and
+0.73 on the RTX PRO 4500, the 900-token prompt cut at 300 the widest on both), and every bit-for-bit
 cell stays bit for bit. Every tolerance compare logs its difference and the one-off row's.
 `test_gpu_resident_gemma*.das` (`_gemma_resident.das` carries the cells; one model a file:
 `gemma3_1b`, `gemma3_4b`, `gemma2`, `gemma4_12b_q8`, `gemma4_12b_k`, `gemma4_e2b`, `gemma4_e4b`,

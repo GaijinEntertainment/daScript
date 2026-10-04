@@ -260,8 +260,9 @@ def control_past(t : T?; what : string; got, control : array<float>; bar : float
 
 //! a tq4 quantizer's step is sixteen times q8_0's, and two passes a float's last bit apart land a quant apart on a rounding
 //! edge: two window splits of one prompt read 0.8-2.0 apart at a 12 max logit and the split q/k norm against the fused one
-//! 1.1-3.5 at 13-15, while a carrier whose rows agree bit for bit has a row one off 1.9 away. The share reads 0.09-0.44
-let TQ4_CTRL_SHARE = 0.6
+//! 1.1-3.5 at 13-15, while a carrier whose rows agree bit for bit has a row one off 1.9 away. The share is card-dependent: 0.09-0.44
+//! on the RTX 5060 Ti, 0.73 on the RTX PRO 4500 (900 tokens cut at 300); the bar sits halfway from that to the row one off's 1.0
+let TQ4_CTRL_SHARE = 0.85
 
 //! `got` no further from `want` than `TQ4_CTRL_SHARE` of its distance from `control`: no share of the peak holds a tq4 mirror.
 //! A NaN in `got` or `want` reads an infinite difference, past every share
