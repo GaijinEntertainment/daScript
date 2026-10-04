@@ -683,6 +683,8 @@ def media_rows(plan : Plan; files : array<string>; run : string; is_audio : bool
         }
         print("{plan.tag}  {what} {name} says: {replace(first.text, "\n", " ")}\n")
         var prompt_tokens = 0l
+        //! a rep shares its system line's opening with the rep before it; this untimed request gives the first rep the same
+        see(plan, "Session {run}-{name}-lead. Answer briefly.", ask, payload, is_audio)
         var walls <- collect_reps(plan.reps) $(rep) {
             let system = "Session {run}-{name}-{rep}. Answer briefly."
             let a = see(plan, system, ask, payload, is_audio)

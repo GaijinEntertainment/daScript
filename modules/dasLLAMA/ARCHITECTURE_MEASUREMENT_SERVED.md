@@ -48,7 +48,8 @@ part's encode, the prompt's prefill and that token: per rep a question under a s
 server has seen, then a second question under the same line - asked again, which a server that
 pays for a part once answers from its cache, neither encoding nor prefilling the part a second
 time. The untimed request ahead of a row asks for a whole answer with thinking off and the bench prints it (`says:`),
-so a row is read beside what the model said of the part. The row carries the prompt tokens the part and the text make, the same on every rep or the
+so a row is read beside what the model said of the part. A second untimed request under a system line of the reps' shape follows it:
+a rep's line shares its opening with the line of the rep before, and without it the first rep alone prefills that opening. The row carries the prompt tokens the part and the text make, the same on every rep or the
 row is refused; the first question's cv is the one that voids it.
 
 Its synthesis rows time a whole `/v1/audio/speech` request, one row a model: the answer is the
