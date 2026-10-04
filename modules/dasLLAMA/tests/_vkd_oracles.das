@@ -40,6 +40,21 @@ def dev_upload(a : array<auto(TT)>) : uint64 {
     return dev
 }
 
+//! one region of `cnt` rows at weight block `wblk0` for `wgs` workgroups: the schedule words the tile classes read at `map_off` 4, in a device buffer or in host memory (the prefill's `pf_meta` form)
+def one_region_sched(cnt, wgs : int; host : bool = false; wblk0 : int = 0) : tuple<buf : uint64; bytes : int64> {
+    let sc_bytes = int64(4 + wgs) * 4l
+    var cur = 4l
+    if (host) {
+        let hb = make_host_buf(sc_bytes, true)
+        batch_sched_map(unsafe(reinterpret<uint?>(hb.mapped)), cur, 0l, int64(wblk0), int64(cnt), int64(wgs))
+        return (buf = hb.buf, bytes = sc_bytes)
+    }
+    let scd = make_staged_buf(sc_bytes) $(var words : uint?) {
+        batch_sched_map(words, cur, 0l, int64(wblk0), int64(cnt), int64(wgs))
+    }
+    return (buf = scd, bytes = sc_bytes)
+}
+
 //! each plane's host offset when the planes stage back to back - the sum of the sizes before it - and the total bytes last
 def staged_offsets(sizes) : array<int64> {
     var at : array<int64>

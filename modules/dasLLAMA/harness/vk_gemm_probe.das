@@ -527,21 +527,6 @@ def private cm2_shape_upload(fmt : int; d, n, cnt : int; slab_blocks : int = 0; 
     return dv
 }
 
-//! one region of `cnt` rows for `wgs` workgroups: the schedule words the tile classes read at `map_off` 4, in a device buffer or in host memory (the prefill's `pf_meta` form)
-def private one_region_sched(cnt, wgs : int; host : bool = false; wblk0 : int = 0) : tuple<buf : uint64; bytes : int64> {
-    let sc_bytes = int64(4 + wgs) * 4l
-    var cur = 4l
-    if (host) {
-        let hb = make_host_buf(sc_bytes, true)
-        batch_sched_map(unsafe(reinterpret<uint?>(hb.mapped)), cur, 0l, int64(wblk0), int64(cnt), int64(wgs))
-        return (buf = hb.buf, bytes = sc_bytes)
-    }
-    let scd = make_staged_buf(sc_bytes) $(var words : uint?) {
-        batch_sched_map(words, cur, 0l, int64(wblk0), int64(cnt), int64(wgs))
-    }
-    return (buf = scd, bytes = sc_bytes)
-}
-
 [arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
 //! `serial`: one hazard rail and one output plane across the dispatches, so a barrier separates them and the row reads a single dispatch's latency - the chain's cost - instead of the throughput of sixteen overlapping ones
 def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; l_stamp_only : bool = false; serial : bool = false) {

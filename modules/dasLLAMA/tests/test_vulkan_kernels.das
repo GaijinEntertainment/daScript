@@ -2572,9 +2572,7 @@ def test_vkd_q8_khr_batch(t0 : T?) {
             let cnt0 = TILE_CELL_ROWS0
             let d = TILE_CELL_D
             let swgs = ((cnt0 + 127) / 128) * ((d + 127) / 128) * nsplit
-            var ssched : array<uint>
-            ssched |> resize(4 + swgs)
-            ssched[2] = uint(cnt0)   // one region at row 0 over the first weight plane; the map stays zero
+            let ssched = one_region_sched(cnt0, swgs)   // one region at row 0 over the first weight plane
             let y0_bytes = int64(cnt0 * d) * 4l
             let part_bytes = y0_bytes * int64(nsplit)
             let pd = make_device_buf(part_bytes)
@@ -2582,9 +2580,8 @@ def test_vkd_q8_khr_batch(t0 : T?) {
             let host_s = make_host_buf(y0_bytes, true, [cached = true])
             nan_sentinel_upload(pd, part_bytes)
             nan_sentinel_upload(yd_s, y0_bytes)
-            let ssc_bytes = int64(4 + swgs) * 4l
-            let sscd = make_device_buf(ssc_bytes)
-            upload_region_at(sscd, 0l, unsafe(addr<uint8 const?>(ssched[0])), ssc_bytes)
+            let ssc_bytes = ssched.bytes
+            let sscd = ssched.buf
             var scs = set_q8_batch_khr_cls(fixed_array(f.wqd, f.wsd, sscd, f.xfd, pd),
                 fixed_array(f.wq_bytes, f.ws_bytes, ssc_bytes, f.xf_bytes, part_bytes), fixed_array(1u, 2u, 0u, 4u, 8u))
             var srd = set_splitk_reduce_cls(fixed_array(pd, yd_s), fixed_array(part_bytes, y0_bytes), fixed_array(8u, 16u))
@@ -2609,7 +2606,6 @@ def test_vkd_q8_khr_batch(t0 : T?) {
             delete y_poison_s
             delete y_ref0
             delete y_split
-            delete ssched
             delete y_ref
             delete f
         } else {
@@ -2905,13 +2901,8 @@ def test_vkd_cm2l_split(t0 : T?) {
             y_cls |> resize(rows * d)
             var sched : array<uint>
             sched |> resize(4 + wgs)
-            sched[0] = 0u
-            sched[1] = 0u
-            sched[2] = uint(rows)
-            sched[3] = 0u
-            for (w in range(wgs)) {
-                sched[4 + w] = 0u
-            }
+            var cur = 4l
+            batch_sched_map(unsafe(addr(sched[0])), cur, 0l, 0l, int64(rows), int64(wgs))
             unsafe {
                 upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
                 upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
