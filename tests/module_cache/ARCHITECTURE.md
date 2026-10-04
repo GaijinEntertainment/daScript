@@ -57,7 +57,8 @@ this document states what the folder is and why its tests take the shape they do
   over each mutated line - recompiles and rewrites, an edited module the descriptor requires
   recompiles it once, a `--jit-target` run keys apart from a native one, the other binary kind
   (`daslang_static` beside `daslang`, or back) writes its own manifest file and each kind replays
-  its own after the other ran, a `no_manifest()` descriptor compiles on every start, a recorded argument with a
+  its own after the other ran, a das root spelled another way (`..`, a trailing slash, relative
+  to the cwd) replays the manifest the full path wrote, a `no_manifest()` descriptor compiles on every start, a recorded argument with a
   tab leaves the manifest unwritten, and a directory sitting where the `.tmp` or the manifest
   goes fails the create or the rename so the start just compiles; each verdict is read from
   the `DAS_TRACE_MODULE_LOAD=1` line the child prints.
