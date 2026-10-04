@@ -6838,18 +6838,29 @@ def test_vkd_ple_side(t0 : T?) {
     }
 }
 
+//! the deltanet cells' gate: a live device and a deltanet chain the device's shared memory holds; false with the skip registered
+//! where either is missing
+def private dn_cells_gate(t : T?) : bool {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (!vk_moe_init()) {
+            t |> skip("no Vulkan device")
+            return false
+        }
+        if (!g_gpu.dn_shared_ok) {
+            t |> skip("dn chain declined on this device (shared-memory cap)")
+            return false
+        }
+        return true
+    } else {
+        return false
+    }
+}
+
 [test]
 def test_vkd_dn_family(t0 : T?) {
     t0 |> run("deltanet class kernels == the CPU oracle (conv, fused step, 2-phase scan)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!g_gpu.dn_shared_ok) {
-                t |> skip("dn chain declined on this device (shared-memory cap)")
-                return
-            }
+            if (!dn_cells_gate(t)) return
             verify(ensure_dn_conv_cls() && ensure_dn_step_cls() && ensure_dn_scan_cls() && ensure_dn_scan_p3_cls(),
                 "the dn class rails must engage on a device over the shared cap")
             for (ds in fixed_array(64, 128)) {   //! ds 64 keeps a state column in one row part of the fused step; 128, the served hybrids' head size, splits it in two and takes the scan's eight-lane clusters
@@ -7548,14 +7559,7 @@ def private dn_step_sameslot_arm(t : T?; ds : int; out_f32 : bool) {
 def test_vkd_dn_step_rows_sameslot(t0 : T?) {
     t0 |> run("dn_step_fused over three rows of one slot a dispatch a row == the one-row dispatch a row at a time, chained") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!g_gpu.dn_shared_ok) {
-                t |> skip("dn chain declined on this device (shared-memory cap)")
-                return
-            }
+            if (!dn_cells_gate(t)) return
             verify(ensure_dn_step_cls(), "the dn step class rail must engage on a device over the shared cap")
             for (ds in fixed_array(64, 128)) {
                 dn_step_sameslot_arm(t, ds, false)
@@ -7571,14 +7575,7 @@ def test_vkd_dn_step_rows_sameslot(t0 : T?) {
 def test_vkd_dn_step_rows(t0 : T?) {
     t0 |> run("dn_step_fused over two rows in two region slots == the one-row dispatch a row at a time") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!g_gpu.dn_shared_ok) {
-                t |> skip("dn chain declined on this device (shared-memory cap)")
-                return
-            }
+            if (!dn_cells_gate(t)) return
             verify(ensure_dn_step_cls(), "the dn step class rail must engage on a device over the shared cap")
             for (ds in fixed_array(64, 128)) {
                 dn_step_rows_arm(t, ds, false)
@@ -7813,14 +7810,7 @@ def private dn_scan_cell(t : T?; tag : string; ds, nkh, nvh, npos : int) {
 def test_vkd_dn_9b_scan(t0 : T?) {
     t0 |> run("dn_scan at the 9B geometry (32 heads, ds 128, 512 rows) == the sequential CPU delta rule") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!g_gpu.dn_shared_ok) {
-                t |> skip("dn chain declined on this device (shared-memory cap)")
-                return
-            }
+            if (!dn_cells_gate(t)) return
             verify(ensure_dn_scan_cls(), "the dn_scan class rail must engage on a live device")
             dn_scan_cell(t, "9B", 128, 16, 32, 512)
             dn_scan_cell(t, "one token", 128, 16, 32, 1)   //! the prefetch's clamp fires on the first iteration
@@ -7838,14 +7828,7 @@ def test_vkd_dn_9b_scan(t0 : T?) {
 def test_vkd_dn_scan_narrow(t0 : T?) {
     t0 |> run("dn_scan at a narrow state (4 heads, ds 32, 64 rows) == the sequential CPU delta rule") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init()) {
-                t |> skip("no Vulkan device")
-                return
-            }
-            if (!g_gpu.dn_shared_ok) {
-                t |> skip("dn chain declined on this device (shared-memory cap)")
-                return
-            }
+            if (!dn_cells_gate(t)) return
             verify(ensure_dn_scan_cls(), "the dn_scan class rail must engage on a live device")
             dn_scan_cell(t, "narrow", 32, 2, 4, 64)
         } else {
