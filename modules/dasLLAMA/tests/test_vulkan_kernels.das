@@ -4275,12 +4275,14 @@ def test_vkd_q8_gemv_ar_row_twin(t0 : T?) {
     }
 }
 
-//! one output plane of an N-form cell: its name in the asserts, the 32-bit words one column holds, and whether the two
-//! forms' words are the same by claim - a plane whose words differ by design (a feed word carrying its row) is the caller's compare
+//! one output plane of an N-form cell: its name in the asserts, the 32-bit words one column holds, whether the two forms'
+//! words are the same by claim - a plane whose words differ by design (a feed word carrying its row) is the caller's compare -
+//! and the words under its first column's base
 struct NformPlane {
     name : string
     words : int
     cmp : bool = true
+    head : int
 }
 
 //! the output planes of one form as the blocks bind them: plane p's device buffer and its bytes
@@ -4290,7 +4292,7 @@ struct NformOuts {
 }
 
 //! the two forms' output planes read back: `one[p]` over every column of the extent, column c at c * (head + words) + head;
-//! `nf[p]` the last count's, column c at head + c * words
+//! `nf[p]` the last count's, column c at head + c * words (`head` and `words` plane p's)
 struct NformPlanes {
     one : array<array<uint>>
     nf : array<array<uint>>
@@ -4326,31 +4328,31 @@ def private nform_plane_mismatch(one, nf : array<uint>; ncols, head, words : int
     return bad
 }
 
-//! the asserts behind `nform_cols_cell` at one count: every compared plane's live columns word for word, the `head` words under
-//! the base and the slots past the last live column still the sentinel, and one poisoned word of the first compared plane reddening its compare
-def private nform_cols_compare(t : T?; tag : string; ncols, ncol_max, head : int; planes : array<NformPlane>; var r : NformPlanes) {
+//! the asserts behind `nform_cols_cell` at one count: every compared plane's live columns word for word, the words under each
+//! plane's head and the slots past the last live column still the sentinel, and one poisoned word of the first compared plane reddening its compare
+def private nform_cols_compare(t : T?; tag : string; ncols, ncol_max : int; planes : array<NformPlane>; var r : NformPlanes) {
     var stale = 0
     var poisoned = false
     for (p in range(length(planes))) {
         let pl = planes[p]
         if (pl.cmp) {
-            let bad = nform_plane_mismatch(r.one[p], r.nf[p], ncols, head, pl.words)
+            let bad = nform_plane_mismatch(r.one[p], r.nf[p], ncols, pl.head, pl.words)
             t |> success(bad == 0, "{tag}: {pl.name} over the live columns are the one form's word for word ({bad} of {ncols * pl.words} words off)")
             if (!poisoned) {
                 poisoned = true
-                let at = head + (ncols - 1) * pl.words + pl.words / 2
+                let at = pl.head + (ncols - 1) * pl.words + pl.words / 2
                 let kept = r.nf[p][at]
                 r.nf[p][at] = kept ^ 0x55u
-                t |> equal(nform_plane_mismatch(r.one[p], r.nf[p], ncols, head, pl.words), 1, "{tag}: the word-exact bar on {pl.name} reds one poisoned word")
+                t |> equal(nform_plane_mismatch(r.one[p], r.nf[p], ncols, pl.head, pl.words), 1, "{tag}: the word-exact bar on {pl.name} reds one poisoned word")
                 r.nf[p][at] = kept
             }
         }
-        for (i in range(head)) {
+        for (i in range(pl.head)) {
             if (r.nf[p][i] != NAN_SENTINEL_BITS) {
                 stale++
             }
         }
-        for (i in range(head + ncols * pl.words, head + (ncol_max + 1) * pl.words)) {
+        for (i in range(pl.head + ncols * pl.words, pl.head + (ncol_max + 1) * pl.words)) {
             if (r.nf[p][i] != NAN_SENTINEL_BITS) {
                 stale++
             }
@@ -4361,77 +4363,52 @@ def private nform_cols_compare(t : T?; tag : string; ncols, ncol_max, head : int
 
 //! one N-form-vs-one-form cell: `one_col(c, raw, h, outs)` records the one form for column `c` of the extent `ncol_max`,
 //! `n_form(ncols, raw, h, outs)` the N form at each count of `counts`; the output planes are made here - one slot past the
-//! extent - NaN-filled before every run, copied back under the hazard mask `bits`, compared by `nform_cols_compare` and returned
-def private nform_cols_cell(t : T?; tag : string; counts : array<int>; ncol_max, head : int; planes : array<NformPlane>; bits : uint; one_col; n_form) : NformPlanes {
+//! extent, plane p's one form the cell's plane 2p and its N form 2p + 1 - NaN-filled before every run, copied back under the
+//! hazard mask `bits`, compared by `nform_cols_compare` and returned
+def private nform_cols_cell(t : T?; tag : string; counts : array<int>; ncol_max : int; planes : array<NformPlane>; bits : uint; one_col; n_form) : NformPlanes {
     var res : NformPlanes
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let np = length(planes)
-        var one_outs : NformOuts
-        var n_outs : NformOuts
-        var one_ats : array<int64>
-        var n_ats : array<int64>
-        one_outs.bufs |> reserve(np)
-        one_outs.bytes |> reserve(np)
-        n_outs.bufs |> reserve(np)
-        n_outs.bytes |> reserve(np)
-        one_ats |> reserve(np)
-        n_ats |> reserve(np)
-        var total = 0l
-        for (pl in planes) {
-            let one_bytes = int64(head + pl.words) * 4l
-            let n_bytes = int64(head + pl.words * (ncol_max + 1)) * 4l
-            one_outs.bufs |> push(make_device_buf(one_bytes))
-            one_outs.bytes |> push(one_bytes)
-            n_outs.bufs |> push(make_device_buf(n_bytes))
-            n_outs.bytes |> push(n_bytes)
-            one_ats |> push(total)
-            total += one_bytes * int64(ncol_max)
-            n_ats |> push(total)
-            total += n_bytes
-        }
-        let host = make_host_buf(total, true, [cached = true])
-        res.one |> resize(np)
-        res.nf |> resize(np)
-        for (c in range(ncol_max)) {
-            var ats : array<int64>
-            ats |> reserve(np)
-            for (p in range(np)) {
-                nan_sentinel_upload(one_outs.bufs[p], one_outs.bytes[p])
-                ats |> push(one_ats[p] + one_outs.bytes[p] * int64(c))
+        with_cell_planes() $(var cp : CellPlanes) {
+            let np = length(planes)
+            var one_outs : NformOuts
+            var n_outs : NformOuts
+            for (pl in planes) {
+                let po = cp |> out_words(int64(pl.head + pl.words) * 4l, NAN_SENTINEL_BITS, bits)
+                let pn = cp |> out_words(int64(pl.head + pl.words * (ncol_max + 1)) * 4l, NAN_SENTINEL_BITS, bits)
+                one_outs.bufs |> push(cp.dev[po])
+                one_outs.bytes |> push(cp.bytes[po])
+                n_outs.bufs |> push(cp.dev[pn])
+                n_outs.bytes |> push(cp.bytes[pn])
             }
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                invoke(one_col, c, raw, h, one_outs)
-                cmd_copy_planes(raw, h, one_outs.bufs, host, ats, one_outs.bytes, bits)
-            }
-            delete ats
-        }
-        unsafe {
-            for (p in range(np)) {
-                let bytes = one_outs.bytes[p] * int64(ncol_max)
-                res.one[p] |> resize(int(bytes / 4l))
-                memcpy(addr<void?>(res.one[p][0]), reinterpret<void?>(intptr(host.mapped) + uint64(one_ats[p])), bytes)
-            }
-        }
-        for (ncols in counts) {
-            for (p in range(np)) {
-                nan_sentinel_upload(n_outs.bufs[p], n_outs.bytes[p])
-            }
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                invoke(n_form, ncols, raw, h, n_outs)
-                cmd_copy_planes(raw, h, n_outs.bufs, host, n_ats, n_outs.bytes, bits)
-            }
-            unsafe {
+            res.one |> resize(np)
+            res.nf |> resize(np)
+            for (c in range(ncol_max)) {
                 for (p in range(np)) {
-                    res.nf[p] |> resize(int(n_outs.bytes[p] / 4l))
-                    memcpy(addr<void?>(res.nf[p][0]), reinterpret<void?>(intptr(host.mapped) + uint64(n_ats[p])), n_outs.bytes[p])
+                    cp |> plane_refill(2 * p)
+                }
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    invoke(one_col, c, raw, h, one_outs)
+                }
+                for (p in range(np)) {
+                    res.one[p] |> push_from(plane_as(cp, 2 * p, type<uint>, int(cp.bytes[2 * p] / 4l)))
                 }
             }
-            nform_cols_compare(t, "{tag} at {ncols} column(s)", ncols, ncol_max, head, planes, res)
+            for (ncols in counts) {
+                for (p in range(np)) {
+                    cp |> plane_refill(2 * p + 1)
+                }
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    invoke(n_form, ncols, raw, h, n_outs)
+                }
+                for (p in range(np)) {
+                    delete res.nf[p]
+                    res.nf[p] <- plane_as(cp, 2 * p + 1, type<uint>, int(cp.bytes[2 * p + 1] / 4l))
+                }
+                nform_cols_compare(t, "{tag} at {ncols} column(s)", ncols, ncol_max, planes, res)
+            }
+            delete one_outs
+            delete n_outs
         }
-        delete one_outs
-        delete n_outs
-        delete one_ats
-        delete n_ats
     }
     return <- res
 }
@@ -4516,7 +4493,7 @@ def private q8_gemv_gu_n_run(t; n, hid, ncols : int; act : uint) {
         upload_region_at(xqd_n, 0l, addr<uint8 const?>(xqh[0]), xq_bytes * int64(ncols))
         upload_region_at(xsd_n, 0l, addr<uint8 const?>(xsh[0]), xs_bytes * int64(ncols))
     }
-    var planes <- nform_cols_cell(t, "N-row fused gate-up {shape}", [ncols], ncol_max, 0,
+    var planes <- nform_cols_cell(t, "N-row fused gate-up {shape}", [ncols], ncol_max,
         [NformPlane(name = "the quant bytes", words = hid / 4), NformPlane(name = "the block scales", words = nblk_out)], 64u,
         $(c : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
             unsafe {
@@ -4596,7 +4573,7 @@ def private q8_gemv_pleact_cols_run(t; n, d, ncols : int) {
         upload_region_at(gd, 0l, addr<uint8 const?>(gh[0]), g_bytes)
         upload_region_at(sd, 0l, addr<uint8 const?>(sh[0]), s_bytes)
     }
-    var planes <- nform_cols_cell(t, "q8 pleact n {n} d {d}", [ncols], ncol_max, 0, [NformPlane(name = "the proj rows", words = d)], 16u,
+    var planes <- nform_cols_cell(t, "q8 pleact n {n} d {d}", [ncols], ncol_max, [NformPlane(name = "the proj rows", words = d)], 16u,
         $(c : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
             unsafe {
                 upload_region_at(gd1, 0l, addr<uint8 const?>(gh[c * n]), g1_bytes)
@@ -4732,7 +4709,7 @@ def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
             g_q8_n2_min_n = paired ? 0u : 0xFFFFFFFFu
             let form = paired ? "{name} row-pair" : name
             t |> success(gemv_cls_ensure_n(fmt), "{form}: the N-column class rail engages")
-            var planes <- nform_cols_cell(t, form, [1, 2, 3, 4, 5, 6, 7, 8], ncol_max, 0, [NformPlane(name = "the y rows", words = d)], 32u,   //! every count: the odd ones leave dead columns on the wider stamps
+            var planes <- nform_cols_cell(t, form, [1, 2, 3, 4, 5, 6, 7, 8], ncol_max, [NformPlane(name = "the y rows", words = d)], 32u,   //! every count: the odd ones leave dead columns on the wider stamps
                 $(c : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
                     var pair <- [0u, uint(c * xblk)]
                     upload_region_at(rgd, 0l, unsafe(addr<uint8 const?>(pair[0])), 8l)
@@ -5101,7 +5078,7 @@ def private qkn_rope_arm(t : T?; f16, biased : bool) {
         check_rows(t, "{name}, q", q_cls, ref.q, BAR_APPROX_CTRL, qd, hs)
         mirror_rows_check(t, name, m_cls, ref.mk, ref.mv, krow, nkvh * hs, mirn2)
         if (!f16) {
-            qkn_rope_n_rows(t, q0h, kvh, csh, wnh, bh, q_cls, m_cls, pc)
+            qkn_rope_n_rows(t, q0h, kvh, csh, wnh, bh, pc)
         }
         delete q0h
         delete kvh
@@ -5114,20 +5091,31 @@ def private qkn_rope_arm(t : T?; f16, biased : bool) {
     }
 }
 
+//! one `qkn_rope_cls` dispatch of `wgs` workgroups under `pc` into an N-form cell's outputs `o` (the q plane, `q` uploaded over
+//! it, then the K and V mirrors) over `cp`'s input planes `ins` (the kv rows, the cos row, the norm rows, the token meta, the bias)
+def private qkn_cell_enc(cp : CellPlanes; o : NformOuts; ins : int[5]; q : array<float>; pc; wgs : int; raw; var h) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        upload_region_at(o.bufs[0], 0l, unsafe(addr<uint8 const?>(q[0])), long_length(q) * 4l)
+        var sc = set_qkn_rope_cls(fixed_array(o.bufs[0], cp.dev[ins[0]], o.bufs[1], o.bufs[2], cp.dev[ins[1]], cp.dev[ins[2]], cp.dev[ins[3]], cp.dev[ins[4]]),
+            fixed_array(o.bytes[0], cp.bytes[ins[0]], o.bytes[1], o.bytes[2], cp.bytes[ins[1]], cp.bytes[ins[2]], cp.bytes[ins[3]], cp.bytes[ins[4]]),
+            fixed_array(1u, 0u, 2u, 4u, 0u, 0u, 0u, 0u))
+        var pcv = pc
+        enc_qkn_rope_cls(raw, h, sc, pcv, int64(wgs))
+    }
+}
+
 //! `qkn_rope_cls`'s N-row form over two stacked rows of `qkn_rope_arm`'s fixture (`pc` its one-row arguments, `wnh` / `bh` its
 //! norm and bias rows - no bias plane where `bh` is empty), each row at its own token meta, against the one-row kernel on that row
-//! alone bit for bit (`q_cls`, `m_cls`: row 0's one-row run)
-def private qkn_rope_n_rows(t : T?; q0h, kvh, csh, wnh, bh, q_cls, m_cls : array<float>; pc) {
+//! alone at position 0 word for word through `nform_cols_cell`: the q rows in place, the mirror rows past layerbase
+def private qkn_rope_n_rows(t : T?; q0h, kvh, csh, wnh, bh : array<float>; pc) {
     let nh = 4
     let nkvh = 2
     let hs = 64
     let qd = nh * hs
     let kvd = nkvh * hs
     let krow = 192
-    let mirn2 = krow + nkvh * hs
     let wgs = nh + nkvh
     let kvrow = qd + 2 * kvd
-    let mn = krow + 2 * kvd   // row 0 at position 0 and row 1 at position 1: two mirror rows past layerbase
     var q2h : array<float>
     var kv2h : array<float>
     var cs2h : array<float>
@@ -5149,63 +5137,32 @@ def private qkn_rope_n_rows(t : T?; q0h, kvh, csh, wnh, bh, q_cls, m_cls : array
     static_if (typeinfo builtin_module_exists(vulkan)) {
         with_cell_planes() $(var cp : CellPlanes) {
             let pwn = cp |> in_(wnh)
-            //! the one-row kernel on row 1 alone, at its own position
-            let pq1 = cp |> io_(copy_span(q2h, qd, qd))
+            let pkv0 = cp |> in_(copy_span(kv2h, 0, kvrow))
             let pkv1 = cp |> in_(copy_span(kv2h, kvrow, kvrow))
-            let pkm1 = cp |> out_(mn)
-            let pvm1 = cp |> out_(mn)
+            let pcs0 = cp |> in_(copy_span(cs2h, 0, hs))
             let pcs1 = cp |> in_(copy_span(cs2h, hs, hs))
-            let ptok1 = cp |> in_plain([TokMeta(pos = 1u)])
-            let pb1 = empty(bh) ? pcs1 : in_(cp, bh)
-            //! the N-row form over both rows
-            let pq2 = cp |> io_(q2h)
+            let pkv = fixed_array(pkv0, pkv1)
+            let pcs = fixed_array(pcs0, pcs1)
+            let ptok1 = cp |> in_plain([TokMeta()])
             let pkv2 = cp |> in_(kv2h)
-            let pkmn = cp |> out_(mn)
-            let pvmn = cp |> out_(mn)
             let pcs2 = cp |> in_(cs2h)
             let ptok2 = cp |> in_plain([TokMeta(pos = 0u), TokMeta(pos = 1u)])
-            let pb2 = empty(bh) ? pcs2 : pb1
-            var s1 = cp |> cls_set(fixed_array(pq1, pkv1, pkm1, pvm1, pcs1, pwn, ptok1, pb1), @@set_qkn_rope_cls)
-            var s2 = cp |> cls_set(fixed_array(pq2, pkv2, pkmn, pvmn, pcs2, pwn, ptok2, pb2), @@set_qkn_rope_cls)
-            var pc1 = pc
+            let pb = empty(bh) ? -1 : in_(cp, bh)
             var pc2 = pc
             pc2.rowwg = uint(wgs)
             pc2.kvrow = uint(kvrow)
             pc2.qrow = uint(qd)
             pc2.cosrow = uint(hs)
-            cp |> cell_record() $(rawn : VkCommandBuffer; var hn : VkHaz) {
-                enc_qkn_rope_cls(rawn, hn, s1, pc1, int64(wgs))
-                enc_qkn_rope_cls(rawn, hn, s2, pc2, int64(wgs) * 2l)
-            }
-            var q1 <- cp |> plane_as(pq1, type<uint>, qd)
-            var km1 <- cp |> plane_as(pkm1, type<uint>, mn)
-            var vm1 <- cp |> plane_as(pvm1, type<uint>, mn)
-            var q2 <- cp |> plane_as(pq2, type<uint>, 2 * qd)
-            var kmn <- cp |> plane_as(pkmn, type<uint>, mn)
-            var vmn <- cp |> plane_as(pvmn, type<uint>, mn)
-            var badn = 0
-            for (i in range(qd)) {   // row 0's q against the one-row run above, row 1's against its own
-                badn += q2[i] != float_bits_to_uint(q_cls[i]) ? 1 : 0
-                badn += q2[qd + i] != q1[i] ? 1 : 0
-            }
-            for (i in range(kvd)) {   // row 0's mirror rows against the one-row run's, row 1's (one row past) against its own
-                badn += kmn[krow + i] != float_bits_to_uint(m_cls[krow + i]) ? 1 : 0
-                badn += vmn[krow + i] != float_bits_to_uint(m_cls[mirn2 + krow + i]) ? 1 : 0
-                badn += kmn[krow + kvd + i] != km1[krow + kvd + i] ? 1 : 0
-                badn += vmn[krow + kvd + i] != vm1[krow + kvd + i] ? 1 : 0
-            }
-            t |> success(badn == 0, "qkn_rope_kv over two rows: each row's q and mirror rows are the one-row kernel's bit for bit ({badn} off)")
-            var stalen = 0
-            for (i in range(krow)) {   // nothing lands under layerbase on either mirror
-                stalen += kmn[i] != NAN_SENTINEL_BITS || vmn[i] != NAN_SENTINEL_BITS ? 1 : 0
-            }
-            t |> success(stalen == 0, "qkn_rope_kv over two rows: the mirror rows under layerbase keep the sentinel ({stalen} written)")
-            delete q1
-            delete km1
-            delete vm1
-            delete q2
-            delete kmn
-            delete vmn
+            var planes <- nform_cols_cell(t, "qkn_rope_kv over two rows", [2], 2,
+                [NformPlane(name = "the q rows", words = qd), NformPlane(name = "the K mirror rows", words = kvd, head = krow),
+                 NformPlane(name = "the V mirror rows", words = kvd, head = krow)], 7u,
+                $(c : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
+                    qkn_cell_enc(cp, o, fixed_array(pkv[c], pcs[c], pwn, ptok1, pb < 0 ? pcs[c] : pb), copy_span(q2h, c * qd, qd), pc, wgs, raw, h)
+                },
+                $(nrows : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
+                    qkn_cell_enc(cp, o, fixed_array(pkv2, pcs2, pwn, ptok2, pb < 0 ? pcs2 : pb), copy_span(q2h, 0, nrows * qd), pc2, wgs * nrows, raw, h)
+                })
+            delete planes
         }
     }
     delete q2h
@@ -8060,7 +8017,7 @@ def private topk_n_arm(t : T?; gptoss_router_bias : bool) {
         }
         let arm = gptoss_router_bias ? "router bias" : "plain"
         let tag = "topk_n ({arm})"
-        var planes <- nform_cols_cell(t, tag, [npos], npos, 0,
+        var planes <- nform_cols_cell(t, tag, [npos], npos,
             [NformPlane(name = "the w1 slot blocks", words = 2 * k, cmp = false), NformPlane(name = "the w3 slot blocks", words = 2 * k, cmp = false),
              NformPlane(name = "the w2 slot blocks", words = 2 * k, cmp = false), NformPlane(name = "the weights", words = k), NformPlane(name = "the picks", words = k)],
             2u | 4u | 8u | 16u | 32u,
@@ -8198,7 +8155,7 @@ def private router_cols_arm(t : T?; ncols : int; norm_on, f16 : bool) {
             upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
             upload_region_at(nd, 0l, addr<uint8 const?>(nh[0]), n_bytes)
         }
-        var planes <- nform_cols_cell(t, form, [ncols], ncol_max, obase, [NformPlane(name = "the logits", words = ne)], 2u,
+        var planes <- nform_cols_cell(t, form, [ncols], ncol_max, [NformPlane(name = "the logits", words = ne, head = obase)], 2u,
             $(c : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
                 upload_region_at(xd1, 0l, unsafe(addr<uint8 const?>(xh[c * dim])), x1_bytes)
                 var sc1 = router_set(f16, fixed_array(wd, xd1, o.bufs[0], nd), fixed_array(w_bytes, x1_bytes, o.bytes[0], n_bytes))
