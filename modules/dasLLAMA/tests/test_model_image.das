@@ -52,33 +52,7 @@ require _model_tier
 // element-exact plane compare: -1 = length mismatch, else the number of differing elements
 // the staged (owned array) side against the served (borrowed plane) side — the only comparison
 // that can prove an image round-trips, now that a served carrier has no array form
-def private count_mismatch(a : array<float>; b : PlaneF) : int64 {
-    if (long_length(a) != length(b)) {
-        return -1l
-    }
-    var bad = 0l
-    for (i in range64(long_length(a))) {
-        if (a[i] != b[i]) {
-            bad++
-        }
-    }
-    return bad
-}
-
-def private count_mismatch_i8(a : array<int8>; b : PlaneI8) : int64 {
-    if (long_length(a) != length(b)) {
-        return -1l
-    }
-    var bad = 0l
-    for (i in range64(long_length(a))) {
-        if (a[i] != b[i]) {
-            bad++
-        }
-    }
-    return bad
-}
-
-def private count_mismatch_u16(a : array<uint16>; b : PlaneU16) : int64 {
+def private count_mismatch(a : array<auto(TT)>; b : auto(PP)) : int64 {
     if (long_length(a) != length(b)) {
         return -1l
     }
@@ -1224,9 +1198,9 @@ def test_whisper_image_roundtrip(t : T?) {
         var inscope stg8 <- stage_whisper_model(path, true)
         var inscope w8 <- load_whisper_model(path, true)
         t |> success(w8.image_map != null, "q8 cold load serves the image it streamed")
-        t |> equal(count_mismatch_i8(stg8.dqblob, w8.dqblob), 0l, "streamed dqblob element-exact vs staged")
+        t |> equal(count_mismatch(stg8.dqblob, w8.dqblob), 0l, "streamed dqblob element-exact vs staged")
         t |> equal(count_mismatch(stg8.dqscales, w8.dqscales), 0l, "streamed dqscales element-exact vs staged")
-        t |> equal(count_mismatch_i8(stg8.enc.qblob, w8.enc.qblob), 0l, "streamed enc.qblob element-exact vs staged")
+        t |> equal(count_mismatch(stg8.enc.qblob, w8.enc.qblob), 0l, "streamed enc.qblob element-exact vs staged")
         t |> equal(count_mismatch(stg8.enc.qscales, w8.enc.qscales), 0l, "streamed enc.qscales element-exact vs staged")
         t |> equal(count_mismatch(stg8.dblob, w8.dblob), 0l, "q8 flavor's fp32 dblob element-exact too")
         // and the MIXED flavor (f32 enc / q8 dec — the GPU-tower serving mode): the decoder
@@ -1238,7 +1212,7 @@ def test_whisper_image_roundtrip(t : T?) {
         var inscope wm <- load_whisper_model(path, false, true)
         t |> success(wm.image_map != null, "mixed cold load serves the image it streamed")
         t |> success(!wm.enc.q8 && wm.dq8, "mixed flavor: f32 encoder, q8 decoder")
-        t |> equal(count_mismatch_i8(stgm.dqblob, wm.dqblob), 0l, "mixed streamed dqblob element-exact vs staged")
+        t |> equal(count_mismatch(stgm.dqblob, wm.dqblob), 0l, "mixed streamed dqblob element-exact vs staged")
         t |> equal(count_mismatch(stgm.dqscales, wm.dqscales), 0l, "mixed streamed dqscales element-exact vs staged")
         t |> equal(count_mismatch(stgm.dblob, wm.dblob), 0l, "mixed streamed dblob element-exact vs staged")
         t |> equal(count_mismatch(stgm.enc.fblob, wm.enc.fblob), 0l, "mixed enc.fblob element-exact (full f32 layout)")
@@ -1832,11 +1806,11 @@ def test_qwen3a_tower_image_roundtrip(t : T?) {
         t |> equal(b.proj_dim, a.e.proj_dim)
         t |> equal(b.n_ch, a.e.n_ch)
         t |> equal(count_mismatch(a.core.fblob, b.core.fblob), 0l, "core.fblob element-exact")
-        t |> equal(count_mismatch_i8(a.core.qblob, b.core.qblob), 0l, "core.qblob element-exact")
+        t |> equal(count_mismatch(a.core.qblob, b.core.qblob), 0l, "core.qblob element-exact")
         t |> equal(count_mismatch(a.core.qscales, b.core.qscales), 0l, "core.qscales element-exact")
         t |> equal(count_mismatch(a.cblob, b.cblob), 0l, "cblob element-exact")
         t |> success(b.cq8, "warm tower cblob trio is on the q8 rail")
-        t |> equal(count_mismatch_i8(a.qcblob, b.qcblob), 0l, "qcblob element-exact")
+        t |> equal(count_mismatch(a.qcblob, b.qcblob), 0l, "qcblob element-exact")
         t |> equal(count_mismatch(a.qcscales, b.qcscales), 0l, "qcscales element-exact")
         // the f32 A/B rail still stages + serves (parity legs flip it; serving never does)
         set_qwen3a_q8(false)
@@ -1883,7 +1857,7 @@ def test_gemma4uv_embedder_image_roundtrip(t : T?) {
         t |> equal(b.proj_w, a.e.proj_w)
         t |> equal(b.pos_w, a.e.pos_w)
         t |> equal(count_mismatch(a.blob, b.blob), 0l, "blob element-exact")
-        t |> equal(count_mismatch_u16(a.wblob, b.wblob), 0l, "wblob (the bf16 GEMM) element-exact")
+        t |> equal(count_mismatch(a.wblob, b.wblob), 0l, "wblob (the bf16 GEMM) element-exact")
         // the bf16 plane holds the file's OWN halfwords: exactly the projection, nothing rounded
         t |> equal(long_length(a.wblob), a.e.n_embd * a.e.proj_dim,
                    "the bf16 plane is exactly the projection ({length(a.wblob)} halfwords)")
@@ -1930,7 +1904,7 @@ def test_gemma4v_tower_image_roundtrip(t : T?) {
         t |> equal(b.layer_w_stride, a.t.layer_w_stride)
         t |> equal(b.proj_clamp, a.t.proj_clamp)
         t |> equal(count_mismatch(a.blob, b.blob), 0l, "blob (f32: conv, pos tables, norms, clamp table) element-exact")
-        t |> equal(count_mismatch_u16(a.wblob, b.wblob), 0l, "wblob (the bf16 GEMMs) element-exact")
+        t |> equal(count_mismatch(a.wblob, b.wblob), 0l, "wblob (the bf16 GEMMs) element-exact")
         t |> equal(long_length(a.wblob), a.t.n_layer * a.t.layer_w_stride + a.t.n_embd * a.t.proj_dim,
                    "the bf16 plane is exactly the GEMM set ({length(a.wblob)} halfwords)")
         set_gemma4v_q8(true)
@@ -1941,8 +1915,8 @@ def test_gemma4v_tower_image_roundtrip(t : T?) {
         t |> success(cq.q8 && cq.image_map != null && stat(imgq).is_valid, "q8 lane: cold load built and serves its own image")
         t |> success(imgq != img, "the q8 lane keys a different image")
         t |> equal(count_mismatch(aq.blob, cq.blob), 0l, "q8 lane: blob element-exact")
-        t |> equal(count_mismatch_u16(aq.wblob, cq.wblob), 0l, "q8 lane: wblob (the projection) element-exact")
-        t |> equal(count_mismatch_i8(aq.qblob, cq.qblob), 0l, "q8 lane: qblob element-exact")
+        t |> equal(count_mismatch(aq.wblob, cq.wblob), 0l, "q8 lane: wblob (the projection) element-exact")
+        t |> equal(count_mismatch(aq.qblob, cq.qblob), 0l, "q8 lane: qblob element-exact")
         t |> equal(count_mismatch(aq.qscales, cq.qscales), 0l, "q8 lane: qscales element-exact")
         t |> equal(long_length(aq.qblob), aq.t.n_layer * aq.t.layer_w_stride, "qblob is exactly the block GEMM set")
         t |> equal(long_length(aq.wblob), aq.t.n_embd * aq.t.proj_dim, "q8 lane: the bf16 plane is exactly the projection")
@@ -1996,7 +1970,7 @@ def test_gemma3v_tower_image_roundtrip(t : T?) {
         t |> success(cq.q8 && cq.image_map != null && stat(imgq).is_valid, "q8 lane: cold load built and serves its own image")
         t |> success(imgq != img, "the q8 lane keys a different image")
         t |> equal(count_mismatch(aq.blob, cq.blob), 0l, "q8 lane: blob element-exact")
-        t |> equal(count_mismatch_i8(aq.qblob, cq.qblob), 0l, "q8 lane: qblob element-exact")
+        t |> equal(count_mismatch(aq.qblob, cq.qblob), 0l, "q8 lane: qblob element-exact")
         t |> equal(count_mismatch(aq.qscales, cq.qscales), 0l, "q8 lane: qscales element-exact")
         t |> equal(long_length(aq.qblob), aq.t.n_layer * aq.t.layer_w_stride, "qblob is exactly the padded block GEMM set")
         reset_gemma3v_q8()
@@ -2130,7 +2104,7 @@ def test_canary_encoder_q8_image_roundtrip(t : T?) {
         t |> success(cold.image_map != null, "cold load serves the image it built")
         t |> success(stat(img).is_valid, "cold load saved an image")
         t |> success(cold.q8, "served encoder is on the q8 rail")
-        t |> equal(count_mismatch_i8(a.qblob, cold.qblob), 0l, "cold-built qblob element-exact")
+        t |> equal(count_mismatch(a.qblob, cold.qblob), 0l, "cold-built qblob element-exact")
         var inscope b <- load_canary_encoder(path, true)
         t |> success(b.image_map != null, "warm load is image-backed")
         t |> success(b.q8, "warm encoder is on the q8 rail")
@@ -2138,7 +2112,7 @@ def test_canary_encoder_q8_image_roundtrip(t : T?) {
         t |> equal(b.n_layer, a.e.n_layer)
         t |> equal(b.proj_dim, a.e.proj_dim)
         t |> equal(length(b.layers), long_length(a.layers))
-        t |> equal(count_mismatch_i8(a.qblob, b.qblob), 0l, "qblob element-exact")
+        t |> equal(count_mismatch(a.qblob, b.qblob), 0l, "qblob element-exact")
         t |> equal(count_mismatch(a.qscales, b.qscales), 0l, "qscales element-exact")
         t |> equal(count_mismatch(a.blob, b.blob), 0l, "compact fp32 blob element-exact")
         t |> equal(count_mismatch(a.filters, b.filters), 0l, "filters element-exact")
@@ -2148,7 +2122,7 @@ def test_canary_encoder_q8_image_roundtrip(t : T?) {
         var inscope minted = CanaryEncoder()
         mint_canary_encoder(stg, minted)
         t |> success(minted.q8, "minted encoder is on the staging's q8 rail")
-        t |> equal(count_mismatch_i8(a.qblob, minted.qblob), 0l, "minted qblob element-exact vs staged truth")
+        t |> equal(count_mismatch(a.qblob, minted.qblob), 0l, "minted qblob element-exact vs staged truth")
     }
 }
 
@@ -2168,7 +2142,7 @@ def test_gemma4a_encoder_image_roundtrip(t : T?) {
         t |> success(cold.image_map != null, "cold load serves the image it built")
         t |> success(stat(img).is_valid, "cold load saved an image")
         t |> success(cold.q8, "served encoder is on the q8 rail")
-        t |> equal(count_mismatch_i8(a.qblob, cold.qblob), 0l, "cold-built qblob element-exact")
+        t |> equal(count_mismatch(a.qblob, cold.qblob), 0l, "cold-built qblob element-exact")
         var inscope b <- load_gemma4a_encoder(path)
         t |> success(b.image_map != null, "warm load is image-backed")
         t |> success(b.q8, "warm encoder is on the q8 rail")
@@ -2176,7 +2150,7 @@ def test_gemma4a_encoder_image_roundtrip(t : T?) {
         t |> equal(b.n_layer, a.e.n_layer)
         t |> equal(b.proj_dim, a.e.proj_dim)
         t |> equal(length(b.layers), long_length(a.layers))
-        t |> equal(count_mismatch_i8(a.qblob, b.qblob), 0l, "qblob element-exact")
+        t |> equal(count_mismatch(a.qblob, b.qblob), 0l, "qblob element-exact")
         t |> equal(count_mismatch(a.qscales, b.qscales), 0l, "qscales element-exact")
         t |> equal(count_mismatch(a.blob, b.blob), 0l, "compact fp32 blob element-exact")
         t |> equal(count_mismatch(a.twiddles, b.twiddles), 0l, "twiddles element-exact")
