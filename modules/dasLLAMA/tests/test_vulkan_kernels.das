@@ -515,6 +515,31 @@ def private kept_stamp_shape(kernel : string) : tuple<wg_vars : int; caps : tabl
     return <- res
 }
 
+//! a kept stamp's GLSL.std.450 Tanh instructions (x) and those of them whose operand is an FClamp's result (y)
+def private kept_tanh_reads(kernel : string) : int2 {
+    var res = int2(0, 0)
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        g_vkd_spv_kept |> get(kernel) $(words) {
+            var clamps : table<uint>
+            foreach_inst(words) $(op : uint; w : array<uint>; s, n : int) {
+                if (op == uint(SpvOp.ExtInst) && n >= 5 && w[s + 3] == uint(GLSLstd450.FClamp)) {
+                    clamps |> insert(w[s + 1])
+                }
+            }
+            foreach_inst(words) $(op : uint; w : array<uint>; s, n : int) {
+                if (op == uint(SpvOp.ExtInst) && n >= 5 && w[s + 3] == uint(GLSLstd450.Tanh)) {
+                    res.x++
+                    if (key_exists(clamps, w[s + 4])) {
+                        res.y++
+                    }
+                }
+            }
+            delete clamps
+        }
+    }
+    return res
+}
+
 //! whether the flash stamp ladder refuses the stamp: the ensure ladder, or the encode ladder when `enc`
 def private fa_ladder_panics(enc, khr : bool; hs : int64; gated, cap : bool; sink : bool = false) : bool {
     var tripped = false
@@ -1445,6 +1470,65 @@ def test_vkd_actf16_base(t0 : T?) {
             delete hsent
             delete h0
             delete h1
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test]
+def test_vkd_act_gelu_past_clamp(t0 : T?) {
+    t0 |> run("the tanh GELU act on gate values past the tanh clamp (|v| to 300) == the CPU oracle, every half finite") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_actf16_cls()) {
+                t |> skip("no Vulkan device, or the actf16 pipeline failed to build")
+                return
+            }
+            let nelem = 1024
+            let big <- [12.0, -12.0, 20.0, -20.0, 60.0, -60.0, 300.0, -300.0]
+            var gh <- row_fill(nelem, 29, 0, 0.06, 1.9, 61)
+            for (i in range(nelem / 8)) {
+                gh[i * 8] = big[i % 8]
+            }
+            var uh <- row_fill(nelem, 43, 0, 0.05, 2.1, 83)
+            let past = length([for (v in gh); v; where abs(v) > 10.0])
+            t |> success(past == nelem / 8, "the fixture puts {nelem / 8} gate values past the clamp's reach")
+            let g_bytes = int64(nelem) * 4l
+            let h_bytes = int64(nelem) * 2l
+            let gd = make_device_buf(g_bytes)
+            let ud = make_device_buf(g_bytes)
+            let hd = make_device_buf(h_bytes)
+            var host = make_host_buf(h_bytes, true, [cached = true])
+            var h_cls : array<uint>
+            h_cls |> resize(nelem / 2)
+            unsafe {
+                upload_region_at(gd, 0l, addr<uint8 const?>(gh[0]), g_bytes)
+                upload_region_at(ud, 0l, addr<uint8 const?>(uh[0]), g_bytes)
+                var sc = set_actf16_cls(fixed_array(gd, ud, hd), fixed_array(g_bytes, g_bytes, h_bytes), fixed_array(1u, 2u, 4u))
+                var pc = ActArgs(nelem = uint(nelem), act = ACT_GELU, nblk = 0u)
+                cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_actf16_cls(raw, h, sc, pc, int64((nelem / 4 + 255) / 256))
+                    cmd_copy_planes(raw, h, fixed_array(hd), host, fixed_array(h_bytes), 4u)
+                }
+                memcpy(addr<void?>(h_cls[0]), host.mapped, h_bytes)
+            }
+            var got <- [for (i in range(nelem)); half_at(h_cls, i)]
+            var want <- [for (i in range(nelem)); act_mul_ref(gh[i], uh[i], true)]
+            t |> success(all_finite(got), "every half the act landed is finite")
+            check_rows(t, "actf16 gelu past the clamp", got, want, BAR_APPROX, FLAT_ROWS)
+            g_vkd_spv_keep = true
+            vkd_pipes_rebuild()
+            let built = ensure_actf16_cls()
+            g_vkd_spv_keep = false
+            t |> success(built, "the actf16 stamp rebuilds through the keeping seat")
+            let tanh = kept_tanh_reads("actf16_cls_spv")
+            t |> success(tanh.x > 0 && tanh.x == tanh.y, "every tanh in the actf16 stamp reads a clamp's result ({tanh.y} of {tanh.x}): a device tanh built from exp answers NaN past +-15")
+            g_vkd_spv_kept |> clear()
+            delete gh
+            delete uh
+            delete h_cls
+            delete got
+            delete want
         } else {
             t |> skip("dasVulkan not present")
         }

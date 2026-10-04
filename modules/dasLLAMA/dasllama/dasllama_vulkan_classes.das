@@ -816,8 +816,7 @@ def private act_mul_sel(v, u : float; act : uint) : float {
         let y = clamp(u, -7.0, 7.0)
         return (x / (1.0 + exp(-1.702 * x))) * (y + 1.0)
     }
-    return (act == ACT_GELU ? (0.5 * v * (1.0 + tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))) * u
-        : silu_f32(v) * u)
+    return (act == ACT_GELU ? tts_gelu_tanh(v) : silu_f32(v)) * u
 }
 
 //! the act + requant of a gate / up pair on `RqT`: the element load is the activation

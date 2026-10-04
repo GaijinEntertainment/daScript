@@ -843,7 +843,10 @@ slab stamp on the groups it serves, two heads and one, at 64, 256 and 512), `tes
 restricted horizon), `test_vkd_da_attn_b_gated` (a gated model's chunked attention - q read at the
 head's [q | gate] stride, the output under the gate's sigmoid - on the 8-row tile at 128, the wide
 tile at 512 and the h128 coopmat tile, each against the gated oracle with the ungated oracle as the
-control and a poisoned element; the h128 arm skips without coopmat), `test_vkd_fa_cm2_h256_softcap` (the gemma-2 softcap tile, the no-cap control in
+control and a poisoned element; the h128 arm skips without coopmat), `test_vkd_act_gelu_past_clamp`
+(the tanh GELU act on gate values out to +-300 through `actf16_cls` against the CPU form, every half
+finite, and the stamp's words read back through the keeping seat: every tanh in it reads a clamp's
+result, since a device tanh built from exp answers NaN past +-15 where this card's does not), `test_vkd_fa_cm2_h256_softcap` (the gemma-2 softcap tile, the no-cap control in
 the same run) and `test_vkd_fa_cm2`'s h512 arm (gemma-4's global heads, the f16 O twin against the
 f32 stamp); the KHR twins `test_vkd_fa_khr` and `test_vkd_fa_khr_h256_softcap` run the same fixture
 (`fa_tile_run`, `fa_h256_softcap_cell`) through the KHR flash tile wherever the device has KHR
