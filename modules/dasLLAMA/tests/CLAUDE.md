@@ -840,7 +840,10 @@ the sink refusals -
 `test_vkd_da_attn_rqk` (the decode attention with the Q8_0 and Q8_K requant folded into its store,
 unsplit and split - the pass stores the row either way, its last piece combining - and the two-head
 slab stamp on the groups it serves, two heads and one, at 64, 256 and 512), `test_vkd_da_attn_bw` (the batched windowed decode attention over a
-restricted horizon), `test_vkd_fa_cm2_h256_softcap` (the gemma-2 softcap tile, the no-cap control in
+restricted horizon), `test_vkd_da_attn_b_gated` (a gated model's chunked attention - q read at the
+head's [q | gate] stride, the output under the gate's sigmoid - on the 8-row tile at 128, the wide
+tile at 512 and the h128 coopmat tile, each against the gated oracle with the ungated oracle as the
+control and a poisoned element; the h128 arm skips without coopmat), `test_vkd_fa_cm2_h256_softcap` (the gemma-2 softcap tile, the no-cap control in
 the same run) and `test_vkd_fa_cm2`'s h512 arm (gemma-4's global heads, the f16 O twin against the
 f32 stamp); the KHR twins `test_vkd_fa_khr` and `test_vkd_fa_khr_h256_softcap` run the same fixture
 (`fa_tile_run`, `fa_h256_softcap_cell`) through the KHR flash tile wherever the device has KHR

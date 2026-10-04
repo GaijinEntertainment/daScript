@@ -3907,6 +3907,7 @@ let private DAB_H128_F16 = 4
 //! a batched decode attention fixture: `npos` query rows over mirrors holding positions [0, w0 + npos) past `kbase` / `vbase` words
 struct private DaAttnBFix {
     qh, kh, vh : array<float>
+    gate : array<float>   //! a gated model's gate half beside each head's q (`npos` x `nheads` x `hs`); empty = ungated
     npos, nheads, kv_mul, hs, w0, kbase, vbase : int
 }
 
@@ -3933,7 +3934,18 @@ def private da_attn_b_ref(f : DaAttnBFix; scale : float; window : int; cap : flo
         let kstart = window > 0 && cnt > window ? cnt - window : 0
         attn_heads_oracle(f.qh, r * qd, f.kh, f.kbase, f.vh, f.vbase, kvd, f.nheads, f.hs, f.kv_mul, cnt, scale, y, r * qd, kstart, cap)
     }
+    if (!empty(f.gate)) {
+        for (i in range(length(y))) {
+            y[i] = sig_gate(y[i], f.gate[i])
+        }
+    }
     return <- y
+}
+
+//! the [q | gate] panel a gated model's q rows take: each head's `hs` q values, then its `hs` gate values
+def private gated_q_panel(f : DaAttnBFix) : array<float> {
+    let hs = f.hs
+    return <- [for (i in range(2 * length(f.qh))); (i / hs) % 2 == 0 ? f.qh[(i / (2 * hs)) * hs + i % hs] : f.gate[(i / (2 * hs)) * hs + i % hs]]
 }
 
 //! one batched decode attention dispatch through `stamp` (a DAB_*) over the fixture: q, the K and V mirrors (f16 halves on an f16
@@ -3945,16 +3957,19 @@ def private da_attn_b_run(f : DaAttnBFix; stamp : int; scale, cap : float; windo
         let tile = stamp == DAB_BW ? 4 : (stamp == DAB_H128 || stamp == DAB_H128_F16 ? 32 : 8)
         let qd = f.nheads * f.hs
         let kvd = (f.nheads / f.kv_mul) * f.hs
+        let gated = !empty(f.gate)
         let q_bytes = int64(f.npos * qd) * 4l
+        let qin_bytes = gated ? 2l * q_bytes : q_bytes
         let k_bytes = long_length(f.kh) * (f16 ? 2l : 4l)
         let v_bytes = long_length(f.vh) * (f16 ? 2l : 4l)
-        let qdev = make_device_buf(q_bytes)
+        let qdev = make_device_buf(qin_bytes)
         let kdev = make_device_buf(k_bytes)
         let vdev = make_device_buf(v_bytes)
         let yd2 = make_device_buf(q_bytes)
         let host = make_host_buf(q_bytes, true, [cached = true])
+        var qin <- gated ? gated_q_panel(f) : clone_to_move(f.qh)
         unsafe {
-            upload_region_at(qdev, 0l, addr<uint8 const?>(f.qh[0]), q_bytes)
+            upload_region_at(qdev, 0l, addr<uint8 const?>(qin[0]), qin_bytes)
             if (f16) {
                 var k16 <- pack_f16(f.kh)
                 var v16 <- pack_f16(f.vh)
@@ -3968,11 +3983,13 @@ def private da_attn_b_run(f : DaAttnBFix; stamp : int; scale, cap : float; windo
             }
         }
         nan_sentinel_upload(yd2, q_bytes)
+        delete qin
         let bufs = fixed_array(qdev, kdev, vdev, yd2)
-        let sizes = fixed_array(q_bytes, k_bytes, v_bytes, q_bytes)
+        let sizes = fixed_array(qin_bytes, k_bytes, v_bytes, q_bytes)
         let bits = fixed_array(1u, 2u, 8u, 16u)
         var pc = DaAttnBArgs(npos = uint(f.npos), nh = uint(f.nheads), kvd = uint(kvd), hs = uint(f.hs), kv_mul = uint(f.kv_mul),
-            kbase = uint(f.kbase), vbase = uint(f.vbase), w0 = uint(f.w0), scale = scale, window = uint(window), cap = cap)
+            kbase = uint(f.kbase), vbase = uint(f.vbase), w0 = uint(f.w0), scale = scale, window = uint(window), cap = cap,
+            qhs = gated ? uint(2 * f.hs) : 0u, gated = gated ? 1u : 0u)
         let wgs = int64(f.nheads * ((f.npos + tile - 1) / tile))
         cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
             if (stamp == DAB_B) {
@@ -4106,6 +4123,55 @@ def test_vkd_da_attn_b_h128(t0 : T?) {
             delete f
             delete y_ref
             delete y_cls
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! one gated chunked-attention arm: q read at the head's [q | gate] stride, the output under the sigmoid of the gate half -
+//! the gated oracle matches, the ungated one misses, the bar reds a poisoned element
+def private da_attn_b_gated_arm(t : T?; tag : string; stamp, npos, kv_mul, hs, w0 : int; qm, qa, km, ka : float; bar : Bar) {
+    var f <- da_attn_b_fix(npos, 4, kv_mul, hs, w0, 64, 160, qm, qa, km, ka, false)
+    f.gate <- [for (i in range(length(f.qh))); float((i * 29) % 61) * 0.08 - 2.4]
+    let scale = hs > 256 ? 1.0 : 0.125
+    var y_cls <- da_attn_b_run(f, stamp, scale, 0.0, 0)
+    var y_ref <- da_attn_b_ref(f, scale, 0, 0.0)
+    check_rows(t, tag, y_cls, y_ref, bar, 4 * hs, hs)
+    delete f.gate
+    var y_plain <- da_attn_b_ref(f, scale, 0, 0.0)
+    t |> success(check_count(y_cls, y_plain, bar) > 0, "{tag}: the gate moves the output (the ungated oracle misses the kernel)")
+    delete f
+    delete y_cls
+    delete y_ref
+    delete y_plain
+}
+
+// a gated model's chunked attention ([q | gate] per head, the output under the gate's sigmoid) on every stamp the prefill's
+// chunked pair picks by head size: the 8-row tile at 128, the wide tile at 512 and the h128 coopmat tile
+[test]
+def test_vkd_da_attn_b_gated(t0 : T?) {
+    t0 |> run("gated chunked attention == the gated CPU oracle on the 8-row, wide and h128 stamps") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            if (!(ensure_da_attn_b_cls() && ensure_da_attn_bw_cls())) {
+                t |> skip("da_attn_b classes declined on this device (workgroup cap)")
+                return
+            }
+            da_attn_b_gated_arm(t, "da_attn_b gated hs 128", DAB_B, 13, 2, 128, 32, 0.05, 1.8, 0.03, 1.4, BAR_APPROX)
+            da_attn_b_gated_arm(t, "da_attn_bw gated hs 512", DAB_BW, 13, 4, 512, 32, 0.005, 0.18, 0.003, 0.14, BAR_APPROX)
+            if (!g_gpu.has_coopmat) {
+                t |> skip("no coopmat on this device - the h128 gated arm")
+                return
+            }
+            if (!ensure_da_attn_b_h128_cls()) {
+                t |> failure("the h128 class rail must engage on a coopmat device")
+                return
+            }
+            da_attn_b_gated_arm(t, "da_attn_b_h128 gated", DAB_H128, 45, 2, 128, 32, 0.05, 1.8, 0.03, 1.4, Bar(rel = 2e-2))
         } else {
             t |> skip("dasVulkan not present")
         }

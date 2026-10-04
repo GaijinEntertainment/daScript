@@ -4154,6 +4154,8 @@ class template DaAttnBWT {
     def run {   // nolint:STYLE037,STYLE038 — the whole flash pass over one q tile, the shape its 8-row sibling takes
         let hs = pa.hs
         let qd = pa.nh * hs
+        let qhs = pa.qhs == 0u ? hs : pa.qhs
+        let qrow = pa.nh * qhs
         let qtiles = (pa.npos + 3u) / 4u
         let h = gl_WorkGroupID.x / qtiles
         let q0 = (gl_WorkGroupID.x % qtiles) * 4u
@@ -4162,7 +4164,7 @@ class template DaAttnBWT {
         var i = tid
         while (i < 4u * hs) {
             let qr = q0 + i / hs
-            fq[i] = qr < pa.npos ? qpanel[qr * qd + h * hs + i % hs] : 0.0
+            fq[i] = qr < pa.npos ? qpanel[qr * qrow + h * qhs + i % hs] : 0.0
             i += 256u
         }
         if (tid < 4u) {
@@ -4251,9 +4253,14 @@ class template DaAttnBWT {
         if (q0 + vr < pa.npos) {
             let inv = 1.0 / fl[vr]
             let ob = (q0 + vr) * qd + h * hs + vc
+            let gb = (q0 + vr) * qrow + h * qhs + hs + vc
             for (z in range(8)) {
                 if (vc + 64u * uint(z) < hs) {
-                    outp[ob + 64u * uint(z)] = o[z] * inv
+                    var v = o[z] * inv
+                    if (pa.gated != 0u) {
+                        v = sig_gate(v, qpanel[gb + 64u * uint(z)])
+                    }
+                    outp[ob + 64u * uint(z)] = v
                 }
             }
         }
@@ -4310,6 +4317,8 @@ class template DaAttnBH128T {
     [spirv_kernel(local_size_x = 128)]
     def run {   // nolint:STYLE037,STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
         let qd = pa.nh * 128u
+        let qhs = pa.qhs == 0u ? 128u : pa.qhs
+        let qrow = pa.nh * qhs
         let qtiles = (pa.npos + 31u) / 32u
         let h = gl_WorkGroupID.x / qtiles
         let q0 = (gl_WorkGroupID.x % qtiles) * 32u
@@ -4321,7 +4330,7 @@ class template DaAttnBH128T {
             let qr = q0 + i / 64u
             let jp = (i % 64u) * 2u
             if (qr < pa.npos) {
-                let src = qr * qd + h * 128u + jp
+                let src = qr * qrow + h * qhs + jp
                 fbq[i] = packHalf2x16(float2(qpanel[src], qpanel[src + 1u]))
             } else {
                 fbq[i] = 0u
@@ -4466,15 +4475,25 @@ class template DaAttnBH128T {
         if (q0 + orow0 < pa.npos) {
             let inv0 = 1.0 / fbl[orow0]
             let ob0 = (q0 + orow0) * qd + h * 128u + oe
+            let gb0 = (q0 + orow0) * qrow + h * qhs + 128u + oe
             for (z in range(16)) {
-                outp[ob0 + uint(z)] = o[z] * inv0
+                var v = o[z] * inv0
+                if (pa.gated != 0u) {
+                    v = sig_gate(v, qpanel[gb0 + uint(z)])
+                }
+                outp[ob0 + uint(z)] = v
             }
         }
         if (q0 + orow0 + 1u < pa.npos) {
             let inv1 = 1.0 / fbl[orow0 + 1u]
             let ob1 = (q0 + orow0 + 1u) * qd + h * 128u + oe
+            let gb1 = (q0 + orow0 + 1u) * qrow + h * qhs + 128u + oe
             for (z in range(16)) {
-                outp[ob1 + uint(z)] = o[16 + z] * inv1
+                var v = o[16 + z] * inv1
+                if (pa.gated != 0u) {
+                    v = sig_gate(v, qpanel[gb1 + uint(z)])
+                }
+                outp[ob1 + uint(z)] = v
             }
         }
     }
