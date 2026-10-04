@@ -50,7 +50,7 @@ with the higher count (`rdec_head_device_wrote`, `rdec_head_host_writes`;
 `test_gpu_resident_hybrid_mtp_draft_upload` holds a draft's upload counted and hydrated back).
 The device's rows come down on a pass
 (`rdec_head_hydrate`: the rows below the row the CPU reads next that the device holds and the host
-does not, through the head warm seat's `read`) - a draft or a verify the seat declines, the
+does not, through the K/V row read seat at layer `n_layers`, `rdec_kv_read`) - a draft or a verify the seat declines, the
 continuation's seam, which the driver's seam seat (`register_mtp_seam_override("vulkan", ...)`)
 hydrates for and leaves to the CPU seam, a steal and a drop (`rdec_hydrate_host`) - so no served
 round reads a head row back, and the CPU round's reject path and a draft the seat declines read

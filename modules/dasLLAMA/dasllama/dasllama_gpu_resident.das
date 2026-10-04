@@ -1277,7 +1277,7 @@ def private rdec_hydrate_host(t : Model; var s : Session) {
     if (!s.rdec_host_current) {
         for (l in range64(c.n_layers)) {
             continue if (!layer_owns_kv(t, l))   // a shared-KV layer reads its donor's slab, gathered once through the donor
-            rdec_read_kv_bulk(l, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), cnt)
+            rdec_kv_read(l, 0l, cnt, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len))
         }
         s.rdec_host_current = true
         to_log(LOG_INFO, "dasLLAMA: resident KV hydrated to host ({cnt} positions x {c.n_layers} layers)\n")
@@ -2399,7 +2399,7 @@ def private rdec_take_mirror(t : Model; var s : Session; r, pos : int64) {
     }
     for (l in range64(c.n_layers)) {
         continue if (!layer_owns_kv(t, l))
-        rdec_sync_kv(l, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len), pos)
+        rdec_kv_sync(l, 0l, pos, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len))
     }
     rdec_claim(s, r, pos)
     s.rdec_host_current = true   // the host still holds everything the mirror does
@@ -2496,7 +2496,7 @@ def private rdec_head_hydrate(t : Model; var s : Session; upto : int64) {
     return if (lo >= hi)
     let c = t.config
     rdec_select_region(r)
-    rdec_head_read_rows(lo, hi - lo, kv_layer_kbase(s, c.n_layers, c.seq_len), kv_layer_vbase(s, c.n_layers, c.seq_len))
+    rdec_kv_read(c.n_layers, lo, hi - lo, kv_layer_kbase(s, c.n_layers, c.seq_len), kv_layer_vbase(s, c.n_layers, c.seq_len))
     g_rdec_regions[r].head_host = hi
 }
 
@@ -2547,9 +2547,9 @@ def private rdec_prefill_head_rows(t : Model; var s : Session; r, npos, start_po
     let held = g_rdec_regions[r].head_cnt
     rdec_head_hydrate(t, s, held)   // the device's rows the host never saw come down first: the count below claims no row nobody wrote
     if (held < start_pos) {
-        rdec_head_sync_rows(held, start_pos - held, kp, vp)
+        rdec_kv_sync(l, held, start_pos - held, kp, vp)
     }
-    rdec_head_read_rows(start_pos, rows, kp, vp)
+    rdec_kv_read(l, start_pos, rows, kp, vp)
     g_rdec_regions[r].head_cnt = start_pos + rows
     g_rdec_regions[r].head_host = start_pos + rows
 }
@@ -3717,12 +3717,7 @@ def private rdec_read_row_kv(t : Model; var s : Session; pos : int64) {
     let c = t.config
     for (l in range64(c.n_layers)) {
         continue if (!layer_owns_kv(t, l))
-        let kvd = layer_kv_dim(c, l)
-        let krowb = kv_row_bytes(s.kv_dtype_k, kvd)
-        let vrowb = kv_row_bytes(s.kv_dtype_v, kvd)
-        unsafe {
-            rdec_read_kv(l, pos, kv_layer_kbase(s, l, c.seq_len) + pos * krowb, kv_layer_vbase(s, l, c.seq_len) + pos * vrowb)
-        }
+        rdec_kv_read(l, pos, 1l, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len))
     }
 }
 

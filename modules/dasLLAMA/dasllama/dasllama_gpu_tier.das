@@ -189,9 +189,10 @@ typedef RdecSetClsFn = function<(cls_block : int64; cls_fmt : int; cap : float; 
 typedef RdecTokenFn = function<(x : array<float>; cossin : array<float>; ple_row : array<float>; pos : int64; cnt : int64; pick_only : bool; var logits : array<float>) : int64>
 //! `ple_raw`: the rows are the gather half alone (sqrt(ple)-scaled table rows) and the driver finishes the pre-step on device; false = the finished side input
 typedef RdecPrefillFn = function<(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; pos0 : int64; var logits : array<float>) : void>
-typedef RdecSyncKvFn = function<(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) : void>
-typedef RdecReadKvFn = function<(l : int64; pos : int64; var kp : uint8?; var vp : uint8?) : void>
-typedef RdecReadKvBulkFn = function<(l : int64; var kp : uint8?; var vp : uint8?; npos : int64) : void>
+//! layer `l`'s K/V rows [row0, row0 + nrows) of the selected region, `l == n_layers` the NextN head: `kp` / `vp` the host cache from
+//! row 0 - the sync takes the rows up from it, the read brings them back into it
+typedef RdecKvSyncFn = function<(l : int64; row0 : int64; nrows : int64; kp : uint8 const?; vp : uint8 const?) : void>
+typedef RdecKvReadFn = function<(l : int64; row0 : int64; nrows : int64; var kp : uint8?; var vp : uint8?) : void>
 
 [unused_argument(fmt, cap_blocks)]
 def private rdec_unset_reserve(fmt : int; cap_blocks : int64) : bool => false
@@ -222,13 +223,13 @@ def private rdec_unset_token(x : array<float>; cossin : array<float>; ple_row : 
 def private rdec_unset_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; pos0 : int64; var logits : array<float>) {
     panic("dasLLAMA: resident prefill hit without an installed GPU driver")
 }
-[unused_argument(l, kp, vp, npos)]
-def private rdec_unset_sync(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) {}
-[unused_argument(l, pos, kp, vp)]
-def private rdec_unset_read(l, pos : int64; var kp : uint8?; var vp : uint8?) {}
-[unused_argument(l, kp, vp, npos)]
-def private rdec_unset_read_bulk(l : int64; var kp : uint8?; var vp : uint8?; npos : int64) {
-    panic("dasLLAMA: resident KV bulk readback hit without an installed GPU driver")
+[unused_argument(l, row0, nrows, kp, vp)]
+def private rdec_unset_kv_sync(l, row0, nrows : int64; kp : uint8 const?; vp : uint8 const?) {
+    panic("dasLLAMA: resident K/V row sync hit without an installed GPU driver")
+}
+[unused_argument(l, row0, nrows, kp, vp)]
+def private rdec_unset_kv_read(l, row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
+    panic("dasLLAMA: resident K/V row readback hit without an installed GPU driver")
 }
 
 var g_rdec_reserve = @@rdec_unset_reserve
@@ -239,9 +240,8 @@ var g_rdec_set_layer = @@rdec_unset_set_layer
 var g_rdec_set_cls = @@rdec_unset_set_cls
 var g_rdec_token = @@rdec_unset_token
 var g_rdec_prefill = @@rdec_unset_prefill
-var g_rdec_sync_kv = @@rdec_unset_sync
-var g_rdec_read_kv = @@rdec_unset_read
-var g_rdec_read_kv_bulk = @@rdec_unset_read_bulk
+var g_rdec_kv_sync = @@rdec_unset_kv_sync
+var g_rdec_kv_read = @@rdec_unset_kv_read
 var g_rdec_installed = false
 var g_rdec_set_dn_layer = @@rdec_unset_set_dn_layer
 var g_rdec_upload_dn_ba = @@rdec_unset_upload_dn_ba
@@ -564,8 +564,7 @@ def public rdec_dn_prefill_own(l : int64; stp : float?; histp : float?) { invoke
 def public install_moe_gpu_resident(reserve : RdecReserveFn; place : RdecPlaceFn; prepare : RdecPrepareFn;
                                     norms : RdecNormsFn; set_layer : RdecSetLayerFn; set_cls : RdecSetClsFn;
                                     token : RdecTokenFn; prefill : RdecPrefillFn;
-                                    sync_kv : RdecSyncKvFn; read_kv : RdecReadKvFn;
-                                    read_kv_bulk : RdecReadKvBulkFn) {
+                                    kv_sync : RdecKvSyncFn; kv_read : RdecKvReadFn) {
     g_rdec_reserve = reserve
     g_rdec_place = place
     g_rdec_prepare = prepare
@@ -574,9 +573,8 @@ def public install_moe_gpu_resident(reserve : RdecReserveFn; place : RdecPlaceFn
     g_rdec_set_cls = set_cls
     g_rdec_token = token
     g_rdec_prefill = prefill
-    g_rdec_sync_kv = sync_kv
-    g_rdec_read_kv = read_kv
-    g_rdec_read_kv_bulk = read_kv_bulk
+    g_rdec_kv_sync = kv_sync
+    g_rdec_kv_read = kv_read
     g_rdec_installed = true
 }
 
@@ -653,7 +651,7 @@ def public rdec_land_carry(row : int64; var dst : array<float>) { invoke(g_rdec_
 typedef RdecSetHeadFn = function<(beh : int64; feh : int; bq : int64; bk : int64; bv : int64; bo : int64; b1 : int64; b3 : int64; b2 : int64; fq : int; fk : int; fv : int; fo : int; f1 : int; f3 : int; f2 : int; g : RdecLayerGeom) : bool>
 //! one NextN draft at head row `row` of the selected region: the host head rows [hyd0, row) at `kp` / `vp` (the head's cache from row 0)
 //! come up, then `x` (the embedded token) and the carry `h` run the head; `rdec_land_carry`'s row 0 takes its hidden, `logits` its logits
-//! unless `pick_only` (they stay on the device), row `row`'s K/V stays on the device (`rdec_head_read_rows` on a pass). Answers the argmax id, -1 where the driver holds no head
+//! unless `pick_only` (they stay on the device), row `row`'s K/V stays on the device (`rdec_kv_read` at layer n_layers on a pass). Answers the argmax id, -1 where the driver holds no head
 typedef RdecDraftFn = function<(x : array<float>; h : array<float>; cossin : array<float>; row : int64; hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64>
 [unused_argument(beh, feh, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g)]
 def private rdec_unset_set_head(beh : int64; feh : int; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) : bool => false
@@ -741,38 +739,26 @@ def public rdec_rollback_installed() : bool => g_rdec_rollback_installed
 def public rdec_rollback(a : int64) : bool => invoke(g_rdec_rollback, a)
 
 //! the NextN head's prompt warm on the window chain: `ask` names whether the next chain warms the head's slab over the prompt rows
-//! it serves, `rows` answers how many head rows the last chain wrote (0 = none); the K/V row seams move the head's rows
-//! [row0, row0 + nrows) of the selected region - `sync` up from the host's `kp` / `vp` (the cache from row 0), `read` back down
+//! it serves, `rows` answers how many head rows the last chain wrote (0 = none); the head's rows move through the K/V row seats at layer `n_layers`
 typedef RdecHeadWarmAskFn = function<(on : bool) : void>
 typedef RdecHeadWarmRowsFn = function<() : int64>
-typedef RdecHeadKvRowsFn = function<(row0 : int64; nrows : int64; var kp : uint8?; var vp : uint8?) : void>
 [unused_argument(on)]
 def private rdec_unset_head_warm_ask(on : bool) {}
 def private rdec_unset_head_warm_rows : int64 => 0l
-[unused_argument(row0, nrows, kp, vp)]
-def private rdec_unset_head_kv_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
-    panic("dasLLAMA: the NextN head's K/V row seam hit without an installed GPU driver")
-}
 var g_rdec_head_warm_ask = @@rdec_unset_head_warm_ask
 var g_rdec_head_warm_rows = @@rdec_unset_head_warm_rows
-var g_rdec_head_sync_rows = @@rdec_unset_head_kv_rows
-var g_rdec_head_read_rows = @@rdec_unset_head_kv_rows
 var g_rdec_head_warm_installed = false
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]
-def public install_rdec_head_warm(ask : RdecHeadWarmAskFn; rows : RdecHeadWarmRowsFn; sync : RdecHeadKvRowsFn; read : RdecHeadKvRowsFn) {
+def public install_rdec_head_warm(ask : RdecHeadWarmAskFn; rows : RdecHeadWarmRowsFn) {
     g_rdec_head_warm_ask = ask
     g_rdec_head_warm_rows = rows
-    g_rdec_head_sync_rows = sync
-    g_rdec_head_read_rows = read
     g_rdec_head_warm_installed = true
 }
 
 def public rdec_head_warm_installed() : bool => g_rdec_head_warm_installed
 def public rdec_head_warm_ask(on : bool) { invoke(g_rdec_head_warm_ask, on) }
 def public rdec_head_warm_rows() : int64 => invoke(g_rdec_head_warm_rows)
-def public rdec_head_sync_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?) { invoke(g_rdec_head_sync_rows, row0, nrows, kp, vp) }
-def public rdec_head_read_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?) { invoke(g_rdec_head_read_rows, row0, nrows, kp, vp) }
 
 //! the per-layer-embedding seats (gemma-4 E-series): `set_ple` sizes the side-input rows at the model's ple width
 //! (after prepare, before the layers); `set_ple_layer` wires one layer's gate [dim x ple] and proj [ple x dim] planes
@@ -830,9 +816,8 @@ def public rdec_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk
 def public rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) { invoke(g_rdec_set_cls, cls_block, cls_fmt, cap, supp) }
 def public rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; pick_only : bool; var logits : array<float>) : int64 => invoke(g_rdec_token, x, cossin, ple_row, pos, cnt, pick_only, logits)
 def public rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; pos0 : int64; var logits : array<float>) { invoke(g_rdec_prefill, x_batch, cos_batch, ple_rows, ple_raw, npos, pos0, logits) }
-def public rdec_sync_kv(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) { invoke(g_rdec_sync_kv, l, kp, vp, npos) }
-def public rdec_read_kv(l, pos : int64; var kp : uint8?; var vp : uint8?) { invoke(g_rdec_read_kv, l, pos, kp, vp) }
-def public rdec_read_kv_bulk(l : int64; var kp : uint8?; var vp : uint8?; npos : int64) { invoke(g_rdec_read_kv_bulk, l, kp, vp, npos) }
+def public rdec_kv_sync(l, row0, nrows : int64; kp : uint8 const?; vp : uint8 const?) { invoke(g_rdec_kv_sync, l, row0, nrows, kp, vp) }
+def public rdec_kv_read(l, row0, nrows : int64; var kp : uint8?; var vp : uint8?) { invoke(g_rdec_kv_read, l, row0, nrows, kp, vp) }
 
 //! Install the GPU MoE tier (a GPU backend calls this at [init] when its device probe passes).
 def public install_moe_gpu_tier(ffn : MoeGpuFfnFn; upload : MoeGpuUploadFn; cls : MoeGpuClsFn; dense : MoeGpuDenseFn; drop : MoeGpuDropFn; dn : MoeGpuDnFn; attn : MoeGpuAttnFn) {

@@ -3389,7 +3389,7 @@ def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row
     let prof = vk_prof()
     let ts0 = ref_time_ticks()
     var pick : int64
-    vk_rdec_head_sync_rows(hyd0, row - hyd0, kp, vp)
+    vk_rdec_kv_sync(g_rd.n_layers, hyd0, row - hyd0, kp, vp)
     unsafe {
         if (!g_rd.head_draft_recorded[g_rd.region]) {
             if (g_rd.hc_nextn) {
@@ -3880,48 +3880,14 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>;
     }
 }
 
-//! Batch-decode support: upload one layer's KV history ([npos x kvd] codec rows) into the shared
-//! mirror at layer `l`, positions [0, npos). The session codec matches the mirror codec (the arm
-//! gate), so the rows byte-copy.
-[hot_path]   // per layer per batch-decode row
-def vk_rdec_sync_kv(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) {
-    assert(g_rd != null, "vk_rdec_sync_kv before prepare")
-    let L & = unsafe(g_rd.layers[l])
-    if (L.mir_idx < 0l) {
-        return
-    }
-    let rowb = rd_kv_row_units(L.kvd) * kv_unit_bytes(g_rd.kv_dt)
-    let base = rd_mir_base(L) * kv_unit_bytes(g_rd.kv_dt)
-    upload_region_at(g_rd.k_mirror, base, kp, npos * rowb)
-    upload_region_at(g_rd.v_mirror, base, vp, npos * rowb)
-}
-
-//! Bulk hydration: read layer `l`'s mirror rows [0, npos) into the caller's cache (kp/vp,
-//! [npos x kvd] codec rows each), one submit per KV_READBACK_ROWS rows. The host-KV-authoritative
-//! rail — makes continuations, CPU fallback, and slot switches valid after a device-resident prefill.
-[hot_path]   // the hydration rail — per layer, KV_READBACK_ROWS rows per submit
-def vk_rdec_read_kv_bulk(l : int64; var kp : uint8?; var vp : uint8?; npos : int64) {
-    read_kv_rows(l, 0l, npos, kp, vp)
-}
-
-//! Batch-decode writeback: read layer `l`'s new K/V row at `pos` from the mirror back into the
-//! caller's cache row (kp/vp, one codec row each). Keeps the CPU cache current after a GPU decode step.
-[hot_path]
-def vk_rdec_read_kv(l, pos : int64; var kp : uint8?; var vp : uint8?) {
-    read_kv_rows(l, pos, 1l, kp, vp)
-}
-
-//! the readback both rails are: layer `l`'s mirror rows [row0, row0 + nrows) into kp / vp from their first row, KV_READBACK_ROWS rows a submit
-def private read_kv_rows(l, row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
-    assert(g_rd != null, "read_kv_rows before prepare")
-    read_kv_rows_of(g_rd.layers[l], row0, nrows, kp, vp)
-}
-
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]   //! per prefill, reached through the tier's registered seat
-def vk_rdec_head_sync_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
-    assert(g_rd != null && g_rd.head_on, "vk_rdec_head_sync_rows on a driver without the head")
+//! layer `l`'s mirror rows [row0, row0 + nrows) up from the host cache `kp` / `vp` (from row 0), `l == n_layers` the NextN head; the
+//! session codec matches the mirror codec (the arm gate), so the rows byte-copy
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]   //! per batch-decode row and per prefill, reached through the tier's registered seat
+def vk_rdec_kv_sync(l, row0, nrows : int64; kp : uint8 const?; vp : uint8 const?) {
+    assert(g_rd != null && (l < g_rd.n_layers || g_rd.head_on), "vk_rdec_kv_sync: a head row on a driver without the head")
     return if (nrows <= 0l)
-    let L & = unsafe(g_rd.head)
+    let L & = unsafe(l == g_rd.n_layers ? g_rd.head : g_rd.layers[l])
+    return if (L.mir_idx < 0l)
     let rowb = rd_kv_row_units(L.kvd) * kv_unit_bytes(g_rd.kv_dt)
     let base = rd_mir_base(L) * kv_unit_bytes(g_rd.kv_dt) + row0 * rowb
     unsafe {
@@ -3930,21 +3896,14 @@ def vk_rdec_head_sync_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?
     }
 }
 
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]   //! per prefill, reached through the tier's registered seat
-def vk_rdec_head_read_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
-    assert(g_rd != null && g_rd.head_on, "vk_rdec_head_read_rows on a driver without the head")
+//! layer `l`'s mirror rows [row0, row0 + nrows) back into the host cache `kp` / `vp` (from row 0), `l == n_layers` the NextN head,
+//! KV_READBACK_ROWS rows a submit - the hydration rail, the batch decode's row writeback and the head's pass
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]   //! per layer per batch-decode row, reached through the tier's registered seat
+def vk_rdec_kv_read(l, row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
+    assert(g_rd != null && (l < g_rd.n_layers || g_rd.head_on), "vk_rdec_kv_read: a head row on a driver without the head")
     return if (nrows <= 0l)
-    let L & = unsafe(g_rd.head)
-    let rowb = rd_kv_row_units(L.kvd) * kv_unit_bytes(g_rd.kv_dt)
-    read_kv_rows_of(L, row0, nrows, unsafe(kp + row0 * rowb), unsafe(vp + row0 * rowb))
-}
-
-//! `L` is a trunk layer or the NextN head (`RDec.head`)
-def private read_kv_rows_of(L : RLayer; row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
-    if (L.mir_idx < 0l) {
-        return
-    }
-    assert(g_rd != null, "vk decode: K/V rows read with no resident model on the device")
+    let L & = unsafe(l == g_rd.n_layers ? g_rd.head : g_rd.layers[l])
+    return if (L.mir_idx < 0l)
     let rowb = rd_kv_row_units(L.kvd) * kv_unit_bytes(g_rd.kv_dt)
     var p0 = 0l
     var raw = alloc_transient_cmd()   // re-recorded per chunk (the pool allows reset), freed below
@@ -3957,8 +3916,8 @@ def private read_kv_rows_of(L : RLayer; row0, nrows : int64; var kp : uint8?; va
             cmd_copy_range(r, g_rd.v_mirror, off, g_rd.kv_readback.buf, bytes, bytes)
         }
         unsafe {
-            memcpy(reinterpret<void?>(kp + p0 * rowb), g_rd.kv_readback.mapped, bytes)
-            memcpy(reinterpret<void?>(vp + p0 * rowb), reinterpret<uint8?>(g_rd.kv_readback.mapped) + bytes, bytes)
+            memcpy(reinterpret<void?>(kp + (row0 + p0) * rowb), g_rd.kv_readback.mapped, bytes)
+            memcpy(reinterpret<void?>(vp + (row0 + p0) * rowb), reinterpret<uint8?>(g_rd.kv_readback.mapped) + bytes, bytes)
         }
         p0 += rows
     }
