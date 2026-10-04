@@ -1182,7 +1182,6 @@ def private moe_gpu_unset_qkv(var yq : float?; var yk : float?; var yv : float?;
 }
 
 var g_moe_gpu_qkv = @@moe_gpu_unset_qkv
-var g_moe_gpu_qkv_route = true
 
 //! Tier registration of the decode q/k/v group (beside install_moe_gpu_tier).
 def public set_moe_gpu_qkv_hook(f : MoeGpuQkvFn) {
@@ -1195,12 +1194,7 @@ def public set_moe_gpu_qkv_layer(l : int64) {
 }
 
 def public moe_gpu_qkv_on_gpu(l : int64) : bool {
-    return g_moe_gpu_installed && g_moe_gpu_qkv_route && key_exists(g_marks.qkv_layers, l)
-}
-
-//! Runtime routing gate over the qkv marks (the --qkv-ab in-process lever; uploads stay).
-def public set_moe_gpu_qkv_route(on : bool) {
-    g_moe_gpu_qkv_route = on
+    return g_moe_gpu_installed && key_exists(g_marks.qkv_layers, l)
 }
 
 // ===== per-model mark sets + whole-model drop (multi-model hosts) =====

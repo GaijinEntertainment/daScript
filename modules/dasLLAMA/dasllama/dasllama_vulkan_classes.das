@@ -6411,8 +6411,8 @@ class CmI8Batch : MoeCmBase {
 }
 
 // The mul_mm tile (DASLLAMA_COOPMAT=mm) as ONE class template over the tile edge and the edge
-// policy. The fragment sets are per-edge `static_if` arms: a cooperative-matrix handle cannot sit
-// in a sized array, and each arm's MMA order is parity-locked to the shipped kernel.
+// policy. The fragment sets are per-edge `static_if` arms, each arm's MMA order parity-locked to the
+// shipped kernel.
 [ |> template_struct_instance]
 class template MmBatchT : MoeCmBase {
     @ssbo @binding = 0 wq : array<uint>        // weight quant words

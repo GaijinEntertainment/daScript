@@ -234,12 +234,6 @@ struct Shape {
 
 let FLAT_SHAPE = Shape()
 
-//! `g` inside `bar` of `w`: bit-equal on an exact bar, else `bar_ok` at the bar's `rel` and `abs_floor`
-def within_bar(bar : Bar; g, w : float) : bool => bar.exact ? g == w : bar_ok(g, w, bar.rel, bar.abs_floor)
-
-//! The elements of `got` outside `bar` of `want`, the first six logged under `tag` on a tolerance bar.
-def mismatch_bar(tag : string; got, want : array<float>; bar : Bar) : int => bar.exact ? mismatch_exact(got, want) : mismatch_rel(tag, got, want, bar.rel, bar.abs_floor)
-
 //! `check` at `bar` with rows `row_width` wide and heads `head_width` wide
 def check_rows(t : T?; tag : string; got, want : array<float>; bar : Bar; row_width : int; head_width : int = 0) {
     check(t, tag, got, want, bar, Shape(row_width = row_width, head_width = head_width))
