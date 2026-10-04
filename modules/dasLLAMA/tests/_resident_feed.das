@@ -95,7 +95,7 @@ def with_gpu_kv_dtype(t : T?; kv : KVDtype; body : block<void>) {
     } else {
         t |> skip("the environment arms a {resident_mirror_dtype()} mirror over the {kv} asked (DASLLAMA_VK_KV32=1) - the cell needs that unset")
     }
-    restore_gpu_kv_dtype_(kv_pin)
+    restore_gpu_kv_dtype(kv_pin)
 }
 
 //! where a cell pinned a mirror codec, the armed mirror holds it
@@ -152,7 +152,7 @@ def load_resident_at(path : string; kv : KVDtype; regions : int64 = 0l; strict_c
     let pin = gpu_kv_dtype_pin()
     set_gpu_kv_dtype(kv)
     var tr <- load_resident(path, regions, strict_ctx)
-    restore_gpu_kv_dtype_(pin)
+    restore_gpu_kv_dtype(pin)
     return <- tr
 }
 

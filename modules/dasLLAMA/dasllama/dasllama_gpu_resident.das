@@ -1403,7 +1403,8 @@ def reset_gpu_kv_dtype_() {
 
 def gpu_kv_dtype_pin_() : tuple<pinned : bool; dt : KVDtype> => (pinned = g_rdec_kv_pinned, dt = g_rdec_kv_want)
 
-def restore_gpu_kv_dtype_(pin : tuple<pinned : bool; dt : KVDtype>) {
+//! the fixtures' put-back of the codec ask `gpu_kv_dtype_pin_` read: the pin again where one stood, the reset where none did
+def restore_gpu_kv_dtype(pin : tuple<pinned : bool; dt : KVDtype>) {
     if (pin.pinned) {
         set_gpu_kv_dtype_(pin.dt)
     } else {

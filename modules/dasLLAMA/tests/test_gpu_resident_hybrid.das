@@ -1368,7 +1368,6 @@ def test_gpu_resident_hybrid_mtp_head_off(t : T?) {
     }
 }
 
-// model-free: the routing witness stands on the census answering by name - a name nothing seeded panics instead of reading a zero count
 [test]
 def test_kernel_census_by_name(t : T?) {
     t |> run("the kernel census refuses a name no kernel seeded") @(t : T?) {
@@ -1387,7 +1386,6 @@ def test_kernel_census_by_name(t : T?) {
     }
 }
 
-// model-free: a NaN in the CPU reference row reads past the bar its finite elements set, so no device row holds it
 [test]
 def test_row_bar_nan_reference(t : T?) {
     let rel = 0.04
@@ -1448,7 +1446,7 @@ def test_gpu_resident_hybrid_mtp_block_codec(t : T?) {
     set_gpu_kv_dtype(KVDtype.q8_0)
     if (resident_mirror_dtype() != KVDtype.q8_0) {
         t |> skip("DASLLAMA_VK_KV32=1 arms the f32 mirror over a codec asked - the block-codec cells need it unset")
-        restore_gpu_kv_dtype_(pin)
+        restore_gpu_kv_dtype(pin)
         return
     }
     t |> run("the NextN head over a q8_0 mirror: the draft, the verify, the warmed head rows, six rounds") @(t : T?) {
@@ -1462,5 +1460,5 @@ def test_gpu_resident_hybrid_mtp_block_codec(t : T?) {
         test_gpu_resident_hybrid_mtp_verify(t)
         test_gpu_resident_hybrid_mtp_verify_reject(t)
     }
-    restore_gpu_kv_dtype_(pin)
+    restore_gpu_kv_dtype(pin)
 }

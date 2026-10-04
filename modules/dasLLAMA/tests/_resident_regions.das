@@ -19,7 +19,7 @@ require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: 
 require dasllama/dasllama_gpu_resident   // set_gpu_resident_regions_, moe_gpu_resident_active
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_token_n_rows: the N-row command served the batched cells' rows
-require ?vulkan dasllama/dasllama_vulkan_classes   // da_slab_of / da_attn_stamp_name: the decode attention stamp a carrier picks
+require ?vulkan dasllama/dasllama_vulkan_classes
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed   // served_every_call: the shared served witness
 
@@ -50,7 +50,7 @@ def pin_file_kv(dt : KVDtype) {
 
 //! the codec pin `pin_file_kv` found put back, from the same file's `[finalize]`
 def unpin_file_kv() {
-    restore_gpu_kv_dtype_(g_file_kv_found)
+    restore_gpu_kv_dtype(g_file_kv_found)
 }
 
 let private STEPS = 8l
