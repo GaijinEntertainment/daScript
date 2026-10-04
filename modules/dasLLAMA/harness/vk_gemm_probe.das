@@ -1826,12 +1826,15 @@ def private khr_arm_enc(v, fmt : int; raw : VkCommandBuffer; var hz : VkHaz; var
 }
 
 //! the baseline arm against the CPU oracle over six corners of the output - eight weight rows by sixteen tokens at the
-//! first, middle and last rows, at the first and last tokens - on the kernel cell's bar: |gpu - cpu| <= 2e-2 |cpu| + 4e-3 max|y|
+//! first, middle and last rows, at the first and last tokens - on the coopmat cells' bar (`bar_ok`): within 4e-3 of the output's
+//! largest finite magnitude, or within 2e-2 of the larger side floored at 1; a NaN on either side is off
 def private khr_cpu_check(wqh, wsuh, xfh : array<uint>; y_gpu : array<float>; d, n, cnt : int) : tuple<samples : int; off : int; max_abs : double> {
     let nsb = n / 256
     var ymax = 0.0
     for (v in y_gpu) {
-        ymax = max(ymax, abs(v))
+        if (!is_nan(v)) {
+            ymax = max(ymax, abs(v))
+        }
     }
     var samples = 0
     var off = 0
@@ -1846,9 +1849,9 @@ def private khr_cpu_check(wqh, wsuh, xfh : array<uint>; y_gpu : array<float>; d,
                 for (c in range(8)) {
                     let cpu = ys[(t0 + r) * 8 + c]
                     let gpu = y_gpu[(t0 + r) * d + r0 + c]
-                    let diff = abs(gpu - cpu)
+                    let diff = is_nan(gpu) || is_nan(cpu) ? INFINITE_DIFF : abs(gpu - cpu)
                     samples++
-                    if (diff > 2e-2 * abs(cpu) + 4e-3 * ymax) {
+                    if (!bar_ok(gpu, cpu, 2e-2, 4e-3 * ymax)) {
                         off++
                     }
                     max_abs = max(max_abs, double(diff))
