@@ -3599,6 +3599,22 @@ def private run_ref_gemm(d, n, cnt : int) {   // nolint:STYLE038 — one linear 
     delete xf
 }
 
+//! the four-wide decode's A/B in one process, interleaved: `body(round, arm, arms, tag)` over two rounds, so drift shows, each
+//! under both arms where the device serves the twin (the class pipelines rebuilt under each - the twin served, then
+//! stripped) and under the one arm elsewhere; the twin lever put back after
+def private twin_rounds(body : block<(round, arm, arms : int; tag : string) : void>) {
+    let twin_device = g_gpu.decvec_on
+    let arms = twin_device ? 2 : 1
+    for (round in range(2)) {
+        for (arm in range(arms)) {
+            g_gpu.decvec_on = twin_device && arm == 0
+            vkd_pipes_rebuild()
+            invoke(body, round, arm, arms, twin_device ? (arm == 0 ? "twin on " : "twin off") : "no twin ")
+        }
+    }
+    g_gpu.decvec_on = twin_device
+}
+
 //! the per-format arm `a` names - its `<arm>:` prefix, the format name past it - or "" where it names none
 def private fmt_arm_of(a : string) : string {
     for (pre in fixed_array("cm2:", "cm2d:", "cm2w:", "moe:", "cm2g:", "moesk:", "ts:", "cold:")) {
@@ -3689,62 +3705,52 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             return
         }
         print("ATTRIBUTION SWEEP {only}{cm2_fmt_names()}: timing-only rows, no output compared\n")
-        // the four-wide decode's A/B, both arms in ONE process, interleaved: the class pipelines
-        // rebuild under each arm (the twin served, then stripped), two rounds so drift shows
-        let twin_device = g_gpu.decvec_on
-        let arms = twin_device ? 2 : 1
-        for (round in range(2)) {
-            for (arm in range(arms)) {
-                g_gpu.decvec_on = twin_device && arm == 0
-                vkd_pipes_rebuild()
-                verify(cm2_cls_ensure(cm2_fmt, 256l) && cm2_cls_ensure(cm2_fmt, 128l) && cm2_cls_ensure(cm2_fmt, 32l)
-                    && (!probe_stwin_has(cm2_fmt) || probe_stwin_ensure(cm2_fmt))
-                    && kq_batch_cls_ensure(cm2_fmt, false), "the cm2 sweeps' probe pipelines (the l, m and s stamps, the twin, the kq tile) must engage")
-                let tag = twin_device ? (arm == 0 ? "twin on " : "twin off") : "no twin "
-                if (only == "cm2g:") {
-                    // gemma-4-26B-A4B's dense role shapes (dim 2816, shared expert 2112, q 4096, kv 2048): the file's K-quant planes against the q8 tiles below
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh_gate", 2112, 2816, 512)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh_down", 2816, 2112, 512)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q      ", 4096, 2816, 512)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} wo     ", 2816, 4096, 512)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} k/v    ", 2048, 2816, 512)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh_gate", 2112, 2816, 512, false, true)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh@2176", 2176, 2816, 512, false, true)   //! the shared expert's width padded to whole weight tiles: the partial 17th tile's cost
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh@2048", 2048, 2816, 512, false, true)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q      ", 4096, 2816, 512, false, true)
-                    if (round == 1) {
-                        for (sk in [1, 2, 3, 4, 6]) {
-                            run_kq_shape_split(cm2_fmt, "{tag} sh_gate", 2112, 2816, 512, sk)
-                        }
-                        for (sk in [1, 2, 4]) {
-                            run_kq_shape_split(cm2_fmt, "{tag} q      ", 4096, 2816, 512, sk)
-                            run_kq_shape_split(cm2_fmt, "{tag} k/v    ", 2048, 2816, 512, sk)
-                        }
+        twin_rounds() $(round, arm, arms; tag) {
+            verify(cm2_cls_ensure(cm2_fmt, 256l) && cm2_cls_ensure(cm2_fmt, 128l) && cm2_cls_ensure(cm2_fmt, 32l)
+                && (!probe_stwin_has(cm2_fmt) || probe_stwin_ensure(cm2_fmt))
+                && kq_batch_cls_ensure(cm2_fmt, false), "the cm2 sweeps' probe pipelines (the l, m and s stamps, the twin, the kq tile) must engage")
+            if (only == "cm2g:") {
+                // gemma-4-26B-A4B's dense role shapes (dim 2816, shared expert 2112, q 4096, kv 2048): the file's K-quant planes against the q8 tiles below
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh_gate", 2112, 2816, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh_down", 2816, 2112, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q      ", 4096, 2816, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} wo     ", 2816, 4096, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} k/v    ", 2048, 2816, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh_gate", 2112, 2816, 512, false, true)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh@2176", 2176, 2816, 512, false, true)   //! the shared expert's width padded to whole weight tiles: the partial 17th tile's cost
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh@2048", 2048, 2816, 512, false, true)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q      ", 4096, 2816, 512, false, true)
+                if (round == 1) {
+                    for (sk in [1, 2, 3, 4, 6]) {
+                        run_kq_shape_split(cm2_fmt, "{tag} sh_gate", 2112, 2816, 512, sk)
                     }
-                    if (round == 1 && arm == arms - 1) {
-                        run_shape("q8 sh_gate", 2112, 2816, 512)
-                        run_shape("q8 q      ", 4096, 2816, 512)
+                    for (sk in [1, 2, 4]) {
+                        run_kq_shape_split(cm2_fmt, "{tag} q      ", 4096, 2816, 512, sk)
+                        run_kq_shape_split(cm2_fmt, "{tag} k/v    ", 2048, 2816, 512, sk)
                     }
-                    continue
                 }
-                if (only == "cm2d:") {
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate ", 12288, 4096, 512)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} down ", 4096, 12288, 512)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} qkv  ", 8192, 4096, 512)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} z/out", 4096, 4096, 512)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} k/v  ", 1024, 4096, 512)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate@500", 12288, 4096, 500)   //! a token count off every column: the stamps' partial-tile store path
-                    continue
+                if (round == 1 && arm == arms - 1) {
+                    run_shape("q8 sh_gate", 2112, 2816, 512)
+                    run_shape("q8 q      ", 4096, 2816, 512)
                 }
-                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate", 9728, 2560, 512)
-                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} down", 2560, 9728, 512)
-                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q/wo", 4096, 2560, 512)
-                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate@64", 9728, 2560, 64)
-                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} shexp", 512, 2048, 512)
-                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} shdown", 2048, 512, 512)
+                return
             }
+            if (only == "cm2d:") {
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate ", 12288, 4096, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} down ", 4096, 12288, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} qkv  ", 8192, 4096, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} z/out", 4096, 4096, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} k/v  ", 1024, 4096, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate@500", 12288, 4096, 500)   //! a token count off every column: the stamps' partial-tile store path
+                return
+            }
+            run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate", 9728, 2560, 512)
+            run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} down", 2560, 9728, 512)
+            run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q/wo", 4096, 2560, 512)
+            run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate@64", 9728, 2560, 64)
+            run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} shexp", 512, 2048, 512)
+            run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} shdown", 2048, 512, 512)
         }
-        g_gpu.decvec_on = twin_device
         return
     }
     if (only == "ts:" || only == "cold:") {
@@ -3786,20 +3792,12 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         }
         print("ATTRIBUTION SWEEP {only}{cm2_fmt_names()}: timing-only rows, no output compared\n")
         let skew = only == "moesk:"
-        let twin_device = g_gpu.decvec_on
-        let arms = twin_device ? 2 : 1
-        for (round in range(2)) {
-            for (arm in range(arms)) {
-                g_gpu.decvec_on = twin_device && arm == 0
-                vkd_pipes_rebuild()
-                verify(cm2_cls_ensure(cm2_fmt, 32l) && cm2_cls_ensure(cm2_fmt, 128l) && cm2_cls_ensure(cm2_fmt, CM2_TC_E)
-                    && (!probe_stwin_has(cm2_fmt) || probe_stwin_ensure(cm2_fmt)), "moe:<fmt> probe pipelines must engage")
-                let tag = twin_device ? (arm == 0 ? "twin on " : "twin off") : "no twin "
-                run_moe_fmt_shape(cm2_fmt, "r{round} {tag} gate/up", 768, 2048, skew)
-                run_moe_fmt_shape(cm2_fmt, "r{round} {tag} down   ", 2048, 768, skew)
-            }
+        twin_rounds() $(round, _arm, _arms; tag) {
+            verify(cm2_cls_ensure(cm2_fmt, 32l) && cm2_cls_ensure(cm2_fmt, 128l) && cm2_cls_ensure(cm2_fmt, CM2_TC_E)
+                && (!probe_stwin_has(cm2_fmt) || probe_stwin_ensure(cm2_fmt)), "moe:<fmt> probe pipelines must engage")
+            run_moe_fmt_shape(cm2_fmt, "r{round} {tag} gate/up", 768, 2048, skew)
+            run_moe_fmt_shape(cm2_fmt, "r{round} {tag} down   ", 2048, 768, skew)
         }
-        g_gpu.decvec_on = twin_device
         return
     }
     if (only == "k6x") {
