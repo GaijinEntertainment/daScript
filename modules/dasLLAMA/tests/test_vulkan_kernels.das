@@ -8923,25 +8923,17 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
         let nrows = npos * k
         let ne = 6
         let eps = 1.0e-6
-        var sidx : array<uint>
-        var sw : array<float>
-        var rows <- row_fill(nrows * n, 7, 0, 0.13, 5.5, 93)
-        var xs <- row_fill(npos * n, 11, 0, 0.1, 1.7, 37)
-        var sh <- row_fill(npos * n, 5, 0, 0.2, 3.0, 41)
+        var fx <- ar_comb_fixture(n, k, npos)
         var wn : array<float>
         var lg : array<float>
         var sex : array<uint>
         var db : array<float>
-        sidx |> resize(nrows)
-        sw |> resize(nrows)
         wn |> resize(n)
         lg |> resize(npos * MR_NER)
         sex |> resize(nrows)
         let dbn = dbias ? 2 * ne * n : n   //! two layers' rows when biased (the dispatch reads the second), the biasless zero row of the model dim otherwise - the driver's own shapes
         db |> resize(dbn)
         for (i in range(nrows)) {
-            sidx[i] = uint((i * 7) % nrows)   //! a permutation of the bucket rows
-            sw[i] = 0.125 + float(i % 5) * 0.25
             sex[i] = hash_word(uint(i) + 3u) % uint(ne)
         }
         for (i in range(dbn)) {
@@ -8953,85 +8945,54 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
         for (i in range(npos * MR_NER)) {
             lg[i] = hash_unit(uint(i) + 9u)
         }
-        let si_bytes = int64(nrows) * 4l
-        let x_bytes = int64(npos * n) * 4l
-        let ro_bytes = int64(nrows * n) * 4l
-        let wn_bytes = int64(n) * 4l
-        let lg_bytes = int64(npos * MR_NER) * 4l
-        let db_bytes = int64(dbn) * 4l
-        let sid = make_device_buf(si_bytes)
-        let swd = make_device_buf(si_bytes)
-        let rod = make_device_buf(ro_bytes)
-        let xd = make_device_buf(x_bytes)
-        let shd = make_device_buf(x_bytes)
-        let wnd = make_device_buf(wn_bytes)
-        let lgd = make_device_buf(lg_bytes)
-        let dbd = make_device_buf(db_bytes)
-        let sexd = make_device_buf(si_bytes)
-        let yod = make_device_buf(x_bytes)
-        let yhd = make_device_buf(x_bytes / 2l)
-        let oq_bytes = int64(npos * n)
-        let os_bytes = int64(npos * n / 32) * 4l
-        let oqd = make_device_buf(oq_bytes)
-        let osd = make_device_buf(os_bytes)
-        var host = make_host_buf(3l * x_bytes, true, [cached = true])
         var got_x : array<float>
         var got_y : array<float>
         var got_h : array<uint>
         var got_q : array<int8>
         var got_s : array<float>
-        got_x |> resize(npos * n)
-        got_y |> resize(npos * n)
-        got_h |> resize(npos * n / 2)
-        got_q |> resize(npos * n)
-        got_s |> resize(npos * n / 32)
         var pc = ArArgs(dim = uint(n), add_on = with_sh ? 1u : 0u, woff = 0u, eps = eps, ascale = 1.0, row0 = 0u,
             slots = uint(k), lstride = uint(MR_NER), gated = gated ? 1u : 0u, dbias_on = dbias ? 1u : 0u, dboff = dbias ? uint(ne * n) : 0u)
-        unsafe {
-            upload_region_at(sid, 0l, addr<uint8 const?>(sidx[0]), si_bytes)
-            upload_region_at(swd, 0l, addr<uint8 const?>(sw[0]), si_bytes)
-            upload_region_at(rod, 0l, addr<uint8 const?>(rows[0]), ro_bytes)
-            upload_region_at(shd, 0l, addr<uint8 const?>(sh[0]), x_bytes)
-            upload_region_at(wnd, 0l, addr<uint8 const?>(wn[0]), wn_bytes)
-            upload_region_at(lgd, 0l, addr<uint8 const?>(lg[0]), lg_bytes)
-            upload_region_at(dbd, 0l, addr<uint8 const?>(db[0]), db_bytes)
-            upload_region_at(sexd, 0l, addr<uint8 const?>(sex[0]), si_bytes)
-            nan_sentinel_upload(yod, x_bytes)
-            nan_sentinel_upload(yhd, x_bytes / 2l)
+        with_cell_planes() $(var cp : CellPlanes) {
+            let px = cp |> io_(fx.xs)
+            let psh = cp |> in_(fx.sh)
+            let pwn = cp |> in_(wn)
+            let pyo = cp |> out_(npos * n)
+            let psi = cp |> in_plain(fx.sidx)
+            let psw = cp |> in_(fx.sw)
+            let pro = cp |> in_(fx.rows)
+            let plg = cp |> in_(lg)
+            let pdb = cp |> in_(db)
+            let psex = cp |> in_plain(sex)
+            let pyh = cp |> out_words(int64(npos * n) * 2l, NAN_SENTINEL_BITS)
+            let poq = cp |> out_words(int64(npos * n), NAN_SENTINEL_BITS)
+            let pos = cp |> out_(npos * n / 32)
             //! the f32 form: x updated in place, the normed row to yo
-            upload_region_at(xd, 0l, addr<uint8 const?>(xs[0]), x_bytes)
-            var sc = set_cls_ar_comb(fixed_array(xd, shd, wnd, yod, sid, swd, rod, lgd, dbd, sexd),
-                fixed_array(x_bytes, x_bytes, wn_bytes, x_bytes, si_bytes, si_bytes, ro_bytes, lg_bytes, db_bytes, si_bytes),
-                fixed_array(1u, 2u, 0u, 4u, 8u, 8u, 16u, 32u, 0u, 8u))
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+            var sc = cp |> cls_set(fixed_array(px, psh, pwn, pyo, psi, psw, pro, plg, pdb, psex), @@set_cls_ar_comb)
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_cls_ar_comb(raw, h, sc, pc, int64(npos))
-                cmd_copy_planes(raw, h, fixed_array(xd, yod), host, fixed_array(x_bytes, x_bytes), 1u | 4u)
             }
-            memcpy(addr<void?>(got_x[0]), host.mapped, x_bytes)
-            memcpy(addr<void?>(got_y[0]), reinterpret<void?>(intptr(host.mapped) + uint64(x_bytes)), x_bytes)
+            delete got_x
+            got_x <- cp |> plane_run(px)
+            delete got_y
+            got_y <- cp |> plane_run(pyo)
             //! the f16 form over a fresh x
-            upload_region_at(xd, 0l, addr<uint8 const?>(xs[0]), x_bytes)
-            var sc16 = set_cls_ar_comb_f16_b(fixed_array(xd, shd, wnd, yhd, sid, swd, rod, lgd, dbd, sexd),
-                fixed_array(x_bytes, x_bytes, wn_bytes, x_bytes / 2l, si_bytes, si_bytes, ro_bytes, lg_bytes, db_bytes, si_bytes),
-                fixed_array(1u, 2u, 0u, 4u, 8u, 8u, 16u, 32u, 0u, 8u))
-            cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                enc_cls_ar_comb_f16_b(raw2, h2, sc16, pc, int64(npos))
-                cmd_copy_planes(raw2, h2, fixed_array(yhd), host, fixed_array(x_bytes / 2l), 4u)
+            cp |> plane_upload(px, fx.xs)
+            var sc16 = cp |> cls_set(fixed_array(px, psh, pwn, pyh, psi, psw, pro, plg, pdb, psex), @@set_cls_ar_comb_f16_b)
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_cls_ar_comb_f16_b(raw, h, sc16, pc, int64(npos))
             }
-            memcpy(addr<void?>(got_h[0]), host.mapped, x_bytes / 2l)
+            delete got_h
+            got_h <- cp |> plane_as(pyh, type<uint>, npos * n / 2)
             //! the quantizing twin over a fresh x: the normed rows as Q8_0 blocks at the row binding, the scales past the slot map
-            upload_region_at(xd, 0l, addr<uint8 const?>(xs[0]), x_bytes)
-            nan_sentinel_upload(oqd, oq_bytes)
-            nan_sentinel_upload(osd, os_bytes)
-            var scq = set_cls_ar_comb_rq(fixed_array(xd, shd, wnd, oqd, sid, swd, rod, lgd, dbd, sexd, osd),
-                fixed_array(x_bytes, x_bytes, wn_bytes, oq_bytes, si_bytes, si_bytes, ro_bytes, lg_bytes, db_bytes, si_bytes, os_bytes),
-                fixed_array(1u, 2u, 0u, 4u, 8u, 8u, 16u, 32u, 0u, 8u, 4u))
-            cmd_one_shot() $(raw3 : VkCommandBuffer; var h3 : VkHaz) {
-                enc_cls_ar_comb_rq(raw3, h3, scq, pc, int64(npos))
-                cmd_copy_planes(raw3, h3, fixed_array(oqd, osd), host, fixed_array(oq_bytes, os_bytes), 4u)
+            cp |> plane_upload(px, fx.xs)
+            var scq = cp |> cls_set(fixed_array(px, psh, pwn, poq, psi, psw, pro, plg, pdb, psex, pos), @@set_cls_ar_comb_rq)
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_cls_ar_comb_rq(raw, h, scq, pc, int64(npos))
             }
-            memcpy(addr<void?>(got_q[0]), host.mapped, oq_bytes)
-            memcpy(addr<void?>(got_s[0]), reinterpret<void?>(intptr(host.mapped) + uint64(oq_bytes)), os_bytes)
+            delete got_q
+            got_q <- cp |> plane_as(poq, type<int8>, npos * n)
+            delete got_s
+            got_s <- cp |> plane_run(pos)
         }
         var want_x : array<float>
         var want_y : array<float>
@@ -9040,12 +9001,12 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
         for (p in range(npos)) {
             let g = with_sh && gated ? sigmoid_f32(lg[p * MR_NER + MR_NE]) : 1.0
             for (i in range(n)) {
-                var v = xs[p * n + i]
+                var v = fx.xs[p * n + i]
                 if (with_sh) {
-                    v += g * sh[p * n + i]
+                    v += g * fx.sh[p * n + i]
                 }
                 for (j in range(k)) {
-                    v += sw[p * k + j] * (rows[int(sidx[p * k + j]) * n + i] + (dbias ? db[ne * n + int(sex[p * k + j]) * n + i] : 0.0))
+                    v += fx.sw[p * k + j] * (fx.rows[int(fx.sidx[p * k + j]) * n + i] + (dbias ? db[ne * n + int(sex[p * k + j]) * n + i] : 0.0))
                 }
                 want_x[p * n + i] = v
             }
@@ -9054,42 +9015,18 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
             }
         }
         let arm = (with_sh ? (gated ? "gated shared" : "ungated shared") : "no shared") + " expert" + (dbias ? ", down biases" : "")
-        t |> success(mismatch_approx(got_x, xs) > 0, "the combine-folded residual step ({arm}): the in-place residual rows moved off their input")
-        let bad_x = mismatch_approx(got_x, want_x)
-        t |> success(bad_x == 0, "the combine-folded residual step ({arm}): the residual rows match the CPU oracle ({bad_x} of {npos * n} off)")
-        let bad_y = mismatch_approx(got_y, want_y)
-        t |> success(bad_y == 0, "the combine-folded residual step ({arm}): the f32 normed rows match the CPU oracle ({bad_y} of {npos * n} off)")
-        var got_yf : array<float>
-        got_yf |> resize(npos * n)
-        for (i in range(npos * n)) {
-            got_yf[i] = half_at(got_h, i)
-        }
-        //! the f16 bar: a half rounds to 2^-11 of the value (4.9e-4 relative); the bar is four halves of
-        //! that, and the same fraction of the row's largest value as the floor the near-zero elements read
-        let f16_bar = 2.0e-3
-        let bad_h = mismatch_rel("", got_yf, want_y, f16_bar, f16_bar * logits_maxabs(want_y))
-        t |> success(bad_h == 0, "the combine-folded residual step ({arm}): the f16 normed rows within the half's rounding of the oracle ({bad_h} off)")
         //! the quantizing twin: every block's scale within 2e-3 of the oracle's amax over 127, every dequantized element within a quant step
         let off = q8_blocks_off(got_q, got_s, want_y, npos * n / 32)
         t |> success(off.scales == 0, "the combine-folded residual step ({arm}): the quantizing twin's block scales match the oracle ({off.scales} of {npos * n / 32} off)")
         t |> success(off.values == 0, "the combine-folded residual step ({arm}): the quantizing twin's rows sit within a quant step of the oracle ({off.values} of {npos * n} off)")
         t |> success(off.poison_inside == 0, "combine-folded residual control: the quant bar reds a poisoned oracle element in every block ({off.poison_inside} passed)")
-        want_x[2 * n + 9] += 0.5
-        t |> success(mismatch_approx(got_x, want_x) == 1, "combine-folded residual control: the residual bar reds one poisoned element")
-        want_y[3 * n + 5] += 0.5
-        t |> success(mismatch_approx(got_y, want_y) == 1, "combine-folded residual control: the f32 normed-row bar reds one poisoned element")
-        t |> success(mismatch_rel("", got_yf, want_y, f16_bar, f16_bar * logits_maxabs(want_y)) == 1, "combine-folded residual control: the f16 normed-row bar reds one poisoned element")
-        delete sidx
-        delete sw
-        delete rows
-        delete xs
-        delete sh
+        ar_comb_check(t, "the combine-folded residual step ({arm})", "combine-folded residual control", fx.xs, got_x, got_y, got_h, want_x, want_y, n)
+        delete fx
         delete wn
         delete lg
         delete got_x
         delete got_y
         delete got_h
-        delete got_yf
         delete got_q
         delete got_s
         delete want_x
@@ -9097,6 +9034,47 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
         delete sex
         delete db
     }
+}
+
+//! the combine-folded residual cells' fixture rows: a permutation of the `npos` x `k` bucket rows as the slot map, the slot
+//! weights, the bucket rows `n` wide, the residual rows and the shared-expert rows
+struct private ArCombFix {
+    sidx : array<uint>
+    sw : array<float>
+    rows : array<float>
+    xs : array<float>
+    sh : array<float>
+}
+
+def private ar_comb_fixture(n, k, npos : int) : ArCombFix {
+    let nrows = npos * k
+    return <- ArCombFix(sidx <- [for (i in range(nrows)); uint((i * 7) % nrows)],
+        sw <- [for (i in range(nrows)); 0.125 + float(i % 5) * 0.25],
+        rows <- row_fill(nrows * n, 7, 0, 0.13, 5.5, 93),
+        xs <- row_fill(npos * n, 11, 0, 0.1, 1.7, 37),
+        sh <- row_fill(npos * n, 5, 0, 0.2, 3.0, 41))
+}
+
+//! a combine-folded residual step's three outputs under `tag`: the in-place residual rows moved off their input `xs` and within
+//! the approx bar of `want_x`, the f32 normed rows of `want_y`, and the f16 normed rows `got_h` within the half's rounding - a
+//! half rounds to 2^-11 of the value, the bar four halves of that with the same fraction of the row's largest value as the floor
+//! the near-zero elements read; then, under `ctrl`, one poisoned element of each expectation reds its bar
+def private ar_comb_check(t : T?; tag, ctrl : string; xs, got_x, got_y : array<float>; got_h : array<uint>; var want_x, want_y : array<float>; n : int) {
+    t |> success(mismatch_approx(got_x, xs) > 0, "{tag}: the in-place residual rows moved off their input")
+    let bad_x = mismatch_approx(got_x, want_x)
+    t |> success(bad_x == 0, "{tag}: the residual rows match the CPU oracle ({bad_x} of {length(want_x)} off)")
+    let bad_y = mismatch_approx(got_y, want_y)
+    t |> success(bad_y == 0, "{tag}: the f32 normed rows match the CPU oracle ({bad_y} of {length(want_y)} off)")
+    var got_yf <- [for (i in range(length(want_y))); half_at(got_h, i)]
+    let f16_bar = 2.0e-3
+    let bad_h = mismatch_rel("", got_yf, want_y, f16_bar, f16_bar * logits_maxabs(want_y))
+    t |> success(bad_h == 0, "{tag}: the f16 normed rows within the half's rounding of the oracle ({bad_h} off)")
+    want_x[2 * n + 9] += 0.5
+    t |> success(mismatch_approx(got_x, want_x) == 1, "{ctrl}: the residual bar reds one poisoned element")
+    want_y[3 * n + 5] += 0.5
+    t |> success(mismatch_approx(got_y, want_y) == 1, "{ctrl}: the f32 normed-row bar reds one poisoned element")
+    t |> success(mismatch_rel("", got_yf, want_y, f16_bar, f16_bar * logits_maxabs(want_y)) == 1, "{ctrl}: the f16 normed-row bar reds one poisoned element")
+    delete got_yf
 }
 
 //! the gemma-4 combine: x = (x + post(post2(sum_j w_j d_j) + post1(dense))) * ascale, then the next norm -
@@ -9107,73 +9085,61 @@ def private moe_ar_comb_g4_arm(t : T?) {
         let n = 64
         let k = 8   //! gemma-4's eight routed slots: the row pass's register form full
         let npos = 5
-        let nrows = npos * k
         let eps = 1.0e-6
         let ascale = 0.75
-        var sidx : array<uint>
-        var sw : array<float>
-        var rows <- row_fill(nrows * n, 7, 0, 0.13, 5.5, 93)
-        var xs <- row_fill(npos * n, 11, 0, 0.1, 1.7, 37)
-        var sh <- row_fill(npos * n, 5, 0, 0.2, 3.0, 41)
+        var fx <- ar_comb_fixture(n, k, npos)
         var wn : array<float>   //! four norm rows: the next norm, the dense post norm, the routed post norm, the layer's post norm
-        sidx |> resize(nrows)
-        sw |> resize(nrows)
         wn |> resize(4 * n)
-        for (i in range(nrows)) {
-            sidx[i] = uint((i * 7) % nrows)
-            sw[i] = 0.125 + float(i % 5) * 0.25
-        }
         for (i in range(4 * n)) {
             wn[i] = 0.5 + float((i * 3) % 7) * 0.125
         }
-        let si_bytes = int64(nrows) * 4l
-        let x_bytes = int64(npos * n) * 4l
-        let ro_bytes = int64(nrows * n) * 4l
-        let wn_bytes = int64(4 * n) * 4l
-        let sid = make_device_buf(si_bytes)
-        let swd = make_device_buf(si_bytes)
-        let rod = make_device_buf(ro_bytes)
-        let xd = make_device_buf(x_bytes)
-        let shd = make_device_buf(x_bytes)
-        let wnd = make_device_buf(wn_bytes)
-        let yod = make_device_buf(x_bytes)
-        let yhd = make_device_buf(x_bytes / 2l)
-        var host = make_host_buf(3l * x_bytes, true, [cached = true])
+        let nblk = npos * n / 32
+        let rq = ensure_cls_ar_comb_g4_rq()
         var got_x : array<float>
         var got_y : array<float>
         var got_h : array<uint>
-        got_x |> resize(npos * n)
-        got_y |> resize(npos * n)
-        got_h |> resize(npos * n / 2)
+        var oq : array<int8>
+        var os : array<float>
         var pc = ArArgs(dim = uint(n), add_on = 1u, woff = 0u, eps = eps, ascale = ascale, row0 = 0u,
             slots = uint(k), pwoff = uint(n), routed_post_off = uint(2 * n), sum_post_off = uint(3 * n))
-        unsafe {
-            upload_region_at(sid, 0l, addr<uint8 const?>(sidx[0]), si_bytes)
-            upload_region_at(swd, 0l, addr<uint8 const?>(sw[0]), si_bytes)
-            upload_region_at(rod, 0l, addr<uint8 const?>(rows[0]), ro_bytes)
-            upload_region_at(shd, 0l, addr<uint8 const?>(sh[0]), x_bytes)
-            upload_region_at(wnd, 0l, addr<uint8 const?>(wn[0]), wn_bytes)
-            nan_sentinel_upload(yod, x_bytes)
-            nan_sentinel_upload(yhd, x_bytes / 2l)
-            upload_region_at(xd, 0l, addr<uint8 const?>(xs[0]), x_bytes)
-            var sc = set_cls_ar_comb_g4(fixed_array(xd, shd, wnd, yod, sid, swd, rod),
-                fixed_array(x_bytes, x_bytes, wn_bytes, x_bytes, si_bytes, si_bytes, ro_bytes),
-                fixed_array(1u, 2u, 0u, 4u, 8u, 8u, 16u))
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+        with_cell_planes() $(var cp : CellPlanes) {
+            let px = cp |> io_(fx.xs)
+            let psh = cp |> in_(fx.sh)
+            let pwn = cp |> in_(wn)
+            let pyo = cp |> out_(npos * n)
+            let psi = cp |> in_plain(fx.sidx)
+            let psw = cp |> in_(fx.sw)
+            let pro = cp |> in_(fx.rows)
+            let pyh = cp |> out_words(int64(npos * n) * 2l, NAN_SENTINEL_BITS)
+            let poq = cp |> out_words(int64(npos * n), NAN_SENTINEL_BITS)
+            let pos = cp |> out_(nblk)
+            var sc = cp |> cls_set(fixed_array(px, psh, pwn, pyo, psi, psw, pro), @@set_cls_ar_comb_g4)
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_cls_ar_comb_g4(raw, h, sc, pc, int64(npos))
-                cmd_copy_planes(raw, h, fixed_array(xd, yod), host, fixed_array(x_bytes, x_bytes), 1u | 4u)
             }
-            memcpy(addr<void?>(got_x[0]), host.mapped, x_bytes)
-            memcpy(addr<void?>(got_y[0]), reinterpret<void?>(intptr(host.mapped) + uint64(x_bytes)), x_bytes)
-            upload_region_at(xd, 0l, addr<uint8 const?>(xs[0]), x_bytes)
-            var sc16 = set_cls_ar_comb_g4_f16_b(fixed_array(xd, shd, wnd, yhd, sid, swd, rod),
-                fixed_array(x_bytes, x_bytes, wn_bytes, x_bytes / 2l, si_bytes, si_bytes, ro_bytes),
-                fixed_array(1u, 2u, 0u, 4u, 8u, 8u, 16u))
-            cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                enc_cls_ar_comb_g4_f16_b(raw2, h2, sc16, pc, int64(npos))
-                cmd_copy_planes(raw2, h2, fixed_array(yhd), host, fixed_array(x_bytes / 2l), 4u)
+            delete got_x
+            got_x <- cp |> plane_run(px)
+            delete got_y
+            got_y <- cp |> plane_run(pyo)
+            cp |> plane_upload(px, fx.xs)
+            var sc16 = cp |> cls_set(fixed_array(px, psh, pwn, pyh, psi, psw, pro), @@set_cls_ar_comb_g4_f16_b)
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_cls_ar_comb_g4_f16_b(raw, h, sc16, pc, int64(npos))
             }
-            memcpy(addr<void?>(got_h[0]), host.mapped, x_bytes / 2l)
+            delete got_h
+            got_h <- cp |> plane_as(pyh, type<uint>, npos * n / 2)
+            //! the quantizing twin: the same step, the normed rows as Q8_0 blocks (two a row)
+            if (rq) {
+                cp |> plane_upload(px, fx.xs)
+                var scq = cp |> cls_set(fixed_array(px, psh, pwn, poq, psi, psw, pro, pos), @@set_cls_ar_comb_g4_rq)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_cls_ar_comb_g4_rq(raw, h, scq, pc, int64(npos))
+                }
+                delete oq
+                oq <- cp |> plane_as(poq, type<int8>, npos * n)
+                delete os
+                os <- cp |> plane_run(pos)
+            }
         }
         var want_x : array<float>
         var want_y : array<float>
@@ -9189,81 +9155,42 @@ def private moe_ar_comb_g4_arm(t : T?) {
             for (i in range(n)) {
                 var v = 0.0
                 for (j in range(k)) {
-                    v += sw[p * k + j] * rows[int(sidx[p * k + j]) * n + i]
+                    v += fx.sw[p * k + j] * fx.rows[int(fx.sidx[p * k + j]) * n + i]
                 }
                 r[i] = v
                 sr += v * v
-                sd += sh[p * n + i] * sh[p * n + i]
+                sd += fx.sh[p * n + i] * fx.sh[p * n + i]
             }
             let inv_r = 1.0 / sqrt(sr / float(n) + eps)
             let inv_d = 1.0 / sqrt(sd / float(n) + eps)
             var sc = 0.0
             for (i in range(n)) {
-                c[i] = wn[2 * n + i] * (r[i] * inv_r) + wn[n + i] * (sh[p * n + i] * inv_d)
+                c[i] = wn[2 * n + i] * (r[i] * inv_r) + wn[n + i] * (fx.sh[p * n + i] * inv_d)
                 sc += c[i] * c[i]
             }
             let inv_c = 1.0 / sqrt(sc / float(n) + eps)
             for (i in range(n)) {
-                want_x[p * n + i] = (xs[p * n + i] + wn[3 * n + i] * (c[i] * inv_c)) * ascale
+                want_x[p * n + i] = (fx.xs[p * n + i] + wn[3 * n + i] * (c[i] * inv_c)) * ascale
             }
             unsafe {
                 rmsnorm(addr<float?>(want_y[p * n]), addr<float const?>(want_x[p * n]), addr<float const?>(wn[0]), int64(n), eps)
             }
         }
-        t |> success(mismatch_approx(got_x, xs) > 0, "the gemma-4 combine step: the in-place residual rows moved off their input")
-        let bad_x = mismatch_approx(got_x, want_x)
-        t |> success(bad_x == 0, "the gemma-4 combine step: the residual rows match the CPU oracle ({bad_x} of {npos * n} off)")
-        let bad_y = mismatch_approx(got_y, want_y)
-        t |> success(bad_y == 0, "the gemma-4 combine step: the f32 normed rows match the CPU oracle ({bad_y} of {npos * n} off)")
-        var got_yf : array<float>
-        got_yf |> resize(npos * n)
-        for (i in range(npos * n)) {
-            got_yf[i] = half_at(got_h, i)
-        }
-        let f16_bar = 2.0e-3
-        let bad_h = mismatch_rel("", got_yf, want_y, f16_bar, f16_bar * logits_maxabs(want_y))
-        t |> success(bad_h == 0, "the gemma-4 combine step: the f16 normed rows within the half's rounding of the oracle ({bad_h} off)")
-        //! the quantizing twin: the same step, the normed rows as Q8_0 blocks (two a row) held to the oracle's blocks
-        if (ensure_cls_ar_comb_g4_rq()) {
-            let nblk = npos * n / 32
-            let oq_bytes = int64(npos * n)
-            let os_bytes = int64(nblk) * 4l
-            let oqd = make_device_buf(oq_bytes)
-            let osd = make_device_buf(os_bytes)
-            upload_region_at(xd, 0l, unsafe(addr<uint8 const?>(xs[0])), x_bytes)
-            nan_sentinel_upload(oqd, oq_bytes)
-            nan_sentinel_upload(osd, os_bytes)
-            var scq = set_cls_ar_comb_g4_rq(fixed_array(xd, shd, wnd, oqd, sid, swd, rod, osd),
-                fixed_array(x_bytes, x_bytes, wn_bytes, oq_bytes, si_bytes, si_bytes, ro_bytes, os_bytes),
-                fixed_array(1u, 2u, 0u, 4u, 8u, 8u, 16u, 4u))
-            cmd_one_shot() $(rawq : VkCommandBuffer; var hq : VkHaz) {
-                enc_cls_ar_comb_g4_rq(rawq, hq, scq, pc, int64(npos))
-                cmd_copy_planes(rawq, hq, fixed_array(oqd, osd), host, fixed_array(oq_bytes, os_bytes), 4u)
-            }
-            var oq <- staged(host.mapped, 0l, npos * n, type<int8>)
-            var os <- staged(host.mapped, oq_bytes, nblk, type<float>)
+        //! the quantizing twin held to the oracle's blocks
+        if (rq) {
             let off = q8_blocks_off(oq, os, want_y, nblk)
             t |> success(off.scales == 0, "the gemma-4 quantizing combine: the block scales match the oracle's normed rows ({off.scales} of {nblk} off)")
             t |> success(off.values == 0, "the gemma-4 quantizing combine: the dequantized rows sit within a quant step of the oracle ({off.values} of {npos * n} off)")
             t |> success(off.poison_inside == 0, "gemma-4 quantizing combine control: the quant bar reds a poisoned oracle element in every block ({off.poison_inside} passed)")
-            delete oq
-            delete os
         }
-        want_x[2 * n + 9] += 0.5
-        t |> success(mismatch_approx(got_x, want_x) == 1, "gemma-4 combine control: the residual bar reds one poisoned element")
-        want_y[3 * n + 5] += 0.5
-        t |> success(mismatch_approx(got_y, want_y) == 1, "gemma-4 combine control: the f32 normed-row bar reds one poisoned element")
-        t |> success(mismatch_rel("", got_yf, want_y, f16_bar, f16_bar * logits_maxabs(want_y)) == 1, "gemma-4 combine control: the f16 normed-row bar reds one poisoned element")
-        delete sidx
-        delete sw
-        delete rows
-        delete xs
-        delete sh
+        ar_comb_check(t, "the gemma-4 combine step", "gemma-4 combine control", fx.xs, got_x, got_y, got_h, want_x, want_y, n)
+        delete fx
         delete wn
         delete got_x
         delete got_y
         delete got_h
-        delete got_yf
+        delete oq
+        delete os
         delete want_x
         delete want_y
         delete r
