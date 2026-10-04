@@ -9415,19 +9415,12 @@ def private moe_sched_arm(t : T?) {
         let s1d = make_device_buf(s_bytes)
         let s3d = make_device_buf(s_bytes)
         let s2d = make_device_buf(s_bytes)
-        var fill : array<uint>
-        fill |> resize(length(w1))
-        for (f in fill) {
-            f = MR_SENT
-        }
         let host = make_host_buf(2l * i_bytes + 3l * s_bytes, true, [cached = true])
-        unsafe {
-            upload_region_at(idxd, 0l, addr<uint8 const?>(idx[0]), i_bytes)
-            nan_sentinel_upload(invd, i_bytes)
-            nan_sentinel_upload(bexd, i_bytes)
-            upload_region_at(s1d, 0l, addr<uint8 const?>(fill[0]), s_bytes)
-            upload_region_at(s3d, 0l, addr<uint8 const?>(fill[0]), s_bytes)
-            upload_region_at(s2d, 0l, addr<uint8 const?>(fill[0]), s_bytes)
+        upload_region_at(idxd, 0l, unsafe(addr<uint8 const?>(idx[0])), i_bytes)
+        nan_sentinel_upload(invd, i_bytes)
+        nan_sentinel_upload(bexd, i_bytes)
+        for (sd in fixed_array(s1d, s3d, s2d)) {
+            upload_fill(sd, 0l, s_bytes, MR_SENT)
         }
         var sc = set_moe_sched_cls(fixed_array(idxd, invd, s1d, s3d, s2d, bexd), fixed_array(i_bytes, i_bytes, s_bytes, s_bytes, s_bytes, i_bytes), fixed_array(1u, 2u, 2u, 2u, 2u, 2u))
         var pc = SchedArgs(nk = uint(nk), ne = uint(MR_NE), wt_gu = uint(wt_gu), wt_dn = uint(wt_dn),
@@ -9476,7 +9469,6 @@ def private moe_sched_arm(t : T?) {
         delete w1
         delete w3
         delete w2
-        delete fill
         delete ginv
         delete g1
         delete g3

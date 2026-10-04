@@ -7,6 +7,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_math
+require daslib/algorithm
 require ?vulkan dasllama/dasllama_math_vulkan  // the MoE GPU tier under test; the test installs its hooks explicitly (no env gate)
 require _vk_kq_fixtures   // f16r: the CPU reference rounds where the device stages halves, on every lane
 require ?vulkan _compares   // read inside the vulkan cells only, so a lane without dasVulkan sees no use
@@ -38,9 +39,7 @@ def private ref_chain(w1, w3, w2 : array<float>; x : array<float>; inv : array<u
     let kn = int(n)
     let knfe = int(nfe)
     out |> resize(npos * n)
-    for (o in out) {
-        o = 0.0
-    }
+    out |> fill(0.0)
     var x16 : array<float>
     x16 |> resize(npos * n)
     for (i in range64(npos * n)) {
