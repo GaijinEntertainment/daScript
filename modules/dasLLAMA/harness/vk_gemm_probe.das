@@ -466,45 +466,66 @@ struct private Cm2ShapeDev {
 //! (the engine's arena form; the schedule then carries the plane's block base), `plane_rows` past `cnt` sizes the
 //! feed and output planes to a wider window (the engine's capacity planes) with the GEMM reading the first `cnt` rows
 def private cm2_shape_upload(fmt : int; d, n, cnt : int; slab_blocks : int = 0; plane_rows : int = 0) : Cm2ShapeDev {
+    var h <- cm2_shape_host(fmt, d, n, cnt)
+    let dv = cm2_shape_dev(fmt, d, n, cnt, h, slab_blocks, plane_rows)
+    delete h
+    return dv
+}
+
+//! a kq shape's host planes: `d` rows of `n` weights (hashed quant words; a scale row a packed f16 d / dmin pair, then hashed
+//! words) and `cnt` activation rows as f16 pairs and as Q8_K words with their scales
+struct private Cm2ShapeHost {
+    wq : array<uint>
+    ws : array<uint>
+    xf : array<uint>
+    xq : array<uint>
+    axs : array<float>
+}
+
+def private cm2_shape_host(fmt : int; d, n, cnt : int) : Cm2ShapeHost {
+    let nsb = n / 256
+    let totsb = d * nsb
+    let bb = arena_block_bytes(fmt)
+    let wq_words = int(bb.wq / 4l)
+    let ws_words = int(bb.ws / 4l)
+    var h : Cm2ShapeHost
+    h.wq |> reserve(totsb * wq_words)   //! a wave sweep's fourth wave is 75 MB of q5_K blocks, past the unreserved growth cap
+    h.wq |> resize(totsb * wq_words)
+    h.ws |> reserve(totsb * ws_words)
+    h.ws |> resize(totsb * ws_words)
+    h.xf |> resize(cnt * n / 2)
+    h.xq |> resize(cnt * nsb * 64)
+    h.axs |> resize(cnt * nsb)
+    for (i in range(totsb * wq_words)) {
+        h.wq[i] = hash_word(uint(i) + 29u)
+    }
+    for (sb in range(totsb)) {
+        h.ws[sb * ws_words] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.00005 * float(1 + sb % 5)))
+        for (wi in range(1, ws_words)) {
+            h.ws[sb * ws_words + wi] = hash_word(uint(sb * ws_words + wi) + 613u)
+        }
+    }
+    for (i in range(cnt * n / 2)) {
+        h.xf[i] = cool_f16_pair(uint(i) * 3u + 5u)
+    }
+    for (i in range(cnt * nsb * 64)) {
+        h.xq[i] = hash_word(uint(i) * 13u + 1u)
+    }
+    for (i in range(cnt * nsb)) {
+        h.axs[i] = 0.0625
+    }
+    return <- h
+}
+
+//! `h` on the device, two output planes beside it; `slab_blocks` and `plane_rows` as in `cm2_shape_upload`
+def private cm2_shape_dev(fmt : int; d, n, cnt : int; h : Cm2ShapeHost; slab_blocks : int = 0; plane_rows : int = 0) : Cm2ShapeDev {
     let nsb = n / 256
     let totsb = d * nsb
     let bb = arena_block_bytes(fmt)
     let blk0 = max(slab_blocks - totsb, 0)
     let prow = max(plane_rows, cnt)
-    let wq_words = int(bb.wq / 4l)
-    let ws_words = int(bb.ws / 4l)
-    var wqh : array<uint>
-    var wsuh : array<uint>
-    var xfh : array<uint>
-    var xqh : array<uint>
-    var axsh : array<float>
-    wqh |> reserve(totsb * wq_words)   //! a wave sweep's fourth wave is 75 MB of q5_K blocks, past the unreserved growth cap
-    wqh |> resize(totsb * wq_words)
-    wsuh |> reserve(totsb * ws_words)
-    wsuh |> resize(totsb * ws_words)
-    xfh |> resize(cnt * n / 2)
-    xqh |> resize(cnt * nsb * 64)
-    axsh |> resize(cnt * nsb)
-    for (i in range(totsb * wq_words)) {
-        wqh[i] = hash_word(uint(i) + 29u)
-    }
-    for (sb in range(totsb)) {
-        wsuh[sb * ws_words] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.00005 * float(1 + sb % 5)))
-        for (wi in range(1, ws_words)) {
-            wsuh[sb * ws_words + wi] = hash_word(uint(sb * ws_words + wi) + 613u)
-        }
-    }
-    for (i in range(cnt * n / 2)) {
-        xfh[i] = cool_f16_pair(uint(i) * 3u + 5u)
-    }
-    for (i in range(cnt * nsb * 64)) {
-        xqh[i] = hash_word(uint(i) * 13u + 1u)
-    }
-    for (i in range(cnt * nsb)) {
-        axsh[i] = 0.0625
-    }
     var dv = Cm2ShapeDev(wq_bytes = int64(blk0 + totsb) * bb.wq, ws_bytes = int64(blk0 + totsb) * bb.ws, xf_bytes = int64(prow * n) * 2l,
-        xq_bytes = long_length(xqh) * 4l, axs_bytes = int64(cnt * nsb) * 4l, y_bytes = int64(prow * d) * 4l, wblk0 = blk0)
+        xq_bytes = long_length(h.xq) * 4l, axs_bytes = int64(cnt * nsb) * 4l, y_bytes = int64(prow * d) * 4l, wblk0 = blk0)
     dv.wqd = make_device_buf(dv.wq_bytes)
     dv.wsd = make_device_buf(dv.ws_bytes)
     dv.xfd = make_device_buf(dv.xf_bytes)
@@ -513,17 +534,12 @@ def private cm2_shape_upload(fmt : int; d, n, cnt : int; slab_blocks : int = 0; 
     dv.yd = make_device_buf(dv.y_bytes)
     dv.yd_b = make_device_buf(dv.y_bytes)
     unsafe {
-        upload_region_at(dv.wqd, int64(blk0) * bb.wq, addr<uint8 const?>(wqh[0]), int64(totsb) * bb.wq)
-        upload_region_at(dv.wsd, int64(blk0) * bb.ws, addr<uint8 const?>(wsuh[0]), long_length(wsuh) * 4l)
-        upload_region_at(dv.xfd, 0l, addr<uint8 const?>(xfh[0]), int64(cnt * n) * 2l)
-        upload_region_at(dv.xqd, 0l, addr<uint8 const?>(xqh[0]), dv.xq_bytes)
-        upload_region_at(dv.axsd, 0l, addr<uint8 const?>(axsh[0]), dv.axs_bytes)
+        upload_region_at(dv.wqd, int64(blk0) * bb.wq, addr<uint8 const?>(h.wq[0]), int64(totsb) * bb.wq)
+        upload_region_at(dv.wsd, int64(blk0) * bb.ws, addr<uint8 const?>(h.ws[0]), long_length(h.ws) * 4l)
+        upload_region_at(dv.xfd, 0l, addr<uint8 const?>(h.xf[0]), int64(cnt * n) * 2l)
+        upload_region_at(dv.xqd, 0l, addr<uint8 const?>(h.xq[0]), dv.xq_bytes)
+        upload_region_at(dv.axsd, 0l, addr<uint8 const?>(h.axs[0]), dv.axs_bytes)
     }
-    delete wqh
-    delete wsuh
-    delete xfh
-    delete xqh
-    delete axsh
     return dv
 }
 
@@ -1885,61 +1901,25 @@ def private khr_prof_submit(name : string; var raws : array<VkCommandBuffer>) {
 }
 
 [arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
-def private run_khr_shape(name : string; d, n, cnt : int; prof : bool = false) {   // nolint:STYLE038 — one interleaved measurement sweep over eight arms, its compare and its CPU check
+def private run_khr_shape(name : string; d, n, cnt : int; prof : bool = false) {
     let fmt = int(KqFmt.k4)
-    let nsb = n / 256
-    let totsb = d * nsb
-    let bb = arena_block_bytes(fmt)
-    let wq_words = int(bb.wq / 4l)
-    let ws_words = int(bb.ws / 4l)
-    var wqh : array<uint>
-    var wsuh : array<uint>
-    var xfh : array<uint>
-    var xqh : array<uint>
-    var axsh : array<float>
-    wqh |> resize(totsb * wq_words)
-    wsuh |> resize(totsb * ws_words)
-    xfh |> resize(cnt * n / 2)
-    xqh |> resize(cnt * nsb * 64)
-    axsh |> resize(cnt * nsb)
-    for (i in range(totsb * wq_words)) {
-        wqh[i] = hash_word(uint(i) + 29u)
-    }
-    for (sb in range(totsb)) {
-        wsuh[sb * ws_words] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.00005 * float(1 + sb % 5)))
-        for (wi in range(1, ws_words)) {
-            wsuh[sb * ws_words + wi] = hash_word(uint(sb * ws_words + wi) + 613u)
-        }
-    }
-    for (i in range(cnt * n / 2)) {
-        xfh[i] = cool_f16_pair(uint(i) * 3u + 5u)
-    }
-    for (i in range(cnt * nsb * 64)) {
-        xqh[i] = hash_word(uint(i) * 13u + 1u)
-    }
-    for (i in range(cnt * nsb)) {
-        axsh[i] = 0.0625
-    }
-    let wq_bytes = int64(totsb) * bb.wq
-    let ws_bytes = long_length(wsuh) * 4l
-    let xf_bytes = int64(cnt * n) * 2l
-    let xq_bytes = long_length(xqh) * 4l
-    let axs_bytes = int64(cnt * nsb) * 4l
-    let y_bytes = int64(cnt * d) * 4l
-    let wqd = make_device_buf(wq_bytes)
-    let wsd = make_device_buf(ws_bytes)
-    let xfd = make_device_buf(xf_bytes)
-    let xqd = make_device_buf(xq_bytes)
-    let axsd = make_device_buf(axs_bytes)
-    let yd = make_device_buf(y_bytes)
+    var h <- cm2_shape_host(fmt, d, n, cnt)
+    let dv = cm2_shape_dev(fmt, d, n, cnt, h)
+    let wq_bytes = dv.wq_bytes
+    let ws_bytes = dv.ws_bytes
+    let xf_bytes = dv.xf_bytes
+    let xq_bytes = dv.xq_bytes
+    let axs_bytes = dv.axs_bytes
+    let y_bytes = dv.y_bytes
+    let wqd = dv.wqd
+    let wsd = dv.wsd
+    let xfd = dv.xfd
+    let xqd = dv.xqd
+    let axsd = dv.axsd
+    let yd = dv.yd
     let flop = 2.0lf * double(cnt) * double(d) * double(n)
     unsafe {
-        upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
-        upload_region_at(wsd, 0l, addr<uint8 const?>(wsuh[0]), ws_bytes)
-        upload_region_at(xfd, 0l, addr<uint8 const?>(xfh[0]), xf_bytes)
-        upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
-        upload_region_at(axsd, 0l, addr<uint8 const?>(axsh[0]), axs_bytes)
-        let yd2 = make_device_buf(y_bytes)   //! consecutive dispatches alternate outputs, as the served graph overlaps them
+        let yd2 = dv.yd_b   //! consecutive dispatches alternate outputs, as the served graph overlaps them
         let partial = cnt % MM_TILE != 0
         var raws : array<VkCommandBuffer>
         raws |> reserve(KHR_ARMS)
@@ -1977,7 +1957,7 @@ def private run_khr_shape(name : string; d, n, cnt : int; prof : bool = false) {
             let last_out = DISPATCHES % 2 == 0 ? yd2 : yd
             var y_ref : array<float>
             khr_report(name, raws, best, last_out, y_bytes, flop, y_ref)
-            let cpu = khr_cpu_check(wqh, wsuh, xfh, y_ref, d, n, cnt)
+            let cpu = khr_cpu_check(h.wq, h.ws, h.xf, y_ref, d, n, cnt)
             print("{name} khr vs CPU oracle: {cpu.off} of {cpu.samples} sampled outputs off the cell bar, max |diff| {cpu.max_abs:.5f}\n")
             if (cpu.off != 0) {
                 g_probe_exit = 1
@@ -1987,11 +1967,7 @@ def private run_khr_shape(name : string; d, n, cnt : int; prof : bool = false) {
         }
         delete raws
     }
-    delete wqh
-    delete wsuh
-    delete xfh
-    delete xqh
-    delete axsh
+    delete h
 }
 
 [vk_dispatch(name = "mmqpx_k4", grid = "wgs", params = "wgs : int64")]
@@ -2457,53 +2433,22 @@ def private mmq_arm_enc(v, fmt : int; raw : VkCommandBuffer; var hz : VkHaz; var
 }
 
 [arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
-def private run_mmq_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
+def private run_mmq_shape(name : string; d, n, cnt : int) {
     let fmt = int(KqFmt.k4)
-    let nsb = n / 256
-    let totsb = d * nsb
-    let bb = arena_block_bytes(fmt)
-    let wq_words = int(bb.wq / 4l)
-    let ws_words = int(bb.ws / 4l)
-    var wqh : array<uint>
-    var wsuh : array<uint>
-    var xqh : array<uint>
-    var axsh : array<float>
-    wqh |> resize(totsb * wq_words)
-    wsuh |> resize(totsb * ws_words)
-    xqh |> resize(cnt * nsb * 64)
-    axsh |> resize(cnt * nsb)
-    for (i in range(totsb * wq_words)) {
-        wqh[i] = hash_word(uint(i) + 29u)
-    }
-    for (sb in range(totsb)) {
-        wsuh[sb * ws_words] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.00005 * float(1 + sb % 5)))
-        for (wi in range(1, ws_words)) {
-            wsuh[sb * ws_words + wi] = hash_word(uint(sb * ws_words + wi) + 613u)
-        }
-    }
-    for (i in range(cnt * nsb * 64)) {
-        xqh[i] = hash_word(uint(i) * 13u + 1u)
-    }
-    for (i in range(cnt * nsb)) {
-        axsh[i] = 0.0625
-    }
-    let wq_bytes = int64(totsb) * bb.wq
-    let ws_bytes = long_length(wsuh) * 4l
-    let xq_bytes = long_length(xqh) * 4l
-    let axs_bytes = int64(cnt * nsb) * 4l
-    let y_bytes = int64(cnt * d) * 4l
-    let wqd = make_device_buf(wq_bytes)
-    let wsd = make_device_buf(ws_bytes)
-    let xqd = make_device_buf(xq_bytes)
-    let axsd = make_device_buf(axs_bytes)
-    let yd = make_device_buf(y_bytes)
+    let dv = cm2_shape_upload(fmt, d, n, cnt)
+    let wq_bytes = dv.wq_bytes
+    let ws_bytes = dv.ws_bytes
+    let xq_bytes = dv.xq_bytes
+    let axs_bytes = dv.axs_bytes
+    let y_bytes = dv.y_bytes
+    let wqd = dv.wqd
+    let wsd = dv.wsd
+    let xqd = dv.xqd
+    let axsd = dv.axsd
+    let yd = dv.yd
     let flop = 2.0lf * double(cnt) * double(d) * double(n)
     unsafe {
-        upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
-        upload_region_at(wsd, 0l, addr<uint8 const?>(wsuh[0]), ws_bytes)
-        upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
-        upload_region_at(axsd, 0l, addr<uint8 const?>(axsh[0]), axs_bytes)
-        let yd2 = make_device_buf(y_bytes)   //! consecutive dispatches alternate outputs, as the served graph overlaps them
+        let yd2 = dv.yd_b   //! consecutive dispatches alternate outputs, as the served graph overlaps them
         let vnames = fixed_array("kq    ", "mmq   ", "mmqb  ", "mmqc  ", "mmqd  ")
         let compared = fixed_array(false, true, true, true, false)   //! kq is the reference; the ceiling twin reads constants: timing-only
         var raws : array<VkCommandBuffer>
@@ -2552,10 +2497,6 @@ def private run_mmq_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038
         delete best
         delete raws
     }
-    delete wqh
-    delete wsuh
-    delete xqh
-    delete axsh
 }
 
 // k6 (Q6_K) cm2 decode-in-load vs the serving kq tile - same instrument as run_k4_shape;
