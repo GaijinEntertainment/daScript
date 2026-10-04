@@ -1111,8 +1111,9 @@ def private cls_ar_run(x, a, w : array<float>; pc; nrows : int) : tuple<y : arra
             cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(bytes), 8u | 1u)
         }
         var y_out <- staged(host.mapped, 0l, n, type<float>)
-        vkd_read_back(xd, host, bytes)
-        var x_out <- staged(host.mapped, 0l, n, type<float>)
+        var x_out : array<float>
+        x_out |> resize(n)
+        readback_range(xd, 0u, host, unsafe(addr(x_out[0])), bytes)
         delete ysent
         return <- (y = y_out, x = x_out)
     } else {
@@ -2240,10 +2241,8 @@ def test_vkd_rope_family(t0 : T?) {
                         cmd_copy_planes(raw2, h2, fixed_array(q2), host, fixed_array(q_bytes), 2u | 4u | 16u)
                     }
                     memcpy(addr<void?>(cls_q[0]), host.mapped, q_bytes)
-                    vkd_read_back(km2, host, m_bytes)
-                    memcpy(addr<void?>(cls_k[0]), host.mapped, m_bytes)
-                    vkd_read_back(vm2, host, m_bytes)
-                    memcpy(addr<void?>(cls_v[0]), host.mapped, m_bytes)
+                    readback_range(km2, 0u, host, addr(cls_k[0]), m_bytes)
+                    readback_range(vm2, 0u, host, addr(cls_v[0]), m_bytes)
                 }
                 //! oracle: bias first, then the engine's NEOX table rotation; v is raw plus bias — the approx bars ride out the device's fma contraction
                 var ref <- rope_kv_rows(qh, kvh, bh, csh, 0, qd, qd + kvd, 0, bpad, nh, nkvh, hs) $(x : float) => x
@@ -2302,8 +2301,7 @@ def test_vkd_rope_family(t0 : T?) {
                         cmd_copy_planes(raw2, h2, fixed_array(q2), host, fixed_array(q_bytes), 1u | 16u)
                     }
                     memcpy(addr<void?>(cls_q[0]), host.mapped, q_bytes)
-                    vkd_read_back(k2, host, k_bytes)
-                    memcpy(addr<void?>(cls_k[0]), host.mapped, k_bytes)
+                    readback_range(k2, 0u, host, addr(cls_k[0]), k_bytes)
                 }
                 // oracle: per-head rms (1/sqrt(mean(v^2)+eps)) times the shared weight row —
                 // the device reduces sum-of-squares in tree order, so approx bars
@@ -4255,10 +4253,8 @@ def test_vkd_requant_family(t0 : T?) {
                         cmd_copy_planes(raw2, h2, fixed_array(q2), host, fixed_array(q_bytes), 1u | 8u | 16u)
                     }
                     memcpy(addr<void?>(q_cls[0]), host.mapped, q_bytes)
-                    vkd_read_back(s2, host, s_bytes)
-                    memcpy(addr<void?>(s_cls[0]), host.mapped, s_bytes)
-                    vkd_read_back(x2, host, e_bytes)
-                    memcpy(addr<void?>(x_cls[0]), host.mapped, e_bytes)
+                    readback_range(s2, 0u, host, addr(s_cls[0]), s_bytes)
+                    readback_range(x2, 0u, host, addr(x_cls[0]), e_bytes)
                 }
                 // oracle: x' = (x+a)*ascale in place, rms over the row, y = w*(x'*inv), Q8_0 pack —
                 // the wg reduce reassociates the sum of squares, so quants ride the byte bar
@@ -4306,10 +4302,8 @@ def test_vkd_requant_family(t0 : T?) {
                             cmd_copy_planes(rawb, hb, fixed_array(q2), host, fixed_array(q_bytes), 1u | 8u | 16u)
                         }
                         memcpy(addr<void?>(qb_cls[0]), host.mapped, q_bytes)
-                        vkd_read_back(s2, host, s_bytes)
-                        memcpy(addr<void?>(sb_cls[0]), host.mapped, s_bytes)
-                        vkd_read_back(x2, host, e_bytes)
-                        memcpy(addr<void?>(xb_cls[0]), host.mapped, e_bytes)
+                        readback_range(s2, 0u, host, addr(sb_cls[0]), s_bytes)
+                        readback_range(x2, 0u, host, addr(xb_cls[0]), e_bytes)
                     }
                     var xb_ref : array<float>
                     var yb_ref : array<float>
@@ -4457,8 +4451,7 @@ def test_vkd_requant_family(t0 : T?) {
                         cmd_copy_planes(raw2, h2, fixed_array(q2), host, fixed_array(q_bytes), 4u | 8u)
                     }
                     memcpy(addr<void?>(q_cls[0]), host.mapped, q_bytes)
-                    vkd_read_back(s2, host, s_bytes)
-                    memcpy(addr<void?>(s_cls[0]), host.mapped, s_bytes)
+                    readback_range(s2, 0u, host, addr(s_cls[0]), s_bytes)
                 }
                 // plain requant of f32 rows — amax is order-free, the pack deterministic: exact
                 var q_ref : array<uint>
@@ -9210,13 +9203,6 @@ let private MR_NER = MR_NE + 1   //! the shared expert's gate row rides past the
 
 //! one 32-bit word to a float in [-2, 2)
 def private hash_unit(i : uint) : float => float(hash_word(i) % 4096u) / 1024.0 - 2.0
-
-//! `bytes` of `dev` back into `host` on a transient command of its own, after the dispatches already landed
-def private vkd_read_back(dev : uint64; host; bytes : int64) {
-    cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-        cmd_copy_whole(raw, dev, host.buf, bytes)
-    }
-}
 
 //! the host select's picks and weights over the rows, `k` a row
 struct TopkSelect {

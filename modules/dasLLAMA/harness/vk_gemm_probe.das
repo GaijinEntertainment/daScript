@@ -1814,15 +1814,8 @@ def private read_back_y(var raw : VkCommandBuffer; dev : uint64; bytes : int64; 
     submit_wait(raw)
     out |> resize(bytes / 4l)
     var host = make_host_buf(bytes, true, [cached = true])
-    var rc = alloc_cmd()
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(rc, begin), null)
-    cmd_copy_whole(rc, dev, host.buf, bytes)
-    vk_check(vkEndCommandBuffer(rc), null)
-    submit_wait(rc)
-    unsafe {
-        memcpy(addr<void?>(out[0]), host.mapped, bytes)
-    }
+    readback_range(dev, 0u, host, unsafe(addr(out[0])), bytes)
+    destroy_host_buf(host)
 }
 
 def private max_rel_diff(a, b : array<float>) : double {
