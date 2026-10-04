@@ -6460,10 +6460,6 @@ def test_vkd_hc_seams(t0 : T?) {
     }
 }
 
-def private hct_slice(a : array<float>; off, n : int) : array<float> {
-    return <- [for (i in range(n)); a[off + i]]
-}
-
 //! the window forms of the mixer seams: the norm at a row offset, the gated mean and the scatter over rows - each against the
 //! one-row CPU form applied a row at a time, the rows outside the dispatch's slice untouched
 [test]
@@ -6512,7 +6508,7 @@ def test_vkd_hc_rows(t0 : T?) {
             for (g in range(2 * HCT_HC)) {
                 hct_rms(res, g * HCT_DIM, wn, (g % HCT_HC) * HCT_DIM, HCT_DIM, want, g * HCT_DIM)
             }
-            let want1 <- hct_slice(want, HCT_HCD, HCT_HCD)
+            let want1 <- copy_span(want, HCT_HCD, HCT_HCD)
             with_cell_planes() $(var cp : CellPlanes) {
                 let rp = cp |> in_(res)
                 let wp = cp |> in_(wn)
@@ -6584,11 +6580,11 @@ def test_vkd_hc_rows(t0 : T?) {
             let logits <- row_fill(rows * lstride, 53, 1, 0.5, 2.0)
             var want : array<float>
             want |> reserve(rows * HCT_HCD)
-            want |> push_from(hct_slice(res, 0, HCT_HCD))
+            want |> push_from(copy_span(res, 0, HCT_HCD))
             for (r in range(1, rows)) {
                 let g = sigmoid_f32(logits[r * lstride + lidx])
-                want |> push_from(hct_comb_ref(hct_slice(res, r * HCT_HCD, HCT_HCD), hct_slice(outr, r * HCT_DIM, HCT_DIM),
-                    hct_slice(inj, r * HCT_HC, HCT_HC), hct_slice(acc, r * HCT_DIM, HCT_DIM), true, true, g))
+                want |> push_from(hct_comb_ref(copy_span(res, r * HCT_HCD, HCT_HCD), copy_span(outr, r * HCT_DIM, HCT_DIM),
+                    copy_span(inj, r * HCT_HC, HCT_HC), copy_span(acc, r * HCT_DIM, HCT_DIM), true, true, g))
             }
             with_cell_planes() $(var cp : CellPlanes) {
                 let rp = cp |> io_(res)
