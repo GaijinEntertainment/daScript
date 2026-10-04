@@ -731,7 +731,7 @@ def test_bench_inprocess(t : T?) {   // nolint:STYLE038 — one live server sess
     }
 }
 
-let TEST_PORT_HELD = 18161   // 18150-18156 are test_openai_server_mtp.das's, 18170-18174 test_openai_server_speech_multi.das's
+let TEST_PORT_HELD = 18161   // 18150-18156 are test_openai_server_mtp.das's, 18170-18176 test_openai_server_speech_multi.das's
 
 //! The HTTP front answers a status route from the engine's last answer while a handler holds the engine: an embeddings
 //! forward over a long input runs in-handler for hundreds of milliseconds, and /v1/stats still answers in a fraction of

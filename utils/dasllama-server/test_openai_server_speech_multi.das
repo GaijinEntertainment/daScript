@@ -5,6 +5,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 require dastest/testing_boost public
 require openai_server                                   // add_asr_model / add_tts_model / run_server (sibling)
 require _server_rig                                     // models_dir (sibling)
+require dasllama/dasllama                               // set_metal_mode: the mode the ASR workers' decoder takes
 require openai/openai_audio                             // transcribe / speech: the two speech requests
 require dashv/dashv_boost                               // GET / POST: the readiness poll, /v1/models, the shutdown
 require daslib/jobque_boost                             // with_job_status / new_thread: the server thread, the four clients at once
@@ -21,7 +22,7 @@ require daslib/strings_boost   // count
 // Model-gated (Qwen3-ASR 0.6B and 1.7B with their mmprojs, kitten-nano with the front-end packs,
 // pocket-tts-en-q8) and JIT-only; skips cleanly otherwise.
 
-let TEST_PORT = 18170   // 18170, 18173, 18174: this file's three boots; 18097-18163 belong to the sibling suites
+let TEST_PORT = 18170   // 18170, 18173 .. 18176: this file's five boots; 18097-18163 belong to the sibling suites
 
 let ASR_A = "Qwen3-ASR-0.6B-Q8_0"
 let ASR_B = "Qwen3-ASR-1.7B-Q8_0"
@@ -200,6 +201,52 @@ def test_one_asr_model_takes_any_name(t : T?) {
             t |> success(res.ok && heard_jfk(res.text), "'{id}': {res.text}{res.error.message}")
         }
     }
+}
+
+//! where /v1/stats says the one ASR model of an ASR-only boot decodes, "" when the boot never served or answered no clip
+def private asr_alone_decoder(t : T?; port : int; mode : MetalMode) : string {
+    var decoder = ""
+    with_job_status(1) $(finished) {
+        new_thread() <| @capture(= finished, = port, = mode) {
+            set_metal_mode(mode)   // the engine's mode: the workers take it for a decoder that is a Model session
+            add_asr_model(path_join(models_dir(), "{ASR_A}.gguf"), asr_mmproj(ASR_A))
+            run_server(port)   // blocks until POST /shutdown
+            finished |> notify_and_release
+        }
+        let ready = serve_clients(port, 1200, "/v1/models") $(base_url) {
+            let res = transcribe(openai_client("{base_url}/v1"), ASR_A, JFK_PATH)
+            t |> success(res.ok && heard_jfk(res.text), "{mode}: {res.text}{res.error.message}")
+            GET("{base_url}/v1/stats") $(resp) {
+                var err = ""
+                var js = read_json(resp != null ? string(resp.body) : "", err)
+                t |> equal(js?["asr_ready"] ?? 0, 1, "the stats of a boot with no LLM count its ASR worker")
+                t |> equal(js?["asr_done_jobs"] ?? 0, 1, "and the clip it read")
+                if (res.ok) {
+                    decoder = js?["asr"]?["models"]?[0]?["decoder"] ?? ""
+                }
+                unsafe {
+                    delete js
+                }
+            }
+        }
+        finished |> join
+        t |> success(ready, "a boot with an ASR model and nothing else serves")
+    }
+    return decoder
+}
+
+//! An ASR model serves with no LLM and no TTS beside it, and its decoder runs where the engine's Metal mode puts it:
+//! on the device under the mode a Metal build serves with, on the CPU with the mode off.
+[test]
+def test_asr_alone_serves_on_the_engine_backend(t : T?) {
+    var inscope files <- [path_join(models_dir(), "{ASR_A}.gguf"), asr_mmproj(ASR_A)]
+    return if (model_missing(t, files))
+    t |> equal(asr_alone_decoder(t, TEST_PORT + 5, MetalMode.off), "cpu")
+    if (!has_prefill_override("metal")) {
+        t |> skip("no Metal driver in this build: the device half needs one")
+        return
+    }
+    t |> equal(asr_alone_decoder(t, TEST_PORT + 6, MetalMode.when_available), "metal")
 }
 
 //! An ASR model that cannot load fails the boot with the loader's reason: the speech thread reports it to the engine,

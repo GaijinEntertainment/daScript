@@ -483,12 +483,37 @@ def private chat_rows(plan : Plan; corpus, sizes : string; settle : int; fixed_c
     return tally
 }
 
-//! one whole transcription request under the client clock, the clip uploaded as a multipart form
+//! A copy of `clip` no server has heard - one sample, picked off the clock, moved - as a 16-bit temp file;
+//! "" when `clip` is no PCM WAV or the copy cannot be written.
+def unseen_clip(clip : string) : string {
+    var samples : array<float>
+    var rate = 0
+    var channels = 0
+    var path = ""
+    if (read_wav(clip, samples, rate, channels) && !empty(samples)) {
+        let ticks = ref_time_ticks()
+        let at = ticks % long_length(samples)
+        samples[at] += samples[at] < 0.5 ? 2.0 / 32767.0 : -2.0 / 32767.0   // two steps: write_wav truncates, and one would round back
+        var err = ""
+        path = path_join(temp_directory(err), "served_bench_{ticks}.wav")
+        if (!write_wav(path, samples, uint(rate), channels)) {
+            path = ""
+        }
+    }
+    delete samples
+    return path
+}
+
+//! one whole transcription request under the client clock, an unseen copy of the clip uploaded as a multipart form
 def transcribe(speech : Speech; clip : string) : Heard {
     var heard = Heard()
+    let unseen = unseen_clip(clip)
     let t0 = ref_time_ticks()
-    let res = openai_audio::transcribe(client_of(speech.url), speech.model, clip)
+    let res = openai_audio::transcribe(client_of(speech.url), speech.model, empty(unseen) ? clip : unseen)
     heard.wall_us = int64(get_time_usec(t0))
+    if (!empty(unseen)) {
+        remove(unseen)
+    }
     if (!res.ok) {
         heard.why = "HTTP {res.error.status}"
         return heard

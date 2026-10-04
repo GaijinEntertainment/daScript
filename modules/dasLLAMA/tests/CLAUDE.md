@@ -1773,7 +1773,9 @@ stream (counts, both spans past the server's 30 ms pauses, the server's own TTFT
 refusals - no usage chunk, no reply text, a reply of one token (no decode span to time), HTTP 500 -
 plus no server at the address, the follow-up row standing over complete turns and refused by a failed one, and the image cells - a file as a data URI and a missing one as none, an image question's wall and prompt tokens off the fake's buffered completion, HTTP 500 saying why, an image row standing over a file and refused without one. The speech rows
 run against a fake speech server on a second thread: a transcription's wall holds the server's
-300 ms pause, a failed and a blank answer say why, a row answers the text its reps read and refuses
+300 ms pause, a failed and a blank answer say why, every request of a row uploads a clip the fake
+has not heard (a WAV's four reps read `new` four times; a clip that is no WAV goes up as it is, the
+fake hears it twice and the row is refused), a row answers the text its reps read and refuses
 reps that read different texts or a text other than the one asked, and the loaded row stands while
 the fake chat turn outlasts two fast reps and is refused when the reps outlive the turn, when the
 turn carries no reply text, and when the loaded text differs from the idle one. The synthesis and

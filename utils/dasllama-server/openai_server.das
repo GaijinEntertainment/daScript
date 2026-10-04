@@ -325,6 +325,7 @@ struct AsrSlot {
     mmproj : string
     workers : int
     ready : int                 //! workers that loaded and answered
+    decoder : string            //! where the workers decode, off a ready event: `metal` for a decoder loaded as the Metal flavor, else `cpu`
 }
 
 //! One served TTS model: one worker loads and owns it. The answer-side fields are the worker's own, off its ready event.
@@ -350,6 +351,7 @@ var private g_asr_alias = ""                //! the default ASR model's other na
 var private g_asr_jobs : array<Channel?>   //! a job channel a running ASR model, by its row; the thread that started the workers holds them
 var private g_tts_jobs : array<Channel?>   //! the same a TTS model, null for one that is not armed
 var g_asr_team_dispatch = false
+var g_speech_metal = MetalMode.off   //! the engine's Metal mode, handed to the ASR workers whose decoder is a Model session
 var g_tts_team_dispatch = false
 let TTS_VOICE_CLIP_EXTENSIONS : array<string> <- [".wav", ".flac", ".mp3", ".ogg"]   // what the decode rail reads
 var g_shutdown_requested = false
@@ -830,6 +832,10 @@ def add_tts_model(path : string; lane : string = TTS_LANE_DEFAULT; voices_dir : 
 def server_has_tts : bool {
     return tts_default() >= 0
 }
+
+//! True when a speech model serves with no LLM slot beside it: an armed TTS model or a configured ASR model.
+def server_has_speech : bool
+    => server_has_tts() || !empty(g_asr)
 
 //! Stop admitting new inference/ASR work and exit after all accepted work finishes. Also wired to
 //! ``POST /shutdown``.
@@ -3817,6 +3823,15 @@ def private tts_stats_member() : string {
     return ",\"tts\":\{\"id\":{json_str(m.id)},\"ready\":{m.ready > 0},\"pending\":{g_tts_pending},\"done_jobs\":{g_tts_done_jobs},\"audio_s\":{g_tts_audio_s},\"voices\":[{voices}],\"sample_rate\":{m.sample_rate},\"lane\":{json_str(lane)},\"cloning\":{m.cloning},\"speed\":{m.speed},\"lang\":{json_str(m.lang)}{models}{failed}}"
 }
 
+//! the stats answer's `asr` member: each served ASR model with its workers and where they decode; "" with none
+def private asr_stats_member() : string {
+    return "" if (empty(g_asr))
+    var models <- [for (a in g_asr); "\{\"id\":{json_str(a.id)},\"workers\":{a.workers},\"ready\":{a.ready},\"decoder\":{json_str(a.decoder)}}"]
+    let member = ",\"asr\":\{\"models\":[{join(models, ",")}]}"
+    delete models
+    return member
+}
+
 // splice a member into a compact JSON object body: sprint_json/write_json_compact both close on
 // the final `}`, and the stats shapes are objects with at least one member
 def private with_json_member(body : string; member : string) : string {
@@ -3832,7 +3847,7 @@ def private handle_stats(var resp : Reply) : http_status {
         // `setup` is the MODE, not the slot count — a speech-only server serves the speech route
         // and must not draw the page's pick-a-model surface.
         return resp |> JSON(
-            "\{\"setup\":{g_setup_mode},\"model\":\"(no model)\",\"active_model\":\"\",\"ctx\":0,\"uptime_s\":{g_started_at > 0l ? get_time_nsec(g_started_at) / 1_000_000_000l : 0l},\"draining\":{g_shutdown_requested},\"active\":0,\"queued\":0,\"peak_active\":0,\"admitted\":0,\"finished\":0,\"evicted\":0,\"decode_steps\":0,\"gen_tokens\":0,\"avg_batch\":0,\"cached_tokens\":0,\"prefix_pages\":0,\"max_streams\":0,\"chunk_tokens\":0,\"asr_workers\":0,\"asr_ready\":0,\"asr_active\":0,\"asr_pending\":0,\"mtp_drafted\":0,\"mtp_accepted\":0,\"prefill_tokens\":0,\"ttft_avg_ms\":0,\"ttft_last_ms\":0,\"weights_bytes\":0,\"kv_bytes\":0,\"gpu_vram_bytes\":0,\"gpu_budget_bytes\":0,\"hardware\":{json_str(g_hardware_line)},\"asr_done_jobs\":0,\"asr_audio_s\":0,\"tts_done_jobs\":{g_tts_done_jobs},\"tts_audio_s\":{g_tts_audio_s},\"vision\":false,\"audio\":false,\"models\":[]{tts_stats_member()}}",
+            "\{\"setup\":{g_setup_mode},\"model\":\"(no model)\",\"active_model\":\"\",\"ctx\":0,\"uptime_s\":{g_started_at > 0l ? get_time_nsec(g_started_at) / 1_000_000_000l : 0l},\"draining\":{g_shutdown_requested},\"active\":0,\"queued\":0,\"peak_active\":0,\"admitted\":0,\"finished\":0,\"evicted\":0,\"decode_steps\":0,\"gen_tokens\":0,\"avg_batch\":0,\"cached_tokens\":0,\"prefix_pages\":0,\"max_streams\":0,\"chunk_tokens\":0,\"asr_workers\":{[for (a in g_asr); a.workers] |> sum()},\"asr_ready\":{[for (a in g_asr); a.ready] |> sum()},\"asr_active\":{g_asr_active},\"asr_pending\":{g_asr_pending},\"mtp_drafted\":0,\"mtp_accepted\":0,\"prefill_tokens\":0,\"ttft_avg_ms\":0,\"ttft_last_ms\":0,\"weights_bytes\":0,\"kv_bytes\":0,\"gpu_vram_bytes\":0,\"gpu_budget_bytes\":0,\"hardware\":{json_str(g_hardware_line)},\"asr_done_jobs\":{g_asr_done_jobs},\"asr_audio_s\":{g_asr_audio_s},\"tts_done_jobs\":{g_tts_done_jobs},\"tts_audio_s\":{g_tts_audio_s},\"vision\":false,\"audio\":false,\"models\":[]{asr_stats_member()}{tts_stats_member()}}",
             http_status.OK)
     }
     let tier = gpu_tier_status()
@@ -3901,7 +3916,7 @@ def private handle_stats(var resp : Reply) : http_status {
     }
     let body = sprint_json(out, false)
     delete out
-    return resp |> JSON(with_json_member(body, tts_stats_member()), http_status.OK)
+    return resp |> JSON(with_json_member(body, "{asr_stats_member()}{tts_stats_member()}"), http_status.OK)
 }
 
 // /v1/streams: the poll surface behind the page's swimlane + stream cards — per-stream state,
@@ -4641,14 +4656,18 @@ def private asr_worker_main(
                             worker_index : int;
                             model_path, mmproj_path : string;
                             team_dispatch : bool;
+                            metal : MetalMode;
                             var jobs : Channel?&;
                             var events : Channel?&
                             ) {
     this_context().name := "dasllama_asr_{worker_index}"
     configure_media_worker_dispatch(team_dispatch)
-    // the engine's Metal mode is the engine context's: this one starts with none, and a family whose decoder is an
-    // LLM (Qwen3-ASR, Canary) prefills it here on the CPU arm - a legitimate serving configuration, not a profiling slip
-    allow_cpu_prefill()
+    // a two-file model's decoder is a Model session and takes the engine's Metal mode; a one-file model (whisper,
+    // parakeet) decodes on hand-written CPU loops over planar weights, which the mode's portable pin would slow
+    if (!empty(mmproj_path)) {
+        set_metal_mode(metal)
+    }
+    allow_cpu_prefill()   // a decline lands the decoder's prefill on the CPU arm: served, not a profiling slip
     var model = AsrModel()
     var load_failure = ""
     let load_failed = catch_worker_panic(load_failure) {
@@ -4661,7 +4680,7 @@ def private asr_worker_main(
         events |> release
         return
     }
-    emit_asr_event(events, AsrEvent(kind = AsrEventKind.ready))
+    emit_asr_event(events, AsrEvent(kind = AsrEventKind.ready, body = model.dec.metal_blob ? "metal" : "cpu"))
     var session = AsrSession()
     var session_language = ""
     var has_session = false
@@ -4765,12 +4784,13 @@ def private start_asr_worker_threads() {
             let model_path = a.path
             let mmproj_path = a.mmproj
             let team_dispatch = g_asr_team_dispatch
+            let metal = g_speech_metal
             var jobs_capture = jobs
             var events_capture = g_asr_events
-            new_thread() <| @capture(= worker_index, = model_path, = mmproj_path, = team_dispatch,
+            new_thread() <| @capture(= worker_index, = model_path, = mmproj_path, = team_dispatch, = metal,
                                     = jobs_capture, = events_capture) {
                 asr_worker_main(
-                    worker_index, model_path, mmproj_path, team_dispatch, jobs_capture, events_capture)
+                    worker_index, model_path, mmproj_path, team_dispatch, metal, jobs_capture, events_capture)
             }
             index++
         }
@@ -4779,7 +4799,8 @@ def private start_asr_worker_threads() {
             g_asr_events |> pop_with_timeout_clone(1000) $(event : AsrEvent#) {
                 if (event.kind == AsrEventKind.ready) {
                     a.ready++
-                    to_log(LOG_INFO, "dasllama-server: ASR worker ready ({a.id}: {a.ready}/{a.workers})\n")
+                    a.decoder = clone_string(event.body)
+                    to_log(LOG_INFO, "dasllama-server: ASR worker ready ({a.id}: {a.ready}/{a.workers}, decoder on {a.decoder})\n")
                 } elif (event.kind == AsrEventKind.failed) {
                     load_failure = clone_string(event.body)
                 }
@@ -6176,6 +6197,7 @@ struct private SpeechBoot {
     asr_team : bool
     tts_team : bool
     asr_alias : string
+    metal : MetalMode
 }
 
 //! the speech state the engine's status routes and its drain read
@@ -6265,6 +6287,7 @@ def private speech_main(var boot : Channel?&; var inbox : Channel?&; var to_engi
         g_tts := b.tts
         g_asr_team_dispatch = b.asr_team
         g_tts_team_dispatch = b.tts_team
+        g_speech_metal = b.metal
         g_asr_alias = clone_string(b.asr_alias)
     }
     boot |> release
@@ -6371,7 +6394,7 @@ def private start_speech_thread {
     g_speech_out = worker_channel()
     var boot = worker_channel()
     g_asr_alias = empty(g_slots) ? "" : "{g_slots[g_default_slot].name}-asr"
-    var first = SpeechBoot(asr_team = g_asr_team_dispatch, tts_team = g_tts_team_dispatch, asr_alias = g_asr_alias)
+    var first = SpeechBoot(asr_team = g_asr_team_dispatch, tts_team = g_tts_team_dispatch, asr_alias = g_asr_alias, metal = get_metal_mode())
     first.asr := g_asr
     first.tts := g_tts
     boot |> push_clone(first)
@@ -6605,8 +6628,8 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
         to_log(LOG_ERROR, "dasllama-server: init_server called while already initialized\n")
         return false
     }
-    if (empty(g_slots) && !g_setup_mode && !server_has_tts()) {
-        to_log(LOG_ERROR, "dasllama-server: init_server with no model slots (call set_model/add_model first, or configure_tts for a speech-only server)\n")
+    if (empty(g_slots) && !g_setup_mode && !server_has_speech()) {
+        to_log(LOG_ERROR, "dasllama-server: init_server with no model slots (call set_model/add_model first, or add_tts_model / add_asr_model for a speech-only server)\n")
         return false
     }
     g_shutdown_requested = false   // reset so a restart in the same context after /shutdown doesn't drain at once
@@ -6629,7 +6652,7 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
     g_media_events = worker_channel()
     init_worker_rails()
     if (empty(g_slots)) {
-        if (!g_setup_mode && !server_has_tts()) {
+        if (!g_setup_mode && !server_has_speech()) {
             // the speech-only boot's worker dropped the route as it loaded: the catalog/config
             // page is all that is left to serve, and it is where the config gets fixed
             to_log(LOG_WARNING, "dasllama-server: the speech route did not arm and no model is loaded - falling back to setup mode\n")

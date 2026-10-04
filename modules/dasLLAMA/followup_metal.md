@@ -878,14 +878,6 @@ Llama-3.2-3B, M5 Max), and leaves the decode driver to upload them again. Three 
   releases the slice and takes a larger one). The work: the old slice's rows copied device-side
   into the new one.
 
-## 37. A served Qwen3-ASR transcription runs its decoder on the CPU
-
-The server's ASR worker context carries no Metal mode, so a family whose decoder is an LLM
-(Qwen3-ASR) prefills and decodes it on the CPU arm while the reference server runs the same file
-offloaded. The row is `harness/served_bench.das --asr-url <server> --clip <wav>` on both servers.
-The work: the worker serving the decoder on the device where one is armed, and that row beside
-the reference's.
-
 ## 38. Two ASR models transcribing at once slow each other
 
 Two ASR models asked for the same clip at the same instant each take several times their idle

@@ -379,10 +379,13 @@ def speech_roster_ids(tts : bool) : array<string> {
     return <- [for (m in tts ? g_tts_models : g_asr_models); empty(m.id) ? m.path : m.id]
 }
 
-//! whether any configured TTS model has its whole file set: such a boot serves the speech route with no LLM
-def private any_tts_present : bool {
+//! whether any configured speech model has its whole file set: such a boot serves its speech route with no LLM
+def private any_speech_present : bool {
     for (m in g_tts_models) {
         return true if (tts_files_present(m.path))
+    }
+    for (a in g_asr_models) {
+        return true if (stat(a.path).is_valid && (empty(a.mmproj) || stat(a.mmproj).is_valid))
     }
     return false
 }
@@ -904,11 +907,10 @@ def parse_args() {
         request_exit()
         return
     }
-    // a [[models]] roster needs no flat model key; a --tts start with its file set complete is a
-    // SERVING server (the speech route), so it never enters setup mode - an incomplete set is one
-    // configure_tts drops, which leaves this boot nothing to serve
+    // a [[models]] roster needs no flat model key; a --tts or --asr start with its file set complete
+    // is a SERVING server (the speech routes), so it never enters setup mode
     speech_roster_from_flags(g_cfg)
-    if (empty(g_cfg.model) && empty(g_models) && !any_tts_present()) {
+    if (empty(g_cfg.model) && empty(g_models) && !any_speech_present()) {
         g_setup_mode = true
         print("no model configured - starting in setup mode (open the control page to download one from the catalog)\n")
     }
@@ -1083,12 +1085,12 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     }
     delete g_models
     g_models <- roster
-    if (empty(g_models) && !g_setup_mode && !any_tts_present()) {
+    if (empty(g_models) && !g_setup_mode && !any_speech_present()) {
         // not an exit: a crash-looping boot under the watchdog never gets a page to fix the config from
         g_setup_mode = true
-        to_log(LOG_ERROR, "dasllama-server: no loadable model - no configured path survived its file check (roster entries, and the --tts file set); starting in setup mode\n")
+        to_log(LOG_ERROR, "dasllama-server: no loadable model - no configured path survived its file check (roster entries, and the --tts and --asr file sets); starting in setup mode\n")
     } elif (empty(g_models) && !g_setup_mode) {
-        to_log(LOG_WARNING, "dasllama-server: no loadable LLM model - serving the speech route only (the TTS model still loads)\n")
+        to_log(LOG_WARNING, "dasllama-server: no loadable LLM model - serving the speech routes only (the TTS and ASR models still load)\n")
     }
     if (!empty(g_cfg.image_mmproj) && !stat(g_cfg.image_mmproj).is_valid) {
         to_log(LOG_ERROR, "dasllama-server: dropping --image-mmproj - file not found: {g_cfg.image_mmproj}\n")
@@ -1206,8 +1208,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
             add_asr_model(a.path, a.mmproj, max(a.workers, 1), a.id)
         }
     }
-    // outside the serving gate: a --tts start with no loadable LLM is a speech-only SERVER, and
-    // its route has to arm on that boot too
+    // a --tts start with no loadable LLM is a speech-only SERVER, and its route arms on that boot too
     configure_tts("")
     for (m in g_tts_models) {
         add_tts_model(m.path, m.lane, m.voices_dir, m.id)

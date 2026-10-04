@@ -33,7 +33,10 @@ cached token count differs between reps.
 
 Its speech rows time a whole transcription request - the clip uploaded as a multipart form to
 `/v1/audio/transcriptions` - one row a clip, over all reps behind one untimed request, every rep
-reading the same text. A second row a clip is timed while a chat turn decodes at the chat
+reading the same text. Every request uploads a copy of the clip with one sample moved, the sample
+picked off the clock: a server that keeps the prompts it has evaluated answers a clip it has heard
+from that cache - audio rows included - and a transcription service is not sent the same audio
+twice. A clip that is no PCM WAV goes up as it is. A second row a clip is timed while a chat turn decodes at the chat
 endpoint: the reps start at that turn's first reply text, and the row is refused when the turn
 ends before they do or the text differs from the idle row's. Where the speech encoder runs -
 beside the chat model on the GPU or on the CPU team - is the server's launch, not the

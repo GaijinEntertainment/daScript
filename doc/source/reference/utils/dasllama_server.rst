@@ -432,7 +432,7 @@ Setup mode and the model catalog
 ================================
 
 A start with no LLM model at all - no ``--model``, no config, or every
-configured path missing - and no servable ``--tts`` boots into setup mode: the
+configured path missing - and no servable ``--tts`` or ``--asr`` boots into setup mode: the
 port opens, the control page serves, every inference route answers with a
 clean error, and the page leads with the model catalog - a curated, sha-pinned
 list of current models (``model_catalog.das``, a view over the module's one
@@ -452,8 +452,13 @@ wears a fit badge (fits gpu / fits / tight / too big) from the box facts the
 ``/catalog`` document carries; the advertised working set is a hint, not a load
 gate.
 
-``--tts`` alone is a serving start, not a setup start: a speech-only server has
-no LLM slot, so ``/v1/stats`` answers the slotless shape with ``setup`` false.
+``--tts`` or ``--asr`` alone is a serving start, not a setup start: a speech-only
+server has no LLM slot, so ``/v1/stats`` answers the slotless shape with ``setup``
+false and its speech counters live. An ASR model whose decoder is an LLM - a
+two-file model, ``--asr`` with ``--mmproj`` - decodes where the server's LLMs do:
+its worker takes the boot's Metal mode, and ``/v1/stats`` names the outcome under
+``asr.models[]`` as ``decoder`` (``metal`` or ``cpu``). A one-file model (whisper,
+parakeet) decodes on the CPU.
 A ``--tts`` the server cannot serve degrades, it does not die: a missing file
 or a failed load is logged, the speech route is dropped, and the boot serves
 whatever is left - the LLM slots if any loaded, else setup mode.

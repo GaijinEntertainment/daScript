@@ -11,6 +11,24 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-03, `direction-grade`) - a served Qwen3-ASR transcription decodes on the device, and a
+  repeated clip measures the other server's prompt cache.** M5 Max, Metal, `dasllama-server` with the
+  ASR model alone (`main.das -- --asr <gguf> --mmproj <mmproj>`), the pinned llama-server as
+  `-m <gguf> --mmproj <mmproj> -ngl 99 -np 1`, `harness/served_bench.das --no-chat --asr-url <server>
+  --clip <wav> --reps 5` (tagged `served`, `out-of-process`), a 60 s rest before each life; the tune
+  sidecar predates the binary, so the CPU kernels ran their fallback stamps.
+  - The ASR worker's context carried no Metal mode, so the decoder - a `Model` session - prefilled
+    and decoded on the CPU: Qwen3-ASR-0.6B Q8_0 read a 4 s clip in 127.5 ms. The worker takes the
+    engine's mode for a two-file model: 50.5 ms. Inside it (the worker's own stage clock): encode
+    10.7 ms, the 75-row prefill 6.7, twelve decode steps 29.0 - 2.4 ms a token, where the reference's
+    own timing line reads 2.65.
+  - The reference keeps the prompts it has evaluated, audio rows included: the same clip sent again
+    costs it one prompt token (`cached_tokens` 79 of 80) and reads 37.4 ms, and a clip one sample
+    off costs the whole prompt. The instrument's rows before this entry repeated one clip and so
+    read that cache; every request now uploads a clip no server has heard.
+  - Unseen clips, ours / the reference, ms a transcription: Qwen3-ASR-0.6B 4 s 50.5 / 60.7, 8 s
+    76.6 / 98.1 (the reference's cv 6.1%, void); Qwen3-ASR-1.7B 4 s 85.5 / 95.1, 8 s 130.8 / 164.4.
+
 - **MEASURED (2026-10-02) - the K/V mirror's block codecs on the whole-model driver
   (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs`, `set_gpu_kv_dtype` / the server's `--kv-dtype`): a
   q8_0 mirror is 17/32 of the f16 mirror's bytes and tq4 9/32, and on a model whose context was asked whole
