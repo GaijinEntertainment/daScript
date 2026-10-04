@@ -284,7 +284,16 @@ def private wt_mm(enc : MetalComputeEncoder?; q8 : bool; site : int64; f16w, bf1
 // non-causal uniform span). Frontend and tail stay CPU. Pad-row garbage is
 // CONTAINED: QK/AV zero k/v rows >= npos, softmax zeroes [uend, np32), pad outputs go unread.
 [hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
-def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
+def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int64) : bool
+    => metal_tower_blocks_form(t, s, npos, false)
+
+//! the blocks with the tower's post-norm behind them in the same command buffer: the normed rows land in `s.xb`
+[hot_path]
+def private metal_tower_blocks_ln_post(t : AudioTower; var s : EncoderState; npos : int64) : bool
+    => metal_tower_blocks_form(t, s, npos, true)
+
+[hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
+def private metal_tower_blocks_form(t : AudioTower; var s : EncoderState; npos : int64; ln_post : bool) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
     }
@@ -365,11 +374,18 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
             enc_add_bias_rows(enc, bxb2, 0ul, bblob, uint64(lo.fc2_b * 4l), u_d, u_totd, npos * d)
             enc_add(enc, bx, 0ul, bxb2, 0ul, u_totd, npos * d)
         }
+        if (ln_post) {
+            enc_ln(enc, bx, bblob, uint64(t.lnp_w_off * 4l), bblob, uint64(t.lnp_b_off * 4l), bxb, 0ul, u_d, u_eps, npos)
+        }
     }
     var served = false
     if (ran) {
-        unsafe {
-            memcpy(addr(s.x[0]), metal_buffer_contents(bx), uint64(npos * d * 4l))
+        unsafe {   // the post-norm seat lands the normed rows where the CPU post-norm would: `s.xb`
+            if (ln_post) {
+                memcpy(addr(s.xb[0]), metal_buffer_contents(bxb), uint64(npos * d * 4l))
+            } else {
+                memcpy(addr(s.x[0]), metal_buffer_contents(bx), uint64(npos * d * 4l))
+            }
         }
         tw_count_encode(npos, t.n_layer, f16w || bf16w)
         served = true
@@ -4674,6 +4690,7 @@ def dasllama_metal_tower_register {
     register_qwen3v_gpu(@@metal_qwen3v_blocks, @@metal_tower_serves)
     register_qwen25v_gpu(@@metal_qwen25v_blocks)
     register_tower_blocks_gpu(@@metal_tower_blocks, @@metal_tower_serves)
+    register_tower_blocks_ln_post_gpu(@@metal_tower_blocks_ln_post)
     register_tower_conv_gpu(@@metal_conv_frontend)
     register_qwen3a_front_gpu(@@metal_q3a_front)
     register_qwen3a_mel_gpu(@@metal_q3a_mel)

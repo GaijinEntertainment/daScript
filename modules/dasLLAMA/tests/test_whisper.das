@@ -777,6 +777,78 @@ def test_whisper_vulkan_wdec_flush(t : T?) {
     }
 }
 
+//! the largest element difference of two row images over the reference's largest magnitude; 2 where a length differs
+def private rows_rel_max(got, want : array<float>) : float {
+    return 2.0 if (length(got) != length(want) || empty(want))
+    var diff = 0.0
+    var peak = 0.0
+    for (g, w in got, want) {
+        diff = max(diff, abs(g - w))
+        peak = max(peak, abs(w))
+    }
+    return diff / max(peak, 1e-30)
+}
+
+//! The Metal tower fills the whisper blocks-with-post-norm seat: the post-norm runs behind the blocks on the device and the
+//! normed rows land in `xb`, where the CPU chain's post-norm would put them.
+[test]
+def test_whisper_metal_ln_post(t : T?) {
+    t |> run("ggml-tiny.bin: the encoder's post-norm on the Metal tower lands the CPU chain's normed rows") @(tt : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
+            return if (!jit_model_available(tt, model_path))
+            let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                tt |> skip("jfk.wav not present")
+                return
+            }
+            var inscope w <- mint_whisper(model_path, false, false, -1l)
+            with_dasllama_jobque_() {
+                var padded : array<float>
+                var mel = WhisperMel()
+                log_mel_whisper(samples, w.mel, w.filters, w.enc.n_mel, padded, mel)
+                var win = MelChunk(n_mel = w.enc.n_mel, n_len = AUDIO_CHUNK_FRAMES)
+                win.data |> resize(w.enc.n_mel * AUDIO_CHUNK_FRAMES)
+                whisper_mel_window(mel, 0l, win)
+                var es <- make_encoder_state(w.enc)
+                set_metal_tower(false)
+                tt |> success(!audio_encode_blocks_ln_post(w.enc, es, win), "tower off: the seat declines and the CPU owes the post-norm")
+                var raw := es.x   // the blocks' rows before the post-norm: the control's reference
+                whisper_encode(w.enc, es, win)
+                var cpu := es.xb
+                set_metal_tower(true)
+                let s0 = metal_tower_stats()
+                tt |> success(audio_encode_blocks_ln_post(w.enc, es, win), "tower on: the seat served the blocks and the post-norm")
+                tt |> equal(metal_tower_stats().encodes - s0.encodes, 1l, "one device encode")
+                let off = rows_rel_max(es.xb, cpu)
+                let unnormed = rows_rel_max(es.xb, raw)
+                var normed := es.xb
+                // the post-norm is the unit: the blocks seat alone gives the device's own block rows, the CPU norms THOSE, and the
+                // device's normed rows must be that image - the block chain's device-vs-CPU distance stays out of the bar
+                audio_encode_blocks(w.enc, es, win)
+                var want : array<float>
+                want |> resize(length(es.x))
+                layernorm_batch(want, es.x, w.enc.fblob, w.enc.lnp_w_off, w.enc.lnp_b_off, w.enc.d_model, w.enc.n_ctx, w.enc.eps)
+                let ln_off = rows_rel_max(normed, want)
+                to_log(LOG_INFO, "whisper tiny ln_post: device norm vs the CPU norm of the device's block rows {ln_off}; vs the CPU chain {off}; vs the un-normed rows {unnormed}\n")
+                tt |> success(ln_off < 1e-4, "the device's post-norm is the CPU post-norm of the same rows ({ln_off})")
+                tt |> success(unnormed > 0.1, "the control: against the rows before the post-norm the compare misses ({unnormed})")
+                delete want
+                delete normed
+                delete raw
+                delete cpu
+                delete es
+                delete win
+                delete mel
+                delete padded
+            }
+            metal_tower_shutdown()
+        } else {
+            tt |> skip("dasMetal not present")
+        }
+    }
+}
+
 //! The Metal decoder leaves a window's cross-KV layouts on the device while its step serves; a first batch past the step's
 //! 32-row cap hands the window to the CPU chain, and the layouts land first.
 [test]

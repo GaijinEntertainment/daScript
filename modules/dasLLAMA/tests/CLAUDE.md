@@ -1708,7 +1708,11 @@ token and bar, the batch with its last token changed landing outside the bar as 
 CPU blocks over them transcribe the all-CPU chain's text), `test_whisper_vulkan_wdec_lifetime` (tiny, one session reused the way a
 serving worker reuses one: a model drop between two transcriptions - the second serves again and reads the same; the decoder knob
 turned off between two - the second reads as a fresh knob-off session; the block hooks pinned off after a served window - no
-handoff for the CPU-encoded windows, the text of the CPU-encoder chain), `test_whisper_metal_wdec_flush`
+handoff for the CPU-encoded windows, the text of the CPU-encoder chain), `test_whisper_metal_ln_post`
+(tiny, the f32 encoder minted in memory: the blocks-with-post-norm seat declines with the tower
+off and serves with it on, one device encode counted, and the device's normed rows are the CPU
+post-norm of the device's own block rows within 1e-4 of the largest - reads 3e-7 - with the rows
+before the post-norm the control), `test_whisper_metal_wdec_flush`
 (tiny, the step's floor lifted so the Metal step serves and the window's cross-KV layouts wait on
 the device: the host layouts zeroed, a 33-row first batch hands the window to the CPU chain, the
 layouts land first and its logits match the knob-off chain's token and bar, the batch with its

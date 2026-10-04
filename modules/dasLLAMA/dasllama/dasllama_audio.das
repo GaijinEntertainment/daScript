@@ -1341,8 +1341,8 @@ def audio_encode_blocks(t : AudioTower; var s : EncoderState; mel : MelChunk) {
 }
 
 //! the stem, then the blocks with the tower's post-norm folded where the blocks-with-post-norm seat serves (true: `s.xb` holds the
-//! normed rows), else the blocks alone (false: `s.x` holds their output and the caller norms it) - a driver with no post-norm
-//! seat (Metal) serves them at the blocks seat; a post-norm seat that declines asks no second seat, its blocks seat declines alike
+//! normed rows), else the blocks alone (false: `s.x` holds their output and the caller norms it) - a build with no post-norm
+//! seat serves them at the blocks seat; a post-norm seat that declines asks no second seat, its blocks seat declines alike
 def audio_encode_blocks_ln_post(t : AudioTower; var s : EncoderState; mel : MelChunk) : bool {
     audio_encode_stem(t, s, mel)
     let tt = t.n_ctx

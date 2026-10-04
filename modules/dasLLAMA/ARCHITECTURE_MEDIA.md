@@ -191,8 +191,8 @@ blocks seats it serves and the front seats it fills (qwen3a's mel and conv front
 whole chunk, canary's front, parakeet's whole encode - the Metal driver's, asked ahead of the CPU
 front with the blocks seat behind a decline - and the whisper-class blocks-with-post-norm seat
 `register_tower_blocks_ln_post_gpu`, which the whisper encode asks ahead of its CPU block loop and
-post-norm - a decline asks no second seat, its driver's blocks seat declining the same way, while a
-driver with no post-norm seat (Metal) serves the blocks at the blocks seat and the CPU norms; the
+post-norm - a decline asks no second seat, its driver's blocks seat declining the same way; both
+tower drivers fill it, the post-norm one more row pass in the blocks' command buffer; the
 seat serves the family whose post-norm follows the blocks with nothing between, whisper, while the
 families that pool before it, and ultravox, keep the CPU post-norm). The direction is forced: the
 driver requires the family file for its
