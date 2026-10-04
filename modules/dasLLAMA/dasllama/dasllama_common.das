@@ -642,12 +642,12 @@ def attach_mtp_drafter_(t : Model; path : string) : bool
     => g_mtp_assistant.attach != null && invoke(g_mtp_assistant.attach, t, path)
 
 //! An assistant drafter is attached to `t`.
-def mtp_assistant_attached_(t : Model) : bool
+def mtp_assistant_attached(t : Model) : bool
     => g_mtp_assistant.attached != null && invoke(g_mtp_assistant.attached, t)
 
 //! `t` can run a speculative round: a NextN head of its own, or an assistant drafter attached.
 def mtp_capable_(t : Model) : bool
-    => t.config.n_layer_nextn > 0l || mtp_assistant_attached_(t)
+    => t.config.n_layer_nextn > 0l || mtp_assistant_attached(t)
 
 //! One speculative round at the configured depth (get_mtp_depth): commits `tok`, returns the
 //! accepted draft count a with the accepted drafts in s.mtp_vbatch[1..a]. The active decode
@@ -672,7 +672,7 @@ def register_mtp_seam_override(name : string; fn : MtpSeamOverrideFn) {
 var private g_mtp_seam_declines = 0l
 
 //! Lifetime continuation windows whose seam seat declined on a blob model, leaving the draft head's seam row stale.
-def mtp_seam_declines_() : int64 => g_mtp_seam_declines
+def mtp_seam_declines() : int64 => g_mtp_seam_declines
 
 // "would the metal drivers serve this loaded model?" — the model-level gate, registered by the
 // metal driver module at [init] (it owns the path masks). load_model consults it to pick the
@@ -3510,7 +3510,7 @@ def private kv_grow_block_table(var s : Session; np : int64) {
 //! The rows of context the armed GPU driver holds a session's K/V for under `kdt` / `vdt` - both planes of every layer that
 //! keeps rows of its own a row - never past the model's context; no driver bounds nothing.
 def device_kv_max_rows_(t : Model; kdt, vdt : KVDtype) : int64 {
-    let total = kv_row_total_(t)
+    let total = kv_row_total(t)
     return min(t.config.seq_len, gpu_kv_room_rows(kv_row_bytes(kdt, total) + kv_row_bytes(vdt, total)))
 }
 
@@ -3519,7 +3519,7 @@ def kv_shared_layer(t : Model; l : int64) : bool => l < long_length(t.kv_src) &&
 
 //! The K/V elements one session row holds over the layers that own rows of their own - the MTP draft slab
 //! (trunk-shaped attention) included under `with_head`, a layer aliasing its source's slab (the E-series) left out.
-def kv_row_total_(t : Model; with_head : bool = true) : int64 {
+def kv_row_total(t : Model; with_head : bool = true) : int64 {
     let c = t.config
     var tot = 0l
     for (l in range64(c.n_layers + (with_head ? c.n_layer_nextn : 0l))) {
@@ -5454,7 +5454,7 @@ def private mtp_reject(t : Model; var s : Session; tok, pos : int64; served, lan
 [hot_path]   // the per-step entry the scheduler re-enters once per tick
 def mtp_spec_eval_batch(t : Model; var sessions : array<Session?>; toks : array<int64>; var accepted : array<int64>) : int64 {
     let n = long_length(sessions)
-    if (mtp_assistant_attached_(t) && mtp_seated(t, g_mtp_round_overrides)) {
+    if (mtp_assistant_attached(t) && mtp_seated(t, g_mtp_round_overrides)) {
         //! an assistant drafter's model: the round seat draws each stream's one draft, the joint verify being the NextN head's
         accepted |> resize(n)   // nolint:PERF026 — the caller's reused per-stream row: it grows to the stream count once and keeps its capacity
         for (i in range64(n)) {

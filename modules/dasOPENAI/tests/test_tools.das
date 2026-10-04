@@ -4,6 +4,7 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require dastest/testing_boost public
+require _openai_live
 require openai/openai_chat
 require strings
 require daslib/fio
@@ -59,10 +60,7 @@ def test_tool_call_response_decode(t : T?) {
 [test]
 def test_tools_live_openrouter(t : T?) {
     t |> run("live tool calling against OpenRouter") @(t : T?) {
-        if (!has_env_variable("OPENROUTER_API_KEY")) {
-            t |> success(true, "OPENROUTER_API_KEY not set - skipped")
-            return
-        }
+        return if (!live_key(t, "OPENROUTER_API_KEY"))
         let client = openai_client("https://openrouter.ai/api/v1", get_env_variable("OPENROUTER_API_KEY"))
         var req = ChatCompletionRequest(
             model = "deepseek/deepseek-v4-flash:free",

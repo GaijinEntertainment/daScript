@@ -2,6 +2,7 @@ options gen2
 options persistent_heap
 
 require dastest/testing_boost public
+require _server_rig                                     // serve_clients (sibling)
 require dasllama/dasllama_exchange
 require dasllama/dasllama   // DASLLAMA_RELEASE — the fixture stamps (facade-public)
 require dashv/dashv_boost
@@ -149,23 +150,7 @@ def private with_fake_exchange(blk : block<(base_url : string) : void>) {
             run_fake_exchange(TEST_PORT)
             finished |> notify_and_release
         }
-        let base_url = "http://127.0.0.1:{TEST_PORT}"
-        var ready = false
-        for (_attempt in range(100)) {
-            GET("{base_url}/healthz") $(resp) {
-                if (resp != null && resp.status_code == http_status.OK) {
-                    ready = true
-                }
-            }
-            if (ready) {
-                break
-            }
-            sleep(100u)
-        }
-        if (ready) {
-            invoke(blk, base_url)
-        }
-        POST("{base_url}/shutdown", "") $(_resp) {}
+        let ready = serve_clients(TEST_PORT, 100, "/healthz", blk)
         finished |> join
         assert(ready, "fake exchange became ready")
     }

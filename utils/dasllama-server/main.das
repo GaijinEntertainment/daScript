@@ -88,28 +88,28 @@ struct ServerArgs {
     gpu_vram_mb : int
 
     @clarg_short = "a"
-    @clarg_doc = "Path to an ASR model — enables /v1/audio/transcriptions"
+    @clarg_doc = "Path to an ASR model (whisper/parakeet/qwen3-asr) — enables the /v1/audio/* routes. Repeatable: each model serves under its file's stem, the first is the default; the config's [[asr]] tables give each model its own id, mmproj and workers"
     asr : string
 
-    @clarg_doc = "mmproj for the GGUF Qwen3-ASR route (paired with --asr)"
+    @clarg_doc = "mmproj for the GGUF Qwen3-ASR route (paired with --asr; with several ASR models, the first one's)"
     mmproj : string
 
-    @clarg_doc = "Path to a TTS model GGUF (kitten-nano, kitten-mini, kokoro-82m, pocket-tts-<lang>-q8) — enables /v1/audio/speech"
+    @clarg_doc = "Path to a TTS model GGUF (kitten-nano, kitten-mini, kokoro-82m, with the front-end packs tts_g2p.bin + tts_postag.bin beside them; or a pocket-tts-<lang>-q8 file, which needs no pack) — enables /v1/audio/speech. Repeatable: each model serves under its file's stem, the first is the default; the config's [[tts]] tables give each model its own id, lane and voices_dir"
     tts : string
 
     @clarg_name = "tts-lane"
-    @clarg_doc = "TTS weight lane: q8 (default) | f32 — the format the speech worker pins around its load"
+    @clarg_doc = "TTS weight lane: q8 (default) | f32 — the format the speech worker pins around its load (with several TTS models, the first one's)"
     tts_lane : string
 
     @clarg_name = "tts-voices-dir"
-    @clarg_doc = "Directory of voice clips (wav / flac / mp3 / ogg, a few seconds each) a cloning TTS model adds to its voices at boot, each under its file's stem"
+    @clarg_doc = "Directory of voice clips (wav / flac / mp3 / ogg, a few seconds each) a cloning TTS model adds to its voices at boot, each under its file's stem (with several TTS models, the first one's)"
     tts_voices_dir : string
 
     @clarg_name = "image-mmproj"
     @clarg_doc = "Vision mmproj (gemma4uv, gemma4v, or gemma3v, sniffed) for the default model — enables image_url parts on /v1/chat/completions"
     image_mmproj : string
 
-    @clarg_doc = "Long-lived asynchronous ASR worker threads (default 1; 2 permits two parallel transcriptions)"
+    @clarg_doc = "Long-lived asynchronous ASR worker threads (default 1; 2 permits two parallel transcriptions; with several ASR models, the first one's)"
     asr_workers : int
 
     @clarg_doc = "Context length in tokens, served whole: the whole-model GPU driver holds it for every stream or declines to the per-op rails (the load log names the room). Default: the model's trained context_length, shortened to what the card holds. A Metal model served from its image alone (no host weights) is cut to the rows its device KV mirror holds (DASLLAMA_METAL_KV_MIRROR_MB), with a warning."
@@ -232,6 +232,21 @@ def suppress_tune_for_setup {
 var private g_setup_mode = false   // no loadable model: serve the catalog/recovery page instead of exiting
 var private g_models : array<ModelEntry>
 var private g_cfg = ServerArgs()
+
+//! One speech model this boot serves: a --asr / --tts flag (repeatable), or a table of an [[asr]] / [[tts]] roster.
+//! The first of a kind is the default - the model a request with no `model` field gets - and the flat `asr` /
+//! `mmproj` / `asr_workers` / `tts` / `tts_lane` / `tts_voices_dir` keys read as that entry.
+struct SpeechEntry {
+    id : string           // the id requests route on; empty = the file's stem
+    path : string
+    mmproj : string       // ASR: the mmproj a GGUF Qwen3-ASR pairs with
+    workers : int         // ASR: worker threads; 0 = one
+    lane : string         // TTS: the weight lane; empty = q8
+    voices_dir : string   // TTS: voice clips a cloning model adds at boot
+}
+
+var private g_asr_models : array<SpeechEntry>
+var private g_tts_models : array<SpeechEntry>
 var private g_args_parsed = false
 var private g_args_ready = false
 var private g_server_ready = false
@@ -266,6 +281,124 @@ def private toml_has(root : JsonValue?; key : string) : bool {
         return false
     }
     return key_exists(root.value as _object, key)
+}
+
+def private toml_is_array(root : JsonValue?; key : string) : bool {
+    let v = root?[key]
+    return v != null && (v.value is _array)
+}
+
+// An [[asr]] / [[tts]] roster: a table per speech model, in serving order - `path` plus an optional `id`, and the
+// kind's own keys (`mmproj`, `workers` / `lane`, `voices_dir`). An entry with no path is skipped with a warning.
+def private apply_speech_roster(root : JsonValue?; key : string; var models : array<SpeechEntry>) {
+    delete models
+    let mv = root?[key]
+    for (e in mv.value as _array) {
+        let ent = SpeechEntry(id = e?["id"] ?? "", path = e?["path"] ?? "", mmproj = e?["mmproj"] ?? "",
+            workers = int(e?["workers"] ?? 0l), lane = e?["lane"] ?? "", voices_dir = e?["voices_dir"] ?? "")
+        if (empty(ent.path)) {
+            to_log(LOG_WARNING, "dasllama-server: [[{key}]] entry with no path — skipped\n")
+            continue
+        }
+        models |> push(ent)
+    }
+    g_cfg_sources[key] = "toml"
+}
+
+// A roster's first entry and the flat key that reads as it, made one value: the flag the command line gave wins over a
+// config that is not authoritative, as it does for every other key; else the entry's value is the key's.
+def private flat_or_first(auth : bool; key : string; var flat : string&; var entry : string&) {
+    if (!auth && from_cli(key)) {
+        entry = flat
+    } else {
+        flat = entry
+    }
+}
+
+def private flat_or_first(auth : bool; key : string; var flat : int&; var entry : int&) {
+    if (!auth && from_cli(key)) {
+        entry = flat
+    } else {
+        flat = entry
+    }
+}
+
+//! The roster a kind's flags make when the config carries no table for it: `first` (the flat key's model, with the
+//! flat keys that go with it), then every other path the flag named. clargs reads a repeated string flag as its LAST
+//! value, so with several the first one named is put back as the default. Non-private: test_server_flags.das gates it.
+def roster_from_flags(first : SpeechEntry; paths : array<string>; from_flags : bool) : array<SpeechEntry> {
+    var lead = first
+    if (from_flags && length(paths) > 1) {
+        lead.path = paths[0]
+    }
+    var roster : array<SpeechEntry>
+    roster |> reserve(length(paths) + 1)
+    if (!empty(lead.path)) {
+        roster |> push(lead)
+    }
+    if (from_flags) {
+        roster |> push_from([for (p in paths); SpeechEntry(path = p); where p != lead.path])
+    }
+    return <- roster
+}
+
+// The speech rosters a boot with no [[asr]] / [[tts]] table serves, off the flags; the flat key reads as the first entry.
+def private speech_roster_from_flags(var cfg : ServerArgs) {
+    var args <- get_user_args()
+    var asr_paths <- find_array_flag_raw_values(args, "--asr")
+    asr_paths |> push_from(find_array_flag_raw_values(args, "-a"))
+    var tts_paths <- find_array_flag_raw_values(args, "--tts")
+    delete args
+    if (empty(g_asr_models)) {
+        delete g_asr_models
+        g_asr_models <- roster_from_flags(SpeechEntry(path = cfg.asr, mmproj = cfg.mmproj, workers = cfg.asr_workers), asr_paths, from_cli("asr"))
+        cfg.asr = empty(g_asr_models) ? "" : g_asr_models[0].path
+    }
+    if (empty(g_tts_models)) {
+        delete g_tts_models
+        g_tts_models <- roster_from_flags(SpeechEntry(path = cfg.tts, lane = cfg.tts_lane, voices_dir = cfg.tts_voices_dir), tts_paths, from_cli("tts"))
+        cfg.tts = empty(g_tts_models) ? "" : g_tts_models[0].path
+    }
+    delete asr_paths
+    delete tts_paths
+}
+
+//! Mark `key` as given on the command line, or not. Non-private: test_server_flags.das sets what a process's own
+//! arguments would, to read the precedence a config file takes against a flag.
+def set_cli_source(key : string; given : bool) {
+    if (given) {
+        g_cfg_sources[key] = "cli"
+    } else {
+        g_cfg_sources |> erase(key)
+    }
+}
+
+//! The ids of this boot's speech roster, in serving order - the path stands in for an entry that names none.
+//! Non-private: test_server_flags.das gates the [[asr]] / [[tts]] read.
+def speech_roster_ids(tts : bool) : array<string> {
+    return <- [for (m in tts ? g_tts_models : g_asr_models); empty(m.id) ? m.path : m.id]
+}
+
+//! whether any configured TTS model has its whole file set: such a boot serves the speech route with no LLM
+def private any_tts_present : bool {
+    for (m in g_tts_models) {
+        return true if (tts_files_present(m.path))
+    }
+    return false
+}
+
+// a speech roster as the /config surface carries it: each entry under the keys its [[asr]] / [[tts]] table takes
+def private speech_roster_json(models : array<SpeechEntry>; tts : bool) : JsonValue? {
+    var entries : array<JsonValue?>
+    entries |> reserve(length(models))
+    for (ent in models) {
+        if (tts) {
+            entries |> push(JV((id = ent.id, path = ent.path, lane = pick_tts_lane(ent.lane), voices_dir = ent.voices_dir)))
+        } else {
+            entries |> push(JV((id = ent.id, path = ent.path, mmproj = ent.mmproj, workers = max(ent.workers, 1))))
+        }
+    }
+    return JV(entries)
 }
 
 def private cfg_from_toml(root : JsonValue?; key : string; var field : string&; auth : bool) {
@@ -441,9 +574,15 @@ def apply_config(var cfg : ServerArgs) : bool {
     cfg_from_toml(root, "gpu_attn", cfg.gpu_attn, auth)
     cfg_from_toml(root, "gpu_dense", cfg.gpu_dense, auth)
     cfg_from_toml(root, "gpu_vram_mb", cfg.gpu_vram_mb, auth)
-    cfg_from_toml(root, "asr", cfg.asr, auth)
+    let asr_roster = toml_is_array(root, "asr")
+    let tts_roster = toml_is_array(root, "tts")
+    if (!asr_roster) {
+        cfg_from_toml(root, "asr", cfg.asr, auth)
+    }
     cfg_from_toml(root, "mmproj", cfg.mmproj, auth)
-    cfg_from_toml(root, "tts", cfg.tts, auth)
+    if (!tts_roster) {
+        cfg_from_toml(root, "tts", cfg.tts, auth)
+    }
     cfg_from_toml(root, "tts_lane", cfg.tts_lane, auth)
     cfg_from_toml(root, "tts_voices_dir", cfg.tts_voices_dir, auth)
     cfg_from_toml(root, "image_mmproj", cfg.image_mmproj, auth)
@@ -467,6 +606,22 @@ def apply_config(var cfg : ServerArgs) : bool {
     cfg_from_toml(root, "models_dir", cfg.models_dir, auth)
     if (toml_has(root, "models")) {
         apply_models_roster(root)
+    }
+    if (asr_roster && (auth || !from_cli("asr"))) {
+        apply_speech_roster(root, "asr", g_asr_models)
+        if (!empty(g_asr_models)) {   // the flat keys read as the default entry
+            cfg.asr = g_asr_models[0].path
+            flat_or_first(auth, "mmproj", cfg.mmproj, g_asr_models[0].mmproj)
+            flat_or_first(auth, "asr_workers", cfg.asr_workers, g_asr_models[0].workers)
+        }
+    }
+    if (tts_roster && (auth || !from_cli("tts"))) {
+        apply_speech_roster(root, "tts", g_tts_models)
+        if (!empty(g_tts_models)) {
+            cfg.tts = g_tts_models[0].path
+            flat_or_first(auth, "tts_lane", cfg.tts_lane, g_tts_models[0].lane)
+            flat_or_first(auth, "tts_voices_dir", cfg.tts_voices_dir, g_tts_models[0].voices_dir)
+        }
     }
     unsafe {
         delete root
@@ -689,6 +844,8 @@ def private build_config_surface(cfg : ServerArgs; save_path : string) : string 
     var top <- {
         "config" => config,
         "models" => JV(mentries),
+        "asr_models" => speech_roster_json(g_asr_models, false),
+        "tts_models" => speech_roster_json(g_tts_models, true),
         "sources" => JV(sources),
         "authoritative" => JV(g_cfg_authoritative),
         "config_path" => JV(cfg.config),
@@ -750,7 +907,8 @@ def parse_args() {
     // a [[models]] roster needs no flat model key; a --tts start with its file set complete is a
     // SERVING server (the speech route), so it never enters setup mode - an incomplete set is one
     // configure_tts drops, which leaves this boot nothing to serve
-    if (empty(g_cfg.model) && empty(g_models) && !tts_files_present(g_cfg.tts)) {
+    speech_roster_from_flags(g_cfg)
+    if (empty(g_cfg.model) && empty(g_models) && !any_tts_present()) {
         g_setup_mode = true
         print("no model configured - starting in setup mode (open the control page to download one from the catalog)\n")
     }
@@ -925,7 +1083,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     }
     delete g_models
     g_models <- roster
-    if (empty(g_models) && !g_setup_mode && !tts_files_present(g_cfg.tts)) {
+    if (empty(g_models) && !g_setup_mode && !any_tts_present()) {
         // not an exit: a crash-looping boot under the watchdog never gets a page to fix the config from
         g_setup_mode = true
         to_log(LOG_ERROR, "dasllama-server: no loadable model - no configured path survived its file check (roster entries, and the --tts file set); starting in setup mode\n")
@@ -1043,14 +1201,16 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
             }
         }
 
-        if (!empty(g_cfg.asr)) {
-            configure_asr_workers(g_cfg.asr, g_cfg.mmproj, g_cfg.asr_workers > 0 ? g_cfg.asr_workers : 1)
+        configure_asr_workers("", "")   // a restart in one process serves this boot's roster, not the last one's
+        for (a in g_asr_models) {
+            add_asr_model(a.path, a.mmproj, max(a.workers, 1), a.id)
         }
     }
     // outside the serving gate: a --tts start with no loadable LLM is a speech-only SERVER, and
     // its route has to arm on that boot too
-    if (!empty(g_cfg.tts)) {
-        configure_tts(g_cfg.tts, g_cfg.tts_lane, g_cfg.tts_voices_dir)
+    configure_tts("")
+    for (m in g_tts_models) {
+        add_tts_model(m.path, m.lane, m.voices_dir, m.id)
     }
 
     // the /config surface: a config-less start saves to the per-user directory, where the

@@ -1162,7 +1162,7 @@ def private mirror_slice_shape(t : Model; s : Session; needed : int64) : tuple<c
         cap *= 2l
     }
     cap = clamp(cap, needed, t.config.seq_len)
-    let total = kv_row_total_(t)
+    let total = kv_row_total(t)
     return (cap = cap, kbytes = uint64(cap * kv_row_bytes(s.kv_dtype_k, total)),
             vbytes = uint64(cap * kv_row_bytes(s.kv_dtype_v, total)))
 }

@@ -4,6 +4,7 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require dastest/testing_boost public
+require _openai_live
 require openai/openai_audio
 require strings
 
@@ -27,6 +28,7 @@ def test_speech_request_serialization(t : T?) {
 [test]
 def test_speech_live_kokoro(t : T?) {
     t |> run("live TTS against the Kokoro server") @(t : T?) {
+        return if (!live_server(t, "http://localhost:8880/v1"))
         let client = openai_client("http://localhost:8880/v1")
         let req = SpeechRequest(model = "kokoro", input = "The quick brown fox.", voice = "af_heart", response_format = "wav")
         let res <- speech(client, req)

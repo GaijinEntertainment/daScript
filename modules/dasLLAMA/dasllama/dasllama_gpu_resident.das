@@ -824,7 +824,7 @@ def private resident_attn_maxima(c : Config) : tuple<qd : int64; kvd : int64; hs
 //! one position's K and V mirror bytes over the layers that hold rows of their own (a shared-KV layer reads its donor's), and the
 //! NextN head's slot where the driver takes the head
 def private resident_kv_row_bytes(t : Model; kdt, vdt : KVDtype) : tuple<krow : int64; vrow : int64> {
-    let total = kv_row_total_(t, resident_head_on(t))
+    let total = kv_row_total(t, resident_head_on(t))
     return (krow = kv_row_bytes(kdt, total), vrow = kv_row_bytes(vdt, total))
 }
 

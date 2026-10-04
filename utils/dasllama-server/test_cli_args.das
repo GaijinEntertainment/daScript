@@ -270,6 +270,20 @@ def test_text_input(t : T?) {
 }
 
 [test]
+def test_config_speech_roster(t : T?) {
+    t |> run("a speech roster's first table supplies the ASR and TTS models and their own keys") @(t : T?) {
+        let speech = "[[asr]]\npath = \"a.gguf\"\nmmproj = \"mm.gguf\"\n[[asr]]\npath = \"b.gguf\"\n[[tts]]\npath = \"k.gguf\"\nlane = \"f32\"\nvoices_dir = \"v\"\n[[tts]]\npath = \"p.gguf\"\n"
+        var cfg = CliConfig()
+        t |> success(parse_cli_config(speech, cfg), "parses")
+        t |> equal(cfg.asr, "a.gguf")
+        t |> equal(cfg.mmproj, "mm.gguf")
+        t |> equal(cfg.tts, "k.gguf")
+        t |> equal(cfg.tts_lane, "f32")
+        t |> equal(cfg.tts_voices_dir, "v")
+    }
+}
+
+[test]
 def test_config_file(t : T?) {
     let body = "model = \"a.gguf\"\ngpu = \"vulkan\"\ngpu_layers = 3\nthreads = 6\nasr = \"asr.bin\"\ntts = \"t.gguf\"\nimage_mmproj = \"v.gguf\"\nmodels_dir = \"/m\"\n"
     t |> run("the flat keys land") @(t : T?) {

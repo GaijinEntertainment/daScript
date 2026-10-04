@@ -39,13 +39,13 @@ def is_route_byte(b : int) : bool {
     return is_alnum(b) || b == '/' || b == '_' || b == '-'
 }
 
-// every path registered in onInit; the scan reads GET( / POST( / STREAM( / ANY( rows
+// every path the server answers: the front's ROUTES rows, and the GET( / POST( / STREAM( / ANY( rows of onInit
 def served_routes() : table<string> {
     var routes : table<string>
     for (raw in split(fread(SERVER_DAS), "\n")) {
         let line = strip(raw)
         var open_at = -1
-        for (m in ["GET(\"", "POST(\"", "STREAM(\"", "ANY(\""]) {
+        for (m in ["RouteRow(path = \"", "GET(\"", "POST(\"", "STREAM(\"", "ANY(\""]) {
             if (line |> starts_with(m)) {
                 open_at = length(m)
                 break

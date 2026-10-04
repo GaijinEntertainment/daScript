@@ -32,7 +32,7 @@ by the Metal seam seat (`metal_mtp_seam_row`, the draft forward with no logits) 
 session's mirror to the seam first: a new session's mirror is adopted or built by that prepare,
 an attached one stands at its whole pages, and the rows to the seam come up from the cache as a
 step's would. A seam the seat declines on a blob model stays stale and dents the window's first
-draft (`mtp_seam_declines_` counts them).
+draft (`mtp_seam_declines` counts them).
 
 **The accept walk and the commit.** Row i of the verify is the truth for draft i+1, so the walk
 takes `a` = the length of the leading run where a row's argmax equals the draft it verifies. The

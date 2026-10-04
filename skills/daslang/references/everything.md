@@ -1342,7 +1342,8 @@ A pure-daslang client for OpenAI-compatible REST APIs — OpenAI itself, plus an
 ### Vision
 
 - `chat_vision` - One-shot vision request: a single user turn with text plus an image (http(s) URL or a `data:` URL).
-- `vision_request_body` - Builds the JSON body for a one-shot vision request (a user turn with text + one image).
+- `image_file_data_uri` - The image file at `path` as the `data:` URL a browser would send (`image/png` for a `.png` name, `image/jpeg` otherwise); "" for a file that cannot be read.
+- `vision_request_body` - Builds the JSON body for a one-shot vision request (a user turn with text + one image), under a system message when `system` is not empty.
 
 ## stbimage
 
@@ -2200,6 +2201,7 @@ Module audio_wav
 
 ### WAV I/O
 
+- `decode_wav` - Decode the bytes of a WAV file into float samples.
 - `read_wav` - Read a WAV file into float samples.
 - `write_wav` - Write float samples as a 16-bit PCM WAV file.
 

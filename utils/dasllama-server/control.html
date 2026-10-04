@@ -2556,6 +2556,20 @@ async function loadConfig() {
     }
 }
 
+// A speech roster ([[asr]] / [[tts]]) rides a save whole — POST /config replaces the file, and the form
+// edits only the roster's first entry: its flat fields fold into that entry, the others pass through.
+function speechRoster(out, key, models, flat) {
+    if (!models || models.length < 2 || !(key in out)) return;
+    const first = Object.assign({}, models[0], { path: out[key] });
+    for (const [entryKey, flatKey] of Object.entries(flat)) {
+        if (flatKey in out) {
+            first[entryKey] = out[flatKey];
+            delete out[flatKey];
+        }
+    }
+    out[key] = (first.path ? [first] : []).concat(models.slice(1));
+}
+
 function gatherConfig() {
     const out = {};
     for (const f of FIELDS) {
@@ -2567,6 +2581,8 @@ function gatherConfig() {
         else out[f.k] = el.value;
     }
     out.models = gatherModels();
+    speechRoster(out, "asr", (cfgSurface || {}).asr_models, { mmproj: "mmproj", workers: "asr_workers" });
+    speechRoster(out, "tts", (cfgSurface || {}).tts_models, { lane: "tts_lane", voices_dir: "tts_voices_dir" });
     // the exchange policy rides EVERY save — POST /config replaces the whole file, and a
     // config save that silently dropped exchange_submit would reset the sharing choice
     if (exchangePolicy) {

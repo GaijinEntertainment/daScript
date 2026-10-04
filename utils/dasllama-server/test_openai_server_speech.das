@@ -13,8 +13,11 @@ require daslib/fio                                      // run_and_capture — t
 require daslib/module_path                              // get_this_module_dir: main.das sits beside this test
 require math                                            // max: the child's captured tail is clamped to its last bytes
 require strings
+require dasllama/dasllama                               // load_model: the LLM whose handler holds the engine
 require dasllama/dasllama_tts                           // tts_normalize / tts_chunks — the /v1/audio/phonemes answer is compared against the facade itself
 
+// The last cell boots an LLM beside the TTS model (tinyllama-1.1b-chat-v1.0.Q8_0.gguf, skips without it) and
+// holds its engine with an embeddings forward while syntheses are asked. Every other cell:
 // /v1/audio/speech on a TTS-only boot (no LLM slot): a WAV answer of speech length with a RIFF
 // header, the raw pcm form, the declined mp3, the missing input, the unknown voice, the TTS id
 // on /v1/models, the input cap (counted in characters) and the speed range, the queue's refusal
@@ -40,6 +43,7 @@ let POCKET_PORT = 18144    // the Pocket boot: its own worker, so its own port
 let POCKET_CLIP_PORT = 18145    // the Pocket boot that speaks the clip the next one clones
 let POCKET_CLONE_PORT = 18146   // the Pocket boot with a voices directory
 let POCKET_NOCLONE_PORT = 18147   // the kitten boot under the same voices directory: ignored
+let HELD_PORT = 18163      // the LLM + TTS boot whose engine an embeddings forward holds
 let TTS_BURST = 24      // past the server's queue cap (16): the overflow must be refused, not queued
 let CHILD_TIMEOUT_SEC = 420.0   // the child parses, JITs and loads before it listens
 let BOOT_POLL_ATTEMPTS = 720    // x 500 ms — inside the child's own timeout, so a hung boot still joins
@@ -47,6 +51,7 @@ let BOOT_POLL_ATTEMPTS = 720    // x 500 ms — inside the child's own timeout, 
 let TTS_PATH = path_join(models_dir(), "kitten-nano.gguf")
 let KOKORO_PATH = path_join(models_dir(), "kokoro-82m.gguf")   // the multi-language front end: two dialects to be wrong about
 let POCKET_PATH = path_join(models_dir(), "pocket-tts-en-q8.gguf")   // the text-reading, voice-cloning family: no packs, no phonemes, no speed
+let LLM_PATH = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")   // the slot whose embeddings forward holds the engine
 let BOGUS_TTS_PATH = path_join(models_dir(), "no-such-tts-model.gguf")   // never on disk: the degrade path
 
 struct private BurstAnswer {
@@ -66,23 +71,7 @@ def private with_speech_server(model_path : string; port : int; lane : string; v
             run_server(port)   // blocks until POST /shutdown
             finished |> notify_and_release
         }
-        let base_url = "http://127.0.0.1:{port}"
-        var ready = false
-        for (_attempt in range(600)) {   // up to ~60 s: the load + JIT
-            GET("{base_url}/v1/models") $(resp) {
-                if (resp != null && resp.status_code == http_status.OK) {
-                    ready = true
-                }
-            }
-            if (ready) {
-                break
-            }
-            sleep(100u)
-        }
-        if (ready) {
-            invoke(blk, base_url)
-        }
-        POST("{base_url}/shutdown", "") $(_resp) {}
+        let ready = serve_clients(port, 600, "/v1/models", blk)   // up to ~60 s: the load + JIT
         finished |> join
         assert(ready, "dasllama speech server became ready")
     }
@@ -168,23 +157,7 @@ def private with_speechless_server(t : T?; port : int; blk : block<(base_url : s
             run_server(port)   // blocks until POST /shutdown
             finished |> notify_and_release
         }
-        let base_url = "http://127.0.0.1:{port}"
-        var ready = false
-        for (_attempt in range(300)) {
-            GET("{base_url}/v1/stats") $(resp) {
-                if (resp != null && resp.status_code == http_status.OK) {
-                    ready = true
-                }
-            }
-            if (ready) {
-                break
-            }
-            sleep(100u)
-        }
-        if (ready) {
-            invoke(blk, base_url)
-        }
-        POST("{base_url}/shutdown", "") $(_resp) {}
+        let ready = serve_clients(port, 300, "/v1/stats", blk)
         finished |> join
         t |> success(ready, "the speechless server became ready")
     }
@@ -847,6 +820,19 @@ def test_speech_only_boot_through_main(t : T?) {
             }
             check_tts_stats_block(t, base_url, "q8")
         }
+        t |> run("the config surface carries the one --tts model as a roster of one") @(t : T?) {
+            GET("{base_url}/config") $(resp) {
+                var err = ""
+                var js = read_json(resp != null ? string(resp.body) : "", err)
+                let roster = js?["surface"]?["tts_models"]
+                t |> success(roster != null && (roster.value is _array) && length(roster.value as _array) == 1, "tts_models: {write_json(roster)}")
+                t |> equal(roster?[0]?["path"] ?? "", TTS_PATH)
+                t |> success(js?["surface"]?["asr_models"] != null && empty(js?["surface"]?["asr_models"].value as _array), "and no ASR model")
+                unsafe {
+                    delete js
+                }
+            }
+        }
     }
 }
 
@@ -949,6 +935,50 @@ def test_speech_route_on_the_f32_lane(t : T?) {
                 t |> success(length(bytes) > 44, "{length(bytes)} bytes of wav off the f32 planes")
             }
             check_tts_stats_block(t, base_url, "f32")
+        }
+    }
+}
+
+def private with_llm_and_speech_server(port : int; blk : block<(base_url : string) : void>) {
+    with_job_status(1) $(finished) {
+        new_thread() @() {
+            allow_cpu_prefill()
+            var m <- load_model_(LLM_PATH, QuantMode.q8)
+            set_model(m, "test-llm")
+            configure_tts(TTS_PATH)
+            run_server(port)   // blocks until POST /shutdown
+            finished |> notify_and_release
+        }
+        let ready = serve_clients(port, 1200, "/v1/models", blk)
+        finished |> join
+        assert(ready, "the LLM + speech server became ready")
+    }
+}
+
+//! A handler that holds the engine holds no speech request: an embeddings forward over a long input runs in-handler for
+//! hundreds of milliseconds while syntheses are asked and answered, each in a fraction of that - the speech thread takes
+//! the route off the front and its worker answers through the front. The control is a route the engine answers itself
+//! (/config), asked inside the hold: it waits the hold out, and every synthesis lands in under a quarter of that wait.
+[test]
+def test_speech_answers_while_engine_held(t : T?) {
+    t |> run("a synthesis is answered while a handler holds the engine (needs tinyllama q8 + kitten-nano)") @(t : T?) {
+        var inscope files <- [LLM_PATH, TTS_PATH, path_join(models_dir(), "tts_g2p.bin"), path_join(models_dir(), "tts_postag.bin")]
+        return if (model_missing(t, files))
+        with_llm_and_speech_server(HELD_PORT) $(base_url) {
+            speech_request(base_url, "\{\"input\": \"Hello.\"}") $(status, _ctype, _bytes, text) {
+                t |> equal(status, 200, "the route speaks on an idle server: {text}")
+            }
+            var said = 0
+            let read = hold_engine(base_url, 0) {
+                speech_request(base_url, "\{\"input\": \"Hello.\"}") $(status, _ctype, bytes, _text) {
+                    if (status == 200 && length(bytes) > 44) {
+                        said++
+                    }
+                }
+            }
+            to_log(LOG_INFO, "engine held {read.hold_ms} ms by the embeddings forward: {said} syntheses answered, the slowest {read.worst_ms} ms; /config waited {read.engine_ms} ms\n")
+            return if (!held_engine_bars(t, read))
+            t |> success(said >= 2, "syntheses were answered during the hold ({said})")
         }
     }
 }

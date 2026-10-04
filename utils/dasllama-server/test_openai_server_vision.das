@@ -42,23 +42,7 @@ def private with_vision_server(port : int; blk : block<(base_url : string) : voi
             run_server(port)   // blocks until POST /shutdown
             finished |> notify_and_release
         }
-        let base_url = "http://127.0.0.1:{port}"
-        var ready = false
-        for (_attempt in range(1200)) {   // up to ~120s: a 12B load + mmproj + JIT
-            GET("{base_url}/v1/models") $(resp) {
-                if (resp != null && resp.status_code == http_status.OK) {
-                    ready = true
-                }
-            }
-            if (ready) {
-                break
-            }
-            sleep(100u)
-        }
-        if (ready) {
-            invoke(blk, base_url)
-        }
-        POST("{base_url}/shutdown", "") $(_resp) {}
+        let ready = serve_clients(port, 1200, "/v1/models", blk)   // up to ~120s: a 12B load + mmproj + JIT
         finished |> join
         assert(ready, "dasllama vision server became ready")
     }

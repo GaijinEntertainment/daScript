@@ -4,6 +4,7 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require dastest/testing_boost public
+require _openai_live
 require openai/openai_audio
 require strings
 require daslib/fio
@@ -26,6 +27,7 @@ def private synth_wav(t : T?; client : OpenAIClient; text, path : string) : bool
 [test]
 def test_transcribe_live_round_trip(t : T?) {
     t |> run("TTS -> STT round trip against the local server") @(t : T?) {
+        return if (!live_server(t, "http://localhost:8880/v1"))
         let client = openai_client("http://localhost:8880/v1")
         let path = "test_stt_rt.wav"
         if (synth_wav(t, client, "The quick brown fox.", path)) {
@@ -43,6 +45,7 @@ def test_transcribe_live_round_trip(t : T?) {
 [test]
 def test_translate_live(t : T?) {
     t |> run("translation endpoint against the local server") @(t : T?) {
+        return if (!live_server(t, "http://localhost:8880/v1"))
         let client = openai_client("http://localhost:8880/v1")
         let path = "test_translate_rt.wav"
         if (synth_wav(t, client, "Hello world.", path)) {

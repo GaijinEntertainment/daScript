@@ -19,6 +19,7 @@ require serving_knobs public    // the serving spellings shared with dasllama-cl
 require daslib/jobque_boost
 require daslib/rtti             // this_context().last_exception inside ASR worker recovery
 require daslib/strings_boost    // join()
+require daslib/linq   // sum: the ASR worker counts on the stats surface
 require daslib/utf8_utils       // utf8_length: the TTS input cap counts characters, not bytes
 require daslib/fio              // sleep(), path_join, base_name, remove, get_env_variable
 require daslib/module_path      // get_this_module_dir: control.html ships beside the server sources
@@ -37,7 +38,176 @@ require daslib/base64                // base64_decode: the data: URI payload
 // the small buffered holdouts (/v1/models, /v1/embeddings, /shutdown, /v1/stats) still complete
 // in-handler.
 
-// ===== Served state (slots set at startup; handlers run serially on the tick thread) =====
+// ===== The HTTP front and the engine =====
+// Two contexts. The FRONT is a thread of its own: it owns the HTTP server and every response writer, parses nothing
+// and runs no inference - a request crosses to the engine as a FrontReq, and the engine's replies come back as
+// FrontOut ops addressed by the front's wire id. The ENGINE is the context that called init_server: it owns the
+// slots, the schedulers and the models, and runs every handler serially inside update_server. A handler that takes
+// seconds (a model load, a long prefill chunk) holds the engine, never the socket side.
+
+enum private Route {
+    unknown
+    models
+    chat
+    completion
+    transcribe
+    translate
+    speech
+    phonemes
+    embeddings
+    activate
+    load
+    unload
+    stats
+    streams
+    config_get
+    vad
+    config_save
+    exchange_get
+    exchange_matches
+    exchange_apply
+    exchange_submit
+    exchange_retune
+    exchange_consent
+    bench_start
+    bench_get
+    bake_start
+    catalog
+    catalog_download
+    bake_get
+    images
+    restart
+    shutdown
+    gc
+}
+
+enum private FrontKind {
+    request     //! a request for `route`
+    gone        //! the client of wire `wid` disconnected
+    ready       //! the front is listening: `status` its start rc, `port` the bound port
+    stopped     //! the front's server is down, its channels released
+    drain       //! engine -> speech thread: the server is draining, admit no new work
+    halt        //! engine -> speech thread: stop the workers and exit
+    query       //! engine -> speech thread: publish the state now, answering `wid`
+}
+
+//! what crosses from the front to the engine; the zero value is a request for the unknown route
+struct FrontReq {
+    kind : FrontKind
+    wid : int64             //! the front's wire id, which the reply names
+    route : Route
+    method : string
+    path : string
+    body : string
+    loopback : bool         //! the peer, its Host and its Origin all say loopback (the operator surface's gate)
+    file_path : string      //! a multipart upload the front saved to a temp file
+    form_format : string    //! the upload's `response_format` field
+    form_language : string  //! the upload's `language` field
+    form_model : string     //! the upload's `model` field
+    status : int
+    port : int
+}
+
+enum private FrontOp {
+    respond         //! a whole reply: `status`, `ctype`, `text` - ends the wire
+    sse             //! one SSE event: `text` the data, `aux` the event name
+    close           //! end a stream - ends the wire
+    release         //! drop the wire without a reply
+    keepalive       //! the wire's keepalive timeout, `ms`
+    header          //! a response header, `aux` its name and `text` its value
+    serve_file      //! a file reply, `text` its path - ends the wire
+    stop            //! shut the front down
+}
+
+//! what crosses from the engine to the front
+struct FrontOut {
+    op : FrontOp
+    wid : int64
+    status : int
+    ctype : string
+    text : string
+    aux : string
+    ms : int
+}
+
+//! the engine's name for a response writer the front holds
+struct WriterRef {
+    id : int64
+}
+
+//! the engine's handle on the front: every writer op below rides the out channel
+struct FrontLink {
+    @do_not_delete out : Channel?
+}
+
+//! a buffered handler's answer, as `resp |> JSON(...)` leaves it
+struct Reply {
+    status : int = 200
+    ctype : string = "application/json"
+    body : string
+}
+
+var private g_link = FrontLink()
+var private g_front_in : Channel?           //! front -> engine: FrontReq
+var private g_gone : table<int64>           //! wires whose client disconnected, until the engine drops them
+
+//! A channel a thread blocks on. A fresh channel counts nothing pending, and a timed pop on it returns at once -
+//! the waiter spins a core; one pending count makes the pop wait for a message or its timeout.
+def private worker_channel() : Channel? {
+    var ch = unsafe(channel_create())
+    ch |> append(1)
+    return ch
+}
+
+def private front_op(srv : FrontLink; o : FrontOut) {
+    if (srv.out != null) {
+        srv.out |> push_clone(o)
+    }
+}
+
+def private sse_event(srv : FrontLink; w : WriterRef; data, event : string implicit) {
+    front_op(srv, FrontOut(op = FrontOp.sse, wid = w.id, text = data, aux = event))
+}
+
+def private respond(srv : FrontLink; w : WriterRef; status : int; ctype, body : string implicit) {
+    g_gone |> erase(w.id)
+    front_op(srv, FrontOut(op = FrontOp.respond, wid = w.id, status = status, ctype = ctype, text = body))
+}
+
+def private close_writer(srv : FrontLink; w : WriterRef) {
+    g_gone |> erase(w.id)
+    front_op(srv, FrontOut(op = FrontOp.close, wid = w.id))
+}
+
+def private release_writer(srv : FrontLink; w : WriterRef) {
+    g_gone |> erase(w.id)
+    front_op(srv, FrontOut(op = FrontOp.release, wid = w.id))
+}
+
+def private set_writer_keepalive_timeout(srv : FrontLink; w : WriterRef; ms : int) {
+    front_op(srv, FrontOut(op = FrontOp.keepalive, wid = w.id, ms = ms))
+}
+
+def private set_header(srv : FrontLink; w : WriterRef; key, value : string implicit) {
+    front_op(srv, FrontOut(op = FrontOp.header, wid = w.id, aux = key, text = value))
+}
+
+def private SERVE_FILE(srv : FrontLink; w : WriterRef; path : string implicit) {
+    g_gone |> erase(w.id)
+    front_op(srv, FrontOut(op = FrontOp.serve_file, wid = w.id, text = path))
+}
+
+[unused_argument(srv)]
+def private is_writer_connected(srv : FrontLink; w : WriterRef) : bool => !key_exists(g_gone, w.id)
+
+def private JSON(var resp : Reply; body : string; status : http_status = http_status.OK) : http_status {
+    resp.status = int(status)
+    resp.ctype = "application/json"
+    resp.body = body
+    return status
+}
+
+// ===== Served state (slots set at startup; handlers run serially on the engine's context) =====
 
 //! Per-slot serving options (main.das resolves them from a [[models]] config entry). The -1/-2/""
 //! sentinels mean "inherit the init_server default". `backend` is a REQUEST (auto | cpu | gpu);
@@ -148,17 +318,39 @@ def same_model_path(a, b : string) : bool {
     return get_platform_name() == "windows" ? to_lower(ga) == to_lower(gb) : ga == gb
 }
 
-var g_has_asr = false
-var g_asr_path = ""
-var g_asr_mmproj = ""
-var g_asr_worker_count = 0
+//! One served ASR model: its workers load and own it, each in a context of its own, and take its jobs off `jobs`.
+struct AsrSlot {
+    id : string                 //! the request's `model` names it; the file's stem unless the config says otherwise
+    path : string
+    mmproj : string
+    workers : int
+    ready : int                 //! workers that loaded and answered
+}
+
+//! One served TTS model: one worker loads and owns it. The answer-side fields are the worker's own, off its ready event.
+struct TtsSlot {
+    id : string                 //! the request's `model` names it; the file's stem unless the config says otherwise
+    path : string
+    lane : string = TTS_LANE_DEFAULT   //! the weight lane the worker is ASKED for; `lane_served` is the pin it took
+    voices_dir : string         //! clips a cloning model adds to its voices at boot, each under its file's stem
+    armed : bool                //! the route serves this model: its file set was there and its worker loaded it
+    ready : int
+    error : string              //! why the worker could not load: the slot stays down and the tts stats block carries this
+    voices : array<string>
+    sample_rate : int
+    lane_served : string
+    cloning : bool
+    speed : bool
+    lang : string
+}
+
+var g_asr : array<AsrSlot>          //! the ASR models, the first the default a request with no `model` gets
+var g_tts : array<TtsSlot>          //! the TTS models, the first ARMED one the default
+var private g_asr_alias = ""                //! the default ASR model's other name, `<default slot>-asr`; empty with no LLM slot
+var private g_asr_jobs : array<Channel?>   //! a job channel a running ASR model, by its row; the thread that started the workers holds them
+var private g_tts_jobs : array<Channel?>   //! the same a TTS model, null for one that is not armed
 var g_asr_team_dispatch = false
 var g_tts_team_dispatch = false
-var g_has_tts = false
-var g_tts_path = ""
-var g_tts_id = ""
-var g_tts_lane = TTS_LANE_DEFAULT   // the weight lane the worker is ASKED for; its ready event echoes the pin it took
-var g_tts_voices_dir = ""   // clips a cloning model adds to its voices at boot, each under its file's stem
 let TTS_VOICE_CLIP_EXTENSIONS : array<string> <- [".wav", ".flac", ".mp3", ".ogg"]   // what the decode rail reads
 var g_shutdown_requested = false
 var g_gc_requested = false
@@ -168,7 +360,7 @@ var g_events : array<SchedEvent>
 // One registered request's HTTP side: where this stream id's SchedEvents go. The writer is owned by
 // dasHV's active_writers (respond/close_writer/release_writer drop it) — never deleted from here.
 struct private StreamWire {
-    @do_not_delete writer : HttpResponseWriter?
+    @do_not_delete writer : WriterRef
     streaming : bool
     include_usage : bool
     is_chat : bool                  // chat.completion.chunk vs text_completion framing
@@ -529,20 +721,72 @@ def set_model_audio(name : string; path : string) {
     }
 }
 
-//! Configure long-lived ASR worker threads. Each worker loads and owns its model in its cloned
-//! context; model/session pointers never cross context heaps. Call once before ``run_server``.
-def configure_asr_workers(path, mmproj : string; workers : int = 1) {
-    g_asr_path = path
-    g_asr_mmproj = mmproj
-    g_asr_worker_count = clamp(workers, 1, 8)
-    g_has_asr = !empty(path)
+//! a speech model's id: the one the config gave, else its file's stem
+def private speech_model_id(id, path : string) : string => empty(id) ? stem(base_name(path)) : id
+
+//! whether a speech model already answers to `id`: the request's `model` field has to name one model
+def private speech_id_taken(id : string) : bool {
+    for (a in g_asr) {
+        return true if (a.id == id)
+    }
+    for (m in g_tts) {
+        return true if (m.id == id)
+    }
+    return false
 }
 
-//! The weight lane ``/v1/audio/speech`` requested for its model — what ``configure_tts`` kept
+//! Serve one more ASR model: `workers` long-lived threads each load and own it in a cloned context (model/session
+//! pointers never cross context heaps). A request's `model` field names it by `id` (the file's stem when empty); the
+//! first model added is the default. An empty path adds nothing. Call before ``run_server``.
+def add_asr_model(path, mmproj : string; workers : int = 1; id : string = "") {
+    return if (empty(path))
+    let mid = speech_model_id(id, path)
+    if (speech_id_taken(mid)) {
+        to_log(LOG_ERROR, "dasllama-server: ASR model {base_name(path)} left out - the id '{mid}' is already served (give the entry an id of its own)\n")
+        return
+    }
+    g_asr |> emplace(AsrSlot(id = mid, path = path, mmproj = mmproj, workers = clamp(workers, 1, 8)))
+}
+
+//! Serve ONE ASR model: every model added before is dropped, then `path` is added (an empty path leaves none).
+def configure_asr_workers(path, mmproj : string; workers : int = 1) {
+    delete g_asr
+    add_asr_model(path, mmproj, workers)
+}
+
+//! The ASR model a request's `model` field names. One served model takes every request, whatever the field says - a
+//! client written for another server names a model of its own. Several: a model's id, or the default for an empty
+//! field and for the `<default slot>-asr` id /v1/models lists; -1 for any other name.
+def private asr_slot_of(model : string) : int {
+    return -1 if (empty(g_asr))
+    for (i in range(length(g_asr))) {
+        return i if (g_asr[i].id == model)
+    }
+    return (length(g_asr) == 1 || empty(model) || model == g_asr_alias) ? 0 : -1
+}
+
+//! the default TTS model: the first one armed, -1 when none is
+def private tts_default : int {
+    for (i in range(length(g_tts))) {
+        return i if (g_tts[i].armed)
+    }
+    return -1
+}
+
+//! the TTS model a request's `model` field names: the default for an empty field, -1 for an id no armed model carries
+def private tts_slot_of(model : string) : int {
+    return tts_default() if (empty(model))
+    for (i in range(length(g_tts))) {
+        return i if (g_tts[i].armed && g_tts[i].id == model)
+    }
+    return -1
+}
+
+//! The weight lane ``/v1/audio/speech`` requested for its default model — what ``configure_tts`` kept
 //! after normalizing. The lane the worker actually pinned rides the ``tts`` block of
 //! ``GET /v1/stats``.
 def server_tts_lane : string {
-    return g_tts_lane
+    return empty(g_tts) ? TTS_LANE_DEFAULT : g_tts[0].lane
 }
 
 //! Configure the TTS model ``/v1/audio/speech`` serves: one worker thread loads and owns it in
@@ -560,34 +804,31 @@ def server_tts_lane : string {
 //! each under its file's stem; a clip that does not decode is logged and skipped, and the
 //! directory on a model that cannot clone is logged and ignored - neither drops the route.
 def configure_tts(path : string; lane : string = TTS_LANE_DEFAULT; voices_dir : string = "") {
-    g_tts_path = path
-    g_has_tts = !empty(path)
-    g_tts_error = ""   // a re-configure is a fresh answer: the previous boot's load failure is not this one's
-    g_tts_id = empty(path) ? "" : stem(base_name(path))
-    g_tts_lane = pick_tts_lane(lane)
-    g_tts_voices_dir = voices_dir
-    // the answer-side facts belong to the model the worker loads, never to the previous one
-    g_tts_cloning = false
-    g_tts_speed = false
-    g_tts_lang = ""
-    g_tts_sample_rate = 0
-    g_tts_voices |> clear()
-    if (!g_has_tts) {
-        return
-    }
-    let missing = tts_missing_file(path)
-    if (!empty(missing)) {
-        to_log(LOG_ERROR, "dasllama-server: dropping the speech route - a TTS file was not found: {missing} (a phoneme family's GGUF and the front-end packs tts_g2p.bin + tts_postag.bin sit in one directory, a Pocket TTS GGUF stands alone; fix the config, then POST /restart)\n")
-        g_has_tts = false
-        g_tts_path = ""
-        g_tts_id = ""
-    }
+    delete g_tts   // a re-configure is a fresh answer: the previous boot's models and load failures are not this one's
+    add_tts_model(path, lane, voices_dir)
 }
 
-//! True when ``configure_tts`` armed the speech route: false when no TTS was configured, and
-//! false when its file set was incomplete and the route was dropped.
+//! Serve one more TTS model beside the ones configured, under `id` (the file's stem when empty): the same file check
+//! and the same degrade as ``configure_tts``, a model at a time - a model whose file set is incomplete is logged and
+//! left out, the others serve. The first model armed is the default. An empty path adds nothing.
+def add_tts_model(path : string; lane : string = TTS_LANE_DEFAULT; voices_dir : string = ""; id : string = "") {
+    return if (empty(path))
+    let missing = tts_missing_file(path)
+    if (!empty(missing)) {
+        to_log(LOG_ERROR, "dasllama-server: dropping the speech route for {base_name(path)} - a TTS file was not found: {missing} (a phoneme family's GGUF and the front-end packs tts_g2p.bin + tts_postag.bin sit in one directory, a Pocket TTS GGUF stands alone; fix the config, then POST /restart)\n")
+    }
+    let mid = speech_model_id(id, path)
+    if (speech_id_taken(mid)) {
+        to_log(LOG_ERROR, "dasllama-server: TTS model {base_name(path)} left out - the id '{mid}' is already served (give the entry an id of its own)\n")
+        return
+    }
+    g_tts |> emplace(TtsSlot(id = mid, path = path, lane = pick_tts_lane(lane), voices_dir = voices_dir, armed = empty(missing)))
+}
+
+//! True when a TTS model is armed: false when none was configured, and false when every configured
+//! one's file set was incomplete or its worker could not load it.
 def server_has_tts : bool {
-    return g_has_tts
+    return tts_default() >= 0
 }
 
 //! Stop admitting new inference/ASR work and exit after all accepted work finishes. Also wired to
@@ -784,7 +1025,7 @@ def private bench_mode() : string {
     return (!empty(g_lcpp_bin) && !empty(g_daslang_bin)) ? "ab" : "inprocess"
 }
 
-def private handle_bench_start(var resp : HttpResponse?) : http_status {
+def private handle_bench_start(var resp : Reply) : http_status {
     if (g_bench_state == "running") {
         return resp |> JSON(error_body("a benchmark is already running", "invalid_request_error"), http_status.CONFLICT)
     }
@@ -811,7 +1052,7 @@ def private handle_bench_start(var resp : HttpResponse?) : http_status {
     return resp |> JSON("\{\"ok\":true,\"state\":\"running\"}", http_status.ACCEPTED)
 }
 
-def private handle_bench_get(var resp : HttpResponse?) : http_status {
+def private handle_bench_get(var resp : Reply) : http_status {
     var log_doc = JV(g_bench_log)
     let log_json = write_json_compact(log_doc)
     unsafe {
@@ -879,7 +1120,7 @@ def private ibench_hold_text() : string {
 
 //! the deferred routes' hold: the audio and speech workers share the cores the timed reps run
 //! on, so their queues answer 503 for the run's duration like the text routes do
-def private reject_while_benching(srv : WebSocketServer; var writer : HttpResponseWriter?) : bool {
+def private reject_while_benching(srv : FrontLink; writer : WriterRef) : bool {
     if (!bench_hold_active()) {
         return false
     }
@@ -940,7 +1181,7 @@ def private ibench_log(text : string) {
     to_log(LOG_INFO, "dasllama-server: bench: {text}\n")
 }
 
-def private ibench_start(var resp : HttpResponse?) : http_status {
+def private ibench_start(var resp : Reply) : http_status {
     if (empty(g_slots)) {
         return resp |> JSON(error_body("no model is loaded - setup mode: pick one from the catalog first", "invalid_request_error"), http_status.BAD_REQUEST)
     }
@@ -1266,7 +1507,7 @@ def private drain_bake_events() {
     }
 }
 
-def private handle_bake_start(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+def private handle_bake_start(req : FrontReq; var resp : Reply) : http_status {
     if (g_bake_state == "running") {
         return resp |> JSON(error_body("a bake is already running", "invalid_request_error"), http_status.CONFLICT)
     }
@@ -1285,7 +1526,7 @@ def private handle_bake_start(var req : HttpRequest?; var resp : HttpResponse?) 
     }
     var model_field = ""
     var jerr = ""
-    let body_text = string(req.body)
+    let body_text = req.body
     var js = read_json(body_text, jerr)
     defer() {
         unsafe {
@@ -1346,12 +1587,12 @@ def private handle_bake_start(var req : HttpRequest?; var resp : HttpResponse?) 
     return resp |> JSON("\{\"ok\":true,\"state\":\"running\",\"model\":{json_str(g_bake_model)},\"flavor\":{json_str(flavor)}}", http_status.ACCEPTED)
 }
 
-def private handle_catalog_download(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+def private handle_catalog_download(req : FrontReq; var resp : Reply) : http_status {
     if (bench_hold_active()) {   // the twin of the start refusal: a download shares the cores and the disk with the rows
         return resp |> JSON(error_body(ibench_hold_text(), "invalid_request_error"), http_status.CONFLICT)
     }
     var jerr = ""
-    var js = read_json(string(req.body), jerr)
+    var js = read_json(req.body, jerr)
     defer() {
         unsafe {
             delete js
@@ -1406,7 +1647,7 @@ def private handle_catalog_download(var req : HttpRequest?; var resp : HttpRespo
     return resp |> JSON(error_body("unknown catalog entry '{want}'", "invalid_request_error"), http_status.NOT_FOUND)
 }
 
-def private handle_bake_get(var resp : HttpResponse?) : http_status {
+def private handle_bake_get(var resp : Reply) : http_status {
     var log_doc = JV(g_bake_log)
     let log_json = write_json_compact(log_doc)
     unsafe {
@@ -1442,7 +1683,7 @@ struct private OaiImagesResponse {
     models : array<OaiSlotImages>
 }
 
-def private handle_images(var resp : HttpResponse?) : http_status {
+def private handle_images(var resp : Reply) : http_status {
     var out = OaiImagesResponse(baking = g_bake_state == "running" ? g_bake_model : "")
     out.models |> reserve(length(g_slots))
     for (s in g_slots) {
@@ -1777,6 +2018,7 @@ struct private AsrEvent {
 //! its wall time and RTF (audio seconds per wall second) — lingers ~30 s like finished streams.
 struct private AsrJobInfo {
     id : int64
+    model : string       // the ASR model that took it, by id
     state : string       // "running" | "done" | "failed"
     audio_s : float
     wall_ms : float
@@ -1786,20 +2028,34 @@ struct private AsrJobInfo {
 }
 
 struct private AsrWire {
-    @do_not_delete writer : HttpResponseWriter?
+    @do_not_delete writer : WriterRef
+    model : string       // the id of the model the request was queued on
 }
 
 var g_asr_recent : array<AsrJobInfo>   // running + lingering done jobs for the poll surface
 var g_asr_done_jobs = 0l               // cumulative completed transcriptions
 var g_asr_audio_s = 0.0                // cumulative audio seconds transcribed
-var g_asr_jobs : Channel?
-var g_asr_events : Channel?
+var g_asr_events : Channel?             //! every ASR worker's events, whichever model it serves
 var g_asr_wires : table<int64; AsrWire>
-var g_asr_ready = 0
 var g_asr_active = 0
 var g_asr_pending = 0
 let ASR_QUEUE_LIMIT = 32
 let WORKER_STOP_WAIT_NS = 30_000_000_000l   // a worker that died on its own never answers the stop; the teardown must still finish
+
+//! Wait on `events` until `asked` of them were stops or `deadline_ns` passed, and answer the stops seen. `is_stop` is
+//! shown every event and says which are stops, so a caller settles the others - a late completion - right there.
+def private await_stopped(events : Channel?; asked : int; deadline_ns : int64; is_stop : block<(ev : auto(TT)#) : bool>) : int {
+    var stopped = 0
+    let since = ref_time_ticks()
+    while (stopped < asked && get_time_nsec(since) < deadline_ns) {
+        events |> pop_with_timeout_clone(100) $(ev : TT#) {
+            if (invoke(is_stop, ev)) {
+                stopped++
+            }
+        }
+    }
+    return stopped
+}
 let ASR_WRITER_KEEPALIVE_MS = 3600000
 let LLM_WRITER_KEEPALIVE_MS = 3600000
 let DEFAULT_WRITER_KEEPALIVE_MS = 75000
@@ -1842,20 +2098,20 @@ def private error_body(msg, kind : string) : string {
 }
 
 // Terminal error on a streaming route's writer (chat/completions run through the writer).
-def private bad_request(srv : WebSocketServer; var writer : HttpResponseWriter?; msg : string) {
+def private bad_request(srv : FrontLink; writer : WriterRef; msg : string) {
     to_log(LOG_WARNING, "dasllama-server: 400 rejected: {msg}\n")
     respond(srv, writer, int(http_status.BAD_REQUEST), "application/json",
             error_body(msg, "invalid_request_error"))
 }
 
-def private service_unavailable(srv : WebSocketServer; var writer : HttpResponseWriter?; msg : string) {
+def private service_unavailable(srv : FrontLink; writer : WriterRef; msg : string) {
     respond(srv, writer, int(http_status.SERVICE_UNAVAILABLE), "application/json",
             error_body(msg, "server_error"))
 }
 
 def private reject_deferred_while_draining(
-                                           srv : WebSocketServer;
-                                           var writer : HttpResponseWriter?
+                                           srv : FrontLink;
+                                           writer : WriterRef
                                            ) : bool {
     if (!g_shutdown_requested) {
         return false
@@ -1891,7 +2147,7 @@ def private utf8_hold_bytes(s : string) : int {
 
 // One chat.completion.chunk SSE event. role-only for the opening delta, content and/or
 // reasoning_content for each token, empty delta + finish_reason for the terminating chunk.
-def private send_chat_chunk(srv : WebSocketServer; var writer : HttpResponseWriter?;
+def private send_chat_chunk(srv : FrontLink; writer : WriterRef;
                             id : string; created : int64; role, content, finish : string;
                             reasoning : string = "") {
     var chunk = OaiStreamChunk(id = id, _object = "chat.completion.chunk", created = created, model = cur_name())
@@ -1903,9 +2159,19 @@ def private send_chat_chunk(srv : WebSocketServer; var writer : HttpResponseWrit
     delete chunk
 }
 
+//! a chat piece's two halves, each a chunk of its own when it carries text: the reasoning, then the content
+def private send_chat_halves(srv : FrontLink; w : StreamWire; rsn, cnt : string) {
+    if (!empty(rsn)) {
+        send_chat_chunk(srv, w.writer, w.id, w.created, "", "", "", rsn)
+    }
+    if (!empty(cnt)) {
+        send_chat_chunk(srv, w.writer, w.id, w.created, "", cnt, "")
+    }
+}
+
 //! The chunk a stream that asked for `stream_options.include_usage` ends on, before `[DONE]`: no choices, the turn's
 //! token counts with the prefix-cache hit among them, and the scheduler's own clock for the turn.
-def private send_usage_chunk(srv : WebSocketServer; var writer : HttpResponseWriter?;
+def private send_usage_chunk(srv : FrontLink; writer : WriterRef;
                              id : string; created : int64; is_chat : bool; e : SchedEvent) {
     var chunk = OaiUsageChunk(id = id, _object = is_chat ? "chat.completion.chunk" : "text_completion",
                               created = created, model = cur_name(),
@@ -1917,7 +2183,7 @@ def private send_usage_chunk(srv : WebSocketServer; var writer : HttpResponseWri
 
 // The whole call set of a streaming reply as ONE tool_calls delta (index enumerates calls per the
 // OpenAI incremental framing); the caller follows with the finish_reason="tool_calls" chunk.
-def private send_chat_tool_calls_chunk(srv : WebSocketServer; var writer : HttpResponseWriter?;
+def private send_chat_tool_calls_chunk(srv : FrontLink; writer : WriterRef;
                                        id : string; created : int64; calls : array<OaiToolCall>) {
     var chunk = OaiStreamChunk(id = id, _object = "chat.completion.chunk", created = created, model = cur_name())
     var delta = OaiDelta()
@@ -2062,7 +2328,7 @@ def parse_tool_calls_auto(full : string; declared_open, declared_close, id_base 
     return full
 }
 
-def private send_compl_chunk(srv : WebSocketServer; var writer : HttpResponseWriter?;
+def private send_compl_chunk(srv : FrontLink; writer : WriterRef;
                              id : string; created : int64; text, finish : string) {
     var chunk = OaiComplStreamChunk(id = id, _object = "text_completion", created = created, model = cur_name())
     chunk.choices |> push(OaiComplStreamChoice(index = 0, text = text, finish_reason = finish))
@@ -2076,7 +2342,7 @@ def private clamp_max(requested : int64) : int64 {
 }
 
 // Error on a buffered (resp-based) route — /v1/models and the audio endpoints use the response path.
-def private resp_error(var resp : HttpResponse?; status : http_status; msg : string) : http_status {
+def private resp_error(var resp : Reply; status : http_status; msg : string) : http_status {
     return resp |> JSON(error_body(msg, "invalid_request_error"), status)
 }
 
@@ -2260,8 +2526,8 @@ def private decode_image_bytes(bytes : array<uint8>; var why : string&) : Vision
 }
 
 // Unknown endpoint: log the probe (method, path, body head) and 404 with an OpenAI error body.
-def private handle_unknown(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-    let body = string(req.body)
+def private handle_unknown(req : FrontReq; var resp : Reply) : http_status {
+    let body = req.body
     let head = length(body) > 400 ? slice(body, 0, 400) : body
     if (empty(head)) {
         to_log(LOG_WARNING, "unhandled request: {req.method} {req.path}\n")
@@ -2273,17 +2539,24 @@ def private handle_unknown(var req : HttpRequest?; var resp : HttpResponse?) : h
 
 // ===== Handlers =====
 
-def private handle_models(var resp : HttpResponse?) : http_status {
+def private handle_models(var resp : Reply) : http_status {
     var list = OaiModelList(_object = "list")
-    list.data |> reserve(length(g_slots) + 1)
+    list.data |> reserve(length(g_slots) + length(g_asr) + length(g_tts) + 1)
     for (s in g_slots) {
         list.data |> push(OaiModel(id = s.name, _object = "model", created = created_ts(), owned_by = "dasllama"))
     }
-    if (g_has_asr && !empty(g_slots)) {
+    if (!empty(g_asr) && !empty(g_slots)) {   // the default ASR model's first name: the default LLM's, suffixed
         list.data |> push(OaiModel(id = "{g_slots[g_default_slot].name}-asr", _object = "model", created = created_ts(), owned_by = "dasllama"))
     }
-    if (g_has_tts) {
-        list.data |> push(OaiModel(id = g_tts_id, _object = "model", created = created_ts(), owned_by = "dasllama"))
+    if (length(g_asr) > 1 || empty(g_slots)) {   // several ASR models, or none of the suffixed name: each under its own id
+        for (a in g_asr) {
+            list.data |> push(OaiModel(id = a.id, _object = "model", created = created_ts(), owned_by = "dasllama"))
+        }
+    }
+    for (m in g_tts) {
+        if (m.armed) {
+            list.data |> push(OaiModel(id = m.id, _object = "model", created = created_ts(), owned_by = "dasllama"))
+        }
     }
     let body = sprint_json(list, false)
     delete list
@@ -2293,9 +2566,9 @@ def private handle_models(var resp : HttpResponse?) : http_status {
 // /v1/embeddings: mean-pooled, L2-normalized sentence embeddings over the facade `embed` verb.
 // `input` is a string or an array of strings; usage is counted via the facade `encode` (cheap
 // relative to the forward). Decoder-only-as-embedder — RAG-grade vectors, not a dedicated model.
-def private handle_embeddings(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+def private handle_embeddings(req : FrontReq; var resp : Reply) : http_status {
     var perr = ""
-    var js = read_json(string(req.body), perr)
+    var js = read_json(req.body, perr)
     if (js == null) {
         return resp_error(resp, http_status.BAD_REQUEST, "invalid JSON: {perr}")
     }
@@ -2431,7 +2704,7 @@ def private runtime_load_conflict(id, rpath : string) : string {
 
 // POST /v1/models/load. Contract: the README's route row. In-code precondition: streams must
 // be idle (the busy gate) because the load blocks the tick thread for its duration.
-def private handle_model_load(var req : HttpRequest?; var resp : HttpResponse?) : http_status {   // nolint:STYLE037,STYLE038 — one guard + one client-facing message per validation
+def private handle_model_load(req : FrontReq; var resp : Reply) : http_status {   // nolint:STYLE037,STYLE038 — one guard + one client-facing message per validation
     if (!is_loopback_req(req)) {
         return deny_operator(resp)
     }
@@ -2439,7 +2712,7 @@ def private handle_model_load(var req : HttpRequest?; var resp : HttpResponse?) 
         return resp |> JSON(error_body("runtime loads need a serving server (setup mode restarts into the first model)", "invalid_request_error"), http_status.CONFLICT)
     }
     var perr = ""
-    var js = read_json(string(req.body), perr)
+    var js = read_json(req.body, perr)
     if (js == null) {
         return resp_error(resp, http_status.BAD_REQUEST, "invalid JSON: {perr}")
     }
@@ -2540,12 +2813,12 @@ def private handle_model_load(var req : HttpRequest?; var resp : HttpResponse?) 
 }
 
 // POST /v1/models/unload. Contract: the README's route row.
-def private handle_model_unload(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+def private handle_model_unload(req : FrontReq; var resp : Reply) : http_status {
     if (!is_loopback_req(req)) {
         return deny_operator(resp)
     }
     var perr = ""
-    var js = read_json(string(req.body), perr)
+    var js = read_json(req.body, perr)
     if (js == null) {
         return resp_error(resp, http_status.BAD_REQUEST, "invalid JSON: {perr}")
     }
@@ -2608,12 +2881,12 @@ def private handle_model_unload(var req : HttpRequest?; var resp : HttpResponse?
 // stepped slot (model-less page requests follow) and move the GPU tier to it NOW instead of
 // waiting for the owner to drain. 409 while any work is live: the switch drops the owner's
 // whole VRAM state. Loopback-only, like its load/unload siblings.
-def private handle_activate(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+def private handle_activate(req : FrontReq; var resp : Reply) : http_status {
     if (!is_loopback_req(req)) {
         return deny_operator(resp)
     }
     var perr = ""
-    var js = read_json(string(req.body), perr)
+    var js = read_json(req.body, perr)
     if (js == null) {
         return resp_error(resp, http_status.BAD_REQUEST, "invalid JSON: {perr}")
     }
@@ -2657,7 +2930,7 @@ def private handle_activate(var req : HttpRequest?; var resp : HttpResponse?) : 
 
 // Resolve a streaming request's "model" field to a slot (sets g_cur). False = unknown model —
 // the 404 with OpenAI error framing is already on the wire.
-def private resolve_stream_slot(srv : WebSocketServer; var writer : HttpResponseWriter?; js : JsonValue?) : bool {
+def private resolve_stream_slot(srv : FrontLink; writer : WriterRef; js : JsonValue?) : bool {
     let want = js?["model"] ?? ""
     let mi = slot_index(want)
     if (mi < 0) {
@@ -2672,7 +2945,7 @@ def private resolve_stream_slot(srv : WebSocketServer; var writer : HttpResponse
 // Validate the rendered prompt, submit it to the scheduler, and register the wire that routes its
 // SchedEvents back to `writer`. Owns the mandatory 400 (prompt does not fit the context — submit
 // would panic) and the 503 (queue full). Moves prompt/stop_ids/close_toks into the request.
-def private register_request(srv : WebSocketServer; var writer : HttpResponseWriter?;
+def private register_request(srv : FrontLink; writer : WriterRef;
                              var prompt, stop_ids, close_toks : array<int64>;
                              var media : array<float>; media_at, n_media : int64;
                              params : SamplingParams; max_new : int64;
@@ -2896,12 +3169,12 @@ def private next_user_start(msgs_v : JsonValue?; start : int) : int {
     return -1
 }
 
-def private handle_chat(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {
+def private handle_chat(srv : FrontLink; req : FrontReq; writer : WriterRef) {
     if (reject_deferred_while_draining(srv, writer) || reject_while_benching(srv, writer)) {
         return
     }
     var perr = ""
-    var js = read_json(string(req.body), perr)
+    var js = read_json(req.body, perr)
     if (js == null) {
         bad_request(srv, writer, "invalid JSON: {perr}")
         return
@@ -2939,7 +3212,7 @@ enum private MediaPark {
 // message carrying it). Any other placement warns and drops — an earlier turn has no render seam
 // (replays go through render_assistant, which has no splice), and a trailing tool turn must render
 // as tools.
-def private park_media_request(srv : WebSocketServer; var writer : HttpResponseWriter?;
+def private park_media_request(srv : FrontLink; writer : WriterRef;
                                var js : JsonValue?; msgs_v : JsonValue?) : MediaPark {
     var images : array<string>
     defer() { delete images }
@@ -3015,7 +3288,7 @@ def private park_media_request(srv : WebSocketServer; var writer : HttpResponseW
 // everything after the media boundary: re-derives the request fields from `js` (cheap), renders,
 // and registers. Runs synchronously for a text request; an image request re-enters here from
 // drain_media_events with the worker's rows.
-def private handle_chat_tail(srv : WebSocketServer; var writer : HttpResponseWriter?; js : JsonValue?;   // nolint:STYLE037,STYLE038 — flat request-field derivation: one guard and one client-facing message per field
+def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue?;   // nolint:STYLE037,STYLE038 — flat request-field derivation: one guard and one client-facing message per field
                              slot : int; var media : array<float>; n_media : int64;
                              media_is_audio : bool = false; resume_rid : int64 = 0l;
                              media_grid : int2 = int2(0)) {
@@ -3142,12 +3415,12 @@ def private handle_chat_tail(srv : WebSocketServer; var writer : HttpResponseWri
 //! whether a request asks its stream to end on the usage chunk (`stream_options.include_usage`)
 def private wants_usage(js : JsonValue?) : bool => js?["stream_options"]?["include_usage"] ?? false
 
-def private handle_completion(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {
+def private handle_completion(srv : FrontLink; req : FrontReq; writer : WriterRef) {
     if (reject_deferred_while_draining(srv, writer) || reject_while_benching(srv, writer)) {
         return
     }
     var perr = ""
-    var js = read_json(string(req.body), perr)
+    var js = read_json(req.body, perr)
     if (js == null) {
         bad_request(srv, writer, "invalid JSON: {perr}")
         return
@@ -3177,46 +3450,45 @@ def private handle_completion(srv : WebSocketServer; var req : HttpRequest?; var
                      [seed = seed, include_usage = wants_usage(js)])
 }
 
+//! the ids of the `wires` whose client vanished, each one's writer released
+def private gone_wires(srv : FrontLink; wires : table<int64; auto(TT)>) : array<int64> {
+    var gone : array<int64>
+    for (id, w in keys(wires), values(wires)) {
+        if (!is_writer_connected(srv, w.writer)) {
+            release_writer(srv, w.writer)
+            gone |> push(id)
+        }
+    }
+    return <- gone
+}
+
+//! drop the `wires` whose client vanished; the work behind one runs on and its answer finds no wire
+def private reap_wires(srv : FrontLink; var wires : table<int64; auto(TT)>) {
+    var gone <- gone_wires(srv, wires)
+    for (id in gone) {
+        delete wires[id]
+        wires |> erase(id)
+    }
+    delete gone
+}
+
+//! drop the transcription and synthesis wires whose client vanished (a synthesis's file is still swept when it lands)
+def private reap_speech_wires(srv : FrontLink) {
+    reap_wires(srv, g_asr_wires)
+    reap_wires(srv, g_tts_wires)
+}
+
 // Evict streams whose client vanished: is_writer_connected reads false once the connection is
 // gone (the async writer ops themselves never report a dead peer). The scheduler appends the
 // "evicted" finished event; flush_events below releases the writer and drops the wire.
-def private reap_disconnected(srv : WebSocketServer) {
+def private reap_disconnected(srv : FrontLink) {
     for (id, w in keys(g_wires), values(g_wires)) {
         if (!is_writer_connected(srv, w.writer)) {
             evict(g_slots[w.slot].sched, id, g_events)
         }
     }
-    var disconnected_asr : array<int64>
-    for (id, w in keys(g_asr_wires), values(g_asr_wires)) {
-        if (!is_writer_connected(srv, w.writer)) {
-            release_writer(srv, w.writer)
-            disconnected_asr |> push(id)
-        }
-    }
-    for (id in disconnected_asr) {
-        delete g_asr_wires[id]
-        g_asr_wires |> erase(id)
-    }
-    delete disconnected_asr
-    var disconnected_tts : array<int64>
-    for (id, w in keys(g_tts_wires), values(g_tts_wires)) {
-        if (!is_writer_connected(srv, w.writer)) {
-            release_writer(srv, w.writer)
-            disconnected_tts |> push(id)
-        }
-    }
-    for (id in disconnected_tts) {   // the synthesis keeps running; its completed event finds no wire and only tracks the file for the sweep
-        delete g_tts_wires[id]
-        g_tts_wires |> erase(id)
-    }
-    delete disconnected_tts
-    var disconnected_vision : array<int64>
-    for (id, w in keys(g_media_wires), values(g_media_wires)) {
-        if (!is_writer_connected(srv, w.writer)) {
-            release_writer(srv, w.writer)
-            disconnected_vision |> push(id)
-        }
-    }
+    reap_speech_wires(srv)
+    var disconnected_vision <- gone_wires(srv, g_media_wires)
     for (id in disconnected_vision) {
         unsafe {
             delete g_media_wires[id].js
@@ -3232,7 +3504,7 @@ def private reap_disconnected(srv : WebSocketServer) {
 // OpenAI tool_calls delta. Slow CPU inference can otherwise leave the socket silent beyond libhv's
 // keep-alive window during prefill or generation. Emit a valid empty delta at least every 10s;
 // scheduler steps may be long, so this is intentionally time-based rather than token-count-based.
-def private flush_tool_keepalives(srv : WebSocketServer) {
+def private flush_tool_keepalives(srv : FrontLink) {
     for (id in keys(g_wires)) {
         var w = unsafe(g_wires?[id])
         if (w != null && w.streaming && w.has_tools &&
@@ -3293,7 +3565,7 @@ def private parse_wire_tools(var w : StreamWire?; full, id_base : string;
 // Route drained SchedEvents to their writers: streaming wires emit SSE chunks, buffered wires
 // accumulate pieces and respond once at finish. "evicted" releases the writer with no bytes —
 // the client is gone (reap_disconnected produced it). Finished wires unregister.
-def private flush_events(srv : WebSocketServer) {   // nolint:STYLE037,STYLE038 — one arm per (event kind x wire flavor); the arms share the wire's UTF-8 hold and reply buffer
+def private flush_events(srv : FrontLink) {   // nolint:STYLE037,STYLE038 — one arm per (event kind x wire flavor); the arms share the wire's UTF-8 hold and reply buffer
     for (e in g_events) {
         // interior pointer into g_wires — nothing inserts into the table between here and the erase
         var w = unsafe(g_wires?[e.stream])
@@ -3323,12 +3595,7 @@ def private flush_events(srv : WebSocketServer) {   // nolint:STYLE037,STYLE038 
                         var rsn = ""
                         var cnt = ""
                         think_feed(w.think, emit_now, rsn, cnt)
-                        if (!empty(rsn)) {
-                            send_chat_chunk(srv, w.writer, w.id, w.created, "", "", "", rsn)
-                        }
-                        if (!empty(cnt)) {
-                            send_chat_chunk(srv, w.writer, w.id, w.created, "", cnt, "")
-                        }
+                        send_chat_halves(srv, *w, rsn, cnt)
                     } else {
                         send_compl_chunk(srv, w.writer, w.id, w.created, emit_now, "")
                     }
@@ -3368,12 +3635,7 @@ def private flush_events(srv : WebSocketServer) {   // nolint:STYLE037,STYLE038 
                 var rsn = ""
                 var cnt = ""
                 think_finish(w.think, rsn, cnt)
-                if (!empty(rsn)) {
-                    send_chat_chunk(srv, w.writer, w.id, w.created, "", "", "", rsn)
-                }
-                if (!empty(cnt)) {
-                    send_chat_chunk(srv, w.writer, w.id, w.created, "", cnt, "")
-                }
+                send_chat_halves(srv, *w, rsn, cnt)
             }
             if (w.is_chat) {
                 send_chat_chunk(srv, w.writer, w.id, w.created, "", "", finish)
@@ -3526,21 +3788,33 @@ def private gpu_weight_budget_bytes() : int64 {
 // `error` names the failure, which is what the page's speech card draws instead of the studio.
 // `voices`, `sample_rate` and `lane` are the worker's own answers about the model it loaded.
 def private tts_stats_member() : string {
-    if (!g_has_tts && empty(g_tts_error)) {
-        return ""
+    var k = tts_default()
+    if (k < 0) {   // none armed: a model whose worker could not load still shows why
+        for (i in range(length(g_tts))) {
+            if (!empty(g_tts[i].error)) {
+                k = i
+                break
+            }
+        }
     }
+    return "" if (k < 0)
+    assume m = g_tts[k]
     let voices = build_string() $(w) {
-        for (i in range(length(g_tts_voices))) {
+        for (i in range(length(m.voices))) {
             if (i > 0) {
                 w |> write(",")
             }
-            w |> write(json_str(g_tts_voices[i]))
+            w |> write(json_str(m.voices[i]))
         }
     }
+    // the other armed models, when there are several: the block above is the default one's
+    var armed <- [for (t in g_tts); json_str(t.id); where t.armed]
+    let models = length(armed) > 1 ? ",\"models\":[{join(armed, ",")}]" : ""
+    delete armed
     // no worker answer yet (loading, or the load failed): the lane is the one the boot asked for
-    let lane = empty(g_tts_lane_served) ? g_tts_lane : g_tts_lane_served
-    let failed = empty(g_tts_error) ? "" : ",\"error\":{json_str(g_tts_error)}"
-    return ",\"tts\":\{\"id\":{json_str(g_tts_id)},\"ready\":{g_tts_ready > 0},\"pending\":{g_tts_pending},\"done_jobs\":{g_tts_done_jobs},\"audio_s\":{g_tts_audio_s},\"voices\":[{voices}],\"sample_rate\":{g_tts_sample_rate},\"lane\":{json_str(lane)},\"cloning\":{g_tts_cloning},\"speed\":{g_tts_speed},\"lang\":{json_str(g_tts_lang)}{failed}}"
+    let lane = empty(m.lane_served) ? m.lane : m.lane_served
+    let failed = empty(m.error) ? "" : ",\"error\":{json_str(m.error)}"
+    return ",\"tts\":\{\"id\":{json_str(m.id)},\"ready\":{m.ready > 0},\"pending\":{g_tts_pending},\"done_jobs\":{g_tts_done_jobs},\"audio_s\":{g_tts_audio_s},\"voices\":[{voices}],\"sample_rate\":{m.sample_rate},\"lane\":{json_str(lane)},\"cloning\":{m.cloning},\"speed\":{m.speed},\"lang\":{json_str(m.lang)}{models}{failed}}"
 }
 
 // splice a member into a compact JSON object body: sprint_json/write_json_compact both close on
@@ -3552,7 +3826,7 @@ def private with_json_member(body : string; member : string) : string {
     return "{slice(body, 0, length(body) - 1)}{member}}"
 }
 
-def private handle_stats(var resp : HttpResponse?) : http_status {
+def private handle_stats(var resp : Reply) : http_status {
     if (empty(g_slots)) {
         // no LLM slot: the minimum shape control.html's apply() reads (it gates on `setup`).
         // `setup` is the MODE, not the slot count — a speech-only server serves the speech route
@@ -3576,7 +3850,7 @@ def private handle_stats(var resp : HttpResponse?) : http_status {
         cached_tokens = g_slots[g_active].sched.cached_tokens,
         prefix_pages = prefix_held_groups(g_slots[g_active].sched.prefix),
         max_streams = g_slots[g_active].sched.max_streams, chunk_tokens = g_slots[g_active].sched.chunk_tokens,
-        asr_workers = g_asr_worker_count, asr_ready = g_asr_ready,
+        asr_workers = [for (a in g_asr); a.workers] |> sum(), asr_ready = [for (a in g_asr); a.ready] |> sum(),
         asr_active = g_asr_active, asr_pending = g_asr_pending,
         mtp_drafted = g_slots[g_active].sched.mtp_drafted, mtp_accepted = g_slots[g_active].sched.mtp_accepted,
         prefill_tokens = g_slots[g_active].sched.prefill_tokens,
@@ -3662,6 +3936,7 @@ struct private OaiCacheEntry {
 // One ASR job row on the poll surface (drain-side tracking; RTF = audio s per wall s).
 struct private OaiAsrRow {
     id : int64
+    model : string
     state : string
     audio_s : float
     wall_ms : float
@@ -3682,7 +3957,7 @@ def private age_seconds(t : int64) : float {
     return float(double(get_time_nsec(t)) * 1e-9lf)
 }
 
-def private handle_streams(var resp : HttpResponse?) : http_status {
+def private handle_streams(var resp : Reply) : http_status {
     // the stream list below aggregates every slot, so the lane capacity the page sizes its
     // swimlane from must be the cross-slot total, not the active slot's own cap
     var total_cap = 0l
@@ -3732,7 +4007,7 @@ def private handle_streams(var resp : HttpResponse?) : http_status {
     out.asr |> reserve(length(g_asr_recent))
     for (j in g_asr_recent) {
         out.asr |> push(OaiAsrRow(
-            id = j.id, state = j.state, audio_s = j.audio_s, wall_ms = j.wall_ms, rtf = j.rtf,
+            id = j.id, model = j.model, state = j.state, audio_s = j.audio_s, wall_ms = j.wall_ms, rtf = j.rtf,
             age_s = age_seconds(j.started_at)))
     }
     let body = sprint_json(out, false)
@@ -3789,62 +4064,47 @@ def private json_of_kind(kind : string; v : JsonValue?) : JsonValue? {
     return null
 }
 
-// Validate + sanitize a POST /config "models" array: objects only, per-key kinds, a non-empty
-// path per entry, backend in {auto, cpu, gpu}, unique route names, at most one default = true.
-// Returns the sanitized array (JV) or null with verr set.
-def private validate_models_array(v : JsonValue?; var verr : string&) : JsonValue? {
+let private ASR_KEY_KINDS <- { "id" => "s", "path" => "s", "mmproj" => "s", "workers" => "i" }
+
+let private TTS_KEY_KINDS <- { "id" => "s", "path" => "s", "lane" => "s", "voices_dir" => "s" }
+
+// Validate + sanitize one array-of-tables key of a POST /config body: objects only, per-key kinds, a non-empty
+// path per entry, unique names - an entry's name is its `name_key` value, else its file (the stem for a speech
+// model, the base name for an LLM). Returns the sanitized array (JV) or null with verr set.
+def private validate_table_array(v : JsonValue?; what : string; kinds : table<string; string>; name_key : string; var verr : string&) : JsonValue? {
     if (v == null || !(v.value is _array)) {
-        verr = "'models' must be an array of model entries"
+        verr = "'{what}' must be an array of entries"
         return null
     }
-    var marr : array<JsonValue?>
+    var arr : array<JsonValue?>
     var names : table<string>
-    var ndefault = 0
     for (e in v.value as _array) {
         if (e == null || !(e.value is _object)) {
-            verr = "'models' entries must be objects"
+            verr = "'{what}' entries must be objects"
             break
         }
         var ent : table<string; JsonValue?>
         for (mk, mv in keys(e.value as _object), values(e.value as _object)) {
-            let kind = MODEL_KEY_KINDS?[mk] ?? ""
+            let kind = kinds?[mk] ?? ""
             if (empty(kind)) {
-                verr = "unknown models key '{mk}'"
+                verr = "unknown {what} key '{mk}'"
                 break
             }
             var jv = json_of_kind(kind, mv)
             if (jv == null) {
-                verr = "models key '{mk}' must be a {kind_name(kind)}"
+                verr = "{what} key '{mk}' must be a {kind_name(kind)}"
                 break
             }
             ent |> insert(mk, jv)
         }
-        if (!empty(verr)) {
-            var junk = JV(ent)
-            unsafe {
-                delete junk
-            }
-            break
-        }
         let path = e?["path"] ?? ""
-        if (empty(path)) {
-            verr = "every models entry needs a non-empty 'path'"
-        } else {
-            let backend = e?["backend"] ?? "auto"
-            if (backend != "auto" && backend != "cpu" && backend != "gpu") {
-                verr = "models backend '{backend}' is not auto | cpu | gpu"
-            }
+        let given = e?[name_key] ?? ""
+        let name = !empty(given) ? given : (name_key == "id" ? stem(base_name(path)) : base_name(path))
+        if (empty(verr) && empty(path)) {
+            verr = "every {what} entry needs a non-empty 'path'"
         }
-        let rname = e?["name"] ?? ""
-        let route = empty(rname) ? base_name(e?["path"] ?? "") : rname
-        if (empty(verr) && key_exists(names, route)) {
-            verr = "duplicate models name '{route}'"
-        }
-        if (empty(verr) && (e?["default"] ?? false)) {
-            ndefault ++
-            if (ndefault > 1) {
-                verr = "more than one models entry marked default = true"
-            }
+        if (empty(verr) && key_exists(names, name)) {
+            verr = "duplicate {what} {name_key} '{name}'"
         }
         if (!empty(verr)) {
             var junk = JV(ent)
@@ -3853,17 +4113,50 @@ def private validate_models_array(v : JsonValue?; var verr : string&) : JsonValu
             }
             break
         }
-        names |> insert(route)
-        marr |> push(JV(ent))
+        names |> insert(name)
+        arr |> push(JV(ent))
     }
     if (!empty(verr)) {
-        var junk = JV(marr)
+        var junk = JV(arr)
         unsafe {
             delete junk
         }
         return null
     }
-    return JV(marr)
+    return JV(arr)
+}
+
+// the "models" array's own rules, past the shared ones: backend in {auto, cpu, gpu}, at most one default = true
+def private models_array_error(v : JsonValue?) : string {
+    var ndefault = 0
+    for (e in v.value as _array) {
+        let backend = e?["backend"] ?? "auto"
+        return "models backend '{backend}' is not auto | cpu | gpu" if (backend != "auto" && backend != "cpu" && backend != "gpu")
+        if (e?["default"] ?? false) {
+            ndefault ++
+        }
+    }
+    return ndefault > 1 ? "more than one models entry marked default = true" : ""
+}
+
+// the sanitized value of one array-kind config key (`models`, or a speech roster under `asr` / `tts`), null with verr set
+def private validate_config_array(key : string; v : JsonValue?; var verr : string&) : JsonValue? {
+    if (key == "asr") {
+        return validate_table_array(v, key, ASR_KEY_KINDS, "id", verr)
+    }
+    if (key == "tts") {
+        return validate_table_array(v, key, TTS_KEY_KINDS, "id", verr)
+    }
+    var sanitized = validate_table_array(v, key, MODEL_KEY_KINDS, "name", verr)
+    return sanitized if (sanitized == null)
+    verr = models_array_error(v)
+    if (!empty(verr)) {
+        unsafe {
+            delete sanitized
+        }
+        return null
+    }
+    return sanitized
 }
 
 // POST /vad: the page's waveform-overlay preview — silero speech spans over an uploaded clip.
@@ -3872,13 +4165,15 @@ var private g_vad_loaded = false
 var private g_vad = VadModel()
 let private VAD_PREVIEW_CAP_S = 120
 
-def private handle_vad(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+def private handle_vad(req : FrontReq; var resp : Reply) : http_status {
     if (bench_hold_active()) {   // Silero runs in-handler, on the cores the timed reps own
+        drop_upload(req)
         return resp_error(resp, http_status.SERVICE_UNAVAILABLE, ibench_hold_text())
     }
     if (!g_vad_loaded) {
         let path = path_join(get_das_root(), "modules/dasLLAMA/models/silero_vad.bin")
         if (!stat(path).is_valid) {
+            drop_upload(req)
             return resp |> JSON(
                 error_body("silero_vad.bin not found ({path}) — the VAD preview needs a source tree", "server_error"),
                 http_status.NOT_IMPLEMENTED)
@@ -3886,19 +4181,12 @@ def private handle_vad(var req : HttpRequest?; var resp : HttpResponse?) : http_
         g_vad <- load_vad_model(path)   // nolint:PERF030 — one-shot lazy load; g_vad_loaded proves the target is still the empty default
         g_vad_loaded = true
     }
-    var fname = ""
-    each_form_field(req) $(name, _content, filename) {
-        if (name == "file" && !empty(filename)) {
-            fname = filename
-        }
-    }
-    if (empty(fname)) {
+    if (empty(req.file_path)) {   // the front saves the form's 'file' upload; none came
         return resp |> JSON(
             error_body("multipart form must include a 'file' audio upload", "invalid_request_error"),
             http_status.BAD_REQUEST)
     }
-    let temppath = path_join(tmpdir(), "dasllama_vad_{next_id()}_{base_name(fname)}")
-    save_form_file(req, "file", temppath)
+    let temppath = req.file_path
     var samples <- load_audio_16k_mono(temppath)
     remove(temppath)
     defer() {
@@ -3957,7 +4245,7 @@ def private push_picker_ggufs(scan_dir : string; var entries : array<JsonValue?>
     }
 }
 
-def private handle_config_get(var resp : HttpResponse?) : http_status {
+def private handle_config_get(var resp : Reply) : http_status {
     var entries : array<JsonValue?>
     let mdir = dir_name(g_config_model_path)
     push_picker_ggufs(mdir, entries)
@@ -3990,9 +4278,9 @@ def private handle_config_get(var resp : HttpResponse?) : http_status {
 // POST /config: validate a {key: value} JSON body against the schema, rebuild it as an
 // explicitly-typed tree + `authoritative = true`, and write it as TOML to the save path.
 // The running server keeps its config — POST /restart applies the saved one.
-def private handle_config_save(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+def private handle_config_save(req : FrontReq; var resp : Reply) : http_status {
     var jerr = ""
-    var body = read_json(string(req.body), jerr)
+    var body = read_json(req.body, jerr)
     defer() {
         unsafe {
             delete body
@@ -4016,8 +4304,9 @@ def private handle_config_save(var req : HttpRequest?; var resp : HttpResponse?)
             verr = "config key '{k}' is null"
             break
         }
-        if (kind == "a") {
-            var sanitized = validate_models_array(v, verr)
+        // a speech key is one path, or a roster of tables ([[asr]] / [[tts]])
+        if (kind == "a" || ((k == "asr" || k == "tts") && (v.value is _array))) {
+            var sanitized = validate_config_array(k, v, verr)
             break if (!empty(verr))
             out_tab |> insert(k, sanitized)
             continue
@@ -4055,7 +4344,7 @@ def private handle_config_save(var req : HttpRequest?; var resp : HttpResponse?)
 
 // ===== the exchange surface (GET /exchange + the apply/submit/retune levers) =====
 
-def private exchange_absent(var resp : HttpResponse?) : http_status {   // nolint:LINT022,LINT019 — reached only from the no-framework static_if arm, which a build with dasLLVM drops; on a host without dasLLVM the arm compiles and the rule is silent
+def private exchange_absent(var resp : Reply) : http_status {   // nolint:LINT022,LINT019 — reached only from the no-framework static_if arm, which a build with dasLLVM drops; on a host without dasLLVM the arm compiles and the rule is silent
     return resp |> JSON(error_body("the sidecar exchange is not in this build (no tune framework)", "not_found"), http_status.NOT_FOUND)
 }
 
@@ -4063,7 +4352,10 @@ def private exchange_absent(var resp : HttpResponse?) : http_status {   // nolin
 // page. The matching route does a blocking network call on the tick thread; apply/retune are
 // destructive; submit publishes. Gate them to the loopback peer so a LAN client (the inference
 // API deliberately binds every interface) cannot stall generation or trigger those actions.
-def private is_loopback_req(req : HttpRequest?) : bool {
+def private is_loopback_req(req : FrontReq) : bool => req.loopback
+
+//! the front's own read of a request: loopback peer, loopback Host, and no cross-site Origin
+def private front_is_loopback(req : HttpRequest?) : bool {
     let ip = client_ip(req)
     // an unknown/empty peer counts as remote (fail closed, like the ladder's is_loopback_peer):
     // this service binds every interface, so a LAN caller must not slip through on an unresolved peer
@@ -4103,12 +4395,12 @@ def private same_origin_or_headerless(req : HttpRequest?) : bool {
 }
 
 // the forbidden reply shared by every operator/control route (the public inference API stays open)
-def private deny_operator(var resp : HttpResponse?) : http_status {
+def private deny_operator(var resp : Reply) : http_status {
     return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
 }
 
 [arch(at = "README.md#exchange-policy")]
-def private handle_exchange_get(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+def private handle_exchange_get(req : FrontReq; var resp : Reply) : http_status {
     if (!is_loopback_req(req)) {
         // the status carries the local sidecar path (username in it) — operator-only, like the rest
         return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
@@ -4120,7 +4412,7 @@ def private handle_exchange_get(var req : HttpRequest?; var resp : HttpResponse?
     }
 }
 
-def private handle_exchange_matches(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+def private handle_exchange_matches(req : FrontReq; var resp : Reply) : http_status {
     if (!is_loopback_req(req)) {
         return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
     }
@@ -4134,7 +4426,7 @@ def private handle_exchange_matches(var req : HttpRequest?; var resp : HttpRespo
 
 // A fat release bakes one kernel clone per CPU class and never tunes, so the exchange has nothing
 // to apply, share or redo on it; the read-only status and matches stay, the levers answer this.
-def private fat_exe_exchange_refusal(var resp : HttpResponse?) : http_status {   // nolint:LINT012,LINT022,LINT019 — resp and every caller sit in llvm_tune static_if halves; a host without dasLLVM compiles the bare-OK arm alone
+def private fat_exe_exchange_refusal(var resp : Reply) : http_status {   // nolint:LINT012,LINT022,LINT019 — resp and every caller sit in llvm_tune static_if halves; a host without dasLLVM compiles the bare-OK arm alone
     static_if (typeinfo module_exists(llvm_tune)) {
         if (!tune_fat_built()) return http_status.OK
         return resp |> JSON(error_body("this is a fat release: the kernels are baked per CPU class, so there is no tune of this box to share, apply or redo - the SDK's daslang -jit run tunes the box", "invalid_request_error"), http_status.BAD_REQUEST)
@@ -4143,7 +4435,7 @@ def private fat_exe_exchange_refusal(var resp : HttpResponse?) : http_status {  
     }
 }
 
-def private handle_exchange_apply(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+def private handle_exchange_apply(req : FrontReq; var resp : Reply) : http_status {
     if (!is_loopback_req(req)) {
         return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
     }
@@ -4151,7 +4443,7 @@ def private handle_exchange_apply(var req : HttpRequest?; var resp : HttpRespons
         let refused = fat_exe_exchange_refusal(resp)
         if (refused != http_status.OK) return refused
         var jerr = ""
-        var js = read_json(string(req.body), jerr)
+        var js = read_json(req.body, jerr)
         defer() {
             unsafe {
                 delete js
@@ -4179,7 +4471,7 @@ def private handle_exchange_apply(var req : HttpRequest?; var resp : HttpRespons
     }
 }
 
-def private handle_exchange_submit(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+def private handle_exchange_submit(req : FrontReq; var resp : Reply) : http_status {
     if (!is_loopback_req(req)) {
         return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
     }
@@ -4197,7 +4489,7 @@ def private handle_exchange_submit(var req : HttpRequest?; var resp : HttpRespon
     }
 }
 
-def private handle_exchange_consent(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+def private handle_exchange_consent(req : FrontReq; var resp : Reply) : http_status {
     if (!is_loopback_req(req)) {
         return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
     }
@@ -4205,7 +4497,7 @@ def private handle_exchange_consent(var req : HttpRequest?; var resp : HttpRespo
         let refused = fat_exe_exchange_refusal(resp)
         if (refused != http_status.OK) return refused
         var jerr = ""
-        var js = read_json(string(req.body), jerr)
+        var js = read_json(req.body, jerr)
         defer() {
             unsafe {
                 delete js
@@ -4238,7 +4530,7 @@ def private handle_exchange_consent(var req : HttpRequest?; var resp : HttpRespo
     }
 }
 
-def private handle_exchange_retune(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
+def private handle_exchange_retune(req : FrontReq; var resp : Reply) : http_status {
     if (!is_loopback_req(req)) {
         return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
     }
@@ -4297,7 +4589,7 @@ def private process_asr_job(
             body = error_body("could not decode the uploaded audio", "invalid_request_error")))
         return
     }
-    let language = empty(job.language) ? "en" : job.language
+    let language = job.language   // empty = the family's own default, which the engine picks
     if (!has_session || session_language != language) {
         if (has_session) {
             delete session
@@ -4354,6 +4646,9 @@ def private asr_worker_main(
                             ) {
     this_context().name := "dasllama_asr_{worker_index}"
     configure_media_worker_dispatch(team_dispatch)
+    // the engine's Metal mode is the engine context's: this one starts with none, and a family whose decoder is an
+    // LLM (Qwen3-ASR, Canary) prefills it here on the CPU arm - a legitimate serving configuration, not a profiling slip
+    allow_cpu_prefill()
     var model = AsrModel()
     var load_failure = ""
     let load_failed = catch_worker_panic(load_failure) {
@@ -4411,91 +4706,101 @@ def private asr_worker_main(
 // /v1/audio/transcriptions (translate=false) and /v1/audio/translations (translate=true, to English).
 // Multipart upload: save the 'file' part to disk (binary-safe), decode to 16 kHz mono f32, transcribe.
 def private queue_transcription(
-                                srv : WebSocketServer;
-                                var req : HttpRequest?;
-                                var writer : HttpResponseWriter?;
+                                srv : FrontLink;
+                                req : FrontReq;
+                                writer : WriterRef;
                                 translate : bool
                                 ) {
     if (reject_deferred_while_draining(srv, writer) || reject_while_benching(srv, writer)) {
+        drop_upload(req)
         return
     }
-    if (!g_has_asr || g_asr_ready < g_asr_worker_count) {
+    let k = asr_slot_of(req.form_model)
+    if (k < 0 && !empty(g_asr)) {
+        respond(srv, writer, int(http_status.NOT_FOUND), "application/json",
+            error_body("model '{req.form_model}' is not a served ASR model — GET /v1/models lists the ids", "invalid_request_error"))
+        drop_upload(req)
+        return
+    }
+    if (k < 0 || g_asr[k].ready < g_asr[k].workers) {
         service_unavailable(srv, writer, "ASR workers are not ready")
+        drop_upload(req)
         return
     }
     if (g_asr_pending >= ASR_QUEUE_LIMIT) {
         service_unavailable(srv, writer, "the ASR queue is at capacity ({ASR_QUEUE_LIMIT}) — retry shortly")
+        drop_upload(req)
         return
     }
-    var fname = ""
-    each_form_field(req) $(name, _content, filename) {
-        if (name == "file" && !empty(filename)) {
-            fname = filename
-        }
-    }
-    if (empty(fname)) {
+    if (empty(req.file_path)) {   // the front saves the form's 'file' upload; none came
         bad_request(srv, writer, "multipart form must include a 'file' audio upload")
         return
     }
     set_writer_keepalive_timeout(srv, writer, ASR_WRITER_KEEPALIVE_MS)
     let rid = next_id()
-    let temppath = path_join(tmpdir(), "dasllama_upload_{rid}_{base_name(fname)}")
-    save_form_file(req, "file", temppath)
-    let fmt = get_form_data(req, "response_format")
-    var lang = get_form_data(req, "language")
-    if (empty(lang)) {
-        lang = "en"
-    }
-    g_asr_wires[rid] <- AsrWire(writer = writer)
+    let temppath = req.file_path
+    let fmt = req.form_format
+    let lang = req.form_language   // empty = the worker's default for its model
+    g_asr_wires[rid] <- AsrWire(writer = writer, model = g_asr[k].id)
     g_asr_pending++
-    g_asr_jobs |> push_clone(AsrJob(
+    g_asr_jobs[k] |> push_clone(AsrJob(
         id = rid, temp_path = temppath, language = lang, response_format = fmt,
         translate = translate))
-    to_log(LOG_INFO, "[req {rid}] asr: queued (pending={g_asr_pending}, active={g_asr_active})\n")
+    to_log(LOG_INFO, "[req {rid}] asr: queued on {g_asr[k].id} (pending={g_asr_pending}, active={g_asr_active})\n")
 }
 
+//! Start every ASR model's workers, a model at a time, and wait for each to load: a worker's ready event names no
+//! model, so the models take turns. A worker that cannot load panics the boot, as a missing model would.
 def private start_asr_worker_threads() {
-    g_asr_ready = 0
-    if (!g_has_asr) {
-        return
-    }
-    to_log(LOG_INFO, "dasllama-server: starting {g_asr_worker_count} asynchronous ASR worker(s)\n")
-    for (index in range(g_asr_worker_count)) {
-        let worker_index = index
-        let model_path = g_asr_path
-        let mmproj_path = g_asr_mmproj
-        let team_dispatch = g_asr_team_dispatch
-        var jobs_capture = g_asr_jobs
-        var events_capture = g_asr_events
-        new_thread() <| @capture(= worker_index, = model_path, = mmproj_path, = team_dispatch,
-                                = jobs_capture, = events_capture) {
-            asr_worker_main(
-                worker_index, model_path, mmproj_path, team_dispatch, jobs_capture, events_capture)
+    var index = 0
+    var failure = ""   // raised past the loop: a panic inside it would leave both arrays locked for whoever catches it
+    g_asr_jobs |> resize(length(g_asr))
+    for (a, jobs in g_asr, g_asr_jobs) {
+        break if (!empty(failure))
+        a.ready = 0
+        jobs = worker_channel()
+        to_log(LOG_INFO, "dasllama-server: starting {a.workers} asynchronous ASR worker(s) for {a.id}\n")
+        for (_w in range(a.workers)) {
+            let worker_index = index
+            let model_path = a.path
+            let mmproj_path = a.mmproj
+            let team_dispatch = g_asr_team_dispatch
+            var jobs_capture = jobs
+            var events_capture = g_asr_events
+            new_thread() <| @capture(= worker_index, = model_path, = mmproj_path, = team_dispatch,
+                                    = jobs_capture, = events_capture) {
+                asr_worker_main(
+                    worker_index, model_path, mmproj_path, team_dispatch, jobs_capture, events_capture)
+            }
+            index++
         }
-    }
-    var load_failure = ""
-    while (g_asr_ready < g_asr_worker_count && empty(load_failure)) {
-        g_asr_events |> pop_with_timeout_clone(1000) $(event : AsrEvent#) {
-            if (event.kind == AsrEventKind.ready) {
-                g_asr_ready++
-                to_log(LOG_INFO, "dasllama-server: ASR worker ready ({g_asr_ready}/{g_asr_worker_count})\n")
-            } elif (event.kind == AsrEventKind.failed) {
-                load_failure = clone_string(event.body)
+        var load_failure = ""
+        while (a.ready < a.workers && empty(load_failure)) {
+            g_asr_events |> pop_with_timeout_clone(1000) $(event : AsrEvent#) {
+                if (event.kind == AsrEventKind.ready) {
+                    a.ready++
+                    to_log(LOG_INFO, "dasllama-server: ASR worker ready ({a.id}: {a.ready}/{a.workers})\n")
+                } elif (event.kind == AsrEventKind.failed) {
+                    load_failure = clone_string(event.body)
+                }
             }
         }
+        if (!empty(load_failure)) {
+            failure = "dasllama-server: an ASR worker failed to load {a.path}: {load_failure}"
+        }
     }
-    if (!empty(load_failure)) {
-        panic("dasllama-server: an ASR worker failed to load {g_asr_path}: {load_failure}")
+    if (!empty(failure)) {
+        panic(failure)
     }
 }
 
-def private drain_asr_events(srv : WebSocketServer) {
+def private drain_asr_events(srv : FrontLink) {
     var draining = true
     while (draining) {
         draining = g_asr_events |> try_pop_clone() $(event : AsrEvent#) {
             if (event.kind == AsrEventKind.started) {
                 g_asr_active++
-                g_asr_recent |> push(AsrJobInfo(id = event.id, state = "running", started_at = ref_time_ticks()))
+                g_asr_recent |> push(AsrJobInfo(id = event.id, model = g_asr_wires?[event.id]?.model ?? "", state = "running", started_at = ref_time_ticks()))
             } elif (event.kind == AsrEventKind.completed) {
                 g_asr_active = max(g_asr_active - 1, 0)
                 g_asr_pending = max(g_asr_pending - 1, 0)
@@ -4544,25 +4849,21 @@ def private drain_asr_events(srv : WebSocketServer) {
 }
 
 def private stop_asr_worker_threads() {
-    if (!g_has_asr) {
-        return
-    }
-    for (_index in range(g_asr_worker_count)) {
-        g_asr_jobs |> push_clone(AsrJob(stop = true))
-    }
-    var stopped = 0
-    let since = ref_time_ticks()
-    while (stopped < g_asr_worker_count && get_time_nsec(since) < WORKER_STOP_WAIT_NS) {
-        g_asr_events |> pop_with_timeout_clone(1000) $(event : AsrEvent#) {
-            if (event.kind == AsrEventKind.stopped) {
-                stopped++
-            }
+    var asked = 0
+    for (a, jobs in g_asr, g_asr_jobs) {
+        continue if (jobs == null)
+        for (_index in range(a.ready)) {   // the workers that loaded: one that failed to has left already
+            jobs |> push_clone(AsrJob(stop = true))
+            asked++
         }
     }
-    if (stopped < g_asr_worker_count) {
-        to_log(LOG_WARNING, "dasllama-server: {g_asr_worker_count - stopped} ASR worker(s) did not answer the stop within {WORKER_STOP_WAIT_NS / 1_000_000_000l} s - a dead worker must not hang the teardown\n")
+    let stopped = await_stopped(g_asr_events, asked, WORKER_STOP_WAIT_NS) $(event : AsrEvent#) => event.kind == AsrEventKind.stopped
+    if (stopped < asked) {
+        to_log(LOG_WARNING, "dasllama-server: {asked - stopped} ASR worker(s) did not answer the stop within {WORKER_STOP_WAIT_NS / 1_000_000_000l} s - a dead worker must not hang the teardown\n")
     }
-    g_asr_ready = 0
+    for (a in g_asr) {
+        a.ready = 0
+    }
 }
 
 // ===== /v1/audio/speech =====
@@ -4593,6 +4894,7 @@ struct private TtsJob {
 
 struct private TtsEvent {
     kind : TtsEventKind
+    slot : int           //! the TTS model's slot: the ready and failed events name which model answered
     id : int64
     status : int
     content_type : string
@@ -4610,7 +4912,7 @@ struct private TtsEvent {
 }
 
 struct private TtsWire {
-    @do_not_delete writer : HttpResponseWriter?
+    @do_not_delete writer : WriterRef
 }
 
 struct private TtsServedFile {
@@ -4618,21 +4920,12 @@ struct private TtsServedFile {
     at : int64
 }
 
-var g_tts_jobs : Channel?
-var g_tts_events : Channel?
+var g_tts_events : Channel?             //! every TTS worker's events; each names its model's slot
 var g_tts_wires : table<int64; TtsWire>
 var g_tts_served : array<TtsServedFile>
-var g_tts_ready = 0
 var g_tts_pending = 0
 var g_tts_done_jobs = 0l
 var g_tts_audio_s = 0.0
-var g_tts_voices : array<string>   // filled from the worker's ready event, with the two below
-var g_tts_sample_rate = 0
-var g_tts_lane_served = ""
-var g_tts_cloning = false
-var g_tts_speed = false
-var g_tts_lang = ""
-var g_tts_error = ""   // why the worker could not load: the route stays down and the tts stats block carries this
 let TTS_QUEUE_LIMIT = 16
 let TTS_WRITER_KEEPALIVE_MS = 600000
 let TTS_MAX_INPUT_CHARS = 4096
@@ -4783,8 +5076,8 @@ def private register_voice_clips(var model : TtsModel; voices_dir : string) {
     }
 }
 
-def private tts_worker_main(model_path : string; lane : string; voices_dir : string; team_dispatch : bool; var jobs : Channel?&; var events : Channel?&) {
-    this_context().name := "dasllama_tts"
+def private tts_worker_main(slot : int; model_path : string; lane : string; voices_dir : string; team_dispatch : bool; var jobs : Channel?&; var events : Channel?&) {
+    this_context().name := "dasllama_tts_{slot}"
     configure_media_worker_dispatch(team_dispatch)
     var inscope model = TtsModel()
     var load_failure = ""
@@ -4801,13 +5094,16 @@ def private tts_worker_main(model_path : string; lane : string; voices_dir : str
     }
     if (load_failed) {   // an escaping panic here would kill only this thread and hang the ready-wait
         to_log(LOG_ERROR, "dasllama-server: the TTS worker could not load {model_path}: {load_failure}\n")
-        emit_tts_event(events, TtsEvent(kind = TtsEventKind.failed, body = load_failure))
+        emit_tts_event(events, TtsEvent(kind = TtsEventKind.failed, slot = slot, body = load_failure))
         // no delete: whatever the load built, whole or half, dies with this thread's context
         jobs |> release
         events |> release
         return
     }
-    emit_tts_event(events, tts_ready_event(model))
+    var ready <- tts_ready_event(model)
+    ready.slot = slot
+    emit_tts_event(events, ready)
+    delete ready
     var stopping = false
     while (!stopping) {
         jobs |> pop_with_timeout_clone(250) $(job : TtsJob#) {
@@ -4840,18 +5136,18 @@ def private tts_worker_main(model_path : string; lane : string; voices_dir : str
         }
     }
     delete model
-    emit_tts_event(events, TtsEvent(kind = TtsEventKind.stopped))
+    emit_tts_event(events, TtsEvent(kind = TtsEventKind.stopped, slot = slot))
     jobs |> release
     events |> release
 }
 
 // The readiness gate both TTS routes answer with, since both ride the one worker queue. True when
 // the request has already been refused.
-def private tts_route_unavailable(srv : WebSocketServer; var writer : HttpResponseWriter?) : bool {
+def private tts_route_unavailable(srv : FrontLink; writer : WriterRef) : bool {
     if (reject_deferred_while_draining(srv, writer) || reject_while_benching(srv, writer)) {
         return true
     }
-    if (!g_has_tts || g_tts_ready < 1) {
+    if (tts_default() < 0) {
         service_unavailable(srv, writer, "no TTS model is served — start with --tts <model.gguf>")
         return true
     }
@@ -4865,7 +5161,7 @@ def private tts_route_unavailable(srv : WebSocketServer; var writer : HttpRespon
 // the `input` field both TTS routes take, under the one cap; "" back means already refused. The
 // cap counts CHARACTERS, the way the text box that fills it does — `length()` on a string is
 // bytes, and a dash or a curly quote pasted from a document costs three of them
-def private tts_input_field(srv : WebSocketServer; var writer : HttpResponseWriter?; js : JsonValue?; verb : string) : string {
+def private tts_input_field(srv : FrontLink; writer : WriterRef; js : JsonValue?; verb : string) : string {
     let input = js?["input"] ?? ""
     if (empty(strip(input))) {   // blank text has nothing to say: every family would answer no samples
         bad_request(srv, writer, "'input' is required (the text to {verb})")
@@ -4879,69 +5175,72 @@ def private tts_input_field(srv : WebSocketServer; var writer : HttpResponseWrit
     return input
 }
 
-// the `model` field both TTS routes take: the served id, or nothing. True when already refused.
-def private tts_model_field_refused(srv : WebSocketServer; var writer : HttpResponseWriter?; js : JsonValue?) : bool {
+def private served_tts_ids : string {
+    return join([for (m in g_tts); "'{m.id}'"; where m.armed], ", ")
+}
+
+// the `model` field both TTS routes take: a served id, or nothing (the default model). The model's slot, or -1
+// when the request is already refused.
+def private tts_request_slot(srv : FrontLink; writer : WriterRef; js : JsonValue?) : int {
     let want_model = js?["model"] ?? ""
-    if (!empty(want_model) && want_model != g_tts_id) {
+    let k = tts_slot_of(want_model)
+    if (k < 0) {
         respond(srv, writer, int(http_status.NOT_FOUND), "application/json",
-            error_body("model '{want_model}' is not the served TTS model ('{g_tts_id}') — GET /v1/models lists the ids", "invalid_request_error"))
-        return true
+            error_body("model '{want_model}' is not a served TTS model ({served_tts_ids()}) — GET /v1/models lists the ids", "invalid_request_error"))
     }
-    return false
+    return k
 }
 
 // the wire and the queue slot a deferred TTS answer needs, plus the keepalive the synthesis outlives
-def private enqueue_tts_job(srv : WebSocketServer; var writer : HttpResponseWriter?; job : TtsJob; note : string) {
+def private enqueue_tts_job(srv : FrontLink; writer : WriterRef; slot : int; job : TtsJob; note : string) {
     set_writer_keepalive_timeout(srv, writer, TTS_WRITER_KEEPALIVE_MS)
     g_tts_wires[job.id] <- TtsWire(writer = writer)
     g_tts_pending++
-    g_tts_jobs |> push_clone(job)
-    to_log(LOG_INFO, "[req {job.id}] tts: {note} (pending={g_tts_pending})\n")
+    g_tts_jobs[slot] |> push_clone(job)
+    to_log(LOG_INFO, "[req {job.id}] tts: {note} on {g_tts[slot].id} (pending={g_tts_pending})\n")
 }
 
 // POST /v1/audio/phonemes: {"input", "voice"?} -> {"normalized", "lang", "chunks":[{"text","phonemes"}]}.
 // The front end's own view of what a synthesis of the same text in that voice would say, in the
 // voice's dialect, answered by the worker that owns the packs; the control page draws it under
 // the studio's waveform.
-def private queue_phonemes(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {
+def private queue_phonemes(srv : FrontLink; req : FrontReq; writer : WriterRef) {
     if (tts_route_unavailable(srv, writer) || reject_while_benching(srv, writer)) {
         return
     }
     var perr = ""
-    var js = read_json(string(req.body), perr)
+    var js = read_json(req.body, perr)
     if (js == null) {
         bad_request(srv, writer, "invalid JSON: {perr}")
         return
     }
     defer() { unsafe { delete js } }
     warn_ignored_fields(js, PHONEMES_FIELDS, "/v1/audio/phonemes")
-    if (tts_model_field_refused(srv, writer, js)) {
-        return
-    }
+    let slot = tts_request_slot(srv, writer, js)
+    return if (slot < 0)
     let input = tts_input_field(srv, writer, js, "phonemize")
     if (empty(input)) {
         return
     }
-    enqueue_tts_job(srv, writer, TtsJob(kind = TtsJobKind.phonemes, id = next_id(), text = input, voice = js?["voice"] ?? ""),
+    enqueue_tts_job(srv, writer, slot, TtsJob(kind = TtsJobKind.phonemes, id = next_id(), text = input, voice = js?["voice"] ?? ""),
         "phonemes queued ({utf8_length(input)} chars)")
 }
 
 // POST /v1/audio/speech: {"model"?, "input", "voice"?, "speed"?, "response_format"?: "wav" | "pcm"}.
-def private queue_speech(srv : WebSocketServer; var req : HttpRequest?; var writer : HttpResponseWriter?) {
+def private queue_speech(srv : FrontLink; req : FrontReq; writer : WriterRef) {
     if (tts_route_unavailable(srv, writer) || reject_while_benching(srv, writer)) {
         return
     }
     var perr = ""
-    var js = read_json(string(req.body), perr)
+    var js = read_json(req.body, perr)
     if (js == null) {
         bad_request(srv, writer, "invalid JSON: {perr}")
         return
     }
     defer() { unsafe { delete js } }
     warn_ignored_fields(js, SPEECH_FIELDS, "/v1/audio/speech")
-    if (tts_model_field_refused(srv, writer, js)) {
-        return
-    }
+    let slot = tts_request_slot(srv, writer, js)
+    return if (slot < 0)
     let input = tts_input_field(srv, writer, js, "speak")
     if (empty(input)) {
         return
@@ -4956,66 +5255,70 @@ def private queue_speech(srv : WebSocketServer; var req : HttpRequest?; var writ
         bad_request(srv, writer, "'speed' must be between 0.25 and 4.0")
         return
     }
-    enqueue_tts_job(srv, writer,
+    enqueue_tts_job(srv, writer, slot,
         TtsJob(id = next_id(), text = input, voice = js?["voice"] ?? "", speed = speed, format = fmt),
         "queued ({utf8_length(input)} chars, {fmt})")
 }
 
-// the ready event's payload into main-context storage: every string is cloned, because the popped
+// the ready event's payload into its model's slot: every string is cloned, because the popped
 // clone lives in the channel's heap and dies with this callback
-def private adopt_tts_ready(event : TtsEvent#) {
-    g_tts_voices |> clear()
-    g_tts_voices |> reserve(length(event.voices))
+def private adopt_tts_ready(var m : TtsSlot; event : TtsEvent#) {
+    m.voices |> clear()
+    m.voices |> reserve(length(event.voices))
     for (v in event.voices) {
-        g_tts_voices |> push(clone_string(v))
+        m.voices |> push(clone_string(v))
     }
-    g_tts_sample_rate = event.sample_rate
-    g_tts_lane_served = clone_string(event.lane)
-    g_tts_cloning = event.cloning
-    g_tts_speed = event.speed
-    g_tts_lang = clone_string(event.lang)
+    m.sample_rate = event.sample_rate
+    m.lane_served = clone_string(event.lane)
+    m.cloning = event.cloning
+    m.speed = event.speed
+    m.lang = clone_string(event.lang)
 }
 
+//! Start every armed TTS model's worker and wait for each to load. A worker that cannot load DEGRADES its model
+//! as ``add_tts_model`` degrades a missing file, for the failures only the load can see - a front-end pack from
+//! before this build, a truncated GGUF, a model with no voice this front end can drive: the model's route drops and
+//! the boot serves on (a crash-looping boot under the watchdog never gets a page to fix the config from), and the
+//! `tts` block of /v1/stats carries the reason so that page can say it.
 def private start_tts_worker() {
-    g_tts_ready = 0
-    if (!g_has_tts) {
-        return
-    }
-    to_log(LOG_INFO, "dasllama-server: starting the TTS worker for {g_tts_id} on the {g_tts_lane} lane\n")
-    let model_path = g_tts_path
-    let lane = g_tts_lane
-    let voices_dir = g_tts_voices_dir
-    let team_dispatch = g_tts_team_dispatch
-    var jobs_capture = g_tts_jobs
-    var events_capture = g_tts_events
-    new_thread() <| @capture(= model_path, = lane, = voices_dir, = team_dispatch, = jobs_capture, = events_capture) {
-        tts_worker_main(model_path, lane, voices_dir, team_dispatch, jobs_capture, events_capture)
-    }
-    var load_failure = ""
-    while (g_tts_ready < 1 && empty(load_failure)) {
-        g_tts_events |> pop_with_timeout_clone(1000) $(event : TtsEvent#) {
-            if (event.kind == TtsEventKind.ready) {
-                adopt_tts_ready(event)
-                g_tts_ready++
-                to_log(LOG_INFO, "dasllama-server: TTS worker ready ({length(g_tts_voices)} voice(s), {g_tts_sample_rate} Hz, {g_tts_lane_served} lane)\n")
-            } elif (event.kind == TtsEventKind.failed) {
-                load_failure = clone_string(event.body)
+    g_tts_jobs |> resize(length(g_tts))
+    for (k in range(length(g_tts))) {
+        assume m = g_tts[k]
+        m.ready = 0
+        continue if (!m.armed)
+        g_tts_jobs[k] = worker_channel()
+        to_log(LOG_INFO, "dasllama-server: starting the TTS worker for {m.id} on the {m.lane} lane\n")
+        let slot = k
+        let model_path = m.path
+        let lane = m.lane
+        let voices_dir = m.voices_dir
+        let team_dispatch = g_tts_team_dispatch
+        var jobs_capture = g_tts_jobs[k]
+        var events_capture = g_tts_events
+        new_thread() <| @capture(= slot, = model_path, = lane, = voices_dir, = team_dispatch, = jobs_capture, = events_capture) {
+            tts_worker_main(slot, model_path, lane, voices_dir, team_dispatch, jobs_capture, events_capture)
+        }
+        var load_failure = ""
+        while (m.ready < 1 && empty(load_failure)) {
+            g_tts_events |> pop_with_timeout_clone(1000) $(event : TtsEvent#) {
+                if (event.kind == TtsEventKind.ready) {
+                    adopt_tts_ready(m, event)
+                    m.ready++
+                    to_log(LOG_INFO, "dasllama-server: TTS worker ready ({m.id}: {length(m.voices)} voice(s), {m.sample_rate} Hz, {m.lane_served} lane)\n")
+                } elif (event.kind == TtsEventKind.failed) {
+                    load_failure = clone_string(event.body)
+                }
             }
         }
-    }
-    if (!empty(load_failure)) {
-        // the same degrade ``configure_tts`` gives a missing file, for the failures only the load
-        // can see - a front-end pack from before this build, a truncated GGUF, a model with no
-        // voice this front end can drive. The route drops and the boot serves on: a crash-looping
-        // boot under the watchdog never gets a page to fix the config from, and the `tts` block of
-        // /v1/stats carries the reason so that page can say it.
-        g_tts_error = load_failure
-        g_has_tts = false
-        to_log(LOG_ERROR, "dasllama-server: dropping the speech route - the TTS worker could not load {g_tts_path}: {load_failure} (fix the file set, then POST /restart)\n")
+        if (!empty(load_failure)) {
+            m.error = load_failure
+            m.armed = false
+            to_log(LOG_ERROR, "dasllama-server: dropping the speech route for {m.id} - the TTS worker could not load {m.path}: {load_failure} (fix the file set, then POST /restart)\n")
+        }
     }
 }
 
-def private drain_tts_events(srv : WebSocketServer) {
+def private drain_tts_events(srv : FrontLink) {
     var draining = true
     while (draining) {
         draining = g_tts_events |> try_pop_clone() $(event : TtsEvent#) {
@@ -5072,8 +5375,8 @@ def private discard_tts_completion(id : int64; file_path : string) {
     g_tts_pending = max(g_tts_pending - 1, 0)
     var wire = unsafe(g_tts_wires?[id])
     if (wire != null) {
-        if (g_server != null) {
-            release_writer(g_server.server, wire.writer)
+        if (g_link.out != null) {
+            release_writer(g_link, wire.writer)
         }
         delete g_tts_wires[id]
         g_tts_wires |> erase(id)
@@ -5085,25 +5388,25 @@ def private discard_tts_completion(id : int64; file_path : string) {
 }
 
 def private stop_tts_worker() {
-    if (!g_has_tts || g_tts_ready < 1) {
-        return
-    }
-    g_tts_jobs |> push_clone(TtsJob(kind = TtsJobKind.stop))
-    var stopped = false
-    let since = ref_time_ticks()
-    while (!stopped && get_time_nsec(since) < WORKER_STOP_WAIT_NS) {
-        g_tts_events |> pop_with_timeout_clone(1000) $(event : TtsEvent#) {
-            if (event.kind == TtsEventKind.stopped) {
-                stopped = true
-            } elif (event.kind == TtsEventKind.completed) {
-                discard_tts_completion(event.id, clone_string(event.file_path))
-            }
+    var asked = 0
+    for (m, jobs in g_tts, g_tts_jobs) {
+        if (m.armed && m.ready > 0 && jobs != null) {
+            jobs |> push_clone(TtsJob(kind = TtsJobKind.stop))
+            asked++
         }
     }
-    if (!stopped) {
-        to_log(LOG_WARNING, "dasllama-server: the TTS worker did not answer the stop within {WORKER_STOP_WAIT_NS / 1_000_000_000l} s - a dead worker must not hang the teardown\n")
+    let stopped = await_stopped(g_tts_events, asked, WORKER_STOP_WAIT_NS) $(event : TtsEvent#) {
+        if (event.kind == TtsEventKind.completed) {
+            discard_tts_completion(event.id, clone_string(event.file_path))
+        }
+        return event.kind == TtsEventKind.stopped
     }
-    g_tts_ready = 0
+    if (stopped < asked) {
+        to_log(LOG_WARNING, "dasllama-server: {asked - stopped} TTS worker(s) did not answer the stop within {WORKER_STOP_WAIT_NS / 1_000_000_000l} s - a dead worker must not hang the teardown\n")
+    }
+    for (m in g_tts) {
+        m.ready = 0
+    }
 }
 
 // ===== async vision encode (the ASR worker pattern: own context, own embedder) =====
@@ -5149,7 +5452,7 @@ struct private MediaEvent {
 }
 
 struct private MediaWire {
-    @do_not_delete writer : HttpResponseWriter?
+    @do_not_delete writer : WriterRef
     @do_not_delete js : JsonValue?   // the parked parsed request — drain_media_events deletes it explicitly
     slot : int
     is_audio : bool                  // picks the render span (audio vs image) and the causal splice
@@ -5340,22 +5643,21 @@ def private stop_media_worker() {
     var halt = MediaJob(kind = MediaJobKind.stop)
     g_media_jobs |> push_clone(halt)
     delete halt
-    var stopped = false
-    while (!stopped) {
-        g_media_events |> pop_with_timeout_clone(1000) $(event : MediaEvent#) {
-            if (event.kind == MediaEventKind.stopped) {
-                stopped = true
-            } elif (event.kind == MediaEventKind.completed) {
-                g_media_pending = max(g_media_pending - 1, 0)
-                to_log(LOG_WARNING, "[req {event.id}] media result discarded during teardown\n")
-            }
+    let stopped = await_stopped(g_media_events, 1, WORKER_STOP_WAIT_NS) $(event : MediaEvent#) {
+        if (event.kind == MediaEventKind.completed) {
+            g_media_pending = max(g_media_pending - 1, 0)
+            to_log(LOG_WARNING, "[req {event.id}] media result discarded during teardown\n")
         }
+        return event.kind == MediaEventKind.stopped
+    }
+    if (stopped < 1) {
+        to_log(LOG_WARNING, "dasllama-server: the media worker did not answer the stop within {WORKER_STOP_WAIT_NS / 1_000_000_000l} s - a dead worker must not hang the teardown\n")
     }
     g_media_ready = 0
     g_media_armed = false
 }
 
-def private drain_media_events(srv : WebSocketServer) {
+def private drain_media_events(srv : FrontLink) {
     var draining = true
     while (draining) {
         draining = g_media_events |> try_pop_clone() $(event : MediaEvent#) {
@@ -5397,53 +5699,127 @@ def private drain_media_events(srv : WebSocketServer) {
 
 // ===== Server =====
 
-class OpenAiServer : HvWebServer {
-    def override onInit {   // nolint:STYLE038 — the route table: one registration per endpoint
-        allow_cors()
-        GET("/v1/models") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_models(resp)
+// The front's route table: path and method to the engine's route. STREAM takes every method, so the method is
+// checked here and a mismatch reads as the unknown route, as a GET / POST registration answered it.
+struct private RouteRow {
+    path : string
+    method : string
+    route : Route
+    upload : bool       //! a multipart form whose 'file' the front saves for the engine
+}
+
+let private ROUTES = fixed_array(
+    RouteRow(path = "/v1/models", method = "GET", route = Route.models),
+    RouteRow(path = "/v1/chat/completions", method = "POST", route = Route.chat),
+    RouteRow(path = "/v1/completions", method = "POST", route = Route.completion),
+    RouteRow(path = "/v1/audio/transcriptions", method = "POST", route = Route.transcribe, upload = true),
+    RouteRow(path = "/v1/audio/translations", method = "POST", route = Route.translate, upload = true),
+    RouteRow(path = "/v1/audio/speech", method = "POST", route = Route.speech),
+    RouteRow(path = "/v1/audio/phonemes", method = "POST", route = Route.phonemes),
+    RouteRow(path = "/v1/embeddings", method = "POST", route = Route.embeddings),
+    RouteRow(path = "/v1/models/activate", method = "POST", route = Route.activate),
+    RouteRow(path = "/v1/models/load", method = "POST", route = Route.load),
+    RouteRow(path = "/v1/models/unload", method = "POST", route = Route.unload),
+    RouteRow(path = "/v1/stats", method = "GET", route = Route.stats),
+    RouteRow(path = "/v1/streams", method = "GET", route = Route.streams),
+    RouteRow(path = "/config", method = "GET", route = Route.config_get),
+    RouteRow(path = "/config", method = "POST", route = Route.config_save),
+    RouteRow(path = "/vad", method = "POST", route = Route.vad, upload = true),
+    RouteRow(path = "/exchange", method = "GET", route = Route.exchange_get),
+    RouteRow(path = "/exchange/matches", method = "GET", route = Route.exchange_matches),
+    RouteRow(path = "/exchange/apply", method = "POST", route = Route.exchange_apply),
+    RouteRow(path = "/exchange/submit", method = "POST", route = Route.exchange_submit),
+    RouteRow(path = "/exchange/retune", method = "POST", route = Route.exchange_retune),
+    RouteRow(path = "/exchange/consent", method = "POST", route = Route.exchange_consent),
+    RouteRow(path = "/bench", method = "POST", route = Route.bench_start),
+    RouteRow(path = "/bench", method = "GET", route = Route.bench_get),
+    RouteRow(path = "/bake", method = "POST", route = Route.bake_start),
+    RouteRow(path = "/bake", method = "GET", route = Route.bake_get),
+    RouteRow(path = "/catalog", method = "GET", route = Route.catalog),
+    RouteRow(path = "/catalog/download", method = "POST", route = Route.catalog_download),
+    RouteRow(path = "/v1/images", method = "GET", route = Route.images),
+    RouteRow(path = "/restart", method = "POST", route = Route.restart),
+    RouteRow(path = "/shutdown", method = "POST", route = Route.shutdown),
+    RouteRow(path = "/gc", method = "POST", route = Route.gc))
+
+// ===== The front's own state: it lives in the front thread's context, never the engine's =====
+var private g_fwires : table<int64; HttpResponseWriter?>   //! wire id -> the writer the engine's reply goes to
+var private g_fnext = 0l
+var private g_fgone : table<int64>                          //! wires already reported gone
+var private g_fto_engine : Channel?
+var private g_fto_speech : Channel?                         //! the speech thread's inbox; null on a server with no speech model
+var private g_fspeech : table<int64>                        //! the wires whose request went to the speech thread
+
+//! a status request the engine has not answered yet
+struct private StatusWait {
+    path : string
+    since : int64       //! ref_time_ticks when it arrived
+}
+
+var private g_fstatus : table<int64; StatusWait>            //! status wires, until the engine's answer arrives
+var private g_fcache : table<string; string>                //! path -> the engine's last good answer
+
+let private FRONT_STATUS_WAIT_US = 50000l   //! how long a status request waits on the engine before the last answer serves it
+
+//! the routes a held engine must not hold up: each answers from the engine's last answer past the wait
+def private status_route(route : Route) : bool
+    => route == Route.models || route == Route.stats || route == Route.streams
+
+//! the table's row for a path under a method; the unknown route when there is none
+def private route_row(path, method : string) : RouteRow {
+    for (row in ROUTES) {
+        if (row.path == path && row.method == method) {
+            return row
         }
-        STREAM("/v1/chat/completions") <| @(var req : HttpRequest?; var writer : HttpResponseWriter?) {
-            handle_chat(server, req, writer)
-        }
-        STREAM("/v1/completions") <| @(var req : HttpRequest?; var writer : HttpResponseWriter?) {
-            handle_completion(server, req, writer)
-        }
-        STREAM("/v1/audio/transcriptions") <| @(var req : HttpRequest?; var writer : HttpResponseWriter?) {
-            queue_transcription(server, req, writer, false)
-        }
-        STREAM("/v1/audio/translations") <| @(var req : HttpRequest?; var writer : HttpResponseWriter?) {
-            queue_transcription(server, req, writer, true)
-        }
-        STREAM("/v1/audio/speech") <| @(var req : HttpRequest?; var writer : HttpResponseWriter?) {
-            queue_speech(server, req, writer)
-        }
-        STREAM("/v1/audio/phonemes") <| @(var req : HttpRequest?; var writer : HttpResponseWriter?) {
-            queue_phonemes(server, req, writer)
-        }
-        POST("/v1/embeddings") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            if (g_shutdown_requested) {
-                return resp |> JSON(
-                    error_body("the server is draining for shutdown — retry shortly", "server_error"),
-                    http_status.SERVICE_UNAVAILABLE)
+    }
+    return RouteRow(route = Route.unknown)
+}
+
+//! the routes the speech thread answers when the server has one
+def private speech_route(route : Route) : bool
+    => route == Route.transcribe || route == Route.translate || route == Route.speech || route == Route.phonemes
+
+//! one request across to the engine: the wire parked under a fresh id, the upload saved, the body cloned
+def private front_forward(var req : HttpRequest?; var writer : HttpResponseWriter?) {
+    g_fnext++
+    let wid = g_fnext
+    g_fwires[wid] = writer
+    let method = "{req.method}"
+    let path = "{req.path}"
+    let row = route_row(path, method)
+    var fr = FrontReq(kind = FrontKind.request, wid = wid, route = row.route,
+        method = method, path = path, loopback = front_is_loopback(req))
+    if (status_route(row.route)) {
+        g_fstatus[wid] <- StatusWait(path = path, since = ref_time_ticks())
+    }
+    if (row.upload && fr.route != Route.unknown) {
+        var fname = ""
+        each_form_field(req) $(name, _content, filename) {
+            if (name == "file" && !empty(filename)) {
+                fname = filename
             }
-            return handle_embeddings(req, resp)
         }
-        POST("/v1/models/activate") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_activate(req, resp)
+        if (!empty(fname)) {
+            fr.file_path = path_join(tmpdir(), "dasllama_upload_{ref_time_ticks()}_{wid}_{base_name(fname)}")
+            save_form_file(req, "file", fr.file_path)
         }
-        POST("/v1/models/load") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_model_load(req, resp)
-        }
-        POST("/v1/models/unload") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_model_unload(req, resp)
-        }
-        GET("/v1/stats") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_stats(resp)
-        }
-        GET("/v1/streams") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_streams(resp)
-        }
+        fr.form_format = get_form_data(req, "response_format")
+        fr.form_language = get_form_data(req, "language")
+        fr.form_model = get_form_data(req, "model")
+    } else {
+        fr.body = "{req.body}"
+    }
+    if (g_fto_speech != null && speech_route(fr.route)) {
+        g_fspeech |> insert(wid)
+        g_fto_speech |> push_clone(fr)
+    } else {
+        g_fto_engine |> push_clone(fr)
+    }
+}
+
+class OpenAiFront : HvWebServer {
+    def override onInit {
+        allow_cors()
         GET("/") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             // the control page ships beside the server sources; libhv sets text/html from the extension
             return resp |> SERVE_FILE(path_join(get_this_module_dir(), "control.html"))
@@ -5451,102 +5827,634 @@ class OpenAiServer : HvWebServer {
         GET("/favicon.ico") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             return resp |> SERVE_FILE(path_join(get_this_module_dir(), "tray.ico"))
         }
-        GET("/config") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_config_get(resp)
+        STREAM("*") <| @(var req : HttpRequest?; var writer : HttpResponseWriter?) {
+            front_forward(req, writer)   // every other path: the route table decides, by path and method
         }
-        POST("/vad") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_vad(req, resp)
+    }
+}
+
+//! one engine op applied to its wire; a terminal op drops the wire
+def private front_apply(srv : WebSocketServer; o : FrontOut) {
+    if (o.op == FrontOp.respond && key_exists(g_fstatus, o.wid)) {   // a status answer refreshes the cache, late or not
+        if (o.status == 200) {
+            g_fcache[g_fstatus[o.wid].path] = clone_string(o.text)
         }
-        POST("/config") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            if (!is_loopback_req(req)) return deny_operator(resp)
-            return handle_config_save(req, resp)
-        }
-        GET("/exchange") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_exchange_get(req, resp)
-        }
-        GET("/exchange/matches") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_exchange_matches(req, resp)
-        }
-        POST("/exchange/apply") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_exchange_apply(req, resp)
-        }
-        POST("/exchange/submit") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_exchange_submit(req, resp)
-        }
-        POST("/exchange/retune") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_exchange_retune(req, resp)
-        }
-        POST("/exchange/consent") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_exchange_consent(req, resp)
-        }
-        POST("/bench") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            if (!is_loopback_req(req)) return deny_operator(resp)
-            return handle_bench_start(resp)
-        }
-        GET("/bench") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_bench_get(resp)
-        }
-        POST("/bake") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            if (!is_loopback_req(req)) return deny_operator(resp)
-            return handle_bake_start(req, resp)
-        }
-        GET("/catalog") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return resp |> JSON(catalog_state_json(g_catalog_dir, g_box_ram_gb, gpu_weight_budget_bytes() / (1024l * 1024l), @@tts_needs_packs))
-        }
-        POST("/catalog/download") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            if (!is_loopback_req(req)) return deny_operator(resp)
-            return handle_catalog_download(req, resp)
-        }
-        GET("/bake") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_bake_get(resp)
-        }
-        GET("/v1/images") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_images(resp)
-        }
-        POST("/restart") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            if (!is_loopback_req(req)) return deny_operator(resp)
-            if (!g_shutdown_requested) {
-                to_log(
-                    LOG_INFO,
-                    "dasllama-server: restart requested; draining llm_active={total_active()}, llm_queued={total_queued()}, asr_pending={g_asr_pending}, tts_pending={g_tts_pending}, media_pending={g_media_pending}\n")
+        g_fstatus |> erase(o.wid)
+    }
+    var writer = g_fwires?[o.wid] ?? null
+    return if (writer == null)
+    var ends = false
+    if (o.op == FrontOp.sse) {
+        sse_event(srv, writer, o.text, o.aux)
+    } elif (o.op == FrontOp.respond) {
+        respond(srv, writer, o.status, o.ctype, o.text)
+        ends = true
+    } elif (o.op == FrontOp.close) {
+        close_writer(srv, writer)
+        ends = true
+    } elif (o.op == FrontOp.release) {
+        release_writer(srv, writer)
+        ends = true
+    } elif (o.op == FrontOp.keepalive) {
+        set_writer_keepalive_timeout(srv, writer, o.ms)
+    } elif (o.op == FrontOp.header) {
+        set_header(srv, writer, o.aux, o.text)
+    } elif (o.op == FrontOp.serve_file) {
+        SERVE_FILE(srv, writer, o.text)
+        ends = true
+    }
+    if (ends) {
+        g_fwires |> erase(o.wid)
+        g_fgone |> erase(o.wid)
+        g_fspeech |> erase(o.wid)
+    }
+}
+
+//! A status request the engine has held past the wait is answered with the engine's last answer for its path, the
+//! header saying how long it waited; its wire goes, and the engine's own answer, when it comes, refreshes the cache.
+def private front_serve_stale(srv : WebSocketServer) {
+    var served : array<int64>
+    for (wid, wait in keys(g_fstatus), values(g_fstatus)) {
+        let waited = int64(get_time_usec(wait.since))
+        continue if (waited < FRONT_STATUS_WAIT_US || !key_exists(g_fwires, wid) || !key_exists(g_fcache, wait.path))
+        var writer = g_fwires?[wid] ?? null
+        set_header(srv, writer, "X-Dasllama-Stale-Ms", "{waited / 1000l}")
+        respond(srv, writer, 200, "application/json", g_fcache?[wait.path] ?? "")
+        served |> push(wid)
+    }
+    for (wid in served) {
+        g_fwires |> erase(wid)
+        g_fgone |> erase(wid)
+    }
+    delete served
+}
+
+//! tell the engine, once a wire, that its client went away
+def private front_reap(srv : WebSocketServer) {
+    for (wid, writer in keys(g_fwires), values(g_fwires)) {
+        if (!key_exists(g_fgone, wid) && !is_writer_connected(srv, writer)) {
+            g_fgone |> insert(wid)
+            if (key_exists(g_fspeech, wid)) {   // the thread that holds the wire is the one that drops it
+                g_fto_speech |> push_clone(FrontReq(kind = FrontKind.gone, wid = wid))
+            } else {
+                g_fto_engine |> push_clone(FrontReq(kind = FrontKind.gone, wid = wid))
             }
-            g_shutdown_requested = true
-            g_restart_requested = true
-            return resp |> JSON("\{\"ok\":true,\"draining\":true,\"restarting\":true}", http_status.OK)
         }
-        POST("/shutdown") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            if (!is_loopback_req(req)) return deny_operator(resp)
-            if (!g_shutdown_requested) {
-                to_log(
-                    LOG_INFO,
-                    "dasllama-server: graceful shutdown requested; draining llm_active={total_active()}, llm_queued={total_queued()}, asr_pending={g_asr_pending}, tts_pending={g_tts_pending}, media_pending={g_media_pending}\n")
+    }
+}
+
+let private FRONT_REAP_EVERY_US = 20000l    //! how often the front looks for dropped clients
+let private FRONT_OUT_BURST = 512           //! engine ops applied between two server ticks
+
+//! The front thread: the HTTP server, its writers, and nothing else. It blocks on the engine's op channel for a
+//! millisecond at a time, so an op reaches its socket as it arrives and a new request waits a millisecond at most.
+def private front_main(port : int; var to_engine : Channel?&; var from_engine : Channel?&; var to_speech : Channel?&) {
+    this_context().name := "dasllama-front"
+    g_fto_engine = to_engine
+    g_fto_speech = to_speech
+    var server = new OpenAiFront()
+    server->init(port)
+    let rc = server->start()   // 0 on success; non-zero = bind/listen failed (e.g. port in use)
+    to_engine |> push_clone(FrontReq(kind = FrontKind.ready, status = rc, port = rc == 0 ? server->bound_port() : 0))
+    var stop = rc != 0
+    var last_reap = ref_time_ticks()
+    while (!stop) {
+        server->tick()
+        var burst = 0
+        var more = true
+        while (more && !stop && burst < FRONT_OUT_BURST) {
+            more = from_engine |> pop_with_timeout_clone(burst == 0 ? 1 : 0) $(o : FrontOut#) {
+                if (o.op == FrontOp.stop) {
+                    stop = true
+                } else {
+                    var op : FrontOut
+                    op := o
+                    front_apply(server.server, op)
+                }
             }
-            g_shutdown_requested = true
-            return resp |> JSON("\{\"ok\":true,\"draining\":true}", http_status.OK)
+            burst++
         }
-        POST("/gc") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            if (!is_loopback_req(req)) return deny_operator(resp)
-            let coalesced = g_gc_requested
-            g_gc_requested = true
-            to_log(LOG_INFO, "dasllama-server: GC requested via POST /gc (coalesced={coalesced})\n")
+        if (!empty(g_fstatus)) {
+            front_serve_stale(server.server)
+        }
+        if (int64(get_time_usec(last_reap)) >= FRONT_REAP_EVERY_US) {
+            front_reap(server.server)
+            last_reap = ref_time_ticks()
+        }
+    }
+    if (rc == 0) {
+        server->stop()
+    }
+    server->cleanup()
+    unsafe {
+        delete server
+    }
+    unsafe {
+        delete g_fwires   // the writers died with the server
+    }
+    delete g_fgone
+    delete g_fstatus
+    delete g_fcache
+    g_fto_engine = null
+    delete g_fspeech
+    if (to_speech != null) {   // let go before the answer below: the engine removes this channel once it has it
+        g_fto_speech = null
+        to_speech |> release
+    }
+    to_engine |> push_clone(FrontReq(kind = FrontKind.stopped))
+    // the pending count each channel was created with is the front's life: dropping it with the reference, in one
+    // step, is what the engine's join waits for before it removes the channel
+    from_engine |> notify_and_release
+    to_engine |> notify_and_release
+}
+
+// ===== The engine's side of a request =====
+
+//! the upload the front saved for a request its handler refused: nobody else removes it
+def private drop_upload(req : FrontReq) {
+    if (!empty(req.file_path)) {
+        remove(req.file_path)
+    }
+}
+
+//! a buffered handler's reply on its wire
+def private reply_on(wid : int64; resp : Reply) {
+    respond(g_link, WriterRef(id = wid), resp.status, resp.ctype, resp.body)
+}
+
+def private operator_route(route : Route) : bool
+    => (route == Route.config_save || route == Route.bench_start || route == Route.bake_start
+        || route == Route.catalog_download || route == Route.restart || route == Route.shutdown || route == Route.gc)
+
+def private note_drain_request(what : string) {
+    if (!g_shutdown_requested) {
+        to_log(
+            LOG_INFO,
+            "dasllama-server: {what} requested; draining llm_active={total_active()}, llm_queued={total_queued()}, asr_pending={g_asr_pending}, tts_pending={g_tts_pending}, media_pending={g_media_pending}\n")
+    }
+}
+
+//! a buffered route's handler, run on the engine
+def private buffered_route(req : FrontReq; var resp : Reply) : http_status {   // nolint:STYLE037 — the route table's engine half: one arm per endpoint
+    if (operator_route(req.route) && !is_loopback_req(req)) return deny_operator(resp)
+    if (req.route == Route.models || req.route == Route.stats || req.route == Route.streams) {
+        refresh_speech_snapshot()
+    }
+    if (req.route == Route.models) return handle_models(resp)
+    if (req.route == Route.embeddings) {
+        if (g_shutdown_requested) {
             return resp |> JSON(
-                "\{\"ok\":true,\"scheduled\":true,\"coalesced\":{coalesced}}",
-                http_status.ACCEPTED)
+                error_body("the server is draining for shutdown — retry shortly", "server_error"),
+                http_status.SERVICE_UNAVAILABLE)
         }
-        ANY("*") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            return handle_unknown(req, resp)
+        return handle_embeddings(req, resp)
+    }
+    if (req.route == Route.activate) return handle_activate(req, resp)
+    if (req.route == Route.load) return handle_model_load(req, resp)
+    if (req.route == Route.unload) return handle_model_unload(req, resp)
+    if (req.route == Route.stats) return handle_stats(resp)
+    if (req.route == Route.streams) return handle_streams(resp)
+    if (req.route == Route.config_get) return handle_config_get(resp)
+    if (req.route == Route.vad) return handle_vad(req, resp)
+    if (req.route == Route.config_save) return handle_config_save(req, resp)
+    if (req.route == Route.exchange_get) return handle_exchange_get(req, resp)
+    if (req.route == Route.exchange_matches) return handle_exchange_matches(req, resp)
+    if (req.route == Route.exchange_apply) return handle_exchange_apply(req, resp)
+    if (req.route == Route.exchange_submit) return handle_exchange_submit(req, resp)
+    if (req.route == Route.exchange_retune) return handle_exchange_retune(req, resp)
+    if (req.route == Route.exchange_consent) return handle_exchange_consent(req, resp)
+    if (req.route == Route.bench_start) return handle_bench_start(resp)
+    if (req.route == Route.bench_get) return handle_bench_get(resp)
+    if (req.route == Route.bake_start) return handle_bake_start(req, resp)
+    if (req.route == Route.bake_get) return handle_bake_get(resp)
+    if (req.route == Route.catalog) {
+        return resp |> JSON(catalog_state_json(g_catalog_dir, g_box_ram_gb, gpu_weight_budget_bytes() / (1024l * 1024l), @@tts_needs_packs))
+    }
+    if (req.route == Route.catalog_download) return handle_catalog_download(req, resp)
+    if (req.route == Route.images) return handle_images(resp)
+    if (req.route == Route.restart) {
+        note_drain_request("restart")
+        g_shutdown_requested = true
+        g_restart_requested = true
+        return resp |> JSON("\{\"ok\":true,\"draining\":true,\"restarting\":true}", http_status.OK)
+    }
+    if (req.route == Route.shutdown) {
+        note_drain_request("graceful shutdown")
+        g_shutdown_requested = true
+        return resp |> JSON("\{\"ok\":true,\"draining\":true}", http_status.OK)
+    }
+    if (req.route == Route.gc) {
+        let coalesced = g_gc_requested
+        g_gc_requested = true
+        to_log(LOG_INFO, "dasllama-server: GC requested via POST /gc (coalesced={coalesced})\n")
+        return resp |> JSON(
+            "\{\"ok\":true,\"scheduled\":true,\"coalesced\":{coalesced}}",
+            http_status.ACCEPTED)
+    }
+    return handle_unknown(req, resp)
+}
+
+//! one message from the front, on the engine: a dropped client is noted, a request runs its handler
+def private engine_dispatch(req : FrontReq) {
+    if (req.kind == FrontKind.gone) {
+        g_gone |> insert(req.wid)
+        return
+    }
+    return if (req.kind != FrontKind.request)
+    let writer = WriterRef(id = req.wid)
+    if (req.route == Route.chat) {
+        handle_chat(g_link, req, writer)
+    } elif (req.route == Route.completion) {
+        handle_completion(g_link, req, writer)
+    } elif (speech_route(req.route)) {
+        speech_dispatch(req, writer)
+    } else {
+        var resp = Reply()
+        buffered_route(req, resp)
+        reply_on(req.wid, resp)
+    }
+}
+
+//! every message the front has queued, in order; `wait_ms` > 0 blocks that long for the first one
+//! one speech request: on the speech thread when the server runs one, else on the engine (no speech model: the refusals)
+def private speech_dispatch(req : FrontReq; writer : WriterRef) {
+    if (req.route == Route.speech) {
+        queue_speech(g_link, req, writer)
+    } elif (req.route == Route.phonemes) {
+        queue_phonemes(g_link, req, writer)
+    } else {
+        queue_transcription(g_link, req, writer, req.route == Route.translate)
+    }
+}
+
+def private drain_front(wait_ms : int) {
+    return if (g_front_in == null)
+    var first = wait_ms
+    var more = true
+    while (more) {
+        more = g_front_in |> pop_with_timeout_clone(first) $(req : FrontReq#) {
+            var copy : FrontReq
+            copy := req
+            engine_dispatch(copy)
         }
+        first = 0
     }
 }
 
 // Lifecycle-owned state. Keeping it global is required by both daslang-live (which calls
 // init/update/shutdown independently) and standalone JIT heap collection: collectable state that
 // survives an update must be visible to the collector as a global root, never a main-loop local.
-var private g_server : OpenAiServer?
+var private g_front_up = false   //! the front thread is running: its channels are live
+var private g_front_stopped = false   //! the front answered its stop: its channels are the engine's to remove
+var private g_front_launched = false  //! a front thread was started on the channels; a boot that failed before it holds them alone
 var private g_server_started = false
 var private g_jobque_owned = false
 var private g_prev_mtp_spec = false
 var private g_mtp_spec_changed = false
+
+let private FRONT_START_WAIT_MS = 30000
+let private FRONT_STOP_WAIT_MS = 10000
+
+//! Start the front thread on `port` and wait for it to listen: its start rc, or -1 when it never answered.
+def private start_front(port : int) : int {
+    g_front_launched = true
+    var to_engine = g_front_in
+    var from_engine = g_link.out
+    if (g_speech_up) {
+        var to_speech = g_speech_in
+        new_thread() <| @capture(= port, = to_engine, = from_engine, = to_speech) {
+            front_main(port, to_engine, from_engine, to_speech)
+        }
+    } else {   // a capture takes a reference, and there is no channel to take one of
+        new_thread() <| @capture(= port, = to_engine, = from_engine) {
+            var no_speech : Channel?
+            front_main(port, to_engine, from_engine, no_speech)
+        }
+    }
+    g_front_up = true
+    var rc = -1
+    g_front_in |> pop_with_timeout_clone(FRONT_START_WAIT_MS) $(ev : FrontReq#) {
+        if (ev.kind == FrontKind.ready) {
+            rc = ev.status
+        }
+    }
+    if (rc != 0) {
+        stop_front()
+    }
+    return rc
+}
+
+//! Stop the front: its server goes down and it answers `stopped`. Its channels stay up until shutdown_server
+//! removes them with the workers' - the front releases its own references after that answer.
+def private stop_front() {
+    return if (!g_front_up)
+    g_link.out |> push_clone(FrontOut(op = FrontOp.stop))
+    let stops = await_stopped(g_front_in, 1, int64(FRONT_STOP_WAIT_MS) * 1_000_000l) $(ev : FrontReq#) => ev.kind == FrontKind.stopped
+    let stopped = stops == 1
+    if (stopped) {   // the front's references go with its last two statements: wait them out
+        g_link.out |> join
+        g_front_in |> join
+    }
+    g_front_up = false
+    g_front_stopped = stopped
+    delete g_gone
+    if (!stopped) {
+        to_log(LOG_WARNING, "dasllama-server: the HTTP front did not stop in {FRONT_STOP_WAIT_MS} ms - its channels are left to it\n")
+    }
+}
+
+// ===== The speech thread: the ASR and TTS models' intake, workers and answers, off the engine =====
+// A handler that holds the engine - a model load, an embeddings forward - holds no speech request: the front hands the
+// speech routes to this thread, whose workers answer through the front's channel. It is a clone of the engine's context,
+// so it runs the engine's own speech code over its own copy of the speech state, and the engine reads that state off
+// the snapshots it publishes.
+
+//! what the speech thread starts from: the configured models and the dispatch its workers take
+struct private SpeechBoot {
+    asr : array<AsrSlot>
+    tts : array<TtsSlot>
+    asr_team : bool
+    tts_team : bool
+    asr_alias : string
+}
+
+//! the speech state the engine's status routes and its drain read
+struct private SpeechSnapshot {
+    stopped : bool               //! the last one: the workers are down, the thread is leaving
+    failure : string             //! why the thread could not start its workers; it is leaving, and the boot fails with this
+    answers : int64              //! the engine's query this one answers, 0 for one the thread sent on its own
+    asr : array<AsrSlot>
+    tts : array<TtsSlot>
+    asr_recent : array<AsrJobInfo>
+    asr_done_jobs : int64
+    asr_audio_s : float
+    asr_active : int
+    asr_pending : int
+    tts_pending : int
+    tts_done_jobs : int64
+    tts_audio_s : float
+}
+
+var private g_speech_in : Channel?     //! front and engine -> speech thread: FrontReq
+var private g_speech_out : Channel?    //! speech thread -> engine: SpeechSnapshot
+var private g_speech_up = false
+var private g_speech_drain_sent = false
+var private g_speech_query = 0l
+let private SPEECH_QUERY_WAIT_MS = 50   //! a status answer waits this long for the speech thread's current state, then serves its last
+let private SPEECH_START_WAIT_MS = 1000
+let private SPEECH_SNAPSHOT_EVERY_US = 250000l   //! a running job's progress reaches the poll surface this often
+
+//! the speech state as a snapshot
+def private speech_snapshot(stopped : bool) : SpeechSnapshot {
+    var snap = SpeechSnapshot(stopped = stopped, asr_done_jobs = g_asr_done_jobs, asr_audio_s = g_asr_audio_s,
+        asr_active = g_asr_active, asr_pending = g_asr_pending, tts_pending = g_tts_pending,
+        tts_done_jobs = g_tts_done_jobs, tts_audio_s = g_tts_audio_s)
+    snap.asr := g_asr
+    snap.tts := g_tts
+    snap.asr_recent := g_asr_recent
+    return <- snap
+}
+
+//! what a snapshot would change for a reader, as one number: the counters and the models' load state
+def private speech_signature : int64 {
+    var sig = g_asr_done_jobs * 31l + g_tts_done_jobs * 17l + int64(g_asr_active) * 7l + int64(g_asr_pending) * 5l + int64(g_tts_pending) * 3l + long_length(g_asr_recent)
+    for (a in g_asr) {
+        sig = sig * 3l + int64(a.ready)
+    }
+    for (m in g_tts) {
+        sig = sig * 3l + int64(m.ready + (m.armed ? 2 : 0))
+    }
+    return sig
+}
+
+//! Take everything the speech thread's inbox holds, waiting 2 ms for the first message: the front's requests and
+//! disconnects, the engine's drain word and its queries. True once the engine said halt.
+def private speech_inbox(var inbox : Channel?&; var to_engine : Channel?&) : bool {
+    var halt = false
+    var more = true
+    var wait = 2
+    while (more && !halt) {
+        more = inbox |> pop_with_timeout_clone(wait) $(ev : FrontReq#) {
+            if (ev.kind == FrontKind.halt) {
+                halt = true
+            } elif (ev.kind == FrontKind.drain) {
+                g_shutdown_requested = true
+            } elif (ev.kind == FrontKind.gone) {
+                g_gone |> insert(ev.wid)
+            } elif (ev.kind == FrontKind.query) {   // in the order it arrived: everything answered before it is counted
+                var now <- speech_snapshot(false)
+                now.answers = ev.wid
+                to_engine |> push_clone(now)
+                delete now
+            } elif (ev.kind == FrontKind.request) {
+                var req : FrontReq
+                req := ev
+                speech_dispatch(req, WriterRef(id = req.wid))
+                delete req
+            }
+        }
+        wait = 0
+    }
+    return halt
+}
+
+def private speech_main(var boot : Channel?&; var inbox : Channel?&; var to_engine : Channel?&; var to_front : Channel?&) {
+    this_context().name := "dasllama-speech"
+    boot |> pop_with_timeout_clone(SPEECH_START_WAIT_MS) $(b : SpeechBoot#) {
+        g_asr := b.asr
+        g_tts := b.tts
+        g_asr_team_dispatch = b.asr_team
+        g_tts_team_dispatch = b.tts_team
+        g_asr_alias = clone_string(b.asr_alias)
+    }
+    boot |> release
+    g_link.out = to_front
+    g_speech_up = false   // this context IS the speech thread: its own dispatch is the direct one
+    g_shutdown_requested = false
+    g_asr_events = worker_channel()
+    g_tts_events = worker_channel()
+    var failure = ""
+    let failed = catch_worker_panic(failure) {   // an ASR model that cannot load panics its boot: here that is this thread, and the engine waits on its first snapshot
+        start_asr_worker_threads()
+        start_tts_worker()
+    }
+    var first <- speech_snapshot(failed)
+    first.failure = failure
+    to_engine |> push_clone(first)
+    delete first
+    var sent_sig = speech_signature()
+    var sent_at = ref_time_ticks()
+    var halt = failed
+    while (!halt) {
+        halt = speech_inbox(inbox, to_engine)
+        drain_asr_events(g_link)
+        drain_tts_events(g_link)
+        reap_speech_wires(g_link)
+        let sig = speech_signature()
+        let busy = g_asr_active + g_asr_pending + g_tts_pending > 0
+        if (sig != sent_sig || (busy && int64(get_time_usec(sent_at)) >= SPEECH_SNAPSHOT_EVERY_US)) {
+            var snap <- speech_snapshot(false)
+            to_engine |> push_clone(snap)
+            delete snap
+            sent_sig = sig
+            sent_at = ref_time_ticks()
+        }
+    }
+    stop_asr_worker_threads()
+    stop_tts_worker()
+    release_speech_state()
+    if (!failed) {   // a failed start said so in its one snapshot
+        var last <- speech_snapshot(true)
+        to_engine |> push_clone(last)
+        delete last
+    }
+    delete g_asr
+    delete g_tts
+    delete g_gone
+    g_link.out = null
+    to_front |> release
+    inbox |> notify_and_release       // each with the channel's pending count, in one step: what the engine's join waits for
+    to_engine |> notify_and_release
+}
+
+//! this context's speech wires, the synthesis files nobody collected, and its worker channels
+def private release_speech_state {
+    delete g_asr_wires
+    delete g_tts_wires
+    for (served in g_tts_served) {   // the synthesis temp files outlive the process otherwise: nothing else sweeps tmpdir
+        remove_result(served.path)
+    }
+    delete g_tts_served
+    var asr_events = g_asr_events
+    var tts_events = g_tts_events
+    g_asr_events = null
+    g_tts_events = null
+    for (jobs in g_asr_jobs) {
+        remove_worker_channels(jobs, null)
+    }
+    for (jobs in g_tts_jobs) {
+        remove_worker_channels(jobs, null)
+    }
+    remove_worker_channels(asr_events, tts_events)
+    g_asr_jobs |> clear()   // the channels are gone: only the buffers are left to free
+    g_tts_jobs |> clear()
+    unsafe {
+        delete g_asr_jobs
+        delete g_tts_jobs
+    }
+    delete g_asr_recent
+    g_asr_active = 0
+    g_asr_pending = 0
+    g_tts_pending = 0
+}
+
+//! the engine's copy of the speech state, off a snapshot
+def private adopt_speech_snapshot(snap : SpeechSnapshot#) {
+    g_asr := snap.asr
+    g_tts := snap.tts
+    g_asr_recent := snap.asr_recent
+    g_asr_done_jobs = snap.asr_done_jobs
+    g_asr_audio_s = snap.asr_audio_s
+    g_asr_active = snap.asr_active
+    g_asr_pending = snap.asr_pending
+    g_tts_pending = snap.tts_pending
+    g_tts_done_jobs = snap.tts_done_jobs
+    g_tts_audio_s = snap.tts_audio_s
+}
+
+//! Start the speech thread when a speech model is configured, and wait for its models to load: its first snapshot is
+//! their load state, which the boot's own checks read. A server with no speech model runs none - the engine answers
+//! the speech routes' refusals itself.
+def private start_speech_thread {
+    return if (empty(g_asr) && empty(g_tts))
+    g_speech_in = worker_channel()
+    g_speech_out = worker_channel()
+    var boot = worker_channel()
+    g_asr_alias = empty(g_slots) ? "" : "{g_slots[g_default_slot].name}-asr"
+    var first = SpeechBoot(asr_team = g_asr_team_dispatch, tts_team = g_tts_team_dispatch, asr_alias = g_asr_alias)
+    first.asr := g_asr
+    first.tts := g_tts
+    boot |> push_clone(first)
+    delete first
+    var inbox = g_speech_in
+    var to_engine = g_speech_out
+    var to_front = g_link.out
+    new_thread() <| @capture(= boot, = inbox, = to_engine, = to_front) {
+        speech_main(boot, inbox, to_engine, to_front)
+    }
+    var loaded = false
+    var failure = ""
+    while (!loaded) {   // the loads take as long as they take; a worker that cannot load answers too
+        g_speech_out |> pop_with_timeout_clone(1000) $(snap : SpeechSnapshot#) {
+            adopt_speech_snapshot(snap)
+            failure = clone_string(snap.failure)
+            loaded = true
+        }
+    }
+    unsafe(channel_remove(boot))   // the thread released it after its pop, ahead of its first snapshot
+    if (!empty(failure)) {   // the thread is leaving: wait it out, give its channels back, and fail the boot as it would have
+        g_speech_in |> join
+        g_speech_out |> join
+        remove_worker_channels(g_speech_in, g_speech_out)
+        g_speech_in = null
+        g_speech_out = null
+        panic(failure)
+    }
+    g_speech_up = true
+    g_speech_drain_sent = false
+}
+
+//! the speech thread's news since the last tick, and the drain word once the server starts draining
+def private drain_speech_snapshots {
+    return if (!g_speech_up)
+    var more = true
+    while (more) {
+        more = g_speech_out |> pop_with_timeout_clone(0) $(snap : SpeechSnapshot#) {
+            adopt_speech_snapshot(snap)
+        }
+    }
+    if (g_shutdown_requested && !g_speech_drain_sent) {
+        g_speech_in |> push_clone(FrontReq(kind = FrontKind.drain))
+        g_speech_drain_sent = true
+    }
+}
+
+//! The speech state as of now, for a status answer: a request the speech thread answered before this call is counted
+//! in what the engine reads next. The thread takes its inbox in order, so its answer to the query follows every
+//! request ahead of it; a thread too busy to answer inside the wait leaves the engine its last snapshot.
+def private refresh_speech_snapshot {
+    return if (!g_speech_up)
+    g_speech_query++
+    let asked = g_speech_query
+    g_speech_in |> push_clone(FrontReq(kind = FrontKind.query, wid = asked))
+    var answered = false
+    let since = ref_time_ticks()
+    while (!answered && get_time_usec(since) / 1000 < SPEECH_QUERY_WAIT_MS) {
+        g_speech_out |> pop_with_timeout_clone(5) $(snap : SpeechSnapshot#) {
+            adopt_speech_snapshot(snap)
+            answered = snap.answers == asked
+        }
+    }
+}
+
+//! Stop the speech thread: its workers go down and its last snapshot says so. The front is down already, so nothing
+//! else holds its two channels once it has let go of them.
+def private stop_speech_thread {
+    return if (!g_speech_up)
+    g_speech_in |> push_clone(FrontReq(kind = FrontKind.halt))
+    let stops = await_stopped(g_speech_out, 1, WORKER_STOP_WAIT_NS * 2l) $(snap : SpeechSnapshot#) => snap.stopped
+    let stopped = stops == 1
+    g_speech_up = false
+    if (stopped) {
+        g_speech_in |> join
+        g_speech_out |> join
+        remove_worker_channels(g_speech_in, g_speech_out)
+    } else {
+        to_log(LOG_WARNING, "dasllama-server: the speech thread did not stop - its channels are left to it\n")
+    }
+    g_speech_in = null
+    g_speech_out = null
+}
 
 //! Initialize the server lifecycle. Creates a persistent JobQue explicitly so the pool spans
 //! externally-driven update calls; ``shutdown_server`` destroys it after every worker and owned
@@ -5563,15 +6471,14 @@ var private g_mtp_spec_changed = false
 //! see ``KVDtype`` — ``tq4`` needs a power-of-two head_size).
 // created here, torn down together by shutdown_server's channel_remove block
 def private init_worker_rails {
-    g_bench_events = unsafe(channel_create())
+    g_bench_events = worker_channel()
     g_bench_state = "idle"
     g_bench_result_json = ""
-    g_bake_events = unsafe(channel_create())
+    g_bake_events = worker_channel()
     g_bake_state = "idle"
     g_bake_result_json = ""
     catalog_events_init()
-    start_asr_worker_threads()
-    start_tts_worker()
+    start_speech_thread()
     start_media_worker()
 }
 
@@ -5694,11 +6601,11 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
                 page_rows : int64 = 64l; prefix_groups : int64 = 0l; kv_dtype : KVDtype = KVDtype.f16;
                 team_dispatch : bool = true; asr_team : int = -1; mtp : int = -1;
                 idle_chunk_tokens : int64 = -1l) : bool {
-    if (g_server != null || g_jobque_owned) {
+    if (g_front_up || g_jobque_owned) {
         to_log(LOG_ERROR, "dasllama-server: init_server called while already initialized\n")
         return false
     }
-    if (empty(g_slots) && !g_setup_mode && !g_has_tts) {
+    if (empty(g_slots) && !g_setup_mode && !server_has_tts()) {
         to_log(LOG_ERROR, "dasllama-server: init_server with no model slots (call set_model/add_model first, or configure_tts for a speech-only server)\n")
         return false
     }
@@ -5714,15 +6621,15 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
     g_asr_team_dispatch = speech.asr
     let dispatch_mode = !team_dispatch ? "inline" : (asr_team > 0 ? "team" : "hybrid")
     to_log(LOG_INFO, "dasllama-server: jobque compute dispatch = {dispatch_mode}, ASR workers {g_asr_team_dispatch ? "on the team" : "inline"}\n")
-    g_asr_jobs = unsafe(channel_create())
-    g_asr_events = unsafe(channel_create())
-    g_tts_jobs = unsafe(channel_create())
-    g_tts_events = unsafe(channel_create())
-    g_media_jobs = unsafe(channel_create())
-    g_media_events = unsafe(channel_create())
+    g_front_in = worker_channel()   // the front starts last, but a speech thread answers through its channel from its first request
+    g_link.out = worker_channel()
+    g_asr_events = worker_channel()
+    g_tts_events = worker_channel()
+    g_media_jobs = worker_channel()
+    g_media_events = worker_channel()
     init_worker_rails()
     if (empty(g_slots)) {
-        if (!g_setup_mode && !g_has_tts) {
+        if (!g_setup_mode && !server_has_tts()) {
             // the speech-only boot's worker dropped the route as it loaded: the catalog/config
             // page is all that is left to serve, and it is where the config gets fixed
             to_log(LOG_WARNING, "dasllama-server: the speech route did not arm and no model is loaded - falling back to setup mode\n")
@@ -5742,9 +6649,7 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
     }
     // a resident prefill would strand device-only rows when host-cached sessions outnumber the driver's K/V regions; device-home streams prefill on the device regardless
     set_resident_prefill_allowed(false)
-    g_server = new OpenAiServer()
-    g_server->init(port)
-    let rc = g_server->start()   // 0 on success; non-zero = bind/listen failed (e.g. port in use)
+    let rc = start_front(port)   // 0 on success; non-zero = bind/listen failed (e.g. port in use)
     if (rc != 0) {
         to_log(LOG_ERROR, "dasllama-server: could not start on port {port} (start rc {rc}; is the port already in use?)\n")
         return false
@@ -5814,18 +6719,19 @@ def private prof_window_report() {
 }
 
 def update_server() : bool {
-    if (!g_server_started || g_server == null) {
+    if (!g_server_started || !g_front_up) {
         return false
     }
     let t_pump = ref_time_ticks()
-    g_server->tick()   // drains queued handlers: requests parse + render + submit here
+    drain_front(0)   // the requests the front queued: parse + render + submit here
     if (g_tickprof) {
         g_prof_pump_us += int64(get_time_usec(t_pump))
     }
     let t_drain = ref_time_ticks()
-    drain_asr_events(g_server.server)
-    drain_tts_events(g_server.server)
-    drain_media_events(g_server.server)
+    drain_speech_snapshots()
+    drain_asr_events(g_link)
+    drain_tts_events(g_link)
+    drain_media_events(g_link)
     drain_bench_events()
     if (g_shutdown_requested && ibench_running()) {
         ibench_stop("idle", "the server is shutting down")   // a benchmark holds nothing worth draining for, and no rep runs on the tick that learns it
@@ -5837,7 +6743,7 @@ def update_server() : bool {
     if (g_tickprof) {
         g_prof_drain_us += int64(get_time_usec(t_drain))
     }
-    reap_disconnected(g_server.server)
+    reap_disconnected(g_link)
     if (g_tickprof) {
         g_prof_reap_us += int64(get_time_usec(t_reap))
     }
@@ -5868,8 +6774,8 @@ def update_server() : bool {
         }
     }
     let t_flush = ref_time_ticks()
-    flush_events(g_server.server)
-    flush_tool_keepalives(g_server.server)
+    flush_events(g_link)
+    flush_tool_keepalives(g_link)
     if (g_tickprof) {
         g_prof_flush_us += int64(get_time_usec(t_flush))
         g_prof_ticks++
@@ -5884,7 +6790,7 @@ def update_server() : bool {
         return false
     }
     if (!busy) {
-        sleep(2u)
+        drain_front(2)   // idle: block on the front's channel, so a request starts as it arrives
     }
     return true
 }
@@ -5906,25 +6812,17 @@ def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers s
     if (ibench_running()) {
         ibench_stop("idle", "the server stopped")   // the rows' cache goes before the model it was sized from
     }
-    if (g_server_started && g_server != null) {
-        g_server->stop()
-    }
+    stop_front()   // the sockets go first: no request arrives while the workers stop
+    stop_speech_thread()
     g_server_started = false
-    if (g_asr_jobs != null && g_asr_events != null) {
+    if (g_asr_events != null) {
         stop_asr_worker_threads()
     }
-    if (g_tts_jobs != null && g_tts_events != null) {
+    if (g_tts_events != null) {
         stop_tts_worker()
     }
     if (g_media_jobs != null && g_media_events != null) {
         stop_media_worker()
-    }
-    if (g_server != null) {
-        g_server->cleanup()
-        unsafe {
-            delete g_server
-        }
-        g_server = null
     }
     // clean tier epoch: drop the owner's VRAM state and leave the engine globals bare, so a
     // same-context restart (tests) starts from an unarmed device with no stale marks
@@ -5944,13 +6842,7 @@ def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers s
     g_cur = 0
     delete g_events
     delete g_wires
-    delete g_asr_wires
-    delete g_tts_wires
-    for (served in g_tts_served) {   // the synthesis temp files outlive the process otherwise: nothing else sweeps tmpdir
-        remove_result(served.path)
-    }
-    delete g_tts_served
-    delete g_tts_voices
+    release_speech_state()   // the engine's own: empty rails on a server whose speech thread ran them
     for (w in values(g_media_wires)) {   // parked image requests die with the server
         unsafe {
             delete w.js
@@ -5958,27 +6850,25 @@ def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers s
         w.js = null
     }
     delete g_media_wires
-    var asr_jobs = g_asr_jobs
-    var asr_events = g_asr_events
-    var tts_jobs = g_tts_jobs
-    var tts_events = g_tts_events
     var vision_jobs = g_media_jobs
     var vision_events = g_media_events
     var bench_events = g_bench_events
     var bake_events = g_bake_events
-    g_asr_jobs = null
-    g_asr_events = null
-    g_tts_jobs = null
-    g_tts_events = null
+    let front_let_go = g_front_stopped || !g_front_launched
+    var front_in = front_let_go ? g_front_in : null
+    var front_out = front_let_go ? g_link.out : null
+    g_front_in = null
+    g_link.out = null
+    g_front_stopped = false
+    g_front_launched = false
     g_media_jobs = null
     g_media_events = null
     g_bench_events = null
     g_bake_events = null
     catalog_events_shutdown()
     unsafe {
-        remove_worker_channels(asr_jobs, asr_events)
-        remove_worker_channels(tts_jobs, tts_events)
         remove_worker_channels(vision_jobs, vision_events)
+        remove_worker_channels(front_in, front_out)
         // a still-running worker holds a channel ref, and channel_remove throws on outstanding
         // refs — leave the channel to the worker (its exit release is safe on the live object;
         // the worker can't be cancelled, its child process runs minutes) instead of aborting stop
@@ -6002,20 +6892,8 @@ def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers s
         set_mtp_spec(g_prev_mtp_spec)   // a /shutdown + restart in the same context starts from a clean gate
         g_mtp_spec_changed = false
     }
-    g_has_asr = false
-    g_asr_path = ""
-    g_asr_mmproj = ""
-    g_asr_worker_count = 0
-    g_asr_ready = 0
-    g_asr_active = 0
-    g_asr_pending = 0
-    g_has_tts = false
-    g_tts_path = ""
-    g_tts_id = ""
-    g_tts_error = ""
-    g_tts_lane_served = ""
-    g_tts_ready = 0
-    g_tts_pending = 0
+    delete g_asr
+    delete g_tts
     g_media_pending = 0
     if (g_jobque_owned) {
         destroy_job_que()

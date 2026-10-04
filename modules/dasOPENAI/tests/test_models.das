@@ -4,6 +4,7 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require dastest/testing_boost public
+require _openai_live
 require openai/openai_models
 require strings
 require daslib/fio
@@ -29,6 +30,7 @@ def test_model_decode(t : T?) {
 [test]
 def test_models_live_ollama(t : T?) {
     t |> run("live list_models against Ollama") @(t : T?) {
+        return if (!live_server(t, "http://localhost:11434/v1"))
         let client = openai_client("http://localhost:11434/v1")
         let res = list_models(client)
         t |> success(res.ok, "list ok (kind={res.error.kind} status={res.error.status} {res.error.message})")
@@ -41,6 +43,7 @@ def test_models_live_ollama(t : T?) {
 [test]
 def test_models_retrieve_ollama(t : T?) {
     t |> run("live retrieve_model against Ollama") @(t : T?) {
+        return if (!live_server(t, "http://localhost:11434/v1"))
         let client = openai_client("http://localhost:11434/v1")
         let res = retrieve_model(client, "nomic-embed-text")
         t |> success(res.ok, "retrieve ok (kind={res.error.kind} status={res.error.status} {res.error.message})")
@@ -54,10 +57,7 @@ def test_models_retrieve_ollama(t : T?) {
 [test]
 def test_models_live_openrouter(t : T?) {
     t |> run("live list_models against OpenRouter (validates GET Bearer auth)") @(t : T?) {
-        if (!has_env_variable("OPENROUTER_API_KEY")) {
-            t |> success(true, "OPENROUTER_API_KEY not set - skipped")
-            return
-        }
+        return if (!live_key(t, "OPENROUTER_API_KEY"))
         let client = openai_client("https://openrouter.ai/api/v1", get_env_variable("OPENROUTER_API_KEY"))
         let res = list_models(client)
         if (!res.ok && res.error.status == 429) {

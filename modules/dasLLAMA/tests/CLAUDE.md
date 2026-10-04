@@ -1771,12 +1771,20 @@ the corpus as its `%%` segments over a temp file, the row statistic and the brac
 against a fake chat server on its own thread that answers by the request's `model` field: a complete
 stream (counts, both spans past the server's 30 ms pauses, the server's own TTFT), and the four
 refusals - no usage chunk, no reply text, a reply of one token (no decode span to time), HTTP 500 -
-plus no server at the address. The speech rows
+plus no server at the address, the follow-up row standing over complete turns and refused by a failed one, and the image cells - a file as a data URI and a missing one as none, an image question's wall and prompt tokens off the fake's buffered completion, HTTP 500 saying why, an image row standing over a file and refused without one. The speech rows
 run against a fake speech server on a second thread: a transcription's wall holds the server's
 300 ms pause, a failed and a blank answer say why, a row answers the text its reps read and refuses
 reps that read different texts or a text other than the one asked, and the loaded row stands while
 the fake chat turn outlasts two fast reps and is refused when the reps outlive the turn, when the
-turn carries no reply text, and when the loaded text differs from the idle one.
+turn carries no reply text, and when the loaded text differs from the idle one. The synthesis and
+scene cells: a WAV's seconds off its header (a header with no sample and text bytes reading 0), a
+synthesis against the fake's one-second WAV (its seconds, a failed and a JSON answer saying why), a
+scene round against both fakes (one decode rate, every lane answering inside the turn), a paced
+lane sending one request a period with a failed request reading below zero, a scene row
+refusing fewer than two samples on either side, the synthesis rows and the scene rows whole (a
+failing model or lane refused alone, a lane too slow for the turn refused for its empty round),
+the flags refused when they would report no row of a mode they ask for, and the scene's lanes
+off the flags.
 `test_site_records.das` - model-free: the records-vs-site drift gate - `merge_site_records`
 (required by relative path, pays the engine compile) regenerated in memory and byte-compared
 against the committed `site/files/dasllama/bench_records.json` and its first-paint projection
@@ -1839,9 +1847,15 @@ takes a COPY (the donor's page stays the cache's alone, `n_hit_partial` counts t
 the cold prefill's logits bit for bit - the tail whole, three of its five rows, and four leading rows
 of a whole page - every page back in the pool at the end; its model-free edges
 (`test_prefix_tail_edges`): a prompt whose first row past the whole hits the next page does not
-share copies nothing, the link past a page stays the FIRST donation's (a second donation sharing
-the page relinks nothing), and a partial take is an LRU touch - the taken page outlives an older
-untouched one when the budget evicts.
+share copies nothing, each donation's page past a hit is a candidate (of two donations past one
+page a prompt takes the one it shares rows with), and a partial take is an LRU touch - the taken page outlives an older
+untouched one when the budget evicts; and the prompt no whole page serves
+(`test_prefix_first_page_edges`): of two donations' first pages the one sharing the most leading
+rows is copied (a partial first page and a whole one), the same prompt again stops a token short, a
+prompt sharing no first row takes no page, the chain whose first page was copied is credited the
+hit, and an evicted first page is no candidate; a link to a page the cache dropped attaches
+nothing past the whole hits - the
+model-gated twin a prompt sharing five rows of the first page alone, bit for bit the cold prefill.
 `test_facade.das` - model-free: the facade's own seams over constructed Models; among them
 `test_facade_device_kv_rows` - the rows a device holds a session's K/V for (`device_kv_max_rows`):
 the installed room seam (`set_gpu_kv_room_hook`, put back) over the model's K/V bytes a row, both
