@@ -11,7 +11,6 @@ require daslib/fio
 require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
-require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW and the resolved coopmat mode, where the module exists
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed   // resident_ready, the levers, the ramps, resident_then_cpu_feed, feed_steps_within, tile_arm_tag
 require dasllama/dasllama_bench   // bench_tg_batched_rep: the batched row's refusal and its served rep
@@ -32,7 +31,6 @@ def private allow_cpu_prefill_intent() {
 
 //! of the step's max |logit|: the qwen2 file's K-quant bar
 let private LOGIT_BAR_REL = 0.06
-let private PF_WINDOW_ROWS = 512l  //! the engine's PF_WINDOW, asserted equal by the two-window cell: a prompt past it runs as sequential windows
 
 //! the carrier's path past its gate - the JIT, the armed tier and the file; "" where the cell already registered its skip
 def private llama_model_path(t : T?; file : string) : string {
@@ -71,9 +69,7 @@ def private llama_cells(t : T?; file : string) {
         llama_forced_feed(t, file, 40l)
     }
     t |> run("{file}: the same across two windows") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            t |> equal(PF_WINDOW, PF_WINDOW_ROWS, "the prompt is sized past the engine's own window")
-        }
+        assert_pf_window(t)
         llama_forced_feed(t, file, PF_WINDOW_ROWS + 88l)
     }
 }

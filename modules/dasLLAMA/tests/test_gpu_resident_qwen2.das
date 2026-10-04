@@ -11,7 +11,6 @@ require daslib/fio
 require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
-require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW and the resolved coopmat mode, where the module exists
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed   // resident_ready, the ramps, resident_then_cpu_feed, feed_steps_within
 require _kv_codec_cells   // the K/V codec cells' rig
@@ -45,7 +44,6 @@ let private CODEC_PAIR_REL = 0.8    //! the two codec chains' distance from each
 //! chains) differ at 0.002-0.01 of their bytes; the prefill's V rows at 0.39 (q8_0) and 0.12 (tq4) - its GEMM reads f16 rows where
 //! the CPU reads Q8_0 blocks - against 0.97 for a row held to the next one (the control)
 let private ROWS_BARS = StoredRowsBars(k = 0.02, v_step = 0.05, v_prefill_of_ctrl = 0.6)
-let private PF_WINDOW_ROWS = 512l  //! the engine's PF_WINDOW, asserted equal by the two-window cell: a prompt past it runs as sequential windows
 
 def private carrier_path() : string => path_join(models_dir(), CARRIER)
 
@@ -68,11 +66,6 @@ def private qwen2_forced_feed(t : T?; n : int64) {
     delete tr
 }
 
-def private assert_pf_window(t : T?) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        t |> equal(PF_WINDOW, PF_WINDOW_ROWS, "the prompt is sized past the engine's own window")
-    }
-}
 
 [test]
 def test_gpu_resident_qwen2_bias(t : T?) {

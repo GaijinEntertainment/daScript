@@ -67,7 +67,6 @@ let private F32_DIST_REL = 1.15
 let private HEAD_K_BAR_REL = 0.08
 //! the CPU row one down misses a device row by at least this many bars, or the bar is too wide to tell the row from its neighbour
 let private HEAD_K_CONTROL_BARS = 2.0
-let private PF_WINDOW_ROWS = 512l     //! the engine's PF_WINDOW, asserted equal by the two-window cells: a prompt past it runs as sequential windows
 let private RQ_NO_CENSUS = -1l        //! the census count with no vulkan module: the routing witness stands down
 
 //! the plane formats a fixture's deltanet layers carry: all Q8_0, all K-quant, or K-quant qkv/z beside a Q8_0 out plane
@@ -75,12 +74,6 @@ enum HybridPlanes {
     q8
     kq
     kq_q8out
-}
-
-def private window_pin(t : T?) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        t |> equal(PF_WINDOW, PF_WINDOW_ROWS, "the prompt is sized past the engine's own window")
-    }
 }
 
 //! the coverage census's count of Q8_K requant dispatches so far; RQ_NO_CENSUS with no vulkan module
@@ -208,7 +201,7 @@ def test_gpu_resident_hybrid_kq(t : T?) {
         hybrid_forced_feed(t, 40l, "Qwen3.5-0.8B-Q4_K_M.gguf", HybridPlanes.kq)
     }
     t |> run("Qwen3.5-0.8B-Q4_K_M: the same across two windows") @(t : T?) {
-        window_pin(t)
+        assert_pf_window(t)
         hybrid_forced_feed(t, PF_WINDOW_ROWS + 88l, "Qwen3.5-0.8B-Q4_K_M.gguf", HybridPlanes.kq)
     }
 }
@@ -219,7 +212,7 @@ def test_gpu_resident_hybrid_kq_q8out(t : T?) {
         hybrid_forced_feed(t, 40l, "Qwen3.5-0.8B-Q4_K_M-q8out.gguf", HybridPlanes.kq_q8out)
     }
     t |> run("Qwen3.5-0.8B-Q4_K_M-q8out: the same across two windows") @(t : T?) {
-        window_pin(t)
+        assert_pf_window(t)
         hybrid_forced_feed(t, PF_WINDOW_ROWS + 88l, "Qwen3.5-0.8B-Q4_K_M-q8out.gguf", HybridPlanes.kq_q8out)
     }
 }
@@ -1106,7 +1099,7 @@ def test_gpu_resident_hybrid_mtp_head_warm(t : T?) {
         head_warm_rows_cell(t, DRAFT_PROMPT)
     }
     t |> run("Qwen3.5-0.8B-MTP: the same over two windows - the second window's carry row is its row 0, the head's rope a row behind the trunk's - every head K row of a prompt one window plus 88 rows long against the CPU warm's") @(t : T?) {
-        window_pin(t)
+        assert_pf_window(t)
         head_warm_rows_cell(t, PF_WINDOW_ROWS + 88l)
     }
 }

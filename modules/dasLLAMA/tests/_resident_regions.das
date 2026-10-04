@@ -40,7 +40,6 @@ def private regions_rig_init() {
 }
 
 let private STEPS = 8l
-let private WINDOW_ROWS = 512l   //! the engine's PF_WINDOW, asserted equal by the continuation cell: its cuts are placed against it
 
 def private prompt_a() : array<int64> => <- resident_prompt(40l)
 def private prompt_b() : array<int64> => <- ramp_ids(57l, 0l, 3000l, 91l, 6000l)
@@ -264,12 +263,10 @@ def private continue_at(t : T?; tr : Model; n, cut : int64) {
 def cell_prefill_continues_on_the_device(t : T?; file : string) {
     t |> run("a prefill from a position past zero runs the window chain over the region's rows") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
-            static_if (typeinfo builtin_module_exists(vulkan)) {
-                t |> equal(PF_WINDOW, WINDOW_ROWS, "the cuts are placed against the engine's own window")
-            }
+            assert_pf_window(t)
             continue_at(t, tr, 57l, 40l)     // a short tail inside the first window
-            continue_at(t, tr, WINDOW_ROWS + 88l, WINDOW_ROWS)   // the cut on the window boundary
-            continue_at(t, tr, WINDOW_ROWS + 388l, 300l)   // the tail runs a whole window from an unaligned start, then a remainder
+            continue_at(t, tr, PF_WINDOW_ROWS + 88l, PF_WINDOW_ROWS)   // the cut on the window boundary
+            continue_at(t, tr, PF_WINDOW_ROWS + 388l, 300l)   // the tail runs a whole window from an unaligned start, then a remainder
             served_every_call(t)
         }
     }
@@ -399,8 +396,8 @@ def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBa
 def cell_regions_batched_steps_split(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
     t |> run("two sessions past the unsplit position: the split N-row command reads what each session reads alone") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
-            var pa <- resident_prompt(WINDOW_ROWS + 8l)
-            var pb <- ramp_ids(WINDOW_ROWS + 25l, 0l, 3000l, 91l, 6000l)
+            var pa <- resident_prompt(PF_WINDOW_ROWS + 8l)
+            var pb <- ramp_ids(PF_WINDOW_ROWS + 25l, 0l, 3000l, 91l, 6000l)
             static_if (typeinfo builtin_module_exists(vulkan)) {
                 t |> success(long_length(pa) > RD_UNSPLIT_POS && long_length(pb) > RD_UNSPLIT_POS, "both prompts run past the unsplit position ({RD_UNSPLIT_POS})")
             }
@@ -749,7 +746,7 @@ def cell_scheduler_device_prefill_chunks(t : T?; file : string) {
         with_regions_rig(t, file) $(tr) {
             var sch <- create_scheduler(tr, 2l, 4l, 64l, 0l, 0l, mirror_kv_dtype())
             t |> success(set_device_kv(sch, true), "an idle scheduler switches to device-home sessions")
-            var long_prompt <- prose_ids(WINDOW_ROWS + 188l, 3l)
+            var long_prompt <- prose_ids(PF_WINDOW_ROWS + 188l, 3l)
             var events : array<SchedEvent>
             let served0 = moe_gpu_resident_prefills()
             submit(tr, sch, make_req(1l, long_prompt, 2l))

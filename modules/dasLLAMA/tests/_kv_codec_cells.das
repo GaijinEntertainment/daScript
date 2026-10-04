@@ -123,7 +123,6 @@ struct StoredRowsBars {
     v_prefill_of_ctrl : float    //! the prefill's V rows, of the share a row held to the next one differs by
 }
 
-let private PLAN_WINDOW_ROWS = 512l   //! the prefill window the plan sizes the staged rows by (the engine's PF_WINDOW)
 let private PLAN_PROBE_CTX = 4096l
 
 //! the plan charges a block codec's scratch over the f16 plan's: both sides' f16 shadow of one layer's rows at the context,
@@ -132,7 +131,7 @@ def private plan_charges_codec_scratch(t : T?; tr : Model; kv : KVDtype) {
     let kvd = layer_kv_dim(tr.config, 0l)
     let codec_plan = resident_plan(tr, PLAN_PROBE_CTX, kv, kv)
     let f16_plan = resident_plan(tr, PLAN_PROBE_CTX, KVDtype.f16, KVDtype.f16)
-    let want = 2l * PLAN_PROBE_CTX * kvd * 2l + 2l * PLAN_WINDOW_ROWS * kvd * 4l
+    let want = 2l * PLAN_PROBE_CTX * kvd * 2l + 2l * PF_WINDOW_ROWS * kvd * 4l
     t |> equal(codec_plan.scratch_bytes - f16_plan.scratch_bytes, want, "{kv}: the plan charges the shadow planes and the staged rows ({want} B at {PLAN_PROBE_CTX} positions of a {kvd}-wide row)")
 }
 

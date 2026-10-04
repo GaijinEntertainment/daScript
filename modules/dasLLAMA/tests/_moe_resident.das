@@ -49,14 +49,7 @@ struct MoeFixture {
 //! two-window step 4 sits on a router near-tie that any change of the device's summation order flips (0.04 under one order,
 //! 0.155-0.16 under two others); the one-step-off control reads 0.42-0.95, so the bar discriminates it by 2x and more
 let MOE_LOGIT_BAR_REL = 0.20
-let PF_WINDOW_ROWS = 512l  //! the engine's PF_WINDOW, asserted equal by the two-window cell: a prompt past it runs as sequential windows
 let FED_STEPS = 6l
-
-def assert_pf_window(t : T?) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        t |> equal(PF_WINDOW, PF_WINDOW_ROWS, "the prompt is sized past the engine's own window")
-    }
-}
 
 //! the token command's attention split count (0 without the module or the driver)
 def private attn_nsplit : int64 {

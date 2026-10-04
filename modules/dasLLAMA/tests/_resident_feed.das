@@ -27,6 +27,15 @@ def tile_arm_tag() : string {
     }
 }
 
+let PF_WINDOW_ROWS = 512l   //! the engine's PF_WINDOW, asserted equal by the two-window cells: a prompt past it runs as sequential windows
+
+//! the engine's prefill window is `PF_WINDOW_ROWS`, where the vulkan module exists: a cell sizing its prompt past the window holds it
+def assert_pf_window(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        t |> equal(PF_WINDOW, PF_WINDOW_ROWS, "the prompt is sized past the engine's own window")
+    }
+}
+
 //! `n` ramp ids `base + ((i + salt) * stride) % span`: a prompt or a fed run no tokenizer is needed for
 def ramp_ids(n, salt, base, stride, span : int64) : array<int64> => <- [for (i in range64(n)); base + ((i + salt) * stride) % span]
 
