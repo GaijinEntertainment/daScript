@@ -7349,8 +7349,8 @@ class template Q8Cm2T : KqCm2BatchT {
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkQ8Blk; bc, cib : uint2) : float16 {
-        let q = unpack8(blk.qs[int((cib.y & 30u) >> 1u)])[int(cib.y & 1u)]
-        return ws[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(int(q)))
+        let q = int(uint(int(blk.qs[int((cib.y & 30u) >> 1u)])) << (24u - (cib.y & 1u) * 8u)) >> 24
+        return ws[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(q))
     }
 
     def override khr_stage16(blk, e0, sbase : uint) : void {
@@ -7405,8 +7405,7 @@ class template K4Cm2T : KqCm2BatchT {
         let g = cib.y >> 5u
         let e = cib.y & 31u
         let bidx = g * 16u + (e & 15u)
-        let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
-        let q = (by >> ((e >> 4u) * 4u)) & 0xFu
+        let q = (uint(int(blk.qs[int(bidx >> 1u)])) >> ((bidx & 1u) * 8u + (e >> 4u) * 4u)) & 0xFu
         let sc_pair = sc_cache[g * SC_STRIDE + (bc.x - wg_m0)]
         static_if (IQLUT) {
             return float16(sc_pair.x * float(iq4lut[int(q)]))
@@ -7579,7 +7578,7 @@ class template K5Cm2T : KqCm2BatchT {
         let l0 = uint(int(blk.qs[li])) & 0xFFFFu
         let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
         let hidx = g * 4u + (j >> 2u)
-        let hby = uint(int(unpack8(blk.qh[int(hidx >> 1u)])[int(hidx & 1u)])) & 0xFFu
+        let hby = ((uint(int(blk.qh[int(hidx >> 1u)])) & 0xFFFFu) >> ((hidx & 1u) * 8u)) & 0xFFu
         let sh = (e >> 4u) * 4u
         let hb = hby >> sh
         let q0 = ((l0 >> sh) & 0xFu) | ((hb & 1u) << 4u)
@@ -7622,9 +7621,8 @@ class template Q40Cm2T : KqCm2BatchT {
         let g = cib.y >> 5u
         let e = cib.y & 31u
         let bidx = g * 16u + (e & 15u)
-        let by = uint(int(unpack8(blk.qs[int(bidx >> 1u)])[int(bidx & 1u)])) & 0xFFu
-        let q = (by >> ((e >> 4u) * 4u)) & 0xFu
-        let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
+        let q = (uint(int(blk.qs[int(bidx >> 1u)])) >> ((bidx & 1u) * 8u + (e >> 4u) * 4u)) & 0xFu
+        let srow =(wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let dp = unpackHalf2x16(ws[srow + (g >> 1u)])
         let d = (g & 1u) == 0u ? dp.x : dp.y
         static_if (IQLUT) {
@@ -7875,8 +7873,8 @@ class template K3Cm2T : KqCm2BatchT {
         let g = e >> 5u
         let l = e & 31u
         let qi = (g >> 2u) * 32u + l
-        let qby = uint(int(unpack8(blk.qs[int(qi >> 1u)])[int(qi & 1u)])) & 0xFFu
-        let hby = uint(int(unpack8(blk.hm[int(l >> 1u)])[int(l & 1u)])) & 0xFFu
+        let qby = ((uint(int(blk.qs[int(qi >> 1u)])) & 0xFFFFu) >> ((qi & 1u) * 8u)) & 0xFFu
+        let hby = ((uint(int(blk.hm[int(l >> 1u)])) & 0xFFFFu) >> ((l & 1u) * 8u)) & 0xFFu
         let q3 = int((qby >> ((g & 3u) * 2u)) & 3u) - (((hby >> g) & 1u) == 0u ? 4 : 0)
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let sidx = e >> 4u
@@ -7939,7 +7937,7 @@ class template K2Cm2T : KqCm2BatchT {
         let g = e >> 4u
         let l = e & 15u
         let qi = (g >> 3u) * 32u + (g & 1u) * 16u + l
-        let qby = uint(int(unpack8(blk.qs[int(qi >> 1u)])[int(qi & 1u)])) & 0xFFu
+        let qby = ((uint(int(blk.qs[int(qi >> 1u)])) & 0xFFFFu) >> ((qi & 1u) * 8u)) & 0xFFu
         let q = (qby >> (((g >> 1u) & 3u) * 2u)) & 3u
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let dm = unpackHalf2x16(ws[srow])
