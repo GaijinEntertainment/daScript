@@ -32,15 +32,6 @@ def private run_ids(tr : Model; var s : Session; plen, ngen : int64; var ids : a
     }
 }
 
-def private same_ids(a, b : array<int64>; a0, n : int) : bool {
-    for (i in range(n)) {
-        if (a[a0 + i] != b[i]) {
-            return false
-        }
-    }
-    return true
-}
-
 struct private SwapResult {
     armed0 : bool       // the resident driver armed at load (false = skip the rest, no device)
     dropped_off : bool  // moe_gpu_drop_model_ deactivated it
@@ -83,7 +74,7 @@ def private slot_swap_cycle(path : string) : SwapResult {
                 forward(tr, sa, best, pos)
                 pos++
             }
-            r.a_par = same_ids(ctrl, a1, 0, 16) && same_ids(ctrl, a2, 16, 16)
+            r.a_par = ids_equal(copy_span(ctrl, 0, 16), a1) && ids_equal(copy_span(ctrl, 16, 16), a2)
             // B: re-arm (the switch-in path) + a fresh trajectory
             let t0 = ref_time_ticks()
             set_gpu_tier_want_(want)
@@ -94,14 +85,14 @@ def private slot_swap_cycle(path : string) : SwapResult {
             var sb = make_run_state(tr.config)
             var b : array<int64>
             run_ids(tr, sb, plen, 32l, b)
-            r.b_par = same_ids(ctrl, b, 0, 32)
+            r.b_par = ids_equal(copy_span(ctrl, 0, 32), b)
             // D: a second full drop/re-arm cycle (registry regrowth smoke)
             moe_gpu_drop_model_()
             moe_gpu_upload_resident(tr)
             var sd = make_run_state(tr.config)
             var d : array<int64>
             run_ids(tr, sd, plen, 32l, d)
-            r.d_par = same_ids(ctrl, d, 0, 32) && moe_gpu_resident_active()
+            r.d_par = ids_equal(copy_span(ctrl, 0, 32), d) && moe_gpu_resident_active()
             delete sc
             delete sa
             delete sb
