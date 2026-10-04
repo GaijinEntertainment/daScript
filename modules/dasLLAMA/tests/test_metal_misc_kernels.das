@@ -18,7 +18,6 @@ require ?das_metal _mtl_toy               // the [metal_dispatch] multi-kernel f
 require ?das_metal dasllama/dasllama_metal_lens   // the requires= tripwire observer: captured, set, restored
 require daslib/f16_cvt              // f32_to_f16 — packing the synthetic scale planes
 require math
-require daslib/fio                  // the lens tgmem gate's spawned compiles
 require strings
 require daslib/strings_boost
 
@@ -1848,22 +1847,7 @@ def test_metal_misc_kernels(t : T?) {
 // writes `src` into a per-tag temp directory and compiles it with this binary - the shared half
 // of every lens-refusal fixture, whose claim is the child's exit code plus its diagnostic text
 def private spawn_lens_compile(tag, src : string) : tuple<rc : int; out : string> {
-    let dir_r = create_temp_directory_result("dasllama_lens_{tag}")
-    if (!(dir_r is value)) {
-        return (rc = -1, out = "temp dir failed")
-    }
-    let dir = unsafe(dir_r.value)
-    let path = path_join(dir, "prog.das")
-    if (!fwrite(path, src)) {
-        rmdir_rec_result(dir)
-        return (rc = -1, out = "fwrite failed")
-    }
-    let argv <- get_command_line_arguments()
-    let self = find(to_generic_path(argv[0]), "/") < 0 ? argv[0] : get_full_file_name(normalize(argv[0]))
-    var out : string
-    let rc = run_and_capture([self, "-compile-only", path], out, 120.0)
-    rmdir_rec_result(dir)
-    return (rc = rc, out = out)
+    return spawn_compile_only(src, "lens_{tag}", 120.0)
 }
 
 //! the require preamble every lens fixture opens with

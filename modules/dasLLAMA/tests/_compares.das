@@ -14,6 +14,8 @@ require daslib/algorithm   // fill
 require daslib/math_bits   // uint_bits_to_float: the NaN sentinel as a float
 require dastest/testing_boost   // T?: check asserts through the cell's handle
 require dasllama/dasllama_math   // parallel_argmax
+require daslib/fio
+require daslib/command_line
 
 let POISON = 7.5   //! the slots a kernel must never read or write: a large finite value, so a stray read lands in the sum
 let SLAB_GAP = 3   //! the poisoned slots `put_run` leaves before a run of a slab plane
@@ -548,4 +550,14 @@ def report_sweep(t : T?; name : string; r : Sweep; cases : int = 0; moved : bool
     if (moved) {
         t |> success(r.inert == 0, "{name}: {r.inert} elements the kernel left exactly where it found them")
     }
+}
+
+//! `src` written to `prog_<tag>.das` in the run's temp dir and compiled by a `-compile-only` daslang child within `timeout`
+//! seconds: the child's exit code and output (-1 where the file could not be written)
+def spawn_compile_only(src, tag : string; timeout : float) : tuple<rc : int; out : string> {
+    let path = path_join(test_temp_dir(), "prog_{tag}.das")
+    return (rc = -1, out = "fwrite failed") if (!fwrite(path, src))
+    var out : string
+    let rc = run_and_capture([get_das_exe(), "-compile-only", path], out, timeout)
+    return (rc = rc, out = out)
 }

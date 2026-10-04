@@ -7,6 +7,7 @@ require dasllama/dasllama_gemma4a
 require daslib/fio
 require daslib/strings_boost
 require strings
+require _compares
 
 // Model-free contract cells for two facade-boundary pieces the escape-hatched suite cannot see
 // from inside: the lint's ALLOWED set (a facade-only program with NO escape compiles), and
@@ -18,21 +19,7 @@ def fixture_source(requires : array<string>) : string {
 }
 
 def spawn_compile(requires : array<string>; tag : string) : tuple<rc : int; out : string> {
-    let dir_r = create_temp_directory_result("dasllama_lint_{tag}")
-    if (!(dir_r is value)) {
-        return (rc = -1, out = "temp dir failed")
-    }
-    let dir = unsafe(dir_r.value)
-    let path = path_join(dir, "prog.das")
-    if (!fwrite(path, fixture_source(requires))) {
-        return (rc = -1, out = "fwrite failed")
-    }
-    let argv <- get_command_line_arguments()
-    let self = find(to_generic_path(argv[0]), "/") < 0 ? argv[0] : get_full_file_name(normalize(argv[0]))
-    var out : string
-    let rc = run_and_capture([self, "-compile-only", path], out, 120.0)
-    rmdir_rec_result(dir)
-    return (rc = rc, out = out)
+    return spawn_compile_only(fixture_source(requires), "lint_{tag}", 120.0)
 }
 
 [test]

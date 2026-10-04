@@ -32,7 +32,6 @@ require ?vulkan daslib/shader_lingua_franca   // gl_GlobalInvocationID — the C
 require dasllama/dasllama_common   // MoeGate: the routing cells' select oracle takes the softmax router
 require dasllama/dasllama_arch_qwen35
 require ?vulkan dasllama/dasllama_moe   // moe_select_core: the host select the window's per-row top-k mirrors
-require daslib/fio   // the lens readonly gate's spawned compiles
 require daslib/strings_boost   // join: the spawned fixture's source
 require daslib/math_bits   // float_bits_to_uint / uint_bits_to_float: the NaN sentinel by bit pattern, the read-back planes as floats
 
@@ -678,22 +677,7 @@ def private spawn_readonly_fixture(ro : bool; tag : string) : tuple<rc : int; ou
         "def main() \{",
         "    print(\"ok\\n\")",
         "\}"], "\n")
-    let dir_r = create_temp_directory_result("dasllama_vk_lens_{tag}")
-    if (!(dir_r is value)) {
-        return (rc = -1, out = "temp dir failed")
-    }
-    let dir = unsafe(dir_r.value)
-    let path = path_join(dir, "prog.das")
-    if (!fwrite(path, src)) {
-        rmdir_rec_result(dir)
-        return (rc = -1, out = "fwrite failed")
-    }
-    let argv <- get_command_line_arguments()
-    let self = find(to_generic_path(argv[0]), "/") < 0 ? argv[0] : get_full_file_name(normalize(argv[0]))
-    var out : string
-    let rc = run_and_capture([self, "-compile-only", path], out, 180.0)
-    rmdir_rec_result(dir)
-    return (rc = rc, out = out)
+    return spawn_compile_only(src, "vk_lens_{tag}", 180.0)
 }
 
 [test]
