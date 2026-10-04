@@ -179,14 +179,27 @@ def private reject_round_ids(tr : Model; n_check : int64) : RejectRound {
 
 // Run the plain-vs-spec invariance pair on a loaded model and assert token-for-token equality
 // plus sane accept telemetry. `tag` distinguishes the arms in the report.
-def private invariance_ok(t : T?; tr : Model; prompt : array<int64>; n_gen : int; tag : string) {
+def private invariance_ok(t : T?; tr : Model; prompt : array<int64>; n_gen : int; tag : string) : array<int64> {
     let total = length(prompt) + n_gen
-    let ref_ids <- gen_plain(tr, prompt, total)
+    var ref_ids <- gen_plain(tr, prompt, total)
     var nd = 0l
     var na = 0l
     let spec_ids <- gen_spec(tr, prompt, total, nd, na)
     t |> success(ids_equal(ref_ids, spec_ids), "{tag}: spec decode token-for-token vs plain")
-    t |> success(nd > 0l, "{tag}: the draft head actually drafted ({nd} drafts)")
+    t |> success(nd > 0l, "{tag}: the draft head actually drafted ({nd} drafts, {nd - na} rejected on its own)")
+    return <- ref_ids
+}
+
+//! the same speculative decode with every third draft forced to reject: still `ref_ids` token for token, a third of its drafts
+//! or more rejected
+def private forced_invariance_ok(t : T?; tr : Model; prompt : array<int64>; n_gen : int; ref_ids : array<int64>; tag : string) {
+    set_mtp_force_reject_every(3l)
+    var nd = 0l
+    var na = 0l
+    let forced_ids <- gen_spec(tr, prompt, length(prompt) + n_gen, nd, na)
+    set_mtp_force_reject_every(0l)
+    t |> success(ids_equal(ref_ids, forced_ids), "{tag} forced: spec decode through the reject branch token-for-token vs plain")
+    t |> success(nd >= 3l && nd - na >= nd / 3l, "{tag} forced: {nd - na} of {nd} drafts rejected - reject branch covered")
 }
 
 [test]
@@ -502,22 +515,8 @@ def test_mtp_invariance_glm(t : T?) {
             // FOLLOW-UP: a margin-gated arm can cover prose — assert that any divergence sits below
             // the quantization noise floor; mtp_verify_logits already computes the margin.
             let code <- encode(tr, "def fibonacci(n):", true, false)
-            let total = length(code) + 40
-            var nd = 0l
-            var na = 0l
-            let ref_ids <- gen_plain(tr, code, total)
-            let spec_ids <- gen_spec(tr, code, total, nd, na)
-            t |> success(ids_equal(ref_ids, spec_ids), "code-glm: spec decode token-for-token vs plain")
-            t |> success(nd > 0l, "code-glm: the draft head actually drafted ({nd} drafts, {nd - na} rejected on its own)")
-            // the reject branch on demand: every third draft rejected, the stream still plain decode's
-            set_mtp_force_reject_every(3l)
-            var nd_forced = 0l
-            var na_forced = 0l
-            let forced_ids <- gen_spec(tr, code, total, nd_forced, na_forced)
-            set_mtp_force_reject_every(0l)
-            t |> success(ids_equal(ref_ids, forced_ids), "code-glm forced: spec decode through the reject branch token-for-token vs plain")
-            t |> success(nd_forced >= 3l && nd_forced - na_forced >= nd_forced / 3l,
-                         "code-glm forced: {nd_forced - na_forced} of {nd_forced} drafts rejected - reject branch covered")
+            let ref_ids <- invariance_ok(t, tr, code, 40, "code-glm")
+            forced_invariance_ok(t, tr, code, 40, ref_ids, "code-glm")
         }
         delete tr
     }
@@ -547,18 +546,8 @@ def test_mtp_invariance_flashnext(t : T?) {
         tr.config.seq_len = 2048l
         let count <- [16l, 11l, 220l, 17l, 11l, 220l, 18l, 11l, 220l, 19l, 11l, 220l, 20l, 11l, 220l, 21l, 11l, 220l, 22l, 11l]
         with_pinned_kernels() {
-            t |> invariance_ok(tr, count, 40, "counting-flashnext")
-            // the reject branch on demand: the n-gram window and the recurrent state both roll back past a rejected draft
-            let total = length(count) + 40
-            let ref_ids <- gen_plain(tr, count, total)
-            set_mtp_force_reject_every(3l)
-            var nd_forced = 0l
-            var na_forced = 0l
-            let forced_ids <- gen_spec(tr, count, total, nd_forced, na_forced)
-            set_mtp_force_reject_every(0l)
-            t |> success(ids_equal(ref_ids, forced_ids), "counting-flashnext forced: spec decode through the reject branch token-for-token vs plain")
-            t |> success(nd_forced >= 3l && nd_forced - na_forced >= nd_forced / 3l,
-                         "counting-flashnext forced: {nd_forced - na_forced} of {nd_forced} drafts rejected - reject branch covered")
+            let ref_ids <- invariance_ok(t, tr, count, 40, "counting-flashnext")
+            forced_invariance_ok(t, tr, count, 40, ref_ids, "counting-flashnext")
         }
         delete tr
     }
