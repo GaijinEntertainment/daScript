@@ -187,6 +187,18 @@ def eval_embd(model : Model; var session : Session; embd : array<float>; npos : 
     eval_embd_(model, session, embd, npos, non_causal)
 }
 
+def eval_embd_body(model : Model; var session : Session; embd : array<float>; npos, span_lo, span_hi : int64; grid : int2) {
+    //! Prefill ``npos`` rows built by ``media_body_rows``: [span_lo, span_hi) a non-causal span (empty = every row
+    //! causal), roped on a merged image ``grid`` where one is given.
+    eval_embd_body_(model, session, embd, npos, span_lo, span_hi, grid)
+}
+
+def media_body_rows(model : Model; head : array<int64>; rows : array<float>; n_media, src_w : int64;
+                    tail : array<int64>; var embd : array<float>) {
+    //! One prefill body's rows: ``head`` text, ``n_media`` media rows of width ``src_w``, ``tail`` text.
+    media_body_rows_(model, head, rows, n_media, src_w, tail, embd)
+}
+
 def eval_embd_span(model : Model; var session : Session; embd : array<float>; npos, span_lo, span_hi : int64) {
     //! ``eval_embd`` for a prompt carrying one NON-CAUSAL image span: rows ``[span_lo, span_hi)``
     //! prefill with every query attending the whole span, the text around them causally — the

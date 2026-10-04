@@ -1688,25 +1688,11 @@ def respond_(m : Model; var c : ChatSession; params : SamplingParams;
 def private assemble_media_embd(m : Model; c : ChatSession; head, tail : array<int64>;
                                 is_image : bool; var embd : array<float>) {
     let dim = m.config.dim
-    let rw = dim * (1l + m.config.n_deepstack)
-    let n_head = long_length(head)
-    let n_media = is_image ? c.n_image_rows : c.n_audio_rows
-    let npos = n_head + n_media + long_length(tail)
-    embd |> ensure_capacity(npos * rw)
-    embd |> resize(npos * rw)
-    embed_text_rows_strided(m, head, embd, 0l, rw)
-    if (is_image) {   // the embedder's rows match rw (the create_chat pair check)
-        for (i in range64(n_media * rw)) {
-            embd[n_head * rw + i] = c.image_rows[i]
-        }
+    if (is_image) {   // the embedder's rows match the decoder's stride (the create_chat pair check)
+        media_body_rows_(m, head, c.image_rows, c.n_image_rows, dim * (1l + m.config.n_deepstack), tail, embd)
     } else {
-        for (r in range64(n_media)) {
-            for (i in range64(dim)) {
-                embd[(n_head + r) * rw + i] = c.audio_rows[r * dim + i]
-            }
-        }
+        media_body_rows_(m, head, c.audio_rows, c.n_audio_rows, dim, tail, embd)
     }
-    embed_text_rows_strided(m, tail, embd, n_head + n_media, rw)
 }
 
 //! One generated token of a respond: false ends the turn - the template's own stop, or a

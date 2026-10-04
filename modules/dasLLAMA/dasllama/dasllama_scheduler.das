@@ -183,6 +183,8 @@ struct Scheduler {
     batch_idx : array<int64>                // batch row -> streams index
     mtp_acc : array<int64>                  // the joint speculative tick's answer per batch row: the accepted draft, or -1
     chunk : array<int64>                    // the current prefill chunk
+    chunk_tail : array<int64>               // a media body's text past its span
+    body : array<float>                     // a media body's rows
     donate_toks : array<int64>              // reap-time scratch: tail eval + the insert token list
     // counters (/v1/stats and server_bench read these)
     n_admitted : int64
@@ -196,6 +198,7 @@ struct Scheduler {
     cached_tokens : int64                   // prefix-cache hits (tokens attached instead of prefilled)
     recent_done : array<DoneStream>         // finished-stream linger for the poll surface (~10 s)
     prefill_tokens : int64                  // prompt tokens actually computed (cache hits excluded)
+    prefill_evals : int64                   // prefill calls those tokens took
     ttft_sum_us : int64                     // Σ ttft over reaped streams that produced a token
     ttft_count : int64
     last_ttft_us : int64                    // most recently reaped stream's ttft
@@ -655,7 +658,9 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         // a media span takes the whole quantum: its rows eval as ONE body, because the mask (gemma vision's
         // non-causal span) is per-call and a chunk boundary would split it. Text chunks normally up to the next span.
         let si = next_span(sch.streams[i].spans)
-        if (si >= 0 && sch.streams[i].n_prefilled >= sch.streams[i].spans[si].at) {
+        if (si >= 0 && prefill_media_body(m, sch, sch.streams[i], si)) {
+            pass
+        } elif (si >= 0 && sch.streams[i].n_prefilled >= sch.streams[i].spans[si].at) {
             let sn = sch.streams[i].spans[si].n
             if (sch.streams[i].spans[si].grid.x > 0) {   // qwen mrope: grid angles + the session-tracked position delta
                 eval_embd_span_mrope(m, sch.streams[i].session, sch.streams[i].spans[si].rows, sn, 0l, sn,
@@ -666,6 +671,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             sch.streams[i].spans[si].done = true
             sch.streams[i].n_prefilled += sn
             sch.prefill_tokens += sn
+            sch.prefill_evals ++
         } else {
             let head_end = si >= 0 ? sch.streams[i].spans[si].at : np
             let chunk = prefill_chunk(m, sch, head_end)
@@ -679,6 +685,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             eval(m, sch.streams[i].session, sch.chunk)
             sch.streams[i].n_prefilled += take
             sch.prefill_tokens += take
+            sch.prefill_evals ++
             if (sch.streams[i].n_prefilled == sch.streams[i].ckpt_at) {
                 prefix_insert(sch.prefix, sch.pool, sch.streams[i].session, sch.streams[i].prompt)
                 to_log(LOG_INFO, "[stream {sch.streams[i].id}] prefix checkpoint at {sch.streams[i].ckpt_at} tok: the next prompt on this opening attaches here\n")
@@ -729,6 +736,39 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         }
     }
     return !empty(sch.streams) || !empty(sch.queue)
+}
+
+//! One eval for span `si` and the text around it, up to a chunk of text: a prefill call's cost is mostly fixed, so
+//! the text either side of a span rides the span's call. False where the body is not one eval - a gemma-4
+//! E-series text row takes its own token's per-layer input, a recurrent checkpoint ends a chunk, the span stands bare.
+def private prefill_media_body(m : Model; var sch : Scheduler; var st : Stream; si : int) : bool {
+    return false if (has_ple(m.config))
+    let lo = st.n_prefilled
+    let at = st.spans[si].at
+    let sn = st.spans[si].n
+    let head = at - lo
+    let room = prefill_chunk(m, sch, at)
+    return false if (head > room)
+    let stop = si + 1 < length(st.spans) ? st.spans[si + 1].at : long_length(st.prompt)
+    let hi = min(stop, at + sn + room - head)
+    return false if (hi - lo == sn || (st.ckpt_at > lo && st.ckpt_at <= hi))
+    sch.chunk |> resize(head)
+    for (k in range64(head)) {
+        sch.chunk[k] = st.prompt[lo + k]
+    }
+    let ntail = hi - at - sn
+    sch.chunk_tail |> resize(ntail)
+    for (k in range64(ntail)) {
+        sch.chunk_tail[k] = st.prompt[at + sn + k]
+    }
+    media_body_rows(m, sch.chunk, st.spans[si].rows, sn, long_length(st.spans[si].rows) / sn, sch.chunk_tail, sch.body)
+    let masked = st.spans[si].non_causal || st.spans[si].grid.x > 0
+    eval_embd_body(m, st.session, sch.body, hi - lo, masked ? head : 0l, masked ? head + sn : 0l, st.spans[si].grid)
+    st.spans[si].done = true
+    st.n_prefilled = hi
+    sch.prefill_tokens += hi - lo
+    sch.prefill_evals ++
+    return true
 }
 
 //! the first span whose K/V does not stand yet; -1 when every span's does

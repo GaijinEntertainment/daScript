@@ -328,13 +328,7 @@ def generate_embd_(t : Model; var s : Session; embd : array<float>; npos : int64
                    blk : block<(id : int64; piece : string) : bool>) : int64 {
     s.recent |> clear()
     let t_pre = ref_time_ticks()
-    if (span_hi > span_lo && grid.x > 0) {
-        eval_embd_span_mrope_(t, s, embd, npos, span_lo, span_hi, int64(grid.x), int64(grid.y))
-    } elif (span_hi > span_lo) {
-        eval_embd_span_(t, s, embd, npos, span_lo, span_hi)
-    } else {
-        eval_embd_(t, s, embd, npos)
-    }
+    eval_embd_body_(t, s, embd, npos, span_lo, span_hi, grid)
     s.stat_prefill_us = int64(get_time_usec(t_pre))
     s.stat_n_prefill = npos
     var one : array<int64>

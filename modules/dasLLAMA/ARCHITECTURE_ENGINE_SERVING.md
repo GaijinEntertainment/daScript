@@ -20,7 +20,11 @@ anchor.
   inside it a doubling moves and fills nothing, where a moved blob is a copy of every cached page inside one
   request's first token. A prompt is one position stream: a media
   span's rows stand in it as ids of the media's content (`media_position_id`), so the prefix cache matches,
-  attaches and donates across an image or a clip as across text. A span evals as one body and attaches
+  attaches and donates across an image or a clip as across text. A span evals as one body, and up to
+  a chunk of the text either side of it rides that body (`prefill_media_body`) - a prefill call's cost is mostly
+  fixed, so a turn's opening, its media and its closing text are one call where three would each pay the floor; a
+  gemma-4 E-series span stands in a body of its own, its text rows taking their own tokens' per-layer input.
+  A span attaches
   whole - a hit ending inside one counts as no hit - and a hit past a grid-roped span restores the span's
   rope advance on the session. A request may leave a span's rows out where it counts on the cache to hold
   the span (`prefix_match_len` is the probe for that); if the cache has lost it by admission the stream

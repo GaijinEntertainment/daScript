@@ -910,10 +910,38 @@ def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model loa
                 var got <- toks_of(events, 1l)
                 t |> success(ids_equal(got, base.toks), "arm {arm}: media stream == the all-token stream")
                 t |> equal(finished_of(events, 1l).n_prompt, np)   // usage counts the rows as positions
+                t |> equal(sch.prefill_evals, 1l, "arm {arm}: the span and the text around it are one prefill call")
                 delete got
                 delete events
                 delete sch
             }
+            // a chunk of text is all a span's call carries: the head rides it, the tail past the chunk evals on its own
+            var sch_cut <- create_scheduler(m, 1l, 4l, 8l, idle_chunk_tokens = 0l)
+            var events_cut : array<SchedEvent>
+            var req_cut <- media_req(m, 2l, prompt, 4l, 10l, false, greedy, 6l)
+            t |> success(submit(m, sch_cut, req_cut), "chunk-bounded media stream queued")
+            drain(m, sch_cut, events_cut)
+            var got_cut <- toks_of(events_cut, 2l)
+            t |> success(ids_equal(got_cut, base.toks), "a body cut at the chunk == the all-token stream")
+            t |> equal(sch_cut.prefill_evals, 1l + (np - 14l + 7l) / 8l, "the body takes the head, the span and four tail tokens; the rest goes a chunk a call")
+            delete got_cut
+            delete events_cut
+            delete sch_cut
+            // a non-causal span with text either side is generate_embd's span form in one call
+            var mid_ref <- embd_span_generate(m, prompt, 4l, 10l, SamplingParams(temp = 0.8, top_k = 40l), 8l, SPAN_SEED)
+            var sch_mid <- create_scheduler(m, 1l, 4l, 64l)
+            var events_mid : array<SchedEvent>
+            var req_mid <- media_req(m, 3l, prompt, 4l, 10l, true, SamplingParams(temp = 0.8, top_k = 40l), 8l)
+            req_mid.seed = SPAN_SEED
+            t |> success(submit(m, sch_mid, req_mid), "non-causal mid-prompt media stream queued")
+            drain(m, sch_mid, events_mid)
+            var got_mid <- toks_of(events_mid, 3l)
+            t |> success(ids_equal(got_mid, mid_ref), "a non-causal span between text == generate_embd's span form")
+            t |> equal(sch_mid.prefill_evals, 1l)
+            delete got_mid
+            delete events_mid
+            delete sch_mid
+            delete mid_ref
             // the non-causal flag reaches the kernel THROUGH the scheduler: with it set the arm must
             // match generate_embd's span form, not the causal one. The span is [1, np) — everything
             // past BOS — and the streams are sampled under one seed: the span moves the prompt's
