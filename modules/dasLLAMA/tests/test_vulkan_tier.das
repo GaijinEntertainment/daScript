@@ -156,59 +156,34 @@ def private ref_ffn(offs1, offs3, offs2 : array<int64>; bases : Bases; nreg : in
                     wq1 : array<int8>; ws1 : array<float>; wq3 : array<int8>; ws3 : array<float>;
                     wq2 : array<int8>; ws2 : array<float>;
                     xq : array<int8>; xs : array<float>; nrows : int64; var gout : array<float>) {
-    gout |> resize(nrows * N)
-    let nb = int(N / 32l)
-    let nbh = int(NFE / 32l)
-    let nn = int(N)
-    let nfe = int(NFE)
-    var gate : array<float>
-    var up : array<float>
-    var h : array<float>
-    gate |> resize(NFE)
-    up |> resize(NFE)
-    h |> resize(NFE)
+    var w1, w3, w2, x : array<float>
+    dequant_q8_rows(wq1, ws1, long_length(wq1) / N, N, w1)
+    dequant_q8_rows(wq3, ws3, long_length(wq3) / N, N, w3)
+    dequant_q8_rows(wq2, ws2, long_length(wq2) / NFE, NFE, w2)
+    dequant_q8_rows(xq, xs, nrows, N, x)
+    ffn_regions_ref(offs1, offs3, offs2, bases, nreg, w1, w3, w2, x, int(N), int(NFE), gout) $(var h) {
+        q8_round_deq(h, false)
+    }
+    delete w1
+    delete w3
+    delete w2
+    delete x
+}
+
+//! `ffn_expert_ref` over each of `nreg` regions' rows of the dequantized feed `x` into `gout` (`nrows` of `n`, sized here): a
+//! region's expert row is its offset past its stack's base in `bases`, `round_h` the hidden row's rounding
+def private ffn_regions_ref(offs1, offs3, offs2 : array<int64>; bases : Bases; nreg : int; w1, w3, w2, x : array<float>; n, nfe : int;
+                            var gout : array<float>; round_h : block<(var h : array<float>) : void>) {
+    gout |> resize(length(x))
     for (r in range(nreg)) {
-        let rb1 = int((offs1[r * 3] - bases.gate) / N)      // first gate-plane row of this region's expert
-        let rb3 = int((offs3[r * 3] - bases.up) / N)
-        let rb2 = int((offs2[r * 3] - bases.down) / NFE)
         let row0 = int(offs1[r * 3 + 1])
         let cnt = int(offs1[r * 3 + 2])
-        for (rw in range(row0, row0 + cnt)) {
-            for (i in range(nfe)) {
-                var ag = 0.0
-                var au = 0.0
-                for (b in range(nb)) {
-                    var dg = 0
-                    var du = 0
-                    for (j in range(32)) {
-                        let xv = int(xq[rw * int(N) + b * 32 + j])
-                        dg += int(wq1[(rb1 + i) * int(N) + b * 32 + j]) * xv
-                        du += int(wq3[(rb3 + i) * int(N) + b * 32 + j]) * xv
-                    }
-                    let xscl = xs[rw * nb + b]
-                    ag += float(dg) * ws1[(rb1 + i) * nb + b] * xscl
-                    au += float(du) * ws3[(rb3 + i) * nb + b] * xscl
-                }
-                gate[i] = ag
-                up[i] = au
-            }
-            for (i in range(nfe)) {
-                h[i] = silu_f32(gate[i]) * up[i]
-            }
-            var hr <- q8_roundtrip(h, NFE, false)
-            for (o in range(nn)) {
-                var y = 0.0
-                for (b in range(nbh)) {
-                    var dd = 0
-                    for (j in range(32)) {
-                        dd += int(wq2[(rb2 + o) * int(NFE) + b * 32 + j]) * int(hr.xq[b * 32 + j])
-                    }
-                    y += float(dd) * ws2[(rb2 + o) * nbh + b] * hr.xs[b]
-                }
-                gout[rw * int(N) + o] = y
-            }
-            delete hr
+        var y <- ffn_expert_ref(w1, w3, w2, copy_span(x, row0 * n, cnt * n), cnt, n, nfe, int((offs1[r * 3] - bases.gate) / int64(n)),
+            int((offs3[r * 3] - bases.up) / int64(n)), int((offs2[r * 3] - bases.down) / int64(nfe)), round_h)
+        for (i in range(cnt * n)) {
+            gout[row0 * n + i] = y[i]
         }
+        delete y
     }
 }
 
@@ -516,72 +491,20 @@ def private ref_deq_gemm(w : array<float>; xq : array<auto(QT)>; xs : array<floa
 }
 
 // the CPU reference of the kq FFN contract: dequantized weights against the Q8_K activation
-// image (per-256 scales), silu, per-256 Q8_K requant, dequantized-down GEMM — double
+// image (per-256 scales), silu, the hidden row's requant, dequantized-down GEMM — double
 // accumulation, judged by the same relative-tolerance bar as the q8 arms
-// midblk = the INTERMEDIATE's requant block: 256 when down is a K-quant, 32 when down is q8.
+// midblk = the INTERMEDIATE's requant block: 256 (Q8_K) when down is a K-quant, 32 (Q8_0) when down is q8.
 // The gate/up dots always ride the kq 256-block activation image; only the h -> down hop changes.
-// Each region's expert row is its offset past its stack's base in `bases`.
 def private ref_ffn_kq(offs1, offs3, offs2 : array<int64>; bases : Bases; nreg : int;
                        w1, w3, w2 : array<float>;
                        xq : array<int8>; xs : array<float>; nrows : int64; var gout : array<float>;
                        midblk : int = 256) {
-    let kn = int(KN)
-    let knfe = int(KNFE)
-    // a midblk that does not divide KNFE would silently drop h's tail and produce a WRONG
-    // baseline — masking a real kernel failure. verify, not assert: this must hold in release too
-    verify(knfe % midblk == 0, "ref_ffn_kq: midblk must divide KNFE")
-    gout |> resize(nrows * KN)
-    let nsb = int(KN / 256l)
-    let nsbh = knfe / midblk
-    var gate : array<float>
-    var up : array<float>
-    var h : array<float>
-    gate |> resize(KNFE)
-    up |> resize(KNFE)
-    h |> resize(KNFE)
-    for (r in range(nreg)) {
-        let rb1 = int((offs1[r * 3] - bases.gate) / KN)
-        let rb3 = int((offs3[r * 3] - bases.up) / KN)
-        let rb2 = int((offs2[r * 3] - bases.down) / KNFE)
-        let row0 = int(offs1[r * 3 + 1])
-        let cnt = int(offs1[r * 3 + 2])
-        for (rw in range(row0, row0 + cnt)) {
-            for (i in range(knfe)) {
-                var ag = 0.0lf
-                var au = 0.0lf
-                for (sb in range(nsb)) {
-                    var dg = 0.0lf
-                    var du = 0.0lf
-                    for (j in range(256)) {
-                        let xv = double(xq[rw * int(KN) + sb * 256 + j])
-                        dg += double(w1[(rb1 + i) * int(KN) + sb * 256 + j]) * xv
-                        du += double(w3[(rb3 + i) * int(KN) + sb * 256 + j]) * xv
-                    }
-                    let xscl = double(xs[rw * nsb + sb])
-                    ag += dg * xscl
-                    au += du * xscl
-                }
-                gate[i] = float(ag)
-                up[i] = float(au)
-            }
-            for (i in range(knfe)) {
-                h[i] = silu_f32(gate[i]) * up[i]
-            }
-            var hr <- q8_roundtrip(h, KNFE, midblk == 256)
-            for (o in range(kn)) {
-                var y = 0.0lf
-                for (sb in range(nsbh)) {
-                    var dd = 0.0lf
-                    for (j in range(midblk)) {
-                        dd += double(w2[(rb2 + o) * int(KNFE) + sb * midblk + j]) * double(hr.xq[sb * midblk + j])
-                    }
-                    y += dd * double(hr.xs[sb])
-                }
-                gout[rw * int(KN) + o] = float(y)
-            }
-            delete hr
-        }
+    verify(midblk == 256 || midblk == 32, "ref_ffn_kq: the hidden row requants in Q8_K (256) or Q8_0 (32)")
+    var x <- [for (i in range64(nrows * KN)); float(xq[i]) * xs[i / 256l]]
+    ffn_regions_ref(offs1, offs3, offs2, bases, nreg, w1, w3, w2, x, int(KN), int(KNFE), gout) $(var h) {
+        q8_round_deq(h, midblk == 256)
     }
+    delete x
 }
 
 [test]

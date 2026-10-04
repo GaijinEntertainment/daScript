@@ -1,6 +1,7 @@
 // The CPU references the Metal and the Vulkan kernel cells share - the engine's table rope by its pairing, the gated
-// activation, dense GEMM rows with their envelope, the Q8_0 requant block check, the attention cells' query rows, the MoE
-// route's padded-CSR prefix - with no device type and no backend require, so a build without either GPU module reads it.
+// activation, dense GEMM rows with their envelope, an expert's FFN rows, the Q8_0 requant block check, the attention cells'
+// query rows, the MoE route's padded-CSR prefix - with no device type and no backend require, so a build without either GPU
+// module reads it.
 
 options gen2
 options _dasllama_internal = true
@@ -10,6 +11,7 @@ module _kernel_oracles shared public
 require dasllama/dasllama_lint public
 require math
 require dasllama/dasllama_math   // rope_scaled_tab, rope_scaled_neox_tab, rope_scaled_neox_tab_part
+require dasllama/dasllama_gpu_math   // silu_f32: the expert FFN reference's gate
 
 //! The engine's table rope over `n` elements of `v` from `base`, heads `hs` wide, on the `tcos` / `tsin` rows: the partial
 //! form whenever `rot` names a prefix short of `hs`, else the NEOX or the interleaved pairing as `neox` names - the engine's
@@ -145,6 +147,38 @@ def strided_ref(ref : DenseRef; ndim, ys, nout : int; sentinel : float) : DenseR
             out.env[r * ys + j] = ref.env[r * ndim + j]
         }
     }
+    return <- out
+}
+
+//! `dense_ref_env` over `ndim` rows of the plane `w`, `kdim` wide, from row `r0`
+def private plane_rows_ref(w, x : array<float>; m, kdim, ndim, r0 : int) : DenseRef {
+    return <- dense_ref_env(m, kdim, ndim, x) $(j; var wrow) {
+        for (c in range(kdim)) {
+            wrow[c] = w[(r0 + j) * kdim + c]
+        }
+    }
+}
+
+//! One expert's FFN over `m` dequantized feed rows `x`, `n` wide: the gate and up rows of `w1` / `w3` from `r1` / `r3` (`nfe` of
+//! them), silu(gate) x up rounded in place by `round_h` row by row - the device's requant or half store - then the `n` down rows
+//! of `w2` from `r2`, `nfe` wide, every dot in double. The `m * n` outputs.
+def ffn_expert_ref(w1, w3, w2, x : array<float>; m, n, nfe, r1, r3, r2 : int; round_h : block<(var h : array<float>) : void>) : array<float> {
+    var g <- plane_rows_ref(w1, x, m, n, nfe, r1)
+    var u <- plane_rows_ref(w3, x, m, n, nfe, r3)
+    var h : array<float>
+    h |> reserve(m * nfe)
+    for (r in range(m)) {
+        var hr <- [for (i in range(nfe)); silu_f32(g.want[r * nfe + i]) * u.want[r * nfe + i]]
+        invoke(round_h, hr)
+        h |> push_from(hr)
+        delete hr
+    }
+    var y <- plane_rows_ref(w2, h, m, nfe, n, r2)
+    var out <- y.want
+    delete g
+    delete u
+    delete h
+    delete y
     return <- out
 }
 

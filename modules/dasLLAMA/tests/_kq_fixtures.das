@@ -207,6 +207,15 @@ def q8_roundtrip(src : array<float>; n : int64; k_form : bool) : Q8Round {
     return <- r
 }
 
+//! `h` replaced by its `q8_roundtrip` under `k_form`: the dequantized row a device requant hands the next GEMM
+def q8_round_deq(var h : array<float>; k_form : bool) {
+    var r <- q8_roundtrip(h, long_length(h), k_form)
+    for (i in range(length(h))) {
+        h[i] = r.deq[i]
+    }
+    delete r
+}
+
 //! the per-32 sums of `ntok` Q8_0 rows of `n` quants, times -128: the bias term a tile's unsigned-weight arm adds back
 def activation_bsums(xq : array<int8>; ntok, n : int64; var xbs : array<int>) {
     let nb = n / 32l

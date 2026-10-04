@@ -354,26 +354,19 @@ def private pair_cell(t : T?; f : Ffn; fmt : int; base : int64; tag : string; ne
 
 // the reference routed FFN over a host-selected slot list (the span's device router + top-k
 // picks) onto the residual row - ffn_ref over (idx, w) instead of the fixed pair
-//! one expert's FFN row over the feed `fd`: silu(w1 . fd) x (w3 . fd) through the engine's requant (Q8_K under `qk`, else Q8_0), then w2 over it
-def private expert_ffn_ref(w1, w3, w2, fd : array<float>; qk : bool) : array<float> {
-    var gg : array<float>
-    var u : array<float>
-    gemv_ref(w1, NFE, N, fd, gg)
-    gemv_ref(w3, NFE, N, fd, u)
-    var hrow <- [for (i in range64(NFE)); silu_f32(gg[i]) * u[i]]
-    let hr <- q8_roundtrip(hrow, NFE, qk)
-    var d : array<float>
-    gemv_ref(w2, N, NFE, hr.deq, d)
+//! expert `e`'s FFN row over the feed `fd`, its hidden row through the engine's requant (Q8_K under `qk`, else Q8_0)
+def private expert_ffn_ref(w1, w3, w2, fd : array<float>; e : int64; qk : bool) : array<float> {
+    var d <- ffn_expert_ref(w1, w3, w2, fd, 1, int(N), int(NFE), int(e * NFE), int(e * NFE), int(e * N)) $(var h) {
+        q8_round_deq(h, qk)
+    }
     return <- d
 }
 
 def private ffn_ref_sel(f : Ffn; fd : array<float>; idx : array<int64>; w : array<float>; var x1 : array<float>) {
-    let ege = NFE * N
     var acc : array<float>
     acc |> resize(N)
     for (j in range64(K)) {
-        let e = idx[j]
-        let d <- expert_ffn_ref(copy_span(f.w1, e * ege, ege), copy_span(f.w3, e * ege, ege), copy_span(f.w2, e * ege, ege), fd, true)
+        let d <- expert_ffn_ref(f.w1, f.w3, f.w2, fd, idx[j], true)
         for (i in range64(N)) {
             acc[i] += w[j] * d[i]
         }
@@ -520,7 +513,7 @@ def private span_layer_ref_sh(var q : Quad; f : Ffn; sh : Shexp; router : array<
     let fd <- feed_ref(x, f.norm, 1)
     let fd0 <- feed_ref(x, f.norm, 0)
     ffn_ref_sel(f, fd.deq, r.idx, r.w, x)
-    let d <- expert_ffn_ref(sh.w1, sh.w3, sh.w2, fd0.deq, false)
+    let d <- expert_ffn_ref(sh.w1, sh.w3, sh.w2, fd0.deq, 0l, false)
     for (i in range64(N)) {
         x[i] += g * d[i]
     }

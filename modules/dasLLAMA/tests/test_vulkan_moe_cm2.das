@@ -6,11 +6,11 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_math
-require dasllama/dasllama_gpu_math
 require daslib/algorithm
 require ?vulkan dasllama/dasllama_math_vulkan  // the MoE GPU tier under test; the test installs its hooks explicitly (no env gate)
 require _vk_kq_fixtures   // f16r: the CPU reference rounds where the device stages halves, on every lane
-require ?vulkan _compares   // read inside the vulkan cells only, so a lane without dasVulkan sees no use
+require _kernel_oracles   // ffn_expert_ref: the chain reference's expert rows
+require _compares   // copy_span: the chain reference's feed rows; the cells' compares
 require ?vulkan dasllama/dasllama_vulkan_common   // find_stack_idx: the fresh-base guard; a build with no Vulkan module skips the cells
 require ?vulkan dasllama/dasllama_env   // the split knob the streamed cells name in their tags
 
@@ -40,37 +40,21 @@ def private ref_chain(w1, w3, w2 : array<float>; x : array<float>; inv : array<u
     let knfe = int(nfe)
     out |> resize(npos * n)
     out |> fill(0.0)
-    var x16 : array<float>
-    x16 |> resize(npos * n)
-    for (i in range64(npos * n)) {
-        x16[i] = f16r(x[i])
-    }
-    var h16 : array<float>
-    h16 |> resize(nfe)
+    var x16 <- [for (v in x); f16r(v)]
     for (j in range64(npos * k)) {
-        let b = int(inv[j])
         let p = j / k
-        let e = expert_of_row[b]
-        for (o in range(knfe)) {
-            var g = 0.0lf
-            var u = 0.0lf
-            for (i in range(kn)) {
-                let xv = double(x16[p * n + int64(i)])
-                g += double(w1[(e * knfe + o) * kn + i]) * xv
-                u += double(w3[(e * knfe + o) * kn + i]) * xv
+        let e = expert_of_row[int(inv[j])]
+        var d <- ffn_expert_ref(w1, w3, w2, copy_span(x16, p * n, n), 1, kn, knfe, e * knfe, e * knfe, e * kn) $(var h) {
+            for (v in h) {
+                v = f16r(v)
             }
-            h16[o] = f16r(silu_f32(float(g)) * float(u))
         }
-        for (o2 in range(kn)) {
-            var d = 0.0lf
-            for (i in range(knfe)) {
-                d += double(w2[(e * kn + o2) * knfe + i]) * double(h16[i])
-            }
-            out[p * n + int64(o2)] += w[j] * float(d)
+        for (o in range(kn)) {
+            out[p * n + int64(o)] += w[j] * d[o]
         }
+        delete d
     }
     delete x16
-    delete h16
 }
 
 //! one_region = the shared expert's call shape: one region over every row, the identity slot map at unit weight
