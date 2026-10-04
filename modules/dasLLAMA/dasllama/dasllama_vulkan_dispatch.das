@@ -39,32 +39,14 @@ def private mk_gvar(at : LineInfo; nm : string) : ExpressionPtr {
     return new ExprVar(at = at, name := nm)
 }
 
-// a [spirv_kernel] method of a lensed class + its captured blob global name. `want` names the
-// method for multi-kernel classes; "" counts every kernel method and returns the first (the
-// single-kernel form's exactly-one check rides on nmatch)
-def private find_kernel_fn(st : StructurePtr; mod : Module?; want : string; var nmatch : int&; var blob : string&) : Function? {
-    var kfn : Function?
-    let wanted = empty(want) ? "" : "{st.name}`{want}"
-    mod |> for_each_function("") $(fn) {
-        if (!empty(fn.arguments) && fn.arguments[0]._type.structType == st) {
-            for (ann in fn.annotations) {
-                if (ann.annotation.name == "spirv_kernel") {
-                    if (empty(wanted)) {
-                        nmatch++
-                        if (kfn == null) {
-                            kfn = fn
-                            blob = find_arg(ann.arguments, "name") ?as tString ?? "{fn.name}`spirv"
-                        }
-                    } elif (fn.name == wanted) {
-                        nmatch++
-                        kfn = fn
-                        blob = find_arg(ann.arguments, "name") ?as tString ?? "{fn.name}`spirv"
-                    }
-                }
-            }
+//! the captured blob global of a [spirv_kernel] method: its `name =` argument, else `<method>`spirv`
+def private spirv_blob_of(kfn : Function?) : string {
+    for (ann in kfn.annotations) {
+        if (ann.annotation.name == "spirv_kernel") {
+            return find_arg(ann.arguments, "name") ?as tString ?? "{kfn.name}`spirv"
         }
     }
-    return kfn
+    return "{kfn.name}`spirv"
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-readonly-lens")]
@@ -290,8 +272,7 @@ class VkDispatch : AstStructureAnnotation {
 
         // the kernel method + derived access -> per-binding read/write masks
         var nmatch = 0
-        var blob = ""
-        let kfn = find_kernel_fn(st, compiling_module(), kern, nmatch, blob)
+        let kfn = find_kernel_fn(st, compiling_module(), "spirv_kernel", kern, nmatch)
         if (empty(kern)) {
             if (kfn == null || nmatch != 1) {
                 errors := "[vk_dispatch] {base}: expected exactly one [spirv_kernel] method on {st.name} (found {nmatch}) - multi-kernel classes pick per instance via kernel="
@@ -376,7 +357,7 @@ class VkDispatch : AstStructureAnnotation {
             var cp = new ExprCall(at = at, name := "vkd_class_pipe")
             cp.arguments |> emplace_new <| mk_gvar(at, gname)
             cp.arguments |> emplace_new <| new ExprConstInt(at = at, value = ord)
-            cp.arguments |> emplace_new <| mk_gvar(at, blob)
+            cp.arguments |> emplace_new <| mk_gvar(at, spirv_blob_of(kfn))
             cp.arguments |> emplace_new <| new ExprConstUInt(at = at, value = rmask)
             cp.arguments |> emplace_new <| new ExprConstUInt(at = at, value = wmask)
             cp.arguments |> emplace_new <| new ExprConstString(at = at, value := disp_name)
