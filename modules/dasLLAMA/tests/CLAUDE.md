@@ -241,8 +241,10 @@ twin-knob freeze and whisper's own wblob-ONLY poison that must CHANGE the GPU tr
 (both legs are whisper's alone; qwen3a carries neither; a twin-W route reads its GEMM weights
 from `wblob` alone, so zeroing that buffer alone poisons it, while a route that also reads the
 f32 plane, `fblob`, is poisoned only with both zeroed), the gemma4a Metal
-Conformer cell (f32-lane transcript equality CPU vs GPU + encode rel-l2 + counter deltas -
-the lane pin/reset discipline mirrors qwen3a's), the canary Metal FastConformer cell (the
+Conformer cells, E2B and E4B (f32-lane transcript equality CPU vs GPU + the soft tokens' rel-l2 +
+counter deltas, the projector tail run on the device - `out_ready` set on the device leg and clear
+on the CPU leg - and the two projector widths read off the file: the encoder's 1536 on both, the
+embedder's 1536 on E2B and 2560 on E4B; the lane pin/reset discipline mirrors qwen3a's), the canary Metal FastConformer cell (the
 same discipline over the rel-pos XL block loop; decoder = the q8_0 serving artifact), the
 parakeet Metal FastConformer cell (the same chain over parakeet's f32 blob, minted in memory;
 transcript equality CPU vs GPU + the encoder rows' rel-l2 + counter deltas - the subsample front

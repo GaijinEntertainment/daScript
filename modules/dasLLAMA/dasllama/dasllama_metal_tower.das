@@ -512,7 +512,7 @@ struct private G4aGpuCtx : TwGpuCtx {
 def private g4a_shape_ok(t : Gemma4aEncoder) : bool {
     let d = t.d_model
     return (!t.q8 && d % 64l == 0l && t.n_ff % 64l == 0l && t.n_head * t.d_head == d
-        && gemma4a_attn_past() <= 15l)
+        && gemma4a_attn_past() <= 15l && gemma4a_mid_dim(t) % 64l == 0l && t.proj_dim % 64l == 0l && gemma4a_mid_dim(t) <= int64(TW_ONES_DIM))
 }
 
 def private g4a_ctx_make(t : Gemma4aEncoder; npos : int64) : G4aGpuCtx {
@@ -556,6 +556,53 @@ def private g4a_ctx_release(var c : G4aGpuCtx) {
     pool_release(g_upool, c.u_in, 4ul)
     pool_release(g_upool, c.u_out, 4ul)
     tw_ctx_release(c)
+}
+
+//! the projector tail's device rows and uniforms: the encoder-width rows the out projection lands, the decoder-width soft tokens
+struct private G4aTail {
+    btmp : MetalBuffer?
+    bout : MetalBuffer?
+    u_mid : MetalBuffer?
+    u_proj : MetalBuffer?
+    u_totmid : MetalBuffer?
+    bytes_tmp : uint64
+    bytes_out : uint64
+}
+
+def private g4a_tail_make(t : Gemma4aEncoder; c : G4aGpuCtx) : G4aTail {
+    let mid = gemma4a_mid_dim(t)
+    let bytes_tmp = uint64(c.mp * mid * 4l)
+    let bytes_out = uint64(c.mp * t.proj_dim * 4l)
+    return G4aTail(bytes_tmp = bytes_tmp, bytes_out = bytes_out,
+        btmp = pool_acquire_pinned(g_tw_pool, g_dev, bytes_tmp), bout = pool_acquire_pinned(g_tw_pool, g_dev, bytes_out),
+        u_mid = uniform_u32(uint(mid)), u_proj = uniform_u32(uint(t.proj_dim)), u_totmid = uniform_u32(uint(c.npos * mid)))
+}
+
+//! The projector tail behind the blocks, in the blocks' command buffer: the out projection and its bias, the weightless
+//! norm, the audio embedder - the CPU tail's four steps at its widths.
+[arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
+def private g4a_tail_body(enc : MetalComputeEncoder?; t : Gemma4aEncoder; c : G4aGpuCtx; tl : G4aTail) {
+    let mid = gemma4a_mid_dim(t)
+    enc_f32_mm(enc, c.bblob, uint64(t.outproj_w * 4l), c.bx, tl.btmp, 0ul, c.u_d, tl.u_mid, c.mp, mid)
+    enc_add_bias_rows(enc, tl.btmp, 0ul, c.bblob, uint64(t.outproj_b * 4l), tl.u_mid, tl.u_totmid, c.npos * mid)
+    pf_enc_rms(enc, tl.btmp, 0ul, g_tw_ones, tl.btmp, tl.u_mid, c.u_eps, c.npos)
+    enc_f32_mm(enc, c.bblob, uint64(t.mmproj_w * 4l), tl.btmp, tl.bout, 0ul, tl.u_mid, tl.u_proj, c.mp, t.proj_dim)
+}
+
+//! the tail's soft tokens into `s.out` where the command buffer ran, the CPU tail told to stand down; the tail's buffers released
+def private g4a_tail_land(t : Gemma4aEncoder; c : G4aGpuCtx; var tl : G4aTail; ran : bool; var s : Gemma4aState) {
+    if (ran) {
+        ensure_length(s.out, c.npos * t.proj_dim)
+        unsafe {
+            memcpy(addr(s.out[0]), metal_buffer_contents(tl.bout), uint64(c.npos * t.proj_dim * 4l))
+        }
+        s.out_ready = true
+    }
+    pool_release(g_tw_pool, tl.btmp, tl.bytes_tmp)
+    pool_release(g_tw_pool, tl.bout, tl.bytes_out)
+    pool_release(g_upool, tl.u_mid, 4ul)
+    pool_release(g_upool, tl.u_proj, 4ul)
+    pool_release(g_upool, tl.u_totmid, 4ul)
 }
 
 //! The 12-block dispatch chain on an already-armed context - the blocks-only and whole-chunk drivers share it.
@@ -630,12 +677,15 @@ def private metal_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos 
     residency_flush()   // pin/commit before the first submission (the post-CPU-front slack)
     let d = t.d_model
     var c <- g4a_ctx_make(t, npos)
+    var tl <- g4a_tail_make(t, c)
     upload_rows_padded(c.bx, unsafe(addr(s.x[0])), npos, c.mp, d)
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
         g4a_blocks_body(enc, t, c)
+        g4a_tail_body(enc, t, c, tl)
     }
     let served = tw_readback(c, ran, s.x, d, t.n_layer)
+    g4a_tail_land(t, c, tl, ran, s)
     g4a_ctx_release(c)
     if (!served) {
         return tw_decline(MetalTowerDecline.gpu_error)
@@ -1161,6 +1211,7 @@ def private metal_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len 
     let kd1 = t.sub_ch0 * 9l
     let conv1_cout_pad = round_up(t.sub_ch1, 64l)
     var c <- g4a_ctx_make(t, npos)
+    var tl <- g4a_tail_make(t, c)
     let bytes_xw = uint64(mpd * n_fft * 4l)
     let bytes_tw = uint64(dft_out_pad * n_fft * 4l)
     let bytes_reim = uint64(mpd * dft_out_pad * 4l)
@@ -1232,7 +1283,9 @@ def private metal_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len 
         //! input projection: [npos x feat] -> [npos x d]
         enc_f32_mm(enc, c.bblob, uint64(t.inproj_w * 4l), c.bxb, c.bx, 0ul, u_feat, c.u_d, c.mp, d)
         g4a_blocks_body(enc, t, c)
+        g4a_tail_body(enc, t, c, tl)
     }
+    g4a_tail_land(t, c, tl, ran, s)
     var served = false
     if (ran) {
         ensure_length(s.x, npos * d)

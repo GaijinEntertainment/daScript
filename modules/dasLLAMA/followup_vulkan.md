@@ -2184,3 +2184,9 @@ module) is independent and can land any time - it is pure structure.
    `tq4_rotate_for_store` / `tq4_unrotate_from_store`, which the per-op rails call; the Metal sites need
    an Apple run. Each fold is behavior-neutral; the proof is `test_vulkan_kv_codec_kernels.das` with the
    codec stamps' SPIR-V diff for the first and the Metal decode parity arms `arm7b-tq4kv` for the second.
+139. **The gemma4a chain declines a widening audio embedder.** The Vulkan chain's projector tail sizes
+   one tail width for the out projection, the norm and the embedder (`tail_dim`), which holds where
+   the embedder is square (E2B). On E4B the embedder widens the encoder's 1536 to the decoder's 2560
+   (`gemma4a_mid_dim` against `proj_dim`), and the chain declines `shape`, so the CPU chain serves
+   E4B audio. Done = the tail's regions, tiles and buffers at the two widths (the Metal chain's
+   `g4a_tail_body` is the form), and `test_gemma4a_vulkan_twin` run on the E4B pair.

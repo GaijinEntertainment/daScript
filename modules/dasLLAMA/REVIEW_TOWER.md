@@ -83,6 +83,14 @@ call site skips when the hook serves.
 **A diff that makes a tower chain compute anything the CPU code its seat's hook replaces does not
 compute changes that CPU code the same way, in the same diff.**
 
+**A diff that adds or changes a family's chain in the Metal tower or in the Metal ASR-decoder
+driver (`dasllama/dasllama_metal_asr_dec.das`) leaves every stage of that family's served chain -
+the mel, the front, the blocks, the tail, the cross-KV and the decode step - on the device, for
+every model and every weight lane the family serves: a stage that runs on the CPU, and a decline
+other than the knob's, the device's or a failed command buffer's, is a defect - moved to the
+device in the same change, or filed in `followup_metal.md` with the stage and the model named.**
+A stage on the CPU behind a Metal chain reads as served and sets the whole chain's rate.
+
 **A diff that changes what a TTS seat's chain computes in a tower driver applies `REVIEW_TTS.md`
 too.**
 

@@ -2266,11 +2266,21 @@ def test_gemma4a_transcribe_q8_ab(t : T?) {
 
 [test]
 def test_gemma4a_tower_metal(t : T?) {
-    t |> run("gemma4a tower: the Metal Conformer block loop matches the CPU f32 rail on jfk") @(t : T?) {
+    g4a_tower_metal_cell(t, "E2B", "gemma-4-E2B-it-Q8_0.gguf", "mmproj-gemma-4-E2B-it-bf16.gguf", 1536l)
+}
+
+//! E4B's audio embedder widens the encoder's 1536 to the decoder's 2560, where E2B's is square
+[test]
+def test_gemma4a_tower_metal_e4b(t : T?) {
+    g4a_tower_metal_cell(t, "E4B", "gemma-4-E4B-it-Q8_0.gguf", "mmproj-gemma-4-E4B-it-BF16.gguf", 2560l)
+}
+
+def private g4a_tower_metal_cell(tst : T?; tag, dec_file, mmp_file : string; want_proj : int64) {
+    tst |> run("gemma4a tower {tag}: the Metal Conformer chain, the projector tail on the device, matches the CPU f32 rail on jfk") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             return if (!family_on(t, "gemma4a") || !arm_on(t, "mtower") || !jit_only(t))
-            let dec_path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
-            let mmp_path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
+            let dec_path = path_join(models_dir(), dec_file)
+            let mmp_path = path_join(models_dir(), mmp_file)
             if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
             var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
             if (empty(samples)) {
@@ -2290,6 +2300,9 @@ def test_gemma4a_tower_metal(t : T?) {
                 set_gemma4a_q8(false)
                 var inscope enc <- load_gemma4a_encoder(mmp_path)
                 t |> success(!enc.q8, "tower is on the f32 rail")
+                t |> equal(enc.proj_dim, want_proj, "the embedder projects to the decoder's width")
+                t |> equal(enc.proj_dim, dec.config.dim)
+                t |> equal(gemma4a_mid_dim(enc), 1536l, "the encoder's own output width")
                 nlayer = enc.n_layer
                 set_metal_tower(false)
                 var inscope s <- create_gemma4a_asr_session(dec)
@@ -2314,6 +2327,7 @@ def test_gemma4a_tower_metal(t : T?) {
                 gemma4a_log_mel(enc, samples, 0l, long_length(samples), stg)
                 gemma4a_encode(enc, stg)
                 enc_rel_l2 = rel_l2(stg.out, stc.out)
+                t |> success(stg.out_ready && !stc.out_ready, "the device leg ran the projector tail, the CPU leg its own")
                 reset_gemma4a_q8()
                 delete dec
             }

@@ -62,6 +62,13 @@ one. The device blob is 34/32 of the q8 planes and no image carries it; it drops
 epoch and the tower shutdown. The stem's first conv reads the f32 blob on both lanes - its
 3 x n_mel columns are not quantized.
 
+The gemma4a chain ends in the projector tail, in the blocks' command buffer: the out projection
+and its bias at the encoder's own output width (`gemma4a_mid_dim`, the length of the weightless
+norm's ones row), that norm, then the audio embedder to the decoder's width (`proj_dim`). The
+embedder is square on E2B (1536 by 1536) and widens on E4B (1536 to 2560), so the two widths are
+read apart off the file - the out projection's rows, the embedder's rows - and never assumed equal.
+The chain lands the soft tokens in `Gemma4aState.out` and says so (`out_ready`).
+
 The FastConformer chain (canary and parakeet share it: one context, one block body over the
 canary offsets record, parakeet's offsets mapped onto it with no GEMM biases and its tap-major
 depthwise stamp) runs the rel-pos (Transformer-XL) attention one head at a time on the f32 GEMM
