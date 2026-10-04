@@ -4625,46 +4625,32 @@ def private q8_gemv_gu_run(t; n, hid : int; gelu : bool) {
     let nb = n / 32
     let nblk_out = hid / 32
     let totblk = hid * nb
-    let wq_bytes = int64(totblk) * 32l
-    let ws_bytes = int64(totblk) * 2l
     var gqh, gsh, uqh, ush : array<uint>
     q8_plane(totblk, 1u, 71u, 1u, 3u, gqh, gsh)
     q8_plane(totblk, 3u, 5u, 7u, 11u, uqh, ush)
     var xqh <- hashed_words(nb * 8, 17u, 9u)
     var xsh <- row_fill(nb, 1, 0, 0.125, -0.25, 5)
-    let xq_bytes = int64(nb) * 32l
-    let xs_bytes = int64(nb) * 4l
-    let oq_bytes = int64(hid)
-    let os_bytes = int64(nblk_out) * 4l
-    let gqd = make_device_buf(wq_bytes)
-    let gsd = make_device_buf(ws_bytes)
-    let uqd = make_device_buf(wq_bytes)
-    let usd = make_device_buf(ws_bytes)
-    let xqd = make_device_buf(xq_bytes)
-    let xsd = make_device_buf(xs_bytes)
-    let oqd = make_device_buf(oq_bytes)
-    let osd = make_device_buf(os_bytes)
-    let host = make_host_buf(oq_bytes + os_bytes, true, [cached = true])
-    unsafe {
-        upload_region_at(gqd, 0l, addr<uint8 const?>(gqh[0]), wq_bytes)
-        upload_region_at(gsd, 0l, addr<uint8 const?>(gsh[0]), ws_bytes)
-        upload_region_at(uqd, 0l, addr<uint8 const?>(uqh[0]), wq_bytes)
-        upload_region_at(usd, 0l, addr<uint8 const?>(ush[0]), ws_bytes)
-        upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
-        upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[0]), xs_bytes)
-        nan_sentinel_upload(oqd, oq_bytes)
-        nan_sentinel_upload(osd, os_bytes)
-        var s_cls = set_q8_gemv_gu_n1_cls(fixed_array(gqd, gsd, uqd, usd, xqd, xsd, oqd, osd),
-            fixed_array(wq_bytes, ws_bytes, wq_bytes, ws_bytes, xq_bytes, xs_bytes, oq_bytes, os_bytes),
-            fixed_array(1u, 2u, 4u, 8u, 16u, 32u, 64u, 64u))
+    var oq : array<int8>
+    var os : array<float>
+    with_cell_planes() $(var cp : CellPlanes) {
+        let pg = cp |> in_plain(gqh)
+        let pgs = cp |> in_plain(gsh)
+        let pu = cp |> in_plain(uqh)
+        let pus = cp |> in_plain(ush)
+        let pxq = cp |> in_plain(xqh)
+        let pxs = cp |> in_(xsh)
+        let poq = cp |> out_words(int64(hid), NAN_SENTINEL_BITS)
+        let pos = cp |> out_(nblk_out)
+        var s_cls = cp |> cls_set(fixed_array(pg, pgs, pu, pus, pxq, pxs, poq, pos), @@set_q8_gemv_gu_n1_cls)
         var pc = GuNArgs(n = uint(n), d = uint(hid), gblk = 0u, ublk = 0u, act = gelu ? ACT_GELU : ACT_SILU, ncols = 1u)
-        cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-            enc_q8_gemv_gu_n1_cls(raw2, h2, s_cls, pc, int64(nblk_out))
-            cmd_copy_planes(raw2, h2, fixed_array(oqd, osd), host, fixed_array(oq_bytes, os_bytes), 64u)
+        cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+            enc_q8_gemv_gu_n1_cls(raw, h, s_cls, pc, int64(nblk_out))
         }
+        delete oq
+        oq <- cp |> plane_as(poq, type<int8>, hid)
+        delete os
+        os <- cp |> plane_run(pos)
     }
-    var oq <- staged(host.mapped, 0l, hid, type<int8>)
-    var os <- staged(host.mapped, oq_bytes, nblk_out, type<float>)
     // the oracle: the q8 GEMM oracle over one record with the x row as its one column, per plane, then the activation
     let one_row <- [0u, 0u, 1u, 0u]
     var g_ref : array<float>
