@@ -371,13 +371,8 @@ def check(t : T?; tag : string; got : array<float>; want : array<auto(WT)>; bar 
 def check_exact(t : T?; tag : string; got, want : array<auto(TT)>) : int {
     let bad = mismatch_exact(got, want)
     let n = min(length(got), length(want))
-    var first = n
-    for (i in range(n)) {
-        if (got[i] != want[i]) {
-            first = i
-            break
-        }
-    }
+    let fm = first_mismatch(got, want, 0, 0, n)
+    let first = fm >= 0 ? fm : n
     let verdict = "{bad} of {max(length(got), length(want))} elements differ, the first at {first}"
     to_log(LOG_INFO, "{tag}: {verdict}\n")
     t |> success(bad == 0, "{tag}: {verdict}")
@@ -401,6 +396,25 @@ def mismatch_exact(got, want : array<auto(TT)>) : int {
         }
     }
     return bad
+}
+
+//! the count of `got[gbase + i]` not equal to `want[wbase + i]` over `n` elements - `mismatch_exact` over a span of each
+def mismatch_exact(got, want : array<auto(TT)>; gbase, wbase, n : int) : int {
+    var bad = 0
+    for (i in range(n)) {
+        if (got[gbase + i] != want[wbase + i]) {
+            bad++
+        }
+    }
+    return bad
+}
+
+//! the first `i` with `got[gbase + i]` not equal to `want[wbase + i]` over `n` elements, -1 where every one agrees
+def first_mismatch(got, want : array<auto(TT)>; gbase, wbase, n : int) : int {
+    for (i in range(n)) {
+        return i if (got[gbase + i] != want[wbase + i])
+    }
+    return -1
 }
 
 //! The Q8_0 planes' differences, scale for scale then byte for byte: a scale off by more than `scale_bar` relative (floored at

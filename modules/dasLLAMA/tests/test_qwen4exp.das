@@ -10,6 +10,7 @@ require dasllama/dasllama_math   // rmsnorm - the reference's grouped norm
 require dasllama/dasllama_par   // get_disp_count - the split legs' witness
 require daslib/jobque_boost   // with_job_que - the threaded leg
 require math
+require _compares
 
 // Model-free gates for the qwen4exp mechanisms: the hyper-connection mixer and scatter against a
 // scalar reference on a synthetic fp32 model, and the n-gram hash gather (the hash, the EOS cut,
@@ -213,16 +214,6 @@ def private hc_batch_run(m : Model) : HcBatch {
     return <- r
 }
 
-def private count_diffs(a, b : array<float>) : int {
-    var n = 0
-    for (x, y in a, b) {
-        if (x != y) {
-            n++
-        }
-    }
-    return n
-}
-
 [test]
 def test_hc_mixer_batched(t : T?) {
     t |> run("hc_mix_b and block_resid_b split over positions without moving a bit, and each row is the mixer's") @(t : T?) {
@@ -238,9 +229,9 @@ def test_hc_mixer_batched(t : T?) {
         t |> equal(inline_leg.mix_dispatches + inline_leg.resid_dispatches, 0l, "a que-less process must run the batched mixer and scatter inline")
         t |> equal(threaded.mix_dispatches, threaded.gemm_dispatches + 2l, "the threaded mixer dispatches its norm pass and its tail pass beside its two GEMMs")
         t |> success(threaded.resid_dispatches > 0l, "the threaded scatter must dispatch, else both legs are the same one lane")
-        t |> equal(count_diffs(threaded.mixed, inline_leg.mixed), 0, "mixed rows differing between the split and the inline leg")
-        t |> equal(count_diffs(threaded.inject, inline_leg.inject), 0, "scatter logits differing between the split and the inline leg")
-        t |> equal(count_diffs(threaded.res, inline_leg.res), 0, "wide rows differing after the split scatter")
+        t |> equal(mismatch_exact(threaded.mixed, inline_leg.mixed), 0, "mixed rows differing between the split and the inline leg")
+        t |> equal(mismatch_exact(threaded.inject, inline_leg.inject), 0, "scatter logits differing between the split and the inline leg")
+        t |> equal(mismatch_exact(threaded.res, inline_leg.res), 0, "wide rows differing after the split scatter")
         // rows at the ends and the middle against the scalar mixer: a misplaced row offset lands elsewhere
         var seed = HC_ROWS_SEED
         var res0 <- [for (_i in range64(NPOS * HCD)); lcg(seed) * 4.0]   // the seed walk hc_batch_run filled the rows with

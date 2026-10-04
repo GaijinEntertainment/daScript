@@ -40,6 +40,10 @@ def test_mismatch_counts(t : T?) {
         t |> equal(mismatch_exact([1, 9, 3], [1, 2, 3]), 1, "control: one element off")
         t |> equal(mismatch_exact([1, 2], [1, 2, 3]), 1, "a truncated output is one element short")
         t |> equal(mismatch_exact([1, 9, 3, 4, 5], [1, 2, 3]), 3, "one off and two past the end")
+        t |> equal(mismatch_exact([7, 1, 9, 3], [1, 2, 3], 1, 0, 3), 1, "a span: got from 1 against want from 0, one off")
+        t |> equal(mismatch_exact([7, 1, 2, 3], [1, 2, 3], 1, 0, 3), 0, "control: the same span equal")
+        t |> equal(first_mismatch([7, 1, 2, 9], [0, 1, 2, 3], 1, 1, 3), 2, "the first span element off sits at its index in the span")
+        t |> equal(first_mismatch([7, 1, 2, 3], [0, 1, 2, 3], 1, 1, 3), -1, "control: an equal span reads -1")
     }
     t |> run("the relative count takes a NaN as off") @(t : T?) {
         let want <- [1.0, 2.0, 3.0]

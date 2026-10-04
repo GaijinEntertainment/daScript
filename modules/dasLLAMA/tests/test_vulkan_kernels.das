@@ -2937,9 +2937,7 @@ def private tok_buf(rows : array<TokMeta>) : uint64 {
         var tokb = make_host_buf(TOK_META_BYTES * long_length(rows), true)
         var tm = unsafe(reinterpret<TokMeta?>(tokb.mapped))
         for (r in range64(long_length(rows))) {
-            unsafe {
-                tm[r] = rows[r]
-            }
+            unsafe(tm[r]) = rows[r]
         }
         return tokb.buf
     } else {
@@ -5028,13 +5026,7 @@ def private q8_gemv_ar_twin_run(t; n, d : int; pre_on : bool; ascale : float) {
     t |> success(xr_epi_h[0] != fx.xres[0], "q8 gemv+ar twin {tag}: the epilogue wrote the residual row")
     t |> success(xr_row_h[0] != fx.xres[0], "q8 gemv+ar twin {tag}: the row kernel wrote the residual row")
     let badx = mismatch_exact(xr_epi_h, xr_row_h)
-    var first = -1
-    for (i in range(d)) {
-        if (xr_epi_h[i] != xr_row_h[i]) {
-            first = i
-            break
-        }
-    }
+    let first = first_mismatch(xr_epi_h, xr_row_h, 0, 0, d)
     if (first >= 0) {
         to_log(LOG_INFO, "q8 gemv+ar twin {tag}: first residual mismatch at {first}: epilogue {xr_epi_h[first]} row kernel {xr_row_h[first]}\n")
     }
@@ -7244,25 +7236,6 @@ def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<in
     return <- r
 }
 
-//! the count of differing elements (a NaN differs from everything)
-def private n_differing(got, want : array<auto(TT)>; gbase, wbase, n : int) : int {
-    var bad = 0
-    for (i in range(n)) {
-        if (got[gbase + i] != want[wbase + i]) {
-            bad++
-        }
-    }
-    return bad
-}
-
-//! the first differing element's index in the compared run, -1 where none differs
-def private first_differing(got, want : array<auto(TT)>; gbase, wbase, n : int) : int {
-    for (i in range(n)) {
-        return i if (got[gbase + i] != want[wbase + i])
-    }
-    return -1
-}
-
 //! the dn step cells' fixture: `nrows` rows over `nslots` slots at head size `ds` - the rows' projections, every slot's state,
 //! the smalls plane (eps, qscale, the rows' beta and alpha rows, a, dt, the taps, the norm row, a ring pair a slot) and the
 //! offsets the push carries
@@ -7341,15 +7314,15 @@ def private dn_row_smalls(sm : array<float>; r, beta_off, g_off, bstride, nvh : 
 def private dn_o_row_off(tag : string; got, want : DnRowsOut; r, nvh, ds, nblk : int; out_f32 : bool) : int {
     if (out_f32) {
         let n = nvh * ds
-        let off = n_differing(got.of32, want.of32, r * n, 0, n)
+        let off = mismatch_exact(got.of32, want.of32, r * n, 0, n)
         let md = span_maxdiff(got.of32, want.of32, r * n, 0, n)
         to_log(LOG_INFO, "{tag}: row {r}'s o row {off} of {n} f32 elements off, the largest difference {md.diff} at head {md.at / ds} col {md.at % ds}\n")
         return off
     }
-    let sc_off = n_differing(got.oscales, want.oscales, r * nblk, 0, nblk)
-    let q_off = n_differing(got.oquants, want.oquants, r * nblk * 8, 0, nblk * 8)
-    let sc_first = first_differing(got.oscales, want.oscales, r * nblk, 0, nblk)
-    let q_first = first_differing(got.oquants, want.oquants, r * nblk * 8, 0, nblk * 8)
+    let sc_off = mismatch_exact(got.oscales, want.oscales, r * nblk, 0, nblk)
+    let q_off = mismatch_exact(got.oquants, want.oquants, r * nblk * 8, 0, nblk * 8)
+    let sc_first = first_mismatch(got.oscales, want.oscales, r * nblk, 0, nblk)
+    let q_first = first_mismatch(got.oquants, want.oquants, r * nblk * 8, 0, nblk * 8)
     let md = span_maxdiff(got.oscales, want.oscales, r * nblk, 0, nblk)
     to_log(LOG_INFO, "{tag}: row {r}'s o row {sc_off} of {nblk} scales off (the first at {sc_first}, the largest difference {md.diff} at block {md.at}), {q_off} of {nblk * 8} quant words off (the first at {q_first})\n")
     return sc_off + q_off
@@ -7358,8 +7331,8 @@ def private dn_o_row_off(tag : string; got, want : DnRowsOut; r, nvh, ds, nblk :
 //! the slot state and ring pair of `got` against `want` at the same offsets: the elements off and the largest difference with its
 //! row and column (a state row is `ds` wide, a ring row is a tap of `cd` channels), logged under `tag`
 def private dn_state_ring_off(tag : string; got, want : DnRowsOut; st_off, st_n, hist_off, ring, cd, ds : int) : int {
-    let st_diffs = n_differing(got.state, want.state, st_off, st_off, st_n)
-    let ring_diffs = n_differing(got.smalls, want.smalls, hist_off, hist_off, 2 * ring)
+    let st_diffs = mismatch_exact(got.state, want.state, st_off, st_off, st_n)
+    let ring_diffs = mismatch_exact(got.smalls, want.smalls, hist_off, hist_off, 2 * ring)
     let sm = span_maxdiff(got.state, want.state, st_off, st_off, st_n)
     let rm = span_maxdiff(got.smalls, want.smalls, hist_off, hist_off, 2 * ring)
     to_log(LOG_INFO, "{tag}: the state {st_diffs} elements off (the largest difference {sm.diff} at row {sm.at / ds} col {sm.at % ds}), the two ring images {ring_diffs} elements off (the largest difference {rm.diff} at tap {rm.at / cd} channel {rm.at % cd})\n")
@@ -7385,7 +7358,7 @@ def private dn_step_rows_arm(t : T?; ds : int; out_f32 : bool) {
         t |> success(st_ring_off == 0 && o_off == 0,
             "{tag}: row {r} in slot {slots[r]} - state and ring {st_ring_off}, o row {o_off} elements off the one-row dispatch")
         let other = 1 - r   //! the control: row r's reference must miss the other row's o row, so the compare can fail
-        let ctrl = out_f32 ? n_differing(got.of32, want.of32, other * f.nvh * ds, 0, f.nvh * ds) : n_differing(got.oquants, want.oquants, other * f.nblk * 8, 0, f.nblk * 8)
+        let ctrl = out_f32 ? mismatch_exact(got.of32, want.of32, other * f.nvh * ds, 0, f.nvh * ds) : mismatch_exact(got.oquants, want.oquants, other * f.nblk * 8, 0, f.nblk * 8)
         t |> success(ctrl > 0, "control: row {r}'s one-row reference misses row {other}'s o row ({ctrl} elements apart)")
         delete proj1
         delete sm1
@@ -7424,7 +7397,7 @@ def private dn_step_sameslot_arm(t : T?; ds : int; out_f32 : bool) {
         if (r == 1) {
             var sm0 <- dn_row_smalls(f.smh, r, f.beta_off, f.g_off, f.bstride, f.nvh)
             var cold <- dn_fixture_run(f, proj1, f.sth, sm0, pars1, slots1, 1, ds, out_f32)
-            let ctrl = out_f32 ? n_differing(got.of32, cold.of32, r * f.nvh * ds, 0, f.nvh * ds) : n_differing(got.oquants, cold.oquants, r * f.nblk * 8, 0, f.nblk * 8)
+            let ctrl = out_f32 ? mismatch_exact(got.of32, cold.of32, r * f.nvh * ds, 0, f.nvh * ds) : mismatch_exact(got.oquants, cold.oquants, r * f.nblk * 8, 0, f.nblk * 8)
             t |> success(ctrl > 0, "{tag} control: row 1 from the untouched state misses the sequential row 1 ({ctrl} elements apart)")
             delete sm0
             delete cold
