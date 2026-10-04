@@ -3189,20 +3189,7 @@ def test_vkd_da_attn(t0 : T?) {
             //! the sink arms (gpt-oss): a per-head sink logit, the unsplit pass folding it at its store and the split pass leaving it
             //! to its last piece's combine, both against the oracle with the sink; the sink-free oracle is the control
             t |> success(ensure_da_attn_sink_cls(), "the sink twin compiles on this device")
-            var sinkh : array<float>
-            sinkh |> resize(nheads)
-            for (hh in range(nheads)) {   //! a sink past each head's top scaled score: the fixture's 300-key row is flat, so only a dominant phantom key carries measurable mass
-                let khoff = (hh / kv_mul) * hs
-                var smax = -3.0e38
-                for (j in range(cnt)) {
-                    var s = 0.0
-                    for (e in range(hs)) {
-                        s += qh[hh * hs + e] * kh[j * kvd + khoff + e]
-                    }
-                    smax = max(smax, s * scale)
-                }
-                sinkh[hh] = smax + 2.5 + 0.5 * float(hh)
-            }
+            var sinkh <- sink_logits(qh, kh, nheads, hs, kv_mul, cnt, kvd, scale)
             let sink_bytes = int64(nheads) * 4l
             let sinkd = make_device_buf(sink_bytes)
             var y_sink : array<float>

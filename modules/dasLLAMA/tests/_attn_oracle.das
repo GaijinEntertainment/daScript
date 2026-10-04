@@ -46,6 +46,26 @@ def attn_heads_oracle(q : array<float>; qbase : int; kk : array<float>; kbase : 
     }
 }
 
+//! one attention sink logit a head for a single query row: past the head's top scaled score over `keys` keys by 2.5 + 0.5 x the head,
+//! so the phantom key carries measurable mass over a flat key row
+def sink_logits(q, kk : array<float>; nheads, hs, kv_mul, keys, kvd : int; scale : float) : array<float> {
+    var sinkh : array<float>
+    sinkh |> resize(nheads)
+    for (hh in range(nheads)) {
+        let khoff = (hh / kv_mul) * hs
+        var smax = -3.0e38
+        for (j in range(keys)) {
+            var sc = 0.0
+            for (e in range(hs)) {
+                sc += q[hh * hs + e] * kk[j * kvd + khoff + e]
+            }
+            smax = max(smax, sc * scale)
+        }
+        sinkh[hh] = smax + 2.5 + 0.5 * float(hh)
+    }
+    return <- sinkh
+}
+
 //! gemma4a's windowed RPE attention, spelled as `gemma4a_encode`'s loop: per head (`hs` wide in rows `d` wide), query row i
 //! attends keys (i - past, i]; a logit is the query times `qscale` and the per-dim `pds`, dotted with the key times `kscale`
 //! plus the relative-position row `rpe[(past - (i - j)) * d ...]`, capped as `cap * tanh(x / cap)`

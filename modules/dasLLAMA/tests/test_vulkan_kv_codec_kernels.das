@@ -343,25 +343,6 @@ struct private CodecAttnFixture {
     signs : array<float>
 }
 
-//! a sink logit a head, past the head's top scaled score: the fixture's row is flat, so only a dominant phantom key carries measurable mass
-def private sink_logits(q, kdeq : array<float>; a : CodecAttn; kvd : int; scale : float) : array<float> {
-    var sinkh : array<float>
-    sinkh |> resize(a.nheads)
-    for (hh in range(a.nheads)) {
-        let khoff = (hh / a.kv_mul) * a.hs
-        var smax = -3.0e38
-        for (j in range(a.keys)) {
-            var sc = 0.0
-            for (e in range(a.hs)) {
-                sc += q[hh * a.hs + e] * kdeq[j * kvd + khoff + e]
-            }
-            smax = max(smax, sc * scale)
-        }
-        sinkh[hh] = smax + 2.5 + 0.5 * float(hh)
-    }
-    return <- sinkh
-}
-
 def private codec_attn_fixture(a : CodecAttn) : CodecAttnFixture {
     let kvd = a.nheads / a.kv_mul * a.hs
     let qdim = a.nheads * a.hs
@@ -392,7 +373,7 @@ def private codec_attn_fixture(a : CodecAttn) : CodecAttnFixture {
     }
     f.k <- codec_mirror(a.kv, f.k_model, a.nrows * a.keys, kvd, a.hs, QA_BASE_BLOCKS + QA_REGION_BLOCKS, f.signs)
     f.v <- codec_mirror(a.kv, f.v_model, a.nrows * a.keys, kvd, a.hs, QA_BASE_BLOCKS + QA_REGION_BLOCKS, f.signs)
-    f.sinks <- sink_logits(f.q, f.k.deq, a, kvd, 1.0 / sqrt(float(a.hs)))
+    f.sinks <- sink_logits(f.q, f.k.deq, a.nheads, a.hs, a.kv_mul, a.keys, kvd, 1.0 / sqrt(float(a.hs)))
     return <- f
 }
 
