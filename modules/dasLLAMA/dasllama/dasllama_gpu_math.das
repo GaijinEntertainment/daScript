@@ -21,6 +21,25 @@ def iq3s_signed(g, nib : uint) : uint {
     return (g ^ mask) + m1
 }
 
+//! a grid word's four magnitude bytes under scale `ds`, byte i negated where bit i of `sgn` is set
+def grid_sv4(gw, sgn : uint; ds : float) : float4 {
+    let g0 = float(gw & 0xFFu)
+    let g1 = float((gw >> 8u) & 0xFFu)
+    let g2 = float((gw >> 16u) & 0xFFu)
+    let g3 = float(gw >> 24u)
+    return float4(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1),
+        ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3))
+}
+
+//! `grid_sv4`'s pair twin: the low two magnitude bytes of `gp` signed by bits 0 and 1 of `sgn`, the second where `e` is odd
+def grid_sv1(gp, sgn, e : uint; ds : float) : float {
+    let g0 = float(gp & 0xFFu)
+    let g1 = float((gp >> 8u) & 0xFFu)
+    let v0 = ds * ((sgn & 1u) != 0u ? -g0 : g0)
+    let v1 = ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)
+    return (e & 1u) != 0u ? v1 : v0
+}
+
 //! Q4_K / Q5_K: sub-block `blk`'s d x scale and dmin x min, off the row's unpacked (d, dmin) and the words that hold its scale and its min byte
 def k4_scale_min(dm : float2; scw, mnw, blk : uint) : float2 {
     let sh = (blk & 3u) * 8u

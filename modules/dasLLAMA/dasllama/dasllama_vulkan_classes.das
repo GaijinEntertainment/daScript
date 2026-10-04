@@ -7969,12 +7969,7 @@ class template Iq3sCm2T : KqCm2BatchT {
                 let qb = (qsw >> (uint(i) * 8u)) & 0xFFu
                 let gw = iq3s_gridc[qb | ((qh << (8u - wj)) & 256u)]
                 let sgn = sgw >> ((uint(i) >> 1u) * 8u + (uint(i) & 1u) * 4u)
-                let g0 = float(gw & 0xFFu)
-                let g1 = float((gw >> 8u) & 0xFFu)
-                let g2 = float((gw >> 16u) & 0xFFu)
-                let g3 = float(gw >> 24u)
-                khr_put4(sbase + uint(i) * 2u, float4(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1),
-                    ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
+                khr_put4(sbase + uint(i) * 2u, grid_sv4(gw, sgn, ds))
             }
         }
     }
@@ -7996,11 +7991,7 @@ class template Iq3sCm2T : KqCm2BatchT {
         let gp = gw >> ((r & 3u) * 8u)
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
         let ds = unpackHalf2x16(ws[srow]).x * float(grid_sc(ws[srow + 1u], g))
-        let g0 = float(gp & 0xFFu)
-        let g1 = float((gp >> 8u) & 0xFFu)
-        let v0 = ds * ((sgn & 1u) != 0u ? -g0 : g0)
-        let v1 = ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)
-        return float16((e & 1u) != 0u ? v1 : v0)
+        return float16(grid_sv1(gp, sgn, e, ds))
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -8020,12 +8011,7 @@ class template Iq3sCm2T : KqCm2BatchT {
         let sc = grid_sc(ws[srow + 1u], g)
         let ds = d * float(sc)
         let sgn = sgw >> (((r >> 2u) & 1u) * 4u)
-        let g0 = float(gw & 0xFFu)
-        let g1 = float((gw >> 8u) & 0xFFu)
-        let g2 = float((gw >> 16u) & 0xFFu)
-        let g3 = float(gw >> 24u)
-        return half4(float4(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1),
-            ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
+        return half4(grid_sv4(gw, sgn, ds))
     }
 }
 
@@ -8050,12 +8036,7 @@ class template Iq3xxsCm2T : KqCm2BatchT {
                 let sidx = (aux >> (7u * l)) & 127u
                 let sgn = ksign7(sidx) >> ((uint(i) & 1u) * 4u)
                 let gw = iq3x_gridc[(qsw >> (uint(i) * 8u)) & 0xFFu]
-                let g0 = float(gw & 0xFFu)
-                let g1 = float((gw >> 8u) & 0xFFu)
-                let g2 = float((gw >> 16u) & 0xFFu)
-                let g3 = float(gw >> 24u)
-                khr_put4(sbase + uint(i) * 2u, float4(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1),
-                    ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
+                khr_put4(sbase + uint(i) * 2u, grid_sv4(gw, sgn, ds))
             }
         }
     }
@@ -8078,11 +8059,7 @@ class template Iq3xxsCm2T : KqCm2BatchT {
         let gp = gw >> ((r & 3u) * 8u)
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
         let ds = unpackHalf2x16(ws[srow]).x * float(grid_sc(ws[srow + 1u], g))
-        let g0 = float(gp & 0xFFu)
-        let g1 = float((gp >> 8u) & 0xFFu)
-        let v0 = ds * ((sgn & 1u) != 0u ? -g0 : g0)
-        let v1 = ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)
-        return float16((e & 1u) != 0u ? v1 : v0)
+        return float16(grid_sv1(gp, sgn, e, ds))
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -8104,12 +8081,7 @@ class template Iq3xxsCm2T : KqCm2BatchT {
         let sc = grid_sc(ws[srow + 1u], g)
         let ds = d * float(sc)
         let sgn = sgb >> (r & 7u)
-        let g0 = float(gw & 0xFFu)
-        let g1 = float((gw >> 8u) & 0xFFu)
-        let g2 = float((gw >> 16u) & 0xFFu)
-        let g3 = float(gw >> 24u)
-        return half4(float4(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1),
-            ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
+        return half4(grid_sv4(gw, sgn, ds))
     }
 }
 
@@ -8143,12 +8115,7 @@ class template Iq2sCm2T : KqCm2BatchT {
                 let qb = (qsw >> (li * 8u)) & 0xFFu
                 let sgn = (sgw >> (li * 8u + (uint(i) & 1u) * 4u)) & 0xFu
                 let gw = iq2s_gridc[(qb | ((qh << (8u - 2u * l)) & 0x300u)) * 2u + (uint(i) & 1u)]
-                let g0 = float(gw & 0xFFu)
-                let g1 = float((gw >> 8u) & 0xFFu)
-                let g2 = float((gw >> 16u) & 0xFFu)
-                let g3 = float(gw >> 24u)
-                khr_put4(sbase + uint(i) * 2u, float4(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1),
-                    ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
+                khr_put4(sbase + uint(i) * 2u, grid_sv4(gw, sgn, ds))
             }
         }
     }
@@ -8170,11 +8137,7 @@ class template Iq2sCm2T : KqCm2BatchT {
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let si = g * 2u + (r >> 4u)
         let ds = unpackHalf2x16(ws[srow]).x * float((ws[srow + 1u + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu)
-        let g0 = float(gp & 0xFFu)
-        let g1 = float((gp >> 8u) & 0xFFu)
-        let v0 = ds * ((sgn & 1u) != 0u ? -g0 : g0)
-        let v1 = ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)
-        return float16((e & 1u) != 0u ? v1 : v0)
+        return float16(grid_sv1(gp, sgn, e, ds))
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -8195,12 +8158,7 @@ class template Iq2sCm2T : KqCm2BatchT {
         let sc = (ws[srow + 1u + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu
         let ds = d * float(sc)
         let sgn = sgw >> j
-        let g0 = float(gw & 0xFFu)
-        let g1 = float((gw >> 8u) & 0xFFu)
-        let g2 = float((gw >> 16u) & 0xFFu)
-        let g3 = float(gw >> 24u)
-        return half4(float4(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1),
-            ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
+        return half4(grid_sv4(gw, sgn, ds))
     }
 }
 
@@ -8221,12 +8179,7 @@ class template Iq2xsCm2T : KqCm2BatchT {
                 let sidx = w16 >> 9u
                 let sgn = ksign7(sidx) >> ((uint(i) & 1u) * 4u)
                 let gw = iq2xs_gridc[(w16 & 511u) * 2u + (uint(i) & 1u)]
-                let g0 = float(gw & 0xFFu)
-                let g1 = float((gw >> 8u) & 0xFFu)
-                let g2 = float((gw >> 16u) & 0xFFu)
-                let g3 = float(gw >> 24u)
-                khr_put4(sbase + uint(i) * 2u, float4(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1),
-                    ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
+                khr_put4(sbase + uint(i) * 2u, grid_sv4(gw, sgn, ds))
             }
         }
     }
@@ -8245,11 +8198,7 @@ class template Iq2xsCm2T : KqCm2BatchT {
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 5u
         let si = pair0 >> 4u
         let ds = unpackHalf2x16(ws[srow]).x * float((ws[srow + 1u + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu)
-        let g0 = float(gp & 0xFFu)
-        let g1 = float((gp >> 8u) & 0xFFu)
-        let v0 = ds * ((sgn & 1u) != 0u ? -g0 : g0)
-        let v1 = ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)
-        return float16((e & 1u) != 0u ? v1 : v0)
+        return float16(grid_sv1(gp, sgn, e, ds))
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -8267,12 +8216,7 @@ class template Iq2xsCm2T : KqCm2BatchT {
         let sc = (ws[srow + 1u + (si >> 2u)] >> ((si & 3u) * 8u)) & 0xFFu
         let ds = dv * float(sc)
         let sgn = sgb >> j
-        let g0 = float(gw & 0xFFu)
-        let g1 = float((gw >> 8u) & 0xFFu)
-        let g2 = float((gw >> 16u) & 0xFFu)
-        let g3 = float(gw >> 24u)
-        return half4(float4(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1),
-            ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
+        return half4(grid_sv4(gw, sgn, ds))
     }
 }
 
@@ -8298,12 +8242,7 @@ class template Iq2xxsCm2T : KqCm2BatchT {
                 let sidx = (aux >> (7u * l)) & 127u
                 let sgn = ksign7(sidx) >> ((uint(i) & 1u) * 4u)
                 let gw = iq2xxs_gridc[qb * 2u + (uint(i) & 1u)]
-                let g0 = float(gw & 0xFFu)
-                let g1 = float((gw >> 8u) & 0xFFu)
-                let g2 = float((gw >> 16u) & 0xFFu)
-                let g3 = float(gw >> 24u)
-                khr_put4(sbase + uint(i) * 2u, float4(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1),
-                    ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
+                khr_put4(sbase + uint(i) * 2u, grid_sv4(gw, sgn, ds))
             }
         }
     }
@@ -8326,11 +8265,7 @@ class template Iq2xxsCm2T : KqCm2BatchT {
         let gp = gw >> ((j & 3u) * 8u)
         let srow = (wg_blk0 + bc.x * (pa.n >> 8u) + bc.y) * 2u
         let ds = unpackHalf2x16(ws[srow]).x * float(grid_sc(ws[srow + 1u], g))
-        let g0 = float(gp & 0xFFu)
-        let g1 = float((gp >> 8u) & 0xFFu)
-        let v0 = ds * ((sgn & 1u) != 0u ? -g0 : g0)
-        let v1 = ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1)
-        return float16((e & 1u) != 0u ? v1 : v0)
+        return float16(grid_sv1(gp, sgn, e, ds))
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -8352,12 +8287,7 @@ class template Iq2xxsCm2T : KqCm2BatchT {
         let sc = grid_sc(ws[srow + 1u], g)
         let ds = dv * float(sc)
         let sgn = sgb >> j
-        let g0 = float(gw & 0xFFu)
-        let g1 = float((gw >> 8u) & 0xFFu)
-        let g2 = float((gw >> 16u) & 0xFFu)
-        let g3 = float(gw >> 24u)
-        return half4(float4(ds * ((sgn & 1u) != 0u ? -g0 : g0), ds * (((sgn >> 1u) & 1u) != 0u ? -g1 : g1),
-            ds * (((sgn >> 2u) & 1u) != 0u ? -g2 : g2), ds * (((sgn >> 3u) & 1u) != 0u ? -g3 : g3)))
+        return half4(grid_sv4(gw, sgn, ds))
     }
 }
 
