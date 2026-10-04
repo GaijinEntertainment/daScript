@@ -570,11 +570,53 @@ def private resident_expert_fmts(t : Model; l : int64) : tuple<f1 : int; f3 : in
     return (f1 = int(rdec_efmt(t, t.we1_fmt, l)), f3 = int(rdec_efmt(t, t.we3_fmt, l)), f2 = int(rdec_efmt(t, t.we2_fmt, l)))
 }
 
-//! an FFN triple's planes in the plan: gate and up at `hid` rows of `dim`, down at `dim` rows of `hid`
-def private push_ffn_planes(var planes : array<tuple<n : int64; rows : int64; f : KqFmt>>; dim, hid : int64; f1, f3, f2 : KqFmt) {
-    planes |> push((n = dim, rows = hid, f = f1))
-    planes |> push((n = dim, rows = hid, f = f3))
-    planes |> push((n = hid, rows = dim, f = f2))
+//! what the upload registers a planned plane as; `ResidentPlane.l` names its layer, mixer site or the NextN head (n_layers)
+enum ResidentRole {
+    ffn_gate
+    ffn_up
+    ffn_down
+    dn_qkv
+    dn_z
+    dn_out
+    dn_beta
+    dn_alpha
+    q
+    k
+    v
+    o
+    exp_gate
+    exp_up
+    exp_down
+    ple_gate
+    ple_proj
+    ple_table
+    cls
+    hc_down
+    hc_up
+    hc_head_down
+    hc_head_up
+    ngram_key
+    ngram_val
+    eh_proj
+}
+
+//! one plane the residency plan counts and the upload places, in placement order: a row length, a row count (an expert
+//! stack's every expert), a format, its element offset, the gather's per-expert rows (-1 = whole), its role and its layer
+struct ResidentPlane {
+    n : int64
+    rows : int64
+    f : KqFmt
+    off : int64
+    slice_rows : int64 = -1l
+    role : ResidentRole
+    l : int64 = -1l
+}
+
+//! an FFN triple's planes: gate and up at `hid` rows of `dim`, down at `dim` rows of `hid`, at offsets `o1` / `o3` / `o2`
+def private push_ffn_planes(var planes : array<ResidentPlane>; l, dim, hid : int64; f1, f3, f2 : KqFmt; o1, o3, o2 : int64) {
+    planes |> push(ResidentPlane(n = dim, rows = hid, f = f1, off = o1, role = ResidentRole.ffn_gate, l = l))
+    planes |> push(ResidentPlane(n = dim, rows = hid, f = f3, off = o3, role = ResidentRole.ffn_up, l = l))
+    planes |> push(ResidentPlane(n = hid, rows = dim, f = f2, off = o2, role = ResidentRole.ffn_down, l = l))
 }
 
 //! the deltanet geometry of the driver's recurrent layers; the zero record on a model with none
@@ -589,26 +631,21 @@ def private rdec_dn_geom(t : Model) : RdecDnGeom {
     return RdecDnGeom()
 }
 
-//! the NextN head's planes in placement order - eh_proj, q, k, v, o, gate, up, down - each a row length, a row count, a format and its offset
-def private resident_head_planes(t : Model) : array<tuple<n : int64; rows : int64; f : KqFmt; off : int64>> {
+//! the NextN head's planes in placement order - eh_proj, q, k, v, o, gate, up, down - at layer n_layers
+def private push_head_planes(t : Model; var planes : array<ResidentPlane>) {
     let c = t.config
     let l = c.n_layers
     let dim = c.dim
     let lf = resident_head_fmts(t)
     let qd = layer_qd(c, l)
     let kvd = layer_kv_dim(c, l)
-    let hid = resident_dense_width(t, l)
-    let p1 = resident_head_ffn_plane(t, 1)
-    let p3 = resident_head_ffn_plane(t, 3)
-    let p2 = resident_head_ffn_plane(t, 2)
-    return <- [(n = 2l * dim, rows = dim, f = t.mtp_ehproj_fmt, off = t.mtp_ehproj_off),
-        (n = dim, rows = c.q_gated ? 2l * qd : qd, f = lf.fq, off = t.wq_offs[l]),
-        (n = dim, rows = kvd, f = lf.fk, off = t.wk_offs[l]),
-        (n = dim, rows = kvd, f = lf.fv, off = t.wv_offs[l]),
-        (n = qd, rows = dim, f = lf.fo, off = t.wo_offs[l]),
-        (n = dim, rows = hid, f = lf.f1, off = p1),
-        (n = dim, rows = hid, f = lf.f3, off = p3),
-        (n = hid, rows = dim, f = lf.f2, off = p2)]
+    planes |> push(ResidentPlane(n = 2l * dim, rows = dim, f = t.mtp_ehproj_fmt, off = t.mtp_ehproj_off, role = ResidentRole.eh_proj, l = l))
+    planes |> push(ResidentPlane(n = dim, rows = c.q_gated ? 2l * qd : qd, f = lf.fq, off = t.wq_offs[l], role = ResidentRole.q, l = l))
+    planes |> push(ResidentPlane(n = dim, rows = kvd, f = lf.fk, off = t.wk_offs[l], role = ResidentRole.k, l = l))
+    planes |> push(ResidentPlane(n = dim, rows = kvd, f = lf.fv, off = t.wv_offs[l], role = ResidentRole.v, l = l))
+    planes |> push(ResidentPlane(n = qd, rows = dim, f = lf.fo, off = t.wo_offs[l], role = ResidentRole.o, l = l))
+    push_ffn_planes(planes, l, dim, resident_dense_width(t, l), lf.f1, lf.f3, lf.f2,
+        resident_head_ffn_plane(t, 1), resident_head_ffn_plane(t, 3), resident_head_ffn_plane(t, 2))
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head")]
@@ -678,112 +715,119 @@ def private rdec_verify_rows_want(t : Model) : int64 => (resident_head_on(t) && 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
 def private resident_host_experts(c : Config) : bool => c.hyper_conn && c.n_expert > 0l && rdec_hc_installed()
 
-//! one mixer site's q8 pair: down [lr x hc_dim] and up [hc_dim x lr]
-def private push_hc_mixer_planes(c : Config; var planes : array<tuple<n : int64; rows : int64; f : KqFmt>>) {
-    planes |> push((n = hc_dim(c), rows = c.hc_low_rank, f = KqFmt.q8))
-    planes |> push((n = c.hc_low_rank, rows = hc_dim(c), f = KqFmt.q8))
+//! one mixer site's q8 pair at offsets `down_off` [lr x hc_dim] and `up_off` [hc_dim x lr], under the roles `down` / `up` at `l`
+def private push_hc_mixer_planes(c : Config; var planes : array<ResidentPlane>; down_off, up_off : int64; down, up : ResidentRole; l : int64) {
+    planes |> push(ResidentPlane(n = hc_dim(c), rows = c.hc_low_rank, f = KqFmt.q8, off = down_off, role = down, l = l))
+    planes |> push(ResidentPlane(n = c.hc_low_rank, rows = hc_dim(c), f = KqFmt.q8, off = up_off, role = up, l = l))
 }
 
-//! one mixer site's q8 pair placed in the arena, `down_off` [lr x hc_dim] and `up_off` [hc_dim x lr]; `ok` false when a placement failed
-def private resident_place_hc_mixer(t : Model; down_off, up_off : int64; mr, kg, wb : int64) : tuple<bd : int64; bu : int64; ok : bool> {
-    let hcd = hc_dim(t.config)
-    let lr = t.config.hc_low_rank
-    let bd = resident_place(t, KqFmt.q8, down_off, hcd, lr, mr, kg, wb)
-    let bu = resident_place(t, KqFmt.q8, up_off, lr, hcd, mr, kg, wb)
-    return (bd = bd, bu = bu, ok = bd >= 0l && bu >= 0l)
-}
-
-//! a hyper-connection layer's planes: two mixer sites' q8 down [lr x hc_dim] and up [hc_dim x lr]; the side input's layer adds key [hc_dim x ind] and value [dim x ind]
-def private resident_hc_layer_planes(c : Config; l : int64; var planes : array<tuple<n : int64; rows : int64; f : KqFmt>>) {
-    planes |> reserve(length(planes) + 6)
-    push_hc_mixer_planes(c, planes)
-    push_hc_mixer_planes(c, planes)
-    if (has_ple_ngram(c) && l == c.ple_layer) {
-        planes |> push((n = ple_in_dim(c), rows = hc_dim(c), f = KqFmt.q8))
-        planes |> push((n = ple_in_dim(c), rows = c.dim, f = KqFmt.q8))
+//! the hyper-connection planes after the classifier: every mixer site's pair (the NextN head's two sites where `head` rides),
+//! the head mixer's, the NextN head's own head mixer's, then the n-gram side input's key [hc_dim x ind] and value [dim x ind]
+def private push_hc_planes(t : Model; var planes : array<ResidentPlane>; head : bool) {
+    let c = t.config
+    for (site in range64(2l * (c.n_layers + (head ? 1l : 0l)))) {
+        push_hc_mixer_planes(c, planes, t.hc_down_offs[site], t.hc_up_offs[site], ResidentRole.hc_down, ResidentRole.hc_up, site)
+    }
+    push_hc_mixer_planes(c, planes, t.hc_head_down_off, t.hc_head_up_off, ResidentRole.hc_head_down, ResidentRole.hc_head_up, -1l)
+    if (head) {
+        push_hc_mixer_planes(c, planes, t.mtp_hc_head_down_off, t.mtp_hc_head_up_off, ResidentRole.hc_head_down, ResidentRole.hc_head_up, c.n_layers)
+    }
+    if (has_ple_ngram(c)) {
+        planes |> push(ResidentPlane(n = ple_in_dim(c), rows = hc_dim(c), f = KqFmt.q8, off = t.ple_key_off, role = ResidentRole.ngram_key))
+        planes |> push(ResidentPlane(n = ple_in_dim(c), rows = c.dim, f = KqFmt.q8, off = t.ple_val_off, role = ResidentRole.ngram_val))
     }
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
-def private resident_planes(t : Model; dng : RdecDnGeom; ple_tbl : bool; host_layers : int64) : array<tuple<n : int64; rows : int64; f : KqFmt>> {
+//! layer `l`'s planes in placement order: its dense or shared-expert FFN triple, its recurrent five or attention quad (a
+//! shared-KV layer's q and o, a V-from-K layer's q, k and o), its expert stacks where they ride the device, its per-layer-embedding pair
+def private push_layer_planes(t : Model; var planes : array<ResidentPlane>; l : int64; dng : RdecDnGeom; experts : bool) {
     let c = t.config
     let dim = c.dim
-    let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
-    var planes : array<tuple<n : int64; rows : int64; f : KqFmt>>
-    planes |> reserve(c.n_layers * 13l + 5l)
+    let lf = resident_layer_fmts(t, l)
+    let moe = layer_is_moe(t, l)
+    if (!moe || c.moe_dense_shexp) {
+        push_ffn_planes(planes, l, dim, resident_dense_width(t, l), lf.f1, lf.f3, lf.f2, t.w1_offs[l], t.w3_offs[l], t.w2_offs[l])
+    } elif (c.n_ff_shexp > 0l) {
+        let p1 = resident_shexp_plane(t, l, 1)
+        let p3 = resident_shexp_plane(t, l, 3)
+        let p2 = resident_shexp_plane(t, l, 2)
+        push_ffn_planes(planes, l, dim, c.n_ff_shexp, p1.f, p3.f, p2.f, p1.off, p3.off, p2.off)
+    }
+    let recurrent = layer_is_recurrent(c, l)
+    if (recurrent) {
+        planes |> push(ResidentPlane(n = dim, rows = dng.cd, f = fmt_at(t.dnqkv_fmt, l), off = t.dnqkv_offs[l], role = ResidentRole.dn_qkv, l = l))
+        planes |> push(ResidentPlane(n = dim, rows = dng.di, f = fmt_at(t.dngate_fmt, l), off = t.dngate_offs[l], role = ResidentRole.dn_z, l = l))
+        planes |> push(ResidentPlane(n = dng.di, rows = dim, f = fmt_at(t.dnout_fmt, l), off = t.dnout_offs[l], role = ResidentRole.dn_out, l = l))
+        if (!dng.ba_f32) {
+            planes |> push(ResidentPlane(n = dim, rows = dng.nvh, f = KqFmt.q8, off = t.dnbeta_offs[l], role = ResidentRole.dn_beta, l = l))
+            planes |> push(ResidentPlane(n = dim, rows = dng.nvh, f = KqFmt.q8, off = t.dnalpha_offs[l], role = ResidentRole.dn_alpha, l = l))
+        }
+    } else {
+        let qd_l = layer_qd(c, l)
+        let kvd_l = layer_kv_dim(c, l)
+        planes |> push(ResidentPlane(n = dim, rows = c.q_gated ? 2l * qd_l : qd_l, f = lf.fq, off = t.wq_offs[l], role = ResidentRole.q, l = l))
+        if (t.kv_src[l] == l) {
+            planes |> push(ResidentPlane(n = dim, rows = kvd_l, f = lf.fk, off = t.wk_offs[l], role = ResidentRole.k, l = l))
+            if (!resident_v_from_k(c, l)) {
+                planes |> push(ResidentPlane(n = dim, rows = kvd_l, f = lf.fv, off = t.wv_offs[l], role = ResidentRole.v, l = l))
+            }
+        }
+        planes |> push(ResidentPlane(n = qd_l, rows = dim, f = lf.fo, off = t.wo_offs[l], role = ResidentRole.o, l = l))
+    }
+    if (moe && experts) {
+        planes |> reserve(length(planes) + 3)
+        for (k, role in [1, 3, 2], [ResidentRole.exp_gate, ResidentRole.exp_up, ResidentRole.exp_down]) {
+            let p = resident_expert_plane(t, l, k)
+            planes |> push(ResidentPlane(n = p.n, rows = c.n_expert * p.rows, f = p.f, off = p.off, slice_rows = p.rows, role = role, l = l))
+        }
+    }
+    if (has_ple(c) && !recurrent) {
+        let ple = c.n_embd_per_layer
+        planes |> push(ResidentPlane(n = dim, rows = ple, f = KqFmt.q8, off = t.ple_gate_off + l * dim * ple, role = ResidentRole.ple_gate, l = l))
+        planes |> push(ResidentPlane(n = ple, rows = dim, f = KqFmt.q8, off = t.ple_proj_off + l * ple * dim, role = ResidentRole.ple_proj, l = l))
+    }
+}
+
+//! the whole model's weight planes in the order the upload places them (`resident_upload` walks this list): the
+//! per-layer-embedding token table, every layer's planes, the classifier, the hyper-connection planes, the NextN head
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
+def private resident_planes(t : Model; dng : RdecDnGeom; ple_tbl : bool; host_layers : int64) : array<ResidentPlane> {
+    let c = t.config
+    var planes : array<ResidentPlane>
+    planes |> reserve(c.n_layers * 13l + 16l)
+    if (ple_tbl) {
+        planes |> push(ResidentPlane(n = c.n_layers * c.n_embd_per_layer, rows = c.vocab_size, f = KqFmt.q8, off = t.ple_emb_off, role = ResidentRole.ple_table))
+    }
     var routed_idx = 0l
     for (l in range64(c.n_layers)) {
-        let lf = resident_layer_fmts(t, l)
-        if (c.hyper_conn) {
-            resident_hc_layer_planes(c, l, planes)
-        }
-        if (layer_is_moe(t, l)) {
-            if (routed_idx >= host_layers) {
-                for (k in [1, 3, 2]) {
-                    let p = resident_expert_plane(t, l, k)
-                    planes |> push((n = p.n, rows = c.n_expert * p.rows, f = p.f))
-                }
-            }
-            routed_idx++
-            if (c.moe_dense_shexp) {
-                push_ffn_planes(planes, dim, layer_hidden(t, l), lf.f1, lf.f3, lf.f2)
-            } elif (c.n_ff_shexp > 0l) {
-                push_ffn_planes(planes, dim, c.n_ff_shexp, resident_shexp_plane(t, l, 1).f, resident_shexp_plane(t, l, 3).f, resident_shexp_plane(t, l, 2).f)
-            }
-        }
-        if (layer_is_recurrent(c, l)) {
-            planes |> push((n = dim, rows = dng.cd, f = fmt_at(t.dnqkv_fmt, l)))
-            planes |> push((n = dim, rows = dng.di, f = fmt_at(t.dngate_fmt, l)))
-            planes |> push((n = dng.di, rows = dim, f = fmt_at(t.dnout_fmt, l)))
-            if (!dng.ba_f32) {
-                planes |> push((n = dim, rows = dng.nvh, f = KqFmt.q8))
-                planes |> push((n = dim, rows = dng.nvh, f = KqFmt.q8))
-            }
-        } else {
-            let qd_l = layer_qd(c, l)
-            let kvd_l = layer_kv_dim(c, l)
-            planes |> push((n = dim, rows = c.q_gated ? 2l * qd_l : qd_l, f = lf.fq))
-            if (t.kv_src[l] == l) {
-                planes |> push((n = dim, rows = kvd_l, f = lf.fk))
-                if (!resident_v_from_k(c, l)) {
-                    planes |> push((n = dim, rows = kvd_l, f = lf.fv))
-                }
-            }
-            planes |> push((n = qd_l, rows = dim, f = lf.fo))
-        }
-        if (!layer_is_moe(t, l)) {
-            push_ffn_planes(planes, dim, resident_dense_width(t, l), lf.f1, lf.f3, lf.f2)
-        }
-        if (has_ple(c)) {
-            planes |> push((n = dim, rows = c.n_embd_per_layer, f = KqFmt.q8))
-            planes |> push((n = c.n_embd_per_layer, rows = dim, f = KqFmt.q8))
-        }
+        push_layer_planes(t, planes, l, dng, routed_idx >= host_layers)
+        routed_idx += layer_is_moe(t, l) ? 1l : 0l
     }
-    planes |> push((n = dim, rows = c.vocab_size, f = cls_fmt))
-    if (c.hyper_conn) {   //! the head mixer's pair
-        push_hc_mixer_planes(c, planes)
+    planes |> push(ResidentPlane(n = c.dim, rows = c.vocab_size, f = c.shared_weights ? t.emb_fmt : t.wcls_fmt, off = t.wcls_off, role = ResidentRole.cls))
+    let head = resident_head_on(t)
+    if (c.hyper_conn) {
+        push_hc_planes(t, planes, head)
     }
-    if (ple_tbl) {
-        planes |> push((n = c.n_layers * c.n_embd_per_layer, rows = c.vocab_size, f = KqFmt.q8))
-    }
-    if (resident_head_on(t)) {
-        resident_head_plan_planes(t, planes)
+    if (head) {
+        push_head_planes(t, planes)
     }
     return <- planes
 }
 
-//! the NextN head's planes in the plan: its dense set, and on the chain its block seams and its own head mixer
-def private resident_head_plan_planes(t : Model; var planes : array<tuple<n : int64; rows : int64; f : KqFmt>>) {
-    let c = t.config
-    var inscope head <- resident_head_planes(t)
-    planes |> reserve(length(planes) + length(head))
-    for (pl in head) {
-        planes |> push((n = pl.n, rows = pl.rows, f = pl.f))
+//! the walk's next plane, which the upload places as `role` of `l` - a plan and a walk that disagree are an engine bug
+def private take_plane(planes : array<ResidentPlane>; var cur : int&; role : ResidentRole; l : int64 = -1l) : ResidentPlane {
+    if (cur >= length(planes) || planes[cur].role != role || planes[cur].l != l) {
+        let at = cur < length(planes) ? "the plan's {planes[cur].role} of {planes[cur].l}" : "the plan's end"
+        panic("dasLLAMA resident driver: the upload walk places the {role} of {l} at {at} - the plan list and the walk disagree (engine bug)")
     }
-    if (c.hyper_conn) {
-        resident_hc_layer_planes(c, c.n_layers, planes)
-        push_hc_mixer_planes(c, planes)
-    }
+    cur++
+    return planes[cur - 1]
+}
+
+//! the walk's next plane placed in its format's arena as `role` of `l`; the block index, -1 where the arena refused it
+def private place_plane(t : Model; planes : array<ResidentPlane>; var cur : int&; role : ResidentRole; l : int64; mr, kg, wb : int64) : int64 {
+    let pl = take_plane(planes, cur, role, l)
+    return resident_place(t, pl.f, pl.off, pl.n, pl.rows, mr, kg, wb, pl.slice_rows)
 }
 
 //! the recurrent layers' beta / alpha rows on the f32 arm: device f16 rows beside the planes (`vk_rdec_upload_dn_ba` halves
@@ -1412,20 +1456,31 @@ def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
 
 //! routed layer l's expert triple: placed in the arena, or -1 blocks where the host serves them (its router slot under
 //! `host_layers`); `ok` false when the arena refused a stack
-def private resident_place_experts_or_host(t : Model; l, router_slot, host_layers : int64; mr, kg, wb : int64) : tuple<be1 : int64; be3 : int64; be2 : int64; ok : bool> {
+def private resident_place_experts_or_host(t : Model; planes : array<ResidentPlane>; var cur : int&; l, router_slot, host_layers : int64; mr, kg, wb : int64) : tuple<be1 : int64; be3 : int64; be2 : int64; ok : bool> {
     if (router_slot < host_layers) {
         return (be1 = -1l, be3 = -1l, be2 = -1l, ok = true)
     }
-    let eb = resident_place_experts(t, l, mr, kg, wb)
-    let ok = eb.be1 >= 0l && eb.be3 >= 0l && eb.be2 >= 0l
-    return (be1 = ok ? eb.be1 : -1l, be3 = eb.be3, be2 = eb.be2, ok = ok)
+    var be = fixed_array(-1l, -1l, -1l)
+    for (i, role in range(3), [ResidentRole.exp_gate, ResidentRole.exp_up, ResidentRole.exp_down]) {
+        be[i] = place_plane(t, planes, cur, role, l, mr, kg, wb)
+        break if (be[i] < 0l)
+    }
+    let ok = be[0] >= 0l && be[1] >= 0l && be[2] >= 0l
+    return (be1 = ok ? be[0] : -1l, be3 = be[1], be2 = be[2], ok = ok)
+}
+
+//! the walk's next FFN triple, layer `l`'s gate, up and down, placed; `b1` is -1 when any of the three placements failed
+def private place_ffn(t : Model; planes : array<ResidentPlane>; var cur : int&; l, mr, kg, wb : int64) : tuple<b1 : int64; b3 : int64; b2 : int64> {
+    let b1 = place_plane(t, planes, cur, ResidentRole.ffn_gate, l, mr, kg, wb)
+    let b3 = place_plane(t, planes, cur, ResidentRole.ffn_up, l, mr, kg, wb)
+    let b2 = place_plane(t, planes, cur, ResidentRole.ffn_down, l, mr, kg, wb)
+    return (b1 = (b1 < 0l || b3 < 0l || b2 < 0l) ? -1l : b1, b3 = b3, b2 = b2)
 }
 
 //! "" when the seats took every hyper-connection plane, else the decline reason
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head")]
-def private resident_upload_hc(t : Model; nextn : bool; mr, kg, wb : int64) : string {
+def private resident_upload_hc(t : Model; planes : array<ResidentPlane>; var cur : int&; nextn : bool; mr, kg, wb : int64) : string {
     let c = t.config
-    let dim = c.dim
     let hc = c.hc_count
     let hcd = hc_dim(c)
     let lr = c.hc_low_rank
@@ -1438,28 +1493,32 @@ def private resident_upload_hc(t : Model; nextn : bool; mr, kg, wb : int64) : st
     down_blks |> reserve(n_sites)
     up_blks |> reserve(n_sites)
     for (site in range64(n_sites)) {
-        let b = resident_place_hc_mixer(t, t.hc_down_offs[site], t.hc_up_offs[site], mr, kg, wb)
-        if (!b.ok) return "arena placement failed at mixer site {site} (the hyper-connection planes)"
-        down_blks |> push(b.bd)
-        up_blks |> push(b.bu)
+        let bd = place_plane(t, planes, cur, ResidentRole.hc_down, site, mr, kg, wb)
+        let bu = place_plane(t, planes, cur, ResidentRole.hc_up, site, mr, kg, wb)
+        if (bd < 0l || bu < 0l) return "arena placement failed at mixer site {site} (the hyper-connection planes)"
+        down_blks |> push(bd)
+        up_blks |> push(bu)
     }
-    let bh = resident_place_hc_mixer(t, t.hc_head_down_off, t.hc_head_up_off, mr, kg, wb)
-    if (!bh.ok) return "arena placement failed at the head mixer (the hyper-connection planes)"
+    let bhd = place_plane(t, planes, cur, ResidentRole.hc_head_down, -1l, mr, kg, wb)
+    let bhu = place_plane(t, planes, cur, ResidentRole.hc_head_up, -1l, mr, kg, wb)
+    if (bhd < 0l || bhu < 0l) return "arena placement failed at the head mixer (the hyper-connection planes)"
     let mtp_norm <- fblob_rows(t, t.mtp_hc_head_norm_off, nextn ? hcd : 0l)
     let hnorm_rows <- fblob_rows(t, t.mtp_hnorm_off, nextn ? hcd : 0l)
-    var bm = (bd = -1l, bu = -1l, ok = true)
+    var bmd = -1l
+    var bmu = -1l
     if (nextn) {
-        bm = resident_place_hc_mixer(t, t.mtp_hc_head_down_off, t.mtp_hc_head_up_off, mr, kg, wb)
-        if (!bm.ok) return "arena placement failed at the NextN head's head mixer (the hyper-connection planes)"
+        bmd = place_plane(t, planes, cur, ResidentRole.hc_head_down, c.n_layers, mr, kg, wb)
+        bmu = place_plane(t, planes, cur, ResidentRole.hc_head_up, c.n_layers, mr, kg, wb)
+        if (bmd < 0l || bmu < 0l) return "arena placement failed at the NextN head's head mixer (the hyper-connection planes)"
     }
-    if (!rdec_set_hc(hc, lr, n_sites, norm_rows, inject_rows, down_blks, up_blks, head_norm, bh.bd, bh.bu, mtp_norm, bm.bd, bm.bu, hnorm_rows)) {
+    if (!rdec_set_hc(hc, lr, n_sites, norm_rows, inject_rows, down_blks, up_blks, head_norm, bhd, bhu, mtp_norm, bmd, bmu, hnorm_rows)) {
         return "the hyper-connection seats declined (the tier's line above)"
     }
     if (has_ple_ngram(c)) {
         let ind = ple_in_dim(c)
         let kern = c.ple_conv_kernel
-        let bkey = resident_place(t, KqFmt.q8, t.ple_key_off, ind, hcd, mr, kg, wb)
-        let bval = resident_place(t, KqFmt.q8, t.ple_val_off, ind, dim, mr, kg, wb)
+        let bkey = place_plane(t, planes, cur, ResidentRole.ngram_key, -1l, mr, kg, wb)
+        let bval = place_plane(t, planes, cur, ResidentRole.ngram_val, -1l, mr, kg, wb)
         if (bkey < 0l || bval < 0l) return "arena placement failed at the n-gram side input's planes"
         var side_norms : array<float>
         side_norms |> reserve_resize(3l * hcd)
@@ -1746,7 +1805,7 @@ struct private ImageRow {
 //! The device-side twin of the load report: every plane the whole-model driver uploads, per
 //! format, as bytes in the file's own blocks against bytes in the device planes, biggest overhead
 //! first, then the KV mirror and scratch the plan adds at this context.
-def private log_resident_image(planes : array<tuple<n : int64; rows : int64; f : KqFmt>>; plan : ResidentPlan; seq_cap : int64) {
+def private log_resident_image(planes : array<ResidentPlane>; plan : ResidentPlan; seq_cap : int64) {
     var rows : table<int; ImageRow>
     var file_total = 0l
     var device_total = 0l
@@ -1814,12 +1873,12 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     let dng = rdec_dn_geom(t)
     // tally arena blocks per format
     var need : table<int; int64>
-    var planes <- resident_planes(t, dng, plan.ple_tbl_bytes > 0l, host_layers)
+    var inscope planes <- resident_planes(t, dng, plan.ple_tbl_bytes > 0l, host_layers)
+    var cur = 0
     let n_moe = resident_moe_layers(t)
     for (pl in planes) {
         if (!kq_rows_ok(pl.n, pl.f)) {
-            let why = "a fmt {int(pl.f)} plane's row length {pl.n} is not a block multiple"   // pl refers into planes: read it before the delete
-            delete planes
+            let why = "a fmt {int(pl.f)} plane's row length {pl.n} is not a block multiple"
             delete need
             return rdec_decline(why)
         }
@@ -1827,7 +1886,6 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         need[fi] = (need?[fi] ?? 0l) + kq_blocks_for(pl.n, pl.rows, pl.f)
     }
     log_resident_image(planes, plan, seq_cap)
-    delete planes
     var reserve_ok = true
     for (fmt, blocks in keys(need), values(need)) {
         if (!rdec_reserve(fmt, blocks)) {
@@ -1880,17 +1938,17 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     if (ple > 0l && !rdec_set_ple(ple)) return rdec_decline("the per-layer-embedding width {ple} is not a 32-multiple")
     var ple_tbl_placed = false
     if (plan.ple_tbl_bytes > 0l) {
-        let all = c.n_layers * ple
+        let tbl = take_plane(planes, cur, ResidentRole.ple_table)
         var bpt0 = -1l
         var contiguous = true
         var row = 0l
-        while (row < c.vocab_size && contiguous) {
-            let prows = min(RDEC_PLE_TBL_PIECE_ROWS, c.vocab_size - row)
-            let bpt = resident_place(t, KqFmt.q8, t.ple_emb_off + row * all, all, prows, 1l, 4l, 0l)   //! the table sits linear in the q8 plane, outside the weights' repack
+        while (row < tbl.rows && contiguous) {
+            let prows = min(RDEC_PLE_TBL_PIECE_ROWS, tbl.rows - row)
+            let bpt = resident_place(t, tbl.f, tbl.off + row * tbl.n, tbl.n, prows, 1l, 4l, 0l)   //! the table sits linear in the q8 plane, outside the weights' repack
             if (row == 0l) {
                 bpt0 = bpt
             }
-            contiguous = bpt >= 0l && bpt == bpt0 + kq_blocks_for(all, row, KqFmt.q8)
+            contiguous = bpt >= 0l && bpt == bpt0 + kq_blocks_for(tbl.n, row, tbl.f)
             row += prows
         }
         ple_tbl_placed = contiguous && rdec_set_ple_table(bpt0)
@@ -1900,21 +1958,17 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     for (l in range64(c.n_layers)) {
         var lf = resident_layer_fmts(t, l)
         let moe = layer_is_moe(t, l)
-        let hid_l = resident_dense_width(t, l)
         var fb = (b1 = -1l, b3 = -1l, b2 = -1l)
         if (moe) {
             //! a layer with no shared expert keeps -1 dense blocks and takes the experts' feed form
             if (c.moe_dense_shexp) {
-                fb = resident_place_ffn(t, lf.f1, lf.f3, lf.f2, t.w1_offs[l], t.w3_offs[l], t.w2_offs[l], hid_l, mr, kg, wb)
+                fb = place_ffn(t, planes, cur, l, mr, kg, wb)
                 if (fb.b1 < 0l) return rdec_decline("arena placement failed at layer {l} (the dense shared expert)")
             } elif (c.n_ff_shexp > 0l) {
-                let p1 = resident_shexp_plane(t, l, 1)
-                let p3 = resident_shexp_plane(t, l, 3)
-                let p2 = resident_shexp_plane(t, l, 2)
-                lf.f1 = p1.f
-                lf.f3 = p3.f
-                lf.f2 = p2.f
-                fb = resident_place_ffn(t, p1.f, p3.f, p2.f, p1.off, p3.off, p2.off, c.n_ff_shexp, mr, kg, wb)
+                lf.f1 = resident_shexp_plane(t, l, 1).f
+                lf.f3 = resident_shexp_plane(t, l, 3).f
+                lf.f2 = resident_shexp_plane(t, l, 2).f
+                fb = place_ffn(t, planes, cur, l, mr, kg, wb)
                 if (fb.b1 < 0l) return rdec_decline("arena placement failed at layer {l} (the shared expert)")
             } else {
                 lf.f1 = rdec_efmt(t, t.we1_fmt, l)
@@ -1922,18 +1976,18 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
                 lf.f2 = rdec_efmt(t, t.we2_fmt, l)
             }
         } else {
-            fb = resident_place_ffn(t, lf.f1, lf.f3, lf.f2, t.w1_offs[l], t.w3_offs[l], t.w2_offs[l], hid_l, mr, kg, wb)
+            fb = place_ffn(t, planes, cur, l, mr, kg, wb)
             if (fb.b1 < 0l) return rdec_decline("arena placement failed at layer {l}")
         }
         if (layer_is_recurrent(c, l)) {
             let fqkv = fmt_at(t.dnqkv_fmt, l)
             let fz = fmt_at(t.dngate_fmt, l)
             let fout = fmt_at(t.dnout_fmt, l)
-            let bqkv = resident_place(t, fqkv, t.dnqkv_offs[l], dim, dng.cd, mr, kg, wb)
-            let bz = resident_place(t, fz, t.dngate_offs[l], dim, dng.di, mr, kg, wb)
-            let bout = resident_place(t, fout, t.dnout_offs[l], dng.di, dim, mr, kg, wb)
-            let bbeta = dng.ba_f32 ? -1l : resident_place(t, KqFmt.q8, t.dnbeta_offs[l], dim, dng.nvh, mr, kg, wb)
-            let balpha = dng.ba_f32 ? -1l : resident_place(t, KqFmt.q8, t.dnalpha_offs[l], dim, dng.nvh, mr, kg, wb)
+            let bqkv = place_plane(t, planes, cur, ResidentRole.dn_qkv, l, mr, kg, wb)
+            let bz = place_plane(t, planes, cur, ResidentRole.dn_z, l, mr, kg, wb)
+            let bout = place_plane(t, planes, cur, ResidentRole.dn_out, l, mr, kg, wb)
+            let bbeta = dng.ba_f32 ? -1l : place_plane(t, planes, cur, ResidentRole.dn_beta, l, mr, kg, wb)
+            let balpha = dng.ba_f32 ? -1l : place_plane(t, planes, cur, ResidentRole.dn_alpha, l, mr, kg, wb)
             if (bqkv < 0l || bz < 0l || bout < 0l || (!dng.ba_f32 && (bbeta < 0l || balpha < 0l))) {
                 return rdec_decline("arena placement failed at recurrent layer {l}")
             }
@@ -1947,7 +2001,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             }
             rec_idx++
             if (moe) {
-                let eb = resident_place_experts_or_host(t, l, router_slot, host_layers, mr, kg, wb)
+                let eb = resident_place_experts_or_host(t, planes, cur, l, router_slot, host_layers, mr, kg, wb)
                 if (!eb.ok) return rdec_decline("arena placement failed at recurrent layer {l} (the expert stacks)")
                 let ef = resident_expert_fmts(t, l)
                 rdec_set_moe_experts(l, router_slot, eb.be1, eb.be3, eb.be2, ef.f1, ef.f3, ef.f2)
@@ -1960,14 +2014,14 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         let g = resident_layer_geom(t, l, kvsh ? mir_bases[t.kv_src[l]] : mir_base)
         mir_bases[l] = g.mir_base
         mir_slots[l] = kvsh ? mir_slots[t.kv_src[l]] : mir_idx
-        let bq = resident_place(t, lf.fq, t.wq_offs[l], dim, c.q_gated ? 2l * g.qd : g.qd, mr, kg, wb)
-        let bk = kvsh ? -1l : resident_place(t, lf.fk, t.wk_offs[l], dim, g.kvd, mr, kg, wb)
-        let bv = (g.vfk || kvsh) ? -1l : resident_place(t, lf.fv, t.wv_offs[l], dim, g.kvd, mr, kg, wb)
-        let bo = resident_place(t, lf.fo, t.wo_offs[l], g.qd, dim, mr, kg, wb)
+        let bq = place_plane(t, planes, cur, ResidentRole.q, l, mr, kg, wb)
+        let bk = kvsh ? -1l : place_plane(t, planes, cur, ResidentRole.k, l, mr, kg, wb)
+        let bv = (g.vfk || kvsh) ? -1l : place_plane(t, planes, cur, ResidentRole.v, l, mr, kg, wb)
+        let bo = place_plane(t, planes, cur, ResidentRole.o, l, mr, kg, wb)
         // a placement can fail (arena exhausted); fail closed to the CPU loop rather than wire a -1 block
         if (bq < 0l || (!kvsh && bk < 0l) || (!g.vfk && !kvsh && bv < 0l) || bo < 0l) return rdec_decline("arena placement failed at layer {l}")
         if (moe) {
-            let eb = resident_place_experts_or_host(t, l, router_slot, host_layers, mr, kg, wb)
+            let eb = resident_place_experts_or_host(t, planes, cur, l, router_slot, host_layers, mr, kg, wb)
             if (!eb.ok) return rdec_decline("arena placement failed at layer {l} (the expert stacks)")
             let ef = resident_expert_fmts(t, l)
             rdec_set_moe_layer(l, mir_idx, router_slot, bq, bk, bv, bo, fb.b1, fb.b3, fb.b2, eb.be1, eb.be3, eb.be2,
@@ -1978,8 +2032,8 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
                 int(lf.fq), int(lf.fk), int(lf.fv), int(lf.fo), int(lf.f1), int(lf.f3), int(lf.f2), g)
         }
         if (ple > 0l) {
-            let bpg = resident_place(t, KqFmt.q8, t.ple_gate_off + l * dim * ple, dim, ple, mr, kg, wb)
-            let bpp = resident_place(t, KqFmt.q8, t.ple_proj_off + l * ple * dim, ple, dim, mr, kg, wb)
+            let bpg = place_plane(t, planes, cur, ResidentRole.ple_gate, l, mr, kg, wb)
+            let bpp = place_plane(t, planes, cur, ResidentRole.ple_proj, l, mr, kg, wb)
             if (bpg < 0l || bpp < 0l) return rdec_decline("arena placement failed at layer {l} (the per-layer-embedding planes)")
             rdec_set_ple_layer(l, bpg, bpp, int(KqFmt.q8))
         }
@@ -2005,11 +2059,11 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         delete w
         delete pnorm
     }
-    let bcls = resident_place(t, cls_fmt, t.wcls_off, dim, c.vocab_size, mr, kg, wb)
+    let bcls = place_plane(t, planes, cur, ResidentRole.cls, -1l, mr, kg, wb)
     if (bcls < 0l) return rdec_decline("classifier placement failed")
     rdec_set_cls(bcls, int(cls_fmt), c.final_logit_softcap, t.suppress)
     if (c.hyper_conn) {
-        let hc_why = resident_upload_hc(t, head, mr, kg, wb)
+        let hc_why = resident_upload_hc(t, planes, cur, head, mr, kg, wb)
         if (!empty(hc_why)) return rdec_decline(hc_why)
     }
     g_rdec_experts_host = host_experts
@@ -2023,7 +2077,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         resident_hot_arm(t, plan)
     }
     if (head) {
-        resident_place_head(t, mir_base, g_rdec_regions_want * seq_cap * kv_row_bytes(rkdt, layer_kv_dim(c, c.n_layers)) * 2l, mr, kg, wb)
+        resident_place_head(t, planes, cur, mir_base, g_rdec_regions_want * seq_cap * kv_row_bytes(rkdt, layer_kv_dim(c, c.n_layers)) * 2l, mr, kg, wb)
     }
     //! a per-layer-embedding model keeps the CPU embed unless its token table sits on the device too: the pre-step wants both gathers in one
     //! place; a hyper-connection model keeps it too - its window chain reads the pre-step's rows, never token ids
@@ -2115,24 +2169,22 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head")]
-def private resident_place_head(t : Model; mir_base, slot_bytes, mr, kg, wb : int64) {
+def private resident_place_head(t : Model; planes : array<ResidentPlane>; var cur : int&; mir_base, slot_bytes, mr, kg, wb : int64) {
     let c = t.config
     let l = c.n_layers
-    var inscope planes <- resident_head_planes(t)
-    var inscope blks : array<int64>
-    blks |> reserve(long_length(planes))
+    var blks : int64[8]
     var plane_bytes = 0l
-    for (pl in planes) {
-        let blk = resident_place(t, pl.f, pl.off, pl.n, pl.rows, mr, kg, wb)
-        if (blk < 0l) {
+    for (role, i in [ResidentRole.eh_proj, ResidentRole.q, ResidentRole.k, ResidentRole.v, ResidentRole.o, ResidentRole.ffn_gate, ResidentRole.ffn_up, ResidentRole.ffn_down], count()) {
+        let pl = take_plane(planes, cur, role, l)
+        blks[i] = resident_place(t, pl.f, pl.off, pl.n, pl.rows, mr, kg, wb)
+        if (blks[i] < 0l) {
             to_log(LOG_WARNING, "dasLLAMA: resident driver - the NextN draft head stays off the device (an arena placement failed on its {pl.f} plane {pl.n} x {pl.rows}); the CPU draft serves\n")
             return
         }
-        blks |> push(blk)
         plane_bytes += moe_gpu_plane_bytes(pl.n, pl.rows, int(pl.f))
     }
     let lf = resident_head_fmts(t)
-    if (!rdec_set_head(blks[0], int(planes[0].f), blks[1], blks[2], blks[3], blks[4], blks[5], blks[6], blks[7],
+    if (!rdec_set_head(blks[0], int(t.mtp_ehproj_fmt), blks[1], blks[2], blks[3], blks[4], blks[5], blks[6], blks[7],
             int(lf.fq), int(lf.fk), int(lf.fv), int(lf.fo), int(lf.f1), int(lf.f3), int(lf.f2), resident_layer_geom(t, l, mir_base))) {
         to_log(LOG_WARNING, "dasLLAMA: resident driver - the NextN draft head stays off the device (the device declined its classes, the tier's line above); the CPU draft serves\n")
         return
@@ -2224,27 +2276,6 @@ def private resident_prepare_moe(t : Model; n_moe : int64; sh_gated : bool) : bo
     delete ubias
     delete dbias
     return ok
-}
-
-//! the expert triple of an MoE layer into the arena, sliced per expert as the per-op walk gathers it
-def private resident_place_experts(t : Model; l : int64; mr, kg, wb : int64) : tuple<be1 : int64; be3 : int64; be2 : int64> {
-    var be = fixed_array(-1l, -1l, -1l)
-    for (i, k in range(3), [1, 3, 2]) {
-        let p = resident_expert_plane(t, l, k)
-        be[i] = resident_place(t, p.f, p.off, p.n, t.config.n_expert * p.rows, mr, kg, wb, p.rows)
-        break if (be[i] < 0l)
-    }
-    return (be1 = be[0], be3 = be[1], be2 = be[2])
-}
-
-//! a dense FFN triple placed in the arena, gate and up at `hid` rows of the model's width and down at its width of `hid`;
-//! `b1` is -1 when any of the three placements failed
-def private resident_place_ffn(t : Model; f1, f3, f2 : KqFmt; o1, o3, o2, hid : int64; mr, kg, wb : int64) : tuple<b1 : int64; b3 : int64; b2 : int64> {
-    let dim = t.config.dim
-    let b1 = resident_place(t, f1, o1, dim, hid, mr, kg, wb)
-    let b3 = resident_place(t, f3, o3, dim, hid, mr, kg, wb)
-    let b2 = resident_place(t, f2, o2, hid, dim, mr, kg, wb)
-    return (b1 = (b1 < 0l || b3 < 0l || b2 < 0l) ? -1l : b1, b3 = b3, b2 = b2)
 }
 
 //! One position's cos/sin plane for the resident device kernels (`build_rope_row_packed` is the one
