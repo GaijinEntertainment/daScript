@@ -1793,13 +1793,8 @@ def private read_back_y(var raw : VkCommandBuffer; dev : uint64; bytes : int64; 
 }
 
 def private max_rel_diff(a, b : array<float>) : double {
-    var mx = 0.0
-    var mref = 0.0
-    for (x, y in a, b) {
-        mx = max(mx, abs(x - y))
-        mref = max(mref, abs(y))
-    }
-    return mref > 0.0 ? double(mx / mref) : 0.0lf
+    let mref = logits_maxabs(b)
+    return mref > 0.0 ? double(logits_maxdiff(a, b) / mref) : 0.0lf
 }
 
 def private khr_arm_set(v, fmt : int; wqd, wsd, scd, xfd, xqd, axsd, yd : uint64; wq_bytes, ws_bytes, sc_bytes, xf_bytes, xq_bytes, axs_bytes, y_bytes : int64) : VkDescriptorSet {
