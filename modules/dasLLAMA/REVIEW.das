@@ -683,8 +683,18 @@ def private check_exe_fn_global_restore {
         }
         let path = "modules/dasLLAMA/dasllama/{name}"
         let text = fread(path)
-        let generated = find(text, "[init, boot_restore]") >= 0
+        //! the annotation line itself, not a mention in a comment: `[init, boot_restore]` or `[boot_restore, init]` at column 0
+        var generated = false
+        var restore_line = 0
         var line_no = 0
+        for (line in split(strip_line_comments(text), "\n")) {
+            line_no++
+            if (line |> starts_with("[init, boot_restore]") || line |> starts_with("[boot_restore, init]")) {
+                generated = true
+                restore_line = line_no
+            }
+        }
+        line_no = 0
         for (line in split(text, "\n")) {
             line_no++
             var rest = ""
@@ -701,6 +711,8 @@ def private check_exe_fn_global_restore {
             continue if (eq < 0 || (find(line, "//") >= 0 && find(line, "//") < eq))
             if (!generated && find(text, "if ({gname} == null)") < 0) {
                 gate_finding(path, line_no, "function global `{gname}` has a declaration initializer but no `if ({gname} == null)` boot-restore guard - a serialized exe restores it as NULL and the first invoke dies (add it to the file's restore [init], or annotate that [init] `boot_restore`, which writes every guard)")
+            } elif (generated && line_no > restore_line) {
+                gate_finding(path, line_no, "function global `{gname}` is declared below the `[init, boot_restore]` function (line {restore_line}), which the annotation walks as the parser reaches it - the global gets no guard; move the restore function below every `= @@fn` global")
             }
         }
     }
@@ -1102,7 +1114,7 @@ def private cm2_template_chain_lines(name : string) : array<string> {
 struct private LadderTrio {
     suffix : string     //! the stamp's class suffix: `<Fmt>` + suffix
     tail : string       //! the dispatch name's tail: `kq_batch_<fmt>_` + tail; a per-32 format (q8, q51, mx4, iq4nl32) spells `<fmt>_batch_` + tail
-    ladder : string     //! the ladder functions' prefix: ladder + `ensure` / `set` / `enc`
+    ladder : string     //! a ladder trio of this tile's own beside the engine's `cm2_cls_*` (the kernel cells' `khr_cls_`), "" where there is none
     why : string        //! what a missing arm does at run time
 }
 
@@ -1110,17 +1122,55 @@ def private cm2_dispatch_name(fmt, tail : string) : string {
     return fmt == "q8" || fmt == "q51" || fmt == "mx4" || fmt == "iq4nl32" ? "{fmt}_batch_{tail}" : "kq_batch_{fmt}_{tail}"
 }
 
-//! the words of `let KQ_CM2E_ALIASES_M = "..."` in the kqformat module: the formats whose e column the m stamp serves
-def private kqformat_cm2e_aliases : array<string> {
-    let marker = "let KQ_CM2E_ALIASES_M = \""
-    for (line in split(strip_line_comments(fread(KQ_FORMAT)), "\n")) {
-        continue if (!(line |> starts_with(marker)))
-        let from = length(marker)
+//! the words of a `let [private] NAME = "..."` line in `path`, or none with a finding: a roster the gate reads where the code reads it
+def private let_words(path, name : string) : array<string> {
+    for (line in split(strip_line_comments(fread(path)), "\n")) {
+        var from = -1
+        for (marker in fixed_array("let {name} = \"", "let private {name} = \"")) {
+            if (line |> starts_with(marker)) {
+                from = length(marker)
+            }
+        }
+        continue if (from < 0)
         return <- split(slice(line, from, find(line, "\"", from)), " ")
     }
-    gate_finding(KQ_FORMAT, "no `{marker}...\"` line - the e-column alias rule has no roster to read; keep the spelling or move this check with it")
+    gate_finding(path, "no `let {name} = \"...\"` line - the rule reading it has no roster; keep the spelling or move this check with it")
     var none : array<string>
     return <- none
+}
+
+//! the words of `let KQ_CM2E_ALIASES_M = "..."` in the kqformat module: the formats whose e column the m stamp serves
+def private kqformat_cm2e_aliases : array<string> => let_words(KQ_FORMAT, "KQ_CM2E_ALIASES_M")
+
+//! the engine's one cm2 class ladder, `cm2_cls_*`: stamped by `kq_tile_stamp` over `tile_<verb>()` with the `CM2_TILE_NONE` skip
+//! list - a `<fmt>/<tail>` pair on that list whose tail is this trio's and whose format has a template on the cm2 base hides the
+//! template behind the skip, and the format panics at its first dispatch of the tile
+def private check_cm2_live_ladder(trio : LadderTrio; templates : array<string>) {
+    var inscope ladders <- function_bodies(VK_CLASSES) $(header) {
+        return header |> starts_with("def cm2_cls_ensure") || header |> starts_with("def cm2_cls_set") || header |> starts_with("def cm2_cls_enc")
+    }
+    if (length(ladders) != 3) {
+        gate_finding(VK_CLASSES, "found {length(ladders)} of the three `cm2_cls_ensure` / `cm2_cls_set` / `cm2_cls_enc` ladders - keep the spelling or move this check with it")
+        return
+    }
+    for (f in ladders) {
+        let ladder = ident_prefix(slice(f.body, length("def ")))
+        let placeholder = "tile_{slice(ladder, length("cm2_cls_"))}("
+        if (find(f.body, "kq_tile_stamp(fmt, CM2_TILE_NONE, ") < 0 || find(f.body, placeholder) < 0) {
+            gate_finding(VK_CLASSES, f.line, "{ladder} is not stamped by `kq_tile_stamp(fmt, CM2_TILE_NONE, ...)` over `{placeholder}` - the stamp walks every KqFmt member, so a format without the class fails the compile instead of {trio.why}")
+        }
+    }
+    var inscope skips <- let_words(VK_CLASSES, "CM2_TILE_NONE")
+    for (word in skips) {
+        let slash = find(word, "/")
+        continue if (slash < 0 || slice(word, slash + 1) != trio.tail)
+        let fmt = slice(word, 0, slash)
+        for (tpl in templates) {
+            if (to_lower(slice(tpl, 0, length(tpl) - length("Cm2T"))) == fmt) {
+                gate_finding(VK_CLASSES, "CM2_TILE_NONE skips {word} while `class template {tpl}` sits on the cm2 base - a skipped (format, tile) pair panics at its first dispatch, so {trio.why}")
+            }
+        }
+    }
 }
 
 //! a stamp's k step off its class lines: the cm2 template's BK unless the stamp overrides it
@@ -1142,10 +1192,11 @@ def private check_cm2_ladder_set(trio : LadderTrio; exempt : table<string>) {
         return
     }
     let classes = strip_line_comments(fread(VK_CLASSES))
+    check_cm2_live_ladder(trio, templates)
     var inscope ladders <- function_bodies(VK_CLASSES) $(header) {
-        return header |> starts_with("def {trio.ladder}ensure") || header |> starts_with("def {trio.ladder}set") || header |> starts_with("def {trio.ladder}enc")
+        return !empty(trio.ladder) && (header |> starts_with("def {trio.ladder}ensure") || header |> starts_with("def {trio.ladder}set") || header |> starts_with("def {trio.ladder}enc"))
     }
-    if (length(ladders) != 3) {
+    if (!empty(trio.ladder) && length(ladders) != 3) {
         gate_finding(VK_CLASSES, "found {length(ladders)} of the three `{trio.ladder}ensure` / `{trio.ladder}set` / `{trio.ladder}enc` ladders - keep the spelling or move this check with it")
     }
     for (f in ladders) {
@@ -1210,8 +1261,8 @@ def private check_cm2_ladder_set(trio : LadderTrio; exempt : table<string>) {
 def private check_cm2_ladder_sets {
     check_cm2_ladder_set(LadderTrio(suffix = "KhrBatch", tail = "khr_cls", ladder = "khr_cls_",
         why = "the f16 feed admits the format on a KHR-mode card, where the KHR ladders panic; a per-32 format the feed never admits there joins CM2_KHR_EXEMPT in this file and the licensed set ARCHITECTURE_GPU_VULKAN.md names, in the same change"), CM2_KHR_EXEMPT)
-    check_cm2_ladder_set(LadderTrio(suffix = "Cm2EBatch", tail = "cm2e_cls", ladder = "cm2e_cls_",
-        why = "the expert schedule takes the format's planes, and the e ladders panic on the first resident MoE window"), CM2_NO_EXEMPT)
+    check_cm2_ladder_set(LadderTrio(suffix = "Cm2EBatch", tail = "cm2e_cls", ladder = "",
+        why = "the expert schedule takes the format's planes, and the e arm panics on the first resident MoE window"), CM2_NO_EXEMPT)
 }
 
 struct private VkStamp {

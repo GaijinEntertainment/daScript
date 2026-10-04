@@ -26,9 +26,12 @@ reads `class template KqCm2BatchT` in `dasllama_vulkan_classes.das` and licenses
 `dasllama_vulkan_common.das`, the `row` slab of `ArBase` in `dasllama_vulkan_classes.das` and the
 `c.dim` cap of `attn_dec_shape_ok` in `dasllama_blocks.das`, and licenses no names: the three
 numbers agree. `check_cm2_ladder_sets` walks every `class template <Fmt>Cm2T : KqCm2BatchT` in
-`dasllama_vulkan_classes.das` twice and requires each trio's ladders there (`khr_cls_*`, `cm2e_cls_*`) stamped by
-`kq_tile_stamp` over their `tile_<verb>_<tail>` placeholder - the stamp walks every `KqFmt` member, so a format with
-no class fails the compile. The KHR trio needs `<Fmt>KhrBatch` and its `kq_batch_<fmt>_khr_cls` stamp (per-32:
+`dasllama_vulkan_classes.das` twice (the KHR tile, the e column) and requires the engine's one ladder trio
+(`cm2_cls_*`) stamped by `kq_tile_stamp(fmt, CM2_TILE_NONE, ...)` over its `tile_<verb>()` placeholders, with no
+`<fmt>/<tail>` pair of the `CM2_TILE_NONE` skip list naming a format that has a template on the cm2 base for
+the walked tile, and the kernel cells' KHR ladder (`khr_cls_*`) stamped over `tile_<verb>_khr_cls()` - the stamp
+walks every `KqFmt` member, so a format with no class fails the compile, and a skipped pair would panic at its
+first dispatch instead. The KHR trio needs `<Fmt>KhrBatch` and its `kq_batch_<fmt>_khr_cls` stamp (per-32:
 `<fmt>_batch_khr_cls` - `Q8KhrBatch`, `Q51KhrBatch`, `Mx4KhrBatch`, `Iq4nl32KhrBatch`; the expert schedule rides that tile in mm mode); the e
 trio reads `KQ_CM2E_ALIASES_M` (`dasllama_kqformat.das`): a format whose s stamp steps k by 64 is on it and ships no
 `<Fmt>Cm2EBatch` (its e column is the m stamp byte for byte), a 32-step one is off it and ships `<Fmt>Cm2EBatch` with its `kq_batch_<fmt>_cm2e_cls` (per-32 `<fmt>_batch_cm2e_cls`) stamp; none licensed.

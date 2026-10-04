@@ -91,8 +91,8 @@ clamped: q8 E2B down 268 -> 612 us) and through the edge path the dispatch waite
 **The k step follows the column and the decode; the k loop is unrolled by hand, a superblock per
 block.** The template's k step (`BK`) is 64 on the dense l and m tiles and on the expert stamps of the K-quants, q4_0, q8 and
 the 4-bit LUT formats - there the e column IS the m stamp (`KQ_CM2E_ALIASES_M` in `dasllama_kqformat.das` names them, the
-`cm2e_cls_*` ladder picks their m class, `REVIEW.das` holds the roster to the s stamps' k steps) - and 32 on the s and e stamps
-of the five grid-codebook formats (iq2xxs, iq2xs, iq2s, iq3xxs, iq3s; their e stamp is `<Fmt>Cm2EBatch`); a stamp's `AT`/`BT` carry its depth. The class pick ladders (`khr_cls_*`, `cm2e_cls_*`, `cm2_cls_*`, in the classes file) are stamped by `kq_tile_stamp` over every `KqFmt` member from one placeholder body, so a format without its stamp fails the compile, never a window. A grid decode is
+`cm2_cls_*` ladder's e tail picks their m class through `kq_tile_target`, `REVIEW.das` holds the roster to the s stamps' k steps) - and 32 on the s and e stamps
+of the five grid-codebook formats (iq2xxs, iq2xs, iq2s, iq3xxs, iq3s; their e stamp is `<Fmt>Cm2EBatch`); a stamp's `AT`/`BT` carry its depth. The class pick ladders (`cm2_cls_*` for the engine, over every tile tail; `khr_cls_*` for the kernel cells' KHR arm, in the classes file) are stamped by `kq_tile_stamp` over every `KqFmt` member from one placeholder body, so a format without its stamp fails the compile, never a window. A grid decode is
 occupancy-bound - a 64-deep column holds twice the A tile, and with the codebook lookup's live range
 a workgroup fewer fits an SM (the iq2xxs gate/up plane 0.611 against 0.730 ms at 32, `moe:<fmt>`,
 RTX 5060 Ti) - while a light decode is step-bound (the k4 s tile 0.744 against 0.679 at 32 (`moesk:k4`), its
@@ -266,8 +266,8 @@ reaches the 49152 B of workgroup memory the tier requires of a device - the floo
 
 **The arm exists at one geometry** - 128 weights by 128 tokens, k step 32 - so in mm mode the
 tile pick answers 128 and the wave model weighs its k chunks alone (a deep, narrow GEMM splits k
-into the same scratch planes and reduce the cm2 tiles use), and `cm2_cls_ensure/set/enc` route to
-the `khr_cls_*` ladders, the same `(fmt)` key on both. The f16 feed admits a kq format in mm mode
+into the same scratch planes and reduce the cm2 tiles use), and `cm2_cls_ensure/set/enc` take the KHR
+tile as their tail-0 arm (`cm2_tile_tail`), the same `(fmt)` key the kernel cells' `khr_cls_*` ladder stamps. The f16 feed admits a kq format in mm mode
 only on a 32-lane subgroup (`khr_kq_tile_on`): the body indexes eight subgroups over the tile, so
 a wave64 device (four subgroups per 256-thread workgroup) keeps its kq planes on the sdot4 tile.
 

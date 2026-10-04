@@ -22,6 +22,43 @@ def spawn_compile(requires : array<string>; tag : string) : tuple<rc : int; out 
     return spawn_compile_only(fixture_source(requires), "lint_{tag}", 120.0)
 }
 
+//! a module with a function global above its `[init, boot_restore]` function, and one below it where `below` is set: the annotation
+//! runs as the parser reaches the function, so a global below it would get no guard - the macro refuses the module
+def private spawn_boot_restore_fixture(below : bool; tag : string) : tuple<rc : int; out : string> {
+    var lines <- [
+        "options gen2",
+        "options _dasllama_internal = true",
+        "",
+        "require dasllama/dasllama_lint public",
+        "require dasllama/dasllama_boot_restore",
+        "",
+        "def private f_a : int => 1",
+        "var private g_above = @@f_a",
+        "",
+        "[init, boot_restore]",
+        "def private restore_probe \{\}",
+        ""]
+    if (below) {
+        lines |> push("var private g_below = @@f_a")
+    }
+    lines |> push("[export]")
+    lines |> push("def main() \{")
+    lines |> push("    print(\"ok\\n\")")
+    lines |> push("\}")
+    return spawn_compile_only(join(lines, "\n"), "boot_restore_{tag}", 120.0)
+}
+
+[test]
+def test_boot_restore_order_gate(t : T?) {
+    t |> run("[boot_restore] refuses a function global declared below its restore function and compiles the module with every global above") @(t : T?) {
+        let bad = spawn_boot_restore_fixture(true, "below")
+        t |> success(bad.rc != 0, "a `= @@fn` global below the restore function must not compile")
+        t |> success(find(bad.out, "is declared below the restore function") >= 0, "the refusal names the global and the order: {bad.out}")
+        let good = spawn_boot_restore_fixture(false, "above")
+        t |> equal(0, good.rc, "every global above the restore function compiles: {good.out}")
+    }
+}
+
 [test]
 def test_allowed_set_admits_the_entry_modules(t : T?) {
     t |> run("a facade-only program with no escape compiles") @(t : T?) {
