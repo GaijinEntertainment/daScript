@@ -17,6 +17,7 @@ require math
 require _vk_kq_fixtures
 require _kq_fixtures   // q8_roundtrip: the feeds and requants the device quantizes, through the engine's quantizers
 require _compares
+require _kernel_oracles
 require _attn_oracle   // attn_row_oracle: the block reference's softmax rows
 
 //! The per-op tier's decode attention block and the decode FFN tail against a CPU reference:
@@ -74,19 +75,6 @@ def private feed_ref(x : array<float>; wn : array<float>; fmt : int) : Q8Round {
     xb |> resize(N)
     rmsnorm(xb, x, wn, N, EPS)
     return <- q8_roundtrip(xb, N, fmt != 0)
-}
-
-// the device rope's two pairings: neox rotates (j, j + half), the classic form (2j, 2j + 1)
-def private rope_ref(var v : array<float>; nheads : int64; cossin : array<float>; neox : bool) {
-    unsafe {
-        let cosrow = addr<float const?>(cossin[0])
-        let sinrow = addr<float const?>(cossin[HS / 2l])
-        if (neox) {
-            rope_scaled_neox_tab(addr<float?>(v[0]), HS, nheads * HS, cosrow, sinrow)
-        } else {
-            rope_scaled_tab(addr<float?>(v[0]), HS, nheads * HS, cosrow, sinrow)
-        }
-    }
 }
 
 // one head group's decode attention over the f16 mirror rows [0, cnt)
@@ -254,8 +242,8 @@ def private block_ref(var q : Quad; x : array<float>; pos : int64; cossin : arra
             vr[i] += q.bv[i]
         }
     }
-    rope_ref(qr, NH, cossin, q.neox)
-    rope_ref(kr, 1l, cossin, q.neox)
+    rope_tab_ref(qr, 0, int(HS), 0, int(NH * HS), q.neox, cossin, cossin, 0, int(HS / 2l))
+    rope_tab_ref(kr, 0, int(HS), 0, int(HS), q.neox, cossin, cossin, 0, int(HS / 2l))
     for (i in range64(KVD)) {
         q.kmir[pos * KVD + i] = f16r(kr[i])
         q.vmir[pos * KVD + i] = f16r(vr[i])

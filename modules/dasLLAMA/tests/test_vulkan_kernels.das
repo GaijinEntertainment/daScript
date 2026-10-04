@@ -6305,21 +6305,9 @@ def test_vkd_at_prep(t0 : T?) {
                             rmsnorm(addr<float?>(rrow[hh * hs]), addr<float const?>(rrow[hh * hs]), addr<float const?>(smh[rms_off]), int64(hs), eps)
                         }
                     }
+                    rope_tab_ref(rrow, 0, hs, 2 * half, d, true, smh, smh, cos_off + p * half, sin_off + p * half)
                     for (i in range(d)) {
-                        let hh = i / hs
-                        let j = i % hs
-                        var outv = rrow[i]
-                        if (j < half) {
-                            outv = rrow[i] * smh[cos_off + p * half + j] - rrow[hh * hs + j + half] * smh[sin_off + p * half + j]
-                        } elif (j < 2 * half) {
-                            let jj = j - half
-                            outv = rrow[hh * hs + jj] * smh[sin_off + p * half + jj] + rrow[i] * smh[cos_off + p * half + jj]
-                        }
-                        if (isq) {
-                            o_ref[p * qd + i] = outv
-                        } else {
-                            o_ref[kb0 + p * kvd + i] = outv
-                        }
+                        o_ref[(isq ? p * qd : kb0 + p * kvd) + i] = rrow[i]
                     }
                     delete rrow
                 }

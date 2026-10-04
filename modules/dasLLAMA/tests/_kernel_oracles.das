@@ -13,12 +13,12 @@ require dasllama/dasllama_math   // rope_scaled_tab, rope_scaled_neox_tab, rope_
 
 //! The engine's table rope over `n` elements of `v` from `base`, heads `hs` wide, on the `tcos` / `tsin` rows: the partial
 //! form whenever `rot` names a prefix short of `hs`, else the NEOX or the interleaved pairing as `neox` names - the engine's
-//! own rule, a `rot` of 0 naming the whole head as the kernels' args take it. The table row starts at `tbase` of `tcos` /
-//! `tsin`.
-def rope_tab_ref(var v : array<float>; base, hs, rot, n : int; neox : bool; tcos, tsin : array<float>; tbase : int = 0) {
+//! own rule, a `rot` of 0 naming the whole head as the kernels' args take it. The cos row starts at `tbase` of `tcos`, the
+//! sin row at `sbase` of `tsin` (`tbase` where it is negative: one base into two tables, or a packed [cos | sin] row).
+def rope_tab_ref(var v : array<float>; base, hs, rot, n : int; neox : bool; tcos, tsin : array<float>; tbase : int = 0; sbase : int = -1) {
     unsafe {
         let cp = addr<float const?>(tcos[tbase])
-        let sp = addr<float const?>(tsin[tbase])
+        let sp = addr<float const?>(tsin[sbase < 0 ? tbase : sbase])
         if (rot > 0 && rot != hs) {
             rope_scaled_neox_tab_part(addr(v[base]), int64(hs), int64(rot), int64(n), cp, sp)
         } elif (neox) {

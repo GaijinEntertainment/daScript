@@ -13,6 +13,7 @@ require daslib/f16_cvt
 require math
 require _vk_kq_fixtures   // the synthetic kq stacks + pow2 scale sets (shared with test_vulkan_moe_cm2)
 require _kq_fixtures
+require _kernel_oracles
 require _compares   // check: every compare's rel_of_max bar, largest-difference log and poisoned-element control
 require _attn_oracle   // attn_row_oracle: the attention cells' softmax rows
 
@@ -1554,7 +1555,7 @@ let AT_REL_TOL = 5e-3
 def private ref_at_prep(y : array<float>; rmsw : array<float>; cosr, sinr : array<float>;
                         npos, d, rot : int64; gated : bool;
                         var outp : array<float>; var gatep : array<float>) {
-    let half = rot / 2l
+    let half = int(rot / 2l)
     outp |> resize(npos * d)
     if (gated) {
         gatep |> resize(npos * d)
@@ -1583,9 +1584,7 @@ def private ref_at_prep(y : array<float>; rmsw : array<float>; cosr, sinr : arra
                 row[h * ATHS + j] = rmsw[j] * (row[h * ATHS + j] * scale)
             }
         }
-        unsafe {   // NEOX pairs (j, j+half) over the roped span
-            rope_scaled_neox_tab_part(addr<float?>(row[0]), ATHS, rot, d, addr<float const?>(cosr[p * half]), addr<float const?>(sinr[p * half]))
-        }
+        rope_tab_ref(row, 0, int(ATHS), int(rot), int(d), true, cosr, sinr, int(p) * half)   // NEOX pairs (j, j+half) over the roped span
         for (i in range64(d)) {
             outp[p * d + i] = row[i]
         }
@@ -1883,17 +1882,8 @@ def test_vulkan_rope_kv_store(t : T?) {
                     rv[i] = qkv[int(QD + KVD) + i]
                 }
                 // rope rq (NH heads) and rk (NKV heads) in place through the engine's table rope
-                unsafe {
-                    let cosrow = addr<float const?>(cossin[0])
-                    let sinrow = addr<float const?>(cossin[int(half)])
-                    if (neox) {
-                        rope_scaled_neox_tab(addr<float?>(rq[0]), HS, QD, cosrow, sinrow)
-                        rope_scaled_neox_tab(addr<float?>(rk[0]), HS, KVD, cosrow, sinrow)
-                    } else {
-                        rope_scaled_tab(addr<float?>(rq[0]), HS, QD, cosrow, sinrow)
-                        rope_scaled_tab(addr<float?>(rk[0]), HS, KVD, cosrow, sinrow)
-                    }
-                }
+                rope_tab_ref(rq, 0, int(HS), 0, int(QD), neox, cossin, cossin, 0, int(half))
+                rope_tab_ref(rk, 0, int(HS), 0, int(KVD), neox, cossin, cossin, 0, int(half))
                 let tag = neox ? "NEOX" : "NORM"
                 held(t, "rope_kv {tag} q roped", qout, rq, REL_TOL, HS, 1e-6)
                 held(t, "rope_kv {tag} K stored roped", krow, rk, REL_TOL, HS, 1e-6)
