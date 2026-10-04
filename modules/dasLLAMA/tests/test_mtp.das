@@ -15,6 +15,7 @@ require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_gguf   // set_mtp_head_path - the split-head fixture names its head explicitly
 require dasllama/dasllama_kv_dtype   // kv_row_bytes / kv_layer_kbase: the head's K row the seam writes
 require daslib/jobque_boost
+require daslib/linq
 require daslib/fio
 require daslib/strings_boost
 require _model_tier   // models_dir() + model_available() presence/size-tier gate (see the file's header)
@@ -321,13 +322,6 @@ def private poison_head_k_row(tr : Model; var s : Session; row : int64) {
     }
 }
 
-def private all_poisoned(row : array<uint8>) : bool {
-    for (b in row) {
-        return false if (b != uint8(0xFF))
-    }
-    return true
-}
-
 //! a continuation window of `tokens` at `SEAM_PROMPT` on a session prefilled over the fixture's first `SEAM_PROMPT` rows with
 //! speculation on, the head's seam row poisoned first, under the seam probe (`serves`) and, under `blob`, the model flagged a
 //! blob with the prefill probe claiming the window: true when the seam row kept its poison (the CPU seam never ran)
@@ -370,7 +364,7 @@ def private seam_row_kept(var tr : Model; serves, blob : bool) : bool {
         select_decode_override(decode0)
         set_mtp_spec(spec0)
         var row <- head_k_row_bytes(tr, s, SEAM_PROMPT - 1l)
-        kept = all_poisoned(row)
+        kept = all(row, $(b) => b == uint8(0xFF))
         delete row
         delete s
         delete first
