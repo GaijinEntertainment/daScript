@@ -23,7 +23,7 @@ def iq3s_signed(g, nib : uint) : uint {
 //! gemma's soft cap cap * tanh(v / cap) in softcap4's exp form: a shader tanh NaNs past ~44, while exp(INF) zeroes the term and saturates.
 def softcap_exp(v, cap : float) : float => cap * (1.0 - 2.0 / (1.0 + exp(2.0 * v / cap)))
 
-//! tanh clamped to +-15, where it already saturates in f32: past that a device tanh built from exp answers NaN, the CPU +-1
+//! tanh clamped to +-15, where f32 tanh already saturates: a device tanh built from exp answers NaN past about +-44, the CPU +-1
 def tts_tanh(v : float) : float => tanh(clamp(v, -15.0, 15.0))
 
 //! the logistic sigmoid, one form for the CPU chains and both kernel homes
