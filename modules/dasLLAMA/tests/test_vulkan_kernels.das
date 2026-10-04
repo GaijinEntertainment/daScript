@@ -1812,18 +1812,8 @@ def test_vkd_kq_gemv_k4_gu(t0 : T?) {
                         }
                         var oq2 <- staged(host.mapped, 0l, rows, type<int8>)
                         var os2 <- staged(host.mapped, oq_bytes, nblk, type<float>)
-                        var dq = 0
-                        var dqmax = 0
-                        for (e in range(rows)) {
-                            let dd = abs(int(oq[e]) - int(oq2[e]))
-                            dq += dd != 0 ? 1 : 0
-                            dqmax = max(dqmax, dd)
-                        }
-                        var ds = 0
-                        for (b in range(nblk)) {
-                            ds += os[b] != os2[b] ? 1 : 0
-                        }
-                        t |> success(dq == 0 && ds == 0, "{tag}: the hidden rows match the three-kernel path byte for byte ({dq} of {rows} quants off, at most {dqmax}; {ds} of {nblk} scales off)")
+                        let bad = mismatch_q8(oq, os, oq2, os2, 0.0, 0)
+                        t |> success(bad == 0, "{tag}: the hidden rows match the three-kernel path byte for byte ({bad} of {rows} quants and {nblk} scales off)")
                         delete oq2
                         delete os2
                     }
@@ -4647,18 +4637,8 @@ def private mx4_gemv_gu_run(t : T?; d, nreg : int; bias : bool) {
         t |> success(off.scales == 0, "{tag}: the block scales match ({off.scales} of {nblk} off)")
         t |> success(off.values == 0, "{tag}: the dequantized hidden rows sit within a quant step ({off.values} of {rows} off)")
         t |> success(off.poison_inside == 0, "{tag}: the bar reds a poisoned oracle element in every block ({off.poison_inside} passed)")
-        var dq = 0
-        var dqmax = 0
-        for (e in range(rows)) {
-            let dd = abs(int(oq[e]) - int(oq2[e]))
-            dq += dd != 0 ? 1 : 0
-            dqmax = max(dqmax, dd)
-        }
-        var ds = 0
-        for (b in range(nblk)) {
-            ds += os[b] != os2[b] ? 1 : 0
-        }
-        t |> success(dq == 0 && ds == 0, "{tag}: the hidden rows match the split path byte for byte ({dq} of {rows} quants off, at most {dqmax}; {ds} of {nblk} scales off)")
+        let bad = mismatch_q8(oq, os, oq2, os2, 0.0, 0)
+        t |> success(bad == 0, "{tag}: the hidden rows match the split path byte for byte ({bad} of {rows} quants and {nblk} scales off)")
         delete wqh
         delete wsh
         delete xqh
