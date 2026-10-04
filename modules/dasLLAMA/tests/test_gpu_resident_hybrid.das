@@ -827,13 +827,9 @@ def test_gpu_resident_hybrid_mtp_verify_reject(t : T?) {
             let pos = DRAFT_PROMPT
             let spec0 = get_mtp_spec()
             set_mtp_spec(true)
-            let reject0 = get_mtp_force_reject_every()
-            set_mtp_force_reject_every(1l)
             let verifies0 = moe_gpu_resident_verifies()
             let rollbacks0 = moe_gpu_resident_rollbacks()
-            var acc = 0l
-            let hit = mtp_spec_eval(tr, s, DRAFT_TOKEN, acc)
-            set_mtp_force_reject_every(reject0)
+            let hit = forced_reject_round(tr, s, DRAFT_TOKEN)
             t |> success(!hit, "the forced reject rejected the draft")
             t |> equal(moe_gpu_resident_verifies(), verifies0 + 1l, "the rejected round's verify ran on the device")
             t |> equal(moe_gpu_resident_rollbacks(), rollbacks0 + 1l, "the reject rolled back on the device")
@@ -855,6 +851,7 @@ def test_gpu_resident_hybrid_mtp_verify_reject(t : T?) {
             forward(tr, s, next, pos + 1l)
             s.n_past = pos + 2l   // a plain step moves no position; the round reads its position from here, and a stale one steps the recurrent state back
             var next_log <- [for (x in s.logits); x]
+            var acc = 0l
             mtp_spec_eval(tr, s, argmax_of(s.logits), acc)
             set_mtp_spec(spec0)
             t |> equal(moe_gpu_resident_verifies(), verifies0 + 2l, "the round after the reject verified on the device again")
@@ -897,14 +894,10 @@ def test_gpu_resident_hybrid_mtp_verify_reject_asked(t : T?) {
             var before <- [for (x in s.logits); x]
             let spec0 = get_mtp_spec()
             set_mtp_spec(true)
-            let reject0 = get_mtp_force_reject_every()
-            set_mtp_force_reject_every(1l)
             let rollbacks0 = moe_gpu_resident_rollbacks()
             s.pick_asked = true
-            var acc = 0l
-            let hit = mtp_spec_eval(tr, s, DRAFT_TOKEN, acc)
+            let hit = forced_reject_round(tr, s, DRAFT_TOKEN)
             s.pick_asked = false
-            set_mtp_force_reject_every(reject0)
             set_mtp_spec(spec0)
             t |> success(!hit, "the forced reject rejected the draft")
             t |> equal(moe_gpu_resident_rollbacks(), rollbacks0 + 1l, "the reject rolled back on the device")

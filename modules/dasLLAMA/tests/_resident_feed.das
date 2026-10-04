@@ -190,6 +190,16 @@ def draft_from(tr : Model; var s : Session; tok, row : int64; h0 : array<float>)
     return <- Draft(logits <- [for (x in s.logits); x], h <- [for (x in s.mtp_h); x])
 }
 
+//! one speculative round of `tok` on `s` with its draft forced to reject, the reject cadence put back after; true where it accepted
+def forced_reject_round(tr : Model; var s : Session; tok : int64) : bool {
+    let reject0 = get_mtp_force_reject_every()
+    set_mtp_force_reject_every(1l)
+    var acc = 0l
+    let hit = mtp_spec_eval(tr, s, tok, acc)
+    set_mtp_force_reject_every(reject0)
+    return hit
+}
+
 //! the head's K row `row` of the session's cache as bytes
 def head_k_row_bytes(tr : Model; var s : Session; row : int64) : array<uint8> {
     let c = tr.config

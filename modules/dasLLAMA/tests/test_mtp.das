@@ -163,11 +163,7 @@ def private reject_round_ids(tr : Model; n_check : int64) : RejectRound {
         s.n_past = np
         let tok = parallel_argmax(s.logits, tr.config.vocab_size)
         out.got |> push(tok)
-        let reject0 = get_mtp_force_reject_every()
-        set_mtp_force_reject_every(1l)
-        var acc = 0l
-        out.hit = mtp_spec_eval(tr, s, tok, acc)
-        set_mtp_force_reject_every(reject0)
+        out.hit = forced_reject_round(tr, s, tok)
         set_mtp_spec(spec0)
         var pos = np + 1l
         for (_i in range64(n_check)) {
