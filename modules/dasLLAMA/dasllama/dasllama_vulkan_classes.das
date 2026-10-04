@@ -2778,7 +2778,7 @@ class DnScan {
     }
 
     [spirv_kernel(local_size_x = 128, name = "dn_scan_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
-    def run {   // nolint:STYLE038 — the per-token recurrence over 16 register rows of one column, written out
+    def run {   // nolint:STYLE038 — the per-token recurrence over 16 register rows of one column
         let ds = pa.ds
         let lanes_per_col = ds / 16u           // 16 state rows each; ds % 16 == 0 host-side
         let cols_per_block = 32u / lanes_per_col   //! the 128-thread workgroup's four 32-lane blocks, by the invocation id: a cluster's shuffles (masks under 8) stay inside a block on any subgroup width
@@ -2806,58 +2806,19 @@ class DnScan {
         let sb = pa.region_state_base + h * ds * ds + (live ? col : 0u) + lane * ds
         let row_stride = lanes_per_col * ds
         var s : float[16]
-        s[0] = state[sb]
-        s[1] = state[sb + row_stride]
-        s[2] = state[sb + 2u * row_stride]
-        s[3] = state[sb + 3u * row_stride]
-        s[4] = state[sb + 4u * row_stride]
-        s[5] = state[sb + 5u * row_stride]
-        s[6] = state[sb + 6u * row_stride]
-        s[7] = state[sb + 7u * row_stride]
-        s[8] = state[sb + 8u * row_stride]
-        s[9] = state[sb + 9u * row_stride]
-        s[10] = state[sb + 10u * row_stride]
-        s[11] = state[sb + 11u * row_stride]
-        s[12] = state[sb + 12u * row_stride]
-        s[13] = state[sb + 13u * row_stride]
-        s[14] = state[sb + 14u * row_stride]
-        s[15] = state[sb + 15u * row_stride]
+        for [unroll_full] (i in range(16)) {
+            s[i] = state[sb + uint(i) * row_stride]
+        }
         //! the last token re-reads its own row
         var k_next : float[16]
         var q_next : float[16]
         var v_next = conv[voff]
-        k_next[0] = conv[k_elem0]
-        k_next[1] = conv[k_elem0 + lanes_per_col]
-        k_next[2] = conv[k_elem0 + 2u * lanes_per_col]
-        k_next[3] = conv[k_elem0 + 3u * lanes_per_col]
-        k_next[4] = conv[k_elem0 + 4u * lanes_per_col]
-        k_next[5] = conv[k_elem0 + 5u * lanes_per_col]
-        k_next[6] = conv[k_elem0 + 6u * lanes_per_col]
-        k_next[7] = conv[k_elem0 + 7u * lanes_per_col]
-        k_next[8] = conv[k_elem0 + 8u * lanes_per_col]
-        k_next[9] = conv[k_elem0 + 9u * lanes_per_col]
-        k_next[10] = conv[k_elem0 + 10u * lanes_per_col]
-        k_next[11] = conv[k_elem0 + 11u * lanes_per_col]
-        k_next[12] = conv[k_elem0 + 12u * lanes_per_col]
-        k_next[13] = conv[k_elem0 + 13u * lanes_per_col]
-        k_next[14] = conv[k_elem0 + 14u * lanes_per_col]
-        k_next[15] = conv[k_elem0 + 15u * lanes_per_col]
-        q_next[0] = conv[q_elem0]
-        q_next[1] = conv[q_elem0 + lanes_per_col]
-        q_next[2] = conv[q_elem0 + 2u * lanes_per_col]
-        q_next[3] = conv[q_elem0 + 3u * lanes_per_col]
-        q_next[4] = conv[q_elem0 + 4u * lanes_per_col]
-        q_next[5] = conv[q_elem0 + 5u * lanes_per_col]
-        q_next[6] = conv[q_elem0 + 6u * lanes_per_col]
-        q_next[7] = conv[q_elem0 + 7u * lanes_per_col]
-        q_next[8] = conv[q_elem0 + 8u * lanes_per_col]
-        q_next[9] = conv[q_elem0 + 9u * lanes_per_col]
-        q_next[10] = conv[q_elem0 + 10u * lanes_per_col]
-        q_next[11] = conv[q_elem0 + 11u * lanes_per_col]
-        q_next[12] = conv[q_elem0 + 12u * lanes_per_col]
-        q_next[13] = conv[q_elem0 + 13u * lanes_per_col]
-        q_next[14] = conv[q_elem0 + 14u * lanes_per_col]
-        q_next[15] = conv[q_elem0 + 15u * lanes_per_col]
+        for [unroll_full] (i in range(16)) {
+            k_next[i] = conv[k_elem0 + uint(i) * lanes_per_col]
+        }
+        for [unroll_full] (i in range(16)) {
+            q_next[i] = conv[q_elem0 + uint(i) * lanes_per_col]
+        }
         var t = 0u
         while (t < pa.npos) {
             let eg = egs[t]
@@ -2865,124 +2826,35 @@ class DnScan {
             let v = v_next
             var k : float[16]
             var q : float[16]
-            k[0] = k_next[0]
-            k[1] = k_next[1]
-            k[2] = k_next[2]
-            k[3] = k_next[3]
-            k[4] = k_next[4]
-            k[5] = k_next[5]
-            k[6] = k_next[6]
-            k[7] = k_next[7]
-            k[8] = k_next[8]
-            k[9] = k_next[9]
-            k[10] = k_next[10]
-            k[11] = k_next[11]
-            k[12] = k_next[12]
-            k[13] = k_next[13]
-            k[14] = k_next[14]
-            k[15] = k_next[15]
-            q[0] = q_next[0]
-            q[1] = q_next[1]
-            q[2] = q_next[2]
-            q[3] = q_next[3]
-            q[4] = q_next[4]
-            q[5] = q_next[5]
-            q[6] = q_next[6]
-            q[7] = q_next[7]
-            q[8] = q_next[8]
-            q[9] = q_next[9]
-            q[10] = q_next[10]
-            q[11] = q_next[11]
-            q[12] = q_next[12]
-            q[13] = q_next[13]
-            q[14] = q_next[14]
-            q[15] = q_next[15]
+            for [unroll_full] (i in range(16)) {
+                k[i] = k_next[i]
+            }
+            for [unroll_full] (i in range(16)) {
+                q[i] = q_next[i]
+            }
             let crow_next = min(t + 1u, pa.npos - 1u) * pa.cd
             v_next = conv[crow_next + voff]
             let kbn = crow_next + k_elem0
-            k_next[0] = conv[kbn]
-            k_next[1] = conv[kbn + lanes_per_col]
-            k_next[2] = conv[kbn + 2u * lanes_per_col]
-            k_next[3] = conv[kbn + 3u * lanes_per_col]
-            k_next[4] = conv[kbn + 4u * lanes_per_col]
-            k_next[5] = conv[kbn + 5u * lanes_per_col]
-            k_next[6] = conv[kbn + 6u * lanes_per_col]
-            k_next[7] = conv[kbn + 7u * lanes_per_col]
-            k_next[8] = conv[kbn + 8u * lanes_per_col]
-            k_next[9] = conv[kbn + 9u * lanes_per_col]
-            k_next[10] = conv[kbn + 10u * lanes_per_col]
-            k_next[11] = conv[kbn + 11u * lanes_per_col]
-            k_next[12] = conv[kbn + 12u * lanes_per_col]
-            k_next[13] = conv[kbn + 13u * lanes_per_col]
-            k_next[14] = conv[kbn + 14u * lanes_per_col]
-            k_next[15] = conv[kbn + 15u * lanes_per_col]
+            for [unroll_full] (i in range(16)) {
+                k_next[i] = conv[kbn + uint(i) * lanes_per_col]
+            }
             let qbn = crow_next + q_elem0
-            q_next[0] = conv[qbn]
-            q_next[1] = conv[qbn + lanes_per_col]
-            q_next[2] = conv[qbn + 2u * lanes_per_col]
-            q_next[3] = conv[qbn + 3u * lanes_per_col]
-            q_next[4] = conv[qbn + 4u * lanes_per_col]
-            q_next[5] = conv[qbn + 5u * lanes_per_col]
-            q_next[6] = conv[qbn + 6u * lanes_per_col]
-            q_next[7] = conv[qbn + 7u * lanes_per_col]
-            q_next[8] = conv[qbn + 8u * lanes_per_col]
-            q_next[9] = conv[qbn + 9u * lanes_per_col]
-            q_next[10] = conv[qbn + 10u * lanes_per_col]
-            q_next[11] = conv[qbn + 11u * lanes_per_col]
-            q_next[12] = conv[qbn + 12u * lanes_per_col]
-            q_next[13] = conv[qbn + 13u * lanes_per_col]
-            q_next[14] = conv[qbn + 14u * lanes_per_col]
-            q_next[15] = conv[qbn + 15u * lanes_per_col]
+            for [unroll_full] (i in range(16)) {
+                q_next[i] = conv[qbn + uint(i) * lanes_per_col]
+            }
             var kv = k[0] * s[0]
-            kv += k[1] * s[1]
-            kv += k[2] * s[2]
-            kv += k[3] * s[3]
-            kv += k[4] * s[4]
-            kv += k[5] * s[5]
-            kv += k[6] * s[6]
-            kv += k[7] * s[7]
-            kv += k[8] * s[8]
-            kv += k[9] * s[9]
-            kv += k[10] * s[10]
-            kv += k[11] * s[11]
-            kv += k[12] * s[12]
-            kv += k[13] * s[13]
-            kv += k[14] * s[14]
-            kv += k[15] * s[15]
+            for [unroll_full] (i in range(1, 16)) {
+                kv += k[i] * s[i]
+            }
             kv = cluster_add(kv, lanes_per_col)
             let delta = bt * (v - eg * kv)
-            s[0] = s[0] * eg + k[0] * delta
-            s[1] = s[1] * eg + k[1] * delta
-            s[2] = s[2] * eg + k[2] * delta
-            s[3] = s[3] * eg + k[3] * delta
-            s[4] = s[4] * eg + k[4] * delta
-            s[5] = s[5] * eg + k[5] * delta
-            s[6] = s[6] * eg + k[6] * delta
-            s[7] = s[7] * eg + k[7] * delta
-            s[8] = s[8] * eg + k[8] * delta
-            s[9] = s[9] * eg + k[9] * delta
-            s[10] = s[10] * eg + k[10] * delta
-            s[11] = s[11] * eg + k[11] * delta
-            s[12] = s[12] * eg + k[12] * delta
-            s[13] = s[13] * eg + k[13] * delta
-            s[14] = s[14] * eg + k[14] * delta
-            s[15] = s[15] * eg + k[15] * delta
+            for [unroll_full] (i in range(16)) {
+                s[i] = s[i] * eg + k[i] * delta
+            }
             var o = q[0] * s[0]
-            o += q[1] * s[1]
-            o += q[2] * s[2]
-            o += q[3] * s[3]
-            o += q[4] * s[4]
-            o += q[5] * s[5]
-            o += q[6] * s[6]
-            o += q[7] * s[7]
-            o += q[8] * s[8]
-            o += q[9] * s[9]
-            o += q[10] * s[10]
-            o += q[11] * s[11]
-            o += q[12] * s[12]
-            o += q[13] * s[13]
-            o += q[14] * s[14]
-            o += q[15] * s[15]
+            for [unroll_full] (i in range(1, 16)) {
+                o += q[i] * s[i]
+            }
             o = cluster_add(o, lanes_per_col)
             if (live && lane == 0u) {
                 orows[pa.o_off + t * pa.di + h * ds + col] = o
@@ -2990,22 +2862,9 @@ class DnScan {
             t++
         }
         if (live) {
-            state[sb] = s[0]
-            state[sb + row_stride] = s[1]
-            state[sb + 2u * row_stride] = s[2]
-            state[sb + 3u * row_stride] = s[3]
-            state[sb + 4u * row_stride] = s[4]
-            state[sb + 5u * row_stride] = s[5]
-            state[sb + 6u * row_stride] = s[6]
-            state[sb + 7u * row_stride] = s[7]
-            state[sb + 8u * row_stride] = s[8]
-            state[sb + 9u * row_stride] = s[9]
-            state[sb + 10u * row_stride] = s[10]
-            state[sb + 11u * row_stride] = s[11]
-            state[sb + 12u * row_stride] = s[12]
-            state[sb + 13u * row_stride] = s[13]
-            state[sb + 14u * row_stride] = s[14]
-            state[sb + 15u * row_stride] = s[15]
+            for [unroll_full] (i in range(16)) {
+                state[sb + uint(i) * row_stride] = s[i]
+            }
         }
     }
 }
@@ -4353,22 +4212,10 @@ class template DaAttnBH128T {
         // my S block's q fragments — invariant across the whole K loop
         let br = warp / 2u
         let bc = warp % 2u
-        var qa0 : coopmatA_f16_16x16
-        var qa1 : coopmatA_f16_16x16
-        var qa2 : coopmatA_f16_16x16
-        var qa3 : coopmatA_f16_16x16
-        var qa4 : coopmatA_f16_16x16
-        var qa5 : coopmatA_f16_16x16
-        var qa6 : coopmatA_f16_16x16
-        var qa7 : coopmatA_f16_16x16
-        coopmatLoad(qa0, fbq, int(br * 16u) * 64, 64, 0)
-        coopmatLoad(qa1, fbq, int(br * 16u) * 64 + 8, 64, 0)
-        coopmatLoad(qa2, fbq, int(br * 16u) * 64 + 16, 64, 0)
-        coopmatLoad(qa3, fbq, int(br * 16u) * 64 + 24, 64, 0)
-        coopmatLoad(qa4, fbq, int(br * 16u) * 64 + 32, 64, 0)
-        coopmatLoad(qa5, fbq, int(br * 16u) * 64 + 40, 64, 0)
-        coopmatLoad(qa6, fbq, int(br * 16u) * 64 + 48, 64, 0)
-        coopmatLoad(qa7, fbq, int(br * 16u) * 64 + 56, 64, 0)
+        var qa : coopmatA_f16_16x16[8]
+        for [unroll_full] (c in range(8)) {
+            coopmatLoad(qa[c], fbq, int(br * 16u) * 64 + c * 8, 64, 0)
+        }
         let kend = pa.w0 + min(q0 + 32u, pa.npos)
         var k0 = 0u
         while (k0 < kend) {
@@ -4387,22 +4234,10 @@ class template DaAttnBH128T {
             barrier()
             var acc : coopmatAcc_f32_16x16
             var kb : coopmatB_f16_16x16
-            coopmatLoad(kb, fbkv, int(bc * 16u) * 64, 64, 1)
-            acc = coopmatMulAdd(qa0, kb, acc)
-            coopmatLoad(kb, fbkv, int(bc * 16u) * 64 + 8, 64, 1)
-            acc = coopmatMulAdd(qa1, kb, acc)
-            coopmatLoad(kb, fbkv, int(bc * 16u) * 64 + 16, 64, 1)
-            acc = coopmatMulAdd(qa2, kb, acc)
-            coopmatLoad(kb, fbkv, int(bc * 16u) * 64 + 24, 64, 1)
-            acc = coopmatMulAdd(qa3, kb, acc)
-            coopmatLoad(kb, fbkv, int(bc * 16u) * 64 + 32, 64, 1)
-            acc = coopmatMulAdd(qa4, kb, acc)
-            coopmatLoad(kb, fbkv, int(bc * 16u) * 64 + 40, 64, 1)
-            acc = coopmatMulAdd(qa5, kb, acc)
-            coopmatLoad(kb, fbkv, int(bc * 16u) * 64 + 48, 64, 1)
-            acc = coopmatMulAdd(qa6, kb, acc)
-            coopmatLoad(kb, fbkv, int(bc * 16u) * 64 + 56, 64, 1)
-            acc = coopmatMulAdd(qa7, kb, acc)
+            for [unroll_full] (c in range(8)) {
+                coopmatLoad(kb, fbkv, int(bc * 16u) * 64 + c * 8, 64, 1)
+                acc = coopmatMulAdd(qa[c], kb, acc)
+            }
             coopmatStore(acc, fbp, int(br * 16u) * 32 + int(bc * 16u), 32, 0)
             barrier()
             // online softmax: 4 threads/row (8 cols each), shuffle-reduced within the aligned quad
