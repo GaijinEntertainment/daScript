@@ -229,36 +229,39 @@ def ref_bar(env : double; nb : int64; ulp : float = REF_ULP) : float {
     return ulp * float(nb) * max(float(env), 1.0)
 }
 
+//! the fp64 sum of a row's `n / 32` block terms `term(bi)` and the sum of their magnitudes - the envelope a bar derives from
+def block_terms_f64(n : int64; term : block<(bi : int64) : double>) : tuple<dot : double; env : double> {
+    var res : tuple<dot : double; env : double>
+    for (bi in range64(n / 32l)) {
+        let v = invoke(term, bi)
+        res.dot += v
+        res.env += abs(v)
+    }
+    return res
+}
+
 //! The independent fp64 truth for one Q8_0 x Q8_0 row; `env` is the same sum on block magnitudes, the envelope the bar derives from. Layout-free, so repacked and row-major backends judge alike.
 def ref_dot_q8_f64(wq : array<int8>; ws : array<float>; woff : int64;
                    xq : array<int8>; xs : array<float>; xoff, n : int64) : tuple<dot : double; env : double> {
-    var res : tuple<dot : double; env : double>
-    for (bi in range64(n / 32l)) {
+    return block_terms_f64(n) $(bi) {
         var iacc = 0
         for (k in range64(32l)) {
             iacc += int(wq[woff + bi * 32l + k]) * int(xq[xoff + bi * 32l + k])
         }
-        let term = double(iacc) * double(ws[woff / 32l + bi]) * double(xs[xoff / 32l + bi])
-        res.dot += term
-        res.env += abs(term)
+        return double(iacc) * double(ws[woff / 32l + bi]) * double(xs[xoff / 32l + bi])
     }
-    return res
 }
 
 //! the fp64 truth for one Q8_0 row against an f32 activation row, with its envelope
 def ref_dot_q8f_f64(wq : array<int8>; ws : array<float>; woff : int64;
                     x : array<float>; n : int64) : tuple<dot : double; env : double> {
-    var res : tuple<dot : double; env : double>
-    for (bi in range64(n / 32l)) {
+    return block_terms_f64(n) $(bi) {
         var bacc : double
         for (k in range64(32l)) {
             bacc += double(int(wq[woff + bi * 32l + k])) * double(x[bi * 32l + k])
         }
-        let term = bacc * double(ws[woff / 32l + bi])
-        res.dot += term
-        res.env += abs(term)
+        return bacc * double(ws[woff / 32l + bi])
     }
-    return res
 }
 
 let MX4_E2M1 <- [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0]
@@ -279,19 +282,15 @@ def pow2d(k : int) : double {
 //! the fp64 truth for one MXFP4 row (nibbles from byte `roff`, e8m0 scales from `eoff`) against a Q8_0 row, with its envelope
 def ref_dot_mx4_f64(wn : array<uint8>; we : array<uint8>; roff, eoff : int64;
                     xq : array<int8>; xs : array<float>; xoff, n : int64) : tuple<dot : double; env : double> {
-    var res : tuple<dot : double; env : double>
-    for (bi in range64(n / 32l)) {
+    return block_terms_f64(n) $(bi) {
         var bacc : double
         for (j in range64(16l)) {
             let b = int(wn[roff + bi * 16l + j])
             bacc += mx4_val(b & 15) * double(int(xq[xoff + bi * 32l + j]))
             bacc += mx4_val(b >> 4) * double(int(xq[xoff + bi * 32l + j + 16l]))
         }
-        let term = bacc * pow2d(int(we[eoff + bi]) - 127) * double(xs[xoff / 32l + bi])
-        res.dot += term
-        res.env += abs(term)
+        return bacc * pow2d(int(we[eoff + bi]) - 127) * double(xs[xoff / 32l + bi])
     }
-    return res
 }
 
 //! rows [t0, te) of an image `d` wide into `ref` and `bar` (grown to te x d where short): element (p, r) is `dot(p, r)`'s fp64
