@@ -67,7 +67,28 @@ struct ChatSession {
     image_rows : array<float>             // encoded image soft tokens awaiting the next respond()
     n_image_rows : int64                  // row count in image_rows (each vision.proj_dim wide)
     image_grid : int2                     // the merged nx×ny when the family ropes with grid positions (qwen mrope); (0,0) = sequential
+    pending_spans : array<MediaMark>      // media the pending user turn carries INLINE: each span's positions render among the turn's tokens
 }
+
+//! One media span a user turn carries inline: `n_rows` positions keyed by the media's content hash, spliced after
+//! `text_before` bytes of the turn's text under the family's image or audio markers (none for a bare span).
+struct MediaMark {
+    key : uint64
+    n_rows : int64
+    text_before : int
+    is_image : bool
+    bare : bool
+}
+
+//! The prompt entry that stands for row `row` of the media keyed `key`: never a vocab id (below zero), the same for the
+//! same media at the same row, so a prefix match runs across a span as it does across text.
+def media_position_id(key : uint64; row : int64) : int64 {
+    let h = hash_combine64(key, uint64(row))
+    return -2l - int64(h >> 2ul)
+}
+
+//! whether a prompt entry stands for a media row rather than a token
+def is_media_position(id : int64) : bool => id < -1l
 
 // Stated rather than inferred: the tower holds borrowed planes, and a generated teardown
 // would force every module that deletes a ChatSession to see the plane finalizers too.
@@ -89,6 +110,7 @@ def finalize(var c : ChatSession) {
     delete c.embedder
     delete c.embedder_scratch
     delete c.image_rows
+    delete c.pending_spans
 }
 
 // ===== Chat-template resolution =====
@@ -528,6 +550,8 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) : 
         split_on_tool_markers(m, c, user_content, tp)
         render_parts_spliced(m, c.tmpl.user.parts, tp, out)
         delete tp
+    } elif (!empty(c.pending_spans)) {
+        render_user_spans(m, c, user_content, out)
     } else {
         render_parts(m, c.tmpl.user.parts, user_content, out)
     }
@@ -542,6 +566,53 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) : 
         render_assistant_open(m, c, out)
     }
     return opening
+}
+
+//! The user turn with its media spans inline: the turn's text cut at each span's offset, the span's marker pair around
+//! its position ids. A text chunk breaks at a span, so no BPE merge crosses one; text a family folds ahead of the
+//! user text (a system prompt with no role of its own) rides ahead of the first span.
+def private render_user_spans(m : Model; c : ChatSession; user_content : string; var out : array<int64>) {
+    var inscope lead : array<ChatPart>
+    var inscope after : array<ChatPart>
+    var seen = false
+    for (p in c.tmpl.user.parts) {
+        if (p.kind == ChatPartKind.content) {
+            seen = true
+        } elif (seen) {
+            after |> push(p)
+        } else {
+            lead |> push(p)
+        }
+    }
+    let folded = length(user_content) - length(c.pending)
+    var cur = 0
+    for (sp in c.pending_spans) {
+        let cut = folded + clamp(sp.text_before, cur - folded, length(c.pending))
+        if (cut > cur) {
+            lead |> push(chat_content())
+        }
+        if (!sp.bare) {
+            lead |> push_from(sp.is_image ? c.tmpl.image_pre.parts : c.tmpl.audio_pre.parts)
+        }
+        render_user_span_text(m, lead, user_content, cur, cut, out)
+        out |> reserve(long_length(out) + sp.n_rows)
+        for (r in range64(sp.n_rows)) {
+            out |> push(media_position_id(sp.key, r))
+        }
+        lead |> clear()
+        if (!sp.bare) {
+            lead |> push_from(sp.is_image ? c.tmpl.image_post.parts : c.tmpl.audio_post.parts)
+        }
+        cur = cut
+    }
+    lead |> push(chat_content())
+    lead |> push_from(after)
+    render_user_span_text(m, lead, user_content, cur, length(user_content), out)
+}
+
+//! `parts` rendered over `text[from, to)`
+def private render_user_span_text(m : Model; parts : array<ChatPart>; text : string; from, to : int; var out : array<int64>) {
+    render_parts(m, parts, to > from ? slice(text, from, to) : "", out)
 }
 
 // The pending tool results in the family's own framing (everything but hermes): harmony/llama
@@ -672,6 +743,7 @@ def private consume_pending_(var c : ChatSession) {
     c.image_rows |> clear()
     c.n_image_rows = 0l
     c.image_grid = int2(0)
+    c.pending_spans |> clear()
     c.turn_open = false                // ditto the leaked-turn close; re-set AFTER consume where a call leaves it open
 }
 
@@ -811,6 +883,25 @@ def add_user_image_rows_(m : Model; var c : ChatSession; var rows : array<float>
     c.image_rows <- rows
     c.n_image_rows = n_rows
     c.image_grid = grid
+}
+
+//! Mark the pending user turn as carrying a media span INLINE: it renders with `n_rows` position ids
+//! (`media_position_id` over `key`) `text_before` bytes into its text. Spans queue in text order; their rows are the
+//! caller's to eval where the ids stand. Panics where the template has no markers for the kind and the span is not bare.
+def add_user_span_(m : Model; var c : ChatSession; key : uint64; n_rows : int64; text_before : int; is_image, bare : bool) {
+    if (n_rows <= 0l) {
+        panic("dasLLAMA chat: a media span of {n_rows} rows")
+    }
+    if (is_image && (empty(c.tmpl.image_pre.parts) || !image_vocab_ok(m, c.tmpl))) {
+        panic("dasLLAMA chat: this model's chat template declares no usable image span markers - it has no vision arm")
+    }
+    if (!is_image && !bare && (empty(c.tmpl.audio_pre.parts) || !audio_vocab_ok(m, c.tmpl))) {
+        panic("dasLLAMA chat: this model's chat template declares no usable audio span markers - it has no audio arm")
+    }
+    if (!empty(c.pending_spans) && c.pending_spans[length(c.pending_spans) - 1].text_before > text_before) {
+        panic("dasLLAMA chat: media spans queue in text order - a span at {text_before} after one at {c.pending_spans[length(c.pending_spans) - 1].text_before}")
+    }
+    c.pending_spans |> push(MediaMark(key = key, n_rows = n_rows, text_before = text_before, is_image = is_image, bare = bare))
 }
 
 //! Queue PRE-ENCODED audio soft-token rows (what `encode_audio` emits — `dim`-wide, length-checked) for the next

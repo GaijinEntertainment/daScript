@@ -948,10 +948,8 @@ def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model loa
             delete sch_nc
             delete span_ref
 
-            // paged: the prefix cache is keyed on TOKEN IDS, and a media stream's KV past the splice
-            // does not follow from them — it must neither attach a hit nor donate. Prime the cache
-            // with a plain stream carrying the media stream's EXACT token prompt: the ids match, so
-            // only the bypass keeps those pages from being attached over the splice.
+            // paged: a media span's positions enter the prompt as ids of its rows' content, so the prefix cache
+            // matches across a span as across text. Prime with a plain stream carrying the media stream's text.
             let mlo = 20l
             let mhi = 26l
             var schp <- create_scheduler(m, 1l, 4l, 64l, 16l)
@@ -966,11 +964,50 @@ def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model loa
             var r1 <- media_req(m, 10l, prompt, mlo, mhi, false, greedy, 6l)
             t |> success(submit(m, schp, r1), "paged media stream queued")
             drain(m, schp, ev)
-            t |> equal(finished_of(ev, 10l).n_cached, 0l)   // no attach: those ids are not this KV
-            t |> equal(schp.cached_tokens, 0l)
+            t |> equal(finished_of(ev, 10l).n_cached, mlo)   // the text ahead of the span attaches; the span's ids are no token's, so the hit stops there
             var paged_toks <- toks_of(ev, 10l)
             t |> success(ids_equal(paged_toks, base.toks), "paged media stream == the all-token stream")
-            t |> equal(prefix_held_groups(schp.prefix), primed)   // and no donate on the way out
+            t |> success(prefix_held_groups(schp.prefix) > primed, "the media stream donates its pages")
+            // the same media again: everything but the last position attaches, the span included
+            ev |> clear()
+            var r2 <- media_req(m, 11l, prompt, mlo, mhi, false, greedy, 6l)
+            t |> success(submit(m, schp, r2), "the same media stream queued again")
+            drain(m, schp, ev)
+            t |> success(finished_of(ev, 11l).n_cached > mhi, "asked again, the span attaches off the cache ({finished_of(ev, 11l).n_cached} of {np} positions)")
+            var again_toks <- toks_of(ev, 11l)
+            t |> success(ids_equal(again_toks, base.toks), "the attached span reads the same stream")
+            // ...and with no rows at all: the request counts on the cache for the span
+            ev |> clear()
+            var r3 <- media_req(m, 12l, prompt, mlo, mhi, false, greedy, 6l)
+            splice_to_span(r3)
+            delete r3.spans[0].rows
+            t |> success(submit(m, schp, r3), "a rowless request queued")
+            drain(m, schp, ev)
+            var rowless_toks <- toks_of(ev, 12l)
+            t |> equal(finished_of(ev, 12l).finish, "length")
+            t |> success(ids_equal(rowless_toks, base.toks), "a span the cache holds needs no rows")
+            // other rows at the same place share only the text ahead of them (the control)
+            ev |> clear()
+            var other <- [for (k in range64(np)); k >= mlo && k < mhi ? prompt[np - 1l - (k - mlo)] : prompt[k]]
+            var r4 <- media_req(m, 13l, other, mlo, mhi, false, greedy, 6l)
+            t |> success(submit(m, schp, r4), "a stream with other rows queued")
+            drain(m, schp, ev)
+            t |> equal(finished_of(ev, 13l).n_cached, mlo)
+            // a rowless request on a cache that never saw the span is told so, and donates nothing
+            var schl <- create_scheduler(m, 1l, 4l, 64l, 16l)
+            var evl : array<SchedEvent>
+            var r5 <- media_req(m, 14l, prompt, mlo, mhi, false, greedy, 6l)
+            splice_to_span(r5)
+            delete r5.spans[0].rows
+            t |> success(submit(m, schl, r5), "a rowless request on a cold cache queued")
+            drain(m, schl, evl)
+            t |> equal(finished_of(evl, 14l).finish, "media_lost")
+            t |> equal(prefix_held_groups(schl.prefix), 0l)
+            delete evl
+            delete schl
+            delete other
+            delete rowless_toks
+            delete again_toks
             delete paged_toks
             delete text_only
             delete ev

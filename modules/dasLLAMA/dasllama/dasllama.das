@@ -321,6 +321,13 @@ def add_user_image_rows(model : Model; var chat : ChatSession; var rows : array<
     add_user_image_rows_(model, chat, rows, n_rows, grid)
 }
 
+def add_user_span(model : Model; var chat : ChatSession; key : uint64; n_rows : int64; text_before : int; is_image : bool; bare : bool = false) {
+    //! Mark the pending user turn as carrying a media span inline: ``render_turn`` and ``render_assistant`` then lay
+    //! ``n_rows`` position ids (``media_position_id`` over the media's content ``key``) where the media sits,
+    //! ``text_before`` bytes into the turn's text. The rows themselves are the caller's to eval at those positions.
+    add_user_span_(model, chat, key, n_rows, text_before, is_image, bare)
+}
+
 def add_user_audio_rows(model : Model; var chat : ChatSession; var rows : array<float>; n_rows : int64; bare : bool = false) {
     //! Queue PRE-ENCODED audio soft-token rows (what ``encode_audio`` emits — ``dim``-wide, length-checked) for the
     //! next ``respond``. MOVES ``rows``; works on a plain chat, no tower needed. Pass the encoder's

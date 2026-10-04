@@ -1002,6 +1002,45 @@ def private detok(m : Model; ids : array<int64>) : string {
     return replace(raw, "\n", "\\n")
 }
 
+[test]
+def test_chat_inline_span(t : T?) {
+    t |> run("an inline span renders the turn the splice pair renders, its position ids where the rows go - in a replayed turn too") @(t : T?) {
+        let path = path_join(models_dir(), "voxtral-mini-3b-q8_0.gguf")
+        if (!model_available(t, path)) {
+            return
+        }
+        var m <- load_capped(path)
+        let key = 0x1234abcdul
+        for (before in [0, 4, length(USR)]) {
+            var c <- create_chat_renderer_(m)
+            add_user(c, USR)
+            c.n_audio_rows = 3l
+            var inscope head : array<int64>
+            var inscope tail : array<int64>
+            render_turn_audio_(m, c, head, tail, before)
+            var inscope ids <- [for (r in range64(3l)); media_position_id(key, r)]
+            var inscope want := head
+            want |> push_from(ids, tail)
+            var ci <- create_chat_renderer_(m)
+            add_user(ci, USR)
+            add_user_span_(m, ci, key, 3l, before, false, false)
+            var inscope got <- render_turn_(m, ci)
+            t |> success(ids_equal(got, want), "{before}: the inline turn is head + ids + tail ({length(got)} vs {length(want)} positions)")
+            // the same turn replayed as history: the span stays in the transcript, the reply and the close after it
+            var inscope hist : array<int64>
+            render_assistant_(m, ci, "ok", hist)
+            t |> success(length(hist) > length(head) + 3 && ids_equal([for (k in range(length(head) + 3)); hist[k]], [for (k in range(length(head) + 3)); want[k]]),
+                "{before}: a replayed turn keeps its span")
+            t |> success(empty(ci.pending_spans), "{before}: the consumed turn leaves no span queued")
+            delete ci
+            delete c
+        }
+        t |> success(is_media_position(media_position_id(key, 0l)) && media_position_id(key, 0l) != media_position_id(key, 1l)
+            && media_position_id(key, 0l) != media_position_id(key + 1ul, 0l), "a position id is no token id, and differs by row and by key")
+        delete m
+    }
+}
+
 // The system text a ChatML template states for a conversation with no system message, read off the three shapes the
 // stocked templates take; a span that carries an expression is the caller's own system turn and yields none.
 [test]
