@@ -7122,36 +7122,53 @@ def test_vkd_dn_family(t0 : T?) {
                 let sl2 = make_device_buf(slab_bytes)
                 let o_bytes = int64(npos * di) * 4l
                 var host = make_host_buf(o_bytes + st_bytes, true, [cached = true])
-                var o_cls : array<float>
                 let cmp_n = npos * di + nvh * ds * ds
-                o_cls |> resize(cmp_n)
-                nan_sentinel_upload(sl2, o_bytes, int64(o_off) * 4l)   //! the o rows under the sentinel: a row the scan or the out-norm skips reds
                 unsafe {
                     upload_region_at(convd, 0l, addr<uint8 const?>(convh[0]), conv_bytes)
                     upload_region_at(zd, 0l, addr<uint8 const?>(zh[0]), z_bytes)
                     upload_region_at(smd, 0l, addr<uint8 const?>(smh[0]), sm_bytes)
-                    upload_region_at(st2, 0l, addr<uint8 const?>(sth[0]), st_bytes)
-                    var sc1 = set_dn_scan_cls(fixed_array(convd, st2, smd, sl2),
-                        fixed_array(conv_bytes, st_bytes, sm_bytes, slab_bytes),
-                        fixed_array(1u, 2u, 8u, 4u))
-                    var sc3 = set_dn_scan_p3_cls(fixed_array(zd, sl2, smd),
-                        fixed_array(z_bytes, slab_bytes, sm_bytes),
-                        fixed_array(16u, 4u, 8u))
-                    var pcs = DnScanArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd),
-                        nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
-                        beta_off = uint(beta_off), g_off = uint(g_off), a_off = uint(a_off),
-                        dt_off = uint(dt_off), o_off = uint(o_off), di = uint(di))
-                    var pc3 = DnScanP3Args(npos = uint(npos), nvh = uint(nvh), di = uint(di), ds = uint(ds),
-                        o_off = uint(o_off), wnorm_off = uint(wnorm_off), eps = eps)
-                    cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                        enc_dn_scan_cls(raw, h, sc1, pcs, dn_scan_wgs(int64(nvh), int64(ds)))
-                        enc_dn_scan_p3_cls(raw, h, sc3, pc3, int64(npos))
-                        vhz_dep(raw, h, 2u | 4u, 0u, true)
-                        cmd_copy_range(raw, sl2, int64(o_off) * 4l, host.buf, 0l, o_bytes)
-                        cmd_copy_range(raw, st2, 0l, host.buf, o_bytes, st_bytes)
-                    }
-                    memcpy(addr<void?>(o_cls[0]), host.mapped, o_bytes + st_bytes)
                 }
+                var pcs = DnScanArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd),
+                    nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
+                    beta_off = uint(beta_off), g_off = uint(g_off), a_off = uint(a_off),
+                    dt_off = uint(dt_off), o_off = uint(o_off), di = uint(di))
+                var pc3 = DnScanP3Args(npos = uint(npos), nvh = uint(nvh), di = uint(di), ds = uint(ds),
+                    o_off = uint(o_off), wnorm_off = uint(wnorm_off), eps = eps)
+                //! the scan from the uploaded state, then the out-norm gated by silu(z) and, the second time, by the sigmoid out-gate
+                //! stamp (`dn_scan_p3_sig_cls`, qwen4exp)
+                var outs : array<array<float>>
+                outs |> reserve(2)
+                for (sig in fixed_array(false, true)) {
+                    var o : array<float>
+                    o |> resize(cmp_n)
+                    nan_sentinel_upload(sl2, o_bytes, int64(o_off) * 4l)   //! the o rows under the sentinel: a row the scan or the out-norm skips reds
+                    unsafe {
+                        upload_region_at(st2, 0l, addr<uint8 const?>(sth[0]), st_bytes)
+                        if (sig) {
+                            verify(ensure_dn_scan_p3_sig_cls(), "the sigmoid out-norm stamp must compile on a device that compiled the silu one")
+                        }
+                        var sc1 = set_dn_scan_cls(fixed_array(convd, st2, smd, sl2), fixed_array(conv_bytes, st_bytes, sm_bytes, slab_bytes), fixed_array(1u, 2u, 8u, 4u))
+                        let p3bufs = fixed_array(zd, sl2, smd)
+                        let p3sizes = fixed_array(z_bytes, slab_bytes, sm_bytes)
+                        let p3bits = fixed_array(16u, 4u, 8u)
+                        var sc3 = sig ? set_dn_scan_p3_sig_cls(p3bufs, p3sizes, p3bits) : set_dn_scan_p3_cls(p3bufs, p3sizes, p3bits)
+                        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+                            enc_dn_scan_cls(raw, h, sc1, pcs, dn_scan_wgs(int64(nvh), int64(ds)))
+                            if (sig) {
+                                enc_dn_scan_p3_sig_cls(raw, h, sc3, pc3, int64(npos))
+                            } else {
+                                enc_dn_scan_p3_cls(raw, h, sc3, pc3, int64(npos))
+                            }
+                            vhz_dep(raw, h, 2u | 4u, 0u, true)
+                            cmd_copy_range(raw, sl2, int64(o_off) * 4l, host.buf, 0l, o_bytes)
+                            cmd_copy_range(raw, st2, 0l, host.buf, o_bytes, st_bytes)
+                        }
+                        memcpy(addr<void?>(o[0]), host.mapped, o_bytes + st_bytes)
+                    }
+                    outs |> emplace(o)
+                }
+                var o_cls <- outs[0]
+                var o_cls_sig <- outs[1]
                 // oracle: the SEQUENTIAL delta rule — the chunked WY form equals it in exact
                 // arithmetic, so the drift is pure reassociation; peak-floored bars absorb it
                 var o_ref : array<float>
@@ -7218,27 +7235,7 @@ def test_vkd_dn_family(t0 : T?) {
                 poison[0] += 1.0 + 2.0 * logits_maxabs(o_ref)
                 t |> success(mismatch_rel("", poison, o_ref, 1e-2, floor) > 0, "dn_scan + out-norm at ds {ds}: the bar reds a poisoned value")
                 delete poison
-                //! the sigmoid out-gate stamp (`dn_scan_p3_sig_cls`, qwen4exp): the scan again from the same state, its rows gated by sigmoid(z); the silu oracle is its control
-                var o_cls_sig : array<float>
-                o_cls_sig |> resize(cmp_n)
-                unsafe {
-                    upload_region_at(st2, 0l, addr<uint8 const?>(sth[0]), st_bytes)
-                    nan_sentinel_upload(sl2, o_bytes, int64(o_off) * 4l)
-                    verify(ensure_dn_scan_p3_sig_cls(), "the sigmoid out-norm stamp must compile on a device that compiled the silu one")
-                    var sc1s = set_dn_scan_cls(fixed_array(convd, st2, smd, sl2), fixed_array(conv_bytes, st_bytes, sm_bytes, slab_bytes), fixed_array(1u, 2u, 8u, 4u))
-                    var sc3s = set_dn_scan_p3_sig_cls(fixed_array(zd, sl2, smd), fixed_array(z_bytes, slab_bytes, sm_bytes), fixed_array(16u, 4u, 8u))
-                    var pcss = DnScanArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
-                        beta_off = uint(beta_off), g_off = uint(g_off), a_off = uint(a_off), dt_off = uint(dt_off), o_off = uint(o_off), di = uint(di))
-                    var pc3s = DnScanP3Args(npos = uint(npos), nvh = uint(nvh), di = uint(di), ds = uint(ds), o_off = uint(o_off), wnorm_off = uint(wnorm_off), eps = eps)
-                    cmd_one_shot() $(raws : VkCommandBuffer; var hs : VkHaz) {
-                        enc_dn_scan_cls(raws, hs, sc1s, pcss, dn_scan_wgs(int64(nvh), int64(ds)))
-                        enc_dn_scan_p3_sig_cls(raws, hs, sc3s, pc3s, int64(npos))
-                        vhz_dep(raws, hs, 2u | 4u, 0u, true)
-                        cmd_copy_range(raws, sl2, int64(o_off) * 4l, host.buf, 0l, o_bytes)
-                        cmd_copy_range(raws, st2, 0l, host.buf, o_bytes, st_bytes)
-                    }
-                    memcpy(addr<void?>(o_cls_sig[0]), host.mapped, o_bytes + st_bytes)
-                }
+                //! the sigmoid out-gate stamp's rows gated by sigmoid(z); the silu oracle is its control
                 let bads = mismatch_rel("", o_cls_sig, o_ref_sig, 1e-2, floor)
                 let wids = span_maxdiff(o_cls_sig, o_ref_sig, 0, 0, cmp_n)
                 t |> success(bads == 0, "dn_scan + the sigmoid out-norm stamp matches the CPU oracle at ds {ds} ({bads} of {cmp_n} off, widest {wids.diff} at {wids.at})")
@@ -7251,6 +7248,7 @@ def test_vkd_dn_family(t0 : T?) {
                 delete smh
                 delete o_ref
                 delete o_cls
+                delete outs
             }
             }
         } else {
