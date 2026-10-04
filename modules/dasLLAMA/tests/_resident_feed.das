@@ -198,6 +198,19 @@ def draft_from(tr : Model; var s : Session; tok, row : int64; h0 : array<float>)
     return <- Draft(logits <- [for (x in s.logits); x], h <- [for (x in s.mtp_h); x])
 }
 
+//! `body` over a batch workspace for `tr` and the borrowed handles of `sa` and `sb`; the handles cleared before the array goes (a
+//! delete of array<T?> frees the pointees), the workspace deleted after
+def with_batch_rows(tr : Model; var sa, sb : Session; body : block<(var ws : BatchWorkspace; var sess : array<Session?>) : void>) {
+    var ws <- create_batch_workspace(tr)
+    var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
+    invoke(body, ws, sess)
+    sess |> clear()
+    unsafe {
+        delete ws
+        delete sess
+    }
+}
+
 //! one speculative round of `tok` on `s` with its draft forced to reject, the reject cadence put back after; true where it accepted
 def forced_reject_round(tr : Model; var s : Session; tok : int64) : bool {
     let reject0 = get_mtp_force_reject_every()

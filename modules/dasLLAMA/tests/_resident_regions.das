@@ -348,17 +348,17 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : 
     eval(tr, sb, pb)
     let hybrid = tr.config.recr_mask != 0ul
     let home0 = hybrid ? dn_state_home(sb) : 0.0lf   //! session B's state after its prefill: the batched steps must move what comes home
-    var ws <- create_batch_workspace(tr)
-    var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
     let gen_a = sa.rdec_gen
     let gen_b = sb.rdec_gen
     let steps0 = rdec_nrow_steps()
-    for (st in range64(STEPS)) {
-        var toks <- [al.fa[st], al.fb[st]]
-        eval_batch(tr, ws, sess, toks)
-        delete toks
-        hold_bar(t, sa.logits, al.ra[st + 1l], al.ra[st], bar, "batched step {st}, row A")
-        hold_bar(t, sb.logits, al.rb[st + 1l], al.rb[st], bar, "batched step {st}, row B")
+    with_batch_rows(tr, sa, sb) $(var ws; var sess) {
+        for (st in range64(STEPS)) {
+            var toks <- [al.fa[st], al.fb[st]]
+            eval_batch(tr, ws, sess, toks)
+            delete toks
+            hold_bar(t, sa.logits, al.ra[st + 1l], al.ra[st], bar, "batched step {st}, row A")
+            hold_bar(t, sb.logits, al.rb[st + 1l], al.rb[st], bar, "batched step {st}, row B")
+        }
     }
     if (hybrid) {
         t |> success(dn_state_home(sb) != home0, "session B's recurrent state came home from its region's slot after the batched steps")
@@ -372,11 +372,6 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : 
     }
     let stepped = rdec_nrow_steps() - steps0
     t |> equal(stepped, STEPS, "every batched step went through the N-row command ({stepped} of {STEPS})")
-    sess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
-    unsafe {
-        delete ws
-        delete sess
-    }
     delete sa
     delete sb
     delete al
@@ -469,25 +464,25 @@ def cell_regions_batched_first(t : T?; file : string) {
             var sb <- create_session(tr, mirror_kv_dtype())
             eval(tr, sa, pa)
             eval(tr, sb, pb)
-            var ws <- create_batch_workspace(tr)
-            var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
             var got_a : array<array<float>>
             var got_b : array<array<float>>
-            for (st in range64(STEPS)) {
-                if (st == 1l) {
-                    var one_a <- [fa[st]]
-                    var one_b <- [fb[st]]
-                    eval(tr, sa, one_a)
-                    eval(tr, sb, one_b)
-                    delete one_a
-                    delete one_b
-                } else {
-                    var toks <- [fa[st], fb[st]]
-                    eval_batch(tr, ws, sess, toks)
-                    delete toks
+            with_batch_rows(tr, sa, sb) $(var ws; var sess) {
+                for (st in range64(STEPS)) {
+                    if (st == 1l) {
+                        var one_a <- [fa[st]]
+                        var one_b <- [fb[st]]
+                        eval(tr, sa, one_a)
+                        eval(tr, sb, one_b)
+                        delete one_a
+                        delete one_b
+                    } else {
+                        var toks <- [fa[st], fb[st]]
+                        eval_batch(tr, ws, sess, toks)
+                        delete toks
+                    }
+                    got_a |> emplace <| logits_of(sa, tr.config.vocab_size)
+                    got_b |> emplace <| logits_of(sb, tr.config.vocab_size)
                 }
-                got_a |> emplace <| logits_of(sa, tr.config.vocab_size)
-                got_b |> emplace <| logits_of(sb, tr.config.vocab_size)
             }
             served_every_call(t)
             var ra <- logits_alone(tr, pa, fa)
@@ -495,11 +490,6 @@ def cell_regions_batched_first(t : T?; file : string) {
             for (st in range64(STEPS)) {
                 hold_equal(t, got_a[st], ra[st + 1l], "batched-first step {st}, row A")
                 hold_equal(t, got_b[st], rb[st + 1l], "batched-first step {st}, row B")
-            }
-            sess |> clear()
-            unsafe {
-                delete ws
-                delete sess
             }
             delete sa
             delete sb
@@ -545,24 +535,19 @@ def cell_device_home_sessions(t : T?; file : string) {
             }
             moe_gpu_hydrate_session(tr, sa)
             t |> equal(length(sa.key_cache) + length(sa.value_cache), 0, "hydrating a device-home session brings nothing down: it has no host cache to fill")
-            var ws <- create_batch_workspace(tr)
-            var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
-            for (st in range64(half, STEPS)) {
-                var toks <- [al.fa[st], al.fb[st]]
-                eval_batch(tr, ws, sess, toks)
-                delete toks
-                hold_equal(t, sa.logits, al.ra[st + 1l], "device-home batched step {st}, row A")
-                hold_equal(t, sb.logits, al.rb[st + 1l], "device-home batched step {st}, row B")
+            with_batch_rows(tr, sa, sb) $(var ws; var sess) {
+                for (st in range64(half, STEPS)) {
+                    var toks <- [al.fa[st], al.fb[st]]
+                    eval_batch(tr, ws, sess, toks)
+                    delete toks
+                    hold_equal(t, sa.logits, al.ra[st + 1l], "device-home batched step {st}, row A")
+                    hold_equal(t, sb.logits, al.rb[st + 1l], "device-home batched step {st}, row B")
+                }
             }
             set_resident_prefill_allowed(true)
             var passes <- gpu_cpu_passes_()
             t |> equal(length(passes), 0, "the device served every call, the prefills under the pin among them: {passes}")
             delete passes
-            sess |> clear()
-            unsafe {
-                delete ws
-                delete sess
-            }
             gpu_device_kv_park(sa)
             gpu_device_kv_park(sb)
             delete sa

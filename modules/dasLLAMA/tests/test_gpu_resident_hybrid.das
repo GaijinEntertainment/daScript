@@ -384,24 +384,19 @@ def test_gpu_resident_hybrid_mtp_carry_batched(t : T?) {
             var gb : array<Carry>
             ga |> emplace <| carry_of(sa)
             gb |> emplace <| carry_of(sb)
-            var ws <- create_batch_workspace(tr)
-            var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
             let steps0 = rdec_nrow_steps()
-            for (st in range64(CARRY_STEPS)) {
-                var toks <- [fa[st], fb[st]]
-                eval_batch(tr, ws, sess, toks)
-                delete toks
-                ga |> emplace <| carry_of(sa)
-                gb |> emplace <| carry_of(sb)
+            with_batch_rows(tr, sa, sb) $(var ws; var sess) {
+                for (st in range64(CARRY_STEPS)) {
+                    var toks <- [fa[st], fb[st]]
+                    eval_batch(tr, ws, sess, toks)
+                    delete toks
+                    ga |> emplace <| carry_of(sa)
+                    gb |> emplace <| carry_of(sb)
+                }
             }
             t |> equal(rdec_nrow_steps() - steps0, CARRY_STEPS, "every batched step went through the N-row command")
             served_every_call(t)
             set_mtp_spec(spec0)
-            sess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
-            unsafe {
-                delete ws
-                delete sess
-            }
             delete sa
             delete sb
             moe_gpu_drop_model()
