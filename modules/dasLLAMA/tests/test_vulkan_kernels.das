@@ -515,6 +515,12 @@ def private kept_stamp_shape(kernel : string) : tuple<wg_vars : int; caps : tabl
     return <- res
 }
 
+//! the kernel cells' approx bar with a poison past the expectation's largest magnitude, outside the bar at any scale
+let private BAR_APPROX_CTRL = Bar(rel = APPROX_REL, poison_of_max = true, poison_abs = 0.5)
+
+//! the coopmat tiles' bar: 2e-2 of the larger magnitude floored at 4e-3 of `ref`'s largest, its poison past that largest
+def private cm_bar(ref : array<float>) : Bar => Bar(rel = 2e-2, abs_floor = 4e-3 * logits_maxabs(ref), poison_of_max = true, poison_abs = 0.5)
+
 //! a kept stamp's GLSL.std.450 Tanh instructions (x) and those of them whose operand is an FClamp's result (y)
 def private kept_tanh_reads(kernel : string) : int2 {
     var res = int2(0, 0)
@@ -1603,6 +1609,17 @@ def private mismatch_qbytes(got, want : array<uint>; tol : int) : int {
     return bad
 }
 
+//! the quant words `got` within one step of `want`, byte for byte and of one length, and the control: `want`'s first byte three steps
+//! off must red the same compare
+def private check_qbytes(t : T?; tag : string; got, want : array<uint>) {
+    let bad = mismatch_qbytes(got, want, 1)
+    t |> success(bad == 0 && length(got) == length(want), "{tag}: the quant bytes within one step ({bad} off, {length(got)} words against {length(want)})")
+    var poisoned := want
+    poisoned[0] = (poisoned[0] & ~0xFFu) | ((poisoned[0] + 3u) & 0xFFu)
+    t |> success(mismatch_qbytes(got, poisoned, 1) > 0, "{tag}: the bar reds a quant byte three steps off")
+    delete poisoned
+}
+
 //! the fourteen kq formats with a decode GEMV leaf and a batch tile, the order the family cells walk
 let private KQ_LEAF_FMTS = fixed_array(int(KqFmt.k4), int(KqFmt.q40), int(KqFmt.k5), int(KqFmt.k6), int(KqFmt.iq4xs), int(KqFmt.k3), int(KqFmt.iq3s), int(KqFmt.iq3xxs), int(KqFmt.iq4nl), int(KqFmt.k2), int(KqFmt.iq2s), int(KqFmt.iq2xs), int(KqFmt.iq2xxs), int(KqFmt.iq3s4))
 
@@ -1676,8 +1693,7 @@ def private per32_gemv_cell(t : T?; fmt : KqFmt; ns : array<int>; wq_words : int
                     gemv_enc(int(fmt), raw2, h2, s_cls, pc, int64(rows))
                 }
                 var y_cls <- plane_run(cp, 5)
-                let bad = mismatch_approx(y_cls, y_ref)
-                t |> success(bad == 0, "{fmt} GEMV at n {n} matches the scalar dot ({bad} of {rows} rows off)")
+                check_rows(t, "{fmt} GEMV at n {n} against the scalar dot", y_cls, y_ref, BAR_APPROX_CTRL, FLAT_ROWS)
                 //! the summed form: the two regions' rows folded under their weights inside the GEMV, one row of d out
                 if (fmt == KqFmt.q51 && ensure_q51_gemv_sum_cls()) {
                     var wgt <- [0.625, -0.375]
@@ -1967,9 +1983,9 @@ def test_vkd_act_family(t0 : T?) {
                 var s_ref : array<float>
                 actrq_oracle(gh, uh, nelem, q8k, act, q_ref, s_ref)
                 // exp/tanh differ by ulps between backends: quants compare as bytes +-1, scales approx
-                let badq = mismatch_qbytes(q_cls, q_ref, 1)
-                let bads = mismatch_approx(s_cls, s_ref)
-                t |> success(badq == 0 && bads == 0, "{q8k ? "q8k" : "q8"} actrq{act == ACT_OAI ? " under the clamped swiglu" : ""} matches the CPU oracle ({badq} bytes / {bads} scales off)")
+                let tag = "{q8k ? "q8k" : "q8"} actrq{act == ACT_OAI ? " under the clamped swiglu" : ""}"
+                check_qbytes(t, tag, q_cls, q_ref)
+                check_rows(t, "{tag} scales", s_cls, s_ref, BAR_APPROX_CTRL, FLAT_ROWS)
                 delete q_ref
                 delete s_ref
                 delete q_cls
@@ -2040,9 +2056,8 @@ def test_vkd_act_family(t0 : T?) {
                 var q_ref : array<uint>
                 var s_ref : array<float>
                 actrq_oracle(gh2, uh2, nb, false, ACT_OAI, q_ref, s_ref)
-                let badq = mismatch_qbytes(q_cls, q_ref, 1)
-                let bads = mismatch_approx(s_cls, s_ref)
-                t |> success(badq == 0 && bads == 0, "the biased q8 actrq under the clamped swiglu matches the oracle over the biased rows ({badq} bytes / {bads} scales off)")
+                check_qbytes(t, "the biased q8 actrq under the clamped swiglu", q_cls, q_ref)
+                check_rows(t, "the biased q8 actrq under the clamped swiglu, scales", s_cls, s_ref, BAR_APPROX_CTRL, FLAT_ROWS)
                 var h_ref : array<float>
                 var h_got : array<float>
                 h_ref |> resize(nb)
@@ -2127,8 +2142,7 @@ def test_vkd_act_family(t0 : T?) {
                         a_ref[p * n + i] = acc
                     }
                 }
-                let bad = mismatch_approx(a_cls, a_ref)
-                t |> success(bad == 0, "combine matches the CPU oracle ({bad} of {npos * n} off)")
+                check_rows(t, "combine against the CPU oracle", a_cls, a_ref, BAR_APPROX_CTRL, n)
                 delete sidx
                 delete sw
                 delete rows
@@ -2298,8 +2312,9 @@ def test_vkd_rope_family(t0 : T?) {
                 }
                 //! oracle: bias first, then the engine's NEOX table rotation; v is raw plus bias — the approx bars ride out the device's fma contraction
                 var ref <- rope_kv_rows(qh, kvh, bh, csh, 0, qd, qd + kvd, 0, bpad, nh, nkvh, hs) $(x : float) => x
-                let bad = mismatch_approx(cls_q, ref.q) + mismatch_approx(cls_k, ref.k) + mismatch_approx(cls_v, ref.v)
-                t |> success(bad == 0, "rope_kv_store with the q/k/v bias matches the CPU oracle ({bad} elements off)")
+                check_rows(t, "rope_kv_store with the q/k/v bias, q", cls_q, ref.q, BAR_APPROX_CTRL, qd, hs)
+                check_rows(t, "rope_kv_store with the q/k/v bias, k", cls_k, ref.k, BAR_APPROX_CTRL, kvd, hs)
+                check_rows(t, "rope_kv_store with the q/k/v bias, v", cls_v, ref.v, BAR_APPROX_CTRL, kvd, hs)
                 delete qh
                 delete kvh
                 delete csh
@@ -2375,8 +2390,8 @@ def test_vkd_rope_family(t0 : T?) {
                         }
                     }
                 }
-                let bad = mismatch_approx(cls_q, ref_q) + mismatch_approx(cls_k, ref_k)
-                t |> success(bad == 0, "qk_rms matches the CPU oracle ({bad} elements off)")
+                check_rows(t, "qk_rms, q", cls_q, ref_q, BAR_APPROX_CTRL, qd, hs)
+                check_rows(t, "qk_rms, k", cls_k, ref_k, BAR_APPROX_CTRL, kvd, hs)
                 delete qh
                 delete kh
                 delete wh
@@ -2415,8 +2430,7 @@ def test_vkd_q8_batch_tile(t0 : T?) {
             var y_ref : array<float>
             y_ref |> resize((cnt0 + cnt1) * d)
             q8_gemm_oracle(p.wqh, p.wsh, p.xqh, p.xsh, r.sched, 2, n, d, y_ref)
-            let bad = mismatch_approx(r.y, y_ref)
-            t |> success(bad == 0, "q8 batch matches the CPU oracle ({bad} of {(cnt0 + cnt1) * d} off)")
+            check_rows(t, "q8 batch against the CPU oracle", r.y, y_ref, BAR_APPROX_CTRL, d)
             delete y_ref
             delete r
             delete p
@@ -2458,8 +2472,7 @@ def test_vkd_kq_batch_family(t0 : T?) {
                 var y_ref : array<float>
                 y_ref |> resize(rows * d)
                 kq_gemm_oracle(fmt, p.wqh, p.wsh, p.xqh, p.xsh, r.sched, 2, n, d, y_ref)
-                let bad = mismatch_approx(r.y, y_ref)
-                t |> success(bad == 0, "kq batch fmt {fmt} matches the CPU oracle ({bad} of {rows * d} off)")
+                check_rows(t, "kq batch fmt {fmt} against the CPU oracle", r.y, y_ref, BAR_APPROX_CTRL, d)
                 delete y_ref
                 delete r
                 delete p
@@ -2540,9 +2553,7 @@ def test_vkd_cm_batch_family(t0 : T?) {
                 var y_ref : array<float>
                 y_ref |> resize(rows * d)
                 q8_gemm_oracle(p.wqh, p.wsh, p.xqh, p.xsh, r.sched, 2, n, d, y_ref)
-                let bad = mismatch_rel("", r.y, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref))
-                to_log(LOG_INFO, "cm batch variant {v}: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
-                t |> success(bad == 0, "cm batch variant {v} matches the CPU oracle ({bad} of {rows * d} off)")
+                check_rows(t, "cm batch variant {v}, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}", r.y, y_ref, cm_bar(y_ref), d)
                 delete y_ref
                 delete r
                 delete p
@@ -2587,9 +2598,7 @@ def test_vkd_kq_q40_cm_batch(t0 : T?) {
             var y_ref : array<float>
             y_ref |> resize(rows * d)
             kq_gemm_oracle(int(KqFmt.q40), p.wqh, p.wsh, p.xqh, p.xsh, r.sched, 2, n, d, y_ref)
-            let bad = mismatch_rel("", r.y, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref))
-            to_log(LOG_INFO, "q40 cm batch: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
-            t |> success(bad == 0, "q40 cm batch matches the CPU oracle ({bad} of {rows * d} off)")
+            check_rows(t, "q40 cm batch, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}", r.y, y_ref, cm_bar(y_ref), d)
             delete y_ref
             delete r
             delete p
@@ -2983,9 +2992,7 @@ def test_vkd_cm2l_split(t0 : T?) {
             var y_ref : array<float>
             y_ref |> resize(rows * d)
             q8f16_gemm_oracle(wqh, wsh, xfh, sched, 1, n, d, y_ref)
-            let bad = mismatch_rel("", y_cls, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref))
-            to_log(LOG_INFO, "cm2 l-tile split-k: {bad} of {rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
-            t |> success(bad == 0, "cm2 l-tile split-k matches the CPU oracle ({bad} of {rows * d} off)")
+            check_rows(t, "cm2 l-tile split-k, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}", y_cls, y_ref, cm_bar(y_ref), d)
             delete sched
             delete y_ref
             delete wqh
@@ -3217,8 +3224,7 @@ def test_vkd_da_attn(t0 : T?) {
             var y_ref : array<float>
             y_ref |> resize(nheads * hs)
             attn_heads_oracle(qh, 0, kh, 0, vh, 0, kvd, nheads, hs, kv_mul, cnt, scale, y_ref, 0)
-            let bad = mismatch_approx(y_cls, y_ref)
-            t |> success(bad == 0, "da_attn matches the CPU oracle ({bad} of {nheads * hs} off)")
+            check_rows(t, "da_attn against the CPU oracle", y_cls, y_ref, BAR_APPROX_CTRL, nheads * hs, hs)
             // the softcap arm (gemma-2): a cap the scaled scores overrun, the kernel's exp form against the oracle's
             let cap = 4.0
             delete y_cls
@@ -3425,10 +3431,7 @@ def private da_attn_shape_arm(t : T?; hs, nheads, kv_mul, cnt, nsplit, nrows : i
             attn_heads_oracle(qh, r * qdim, kh, r * mir_units, vh, r * mir_units, kvd, nheads, hs, kv_mul, cnt, scale, y_ref, r * qdim)
         }
         let arm = "hs {hs} x {nheads} heads, {kv_mul} a kv head, {cnt} keys, {nsplit} split(s), {nrows} row(s){slab2 ? ", the two-head slab" : ""}"
-        for (r in range(nrows)) {
-            let bad = mismatch_rel("decode attention ({arm}) row {r}", copy_span(y_cls, r * qdim, qdim), copy_span(y_ref, r * qdim, qdim), APPROX_REL)
-            t |> success(bad == 0, "decode attention ({arm}): row {r} matches its own oracle ({bad} of {qdim} off)")
-        }
+        check_rows(t, "decode attention ({arm}), every row against its own oracle", y_cls, y_ref, BAR_APPROX_CTRL, qdim, hs)
         if (nsplit > 1) {
             unsafe {
                 nan_sentinel_upload(yd, q_bytes)
@@ -3546,8 +3549,7 @@ def test_vkd_at_attn(t0 : T?) {
                         y_ref[i] = sig_gate(y_ref[i], gh[i])
                     }
                 }
-                let bad = mismatch_approx(y_cls, y_ref)
-                t |> success(bad == 0, "at_attn hs {hs} matches the CPU oracle ({bad} of {rows * qd} off)")
+                check_rows(t, "at_attn hs {hs}{gated ? " gated" : ""} against the CPU oracle", y_cls, y_ref, BAR_APPROX_CTRL, qd, hs)
                 delete qh
                 delete kh
                 delete vh
@@ -4202,8 +4204,7 @@ def test_vkd_da_attn_b_h128(t0 : T?) {
             // the h128 twin stages q/K/V through f16 pairs for the MMAs — floor-barred like the
             // cm GEMMs (softmax weights bound the V fold, so the peak floor is generous enough)
             var y_ref <- da_attn_b_ref(f, scale, 0, 0.0)
-            let bad = mismatch_rel("", y_cls, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref))
-            t |> success(bad == 0, "da_attn_b_h128 matches the CPU oracle ({bad} of {length(y_ref)} off)")
+            check_rows(t, "da_attn_b_h128 against the CPU oracle", y_cls, y_ref, cm_bar(y_ref), 4 * 128, 128)
             delete f
             delete y_ref
             delete y_cls
@@ -4327,9 +4328,9 @@ def test_vkd_requant_family(t0 : T?) {
                 var q_ref : array<uint>
                 var s_ref : array<float>
                 requant_oracle(y_ref, 0, dim, false, q_ref, s_ref)
-                let bad = (mismatch_qbytes(q_cls, q_ref, 1) + mismatch_approx(s_cls, s_ref)
-                    + mismatch_approx(x_cls, x_ref))
-                t |> success(bad == 0, "ar+requant fused matches the CPU oracle ({bad} elements off)")
+                check_qbytes(t, "ar+requant fused", q_cls, q_ref)
+                check_rows(t, "ar+requant fused, scales", s_cls, s_ref, BAR_APPROX_CTRL, FLAT_ROWS)
+                check_rows(t, "ar+requant fused, the residual row", x_cls, x_ref, BAR_APPROX_CTRL, FLAT_ROWS)
                 //! the biased add partner (gpt-oss's output bias) on the fused stamp: the bias row rides the norms plane past the norm row
                 {
                     var b <- row_fill(dim, 23, 0, 0.09, 3.1, 71)
@@ -5727,8 +5728,7 @@ def test_vkd_cvt_family(t0 : T?) {
                         got[i] = half_at(h_cls, i)
                         want[i] = arm == 2 ? uh[i] : act_mul_ref(gh[i], uh[i], arm == 3 ? ACT_OAI : ACT_GELU)
                     }
-                    let bad = mismatch_approx(got, want)
-                    t |> success(bad == 0, "cvt arm {arm} matches the CPU oracle ({bad} of {nelem} off)")
+                    check_rows(t, "cvt arm {arm} against the CPU oracle", got, want, BAR_APPROX_CTRL, FLAT_ROWS)
                     delete got
                     delete want
                 }
@@ -5763,6 +5763,16 @@ def private mirror_rows_off(m, mk, mv : array<float>; w0, n, vbase : int) : int 
         }
     }
     return bad
+}
+
+//! `mirror_rows_off` asserted 0 under `tag`, and its control: the oracle's first K element moved past its own magnitude must red it
+def private mirror_rows_check(t : T?; tag : string; m, mk, mv : array<float>; w0, n, vbase : int) {
+    let bad = mirror_rows_off(m, mk, mv, w0, n, vbase)
+    t |> success(bad == 0, "{tag}: the K and V mirror rows match the CPU oracle ({bad} off)")
+    var poisoned := mk
+    poisoned[w0] += 1.0 + abs(poisoned[w0])
+    t |> success(mirror_rows_off(m, poisoned, mv, w0, n, vbase) > 0, "{tag}: the bar reds a poisoned K mirror element")
+    delete poisoned
 }
 
 //! the batched KV writer's oracle over `npos` positions of the four-head, two-kv-head, 64-wide fixture: the bias row at
@@ -5882,9 +5892,11 @@ def private rope_kv_b_arm(t : T?; f16, biased : bool) {   // nolint:STYLE037 —
             }
             var q_cls <- staged(host.mapped, 0l, npos * qd, type<float>)
             var m_cls <- f16 ? unpack_f16(staged(host.mapped, q_bytes, 2 * mirn, type<float16>)) : staged(host.mapped, q_bytes, 2 * mirn, type<float>)
-            let bad = (f16 ? 0 : mismatch_approx(q_cls, q_ref)) + mirror_rows_off(m_cls, mk_ref, mv_ref, w0, npos * kvd, mirn)
             let form = merged ? " over merged k|v rows (kstride 2*kvd, voff kvd)" : ""
-            t |> success(bad == 0, "{name}{form} matches the CPU oracle ({bad} off)")
+            if (!f16) {
+                check_rows(t, "{name}{form}, q", q_cls, q_ref, BAR_APPROX_CTRL, qd, hs)
+            }
+            mirror_rows_check(t, "{name}{form}", m_cls, mk_ref, mv_ref, w0, npos * kvd, mirn)
             delete q_cls
             delete m_cls
         }
@@ -5973,8 +5985,8 @@ def private qkn_rope_arm(t : T?; f16, biased : bool) {
         // oracle: the bias row at boff, then per-head rms-norm with its weight row, then NEOX rope off the normed row; k lands
         // at the mirror row, v copies raw plus its bias, on the half grid under `f16`
         var ref <- qkn_rope_rows(q0h, kvh, bh, wnh, csh, bpad, nh, nkvh, hs, krow, mirn2, eps) $(x : float) => f16 ? f16r(x) : x
-        let bad = mismatch_approx(q_cls, ref.q) + mirror_rows_off(m_cls, ref.mk, ref.mv, krow, nkvh * hs, mirn2)
-        t |> success(bad == 0, "{name} matches the CPU oracle ({bad} off)")
+        check_rows(t, "{name}, q", q_cls, ref.q, BAR_APPROX_CTRL, qd, hs)
+        mirror_rows_check(t, name, m_cls, ref.mk, ref.mv, krow, nkvh * hs, mirn2)
         if (!f16) {
             qkn_rope_n_rows(t, q0h, kvh, csh, q_cls, m_cls, wnd, bd, b_bytes, pc)
         }
@@ -6882,8 +6894,7 @@ def test_vkd_dn_family(t0 : T?) {
                 // oracle: depthwise conv (history rows below position 0) + SiLU, then per-ds-block
                 // L2 norm over the q/k regions with qscale on the q blocks
                 var o_ref <- dn_conv_ref(srch, smh, hist_off, smh, taps_off, npos, cd, dconv, kd, ds, eps, qscale)
-                let bad = mismatch_approx(o_cls, o_ref)
-                t |> success(bad == 0, "dn_conv matches the CPU oracle at ds {ds} ({bad} of {npos * cd} off)")
+                check_rows(t, "dn_conv at ds {ds} against the CPU oracle", o_cls, o_ref, BAR_APPROX_CTRL, cd)
                 delete srch
                 delete smh
                 delete o_ref
@@ -7896,8 +7907,10 @@ def test_vkd_kv16_writers(t0 : T?) {
                 var cls_v <- unpack_f16(v16)
                 // oracle: the f32 rotation lands on the f16 grid (clamp is a no-op at these magnitudes)
                 var ref <- rope_kv_rows(qh, kvh, bh, csh, 0, qd, qd + kvd, 0, bpad, nh, nkvh, hs) $(x : float) => f16r(x)
-                let bad = mismatch_approx(cls_q, ref.q) + mismatch_approx(cls_k, ref.k) + mismatch_approx(cls_v, ref.v)
-                t |> success(bad == 0, "rope_kv_f16{biased ? " with the q/k/v bias" : ""} matches the CPU oracle ({bad} elements off)")
+                let tag = "rope_kv_f16{biased ? " with the q/k/v bias" : ""}"
+                check_rows(t, "{tag}, q", cls_q, ref.q, BAR_APPROX_CTRL, qd, hs)
+                check_rows(t, "{tag}, k", cls_k, ref.k, BAR_APPROX_CTRL, kvd, hs)
+                check_rows(t, "{tag}, v", cls_v, ref.v, BAR_APPROX_CTRL, kvd, hs)
                 delete qh
                 delete kvh
                 delete csh
@@ -7974,8 +7987,7 @@ def test_vkd_kv16_readers(t0 : T?) {
                 var y_ref : array<float>
                 y_ref |> resize(nheads * hs)
                 attn_heads_oracle(qh, 0, kh, 0, vh, 0, kvd, nheads, hs, kv_mul, cnt, scale, y_ref, 0)
-                let bad = mismatch_approx(y_cls, y_ref)
-                t |> success(bad == 0, "da_attn_f16 at head {hs} matches the CPU oracle ({bad} of {nheads * hs} off)")
+                check_rows(t, "da_attn_f16 at head {hs} against the CPU oracle", y_cls, y_ref, BAR_APPROX_CTRL, nheads * hs, hs)
                 //! the two-head slab's f16 stamp (the one a two-head group serves on the f16 mirror) at the same shape: the oracle, and the four-head stamp bit for bit
                 var y_g2 <- da_attn_run(cnt, nheads * hs, yd2) $(tok : uint64; raw3 : VkCommandBuffer; var h3 : VkHaz) {
                     var sc2 = set_da_attn_f16_cls(fixed_array(qdv, kd, vd, yd2, tok, yd2, yd2, yd2),
@@ -8006,8 +8018,7 @@ def test_vkd_kv16_readers(t0 : T?) {
                 var f <- da_attn_b_fix(13, 4, 2, hs, 32, 64, 160, 0.05, 1.8, 0.03, 1.4, true)
                 var y_cls <- da_attn_b_run(f, DAB_B_F16, 0.125, 0.0, 0)
                 var y_ref <- da_attn_b_ref(f, 0.125, 0, 0.0)
-                let bad = mismatch_approx(y_cls, y_ref)
-                t |> success(bad == 0, "da_attn_b_f16 hs {hs} matches the CPU oracle ({bad} of {length(y_ref)} off)")
+                check_rows(t, "da_attn_b_f16 hs {hs} against the CPU oracle", y_cls, y_ref, BAR_APPROX_CTRL, 4 * hs, hs)
                 delete f
                 delete y_ref
                 delete y_cls
@@ -8018,8 +8029,7 @@ def test_vkd_kv16_readers(t0 : T?) {
                 var f <- da_attn_b_fix(45, 4, 2, 128, 32, 64, 160, 0.05, 1.8, 0.03, 1.4, true)
                 var y_cls <- da_attn_b_run(f, DAB_H128_F16, 0.125, 0.0, 0)
                 var y_ref <- da_attn_b_ref(f, 0.125, 0, 0.0)
-                let bad = mismatch_rel("", y_cls, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref))
-                t |> success(bad == 0, "da_attn_b_h128_f16 matches the CPU oracle ({bad} of {length(y_ref)} off)")
+                check_rows(t, "da_attn_b_h128_f16 against the CPU oracle", y_cls, y_ref, cm_bar(y_ref), 4 * 128, 128)
                 delete f
                 delete y_ref
                 delete y_cls
@@ -8589,9 +8599,8 @@ def private topk_rows_compare(t : T?; tag : string; gidx : array<uint>; gw : arr
             badi++
         }
     }
-    let badw = mismatch_rel("", gw, sel.w, 1e-4)
-    t |> success(badi == 0, "{tag}: the picks are the host select's ({badi} of {length(gidx)} off)")
-    t |> success(badw == 0, "{tag}: the weights match the host select ({badw} of {length(gw)} off)")
+    t |> success(badi == 0 && length(gidx) == length(sel.idx), "{tag}: the picks are the host select's ({badi} of {length(gidx)} off, {length(sel.idx)} picks selected)")
+    check_rows(t, "{tag}: the weights against the host select", gw, sel.w, Bar(rel = 1e-4, poison_of_max = true, poison_abs = 0.5), FLAT_ROWS)
 }
 
 //! the router GEMM: two layers' [ner x dim] rows, the second layer's dispatched through woff; logits at the ner
