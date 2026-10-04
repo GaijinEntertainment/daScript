@@ -6171,6 +6171,23 @@ let private HCT_LR = 32         //! one Q8_0 block of low-rank row
 let private HCT_HCD = HCT_HC * HCT_DIM
 let private HCT_EPS = 1e-6
 
+//! the hc_mix oracle over `rows` wide rows: each row's streams gated by sigmoid(gate), their mean one block input row
+def private hc_mix_ref(xn, gate : array<float>; rows : int) : array<float> {
+    var want : array<float>
+    want |> resize(rows * HCT_DIM)
+    for (r in range(rows)) {
+        for (i in range(HCT_DIM)) {
+            var acc = 0.0
+            for (c in range(HCT_HC)) {
+                let e = r * HCT_HCD + c * HCT_DIM + i
+                acc += xn[e] * sigmoid_f32(gate[e])
+            }
+            want[r * HCT_DIM + i] = acc * (1.0 / float(HCT_HC))
+        }
+    }
+    return <- want
+}
+
 //! the CPU rmsnorm of `n` elements from `xo` under the weight row at `wo`, into `out` from `oo`
 def private hct_rms(x : array<float>; xo : int; w : array<float>; wo : int; n : int; var out : array<float>; oo : int) {
     unsafe {
@@ -6282,15 +6299,7 @@ def test_vkd_hc_seams(t0 : T?) {
             }
             let xn <- row_fill(HCT_HCD, 23, 11, 0.05, 1.3)
             let gate <- row_fill(HCT_HCD, 29, 5, 0.2, 3.0)
-            var want : array<float>
-            want |> resize(HCT_DIM)
-            for (i in range(HCT_DIM)) {
-                var acc = 0.0
-                for (c in range(HCT_HC)) {
-                    acc += xn[c * HCT_DIM + i] * sigmoid_f32(gate[c * HCT_DIM + i])
-                }
-                want[i] = acc * (1.0 / float(HCT_HC))
-            }
+            let want <- hc_mix_ref(xn, gate, 1)
             with_cell_planes() $(var cp : CellPlanes) {
                 let xp = cp |> in_(xn)
                 let gp = cp |> in_(gate)
@@ -6437,18 +6446,7 @@ def test_vkd_hc_rows(t0 : T?) {
             }
             let xn <- row_fill(2 * HCT_HCD, 23, 11, 0.05, 1.3)
             let gate <- row_fill(2 * HCT_HCD, 29, 5, 0.2, 3.0)
-            var want : array<float>
-            want |> resize(2 * HCT_DIM)
-            for (r in range(2)) {
-                for (i in range(HCT_DIM)) {
-                    var acc = 0.0
-                    for (c in range(HCT_HC)) {
-                        let e = r * HCT_HCD + c * HCT_DIM + i
-                        acc += xn[e] * sigmoid_f32(gate[e])
-                    }
-                    want[r * HCT_DIM + i] = acc * (1.0 / float(HCT_HC))
-                }
-            }
+            let want <- hc_mix_ref(xn, gate, 2)
             with_cell_planes() $(var cp : CellPlanes) {
                 let xp = cp |> in_(xn)
                 let gp = cp |> in_(gate)
