@@ -107,6 +107,26 @@ def with_gpu_kv_dtype(t : T?; kv : KVDtype; body : block<void>) {
     restore_kv_pin(kv_pin)
 }
 
+//! where a cell pinned a mirror codec, the armed mirror holds it
+def mirror_codec_held(t : T?) {
+    let asked = gpu_kv_dtype_pin()
+    if (asked.pinned) {
+        t |> equal(mirror_kv_dtype(), asked.dt, "the mirror armed at the codec the cell asks")
+    }
+}
+
+//! a resident load's admission: false after a skip with the driver's decline (`note` after it) where the plan does not fit
+//! the card's room; else the driver asserted armed (`armed` the assert's text - any other decline reds it) and the pinned codec held
+def resident_admitted(t : T?; armed, note : string) : bool {
+    if (!moe_gpu_resident_active() && moe_gpu_resident_memory_decline()) {
+        t |> skip("the residency plan does not fit this card ({gpu_resident_decline_()}){note}")
+        return false
+    }
+    t |> success(moe_gpu_resident_active(), armed)
+    mirror_codec_held(t)
+    return true
+}
+
 let NO_CENSUS = -1l   //! the census count with no vulkan module: a census witness stands down
 
 //! the coverage census's count of a kernel's dispatches so far; NO_CENSUS with no vulkan module

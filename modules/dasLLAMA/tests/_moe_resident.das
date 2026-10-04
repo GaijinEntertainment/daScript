@@ -130,10 +130,7 @@ def private moe_fixture_admitted(t : T?; tr : Model; fx : MoeFixture) : int64 {
     }
     t |> success(moe_gpu_resident_active(), "the whole-model driver took {fx.file} (a decline names its reason in the load log: the plan, a seat, a plane's format)")
     return -1l if (!moe_gpu_resident_active())
-    let asked = gpu_kv_dtype_pin()
-    if (asked.pinned) {
-        t |> equal(mirror_kv_dtype(), asked.dt, "the mirror armed at the codec the cell asks")
-    }
+    mirror_codec_held(t)
     let host_layers = gpu_resident_host_layers()
     if (fx.expect_host_layers && host_layers == 0l) {
         t |> skip("the card holds every expert stack beside the {fx.strict_ctx}-position mirror - the host-layer form needs a smaller card")

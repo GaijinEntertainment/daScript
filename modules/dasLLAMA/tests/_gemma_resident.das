@@ -80,15 +80,9 @@ def private gemma_model(t : T?; file : string) : Model {
     let path = path_join(models_dir(), file)
     if (!resident_ready(t, path)) return <- Model()
     var tr <- load_resident(path)
-    if (!moe_gpu_resident_active() && moe_gpu_resident_memory_decline()) {
-        t |> skip("the residency plan does not fit this card ({gpu_resident_decline_()}) - DASLLAMA_GPU_MIN_CTX=1024 arms the 12B Q8_0 file on a 16 GB card")
+    if (!resident_admitted(t, "the whole-model driver armed on the model (the load log names any decline)", " - DASLLAMA_GPU_MIN_CTX=1024 arms the 12B Q8_0 file on a 16 GB card")) {
         delete tr
         return <- Model()
-    }
-    t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
-    let asked = gpu_kv_dtype_pin()
-    if (asked.pinned) {
-        t |> equal(mirror_kv_dtype(), asked.dt, "the mirror armed at the codec the cell asks")
     }
     t |> success(tr.config.pre_post_norm && tr.config.sliding_window > 0l && tr.config.ffn_act == FfnAct.gelu,
         "the fixture carries the sandwich norms, a sliding window and the GeGLU FFN (the arms this file gates)")

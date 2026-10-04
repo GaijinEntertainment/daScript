@@ -112,15 +112,7 @@ def private tq4_within(t : T?; got, want, control : array<float>; what : string)
 def private load_regions(t : T?; file : string; regions : int64) : Model {
     var tr <- load_resident(path_join(models_dir(), file), regions)   //! the rig measures the resident driver: its route is pinned on for the load whatever the environment says
     tr.config.seq_len = min(tr.config.seq_len, REGIONS_RIG_CTX)
-    if (!moe_gpu_resident_active() && moe_gpu_resident_memory_decline()) {
-        t |> skip("the residency plan does not fit this card at {regions} regions ({gpu_resident_decline_()})")
-        return <- tr
-    }
-    t |> success(moe_gpu_resident_active(), "the whole-model driver armed at {regions} regions (the load log names any decline)")
-    let asked = gpu_kv_dtype_pin()
-    if (asked.pinned) {
-        t |> equal(mirror_kv_dtype(), asked.dt, "the mirror armed at the codec the file asks")
-    }
+    resident_admitted(t, "the whole-model driver armed at {regions} regions (the load log names any decline)", " at {regions} regions")
     return <- tr
 }
 
@@ -138,10 +130,27 @@ def private regions_ready(t : T?; file : string) : bool {
     return true
 }
 
+//! how a regions cell loads its carrier: the region count, the context pinned for the load, and the fuse knob off for the load
+//! (the split one-row forms; a no-op without the Vulkan module)
+struct private RegionsLoad {
+    regions : int64 = 2l
+    ctx : int64 = REGIONS_RIG_CTX
+    split_forms : bool
+}
+
 //! the two-region cell's rig: the gate, `file` loaded at two regions, `body` inside the engine's job queue, the model deleted after
 def private with_regions_rig(t : T?; file : string; body : block<(tr : Model) : void>) {
+    with_regions_rig(t, file, RegionsLoad(), body)
+}
+
+//! the rig over the load `load` names, every lever it pins put back after the load
+def private with_regions_rig(t : T?; file : string; load : RegionsLoad; body : block<(tr : Model) : void>) {
     if (!regions_ready(t, file)) return
-    var tr <- load_two_regions(t, file)
+    let levers = resident_levers()
+    split_forms_pin(load.split_forms)
+    set_gpu_ctx_max(load.ctx)
+    var tr <- load_regions(t, file, load.regions)
+    restore_resident_levers(levers)
     if (moe_gpu_resident_active()) {
         with_dasllama_jobque_() {
             invoke(body, tr)
@@ -383,9 +392,9 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : 
     delete al
 }
 
-def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
+def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact; split_forms : bool = false) {
     t |> run("two sessions, a region each: a batched step over both reads what each session reads alone, with no history resync") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
+        with_regions_rig(t, file, RegionsLoad(split_forms = split_forms)) $(tr) {
             var pa <- prompt_a()
             var pb <- prompt_b()
             batched_steps_body(t, tr, pa, pb, bar)
@@ -793,49 +802,44 @@ def cell_device_home_guards(t : T?; file : string) {
 
 def cell_driver_reports(t : T?; file : string) {
     t |> run("every reason a call can pass to the CPU has words of its own, the plan sizes every region, and the status counts the mirrors") @(t : T?) {
-        if (!regions_ready(t, file)) return
-        var tr <- load_two_regions(t, file)
-        if (!moe_gpu_resident_active()) {
-            delete tr
-            return
+        with_regions_rig(t, file) $(tr) {
+            let n = gpu_cpu_pass_reason_count()
+            t |> success(n >= 10, "the armed driver registered its pass reasons ({n})")
+            for (i in range(n)) {
+                note_gpu_cpu_pass(i)
+            }
+            var passes <- gpu_cpu_passes_()
+            t |> equal(length(passes), n, "every reason fired once")
+            var seen : table<string>
+            for (p in passes) {
+                t |> success(!empty(p.words) && p.words != p.reason && !key_exists(seen, p.words), "{p.reason} reads in words of its own: {p.words}")
+                seen |> insert(p.words)
+            }
+            delete passes
+            delete seen
+            reset_gpu_cpu_passes()
+            var none <- gpu_cpu_passes_()
+            t |> equal(length(none), 0, "a reset counter reports nothing")
+            delete none
+            let kv = mirror_kv_dtype()
+            let cap = gpu_device_session_ctx()
+            t |> success(cap > 0l && cap <= REGIONS_RIG_CTX, "a region's context is the rig's cap or under it ({cap})")
+            set_gpu_resident_regions_(1l)
+            let one = resident_plan(tr, cap, kv, kv)
+            set_gpu_resident_regions_(4l)
+            let four = resident_plan(tr, cap, kv, kv)
+            set_gpu_resident_regions_(0l)
+            let zero = resident_plan(tr, cap, kv, kv)
+            set_gpu_resident_regions_(2l)
+            let two = resident_plan(tr, cap, kv, kv)
+            set_gpu_resident_regions_(1l)
+            t |> success(one.kv_bytes > 0l && four.kv_bytes == 4l * one.kv_bytes, "four regions plan four times one region's K/V ({four.kv_bytes} against {one.kv_bytes})")
+            t |> equal(zero.kv_bytes, one.kv_bytes, "a region count under one plans one region")
+            let held = gpu_tier_status_().vram_bytes
+            t |> success(held >= two.kv_bytes, "the status counts both mirror sides of the two regions this load armed ({held} against {two.kv_bytes})")
+            let weights_held = held - two.kv_bytes
+            t |> success(abs(weights_held - two.weight_bytes) * 50l <= two.weight_bytes, "the plan's weight tally is the upload's within 2% ({two.weight_bytes} planned against {weights_held} held): a plane tallied twice or never lands here")
         }
-        let n = gpu_cpu_pass_reason_count()
-        t |> success(n >= 10, "the armed driver registered its pass reasons ({n})")
-        for (i in range(n)) {
-            note_gpu_cpu_pass(i)
-        }
-        var passes <- gpu_cpu_passes_()
-        t |> equal(length(passes), n, "every reason fired once")
-        var seen : table<string>
-        for (p in passes) {
-            t |> success(!empty(p.words) && p.words != p.reason && !key_exists(seen, p.words), "{p.reason} reads in words of its own: {p.words}")
-            seen |> insert(p.words)
-        }
-        delete passes
-        delete seen
-        reset_gpu_cpu_passes()
-        var none <- gpu_cpu_passes_()
-        t |> equal(length(none), 0, "a reset counter reports nothing")
-        delete none
-        let kv = mirror_kv_dtype()
-        let cap = gpu_device_session_ctx()
-        t |> success(cap > 0l && cap <= REGIONS_RIG_CTX, "a region's context is the rig's cap or under it ({cap})")
-        set_gpu_resident_regions_(1l)
-        let one = resident_plan(tr, cap, kv, kv)
-        set_gpu_resident_regions_(4l)
-        let four = resident_plan(tr, cap, kv, kv)
-        set_gpu_resident_regions_(0l)
-        let zero = resident_plan(tr, cap, kv, kv)
-        set_gpu_resident_regions_(2l)
-        let two = resident_plan(tr, cap, kv, kv)
-        set_gpu_resident_regions_(1l)
-        t |> success(one.kv_bytes > 0l && four.kv_bytes == 4l * one.kv_bytes, "four regions plan four times one region's K/V ({four.kv_bytes} against {one.kv_bytes})")
-        t |> equal(zero.kv_bytes, one.kv_bytes, "a region count under one plans one region")
-        let held = gpu_tier_status_().vram_bytes
-        t |> success(held >= two.kv_bytes, "the status counts both mirror sides of the two regions this load armed ({held} against {two.kv_bytes})")
-        let weights_held = held - two.kv_bytes
-        t |> success(abs(weights_held - two.weight_bytes) * 50l <= two.weight_bytes, "the plan's weight tally is the upload's within 2% ({two.weight_bytes} planned against {weights_held} held): a plane tallied twice or never lands here")
-        delete tr
     }
     t |> run("a load under a switched-off whole-model route says it was never attempted") @(t : T?) {
         if (!regions_ready(t, file)) return
@@ -866,15 +870,7 @@ def cell_passes_with_their_rows(t : T?; file : string) {
         }
     }
     t |> run("a prefill past the region's context passes as cap, its device rows brought down first") @(t : T?) {
-        if (!regions_ready(t, file)) return
-        set_gpu_ctx_max(CAPPED_RIG_CTX)
-        var tr <- load_two_regions(t, file)
-        set_gpu_ctx_max(REGIONS_RIG_CTX)
-        if (!moe_gpu_resident_active()) {
-            delete tr
-            return
-        }
-        with_dasllama_jobque_() {
+        with_regions_rig(t, file, RegionsLoad(ctx = CAPPED_RIG_CTX)) $(tr) {
             t |> equal(gpu_device_session_ctx(), CAPPED_RIG_CTX, "the regions armed at the capped context")
             var head <- prose_ids(CAPPED_RIG_CTX - 96l, 0l)
             var tail <- prose_ids(200l, 9l)
@@ -887,7 +883,6 @@ def cell_passes_with_their_rows(t : T?; file : string) {
             delete head
             delete tail
         }
-        delete tr
     }
 }
 
@@ -940,10 +935,7 @@ def private split_forms_pin(on : bool) {
 //! fused act + proj); without the Vulkan module the knob does not exist and the cell skips
 def cell_regions_batched_steps_split_forms(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let levers = resident_levers()
-        split_forms_pin(true)
-        cell_regions_batched_steps(t, file, bar)
-        restore_resident_levers(levers)
+        cell_regions_batched_steps(t, file, bar, true)
     } else {
         t |> run("the split one-row forms need the Vulkan driver") @(t : T?) {
             t |> skip("no Vulkan module in this build: the split one-row forms are the Vulkan driver's")
@@ -979,16 +971,7 @@ def private widen_hold(t : T?; got, ref : array<array<float>>; bar : LogitsBar; 
 //! `split_forms` pins the fuse knob off for the load, as the split-forms cell does
 def cell_regions_batched_widen(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact; split_forms : bool = false) {
     t |> run("a batched step over two rows, one row alone, then a batched step over three: the rows read what each session reads alone") @(t : T?) {
-        if (!regions_ready(t, file)) return
-        let levers = resident_levers()
-        split_forms_pin(split_forms)
-        var tr <- load_regions(t, file, 3l)
-        restore_resident_levers(levers)
-        if (!moe_gpu_resident_active()) {
-            delete tr
-            return
-        }
-        with_dasllama_jobque_() {
+        with_regions_rig(t, file, RegionsLoad(regions = 3l, split_forms = split_forms)) $(tr) {
             var pa <- prompt_a()
             var pb <- prompt_b()
             var pc <- prompt_c()
@@ -1050,6 +1033,5 @@ def cell_regions_batched_widen(t : T?; file : string; bar : LogitsBar = LogitsBa
             delete fc
             delete fc_short
         }
-        delete tr
     }
 }
