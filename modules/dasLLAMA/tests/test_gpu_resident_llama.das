@@ -48,18 +48,12 @@ def private llama_forced_feed(t : T?; file : string; n : int64) {
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
     t |> equal(get_jobque_spin_in_force(), get_jobque_spin_gpu_us(), "the armed driver put the GPU-served spin window in force")
     with_dasllama_jobque_() {
-        var prompt <- resident_prompt(n)
-        var toks <- resident_feed(8l)
-        var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {
+        forced_feed_over(t, tr, "{file} ", n, 8l, LOGIT_BAR_REL) $ {
             var passes <- gpu_cpu_passes_()
             t |> equal(length(passes), 0, "the device served every call of the resident run: {passes}")
             delete passes
         }
         t |> equal(get_jobque_spin_in_force(), get_jobque_spin_us(), "the dropped driver handed the pool the CPU window back")
-        feed_steps_within(t, tr, "{file} ", n, fed.gpu, fed.cpu, toks, LOGIT_BAR_REL)
-        delete fed
-        delete prompt
-        delete toks
     }
     delete tr
 }

@@ -362,6 +362,18 @@ def resident_then_cpu_feed(t : T?; tr : Model; prompt, toks : array<int64>; afte
     return <- resident_then_cpu_feed(t, tr, prompt, toks, $ {}, after_gpu)
 }
 
+//! the forced-feed form: an `n`-token `resident_prompt` and `steps` fed tokens through `resident_then_cpu_feed` (`after_gpu`
+//! the caller's witnesses), every row held by `feed_steps_within` at `bar_rel` under `tag`
+def forced_feed_over(t : T?; tr : Model; tag : string; n, steps : int64; bar_rel : float; after_gpu : block<void>) {
+    var prompt <- resident_prompt(n)
+    var toks <- resident_feed(steps)
+    var fed <- resident_then_cpu_feed(t, tr, prompt, toks, after_gpu)
+    feed_steps_within(t, tr, tag, n, fed.gpu, fed.cpu, toks, bar_rel)
+    delete fed
+    delete prompt
+    delete toks
+}
+
 //! every row of `gpu` (the prefill's, then each fed step's) within `bar_rel` of the CPU chain's max live |logit| of the
 //! same row, and each step's one-step-off compare (the previous step's CPU row, a disconnected mechanism) past the bar;
 //! both argmaxes logged under `tag` with the piece `tr` decodes them to, the two arms named `gpu_name` and `cpu_name` in every message

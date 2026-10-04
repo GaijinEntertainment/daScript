@@ -162,33 +162,27 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
     let device_routed_layers = tr.config.n_layers - host_layers   // a host layer runs its router alone
     let windows = (n + PF_WINDOW_ROWS - 1l) / PF_WINDOW_ROWS
     with_dasllama_jobque_() {
-        var prompt <- resident_prompt(n)
-        var toks <- resident_feed(FED_STEPS)
         let sched0 = census("moe_sched_cls_spv")
         let rows0 = census("topk_rows_cls_spv")
         let topk0 = census("topk_n_cls_spv")
         let ecol = expert_column()
         let e0 = column_census(ecol.col)
         let un0 = unsplit_tokens()
-        var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {
-        if (attn_nsplit() > 1l && unsplit_want(n) != UNSPLIT_UNDECIDED && host_layers == 0l) {   //! a split device records the unsplit twin: it serves the steps under RD_UNSPLIT_POS and none past it
-            t |> equal(unsplit_tokens() - un0, unsplit_want(n), "the token command's unsplit twin served {unsplit_want(n)} of the {FED_STEPS} steps after {n} rows")
+        forced_feed_over(t, tr, "", n, FED_STEPS, fx.bar_rel) $ {
+            if (attn_nsplit() > 1l && unsplit_want(n) != UNSPLIT_UNDECIDED && host_layers == 0l) {   //! a split device records the unsplit twin: it serves the steps under RD_UNSPLIT_POS and none past it
+                t |> equal(unsplit_tokens() - un0, unsplit_want(n), "the token command's unsplit twin served {unsplit_want(n)} of the {FED_STEPS} steps after {n} rows")
+            }
+            if (sched0 != NO_CENSUS) {
+                t |> equal(census("moe_sched_cls_spv") - sched0, device_routed_layers * windows, "the device bucket schedule ran once per device-routed layer per window ({device_routed_layers} layers, {windows} windows)")
+                t |> equal(census("topk_rows_cls_spv") - rows0, device_routed_layers * windows, "the window's per-row select ran once per device-routed layer per window")
+                //! the token command records once and resubmits: the census counts its recording, one top-k per MoE layer per recorded form (a split device records the unsplit twin too)
+                let topk = census("topk_n_cls_spv") - topk0
+                t |> success(topk >= device_routed_layers && topk % device_routed_layers == 0l, "the token command recorded a top-k per device-routed layer ({topk} over {device_routed_layers} layers)")
+                let edelta = column_census(ecol.col) - e0
+                let ewant = 3l * ecol.per_plane * device_routed_layers * windows
+                t |> success(edelta >= ewant, "the expert schedule's pieces dispatched the {ecol.col} column at least {ecol.per_plane} a plane per device-routed layer per window ({edelta} over a floor of {ewant})")
+            }
         }
-        if (sched0 != NO_CENSUS) {
-            t |> equal(census("moe_sched_cls_spv") - sched0, device_routed_layers * windows, "the device bucket schedule ran once per device-routed layer per window ({device_routed_layers} layers, {windows} windows)")
-            t |> equal(census("topk_rows_cls_spv") - rows0, device_routed_layers * windows, "the window's per-row select ran once per device-routed layer per window")
-            //! the token command records once and resubmits: the census counts its recording, one top-k per MoE layer per recorded form (a split device records the unsplit twin too)
-            let topk = census("topk_n_cls_spv") - topk0
-            t |> success(topk >= device_routed_layers && topk % device_routed_layers == 0l, "the token command recorded a top-k per device-routed layer ({topk} over {device_routed_layers} layers)")
-            let edelta = column_census(ecol.col) - e0
-            let ewant = 3l * ecol.per_plane * device_routed_layers * windows
-            t |> success(edelta >= ewant, "the expert schedule's pieces dispatched the {ecol.col} column at least {ecol.per_plane} a plane per device-routed layer per window ({edelta} over a floor of {ewant})")
-        }
-        }
-        feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, toks, fx.bar_rel)
-        delete fed
-        delete prompt
-        delete toks
     }
     delete tr
 }

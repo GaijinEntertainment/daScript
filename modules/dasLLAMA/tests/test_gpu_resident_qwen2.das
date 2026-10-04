@@ -53,13 +53,7 @@ def private qwen2_forced_feed(t : T?; n : int64) {
     t |> success(tr.config.attn_qkv_bias, "the qwen2 carries the q/k/v projection bias the arm exists for")
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the biased model (the load log names any decline)")
     with_dasllama_jobque_() {
-        var prompt <- resident_prompt(n)
-        var toks <- resident_feed(8l)
-        var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {}
-        feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, toks, LOGIT_BAR_REL)
-        delete fed
-        delete prompt
-        delete toks
+        forced_feed_over(t, tr, "", n, 8l, LOGIT_BAR_REL) $ {}
     }
     delete tr
 }

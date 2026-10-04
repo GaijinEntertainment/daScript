@@ -48,15 +48,9 @@ def with_codec_model(t : T?; file : string; kv : KVDtype; blk : block<(tr : Mode
 [cold_path]
 def cell_codec_forced_feed(t : T?; file : string; n : int64; kv : KVDtype; bar_rel : float) {
     with_codec_model(t, file, kv) $(tr) {
-        var prompt <- resident_prompt(n)
-        var toks <- resident_feed(CODEC_FED_STEPS)
-        var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {
+        forced_feed_over(t, tr, "{kv} mirror: ", n, CODEC_FED_STEPS, bar_rel) $ {
             served_every_call(t)
         }
-        feed_steps_within(t, tr, "{kv} mirror: ", n, fed.gpu, fed.cpu, toks, bar_rel)
-        delete fed
-        delete prompt
-        delete toks
     }
 }
 
