@@ -19,14 +19,13 @@ let private REPS = 8
 //! one copy of `bytes` on the compute queue, the device clock around it, averaged over REPS submits after a warm-up
 def private compute_copy_us(src, dst : uint64; bytes : int64) : double {
     var raw = alloc_cmd()
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
-    pfq_arm(raw)
-    pfq_ts(raw)
-    cmd_copy_whole(raw, src, dst, bytes)
-    pfq_ts(raw)
-    pfq_end(raw)
-    vk_check(vkEndCommandBuffer(raw), null)
+    record_cmd(raw, false) $(r; var _h) {
+        pfq_arm(r)
+        pfq_ts(r)
+        cmd_copy_whole(r, src, dst, bytes)
+        pfq_ts(r)
+        pfq_end(r)
+    }
     return pfq_avg_us(raw, REPS, 1)
 }
 

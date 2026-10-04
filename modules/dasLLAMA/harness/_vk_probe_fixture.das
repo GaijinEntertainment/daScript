@@ -48,6 +48,13 @@ def submit_avg_us(var raw : VkCommandBuffer; submits, dispatches, warmups : int)
     return double(get_time_usec(t0)) / double(submits * dispatches)
 }
 
+//! a fresh command `rec` records on one hazard rail, then its `submit_avg_us`
+def time_chain(submits, dispatches, warmups : int; rec : block<(raw : VkCommandBuffer; var hz : VkHaz) : void>) : double {
+    var raw = alloc_cmd()
+    record_cmd(raw, false, rec)
+    return submit_avg_us(raw, submits, dispatches, warmups)
+}
+
 //! two packed f16 scales per word, small positive values (the kernel-suite fixture shape)
 def cool_f16_pair(i : uint) : uint {
     let h = 0x2c00u + (i % 64u)

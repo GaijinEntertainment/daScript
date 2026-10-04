@@ -541,40 +541,36 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; l_stamp
         let wtile = v == 4 ? 32 : 128
         let wgs = ((cnt + ttile - 1) / ttile) * ((d + wtile - 1) / wtile)
         let sc = one_region_sched(cnt, wgs)
-        var raw = alloc_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
         //! every arm alike: the two output planes alternate across the dispatches, each under a fresh hazard rail (the serial row keeps one of each)
         let sizes5 = fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xf_bytes, dv.y_bytes)
         let gbits5 = fixed_array(1u, 2u, 0u, 4u, 16u)
-        var hzs : VkHaz
-        if (v == 4) {
-            let sizes6 = fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xq_bytes, dv.axs_bytes, dv.y_bytes)
-            let gbits6 = fixed_array(1u, 2u, 0u, 4u, 8u, 16u)
-            var sa = kq_batch_cls_set_for(fmt, false, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xqd, dv.axsd, dv.yd), sizes6, gbits6)
-            var sb = kq_batch_cls_set_for(fmt, false, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xqd, dv.axsd, dv.yd_b), sizes6, gbits6)
-            for (k in range(DISPATCHES)) {
-                var hz : VkHaz
-                kq_batch_cls_enc_for(fmt, false, raw, serial ? hzs : hz, (serial || k % 2 == 0) ? sa : sb, pc, int64(wgs))
-            }
-        } elif (v == 3) {
-            var sa = probe_stwin_set(fmt, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd), sizes5, gbits5)
-            var sb = probe_stwin_set(fmt, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd_b), sizes5, gbits5)
-            for (k in range(DISPATCHES)) {
-                var hz : VkHaz
-                probe_stwin_enc(fmt, raw, serial ? hzs : hz, (serial || k % 2 == 0) ? sa : sb, pc, int64(wgs))
-            }
-        } else {
-            var sa = cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd), sizes5, gbits5)
-            var sb = cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd_b), sizes5, gbits5)
-            for (k in range(DISPATCHES)) {
-                var hz : VkHaz
-                cm2_cls_enc(fmt, int64(ttile), raw, serial ? hzs : hz, (serial || k % 2 == 0) ? sa : sb, pc, int64(wgs))
+        let us = timed_chain() $(raw; var hzs) {
+            if (v == 4) {
+                let sizes6 = fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xq_bytes, dv.axs_bytes, dv.y_bytes)
+                let gbits6 = fixed_array(1u, 2u, 0u, 4u, 8u, 16u)
+                var sa = kq_batch_cls_set_for(fmt, false, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xqd, dv.axsd, dv.yd), sizes6, gbits6)
+                var sb = kq_batch_cls_set_for(fmt, false, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xqd, dv.axsd, dv.yd_b), sizes6, gbits6)
+                for (k in range(DISPATCHES)) {
+                    var hz : VkHaz
+                    kq_batch_cls_enc_for(fmt, false, raw, serial ? hzs : hz, (serial || k % 2 == 0) ? sa : sb, pc, int64(wgs))
+                }
+            } elif (v == 3) {
+                var sa = probe_stwin_set(fmt, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd), sizes5, gbits5)
+                var sb = probe_stwin_set(fmt, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd_b), sizes5, gbits5)
+                for (k in range(DISPATCHES)) {
+                    var hz : VkHaz
+                    probe_stwin_enc(fmt, raw, serial ? hzs : hz, (serial || k % 2 == 0) ? sa : sb, pc, int64(wgs))
+                }
+            } else {
+                var sa = cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd), sizes5, gbits5)
+                var sb = cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd_b), sizes5, gbits5)
+                for (k in range(DISPATCHES)) {
+                    var hz : VkHaz
+                    cm2_cls_enc(fmt, int64(ttile), raw, serial ? hzs : hz, (serial || k % 2 == 0) ? sa : sb, pc, int64(wgs))
+                }
             }
         }
-        vk_check(vkEndCommandBuffer(raw), null)
-        let us = usec_per_dispatch(raw)
         let tf = flop / (us * 1000000.0lf)
         print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only{serial ? ", one dispatch at a time" : ""}\n")
     }
@@ -609,16 +605,12 @@ def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measur
             upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
         }
         var s = set_router_gemv_f16_cls(fixed_array(wd, xd, od, xd), fixed_array(w_bytes, x_bytes, o_bytes, x_bytes), fixed_array(0u, 1u, 2u, 0u))
-        var raw = alloc_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var hz : VkHaz
         var pc = RouterArgs(ne = uint(ne), dim = uint(dim), woff = 0u, obase = 16u, ne_split = uint(ne / 2), obase_split = uint(16 + ne))
-        for (_k in range(DISPATCHES)) {
-            enc_router_gemv_f16_cls(raw, hz, s, pc, int64(ne))
+        let us = timed_chain() $(raw; var hz) {
+            for (_k in range(DISPATCHES)) {
+                enc_router_gemv_f16_cls(raw, hz, s, pc, int64(ne))
+            }
         }
-        vk_check(vkEndCommandBuffer(raw), null)
-        let us = usec_per_dispatch(raw)
         print("dec ba gemv f16 {ne}x{dim}: {us} us/dispatch  timing-only\n")
         delete wh
         delete xh
@@ -664,19 +656,15 @@ def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measur
             fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes, TOK_META_BYTES, of_bytes),
             fixed_array(16u, 2u, 8u, 1u, 4u, 0u, 32u))
         for (oform in range(2)) {
-            var raw = alloc_cmd()
-            let begin = VkCommandBufferBeginInfo()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
-            var hz : VkHaz
             var pc = DnStepArgs(cd = uint(cd), kd = uint(kd), nkh = uint(nkh), ds = uint(ds), dconv = uint(dconv),
                 beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G), taps_off = uint(DN_SM_TAPS), wnorm_off = uint(DN_SM_WNORM),
                 a_off = uint(DN_SM_A), dt_off = uint(DN_SM_DT), hist_off = uint(DN_SM_HIST), eps = 1e-6, qscale = 1.0 / sqrt(float(ds)),
                 out_f32 = uint(oform))
-            for (_k in range(DISPATCHES)) {
-                enc_dn_step_cls(raw, hz, s, pc, int64(nvh))
+            let us = timed_chain() $(raw; var hz) {
+                for (_k in range(DISPATCHES)) {
+                    enc_dn_step_cls(raw, hz, s, pc, int64(nvh))
+                }
             }
-            vk_check(vkEndCommandBuffer(raw), null)
-            let us = usec_per_dispatch(raw)
             let oname = oform == 0 ? "q8 row" : "f32 row"
             print("dec step nvh {nvh} ds {ds} {oname}: {us} us/dispatch  timing-only\n")
         }
@@ -716,29 +704,25 @@ def private run_cold_shape(fmt : int; name : string; d, n, cnt : int) {
     //! stamp on the engine's forms; 10: the flush alone; 11: the flush then the m stamp on the warm planes
     let vnames = fixed_array("warm    ", "cold    ", "warm    ", "cold    ", "warm    ", "cold    ", "hostmeta", "turns   ", "deepslab", "wideplan", "flush   ", "flushed ")
     for (v in range(12)) {
-        var raw = alloc_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var hz : VkHaz
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
         var wsum = 0
-        for (c in range(COLD_COPIES)) {
-            if (v >= 10) {
-                enc_splitk_reduce_cls(raw, hz, sfl, pfl, fl_wgs)
+        let us = timed_chain(COLD_COPIES) $(raw; var hz) {
+            for (c in range(COLD_COPIES)) {
+                if (v >= 10) {
+                    enc_splitk_reduce_cls(raw, hz, sfl, pfl, fl_wgs)
+                }
+                if (v == 10) continue
+                let t = v < 6 ? v / 2 : (v == 7 ? c % 3 : 1)
+                let cold = v == 7 || (v < 6 && v % 2 == 1)
+                let dv = v == 8 ? deep : (v == 9 ? wide : dvs[cold ? c : 0])
+                let m = v == 6 ? sch : (v == 8 ? scd : scs[t])
+                var s = cm2_cls_set(fmt, int64(tiles[t]), fixed_array(dv.wqd, dv.wsd, m.buf, dv.xfd, dv.yd),
+                    fixed_array(dv.wq_bytes, dv.ws_bytes, m.bytes, dv.xf_bytes, dv.y_bytes),
+                    fixed_array(1u, 2u, 0u, 4u, 16u))
+                cm2_cls_enc(fmt, int64(tiles[t]), raw, hz, s, pc, int64(wgs[t]))
+                wsum += wgs[t]
             }
-            if (v == 10) continue
-            let t = v < 6 ? v / 2 : (v == 7 ? c % 3 : 1)
-            let cold = v == 7 || (v < 6 && v % 2 == 1)
-            let dv = v == 8 ? deep : (v == 9 ? wide : dvs[cold ? c : 0])
-            let m = v == 6 ? sch : (v == 8 ? scd : scs[t])
-            var s = cm2_cls_set(fmt, int64(tiles[t]), fixed_array(dv.wqd, dv.wsd, m.buf, dv.xfd, dv.yd),
-                fixed_array(dv.wq_bytes, dv.ws_bytes, m.bytes, dv.xf_bytes, dv.y_bytes),
-                fixed_array(1u, 2u, 0u, 4u, 16u))
-            cm2_cls_enc(fmt, int64(tiles[t]), raw, hz, s, pc, int64(wgs[t]))
-            wsum += wgs[t]
         }
-        vk_check(vkEndCommandBuffer(raw), null)
-        let us = usec_per_dispatch(raw, COLD_COPIES)
         let tf = flop / (us * 1000000.0lf)
         let tn = v < 6 ? tnames[v / 2] : (v == 7 ? "l/m/s" : (v == 10 ? "none" : "cm2m"))
         print("{name} {tn} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  ({wsum / COLD_COPIES} workgroups)  timing-only\n")
@@ -766,27 +750,23 @@ def private run_ts_pair(fmt : int; d, n, cnt : int) {
         var sb = cm2_cls_set(fmt, 128l, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, one_plane ? dv.yd : yd2),
             fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xf_bytes, dv.y_bytes),
             fixed_array(1u, 2u, 0u, 4u, one_plane ? 16u : 32u))
-        var raw = alloc_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        g_pfq_on = v == 1
-        g_pfq_n = 0u
-        if (g_pfq_on) {
-            cmd_reset_query_pool(vk_value_to_boost(raw), g_pfq_pool, 0u, PFQ_CAP)
-        }
-        var hz : VkHaz
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-        for (_k in range(DISPATCHES)) {
-            cm2_cls_enc(fmt, 128l, raw, hz, sa, pc, int64(wgs))
-            pfq_ts(raw)
-            if (v == 3) {
-                enc_splitk_reduce_cls(raw, hz, sr, pcr, int64(cnt * d + 1023) / 1_024l)
+        let us = timed_chain() $(raw; var hz) {
+            g_pfq_on = v == 1
+            g_pfq_n = 0u
+            if (g_pfq_on) {
+                cmd_reset_query_pool(vk_value_to_boost(raw), g_pfq_pool, 0u, PFQ_CAP)
             }
-            cm2_cls_enc(fmt, 128l, raw, hz, sb, pc, int64(wgs))
+            for (_k in range(DISPATCHES)) {
+                cm2_cls_enc(fmt, 128l, raw, hz, sa, pc, int64(wgs))
+                pfq_ts(raw)
+                if (v == 3) {
+                    enc_splitk_reduce_cls(raw, hz, sr, pcr, int64(cnt * d + 1023) / 1_024l)
+                }
+                cm2_cls_enc(fmt, 128l, raw, hz, sb, pc, int64(wgs))
+            }
+            g_pfq_on = false
         }
-        g_pfq_on = false
-        vk_check(vkEndCommandBuffer(raw), null)
-        let us = usec_per_dispatch(raw)
         print("ts {vnames[v]}: {us / 1000.0lf} ms per pair of {wgs}-workgroup m stamps ({d} x {n} over {cnt} rows)  timing-only\n")
     }
 }
@@ -937,24 +917,19 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
         upload_region_at(ladder_m_d, 0l, addr<uint8 const?>(words_ladder_m[0]), ladder_m_bytes)
         upload_region_at(ladder_s_d, 0l, addr<uint8 const?>(words_ladder_s[0]), ladder_s_bytes)
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(map_off))
-        let begin = VkCommandBufferBeginInfo()
-        var raw = alloc_cmd()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
         let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
         var s_whole_a = cm2_cls_set(fmt, 32l, fixed_array(wqd, wsd, whole_d, xfd, yd_a),
             fixed_array(wq_bytes, ws_bytes, whole_bytes, xf_bytes, y_bytes), gbits)
         var s_whole_b = cm2_cls_set(fmt, 32l, fixed_array(wqd, wsd, whole_d, xfd, yd_b),
             fixed_array(wq_bytes, ws_bytes, whole_bytes, xf_bytes, y_bytes), gbits)
-        for (k in range(DISPATCHES)) {
-            var hz : VkHaz
-            cm2_cls_enc(fmt, 32l, raw, hz, k % 2 == 0 ? s_whole_a : s_whole_b, pc, int64(bound_whole))
+        let us = timed_chain() $(raw; var _h) {
+            for (k in range(DISPATCHES)) {
+                var hz : VkHaz
+                cm2_cls_enc(fmt, 32l, raw, hz, k % 2 == 0 ? s_whole_a : s_whole_b, pc, int64(bound_whole))
+            }
         }
-        vk_check(vkEndCommandBuffer(raw), null)
-        let us = usec_per_dispatch(raw)
         let tf = flop / (us * 1000000.0lf)
         print("{name} {profile} whole s-tile: d={d} K={n} wgs={bound_whole} ({live_whole} live)  {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
-        var raw2 = alloc_cmd()
-        vk_check(vkBeginCommandBuffer(raw2, begin), null)
         var s_ladder_m_a = cm2_cls_set(fmt, CM2_TC_E, fixed_array(wqd, wsd, ladder_m_d, xfd, yd_a),
             fixed_array(wq_bytes, ws_bytes, ladder_m_bytes, xf_bytes, y_bytes), gbits)
         var s_ladder_m_b = cm2_cls_set(fmt, CM2_TC_E, fixed_array(wqd, wsd, ladder_m_d, xfd, yd_b),
@@ -963,45 +938,41 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
             fixed_array(wq_bytes, ws_bytes, ladder_s_bytes, xf_bytes, y_bytes), gbits)
         var s_ladder_s_b = cm2_cls_set(fmt, 32l, fixed_array(wqd, wsd, ladder_s_d, xfd, yd_b),
             fixed_array(wq_bytes, ws_bytes, ladder_s_bytes, xf_bytes, y_bytes), gbits)
-        for (k in range(DISPATCHES)) {
-            var hz_m : VkHaz
-            var hz_s : VkHaz
-            cm2_cls_enc(fmt, CM2_TC_E, raw2, hz_m, k % 2 == 0 ? s_ladder_m_a : s_ladder_m_b, pc, int64(bound_ladder_m))
-            cm2_cls_enc(fmt, 32l, raw2, hz_s, k % 2 == 0 ? s_ladder_s_a : s_ladder_s_b, pc, int64(bound_ladder_s))
+        let us2 = timed_chain() $(raw2; var _h) {
+            for (k in range(DISPATCHES)) {
+                var hz_m : VkHaz
+                var hz_s : VkHaz
+                cm2_cls_enc(fmt, CM2_TC_E, raw2, hz_m, k % 2 == 0 ? s_ladder_m_a : s_ladder_m_b, pc, int64(bound_ladder_m))
+                cm2_cls_enc(fmt, 32l, raw2, hz_s, k % 2 == 0 ? s_ladder_s_a : s_ladder_s_b, pc, int64(bound_ladder_s))
+            }
         }
-        vk_check(vkEndCommandBuffer(raw2), null)
-        let us2 = usec_per_dispatch(raw2)
         let tf2 = flop / (us2 * 1000000.0lf)
         print("{name} {profile} ladder e+s:   d={d} K={n} wgs={bound_ladder_m}+{bound_ladder_s} ({live_ladder_m}+{live_ladder_s} live)  {us2 / 1000.0lf} ms/dispatch  {tf2} TFLOP/s  timing-only\n")
-        var raw3 = alloc_cmd()
-        vk_check(vkBeginCommandBuffer(raw3, begin), null)
         var s_ladder_dm_a = cm2_cls_set(fmt, 128l, fixed_array(wqd, wsd, ladder_m_d, xfd, yd_a),
             fixed_array(wq_bytes, ws_bytes, ladder_m_bytes, xf_bytes, y_bytes), gbits)
         var s_ladder_dm_b = cm2_cls_set(fmt, 128l, fixed_array(wqd, wsd, ladder_m_d, xfd, yd_b),
             fixed_array(wq_bytes, ws_bytes, ladder_m_bytes, xf_bytes, y_bytes), gbits)
-        for (k in range(DISPATCHES)) {
-            var hz_m : VkHaz
-            var hz_s : VkHaz
-            cm2_cls_enc(fmt, 128l, raw3, hz_m, k % 2 == 0 ? s_ladder_dm_a : s_ladder_dm_b, pc, int64(bound_ladder_m))
-            cm2_cls_enc(fmt, 32l, raw3, hz_s, k % 2 == 0 ? s_ladder_s_a : s_ladder_s_b, pc, int64(bound_ladder_s))
+        let us3 = timed_chain() $(raw3; var _h) {
+            for (k in range(DISPATCHES)) {
+                var hz_m : VkHaz
+                var hz_s : VkHaz
+                cm2_cls_enc(fmt, 128l, raw3, hz_m, k % 2 == 0 ? s_ladder_dm_a : s_ladder_dm_b, pc, int64(bound_ladder_m))
+                cm2_cls_enc(fmt, 32l, raw3, hz_s, k % 2 == 0 ? s_ladder_s_a : s_ladder_s_b, pc, int64(bound_ladder_s))
+            }
         }
-        vk_check(vkEndCommandBuffer(raw3), null)
-        let us3 = usec_per_dispatch(raw3)
         let tf3 = flop / (us3 * 1000000.0lf)
         print("{name} {profile} ladder m+s:   d={d} K={n} wgs={bound_ladder_m}+{bound_ladder_s} ({live_ladder_m}+{live_ladder_s} live)  {us3 / 1000.0lf} ms/dispatch  {tf3} TFLOP/s  timing-only  (the dense 64-deep m stamp)\n")
         if (probe_stwin_has(fmt)) {
-            var raw4 = alloc_cmd()
-            vk_check(vkBeginCommandBuffer(raw4, begin), null)
             var s_whole_tw_a = probe_stwin_set(fmt, fixed_array(wqd, wsd, whole_d, xfd, yd_a),
                 fixed_array(wq_bytes, ws_bytes, whole_bytes, xf_bytes, y_bytes), gbits)
             var s_whole_tw_b = probe_stwin_set(fmt, fixed_array(wqd, wsd, whole_d, xfd, yd_b),
                 fixed_array(wq_bytes, ws_bytes, whole_bytes, xf_bytes, y_bytes), gbits)
-            for (k in range(DISPATCHES)) {
-                var hz : VkHaz
-                probe_stwin_enc(fmt, raw4, hz, k % 2 == 0 ? s_whole_tw_a : s_whole_tw_b, pc, int64(bound_whole))
+            let us4 = timed_chain() $(raw4; var _h) {
+                for (k in range(DISPATCHES)) {
+                    var hz : VkHaz
+                    probe_stwin_enc(fmt, raw4, hz, k % 2 == 0 ? s_whole_tw_a : s_whole_tw_b, pc, int64(bound_whole))
+                }
             }
-            vk_check(vkEndCommandBuffer(raw4), null)
-            let us4 = usec_per_dispatch(raw4)
             let tf4 = flop / (us4 * 1000000.0lf)
             print("{name} {profile} whole s-tile: d={d} K={n} wgs={bound_whole} ({live_whole} live)  {us4 / 1000.0lf} ms/dispatch  {tf4} TFLOP/s  timing-only  (the {probe_stwin_depth(fmt)}-deep twin)\n")
         }
@@ -1074,41 +1045,37 @@ def private run_k4_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 
             let sched = one_region_sched(cnt, wgs)
             let scd = sched.buf
             let sc_bytes = sched.bytes
-            var raw = alloc_cmd()
-            let begin = VkCommandBufferBeginInfo()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
-            var hz : VkHaz
             var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-            if (v == 3) {
-                var s = kq_batch_cls_set_for(int(KqFmt.k4), false,
-                    fixed_array(wqd, wsd, scd, xqd, axsd, yd),
-                    fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, axs_bytes, y_bytes),
-                    fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
-                for (_k in range(DISPATCHES)) {
-                    var hz2 : VkHaz
-                    enc_kq_batch_k4_cls(raw, hz2, s, pc, int64(wgs))
-                }
-            } else {
-                var s = (v == 1
-                    ? set_kq_batch_k4_cm2m_cls(fixed_array(wqd, wsd, scd, xfd, yd),
-                        fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes),
-                        fixed_array(1u, 2u, 0u, 4u, 16u))
-                    : set_kq_batch_k4_cm2l_cls(fixed_array(wqd, wsd, scd, xfd, yd),
-                        fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes),
-                        fixed_array(1u, 2u, 0u, 4u, 16u)))
-                for (_k in range(DISPATCHES)) {
-                    if (v == 2) {
+            let us = timed_chain() $(raw; var hz) {
+                if (v == 3) {
+                    var s = kq_batch_cls_set_for(int(KqFmt.k4), false,
+                        fixed_array(wqd, wsd, scd, xqd, axsd, yd),
+                        fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, axs_bytes, y_bytes),
+                        fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                    for (_k in range(DISPATCHES)) {
                         var hz2 : VkHaz
-                        enc_kq_batch_k4_cm2l_cls(raw, hz2, s, pc, int64(wgs))
-                    } elif (v == 1) {
-                        enc_kq_batch_k4_cm2m_cls(raw, hz, s, pc, int64(wgs))
-                    } else {
-                        enc_kq_batch_k4_cm2l_cls(raw, hz, s, pc, int64(wgs))
+                        enc_kq_batch_k4_cls(raw, hz2, s, pc, int64(wgs))
+                    }
+                } else {
+                    var s = (v == 1
+                        ? set_kq_batch_k4_cm2m_cls(fixed_array(wqd, wsd, scd, xfd, yd),
+                            fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes),
+                            fixed_array(1u, 2u, 0u, 4u, 16u))
+                        : set_kq_batch_k4_cm2l_cls(fixed_array(wqd, wsd, scd, xfd, yd),
+                            fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes),
+                            fixed_array(1u, 2u, 0u, 4u, 16u)))
+                    for (_k in range(DISPATCHES)) {
+                        if (v == 2) {
+                            var hz2 : VkHaz
+                            enc_kq_batch_k4_cm2l_cls(raw, hz2, s, pc, int64(wgs))
+                        } elif (v == 1) {
+                            enc_kq_batch_k4_cm2m_cls(raw, hz, s, pc, int64(wgs))
+                        } else {
+                            enc_kq_batch_k4_cm2l_cls(raw, hz, s, pc, int64(wgs))
+                        }
                     }
                 }
             }
-            vk_check(vkEndCommandBuffer(raw), null)
-            let us = usec_per_dispatch(raw)
             let tf = flop / (us * 1000000.0lf)
             print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
         }
@@ -1989,19 +1956,18 @@ def private run_khr_shape(name : string; d, n, cnt : int; prof : bool = false) {
             let sc_bytes = sched.bytes
             var sa = khr_arm_set(v, fmt, wqd, wsd, scd, xfd, xqd, axsd, yd, wq_bytes, ws_bytes, sc_bytes, xf_bytes, xq_bytes, axs_bytes, y_bytes)
             var sb = khr_arm_set(v, fmt, wqd, wsd, scd, xfd, xqd, axsd, yd2, wq_bytes, ws_bytes, sc_bytes, xf_bytes, xq_bytes, axs_bytes, y_bytes)
-            var raw = alloc_cmd()
-            let begin = VkCommandBufferBeginInfo()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
             var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-            for (k in range(DISPATCHES)) {
-                var hz : VkHaz   //! fresh per dispatch: no barrier between them, the served graph's shape
-                if (k % 2 == 0) {
-                    khr_arm_enc(v, fmt, raw, hz, sa, pc, int64(wgs))
-                } else {
-                    khr_arm_enc(v, fmt, raw, hz, sb, pc, int64(wgs))
+            var raw = alloc_cmd()
+            record_cmd(raw, false) $(r; var _h) {
+                for (k in range(DISPATCHES)) {
+                    var hz : VkHaz   //! fresh per dispatch: no barrier between them, the served graph's shape
+                    if (k % 2 == 0) {
+                        khr_arm_enc(v, fmt, r, hz, sa, pc, int64(wgs))
+                    } else {
+                        khr_arm_enc(v, fmt, r, hz, sb, pc, int64(wgs))
+                    }
                 }
             }
-            vk_check(vkEndCommandBuffer(raw), null)
             raws |> push(raw)
         }
         if (prof) {
@@ -2553,19 +2519,18 @@ def private run_mmq_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038
             let asizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, axs_bytes, y_bytes)
             var sa = mmq_arm_set(v, fmt, fixed_array(wqd, wsd, scd, xqd, axsd, yd), asizes, gbits)
             var sb = mmq_arm_set(v, fmt, fixed_array(wqd, wsd, scd, xqd, axsd, yd2), asizes, gbits)
-            var raw = alloc_cmd()
-            let begin = VkCommandBufferBeginInfo()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
             var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-            for (k in range(DISPATCHES)) {
-                var hz : VkHaz   //! fresh per dispatch: no barrier between them, the served graph's shape
-                if (k % 2 == 0) {
-                    mmq_arm_enc(v, fmt, raw, hz, sa, pc, int64(wgs))
-                } else {
-                    mmq_arm_enc(v, fmt, raw, hz, sb, pc, int64(wgs))
+            var raw = alloc_cmd()
+            record_cmd(raw, false) $(r; var _h) {
+                for (k in range(DISPATCHES)) {
+                    var hz : VkHaz   //! fresh per dispatch: no barrier between them, the served graph's shape
+                    if (k % 2 == 0) {
+                        mmq_arm_enc(v, fmt, r, hz, sa, pc, int64(wgs))
+                    } else {
+                        mmq_arm_enc(v, fmt, r, hz, sb, pc, int64(wgs))
+                    }
                 }
             }
-            vk_check(vkEndCommandBuffer(raw), null)
             raws |> push(raw)
         }
         var best <- sweep_best_us(raws)
@@ -2596,7 +2561,7 @@ def private run_mmq_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038
 // k6 (Q6_K) cm2 decode-in-load vs the serving kq tile - same instrument as run_k4_shape;
 // bisect adds the k6px decode-spelling variants
 [arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
-def private run_k6_shape(name : string; d, n, cnt : int; bisect : bool = false) {   // nolint:STYLE037,STYLE038 — one linear measurement sweep
+def private run_k6_shape(name : string; d, n, cnt : int; bisect : bool = false) {   // nolint:STYLE038 — one linear measurement sweep
     let nsb = n / 256
     let totsb = d * nsb
     var wqh : array<uint>
@@ -2654,63 +2619,59 @@ def private run_k6_shape(name : string; d, n, cnt : int; bisect : bool = false) 
             let sched = one_region_sched(cnt, wgs)
             let scd = sched.buf
             let sc_bytes = sched.bytes
-            var raw = alloc_cmd()
-            let begin = VkCommandBufferBeginInfo()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
-            var hz : VkHaz
             var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-            if (v >= 4) {
-                let bufs = fixed_array(wqd, wsd, scd, xfd, yd)
-                let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
-                let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
-                for (_k in range(DISPATCHES)) {
-                    if (v == 4) {
-                        var s = set_k6px_nil(bufs, sizes, gbits)
-                        enc_k6px_nil(raw, hz, s, pc, int64(wgs))
-                    } elif (v == 5) {
-                        var s = set_k6px_flat(bufs, sizes, gbits)
-                        enc_k6px_flat(raw, hz, s, pc, int64(wgs))
-                    } elif (v == 6) {
-                        var s = set_k6px_ql(bufs, sizes, gbits)
-                        enc_k6px_ql(raw, hz, s, pc, int64(wgs))
-                    } elif (v == 7) {
-                        var s = set_k6px_pair(bufs, sizes, gbits)
-                        enc_k6px_pair(raw, hz, s, pc, int64(wgs))
-                    } else {
-                        var s = set_k6px_pair16(bufs, sizes, gbits)
-                        enc_k6px_pair16(raw, hz, s, pc, int64(wgs))
+            let us = timed_chain() $(raw; var hz) {
+                if (v >= 4) {
+                    let bufs = fixed_array(wqd, wsd, scd, xfd, yd)
+                    let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
+                    let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
+                    for (_k in range(DISPATCHES)) {
+                        if (v == 4) {
+                            var s = set_k6px_nil(bufs, sizes, gbits)
+                            enc_k6px_nil(raw, hz, s, pc, int64(wgs))
+                        } elif (v == 5) {
+                            var s = set_k6px_flat(bufs, sizes, gbits)
+                            enc_k6px_flat(raw, hz, s, pc, int64(wgs))
+                        } elif (v == 6) {
+                            var s = set_k6px_ql(bufs, sizes, gbits)
+                            enc_k6px_ql(raw, hz, s, pc, int64(wgs))
+                        } elif (v == 7) {
+                            var s = set_k6px_pair(bufs, sizes, gbits)
+                            enc_k6px_pair(raw, hz, s, pc, int64(wgs))
+                        } else {
+                            var s = set_k6px_pair16(bufs, sizes, gbits)
+                            enc_k6px_pair16(raw, hz, s, pc, int64(wgs))
+                        }
                     }
-                }
-            } elif (v == 3) {
-                var s = kq_batch_cls_set_for(int(KqFmt.k6), false,
-                    fixed_array(wqd, wsd, scd, xqd, axsd, yd),
-                    fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, axs_bytes, y_bytes),
-                    fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
-                for (_k in range(DISPATCHES)) {
-                    var hz2 : VkHaz
-                    enc_kq_batch_k6_cls(raw, hz2, s, pc, int64(wgs))
-                }
-            } else {
-                var s = (v == 1
-                    ? set_kq_batch_k6_cm2m_cls(fixed_array(wqd, wsd, scd, xfd, yd),
-                        fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes),
-                        fixed_array(1u, 2u, 0u, 4u, 16u))
-                    : set_kq_batch_k6_cm2l_cls(fixed_array(wqd, wsd, scd, xfd, yd),
-                        fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes),
-                        fixed_array(1u, 2u, 0u, 4u, 16u)))
-                for (_k in range(DISPATCHES)) {
-                    if (v == 2) {
+                } elif (v == 3) {
+                    var s = kq_batch_cls_set_for(int(KqFmt.k6), false,
+                        fixed_array(wqd, wsd, scd, xqd, axsd, yd),
+                        fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, axs_bytes, y_bytes),
+                        fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                    for (_k in range(DISPATCHES)) {
                         var hz2 : VkHaz
-                        enc_kq_batch_k6_cm2l_cls(raw, hz2, s, pc, int64(wgs))
-                    } elif (v == 1) {
-                        enc_kq_batch_k6_cm2m_cls(raw, hz, s, pc, int64(wgs))
-                    } else {
-                        enc_kq_batch_k6_cm2l_cls(raw, hz, s, pc, int64(wgs))
+                        enc_kq_batch_k6_cls(raw, hz2, s, pc, int64(wgs))
+                    }
+                } else {
+                    var s = (v == 1
+                        ? set_kq_batch_k6_cm2m_cls(fixed_array(wqd, wsd, scd, xfd, yd),
+                            fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes),
+                            fixed_array(1u, 2u, 0u, 4u, 16u))
+                        : set_kq_batch_k6_cm2l_cls(fixed_array(wqd, wsd, scd, xfd, yd),
+                            fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes),
+                            fixed_array(1u, 2u, 0u, 4u, 16u)))
+                    for (_k in range(DISPATCHES)) {
+                        if (v == 2) {
+                            var hz2 : VkHaz
+                            enc_kq_batch_k6_cm2l_cls(raw, hz2, s, pc, int64(wgs))
+                        } elif (v == 1) {
+                            enc_kq_batch_k6_cm2m_cls(raw, hz, s, pc, int64(wgs))
+                        } else {
+                            enc_kq_batch_k6_cm2l_cls(raw, hz, s, pc, int64(wgs))
+                        }
                     }
                 }
             }
-            vk_check(vkEndCommandBuffer(raw), null)
-            let us = usec_per_dispatch(raw)
             let tf = flop / (us * 1000000.0lf)
             print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
         }
@@ -2724,6 +2685,12 @@ def private run_k6_shape(name : string; d, n, cnt : int; bisect : bool = false) 
 
 // two warmup submits (pipeline compile + clocks settle), then the timed window
 def private usec_per_dispatch(var raw : VkCommandBuffer; dispatches : int = DISPATCHES) : double => submit_avg_us(raw, SUBMITS, dispatches, 2)
+
+//! a fresh command `rec` records, timed as `usec_per_dispatch` times one over `dispatches` dispatches a submit
+def private timed_chain(dispatches : int; rec : block<(raw : VkCommandBuffer; var hz : VkHaz) : void>) : double => time_chain(SUBMITS, dispatches, 2, rec)
+
+//! `timed_chain` over DISPATCHES dispatches a submit
+def private timed_chain(rec : block<(raw : VkCommandBuffer; var hz : VkHaz) : void>) : double => time_chain(SUBMITS, DISPATCHES, 2, rec)
 
 //! `with_sdot4_mm` off skips the sdot4 mm tile (the row a shape's cm2 question does not need)
 def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = true) {   // nolint:STYLE038 — one linear measurement sweep
@@ -2764,18 +2731,14 @@ def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = tru
         let bufs = fixed_array(wqd, wsd, scd, xqd, xsd, yd)
         let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, xs_bytes, y_bytes)
         let gbits = fixed_array(1u, 2u, 0u, 4u, 8u, 16u)
-        let begin = VkCommandBufferBeginInfo()
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
         if (with_sdot4_mm) {
             var sc = set_q8_batch_mm_a_cls(bufs, sizes, gbits)
-            var raw = alloc_cmd()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
-            var hz : VkHaz
-            for (_k in range(DISPATCHES)) {
-                enc_q8_batch_mm_a_cls(raw, hz, sc, pc, int64(wgs))
+            per_us = timed_chain() $(raw; var hz) {
+                for (_k in range(DISPATCHES)) {
+                    enc_q8_batch_mm_a_cls(raw, hz, sc, pc, int64(wgs))
+                }
             }
-            vk_check(vkEndCommandBuffer(raw), null)
-            per_us = usec_per_dispatch(raw)
         }
         if (g_gpu.coopmat_mode == COOPMAT_CM2) {
             // the cm2 tiles at the serving no-split config (f16-fed, decode-in-load); off cm2 mode the device enabled no cm2 extension
@@ -2784,20 +2747,18 @@ def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = tru
             let cgbits = fixed_array(1u, 2u, 0u, 4u, 16u)
             var scl = set_q8_batch_cm2l_cls(cbufs, csizes, cgbits)
             var rawl = alloc_cmd()
-            vk_check(vkBeginCommandBuffer(rawl, begin), null)
-            var hzl : VkHaz
-            for (_k in range(DISPATCHES)) {
-                enc_q8_batch_cm2l_cls(rawl, hzl, scl, pc, int64(lwgs))
+            record_cmd(rawl, false) $(r; var hzl) {
+                for (_k in range(DISPATCHES)) {
+                    enc_q8_batch_cm2l_cls(r, hzl, scl, pc, int64(lwgs))
+                }
             }
-            vk_check(vkEndCommandBuffer(rawl), null)
             var scm = set_q8_batch_cm2m_cls(cbufs, csizes, cgbits)
             var rawm = alloc_cmd()
-            vk_check(vkBeginCommandBuffer(rawm, begin), null)
-            var hzm : VkHaz
-            for (_k in range(DISPATCHES)) {
-                enc_q8_batch_cm2m_cls(rawm, hzm, scm, pc, int64(mwgs))
+            record_cmd(rawm, false) $(r; var hzm) {
+                for (_k in range(DISPATCHES)) {
+                    enc_q8_batch_cm2m_cls(r, hzm, scm, pc, int64(mwgs))
+                }
             }
-            vk_check(vkEndCommandBuffer(rawm), null)
             var lm <- [rawl, rawm]
             let best <- sweep_best_us(lm)   // the two columns are a race: their rounds alternate, each figure its best round
             cm2l_us = best[0]
@@ -2860,38 +2821,32 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int; khr : bool =
         let csizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_dev_bytes, y_bytes)
         let cgbits = fixed_array(1u, 2u, 0u, 4u, 16u)
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = uint(ck))
-        let begin = VkCommandBufferBeginInfo()
         if (khr) {
             verify(ensure_q8_batch_khr_cls(), "the q8 KHR kq tile's probe pipeline must engage")
             var sck = set_q8_batch_khr_cls(cbufs, csizes, cgbits)
-            var rawk = alloc_cmd()
-            vk_check(vkBeginCommandBuffer(rawk, begin), null)
-            var hzk : VkHaz
-            for (_k in range(DISPATCHES)) {
-                enc_q8_batch_khr_cls(rawk, hzk, sck, pc, int64(lwgs))
+            cm2l_us = timed_chain() $(rawk; var hzk) {
+                for (_k in range(DISPATCHES)) {
+                    enc_q8_batch_khr_cls(rawk, hzk, sck, pc, int64(lwgs))
+                }
             }
-            vk_check(vkEndCommandBuffer(rawk), null)
-            cm2l_us = usec_per_dispatch(rawk)
             let tr = time_split_reduce(yd, y_bytes, rows, d, nsplit, sck, pc, lwgs)
             red_us = tr.red
             chain_us = tr.chain
         } else {
             var scl = set_q8_batch_cm2l_cls(cbufs, csizes, cgbits)
             var rawl = alloc_cmd()
-            vk_check(vkBeginCommandBuffer(rawl, begin), null)
-            var hzl : VkHaz
-            for (_k in range(DISPATCHES)) {
-                enc_q8_batch_cm2l_cls(rawl, hzl, scl, pc, int64(lwgs))
+            record_cmd(rawl, false) $(r; var hzl) {
+                for (_k in range(DISPATCHES)) {
+                    enc_q8_batch_cm2l_cls(r, hzl, scl, pc, int64(lwgs))
+                }
             }
-            vk_check(vkEndCommandBuffer(rawl), null)
             var scm = set_q8_batch_cm2m_cls(cbufs, csizes, cgbits)
             var rawm = alloc_cmd()
-            vk_check(vkBeginCommandBuffer(rawm, begin), null)
-            var hzm : VkHaz
-            for (_k in range(DISPATCHES)) {
-                enc_q8_batch_cm2m_cls(rawm, hzm, scm, pc, int64(mwgs))
+            record_cmd(rawm, false) $(r; var hzm) {
+                for (_k in range(DISPATCHES)) {
+                    enc_q8_batch_cm2m_cls(r, hzm, scm, pc, int64(mwgs))
+                }
             }
-            vk_check(vkEndCommandBuffer(rawm), null)
             var lm <- [rawl, rawm]
             let best <- sweep_best_us(lm)   // the two columns are a race: their rounds alternate, each figure its best round
             cm2l_us = best[0]
@@ -2934,15 +2889,11 @@ def private run_kq_shape_split(fmt : int; name : string; d, n, cnt, nsplit : int
         let sc = one_region_sched(cnt, wgs)
         var s = cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, yd),
             fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xf_bytes, y_bytes), fixed_array(1u, 2u, 0u, 4u, 16u))
-        var raw = alloc_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var hz : VkHaz
-        for (_k in range(DISPATCHES)) {
-            cm2_cls_enc(fmt, int64(ttile), raw, hz, s, pc, int64(wgs))
+        let us = timed_chain() $(raw; var hz) {
+            for (_k in range(DISPATCHES)) {
+                cm2_cls_enc(fmt, int64(ttile), raw, hz, s, pc, int64(wgs))
+            }
         }
-        vk_check(vkEndCommandBuffer(raw), null)
-        let us = usec_per_dispatch(raw)
         if (v == 0) {
             lus = us
             lwgs = wgs
@@ -2962,24 +2913,18 @@ def private time_split_reduce(yd : uint64; y_bytes : int64; rows, d, nsplit : in
     var sr = set_splitk_reduce_cls(fixed_array(yd, outd), fixed_array(y_bytes, out_bytes), fixed_array(16u, 32u))
     var pcr = SkRedArgs(nelem = uint(rows * d), k = uint(nsplit))
     let rwgs = int64(rows * d + 1023) / 1_024l
-    let begin = VkCommandBufferBeginInfo()
-    var rawr = alloc_cmd()
-    vk_check(vkBeginCommandBuffer(rawr, begin), null)
-    var hzr : VkHaz
-    for (_k in range(DISPATCHES)) {
-        enc_splitk_reduce_cls(rawr, hzr, sr, pcr, rwgs)
+    let red = timed_chain() $(rawr; var hzr) {
+        for (_k in range(DISPATCHES)) {
+            enc_splitk_reduce_cls(rawr, hzr, sr, pcr, rwgs)
+        }
     }
-    vk_check(vkEndCommandBuffer(rawr), null)
-    let red = usec_per_dispatch(rawr)
-    var rawc = alloc_cmd()
-    vk_check(vkBeginCommandBuffer(rawc, begin), null)
-    var hzc : VkHaz
-    for (_k in range(DISPATCHES)) {
-        cm2_cls_enc(fmt, tc, rawc, hzc, scl, pc, int64(lwgs))
-        enc_splitk_reduce_cls(rawc, hzc, sr, pcr, rwgs)
+    let chain = timed_chain() $(rawc; var hzc) {
+        for (_k in range(DISPATCHES)) {
+            cm2_cls_enc(fmt, tc, rawc, hzc, scl, pc, int64(lwgs))
+            enc_splitk_reduce_cls(rawc, hzc, sr, pcr, rwgs)
+        }
     }
-    vk_check(vkEndCommandBuffer(rawc), null)
-    return (red = red, chain = usec_per_dispatch(rawc))
+    return (red = red, chain = chain)
 }
 
 // ===== the last-arriving-workgroup hand-off (arg "lastwg") =====
@@ -3120,28 +3065,25 @@ def private run_lastwg(dim : int) {   // nolint:STYLE038 — one linear measurem
             upload_region_at(yd, 0l, addr<uint8 const?>(x0[0]), nb)
             upload_region_at(cntd, 0l, addr<uint8 const?>(zero[0]), 16l)
         }
-        var raw = alloc_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var hz : VkHaz
-        if (form == 0) {
-            var sg = set_px_lw_gemv(fixed_array(wd, xnd, yd, cntd, xresd, wnd), fixed_array(w_bytes, nb, nb, 16l, nb, nb),
-                fixed_array(0u, 1u, 2u, 0u, 0u, 0u))
-            var sa = set_cls_ar(fixed_array(xresd, yd, wnd, xnd), fixed_array(nb, nb, nb, nb), fixed_array(4u, 2u, 0u, 1u))
-            for (_k in range(DISPATCHES)) {
-                enc_px_lw_gemv(raw, hz, sg, pc, wgs)
-                enc_cls_ar(raw, hz, sa, pca, 1l)
-            }
-        } else {
-            var sf = set_px_lw_gemv_last(fixed_array(wd, xnd, yd, cntd, xresd, wnd), fixed_array(w_bytes, nb, nb, 16l, nb, nb),
-                fixed_array(0u, 1u, 2u, 8u, 4u, 0u))
-            for (_k in range(DISPATCHES)) {
-                enc_px_lw_gemv_last(raw, hz, sf, pc, wgs)
+        let us = timed_chain() $(raw; var hz) {   //! per step: the split form's step is two dispatches
+            if (form == 0) {
+                var sg = set_px_lw_gemv(fixed_array(wd, xnd, yd, cntd, xresd, wnd), fixed_array(w_bytes, nb, nb, 16l, nb, nb),
+                    fixed_array(0u, 1u, 2u, 0u, 0u, 0u))
+                var sa = set_cls_ar(fixed_array(xresd, yd, wnd, xnd), fixed_array(nb, nb, nb, nb), fixed_array(4u, 2u, 0u, 1u))
+                for (_k in range(DISPATCHES)) {
+                    enc_px_lw_gemv(raw, hz, sg, pc, wgs)
+                    enc_cls_ar(raw, hz, sa, pca, 1l)
+                }
+            } else {
+                var sf = set_px_lw_gemv_last(fixed_array(wd, xnd, yd, cntd, xresd, wnd), fixed_array(w_bytes, nb, nb, 16l, nb, nb),
+                    fixed_array(0u, 1u, 2u, 8u, 4u, 0u))
+                for (_k in range(DISPATCHES)) {
+                    enc_px_lw_gemv_last(raw, hz, sf, pc, wgs)
+                }
             }
         }
-        vk_check(vkEndCommandBuffer(raw), null)
-        let us = usec_per_dispatch(raw)   //! per step: the split form's step is two dispatches
         var rawc = alloc_cmd()
+        let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(rawc, begin), null)
         var hc : VkHaz
         vhz_dep(rawc, hc, 1u | 8u, 0u, true)
@@ -3197,19 +3139,15 @@ def private run_barrier_forms(dim : int) {
         upload_region_at(wnd, 0l, addr<uint8 const?>(ones[0]), nb)
     }
     var pc = ArArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = 1.0e-6, ascale = 1.0)
-    let begin = VkCommandBufferBeginInfo()
     let names = fixed_array("rail (global, compute+transfer)", "global, compute only", "global, shader bits only", "buffer barrier on the row", "execution only", "no barrier")
     for (form in range(6)) {
         var sc = set_cls_ar(fixed_array(xd, ad, wnd, yd), fixed_array(nb, nb, nb, nb), fixed_array(0u, 0u, 0u, 0u))   //! the rail sees no bits: the barriers below are the probe's own
-        var raw = alloc_cmd()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var hz : VkHaz
-        for (_k in range(DISPATCHES)) {
-            enc_cls_ar(raw, hz, sc, pc, 1l)
-            probe_barrier(raw, form, xd, nb)
+        let us = timed_chain() $(raw; var hz) {
+            for (_k in range(DISPATCHES)) {
+                enc_cls_ar(raw, hz, sc, pc, 1l)
+                probe_barrier(raw, form, xd, nb)
+            }
         }
-        vk_check(vkEndCommandBuffer(raw), null)
-        let us = usec_per_dispatch(raw)
         print("barform dim={dim} {names[form]}: cls_ar {us} us/dispatch | timing-only\n")
     }
     delete ones
@@ -3280,27 +3218,20 @@ def private run_small_kernels(dim : int) {
     }
     verify(ensure_cls_ar() && ensure_cls_ar_rq_b(), "the add+rms class rails must engage")
     var pc = ArArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = 1.0e-6, ascale = 1.0)
-    let begin = VkCommandBufferBeginInfo()
     for (dep in range(2)) {
         let bit = dep == 1 ? 1u : 0u   //! the dependency: x read and written by every dispatch, so the rail barriers between them
         var sc = set_cls_ar(fixed_array(xd, ad, wnd, yd), fixed_array(nb, nb, nb, nb), fixed_array(bit, 0u, 0u, 2u * bit))
-        var raw = alloc_cmd()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var hz : VkHaz
-        for (_k in range(DISPATCHES)) {
-            enc_cls_ar(raw, hz, sc, pc, 1l)
+        let us = timed_chain() $(raw; var hz) {
+            for (_k in range(DISPATCHES)) {
+                enc_cls_ar(raw, hz, sc, pc, 1l)
+            }
         }
-        vk_check(vkEndCommandBuffer(raw), null)
-        let us = usec_per_dispatch(raw)
         var scq = set_cls_ar_rq_b(fixed_array(xd, ad, wnd, xqd, xsd), fixed_array(nb, nb, nb, int64(dim), int64(dim / 32) * 4l), fixed_array(bit, 0u, 0u, 2u * bit, 2u * bit))
-        var rawq = alloc_cmd()
-        vk_check(vkBeginCommandBuffer(rawq, begin), null)
-        var hzq : VkHaz
-        for (_k in range(DISPATCHES)) {
-            enc_cls_ar_rq_b(rawq, hzq, scq, pc, 1l)
+        let usq = timed_chain() $(rawq; var hzq) {
+            for (_k in range(DISPATCHES)) {
+                enc_cls_ar_rq_b(rawq, hzq, scq, pc, 1l)
+            }
         }
-        vk_check(vkEndCommandBuffer(rawq), null)
-        let usq = usec_per_dispatch(rawq)
         print("small dim={dim} {dep == 1 ? "chained (barrier between)" : "independent"}: cls_ar {us} us/dispatch, cls_ar_rq_b {usq} us/dispatch | timing-only\n")
     }
     delete ones
@@ -3352,61 +3283,57 @@ def private run_cm2x_shape(name : string; d, n, cnt : int) {   // nolint:STYLE03
         upload_region_at(xqd, 0l, addr<uint8 const?>(b.xq[0]), xq_bytes)
         upload_region_at(xsd, 0l, addr<uint8 const?>(b.xs[0]), xs_bytes)
         for (v in range(8)) {
-            var raw = alloc_cmd()
-            let begin = VkCommandBufferBeginInfo()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
-            var hz : VkHaz
-            if (v == 0) {
-                var s = set_q8_batch_cm2l_cls(cbufs, csizes, cgbits)
-                for (_k in range(DISPATCHES)) {
-                    enc_q8_batch_cm2l_cls(raw, hz, s, pc, int64(lwgs))
-                }
-            } elif (v == 1) {
-                var s = set_cm2px_lit(cbufs, csizes, cgbits)
-                for (_k in range(DISPATCHES)) {
-                    enc_cm2px_lit(raw, hz, s, pc, int64(lwgs))
-                }
-            } elif (v == 2) {
-                var s = set_cm2px_flat(cbufs, csizes, cgbits)
-                for (_k in range(DISPATCHES)) {
-                    enc_cm2px_flat(raw, hz, s, pc, int64(lwgs))
-                }
-            } elif (v == 3) {
-                var s = set_cm2px_nil(cbufs, csizes, cgbits)
-                for (_k in range(DISPATCHES)) {
-                    enc_cm2px_nil(raw, hz, s, pc, int64(lwgs))
-                }
-            } elif (v == 4) {
-                var s = set_cm2px_f16a(fbufs, fsizes, fgbits)
-                for (_k in range(DISPATCHES)) {
-                    enc_cm2px_f16a(raw, hz, s, pc, int64(lwgs))
-                }
-            } elif (v == 5) {
-                // no-barrier arm: a fresh hazard rail per enc drops the y write-write barrier,
-                // so consecutive dispatches overlap on device - sizes the per-dispatch drain
-                var s = set_q8_batch_cm2l_cls(cbufs, csizes, cgbits)
-                for (_k in range(DISPATCHES)) {
-                    var hz2 : VkHaz
-                    enc_q8_batch_cm2l_cls(raw, hz2, s, pc, int64(lwgs))
-                }
-            } elif (v == 6) {
-                // the serving mm kernel, same no-barrier treatment - the fair kernel-rate twin
-                var s = set_q8_batch_mm_a_cls(
-                    fixed_array(wqd, wsd, mscd, xqd, xsd, yd),
-                    fixed_array(wq_bytes, ws_bytes, msc_bytes, xq_bytes, xs_bytes, y_bytes),
-                    fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
-                for (_k in range(DISPATCHES)) {
-                    var hz2 : VkHaz
-                    enc_q8_batch_mm_a_cls(raw, hz2, s, pc, int64(mm_wgs))
-                }
-            } else {
-                var s = set_cm2px_push(cbufs, csizes, cgbits)
-                for (_k in range(DISPATCHES)) {
-                    enc_cm2px_push(raw, hz, s, pc, int64(lwgs))
+            let us = timed_chain() $(raw; var hz) {
+                if (v == 0) {
+                    var s = set_q8_batch_cm2l_cls(cbufs, csizes, cgbits)
+                    for (_k in range(DISPATCHES)) {
+                        enc_q8_batch_cm2l_cls(raw, hz, s, pc, int64(lwgs))
+                    }
+                } elif (v == 1) {
+                    var s = set_cm2px_lit(cbufs, csizes, cgbits)
+                    for (_k in range(DISPATCHES)) {
+                        enc_cm2px_lit(raw, hz, s, pc, int64(lwgs))
+                    }
+                } elif (v == 2) {
+                    var s = set_cm2px_flat(cbufs, csizes, cgbits)
+                    for (_k in range(DISPATCHES)) {
+                        enc_cm2px_flat(raw, hz, s, pc, int64(lwgs))
+                    }
+                } elif (v == 3) {
+                    var s = set_cm2px_nil(cbufs, csizes, cgbits)
+                    for (_k in range(DISPATCHES)) {
+                        enc_cm2px_nil(raw, hz, s, pc, int64(lwgs))
+                    }
+                } elif (v == 4) {
+                    var s = set_cm2px_f16a(fbufs, fsizes, fgbits)
+                    for (_k in range(DISPATCHES)) {
+                        enc_cm2px_f16a(raw, hz, s, pc, int64(lwgs))
+                    }
+                } elif (v == 5) {
+                    // no-barrier arm: a fresh hazard rail per enc drops the y write-write barrier,
+                    // so consecutive dispatches overlap on device - sizes the per-dispatch drain
+                    var s = set_q8_batch_cm2l_cls(cbufs, csizes, cgbits)
+                    for (_k in range(DISPATCHES)) {
+                        var hz2 : VkHaz
+                        enc_q8_batch_cm2l_cls(raw, hz2, s, pc, int64(lwgs))
+                    }
+                } elif (v == 6) {
+                    // the serving mm kernel, same no-barrier treatment - the fair kernel-rate twin
+                    var s = set_q8_batch_mm_a_cls(
+                        fixed_array(wqd, wsd, mscd, xqd, xsd, yd),
+                        fixed_array(wq_bytes, ws_bytes, msc_bytes, xq_bytes, xs_bytes, y_bytes),
+                        fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                    for (_k in range(DISPATCHES)) {
+                        var hz2 : VkHaz
+                        enc_q8_batch_mm_a_cls(raw, hz2, s, pc, int64(mm_wgs))
+                    }
+                } else {
+                    var s = set_cm2px_push(cbufs, csizes, cgbits)
+                    for (_k in range(DISPATCHES)) {
+                        enc_cm2px_push(raw, hz, s, pc, int64(lwgs))
+                    }
                 }
             }
-            vk_check(vkEndCommandBuffer(raw), null)
-            let us = usec_per_dispatch(raw)
             let tf = flop / (us * 1000000.0lf)
             print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
         }
@@ -3634,44 +3561,37 @@ def private run_ref_gemm(d, n, cnt : int) {   // nolint:STYLE038 — one linear 
             fixed_array(ad, bd, yd),
             fixed_array(a_bytes, b_bytes, y_bytes),
             fixed_array(1u, 2u, 4u))
-        var raw = alloc_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        for (_k in range(DISPATCHES)) {
-            var hz : VkHaz
-            enc_cm2px_ref(raw, hz, s, pc, int64(wgs))
+        let us = timed_chain() $(raw; var _h) {
+            for (_k in range(DISPATCHES)) {
+                var hz : VkHaz
+                enc_cm2px_ref(raw, hz, s, pc, int64(wgs))
+            }
         }
-        vk_check(vkEndCommandBuffer(raw), null)
-        let us = usec_per_dispatch(raw)
         let tf = flop / (us * 1000000.0lf)
         print("ref cm2 (d={d} K={n} cnt={cnt} wgs={wgs}): {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
         var s2 = set_cm2px_ref2(
             fixed_array(ad, bd, yd, scd),
             fixed_array(a_bytes, b_bytes, y_bytes, sc_bytes),
             fixed_array(1u, 2u, 4u, 8u))
-        var raw2 = alloc_cmd()
-        vk_check(vkBeginCommandBuffer(raw2, begin), null)
-        for (_k in range(DISPATCHES)) {
-            var hz : VkHaz
-            enc_cm2px_ref2(raw2, hz, s2, pc, int64(wgs))
+        let us2 = timed_chain() $(raw2; var _h) {
+            for (_k in range(DISPATCHES)) {
+                var hz : VkHaz
+                enc_cm2px_ref2(raw2, hz, s2, pc, int64(wgs))
+            }
         }
-        vk_check(vkEndCommandBuffer(raw2), null)
-        let us2 = usec_per_dispatch(raw2)
         let tf2 = flop / (us2 * 1000000.0lf)
         print("ref+2plane: {us2 / 1000.0lf} ms/dispatch  {tf2} TFLOP/s  timing-only\n")
         var s3 = set_cm2px_min(
             fixed_array(ad, scd, bd, yd),
             fixed_array(a_bytes, sc_bytes, b_bytes, y_bytes),
             fixed_array(1u, 2u, 4u, 8u))
-        var raw3 = alloc_cmd()
-        vk_check(vkBeginCommandBuffer(raw3, begin), null)
         var pcm = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-        for (_k in range(DISPATCHES)) {
-            var hz : VkHaz
-            enc_cm2px_min(raw3, hz, s3, pcm, int64(wgs))
+        let us3 = timed_chain() $(raw3; var _h) {
+            for (_k in range(DISPATCHES)) {
+                var hz : VkHaz
+                enc_cm2px_min(raw3, hz, s3, pcm, int64(wgs))
+            }
         }
-        vk_check(vkEndCommandBuffer(raw3), null)
-        let us3 = usec_per_dispatch(raw3)
         let tf3 = flop / (us3 * 1000000.0lf)
         print("our minimal (min): {us3 / 1000.0lf} ms/dispatch  {tf3} TFLOP/s  timing-only\n")
     }

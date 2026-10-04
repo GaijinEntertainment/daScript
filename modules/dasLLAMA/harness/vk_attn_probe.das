@@ -75,26 +75,24 @@ def private time_split(rows, cnt, hs, nheads, kv_mul, nsplit, slab : int) : doub
         var sc = set_da_attn_f16_cls(fixed_array(qdev, kd, vd, yd, tokb.buf, partd, aqd, asd),
             fixed_array(q_bytes, m_bytes, m_bytes, q_bytes, TOK_META_BYTES * int64(rows), p_bytes, int64(qd * rows), s_bytes),
             fixed_array(1u, 2u, 4u, 16u, 0u, 32u, 64u, 64u))
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        pfq_arm(raw)   //! device timestamps around every layer: the host's submit and fence latency stay out of the number
-        var h : VkHaz
         var pc = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u,
             scale = 1.0 / sqrt(float(hs)), qstride = uint(hs), nsplit = uint(nsplit), rqk = DA_RQ_Q8,
             rowwg = uint(da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit))), qrow = uint(qd), cntoff = uint(cnt_off))
         let wgs = da_attn_row_wgs(int64(nheads), int64(kv_mul), int64(nsplit)) * int64(rows)
-        pfq_ts(raw)
-        for (_i in range(DISPATCHES)) {
-            if (slab == 2) {
-                enc_da_attn_f16_g2_cls(raw, h, sc, pc, wgs)
-            } else {
-                enc_da_attn_f16_cls(raw, h, sc, pc, wgs)
+        record_cmd(raw, false) $(r; var h) {
+            pfq_arm(r)   //! device timestamps around every layer: the host's submit and fence latency stay out of the number
+            pfq_ts(r)
+            for (_i in range(DISPATCHES)) {
+                if (slab == 2) {
+                    enc_da_attn_f16_g2_cls(r, h, sc, pc, wgs)
+                } else {
+                    enc_da_attn_f16_cls(r, h, sc, pc, wgs)
+                }
+                vhz_dep(r, h, 16u | 32u | 64u, 0u, true)   //! the next layer waits on this one's row
+                pfq_ts(r)
             }
-            vhz_dep(raw, h, 16u | 32u | 64u, 0u, true)   //! the next layer waits on this one's row
-            pfq_ts(raw)
+            pfq_end(r)
         }
-        pfq_end(raw)
-        vk_check(vkEndCommandBuffer(raw), null)
     }
     return pfq_avg_us(raw, SUBMITS, DISPATCHES)
 }

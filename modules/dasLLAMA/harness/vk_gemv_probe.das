@@ -115,7 +115,6 @@ def private probe_fill(seed : uint; wq_words, ws_words, xq_words, xs_words, bloc
 //! against the dispatch two back on its plane (the encoder's own WAW gate), so consecutive dispatches overlap as
 //! the batched step's GEMVs do; the one-plane modes chain every dispatch on the one y
 def private probe_time(fmt : KqFmt; ncols : int; p : ProbePlanes; b : tuple<wqd : uint64; wsd : uint64; xqd : uint64; xsd : uint64; yd : uint64; yd2 : uint64; rgd : uint64>) : tuple<mb : double; us : double> {
-    var raw = alloc_cmd()
     var sets : array<VkDescriptorSet>
     unsafe {
         let sizes = fixed_array(p.wq_bytes, p.ws_bytes, p.rg_bytes, p.xq_bytes, p.xs_bytes, p.y_bytes)
@@ -140,15 +139,14 @@ def private probe_time(fmt : KqFmt; ncols : int; p : ProbePlanes; b : tuple<wqd 
                 sets |> push(ncols > 0 ? gemv_cls_set_n(int(fmt), bufs2, sizes, gbits2) : gemv_cls_set(int(fmt), bufs2, sizes, gbits2))
             }
         }
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
-        var pc = p.pc
-        if (g_cold) {
-            pc.nreg = 1u
-            pc.ystride = pc.d
-        }
-        let wgs = g_cold ? p.wgs_one_copy : p.wgs_all_copies
+    }
+    var pc = p.pc
+    if (g_cold) {
+        pc.nreg = 1u
+        pc.ystride = pc.d
+    }
+    let wgs = g_cold ? p.wgs_one_copy : p.wgs_all_copies
+    let us = time_chain(SUBMITS, DISPATCHES, 1) $(raw; var h) {
         for (i in range(DISPATCHES)) {
             var s_cls = sets[i % length(sets)]
             if (ncols > 0) {
@@ -160,9 +158,7 @@ def private probe_time(fmt : KqFmt; ncols : int; p : ProbePlanes; b : tuple<wqd 
                 vhz_dep(raw, h, YBIT, 0u, true)   //! the next dispatch waits on this one's y
             }
         }
-        vk_check(vkEndCommandBuffer(raw), null)
     }
-    let us = submit_avg_us(raw, SUBMITS, DISPATCHES, 1)
     let mb = double(p.wq_bytes + p.ws_bytes) / 1048576.0lf
     return (mb = g_cold ? mb / double(p.copies) : mb, us = us)
 }
