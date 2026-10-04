@@ -12,6 +12,7 @@ require dasllama/dasllama_gpu_resident   // vulkan_bake_* — the offline flavor
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the vulkan static_if half
 require _model_tier
+require _vulkan_lane
 
 // The OFFLINE vulkan bake (plan-as-data): the dry tier runs the load walk's accept/refuse
 // arithmetic against the config's numbers with NO device — the converter's `-f vulkan` rail.
@@ -59,14 +60,6 @@ def private mint_matches_eager_bake(t : T?; minted : Model; path : string) {
         }
     }
     delete eager
-}
-
-def private load_cached_q8(path : string) : Model {
-    var m = Model()
-    with_dasllama_jobque_() {
-        m <- load_model_cached(path, QuantMode.q8)   // nolint:PERF030,LINT019 -- the move must sit inside with_job_que; the target is fresh-empty, so nothing drops
-    }
-    return <- m
 }
 
 [test]
@@ -136,11 +129,7 @@ def test_vulkan_inline_bake(tst : T?) {
                 t |> skip("dry bake declined to arm - see the log")
                 return
             }
-            let route0 = gpu_resident_route_lever()
-            let trim_set0 = vulkan_trim_lever_set()
-            let trim0 = vulkan_trim()
-            set_gpu_resident_route(true)   // the trimmed lane's admission reads the driver's route lever
-            set_vulkan_trim(false)
+            let levers = pin_lane_levers()
             let vk_tag = moe_gpu_bake_tag()
             let img_v = image_path_for(path, vk_tag)
             let img_p = image_path_for(path, "", "q8")
@@ -161,8 +150,7 @@ def test_vulkan_inline_bake(tst : T?) {
             t |> success(trimmed_tag != vk_tag, "the trim folds into the lane's identity on the dry tier too ({trimmed_tag} against {vk_tag})")
             remove(img_v)
             var b <- load_cached_q8(path)
-            set_gpu_resident_route(route0)
-            restore_vulkan_trim(trim_set0, trim0)
+            restore_lane_levers(levers)
             t |> success(b.image_map != null && b.planes_trimmed, "the trimmed lane serves, flagged trimmed")
             t |> success(long_length(b.vkplan) > 0l && long_length(b.vkblob) > 0l, "... with the plan and the twin")
             t |> equal(long_length(b.qblob), 0l, "... and no q8 planar plane")

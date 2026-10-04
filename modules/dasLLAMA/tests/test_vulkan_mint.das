@@ -17,6 +17,7 @@ require daslib/fio
 require _model_tier
 require _compares
 require _resident_feed
+require _vulkan_lane
 
 // The vulkan lane's streaming mint on a LIVE tier (the dry twin is test_model_image_vulkan.das): a cold vulkan-armed
 // load of the 0.8B-MTP mints the vulkan lane and no other, the trimmed lane under the lever serves the same greedy
@@ -34,14 +35,6 @@ let private KQ_FILE = "Qwen3.5-0.8B-Q4_K_M.gguf"
 let private MINT_PROMPT = 16
 let private MINT_STEPS = 12
 
-def private load_cached_q8(path : string) : Model {
-    var m = Model()
-    with_dasllama_jobque_() {
-        m <- load_model_cached(path, QuantMode.q8)   // nolint:PERF030,LINT019 -- the move must sit inside with_job_que; the target is fresh-empty, so nothing drops
-    }
-    return <- m
-}
-
 //! `MINT_STEPS` greedy tokens over a counting prompt, and the CPU embed row of one token: what the two lanes must agree on
 def private mint_witness(tr : Model; var ids : array<int64>; var row : array<float>; kv : KVDtype = KVDtype.f16) {
     with_dasllama_jobque_() {
@@ -56,7 +49,6 @@ def private mint_witness(tr : Model; var ids : array<int64>; var row : array<flo
     }
 }
 
-//! the levers a lane cell pins for its loads and puts back as it found them
 typedef private MintRun = tuple<ids : array<int64>; row : array<float>>
 
 //! `mint_witness` over `tr` with its token count asserted: `what` generated the asked steps past the prompt
@@ -65,24 +57,6 @@ def private witness_steps(t : T?; tr : Model; what : string) : MintRun {
     mint_witness(tr, w.ids, w.row)
     t |> equal(long_length(w.ids), int64(MINT_PROMPT + MINT_STEPS), "{what} generated the {MINT_STEPS} asked steps past the {MINT_PROMPT}-token prompt")
     return <- w
-}
-
-struct private LaneLevers {
-    route : bool
-    trim_set : bool
-    trim : bool
-}
-
-def private pin_lane_levers() : LaneLevers {
-    let l = LaneLevers(route = gpu_resident_route_lever(), trim_set = vulkan_trim_lever_set(), trim = vulkan_trim())
-    set_gpu_resident_route(true)
-    set_vulkan_trim(false)
-    return l
-}
-
-def private restore_lane_levers(l : LaneLevers) {
-    set_gpu_resident_route(l.route)
-    restore_vulkan_trim(l.trim_set, l.trim)
 }
 
 //! the box facts every cell here skips on; "" = the cell runs
