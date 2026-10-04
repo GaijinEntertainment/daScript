@@ -23,6 +23,12 @@ require dasllama/dasllama   // create_session, moe_gpu_drop_model; its umbrella 
 //! 8 GB mirror on a 4B and a 30 GB CPU cache on the 26B for prompts of 600
 let GEMMA_RIG_CTX = 32768l
 
+//! one gemma fixture: its file under models_dir() and the arm token that selects its cells
+struct GemmaFile {
+    file : string
+    arm : string
+}
+
 [init]
 def private gemma_rig_init() {
     allow_cpu_prefill()   // the control arm (the model dropped off the device) prefills on the CPU by design
@@ -90,9 +96,11 @@ def private gemma_model(t : T?; file : string) : Model {
     return <- tr
 }
 
-//! the gemma cell's rig: the fixture on the armed driver (or the cell skipped, saying why), `body` inside the engine's job queue, the model deleted after
-def private with_gemma_rig(t : T?; file : string; body : block<(tr : Model) : void>) {
-    var tr <- gemma_model(t, file)
+//! the gemma cell's rig: the fixture on the armed driver (or the cell skipped, saying why - its arm filtered among the reasons),
+//! `body` inside the engine's job queue, the model deleted after
+def private with_gemma_rig(t : T?; gf : GemmaFile; body : block<(tr : Model) : void>) {
+    return if (!arm_on(t, gf.arm))
+    var tr <- gemma_model(t, gf.file)
     if (tr.config.n_layers > 0l) {
         with_dasllama_jobque_() {
             invoke(body, tr)
@@ -103,8 +111,8 @@ def private with_gemma_rig(t : T?; file : string; body : block<(tr : Model) : vo
 
 //! prefill `n` tokens + 8 fed steps on the resident driver, then the same on the all-CPU chain; the
 //! prefill logits and every step's within the bar, the one-step-off control past it.
-def gemma_forced_feed(t : T?; n : int64; file : string) {
-    with_gemma_rig(t, file) $(tr) {
+def gemma_forced_feed(t : T?; n : int64; gf : GemmaFile) {
+    with_gemma_rig(t, gf) $(tr) {
         var ids <- prose_tokens(tr, n + 8l)
         var prompt <- [for (i in range64(n)); ids[i]]
         var toks <- [for (i in range64(n, n + 8l)); ids[i]]
@@ -121,8 +129,8 @@ def gemma_forced_feed(t : T?; n : int64; file : string) {
 //! on one arm: the two GPU paths' logits at every shared position against each other, then the CPU
 //! arm's own pair as the yardstick of how far a prefill kernel and a decode kernel sit apart on
 //! this model by rounding alone
-def prefill_vs_decode(t : T?; n : int64; file : string) {
-    with_gemma_rig(t, file) $(tr) {
+def prefill_vs_decode(t : T?; n : int64; gf : GemmaFile) {
+    with_gemma_rig(t, gf) $(tr) {
         let RESIDENT = 0
         let CPU = 1
         var toks <- prose_tokens(tr, n + 4l)
@@ -225,8 +233,8 @@ def private forced_nll(tr : Model; var s : Session; ids : array<int64>; n, steps
 //! On the 12B the logits sit within a few points at whole stretches of positions (the reference exe's own
 //! margins read 0.6 to 16 on this text), so a maxdiff bar on a single position measures the model, not the driver;
 //! a routed model's near-tie flips move whole positions, so its slack is wider.
-def ppl_compare(t : T?; n, steps : int64; file : string; hits_slack : int64 = 3l; ppl_ratio : float = GEMMA_PPL_RATIO) {
-    with_gemma_rig(t, file) $(tr) {
+def ppl_compare(t : T?; n, steps : int64; gf : GemmaFile; hits_slack : int64 = 3l; ppl_ratio : float = GEMMA_PPL_RATIO) {
+    with_gemma_rig(t, gf) $(tr) {
         var ids <- prose_tokens(tr, n + steps + 1l)
         var sg <- create_session(tr, mirror_kv_dtype())
         let served0 = moe_gpu_resident_prefills()
