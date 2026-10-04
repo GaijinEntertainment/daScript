@@ -1318,7 +1318,9 @@ two rows to the split command's own one-row steps on the same picks (`moe_pick_t
 rows-form tape) at the split bars, and to the CPU's one-row steps at the wide bars, the other row as each
 row's control. Both also skip where the head shard is not beside the model.
 `test_gpu_resident_llama.das` - stocked suite, `-jit` only; the whole-model resident driver on the
-llama family (Llama-3.2-1B Q8_0, Llama-3.2-3B Q8_0, Llama-3.1-8B Q4_K_M, `DASLLAMA_GPU=1`): the
+llama family (Llama-3.2-1B Q8_0 and its Q4_0 requant `-local` - the q40 planes, which take the kq
+batch arm off the f16 feed and the cm2 tiles on it - Llama-3.2-3B Q8_0, Llama-3.1-8B Q4_K_M,
+`DASLLAMA_GPU=1`): the
 NORM rope, no q/k/v bias, no q/k norm, the tied classifier of the 3.2 files - the qwen2 file's
 forced-feed form and bar at one window and two windows per carrier, with the arm witnesses that
 the file is a llama with neither bias nor NEOX rope, and the pool's spin-window witness - the

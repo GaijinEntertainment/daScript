@@ -18,9 +18,10 @@ require dasllama/dasllama_bench   // bench_tg_batched_rep: the batched row's ref
 // The whole-model resident driver on the llama family (`DASLLAMA_GPU=1`): the NORM rope (adjacent pairs),
 // no q/k/v bias, no q/k norm, GQA, the tied classifier of the 3.2 files. The forced-feed logits-tolerance
 // form of test_gpu_resident_qwen2: the same fixed tokens through the resident chain and the all-CPU chain,
-// the prefill logits and every step's within the bar, the one-step-off control past it. Three carriers -
-// Llama-3.2-1B Q8_0, Llama-3.2-3B Q8_0, Llama-3.1-8B Q4_K_M (the batched step's Q8_0 and K-quant planes) -
-// at one window and two windows; the 1B also runs the batched bench row's refusal and one served rep.
+// the prefill logits and every step's within the bar, the one-step-off control past it. Four carriers -
+// Llama-3.2-1B Q8_0, its Q4_0 requant (the q40 planes), Llama-3.2-3B Q8_0, Llama-3.1-8B Q4_K_M (the batched
+// step's Q8_0 and K-quant planes) - at one window and two windows; the 1B also runs the batched bench row's
+// refusal and one served rep.
 // Every cell skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, or without its file
 // under models_dir() (the 8B is large-tier: DASLLAMA_PARITY_FULL=1).
 
@@ -103,6 +104,12 @@ def test_gpu_resident_llama_batched_row(t : T?) {
         }
         delete tr
     }
+}
+
+//! the 1B's Q4_0 requant: its q40 planes take the window chain's kq batch arm off the f16 feed and the cm2 tiles on it
+[test]
+def test_gpu_resident_llama_1b_q40(t : T?) {
+    llama_cells(t, "Llama-3.2-1B-Instruct-Q4_0-local.gguf")
 }
 
 [test]
