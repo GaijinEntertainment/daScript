@@ -282,7 +282,13 @@ lane panics on a call passed to the CPU rails, so generating is the served witne
 codecs' token streams differing from the f16 one is the control that the compare tells them
 apart. On Qwen3.5-0.8B-Q4_K_M the loader keeps the K-quant planes in their file format
 (`kq_repacked`), the cold load mints the vulkan lane alone with its plan, and the warm map
-generates the same tokens and the same CPU embed row.
+generates the same tokens and the same CPU embed row. `test_vulkan_mint_trim_follows_the_driver`
+holds the trim's admission to the driver's answer: the model the driver serves is admitted
+(`resident_would_serve`, an empty `resident_decline_reason`) and its trimmed lane mints onto the
+driver; then, under a foreign prefill override the cell registers and selects (put back after), a
+staged load leaves the driver off (the control), the driver's decline text
+(`gpu_resident_decline_`) is the chain's byte for byte, the trim declines the model, and the warm
+load of the trimmed lane on disk deletes it and mints the lane again with its planar families.
 
 The `coverage` suite (test_kernel_coverage, arm `coverage`; arm `coverage-vk` = the vulkan
 SERVING census - needs a vulkan device + `DASLLAMA_GPU=1` + `DASLLAMA_MODELS_DIR`, MoE rows

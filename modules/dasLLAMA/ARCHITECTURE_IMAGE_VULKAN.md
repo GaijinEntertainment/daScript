@@ -39,8 +39,11 @@ mid-walk leaves nothing armed for the next load.
 
 **The trim lever** (`DASLLAMA_TRIM`, `set_vulkan_trim`, `restore_vulkan_trim` for a fixture) mints the TRIMMED lane, where
 `planes_trimmed` is answered by `resident_would_serve` before the walk (the meta serializes first): a dense q8 model with
-no per-layer embedding whose plan fits the driver's arena, the plan asked quietly so the pinned-context line prints once
-per walk. The planar families the arena holds whole are refused at their turns (`trim_plane_dropped`), the emb region is
+no per-layer embedding that passes the gate chain `resident_upload` declines by (`resident_decline_reason`: the seams, a
+prefill pinned or overridden away from the driver, the features, every layer's shape and plane forms), whose NextN head,
+where it has one, the driver homes, and whose plan fits the driver's arena, the plan asked quietly so the pinned-context
+line prints once per walk. The converter's `--trim` (`trim_model_planes`) asks the same answer over its dry walk's plan, so
+a NextN model trims on both rails or on neither. The planar families the arena holds whole are refused at their turns (`trim_plane_dropped`), the emb region is
 packed off its run's view - or off the whole planes where no job streams (`trim_pack_emb`) - and a walk that armed
 anything but the whole-model driver after the plan accepted declines the mint. A trimmed image serves the device and
 the CPU embed alone: a call the driver passes to the CPU rails panics by name, the NextN draft's CPU fallback included.
@@ -48,7 +51,8 @@ A model the plan would not take whole keeps its planar families under the trim, 
 identity folds the lever on every tier, the dry tier's included, so a flip re-bakes it. The identity does not fold the
 context pin, the mirror codec or the resident route (`DASLLAMA_GPU_CTX_MAX`, `DASLLAMA_GPU_KV` / `set_gpu_kv_dtype`, `DASLLAMA_VK_KV32`, `DASLLAMA_GPU_RESIDENT`),
 so a trimmed lane the driver would decline under this run's knobs is caught before its upload: the map asks the plan
-again, deletes the lane and mints under the run's knobs. A streamed MoE's expert planes stay planar
+again, deletes the lane and mints under the run's knobs - or, where the caller named the `.dlim` itself and no gguf
+stands behind it, panics by name with the decline (`load_model_image`). A streamed MoE's expert planes stay planar
 (`VkBakeRole.expert_stream`: decode runs them on the CPU); the eager rail (a gguf that would not open for streaming, a
 chunk that would not allocate) and a planar image already mapped bake the lane from RAM or the mapping with the families
 kept, the eager rail writing the CPU lane beside it and serving that.

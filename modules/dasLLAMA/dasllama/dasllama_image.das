@@ -1325,9 +1325,10 @@ def private vk_mint_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model;
 
 //! why the trimmed lane cannot be minted off this walk, "" where it can: the plan must sit whole in the driver's arena and the
 //! emb region must pack off its jobs, or off the planes the load left whole
-def private vk_mint_trim_decline(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; jobs : array<FillJob>) : string {
-    if (!(moe_gpu_resident_active() && vk_plan_arena_only(t))) {
-        return "the trimmed lane needs the whole-model driver, and the walk armed the per-op rails"
+def private vk_mint_trim_decline(var t : Model; jobs : array<FillJob>) : string {
+    let why = trim_plan_decline(t, moe_gpu_resident_active())
+    if (!empty(why)) {
+        return why
     }
     if (!(t.emb_q8 || cls_kq(t))) {
         return ""   // an fp32 token table rides fblob, kept: nothing to pack
@@ -1372,7 +1373,7 @@ def private vk_mint_walk(m : GGUFMeta; bytes : array<uint8> | #; var t : Model; 
             to_log(LOG_INFO, "dasLLAMA image:   the armed tier placed nothing - the vulkan lane carries no device twin\n")
         }
     } elif (t.planes_trimmed) {
-        declined = vk_mint_trim_decline(m, bytes, t, jobs)
+        declined = vk_mint_trim_decline(t, jobs)
     }
     vk_mint_release()
     if (!empty(declined)) {
@@ -1900,6 +1901,13 @@ def load_model_image(path : string; var t : Model; tag : string = ""; quant : st
     if (!load_image(path, t, tag, quant)) {
         return false
     }
+    if (t.planes_trimmed) {
+        let why = resident_trim_decline(t)
+        if (!empty(why)) {
+            vulkan_bake_disarm()
+            panic("dasLLAMA: '{path}' is a trimmed vulkan lane, and the whole-model driver would not serve it under this run's knobs ({why}) - a trimmed lane carries no planar families for the per-op rails; lift the knob, or load the source gguf to mint a lane for it")
+        }
+    }
     // after the plane borrows: the PLE tripwire and the MoE gather both need bound planes
     ple_check_table(t, "prepared image '{path}'")
     moe_gpu_upload_resident(t)
@@ -1971,8 +1979,9 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
             let img_v = image_path_for(path, vk_tag)
             vulkan_bake_slice_begin()
             if (load_image(img_v, t, vk_tag)) {
-                if (t.planes_trimmed && !resident_would_serve(t)) {
-                    to_log(LOG_ERROR, "dasLLAMA: the trimmed vulkan lane '{img_v}' maps, and the whole-model driver would not take it under this run's knobs (DASLLAMA_GPU_CTX_MAX, DASLLAMA_VK_KV32, DASLLAMA_GPU_KV / set_gpu_kv_dtype and DASLLAMA_GPU_RESIDENT / set_gpu_resident_route sit outside the lane's identity) - the lane is deleted and minted again\n")
+                let trim_why = t.planes_trimmed ? resident_trim_decline(t) : ""
+                if (!empty(trim_why)) {
+                    to_log(LOG_ERROR, "dasLLAMA: the trimmed vulkan lane '{img_v}' maps, and the whole-model driver would not take it under this run's knobs ({trim_why}; DASLLAMA_GPU_CTX_MAX, DASLLAMA_VK_KV32, DASLLAMA_GPU_KV / set_gpu_kv_dtype and DASLLAMA_GPU_RESIDENT / set_gpu_resident_route sit outside the lane's identity) - the lane is deleted and minted again\n")
                     vulkan_bake_disarm()
                     delete t
                     remove(img_v)

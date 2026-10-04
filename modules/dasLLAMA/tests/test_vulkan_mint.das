@@ -22,7 +22,9 @@ require _resident_feed
 // load of the 0.8B-MTP mints the vulkan lane and no other, the trimmed lane under the lever serves the same greedy
 // tokens off the same device twin and the same CPU embed rows off the packed emb region, and the trimmed lane maps
 // back warm to the same tokens; the K-quant twin's lane mints off its native planes and maps back to the same tokens;
-// and a trimmed lane minted under one K/V mirror codec maps under the others and serves each codec's own tokens.
+// and a trimmed lane minted under one K/V mirror codec maps under the others and serves each codec's own tokens; the trim
+// admits what the whole-model driver serves: under a foreign prefill override both decline with one text, and a trimmed
+// lane on disk maps under it as a lane minted again with its planar families.
 // Skips when interpreted, without the model, with the image rail off (DASLLAMA_IMAGE=0), without a live armed tier,
 // and when the whole-model driver declines the model on this box.
 
@@ -187,6 +189,47 @@ def test_vulkan_mint_kquant(tst : T?) {
                 moe_gpu_drop_model()
                 delete a
                 delete b
+            }
+        }
+    }
+}
+
+let private TRIM_PROBE = "trim-probe"
+
+//! the prefill override the trim cell selects to keep the whole-model driver off a load: it passes every call to the CPU layer loop
+[unused_argument(tr, s, npos, start_pos)]
+def private pass_prefill(tr : Model; var s : Session; npos : int64; start_pos : int64) : bool => false
+
+[test]
+def test_vulkan_mint_trim_follows_the_driver(tst : T?) {
+    tst |> run("Qwen3.5-0.8B-MTP: the trim admits what the whole-model driver serves - a foreign prefill override declines both with one text, and the trimmed lane on disk maps under it as a lane minted again planar") @(t : T?) {
+        with_mint_file(t, MINT_FILE) $(path) {
+            with_cold_lane(t, path, "the model") $(var plain; img_v) {
+                t |> success(resident_would_serve(plain) && empty(resident_decline_reason(plain)), "the trim admits the model the driver serves")
+                delete plain
+                moe_gpu_drop_model()
+                set_vulkan_trim(true)
+                remove(img_v)
+                var trimmed <- load_cached_q8(path)
+                t |> success(trimmed.planes_trimmed && moe_gpu_resident_active(), "the trimmed lane mints, and the driver serves it")
+                delete trimmed
+                moe_gpu_drop_model()
+                register_prefill_override(TRIM_PROBE, @@pass_prefill)
+                select_prefill_override(TRIM_PROBE)
+                var staged <- load_model_(path, QuantMode.q8)
+                let why = resident_decline_reason(staged)
+                t |> success(!moe_gpu_resident_active(), "control: the foreign override keeps the driver off the model")
+                t |> equal(why, "the '{TRIM_PROBE}' prefill override is active")
+                t |> equal(gpu_resident_decline_(), why, "the driver's decline is the chain's text, byte for byte")
+                t |> success(!resident_would_serve(staged), "the trim declines what the driver declines")
+                delete staged
+                moe_gpu_drop_model()
+                var warm <- load_cached_q8(path)
+                t |> success(!warm.planes_trimmed && long_length(warm.qblob) > 0l && stat(img_v).is_valid,
+                    "the trimmed lane the driver would decline is deleted and minted again with its planar families")
+                delete warm
+                moe_gpu_drop_model()
+                select_prefill_override("")
             }
         }
     }

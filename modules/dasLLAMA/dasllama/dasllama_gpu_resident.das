@@ -346,15 +346,16 @@ def trim_emb_bytes(t : Model) : int64 {
     return 0l
 }
 
-//! The trim (generate-then-free): pack the emb/cls region into embq/embs, mark the model
-//! trimmed, and FREE the big CPU weight families — the save then writes them as empty planes.
-//! Arena-only plans qualify (pure resident-driver dense); false = declined, nothing changed.
+//! The trim (generate-then-free): pack the emb/cls region into embq/embs, mark the model trimmed, and FREE the big CPU weight
+//! families — the save then writes them as empty planes. The streaming mint's admission qualifies (the driver would serve the
+//! lane, the dry walk's plan sits whole in its arena); false = declined, nothing changed.
 def trim_model_planes(var t : Model) : bool {
-    if (empty(t.vkplan) || t.config.n_layer_nextn > 0l) {
-        return false
+    var why = empty(t.vkplan) ? "the GPU walk baked no plan" : resident_trim_decline(t)
+    if (empty(why)) {
+        why = trim_plan_decline(t, true)
     }
-    if (!vk_plan_arena_only(t)) {
-        to_log(LOG_WARNING, "dasLLAMA trim: the baked plan carries a non-arena role - only pure resident-driver dense models trim; declining\n")
+    if (!empty(why)) {
+        to_log(LOG_WARNING, "dasLLAMA trim: {why} - declining\n")
         return false
     }
     if (!trim_pack_emb(t, t, 0l)) {
@@ -1162,18 +1163,58 @@ def private resident_ctx_shortened_say(plan : ResidentPlan; asked, seq_cap : int
     to_log(LOG_WARNING, "dasLLAMA: resident driver - K/V mirror {seq_cap} positions{each} of the {asked} asked: {why}; fewer regions, a smaller model or a smaller mirror codec (f16 over f32: DASLLAMA_VK_KV32=0; q8_0 or tq4 over f16: DASLLAMA_GPU_KV, set_gpu_kv_dtype in process) raise it, and a context asked whole (set_gpu_ctx_strict, DASLLAMA_GPU_CTX_STRICT) declines the driver instead\n")
 }
 
-//! Whether the whole-model driver takes `t`, as far as the plan tells before a byte uploads; a later device refusal (a kernel class, an arena reserve) is the walk's to report
+//! Why the whole-model driver declines `t` before a byte uploads - its seams, the serving mode, a prefill pinned or overridden away
+//! from it, the features and every layer's shape - or "" where these admit it: `resident_upload` declines with this text, and the
+//! trim's admission asks the same chain
 [arch(at="../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
-def resident_would_serve(t : Model) : bool {
+def resident_decline_reason(t : Model) : string {
     let c = t.config
-    return false if (!(moe_gpu_resident_installed() && gpu_resident_requested() && gpu_want_resident())
-        || t.quant != QuantMode.q8 || c.n_expert > 0l || c.hyper_conn || has_ple(c) || !empty(resident_unserved_features(c)))
+    if (!moe_gpu_resident_installed()) return "the tier installed no resident-driver seams"
+    if (t.quant != QuantMode.q8) return "weights are not in the q8 serving mode ({t.quant})"
+    if (c.n_expert > 0l && !rdec_moe_installed()) return "routed experts ({c.n_expert}) - the tier installed no MoE seats; the per-op tier's expert rails serve"
+    // the driver is all-or-nothing across prefill AND decode (the KV lives in the device mirror
+    // only), so a pin away from it declines BEFORE any upload — the per-op rails take over
+    let pin = g_env_engine.pin_prefill
+    if (!empty(pin) && pin != "vulkan") return "prefill is pinned to '{pin}' (DASLLAMA_PIN_PREFILL)"
+    let ov = active_prefill_override()
+    if (!empty(ov) && ov != "vulkan") return "the '{ov}' prefill override is active"
+    let feats = resident_unserved_features(c)
+    if (!empty(feats)) return "no arm for: {feats}"
+    if (resident_recurrent_layers(c) == c.n_layers) return "no attention layer (the whole-model driver serves attention or hybrid stacks)"
+    if (c.hyper_conn && g_rdec_regions_want > 1l) return "hyper-connection residual (qwen4exp) - the split token command serves one mirror region"
     for (l in range64(c.n_layers)) {
-        return false if (!empty(resident_layer_decline(t, l)))
+        let why = resident_layer_decline(t, l)
+        if (!empty(why)) return why
     }
-    return false if (c.n_layer_nextn > 0l && !empty(resident_head_decline(t)))
+    return ""
+}
+
+//! Why a trimmed vulkan lane of `t` cannot serve under this run's knobs, "" where it can: the driver asked for, a dense model with no
+//! hyper-connection residual or per-layer embedding, `resident_decline_reason`'s chain, a NextN head the driver homes (the CPU draft
+//! reads planar families the trim drops) and a plan that fits; a later device refusal (a kernel class, an arena reserve) is the walk's to report
+[arch(at="../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
+def resident_trim_decline(t : Model) : string {
+    let c = t.config
+    if (!(gpu_resident_requested() && gpu_want_resident())) return "the whole-model driver is not asked for (DASLLAMA_GPU_RESIDENT, set_gpu_resident_route)"
+    if (c.n_expert > 0l || c.hyper_conn || has_ple(c)) return "the trim serves dense models without a hyper-connection residual or per-layer embeddings"
+    let why = resident_decline_reason(t)
+    if (!empty(why)) return why
+    if (c.n_layer_nextn > 0l) {
+        let head_why = resident_head_decline(t)
+        if (!empty(head_why)) return "the NextN draft head stays off the device ({head_why})"
+    }
     var seq_cap = 0l
-    return resident_plan_pick(t, resident_mirror_dtype_of(t), seq_cap, false).fits
+    return resident_plan_pick(t, resident_mirror_dtype_of(t), seq_cap, false).fits ? "" : "the residency plan does not fit the card"
+}
+
+//! Whether the whole-model driver takes `t` and a trimmed lane of it serves (`resident_trim_decline` answers why not)
+[arch(at="../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
+def resident_would_serve(t : Model) : bool => empty(resident_trim_decline(t))
+
+//! why the trimmed lane cannot be cut off a GPU walk's plan, "" where it can: the walk armed the whole-model driver and the plan sits whole in its arena
+def trim_plan_decline(t : Model; armed : bool) : string {
+    if (!armed) return "the trimmed lane needs the whole-model driver, and the walk armed the per-op rails"
+    return vk_plan_arena_only(t) ? "" : "the baked plan carries a non-arena role - only a whole-model driver's plan trims"
 }
 
 [arch(at="../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
@@ -1564,6 +1605,9 @@ def resident_layer_decline(t : Model; l : int64) : string {
         if (!empty(shexp_why)) return shexp_why
     } elif (c.n_expert > 0l && l >= c.n_layer_dense_lead) {
         return "layer {l} lacks an expert plane"
+    } else {
+        let lf = resident_layer_fmts(t, l)
+        if (rdec_quant_class(lf.f1) != rdec_quant_class(lf.f3)) return "layer {l} mixes activation-quant forms (ffn {int(lf.f1)}/{int(lf.f3)})"
     }
     if (layer_is_recurrent(c, l)) {
         if (l >= long_length(t.dnqkv_offs) || t.dnqkv_offs[l] < 0l || t.dngate_offs[l] < 0l || t.dnout_offs[l] < 0l) {
@@ -1585,12 +1629,23 @@ def resident_layer_decline(t : Model; l : int64) : string {
         if (!rdec_dn_installed()) return "layer {l} is recurrent and the tier installed no deltanet seats for the whole-model driver"
         return ""
     }
+    return resident_attn_layer_decline(t, l)
+}
+
+//! `resident_layer_decline`'s attention-layer half: its own or a donor's K/V, its q/k/v planes, a head the kernels stage, one feed form
+def private resident_attn_layer_decline(t : Model; l : int64) : string {
+    let c = t.config
     let kvsh = t.kv_src[l] != l   //! a shared-KV layer projects Q only and reads its donor's rows (the donor sits below it)
     if (kvsh && t.kv_src[l] > l) return "layer {l} shares layer {t.kv_src[l]}'s K/V, a layer above it"
     if (t.wq_offs[l] < 0l || (!kvsh && t.wk_offs[l] < 0l)) return "layer {l} lacks a q/k plane"
     if (!kvsh && t.wv_offs[l] < 0l && !resident_v_from_k(c, l)) return "layer {l} lacks a v plane"
     let hs = layer_head_size(c, l)
     if (hs % 32l != 0l || (hs > 256l && hs != 512l)) return "layer {l} head size {hs} (the attention kernels take 32-multiples up to 256, and 512)"
+    let lf = resident_layer_fmts(t, l)
+    let cq = rdec_quant_class(lf.fq)
+    if (!kvsh && (cq != rdec_quant_class(lf.fk) || (!resident_v_from_k(c, l) && cq != rdec_quant_class(lf.fv)))) {
+        return "layer {l} mixes activation-quant forms (qkv {int(lf.fq)}/{int(lf.fk)}/{int(lf.fv)})"
+    }
     return ""
 }
 
@@ -1731,22 +1786,12 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     g_rdec_head_warm_decline_said = false
     set_gpu_cpu_pass_reasons([for (k in type<RdecPass>); "{k}"], [for (k in type<RdecPass>); rdec_pass_words(k)])
     vulkan_bake_role(VkBakeRole.arena)
-    if (!moe_gpu_resident_installed()) return rdec_decline("the tier installed no resident-driver seams")
-    if (t.quant != QuantMode.q8) return rdec_decline("weights are not in the q8 serving mode ({t.quant})")
-    if (t.config.n_expert > 0l && !rdec_moe_installed()) return rdec_decline("routed experts ({t.config.n_expert}) - the tier installed no MoE seats; the per-op tier's expert rails serve")
-    // the driver is all-or-nothing across prefill AND decode (the KV lives in the device mirror
-    // only), so a pin away from it declines BEFORE any upload — the per-op rails take over
-    let pin = g_env_engine.pin_prefill
-    if (!empty(pin) && pin != "vulkan") return rdec_decline("prefill is pinned to '{pin}' (DASLLAMA_PIN_PREFILL)")
-    if (!empty(active_prefill_override())) return rdec_decline("the '{active_prefill_override()}' prefill override is active")
+    let gate_why = resident_decline_reason(t)
+    if (!empty(gate_why)) return rdec_decline(gate_why)
     let c = t.config
-    let feats = resident_unserved_features(c)
-    if (!empty(feats)) return rdec_decline("no arm for: {feats}")
     let n_recurrent = resident_recurrent_layers(c)
-    if (n_recurrent == c.n_layers) return rdec_decline("no attention layer (the whole-model driver serves attention or hybrid stacks)")
     let host_layers = plan.host_layers
     let host_experts = host_layers > 0l
-    if (c.hyper_conn && g_rdec_regions_want > 1l) return rdec_decline("hyper-connection residual (qwen4exp) - the split token command serves one mirror region")
     let dim = c.dim
     let neox = c.rope_neox
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
@@ -1754,8 +1799,6 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     let (qd, kvd, hs) = resident_attn_maxima(c)
     var mir_units = 0l
     for (l in range64(c.n_layers)) {
-        let why = resident_layer_decline(t, l)
-        if (!empty(why)) return rdec_decline(why)
         if (layer_owns_kv(t, l)) {
             mir_units += seq_cap * kv_row_units(rkdt, layer_kv_dim(c, l))
         }
@@ -1862,9 +1905,6 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         if (moe) {
             //! a layer with no shared expert keeps -1 dense blocks and takes the experts' feed form
             if (c.moe_dense_shexp) {
-                if (rdec_quant_class(lf.f1) != rdec_quant_class(lf.f3)) {
-                    return rdec_decline("layer {l} mixes activation-quant forms (the dense shared expert {int(lf.f1)}/{int(lf.f3)})")
-                }
                 fb = resident_place_ffn(t, lf.f1, lf.f3, lf.f2, t.w1_offs[l], t.w3_offs[l], t.w2_offs[l], hid_l, mr, kg, wb)
                 if (fb.b1 < 0l) return rdec_decline("arena placement failed at layer {l} (the dense shared expert)")
             } elif (c.n_ff_shexp > 0l) {
@@ -1882,9 +1922,6 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
                 lf.f2 = rdec_efmt(t, t.we2_fmt, l)
             }
         } else {
-            if (rdec_quant_class(lf.f1) != rdec_quant_class(lf.f3)) {
-                return rdec_decline("layer {l} mixes activation-quant forms (ffn {int(lf.f1)}/{int(lf.f3)})")
-            }
             fb = resident_place_ffn(t, lf.f1, lf.f3, lf.f2, t.w1_offs[l], t.w3_offs[l], t.w2_offs[l], hid_l, mr, kg, wb)
             if (fb.b1 < 0l) return rdec_decline("arena placement failed at layer {l}")
         }
@@ -1923,10 +1960,6 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         let g = resident_layer_geom(t, l, kvsh ? mir_bases[t.kv_src[l]] : mir_base)
         mir_bases[l] = g.mir_base
         mir_slots[l] = kvsh ? mir_slots[t.kv_src[l]] : mir_idx
-        let cq = rdec_quant_class(lf.fq)
-        if (!kvsh && (cq != rdec_quant_class(lf.fk) || (!g.vfk && cq != rdec_quant_class(lf.fv)))) {
-            return rdec_decline("layer {l} mixes activation-quant forms (qkv {int(lf.fq)}/{int(lf.fk)}/{int(lf.fv)})")
-        }
         let bq = resident_place(t, lf.fq, t.wq_offs[l], dim, c.q_gated ? 2l * g.qd : g.qd, mr, kg, wb)
         let bk = kvsh ? -1l : resident_place(t, lf.fk, t.wk_offs[l], dim, g.kvd, mr, kg, wb)
         let bv = (g.vfk || kvsh) ? -1l : resident_place(t, lf.fv, t.wv_offs[l], dim, g.kvd, mr, kg, wb)
