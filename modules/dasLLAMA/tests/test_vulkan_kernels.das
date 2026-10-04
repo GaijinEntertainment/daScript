@@ -1564,28 +1564,44 @@ def private ba_plane_mismatches(got, want : array<float>; npos, ne, nvh, ob_b, o
 }
 
 
-// packed quant words as signed bytes within +-tol (act chains carry transcendental ulp noise)
-def private mismatch_qbytes(got, want : array<uint>; tol : int) : int {
+//! the signed bytes of the packed quant word `g` outside +-tol of `w`'s (act chains carry transcendental ulp noise)
+def private qword_off(g, w : uint; tol : int) : int {
     var bad = 0
-    for (g, w in got, want) {
-        for (sh in range(4)) {
-            let a = int(g >> uint(sh * 8)) & 0xFF
-            let b = int(w >> uint(sh * 8)) & 0xFF
-            let sa = a >= 128 ? a - 256 : a
-            let sb = b >= 128 ? b - 256 : b
-            if (!(abs(sa - sb) <= tol)) {
-                bad++
-            }
+    for (sh in range(4)) {
+        let a = int(g >> uint(sh * 8)) & 0xFF
+        let b = int(w >> uint(sh * 8)) & 0xFF
+        let sa = a >= 128 ? a - 256 : a
+        let sb = b >= 128 ? b - 256 : b
+        if (!(abs(sa - sb) <= tol)) {
+            bad++
         }
     }
     return bad
+}
+
+def private mismatch_qbytes(got, want : array<uint>; tol : int) : int {
+    var bad = 0
+    for (g, w in got, want) {
+        bad += qword_off(g, w, tol)
+    }
+    return bad
+}
+
+//! the first word of `got` with a byte outside +-tol of `want`'s, -1 when none
+def private first_qbytes_off(got, want : array<uint>; tol : int) : int {
+    for (i in range(min(length(got), length(want)))) {
+        return i if (qword_off(got[i], want[i], tol) > 0)
+    }
+    return -1
 }
 
 //! the quant words `got` within one step of `want`, byte for byte and of one length, and the control: `want`'s first byte three steps
 //! off must red the same compare
 def private check_qbytes(t : T?; tag : string; got, want : array<uint>) {
     let bad = mismatch_qbytes(got, want, 1)
-    t |> success(bad == 0 && length(got) == length(want), "{tag}: the quant bytes within one step ({bad} off, {length(got)} words against {length(want)})")
+    let verdict = "the quant bytes within one step ({bad} off, the first in word {first_qbytes_off(got, want, 1)}, {length(got)} words against {length(want)})"
+    to_log(LOG_INFO, "{tag}: {verdict}\n")
+    t |> success(bad == 0 && length(got) == length(want), "{tag}: {verdict}")
     var poisoned := want
     poisoned[0] = (poisoned[0] & ~0xFFu) | ((poisoned[0] + 3u) & 0xFFu)
     t |> success(mismatch_qbytes(got, poisoned, 1) > 0, "{tag}: the bar reds a quant byte three steps off")
@@ -1650,7 +1666,9 @@ def private gu_regions(nreg, d, units : int) : tuple<g : array<uint>; u : array<
 def private gu_blocks_hold(t : T?; tag : string; oq : array<int8>; os, act : array<float>; nblk : int) {
     let off = q8_blocks_off(oq, os, act, nblk)
     t |> success(off.scales == 0, "{tag}: the block scales match ({off.scales} of {nblk} off)")
-    t |> success(off.values == 0, "{tag}: the dequantized hidden rows sit within a quant step ({off.values} of {nblk * 32} off)")
+    let verdict = "the dequantized hidden rows sit within a quant step ({off.values} of {nblk * 32} off; the largest {off.worst} steps at element {off.worst_at})"
+    to_log(LOG_INFO, "{tag}: {verdict}\n")
+    t |> success(off.values == 0, "{tag}: {verdict}")
     t |> success(off.poison_inside == 0, "{tag}: the bar reds a poisoned oracle element in every block ({off.poison_inside} passed)")
 }
 
@@ -1846,6 +1864,7 @@ def test_vkd_kq_gemv_k4_gu(t0 : T?) {
                         var s_a = cp |> cls_set(fixed_array(py, pyu, poq2, pos2), @@set_actrq_cls)
                         var pc2 = GemvArgs(n = uint(nsb * 256), d = uint(d), nreg = uint(nreg), ybase = 0u, lanes_per_row = 16u)
                         var pca = ActArgs(nelem = uint(rows), act = ACT_GELU, nblk = uint(nblk))
+                        cp |> plane_refill(py)   //! the gate GEMV writes the fused run's gate plane: the sentinel back first, or a skipped dispatch reads as a match
                         cp |> cell_record() $(raw3 : VkCommandBuffer; var h3 : VkHaz) {
                             enc_kq_gemv_k4_cls(raw3, h3, s_g, pc2, gemv_wgs(int64(rows), 16u))
                             enc_kq_gemv_k4_cls(raw3, h3, s_u, pc2, gemv_wgs(int64(rows), 16u))
@@ -3560,12 +3579,14 @@ def test_vkd_da_attn_b_h128(t0 : T?) {
 
 //! one gated chunked-attention arm: q read at the head's [q | gate] stride, the output under the sigmoid of the gate half -
 //! the gated oracle matches, the ungated one misses, the bar reds a poisoned element
-def private da_attn_b_gated_arm(t : T?; tag : string; stamp, npos, kv_mul, hs, w0 : int; qm, qa, km, ka : float; bar : Bar) {
+//! `bar_of` reads the bar off the oracle rows: a stamp staging q/K/V through halves takes `cm_bar`, the f32 stamps a fixed bar
+def private da_attn_b_gated_arm(t : T?; tag : string; stamp, npos, kv_mul, hs, w0 : int; qm, qa, km, ka : float; bar_of : block<(want : array<float>) : Bar>) {
     var f <- da_attn_b_fix(npos, 4, kv_mul, hs, w0, 64, 160, qm, qa, km, ka, dab_f16(stamp))
     f.gate <- [for (i in range(length(f.qh))); float((i * 29) % 61) * 0.08 - 2.4]
     let scale = hs > 256 ? 1.0 : 0.125
     var y_cls <- da_attn_b_run(f, stamp, scale, 0.0, 0)
     var y_ref <- da_attn_b_ref(f, scale, 0, 0.0)
+    let bar = invoke(bar_of, y_ref)
     check_rows(t, tag, y_cls, y_ref, bar, 4 * hs, hs)
     delete f.gate
     var y_plain <- da_attn_b_ref(f, scale, 0, 0.0)
@@ -3588,10 +3609,16 @@ def test_vkd_da_attn_b_gated(t0 : T?) {
                 t |> skip("da_attn_b classes declined on this device (workgroup cap)")
                 return
             }
-            da_attn_b_gated_arm(t, "da_attn_b gated hs 128", DAB_B, 13, 2, 128, 32, 0.05, 1.8, 0.03, 1.4, BAR_APPROX)
-            da_attn_b_gated_arm(t, "da_attn_bw gated hs 512", DAB_BW, 13, 4, 512, 32, 0.005, 0.18, 0.003, 0.14, BAR_APPROX)
+            da_attn_b_gated_arm(t, "da_attn_b gated hs 128", DAB_B, 13, 2, 128, 32, 0.05, 1.8, 0.03, 1.4) $(want : array<float>) : Bar {
+                return BAR_APPROX
+            }
+            da_attn_b_gated_arm(t, "da_attn_bw gated hs 512", DAB_BW, 13, 4, 512, 32, 0.005, 0.18, 0.003, 0.14) $(want : array<float>) : Bar {
+                return BAR_APPROX
+            }
             if (ensure_da_attn_bw_f16_cls()) {
-                da_attn_b_gated_arm(t, "da_attn_bw_f16 gated hs 512", DAB_BW_F16, 13, 4, 512, 32, 0.005, 0.18, 0.003, 0.14, BAR_APPROX_CTRL)
+                da_attn_b_gated_arm(t, "da_attn_bw_f16 gated hs 512", DAB_BW_F16, 13, 4, 512, 32, 0.005, 0.18, 0.003, 0.14) $(want : array<float>) : Bar {
+                    return BAR_APPROX_CTRL
+                }
             } else {
                 t |> skip("da_attn_bw_f16 class declined on this device (workgroup cap) - the f16 gated arm")
             }
@@ -3603,7 +3630,9 @@ def test_vkd_da_attn_b_gated(t0 : T?) {
                 t |> failure("the h128 class rail must engage on a coopmat device")
                 return
             }
-            da_attn_b_gated_arm(t, "da_attn_b_h128 gated", DAB_H128, 45, 2, 128, 32, 0.05, 1.8, 0.03, 1.4, Bar(rel = 2e-2))
+            da_attn_b_gated_arm(t, "da_attn_b_h128 gated", DAB_H128, 45, 2, 128, 32, 0.05, 1.8, 0.03, 1.4) $(want : array<float>) : Bar {
+                return cm_bar(want)   //! the h128 stamp stages q/K/V through f16 pairs for its MMAs
+            }
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -3980,7 +4009,7 @@ def test_vkd_mx4_gemv_gu(t0 : T?) {
 //! the fused gate + up + act + Q8_0 requant dispatch against the CPU oracle: the two q8 GEMVs in the scalar order,
 //! the activation, and the block quant of the hidden row - the dequantized row within a quant step of the oracle's,
 //! the scales within the GEMV bar, under both activations and at a width whose block count is off the 16-block lane pass
-def private q8_gemv_gu_run(t; n, hid : int; gelu : bool) {
+def private q8_gemv_gu_run(t; n, hid : int; act : uint) {
     let nb = n / 32
     let nblk_out = hid / 32
     let totblk = hid * nb
@@ -4001,7 +4030,7 @@ def private q8_gemv_gu_run(t; n, hid : int; gelu : bool) {
         let poq = cp |> out_words(int64(hid), NAN_SENTINEL_BITS)
         let pos = cp |> out_(nblk_out)
         var s_cls = cp |> cls_set(fixed_array(pg, pgs, pu, pus, pxq, pxs, poq, pos), @@set_q8_gemv_gu_n1_cls)
-        var pc = GuNArgs(n = uint(n), d = uint(hid), gblk = 0u, ublk = 0u, act = gelu ? ACT_GELU : ACT_SILU, ncols = 1u)
+        var pc = GuNArgs(n = uint(n), d = uint(hid), gblk = 0u, ublk = 0u, act = act, ncols = 1u)
         cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
             enc_q8_gemv_gu_n1_cls(raw, h, s_cls, pc, int64(nblk_out))
         }
@@ -4018,13 +4047,13 @@ def private q8_gemv_gu_run(t; n, hid : int; gelu : bool) {
     u_ref |> resize(hid)
     q8_gemm_oracle(gqh, gsh, xqh, xsh, one_row, 1, n, hid, g_ref)
     q8_gemm_oracle(uqh, ush, xqh, xsh, one_row, 1, n, hid, u_ref)
-    var act : array<float>
-    act |> resize(hid)
+    var hidden : array<float>
+    hidden |> resize(hid)
     for (row in range(hid)) {
-        act[row] = act_mul_ref(g_ref[row], u_ref[row], gelu)
+        hidden[row] = act_mul_ref(g_ref[row], u_ref[row], act)
     }
-    gu_blocks_hold(t, "q8 gu {gelu ? "gelu" : "silu"} n {n} hid {hid}", oq, os, act, nblk_out)
-    delete act
+    gu_blocks_hold(t, "q8 gu act {act} n {n} hid {hid}", oq, os, hidden, nblk_out)
+    delete hidden
     delete gqh
     delete gsh
     delete uqh
@@ -4037,14 +4066,15 @@ def private q8_gemv_gu_run(t; n, hid : int; gelu : bool) {
 
 [test]
 def test_vkd_q8_gemv_gu(t0 : T?) {
-    t0 |> run("fused q8 gate + up GEMV + act + Q8_0 requant == the CPU oracle (gelu and silu; 36 and 16 blocks deep)") <| @(t : T?) {
+    t0 |> run("fused q8 gate + up GEMV + act + Q8_0 requant == the CPU oracle (gelu, silu and the clamped swiglu; 36 and 16 blocks deep)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_gemv_gu_n1_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }
-            q8_gemv_gu_run(t, 1152, 256, true)   // gemma-3-1b's dim: 36 blocks, a partial third lane pass; eight requant blocks
-            q8_gemv_gu_run(t, 512, 96, false)    // 16 blocks: exactly one lane pass; three blocks
+            q8_gemv_gu_run(t, 1152, 256, ACT_GELU)   // gemma-3-1b's dim: 36 blocks, a partial third lane pass; eight requant blocks
+            q8_gemv_gu_run(t, 512, 96, ACT_SILU)    // 16 blocks: exactly one lane pass; three blocks
+            q8_gemv_gu_run(t, 512, 96, ACT_OAI)   //! the third branch of the kernel's act select, gpt-oss's clamped swiglu
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -4600,6 +4630,7 @@ def test_vkd_q8_gemv_gu_n(t0 : T?) {
             q8_gemv_gu_n_run(t, 256, 512, 5, ACT_SILU)   //! the eight-column stamp at five: three lanes re-dot column 4
             q8_gemv_gu_n_run(t, 256, 512, 2, ACT_GELU)   //! the two-column stamp full
             q8_gemv_gu_n_run(t, 256, 512, 1, ACT_SILU)   //! one column on the two-column stamp: the one-row command's shape through the N form
+            q8_gemv_gu_n_run(t, 256, 512, 2, ACT_OAI)   //! the clamped swiglu through the N form
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -4938,26 +4969,43 @@ def private bias_past_pad(bpad, n, mul : int; scale, off : float; modulus : int;
 }
 
 //! the elements of the K and V mirror rows [w0, w0 + n) of `m` (the V mirror `vbase` past the K one) off the oracle's at `approx`
-def private mirror_rows_off(m, mk, mv : array<float>; w0, n, vbase : int) : int {
-    var bad = 0
-    for (i in range(n)) {
-        if (!approx(m[w0 + i], mk[w0 + i])) {
-            bad++
-        }
-        if (!approx(m[vbase + w0 + i], mv[w0 + i])) {
-            bad++
-        }
+//! a mirror compare's count off the approx bar and its largest difference, at that mirror element
+struct MirrorOff {
+    bad : int
+    worst : float
+    worst_at : int = -1
+}
+
+def private mirror_elem(var off : MirrorOff; got, want : float; at : int) {
+    if (!approx(got, want)) {
+        off.bad++
     }
-    return bad
+    let d = abs(got - want)
+    if (d > off.worst) {
+        off.worst = d
+        off.worst_at = at
+    }
+}
+
+//! the K rows `mk` and V rows `mv` of `n` elements from `w0` against the mirror plane `m`, V at `vbase`
+def private mirror_rows_off(m, mk, mv : array<float>; w0, n, vbase : int) : MirrorOff {
+    var off = MirrorOff()
+    for (i in range(n)) {
+        off |> mirror_elem(m[w0 + i], mk[w0 + i], w0 + i)
+        off |> mirror_elem(m[vbase + w0 + i], mv[w0 + i], vbase + w0 + i)
+    }
+    return off
 }
 
 //! `mirror_rows_off` asserted 0 under `tag`, and its control: the oracle's first K element moved past its own magnitude must red it
 def private mirror_rows_check(t : T?; tag : string; m, mk, mv : array<float>; w0, n, vbase : int) {
-    let bad = mirror_rows_off(m, mk, mv, w0, n, vbase)
-    t |> success(bad == 0, "{tag}: the K and V mirror rows match the CPU oracle ({bad} off)")
+    let off = mirror_rows_off(m, mk, mv, w0, n, vbase)
+    let verdict = "the K and V mirror rows match the CPU oracle ({off.bad} off; the largest difference {off.worst} at mirror element {off.worst_at})"
+    to_log(LOG_INFO, "{tag}: {verdict}\n")
+    t |> success(off.bad == 0, "{tag}: {verdict}")
     var poisoned := mk
     poisoned[w0] += 1.0 + abs(poisoned[w0])
-    t |> success(mirror_rows_off(m, poisoned, mv, w0, n, vbase) > 0, "{tag}: the bar reds a poisoned K mirror element")
+    t |> success(mirror_rows_off(m, poisoned, mv, w0, n, vbase).bad > 0, "{tag}: the bar reds a poisoned K mirror element")
     delete poisoned
 }
 
@@ -7324,17 +7372,15 @@ def private ar_fused_arm(t : T?; rq : bool) {
             let nw = int(out_bytes[0] / 4l)
             var a_split_h <- cp |> plane_as(pas, type<uint>, nw)
             var a_fused_h <- cp |> plane_as(paf, type<uint>, nw)
-            let bada = mismatch_qbytes(a_split_h, a_fused_h, 0)
             if (rq) {
-                t |> success(bada == 0, "fused quant words == split ({bada} of {nw} off)")
+                check_exact(t, "fused quant words == split", a_fused_h, a_split_h)
                 var s_split_h <- cp |> plane_as(pbs, type<float>, nblk)
                 var s_fused_h <- cp |> plane_as(pbf, type<float>, nblk)
-                let bads = mismatch_exact(s_split_h, s_fused_h)
-                t |> success(bads == 0, "fused scales == split ({bads} of {nblk} off)")
+                check_exact(t, "fused scales == split", s_fused_h, s_split_h)
                 delete s_split_h
                 delete s_fused_h
             } else {
-                t |> success(bada == 0, "fused f16 rows == split ({bada} of {nw} words off)")
+                check_exact(t, "fused f16 rows == split", a_fused_h, a_split_h)
             }
             var x_split_h <- cp |> plane_run(pxs)
             var x_fused_h <- cp |> plane_run(pxf)
@@ -7891,14 +7937,11 @@ def private ar_comb_fixture(n, k, npos : int) : ArCombFix {
 //! the near-zero elements read; then, under `ctrl`, one poisoned element of each expectation reds its bar
 def private ar_comb_check(t : T?; tag, ctrl : string; xs, got_x, got_y : array<float>; got_h : array<uint>; var want_x, want_y : array<float>; n : int) {
     t |> success(mismatch_approx(got_x, xs) > 0, "{tag}: the in-place residual rows moved off their input")
-    let bad_x = mismatch_approx(got_x, want_x)
-    t |> success(bad_x == 0, "{tag}: the residual rows match the CPU oracle ({bad_x} of {length(want_x)} off)")
-    let bad_y = mismatch_approx(got_y, want_y)
-    t |> success(bad_y == 0, "{tag}: the f32 normed rows match the CPU oracle ({bad_y} of {length(want_y)} off)")
+    check(t, "{tag}: the residual rows match the CPU oracle", got_x, want_x, BAR_APPROX, Shape(row_width = n))
+    check(t, "{tag}: the f32 normed rows match the CPU oracle", got_y, want_y, BAR_APPROX, Shape(row_width = n))
     var got_yf <- [for (i in range(length(want_y))); half_at(got_h, i)]
     let f16_bar = 2.0e-3
-    let bad_h = mismatch_rel("", got_yf, want_y, f16_bar, f16_bar * logits_maxabs(want_y))
-    t |> success(bad_h == 0, "{tag}: the f16 normed rows within the half's rounding of the oracle ({bad_h} off)")
+    check(t, "{tag}: the f16 normed rows within the half's rounding of the oracle", got_yf, want_y, Bar(rel = f16_bar, abs_floor = f16_bar * logits_maxabs(want_y)), Shape(row_width = n))
     want_x[2 * n + 9] += 0.5
     t |> success(mismatch_approx(got_x, want_x) == 1, "{ctrl}: the residual bar reds one poisoned element")
     want_y[3 * n + 5] += 0.5

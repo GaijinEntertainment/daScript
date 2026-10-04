@@ -189,11 +189,13 @@ struct Q8BlocksOff {
     scales : int
     values : int
     poison_inside : int
+    worst : float   //! the largest dequantized distance from the reference, in that block's quant steps
+    worst_at : int = -1
 }
 
 //! `Q8BlocksOff` over `nblk` blocks of 32: quants `oq`, scales `os`, the activated reference row `a`
 def q8_blocks_off(oq : array<int8>; os : array<float>; a : array<float>; nblk : int) : Q8BlocksOff {
-    var off : Q8BlocksOff
+    var off = Q8BlocksOff()
     for (blk in range(nblk)) {
         var m = 0.0
         for (e in range(32)) {
@@ -208,6 +210,11 @@ def q8_blocks_off(oq : array<int8>; os : array<float>; a : array<float>; nblk : 
             let deq = float(oq[blk * 32 + e]) * os[blk]
             if (!(abs(deq - w) <= d_ref + 2e-3 * abs(w))) {
                 off.values++
+            }
+            let steps = abs(deq - w) / max(d_ref, 1e-30)
+            if (steps > off.worst) {
+                off.worst = steps
+                off.worst_at = blk * 32 + e
             }
             if (e == 0 && abs(deq - (w + 3.0 * d_ref + 1.0)) <= d_ref + 2e-3 * abs(w)) {
                 off.poison_inside++
