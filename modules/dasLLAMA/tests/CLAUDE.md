@@ -275,8 +275,8 @@ arms (`parakeet` transcript-exact, `qwen3a`/`canary`/`gemma4a` element-exact pla
 run like the voxtral arm. The canary arm carries both lanes: the f32 element-exact cell and
 the q8 cell (read-time transcode - qblob/qscales/compact-blob element-exact vs a staged read).
 
-The `image-vulkan` suite (test_model_image_vulkan, arm `vulkan`) covers the OFFLINE vulkan
-bake: the runner arms DASLLAMA_GPU + a small VRAM budget so the probed config carries a
+The `image-vulkan` suite (test_model_image_vulkan, arm `vulkan`; every cell skips without the dasVulkan
+module) covers the OFFLINE vulkan bake: the runner arms DASLLAMA_GPU + a small VRAM budget so the probed config carries a
 vulkan section, the DRY tier collects a role-stamped plan with no device calls (safe on
 GPU-less boxes), the flavor image round-trips the plan verbatim, and a cold cached load under
 the armed tier mints the vulkan lane ALONE. `test_vulkan_inline_bake`, on the same dry tier, holds
@@ -884,7 +884,8 @@ the file rides `_vk_codec_attn.das`' `codec_attn_arm` at its 1e-4 bar), `test_vk
 restricted horizon), `test_vkd_da_attn_b_gated` (a gated model's chunked attention - q read at the
 head's [q | gate] stride, the output under the gate's sigmoid - on the 8-row tile at 128, the wide
 tile at 512 and the h128 coopmat tile, each against the gated oracle with the ungated oracle as the
-control and a poisoned element; the h128 arm skips without coopmat), `test_vkd_act_gelu_past_clamp`
+control and a poisoned element; the h128 arm skips without coopmat, the f16 wide-head arm where its class declines on the workgroup
+cap, and the cell where the 8-row and wide-head classes do), `test_vkd_act_gelu_past_clamp`
 (the tanh GELU act on gate values out to +-300 through `actf16_cls` against the CPU form, every half
 finite, and the stamp's words read back through the keeping seat: every tanh in it reads a clamp's
 result, since a device tanh built from exp answers NaN past +-15 where this card's does not), `test_vkd_fa_cm2_h256_softcap` (the gemma-2 softcap tile, the no-cap control in
@@ -1289,7 +1290,7 @@ kernel name nothing seeded, so a misspelt key cannot read as a zero count; `test
 holds the resident rigs' bar (`row_bar`, `_resident_feed.das`: rel of the CPU row's largest live
 |logit|) - a NaN in the reference row scales no bar and reads past it, while a bar scaled by
 `logits_maxabs` is infinite over the NaN and the same row holds it (the control); `test_row_bars_red_a_nan`
-runs the rigs' two row bars - `rows_within_control` and the regions files' `tq4_within` - on synthetic rows
+runs the rigs' two row bars - `rows_within_control` and `tq4_within`, both in `_resident_feed.das` - on synthetic rows
 through a probe handle (`probe_fails`, `_compares.das`): a NaN in the device row or the reference row reds
 each, the clean rows hold each (the control).
 

@@ -128,19 +128,22 @@ def private invariance_ok(t : T?; tr : Model; prompt : array<int64>; n_gen : int
     var nd = 0l
     var na = 0l
     let spec_ids <- gen_spec(tr, prompt, total, nd, na)
+    log_gen_texts(tr, tag, ref_ids, spec_ids)
     t |> success(ids_equal(ref_ids, spec_ids), "{tag}: spec decode token-for-token vs plain")
     t |> success(nd > 0l, "{tag}: the draft head actually drafted ({nd} drafts, {nd - na} rejected on its own)")
     return <- ref_ids
 }
 
 //! the same speculative decode with every third draft forced to reject: still `ref_ids` token for token, a third of its drafts
-//! or more rejected
+//! or more rejected; the reject cadence goes back to what the getter read before
 def private forced_invariance_ok(t : T?; tr : Model; prompt : array<int64>; n_gen : int; ref_ids : array<int64>; tag : string) {
+    let cadence_found = get_mtp_force_reject_every()
     set_mtp_force_reject_every(3l)
     var nd = 0l
     var na = 0l
     let forced_ids <- gen_spec(tr, prompt, length(prompt) + n_gen, nd, na)
-    set_mtp_force_reject_every(0l)
+    set_mtp_force_reject_every(cadence_found)
+    log_gen_texts(tr, "{tag} forced", ref_ids, forced_ids)
     t |> success(ids_equal(ref_ids, forced_ids), "{tag} forced: spec decode through the reject branch token-for-token vs plain")
     t |> success(nd >= 3l && nd - na >= nd / 3l, "{tag} forced: {nd - na} of {nd} drafts rejected - reject branch covered")
 }
@@ -159,7 +162,7 @@ def test_mtp_loader(t : T?) {
         t |> success(tr.mtp_headnorm_off >= 0l, "nextn shared_head_norm loaded (qwen35 MTP files ship it)")
         tr.config.seq_len = 2048l
         // spec OFF: the -MTP- file's trunk must continue the fixture exactly like the plain file
-        t |> success(parity_gen_ok(tr, MTP_PROMPT, MTP_WANT), "spec-off token-for-token vs the plain-file oracle")
+        t |> success(parity_gen_ok(tr, MTP_PROMPT, MTP_WANT, eyeball = true), "spec-off token-for-token vs the plain-file oracle")
         delete tr
     }
 }

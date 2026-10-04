@@ -241,7 +241,7 @@ def ref_bar(env : double; nb : int64; ulp : float = REF_ULP) : float {
 //! the fp64 sum of a row's `n / 32` block terms `term(bi)` and the sum of their magnitudes - the envelope a bar derives from
 def block_terms_f64(n : int64; term : block<(bi : int64) : double>) : tuple<dot : double; env : double> {
     var res : tuple<dot : double; env : double>
-    for (bi in range64(n / 32l)) {
+    for (bi in range64(n / KQ_B32_ELEMS)) {
         let v = invoke(term, bi)
         res.dot += v
         res.env += abs(v)

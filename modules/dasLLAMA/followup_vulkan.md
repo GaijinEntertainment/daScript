@@ -111,7 +111,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    session (valid, dirty, owned) instead of flushing it home and re-uploading, and window 0 zeroes
    the slots with fills inside the window command: 48 host round trips gone per prefill.
 4. **Real batched decode** - the resident mirror is single-sequence; batch rows round-trip
-   their KV per step (`rdec_sync_kv` in, `rdec_read_kv` out). Metal has a true batched driver
+   their KV per step (`rdec_kv_sync` in, `rdec_kv_read` out). Metal has a true batched driver
    (P4). Options: multi-sequence mirror slabs, or per-row device KV like Metal's `KVMirror`.
 6. **mx4 / q51 device kernels** - absent on Vulkan (CPU+Metal only). Needed before gpt-oss
    (mx4 experts) or gemma-4-26B (q51 stacks) can go resident on PC.
@@ -254,7 +254,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    still unported: the ar+rq fusion (the fq6 gate skips it), the kvm merge (mode-4
    excluded), the wg_blk0 push-constant base (~9% of the decode callback).
    ar fusion PORTED (2026-08-27, commit 4b690e77e): cls_ar_f16_b - the fused add+rms twin's
-   f16 form, bit-identical to the split cls_ar + f16cvt pair (gated). vk_fuse A/B: 3B pp
+   f16 form, bit-identical to the split cls_ar + clamp-convert (`tower_clamp_cvt_cls`) pair (gated). vk_fuse A/B: 3B pp
    7463 -> 7584 (+1.6%), tg +2.6%; tinyllama pp 19978 -> 20374 (+2.0%), tg +4.0% - both
    models' new bests, tinyllama pp now ~100.5% of their row.
    wg_blk0 lever DEAD (same day): the cm2x probe grew a `push` variant (base off pa.ksplit)
@@ -267,7 +267,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    tinyllama +0.5%. fa f16-out stamp (commit 5267a63b1): FaCm2H64/H128 templated
    (OUT16/typedef OT), the O accumulator converts in-kernel and lands the wo feed - the
    per-layer b+6 attn->f16 convert never encodes; bit-exact vs the split pair's own device
-   f16cvt (CPU float16() differs on rounding ties - device converts agree with each other).
+   the clamp-convert (CPU float16() differs on rounding ties - device converts agree with each other).
    A/B: 3B 7669 -> 7737/7708 (+0.7-0.9%), tinyllama 20796 -> 20986 (+0.9%).
    END-OF-DAY BOARD vs b10659: 3B pp 7737.2 +/- 67 = 100.6% - AHEAD of the reference exe for the
    first time; tinyllama pp 20986 +/- 357 = ~103.5%, tg ahead. 3B tg 105.1 = ~95.5% (decode
@@ -583,7 +583,7 @@ module) is independent and can land any time - it is pure structure.
     + `return` gates from before the `t |> skip` rule; the s-tile cell and the two new files now
     skip. Sweep the family in one change.
 
-32. **A top-k fixture over the dark arms.** `topk_cls` runs in the suite at one shape (4 experts,
+32. **A top-k fixture over the dark arms.** `topk_n_cls` at one workgroup (the one-row top-k) runs in the suite at one shape (4 experts,
     k = 2, one subgroup live, renorm on, scale 1). A fixture driving the kernel alone against
     `moe_select_core` over several `ne` / `k` shapes, exact ties, `norm == 0` and `wscale != 1`
     covers the cross-subgroup argmax, the tie rule and both weight arms (the Metal twin has one:
@@ -1194,7 +1194,7 @@ module) is independent and can land any time - it is pure structure.
     after ar1) - the GEMV's wave tail and the barrier the successor waits at. LANDED next: the qkv and z GEMVs
     shared VHZ_DNP and serialized on a WAW hazard the per-op tier already splits (VHG_Y1 / VHG_Y2) - the resident
     decode's z rides VHZ_DNZ: tg32 0.8B 354 -> 370.5, 9B 96.1 -> 97.6, 35B 141.5 -> 143.9 (0.991x of 145.2). LANDED
-    next: the residual add + norm + requant pairs as one kernel on every model - the fused twin `cls_ar_rq` was off
+    next: the residual add + norm + requant pairs as one kernel on every model - the fused twin `cls_ar_rq_b` was off
     hybrids (the beta/alpha GEMV reads the normed f32 row), MoE (the router reads it) and any Q8_K feed (it
     quantized Q8_0 only); the Q8_K and row-storing stamps of `ArRqT` lift all three (the profiler now keys on the
     stamps' recorded names): tg32 0.8B 370.5 -> 381.2, 9B 97.6 -> 100.8 (0.894x), 35B 143.9 -> 146.6 (1.009x of
@@ -1582,7 +1582,7 @@ module) is independent and can land any time - it is pure structure.
     the refusal named under `--track-job-status` / a panic hook, then the rows' samples on the
     lanes, priced on the tg128@4 row (about a hundred microseconds a step at four rows).
 78. **A head of 96 takes no flash tile, so phi's prefill attention runs the chunked pair at
-    thirty times the reference's.** `fa_hs_ok` (the cm2 arm) and `fa_khr_serves` admit heads of
+    thirty times the reference's.** `fa_cm2_serves` (the cm2 arm) and `fa_khr_serves` admit heads of
     64, 128, 256 and 512; Phi-3.5-mini's 32 heads of 96 fall to the chunked pair, which reads
     81.5 ms of a 162 ms 512-token window on the 5060 Ti (2.55 ms a layer against the reference's
     flash attention at 83 us), every GEMM role on par or ahead - so phi prefills at half the

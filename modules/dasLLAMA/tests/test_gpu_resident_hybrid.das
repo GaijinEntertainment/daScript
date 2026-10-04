@@ -1403,14 +1403,9 @@ def test_row_bar_nan_reference(t : T?) {
 
 //! the asserts `rows_within_control` fails on a probe over the one device row `g` against the reference `c`, `off` its row one off
 def private rows_bar_fails(g, c, off : array<float>) : int {
-    var gr <- [ <- clone_to_move(g)]
-    var cr <- [ <- clone_to_move(c), <- clone_to_move(off)]
-    let fails = probe_fails() $(p) {
-        rows_within_control(p, "probe", gr, cr, 0.04, 1l, 1.0) $(_r) => "row"
+    return probe_fails() $(p) {
+        row_within_ctrl(p, "probe", g, c, off, 0.04, "row")
     }
-    delete gr
-    delete cr
-    return fails
 }
 
 //! the asserts `tq4_within` fails on a probe over `g` against `c`, `off` its row one off
@@ -1438,6 +1433,23 @@ def test_row_bars_red_a_nan(t : T?) {
     t |> equal(tq4_bar_fails(gpu, cpu, off), 0, "control: tq4_within holds a device row nearer the reference than its share of the row one off")
     t |> success(tq4_bar_fails(nan_gpu, cpu, off) > 0, "tq4_within reds a NaN in the device row")
     t |> success(tq4_bar_fails(gpu, nan_cpu, off) > 0, "tq4_within reds a NaN in the reference row")
+    //! the share's bound has teeth at TQ4_CTRL_SHARE: the row one off sits 4.0 from the reference, so a device row 0.8 of that
+    //! away holds and one 0.9 of it away reds
+    var near := cpu
+    near[0] += 0.8 * 4.0
+    var far := cpu
+    far[0] += 0.9 * 4.0
+    t |> equal(tq4_bar_fails(near, cpu, off), 0, "control: tq4_within holds a device row at 0.8 of the one-off row's distance")
+    t |> success(tq4_bar_fails(far, cpu, off) > 0, "tq4_within reds a device row at 0.9 of the one-off row's distance - past TQ4_CTRL_SHARE")
+    //! a row with no control row (the hybrid carry's row 0): the NaN reference still reds through the bar alone
+    var gr <- [ <- clone_to_move(gpu)]
+    var cr <- [ <- clone_to_move(nan_cpu)]
+    let alone = probe_fails() $(p) {
+        rows_within_control(p, "probe", gr, cr, 0.04, -1l, 1.0) $(_r) => "row"
+    }
+    t |> success(alone > 0, "rows_within_control reds a NaN in the reference row where no control row exists")
+    delete gr
+    delete cr
 }
 
 [test]

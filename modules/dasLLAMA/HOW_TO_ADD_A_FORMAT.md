@@ -362,8 +362,8 @@ decoded scale row needs no upload work - only the id bridge and the kernels. IQ4
    `override NCOL = true` - the template's `run` picks the shell; a grid format's template adds
    `override GRID = true` with its literal `GRID_WORDS` / `GRID_OFF` (REVIEW.das holds them to the
    `KQ_GRID_<FMT>` chain). `gemv_cls_has_n` admits every `kq_sb` format, so the N leaf is not optional:
-   `gemv_cls_ensure_n` / `gemv_cls_enc_n` take one arm each, or the first batched step on a model
-   carrying the format panics; the format joins `KQ_LEAF_FMTS` in `tests/test_vulkan_kernels.das`,
+   `gemv_cls_ensure_n` / `gemv_cls_enc_n` are `kq_tile_stamp` stamps over every `KqFmt` member, so a
+   format with no N stamp fails the compile; the format joins `KQ_LEAF_FMTS` in `tests/test_vulkan_kernels.das`,
    which the ncol cell holds against the family's roster `kq_gemv_fmts`, and its N stamp joins the
    census's blind list in `tests/test_kernel_coverage.das` naming the regions file that carries it
    (the census's one-region loads never engage the N-row command). A codebook is packed into
@@ -380,8 +380,10 @@ decoded scale row needs no upload work - only the id bridge and the kernels. IQ4
    `<fmt>_quad` over a `uint4` of packed words, a grid format's `<fmt>_idx4` / `<fmt>_sgn4` pick
    (the four grid words and their sign nibbles; the class gathers them through its own grid slab,
    the leaf through `grid4`) - never a second spelling in the tile.
-4. Ladders: `kq_batch_cls_ensure` / `kq_batch_cls_enc_for` / `gemv_cls_ensure` /
-   `gemv_cls_enc` gain an arm; `gemv_cls_set`'s four-way `||` became `kq_sb(fmt)`.
+4. Ladders: nothing to edit - `kq_batch_cls_ensure` / `kq_batch_cls_enc_for` / `gemv_cls_ensure` /
+   `gemv_cls_enc` and the `cm2_cls_*` trio are `kq_tile_stamp` stamps over the enum, so the format's
+   stamps exist with the right names or the compile fails; a per-32 format joins `kq_tile_stem`'s
+   spelling and `CM2_TILE_NONE` (the dense tiles it never serves) in the same change.
 5. The decode GEMV's lanes per row (`dasllama/dasllama_vulkan_classes.das`): join
    `gemv_grid_fmt` where the format's decode gathers from a codebook or a grid, and take the
    lanes from `gemv_lanes_per_row`, which every decode site reaches through `gemv_enc`. Which

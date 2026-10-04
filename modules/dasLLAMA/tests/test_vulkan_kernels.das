@@ -395,8 +395,10 @@ def private sdot4_tile_run(n, d, cnt0, cnt1, tile, wblk1 : int; p : Sdot4Planes;
 // ensure engages it); an NV_coopmat2 device in cm2 mode (DASLLAMA_COOPMAT=cm2) for the cm2
 // l/m/s/e arms; KHR cooperative matrix at subgroup 32 for the KHR arm; DASLLAMA_CM2_TILE and
 // DASLLAMA_CM2_SPLITK for the tile-pick cell; a device over the deltanet chain's shared-memory
-// cap for the dn step cells (`g_gpu.dn_shared_ok`, else they skip). Without dasVulkan (or with
-// no device) every check skips or feints cleanly.
+// cap for the dn step cells (`g_gpu.dn_shared_ok`, else they skip); a device over the batched
+// decode attention classes' workgroup footprint (`ensure_da_attn_b*_cls`, else the da_attn_b, the
+// wide-head and the gated cells skip) and a coopmat device for their h128 arms. Without dasVulkan
+// (or with no device) every check skips or feints cleanly.
 
 [test]
 def test_vkd_class_dispatch(t0 : T?) {
@@ -678,6 +680,68 @@ def test_vkd_lens_readonly_gate(t0 : T?) {
             t |> success(find(bad.out, "is @readonly but a kernel of RoFixture writes binding 1") >= 0, "the refusal names the member and the binding: {bad.out}")
             let good = spawn_readonly_fixture(false, "ok")
             t |> equal(0, good.rc, "the twin without the qualifier compiles: {good.out}")
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! a two-kernel class whose `[vk_dispatch]` names its kernel by `kern`: a `*` prefix picks exactly one method or the lens refuses
+def private spawn_kernel_prefix_fixture(kern, tag : string) : tuple<rc : int; out : string> {
+    let src = join([
+        "options gen2",
+        "options _dasllama_internal = true",
+        "",
+        "require dasllama/dasllama_lint public",
+        "require spirv/spirv_shader",
+        "require vulkan",
+        "require vulkan/vulkan_boost",
+        "require dasllama/dasllama_vulkan_common",
+        "require dasllama/dasllama_vulkan_dispatch",
+        "",
+        "struct PfArgs \{",
+        "    n : uint",
+        "\}",
+        "",
+        "[vk_dispatch(name = \"pf_fixture\", kernel = \"{kern}\", grid = \"n/64\", params = \"n : int64\")]",
+        "class PfFixture \{",
+        "    @ssbo @binding = 0 xs : array<float>",
+        "    @ssbo @binding = 1 ys : array<float>",
+        "    @push_constant pa : PfArgs",
+        "",
+        "    [spirv_kernel(local_size_x = 64, name = \"pf_fixture_a_spv\")]",
+        "    def run_a \{",
+        "        let i = gl_GlobalInvocationID.x",
+        "        if (i < pa.n) \{",
+        "            ys[i] = xs[i] * 2.0",
+        "        \}",
+        "    \}",
+        "",
+        "    [spirv_kernel(local_size_x = 64, name = \"pf_fixture_b_spv\")]",
+        "    def run_b \{",
+        "        let i = gl_GlobalInvocationID.x",
+        "        if (i < pa.n) \{",
+        "            ys[i] = xs[i] * 3.0",
+        "        \}",
+        "    \}",
+        "\}",
+        "",
+        "[export]",
+        "def main() \{",
+        "    print(\"ok\\n\")",
+        "\}"], "\n")
+    return spawn_compile_only(src, "vk_prefix_{tag}", 180.0)
+}
+
+[test]
+def test_vkd_lens_kernel_prefix_gate(t0 : T?) {
+    t0 |> run("[vk_dispatch] refuses a kernel= prefix that names two methods and compiles the exact twin") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            let bad = spawn_kernel_prefix_fixture("run_*", "bad")
+            t |> success(bad.rc != 0, "a prefix naming two [spirv_kernel] methods must not compile")
+            t |> success(find(bad.out, "names 2 [spirv_kernel] methods") >= 0, "the refusal counts the matches: {bad.out}")
+            let good = spawn_kernel_prefix_fixture("run_a", "ok")
+            t |> equal(0, good.rc, "the exact name compiles: {good.out}")
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -1038,7 +1102,7 @@ def private ar_rq_run(name : string; x, a, w : array<float>; pc; kform, storex :
             let pa = cp |> in_(a)
             let pw = cp |> in_(w)
             let pq = cp |> out_words(int64(dim), I8_SENTINEL_BITS)
-            let ps = cp |> out_(kform ? dim / 256 : dim / 32)
+            let ps = cp |> out_(kform ? dim / int(KQ_SB_ELEMS) : dim / int(KQ_B32_ELEMS))
             let py = cp |> out_(storex ? dim : 1)
             var args = pc
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
@@ -3264,11 +3328,15 @@ def test_vkd_fa_cm2_h256_9b(t0 : T?) {
     }
 }
 
-let private DAB_B = 0          //! the batched decode attention stamps: the 8-row tile, the wide-head 4-row tile, the h128 coopmat tile, and the f16-mirror twins of the first and the last
+let private DAB_B = 0          //! the batched decode attention stamps: the 8-row tile, the wide-head 4-row tile, the h128 coopmat tile, and the f16-mirror twins of all three
 let private DAB_BW = 1
 let private DAB_H128 = 2
 let private DAB_B_F16 = 3
 let private DAB_H128_F16 = 4
+let private DAB_BW_F16 = 5
+
+//! whether a DAB_* stamp reads f16 mirrors
+def private dab_f16(stamp : int) : bool => stamp == DAB_B_F16 || stamp == DAB_H128_F16 || stamp == DAB_BW_F16
 
 //! a batched decode attention fixture: `npos` query rows over mirrors holding positions [0, w0 + npos) past `kbase` / `vbase` words
 struct private DaAttnBFix {
@@ -3319,8 +3387,8 @@ def private gated_q_panel(f : DaAttnBFix) : array<float> {
 def private da_attn_b_run(f : DaAttnBFix; stamp : int; scale, cap : float; window : int) : array<float> {
     var y : array<float>
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let f16 = stamp == DAB_B_F16 || stamp == DAB_H128_F16
-        let tile = stamp == DAB_BW ? 4 : (stamp == DAB_H128 || stamp == DAB_H128_F16 ? 32 : 8)
+        let f16 = dab_f16(stamp)
+        let tile = stamp == DAB_BW || stamp == DAB_BW_F16 ? 4 : (stamp == DAB_H128 || stamp == DAB_H128_F16 ? 32 : 8)
         let qd = f.nheads * f.hs
         let kvd = (f.nheads / f.kv_mul) * f.hs
         let gated = !empty(f.gate)
@@ -3350,6 +3418,9 @@ def private da_attn_b_run(f : DaAttnBFix; stamp : int; scale, cap : float; windo
                 } elif (stamp == DAB_B_F16) {
                     var sc = set_da_attn_b_f16_cls(bufs, sizes, bits)
                     enc_da_attn_b_f16_cls(raw2, h2, sc, pc, wgs)
+                } elif (stamp == DAB_BW_F16) {
+                    var sc = set_da_attn_bw_f16_cls(bufs, sizes, bits)
+                    enc_da_attn_bw_f16_cls(raw2, h2, sc, pc, wgs)
                 } else {
                     var sc = set_da_attn_b_h128_f16_cls(bufs, sizes, bits)
                     enc_da_attn_b_h128_f16_cls(raw2, h2, sc, pc, wgs)
@@ -3417,7 +3488,11 @@ def test_vkd_da_attn_bw(t0 : T?) {
                 t |> skip("da_attn_bw class declined on this device (workgroup cap)")
                 return
             }
+            if (!ensure_da_attn_bw_f16_cls()) {
+                t |> skip("da_attn_bw_f16 class declined on this device (workgroup cap) - the f16-mirror arms")
+            }
             let scale = 1.0     // the gemma-4 score scale
+            let f16_on = ensure_da_attn_bw_f16_cls()   //! the f16-mirror twin (the gemma-4 global heads on the f16 mirror) runs beside every arm
             for (arm in range(4)) {
                 let hs = arm == 0 ? 384 : 512
                 let npos = arm >= 2 ? 120 : 13    //! 13: a partial 4-tile and a stage crossing; 120: thirty 4-tiles over a 620-position mirror (the second prefill window's shape)
@@ -3431,6 +3506,15 @@ def test_vkd_da_attn_bw(t0 : T?) {
                 t |> success(bad == 0, "da_attn_bw hs {hs} npos {npos} window {window} matches the CPU oracle ({bad} of {length(y_ref)} off)")
                 y_ref[0] += 0.5
                 t |> success(mismatch_approx(y_cls, y_ref) > 0, "da_attn_bw hs {hs} npos {npos} window {window}: the bar reds a poisoned oracle element")
+                if (f16_on) {
+                    var f16 <- da_attn_b_fix(npos, 4, 4, hs, w0, 64, 160, 0.005, 0.18, 0.003, 0.14, true)
+                    var y16 <- da_attn_b_run(f16, DAB_BW_F16, scale, 0.0, window)
+                    var y16_ref <- da_attn_b_ref(f16, scale, window, 0.0)
+                    check_rows(t, "da_attn_bw_f16 hs {hs} npos {npos} window {window} against the CPU oracle", y16, y16_ref, BAR_APPROX_CTRL, 4 * hs, hs)
+                    delete f16
+                    delete y16
+                    delete y16_ref
+                }
                 delete f
                 delete y_ref
                 delete y_cls
@@ -3477,7 +3561,7 @@ def test_vkd_da_attn_b_h128(t0 : T?) {
 //! one gated chunked-attention arm: q read at the head's [q | gate] stride, the output under the sigmoid of the gate half -
 //! the gated oracle matches, the ungated one misses, the bar reds a poisoned element
 def private da_attn_b_gated_arm(t : T?; tag : string; stamp, npos, kv_mul, hs, w0 : int; qm, qa, km, ka : float; bar : Bar) {
-    var f <- da_attn_b_fix(npos, 4, kv_mul, hs, w0, 64, 160, qm, qa, km, ka, false)
+    var f <- da_attn_b_fix(npos, 4, kv_mul, hs, w0, 64, 160, qm, qa, km, ka, dab_f16(stamp))
     f.gate <- [for (i in range(length(f.qh))); float((i * 29) % 61) * 0.08 - 2.4]
     let scale = hs > 256 ? 1.0 : 0.125
     var y_cls <- da_attn_b_run(f, stamp, scale, 0.0, 0)
@@ -3506,6 +3590,11 @@ def test_vkd_da_attn_b_gated(t0 : T?) {
             }
             da_attn_b_gated_arm(t, "da_attn_b gated hs 128", DAB_B, 13, 2, 128, 32, 0.05, 1.8, 0.03, 1.4, BAR_APPROX)
             da_attn_b_gated_arm(t, "da_attn_bw gated hs 512", DAB_BW, 13, 4, 512, 32, 0.005, 0.18, 0.003, 0.14, BAR_APPROX)
+            if (ensure_da_attn_bw_f16_cls()) {
+                da_attn_b_gated_arm(t, "da_attn_bw_f16 gated hs 512", DAB_BW_F16, 13, 4, 512, 32, 0.005, 0.18, 0.003, 0.14, BAR_APPROX_CTRL)
+            } else {
+                t |> skip("da_attn_bw_f16 class declined on this device (workgroup cap) - the f16 gated arm")
+            }
             if (!g_gpu.has_coopmat) {
                 t |> skip("no coopmat on this device - the h128 gated arm")
                 return
@@ -4059,7 +4148,7 @@ def private q8_gemv_ar_fixture(n, d : int) : GemvArFixture {
 
 //! the q8 GEMV + residual step's ten planes over the fixture, in `set_q8_gemv_ar_cls`'s binding order: the GEMV's y row at 4,
 //! the residual row in place at 5, the norm rows at 6, the quants at 7, the scales at 8
-def private gemv_ar_planes(var cp : CellPlanes; fx : GemvArFixture; d : int) : int[10] {
+def private gemv_ar_planes(var cp; fx : GemvArFixture; d : int) : int[10] {   //! `cp` untyped: the CellPlanes type lives behind the `?vulkan` require, and a typed signature breaks the compile where the module is absent
     let pwq = cp |> in_plain(fx.wqh)
     let pws = cp |> in_plain(fx.wsh)
     let pxq = cp |> in_plain(fx.xqh)
@@ -5067,7 +5156,7 @@ def private qkn_rope_arm(t : T?; f16, biased : bool) {
 
 //! one `qkn_rope_cls` dispatch of `wgs` workgroups under `pc` into an N-form cell's outputs `o` (the q plane, `q` uploaded over
 //! it, then the K and V mirrors) over `cp`'s input planes `ins` (the kv rows, the cos row, the norm rows, the token meta, the bias)
-def private qkn_cell_enc(cp : CellPlanes; o : NformOuts; ins : int[5]; q : array<float>; pc; wgs : int; raw; var h) {
+def private qkn_cell_enc(cp; o : NformOuts; ins : int[5]; q : array<float>; pc; wgs : int; raw; var h) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         upload_region_at(o.bufs[0], 0l, unsafe(addr<uint8 const?>(q[0])), long_length(q) * 4l)
         var sc = set_qkn_rope_cls(fixed_array(o.bufs[0], cp.dev[ins[0]], o.bufs[1], o.bufs[2], cp.dev[ins[1]], cp.dev[ins[2]], cp.dev[ins[3]], cp.dev[ins[4]]),
@@ -7203,8 +7292,8 @@ def private ar_fused_arm(t : T?; rq : bool) {
         let out_bytes = rq ? fixed_array(int64(nblk) * 32l, int64(nblk) * 4l) : fixed_array(int64(nrows * dim) * 2l, 0l)
         //! two DIFFERENT sentinels on the compared planes: a dead leg on either side reads as a mismatch - a float word on the quant
         //! and scale planes, a half twice over on the f16 rows
-        let sent_split = rq ? float_bits_to_uint(-999.25) : half_pair_word(-999.25)
-        let sent_fused = rq ? float_bits_to_uint(-777.5) : half_pair_word(-777.5)
+        let sent_split = rq ? float_bits_to_uint(-999.25) : packHalf2x16(float2(-999.25, -999.25))
+        let sent_fused = rq ? float_bits_to_uint(-777.5) : packHalf2x16(float2(-777.5, -777.5))
         with_cell_planes() $(var cp : CellPlanes) {
             let pxs = cp |> io_(fx.x)
             let pxf = cp |> io_(fx.x)
@@ -7257,12 +7346,6 @@ def private ar_fused_arm(t : T?; rq : bool) {
         }
         delete fx
     }
-}
-
-//! the word of two halves of `v`: an f16 plane's fill
-def private half_pair_word(v : float) : uint {
-    let h = uint(unsafe(reinterpret<uint16>(float16(v))))
-    return h | (h << 16u)
 }
 
 [test]

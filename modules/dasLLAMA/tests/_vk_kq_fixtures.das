@@ -6,6 +6,7 @@ module _vk_kq_fixtures shared public   //! shared: the harness's probe fixture (
 require daslib/f16_cvt
 require dasllama/dasllama_convert
 require dasllama/dasllama_gpu_tier
+require dasllama/dasllama_kqformat   // KQ_B32_ELEMS: the q8_0 block the stacks' scales step by
 
 // Synthetic K-quant expert stacks in the vulkan tier's DEVICE layout, shared by the tier suite
 // (test_vulkan_tier) and the cm2 expert-chain suite (test_vulkan_moe_cm2): the pow2 scale sets
@@ -160,11 +161,11 @@ def pow2_scale(i : int64) : float {
 //! a q8_0 stack's quants `(i * 7 + seed) % 255 - 127` and its per-32 scales, `pow2_small` or `pow2_scale`
 def fill_q8_quants(var wq : array<int8>; var ws : array<float>; rows, n : int64; seed : int64; small_scales : bool) {
     wq |> resize(rows * n)
-    ws |> resize(rows * (n / 32l))
+    ws |> resize(rows * (n / KQ_B32_ELEMS))
     for (i in range64(rows * n)) {
         wq[i] = int8((i * 7l + seed) % 255l - 127l)
     }
-    for (i in range64(rows * (n / 32l))) {
+    for (i in range64(rows * (n / KQ_B32_ELEMS))) {
         ws[i] = small_scales ? pow2_small(i + seed) : pow2_scale(i + seed)
     }
 }
@@ -185,7 +186,7 @@ def pack_q8_wire(wq : array<int8>; ws : array<float>; var wqb : array<uint8>; va
 def dequant_q8_rows(wq : array<int8>; ws : array<float>; rows, n : int64; var w : array<float>) {
     w |> resize(rows * n)
     for (i in range64(rows * n)) {
-        w[i] = float(wq[i]) * ws[i / 32l]
+        w[i] = float(wq[i]) * ws[i / KQ_B32_ELEMS]
     }
 }
 

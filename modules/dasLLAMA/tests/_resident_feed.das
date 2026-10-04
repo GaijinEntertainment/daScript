@@ -273,7 +273,7 @@ def tq4_within(t : T?; got, want, control : array<float>; what : string) {
     to_log(LOG_INFO, "{what}: maxdiff {diff}, the row one off {off}\n")
 }
 
-//! every row r of `gpu` within `rel` of the max |value| of `cpu[r]`, and the control row `cpu[r + ctrl_off]` - where one exists -
+//! every row r of `gpu` within `rel` of the largest live |value| of `cpu[r]` (`live_maxabs`: a NaN and the suppressed-id floor left out), and the control row `cpu[r + ctrl_off]` - where one exists -
 //! past `ctrl_bars` bars of the same row: the widest miss and the tightest control logged with their rows; `row_tag` names a row
 def rows_within_control(t : T?; what : string; gpu, cpu : array<array<float>>; rel : float; ctrl_off : int64; ctrl_bars : float; row_tag : block<(r : int64) : string>) {
     var worst = 0.0
