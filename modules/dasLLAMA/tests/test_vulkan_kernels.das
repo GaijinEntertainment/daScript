@@ -1408,25 +1408,7 @@ def test_vkd_act_gelu_past_clamp(t0 : T?) {
             var uh <- row_fill(nelem, 43, 0, 0.05, 2.1, 83)
             let past = length([for (v in gh); v; where abs(v) > 10.0])
             t |> success(past == nelem / 8, "the fixture puts {nelem / 8} gate values past the clamp's reach")
-            let g_bytes = int64(nelem) * 4l
-            let h_bytes = int64(nelem) * 2l
-            let gd = make_device_buf(g_bytes)
-            let ud = make_device_buf(g_bytes)
-            let hd = make_device_buf(h_bytes)
-            var host = make_host_buf(h_bytes, true, [cached = true])
-            var h_cls : array<uint>
-            h_cls |> resize(nelem / 2)
-            unsafe {
-                upload_region_at(gd, 0l, addr<uint8 const?>(gh[0]), g_bytes)
-                upload_region_at(ud, 0l, addr<uint8 const?>(uh[0]), g_bytes)
-                var sc = set_actf16_cls(fixed_array(gd, ud, hd), fixed_array(g_bytes, g_bytes, h_bytes), fixed_array(1u, 2u, 4u))
-                var pc = ActArgs(nelem = uint(nelem), act = ACT_GELU, nblk = 0u)
-                cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                    enc_actf16_cls(raw, h, sc, pc, int64((nelem / 4 + 255) / 256))
-                    cmd_copy_planes(raw, h, fixed_array(hd), host, fixed_array(h_bytes), 4u)
-                }
-                memcpy(addr<void?>(h_cls[0]), host.mapped, h_bytes)
-            }
+            var h_cls <- actf16_halves(gh, uh, nelem, 0)
             var got <- [for (i in range(nelem)); half_at(h_cls, i)]
             var want <- [for (i in range(nelem)); act_mul_ref(gh[i], uh[i], true)]
             t |> success(all_finite(got), "every half the act landed is finite")
