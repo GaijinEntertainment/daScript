@@ -289,11 +289,10 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
                 t |> success(find(string(resp.body), "no audio arm") >= 0, "the 400 names the missing audio arm")
             }
-            // an image AND audio in one message: refused by shape before any arm check — the
-            // scheduler takes ONE media splice per request
+            // an image AND audio in one message: a request may carry both, so the refusal here is the missing arm
             POST("{base_url}/v1/chat/completions", "\{\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png;base64,AAAA\"}},\{\"type\":\"input_audio\",\"input_audio\":\{\"data\":\"AAAA\",\"format\":\"wav\"}}]}]}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
-                t |> success(find(string(resp.body), "image AND audio") >= 0, "the 400 names the two-media shape")
+                t |> success(find(string(resp.body), " arm ") >= 0, "the 400 names a missing arm")
             }
             // /v1/stats declares the arms the page reads: the vision/audio flags and the thinking default
             GET("{base_url}/v1/stats") $(resp) {

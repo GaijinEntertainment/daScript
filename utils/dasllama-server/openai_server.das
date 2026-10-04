@@ -249,6 +249,7 @@ struct ModelSlot {
     vision : VisionEmbedder = VisionEmbedder()   // set_model_vision; kind == none = text only (encode runs on the media worker)
     vision_path : string                             // the worker loads its own embedder from this
     audio_armed : bool                           // set_model_audio; the media worker owns the encoder itself
+    audio_bare : bool                            // the audio encoder's rows splice with no span marker (ultravox)
     audio_path : string                              // the mmproj the worker loads the audio encoder from
     think_default : bool   // family default when the request sends no enable_thinking (THINKING.md's table)
 }
@@ -700,6 +701,7 @@ def private arm_slot_audio(mi : int; path : string) : string {
         return "{g_slots[mi].name}'s chat template or vocab carries no audio span markers - it has no audio arm"
     }
     g_slots[mi].audio_armed = true
+    g_slots[mi].audio_bare = audio_probe_span_bare(path)
     g_slots[mi].audio_path = path
     to_log(LOG_INFO, "dasllama-server: {g_slots[mi].name} audio arm: {base_name(path)} ({proj_dim}-wide)\n")
     return ""
@@ -2971,20 +2973,19 @@ def private resolve_stream_slot(srv : FrontLink; writer : WriterRef; js : JsonVa
 // would panic) and the 503 (queue full). Moves prompt/stop_ids/close_toks into the request.
 def private register_request(srv : FrontLink; writer : WriterRef;
                              var prompt, stop_ids, close_toks : array<int64>;
-                             var media : array<float>; media_at, n_media : int64;
+                             var spans : array<MediaSpan>;
                              params : SamplingParams; max_new : int64;
                              streaming, is_chat : bool; prefix : string;
                              tools_declared : bool = false; call_open : string = ""; call_close : string = "";
                              seed : int = 0; think : ThinkStream = ThinkStream();
                              tool_mode : ToolMode = ToolMode.none; reuse_id : int64 = 0l;
-                             media_is_audio : bool = false; media_grid : int2 = int2(0);
                              var nothink : NothinkStopGuard = NothinkStopGuard(); stable_at : int64 = 0l;
-                             include_usage : bool = false) {
+                             include_usage : bool = false; resumed : bool = false) {
     if (bench_hold_active()) {
         service_unavailable(srv, writer, ibench_hold_text())
         return
     }
-    let np = long_length(prompt) + n_media
+    let np = long_length(prompt)   // media positions included: a span's ids stand in the prompt
     if (np + 1l > cur_model().config.seq_len) {
         bad_request(srv, writer, "the rendered prompt is {np} tokens; the model context is {cur_model().config.seq_len} — shorten the conversation or raise --ctx")
         return
@@ -2992,25 +2993,23 @@ def private register_request(srv : FrontLink; writer : WriterRef;
     let rid = reuse_id != 0l ? reuse_id : next_id()   // a resumed image request keeps its park id, so one [req N] spans the request
     let cid = "{prefix}-{rid}"
     let created = created_ts()
-    var preq <- PendingReq(id = rid, params = params, max_new = max_new, seed = seed,
-                           media_at = media_at, n_media = n_media,
-                           media_non_causal = n_media > 0l && !media_is_audio,   // image span rows attend in full; audio rows stay causal
-                           media_grid = media_grid,   // qwen mrope grid; (0,0) on gemma families
-                           stable_at = stable_at)
+    var preq <- PendingReq(id = rid, params = params, max_new = max_new, seed = seed, stable_at = stable_at)
+    var encoded_rows = 0l
+    for (sp in spans) {
+        encoded_rows += empty(sp.rows) ? 0l : sp.n
+    }
     preq.prompt <- prompt
     preq.stop_ids <- stop_ids
     preq.nothink <- nothink
     preq.close_toks <- close_toks
-    preq.media_embd <- media
+    preq.spans <- spans
     if (!submit(cur_model(), cur_sched(), preq)) {
         delete preq
         to_log(LOG_WARNING, "dasllama-server: 503 queue full ({cur_sched().max_queue}) — rejected {prefix} request ({np} tok)\n")
         service_unavailable(srv, writer, "the server is at capacity ({cur_sched().max_queue} requests queued) — retry shortly")
         return
     }
-    g_media_rows += n_media   // after submit: a 503-rejected request counts nothing (an image
-                              // request reaches here once — it parks at the encode boundary
-                              // BEFORE this function and re-enters only as the resume)
+    g_media_rows += encoded_rows   // after submit: a 503-rejected request counts nothing; a span the prefix cache serves brought no rows
     g_slots[g_cur].last_used = ref_time_ticks()
     set_writer_keepalive_timeout(srv, writer, LLM_WRITER_KEEPALIVE_MS)
     to_log(LOG_INFO, "[req {rid}] {prefix}: prompt={np} tok, stream={streaming}, max_new={max_new}\n")
@@ -3021,7 +3020,7 @@ def private register_request(srv : FrontLink; writer : WriterRef;
                            call_open = call_open, call_close = call_close,
                            tool_mode = tool_mode, think = think)
     g_wires[rid] <- wire
-    if (streaming && is_chat) {
+    if (streaming && is_chat && !resumed) {
         send_chat_chunk(srv, writer, cid, created, "assistant", "", "")   // opening role delta
     }
 }
@@ -3032,11 +3031,11 @@ def private register_request(srv : FrontLink; writer : WriterRef;
 // Render a user-led suffix of the transcript. System messages are always retained (they were
 // folded into `system`); `start` applies only to conversational messages in the original array.
 def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : array<string>;   // nolint:STYLE037,STYLE038 — one arm per message role, each accumulating into the same renderer state
-                               max_new : int64; start : int; think_set, think_val, has_media, media_is_audio : bool;
+                               max_new : int64; start : int; think_set, think_val : bool; refs : array<MediaRef>;
                                var prompt, stop_ids, close : array<int64>&;
                                var nothink_out : NothinkStopGuard&;
                                var call_open, call_close : string&; var think_out : ThinkStream&;
-                               var tool_mode_out : ToolMode&; var media_at, stable_at : int64&) : string {
+                               var tool_mode_out : ToolMode&; var stable_at : int64&) : string {
     var chat <- create_chat_renderer(cur_model(), system, max_new)
     defer() { delete chat }
     if (think_set) {   // absent from the request => the family's own default (gemma-4 E: off)
@@ -3094,6 +3093,10 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
         }
         if (role == "user") {
             add_user(chat, content)
+            for (r in refs) {   // the message's media, inline where its parts sit among the text
+                continue if (r.msg != i)
+                add_user_span(cur_model(), chat, r.key, r.n_rows, r.text_before, !r.is_audio, r.is_audio && g_slots[g_cur].audio_bare)
+            }
             pending = true
         } elif (role == "assistant") {
             var calls : array<string>
@@ -3145,30 +3148,10 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
         delete rendered
         return "the last message must be a user or tool message"
     }
-    media_at = 0l
-    stable_at = 0l
-    if (has_media) {
-        // the media turn renders as TWO token spans; the soft-token rows prefill between them, so
-        // the scheduler gets one flat prompt plus the index the rows splice at
-        var head : array<int64>
-        var tail : array<int64>
-        let n_msgs = length(msgs_v.value as _array)
-        let text_before = media_text_before((msgs_v.value as _array)[n_msgs - 1])   // the media rides the final message
-        if (media_is_audio) {
-            render_turn_audio(cur_model(), chat, head, tail, text_before)
-        } else {
-            render_turn_image(cur_model(), chat, head, tail, text_before)
-        }
-        media_at = long_length(rendered) + long_length(head)
-        rendered |> push_from(head, tail)
-        delete head
-        delete tail
-    } else {
-        var turn <- render_turn_marked(cur_model(), chat)
-        stable_at = long_length(rendered) + turn.opening   //! every earlier turn, and the last turn's own opening
-        rendered |> push_from(turn.toks)
-        delete turn
-    }
+    var turn <- render_turn_marked(cur_model(), chat)
+    stable_at = long_length(rendered) + turn.opening   //! every earlier turn, and the last turn's own opening
+    rendered |> push_from(turn.toks)
+    delete turn
     // out-params: the sole caller hands them in empty and deletes them before every re-render
     prompt <- rendered      // nolint:PERF030 — empty on entry
     stop_ids <- turn_stop_ids(chat)   // nolint:PERF030 — empty on entry; the thinking-off extras ride the guard
@@ -3223,9 +3206,9 @@ def private handle_chat(srv : FrontLink; req : FrontReq; writer : WriterRef) {
     if (parked == MediaPark.answered) {
         return   // an error already went out; the defer frees js
     }
-    var no_media : array<float>
-    defer() { delete no_media }
-    handle_chat_tail(srv, writer, js, g_cur, no_media, 0l)
+    var no_refs : array<MediaRef>
+    defer() { delete no_refs }
+    handle_chat_tail(srv, writer, js, g_cur, no_refs)
 }
 
 enum private MediaPark {
@@ -3234,90 +3217,194 @@ enum private MediaPark {
     parked     // the request is parked with the media worker, which now owns js
 }
 
-// The chat route's media boundary: ONE image or ONE audio clip, on the FINAL message (a user
-// message carrying it). Any other placement warns and drops — an earlier turn has no render seam
-// (replays go through render_assistant, which has no splice), and a trailing tool turn must render
-// as tools.
+//! One media part of a request: the message and text offset it sits at, the content key its positions carry, and its
+//! soft-token rows once encoded. `n_rows` is known ahead of the rows for media this slot has encoded before.
+struct private MediaRef {
+    key : uint64
+    is_audio : bool
+    msg : int
+    text_before : int
+    payload : string            // the part's base64 / data URI, inside the parked request's JSON
+    n_rows : int64
+    grid : int2
+    rows : array<float>
+}
+
+//! what a slot remembers of media it encoded: the span's shape, which a transcript needs to lay the span out
+struct private MediaSeen {
+    n_rows : int64
+    grid : int2
+}
+
+let MEDIA_SPANS_LIMIT = 16     // media parts one request may carry, every message's
+let MEDIA_SEEN_LIMIT = 4096    // remembered span shapes; past it the table starts over
+
+var private g_media_seen : table<uint64; MediaSeen>
+
+//! the media parts of every user message, in transcript order, each at its text offset in its message
+def private collect_media_refs(msgs_v : JsonValue?; var refs : array<MediaRef>) {
+    let salt = hash(g_slots[g_cur].name)
+    for (i in range(length(msgs_v.value as _array))) {
+        let mv = (msgs_v.value as _array)[i]
+        let cv = mv?["content"]
+        continue if (cv == null || !(cv.value is _array))
+        let is_user = (mv?["role"] ?? "") == "user"
+        var at = 0
+        for (pv in (cv.value as _array)) {
+            let ptype = pv?["type"] ?? ""
+            var payload = ""
+            if (ptype == "text") {
+                at += length(pv?["text"] ?? "")
+            } elif (ptype == "image_url") {
+                let uv = pv?["image_url"]
+                payload = uv != null && uv.value is _string ? (uv ?? "") : (uv?["url"] ?? "")
+            } elif (ptype == "input_image") {
+                payload = pv?["image_url"] ?? ""
+            } elif (ptype == "input_audio") {
+                payload = pv?["input_audio"]?["data"] ?? ""
+            }
+            continue if (ptype == "text" || empty(payload) && ptype != "image_url" && ptype != "input_image" && ptype != "input_audio")
+            if (!is_user) {
+                to_log(LOG_WARNING, "/v1/chat/completions: dropping a media part on message {i} - media rides user messages\n")
+                continue
+            }
+            let is_audio = ptype == "input_audio"
+            refs |> emplace(MediaRef(key = hash_combine64(hash_combine64(hash(payload), salt), is_audio ? 1ul : 2ul),
+                                     is_audio = is_audio, msg = i, text_before = at, payload = payload))
+        }
+    }
+}
+
+//! Send the worker a job for every ref that needs rows - all of them under `force`, else the ones this slot never
+//! encoded; a job's id maps back to its ref. False with `why` when a part does not decode.
+def private encode_media_refs(rid : int64; var wire : MediaWire; force : bool; var why : string&) : bool {
+    for (r, ri in wire.refs, count()) {
+        continue if (!force && r.n_rows > 0l)
+        var file_bytes : array<uint8>
+        let decoded = (r.is_audio ? decode_base64_bytes(r.payload, file_bytes, why)
+            : decode_data_uri_bytes(r.payload, file_bytes, why))
+        if (!decoded) {
+            delete file_bytes
+            return false
+        }
+        let jid = next_id()
+        var vjob = MediaJob(id = jid, name = g_slots[wire.slot].name, file_bytes <- file_bytes, tag = "req{rid}",
+                            is_audio = r.is_audio,
+                            max_audio_frames = r.is_audio ? audio_decode_frame_cap(g_slots[wire.slot].model.config.seq_len) : 0)
+        g_media_jobs |> push_clone(vjob)
+        delete vjob
+        g_media_job_ref[jid] = MediaJobRef(wire = rid, at = ri)
+        g_media_pending++
+        wire.jobs_left++
+    }
+    return true
+}
+
+// The chat route's media boundary: every image and audio part of every user message stays in the transcript, at its
+// place among the message's text. A part this slot has encoded before goes to the scheduler with no rows - the
+// prefix cache holds its span on a continued chat - and only a new part parks with the media worker.
 def private park_media_request(srv : FrontLink; writer : WriterRef;
                                var js : JsonValue?; msgs_v : JsonValue?) : MediaPark {
-    var images : array<string>
-    defer() { delete images }
-    var audios : array<string>
-    defer() { delete audios }
-    let n_msgs = length(msgs_v.value as _array)
-    for (i in range(n_msgs)) {
-        var img_here : array<string>
-        var aud_here : array<string>
-        message_parts((msgs_v.value as _array)[i], "/v1/chat/completions", img_here, aud_here)
-        let is_final_user = i == n_msgs - 1 && ((msgs_v.value as _array)[i]?["role"] ?? "") == "user"
-        if ((!empty(img_here) || !empty(aud_here)) && !is_final_user) {
-            to_log(LOG_WARNING, "/v1/chat/completions: dropping {length(img_here) + length(aud_here)} media part(s) on message {i} — media is read from the FINAL user message only\n")
-        } else {
-            images |> push_from(img_here)
-            audios |> push_from(aud_here)
-        }
-        delete img_here
-        delete aud_here
-    }
-    if (empty(images) && empty(audios)) {
+    var refs : array<MediaRef>
+    collect_media_refs(msgs_v, refs)
+    if (empty(refs)) {
+        delete refs
         return MediaPark.none
     }
-    if (!empty(images) && !empty(audios)) {
-        bad_request(srv, writer, "one media clip per request — this message carries an image AND audio")
+    var refusal = ""
+    var has_new = false
+    for (r in refs) {
+        if (r.is_audio && !g_slots[g_cur].audio_armed) {
+            refusal = "model '{cur_name()}' has no audio arm — start the server with --audio-mmproj (or an --image-mmproj that carries an audio tower) for it to accept input_audio parts"
+        } elif (!r.is_audio && g_slots[g_cur].vision.kind == VisionKind.none) {
+            refusal = "model '{cur_name()}' has no vision arm — start the server with an image mmproj for it to accept image_url parts"
+        }
+        let seen = g_media_seen?[r.key] ?? MediaSeen()
+        r.n_rows = seen.n_rows
+        r.grid = seen.grid
+        has_new ||= seen.n_rows == 0l
+    }
+    if (empty(refusal) && length(refs) > MEDIA_SPANS_LIMIT) {
+        refusal = "this request carries {length(refs)} media parts; the limit is {MEDIA_SPANS_LIMIT}"
+    }
+    if (!empty(refusal)) {
+        delete refs
+        bad_request(srv, writer, refusal)
         return MediaPark.answered
     }
-    let is_audio = !empty(audios)
-    if (is_audio && !g_slots[g_cur].audio_armed) {
-        bad_request(srv, writer, "model '{cur_name()}' has no audio arm — start the server with --audio-mmproj (or an --image-mmproj that carries an audio tower) for it to accept input_audio parts")
-        return MediaPark.answered
-    }
-    if (!is_audio && g_slots[g_cur].vision.kind == VisionKind.none) {
-        bad_request(srv, writer, "model '{cur_name()}' has no vision arm — start the server with an image mmproj for it to accept image_url parts")
-        return MediaPark.answered
-    }
-    if (length(images) > 1 || length(audios) > 1) {
-        bad_request(srv, writer, "one media clip per request — this message carries {length(images) + length(audios)}")
-        return MediaPark.answered
-    }
-    if (!g_media_armed || g_media_ready < 1) {
+    if (has_new && (!g_media_armed || g_media_ready < 1)) {
+        delete refs
         service_unavailable(srv, writer, "the media worker is not ready")
         return MediaPark.answered
     }
-    if (g_media_pending >= MEDIA_QUEUE_LIMIT) {
+    if (has_new && g_media_pending >= MEDIA_QUEUE_LIMIT) {
+        delete refs
         service_unavailable(srv, writer, "the media queue is at capacity ({MEDIA_QUEUE_LIMIT}) — retry shortly")
         return MediaPark.answered
     }
-    var file_bytes : array<uint8>
+    // park at the encode boundary: the worker decodes + encodes off-thread, and drain_media_events resumes at
+    // handle_chat_tail with the rows; a request of known media resumes at once, its wire kept for a lost span
+    let rid = next_id()
+    set_writer_keepalive_timeout(srv, writer, LLM_WRITER_KEEPALIVE_MS)
+    g_media_wires[rid] <- MediaWire(writer = writer, js = js, slot = g_cur, refs <- refs)
+    var wire = unsafe(g_media_wires?[rid])
     var why = ""
-    let decoded = (is_audio ? decode_base64_bytes(audios[0], file_bytes, why)
-        : decode_data_uri_bytes(images[0], file_bytes, why))
-    if (!decoded) {
-        delete file_bytes
+    if (!encode_media_refs(rid, *wire, false, why)) {
+        drop_media_wire(rid, false)
         bad_request(srv, writer, why)
         return MediaPark.answered
     }
-    // park at the encode boundary: the worker decodes + encodes off-thread, and
-    // drain_media_events resumes at handle_chat_tail with the rows
-    let rid = next_id()
-    set_writer_keepalive_timeout(srv, writer, LLM_WRITER_KEEPALIVE_MS)
-    g_media_wires[rid] <- MediaWire(writer = writer, js = js, slot = g_cur, is_audio = is_audio)
-    let max_audio_frames = is_audio ? audio_decode_frame_cap(g_slots[g_cur].model.config.seq_len) : 0
-    var vjob = MediaJob(id = rid, name = g_slots[g_cur].name, file_bytes <- file_bytes, tag = "req{rid}",
-                        is_audio = is_audio, max_audio_frames = max_audio_frames)
-    g_media_jobs |> push_clone(vjob)
-    delete vjob
-    g_media_pending++
-    to_log(LOG_INFO, "[req {rid}] {is_audio ? "audio" : "image"} parked for the media worker ({g_media_pending} queued or in flight)\n")
+    if (wire.jobs_left > 0) {
+        to_log(LOG_INFO, "[req {rid}] {wire.jobs_left} media part(s) parked for the media worker, {length(wire.refs) - wire.jobs_left} known ({g_media_pending} queued or in flight)\n")
+    } else {
+        to_log(LOG_INFO, "[req {rid}] {length(wire.refs)} media part(s), every one known: no encode\n")
+        resume_media_request(srv, rid)
+    }
     return MediaPark.parked
+}
+
+//! free a parked request's wire; `keep_js` where the caller's own defer frees the request JSON
+def private drop_media_wire(rid : int64; free_js : bool) {
+    return if (!key_exists(g_media_wires, rid))
+    if (free_js) {
+        unsafe {
+            delete g_media_wires[rid].js
+        }
+    }
+    g_media_wires[rid].js = null
+    delete g_media_wires[rid]
+    g_media_wires |> erase(rid)
+}
+
+//! every job of a parked request is in: render and submit it. The wire stays until the stream's first event, since a
+//! span submitted with no rows may turn out lost.
+def private resume_media_request(srv : FrontLink; rid : int64) {
+    var wire = unsafe(g_media_wires?[rid])
+    return if (wire == null)
+    wire.submitted = true
+    handle_chat_tail(srv, wire.writer, wire.js, wire.slot, wire.refs, rid, wire.retried)
+    if (!key_exists(g_wires, rid)) {   // answered with an error: no stream to wait on
+        drop_media_wire(rid, true)
+    }
+}
+
+//! A stream finished `media_lost`: the prefix cache no longer held a span the request sent no rows for. Encode every
+//! part and submit again, once. False where there is nothing to retry.
+def private retry_lost_media(rid : int64) : bool {
+    var wire = unsafe(g_media_wires?[rid])
+    return false if (wire == null || wire.retried)
+    wire.retried = true
+    wire.submitted = false
+    var why = ""
+    to_log(LOG_INFO, "[req {rid}] a span the prefix cache no longer holds: encoding the request's media\n")
+    return encode_media_refs(rid, *wire, true, why) && wire.jobs_left > 0
 }
 
 // everything after the media boundary: re-derives the request fields from `js` (cheap), renders,
 // and registers. Runs synchronously for a text request; an image request re-enters here from
 // drain_media_events with the worker's rows.
 def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue?;   // nolint:STYLE037,STYLE038 — flat request-field derivation: one guard and one client-facing message per field
-                             slot : int; var media : array<float>; n_media : int64;
-                             media_is_audio : bool = false; resume_rid : int64 = 0l;
-                             media_grid : int2 = int2(0)) {
+                             slot : int; var refs : array<MediaRef>; resume_rid : int64 = 0l; resumed : bool = false) {
     g_cur = slot
     let msgs_v = js?["messages"]
     let streaming = js?["stream"] ?? false
@@ -3404,18 +3491,17 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
     var call_close = ""
     var think_stream = ThinkStream()
     var wire_tool_mode = ToolMode.none
-    var media_at = 0l
     var stable_at = 0l
     var start = 0
     while (true) {
         let render_error = render_chat_suffix(msgs_v, system, tools, max_new, start, think_set, think_val,
-                                              n_media > 0l, media_is_audio, prompt, stop_ids, close, nothink, call_open, call_close,
-                                              think_stream, wire_tool_mode, media_at, stable_at)
+                                              refs, prompt, stop_ids, close, nothink, call_open, call_close,
+                                              think_stream, wire_tool_mode, stable_at)
         if (!empty(render_error)) {
             bad_request(srv, writer, render_error)
             return
         }
-        let required = long_length(prompt) + n_media + (truncation == "auto" ? max_new : 1l)
+        let required = long_length(prompt) + (truncation == "auto" ? max_new : 1l)
         if (required <= cur_model().config.seq_len || truncation != "auto") {
             break
         }
@@ -3432,10 +3518,29 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
         delete nothink
         delete close
     }
-    register_request(srv, writer, prompt, stop_ids, close, media, media_at, n_media, params, max_new,
+    var spans <- media_spans(prompt, refs)
+    register_request(srv, writer, prompt, stop_ids, close, spans, params, max_new,
                      streaming, true, "chatcmpl",
                      has_tools, call_open, call_close, seed, think_stream, wire_tool_mode, resume_rid,
-                     media_is_audio, media_grid, nothink, stable_at, wants_usage(js))
+                     nothink, stable_at, wants_usage(js), resumed)
+}
+
+//! The spans of a rendered prompt: each ref's run of position ids, in prompt order, with the ref's rows moved in. A ref
+//! whose message the renderer dropped (auto truncation) has no run and makes no span.
+def private media_spans(prompt : array<int64>; var refs : array<MediaRef>) : array<MediaSpan> {
+    var spans : array<MediaSpan>
+    var from = 0l
+    for (r in refs) {
+        let first = media_position_id(r.key, 0l)
+        var at = from
+        while (at < long_length(prompt) && prompt[at] != first) {
+            at++
+        }
+        continue if (at >= long_length(prompt))
+        spans |> emplace(MediaSpan(at = at, n = r.n_rows, non_causal = !r.is_audio, grid = r.grid, rows <- r.rows))
+        from = at + r.n_rows
+    }
+    return <- spans
 }
 
 //! whether a request asks its stream to end on the usage chunk (`stream_options.include_usage`)
@@ -3470,8 +3575,8 @@ def private handle_completion(srv : FrontLink; req : FrontReq; writer : WriterRe
     // no stop ids and no close: raw completions run to the budget, matching bare generate()
     var none_stop : array<int64>
     var none_close : array<int64>
-    var no_media : array<float>
-    register_request(srv, writer, toks, none_stop, none_close, no_media, 0l, 0l,
+    var no_spans : array<MediaSpan>
+    register_request(srv, writer, toks, none_stop, none_close, no_spans,
                      params, max_new, streaming, false, "cmpl",
                      [seed = seed, include_usage = wants_usage(js)])
 }
@@ -3516,12 +3621,7 @@ def private reap_disconnected(srv : FrontLink) {
     reap_speech_wires(srv)
     var disconnected_vision <- gone_wires(srv, g_media_wires)
     for (id in disconnected_vision) {
-        unsafe {
-            delete g_media_wires[id].js
-        }
-        g_media_wires[id].js = null
-        delete g_media_wires[id]
-        g_media_wires |> erase(id)
+        drop_media_wire(id, true)
     }
     delete disconnected_vision
 }
@@ -3599,6 +3699,12 @@ def private flush_events(srv : FrontLink) {   // nolint:STYLE037,STYLE038 — on
             continue
         }
         g_cur = w.slot   // response builders read the wire's slot (cur_name / cur_model)
+        if (e.kind != SchedEventKind.piece && e.finish == "media_lost" && retry_lost_media(e.stream)) {
+            delete g_wires[e.stream]   // the retry registers the stream's wire again, under the same id
+            g_wires |> erase(e.stream)
+            continue
+        }
+        drop_media_wire(e.stream, true)   // the stream is under way: its parked request has nothing left to retry
         if (e.kind == SchedEventKind.piece) {
             if (!w.streaming || w.has_tools) {
                 w.reply_parts |> push(e.text)   // buffered reply, and/or the finish-time tool-call parse
@@ -4009,7 +4115,7 @@ def private handle_streams(var resp : Reply) : http_status {
                 id = st.id, model = mname,
                 state = st.state == StreamState.prefilling ? "prefilling" : "decoding",
                 age_s = age_seconds(st.t_admit),
-                n_prompt = long_length(st.prompt) + st.n_media, n_cached = st.n_cached,
+                n_prompt = long_length(st.prompt), n_cached = st.n_cached,
                 n_prefilled = st.n_prefilled, n_gen = st.n_gen, max_new = st.max_new,
                 ttft_ms = float(st.ttft_us) / 1000.0,
                 prompt_head = st.prompt_head, gen_tail = utf8_trim_partial_end(string(st.gen_tail_bytes))))
@@ -4018,7 +4124,7 @@ def private handle_streams(var resp : Reply) : http_status {
             out.streams |> push(OaiStreamInfo(
                 id = q.id, model = mname, state = "queued",
                 age_s = q.t_submit != 0l ? age_seconds(q.t_submit) : 0.0,
-                n_prompt = long_length(q.prompt) + q.n_media, max_new = q.max_new))
+                n_prompt = long_length(q.prompt), max_new = q.max_new))
         }
         for (d in sch.recent_done) {
             out.streams |> push(OaiStreamInfo(
@@ -5494,10 +5600,22 @@ struct private MediaEvent {
 
 struct private MediaWire {
     @do_not_delete writer : WriterRef
-    @do_not_delete js : JsonValue?   // the parked parsed request — drain_media_events deletes it explicitly
+    @do_not_delete js : JsonValue?   // the parked parsed request — `drop_media_wire` deletes it explicitly
     slot : int
-    is_audio : bool                  // picks the render span (audio vs image) and the causal splice
+    refs : array<MediaRef>           // the request's media parts, in transcript order
+    jobs_left : int                  // encode jobs the worker still owes this request
+    failed : string                  // the first job failure's reason
+    submitted : bool                 // rendered and handed to the scheduler: kept only for a lost span's retry
+    retried : bool                   // a lost span was retried once already
 }
+
+//! which ref of which parked request an encode job serves
+struct private MediaJobRef {
+    wire : int64
+    at : int
+}
+
+var private g_media_job_ref : table<int64; MediaJobRef>
 
 let MEDIA_QUEUE_LIMIT = 8   // parked image requests are heavy (decoded bytes ride the channel)
 
@@ -5707,33 +5825,43 @@ def private drain_media_events(srv : FrontLink) {
             var ev : MediaEvent
             ev := event
             defer() { delete ev }
-            // interior pointer into g_media_wires — nothing inserts into the table between here
-            // and the erase (the only insert is handle_chat's park, and handlers cannot run inside
-            // this drain)
-            var wire = unsafe(g_media_wires?[ev.id])
+            let jr = g_media_job_ref?[ev.id] ?? MediaJobRef()
+            g_media_job_ref |> erase(ev.id)
+            // interior pointer into g_media_wires — nothing inserts into the table inside this drain
+            var wire = unsafe(g_media_wires?[jr.wire])
             if (wire == null) {
                 return   // the client vanished while encoding; reap released the writer
             }
-            if (!is_writer_connected(srv, wire.writer)) {
-                release_writer(srv, wire.writer)
-            } elif (!ev.ok) {
-                bad_request(srv, wire.writer, ev.why)
-            } elif (reject_deferred_while_draining(srv, wire.writer)) {
-                pass   // a clean terminal 503: the drain must not admit a new generation
+            wire.jobs_left--
+            if (!ev.ok) {
+                wire.failed = empty(wire.failed) ? ev.why : wire.failed
             } else {
                 if (ev.is_audio) {
-                    to_log(LOG_INFO, "[req {ev.id}] audio {float(ev.audio_cs) / 100f}s -> {ev.n_media} soft tokens in {ev.enc_ms}ms off-thread\n")
+                    to_log(LOG_INFO, "[req {jr.wire}] audio {float(ev.audio_cs) / 100f}s -> {ev.n_media} soft tokens in {ev.enc_ms}ms off-thread\n")
                 } else {
-                    to_log(LOG_INFO, "[req {ev.id}] image {ev.width}x{ev.height} -> {ev.n_media} soft tokens in {ev.enc_ms}ms off-thread\n")
+                    to_log(LOG_INFO, "[req {jr.wire}] image {ev.width}x{ev.height} -> {ev.n_media} soft tokens in {ev.enc_ms}ms off-thread\n")
                 }
-                handle_chat_tail(srv, wire.writer, wire.js, wire.slot, ev.rows, ev.n_media, ev.is_audio, ev.id, ev.grid)
+                wire.refs[jr.at].n_rows = ev.n_media
+                wire.refs[jr.at].grid = ev.grid
+                delete wire.refs[jr.at].rows
+                wire.refs[jr.at].rows <- ev.rows
+                if (length(g_media_seen) >= MEDIA_SEEN_LIMIT) {
+                    g_media_seen |> clear()
+                }
+                g_media_seen[wire.refs[jr.at].key] = MediaSeen(n_rows = ev.n_media, grid = ev.grid)
             }
-            unsafe {
-                delete wire.js
+            return if (wire.jobs_left > 0)
+            if (!is_writer_connected(srv, wire.writer)) {
+                release_writer(srv, wire.writer)
+                drop_media_wire(jr.wire, true)
+            } elif (!empty(wire.failed)) {
+                bad_request(srv, wire.writer, wire.failed)
+                drop_media_wire(jr.wire, true)
+            } elif (reject_deferred_while_draining(srv, wire.writer)) {
+                drop_media_wire(jr.wire, true)   // a clean terminal 503: the drain must not admit a new generation
+            } else {
+                resume_media_request(srv, jr.wire)
             }
-            wire.js = null
-            delete g_media_wires[ev.id]
-            g_media_wires |> erase(ev.id)
         }
     }
 }

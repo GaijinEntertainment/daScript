@@ -93,6 +93,20 @@ def private audio_chat_body(b64 : string; text : string) : string {
     return "\{\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"input_audio\",\"input_audio\":\{\"data\":\"{b64}\",\"format\":\"wav\"}},\{\"type\":\"text\",\"text\":\"{text}\"}]}]}"
 }
 
+//! a chat reply's prompt and cached position counts off its usage
+def private usage_of(t : T?; body : string; tag : string) : tuple<prompt : int; cached : int> {
+    var err : string
+    var js = read_json(body, err)
+    t |> success(js != null, "{tag}: chat JSON parses")
+    return (prompt = 0, cached = 0) if (js == null)
+    let res = (prompt = int(js?["usage"]?["prompt_tokens"] ?? 0l), cached = int(js?["usage"]?["prompt_tokens_details"]?["cached_tokens"] ?? 0l))
+    to_log(LOG_INFO, "{tag}: prompt {res.prompt}, cached {res.cached}\n")
+    unsafe {
+        delete js
+    }
+    return res
+}
+
 [test]
 def test_openai_server_audio(t : T?) {   // nolint:STYLE038 — one live server session per test: every endpoint assertion runs against that one boot
     t |> run("native audio: input_audio -> gemma4a soft tokens -> a transcription (needs E2B + its mmproj)") @(t : T?) {
@@ -139,11 +153,28 @@ def test_openai_server_audio(t : T?) {   // nolint:STYLE038 — one live server 
                     }
                 }
             }
-            // an image AND audio on the ARMED slot: still refused by shape — one media splice per request
+            // an image AND audio on the ARMED slot: both parts reach the worker, and the bytes that are no image answer the 400
             POST("{base_url}/v1/chat/completions",
                  "\{\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png;base64,AAAA\"}},\{\"type\":\"input_audio\",\"input_audio\":\{\"data\":\"{slice(b64, 0, 64)}\",\"format\":\"wav\"}}]}]}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
-                t |> success(find(string(resp.body), "image AND audio") >= 0, "the 400 names the two-media shape")
+                t |> success(find(string(resp.body), "did not decode") >= 0 || find(string(resp.body), "decode") >= 0, "the 400 names the part that does not decode")
+            }
+            // the clip's cost is paid once: asked again, and continued with the clip in the history, the request attaches
+            // the clip's span off the prefix cache and never reaches the tower
+            let ask = "\{\"max_tokens\":8,\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"input_audio\",\"input_audio\":\{\"data\":\"{b64}\",\"format\":\"wav\"}},\{\"type\":\"text\",\"text\":\"Transcribe this audio.\"}]}"
+            var first_prompt = 0
+            POST("{base_url}/v1/chat/completions", "{ask}]}") $(resp) {
+                let u = usage_of(t, string(resp.body), "the clip asked again")
+                first_prompt = u.prompt
+                t |> success(u.cached >= u.prompt - 1 && u.prompt > 40, "asked again, all but the last position attaches ({u.cached} of {u.prompt})")
+            }
+            POST("{base_url}/v1/chat/completions", "{ask},\{\"role\":\"assistant\",\"content\":\"ok\"},\{\"role\":\"user\",\"content\":\"Thanks.\"}]}") $(resp) {
+                let u = usage_of(t, string(resp.body), "the chat continued")
+                t |> success(u.prompt > first_prompt, "the continued chat keeps the clip in its transcript ({u.prompt} > {first_prompt} positions)")
+                t |> success(u.cached > 40 && u.cached <= first_prompt, "and attaches the first turn, the clip's span in it ({u.cached} of the first turn's {first_prompt})")
+            }
+            GET("{base_url}/v1/stats") $(resp) {
+                t |> success(find(string(resp.body), "media") >= 0, "stats still answers after the media turns")
             }
             // input_audio.data that is not base64: the synchronous 400
             POST("{base_url}/v1/chat/completions", audio_chat_body("!!!not-base64!!!", "hi")) $(resp) {
