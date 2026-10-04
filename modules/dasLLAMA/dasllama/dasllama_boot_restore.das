@@ -21,7 +21,9 @@ class private BootRestoreMacro : AstFunctionAnnotation {
         }
         for_each_global(compiling_module()) $(g) {
             if (g.init != null && g.init is ExprAddr) {
-                blk.list |> emplace_new(qmacro_expr(${ if ($i(g.name) == null) { $i(g.name) = $e(g.init); } }))
+                var guard = qmacro_expr(${ if ($i(g.name) == null) { $i(g.name) = $e(g.init); } })
+                force_generated(guard, true)
+                blk.list |> emplace_new(guard)
             }
         }
         return true
