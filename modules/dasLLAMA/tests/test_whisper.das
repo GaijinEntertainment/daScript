@@ -898,7 +898,7 @@ def test_whisper_metal_wdec_flush(t : T?) {
                 tt |> equal(metal_wdec_stats().steps, d1.steps, "the device served no step of the wide batch: the CPU chain decoded it over the flushed memory")
                 dev_logits := sg.w.ds.logits
                 wdec_flush_compare(tt, m.whisper, cpu_logits, dev_logits, cpu_moved)   // inside the queue: the argmax is the parallel one
-                set_metal_wdec_step_min_d(1024l)
+                set_metal_wdec_step_min_d(METAL_WDEC_STEP_MIN_D)
             }
             delete cpu_logits
             delete cpu_moved
@@ -1232,7 +1232,7 @@ def test_whisper_crowned_word_level(t : T?) {
             set_metal_tower(true)   // restore: the defaults later cells' GPU-serving claims see
             set_metal_wdec(true)
             set_metal_wdec_step(true)
-            set_metal_wdec_step_min_d(1024l)   // the measured serving floor (the declaration default)
+            set_metal_wdec_step_min_d(METAL_WDEC_STEP_MIN_D)   // the measured serving floor (the declaration default)
             delete m
             delete mm
         } else {

@@ -1512,7 +1512,7 @@ def test_whisper_metal_cross_kv(tst : T?) {
             t |> success(rearm_text == gpu_text, "post-shutdown transcript unchanged")
             // the serving FLOOR: at the default min_d, tiny cross-KV-serves but never steps,
             // and the small decline is recorded as policy
-            set_metal_wdec_step_min_d(1024l)
+            set_metal_wdec_step_min_d(METAL_WDEC_STEP_MIN_D)
             let sm0 = metal_wdec_stats()
             let small_text = wdec_transcribe(w8, samples)
             let sm1 = metal_wdec_stats()

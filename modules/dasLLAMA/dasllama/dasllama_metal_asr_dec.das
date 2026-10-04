@@ -29,7 +29,9 @@ var private g_wd_failed = false
 var private g_wd_pool : MetalBufferPool
 var private g_wd_env = true
 var private g_wd_step_env = true    // the decode-step half (DASLLAMA_METAL_WDEC_STEP); windows capture it
-var private g_wd_step_min_d = 1024l   // the step's serving floor (measured: d=1280 wins 1.6x, d=384 loses)
+//! The text width the decode step serves from: at 384 (tiny) the device step is slower than the CPU's, from 512 (base) up it is faster.
+let METAL_WDEC_STEP_MIN_D = 512l
+var private g_wd_step_min_d = METAL_WDEC_STEP_MIN_D
 // the attached decoder, keyed on the dq plane (base, length): ONE live whisper decoder per
 // process is the serving contract — a key mismatch re-attaches; tests switching models call
 // metal_wdec_shutdown between them (address reuse after an unmap could alias the key)
