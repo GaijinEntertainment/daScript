@@ -1761,6 +1761,15 @@ def private vulkan_bake_flavor(var t : Model; path : string; vk_tag : string) {
         return
     }
     if (vulkan_trim()) {
+        //! the same rule as the streaming mint's: a lane this run cannot serve (the route, a prefill pin or override, the tier's
+        //! seams, the card's room) is not written under the trimmed identity, or the next run would serve it untrimmed
+        let trim_why = resident_trim_decline(t)
+        if (!empty(trim_why) && resident_trim_decline_is_run_mode(trim_why)) {
+            to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_TRIM / set_vulkan_trim asked for the trimmed vulkan lane, and this run cannot mint it ({trim_why}) - the lane this run collected from RAM is not written\n")
+            delete t.vkblob
+            delete t.vkplan
+            return
+        }
         to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_TRIM / set_vulkan_trim asked for the trimmed vulkan lane, and this arm bakes the lane from RAM with the planar families kept - the lane's identity still folds the trim\n")
     }
     let ts = ref_time_ticks()
@@ -2044,6 +2053,7 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
             var streamed = Model()
             var served = false
             var saved = false
+            var mint_held = false   //! a trim ask this run cannot mint (a run-mode decline): no lane is written, the streamed build serves from memory
             let ts_s = ref_time_ticks()
             let save = image_save_enabled()
             vk_mint_reset()
@@ -2057,15 +2067,17 @@ def load_model_cached(path : string; mode : QuantMode = QuantMode.fp32;
                     mt.planes_trimmed = empty(trim_why)
                     if (!mt.planes_trimmed) {
                         //! a run-mode decline writes NO lane: an untrimmed lane saved under the trimmed identity would keep serving
-                        //! untrimmed once the knob lifts, and the load-time recheck reads trimmed lanes alone
+                        //! untrimmed once the knob lifts, and the load-time recheck reads trimmed lanes alone; the build stays on
+                        //! this arm (the eager rail would cache a planar image, and the RAM bake never trims)
                         if (resident_trim_decline_is_run_mode(trim_why)) {
                             to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_TRIM / set_vulkan_trim asked for the trimmed vulkan lane, and this run cannot mint it ({trim_why}) - no lane is written; the streamed build serves planar from memory\n")
-                            return false
+                            mint_held = true
+                        } else {
+                            to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_TRIM / set_vulkan_trim asked for the trimmed vulkan lane, and the whole-model driver would not take '{path}' whole ({trim_why}) - the lane keeps its planar families\n")
                         }
-                        to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_TRIM / set_vulkan_trim asked for the trimmed vulkan lane, and the whole-model driver would not take '{path}' whole ({trim_why}) - the lane keeps its planar families\n")
                     }
                 }
-                if (save) {
+                if (save && !mint_held) {
                     saved = save_model_image_streaming(mt, gm, gbytes, jobs, s_img, s_tag, s_quant)
                     if (!saved) {
                         to_log(LOG_WARNING, "dasLLAMA: the image save for '{path}' declined - serving the streamed build from memory\n")

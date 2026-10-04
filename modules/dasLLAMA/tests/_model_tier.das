@@ -20,6 +20,7 @@ require daslib/strings_boost   // split — the DASLLAMA_TEST_ARMS comma list
 require math   // the tower-parity statistics
 require dasllama/dasllama_gguf   // gguf_shard_paths — split models tier on their TOTAL size
 require dasllama/dasllama_common   // decode_ — the eyeball rail detokenizes through the model
+require dasllama/dasllama_tokenizer   // TokKind — a model loaded without its tokenizer logs ids
 require dasllama/dasllama_env
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_resident   // resident_mirror_dtype — the mirror codec the box arms
@@ -97,7 +98,8 @@ def private filter_on(t : T?; filter, env, what, name : string; exact : bool) : 
 
 def eyeball_str(s : string) : string => replace(s, "\n", "\\n")
 
-def eyeball_text(m : Model; ids : array<int64>) : string => eyeball_str(decode_(m, ids))
+//! a model loaded without its tokenizer (`load_gguf`) logs the ids themselves, since there is no vocabulary to decode them through
+def eyeball_text(m : Model; ids : array<int64>) : string => m.tok.kind == TokKind.unset ? "ids {ids}" : eyeball_str(decode_(m, ids))
 
 def log_gen_texts(m : Model; tag : string; cpu_ids, gpu_ids : array<int64>) {
     to_log(LOG_INFO, "{tag} CPU text: {eyeball_text(m, cpu_ids)}\n")

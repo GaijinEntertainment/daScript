@@ -214,6 +214,7 @@ def test_vulkan_mint_trim_follows_the_driver(tst : T?) {
                     "a trim ask under the override writes no lane: the streamed build serves planar from memory and nothing lands under the trimmed identity")
                 delete minted
                 moe_gpu_drop_model()
+                t |> success(!stat(image_path_for(path, "", "q8")).is_valid, "control: the held mint cached no planar image either - the next load stays on the streaming arm, the one that trims")
                 select_prefill_override(override_found)
                 var again <- load_cached_q8(path)
                 t |> success(again.planes_trimmed && moe_gpu_resident_active(), "with the override lifted the next load mints the trimmed lane and the driver serves it")
