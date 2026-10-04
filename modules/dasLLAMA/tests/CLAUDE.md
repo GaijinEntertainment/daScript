@@ -1708,7 +1708,8 @@ token and bar, the batch with its last token changed landing outside the bar as 
 CPU blocks over them transcribe the all-CPU chain's text), `test_whisper_vulkan_wdec_lifetime` (tiny, one session reused the way a
 serving worker reuses one: a model drop between two transcriptions - the second serves again and reads the same; the decoder knob
 turned off between two - the second reads as a fresh knob-off session; the block hooks pinned off after a served window - no
-handoff for the CPU-encoded windows, the text of the CPU-encoder chain), `test_whisper_q8_0_file` (a whisper.cpp q8_0 bin of tiny loads - its
+handoff for the CPU-encoded windows, the text of the CPU-encoder chain), `test_parakeet_q8_0_file` (the parakeet v3 q8_0 bin loads through the same
+reader and reads jfk as the f32 bin does; skips without it), `test_whisper_q8_0_file` (a whisper.cpp q8_0 bin of tiny loads - its
 Q8_0 tensors read as each block's scale times its quants - and reads jfk as the f16 bin does; skips
 without `ggml-tiny-q8_0.bin`), `test_whisper_metal_ln_post`
 (tiny, the f32 encoder minted in memory: the blocks-with-post-norm seat declines with the tower

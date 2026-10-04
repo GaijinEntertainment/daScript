@@ -896,7 +896,9 @@ Each is a stage and the models it holds for, read off the drivers' own gates:
 - **The whisper decode step** serves on the device from a text width of 512 up
   (`METAL_WDEC_STEP_MIN_D`); tiny's (384) runs on the CPU, where the device step is the slower
   one - 21.8 ms a request's decode against 17.8.
-- **The parakeet decode step** (the TDT predictor and joint) is a CPU team publish.
+- **The parakeet decode** (the TDT predictor and joint, the pick) and **its mel** run on the CPU: of a
+  64 s clip's 78 ms, the decode is 27.0 (260 steps at 78 us) and the mel 7.1, beside 44.9 of encode
+  on the device.
 - **The q8 encoder lane** declines `quant_mode` on gemma4a, canary and parakeet, so those families
   serve their f32 lane on the device at the larger image; the whisper-class tower reads q8.
 - **Qwen3-ASR, Qwen3-Omni and Canary-Qwen** have had no stage-by-stage check.

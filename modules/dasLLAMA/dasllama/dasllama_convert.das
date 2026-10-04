@@ -35,6 +35,41 @@ def rd_f32(b : array<uint8> | #; o : int64) : float {
     return unsafe(reinterpret<float>(rd_u32(b, o)))
 }
 
+let GGML_BIN_Q8_BLOCK_ELEMS = 32l   //!< a Q8_0 block of a ggml bin: an f16 scale, then this many quants
+let GGML_BIN_Q8_BLOCK_BYTES = 34l
+
+//! the bytes a tensor of ggml type `ttype` takes in a whisper-style bin: f32, f16, or Q8_0 blocks
+def ggml_bin_tensor_bytes(ttype : int; n_elem : int64) : int64 {
+    if (ttype == GGML_TYPE_F32) return n_elem * 4l
+    if (ttype == GGML_TYPE_F16) return n_elem * 2l
+    if (ttype == GGML_TYPE_Q8_0) return (n_elem / GGML_BIN_Q8_BLOCK_ELEMS) * GGML_BIN_Q8_BLOCK_BYTES
+    panic("dasLLAMA: ggml bin tensor type {ttype} - f32, f16 and q8_0 tensors load")
+    return 0l
+}
+
+//! `n` elements of a ggml bin tensor at byte `off` into `dst[dst_off..)` as f32: byte-wise, the bin stores its data
+//! unaligned; a Q8_0 element is its block's scale times its quant
+def ggml_bin_read_f32(b : array<uint8> | #; ttype : int; off, n : int64; var dst : array<float>; dst_off : int64) {
+    if (ttype == GGML_TYPE_F32) {
+        for (i in range64(n)) {
+            dst[dst_off + i] = rd_f32(b, off + i * 4l)
+        }
+    } elif (ttype == GGML_TYPE_F16) {
+        for (i in range64(n)) {
+            dst[dst_off + i] = f16_to_f32(rd_u16(b, off + i * 2l))
+        }
+    } else {
+        for (blk in range64(ggml_bin_tensor_bytes(ttype, n) / GGML_BIN_Q8_BLOCK_BYTES)) {
+            let at = off + blk * GGML_BIN_Q8_BLOCK_BYTES
+            let scale = f16_to_f32(rd_u16(b, at))
+            for (i in range64(GGML_BIN_Q8_BLOCK_ELEMS)) {
+                dst[dst_off + blk * GGML_BIN_Q8_BLOCK_ELEMS + i] = scale * float(int8(b[at + 2l + i]))
+            }
+        }
+    }
+}
+
+
 def rd_i32(b : array<uint8> | #; o : int64) : int {
     return int(rd_u32(b, o))
 }

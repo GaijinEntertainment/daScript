@@ -809,6 +809,40 @@ def test_whisper_q8_0_file(t : T?) {
     }
 }
 
+//! one parakeet bin staged and minted in memory on the lane `q8`, reading `samples`
+def private parakeet_text(path : string; q8 : bool; samples : array<float>) : string {
+    var inscope m = AsrModel(kind = AsrKind.parakeet)
+    var inscope stg <- stage_parakeet_model(path, q8)
+    mint_parakeet_model(stg, m.pk, q8)
+    var text = ""
+    with_dasllama_jobque_() {
+        var inscope s <- create_session(m, "en")
+        text = transcribe(m, s, samples)
+    }
+    return text
+}
+
+//! A parakeet q8_0 bin loads through the reader the whisper bins share, and reads what the f32 bin of the same model does.
+[test]
+def test_parakeet_q8_0_file(t : T?) {
+    t |> run("ggml-parakeet-tdt-0.6b-v3-q8_0.bin: a q8_0 bin loads and reads jfk as the f32 bin does") @(tt : T?) {
+        let f32_path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
+        let q8_path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-q8_0.bin")
+        return if (!jit_model_available(tt, f32_path) || !jit_model_available(tt, q8_path))
+        let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+        if (empty(samples)) {
+            tt |> skip("jfk.wav not present")
+            return
+        }
+        let from_f32 = parakeet_text(f32_path, false, samples)
+        let from_q8 = parakeet_text(q8_path, false, samples)
+        to_log(LOG_INFO, "parakeet v3 f32 bin: '{from_f32}'\n")
+        to_log(LOG_INFO, "parakeet v3 q8_0 bin: '{from_q8}'\n")
+        tt |> success(!empty(from_q8), "the q8_0 bin transcribes")
+        tt |> equal(from_q8, from_f32, "and reads what the f32 bin reads")
+    }
+}
+
 //! the largest element difference of two row images over the reference's largest magnitude; 2 where a length differs
 def private rows_rel_max(got, want : array<float>) : float {
     return 2.0 if (length(got) != length(want) || empty(want))

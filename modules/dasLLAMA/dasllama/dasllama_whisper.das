@@ -412,15 +412,6 @@ def private bytes_str(b : array<uint8> | #; o, n : int64) : string {
 }
 
 let private GGML_FTYPE_MOSTLY_Q8_0 = 7   //!< the file type whisper.cpp's quantizer stamps a q8_0 bin with
-let private WT_Q8_BLOCK_ELEMS = 32l
-let private WT_Q8_BLOCK_BYTES = 34l      //!< a Q8_0 block on disk: an f16 scale and 32 quants
-
-//! a tensor's bytes in the bin by its ggml type
-def private wt_bytes(tt : int; n_elem : int64) : int64 {
-    if (tt == GGML_TYPE_F32) return n_elem * 4l
-    if (tt == GGML_TYPE_F16) return n_elem * 2l
-    return (n_elem / WT_Q8_BLOCK_ELEMS) * WT_Q8_BLOCK_BYTES
-}
 
 // Read a tensor's raw data (f32, f16 or Q8_0 blocks) into dst[dst_off..) as fp32. Byte-wise reads — the
 // bin stores tensor data unaligned.
@@ -433,23 +424,7 @@ def private wt_read(recs : table<string; WTensorRec>; b : array<uint8> | #; name
     if (r.n_elem != n) {
         panic("dasLLAMA whisper: tensor '{name}' has {r.n_elem} elements, want {n}")
     }
-    if (r.ttype == GGML_TYPE_F32) {
-        for (i in range64(n)) {
-            dst[dst_off + i] = rd_f32(b, r.off + i * 4l)
-        }
-    } elif (r.ttype == GGML_TYPE_Q8_0) {   // a block: its f16 scale, then 32 quants
-        for (blk in range64(n / WT_Q8_BLOCK_ELEMS)) {
-            let at = r.off + blk * WT_Q8_BLOCK_BYTES
-            let scale = f16_to_f32(rd_u16(b, at))
-            for (i in range64(WT_Q8_BLOCK_ELEMS)) {
-                dst[dst_off + blk * WT_Q8_BLOCK_ELEMS + i] = scale * float(int8(b[at + 2l + i]))
-            }
-        }
-    } else {
-        for (i in range64(n)) {
-            dst[dst_off + i] = f16_to_f32(rd_u16(b, r.off + i * 2l))
-        }
-    }
+    ggml_bin_read_f32(b, r.ttype, r.off, n, dst, dst_off)
 }
 
 // Conv1d weight (flat [c_out][c_in][k=3], k contiguous — torch layout) permuted to the
@@ -896,7 +871,7 @@ def private whisper_index(bytes : array<uint8> | #; n_bytes : int64; var st : Wh
         let name = bytes_str(bytes, o, nl)
         o += nl
         recs[name] = WTensorRec(ttype = tt, n_elem = ne, off = o)
-        o += wt_bytes(tt, ne)
+        o += ggml_bin_tensor_bytes(tt, ne)
     }
 
     // encoder tower layout -> AudioTower scalars + one job per tensor, in blob-offset order
