@@ -46,23 +46,11 @@ def private make_conv(g : ConvGeom; wscale, woff : float) : TtsConv1d {
     return <- c
 }
 
-//! the conv's weights as `tts_slab_conv` lays them, the columns past k * cin poisoned: the im2col's zero columns keep them out
+//! the prepared conv's weights as `tts_slab_conv` lays them, the columns past k * cin poisoned: the im2col's zero columns keep them out
 def private slab_rows(c : TtsConv1d; kdim : int) : array<float> {
-    let cin = int(c.cin)
-    let cout = int(c.cout)
-    let k = int(c.k)
-    var w : array<float>
-    w |> resize(cout * kdim)
-    for (co in range(cout)) {
-        for (j in range(k * cin, kdim)) {
-            w[co * kdim + j] = POISON
-        }
-        for (ci in range(cin)) {
-            for (tap in range(k)) {
-                let src = c.transposed ? (ci * cout + co) * k + tap : (co * cin + ci) * k + tap
-                w[co * kdim + tap * cin + ci] = c.w[src]
-            }
-        }
+    var w <- [for (_i in range(int(c.cout) * kdim)); POISON]
+    for (co in range64(c.cout)) {
+        conv1d_weight_row(c, co, w, co * int64(kdim))
     }
     return <- w
 }
@@ -92,6 +80,12 @@ def private im2col_arm(t : T?; tag : string; g : ConvGeom; on_f16_lattice : bool
         let tout = int(conv1d_out_len(c, int64(g.tin)))
         t |> equal(tout, g.tout, "{tag}: the output length")
         let kdim = (g.k * g.cin + 31) / 32 * 32
+        var x <- row_fill(g.cin * g.tin, 41, 7, on_f16_lattice ? F16_LATTICE : 0.05, on_f16_lattice ? F16_LATTICE_OFF : 2.1)
+        var x_rows : array<float>
+        if (g.rows_x) {
+            transpose_ct(x, int64(g.cin), int64(g.tin), x_rows)
+        }
+        var y_ref <- conv_ref(c, x, g.tin)
         var w <- slab_rows(c, kdim)
         var w16 : array<uint16>
         if (on_f16_lattice) {
@@ -100,12 +94,6 @@ def private im2col_arm(t : T?; tag : string; g : ConvGeom; on_f16_lattice : bool
                 cvt_f32_to_f16_sat(addr(w16[0]), addr(w[0]), long_length(w))
             }
         }
-        var x <- row_fill(g.cin * g.tin, 41, 7, on_f16_lattice ? F16_LATTICE : 0.05, on_f16_lattice ? F16_LATTICE_OFF : 2.1)
-        var x_rows : array<float>
-        if (g.rows_x) {
-            transpose_ct(x, int64(g.cin), int64(g.tin), x_rows)
-        }
-        var y_ref <- conv_ref(c, x, g.tin)
         let ny = tout * g.cout
         with_cell_planes() $(var cp : CellPlanes) {
             let xp = cp |> in_(g.rows_x ? x_rows : x, g.xoff)
