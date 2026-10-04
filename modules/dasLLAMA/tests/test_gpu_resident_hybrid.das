@@ -217,12 +217,12 @@ let private GATED_CODEC_PAIR_REL = 0.8
 
 [test]
 def test_gpu_resident_hybrid_gated_block_codecs(t : T?) {
-    let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
+    let file = "Qwen3.5-0.8B-Q8_0.gguf"
     t |> run("Qwen3.5-0.8B: a q8_0 K/V mirror under the gated attention - resident prefill + decode vs the CPU chain on q8_0 sessions") @(t : T?) {
-        cell_codec_forced_feed(t, path, 40l, KVDtype.q8_0, GATED_Q8KV_BAR_REL)
+        cell_codec_forced_feed(t, file, 40l, KVDtype.q8_0, GATED_Q8KV_BAR_REL)
     }
     t |> run("Qwen3.5-0.8B: a tq4 K/V mirror under the gated attention - the un-rotation applies the head gate - against the CPU chain's tq4 and f16 rows") @(t : T?) {
-        cell_codec_distance(t, path, 40l, KVDtype.tq4, false, GATED_CODEC_DIST_REL, GATED_CODEC_PAIR_REL)
+        cell_codec_distance(t, file, 40l, KVDtype.tq4, false, GATED_CODEC_DIST_REL, GATED_CODEC_PAIR_REL)
     }
 }
 

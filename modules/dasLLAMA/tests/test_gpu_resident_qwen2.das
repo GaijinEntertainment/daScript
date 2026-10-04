@@ -45,11 +45,9 @@ let private CODEC_PAIR_REL = 0.8    //! the two codec chains' distance from each
 //! the CPU reads Q8_0 blocks - against 0.97 for a row held to the next one (the control)
 let private ROWS_BARS = StoredRowsBars(k = 0.02, v_step = 0.05, v_prefill_of_ctrl = 0.6)
 
-def private carrier_path() : string => path_join(models_dir(), CARRIER)
-
 [cold_path]
 def private qwen2_forced_feed(t : T?; n : int64) {
-    let path = carrier_path()
+    let path = path_join(models_dir(), CARRIER)
     if (!resident_ready(t, path)) return
     var tr <- load_model_(path, QuantMode.q8)
     t |> success(tr.config.attn_qkv_bias, "the qwen2 carries the q/k/v projection bias the arm exists for")
@@ -81,41 +79,41 @@ def test_gpu_resident_qwen2_bias(t : T?) {
 [test]
 def test_gpu_resident_qwen2_q8kv(t : T?) {
     t |> run("Qwen2.5-0.5B: the q8_0 K/V mirror - resident prefill + decode vs the CPU chain on q8_0 sessions, one window") @(t : T?) {
-        cell_codec_forced_feed(t, carrier_path(), 40l, KVDtype.q8_0, Q8KV_BAR_REL)
+        cell_codec_forced_feed(t, CARRIER, 40l, KVDtype.q8_0, Q8KV_BAR_REL)
     }
     t |> run("Qwen2.5-0.5B: the q8_0 K/V mirror across two windows") @(t : T?) {
         assert_pf_window(t)
-        cell_codec_forced_feed(t, carrier_path(), PF_WINDOW_ROWS + 88l, KVDtype.q8_0, Q8KV_BAR_REL)
+        cell_codec_forced_feed(t, CARRIER, PF_WINDOW_ROWS + 88l, KVDtype.q8_0, Q8KV_BAR_REL)
     }
 }
 
 [test]
 def test_gpu_resident_qwen2_tq4kv(t : T?) {
     t |> run("Qwen2.5-0.5B: the tq4 K/V mirror - resident prefill + decode against the CPU chain's tq4 and f16 rows, one window") @(t : T?) {
-        cell_codec_distance(t, carrier_path(), 40l, KVDtype.tq4, false, CODEC_DIST_REL, CODEC_PAIR_REL)
+        cell_codec_distance(t, CARRIER, 40l, KVDtype.tq4, false, CODEC_DIST_REL, CODEC_PAIR_REL)
     }
     t |> run("Qwen2.5-0.5B: the tq4 K/V mirror across two windows") @(t : T?) {
         assert_pf_window(t)
-        cell_codec_distance(t, carrier_path(), PF_WINDOW_ROWS + 88l, KVDtype.tq4, false, CODEC_DIST_REL, CODEC_PAIR_REL)
+        cell_codec_distance(t, CARRIER, PF_WINDOW_ROWS + 88l, KVDtype.tq4, false, CODEC_DIST_REL, CODEC_PAIR_REL)
     }
 }
 
 [test]
 def test_gpu_resident_qwen2_codec_rows_up(t : T?) {
     t |> run("Qwen2.5-0.5B: the device steps over q8_0 rows the CPU prefill wrote") @(t : T?) {
-        cell_codec_distance(t, carrier_path(), 40l, KVDtype.q8_0, true, CODEC_DIST_REL, CODEC_PAIR_REL)
+        cell_codec_distance(t, CARRIER, 40l, KVDtype.q8_0, true, CODEC_DIST_REL, CODEC_PAIR_REL)
     }
     t |> run("Qwen2.5-0.5B: the device steps over tq4 rows the CPU prefill wrote") @(t : T?) {
-        cell_codec_distance(t, carrier_path(), 40l, KVDtype.tq4, true, CODEC_DIST_REL, CODEC_PAIR_REL)
+        cell_codec_distance(t, CARRIER, 40l, KVDtype.tq4, true, CODEC_DIST_REL, CODEC_PAIR_REL)
     }
 }
 
 [test]
 def test_gpu_resident_qwen2_codec_rows(t : T?) {
     t |> run("Qwen2.5-0.5B: the q8_0 mirror's stored rows against the CPU cache's, layer 0") @(t : T?) {
-        cell_codec_stored_rows(t, carrier_path(), KVDtype.q8_0, ROWS_BARS)
+        cell_codec_stored_rows(t, CARRIER, KVDtype.q8_0, ROWS_BARS)
     }
     t |> run("Qwen2.5-0.5B: the tq4 mirror's stored rows against the CPU cache's, layer 0") @(t : T?) {
-        cell_codec_stored_rows(t, carrier_path(), KVDtype.tq4, ROWS_BARS)
+        cell_codec_stored_rows(t, CARRIER, KVDtype.tq4, ROWS_BARS)
     }
 }
