@@ -4978,30 +4978,14 @@ def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float; ab
             y[k] += wnh[2 * d + k]
         }
     }
-    var ainv = 0.0
+    var aref := y   //! the add partner the step sees: the normed GEMV row under pre_on, the raw row otherwise
     if (pre_on) {
-        var sa = 0.0
-        for (k in range(d)) {
-            sa += y[k] * y[k]
-        }
-        ainv = 1.0 / sqrt(sa / float(d) + eps)
+        rmsnorm(unsafe(addr<float?>(aref[0])), unsafe(addr<float const?>(y[0])), unsafe(addr<float const?>(wnh[0])), int64(d), eps)
     }
-    var xr_ref : array<float>
-    xr_ref |> resize(d)
-    var aref : array<float>   //! the add partner the step sees: the normed GEMV row under pre_on, the raw row otherwise
-    aref |> resize(d)
-    var ss = 0.0
-    for (k in range(d)) {
-        let a = pre_on ? wnh[k] * (y[k] * ainv) : y[k]
-        aref[k] = a
-        xr_ref[k] = (xres[k] + a) * ascale
-        ss += xr_ref[k] * xr_ref[k]
-    }
-    let inv = raw ? 1.0 : 1.0 / sqrt(ss / float(d) + eps)
-    var normed : array<float>
-    normed |> resize(d)
-    for (k in range(d)) {
-        normed[k] = (raw ? 1.0 : wnh[d + k]) * (xr_ref[k] * inv)
+    var xr_ref <- [for (k in range(d)); (xres[k] + aref[k]) * ascale]
+    var normed := xr_ref
+    if (!raw) {
+        rmsnorm(unsafe(addr<float?>(normed[0])), unsafe(addr<float const?>(xr_ref[0])), unsafe(addr<float const?>(wnh[d])), int64(d), eps)
     }
     //! the residual bar: the step's own rounding on the row, plus the GEMV's on the partner it adds - a 512-deep dot whose
     //! terms cancel lands a few 1e-4 of its magnitude off the oracle's order (two rows of 2816 read 3e-4 at gemma-4-26B's width)
