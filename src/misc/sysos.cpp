@@ -2,6 +2,13 @@
 
 #include "daScript/misc/sysos.h"
 
+#if !defined(DAS_NO_FILEIO) && !defined(_EMSCRIPTEN_VER) && (defined(__linux__) || defined(__APPLE__) || defined(__HAIKU__))
+    #include <filesystem>
+    #define DAS_ROOT_STD_FILESYSTEM 1
+#else
+    #define DAS_ROOT_STD_FILESYSTEM 0
+#endif
+
 #if defined(_WIN32) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
 // All Windows toolchains use the same <windows.h> Win32 API for executable
 // path, dynamic loader, and hardware breakpoints. The old _MSC_VER gate sent
@@ -674,10 +681,27 @@ namespace das {
 
     string g_dasRoot;
 
+    // src/misc/ARCHITECTURE.md#das-root-absolute
+    static string absolute_das_root ( const string & dr ) {
+        if ( dr.empty() ) return dr;
+#if defined(_WIN32) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
+        string full = normalizeFileName(dr.c_str());
+        return full.empty() ? dr : full;
+#elif DAS_ROOT_STD_FILESYSTEM
+        std::error_code ec;
+        auto full = std::filesystem::absolute(std::filesystem::path(dr.c_str()), ec);
+        if ( ec ) return dr;
+        string out = full.lexically_normal().generic_string().c_str();
+        if ( out.size() > 1 && out.back() == '/' ) out.pop_back();
+        return out;
+#else
+        return dr;
+#endif
+    }
+
     void setDasRoot ( const string & dr ) {
-        g_dasRoot = dr;
-        // same normalization the derived root gets below - callers concatenate with '/'
-        replace(g_dasRoot.begin(), g_dasRoot.end(), '\\', '/');
+        g_dasRoot = absolute_das_root(dr);
+        replace(g_dasRoot.begin(), g_dasRoot.end(), '\\', '/');     // callers concatenate with '/'
     }
 
     string getDasRoot ( void ) {
@@ -700,11 +724,10 @@ namespace das {
                     g_dasRoot = DAS_INSTALL_DATADIR;
                 }
                 #endif
-                // make paths consistent on UNIX and Windows
-                replace(g_dasRoot.begin(), g_dasRoot.end(), '\\', '/');
             } else {
                 g_dasRoot = ".";
             }
+            setDasRoot(g_dasRoot);
         }
         return g_dasRoot;
     }
