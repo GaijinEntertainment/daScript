@@ -12,17 +12,10 @@ require dasllama/dasllama_lint public
 require dasllama/dasllama_convert   // kq_transcode_superblock, requant_rows_q8k_bs
 require dasllama/dasllama_gemm_schema   // kq_qsb / kq_ssb by format id
 require dasllama/dasllama_kqformat
-require daslib/f16_cvt
 require math
 require _kq_dot public   // dot_kq on the run-time format - the reference the kq cells hold the kernels to
 require _compares   // opaque: the activation fill's taint seam
-
-//! `v` as a little-endian f16 at byte `off` of `b`
-def put_f16(var b : array<uint8>; off : int64; v : float) {
-    let bits = f32_to_f16(v)
-    b[off] = uint8(bits & 0xFFu)
-    b[off + 1l] = uint8(bits >> 8u)
-}
+require _vk_kq_fixtures public
 
 //! one Q4_K superblock in the GGUF's disk layout: two f16 scales, 12 bytes of 6-bit sub-scales, 128 bytes of nibbles
 def q4k_disk_superblock() : array<uint8> {
@@ -335,12 +328,8 @@ let SYNTH_SCQ <- [3, -5, 60, -60, 17, 127, -128, 1, 0, 33, -77, 90, -2, 45, -101
 
 // Pack the 4-byte header + 12 scale/min bytes shared by the Q4_K/Q5_K synthetic superblocks.
 def pack_kq_header(var blkb : array<uint8>) {
-    let dbits = f32_to_f16(SYNTH_D)
-    let mbits = f32_to_f16(SYNTH_DMIN)
-    blkb[0] = uint8(dbits & 0xFF)
-    blkb[1] = uint8(dbits >> 8u)
-    blkb[2] = uint8(mbits & 0xFF)
-    blkb[3] = uint8(mbits >> 8u)
+    put_f16(blkb, 0, SYNTH_D)
+    put_f16(blkb, 2, SYNTH_DMIN)
     for (j in range(4)) {
         blkb[4 + j] = uint8((SYNTH_SC[j] & 63) | (((SYNTH_SC[j + 4] >> 4) & 3) << 6))
         blkb[8 + j] = uint8((SYNTH_MN[j] & 63) | (((SYNTH_MN[j + 4] >> 4) & 3) << 6))
@@ -393,9 +382,7 @@ def build_q6k_block() : array<uint8> {
     for (i in range(16)) {
         blkb[192 + i] = uint8(SYNTH_SCQ[i] & 255)
     }
-    let dbits = f32_to_f16(0.25)
-    blkb[208] = uint8(dbits & 0xFF)
-    blkb[209] = uint8(dbits >> 8u)
+    put_f16(blkb, 208, 0.25)
     return <- blkb
 }
 
@@ -406,9 +393,7 @@ def iq3xxs_aux_pat(p : int) : int => (p * 9 + 17) % 256
 def build_iq3xxs_block() : array<uint8> {
     var blkb : array<uint8>
     blkb |> resize(98)
-    let dbits = f32_to_f16(0.002)
-    blkb[0] = uint8(dbits & 0xFF)
-    blkb[1] = uint8(dbits >> 8u)
+    put_f16(blkb, 0, 0.002)
     for (i in range(64)) {
         blkb[2 + i] = uint8(iq3xxs_qs_pat(i))
     }
@@ -425,9 +410,7 @@ def build_iq4nl_block() : array<uint8> {
     var blkb : array<uint8>
     blkb |> resize(144)
     for (b in range(8)) {
-        let dbits = f32_to_f16(0.002 + 0.0003 * float(b))
-        blkb[b * 18] = uint8(dbits & 0xFF)
-        blkb[b * 18 + 1] = uint8(dbits >> 8u)
+        put_f16(blkb, b * 18, 0.002 + 0.0003 * float(b))
         for (i in range(16)) {
             blkb[b * 18 + 2 + i] = uint8(iq4nl_qs_pat(b * 16 + i))
         }
@@ -441,9 +424,7 @@ def build_iq4nl_block() : array<uint8> {
 def build_iq4xs_block() : array<uint8> {
     var blkb : array<uint8>
     blkb |> resize(136)
-    let dbits = f32_to_f16(SYNTH_D)
-    blkb[0] = uint8(dbits & 0xFF)
-    blkb[1] = uint8(dbits >> 8u)
+    put_f16(blkb, 0, SYNTH_D)
     var sh = 0
     for (blk in range(8)) {
         sh |= ((SYNTH_SC[blk] >> 4) & 3) << (2 * blk)
@@ -498,9 +479,7 @@ def build_q3k_block() : array<uint8> {
     for (i in range(12)) {
         blkb[96 + i] = uint8(sc[i])
     }
-    let dbits = f32_to_f16(SYNTH_D)
-    blkb[108] = uint8(dbits & 0xFF)
-    blkb[109] = uint8(dbits >> 8u)
+    put_f16(blkb, 108, SYNTH_D)
     return <- blkb
 }
 
@@ -513,9 +492,7 @@ def iq3s_sg_pat(p : int) : int => (p * 7 + 13) % 256
 def build_iq3s_block() : array<uint8> {
     var blkb : array<uint8>
     blkb |> resize(110)
-    let dbits = f32_to_f16(SYNTH_D)
-    blkb[0] = uint8(dbits & 0xFF)
-    blkb[1] = uint8(dbits >> 8u)
+    put_f16(blkb, 0, SYNTH_D)
     for (i in range(64)) {
         blkb[2 + i] = uint8(iq3s_qs_pat(i))
     }
@@ -551,12 +528,8 @@ def build_q2k_block() : array<uint8> {
     for (i in range(64)) {
         blkb[16 + i] = uint8(qs[i])
     }
-    let dbits = f32_to_f16(SYNTH_D)
-    blkb[80] = uint8(dbits & 0xFF)
-    blkb[81] = uint8(dbits >> 8u)
-    let mbits = f32_to_f16(SYNTH_DMIN)
-    blkb[82] = uint8(mbits & 0xFF)
-    blkb[83] = uint8(mbits >> 8u)
+    put_f16(blkb, 80, SYNTH_D)
+    put_f16(blkb, 82, SYNTH_DMIN)
     return <- blkb
 }
 
@@ -569,9 +542,7 @@ def iq2s_sg_pat(p : int) : int => (p * 7 + 11) % 256
 def build_iq2s_block() : array<uint8> {
     var blkb : array<uint8>
     blkb |> resize(82)
-    let dbits = f32_to_f16(SYNTH_D)
-    blkb[0] = uint8(dbits & 0xFF)
-    blkb[1] = uint8(dbits >> 8u)
+    put_f16(blkb, 0, SYNTH_D)
     for (i in range(32)) {
         blkb[2 + i] = uint8(iq2s_ix_pat(i))
     }
@@ -597,9 +568,7 @@ def iq2xs_sg7_pat(i : int) : int => (i * 5 + 3) % 128
 def build_iq2xs_block() : array<uint8> {
     var blkb : array<uint8>
     blkb |> resize(74)
-    let dbits = f32_to_f16(SYNTH_D)
-    blkb[0] = uint8(dbits & 0xFF)
-    blkb[1] = uint8(dbits >> 8u)
+    put_f16(blkb, 0, SYNTH_D)
     for (w in range(32)) {
         let v = iq2xs_ix_pat(w) | (iq2xs_sg7_pat(w) << 9)
         blkb[2 + w * 2] = uint8(v & 0xFF)
@@ -621,9 +590,7 @@ def iq2xxs_sg7_pat(i : int) : int => (i * 5 + 3) % 128
 def build_iq2xxs_block() : array<uint8> {
     var blkb : array<uint8>
     blkb |> resize(66)
-    let dbits = f32_to_f16(SYNTH_D)
-    blkb[0] = uint8(dbits & 0xFF)
-    blkb[1] = uint8(dbits >> 8u)
+    put_f16(blkb, 0, SYNTH_D)
     for (b in range(8)) {
         for (l in range(4)) {
             blkb[2 + b * 8 + l] = uint8(iq2xxs_ix_pat(b * 4 + l))
@@ -648,9 +615,7 @@ def build_q40_block() : array<uint8> {
     var blkb : array<uint8>
     blkb |> resize(144)
     for (blk in range(8)) {
-        let dbits = f32_to_f16(q40_d(blk))
-        blkb[blk * 18] = uint8(dbits & 0xFF)
-        blkb[blk * 18 + 1] = uint8(dbits >> 8u)
+        put_f16(blkb, blk * 18, q40_d(blk))
         for (j in range(16)) {   // byte j: weight blk*32+j in the low nibble, +16 in the high
             blkb[blk * 18 + 2 + j] = uint8(q4_pat(blk * 32 + j) | (q4_pat(blk * 32 + 16 + j) << 4))
         }
@@ -666,12 +631,8 @@ def q51_m(blk : int) : float => float(blk % 5) * 0.25 - 0.5
 def build_q51_block(blk : int) : array<uint8> {
     var b : array<uint8>
     b |> resize(24)
-    let dbits = f32_to_f16(q51_d(blk))
-    let mbits = f32_to_f16(q51_m(blk))
-    b[0] = uint8(dbits & 0xFF)
-    b[1] = uint8(dbits >> 8u)
-    b[2] = uint8(mbits & 0xFF)
-    b[3] = uint8(mbits >> 8u)
+    put_f16(b, 0, q51_d(blk))
+    put_f16(b, 2, q51_m(blk))
     var qh = 0u
     for (k in range(32)) {   // qh bit k = the 5th bit of element k
         if ((q5_pat(k + blk) & 16) != 0) {
@@ -695,9 +656,7 @@ def iq4nl32_d(blk : int) : float => float(blk % 7 + 1) * 0.0625
 def build_iq4nl32_block(blk : int) : array<uint8> {
     var b : array<uint8>
     b |> resize(18)
-    let dbits = f32_to_f16(iq4nl32_d(blk))
-    b[0] = uint8(dbits & 0xFF)
-    b[1] = uint8(dbits >> 8u)
+    put_f16(b, 0, iq4nl32_d(blk))
     for (j in range(16)) {
         b[2 + j] = uint8(iq4nl_qs_pat(blk * 16 + j))
     }
