@@ -169,7 +169,7 @@ def pass_count(reason : string) : int64 {
 //! within `rel` of the CPU argmax's (a near-tie the two chains' rounding flips); both decoded and logged with their CPU logits
 def pick_agrees(t : T?; tr : Model; what : string; pick : int64; cpu : array<float>; rel : float) : bool {
     let ac = argmax_of(cpu)
-    let bar = rel * live_maxabs(cpu)
+    let bar = row_bar(cpu, rel)
     let in_bar = pick >= 0l && pick < long_length(cpu) && cpu[pick] >= cpu[ac] - bar
     to_log(LOG_INFO, "{what}: device pick {pick} '{decode_(tr, [pick])}' (CPU logit {pick >= 0l && pick < long_length(cpu) ? cpu[pick] : 0.0}), CPU argmax {ac} '{decode_(tr, [ac])}' ({cpu[ac]}), tie bar {bar}\n")
     t |> success(pick == ac || in_bar, "{what}: the device pick is the CPU argmax, or its CPU logit is within {bar} of the CPU argmax's (a near-tie)")
@@ -198,6 +198,10 @@ def head_k_row_bytes(tr : Model; var s : Session; row : int64) : array<uint8> {
     return <- [for (i in range64(rowb)); unsafe(kp[row * rowb + i])]
 }
 
+//! the bar a CPU row `cpu` holds a device row to: `rel` of its largest live |logit| - a suppressed id and a NaN scale no bar, so a
+//! NaN in the reference row reads past the bar its finite elements set
+def row_bar(cpu : array<float>; rel : float) : float => rel * live_maxabs(cpu)
+
 //! `got` within `bar` of `want` - its largest difference, a NaN read past the bar - asserted under `what`; the difference back
 def row_within(t : T?; what : string; got, want : array<float>; bar : float) : float {
     let diff = logits_maxdiff(got, want)
@@ -224,7 +228,7 @@ def rows_within_control(t : T?; what : string; gpu, cpu : array<array<float>>; r
     let n = long_length(gpu)
     for (r in range64(n)) {
         let tag = "{what} {invoke(row_tag, r)}"
-        let bar = rel * logits_maxabs(cpu[r])
+        let bar = row_bar(cpu[r], rel)
         let diff = row_within(t, tag, gpu[r], cpu[r], bar)
         if (diff > worst) {
             worst = diff
@@ -312,7 +316,7 @@ def resident_then_cpu_feed(t : T?; tr : Model; prompt, toks : array<int64>; afte
 //! both argmaxes logged under `tag` with the piece `tr` decodes them to, the two arms named `gpu_name` and `cpu_name` in every message
 def feed_steps_within(t : T?; tr : Model; tag : string; nprompt : int64; gpu, cpu : array<array<float>>; toks : array<int64>; bar_rel : float; gpu_name : string = "resident"; cpu_name : string = "the CPU chain") {
     for (st in range64(long_length(cpu))) {
-        let bar = bar_rel * live_maxabs(cpu[st])
+        let bar = row_bar(cpu[st], bar_rel)
         let ag = argmax_of(gpu[st])
         let ac = argmax_of(cpu[st])
         let what = tag + (st == 0l ? "prefill ({nprompt} tokens)" : "step {st - 1l} (fed {toks[st - 1l]})") + " [{tile_arm_tag()}]"

@@ -75,7 +75,7 @@ def private hold_within(t : T?; got, want, control : array<float>; what : string
         tq4_within(t, got, want, control, what)
         return
     }
-    let bar = rel * live_maxabs(want)
+    let bar = row_bar(want, rel)
     let diff = row_within(t, what, got, want, bar)
     let off = control_past(t, what, got, control, bar)
     to_log(LOG_INFO, "{what}: maxdiff {diff}, the row one off {off}, bar {bar}\n")

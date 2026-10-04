@@ -1364,6 +1364,22 @@ def test_kernel_census_by_name(t : T?) {
     }
 }
 
+// model-free: a NaN in the CPU reference row reads past the bar its finite elements set, so no device row holds it
+[test]
+def test_row_bar_nan_reference(t : T?) {
+    let rel = 0.04
+    let cpu <- [1.0, -4.0, 2.0, 0.5]
+    var gpu := cpu
+    gpu[0] += 0.1
+    var nan_cpu := cpu
+    nan_cpu[2] = unsafe(reinterpret<float>(NAN_BITS))
+    t |> equal(row_bar(cpu, rel), rel * 4.0, "the bar is rel of the row's largest |logit|")
+    t |> success(logits_maxdiff(gpu, cpu) <= row_bar(cpu, rel), "a device row within the bar of a finite reference holds it")
+    t |> equal(row_bar(nan_cpu, rel), rel * 4.0, "a NaN in the reference row scales no bar - the finite elements set it")
+    t |> success(!(logits_maxdiff(gpu, nan_cpu) <= row_bar(nan_cpu, rel)), "a NaN in the reference row reads past the bar")
+    t |> success(logits_maxdiff(gpu, nan_cpu) <= rel * logits_maxabs(nan_cpu), "control: the NaN-scaled bar is infinite and the same row holds it")
+}
+
 [test]
 def test_gpu_resident_hybrid_mtp_block_codec(t : T?) {
     let pin = gpu_kv_dtype_pin()
