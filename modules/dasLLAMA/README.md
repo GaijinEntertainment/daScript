@@ -163,6 +163,7 @@ modules/dasLLAMA/
     dasllama_gemm_gen.das     #   the GEMM tile generator (emits per-perm kernels under llvm_tune)
     dasllama_gemm_register.das #  [tune] family registration — manifest > per-ISA fallback chain
     dasllama_par.das          #   maybe_parallel_for threading macro
+    dasllama_boot_restore.das #   [boot_restore] — writes a module's boot-restore guards for its @@-initialized function globals
     dasllama_tune.das         #   per-box kernel loop-hint tuner — [tuned] / [dasllama_grid] (see tune_for_this_box.md)
     dasllama_parity.das       #   CPU-reference caches for the parity instruments (the metal suites, batch_parity_probe)
     dasllama_gguf.das         #   GGUF container parser + tensor read drivers (codecs live in dasllama_convert)

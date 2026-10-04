@@ -683,6 +683,7 @@ def private check_exe_fn_global_restore {
         }
         let path = "modules/dasLLAMA/dasllama/{name}"
         let text = fread(path)
+        let generated = find(text, "[init, boot_restore]") >= 0
         var line_no = 0
         for (line in split(text, "\n")) {
             line_no++
@@ -698,8 +699,8 @@ def private check_exe_fn_global_restore {
             continue if (!(gname |> starts_with("g_")))
             let eq = find(line, "= @@")
             continue if (eq < 0 || (find(line, "//") >= 0 && find(line, "//") < eq))
-            if (find(text, "if ({gname} == null)") < 0) {
-                gate_finding(path, line_no, "function global `{gname}` has a declaration initializer but no `if ({gname} == null)` boot-restore guard - a serialized exe restores it as NULL and the first invoke dies (add it to the file's restore [init])")
+            if (!generated && find(text, "if ({gname} == null)") < 0) {
+                gate_finding(path, line_no, "function global `{gname}` has a declaration initializer but no `if ({gname} == null)` boot-restore guard - a serialized exe restores it as NULL and the first invoke dies (add it to the file's restore [init], or annotate that [init] `boot_restore`, which writes every guard)")
             }
         }
     }
