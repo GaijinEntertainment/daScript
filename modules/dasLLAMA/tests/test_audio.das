@@ -79,14 +79,14 @@ def test_mel_filterbank(t : T?) {
 [test]
 def test_log_mel_chunks(t : T?) {
     t |> run("whisper mel: 440 Hz sine lands on its mel row, silence clamps") @(t : T?) {
-        // the mtmd-debug 'preproc 440' fixture: 5 s sine -> exactly 2 full 3000-frame chunks
+        // 5 s of sine and the 30 s of zeros past it: one full 3000-frame chunk, the partial one dropped
         var s : array<float>
         s |> resize(80000)
         for (i in range(80000)) {
             s[i] = sin(2.0 * 3.14159265 * 440.0 * float(i) / 16000.0)
         }
         let chunks <- log_mel_chunks(s, 128l)
-        t |> success(length(chunks) == 2, "two chunks (audio + padded silence)")
+        t |> equal(length(chunks), 1, "a clip under 30 s is one chunk")
         t |> equal(chunks[0].n_mel, 128l, "n_mel")
         t |> equal(chunks[0].n_len, 3000l, "n_len")
         // 440 Hz sits in the slaney linear region: center(m=18) = 19·(m_hi/129)/lin_slope ≈ 444 Hz
@@ -108,14 +108,21 @@ def test_log_mel_chunks(t : T?) {
             mx = max(mx, v)
         }
         t |> success(mx - mn <= 2.0 + 1e-6, "max-min <= 8/4 (global clamp)")
-        // the second chunk is all padded silence: every value at the clamp floor
+        // past the audio the chunk is padded silence: every value at the clamp floor
         var uniform = true
-        for (v in chunks[1].data) {
-            if (v != chunks[1].data[0]) {
-                uniform = false
+        for (m in range(128)) {
+            for (i in range(600, 3000)) {
+                if (chunks[0].data[m * 3000 + i] != chunks[0].data[600]) {
+                    uniform = false
+                }
             }
         }
-        t |> success(uniform, "silence chunk uniform at the floor")
+        t |> success(uniform, "the frames past the audio are uniform at the floor")
+        t |> success(chunks[0].data[18 * 3000 + 100] != chunks[0].data[600], "the control: a frame of the sine is off the floor")
+        // 35 s of audio: the 30 s of zeros past it complete a second chunk
+        s |> resize(560000)
+        let two <- log_mel_chunks(s, 128l)
+        t |> equal(length(two), 2, "a clip between 30 and 60 s is two chunks")
     }
 }
 

@@ -198,14 +198,12 @@ def fft_pow2_run(n : int64; rev : int const?; tw : float const?; var reim : floa
 }
 
 //! Whisper log-mel spectrogram over the full padded input, split into full 3000-frame chunks —
-//! the mtmd flavor end-to-end (pad to ≥31 s, reflect-200 head, Hann/hop-160 power spectra,
-//! slaney mel, log10, global max−8 clamp). Audio ≤30 s yields exactly one chunk.
+//! the mtmd flavor end-to-end (reflect-200 head, 30 s of zeros and 200 past the audio, Hann/hop-160
+//! power spectra, slaney mel, log10, global max−8 clamp). Audio under 30 s yields exactly one chunk.
 def log_mel_chunks(samples : array<float> | #; n_mel : int64) : array<MelChunk> {
     let n_in = length(samples)
-    // this flavor zero-extends short input to chunk+1 seconds BEFORE the stage pads — the head
-    // reflect below must read from the extended buffer, not the raw input
-    let min_samples = int(AUDIO_SAMPLE_RATE * 31l)
-    let n_base = max(n_in, min_samples)
+    // the head reflect reads one sample plus half a window: shorter input counts as that many, zero past its end
+    let n_base = max(n_in, int(AUDIO_N_FFT / 2l) + 1)
     let head = int(AUDIO_N_FFT / 2l)                       // reflect pad
     let tail = int(AUDIO_SAMPLE_RATE * 30l) + head         // 30 s zeros + 200
     let n_padded = head + n_base + tail
@@ -1013,10 +1011,12 @@ def load_audio_tower(path : string; q8 : bool = false) : AudioTower {
         let img = image_path_for(path, tag)
         let ts_img = ref_time_ticks()
         var t = AudioTower()
-        if (load_image(img, t, tag)) {
+        // an exact-lane image minted before the half twin rode it carries none: where the file's GEMMs are halves, mint again
+        if (load_image(img, t, tag) && (q8 || length(t.wblob) > 0l || !audio_tower_half_gemms(path))) {
             to_log(LOG_INFO, "dasLLAMA: prepared tower image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
             return <- t
         }
+        delete t
         var inscope st <- stage_audio_tower(path, q8)
         var built = AudioTower()
         if (cache_via_image_staged(st, built, img, tag)) {
@@ -1030,6 +1030,90 @@ def load_audio_tower(path : string; q8 : bool = false) : AudioTower {
     var built = AudioTower()
     cache_via_image_staged(st, built, "", tag)
     return <- built
+}
+
+//! whether every block GEMM of a whisper-class mmproj - q, k, v, out, the two FFN matrices of each of `n_layer` blocks - is
+//! stored as ggml type `gt`: the half twin is baked only off a file whose GEMMs are all one half type
+def tower_gemm_types_uniform(m : GGUFMeta; n_layer : int64; gt : int) : bool {
+    for (l in range64(n_layer)) {
+        for (nm in ["attn_q", "attn_k", "attn_v", "attn_out", "ffn_up", "ffn_down"]) {
+            if (gguf_tensor_type(m, "a.blk.{l}.{nm}.weight") != gt) {
+                return false
+            }
+        }
+    }
+    return true
+}
+
+//! whether a whisper-class mmproj stores every block GEMM in one half type (f16 or bf16); false for a file that cannot be read
+def private audio_tower_half_gemms(path : string) : bool {
+    let f = fopen(path, "rb")
+    return false if (f == null)
+    var half = false
+    fmap(f) $(var bytes : array<uint8>#) {
+        if (long_length(bytes) < 4l || rd_u32(bytes, 0l) != 0x46554747u) {
+            return
+        }
+        var inscope m <- parse_gguf_meta(bytes)
+        let gt = gguf_tensor_type(m, "a.blk.0.attn_q.weight")
+        let n_layer = gguf_has(m, "clip.audio.block_count") ? gguf_int(m, bytes, "clip.audio.block_count") : 0l
+        half = (gt == GGML_TYPE_BF16 || gt == GGML_TYPE_F16) && n_layer > 0l && tower_gemm_types_uniform(m, n_layer, gt)
+    }
+    fclose(f)
+    return half
+}
+
+//! the projector kind an mmproj's `clip.projector_type` names, false for a type the audio tower does not serve
+def private audio_tower_projector(proj : string; var kind : AudioProjKind&) : bool {
+    if (proj == "qwen2a" || proj == "qwen2.5o") {   // omni's audio side is qwen2a verbatim
+        kind = AudioProjKind.qwen2a
+    } elif (proj == "ultravox") {
+        kind = AudioProjKind.ultravox
+    } elif (proj == "voxtral") {
+        kind = AudioProjKind.voxtral
+    } else {
+        return false
+    }
+    return true
+}
+
+//! An MLP projector's hidden and output widths off its tensors - `clip.audio.projection_dim` lies for ultravox-1b (4096
+//! against 2048) - zeros where a tensor is missing
+def private audio_tower_mlp_shape(m : GGUFMeta; kind : AudioProjKind; mm1_in : int64) : tuple<mm1_out : int64; proj_dim : int64> {
+    let i1 = gguf_find_tensor(m, "mm.a.mlp.1.weight")
+    let i2 = gguf_find_tensor(m, "mm.a.mlp.2.weight")
+    return (mm1_out = 0l, proj_dim = 0l) if (i1 < 0 || i2 < 0 || mm1_in <= 0l)
+    let mm1_out = m.tensors[i1].n_elem / mm1_in
+    let mm2_in = kind == AudioProjKind.ultravox ? mm1_out / 2l : mm1_out
+    return (mm1_out = mm1_out, proj_dim = mm2_in > 0l ? m.tensors[i2].n_elem / mm2_in : 0l)
+}
+
+//! The decoder width a whisper-class audio mmproj (qwen2a, qwen2.5o, ultravox, voxtral) projects to; 0 for a missing
+//! file, a file that is no GGUF, or an mmproj this tower does not serve. Never panics: the seams gate an audio arm on it.
+def audio_tower_probe_proj_dim(path : string) : int64 {
+    return 0l if (path |> ends_with(".dlim"))
+    let f = fopen(path, "rb")
+    return 0l if (f == null)
+    var dim = 0l
+    fmap(f) $(var bytes : array<uint8>#) {
+        if (long_length(bytes) < 4l || rd_u32(bytes, 0l) != 0x46554747u) {
+            return
+        }
+        var inscope m <- parse_gguf_meta(bytes)
+        var kind = AudioProjKind.qwen2a
+        if (!gguf_has(m, "clip.projector_type") || !audio_tower_projector(gguf_str(m, bytes, "clip.projector_type"), kind)
+                || !gguf_has(m, "clip.audio.embedding_length") || gguf_find_tensor(m, "a.position_embd.weight") < 0) {
+            return
+        }
+        if (kind == AudioProjKind.qwen2a) {
+            dim = gguf_has(m, "clip.audio.projection_dim") ? gguf_int(m, bytes, "clip.audio.projection_dim") : 0l
+        } else {
+            let stack = gguf_has(m, "clip.audio.projector.stack_factor") ? gguf_int(m, bytes, "clip.audio.projector.stack_factor") : 1l
+            dim = audio_tower_mlp_shape(m, kind, gguf_int(m, bytes, "clip.audio.embedding_length") * stack).proj_dim
+        }
+    }
+    fclose(f)
+    return dim
 }
 
 //! Mint a served tower from a staged read WITHOUT touching disk — the off-rail control for suites.
@@ -1048,13 +1132,7 @@ def stage_audio_tower(path : string; q8 : bool = false) : AudioTowerStaging {
     fmap(f) $(var bytes : array<uint8>#) {
         var inscope m <- parse_gguf_meta(bytes)
         let proj = gguf_str(m, bytes, "clip.projector_type")
-        if (proj == "qwen2a" || proj == "qwen2.5o") {   // omni's audio side is qwen2a verbatim
-            st.e.proj_kind = AudioProjKind.qwen2a
-        } elif (proj == "ultravox") {
-            st.e.proj_kind = AudioProjKind.ultravox
-        } elif (proj == "voxtral") {
-            st.e.proj_kind = AudioProjKind.voxtral
-        } else {
+        if (!audio_tower_projector(proj, st.e.proj_kind)) {
             panic("dasLLAMA: audio tower supports qwen2a/qwen2.5o/ultravox/voxtral projectors, got '{proj}'")
         }
         st.e.n_mel = gguf_int(m, bytes, "clip.audio.num_mel_bins")
@@ -1079,18 +1157,14 @@ def stage_audio_tower(path : string; q8 : bool = false) : AudioTowerStaging {
         }
         st.e.n_ctx = m.tensors[pi].n_elem / d
 
-        // shapes come from the tensors, not clip.audio.projection_dim — it lies for ultravox-1b (4096 vs actual 2048)
-        var mm1_in = 0l
+        let mm1_in = st.e.proj_kind != AudioProjKind.qwen2a ? d * st.e.stack_factor : 0l
         if (st.e.proj_kind != AudioProjKind.qwen2a) {
-            mm1_in = d * st.e.stack_factor
-            let i1 = gguf_find_tensor(m, "mm.a.mlp.1.weight")
-            let i2 = gguf_find_tensor(m, "mm.a.mlp.2.weight")
-            if (i1 < 0 || i2 < 0) {
+            let shape = audio_tower_mlp_shape(m, st.e.proj_kind, mm1_in)
+            if (shape.proj_dim == 0l) {
                 panic("dasLLAMA: mm.a.mlp.1/2.weight missing from '{proj}' mmproj")
             }
-            st.e.mm1_out = m.tensors[i1].n_elem / mm1_in
-            let mm2_in = st.e.proj_kind == AudioProjKind.ultravox ? st.e.mm1_out / 2l : st.e.mm1_out
-            st.e.proj_dim = m.tensors[i2].n_elem / mm2_in
+            st.e.mm1_out = shape.mm1_out
+            st.e.proj_dim = shape.proj_dim
         }
 
         // fixed blob layout: convs, pos, per-layer region, post-ln, projector
@@ -1158,10 +1232,13 @@ def stage_audio_tower(path : string; q8 : bool = false) : AudioTowerStaging {
             gguf_read_tensor_f32(m, bytes, "mm.a.mlp.1.weight", st.fblob, st.e.proj_w_off, st.e.mm1_out * m1in)
             gguf_read_tensor_f32(m, bytes, "mm.a.mlp.2.weight", st.fblob, st.e.mm2_w_off, st.e.proj_dim * st.e.mm1_out)
         }
+        st.e.blk_bf16 = gguf_tensor_type(m, "a.blk.0.attn_q.weight") == GGML_TYPE_BF16
     }
     fclose(f)
     if (q8) {
         tower_quantize(st)
+    } elif (audio_tower_half_gemms(path)) {   // the file's GEMMs are halves: the Metal tower's half GEMMs read them back as they were stored
+        tower_bake_half_twin(st.fblob, st.wblob, st.e.blk_bf16)
     }
     return <- st
 }

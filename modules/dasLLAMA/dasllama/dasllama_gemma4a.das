@@ -353,7 +353,7 @@ def gemma4a_probe_proj_dim(path : string) : int64 {
     }
     var dim = 0l
     fmap(f) $(var bytes : array<uint8>#) {
-        if (length(bytes) < 4 || !(int(bytes[0]) == 'G' && int(bytes[1]) == 'G' && int(bytes[2]) == 'U' && int(bytes[3]) == 'F')) {
+        if (long_length(bytes) < 4l || !(int(bytes[0]) == 'G' && int(bytes[1]) == 'G' && int(bytes[2]) == 'U' && int(bytes[3]) == 'F')) {
             return
         }
         var inscope m <- parse_gguf_meta(bytes)

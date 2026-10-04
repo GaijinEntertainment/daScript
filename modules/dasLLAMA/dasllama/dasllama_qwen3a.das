@@ -164,17 +164,6 @@ def private q3a_announce_lane() {
 }
 
 [arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
-def private q3a_gemm_types_uniform(m : GGUFMeta; n_layer : int64; gt : int) : bool {
-    for (l in range64(n_layer)) {
-        for (nm in ["attn_q", "attn_k", "attn_v", "attn_out", "ffn_up", "ffn_down"]) {
-            if (gguf_tensor_type(m, "a.blk.{l}.{nm}.weight") != gt) {
-                return false
-            }
-        }
-    }
-    return true
-}
-
 //! Load a Qwen3-ASR mmproj GGUF (projector type `qwen3a`, bf16/f16/f32 tensors). Like
 //! ``load_model``, caches a box/knob-specific PREPARED IMAGE for fast reload;
 //! ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
@@ -287,7 +276,7 @@ def stage_qwen3a_tower(path : string) : Qwen3aStaging {
         st.e.core <- c
         if (q3a_serve_q8()) {
             tower_quantize(st.e.core, st.core)   // arm the shared core's q8 rail (encoder_blocks reads core.q8)
-        } elif ((gt == GGML_TYPE_BF16 || gt == GGML_TYPE_F16) && q3a_gemm_types_uniform(m, st.e.core.n_layer, gt)) {
+        } elif ((gt == GGML_TYPE_BF16 || gt == GGML_TYPE_F16) && tower_gemm_types_uniform(m, st.e.core.n_layer, gt)) {
             tower_bake_half_twin(st.core.fblob, st.core.wblob, st.e.core.blk_bf16)
         }
 

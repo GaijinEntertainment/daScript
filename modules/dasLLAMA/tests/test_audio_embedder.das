@@ -82,22 +82,89 @@ def test_audio_embedder_gemma4a_arm(t : T?) {
             // baked family tag, or directory order hands this audio cell a vision image. The
             // load above already minted the gemma4a arm when the image rail is on, so this
             // scan only skips under DASLLAMA_IMAGE=0 — a model gate, not an artifact gate
-            if (empty(image_path) && starts_with(name, "{base_name(mm)}.0x") && ends_with(name, ".dlim")) {
+            if (empty(image_path) && starts_with(name, "{base_name(mm)}.") && ends_with(name, ".dlim")) {
                 let cand = path_join(models_dir(), name)
                 let tag = image_family_tag(cand)
                 //! only the path the rail mints for THIS box identity is loadable by the direct route - a foreign-identity bake sits beside it under its own hash
-                if (tag |> starts_with("gemma4a-") && cand == image_path_for(mm, tag)) {
+                //! and of its two lanes only the one this box serves: the direct route reads under the lane the loader picked above
+                if (tag == (e.gemma4a.q8 ? "gemma4a-q8" : "gemma4a-f32") && cand == image_path_for(mm, tag)) {
                     image_path = cand
                 }
             }
         }
         if (empty(image_path)) {
-            t |> skip("no prepared gemma4a-tagged {base_name(mm)}.0x*.dlim beside the mmproj - the direct image route needs a baked image")
+            t |> skip("no prepared gemma4a-tagged {base_name(mm)}.*.dlim beside the mmproj - the direct image route needs a baked image")
         } else {
             t |> equal(audio_probe_proj_dim(image_path), 0l, "the gguf probe answers 0 on a .dlim by pinned contract")
             var inscope ei <- load_audio_embedder(image_path)
             t |> equal(audio_family(ei), "gemma4a", "a prepared image routes on its baked family tag, not the probe")
             t |> equal(audio_proj_dim(ei), 1536l, "the image-loaded carrier reports the same width")
+        }
+    }
+}
+
+def private tower_arm_cell(t : T?; file, family : string; width, rows_per_chunk : int64) {
+    let mm = path_join(models_dir(), file)
+    if (!model_available(t, mm)) {
+        return
+    }
+    t |> equal(audio_probe_proj_dim(mm), width, "the probe reports the projector's output width off its tensors")
+    var inscope e <- load_audio_embedder(mm)
+    t |> success(e.kind == AudioKind.tower, "the carrier holds the whisper-class tower")
+    t |> equal(audio_family(e), family, "the carrier reports the projector kind")
+    t |> equal(audio_proj_dim(e), width, "the carrier reports the probed width")
+    var st = AudioState()
+    var samples : array<float>
+    samples |> resize(16000 * 5)
+    for (i, s in count(), samples) {
+        s = 0.3 * sin(float(i) * 0.05)
+    }
+    var rows : array<float>
+    t |> equal(encode_audio_(e, st, samples, rows), rows_per_chunk, "a 5 s clip is one mel chunk")
+    t |> equal(long_length(rows), rows_per_chunk * width, "one row of the decoder's width a soft token")
+    var peak = 0.
+    var finite = true
+    for (v in rows) {
+        finite &&= is_finite(v)
+        peak = max(peak, abs(v))
+    }
+    t |> success(finite && peak > 0., "the rows are finite and not all zero (peak {peak})")
+    var again : array<float>
+    t |> equal(encode_audio_(e, st, samples, again), rows_per_chunk, "the reused state encodes the clip again")
+    var moved = 0
+    for (a, b in rows, again) {
+        moved += a != b ? 1 : 0
+    }
+    t |> equal(moved, 0, "the reused state reads the same rows bit for bit")
+    for (i, s in count(), samples) {
+        s = 0.3 * sin(float(i) * 0.11)
+    }
+    delete again
+    encode_audio_(e, st, samples, again)
+    moved = 0
+    for (a, b in rows, again) {
+        moved += a != b ? 1 : 0
+    }
+    t |> success(moved > length(rows) / 2, "another clip reads other rows ({moved} of {length(rows)} differ) - the control")
+    samples |> resize(16000 * 35)
+    delete again
+    t |> equal(encode_audio_(e, st, samples, again), 2l * rows_per_chunk, "a 35 s clip is two chunks, their rows appended")
+    delete again
+    delete rows
+    delete samples
+    delete st
+}
+
+[test]
+def test_audio_embedder_tower_arm(t : T?) {
+    t |> run("an ultravox mmproj loads as the whisper-class tower") @(t : T?) {
+        with_dasllama_jobque() {
+            tower_arm_cell(t, "mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf", "ultravox", 2048l, 187l)
+        }
+    }
+    t |> run("the Qwen2.5-Omni mmproj's audio side loads as the whisper-class tower beside its vision tensors") @(t : T?) {
+        with_dasllama_jobque() {
+            tower_arm_cell(t, "mmproj-Qwen2.5-Omni-3B-f16.gguf", "qwen2a", 2048l, 750l)
         }
     }
 }
