@@ -42,24 +42,8 @@ def private transfer_copy_us(src, dst : uint64; bytes : int64) : double {
         vk_check(vkBeginCommandBuffer(raw, begin), null)
         cmd_copy_whole(raw, src, dst, bytes)
         vk_check(vkEndCommandBuffer(raw), null)
-        g_gpu.xfer_value++
-        var sig = g_gpu.xfer_value
-        var tss = VkTimelineSemaphoreSubmitInfo()
-        var sem = g_gpu.xfer_sem
-        var submit = VkSubmitInfo()
-        submit.commandBufferCount = 1u
-        submit.signalSemaphoreCount = 1u
-        let nofence : VkFence
         let t0 = ref_time_ticks()
-        unsafe {
-            tss.signalSemaphoreValueCount = 1u
-            tss.pSignalSemaphoreValues = addr(sig)
-            submit.pNext = addr<void?>(tss)
-            submit.pCommandBuffers = addr(raw)
-            submit.pSignalSemaphores = addr(sem)
-            vk_check(vkQueueSubmit(g_gpu.xfer_queue, 1u, addr(submit), nofence), null)
-        }
-        xfer_wait(g_gpu.xfer_value, false)
+        xfer_wait(xfer_submit_after(raw, XFER_NO_WAIT), false)
         if (i > 0) {   //! the first submit is the warm-up
             us += double(get_time_usec(t0))
         }
