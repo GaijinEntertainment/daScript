@@ -39,18 +39,29 @@ def dev_upload(a : array<auto(TT)>) : uint64 {
     return dev
 }
 
-//! one region of `cnt` rows at weight block `wblk0` for `wgs` workgroups: the schedule words the tile classes read at `map_off` 4, in a device buffer or in host memory (the prefill's `pf_meta` form)
-def one_region_sched(cnt, wgs : int; host : bool = false; wblk0 : int = 0) : tuple<buf : uint64; bytes : int64> {
-    let sc_bytes = int64(4 + wgs) * 4l
+//! one region of `cnt` rows at weight block `wblk0` for `wgs` workgroups: the schedule words the tile classes read at `map_off` 4
+def one_region_words(cnt, wgs : int; wblk0 : int = 0) : array<uint> {
+    var words : array<uint>
+    words |> resize(4 + wgs)
     var cur = 4l
+    batch_sched_map(unsafe(addr(words[0])), cur, 0l, int64(wblk0), int64(cnt), int64(wgs))
+    return <- words
+}
+
+//! `one_region_words` in a device buffer or in host memory (the prefill's `pf_meta` form)
+def one_region_sched(cnt, wgs : int; host : bool = false; wblk0 : int = 0) : tuple<buf : uint64; bytes : int64> {
+    var words <- one_region_words(cnt, wgs, wblk0)
+    let sc_bytes = long_length(words) * 4l
     if (host) {
         let hb = make_host_buf(sc_bytes, true)
-        batch_sched_map(unsafe(reinterpret<uint?>(hb.mapped)), cur, 0l, int64(wblk0), int64(cnt), int64(wgs))
+        unsafe {
+            memcpy(hb.mapped, addr(words[0]), sc_bytes)
+        }
+        delete words
         return (buf = hb.buf, bytes = sc_bytes)
     }
-    let scd = make_staged_buf(sc_bytes) $(var words : uint?) {
-        batch_sched_map(words, cur, 0l, int64(wblk0), int64(cnt), int64(wgs))
-    }
+    let scd = dev_upload(words)
+    delete words
     return (buf = scd, bytes = sc_bytes)
 }
 

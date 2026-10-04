@@ -50,14 +50,17 @@ let private ARM_CM2_M = 1
 let private ARM_CM2_S = 2
 let private ARM_KHR = 3
 let private ARM_CM2_E = 4
+let private ARM_TOY_STRIP = 5   //! the q8 l-tile toy stamp built with the four-wide decode stripped to the scalar callback
+let private ARM_TOY_TWIN = 6    //! ... and built as the device builds it
 
 def private cell_arm_name(arm : int) : string {
+    if (arm >= ARM_TOY_STRIP) return arm == ARM_TOY_STRIP ? "stripped toy l" : "twin toy l"
     return arm == ARM_CM2_L ? "l" : (arm == ARM_CM2_M ? "m" : (arm == ARM_CM2_S ? "s" : (arm == ARM_KHR ? "khr" : "e")))
 }
 
 //! the arm helpers stay generic on purpose - a build without the vulkan module must never infer these bodies
 //! 256 is the l stamps' BN default, a column no schedule constant names (the l column is never a schedule piece)
-def private cell_arm_rows_per_wg(arm) => arm == ARM_CM2_L ? 256 : int(arm == ARM_CM2_S ? SCHED_S_ROWS : SCHED_M_ROWS)
+def private cell_arm_rows_per_wg(arm) => arm == ARM_CM2_L || arm >= ARM_TOY_STRIP ? 256 : int(arm == ARM_CM2_S ? SCHED_S_ROWS : SCHED_M_ROWS)
 
 def private cell_arm_tc(arm) => arm == ARM_CM2_E ? CM2_TC_E : int64(cell_arm_rows_per_wg(arm))
 
@@ -69,6 +72,7 @@ def private cell_arm_set(arm, fmt : int; bufs; sizes; gbits) {
         return khr_cls_set(fmt, bufs, sizes, gbits)
     }
     verify(g_gpu.coopmat_mode == COOPMAT_CM2, "a cm2 arm dispatched off cm2 mode - the ladder would hand back the KHR stamp")
+    if (arm >= ARM_TOY_STRIP) return arm == ARM_TOY_STRIP ? set_toy_q8_cm2_strip_cls(bufs, sizes, gbits) : set_toy_q8_cm2_twin_cls(bufs, sizes, gbits)
     if (!cm2_cls_ensure(fmt, cell_arm_tc(arm))) panic("the {cell_arm_name(arm)} arm's class rail for format {fmt} must engage in cm2 mode")
     return cm2_cls_set(fmt, cell_arm_tc(arm), bufs, sizes, gbits)
 }
@@ -76,6 +80,10 @@ def private cell_arm_set(arm, fmt : int; bufs; sizes; gbits) {
 def private cell_arm_enc(arm, fmt : int; raw; var h; var s; var pc; groups : int64) {
     if (arm == ARM_KHR) {
         khr_cls_enc(fmt, raw, h, s, pc, groups)
+    } elif (arm == ARM_TOY_STRIP) {
+        enc_toy_q8_cm2_strip_cls(raw, h, s, pc, groups)
+    } elif (arm == ARM_TOY_TWIN) {
+        enc_toy_q8_cm2_twin_cls(raw, h, s, pc, groups)
     } else {
         cm2_cls_enc(fmt, cell_arm_tc(arm), raw, h, s, pc, groups)
     }
@@ -85,39 +93,19 @@ def private tile_arms_all() : array<int> {
     return <- [ARM_CM2_L, ARM_CM2_M, ARM_CM2_S, ARM_KHR, ARM_CM2_E]
 }
 
-//! a tile cell's fixture: the format's packed weight and scale planes moved in, the f16 activation plane built here with the engine's read slack past the two regions; the device planes are made and uploaded by the arm loop once it knows an arm is served, the output plane left for its sentinel fill
+//! a tile cell's fixture: the format's packed weight and scale planes moved in, the f16 activation plane built here with the engine's read slack past the two regions
 struct TileFixture {
     n, blk_k, rows : int
     wqh, wsh, xfh : array<uint>
-    wq_bytes, ws_bytes, xf_bytes, y_bytes : int64
-    wqd, wsd, xfd, yd : uint64
 }
 
 def private tile_fixture(n, blk_k : int; var wqh, wsh : array<uint>; xf_mul, xf_add : uint) : TileFixture {
     let rows = TILE_CELL_ROWS0 + TILE_CELL_ROWS1
-    let xf_words = (rows + TILE_SLACK_ROWS) * n / 2
-    var xfh <- ws_plane(xf_words, xf_mul, xf_add)   // f16 activation pairs
-    var f = TileFixture(n = n, blk_k = blk_k, rows = rows, wq_bytes = long_length(wqh) * 4l, ws_bytes = long_length(wsh) * 4l,
-        xf_bytes = int64(xf_words) * 4l, y_bytes = int64(rows * TILE_CELL_D) * 4l)
+    var f = TileFixture(n = n, blk_k = blk_k, rows = rows)
     f.wqh <- wqh
     f.wsh <- wsh
-    f.xfh <- xfh
+    f.xfh <- ws_plane((rows + TILE_SLACK_ROWS) * n / 2, xf_mul, xf_add)   // f16 activation pairs
     return <- f
-}
-
-//! the fixture's device planes, made and uploaded once the caller knows an arm is served; the output plane is left for the sentinel fill
-def private tile_fixture_upload(var f : TileFixture) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        f.wqd = make_device_buf(f.wq_bytes)
-        f.wsd = make_device_buf(f.ws_bytes)
-        f.xfd = make_device_buf(f.xf_bytes)
-        f.yd = make_device_buf(f.y_bytes)
-        unsafe {
-            upload_region_at(f.wqd, 0l, addr<uint8 const?>(f.wqh[0]), f.wq_bytes)
-            upload_region_at(f.wsd, 0l, addr<uint8 const?>(f.wsh[0]), f.ws_bytes)
-            upload_region_at(f.xfd, 0l, addr<uint8 const?>(f.xfh[0]), f.xf_bytes)
-        }
-    }
 }
 
 //! one q8 fmt-0 host plane of `totblk` blocks: the s8 quant words hashed at `i * wq_mul + wq_add`, the f16 scale pairs at `i * ws_mul + ws_add`
@@ -146,42 +134,33 @@ def private tile_cell_arms(t : T?; tag : string; fmt : int; var f : TileFixture;
             t |> skip("the {tag} tiles need cooperative matrices (cm2 in mode 4 on an NV_coopmat2 device, or KHR coopmat at subgroup 32)")
             return <- y_ref
         }
-        tile_fixture_upload(f)
         let d = TILE_CELL_D
-        let host = make_host_buf(f.y_bytes, true, [cached = true])
         y_ref |> resize(f.rows * d)
         let tail = 2
         for (arm in arms) {
             continue if (!cell_arm_served(arm))
-            let tname = cell_arm_name(arm)
             var sr <- two_region_sched(TILE_CELL_ROWS0, TILE_CELL_ROWS1, d * (f.n / f.blk_k), cell_arm_rows_per_wg(arm), (d + 127) / 128, tail)
             let wgs = sr.wgs
             var sched <- sr.words
             for (w in range(wgs, wgs + tail)) {
                 sched[8 + w] = SCHED_NONE
             }
-            nan_sentinel_upload(f.yd, f.y_bytes)
-            let sc_bytes = int64(2 * 4 + wgs + tail) * 4l
-            let scd = make_device_buf(sc_bytes)
-            upload_region_at(scd, 0l, unsafe(addr<uint8 const?>(sched[0])), sc_bytes)
-            var sc = cell_arm_set(arm, fmt, fixed_array(f.wqd, f.wsd, scd, f.xfd, f.yd),
-                fixed_array(f.wq_bytes, f.ws_bytes, sc_bytes, f.xf_bytes, f.y_bytes), fixed_array(1u, 2u, 0u, 4u, 16u))
-            var pc = BatchArgs(n = uint(f.n), d = uint(d), map_off = uint(2 * 4))
-            cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                cell_arm_enc(arm, fmt, raw2, h2, sc, pc, int64(wgs + tail))
-                cmd_copy_planes(raw2, h2, fixed_array(f.yd), host, fixed_array(f.y_bytes), 16u)
-            }
-            var y_cls <- staged(host.mapped, 0l, f.rows * d, type<float>)
             invoke(oracle, f.wqh, f.wsh, f.xfh, sched, 2, f.n, d, y_ref)
-            let bad = mismatch_rel("", y_cls, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref))
-            to_log(LOG_INFO, "{tag} {tname}-tile batch: {bad} of {f.rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
-            t |> success(bad == 0, "{tag} {tname}-tile matches the CPU oracle ({bad} of {f.rows * d} off)")
-            var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
-            y_poison[0] += 1.0 + 2.0 * logits_maxabs(y_ref)
-            t |> success(mismatch_rel("", y_poison, y_ref, 2e-2, 4e-3 * logits_maxabs(y_ref)) > 0, "the {tag} {tname}-tile bar reds a poisoned element")
-            delete y_poison
+            with_cell_planes() $(var cp : CellPlanes) {
+                let pwq = cp |> in_plain(f.wqh)
+                let pws = cp |> in_plain(f.wsh)
+                let psc = cp |> in_plain(sched)
+                let pxf = cp |> in_plain(f.xfh)
+                let py = cp |> out_(f.rows * d)
+                let planes = fixed_array(pwq, pws, psc, pxf, py)
+                var sc = cell_arm_set(arm, fmt, gather_planes(cp.dev, planes), gather_planes(cp.bytes, planes), gather_planes(cp.hazard_bit, planes))
+                var pc = BatchArgs(n = uint(f.n), d = uint(d), map_off = uint(2 * 4))
+                cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                    cell_arm_enc(arm, fmt, raw2, h2, sc, pc, int64(wgs + tail))
+                }
+                check_rows(t, "{tag} {cell_arm_name(arm)}-tile ({g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}) vs the CPU oracle", cp |> plane_run(py), y_ref, cm_bar(y_ref), d)
+            }
             delete sched
-            delete y_cls
         }
     }
     return <- y_ref
@@ -381,45 +360,32 @@ def private q8_sdot4_planes(units, wq_words, ws_words : int; ws_bytes : int64; x
 }
 
 //! an sdot4-feed tile cell's device half over two regions of `cnt0` and `cnt1` rows at `tile` rows a workgroup, `d` weight
-//! rows a region at `wblk1` units apart: the planes uploaded, the y plane under the sentinel, `rec` sets the class over
-//! [w, ws, schedule, xq, xs, y] and encodes it at the map's workgroups; the rows come back with the schedule
+//! rows a region at `wblk1` units apart: the planes uploaded (the scale plane bound at `ws_bytes`), the y plane under the
+//! sentinel - a row the tile never stores keeps it - `rec` sets the class over [w, ws, schedule, xq, xs, y] and encodes it at the
+//! map's workgroups; the rows come back with the schedule
 def private sdot4_tile_run(n, d, cnt0, cnt1, tile, wblk1 : int; p : Sdot4Planes; rec) : tuple<y : array<float>; sched : array<uint>> {
     var sr <- two_region_sched(cnt0, cnt1, wblk1, tile, (d + tile - 1) / tile, 0)
+    var y : array<float>
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let rows = cnt0 + cnt1
-        let wq_bytes = long_length(p.wqh) * 4l
-        let xq_bytes = long_length(p.xqh) * 4l
-        let xs_bytes = long_length(p.xsh) * 4l
-        let y_bytes = int64(rows * d) * 4l
-        let wqd = make_device_buf(wq_bytes)
-        let wsd = make_device_buf(p.ws_bytes)
-        let xqd = make_device_buf(xq_bytes)
-        let xsd = make_device_buf(xs_bytes)
-        let yd2 = make_device_buf(y_bytes)
-        let host = make_host_buf(y_bytes, true, [cached = true])
-        let sc_bytes = long_length(sr.words) * 4l
-        let scd = make_device_buf(sc_bytes)
-        unsafe {
-            upload_region_at(wqd, 0l, addr<uint8 const?>(p.wqh[0]), wq_bytes)
-            upload_region_at(wsd, 0l, addr<uint8 const?>(p.wsh[0]), p.ws_bytes)
-            upload_region_at(xqd, 0l, addr<uint8 const?>(p.xqh[0]), xq_bytes)
-            upload_region_at(xsd, 0l, addr<uint8 const?>(p.xsh[0]), xs_bytes)
-            upload_region_at(scd, 0l, addr<uint8 const?>(sr.words[0]), sc_bytes)
+        with_cell_planes() $(var cp : CellPlanes) {
+            let pwq = cp |> in_plain(p.wqh)
+            let pws = cp |> in_plain(p.wsh)
+            let psc = cp |> in_plain(sr.words)
+            let pxq = cp |> in_plain(p.xqh)
+            let pxs = cp |> in_(p.xsh)
+            let py = cp |> out_((cnt0 + cnt1) * d)
+            let planes = fixed_array(pwq, pws, psc, pxq, pxs, py)
+            var sizes = gather_planes(cp.bytes, planes)
+            sizes[1] = p.ws_bytes
+            cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                invoke(rec, gather_planes(cp.dev, planes), sizes, gather_planes(cp.hazard_bit, planes), raw2, h2, int64(sr.wgs))
+            }
+            delete y
+            y <- cp |> plane_run(py)
         }
-        nan_sentinel_upload(yd2, y_bytes)   //! a row the tile never stores keeps the sentinel, never a zeroed page near the oracle's value
-        cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-            invoke(rec, fixed_array(wqd, wsd, scd, xqd, xsd, yd2), fixed_array(wq_bytes, p.ws_bytes, sc_bytes, xq_bytes, xs_bytes, y_bytes),
-                raw2, h2, int64(sr.wgs))
-            cmd_copy_planes(raw2, h2, fixed_array(yd2), host, fixed_array(y_bytes), 32u)
-        }
-        var y <- staged(host.mapped, 0l, rows * d, type<float>)
-        var sched <- sr.words
-        return <- (y = y, sched = sched)
-    } else {
-        var y : array<float>
-        var sched <- sr.words
-        return <- (y = y, sched = sched)
     }
+    var sched <- sr.words
+    return <- (y = y, sched = sched)
 }
 
 // The model-less Vulkan kernel-unit suite ([vk_dispatch] bring-up): a class kernel dispatched
@@ -745,43 +711,8 @@ def private f16_gemm_cell(t : T?; tag : string; d, n, rows : int; khr : bool = f
             for (i in range(rows_alloc * n)) {
                 xh[i] = float16(float((i * 11) % 53) * 0.03 - 0.8)
             }
-            let w_bytes = int64(d * n) * 2l
-            let x_bytes = int64(rows_alloc * n) * 2l
-            let y_bytes = int64(yn) * 4l
-            let part_bytes = int64(nsplit * rows * d) * 4l
-            let wd = make_device_buf(w_bytes)
-            let xd = make_device_buf(x_bytes)
-            let yd = make_device_buf(y_bytes)
-            let yd2 = make_device_buf(y_bytes)
-            let pd = make_device_buf(part_bytes)
-            let host = make_host_buf(2l * y_bytes, true, [cached = true])
-            nan_sentinel_upload(yd, y_bytes, 0l)
-            nan_sentinel_upload(yd2, y_bytes, 0l)
-            unsafe {
-                upload_region_at(wd, 0l, addr<uint8 const?>(wh[0]), w_bytes)
-                upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
-            }
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                var pc = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = 0u, ybase = uint(ybase), ystride = uint(d), ksplit = 0u)
-                var sd = f16_gemm_set(khr, fixed_array(wd, xd, yd), fixed_array(w_bytes, x_bytes, y_bytes), fixed_array(1u, 2u, 4u))
-                f16_gemm_enc(khr, raw, h, sd, pc, int64(rows), int64(d))
-                if (!khr) {   // the split arm is the cm2 stamp's alone: the KHR stamp reads no k split
-                    nan_sentinel_upload(pd, part_bytes, 0l)   // the split arm's partial planes: a chunk the GEMM skipped would sum a stale plane into the reduce
-                    var sp = set_f16_gemm_cm2_cls(fixed_array(wd, xd, pd), fixed_array(w_bytes, x_bytes, part_bytes), fixed_array(1u, 2u, 8u))
-                    var sr = set_splitk_reduce_cls(fixed_array(pd, yd2), fixed_array(part_bytes, y_bytes), fixed_array(8u, 16u))
-                    let bk = int(F16G_BK)
-                    let ksplit = max(bk, ((n / nsplit + bk - 1) / bk) * bk)   //! the class walks K in F16G_BK steps: a chunk shorter than a step would re-sum the first step, so a short K leaves the tail chunks empty (zero planes) instead
-                    var pc2 = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = 0u, ybase = 0u, ystride = uint(d), ksplit = uint(ksplit))
-                    enc_f16_gemm_cm2_cls(raw, h, sp, pc2, f16_gemm_wgs(false, int64(rows), int64(d)) * int64(nsplit))
-                    var pcr = SkRedArgs(nelem = uint(rows * d), k = uint(nsplit), ybase = uint(ybase))
-                    enc_splitk_reduce_cls(raw, h, sr, pcr, int64(rows * d + 1023) / 1_024l)
-                }
-                cmd_copy_planes(raw, h, fixed_array(yd, yd2), host, fixed_array(0l, y_bytes), fixed_array(y_bytes, y_bytes), 4u | 16u)
-            }
-            var got <- staged(host.mapped, 0l, 2 * yn, type<float>)
             var ref : array<float>
             ref |> resize(rows * d)
-            var amax = 0.0
             for (p in range(rows)) {
                 for (e in range(d)) {
                     var s = 0.0
@@ -789,32 +720,44 @@ def private f16_gemm_cell(t : T?; tag : string; d, n, rows : int; khr : bool = f
                         s += float(xh[p * n + kk]) * float(wh[e * n + kk])
                     }
                     ref[p * d + e] = s
-                    amax = max(amax, abs(s))
                 }
             }
-            let tol = amax * 2e-5   //! both operands are f16-exact, so every product is exact in f32 and the arms differ by f32 reassociation over K alone; 2e-5 of the max holds the cell's shapes with the poison leg red
-            let poison = tol * 4.0
-            let arms = fixed_array(khr ? "khr direct" : "direct", "split-k")
-            for (arm in range(khr ? 1 : 2)) {
-                let base = arm * yn
-                var header_ok = true
-                for (i in range(ybase)) {
-                    header_ok = header_ok && float_bits_to_uint(got[base + i]) == NAN_SENTINEL_BITS
+            //! both operands are f16-exact, so every product is exact in f32 and the arms differ by f32 reassociation over K
+            //! alone: 2e-5 of the max holds the cell's shapes, the poisoned expectation four bars off
+            let bar = Bar(kind = BarKind.rel_of_max, rel = 2e-5, poison = 8e-5, poison_of_max = true)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let pw = cp |> in_plain(wh)
+                let px = cp |> in_plain(xh)
+                let yslack = yn - ybase - rows * d
+                let y0 = out_(cp, rows * d, ybase, yslack)
+                let y1 = khr ? -1 : out_(cp, rows * d, ybase, yslack)
+                let ys = fixed_array(y0, y1)
+                let pp = khr ? -1 : out_(cp, nsplit * rows * d)   //! the split arm's partial planes: a chunk the GEMM skipped would sum a stale plane into the reduce
+                let direct = fixed_array(pw, px, ys[0])
+                var sd = f16_gemm_set(khr, gather_planes(cp.dev, direct), gather_planes(cp.bytes, direct), gather_planes(cp.hazard_bit, direct))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    var pc = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = 0u, ybase = uint(ybase), ystride = uint(d), ksplit = 0u)
+                    f16_gemm_enc(khr, raw, h, sd, pc, int64(rows), int64(d))
+                    if (!khr) {   // the split arm is the cm2 stamp's alone: the KHR stamp reads no k split
+                        var sp = cp |> cls_set(fixed_array(pw, px, pp), @@set_f16_gemm_cm2_cls)
+                        var sr = cp |> cls_set(fixed_array(pp, ys[1]), @@set_splitk_reduce_cls)
+                        let bk = int(F16G_BK)
+                        let ksplit = max(bk, ((n / nsplit + bk - 1) / bk) * bk)   //! the class walks K in F16G_BK steps: a chunk shorter than a step would re-sum the first step, so a short K leaves the tail chunks empty (zero planes) instead
+                        var pc2 = F16GemmArgs(n = uint(n), d = uint(d), rows = uint(rows), woff = 0u, ybase = 0u, ystride = uint(d), ksplit = uint(ksplit))
+                        enc_f16_gemm_cm2_cls(raw, h, sp, pc2, f16_gemm_wgs(false, int64(rows), int64(d)) * int64(nsplit))
+                        splitk_reduce_enc(raw, h, sr, int64(rows * d), int64(nsplit), int64(ybase))
+                    }
                 }
-                var worst = 0.0
-                var worst_poisoned = 1.0e30
-                for (i in range(rows * d)) {
-                    let dv = abs(got[base + ybase + i] - ref[i])
-                    worst = max(worst, dv)
-                    worst_poisoned = min(worst_poisoned, abs(got[base + ybase + i] - (ref[i] + poison)))
+                let arms = fixed_array(khr ? "khr direct" : "direct", "split-k")
+                for (arm in range(khr ? 1 : 2)) {
+                    var header <- copy_span(cp |> plane_whole(ys[arm]), 0, ybase)
+                    t |> success(outside_run(header, 0, 0, NAN_SENTINEL), "f16 GEMM {tag} {arms[arm]}: the {ybase} words under the base stay the sentinel")
+                    check_rows(t, "f16 GEMM {tag} {arms[arm]}: {rows} x {d} over K {n} vs the f32 dot", cp |> plane_run(ys[arm]), ref, bar, d)
+                    delete header
                 }
-                t |> success(header_ok, "f16 GEMM {tag} {arms[arm]}: the {ybase} words under the base stay the sentinel")
-                t |> success(worst <= tol, "f16 GEMM {tag} {arms[arm]}: {rows} x {d} over K {n} within {tol} of the f32 dot (worst {worst}, max |y| {amax})")
-                t |> success(worst_poisoned > tol, "f16 GEMM {tag} {arms[arm]}: the poisoned expectation reds the bar (nearest {worst_poisoned})")
             }
             delete wh
             delete xh
-            delete got
             delete ref
         }
     }
@@ -2423,8 +2366,8 @@ def test_vkd_q8_batch_tile(t0 : T?) {
             let cnt1 = 20              // region 1: 1 x-tile
             let totblk = 2 * d * nbb
             var p <- q8_sdot4_planes(totblk, 8, totblk / 2 + 1, int64(totblk) * 2l, (cnt0 + cnt1) * nbb, 8, 1.0)
-            var r <- sdot4_tile_run(n, d, cnt0, cnt1, 32, d * nbb, p) $(bufs : uint64[6]; sizes : int64[6]; raw2 : VkCommandBuffer; var h2 : VkHaz; wgs : int64) {
-                var sc = set_q8_batch_cls(bufs, sizes, fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+            var r <- sdot4_tile_run(n, d, cnt0, cnt1, 32, d * nbb, p) $(bufs : uint64[6]; sizes : int64[6]; bits : uint[6]; raw2 : VkCommandBuffer; var h2 : VkHaz; wgs : int64) {
+                var sc = set_q8_batch_cls(bufs, sizes, bits)
                 var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
                 enc_q8_batch_cls(raw2, h2, sc, pc, wgs)
             }
@@ -2465,8 +2408,8 @@ def test_vkd_kq_batch_family(t0 : T?) {
                 p.xqh <- hashed_words(rows * nsb * 64, 7u, 2u)
                 p.xsh <- row_fill(rows * nsb, 1, 0, 0.05, -0.3, 11)
                 //! one family set serves every format; region 1's weights follow region 0's stack in superblock units
-                var r <- sdot4_tile_run(n, d, cnt0, cnt1, 32, d * nsb, p) $(bufs : uint64[6]; sizes : int64[6]; raw2 : VkCommandBuffer; var h2 : VkHaz; wgs : int64) {
-                    var sc = set_kq_batch_cls(bufs, sizes, fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                var r <- sdot4_tile_run(n, d, cnt0, cnt1, 32, d * nsb, p) $(bufs : uint64[6]; sizes : int64[6]; bits : uint[6]; raw2 : VkCommandBuffer; var h2 : VkHaz; wgs : int64) {
+                    var sc = set_kq_batch_cls(bufs, sizes, bits)
                     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
                     kq_batch_cls_enc_for(fmt, false, raw2, h2, sc, pc, wgs)
                 }
@@ -2543,8 +2486,8 @@ def test_vkd_cm_batch_family(t0 : T?) {
                 let totblk = 2 * d * nbb
                 //! 16x cooler activation scales than the sdot4 arms: the mm family ACCUMULATES in f16, and the hot form's |y| ~7e4 overflows f16's 65504 to inf
                 var p <- q8_sdot4_planes(totblk, 8, totblk / 2 + 1, int64(totblk) * 2l, rows * nbb, 8, 0.0625)
-                var r <- sdot4_tile_run(n, d, cnt0, cnt1, tile, d * nbb, p) $(bufs : uint64[6]; sizes : int64[6]; raw2 : VkCommandBuffer; var h2 : VkHaz; wgs : int64) {
-                    var sc = q8_batch_cls_set(cv, bufs, sizes, fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                var r <- sdot4_tile_run(n, d, cnt0, cnt1, tile, d * nbb, p) $(bufs : uint64[6]; sizes : int64[6]; bits : uint[6]; raw2 : VkCommandBuffer; var h2 : VkHaz; wgs : int64) {
+                    var sc = q8_batch_cls_set(cv, bufs, sizes, bits)
                     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
                     q8_batch_cls_enc(cv, raw2, h2, sc, pc, wgs)
                 }
@@ -2590,8 +2533,8 @@ def test_vkd_kq_q40_cm_batch(t0 : T?) {
             let totsb = 2 * d * nsb
             //! the scale words hold the d halves - every u16 a finite half
             var p <- q8_sdot4_planes(totsb, 32, totsb * 5, int64(totsb) * 20l, rows * nsb, 64, 1.0)
-            var r <- sdot4_tile_run(n, d, cnt0, cnt1, 32, d * nsb, p) $(bufs : uint64[6]; sizes : int64[6]; raw2 : VkCommandBuffer; var h2 : VkHaz; wgs : int64) {
-                var sc = set_kq_batch_q40_cmf16_cls(bufs, sizes, fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+            var r <- sdot4_tile_run(n, d, cnt0, cnt1, 32, d * nsb, p) $(bufs : uint64[6]; sizes : int64[6]; bits : uint[6]; raw2 : VkCommandBuffer; var h2 : VkHaz; wgs : int64) {
+                var sc = set_kq_batch_q40_cmf16_cls(bufs, sizes, bits)
                 var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
                 enc_kq_batch_q40_cmf16_cls(raw2, h2, sc, pc, wgs)
             }
@@ -2635,40 +2578,24 @@ def test_vkd_q8_khr_batch(t0 : T?) {
             let cnt0 = TILE_CELL_ROWS0
             let d = TILE_CELL_D
             let swgs = ((cnt0 + 127) / 128) * ((d + 127) / 128) * nsplit
-            let ssched = one_region_sched(cnt0, swgs)   // one region at row 0 over the first weight plane
-            let y0_bytes = int64(cnt0 * d) * 4l
-            let part_bytes = y0_bytes * int64(nsplit)
-            let pd = make_device_buf(part_bytes)
-            let yd_s = make_device_buf(y0_bytes)
-            let host_s = make_host_buf(y0_bytes, true, [cached = true])
-            nan_sentinel_upload(pd, part_bytes)
-            nan_sentinel_upload(yd_s, y0_bytes)
-            let ssc_bytes = ssched.bytes
-            let sscd = ssched.buf
-            var scs = set_q8_batch_khr_cls(fixed_array(f.wqd, f.wsd, sscd, f.xfd, pd),
-                fixed_array(f.wq_bytes, f.ws_bytes, ssc_bytes, f.xf_bytes, part_bytes), fixed_array(1u, 2u, 0u, 4u, 8u))
-            var srd = set_splitk_reduce_cls(fixed_array(pd, yd_s), fixed_array(part_bytes, y0_bytes), fixed_array(8u, 16u))
-            var pcs = BatchArgs(n = uint(f.n), d = uint(d), map_off = 4u, ksplit = uint(ck))
-            var pcr = SkRedArgs(nelem = uint(cnt0 * d), k = uint(nsplit), ybase = 0u)
-            cmd_one_shot() $(raw3 : VkCommandBuffer; var h3 : VkHaz) {
-                enc_q8_batch_khr_cls(raw3, h3, scs, pcs, int64(swgs))
-                enc_splitk_reduce_cls(raw3, h3, srd, pcr, int64(cnt0 * d + 1023) / 1_024l)
-                cmd_copy_planes(raw3, h3, fixed_array(yd_s), host_s, fixed_array(y0_bytes), 16u)
+            var y_ref0 <- copy_span(y_ref, 0, cnt0 * d)   // the oracle's first region is the split arm's whole answer
+            with_cell_planes() $(var cp : CellPlanes) {
+                let pwq = cp |> in_plain(f.wqh)
+                let pws = cp |> in_plain(f.wsh)
+                let psc = cp |> in_plain(one_region_words(cnt0, swgs))   // one region at row 0 over the first weight plane
+                let pxf = cp |> in_plain(f.xfh)
+                let pp = cp |> out_(cnt0 * d * nsplit)
+                let py = cp |> out_(cnt0 * d)
+                var scs = cp |> cls_set(fixed_array(pwq, pws, psc, pxf, pp), @@set_q8_batch_khr_cls)
+                var srd = cp |> cls_set(fixed_array(pp, py), @@set_splitk_reduce_cls)
+                var pcs = BatchArgs(n = uint(f.n), d = uint(d), map_off = 4u, ksplit = uint(ck))
+                cp |> cell_record() $(raw3 : VkCommandBuffer; var h3 : VkHaz) {
+                    enc_q8_batch_khr_cls(raw3, h3, scs, pcs, int64(swgs))
+                    splitk_reduce_enc(raw3, h3, srd, int64(cnt0 * d), int64(nsplit))
+                }
+                check_rows(t, "q8 KHR tile split in two k chunks + the reduce vs the CPU oracle", cp |> plane_run(py), y_ref0, cm_bar(y_ref0), d)
             }
-            var y_split <- staged(host_s.mapped, 0l, cnt0 * d, type<float>)
-            var y_ref0 : array<float>
-            y_ref0 |> resize(cnt0 * d)
-            for (i in range(cnt0 * d)) {
-                y_ref0[i] = y_ref[i]   // the oracle's first region is the split arm's whole answer
-            }
-            let bad_s = mismatch_rel("", y_split, y_ref0, 2e-2, 4e-3 * logits_maxabs(y_ref0))
-            t |> success(bad_s == 0, "q8 KHR tile split in two k chunks + the reduce matches the CPU oracle ({bad_s} of {cnt0 * d} off)")
-            var y_poison_s := y_split
-            y_poison_s[cnt0 * d - 1] += 1.0 + 2.0 * logits_maxabs(y_ref0)
-            t |> success(mismatch_rel("", y_poison_s, y_ref0, 2e-2, 4e-3 * logits_maxabs(y_ref0)) > 0, "the split arm's bar reds a poisoned element")
-            delete y_poison_s
             delete y_ref0
-            delete y_split
             delete y_ref
             delete f
         } else {
@@ -2702,54 +2629,11 @@ def test_vkd_cm2_decode_vector_pair(t0 : T?) {
             verify(ensure_toy_q8_cm2_strip_cls(), "the stripped toy stamp must engage")
             g_gpu.decvec_on = twin_device
             verify(ensure_toy_q8_cm2_twin_cls(), "the toy twin stamp must engage")
-            let n = 576
-            let d = TILE_CELL_D
             var wqh : array<uint>
             var wsh : array<uint>
-            q8_planes(n, 17u, 991u, wqh, wsh)
-            var f <- tile_fixture(n, 32, wqh, wsh, 3u, 5u)
-            tile_fixture_upload(f)   // no arm loop here: the pair dispatches the toy stamps itself
-            let host = make_host_buf(f.y_bytes, true, [cached = true])
-            var sr <- two_region_sched(TILE_CELL_ROWS0, TILE_CELL_ROWS1, d * (n / 32), 256, (d + 127) / 128, 0)
-            let wgs = sr.wgs
-            var sched <- sr.words
-            var y_ref : array<float>
-            y_ref |> resize(f.rows * d)
-            q8f16_gemm_oracle(f.wqh, f.wsh, f.xfh, sched, 2, n, d, y_ref)
-            let floor = 4e-3 * logits_maxabs(y_ref)
-            unsafe {
-                let sc_bytes = int64(2 * 4 + wgs) * 4l
-                let scd = make_device_buf(sc_bytes)
-                upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
-                for (arm in range(2)) {
-                    nan_sentinel_upload(f.yd, f.y_bytes)
-                    var sc = (arm == 0
-                        ? set_toy_q8_cm2_strip_cls(fixed_array(f.wqd, f.wsd, scd, f.xfd, f.yd),
-                            fixed_array(f.wq_bytes, f.ws_bytes, sc_bytes, f.xf_bytes, f.y_bytes), fixed_array(1u, 2u, 0u, 4u, 16u))
-                        : set_toy_q8_cm2_twin_cls(fixed_array(f.wqd, f.wsd, scd, f.xfd, f.yd),
-                            fixed_array(f.wq_bytes, f.ws_bytes, sc_bytes, f.xf_bytes, f.y_bytes), fixed_array(1u, 2u, 0u, 4u, 16u)))
-                    var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
-                    cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                        if (arm == 0) {
-                            enc_toy_q8_cm2_strip_cls(raw2, h2, sc, pc, int64(wgs))
-                        } else {
-                            enc_toy_q8_cm2_twin_cls(raw2, h2, sc, pc, int64(wgs))
-                        }
-                        cmd_copy_planes(raw2, h2, fixed_array(f.yd), host, fixed_array(f.y_bytes), 16u)
-                    }
-                    var y_cls <- staged(host.mapped, 0l, f.rows * d, type<float>)
-                    let bad = mismatch_rel("", y_cls, y_ref, 2e-2, floor)
-                    let what = arm == 0 ? "stripped (scalar callback)" : (twin_device ? "the four-wide twin" : "the twin stamp on a device without the callback")
-                    to_log(LOG_INFO, "cm2 decode pair, {what}: {bad} of {f.rows * d} off the oracle, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}\n")
-                    t |> success(bad == 0, "{what} matches the CPU oracle ({bad} of {f.rows * d} off)")
-                    var y_poison := y_cls   // the bar's control: one element pushed past both bars must red
-                    y_poison[0] += 1.0 + 2.0 * logits_maxabs(y_ref)
-                    t |> success(mismatch_rel("", y_poison, y_ref, 2e-2, floor) > 0, "the pair's bar reds a poisoned element")
-                    delete y_poison
-                    delete y_cls
-                }
-            }
-            delete sched
+            q8_planes(576, 17u, 991u, wqh, wsh)
+            var f <- tile_fixture(576, 32, wqh, wsh, 3u, 5u)
+            var y_ref <- tile_cell_arms(t, "cm2 decode pair ({twin_device ? "the four-wide twin" : "the twin stamp on a device without the callback"})", int(KqFmt.q8), f, [ARM_TOY_STRIP, ARM_TOY_TWIN], @@q8f16_gemm_oracle)
             delete y_ref
             delete f
         } else {
@@ -2949,58 +2833,31 @@ def test_vkd_cm2l_split(t0 : T?) {
             var wqh <- hashed_words(totblk * 8, 1u, 43u)     // arbitrary bytes — s8 quants
             var wsh <- ws_plane((totblk + 1) / 2, 1u, 337u)   // f16 scale pairs, finite halves
             var xfh <- ws_plane(rows * n / 2, 7u, 3u)   // f16 activation pairs
-            let wq_bytes = int64(totblk) * 32l
-            let ws_bytes = int64(length(wsh)) * 4l
-            let xf_bytes = int64(rows * n) * 2l
-            let y_bytes = int64(rows * d) * 4l
-            let sk_bytes = y_bytes * int64(nsplit)
-            let wqd = make_device_buf(wq_bytes)
-            let wsd = make_device_buf(ws_bytes)
-            let xfd = make_device_buf(xf_bytes)
-            let skd = make_device_buf(sk_bytes)
-            let yd2 = make_device_buf(y_bytes)
-            var host = make_host_buf(y_bytes, true, [cached = true])
-            var y_cls : array<float>
-            y_cls |> resize(rows * d)
-            var sched : array<uint>
-            sched |> resize(4 + wgs)
-            var cur = 4l
-            batch_sched_map(unsafe(addr(sched[0])), cur, 0l, 0l, int64(rows), int64(wgs))
-            unsafe {
-                upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
-                upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
-                upload_region_at(xfd, 0l, addr<uint8 const?>(xfh[0]), xf_bytes)
-                let sc_bytes = int64(4 + wgs) * 4l
-                let scd = make_device_buf(sc_bytes)
-                upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
-                // the GEMM writes partial planes into the scratch (group 32), the reduce sums into y
-                var sc = set_q8_batch_cm2l_cls(fixed_array(wqd, wsd, scd, xfd, skd),
-                    fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, sk_bytes),
-                    fixed_array(1u, 2u, 0u, 4u, 32u))
-                var sr = set_splitk_reduce_cls(fixed_array(skd, yd2),
-                    fixed_array(sk_bytes, y_bytes),
-                    fixed_array(32u, 16u))
-                nan_sentinel_upload(skd, sk_bytes)
-                nan_sentinel_upload(yd2, y_bytes)
-                var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = uint(ksplit))
-                var pcr = SkRedArgs(nelem = uint(rows * d), k = uint(nsplit))
-                cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                    enc_q8_batch_cm2l_cls(raw2, h2, sc, pc, int64(wgs))
-                    enc_splitk_reduce_cls(raw2, h2, sr, pcr, int64(rows * d + 1023) / 1_024l)
-                    cmd_copy_planes(raw2, h2, fixed_array(yd2), host, fixed_array(y_bytes), 16u)
-                }
-                memcpy(addr<void?>(y_cls[0]), host.mapped, y_bytes)
-            }
+            var sched <- one_region_words(rows, wgs)
             var y_ref : array<float>
             y_ref |> resize(rows * d)
             q8f16_gemm_oracle(wqh, wsh, xfh, sched, 1, n, d, y_ref)
-            check_rows(t, "cm2 l-tile split-k, {g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}", y_cls, y_ref, cm_bar(y_ref), d)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let pwq = cp |> in_plain(wqh)
+                let pws = cp |> in_plain(wsh)
+                let psc = cp |> in_plain(sched)
+                let pxf = cp |> in_plain(xfh)
+                let pp = cp |> out_(rows * d * nsplit)   // the GEMM writes partial planes into the scratch, the reduce sums into y
+                let py = cp |> out_(rows * d)
+                var sc = cp |> cls_set(fixed_array(pwq, pws, psc, pxf, pp), @@set_q8_batch_cm2l_cls)
+                var sr = cp |> cls_set(fixed_array(pp, py), @@set_splitk_reduce_cls)
+                var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = uint(ksplit))
+                cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                    enc_q8_batch_cm2l_cls(raw2, h2, sc, pc, int64(wgs))
+                    splitk_reduce_enc(raw2, h2, sr, int64(rows * d), int64(nsplit))
+                }
+                check_rows(t, "cm2 l-tile split-k ({g_gpu.decvec_on ? "four-wide twin" : "scalar callback"}) vs the CPU oracle", cp |> plane_run(py), y_ref, cm_bar(y_ref), d)
+            }
             delete sched
             delete y_ref
             delete wqh
             delete wsh
             delete xfh
-            delete y_cls
         } else {
             t |> skip("dasVulkan not present")
         }

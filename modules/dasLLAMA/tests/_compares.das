@@ -224,6 +224,13 @@ struct Bar {
 let BAR_EXACT = Bar(exact = true)
 let BAR_APPROX = Bar(rel = APPROX_REL)
 
+//! The coopmat tiles' bar over the expectation `want`: 2e-2 of the larger magnitude floored at 1, or 4e-3 of `want`'s largest
+//! magnitude - an f16 operand tile rounds every product - the poisoned expectation one plus twice that magnitude off.
+def cm_bar(want : array<float>) : Bar {
+    let m = logits_maxabs(want)
+    return Bar(rel = 2e-2, abs_floor = 4e-3 * m, poison = 2.0 * m, poison_abs = 1.0)
+}
+
 let FLAT_ROWS = 0   //! `check_rows`' row width for a compare with no row structure: the max difference logs at its element
 
 //! How a compare names an element in its log: rows `row_width` wide (0 = flat), each split into heads `head_width` wide (0 = none).
