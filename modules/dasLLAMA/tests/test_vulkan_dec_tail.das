@@ -550,9 +550,7 @@ def test_vulkan_dec_span_cache(t : T?) {
 [test]
 def test_vulkan_dec_span(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
-        set_moe_gpu_attn_dec_hooks(@@vk_moe_attn_dec, @@vk_moe_attn_dec_ok, @@vk_moe_attn_dec_claim, @@vk_moe_attn_dec_hydrate)
-        set_moe_gpu_span_dec_hook(@@vk_moe_span_dec)
+        install_vk_moe_hooks()
         var f : Ffn
         if (!ffn_up(t, f)) {
             t |> skip("dec span: no Vulkan device (or probe/budget refused the upload)")
@@ -599,9 +597,7 @@ def test_vulkan_dec_span(t : T?) {
 def test_vulkan_dec_span_shexp(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         vk_span_reset()   //! the span records once per model: this cell is the second model in the process
-        install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
-        set_moe_gpu_attn_dec_hooks(@@vk_moe_attn_dec, @@vk_moe_attn_dec_ok, @@vk_moe_attn_dec_claim, @@vk_moe_attn_dec_hydrate)
-        set_moe_gpu_span_dec_hook(@@vk_moe_span_dec)
+        install_vk_moe_hooks()
         //! bases past every other cell's (the tail pairs sit at 10-23, 40-53 and 80-93 x STRIDE, the
         //! routed stacks at 30-32, the plain span's quads at 60-73): first-hit stack lookup
         var f : Ffn
@@ -654,9 +650,7 @@ def test_vulkan_dec_span_shexp(t : T?) {
 [test]
 def test_vulkan_dec_tail(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
-        set_moe_gpu_attn_dec_hooks(@@vk_moe_attn_dec, @@vk_moe_attn_dec_ok, @@vk_moe_attn_dec_claim, @@vk_moe_attn_dec_hydrate)
-        set_moe_gpu_ffn_tail_hooks(@@vk_moe_ffn_tail, @@vk_moe_ffn_tail_pending)
+        install_vk_moe_hooks()
         var f : Ffn
         if (!ffn_up(t, f)) {
             t |> skip("dec tail: no Vulkan device (or probe/budget refused the upload)")

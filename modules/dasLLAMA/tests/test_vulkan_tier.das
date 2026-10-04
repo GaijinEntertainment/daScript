@@ -230,7 +230,7 @@ def private held_nontrivial(t : T?; tag : string; got, want : array<float>; rel 
 def test_vulkan_moe_ffn_vs_ref(t : T?) {
     t |> run("vulkan MoE FFN tier == CPU reference (decode GEMV + prefill batch arms)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
+            install_vk_moe_hooks()
             // synthetic stacks: gate/up are (NE*NFE) x N, down is (NE*N) x NFE
             var wq1 : array<int8>
             var ws1 : array<float>
@@ -324,7 +324,7 @@ let SSTRIDE = 100000l   // per-stack offset stride inside the streamed fixture (
 def test_vulkan_moe_ffn_streamed(t : T?) {
     t |> run("vulkan MoE streamed prefill (pinned mirrors, 2 slots) == CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
+            install_vk_moe_hooks()
             var wq1 : array<array<int8>>
             var ws1 : array<array<float>>
             var wq3 : array<array<int8>>
@@ -397,7 +397,7 @@ def private heat_hit_offs(o : array<int64>; nh : int64) : array<int64> {
 def test_vulkan_moe_heat_cache(t : T?) {
     t |> run("vulkan heat-pinned expert cache == CPU reference (pins, eviction, split hits)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
+            install_vk_moe_hooks()
             set_moe_gpu_heat_hooks(@@vk_moe_heat_query, @@vk_moe_heat_advise, @@vk_moe_ffn_begin, @@vk_moe_ffn_join)
             var want = GpuTierWant()
             want.heat = 2l   // two slots: the eviction/reuse choreography below assumes C = 2
@@ -588,7 +588,7 @@ def private ref_ffn_kq(offs1, offs3, offs2 : array<int64>; bases : Bases; nreg :
 def test_vulkan_moe_ffn_kq(t : T?) {
     t |> run("vulkan MoE kq tier (k4 gate/up + k5/k6 down) == CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
+            install_vk_moe_hooks()
             // k4 gate/up stacks + BOTH down formats in one down stack region set is not a real
             // shape — use two arms sharing the gate/up stacks: down = k6, then down = k5 at a
             // fresh offset (the 35B carries k5 downs on most layers, k6 on the last two)
@@ -657,7 +657,7 @@ let QWOFF2 = 43000000l
 def test_vulkan_moe_ffn_q40(t : T?) {
     t |> run("vulkan MoE q40 tier (all-Q4_0 triple) == CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
+            install_vk_moe_hooks()
             var w1 : array<float>
             var w3 : array<float>
             var w2 : array<float>
@@ -702,7 +702,7 @@ let MXOFF2 = 230000000l
 def test_vulkan_moe_ffn_mixed(t : T?) {
     t |> run("vulkan MoE mixed triple (k4 gate/up + q8 down) == CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
+            install_vk_moe_hooks()
             var w1 : array<float>
             var w3 : array<float>
             if (!plane_up(1, NE * KNFE, KN, 61l, MXOFF1, w1)) {
@@ -741,7 +741,7 @@ def test_vulkan_moe_ffn_mixed(t : T?) {
 def test_vulkan_dense_gemm(t : T?) {
     t |> run("vulkan dense GEMM rail == CPU reference (q8 + k4, one-region batch tiles)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
+            install_vk_moe_hooks()
             // q8 arm: [DD x N] plane, Q8_0 acts
             var wq : array<int8>
             var ws : array<float>
@@ -1072,7 +1072,7 @@ def private dn_fixture(npos : int64) : DnFix {
 def test_vulkan_deltanet(t : T?) {
     t |> run("vulkan deltanet chain == CPU reference (chunk-boundary + multi-window arms)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
+            install_vk_moe_hooks()
             var wqkv : array<int8>
             var wsqkv : array<float>
             var wz : array<int8>
@@ -1169,7 +1169,7 @@ let DNSTEPS = 8l
 def test_vulkan_deltanet_step(t : T?) {
     t |> run("vulkan deltanet decode step == CPU reference (state carry + mid-sequence flush)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
+            install_vk_moe_hooks()
             var wqkv : array<int8>
             var wsqkv : array<float>
             var wz : array<int8>
@@ -1418,7 +1418,7 @@ def private ref_wo_gemm(op : array<float>; npos : int64; wo_k4 : bool; wo4 : arr
 def test_vulkan_attention(t : T?) {
     t |> run("vulkan attention chain == CPU reference (gated/ungated/kq-wo/multi-window arms)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
+            install_vk_moe_hooks()
             var wqg : array<int8>       // gated q|gate plane (2*ATQD rows)
             var wsqg : array<float>
             var wqp : array<int8>       // plain q plane (ungated arm)
@@ -1969,7 +1969,7 @@ let DMROWS = 64l
 def test_vulkan_drop_model(t : T?) {
     t |> run("vulkan whole-model drop - stacks + arena rebuild and serve across two cycles") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
+            install_vk_moe_hooks()
             for (cycle in range(2)) {
                 // per-op stack rail: upload -> dense GEMV -> parity vs THIS cycle's content
                 var wq : array<int8>

@@ -161,8 +161,7 @@ def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; wof
 def test_vulkan_moe_cm2_chain(t : T?) {
     t |> run("cm2 expert chain (k4 gate/up + k6 down, f16 feed) == the CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
-            set_moe_gpu_ffn_xf_hooks(@@vk_moe_ffn_xf, @@vk_moe_ffn_xf_ok)
+            install_vk_moe_hooks()
             // small regions (20 + 20 rows): one s-tile row column per region, d = 512 on every GEMM
             chain_cell(t, "small", 512l, 512l, 20l, 2l, 20l, 21000000l, 1000000l, false)
             // a 20 + 10 pair: region B starts at row 20 and ends inside the tile that started it - the
@@ -182,8 +181,7 @@ def test_vulkan_moe_cm2_chain(t : T?) {
 def test_vulkan_moe_cm2_one_region(t : T?) {
     t |> run("cm2 expert chain as the shared expert calls it: one region over every position, the identity slot map at unit weight == the CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
-            set_moe_gpu_ffn_xf_hooks(@@vk_moe_ffn_xf, @@vk_moe_ffn_xf_ok)
+            install_vk_moe_hooks()
             //! k = 1 and every row in region A (cnt_a == nk): the one-region form; 40 rows = one s-tile column plus a partial
             chain_cell(t, "one-region", 512l, 512l, 40l, 1l, 40l, 71000000l, 1000000l, false, false, true)
             //! the same over a 2048-wide dim at 300 rows: the multi-row-tile region and the down GEMM's l-tile pick
@@ -198,8 +196,7 @@ def test_vulkan_moe_cm2_one_region(t : T?) {
 def test_vulkan_moe_cm2_streamed(t : T?) {
     t |> run("cm2 expert chain over a streamed group (slot rebase + the timeline hand-off) == the CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
-            set_moe_gpu_ffn_xf_hooks(@@vk_moe_ffn_xf, @@vk_moe_ffn_xf_ok)
+            install_vk_moe_hooks()
             chain_cell(t, "streamed (DASLLAMA_GPU_MOE_SPLIT={g_env_gpu.gpu_moe_split ? 1 : 0})", 512l, 512l, 40l, 2l, 48l, 41000000l, 1000000l, true)
         } else {
             t |> skip("dasVulkan not installed; the cm2 expert chain is untestable here")
@@ -211,9 +208,7 @@ def test_vulkan_moe_cm2_streamed(t : T?) {
 def test_vulkan_moe_cm2_split(t : T?) {
     t |> run("cm2 expert chain async arm: a region head alone (the streamed-layer split's GPU share, partial slot copy) == the CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
-            set_moe_gpu_ffn_xf_hooks(@@vk_moe_ffn_xf, @@vk_moe_ffn_xf_ok)
-            set_moe_gpu_ffn_xf_async_hooks(@@vk_moe_ffn_xf_begin, @@vk_moe_ffn_xf_join, @@vk_moe_ffn_xf_async_rows)
+            install_vk_moe_hooks()
             t |> success(moe_gpu_ffn_xf_async_rows(512l, 512l) >= 128l, "the async arm serves a window of bucket rows")
             // resident: the async begin/join over region A only
             chain_cell(t, "async", 512l, 512l, 20l, 2l, 20l, 51000000l, 1000000l, false, true)
