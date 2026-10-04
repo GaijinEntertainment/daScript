@@ -226,18 +226,25 @@ let private SPLIT_BAR_REL = 0.06
 
 def private prose_ids(n, salt : int64) : array<int64> => <- resident_prompt(n, salt)
 
+//! the logits of `prompt`'s first `n - 1` tokens on a session of its own, gone before the caller makes the compared pair (two
+//! regions hold two live sessions): the one-token-short control a prefill compare holds its bar against
+def private short_control(tr : Model; prompt : array<int64>; n : int64) : array<float> {
+    var short <- create_session(tr, mirror_kv_dtype())
+    var less <- [for (i in range64(n - 1l)); prompt[i]]
+    forward_prefill(tr, short, less, n - 1l, 0l)
+    var out <- logits_of(short, tr.config.vocab_size)
+    delete short
+    delete less
+    return <- out
+}
+
 //! `prompt` prefilled in one call against the same prompt prefilled as [0, cut) then [cut, n), then four fed steps on both
 def private continue_at(t : T?; tr : Model; n, cut : int64) {
     var prompt <- prose_ids(n, 0l)
     var head <- [for (i in range64(cut)); prompt[i]]
     var tail <- [for (i in range64(n - cut)); prompt[cut + i]]
     var feed <- feed_a()
-    // the control's session first, and gone before the compared pair: two regions hold two live sessions
-    var short <- create_session(tr, mirror_kv_dtype())
-    var less <- [for (i in range64(n - 1l)); prompt[i]]
-    forward_prefill(tr, short, less, n - 1l, 0l)
-    var short_logits <- logits_of(short, tr.config.vocab_size)
-    delete short
+    var short_logits <- short_control(tr, prompt, n)
     var whole <- create_session(tr, mirror_kv_dtype())
     var split <- create_session(tr, mirror_kv_dtype())
     let served0 = moe_gpu_resident_prefills()
@@ -259,7 +266,6 @@ def private continue_at(t : T?; tr : Model; n, cut : int64) {
     delete prompt
     delete head
     delete tail
-    delete less
     delete feed
 }
 
@@ -608,12 +614,7 @@ def cell_device_kv_park_adopt(t : T?; file : string) {
         with_regions_rig(t, file) $(tr) {
             var prompt <- prose_ids(57l, 0l)
             var tail <- [for (i in range64(17l)); prompt[40l + i]]
-            var less <- [for (i in range64(56l)); prompt[i]]
-            var short <- create_session(tr, mirror_kv_dtype())
-            eval(tr, short, less)
-            var short_logits <- logits_of(short, tr.config.vocab_size)
-            delete short
-            delete less
+            var short_logits <- short_control(tr, prompt, 57l)
             var first <- device_session(tr)
             eval(tr, first, prompt)
             var want <- logits_of(first, tr.config.vocab_size)
