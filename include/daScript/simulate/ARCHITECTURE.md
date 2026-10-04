@@ -103,6 +103,17 @@ guard costs nothing where exceptions are off.
 The ledger the checklist's hot-path rules route to. Each entry: what was added, where, why
 correctness required it, and the alternative that was rejected.
 
+- **Explicit string release** (`Context::freeString` in `simulate.h` and the nano
+  shadow header) checks whether an owned allocation is queued for temporary disposal
+  and clears that queue entry before freeing it. Otherwise, address reuse lets a later
+  temporary release free a different live allocation. Cancelling only in the
+  `delete_string` binding leaves direct C++ context calls with the same ownership bug;
+  cancellation belongs to the shared allocation owner. A private inline
+  `freeStringStorage<cancelPending>` helper owns validation, instrumentation and
+  deallocation. Public `freeString` enables cancellation; `freeTempString` disables
+  it because that caller replaces the queue entry itself. The compile-time parameter
+  keeps ordinary temporary disposal on its existing operations.
+
 - **`SetMod` on `SimPolicy_IntBin`** (`sim_policy.h`) - one compare-and-branch on the
   `a == INTMIN && b == -1` pair, matching the guard `Div`, `SetDiv` and `Mod` on the same
   template already carry. Correctness required it because x86 `idiv` faults on that pair

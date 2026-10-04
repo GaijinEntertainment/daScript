@@ -278,19 +278,29 @@ namespace das
             return allocateString(text, length, at, /*temp*/true);
         }
 
-        __forceinline bool freeString ( char * ptr, uint64_t length, const LineInfo *, bool = false ) {
+    private:
+        template <bool cancelPending>
+        __forceinline bool freeStringStorage ( char * ptr, uint64_t length, const LineInfo *, bool ) {
             uint64_t size = length + 1;
             size = (size + 15) & ~15;
             if (stringHeap->isOwnPtr(ptr, size)) {
+                if constexpr (cancelPending) {
+                    if (stringDisposeQue == ptr) stringDisposeQue = nullptr;
+                }
                 stringHeap->impl_freeString(ptr, length);
                 return true;
             }
             return false;
         }
 
+    public:
+        __forceinline bool freeString ( char * ptr, uint64_t length, const LineInfo * at, bool tempString = false ) {
+            return freeStringStorage<true>(ptr, length, at, tempString);
+        }
+
         __forceinline void freeTempString ( char * ptr, const LineInfo * at ) {
             if ( stringHeap->isIntern() || stringHeap->isReclaimDisabled() ) return;
-            if ( stringDisposeQue ) freeString(stringDisposeQue,(uint64_t)strlen(stringDisposeQue),at, /*temp*/true);
+            if ( stringDisposeQue ) freeStringStorage<false>(stringDisposeQue,(uint64_t)strlen(stringDisposeQue),at, /*temp*/true);
             stringDisposeQue = ptr;
         }
 

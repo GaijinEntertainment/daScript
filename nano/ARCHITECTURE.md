@@ -217,3 +217,13 @@ nano reuses `MemoryModel` and the heap allocators unchanged, so `options heap_si
 persistent_heap` picks `PersistentHeapAllocator` over the linear one, exactly as on a host.
 `options stack = N` is honored exactly - the 16384 floor applies only when a script sets no stack
 at all.
+
+## Sanctioned private implementation helper
+
+`Context::freeStringStorage<cancelPending>` is an internal implementation helper with
+immediate callers in `freeString` and `freeTempString`, matching the full runtime's
+ownership split. It adds no public operation or supported tier. The full runtime's
+version includes its existing instrumentation; nano's keeps that work absent.
+This is a narrow exception to the new-name restriction: sharing the storage release
+body prevents validation and deallocation from drifting while explicit releases cancel
+queued disposal without taxing ordinary temporary disposal.

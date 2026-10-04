@@ -68,3 +68,47 @@ def pending_edit_keeps_other_editor_cursor_and_undo_semantics(t : T?) {
     clear(g_registry); clear(g_widgets)
     DestroyContext(context)
 }
+
+[test]
+def enter_only_result_preserves_live_text_state(t : T?) {
+    for (kind in range(5)) {
+        let context = CreateContext(null)
+        var io & = unsafe(GetIO())
+        io.DisplaySize = float2(640, 480)
+        io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures
+        io.ConfigMacOSXBehaviors = false
+        for (frame in range(8)) {
+            if (frame == 3) { io |> AddInputCharactersUTF8("draft") }
+            if (frame == 5) {
+                if (kind == 2) { io |> AddKeyEvent(ImGuiKey.ImGuiMod_Ctrl, true) }
+                io |> AddKeyEvent(ImGuiKey.Enter, true)
+            }
+            if (frame == 6) { io |> AddKeyEvent(ImGuiKey.Enter, false); io |> AddKeyEvent(ImGuiKey.ImGuiMod_Ctrl, false) }
+            NewFrame(); imgui_boost_runtime::begin_frame()
+            window(ENTER_WINDOW, (text = "Enter-only input", closable = false, flags = ImGuiWindowFlags.None)) {
+                if (frame == 1) { SetKeyboardFocusHere(0) }
+                var result = false
+                let flags = ImGuiInputTextFlags.EnterReturnsTrue
+                if (kind == 0) { result = input_text(EDITORS[kind], (text = "Editor", flags = flags)) }
+                elif (kind == 1) { result = input_text_with_hint(EDITORS[kind], (text = "Editor", hint = "Hint", flags = flags)) }
+                elif (kind == 2) { result = input_text_multiline(EDITORS[kind], (text = "Editor", size = float2(300, 120), flags = flags)) }
+                elif (kind == 3) { result = input_text_growable(EDITORS[kind], (text = "Editor", flags = flags)) }
+                else { result = input_text_callback(EDITORS[kind], "Editor", flags, @(var _data : ImGuiInputTextCallbackData) : int { return 0 }) }
+                if (frame == 3) {
+                    t |> equal(EDITORS[kind].value, "draft", "value follows typing before submission")
+                    t |> success(EDITORS[kind].changed, "typing is an edit")
+                    t |> success(!result, "typing does not submit")
+                }
+                if (frame == 4) { t |> success(!EDITORS[kind].changed, "idle is not another edit") }
+                if (frame == 5) {
+                    t |> success(result, "Enter retains its submission result")
+                    t |> equal(EDITORS[kind].value, "draft")
+                    t |> success(!EDITORS[kind].changed, "submitting unchanged text is not an edit")
+                }
+            }
+            EndFrame()
+        }
+        clear(g_registry); clear(g_widgets); clear(EDITORS)
+        DestroyContext(context)
+    }
+}
