@@ -1318,11 +1318,11 @@ def vk_rdec_head_warm_rows : int64 => g_rd != null ? g_rd.pf_head_rows : 0l
 //! Resident-driver prefill: `npos` embedded rows (x_batch, [npos x dim]) + per-position rope rows
 //! (cos_batch, [npos x hs]) -> the last row's logits, filling the selected mirror region at positions [pos0, pos0 + npos).
 [hot_path]   // the per-window resident prefill — encode + one submit per window
-def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos, pos0 : int64; var logits : array<float>) {
+def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos, pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
     let noids : array<int64>
     vk_demotion_check("prefill")
     assert(!ple_raw || g_rd.ple_gpu, "vk_rdec_prefill: raw per-layer-embedding rows without the projection on device")
-    pf_run(x_batch, noids, false, 1.0, cos_batch, ple_rows, ple_raw, npos, pos0, logits)
+    pf_run(x_batch, noids, false, 1.0, cos_batch, ple_rows, ple_raw, npos, pos0, logits, experts)
 }
 
 def ple_proj_shape_ok(dim, all : int64) : bool
@@ -1368,13 +1368,13 @@ def vk_rdec_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : 
 }
 
 [hot_path, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
-def vk_rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos, pos0 : int64; var logits : array<float>) {
+def vk_rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos, pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
     assert(g_rd != null && (g_rd.emb_blk >= 0l || g_rd.emb_f32 != 0ul), "vk_rdec_prefill_ids without a placed embd plane")
     let nox : array<float>
     vk_demotion_check("prefill")
     let ple_tbl = pf_ple_tbl_on()
     assert(g_rd.ple == 0l || ple_tbl, "vk_rdec_prefill_ids: a per-layer-embedding model without its token table and projection on device")
-    pf_run(nox, tokens, true, emb_scale, cos_batch, nox, ple_tbl, npos, pos0, logits)
+    pf_run(nox, tokens, true, emb_scale, cos_batch, nox, ple_tbl, npos, pos0, logits, experts)
 }
 
 //! After a resident prefill, hand recurrent layer `l`'s device slot to the session `stp`/`histp` name (valid, dirty, bound)
@@ -1848,7 +1848,8 @@ def private pf_ffn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : in
 
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm"), arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
 def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; emb_scale : float;
-                   cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos, pos0 : int64; var logits : array<float>) {
+                   cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos, pos0 : int64; var logits : array<float>;
+                   experts : RdecHostExpertsRowsFn) {
     assert(g_rd != null && g_rd.ready, "vk prefill before prepare/set_cls")
     let ple_tbl = use_ids && ple_raw   //! the side rows gather on device from the token table
     assert(g_rd.ple == 0l || ple_tbl || long_length(ple_rows) >= npos * g_rd.n_layers * g_rd.ple, "vk prefill: the per-layer-embedding rows are short of the prompt")
@@ -1991,7 +1992,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 }
                 if (moe && g_rd.layers[l].experts_host) {
                     pf_moe_router(raw, h, l, wlen)
-                    pf_host_cut(raw, raw, h, l, wlen, 0l, @@rdec_host_rows)
+                    pf_host_cut(raw, raw, h, l, wlen, 0l, experts)
                 } elif (moe) {
                     pf_moe_block(raw, h, l, wlen)
                 }

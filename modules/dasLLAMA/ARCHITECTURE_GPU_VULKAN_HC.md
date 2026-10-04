@@ -184,10 +184,9 @@ The head mixer's single row feeds the classifier through row 0 of `pf_xb`.
 
 **A plain MoE with host layers cuts its window the same way, inside `pf_run`.** At a host layer the window
 runs the router alone (`pf_moe_router`), lands the window's FFN-normed rows and logits (`pf_hx_host`,
-`pf_hlog_host`), ends and waits the command, asks the host's rows through the tier's seat
-(`rdec_host_rows`; the seat holds the chain's `rdec_host_experts_rows` from the arm, `set_rdec_host_rows`, and a
-no-op from the model drop, `clear_rdec_host_rows` - the hyper-connection window chain takes its host callback
-per call instead), then re-opens
+`pf_hlog_host`), ends and waits the command, asks the host's rows through the `experts` callback the prefill seat
+takes per call (`rdec_prefill` / `rdec_prefill_ids`, the resident override passing `rdec_host_experts_rows` - the
+hyper-connection window chain takes its host callback the same way), then re-opens
 the same command on a copy of the sums into `pf_hacc_dev` and the plain combine over them (one slot a row
 at the identity map, `pf_ident_dev` / `pf_ones_dev`). The overlap ring is off for such a model - a cut is
 a fence mid-window - and the device layers keep the MoE block.

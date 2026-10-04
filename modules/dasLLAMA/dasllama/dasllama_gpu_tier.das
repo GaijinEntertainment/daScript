@@ -187,8 +187,9 @@ typedef RdecSetClsFn = function<(cls_block : int64; cls_fmt : int; cap : float; 
 //! `ple_row` / `ple_rows`: the per-layer-embedding side input the CPU pre-step built ([layers x ple] a token; position-major over a prompt); empty on a model without one
 //! `pick_only`: land the row's argmax id alone (the answer) and leave `logits` unwritten; false lands the logits and answers -1
 typedef RdecTokenFn = function<(x : array<float>; cossin : array<float>; ple_row : array<float>; pos : int64; cnt : int64; pick_only : bool; var logits : array<float>) : int64>
-//! `ple_raw`: the rows are the gather half alone (sqrt(ple)-scaled table rows) and the driver finishes the pre-step on device; false = the finished side input
-typedef RdecPrefillFn = function<(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; pos0 : int64; var logits : array<float>) : void>
+//! `ple_raw`: the rows are the gather half alone (sqrt(ple)-scaled table rows) and the driver finishes the pre-step on device; false = the finished side input;
+//! `experts` the host's routed sums of a plain MoE's host layers, asked at each one's cut of the window (unreached on a model without them)
+typedef RdecPrefillFn = function<(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) : void>
 //! layer `l`'s K/V rows [row0, row0 + nrows) of the selected region, `l == n_layers` the NextN head: `kp` / `vp` the host cache from
 //! row 0 - the sync takes the rows up from it, the read brings them back into it
 typedef RdecKvSyncFn = function<(l : int64; row0 : int64; nrows : int64; kp : uint8 const?; vp : uint8 const?) : void>
@@ -219,8 +220,8 @@ def private rdec_unset_token(x : array<float>; cossin : array<float>; ple_row : 
     panic("dasLLAMA: resident decode token hit without an installed GPU driver")
     return -1l
 }
-[unused_argument(x_batch, cos_batch, ple_rows, ple_raw, npos, pos0, logits)]
-def private rdec_unset_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; pos0 : int64; var logits : array<float>) {
+[unused_argument(x_batch, cos_batch, ple_rows, ple_raw, npos, pos0, logits, experts)]
+def private rdec_unset_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
     panic("dasLLAMA: resident prefill hit without an installed GPU driver")
 }
 [unused_argument(l, row0, nrows, kp, vp)]
@@ -404,25 +405,6 @@ def public rdec_prefill_hc(x_batch : array<float>; cos_batch : array<float>; sid
     invoke(g_rdec_prefill_hc, x_batch, cos_batch, side, npos, pos0, logits, experts)
 }
 
-[unused_argument(l, xb, logits, acc, row0, nrows)]
-def private rdec_unset_host_rows(l : int64; xb : float const?; logits : float const?; var acc : float?; row0, nrows : int64) {
-}
-
-var g_rdec_host_rows = @@rdec_unset_host_rows
-
-[arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
-def public set_rdec_host_rows(fn : RdecHostExpertsRowsFn) {
-    g_rdec_host_rows = fn
-}
-
-def public clear_rdec_host_rows() {
-    g_rdec_host_rows = @@rdec_unset_host_rows
-}
-
-def public rdec_host_rows(l : int64; xb : float const?; logits : float const?; var acc : float?; row0, nrows : int64) {
-    invoke(g_rdec_host_rows, l, xb, logits, acc, row0, nrows)
-}
-
 def public rdec_hc_installed() : bool => g_rdec_hc_installed
 //! `mtp_head_*` the NextN head's own head mixer and `hnorm_rows` the carry's per-stream norm gammas where the head rides the chain (empty rows and -1 blocks otherwise)
 def public rdec_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_rows : array<float>; down_blks, up_blks : array<int64>; head_norm : array<float>; head_down, head_up : int64;
@@ -578,7 +560,7 @@ def public install_moe_gpu_resident(reserve : RdecReserveFn; place : RdecPlaceFn
     g_rdec_installed = true
 }
 
-typedef RdecPrefillIdsFn = function<(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; pos0 : int64; var logits : array<float>) : void>
+typedef RdecPrefillIdsFn = function<(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) : void>
 typedef RdecSetEmbFn = function<(emb_block : int64) : bool>
 typedef RdecUploadEmbF32Fn = function<(fblob : array<float>; off : int64; vocab : int64; dim : int64) : bool>
 
@@ -596,8 +578,8 @@ def public rdec_emb_f32_bytes(vocab, dim : int64) : int64 {
     return bytes > RDEC_EMB_F32_CAP ? 0l : bytes
 }
 
-[unused_argument(tokens, emb_scale, cos_batch, npos, pos0, logits)]
-def private rdec_unset_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; pos0 : int64; var logits : array<float>) {
+[unused_argument(tokens, emb_scale, cos_batch, npos, pos0, logits, experts)]
+def private rdec_unset_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
     panic("dasLLAMA: ids-form resident prefill hit without an installed GPU driver")
 }
 [unused_argument(emb_block)]
@@ -621,7 +603,9 @@ def public install_rdec_prefill_ids(prefill_ids : RdecPrefillIdsFn; set_emb : Rd
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def public rdec_prefill_ids_installed() : bool => g_rdec_prefill_ids_installed
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
-def public rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; pos0 : int64; var logits : array<float>) { invoke(g_rdec_prefill_ids, tokens, emb_scale, cos_batch, npos, pos0, logits) }
+def public rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
+    invoke(g_rdec_prefill_ids, tokens, emb_scale, cos_batch, npos, pos0, logits, experts)
+}
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def public rdec_set_emb(emb_block : int64) : bool => invoke(g_rdec_set_emb, emb_block)
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
@@ -815,7 +799,9 @@ def public rdec_upload_norms(norms : array<float>; obias : bool) { invoke(g_rdec
 def public rdec_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) { invoke(g_rdec_set_layer, l, mir_idx, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g) }
 def public rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) { invoke(g_rdec_set_cls, cls_block, cls_fmt, cap, supp) }
 def public rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; pick_only : bool; var logits : array<float>) : int64 => invoke(g_rdec_token, x, cossin, ple_row, pos, cnt, pick_only, logits)
-def public rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; pos0 : int64; var logits : array<float>) { invoke(g_rdec_prefill, x_batch, cos_batch, ple_rows, ple_raw, npos, pos0, logits) }
+def public rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
+    invoke(g_rdec_prefill, x_batch, cos_batch, ple_rows, ple_raw, npos, pos0, logits, experts)
+}
 def public rdec_kv_sync(l, row0, nrows : int64; kp : uint8 const?; vp : uint8 const?) { invoke(g_rdec_kv_sync, l, row0, nrows, kp, vp) }
 def public rdec_kv_read(l, row0, nrows : int64; var kp : uint8?; var vp : uint8?) { invoke(g_rdec_kv_read, l, row0, nrows, kp, vp) }
 

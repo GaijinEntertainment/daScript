@@ -1981,9 +1981,6 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     }
     g_rdec_experts_host = host_experts
     g_rdec_host_layers = host_layers
-    if (host_experts && !c.hyper_conn) {
-        set_rdec_host_rows(@@rdec_host_experts_rows)
-    }
     if (host_experts) {
         g_rdec_trace_header = (layers = int(resident_routed_layers(t)), experts = int(c.n_expert), k = int(c.n_expert_used))
         if (!empty(g_env_gpu.moe_trace)) {
@@ -3614,15 +3611,15 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
     } else {
         with_host_experts(t, s) {
             if (s.embed_gpu_pending) {
-                rdec_prefill_ids(s.embed_gpu_tokens, c.embed_scale, cb, npos, start_pos, s.logits)
+                rdec_prefill_ids(s.embed_gpu_tokens, c.embed_scale, cb, npos, start_pos, s.logits, @@rdec_host_experts_rows)
                 s.embed_gpu_pending = false
                 s.ple_gpu_pending = false   //! the ids form gathers the side rows on device too: no late CPU pre-step
             } elif (s.ple_gpu_pending) {
                 us_gather = resident_prefill_ple_rows(t, s.ple_gpu_tokens, npos)
-                rdec_prefill(s.x_b, cb, g_rdec_ple_rows, true, npos, start_pos, s.logits)
+                rdec_prefill(s.x_b, cb, g_rdec_ple_rows, true, npos, start_pos, s.logits, @@rdec_host_experts_rows)
                 s.ple_gpu_pending = false
             } else {
-                rdec_prefill(s.x_b, cb, s.ple_inp, false, npos, start_pos, s.logits)   //! forward_prefill ran the PLE pre-step into s.ple_inp (position-major) before the override; empty elsewhere
+                rdec_prefill(s.x_b, cb, s.ple_inp, false, npos, start_pos, s.logits, @@rdec_host_experts_rows)   //! forward_prefill ran the PLE pre-step into s.ple_inp (position-major) before the override; empty elsewhere
             }
         }
     }
@@ -4016,7 +4013,6 @@ def moe_gpu_drop_model_() {
     g_rdec_trace_header = (layers = 0, experts = 0, k = 0)
     g_rdec_experts_host = false
     g_rdec_host_layers = 0l
-    clear_rdec_host_rows()
     rdec_set_host_experts(false)
     moe_gpu_dn_invalidate()
     rdec_set_active(false)
