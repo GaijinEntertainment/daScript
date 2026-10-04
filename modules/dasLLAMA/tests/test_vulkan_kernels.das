@@ -6913,15 +6913,9 @@ def test_vkd_dn_family(t0 : T?) {
                         }
                         o_ref[p * cd + ch] = silu_f32(acc)
                     }
-                    for (b in range(2 * kd / ds)) {
-                        var sum = 0.0
-                        for (j in range(ds)) {
-                            sum += o_ref[p * cd + b * ds + j] * o_ref[p * cd + b * ds + j]
-                        }
-                        let s = (1.0 / max(sqrt(sum), eps)) * (b < kd / ds ? qscale : 1.0)
-                        for (j in range(ds)) {
-                            o_ref[p * cd + b * ds + j] *= s
-                        }
+                    l2_norm_rows(unsafe(addr(o_ref[p * cd])), int64(2 * kd / ds), int64(ds), eps)
+                    for (j in range(kd)) {
+                        o_ref[p * cd + j] *= qscale
                     }
                 }
                 let bad = mismatch_approx(o_cls, o_ref)
@@ -6999,21 +6993,14 @@ def test_vkd_dn_family(t0 : T?) {
                             }
                         }
                     }
-                    var sumq = 0.0
-                    var sumk = 0.0
-                    for (j in range(ds)) {
-                        sumq += dq[j] * dq[j]
-                        sumk += dk[j] * dk[j]
-                    }
-                    let sq = (1.0 / max(sqrt(sumq), eps)) * qscale
-                    let sk = 1.0 / max(sqrt(sumk), eps)
+                    l2_norm_rows(unsafe(addr(dq[0])), 1l, int64(ds), eps)
+                    l2_norm_rows(unsafe(addr(dk[0])), 1l, int64(ds), eps)
                     let graw = smh[g_off + hh] + smh[dt_off + hh]
                     let eg = exp(smh[a_off + hh] * softplus(graw))
                     let bt = sigmoid_f32(smh[beta_off + hh])
                     var qk = 0.0
                     for (j in range(ds)) {
-                        dq[j] *= sq
-                        dk[j] *= sk
+                        dq[j] *= qscale
                         qk += dq[j] * dk[j]
                     }
                     let sbase = hh * ds * ds
