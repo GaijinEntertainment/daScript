@@ -1068,30 +1068,44 @@ def private dn_fixture(npos : int64) : DnFix {
         state <- [for (i in range64(DNVH * DNDS * DNDS)); synth_f(i, 47l, 0.1)])
 }
 
+//! A deltanet chain's three q8 stacks - the qkv, z and out projections - as quants and scales
+struct private DnStacks {
+    wqkv : array<int8>
+    wsqkv : array<float>
+    wz : array<int8>
+    wsz : array<float>
+    wo : array<int8>
+    wso : array<float>
+}
+
+//! the three stacks over seeds `seed`, `seed` + 6 and `seed` + 10, uploaded at `qoff` / `zoff` / `ooff`; false after a skip
+//! where the device refuses the upload or declines the dn chains
+def private dn_stacks_up(t : T?; seed, qoff, zoff, ooff : int64; var st : DnStacks) : bool {
+    fill_q8_quants(st.wqkv, st.wsqkv, DNCD, DND, seed, true)
+    fill_q8_quants(st.wz, st.wsz, DNDI, DND, seed + 6l, true)
+    fill_q8_quants(st.wo, st.wso, DND, DNDI, seed + 10l, false)
+    if (!q8_upload(st.wqkv, st.wsqkv, qoff, DND, DNCD)) {
+        t |> skip("no Vulkan device (or probe/budget refused the upload)")
+        return false
+    }
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (!g_gpu.dn_shared_ok) {
+            t |> skip("dn/attention chains declined on this device (shared-memory cap)")
+            return false
+        }
+    }
+    t |> success(q8_upload(st.wz, st.wsz, zoff, DND, DNDI), "z stack uploaded")
+    t |> success(q8_upload(st.wo, st.wso, ooff, DNDI, DND), "out stack uploaded")
+    return true
+}
+
 [test]
 def test_vulkan_deltanet(t : T?) {
     t |> run("vulkan deltanet chain == CPU reference (chunk-boundary + multi-window arms)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_vk_moe_hooks()
-            var wqkv : array<int8>
-            var wsqkv : array<float>
-            var wz : array<int8>
-            var wsz : array<float>
-            var wo : array<int8>
-            var wso : array<float>
-            fill_q8_quants(wqkv, wsqkv, DNCD, DND, 31l, true)
-            fill_q8_quants(wz, wsz, DNDI, DND, 37l, true)
-            fill_q8_quants(wo, wso, DND, DNDI, 41l, false)
-            if (!q8_upload(wqkv, wsqkv, DNQKV_WOFF, DND, DNCD)) {
-                t |> skip("no Vulkan device (or probe/budget refused the upload)")
-                return
-            }
-            if (!g_gpu.dn_shared_ok) {
-                t |> skip("dn/attention chains declined on this device (shared-memory cap)")
-                return
-            }
-            t |> success(q8_upload(wz, wsz, DNZ_WOFF, DND, DNDI), "z stack uploaded")
-            t |> success(q8_upload(wo, wso, DNO_WOFF, DNDI, DND), "out stack uploaded")
+            var st : DnStacks
+            return if (!dn_stacks_up(t, 31l, DNQKV_WOFF, DNZ_WOFF, DNO_WOFF, st))
             for (arm_npos in [70l, 1100l]) {
                 let npos = arm_npos
                 var xq : array<int8>
@@ -1113,11 +1127,11 @@ def test_vulkan_deltanet(t : T?) {
                 }
                 var qkvy : array<float>
                 var zy : array<float>
-                ref_q8_gemm(wqkv, wsqkv, xq, xs, DND, DNCD, npos, qkvy)
-                ref_q8_gemm(wz, wsz, xq, xs, DND, DNDI, npos, zy)
+                ref_q8_gemm(st.wqkv, st.wsqkv, xq, xs, DND, DNCD, npos, qkvy)
+                ref_q8_gemm(st.wz, st.wsz, xq, xs, DND, DNDI, npos, zy)
                 var refy : array<float>
                 var refconv : array<float>
-                ref_dn_core(qkvy, zy, fx.bts, fx.gts, fx.tapsv, fx.wnormv, fx.av, fx.dtv, rstate, fx.hist, npos, wo, wso, refy, refconv)
+                ref_dn_core(qkvy, zy, fx.bts, fx.gts, fx.tapsv, fx.wnormv, fx.av, fx.dtv, rstate, fx.hist, npos, st.wo, st.wso, refy, refconv)
                 held_nontrivial(t, "npos={npos}: out rows", y, refy, DN_REL_TOL, DND)
                 held(t, "npos={npos}: final state", gstate, rstate, DN_REL_TOL, DNDS)
                 var reft : array<float>
@@ -1141,12 +1155,7 @@ def test_vulkan_deltanet(t : T?) {
                 delete refconv
                 delete reft
             }
-            delete wqkv
-            delete wsqkv
-            delete wz
-            delete wsz
-            delete wo
-            delete wso
+            delete st
         } else {
             t |> skip("dasVulkan not installed; vulkan deltanet chain untestable here")
         }
@@ -1170,25 +1179,8 @@ def test_vulkan_deltanet_step(t : T?) {
     t |> run("vulkan deltanet decode step == CPU reference (state carry + mid-sequence flush)") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_vk_moe_hooks()
-            var wqkv : array<int8>
-            var wsqkv : array<float>
-            var wz : array<int8>
-            var wsz : array<float>
-            var wo : array<int8>
-            var wso : array<float>
-            fill_q8_quants(wqkv, wsqkv, DNCD, DND, 61l, true)
-            fill_q8_quants(wz, wsz, DNDI, DND, 67l, true)
-            fill_q8_quants(wo, wso, DND, DNDI, 71l, false)
-            if (!q8_upload(wqkv, wsqkv, DNSQ_WOFF, DND, DNCD)) {
-                t |> skip("no Vulkan device (or probe/budget refused the upload)")
-                return
-            }
-            if (!g_gpu.dn_shared_ok) {
-                t |> skip("dn/attention chains declined on this device (shared-memory cap)")
-                return
-            }
-            t |> success(q8_upload(wz, wsz, DNSZ_WOFF, DND, DNDI), "z stack uploaded")
-            t |> success(q8_upload(wo, wso, DNSO_WOFF, DNDI, DND), "out stack uploaded")
+            var st : DnStacks
+            return if (!dn_stacks_up(t, 61l, DNSQ_WOFF, DNSZ_WOFF, DNSO_WOFF, st))
             set_moe_gpu_dn_layer(0l, DNSQ_WOFF)   // the flush hook resolves layer -> tier state by this
             var xq : array<int8>
             var xs : array<float>
@@ -1197,20 +1189,20 @@ def test_vulkan_deltanet_step(t : T?) {
             // references: the straight-through 8-token mirror and the 4-token prefix (flush point)
             var qkvy : array<float>
             var zy : array<float>
-            ref_q8_gemm(wqkv, wsqkv, xq, xs, DND, DNCD, DNSTEPS, qkvy)
-            ref_q8_gemm(wz, wsz, xq, xs, DND, DNDI, DNSTEPS, zy)
+            ref_q8_gemm(st.wqkv, st.wsqkv, xq, xs, DND, DNCD, DNSTEPS, qkvy)
+            ref_q8_gemm(st.wz, st.wsz, xq, xs, DND, DNDI, DNSTEPS, zy)
             var rstate := fx.state
             var rstate4 := fx.state
             var refy : array<float>
             var refconv : array<float>
-            ref_dn_core(qkvy, zy, fx.bts, fx.gts, fx.tapsv, fx.wnormv, fx.av, fx.dtv, rstate, fx.hist, DNSTEPS, wo, wso, refy, refconv)
+            ref_dn_core(qkvy, zy, fx.bts, fx.gts, fx.tapsv, fx.wnormv, fx.av, fx.dtv, rstate, fx.hist, DNSTEPS, st.wo, st.wso, refy, refconv)
             var qkvy4 <- copy_span(qkvy, 0l, 4l * DNCD)
             var zy4 <- copy_span(zy, 0l, 4l * DNDI)
             var bts4 <- copy_span(fx.bts, 0l, 4l * DNVH)
             var gts4 <- copy_span(fx.gts, 0l, 4l * DNVH)
             var refy4 : array<float>
             var refconv4 : array<float>
-            ref_dn_core(qkvy4, zy4, bts4, gts4, fx.tapsv, fx.wnormv, fx.av, fx.dtv, rstate4, fx.hist, 4l, wo, wso, refy4, refconv4)
+            ref_dn_core(qkvy4, zy4, bts4, gts4, fx.tapsv, fx.wnormv, fx.av, fx.dtv, rstate4, fx.hist, 4l, st.wo, st.wso, refy4, refconv4)
             var reft : array<float>
             var reft4 : array<float>
             reft |> resize(int(DNTAPS * DNCD))
@@ -1275,12 +1267,7 @@ def test_vulkan_deltanet_step(t : T?) {
             held(t, "final state", gstate, rstate, DN_REL_TOL, DNDS)
             held(t, "final conv ring", gring, reft, REL_TOL, DNTAPS)
             reset_moe_gpu_dn_layers()
-            delete wqkv
-            delete wsqkv
-            delete wz
-            delete wsz
-            delete wo
-            delete wso
+            delete st
             delete xq
             delete xs
             delete fx
