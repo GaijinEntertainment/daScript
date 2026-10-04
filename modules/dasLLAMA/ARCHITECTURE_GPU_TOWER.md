@@ -71,6 +71,14 @@ embedder is square on E2B (1536 by 1536) and widens on E4B (1536 to 2560), so th
 read apart off the file - the out projection's rows, the embedder's rows - and never assumed equal.
 The chain lands the soft tokens in `Gemma4aState.out` and says so (`out_ready`).
 
+Canary's front runs whole on the device ahead of its block seat (`metal_canary_front`, the front
+seat): off the CPU-windowed frames, the DFT as a GEMM over the transposed twiddles, the power
+spectrum, the mel sums, `MetalCnMelNorm` - the log and the per-feature normalization over the valid
+frames, one thread a feature - then the parakeet front's convs and the input projection. The front
+kernels read tap-major taps and canary's file keeps them channel-major, so the three conv panels
+ride a device copy (`tw_cn_front_attach`); and a stage's valid rows are its conv's image height, so
+a row past them reads as the zero the CPU chain masks it to and no mask pass is dispatched.
+
 The FastConformer chain (canary and parakeet share it: one context, one block body over the
 canary offsets record, parakeet's offsets mapped onto it with no GEMM biases and its tap-major
 depthwise stamp) runs the rel-pos (Transformer-XL) attention one head at a time on the f32 GEMM

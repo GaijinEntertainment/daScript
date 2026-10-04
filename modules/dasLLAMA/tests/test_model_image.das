@@ -2396,13 +2396,15 @@ def test_canary_tower_metal(t : T?) {
                 canary_encode(enc, stc)
                 set_metal_tower(true)
                 canary_log_mel(enc, samples, stg)
-                let e0 = metal_tower_stats().encodes
+                let e0 = metal_tower_stats()
                 canary_encode(enc, stg)
-                rows_gpu = metal_tower_stats().encodes - e0
+                rows_gpu = metal_tower_stats().encodes - e0.encodes
+                t |> equal(metal_tower_stats().convs - e0.convs, 1l, "the mel and the subsample front served on the device")
                 enc_rel_l2 = rel_l2(stg.out, stc.out)
-                // the control: the same clip with its mel scaled x3 through the GPU chain must red the bar
-                for (i in range(length(stg.mel))) {
-                    stg.mel[i] *= 3.0
+                // the control: the device front reads the windowed frames, so the clip with the first half of them
+                // silenced, through the GPU chain, must red the bar (a scaled clip would not: the mel normalizes per feature)
+                for (i in range(length(stg.xw) / 2)) {
+                    stg.xw[i] = 0.0
                 }
                 canary_encode(enc, stg)
                 poison_rel_l2 = rel_l2(stg.out, stc.out)

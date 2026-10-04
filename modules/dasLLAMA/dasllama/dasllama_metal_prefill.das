@@ -4271,6 +4271,52 @@ class MetalG4aLogMel {
     }
 }
 
+struct CnMelNormArgs {
+    nmel : uint
+    nlen : uint     //!< frames the mel holds
+    valid : uint    //!< frames of real audio: the statistics' span, the rows past it zeroed
+    mfloor : float
+}
+
+//! Canary's log and per-feature normalization over the mel GEMM's sums [rows x nmel], in place, one thread a mel
+//! feature: log(sum + floor), the mean and the Bessel deviation over the valid frames, every valid frame normalized
+//! and the frames past them zero - the CPU form's three passes.
+[metal_dispatch(name = "enc_cn_melnorm", pso = "g_pf_pso_cn_melnorm", tg = 64, grid = "nmel/64", params = "nmel : int64")]
+class MetalCnMelNorm {
+    @ssbo @binding = 0 @role = "readwrite" mel : array<float>   //!< [rows x nmel]
+    @uniform @binding = 1 ka : CnMelNormArgs
+
+    [metal_kernel(name="metal_cn_melnorm_msl")]
+    def metal_cn_melnorm {
+        let j = gl_GlobalInvocationID.x
+        if (j >= ka.nmel) {
+            return
+        }
+        var sum = 0.0
+        var i = 0u
+        while (i < ka.valid) {
+            let v = log(mel[i * ka.nmel + j] + ka.mfloor)
+            mel[i * ka.nmel + j] = v
+            sum += v
+            i++
+        }
+        let mean = sum / float(max(ka.valid, 1u))
+        var sq = 0.0
+        i = 0u
+        while (i < ka.valid) {
+            let dv = mel[i * ka.nmel + j] - mean
+            sq += dv * dv
+            i++
+        }
+        let denom = sqrt(sq / max(float(ka.valid) - 1.0, 1.0)) + 1e-5
+        i = 0u
+        while (i < ka.nlen) {
+            mel[i * ka.nmel + j] = i < ka.valid ? (mel[i * ka.nmel + j] - mean) / denom : 0.0
+            i++
+        }
+    }
+}
+
 //! The subsample conv's LayerNorm(channels, weight-only) + ReLU: one thread per row —
 //! mean/variance over ``dim`` at ``ldin`` stride, compact ``dim``-wide rows out at ``ldout``.
 [metal_dispatch(name = "enc_g4a_lnrelu", pso = "g_pf_pso_g4a_lnrelu", tg = 64, grid = "nrows/64", params = "nrows : int64")]
@@ -4477,6 +4523,7 @@ var private g_pf_pso_pk_dw : MetalComputePipeline?       //!< the same on parake
 var private g_pf_pso_pk_conv0 : MetalComputePipeline?    //!< the parakeet front: the first conv with its ReLU
 var private g_pf_pso_pk_dw2d : MetalComputePipeline?     //!< its depthwise stride-2 conv
 var private g_pf_pso_pk_xf : MetalComputePipeline?       //!< its feature rows for the pre-projection
+var private g_pf_pso_cn_melnorm : MetalComputePipeline?  //!< canary's log and per-feature normalization over the mel
 var private g_pf_pso_bias_relu : MetalComputePipeline?   //!< a 1x1 conv's bias and ReLU over its GEMM's rows
 var private g_pf_pso_g4a_attn : MetalComputePipeline?    //!< the gemma4a sliding-window RPE attention
 var private g_pf_pso_g4a_glu : MetalComputePipeline?     //!< its conv-module GLU halves
@@ -4906,6 +4953,7 @@ def public metal_prefill_shutdown {
     release_handles(g_pf_pso_twr_flash, g_pf_pso_twr_kvhc, g_pf_pso_twr_win)
     release_handles(g_pf_pso_fc_pack, g_pf_pso_fc_softmax, g_pf_pso_fc_unpack, g_pf_pso_cn_dw, g_pf_pso_pk_dw)
     release_handles(g_pf_pso_pk_conv0, g_pf_pso_pk_dw2d, g_pf_pso_pk_xf, g_pf_pso_bias_relu)
+    release_handle(g_pf_pso_cn_melnorm)
     release_handles(g_pf_pso_g4a_attn, g_pf_pso_g4a_glu, g_pf_pso_g4a_dw, g_pf_pso_g4a_silu, g_pf_pso_g4a_axpy)
     release_handles(g_pf_pso_g4a_mag, g_pf_pso_g4a_logmel, g_pf_pso_g4a_lnrelu)
     release_handles(g_pf_pso_q3a_shuffle, g_pf_pso_q3a_finish, g_pf_pso_q3a_pow, g_pf_pso_q3a_logmel_t)
@@ -5088,6 +5136,7 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     g_pf_pso_pk_conv0 = compile_stamp(metal_pk_conv0_msl, ok)
     g_pf_pso_pk_dw2d = compile_stamp(metal_pk_dw2d_msl, ok)
     g_pf_pso_pk_xf = compile_stamp(metal_pk_xf_msl, ok)
+    g_pf_pso_cn_melnorm = compile_stamp(metal_cn_melnorm_msl, ok)
     g_pf_pso_bias_relu = compile_stamp(metal_bias_relu_rows_msl, ok)
     g_pf_pso_g4a_attn = compile_stamp(metal_g4a_attn_msl, ok)
     g_pf_pso_g4a_glu = compile_stamp(metal_g4a_glu_msl, ok)
@@ -5386,6 +5435,9 @@ def pf_fc_ready(tap_major : bool) : bool => psos_ready(fixed_array(g_pf_pso_fc_p
 
 //! The parakeet subsample front's kernels compiled - the whole-encode driver's extra device gate.
 def pf_pk_front_ready() : bool => psos_ready(fixed_array(g_pf_pso_pk_conv0, g_pf_pso_pk_dw2d, g_pf_pso_pk_xf, g_pf_pso_bias_relu, g_pf_pso_addbias))
+
+//! The canary front's kernels compiled - the parakeet front's, the spectrum's and the mel normalization.
+def pf_cn_front_ready() : bool => pf_pk_front_ready() && psos_ready(fixed_array(g_pf_pso_cn_melnorm, g_pf_pso_q3a_pow))
 
 //! The gemma4a Conformer kernel set compiled — its tower driver's device gate.
 def pf_g4a_ready() : bool => psos_ready(fixed_array(g_pf_pso_g4a_attn, g_pf_pso_g4a_glu, g_pf_pso_g4a_dw, g_pf_pso_g4a_silu, g_pf_pso_g4a_axpy))

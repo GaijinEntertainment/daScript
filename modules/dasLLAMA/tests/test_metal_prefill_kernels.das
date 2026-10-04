@@ -819,6 +819,49 @@ def private pk_xf_gate(t : T?; var dev, queue) {
     }
 }
 
+//! Canary's log and per-feature normalization, in place over the mel sums: log(sum + floor), the mean and the Bessel
+//! deviation over the valid frames in double, every valid frame normalized and the frames past them zero; rows past
+//! the mel keep their sentinel.
+def private cn_melnorm_gate(t : T?; var dev, queue) {
+    let tag = "cn_melnorm"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kd = kernel_of(@@enc_cn_melnorm)
+        var pso = mc |> keep_stamp(kd, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let nmel = 70      // off the 64-thread group: the last group's guard runs
+        let nlen = 11
+        let valid = 7
+        let rows = 13      // two rows past the mel: untouched
+        let mfloor = 5.960464477539063e-08
+        var inscope x <- [for (i in range(rows * nmel)); 0.001 + float((i * 37) % 101) * 0.37]
+        var inscope want := x
+        for (j in range(nmel)) {
+            var sum = 0.0lf
+            for (i in range(valid)) {
+                sum += log(double(x[i * nmel + j]) + double(mfloor))
+            }
+            let mean = sum / double(valid)
+            var sq = 0.0lf
+            for (i in range(valid)) {
+                let dv = log(double(x[i * nmel + j]) + double(mfloor)) - mean
+                sq += dv * dv
+            }
+            let denom = sqrt(sq / double(valid - 1)) + 1e-5lf
+            for (i in range(nlen)) {
+                want[i * nmel + j] = i < valid ? float((log(double(x[i * nmel + j]) + double(mfloor)) - mean) / denom) : 0.0
+            }
+        }
+        var ka = CnMelNormArgs(nmel = uint(nmel), nlen = uint(nlen), valid = uint(valid), mfloor = mfloor)
+        let bx = mc |> io_(x)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            invoke(kd.enc, enc, pso, mc.buf[bx], ka, int64(nmel))
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bx], want, BAR_APPROX, Shape(row_width = nmel))
+    }
+}
+
 //! A 1x1 conv's bias and ReLU over its rows, in place: max(x + b, 0) against the same f32 form, the fixture on
 //! both sides of zero.
 def private bias_relu_rows_gate(t : T?; var dev, queue) {
@@ -2725,6 +2768,7 @@ def test_metal_prefill_kernels(t : T?) {
                 pk_front_conv_gate(t, dev, queue, true)
                 pk_front_conv_gate(t, dev, queue, false)
                 pk_xf_gate(t, dev, queue)
+                cn_melnorm_gate(t, dev, queue)
                 bias_relu_rows_gate(t, dev, queue)
                 st2_conv_gate(t, dev, queue, false, false)
                 st2_conv_gate(t, dev, queue, true, false)

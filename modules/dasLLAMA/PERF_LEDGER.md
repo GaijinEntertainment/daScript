@@ -11,6 +11,18 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-04, `direction-grade`) - canary's mel and subsample front run on the Metal tower.**
+  M5 Max, Metal, canary-qwen-2.5b (the q8_0 decoder, the f32 encoder), in process as the server's
+  ASR worker runs it (the engine's stage clock, the fourth transcription of a clip), the tune sidecar
+  predating the binary. The front seat was filled by the Vulkan driver alone, so on Metal the mel
+  (a twiddle GEMM on the CPU) and the subsample stack ran on the CPU beside 80 ms of blocks on the
+  device.
+  - A 64 s clip: 1274 ms before - mel 239, front 258, blocks 80, projection 7, prefill 56, decode
+    629 - and 772 after, the mel and the front together 8.0. An 8 s clip: 163 ms before, 106 after
+    (3.5 for the two).
+  - The device rows sit 2.1e-3 rel-l2 from the CPU chain's on the jfk clip (3.1e-4 with the CPU
+    front ahead of the device blocks); the transcripts are equal.
+
 - **MEASURED (2026-10-03, `direction-grade`) - the Metal tower reads a whisper encoder's q8 planes.**
   M5 Max, Metal, whisper large-v3-turbo, `dasllama-server` with the ASR model alone
   (`main.das -- --asr ggml-large-v3-turbo.bin`), the reference whisper.cpp `6fc7c33` as

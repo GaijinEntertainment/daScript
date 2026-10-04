@@ -245,7 +245,10 @@ Conformer cells, E2B and E4B (f32-lane transcript equality CPU vs GPU + the soft
 counter deltas, the projector tail run on the device - `out_ready` set on the device leg and clear
 on the CPU leg - and the two projector widths read off the file: the encoder's 1536 on both, the
 embedder's 1536 on E2B and 2560 on E4B; the lane pin/reset discipline mirrors qwen3a's), the canary Metal FastConformer cell (the
-same discipline over the rel-pos XL block loop; decoder = the q8_0 serving artifact), the
+same discipline over the rel-pos XL block loop, the mel and the subsample front served on the
+device ahead of it - the conv counter rising - and the control a clip with half its windowed
+frames silenced, which the per-feature normalization cannot absorb as it would a scaled clip;
+decoder = the q8_0 serving artifact), the
 parakeet Metal FastConformer cell (the same chain over parakeet's f32 blob, minted in memory;
 transcript equality CPU vs GPU + the encoder rows' rel-l2 + counter deltas - the subsample front
 counted on the device at every GPU encode - then the front lever off (`set_metal_parakeet_front`:
@@ -400,7 +403,10 @@ front's cells (the same file): the first conv and the depthwise conv on an 11 x 
 along one axis, even along the other, so each edge drops its own taps - against the in-test
 loops, the sums asserted to take both signs so the first conv's ReLU and the depthwise conv's
 lack of one both show; the feature permute bit for bit with its row pad zero under a sentinel
-fill; the bias-and-ReLU row pass against max(x + b, 0) over sums of both signs. The FastConformer
+fill; the bias-and-ReLU row pass against max(x + b, 0) over sums of both signs. Canary's mel
+normalization (`cn_melnorm`): the log and the per-feature normalization in place against a double
+form at 70 features (off the 64-thread group), 11 frames of which 7 are valid - the rest zero - and
+two rows past the mel left as they were. The FastConformer
 all-heads attention's two stamps (the same file): the half operands (`fc_twin`) bit for bit the RNE
 narrow of the host's sum or product over all five panels, their pad rows zero, one poisoned input
 a panel; the rel-shift softmax (`fc_pexp`) over two heads at 24 and 300 keys - the weights within
