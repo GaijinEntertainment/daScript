@@ -39,6 +39,19 @@ def private regions_rig_init() {
     set_gpu_ctx_max(REGIONS_RIG_CTX)
 }
 
+var private g_file_kv_found : tuple<pinned : bool; dt : KVDtype>
+
+//! the K/V mirror asked at `dt` for every load of the file that calls it from its `[init]` - a process runs one test file
+def pin_file_kv(dt : KVDtype) {
+    g_file_kv_found = gpu_kv_dtype_pin()
+    set_gpu_kv_dtype(dt)
+}
+
+//! the codec pin `pin_file_kv` found put back, from the same file's `[finalize]`
+def unpin_file_kv() {
+    restore_kv_pin(g_file_kv_found)
+}
+
 let private STEPS = 8l
 
 def private prompt_a() : array<int64> => <- resident_prompt(40l)
