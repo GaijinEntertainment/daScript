@@ -529,23 +529,16 @@ def private cm2_shape_upload(fmt : int; d, n, cnt : int; slab_blocks : int = 0; 
 
 //! one region of `cnt` rows for `wgs` workgroups: the schedule words the tile classes read at `map_off` 4, in a device buffer or in host memory (the prefill's `pf_meta` form)
 def private one_region_sched(cnt, wgs : int; host : bool = false; wblk0 : int = 0) : tuple<buf : uint64; bytes : int64> {
-    var sched : array<uint>
-    sched |> resize(4 + wgs)
-    sched[0] = uint(wblk0)
-    sched[2] = uint(cnt)
     let sc_bytes = int64(4 + wgs) * 4l
-    var scd = 0ul
-    unsafe {
-        if (host) {
-            let hb = make_host_buf(sc_bytes, true)
-            memcpy(hb.mapped, addr<void?>(sched[0]), sc_bytes)
-            scd = hb.buf
-        } else {
-            scd = make_device_buf(sc_bytes)
-            upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
-        }
+    var cur = 4l
+    if (host) {
+        let hb = make_host_buf(sc_bytes, true)
+        batch_sched_map(unsafe(reinterpret<uint?>(hb.mapped)), cur, 0l, int64(wblk0), int64(cnt), int64(wgs))
+        return (buf = hb.buf, bytes = sc_bytes)
     }
-    delete sched
+    let scd = make_staged_buf(sc_bytes) $(var words : uint?) {
+        batch_sched_map(words, cur, 0l, int64(wblk0), int64(cnt), int64(wgs))
+    }
     return (buf = scd, bytes = sc_bytes)
 }
 
