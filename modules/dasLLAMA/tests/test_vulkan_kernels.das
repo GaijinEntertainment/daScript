@@ -2629,7 +2629,8 @@ def test_vkd_q8_khr_batch(t0 : T?) {
             // planes, then the reduce into the y plane - the k0 / k1 / ybase prologue the KHR stamp shares with the cm2 tiles
             verify(ensure_splitk_reduce_cls(), "the split-k reduce's class rail must engage")
             let nsplit = 2
-            let ck = ((f.n + nsplit - 1) / nsplit + 255) & ~255
+            let ck = cm2_chunk(int64(f.n), int64(nsplit))
+            t |> equal(ck, 512l, "the engine's chunk: K 576 in two 256-aligned chunks, 512 and 64 deep")
             let cnt0 = TILE_CELL_ROWS0
             let d = TILE_CELL_D
             let swgs = ((cnt0 + 127) / 128) * ((d + 127) / 128) * nsplit
