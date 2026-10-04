@@ -2908,55 +2908,33 @@ def test_vkd_at_attn(t0 : T?) {
                 let gated = hs == 256
                 let qd = nheads * hs
                 let kvd = (nheads / kv_mul) * hs
-                let kpos = w0 + rows   // K/V panels hold absolute positions [0, w0+rows)
-                var qh <- row_fill(rows * qd, 41, 0, 0.05, 1.8, 73)
-                var kh <- row_fill(kpos * kvd, 17, 0, 0.03, 1.4, 97)
-                var vh <- row_fill(kpos * kvd, 53, 0, 0.04, 1.7, 89)
+                var f <- da_attn_b_fix(rows, nheads, kv_mul, hs, w0, 0, 0, 0.05, 1.8, 0.03, 1.4, false)   // K/V panels hold absolute positions [0, w0+rows)
                 var gh <- row_fill(rows * qd, 29, 0, 0.06, 1.9, 61)
-                let q_bytes = int64(rows * qd) * 4l
-                let m_bytes = int64(kpos * kvd) * 4l
-                let qdev = make_device_buf(q_bytes)
-                let kdev = make_device_buf(m_bytes)
-                let vdev = make_device_buf(m_bytes)
-                let yd2 = make_device_buf(q_bytes)
-                let host = make_host_buf(q_bytes, true, [cached = true])
-                let wgs = nheads * ((rows + 7) / 8)
-                unsafe {
-                    upload_region_at(qdev, 0l, addr<uint8 const?>(qh[0]), q_bytes)
-                    upload_region_at(kdev, 0l, addr<uint8 const?>(kh[0]), m_bytes)
-                    upload_region_at(vdev, 0l, addr<uint8 const?>(vh[0]), m_bytes)
-                    // the class kernel: q@0, K@1, V@2, out@3 (pre-loaded with the gates)
-                    upload_region_at(yd2, 0l, addr<uint8 const?>(gh[0]), q_bytes)
-                }
-                var sc = set_at_attn_cls(fixed_array(qdev, kdev, vdev, yd2),
-                    fixed_array(q_bytes, m_bytes, m_bytes, q_bytes),
-                    fixed_array(1u, 2u, 8u, 4u))
-                var pc = AtAttnArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd),
-                    kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul),
-                    flags = gated ? 1u : 0u, dpl = uint(hs / 32), scale = scale)
-                cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                    enc_at_attn_cls(raw2, h2, sc, pc, int64(wgs))
-                    cmd_copy_planes(raw2, h2, fixed_array(yd2), host, fixed_array(q_bytes), 4u)
-                }
-                var y_cls <- staged(host.mapped, 0l, rows * qd, type<float>)
                 // oracle: causal rows (row r attends [0, w0 + r]); gated = out * sigmoid(gate)
-                var y_ref : array<float>
-                y_ref |> resize(rows * qd)
-                for (r in range(rows)) {
-                    attn_heads_oracle(qh, r * qd, kh, 0, vh, 0, kvd, nheads, hs, kv_mul, w0 + r + 1, scale, y_ref, r * qd)
-                }
+                var y_ref <- da_attn_b_ref(f, scale, 0, 0.0)
                 if (gated) {
                     for (i in range(rows * qd)) {
                         y_ref[i] = sig_gate(y_ref[i], gh[i])
                     }
                 }
-                check_rows(t, "at_attn hs {hs}{gated ? " gated" : ""} against the CPU oracle", y_cls, y_ref, BAR_APPROX_CTRL, qd, hs)
-                delete qh
-                delete kh
-                delete vh
+                with_cell_planes() $(var cp : CellPlanes) {
+                    // the class kernel: q@0, K@1, V@2, out@3 (pre-loaded with the gates)
+                    let pq = cp |> in_(f.qh)
+                    let pk = cp |> in_(f.kh)
+                    let pv = cp |> in_(f.vh)
+                    let py = cp |> io_(gh)
+                    var sc = cp |> cls_set(fixed_array(pq, pk, pv, py), @@set_at_attn_cls)
+                    var pc = AtAttnArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd),
+                        kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul),
+                        flags = gated ? 1u : 0u, dpl = uint(hs / 32), scale = scale)
+                    cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                        enc_at_attn_cls(raw2, h2, sc, pc, int64(nheads * ((rows + 7) / 8)))
+                    }
+                    check_rows(t, "at_attn hs {hs}{gated ? " gated" : ""} against the CPU oracle", cp |> plane_run(py), y_ref, BAR_APPROX_CTRL, qd, hs)
+                }
+                delete f
                 delete gh
                 delete y_ref
-                delete y_cls
             }
         } else {
             t |> skip("dasVulkan not present")
@@ -2977,6 +2955,16 @@ def private fa_arm_ensure(khr : bool) : bool {
         if (!fa_stamp_pair_ensure(khr, 64l, false, false, true, true)) return false   //! the sink stamps (gpt-oss)
     }
     return true
+}
+
+//! a flash stamp's set over the cell planes `p` (q, the K and V shadows, the out plane), and the sink plane `psink` past them on a
+//! sink stamp; generic so a build without the vulkan module never infers it
+def private fa_cell_set(cp; khr, sink : bool; p; psink : int) {
+    if (sink) {
+        let p5 = fixed_array(p[0], p[1], p[2], p[3], psink)
+        return fa_stamp_sink_set(khr, gather_planes(cp.dev, p5), gather_planes(cp.bytes, p5), gather_planes(cp.hazard_bit, p5))
+    }
+    return fa_stamp_set(khr, gather_planes(cp.dev, p), gather_planes(cp.bytes, p), gather_planes(cp.hazard_bit, p))
 }
 
 //! the f16-out twin is held to the f32 stamp's output through f16cvt, not to the oracle: the two stamps must agree bit for bit
@@ -3000,8 +2988,6 @@ def private fa_tile_run(t : T?; khr : bool) {
             for (hh in range(nheads)) {
                 sinkh[hh] = 0.45 * float(hh) - 0.3   //! sink logits inside the scaled scores' range, one under and the rest over the row's typical max
             }
-            let sink_bytes = int64(nheads) * 4l
-            let sinkd = make_device_buf(sink_bytes)
             let qd = nheads * hs
             let kvd = (nheads / kv_mul) * hs
             let kpos = w0 + rows
@@ -3015,79 +3001,44 @@ def private fa_tile_run(t : T?; khr : bool) {
                 kh[i] = 10000.0
                 vh[i] = 10000.0
             }
-            let q_bytes = int64(rows * qd) * 4l
-            let m_bytes = int64(kpad * kvd) * 4l
-            let sh_bytes = int64(kpad * kvd) * 2l
-            let h16_bytes = int64(rows * qd) * 2l
-            let qdev = make_device_buf(q_bytes)
-            let kdev = make_device_buf(m_bytes)
-            let vdev = make_device_buf(m_bytes)
-            let khdev = make_device_buf(sh_bytes)
-            let vhdev = make_device_buf(sh_bytes)
-            let yd = make_device_buf(q_bytes)
-            let yh16_fused = make_device_buf(h16_bytes)   // the f16-out twin's plane
-            let yh16_split = make_device_buf(h16_bytes)   // the split pair's: f32 out -> f16cvt
-            var host = make_host_buf(q_bytes, true, [cached = true])
-            var host16 = make_host_buf(h16_bytes * 2l, true, [cached = true])
             var y_cls : array<float>
             var y16_fused : array<float16>
             var y16_split : array<float16>
-            y_cls |> resize(rows * qd)
-            y16_fused |> resize(rows * qd)
-            y16_split |> resize(rows * qd)
-            // two DIFFERENT sentinels on the compared f16 planes: a dead leg on either side reads as a mismatch
-            for (i in range(rows * qd)) {
-                y16_fused[i] = float16(-777.5)
-                y16_split[i] = float16(-999.25)
-            }
-            unsafe {
-                upload_region_at(qdev, 0l, addr<uint8 const?>(qh[0]), q_bytes)
-                upload_region_at(kdev, 0l, addr<uint8 const?>(kh[0]), m_bytes)
-                upload_region_at(vdev, 0l, addr<uint8 const?>(vh[0]), m_bytes)
-                upload_region_at(yh16_fused, 0l, addr<uint8 const?>(y16_fused[0]), h16_bytes)
-                upload_region_at(yh16_split, 0l, addr<uint8 const?>(y16_split[0]), h16_bytes)
-                upload_region_at(sinkd, 0l, addr<uint8 const?>(sinkh[0]), sink_bytes)
-                nan_sentinel_upload(yd, q_bytes)
-                var sck = set_tower_clamp_cvt_cls(fixed_array(kdev, khdev),
-                    fixed_array(m_bytes, sh_bytes), fixed_array(2u, 16u))
-                var scv = set_tower_clamp_cvt_cls(fixed_array(vdev, vhdev),
-                    fixed_array(m_bytes, sh_bytes), fixed_array(8u, 32u))
-                var sfa = (sink
-                    ? fa_stamp_sink_set(khr, fixed_array(qdev, khdev, vhdev, yd, sinkd),
-                        fixed_array(q_bytes, sh_bytes, sh_bytes, q_bytes, sink_bytes),
-                        fixed_array(1u, 16u, 32u, 4u, 0u))
-                    : fa_stamp_set(khr, fixed_array(qdev, khdev, vhdev, yd),
-                        fixed_array(q_bytes, sh_bytes, sh_bytes, q_bytes),
-                        fixed_array(1u, 16u, 32u, 4u)))
-                var sfa16 = (sink
-                    ? fa_stamp_sink_set(khr, fixed_array(qdev, khdev, vhdev, yh16_fused, sinkd),
-                        fixed_array(q_bytes, sh_bytes, sh_bytes, h16_bytes, sink_bytes),
-                        fixed_array(1u, 16u, 32u, 64u, 0u))
-                    : fa_stamp_set(khr, fixed_array(qdev, khdev, vhdev, yh16_fused),
-                        fixed_array(q_bytes, sh_bytes, sh_bytes, h16_bytes),
-                        fixed_array(1u, 16u, 32u, 64u)))
-                var scy = set_tower_clamp_cvt_cls(fixed_array(yd, yh16_split),
-                    fixed_array(q_bytes, h16_bytes), fixed_array(4u, 128u))
+            with_cell_planes() $(var cp : CellPlanes) {
+                let pq = cp |> in_(qh)
+                let pk = cp |> in_(kh)
+                let pv = cp |> in_(vh)
+                let pkh = cp |> out_words(int64(kpad * kvd) * 2l, NAN_SENTINEL_BITS)   // the f16cvt shadows the stamps read
+                let pvh = cp |> out_words(int64(kpad * kvd) * 2l, NAN_SENTINEL_BITS)
+                let py = cp |> out_(rows * qd)
+                //! the compared f16 planes under a NaN in both halves: a dead leg on either side reads as a mismatch
+                let py16f = cp |> out_words(int64(rows * qd) * 2l, NAN_SENTINEL_BITS)   // the f16-out twin's plane
+                let py16s = cp |> out_words(int64(rows * qd) * 2l, NAN_SENTINEL_BITS)   // the split pair's: f32 out -> f16cvt
+                let psink = cp |> in_(sinkh)
+                var sck = cp |> cls_set(fixed_array(pk, pkh), @@set_tower_clamp_cvt_cls)
+                var scv = cp |> cls_set(fixed_array(pv, pvh), @@set_tower_clamp_cvt_cls)
+                var sfa = fa_cell_set(cp, khr, sink, fixed_array(pq, pkh, pvh, py), psink)
+                var sfa16 = fa_cell_set(cp, khr, sink, fixed_array(pq, pkh, pvh, py16f), psink)
+                var scy = cp |> cls_set(fixed_array(py, py16s), @@set_tower_clamp_cvt_cls)
                 var pcv = f16_rows_args(uint(kpad * kvd))
                 let cvtwgs = int64((kpad * kvd / 4 + 255) / 256)
                 var pcf = FaArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd),
                     kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u, scale = scale, window = uint(window), sinkoff = 0u)
                 var pcy = f16_rows_args(uint(rows * qd))
-                cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
                     enc_tower_clamp_cvt_cls(raw2, h2, sck, pcv, cvtwgs)
                     enc_tower_clamp_cvt_cls(raw2, h2, scv, pcv, cvtwgs)
                     enc_fa_tile(khr, hs, false, false, sink, false, raw2, h2, sfa, pcf, nheads, rows)
                     enc_fa_tile(khr, hs, false, false, sink, true, raw2, h2, sfa16, pcf, nheads, rows)
                     // the split pair's own convert: f16cvt over the f32 out - the fused twin's true peer
                     enc_tower_clamp_cvt_cls(raw2, h2, scy, pcy, int64((rows * qd / 4 + 255) / 256))
-                    vhz_dep(raw2, h2, 4u | 64u | 128u, 0u, true)
-                    cmd_copy_whole(raw2, yd, host.buf, q_bytes)
-                    cmd_copy_range(raw2, yh16_fused, 0l, host16.buf, 0l, h16_bytes)
-                    cmd_copy_range(raw2, yh16_split, 0l, host16.buf, h16_bytes, h16_bytes)
                 }
-                memcpy(addr<void?>(y_cls[0]), host.mapped, q_bytes)
-                memcpy(addr<void?>(y16_fused[0]), host16.mapped, h16_bytes)
-                memcpy(addr<void?>(y16_split[0]), reinterpret<void?>(intptr(host16.mapped) + uint64(h16_bytes)), h16_bytes)
+                delete y_cls
+                delete y16_fused
+                delete y16_split
+                y_cls <- cp |> plane_run(py)
+                y16_fused <- cp |> plane_as(py16f, type<float16>, rows * qd)
+                y16_split <- cp |> plane_as(py16s, type<float16>, rows * qd)
             }
             // oracle mirrors the kernel's f16 grid: q pre-scales then rounds (the kernel's
             // MatrixTimesScalar-then-convert), K/V round through the shadow; softmax stays f32. The cm2 kernel's
@@ -3219,46 +3170,36 @@ def private fa_h256_run(nheads, kv_mul, rows, w0 : int; gated : bool; cap : floa
         var vh <- row_fill(kpos * kvd, 53, 0, 0.04, 1.7, 89)
         kh |> resize(kpad * kvd)
         vh |> resize(kpad * kvd)
-        let qp_bytes = int64(rows * qrow) * 4l
-        let m_bytes = int64(kpad * kvd) * 4l
-        let sh_bytes = int64(kpad * kvd) * 2l
-        let o_bytes = int64(rows * qd) * 4l
-        let o16_bytes = int64(rows * qd) * 2l
-        let qdev = make_device_buf(qp_bytes)
-        let kdev = make_device_buf(m_bytes)
-        let vdev = make_device_buf(m_bytes)
-        let khdev = make_device_buf(sh_bytes)
-        let vhdev = make_device_buf(sh_bytes)
-        let yd = make_device_buf(o_bytes)
-        let yh16 = make_device_buf(o16_bytes)
-        let host = make_host_buf(o_bytes + o16_bytes, true, [cached = true])
-        nan_sentinel_upload(yd, o_bytes)
-        nan_sentinel_upload(yh16, o16_bytes)
-        unsafe {
-            upload_region_at(qdev, 0l, addr<uint8 const?>(qp[0]), qp_bytes)
-            upload_region_at(kdev, 0l, addr<uint8 const?>(kh[0]), m_bytes)
-            upload_region_at(vdev, 0l, addr<uint8 const?>(vh[0]), m_bytes)
+        var y_cls : array<float>
+        var y16 : array<float16>
+        with_cell_planes() $(var cp : CellPlanes) {
+            let pq = cp |> in_(qp)
+            let pk = cp |> in_(kh)
+            let pv = cp |> in_(vh)
+            let pkh = cp |> out_words(int64(kpad * kvd) * 2l, NAN_SENTINEL_BITS)
+            let pvh = cp |> out_words(int64(kpad * kvd) * 2l, NAN_SENTINEL_BITS)
+            let py = cp |> out_(rows * qd)
+            let py16 = cp |> out_words(int64(rows * qd) * 2l, NAN_SENTINEL_BITS)
+            var sck = cp |> cls_set(fixed_array(pk, pkh), @@set_tower_clamp_cvt_cls)
+            var scv = cp |> cls_set(fixed_array(pv, pvh), @@set_tower_clamp_cvt_cls)
+            var sfa = fa_cell_set(cp, khr, false, fixed_array(pq, pkh, pvh, py), -1)
+            var sfa16 = fa_cell_set(cp, khr, false, fixed_array(pq, pkh, pvh, py16), -1)
+            var pcv = f16_rows_args(uint(kpad * kvd))
+            let cvtwgs = int64((kpad * kvd / 4 + 255) / 256)
+            var pcf = FaArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u,
+                scale = scale, cap = cap, qstride = gated ? uint(qrow) : 0u, qhs = gated ? uint(qhs) : 0u)
+            let capped = !gated
+            cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                enc_tower_clamp_cvt_cls(raw2, h2, sck, pcv, cvtwgs)
+                enc_tower_clamp_cvt_cls(raw2, h2, scv, pcv, cvtwgs)
+                enc_fa_tile(khr, hs, gated, capped, false, false, raw2, h2, sfa, pcf, nheads, rows)
+                enc_fa_tile(khr, hs, gated, capped, false, true, raw2, h2, sfa16, pcf, nheads, rows)
+            }
+            delete y_cls
+            delete y16
+            y_cls <- cp |> plane_run(py)
+            y16 <- cp |> plane_as(py16, type<float16>, rows * qd)
         }
-        var sck = set_tower_clamp_cvt_cls(fixed_array(kdev, khdev), fixed_array(m_bytes, sh_bytes), fixed_array(2u, 16u))
-        var scv = set_tower_clamp_cvt_cls(fixed_array(vdev, vhdev), fixed_array(m_bytes, sh_bytes), fixed_array(8u, 32u))
-        var sfa = fa_stamp_set(khr, fixed_array(qdev, khdev, vhdev, yd),
-            fixed_array(qp_bytes, sh_bytes, sh_bytes, o_bytes), fixed_array(1u, 16u, 32u, 4u))
-        var sfa16 = fa_stamp_set(khr, fixed_array(qdev, khdev, vhdev, yh16),
-            fixed_array(qp_bytes, sh_bytes, sh_bytes, o16_bytes), fixed_array(1u, 16u, 32u, 64u))
-        var pcv = f16_rows_args(uint(kpad * kvd))
-        let cvtwgs = int64((kpad * kvd / 4 + 255) / 256)
-        var pcf = FaArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u,
-            scale = scale, cap = cap, qstride = gated ? uint(qrow) : 0u, qhs = gated ? uint(qhs) : 0u)
-        let capped = !gated
-        cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-            enc_tower_clamp_cvt_cls(raw2, h2, sck, pcv, cvtwgs)
-            enc_tower_clamp_cvt_cls(raw2, h2, scv, pcv, cvtwgs)
-            enc_fa_tile(khr, hs, gated, capped, false, false, raw2, h2, sfa, pcf, nheads, rows)
-            enc_fa_tile(khr, hs, gated, capped, false, true, raw2, h2, sfa16, pcf, nheads, rows)
-            cmd_copy_planes(raw2, h2, fixed_array(yd, yh16), host, fixed_array(o_bytes, o16_bytes), 4u | 64u)
-        }
-        var y_cls <- staged(host.mapped, 0l, rows * qd, type<float>)
-        var y16 <- staged(host.mapped, o_bytes, rows * qd, type<float16>)
         // oracle: q (the gate halves too) pre-scales and rounds to f16 like the kernel, K / V round through the shadow; the gate reads the f32 panel
         var qp2 <- [for (x in qp); float(float16(x * scale))]
         var kh2 <- [for (i in range(kpos * kvd)); float(float16(kh[i]))]
@@ -3436,7 +3377,7 @@ def private gated_q_panel(f : DaAttnBFix) : array<float> {
 }
 
 //! one batched decode attention dispatch through `stamp` (a DAB_*) over the fixture: q, the K and V mirrors (f16 halves on an f16
-//! stamp) at hazard bits 1, 2 and 8, the out plane under the sentinel at 16, a workgroup a head per stamp tile of rows; the rows come back
+//! stamp), the out plane under the sentinel, a workgroup a head per stamp tile of rows; the rows come back
 def private da_attn_b_run(f : DaAttnBFix; stamp : int; scale, cap : float; window : int) : array<float> {
     var y : array<float>
     static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -3445,59 +3386,39 @@ def private da_attn_b_run(f : DaAttnBFix; stamp : int; scale, cap : float; windo
         let qd = f.nheads * f.hs
         let kvd = (f.nheads / f.kv_mul) * f.hs
         let gated = !empty(f.gate)
-        let q_bytes = int64(f.npos * qd) * 4l
-        let qin_bytes = gated ? 2l * q_bytes : q_bytes
-        let k_bytes = long_length(f.kh) * (f16 ? 2l : 4l)
-        let v_bytes = long_length(f.vh) * (f16 ? 2l : 4l)
-        let qdev = make_device_buf(qin_bytes)
-        let kdev = make_device_buf(k_bytes)
-        let vdev = make_device_buf(v_bytes)
-        let yd2 = make_device_buf(q_bytes)
-        let host = make_host_buf(q_bytes, true, [cached = true])
-        var qin <- gated ? gated_q_panel(f) : clone_to_move(f.qh)
-        unsafe {
-            upload_region_at(qdev, 0l, addr<uint8 const?>(qin[0]), qin_bytes)
-            if (f16) {
-                var k16 <- pack_f16(f.kh)
-                var v16 <- pack_f16(f.vh)
-                upload_region_at(kdev, 0l, addr<uint8 const?>(k16[0]), k_bytes)
-                upload_region_at(vdev, 0l, addr<uint8 const?>(v16[0]), v_bytes)
-                delete k16
-                delete v16
-            } else {
-                upload_region_at(kdev, 0l, addr<uint8 const?>(f.kh[0]), k_bytes)
-                upload_region_at(vdev, 0l, addr<uint8 const?>(f.vh[0]), v_bytes)
+        with_cell_planes() $(var cp : CellPlanes) {
+            let pq = gated ? in_(cp, gated_q_panel(f)) : in_(cp, f.qh)
+            let pk = f16 ? in_plain(cp, pack_f16(f.kh)) : in_(cp, f.kh)
+            let pv = f16 ? in_plain(cp, pack_f16(f.vh)) : in_(cp, f.vh)
+            let py = cp |> out_(f.npos * qd)
+            let planes = fixed_array(pq, pk, pv, py)
+            let bufs = gather_planes(cp.dev, planes)
+            let sizes = gather_planes(cp.bytes, planes)
+            let bits = gather_planes(cp.hazard_bit, planes)
+            var pc = DaAttnBArgs(npos = uint(f.npos), nh = uint(f.nheads), kvd = uint(kvd), hs = uint(f.hs), kv_mul = uint(f.kv_mul),
+                kbase = uint(f.kbase), vbase = uint(f.vbase), w0 = uint(f.w0), scale = scale, window = uint(window), cap = cap,
+                qhs = gated ? uint(2 * f.hs) : 0u, gated = gated ? 1u : 0u)
+            let wgs = int64(f.nheads * ((f.npos + tile - 1) / tile))
+            cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                if (stamp == DAB_B) {
+                    var sc = set_da_attn_b_cls(bufs, sizes, bits)
+                    enc_da_attn_b_cls(raw2, h2, sc, pc, wgs)
+                } elif (stamp == DAB_BW) {
+                    var sc = set_da_attn_bw_cls(bufs, sizes, bits)
+                    enc_da_attn_bw_cls(raw2, h2, sc, pc, wgs)
+                } elif (stamp == DAB_H128) {
+                    var sc = set_da_attn_b_h128_cls(bufs, sizes, bits)
+                    enc_da_attn_b_h128_cls(raw2, h2, sc, pc, wgs)
+                } elif (stamp == DAB_B_F16) {
+                    var sc = set_da_attn_b_f16_cls(bufs, sizes, bits)
+                    enc_da_attn_b_f16_cls(raw2, h2, sc, pc, wgs)
+                } else {
+                    var sc = set_da_attn_b_h128_f16_cls(bufs, sizes, bits)
+                    enc_da_attn_b_h128_f16_cls(raw2, h2, sc, pc, wgs)
+                }
             }
+            y <- cp |> plane_run(py)
         }
-        nan_sentinel_upload(yd2, q_bytes)
-        delete qin
-        let bufs = fixed_array(qdev, kdev, vdev, yd2)
-        let sizes = fixed_array(qin_bytes, k_bytes, v_bytes, q_bytes)
-        let bits = fixed_array(1u, 2u, 8u, 16u)
-        var pc = DaAttnBArgs(npos = uint(f.npos), nh = uint(f.nheads), kvd = uint(kvd), hs = uint(f.hs), kv_mul = uint(f.kv_mul),
-            kbase = uint(f.kbase), vbase = uint(f.vbase), w0 = uint(f.w0), scale = scale, window = uint(window), cap = cap,
-            qhs = gated ? uint(2 * f.hs) : 0u, gated = gated ? 1u : 0u)
-        let wgs = int64(f.nheads * ((f.npos + tile - 1) / tile))
-        cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-            if (stamp == DAB_B) {
-                var sc = set_da_attn_b_cls(bufs, sizes, bits)
-                enc_da_attn_b_cls(raw2, h2, sc, pc, wgs)
-            } elif (stamp == DAB_BW) {
-                var sc = set_da_attn_bw_cls(bufs, sizes, bits)
-                enc_da_attn_bw_cls(raw2, h2, sc, pc, wgs)
-            } elif (stamp == DAB_H128) {
-                var sc = set_da_attn_b_h128_cls(bufs, sizes, bits)
-                enc_da_attn_b_h128_cls(raw2, h2, sc, pc, wgs)
-            } elif (stamp == DAB_B_F16) {
-                var sc = set_da_attn_b_f16_cls(bufs, sizes, bits)
-                enc_da_attn_b_f16_cls(raw2, h2, sc, pc, wgs)
-            } else {
-                var sc = set_da_attn_b_h128_f16_cls(bufs, sizes, bits)
-                enc_da_attn_b_h128_f16_cls(raw2, h2, sc, pc, wgs)
-            }
-            cmd_copy_planes(raw2, h2, fixed_array(yd2), host, fixed_array(q_bytes), 16u)
-        }
-        y <- staged(host.mapped, 0l, f.npos * qd, type<float>)
     }
     return <- y
 }
