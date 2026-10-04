@@ -10,6 +10,7 @@ require daslib/f16_cvt   // nolint:STYLE030,LINT019 — used only inside the vul
 require dasllama/dasllama_plane   // nolint:STYLE030,LINT019 — the same
 require dasllama/dasllama_tower   // nolint:STYLE030,LINT019 — the same
 require dasllama/dasllama_common
+require dasllama/dasllama_convert
 require dasllama/dasllama_gemma4a   // gemma4a_attn_past: the Conformer cell's window
 require dasllama/dasllama_qwen3a   // nolint:STYLE030,LINT019 — QWEN3A_TOK_PER_CHUNK: the front movers' qwen3a fixture, inside the vulkan arm alone
 require dasllama/dasllama_audio   // nolint:STYLE030,LINT019 — build_dft_twiddles: the spectrum cell's twiddle table, inside the vulkan arm alone
@@ -479,9 +480,7 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
                 var clamped_x : array<float>
                 clamped_x |> resize(nd)
                 clamp_rows(clamped_x, x, int64(nd), lo2, hi2)
-                let bad_cvt = halves_off(xh_dev, clamped_x)
-                t |> success(bad_cvt == 0, "tower_clamp_cvt: the f16 feed is the clamped rows rounded to f16, bit for bit ({bad_cvt} of {nd} off)")
-                t |> success(uint(xh_dev[nd - 1]) != f32_to_f16(clamped_x[nd - 1] + 0.5), "tower_clamp_cvt: the bar reds a poisoned element")
+                check_halves(t, "tower_clamp_cvt: the f16 feed is the clamped rows rounded to f16", xh_dev, clamped_x)
                 var xq_ref : array<int8>
                 var xs_ref : array<float>
                 requant_rows_q8_sized(clamped_x, int64(d), int64(rows), xq_ref, xs_ref)
@@ -1019,23 +1018,15 @@ def test_vkt_tower_f16_feeds(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                 let ghrelu_dev <- cp |> plane_as(act_hp[2], type<uint16>, nd)
                 let x16z_dev <- cp |> plane_run(x_post16z_p)
                 let xb2h0_dev <- cp |> plane_as(xb2h0p, type<uint>, nd / 2)
-                let bad_ln16 = halves_off(xbh_dev, xb_dev)
-                let bad_bias16 = halves_off(gh_dev, g_dev)
                 var bad_post16 = 0
-                t |> success(bad_ln16 == 0, "tower_ln16: the f16 rows are the f32 stamp's rows rounded to half, bit for bit ({bad_ln16} of {nd} off)")
-                t |> success(uint(xbh_dev[0]) != f32_to_f16(xb_dev[0] + 0.5), "tower_ln16: the bar reds a poisoned element")
+                check_halves(t, "tower_ln16: the f16 rows are the f32 stamp's rows rounded to half", xbh_dev, xb_dev)
                 var xb_ref : array<float>
                 xb_ref |> resize(nd)
                 layernorm_batch(xb_ref, x, wn, 0l, int64(d), int64(d), int64(rows), ROWS_EPS)
                 check_rows(t, "tower_ln16 half rows vs layernorm_batch", [for (hv in xbh_dev); f16_to_f32(uint(hv))], xb_ref, BAR_APPROX, d)
-                t |> success(bad_bias16 == 0, "tower_bias_act_cvt16: the f16 rows are the in-place stamp's rows rounded to half, bit for bit ({bad_bias16} of {nd} off)")
-                t |> success(uint(gh_dev[0]) != f32_to_f16(g_dev[0] + 0.5), "tower_bias_act_cvt16: the bar reds a poisoned element")
-                let bad_erf16 = halves_off(gherf_dev, gerf_dev)
-                t |> success(bad_erf16 == 0, "tower_bias_act_cvt16 BIAS_ACT_GELU_ERF: the f16 rows are the in-place stamp's rows rounded to half, bit for bit ({bad_erf16} of {nd} off)")
-                t |> success(uint(gherf_dev[0]) != f32_to_f16(gerf_dev[0] + 0.5), "tower_bias_act_cvt16 BIAS_ACT_GELU_ERF: the bar reds a poisoned element")
-                let bad_relu16 = halves_off(ghrelu_dev, grelu_dev)
-                t |> success(bad_relu16 == 0, "tower_bias_act_cvt16 BIAS_ACT_RELU: the f16 rows are the in-place stamp's rows rounded to half, bit for bit ({bad_relu16} of {nd} off)")
-                t |> success(uint(ghrelu_dev[0]) != f32_to_f16(grelu_dev[0] + 0.5), "tower_bias_act_cvt16 BIAS_ACT_RELU: the bar reds a poisoned element")
+                check_halves(t, "tower_bias_act_cvt16: the f16 rows are the in-place stamp's rows rounded to half", gh_dev, g_dev)
+                check_halves(t, "tower_bias_act_cvt16 BIAS_ACT_GELU_ERF: the f16 rows are the in-place stamp's rows rounded to half", gherf_dev, gerf_dev)
+                check_halves(t, "tower_bias_act_cvt16 BIAS_ACT_RELU: the f16 rows are the in-place stamp's rows rounded to half", ghrelu_dev, grelu_dev)
                 var x_ref := x
                 var yb := y
                 add_bias_rows(yb, wn, int64(2 * d), int64(d), int64(rows))
@@ -1477,14 +1468,11 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
     }
 }
 
-def private halves_off(got : array<uint16>; want : array<float>) : int {
-    var bad = 0
-    for (g, w in got, want) {
-        if (uint(g) != f32_to_f16(w)) {
-            bad++
-        }
-    }
-    return bad
+//! `check_exact` of half rows against `want` rounded to half, saturating at the half range
+def private check_halves(t : T?; tag : string; got : array<uint16>; want : array<float>) {
+    var want_h <- cvt_f32_to_f16_sat_array(want)
+    check_exact(t, tag, got, want_h)
+    delete want_h
 }
 
 let private FM_IW = 7          //! the k3 s2 p1 conv over the 7 x 5 image gives the 4 x 3 output
@@ -1622,10 +1610,7 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
                     }
                     col_want[gid] = v
                 }
-                let bad_im = halves_off(col_dev, col_want)
-                t |> success(bad_im == 0, "tower_im2col: the k3 s2 p1 columns over two chunks, the pad and the zero tail, bit for bit ({bad_im} of {n_col} off)")
-                let live_im = find_index_if(col_want, $(v) => v != 0.0)
-                t |> success(uint(col_dev[live_im]) != f32_to_f16(col_want[live_im] + 0.5), "tower_im2col: the bar reds a poisoned element")
+                check_halves(t, "tower_im2col: the k3 s2 p1 columns over two chunks, the pad and the zero tail", col_dev, col_want)
                 var col1_want : array<float>
                 col1_want |> resize(len1 * kdp1)
                 for (gid in range(len1 * kdp1)) {
@@ -1648,14 +1633,8 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
                     let sp = i * 2 + k / nch2 - 1
                     col2_want[gid] = k < 3 * nch2 && sp >= 0 && sp < len1 ? cv2[sp * nch2 + k % nch2] : 0.0
                 }
-                let bad_im1 = halves_off(col1_dev, col1_want)
-                let bad_im2 = halves_off(col2_dev, col2_want)
-                t |> success(bad_im1 == 0, "the stem's im2col (tts_im2col16, channel-major, stride 1): the mel's k3 columns with the zero pad and tail, bit for bit ({bad_im1} of {len1 * kdp1} off)")
-                t |> success(bad_im2 == 0, "the stem's im2col (tts_im2col16, row-major, stride 2): the conv output's k3 columns at every second position and the zero pad columns, bit for bit ({bad_im2} of {rows2 * kdp2} off)")
-                let live_im1 = find_index_if(col1_want, $(v) => v != 0.0)
-                t |> success(uint(col1_dev[live_im1]) != f32_to_f16(col1_want[live_im1] + 0.5), "the stem's im2col (channel-major): the bar reds a poisoned element")
-                let live_im2 = find_index_if(col2_want, $(v) => v != 0.0)
-                t |> success(uint(col2_dev[live_im2]) != f32_to_f16(col2_want[live_im2] + 0.5), "the stem's im2col (row-major, stride 2): the bar reds a poisoned element")
+                check_halves(t, "the stem's im2col (tts_im2col16, channel-major, stride 1): the mel's k3 columns with the zero pad and tail", col1_dev, col1_want)
+                check_halves(t, "the stem's im2col (tts_im2col16, row-major, stride 2): the conv output's k3 columns at every second position and the zero pad columns", col2_dev, col2_want)
                 var feat_want : array<float>
                 feat_want |> resize(q3_pos * q3_feat)
                 for (gid in range(q3_pos * q3_feat)) {
@@ -1663,10 +1642,7 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
                     let j = gid % q3_feat
                     feat_want[gid] = y3[(row / q3_tok) * (16 * q3_tok * q3_nch) + ((j % 16) * q3_tok + row % q3_tok) * q3_nch + j / 16]
                 }
-                let bad_sh = halves_off(feat_dev, feat_want)
-                t |> success(bad_sh == 0, "tower_q3a_shuffle: the feature rows off the third conv stage, bit for bit ({bad_sh} of {q3_pos * q3_feat} off)")
-                let live_sh = find_index_if(feat_want, $(v) => v != 0.0)
-                t |> success(uint(feat_dev[live_sh]) != f32_to_f16(feat_want[live_sh] + 0.5), "tower_q3a_shuffle: the bar reds a poisoned element")
+                check_halves(t, "tower_q3a_shuffle: the feature rows off the third conv stage", feat_dev, feat_want)
                 var fs_want : array<float>
                 fs_want |> resize(fs_t * fs_w * fs_c)
                 for (gid in range(fs_t * fs_w * fs_c)) {
@@ -1685,11 +1661,11 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
                         gq_want[r * hs + n] = x[r * d + second_head_base + n] + wn[second_head_base + n]
                     }
                 }
-                let bad_gq = halves_off(gq_dev, gq_want)
-                let bad_gp = halves_off(gp_dev, gp_want)
-                t |> success(bad_gq == 0, "tower_hpad16_b restride at one head (the canary panel): the head's rows plus the bias row as halves, bit for bit ({bad_gq} of {rows * hs} off)")
-                t |> success(bad_gp == 0, "tower_hpad16 restride at one head (the canary panel): the head's rows as halves, bit for bit ({bad_gp} of {rows * hs} off)")
-                t |> success(uint(gq_dev[0]) != f32_to_f16(gq_want[0] + 0.5) && halves_off(gp_dev, gq_want) > rows * hs / 2, "the one-head restride: the bar reds a poisoned element, and the plain arm misses the biased rows")
+                check_halves(t, "tower_hpad16_b restride at one head (the canary panel): the head's rows plus the bias row as halves", gq_dev, gq_want)
+                check_halves(t, "tower_hpad16 restride at one head (the canary panel): the head's rows as halves", gp_dev, gp_want)
+                var gq_h <- cvt_f32_to_f16_sat_array(gq_want)
+                t |> success(mismatch_exact(gp_dev, gq_h) > rows * hs / 2, "the one-head restride: the plain arm misses the biased rows")
+                delete gq_h
                 var cvt_want : array<float>
                 cvt_want |> resize(nd)
                 var clamped = 0
@@ -1699,9 +1675,8 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
                         clamped++
                     }
                 }
-                let bad_cvt = halves_off(cvt_dev, cvt_want)
-                t |> success(bad_cvt == 0 && clamped > nd / 8, "tower_clamp_cvt: the clamped rows as halves, bit for bit ({bad_cvt} of {nd} off, {clamped} elements clamped)")
-                t |> success(uint(cvt_dev[0]) != f32_to_f16(cvt_want[0] + 0.5), "tower_clamp_cvt: the bar reds a poisoned element")
+                check_halves(t, "tower_clamp_cvt: the clamped rows as halves", cvt_dev, cvt_want)
+                t |> success(clamped > nd / 8, "tower_clamp_cvt: the fixture reaches the clamp ({clamped} of {nd} elements clamped)")
                 var add_want := x
                 for (i in range(add_n)) {
                     add_want[i] = x[i] + wn[d + i]
