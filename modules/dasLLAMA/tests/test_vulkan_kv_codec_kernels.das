@@ -420,8 +420,8 @@ def private requant_misses(quants : array<int8>; scales, row : array<float>; blk
     return (scales = bad_s, quants = bad_q)
 }
 
-def private codec_attn_tag(a : CodecAttn; slab : string) : string {
-    var tag = "da_attn_{a.kv == KVDtype.tq4 ? "tq4" : "q8"}{slab} hs {a.hs}, {a.nheads} heads over {a.nheads / a.kv_mul}, {a.keys} keys in {a.nsplit} piece(s), {a.nrows} row(s)"
+def private codec_attn_tag(a : CodecAttn; stamp : string) : string {
+    var tag = "{stamp} hs {a.hs}, {a.nheads} heads over {a.nheads / a.kv_mul}, {a.keys} keys in {a.nsplit} piece(s), {a.nrows} row(s)"
     if (a.fold != Fold.none) {
         tag += a.fold == Fold.q8_k ? ", the Q8_K fold" : ", the Q8_0 fold"
     }
@@ -446,7 +446,7 @@ def private codec_attn_arm(t : T?; a : CodecAttn) {
         let qdim = a.nheads * a.hs
         let qstride = a.gated ? 2 * a.hs : a.hs
         let slab = da_slab_of(a.sink, int64(a.kv_mul))
-        let tag = codec_attn_tag(a, slab == DaSlab.sink ? "_sink" : (slab == DaSlab.two ? "_g2" : ""))
+        let tag = codec_attn_tag(a, da_attn_stamp_name(a.kv, slab))
         let blk = a.fold == Fold.q8_k ? 256 : 32
         let rqk = a.fold == Fold.none ? DA_RQ_NONE : (a.fold == Fold.q8_k ? DA_RQ_Q8K : DA_RQ_Q8)
         t |> equal(KV_TQ4_SIGNS, SIGN_ROW, "the fixtures' sign row is the driver's")

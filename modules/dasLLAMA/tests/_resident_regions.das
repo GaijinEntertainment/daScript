@@ -19,6 +19,7 @@ require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: 
 require dasllama/dasllama_gpu_resident   // set_gpu_resident_regions_, moe_gpu_resident_active
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_token_n_rows: the N-row command served the batched cells' rows
+require ?vulkan dasllama/dasllama_vulkan_classes   // da_slab_of / da_attn_stamp_name: the decode attention stamp a carrier picks
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed   // served_every_call: the shared served witness
 
@@ -869,30 +870,28 @@ def cell_passes_with_their_rows(t : T?; file : string) {
     }
 }
 
-//! the census key of the decode attention's `slab` stamp ("", "_g2", "_sink") over the armed mirror codec
-def private da_attn_stamp_key(slab : string) : string {
-    let dt = mirror_kv_dtype()
-    var codec = ""
-    if (dt == KVDtype.f16) {
-        codec = "_f16"
-    } elif (dt == KVDtype.q8_0) {
-        codec = "_q8"
-    } elif (dt == KVDtype.tq4) {
-        codec = "_tq4"
+//! the census key of the decode attention stamp the armed mirror codec and `tr`'s head shape pick, its slab asserted
+//! `slab_heads` q heads wide ("" with no vulkan module)
+def private da_attn_stamp_key(t : T?; tr : Model; slab_heads : int) : string {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let kv_mul = tr.config.n_heads / tr.config.n_kv_heads
+        t |> equal(da_slab_heads(kv_mul), int64(slab_heads), "the carrier's {kv_mul} q heads a kv head pick the {slab_heads}-head slab")
+        return "{da_attn_stamp_name(mirror_kv_dtype(), da_slab_of(tr.config.attn_sinks, kv_mul))}_cls_spv"
+    } else {
+        return ""
     }
-    return "da_attn{codec}{slab}_cls_spv"
 }
 
-//! a session stepped once through the driver dispatches the decode attention's `slab` stamp of the armed mirror codec - the
-//! pick a logits compare cannot see, the census can
-def cell_regions_stamp_served(t : T?; file : string; slab : string) {
+//! a session stepped once through the driver dispatches the decode attention stamp of the armed mirror codec that the
+//! carrier's head shape picks - a slab `slab_heads` q heads wide - the pick a logits compare cannot see, the census can
+def cell_regions_stamp_served(t : T?; file : string; slab_heads : int) {
     t |> run("the driver's step dispatches the stamp the carrier's shape picks") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
             var pa <- prompt_a()
             var fa <- feed_a()
             var s <- create_session(tr, mirror_kv_dtype())
             forward_prefill(tr, s, pa, long_length(pa), 0l)
-            let key = da_attn_stamp_key(slab)
+            let key = da_attn_stamp_key(t, tr, slab_heads)
             let before = census(key)
             forward(tr, s, fa[0], long_length(pa))
             let after = census(key)

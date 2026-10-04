@@ -17,6 +17,7 @@ require dasllama/dasllama_math
 require daslib/typemacro_boost  // [template_struct_instance] — the KV-codec kernel templates
 require daslib/math_bits   // uint_bits_to_float: the KHR tile's f32 store bounce read back through its uint staging array
 require daslib/enum_trait   // kq_gemv_fmts walks the enum
+require daslib/strings_boost   // split: a decode attention stamp's name out of the stem list
 require math
 
 // The Vulkan KERNEL home: every kernel is a [spirv_kernel]/[vk_dispatch] class — families are
@@ -4989,6 +4990,12 @@ def da_slab_of(has_sinks : bool; kv_mul : int64) : DaSlab => has_sinks ? DaSlab.
 let private DA_STAMPS = "da_attn da_attn_g2 da_attn_sink da_attn_f16 da_attn_f16_g2 da_attn_f16_sink da_attn_q8 da_attn_q8_g2 da_attn_q8_sink da_attn_tq4 da_attn_tq4_g2 da_attn_tq4_sink"
 
 def private da_stamp_key(dt : KVDtype; slab : DaSlab) : int => int(dt) * 3 + int(slab)
+
+//! The decode attention stamp's name over a mirror in codec `dt` at `slab`: its `DA_STAMPS` stem, the census key less `_cls_spv`.
+def da_attn_stamp_name(dt : KVDtype; slab : DaSlab) : string {
+    let stems <- split(DA_STAMPS, " ")
+    return stems[da_stamp_key(dt, slab)]
+}
 
 //! The decode attention's stamp over a mirror in codec `dt` at `slab`.
 def da_attn_stamp_ensure(dt : KVDtype; slab : DaSlab) : bool {
