@@ -9110,41 +9110,22 @@ def private router_enc(f16 : bool; raw; var h; var sc; var pc; groups : int64) {
 //! the CPU oracle: each row's dot with every expert row, the row under its rms and the norm row where the fused norm is on;
 //! the bar is the sum's rounding over dim terms of the same order, the envelope scaling it with the row
 def private router_cols_oracle(t : T?; arm : string; got, xh, nh, wdev : array<float>; ncols, ne, dim, obase : int; norm_on : bool; eps : float) {
-    var obad = 0
-    var oworst = 0.0
-    var oworst_c = 0
-    var oworst_e = 0
+    let xn <- [for (i in range(ncols * dim)); norm_on ? xh[i] * nh[i % dim] : xh[i]]
+    var ref <- dense_ref_rows(wdev, xn, ncols, dim, ne)
     for (c in range(ncols)) {
-        var inv = 1.0
-        if (norm_on) {
-            var ss = 0.0
-            for (i in range(dim)) {
-                ss += xh[c * dim + i] * xh[c * dim + i]
-            }
-            inv = 1.0 / sqrt(ss / float(dim) + eps)
+        var ss = 0.0
+        for (i in range(dim)) {
+            ss += xh[c * dim + i] * xh[c * dim + i]
         }
-        for (e in range(ne)) {
-            var acc = 0.0
-            var env = 0.0
-            for (i in range(dim)) {
-                let xv = norm_on ? xh[c * dim + i] * nh[i] : xh[c * dim + i]
-                acc += wdev[e * dim + i] * xv
-                env += abs(wdev[e * dim + i] * xv)
-            }
-            let want = acc * inv
-            let bar = 1e-4 * env * inv + 1e-6
-            let d = abs(got[obase + c * ne + e] - want)
-            if (d > bar) {
-                obad++
-            }
-            if (d > oworst) {
-                oworst = d
-                oworst_c = c
-                oworst_e = e
-            }
+        let inv = norm_on ? 1.0 / sqrt(ss / float(dim) + eps) : 1.0
+        for (e in range(c * ne, (c + 1) * ne)) {
+            ref.want[e] *= inv
+            ref.env[e] *= inv
         }
     }
-    t |> success(obad == 0, "{arm}: {obad} of {ne * ncols} logits off the CPU oracle (widest {oworst} at row {oworst_c}, expert {oworst_e})")
+    check(t, "{arm}: the logits vs the CPU oracle", copy_span(got, obase, ncols * ne), ref.want, Bar(kind = BarKind.envelope, rel = 1e-4, abs_floor = 1e-6),
+        Shape(row_width = ne), ref.env)
+    delete ref
 }
 
 //! the router GEMV over `ncols` x rows against the one-row dispatch a row at a time (word for word through `nform_cols_cell`:
