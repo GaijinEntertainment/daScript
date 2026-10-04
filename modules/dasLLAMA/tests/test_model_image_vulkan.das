@@ -103,9 +103,7 @@ def test_vulkan_dry_bake(tst : T?) {
             t |> success(roles_ok, "every plan entry carries a stage role")
             t |> success(bounds_ok, "every plan entry's planes sit inside the blob")
             // the flavor image round-trips the plan verbatim
-            var terr : string
-            let tmp = temp_directory(terr)
-            let img = path_join(empty(tmp) ? "." : tmp, "dasllama_vkbake_{ref_time_ticks()}.dlim")
+            let img = path_join(test_temp_dir(), "dasllama_vkbake.dlim")
             let tag = moe_gpu_bake_tag()
             t |> success(!empty(tag), "the armed tier names its bake tag")
             t |> success(save_model_image(m, img, tag, "q8"), "flavor image saves")
@@ -115,7 +113,6 @@ def test_vulkan_dry_bake(tst : T?) {
             t |> equal(long_length(m.vkblob), long_length(b.vkblob), "blob survives the round trip")
             delete b
             delete m
-            remove(img)
         } else {
             t |> skip("dasVulkan not present")
         }

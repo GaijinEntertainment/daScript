@@ -267,9 +267,7 @@ def test_image_table_slot_names(t : T?) {
         if (!arm_on(t, "mechanics")) {
             return
         }
-        var terr : string
-        let tmp = temp_directory(terr)
-        let path = path_join(empty(tmp) ? "." : tmp, "dasllama_img_table_{ref_time_ticks()}.dlim")
+        let path = path_join(test_temp_dir(), "dasllama_img_table.dlim")
         var p = ImgTableProbe()
         fill_bytes(p.kq[int(KqFmt.k4)].q, 4096, 1)
         fill_bytes(p.kq[int(KqFmt.k4)].s, 512, 2)
@@ -302,9 +300,7 @@ def test_image_mechanics(t : T?) {
         if (!arm_on(t, "mechanics")) {
             return
         }
-        var terr : string
-        let tmp = temp_directory(terr)   // portable (no /tmp on Windows); cwd as a last resort
-        let path = path_join(empty(tmp) ? "." : tmp, "dasllama_img_probe_{ref_time_ticks()}.dlim")
+        let path = path_join(test_temp_dir(), "dasllama_img_probe.dlim")
         var p <- make_probe()
         t |> success(save_image(p, path, "img-probe"), "save")
         t |> success(stat(path).is_valid, "file exists")
@@ -402,9 +398,7 @@ def test_image_mechanics(t : T?) {
         if (!arm_on(t, "mechanics")) {
             return
         }
-        var terr : string
-        let tmp = temp_directory(terr)
-        let path = path_join(empty(tmp) ? "." : tmp, "dasllama_img_stale_{ref_time_ticks()}.dlim")
+        let path = path_join(test_temp_dir(), "dasllama_img_stale.dlim")
         var p <- make_probe()
         t |> success(save_image(p, path, "img-probe"), "save")
         delete p
@@ -421,9 +415,7 @@ def test_image_mechanics(t : T?) {
         if (!arm_on(t, "mechanics")) {
             return
         }
-        var terr : string
-        let tmp = temp_directory(terr)
-        let path = path_join(empty(tmp) ? "." : tmp, "dasllama_img_chunk_{ref_time_ticks()}.dlim")
+        let path = path_join(test_temp_dir(), "dasllama_img_chunk.dlim")
         var truth <- make_probe()   // the off-rail reference, untouched by the build
         var src <- make_probe()
         var cold = ImgProbe()
@@ -478,9 +470,7 @@ def test_image_mechanics(t : T?) {
         if (!arm_on(t, "mechanics")) {
             return
         }
-        var terr : string
-        let tmp = temp_directory(terr)
-        let fake = path_join(empty(tmp) ? "." : tmp, "dasllama_lane_{ref_time_ticks()}.gguf")
+        let fake = path_join(test_temp_dir(), "dasllama_lane.gguf")
         let fk = fopen(fake, "wb")   // the inventory scans the siblings of an existing source file
         t |> success(fk != null, "the fake source exists")
         fclose(fk)
@@ -2948,9 +2938,7 @@ def test_layout_fingerprint(t : T?) {
         if (!arm_on(t, "mechanics")) {
             return
         }
-        var terr : string
-        let tmp = temp_directory(terr)
-        let path = path_join(empty(tmp) ? "." : tmp, "dasllama_img_fp_{ref_time_ticks()}.dlim")
+        let path = path_join(test_temp_dir(), "dasllama_img_fp.dlim")
         var p <- make_probe()
         t |> success(save_image(p, path, "img-probe"), "save")
         var f = fopen(path, "rb+")
