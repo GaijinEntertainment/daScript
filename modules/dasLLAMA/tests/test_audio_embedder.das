@@ -179,6 +179,17 @@ def test_audio_embedder_tower_arm(t : T?) {
         t |> success(!audio_probe_span_bare(omni), "a qwen2.5o mmproj does not")
         t |> success(!audio_probe_span_bare(path_join(models_dir(), "no-such-mmproj.gguf")), "a missing file probes false, never panics")
     }
+    t |> run("a Q8_0 projector file bakes the halfword twin its device GEMMs read") @(t : T?) {
+        let mm = path_join(models_dir(), "mmproj-Voxtral-Mini-3B-2507-Q8_0.gguf")
+        if (!model_available(t, mm)) {
+            return
+        }
+        var inscope st <- stage_audio_tower(mm)
+        t |> success(!empty(st.wblob) && length(st.wblob) == length(st.fblob), "the twin covers the f32 plane, a halfword an element ({length(st.wblob)} halves)")
+        t |> success(!st.e.blk_bf16, "its halves are f16: eight-bit quants times a half scale")
+        var inscope f32 <- stage_audio_tower(path_join(models_dir(), "voxtral-mini-mmproj-f32.gguf"))
+        t |> success(empty(f32.wblob), "an f32 file bakes none: its GEMMs are no halfword's")
+    }
     t |> run("the Qwen2.5-Omni mmproj's audio side loads as the whisper-class tower beside its vision tensors") @(t : T?) {
         with_dasllama_jobque() {
             tower_arm_cell(t, "mmproj-Qwen2.5-Omni-3B-f16.gguf", "qwen2a", 2048l, 750l)

@@ -1069,7 +1069,8 @@ def tower_gemm_types_uniform(m : GGUFMeta; n_layer : int64; gt : int) : bool {
     return true
 }
 
-//! whether a whisper-class mmproj stores every block GEMM in one half type (f16 or bf16); false for a file that cannot be read
+//! Whether a whisper-class mmproj stores every block GEMM in one type a halfword holds - f16, bf16, or Q8_0, whose
+//! eight-bit quants times a half scale the device's f32 tile would stage as halves anyway; false for a file that cannot be read
 def private audio_tower_half_gemms(path : string) : bool {
     let f = fopen(path, "rb")
     return false if (f == null)
@@ -1081,7 +1082,7 @@ def private audio_tower_half_gemms(path : string) : bool {
         var inscope m <- parse_gguf_meta(bytes)
         let gt = gguf_tensor_type(m, "a.blk.0.attn_q.weight")
         let n_layer = gguf_has(m, "clip.audio.block_count") ? gguf_int(m, bytes, "clip.audio.block_count") : 0l
-        half = (gt == GGML_TYPE_BF16 || gt == GGML_TYPE_F16) && n_layer > 0l && tower_gemm_types_uniform(m, n_layer, gt)
+        half = (gt == GGML_TYPE_BF16 || gt == GGML_TYPE_F16 || gt == GGML_TYPE_Q8_0) && n_layer > 0l && tower_gemm_types_uniform(m, n_layer, gt)
     }
     fclose(f)
     return half
@@ -1277,7 +1278,7 @@ def stage_audio_tower(path : string; q8 : bool = false) : AudioTowerStaging {
     fclose(f)
     if (q8) {
         tower_quantize(st)
-    } elif (audio_tower_half_gemms(path)) {   // the file's GEMMs are halves: the Metal tower's half GEMMs read them back as they were stored
+    } elif (audio_tower_half_gemms(path)) {   // the file's GEMMs fit halves: the Metal tower's half GEMMs read them where its f32 tile would stage them as halves
         tower_bake_half_twin(st.fblob, st.wblob, st.e.blk_bf16)
     }
     return <- st
