@@ -507,26 +507,12 @@ def private fill_acts_kq(var xq : array<int8>; var xs : array<float>; nrows : in
     fill_acts_of(xq, xs, nrows, KN, 256l, 13l, 5l, 4l)
 }
 
-//! A dequantized-weight GEMM mirror (double-accumulated per 256-block, then scaled): y [nrows x d] = X . W^T over `nrows`
-//! activation rows of `n` quants `xq` (a scale per 256 in `xs`) and `d` dequantized weight rows `w`.
+//! A dequantized-weight GEMM mirror (`dense_ref_rows` in double over the dequantized activations): y [nrows x d] = X . W^T over
+//! `nrows` activation rows of `n` quants `xq` (a scale per 256 in `xs`) and `d` dequantized weight rows `w`.
 def private ref_deq_gemm(w : array<float>; xq : array<auto(QT)>; xs : array<float>; n, d, nrows : int64) : array<float> {
-    let nsb = int(n / 256l)
-    var y : array<float>
-    y |> resize(nrows * d)
-    for (r in range(int(nrows))) {
-        for (c in range(int(d))) {
-            var acc = 0.0lf
-            for (sb in range(nsb)) {
-                var dd = 0.0lf
-                for (j in range(256)) {
-                    dd += double(w[c * int(n) + sb * 256 + j]) * double(xq[r * int(n) + sb * 256 + j])
-                }
-                acc += dd * double(xs[r * nsb + sb])
-            }
-            y[r * int(d) + c] = float(acc)
-        }
-    }
-    return <- y
+    let x <- [for (i in range(int(nrows * n))); float(xq[i]) * xs[i / 256]]
+    var r <- dense_ref_rows(w, x, int(nrows), int(n), int(d))
+    return <- r.want
 }
 
 // the CPU reference of the kq FFN contract: dequantized weights against the Q8_K activation

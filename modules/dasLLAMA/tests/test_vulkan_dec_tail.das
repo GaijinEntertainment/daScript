@@ -59,14 +59,10 @@ def private fill_norm(var w : array<float>; n : int64; phase : float) {
 
 // y = W x over `rows` rows of width n (row-major dequantized plane)
 def private gemv_ref(w : array<float>; rows, n : int64; x : array<float>; var y : array<float>) {
-    y |> resize(rows)
-    for (r in range64(rows)) {
-        var acc = 0.0
-        for (c in range64(n)) {
-            acc += w[r * n + c] * x[c]
-        }
-        y[r] = acc
-    }
+    var r <- dense_ref_rows(w, x, 1, int(n), int(rows))
+    delete y
+    y <- r.want
+    delete r
 }
 
 //! the device's feed: rms-normed, then quantized in the plane's acts form (Q8_0 for q8 planes, Q8_K for K-quant ones)
