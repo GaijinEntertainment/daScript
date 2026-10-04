@@ -1804,6 +1804,45 @@ def test_vulkan_decode_attn(t : T?) {
     }
 }
 
+struct private ArenaQ8 {
+    wq : array<int8>
+    ws : array<float>
+    blk : int64
+}
+
+//! a [rows x n] q8 tensor at `seed` placed in the resident arena, its quants and scales kept for the reference; blk < 0 = refused
+def private arena_place_q8(rows, n, seed : int64; small_scales : bool = false) : ArenaQ8 {
+    var a : ArenaQ8
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        fill_q8_quants(a.wq, a.ws, rows, n, seed, small_scales)
+        var pq : array<uint8>
+        var ps : array<uint8>
+        pack_q8_wire(a.wq, a.ws, pq, ps)
+        a.blk = vk_arena_place(pq, ps, n, rows, 0)
+        delete pq
+        delete ps
+    }
+    return <- a
+}
+
+//! the arena GEMV (`npos` 1) or batch GEMM over `a`'s block against the CPU q8 reference on the same activations
+def private arena_serves(t : T?; tag : string; a : ArenaQ8; rows, npos : int64; xq : array<int8>; xs : array<float>) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        var y : array<float>
+        y |> resize(npos * rows)
+        if (npos == 1l) {
+            vk_arena_gemv(y, a.blk, N, rows, 0, xq, xs)
+        } else {
+            vk_arena_gemm(y, a.blk, N, rows, npos, 0, xq, xs)
+        }
+        var refy : array<float>
+        ref_q8_gemm(a.wq, a.ws, xq, xs, N, rows, npos, refy)
+        held(t, tag, y, refy, REL_TOL, rows)
+        delete y
+        delete refy
+    }
+}
+
 // Arena batch GEMM (prefill twin of the arena GEMV): npos rows through q8_moe_batch against an
 // arena-resident plane, vs a CPU reference. Two tensors again so the block offset must be honored.
 [test]
@@ -1816,46 +1855,15 @@ def test_vulkan_arena_gemm(t : T?) {
                 t |> skip("no Vulkan device; arena batch GEMM untestable here")
                 return
             }
-            var wqa : array<int8>
-            var wsa : array<float>
-            var wqbv : array<int8>
-            var wsbv : array<float>
-            fill_q8_quants(wqa, wsa, GROWS, N, 41l, false)
-            fill_q8_quants(wqbv, wsbv, GROWS, N, 67l, false)
-            var pqa : array<uint8>
-            var psa : array<uint8>
-            var pqb : array<uint8>
-            var psb : array<uint8>
-            pack_q8_wire(wqa, wsa, pqa, psa)
-            pack_q8_wire(wqbv, wsbv, pqb, psb)
-            let gblk_a = vk_arena_place(pqa, psa, N, GROWS, 0)
-            let gblk_b = vk_arena_place(pqb, psb, N, GROWS, 0)
+            var ta <- arena_place_q8(GROWS, N, 41l)
+            var tb <- arena_place_q8(GROWS, N, 67l)
             var xq : array<int8>
             var xs : array<float>
             fill_acts(xq, xs, GNP)
-            for (arm in range(2)) {
-                let blk = arm == 0 ? gblk_a : gblk_b
-                var y : array<float>
-                y |> resize(int(GNP * GROWS))
-                vk_arena_gemm(y, blk, N, GROWS, GNP, 0, xq, xs)
-                var refy : array<float>
-                if (arm == 0) {
-                    ref_q8_gemm(wqa, wsa, xq, xs, N, GROWS, GNP, refy)
-                } else {
-                    ref_q8_gemm(wqbv, wsbv, xq, xs, N, GROWS, GNP, refy)
-                }
-                held(t, "arena GEMM arm {arm}", y, refy, REL_TOL, GROWS)
-                delete y
-                delete refy
-            }
-            delete wqa
-            delete wsa
-            delete wqbv
-            delete wsbv
-            delete pqa
-            delete psa
-            delete pqb
-            delete psb
+            arena_serves(t, "arena GEMM arm 0", ta, GROWS, GNP, xq, xs)
+            arena_serves(t, "arena GEMM arm 1", tb, GROWS, GNP, xq, xs)
+            delete ta
+            delete tb
             delete xq
             delete xs
         } else {
@@ -1875,53 +1883,26 @@ def test_vulkan_arena_ffn(t : T?) {
                 t |> skip("no Vulkan device (or the arena reserve was refused)")
                 return
             }
-            var wq1 : array<int8>
-            var ws1 : array<float>
-            var wq3 : array<int8>
-            var ws3 : array<float>
-            var wq2 : array<int8>
-            var ws2 : array<float>
-            fill_q8_quants(wq1, ws1, NFE, N, 11l, true)    // gate/up small scales — the sane silu regime
-            fill_q8_quants(wq3, ws3, NFE, N, 23l, true)
-            fill_q8_quants(wq2, ws2, N, NFE, 37l, false)
-            var p1 : array<uint8>
-            var s1 : array<uint8>
-            var p3 : array<uint8>
-            var s3 : array<uint8>
-            var p2 : array<uint8>
-            var s2 : array<uint8>
-            pack_q8_wire(wq1, ws1, p1, s1)
-            pack_q8_wire(wq3, ws3, p3, s3)
-            pack_q8_wire(wq2, ws2, p2, s2)
-            let b1 = vk_arena_place(p1, s1, N, NFE, 0)
-            let b3 = vk_arena_place(p3, s3, N, NFE, 0)
-            let b2 = vk_arena_place(p2, s2, NFE, N, 0)
-            t |> success(b1 >= 0l && b3 >= 0l && b2 >= 0l, "arena admitted the FFN triple (blocks {b1}/{b3}/{b2})")
+            var t1 <- arena_place_q8(NFE, N, 11l, true)    // gate/up small scales — the sane silu regime
+            var t3 <- arena_place_q8(NFE, N, 23l, true)
+            var t2 <- arena_place_q8(N, NFE, 37l)
+            t |> success(t1.blk >= 0l && t3.blk >= 0l && t2.blk >= 0l, "arena admitted the FFN triple (blocks {t1.blk}/{t3.blk}/{t2.blk})")
             var xq : array<int8>
             var xs : array<float>
             fill_acts(xq, xs, 1l)
             var y : array<float>
             y |> resize(int(N))
-            vk_arena_ffn(y, b1, b3, b2, N, NFE, 0, 0, 0, xq, xs, false)
+            vk_arena_ffn(y, t1.blk, t3.blk, t2.blk, N, NFE, 0, 0, 0, xq, xs, false)
             // CPU mirror: the fused-FFN reference over one region, the triple's only expert
             var roffs1 <- make_offs([0l], [0l], [1l], WOFF1, NFE * N)
             var roffs3 <- make_offs([0l], [0l], [1l], WOFF3, NFE * N)
             var roffs2 <- make_offs([0l], [0l], [1l], WOFF2, N * NFE)
             var refy : array<float>
-            ref_ffn(roffs1, roffs3, roffs2, WOFFS, 1, wq1, ws1, wq3, ws3, wq2, ws2, xq, xs, 1l, refy)
+            ref_ffn(roffs1, roffs3, roffs2, WOFFS, 1, t1.wq, t1.ws, t3.wq, t3.ws, t2.wq, t2.ws, xq, xs, 1l, refy)
             held(t, "arena FFN", y, refy, REL_TOL, N)
-            delete wq1
-            delete ws1
-            delete wq3
-            delete ws3
-            delete wq2
-            delete ws2
-            delete p1
-            delete s1
-            delete p3
-            delete s3
-            delete p2
-            delete s2
+            delete t1
+            delete t3
+            delete t2
             delete xq
             delete xs
             delete y
@@ -2008,50 +1989,19 @@ def test_vulkan_arena(t : T?) {
                 tt |> skip("no Vulkan device (or the arena reserve was refused)")
                 return
             }
-            var wqa : array<int8>
-            var wsa : array<float>
-            var wqbv : array<int8>
-            var wsbv : array<float>
-            fill_q8_quants(wqa, wsa, AROWS, N, 31l, false)
-            fill_q8_quants(wqbv, wsbv, AROWS, N, 57l, false)   // different seed => different content
-            var pqa : array<uint8>
-            var psa : array<uint8>
-            var pqb : array<uint8>
-            var psb : array<uint8>
-            pack_q8_wire(wqa, wsa, pqa, psa)
-            pack_q8_wire(wqbv, wsbv, pqb, psb)
-            let blk_a = vk_arena_place(pqa, psa, N, AROWS, 0)
-            let blk_b = vk_arena_place(pqb, psb, N, AROWS, 0)
+            var ta <- arena_place_q8(AROWS, N, 31l)
+            var tb <- arena_place_q8(AROWS, N, 57l)   // different seed => different content
             // relative, not absolute: the arena is process-global, so another arm may have placed
             // into it first. Back-to-back is the actual invariant.
-            tt |> success(blk_a >= 0l && blk_b == blk_a + ABLK,
-                "arena bump cursor packs tensors back to back (a={blk_a}, b={blk_b}, delta expected {ABLK})")
+            tt |> success(ta.blk >= 0l && tb.blk == ta.blk + ABLK,
+                "arena bump cursor packs tensors back to back (a={ta.blk}, b={tb.blk}, delta expected {ABLK})")
             var xq : array<int8>
             var xs : array<float>
             fill_acts(xq, xs, 1l)
-            for (arm in range(2)) {
-                let blk = arm == 0 ? blk_a : blk_b
-                var y : array<float>
-                y |> resize(int(AROWS))
-                vk_arena_gemv(y, blk, N, AROWS, 0, xq, xs)
-                var refy : array<float>
-                if (arm == 0) {
-                    ref_q8_gemm(wqa, wsa, xq, xs, N, AROWS, 1l, refy)
-                } else {
-                    ref_q8_gemm(wqbv, wsbv, xq, xs, N, AROWS, 1l, refy)
-                }
-                held(tt, "arena tensor {arm}", y, refy, REL_TOL, AROWS)
-                delete y
-                delete refy
-            }
-            delete wqa
-            delete wsa
-            delete wqbv
-            delete wsbv
-            delete pqa
-            delete psa
-            delete pqb
-            delete psb
+            arena_serves(tt, "arena tensor 0", ta, AROWS, 1l, xq, xs)
+            arena_serves(tt, "arena tensor 1", tb, AROWS, 1l, xq, xs)
+            delete ta
+            delete tb
             delete xq
             delete xs
         } else {
@@ -2096,23 +2046,12 @@ def test_vulkan_drop_model(t : T?) {
                 held(t, "cycle {cycle} stack serves its own content", y, refy, REL_TOL, DMROWS)
                 // arena rail: reserve (fresh after a drop) -> place -> GEMV -> parity
                 t |> success(vk_arena_reserve(0, ARENA_BLOCKS / 2l), "cycle {cycle} arena reserve")
-                var awq : array<int8>
-                var aws : array<float>
-                fill_q8_quants(awq, aws, DMROWS, N, 91l + int64(cycle) * 13l, false)
-                var apq : array<uint8>
-                var aps : array<uint8>
-                pack_q8_wire(awq, aws, apq, aps)
-                let blk = vk_arena_place(apq, aps, N, DMROWS, 0)
-                t |> success(blk >= 0l, "cycle {cycle} arena placement (block {blk})")
+                var at <- arena_place_q8(DMROWS, N, 91l + int64(cycle) * 13l)
+                t |> success(at.blk >= 0l, "cycle {cycle} arena placement (block {at.blk})")
                 var axq : array<int8>
                 var axs : array<float>
                 fill_acts(axq, axs, 1l)
-                var ay : array<float>
-                ay |> resize(int(DMROWS))
-                vk_arena_gemv(ay, blk, N, DMROWS, 0, axq, axs)
-                var aref : array<float>
-                ref_q8_gemm(awq, aws, axq, axs, N, DMROWS, 1l, aref)
-                held(t, "cycle {cycle} arena serves its own content", ay, aref, REL_TOL, DMROWS)
+                arena_serves(t, "cycle {cycle} arena serves its own content", at, DMROWS, 1l, axq, axs)
                 // the whole-model drop: every stack (this file's earlier tests included), the
                 // arena, and all lazy dispatch state die; cycle 1 re-runs the ladder from bare
                 moe_gpu_drop_model_state()
@@ -2123,14 +2062,9 @@ def test_vulkan_drop_model(t : T?) {
                 delete xs
                 delete y
                 delete refy
-                delete awq
-                delete aws
-                delete apq
-                delete aps
+                delete at
                 delete axq
                 delete axs
-                delete ay
-                delete aref
             }
         } else {
             t |> skip("dasVulkan not installed; whole-model drop untestable here")
@@ -2156,44 +2090,18 @@ def test_vulkan_arena_slabs(t : T?) {
                     tt |> skip("no Vulkan device (or the arena reserve was refused)")
                     return
                 }
-                var blks : array<int64>
-                blks |> reserve(3)
-                for (arm in range64(3l)) {
-                    var wq : array<int8>
-                    var ws : array<float>
-                    fill_q8_quants(wq, ws, SROWS, N, 7l + arm * 29l, false)
-                    var pq : array<uint8>
-                    var ps : array<uint8>
-                    pack_q8_wire(wq, ws, pq, ps)
-                    blks |> push(vk_arena_place(pq, ps, N, SROWS, 0))
-                    delete wq
-                    delete ws
-                    delete pq
-                    delete ps
-                }
+                var ts <- [for (arm in range64(3l)); arena_place_q8(SROWS, N, 7l + arm * 29l)]
                 // A and B pack into slab 0 (B at a nonzero local base); C crosses into slab 1 at local 0
-                tt |> equal(0l, blks[0], "tensor A at slab 0, local 0")
-                tt |> equal(SBLK, blks[1], "tensor B at slab 0, local {SBLK}")
-                tt |> equal(1l << 32l, blks[2], "tensor C crosses into slab 1, local 0")
+                tt |> equal(0l, ts[0].blk, "tensor A at slab 0, local 0")
+                tt |> equal(SBLK, ts[1].blk, "tensor B at slab 0, local {SBLK}")
+                tt |> equal(1l << 32l, ts[2].blk, "tensor C crosses into slab 1, local 0")
                 var xq : array<int8>
                 var xs : array<float>
                 fill_acts(xq, xs, 1l)
-                for (arm in range(3)) {
-                    var wq : array<int8>
-                    var ws : array<float>
-                    fill_q8_quants(wq, ws, SROWS, N, 7l + int64(arm) * 29l, false)   // same seed => same content
-                    var y : array<float>
-                    y |> resize(int(SROWS))
-                    vk_arena_gemv(y, blks[arm], N, SROWS, 0, xq, xs)
-                    var refy : array<float>
-                    ref_q8_gemm(wq, ws, xq, xs, N, SROWS, 1l, refy)
-                    held(tt, "slab tensor {arm}", y, refy, REL_TOL, SROWS)
-                    delete wq
-                    delete ws
-                    delete y
-                    delete refy
+                for (ta, arm in ts, count()) {
+                    arena_serves(tt, "slab tensor {arm}", ta, SROWS, 1l, xq, xs)
                 }
-                delete blks
+                delete ts
                 delete xq
                 delete xs
             } finally {
