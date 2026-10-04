@@ -125,19 +125,6 @@ struct private Ffn {
     rw : array<float>
 }
 
-// one plane in the quad's format, uploaded at woff and dequantized; false = the upload was refused
-def private plane_up(fmt : int; rows, n, seed, woff : int64; var w : array<float>) : bool {
-    var wqb : array<uint8>
-    var wsb : array<uint8>
-    if (fmt == 0) {
-        fill_q8_stack(rows, n, seed, wqb, wsb, w)
-    } else {
-        fill_kq_stack(fmt, rows, n, seed, true, wqb, wsb)
-        dequant_kq_stack(fmt, wqb, wsb, rows, n, w)
-    }
-    return moe_gpu_upload_stack(wqb, wsb, woff, n, rows, fmt)
-}
-
 //! one attention quad's four planes, uploaded and dequantized; false = no device, hasb = the quad carries bias rows
 def private quad_up(var q : Quad; fmt : int; base : int64; seed : int64; phase : float; neox, hasb : bool) : bool {
     q.fmt = fmt
@@ -166,26 +153,14 @@ def private quad_up(var q : Quad; fmt : int; base : int64; seed : int64; phase :
 // the expert stacks: gate/up k4 over N, down k6 over NFE; expert e's plane starts at e * NFE * N;
 // slot j routes expert j
 def private ffn_up(t : T?; var f : Ffn; base_slot : int64 = 30l) : bool {
-    var wq1 : array<uint8>
-    var ws1 : array<uint8>
-    var wq3 : array<uint8>
-    var ws3 : array<uint8>
-    var wq2 : array<uint8>
-    var ws2 : array<uint8>
-    fill_kq_stack(1, NE * NFE, N, 41l, true, wq1, ws1)
-    fill_kq_stack(1, NE * NFE, N, 43l, true, wq3, ws3)
-    fill_kq_stack(3, NE * N, NFE, 47l, false, wq2, ws2)
     let woff1 = base_slot * STRIDE
     let woff3 = (base_slot + 1l) * STRIDE
     let woff2 = (base_slot + 2l) * STRIDE
-    if (!moe_gpu_upload_stack(wq1, ws1, woff1, N, NE * NFE, 1)) {
+    if (!plane_up(1, NE * NFE, N, 41l, woff1, f.w1)) {
         return false
     }
-    t |> success(moe_gpu_upload_stack(wq3, ws3, woff3, N, NE * NFE, 1), "dec tail: up stack uploaded")
-    t |> success(moe_gpu_upload_stack(wq2, ws2, woff2, NFE, NE * N, 3), "dec tail: down stack uploaded")
-    dequant_kq_stack(1, wq1, ws1, NE * NFE, N, f.w1)
-    dequant_kq_stack(1, wq3, ws3, NE * NFE, N, f.w3)
-    dequant_kq_stack(3, wq2, ws2, NE * N, NFE, f.w2)
+    t |> success(plane_up(1, NE * NFE, N, 43l, woff3, f.w3), "dec tail: up stack uploaded")
+    t |> success(plane_up(3, NE * N, NFE, 47l, woff2, f.w2, false), "dec tail: down stack uploaded")
     fill_norm(f.norm, N, 1.1)
     let ege = NFE * N
     f.offs1 <- [woff1, 0l, 1l, woff1 + ege, 1l, 1l]

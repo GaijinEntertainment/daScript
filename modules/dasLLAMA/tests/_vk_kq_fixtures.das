@@ -5,6 +5,7 @@ module _vk_kq_fixtures shared public   //! shared: the harness's probe fixture (
 
 require daslib/f16_cvt
 require dasllama/dasllama_convert
+require dasllama/dasllama_gpu_tier
 
 // Synthetic K-quant expert stacks in the vulkan tier's DEVICE layout, shared by the tier suite
 // (test_vulkan_tier) and the cm2 expert-chain suite (test_vulkan_moe_cm2): the pow2 scale sets
@@ -168,6 +169,22 @@ def fill_q8_stack(rows, n : int64; seed : int64; var wqb : array<uint8>; var wsb
         wqb[i] = uint8(q)
         w[i] = float(q) * scales[i / 32l]
     }
+}
+
+//! one plane in format `fmt` (0 = q8 under `fill_q8_stack`) uploaded at `woff` and dequantized into `w`; false = the upload was refused
+def plane_up(fmt : int; rows, n, seed, woff : int64; var w : array<float>; tiny_d : bool = true; stream : bool = false) : bool {
+    var wqb : array<uint8>
+    var wsb : array<uint8>
+    if (fmt == 0) {
+        fill_q8_stack(rows, n, seed, wqb, wsb, w)
+    } else {
+        fill_kq_stack(fmt, rows, n, seed, tiny_d, wqb, wsb)
+        dequant_kq_stack(fmt, wqb, wsb, rows, n, w)
+    }
+    let ok = moe_gpu_upload_stack(wqb, wsb, woff, n, rows, fmt, stream)
+    delete wqb
+    delete wsb
+    return ok
 }
 
 //! one hashed word of synthetic quant bytes for index i - the kernel suite's and the probes' plane filler

@@ -671,32 +671,17 @@ def test_vulkan_moe_ffn_kq(t : T?) {
             // k4 gate/up stacks + BOTH down formats in one down stack region set is not a real
             // shape — use two arms sharing the gate/up stacks: down = k6, then down = k5 at a
             // fresh offset (the 35B carries k5 downs on most layers, k6 on the last two)
-            var wq1 : array<uint8>
-            var ws1 : array<uint8>
-            var wq3 : array<uint8>
-            var ws3 : array<uint8>
-            fill_kq_stack(1, NE * KNFE, KN, 21l, true, wq1, ws1)
-            fill_kq_stack(1, NE * KNFE, KN, 37l, true, wq3, ws3)
-            var up_ok = moe_gpu_upload_stack(wq1, ws1, KWOFF1, KN, NE * KNFE, 1)
-            if (!up_ok) {
+            var w1 : array<float>
+            var w3 : array<float>
+            if (!plane_up(1, NE * KNFE, KN, 21l, KWOFF1, w1)) {
                 t |> skip("no Vulkan device (or probe/budget refused the upload)")
                 return
             }
-            up_ok = moe_gpu_upload_stack(wq3, ws3, KWOFF3, KN, NE * KNFE, 1)
-            t |> success(up_ok, "k4 up stack uploaded")
-            var w1 : array<float>
-            var w3 : array<float>
-            dequant_kq_stack(1, wq1, ws1, NE * KNFE, KN, w1)
-            dequant_kq_stack(1, wq3, ws3, NE * KNFE, KN, w3)
+            t |> success(plane_up(1, NE * KNFE, KN, 37l, KWOFF3, w3), "k4 up stack uploaded")
             for (dfmt in [3, 2]) {   // k6 down, then k5 down (fresh stack, same gate/up)
                 let dwoff = KWOFF2 + int64(3 - dfmt) * 10000000l
-                var wq2 : array<uint8>
-                var ws2 : array<uint8>
-                fill_kq_stack(dfmt, NE * KN, KNFE, 53l + int64(dfmt), false, wq2, ws2)
-                up_ok = moe_gpu_upload_stack(wq2, ws2, dwoff, KNFE, NE * KN, dfmt)
-                t |> success(up_ok, "k{dfmt == 3 ? 6 : 5} down stack uploaded")
                 var w2 : array<float>
-                dequant_kq_stack(dfmt, wq2, ws2, NE * KN, KNFE, w2)
+                t |> success(plane_up(dfmt, NE * KN, KNFE, 53l + int64(dfmt), dwoff, w2, false), "k{dfmt == 3 ? 6 : 5} down stack uploaded")
                 let woffs = Bases(gate = KWOFF1, up = KWOFF3, down = dwoff)
                 for (decode in fixed_array(true, false)) {
                     var gout <- ffn_arm(t, "kq (down k{dfmt == 3 ? 6 : 5})", decode, woffs, KN, KNFE, int3(1, 1, dfmt)) $(o1, o3, o2, xq, xs, nrows, refv) {
@@ -704,8 +689,6 @@ def test_vulkan_moe_ffn_kq(t : T?) {
                     }
                     delete gout
                 }
-                delete wq2
-                delete ws2
                 delete w2
             }
             var xq : array<int8>
@@ -716,13 +699,8 @@ def test_vulkan_moe_ffn_kq(t : T?) {
             // perturbed activations exercise the recorded-resubmit path.
             let CWOFF = 9000000l
             let CVOCAB = 512l
-            var wqc : array<uint8>
-            var wsc : array<uint8>
-            fill_kq_stack(3, CVOCAB, KN, 71l, false, wqc, wsc)
-            up_ok = moe_gpu_upload_stack(wqc, wsc, CWOFF, KN, CVOCAB, 3)
-            t |> success(up_ok, "k6 classifier plane uploaded")
             var wc : array<float>
-            dequant_kq_stack(3, wqc, wsc, CVOCAB, KN, wc)
+            t |> success(plane_up(3, CVOCAB, KN, 71l, CWOFF, wc, false), "k6 classifier plane uploaded")
             var ylog : array<float>
             ylog |> resize(int(CVOCAB))
             for (cpass in range(2)) {
@@ -733,14 +711,8 @@ def test_vulkan_moe_ffn_kq(t : T?) {
                 held_nontrivial(t, "cls GEMV arm pass {cpass}", ylog, yref, REL_TOL, CVOCAB)
                 delete yref
             }
-            delete wqc
-            delete wsc
             delete wc
             delete ylog
-            delete wq1
-            delete ws1
-            delete wq3
-            delete ws3
             delete w1
             delete w3
             delete xq
@@ -765,30 +737,15 @@ def test_vulkan_moe_ffn_q40(t : T?) {
     t |> run("vulkan MoE q40 tier (all-Q4_0 triple) == CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
-            var wq1 : array<uint8>
-            var ws1 : array<uint8>
-            var wq3 : array<uint8>
-            var ws3 : array<uint8>
-            var wq2 : array<uint8>
-            var ws2 : array<uint8>
-            fill_kq_stack(4, NE * KNFE, KN, 83l, false, wq1, ws1)
-            fill_kq_stack(4, NE * KNFE, KN, 97l, false, wq3, ws3)
-            fill_kq_stack(4, NE * KN, KNFE, 101l, false, wq2, ws2)
-            var up_ok = moe_gpu_upload_stack(wq1, ws1, QWOFF1, KN, NE * KNFE, 4)
-            if (!up_ok) {
-                t |> skip("no Vulkan device (or probe/budget refused the upload)")
-                return
-            }
-            up_ok = moe_gpu_upload_stack(wq3, ws3, QWOFF3, KN, NE * KNFE, 4)
-            t |> success(up_ok, "q40 up stack uploaded")
-            up_ok = moe_gpu_upload_stack(wq2, ws2, QWOFF2, KNFE, NE * KN, 4)
-            t |> success(up_ok, "q40 down stack uploaded")
             var w1 : array<float>
             var w3 : array<float>
             var w2 : array<float>
-            dequant_kq_stack(4, wq1, ws1, NE * KNFE, KN, w1)
-            dequant_kq_stack(4, wq3, ws3, NE * KNFE, KN, w3)
-            dequant_kq_stack(4, wq2, ws2, NE * KN, KNFE, w2)
+            if (!plane_up(4, NE * KNFE, KN, 83l, QWOFF1, w1, false)) {
+                t |> skip("no Vulkan device (or probe/budget refused the upload)")
+                return
+            }
+            t |> success(plane_up(4, NE * KNFE, KN, 97l, QWOFF3, w3, false), "q40 up stack uploaded")
+            t |> success(plane_up(4, NE * KN, KNFE, 101l, QWOFF2, w2, false), "q40 down stack uploaded")
             let woffs = Bases(gate = QWOFF1, up = QWOFF3, down = QWOFF2)
             for (decode in fixed_array(true, false)) {   // the GEMV kernel, then the q40 tile
                 var gout <- ffn_arm(t, "q40", decode, woffs, KN, KNFE, int3(4)) $(o1, o3, o2, xq, xs, nrows, refv) {
@@ -796,12 +753,6 @@ def test_vulkan_moe_ffn_q40(t : T?) {
                 }
                 delete gout
             }
-            delete wq1
-            delete ws1
-            delete wq3
-            delete ws3
-            delete wq2
-            delete ws2
             delete w1
             delete w3
             delete w2
@@ -841,19 +792,13 @@ def test_vulkan_moe_ffn_mixed(t : T?) {
     t |> run("vulkan MoE mixed triple (k4 gate/up + q8 down) == CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
-            var wq1 : array<uint8>
-            var ws1 : array<uint8>
-            var wq3 : array<uint8>
-            var ws3 : array<uint8>
-            fill_kq_stack(1, NE * KNFE, KN, 61l, true, wq1, ws1)
-            fill_kq_stack(1, NE * KNFE, KN, 67l, true, wq3, ws3)
-            var up_ok = moe_gpu_upload_stack(wq1, ws1, MXOFF1, KN, NE * KNFE, 1)
-            if (!up_ok) {
+            var w1 : array<float>
+            var w3 : array<float>
+            if (!plane_up(1, NE * KNFE, KN, 61l, MXOFF1, w1)) {
                 t |> skip("no Vulkan device (or probe/budget refused the upload)")
                 return
             }
-            up_ok = moe_gpu_upload_stack(wq3, ws3, MXOFF3, KN, NE * KNFE, 1)
-            t |> success(up_ok, "k4 up stack uploaded")
+            t |> success(plane_up(1, NE * KNFE, KN, 67l, MXOFF3, w3), "k4 up stack uploaded")
             // down: plain q8, the format the Q5_0/Q8_0 downs land in after the loader's transcode
             var dq2 : array<int8>
             var ds2 : array<float>
@@ -861,14 +806,9 @@ def test_vulkan_moe_ffn_mixed(t : T?) {
             var wqb : array<uint8>
             var wsb : array<uint8>
             pack_upload(dq2, ds2, wqb, wsb)
-            up_ok = moe_gpu_upload_stack(wqb, wsb, MXOFF2, KNFE, NE * KN, 0)
-            t |> success(up_ok, "q8 down stack uploaded")
+            t |> success(moe_gpu_upload_stack(wqb, wsb, MXOFF2, KNFE, NE * KN, 0), "q8 down stack uploaded")
 
-            var w1 : array<float>
-            var w3 : array<float>
             var w2 : array<float>
-            dequant_kq_stack(1, wq1, ws1, NE * KNFE, KN, w1)
-            dequant_kq_stack(1, wq3, ws3, NE * KNFE, KN, w3)
             dequant_q8_stack(dq2, ds2, NE * KN, KNFE, w2)
             let woffs = Bases(gate = MXOFF1, up = MXOFF3, down = MXOFF2)
             //! the batch arm: vk_moe_ffn_batch carries its own xunit split and chunk sizing, so the decode arm does NOT cover it
@@ -878,10 +818,6 @@ def test_vulkan_moe_ffn_mixed(t : T?) {
                 }
                 delete gout
             }
-            delete wq1
-            delete ws1
-            delete wq3
-            delete ws3
             delete dq2
             delete ds2
             delete wqb
@@ -921,15 +857,11 @@ def test_vulkan_dense_gemm(t : T?) {
             ref_q8_gemm(wq, ws, xq, xs, N, DD, DNR, refy)
             held(t, "dense q8 arm", y, refy, REL_TOL, DD)
             // k4 arm: [DD x KN] plane, Q8_K acts through the same one-region rail
-            var kwqb : array<uint8>
-            var kwsb : array<uint8>
-            fill_kq_stack(1, DD, KN, 23l, false, kwqb, kwsb)
-            if (!moe_gpu_upload_stack(kwqb, kwsb, KDWOFF, KN, DD, 1)) {
+            var w : array<float>
+            if (!plane_up(1, DD, KN, 23l, KDWOFF, w, false)) {
                 t |> skip("kq dense upload refused (budget); skipping the k4 arm")
                 return
             }
-            var w : array<float>
-            dequant_kq_stack(1, kwqb, kwsb, DD, KN, w)
             var kxq : array<int8>
             var kxs : array<float>
             fill_acts_kq(kxq, kxs, DNR)
@@ -976,8 +908,6 @@ def test_vulkan_dense_gemm(t : T?) {
             delete xs
             delete y
             delete refy
-            delete kwqb
-            delete kwsb
             delete w
             delete kxq
             delete kxs
@@ -1665,12 +1595,8 @@ def test_vulkan_attention(t : T?) {
             t |> success(moe_gpu_upload_stack(wqb, wsb, ATV_WOFF, ATD, ATKVD, 0), "v stack uploaded")
             pack_upload(wo, wso, wqb, wsb)
             t |> success(moe_gpu_upload_stack(wqb, wsb, ATO_WOFF, ATQD, ATD, 0), "wo stack uploaded")
-            var wo4b : array<uint8>
-            var wso4b : array<uint8>
-            fill_kq_stack(1, ATD, ATQD, 67l, false, wo4b, wso4b)
-            t |> success(moe_gpu_upload_stack(wo4b, wso4b, ATO4_WOFF, ATQD, ATD, 1), "k4 wo stack uploaded")
             var wo4 : array<float>
-            dequant_kq_stack(1, wo4b, wso4b, ATD, ATQD, wo4)
+            t |> success(plane_up(1, ATD, ATQD, 67l, ATO4_WOFF, wo4, false), "k4 wo stack uploaded")
             var rmsq : array<float>
             var rmsk : array<float>
             rmsq |> resize(int(ATHS))
@@ -1822,8 +1748,6 @@ def test_vulkan_attention(t : T?) {
             delete wso
             delete wqb
             delete wsb
-            delete wo4b
-            delete wso4b
             delete wo4
             delete rmsq
             delete rmsk

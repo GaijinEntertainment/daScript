@@ -76,19 +76,13 @@ def private ref_chain(w1, w3, w2 : array<float>; x : array<float>; inv : array<u
 //! one_region = the shared expert's call shape: one region over every row, the identity slot map at unit weight
 def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; woff, stride : int64; stream : bool; head_only : bool = false; one_region : bool = false) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        var wq1 : array<uint8>
-        var ws1 : array<uint8>
-        var wq3 : array<uint8>
-        var ws3 : array<uint8>
-        var wq2 : array<uint8>
-        var ws2 : array<uint8>
-        fill_kq_stack(1, NE * nfe, n, 21l + woff % 7l, true, wq1, ws1)
-        fill_kq_stack(1, NE * nfe, n, 37l + woff % 7l, true, wq3, ws3)
-        fill_kq_stack(3, NE * n, nfe, 56l + woff % 7l, false, wq2, ws2)
         let woff1 = woff
         let woff3 = woff + stride
         let woff2 = woff + 2l * stride
-        if (!moe_gpu_upload_stack(wq1, ws1, woff1, n, NE * nfe, 1, [stream = stream])) {
+        var w1 : array<float>
+        var w3 : array<float>
+        var w2 : array<float>
+        if (!plane_up(1, NE * nfe, n, 21l + woff % 7l, woff1, w1, true, stream)) {
             t |> skip("{tag}: no Vulkan device (or probe/budget refused the upload)")
             return
         }
@@ -96,18 +90,12 @@ def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; wof
             t |> success(find_stack_idx(woff1, 1) == length(g_gpu.stacks) - 1, "{tag}: the gate base resolves to the stack just uploaded")
             t |> success(find_stack_idx(woff3, 1) < 0 && find_stack_idx(woff2, 3) < 0, "{tag}: the up/down bases are fresh")
         }
-        t |> success(moe_gpu_upload_stack(wq3, ws3, woff3, n, NE * nfe, 1, [stream = stream]), "{tag}: k4 up stack uploaded")
-        t |> success(moe_gpu_upload_stack(wq2, ws2, woff2, nfe, NE * n, 3, [stream = stream]), "{tag}: k6 down stack uploaded")
+        t |> success(plane_up(1, NE * nfe, n, 37l + woff % 7l, woff3, w3, true, stream), "{tag}: k4 up stack uploaded")
+        t |> success(plane_up(3, NE * n, nfe, 56l + woff % 7l, woff2, w2, false, stream), "{tag}: k6 down stack uploaded")
         if (!moe_gpu_ffn_xf_ok(npos, n, 1, 1, 3)) {
             t |> skip("{tag}: the cm2 expert chain serves only in mode 4 on an NV_coopmat2 device")
             return
         }
-        var w1 : array<float>
-        var w3 : array<float>
-        var w2 : array<float>
-        dequant_kq_stack(1, wq1, ws1, NE * nfe, n, w1)
-        dequant_kq_stack(1, wq3, ws3, NE * nfe, n, w3)
-        dequant_kq_stack(3, wq2, ws2, NE * n, nfe, w2)
         // routing: grid entry j -> bucket row (j * 7) % nk (7 coprime to nk); rows below cnt_a are expert 1's
         let nk = npos * k
         var inv : array<uint>
@@ -166,12 +154,6 @@ def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; wof
         delete w1
         delete w3
         delete w2
-        delete wq1
-        delete ws1
-        delete wq3
-        delete ws3
-        delete wq2
-        delete ws2
     }
 }
 
