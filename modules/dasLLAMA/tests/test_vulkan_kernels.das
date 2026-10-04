@@ -6556,6 +6556,39 @@ let private PLT_NROWS = 5   //! the conv ring: (kern - 1) x dil + 1 rows at kern
 let private PLT_KERN = 3
 let private PLT_DIL = 2
 
+//! the PLE gate's CPU form for the row at `row_at`: each stream's normed key against its normed residual, the signed-sqrt sigmoid
+//! gate on the value row at `val_at` into `gated`, the gated row normed into `normed` at `normed_at`; returns the stream dots
+def private ple_gate_row_ref(key, res, val, wn : array<float>; row_at, val_at : int; var gated : array<float>; var normed : array<float>;
+                             normed_at : int) : array<float> {
+    let dim = HCT_DIM
+    let hcd = HCT_HCD
+    var kn : array<float>
+    var qn : array<float>
+    kn |> resize(hcd)
+    qn |> resize(hcd)
+    var svs : array<float>
+    svs |> reserve(HCT_HC)
+    for (c in range(HCT_HC)) {
+        hct_rms(key, row_at + c * dim, wn, c * dim, dim, kn, c * dim)
+        hct_rms(res, row_at + c * dim, wn, hcd + c * dim, dim, qn, c * dim)
+        var sv = 0.0
+        for (i in range(dim)) {
+            sv += kn[c * dim + i] * qn[c * dim + i]
+        }
+        sv *= 1.0 / sqrt(float(dim))
+        svs |> push(sv)
+        let mag = sqrt(max(abs(sv), 1.0e-6))
+        let g = sigmoid_f32(sv > 0.0 ? mag : (sv < 0.0 ? -mag : 0.0))
+        for (i in range(dim)) {
+            gated[row_at + c * dim + i] = val[val_at + i] * g
+        }
+        hct_rms(gated, row_at + c * dim, wn, 2 * hcd + c * dim, dim, normed, normed_at + c * dim)
+    }
+    delete kn
+    delete qn
+    return <- svs
+}
+
 //! the side input's two kernels at position `pos` against the CPU form: the gate's `gated` rows and the ring slot it writes, the
 //! conv's landing in the residual; a position under the taps' reach (`pos` < (kern - 1) x dil) reads zero before the sequence
 def private ple_side_case(t : T?; pos : int) {
@@ -6576,33 +6609,18 @@ def private ple_side_case(t : T?; pos : int) {
         var hist_ref := hist
         var res_ref := res
         gated_ref |> resize(hcd)
+        let slot = (pos % PLT_NROWS) * hcd
+        var svs <- ple_gate_row_ref(key, res, val, wn, 0, 0, gated_ref, hist_ref, slot)
         var npos_sv = 0
         var nneg_sv = 0
-        var kn : array<float>
-        var qn : array<float>
-        kn |> resize(hcd)
-        qn |> resize(hcd)
-        let slot = (pos % PLT_NROWS) * hcd
-        for (c in range(hc)) {
-            hct_rms(key, c * dim, wn, c * dim, dim, kn, c * dim)
-            hct_rms(res, c * dim, wn, hcd + c * dim, dim, qn, c * dim)
-            var sv = 0.0
-            for (i in range(dim)) {
-                sv += kn[c * dim + i] * qn[c * dim + i]
-            }
-            sv *= 1.0 / sqrt(float(dim))
+        for (sv in svs) {
             if (sv > 0.0) {
                 npos_sv++
             } elif (sv < 0.0) {
                 nneg_sv++
             }
-            let mag = sqrt(max(abs(sv), 1.0e-6))
-            let g = sigmoid_f32(sv > 0.0 ? mag : (sv < 0.0 ? -mag : 0.0))
-            for (i in range(dim)) {
-                gated_ref[c * dim + i] = val[i] * g
-            }
-            hct_rms(gated_ref, c * dim, wn, 2 * hcd + c * dim, dim, hist_ref, slot + c * dim)
         }
+        delete svs
         t |> success(npos_sv > 0 && nneg_sv > 0, "the fixture's stream dots take both signs ({npos_sv} positive, {nneg_sv} negative)")
         for (e in range(hcd)) {
             var co = 0.0
@@ -6641,8 +6659,6 @@ def private ple_side_case(t : T?; pos : int) {
         delete gated_ref
         delete hist_ref
         delete res_ref
-        delete kn
-        delete qn
     }
 }
 
@@ -6670,26 +6686,9 @@ def private ple_panel_case(t : T?; rows, pos0 : int; tok_pos : bool = false) {
         var res_ref := res
         gated_ref |> resize(rows * hcd)
         panel_ref |> resize(rows * hcd)
-        var kn : array<float>
-        var qn : array<float>
-        kn |> resize(hcd)
-        qn |> resize(hcd)
         for (r in range(rows)) {
-            for (c in range(hc)) {
-                hct_rms(key, r * hcd + c * dim, wn, c * dim, dim, kn, c * dim)
-                hct_rms(res, r * hcd + c * dim, wn, hcd + c * dim, dim, qn, c * dim)
-                var sv = 0.0
-                for (i in range(dim)) {
-                    sv += kn[c * dim + i] * qn[c * dim + i]
-                }
-                sv *= 1.0 / sqrt(float(dim))
-                let mag = sqrt(max(abs(sv), 1.0e-6))
-                let g = sigmoid_f32(sv > 0.0 ? mag : (sv < 0.0 ? -mag : 0.0))
-                for (i in range(dim)) {
-                    gated_ref[r * hcd + c * dim + i] = val[r * dim + i] * g
-                }
-                hct_rms(gated_ref, r * hcd + c * dim, wn, 2 * hcd + c * dim, dim, panel_ref, r * hcd + c * dim)
-            }
+            var svs <- ple_gate_row_ref(key, res, val, wn, r * hcd, r * dim, gated_ref, panel_ref, r * hcd)
+            delete svs
         }
         var from_ring = 0
         var from_panel = 0
@@ -6761,8 +6760,6 @@ def private ple_panel_case(t : T?; rows, pos0 : int; tok_pos : bool = false) {
         delete gated_ref
         delete panel_ref
         delete res_ref
-        delete kn
-        delete qn
     }
 }
 
