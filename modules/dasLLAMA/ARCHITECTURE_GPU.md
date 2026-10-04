@@ -221,7 +221,7 @@ that a question answered for one backend has an obvious address in the other. Th
   memory (`vk_rdec_upload_emb_f32`) answers false without touching a device - which keeps a baked `.dlim` layout equal to the one a real arm produces.
 - **`dasllama_gpu_math.das`** - the ALU helpers both kernel homes splice into their shader bodies
   (`ksign7`, `iq3s_signed`, `softcap_exp`): pure arithmetic, no table, no backend lowering, so one
-  owner serves the Metal and the Vulkan bodies alike; it also holds the CPU chains' matching scalar forms (the sigmoid, the SiLU: `sigmoid_f32`, `silu_f32`); the codebook tables stay per kernel home.
+  owner serves the Metal and the Vulkan bodies alike; it also holds the CPU chains' matching scalar forms (the sigmoid, the SiLU, the softplus: `sigmoid_f32`, `silu_f32`, `softplus`); the codebook tables stay per kernel home.
   `mad` is the fused instruction by definition and leaves a driver nothing to choose, so two bodies
   held bit for bit spell as `mad` each multiply that feeds an add.
 - **`dasllama_kernel_access.das`** - the shared body-walk read/write classifier both GPU lenses run

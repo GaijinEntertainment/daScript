@@ -7,10 +7,10 @@ options _dasllama_internal = true
 module _vulkan_lane shared public
 
 require dasllama/dasllama_lint public
-require dasllama/dasllama_common   // Model, QuantMode
+require dasllama/dasllama_common
 require dasllama/dasllama_math   // with_dasllama_jobque_
 require dasllama/dasllama_image   // load_model_cached
-require dasllama/dasllama_gpu_tier   // the route and trim levers
+require dasllama/dasllama_gpu_tier
 
 //! `path` loaded through the image cache in q8 inside the job queue
 def load_cached_q8(path : string) : Model {

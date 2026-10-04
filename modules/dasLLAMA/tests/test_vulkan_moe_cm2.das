@@ -8,9 +8,9 @@ require dastest/testing_boost public
 require dasllama/dasllama_math
 require daslib/algorithm
 require ?vulkan dasllama/dasllama_math_vulkan  // the MoE GPU tier under test; the test installs its hooks explicitly (no env gate)
-require _vk_kq_fixtures   // f16r: the CPU reference rounds where the device stages halves, on every lane
-require _kernel_oracles   // ffn_expert_ref: the chain reference's expert rows
-require _compares   // copy_span: the chain reference's feed rows; the cells' compares
+require _vk_kq_fixtures
+require _kernel_oracles
+require _compares
 require ?vulkan dasllama/dasllama_vulkan_common   // find_stack_idx: the fresh-base guard; a build with no Vulkan module skips the cells
 require ?vulkan dasllama/dasllama_env   // the split knob the streamed cells name in their tags
 

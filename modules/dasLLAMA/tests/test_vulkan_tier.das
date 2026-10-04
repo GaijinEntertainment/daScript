@@ -490,19 +490,15 @@ def private ref_deq_gemm(w : array<float>; xq : array<auto(QT)>; xs : array<floa
     return <- r.want
 }
 
-// the CPU reference of the kq FFN contract: dequantized weights against the Q8_K activation
-// image (per-256 scales), silu, the hidden row's requant, dequantized-down GEMM — double
-// accumulation, judged by the same relative-tolerance bar as the q8 arms
-// midblk = the INTERMEDIATE's requant block: 256 (Q8_K) when down is a K-quant, 32 (Q8_0) when down is q8.
-// The gate/up dots always ride the kq 256-block activation image; only the h -> down hop changes.
+//! the kq FFN contract's CPU reference: dequantized weights on the Q8_K image, silu, the hidden row's requant, the dequantized down GEMM, double-accumulated
 def private ref_ffn_kq(offs1, offs3, offs2 : array<int64>; bases : Bases; nreg : int;
                        w1, w3, w2 : array<float>;
                        xq : array<int8>; xs : array<float>; nrows : int64; var gout : array<float>;
-                       midblk : int = 256) {
-    verify(midblk == 256 || midblk == 32, "ref_ffn_kq: the hidden row requants in Q8_K (256) or Q8_0 (32)")
+                       hidden_rq_block : int = 256) {
+    verify(hidden_rq_block == 256 || hidden_rq_block == 32, "ref_ffn_kq: the hidden row requants in Q8_K (256) or Q8_0 (32)")
     var x <- [for (i in range64(nrows * KN)); float(xq[i]) * xs[i / 256l]]
     ffn_regions_ref(offs1, offs3, offs2, bases, nreg, w1, w3, w2, x, int(KN), int(KNFE), gout) $(var h) {
-        q8_round_deq(h, midblk == 256)
+        q8_round_deq(h, hidden_rq_block == 256)
     }
     delete x
 }

@@ -17,7 +17,7 @@ require dasllama/dasllama_math
 require daslib/typemacro_boost  // [template_struct_instance] — the KV-codec kernel templates
 require daslib/math_bits   // uint_bits_to_float: the KHR tile's f32 store bounce read back through its uint staging array
 require daslib/enum_trait   // kq_gemv_fmts walks the enum
-require daslib/strings_boost   // split: a decode attention stamp's name out of the stem list
+require daslib/strings_boost
 require math
 
 // The Vulkan KERNEL home: every kernel is a [spirv_kernel]/[vk_dispatch] class — families are
@@ -3040,12 +3040,7 @@ struct AtAttnArgs {
     scale : float
 }
 
-// the flash Q-tile core (AtAttn, DaAttnB and the wide DaAttnBW share it; the h128 coopmat twin does
-// not): a TQ-row q tile, staged K/V tiles of KS positions at row stride LD, per-row online softmax.
-// KT is the K/V plane element type (staging and compute stay f32 — the f16 arm converts on load).
-// The template's run is the 8-row pass over 32-position tiles (DaAttnB's mirror window); AtAttn
-// authors its own run over its own push, the wide twin (4 rows, 16 positions) its own V walk.
-// Leaves bring their own out plane + push args, so the methods take every varying scalar as a param
+//! the flash Q-tile core (AtAttn, DaAttnB, DaAttnBWT; not the h128 coopmat twin): a leaf declares its own pa/outp, so the methods take every varying scalar as a param
 [ |> template_struct_instance]
 class template AtAttnTileT {
     @ssbo @binding = 0 qpanel : array<float>   // the prepped/roped q rows
@@ -3054,20 +3049,19 @@ class template AtAttnTileT {
     @template_constant TQ : uint = 8u          //!< the q tile's rows
     @template_constant KS : uint = 32u         //!< the K/V stage's positions
     @template_constant LD : uint = 257u        //!< the K/V stage's row stride (one past the widest head: bank-spread)
-    @workgroup fq : float[2048]    // the tile's q rows
-    @workgroup fkv : float[int(KS * LD)]   // one K/V stage
-    @workgroup fp : float[int(TQ * KS)]    // the score/probability tile
+    @workgroup q_tile : float[2048]
+    @workgroup kv_stage : float[int(KS * LD)]
+    @workgroup score_tile : float[int(TQ * KS)]
     @workgroup fm : float[int(TQ)]         // per-row online-softmax state
     @workgroup fl : float[int(TQ)]
     @workgroup fal : float[int(TQ)]
 
-    // stage the TQ-query tile and reset the online-softmax state
     def load_q(q0, nrows, qstride, h, hs, qhs : uint) {
         let tid = gl_LocalInvocationID.x
         var i = tid
         while (i < TQ * hs) {
             let qr = q0 + i / hs
-            fq[i] = qr < nrows ? qpanel[qr * qstride + h * qhs + i % hs] : 0.0
+            q_tile[i] = qr < nrows ? qpanel[qr * qstride + h * qhs + i % hs] : 0.0
             i += 256u
         }
         if (tid < TQ) {
@@ -3076,41 +3070,40 @@ class template AtAttnTileT {
         }
     }
 
-    // stage one KS-position K tile from kpanel at kbase
     def load_k(k0, kend, kbase, kvd, kvh, hs : uint) {
         var i = gl_LocalInvocationID.x
         while (i < KS * hs) {
             let kr = k0 + i / hs
-            fkv[(i / hs) * LD + i % hs] = kr < kend ? float(kpanel[kbase + kr * kvd + kvh * hs + i % hs]) : 0.0   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
+            kv_stage[(i / hs) * LD + i % hs] = kr < kend ? float(kpanel[kbase + kr * kvd + kvh * hs + i % hs]) : 0.0   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
             i += 256u
         }
     }
 
-    // ... and the V tile reuse of the K staging at vbase (call only after all K reads completed)
+    //! the V tile, reusing the K staging at vbase (call only after every K read completed)
     def load_v(k0, kend, vbase, kvd, kvh, hs : uint) {
         var i = gl_LocalInvocationID.x
         while (i < KS * hs) {
             let kr = k0 + i / hs
-            fkv[(i / hs) * LD + i % hs] = kr < kend ? float(vpanel[vbase + kr * kvd + kvh * hs + i % hs]) : 0.0   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
+            kv_stage[(i / hs) * LD + i % hs] = kr < kend ? float(vpanel[vbase + kr * kvd + kvh * hs + i % hs]) : 0.0   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
             i += 256u
         }
     }
 
-    // tile QK^T: lane (r, c) scores query r against position k0+c, masked into fp - causal, and
+    // tile QK^T: lane (r, c) scores query r against position k0+c, masked into the score tile - causal, and
     // below the query's window on a sliding layer (win 0 = every position)
     def qk_score(r, c, hs, k0, gq, q0, nrows, win : uint; scale, cap : float) {
         var s = 0.0
         var j = 0u
         while (j < hs) {   // 4-wide manual unroll (hs % 32 == 0)
-            s += fq[r * hs + j] * fkv[c * LD + j]
-            s += fq[r * hs + j + 1u] * fkv[c * LD + j + 1u]
-            s += fq[r * hs + j + 2u] * fkv[c * LD + j + 2u]
-            s += fq[r * hs + j + 3u] * fkv[c * LD + j + 3u]
+            s += q_tile[r * hs + j] * kv_stage[c * LD + j]
+            s += q_tile[r * hs + j + 1u] * kv_stage[c * LD + j + 1u]
+            s += q_tile[r * hs + j + 2u] * kv_stage[c * LD + j + 2u]
+            s += q_tile[r * hs + j + 3u] * kv_stage[c * LD + j + 3u]
             j += 4u
         }
         let gk = k0 + c
         let inwin = win == 0u || gk + win > gq
-        fp[r * KS + c] = (gk <= gq && inwin && q0 + r < nrows) ? attn_softcap(s * scale, cap) : -3.0e38
+        score_tile[r * KS + c] = (gk <= gq && inwin && q0 + r < nrows) ? attn_softcap(s * scale, cap) : -3.0e38
     }
 
     //! the first K/V tile a window's queries can see: a sliding layer's tile below every query's window start skips whole
@@ -3123,15 +3116,15 @@ class template AtAttnTileT {
             var mt = fm[tid]
             var j2 = 0u
             while (j2 < KS) {
-                mt = max(mt, fp[tid * KS + j2])
+                mt = max(mt, score_tile[tid * KS + j2])
                 j2++
             }
             let alpha = exp(fm[tid] - mt)
             var lsum = 0.0
             j2 = 0u
             while (j2 < KS) {
-                let e = exp(fp[tid * KS + j2] - mt)
-                fp[tid * KS + j2] = e
+                let e = exp(score_tile[tid * KS + j2] - mt)
+                score_tile[tid * KS + j2] = e
                 lsum += e
                 j2++
             }
@@ -3144,7 +3137,6 @@ class template AtAttnTileT {
     // the mirror-window kernel (DaAttnB's pass): batched causal attention over the decode
     // mirrors, K/V read at kbase/vbase; q read head-strided (qhs), the gated epilogue multiplies
     // by the sigmoid of the head's gate half; dpl-guarded accumulators serve hs 32..256.
-    // pa/outp are instance-declared (DaAttnBArgs); AtAttn and the wide twin override run
     [spirv_kernel(local_size_x = 256)]
     def run {   // nolint:STYLE038 — the verbatim flash pass, parity-locked to the shipped kernel
         let qd = pa.nh * pa.hs
@@ -3197,21 +3189,21 @@ class template AtAttnTileT {
             barrier()
             var c2 = 0u
             while (c2 < 32u) {
-                let pw = fp[r * 32u + c2]
+                let pw = score_tile[r * 32u + c2]
                 let vb = c2 * 257u + c
-                o0 += pw * fkv[vb]
+                o0 += pw * kv_stage[vb]
                 if (dpl > 1u) {
-                    o1 += pw * fkv[vb + 32u]
+                    o1 += pw * kv_stage[vb + 32u]
                 }
                 if (dpl > 2u) {
-                    o2 += pw * fkv[vb + 64u]
-                    o3 += pw * fkv[vb + 96u]
+                    o2 += pw * kv_stage[vb + 64u]
+                    o3 += pw * kv_stage[vb + 96u]
                 }
                 if (dpl > 4u) {
-                    o4 += pw * fkv[vb + 128u]
-                    o5 += pw * fkv[vb + 160u]
-                    o6 += pw * fkv[vb + 192u]
-                    o7 += pw * fkv[vb + 224u]
+                    o4 += pw * kv_stage[vb + 128u]
+                    o5 += pw * kv_stage[vb + 160u]
+                    o6 += pw * kv_stage[vb + 192u]
+                    o7 += pw * kv_stage[vb + 224u]
                 }
                 c2++
             }
@@ -3288,17 +3280,17 @@ class AtAttn : AtAttnTileT {
             barrier()
             var c2 = 0u
             while (c2 < 32u) {
-                let pw = fp[r * 32u + c2]
+                let pw = score_tile[r * 32u + c2]
                 let vb = c2 * 257u + c
-                o0 += pw * fkv[vb]
-                o1 += pw * fkv[vb + 32u]
-                o2 += pw * fkv[vb + 64u]
-                o3 += pw * fkv[vb + 96u]
+                o0 += pw * kv_stage[vb]
+                o1 += pw * kv_stage[vb + 32u]
+                o2 += pw * kv_stage[vb + 64u]
+                o3 += pw * kv_stage[vb + 96u]
                 if (pa.dpl > 4u) {
-                    o4 += pw * fkv[vb + 128u]
-                    o5 += pw * fkv[vb + 160u]
-                    o6 += pw * fkv[vb + 192u]
-                    o7 += pw * fkv[vb + 224u]
+                    o4 += pw * kv_stage[vb + 128u]
+                    o5 += pw * kv_stage[vb + 160u]
+                    o6 += pw * kv_stage[vb + 192u]
+                    o7 += pw * kv_stage[vb + 224u]
                 }
                 c2++
             }
@@ -4045,10 +4037,10 @@ class template DaAttnBWT : AtAttnTileT {
             barrier()
             var c2 = 0u
             while (c2 < 16u) {
-                let pw = fp[vr * 16u + c2]
+                let pw = score_tile[vr * 16u + c2]
                 let vb = c2 * 513u + vc
                 for [unroll] (z in range(8)) {
-                    o[z] += pw * fkv[vb + 64u * uint(z)]
+                    o[z] += pw * kv_stage[vb + 64u * uint(z)]
                 }
                 c2++
             }
@@ -6111,9 +6103,7 @@ class CmI8Batch : MoeCmBase {
     }
 }
 
-// The mul_mm tile (DASLLAMA_COOPMAT=mm) as ONE class template over the tile edge and the edge
-// policy. A warp's fragment set is an accumulator array, (BT / 32) squared, walked under
-// `for [unroll_full]` in the shipped kernel's MMA order - A row by A row, each against every B column.
+//! the mul_mm tile (DASLLAMA_COOPMAT=mm) over the tile edge and the edge policy; its fragment walk keeps the shipped kernel's MMA order: A row by A row, each against every B column
 [ |> template_struct_instance]
 class template MmBatchT : MoeCmBase {
     @ssbo @binding = 0 wq : array<uint>        // weight quant words
@@ -6212,7 +6202,7 @@ class template MmBatchT : MoeCmBase {
             stage_a(wblk0, gm0, nbb, kb, lw, lr0)
             stage_b(row0, gn0, cnt, nbb, kb, lw, lr0)
             barrier()
-            for [unroll] (ks in range(2)) {   // 2 K-subtiles x (NF A rows x NF B cols), their MMA order
+            for [unroll] (ks in range(2)) {
                 let k8 = uint(ks) * 8u
                 var ca : coopmatA_f16_16x16
                 var cb : coopmatB_f16_16x16
@@ -11031,7 +11021,6 @@ struct QknRopeArgs {
     cosrow : uint   //! a row's stride in the cos/sin plane
 }
 
-// qk_rms + rope_kv_store in ONE dispatch (qk_norm models).
 // A head past 256 (gemma-4's global layers, 512) gives each thread a second element at tid + 256.
 [ |> template_struct_instance]
 class template QknRopeKvT : WgReduceBase {

@@ -11,7 +11,7 @@ module _kernel_oracles shared public
 require dasllama/dasllama_lint public
 require math
 require dasllama/dasllama_math   // rope_scaled_tab, rope_scaled_neox_tab, rope_scaled_neox_tab_part
-require dasllama/dasllama_gpu_math   // silu_f32: the expert FFN reference's gate
+require dasllama/dasllama_gpu_math
 
 //! The engine's table rope over `n` elements of `v` from `base`, heads `hs` wide, on the `tcos` / `tsin` rows: the partial
 //! form whenever `rot` names a prefix short of `hs`, else the NEOX or the interleaved pairing as `neox` names - the engine's

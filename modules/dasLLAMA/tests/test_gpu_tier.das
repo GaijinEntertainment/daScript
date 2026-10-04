@@ -119,7 +119,6 @@ def private d_sync(l, row0, nrows : int64; kp : uint8 const?; vp : uint8 const?)
     g_sync_n = nrows
 }
 
-// the readback double writes a sentinel through the pointers the forwarder handed it
 def private d_read(l, row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
     g_read_l = l
     g_read_row0 = row0

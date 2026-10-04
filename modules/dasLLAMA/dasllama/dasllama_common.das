@@ -14,7 +14,7 @@ require dasllama/dasllama_rope       // the RoPE angle/table generation (Model-f
 require dasllama/dasllama_gpu_tier   // the device-cooperation seam (hooks the loader/dispatch arms call)
 require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs and false-flags this as unused
 require dasllama/dasllama_math
-require dasllama/dasllama_gpu_math   // silu_f32: the one form the CPU chain and the kernel homes share
+require dasllama/dasllama_gpu_math
 require daslib/jobque_profile  // JOBQUE_PROFILING_ENABLED — the compile-time gate on prof_ticks/prof_add
 require dasllama/dasllama_kv_codec public  // the KV-cache codec families — kv_store_row/kv_load_row/kv_dot/kv_axpy dispatch into them
 require dasllama/dasllama_convert   // cvt_f32_to_f16/cvt_f16_to_f32 — the f16 rows (wscale plane + the f16 KV codec)
@@ -3863,9 +3863,7 @@ def kv_store_batch(var kcp : uint8?; var vcp : uint8?;
     }
 }
 
-// tq4 basis change over rows in place: rotate (or, under `inverse`, un-rotate) every head segment of every row -
-// q_b rows at stride qd, k_b/v_b rows at stride kv_dim, xb_b rows at stride qd. Segments are independent; the cost
-// is O(rows · stride · log head_size), noise next to the GEMMs.
+//! in place over `nrows` rows of `stride` floats, each `head_size` segment on its own: O(rows · stride · log head_size), noise next to the GEMMs
 def tq4_basis_rows(var p : float?; nrows, stride, head_size : int64; signs : float const?; inverse : bool) {
     for (sg in range64(nrows * (stride / head_size))) {
         if (inverse) {

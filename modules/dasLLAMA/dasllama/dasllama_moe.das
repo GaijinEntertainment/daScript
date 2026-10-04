@@ -7,7 +7,7 @@ module dasllama_moe shared public
 require dasllama/dasllama_lint public
 require dasllama/dasllama_common
 require dasllama/dasllama_math
-require dasllama/dasllama_gpu_math   // sigmoid_f32: the one form the CPU chain and the kernel homes share
+require dasllama/dasllama_gpu_math
 require dasllama/dasllama_par
 require dasllama/dasllama_convert   // the q8_0/q8_k row quantizers the expert dispatch feeds
 require dasllama/dasllama_env       // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)

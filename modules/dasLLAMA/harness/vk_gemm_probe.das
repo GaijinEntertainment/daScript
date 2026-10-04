@@ -44,8 +44,8 @@ require daslib/typemacro_boost
 require _vk_probe_fixture   // hash_word, cool_f16_pair: the synthetic planes both probes build
 require ../tests/_vkd_oracles.das   // k4f16_gemm_oracle: the CPU reference the khrx baseline arm is checked against
 require ../tests/_compares.das
-require _race_fixture   // time_rounds, held, compare_words: the races' round loop and their compare
-require daslib/linq   // min: an arm's best round
+require _race_fixture
+require daslib/linq
 
 let private MM_TILE = 128
 let private DISPATCHES = 16

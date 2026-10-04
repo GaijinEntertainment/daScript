@@ -9,9 +9,9 @@ require ?vulkan vulkan
 require ?vulkan dasllama/dasllama_vulkan_common
 require ?vulkan dasllama/dasllama_vulkan_classes
 require ?vulkan _vkd_oracles
-require ?vulkan _vk_codec_attn   // the decode attention's codec arms, the tq4 sign row and rotation, the CPU codec's mirror rows
+require ?vulkan _vk_codec_attn
 require _compares
-require dasllama/dasllama_common   // kv_store_row and the tq4 un-rotation: the CPU cache's own codec
+require dasllama/dasllama_common
 require daslib/f16_cvt   // nolint:STYLE030,LINT019 — used only inside the vulkan static_if arms; the no-vulkan lane sees it unused
 require daslib/algorithm
 require math

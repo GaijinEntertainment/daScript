@@ -10,7 +10,7 @@ require dasllama/dasllama_blocks       // ffn_moe_decode / ffn_moe_prefill: the 
 require dasllama/dasllama_arch_qwen35  // the hybrid deltanet / gated-attention dispatch + configure_qwen35moe
 require dasllama/dasllama_kqformat     // GGML_TYPE_* + iq4nl_lut: the hash table's rows decode from their disk blocks
 require dasllama/dasllama_math
-require dasllama/dasllama_gpu_math   // sigmoid_f32: the one form the CPU chain and the kernel homes share
+require dasllama/dasllama_gpu_math
 require daslib/f16_cvt      // f16_to_f32: the hash table's block scales
 require daslib/array_boost  // nolint:STYLE030 — temp_array: the decode token as a one-row token array (a generic instance the lint does not see)
 require math

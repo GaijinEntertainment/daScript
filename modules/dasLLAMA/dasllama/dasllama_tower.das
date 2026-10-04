@@ -7,7 +7,7 @@ module dasllama_tower shared public
 require dasllama/dasllama_lint public
 require math
 require dasllama/dasllama_math
-require dasllama/dasllama_gpu_math   // sigmoid_f32: the one form the CPU chain and the kernel homes share
+require dasllama/dasllama_gpu_math
 require dasllama/dasllama_plane public   // PlaneF/PlaneU16 — plane forms of the blob helpers
 require dasllama/dasllama_par
 require dasllama/dasllama_gguf   // read_clamp reads sidecar scalar tensors

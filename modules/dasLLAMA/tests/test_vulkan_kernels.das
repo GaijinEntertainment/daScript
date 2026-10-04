@@ -14,7 +14,7 @@ require _vk_kq_fixtures
 require _kq_fixtures
 require ?vulkan _vkd_toy
 require ?vulkan _vkd_oracles
-require ?vulkan _vk_codec_attn   // codec_attn_arm: the decode attention cells over the f32 and f16 mirrors
+require ?vulkan _vk_codec_attn
 require ?vulkan vulkan
 require ?vulkan vulkan/vulkan_boost
 require ?vulkan dasllama/dasllama_vulkan_common
@@ -2715,10 +2715,10 @@ def test_vkd_cm2l_split(t0 : T?) {
                 let pws = cp |> in_plain(wsh)
                 let psc = cp |> in_plain(sched)
                 let pxf = cp |> in_plain(xfh)
-                let pp = cp |> out_(rows * d * nsplit)   // the GEMM writes partial planes into the scratch, the reduce sums into y
+                let partial_planes = cp |> out_(rows * d * nsplit)   // the GEMM writes partial planes into the scratch, the reduce sums into y
                 let py = cp |> out_(rows * d)
-                var sc = cp |> cls_set(fixed_array(pwq, pws, psc, pxf, pp), @@set_q8_batch_cm2l_cls)
-                var sr = cp |> cls_set(fixed_array(pp, py), @@set_splitk_reduce_cls)
+                var sc = cp |> cls_set(fixed_array(pwq, pws, psc, pxf, partial_planes), @@set_q8_batch_cm2l_cls)
+                var sr = cp |> cls_set(fixed_array(partial_planes, py), @@set_splitk_reduce_cls)
                 var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = uint(ksplit))
                 cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
                     enc_q8_batch_cm2l_cls(raw2, h2, sc, pc, int64(wgs))
@@ -2906,7 +2906,7 @@ def private fa_cell_set(cp; khr, sink : bool; p; psink : int) {
     return fa_stamp_set(khr, gather_planes(cp.dev, p), gather_planes(cp.bytes, p), gather_planes(cp.hazard_bit, p))
 }
 
-//! the f16-out twin is held to the f32 stamp's output through f16cvt, not to the oracle: the two stamps must agree bit for bit
+//! the f16-out twin is held to the f32 stamp's output through the clamp-convert, not to the oracle: the two stamps must agree bit for bit
 def private fa_tile_run(t : T?; khr : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = khr ? "fa_khr" : "fa_cm2"
@@ -2947,17 +2947,17 @@ def private fa_tile_run(t : T?; khr : bool) {
                 let pq = cp |> in_(qh)
                 let pk = cp |> in_(kh)
                 let pv = cp |> in_(vh)
-                let pkh = cp |> out_words(int64(kpad * kvd) * 2l, NAN_SENTINEL_BITS)   // the f16cvt shadows the stamps read
-                let pvh = cp |> out_words(int64(kpad * kvd) * 2l, NAN_SENTINEL_BITS)
+                let pk_shadow16 = cp |> out_words(int64(kpad * kvd) * 2l, NAN_SENTINEL_BITS)
+                let pv_shadow16 = cp |> out_words(int64(kpad * kvd) * 2l, NAN_SENTINEL_BITS)
                 let py = cp |> out_(rows * qd)
                 //! the compared f16 planes under a NaN in both halves: a dead leg on either side reads as a mismatch
                 let py16f = cp |> out_words(int64(rows * qd) * 2l, NAN_SENTINEL_BITS)   // the f16-out twin's plane
-                let py16s = cp |> out_words(int64(rows * qd) * 2l, NAN_SENTINEL_BITS)   // the split pair's: f32 out -> f16cvt
+                let py16s = cp |> out_words(int64(rows * qd) * 2l, NAN_SENTINEL_BITS)   // the split pair's: f32 out -> the clamp-convert
                 let psink = cp |> in_(sinkh)
-                var sck = cp |> cls_set(fixed_array(pk, pkh), @@set_tower_clamp_cvt_cls)
-                var scv = cp |> cls_set(fixed_array(pv, pvh), @@set_tower_clamp_cvt_cls)
-                var sfa = fa_cell_set(cp, khr, sink, fixed_array(pq, pkh, pvh, py), psink)
-                var sfa16 = fa_cell_set(cp, khr, sink, fixed_array(pq, pkh, pvh, py16f), psink)
+                var sck = cp |> cls_set(fixed_array(pk, pk_shadow16), @@set_tower_clamp_cvt_cls)
+                var scv = cp |> cls_set(fixed_array(pv, pv_shadow16), @@set_tower_clamp_cvt_cls)
+                var sfa = fa_cell_set(cp, khr, sink, fixed_array(pq, pk_shadow16, pv_shadow16, py), psink)
+                var sfa16 = fa_cell_set(cp, khr, sink, fixed_array(pq, pk_shadow16, pv_shadow16, py16f), psink)
                 var scy = cp |> cls_set(fixed_array(py, py16s), @@set_tower_clamp_cvt_cls)
                 var pcv = f16_rows_args(uint(kpad * kvd))
                 let cvtwgs = int64((kpad * kvd / 4 + 255) / 256)
@@ -2969,8 +2969,7 @@ def private fa_tile_run(t : T?; khr : bool) {
                     enc_tower_clamp_cvt_cls(raw2, h2, scv, pcv, cvtwgs)
                     enc_fa_tile(khr, hs, false, false, sink, false, raw2, h2, sfa, pcf, nheads, rows)
                     enc_fa_tile(khr, hs, false, false, sink, true, raw2, h2, sfa16, pcf, nheads, rows)
-                    // the split pair's own convert: f16cvt over the f32 out - the fused twin's true peer
-                    enc_tower_clamp_cvt_cls(raw2, h2, scy, pcy, int64((rows * qd / 4 + 255) / 256))
+                    enc_tower_clamp_cvt_cls(raw2, h2, scy, pcy, int64((rows * qd / 4 + 255) / 256))   // the split pair's own convert over the f32 out: the fused twin's true peer
                 }
                 delete y_cls
                 delete y16_fused
@@ -3029,7 +3028,7 @@ def private fa_tile_run(t : T?; khr : bool) {
                     bad16++
                 }
             }
-            t |> success(bad16 == 0, "{tag} hs {hs}{stag} f16-out twin == the f32 stamp's f16cvt ({bad16} of {rows * qd} off)")
+            t |> success(bad16 == 0, "{tag} hs {hs}{stag} f16-out twin == the f32 stamp's clamp-convert ({bad16} of {rows * qd} off)")
             delete sinkh
             delete qh
             delete kh
@@ -3047,7 +3046,7 @@ def private fa_tile_run(t : T?; khr : bool) {
 
 [test]
 def test_vkd_fa_cm2(t0 : T?) {
-    t0 |> run("cm2 flash-attention family == the CPU oracle (h64 + h128 + h256, f16cvt-staged planes)") <| @(t : T?) {
+    t0 |> run("cm2 flash-attention family == the CPU oracle (h64 + h128 + h256, clamp-convert-staged planes)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_tower_clamp_cvt_cls()) {   // engage the device without touching coopmat rails
                 t |> skip("no Vulkan device")
@@ -3067,7 +3066,7 @@ def test_vkd_fa_cm2(t0 : T?) {
 
 [test]
 def test_vkd_fa_khr(t0 : T?) {
-    t0 |> run("KHR flash-attention family == the CPU oracle (h64 + h128 + h256 + h512, the window arm, f16cvt-staged planes)") <| @(t : T?) {
+    t0 |> run("KHR flash-attention family == the CPU oracle (h64 + h128 + h256 + h512, the window arm, clamp-convert-staged planes)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_tower_clamp_cvt_cls()) {
                 t |> skip("no Vulkan device")
@@ -3115,14 +3114,14 @@ def private fa_h256_run(nheads, kv_mul, rows, w0 : int; gated : bool; cap : floa
             let pq = cp |> in_(qp)
             let pk = cp |> in_(kh)
             let pv = cp |> in_(vh)
-            let pkh = cp |> out_words(int64(kpad * kvd) * 2l, NAN_SENTINEL_BITS)
-            let pvh = cp |> out_words(int64(kpad * kvd) * 2l, NAN_SENTINEL_BITS)
+            let pk_shadow16 = cp |> out_words(int64(kpad * kvd) * 2l, NAN_SENTINEL_BITS)
+            let pv_shadow16 = cp |> out_words(int64(kpad * kvd) * 2l, NAN_SENTINEL_BITS)
             let py = cp |> out_(rows * qd)
             let py16 = cp |> out_words(int64(rows * qd) * 2l, NAN_SENTINEL_BITS)
-            var sck = cp |> cls_set(fixed_array(pk, pkh), @@set_tower_clamp_cvt_cls)
-            var scv = cp |> cls_set(fixed_array(pv, pvh), @@set_tower_clamp_cvt_cls)
-            var sfa = fa_cell_set(cp, khr, false, fixed_array(pq, pkh, pvh, py), -1)
-            var sfa16 = fa_cell_set(cp, khr, false, fixed_array(pq, pkh, pvh, py16), -1)
+            var sck = cp |> cls_set(fixed_array(pk, pk_shadow16), @@set_tower_clamp_cvt_cls)
+            var scv = cp |> cls_set(fixed_array(pv, pv_shadow16), @@set_tower_clamp_cvt_cls)
+            var sfa = fa_cell_set(cp, khr, false, fixed_array(pq, pk_shadow16, pv_shadow16, py), -1)
+            var sfa16 = fa_cell_set(cp, khr, false, fixed_array(pq, pk_shadow16, pv_shadow16, py16), -1)
             var pcv = f16_rows_args(uint(kpad * kvd))
             let cvtwgs = int64((kpad * kvd / 4 + 255) / 256)
             var pcf = FaArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u,
@@ -3493,8 +3492,6 @@ def private da_attn_b_gated_arm(t : T?; tag : string; stamp, npos, kv_mul, hs, w
     delete y_plain
 }
 
-// a gated model's chunked attention ([q | gate] per head, the output under the gate's sigmoid) on every stamp the prefill's
-// chunked pair picks by head size: the 8-row tile at 128, the wide tile at 512 and the h128 coopmat tile
 [test]
 def test_vkd_da_attn_b_gated(t0 : T?) {
     t0 |> run("gated chunked attention == the gated CPU oracle on the 8-row, wide and h128 stamps") <| @(t : T?) {
@@ -5051,8 +5048,6 @@ def private qkn_rope_arm(t : T?; f16, biased : bool) {
             q_cls <- cp |> plane_run(pq)
             m_cls <- mirror_pair(cp, pkm, pvm, mirn2, f16)
         }
-        // oracle: the bias row at boff, then per-head rms-norm with its weight row, then NEOX rope off the normed row; k lands
-        // at the mirror row, v copies raw plus its bias, on the half grid under `f16`
         var ref <- qkn_rope_rows(q0h, kvh, bh, wnh, csh, bpad, nh, nkvh, hs, krow, mirn2, eps) $(x : float) => f16 ? f16r(x) : x
         check_rows(t, "{name}, q", q_cls, ref.q, BAR_APPROX_CTRL, qd, hs)
         mirror_rows_check(t, name, m_cls, ref.mk, ref.mv, krow, nkvh * hs, mirn2)
@@ -6165,8 +6160,7 @@ def test_vkd_dn_family(t0 : T?) {
                 }
                 var o_cls <- outs[0]
                 var o_cls_sig <- outs[1]
-                // oracle: the SEQUENTIAL delta rule — the chunked WY form equals it in exact
-                // arithmetic, so the drift is pure reassociation; peak-floored bars absorb it - then the out-norm over each raw o row
+                // the chunked WY form equals the sequential rule in exact arithmetic: the drift is reassociation, which the peak-floored bars absorb
                 var o_ref <- dn_delta_ref(convh, sth, smh, npos, nkh, nvh, ds, beta_off, g_off, a_off, dt_off)
                 var o_ref_sig := o_ref   //! the same rows under the sigmoid out-gate (the `dn_scan_p3_sig_cls` stamp's), the state part alike
                 for (tt in range(npos)) {
@@ -6838,7 +6832,7 @@ def test_vkd_kv16_writers(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            // --- rope_kv_f16: q roped f32 in place, k/v rows land f16 (the clamp a no-op at these magnitudes); unbiased, then the f32 twin's bias rows ---
+            // --- rope_kv_f16: k/v rows land f16, the clamp a no-op at these magnitudes ---
             for (biased in fixed_array(false, true)) {
                 rope_kv_arm(t, true, biased)
             }
@@ -6866,8 +6860,7 @@ def test_vkd_kv16_readers(t0 : T?) {
                 t |> skip("f16 attention classes declined on this device")
                 return
             }
-            // --- da_attn_f16: every path of the decode pass over the f16 mirror, then a two-head group at the scalar head (64), the
-            // one-word lane (256) and the two-word lane (512), the four-head stamp held to the two-head slab bit for bit ---
+            // --- da_attn_f16: hs 64 the scalar head, 256 the one-word lane, 512 the two-word lane ---
             codec_attn_arms(t, KVDtype.f16)
             for (hs in [64, 256, 512]) {
                 codec_attn_arm(t, CodecAttn(kv = KVDtype.f16, hs = hs, nheads = 4, kv_mul = 2, g4_twin = true))
@@ -7399,7 +7392,7 @@ def test_vk_coopmat_default_and_tile_pick(t0 : T?) {
 
 [test]
 def test_vkd_ar_f16_fused(t0 : T?) {
-    t0 |> run("fused batch ar+f16 == the split cls_ar + f16cvt_cls pair, bit-exact") <| @(t : T?) {
+    t0 |> run("fused batch ar+f16 == the split cls_ar + tower_clamp_cvt_cls pair, bit-exact") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_cls_ar() || !ensure_tower_clamp_cvt_cls() || !ensure_cls_ar_f16_b()) {
                 t |> skip("no Vulkan device")

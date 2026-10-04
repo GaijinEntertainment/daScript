@@ -7,7 +7,7 @@ require dasllama/dasllama_transformer   // the umbrella: hc_mix_row / hc_combine
 require dasllama/dasllama_arch_qwen4exp   // ngram_gather
 require dasllama/dasllama_kqformat   // GGML_TYPE_* + iq4nl_lut
 require dasllama/dasllama_math   // rmsnorm - the reference's grouped norm
-require dasllama/dasllama_gpu_math   // sigmoid_f32 - the reference's gates
+require dasllama/dasllama_gpu_math
 require dasllama/dasllama_par   // get_disp_count - the split legs' witness
 require daslib/jobque_boost   // with_job_que - the threaded leg
 require math
