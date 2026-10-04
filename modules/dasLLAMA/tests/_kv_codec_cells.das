@@ -85,9 +85,7 @@ def codec_distance_over(t : T?; tr : Model; n : int64; kv : KVDtype; cpu_prefill
     set_resident_prefill_allowed(allowed0)
     if (cpu_prefill) {
         t |> equal(moe_gpu_resident_prefills(), served0, "the prompt read on the CPU rails")
-        var passes <- gpu_cpu_passes_()
-        t |> success(length(passes) == 1 && passes[0].reason == "pinned_off", "the device served every call but the prompt the pin kept off it: {passes}")
-        delete passes
+        only_pass(t, "pinned_off", "the device served every call but the prompt the pin kept off it")
     } else {
         t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the prompt")
         served_every_call(t)

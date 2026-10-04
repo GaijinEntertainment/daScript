@@ -574,9 +574,7 @@ def private cell_device_home_pin(t : T?; file : string) {
             eval(tr, sb, pb)
             var outsider <- create_session(tr, mirror_kv_dtype())
             eval(tr, outsider, pa)
-            var passes <- gpu_cpu_passes_()
-            t |> success(length(passes) == 1 && passes[0].reason == "busy", "the outsider's call passed as busy, and only it: {passes}")
-            delete passes
+            only_pass(t, "busy", "the outsider's call passed as busy, and only it")
             var ta <- [al.fa[0]]
             var tb <- [al.fb[0]]
             eval(tr, sa, ta)
@@ -773,9 +771,7 @@ def cell_device_home_guards(t : T?; file : string) {
                 tripped = true
             }
             t |> success(tripped, "a third device-home session over two regions has nowhere to keep its rows: the CPU cannot take it, so it panics")
-            var passes <- gpu_cpu_passes_()
-            t |> success(length(passes) == 1 && passes[0].reason == "busy", "the refused call was counted as busy, and only it: {passes}")
-            delete passes
+            only_pass(t, "busy", "the refused call was counted as busy, and only it")
             var ta <- [fa[0]]
             eval(tr, sa, ta)
             hold_equal(t, sa.logits, ra[1], "owner A's next step after the refused session")
@@ -861,10 +857,8 @@ def cell_passes_with_their_rows(t : T?; file : string) {
             eval(tr, s, head)
             t |> success(!s.rdec_host_current, "the prompt's rows live on the device alone")
             forward_prefill(tr, s, tail, 10l, 50l)
-            var passes <- gpu_cpu_passes_()
-            t |> success(length(passes) == 1 && passes[0].reason == "gap" && passes[0].count == 1l, "positions 40 to 49 were never written: the call passed as a gap ({passes})")
+            only_pass(t, "gap", "positions 40 to 49 were never written: the call passed as a gap", 1l)
             t |> success(s.rdec_host_current, "and the CPU took it over rows brought down from the device")
-            delete passes
             delete s
             delete head
             delete tail
@@ -886,10 +880,8 @@ def cell_passes_with_their_rows(t : T?; file : string) {
             var s <- create_session(tr, mirror_kv_dtype())
             eval(tr, s, head)
             forward_prefill(tr, s, tail, 200l, CAPPED_RIG_CTX - 96l)
-            var passes <- gpu_cpu_passes_()
-            t |> success(length(passes) == 1 && passes[0].reason == "cap" && passes[0].count == 1l, "200 tokens from 96 short of the region's end: the call passed as cap ({passes})")
+            only_pass(t, "cap", "200 tokens from 96 short of the region's end: the call passed as cap", 1l)
             t |> success(s.rdec_host_current, "and the CPU took it over rows brought down from the device")
-            delete passes
             delete s
             delete head
             delete tail

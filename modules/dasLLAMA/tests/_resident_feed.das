@@ -165,6 +165,14 @@ def pass_count(reason : string) : int64 {
     return n
 }
 
+//! the driver passed calls to the CPU rails for `reason` alone since the model armed - `count` of them where past 0 - asserted
+//! under `what` with every pass logged
+def only_pass(t : T?; reason, what : string; count : int64 = 0l) {
+    var passes <- gpu_cpu_passes_()
+    t |> success(length(passes) == 1 && passes[0].reason == reason && (count <= 0l || passes[0].count == count), "{what}: {passes}")
+    delete passes
+}
+
 //! the pick a device landed against the CPU logits of the same row, tie-aware: the pick is the CPU argmax, or its CPU logit sits
 //! within `rel` of the CPU argmax's (a near-tie the two chains' rounding flips); both decoded and logged with their CPU logits
 def pick_agrees(t : T?; tr : Model; what : string; pick : int64; cpu : array<float>; rel : float) : bool {
