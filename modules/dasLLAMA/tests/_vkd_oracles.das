@@ -10,7 +10,6 @@ module _vkd_oracles shared public
 require dasllama/dasllama_lint public
 require math   // tanh, exp: the activation oracles' closed forms
 require daslib/shader_lingua_franca
-require daslib/math_bits   // uint_bits_to_float: the mx4 oracle builds the E8M0 scale from its bits as the decode does
 require vulkan   // VkCommandBuffer: the cell harness's record block
 require daslib/linq   // count: the bucket bounds
 require dasllama/dasllama_kqformat
@@ -870,16 +869,7 @@ def iq4nl32f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>
 }
 
 //! one MXFP4 weight off its e2m1 code and E8M0 scale byte, as the CPU dot and the cm2 decode compute it (denormal bit patterns below e = 2)
-def mx4_dequant(nib, ex : int) : float {
-    let e = uint(ex)
-    return float(mx4_mag2(nib)) * uint_bits_to_float(e < 2u ? (0x00200000u << e) : ((e - 1u) << 23u))
-}
-
-//! an e2m1 code's DOUBLED magnitude with its sign: the integer the CPU dot and the GEMV kernel multiply against the Q8_0 byte
-def mx4_mag2(nib : int) : int {
-    let kv = fixed_array(0, 1, 2, 3, 4, 6, 8, 12, 0, -1, -2, -3, -4, -6, -8, -12)
-    return kv[nib]
-}
+def mx4_dequant(nib, ex : int) : float => float(int(mx4_lut()[nib])) * e8m0_half(uint(ex))
 
 //! MXFP4 x f16 GEMM oracle (the mx4 s and e stamps' shape): per weight `mx4_dequant` off the per-32 plane - byte j holds
 //! element j in its low nibble and j + 16 in its high, the block's E8M0 byte is the scale plane's byte b (four a word) -
