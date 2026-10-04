@@ -1760,6 +1760,41 @@ def private read_back_y(var raw : VkCommandBuffer; dev : uint64; bytes : int64; 
     destroy_host_buf(host)
 }
 
+//! a race's command per arm of `narms`: one region of `cnt` rows over `wgs_of(v)` workgroups (`wgs_of` 0 keeps the arm's command
+//! null), DISPATCHES dispatches of `set(v, sched, y)`'s set alternating the outputs `ya` / `yb` under a fresh hazard each - the
+//! served graph's shape - encoded through `enc`
+def private race_arms(narms, n, d, cnt, fmt : int; ya, yb : uint64; wgs_of : block<(v : int) : int>;
+                      set : block<(v : int; sched : uint64; sched_bytes : int64; y : uint64) : VkDescriptorSet>;
+                      enc : function<(v, fmt : int; raw : VkCommandBuffer; var hz : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; wgs : int64) : void>) : array<VkCommandBuffer> {
+    var raws : array<VkCommandBuffer>
+    raws |> reserve(narms)
+    for (v in range(narms)) {
+        let wgs = invoke(wgs_of, v)
+        if (wgs == 0) {
+            var none : VkCommandBuffer
+            raws |> push(none)
+            continue
+        }
+        let sched = one_region_sched(cnt, wgs)
+        var sa = invoke(set, v, sched.buf, sched.bytes, ya)
+        var sb = invoke(set, v, sched.buf, sched.bytes, yb)
+        var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
+        var raw = alloc_cmd()
+        record_cmd(raw, false) $(r; var _h) {
+            for (k in range(DISPATCHES)) {
+                var hz : VkHaz
+                if (k % 2 == 0) {
+                    invoke(enc, v, fmt, r, hz, sa, pc, int64(wgs))
+                } else {
+                    invoke(enc, v, fmt, r, hz, sb, pc, int64(wgs))
+                }
+            }
+        }
+        raws |> push(raw)
+    }
+    return <- raws
+}
+
 def private max_rel_diff(a, b : array<float>) : double {
     let mref = logits_maxabs(b)
     return mref > 0.0 ? double(logits_maxdiff(a, b) / mref) : 0.0lf
@@ -1910,35 +1945,12 @@ def private run_khr_shape(name : string; d, n, cnt : int; prof : bool = false) {
     unsafe {
         let yd2 = dv.yd_b   //! consecutive dispatches alternate outputs, as the served graph overlaps them
         let partial = cnt % MM_TILE != 0
-        var raws : array<VkCommandBuffer>
-        raws |> reserve(KHR_ARMS)
-        for (v in range(KHR_ARMS)) {
-            if (partial && !khr_arm_clamps(v)) {
-                var none : VkCommandBuffer
-                raws |> push(none)
-                continue
-            }
+        var raws <- race_arms(KHR_ARMS, n, d, cnt, fmt, yd, yd2, $(v : int) : int {
             let tile = v == KHR_ARM_KQ ? 32 : 128
-            let wgs = ((cnt + tile - 1) / tile) * ((d + tile - 1) / tile)
-            let sched = one_region_sched(cnt, wgs)
-            let scd = sched.buf
-            let sc_bytes = sched.bytes
-            var sa = khr_arm_set(v, fmt, wqd, wsd, scd, xfd, xqd, axsd, yd, wq_bytes, ws_bytes, sc_bytes, xf_bytes, xq_bytes, axs_bytes, y_bytes)
-            var sb = khr_arm_set(v, fmt, wqd, wsd, scd, xfd, xqd, axsd, yd2, wq_bytes, ws_bytes, sc_bytes, xf_bytes, xq_bytes, axs_bytes, y_bytes)
-            var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-            var raw = alloc_cmd()
-            record_cmd(raw, false) $(r; var _h) {
-                for (k in range(DISPATCHES)) {
-                    var hz : VkHaz   //! fresh per dispatch: no barrier between them, the served graph's shape
-                    if (k % 2 == 0) {
-                        khr_arm_enc(v, fmt, r, hz, sa, pc, int64(wgs))
-                    } else {
-                        khr_arm_enc(v, fmt, r, hz, sb, pc, int64(wgs))
-                    }
-                }
-            }
-            raws |> push(raw)
-        }
+            return partial && !khr_arm_clamps(v) ? 0 : ((cnt + tile - 1) / tile) * ((d + tile - 1) / tile)
+        }, $(v : int; scd : uint64; sc_bytes : int64; y : uint64) : VkDescriptorSet {
+            return khr_arm_set(v, fmt, wqd, wsd, scd, xfd, xqd, axsd, y, wq_bytes, ws_bytes, sc_bytes, xf_bytes, xq_bytes, axs_bytes, y_bytes)
+        }, @@khr_arm_enc)
         if (prof) {
             khr_prof_submit(name, raws)
         } else {
@@ -2440,33 +2452,13 @@ def private run_mmq_shape(name : string; d, n, cnt : int) {
         let yd2 = dv.yd_b   //! consecutive dispatches alternate outputs, as the served graph overlaps them
         let vnames = fixed_array("kq    ", "mmq   ", "mmqb  ", "mmqc  ", "mmqd  ")
         let compared = fixed_array(false, true, true, true, false)   //! kq is the reference; the ceiling twin reads constants: timing-only
-        var raws : array<VkCommandBuffer>
-        raws |> reserve(MMQ_ARMS)
-        for (v in range(MMQ_ARMS)) {
+        var raws <- race_arms(MMQ_ARMS, n, d, cnt, fmt, yd, yd2, $(v : int) : int {
             let ttile = v == 0 ? 32 : 64
             let wtile = v == 2 ? 128 : (v >= 3 ? 64 : 32)
-            let wgs = ((cnt + ttile - 1) / ttile) * ((d + wtile - 1) / wtile)
-            let sched = one_region_sched(cnt, wgs)
-            let scd = sched.buf
-            let sc_bytes = sched.bytes
-            let gbits = fixed_array(1u, 2u, 0u, 4u, 8u, 16u)
-            let asizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, axs_bytes, y_bytes)
-            var sa = mmq_arm_set(v, fmt, fixed_array(wqd, wsd, scd, xqd, axsd, yd), asizes, gbits)
-            var sb = mmq_arm_set(v, fmt, fixed_array(wqd, wsd, scd, xqd, axsd, yd2), asizes, gbits)
-            var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-            var raw = alloc_cmd()
-            record_cmd(raw, false) $(r; var _h) {
-                for (k in range(DISPATCHES)) {
-                    var hz : VkHaz   //! fresh per dispatch: no barrier between them, the served graph's shape
-                    if (k % 2 == 0) {
-                        mmq_arm_enc(v, fmt, r, hz, sa, pc, int64(wgs))
-                    } else {
-                        mmq_arm_enc(v, fmt, r, hz, sb, pc, int64(wgs))
-                    }
-                }
-            }
-            raws |> push(raw)
-        }
+            return ((cnt + ttile - 1) / ttile) * ((d + wtile - 1) / wtile)
+        }, $(v : int; scd : uint64; sc_bytes : int64; y : uint64) : VkDescriptorSet {
+            return mmq_arm_set(v, fmt, fixed_array(wqd, wsd, scd, xqd, axsd, y), fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, axs_bytes, y_bytes), fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+        }, @@mmq_arm_enc)
         var best <- sweep_best_us(raws)
         let last_out = DISPATCHES % 2 == 0 ? yd2 : yd
         var y_ref : array<float>
