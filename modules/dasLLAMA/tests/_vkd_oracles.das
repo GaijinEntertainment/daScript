@@ -296,29 +296,35 @@ def half_at(a : array<uint>; hi : int) : float {
 // q8 batch GEMM oracle over region records ([wblk0, row0, cnt, wg0] x nrec): per (row, col),
 // int dots per 32-block (exact) folded by the f16 weight scale and the f32 x scale in block
 // order — the device tiles reassociate, so approx bars
-def q8_gemm_oracle(wq : array<uint>; wsw : array<uint>; xq : array<uint>; xs : array<float>;
-                   recs : array<uint>; nrec, n, d : int; var y : array<float>) {
-    let nbb = n / 32
+//! the GEMM oracles' region-record walk: each record's `cnt` rows from `row0` at every output column, y[row * d + c] = `dot`(row, c, wblk0)
+def private rec_walk(recs : array<uint>; nrec, d : int; var y : array<float>; dot : block<(row, c, wblk0 : int) : float>) {
     for (rr in range(nrec)) {
         let wblk0 = int(recs[rr * 4])
         let row0 = int(recs[rr * 4 + 1])
-        let cnt = int(recs[rr * 4 + 2])
-        for (r in range(cnt)) {
+        for (r in range(int(recs[rr * 4 + 2]))) {
             for (c in range(d)) {
-                var acc = 0.0
-                for (b in range(nbb)) {
-                    let wb = wblk0 + c * nbb + b
-                    let xb = (row0 + r) * nbb + b
-                    var idot = 0
-                    for (j in range(8)) {
-                        idot += sdot4(wq[wb * 8 + j], xq[xb * 8 + j])
-                    }
-                    let wsf = wb % 2 == 0 ? unpackHalf2x16(wsw[wb / 2]).x : unpackHalf2x16(wsw[wb / 2]).y
-                    acc += float(idot) * wsf * xs[xb]
-                }
-                y[(row0 + r) * d + c] = acc
+                y[(row0 + r) * d + c] = invoke(dot, row0 + r, c, wblk0)
             }
         }
+    }
+}
+
+def q8_gemm_oracle(wq : array<uint>; wsw : array<uint>; xq : array<uint>; xs : array<float>;
+                   recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nbb = n / 32
+    rec_walk(recs, nrec, d, y) $(row, c, wblk0 : int) : float {
+        var acc = 0.0
+        for (b in range(nbb)) {
+            let wb = wblk0 + c * nbb + b
+            let xb = row * nbb + b
+            var idot = 0
+            for (j in range(8)) {
+                idot += sdot4(wq[wb * 8 + j], xq[xb * 8 + j])
+            }
+            let wsf = wb % 2 == 0 ? unpackHalf2x16(wsw[wb / 2]).x : unpackHalf2x16(wsw[wb / 2]).y
+            acc += float(idot) * wsf * xs[xb]
+        }
+        return acc
     }
 }
 
@@ -328,25 +334,18 @@ def q8_gemm_oracle(wq : array<uint>; wsw : array<uint>; xq : array<uint>; xs : a
 def q8f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
                       recs : array<uint>; nrec, n, d : int; var y : array<float>) {
     let nbb = n / 32
-    for (rr in range(nrec)) {
-        let wblk0 = int(recs[rr * 4])
-        let row0 = int(recs[rr * 4 + 1])
-        let cnt = int(recs[rr * 4 + 2])
-        for (r in range(cnt)) {
-            for (c in range(d)) {
-                var acc = 0.0
-                for (b in range(nbb)) {
-                    let wb = wblk0 + c * nbb + b
-                    let wsf = wb % 2 == 0 ? unpackHalf2x16(wsw[wb / 2]).x : unpackHalf2x16(wsw[wb / 2]).y
-                    var bacc = 0.0
-                    for (j in range(32)) {
-                        bacc += float(byte_s8(wq, wb * 32 + j)) * half_at(xf, (row0 + r) * n + b * 32 + j)
-                    }
-                    acc += bacc * wsf
-                }
-                y[(row0 + r) * d + c] = acc
+    rec_walk(recs, nrec, d, y) $(row, c, wblk0 : int) : float {
+        var acc = 0.0
+        for (b in range(nbb)) {
+            let wb = wblk0 + c * nbb + b
+            let wsf = wb % 2 == 0 ? unpackHalf2x16(wsw[wb / 2]).x : unpackHalf2x16(wsw[wb / 2]).y
+            var bacc = 0.0
+            for (j in range(32)) {
+                bacc += float(byte_s8(wq, wb * 32 + j)) * half_at(xf, row * n + b * 32 + j)
             }
+            acc += bacc * wsf
         }
+        return acc
     }
 }
 
@@ -356,22 +355,15 @@ def q8f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
 //! so approx bars
 def f16_gemm_walk(xf, recs : array<uint>; nrec, n, d, blkw : int; var y : array<float>; w_at : block<(sb, e : int) : float>) {
     let nsb = n / blkw
-    for (rr in range(nrec)) {
-        let wsb0 = int(recs[rr * 4])
-        let row0 = int(recs[rr * 4 + 1])
-        let cnt = int(recs[rr * 4 + 2])
-        for (r in range(cnt)) {
-            for (c in range(d)) {
-                var acc = 0.0
-                for (s in range(nsb)) {
-                    let sb = wsb0 + c * nsb + s
-                    for (e in range(blkw)) {
-                        acc += invoke(w_at, sb, e) * half_at(xf, (row0 + r) * n + s * blkw + e)
-                    }
-                }
-                y[(row0 + r) * d + c] = acc
+    rec_walk(recs, nrec, d, y) $(row, c, wsb0 : int) : float {
+        var acc = 0.0
+        for (s in range(nsb)) {
+            let sb = wsb0 + c * nsb + s
+            for (e in range(blkw)) {
+                acc += invoke(w_at, sb, e) * half_at(xf, row * n + s * blkw + e)
             }
         }
+        return acc
     }
 }
 
@@ -816,21 +808,14 @@ def kq_gemm_oracle(fmt : int; wq, ws, xq : array<uint>; xs : array<float>;
                    recs : array<uint>; nrec, n, d : int; var y : array<float>) {
     var k = kq_cls_ref(fmt, wq, ws, xq, xs)
     let nsb = n / 256
-    for (rr in range(nrec)) {
-        let wblk0 = int(recs[rr * 4])
-        let row0 = int(recs[rr * 4 + 1])
-        let cnt = int(recs[rr * 4 + 2])
-        for (r in range(cnt)) {
-            for (c in range(d)) {
-                var acc = 0.0
-                for (sb in range(nsb)) {
-                    for (blk in range(8)) {
-                        acc += k->blk_contrib(uint(wblk0 + c * nsb + sb), uint(blk), uint((row0 + r) * nsb + sb))
-                    }
-                }
-                y[(row0 + r) * d + c] = acc
+    rec_walk(recs, nrec, d, y) $(row, c, wblk0 : int) : float {
+        var acc = 0.0
+        for (sb in range(nsb)) {
+            for (blk in range(8)) {
+                acc += k->blk_contrib(uint(wblk0 + c * nsb + sb), uint(blk), uint(row * nsb + sb))
             }
         }
+        return acc
     }
     unsafe {
         delete k
