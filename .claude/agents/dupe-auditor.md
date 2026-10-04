@@ -66,3 +66,22 @@ tier requires; then the summary line `N functions read: D duplicates, T templata
 (M members), L local blocks, R ruled separate`. DUPLICATE and TEMPLATABLE in full; the rest by
 count with one line each. Cite `file:line`, do not narrate. A clean audit names every
 function it checked and the corpus it swept.
+
+## The log
+
+Before you return, write the report you are about to return - verbatim, the whole of it - to a file
+under the MAIN checkout's `logs/audits/` (gitignored), and name that file on the report's last line:
+
+```bash
+root=$(cd "$(git rev-parse --git-common-dir)/.." && pwd)      # the main checkout, from a worktree too
+dir="$root/logs/audits/$(git rev-parse --abbrev-ref HEAD | tr / -)"
+mkdir -p "$dir"
+# <subject>: what you audited as a path with / as -  (a checklist, a document; "diff" for a whole-diff audit)
+cat > "$dir/$(git rev-parse --short=9 HEAD)-dupe-auditor-<subject>.md" <<'REPORT'
+...
+REPORT
+```
+
+The report you return lives only in the session that asked for it. The file is what a later session
+reads - a finding nobody acted on, a checklist's self-review defects - without running the audit again.
+An audit of a diff names the branch and tip it read; a detached worktree names the branch it was told.
