@@ -8156,42 +8156,28 @@ def test_vkd_emb_gather_pair(t0 : T?) {
             for (i in range(vocab * dim)) {
                 wfh[i] = float(i % 97) * 0.125 - 6.0
             }
-            let wq_bytes = int64(totblk) * 32l
-            let ws_bytes = int64(totblk) * 2l
-            let ids_bytes = int64(npos) * 4l
-            let x_bytes = int64(npos * dim) * 4l
-            let wf_bytes = int64(vocab * dim) * 4l
-            let wqd = make_device_buf(wq_bytes)
-            let wsd = make_device_buf(ws_bytes)
-            let idd = make_device_buf(ids_bytes)
-            let xd = make_device_buf(x_bytes)
-            let wfd = make_device_buf(wf_bytes)
-            var host = make_host_buf(x_bytes * 2l, true, [cached = true])
             var y_cls : array<float>
             var yf_cls : array<float>
-            y_cls |> resize(npos * dim)
-            yf_cls |> resize(npos * dim)
-            unsafe {
-                upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
-                upload_region_at(wsd, 0l, addr<uint8 const?>(wsh16[0]), ws_bytes)
-                upload_region_at(idd, 0l, addr<uint8 const?>(idsh[0]), ids_bytes)
-                upload_region_at(wfd, 0l, addr<uint8 const?>(wfh[0]), wf_bytes)
-                var scq = set_emb_gather_cls(fixed_array(wqd, wsd, idd, xd),
-                    fixed_array(wq_bytes, ws_bytes, ids_bytes, x_bytes),
-                    fixed_array(1u, 2u, 4u, 8u))
-                var scf = set_emb_gather_f32_cls(fixed_array(wfd, idd, xd),
-                    fixed_array(wf_bytes, ids_bytes, x_bytes),
-                    fixed_array(1u, 4u, 8u))
+            with_cell_planes() $(var cp : CellPlanes) {
+                let pwq = cp |> in_plain(wqh)
+                let pws = cp |> in_plain(wsh16)
+                let pid = cp |> in_plain(idsh)
+                let pwf = cp |> in_(wfh)
+                let px = cp |> out_(npos * dim)
+                var scq = cp |> cls_set(fixed_array(pwq, pws, pid, px), @@set_emb_gather_cls)
+                var scf = cp |> cls_set(fixed_array(pwf, pid, px), @@set_emb_gather_f32_cls)
                 var pc = EmbArgs(npos = uint(npos), dim = uint(dim), wblk0 = uint(wblk0), embed_scale = scale)
-                cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_emb_gather_cls(raw, h, scq, pc, int64((npos * dim / 4 + 255) / 256))
-                    vhz_dep(raw, h, 8u, 0u, true)
-                    cmd_copy_range(raw, xd, 0l, host.buf, 0l, x_bytes)
-                    enc_emb_gather_f32_cls(raw, h, scf, pc, int64((npos * dim / 4 + 255) / 256))
-                    cmd_copy_planes(raw, h, fixed_array(xd), host, fixed_array(x_bytes), fixed_array(x_bytes), 8u)
                 }
-                memcpy(addr<void?>(y_cls[0]), host.mapped, x_bytes)
-                memcpy(addr<void?>(yf_cls[0]), reinterpret<void?>(intptr(host.mapped) + uint64(x_bytes)), x_bytes)
+                delete y_cls
+                y_cls <- cp |> plane_run(px)
+                cp |> plane_refill(px)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_emb_gather_f32_cls(raw, h, scf, pc, int64((npos * dim / 4 + 255) / 256))
+                }
+                delete yf_cls
+                yf_cls <- cp |> plane_run(px)
             }
             var y_ref : array<float>
             var yf_ref : array<float>
@@ -8251,33 +8237,27 @@ def test_vkd_hot_combine(t0 : T?) {
             for (i in range(nhit * n, k * n)) {
                 down[i] = nan   // a miss's row is stale: no hit chain wrote it
             }
-            let x_bytes = int64(n) * 4l
-            let w_bytes = int64(k) * 4l
-            let d_bytes = int64(k * n) * 4l
-            let ad = make_device_buf(x_bytes)
-            let id = make_device_buf(w_bytes)
-            let wd = make_device_buf(w_bytes)
-            let dd = make_device_buf(d_bytes)
-            let a0d = make_device_buf(x_bytes)
-            let host = make_host_buf(x_bytes * 2l, true, [cached = true])
-            unsafe {
-                upload_region_at(ad, 0l, addr<uint8 const?>(miss[0]), x_bytes)
-                upload_region_at(a0d, 0l, addr<uint8 const?>(miss[0]), x_bytes)
-                upload_region_at(id, 0l, addr<uint8 const?>(ident1[0]), w_bytes)
-                upload_region_at(wd, 0l, addr<uint8 const?>(w[0]), w_bytes)
-                upload_region_at(dd, 0l, addr<uint8 const?>(down[0]), d_bytes)
+            var y : array<float>
+            var y0 : array<float>
+            with_cell_planes() $(var cp : CellPlanes) {
+                let pa = cp |> io_(miss)
+                let pa0 = cp |> io_(miss)
+                let pid = cp |> in_plain(ident1)
+                let pw = cp |> in_(w)
+                let pd = cp |> in_(down)
+                var sp = cp |> cls_set(fixed_array(pa, pid, pw, pd), @@set_combine_cls)
+                var s0 = cp |> cls_set(fixed_array(pa0, pid, pw, pd), @@set_combine_cls)
+                var pc = CombineArgs(n = uint(n), k = uint(k), r0 = 1u, r1 = uint(k) + 1u)
+                var pc0 = CombineArgs(n = uint(n), k = uint(k), r0 = 0u, r1 = uint(k))   // the window at 0 starts the sum: the host's row is lost
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_combine_cls(raw, h, sp, pc, 1l)
+                    enc_combine_cls(raw, h, s0, pc0, 1l)
+                }
+                delete y
+                y <- cp |> plane_run(pa)
+                delete y0
+                y0 <- cp |> plane_run(pa0)
             }
-            var sp = set_combine_cls(fixed_array(ad, id, wd, dd), fixed_array(x_bytes, w_bytes, w_bytes, d_bytes), fixed_array(1u, 2u, 4u, 8u))
-            var s0 = set_combine_cls(fixed_array(a0d, id, wd, dd), fixed_array(x_bytes, w_bytes, w_bytes, d_bytes), fixed_array(16u, 2u, 4u, 8u))
-            var pc = CombineArgs(n = uint(n), k = uint(k), r0 = 1u, r1 = uint(k) + 1u)
-            var pc0 = CombineArgs(n = uint(n), k = uint(k), r0 = 0u, r1 = uint(k))   // the window at 0 starts the sum: the host's row is lost
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_combine_cls(raw, h, sp, pc, 1l)
-                enc_combine_cls(raw, h, s0, pc0, 1l)
-                cmd_copy_planes(raw, h, fixed_array(ad, a0d), host, fixed_array(x_bytes, x_bytes), 17u)
-            }
-            var y <- staged(host.mapped, 0l, n, type<float>)
-            var y0 <- staged(host.mapped, x_bytes, n, type<float>)
             var want : array<float>
             want |> resize(n)
             for (i in range(n)) {
@@ -8340,51 +8320,37 @@ def test_vkd_dec_combine_pair(t0 : T?) {
             for (i in range(ngate)) {
                 gate[i] = float(i) * 0.5 - 2.0   // gate[gidx] = 1.0: a sigmoid off 0.5, so an ungated arm reads apart
             }
-            let x_bytes = int64(n) * 4l
-            let w_bytes = int64(k) * 4l
-            let d_bytes = int64(k * n) * 4l
-            let g_bytes = int64(ngate) * 4l
-            let xd = make_device_buf(x_bytes)
-            let wd = make_device_buf(w_bytes)
-            let dd = make_device_buf(d_bytes)
-            let shd = make_device_buf(x_bytes)
-            let gd = make_device_buf(g_bytes)
-            let od = make_device_buf(x_bytes)
-            let osd = make_device_buf(x_bytes)
-            let oud = make_device_buf(x_bytes)
-            let host = make_host_buf(x_bytes * 3l, true, [cached = true])
-            unsafe {
-                upload_region_at(xd, 0l, addr<uint8 const?>(xin[0]), x_bytes)
-                upload_region_at(wd, 0l, addr<uint8 const?>(w[0]), w_bytes)
-                upload_region_at(dd, 0l, addr<uint8 const?>(down[0]), d_bytes)
-                upload_region_at(shd, 0l, addr<uint8 const?>(sh[0]), x_bytes)
-                upload_region_at(gd, 0l, addr<uint8 const?>(gate[0]), g_bytes)
-            }
-            nan_sentinel_upload(od, x_bytes)
-            nan_sentinel_upload(osd, x_bytes)
-            nan_sentinel_upload(oud, x_bytes)
-            var sr = set_dec_combine_cls(fixed_array(xd, wd, dd, od),
-                fixed_array(x_bytes, w_bytes, d_bytes, x_bytes),
-                fixed_array(1u, 2u, 4u, 8u))
-            var ss = set_dec_combine_sh_cls(fixed_array(xd, wd, dd, shd, gd, osd),
-                fixed_array(x_bytes, w_bytes, d_bytes, x_bytes, g_bytes, x_bytes),
-                fixed_array(1u, 2u, 4u, 16u, 32u, 8u))
-            var su = set_dec_combine_sh_cls(fixed_array(xd, wd, dd, shd, gd, oud),
-                fixed_array(x_bytes, w_bytes, d_bytes, x_bytes, g_bytes, x_bytes),
-                fixed_array(1u, 2u, 4u, 16u, 32u, 8u))
             let wgs = int64((n + 255) / 256)
-            var pcr = DecCombineArgs(n = uint(n), k = uint(k))
-            var pcs = DecCombineArgs(n = uint(n), k = uint(k), gidx = uint(gidx), gated = 1u)
-            var pcu = DecCombineArgs(n = uint(n), k = uint(k), gidx = uint(gidx), gated = 0u)
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_dec_combine_cls(raw, h, sr, pcr, wgs)
-                enc_dec_combine_sh_cls(raw, h, ss, pcs, wgs)
-                enc_dec_combine_sh_cls(raw, h, su, pcu, wgs)
-                cmd_copy_planes(raw, h, fixed_array(od, osd, oud), host, fixed_array(x_bytes, x_bytes, x_bytes), 8u)
+            var y_r : array<float>
+            var y_s : array<float>
+            var y_u : array<float>
+            with_cell_planes() $(var cp : CellPlanes) {
+                let px = cp |> in_(xin)
+                let pw = cp |> in_(w)
+                let pd = cp |> in_(down)
+                let psh = cp |> in_(sh)
+                let pg = cp |> in_(gate)
+                let por = cp |> out_(n)
+                let pos = cp |> out_(n)
+                let pou = cp |> out_(n)
+                var sr = cp |> cls_set(fixed_array(px, pw, pd, por), @@set_dec_combine_cls)
+                var ss = cp |> cls_set(fixed_array(px, pw, pd, psh, pg, pos), @@set_dec_combine_sh_cls)
+                var su = cp |> cls_set(fixed_array(px, pw, pd, psh, pg, pou), @@set_dec_combine_sh_cls)
+                var pcr = DecCombineArgs(n = uint(n), k = uint(k))
+                var pcs = DecCombineArgs(n = uint(n), k = uint(k), gidx = uint(gidx), gated = 1u)
+                var pcu = DecCombineArgs(n = uint(n), k = uint(k), gidx = uint(gidx), gated = 0u)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_dec_combine_cls(raw, h, sr, pcr, wgs)
+                    enc_dec_combine_sh_cls(raw, h, ss, pcs, wgs)
+                    enc_dec_combine_sh_cls(raw, h, su, pcu, wgs)
+                }
+                delete y_r
+                y_r <- cp |> plane_run(por)
+                delete y_s
+                y_s <- cp |> plane_run(pos)
+                delete y_u
+                y_u <- cp |> plane_run(pou)
             }
-            var y_r <- staged(host.mapped, 0l, n, type<float>)
-            var y_s <- staged(host.mapped, x_bytes, n, type<float>)
-            var y_u <- staged(host.mapped, x_bytes * 2l, n, type<float>)
             var r_ref : array<float>
             var s_ref : array<float>
             var u_ref : array<float>
