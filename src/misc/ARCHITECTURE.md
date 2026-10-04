@@ -254,3 +254,24 @@ Windows resolves the path with `normalizeFileName`; Linux, macOS and Haiku with
 `std::filesystem`. The root stays as given on every other target (the web build, a console, a
 `DAS_NO_FILEIO` build), and wherever the resolve fails - a path past `MAX_PATH`, a working
 directory that cannot be read.
+
+## 12. A sweep gives a dead deck back; the head of its class stays {#empty-deck-release}
+
+A size class in `MemoryModel` is a chain of decks, newest at the head, and a request walks the
+chain from the head for a free slot. Growth is geometric - each new deck is twice the head it
+replaces unless `customGrow` says otherwise - so the chain behind the head sums to about the head's own size, and it is the part a
+loading burst leaves behind: the burst's objects die, the survivors allocated after it sit in the
+head, and the older decks hold nothing. Before, a deck lived until the context was reset, so the
+reserved capacity of every class was its peak for the life of the context, and a persistent heap
+carried its startup peak as dirty memory for the whole run.
+
+`Shoe::dropEmptyDecks` unlinks every deck whose live count is zero and frees it; a deck's
+destructor frees the chain behind it, so a released deck is detached from its successor before
+`delete`. `MemoryModel::sweep` calls it with `DeckRelease::keepHead` after the per-deck live
+count it already computes, keeping the head deck of each class even when empty: the head is where the next request lands and the base the next growth doubles
+from, so keeping it stops a steady workload from freeing and re-creating the same deck every
+collection. `MemoryModel::shrink` calls it with `DeckRelease::all` - after a reset every deck is empty,
+and shrink's contract is to give unused memory back. A deck with one live object stays
+whole: the heap does not move objects, so a partly used deck is reclaimed only by its last
+object dying. `Shoe::lastChunk` is cleared on every pass, because it may have named a deck that
+is gone. Under ASan `maxShoeAllocation` is 0, so no deck exists and the pass finds nothing.
