@@ -178,6 +178,31 @@ def cls_set(cp : CellPlanes; idx; set_fn) {
 
 //! one command buffer: `rec` records the dispatches, then every written plane copies back whole, behind its hazard bit, to the staging
 def cell_record(var cp : CellPlanes; rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) {
+    var raw = alloc_transient_cmd()
+    var h = cmd_open(raw, false)
+    cell_record_into(cp, raw, h, rec)
+    cmd_close(raw)
+    submit_wait(raw)
+    free_transient_cmd(raw)
+}
+
+//! `cell_record` on a command the cell keeps: `what` logged under `tag` before the submit and the submit timed after it, so a
+//! device hang names its kernel; the command comes back for a resubmit (`submit_wait`)
+def cell_record_timed(var cp : CellPlanes; tag, what : string; rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) : VkCommandBuffer {
+    var raw = alloc_cmd()
+    var h = cmd_open(raw, false)
+    cell_record_into(cp, raw, h, rec)
+    cmd_close(raw)
+    to_log(LOG_INFO, "{tag}: dispatching {what}\n")
+    let tick = ref_time_ticks()
+    submit_wait(raw)
+    to_log(LOG_INFO, "{tag}: submit + wait {get_time_usec(tick)} us\n")
+    return raw
+}
+
+//! the dispatches `rec` records into `raw` on the rail `h`, then every written plane copied back whole, behind its hazard bit, to
+//! the staging (grown to hold them): `cell_record`'s body, for a cell that records into a command it keeps
+def cell_record_into(var cp : CellPlanes; raw : VkCommandBuffer; var h : VkHaz; rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) {
     var devs : array<uint64>
     var sizes : array<int64>
     var ats : array<int64>
@@ -198,12 +223,16 @@ def cell_record(var cp : CellPlanes; rec : block<(raw : VkCommandBuffer; var h :
         }
         cp.host = make_host_buf(total, true, [cached = true])
     }
-    cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-        invoke(rec, raw, h)
-        cmd_copy_planes(raw, h, devs, cp.host, ats, sizes, bits)
-    }
+    invoke(rec, raw, h)
+    cmd_copy_planes(raw, h, devs, cp.host, ats, sizes, bits)
 }
 
+//! `n` elements of written plane `p` from `at` past its base set to its sentinel inside the command `raw` records, behind the
+//! plane's hazard bit: the fill between two dispatches, so a write the second one skips cannot read as the first one's
+def plane_fill_cmd(cp : CellPlanes; p : int; raw : VkCommandBuffer; var h : VkHaz; at, n : int) {
+    vhz_dep(raw, h, 0u, cp.hazard_bit[p], true)
+    vkCmdFillBuffer(raw, unsafe(reinterpret<VkBuffer>(cp.dev[p])), uint64((cp.base[p] + at) * 4), uint64(n * 4), cp.fill[p])
+}
 //! plane `p`'s live run as `cell_record` staged it
 def plane_run(cp : CellPlanes; p : int) : array<float> {
     return <- staged(cp.host.mapped, cp.host_off[p] + int64(cp.base[p]) * 4l, cp.run[p], type<float>)

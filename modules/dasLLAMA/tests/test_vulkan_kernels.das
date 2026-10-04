@@ -6960,7 +6960,7 @@ def test_vkd_dn_family(t0 : T?) {
                 var pars <- [par]
                 var slots <- [0]
                 let offs = fixed_array(beta_off, g_off, a_off, dt_off, taps_off, wnorm_off, hist_off, 0)
-                var got <- dn_step_rows_run(projh, sth, smh, pars, slots, 1, 1, cd + nvh * ds, nvh * ds * ds, sm_n, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, false)
+                var got <- dn_step_rows_run(projh, sth, smh, pars, slots, 1, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, false)
                 // oracle: the whole fused chain — ring conv + silu, q/k L2, chunk-length-1 delta
                 // rule in place, gated out-norm, the head's Q8_0 blocks
                 var sm_ref : array<float>
@@ -7055,12 +7055,12 @@ def test_vkd_dn_family(t0 : T?) {
                     + mismatch_approx(got.oscales, s_ref) + mismatch_qbytes(got.oquants, q_ref, 1))
                 t |> success(bad == 0, "dn_step_fused matches the CPU oracle at ds {ds} ({bad} elements off)")
                 //! the f32 arm (oform 1): the same step leaves the o row as floats - the pre-quant oracle row - and advances state and ring alike
-                var gotf <- dn_step_rows_run(projh, sth, smh, pars, slots, 1, 1, cd + nvh * ds, nvh * ds * ds, sm_n, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, true)
+                var gotf <- dn_step_rows_run(projh, sth, smh, pars, slots, 1, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, true)
                 let badf = mismatch_approx(gotf.of32, out_ref) + mismatch_approx(gotf.state, st_ref) + mismatch_approx(gotf.smalls, sm_ref)
                 t |> success(badf == 0, "dn_step_fused's f32 o row (oform 1) at ds {ds} matches the pre-quant oracle with state and ring advanced alike ({badf} elements off)")
                 delete gotf
                 //! the sigmoid out-gate stamp (`dn_step_sig_cls`, qwen4exp): the same step, the o row gated by sigmoid(z); the silu oracle is its control
-                var gots <- dn_step_rows_run(projh, sth, smh, pars, slots, 1, 1, cd + nvh * ds, nvh * ds * ds, sm_n, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, true, false, true)
+                var gots <- dn_step_rows_run(projh, sth, smh, pars, slots, 1, nblk, ds, nvh, nkh, cd, dconv, offs, eps, qscale, true, false, true)
                 let bads = mismatch_approx(gots.of32, out_ref_sig) + mismatch_approx(gots.state, st_ref) + mismatch_approx(gots.smalls, sm_ref)
                 let wids = span_maxdiff(gots.of32, out_ref_sig, 0, 0, length(out_ref_sig))
                 t |> success(bads == 0, "dn_step_sig's f32 o row at ds {ds} matches the sigmoid-gated oracle with state and ring advanced alike ({bads} elements off, the o row's widest {wids.diff} at {wids.at})")
@@ -7277,57 +7277,36 @@ def private dn_step_enc(raw; var h; var sc; var pc; wgs : int64; zsig : bool) {
 
 //! `dn_step_cls` over `nrows` rows on buffers of its own - one dispatch, or under `seq` a dispatch a row in order (the rows' first
 //! row in the push, the same-slab verify's form) - two calls share no device plane; `zsig` takes the sigmoid out-gate stamp
-def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<int>; nrows, nslots, prow, st_n, sm_n, nblk, ds, nvh, nkh, cd, dconv : int;
+def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<int>; nrows, nblk, ds, nvh, nkh, cd, dconv : int;
                              offs : int[8]; eps, qscale : float; out_f32 : bool; seq : bool = false; zsig : bool = false) : DnRowsOut {
     var r : DnRowsOut
-    let proj_bytes = int64(nrows * prow) * 4l
-    let st_bytes = int64(nslots * st_n) * 4l
-    let sm_bytes = int64(sm_n) * 4l
-    let sc_bytes = int64(nrows * nblk) * 4l
-    let q_bytes = int64(nrows * nblk) * 32l
-    let of_bytes = int64(nrows * nvh * ds) * 4l
-    r.state |> resize(nslots * st_n)
-    r.smalls |> resize(sm_n)
-    r.oscales |> resize(nrows * nblk)
-    r.oquants |> resize(nrows * nblk * 8)
-    r.of32 |> resize(nrows * nvh * ds)
     static_if (typeinfo builtin_module_exists(vulkan)) {   //! the device half: a fully typed function is inferred in a build without the module too
-        let projd = make_device_buf(proj_bytes)
-        let std = make_device_buf(st_bytes)
-        let smd = make_device_buf(sm_bytes)
-        let scd = make_device_buf(sc_bytes)
-        let qd = make_device_buf(q_bytes)
-        let ofd = make_device_buf(of_bytes)
-        var host = make_host_buf(st_bytes + sm_bytes + sc_bytes + q_bytes + of_bytes, true, [cached = true])
         let ring = cd * (dconv - 1)
-        unsafe {
-            upload_region_at(projd, 0l, addr<uint8 const?>(proj[0]), proj_bytes)
-            upload_region_at(std, 0l, addr<uint8 const?>(st[0]), st_bytes)
-            upload_region_at(smd, 0l, addr<uint8 const?>(sm[0]), sm_bytes)
+        with_cell_planes() $(var cp : CellPlanes) {
+            let pproj = cp |> in_(proj)
+            let pst = cp |> io_(st)
+            let psm = cp |> io_(sm)
+            let psc = cp |> out_(nrows * nblk)
+            let pq = cp |> out_(nrows * nblk * 8)
+            let ptok = cp |> in_plain([for (i in range(nrows)); TokMeta(parity = uint(pars[i]), dnslot = uint(slots[i]))])
+            let pof = cp |> out_(nrows * nvh * ds)
             for (i in range(seq ? 1 : nrows)) {   // the ring image each row writes starts as a sentinel: a skipped ring advance cannot compare equal (sequential rows write the image the row before read, so the first row's alone is filled here - the rest between the dispatches)
-                nan_sentinel_upload(smd, int64(ring) * 4l, int64(offs[6] + slots[i] * 2 * ring + (1 - pars[i]) * ring) * 4l)
+                nan_sentinel_upload(cp.dev[psm], int64(ring) * 4l, int64(offs[6] + slots[i] * 2 * ring + (1 - pars[i]) * ring) * 4l)
             }
-            nan_sentinel_upload(scd, sc_bytes)
-            nan_sentinel_upload(qd, q_bytes)
-            nan_sentinel_upload(ofd, of_bytes)
-            let tok = tok_buf([for (i in range(nrows)); TokMeta(parity = uint(pars[i]), dnslot = uint(slots[i]))])
-            let bufs = fixed_array(projd, std, smd, scd, qd, tok, ofd)
-            let sizes = fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes, TOK_META_BYTES * int64(nrows), of_bytes)
-            let bits = fixed_array(16u, 2u, 8u, 1u, 4u, 0u, 32u)
             if (zsig) {
                 verify(ensure_dn_step_sig_cls(), "the sigmoid out-gate stamp must compile on a device that compiled the silu one")
             }
-            var sc = zsig ? set_dn_step_sig_cls(bufs, sizes, bits) : set_dn_step_cls(bufs, sizes, bits)
+            let idx = fixed_array(pproj, pst, psm, psc, pq, ptok, pof)
+            var sc = zsig ? cp |> cls_set(idx, @@set_dn_step_sig_cls) : cp |> cls_set(idx, @@set_dn_step_cls)
             var pc = DnStepArgs(cd = uint(cd), kd = uint(nkh * ds), nkh = uint(nkh), ds = uint(ds), dconv = uint(dconv),
                 beta_off = uint(offs[0]), g_off = uint(offs[1]), a_off = uint(offs[2]), dt_off = uint(offs[3]),
                 taps_off = uint(offs[4]), wnorm_off = uint(offs[5]), hist_off = uint(offs[6]),
                 eps = eps, qscale = qscale, out_f32 = out_f32 ? 1u : 0u, beta_row_stride = uint(offs[7]))
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 if (seq) {
                     for (i in range(nrows)) {
                         if (i > 0) {   // the image this row writes held the row before's input: a sentinel now, so a skipped ring advance cannot compare equal
-                            vhz_dep(raw, h, 0u, 8u, true)
-                            vkCmdFillBuffer(raw, unsafe(reinterpret<VkBuffer>(smd)), uint64((offs[6] + slots[i] * 2 * ring + (1 - pars[i]) * ring) * 4), uint64(ring * 4), NAN_SENTINEL_BITS)
+                            cp |> plane_fill_cmd(psm, raw, h, offs[6] + slots[i] * 2 * ring + (1 - pars[i]) * ring, ring)
                         }
                         pc.row0 = uint(i)
                         dn_step_enc(raw, h, sc, pc, int64(nvh), zsig)
@@ -7335,14 +7314,12 @@ def private dn_step_rows_run(proj, st, sm : array<float>; pars, slots : array<in
                 } else {
                     dn_step_enc(raw, h, sc, pc, int64(nvh * nrows), zsig)
                 }
-                cmd_copy_planes(raw, h, fixed_array(std, smd, scd, qd, ofd), host, fixed_array(st_bytes, sm_bytes, sc_bytes, q_bytes, of_bytes), 1u | 2u | 4u | 8u | 32u)
             }
-            let base = intptr(host.mapped)
-            memcpy(addr<void?>(r.state[0]), host.mapped, st_bytes)
-            memcpy(addr<void?>(r.smalls[0]), reinterpret<void?>(base + uint64(st_bytes)), sm_bytes)
-            memcpy(addr<void?>(r.oscales[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes)), sc_bytes)
-            memcpy(addr<void?>(r.oquants[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes + sc_bytes)), q_bytes)
-            memcpy(addr<void?>(r.of32[0]), reinterpret<void?>(base + uint64(st_bytes + sm_bytes + sc_bytes + q_bytes)), of_bytes)
+            r.state <- cp |> plane_run(pst)
+            r.smalls <- cp |> plane_run(psm)
+            r.oscales <- cp |> plane_run(psc)
+            r.oquants <- cp |> plane_as(pq, type<uint>, nrows * nblk * 8)
+            r.of32 <- cp |> plane_run(pof)
         }
     }
     return <- r
@@ -7427,7 +7404,7 @@ def private dn_fixture(nrows, nslots, ds : int; out_f32 : bool) : DnFixture {
 
 //! `dn_step_rows_run` over the fixture's `nrows` rows (`proj` the rows' projections, `st` the slots' states, `sm` the smalls) in `pars` / `slots`
 def private dn_fixture_run(f : DnFixture; proj, st, sm : array<float>; pars, slots : array<int>; nrows : int; ds : int; out_f32 : bool; seq : bool = false) : DnRowsOut {
-    return <- dn_step_rows_run(proj, st, sm, pars, slots, nrows, f.nslots, f.prow, f.st_n, f.sm_n, f.nblk, ds, f.nvh, f.nkh, f.cd, f.dconv, f.offs, f.eps, f.qscale, out_f32, seq)
+    return <- dn_step_rows_run(proj, st, sm, pars, slots, nrows, f.nblk, ds, f.nvh, f.nkh, f.cd, f.dconv, f.offs, f.eps, f.qscale, out_f32, seq)
 }
 
 //! a row's beta and alpha rows moved to row 0's place in a copy of `sm`: the one-row dispatch reads row 0
@@ -7628,41 +7605,27 @@ def private dn_ba_cell(t : T?; tag : string; dim, nvh, npos, woff : int; poison_
                 want[(e < nvh ? ob_b : ob_g) + p * ostride + e % nvh] = acc
             }
         }
-        let w_bytes = long_length(wh16) * 2l
-        let x_bytes = long_length(xh) * 4l
-        let o_bytes = int64(out_n) * 4l
-        let wd = make_device_buf(w_bytes)
-        let xd = make_device_buf(x_bytes)
-        let od = make_device_buf(o_bytes)
-        let host = make_host_buf(o_bytes, true, [cached = true])
         let wgs = dn_ba_wgs(int64(npos), int64(nvh))
-        nan_sentinel_upload(od, o_bytes)
-        unsafe {
-            upload_region_at(wd, 0l, addr<uint8 const?>(wh16[0]), w_bytes)
-            upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
-        }
-        var sc = set_dn_ba_cls(fixed_array(wd, xd, od), fixed_array(w_bytes, x_bytes, o_bytes), fixed_array(0u, 1u, 2u))
-        var pc = DnBaArgs(npos = uint(npos), dim = uint(dim), nvh = uint(nvh), woff = uint(woff), xstride = uint(dim),
-            obase_b = uint(ob_b), obase_g = uint(ob_g), ostride = uint(ostride))
-        if (timed) {
-            var raw = alloc_cmd()
-            let begin = VkCommandBufferBeginInfo()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
-            var h : VkHaz
-            enc_dn_ba_cls(raw, h, sc, pc, wgs)
-            cmd_copy_planes(raw, h, fixed_array(od), host, fixed_array(o_bytes), 2u)
-            vk_check(vkEndCommandBuffer(raw), null)
-            to_log(LOG_INFO, "{tag}: dispatching {wgs} workgroups over {npos} rows x {ne} outputs x {dim}\n")
-            let tick = ref_time_ticks()
-            submit_wait(raw)
-            to_log(LOG_INFO, "{tag}: submit + wait {get_time_usec(tick)} us\n")
-        } else {
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_dn_ba_cls(raw, h, sc, pc, wgs)
-                cmd_copy_planes(raw, h, fixed_array(od), host, fixed_array(o_bytes), 2u)
+        var got : array<float>
+        with_cell_planes() $(var cp : CellPlanes) {
+            let pw = cp |> in_plain(wh16)
+            let px = cp |> in_(xh)
+            let po = cp |> out_(out_n)
+            var sc = cp |> cls_set(fixed_array(pw, px, po), @@set_dn_ba_cls)
+            var pc = DnBaArgs(npos = uint(npos), dim = uint(dim), nvh = uint(nvh), woff = uint(woff), xstride = uint(dim),
+                obase_b = uint(ob_b), obase_g = uint(ob_g), ostride = uint(ostride))
+            if (timed) {
+                cp |> cell_record_timed(tag, "{wgs} workgroups over {npos} rows x {ne} outputs x {dim}") $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_dn_ba_cls(raw, h, sc, pc, wgs)
+                }
+            } else {
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_dn_ba_cls(raw, h, sc, pc, wgs)
+                }
             }
+            delete got
+            got <- cp |> plane_run(po)
         }
-        var got <- staged(host.mapped, 0l, out_n, type<float>)
         let bad = ba_plane_mismatches(got, want, npos, ne, nvh, ob_b, ob_g, ostride)
         t |> success(bad == 0, "{tag}: {bad} of {npos * ne} outputs off the CPU dot")
         let at = poison_beta ? ob_b : ob_g
@@ -7692,7 +7655,6 @@ def private dn_scan_cell(t : T?; tag : string; ds, nkh, nvh, npos : int) {
             let dt_off = a_off + nvh
             let sm_n = dt_off + nvh
             let o_off = 64   // the o rows sit past a header the kernel must leave alone
-            let o_n = o_off + npos * di
             var convh : array<float>
             convh |> resize(npos * cd)
             for (i in range(npos * cd)) {   // unit-scale q/k rows keep the 512-step recurrence bounded
@@ -7703,51 +7665,37 @@ def private dn_scan_cell(t : T?; tag : string; ds, nkh, nvh, npos : int) {
             for (i in range(nvh)) {
                 smh[a_off + i] = -0.4 - float(i) * 0.1
             }
-            let conv_bytes = int64(npos * cd) * 4l
-            let st_bytes = int64(nvh * ds * ds) * 4l
-            let sm_bytes = int64(sm_n) * 4l
-            let o_bytes = int64(o_n) * 4l
-            let convd = make_device_buf(conv_bytes)
-            let st2 = make_device_buf(st_bytes)
-            let smd = make_device_buf(sm_bytes)
-            let od = make_device_buf(o_bytes)
-            var host = make_host_buf(o_bytes + st_bytes, true, [cached = true])
-            var got : array<float>
-            got |> resize(o_n + nvh * ds * ds)
             let wgs = dn_scan_wgs(int64(nvh), int64(ds))
-            nan_sentinel_upload(od, o_bytes - int64(o_off) * 4l, int64(o_off) * 4l)   // the header stays as allocated: the oracle holds it at zero
-            unsafe {
-                upload_region_at(convd, 0l, addr<uint8 const?>(convh[0]), conv_bytes)
-                upload_region_at(smd, 0l, addr<uint8 const?>(smh[0]), sm_bytes)
-                upload_region_at(st2, 0l, addr<uint8 const?>(sth[0]), st_bytes)
-                var sc = set_dn_scan_cls(fixed_array(convd, st2, smd, od),
-                    fixed_array(conv_bytes, st_bytes, sm_bytes, o_bytes),
-                    fixed_array(1u, 2u, 8u, 4u))
-                var raw = alloc_cmd()
-                let begin = VkCommandBufferBeginInfo()
-                vk_check(vkBeginCommandBuffer(raw, begin), null)
-                var h : VkHaz
+            var got : array<float>   //! the o rows, then the state
+            var head_kept = 0
+            with_cell_planes() $(var cp : CellPlanes) {
+                let pconv = cp |> in_(convh)
+                let pst = cp |> io_(sth)
+                let psm = cp |> in_(smh)
+                let po = cp |> out_(npos * di, o_off)
+                var sc = cp |> cls_set(fixed_array(pconv, pst, psm, po), @@set_dn_scan_cls)
                 var pcs = DnScanArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd),
                     nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
                     beta_off = uint(beta_off), g_off = uint(g_off), a_off = uint(a_off),
                     dt_off = uint(dt_off), o_off = uint(o_off), di = uint(di))
-                enc_dn_scan_cls(raw, h, sc, pcs, wgs)
-                vhz_dep(raw, h, 2u | 4u, 0u, true)
-                cmd_copy_range(raw, od, 0l, host.buf, 0l, o_bytes)
-                cmd_copy_range(raw, st2, 0l, host.buf, o_bytes, st_bytes)
-                vk_check(vkEndCommandBuffer(raw), null)
-                to_log(LOG_INFO, "dn_scan {tag}: dispatching {wgs} workgroups over {npos} rows\n")
-                let tick = ref_time_ticks()
-                submit_wait(raw)
-                to_log(LOG_INFO, "dn_scan {tag}: submit + wait {get_time_usec(tick)} us\n")
-                memcpy(addr<void?>(got[0]), host.mapped, o_bytes + st_bytes)
+                cp |> cell_record_timed("dn_scan {tag}", "{wgs} workgroups over {npos} rows") $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_dn_scan_cls(raw, h, sc, pcs, wgs)
+                }
+                var whole <- cp |> plane_whole(po)
+                for (i in range(o_off)) {
+                    head_kept += float_bits_to_uint(whole[i]) == NAN_SENTINEL_BITS ? 1 : 0
+                }
+                delete got
+                got <- cp |> plane_run(po)
+                var st_got <- cp |> plane_run(pst)
+                got |> push_from(st_got)
+                delete st_got
+                delete whole
             }
+            t |> equal(head_kept, o_off, "dn_scan {tag}: the {o_off}-word header ahead of the o rows keeps its sentinel")
             // oracle: the sequential delta rule per head, raw o rows (the out-norm is phase 3's)
             var ref : array<float>
             ref |> resize(length(got))
-            for (i in range(o_off)) {
-                ref[i] = 0.0
-            }
             var st_h : array<float>
             var dvn : array<float>
             st_h |> resize(ds * ds)
@@ -7777,18 +7725,18 @@ def private dn_scan_cell(t : T?; tag : string; ds, nkh, nvh, npos : int) {
                         for (i in range(ds)) {
                             qs += convh[crow + kh * ds + i] * st_h[i * ds + j]
                         }
-                        ref[o_off + tt * di + hh * ds + j] = qs
+                        ref[tt * di + hh * ds + j] = qs
                     }
                 }
                 for (e in range(ds * ds)) {
-                    ref[o_n + hh * ds * ds + e] = st_h[e]
+                    ref[npos * di + hh * ds * ds + e] = st_h[e]
                 }
             }
             let floor = 1e-2 * logits_maxabs(ref)
             let bad = mismatch_rel("", got, ref, 1e-2, floor)
             t |> success(bad == 0, "dn_scan {tag}: {bad} of {length(got)} o-row and state values off the sequential oracle")
             var poison := got   // the bar's control: one o value pushed past both bars must red
-            poison[o_off] += 1.0 + 2.0 * logits_maxabs(ref)
+            poison[0] += 1.0 + 2.0 * logits_maxabs(ref)
             t |> success(mismatch_rel("", poison, ref, 1e-2, floor) > 0, "dn_scan {tag}: the bar reds a poisoned value")
             delete poison
             delete convh
