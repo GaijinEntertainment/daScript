@@ -1489,11 +1489,6 @@ def private ws_plane(n : int; mul, add : uint) : array<uint> {
 // stay exact, except quants downstream of exp/tanh (GPU transcendentals differ by ulps — those
 // compare as signed bytes within +-1).
 
-def private q8_scale_off(got, d_ref : float) : bool => abs(got - d_ref) > 2e-3 * max(d_ref, 1e-6)
-
-//! spelled "not within" so a NaN on either side reads as off
-def private q8_value_off(deq, want, d_ref : float) : bool => !(abs(deq - want) <= d_ref + 2e-3 * abs(want))
-
 // the dot-product cells' bar - 1e-3 of the larger of 1 and the reference - over n outputs from base
 def private rel_mismatches(got, want : array<float>; base, n : int) : int {
     var bad = 0
@@ -4764,17 +4759,7 @@ def private q8_gemv_gu_run(t; n, hid : int; gelu : bool) {
     let tag = "{gelu ? "gelu" : "silu"} n {n} hid {hid}"
     t |> success(off.scales == 0, "q8 gu {tag}: the block scales match the oracle ({off.scales} of {nblk_out} off)")
     t |> success(off.values == 0, "q8 gu {tag}: the dequantized hidden row sits within a quant step of the oracle ({off.values} of {hid} off)")
-    var poison := act   // the control: one oracle value pushed three quant steps past its block's must red
-    poison[0] += 3.0 * os[0] + 1.0
-    var pbad = 0
-    for (e in range(32)) {
-        let deq = float(oq[e]) * os[0]
-        if (abs(deq - poison[e]) > os[0] + 2e-3 * abs(poison[e])) {
-            pbad++
-        }
-    }
-    t |> success(pbad > 0, "q8 gu {tag}: the bar reds a poisoned oracle element")
-    delete poison
+    t |> success(off.poison_inside == 0, "q8 gu {tag}: the bar reds a poisoned oracle element in every block ({off.poison_inside} passed)")
     delete act
     delete gqh
     delete gsh
@@ -4924,7 +4909,7 @@ def private q8_gemv_ar_fixture(n, d : int) : GemvArFixture {
     return <- fx
 }
 
-def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float; abias : bool = false) {   // nolint:STYLE037 — one linear fixture: the GEMV, the residual step and its quant, each with its bar
+def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float; abias : bool = false) {
     let nb = n / 32
     let totblk = d * nb
     let nblk_out = d / 32
@@ -5038,16 +5023,7 @@ def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float; ab
     t |> success(off.scales == 0, "q8 gemv+ar {tag}: the block scales match ({off.scales} of {nblk_out} off)")
     t |> success(off.values == 0, "q8 gemv+ar {tag}: the dequantized row sits within a quant step ({off.values} of {d} off)")
     t |> success(cnt_after[0] == 0u, "q8 gemv+ar {tag}: the arrival counter reads zero after the dispatch ({cnt_after[0]})")
-    var poison := normed   // the control: one expected value pushed three quant steps past its block must red
-    poison[0] += 3.0 * os[0] + 1.0
-    var pbad = 0
-    for (e in range(32)) {
-        let deq = float(oq[e]) * os[0]
-        if (abs(deq - poison[e]) > os[0] + 2e-3 * abs(poison[e])) {
-            pbad++
-        }
-    }
-    t |> success(pbad > 0, "q8 gemv+ar {tag}: the bar reds a poisoned oracle element")
+    t |> success(off.poison_inside == 0, "q8 gemv+ar {tag}: the bar reds a poisoned oracle element in every block ({off.poison_inside} passed)")
     delete wqh
     delete wsh
     delete xqh
@@ -5062,7 +5038,6 @@ def private q8_gemv_ar_run(t; n, d : int; pre_on, raw : bool; ascale : float; ab
     delete y
     delete xr_ref
     delete normed
-    delete poison
 }
 
 [test]
@@ -5373,6 +5348,7 @@ def private q8_gemv_gu_oracle_cols(t; tag : string; oq_w, os_w : array<uint>; gq
     let one_rec <- [0u, 0u, 1u, 0u]
     var obad = 0
     var obads = 0
+    var opoison = 0
     for (c in range(ncols)) {
         var xq_c : array<uint>
         var xs_c : array<float>
@@ -5390,25 +5366,16 @@ def private q8_gemv_gu_oracle_cols(t; tag : string; oq_w, os_w : array<uint>; gq
         u_ref |> resize(hid)
         q8_gemm_oracle(gqh, gsh, xq_c, xs_c, one_rec, 1, n, hid, g_ref)
         q8_gemm_oracle(uqh, ush, xq_c, xs_c, one_rec, 1, n, hid, u_ref)
-        for (blk in range(nblk_out)) {
-            var m = 0.0
-            for (e in range(32)) {
-                m = max(m, abs(act_mul_ref(g_ref[blk * 32 + e], u_ref[blk * 32 + e], act)))
-            }
-            let d_ref = m / 127.0
-            let os_c = uint_bits_to_float(os_w[c * nblk_out + blk])
-            if (q8_scale_off(os_c, d_ref)) {
-                obads++
-            }
-            for (e in range(32)) {
-                let a_ref = act_mul_ref(g_ref[blk * 32 + e], u_ref[blk * 32 + e], act)
-                let qi = blk * 32 + e
-                let q = int(int8(uint8((oq_w[c * (hid / 4) + qi / 4] >> uint((qi % 4) * 8)) & 0xFFu)))
-                if (q8_value_off(float(q) * os_c, a_ref, d_ref)) {
-                    obad++
-                }
-            }
-        }
+        var act_c <- [for (e in range(hid)); act_mul_ref(g_ref[e], u_ref[e], act)]
+        var oq_c <- [for (e in range(hid)); int8(uint8((oq_w[c * (hid / 4) + e / 4] >> uint((e % 4) * 8)) & 0xFFu))]
+        var os_c <- [for (b in range(nblk_out)); uint_bits_to_float(os_w[c * nblk_out + b])]
+        let off = q8_blocks_off(oq_c, os_c, act_c, nblk_out)
+        obads += off.scales
+        obad += off.values
+        opoison += off.poison_inside
+        delete act_c
+        delete oq_c
+        delete os_c
         delete g_ref
         delete u_ref
         delete xq_c
@@ -5416,6 +5383,7 @@ def private q8_gemv_gu_oracle_cols(t; tag : string; oq_w, os_w : array<uint>; gq
     }
     t |> success(obads == 0, "one-row fused gate-up {tag}: every column's block scales match the CPU oracle ({obads} of {nblk_out * ncols} off)")
     t |> success(obad == 0, "one-row fused gate-up {tag}: every column's dequantized hidden row sits within a quant step of the CPU oracle ({obad} of {hid * ncols} off)")
+    t |> success(opoison == 0, "one-row fused gate-up {tag}: the bar reds a poisoned oracle element in every block ({opoison} passed)")
 }
 
 //! the fused gate-up GEMV's N-column form over `ncols` columns against the one-row kernel run a column at a time, word for
@@ -9368,32 +9336,10 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
         let bad_h = mismatch_rel("", got_yf, want_y, f16_bar, f16_bar * logits_maxabs(want_y))
         t |> success(bad_h == 0, "the combine-folded residual step ({arm}): the f16 normed rows within the half's rounding of the oracle ({bad_h} off)")
         //! the quantizing twin: every block's scale within 2e-3 of the oracle's amax over 127, every dequantized element within a quant step
-        var bad_s = 0
-        var bad_q = 0
-        var pbad = 0
-        for (blk in range(npos * n / 32)) {
-            var m = 0.0
-            for (e in range(32)) {
-                m = max(m, abs(want_y[blk * 32 + e]))
-            }
-            let d_ref = m / 127.0
-            if (q8_scale_off(got_s[blk], d_ref)) {
-                bad_s++
-            }
-            for (e in range(32)) {
-                let deq = float(got_q[blk * 32 + e]) * got_s[blk]
-                let a = want_y[blk * 32 + e]
-                if (q8_value_off(deq, a, d_ref)) {
-                    bad_q++
-                }
-                if (e == 1 && abs(deq - (a + 3.0 * d_ref + 1.0)) <= d_ref + 2e-3 * abs(a)) {   // the control: the expectation pushed three quant steps must miss
-                    pbad++
-                }
-            }
-        }
-        t |> success(bad_s == 0, "the combine-folded residual step ({arm}): the quantizing twin's block scales match the oracle ({bad_s} of {npos * n / 32} off)")
-        t |> success(bad_q == 0, "the combine-folded residual step ({arm}): the quantizing twin's rows sit within a quant step of the oracle ({bad_q} of {npos * n} off)")
-        t |> success(pbad == 0, "combine-folded residual control: the quant bar reds a poisoned oracle element in every block ({pbad} passed)")
+        let off = q8_blocks_off(got_q, got_s, want_y, npos * n / 32)
+        t |> success(off.scales == 0, "the combine-folded residual step ({arm}): the quantizing twin's block scales match the oracle ({off.scales} of {npos * n / 32} off)")
+        t |> success(off.values == 0, "the combine-folded residual step ({arm}): the quantizing twin's rows sit within a quant step of the oracle ({off.values} of {npos * n} off)")
+        t |> success(off.poison_inside == 0, "combine-folded residual control: the quant bar reds a poisoned oracle element in every block ({off.poison_inside} passed)")
         want_x[2 * n + 9] += 0.5
         t |> success(mismatch_approx(got_x, want_x) == 1, "combine-folded residual control: the residual bar reds one poisoned element")
         want_y[3 * n + 5] += 0.5
@@ -9565,19 +9511,9 @@ def private moe_ar_comb_g4_arm(t : T?) {
             let off = q8_blocks_off(oq, os, want_y, nblk)
             t |> success(off.scales == 0, "the gemma-4 quantizing combine: the block scales match the oracle's normed rows ({off.scales} of {nblk} off)")
             t |> success(off.values == 0, "the gemma-4 quantizing combine: the dequantized rows sit within a quant step of the oracle ({off.values} of {npos * n} off)")
-            var poisonq := want_y
-            poisonq[0] += 3.0 * os[0] + 1.0
-            var pbad = 0
-            for (e in range(32)) {
-                let deq = float(oq[e]) * os[0]
-                if (abs(deq - poisonq[e]) > os[0] + 2e-3 * abs(poisonq[e])) {
-                    pbad++
-                }
-            }
-            t |> success(pbad > 0, "gemma-4 quantizing combine control: the quant bar reds a poisoned oracle element")
+            t |> success(off.poison_inside == 0, "gemma-4 quantizing combine control: the quant bar reds a poisoned oracle element in every block ({off.poison_inside} passed)")
             delete oq
             delete os
-            delete poisonq
         }
         want_x[2 * n + 9] += 0.5
         t |> success(mismatch_approx(got_x, want_x) == 1, "gemma-4 combine control: the residual bar reds one poisoned element")
