@@ -11,6 +11,7 @@ require _compares
 require _kernel_oracles   // rope_tab_ref: the rope and KV-writer cells' oracle
 require _attn_oracle   // attn_row_oracle: the batched decode attention cells' oracle
 require _vk_kq_fixtures
+require _kq_fixtures
 require ?vulkan _vkd_toy
 require ?vulkan _vkd_oracles
 require ?vulkan vulkan
@@ -4715,55 +4716,28 @@ def test_vkd_q8_gemv_gu(t0 : T?) {
 def private q8_gemv_pleact_run(t; n, d : int) {
     let nb = n / 32
     let totblk = d * nb
-    let wq_bytes = int64(totblk) * 32l
-    let ws_bytes = int64(totblk) * 2l
     var wqh, wsh : array<uint>
     q8_plane(totblk, 5u, 19u, 3u, 7u, wqh, wsh)
     var gh <- row_fill(n, 37, 0, 0.06, 3.0, 101)
     var sh <- row_fill(3 * n, 29, 0, 0.05, 2.0, 83)   // three layers' side rows: the cell reads the middle one
-    let g_bytes = int64(n) * 4l
-    let s_bytes = int64(3 * n) * 4l
-    let y_bytes = int64(d) * 4l
-    let wqd = make_device_buf(wq_bytes)
-    let wsd = make_device_buf(ws_bytes)
-    let gd = make_device_buf(g_bytes)
-    let sd = make_device_buf(s_bytes)
-    let yd = make_device_buf(y_bytes)
-    let host = make_host_buf(y_bytes, true, [cached = true])
-    unsafe {
-        upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
-        upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
-        upload_region_at(gd, 0l, addr<uint8 const?>(gh[0]), g_bytes)
-        upload_region_at(sd, 0l, addr<uint8 const?>(sh[0]), s_bytes)
-    }
-    nan_sentinel_upload(yd, y_bytes)
-    var s_cls = set_q8_gemv_pleact_cls(fixed_array(wqd, wsd, gd, sd, yd),
-        fixed_array(wq_bytes, ws_bytes, g_bytes, s_bytes, y_bytes),
-        fixed_array(1u, 2u, 4u, 8u, 16u))
-    var pc = PleActArgs(n = uint(n), d = uint(d), wblk = 0u, ubase = uint(n), act = ACT_GELU)
-    let rpw = 4l * g_gpu.rows_per_wg
-    cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-        enc_q8_gemv_pleact_cls(raw2, h2, s_cls, pc, (int64(d) + rpw - 1l) / rpw)
-        cmd_copy_planes(raw2, h2, fixed_array(yd), host, fixed_array(y_bytes), 16u)
-    }
-    var y_cls <- staged(host.mapped, 0l, d, type<float>)
-    // the oracle: the activated row, its Q8_0 blocks, then each row's dot in the scalar block order
-    var xq : array<int>
-    var xs : array<float>
-    xq |> resize(n)
-    xs |> resize(nb)
-    for (b in range(nb)) {
-        var m = 0.0
-        for (e in range(32)) {
-            m = max(m, abs(act_mul_ref(gh[b * 32 + e], sh[n + b * 32 + e], true)))
+    var y_cls : array<float>
+    with_cell_planes() $(var cp : CellPlanes) {
+        let py = cp |> out_(d)
+        var s_cls = cp |> cls_set(fixed_array(cp |> in_plain(wqh), cp |> in_plain(wsh), cp |> in_(gh), cp |> in_(sh), py), @@set_q8_gemv_pleact_cls)
+        var pc = PleActArgs(n = uint(n), d = uint(d), wblk = 0u, ubase = uint(n), act = ACT_GELU)
+        let rpw = 4l * g_gpu.rows_per_wg
+        cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+            enc_q8_gemv_pleact_cls(raw, h, s_cls, pc, (int64(d) + rpw - 1l) / rpw)
         }
-        let dq = m / 127.0
-        xs[b] = dq
-        let id = dq != 0.0 ? 1.0 / dq : 0.0
-        for (e in range(32)) {
-            xq[b * 32 + e] = int(round(act_mul_ref(gh[b * 32 + e], sh[n + b * 32 + e], true) * id))
-        }
+        delete y_cls
+        y_cls <- cp |> plane_run(py)
     }
+    // the oracle: the activated row through the engine's Q8_0 quantizer, then each row's dot in the scalar block order
+    let act <- [for (e in range(n)); act_mul_ref(gh[e], sh[n + e], true)]
+    var qx <- q8_roundtrip(act, int64(n), false)
+    var xq <- [for (q in qx.xq); int(q)]
+    var xs <- qx.xs
+    delete qx
     var bad = 0
     var pbad = 0
     for (row in range(d)) {
