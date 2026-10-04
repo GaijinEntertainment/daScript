@@ -100,25 +100,6 @@ void Module_dasIMGUI::initFunctions_25() {
 	makeExtern<DAS_CALL_METHOD(_method_103), SimNode_ExtFuncCall , imguiTempFn>(lib,"AddConcavePolyFilled","das_call_member< void (ImDrawList::*)(const ImVec2 *,int,unsigned int) , &ImDrawList::AddConcavePolyFilled >::invoke")
 		->args({"self","points","num_points","col"})
 		->addToModule(*this, SideEffects::worstDefault);
-	using _method_104 = das::das_call_member< void (ImDrawList::*)(ImTextureRef,const ImVec2 &,const ImVec2 &,const ImVec2 &,const ImVec2 &,unsigned int),&ImDrawList::AddImage >;
-// from imgui.h:3470:21
-	makeExtern<DAS_CALL_METHOD(_method_104), SimNode_ExtFuncCall , imguiTempFn>(lib,"AddImage","das_call_member< void (ImDrawList::*)(ImTextureRef,const ImVec2 &,const ImVec2 &,const ImVec2 &,const ImVec2 &,unsigned int) , &ImDrawList::AddImage >::invoke")
-		->args({"self","tex_ref","p_min","p_max","uv_min","uv_max","col"})
-		->arg_init(6,new ExprConstUInt(0xffffffff))
-		->addToModule(*this, SideEffects::worstDefault);
-	using _method_105 = das::das_call_member< void (ImDrawList::*)(ImTextureRef,const ImVec2 &,const ImVec2 &,const ImVec2 &,const ImVec2 &,const ImVec2 &,const ImVec2 &,const ImVec2 &,const ImVec2 &,unsigned int),&ImDrawList::AddImageQuad >;
-// from imgui.h:3471:21
-	makeExtern<DAS_CALL_METHOD(_method_105), SimNode_ExtFuncCall , imguiTempFn>(lib,"AddImageQuad","das_call_member< void (ImDrawList::*)(ImTextureRef,const ImVec2 &,const ImVec2 &,const ImVec2 &,const ImVec2 &,const ImVec2 &,const ImVec2 &,const ImVec2 &,const ImVec2 &,unsigned int) , &ImDrawList::AddImageQuad >::invoke")
-		->args({"self","tex_ref","p1","p2","p3","p4","uv1","uv2","uv3","uv4","col"})
-		->arg_init(10,new ExprConstUInt(0xffffffff))
-		->addToModule(*this, SideEffects::worstDefault);
-	using _method_106 = das::das_call_member< void (ImDrawList::*)(ImTextureRef,const ImVec2 &,const ImVec2 &,const ImVec2 &,const ImVec2 &,unsigned int,float,int),&ImDrawList::AddImageRounded >;
-// from imgui.h:3472:21
-	makeExtern<DAS_CALL_METHOD(_method_106), SimNode_ExtFuncCall , imguiTempFn>(lib,"AddImageRounded","das_call_member< void (ImDrawList::*)(ImTextureRef,const ImVec2 &,const ImVec2 &,const ImVec2 &,const ImVec2 &,unsigned int,float,int) , &ImDrawList::AddImageRounded >::invoke")
-		->args({"self","tex_ref","p_min","p_max","uv_min","uv_max","col","rounding","flags"})
-		->arg_type(8,makeType<ImDrawFlags_>(lib))
-		->arg_init(8,new ExprConstEnumeration(0,makeType<ImDrawFlags_>(lib)))
-		->addToModule(*this, SideEffects::worstDefault);
 	using _method_107 = das::das_call_member< void (ImDrawList::*)(),&ImDrawList::PathClear >;
 // from imgui.h:3477:21
 	makeExtern<DAS_CALL_METHOD(_method_107), SimNode_ExtFuncCall , imguiTempFn>(lib,"PathClear","das_call_member< void (ImDrawList::*)() , &ImDrawList::PathClear >::invoke")

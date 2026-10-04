@@ -128,6 +128,12 @@ class ImguiGen : CppGenBind {
             "ImGui::Image" => true,
             "ImGui::ImageButton" => true,
             "ImGui::ImageWithBg" => true,
+            // Draw-list calls likewise need a const-reference native ABI.
+            "ImDrawList::AddImage" => true,
+            "ImDrawList::AddImageQuad" => true,
+            "ImDrawList::AddImageRounded" => true,
+            "ImDrawList::PushTexture" => true,
+            "ImDrawList::_SetTexture" => true,
             "ImGui::TextUnformatted" => true,
             "ImGuiTextFilter::PassFilter" => true,
             "ImGuiTextBuffer::append" => true,
