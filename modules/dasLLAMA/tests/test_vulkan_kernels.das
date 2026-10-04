@@ -1046,43 +1046,77 @@ def private biased_norms(w, b : array<float>) : array<float> {
     return <- wb
 }
 
+//! a fused residual + requant stamp's planes back: the quants as words, the scales, the residual row and the normed row
+struct private ArRqOut {
+    q : array<uint>
+    s : array<float>
+    x : array<float>
+    y : array<float>
+}
+
+//! one fused residual + requant stamp (`name`: cls_ar_rq_b, or the row-storing / Q8_K forms cls_ar_rqx, cls_ar_rqk,
+//! cls_ar_rqkx) over the residual `x` (written in place), the partner `a` and the norms plane `w`: the quants under -128, the
+//! scales - a superblock's under `kform` - and the stored row under the NaN sentinel
+def private ar_rq_run(name : string; x, a, w : array<float>; pc; kform, storex : bool) : ArRqOut {
+    var r : ArRqOut
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let dim = length(x)
+        with_cell_planes() $(var cp : CellPlanes) {
+            let px = cp |> io_(x)
+            let pa = cp |> in_(a)
+            let pw = cp |> in_(w)
+            let pq = cp |> out_words(int64(dim), I8_SENTINEL_BITS)
+            let ps = cp |> out_(kform ? dim / 256 : dim / 32)
+            let py = cp |> out_(storex ? dim : 1)
+            var args = pc
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                if (name == "cls_ar_rq_b") {
+                    var s = cp |> cls_set(fixed_array(px, pa, pw, pq, ps), @@set_cls_ar_rq_b)
+                    enc_cls_ar_rq_b(raw, h, s, args, 1l)
+                } elif (name == "cls_ar_rqx") {
+                    var s = cp |> cls_set(fixed_array(px, pa, pw, pq, ps, py), @@set_cls_ar_rqx)
+                    enc_cls_ar_rqx(raw, h, s, args, 1l)
+                } elif (name == "cls_ar_rqk") {
+                    var s = cp |> cls_set(fixed_array(px, pa, pw, pq, ps), @@set_cls_ar_rqk)
+                    enc_cls_ar_rqk(raw, h, s, args, 1l)
+                } else {
+                    var s = cp |> cls_set(fixed_array(px, pa, pw, pq, ps, py), @@set_cls_ar_rqkx)
+                    enc_cls_ar_rqkx(raw, h, s, args, 1l)
+                }
+            }
+            r.q <- cp |> plane_as(pq, type<uint>, dim / 4)
+            r.s <- cp |> plane_run(ps)
+            r.x <- cp |> plane_run(px)
+            r.y <- cp |> plane_run(py)
+        }
+    }
+    return <- r
+}
+
 //! one cls_ar dispatch over `nrows` rows (`pc` the class's ArArgs): the norm plane `w` whole, the residual `x` read and written in
 //! place, y under the -999.25 sentinel - a GPU-vs-GPU compare is vacuous-prone, two dead kernels leave two matching zeroed
 //! planes, and no real computation lands the sentinel; y and x come back
 def private cls_ar_run(x, a, w : array<float>; pc; nrows : int) : tuple<y : array<float>; x : array<float>> {
+    var y_out : array<float>
+    var x_out : array<float>
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let n = length(x)
-        let bytes = int64(n) * 4l
-        let wbytes = long_length(w) * 4l
-        let xd = make_device_buf(bytes)
-        let ad = make_device_buf(bytes)
-        let wd = make_device_buf(wbytes)
-        let yd = make_device_buf(bytes)
-        let host = make_host_buf(bytes, true, [cached = true])
-        var ysent <- [for (_ in range(n)); -999.25]
-        unsafe {
-            upload_region_at(yd, 0l, addr<uint8 const?>(ysent[0]), bytes)
-            upload_region_at(xd, 0l, addr<uint8 const?>(x[0]), bytes)
-            upload_region_at(ad, 0l, addr<uint8 const?>(a[0]), bytes)
-            upload_region_at(wd, 0l, addr<uint8 const?>(w[0]), wbytes)
+        with_cell_planes() $(var cp : CellPlanes) {
+            let px = cp |> io_(x)
+            let pa = cp |> in_(a)
+            let pw = cp |> in_(w)
+            let py = cp |> out_words(long_length(x) * 4l, float_bits_to_uint(-999.25))
+            var s = cp |> cls_set(fixed_array(px, pa, pw, py), @@set_cls_ar)
+            var args = pc
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_cls_ar(raw, h, s, args, int64(nrows))
+            }
+            delete y_out
+            delete x_out
+            y_out <- cp |> plane_as(py, type<float>, length(x))
+            x_out <- cp |> plane_run(px)
         }
-        var s = set_cls_ar(fixed_array(xd, ad, wd, yd), fixed_array(bytes, bytes, wbytes, bytes), fixed_array(1u, 2u, 4u, 8u))
-        var args = pc
-        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            enc_cls_ar(raw, h, s, args, int64(nrows))
-            cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(bytes), 8u | 1u)
-        }
-        var y_out <- staged(host.mapped, 0l, n, type<float>)
-        var x_out : array<float>
-        x_out |> resize(n)
-        readback_range(xd, 0u, host, unsafe(addr(x_out[0])), bytes)
-        delete ysent
-        return <- (y = y_out, x = x_out)
-    } else {
-        var y_out : array<float>
-        var x_out : array<float>
-        return <- (y = y_out, x = x_out)
     }
+    return <- (y = y_out, x = x_out)
 }
 
 //! the classifier epilogue's rows form: `rows` logits rows through one dispatch of `rows` (the whole plane), or a
@@ -1090,30 +1124,20 @@ def private cls_ar_run(x, a, w : array<float>; pc; nrows : int) : tuple<y : arra
 def private cls_epi_rows_run(y : array<float>; supp : array<uint>; vocab, rows : int64; cap : float; a_row_at_a_time : bool) : array<float> {
     var yc : array<float>
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let row_bytes = vocab * 4l
-        let sbytes = max(long_length(supp), 1l) * 4l
-        let sd = make_device_buf(sbytes)
-        var host = make_host_buf(row_bytes * rows, true, [cached = true])
-        yc |> resize(vocab * rows)
-        unsafe {
-            if (!empty(supp)) {
-                upload_region_at(sd, 0l, addr<uint8 const?>(supp[0]), sbytes)
-            }
-            let per = a_row_at_a_time ? 1l : rows   //! rows a dispatch
-            var r0 = 0l
-            while (r0 < rows) {
-                let bytes = row_bytes * per
-                let yd = make_device_buf(bytes)
-                upload_region_at(yd, 0l, addr<uint8 const?>(y[r0 * vocab]), bytes)
-                var s = set_cls_epi(fixed_array(yd, sd), fixed_array(bytes, sbytes), fixed_array(1u, 0u))
+        let per = a_row_at_a_time ? 1l : rows   //! rows a dispatch
+        var r0 = 0l
+        while (r0 < rows) {
+            with_cell_planes() $(var cp : CellPlanes) {
+                let py = cp |> io_(copy_span(y, r0 * vocab, per * vocab))
+                let ps = cp |> in_plain(supp)
+                var s = cp |> cls_set(fixed_array(py, ps), @@set_cls_epi)
                 var pc = ClsEpiArgs(vocab = uint(vocab), cap = cap, nsupp = uint(length(supp)), rows = uint(per))
-                cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_cls_epi(raw, h, s, pc, (vocab * per + 255l) / 256l)
-                    cmd_copy_planes(raw, h, fixed_array(yd), host, fixed_array(bytes), 1u)
                 }
-                memcpy(addr<void?>(yc[r0 * vocab]), host.mapped, bytes)
-                r0 += per
+                yc |> push_from(cp |> plane_run(py))
             }
+            r0 += per
         }
     }
     return <- yc
@@ -1194,27 +1218,21 @@ def test_vkd_cls_epi_rows(t0 : T?) {
 def private cls_argmax_run(y : array<float>; vocab, rows : int64) : array<uint> {
     var ids : array<uint>
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let bytes = vocab * 4l * rows
         let nchunk = int64(CLS_ARGMAX_CHUNKS)
-        let pbytes = rows * nchunk * 4l
-        let yd = make_device_buf(bytes)
-        let pmd = make_device_buf(pbytes)
-        let pid = make_device_buf(pbytes)
-        let pd = make_device_buf(rows * 4l)
-        let host = make_host_buf(rows * 4l, true, [cached = true])
-        upload_region_at(yd, 0l, unsafe(addr<uint8 const?>(y[0])), bytes)
-        nan_sentinel_upload(pmd, pbytes)   //! the partials the second pass reads: an unwritten slot must be a sentinel, not a stale max
-        nan_sentinel_upload(pid, pbytes)
-        nan_sentinel_upload(pd, rows * 4l)
-        var sp = set_cls_argmax_part(fixed_array(yd, pmd, pid), fixed_array(bytes, pbytes, pbytes), fixed_array(1u, 2u, 2u))
-        var sf = set_cls_argmax_fin(fixed_array(pmd, pid, pd), fixed_array(pbytes, pbytes, rows * 4l), fixed_array(2u, 2u, 4u))
-        var pc = ArgmaxArgs(vocab = uint(vocab))
-        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            enc_cls_argmax_part(raw, h, sp, pc, rows * nchunk)
-            enc_cls_argmax_fin(raw, h, sf, pc, rows)
-            cmd_copy_planes(raw, h, fixed_array(pd), host, fixed_array(rows * 4l), 4u)
+        with_cell_planes() $(var cp : CellPlanes) {
+            let py = cp |> in_(y)
+            let pm = cp |> out_(int(rows * nchunk))   //! the partials the second pass reads: an unwritten slot must be a sentinel, not a stale max
+            let pi = cp |> out_(int(rows * nchunk))
+            let pd = cp |> out_(int(rows))
+            var sp = cp |> cls_set(fixed_array(py, pm, pi), @@set_cls_argmax_part)
+            var sf = cp |> cls_set(fixed_array(pm, pi, pd), @@set_cls_argmax_fin)
+            var pc = ArgmaxArgs(vocab = uint(vocab))
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_cls_argmax_part(raw, h, sp, pc, rows * nchunk)
+                enc_cls_argmax_fin(raw, h, sf, pc, rows)
+            }
+            ids <- cp |> plane_as(pd, type<uint>, int(rows))
         }
-        ids <- staged(host.mapped, 0l, int(rows), type<uint>)
     }
     return <- ids
 }
@@ -1361,8 +1379,6 @@ def test_vkd_actf16_base(t0 : T?) {
             }
             let nelem = 2048
             let total = nelem * 2
-            let g_bytes = int64(total) * 4l
-            let h_bytes = int64(total) * 2l
             var gh <- row_fill(total, 29, 0, 0.06, 1.9, 61)
             var uh <- row_fill(total, 43, 0, 0.05, 2.1, 83)
             // arm 0: the second row's data at the front, base 0; arm 1: the plane as is, base nelem
@@ -1374,33 +1390,8 @@ def test_vkd_actf16_base(t0 : T?) {
                 g0[i] = gh[nelem + i]
                 u0[i] = uh[nelem + i]
             }
-            var hsent : array<uint>
-            hsent |> resize(total / 2)
-            for (i in range(total / 2)) {
-                hsent[i] = 0xFC00FC00u
-            }
-            let gd = make_device_buf(g_bytes)
-            let ud = make_device_buf(g_bytes)
-            let hd = make_device_buf(h_bytes)
-            var host = make_host_buf(h_bytes, true, [cached = true])
-            var h0 : array<uint>
-            var h1 : array<uint>
-            h0 |> resize(total / 2)
-            h1 |> resize(total / 2)
-            for (arm in range(2)) {
-                unsafe {
-                    upload_region_at(gd, 0l, addr<uint8 const?>(arm == 0 ? g0[0] : gh[0]), g_bytes)
-                    upload_region_at(ud, 0l, addr<uint8 const?>(arm == 0 ? u0[0] : uh[0]), g_bytes)
-                    upload_region_at(hd, 0l, addr<uint8 const?>(hsent[0]), h_bytes)
-                    var sc = set_actf16_cls(fixed_array(gd, ud, hd), fixed_array(g_bytes, g_bytes, h_bytes), fixed_array(1u, 2u, 4u))
-                    var pc = ActArgs(nelem = uint(nelem), act = ACT_GELU, nblk = 0u, elem0 = arm == 0 ? 0u : uint(nelem))
-                    cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                        enc_actf16_cls(raw, h, sc, pc, int64((nelem / 4 + 255) / 256))
-                        cmd_copy_planes(raw, h, fixed_array(hd), host, fixed_array(h_bytes), 4u)
-                    }
-                    memcpy(addr<void?>(arm == 0 ? h0[0] : h1[0]), host.mapped, h_bytes)
-                }
-            }
+            var h0 <- actf16_halves(g0, u0, nelem, 0)
+            var h1 <- actf16_halves(gh, uh, nelem, nelem)
             var bad_row = 0
             var bad_sent = 0
             for (i in range(nelem / 2)) {
@@ -1417,7 +1408,6 @@ def test_vkd_actf16_base(t0 : T?) {
             delete uh
             delete g0
             delete u0
-            delete hsent
             delete h0
             delete h1
         } else {
@@ -1483,6 +1473,26 @@ def test_vkd_act_gelu_past_clamp(t0 : T?) {
             t |> skip("dasVulkan not present")
         }
     }
+}
+
+//! one actf16 dispatch of `nelem` elements from element `elem0` of `g` and `u`: the whole half plane back, every half it was
+//! not written left at -inf
+def private actf16_halves(g, u : array<float>; nelem, elem0 : int) : array<uint> {
+    var halves : array<uint>
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        with_cell_planes() $(var cp : CellPlanes) {
+            let pg = cp |> in_(g)
+            let pu = cp |> in_(u)
+            let ph = cp |> out_words(long_length(g) * 2l, 0xFC00FC00u)
+            var sc = cp |> cls_set(fixed_array(pg, pu, ph), @@set_actf16_cls)
+            var pc = ActArgs(nelem = uint(nelem), act = ACT_GELU, nblk = 0u, elem0 = uint(elem0))
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_actf16_cls(raw, h, sc, pc, int64((nelem / 4 + 255) / 256))
+            }
+            halves <- cp |> plane_as(ph, type<uint>, length(g) / 2)
+        }
+    }
+    return <- halves
 }
 
 // ===== the kq GEMV family: class kernels vs the CPU oracle, per format =====
@@ -1879,49 +1889,31 @@ def test_vkd_act_family(t0 : T?) {
             let nelem = 1024
             var gh <- row_fill(nelem, 29, 0, 0.21, 6.0, 61)
             var uh <- row_fill(nelem, 11, 0, 0.17, 4.0, 47)
-            let e_bytes = int64(nelem) * 4l
-            let gd = make_device_buf(e_bytes)
-            let ud = make_device_buf(e_bytes)
-            unsafe {
-                upload_region_at(gd, 0l, addr<uint8 const?>(gh[0]), e_bytes)
-                upload_region_at(ud, 0l, addr<uint8 const?>(uh[0]), e_bytes)
-            }
             // arm 0 = q8 (32-blocks), arm 1 = q8k (256-superblocks); arms 2 and 3 the same under the clamped swiglu (gpt-oss's act code on the unbiased kernels)
             for (arm in range(4)) {
                 let q8k = (arm & 1) == 1
                 let act = arm >= 2 ? ACT_OAI : ACT_SILU
                 let nblk = q8k ? nelem / 256 : nelem / 32
-                let q_bytes = int64(nelem)          // 1 byte per quant either way
-                let s_bytes = int64(nblk) * 4l
-                let hq2 = make_device_buf(q_bytes)
-                let hs2 = make_device_buf(s_bytes)
-                var hostq = make_host_buf(q_bytes, true, [cached = true])
-                var hosts = make_host_buf(s_bytes, true, [cached = true])
                 var q_cls : array<uint>
                 var s_cls : array<float>
-                q_cls |> resize(nelem / 4)
-                s_cls |> resize(nblk)
-                let wgs = 1l   // 256 threads cover both shapes at nelem = 1024
-                unsafe {
-                    upload_fill(hq2, 0l, q_bytes, I8_SENTINEL_BITS)
-                    nan_sentinel_upload(hs2, s_bytes)
-                    // the class kernel: gate@0, up@1, outq@2, outs@3
-                    var sc = set_actrq_cls(fixed_array(gd, ud, hq2, hs2),
-                        fixed_array(e_bytes, e_bytes, q_bytes, s_bytes),
-                        fixed_array(16u, 1u, 4u, 8u))
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let pg = cp |> in_(gh)
+                    let pu = cp |> in_(uh)
+                    let pq = cp |> out_words(int64(nelem), I8_SENTINEL_BITS)   // 1 byte per quant either way
+                    let ps = cp |> out_(nblk)
+                    var sc = cp |> cls_set(fixed_array(pg, pu, pq, ps), @@set_actrq_cls)
                     var pc = ActArgs(nelem = uint(nelem), act = act, nblk = uint(nblk))
-                    cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                    cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
                         if (q8k) {
-                            enc_q8k_actrq_cls(raw2, h2, sc, pc, wgs)
+                            enc_q8k_actrq_cls(raw2, h2, sc, pc, 1l)   // 256 threads cover both shapes at nelem = 1024
                         } else {
-                            enc_q8_actrq_cls(raw2, h2, sc, pc, wgs)
+                            enc_q8_actrq_cls(raw2, h2, sc, pc, 1l)
                         }
-                        vhz_dep(raw2, h2, 4u | 8u, 0u, true)
-                        cmd_copy_whole(raw2, hq2, hostq.buf, q_bytes)
-                        cmd_copy_whole(raw2, hs2, hosts.buf, s_bytes)
                     }
-                    memcpy(addr<void?>(q_cls[0]), hostq.mapped, q_bytes)
-                    memcpy(addr<void?>(s_cls[0]), hosts.mapped, s_bytes)
+                    delete q_cls
+                    delete s_cls
+                    q_cls <- cp |> plane_as(pq, type<uint>, nelem / 4)
+                    s_cls <- cp |> plane_run(ps)
                 }
                 var q_ref : array<uint>
                 var s_ref : array<float>
@@ -1955,47 +1947,31 @@ def test_vkd_act_family(t0 : T?) {
                     gh2[e] = gh[e] + gb[ex * brow + e % brow]
                     uh2[e] = uh[e] + ub[ex * brow + e % brow]
                 }
-                let b_bytes = int64(ne * brow) * 4l
-                let gbd = make_device_buf(b_bytes)
-                let ubd = make_device_buf(b_bytes)
-                let rexd = make_device_buf(int64(nrow) * 4l)
-                let hq2 = make_device_buf(int64(nb))
-                let hs2 = make_device_buf(int64(nb / 32) * 4l)
-                let hd2 = make_device_buf(int64(nb) * 2l)
-                var hostq = make_host_buf(int64(nb), true, [cached = true])
-                var hosts = make_host_buf(int64(nb / 32) * 4l, true, [cached = true])
-                var hosth = make_host_buf(int64(nb) * 2l, true, [cached = true])
                 var q_cls : array<uint>
                 var s_cls : array<float>
                 var h_cls : array<uint>
-                q_cls |> resize(nb / 4)
-                s_cls |> resize(nb / 32)
-                h_cls |> resize(nb / 2)
                 var pc = ActArgs(nelem = uint(nb), act = ACT_OAI, nblk = uint(nb / 32), bias_on = 1u, gboff = 0u, uboff = 0u, brow = uint(brow))
-                unsafe {
-                    upload_region_at(gbd, 0l, addr<uint8 const?>(gb[0]), b_bytes)
-                    upload_region_at(ubd, 0l, addr<uint8 const?>(ub[0]), b_bytes)
-                    upload_region_at(rexd, 0l, addr<uint8 const?>(rex[0]), int64(nrow) * 4l)
-                    nan_sentinel_upload(hq2, int64(nb))
-                    nan_sentinel_upload(hs2, int64(nb / 32) * 4l)
-                    nan_sentinel_upload(hd2, int64(nb) * 2l)
-                    var sc = set_q8_actrq_b_cls(fixed_array(gd, ud, hq2, hs2, gbd, ubd, rexd),
-                        fixed_array(e_bytes, e_bytes, int64(nb), int64(nb / 32) * 4l, b_bytes, b_bytes, int64(nrow) * 4l),
-                        fixed_array(16u, 1u, 4u, 8u, 0u, 0u, 0u))
-                    cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let pg = cp |> in_(gh)
+                    let pu = cp |> in_(uh)
+                    let pq = cp |> out_words(int64(nb), NAN_SENTINEL_BITS)
+                    let ps = cp |> out_(nb / 32)
+                    let ph = cp |> out_words(int64(nb) * 2l, NAN_SENTINEL_BITS)
+                    let pgb = cp |> in_(gb)
+                    let pub = cp |> in_(ub)
+                    let prex = cp |> in_plain(rex)
+                    var sc = cp |> cls_set(fixed_array(pg, pu, pq, ps, pgb, pub, prex), @@set_q8_actrq_b_cls)
+                    var sc16 = cp |> cls_set(fixed_array(pg, pu, ph, pgb, pub, prex), @@set_actf16_b_cls)
+                    cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
                         enc_q8_actrq_b_cls(raw2, h2, sc, pc, (int64(nb) / 4l + 255l) / 256l)
-                        var sc16 = set_actf16_b_cls(fixed_array(gd, ud, hd2, gbd, ubd, rexd),
-                            fixed_array(e_bytes, e_bytes, int64(nb) * 2l, b_bytes, b_bytes, int64(nrow) * 4l),
-                            fixed_array(16u, 1u, 32u, 0u, 0u, 0u))
                         enc_actf16_b_cls(raw2, h2, sc16, pc, (int64(nb) / 4l + 255l) / 256l)
-                        vhz_dep(raw2, h2, 4u | 8u | 32u, 0u, true)
-                        cmd_copy_whole(raw2, hq2, hostq.buf, int64(nb))
-                        cmd_copy_whole(raw2, hs2, hosts.buf, int64(nb / 32) * 4l)
-                        cmd_copy_whole(raw2, hd2, hosth.buf, int64(nb) * 2l)
                     }
-                    memcpy(addr<void?>(q_cls[0]), hostq.mapped, int64(nb))
-                    memcpy(addr<void?>(s_cls[0]), hosts.mapped, int64(nb / 32) * 4l)
-                    memcpy(addr<void?>(h_cls[0]), hosth.mapped, int64(nb) * 2l)
+                    delete q_cls
+                    delete s_cls
+                    delete h_cls
+                    q_cls <- cp |> plane_as(pq, type<uint>, nb / 4)
+                    s_cls <- cp |> plane_run(ps)
+                    h_cls <- cp |> plane_as(ph, type<uint>, nb / 2)
                 }
                 var q_ref : array<uint>
                 var s_ref : array<float>
@@ -2051,29 +2027,20 @@ def test_vkd_act_family(t0 : T?) {
                     sw[i] = 0.125 + float(i % 5) * 0.25
                 }
                 var rows <- row_fill(nrows * n, 7, 0, 0.13, 5.5, 93)
-                let si_bytes = int64(npos * k) * 4l
-                let ro_bytes = int64(nrows * n) * 4l
-                let ac_bytes = int64(npos * n) * 4l
-                let sid = make_device_buf(si_bytes)
-                let swd = make_device_buf(si_bytes)
-                let rod = make_device_buf(ro_bytes)
-                let ac2 = make_device_buf(ac_bytes)
-                let hosta = make_host_buf(ac_bytes, true, [cached = true])
-                unsafe {
-                    upload_region_at(sid, 0l, addr<uint8 const?>(sidx[0]), si_bytes)
-                    upload_region_at(swd, 0l, addr<uint8 const?>(sw[0]), si_bytes)
-                    upload_region_at(rod, 0l, addr<uint8 const?>(rows[0]), ro_bytes)
+                var a_cls : array<float>
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let pa = cp |> out_(npos * n)   //! r0 == 0 starts the sum: the accumulator rows are written, never read
+                    let psi = cp |> in_plain(sidx)
+                    let psw = cp |> in_(sw)
+                    let pr = cp |> in_(rows)
+                    var sc = cp |> cls_set(fixed_array(pa, psi, psw, pr), @@set_combine_cls)
+                    var pc = CombineArgs(n = uint(n), k = uint(k), r0 = 0u, r1 = uint(nrows))
+                    cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                        enc_combine_cls(raw2, h2, sc, pc, int64(npos))
+                    }
+                    delete a_cls
+                    a_cls <- cp |> plane_run(pa)
                 }
-                nan_sentinel_upload(ac2, ac_bytes)   //! r0 == 0 starts the sum: the accumulator rows are written, never read
-                var sc = set_combine_cls(fixed_array(ac2, sid, swd, rod),
-                    fixed_array(ac_bytes, si_bytes, si_bytes, ro_bytes),
-                    fixed_array(1u, 2u, 4u, 8u))
-                var pc = CombineArgs(n = uint(n), k = uint(k), r0 = 0u, r1 = uint(nrows))
-                cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                    enc_combine_cls(raw2, h2, sc, pc, int64(npos))
-                    cmd_copy_planes(raw2, h2, fixed_array(ac2), hosta, fixed_array(ac_bytes), 1u)
-                }
-                var a_cls <- staged(hosta.mapped, 0l, npos * n, type<float>)
                 // oracle: same slot order, but the device contracts mul+add to fma — approx bar
                 var a_ref : array<float>
                 a_ref |> resize(npos * n)
@@ -2215,44 +2182,30 @@ def test_vkd_rope_family(t0 : T?) {
                 for (i in range(bpad + qd + 2 * kvd)) {
                     bh[i] = i < bpad ? 55.0 : float((i * 13) % 29) * 0.05 - 0.7
                 }
-                let b_bytes = long_length(bh) * 4l
-                let q_bytes = int64(qd) * 4l
-                let kv_bytes = int64(qd + 2 * kvd) * 4l
-                let m_bytes = int64(kvd) * 4l
-                let cs_bytes = int64(hs) * 4l
-                let kvd_dev = make_device_buf(kv_bytes)
-                let csd = make_device_buf(cs_bytes)
-                let bd = make_device_buf(b_bytes)
-                let q2 = make_device_buf(q_bytes)
-                let km2 = make_device_buf(m_bytes)
-                let vm2 = make_device_buf(m_bytes)
-                var host = make_host_buf(kv_bytes, true, [cached = true])
                 var cls_q : array<float>
                 var cls_k : array<float>
                 var cls_v : array<float>
-                cls_q |> resize(qd)
-                cls_k |> resize(kvd)
-                cls_v |> resize(kvd)
-                let wgs = int64((npairs + 255) / 256)
-                unsafe {
-                    upload_region_at(kvd_dev, 0l, addr<uint8 const?>(kvh[0]), kv_bytes)
-                    upload_region_at(csd, 0l, addr<uint8 const?>(csh[0]), cs_bytes)
-                    upload_region_at(q2, 0l, addr<uint8 const?>(qh[0]), q_bytes)
-                    upload_region_at(bd, 0l, addr<uint8 const?>(bh[0]), b_bytes)
+                with_cell_planes() $(var cp : CellPlanes) {
                     //! the class kernel: q@0, kvsrc@1, kmir@2, vmir@3, cossin@4, tok@5 (pos 0 -> row 0), bias@6
-                    let tok = tok_buf([TokMeta()])
-                    var sc = set_rope_kv_cls(fixed_array(q2, kvd_dev, km2, vm2, csd, tok, bd),
-                        fixed_array(q_bytes, kv_bytes, m_bytes, m_bytes, cs_bytes, TOK_META_BYTES, b_bytes),
-                        fixed_array(16u, 1u, 2u, 4u, 8u, 0u, 0u))
+                    let pq = cp |> io_(qh)
+                    let pkv = cp |> in_(kvh)
+                    let pkm = cp |> out_(kvd)
+                    let pvm = cp |> out_(kvd)
+                    let pcs = cp |> in_(csh)
+                    let ptok = cp |> in_plain([TokMeta()])
+                    let pb = cp |> in_(bh)
+                    var sc = cp |> cls_set(fixed_array(pq, pkv, pkm, pvm, pcs, ptok, pb), @@set_rope_kv_cls)
                     var pc = RopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(half),
                         neox = 1u, kpair0 = uint(kpair0), npairs = uint(npairs), layerbase = 0u, boff = uint(bpad), hasb = 1u)
-                    cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                        enc_rope_kv_cls(raw2, h2, sc, pc, wgs)
-                        cmd_copy_planes(raw2, h2, fixed_array(q2), host, fixed_array(q_bytes), 2u | 4u | 16u)
+                    cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                        enc_rope_kv_cls(raw2, h2, sc, pc, int64((npairs + 255) / 256))
                     }
-                    memcpy(addr<void?>(cls_q[0]), host.mapped, q_bytes)
-                    readback_range(km2, 0u, host, addr(cls_k[0]), m_bytes)
-                    readback_range(vm2, 0u, host, addr(cls_v[0]), m_bytes)
+                    delete cls_q
+                    delete cls_k
+                    delete cls_v
+                    cls_q <- cp |> plane_run(pq)
+                    cls_k <- cp |> plane_run(pkm)
+                    cls_v <- cp |> plane_run(pvm)
                 }
                 //! oracle: bias first, then the engine's NEOX table rotation; v is raw plus bias — the approx bars ride out the device's fma contraction
                 var ref <- rope_kv_rows(qh, kvh, bh, csh, 0, qd, qd + kvd, 0, bpad, nh, nkvh, hs) $(x : float) => x
@@ -2276,43 +2229,25 @@ def test_vkd_rope_family(t0 : T?) {
                 let eps = 1e-5
                 var qh <- row_fill(rows * qd, 31, 0, 0.08, 2.5, 67)
                 var kh <- row_fill(rows * kvd, 43, 0, 0.06, 1.7, 59)
-                var wh : array<float>
-                var eh : array<float>
-                wh |> resize(2 * hs)
-                eh |> resize(1)
-                for (i in range(2 * hs)) {
-                    wh[i] = 0.4 + float(i % 13) * 0.06
-                }
-                eh[0] = eps
-                let q_bytes = int64(rows * qd) * 4l
-                let k_bytes = int64(rows * kvd) * 4l
-                let w_bytes = int64(2 * hs) * 4l
-                let q2 = make_device_buf(q_bytes)
-                let k2 = make_device_buf(k_bytes)
-                let wd = make_device_buf(w_bytes)
-                var host = make_host_buf(q_bytes, true, [cached = true])
+                var wh <- [for (i in range(2 * hs)); 0.4 + float(i % 13) * 0.06]
                 var cls_q : array<float>
                 var cls_k : array<float>
-                cls_q |> resize(rows * qd)
-                cls_k |> resize(rows * kvd)
-                let wgs = int64(rows * (nh + nkvh))
-                unsafe {
-                    upload_region_at(q2, 0l, addr<uint8 const?>(qh[0]), q_bytes)
-                    upload_region_at(k2, 0l, addr<uint8 const?>(kh[0]), k_bytes)
-                    upload_region_at(wd, 0l, addr<uint8 const?>(wh[0]), w_bytes)
+                with_cell_planes() $(var cp : CellPlanes) {
                     // the class kernel: q@0, k@1, weights@2
-                    var sc = set_qk_rms_cls(fixed_array(q2, k2, wd),
-                        fixed_array(q_bytes, k_bytes, w_bytes),
-                        fixed_array(1u, 16u, 4u))
+                    let pq = cp |> io_(qh)
+                    let pk = cp |> io_(kh)
+                    let pw = cp |> in_(wh)
+                    var sc = cp |> cls_set(fixed_array(pq, pk, pw), @@set_qk_rms_cls)
                     var pc = QkRmsArgs(hs = uint(hs), nh = uint(nh), nkvh = uint(nkvh),
                         qstride = uint(qstride), kstride = uint(kstride), kbase = 0u,
                         qwoff = 0u, kwoff = uint(hs), eps = eps)
-                    cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                        enc_qk_rms_cls(raw2, h2, sc, pc, wgs)
-                        cmd_copy_planes(raw2, h2, fixed_array(q2), host, fixed_array(q_bytes), 1u | 16u)
+                    cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                        enc_qk_rms_cls(raw2, h2, sc, pc, int64(rows * (nh + nkvh)))
                     }
-                    memcpy(addr<void?>(cls_q[0]), host.mapped, q_bytes)
-                    readback_range(k2, 0u, host, addr(cls_k[0]), k_bytes)
+                    delete cls_q
+                    delete cls_k
+                    cls_q <- cp |> plane_run(pq)
+                    cls_k <- cp |> plane_run(pk)
                 }
                 // oracle: per-head rms (1/sqrt(mean(v^2)+eps)) times the shared weight row —
                 // the device reduces sum-of-squares in tree order, so approx bars
@@ -2339,7 +2274,6 @@ def test_vkd_rope_family(t0 : T?) {
                 delete qh
                 delete kh
                 delete wh
-                delete eh
                 delete ref_q
                 delete ref_k
                 delete cls_q
@@ -3743,45 +3677,17 @@ def test_vkd_requant_family(t0 : T?) {
                 let dim = 1024
                 let eps = 1e-5
                 let ascale = 1.25
-                let nblk = dim / 32
                 var fx <- ar_fixture(dim, dim, 0.09, 4.2, 0.06, 2.6, 0.04)
                 var x <- fx.x
                 var a <- fx.a
                 var w <- fx.w
-                let e_bytes = int64(dim) * 4l
-                let q_bytes = int64(dim)
-                let s_bytes = int64(nblk) * 4l
-                let x2 = make_device_buf(e_bytes)
-                let ad = make_device_buf(e_bytes)
-                let wd = make_device_buf(e_bytes)
-                let q2 = make_device_buf(q_bytes)
-                let s2 = make_device_buf(s_bytes)
-                var host = make_host_buf(e_bytes, true, [cached = true])
-                var q_cls : array<uint>
-                var s_cls : array<float>
-                var x_cls : array<float>
-                q_cls |> resize(dim / 4)
-                s_cls |> resize(nblk)
-                x_cls |> resize(dim)
-                unsafe {
-                    upload_region_at(x2, 0l, addr<uint8 const?>(x[0]), e_bytes)
-                    upload_region_at(ad, 0l, addr<uint8 const?>(a[0]), e_bytes)
-                    upload_region_at(wd, 0l, addr<uint8 const?>(w[0]), e_bytes)
-                    upload_fill(q2, 0l, q_bytes, I8_SENTINEL_BITS)
-                    nan_sentinel_upload(s2, s_bytes)
-                    // the class kernel: x@0, a@1, w@2, outq@3, outs@4
-                    var sc = set_cls_ar_rq_b(fixed_array(x2, ad, wd, q2, s2),
-                        fixed_array(e_bytes, e_bytes, e_bytes, q_bytes, s_bytes),
-                        fixed_array(1u, 2u, 4u, 16u, 8u))
-                    var pc = ArArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = ascale)
-                    cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                        enc_cls_ar_rq_b(raw2, h2, sc, pc, 1l)
-                        cmd_copy_planes(raw2, h2, fixed_array(q2), host, fixed_array(q_bytes), 1u | 8u | 16u)
-                    }
-                    memcpy(addr<void?>(q_cls[0]), host.mapped, q_bytes)
-                    readback_range(s2, 0u, host, addr(s_cls[0]), s_bytes)
-                    readback_range(x2, 0u, host, addr(x_cls[0]), e_bytes)
-                }
+                // the class kernel: x@0, a@1, w@2, outq@3, outs@4
+                let pc = ArArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = ascale)
+                var r <- ar_rq_run("cls_ar_rq_b", x, a, w, pc, false, false)
+                var q_cls <- r.q
+                var s_cls <- r.s
+                var x_cls <- r.x
+                delete r
                 // oracle: x' = (x+a)*ascale in place, rms over the row, y = w*(x'*inv), Q8_0 pack —
                 // the wg reduce reassociates the sum of squares, so quants ride the byte bar
                 var x_ref : array<float>
@@ -3802,30 +3708,12 @@ def test_vkd_requant_family(t0 : T?) {
                 {
                     var b <- row_fill(dim, 23, 0, 0.09, 3.1, 71)
                     var wb <- biased_norms(w, b)
-                    let wbd = make_device_buf(2l * e_bytes)
-                    var qb_cls : array<uint>
-                    var sb_cls : array<float>
-                    var xb_cls : array<float>
-                    qb_cls |> resize(dim / 4)
-                    sb_cls |> resize(nblk)
-                    xb_cls |> resize(dim)
-                    unsafe {
-                        upload_region_at(x2, 0l, addr<uint8 const?>(x[0]), e_bytes)
-                        upload_region_at(wbd, 0l, addr<uint8 const?>(wb[0]), 2l * e_bytes)
-                        upload_fill(q2, 0l, q_bytes, I8_SENTINEL_BITS)
-                        nan_sentinel_upload(s2, s_bytes)
-                        var scb = set_cls_ar_rq_b(fixed_array(x2, ad, wbd, q2, s2),
-                            fixed_array(e_bytes, e_bytes, 2l * e_bytes, q_bytes, s_bytes),
-                            fixed_array(1u, 2u, 4u, 16u, 8u))
-                        var pcb = ArArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = ascale, abias_on = 1u, aboff = uint(dim))
-                        cmd_one_shot() $(rawb : VkCommandBuffer; var hb : VkHaz) {
-                            enc_cls_ar_rq_b(rawb, hb, scb, pcb, 1l)
-                            cmd_copy_planes(rawb, hb, fixed_array(q2), host, fixed_array(q_bytes), 1u | 8u | 16u)
-                        }
-                        memcpy(addr<void?>(qb_cls[0]), host.mapped, q_bytes)
-                        readback_range(s2, 0u, host, addr(sb_cls[0]), s_bytes)
-                        readback_range(x2, 0u, host, addr(xb_cls[0]), e_bytes)
-                    }
+                    let pcb = ArArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = ascale, abias_on = 1u, aboff = uint(dim))
+                    var rb <- ar_rq_run("cls_ar_rq_b", x, a, wb, pcb, false, false)
+                    var qb_cls <- rb.q
+                    var sb_cls <- rb.s
+                    var xb_cls <- rb.x
+                    delete rb
                     var xb_ref : array<float>
                     var yb_ref : array<float>
                     xb_ref |> resize(dim)
@@ -3855,8 +3743,6 @@ def test_vkd_requant_family(t0 : T?) {
                 var q_ref_k : array<uint>
                 var s_ref_k : array<float>
                 requant_oracle(y_ref, 0, dim, true, q_ref_k, s_ref_k)
-                let sk_bytes = int64(dim / 256) * 4l
-                var host3 = make_host_buf(q_bytes + s_bytes + e_bytes, true, [cached = true])
                 let stamps <- fixed_array(
                     (name = "cls_ar_rqx", kform = false, storex = true),
                     (name = "cls_ar_rqk", kform = true, storex = false),
@@ -3864,43 +3750,11 @@ def test_vkd_requant_family(t0 : T?) {
                 for (stamp in stamps) {
                     let kform = stamp.kform
                     let storex = stamp.storex
-                    let q3 = make_device_buf(q_bytes)
-                    let s3 = make_device_buf(s_bytes)
-                    let y3 = make_device_buf(e_bytes)
-                    let sb = kform ? sk_bytes : s_bytes
-                    var q_got : array<uint>
-                    var s_got : array<float>
-                    var y_got : array<float>
-                    q_got |> resize(dim / 4)
-                    s_got |> resize(kform ? dim / 256 : nblk)
-                    y_got |> resize(dim)
-                    unsafe {
-                        upload_region_at(x2, 0l, addr<uint8 const?>(x[0]), e_bytes)
-                        nan_sentinel_upload(q3, q_bytes)
-                        nan_sentinel_upload(s3, s_bytes)
-                        nan_sentinel_upload(y3, e_bytes)
-                        var pc3 = ArArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = ascale)
-                        cmd_one_shot() $(raw3 : VkCommandBuffer; var h3 : VkHaz) {
-                            if (stamp.name == "cls_ar_rqx") {
-                                var sc3 = set_cls_ar_rqx(fixed_array(x2, ad, wd, q3, s3, y3),
-                                    fixed_array(e_bytes, e_bytes, e_bytes, q_bytes, sb, e_bytes), fixed_array(1u, 2u, 4u, 16u, 8u, 32u))
-                                enc_cls_ar_rqx(raw3, h3, sc3, pc3, 1l)
-                            } elif (stamp.name == "cls_ar_rqk") {
-                                var sc3 = set_cls_ar_rqk(fixed_array(x2, ad, wd, q3, s3),
-                                    fixed_array(e_bytes, e_bytes, e_bytes, q_bytes, sb), fixed_array(1u, 2u, 4u, 16u, 8u))
-                                enc_cls_ar_rqk(raw3, h3, sc3, pc3, 1l)
-                            } else {
-                                var sc3 = set_cls_ar_rqkx(fixed_array(x2, ad, wd, q3, s3, y3),
-                                    fixed_array(e_bytes, e_bytes, e_bytes, q_bytes, sb, e_bytes), fixed_array(1u, 2u, 4u, 16u, 8u, 32u))
-                                enc_cls_ar_rqkx(raw3, h3, sc3, pc3, 1l)
-                            }
-                            cmd_copy_planes(raw3, h3, fixed_array(q3, s3, y3), host3, fixed_array(0l, q_bytes, q_bytes + s_bytes), fixed_array(q_bytes, sb, e_bytes), 1u | 8u | 16u | 32u)
-                        }
-                        let hp3 = intptr(host3.mapped)
-                        memcpy(addr<void?>(q_got[0]), host3.mapped, q_bytes)
-                        memcpy(addr<void?>(s_got[0]), reinterpret<void?>(hp3 + uint64(q_bytes)), sb)
-                        memcpy(addr<void?>(y_got[0]), reinterpret<void?>(hp3 + uint64(q_bytes + s_bytes)), e_bytes)
-                    }
+                    var r3 <- ar_rq_run(stamp.name, x, a, w, pc, kform, storex)
+                    var q_got <- r3.q
+                    var s_got <- r3.s
+                    var y_got <- r3.y
+                    delete r3
                     var badk = 0
                     if (kform) {
                         badk = mismatch_qbytes(q_got, q_ref_k, 1) + mismatch_approx(s_got, s_ref_k)
@@ -3946,33 +3800,22 @@ def test_vkd_requant_family(t0 : T?) {
                 let nsb = 4
                 let nelem = nsb * 256
                 var src <- row_fill(nelem, 61, 0, 0.05, 2.8, 113)
-                let e_bytes = int64(nelem) * 4l
-                let q_bytes = int64(nelem)
-                let s_bytes = int64(nsb) * 4l
-                let sd = make_device_buf(e_bytes)
-                let q2 = make_device_buf(q_bytes)
-                let s2 = make_device_buf(s_bytes)
-                var host = make_host_buf(q_bytes, true, [cached = true])
                 var q_cls : array<uint>
                 var s_cls : array<float>
-                q_cls |> resize(nelem / 4)
-                s_cls |> resize(nsb)
-                let wgs = (nsb * 32 + 255) / 256
-                unsafe {
-                    upload_region_at(sd, 0l, addr<uint8 const?>(src[0]), e_bytes)
-                    upload_fill(q2, 0l, q_bytes, I8_SENTINEL_BITS)
-                    nan_sentinel_upload(s2, s_bytes)
+                with_cell_planes() $(var cp : CellPlanes) {
                     // the class kernel: src@0, outq@1, outs@2
-                    var sc = set_rq_cls(fixed_array(sd, q2, s2),
-                        fixed_array(e_bytes, q_bytes, s_bytes),
-                        fixed_array(1u, 4u, 8u))
+                    let psrc = cp |> in_(src)
+                    let pq = cp |> out_words(int64(nelem), I8_SENTINEL_BITS)
+                    let ps = cp |> out_(nsb)
+                    var sc = cp |> cls_set(fixed_array(psrc, pq, ps), @@set_rq_cls)
                     var pc = RqArgs(inbase = 0u, nblk = uint(nsb))
-                    cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                        enc_cls_q8k_rq(raw2, h2, sc, pc, int64(wgs))
-                        cmd_copy_planes(raw2, h2, fixed_array(q2), host, fixed_array(q_bytes), 4u | 8u)
+                    cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                        enc_cls_q8k_rq(raw2, h2, sc, pc, int64((nsb * 32 + 255) / 256))
                     }
-                    memcpy(addr<void?>(q_cls[0]), host.mapped, q_bytes)
-                    readback_range(s2, 0u, host, addr(s_cls[0]), s_bytes)
+                    delete q_cls
+                    delete s_cls
+                    q_cls <- cp |> plane_as(pq, type<uint>, nelem / 4)
+                    s_cls <- cp |> plane_run(ps)
                 }
                 // plain requant of f32 rows — amax is order-free, the pack deterministic: exact
                 var q_ref : array<uint>
@@ -5117,25 +4960,23 @@ def test_vkd_cvt_family(t0 : T?) {
                 let nblk = 24
                 let inbase = 64
                 var srch <- row_fill(inbase + nblk * 32, 37, 0, 0.04, 2.2, 113)
-                let src_bytes = int64(inbase + nblk * 32) * 4l
-                let q_bytes = int64(nblk) * 32l
-                let s_bytes = int64(nblk) * 4l
-                let srcd = make_device_buf(src_bytes)
-                let qd2 = make_device_buf(q_bytes)
-                let sd2 = make_device_buf(s_bytes)
-                let host = make_host_buf(q_bytes + s_bytes, true, [cached = true])
                 let wgs = (nblk * 8 + 255) / 256
-                upload_region_at(srcd, 0l, unsafe(addr<uint8 const?>(srch[0])), src_bytes)
-                var sc = set_rq_cls(fixed_array(srcd, qd2, sd2),
-                    fixed_array(src_bytes, q_bytes, s_bytes),
-                    fixed_array(1u, 4u, 8u))
-                var pc = RqArgs(inbase = uint(inbase), nblk = uint(nblk))
-                cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                    enc_cls_dn_rq(raw2, h2, sc, pc, int64(wgs))
-                    cmd_copy_planes(raw2, h2, fixed_array(qd2, sd2), host, fixed_array(q_bytes, s_bytes), 4u)
+                var q_cls : array<uint>
+                var s_cls : array<float>
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let psrc = cp |> in_(srch)
+                    let pq = cp |> out_words(int64(nblk) * 32l, I8_SENTINEL_BITS)
+                    let ps = cp |> out_(nblk)
+                    var sc = cp |> cls_set(fixed_array(psrc, pq, ps), @@set_rq_cls)
+                    var pc = RqArgs(inbase = uint(inbase), nblk = uint(nblk))
+                    cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                        enc_cls_dn_rq(raw2, h2, sc, pc, int64(wgs))
+                    }
+                    delete q_cls
+                    delete s_cls
+                    q_cls <- cp |> plane_as(pq, type<uint>, nblk * 8)
+                    s_cls <- cp |> plane_run(ps)
                 }
-                var q_cls <- staged(host.mapped, 0l, nblk * 8, type<uint>)
-                var s_cls <- staged(host.mapped, q_bytes, nblk, type<float>)
                 // plain Q8_0 requant with an input offset — exact
                 var q_ref : array<uint>
                 var s_ref : array<float>
@@ -5155,35 +4996,26 @@ def test_vkd_cvt_family(t0 : T?) {
                 let nelem = 2048
                 var gh <- row_fill(nelem, 29, 0, 0.06, 1.9, 61)
                 var uh <- row_fill(nelem, 43, 0, 0.05, 2.1, 83)
-                let g_bytes = int64(nelem) * 4l
-                let h_bytes = int64(nelem) * 2l
-                let gd = make_device_buf(g_bytes)
-                let ud = make_device_buf(g_bytes)
-                let hd2 = make_device_buf(h_bytes)
-                var host = make_host_buf(h_bytes, true, [cached = true])
-                var h_cls : array<uint>
-                h_cls |> resize(nelem / 2)
                 for (arm in range(1, 4)) {   // 1 = act-f16 (gelu), 2 = f16 convert, 3 = act-f16 under the clamped swiglu
-                    unsafe {
-                        upload_region_at(gd, 0l, addr<uint8 const?>(gh[0]), g_bytes)
-                        upload_region_at(ud, 0l, addr<uint8 const?>(uh[0]), g_bytes)
+                    var h_cls : array<uint>
+                    with_cell_planes() $(var cp : CellPlanes) {
+                        let pg = cp |> in_(gh)
+                        let pu = cp |> in_(uh)
+                        let ph = cp |> out_words(int64(nelem) * 2l, NAN_SENTINEL_BITS)
                         let wgs = (nelem / 4 + 255) / 256
-                        var sc : VkDescriptorSet
-                        cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                        cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
                             if (arm != 2) {
-                                sc = set_actf16_cls(fixed_array(gd, ud, hd2),
-                                    fixed_array(g_bytes, g_bytes, h_bytes), fixed_array(1u, 2u, 4u))
+                                var sc = cp |> cls_set(fixed_array(pg, pu, ph), @@set_actf16_cls)
                                 var pc = ActArgs(nelem = uint(nelem), act = arm == 3 ? ACT_OAI : ACT_GELU, nblk = 0u)
                                 enc_actf16_cls(raw2, h2, sc, pc, int64(wgs))
                             } else {
-                                sc = set_tower_clamp_cvt_cls(fixed_array(ud, hd2),
-                                    fixed_array(g_bytes, h_bytes), fixed_array(1u, 4u))
+                                var sc = cp |> cls_set(fixed_array(pu, ph), @@set_tower_clamp_cvt_cls)
                                 var pc = f16_rows_args(uint(nelem))
                                 enc_tower_clamp_cvt_cls(raw2, h2, sc, pc, int64(wgs))
                             }
-                            cmd_copy_planes(raw2, h2, fixed_array(hd2), host, fixed_array(h_bytes), 4u)
                         }
-                        memcpy(addr<void?>(h_cls[0]), host.mapped, h_bytes)
+                        delete h_cls
+                        h_cls <- cp |> plane_as(ph, type<uint>, nelem / 2)
                     }
                     // oracle in f32, compared through the f16 halves the kernels emit (the gelu
                     // arm carries transcendental ulps — approx absorbs both)
@@ -5198,10 +5030,10 @@ def test_vkd_cvt_family(t0 : T?) {
                     check_rows(t, "cvt arm {arm} against the CPU oracle", got, want, BAR_APPROX_CTRL, FLAT_ROWS)
                     delete got
                     delete want
+                    delete h_cls
                 }
                 delete gh
                 delete uh
-                delete h_cls
             }
         } else {
             t |> skip("dasVulkan not present")
