@@ -34,6 +34,7 @@ require dasllama/dasllama_tts_types   // nolint:STYLE030,LINT019 — read only i
 require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower — the census pins the rail ON
 require ?das_metal dasllama/dasllama_metal_prefill // metal_prefill_shutdown — the crowned twin-W leg re-arms PSOs
 require ?das_metal dasllama/dasllama_metal_asr_dec // set_metal_wdec — the cov_tower mixed chunk's decoder half
+require ?das_metal dasllama/dasllama_audio_io
 require daslib/jobque_boost
 require daslib/fio  // the zoo paths
 require math  // nolint:STYLE030,LINT019 — used only inside the das_metal static_if half
@@ -541,7 +542,7 @@ def private cov_tower(t : T?) {
         set_metal_wdec_step(true)
         set_metal_wdec_step_min_d(0l)   // the census carrier is tiny — under the serving floor
         let wpath = path_join(whisper_dir(), "ggml-tiny.bin")
-        var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+        var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
         if (model_available(t, wpath) && !empty(samples)) {
             var inscope w = WhisperModel()
             var inscope stg <- stage_whisper_model(wpath, false, true)

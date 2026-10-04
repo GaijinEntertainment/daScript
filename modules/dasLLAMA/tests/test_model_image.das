@@ -37,6 +37,7 @@ require daslib/apply
 require daslib/fio
 require strings
 require math
+require dasllama/dasllama_audio_io
 require _model_tier
 
 // The prepared-model image (.dlim) rail. The mechanics arm exercises save/load on a synthetic
@@ -1190,7 +1191,7 @@ def test_whisper_image_roundtrip(t : T?) {
         if (!family_on(t, "whisper") || !arm_on(t, "whisper")) return
         let path = path_join(whisper_dir(), "ggml-tiny.bin")
         return if (!jit_model_available(t, path))
-        var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+        var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
@@ -1268,7 +1269,7 @@ def test_whisper_metal_tower(tst : T?) {
             if (!family_on(t, "whisper") || !arm_on(t, "mtower")) return
             let path = path_join(whisper_dir(), "ggml-tiny.bin")
             return if (!jit_model_available(t, path))
-            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present")
                 return
@@ -1425,7 +1426,7 @@ def test_whisper_metal_cross_kv(tst : T?) {
             if (!family_on(t, "whisper") || !arm_on(t, "mtower")) return
             let path = path_join(whisper_dir(), "ggml-tiny.bin")
             return if (!jit_model_available(t, path))
-            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present")
                 return
@@ -1544,7 +1545,7 @@ def test_parakeet_tower_metal(tst : T?) {
             if (!family_on(t, "parakeet") || !arm_on(t, "mtower")) return
             let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
             return if (!jit_model_available(t, path))
-            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present")
                 return
@@ -1722,7 +1723,7 @@ def test_parakeet_tower_q8_decline(tst : T?) {
             if (!family_on(t, "parakeet") || !arm_on(t, "mtower")) return
             let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
             return if (!jit_model_available(t, path))
-            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present")
                 return
@@ -1781,7 +1782,7 @@ def test_parakeet_image_roundtrip(t : T?) {
         if (!family_on(t, "parakeet") || !arm_on(t, "parakeet")) return
         let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
         return if (!jit_model_available(t, path))
-        var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+        var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
@@ -2202,7 +2203,7 @@ def test_gemma4a_transcribe_q8_ab(t : T?) {
         let dec_path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
         let mmp_path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
         if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
-        var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+        var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present beside the models")
             return
@@ -2245,7 +2246,7 @@ def test_gemma4a_tower_metal(t : T?) {
             let dec_path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
             let mmp_path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
             if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
-            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present beside the models")
                 return
@@ -2313,7 +2314,7 @@ def test_canary_tower_metal(t : T?) {
             let dec_path = path_join(models_dir(), "canary-qwen-2.5b-decoder-q8_0.gguf")
             let mmp_path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
             if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
-            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present beside the models")
                 return
@@ -2393,7 +2394,7 @@ def test_qwen3a_tower_q8_ab(t : T?) {
         if (!family_on(t, "qwen3a") || !arm_on(t, "qwen3a")) return
         let path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
         return if (!jit_model_available(t, path))
-        var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+        var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present beside the models")
             return
@@ -2436,7 +2437,7 @@ def test_qwen3a_transcribe_q8_ab(t : T?) {
         let dec_path = path_join(models_dir(), "Qwen3-ASR-0.6B-Q8_0.gguf")
         let mmp_path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
         if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
-        var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+        var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present beside the models")
             return
@@ -2483,7 +2484,7 @@ def test_qwen3a_metal_tower(tst : T?) {
             let dec_path = path_join(models_dir(), "Qwen3-ASR-0.6B-Q8_0.gguf")
             let mmp_path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
             if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
-            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present beside the models")
                 return
