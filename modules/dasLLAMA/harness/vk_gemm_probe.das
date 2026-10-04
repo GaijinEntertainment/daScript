@@ -472,8 +472,17 @@ def private cm2_shape_upload(fmt : int; d, n, cnt : int; slab_blocks : int = 0; 
     return dv
 }
 
-//! a kq shape's host planes: `d` rows of `n` weights (hashed quant words; a scale row a packed f16 d / dmin pair, then hashed
-//! words) and `cnt` activation rows as f16 pairs and as Q8_K words with their scales
+//! word `wi` of superblock `sb`'s scale row: word 0 a packed f16 d / dmin pair, the rest hashed - k4's and k5's are 6-bit scale
+//! bytes, every other format's hold f16 d's past word 0 (k6, k3 and k2 at word 4, q40 and iq4nl in every word), so there both
+//! halves are kept finite small f16s
+def private scale_row_word(fmt, sb, wi, ws_words : int) : uint {
+    return packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.00005 * float(1 + sb % 5))) if (wi == 0)
+    let hw = hash_word(uint(sb * ws_words + wi) + 613u)
+    return (fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5)) ? hw : (hw & 0x03FF03FFu) | 0x2C002C00u
+}
+
+//! a kq shape's host planes: `d` rows of `n` weights (hashed quant words; a scale row of `scale_row_word`s) and `cnt` activation
+//! rows as f16 pairs and as Q8_K words with their scales
 struct private Cm2ShapeHost {
     wq : array<uint>
     ws : array<uint>
@@ -500,9 +509,8 @@ def private cm2_shape_host(fmt : int; d, n, cnt : int) : Cm2ShapeHost {
         h.wq[i] = hash_word(uint(i) + 29u)
     }
     for (sb in range(totsb)) {
-        h.ws[sb * ws_words] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.00005 * float(1 + sb % 5)))
-        for (wi in range(1, ws_words)) {
-            h.ws[sb * ws_words + wi] = hash_word(uint(sb * ws_words + wi) + 613u)
+        for (wi in range(ws_words)) {
+            h.ws[sb * ws_words + wi] = scale_row_word(fmt, sb, wi, ws_words)
         }
     }
     for (i in range(cnt * n / 2)) {
@@ -883,9 +891,8 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
         wsuh |> reserve(totblk * ws_words)
         wsuh |> resize(totblk * ws_words)
         for (sb in range(totblk)) {
-            wsuh[sb * ws_words] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.00005 * float(1 + sb % 5)))
-            for (wi in range(1, ws_words)) {
-                wsuh[sb * ws_words + wi] = hash_word(uint(sb * ws_words + wi) + 613u)
+            for (wi in range(ws_words)) {
+                wsuh[sb * ws_words + wi] = scale_row_word(fmt, sb, wi, ws_words)
             }
         }
     }
