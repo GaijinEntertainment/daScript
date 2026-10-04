@@ -230,18 +230,16 @@ rows and the alpha rows each through `F16GemmCm2`, eight k chunks into the split
 the reduce into the layer's smalls at the beta and alpha bases (the class is the MoE router's,
 `ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block`). Off that route the f32 arm is a scalar tile GEMM
 over the `[beta ; alpha]` rows: one workgroup covers 16 positions by 16 output rows, one output
-per invocation, and the grid runs over both group axes, so a layer of only `2 x nvh` rows
-(`nvh`, the layer's value-head count) - 64 on the 9B - still fills the card. The q8 arm is two
-q8 GEMMs and copies.
+per invocation, and the grid runs over both group axes, so a layer of only `2 x nvh` rows (`nvh`,
+the layer's value-head count) - 64 on the 9B - still fills the card. The q8 arm is two q8 GEMMs and copies.
 
 The conv is channel-major: a workgroup owns 256 channels over `DN_CONV_PB` positions
 (`dn_conv_wgs` sizes the grid), every thread slides one channel's window over them with the taps
 in registers and one new row read per position, and holds its outputs in registers for the SiLU
 and the per-head L2 norm - the head's sum of squares crosses the head's lanes by shuffles and its
 32-lane blocks by one shared row, a head being `ds` consecutive channels with `ds` dividing 256. The
-position-major form it replaced (one workgroup per position, the row staged in 32 KB of shared
-memory) re-read every input row once per tap and the whole tap table once per position, all from
-L2.
+position-major form it replaced (one workgroup per position, the row staged in 32 KB of shared memory)
+re-read every input row once per tap and the whole tap table once per position, all from L2.
 
 The scan is the plain per-token delta rule in upstream's shape: one column of a head's state per
 lane cluster, 16 state rows per lane in registers, four 32-lane blocks per workgroup, and every lane
@@ -286,9 +284,8 @@ per entry after the `device ready` line, so a box's log says which route each ca
 `VK_NV_cooperative_matrix_decode_vector` runs the scalar decode arm, a device with no
 `VK_NV_shader_sm_builtins` never splits k). The roster re-queries the device rather than reading
 the arming's fields, so the two cannot disagree by construction only where the arming reads the
-same probe - the kernel file's roster cell holds the arming's fields to the roster's entries. The
-module gate keeps the roster complete: every extension name and every such probe the tier calls
-appears in it.
+same probe - the kernel file's roster cell holds the arming's fields to the roster's entries. The module
+gate keeps the roster complete: every extension name and every such probe the tier calls appears in it.
 
 ### The `[vk_dispatch]` lens derives `readonly` from the class family's accesses {#vk-readonly-lens}
 
