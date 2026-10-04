@@ -16,6 +16,7 @@ require daslib/jobque_boost
 require daslib/fio
 require _model_tier
 require _compares
+require _resident_feed
 
 // The vulkan lane's streaming mint on a LIVE tier (the dry twin is test_model_image_vulkan.das): a cold vulkan-armed
 // load of the 0.8B-MTP mints the vulkan lane and no other, the trimmed lane under the lever serves the same greedy
@@ -194,8 +195,7 @@ def test_vulkan_mint_kquant(tst : T?) {
 //! the greedy tokens a staged (no image) load of `path` serves on the device at mirror codec `kv`: what a lane serves at that codec
 [cold_path]
 def private staged_tokens_at(t : T?; path : string; kv : KVDtype) : array<int64> {
-    set_gpu_kv_dtype(kv)
-    var m <- load_model_(path, QuantMode.q8)
+    var m <- load_resident_at(path, kv)
     var ids : array<int64>
     if (moe_gpu_resident_active()) {   // no driver, no tokens: the caller skips
         t |> equal(mirror_kv_dtype(), kv, "the staged load arms the mirror at the asked codec")
@@ -212,57 +212,44 @@ def private staged_tokens_at(t : T?; path : string; kv : KVDtype) : array<int64>
 def test_vulkan_mint_kv_codecs(tst : T?) {
     tst |> run("Qwen3.5-0.8B-MTP: the trimmed lane minted under a q8_0 mirror maps under tq4 and f16 with no re-mint, and serves at each codec the tokens the staged load serves there") @(t : T?) {
         with_mint_file(t, MINT_FILE) $(path) {
-            let kv_pin = gpu_kv_dtype_pin()
             let codecs = fixed_array(KVDtype.q8_0, KVDtype.tq4, KVDtype.f16)   // the mint's codec first
-            var want : array<array<int64>>
-            want |> reserve(length(codecs))
-            set_gpu_kv_dtype(codecs[0])
-            let ask_overridden = resident_mirror_dtype() != codecs[0]
-            for (kv in codecs) {
-                break if (ask_overridden)
-                want |> emplace <| staged_tokens_at(t, path, kv)
-            }
-            if (ask_overridden) {
-                t |> skip("DASLLAMA_VK_KV32=1 arms the f32 mirror over a codec asked - the codec cell needs it unset")
-            } elif (empty(want[0])) {
-                t |> skip("the whole-model driver did not take the model on this box (the decline line above)")
-            } else {
-                set_vulkan_trim(true)
-                let img_t = image_path_for(path, moe_gpu_bake_tag())
-                remove(img_t)
-                var minted_size = 0ul
-                var minted_at = 0l
-                for (kv, ids_want, i in codecs, want, count()) {
-                    set_gpu_kv_dtype(kv)
-                    var m <- load_cached_q8(path)
-                    t |> success(moe_gpu_resident_active() && mirror_kv_dtype() == kv, "{kv}: the lane is served by the whole-model driver at the asked mirror codec")
-                    t |> success(m.image_map != null && m.planes_trimmed, "{kv}: the served image is the trimmed lane")
-                    let st = stat(img_t)
-                    if (i == 0) {
-                        minted_size = st.size
-                        minted_at = int64(st.mtime)
-                        t |> success(st.is_valid, "the cold load under {kv} minted the trimmed lane")
-                    } else {
-                        t |> success(st.size == minted_size && int64(st.mtime) == minted_at, "{kv}: the lane minted under {codecs[0]} mapped as it was - no re-mint ({st.size} bytes)")
+            with_gpu_kv_dtype(t, codecs[0]) {
+                var want <- [for (kv in codecs); staged_tokens_at(t, path, kv)]
+                if (empty(want[0])) {
+                    t |> skip("the whole-model driver did not take the model on this box (the decline line above)")
+                } else {
+                    set_vulkan_trim(true)
+                    let img_t = image_path_for(path, moe_gpu_bake_tag())
+                    remove(img_t)
+                    var minted_size = 0ul
+                    var minted_at = 0l
+                    for (kv, ids_want, i in codecs, want, count()) {
+                        set_gpu_kv_dtype(kv)
+                        var m <- load_cached_q8(path)
+                        t |> success(moe_gpu_resident_active() && mirror_kv_dtype() == kv, "{kv}: the lane is served by the whole-model driver at the asked mirror codec")
+                        t |> success(m.image_map != null && m.planes_trimmed, "{kv}: the served image is the trimmed lane")
+                        let st = stat(img_t)
+                        if (i == 0) {
+                            minted_size = st.size
+                            minted_at = int64(st.mtime)
+                            t |> success(st.is_valid, "the cold load under {kv} minted the trimmed lane")
+                        } else {
+                            t |> success(st.size == minted_size && int64(st.mtime) == minted_at, "{kv}: the lane minted under {codecs[0]} mapped as it was - no re-mint ({st.size} bytes)")
+                        }
+                        var ids : array<int64>
+                        var row : array<float>
+                        mint_witness(m, ids, row, kv)   // a trimmed lane panics on a call passed to the CPU rails: generating is the served witness
+                        log_gen_texts(m, "{kv}: the staged load / the trimmed lane", ids_want, ids)
+                        t |> equal(mismatch_exact(ids, ids_want), 0, "{kv}: the trimmed lane's greedy tokens are the staged load's at that codec, token for token")
+                        delete ids
+                        delete row
+                        delete m
+                        moe_gpu_drop_model()
                     }
-                    var ids : array<int64>
-                    var row : array<float>
-                    mint_witness(m, ids, row, kv)   // a trimmed lane panics on a call passed to the CPU rails: generating is the served witness
-                    log_gen_texts(m, "{kv}: the staged load / the trimmed lane", ids_want, ids)
-                    t |> equal(mismatch_exact(ids, ids_want), 0, "{kv}: the trimmed lane's greedy tokens are the staged load's at that codec, token for token")
-                    delete ids
-                    delete row
-                    delete m
-                    moe_gpu_drop_model()
+                    t |> success(mismatch_exact(want[0], want[2]) > 0 || mismatch_exact(want[1], want[2]) > 0, "control: a block codec moves the greedy tokens off the f16 mirror's on this prompt, so the per-codec compares tell the codecs apart")
+                    remove(img_t)
                 }
-                t |> success(mismatch_exact(want[0], want[2]) > 0 || mismatch_exact(want[1], want[2]) > 0, "control: a block codec moves the greedy tokens off the f16 mirror's on this prompt, so the per-codec compares tell the codecs apart")
-                remove(img_t)
-            }
-            delete want
-            if (kv_pin.pinned) {
-                set_gpu_kv_dtype(kv_pin.dt)
-            } else {
-                reset_gpu_kv_dtype()
+                delete want
             }
         }
     }
