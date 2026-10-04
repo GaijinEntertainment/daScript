@@ -622,9 +622,9 @@ def test_qwen3a_vulkan_front(tst : T?) {
     }
 }
 
-// The GPU tower blocks vs the CPU encoder on the SAME all-ones fixture as the oracle above -
-// the projector runs CPU on both legs, so the delta isolates the 32-layer block loop (the
-// battery's deep structural check; whisper-large geometry). Counters prove the dispatch.
+// The GPU tower against the CPU encoder on one synthetic mel: the 32-layer block loop and the projector tail behind it
+// on the device leg (the battery's deep structural check; whisper-large geometry). Counters prove the dispatch; the
+// tail alone is `test_encoder_tail_gpu`'s.
 [test]
 def test_encoder_blocks_gpu(tst : T?) {
     tst |> run("qwen2audio tower: GPU blocks vs CPU encoder, 32 layers") @(t : T?) {
@@ -687,6 +687,106 @@ def test_encoder_blocks_gpu(tst : T?) {
             delete enc
             delete tw
         }
+    }
+}
+
+//! The projector tail on the device against the CPU tail over the SAME device block rows (the tail lever off), one cell a
+//! projector kind: the soft tokens within `bar` rel-l2, the tail's counter up by the device leg alone, and the rows of
+//! another mel outside the bar (the control).
+def private tail_gpu_cell(t : T?; file : string; kind : AudioProjKind; bar : float) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let path = path_join(models_dir(), file)
+        return if (!jit_model_available(t, path))
+        var inscope st <- stage_audio_tower(path)
+        var tw = AudioTower()
+        mint_audio_tower(st, tw)
+        t |> success(tw.proj_kind == kind, "the projector kind the cell names")
+        var inscope mel = MelChunk(n_mel = tw.n_mel, n_len = AUDIO_CHUNK_FRAMES)
+        mel.data |> resize(tw.n_mel * AUDIO_CHUNK_FRAMES)
+        for (i in range(length(mel.data))) {
+            mel.data[i] = sin(float(i) * 0.0137) * 0.8 + sin(float(i) * 0.00291) * 0.5
+        }
+        var enc <- make_encoder_state(tw)
+        let n = audio_tokens_per_chunk(tw) * tw.proj_dim
+        let tower_was = metal_tower_knob()
+        let tail_was = metal_tower_tail_knob()
+        set_metal_tower(true)
+        with_dasllama_jobque_() {
+            set_metal_tower_tail(false)
+            let e0 = metal_tower_stats().encodes
+            let t0 = metal_tower_tail_encodes()
+            audio_encode(tw, enc, mel)
+            var inscope cpu_tail <- copy_span(enc.out, 0l, n)
+            t |> equal(metal_tower_stats().encodes - e0, 1l, "lever off: the blocks still ride the device")
+            t |> equal(metal_tower_tail_encodes() - t0, 0l, "lever off: the tail stays on the CPU")
+            set_metal_tower_tail(true)
+            audio_encode(tw, enc, mel)
+            var inscope dev_tail <- copy_span(enc.out, 0l, n)
+            t |> equal(metal_tower_tail_encodes() - t0, 1l, "lever on: the tail rides the device behind the blocks")
+            for (i in range(length(mel.data))) {
+                mel.data[i] = sin(float(i) * 0.0091) * 0.8 + sin(float(i) * 0.00417) * 0.5
+            }
+            audio_encode(tw, enc, mel)
+            var inscope other <- copy_span(enc.out, 0l, n)
+            var got = TowerParityStats()
+            var ctl = TowerParityStats()
+            if (tower_parity_stats(t, "{file} tail", cpu_tail, dev_tail, got) && tower_parity_stats(t, "{file} tail control", cpu_tail, other, ctl)) {
+                t |> success(got.rel_l2 <= double(bar), "{file}: device tail vs CPU tail rel_l2 {got.rel_l2} (bar {bar})")
+                t |> success(ctl.rel_l2 > double(bar), "{file}: another mel's rows land outside the bar (rel_l2 {ctl.rel_l2}) - the control")
+            }
+        }
+        set_metal_tower_tail(tail_was)
+        set_metal_tower(tower_was)
+        delete enc
+        delete tw
+    }
+}
+
+//! The chat towers' chunked mel on the device seat against the CPU spectrum: a 128-mel clip's chunk within 1e-3 of the CPU
+//! mel, the mel counter up by the device leg alone, an 80-mel call (off the seat's lattice) served by the CPU with the
+//! counter unmoved, and a second clip's mel outside the bar (the control).
+[test]
+def test_log_mel_chunks_gpu(t : T?) {
+    t |> run("the chunked whisper mel rides the device mel seat") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            return if (!jit_only(t))
+            var inscope samples <- [for (i in range(16000 * 5)); 0.3 * sin(float(i) * 0.05) + 0.1 * sin(float(i) * 0.31)]
+            var inscope other <- [for (i in range(16000 * 5)); 0.3 * sin(float(i) * 0.11)]
+            let was = metal_tower_knob()
+            with_dasllama_jobque_() {
+                set_metal_tower(false)
+                let m0 = metal_tower_mel_encodes()
+                var inscope cpu <- log_mel_chunks(samples, 128l)
+                t |> equal(metal_tower_mel_encodes() - m0, 0l, "tower off: the CPU spectrum")
+                set_metal_tower(true)
+                var inscope dev <- log_mel_chunks(samples, 128l)
+                t |> equal(metal_tower_mel_encodes() - m0, 1l, "tower on: one device mel a clip")
+                var inscope dev2 <- log_mel_chunks(other, 128l)
+                var inscope m80 <- log_mel_chunks(samples, 80l)
+                t |> equal(metal_tower_mel_encodes() - m0, 2l, "an 80-mel call is off the seat's lattice: the CPU serves it")
+                t |> success(length(cpu) == 1 && length(dev) == 1 && length(m80) == 1, "one chunk each")
+                if (length(cpu) == 1 && length(dev) == 1 && length(dev2) == 1) {
+                    let d = logits_maxdiff(cpu[0].data, dev[0].data)
+                    let ctl = logits_maxdiff(cpu[0].data, dev2[0].data)
+                    t |> success(d <= 1e-3, "device mel within 1e-3 of the CPU mel (max diff {d})")
+                    t |> success(ctl > 1e-3, "another clip's mel lands outside the bar (max diff {ctl}) - the control")
+                }
+            }
+            set_metal_tower(was)
+        }
+    }
+}
+
+[test]
+def test_encoder_tail_gpu(tst : T?) {
+    tst |> run("the qwen2a tail: pair pool, post-norm, one biased linear") @(t : T?) {
+        tail_gpu_cell(t, "mmproj-Qwen2.5-Omni-3B-f16.gguf", AudioProjKind.qwen2a, 1e-3)
+    }
+    tst |> run("the ultravox tail: post-norm, stacked rms, gated MLP") @(t : T?) {
+        tail_gpu_cell(t, "mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf", AudioProjKind.ultravox, 1e-3)
+    }
+    tst |> run("the voxtral tail: pair pool, post-norm, stacked GELU MLP") @(t : T?) {
+        tail_gpu_cell(t, "voxtral-mini-mmproj-f32.gguf", AudioProjKind.voxtral, 1e-3)
     }
 }
 

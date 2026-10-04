@@ -403,7 +403,9 @@ front's cells (the same file): the first conv and the depthwise conv on an 11 x 
 along one axis, even along the other, so each edge drops its own taps - against the in-test
 loops, the sums asserted to take both signs so the first conv's ReLU and the depthwise conv's
 lack of one both show; the feature permute bit for bit with its row pad zero under a sentinel
-fill; the bias-and-ReLU row pass against max(x + b, 0) over sums of both signs. Canary's mel
+fill; the bias-and-ReLU row pass against max(x + b, 0) over sums of both signs. The whisper-class projector tail's
+two row kernels (`tw_tail_rows_gate`): the pair pool and the row-split gate at a 70-wide row over
+five rows against their host forms, the gate's fixture asserted to tell its halves apart. Canary's mel
 normalization (`cn_melnorm`): the log and the per-feature normalization in place against a double
 form at 70 features (off the 64-thread group), 11 frames of which 7 are valid - the rest zero - and
 two rows past the mel left as they were. The FastConformer
@@ -982,12 +984,18 @@ past the fast cap taking the reference.
 `test_chat.das` - stocked suite; the chat template renderer per family against pinned token
 streams (each cell skips without its carrier; the Qwen2.5 cell also holds `render_turn_marked`'s
 opening - the system turn on a first turn, none on a later one, its tokens the pinned ChatML
-prefill stream), the tool wires, and the gemma-4 E2B cells: the
+prefill stream), the tool wires (the Qwen2.5 hermes cell holding the system turn a ChatML template
+states for a conversation that opens with none - its text read off the template's escaped string
+literal, its tokens ahead of the first user turn), the audio marker cells (voxtral's opening
+marker, qwen2audio's pair, and the splice at the text offset the message gives - ahead of the text,
+inside it, after it - the head and tail carrying exactly the text on their side), and the gemma-4 E2B cells: the
 thinking renderer pins (the instruct prefill token for token, the gate + bare opener, the
 thinking-off extras on `effective_stop_ids`, a mid-conversation toggle staying instruct) and
 the instruct-mode TEXT turn through `respond` (greedy "2+2": the answer, no channel marker in
 the content half, the turn ending on a stop - red when the guard does not end the turn on the
-stray `<channel|>` the E2B emits after its answer).
+stray `<channel|>` the E2B emits after its answer). Model-free beside them,
+`test_chatml_default_system`: the default system text read off template text and off a string
+literal, none where the span holds an expression or the template states no system turn.
 `test_think_split.das` - the reply-side reasoning matcher, model-free: every
 thinking family's wire shape, whole-string and per-chunk down to 1 byte, and the
 instruct-mode stop guard (`nothink_stop_here_`): a channel marker before the reply's first
@@ -1686,8 +1694,18 @@ block a test opens around the engine without calling `setup_dasllama_jobque_()` 
 window, mel filterbank, log-mel chunking, swapped swiglu); model-gated: the tower structure/oracle
 gates (ultravox/voxtral/omni shapes, the mtmd all-ones encode oracles - CPU-claim cells, tower
 knob pinned OFF) and the `test_encoder_blocks_gpu` cell, the qwen2audio + voxtral 32-layer
-CPU-vs-GPU blocks parity on the depth-scaled bars with counter deltas - Apple builds, `-jit`;
-skips honestly without the qwen2audio / voxtral mmprojs; and the Vulkan twins
+CPU-vs-GPU parity on the depth-scaled bars with counter deltas (the device leg runs the blocks and
+the projector tail) - Apple builds, `-jit`; skips honestly without the qwen2audio / voxtral
+mmprojs; `test_encoder_tail_gpu`, the projector tail alone, one cell a projector kind (qwen2a on
+the Omni-3B f16 mmproj, ultravox on the v0_5 1b f16 one, voxtral on the mini f32 one, each minted
+in memory): the device tail against the CPU tail over the SAME device block rows
+(`set_metal_tower_tail` off for the CPU-tail leg, put back) within 1e-3 rel-l2 (reads 1.6e-4 to
+2.1e-4), the tail counter (`metal_tower_tail_encodes`) up on the device leg alone with the blocks
+on the device on both, another mel's rows outside the bar as the control (reads 0.8 to 0.95); `test_log_mel_chunks_gpu`,
+the chat towers' chunked mel on the device mel seat - a 128-mel clip's chunk within 1e-3 of the
+CPU mel (the seat's GEMMs on the exact f32 tiles: a half tile reads a quiet bin 0.085 off), the mel
+counter (`metal_tower_mel_encodes`) up by the device leg alone, an 80-mel call off the seat's
+lattice served by the CPU with the counter unmoved, another clip's mel outside the bar; and the Vulkan twins
 `test_encoder_blocks_vulkan`, `test_gemma4a_vulkan_twin`, `test_canary_vulkan_twin` and
 `test_qwen3a_vulkan_front` (the three-way cells described under `test_vulkan_tower_kernels.das`),
 which skip without their carriers (the qwen2audio / voxtral / omni-3b f32 mmprojs, the E2B bf16
@@ -1698,7 +1716,9 @@ oracle cells (the parakeet v2 cell also runs the transcription with single-threa
 on: the team leg dispatches, the one-lane leg never does, and its tokens are the team leg's - the
 decode step's one-lane form against its team publish, both texts logged - and the session that
 read the whole clip reading its first half token for token as a fresh session does, the half clip
-over 8 tokens), the Vulkan twin `test_whisper_vulkan_twin` (whisper tiny and large-v3-turbo; the
+over 8 tokens, and two more transcriptions on the session leaving the heap where it stood -
+`heap_flat_leg`, which the canary and gemma4a oracle cells run too: a transcription frees what it
+allocates), the Vulkan twin `test_whisper_vulkan_twin` (whisper tiny and large-v3-turbo; the
 cell described under `test_vulkan_tower_kernels.das`, skipping without the ggml files, without
 jfk.wav, without a Vulkan device under `DASLLAMA_GPU=1`, on a das_metal build, and when
 interpreted), the decoder twin `test_whisper_vulkan_wdec` (tiny and large-v3-turbo on jfk, the q8
@@ -2100,11 +2120,17 @@ q1/q2/q3 quarter-offset probe fields live here).
 `test_audio_embedder.das` - stocked suite; model-free cells: the `AudioEmbedder` carrier's own
 arms - the no-audio refusals and the probe's 0-not-panic contract; model-gated: the gemma4a arm on
 the E2B mmproj, carrying the padding-contract cell (a 320-sample clip encodes to exactly 1 soft
-token); the pre-encoded rows seam on a plain chat (`add_user_audio_rows`: a second's clip lands
+token) and the direct-image route on the lane-named `.dlim` of the lane the box serves; the
+whisper-class tower arm (`test_audio_embedder_tower_arm`: the ultravox v0_5 1b and the
+Qwen2.5-Omni-3B f16 mmprojs - the probed width, the projector kind, a 5 s clip one chunk of 187 and
+750 rows, finite and not all zero, a reused state reading the same rows bit for bit, another clip
+the control, a 35 s clip two chunks, two more encodes leaving the heap where it stood; and the span rule off the projector, ultravox bare, qwen2.5o
+not, a missing file false); the pre-encoded rows seam on a plain chat (`add_user_audio_rows`: a second's clip lands
 25 rows, two clips append, the turn answers and consumes them, a short row block and a queued
 image panic, and the same turn with thinking off under the chat sampler preset answers - gated
 on the E2B Q4_K_M decoder + its bf16 mmproj, loaded staged, no `.dlim`), and
-the no-audio-arm refusal (SmolLM2-135M: a family with no audio markers panics).
+the no-audio-arm refusal (SmolLM2-135M: a family with no audio markers panics, and the same rows
+passed as a bare span queue).
 `test_vision_embedder.das` - stocked suite; model-free cells: the `VisionEmbedder` carrier's own
 arms over constructed carriers - the text-only (none) shape, the loader's refusals by name
 (missing file, audio-only mmproj), and the `vision_exec_fmt` lane stamp (the qwen3v q8 flag
@@ -2644,11 +2670,16 @@ stale-cache red class does not exist for it.
 
 Every `[test]` file requiring a `dasllama/*` module outside this folder, each with its reason:
 - `utils/dasllama-server/test_openai_server*.das` - require the server by bare same-dir name
-  (the hyphenated directory is unreachable by path require).
+  (the hyphenated directory is unreachable by path require). `test_openai_server_audio.das`'s
+  `test_openai_server_audio_tower` serves an ultravox mmproj on a stock Llama-3.2-1B through the
+  audio arm alone: no vision arm on stats, and a clip adding exactly its 187 rows to the text-only
+  prompt count - no marker token - with the clip after the text and ahead of it, each reply logged.
 - `utils/dasllama-server/test_worker_dispatch.das` - requires the server (`openai_server`) by
   bare same-dir name, like the server suites beside it.
 - `utils/dasllama-server/test_server_flags.das` - requires the server's program root (`main`) and
-  `openai_server` by bare same-dir name; its ctx-clamp cell doubles the engine's K/V room seam
+  `openai_server` by bare same-dir name; its `test_media_text_before` cell holds the text offset a
+  media part splices at (the text parts ahead of the first media part; 0 for a leading part, a
+  plain string or no media); its ctx-clamp cell doubles the engine's K/V room seam
   (`dasllama_gpu_tier`) under the internal escape, so a blob-only Model shell's `seq_len` is cut to
   the rows the seam answers while a planar shell's stands; its slot-codec cell holds the K/V codec
   a slot runs on (`slot_kv_dtype`, which the live-load clamp reads): the server default for a slot

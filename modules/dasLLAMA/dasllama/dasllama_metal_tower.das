@@ -49,6 +49,7 @@ var private g_tw_pool : MetalBufferPool
 var private g_tw_env_tower = true
 var private g_tw_env_tower_f16 = true
 var private g_tw_env_tower_flash = true
+var private g_tw_tail = true              // the whisper-class projector tail rides the device behind the blocks
 var private g_tw_ones : MetalBuffer?      // [TW_ONES_DIM] ones — the weightless-rms weight bind
 let private TW_ONES_DIM = 8192
 
@@ -91,8 +92,22 @@ def set_metal_tower_flash(on : bool) {
     g_tw_env_tower_flash = on
 }
 
+//! The whisper-class projector tail's A/B seat: off, the tail seat serves the blocks alone and the CPU tail reads their rows.
+def set_metal_tower_tail(on : bool) {
+    g_tw_tail = on
+}
+
+//! The tail lever as it stands, for a cell that puts it back where it found it.
+def metal_tower_tail_knob() : bool => g_tw_tail
+
 //! Encodes whose block/merger GEMMs rode the f16-W shadow route — the engage witness.
 def metal_tower_f16_encodes() : int64 => g_tower_f16_encodes
+
+//! whisper-preprocessor mels (Qwen3-ASR's, the chat towers' chunked one) the device served
+def metal_tower_mel_encodes() : int64 => g_tower_mels
+
+//! whisper-class encodes whose projector tail ran on the device behind the blocks
+def metal_tower_tail_encodes() : int64 => g_tower_tail_encodes
 
 [cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
 def private tw_decline(why : MetalTowerDecline) : bool {
@@ -287,15 +302,159 @@ def private wt_mm(enc : MetalComputeEncoder?; q8 : bool; site : int64; f16w, bf1
 // CONTAINED: QK/AV zero k/v rows >= npos, softmax zeroes [uend, np32), pad outputs go unread.
 [hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
 def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int64) : bool
-    => metal_tower_blocks_form(t, s, npos, false)
+    => metal_tower_blocks_form(t, s, npos, TwForm.blocks)
 
 //! the blocks with the tower's post-norm behind them in the same command buffer: the normed rows land in `s.xb`
 [hot_path]
 def private metal_tower_blocks_ln_post(t : AudioTower; var s : EncoderState; npos : int64) : bool
-    => metal_tower_blocks_form(t, s, npos, true)
+    => metal_tower_blocks_form(t, s, npos, TwForm.ln_post)
+
+//! the blocks with the projector tail behind them in the same command buffer where the tail's shapes ride the device (the soft
+//! tokens land in `s.out`), the blocks alone where they do not
+[hot_path]
+def private metal_tower_blocks_tail(t : AudioTower; var s : EncoderState; npos : int64) : TowerTailServed {
+    if (g_tw_tail && tw_tail_shape_ok(t, npos)) {
+        return metal_tower_blocks_form(t, s, npos, TwForm.tail) ? TowerTailServed.tail : TowerTailServed.declined
+    }
+    return metal_tower_blocks_form(t, s, npos, TwForm.blocks) ? TowerTailServed.blocks : TowerTailServed.declined
+}
+
+//! what follows the whisper-class block loop in its command buffer
+enum private TwForm {
+    blocks
+    ln_post   // the tower's post-norm: whisper's encoder output
+    tail      // the projector tail: the chat towers' soft tokens
+}
+
+//! Whether the projector tail rides the device: an f32 tower (a q8 tower's projector planes are not on the device), the tail's
+//! kernels compiled, every GEMM on the f32 tile's lattice (K a multiple of 32, N of 64) and the rms rows inside the ones row.
+def private tw_tail_shape_ok(t : AudioTower; npos : int64) : bool {
+    return false if (t.q8 || !pf_tw_tail_ready() || npos % 2l != 0l)
+    if (t.proj_kind == AudioProjKind.qwen2a) {
+        return t.d_model % 32l == 0l && t.proj_dim % 64l == 0l
+    }
+    let m1in = t.d_model * t.stack_factor
+    let mm2_in = t.proj_kind == AudioProjKind.ultravox ? t.mm1_out / 2l : t.mm1_out
+    return m1in % 32l == 0l && t.mm1_out % 64l == 0l && mm2_in % 32l == 0l && t.proj_dim % 64l == 0l
+}
+
+//! the projector tail's device rows and uniforms
+struct private TwTail {
+    rows : int64        //!< soft tokens a chunk
+    mpr : int64         //!< `rows` on the GEMM's 32-row lattice
+    bin : MetalBuffer?  //!< the first GEMM's input rows, padded to `mpr`
+    bhid : MetalBuffer? //!< the MLP projectors' hidden rows
+    bgate : MetalBuffer?//!< ultravox: the gated half rows, the second GEMM's input
+    bout : MetalBuffer? //!< the soft tokens
+    bn1 : MetalBuffer?  //!< ultravox: the pre-norm's weight row
+    bn2 : MetalBuffer?  //!< ultravox: the mid-norm's weight row
+    bytes_in : uint64
+    bytes_hid : uint64
+    bytes_gate : uint64
+    bytes_out : uint64
+    bytes_n1 : uint64
+    bytes_n2 : uint64
+    u_in : MetalBuffer?
+    u_hid : MetalBuffer?
+    u_gate : MetalBuffer?
+    u_proj : MetalBuffer?
+    u_tot : MetalBuffer?
+    u_eps6 : MetalBuffer?
+}
+
+def private tw_tail_make(t : AudioTower; npos : int64) : TwTail {
+    let d = t.d_model
+    let rows = audio_tokens_per_chunk(t)
+    let mpr = round_up(rows, 32l)
+    let mlp = t.proj_kind != AudioProjKind.qwen2a
+    let uv = t.proj_kind == AudioProjKind.ultravox
+    let m1in = mlp ? d * t.stack_factor : d
+    let half = t.mm1_out / 2l
+    var tl = TwTail(rows = rows, mpr = mpr,
+        bytes_in = uint64(max(mpr * m1in, npos * d) * 4l), bytes_hid = uint64(mpr * t.mm1_out * 4l),
+        bytes_gate = uint64(mpr * half * 4l), bytes_out = uint64(mpr * t.proj_dim * 4l),
+        bytes_n1 = uint64(m1in * 4l), bytes_n2 = uint64(half * 4l))
+    tl.bin = pool_acquire_pinned(g_tw_pool, g_dev, tl.bytes_in)
+    tl.bout = pool_acquire_pinned(g_tw_pool, g_dev, tl.bytes_out)
+    tl.u_in = uniform_u32(uint(m1in))
+    tl.u_proj = uniform_u32(uint(t.proj_dim))
+    tl.u_tot = uniform_u32(uint(rows * (mlp ? t.mm1_out : t.proj_dim)))
+    if (mlp) {
+        tl.bhid = pool_acquire_pinned(g_tw_pool, g_dev, tl.bytes_hid)
+        tl.u_hid = uniform_u32(uint(t.mm1_out))
+    }
+    if (uv) {
+        tl.bgate = pool_acquire_pinned(g_tw_pool, g_dev, tl.bytes_gate)
+        tl.bn1 = pool_acquire_pinned(g_tw_pool, g_dev, tl.bytes_n1)
+        tl.bn2 = pool_acquire_pinned(g_tw_pool, g_dev, tl.bytes_n2)
+        tl.u_gate = uniform_u32(uint(half))
+        tl.u_eps6 = uniform_f32(1e-6)   // the ultravox norms' own eps, not the tower's
+        unsafe {
+            memcpy(metal_buffer_contents(tl.bn1), plane_at(t.fblob, t.normpre_off), tl.bytes_n1)
+            memcpy(metal_buffer_contents(tl.bn2), plane_at(t.fblob, t.normmid_off), tl.bytes_n2)
+        }
+    }
+    return tl
+}
+
+//! The projector tail behind the blocks, the CPU tail's steps at its widths: `bx` holds the blocks' rows, `bs` is a scratch
+//! row plane of the blocks' size.
+[arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
+def private tw_tail_body(enc : MetalComputeEncoder?; t : AudioTower; tl : TwTail; bblob, bx, bs : MetalBuffer?;
+                         u_d, u_eps : MetalBuffer?; npos : int64) {
+    let d = t.d_model
+    let rows = tl.rows
+    if (t.proj_kind == AudioProjKind.ultravox) {   // post-norm over every position, the stacked rows normed, gated MLP
+        let half = t.mm1_out / 2l
+        enc_ln(enc, bx, bblob, uint64(t.lnp_w_off * 4l), bblob, uint64(t.lnp_b_off * 4l), bs, 0ul, u_d, u_eps, npos)
+        pf_enc_rms(enc, bs, 0ul, tl.bn1, tl.bin, tl.u_in, tl.u_eps6, rows)
+        enc_f32_mm(enc, bblob, uint64(t.proj_w_off * 4l), tl.bin, tl.bhid, 0ul, tl.u_in, tl.u_hid, tl.mpr, t.mm1_out)
+        enc_tw_swiglu_rows(enc, tl.bhid, tl.bgate, TwRowsArgs(width = uint(half), total = uint(rows * half)), rows * half)
+        pf_enc_rms(enc, tl.bgate, 0ul, tl.bn2, tl.bgate, tl.u_gate, tl.u_eps6, rows)
+        enc_f32_mm(enc, bblob, uint64(t.mm2_w_off * 4l), tl.bgate, tl.bout, 0ul, tl.u_gate, tl.u_proj, tl.mpr, t.proj_dim)
+        return
+    }
+    let tp = npos / 2l   // the pair pool BEFORE the post-norm
+    enc_tw_pool2(enc, bx, bs, TwRowsArgs(width = uint(d), total = uint(tp * d)), tp * d)
+    enc_ln(enc, bs, bblob, uint64(t.lnp_w_off * 4l), bblob, uint64(t.lnp_b_off * 4l), tl.bin, 0ul, u_d, u_eps, tp)
+    if (t.proj_kind == AudioProjKind.qwen2a) {
+        enc_f32_mm(enc, bblob, uint64(t.proj_w_off * 4l), tl.bin, tl.bout, 0ul, tl.u_in, tl.u_proj, tl.mpr, t.proj_dim)
+        enc_add_bias_rows(enc, tl.bout, 0ul, bblob, uint64(t.proj_b_off * 4l), tl.u_proj, tl.u_tot, rows * t.proj_dim)
+    } else {   // voxtral: the stacked rows through the GELU MLP
+        enc_f32_mm(enc, bblob, uint64(t.proj_w_off * 4l), tl.bin, tl.bhid, 0ul, tl.u_in, tl.u_hid, tl.mpr, t.mm1_out)
+        enc_gelu_erf(enc, tl.bhid, 0ul, tl.u_tot, rows * t.mm1_out)
+        enc_f32_mm(enc, bblob, uint64(t.mm2_w_off * 4l), tl.bhid, tl.bout, 0ul, tl.u_hid, tl.u_proj, tl.mpr, t.proj_dim)
+    }
+}
+
+//! the tail's soft tokens into `s.out` where the command buffer ran; the tail's buffers released
+def private tw_tail_land(t : AudioTower; var tl : TwTail; ran : bool; var s : EncoderState) {
+    if (ran) {
+        unsafe {
+            memcpy(addr(s.out[0]), metal_buffer_contents(tl.bout), uint64(tl.rows * t.proj_dim * 4l))
+        }
+        g_tower_tail_encodes++
+    }
+    pool_release(g_tw_pool, tl.bin, tl.bytes_in)
+    pool_release(g_tw_pool, tl.bout, tl.bytes_out)
+    pool_release(g_upool, tl.u_in, 4ul)
+    pool_release(g_upool, tl.u_proj, 4ul)
+    pool_release(g_upool, tl.u_tot, 4ul)
+    if (tl.bhid != null) {
+        pool_release(g_tw_pool, tl.bhid, tl.bytes_hid)
+        pool_release(g_upool, tl.u_hid, 4ul)
+    }
+    if (tl.bgate != null) {
+        pool_release(g_tw_pool, tl.bgate, tl.bytes_gate)
+        pool_release(g_tw_pool, tl.bn1, tl.bytes_n1)
+        pool_release(g_tw_pool, tl.bn2, tl.bytes_n2)
+        pool_release(g_upool, tl.u_gate, 4ul)
+        pool_release(g_upool, tl.u_eps6, 4ul)
+    }
+}
 
 [hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
-def private metal_tower_blocks_form(t : AudioTower; var s : EncoderState; npos : int64; ln_post : bool) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
+def private metal_tower_blocks_form(t : AudioTower; var s : EncoderState; npos : int64; form : TwForm) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
     }
@@ -345,6 +504,7 @@ def private metal_tower_blocks_form(t : AudioTower; var s : EncoderState; npos :
     var ka = AttnArgs(qd = uint(d), kv_dim = uint(d), head_size = uint(hs), kv_mul = 1u,
         npos = uint(npos), np32 = uint(nk64), scale = 1.0 / sqrt(float(hs)),
         qoff = 0u, qrows = uint(mp), window = 0u, softcap = 0.0, hass = 0u, uend = uint(npos))
+    var tl = form == TwForm.tail ? tw_tail_make(t, npos) : TwTail()
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
         for (l in range64(t.n_layer)) {
@@ -376,16 +536,21 @@ def private metal_tower_blocks_form(t : AudioTower; var s : EncoderState; npos :
             enc_add_bias_rows(enc, bxb2, 0ul, bblob, uint64(lo.fc2_b * 4l), u_d, u_totd, npos * d)
             enc_add(enc, bx, 0ul, bxb2, 0ul, u_totd, npos * d)
         }
-        if (ln_post) {
+        if (form == TwForm.ln_post) {
             enc_ln(enc, bx, bblob, uint64(t.lnp_w_off * 4l), bblob, uint64(t.lnp_b_off * 4l), bxb, 0ul, u_d, u_eps, npos)
+        } elif (form == TwForm.tail) {
+            tw_tail_body(enc, t, tl, bblob, bx, bxb, u_d, u_eps, npos)
         }
+    }
+    if (form == TwForm.tail) {
+        tw_tail_land(t, tl, ran, s)
     }
     var served = false
     if (ran) {
-        unsafe {   // the post-norm seat lands the normed rows where the CPU post-norm would: `s.xb`
-            if (ln_post) {
+        unsafe {   // the post-norm seat lands the normed rows where the CPU post-norm would: `s.xb`; the tail seat landed `s.out`
+            if (form == TwForm.ln_post) {
                 memcpy(addr(s.xb[0]), metal_buffer_contents(bxb), uint64(npos * d * 4l))
-            } else {
+            } elif (form == TwForm.blocks) {
                 memcpy(addr(s.x[0]), metal_buffer_contents(bx), uint64(npos * d * 4l))
             }
         }
@@ -2649,9 +2814,10 @@ def private metal_q3a_mel(xw : array<float>; n_len, n_fft, n_bins, n_mel : int64
     var u_totm = uniform_u32(uint(n_len * n_mel))
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
-        enc_f32_mm(enc, btw, 0ul, bxw, bre, 0ul, u_kfp, u_dft_out_pad, mp, dft_out_pad)
+        // the float tiles: a quiet bin sits 80 dB under the frame's loud ones, below what a half tile resolves
+        enc_f32_exact_mm(enc, btw, 0ul, bxw, bre, 0ul, u_kfp, u_dft_out_pad, mp, dft_out_pad)
         enc_q3a_pow(enc, bre, bpow, u_nbins, u_dft_out_pad, u_ldpow, u_totpow, mp * ldpow)
-        enc_f32_mm(enc, bfil, 0ul, bpow, braw, 0ul, u_ldpow, u_nmel, mp, n_mel)
+        enc_f32_exact_mm(enc, bfil, 0ul, bpow, braw, 0ul, u_ldpow, u_nmel, mp, n_mel)
         enc_q3a_logmel_t(enc, braw, bout, u_nmel, u_nlen, u_floor, u_scale, u_totm, n_len * n_mel)
     }
     var served = false
@@ -2659,6 +2825,7 @@ def private metal_q3a_mel(xw : array<float>; n_len, n_fft, n_bins, n_mel : int64
         unsafe {
             memcpy(addr(m.data[0]), metal_buffer_contents(bout), uint64(n_mel * n_len * 4l))
         }
+        g_tower_mels++
         served = true
     }
     pool_release(g_tw_pool, bxw, bytes_xw)
@@ -4866,9 +5033,10 @@ def dasllama_metal_tower_register {
     register_qwen25v_gpu(@@metal_qwen25v_blocks)
     register_tower_blocks_gpu(@@metal_tower_blocks, @@metal_tower_serves)
     register_tower_blocks_ln_post_gpu(@@metal_tower_blocks_ln_post)
+    register_tower_blocks_tail_gpu(@@metal_tower_blocks_tail)
     register_tower_conv_gpu(@@metal_conv_frontend)
     register_qwen3a_front_gpu(@@metal_q3a_front)
-    register_qwen3a_mel_gpu(@@metal_q3a_mel)
+    register_whisper_mel_gpu(@@metal_q3a_mel)
     register_gemma4a_gpu(@@metal_gemma4a_blocks, @@metal_tower_serves)
     register_gemma4a_chunk_gpu(@@metal_gemma4a_chunk)
     register_canary_gpu(@@metal_canary_blocks, @@metal_tower_serves)

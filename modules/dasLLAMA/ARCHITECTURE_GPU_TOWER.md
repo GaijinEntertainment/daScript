@@ -64,6 +64,20 @@ epoch and the tower shutdown. The stem's first conv reads the f32 blob on both l
 mels: 240) it reads a device copy of its rows zero-padded to the lattice (`tw_conv1_pad_attach`),
 the im2col pass padding its own rows with zeros to the same width.
 
+The whisper-class chain has three forms over one block loop (`TwForm`): the blocks alone, the
+blocks with the tower's post-norm (whisper's encoder output), and the blocks with the projector
+tail - the chat towers' soft tokens (`tw_tail_body`). The tail is the CPU tail's steps at its
+widths, by projector kind: qwen2a pools row pairs (`MetalTwPool2`), norms, and runs one biased
+linear; voxtral pools, norms, and runs the stacked rows through a GELU MLP; ultravox norms every
+position, rms-norms the stacked rows at the projector's own eps, and runs the gated MLP
+(`MetalTwSwigluRows`: silu of a row's second half times its first). A stack is no kernel: the
+stacked row is the same memory read at the wider row. The tail's GEMMs read the f32 blob on the
+f32 tile, so the tail seat serves it on an f32 tower whose widths sit on that tile's lattice
+(`tw_tail_shape_ok`) and serves the blocks alone otherwise - a q8 tower's projector planes are not
+on the device - answering which it served (`TowerTailServed`), so the CPU tail runs exactly when
+the device one did not. Its engage counter is `metal_tower_tail_encodes`, its lever
+`set_metal_tower_tail`.
+
 The gemma4a chain ends in the projector tail, in the blocks' command buffer: the out projection
 and its bias at the encoder's own output width (`gemma4a_mid_dim`, the length of the weightless
 norm's ones row), that norm, then the audio embedder to the decoder's width (`proj_dim`). The

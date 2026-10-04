@@ -812,7 +812,7 @@ the 9B (`harness/mtp_ruler.das`, the verify against the plain step) to name the 
 ## 28. The Metal tower's qwen3a mel hook raises no counter
 
 `metal_q3a_mel` (`dasllama/dasllama_metal_tower.das`, registered through
-`register_qwen3a_mel_gpu`) serves the qwen3a log-mel front on the device and raises none of
+`register_whisper_mel_gpu`) serves the qwen3a log-mel front on the device and raises none of
 `metal_tower_stats()`'s counters - `encodes`, `blocks` and `convs` all stay flat across a served
 mel - so no gate can cover the hook under `REVIEW_TOWER.md`'s covering rule, which needs a
 counter that rises on a leg where the hook is the only hook raising it. The Vulkan tower counts
@@ -906,6 +906,9 @@ Each is a stage and the models it holds for, read off the drivers' own gates:
   1 GB (about five minutes) keeps the CPU front, and the q8 encoder lane the whole CPU chain.
 - **The Qwen3-ASR projector** (`q3a.proj`, 1.6 ms a chunk) runs on the CPU, and its mel's windowing
   and clamp around the device spectrum.
+- **The whisper-class chat towers' mel** (`log_mel_chunks`; Qwen2-Audio, Qwen2.5-Omni, Ultravox,
+  Voxtral) runs on the CPU: 48 ms of a chunk's 158, beside 99 of blocks and 9 of stem on the device.
+  A q8 tower's projector tail runs on the CPU too - its projector planes are not on the device.
 - **Qwen3-Omni** has had no stage-by-stage check.
 
 The work: each stage on the device, and a counter per stage a gate can read, so a served model's

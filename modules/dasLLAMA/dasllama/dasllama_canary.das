@@ -1235,11 +1235,11 @@ def canary_transcribe(dec : Model; enc : CanaryEncoder; var s : CanaryAsrSession
     let im_start = special_id(dec, "<|im_start|>")
     let im_end = special_id(dec, "<|im_end|>")   // = the text EOS (151645)
     // SALM "qwen" prompt: <|im_start|>user\nTranscribe the following: <AUDIO><|im_end|>\n<|im_start|>assistant\n
-    var head : array<int64>
+    var inscope head : array<int64>
     head |> push(im_start)
     head |> push_from(encode_(dec, "user\n", false, false))
     head |> push_from(encode_(dec, "Transcribe the following: ", false, false))
-    var tail : array<int64>
+    var inscope tail : array<int64>
     tail |> push(im_end)
     tail |> push_from(encode_(dec, "\n", false, false))
     tail |> push(im_start)
@@ -1248,7 +1248,7 @@ def canary_transcribe(dec : Model; enc : CanaryEncoder; var s : CanaryAsrSession
     let n_head = long_length(head)
     let npos = n_head + n_audio + long_length(tail)
     asr_ctx_guard(n_audio, npos, dec.config.seq_len)
-    var embd : array<float>
+    var inscope embd : array<float>
     embd |> resize(int(npos * dim))
     embed_text_rows(dec, head, embd, 0l)
     for (i in range64(n_audio * dim)) {
@@ -1262,10 +1262,10 @@ def canary_transcribe(dec : Model; enc : CanaryEncoder; var s : CanaryAsrSession
     asr_prof_add("cn.prefill", tpf)
 
     let max_new = min(dec.config.seq_len - npos - 1l, CN_MAX_NEW)
-    var one : array<int64>
+    var inscope one : array<int64>
     one |> resize(1)
-    var toks : array<int>
-    var raw : array<string>
+    var inscope toks : array<int>
+    var inscope raw : array<string>
     toks |> reserve(128)   // typical transcription length; grows if a clip runs longer
     raw |> reserve(128)
     var plog_sum = 0.0lf
@@ -1291,7 +1291,7 @@ def canary_transcribe(dec : Model; enc : CanaryEncoder; var s : CanaryAsrSession
         to_log(LOG_WARNING, "dasLLAMA canary: decode budget exhausted at {max_new} tokens - transcript is TRUNCATED\n")
     }
 
-    var seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE,
+    var inscope seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE,
         text = strip(join(raw, "")))
     seg.tokens := toks
     if (!empty(toks)) {

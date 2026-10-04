@@ -1161,22 +1161,22 @@ def gemma4a_transcribe(dec : Model; enc : Gemma4aEncoder; var s : Gemma4aAsrSess
                        samples : array<float> | #; blk : block<(seg : TranscribeSegment)>;
                        var detected_lang : string&) : int {
     var tp = ref_time_ticks()
-    var rows : array<float>
+    var inscope rows : array<float>
     let n_audio = gemma4a_encode_all(enc, s.g4st, samples, rows)
     asr_prof_add("g4a.encode", tp)
 
     let dim = dec.config.dim
-    let nl = encode_(dec, "\n", false, false)
+    var inscope nl <- encode_(dec, "\n", false, false)
     // no-think turn: a bare user turn (no system/`<|think|>`) yields a deterministic transcription
     // — the reasoning channel is near-tie-brittle across float engines, so it is disabled here.
-    var head : array<int64>
+    var inscope head : array<int64>
     head |> push(special_id(dec, "<bos>"))
     head |> push(special_id(dec, "<|turn>"))
     head |> push_from(encode_(dec, "user", false, false))
     head |> push_from(nl)
     var inscope tmpl <- arch_chat("gemma4")
     head |> push(special_id(dec, tmpl.audio_pre.parts[0].s))
-    var tail : array<int64>
+    var inscope tail : array<int64>
     tail |> push(special_id(dec, tmpl.audio_post.parts[0].s))
     tail |> push_from(encode_(dec, "Transcribe this audio.", false, false))
     tail |> push(special_id(dec, "<turn|>"))
@@ -1188,7 +1188,7 @@ def gemma4a_transcribe(dec : Model; enc : Gemma4aEncoder; var s : Gemma4aAsrSess
     let n_head = long_length(head)
     let npos = n_head + n_audio + long_length(tail)
     asr_ctx_guard(n_audio, npos, dec.config.seq_len)
-    var embd : array<float>
+    var inscope embd : array<float>
     embd |> resize(int(npos * dim))
     embed_text_rows(dec, head, embd, 0l)
     for (i in range64(n_audio * dim)) {
@@ -1204,10 +1204,10 @@ def gemma4a_transcribe(dec : Model; enc : Gemma4aEncoder; var s : Gemma4aAsrSess
     let turn_end = special_id(dec, "<turn|>")
     let eos = special_id(dec, "<eos>")
     let max_new = dec.config.seq_len - npos - 1l
-    var one : array<int64>
+    var inscope one : array<int64>
     one |> resize(1)
-    var toks : array<int>
-    var raw : array<string>
+    var inscope toks : array<int>
+    var inscope raw : array<string>
     toks |> reserve(512)
     raw |> reserve(512)
     tp = ref_time_ticks()
@@ -1232,7 +1232,7 @@ def gemma4a_transcribe(dec : Model; enc : Gemma4aEncoder; var s : Gemma4aAsrSess
     if (mark >= 0) {
         text = slice(full, mark + length("<channel|>"), length(full))
     }
-    var seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE,
+    var inscope seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE,
         text = strip(text))
     seg.tokens := toks
     detected_lang = "en"

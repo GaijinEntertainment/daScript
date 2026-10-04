@@ -149,6 +149,13 @@ def private tower_arm_cell(t : T?; file, family : string; width, rows_per_chunk 
     samples |> resize(16000 * 35)
     delete again
     t |> equal(encode_audio_(e, st, samples, again), 2l * rows_per_chunk, "a 35 s clip is two chunks, their rows appended")
+    let h0 = heap_bytes_allocated()
+    for (_i in range(2)) {
+        delete again
+        encode_audio_(e, st, samples, again)
+    }
+    let h1 = heap_bytes_allocated()
+    t |> success(h1 <= h0 + 262144ul, "two more encodes leave the heap where it stood ({h0} -> {h1} bytes) - an encode frees its mel and frames")
     delete again
     delete rows
     delete samples
@@ -161,6 +168,16 @@ def test_audio_embedder_tower_arm(t : T?) {
         with_dasllama_jobque() {
             tower_arm_cell(t, "mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf", "ultravox", 2048l, 187l)
         }
+    }
+    t |> run("the span rule rides the projector: ultravox rows take no marker, the others their template's") @(t : T?) {
+        let uv = path_join(models_dir(), "mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf")
+        let omni = path_join(models_dir(), "mmproj-Qwen2.5-Omni-3B-f16.gguf")
+        if (!model_available(t, uv) || !model_available(t, omni)) {
+            return
+        }
+        t |> success(audio_probe_span_bare(uv), "an ultravox mmproj probes a bare span")
+        t |> success(!audio_probe_span_bare(omni), "a qwen2.5o mmproj does not")
+        t |> success(!audio_probe_span_bare(path_join(models_dir(), "no-such-mmproj.gguf")), "a missing file probes false, never panics")
     }
     t |> run("the Qwen2.5-Omni mmproj's audio side loads as the whisper-class tower beside its vision tensors") @(t : T?) {
         with_dasllama_jobque() {
@@ -290,6 +307,11 @@ def test_audio_rows_need_an_audio_arm(t : T?) {
                 tripped = true
             }
             t |> success(tripped, "no audio arm: the rows are refused")
+            // an encoder whose span takes no marker (ultravox) owes the template none: the same rows queue
+            var bare_rows : array<float>
+            bare_rows |> resize(int(m.config.dim) * 2)
+            add_user_audio_rows(m, chat, bare_rows, 2l, true)
+            t |> equal(chat.n_audio_rows, 2l, "a bare span's rows queue on a template with no audio marker")
             delete chat
         }
     }

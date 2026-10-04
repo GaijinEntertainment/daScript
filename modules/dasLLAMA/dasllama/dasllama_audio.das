@@ -207,7 +207,7 @@ def log_mel_chunks(samples : array<float> | #; n_mel : int64) : array<MelChunk> 
     let head = int(AUDIO_N_FFT / 2l)                       // reflect pad
     let tail = int(AUDIO_SAMPLE_RATE * 30l) + head         // 30 s zeros + 200
     let n_padded = head + n_base + tail
-    var padded : array<float>
+    var inscope padded : array<float>
     padded |> reserve(n_padded)
     padded |> resize(n_padded)                             // resize zero-fills
     for (i in range(n_in)) {
@@ -220,12 +220,12 @@ def log_mel_chunks(samples : array<float> | #; n_mel : int64) : array<MelChunk> 
     let n_fft = AUDIO_N_FFT
     let n_bins = n_fft / 2l + 1l
     let n_len = (int64(n_padded) - n_fft) / AUDIO_HOP + 1l
-    let hann <- build_hann_window(n_fft)
-    let twiddles <- build_dft_twiddles(n_fft)
-    let filters <- build_mel_filterbank(n_mel, n_fft, AUDIO_SAMPLE_RATE)
+    var inscope hann <- build_hann_window(n_fft)
+    var inscope twiddles <- build_dft_twiddles(n_fft)
+    var inscope filters <- build_mel_filterbank(n_mel, n_fft, AUDIO_SAMPLE_RATE)
 
     // windowed frames [n_len × n_fft]
-    var xw : array<float>
+    var inscope xw : array<float>
     xw |> reserve_resize(int(n_len * n_fft))
     for (i in range64(n_len)) {
         let off = i * AUDIO_HOP
@@ -234,21 +234,58 @@ def log_mel_chunks(samples : array<float> | #; n_mel : int64) : array<MelChunk> 
         }
     }
 
+    var inscope wm = WhisperMel(n_mel = n_mel, n_len = n_len, n_len_org = n_len)   // mel-major [n_mel][n_len]
+    wm.data |> reserve(n_mel * n_len)
+    wm.data |> resize(n_mel * n_len)
+    if (!whisper_mel_gpu(xw, n_len, n_fft, n_bins, n_mel, twiddles, filters, wm)) {
+        log_mel_spectrum_cpu(xw, twiddles, filters, n_len, n_fft, n_bins, n_mel, wm.data)
+    }
+
+    // whisper-style dynamic clamp + scale, GLOBAL over the padded spectrogram; the clamp value
+    // round-trips through float before the (x+4)/4 double math - the round-trip is what keeps
+    // the mel plane bit-exact against the reference
+    var mmax = -1e20lf
+    for (v in wm.data) {
+        mmax = max(mmax, double(v))
+    }
+    mmax -= 8.0lf
+    for (v in wm.data) {
+        let clamped = double(v) < mmax ? float(mmax) : v
+        v = float((double(clamped) + 4.0lf) / 4.0lf)
+    }
+
+    // full 3000-frame chunks only; the partial tail chunk is dropped
+    var chunks : array<MelChunk>
+    var off = 0l
+    while (off + AUDIO_CHUNK_FRAMES <= n_len) {
+        var c = MelChunk(n_mel = n_mel, n_len = AUDIO_CHUNK_FRAMES)
+        c.data |> resize(int(n_mel * AUDIO_CHUNK_FRAMES))
+        for (m in range64(n_mel)) {
+            for (i in range64(AUDIO_CHUNK_FRAMES)) {
+                c.data[m * AUDIO_CHUNK_FRAMES + i] = wm.data[m * n_len + off + i]
+            }
+        }
+        chunks |> emplace(c)
+        off += AUDIO_CHUNK_FRAMES
+    }
+    return <- chunks
+}
+
+//! The whisper preprocessor's spectrum on the CPU: the DFT as one GEMM over the windowed frames `xw`, the power spectra,
+//! the mel sums in bin order and their log10 into the mel-major `mel` [n_mel][n_len] - what the mel seat serves on a device.
+def private log_mel_spectrum_cpu(xw, twiddles, filters : array<float>; n_len, n_fft, n_bins, n_mel : int64; var mel : array<float>) {
     // DFT as one GEMM: [n_len × n_fft] · [n_fft × 2·n_bins] -> interleaved re/im
-    var reim : array<float>
-    reim |> reserve(int(n_len * n_bins * 2l))
-    reim |> resize(int(n_len * n_bins * 2l))               // gemm accumulates: starts zeroed
+    var inscope reim : array<float>
+    reim |> reserve(n_len * n_bins * 2l)
+    reim |> resize(n_len * n_bins * 2l)                    // gemm accumulates: starts zeroed
     gemm_f32(unsafe(addr(reim[0])), unsafe(addr(xw[0])), unsafe(addr(twiddles[0])),
              n_len, n_fft, n_bins * 2l)
 
     // power spectra -> mel (float products, double sum in bin order), log10
     let mel_floor = 5.960464477539063e-08lf                // 2^-24, the fixed filterbank floor
     let log10_e = 0.43429448190325176lf
-    var mel : array<float>
-    mel |> reserve(int(n_mel * n_len))
-    mel |> resize(int(n_mel * n_len))                      // mel-major [n_mel][n_len]
-    var power : array<float>
-    power |> resize(int(n_bins))
+    var inscope power : array<float>
+    power |> resize(n_bins)
     for (i in range64(n_len)) {
         for (k in range64(n_bins)) {
             let re = reim[i * n_bins * 2l + k * 2l]
@@ -263,36 +300,23 @@ def log_mel_chunks(samples : array<float> | #; n_mel : int64) : array<MelChunk> 
             mel[m * n_len + i] = float(log(max(sum, mel_floor)) * log10_e)
         }
     }
-
-    // whisper-style dynamic clamp + scale, GLOBAL over the padded spectrogram; the clamp value
-    // round-trips through float before the (x+4)/4 double math - the round-trip is what keeps
-    // the mel plane bit-exact against the reference
-    var mmax = -1e20lf
-    for (v in mel) {
-        mmax = max(mmax, double(v))
-    }
-    mmax -= 8.0lf
-    for (v in mel) {
-        let clamped = double(v) < mmax ? float(mmax) : v
-        v = float((double(clamped) + 4.0lf) / 4.0lf)
-    }
-
-    // full 3000-frame chunks only; the partial tail chunk is dropped
-    var chunks : array<MelChunk>
-    var off = 0l
-    while (off + AUDIO_CHUNK_FRAMES <= n_len) {
-        var c = MelChunk(n_mel = n_mel, n_len = AUDIO_CHUNK_FRAMES)
-        c.data |> resize(int(n_mel * AUDIO_CHUNK_FRAMES))
-        for (m in range64(n_mel)) {
-            for (i in range64(AUDIO_CHUNK_FRAMES)) {
-                c.data[m * AUDIO_CHUNK_FRAMES + i] = mel[m * n_len + off + i]
-            }
-        }
-        chunks |> emplace(c)
-        off += AUDIO_CHUNK_FRAMES
-    }
-    return <- chunks
 }
+
+//! the GPU mel hook: DFT, power and log10 mel off the CPU-windowed `xw` frames into `m.data` (mel-major, no clamp)
+typedef WhisperMelGpuFn = function<(xw : array<float>; n_len, n_fft, n_bins, n_mel : int64;
+                                    twiddles, filters : array<float>; var m : WhisperMel) : bool>
+var private g_mel_gpu : WhisperMelGpuFn
+var private g_mel_gpu_set = false
+
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
+def register_whisper_mel_gpu(fn : WhisperMelGpuFn) {
+    g_mel_gpu = fn
+    g_mel_gpu_set = true
+}
+
+//! the mel seat asked: true where a driver landed the log10 mel in `m.data`, false with no seat or on its decline
+def whisper_mel_gpu(xw : array<float>; n_len, n_fft, n_bins, n_mel : int64; twiddles, filters : array<float>; var m : WhisperMel) : bool
+    => g_mel_gpu_set && invoke(g_mel_gpu, xw, n_len, n_fft, n_bins, n_mel, twiddles, filters, m)
 
 //! Full-length whisper-flavor log-mel spectrogram: total frame count (audio + the 30 s
 //! zero tail), the real-audio frame count (``n_len_org`` = the driver's seek_end), and
@@ -1088,13 +1112,14 @@ def private audio_tower_mlp_shape(m : GGUFMeta; kind : AudioProjKind; mm1_in : i
     return (mm1_out = mm1_out, proj_dim = mm2_in > 0l ? m.tensors[i2].n_elem / mm2_in : 0l)
 }
 
-//! The decoder width a whisper-class audio mmproj (qwen2a, qwen2.5o, ultravox, voxtral) projects to; 0 for a missing
-//! file, a file that is no GGUF, or an mmproj this tower does not serve. Never panics: the seams gate an audio arm on it.
-def audio_tower_probe_proj_dim(path : string) : int64 {
-    return 0l if (path |> ends_with(".dlim"))
+//! What a whisper-class audio mmproj (qwen2a, qwen2.5o, ultravox, voxtral) says of itself, read off its metadata: the
+//! decoder width it projects to and its projector kind. `dim` 0 for a missing file, a file that is no GGUF, or an mmproj
+//! this tower does not serve. Never panics.
+def private audio_tower_probe(path : string) : tuple<dim : int64; kind : AudioProjKind> {
+    var res = (dim = 0l, kind = AudioProjKind.qwen2a)
+    return res if (path |> ends_with(".dlim"))
     let f = fopen(path, "rb")
-    return 0l if (f == null)
-    var dim = 0l
+    return res if (f == null)
     fmap(f) $(var bytes : array<uint8>#) {
         if (long_length(bytes) < 4l || rd_u32(bytes, 0l) != 0x46554747u) {
             return
@@ -1105,15 +1130,30 @@ def audio_tower_probe_proj_dim(path : string) : int64 {
                 || !gguf_has(m, "clip.audio.embedding_length") || gguf_find_tensor(m, "a.position_embd.weight") < 0) {
             return
         }
+        res.kind = kind
         if (kind == AudioProjKind.qwen2a) {
-            dim = gguf_has(m, "clip.audio.projection_dim") ? gguf_int(m, bytes, "clip.audio.projection_dim") : 0l
+            res.dim = gguf_has(m, "clip.audio.projection_dim") ? gguf_int(m, bytes, "clip.audio.projection_dim") : 0l
         } else {
             let stack = gguf_has(m, "clip.audio.projector.stack_factor") ? gguf_int(m, bytes, "clip.audio.projector.stack_factor") : 1l
-            dim = audio_tower_mlp_shape(m, kind, gguf_int(m, bytes, "clip.audio.embedding_length") * stack).proj_dim
+            res.dim = audio_tower_mlp_shape(m, kind, gguf_int(m, bytes, "clip.audio.embedding_length") * stack).proj_dim
         }
     }
     fclose(f)
-    return dim
+    return res
+}
+
+//! The decoder width a whisper-class audio mmproj projects to; 0 where the tower does not serve the file. Never panics:
+//! the seams gate an audio arm on it.
+def audio_tower_probe_proj_dim(path : string) : int64 => audio_tower_probe(path).dim
+
+//! Whether a tower's soft tokens sit in the user turn with no span marker around them: the ultravox projector pairs with
+//! a stock decoder whose template and vocab know no audio marker
+def audio_span_bare(kind : AudioProjKind) : bool => kind == AudioProjKind.ultravox
+
+//! `audio_span_bare` for an mmproj on disk; false where the tower does not serve the file
+def audio_tower_probe_span_bare(path : string) : bool {
+    let p = audio_tower_probe(path)
+    return p.dim > 0l && audio_span_bare(p.kind)
 }
 
 //! Mint a served tower from a staged read WITHOUT touching disk — the off-rail control for suites.
@@ -1439,6 +1479,48 @@ def audio_encode_blocks_ln_post(t : AudioTower; var s : EncoderState; mel : MelC
     return false
 }
 
+//! What the blocks-with-tail seat served: nothing, the blocks alone (`s.x` holds their rows), or the blocks and the projector
+//! tail behind them (`s.out` holds the soft tokens)
+enum TowerTailServed {
+    declined
+    blocks
+    tail
+}
+
+typedef TowerBlocksTailGpuFn = function<(t : AudioTower; var s : EncoderState; npos : int64) : TowerTailServed>
+var private g_tw_blocks_tail : TowerBlocksTailGpuFn
+var private g_tw_blocks_tail_set = false
+
+[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
+def register_tower_blocks_tail_gpu(fn : TowerBlocksTailGpuFn) {
+    g_tw_blocks_tail = fn
+    g_tw_blocks_tail_set = true
+}
+
+//! the stem, then the blocks with the projector tail behind them where the tail seat serves both (true: `s.out` holds the soft
+//! tokens); false leaves the blocks' rows in `s.x` for the CPU tail, whichever chain ran them
+def private audio_encode_blocks_tail(t : AudioTower; var s : EncoderState; mel : MelChunk) : bool {
+    audio_encode_stem(t, s, mel)
+    let tt = t.n_ctx
+    if (!g_tw_blocks_tail_set) {
+        encoder_blocks(t, s, tt)
+        return false
+    }
+    dispatch_phase_encode(tt)
+    var served = TowerTailServed.declined
+    if (empty(g_audio_ref_dir)) {
+        let te = ref_time_ticks()
+        served = invoke(g_tw_blocks_tail, t, s, tt)
+        if (served != TowerTailServed.declined) {
+            asr_prof_add("enc.blocks.gpu", te)
+        }
+    }
+    if (served == TowerTailServed.declined) {
+        encoder_blocks_cpu(t, s, tt)
+    }
+    return served == TowerTailServed.tail
+}
+
 var private g_tw_blocks_ln_post : TowerBlocksGpuFn
 var private g_tw_blocks_ln_post_set = false
 
@@ -1595,11 +1677,15 @@ def private rms_rows_blob_at(var x : array<float>; wp : float const?; dim, rows 
 //! Stacking floors rows — ragged tail positions are dropped, not zero-padded.
 [hot_path]
 def audio_encode(t : AudioTower; var s : EncoderState; mel : MelChunk) {
-    audio_encode_blocks(t, s, mel)
+    let rows = audio_tokens_per_chunk(t)
+    if (audio_encode_blocks_tail(t, s, mel)) {
+        diff_stage("out", s.out, rows * t.proj_dim)
+        return
+    }
     trace_tag(TRACE_TAG_ENC_PROJ)
+    let t_tail = ref_time_ticks()
     let tt = t.n_ctx
     let d = t.d_model
-    let rows = audio_tokens_per_chunk(t)
 
     if (t.proj_kind == AudioProjKind.qwen2a) {
         // avg-pool pairs over time (BEFORE the post-LN, not after), then ln_post
@@ -1636,6 +1722,7 @@ def audio_encode(t : AudioTower; var s : EncoderState; mel : MelChunk) {
         gelu_erf(s.ph, rows * t.mm1_out)
         tw_mm_rq(t, s.out, t.mm2_w_off, s.ph, s.xqi, s.xsi, t.mm1_out, t.proj_dim, rows)
     }
+    asr_prof_add("enc.tail", t_tail)
     trace_tag(0)   // clear: the decoder's dispatches must not inherit the projector's color
     diff_stage("out", s.out, rows * t.proj_dim)
 }

@@ -333,6 +333,7 @@ def test_parakeet_oracle(t : T?) {
             t |> equal(s.detected_lang, "en")
 
             reused_session_leg(t, m, s, samples)
+            heap_flat_leg(t, m, s, samples, "parakeet")
 
             t |> equal(m.pk.q8, !parakeet_gpu_serves(), "default load follows the lane policy - q8 unless the Metal driver serves")
             var inscope mf = AsrModel(kind = AsrKind.parakeet)
@@ -1072,6 +1073,20 @@ def private session_segs(m; var s; samples : array<float>) : array<TranscribeSeg
     return <- segs
 }
 
+//! A serving worker transcribes clip after clip on one session: the heap after the fourth transcription of a clip is the
+//! heap after the second (within 256 KB), so a transcription frees what it allocates.
+def private heap_flat_leg(t : T?; m; var s; samples : array<float>; tag : string) {
+    for (_i in range(2)) {
+        var inscope warm <- session_segs(m, s, samples)
+    }
+    let h0 = heap_bytes_allocated()
+    for (_i in range(2)) {
+        var inscope again <- session_segs(m, s, samples)
+    }
+    let h1 = heap_bytes_allocated()
+    t |> success(h1 <= h0 + 262144ul, "{tag}: two more transcriptions leave the heap where it stood ({h0} -> {h1} bytes)")
+}
+
 //! a serving worker's session sees clips of every length: a session that read the whole clip reads its first half as a fresh one does
 def private reused_session_leg(t : T?; m; var s; samples : array<float>) {
     var inscope half <- [for (i in range(length(samples) / 2)); samples[i]]
@@ -1357,6 +1372,11 @@ def test_canary_qwen_oracle(t : T?) {
                  6540, 315, 5561, 151645])
             check_canary_clip(t, m, path_join(corpus_dir(), "librispeech/05_1089-134686-0004.wav"),
                 [2833, 5779, 29160, 451, 11896, 374, 8580, 389, 498, 13, 7684, 3729, 9972, 151645])
+            var inscope jfk <- read_wav_pcm16_mono(path_join(corpus_dir(), "jfk.wav"))
+            if (!empty(jfk)) {
+                var inscope hs <- create_session(m, "en")
+                heap_flat_leg(t, m, hs, jfk, "canary")
+            }
         }
         set_asr_kv(KVDtype.f16)   // back to the serving default
     }
@@ -1392,6 +1412,7 @@ def test_gemma4a_audio_oracle(t : T?) {
         with_dasllama_jobque_() {
             var inscope s <- create_session(m, "en")
             var inscope segs <- session_segs(m, s, samples)
+            heap_flat_leg(t, m, s, samples, "gemma4a")
             t |> equal(length(segs), 1, "one segment")
             to_log(LOG_INFO, "gemma4a eyeball: '{segs[0].text}'\n")
             // frozen llama-mtmd-cli no-think greedy ids (first 40 tokens — the confident prefix

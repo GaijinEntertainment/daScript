@@ -7,6 +7,7 @@ module dasllama_audio_embedder shared public
 require dasllama/dasllama_lint public
 require dasllama/dasllama_gemma4a public   // re-exported: a requirer that carries the union must see the family to delete it
 require dasllama/dasllama_audio public     // the same for the whisper-class tower (qwen2a, qwen2.5o, ultravox, voxtral)
+require dasllama/dasllama_tower   // asr_prof_add: the stage clock
 require dasllama/dasllama_image   // image_family_tag — a prepared .dlim routes on its baked tag
 require strings
 
@@ -67,6 +68,13 @@ def audio_probe_proj_dim(path : string) : int64 {
     return g4a > 0l ? g4a : audio_tower_probe_proj_dim(path)
 }
 
+//! Whether the mmproj at `path` splices its soft tokens with no span marker (see `audio_span_bare`); false for a file
+//! no audio family serves. Never panics.
+def audio_probe_span_bare(path : string) : bool => audio_tower_probe_span_bare(path)
+
+//! Whether the carried family splices its soft tokens with no span marker around them
+def audio_span_bare(e : AudioEmbedder) : bool => e.kind == AudioKind.tower && audio_span_bare(e.tower.proj_kind)
+
 //! Load an audio mmproj (gguf, or a prepared ``.dlim`` routed on its baked family tag) as
 //! whichever family it is — probed from the file, never from a knob. Panics by name on a file
 //! no audio family serves; probe first where absence is an answer.
@@ -93,7 +101,9 @@ def private tower_encode_all(t : AudioTower; var s : AudioState; samples : array
         s.enc <- make_encoder_state(t)
         s.enc_made = true
     }
+    let t_mel = ref_time_ticks()
     var inscope chunks <- log_mel_chunks(samples, t.n_mel)
+    asr_prof_add("enc.mel", t_mel)
     let rows = audio_tokens_per_chunk(t)
     out |> reserve(length(out) + length(chunks) * int(rows * t.proj_dim))
     for (chunk in chunks) {

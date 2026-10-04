@@ -3821,7 +3821,7 @@ def dasllama_vulkan_tower_register {
         register_gemma4a_gpu(@@vulkan_gemma4a_blocks, @@vulkan_tower_serves_exact)
         register_canary_gpu(@@vulkan_canary_blocks, @@vulkan_tower_serves_exact)
         register_qwen3a_front_gpu(@@vulkan_q3a_front)
-        register_qwen3a_mel_gpu(@@vulkan_q3a_mel)
+        register_whisper_mel_gpu(@@vulkan_q3a_mel)
         register_gemma4a_chunk_gpu(@@vulkan_gemma4a_chunk)
         register_canary_front_gpu(@@vulkan_canary_front)
     }

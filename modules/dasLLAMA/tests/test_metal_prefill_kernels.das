@@ -862,6 +862,50 @@ def private cn_melnorm_gate(t : T?; var dev, queue) {
     }
 }
 
+//! The whisper-class projector tails' two row kernels at a width off the 64-thread group: the pair pool against the
+//! mean of each row pair, the row-split gate against silu(second half) * first half - the fixture's halves differ, so
+//! the gate with its halves swapped misses on most elements (asserted on the host).
+def private tw_tail_rows_gate(t : T?; var dev, queue) {
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kp = kernel_of(@@enc_tw_pool2)
+        let kg = kernel_of(@@enc_tw_swiglu_rows)
+        var pso_p = mc |> keep_stamp(kp, err)
+        return if (!pso_ok(t, "tw_pool2", pso_p, err))
+        var pso_g = mc |> keep_stamp(kg, err)
+        return if (!pso_ok(t, "tw_swiglu_rows", pso_g, err))
+        let width = 70
+        let rows = 5
+        let total = rows * width
+        var inscope x <- [for (i in range(2 * total)); float((i * 37) % 101 - 50) * 0.043]
+        var inscope pooled <- [for (i in range(total)); 0.5 * (x[(i / width) * 2 * width + i % width] + x[(i / width) * 2 * width + width + i % width])]
+        var inscope gated : array<float>
+        var inscope swapped : array<float>
+        for (i in range(total)) {
+            let a = double(x[(i / width) * 2 * width + i % width])
+            let g = double(x[(i / width) * 2 * width + width + i % width])
+            gated |> push(float(g / (1.0lf + exp(-g)) * a))
+            swapped |> push(float(a / (1.0lf + exp(-a)) * g))
+        }
+        var apart = 0
+        for (a, b in gated, swapped) {
+            apart += abs(a - b) > 1e-3 ? 1 : 0
+        }
+        t |> success(apart > total / 2, "tw_swiglu_rows: the fixture tells the halves apart ({apart} of {total})")
+        var ka = TwRowsArgs(width = uint(width), total = uint(total))
+        let bx = mc |> in_(x)
+        let bp = mc |> out_(total)
+        let bg = mc |> out_(total)
+        let ran = mc |> cell_record(t, "tw_tail_rows") $(enc : MetalComputeEncoder?) {
+            invoke(kp.enc, enc, pso_p, mc.buf[bx], mc.buf[bp], ka, int64(total))
+            invoke(kg.enc, enc, pso_g, mc.buf[bx], mc.buf[bg], ka, int64(total))
+        }
+        return if (!ran)
+        check_buf(t, "tw_pool2", mc.buf[bp], pooled, BAR_APPROX, Shape(row_width = width))
+        check_buf(t, "tw_swiglu_rows", mc.buf[bg], gated, BAR_APPROX, Shape(row_width = width))
+    }
+}
+
 //! A 1x1 conv's bias and ReLU over its rows, in place: max(x + b, 0) against the same f32 form, the fixture on
 //! both sides of zero.
 def private bias_relu_rows_gate(t : T?; var dev, queue) {
@@ -2769,6 +2813,7 @@ def test_metal_prefill_kernels(t : T?) {
                 pk_front_conv_gate(t, dev, queue, false)
                 pk_xf_gate(t, dev, queue)
                 cn_melnorm_gate(t, dev, queue)
+                tw_tail_rows_gate(t, dev, queue)
                 bias_relu_rows_gate(t, dev, queue)
                 st2_conv_gate(t, dev, queue, false, false)
                 st2_conv_gate(t, dev, queue, true, false)

@@ -15,7 +15,7 @@ var g_plane : array<uint64>
 def test_gc_borrowed_range_of_4gib(t : T?) {
     let n = 1l << 29l   // 2^29 uint64 = 4 GiB of range over 16 real elements; the walk reads no element of a uint64 array
     unsafe {
-        _builtin_make_temp_array_i64(g_plane, reinterpret<void?>(addr(g_backing[0])), n)
+        _builtin_make_temp_array_i64(g_plane, addr<void?>(g_backing[0]), n)
         heap_collect(true, true)
     }
     t |> equal(long_length(g_plane), n, "the view survives a validating collect")
