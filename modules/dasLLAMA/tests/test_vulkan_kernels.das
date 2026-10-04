@@ -1618,6 +1618,24 @@ def private gemv_cell_planes(var cp; f : GemvFix; rows : int) {
     cp |> out_(rows, 0, 0, 32u)
 }
 
+//! a fused gate + up cell's region records over its two stacks: `nreg` slots of `d` rows `units` units wide, the gate stack's
+//! regions in `g`, the up stack's - past every gate row - in `u`
+def private gu_regions(nreg, d, units : int) : tuple<g : array<uint>; u : array<uint>> {
+    var g <- [for (i in range(nreg * 2)); i % 2 == 0 ? uint((i / 2) * d * units) : 0u]
+    var u <- [for (i in range(nreg * 2)); i % 2 == 0 ? uint((nreg + i / 2) * d * units) : 0u]
+    return <- (g = g, u = u)
+}
+
+//! a fused gate + up cell's hidden rows - the quants `oq` and the scales `os`, `nblk` Q8_0 blocks - against the activated
+//! reference `act`: every scale, every dequantized value within a quant step, and the poisoned oracle element of every block
+//! missing (`q8_blocks_off`'s control)
+def private gu_blocks_hold(t : T?; tag : string; oq : array<int8>; os, act : array<float>; nblk : int) {
+    let off = q8_blocks_off(oq, os, act, nblk)
+    t |> success(off.scales == 0, "{tag}: the block scales match ({off.scales} of {nblk} off)")
+    t |> success(off.values == 0, "{tag}: the dequantized hidden rows sit within a quant step ({off.values} of {nblk * 32} off)")
+    t |> success(off.poison_inside == 0, "{tag}: the bar reds a poisoned oracle element in every block ({off.poison_inside} passed)")
+}
+
 //! a per-32 format's decode GEMV - one lane a block over Q8_0 activations, `d` rows in each of two regions - at each width
 //! in `ns`, against the scalar dot's float order (`row_oracle` a row) with its poisoned element; the weight quants `wq_words`
 //! a block hashed at `i + wq_seed`, `scales` the format's scale plane over a block count; q51 also folds the two regions
@@ -1651,22 +1669,13 @@ def private per32_gemv_cell(t : T?; fmt : KqFmt; ns : array<int>; wq_words : int
                 //! the summed form: the two regions' rows folded under their weights inside the GEMV, one row of d out
                 if (fmt == KqFmt.q51 && ensure_q51_gemv_sum_cls()) {
                     var wgt <- [0.625, -0.375]
-                    let ys_bytes = int64(d) * 4l
-                    let ysd = make_device_buf(ys_bytes)
-                    let swd = make_device_buf(8l)
-                    let host = make_host_buf(ys_bytes, true, [cached = true])
-                    unsafe {
-                        upload_region_at(swd, 0l, addr<uint8 const?>(wgt[0]), 8l)
-                    }
-                    nan_sentinel_upload(ysd, ys_bytes)
-                    var s_sum = set_q51_gemv_sum_cls(fixed_array(cp.dev[0], cp.dev[1], cp.dev[2], cp.dev[3], cp.dev[4], ysd, swd),
-                        fixed_array(cp.bytes[0], cp.bytes[1], cp.bytes[2], cp.bytes[3], cp.bytes[4], ys_bytes, 8l),
-                        fixed_array(1u, 2u, 4u, 8u, 16u, 32u, 64u))
-                    cmd_one_shot() $(raw3 : VkCommandBuffer; var h3 : VkHaz) {
+                    let pys = cp |> out_(d, 0, 0, 64u)
+                    let psw = cp |> in_(wgt)
+                    var s_sum = cp |> cls_set(fixed_array(0, 1, 2, 3, 4, pys, psw), @@set_q51_gemv_sum_cls)
+                    cp |> cell_record() $(raw3 : VkCommandBuffer; var h3 : VkHaz) {
                         enc_q51_gemv_sum_cls(raw3, h3, s_sum, pc, gemv_wgs(int64(d), 0u))
-                        cmd_copy_planes(raw3, h3, fixed_array(ysd), host, fixed_array(ys_bytes), 32u)
                     }
-                    var ys_cls <- staged(host.mapped, 0l, d, type<float>)
+                    var ys_cls <- cp |> plane_run(pys)
                     var ys_ref <- [for (row in range(d)); wgt[0] * y_ref[row] + wgt[1] * y_ref[d + row]]
                     let bads = mismatch_approx(ys_cls, ys_ref)
                     t |> success(bads == 0, "q51 GEMV summed under the weights at n {n} matches the weighted rows ({bads} of {d} off)")
@@ -1771,88 +1780,61 @@ def test_vkd_kq_gemv_k4_gu(t0 : T?) {
             var wsh <- ws_plane(ws_words_n, 3u, 91u)
             var xqh <- hashed_words(nsb * 64, 23u, 17u)
             var xsh <- row_fill(nsb, 1, 0, 0.25, -0.5, 5)
-            var regs : array<uint>
-            var regs3 : array<uint>
-            regs |> resize(nreg * 2)
-            regs3 |> resize(nreg * 2)
-            for (r in range(nreg)) {
-                regs[r * 2] = uint(r * d * nsb)
-                regs[r * 2 + 1] = 0u
-                regs3[r * 2] = uint((nreg + r) * d * nsb)
-                regs3[r * 2 + 1] = 0u
-            }
-            var y_g <- kq_gemv_oracle(fmt, wqh, wsh, xqh, xsh, regs, nsb * 256, d, nreg)
-            var y_u <- kq_gemv_oracle(fmt, wqh, wsh, xqh, xsh, regs3, nsb * 256, d, nreg)
-            let wq_bytes = int64(wq_words) * 4l
-            let ws_bytes = int64(ws_words_n) * 4l
-            let xq_bytes = int64(nsb) * 256l
-            let xs_bytes = int64(nsb) * 4l
-            let rg_bytes = int64(nreg) * 8l
-            let y_bytes = int64(rows) * 4l
-            let oq_bytes = int64(rows)
-            let os_bytes = int64(nblk) * 4l
-            let wqd = make_device_buf(wq_bytes)
-            let wsd = make_device_buf(ws_bytes)
-            let xqd = make_device_buf(xq_bytes)
-            let xsd = make_device_buf(xs_bytes)
-            let rgd = make_device_buf(rg_bytes)
-            let rg3d = make_device_buf(rg_bytes)
-            let yd = make_device_buf(y_bytes)
-            let oqd = make_device_buf(oq_bytes)
-            let osd = make_device_buf(os_bytes)
-            let host = make_host_buf(oq_bytes + os_bytes + y_bytes, true, [cached = true])
-            unsafe {
-                upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
-                upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
-                upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
-                upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[0]), xs_bytes)
-                upload_region_at(rgd, 0l, addr<uint8 const?>(regs[0]), rg_bytes)
-                upload_region_at(rg3d, 0l, addr<uint8 const?>(regs3[0]), rg_bytes)
-                var s_cls = set_kq_gemv_k4_gu_cls(fixed_array(wqd, wsd, rgd, xqd, xsd, yd, kq_grid_dev(), rg3d, oqd, osd),
-                    fixed_array(wq_bytes, ws_bytes, rg_bytes, xq_bytes, xs_bytes, y_bytes, KQ_GRID_BYTES, rg_bytes, oq_bytes, os_bytes),
-                    fixed_array(1u, 2u, 4u, 8u, 16u, 32u, 0u, 64u, 128u, 128u))
+            var rg <- gu_regions(nreg, d, nsb)
+            var y_g <- kq_gemv_oracle(fmt, wqh, wsh, xqh, xsh, rg.g, nsb * 256, d, nreg)
+            var y_u <- kq_gemv_oracle(fmt, wqh, wsh, xqh, xsh, rg.u, nsb * 256, d, nreg)
+            var act <- [for (i in range(nblk * 32)); act_mul_ref(y_g[i], y_u[i], true)]
+            with_cell_planes() $(var cp : CellPlanes) {
+                let pwq = cp |> in_plain(wqh)
+                let pws = cp |> in_plain(wsh)
+                let prg = cp |> in_plain(rg.g)
+                let pxq = cp |> in_plain(xqh)
+                let pxs = cp |> in_(xsh)
+                let py = cp |> out_(rows)
+                let prg3 = cp |> in_plain(rg.u)
+                let poq = cp |> out_words(int64(rows), NAN_SENTINEL_BITS)
+                let pos = cp |> out_(nblk)
+                let fused = fixed_array(pwq, pws, prg, pxq, pxs, py, pxs, prg3, poq, pos)   //! slot 6 the engine's grid table, set below
+                var bufs = gather_planes(cp.dev, fused)
+                var sizes = gather_planes(cp.bytes, fused)
+                var bits = gather_planes(cp.hazard_bit, fused)
+                bufs[6] = kq_grid_dev()
+                sizes[6] = KQ_GRID_BYTES
+                bits[6] = 0u
+                var s_cls = set_kq_gemv_k4_gu_cls(bufs, sizes, bits)
                 for (lanes_per_row in fixed_array(0u, 16u, 8u)) {
-                    nan_sentinel_upload(oqd, oq_bytes)
-                    nan_sentinel_upload(osd, os_bytes)
-                    nan_sentinel_upload(yd, y_bytes)
-                    var pc = GemvArgs(n = uint(nsb * 256), d = uint(d), nreg = uint(nreg), ybase = 0u, lanes_per_row = lanes_per_row, act = ACT_GELU)
-                    cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                        enc_kq_gemv_k4_gu_cls(raw2, h2, s_cls, pc, int64(nblk))
-                        cmd_copy_planes(raw2, h2, fixed_array(oqd, osd, yd), host, fixed_array(oq_bytes, os_bytes, y_bytes), 32u | 128u)
+                    for (p in fixed_array(py, poq, pos)) {
+                        cp |> plane_refill(p)
                     }
-                    var oq <- staged(host.mapped, 0l, rows, type<int8>)
-                    var os <- staged(host.mapped, oq_bytes, nblk, type<float>)
-                    var y_cls <- staged(host.mapped, oq_bytes + os_bytes, rows, type<float>)
+                    var pc = GemvArgs(n = uint(nsb * 256), d = uint(d), nreg = uint(nreg), ybase = 0u, lanes_per_row = lanes_per_row, act = ACT_GELU)
+                    cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+                        enc_kq_gemv_k4_gu_cls(raw2, h2, s_cls, pc, int64(nblk))
+                    }
+                    var oq <- cp |> plane_as(poq, type<int8>, rows)
+                    var os <- cp |> plane_run(pos)
+                    var y_cls <- cp |> plane_run(py)
                     let badg = mismatch_approx(y_cls, y_g)
-                    var act <- [for (i in range(nblk * 32)); act_mul_ref(y_g[i], y_u[i], true)]
-                    let off = q8_blocks_off(oq, os, act, nblk)   //! its control: each block's first expectation pushed three quant steps must miss
-                    delete act
                     let lanes = lanes_per_row == 0u ? g_gpu.subgroup_size : int64(lanes_per_row)
                     let tag = "k4 gu {nreg} x {d} at {lanes} lanes per row"
                     t |> success(badg == 0, "{tag}: the gate rows match the family's oracle ({badg} of {rows} off)")
-                    t |> success(off.scales == 0, "{tag}: the block scales match ({off.scales} of {nblk} off)")
-                    t |> success(off.values == 0, "{tag}: the dequantized hidden rows sit within a quant step ({off.values} of {rows} off)")
-                    t |> success(off.poison_inside == 0, "{tag}: the bar reds a poisoned oracle element in every block ({off.poison_inside} passed)")
-                    if (lanes_per_row == 16u) {   //! the three-kernel path on the same buffers at the served lane split: its hidden rows byte for byte
-                        let yud = make_device_buf(y_bytes)
-                        let oq2d = make_device_buf(oq_bytes)
-                        let os2d = make_device_buf(os_bytes)
-                        nan_sentinel_upload(yud, y_bytes)
-                        nan_sentinel_upload(oq2d, oq_bytes)
-                        nan_sentinel_upload(os2d, os_bytes)
-                        var s_g = gemv_cls_set(fmt, fixed_array(wqd, wsd, rgd, xqd, xsd, yd), fixed_array(wq_bytes, ws_bytes, rg_bytes, xq_bytes, xs_bytes, y_bytes), fixed_array(1u, 2u, 4u, 8u, 16u, 32u))
-                        var s_u = gemv_cls_set(fmt, fixed_array(wqd, wsd, rg3d, xqd, xsd, yud), fixed_array(wq_bytes, ws_bytes, rg_bytes, xq_bytes, xs_bytes, y_bytes), fixed_array(1u, 2u, 64u, 8u, 16u, 256u))
-                        var s_a = set_actrq_cls(fixed_array(yd, yud, oq2d, os2d), fixed_array(y_bytes, y_bytes, oq_bytes, os_bytes), fixed_array(32u, 256u, 512u, 512u))
+                    gu_blocks_hold(t, tag, oq, os, act, nblk)
+                    if (lanes_per_row == 16u) {   //! the three-kernel path on the same planes at the served lane split: its hidden rows byte for byte
+                        let pyu = cp |> out_(rows)
+                        let poq2 = cp |> out_words(int64(rows), NAN_SENTINEL_BITS)
+                        let pos2 = cp |> out_(nblk)
+                        var s_g = gemv_cls_set(fmt, gather_planes(cp.dev, GEMV_PLANES), gather_planes(cp.bytes, GEMV_PLANES), gather_planes(cp.hazard_bit, GEMV_PLANES))
+                        let up = fixed_array(pwq, pws, prg3, pxq, pxs, pyu)
+                        var s_u = gemv_cls_set(fmt, gather_planes(cp.dev, up), gather_planes(cp.bytes, up), gather_planes(cp.hazard_bit, up))
+                        var s_a = cp |> cls_set(fixed_array(py, pyu, poq2, pos2), @@set_actrq_cls)
                         var pc2 = GemvArgs(n = uint(nsb * 256), d = uint(d), nreg = uint(nreg), ybase = 0u, lanes_per_row = 16u)
                         var pca = ActArgs(nelem = uint(rows), act = ACT_GELU, nblk = uint(nblk))
-                        cmd_one_shot() $(raw3 : VkCommandBuffer; var h3 : VkHaz) {
+                        cp |> cell_record() $(raw3 : VkCommandBuffer; var h3 : VkHaz) {
                             enc_kq_gemv_k4_cls(raw3, h3, s_g, pc2, gemv_wgs(int64(rows), 16u))
                             enc_kq_gemv_k4_cls(raw3, h3, s_u, pc2, gemv_wgs(int64(rows), 16u))
                             enc_q8_actrq_cls(raw3, h3, s_a, pca, (int64(rows) / 4l + 255l) / 256l)
-                            cmd_copy_planes(raw3, h3, fixed_array(oq2d, os2d), host, fixed_array(oq_bytes, os_bytes), 512u)
                         }
-                        var oq2 <- staged(host.mapped, 0l, rows, type<int8>)
-                        var os2 <- staged(host.mapped, oq_bytes, nblk, type<float>)
+                        var oq2 <- cp |> plane_as(poq2, type<int8>, rows)
+                        var os2 <- cp |> plane_run(pos2)
                         let bad = mismatch_q8(oq, os, oq2, os2, 0.0, 0)
                         t |> success(bad == 0, "{tag}: the hidden rows match the three-kernel path byte for byte ({bad} of {rows} quants and {nblk} scales off)")
                         delete oq2
@@ -1867,10 +1849,10 @@ def test_vkd_kq_gemv_k4_gu(t0 : T?) {
             delete wsh
             delete xqh
             delete xsh
-            delete regs
-            delete regs3
+            delete rg
             delete y_g
             delete y_u
+            delete act
             }
         } else {
             t |> skip("dasVulkan not present")
@@ -3838,89 +3820,61 @@ def private mx4_gemv_gu_run(t : T?; d, nreg : int; bias : bool) {
         for (r in range(nreg)) {
             rex[r] = uint((r * 5 + 2) % ne)
         }
-        var regs : array<uint>
-        var regs3 : array<uint>
-        regs |> resize(nreg * 2)
-        regs3 |> resize(nreg * 2)
-        for (r in range(nreg)) {
-            regs[r * 2] = uint(r * d * nb)
-            regs[r * 2 + 1] = 0u
-            regs3[r * 2] = uint((nreg + r) * d * nb)
-            regs3[r * 2 + 1] = 0u
-        }
+        var gu <- gu_regions(nreg, d, nb)
         let act = bias ? ACT_OAI : ACT_SILU
-        let wq_bytes = int64(totblk) * 16l
-        let ws_bytes = long_length(wsh) * 4l
-        let xq_bytes = int64(nb) * 32l
-        let xs_bytes = int64(nb) * 4l
-        let rg_bytes = int64(nreg) * 8l
-        let b_bytes = int64(ne * d) * 4l
-        let y_bytes = int64(rows) * 4l
-        let oq_bytes = int64(rows)
-        let os_bytes = int64(nblk) * 4l
-        let wqd = make_device_buf(wq_bytes)
-        let wsd = make_device_buf(ws_bytes)
-        let xqd = make_device_buf(xq_bytes)
-        let xsd = make_device_buf(xs_bytes)
-        let rgd = make_device_buf(rg_bytes)
-        let rg3d = make_device_buf(rg_bytes)
-        let gbd = make_device_buf(b_bytes)
-        let ubd = make_device_buf(b_bytes)
-        let rexd = make_device_buf(rg_bytes)
-        let yd = make_device_buf(y_bytes)
-        let yud = make_device_buf(y_bytes)
-        let oqd = make_device_buf(oq_bytes)
-        let osd = make_device_buf(os_bytes)
-        let oq2d = make_device_buf(oq_bytes)
-        let os2d = make_device_buf(os_bytes)
-        let host = make_host_buf(2l * (oq_bytes + os_bytes) + y_bytes, true, [cached = true])
-        unsafe {
-            upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
-            upload_region_at(wsd, 0l, addr<uint8 const?>(wsh[0]), ws_bytes)
-            upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
-            upload_region_at(xsd, 0l, addr<uint8 const?>(xsh[0]), xs_bytes)
-            upload_region_at(rgd, 0l, addr<uint8 const?>(regs[0]), rg_bytes)
-            upload_region_at(rg3d, 0l, addr<uint8 const?>(regs3[0]), rg_bytes)
-            upload_region_at(gbd, 0l, addr<uint8 const?>(gb[0]), b_bytes)
-            upload_region_at(ubd, 0l, addr<uint8 const?>(ub[0]), b_bytes)
-            upload_region_at(rexd, 0l, addr<uint8 const?>(rex[0]), int64(nreg) * 4l)
-            nan_sentinel_upload(oqd, oq_bytes)
-            nan_sentinel_upload(osd, os_bytes)
-            nan_sentinel_upload(yd, y_bytes)
-            nan_sentinel_upload(yud, y_bytes)
-            nan_sentinel_upload(oq2d, oq_bytes)
-            nan_sentinel_upload(os2d, os_bytes)
-            var s_cls = set_mx4_gemv_gu_cls(fixed_array(wqd, wsd, rgd, xqd, xsd, yd, rg3d, gbd, ubd, rexd, oqd, osd),
-                fixed_array(wq_bytes, ws_bytes, rg_bytes, xq_bytes, xs_bytes, y_bytes, rg_bytes, b_bytes, b_bytes, rg_bytes, oq_bytes, os_bytes),
-                fixed_array(1u, 2u, 4u, 8u, 16u, 32u, 64u, 0u, 0u, 64u, 128u, 128u))
+        var oq : array<int8>
+        var os : array<float>
+        var y_cls : array<float>
+        var oq2 : array<int8>
+        var os2 : array<float>
+        with_cell_planes() $(var cp : CellPlanes) {
+            let pwq = cp |> in_plain(wqh)
+            let pws = cp |> in_plain(wsh)
+            let prg = cp |> in_plain(gu.g)
+            let pxq = cp |> in_plain(xqh)
+            let pxs = cp |> in_(xsh)
+            let py = cp |> out_(rows)
+            let prg3 = cp |> in_plain(gu.u)
+            let pgb = cp |> in_(gb)
+            let pub = cp |> in_(ub)
+            let prex = cp |> in_plain(rex)
+            let poq = cp |> out_words(int64(rows), NAN_SENTINEL_BITS)
+            let pos = cp |> out_(nblk)
+            let pyg = cp |> out_(rows)   //! the split path on the same planes: the two GEMVs, then the (biased) act + requant
+            let pyu = cp |> out_(rows)
+            let poq2 = cp |> out_words(int64(rows), NAN_SENTINEL_BITS)
+            let pos2 = cp |> out_(nblk)
+            var s_cls = cp |> cls_set(fixed_array(pwq, pws, prg, pxq, pxs, py, prg3, pgb, pub, prex, poq, pos), @@set_mx4_gemv_gu_cls)
+            let gate = fixed_array(pwq, pws, prg, pxq, pxs, pyg)
+            let up = fixed_array(pwq, pws, prg3, pxq, pxs, pyu)
+            var s_g = gemv_cls_set(int(KqFmt.mx4), gather_planes(cp.dev, gate), gather_planes(cp.bytes, gate), gather_planes(cp.hazard_bit, gate))
+            var s_u = gemv_cls_set(int(KqFmt.mx4), gather_planes(cp.dev, up), gather_planes(cp.bytes, up), gather_planes(cp.hazard_bit, up))
             var pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(nreg), ybase = 0u, act = act, bias_on = bias ? 1u : 0u, gboff = 0u, uboff = 0u)
             var pc2 = GemvArgs(n = uint(n), d = uint(d), nreg = uint(nreg), ybase = 0u)
             var pca = ActArgs(nelem = uint(rows), act = act, nblk = uint(nblk), bias_on = bias ? 1u : 0u, gboff = 0u, uboff = 0u, brow = uint(d))
-            cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+            cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
                 enc_mx4_gemv_gu_cls(raw2, h2, s_cls, pc, int64(nblk))
-                //! the split path on the same planes: the two GEMVs, then the (biased) act + requant
-                var s_g = gemv_cls_set(int(KqFmt.mx4), fixed_array(wqd, wsd, rgd, xqd, xsd, yud), fixed_array(wq_bytes, ws_bytes, rg_bytes, xq_bytes, xs_bytes, y_bytes), fixed_array(1u, 2u, 4u, 8u, 16u, 256u))
-                let yu2d = make_device_buf(y_bytes)
-                nan_sentinel_upload(yu2d, y_bytes)
-                var s_u = gemv_cls_set(int(KqFmt.mx4), fixed_array(wqd, wsd, rg3d, xqd, xsd, yu2d), fixed_array(wq_bytes, ws_bytes, rg_bytes, xq_bytes, xs_bytes, y_bytes), fixed_array(1u, 2u, 64u, 8u, 16u, 1024u))
                 gemv_enc(int(KqFmt.mx4), raw2, h2, s_g, pc2, int64(rows))
                 gemv_enc(int(KqFmt.mx4), raw2, h2, s_u, pc2, int64(rows))
                 if (bias) {
-                    var s_a = set_q8_actrq_b_cls(fixed_array(yud, yu2d, oq2d, os2d, gbd, ubd, rexd),
-                        fixed_array(y_bytes, y_bytes, oq_bytes, os_bytes, b_bytes, b_bytes, rg_bytes), fixed_array(256u, 1024u, 512u, 512u, 0u, 0u, 64u))
+                    var s_a = cp |> cls_set(fixed_array(pyg, pyu, poq2, pos2, pgb, pub, prex), @@set_q8_actrq_b_cls)
                     enc_q8_actrq_b_cls(raw2, h2, s_a, pca, (int64(rows) / 4l + 255l) / 256l)
                 } else {
-                    var s_a = set_actrq_cls(fixed_array(yud, yu2d, oq2d, os2d), fixed_array(y_bytes, y_bytes, oq_bytes, os_bytes), fixed_array(256u, 1024u, 512u, 512u))
+                    var s_a = cp |> cls_set(fixed_array(pyg, pyu, poq2, pos2), @@set_actrq_cls)
                     enc_q8_actrq_cls(raw2, h2, s_a, pca, (int64(rows) / 4l + 255l) / 256l)
                 }
-                cmd_copy_planes(raw2, h2, fixed_array(oqd, osd, yd, oq2d, os2d), host, fixed_array(oq_bytes, os_bytes, y_bytes, oq_bytes, os_bytes), 32u | 128u | 512u)
             }
+            delete oq
+            delete os
+            delete y_cls
+            delete oq2
+            delete os2
+            oq <- cp |> plane_as(poq, type<int8>, rows)
+            os <- cp |> plane_run(pos)
+            y_cls <- cp |> plane_run(py)
+            oq2 <- cp |> plane_as(poq2, type<int8>, rows)
+            os2 <- cp |> plane_run(pos2)
         }
-        var oq <- staged(host.mapped, 0l, rows, type<int8>)
-        var os <- staged(host.mapped, oq_bytes, nblk, type<float>)
-        var y_cls <- staged(host.mapped, oq_bytes + os_bytes, rows, type<float>)
-        var oq2 <- staged(host.mapped, oq_bytes + os_bytes + y_bytes, rows, type<int8>)
-        var os2 <- staged(host.mapped, 2l * oq_bytes + os_bytes + y_bytes, nblk, type<float>)
         var y_g : array<float>
         var y_u : array<float>
         y_g |> resize(rows)
@@ -3937,15 +3891,12 @@ def private mx4_gemv_gu_run(t : T?; d, nreg : int; bias : bool) {
         let badgp = mismatch_approx(y_cls, y_gp)
         //! the activated reference row: each slot row's expert biases added before the act
         var a_ref <- [for (rg in range(nblk * 32)); act_mul_ref(y_g[rg] + gb[int(rex[rg / d]) * d + rg % d], y_u[rg] + ub[int(rex[rg / d]) * d + rg % d], act)]
-        let off = q8_blocks_off(oq, os, a_ref, nblk)   //! its control: each block's first expectation pushed three quant steps must miss
-        delete a_ref
         let tag = "mx4 gu {nreg} x {d}{bias ? " biased" : ""}"
         t |> success(badg == 0, "{tag}: the gate rows match the scalar dot ({badg} of {rows} off)")
         t |> success(badgp == 1, "{tag}: the gate rows' bar reds one poisoned element ({badgp})")
         delete y_gp
-        t |> success(off.scales == 0, "{tag}: the block scales match ({off.scales} of {nblk} off)")
-        t |> success(off.values == 0, "{tag}: the dequantized hidden rows sit within a quant step ({off.values} of {rows} off)")
-        t |> success(off.poison_inside == 0, "{tag}: the bar reds a poisoned oracle element in every block ({off.poison_inside} passed)")
+        gu_blocks_hold(t, tag, oq, os, a_ref, nblk)
+        delete a_ref
         let bad = mismatch_q8(oq, os, oq2, os2, 0.0, 0)
         t |> success(bad == 0, "{tag}: the hidden rows match the split path byte for byte ({bad} of {rows} quants and {nblk} scales off)")
         delete wqh
@@ -3955,8 +3906,7 @@ def private mx4_gemv_gu_run(t : T?; d, nreg : int; bias : bool) {
         delete gb
         delete ub
         delete rex
-        delete regs
-        delete regs3
+        delete gu
         delete oq
         delete os
         delete oq2
@@ -4030,11 +3980,7 @@ def private q8_gemv_gu_run(t; n, hid : int; gelu : bool) {
     for (row in range(hid)) {
         act[row] = act_mul_ref(g_ref[row], u_ref[row], gelu)
     }
-    let off = q8_blocks_off(oq, os, act, nblk_out)
-    let tag = "{gelu ? "gelu" : "silu"} n {n} hid {hid}"
-    t |> success(off.scales == 0, "q8 gu {tag}: the block scales match the oracle ({off.scales} of {nblk_out} off)")
-    t |> success(off.values == 0, "q8 gu {tag}: the dequantized hidden row sits within a quant step of the oracle ({off.values} of {hid} off)")
-    t |> success(off.poison_inside == 0, "q8 gu {tag}: the bar reds a poisoned oracle element in every block ({off.poison_inside} passed)")
+    gu_blocks_hold(t, "q8 gu {gelu ? "gelu" : "silu"} n {n} hid {hid}", oq, os, act, nblk_out)
     delete act
     delete gqh
     delete gsh
