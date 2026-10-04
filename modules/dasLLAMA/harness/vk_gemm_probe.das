@@ -2009,8 +2009,7 @@ class MmqPxK4 : MoeCmBase {
                     let xr = (tg * 4u + uint(t)) * 17u + k0
                     xw[t * 2] = mx4[xr]
                     xw[t * 2 + 1] = mx4[xr + 1u]
-                    bs[t] = (sdot4(xw[t * 2].x, 0x01010101) + sdot4(xw[t * 2].y, 0x01010101) + sdot4(xw[t * 2].z, 0x01010101) + sdot4(xw[t * 2].w, 0x01010101)
-                        + sdot4(xw[t * 2 + 1].x, 0x01010101) + sdot4(xw[t * 2 + 1].y, 0x01010101) + sdot4(xw[t * 2 + 1].z, 0x01010101) + sdot4(xw[t * 2 + 1].w, 0x01010101))
+                    bs[t] = bsum8(xw[t * 2], xw[t * 2 + 1])
                 }
                 for [unroll] (c in range(8)) {
                     let col = cg * 8u + uint(c)
@@ -2019,8 +2018,7 @@ class MmqPxK4 : MoeCmBase {
                     let dsc = w_dsc[uint(bu) * 32u + col]
                     let dmin = w_dmin[uint(bu) * 32u + col]
                     for [unroll] (t in range(4)) {
-                        let idot = (sdot4(w0.x, xw[t * 2].x) + sdot4(w0.y, xw[t * 2].y) + sdot4(w0.z, xw[t * 2].z) + sdot4(w0.w, xw[t * 2].w)
-                            + sdot4(w1.x, xw[t * 2 + 1].x) + sdot4(w1.y, xw[t * 2 + 1].y) + sdot4(w1.z, xw[t * 2 + 1].z) + sdot4(w1.w, xw[t * 2 + 1].w))
+                        let idot = dot8(w0, w1, xw[t * 2], xw[t * 2 + 1])
                         acc[t * 8 + c] += mxs[tg * 4u + uint(t)] * (dsc * float(idot) - dmin * float(bs[t]))
                     }
                 }
@@ -2088,8 +2086,7 @@ class MmqPxK4Blk : MoeCmBase {
                 let wcol = wt * 128u + tid
                 var w0 = uint4(0u)
                 var w1 = uint4(0u)
-                var sa = 0.0
-                var sbv = 0.0
+                var sm = float2(0.0)
                 if (wcol < pa.d) {
                     let wsb = wsb0 + wcol * nsb + s
                     let rb4 = wsb * 32u + uint(bu) * 4u
@@ -2099,16 +2096,12 @@ class MmqPxK4Blk : MoeCmBase {
                     let r3 = wq[rb4 + 3u]
                     w0 = uint4(r0 & 0x0F0F0F0F, r1 & 0x0F0F0F0F, r2 & 0x0F0F0F0F, r3 & 0x0F0F0F0F)
                     w1 = uint4((r0 >> 4u) & 0x0F0F0F0F, (r1 >> 4u) & 0x0F0F0F0F, (r2 >> 4u) & 0x0F0F0F0F, (r3 >> 4u) & 0x0F0F0F0F)
-                    let dm = unpackHalf2x16(wsu[wsb * 5u])
-                    let sc = int((wsu[wsb * 5u + 1u + uint(bu) / 4u] >> ((uint(bu) % 4u) * 8u)) & 0xFF)
-                    let mn = int((wsu[wsb * 5u + 3u + uint(bu) / 4u] >> ((uint(bu) % 4u) * 8u)) & 0xFF)
-                    sa = dm.x * float(sc)
-                    sbv = dm.y * float(mn)
+                    sm = k4_dmin(unpackHalf2x16(wsu[wsb * 5u]), wsu[wsb * 5u + 1u + uint(bu) / 4u], wsu[wsb * 5u + 3u + uint(bu) / 4u], uint(bu))
                 }
                 bw4[tid * 2u] = w0
                 bw4[tid * 2u + 1u] = w1
-                w_dsc[tid] = sa
-                w_dmin[tid] = sbv
+                w_dsc[tid] = sm.x
+                w_dmin[tid] = sm.y
                 barrier()
                 var xw : uint4[8]
                 var bs : int[4]
@@ -2116,8 +2109,7 @@ class MmqPxK4Blk : MoeCmBase {
                     let xr = (tg * 4u + uint(t)) * 2u
                     xw[t * 2] = bx4[xr]
                     xw[t * 2 + 1] = bx4[xr + 1u]
-                    bs[t] = (sdot4(xw[t * 2].x, 0x01010101) + sdot4(xw[t * 2].y, 0x01010101) + sdot4(xw[t * 2].z, 0x01010101) + sdot4(xw[t * 2].w, 0x01010101)
-                        + sdot4(xw[t * 2 + 1].x, 0x01010101) + sdot4(xw[t * 2 + 1].y, 0x01010101) + sdot4(xw[t * 2 + 1].z, 0x01010101) + sdot4(xw[t * 2 + 1].w, 0x01010101))
+                    bs[t] = bsum8(xw[t * 2], xw[t * 2 + 1])
                 }
                 for [unroll] (c in range(16)) {
                     let col = cg * 16u + uint(c)
@@ -2126,8 +2118,7 @@ class MmqPxK4Blk : MoeCmBase {
                     let dsc = w_dsc[col]
                     let dmin = w_dmin[col]
                     for [unroll] (t in range(4)) {
-                        let idot = (sdot4(wa.x, xw[t * 2].x) + sdot4(wa.y, xw[t * 2].y) + sdot4(wa.z, xw[t * 2].z) + sdot4(wa.w, xw[t * 2].w)
-                            + sdot4(wb.x, xw[t * 2 + 1].x) + sdot4(wb.y, xw[t * 2 + 1].y) + sdot4(wb.z, xw[t * 2 + 1].z) + sdot4(wb.w, xw[t * 2 + 1].w))
+                        let idot = dot8(wa, wb, xw[t * 2], xw[t * 2 + 1])
                         acc[t * 16 + c] += bxs[tg * 4u + uint(t)] * (dsc * float(idot) - dmin * float(bs[t]))
                     }
                 }
@@ -2156,6 +2147,13 @@ def dot8(wa, wb, xa, xb : uint4) : int {
 def bsum8(xa, xb : uint4) : int {
     return (sdot4(xa.x, 0x01010101) + sdot4(xa.y, 0x01010101) + sdot4(xa.z, 0x01010101) + sdot4(xa.w, 0x01010101)
         + sdot4(xb.x, 0x01010101) + sdot4(xb.y, 0x01010101) + sdot4(xb.z, 0x01010101) + sdot4(xb.w, 0x01010101))
+}
+
+//! a k4 superblock's block `sblk` scale pair: the f16 (d, min) pair `dm` times the block's 8-bit scale and min, which sit in the
+//! scale and min words `scw` / `mnw` that hold blocks 4 * (sblk / 4) up
+def k4_dmin(dm : float2; scw, mnw, sblk : uint) : float2 {
+    let sh = (sblk % 4u) * 8u
+    return float2(dm.x * float(int((scw >> sh) & 0xFF)), dm.y * float(int((mnw >> sh) & 0xFF)))
 }
 
 [ |> template_struct_instance]
@@ -2229,12 +2227,10 @@ class template MmqPxK4CT {   //! standalone: a harness template cannot derive fr
                 } else {
                     let ct = tid - 128u
                     var wv = uint4(0u)
-                    var sa = 0.0
-                    var sbv = 0.0
+                    var sm = float2(0.0)
                     static_if (NOSTAGE) {
                         wv = uint4(0x01020304u + uint(bu), 0x05060708u, 0x090A0B0Cu + s, 0x0D0E0F10u)
-                        sa = 0.001
-                        sbv = 0.0001
+                        sm = float2(0.001, 0.0001)
                     } else {
                         let wcol = wt * 64u + ct / 2u
                         if (wcol < pa.d) {
@@ -2242,17 +2238,13 @@ class template MmqPxK4CT {   //! standalone: a harness template cannot derive fr
                             let rb4 = wsb * 32u + uint(bu) * 4u
                             let sh = (ct % 2u) * 4u
                             wv = uint4((wq[rb4] >> sh) & 0x0F0F0F0F, (wq[rb4 + 1u] >> sh) & 0x0F0F0F0F, (wq[rb4 + 2u] >> sh) & 0x0F0F0F0F, (wq[rb4 + 3u] >> sh) & 0x0F0F0F0F)
-                            let dm = unpackHalf2x16(wsu[wsb * 5u])
-                            let sc = int((wsu[wsb * 5u + 1u + uint(bu) / 4u] >> ((uint(bu) % 4u) * 8u)) & 0xFF)
-                            let mn = int((wsu[wsb * 5u + 3u + uint(bu) / 4u] >> ((uint(bu) % 4u) * 8u)) & 0xFF)
-                            sa = dm.x * float(sc)
-                            sbv = dm.y * float(mn)
+                            sm = k4_dmin(unpackHalf2x16(wsu[wsb * 5u]), wsu[wsb * 5u + 1u + uint(bu) / 4u], wsu[wsb * 5u + 3u + uint(bu) / 4u], uint(bu))
                         }
                     }
                     bw4[ct] = wv
                     if (ct % 2u == 0u) {
-                        w_dsc[ct / 2u] = sa
-                        w_dmin[ct / 2u] = sbv
+                        w_dsc[ct / 2u] = sm.x
+                        w_dmin[ct / 2u] = sm.y
                     }
                 }
                 barrier()
