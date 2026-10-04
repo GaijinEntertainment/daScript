@@ -15,7 +15,10 @@ anchor.
   while none does, since a prefill window's cost is mostly fixed and nothing waits on it; `chunk_defaults` names
   both sizes per serving backend (the chunk 512 where a GPU prefills and 64 on the CPU, whose chunk costs its token count, so the stall follows it down; idle 512,
   2048 on Metal, where four windows in one call run within a few percent of the whole prompt's rate); paged serving donates finished streams'
-  KV pages to the prefix cache, device mode parks their regions. A prompt is one position stream: a media
+  KV pages to the prefix cache, device mode parks their regions. The paged pool's blobs hold reserved address
+  room for every stream's context plus the cache's retention, up to `KV_POOL_RESERVE_BYTES` (`kv_pool_reserve`):
+  inside it a doubling moves and fills nothing, where a moved blob is a copy of every cached page inside one
+  request's first token. A prompt is one position stream: a media
   span's rows stand in it as ids of the media's content (`media_position_id`), so the prefix cache matches,
   attaches and donates across an image or a clip as across text. A span evals as one body and attaches
   whole - a hit ending inside one counts as no hit - and a hit past a grid-roped span restores the span's

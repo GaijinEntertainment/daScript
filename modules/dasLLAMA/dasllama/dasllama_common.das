@@ -3425,6 +3425,31 @@ def create_kv_pool_(c : Config; page_rows : int64; kdt, vdt : KVDtype) : KVPool 
     return <- p
 }
 
+let KV_POOL_RESERVE_BYTES = 4l * 1024l * 1024l * 1024l
+
+//! Reserve address room for `positions` cached positions, up to KV_POOL_RESERVE_BYTES: growth inside the
+//! reserve moves no blob. The reserve is untouched memory - pages commit as groups are written.
+def kv_pool_reserve(var p : KVPool; positions : int64) {
+    var group_bytes = 0l
+    for (kb, vb in p.krow_bytes, p.vrow_bytes) {
+        group_bytes += (kb + vb) * p.page_rows
+    }
+    return if (group_bytes <= 0l)
+    let groups = min((positions + p.page_rows - 1l) / p.page_rows, KV_POOL_RESERVE_BYTES / group_bytes)
+    for (b in range64(p.nblobs)) {
+        p.kblobs[b] |> reserve(groups * p.page_rows * p.krow_bytes[b])
+        p.vblobs[b] |> reserve(groups * p.page_rows * p.vrow_bytes[b])
+    }
+}
+
+//! A group is written before it is read - a recycled one already hands out stale rows - so the new rows stay unfilled.
+def private kv_blob_grow(var blob : array<uint8>; need : int64) {
+    if (long_capacity(blob) < need) {
+        blob |> reserve(need)
+    }
+    blob |> resize_no_init(need)
+}
+
 // Double the pool's group capacity. Every blob resizes IN PLACE — a hoisted cache pointer would
 // dangle, which is why kv_ensure runs at the top of the forward entries, before any hoist.
 [cold_path]   // doubling growth: amortized O(1) per page, and never on a flat session
@@ -3432,8 +3457,8 @@ def private kv_pool_grow(var p : KVPool) {
     let oldcap = p.capacity_groups
     let newcap = oldcap <= 0l ? 4l : oldcap * 2l
     for (b in range64(p.nblobs)) {
-        p.kblobs[b] |> reserve_resize(newcap * p.page_rows * p.krow_bytes[b])
-        p.vblobs[b] |> reserve_resize(newcap * p.page_rows * p.vrow_bytes[b])
+        kv_blob_grow(p.kblobs[b], newcap * p.page_rows * p.krow_bytes[b])
+        kv_blob_grow(p.vblobs[b], newcap * p.page_rows * p.vrow_bytes[b])
     }
     p.refcnt |> resize(newcap)
     p.gen |> resize(newcap)

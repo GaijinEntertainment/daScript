@@ -227,6 +227,7 @@ def create_scheduler(model : Model; max_streams : int64 = 4l; max_queue : int64 
     if (page_rows > 0l) {
         sch.paged = true
         sch.pool <- create_kv_pool(model, page_rows, kv_dtype)
+        kv_pool_reserve(sch.pool, sch.max_streams * (model.config.seq_len + page_rows) + prefix_groups * page_rows)
         sch.prefix <- create_prefix_cache(prefix_groups, prefix_states)
     }
     return <- sch
