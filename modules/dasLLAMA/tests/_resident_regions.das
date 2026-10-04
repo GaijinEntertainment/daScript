@@ -518,6 +518,20 @@ def cell_regions_batched_first(t : T?; file : string) {
 
 def private device_session(tr : Model) : Session => <- create_device_session(tr, gpu_device_session_dtype())
 
+//! two device-home sessions prefilled over `pa` and `pb` for `body`, each parked and deleted after (one the body parked parks
+//! again as a no-op: its claim is gone)
+def private with_device_pair(tr : Model; pa, pb : array<int64>; body : block<(var sa : Session; var sb : Session) : void>) {
+    var sa <- device_session(tr)
+    var sb <- device_session(tr)
+    eval(tr, sa, pa)
+    eval(tr, sb, pb)
+    invoke(body, sa, sb)
+    gpu_device_kv_park(sa)
+    gpu_device_kv_park(sb)
+    delete sa
+    delete sb
+}
+
 def cell_device_home_sessions(t : T?; file : string) {
     t |> run("two device-home sessions step between each other and in one batched step, bit for bit a host-cached session alone") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
@@ -526,43 +540,37 @@ def cell_device_home_sessions(t : T?; file : string) {
             var pb <- prompt_b()
             var al <- alone_runs(tr, pa, pb)
             set_resident_prefill_allowed(false)   // the server's setting: the pin binds host-cached sessions, a device-home one prefills on the device all the same
-            var sa <- device_session(tr)
-            var sb <- device_session(tr)
-            t |> equal(length(sa.key_cache) + length(sa.value_cache), 0, "a device-home session allocates no host cache")
-            eval(tr, sa, pa)
-            hold_equal(t, sa.logits, al.ra[0], "device-home A's prefill")
-            eval(tr, sb, pb)
-            hold_equal(t, sb.logits, al.rb[0], "device-home B's prefill")
-            let half = STEPS / 2l
-            for (st in range64(half)) {
-                var ta <- [al.fa[st]]
-                var tb <- [al.fb[st]]
-                eval(tr, sa, ta)
-                hold_equal(t, sa.logits, al.ra[st + 1l], "device-home A single step {st}")
-                eval(tr, sb, tb)
-                hold_equal(t, sb.logits, al.rb[st + 1l], "device-home B single step {st}")
-                delete ta
-                delete tb
-            }
-            moe_gpu_hydrate_session(tr, sa)
-            t |> equal(length(sa.key_cache) + length(sa.value_cache), 0, "hydrating a device-home session brings nothing down: it has no host cache to fill")
-            with_batch_rows(tr, sa, sb) $(var ws; var sess) {
-                for (st in range64(half, STEPS)) {
-                    var toks <- [al.fa[st], al.fb[st]]
-                    eval_batch(tr, ws, sess, toks)
-                    delete toks
-                    hold_equal(t, sa.logits, al.ra[st + 1l], "device-home batched step {st}, row A")
-                    hold_equal(t, sb.logits, al.rb[st + 1l], "device-home batched step {st}, row B")
+            with_device_pair(tr, pa, pb) $(var sa; var sb) {
+                t |> equal(length(sa.key_cache) + length(sa.value_cache), 0, "a device-home session allocates no host cache")
+                hold_equal(t, sa.logits, al.ra[0], "device-home A's prefill")
+                hold_equal(t, sb.logits, al.rb[0], "device-home B's prefill")
+                let half = STEPS / 2l
+                for (st in range64(half)) {
+                    var ta <- [al.fa[st]]
+                    var tb <- [al.fb[st]]
+                    eval(tr, sa, ta)
+                    hold_equal(t, sa.logits, al.ra[st + 1l], "device-home A single step {st}")
+                    eval(tr, sb, tb)
+                    hold_equal(t, sb.logits, al.rb[st + 1l], "device-home B single step {st}")
+                    delete ta
+                    delete tb
                 }
+                moe_gpu_hydrate_session(tr, sa)
+                t |> equal(length(sa.key_cache) + length(sa.value_cache), 0, "hydrating a device-home session brings nothing down: it has no host cache to fill")
+                with_batch_rows(tr, sa, sb) $(var ws; var sess) {
+                    for (st in range64(half, STEPS)) {
+                        var toks <- [al.fa[st], al.fb[st]]
+                        eval_batch(tr, ws, sess, toks)
+                        delete toks
+                        hold_equal(t, sa.logits, al.ra[st + 1l], "device-home batched step {st}, row A")
+                        hold_equal(t, sb.logits, al.rb[st + 1l], "device-home batched step {st}, row B")
+                    }
+                }
+                set_resident_prefill_allowed(true)
+                var passes <- gpu_cpu_passes_()
+                t |> equal(length(passes), 0, "the device served every call, the prefills under the pin among them: {passes}")
+                delete passes
             }
-            set_resident_prefill_allowed(true)
-            var passes <- gpu_cpu_passes_()
-            t |> equal(length(passes), 0, "the device served every call, the prefills under the pin among them: {passes}")
-            delete passes
-            gpu_device_kv_park(sa)
-            gpu_device_kv_park(sb)
-            delete sa
-            delete sb
             delete al
             delete pa
             delete pb
@@ -577,31 +585,26 @@ def private cell_device_home_pin(t : T?; file : string) {
             var pa <- prompt_a()
             var pb <- prompt_b()
             var al <- alone_runs(tr, pa, pb)
-            var sa <- device_session(tr)
-            var sb <- device_session(tr)
-            eval(tr, sa, pa)
-            eval(tr, sb, pb)
-            var outsider <- create_session(tr, mirror_kv_dtype())
-            eval(tr, outsider, pa)
-            only_pass(t, "busy", "the outsider's call passed as busy, and only it")
-            var ta <- [al.fa[0]]
-            var tb <- [al.fb[0]]
-            eval(tr, sa, ta)
-            hold_equal(t, sa.logits, al.ra[1], "owner A's next step, its region untouched")
-            eval(tr, sb, tb)
-            hold_equal(t, sb.logits, al.rb[1], "owner B's next step, its region untouched")
-            gpu_device_kv_park(sa)
-            var late <- create_session(tr, mirror_kv_dtype())
-            let served0 = moe_gpu_resident_prefills()
-            eval(tr, late, pa)
-            t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "a parked region is anyone's: the next outsider prefills on the device")
-            gpu_device_kv_park(sb)
-            delete ta
-            delete tb
-            delete late
-            delete outsider
-            delete sa
-            delete sb
+            with_device_pair(tr, pa, pb) $(var sa; var sb) {
+                var outsider <- create_session(tr, mirror_kv_dtype())
+                eval(tr, outsider, pa)
+                only_pass(t, "busy", "the outsider's call passed as busy, and only it")
+                var ta <- [al.fa[0]]
+                var tb <- [al.fb[0]]
+                eval(tr, sa, ta)
+                hold_equal(t, sa.logits, al.ra[1], "owner A's next step, its region untouched")
+                eval(tr, sb, tb)
+                hold_equal(t, sb.logits, al.rb[1], "owner B's next step, its region untouched")
+                gpu_device_kv_park(sa)
+                var late <- create_session(tr, mirror_kv_dtype())
+                let served0 = moe_gpu_resident_prefills()
+                eval(tr, late, pa)
+                t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "a parked region is anyone's: the next outsider prefills on the device")
+                delete ta
+                delete tb
+                delete late
+                delete outsider
+            }
             delete al
             delete pa
             delete pb
@@ -763,29 +766,23 @@ def cell_device_home_guards(t : T?; file : string) {
             var pb <- prompt_b()
             var fa <- feed_a()
             var ra <- logits_alone(tr, pa, fa)
-            var sa <- device_session(tr)
-            var sb <- device_session(tr)
-            eval(tr, sa, pa)
-            eval(tr, sb, pb)
-            var third <- device_session(tr)
-            var tripped = false
-            try {
-                eval(tr, third, pa)
-            } recover {
-                tripped = true
+            with_device_pair(tr, pa, pb) $(var sa; var _sb) {
+                var third <- device_session(tr)
+                var tripped = false
+                try {
+                    eval(tr, third, pa)
+                } recover {
+                    tripped = true
+                }
+                t |> success(tripped, "a third device-home session over two regions has nowhere to keep its rows: the CPU cannot take it, so it panics")
+                only_pass(t, "busy", "the refused call was counted as busy, and only it")
+                var ta <- [fa[0]]
+                eval(tr, sa, ta)
+                hold_equal(t, sa.logits, ra[1], "owner A's next step after the refused session")
+                gpu_device_kv_park(third)
+                delete ta
+                delete third
             }
-            t |> success(tripped, "a third device-home session over two regions has nowhere to keep its rows: the CPU cannot take it, so it panics")
-            only_pass(t, "busy", "the refused call was counted as busy, and only it")
-            var ta <- [fa[0]]
-            eval(tr, sa, ta)
-            hold_equal(t, sa.logits, ra[1], "owner A's next step after the refused session")
-            gpu_device_kv_park(sa)
-            gpu_device_kv_park(sb)
-            gpu_device_kv_park(third)
-            delete ta
-            delete third
-            delete sa
-            delete sb
             delete ra
             delete pa
             delete pb
