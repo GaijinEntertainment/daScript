@@ -48,20 +48,10 @@ def private feed_b() : array<int64> => <- ramp_ids(STEPS, 0l, 2500l, 71l, 4500l)
 def private prompt_c() : array<int64> => <- ramp_ids(48l, 0l, 1500l, 59l, 5500l)
 def private feed_c() : array<int64> => <- ramp_ids(STEPS, 0l, 2200l, 67l, 4200l)
 
-def private logits_of(s : Session; vocab : int64) : array<float> => <- [for (i in range64(vocab)); s.logits[i]]
-
 //! one session alone: the prefill's logits, then each fed step's
 def private logits_alone(tr : Model; prompt, toks : array<int64>) : array<array<float>> {
     var s <- create_session(tr, mirror_kv_dtype())
-    let n = long_length(prompt)
-    var out : array<array<float>>
-    out |> reserve(long_length(toks) + 1l)
-    forward_prefill(tr, s, prompt, n, 0l)
-    out |> emplace <| logits_of(s, tr.config.vocab_size)
-    for (st in range64(long_length(toks))) {
-        forward(tr, s, toks[st], n + st)
-        out |> emplace <| logits_of(s, tr.config.vocab_size)
-    }
+    var out <- feed_logits(tr, s, prompt, toks)
     delete s
     return <- out
 }

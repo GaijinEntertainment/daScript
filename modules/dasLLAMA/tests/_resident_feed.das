@@ -251,13 +251,16 @@ def feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks : array
     out |> reserve(long_length(toks) + 1l)
     forward_prefill(tr, s, prompt, n, 0l)
     invoke(after_prefill)
-    out |> emplace <| [for (i in range64(tr.config.vocab_size)); s.logits[i]]
+    out |> emplace <| logits_of(s, tr.config.vocab_size)
     for (st in range64(long_length(toks))) {
         forward(tr, s, toks[st], n + st)
-        out |> emplace <| [for (i in range64(tr.config.vocab_size)); s.logits[i]]
+        out |> emplace <| logits_of(s, tr.config.vocab_size)
     }
     return <- out
 }
+
+//! the session's first `vocab` logits, copied
+def logits_of(s : Session; vocab : int64) : array<float> => <- [for (i in range64(vocab)); s.logits[i]]
 
 //! the prefill's logits, then each fed step's, through `s`
 def feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks : array<int64>) : array<array<float>> {
