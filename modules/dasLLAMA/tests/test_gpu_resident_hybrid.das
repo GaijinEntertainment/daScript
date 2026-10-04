@@ -315,6 +315,34 @@ def private load_mtp_carrier(t : T?; regions : int64; head_off : bool = false) :
     return <- tr
 }
 
+//! `body` on the -MTP- carrier `load_mtp_carrier` loads at `regions`, inside the engine's job queue, the model deleted after; nothing
+//! past the gate's skip
+def private with_mtp_carrier(t : T?; regions : int64; head_off : bool; body : block<(var tr : Model) : void>) {
+    if (!mtp_carry_ready(t)) return
+    var tr <- load_mtp_carrier(t, regions, head_off)
+    with_dasllama_jobque_() {
+        invoke(body, tr)
+    }
+    delete tr
+}
+
+def private with_mtp_carrier(t : T?; regions : int64; body : block<(var tr : Model) : void>) {
+    with_mtp_carrier(t, regions, false, body)
+}
+
+//! `body` on the one-region carrier and a fresh session holding `resident_prompt(DRAFT_PROMPT)` through `prefill_warm`, the
+//! session and the prompt deleted after
+def private with_warm_carrier(t : T?; body : block<(var tr : Model; prompt : array<int64>; var s : Session) : void>) {
+    with_mtp_carrier(t, 1l) $(var tr) {
+        var prompt <- resident_prompt(DRAFT_PROMPT)
+        var s <- create_session(tr, mirror_kv_dtype())
+        prefill_warm(tr, s, prompt)
+        invoke(body, tr, prompt, s)
+        delete s
+        delete prompt
+    }
+}
+
 //! the prefill's logits, then each fed step's, through a fresh session under the speculative gate `spec` (put back after)
 [cold_path]
 def private feed_under_spec(tr : Model; prompt, toks : array<int64>; spec : bool) : array<array<float>> {
@@ -330,9 +358,7 @@ def private feed_under_spec(tr : Model; prompt, toks : array<int64>; spec : bool
 [test]
 def test_gpu_resident_hybrid_mtp_carry(t : T?) {
     t |> run("Qwen3.5-0.8B-MTP: the resident prefill and each step land the post-norm hidden as the speculative carry, against the CPU chain's") @(t : T?) {
-        if (!mtp_carry_ready(t)) return
-        var tr <- load_mtp_carrier(t, 1l)
-        with_dasllama_jobque_() {
+        with_mtp_carrier(t, 1l) $(var tr) {
             var prompt <- resident_prompt(40l)
             var toks <- resident_feed(CARRY_STEPS)
             let served0 = moe_gpu_resident_prefills()
@@ -347,16 +373,13 @@ def test_gpu_resident_hybrid_mtp_carry(t : T?) {
             delete prompt
             delete toks
         }
-        delete tr
     }
 }
 
 [test]
 def test_gpu_resident_hybrid_mtp_carry_batched(t : T?) {
     t |> run("Qwen3.5-0.8B-MTP: two sessions batched through the N-row command land each row's carry, against each session alone on the CPU chain") @(t : T?) {
-        if (!mtp_carry_ready(t)) return
-        var tr <- load_mtp_carrier(t, 2l)
-        with_dasllama_jobque_() {
+        with_mtp_carrier(t, 2l) $(var tr) {
             var pa <- resident_prompt(40l)
             var pb <- [for (i in range64(57l)); 3000l + (i * 91l) % 6000l]
             var fa <- resident_feed(CARRY_STEPS)
@@ -405,16 +428,13 @@ def test_gpu_resident_hybrid_mtp_carry_batched(t : T?) {
             delete fa
             delete fb
         }
-        delete tr
     }
 }
 
 [test]
 def test_gpu_resident_hybrid_mtp_carry_gate(t : T?) {
     t |> run("Qwen3.5-0.8B-MTP: with speculation off the NextN-headed hybrid lands no carry - the watermark stays 0 after the resident prefill and every step - and its logits sit within the deltanet bar of the spec-on run's at every row, the one-step-off control past it") @(t : T?) {
-        if (!mtp_carry_ready(t)) return
-        var tr <- load_mtp_carrier(t, 1l)
-        with_dasllama_jobque_() {
+        with_mtp_carrier(t, 1l) $(var tr) {
             var prompt <- resident_prompt(40l)
             var toks <- resident_feed(CARRY_STEPS)
             let served0 = moe_gpu_resident_prefills()
@@ -437,7 +457,6 @@ def test_gpu_resident_hybrid_mtp_carry_gate(t : T?) {
             delete prompt
             delete toks
         }
-        delete tr
     }
 }
 
@@ -467,12 +486,7 @@ def private row_within(t : T?; what : string; gpu, cpu, off : array<float>) {
 [test]
 def test_gpu_resident_hybrid_mtp_draft(t : T?) {
     t |> run("Qwen3.5-0.8B-MTP: one NextN draft through the resident head against the CPU forward_mtp on the same token, carry and row") @(t : T?) {
-        if (!mtp_carry_ready(t)) return
-        var tr <- load_mtp_carrier(t, 1l)
-        with_dasllama_jobque_() {
-            var prompt <- resident_prompt(DRAFT_PROMPT)
-            var s <- create_session(tr, mirror_kv_dtype())
-            prefill_warm(tr, s, prompt)
+        with_warm_carrier(t) $(var tr; prompt; var s) {
             t |> equal(s.mtp_h_pos1, DRAFT_PROMPT, "the resident prefill landed the carry at the prompt's end")
             var h0 <- [for (x in s.mtp_h); x]
             let row = DRAFT_PROMPT - 1l   // the head's row pos - 1: the round's draft at position pos
@@ -498,18 +512,10 @@ def test_gpu_resident_hybrid_mtp_draft(t : T?) {
             delete cpu
             delete one_row_back
             delete h0
-            delete s
-            delete prompt
         }
-        delete tr
     }
     t |> run("Qwen3.5-0.8B-MTP: the speculative round drafts on the CPU with the draft seat unset, and on the device with it back") @(t : T?) {
-        if (!mtp_carry_ready(t)) return
-        var tr <- load_mtp_carrier(t, 1l)
-        with_dasllama_jobque_() {
-            var prompt <- resident_prompt(DRAFT_PROMPT)
-            var s <- create_session(tr, mirror_kv_dtype())
-            prefill_warm(tr, s, prompt)
+        with_warm_carrier(t) $(var tr; prompt; var s) {
             let spec0 = get_mtp_spec()
             set_mtp_spec(true)
             let drafts0 = moe_gpu_resident_drafts()
@@ -523,22 +529,14 @@ def test_gpu_resident_hybrid_mtp_draft(t : T?) {
             set_mtp_spec(spec0)
             t |> equal(s.mtp_drafted, 2l, "the second round drafted")
             t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the second round's draft ran on the device: the seat back took it")
-            delete s
-            delete prompt
         }
-        delete tr
     }
 }
 
 [test]
 def test_gpu_resident_hybrid_mtp_draft_upload(t : T?) {
     t |> run("Qwen3.5-0.8B-MTP: a device draft past the rows the device holds brings the host's rows up with it and counts the device's rows through its own; the pass after it brings the drafted row down, and the CPU draft over the same rows picks the same token") @(t : T?) {
-        if (!mtp_carry_ready(t)) return
-        var tr <- load_mtp_carrier(t, 1l)
-        with_dasllama_jobque_() {
-            var prompt <- resident_prompt(DRAFT_PROMPT)
-            var s <- create_session(tr, mirror_kv_dtype())
-            prefill_warm(tr, s, prompt)
+        with_warm_carrier(t) $(var tr; prompt; var s) {
             let pos = DRAFT_PROMPT
             var h0 <- [for (x in s.mtp_h); x]
             declined_draft(tr, s, DRAFT_TOKEN, pos - 1l)
@@ -566,10 +564,7 @@ def test_gpu_resident_hybrid_mtp_draft_upload(t : T?) {
             delete landed_row
             delete stale_row
             delete h0
-            delete s
-            delete prompt
         }
-        delete tr
     }
 }
 
@@ -695,9 +690,7 @@ def private declined_draft_rounds(tr : Model; var s : Session; toks : array<int6
 [test]
 def test_gpu_resident_hybrid_mtp_verify(t : T?) {
     t |> run("Qwen3.5-0.8B-MTP: the round's two verify rows as same-slab rows through the resident seat, bit for bit the two one-row steps of the same tokens; the head's rows stay on the device and come down on a pass, the re-warm's row bit for bit the draft's") @(t : T?) {
-        if (!mtp_carry_ready(t)) return
-        var tr <- load_mtp_carrier(t, 1l)
-        with_dasllama_jobque_() {
+        with_mtp_carrier(t, 1l) $(var tr) {
             let c = tr.config
             var prompt <- resident_prompt(DRAFT_PROMPT)
             var s <- create_session(tr, mirror_kv_dtype())
@@ -762,16 +755,13 @@ def test_gpu_resident_hybrid_mtp_verify(t : T?) {
             delete h0
             delete prompt
         }
-        delete tr
     }
 }
 
 [test]
 def test_gpu_resident_hybrid_mtp_verify_asked(t : T?) {
     t |> run("Qwen3.5-0.8B-MTP: six rounds under the caller's pick ask - the picks alone landed, the committed row's pick published for sample_ - token for token the rounds with the logits landing") @(t : T?) {
-        if (!mtp_carry_ready(t)) return
-        var tr <- load_mtp_carrier(t, 2l)
-        with_dasllama_jobque_() {
+        with_mtp_carrier(t, 2l) $(var tr) {
             var prompt <- resident_prompt(DRAFT_PROMPT)
             var sa <- create_session(tr, mirror_kv_dtype())
             var sb <- create_session(tr, mirror_kv_dtype())
@@ -803,7 +793,6 @@ def test_gpu_resident_hybrid_mtp_verify_asked(t : T?) {
             delete sb
             delete prompt
         }
-        delete tr
     }
 }
 
@@ -844,9 +833,7 @@ def private state_after_steps(tr : Model; prompt, toks : array<int64>; next : in
 [test]
 def test_gpu_resident_hybrid_mtp_verify_reject(t : T?) {
     t |> run("Qwen3.5-0.8B-MTP: a rejected device verify rolls the region back on the device - no snapshot and no replayed step; the live deltanet slots and the next step bit for bit a one-row session's, the rows, head rows, dn_pos and carry at the token's row, the next round on the device again") @(t : T?) {
-        if (!mtp_carry_ready(t)) return
-        var tr <- load_mtp_carrier(t, 1l)
-        with_dasllama_jobque_() {
+        with_mtp_carrier(t, 1l) $(var tr) {
             let c = tr.config
             var prompt <- resident_prompt(DRAFT_PROMPT)
             var s <- create_session(tr, mirror_kv_dtype())
@@ -909,16 +896,13 @@ def test_gpu_resident_hybrid_mtp_verify_reject(t : T?) {
             delete vlog0
             delete prompt
         }
-        delete tr
     }
 }
 
 [test]
 def test_gpu_resident_hybrid_mtp_verify_reject_asked(t : T?) {
     t |> run("Qwen3.5-0.8B-MTP: a rejected device verify under the caller's pick ask publishes verify row 0's pick - the one-row step's argmax - in place of its logits, the carry re-seeded from its hidden") @(t : T?) {
-        if (!mtp_carry_ready(t)) return
-        var tr <- load_mtp_carrier(t, 1l)
-        with_dasllama_jobque_() {
+        with_mtp_carrier(t, 1l) $(var tr) {
             let c = tr.config
             var prompt <- resident_prompt(DRAFT_PROMPT)
             var s <- create_session(tr, mirror_kv_dtype())
@@ -960,7 +944,6 @@ def test_gpu_resident_hybrid_mtp_verify_reject_asked(t : T?) {
             delete before
             delete prompt
         }
-        delete tr
     }
 }
 
@@ -1023,9 +1006,7 @@ def private head_rows_within(t : T?; what : string; gpu, cpu : array<array<float
 [test]
 def test_gpu_resident_hybrid_mtp_xb_poison(t : T?) {
     t |> run("Qwen3.5-0.8B-MTP: the host residual rows poisoned with NaN before a resident prefill leave the device draft bit for bit the clean prefill's - the head's prompt rows warm on the device, off no host row") @(t : T?) {
-        if (!mtp_carry_ready(t)) return
-        var tr <- load_mtp_carrier(t, 1l)
-        with_dasllama_jobque_() {
+        with_mtp_carrier(t, 1l) $(var tr) {
             var prompt <- resident_prompt(DRAFT_PROMPT)
             let row = DRAFT_PROMPT - 1l
             var clean <- create_session(tr, mirror_kv_dtype())
@@ -1059,16 +1040,13 @@ def test_gpu_resident_hybrid_mtp_xb_poison(t : T?) {
             delete s
             delete prompt
         }
-        delete tr
     }
 }
 
 //! the head's K rows [0, nprompt - 1) the window chain warmed over an `nprompt`-token prompt, read back to the host, against the
 //! CPU warm's rows on the same prompt (the model dropped): within the head-row bar, the CPU row one down as the control
 def private head_warm_rows_cell(t : T?; nprompt : int64) {
-    if (!mtp_carry_ready(t)) return
-    var tr <- load_mtp_carrier(t, 1l)
-    with_dasllama_jobque_() {
+    with_mtp_carrier(t, 1l) $(var tr) {
         var prompt <- resident_prompt(nprompt)
         let n = nprompt - 1l
         var s <- create_session(tr, mirror_kv_dtype())
@@ -1090,7 +1068,6 @@ def private head_warm_rows_cell(t : T?; nprompt : int64) {
         delete cpu
         delete prompt
     }
-    delete tr
 }
 
 [test]
@@ -1121,9 +1098,7 @@ def private agreed_rows_within(t : T?; tr : Model; var c : Session; var hydrated
 [test]
 def test_gpu_resident_hybrid_mtp_rounds(t : T?) {
     t |> run("Qwen3.5-0.8B-MTP: six speculative rounds on the resident driver against the CPU round from the same prompt - every round's draft the CPU round's or a near-tie of it, accept and position equal while the drafts agree; then two rounds whose draft the seat declines - the CPU head over the head's rows hydrated from the device - against the CPU round, the hydrated rows within twice the deltanet bar, the CPU round on poisoned head rows as the control") @(t : T?) {
-        if (!mtp_carry_ready(t)) return
-        var tr <- load_mtp_carrier(t, 1l)
-        with_dasllama_jobque_() {
+        with_mtp_carrier(t, 1l) $(var tr) {
             var prompt <- resident_prompt(DRAFT_PROMPT)
             var toks <- resident_feed(ROUNDS + 2l)
             var fed <- [for (i in range64(ROUNDS)); toks[i]]
@@ -1194,19 +1169,13 @@ def test_gpu_resident_hybrid_mtp_rounds(t : T?) {
             delete toks
             delete prompt
         }
-        delete tr
     }
 }
 
 [test]
 def test_gpu_resident_hybrid_mtp_nonfinite(t : T?) {
     t |> run("Qwen3.5-0.8B-MTP: a NaN carry through the resident head lands non-finite logits, and the draft panics naming the row instead of landing a pick") @(t : T?) {
-        if (!mtp_carry_ready(t)) return
-        var tr <- load_mtp_carrier(t, 1l)
-        with_dasllama_jobque_() {
-            var prompt <- resident_prompt(DRAFT_PROMPT)
-            var s <- create_session(tr, mirror_kv_dtype())
-            prefill_warm(tr, s, prompt)
+        with_warm_carrier(t) $(var tr; prompt; var s) {
             let row = DRAFT_PROMPT - 1l
             let nan = unsafe(reinterpret<float>(NAN_BITS))
             for (i in range64(long_length(s.mtp_h))) {
@@ -1219,10 +1188,7 @@ def test_gpu_resident_hybrid_mtp_nonfinite(t : T?) {
             to_log(LOG_INFO, "NaN carry draft at row {row}: {empty(why) ? "no panic" : why}\n")
             t |> success(contains(why, "landed non-finite logits") && contains(why, "resident draft") && contains(why, "row {row}"), "the draft panics on the non-finite row it landed, naming the row: '{why}'")
             t |> equal(moe_gpu_resident_drafts(), drafts0, "no draft was counted: the panic fired before the pick landed")
-            delete s
-            delete prompt
         }
-        delete tr
     }
 }
 
@@ -1289,12 +1255,9 @@ def test_gpu_resident_hybrid_mtp_pass_arms(t : T?) {
             delete s
             delete prompt
         }
-        delete tr
     }
     t |> run("Qwen3.5-0.8B-MTP: a session the device never homed - its prompt read on the CPU rails under the server's prefill pin - drafts and verifies on the CPU rails as unhomed, the CPU verify over the recurrent state the CPU rails left at the prompt's end") @(t : T?) {
-        if (!mtp_carry_ready(t)) return
-        var tr <- load_mtp_carrier(t, 1l)
-        with_dasllama_jobque_() {
+        with_mtp_carrier(t, 1l) $(var tr) {
             var prompt <- resident_prompt(DRAFT_PROMPT)
             var s <- create_session(tr, mirror_kv_dtype())
             let pinned0 = pass_count("pinned_off")
@@ -1311,12 +1274,9 @@ def test_gpu_resident_hybrid_mtp_pass_arms(t : T?) {
             delete s
             delete prompt
         }
-        delete tr
     }
     t |> run("Qwen3.5-0.8B-MTP: a round five rows past the region's rows - rows the CPU rails served as a continuation the hybrid's resident prefill passes - the draft, which has no gap arm, serves on the device; the verify passes as gap and the CPU verify completes over the recurrent state the CPU rails left") @(t : T?) {
-        if (!mtp_carry_ready(t)) return
-        var tr <- load_mtp_carrier(t, 1l)
-        with_dasllama_jobque_() {
+        with_mtp_carrier(t, 1l) $(var tr) {
             var prompt <- resident_prompt(DRAFT_PROMPT)
             var more <- [for (i in range64(GAP_ROWS)); 3000l + (i * 61l) % 4000l]
             var s <- create_session(tr, mirror_kv_dtype())
@@ -1335,38 +1295,27 @@ def test_gpu_resident_hybrid_mtp_pass_arms(t : T?) {
             delete more
             delete prompt
         }
-        delete tr
     }
 }
 
 [test]
 def test_gpu_resident_hybrid_mtp_rewind_refused(t : T?) {
     t |> run("Qwen3.5-0.8B-MTP: a round off the recurrent state's position - the draft, which has no rewind arm, serves on the device; the verify passes as rewind, and the CPU rails refuse the rewind by name: the recurrent state is forward-only on every rail") @(t : T?) {
-        if (!mtp_carry_ready(t)) return
-        var tr <- load_mtp_carrier(t, 1l)
-        with_dasllama_jobque_() {
-            var prompt <- resident_prompt(DRAFT_PROMPT)
-            var s <- create_session(tr, mirror_kv_dtype())
-            prefill_warm(tr, s, prompt)
+        with_warm_carrier(t) $(var tr; prompt; var s) {
             t |> equal(s.dn_pos, DRAFT_PROMPT, "the recurrent state sits at the prompt's end")
             s.dn_pos = DRAFT_PROMPT - 1l
             let arm = pass_arm_begin("rewind")
             let why = pass_arm_round(tr, s, DRAFT_TOKEN)
             t |> success(contains(why, "deltanet state is forward-only") && contains(why, "position {DRAFT_PROMPT}") && contains(why, "session is at {DRAFT_PROMPT - 1l}"), "the CPU verify refused the rewind by name, both positions in the text: '{why}'")
             pass_arm_counted(t, arm, 1l, 1l)
-            delete s
-            delete prompt
         }
-        delete tr
     }
 }
 
 [test]
 def test_gpu_resident_hybrid_mtp_head_off(t : T?) {
     t |> run("Qwen3.5-0.8B-MTP: with the NextN head kept off the device (the draft seat unset for the load) the plan carries no verify rows, so a round's verify passes as verify_rows and the CPU verify's two-row window passes the resident prefill as verify_window - no panic, the verify counter unmoved, the driver still armed - and the CPU verify's row 0 sits within the deltanet bar of the CPU chain's step of the same token, the prefill's logits as the control") @(t : T?) {
-        if (!mtp_carry_ready(t)) return
-        var tr <- load_mtp_carrier(t, 1l, true)
-        with_dasllama_jobque_() {
+        with_mtp_carrier(t, 1l, true) $(var tr) {
             t |> equal(rdec_verify_rows(), 0l, "the plan carries no verify rows: the head is off the device")
             var prompt <- resident_prompt(DRAFT_PROMPT)
             let pos = DRAFT_PROMPT
@@ -1397,7 +1346,6 @@ def test_gpu_resident_hybrid_mtp_head_off(t : T?) {
             delete truth
             delete prompt
         }
-        delete tr
     }
 }
 
