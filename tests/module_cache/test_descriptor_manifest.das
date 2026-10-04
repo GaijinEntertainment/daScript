@@ -111,6 +111,11 @@ struct Fixture {
     cmd : string
 }
 
+//! the child that runs the driver under project root `tmp`: `exe` started with `-dasroot root`
+def fixture_cmd(tmp, exe, root : string) : string {
+    return "{trace_prefix()}\"{exe}\" -dasroot \"{root}\" -no-module-cache -project_root \"{tmp}\" \"{path_join(tmp, "use.das")}\""
+}
+
 //! a project root holding one pure-das module whose descriptor registers one require path,
 //! a module whose descriptor registers an absent C++ artifact, a module whose descriptor does
 //! not compile, and a driver that requires through the first
@@ -133,7 +138,7 @@ def make_fixture(tmp : string) : Fixture {
         manifest = manifest,
         manifestTmp = "{manifest}.tmp",
         dmManifest = path_join(dmDir, manifest_file_name()),
-        cmd = "{trace_prefix()}\"{das_exe()}\" -dasroot \"{get_das_root()}\" -no-module-cache -project_root \"{tmp}\" \"{path_join(tmp, "use.das")}\""
+        cmd = fixture_cmd(tmp, das_exe(), get_das_root())
     )
     fwrite(fx.descriptor, DESCRIPTOR)
     fwrite(path_join(fx.modDir, "hello.das"), "options gen2\nmodule hello\ndef hello_value() : int \{\n    return 42\n\}\n")
@@ -196,7 +201,7 @@ def arms_binary_kinds(t : T?; fx : Fixture) {
         t |> skip("no {das_is_dll_build() ? "daslang_static" : "daslang"} beside {das_exe()}")
         return
     }
-    let twinCmd = "{trace_prefix()}\"{twin}\" -dasroot \"{get_das_root()}\" -no-module-cache -project_root \"{fx.tmp}\" \"{path_join(fx.tmp, "use.das")}\""
+    let twinCmd = fixture_cmd(fx.tmp, twin, get_das_root())
     let twinManifest = path_join(fx.modDir, twin_manifest_file_name())
     t |> run("the other kind's first start writes its own manifest and leaves this kind's alone") @(t : T?) {
         let before = fread(fx.manifest)
@@ -238,6 +243,28 @@ def arms_targets(t : T?; fx : Fixture) {
         var again : string
         t |> success(run_child_reported(t, "target warm", targetCmd, again, "PROBE 42"), "the target run resolves through its rows")
         t |> equal("replayed 1 row(s) (deferred 0)", probe_line(again), "the target run replays its own:\n{again}")
+    }
+}
+
+//! one das root under several spellings is one manifest key (src/misc/ARCHITECTURE.md#das-root-absolute)
+def arms_root_spellings(t : T?; fx : Fixture) {
+    let root = get_das_root()
+    var spellings <- [
+        (name = "dot-dot", path = "{root}/modules/.."),
+        (name = "trailing slash", path = "{root}/")
+    ]
+    let fromCwd = relative_result(root, getcwd())
+    if (fromCwd is value && !empty(fromCwd as value)) {
+        spellings |> push((name = "relative", path = fromCwd as value))
+    }
+    for (s in spellings) {
+        t |> run("a das root spelled with a {s.name} replays the manifest the full path wrote") @(t : T?) {
+            let before = fread(fx.manifest)
+            var out : string
+            t |> success(run_child_reported(t, s.name, fixture_cmd(fx.tmp, das_exe(), s.path), out, "PROBE 42"), "the require resolves under -dasroot {s.path}")
+            t |> equal("replayed 1 row(s) (deferred 0)", probe_line(out), "-dasroot {s.path} replays, no das-root recompile:\n{out}")
+            t |> equal(before, fread(fx.manifest), "the manifest is untouched")
+        }
     }
 }
 
@@ -370,6 +397,7 @@ def test_descriptor_manifest(t : T?) {
     arms_record_and_replay(t, fx)
     arms_binary_kinds(t, fx)
     arms_targets(t, fx)
+    arms_root_spellings(t, fx)
     arms_rejections(t, fx)
     arms_opt_out_and_write_failures(t, fx)
     var err : string

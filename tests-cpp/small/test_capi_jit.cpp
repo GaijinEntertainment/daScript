@@ -1,8 +1,10 @@
 #include <doctest/doctest.h>
 
 #include "daScript/daScriptC.h"
+#include "daScript/misc/platform.h"
 
 #include <cstdio>
+#include <filesystem>
 #include <string>
 
 namespace {
@@ -63,15 +65,42 @@ TEST_CASE("C API set root round trip") {
     REQUIRE(!dasRoot.empty());
     // a root DIFFERENT from the derived one, set through the explicit-length form
     // with a non-NUL-terminated range - a no-op das_set_root fails both checks
-    const char newRoot[] = {'/','n','o','/','s','u','c','h','/','r','o','o','t','X'};
-    das_set_root_n(newRoot, sizeof(newRoot) - 1);
+#if defined(_WIN32)
+    const std::string absent = "C:/no/such/root";
+#else
+    const std::string absent = "/no/such/root";
+#endif
+    const std::string newRoot = absent + "X";
+    das_set_root_n(newRoot.c_str(), newRoot.size() - 1);
     char root2[4096];
     das_get_root(root2, int(sizeof(root2)));
-    CHECK(std::string(root2) == "/no/such/root");
+    CHECK(std::string(root2) == absent);
     das_set_root(dasRoot.c_str());
     das_get_root(root2, int(sizeof(root2)));
     CHECK(dasRoot == root2);
 }
+
+#if !defined(DAS_NO_FILEIO)
+TEST_CASE("C API set root stores one absolute spelling") {
+    char root[4096];
+    das_get_root(root, int(sizeof(root)));
+    const std::string dasRoot = root;
+    const std::string cwd = std::filesystem::current_path().generic_string();
+    char got[4096];
+    for ( const char * spelling : { ".", "./", "sub/..", "sub/../." } ) {
+        das_set_root(spelling);
+        das_get_root(got, int(sizeof(got)));
+        CHECK_MESSAGE(cwd == got, spelling);
+    }
+    das_set_root((cwd + "/sub/").c_str());
+    das_get_root(got, int(sizeof(got)));
+    CHECK(cwd + "/sub" == got);
+    das_set_root("");
+    das_get_root(got, int(sizeof(got)));
+    CHECK(dasRoot == got);
+    das_set_root(dasRoot.c_str());
+}
+#endif
 
 TEST_CASE("C API jit enable") {
     char root[4096];
