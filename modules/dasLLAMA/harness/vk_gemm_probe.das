@@ -3121,6 +3121,23 @@ def private run_lastwg(dim : int) {   // nolint:STYLE038 — one linear measurem
     delete out_fused
 }
 
+//! the add + rms rows `dim` wide on the device - the residual x, the partner a, the norm row wn and the output y - the first
+//! three uploaded with one ramp
+def private row_kernel_planes(dim : int) : tuple<xd : uint64; ad : uint64; wnd : uint64; yd : uint64> {
+    let nb = int64(dim) * 4l
+    let xd = make_device_buf(nb)
+    let ad = make_device_buf(nb)
+    let wnd = make_device_buf(nb)
+    var ones <- row_fill(dim, 1, 0, 0.001, -0.5, 17)
+    unsafe {
+        upload_region_at(xd, 0l, addr<uint8 const?>(ones[0]), nb)
+        upload_region_at(ad, 0l, addr<uint8 const?>(ones[0]), nb)
+        upload_region_at(wnd, 0l, addr<uint8 const?>(ones[0]), nb)
+    }
+    delete ones
+    return (xd = xd, ad = ad, wnd = wnd, yd = make_device_buf(nb))
+}
+
 // ===== the dependent-dispatch gap by barrier form (arg "barform") =====
 //! `cls_ar` chained through hand-placed barriers of five forms - the hazard rail's (a global memory barrier, compute and
 //! transfer stages both ways), compute-only stages, shader access bits alone, a buffer memory barrier on the row, an
@@ -3128,16 +3145,11 @@ def private run_lastwg(dim : int) {   // nolint:STYLE038 — one linear measurem
 //! no barrier at all (the wrong-but-fast floor), each timed a dispatch
 def private run_barrier_forms(dim : int) {
     let nb = int64(dim) * 4l
-    let xd = make_device_buf(nb)
-    let ad = make_device_buf(nb)
-    let wnd = make_device_buf(nb)
-    let yd = make_device_buf(nb)
-    var ones <- row_fill(dim, 1, 0, 0.001, -0.5, 17)
-    unsafe {
-        upload_region_at(xd, 0l, addr<uint8 const?>(ones[0]), nb)
-        upload_region_at(ad, 0l, addr<uint8 const?>(ones[0]), nb)
-        upload_region_at(wnd, 0l, addr<uint8 const?>(ones[0]), nb)
-    }
+    let rk = row_kernel_planes(dim)
+    let xd = rk.xd
+    let ad = rk.ad
+    let wnd = rk.wnd
+    let yd = rk.yd
     var pc = ArArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = 1.0e-6, ascale = 1.0)
     let names = fixed_array("rail (global, compute+transfer)", "global, compute only", "global, shader bits only", "buffer barrier on the row", "execution only", "no barrier")
     for (form in range(6)) {
@@ -3150,7 +3162,6 @@ def private run_barrier_forms(dim : int) {
         }
         print("barform dim={dim} {names[form]}: cls_ar {us} us/dispatch | timing-only\n")
     }
-    delete ones
 }
 
 //! one barrier of the form `form` after a dispatch that wrote `buf`
@@ -3204,18 +3215,13 @@ def private probe_barrier(raw : VkCommandBuffer; form : int; buf : uint64; bytes
 //! and without the barrier
 def private run_small_kernels(dim : int) {
     let nb = int64(dim) * 4l
-    let xd = make_device_buf(nb)
-    let ad = make_device_buf(nb)
-    let wnd = make_device_buf(nb)
-    let yd = make_device_buf(nb)
+    let rk = row_kernel_planes(dim)
+    let xd = rk.xd
+    let ad = rk.ad
+    let wnd = rk.wnd
+    let yd = rk.yd
     let xqd = make_device_buf(int64(dim))
     let xsd = make_device_buf(int64(dim / 32) * 4l)
-    var ones <- row_fill(dim, 1, 0, 0.001, -0.5, 17)
-    unsafe {
-        upload_region_at(xd, 0l, addr<uint8 const?>(ones[0]), nb)
-        upload_region_at(ad, 0l, addr<uint8 const?>(ones[0]), nb)
-        upload_region_at(wnd, 0l, addr<uint8 const?>(ones[0]), nb)
-    }
     verify(ensure_cls_ar() && ensure_cls_ar_rq_b(), "the add+rms class rails must engage")
     var pc = ArArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = 1.0e-6, ascale = 1.0)
     for (dep in range(2)) {
@@ -3234,7 +3240,6 @@ def private run_small_kernels(dim : int) {
         }
         print("small dim={dim} {dep == 1 ? "chained (barrier between)" : "independent"}: cls_ar {us} us/dispatch, cls_ar_rq_b {usq} us/dispatch | timing-only\n")
     }
-    delete ones
 }
 
 // the decode-cost bisect: the shipped cm2l against the three probe variants, one shape
