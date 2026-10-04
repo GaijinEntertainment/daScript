@@ -14,6 +14,7 @@ require dasllama/dasllama_rope       // the RoPE angle/table generation (Model-f
 require dasllama/dasllama_gpu_tier   // the device-cooperation seam (hooks the loader/dispatch arms call)
 require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs and false-flags this as unused
 require dasllama/dasllama_math
+require dasllama/dasllama_gpu_math   // silu_f32: the one form the CPU chain and the kernel homes share
 require daslib/jobque_profile  // JOBQUE_PROFILING_ENABLED — the compile-time gate on prof_ticks/prof_add
 require dasllama/dasllama_kv_codec public  // the KV-cache codec families — kv_store_row/kv_load_row/kv_dot/kv_axpy dispatch into them
 require dasllama/dasllama_convert   // cvt_f32_to_f16/cvt_f16_to_f32 — the f16 rows (wscale plane + the f16 KV codec)
@@ -3029,7 +3030,7 @@ def hc_mix_row(t : Model; var s : Session; res : array<float>; roff, norm_off, d
     mm_f(s.hc_lo, t, KqFmt.q8, down_off, s.hc_xn, s.xq, s.xs, s.xbs, hcd, lr)
     for (j in range64(lr)) {
         let v = s.hc_lo[j] * inv
-        s.hc_lo[j] = v / (1.0 + exp(-v))
+        s.hc_lo[j] = silu_f32(v)
     }
     mm_f(s.hc_gate, t, KqFmt.q8, up_off, s.hc_lo, s.xq, s.xs, s.xbs, lr, hcd)
     unsafe {
@@ -3070,7 +3071,7 @@ def hc_mix_b(t : Model; var s : Session; norm_off, down_off, up_off, inject_off,
     mm_b_f(s, s.hc_lo_b, t, KqFmt.q8, down_off, s.hc_xn_b, hcd, lr, npos)
     for (j in range64(npos * lr)) {
         let v = s.hc_lo_b[j] * inv
-        s.hc_lo_b[j] = v / (1.0 + exp(-v))
+        s.hc_lo_b[j] = silu_f32(v)
     }
     mm_b_f(s, s.hc_gate_b, t, KqFmt.q8, up_off, s.hc_lo_b, lr, hcd, npos)
     unsafe {

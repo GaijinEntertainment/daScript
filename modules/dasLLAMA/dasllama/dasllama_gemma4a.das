@@ -14,6 +14,7 @@ require daslib/apply
 require daslib/archive
 require dasllama/dasllama_env
 require dasllama/dasllama_math
+require dasllama/dasllama_gpu_math   // sigmoid_f32: the one form the CPU chain and the kernel homes share
 require dasllama/dasllama_gguf
 require dasllama/dasllama_plane public   // PlaneF — the borrowed weight planes; re-exported so requirers can delete an encoder
 require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — the shared ASR floor
@@ -1030,7 +1031,7 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
             for (c in range64(d)) {
                 let sig = st.h[t * 2l * d + c]
                 let gate = st.h[t * 2l * d + d + c]
-                st.glu[t * d + c] = sig * (1.0 / (1.0 + exp(-gate)))
+                st.glu[t * d + c] = sig * sigmoid_f32(gate)
             }
         }
         for (t in range64(npos)) {

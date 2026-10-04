@@ -7,6 +7,7 @@ module dasllama_tower shared public
 require dasllama/dasllama_lint public
 require math
 require dasllama/dasllama_math
+require dasllama/dasllama_gpu_math   // sigmoid_f32: the one form the CPU chain and the kernel homes share
 require dasllama/dasllama_plane public   // PlaneF/PlaneU16 — plane forms of the blob helpers
 require dasllama/dasllama_par
 require dasllama/dasllama_gguf   // read_clamp reads sidecar scalar tensors
@@ -576,7 +577,7 @@ def private gelu_quick_lut_ensure() {
     for (h in range(65536)) {
         let xr = f16_to_f32(uint(h))
         if ((unsafe(reinterpret<uint>(xr)) & 0x7F800000u) != 0x7F800000u) {   // finite (not inf/nan)
-            let g = xr * (1.0 / (1.0 + exp(-1.702 * xr)))
+            let g = xr * sigmoid_f32(1.702 * xr)
             g_gelu_quick_lut[h] = f16_to_f32(f32_to_f16(g))
         }
     }

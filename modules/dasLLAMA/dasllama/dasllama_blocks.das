@@ -9,6 +9,7 @@ require dasllama/dasllama_common
 require dasllama/dasllama_moe   // moe_select_core/moe_ffn_core/moe_shexp_gate — the router the MoE blocks drive
 require dasllama/dasllama_attn_prefill   // prefill_attention — the head-threaded prefill the std/dense blocks call
 require dasllama/dasllama_math
+require dasllama/dasllama_gpu_math   // sigmoid_f32: the one form the CPU chain and the kernel homes share
 require dasllama/dasllama_par
 require dasllama/dasllama_convert
 require dasllama/dasllama_rope     // mrope_span_positions — the image-span position map
@@ -1859,7 +1860,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
                     }
                     moe_select_core(gate, ne, k, norm_topk, wscale, lgp, idxp, wp, p * k, ebp)
                     if (glp != null) {
-                        glp[p] = 1.0 / (1.0 + exp(-dot(gvp, xbp + p * dim, dim)))
+                        glp[p] = sigmoid_f32(dot(gvp, xbp + p * dim, dim))
                     }
                 }
             }

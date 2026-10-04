@@ -3011,7 +3011,7 @@ def swiglu(var g : float?; u : float const?; size : int64) {
     unsafe {
         for (i in range64(size)) {
             let v = g[i]
-            g[i] = (v / (1.0 + exp(-v))) * u[i]
+            g[i] = silu_f32(v) * u[i]
         }
     }
 }
@@ -3078,7 +3078,7 @@ def swiglu4(var g : float?; u : float const?; size : int64) {
         }
         for (i in range64(n4 * 4l, size)) {
             let v = g[i]
-            g[i] = (v / (1.0 + exp(-v))) * u[i]
+            g[i] = silu_f32(v) * u[i]
         }
     }
 }
@@ -3151,7 +3151,7 @@ def silu4(var x : float?; size : int64) {
         }
         for (i in range64(n4 * 4l, size)) {
             let v = x[i]
-            x[i] = v / (1.0 + exp(-v))
+            x[i] = silu_f32(v)
         }
     }
 }
@@ -3181,7 +3181,7 @@ def silu4_batch(var x : array<float> | #; d, npos : int64) {
 def sigmoid_gate(var x : float?; g : float const?; size : int64) {
     unsafe {
         for (i in range64(size)) {
-            x[i] *= 1.0 / (1.0 + exp(-g[i]))
+            x[i] *= sigmoid_f32(g[i])
         }
     }
 }
@@ -3198,7 +3198,7 @@ def sigmoid_gate4(var x : float?; g : float const?; size : int64) {
             x4[k] = x4[k] / (one + exp4(arg))
         }
         for (i in range64(n4 * 4l, size)) {
-            x[i] *= 1.0 / (1.0 + exp(-g[i]))
+            x[i] *= sigmoid_f32(g[i])
         }
     }
 }
@@ -3219,7 +3219,7 @@ def silu_mul4(var o : float?; a, z : float const?; size : int64) {
         }
         for (i in range64(n4 * 4l, size)) {
             let zv = z[i]
-            o[i] = a[i] * (zv / (1.0 + exp(-zv)))
+            o[i] = a[i] * silu_f32(zv)
         }
     }
 }

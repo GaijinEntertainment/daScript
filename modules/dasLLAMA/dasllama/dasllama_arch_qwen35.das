@@ -128,7 +128,7 @@ def private dn_token_prelude(t : Model; var s : Session; l : int64; qkv : float 
     let taps = c.ssm_d_conv - 1l
     unsafe {
         for (h in range64(nvh)) {
-            beta[h] = 1.0 / (1.0 + exp(-beta[h]))
+            beta[h] = sigmoid_f32(beta[h])
             g[h] = t.fblob[t.dn_a_off + l * nvh + h] * softplus(g[h] + t.fblob[t.dn_dt_off + l * nvh + h])
         }
         var cop = addr(s.dn_conv_out[0])
@@ -683,7 +683,7 @@ def private dn_chunked_head(conv : float const?; qoff, koff, voff, cd : int64; /
             var gacc = 0.0
             for (i in range64(cl)) {
                 let crow = conv + (c0 + i) * cd
-                let bv = 1.0 / (1.0 + exp(-bp[(c0 + i) * bg_stride]))
+                let bv = sigmoid_f32(bp[(c0 + i) * bg_stride])
                 gacc += aa * softplus(gp[(c0 + i) * bg_stride] + dtb)
                 gcum[i] = gacc
                 egc[i] = exp(gacc)
@@ -769,14 +769,13 @@ def private dn_chunked_head(conv : float const?; qoff, koff, voff, cd : int64; /
                 let zrow = zp + (c0 + i) * o_stride
                 if (zsig) {   // qwen4exp: σ(z) gates the normed output
                     for (j in range64(ds)) {
-                        orow[j] = och[i * ds + j] / (1.0 + exp(-zrow[j]))
+                        orow[j] = sig_gate(och[i * ds + j], zrow[j])
                     }
                 } elif (vec) {
                     silu_mul4(orow, och + i * ds, zrow, ds)
                 } else {
                     for (j in range64(ds)) {
-                        let zv = zrow[j]
-                        orow[j] = och[i * ds + j] * (zv / (1.0 + exp(-zv)))
+                        orow[j] = och[i * ds + j] * silu_f32(zrow[j])
                     }
                 }
             }

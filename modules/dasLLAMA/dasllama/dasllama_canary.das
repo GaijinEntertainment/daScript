@@ -16,6 +16,7 @@ require daslib/apply
 require daslib/archive
 require dasllama/dasllama_env
 require dasllama/dasllama_math
+require dasllama/dasllama_gpu_math   // sigmoid_f32: the one form the CPU chain and the kernel homes share
 require dasllama/dasllama_gguf
 require dasllama/dasllama_plane public   // PlaneF — the borrowed weight planes; re-exported so requirers can delete an encoder
 require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — the shared ASR floor
@@ -1116,7 +1117,7 @@ def private cn_blocks_cpu(m : CanaryEncoder; var st : CanaryState; tt, ww : int6
             for (j in range64(d)) {
                 let sg = st.h[t * 2l * d + j]
                 let gt = st.h[t * 2l * d + d + j]
-                st.glu[t * d + j] = sg * (1.0 / (1.0 + exp(-gt)))
+                st.glu[t * d + j] = sg * sigmoid_f32(gt)
             }
         }
         for (t in range64(tt)) {   // depthwise conv1d over time + folded BN + silu
@@ -1129,7 +1130,7 @@ def private cn_blocks_cpu(m : CanaryEncoder; var st : CanaryState; tt, ww : int6
                     }
                 }
                 let bv = acc * m.blob[lo.bn_w + c] + m.blob[lo.bn_b + c]
-                st.ao[t * d + c] = bv * (1.0 / (1.0 + exp(-bv)))
+                st.ao[t * d + c] = bv * sigmoid_f32(bv)
             }
         }
         cn_mm_rq(m, st.xb, lo.pw2_w, st.ao, st.xqi, st.xsi, d, d, tt); add_bias_rows(st.xb, m.blob, lo.pw2_b, d, tt)

@@ -7,6 +7,7 @@ require dasllama/dasllama_transformer   // the umbrella: hc_mix_row / hc_combine
 require dasllama/dasllama_arch_qwen4exp   // ngram_gather
 require dasllama/dasllama_kqformat   // GGML_TYPE_* + iq4nl_lut
 require dasllama/dasllama_math   // rmsnorm - the reference's grouped norm
+require dasllama/dasllama_gpu_math   // sigmoid_f32 - the reference's gates
 require dasllama/dasllama_par   // get_disp_count - the split legs' witness
 require daslib/jobque_boost   // with_job_que - the threaded leg
 require math
@@ -43,8 +44,6 @@ def private hc_fixture(var t : Model) {
     }
 }
 
-def private sigmoid(x : float) : float => 1.0 / (1.0 + exp(-x))
-
 //! the mixer written out: grouped norm, down, silu(lo / hc), up, sigmoid-gated mean, inject
 def private hc_mix_reference(t : Model; res : array<float>; var mixed : array<float>; var inject : array<float>) {
     let c = t.config
@@ -63,7 +62,7 @@ def private hc_mix_reference(t : Model; res : array<float>; var mixed : array<fl
             acc += t.wblob[j * HCD + i] * xn[i]
         }
         let v = acc / float(HC)
-        lo[j] = v * sigmoid(v)
+        lo[j] = v * sigmoid_f32(v)
     }
     var gate : array<float>
     gate |> resize(HCD)
@@ -78,7 +77,7 @@ def private hc_mix_reference(t : Model; res : array<float>; var mixed : array<fl
     for (i in range64(DIM)) {
         var acc = 0.0
         for (ch in range64(HC)) {
-            acc += xn[ch * DIM + i] * sigmoid(gate[ch * DIM + i])
+            acc += xn[ch * DIM + i] * sigmoid_f32(gate[ch * DIM + i])
         }
         mixed[i] = acc / float(HC)
     }
@@ -157,7 +156,7 @@ def test_hc_mixer(t : T?) {
         var bad = 0
         for (i in range64(DIM)) {
             for (ch in range64(HC)) {
-                let w = 2.0 * sigmoid(inj[ch] / float(HC))
+                let w = 2.0 * sigmoid_f32(inj[ch] / float(HC))
                 if (abs(s.hc_res[ch * DIM + i] - (float(ch) + out[i] * w)) > 1.0e-5) {
                     bad++
                 }
