@@ -483,6 +483,15 @@ def build_q3k_block() : array<uint8> {
     return <- blkb
 }
 
+//! `n` scale nibbles SYNTH_SC[g % 8] & 15 OR-ed into `blkb` from byte `at`: nibble g the low half of byte g / 2 for an even g,
+//! the high half for an odd one
+def private pack_sc_nibbles(var blkb : array<uint8>; at, n : int) {
+    for (g in range(n)) {
+        let v = SYNTH_SC[g % 8] & 15
+        blkb[at + g / 2] = uint8(int(blkb[at + g / 2]) | (g % 2 == 0 ? v : v << 4))
+    }
+}
+
 // iq3s synthetic superblock: 110B IQ3_S disk block — 4-bit sub-scales SYNTH_SC[b] & 15, f16 d =
 // SYNTH_D, grid-index/qh/sign byte patterns (written in the PACK direction); the gate recomposes
 // each weight through IQ3S_GRID
@@ -502,11 +511,7 @@ def build_iq3s_block() : array<uint8> {
     for (p in range(32)) {
         blkb[74 + p] = uint8(iq3s_sg_pat(p))
     }
-    for (b in range(8)) {   // scale nibble b: low nibble of byte b/2 (b even), high nibble (b odd)
-        let v = SYNTH_SC[b] & 15
-        let nib = b % 2 == 0 ? v : v << 4
-        blkb[106 + b / 2] = uint8(int(blkb[106 + b / 2]) | nib)
-    }
+    pack_sc_nibbles(blkb, 106, 8)
     return <- blkb
 }
 
@@ -552,11 +557,7 @@ def build_iq2s_block() : array<uint8> {
     for (b in range(8)) {
         blkb[66 + b] = uint8(iq2s_qh_pat(b))
     }
-    for (g in range(16)) {   // scale nibble g: low nibble of byte g/2 (g even), high (g odd)
-        let v = SYNTH_SC[g % 8] & 15
-        let nib = g % 2 == 0 ? v : v << 4
-        blkb[74 + g / 2] = uint8(int(blkb[74 + g / 2]) | nib)
-    }
+    pack_sc_nibbles(blkb, 74, 16)
     return <- blkb
 }
 
@@ -574,11 +575,7 @@ def build_iq2xs_block() : array<uint8> {
         blkb[2 + w * 2] = uint8(v & 0xFF)
         blkb[3 + w * 2] = uint8(v >> 8)
     }
-    for (g in range(16)) {   // scale nibble g: low nibble of byte g/2 (g even), high (g odd)
-        let v = SYNTH_SC[g % 8] & 15
-        let nib = g % 2 == 0 ? v : v << 4
-        blkb[66 + g / 2] = uint8(int(blkb[66 + g / 2]) | nib)
-    }
+    pack_sc_nibbles(blkb, 66, 16)
     return <- blkb
 }
 
