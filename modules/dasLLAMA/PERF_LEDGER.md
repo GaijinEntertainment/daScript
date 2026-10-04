@@ -11,6 +11,25 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-03, `direction-grade`) - the Metal tower reads a whisper encoder's q8 planes.**
+  M5 Max, Metal, whisper large-v3-turbo, `dasllama-server` with the ASR model alone
+  (`main.das -- --asr ggml-large-v3-turbo.bin`), the reference whisper.cpp `6fc7c33` as
+  `whisper-server -m <bin> --inference-path /v1/audio/transcriptions`, `harness/served_bench.das
+  --no-chat --asr-url <server> --clip <wav> --reps 5` (tagged `served`, `out-of-process`), a 60 s
+  rest before each life, every request a clip no server has heard; the tune sidecar predates the
+  binary, so the CPU kernels ran their fallback stamps. Clips of 8 s, 11 s and 64 s (one 30 s
+  window, one, three), ms a transcription.
+  - The tower declined a q8 encoder, and whisper serves q8: the encoder ran on the CPU and read
+    911.7 / 951.4 / 3092.8. The reference reads 131.3 / 147.1 / 601.5 on the f16 file and
+    127.1 / 139.8 / 554.8 on its q8_0 file (0.87 GB).
+  - The block GEMMs off the q8 blob on the plain q8 tile: 240.5 / 253.1 / 876.7. On the prefill
+    ladder: 153.5 / 166.1 / 608.9. With the stem's second conv off the same blob: 137.4 / 149.0 /
+    541.0, on the 1.2 GB q8 image. The f32 encoder lane on the same tower reads 132.3 / 140.0 /
+    517.9 on a 4.3 GB image.
+  - A window's stages on the q8 lane (the encoder's own stage clock, in process): blocks 102.5 ms
+    (94.0 on the f32 lane), the stem 2.2 (15.6 on the CPU), the decode 21.2, the cross K/V 6.4,
+    the mel 1.4.
+
 - **MEASURED (2026-10-03, `direction-grade`) - a served Qwen3-ASR transcription decodes on the device, and a
   repeated clip measures the other server's prompt cache.** M5 Max, Metal, `dasllama-server` with the
   ASR model alone (`main.das -- --asr <gguf> --mmproj <mmproj>`), the pinned llama-server as

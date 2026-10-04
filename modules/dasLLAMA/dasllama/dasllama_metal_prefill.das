@@ -5824,6 +5824,16 @@ def private enc_gemm_mm(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff
     }
 }
 
+//! whether a GEMM through `pf_enc_q8_mm` reads a half activation panel on this box: the caller converts one a panel
+def pf_q8_mm_half() : bool => (g_pf_mm_tensor && g_pf_pso_mm_th != null) || (g_pf_tensor_ok && g_pf_pso_hmm_th != null)
+
+//! One q8 GEMM over a 34-byte-block blob on the prefill ladder, for a driver outside this file: `mp` rows padded to 32,
+//! no GEMV tail; `bxh` is the caller's half twin of `bx`, null where `pf_q8_mm_half` says none is read.
+[arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder")]
+def pf_enc_q8_mm(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64; bx, bxh, by, bk, bn : MetalBuffer?; mp, d, kdim : int64) {
+    enc_gemm_mm(enc, bwblob, wboff, bx, by, bk, bn, mp, d, 0ul, kdim, 0l, bxh)
+}
+
 //! kdim feeds the tall/remainder split's X stride; kdim-less callers stay whole-dispatch 32-tile
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder")]
 def pf_enc_bf16_mm(enc : MetalComputeEncoder?; bw : MetalBuffer?; wboff : uint64;

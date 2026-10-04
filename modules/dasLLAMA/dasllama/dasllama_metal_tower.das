@@ -108,6 +108,7 @@ def metal_tower_shutdown {
     release_handle(g_tw_ones)
     st2_slab_free(g_tw_q3a_wpad)
     st2_slab_free(g_tw_fc_twin)
+    st2_slab_free(g_tw_q8)
     st2_slab_drop()
     pool_drain(g_tw_pool)
     g_tw_failed = false
@@ -212,23 +213,87 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
     return true
 }
 
+var private g_tw_q8 : St2SlabBase            //!< the served whisper-class tower's q8 GEMM planes as one device blob, resident until the weights drop
+var private g_tw_q8_boffs : array<uint64>    //!< a layer's regions in that blob, TW_Q8_MATS a layer: q, k, v, o, fc1, fc2
+var private g_tw_q8_conv2 = 0ul              //!< the stem's second conv in that blob
+let private TW_Q8_MATS = 6l
+let private TW_Q8_BLOCK_BYTES = Q8_QPB + Q8_SPB
+
+//! one GEMM region out of the CPU backend's layout into the q8 blob's blocks at the 16-byte-aligned cursor; answers its byte offset
+def private tw_q8_region(t : AudioTower; off, n, rows : int64; lay : Q8RepackLayout; var staging : array<uint8>; var cur : uint64&) : uint64 {
+    cur = (cur + 15ul) & ~15ul
+    let at = cur
+    q8_region_to_metal_blob(plane_at(t.qblob, off), plane_at(t.qscales, off / Q8_BLOCK_ELEMS),
+        n, rows, lay.repacked, lay.mr, lay.kgroup, lay.wbias, unsafe(addr(staging[int64(cur)])))
+    cur += uint64((rows * n / Q8_BLOCK_ELEMS) * TW_Q8_BLOCK_BYTES)
+    return at
+}
+
+//! The whisper-class tower's q8 block GEMM planes on the device, uploaded once a tower. False where the buffer cannot be made.
+[cold_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
+def private tw_q8_attach(t : AudioTower) : bool {
+    let key = hash_combine64(intptr(plane_at(t.qblob, 0l)), uint64(length(t.qblob)))
+    return true if (st2_slab_current(g_tw_q8, key))
+    st2_slab_free(g_tw_q8)
+    let d = t.d_model
+    let ff = t.n_ff
+    let layer_elems = 4l * d * d + 2l * d * ff
+    var staging : array<uint8>
+    staging |> reserve_resize(((t.n_layer * layer_elems + 3l * d * d) / Q8_BLOCK_ELEMS) * TW_Q8_BLOCK_BYTES + 16l * (t.n_layer * TW_Q8_MATS + 1l))
+    // a pure read of the layout the load repacked under: selecting again here could name another
+    let lay = active_q8_repack_layout(kernel_backend_needs_repack(active_kernel_backend()))
+    g_tw_q8_boffs |> resize(t.n_layer * TW_Q8_MATS)
+    var cur = 0ul
+    g_tw_q8_conv2 = tw_q8_region(t, t.conv2_w_off, 3l * d, d, lay, staging, cur)
+    for (l in range64(t.n_layer)) {
+        let lo = enc_layer_offsets(t, l)
+        var mi = 0l
+        for (woff in [lo.q_w, lo.k_w, lo.v_w, lo.o_w]) {
+            g_tw_q8_boffs[l * TW_Q8_MATS + mi] = tw_q8_region(t, woff, d, d, lay, staging, cur)
+            mi++
+        }
+        g_tw_q8_boffs[l * TW_Q8_MATS + 4l] = tw_q8_region(t, lo.fc1_w, d, ff, lay, staging, cur)
+        g_tw_q8_boffs[l * TW_Q8_MATS + 5l] = tw_q8_region(t, lo.fc2_w, ff, d, lay, staging, cur)
+    }
+    var blob = metal_new_buffer(g_dev, cur)
+    if (blob != null) {
+        unsafe {
+            memcpy(metal_buffer_contents(blob), addr(staging[0]), cur)
+        }
+        g_tw_q8.buf = blob
+        g_tw_q8.key = key
+    }
+    delete staging
+    return blob != null
+}
+
+//! one block GEMM of the whisper-class chain: region `site` of the device q8 blob on a q8 tower, tw_mm's forms on an f32 one
+def private wt_mm(enc : MetalComputeEncoder?; q8 : bool; site : int64; f16w, bf16w : bool; bwh, bblob : MetalBuffer?; welem : int64;
+                  bx, bxh, by : MetalBuffer?; bk, bn : MetalBuffer?; rows, nd, kdim : int64; cvt : bool) {
+    if (q8) {
+        if (bxh != null && cvt) {
+            enc_cvt_half(enc, bx, bxh, rows * kdim)
+        }
+        pf_enc_q8_mm(enc, g_tw_q8.buf, g_tw_q8_boffs[site], bx, bxh, by, bk, bn, rows, nd, kdim)
+    } else {
+        tw_mm(enc, f16w, bf16w, bwh, bblob, welem, bx, bxh, by, 0ul, bk, bn, rows, nd, kdim, cvt)
+    }
+}
+
 // The whisper-class block loop as ONE command buffer; the attention trio rides uend = npos (the
-// non-causal uniform span). Frontend and tail stay CPU; f32 towers only. Pad-row garbage is
+// non-causal uniform span). Frontend and tail stay CPU. Pad-row garbage is
 // CONTAINED: QK/AV zero k/v rows >= npos, softmax zeroes [uend, np32), pad outputs go unread.
 [hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
 def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
     }
-    if (t.q8) {
-        return tw_decline(MetalTowerDecline.quant_mode)
-    }
     let d = t.d_model
     let hs = d / t.n_head
     if (d % 64l != 0l || t.n_ff % 64l != 0l || hs % 64l != 0l || t.layers_off % 4l != 0l || t.layer_stride % 4l != 0l) {
         return tw_decline(MetalTowerDecline.shape)
     }
-    if (!metal_tower_init()) {   // per-encode: re-arms after any shutdown seat
+    if (!metal_tower_init() || (t.q8 && !tw_q8_attach(t))) {   // per-encode: re-arms after any shutdown seat
         return tw_decline(MetalTowerDecline.device)
     }
     residency_flush()   // pin/commit before the first submission (the post-CPU-window slack)
@@ -242,11 +307,11 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
     let bytes_att = uint64(t.n_head * mp * nk64 * 2l)
     let bytes_rowk = uint64(nk64 * d * 4l)   //! K panel: the QK grid walks nk64 key rows, past mp
     let bytes_stat = uint64(t.n_head * mp * 2l * 4l)
-    let twin = g_tw_env_tower_f16 && length(t.wblob) > 0l
+    let twin = !t.q8 && g_tw_env_tower_f16 && length(t.wblob) > 0l
     let f16_route = twin && !t.blk_bf16 && pf_hmm_ready()
     let bf16_route = twin && t.blk_bf16
     let bytes_xh = uint64(mp * ff * 2l)
-    var bxh = (f16_route || (bf16_route && pf_bf16_half_ready())) ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_xh) : null
+    var bxh = (f16_route || (bf16_route && pf_bf16_half_ready()) || (t.q8 && pf_q8_mm_half())) ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_xh) : null
     var bwh = (f16_route || bf16_route) ? plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wblob, 0l))), uint64(length(t.wblob) * 2l), mapped) : null
     let f16w = f16_route && bwh != null && bxh != null
     let bf16w = bf16_route && bwh != null
@@ -274,29 +339,29 @@ def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int6
         for (l in range64(t.n_layer)) {
             let lo = enc_layer_offsets(t, l)
             enc_ln(enc, bx, bblob, uint64(lo.ln1_w * 4l), bblob, uint64(lo.ln1_b * 4l), bxb, 0ul, u_d, u_eps, npos)
-            tw_mm(enc, f16w, bf16w, bwh, bblob, lo.q_w, bxb, bxh, bq, 0ul, u_d, u_d, mp, d, d, true)
+            wt_mm(enc, t.q8, l * TW_Q8_MATS, f16w, bf16w, bwh, bblob, lo.q_w, bxb, bxh, bq, u_d, u_d, mp, d, d, true)
             enc_add_bias_rows(enc, bq, 0ul, bblob, uint64(lo.q_b * 4l), u_d, u_totd, npos * d)
-            tw_mm(enc, f16w, bf16w, bwh, bblob, lo.k_w, bxb, bxh, bk, 0ul, u_d, u_d, mp, d, d, false)
+            wt_mm(enc, t.q8, l * TW_Q8_MATS + 1l, f16w, bf16w, bwh, bblob, lo.k_w, bxb, bxh, bk, u_d, u_d, mp, d, d, false)
             if (t.has_k_bias) {
                 enc_add_bias_rows(enc, bk, 0ul, bblob, uint64(lo.k_b * 4l), u_d, u_totd, npos * d)
             }
-            tw_mm(enc, f16w, bf16w, bwh, bblob, lo.v_w, bxb, bxh, bv, 0ul, u_d, u_d, mp, d, d, false)
+            wt_mm(enc, t.q8, l * TW_Q8_MATS + 2l, f16w, bf16w, bwh, bblob, lo.v_w, bxb, bxh, bv, u_d, u_d, mp, d, d, false)
             enc_add_bias_rows(enc, bv, 0ul, bblob, uint64(lo.v_b * 4l), u_d, u_totd, npos * d)
             enc_qk_mm(enc, bq, bk, batt, ka, mp, nk64, t.n_head)
             enc_rowstat(enc, batt, ka, bstat, null, npos, t.n_head)
             enc_av_mm(enc, batt, bv, bxb2, ka, bstat, mp, t.n_head, hs)
-            tw_mm(enc, f16w, bf16w, bwh, bblob, lo.o_w, bxb2, bxh, bxb, 0ul, u_d, u_d, mp, d, d, true)
+            wt_mm(enc, t.q8, l * TW_Q8_MATS + 3l, f16w, bf16w, bwh, bblob, lo.o_w, bxb2, bxh, bxb, u_d, u_d, mp, d, d, true)
             enc_add_bias_rows(enc, bxb, 0ul, bblob, uint64(lo.o_b * 4l), u_d, u_totd, npos * d)
             enc_add(enc, bx, 0ul, bxb, 0ul, u_totd, npos * d)
             enc_ln(enc, bx, bblob, uint64(lo.ln2_w * 4l), bblob, uint64(lo.ln2_b * 4l), bxb, 0ul, u_d, u_eps, npos)
-            tw_mm(enc, f16w, bf16w, bwh, bblob, lo.fc1_w, bxb, bxh, bh, 0ul, u_d, u_ff, mp, ff, d, true)
+            wt_mm(enc, t.q8, l * TW_Q8_MATS + 4l, f16w, bf16w, bwh, bblob, lo.fc1_w, bxb, bxh, bh, u_d, u_ff, mp, ff, d, true)
             enc_add_bias_rows(enc, bh, 0ul, bblob, uint64(lo.fc1_b * 4l), u_ff, u_totff, npos * ff)
             if (t.gelu_tanh) {
                 enc_gelu_lut(enc, bh, 0ul, u_totff, npos * ff)
             } else {
                 enc_gelu_erf(enc, bh, 0ul, u_totff, npos * ff)
             }
-            tw_mm(enc, f16w, bf16w, bwh, bblob, lo.fc2_w, bh, bxh, bxb2, 0ul, u_ff, u_d, mp, d, ff, true)
+            wt_mm(enc, t.q8, l * TW_Q8_MATS + 5l, f16w, bf16w, bwh, bblob, lo.fc2_w, bh, bxh, bxb2, u_ff, u_d, mp, d, ff, true)
             enc_add_bias_rows(enc, bxb2, 0ul, bblob, uint64(lo.fc2_b * 4l), u_d, u_totd, npos * d)
             enc_add(enc, bx, 0ul, bxb2, 0ul, u_totd, npos * d)
         }
@@ -2008,12 +2073,25 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : 
     return true
 }
 
+//! the stem's second conv as a GEMM over its im2col rows: the device q8 blob's region on a q8 tower, the f32 blob otherwise
+def private conv2_mm(enc : MetalComputeEncoder?; t : AudioTower; bblob, bx2, bx2h, bxo, u_3d, u_d : MetalBuffer?; mp2 : int64) {
+    let d = t.d_model
+    if (!t.q8) {
+        enc_f32_mm(enc, bblob, uint64(t.conv2_w_off * 4l), bx2, bxo, 0ul, u_3d, u_d, mp2, d)
+        return
+    }
+    if (bx2h != null) {
+        enc_cvt_half(enc, bx2, bx2h, mp2 * 3l * d)
+    }
+    pf_enc_q8_mm(enc, g_tw_q8.buf, g_tw_q8_conv2, bx2, bx2h, bxo, u_3d, u_d, mp2, d, 3l * d)
+}
+
 // The whisper conv frontend for one mel chunk: im2col + conv GEMMs + bias + GELU + pos-add,
 // one command buffer, s.x readback. BEST-EFFORT inside the tower knob: any decline is a
 // silent false (no counter noise — the CPU conv serves and the blocks still ride the GPU).
 [hot_path]
 def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelChunk) : bool {
-    if (!g_tw_env_tower || t.q8) {
+    if (!g_tw_env_tower) {
         return false
     }
     let tin = AUDIO_CHUNK_FRAMES
@@ -2021,7 +2099,7 @@ def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelC
     let d = t.d_model
     let nm = t.n_mel
     // tiny's 3x80 im2col width stays CPU; init re-arms after any shutdown seat
-    if ((3l * nm) % 32l != 0l || d % 64l != 0l || (3l * d) % 32l != 0l || !metal_tower_init()) {
+    if ((3l * nm) % 32l != 0l || d % 64l != 0l || (3l * d) % 32l != 0l || !metal_tower_init() || (t.q8 && !tw_q8_attach(t))) {
         return false
     }
     let mp1 = round_up(tin, 32l)
@@ -2038,6 +2116,7 @@ def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelC
     var by1 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_y1)
     var bx2 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_x2)
     var bxo = pool_acquire_pinned(g_tw_pool, g_dev, bytes_xo)
+    var bx2h = (t.q8 && pf_q8_mm_half()) ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_x2 / 2ul) : null
     unsafe {
         memcpy(metal_buffer_contents(bmel), addr(mel.data[0]), bytes_mel)
     }
@@ -2059,7 +2138,7 @@ def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelC
             enc_gelu_erf(enc, by1, 0ul, u_totd1, tin * d)
         }
         enc_st2_im2col(enc, by1, bx2, k2, mp2 * 3l * d)
-        enc_f32_mm(enc, bblob, uint64(t.conv2_w_off * 4l), bx2, bxo, 0ul, u_3d, u_d, mp2, d)
+        conv2_mm(enc, t, bblob, bx2, bx2h, bxo, u_3d, u_d, mp2)
         enc_add_bias_rows(enc, bxo, 0ul, bblob, uint64(t.conv2_b_off * 4l), u_d, u_totd2, tt * d)
         if (t.gelu_tanh) {
             enc_gelu_lut(enc, bxo, 0ul, u_totd2, tt * d)
@@ -2081,6 +2160,9 @@ def private metal_conv_frontend(t : AudioTower; var s : EncoderState; mel : MelC
     pool_release(g_tw_pool, by1, bytes_y1)
     pool_release(g_tw_pool, bx2, bytes_x2)
     pool_release(g_tw_pool, bxo, bytes_xo)
+    if (bx2h != null) {
+        pool_release(g_tw_pool, bx2h, bytes_x2 / 2ul)
+    }
     pool_release(g_upool, u_nm3, 4ul)
     pool_release(g_upool, u_d, 4ul)
     pool_release(g_upool, u_3d, 4ul)
@@ -4514,6 +4596,7 @@ def private metal_styletts2_driver : St2GpuDriver {
 def private tw_weights_drop {
     st2_slab_free(g_tw_q3a_wpad)
     st2_slab_free(g_tw_fc_twin)
+    st2_slab_free(g_tw_q8)
     st2_slab_drop()
 }
 

@@ -206,9 +206,10 @@ the driver's seats survive the test.
 Every hook answers "declined" in its own return - `false` for the block hooks and qwen3a's mel and
 front hooks, `-1` for the hooks that return a row count (gemma4a's whole chunk, canary's front) -
 so a decline is a fallback, never an outage, and the CPU form stays the reference. A family calls
-its hook on either lane: the Metal driver declines the q8 encoder and the Vulkan driver the exact
-one, each as a counted non-policy `quant_mode` decline, which under the driver's required mode
-panics - a caller that pins a lane pins the one its driver serves. While the stage-diff witness is
+its hook on either lane: the Metal driver declines the q8 encoder of every family but the
+whisper-class tower, whose chain reads both lanes (`ARCHITECTURE_GPU_TOWER.md#tower-encode-chains`),
+and the Vulkan driver the exact one, each as a counted non-policy `quant_mode` decline, which under
+the driver's required mode panics - a caller that pins a lane pins the one its driver serves. While the stage-diff witness is
 armed (`set_audio_encode_ref_dir`), the whisper-class tower skips its conv and block hooks and runs
 the CPU forms: the witness diffs the CPU stages' rows against reference dumps, and a stage the
 device served leaves nothing to diff.
@@ -227,8 +228,9 @@ column buffer (`s.x0`, `st.xw`) and never the residual stream the CPU half would
 
 A tower serves its GEMMs on one of two lanes: q8 planes (the CPU serving format) or the file's
 exact f32 planes. Un-pinned, the lane follows the fastest GEMM path on the box - a serving Metal
-driver reads the f32 blob and declines q8, so `*_gpu_serves` answering true flips the default to
-exact, and every other box takes q8. Each family exposes the same trio over one `GemmLane` pin
+driver that reads the f32 blob and declines q8 makes `*_gpu_serves` answering true flip the default
+to exact, and every other box takes q8. Whisper carries no lane policy and serves q8 everywhere:
+the Metal tower reads its q8 planes. Each family exposes the same trio over one `GemmLane` pin
 (`lane_serves_q8`, `dasllama_common.das`): `set_*_q8` pins a lane, `reset_*_q8` returns to the
 policy, `*_serves_q8` reports the lane the next load would take. The
 lane picks the image tag, so the two lanes are separate images that coexist.

@@ -1075,11 +1075,11 @@ def test_whisper_crowned_word_level(t : T?) {
                 to_log(LOG_INFO, "whisper-tiny crowned q8 jfk eyeball: '{text_default}'\n")
                 to_log(LOG_INFO, "whisper-tiny crowned f32/q8 jfk eyeball: '{text_mixed}'\n")
                 // engage witness - without it a declining driver would compare two CPU
-                // transcripts and pass vacuously. The q8-default ENCODER declines the tower
-                // by design (quant_mode), so the tower delta is the mixed lane's f32 encode
-                // alone; both DECODERS ride the crowned wdec
-                t |> equal(metal_tower_stats().encodes - s0.encodes, 1l,
-                           "the mixed lane's f32 encoder GPU-served (tower encode delta)")
+                // transcripts and pass vacuously. Both ENCODERS serve on the tower - the q8
+                // default off its q8 planes, the mixed lane off its f32 blob - and both
+                // DECODERS ride the crowned wdec
+                t |> equal(metal_tower_stats().encodes - s0.encodes, 2l,
+                           "both lanes' encoders GPU-served (tower encode delta)")
                 t |> success(metal_wdec_stats().steps - w0.steps > 0l,
                              "the crowned decoder served (wdec step delta)")
                 let wa <- word_forms(text_default)

@@ -254,11 +254,14 @@ forms under the `mulmm_q8,attn_dev` crown - every head at once, its engage count
 (`metal_tower_fc_dev_encodes`) and its transcript the CPU's, and the per-head loop with the lever
 off (`set_metal_fc_attn_dev`), the counter unmoved, the two forms' distances from the CPU rail
 asserted to differ; the crowns and the three levers are put back as the cell found them), plus
-the tower q8-decline - a q8 whisper encoder never dispatches and records the `quant_mode`
-decline, and the whisper serving default IS q8 unless `set_asr_fp32` / `set_asr_tower_fp32`
-asks for f32 (whisper carries no lane policy). Canary, parakeet and gemma4a do: un-pinned,
-their lane follows whether the Metal tower would serve.
-Then the required-mode panic cell; the arm's DECODER half is the `test_whisper_metal_cross_kv`
+the whisper q8 lane on the tower - a q8 whisper encoder serves on the device off its q8 planes:
+the transcript the CPU q8 chain's, one encode and n_layer blocks counted, no `quant_mode` decline,
+the halfword twin's counter unmoved, and a q8 tower with one layer's planes zeroed reading another
+text through the device chain (the control); the whisper serving default IS q8 unless
+`set_asr_fp32` / `set_asr_tower_fp32` asks for f32 (whisper carries no lane policy). Canary,
+parakeet and gemma4a do: un-pinned, their lane follows whether the Metal tower would serve, and
+their q8 lane declines `quant_mode`. The required-mode panic rides the parakeet q8 cell: that
+decline under `MetalMode.required` panics; the arm's DECODER half is the `test_whisper_metal_cross_kv`
 cell in `test_model_image.das` - GPU cross-KV on the q8 serving default, transcript-exact
 against the CPU chain with window/step counter deltas and the knob and quant_mode declines,
 required-mode, step-floor and shutdown-re-arm contract; the voxtral arm re-saves a

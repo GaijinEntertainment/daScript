@@ -52,6 +52,16 @@ best-effort: it answers false (or -1) on any shape, knob, quant-mode or device d
 CPU chain serves that encode. Engage is read from counter deltas (`metal_tower_stats`,
 `metal_tower_f16_encodes`), never from "the model ran".
 
+The whisper-class chain serves both weight lanes. An f32 tower's block GEMMs read the f32 blob or
+its halfword twin. A q8 tower's read the q8 planes themselves: `tw_q8_attach` uploads the stem's
+second conv and each block's six GEMM regions once a tower, out of the CPU backend's repack layout
+into the 34-byte q8 blocks the prefill driver's q8 GEMM reads (`q8_region_to_metal_blob`, the
+transform the ASR-decoder driver uploads its planes through), and every site runs on the prefill
+ladder (`pf_enc_q8_mm`) with the activations converted to one half panel where that ladder reads
+one. The device blob is 34/32 of the q8 planes and no image carries it; it drops with the weights
+epoch and the tower shutdown. The stem's first conv reads the f32 blob on both lanes - its
+3 x n_mel columns are not quantized.
+
 The FastConformer chain (canary and parakeet share it: one context, one block body over the
 canary offsets record, parakeet's offsets mapped onto it with no GEMM biases and its tap-major
 depthwise stamp) runs the rel-pos (Transformer-XL) attention one head at a time on the f32 GEMM
