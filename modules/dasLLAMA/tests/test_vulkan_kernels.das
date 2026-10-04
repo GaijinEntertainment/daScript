@@ -7878,31 +7878,6 @@ def test_vkd_router_gemv_f16(t0 : T?) {
                 }
                 want[obase + e] = acc
             }
-            let w_bytes = int64(length(wh16)) * 2l
-            let x_bytes = int64(dim) * 4l
-            let o_bytes = int64(out_n) * 4l
-            let wd = make_device_buf(w_bytes)
-            let xd = make_device_buf(x_bytes)
-            let od = make_device_buf(o_bytes)
-            let host = make_host_buf(o_bytes, true, [cached = true])
-            nan_sentinel_upload(od, o_bytes)
-            unsafe {
-                upload_region_at(wd, 0l, addr<uint8 const?>(wh16[0]), w_bytes)
-                upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
-            }
-            var sc = set_router_gemv_f16_cls(fixed_array(wd, xd, od, xd), fixed_array(w_bytes, x_bytes, o_bytes, x_bytes), fixed_array(0u, 1u, 2u, 0u))
-            var pc = RouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(obase))
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_router_gemv_f16_cls(raw, h, sc, pc, int64(ne))
-                cmd_copy_planes(raw, h, fixed_array(od), host, fixed_array(o_bytes), 2u)
-            }
-            var got <- staged(host.mapped, 0l, out_n, type<float>)
-            let bad = rel_mismatches(got, want, obase, ne)
-            t |> success(bad == 0, "router_gemv_f16: {bad} of {ne} outputs off the CPU dot")
-            var poison := got   // the bar's control: one output pushed past it must red
-            poison[obase] += 1.0 + 2.0 * abs(want[obase])
-            t |> success(rel_mismatches(poison, want, obase, ne) > 0, "router_gemv_f16: the bar reds a poisoned output")
-            delete poison
             //! the two-base form: the rows from ne1 on land at obase2, the four sentinel words between the halves untouched
             let ne1 = ne / 2
             let obase2 = obase + ne1 + 4
@@ -7911,22 +7886,6 @@ def test_vkd_router_gemv_f16(t0 : T?) {
             for (e in range(ne)) {
                 want2[(e < ne1 ? obase : obase2 - ne1) + e] = want[obase + e]
             }
-            nan_sentinel_upload(od, o_bytes)
-            var sc2 = set_router_gemv_f16_cls(fixed_array(wd, xd, od, xd), fixed_array(w_bytes, x_bytes, o_bytes, x_bytes), fixed_array(0u, 1u, 2u, 0u))
-            var pc2 = RouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(obase), ne_split = uint(ne1), obase_split = uint(obase2))
-            cmd_one_shot() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                enc_router_gemv_f16_cls(raw2, h2, sc2, pc2, int64(ne))
-                cmd_copy_planes(raw2, h2, fixed_array(od), host, fixed_array(o_bytes), 2u)
-            }
-            var got2 <- staged(host.mapped, 0l, out_n, type<float>)
-            let bad2 = rel_mismatches(got2, want2, obase, ne1) + rel_mismatches(got2, want2, obase2, ne1)
-            var gap = 0
-            for (i in range(obase + ne1, obase2)) {
-                if (float_bits_to_uint(got2[i]) != NAN_SENTINEL_BITS) {
-                    gap++
-                }
-            }
-            t |> success(bad2 == 0 && gap == 0, "router_gemv_f16 two bases: {bad2} of {ne} outputs off the CPU dot, {gap} of 4 gap words written")
             //! the norm-folded form: every expert row's dot over x under the norm row at nwoff, scaled by the row's weightless rms
             let nwoff = 64
             var wnh <- hash_fill(nwoff + dim, 777u, 1000u, 1000.0, -0.5)
@@ -7945,30 +7904,58 @@ def test_vkd_router_gemv_f16(t0 : T?) {
                 }
                 want3[obase + e] = acc * invn
             }
-            let wn_bytes = int64(length(wnh)) * 4l
-            let wnd = make_device_buf(wn_bytes)
-            nan_sentinel_upload(od, o_bytes)
-            upload_region_at(wnd, 0l, unsafe(addr<uint8 const?>(wnh[0])), wn_bytes)
-            var sc3 = set_router_gemv_f16_cls(fixed_array(wd, xd, od, wnd), fixed_array(w_bytes, x_bytes, o_bytes, wn_bytes), fixed_array(0u, 1u, 2u, 4u))
-            var pc3 = RouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(obase), norm_on = 1u, nwoff = uint(nwoff), eps = eps)
-            cmd_one_shot() $(raw3 : VkCommandBuffer; var h3 : VkHaz) {
-                enc_router_gemv_f16_cls(raw3, h3, sc3, pc3, int64(ne))
-                cmd_copy_planes(raw3, h3, fixed_array(od), host, fixed_array(o_bytes), 2u)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let pw = cp |> in_plain(wh16)
+                let px = cp |> in_(xh)
+                let po = cp |> out_(out_n)
+                let pn = cp |> in_(wnh)
+                var sc = cp |> cls_set(fixed_array(pw, px, po, px), @@set_router_gemv_f16_cls)
+                var pc = RouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(obase))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_router_gemv_f16_cls(raw, h, sc, pc, int64(ne))
+                }
+                var got <- cp |> plane_run(po)
+                let bad = rel_mismatches(got, want, obase, ne)
+                t |> success(bad == 0, "router_gemv_f16: {bad} of {ne} outputs off the CPU dot")
+                var poison := got   // the bar's control: one output pushed past it must red
+                poison[obase] += 1.0 + 2.0 * abs(want[obase])
+                t |> success(rel_mismatches(poison, want, obase, ne) > 0, "router_gemv_f16: the bar reds a poisoned output")
+                delete poison
+                cp |> plane_refill(po)
+                var pc2 = RouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(obase), ne_split = uint(ne1), obase_split = uint(obase2))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_router_gemv_f16_cls(raw, h, sc, pc2, int64(ne))
+                }
+                var got2 <- cp |> plane_run(po)
+                let bad2 = rel_mismatches(got2, want2, obase, ne1) + rel_mismatches(got2, want2, obase2, ne1)
+                var gap = 0
+                for (i in range(obase + ne1, obase2)) {
+                    if (float_bits_to_uint(got2[i]) != NAN_SENTINEL_BITS) {
+                        gap++
+                    }
+                }
+                t |> success(bad2 == 0 && gap == 0, "router_gemv_f16 two bases: {bad2} of {ne} outputs off the CPU dot, {gap} of 4 gap words written")
+                cp |> plane_refill(po)
+                var sc3 = cp |> cls_set(fixed_array(pw, px, po, pn), @@set_router_gemv_f16_cls)
+                var pc3 = RouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(obase), norm_on = 1u, nwoff = uint(nwoff), eps = eps)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_router_gemv_f16_cls(raw, h, sc3, pc3, int64(ne))
+                }
+                var got3 <- cp |> plane_run(po)
+                let bad3 = rel_mismatches(got3, want3, obase, ne)
+                t |> success(bad3 == 0, "router_gemv_f16 norm-folded: {bad3} of {ne} outputs off the CPU chain")
+                t |> success(rel_mismatches(got3, want, obase, ne) > 0, "router_gemv_f16 norm-folded: the control - the unnormed dot must miss")
+                delete got
+                delete got2
+                delete got3
             }
-            var got3 <- staged(host.mapped, 0l, out_n, type<float>)
-            let bad3 = rel_mismatches(got3, want3, obase, ne)
-            t |> success(bad3 == 0, "router_gemv_f16 norm-folded: {bad3} of {ne} outputs off the CPU chain")
-            t |> success(rel_mismatches(got3, want, obase, ne) > 0, "router_gemv_f16 norm-folded: the control - the unnormed dot must miss")
             delete wnh
             delete want3
-            delete got3
             delete want2
-            delete got2
             delete wh
             delete wh16
             delete xh
             delete want
-            delete got
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -8846,25 +8833,19 @@ def private moe_router_arm(t : T?; ner : int) {
         for (i in range(MR_NPOS * MR_DIM)) {
             xh[i] = hash_unit(uint(i) + 7_777u)
         }
-        let w_bytes = int64(nw) * 4l
-        let x_bytes = int64(MR_NPOS * MR_DIM) * 4l
-        let l_bytes = int64(MR_NPOS * ner) * 4l
-        let wd = make_device_buf(w_bytes)
-        let xd = make_device_buf(x_bytes)
-        let ld = make_device_buf(l_bytes)
-        let host = make_host_buf(l_bytes, true, [cached = true])
-        unsafe {
-            upload_region_at(wd, 0l, addr<uint8 const?>(wh[0]), w_bytes)
-            upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
+        var got : array<float>
+        with_cell_planes() $(var cp : CellPlanes) {
+            let pw = cp |> in_(wh)
+            let px = cp |> in_(xh)
+            let pl = cp |> out_(MR_NPOS * ner)
+            var sc = cp |> cls_set(fixed_array(pw, px, pl), @@set_router_gemm_cls)
+            var pc = RouterGemmArgs(npos = uint(MR_NPOS), ne = uint(ner), dim = uint(MR_DIM), woff = uint(ner * MR_DIM), ostride = uint(ner))
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_router_gemm_cls(raw, h, sc, pc, int64(((MR_NPOS + int(ROUTER_TP) - 1) / int(ROUTER_TP)) * ((ner + int(ROUTER_TE) - 1) / int(ROUTER_TE))))
+            }
+            delete got
+            got <- cp |> plane_run(pl)
         }
-        nan_sentinel_upload(ld, l_bytes)
-        var sc = set_router_gemm_cls(fixed_array(wd, xd, ld), fixed_array(w_bytes, x_bytes, l_bytes), fixed_array(0u, 1u, 2u))
-        var pc = RouterGemmArgs(npos = uint(MR_NPOS), ne = uint(ner), dim = uint(MR_DIM), woff = uint(ner * MR_DIM), ostride = uint(ner))
-        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            enc_router_gemm_cls(raw, h, sc, pc, int64(((MR_NPOS + int(ROUTER_TP) - 1) / int(ROUTER_TP)) * ((ner + int(ROUTER_TE) - 1) / int(ROUTER_TE))))
-            cmd_copy_planes(raw, h, fixed_array(ld), host, fixed_array(l_bytes), 2u)
-        }
-        var got <- staged(host.mapped, 0l, MR_NPOS * ner, type<float>)
         var want : array<float>
         want |> resize(MR_NPOS * ner)
         for (p in range(MR_NPOS)) {
@@ -8902,35 +8883,23 @@ def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float; gate : MoeGat
             rb[e] = 7.0
             rb[MR_NE + e] = rbias ? hash_unit(uint(e) * 5u + 7u) * 3.0 - 1.5 : 0.0   //! a bias wide enough to move picks
         }
-        let l_bytes = int64(MR_NPOS * MR_NER) * 4l
-        let s_bytes = int64(MR_NPOS * MR_K) * 4l
-        let rb_bytes = int64(2 * MR_NE) * 4l
-        let ld = make_device_buf(l_bytes)
-        let idxd = make_device_buf(s_bytes)
-        let wd = make_device_buf(s_bytes)
-        let rbd = make_device_buf(rb_bytes)
-        var hosti = make_host_buf(s_bytes, true, [cached = true])
-        var hostw = make_host_buf(s_bytes, true, [cached = true])
         var gidx : array<uint>
         var gw : array<float>
-        gidx |> resize(MR_NPOS * MR_K)
-        gw |> resize(MR_NPOS * MR_K)
-        unsafe {
-            upload_region_at(ld, 0l, addr<uint8 const?>(lh[0]), l_bytes)
-            upload_region_at(rbd, 0l, addr<uint8 const?>(rb[0]), rb_bytes)
-            nan_sentinel_upload(idxd, s_bytes)
-            nan_sentinel_upload(wd, s_bytes)
-            var sc = set_topk_rows_cls(fixed_array(ld, wd, ld, rbd, idxd), fixed_array(l_bytes, s_bytes, l_bytes, rb_bytes, s_bytes), fixed_array(1u, 4u, 1u, 0u, 2u))   //! no down scale: the logits fill the ds binding, never read at NO_DSCALE
+        with_cell_planes() $(var cp : CellPlanes) {
+            let pl = cp |> in_(lh)
+            let prb = cp |> in_(rb)
+            let pw = cp |> out_(MR_NPOS * MR_K)
+            let pidx = cp |> out_(MR_NPOS * MR_K)
+            var sc = cp |> cls_set(fixed_array(pl, pw, pl, prb, pidx), @@set_topk_rows_cls)   //! no down scale: the logits fill the ds binding, never read at NO_DSCALE
             var pc = TopkArgs(ne = uint(MR_NE), k = uint(MR_K), norm = norm || gate == MoeGate.softmax_weight ? 1u : 0u, lstride = uint(MR_NER), wscale = wscale, dsoff = NO_DSCALE,
                 rbias_on = rbias ? 1u : 0u, rboff = uint(MR_NE))
-            cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_topk_rows_cls(raw, h, sc, pc, int64(MR_NPOS))
-                vhz_dep(raw, h, 2u | 4u, 0u, true)
-                cmd_copy_whole(raw, idxd, hosti.buf, s_bytes)
-                cmd_copy_whole(raw, wd, hostw.buf, s_bytes)
             }
-            memcpy(addr<void?>(gidx[0]), hosti.mapped, s_bytes)
-            memcpy(addr<void?>(gw[0]), hostw.mapped, s_bytes)
+            delete gidx
+            gidx <- cp |> plane_as(pidx, type<uint>, MR_NPOS * MR_K)
+            delete gw
+            gw <- cp |> plane_run(pw)
         }
         var sel <- topk_rows_select(gate, lh, rb, MR_NPOS, MR_NE, MR_K, MR_NER, MR_NE, true, norm, wscale)
         let arm = (gate == MoeGate.softmax_weight ? "softmax over the picks" : (norm ? "renormalized" : "scaled by {wscale}")) + (rbias ? ", router bias" : "")
@@ -8980,35 +8949,38 @@ def private moe_sched_arm(t : T?) {
         var w3 : array<uint>
         var w2 : array<uint>
         sched_oracle(idx, MR_NE, wt_gu, wt_dn, sh, bases, winv, w1, w3, w2)
-        let i_bytes = int64(nk) * 4l
         let s_bytes = long_length(w1) * 4l
-        let idxd = make_device_buf(i_bytes)
-        let invd = make_device_buf(i_bytes)
-        let bexd = make_device_buf(i_bytes)
-        let s1d = make_device_buf(s_bytes)
-        let s3d = make_device_buf(s_bytes)
-        let s2d = make_device_buf(s_bytes)
-        let host = make_host_buf(2l * i_bytes + 3l * s_bytes, true, [cached = true])
-        upload_region_at(idxd, 0l, unsafe(addr<uint8 const?>(idx[0])), i_bytes)
-        nan_sentinel_upload(invd, i_bytes)
-        nan_sentinel_upload(bexd, i_bytes)
-        for (sd in fixed_array(s1d, s3d, s2d)) {
-            upload_fill(sd, 0l, s_bytes, MR_SENT)
+        var ginv : array<uint>
+        var g1 : array<uint>
+        var g3 : array<uint>
+        var g2 : array<uint>
+        var gbex : array<uint>
+        with_cell_planes() $(var cp : CellPlanes) {
+            let pidx = cp |> in_plain(idx)
+            let pinv = cp |> out_(nk)
+            let p1 = cp |> out_words(s_bytes, MR_SENT)
+            let p3 = cp |> out_words(s_bytes, MR_SENT)
+            let p2 = cp |> out_words(s_bytes, MR_SENT)
+            let pbex = cp |> out_(nk)
+            var sc = cp |> cls_set(fixed_array(pidx, pinv, p1, p3, p2, pbex), @@set_moe_sched_cls)
+            var pc = SchedArgs(nk = uint(nk), ne = uint(MR_NE), wt_gu = uint(wt_gu), wt_dn = uint(wt_dn),
+                map_off = uint(sh.map_off), map_off_mgu = uint(sh.map_off_mgu), map_off_mdn = uint(sh.map_off_mdn),
+                bound_gu = uint(sh.bound_gu), bound_dn = uint(sh.bound_dn), bound_mgu = uint(sh.bound_mgu), bound_mdn = uint(sh.bound_mdn),
+                base1 = bases[0], stride1 = bases[1], base3 = bases[2], stride3 = bases[3], base2 = bases[4], stride2 = bases[5])
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_moe_sched_cls(raw, h, sc, pc, 1l)
+            }
+            delete ginv
+            ginv <- cp |> plane_as(pinv, type<uint>, nk)
+            delete g1
+            g1 <- cp |> plane_as(p1, type<uint>, length(w1))
+            delete g3
+            g3 <- cp |> plane_as(p3, type<uint>, length(w1))
+            delete g2
+            g2 <- cp |> plane_as(p2, type<uint>, length(w1))
+            delete gbex
+            gbex <- cp |> plane_as(pbex, type<uint>, nk)
         }
-        var sc = set_moe_sched_cls(fixed_array(idxd, invd, s1d, s3d, s2d, bexd), fixed_array(i_bytes, i_bytes, s_bytes, s_bytes, s_bytes, i_bytes), fixed_array(1u, 2u, 2u, 2u, 2u, 2u))
-        var pc = SchedArgs(nk = uint(nk), ne = uint(MR_NE), wt_gu = uint(wt_gu), wt_dn = uint(wt_dn),
-            map_off = uint(sh.map_off), map_off_mgu = uint(sh.map_off_mgu), map_off_mdn = uint(sh.map_off_mdn),
-            bound_gu = uint(sh.bound_gu), bound_dn = uint(sh.bound_dn), bound_mgu = uint(sh.bound_mgu), bound_mdn = uint(sh.bound_mdn),
-            base1 = bases[0], stride1 = bases[1], base3 = bases[2], stride3 = bases[3], base2 = bases[4], stride2 = bases[5])
-        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            enc_moe_sched_cls(raw, h, sc, pc, 1l)
-            cmd_copy_planes(raw, h, fixed_array(invd, s1d, s3d, s2d, bexd), host, fixed_array(i_bytes, s_bytes, s_bytes, s_bytes, i_bytes), 2u)
-        }
-        var ginv <- staged(host.mapped, 0l, nk, type<uint>)
-        var g1 <- staged(host.mapped, i_bytes, length(w1), type<uint>)
-        var g3 <- staged(host.mapped, i_bytes + s_bytes, length(w1), type<uint>)
-        var g2 <- staged(host.mapped, i_bytes + 2l * s_bytes, length(w1), type<uint>)
-        var gbex <- staged(host.mapped, i_bytes + 3l * s_bytes, nk, type<uint>)
         //! the atomic cursor fixes no order within a bucket, so the check is per bucket: a permutation of its rows
         var inv_bad = 0
         var bex_bad = 0
