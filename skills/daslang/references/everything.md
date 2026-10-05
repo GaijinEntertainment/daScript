@@ -1341,9 +1341,12 @@ A pure-daslang client for OpenAI-compatible REST APIs — OpenAI itself, plus an
 
 ### Vision
 
+- `audio_request_body` - Builds the JSON body for a one-shot audio request: a user turn with text + one `input_audio` part carrying the base64 of an audio file, the clip ahead of the text under `audio_first`.
+- `chat_audio` - One-shot audio request: a single user turn with text plus an audio clip (the base64 of its file).
 - `chat_vision` - One-shot vision request: a single user turn with text plus an image (http(s) URL or a `data:` URL).
+- `file_base64` - The bytes of the file at `path` as base64 - a byte read, since an image or a clip carries interior NULs a string read stops at; "" for a file that cannot be read.
 - `image_file_data_uri` - The image file at `path` as the `data:` URL a browser would send (`image/png` for a `.png` name, `image/jpeg` otherwise); "" for a file that cannot be read.
-- `vision_request_body` - Builds the JSON body for a one-shot vision request (a user turn with text + one image), under a system message when `system` is not empty.
+- `vision_request_body` - Builds the JSON body for a one-shot vision request (a user turn with text + one image, the image ahead of the text under `image_first`), under a system message when `system` is not empty; `no_think` asks a thinking model to answer directly.
 
 ## stbimage
 
@@ -3185,6 +3188,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `prefix_checkpoint_at` - Where a recurrent `session`'s prefill of `prompt` should stop for a `prefix_insert`, after `prefix_attach` matched `matched` tokens: `stable_at` (`render_turn_marked`'s opening) when the caller knows it, else the longest opening an earlier checkpoint shares.
 - `prefix_held_groups` - Pages the cache currently holds (== pool groups retained for reuse).
 - `prefix_insert` - Donate a session's KV pages to the cache.
+- `prefix_match_len` - How many leading positions of `prompt` a `prefix_attach` would attach right now, attaching nothing: a probe for a caller deciding what a request must bring (a media span's rows).
 - `prefix_release` - Release every cached page back to `pool` and clear the cache (pages still used by live sessions stay alive until those sessions release them).
 
 ### Tokenizer
@@ -3198,8 +3202,10 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `eval` - THE eval primitive: run `tokens` at the session's current position and advance it.
 - `eval_batch` - One synchronous batched decode step: row i evals `tokens[i]` at `sessions[i]`'s current position, advancing each by one — B conversations through ONE pass of the weights (GEMVs batch into GEMMs).
 - `eval_embd` - `eval`'s embedding-input twin: prefill `npos` pre-built embedding rows (`npos × dim`, token-major) at the session's current position and advance it — the multimodal splice entry.
+- `eval_embd_body` - Prefill `npos` rows built by `media_body_rows`: [span_lo, span_hi) a non-causal span (empty = every row causal), roped on a merged image `grid` where one is given.
 - `eval_embd_span` - `eval_embd` for a prompt carrying one NON-CAUSAL image span: rows `[span_lo, span_hi)` prefill with every query attending the whole span, the text around them causally — the gemma vision decode shape (non-causal media chunk).
 - `eval_embd_span_mrope` - `eval_embd_span`'s qwen mrope twin: the span rows rope as a `grid`-shaped merged image (position advance `max(grid.x, grid.y)`, tracked on the session for every later eval); same span mask, only the angles differ.
+- `media_body_rows` - One prefill body's rows for `eval_embd_body` on `session`: `head` text, `n_media` media rows of width `src_w`, `tail` text.
 - `sample` - Sample the next token from `session.logits` per `params`: penalties, then temperature/top-k/top-p/min-p and a CDF draw — or greedy argmax when `params.temp <= 0` (`SamplingParams()` defaults are greedy).
 - `set_seed` - Seed the session's sampling RNG for reproducible generation.
 - `stats` - Timing of the most recent `generate`/`respond` call on `session`: prompt/generated token counts, time to first token, prefill and generation tok/s.
@@ -3223,18 +3229,20 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `add_assistant` - Inject a KNOWN assistant reply (no generation): prefill the pending user turn and `text` into the KV cache, then close the turn — like `respond` but with a supplied reply.
 - `add_user` - Queue a user message for the next `respond`.
 - `add_user_audio` - Queue audio (16 kHz mono f32 PCM) for the next `respond` — encoded to soft tokens immediately and spliced at the head of the turn before any `add_user` text.
-- `add_user_audio_rows` - Queue PRE-ENCODED audio soft-token rows (what `encode_audio` emits — `dim`-wide on every family, length-checked) for the next `respond`.
+- `add_user_audio_rows` - Queue PRE-ENCODED audio soft-token rows (what `encode_audio` emits — `dim`-wide, length-checked) for the next `respond`.
 - `add_user_image` - Queue an image for the next `respond` — geometry, letterbox and the embedder run NOW, spliced at the head of the next user turn.
 - `add_user_image_rows` - Queue PRE-ENCODED image soft-token rows (what `encode_image` emits — deepstack models: `(1+n)·dim`-wide, length-checked) with the family's mrope `grid` ((0,0) = sequential) for the next `respond`.
+- `add_user_span` - Mark the pending user turn as carrying a media span inline: `render_turn` and `render_assistant` then lay `n_rows` position ids (`media_position_id` over the media's content `key`) where the media sits, `text_before` bytes into the turn's text.
 - `create_chat` - Start a conversation over `model`: resolves the chat template (GGUF-embedded, falling back to the arch registry) and creates the session.
 - `create_chat_renderer` - `create_chat`'s RENDER-ONLY twin: resolves the template/stop ids/turn close but creates NO KV session — a queued request can render its whole prompt holding tokens only, no cache memory.
 - `render_assistant` - `add_assistant`'s render half: appends the exact token stream a known reply prefills to `out` WITHOUT running the model, advancing the transcript like `add_assistant`.
 - `render_close` - The tokens that TERMINATE an assistant turn (what `respond` evals after the reply) — for schedulers that close a finished stream's turn themselves.
 - `render_turn` - Render the next turn's prefill token ids — BOS + system on the first turn, then the user turn and the generation prompt — WITHOUT running the model.
 - `render_turn_audio` - `render_turn`'s AUDIO twin: the same two-span contract around the audio soft-token splice (the template's audio span markers).
-- `render_turn_image` - `render_turn`'s IMAGE twin: the turn's prefill as the two token spans that bracket the image soft-token splice — `head` before the rows, `tail` after.
+- `render_turn_image` - `render_turn`'s IMAGE twin: the two token spans that bracket the image soft-token splice — `head` before the rows, `tail` after.
 - `render_turn_marked` - `render_turn` with its opening marked: `opening` leading tokens - BOS, prelude and the system turn of a conversation's first turn - are the same for any user text, so a prefix cache can checkpoint there.
 - `respond` - Generate the assistant's reply to the queued user message, streaming pieces through the trailing block (return `false` to stop early).
+- `set_chat_date` - Pin the date a Llama-3.1+ system turn states (`"26 Jul 2024"`); `""` returns it to the day the turn renders.
 - `set_thinking` - Toggle reasoning for a hybrid thinking model (Qwen3 family): `false` appends the template's empty think block so the model answers directly.
 
 ### Tool calling

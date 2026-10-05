@@ -325,7 +325,7 @@ def document_module_openai(_root : string) {
         group_by_regex("Audio (TTS and STT)", mod, %regex~(speech|speak|transcribe|translate)$%%),
         group_by_regex("Moderations", mod, %regex~(moderations)$%%),
         group_by_regex("Image generation", mod, %regex~(generate_image)$%%),
-        group_by_regex("Vision", mod, %regex~(chat_vision|vision_request_body|image_file_data_uri)$%%)
+        group_by_regex("Vision", mod, %regex~(chat_vision|chat_audio|vision_request_body|audio_request_body|image_file_data_uri|file_base64)$%%)
     )
     documents("OpenAI-compatible API client (chat, embeddings, audio, vision, ...)", mod, "openai.rst", groups)
 }
@@ -343,13 +343,13 @@ def document_module_dasllama(_root : string) {
     var mod = find_module("dasllama")
     var groups <- array<DocGroup>(
         group_by_regex("Model loading and sessions", mod, %regex~(load_model|create_session|create_kv_pool|release_kv_pages|create_batch_workspace|setup_dasllama_jobque|with_dasllama_jobque|caps|mtp_drafter_sidecar|attach_mtp_drafter|mtp_capable)$%%),
-        group_by_regex("Prefix cache", mod, %regex~(create_prefix_cache|prefix_attach|prefix_insert|prefix_checkpoint_at|prefix_release|prefix_held_groups|prefix_chain_list)$%%),
+        group_by_regex("Prefix cache", mod, %regex~(create_prefix_cache|prefix_attach|prefix_insert|prefix_checkpoint_at|prefix_match_len|prefix_release|prefix_held_groups|prefix_chain_list)$%%),
         group_by_regex("Tokenizer", mod, %regex~(encode|decode|piece)$%%),
-        group_by_regex("Evaluation and sampling", mod, %regex~(eval|eval_embd|eval_embd_span|eval_embd_span_mrope|eval_batch|sample|set_seed|stats)$%%),
+        group_by_regex("Evaluation and sampling", mod, %regex~(eval|eval_embd|eval_embd_span|eval_embd_span_mrope|eval_embd_body|media_body_rows|eval_batch|sample|set_seed|stats)$%%),
         group_by_regex("Generation", mod, %regex~(generate|generate_embd)$%%),
         group_by_regex("Embeddings", mod, %regex~(embed)$%%),
         group_by_regex("Vision and audio encoders", mod, %regex~(encode_image|encode_audio)$%%),
-        group_by_regex("Chat", mod, %regex~(create_chat|create_chat_renderer|add_user|add_user_audio|add_user_image|add_user_image_rows|add_user_audio_rows|add_assistant|render_turn|render_turn_marked|render_turn_image|render_turn_audio|render_assistant|render_close|respond|set_thinking)$%%),
+        group_by_regex("Chat", mod, %regex~(create_chat|create_chat_renderer|add_user|add_user_audio|add_user_image|add_user_image_rows|add_user_audio_rows|add_user_span|set_chat_date|add_assistant|render_turn|render_turn_marked|render_turn_image|render_turn_audio|render_assistant|render_close|respond|set_thinking)$%%),
         group_by_regex("Tool calling", mod, %regex~(set_tools|add_tool_results|render_assistant_calls|parse_calls)$%%),
         group_by_regex("Reasoning (thinking models)", mod, %regex~(split_reasoning|make_think_stream|think_feed|think_finish|think_drain|effective_stop_ids|turn_stop_ids|make_nothink_guard|nothink_stop_here)$%%),
         group_by_regex("Operations: prepared images and dispatch", mod, %regex~(dlim_inventory|dlim_clean|set_dispatch_worker_limit|get_dispatch_worker_limit|set_jobque_spin_us|get_jobque_spin_us|set_jobque_spin_gpu_us|get_jobque_spin_gpu_us|get_jobque_spin_in_force|set_single_thread|get_single_thread|select_matmul_backend_for_load|kernel_backend_available)$%%),
