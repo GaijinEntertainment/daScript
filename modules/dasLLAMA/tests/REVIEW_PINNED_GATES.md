@@ -5,8 +5,9 @@ doc: `CLAUDE.md`. Planned work: `../followup_general.md`.
 
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's
 asserts belong to every cell that calls it. A pinned test cell is a cell the pinned set lists,
-or any cell of a file it lists, and the pinned set is the only test of whether a cell is one.
-The pinned set, one entry a line, each with what it must keep holding:
+or any cell of a file the pinned set lists whole - a file entry, one naming the file and no cell -
+and the pinned set is the only test of whether a cell is one. The pinned set, one entry a line,
+each with what it must keep holding:
 
 - `test_run_suites.das` must hold the per-PR split, the folder census, the area tables and the
   `--exclude` filter.
@@ -20,7 +21,10 @@ The pinned set, one entry a line, each with what it must keep holding:
   `attn_trio_gate` calls whose `AttnKeys` sets `softcap`, `hass`, `uend` or `ulo` - the softcap,
   sink, uniform-span and mixed-span arms.
 - `test_site_records.das` must hold the byte-compare of `site/files/dasllama/bench_records.json`
-  (repo root) against a fresh `merge_site_records` run.
+  and of `site/files/dasllama/bench_cells.json` (repo root) - the smaller copy the site page loads
+  first - against a fresh `merge_site_records` run, and `bench_cells.json` keeping every field
+  that page renders at load while dropping the fields it reads from `bench_records.json` only on
+  demand.
 - `test_exchange_schema.das` must hold the exchange validator's corpus sweeps and the
   `[tune_scope]` wire-key pin read out of `../dasllama/dasllama_tune_scope.das`.
 - `test_bench_records_schema.das` must hold the `write_bench_records` output, corpus sweeps
@@ -53,15 +57,17 @@ The pinned set, one entry a line, each with what it must keep holding:
 
 **A diff that changes the contract a pinned test cell holds fixed - what its asserts hold, an
 axis gained or lost - updates that cell's entry in the pinned set in the same change; a diff
-adding a cell to a file the pinned set lists adds to that file's entry each axis the cell asserts
-that the entry does not name.**
+adding a cell to a file with a file entry adds to that entry each axis the cell asserts that the
+entry does not name.**
 An axis is one distinct behaviour the cell asserts - an output form, a refusal path, an argument's
 order; a new input row on an axis the cell already asserts is not an axis gained.
 
-**A diff that removes a pinned test cell's assert, loosens its bound, drops its input, or drops a
-`run.das` suite listing that reaches it is a defect - keep the cell's asserts and fix the code
-that fails them instead.** A diff that changes the value the cell's asserted function answers on
-an input the cell keeps is not one of these.
+**A diff that loosens a pinned test cell's bound, drops its input, or drops a `run.das` suite
+listing that reaches it is a defect - keep the cell's asserts and fix the code that fails them
+instead; so is a diff that removes a pinned test cell's assert without adding to the same cell, in
+the same change, an assert that holds the same values to an equal or tighter bound, with its
+control (an extra assert in the same cell proving the compare can fail).** A diff that changes the value
+the cell's asserted function answers on an input the cell keeps is not one of these.
 
 **A diff that adds a cell or an assert whose expected value must be kept in step with something
 maintained outside the cell - a document, a checked-in table, a committed artifact's form, a

@@ -19,7 +19,7 @@ that takes the id (`kq_qsb` / `kq_ssb`).**
 **A literal that stands for a per-format quantity of a `KqFmt` member - the value a `kq_desc`
 column, that member's `ggml_type_bytes` entry or a named per-format constant defines for it -
 written anywhere under `modules/dasLLAMA/` outside a definition home is a defect: read it through a
-`kq_desc` accessor (`kq_elems`, `kq_disk_bytes`, ...), through `kq_qsb` / `kq_ssb` on a format id,
+`KqFmt` accessor (`kq_elems`, `kq_disk_bytes`, ...), through `kq_qsb` / `kq_ssb` on a format id,
 or through a named constant a definition home declares - in a kernel body, which calls no
 accessor, a `uint` one `dasllama/dasllama_kqformat.das` declares.** A hand-copied value drifts
 from the definition it restates, and a literal `32` cannot be told apart from a tile width that

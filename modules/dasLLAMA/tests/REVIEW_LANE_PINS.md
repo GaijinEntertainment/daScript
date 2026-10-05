@@ -12,9 +12,9 @@ dispatch reads. A driver setter's getter is the `../dasllama/` call, or the set 
 returns the values the driver setter last wrote.
 
 **A cell, the `[test]` function that runs it, or the `[init]` of the file holding that function,
-calls every driver setter whose last-written value decides whether an assert the cell makes
-passes, or is what an assert's expected value is computed from, even when the value it writes is
-the DEFAULT.**
+calls - directly or through a helper it calls - every driver setter whose last-written value
+decides whether an assert the cell makes passes, or is what an assert's expected value is computed
+from, even when the value it writes is the DEFAULT.**
 
 **A cell whose claim depends on a family serving lane pins that lane in the cell itself - through
 a lane setter (`set_<name>_q8`, or whisper's `set_asr_fp32` / `set_asr_tower_fp32`) or a loader

@@ -99,14 +99,14 @@ overrides, on the CPU chain or on a GPU TTS seat that serves by default
 corpus, which `test_corpus_phonemes` in `tests/test_tts_g2p.das` decides) - ships in the PR body
 the WER and UTMOS of `harness/tts_rig.py`, before and after, at the rig's voice, on every model
 the change reaches and every weight lane that model can take - the unpinned default and each
-pin.** A lane's per-frame figures against the f32 oracle say nothing about the speech; only the
-rig does.
+pin - or the PCM hash of one flag-free synthesis per family, before and after, the two matching.**
 
 **A diff that changes what a GPU TTS seat's chain computes, on a seat that is not armed by
 default, ships in the PR body the WER and UTMOS of `harness/tts_rig.py` with that seat armed
 (`DASLLAMA_GPU=1` on Vulkan), before and after, at the rig's voice, on one model of each family
-the seat serves, on its served lane.** The per-lane, per-model sweep is the flag-free rule's;
-here the rig measures what the seat's own cells cannot - the speech.
+the seat serves, on its served lane - or the PCM hash of one synthesis per family with that seat
+armed, before and after, the two matching.** The rig measures what the seat's own cells cannot -
+the speech.
 
 **A text normalization or grapheme-to-phoneme error `harness/tts_rig.py`'s transcripts
 expose lands as a failing-first case in `tests/test_tts_textnorm.das` or

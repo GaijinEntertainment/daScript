@@ -1,8 +1,8 @@
 # dasLLAMA harness Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `../ARCHITECTURE_MEASUREMENT.md` (it routes to its companions). Planned
-work: `../followup_general.md`, `../followup_metal.md`, `../followup_vulkan.md`.
+doc: `../ARCHITECTURE_MEASUREMENT.md`. Planned work: `../followup_general.md`,
+`../followup_metal.md`, `../followup_vulkan.md`.
 
 **A diff that places a race or bench in `tune_kernels.das` that calls `pin_kernel_backend`,
 directly or through a helper, ahead of one that does not, is a defect - it moves after them.** The

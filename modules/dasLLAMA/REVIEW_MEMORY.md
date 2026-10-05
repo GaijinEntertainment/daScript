@@ -22,8 +22,10 @@ stays green.
 **A value that a team-lane kernel reads - anything reachable from a `team_parallel_for` /
 `team_parallel_for_indexed` / `team_parallel_stages` body (`daslib/jobque_boost.das`, repo
 root) or from a `maybe_parallel_for*` body (`dasllama/dasllama_par.das`), which can dispatch onto
-those same lanes - is a `def` returning it, never a module global with a declaration initializer
-(`let` or `var`).** A pooled lane's globals are not its own: a read comes back zero.
+those same lanes - is a `def` returning it, or a module `let` of a bool, number, enum or bitfield
+type whose initializer is a constant - never a module `var` or any other module `let`.** A pooled
+lane's globals are not its own: a read comes back zero; the optimizer, when on, folds such a
+`let` into its literal at each read.
 
 **Nothing reachable from a `team_parallel_for` / `team_parallel_for_indexed` /
 `team_parallel_stages` or `maybe_parallel_for*` body writes or resizes a module global - write

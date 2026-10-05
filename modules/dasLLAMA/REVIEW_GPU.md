@@ -113,13 +113,12 @@ a `@template_constant`'s default and each stamp's `override` for a constant a te
 the `grid=` spec (a CEIL divide), or the `wgs` decode plus its host helper, for a grid; the
 `tg=` / `local_size_x` spec for a threadgroup; the single writer for a uniform.
 
-**A diff that changes how a `grid = "wgs"` kernel body decodes its workgroup index, or how the
-host computes that class's `wgs`, shows in the same change that the host's count still covers
-exactly the indices the body's decode reads - by changing both, by a decode that permutes the
-same index set, or - where the body's decode and the host's count both read one shared
-function - by showing that for every shape the encoder dispatches that class on, the stamp it
-picks is the one that function's value names.** The `grid=` spec carries no number for these
-classes, so nothing else ties the two.
+**A diff that changes how a `grid = "wgs"` kernel body decodes its workgroup index, or how the host
+computes that class's `wgs`, shows in the same change that the host's count still covers exactly the
+indices the body's decode reads - by changing both, by a decode that permutes the same index set,
+or - where the body's decode and the host's count both read one shared function - by showing that
+for every shape the encoder dispatches that class on, the stamp it picks is the one that function's
+value names.** The `grid=` spec carries no number for these classes, so nothing else ties the two.
 
 **Never let a key that decides whether uploaded bytes, a cached descriptor set or bind list, or
 encoded GPU work may be reused skip an input that content was built from - it compares every
@@ -133,9 +132,8 @@ on a host address, an offset or a handle alone - also compare a counter bumped o
 reallocation, or drop every cached entry built over the old buffer at the reallocation.** An
 address, offset or handle names whatever occupies it now.
 
-**Never compile or release a Metal PSO (pipeline state object) from an engine file
-(`dasllama/`) other than the one that owns its kernel class** - it goes through that file's
-own init/release pair.
+**Never compile or release a Metal PSO (pipeline state object) from an engine file (`dasllama/`)
+other than the one that owns its kernel class** - it goes through that file's own init/release pair.
 
 **A function that decides whether a GPU seat or driver declines a call, wherever the diff puts
 it, counts a decline - where it counts one - only through a `DeclineCounter`
@@ -152,50 +150,52 @@ whether the call carries a uniform attention span - however that parameter is de
 readiness, whether this window's rope tables are staged, is asked by `prefill_decline` /
 `decode_decline` instead.**
 
-**A diff that adds or removes a seat in `dasllama/dasllama_gpu_tier.das` that only the Vulkan
-family fills - a seat is a module-level variable that holds a function and has a public setter,
-whatever the setter is named - names the seat, by its setter's name, in the `dasllama_gpu_tier.das`
-entry of `ARCHITECTURE_GPU.md#gpu-backends`, in the same change.**
+**A diff that adds a seat in `dasllama/dasllama_gpu_tier.das` that only the Vulkan family fills -
+a seat is a module-level variable that holds a function and has a public setter, whatever the
+setter is named - names the seat, by its setter's name, in the `dasllama_gpu_tier.das` entry of
+`ARCHITECTURE_GPU.md#gpu-backends`; a diff that removes one deletes that name; in the same change.**
 
-**A diff that adds or removes a hook a GPU driver registers in a model family's registry, or a
-prefill builder a tower driver borrows, names it - the hook by the seat's register function, the
-builder by its name - in that driver's row of the role table in
-`ARCHITECTURE_GPU.md#gpu-backends`, in the same change.**
+**A diff that adds a hook a GPU driver registers in a model family's registry, or a prefill
+builder a tower driver borrows, names it - the hook by the seat's register function, the builder
+by its name - in that driver's row of the role table in `ARCHITECTURE_GPU.md#gpu-backends`; a
+diff that removes one deletes its name from that row; in the same change.**
 
-**A diff that adds or removes a `dasllama/dasllama_gpu_tier.das` seat Metal fills, or a registered
-override only one GPU backend files (`register_*("metal", ...)` or `register_*("vulkan", ...)`)
-other than a family hook a tower driver registers, lands its own entry in
-`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`, the closed asymmetry list, in the same change,
-even when the list already carries one of the same class.**
+**A diff that adds a `dasllama/dasllama_gpu_tier.das` seat Metal fills, or a registered override
+only one GPU backend files (`register_*("metal", ...)` or `register_*("vulkan", ...)`) other than
+a family hook a tower driver registers, lands its own entry in
+`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`, the closed asymmetry list, even when the list
+already carries one of the same class; a diff that removes one deletes its entry;
+in the same change.**
 
-**A diff that adds or removes a function one backend exports with no counterpart under the other
-backend's prefix - the same name after the prefix, the same role - called by code outside that
-backend's files lands its own entry in `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries` in the
-same change, even when the list already carries one of the same class.**
+**A diff that adds a function one backend exports with no counterpart under the other backend's
+prefix - the same name after the prefix, the same role - called by code outside that backend's files
+lands its own entry in `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`, even when the list already
+carries one of the same class; a diff that removes one deletes its entry; in the same change.**
 
-**A diff that adds or removes a kind of generated function (such as a `set_*` setter) that one
-backend's dispatch macro (`[metal_dispatch]` or `[vk_dispatch]`) generates for every kernel class
-and the other does not, or a `[metal_dispatch]` or `[vk_dispatch]` argument or field annotation
-the other lens lacks, lands its own entry in `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries` in
-the same change, even when the list already carries one of the same class.**
+**A diff that adds a kind of generated function (such as a `set_*` setter) that one backend's
+dispatch macro (`[metal_dispatch]` or `[vk_dispatch]`) generates for every kernel class and the
+other does not, or a `[metal_dispatch]` or `[vk_dispatch]` argument or field annotation the other
+lens lacks, lands its own entry in `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`, even when the
+list already carries one of the same class; a diff that removes one deletes its entry;
+in the same change.**
 
-**A diff that adds or removes a decode or prefill behavior only one backend's drivers provide, or
-a pin or knob (a setter or environment variable that changes what a run selects or computes) only
-one backend reads, lands its own entry in `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries` in the
-same change, even when the list already carries an entry of the same kind.** The same path served faster or slower does not count.
+**A diff that adds a decode or prefill behavior only one backend's drivers provide, or a pin or
+knob (a setter or environment variable that changes what a run selects or computes) only one
+backend reads, lands its own entry in `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`, even when
+the list already carries an entry of the same kind; a diff that removes one deletes its entry;
+in the same change.** The same path served faster or slower does not count.
 
-**A change that can alter what a GPU decode or prefill call on a session computes or selects
-ships GPU-vs-CPU parity on one q8 model, one K-quant model, and one model of a format outside
-both, for each of the three that the changed call serves - or names both compares in the PR
-body: its emitted kernels byte-identical before and after (the `*_msl` globals or the AIR,
-Metal's compiled shader IR, they build into; the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes) and
-the host's stamp, dispatch selection and every bind argument (buffer, offset, kargs value)
-unchanged on every input.** Such a change is anything the call executes or that selects what it
-executes - a driver, a kernel class it dispatches, that class's builder, a servability gate, a
-race that picks which kernel serves, a forwarder default, a weight-region or residency path, the
-tier forwarders and the Vulkan tier-dispatch seams (`dasllama/dasllama_vulkan_seams.das`) the
-call routes through; only both compares together show the change cannot alter what the path
-computes or selects.
+**A change that can alter what a GPU decode or prefill call on a session computes or selects ships
+GPU-vs-CPU parity on one q8 model, one K-quant model, and one model of a format outside both, for
+each of the three that the changed call serves - or names both compares in the PR body: its emitted
+kernels byte-identical before and after (the `*_msl` globals or the AIR, Metal's compiled shader IR,
+they build into; the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes) and the host's stamp, dispatch
+selection and every bind argument (buffer, offset, kargs value) unchanged on every input.** Such a
+change is anything the call executes or that selects what it executes - a driver, a kernel class it
+dispatches, that class's builder, a servability gate, a race that picks which kernel serves, a
+forwarder default, a weight-region or residency path, the tier forwarders and the Vulkan
+tier-dispatch seams (`dasllama/dasllama_vulkan_seams.das`) the call routes through; only both
+compares together show the change cannot alter what the path computes or selects.
 
 **A diff that adds a call site handing a whole GPU decode or prefill call the device served before
 the diff to the CPU path is a defect - it ships the device path in the same change.** A call that
