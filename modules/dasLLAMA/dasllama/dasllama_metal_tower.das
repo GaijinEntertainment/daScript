@@ -3737,12 +3737,9 @@ def private st2_stage(enc : MetalComputeEncoder?; var c : St2GpuCtx; d : St2Deco
     st2_add(enc, c, g.by, g.bsres, g.by, n, 1.0)
     let nk = d.n_kernels
     let nnoise = long_length(d.noise_res)
-    let u_scale = st2_uf(c, 1.0 / float(nk))
-    let u_one = st2_u(c, 1u)
-    let u_zero = st2_u(c, 0u)
     for (j in range64(nk)) {
         st2_gen_res_block(enc, c, d.resblocks[i * nk + j], sl.blocks[nnoise + i * nk + j], g.bxt, g.by1, g.by, g.bsres, t2, s)
-        enc_st2_axpy(enc, bout, g.bsres, u_scale, j == 0l ? u_one : u_zero, u_n, n)
+        enc_st2_axpy(enc, bout, g.bsres, GkAxpyArgs(nelem = uint(n), scale = 1.0 / float(nk), zero = j == 0l ? 1u : 0u), n)
     }
     tt = t2
     cc = c2
@@ -3941,8 +3938,8 @@ def private st2_decoder_chain(enc : MetalComputeEncoder?; var c : St2GpuCtx; d :
                               text_c, frames : int64; s_ref : array<float>) {
     let sl & = g_tw_st2_dec
     let rc = uint(d.asr_res.cout)
-    var kc = St2ConcatArgs(c = uint(text_c), rc = rc, rs = uint(sl.asr_res.cout_p), f0s = uint(ST2_POST_WIDTH), ns = uint(ST2_POST_WIDTH),
-        with_res = 0u, width = uint(d.encode.dim_in_s), total = uint(frames * d.encode.dim_in_s))
+    var kc = GkConcatArgs(c = uint(text_c), rc = rc, rs = uint(sl.asr_res.cout_p), f0s = uint(ST2_POST_WIDTH), ns = uint(ST2_POST_WIDTH),
+        with_res = 0u, width = uint(d.encode.dim_in_s), rows = uint(frames))
     enc_st2_concat(enc, b.basr, b.bres, b.bf0d, b.bnd, b.bcat, kc, frames * d.encode.dim_in_s)
     var tt = st2_res_blk(enc, c, d.encode, sl.encode, r, b.bcat, frames, s_ref, b.bx)
     var cwr = d.encode.dim_out
@@ -3952,8 +3949,8 @@ def private st2_decoder_chain(enc : MetalComputeEncoder?; var c : St2GpuCtx; d :
         let src = in_x ? b.bx : g.bo
         let dst = in_x ? g.bo : b.bx
         if (blk.dim_in != cwr) {
-            var kc2 = St2ConcatArgs(c = uint(cwr), rc = rc, rs = uint(sl.asr_res.cout_p), f0s = uint(ST2_POST_WIDTH), ns = uint(ST2_POST_WIDTH),
-                with_res = 1u, width = uint(blk.dim_in_s), total = uint(tt * blk.dim_in_s))
+            var kc2 = GkConcatArgs(c = uint(cwr), rc = rc, rs = uint(sl.asr_res.cout_p), f0s = uint(ST2_POST_WIDTH), ns = uint(ST2_POST_WIDTH),
+                with_res = 1u, width = uint(blk.dim_in_s), rows = uint(tt))
             enc_st2_concat(enc, src, b.bres, b.bf0d, b.bnd, b.bcat, kc2, tt * blk.dim_in_s)
             tt = st2_res_blk(enc, c, blk, sl.decode[i], r, b.bcat, tt, s_ref, dst)
         } else {
@@ -4171,7 +4168,7 @@ def private metal_styletts2_dur_enc(p : St2Predictor; bert : array<float>; t : i
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
         st2_lin(enc, c, sl.bert_enc, bbert, t, bden)
         //! the style appended as a broadcast "residual" of stride 0; the width holds the f0/n columns out
-        var kc = St2ConcatArgs(c = uint(cc), rc = uint(sd), rs = 0u, f0s = 0u, ns = 0u, with_res = 1u, width = uint(width), total = uint(t * width))
+        var kc = GkConcatArgs(c = uint(cc), rc = uint(sd), rs = 0u, f0s = 0u, ns = 0u, with_res = 1u, width = uint(width), rows = uint(t))
         enc_st2_concat(enc, bden, bs, bs, bs, bx, kc, t * width)
         for (i in range(length(p.lstms))) {
             let lb & = lbs[i]

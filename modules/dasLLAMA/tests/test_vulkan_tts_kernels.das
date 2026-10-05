@@ -333,8 +333,8 @@ def test_vkt_concat(t0 : T?) {
                 let opp = cp |> out_(rows * CC_WIDTH)
                 var s_res = cp |> cls_set(fixed_array(xp, sp, fp, np, orp), @@set_tts_concat_cls)
                 var s_pad = cp |> cls_set(fixed_array(xp, xp, fp, np, opp), @@set_tts_concat_cls)
-                var pr = TtsConcatArgs(c = uint(c), rc = uint(CC_RC), rs = 0u, f0s = 0u, ns = 0u, with_res = 1u, width = uint(wr), rows = uint(rows))
-                var pp = TtsConcatArgs(c = uint(c), rc = uint(CC_RC), rs = uint(CC_RC), f0s = uint(CC_F0S), ns = uint(CC_NS), with_res = 0u,
+                var pr = GkConcatArgs(c = uint(c), rc = uint(CC_RC), rs = 0u, f0s = 0u, ns = 0u, with_res = 1u, width = uint(wr), rows = uint(rows))
+                var pp = GkConcatArgs(c = uint(c), rc = uint(CC_RC), rs = uint(CC_RC), f0s = uint(CC_F0S), ns = uint(CC_NS), with_res = 0u,
                     width = uint(CC_WIDTH), rows = uint(rows))
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_tts_concat_cls(raw, h, s_res, pr, int64(rows * wr))

@@ -15,6 +15,7 @@ require dasllama/dasllama_common
 require dasllama/dasllama_math
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_gpu_math
+require dasllama/dasllama_gpu_kernels_common public
 require dasllama/dasllama_metal_common
 require dasllama/dasllama_metal_lens
 
@@ -3574,7 +3575,7 @@ class MetalRopeStoreBTq4 : MetalRopeStoreTq4Base {
 
 def compile_pso(source, entry : string; fastmath : bool; var ok : bool&) : MetalComputePipeline? {
     var err : string
-    var pso = pipeline_from_source(g_dev, source, entry, fastmath, err)
+    var pso = pso_from_source(g_dev, source, entry, fastmath, err)
     if (pso == null) {
         to_log(LOG_ERROR, "dasLLAMA metal decode: `{entry}` compile failed - {err}\n")
         ok = false
@@ -10847,22 +10848,11 @@ class MetalSt2Leaky : MetalEw1BaseT {
 }
 
 //! out = (zero ? 0 : out) + scale * y - the stage's averaged residual-block sum.
-[metal_dispatch(name = "enc_st2_axpy", pso = "g_pso_st2_axpy", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2Axpy {
-    @ssbo @binding = 0 @role = "readwrite" o : array<float>
-    @ssbo @binding = 1 @role = "read" y : array<float>
-    @uniform @binding = 2 scale : float
-    @uniform @binding = 3 zero : uint
-    @uniform @binding = 4 total : uint
-
+[metal_dispatch(name = "enc_st2_axpy", pso = "g_pso_st2_axpy", tg = 64, grid = "nelem/64", params = "nelem : int64")]
+class MetalSt2Axpy : GkAxpy {
     [metal_kernel(name="metal_st2_axpy_msl")]
     def metal_st2_axpy {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= total) {
-            return
-        }
-        let base = zero != 0u ? 0.0 : o[gid]
-        o[gid] = base + scale * y[gid]
+        axpy_body()
     }
 }
 
@@ -10936,46 +10926,11 @@ class MetalRowGather {
 }
 
 //! cat(x [t][c], res [t][rc] at stride rs when with_res, f0 at stride f0s, n at stride ns), zero-padded to width.
-struct St2ConcatArgs {
-    c : uint
-    rc : uint
-    rs : uint
-    f0s : uint
-    ns : uint
-    with_res : uint
-    width : uint
-    total : uint
-}
-
 [metal_dispatch(name = "enc_st2_concat", pso = "g_pso_st2_concat", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2Concat {
-    @ssbo @binding = 0 @role = "read" x : array<float>
-    @ssbo @binding = 1 @role = "read" res : array<float>
-    @ssbo @binding = 2 @role = "read" f0 : array<float>
-    @ssbo @binding = 3 @role = "read" nd : array<float>
-    @ssbo @binding = 4 @role = "write" o : array<float>
-    @uniform @binding = 5 ka : St2ConcatArgs
-
+class MetalSt2Concat : GkConcat {
     [metal_kernel(name="metal_st2_concat_msl")]
     def metal_st2_concat {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= ka.total) {
-            return
-        }
-        let r = gid / ka.width
-        let j = gid % ka.width
-        let rc = ka.with_res != 0u ? ka.rc : 0u
-        var v = 0.0
-        if (j < ka.c) {
-            v = x[r * ka.c + j]
-        } elif (j < ka.c + rc) {
-            v = res[r * ka.rs + (j - ka.c)]
-        } elif (j == ka.c + rc) {
-            v = f0[r * ka.f0s]
-        } elif (j == ka.c + rc + 1u) {
-            v = nd[r * ka.ns]
-        }
-        o[gid] = v
+        concat_body()
     }
 }
 

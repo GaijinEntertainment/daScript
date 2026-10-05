@@ -80,7 +80,9 @@ tokenizer's own file (`dasllama/dasllama_spm.das` / `dasllama/dasllama_bpe.das`)
 
 **A GPU kernel body under `dasllama/` - the arithmetic loop a dispatch class (a class a
 `[metal_dispatch]` or `[vk_dispatch]` declares) picks one variant of - lands in its backend's
-kernel file, `dasllama/dasllama_metal_kernels.das` or `dasllama/dasllama_vulkan_classes.das`.** A
+kernel file, `dasllama/dasllama_metal_kernels.das` or `dasllama/dasllama_vulkan_classes.das`, where
+one backend stamps it, and as a `class template` in `dasllama/dasllama_gpu_kernels_common.das` where
+both do (`ARCHITECTURE_GPU.md#gpu-shared-kernels`).** A
 class stamped from a template declared elsewhere is not a kernel body: it compiles its own
 pipeline where it is stamped.
 

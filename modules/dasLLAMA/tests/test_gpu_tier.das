@@ -11,6 +11,7 @@ options _dasllama_internal = true
 // armed itself, and the arm double is reset to false at the end.
 
 require dastest/testing_boost public
+require daslib/fio
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_config
 require dasllama/dasllama_kv_dtype   // KVDtype: the mirror codec crosses the seam as its ordinal
@@ -575,5 +576,21 @@ def test_dlim_vulkan_tag_dn_native(t : T?) {
         let plain = dlim_vulkan_tag(v)
         v.dn_native = true
         t |> success(dlim_vulkan_tag(v) != plain, "the tag changes with dn_native: '{plain}' vs '{dlim_vulkan_tag(v)}'")
+    }
+}
+
+[test]
+def test_kernel_dump_save(t : T?) {
+    t |> run("a kernel dump writes its payload under the knob's directory, writes nothing with the knob unset, and says where it could not write") @(t : T?) {
+        let dir = test_temp_dir()
+        t |> success(kernel_dump_save(dir, "toy.metal", "TEST_DUMP", "kernel void toy();"), "the text payload is written")
+        t |> equal(fread(path_join(dir, "toy.metal")), "kernel void toy();")
+        var words <- [0x07230203u, 0x00010300u, 42u]
+        t |> success(kernel_dump_save(dir, "toy.spv", "TEST_DUMP", words), "the word payload is written")
+        t |> equal(int(stat(path_join(dir, "toy.spv")).size), 12)
+        t |> success(kernel_dump_save("", "unset.metal", "TEST_DUMP", "x"), "an unset knob is no failure")
+        t |> success(!stat("unset.metal").is_valid, "and writes no file")
+        t |> success(!kernel_dump_save(path_join(dir, "no_such_dir"), "toy.metal", "TEST_DUMP", "x"), "a directory that is not there answers false")
+        delete words
     }
 }

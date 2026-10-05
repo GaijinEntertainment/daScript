@@ -224,10 +224,13 @@ that a question answered for one backend has an obvious address in the other. Th
   owner serves the Metal and the Vulkan bodies alike; it also holds the CPU chains' matching scalar forms (the sigmoid, the SiLU, the logistic gate, the softplus: `sigmoid_f32`, `silu_f32`, `sig_gate`, `softplus`); the codebook tables stay per kernel home.
   `mad` is the fused instruction by definition and leaves a driver nothing to choose, so two bodies
   held bit for bit spell as `mad` each multiply that feeds an add.
+- **`dasllama_gpu_kernels_common.das`** - the kernels both kernel homes stamp, each one `class template`
+  with its buffers, its argument struct and its body (`#gpu-shared-kernels`); it requires no backend.
 - **`dasllama_kernel_access.das`** - the shared body-walk read/write classifier both GPU lenses run
   on, plus the dispatch-lens micro-grammar (the grid/tg/params spec tokenizers and the shared
   AST-emission core: `is_digit_tok`, `role_ok`, `derived_role`, `mk_uint_cast`, `mk_call1`,
-  `mk_grid_dim`, `param_type`). One owner by design: a private copy per lens drifts (metal folding
+  `mk_grid_dim`, `param_type`, and `kargs_as`, which gives a shared kernel's `@kargs` member the argument
+  form each lens's emitter reads). One owner by design: a private copy per lens drifts (metal folding
   only the literal "1" where vulkan folds any integer). Backend-specific lowering stays in that backend's lens.
 - **The authoritative site of each constant kind.** Tile constant in a kernel body: the literal in the generated `*_msl` global or the
   SPIR-V dump (`DASLLAMA_VK_SPV_DUMP=<dir>` writes every class kernel's words). Grid constant: the class's `[metal_dispatch]` / `[vk_dispatch]`
@@ -250,3 +253,28 @@ in prefill) and the tuner calls those public entries.
 decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for both paths.
 
 Vulkan is the deliberately-designed model of this shape; Metal converges as it is touched.
+
+### Kernels both homes stamp {#gpu-shared-kernels}
+
+A kernel the Metal and the Vulkan home both run is one `class template` in
+`dasllama_gpu_kernels_common.das`: its `@ssbo` buffers with their `@role`s, its argument struct and its
+body. The module requires no backend and no shader vocabulary - a template's body resolves in the module
+that stamps it. Each home stamps the template as a leaf class under its own dispatch annotation and its
+own kernel method, which calls the body, so a kernel keeps the dispatch name, the pipeline and the census
+key it has on that home.
+
+- **The arguments are one `@kargs` member.** `kargs_as` (`dasllama_kernel_access.das`) runs in both
+  dispatch lenses ahead of the kernel's emission and gives the member the form that home's emitter reads:
+  a `@push_constant` block on Vulkan, a by-value `@uniform` at the binding past the class's highest on
+  Metal. The struct is a member and not a parameter of the body: a parameter is passed by value, and the
+  emitted kernel then copies the whole struct where a member is read a field at a time.
+- **A body that reads a buffer at an offset takes it as an element offset in its arguments.** Vulkan caches
+  a descriptor set by its binding tuple, so an offset bound per dispatch would be a set per offset; an offset
+  in the arguments is one set. A kernel every site reads from element zero carries none.
+- **The two emitters place the body differently.** The MSL emitter splices a called method flat into the
+  kernel; the SPIR-V emitter keeps it a function the entry point calls. A kernel moved here therefore
+  reads, on Vulkan, as its old words plus one call.
+- **What stays per home:** the GEMM and attention tiles, which each home builds on its own matrix
+  primitives. A pair whose two forms differ in shape (the elementwise maps run one element a thread on
+  Metal and four an invocation on Vulkan) folds onto one body when both homes profile the same on it, and
+  until then shares its per-element function through `dasllama_gpu_math.das`.

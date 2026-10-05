@@ -1936,21 +1936,19 @@ module) is independent and can land any time - it is pure structure.
     skip on it as they do on a missing device) or the offending opcode is spelled the way
     MoltenVK's converter accepts, and the three files read green under MoltenVK.
 
-115. **Nineteen TTS kernels are one algorithm under two class shells.** `TtsSrcCumsumT`, `TtsStftT`,
-    `TtsIstft`, `TtsSrcSinesT`, `TtsSrcLowT`, `TtsAdainT`, `TtsConcat`, `TtsPkAttn`, `TtsPkGemvT`,
+115. **Seventeen TTS kernels are one algorithm under two class shells.** `TtsSrcCumsumT`, `TtsStftT`,
+    `TtsIstft`, `TtsSrcSinesT`, `TtsSrcLowT`, `TtsAdainT`, `TtsPkAttn`, `TtsPkGemvT`,
     `TtsPoolDw`, `TtsIm2colT`, `TtsElemT`, `TtsAddScale`, `TtsPkRowScale`, `TtsRowGather`,
-    `TtsPkRowsT` (the reflect pad's two copies included), `TtsSigSum`, `TtsAxpy` and
-    `TtsSrcNoise` each have a `MetalSt2*` / `MetalPk*` twin whose body is the same arithmetic; the dedup pass moved that
-    arithmetic into `dasllama_gpu_math.das`, and what stays twice is the shell - the binding
-    declarations (`@push_constant pa` against `@uniform ka`), the entry, the workgroup count. No
-    `class template` is stamped by both the SPIR-V and the Metal emitter today
-    (`modules/dasMetal/ARCHITECTURE.md` section 5: uniform against push-constant bindings, method
-    splicing against calls), so the shells wait on an emitter feature: one template with a
-    per-emitter binding form, about 500 lines across the two homes. The seat chains the two
-    drivers write per backend are the other half of the same picture and a separate arc after
-    the 0.6.5 release (Boris's ruling): the host flow of every TTS seat - the stage ping-pong,
-    the concat when the width differs, the head-block loop - is identical and could run once over
-    an encoder interface, about 450 lines.
+    `TtsPkRowsT` (the reflect pad's two copies included), `TtsSigSum` and
+    `TtsSrcNoise` each have a `MetalSt2*` / `MetalPk*` twin whose body is the same arithmetic, held in
+    `dasllama_gpu_math.das`; what stays twice is the shell - the binding declarations, the entry, the
+    workgroup count. The shell folds as `TtsConcat` and `TtsAxpy` did: one `class template` in
+    `dasllama_gpu_kernels_common.das` both homes stamp (`ARCHITECTURE_GPU.md#gpu-shared-kernels`). A pair
+    whose two bodies were tuned apart (`TtsElemT` maps four elements an invocation, its Metal twin one a
+    thread) keeps both and shares the per-element function. The seat chains the two
+    drivers write per backend are the other half of the same picture and a separate arc: the host flow of
+    every TTS seat - the stage ping-pong, the concat when the width differs, the head-block loop - is
+    identical and could run once over an encoder interface, about 450 lines.
 
 116. **The speculative round has no Vulkan round seat.** The round's four backend seats
     (`register_mtp_spec_override`, `_spec_batch_`, `_round_`, `_seam_` in `dasllama_common.das`)

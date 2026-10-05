@@ -2119,6 +2119,23 @@ def public matmul_moe_gpu_cls(var y : array<float>; woff : int64; xq : array<int
     }
 }
 
+//! A kernel's emitted payload - shader text, or SPIR-V words - written as `file` under `dir`, the directory a dump
+//! knob names; nothing where the knob is unset. `knob` is the knob's name in the line this logs. False where the
+//! file could not be written.
+def public kernel_dump_save(dir, file, knob : string; payload) : bool {
+    return true if (empty(dir))
+    let path = path_join(dir, file)
+    var ok = false
+    fopen(path, "wb") $(f) {
+        if (f != null) {
+            f |> fwrite(payload)
+            ok = true
+        }
+    }
+    to_log(ok ? LOG_INFO : LOG_WARNING, "dasLLAMA: {knob} {ok ? "wrote" : "could not write"} {path}\n")
+    return ok
+}
+
 //! log census `cov` (name -> dispatches): the dispatched with counts, a LOUD WARNING per never-dispatched one
 def public kernel_coverage_report(backend, population : string; cov : table<string; int64>) {
     var names <- [for (name in keys(cov)); name]

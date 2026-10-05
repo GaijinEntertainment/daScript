@@ -2774,6 +2774,13 @@ struct public RacePsoPair {
     ok : bool
 }
 
+//! `pipeline_from_source` for every pipeline this backend builds: the kernel's generated source goes to the dump
+//! directory first, where `DASLLAMA_METAL_MSL_DUMP` names one.
+def pso_from_source(dev : MetalDevice?; source, entry : string; fastmath : bool; var err : string&) : MetalComputePipeline? {
+    kernel_dump_save(g_env_metal.msl_dump, "{entry}.metal", "DASLLAMA_METAL_MSL_DUMP", source)
+    return pipeline_from_source(dev, source, entry, fastmath, err)
+}
+
 //! the `race_pso_pair_stamp` macro is the spelling a race arm uses - it names each side by its
 //! ONE `_msl` stem, so the entry name and the fastmath flag cannot drift onto another kernel's
 def race_pso_pair(dev : MetalDevice?; family : string;
@@ -2782,12 +2789,12 @@ def race_pso_pair(dev : MetalDevice?; family : string;
     var p = RacePsoPair(base_pso = null, twin_pso = null, ok = false,
         verdict = MetalTensorRaceResult(family = family, winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = ""))
     var err = ""
-    p.base_pso = pipeline_from_source(dev, base_src, base_entry, base_fm, err)
+    p.base_pso = pso_from_source(dev, base_src, base_entry, base_fm, err)
     if (p.base_pso == null) {
         p.verdict.note = "base pso: {err}"
         return p
     }
-    p.twin_pso = pipeline_from_source(dev, twin_src, twin_entry, twin_fm, err)
+    p.twin_pso = pso_from_source(dev, twin_src, twin_entry, twin_fm, err)
     if (p.twin_pso == null) {
         p.verdict.winner = "simdgroup"
         p.verdict.note = "twin pso: {err}"
