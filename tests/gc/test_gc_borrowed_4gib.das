@@ -4,6 +4,7 @@
 options gen2
 options persistent_heap
 options gc
+options no_aot   // the test calls heap_collect with its `T?` argument live, and AOT refuses a function whose frame the collector must walk (error 50503)
 
 require dastest/testing_boost public
 
