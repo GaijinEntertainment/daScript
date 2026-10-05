@@ -4621,8 +4621,9 @@ and pp512 is read against its own spread.
   `MmBatchT`'s two tiles back as two bodies reads 11894 +- 331 (the one coopmat accumulator array
   walked under `[unroll_full]`, 2.5% - its own 4096x4096 probe had read flat per dispatch, 147.63 ->
   147.68 us; the served shape did not agree, and the old and new tiles load the same fragments, so
-  the array itself is what the driver stops keeping in registers). A probe shape is not the served
-  shape: the served row is the gate a fold passes.
+  the array itself is what the driver stops keeping in registers). With both back, at 10 reps
+  master-tip-master-tip: Qwen3-4B Q8_0 11765 / 11753 / 11508 / 11754, gemma-4-E4B Q8_0 9610 / 9584 /
+  9575 / 9587. A probe shape is not the served shape: the served row is the gate a fold passes.
 - **The tq4 mirror's control share reads as the constant's doc says on this card.** The hybrid file's
   `tq4_within` holds a tolerance row to `TQ4_CTRL_SHARE` 0.85 of its distance from the one-token-off row
   (`tests/_resident_feed.das`): the share reads 0.09-0.44 on the RTX 5060 Ti and 0.73 on the RTX PRO
