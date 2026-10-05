@@ -1025,7 +1025,11 @@ thinking renderer pins (the instruct prefill token for token, the gate + bare op
 thinking-off extras on `effective_stop_ids`, a mid-conversation toggle staying instruct) and
 the instruct-mode TEXT turn through `respond` (greedy "2+2": the answer, no channel marker in
 the content half, the turn ending on a stop - red when the guard does not end the turn on the
-stray `<channel|>` the E2B emits after its answer). Model-free beside them,
+stray `<channel|>` the E2B emits after its answer), and `test_gemma4_e_media_body`: one fused media
+body (text, the span's own text embeddings as rows, text - one prefill through `media_body_rows`
+and `eval_embd_body`) reads the last row's logits within a quarter of their peak of the same
+prompt as text / rows / text in three calls, and the same body with its ids cleared - the text
+rows under the padding token's per-layer input - reads past the peak (the control). Model-free beside them,
 `test_chatml_default_system`: the default system text read off template text and off a string
 literal, none where the span holds an expression or the template states no system turn. Beside it,
 `test_gemma4_instruct_opener`: a gemma-4 template's non-thinking generation prompt keeps the closed

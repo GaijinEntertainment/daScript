@@ -84,6 +84,17 @@ for a transcription row, the reference as `llama-server -m <gguf> --mmproj <mmpr
 `served_bench.das -- --url <server> --no-chat --image <file> --reps 5` and
 `served_bench.das -- --asr-url <server> --clip <wav> --reps 5`.
 
+A transcription row with no chat model behind it launches ours with the ASR model alone:
+`main.das -- --asr <whisper bin>` for a whisper model, `main.das -- --asr <gguf> --mmproj <mmproj>`
+for Qwen3-ASR. The whisper reference is whisper.cpp `6fc7c33`, built on the box, as
+`whisper-server -m <bin> --port <port> --inference-path /v1/audio/transcriptions`, so the
+client's transcription request reaches it at the path it sends. The client is
+`served_bench.das -- --no-chat --asr-url <server> --clip <wav> --reps 5`.
+
+An audio-chat row (a clip asked about as an `input_audio` part) launches ours with the tower's
+projector beside the model, `main.das -- -m <gguf> --audio-mmproj <mmproj> -p 8123 -s 1`, and the
+client as `served_bench.das -- --url <server> --no-chat --chat-clip <wav> --reps 5`.
+
 Its figures are ledger figures - `PERF_LEDGER.md`, tagged `served` - and nothing else. No record
 store, board or ladder takes them, and none of them compares against an `lcpp_bench` row: the
 rig's `pp` and `tg` time the kernels from an empty cache with no scheduler, no HTTP path and no

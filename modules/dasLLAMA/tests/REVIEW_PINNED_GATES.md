@@ -29,8 +29,13 @@ The pinned set, one entry a line, each with what it must keep holding:
   a run that prints no row names why and reads 0; and the committed stores' batched receipts - the
   cpu legs' das child at `--npl-plen 128 --npl-reps 3` and reference at `-npp 128`,
   `--no-op-offload` on the stock cpu arm alone, the metal leg at `-npp 512` with neither.
-- `test_scheduler.das`'s `test_scheduler_media_splice` cell must hold that a media stream takes no
-  cached hit at `prefix_attach` and donates no pages at `donate_stream`.
+- `test_scheduler.das`'s `test_scheduler_media_splice` cell must hold a media span's text and rows
+  as one prefill call, and a body cut at the chunk taking the rest a chunk a call; on a paged
+  scheduler, the prefix cache matching across a span by its rows' content - the text ahead of a new
+  span attaching and the hit stopping at it, the media stream donating its pages, the same span
+  asked again attaching past it, a rowless request for it served off the cache, other rows at the same place sharing only
+  the text ahead of them - and a rowless request on a cold cache finishing `media_lost` with
+  nothing donated.
 - `test_vulkan_kernels.das`'s `test_vk_coopmat_default_and_tile_pick` cell must hold which tile
   the Vulkan matmul picks, and whether that dispatch splits its reduction across partial planes,
   on every input of the prefill's tile-and-split pick.

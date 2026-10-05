@@ -809,15 +809,6 @@ that scales with the model and not with the drafts - the verify's two rows again
 weight pass at its bandwidth roof should be nearly free. The work: the round's stage split on
 the 9B (`harness/mtp_ruler.das`, the verify against the plain step) to name the term.
 
-## 28. The Metal tower's qwen3a mel hook raises no counter
-
-`metal_q3a_mel` (`dasllama/dasllama_metal_tower.das`, registered through
-`register_whisper_mel_gpu`) serves the qwen3a log-mel front on the device and raises none of
-`metal_tower_stats()`'s counters - `encodes`, `blocks` and `convs` all stay flat across a served
-mel - so no gate can cover the hook under `REVIEW_TOWER.md`'s covering rule, which needs a
-counter that rises on a leg where the hook is the only hook raising it. The Vulkan tower counts
-the same hook under `vulkan_tower_stats()`'s `mels`. The work: a `mels` counter in
-`metal_tower_stats()` that the mel hook raises, and the qwen3a Metal cell asserting it rises.
 ## 29. The Metal tower's K-panel pool release has no cell
 
 The Metal tower's block encodes (`dasllama/dasllama_metal_tower.das`) acquire the K panel from
@@ -907,10 +898,16 @@ Each is a stage and the models it holds for, read off the drivers' own gates:
 - **The Qwen3-ASR projector** (`q3a.proj`, 1.6 ms a chunk) runs on the CPU, and its mel's windowing
   and clamp around the device spectrum.
 - **The whisper-class chat towers' mel** (`log_mel_chunks`; Qwen2-Audio, Qwen2.5-Omni, Ultravox,
-  Voxtral) runs on the CPU: 48 ms of a chunk's 158, beside 99 of blocks and 9 of stem on the device.
-  A q8 tower's projector tail runs on the CPU too - its projector planes are not on the device.
-- **The vision towers' im2col** (gemma3v, gemma4v: under 1 ms) and the q8 lane's whole chain run on the
-  CPU; qwen3v and qwen25v have had no stage-by-stage check of their merger tails.
+  Voxtral) takes its spectrum from the device mel seat; the reflect pad, the windowing, the global
+  clamp and the chunk split run on the CPU around it. A mel count off the seat's 64 lattice keeps
+  the CPU spectrum.
+- **The whisper-class projector tail** runs on the CPU on a q8 tower - its projector planes are not
+  on the device - and on a tower whose tail widths are off the f32 GEMM lattice.
+- **The vision towers' im2col** (gemma3v, gemma4v) runs on the CPU, and so does gemma4v's sum of its
+  two position-table rows a patch; the patch conv and the tail run on the device. The tail falls
+  back to the CPU where the patch grid does not pool whole or its widths are off the GEMM lattice.
+  The q8 lane's whole chain runs on the CPU. qwen3v and qwen25v have had no stage-by-stage check of
+  their merger tails.
 - **Qwen3-Omni** has had no stage-by-stage check.
 
 The work: each stage on the device, and a counter per stage a gate can read, so a served model's

@@ -319,6 +319,9 @@ def test_config_file(t : T?) {
         var flat = CliConfig()
         t |> success(parse_cli_config("model = \"flat.gguf\"\n[[models]]\npath = \"first.gguf\"\n", flat), "parses")
         t |> equal(flat.model, "flat.gguf")
+        var flat_audio = CliConfig()
+        t |> success(parse_cli_config("audio_mmproj = \"flat.gguf\"\n[[models]]\npath = \"first.gguf\"\naudio_mmproj = \"entry.gguf\"\n", flat_audio), "parses")
+        t |> equal(flat_audio.audio_mmproj, "flat.gguf", "a flat audio_mmproj wins over the roster entry's")
     }
     t |> run("bad TOML is the error, not a silent empty config") @(t : T?) {
         var cfg = CliConfig()

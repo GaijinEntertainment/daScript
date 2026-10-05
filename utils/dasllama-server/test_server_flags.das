@@ -237,6 +237,40 @@ def test_speech_roster_from_toml(t : T?) {
     remove(path)
 }
 
+//! The audio tower's two spellings: `--audio-mmproj` on the command line and `audio_mmproj` in the config, the flag
+//! winning over a config that is not authoritative.
+[test]
+def test_audio_mmproj_flag_and_key(t : T?) {
+    t |> run("--audio-mmproj parses onto the server's arguments") @(t : T?) {
+        let r <- parse_args(type<ServerArgs>, ["--audio-mmproj", "au.gguf", "--image-mmproj", "v.gguf"])
+        t |> success(r |> is_ok, "the flags parse")
+        if (r |> is_ok) {
+            let cfg = r |> unwrap
+            t |> equal(cfg.audio_mmproj, "au.gguf")
+            t |> equal(cfg.image_mmproj, "v.gguf", "and stays apart from the vision flag")
+        }
+    }
+    let path = path_join(test_temp_dir(), "audio_mmproj.toml")
+    t |> run("the config's audio_mmproj lands, under a flag only when the config is authoritative") @(t : T?) {
+        t |> success(fwrite(path, "audio_mmproj = \"toml.gguf\"\n"), "wrote the config")
+        var plain = ServerArgs(config = path)
+        t |> success(apply_config(plain), "the config reads")
+        t |> equal(plain.audio_mmproj, "toml.gguf", "no flag: the key is the arm")
+        var flagged = ServerArgs(config = path, audio_mmproj = "cli.gguf")
+        set_cli_source("audio_mmproj", true)
+        t |> success(apply_config(flagged), "the config reads")
+        set_cli_source("audio_mmproj", false)
+        t |> equal(flagged.audio_mmproj, "cli.gguf", "the flag wins over a config that is not authoritative")
+        t |> success(fwrite(path, "authoritative = true\naudio_mmproj = \"toml.gguf\"\n"), "wrote the authoritative config")
+        var saved = ServerArgs(config = path, audio_mmproj = "cli.gguf")
+        set_cli_source("audio_mmproj", true)
+        t |> success(apply_config(saved), "the authoritative config reads")
+        set_cli_source("audio_mmproj", false)
+        t |> equal(saved.audio_mmproj, "toml.gguf", "an authoritative config wins over the flag")
+    }
+    remove(path)
+}
+
 //! The roster a kind's flags make: the flat key's model first, with its own keys, then every other path named; a
 //! repeated flag's first value is the default, whatever clargs kept.
 [test]

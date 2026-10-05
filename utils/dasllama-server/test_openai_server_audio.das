@@ -13,6 +13,7 @@ require daslib/json_boost                               // read_json
 require daslib/base64                                   // input_audio.data payload
 require daslib/fio
 require strings
+require daslib/strings_boost                            // count / join
 
 // NATIVE AUDIO through the serving slot: input_audio part -> media worker gemma4a encode -> soft
 // tokens spliced (causal) between the audio span markers -> the model transcribes/answers. ONE
@@ -93,14 +94,24 @@ def private audio_chat_body(b64 : string; text : string) : string {
     return "\{\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"input_audio\",\"input_audio\":\{\"data\":\"{b64}\",\"format\":\"wav\"}},\{\"type\":\"text\",\"text\":\"{text}\"}]}]}"
 }
 
-//! a chat reply's prompt and cached position counts off its usage
-def private usage_of(t : T?; body : string; tag : string) : tuple<prompt : int; cached : int> {
+//! what a buffered chat reply says: its prompt and cached position counts, its finish reason, its content
+struct private ChatReply {
+    prompt : int
+    cached : int
+    finish : string
+    content : string
+}
+
+def private usage_of(t : T?; body : string; tag : string) : ChatReply {
     var err : string
     var js = read_json(body, err)
     t |> success(js != null, "{tag}: chat JSON parses")
-    return (prompt = 0, cached = 0) if (js == null)
-    let res = (prompt = int(js?["usage"]?["prompt_tokens"] ?? 0l), cached = int(js?["usage"]?["prompt_tokens_details"]?["cached_tokens"] ?? 0l))
-    to_log(LOG_INFO, "{tag}: prompt {res.prompt}, cached {res.cached}\n")
+    return ChatReply() if (js == null)
+    let res = ChatReply(prompt = int(js?["usage"]?["prompt_tokens"] ?? 0l),
+                        cached = int(js?["usage"]?["prompt_tokens_details"]?["cached_tokens"] ?? 0l),
+                        finish = js?["choices"]?[0]?["finish_reason"] ?? "",
+                        content = js?["choices"]?[0]?["message"]?["content"] ?? "")
+    to_log(LOG_INFO, "{tag}: prompt {res.prompt}, cached {res.cached}, finish {res.finish}, reply '{res.content}'\n")
     unsafe {
         delete js
     }
@@ -227,7 +238,8 @@ let UV_DEC_PATH = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
 let UV_MM_PATH = path_join(models_dir(), "mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf")
 let UV_ROWS = 187   // a chunk's soft tokens: 1500 encoder positions over the stack of 8
 
-def private with_tower_audio_server(port : int; blk : block<(base_url : string) : void>) {
+//! `cover_probe` false sends every known part to the scheduler rowless (`set_media_cover_probe`)
+def private with_tower_audio_server(port : int; cover_probe : bool; blk : block<(base_url : string) : void>) {
     with_job_status(1) $(finished) {
         new_thread() @() {
             allow_cpu_prefill()
@@ -235,6 +247,7 @@ def private with_tower_audio_server(port : int; blk : block<(base_url : string) 
             set_model(m, "test-uv")
             set_model_audio("test-uv", UV_MM_PATH)
             set_default_max_tokens(48l)
+            set_media_cover_probe(cover_probe)
             run_server(port)
             finished |> notify_and_release
         }
@@ -245,15 +258,52 @@ def private with_tower_audio_server(port : int; blk : block<(base_url : string) 
 }
 
 def private prompt_tokens_of(t : T?; body : string; tag : string) : int {
-    var err : string
-    var js = read_json(body, err)
-    t |> success(js != null, "{tag}: chat JSON parses")
-    return 0 if (js == null)
-    let n = int(js?["usage"]?["prompt_tokens"] ?? 0l)
-    to_log(LOG_INFO, "{tag}: prompt {n}, reply '{js?["choices"]?[0]?["message"]?["content"] ?? ""}'\n")
-    t |> success(!empty(js?["choices"]?[0]?["message"]?["content"] ?? ""), "{tag}: the turn answers")
-    unsafe {
-        delete js
+    let reply = usage_of(t, body, tag)
+    t |> success(!empty(reply.content), "{tag}: the turn answers")
+    return reply.prompt
+}
+
+//! the scheduler's streams admitted and the media rows prefilled since boot, off /v1/stats
+def private stats_counts(t : T?; base_url : string) : tuple<admitted : int64; media_rows : int64> {
+    var res = (admitted = -1l, media_rows = -1l)
+    GET("{base_url}/v1/stats") $(resp) {
+        var err : string
+        var js = read_json(string(resp.body), err)
+        t |> success(js != null, "stats JSON parses")
+        if (js != null) {
+            res = (admitted = js?["admitted"] ?? -1l, media_rows = js?["media_rows"] ?? -1l)
+            unsafe {
+                delete js
+            }
+        }
+    }
+    return res
+}
+
+//! a greedy chat under the system line `system`: the clip then `text` in one user message, or `text` alone for an empty `b64`
+def private system_chat_body(system, b64, text : string; stream : bool) : string {
+    let audio = empty(b64) ? "" : "\{\"type\":\"input_audio\",\"input_audio\":\{\"data\":\"{b64}\",\"format\":\"wav\"}},"
+    return "\{\"temperature\":0,\"stream\":{stream},\"messages\":[\{\"role\":\"system\",\"content\":\"{system}\"},\{\"role\":\"user\",\"content\":[{audio}\{\"type\":\"text\",\"text\":\"{text}\"}]}]}"
+}
+
+//! one ask of the clip under `system`: the reply, and how far the admitted-stream and media-row counters moved for it
+def private ask_counted(t : T?; base_url, system, b64, text : string; tag : string) : tuple<reply : ChatReply; admitted : int64; rows : int64> {
+    let before = stats_counts(t, base_url)
+    var reply = ChatReply()
+    POST("{base_url}/v1/chat/completions", system_chat_body(system, b64, text, false)) $(resp) {
+        t |> equal(int(resp.status_code), int(http_status.OK), "{tag}: {resp.body}")
+        reply = usage_of(t, string(resp.body), tag)
+    }
+    let after = stats_counts(t, base_url)
+    return (reply = reply, admitted = after.admitted - before.admitted, rows = after.media_rows - before.media_rows)
+}
+
+//! the prompt positions `text` alone takes under `system`
+def private text_prompt(t : T?; base_url, system, text : string) : int {
+    var n = 0
+    POST("{base_url}/v1/chat/completions", system_chat_body(system, "", text, false)) $(resp) {
+        t |> equal(int(resp.status_code), int(http_status.OK))
+        n = prompt_tokens_of(t, string(resp.body), "text alone under '{system}'")
     }
     return n
 }
@@ -273,7 +323,7 @@ def test_openai_server_audio_tower(t : T?) {
         }
         let b64 = jfk_b64()
         let text = "Transcribe this audio."
-        with_tower_audio_server(TOWER_PORT) $(base_url) {
+        with_tower_audio_server(TOWER_PORT, true) $(base_url) {
             GET("{base_url}/v1/stats") $(resp) {
                 var err : string
                 var js = read_json(string(resp.body), err)
@@ -298,6 +348,189 @@ def test_openai_server_audio_tower(t : T?) {
             POST("{base_url}/v1/chat/completions", audio_chat_body(b64, text)) $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
                 t |> equal(prompt_tokens_of(t, string(resp.body), "audio, then text"), plain + UV_ROWS, "the same count with the clip ahead of the text")
+            }
+            check_known_clip_reencoded(t, base_url, b64, text)
+            check_media_parts_limit(t, base_url)
+            check_assistant_media_dropped(t, base_url, text)
+        }
+    }
+}
+
+//! The clip is known, but no cached prefix runs under a new system line to its span: the probe sends it to the encoder
+//! before the submit, so one stream is admitted, carrying the clip's rows. Asked again, the cache holds the span.
+def private check_known_clip_reencoded(t : T?; base_url, b64, text : string) {
+    let sys_plain = text_prompt(t, base_url, SYS_A, text)
+    let moved = ask_counted(t, base_url, SYS_A, b64, text, "a known clip under a new system line")
+    t |> equal(moved.reply.prompt, sys_plain + UV_ROWS, "the clip adds its rows under the new system line")
+    t |> equal(moved.admitted, 1l, "one stream admitted: the uncovered span was encoded before the submit")
+    t |> equal(moved.rows, int64(UV_ROWS), "and it brought the clip's rows")
+    t |> success(moved.reply.finish != "media_lost", "the reply finishes '{moved.reply.finish}'")
+    let again = ask_counted(t, base_url, SYS_A, b64, text, "the same ask again")
+    t |> equal(again.admitted, 1l, "one stream admitted")
+    t |> equal(again.rows, 0l, "the cached span brings no rows")
+    t |> equal(again.reply.prompt, moved.reply.prompt, "the same prompt")
+}
+
+//! A request's media parts are capped: one past the limit is refused by name before any part decodes; at the limit
+//! the parts decode, and the first one's bad base64 answers.
+def private check_media_parts_limit(t : T?; base_url : string) {
+    for (n in [MEDIA_SPANS_LIMIT, MEDIA_SPANS_LIMIT + 1]) {
+        let parts = join([for (_i in range(n)); "\{\"type\":\"input_audio\",\"input_audio\":\{\"data\":\"!!!not-base64!!!\",\"format\":\"wav\"}}"], ",")
+        POST("{base_url}/v1/chat/completions", "\{\"messages\":[\{\"role\":\"user\",\"content\":[{parts}]}]}") $(resp) {
+            let body = string(resp.body)
+            t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "{n} parts: {body}")
+            let names_limit = find(body, "carries {n} media parts; the limit is {MEDIA_SPANS_LIMIT}") >= 0
+            if (n > MEDIA_SPANS_LIMIT) {
+                t |> success(names_limit, "{n} parts: the 400 names the limit ({body})")
+            } else {
+                t |> success(!names_limit && find(body, "not valid base64") >= 0, "{n} parts are within the limit ({body})")
+            }
+        }
+    }
+}
+
+//! Media rides user messages: an image on an assistant turn - this slot has no vision arm - is dropped, and the
+//! request answers as its text alone.
+def private check_assistant_media_dropped(t : T?; base_url, text : string) {
+    let turns_head = "\{\"temperature\":0,\"messages\":[\{\"role\":\"user\",\"content\":\"Hi.\"},\{\"role\":\"assistant\",\"content\":["
+    let turns_tail = "\{\"type\":\"text\",\"text\":\"Hello.\"}]},\{\"role\":\"user\",\"content\":\"{text}\"}]}"
+    var text_turns = 0
+    POST("{base_url}/v1/chat/completions", "{turns_head}{turns_tail}") $(resp) {
+        t |> equal(int(resp.status_code), int(http_status.OK))
+        text_turns = prompt_tokens_of(t, string(resp.body), "the turns as text")
+    }
+    POST("{base_url}/v1/chat/completions", "{turns_head}\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png;base64,AAAA\"}},{turns_tail}") $(resp) {
+        t |> equal(int(resp.status_code), int(http_status.OK), "an assistant turn's image is no vision request: {resp.body}")
+        t |> equal(prompt_tokens_of(t, string(resp.body), "an image on the assistant turn"), text_turns, "and the prompt is the text turns alone")
+    }
+}
+
+let SYS_A = "You are a careful listener."
+let SYS_B = "You answer in one short sentence."
+let SYS_C = "You are brief."
+
+// A known clip under a system line the prefix cache holds no span for, sent to the scheduler rowless: the stream finishes
+// `media_lost` on admission, and the server encodes the clip and submits once more - the client sees one answer.
+let LOST_PORT = 18178
+
+[test]
+def test_openai_server_audio_lost_span(t : T?) {
+    t |> run("a span the cache does not hold is encoded and resubmitted (needs Llama-3.2-1B + the ultravox mmproj)") @(t : T?) {
+        var inscope files <- [UV_DEC_PATH, UV_MM_PATH, JFK_PATH]
+        return if (model_missing(t, files))
+        let b64 = jfk_b64()
+        let text = "Transcribe this audio."
+        with_tower_audio_server(LOST_PORT, false) $(base_url) {
+            let cold = ask_counted(t, base_url, SYS_A, b64, text, "the clip, new to the slot")
+            t |> equal(cold.admitted, 1l, "a new clip encodes before the submit: one stream")
+            t |> equal(cold.rows, int64(UV_ROWS), "carrying the clip's rows")
+            let held = ask_counted(t, base_url, SYS_A, b64, text, "the same ask: the cache holds the span")
+            t |> equal(held.admitted, 1l, "a span the cache holds is admitted once")
+            t |> equal(held.rows, 0l, "with no rows")
+            let lost = ask_counted(t, base_url, SYS_B, b64, text, "the clip under a new system line")
+            t |> success(lost.reply.finish != "media_lost" && !empty(lost.reply.finish), "the reply finishes '{lost.reply.finish}', never media_lost")
+            t |> success(!empty(lost.reply.content), "and answers")
+            t |> equal(lost.admitted, 2l, "two streams admitted: the rowless one lost its span, the resubmission carried the rows")
+            t |> equal(lost.rows, int64(UV_ROWS), "the resubmission brought the clip's rows")
+            let sys_plain = text_prompt(t, base_url, SYS_B, text)
+            t |> equal(lost.reply.prompt, sys_plain + UV_ROWS, "the prompt a cold ask of the clip takes")
+            // streamed, the retry is invisible on the wire: one opening role delta, one finish, one [DONE]
+            let before = stats_counts(t, base_url)
+            POST("{base_url}/v1/chat/completions", system_chat_body(SYS_C, b64, text, true)) $(resp) {
+                let body = string(resp.body)
+                t |> equal(int(resp.status_code), int(http_status.OK))
+                t |> equal(count(body, "\"role\":\"assistant\""), 1, "one role delta across the retry: {body}")
+                t |> equal(count(body, "[DONE]"), 1, "one [DONE]")
+                t |> equal(count(body, "media_lost"), 0, "no media_lost on the wire")
+                t |> success(count(body, "\"finish_reason\":\"stop\"") + count(body, "\"finish_reason\":\"length\"") == 1, "one finish chunk")
+            }
+            t |> equal(stats_counts(t, base_url).admitted - before.admitted, 2l, "the streamed ask took the retry too")
+        }
+    }
+}
+
+// POST /v1/models/load arms a runtime-loaded slot's audio from the body's `audio_mmproj`; a file that arms nothing serves
+// the model as text and says why in `tower_note`.
+let LOAD_PORT = 18183
+let SMOL_PATH = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
+
+def private with_text_server(port : int; blk : block<(base_url : string) : void>) {
+    with_job_status(1) $(finished) {
+        new_thread() @() {
+            allow_cpu_prefill()
+            var m <- load_model(SMOL_PATH, QuantMode.q8)
+            set_model(m, "test-smol")
+            set_default_max_tokens(16l)
+            run_server(port)
+            finished |> notify_and_release
+        }
+        let ready = serve_clients(port, 1200, "/v1/models", blk)
+        finished |> join
+        assert(ready, "dasllama text server became ready")
+    }
+}
+
+//! /v1/stats' default-slot audio arm, and the arm of the slot named `id`
+def private audio_arms(t : T?; base_url, id : string) : tuple<default_arm : bool; slot_arm : bool> {
+    var res = (default_arm = false, slot_arm = false)
+    GET("{base_url}/v1/stats") $(resp) {
+        var err : string
+        var js = read_json(string(resp.body), err)
+        t |> success(js != null, "stats JSON parses")
+        if (js != null) {
+            res.default_arm = js?["audio"] ?? false
+            for (mv in js?["models"].value as _array) {
+                if ((mv?["name"] ?? "") == id) {
+                    res.slot_arm = mv?["audio"] ?? false
+                }
+            }
+            unsafe {
+                delete js
+            }
+        }
+    }
+    return res
+}
+
+[test]
+def test_openai_server_audio_runtime_load(t : T?) {
+    t |> run("a runtime load arms audio from audio_mmproj (needs SmolLM2-135M, Llama-3.2-1B + the ultravox mmproj)") @(t : T?) {
+        var inscope files <- [SMOL_PATH, UV_DEC_PATH, UV_MM_PATH, JFK_PATH]
+        return if (model_missing(t, files))
+        let dec = to_generic_path(UV_DEC_PATH)
+        let missing = to_generic_path(path_join(test_temp_dir(), "no-such-mmproj.gguf"))
+        with_text_server(LOAD_PORT) $(base_url) {
+            t |> success(!audio_arms(t, base_url, "test-smol").default_arm, "the boot slot has no audio arm")
+            POST("{base_url}/v1/models/load", "\{\"path\":\"{dec}\",\"id\":\"uv-bad\",\"ctx\":2048,\"activate\":false,\"audio_mmproj\":\"{missing}\"}") $(resp) {
+                let body = string(resp.body)
+                t |> equal(int(resp.status_code), int(http_status.OK), "the model serves without the arm: {body}")
+                var err : string
+                var js = read_json(body, err)
+                t |> success(!empty(js?["tower_note"] ?? ""), "and tower_note says why: {body}")
+                unsafe {
+                    delete js
+                }
+            }
+            t |> success(!audio_arms(t, base_url, "uv-bad").slot_arm, "the slot a missing mmproj names has no audio arm")
+            POST("{base_url}/v1/models/unload", "\{\"model\":\"uv-bad\"}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK))
+            }
+            POST("{base_url}/v1/models/load", "\{\"path\":\"{dec}\",\"id\":\"uv-live\",\"ctx\":2048,\"audio_mmproj\":\"{to_generic_path(UV_MM_PATH)}\"}") $(resp) {
+                let body = string(resp.body)
+                t |> equal(int(resp.status_code), int(http_status.OK), body)
+                var err : string
+                var js = read_json(body, err)
+                t |> equal(js?["tower_note"] ?? "?", "", "the arm took: {body}")
+                unsafe {
+                    delete js
+                }
+            }
+            let arms = audio_arms(t, base_url, "uv-live")
+            t |> success(arms.slot_arm, "the loaded slot declares the audio arm")
+            t |> success(arms.default_arm, "and, made the default, so does the server")
+            POST("{base_url}/v1/chat/completions", audio_chat_body(jfk_b64(), "Transcribe this audio.")) $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK), "the armed slot takes input_audio: {resp.body}")
+                t |> success(prompt_tokens_of(t, string(resp.body), "the clip on the runtime-armed slot") > UV_ROWS, "the clip's rows are in the prompt")
             }
         }
     }
