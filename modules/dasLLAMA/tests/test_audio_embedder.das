@@ -5,7 +5,8 @@ options _dasllama_internal = true
 
 // The AudioEmbedder carrier, and the pre-encoded rows seam it feeds. Skips: the gemma4a arm on
 // `mmproj-gemma-4-E2B-it-bf16.gguf` (absent file), its direct-image route on a prepared
-// gemma4a-tagged `.dlim` beside it (absent bake), the rows seam on `gemma-4-E2B-it-Q4_K_M.gguf`
+// gemma4a-tagged `.dlim` beside it (absent bake), the E4B width probe on
+// `mmproj-gemma-4-E4B-it-BF16.gguf` (absent file), the rows seam on `gemma-4-E2B-it-Q4_K_M.gguf`
 // + that mmproj (absent file), the no-audio-arm refusal on `SmolLM2-135M-Instruct-Q8_0.gguf`
 // (absent file). Every skip is loud.
 
@@ -101,6 +102,13 @@ def test_audio_embedder_gemma4a_arm(t : T?) {
             t |> equal(audio_proj_dim(ei), 1536l, "the image-loaded carrier reports the same width")
         }
     }
+    t |> run("the E4B mmproj probes its own decoder's width, read off the embedder's rows") @(t : T?) {
+        let mm = path_join(models_dir(), "mmproj-gemma-4-E4B-it-BF16.gguf")
+        if (!model_available(t, mm)) {
+            return
+        }
+        t |> equal(audio_probe_proj_dim(mm), 2560l, "the probe reports the E4B decoder width (E2B's is 1536, the encoder's 1024)")
+    }
 }
 
 def private tower_arm_cell(t : T?; file, family : string; width, rows_per_chunk : int64) {
@@ -110,7 +118,7 @@ def private tower_arm_cell(t : T?; file, family : string; width, rows_per_chunk 
     }
     t |> equal(audio_probe_proj_dim(mm), width, "the probe reports the projector's output width off its tensors")
     var inscope e <- load_audio_embedder(mm)
-    t |> success(e.kind == AudioKind.tower, "the carrier holds the whisper-class tower")
+    t |> success(e.kind == AudioKind.audio_tower, "the carrier holds the whisper-class tower")
     t |> equal(audio_family(e), family, "the carrier reports the projector kind")
     t |> equal(audio_proj_dim(e), width, "the carrier reports the probed width")
     var st = AudioState()

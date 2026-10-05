@@ -230,8 +230,7 @@ def test_vision_chat_e2b_nothink(t : T?) {
         allow_cpu_prefill()
         with_dasllama_jobque_() {
             var emb <- load_vision_embedder(mm)
-            let budget = 1280l   //! the sampled turn's length follows the box's tower lane: 656 tokens with the tail on the device
-            var chat <- create_chat_(m, emb, "", budget)
+            var chat <- create_chat_(m, emb, "", 640l)
             set_thinking_(chat, false)
             set_seed_(chat.session, 1234)
             add_user_image_(chat, img)
@@ -245,11 +244,11 @@ def test_vision_chat_e2b_nothink(t : T?) {
             // the model opens with a thought block despite the closed empty prefill; the armed
             // matcher files it as reasoning and the answer is the content half
             let sp = split_reasoning_(chat.tmpl, reply)
-            to_log(LOG_INFO, "vision caption (E2B/gemma4v, thinking off): reasoning {length(sp.reasoning)} chars, content: {replace(sp.content, "\n", "\\n")}\n")
+            to_log(LOG_INFO, "vision caption (E2B/gemma4v, thinking off): {stats(chat.session).n_gen} tokens, reasoning {length(sp.reasoning)} chars, content: {replace(sp.content, "\n", "\\n")}\n")
             tt |> success(n_pieces > 0, "the turn generated tokens")
             tt |> success(find(to_lower(sp.content), "cat") >= 0, "the content half describes the cats as cats")
             tt |> success(find(sp.content, "<channel|>") < 0 && find(sp.content, "<|channel>") < 0, "no channel marker reaches the content half")
-            tt |> success(stats(chat.session).n_gen < budget, "the turn ended on a stop, not the budget ({stats(chat.session).n_gen} of {budget} tokens)")
+            tt |> success(stats(chat.session).n_gen < 640l, "the turn ended on a stop, not the budget ({stats(chat.session).n_gen} tokens)")
             tt |> equal(length(chat.history), 2, "the turn is on the history")
             tt |> success(find(chat.history[1].content, "<|channel>") < 0, "history stores the answer without the thought")
             delete chat

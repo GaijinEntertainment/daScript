@@ -487,15 +487,20 @@ def private e_series_body_logits(m : Model; toks : array<int64>; lo, hi : int64;
     return <- out
 }
 
-let private E_BODY_NEAR = 0.25   //! of the logits' peak: one body against three calls differs by call shape alone - 0.11 here, and the same tokens as ids read 0.14 apart in one call and in three
+//! one side's top predicted token beside a logits compare, its id and its piece
+def private log_top_token(m : Model; side : string; logits : array<float>) {
+    let top = argmax_of(logits)
+    to_log(LOG_INFO, "E-series media body, {side}: top token {top} '{piece_(m, top)}'\n")
+}
+
+let private E_BODY_NEAR = 0.25  //! of the logits' peak: one body against three calls differs by call shape alone - 0.11 here, and the same tokens as ids read 0.14 apart in one call and in three
 let private E_BODY_FAR = 1.0     //! of the peak: text rows under the padding token's per-layer input are another prompt - 1.9 here
 
 [test]
 def test_gemma4_e_media_body(t : T?) {
     t |> run("an E-series media body gives its text rows their own tokens' per-layer input: one call == text / rows / text (needs gemma-4-E2B)") @(t : T?) {
         let path = path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
+        if (!model_available(t, path)) {
             return
         }
         var m <- load_capped(path)
@@ -511,6 +516,9 @@ def test_gemma4_e_media_body(t : T?) {
             let near = logits_maxdiff(fused, split)
             let far = logits_maxdiff(padded, split)
             to_log(LOG_INFO, "E-series media body: one call {near} from three, the padding-id body {far}, at a {peak} peak\n")
+            log_top_token(m, "three calls", split)
+            log_top_token(m, "one call", fused)
+            log_top_token(m, "the padding-id body", padded)
             t |> success(near < E_BODY_NEAR * peak, "one call reads as three ({near} at a {peak} peak)")
             t |> success(far > E_BODY_FAR * peak, "the ids are load-bearing: a body without them reads another prompt ({far} at a {peak} peak)")
             delete split
@@ -1098,6 +1106,46 @@ def test_chat_inline_span(t : T?) {
     }
 }
 
+//! whether `add_user_span_` refuses the span by panic, on a fresh chat that already holds the `queued` spans' text offsets
+def private span_refused(m : Model; queued : array<int>; n_rows : int64; text_before : int; is_image, bare : bool) : bool {
+    var c <- create_chat_renderer_(m)
+    add_user(c, USR)
+    for (at in queued) {
+        add_user_span_(m, c, 0x77ul, 1l, at, false, true)
+    }
+    var refused = false
+    try {
+        add_user_span_(m, c, 0x77ul, n_rows, text_before, is_image, bare)
+    } recover {
+        refused = true
+    }
+    delete c
+    return refused
+}
+
+// A template with no media markers takes a span only where the encoder's rows need none (a bare audio span); every span
+// has rows, and spans queue in text order.
+[test]
+def test_chat_span_refusals(t : T?) {
+    t |> run("add_user_span_ refuses a span the template cannot mark, an empty span, and one out of text order") @(t : T?) {
+        let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
+        if (!model_available(t, path)) {
+            return
+        }
+        var m <- load_capped(path)
+        var none : array<int>
+        t |> success(!span_refused(m, none, 2l, 4, false, true), "a bare audio span needs no markers (the control)")
+        t |> success(span_refused(m, none, 0l, 4, false, true), "a span of no rows panics")
+        t |> success(span_refused(m, none, -1l, 4, false, true), "a span of negative rows panics")
+        t |> success(span_refused(m, none, 2l, 4, true, false), "an image span on a template with no image markers panics")
+        t |> success(span_refused(m, none, 2l, 4, false, false), "a marked audio span on a template with no audio markers panics")
+        t |> success(!span_refused(m, [4], 2l, 4, false, true), "a span at the offset of the one before it queues")
+        t |> success(span_refused(m, [4], 2l, 2, false, true), "a span ahead of the one queued before it panics")
+        delete none
+        delete m
+    }
+}
+
 // A gemma-4 template's non-thinking generation prompt is read off the model's own template: the larger models close
 // an empty thought channel after the model turn's opener, the E-series opens the turn bare.
 [test]
@@ -1144,6 +1192,40 @@ def test_llama_system_header(t : T?) {
             delete m
         }
     }
+    t |> run("the rendered header: a tool-carrying turn opens with the environment line, and a pinned date wins over the template's") @(t : T?) {
+        let path = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
+        if (!model_available(t, path)) {
+            return
+        }
+        var m <- load_capped(path)
+        set_chat_date("")
+        let plain = system_header_text(m, "01 Jan 2030", false)
+        let tooled = system_header_text(m, "01 Jan 2030", true)
+        set_chat_date("26 Jul 2024")
+        let pinned = system_header_text(m, "01 Jan 2030", false)
+        set_chat_date("")
+        to_log(LOG_INFO, "llama header, the template's date: '{plain}'\nwith a tool: '{tooled}'\nthe date pinned: '{pinned}'\n")
+        t |> success(find(plain, "\\n\\nCutting Knowledge Date: December 2023\\nToday Date: 01 Jan 2030\\n\\n") >= 0, "unpinned, the turn states the date the template fixes")
+        t |> success(find(plain, "Environment: ipython") < 0, "a turn with no tools states no environment line")
+        t |> success(find(tooled, "\\n\\nEnvironment: ipython\\nCutting Knowledge Date: December 2023\\nToday Date: 01 Jan 2030\\n\\n") >= 0, "a tool-carrying turn opens with the environment line, ahead of the cutoff")
+        t |> success(find(pinned, "Today Date: 26 Jul 2024\\n") >= 0 && find(pinned, "2030") < 0, "a pinned date wins over the template's own")
+        delete m
+    }
+}
+
+//! the first turn's detokenized render on a Llama-3.2 chat whose template fixes `date` (as 3.1's does), with a tool or none
+def private system_header_text(m : Model; date : string; with_tool : bool) : string {
+    var c <- create_chat_renderer_(m)
+    c.tmpl.system_date = date
+    if (with_tool) {
+        var tools <- ["\{\"type\": \"function\", \"function\": \{\"name\": \"get_time\", \"parameters\": \{\"type\": \"object\", \"properties\": \{}}}}"]
+        set_tools_(c, tools)
+        delete tools
+    }
+    add_user(c, USR)
+    var inscope toks <- render_turn_(m, c)
+    delete c
+    return detok(m, toks)
 }
 
 // The system text a ChatML template states for a conversation with no system message, read off the three shapes the

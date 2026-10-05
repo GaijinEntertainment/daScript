@@ -136,8 +136,9 @@ carriers name, and no TTS family file (`dasllama_kitten`, `dasllama_kokoro`, `da
   vision carrier's audio twin - one union through every seam (server media worker, facade
   `encode_audio`, tutorials), the family probed from the mmproj's audio tensor (or a `.dlim`'s
   baked tag) at load, one-line arms. It carries two kinds: the gemma-4 Conformer, and the
-  whisper-class tower with its projector (`AudioKind.tower`: Qwen2-Audio, Qwen2.5-Omni, Ultravox,
-  Voxtral), a clip encoded one 30 s mel chunk at a time into its state's `EncoderState`. The
+  whisper-class tower with its projector (`AudioKind.audio_tower`: Qwen2-Audio, Qwen2.5-Omni, Ultravox,
+  Voxtral), whose family file `dasllama_audio_tower.das` wraps `dasllama_audio`'s tower for the carrier
+  and encodes a clip one 30 s mel chunk at a time into its state's `EncoderState`. The
   projector says how its rows splice: an ultravox span takes no marker (`audio_span_bare`), since
   the stock decoder it pairs with declares none, and every other kind takes the markers the
   decoder's chat template declares. Outside a family's own file, an audio family type is named

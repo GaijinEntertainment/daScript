@@ -842,18 +842,6 @@ def test_parakeet_q8_0_file(t : T?) {
     }
 }
 
-//! the largest element difference of two row images over the reference's largest magnitude; 2 where a length differs
-def private rows_rel_max(got, want : array<float>) : float {
-    return 2.0 if (length(got) != length(want) || empty(want))
-    var diff = 0.0
-    var peak = 0.0
-    for (g, w in got, want) {
-        diff = max(diff, abs(g - w))
-        peak = max(peak, abs(w))
-    }
-    return diff / max(peak, 1e-30)
-}
-
 //! The Metal tower fills the whisper blocks-with-post-norm seat: the post-norm runs behind the blocks on the device and the
 //! normed rows land in `xb`, where the CPU chain's post-norm would put them.
 [test]
@@ -885,8 +873,10 @@ def test_whisper_metal_ln_post(t : T?) {
                 let s0 = metal_tower_stats()
                 tt |> success(audio_encode_blocks_ln_post(w.enc, es, win), "tower on: the seat served the blocks and the post-norm")
                 tt |> equal(metal_tower_stats().encodes - s0.encodes, 1l, "one device encode")
-                let off = rows_rel_max(es.xb, cpu)
-                let unnormed = rows_rel_max(es.xb, raw)
+                // a NaN on either side reads infinite in the difference, and in the scale where it is the reference's: the
+                // ratio is then infinite or NaN, outside the bar
+                let off = logits_maxdiff(es.xb, cpu) / logits_maxabs(cpu)
+                let unnormed = logits_maxdiff(es.xb, raw) / logits_maxabs(raw)
                 var normed := es.xb
                 // the post-norm is the unit: the blocks seat alone gives the device's own block rows, the CPU norms THOSE, and the
                 // device's normed rows must be that image - the block chain's device-vs-CPU distance stays out of the bar
@@ -894,7 +884,7 @@ def test_whisper_metal_ln_post(t : T?) {
                 var want : array<float>
                 want |> resize(length(es.x))
                 layernorm_batch(want, es.x, w.enc.fblob, w.enc.lnp_w_off, w.enc.lnp_b_off, w.enc.d_model, w.enc.n_ctx, w.enc.eps)
-                let ln_off = rows_rel_max(normed, want)
+                let ln_off = logits_maxdiff(normed, want) / logits_maxabs(want)
                 to_log(LOG_INFO, "whisper tiny ln_post: device norm vs the CPU norm of the device's block rows {ln_off}; vs the CPU chain {off}; vs the un-normed rows {unnormed}\n")
                 tt |> success(ln_off < 1e-4, "the device's post-norm is the CPU post-norm of the same rows ({ln_off})")
                 tt |> success(unnormed > 0.1, "the control: against the rows before the post-norm the compare misses ({unnormed})")
