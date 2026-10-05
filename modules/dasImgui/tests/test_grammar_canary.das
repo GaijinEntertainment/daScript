@@ -52,6 +52,8 @@ let CANARY_SECTIONS : array<CanarySection> <- [
         snippet = "def can_bracket_named() \{\n    named_stub(1, [primary = true, scope = 2])\n    named_stub(4)\n\}"),
     CanarySection(name = "arrow-body function",
         snippet = "def can_arrow(a, b : int) : int => a + b"),
+    CanarySection(name = "arrow body on the next line",
+        snippet = "def can_arrow_next_line(a, b : int) : int =>\n    a * b"),
     CanarySection(name = "OR-type parameter",
         snippet = "def can_or_type(v : int | float) \{\n    print(\"x\\n\")\n    print(\"y\\n\")\n\}"),
     CanarySection(name = "generic auto(TT)",

@@ -15,6 +15,9 @@ def dbl(x : auto(T)) : auto(T) => x + x
 
 def no_ret(x : int) => x + 1
 
+def next_line(x : int) : int =>
+    x * 3
+
 // arrow body on struct/class methods (the member-function form).
 // `tag` carries a field annotation immediately after an arrow-bodied method:
 // this is the case that previously broke the parser (the '@' was ambiguous with
@@ -60,6 +63,9 @@ def test_function_arrow_body(t : T?) {
     }
     t |> run("no explicit return type") @(t : T?) {
         t |> equal(no_ret(10), 11)
+    }
+    t |> run("body on the line after '=>'") @(t : T?) {
+        t |> equal(next_line(2), 6)
     }
     t |> run("class method arrow bodies") @(t : T?) {
         var wp = new Widget(w = 3, h = 4)

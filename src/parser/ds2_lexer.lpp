@@ -884,6 +884,11 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>"\<\<\="                            return SHLEQU;
 <normal>"\>\>\>\="                          return ROTREQU;
 <normal>"\<\<\<\="                          return ROTLEQU;
+<normal>"\=\>"[ \t\r]*\n {
+    yylloc_param->last_column = yylloc_param->first_column + 2;
+    YYCOLUMN(yyextra->das_yycolumn = 0, "MAPTO AT END OF LINE");
+    return MAPTO;
+}
 <normal>"\=\>"                              return MAPTO;
 <normal>[ \r\t]                             /* skip white space */
 

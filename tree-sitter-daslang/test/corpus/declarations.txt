@@ -131,6 +131,27 @@ def succ(x : int) => x + 1
       (integer_literal))))
 
 ================================================================================
+Function with arrow body on the next line
+================================================================================
+
+def succ(x : int) =>
+    x + 1
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list
+      (function_argument
+        name: (identifier)
+        type: (basic_type)))
+    body: (binary_expression
+      (identifier)
+      (integer_literal))))
+
+================================================================================
 Method with single-expression arrow body
 ================================================================================
 
