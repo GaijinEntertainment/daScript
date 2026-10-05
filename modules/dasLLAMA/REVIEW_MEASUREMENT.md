@@ -14,6 +14,8 @@ percentage of two such numbers, produced by the runs its sides came from - or an
 agreement reading (a cosine, a max-abs error) that a test's tolerance, or the bound an
 instrument's bounded-difference compare checks against, is set from, or that a change cites as
 evidence that a tolerance set for another cell, model or tier holds for the one it adds or alters.
+A test suite's pass, fail and skip tally, and the count of kernels a compare of two dumps of
+emitted kernel code finds identical or different, are not figures.
 
 A served-turn leg is prefill, decode, a batched decode row, or a whole served request end to end;
 the wall of one internal stage (one model component's forward pass, one decoder block) is not a

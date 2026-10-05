@@ -488,6 +488,26 @@ struct ImgWriter {
     ok : bool = true
 }
 
+var private g_image_write_fails_after_bytes = 0ul
+var private g_image_write_fault_hits = 0
+
+//! Test seam: a file save that carries an image past `after_bytes` fails as a full disk does; 0 turns it off.
+def set_image_write_fault(after_bytes : uint64) {
+    g_image_write_fails_after_bytes = after_bytes
+}
+
+//! Current value of the [[set_image_write_fault]] seam (0 = off), so a fixture restores what it found.
+def get_image_write_fault() : uint64 => g_image_write_fails_after_bytes
+
+//! How many saves the [[set_image_write_fault]] seam has failed in this process.
+def image_write_fault_hits() : int => g_image_write_fault_hits
+
+def private image_write_faulted(bytes : uint64) : bool {
+    return false if (g_image_write_fails_after_bytes == 0ul || bytes <= g_image_write_fails_after_bytes)
+    g_image_write_fault_hits++
+    return true
+}
+
 def private w_open(path : string; total : uint64) : ImgWriter {
     let h = unsafe(dwrite_open(path, total, uint64(DWRITE_STAGING_BAND)))
     return ImgWriter(dwrite_h = h, ok = h != null)
@@ -1093,7 +1113,9 @@ def private build_image(var t; dst : string; in_mem : bool; extra : uint64;
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-publish")]
 def private promote_tmp(tmp_path : string; path : string; built : bool; want_bytes : uint64) : bool {
     var ok = built
-    if (ok) {
+    if (!ok) {
+        to_log(LOG_ERROR, "dasLLAMA image: the save of '{path}' lost a write or its open - disk full or over quota? the save declines\n")
+    } else {
         // an ENOSPC that only surfaces at close still leaves a short file — check what landed
         var st : FStat
         if (!stat(tmp_path, st) || st.size != want_bytes) {
@@ -1124,18 +1146,55 @@ def private promote_tmp(tmp_path : string; path : string; built : bool; want_byt
 // per-writer name: concurrent savers must not clobber each other; last rename wins, same content
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-publish")]
 def private tmp_name_for(path : string) : string {
-    return "{path}.{ref_time_ticks()}.tmp"   // clock: control — unique temp-name suffix, not timing
+    return "{path}.{ref_time_ticks()}{IMAGE_TMP_SUFFIX}"   // clock: control — unique temp-name suffix, not timing
+}
+
+let private IMAGE_TMP_SUFFIX = ".tmp"
+
+let private TMP_STALE_S = 3600l   //! a temp file this long unwritten has no live writer
+
+//! Removes the image temp files beside `stem` - names that start with its file name, carry `.dlim.` and end in the
+//! temp suffix - that have gone `min_age_s` seconds unwritten; `stem` is an image path or the gguf every lane's image is named from.
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-publish")]
+def sweep_image_tmps(stem : string; min_age_s : int64) : tuple<removed : int; freed : int64> {
+    let folder = dir_name(stem)
+    let base = base_name(stem)
+    let now = int64(get_clock())   // clock: control — a temp file's age decides its removal
+    var stale : array<string>
+    dir(folder) $(name) {
+        if (name |> starts_with(base) && name |> ends_with(IMAGE_TMP_SUFFIX) && find(name, ".dlim.") >= 0) {
+            let full = path_join(folder, name)
+            let st = stat(full)
+            if (st.is_valid && !st.is_dir && now - int64(st.mtime) >= min_age_s) {
+                stale |> push(full)
+            }
+        }
+    }
+    var swept : tuple<removed : int; freed : int64>
+    for (full in stale) {
+        let bytes = int64(stat(full).size)
+        if (remove(full)) {
+            swept.removed++
+            swept.freed += bytes
+            to_log(LOG_WARNING, "dasLLAMA image: removed '{full}' ({bytes >> 20l} MB) - a temp file an earlier save left behind\n")
+        } else {
+            to_log(LOG_WARNING, "dasLLAMA image: could not remove the stale temp file '{full}' - in use by a live writer?\n")
+        }
+    }
+    return swept
 }
 
 def private save_image_to_file(var t; path : string; extra : uint64; tag : string; quant : string; layout : uint64;
                                plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : bool {
+    sweep_image_tmps(path, TMP_STALE_S)
     let tmp_path = tmp_name_for(path)
     let w = build_image(t, tmp_path, false, extra, tag, quant, false, layout, plane)
-    return promote_tmp(tmp_path, path, w.ok, w.cur)
+    return promote_tmp(tmp_path, path, w.ok && !image_write_faulted(w.cur), w.cur)
 }
 
 // a finished chunk to disk, header and all — one append, no patch pass (page 0 is already stored)
 def private write_chunk(base : void?; bytes : uint64; path : string) : bool {
+    sweep_image_tmps(path, TMP_STALE_S)
     let tmp_path = tmp_name_for(path)
     var w = w_open(tmp_path, bytes)
     let ts = ref_time_ticks()
@@ -1225,9 +1284,13 @@ def private vk_mint_arm_walk(tag : string) : bool {
     return !empty(tag) && !g_vk_mint_declined && tag == moe_gpu_bake_tag()
 }
 
+//! only an overrun panics - a dead memory-chunk writer; a file writer a lost write killed drops the rest of the walk and the save declines at the publish
 def private vk_mint_sink(p : void?; nbytes : uint64) {
-    if (!g_vk_mint_walk_writer.ok) {
+    if (!g_vk_mint_walk_writer.ok && g_vk_mint_walk_writer.chunk_base != null) {
         panic("dasLLAMA image: the vulkan lane's device twin overran the image's reserve mid-walk - the sizing is wrong, see the error above")
+    }
+    if (g_vk_mint_walk_writer.ok && g_vk_mint_walk_writer.chunk_base == null && image_write_faulted(g_vk_mint_walk_writer.cur + nbytes)) {
+        g_vk_mint_walk_writer.ok = false
     }
     w_append(*g_vk_mint_walk_writer, p, nbytes)
 }

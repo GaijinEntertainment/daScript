@@ -295,6 +295,42 @@ def test_image_table_slot_names(t : T?) {
 }
 
 [test]
+def test_image_tmp_does_not_outlive_a_save(t : T?) {
+    t |> run("a failed write removes the save's temp file; a temp file a killed writer left goes at the next save, a fresh one stays") @(t : T?) {
+        if (!arm_on(t, "mechanics")) {
+            return
+        }
+        let path = path_join(test_temp_dir(), "dasllama_img_tmp_probe.dlim")
+        remove(path)
+        var p <- make_probe()
+        let fault_found = get_image_write_fault()
+        let hits_found = image_write_fault_hits()
+        set_image_write_fault(1ul)
+        let saved = save_image(p, path, "img-probe")
+        set_image_write_fault(0ul)
+        t |> equal(image_write_fault_hits(), hits_found + 1, "the seam failed this save, once")
+        t |> success(!saved && !stat(path).is_valid, "a save whose write fails declines and publishes nothing")
+        t |> equal(image_tmp_count(path), 0, "the failed save's temp file is gone")
+        let stale = "{path}.123.tmp"
+        let fresh = "{path}.456.tmp"
+        for (planted in fixed_array(stale, fresh)) {
+            fopen(planted, "wb") $(f) {
+                fwrite(f, "x")
+            }
+        }
+        var mtime_err : string
+        t |> success(set_mtime(stale, mktime(2020, 1, 1, 0, 0, 0), mtime_err), "the stale temp file's mtime is set back")
+        t |> success(save_image(p, path, "img-probe"), "control: with the seam off the same save lands")
+        t |> success(!stat(stale).is_valid, "the next save removes the temp file a killed writer left")
+        t |> success(stat(fresh).is_valid, "control: a temp file written a moment ago stays - it may have a live writer")
+        remove(fresh)
+        remove(path)
+        set_image_write_fault(fault_found)
+        delete p
+    }
+}
+
+[test]
 def test_image_mechanics(t : T?) {
     t |> run("synthetic carrier: round trip, nested planes, declines, unmap-remap") @(t : T?) {
         if (!arm_on(t, "mechanics")) {

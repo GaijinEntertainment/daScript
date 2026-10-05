@@ -98,6 +98,13 @@ def private filter_on(t : T?; filter, env, what, name : string; exact : bool) : 
 
 def eyeball_str(s : string) : string => replace(s, "\n", "\\n")
 
+//! temp files beside the image `path`, named `<path>.*.tmp`
+def image_tmp_count(path : string) : int {
+    var found : array<string>
+    expand_glob("{path}.*.tmp", found)
+    return length(found)
+}
+
 //! a model loaded without its tokenizer (`load_gguf`) logs the ids themselves, since there is no vocabulary to decode them through
 def eyeball_text(m : Model; ids : array<int64>) : string => m.tok.kind == TokKind.unset ? "ids {ids}" : eyeball_str(decode_(m, ids))
 

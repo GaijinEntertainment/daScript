@@ -75,10 +75,11 @@ stream it from device instead.** A dequant, a transpose, or a layout or element-
 makes the forms differ. A staged pass-through costs the op more than the reads it saves.
 
 **Never fill a `@workgroup` tile with a loop whose tile address - where the lane writes in the
-tile - needs a div or mod of a run-time value other than the lane's own slot index (the index that
-steps by one from lane to lane); the counter of an `[unroll_full]` loop is a compile-time constant
-once unrolled, not a run-time value. Give each lane a consecutive run of elements, or a
-lane-coalesced stride (`i += 32`), instead.**
+tile - takes a div or mod whose dividend is any run-time value but the lane's own slot index (the
+index that steps by one from lane to lane) plus compile-time constants; the counter of an
+`[unroll_full]` loop is a compile-time constant once unrolled, and the divisor may be a run-time
+value. Give each lane a consecutive run of elements, or a lane-coalesced stride (`i += 32`),
+instead.**
 
 **Never decide a row's validity or owner in the bucket-ordered buffer (the routed rows sorted so
 each expert's rows form one contiguous run, a bucket) by scanning the per-bucket base and count

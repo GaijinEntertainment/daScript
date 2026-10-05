@@ -20,7 +20,11 @@ compiles to its own shader module - a class no other class derives from; every r
 each stamp as its own class. A CPU oracle is the same computation written in plain code and run on
 the CPU. A path of a class is each kargs-selected branch, each branch a sentinel value in a bound
 buffer selects, and each trip-count regime of each loop whose trip count a kargs value sets - zero
-trips, one trip, a whole number of workgroup strides, or a partial tail. To loosen an assert is to
+trips, one trip, a whole number of workgroup strides, or a partial tail. A branch or loop inside a
+function the class's methods call, other than a method of the class, is not a path of the class -
+covering it is the job of that function's cells, never the class's. A trip-count regime is a path
+only where a serving call in `../dasllama/` can reach it on some model the engine serves. To
+loosen an assert is to
 let pass an input the old assert failed: a wider bar, a shorter domain, a dropped length check. A
 control is an extra assert in the same cell proving a compare can fail - a poisoned input, or a
 poisoned expectation (the expected value with a known amount added), that must land outside the

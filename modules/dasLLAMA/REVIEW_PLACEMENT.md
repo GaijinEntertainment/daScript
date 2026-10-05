@@ -1,14 +1,16 @@
 # dasLLAMA Placement Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_ENGINE_FORMATS.md`,
-`ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEDIA.md`, `ARCHITECTURE_TTS.md`, `ARCHITECTURE_POCKET.md`.
-Planned work: `followup_general.md`, `followup_vulkan.md` for Vulkan, `followup_metal.md` for Metal.
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_ENGINE_SERVING.md`,
+`ARCHITECTURE_ENGINE_FORMATS.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEDIA.md`,
+`ARCHITECTURE_TTS.md`, `ARCHITECTURE_POCKET.md`. Planned work: `followup_general.md`,
+`followup_vulkan.md` for Vulkan, `followup_metal.md` for Metal.
 
 A charter line is the one line saying what a file under `dasllama/` holds: in
-`ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_ENGINE_FORMATS.md`, `ARCHITECTURE_MEDIA.md`,
-`ARCHITECTURE_TTS.md` or `ARCHITECTURE_POCKET.md` (`ARCHITECTURE.md#file-charters` names which),
-or a role row or a file bullet of `ARCHITECTURE_GPU.md#gpu-backends`.
+`ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_ENGINE_SERVING.md`, `ARCHITECTURE_ENGINE_FORMATS.md`,
+`ARCHITECTURE_MEDIA.md`, `ARCHITECTURE_TTS.md` or `ARCHITECTURE_POCKET.md`
+(`ARCHITECTURE.md#file-charters` names which), or a role row or a file bullet of
+`ARCHITECTURE_GPU.md#gpu-backends`.
 
 **A per-file inventory restated in this checklist is a defect of the checklist.** The charter
 lines own the per-file list; a rule naming what KIND of code lands in which file is the
@@ -38,23 +40,25 @@ folder's checklist.**
 family ships more than one coopmat form (cm2, KHR) lands in
 `dasllama/dasllama_vulkan_classes.das`.**
 
-**A Vulkan host-side ensure/set/encode chain (an if/else over stamps) that picks a stamp from
-its push-constant and shape arguments and the device's cooperative-matrix mode
-(`g_gpu.coopmat_mode`) alone lands in `dasllama/dasllama_vulkan_classes.das`.** A stamp is one
-class stamped from a kernel class template.
+**A Vulkan host-side ensure/set/encode chain (an if/else over stamps) whose pick reads nothing but
+its arguments and the device's cooperative-matrix mode (`g_gpu.coopmat_mode`), and no driver
+state, lands in `dasllama/dasllama_vulkan_classes.das`; a stamp selector it is handed - a value
+naming the stamp, such as a variant ordinal - is one of those arguments.** A stamp is one class
+stamped from a kernel class template.
 
 **A Vulkan predicate over shape values alone lands in `dasllama/dasllama_vulkan_classes.das`,
 whichever file calls it.**
 
-**A Vulkan host-side ensure/set/encode chain whose pick reads driver state - `g_rd` or an
-`RLayer` field - lands in the Vulkan driver file whose pass calls it -
+**A Vulkan host-side ensure/set/encode chain whose pick reads driver state - `g_rd`, or an
+`RLayer` field read from a global or from an argument - lands in the Vulkan driver file whose
+pass calls it -
 `dasllama/dasllama_vulkan_decode.das` for the decode step, `dasllama/dasllama_vulkan_prefill.das`
 for the prefill pass, the tower, ASR-decoder or TTS driver file for theirs - and in
 `dasllama/dasllama_vulkan_common.das` when both the decode step and the prefill pass call it.**
 
-**A host-side ensure/set/encode chain on any backend that only switches on a stamp it is handed
-lands in the file of the function that decides that stamp, and a diff that moves that function
-moves the chain with it.**
+**A Metal host-side ensure/set/encode chain whose pick reads nothing but a stamp selector it is
+handed lands in the file of the function that decides that stamp, and a diff that moves that
+function moves the chain with it.**
 
 **A HOST-side tensor format conversion lands in `dasllama/dasllama_convert.das`.**
 

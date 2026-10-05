@@ -112,7 +112,9 @@ standalone exe, and a host that linked the engine's AOT stubs (`aot_kernels_link
 An image is published by writing a temp file beside its destination and renaming over it. POSIX
 makes that replace atomic. Windows has no rename-over, so the publish removes the destination
 first and a concurrent reader can see a brief absence - which costs that reader a regenerate,
-never a corrupt map.
+never a corrupt map. A temp file does not outlive its save: a failed write or a short file ends
+the save and removes it - in the vulkan mint too, where the load then serves the streamed build
+from memory - and the next save of an image removes one a killed process left an hour ago.
 
 ### The image's size is known before the first byte {#image-sizing-exactness}
 

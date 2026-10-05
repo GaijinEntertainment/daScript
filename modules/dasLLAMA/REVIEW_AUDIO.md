@@ -19,11 +19,12 @@ field, finalize line, kind value, and one-line arms.**
 **A prompt, a decode loop, a caps value, or a language rule in a union carrier is a defect - it
 goes in the family file.**
 
-**A GEMM against model weights in an ASR family file that does not go through a `*_mm` wrapper
+**A GEMM against model weights in an ASR family file that does not go through a `*_mm*` wrapper
 or `mm_blob_b` is a defect, hand-written dot-product loops included.**
 
-**An activation-by-activation product in an ASR family file that does not go through
-`gemm_f32_jo` is a defect, hand-written loops included.**
+**A matrix product of two activations - tensors the encoder or decoder computes, never a weight
+or the mel frontend's transform table (`build_dft_twiddles`) - in an ASR family file that does
+not go through `gemm_f32_jo` is a defect, hand-written loops included.**
 
 **A buffer reused across encodes in an audio-rail file that is not `@scratch` - on its
 declaration, or on the parameter of every callee that grows it - is a defect.**

@@ -95,7 +95,8 @@ that text.**
 **A diff that cites a driver-against-itself compare as parity evidence is a defect - such a
 compare is evidence for a `PERF_LEDGER.md` row.**
 
-**A diff that holds a serving call's output to a bar for the first time in a parity run, or
-changes a bar's constant or the statistic the constant multiplies, adds a `PERF_LEDGER.md` row
-in the same change naming the bar's constant and value, the reading it comes from and the box
-that read it.**
+**A diff that, in a parity run that is not a kernel-unit cell, holds a model file's serving-call
+output to a bar no earlier parity run held that file to, or changes the constant - or the
+statistic the constant multiplies - of such a bar, adds a `PERF_LEDGER.md` row in the same change
+naming the bar's constant and value, the reading it comes from and the box that read it.** A
+driver-against-itself compare is not a parity run, so its bar owes no such row.

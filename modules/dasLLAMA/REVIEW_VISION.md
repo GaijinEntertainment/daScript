@@ -19,8 +19,8 @@ size follows the input - patch count, pixel count, clip frames - is a defect wit
 encode and is reused by the next (a state field, a module global) is a defect unless `@scratch`
 sits on its declaration or on the parameter of every callee that grows it.**
 
-**A debug or profiling leg in `dasllama/dasllama_vision_embedder.das` or a vision family file
-that is not `[cold_path]` is a defect.**
+**A debug or profiling code path in `dasllama/dasllama_vision_embedder.das` or a vision family
+file that is not `[cold_path]` is a defect.**
 
 **A vision family file takes every clamp bound from `read_clamp`, never from a literal.**
 

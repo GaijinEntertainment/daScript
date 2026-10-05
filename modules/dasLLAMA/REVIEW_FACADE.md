@@ -1,7 +1,8 @@
 # dasLLAMA Facade Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_RUNTIME.md`. Planned work: `followup_general.md`.
+docs: `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_RUNTIME.md`, `ARCHITECTURE_TTS.md`. Planned work:
+`followup_general.md`.
 
 **A non-private, non-operator def of a file `REVIEW.das`'s `FACADE_FILES` lists, and each new
 overload of one, is called in runnable code in a `tutorials/dasLLAMA/*.das` source - not a comment
