@@ -912,3 +912,61 @@ Each is a stage and the models it holds for, read off the drivers' own gates:
 
 The work: each stage on the device, and a counter per stage a gate can read, so a served model's
 row names the stages it ran and where.
+
+## 40. The served-media arc's sibling sets stand unfolded
+
+Each pair below differs on the one axis named, and the fold is behavior-neutral unless it says otherwise.
+
+- **Tail scratch.** `tw_tail_make` / `_land`, `g4a_tail_make` / `_land`, `g4v_ends_make` / `_land`, `g3v_tail_make` /
+  `_land` and `metal_canary_front`'s `g_tw_cn_bufs` each carry their own `bytes_*` fields and release list for
+  pool buffers that `TwBufSet` / `tw_take` / `tw_release` hold (`dasllama/dasllama_metal_tower.das`). The fold: a
+  `scratch : TwBufSet` a tail struct, one `tw_release` in its land. Proof: the audio and vision areas.
+- **The prefix probe.** `prefix_match_len_` repeats `prefix_attach_`'s whole-page walk and partial-page pick with
+  no side effect (`dasllama/dasllama_prefix.das`). The fold: one read-only walk that attach applies its effects
+  over, so the probe equals the attach by construction. Proof: `test_kv_prefix.das`, `test_scheduler.das`.
+- **The pool kernels.** `MetalTwPool2` (a row pair) and `MetalTwPool2d` (a k x k block) differ on the window
+  (`dasllama/dasllama_metal_prefill.das`); one kernel takes a window of its own width and height.
+- **The gated rows.** `MetalTwSwigluRows` and `MetalG4aGlu` walk a row's two halves alike and differ on the gate
+  (`silu(b) * a` against `a * sigmoid(b)`) and on their argument shape; a class template with the gate abstract
+  stamps both. `MetalG4aGlu` sits in gemma4a's block loop: the stamp's generated source is diffed against it.
+- **The subsample front.** `metal_canary_front` and `metal_parakeet_encode` run the same ten dispatches in the
+  same order and differ on the taps buffer, the valid-row clamps and the GEMM form; one body takes the three.
+  Proof: the parakeet and canary `mtower` arms of `test_model_image.das`.
+- **The spectrum's tile.** `metal_canary_front` runs its DFT GEMM on the half-staged f32 tile and `metal_q3a_mel`
+  on the exact f32 tile, where a quiet bin sits 80 dB under the loud ones. Folding the two picks one tile: the
+  exact one, with canary's rel-l2 read again.
+- **The inline media turn.** `render_prompt_media` (with `text_before`) and `render_user_spans` render the same
+  turn as a head and tail pair and as one position stream (`dasllama/dasllama_chat.das`); the first becomes the
+  second with one mark, split at the id run. The single-chat media turn then takes the text renderer's arms
+  (displaced tool results, the open-turn close): `test_vision_chat.das`'s render cells are the check.
+- **The per-layer input's gate.** `ple_pre_prefill_pad_gated` and `ple_pre_prefill_gated` differ on the id source
+  (`dasllama/dasllama_common.das`); one gate reads an empty token range as the padding token and keeps the CPU's
+  one-gather pad arm.
+- **Smaller pairs.** `conv2_mm` beside `wt_mm` (where the q8 region's offset lives); `audio_tower_half_gemms`
+  beside `stage_qwen3a_tower`'s inline predicate (whether Q8_0 is admitted); `kv_blob_grow` beside
+  `reserve_resize` (no fill against zero fill); the three audio probes' file open beside `gguf_file_arch`'s;
+  `uncovered_media` and `media_spans`' scan for a ref's id run, and `collect_media_refs` beside `message_parts`
+  (`utils/dasllama-server/openai_server.das`); the device tail's landing in `dasllama_gemma3v.das` and
+  `dasllama_gemma4v.das`; the bench's `unseen_clip` temp path beside `create_temp_file`; the test helpers
+  `with_tower_audio_server` / `with_audio_server`, `tail_gpu_cell` / `test_gemma3v_tail_gpu`'s body, and the
+  two heap-flat legs.
+- **Not a fold.** gemma4v's position rows add as `x + (ex + ey)` on the device and `(x + ex) + ey` on the CPU; one
+  helper changes one side's sums. The CPU mel's power spectrum is shared by `log_mel_spectrum_cpu` and
+  `dasllama_qwen3a.das`, the mel sums behind it are not: each matches its own reference.
+
+## 41. The projector tails run on the f32 tiles beside a resident halfword copy
+
+The whisper-class, gemma-3 and gemma-4 vision tails (`tw_tail_body`, `g3v_tail_body`, `g4v_tail_body`) take their
+projection GEMMs through `enc_f32_mm` in the command buffer where the halfword copy of the same weight blob
+serves the block GEMMs. Neither form has been raced on a tail. The work: one in-process race a tail on the half
+tile against the f32 tile (an encode's wall, the rows' distance from the CPU tail), and the tail on whichever
+holds its bar and reads faster.
+
+## 42. The ASR decoder drivers keep a dropped state's id for the process's life
+
+`g_wd_dropped` holds the id of every decoder state whose waiting cross-KV planes were dropped unread, and a
+state leaves it only at its next window (`dasllama/dasllama_metal_asr_dec.das`; the Vulkan driver carries the
+same record in `dasllama_vulkan_asr_dec.das`). A transcription makes a fresh state, so a state whose last
+window was dropped never returns: eight bytes a transcription, for as long as the server runs. The work: the
+pending mark on the state itself (a flag beside `DecoderState.gpu_uid`, the driver's one pending id beside
+it), so nothing outlives the state; both drivers in one change, the Vulkan one on a Vulkan box.
