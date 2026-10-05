@@ -98,16 +98,11 @@ def private filter_on(t : T?; filter, env, what, name : string; exact : bool) : 
 
 def eyeball_str(s : string) : string => replace(s, "\n", "\\n")
 
-//! how many temp files of an image save sit beside `path` (`<path>.<stamp>.tmp`, the image writer's names)
-def image_tmp_siblings(path : string) : int {
-    let prefix = "{base_name(path)}."
-    var n = 0
-    dir(dir_name(path)) $(name) {
-        if (name |> starts_with(prefix) && name |> ends_with(".tmp")) {
-            n++
-        }
-    }
-    return n
+//! temp files beside the image `path`, named `<path>.*.tmp`
+def image_tmp_count(path : string) : int {
+    var found : array<string>
+    expand_glob("{path}.*.tmp", found)
+    return length(found)
 }
 
 //! a model loaded without its tokenizer (`load_gguf`) logs the ids themselves, since there is no vocabulary to decode them through

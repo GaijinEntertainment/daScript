@@ -304,11 +304,13 @@ def test_image_tmp_does_not_outlive_a_save(t : T?) {
         remove(path)
         var p <- make_probe()
         let fault_found = get_image_write_fault()
+        let hits_found = image_write_fault_hits()
         set_image_write_fault(1ul)
         let saved = save_image(p, path, "img-probe")
-        set_image_write_fault(fault_found)
+        set_image_write_fault(0ul)
+        t |> equal(image_write_fault_hits(), hits_found + 1, "the seam failed this save, once")
         t |> success(!saved && !stat(path).is_valid, "a save whose write fails declines and publishes nothing")
-        t |> equal(image_tmp_siblings(path), 0, "the failed save's temp file is gone")
+        t |> equal(image_tmp_count(path), 0, "the failed save's temp file is gone")
         let stale = "{path}.123.tmp"
         let fresh = "{path}.456.tmp"
         for (planted in fixed_array(stale, fresh)) {
@@ -323,6 +325,7 @@ def test_image_tmp_does_not_outlive_a_save(t : T?) {
         t |> success(stat(fresh).is_valid, "control: a temp file written a moment ago stays - it may have a live writer")
         remove(fresh)
         remove(path)
+        set_image_write_fault(fault_found)
         delete p
     }
 }

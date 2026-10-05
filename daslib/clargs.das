@@ -928,8 +928,8 @@ class ArgsMacro : AstStructureAnnotation {
     def make_parse_args_with_help_fn(var st : StructurePtr) : FunctionPtr {
         var fn = qmacro_function("parse_args_with_help") $(var dst : $t(st); prog_name : string) : int {
             let auto_args <- get_user_args()
-            if (find_index(auto_args, "--help") != -1 || find_index(auto_args, "-h") != -1) {
-                let auto_info <- get_command_info(type<$t(st)>)
+            let auto_info <- get_command_info(type<$t(st)>)
+            if (!empty(unclaimed_help_flag(auto_args, auto_info))) {
                 print(format_help_with_auto_help(auto_info, prog_name))
                 return 0
             }
@@ -1044,7 +1044,7 @@ class ArgsMacro : AstStructureAnnotation {
         }
     }
 
-    //! `--help` / `-h` reach a bool `help` field the struct gave another flag name, so a help request is never dropped and the tool run instead
+    // a bool `help` field renamed off --help still takes --help / -h, else the tool runs instead of printing its help
     def make_help_alias_expr(arg : CommandArgumentInfo) : ExpressionPtr {
         return qmacro_block() {
             if (!empty(unclaimed_help_flag(args, command_info))) {

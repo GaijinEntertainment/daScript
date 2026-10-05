@@ -94,8 +94,8 @@ help : bool
 ```
 
 Under `parse_args`, `--show-help`, `-?`, `--help` and `-h` all set that field. The struct declares
-no `--help` / `-h` flag, so `parse_args_with_help` is generated for it too, and there `--help` /
-`-h` print the generated help and return `0` before any field is set.
+no `--help` / `-h` flag, so `parse_args_with_help` is generated for it too, and there the same
+unclaimed `--help` / `-h` prints the generated help and returns `0` before any field is set.
 
 A `-lib` library never owns argv at all: the host's process arguments are whatever the host was
 started with, so a library reads its configuration from its C parameters, not from `clargs`.

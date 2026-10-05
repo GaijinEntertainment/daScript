@@ -234,13 +234,16 @@ def test_vulkan_mint_failed_write_leaves_nothing(tst : T?) {
                 moe_gpu_drop_model()
                 remove(img_v)
                 let fault_found = get_image_write_fault()
-                let tmps_found = image_tmp_siblings(img_v)
+                let hits_found = image_write_fault_hits()
+                let tmps_found = image_tmp_count(img_v)
                 set_image_write_fault(1ul << 20ul)
                 var held <- load_cached_q8(path)
-                set_image_write_fault(fault_found)
-                t |> success(!stat(img_v).is_valid, "the mint whose write failed a megabyte in published no lane")
-                t |> equal(image_tmp_siblings(img_v), tmps_found, "and left no temp file of its own beside it")
-                t |> success(long_length(held.qblob) > 0l, "the load serves the streamed build from memory")
+                set_image_write_fault(0ul)
+                t |> success(image_write_fault_hits() != hits_found, "the seam failed a write of this load's mint")
+                t |> success(!stat(img_v).is_valid, "the mint whose write failed published no lane")
+                t |> equal(image_tmp_count(img_v), tmps_found, "and left no temp file of its own beside it")
+                t |> success(held.image_map != null && !stat(image_path_for(path, "", "q8")).is_valid,
+                    "the load serves the streamed build from memory - an image is in hand and neither lane's file is on disk")
                 delete held
                 moe_gpu_drop_model()
                 remove(image_path_for(path, "", "q8"))
@@ -248,6 +251,7 @@ def test_vulkan_mint_failed_write_leaves_nothing(tst : T?) {
                 t |> success(stat(img_v).is_valid && moe_gpu_resident_active(), "control: with the seam off the next load mints the lane and the driver serves it")
                 delete again
                 moe_gpu_drop_model()
+                set_image_write_fault(fault_found)
             }
         }
     }

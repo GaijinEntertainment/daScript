@@ -102,33 +102,11 @@ struct ConvertArgs {
 // A killed converter leaves its tmp behind — save_image only removes its own on a CLEAN failure.
 // They are full-size (95 GB each was found on this box), so sweep them before writing another.
 def private sweep_stale_tmp(gguf : string) : int {
-    let dir_path = dir_name(gguf)
-    let base = base_name(gguf)
-    var freed = 0l
-    var n = 0
-    dir(dir_path) $(name : string) {
-        // only OUR tmp shape (<gguf>….dlim.<ticks>.tmp) — never an unrelated .tmp
-        if (!(name |> starts_with(base)) || !(name |> ends_with(".tmp")) || find(name, ".dlim.") < 0) {
-            return
-        }
-        let full = path_join(dir_path, name)
-        var st : FStat
-        if (!stat(full, st) || st.is_dir) {
-            return
-        }
-        let bytes = int64(st.size)
-        if (remove(full)) {
-            freed += bytes
-            n++
-            to_log(LOG_INFO, "dasllama-convert: removed stale tmp {name} ({bytes >> 20l} MB)\n")
-        } else {
-            to_log(LOG_WARNING, "dasllama-convert: could not remove stale tmp {name} — in use by a live converter?\n")
-        }
+    let swept = sweep_image_tmps(gguf, 0l)
+    if (swept.removed > 0) {
+        to_log(LOG_INFO, "dasllama-convert: reclaimed {swept.freed >> 30l} GB from {swept.removed} stale tmp file(s)\n")
     }
-    if (n > 0) {
-        to_log(LOG_INFO, "dasllama-convert: reclaimed {freed >> 30l} GB from {n} stale tmp file(s)\n")
-    }
-    return n
+    return swept.removed
 }
 
 // q is a REFERENCE — a plain `var q : QuantMode` is a workhorse-type copy and the caller

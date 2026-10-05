@@ -209,7 +209,10 @@ batched driver gained, deltanet rows against per-session mirrors and the shared 
 site; fam-qwen35moe keeps the per-row FALLBACK assertion until the MoE hybrid's arm lands).
 
 The `image` suite (test_model_image - the prepared-image .dlim rail): `mechanics` (synthetic
-carrier, model-free - runs with no model stocked; also the layout fingerprint; the lane naming -
+carrier, model-free - runs with no model stocked; also the layout fingerprint; the save's temp
+file - a save the `set_image_write_fault` seam fails publishes nothing and leaves no temp file,
+a temp file a killed writer left (its mtime set back) goes at the next save and one written a
+moment ago stays; the lane naming -
 the file name's lane segment read back, a hash-named legacy image adopted into its lane, a save
 reaping only its own lane's legacy other while another lane's OTHER survives, a version-stale
 image going in any lane, and the rope-scaling override as a lane suffix and an identity element
@@ -316,6 +319,10 @@ byte for byte, the trim declines the model as this run's decline (`resident_trim
 the warm load serves planar from memory and leaves the trimmed lane on disk at its minted size, and
 a cold trim ask writes no lane at all; with the override put back to what `active_prefill_override`
 read before, the next load mints the trimmed lane and the driver serves it.
+`test_vulkan_mint_failed_write_leaves_nothing` fails the mint's write through the
+`set_image_write_fault` seam (the seam's hit count moves): no lane, no temp file of the mint's own,
+the load serves the streamed build from memory with neither lane's file on disk, and with the seam
+at 0 the next load mints the lane and the driver serves it.
 
 The `coverage` suite (test_kernel_coverage, arm `coverage`; arm `coverage-vk` = the vulkan
 SERVING census - needs a vulkan device + `DASLLAMA_GPU=1` + `DASLLAMA_MODELS_DIR`, MoE rows
