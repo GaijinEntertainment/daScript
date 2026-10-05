@@ -2135,6 +2135,7 @@ const FIELDS = [
     { k: "tts_lane", t: "sel", o: ["q8", "f32"] },
     { k: "tts_voices_dir", t: "path", wide: true },
     { k: "image_mmproj", t: "path", wide: true },
+    { k: "audio_mmproj", t: "path", wide: true },
     { k: "asr_workers", t: "int" },
     { k: "lcpp_bin", t: "path", wide: true },
     { k: "models_dir", t: "path", wide: true },
@@ -2318,7 +2319,7 @@ function renderGpu(status) {
 // so the TOML stays name+path per model unless something is genuinely overridden.
 const QUANT_OPTS = ["", "q8", "fp32", "q4", "q8_0", "q4_0", "q4_k", "q5_k", "q6_k", "mxfp4", "f16", "bf16"];
 const KV_OPTS = ["", "f16", "f32", "q8_0", "tq4"];
-let roster = [];         // {name, path, backend, ctx, quant, kv_dtype, streams, chunk, page_rows, prefix, mtp, rope_scaling, rope_scale, yarn_orig_ctx, image_mmproj, def, adv}
+let roster = [];         // {name, path, backend, ctx, quant, kv_dtype, streams, chunk, page_rows, prefix, mtp, rope_scaling, rope_scale, yarn_orig_ctx, image_mmproj, audio_mmproj, def, adv}
 const ROPE_OPTS = ["", "yarn", "linear", "none"];
 let gpuStatus = null;    // /config status.gpu — decline reason for the effective badge hover
 
@@ -2343,6 +2344,7 @@ function rosterFromSurface(surface) {
         rope_scale: e.rope_scale > 0 ? String(e.rope_scale) : "",
         yarn_orig_ctx: e.yarn_orig_ctx > 0 ? String(e.yarn_orig_ctx) : "",
         image_mmproj: e.image_mmproj || "",
+        audio_mmproj: e.audio_mmproj || "",
         def: !!e.default,
         adv: false,
     }));
@@ -2449,7 +2451,8 @@ function renderRoster() {
                 wrap("rope_scaling", rosterSelect(i, "rope_scaling", r.rope_scaling, ROPE_OPTS)),
                 wrap("rope_scale", rosterInput(i, "rope_scale", r.rope_scale, "number")),
                 wrap("yarn_orig_ctx", rosterInput(i, "yarn_orig_ctx", r.yarn_orig_ctx, "number")),
-                wrap("image_mmproj", rosterInput(i, "image_mmproj", r.image_mmproj, "text")));
+                wrap("image_mmproj", rosterInput(i, "image_mmproj", r.image_mmproj, "text")),
+                wrap("audio_mmproj", rosterInput(i, "audio_mmproj", r.audio_mmproj, "text")));
             for (const inp of grid.querySelectorAll("input")) inp.placeholder = "inherit";
             td.append(grid);
             at.append(td);
@@ -2498,7 +2501,7 @@ $("roster-body").addEventListener("click", e => {
 $("b-addmodel").addEventListener("click", () => {
     roster.push({ name: "", path: "", backend: "auto", ctx: "", quant: "", kv_dtype: "",
                   streams: "", chunk: "", page_rows: "", prefix: "", mtp: "",
-                  rope_scaling: "", rope_scale: "", yarn_orig_ctx: "", image_mmproj: "",
+                  rope_scaling: "", rope_scale: "", yarn_orig_ctx: "", image_mmproj: "", audio_mmproj: "",
                   def: roster.length === 0, adv: false });
     renderRoster();
 });
@@ -2520,6 +2523,7 @@ function gatherModels() {
         if (r.rope_scale !== "" && Number(r.rope_scale) > 0) e.rope_scale = Number(r.rope_scale);
         if (r.yarn_orig_ctx !== "" && Math.trunc(+r.yarn_orig_ctx) > 0) e.yarn_orig_ctx = Math.trunc(+r.yarn_orig_ctx);
         if (r.image_mmproj) e.image_mmproj = r.image_mmproj;
+        if (r.audio_mmproj) e.audio_mmproj = r.audio_mmproj;
         if (r.def) e.default = true;
         return e;
     });

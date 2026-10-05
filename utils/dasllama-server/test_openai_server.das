@@ -289,11 +289,10 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
                 t |> success(find(string(resp.body), "no audio arm") >= 0, "the 400 names the missing audio arm")
             }
-            // an image AND audio in one message: refused by shape before any arm check — the
-            // scheduler takes ONE media splice per request
+            // an image AND audio in one message: a request may carry both, so the refusal here is the missing arm
             POST("{base_url}/v1/chat/completions", "\{\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png;base64,AAAA\"}},\{\"type\":\"input_audio\",\"input_audio\":\{\"data\":\"AAAA\",\"format\":\"wav\"}}]}]}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
-                t |> success(find(string(resp.body), "image AND audio") >= 0, "the 400 names the two-media shape")
+                t |> success(find(string(resp.body), " arm ") >= 0, "the 400 names a missing arm")
             }
             // /v1/stats declares the arms the page reads: the vision/audio flags and the thinking default
             GET("{base_url}/v1/stats") $(resp) {
@@ -363,7 +362,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 }
             }
             // POST /config — validated body writes an authoritative TOML to the registered path
-            POST("{base_url}/config", "\{\"model\":\"m.gguf\",\"port\":8123,\"mtp\":true,\"gpu\":\"vulkan\",\"image_mmproj\":\"mm.gguf\",\"tts_voices_dir\":\"voices\",\"chunk_idle\":1024}") $(resp) {
+            POST("{base_url}/config", "\{\"model\":\"m.gguf\",\"port\":8123,\"mtp\":true,\"gpu\":\"vulkan\",\"image_mmproj\":\"mm.gguf\",\"audio_mmproj\":\"am.gguf\",\"tts_voices_dir\":\"voices\",\"chunk_idle\":1024}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
                 t |> success(find(string(resp.body), "restart_required") >= 0, "save response flags restart")
             }
@@ -379,6 +378,7 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                     t |> equal(troot?["model"] ?? "", "m.gguf")
                     t |> success(troot?["mtp"] ?? false, "bool key round-trips")
                     t |> equal(troot?["image_mmproj"] ?? "", "mm.gguf")   // a save must not eat the vision arm
+                    t |> equal(troot?["audio_mmproj"] ?? "", "am.gguf")   // nor the audio arm
                     t |> equal(troot?["tts_voices_dir"] ?? "", "voices")   // every key the page's field list carries is a key the save takes
                     t |> equal(troot?["chunk_idle"] ?? 0l, 1024l)
                     unsafe {
@@ -731,7 +731,7 @@ def test_bench_inprocess(t : T?) {   // nolint:STYLE038 — one live server sess
     }
 }
 
-let TEST_PORT_HELD = 18161   // 18150-18156 are test_openai_server_mtp.das's, 18170-18174 test_openai_server_speech_multi.das's
+let TEST_PORT_HELD = 18161   // 18150-18156 are test_openai_server_mtp.das's, 18170-18176 test_openai_server_speech_multi.das's
 
 //! The HTTP front answers a status route from the engine's last answer while a handler holds the engine: an embeddings
 //! forward over a long input runs in-handler for hundreds of milliseconds, and /v1/stats still answers in a fraction of

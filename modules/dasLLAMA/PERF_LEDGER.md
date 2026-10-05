@@ -11,6 +11,94 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-04, `direction-grade`) - a served media turn's first token, and the speech rows beside
+  mlx-audio.** M5 Max, Metal, `dasllama-server` with one model (`main.das -- -m <gguf> --image-mmproj <mmproj>` or
+  `--audio-mmproj <mmproj>`, `-s 1 --ctx 16384`), the pinned llama-server as `-m <gguf> --mmproj <mmproj> -ngl 99
+  -np 1 -c 16384`, `harness/served_bench.das --url <server> --no-chat --reps 5 --image <jpg> --chat-clip <wav>`
+  (tagged `served`, `out-of-process`), a 60 s rest before each life; the tune sidecar predates the binary. The
+  first token of a question about a 640x480 image or an 8 s clip under a system line no server has seen, ms,
+  ours / the reference; a row over 3% cv is marked void.
+  - The paged KV pool grew by doubling, and a doubling copied and zero-filled every cached page inside one
+    request: Qwen3-VL 4B's image row read cv 7.9% with prefills of 116 ms beside ones of 158, 189 and 271. With
+    the pool's address room reserved at scheduler creation, twenty prefills in a row read 116-118 ms and the
+    row cv 0.9-1.2% over three runs. A model whose K/V passes the 4 GiB reserve (Qwen2-Audio, 524 KB a
+    position) still pays one copy a server life: 246 ms, once.
+  - A media prompt prefilled as three calls - text, rows, text - and each short call paid the call's floor
+    (about 20 ms): Voxtral Mini's clip read 214.7 with 102 of encode and 84 of prefill (21 + 41 + 20). As one
+    call it reads 181.0; Qwen3-VL 4B's image 185 to 148; gemma-4 E2B's image 115 to 82 and E4B's 164 to 98,
+    once the body carries each row's token id.
+  - Images: gemma-4 E2B 81.7 / 141.4, E4B 98.3 / 206.9, 12B 164.3 / 371.2; gemma-3 4B 426.6 / 466.8, 12B
+    561.0 / 666.1; Qwen3-VL 4B 147.2 / 196.5 (the reference void, 3.2%), 8B 220.8 / 295.5; Qwen2.5-Omni 3B
+    188.8 (void, 3.8%) / 224.6, 7B 257.0 (void, 5.7%) / 349.3.
+  - Clips: gemma-4 E2B 77.9 / 125.8 (the reference void, 6.3%), E4B 107.4 / 187.2; Qwen2.5-Omni 3B
+    219.3 / 294.5, 7B 348.2 / 465.6; Ultravox 1B 132.0 / 147.9 (the reference void, 6.1%), 8B 219.1 / 292.3;
+    Voxtral Mini 181.6 / 189.1 (the reference void, 5.3%), Small 439.6 / 503.6 (the reference void, 4.2%);
+    Qwen2-Audio 465.0 / 508.2. The E-series rows and the 12B image are single re-runs after their change; the
+    rest are one sweep taken before the instrument's lead-in request, which is what voids the two Omni images.
+  - Asked again under the same line, both servers answer off their cache within a few ms of each other on
+    every row; the one row the reference leads is Voxtral Small, 167.8 / 161.8.
+  - Speech, `main.das -- --tts <gguf>` against `mlx_audio.server` (mlx-audio 0.5.7), `served_bench.das
+    --no-chat --tts-url <server> --reps 8`, one sentence: ms a request / s of speech / real-time factor.
+    Kokoro-82M (the same voice, ours q8, theirs bf16): 73.1 / 5.50 / 0.013 against 108.9 / 5.47 / 0.020; three
+    sentences 218.9 / 17.5 / 0.013 against 323.5 / 17.1 / 0.019. Kitten nano 22.5 / 5.24 / 0.004 against
+    75.1 / 7.93 / 0.009 and mini 64.6 / 5.84 / 0.011 against 242.7 / 7.55 / 0.032 - their files are the 0.8
+    release and speak the sentence longer, so the factor is the comparison. Pocket (ours the English 2026-04
+    file at q8 and kq, theirs Kyutai's without-voice-cloning weights at full and 8 bit): 67.7 / 4.64 / 0.015
+    and 61.7 / 4.80 / 0.013 against 200.3 / 4.96 / 0.040 (void, 8.6%) and 152.6 / 5.12 / 0.030 (void, 6.7%).
+  - The M5 and M4 boards' Metal rows this arc re-routes are withdrawn until a mint on a fresh sidecar: the
+    ASR rows of whisper tiny and large-v3-turbo, Canary-Qwen, Qwen3-ASR 0.6B, Qwen3-Omni 30B and gemma-4 E2B,
+    and the image rows of gemma-4 E2B and E4B.
+
+- **MEASURED (2026-10-04, `direction-grade`) - canary's mel and subsample front run on the Metal tower.**
+  M5 Max, Metal, canary-qwen-2.5b (the q8_0 decoder, the f32 encoder), in process as the server's
+  ASR worker runs it (the engine's stage clock, the fourth transcription of a clip), the tune sidecar
+  predating the binary. The front seat was filled by the Vulkan driver alone, so on Metal the mel
+  (a twiddle GEMM on the CPU) and the subsample stack ran on the CPU beside 80 ms of blocks on the
+  device.
+  - A 64 s clip: 1274 ms before - mel 239, front 258, blocks 80, projection 7, prefill 56, decode
+    629 - and 772 after, the mel and the front together 8.0. An 8 s clip: 163 ms before, 106 after
+    (3.5 for the two).
+  - The device rows sit 2.1e-3 rel-l2 from the CPU chain's on the jfk clip (3.1e-4 with the CPU
+    front ahead of the device blocks); the transcripts are equal. The reading is `test_model_image.das`'s
+    canary `mtower` arm (`canary mtower encode rel-l2`).
+
+- **MEASURED (2026-10-03, `direction-grade`) - the Metal tower reads a whisper encoder's q8 planes.**
+  M5 Max, Metal, whisper large-v3-turbo, `dasllama-server` with the ASR model alone
+  (`main.das -- --asr ggml-large-v3-turbo.bin`), the reference whisper.cpp `6fc7c33` as
+  `whisper-server -m <bin> --inference-path /v1/audio/transcriptions`, `harness/served_bench.das
+  --no-chat --asr-url <server> --clip <wav> --reps 5` (tagged `served`, `out-of-process`), a 60 s
+  rest before each life, every request a clip no server has heard; the tune sidecar predates the
+  binary, so the CPU kernels ran their fallback stamps. Clips of 8 s, 11 s and 64 s (one 30 s
+  window, one, three), ms a transcription.
+  - The tower declined a q8 encoder, and whisper serves q8: the encoder ran on the CPU and read
+    911.7 / 951.4 / 3092.8. The reference reads 131.3 / 147.1 / 601.5 on the f16 file and
+    127.1 / 139.8 / 554.8 on its q8_0 file (0.87 GB).
+  - The block GEMMs off the q8 blob on the plain q8 tile: 240.5 / 253.1 / 876.7. On the prefill
+    ladder: 153.5 / 166.1 / 608.9. With the stem's second conv off the same blob: 137.4 / 149.0 /
+    541.0, on the 1.2 GB q8 image. The f32 encoder lane on the same tower reads 132.3 / 140.0 /
+    517.9 on a 4.3 GB image.
+  - A window's stages on the q8 lane (the encoder's own stage clock, in process): blocks 102.5 ms
+    (94.0 on the f32 lane), the stem 2.2 (15.6 on the CPU), the decode 21.2, the cross K/V 6.4,
+    the mel 1.4.
+
+- **MEASURED (2026-10-03, `direction-grade`) - a served Qwen3-ASR transcription decodes on the device, and a
+  repeated clip measures the other server's prompt cache.** M5 Max, Metal, `dasllama-server` with the
+  ASR model alone (`main.das -- --asr <gguf> --mmproj <mmproj>`), the pinned llama-server as
+  `-m <gguf> --mmproj <mmproj> -ngl 99 -np 1`, `harness/served_bench.das --no-chat --asr-url <server>
+  --clip <wav> --reps 5` (tagged `served`, `out-of-process`), a 60 s rest before each life; the tune
+  sidecar predates the binary, so the CPU kernels ran their fallback stamps.
+  - The ASR worker's context carried no Metal mode, so the decoder - a `Model` session - prefilled
+    and decoded on the CPU: Qwen3-ASR-0.6B Q8_0 read a 4 s clip in 127.5 ms. The worker takes the
+    engine's mode for a two-file model: 50.5 ms. Inside it (the worker's own stage clock): encode
+    10.7 ms, the 75-row prefill 6.7, twelve decode steps 29.0 - 2.4 ms a token, where the reference's
+    own timing line reads 2.65.
+  - The reference keeps the prompts it has evaluated, audio rows included: the same clip sent again
+    costs it one prompt token (`cached_tokens` 79 of 80) and reads 37.4 ms, and a clip one sample
+    off costs the whole prompt. The instrument's rows before this entry repeated one clip and so
+    read that cache; every request now uploads a clip no server has heard.
+  - Unseen clips, ours / the reference, ms a transcription: Qwen3-ASR-0.6B 4 s 50.5 / 60.7, 8 s
+    76.6 / 98.1 (the reference's cv 6.1%, void); Qwen3-ASR-1.7B 4 s 85.5 / 95.1, 8 s 130.8 / 164.4.
+
 - **MEASURED (2026-10-02) - the K/V mirror's block codecs on the whole-model driver
   (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs`, `set_gpu_kv_dtype` / the server's `--kv-dtype`): a
   q8_0 mirror is 17/32 of the f16 mirror's bytes and tq4 9/32, and on a model whose context was asked whole

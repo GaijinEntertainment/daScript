@@ -11,6 +11,7 @@ def private allow_cpu_prefill_intent() {
     allow_cpu_prefill()   // render/eval-seam test, CPU by design: on a Metal build the prefill guard panics otherwise
 }
 require dasllama/dasllama_tokenizer
+require dasllama/dasllama_blocks   // embed_text_rows: the media body cell builds rows from the prompt's own tokens
 require dasllama/dasllama_bpe
 require daslib/jobque_boost
 require daslib/fio
@@ -176,10 +177,13 @@ def test_chat_llama3(t : T?) {
         let sh = special_id(raw, "<|start_header_id|>")
         let eh = special_id(raw, "<|end_header_id|>")
         let eot = special_id(raw, "<|eot_id|>")
-        // old llama3_chat.das: BOS, header(system), "\n\n{sys}", eot, header(user), "\n\n{usr}", eot, header(assistant), "\n\n"
+        // the model's own template: every system turn opens with its knowledge-cutoff line and a date line, the
+        // caller's system text after them - and a conversation with no system message still carries the two lines
+        set_chat_date("26 Jul 2024")
+        let header = "Cutting Knowledge Date: December 2023\nToday Date: 26 Jul 2024\n\n"
         var want <- [raw.bos_id, sh]
         want |> push_from(bpe_encode(raw, "system")); want |> push(eh)
-        want |> push_from(bpe_encode(raw, "\n\n{SYS}"))
+        want |> push_from(bpe_encode(raw, "\n\n{header}{SYS}"))
         want |> push(eot)
         want |> push(sh); want |> push_from(bpe_encode(raw, "user")); want |> push(eh)
         want |> push_from(bpe_encode(raw, "\n\n{USR}"))
@@ -187,6 +191,13 @@ def test_chat_llama3(t : T?) {
         want |> push(sh); want |> push_from(bpe_encode(raw, "assistant")); want |> push(eh)
         want |> push_from(bpe_encode(raw, "\n\n"))
         t |> success(ids_equal(engine_prefill(m, SYS, USR), want), "llama3 header prefill token-for-token")
+        var inscope bare <- engine_prefill(m, "", USR)
+        var inscope lead <- bpe_encode(raw, "\n\n{header}")
+        t |> success(length(bare) > 4 + length(lead) && ids_equal([for (k in range(length(lead))); bare[4 + k]], lead),
+            "with no system message the turn still states the cutoff and the date")
+        set_chat_date("")
+        var inscope today <- engine_prefill(m, "", USR)
+        t |> success(!ids_equal(today, bare), "unpinned, the date is the day the turn renders")
         delete raw
         delete m
     }
@@ -291,8 +302,10 @@ def test_chat_tools_hermes(t : T?) {   // nolint:STYLE038 — flat expected-toke
         let tco = special_id(m, "<tool_call>")
         let tcc = special_id(m, "</tool_call>")
 
-        // no system, no tools: the replay shape alone. The assistant called get_weather...
+        // no system, no tools: the replay shape alone - the conversation opens with the system turn the model's own
+        // template states for one that carries none. The assistant called get_weather...
         var c = create_chat_renderer(m, "", 8l)
+        t |> equal(c.tmpl.default_system, "You are Qwen, created by Alibaba Cloud. You are a helpful assistant.", "the template's default system text, read off its escaped string literal")
         add_user(c, USR)
         var toks : array<int64>
         let call = "\{\"name\": \"get_weather\", \"arguments\": \{\"city\": \"Paris\"}}"
@@ -300,6 +313,10 @@ def test_chat_tools_hermes(t : T?) {   // nolint:STYLE038 — flat expected-toke
         calls |> push(call)
         render_assistant_calls(m, c, "", calls, toks)
         var want : array<int64>
+        want |> push(ims)
+        want |> push_from(bpe_encode(raw, "system\n{c.tmpl.default_system}"))
+        want |> push(ime)
+        want |> push_from(bpe_encode(raw, "\n"))
         want |> push(ims)
         want |> push_from(bpe_encode(raw, "user\n{USR}"))
         want |> push(ime)
@@ -439,9 +456,83 @@ def test_chat_gemma4_instruct_text_turn(t : T?) {
     }
 }
 
+//! the last row's logits of `toks` prefilled with rows [lo, hi) as embedding rows: one fused body, or text / rows / text as three calls
+def private e_series_body_logits(m : Model; toks : array<int64>; lo, hi : int64; fused, with_ids : bool) : array<float> {
+    var head <- [for (k in range64(lo)); toks[k]]
+    var mid <- [for (k in range64(lo, hi)); toks[k]]
+    var tail <- [for (k in range64(hi, long_length(toks))); toks[k]]
+    var rows : array<float>
+    rows |> resize((hi - lo) * m.config.dim)
+    embed_text_rows(m, mid, rows, 0l)
+    var s <- create_session(m)
+    if (fused) {
+        var body : array<float>
+        media_body_rows(m, s, head, rows, hi - lo, m.config.dim, tail, body)
+        if (!with_ids) {
+            s.embd_ids |> clear()
+        }
+        eval_embd_body(m, s, body, long_length(toks), 0l, 0l, int2(0))
+        delete body
+    } else {
+        eval(m, s, head)
+        eval_embd(m, s, rows, hi - lo)
+        eval(m, s, tail)
+    }
+    var out := s.logits
+    delete s
+    delete head
+    delete mid
+    delete tail
+    delete rows
+    return <- out
+}
+
+//! one side's top predicted token beside a logits compare, its id and its piece
+def private log_top_token(m : Model; side : string; logits : array<float>) {
+    let top = argmax_of(logits)
+    to_log(LOG_INFO, "E-series media body, {side}: top token {top} '{piece_(m, top)}'\n")
+}
+
+let private E_BODY_NEAR = 0.25  //! of the logits' peak: one body against three calls differs by call shape alone - 0.11 here, and the same tokens as ids read 0.14 apart in one call and in three
+let private E_BODY_FAR = 1.0     //! of the peak: text rows under the padding token's per-layer input are another prompt - 1.9 here
+
+[test]
+def test_gemma4_e_media_body(t : T?) {
+    t |> run("an E-series media body gives its text rows their own tokens' per-layer input: one call == text / rows / text (needs gemma-4-E2B)") @(t : T?) {
+        let path = path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf")
+        if (!model_available(t, path)) {
+            return
+        }
+        var m <- load_capped(path)
+        allow_cpu_prefill()
+        with_dasllama_jobque() {
+            var toks <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches from a small hill near the old village bakery", true, false)
+            let np = long_length(toks)
+            t |> success(np > 16l, "the prompt holds a head, a span and a tail ({np} tokens)")
+            var split <- e_series_body_logits(m, toks, 5l, 11l, false, true)
+            var fused <- e_series_body_logits(m, toks, 5l, 11l, true, true)
+            var padded <- e_series_body_logits(m, toks, 5l, 11l, true, false)
+            let peak = logits_maxabs(split)
+            let near = logits_maxdiff(fused, split)
+            let far = logits_maxdiff(padded, split)
+            to_log(LOG_INFO, "E-series media body: one call {near} from three, the padding-id body {far}, at a {peak} peak\n")
+            log_top_token(m, "three calls", split)
+            log_top_token(m, "one call", fused)
+            log_top_token(m, "the padding-id body", padded)
+            t |> success(near < E_BODY_NEAR * peak, "one call reads as three ({near} at a {peak} peak)")
+            t |> success(far > E_BODY_FAR * peak, "the ids are load-bearing: a body without them reads another prompt ({far} at a {peak} peak)")
+            delete split
+            delete fused
+            delete padded
+            delete toks
+        }
+        delete m
+    }
+}
+
 [test]
 def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-token stream, one push per run
-    t |> run("default = thinking; instruct opt-out = closed empty thought (needs gemma-4-E2B)") @(t : T?) {
+    t |> run("default = thinking; instruct opt-out = the template's bare model turn (needs gemma-4-E2B)") @(t : T?) {
         let path = path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf")
         if (!stat(path).is_valid) {
             t |> skip("{path} not present")
@@ -458,8 +549,7 @@ def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-t
 
         var c = create_chat_renderer(m, "", 8l)
         t |> success(c.enable_thinking, "gemma-4 defaults to thinking on (thinking-trained family)")
-        // instruct opt-out: the closed empty thought prefill — the exact pre-thinking-arc token
-        // stream, pinned so the assistant_open restructure changes nothing
+        // instruct opt-out: the E-series template opens the model turn bare
         set_thinking(c, false)
         // instruct mode stops at a stray channel marker; thinking-ON must NOT (they frame the thought)
         let base_stops = length(c.stop_ids)
@@ -480,9 +570,6 @@ def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-t
         want |> push_from(encode(m, "\n", false, false))
         want |> push(trn)
         want |> push_from(encode(m, "model\n", false, false))
-        want |> push(cho)
-        want |> push_from(encode(m, "thought\n", false, false))
-        want |> push(chc)
         t |> success(ids_equal(got, want), "default prefill token-for-token (instruct shape)")
         delete c
 
@@ -538,7 +625,7 @@ def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-t
         add_user(c5, "and again?")
         let got5 <- render_turn(m, c5)
         t |> success(find_index(got5, thk) < 0, "no late gate materializes")
-        t |> equal(got5[length(got5) - 1], chc, "the opener keeps the closed empty thought")
+        t |> success(find_index(got5, chc) < 0, "the opener is the E-series template's bare model turn: no closed thought ahead of the answer")
         var eff5 <- effective_stop_ids(c5)
         t |> success(find_index(eff5, chc) >= 0, "the channel-marker stops stay armed (thinking never armed)")
         delete eff5
@@ -638,8 +725,6 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         var m <- load_capped(path)
         let trn = special_id(m, "<|turn>")
         let trc = special_id(m, "<turn|>")
-        let cho = special_id(m, "<|channel>")
-        let chc = special_id(m, "<channel|>")
         let tlo = special_id(m, "<|tool>")
         let tlc = special_id(m, "<tool|>")
         let tco = special_id(m, "<|tool_call>")
@@ -690,9 +775,6 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         want |> push_from(encode(m, "\n", false, false))
         want |> push(trn)
         want |> push_from(encode(m, "model\n", false, false))
-        want |> push(cho)
-        want |> push_from(encode(m, "thought\n", false, false))
-        want |> push(chc)
         t |> success(ids_equal(got, want), "defs turn token-for-token")
         delete c
 
@@ -710,9 +792,6 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         want2 |> push_from(encode(m, "\n", false, false))
         want2 |> push(trn)
         want2 |> push_from(encode(m, "model\n", false, false))
-        want2 |> push(cho)
-        want2 |> push_from(encode(m, "thought\n", false, false))
-        want2 |> push(chc)
         want2 |> push(tco)
         want2 |> push_from(encode(m, "call:get_weather\{city:", false, false))
         want2 |> push(q)
@@ -747,8 +826,6 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         var m <- load_capped(path)
         let trn = special_id(m, "<|turn>")
         let trc = special_id(m, "<turn|>")
-        let cho = special_id(m, "<|channel>")
-        let chc = special_id(m, "<channel|>")
         let tro = special_id(m, "<|tool_response>")
         let trr = special_id(m, "<tool_response|>")
 
@@ -781,9 +858,6 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         want |> push_from(encode(m, "\n", false, false))
         want |> push(trn)
         want |> push_from(encode(m, "model\n", false, false))
-        want |> push(cho)
-        want |> push_from(encode(m, "thought\n", false, false))
-        want |> push(chc)
         t |> success(ids_equal(got, want), "displaced results + close + user turn token-for-token")
         delete c
 
@@ -805,9 +879,6 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         want2 |> push_from(encode(m, "\n", false, false))
         want2 |> push(trn)
         want2 |> push_from(encode(m, "model\n", false, false))
-        want2 |> push(cho)
-        want2 |> push_from(encode(m, "thought\n", false, false))
-        want2 |> push(chc)
         t |> success(ids_equal(got2, want2), "the leaked open turn closes before the user turn")
         delete c2
         delete m
@@ -996,6 +1067,212 @@ def private detok(m : Model; ids : array<int64>) : string {
     return replace(raw, "\n", "\\n")
 }
 
+[test]
+def test_chat_inline_span(t : T?) {
+    t |> run("an inline span renders the turn the splice pair renders, its position ids where the rows go - in a replayed turn too") @(t : T?) {
+        let path = path_join(models_dir(), "voxtral-mini-3b-q8_0.gguf")
+        if (!model_available(t, path)) {
+            return
+        }
+        var m <- load_capped(path)
+        let key = 0x1234abcdul
+        for (before in [0, 4, length(USR)]) {
+            var c <- create_chat_renderer_(m)
+            add_user(c, USR)
+            c.n_audio_rows = 3l
+            var inscope head : array<int64>
+            var inscope tail : array<int64>
+            render_turn_audio_(m, c, head, tail, before)
+            var inscope ids <- [for (r in range64(3l)); media_position_id(key, r)]
+            var inscope want := head
+            want |> push_from(ids, tail)
+            var ci <- create_chat_renderer_(m)
+            add_user(ci, USR)
+            add_user_span_(m, ci, key, 3l, before, false, false)
+            var inscope got <- render_turn_(m, ci)
+            t |> success(ids_equal(got, want), "{before}: the inline turn is head + ids + tail ({length(got)} vs {length(want)} positions)")
+            // the same turn replayed as history: the span stays in the transcript, the reply and the close after it
+            var inscope hist : array<int64>
+            render_assistant_(m, ci, "ok", hist)
+            t |> success(length(hist) > length(head) + 3 && ids_equal([for (k in range(length(head) + 3)); hist[k]], [for (k in range(length(head) + 3)); want[k]]),
+                "{before}: a replayed turn keeps its span")
+            t |> success(empty(ci.pending_spans), "{before}: the consumed turn leaves no span queued")
+            delete ci
+            delete c
+        }
+        t |> success(is_media_position(media_position_id(key, 0l)) && media_position_id(key, 0l) != media_position_id(key, 1l)
+            && media_position_id(key, 0l) != media_position_id(key + 1ul, 0l), "a position id is no token id, and differs by row and by key")
+        delete m
+    }
+}
+
+//! whether `add_user_span_` refuses the span by panic, on a fresh chat that already holds the `queued` spans' text offsets
+def private span_refused(m : Model; queued : array<int>; n_rows : int64; text_before : int; is_image, bare : bool) : bool {
+    var c <- create_chat_renderer_(m)
+    add_user(c, USR)
+    for (at in queued) {
+        add_user_span_(m, c, 0x77ul, 1l, at, false, true)
+    }
+    var refused = false
+    try {
+        add_user_span_(m, c, 0x77ul, n_rows, text_before, is_image, bare)
+    } recover {
+        refused = true
+    }
+    delete c
+    return refused
+}
+
+// A template with no media markers takes a span only where the encoder's rows need none (a bare audio span); every span
+// has rows, and spans queue in text order.
+[test]
+def test_chat_span_refusals(t : T?) {
+    t |> run("add_user_span_ refuses a span the template cannot mark, an empty span, and one out of text order") @(t : T?) {
+        let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
+        if (!model_available(t, path)) {
+            return
+        }
+        var m <- load_capped(path)
+        var none : array<int>
+        t |> success(!span_refused(m, none, 2l, 4, false, true), "a bare audio span needs no markers (the control)")
+        t |> success(span_refused(m, none, 0l, 4, false, true), "a span of no rows panics")
+        t |> success(span_refused(m, none, -1l, 4, false, true), "a span of negative rows panics")
+        t |> success(span_refused(m, none, 2l, 4, true, false), "an image span on a template with no image markers panics")
+        t |> success(span_refused(m, none, 2l, 4, false, false), "a marked audio span on a template with no audio markers panics")
+        t |> success(!span_refused(m, [4], 2l, 4, false, true), "a span at the offset of the one before it queues")
+        t |> success(span_refused(m, [4], 2l, 2, false, true), "a span ahead of the one queued before it panics")
+        delete none
+        delete m
+    }
+}
+
+// A gemma-4 template's non-thinking generation prompt is read off the model's own template: the larger models close
+// an empty thought channel after the model turn's opener, the E-series opens the turn bare.
+[test]
+def test_gemma4_instruct_opener(t : T?) {
+    t |> run("the non-thinking opener follows the template: a closed thought where it writes one, bare where it does not") @(t : T?) {
+        let cases = [
+            (name = "the 12B form", parts = 5,
+             src = "\{\{- '<|turn>model\\n' -}}\{%- if not enable_thinking -%}\{\{- '<|channel>thought\\n<channel|>' -}}\{%- endif -%}"),
+            (name = "the E-series form", parts = 2,
+             src = "\{\{- '<|turn>model\\n' -}}\{%- elif enable_thinking -%}\{\{- '<|channel>thought\\n' -}}\{%- endif -%}")
+        ]
+        for (c in cases) {
+            var m = Model()
+            m.chat_template_str = c.src
+            var inscope tmpl <- chat_template(m)
+            t |> equal(length(tmpl.assistant_open.parts), c.parts, c.name)
+            t |> equal(length(tmpl.assistant_open_think.parts), 2, "{c.name}: the thinking opener is the bare model turn")
+            delete m
+        }
+    }
+}
+
+// A Llama-3.1+ template's system header is read off the template: the cutoff line, and the date line's date where the
+// template fixes one; a template with a clock states the day, and one with no header (Llama-3.0) states nothing.
+[test]
+def test_llama_system_header(t : T?) {
+    t |> run("the dated system header follows the template") @(t : T?) {
+        let head = "\{\{- \"<|start_header_id|>system<|end_header_id|>\\n\\n\" }}\{\{- \"Cutting Knowledge Date: December 2023\\n\" }}\{\{- \"Today Date: \" + date_string + \"\\n\\n\" }}"
+        let cases = [
+            (name = "a fixed date (3.1)", dated = true, date = "26 Jul 2024",
+             src = "\{%- set date_string = \"26 Jul 2024\" %}{head}"),
+            (name = "a clock (3.2)", dated = true, date = "",
+             src = "\{%- if strftime_now is defined %}\{%- set date_string = strftime_now(\"%d %b %Y\") %}\{%- else %}\{%- set date_string = \"26 Jul 2024\" %}\{%- endif %}{head}"),
+            (name = "no header (3.0)", dated = false, date = "",
+             src = "\{\{- '<|start_header_id|>' + message['role'] + '<|end_header_id|>\\n\\n' }}")
+        ]
+        for (c in cases) {
+            var m = Model()
+            m.chat_template_str = c.src
+            var inscope tmpl <- chat_template(m)
+            t |> equal(tmpl.system_dated, c.dated, c.name)
+            t |> equal(tmpl.system_date, c.date, "{c.name}: the date the template fixes")
+            t |> equal(tmpl.system_lead, c.dated ? "Cutting Knowledge Date: December 2023\n" : "", "{c.name}: the cutoff line")
+            delete m
+        }
+    }
+    t |> run("the rendered header: a tool-carrying turn opens with the environment line, and a pinned date wins over the template's") @(t : T?) {
+        let path = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
+        if (!model_available(t, path)) {
+            return
+        }
+        var m <- load_capped(path)
+        set_chat_date("")
+        let plain = system_header_text(m, "01 Jan 2030", false)
+        let tooled = system_header_text(m, "01 Jan 2030", true)
+        set_chat_date("26 Jul 2024")
+        let pinned = system_header_text(m, "01 Jan 2030", false)
+        set_chat_date("")
+        to_log(LOG_INFO, "llama header, the template's date: '{plain}'\nwith a tool: '{tooled}'\nthe date pinned: '{pinned}'\n")
+        t |> success(find(plain, "\\n\\nCutting Knowledge Date: December 2023\\nToday Date: 01 Jan 2030\\n\\n") >= 0, "unpinned, the turn states the date the template fixes")
+        t |> success(find(plain, "Environment: ipython") < 0, "a turn with no tools states no environment line")
+        t |> success(find(tooled, "\\n\\nEnvironment: ipython\\nCutting Knowledge Date: December 2023\\nToday Date: 01 Jan 2030\\n\\n") >= 0, "a tool-carrying turn opens with the environment line, ahead of the cutoff")
+        t |> success(find(pinned, "Today Date: 26 Jul 2024\\n") >= 0 && find(pinned, "2030") < 0, "a pinned date wins over the template's own")
+        delete m
+    }
+}
+
+//! the first turn's detokenized render on a Llama-3.2 chat whose template fixes `date` (as 3.1's does), with a tool or none
+def private system_header_text(m : Model; date : string; with_tool : bool) : string {
+    var c <- create_chat_renderer_(m)
+    c.tmpl.system_date = date
+    if (with_tool) {
+        var tools <- ["\{\"type\": \"function\", \"function\": \{\"name\": \"get_time\", \"parameters\": \{\"type\": \"object\", \"properties\": \{}}}}"]
+        set_tools_(c, tools)
+        delete tools
+    }
+    add_user(c, USR)
+    var inscope toks <- render_turn_(m, c)
+    delete c
+    return detok(m, toks)
+}
+
+// The system text a ChatML template states for a conversation with no system message, read off the three shapes the
+// stocked templates take; a span that carries an expression is the caller's own system turn and yields none.
+[test]
+def test_chatml_default_system(t : T?) {
+    t |> run("the default system text is the template's literal, never one of its expressions") @(t : T?) {
+        let cases = [
+            (name = "template text (Qwen2.5-Omni)", want = "You are a helpful assistant.",
+             src = "\{% if loop.first and message['role'] != 'system' %}<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n\{% endif %}<|im_start|>\{\{ message['role'] }}"),
+            (name = "a string literal (Qwen2.5)", want = "You are Qwen, created by Alibaba Cloud. You are a helpful assistant.",
+             src = "\{\{- '<|im_start|>system\\n' + messages[0]['content'] + '<|im_end|>\\n' }}\{%- else %}\{\{- '<|im_start|>system\\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\\n' }}"),
+            (name = "an expression alone (Qwen3.5)", want = "",
+             src = "\{\{- '<|im_start|>system\\n' }}\{\{- \"# Tools\" }}<|im_end|>\{\{- '<|im_start|>system\\n' + content + '<|im_end|>\\n' }}"),
+            (name = "no system literal at all", want = "",
+             src = "\{\{- '<|im_start|>' + message.role + '\\n' + content + '<|im_end|>' }}")
+        ]
+        for (c in cases) {
+            var m = Model()
+            m.chat_template_str = c.src
+            var inscope tmpl <- chat_template(m)
+            t |> equal(tmpl.default_system, c.want, c.name)
+            delete m
+        }
+    }
+}
+
+//! one audio turn rendered with `before` bytes of the user text ahead of the splice: the head closes with the opening marker
+//! and carries exactly that text, the tail the rest
+def private audio_splice_cell(t : T?; m : Model; before : int) {
+    var c <- create_chat_renderer_(m)
+    add_user(c, USR)
+    c.n_audio_rows = 3l
+    var inscope head : array<int64>
+    var inscope tail : array<int64>
+    render_prompt_audio(m, c, head, tail, before)
+    let h = detok(m, head)
+    let tl = detok(m, tail)
+    let lead = slice(USR, 0, max(before, 4))
+    let rest = slice(USR, before)
+    to_log(LOG_INFO, "voxtral audio at {before}: '{h}' [audio x3] '{tl}'\n")
+    t |> equal(head[length(head) - 1], special_id(m, "[BEGIN_AUDIO]"), "{before}: the head still closes with the opening marker")
+    t |> success(before == 0 ? find(h, lead) < 0 : find(h, lead) >= 0, "{before}: the head carries exactly the text ahead of the audio")
+    t |> success(before == length(USR) ? find(tl, "time") < 0 : find(tl, rest) >= 0, "{before}: the tail carries the text after it")
+    delete c
+}
+
 // The chat-audio marker gate: render_prompt_audio must bracket the soft-token splice in the
 // family's audio markers — the render-side half of the chat-audio rail (encoder numerics are
 // test_audio's; nothing else pins these template tags against a real vocab).
@@ -1019,6 +1296,17 @@ def test_chat_audio_markers(t : T?) {
         t |> equal(head[length(head) - 1], ba, "head closes with the opening audio marker")
         t |> success(!empty(tail) && tail[0] != ba, "no closing marker - the tail starts with text")
         delete c
+        delete m
+    }
+    t |> run("the audio splices where the message put it: ahead of the text, after it, inside it") @(t : T?) {
+        let path = path_join(models_dir(), "voxtral-mini-3b-q8_0.gguf")
+        if (!model_available(t, path)) {
+            return
+        }
+        var m <- load_capped(path)
+        for (before in [0, 4, length(USR)]) {
+            audio_splice_cell(t, m, before)
+        }
         delete m
     }
     t |> run("qwen2audio audio turn is bracketed by <|audio_bos|>/<|audio_eos|>") @(t : T?) {

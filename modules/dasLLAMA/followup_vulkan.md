@@ -2151,3 +2151,10 @@ module) is independent and can land any time - it is pure structure.
     changes the k4 bytes behind the `khrx` and `mmqx` races and every recorded probe reading in
     `PERF_LEDGER.md`. The fold is admissible only together with a re-reading of those rows, in a session
     that re-stamps them.
+
+144. **The gemma4a chain declines a widening audio embedder.** The Vulkan chain's projector tail sizes
+   one tail width for the out projection, the norm and the embedder (`tail_dim`), which holds where
+   the embedder is square (E2B). On E4B the embedder widens the encoder's 1536 to the decoder's 2560
+   (`gemma4a_mid_dim` against `proj_dim`), and the chain declines `shape`, so the CPU chain serves
+   E4B audio. Done = the tail's regions, tiles and buffers at the two widths (the Metal chain's
+   `g4a_tail_body` is the form), and `test_gemma4a_vulkan_twin` run on the E4B pair.

@@ -1160,7 +1160,7 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
     let rel_cap_rows = past + 1l
     let tail_dim = t.proj_dim
     if (d % 64l != 0l || ff % 64l != 0l || ff < 2l * d || t.n_head * hs != d || (hs != 64l && hs != 128l) || past != int64(G4A_ATTN_PAST) || gemma4a_softcap() != G4A_ATTN_CAP
-            || npos > VT_MAX_ENCODE_ROWS || npos <= 0l || tail_dim % 64l != 0l || tail_dim > max(d, ff)) {
+            || npos > VT_MAX_ENCODE_ROWS || npos <= 0l || tail_dim % 64l != 0l || tail_dim > max(d, ff) || tail_dim != gemma4a_mid_dim(t)) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
     let arm = vt_arm(r)
@@ -3752,7 +3752,7 @@ def dasllama_vulkan_tower_register {
         register_gemma4a_gpu(@@vulkan_gemma4a_blocks, @@vulkan_tower_serves_exact)
         register_canary_gpu(@@vulkan_canary_blocks, @@vulkan_tower_serves_exact)
         register_qwen3a_front_gpu(@@vulkan_q3a_front)
-        register_qwen3a_mel_gpu(@@vulkan_q3a_mel)
+        register_whisper_mel_gpu(@@vulkan_q3a_mel)
         register_gemma4a_chunk_gpu(@@vulkan_gemma4a_chunk)
         register_canary_front_gpu(@@vulkan_canary_front)
     }

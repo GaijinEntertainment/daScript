@@ -244,7 +244,7 @@ def test_vision_chat_e2b_nothink(t : T?) {
             // the model opens with a thought block despite the closed empty prefill; the armed
             // matcher files it as reasoning and the answer is the content half
             let sp = split_reasoning_(chat.tmpl, reply)
-            to_log(LOG_INFO, "vision caption (E2B/gemma4v, thinking off): reasoning {length(sp.reasoning)} chars, content: {replace(sp.content, "\n", "\\n")}\n")
+            to_log(LOG_INFO, "vision caption (E2B/gemma4v, thinking off): {stats(chat.session).n_gen} tokens, reasoning {length(sp.reasoning)} chars, content: {replace(sp.content, "\n", "\\n")}\n")
             tt |> success(n_pieces > 0, "the turn generated tokens")
             tt |> success(find(to_lower(sp.content), "cat") >= 0, "the content half describes the cats as cats")
             tt |> success(find(sp.content, "<channel|>") < 0 && find(sp.content, "<|channel>") < 0, "no channel marker reaches the content half")

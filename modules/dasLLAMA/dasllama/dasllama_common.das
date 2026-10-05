@@ -386,6 +386,20 @@ def ple_pre_prefill_pad(t : Model; var s : Session; npos : int64) {
     invoke(g_ple_pre_prefill_pad, t, s, npos)
 }
 
+//! The prefill pre-step over rows `tokens[off ..]`: offered to the device driver with the ids stashed, the CPU
+//! pre-step on decline. The model_proj GEMM inside the finish is the whole cost, so an eligible driver gets the offer.
+def ple_pre_prefill_gated(t : Model; var s : Session; tokens : array<int64>; off, npos, start_pos : int64) {
+    s.ple_gpu_tokens |> resize(npos)
+    for (p in range64(npos)) {
+        s.ple_gpu_tokens[p] = tokens[off + p]
+    }
+    if (g_ple_gpu_gate_set && invoke(g_ple_gpu_gate, t, s, npos, start_pos)) {
+        s.ple_gpu_pending = true
+    } else {
+        ple_pre_prefill(t, s, s.ple_gpu_tokens, npos)
+    }
+}
+
 //! The embd-prefill twin of the token path's PLE gate: offer the pre-step to the device driver
 //! (pad ids stashed — the media path has no tokens), CPU pad impl on decline. The model_proj
 //! GEMM inside the finish is the whole cost, so an eligible driver must get the offer here too.
@@ -1514,6 +1528,10 @@ struct ChatTemplate {
     add_bos : bool = false                    // prepend the tokenizer BOS at conversation start
     prelude : ChatTurn = ChatTurn()           // conversation-start parts after BOS (glm4moe: [gMASK]<sop>)
     system : ChatTurn = ChatTurn()
+    default_system : string = ""              // the system text the model's own template states for a conversation that opens with none
+    system_lead : string = ""                 // text the template writes ahead of every system turn's content (Llama-3.1+: the knowledge-cutoff line)
+    system_dated : bool = false               // the template follows `system_lead` with a "Today Date:" line, so a system turn renders on every conversation
+    system_date : string = ""                 // that line's date where the template fixes one; "" = the day the turn renders
     user : ChatTurn = ChatTurn()
     assistant_open : ChatTurn = ChatTurn()
     assistant_close : ChatTurn = ChatTurn()   // empty = derive from the user turn's tail parts
@@ -2520,6 +2538,7 @@ struct Session {
     @scratch ple_proj : array<float>     // model-proj scratch for the pre-step (npos x n_layers x ple)
     @scratch ple_gate : array<float>     // per-(position) gate vector for the layer block (npos x ple)
     @scratch ple_gpu_tokens : array<int64>  // stashed token rows for a driver-owned pre-step (see register_ple_gpu_gate)
+    @scratch embd_ids : array<int64>        //!< the token id of each row of the embedding body about to prefill, 0 for a media row; empty = every row the padding token's
     ple_gpu_pending : bool      // forward_prefill skipped the CPU pre-step — the engaged driver builds it
     @scratch embed_gpu_tokens : array<int64>
     embed_gpu_pending : bool
@@ -3422,6 +3441,31 @@ def create_kv_pool_(c : Config; page_rows : int64; kdt, vdt : KVDtype) : KVPool 
     return <- p
 }
 
+let KV_POOL_RESERVE_BYTES = 4l * 1024l * 1024l * 1024l
+
+//! Reserve address room for `positions` cached positions, up to KV_POOL_RESERVE_BYTES: growth inside the
+//! reserve moves no blob. The reserve is untouched memory - pages commit as groups are written.
+def kv_pool_reserve(var p : KVPool; positions : int64) {
+    var group_bytes = 0l
+    for (kb, vb in p.krow_bytes, p.vrow_bytes) {
+        group_bytes += (kb + vb) * p.page_rows
+    }
+    return if (group_bytes <= 0l)
+    let groups = min((positions + p.page_rows - 1l) / p.page_rows, KV_POOL_RESERVE_BYTES / group_bytes)
+    for (b in range64(p.nblobs)) {
+        p.kblobs[b] |> reserve(groups * p.page_rows * p.krow_bytes[b])
+        p.vblobs[b] |> reserve(groups * p.page_rows * p.vrow_bytes[b])
+    }
+}
+
+//! A group is written before it is read - a recycled one already hands out stale rows - so the new rows stay unfilled.
+def private kv_blob_grow(var blob : array<uint8>; need : int64) {
+    if (long_capacity(blob) < need) {
+        blob |> reserve(need)
+    }
+    blob |> resize_no_init(need)
+}
+
 // Double the pool's group capacity. Every blob resizes IN PLACE — a hoisted cache pointer would
 // dangle, which is why kv_ensure runs at the top of the forward entries, before any hoist.
 [cold_path]   // doubling growth: amortized O(1) per page, and never on a flat session
@@ -3429,8 +3473,8 @@ def private kv_pool_grow(var p : KVPool) {
     let oldcap = p.capacity_groups
     let newcap = oldcap <= 0l ? 4l : oldcap * 2l
     for (b in range64(p.nblobs)) {
-        p.kblobs[b] |> reserve_resize(newcap * p.page_rows * p.krow_bytes[b])
-        p.vblobs[b] |> reserve_resize(newcap * p.page_rows * p.vrow_bytes[b])
+        kv_blob_grow(p.kblobs[b], newcap * p.page_rows * p.krow_bytes[b])
+        kv_blob_grow(p.vblobs[b], newcap * p.page_rows * p.vrow_bytes[b])
     }
     p.refcnt |> resize(newcap)
     p.gen |> resize(newcap)
@@ -6191,15 +6235,7 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
     }
     if (has_ple(c)) {  // gemma-4 E-series: build each position's per-(layer) side input before the stack
         let ts_ple = prof_ticks()
-        if (g_ple_gpu_gate_set && invoke(g_ple_gpu_gate, t, s, npos, start_pos)) {
-            s.ple_gpu_tokens |> resize(npos)
-            for (p in range64(npos)) {
-                s.ple_gpu_tokens[p] = tokens[p]
-            }
-            s.ple_gpu_pending = true
-        } else {
-            ple_pre_prefill(t, s, tokens, npos)
-        }
+        ple_pre_prefill_gated(t, s, tokens, 0l, npos, start_pos)
         prof_add("ple", ts_ple)
     }
 

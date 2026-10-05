@@ -44,6 +44,7 @@ def test_prefix_accounting(t : T?) {
         t |> equal(1, pool.refcnt[g1])
         // np == 8 -> pages_max = (8-1)/4 = 1 whole page shared, then three rows of the second as a COPY: the cap leaves one token to eval for logits
         var w <- make_run_state_paged(c, pool)
+        t |> equal(7l, prefix_match_len_(cache, pool, toks), "the probe reads what the attach will attach")
         t |> equal(7l, prefix_attach_(cache, pool, w, toks))
         t |> equal(7l, w.n_past)
         t |> equal(2, length(w.block_table))
@@ -55,11 +56,13 @@ def test_prefix_accounting(t : T?) {
         // a longer prompt with the same 8-token prefix attaches BOTH pages
         var toks12 <- [for (i in range64(12l)); i < 8l ? 100l + i : 900l + i]
         var w2 <- make_run_state_paged(c, pool)
+        t |> equal(8l, prefix_match_len_(cache, pool, toks12), "the probe reads what the attach will attach")
         t |> equal(8l, prefix_attach_(cache, pool, w2, toks12))
         t |> equal(3, pool.refcnt[g0])
         // divergence in page 0 -> no match, nothing attached
         var other <- [for (i in range64(8l)); 500l + i]
         var w3 <- make_run_state_paged(c, pool)
+        t |> equal(0l, prefix_match_len_(cache, pool, other), "the probe reads what the attach will attach")
         t |> equal(0l, prefix_attach_(cache, pool, w3, other))
         t |> equal(0, length(w3.block_table))
         t |> equal(0l, w3.n_past)
@@ -97,6 +100,7 @@ def test_prefix_lru_budget(t : T?) {
         t |> equal(2, pool.refcnt[s.block_table[1]])
         // page 0 is gone and the chain starts there -> attach misses at once
         var w <- make_run_state_paged(c, pool)
+        t |> equal(0l, prefix_match_len_(cache, pool, toks), "the probe reads what the attach will attach")
         t |> equal(0l, prefix_attach_(cache, pool, w, toks))
         release_kv_pages_(s)
         prefix_release_(cache, pool)
@@ -140,12 +144,14 @@ def test_prefix_tail_edges(t : T?) {
         // one whole hit, then two rows of A1 - of the two pages past A0, the one the prompt shares rows with
         var two <- [100l, 101l, 102l, 103l, 104l, 105l, 999l, 998l]
         var w1 <- make_run_state_paged(c, pool)
+        t |> equal(6l, prefix_match_len_(cache, pool, two), "the probe reads what the attach will attach")
         t |> equal(6l, prefix_attach_(cache, pool, w1, two), "A1 follows A0 and the prompt shares its two rows")
         t |> equal(1l, cache.n_hit_partial)
         t |> success(w1.block_table[1] != ga1 && w1.block_table[1] != gb1, "the partly shared page is a copy")
         // the same hit, then three rows of B1: the second donation's page past A0 serves a prompt that follows it
         var like_b <- [100l, 101l, 102l, 103l, 704l, 705l, 706l, 999l, 998l]
         var w2 <- make_run_state_paged(c, pool)
+        t |> equal(7l, prefix_match_len_(cache, pool, like_b), "the probe reads what the attach will attach")
         t |> equal(7l, prefix_attach_(cache, pool, w2, like_b), "B1 follows A0 too, and the prompt shares three of its rows")
         t |> success(w2.block_table[1] != ga1 && w2.block_table[1] != gb1, "and its page is a copy as well")
         release_kv_pages_(w2)
@@ -212,6 +218,7 @@ def test_prefix_first_page_edges(t : T?) {
         t |> equal(2, length(cache.roots), "each donation's first page is a candidate")
         var like_a <- [100l, 101l, 102l, 900l, 901l]
         var w0 <- make_run_state_paged(c, pool)
+        t |> equal(3l, prefix_match_len_(cache, pool, like_a), "the probe reads what the attach will attach")
         t |> equal(3l, prefix_attach_(cache, pool, w0, like_a), "three rows of A's page beat two of B's")
         var chains <- prefix_chain_list_(cache)
         t |> equal(1l, [for (ch in chains); ch.hits] |> sum(), "the chain whose first page was copied is credited the hit")
@@ -219,12 +226,15 @@ def test_prefix_first_page_edges(t : T?) {
         t |> success(length(w0.block_table) == 1 && w0.block_table[0] != ga && w0.block_table[0] != gb, "the page is a copy")
         var like_b <- [100l, 101l, 502l, 900l, 901l]
         var w1 <- make_run_state_paged(c, pool)
+        t |> equal(3l, prefix_match_len_(cache, pool, like_b), "the probe reads what the attach will attach")
         t |> equal(3l, prefix_attach_(cache, pool, w1, like_b), "three leading rows of B's whole page")
         var same_a <- [100l, 101l, 102l]
         var w2 <- make_run_state_paged(c, pool)
+        t |> equal(2l, prefix_match_len_(cache, pool, same_a), "the probe reads what the attach will attach")
         t |> equal(2l, prefix_attach_(cache, pool, w2, same_a), "the same prompt again stops a token short, so the tail eval lands logits")
         var none <- [777l, 100l, 101l]
         var w3 <- make_run_state_paged(c, pool)
+        t |> equal(0l, prefix_match_len_(cache, pool, none), "the probe reads what the attach will attach")
         t |> equal(0l, prefix_attach_(cache, pool, w3, none))
         t |> success(empty(w3.block_table), "a prompt sharing no first row takes no page")
         t |> equal(3l, cache.n_hit_partial)
@@ -278,6 +288,7 @@ def test_prefix_verify_tokens(t : T?) {
             e.tokens[0] = 424242l
         }
         var w <- make_run_state_paged(c, pool)
+        t |> equal(0l, prefix_match_len_(cache, pool, toks), "the probe reads what the attach will attach")
         t |> equal(0l, prefix_attach_(cache, pool, w, toks))
         t |> equal(0, length(w.block_table))
         release_kv_pages_(s)
@@ -333,6 +344,7 @@ def test_prefix_checkpoint_accounting(t : T?) {
         prefix_insert_(cache, pool, s, toks)
         t |> equal(1, length(cache.states), "the same tokens leave no second checkpoint")
         var w <- mk_recurrent(c, pool, 0l)
+        t |> equal(0l, prefix_match_len_(cache, pool, toks), "a recurrent cache attaches at checkpoints: the probe answers nothing held")
         t |> equal(6l, prefix_attach_(cache, pool, w, toks), "a prompt past the checkpoint attaches all of it")
         t |> equal(6l, w.n_past)
         t |> equal(6l, w.dn_pos, "the recurrent state stands at the checkpoint")
@@ -345,8 +357,10 @@ def test_prefix_checkpoint_accounting(t : T?) {
         t |> equal(1, pool.refcnt[w.block_table[1]])
         var same <- [for (i in range64(6l)); 100l + i]
         var w2 <- mk_recurrent(c, pool, 0l)
+        t |> equal(0l, prefix_match_len_(cache, pool, same), "the probe reads what the attach will attach")
         t |> equal(0l, prefix_attach_(cache, pool, w2, same), "a prompt the checkpoint covers whole attaches nothing: its last token must be evaled")
         var other <- [for (i in range64(9l)); i < 5l ? 100l + i : 700l + i]
+        t |> equal(0l, prefix_match_len_(cache, pool, other), "the probe reads what the attach will attach")
         t |> equal(0l, prefix_attach_(cache, pool, w2, other), "a prompt leaving the checkpoint's tokens early attaches nothing: the state is at one position only")
         release_kv_pages_(s)
         release_kv_pages_(w)
@@ -375,6 +389,7 @@ def test_prefix_checkpoint_accounting(t : T?) {
         prefix_insert_(cache, pool, off, toks)
         t |> equal(1, length(cache.states))
         var w <- mk_recurrent(c, pool, 0l)
+        t |> equal(0l, prefix_match_len_(cache, pool, toks), "a recurrent cache attaches at checkpoints: the probe answers nothing held")
         t |> equal(8l, prefix_attach_(cache, pool, w, toks))
         t |> equal(off.block_table[0], w.block_table[0], "the first page is shared")
         t |> success(w.block_table[1] != off.block_table[1], "the page of row 7 is copied though it is whole: the draft head rewrites that row")
@@ -508,6 +523,7 @@ def test_prefix_checkpoint_side_state(t : T?) {
         var w <- mk_recurrent(c, pool, 0l)
         w.ple_prev <- [-1l, -1l]
         w.ple_conv_hist |> reserve_resize(6l)
+        t |> equal(0l, prefix_match_len_(cache, pool, toks), "a recurrent cache attaches at checkpoints: the probe answers nothing held")
         t |> equal(6l, prefix_attach_(cache, pool, w, toks))
         t |> success(w.ple_prev[0] == 7l && w.ple_prev[1] == 8l, "the attached session holds the checkpoint's last tokens ({w.ple_prev[0]}, {w.ple_prev[1]})")
         t |> success(w.ple_conv_hist[0] == 6000.0 && w.ple_conv_hist[5] == 6005.0, "and its conv history ({w.ple_conv_hist[0]} .. {w.ple_conv_hist[5]})")
@@ -591,6 +607,7 @@ def test_prefix_warm_equals_cold(t : T?) {   // nolint:STYLE038 — cold/warm/di
             release_kv_pages_(cold)
             // WARM: attach 2 pages ((21-1)/8) shared and four rows of the third copied, classic-eval only the last token
             var warm <- make_run_state_paged(c, pool)
+            t |> equal(20l, prefix_match_len_(cache, pool, prompt), "the probe reads what the attach will attach")
             t |> equal(20l, prefix_attach_(cache, pool, warm, prompt))
             t |> equal(g0, warm.block_table[0])   // the whole pages are SHARED, not copied
             t |> equal(g1, warm.block_table[1])
@@ -617,6 +634,7 @@ def test_prefix_warm_equals_cold(t : T?) {   // nolint:STYLE038 — cold/warm/di
             var cold2 <- make_run_state_paged(c, pool)
             eval_(tr, cold2, prompt2)
             var warm2 <- make_run_state_paged(c, pool)
+            t |> equal(16l, prefix_match_len_(cache, pool, prompt2), "the probe reads what the attach will attach")
             t |> equal(16l, prefix_attach_(cache, pool, warm2, prompt2))
             var tail2 <- [for (j in range64(16l, 24l)); prompt2[j]]
             eval_(tr, warm2, tail2)

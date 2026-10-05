@@ -392,7 +392,7 @@ def private wm_mm_rq(w : WhisperModel; var y : array<float>; woff : int64; x : a
 
 // ===== ggml bin container parsing =====
 
-// One tensor's location in the bin: ggml ttype (0=f32, 1=f16), element count, absolute
+// One tensor's location in the bin: ggml ttype (0=f32, 1=f16, 8=q8_0), element count, absolute
 // byte offset of the raw data (which follows the name with NO alignment padding).
 struct private WTensorRec {
     ttype : int
@@ -411,7 +411,9 @@ def private bytes_str(b : array<uint8> | #; o, n : int64) : string {
     return s
 }
 
-// Read a tensor's raw data (f32 or f16) into dst[dst_off..) as fp32. Byte-wise reads — the
+let private GGML_FTYPE_MOSTLY_Q8_0 = 7   //!< the file type whisper.cpp's quantizer stamps a q8_0 bin with
+
+// Read a tensor's raw data (f32, f16 or Q8_0 blocks) into dst[dst_off..) as fp32. Byte-wise reads — the
 // bin stores tensor data unaligned.
 def private wt_read(recs : table<string; WTensorRec>; b : array<uint8> | #; name : string;
                     var dst : array<float>; dst_off, n : int64) {
@@ -422,15 +424,7 @@ def private wt_read(recs : table<string; WTensorRec>; b : array<uint8> | #; name
     if (r.n_elem != n) {
         panic("dasLLAMA whisper: tensor '{name}' has {r.n_elem} elements, want {n}")
     }
-    if (r.ttype == GGML_TYPE_F32) {
-        for (i in range64(n)) {
-            dst[dst_off + i] = rd_f32(b, r.off + i * 4l)
-        }
-    } else {
-        for (i in range64(n)) {
-            dst[dst_off + i] = f16_to_f32(rd_u16(b, r.off + i * 2l))
-        }
-    }
+    ggml_bin_read_f32(b, r.ttype, r.off, n, dst, dst_off)
 }
 
 // Conv1d weight (flat [c_out][c_in][k=3], k contiguous — torch layout) permuted to the
@@ -802,8 +796,8 @@ def private whisper_index(bytes : array<uint8> | #; n_bytes : int64; var st : Wh
     st.e.n_text_layer = int64(rd_i32(bytes, o)); o += 4l
     let n_mels = int64(rd_i32(bytes, o)); o += 4l
     let ftype = rd_i32(bytes, o) % 1000; o += 4l
-    if (ftype != GGML_TYPE_F32 && ftype != GGML_TYPE_F16) {
-        panic("dasLLAMA whisper: unsupported ftype {ftype} (only f32/f16 bins)")
+    if (ftype != GGML_TYPE_F32 && ftype != GGML_TYPE_F16 && ftype != GGML_FTYPE_MOSTLY_Q8_0) {
+        panic("dasLLAMA whisper: unsupported ftype {ftype} (f32, f16 and q8_0 bins load)")
     }
 
     // mel filterbank
@@ -866,8 +860,8 @@ def private whisper_index(bytes : array<uint8> | #; n_bytes : int64; var st : Wh
         let nl = int64(rd_i32(bytes, o + 4l))
         let tt = rd_i32(bytes, o + 8l)
         o += 12l
-        if (tt != GGML_TYPE_F32 && tt != GGML_TYPE_F16) {
-            panic("dasLLAMA whisper: unsupported tensor type {tt} (only f32/f16 bins)")
+        if (tt != GGML_TYPE_F32 && tt != GGML_TYPE_F16 && tt != GGML_TYPE_Q8_0) {
+            panic("dasLLAMA whisper: unsupported tensor type {tt} (f32, f16 and q8_0 tensors load)")
         }
         var ne = 1l
         for (_i in range(nd)) {
@@ -877,7 +871,7 @@ def private whisper_index(bytes : array<uint8> | #; n_bytes : int64; var st : Wh
         let name = bytes_str(bytes, o, nl)
         o += nl
         recs[name] = WTensorRec(ttype = tt, n_elem = ne, off = o)
-        o += ne * (tt == GGML_TYPE_F32 ? 4l : 2l)
+        o += ggml_bin_tensor_bytes(tt, ne)
     }
 
     // encoder tower layout -> AudioTower scalars + one job per tensor, in blob-offset order

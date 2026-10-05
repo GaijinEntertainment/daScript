@@ -819,6 +819,177 @@ def private pk_xf_gate(t : T?; var dev, queue) {
     }
 }
 
+//! Canary's log and per-feature normalization, in place over the mel sums: log(sum + floor), the mean and the Bessel
+//! deviation over the valid frames in double, every valid frame normalized and the frames past them zero; rows past
+//! the mel keep their sentinel.
+def private cn_melnorm_gate(t : T?; var dev, queue) {
+    let tag = "cn_melnorm"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kd = kernel_of(@@enc_cn_melnorm)
+        var pso = mc |> keep_stamp(kd, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let nmel = 70      // off the 64-thread group: the last group's guard runs
+        let nlen = 11
+        let valid = 7
+        let rows = 13      // two rows past the mel: untouched
+        let mfloor = 5.960464477539063e-08
+        var inscope x <- [for (i in range(rows * nmel)); 0.001 + float((i * 37) % 101) * 0.37]
+        var inscope want := x
+        for (j in range(nmel)) {
+            var sum = 0.0lf
+            for (i in range(valid)) {
+                sum += log(double(x[i * nmel + j]) + double(mfloor))
+            }
+            let mean = sum / double(valid)
+            var sq = 0.0lf
+            for (i in range(valid)) {
+                let dv = log(double(x[i * nmel + j]) + double(mfloor)) - mean
+                sq += dv * dv
+            }
+            let denom = sqrt(sq / double(valid - 1)) + 1e-5lf
+            for (i in range(nlen)) {
+                want[i * nmel + j] = i < valid ? float((log(double(x[i * nmel + j]) + double(mfloor)) - mean) / denom) : 0.0
+            }
+        }
+        var ka = CnMelNormArgs(nmel = uint(nmel), nlen = uint(nlen), valid = uint(valid), mfloor = mfloor)
+        let bx = mc |> io_(x)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            invoke(kd.enc, enc, pso, mc.buf[bx], ka, int64(nmel))
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bx], want, BAR_APPROX, Shape(row_width = nmel))
+    }
+}
+
+//! The whisper-class projector tails' two row kernels at a width off the 64-thread group: the pair pool against the
+//! mean of each row pair, the row-split gate against silu(second half) * first half - the fixture's halves differ, so
+//! the gate with its halves swapped misses on most elements (asserted on the host).
+def private tw_tail_rows_gate(t : T?; var dev, queue) {
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kp = kernel_of(@@enc_tw_pool2)
+        let kg = kernel_of(@@enc_tw_swiglu_rows)
+        var pso_p = mc |> keep_stamp(kp, err)
+        return if (!pso_ok(t, "tw_pool2", pso_p, err))
+        var pso_g = mc |> keep_stamp(kg, err)
+        return if (!pso_ok(t, "tw_swiglu_rows", pso_g, err))
+        let width = 70
+        let rows = 5
+        let total = rows * width
+        var inscope x <- [for (i in range(2 * total)); float((i * 37) % 101 - 50) * 0.043]
+        var inscope pooled <- [for (i in range(total)); 0.5 * (x[(i / width) * 2 * width + i % width] + x[(i / width) * 2 * width + width + i % width])]
+        var inscope gated : array<float>
+        var inscope swapped : array<float>
+        for (i in range(total)) {
+            let a = double(x[(i / width) * 2 * width + i % width])
+            let g = double(x[(i / width) * 2 * width + width + i % width])
+            gated |> push(float(g / (1.0lf + exp(-g)) * a))
+            swapped |> push(float(a / (1.0lf + exp(-a)) * g))
+        }
+        var apart = 0
+        for (a, b in gated, swapped) {
+            apart += abs(a - b) > 1e-3 ? 1 : 0
+        }
+        t |> success(apart > total / 2, "tw_swiglu_rows: the fixture tells the halves apart ({apart} of {total})")
+        var ka = TwRowsArgs(width = uint(width), total = uint(total))
+        let bx = mc |> in_(x)
+        let bp = mc |> out_(total)
+        let bg = mc |> out_(total)
+        let ran = mc |> cell_record(t, "tw_tail_rows") $(enc : MetalComputeEncoder?) {
+            invoke(kp.enc, enc, pso_p, mc.buf[bx], mc.buf[bp], ka, int64(total))
+            invoke(kg.enc, enc, pso_g, mc.buf[bx], mc.buf[bg], ka, int64(total))
+        }
+        return if (!ran)
+        check_buf(t, "tw_pool2", mc.buf[bp], pooled, BAR_APPROX, Shape(row_width = width))
+        check_buf(t, "tw_swiglu_rows", mc.buf[bg], gated, BAR_APPROX, Shape(row_width = width))
+    }
+}
+
+//! A vision tail's row standardize, in place, at a width off the 64-thread group: (x * scale - b[c]) * m[c] against the
+//! host form, two rows past the run left as they were; the form with no scale misses on most elements (asserted on the host).
+def private tw_affine_gate(t : T?; var dev, queue) {
+    let tag = "tw_affine_rows"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kd = kernel_of(@@enc_tw_affine_rows)
+        var pso = mc |> keep_stamp(kd, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let width = 70
+        let rows = 5
+        let total = rows * width
+        let scale = 27.712812   // sqrt(768)
+        var inscope x <- [for (i in range((rows + 2) * width)); float((i * 37) % 101 - 50) * 0.043]
+        var inscope b <- [for (i in range(width)); float((i * 7) % 13 - 6) * 0.31]
+        var inscope m <- [for (i in range(width)); 0.5 + float((i * 5) % 11) * 0.17]
+        var inscope want := x
+        var apart = 0
+        for (i in range(total)) {
+            want[i] = (x[i] * scale - b[i % width]) * m[i % width]
+            apart += abs(want[i] - (x[i] - b[i % width]) * m[i % width]) > 1e-3 ? 1 : 0
+        }
+        t |> success(apart > total / 2, "{tag}: the fixture tells the scale apart ({apart} of {total})")
+        var ka = TwAffineArgs(width = uint(width), total = uint(total), scale = scale)
+        let bx = mc |> io_(x)
+        let bb = mc |> in_(b)
+        let bm = mc |> in_(m)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            invoke(kd.enc, enc, pso, mc.buf[bx], mc.buf[bb], mc.buf[bm], ka, int64(total))
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bx], want, BAR_APPROX, Shape(row_width = width))
+    }
+}
+
+//! A vision tail's grid mean pool at a width off the 64-thread group: a 6 x 4 row grid pooled 2 x 2 into 3 x 2 rows
+//! against the host mean of each block; the pool along the other axis alone misses on most elements (asserted on the host).
+def private tw_pool2d_gate(t : T?; var dev, queue) {
+    let tag = "tw_pool2d"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kd = kernel_of(@@enc_tw_pool2d)
+        var pso = mc |> keep_stamp(kd, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let width = 70
+        let gw = 6
+        let gh = 4
+        let k = 2
+        let ow = gw / k
+        let total = ow * (gh / k) * width
+        var inscope x <- [for (i in range(gw * gh * width)); float((i * 37) % 101 - 50) * 0.043]
+        var inscope want : array<float>
+        var inscope row_only : array<float>
+        for (i in range(total)) {
+            let o = i / width
+            let c = i % width
+            var sum = 0.0lf
+            var row = 0.0lf
+            for (dy in range(k)) {
+                for (dx in range(k)) {
+                    let v = double(x[(((o / ow) * k + dy) * gw + (o % ow) * k + dx) * width + c])
+                    sum += v
+                    row += dy == 0 ? v : 0.0lf
+                }
+            }
+            want |> push(float(sum / double(k * k)))
+            row_only |> push(float(row / double(k)))
+        }
+        var apart = 0
+        for (a, b in want, row_only) {
+            apart += abs(a - b) > 1e-3 ? 1 : 0
+        }
+        t |> success(apart > total / 2, "{tag}: the fixture tells a one-axis pool apart ({apart} of {total})")
+        var ka = TwPool2dArgs(width = uint(width), gw = uint(gw), k = uint(k), ow = uint(ow), total = uint(total))
+        let bx = mc |> in_(x)
+        let by = mc |> out_(total)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            invoke(kd.enc, enc, pso, mc.buf[bx], mc.buf[by], ka, int64(total))
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], want, BAR_APPROX, Shape(row_width = width))
+    }
+}
+
 //! A 1x1 conv's bias and ReLU over its rows, in place: max(x + b, 0) against the same f32 form, the fixture on
 //! both sides of zero.
 def private bias_relu_rows_gate(t : T?; var dev, queue) {
@@ -2725,6 +2896,10 @@ def test_metal_prefill_kernels(t : T?) {
                 pk_front_conv_gate(t, dev, queue, true)
                 pk_front_conv_gate(t, dev, queue, false)
                 pk_xf_gate(t, dev, queue)
+                cn_melnorm_gate(t, dev, queue)
+                tw_tail_rows_gate(t, dev, queue)
+                tw_pool2d_gate(t, dev, queue)
+                tw_affine_gate(t, dev, queue)
                 bias_relu_rows_gate(t, dev, queue)
                 st2_conv_gate(t, dev, queue, false, false)
                 st2_conv_gate(t, dev, queue, true, false)

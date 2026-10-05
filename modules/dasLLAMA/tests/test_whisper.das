@@ -331,6 +331,7 @@ def test_parakeet_oracle(t : T?) {
             t |> equal(s.detected_lang, "en")
 
             reused_session_leg(t, m, s, samples)
+            heap_flat_leg(t, m, s, samples, "parakeet")
 
             t |> equal(m.pk.q8, !parakeet_gpu_serves(), "default load follows the lane policy - q8 unless the Metal driver serves")
             var inscope mf = AsrModel(kind = AsrKind.parakeet)
@@ -775,6 +776,197 @@ def test_whisper_vulkan_wdec_flush(t : T?) {
     }
 }
 
+//! A whisper.cpp q8_0 bin loads: its Q8_0 tensors read as their blocks' scale times the quants, and it transcribes what the
+//! f16 bin of the same model does.
+[test]
+def test_whisper_q8_0_file(t : T?) {
+    t |> run("ggml-tiny-q8_0.bin: a q8_0 bin loads and reads jfk as the f16 bin does") @(tt : T?) {
+        let f16_path = path_join(whisper_dir(), "ggml-tiny.bin")
+        let q8_path = path_join(whisper_dir(), "ggml-tiny-q8_0.bin")
+        return if (!jit_model_available(tt, f16_path) || !jit_model_available(tt, q8_path))
+        let samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+        if (empty(samples)) {
+            tt |> skip("jfk.wav not present")
+            return
+        }
+        set_asr_fp32(false)
+        set_asr_tower_fp32(false)
+        var inscope m16 <- mint_asr_whisper(f16_path)
+        var inscope m8 <- mint_asr_whisper(q8_path)
+        var from_f16 = ""
+        var from_q8 = ""
+        with_dasllama_jobque_() {
+            var inscope s16 <- create_session(m16)
+            from_f16 = transcribe(m16, s16, samples)
+            var inscope s8 <- create_session(m8)
+            from_q8 = transcribe(m8, s8, samples)
+        }
+        to_log(LOG_INFO, "whisper tiny f16 bin: '{from_f16}'\n")
+        to_log(LOG_INFO, "whisper tiny q8_0 bin: '{from_q8}'\n")
+        tt |> success(!empty(from_q8), "the q8_0 bin transcribes")
+        tt |> equal(from_q8, from_f16, "and reads what the f16 bin reads")
+    }
+}
+
+//! one parakeet bin staged and minted in memory on the lane `q8`, reading `samples`
+def private parakeet_text(path : string; q8 : bool; samples : array<float>) : string {
+    var inscope m = AsrModel(kind = AsrKind.parakeet)
+    var inscope stg <- stage_parakeet_model(path, q8)
+    mint_parakeet_model(stg, m.pk, q8)
+    var text = ""
+    with_dasllama_jobque_() {
+        var inscope s <- create_session(m, "en")
+        text = transcribe(m, s, samples)
+    }
+    return text
+}
+
+//! A parakeet q8_0 bin loads through the reader the whisper bins share, and reads what the f32 bin of the same model does.
+[test]
+def test_parakeet_q8_0_file(t : T?) {
+    t |> run("ggml-parakeet-tdt-0.6b-v3-q8_0.bin: a q8_0 bin loads and reads jfk as the f32 bin does") @(tt : T?) {
+        let f32_path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
+        let q8_path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-q8_0.bin")
+        return if (!jit_model_available(tt, f32_path) || !jit_model_available(tt, q8_path))
+        let samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+        if (empty(samples)) {
+            tt |> skip("jfk.wav not present")
+            return
+        }
+        let from_f32 = parakeet_text(f32_path, false, samples)
+        let from_q8 = parakeet_text(q8_path, false, samples)
+        to_log(LOG_INFO, "parakeet v3 f32 bin: '{from_f32}'\n")
+        to_log(LOG_INFO, "parakeet v3 q8_0 bin: '{from_q8}'\n")
+        tt |> success(!empty(from_q8), "the q8_0 bin transcribes")
+        tt |> equal(from_q8, from_f32, "and reads what the f32 bin reads")
+    }
+}
+
+//! The Metal tower fills the whisper blocks-with-post-norm seat: the post-norm runs behind the blocks on the device and the
+//! normed rows land in `xb`, where the CPU chain's post-norm would put them.
+[test]
+def test_whisper_metal_ln_post(t : T?) {
+    t |> run("ggml-tiny.bin: the encoder's post-norm on the Metal tower lands the CPU chain's normed rows") @(tt : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
+            return if (!jit_model_available(tt, model_path))
+            let samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                tt |> skip("jfk.wav not present")
+                return
+            }
+            var inscope w <- mint_whisper(model_path, false, false, -1l)
+            with_dasllama_jobque_() {
+                var padded : array<float>
+                var mel = WhisperMel()
+                log_mel_whisper(samples, w.mel, w.filters, w.enc.n_mel, padded, mel)
+                var win = MelChunk(n_mel = w.enc.n_mel, n_len = AUDIO_CHUNK_FRAMES)
+                win.data |> resize(w.enc.n_mel * AUDIO_CHUNK_FRAMES)
+                whisper_mel_window(mel, 0l, win)
+                var es <- make_encoder_state(w.enc)
+                set_metal_tower(false)
+                tt |> success(!audio_encode_blocks_ln_post(w.enc, es, win), "tower off: the seat declines and the CPU owes the post-norm")
+                var raw := es.x   // the blocks' rows before the post-norm: the control's reference
+                whisper_encode(w.enc, es, win)
+                var cpu := es.xb
+                set_metal_tower(true)
+                let s0 = metal_tower_stats()
+                tt |> success(audio_encode_blocks_ln_post(w.enc, es, win), "tower on: the seat served the blocks and the post-norm")
+                tt |> equal(metal_tower_stats().encodes - s0.encodes, 1l, "one device encode")
+                // a NaN on either side reads infinite in the difference, and in the scale where it is the reference's: the
+                // ratio is then infinite or NaN, outside the bar
+                let off = logits_maxdiff(es.xb, cpu) / logits_maxabs(cpu)
+                let unnormed = logits_maxdiff(es.xb, raw) / logits_maxabs(raw)
+                var normed := es.xb
+                // the post-norm is the unit: the blocks seat alone gives the device's own block rows, the CPU norms THOSE, and the
+                // device's normed rows must be that image - the block chain's device-vs-CPU distance stays out of the bar
+                audio_encode_blocks(w.enc, es, win)
+                var want : array<float>
+                want |> resize(length(es.x))
+                layernorm_batch(want, es.x, w.enc.fblob, w.enc.lnp_w_off, w.enc.lnp_b_off, w.enc.d_model, w.enc.n_ctx, w.enc.eps)
+                let ln_off = logits_maxdiff(normed, want) / logits_maxabs(want)
+                to_log(LOG_INFO, "whisper tiny ln_post: device norm vs the CPU norm of the device's block rows {ln_off}; vs the CPU chain {off}; vs the un-normed rows {unnormed}\n")
+                tt |> success(ln_off < 1e-4, "the device's post-norm is the CPU post-norm of the same rows ({ln_off})")
+                tt |> success(unnormed > 0.1, "the control: against the rows before the post-norm the compare misses ({unnormed})")
+                delete want
+                delete normed
+                delete raw
+                delete cpu
+                delete es
+                delete win
+                delete mel
+                delete padded
+            }
+            metal_tower_shutdown()
+        } else {
+            tt |> skip("dasMetal not present")
+        }
+    }
+}
+
+//! The Metal decoder leaves a window's cross-KV layouts on the device while its step serves; a first batch past the step's
+//! 32-row cap hands the window to the CPU chain, and the layouts land first.
+[test]
+def test_whisper_metal_wdec_flush(t : T?) {
+    t |> run("ggml-tiny.bin: the waiting cross-KV readback lands when the step declines; the CPU chain over it matches the knob-off chain") @(tt : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
+            return if (!jit_model_available(tt, model_path))
+            let samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
+            if (empty(samples)) {
+                tt |> skip("jfk.wav not present")
+                return
+            }
+            set_asr_fp32(false)
+            set_asr_tower_fp32(false)
+            var inscope m <- mint_asr_whisper(model_path)
+            let batch <- [for (i in range(33)); m.whisper.tok_sot + i]   // one past the step's cap, the first batch of a window
+            var batch_moved := batch
+            batch_moved[length(batch_moved) - 1]++
+            var cpu_logits : array<float>
+            var cpu_moved : array<float>
+            var dev_logits : array<float>
+            with_dasllama_jobque_() {
+                set_metal_wdec(false)
+                var inscope sc <- create_session(m)
+                transcribe(m, sc, samples) $(_seg) {}
+                sc.w.ds.n_past = 0l
+                whisper_decode_batch(m.whisper, sc.w.ds, batch)
+                cpu_logits := sc.w.ds.logits
+                sc.w.ds.n_past = 0l
+                whisper_decode_batch(m.whisper, sc.w.ds, batch_moved)
+                cpu_moved := sc.w.ds.logits
+                set_metal_wdec(true)
+                set_metal_wdec_step(true)
+                set_metal_wdec_step_min_d(0l)   // tiny sits under the step's serving floor: with it lifted the step serves and the layouts wait
+                let d0 = metal_wdec_stats()
+                var inscope sg <- create_session(m)
+                transcribe(m, sg, samples) $(_seg) {}
+                let d1 = metal_wdec_stats()
+                tt |> success(d1.windows - d0.windows >= 1l && d1.steps > d0.steps, "the device served the window's cross-KV and its steps ({d1.windows - d0.windows}, {d1.steps - d0.steps})")
+                for (i in range(length(sg.w.ds.kx))) {   // the host layouts are stale by construction: only a flush makes the CPU chain right
+                    sg.w.ds.kx[i] = 0.0
+                }
+                sg.w.ds.n_past = 0l
+                sg.w.ds.gpu_kv_gen = 0l
+                whisper_decode_batch(m.whisper, sg.w.ds, batch)
+                tt |> equal(metal_wdec_stats().steps, d1.steps, "the device served no step of the wide batch: the CPU chain decoded it over the flushed memory")
+                dev_logits := sg.w.ds.logits
+                wdec_flush_compare(tt, m.whisper, cpu_logits, dev_logits, cpu_moved)   // inside the queue: the argmax is the parallel one
+                set_metal_wdec_step_min_d(METAL_WDEC_STEP_MIN_D)
+            }
+            delete cpu_logits
+            delete cpu_moved
+            delete dev_logits
+            delete m
+            metal_wdec_shutdown()
+            metal_tower_shutdown()
+        } else {
+            tt |> skip("dasMetal not present")
+        }
+    }
+}
+
 //! a lifetime cell's seat: tiny on jfk, both drivers on, the q8 default load, one session created for `body` the way a serving
 //! worker reuses one - the decoder's window lifetime across that session's transcriptions is the claim
 def private wdec_lifetime_cell(tt : T?; body : block<(m : AsrModel; var s : AsrSession; samples : array<float>) : void>) {
@@ -867,6 +1059,20 @@ def private session_segs(m; var s; samples : array<float>) : array<TranscribeSeg
         segs |> push_clone(seg)
     }
     return <- segs
+}
+
+//! A serving worker transcribes clip after clip on one session: the heap after the fourth transcription of a clip is the
+//! heap after the second (within 256 KB), so a transcription frees what it allocates.
+def private heap_flat_leg(t : T?; m; var s; samples : array<float>; tag : string) {
+    for (_i in range(2)) {
+        var inscope warm <- session_segs(m, s, samples)
+    }
+    let h0 = heap_bytes_allocated()
+    for (_i in range(2)) {
+        var inscope again <- session_segs(m, s, samples)
+    }
+    let h1 = heap_bytes_allocated()
+    t |> success(h1 <= h0 + 262144ul, "{tag}: two more transcriptions leave the heap where it stood ({h0} -> {h1} bytes)")
 }
 
 //! a serving worker's session sees clips of every length: a session that read the whole clip reads its first half as a fresh one does
@@ -1073,11 +1279,11 @@ def test_whisper_crowned_word_level(t : T?) {
                 to_log(LOG_INFO, "whisper-tiny crowned q8 jfk eyeball: '{text_default}'\n")
                 to_log(LOG_INFO, "whisper-tiny crowned f32/q8 jfk eyeball: '{text_mixed}'\n")
                 // engage witness - without it a declining driver would compare two CPU
-                // transcripts and pass vacuously. The q8-default ENCODER declines the tower
-                // by design (quant_mode), so the tower delta is the mixed lane's f32 encode
-                // alone; both DECODERS ride the crowned wdec
-                t |> equal(metal_tower_stats().encodes - s0.encodes, 1l,
-                           "the mixed lane's f32 encoder GPU-served (tower encode delta)")
+                // transcripts and pass vacuously. Both ENCODERS serve on the tower - the q8
+                // default off its q8 planes, the mixed lane off its f32 blob - and both
+                // DECODERS ride the crowned wdec
+                t |> equal(metal_tower_stats().encodes - s0.encodes, 2l,
+                           "both lanes' encoders GPU-served (tower encode delta)")
                 t |> success(metal_wdec_stats().steps - w0.steps > 0l,
                              "the crowned decoder served (wdec step delta)")
                 let wa <- word_forms(text_default)
@@ -1095,7 +1301,7 @@ def test_whisper_crowned_word_level(t : T?) {
             set_metal_tower(true)   // restore: the defaults later cells' GPU-serving claims see
             set_metal_wdec(true)
             set_metal_wdec_step(true)
-            set_metal_wdec_step_min_d(1024l)   // the measured serving floor (the declaration default)
+            set_metal_wdec_step_min_d(METAL_WDEC_STEP_MIN_D)   // the measured serving floor (the declaration default)
             delete m
             delete mm
         } else {
@@ -1154,6 +1360,11 @@ def test_canary_qwen_oracle(t : T?) {
                  6540, 315, 5561, 151645])
             check_canary_clip(t, m, path_join(corpus_dir(), "librispeech/05_1089-134686-0004.wav"),
                 [2833, 5779, 29160, 451, 11896, 374, 8580, 389, 498, 13, 7684, 3729, 9972, 151645])
+            var inscope jfk <- load_audio_16k_mono(path_join(corpus_dir(), "jfk.wav"))
+            if (!empty(jfk)) {
+                var inscope hs <- create_session(m, "en")
+                heap_flat_leg(t, m, hs, jfk, "canary")
+            }
         }
         set_asr_kv(KVDtype.f16)   // back to the serving default
     }
@@ -1189,6 +1400,7 @@ def test_gemma4a_audio_oracle(t : T?) {
         with_dasllama_jobque_() {
             var inscope s <- create_session(m, "en")
             var inscope segs <- session_segs(m, s, samples)
+            heap_flat_leg(t, m, s, samples, "gemma4a")
             t |> equal(length(segs), 1, "one segment")
             to_log(LOG_INFO, "gemma4a eyeball: '{segs[0].text}'\n")
             // frozen llama-mtmd-cli no-think greedy ids (first 40 tokens — the confident prefix

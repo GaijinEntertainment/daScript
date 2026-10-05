@@ -579,6 +579,7 @@ struct CliConfig {
     path : string            // "" when no file was found
     model : string
     image_mmproj : string
+    audio_mmproj : string
     asr : string
     mmproj : string
     tts : string
@@ -634,6 +635,9 @@ def private apply_roster(root : JsonValue?; var cfg : CliConfig) {
     if (empty(cfg.image_mmproj)) {
         cfg.image_mmproj = pick?["image_mmproj"] ?? ""
     }
+    if (empty(cfg.audio_mmproj)) {
+        cfg.audio_mmproj = pick?["audio_mmproj"] ?? ""
+    }
     if (empty(cfg.quant)) {
         cfg.quant = pick?["quant"] ?? ""
     }
@@ -670,6 +674,7 @@ def parse_cli_config(body : string; var cfg : CliConfig) : bool {
     }
     cfg.model = root?["model"] ?? ""
     cfg.image_mmproj = root?["image_mmproj"] ?? ""
+    cfg.audio_mmproj = root?["audio_mmproj"] ?? ""
     // a speech key is one path, or an [[asr]] / [[tts]] roster whose first table is the default model
     let asr0 = first_table(root, "asr")
     cfg.asr = asr0 != null ? (asr0?["path"] ?? "") : (root?["asr"] ?? "")

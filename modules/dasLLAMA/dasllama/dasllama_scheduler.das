@@ -43,6 +43,18 @@ struct SchedEvent {
     gen_us : int64 = 0l                     // finished: first sampled token -> finish (microseconds)
 }
 
+//! One media span of a prompt: `n` positions from prompt index `at`, each entry a `media_position_id` of the media's
+//! content key, so the prefix cache matches across the span as across text. `rows` are the span's soft tokens (dim-wide
+//! audio, dim*(1+n_deepstack)-wide images); a request leaves them empty for a span it counts on the cache to hold.
+struct MediaSpan {
+    at : int64
+    n : int64
+    non_causal : bool                       // the rows attend each other in full (an image span); audio is causal
+    grid : int2                             // qwen mrope: the merged image grid roping the rows; (0,0) = sequential positions
+    rows : array<float>
+    done : bool                             // the span's K/V stands: attached off the prefix cache, or evaled
+}
+
 //! A parsed + rendered request awaiting admission: tokens only, NO session — queued requests hold
 //! no KV memory. The caller renders (create_chat_renderer / render_assistant / render_turn, or a
 //! raw encode) and assigns unique ids.
@@ -65,6 +77,7 @@ struct PendingReq {
     media_at : int64                        // prompt index the rows splice at (0 <= media_at <= |prompt|)
     media_non_causal : bool                 // the rows attend each other in full (gemma vision); audio is causal
     media_grid : int2                       // qwen mrope: the merged image grid (nx, ny) roping the rows; (0,0) = sequential positions (gemma, audio)
+    spans : array<MediaSpan>                //! media already INLINE in `prompt` as position ids (a transcript renderer's form); `submit` folds the splice fields above into one
 }
 
 //! One active generation stream: the owned KV session plus its request state. Managed wholly by
@@ -77,13 +90,9 @@ struct Stream {
     close_toks : array<int64>
     stop_ids : array<int64>
     nothink : NothinkStopGuard = NothinkStopGuard()
-    n_prefilled : int64                     // prompt tokens evaled so far
-    media_embd : array<float>               // the splice's soft-token rows (see PendingReq)
-    n_media : int64
-    media_at : int64
-    media_non_causal : bool
-    media_grid : int2
-    media_done : bool                       // the rows have been evaled (their own prefill quantum)
+    n_prefilled : int64                     // prompt positions whose K/V stands: attached or evaled
+    spans : array<MediaSpan>                // the prompt's media spans, in prompt order (see PendingReq)
+    n_media : int64                         // media positions in the prompt, every span's
     max_new : int64
     n_gen : int64                           // tokens emitted so far
     cur_tok : int64 = -1l                   // sampled but not yet evaled — the next decode step's input
@@ -174,6 +183,8 @@ struct Scheduler {
     batch_idx : array<int64>                // batch row -> streams index
     mtp_acc : array<int64>                  // the joint speculative tick's answer per batch row: the accepted draft, or -1
     chunk : array<int64>                    // the current prefill chunk
+    chunk_tail : array<int64>               // a media body's text past its span
+    @exact_size body : array<float>         // a media body's rows
     donate_toks : array<int64>              // reap-time scratch: tail eval + the insert token list
     // counters (/v1/stats and server_bench read these)
     n_admitted : int64
@@ -187,6 +198,7 @@ struct Scheduler {
     cached_tokens : int64                   // prefix-cache hits (tokens attached instead of prefilled)
     recent_done : array<DoneStream>         // finished-stream linger for the poll surface (~10 s)
     prefill_tokens : int64                  // prompt tokens actually computed (cache hits excluded)
+    prefill_evals : int64                   // prefill calls those tokens took
     ttft_sum_us : int64                     // Σ ttft over reaped streams that produced a token
     ttft_count : int64
     last_ttft_us : int64                    // most recently reaped stream's ttft
@@ -218,6 +230,7 @@ def create_scheduler(model : Model; max_streams : int64 = 4l; max_queue : int64 
     if (page_rows > 0l) {
         sch.paged = true
         sch.pool <- create_kv_pool(model, page_rows, kv_dtype)
+        kv_pool_reserve(sch.pool, sch.max_streams * (model.config.seq_len + page_rows) + prefix_groups * page_rows)
         sch.prefix <- create_prefix_cache(prefix_groups, prefix_states)
     }
     return <- sch
@@ -252,6 +265,50 @@ def private mtp_totals(sch : Scheduler) : tuple<drafted : int64; accepted : int6
 
 //! Queued (not yet admitted) request count.
 def n_queued(sch : Scheduler) : int64 => long_length(sch.queue)
+
+//! A splice request as an inline span: the rows' position ids enter the prompt at the splice, keyed by the rows' own
+//! bytes, so a caller that hands rows with no key still shares a prefix with a request carrying the same rows.
+def splice_to_span(var req : PendingReq) {
+    var key = 0x9e3779b97f4a7c15ul
+    for (v in req.media_embd) {
+        key = hash_combine64(key, uint64(unsafe(reinterpret<uint>(v))))
+    }
+    var inscope tail <- [for (i in range64(req.media_at, long_length(req.prompt))); req.prompt[i]]
+    req.prompt |> resize(req.media_at)
+    req.prompt |> reserve(req.media_at + req.n_media + long_length(tail))
+    for (r in range64(req.n_media)) {
+        req.prompt |> push(media_position_id(key, r))
+    }
+    req.prompt |> push_from(tail)
+    req.spans |> emplace(MediaSpan(at = req.media_at, n = req.n_media, non_causal = req.media_non_causal,
+                                   grid = req.media_grid, rows <- req.media_embd))
+    req.n_media = 0l
+    req.media_at = 0l
+    req.media_non_causal = false
+    req.media_grid = int2(0)
+}
+
+//! a request's inline spans: in prompt order, over position ids, each with rows of the model's width or none
+def private check_spans(model : Model; sch : Scheduler; req : PendingReq) {
+    return if (empty(req.spans))
+    if (sch.device_kv) {
+        panic("dasllama_scheduler: a media request in device mode (stream {req.id}) - a device-home session serves no media span; the wiring keeps `set_device_kv` off for a model that takes media")
+    }
+    var floor = 0l
+    for (sp in req.spans) {
+        if (sp.n <= 0l || sp.at < floor || sp.at + sp.n > long_length(req.prompt)) {
+            panic("dasllama_scheduler: media span [{sp.at}, {sp.at + sp.n}) outside the {length(req.prompt)}-position prompt or out of order (stream {req.id})")
+        }
+        if (!is_media_position(req.prompt[sp.at]) || !is_media_position(req.prompt[sp.at + sp.n - 1l])) {
+            panic("dasllama_scheduler: media span [{sp.at}, {sp.at + sp.n}) does not stand on position ids (stream {req.id})")
+        }
+        let need = sp.n * model.config.dim * (1l + (sp.non_causal ? model.config.n_deepstack : 0l))
+        if (!empty(sp.rows) && long_length(sp.rows) != need) {
+            panic("dasllama_scheduler: a {sp.n}-row media span needs {need} floats, got {length(sp.rows)} (stream {req.id})")
+        }
+        floor = sp.at + sp.n
+    }
+}
 
 //! Queue a request; false = queue full (the wiring answers 503). Preconditions PANIC — the wiring
 //! must reject them first (its 400s): a non-empty prompt that fits the model context with room to
@@ -292,8 +349,15 @@ def submit(model : Model; var sch : Scheduler; var req : PendingReq) : bool {
     } elif (long_length(req.media_embd) != 0l || req.media_at != 0l || req.media_grid != int2(0)) {
         panic("dasllama_scheduler: media rows, media_at, or media_grid set with n_media == 0 (stream {req.id}) - the rows would be silently dropped")
     }
-    if (np + req.n_media + 1l > model.config.seq_len) {
-        panic("dasllama_scheduler: {np + req.n_media}-position prompt does not fit seq_len {model.config.seq_len} (stream {req.id}) - the wiring must reject it first")
+    if (req.n_media > 0l) {
+        if (!empty(req.spans)) {
+            panic("dasllama_scheduler: a request with both a media splice and inline spans (stream {req.id})")
+        }
+        splice_to_span(req)
+    }
+    check_spans(model, sch, req)
+    if (long_length(req.prompt) + 1l > model.config.seq_len) {
+        panic("dasllama_scheduler: {length(req.prompt)}-position prompt does not fit seq_len {model.config.seq_len} (stream {req.id}) - the wiring must reject it first")
     }
     if (req.max_new < 1l) {
         panic("dasllama_scheduler: max_new {req.max_new} < 1 (stream {req.id}) - the wiring must clamp it first")
@@ -317,7 +381,7 @@ def private finish_stream(var st : Stream; finish : string; var events : array<S
     let rate = gen_us > 0l ? 1000000.0 * float(st.n_gen) / float(gen_us) : 0.0
     to_log(LOG_INFO, "[stream {st.id}] finish: reason={finish}, gen={st.n_gen} tok in {gen_us / 1000l}ms ({rate} tok/s), total {int64(get_time_usec(st.t_admit)) / 1000l}ms\n")
     events |> push(SchedEvent(stream = st.id, kind = SchedEventKind.finished, finish = finish,
-                              n_prompt = long_length(st.prompt) + st.n_media, n_gen = st.n_gen,
+                              n_prompt = long_length(st.prompt), n_gen = st.n_gen,
                               n_cached = st.n_cached, ttft_us = st.ttft_us,
                               gen_us = gen_us))
 }
@@ -415,7 +479,7 @@ def evict(var sch : Scheduler; id : int64; var events : array<SchedEvent>) : boo
     for (i in range64(long_length(sch.queue))) {
         if (sch.queue[i].id == id) {
             events |> push(SchedEvent(stream = id, kind = SchedEventKind.finished, finish = "evicted",
-                                      n_prompt = long_length(sch.queue[i].prompt) + sch.queue[i].n_media))
+                                      n_prompt = long_length(sch.queue[i].prompt)))
             delete sch.queue[i]   // erase is a raw memmove — finalize the owned arrays first
             sch.queue |> erase(i)
             sch.n_evicted ++
@@ -446,10 +510,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                          params = sch.queue[0].params, prompt <- sch.queue[0].prompt,
                          close_toks <- sch.queue[0].close_toks, stop_ids <- sch.queue[0].stop_ids,
                          nothink <- sch.queue[0].nothink,
-                         media_embd <- sch.queue[0].media_embd, n_media = sch.queue[0].n_media,
-                         media_at = sch.queue[0].media_at,
-                         media_non_causal = sch.queue[0].media_non_causal,
-                         media_grid = sch.queue[0].media_grid,
+                         spans <- sch.queue[0].spans,
                          max_new = sch.queue[0].max_new, t_admit = ref_time_ticks())
         if (sch.device_kv) {
             st.session <- create_device_session(m, gpu_device_session_dtype())
@@ -458,14 +519,16 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             st.n_cached = matched
             sch.cached_tokens += matched
             to_log(LOG_INFO, "[stream {st.id}] device prefix: {matched}/{length(st.prompt)} tok already on the device\n")
-        } elif (sch.paged && st.n_media > 0l) {
-            // a media stream's KV past the splice does NOT follow from its token ids, so neither
-            // half of the prefix cache is sound for it: no attach here, no donate at reap
-            st.session <- create_session(m, sch.pool)
-            to_log(LOG_INFO, "[stream {st.id}] prefix cache BYPASSED: {st.n_media} media rows splice at token {st.media_at}\n")
         } elif (sch.paged) {
             st.session <- create_session(m, sch.pool)
-            let matched = prefix_attach(sch.prefix, sch.pool, st.session, st.prompt)
+            var matched = prefix_attach(sch.prefix, sch.pool, st.session, st.prompt)
+            if (cuts_a_span(st.spans, matched)) {   // a span evals whole: a hit that ends inside one is no hit
+                release_kv_pages(st.session)
+                delete st.session
+                st.session <- create_session(m, sch.pool)
+                matched = 0l
+            }
+            adopt_spans(st, matched)
             st.n_prefilled = matched
             st.n_cached = matched
             sch.cached_tokens += matched
@@ -481,14 +544,22 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         if (sch.queue[0].seed != 0) {
             set_seed(st.session, sch.queue[0].seed)
         }
-        if (st.media_grid.x > 0) {
-            sch.mrope_streams ++
+        var lost = false
+        for (sp in st.spans) {
+            st.n_media += sp.n
+            lost ||= !sp.done && empty(sp.rows)
+            if (sp.grid.x > 0) {
+                sch.mrope_streams ++
+            }
         }
         let wait_ms = sch.queue[0].t_submit != 0l ? int64(get_time_usec(sch.queue[0].t_submit)) / 1000l : 0l
-        let grid_note = st.media_grid.x > 0 ? " (mrope grid {st.media_grid.x}x{st.media_grid.y})" : ""
-        let media_note = st.n_media > 0l ? " + {st.n_media} media rows{grid_note}" : ""
-        to_log(LOG_INFO, "[stream {st.id}] start: prompt={length(st.prompt)} tok{media_note} (cached={st.n_cached}), queue_wait={wait_ms}ms, active={length(sch.streams) + 1}/{sch.max_streams}\n")
+        let media_note = st.n_media > 0l ? " ({st.n_media} media rows in {length(st.spans)} span(s))" : ""
+        to_log(LOG_INFO, "[stream {st.id}] start: prompt={length(st.prompt)} pos{media_note} (cached={st.n_cached}), queue_wait={wait_ms}ms, active={length(sch.streams) + 1}/{sch.max_streams}\n")
+        if (lost) {   // the request counted on the cache for a span the cache no longer holds: the caller encodes it and asks again
+            finish_stream(st, "media_lost", events)
+        }
         for (tk in st.prompt) {   // poll-surface preview: whole pieces up to the head cap
+            continue if (is_media_position(tk))
             let p = piece(m, tk)
             break if (length(st.prompt_head) + length(p) > 160)
             st.prompt_head += p
@@ -584,23 +655,25 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             continue
         }
         let np = long_length(sch.streams[i].prompt)
-        // a media splice takes the whole quantum: the rows eval as ONE body, because the mask
-        // (gemma vision's non-causal span) is per-call and a chunk boundary would split it.
-        // Head tokens chunk normally up to media_at, the tail resumes after.
-        let media_pending = sch.streams[i].n_media > 0l && !sch.streams[i].media_done
-        if (media_pending && sch.streams[i].n_prefilled >= sch.streams[i].media_at) {
-            if (sch.streams[i].media_grid.x > 0) {   // qwen mrope: grid angles + the session-tracked position delta
-                eval_embd_span_mrope(m, sch.streams[i].session, sch.streams[i].media_embd,
-                                     sch.streams[i].n_media, 0l, sch.streams[i].n_media,
-                                     sch.streams[i].media_grid)
+        // a media span takes the whole quantum: its rows eval as ONE body, because the mask (gemma vision's
+        // non-causal span) is per-call and a chunk boundary would split it. Text chunks normally up to the next span.
+        let si = next_span(sch.streams[i].spans)
+        if (si >= 0 && prefill_media_body(m, sch, sch.streams[i], si)) {
+            pass
+        } elif (si >= 0 && sch.streams[i].n_prefilled >= sch.streams[i].spans[si].at) {
+            let sn = sch.streams[i].spans[si].n
+            if (sch.streams[i].spans[si].grid.x > 0) {   // qwen mrope: grid angles + the session-tracked position delta
+                eval_embd_span_mrope(m, sch.streams[i].session, sch.streams[i].spans[si].rows, sn, 0l, sn,
+                                     sch.streams[i].spans[si].grid)
             } else {
-                eval_embd(m, sch.streams[i].session, sch.streams[i].media_embd, sch.streams[i].n_media,
-                          sch.streams[i].media_non_causal)
+                eval_embd(m, sch.streams[i].session, sch.streams[i].spans[si].rows, sn, sch.streams[i].spans[si].non_causal)
             }
-            sch.streams[i].media_done = true
-            sch.prefill_tokens += sch.streams[i].n_media
+            sch.streams[i].spans[si].done = true
+            sch.streams[i].n_prefilled += sn
+            sch.prefill_tokens += sn
+            sch.prefill_evals ++
         } else {
-            let head_end = media_pending ? sch.streams[i].media_at : np
+            let head_end = si >= 0 ? sch.streams[i].spans[si].at : np
             let chunk = prefill_chunk(m, sch, head_end)
             let to_ckpt = sch.streams[i].ckpt_at - sch.streams[i].n_prefilled
             //! a checkpoint within a chunk and a half ends this chunk: stopping a chunk short of it would add a window, and a window's cost is mostly fixed
@@ -612,14 +685,15 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             eval(m, sch.streams[i].session, sch.chunk)
             sch.streams[i].n_prefilled += take
             sch.prefill_tokens += take
+            sch.prefill_evals ++
             if (sch.streams[i].n_prefilled == sch.streams[i].ckpt_at) {
                 prefix_insert(sch.prefix, sch.pool, sch.streams[i].session, sch.streams[i].prompt)
                 to_log(LOG_INFO, "[stream {sch.streams[i].id}] prefix checkpoint at {sch.streams[i].ckpt_at} tok: the next prompt on this opening attaches here\n")
             }
         }
-        if (sch.streams[i].n_prefilled >= np && (sch.streams[i].n_media == 0l || sch.streams[i].media_done)) {
+        if (sch.streams[i].n_prefilled >= np) {
             let pf_ms = int64(get_time_usec(sch.streams[i].t_admit)) / 1000l
-            let pf_tok = np + sch.streams[i].n_media - sch.streams[i].n_cached
+            let pf_tok = np - sch.streams[i].n_cached
             let pf_rate = pf_ms > 0l ? 1000.0 * float(pf_tok) / float(pf_ms) : 0.0
             to_log(LOG_INFO, "[stream {sch.streams[i].id}] prefill done: {pf_tok} tok in {pf_ms}ms ({pf_rate} tok/s)\n")
             sch.streams[i].state = StreamState.decoding   // before sampling: sample_advance may finish it
@@ -641,7 +715,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             }
             sch.recent_done |> push(DoneStream(
                 id = sch.streams[i].id, finish = sch.streams[i].finish,
-                n_prompt = long_length(sch.streams[i].prompt) + sch.streams[i].n_media,
+                n_prompt = long_length(sch.streams[i].prompt),
                 n_cached = sch.streams[i].n_cached,
                 n_gen = sch.streams[i].n_gen, ttft_us = sch.streams[i].ttft_us,
                 prompt_head = sch.streams[i].prompt_head, gen_tail = string(sch.streams[i].gen_tail_bytes),
@@ -649,7 +723,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             if (sch.streams[i].session.device_kv) {
                 park_stream(m, sch, sch.streams[i])
             } elif (sch.paged) {
-                if (sch.streams[i].n_media == 0l) {   // media KV does not follow from the token ids
+                if (sch.streams[i].finish != "media_lost") {
                     donate_stream(m, sch, sch.streams[i])
                 }
                 release_kv_pages(sch.streams[i].session)
@@ -662,6 +736,66 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         }
     }
     return !empty(sch.streams) || !empty(sch.queue)
+}
+
+//! One eval for span `si` and the text around it, up to a chunk of text: a prefill call's cost is mostly fixed, so
+//! the text either side of a span rides the span's call. False where the body is not one eval - a recurrent
+//! checkpoint ends a chunk, the span stands bare.
+def private prefill_media_body(m : Model; var sch : Scheduler; var st : Stream; si : int) : bool {
+    let lo = st.n_prefilled
+    let at = st.spans[si].at
+    let sn = st.spans[si].n
+    let head = at - lo
+    let room = prefill_chunk(m, sch, at)
+    return false if (head > room)
+    let stop = si + 1 < length(st.spans) ? st.spans[si + 1].at : long_length(st.prompt)
+    let hi = min(stop, at + sn + room - head)
+    return false if (hi - lo == sn || (st.ckpt_at > lo && st.ckpt_at <= hi))
+    sch.chunk |> resize(head)
+    for (k in range64(head)) {
+        sch.chunk[k] = st.prompt[lo + k]
+    }
+    let ntail = hi - at - sn
+    sch.chunk_tail |> resize(ntail)
+    for (k in range64(ntail)) {
+        sch.chunk_tail[k] = st.prompt[at + sn + k]
+    }
+    media_body_rows(m, st.session, sch.chunk, st.spans[si].rows, sn, long_length(st.spans[si].rows) / sn, sch.chunk_tail, sch.body)
+    let masked = st.spans[si].non_causal || st.spans[si].grid.x > 0
+    eval_embd_body(m, st.session, sch.body, hi - lo, masked ? head : 0l, masked ? head + sn : 0l, st.spans[si].grid)
+    st.spans[si].done = true
+    st.n_prefilled = hi
+    sch.prefill_tokens += hi - lo
+    sch.prefill_evals ++
+    return true
+}
+
+//! the first span whose K/V does not stand yet; -1 when every span's does
+def private next_span(spans : array<MediaSpan>) : int {
+    for (sp, i in spans, count()) {
+        return i if (!sp.done)
+    }
+    return -1
+}
+
+//! whether a prefix hit of `matched` positions ends inside a span
+def private cuts_a_span(spans : array<MediaSpan>; matched : int64) : bool {
+    for (sp in spans) {
+        return true if (matched > sp.at && matched < sp.at + sp.n)
+    }
+    return false
+}
+
+//! The spans a prefix hit of `matched` positions covers stand as attached: their rows are never evaled, and a grid
+//! span's rope advance is restored on the session, which ropes the positions after it by that delta.
+def private adopt_spans(var st : Stream; matched : int64) {
+    for (sp in st.spans) {
+        continue if (sp.at + sp.n > matched)
+        sp.done = true
+        if (sp.grid.x > 0) {
+            st.session.rope_pos_delta += int64(max(sp.grid.x, sp.grid.y)) - sp.n
+        }
+    }
 }
 
 // Donate a finished stream's KV pages, first evaling what the cache still lacks. A "length"

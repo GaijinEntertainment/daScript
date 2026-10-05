@@ -65,6 +65,14 @@ def ggml_type_bytes(gt : int; n : int64) : int64 {
     return 0l
 }
 
+//! the bytes a tensor of ggml type `ttype` takes in a whisper-style bin: f32, f16, or Q8_0 blocks
+def ggml_bin_tensor_bytes(ttype : int; n_elem : int64) : int64 {
+    if (ttype != GGML_TYPE_F32 && ttype != GGML_TYPE_F16 && ttype != GGML_TYPE_Q8_0) {
+        panic("dasLLAMA: ggml bin tensor type {ttype} - f32, f16 and q8_0 tensors load")
+    }
+    return ggml_type_bytes(ttype, n_elem)
+}
+
 //! Bytes `n` weights of a kq format take on disk (the ggml block sizes, so a 32-block format
 //! answers per 32) - what a device plane is measured against; q8 counts its Q8_0 blocks.
 def kq_disk_bytes(f : KqFmt; n : int64) : int64 => ggml_type_bytes(kq_ggml_type(f), n)

@@ -167,6 +167,7 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
 
    bin/daslang -jit utils/dasllama-server/main.das -- --model <model.gguf> [--port 8080] [--quant q8] \
        [--asr <asr.bin>] [--asr-workers 2] [--mmproj <mmproj.gguf>] [--image-mmproj <mmproj.gguf>] \
+       [--audio-mmproj <mmproj.gguf>] \
        [--ctx 4096] [--streams 4] [--chunk 512] [--chunk-idle 2048] [--page-rows 64] [--prefix N] [--tune]
 
 .. list-table::
@@ -256,7 +257,11 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--image-mmproj``
      -
      - ---
-     - Vision mmproj (gemma4uv, gemma4v or gemma3v, sniffed) for the default model --- the chat route then accepts ``image_url`` content parts. When the file also carries a gemma4a audio encoder (the E-series mmproj carries both towers) the same flag arms native audio: ``input_audio`` parts serve through the same slot
+     - Vision mmproj (gemma4uv, gemma4v or gemma3v, sniffed) for the default model --- the chat route then accepts ``image_url`` content parts. When the file also carries an audio encoder (the gemma-4 E-series and the Qwen Omni mmprojs carry both towers) the same flag arms native audio: ``input_audio`` parts serve through the same slot
+   * - ``--audio-mmproj``
+     -
+     - ---
+     - Audio mmproj for the default model --- the chat route then accepts ``input_audio`` content parts: a whisper-class tower with its projector (Qwen2-Audio, Qwen2.5-Omni, Ultravox, Voxtral) or the gemma-4 Conformer. Not needed when ``--image-mmproj`` names a file that carries the audio tower too
    * - ``--ctx``
      -
      - *model*
@@ -394,7 +399,7 @@ model's GPU state lives in VRAM at a time (the tier drops and re-arms on
 switch; ``backend = "cpu"`` slots never evict the GPU owner). Blank keys
 inherit the flat defaults; ``backend`` is ``auto`` | ``cpu`` | ``gpu``, and
 per-entry ``ctx``, ``quant``, ``kv_dtype``, ``streams``, ``chunk``, ``chunk_idle``,
-``page_rows``, ``prefix``, ``mtp``, ``rope_scaling``, ``rope_scale``, ``yarn_orig_ctx`` and ``image_mmproj`` override per model:
+``page_rows``, ``prefix``, ``mtp``, ``rope_scaling``, ``rope_scale``, ``yarn_orig_ctx``, ``image_mmproj`` and ``audio_mmproj`` override per model:
 
 .. code-block:: toml
 
@@ -432,7 +437,7 @@ Setup mode and the model catalog
 ================================
 
 A start with no LLM model at all - no ``--model``, no config, or every
-configured path missing - and no servable ``--tts`` boots into setup mode: the
+configured path missing - and no servable ``--tts`` or ``--asr`` boots into setup mode: the
 port opens, the control page serves, every inference route answers with a
 clean error, and the page leads with the model catalog - a curated, sha-pinned
 list of current models (``model_catalog.das``, a view over the module's one
@@ -452,8 +457,13 @@ wears a fit badge (fits gpu / fits / tight / too big) from the box facts the
 ``/catalog`` document carries; the advertised working set is a hint, not a load
 gate.
 
-``--tts`` alone is a serving start, not a setup start: a speech-only server has
-no LLM slot, so ``/v1/stats`` answers the slotless shape with ``setup`` false.
+``--tts`` or ``--asr`` alone is a serving start, not a setup start: a speech-only
+server has no LLM slot, so ``/v1/stats`` answers the slotless shape with ``setup``
+false and its speech counters live. An ASR model whose decoder is an LLM - a
+two-file model, ``--asr`` with ``--mmproj`` - decodes where the server's LLMs do:
+its worker takes the boot's Metal mode, and ``/v1/stats`` names the outcome under
+``asr.models[]`` as ``decoder`` (``metal`` or ``cpu``). A one-file model (whisper,
+parakeet) decodes on the CPU.
 A ``--tts`` the server cannot serve degrades, it does not die: a missing file
 or a failed load is logged, the speech route is dropped, and the boot serves
 whatever is left - the LLM slots if any loaded, else setup mode.
@@ -545,13 +555,13 @@ Endpoints
      - ``{"model": name}`` --- make ``name`` the default + stepped slot and move the GPU tier to it now (loopback-only; 409 while work is live)
    * - ``POST``
      - ``/v1/models/load``
-     - ``{"path", "id"?, "backend"?, "quant"?, "ctx"?, "image_mmproj"?, "activate"?}`` --- load a GGUF into a new serving slot with no restart (loopback-only; 409 on a live stream set, a taken id, or a GGUF another slot already serves)
+     - ``{"path", "id"?, "backend"?, "quant"?, "ctx"?, "image_mmproj"?, "audio_mmproj"?, "activate"?}`` --- load a GGUF into a new serving slot with no restart (loopback-only; 409 on a live stream set, a taken id, or a GGUF another slot already serves)
    * - ``POST``
      - ``/v1/models/unload``
      - ``{"model": name}`` --- free the slot's weights, KV and VRAM; the default slot refuses (loopback-only)
    * - ``POST``
      - ``/v1/chat/completions``
-     - Chat; ``stream: true`` gives SSE, else a buffered reply. OpenAI function calling (``tools``); ``image_url`` parts under ``--image-mmproj``; ``input_audio`` parts when the mmproj carries the audio tower (one image or one clip per request, on the final user message). A stream sent with ``stream_options: {"include_usage": true}`` ends, before ``[DONE]``, on one chunk with an empty ``choices`` list: ``usage`` (``prompt_tokens``, ``completion_tokens``, ``total_tokens``, and ``prompt_tokens_details.cached_tokens`` --- the prompt tokens the prefix cache attached) and ``timings`` (``ttft_ms``, the scheduler's admit-to-first-token wall, and ``gen_ms``, first token to finish); a stream that does not ask carries no such chunk
+     - Chat; ``stream: true`` gives SSE, else a buffered reply. OpenAI function calling (``tools``); ``image_url`` parts under ``--image-mmproj``; ``input_audio`` parts under ``--audio-mmproj``, or when the image mmproj carries the audio tower (any user message may carry images and clips, up to 16 parts a request, each spliced where the part sits among its message's text parts; a part is encoded and prefilled once --- a continued chat, or the same request again, attaches its span off the prefix cache and never reaches the tower). A stream sent with ``stream_options: {"include_usage": true}`` ends, before ``[DONE]``, on one chunk with an empty ``choices`` list: ``usage`` (``prompt_tokens``, ``completion_tokens``, ``total_tokens``, and ``prompt_tokens_details.cached_tokens`` --- the prompt tokens the prefix cache attached) and ``timings`` (``ttft_ms``, the scheduler's admit-to-first-token wall, and ``gen_ms``, first token to finish); a stream that does not ask carries no such chunk
    * - ``POST``
      - ``/v1/completions``
      - Raw completion; ``stream: true`` gives SSE, else buffered; the same ``stream_options.include_usage`` closing chunk as the chat route

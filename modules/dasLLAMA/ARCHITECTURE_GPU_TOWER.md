@@ -52,6 +52,56 @@ best-effort: it answers false (or -1) on any shape, knob, quant-mode or device d
 CPU chain serves that encode. Engage is read from counter deltas (`metal_tower_stats`,
 `metal_tower_f16_encodes`), never from "the model ran".
 
+The whisper-class chain serves both weight lanes. An f32 tower's block GEMMs read the f32 blob or
+its halfword twin. A q8 tower's read the q8 planes themselves: `tw_q8_attach` uploads the stem's
+second conv and each block's six GEMM regions once a tower, out of the CPU backend's repack layout
+into the 34-byte q8 blocks the prefill driver's q8 GEMM reads (`q8_region_to_metal_blob`, the
+transform the ASR-decoder driver uploads its planes through), and every site runs on the prefill
+ladder (`pf_enc_q8_mm`) with the activations converted to one half panel where that ladder reads
+one. The device blob is 34/32 of the q8 planes and no image carries it; it drops with the weights
+epoch and the tower shutdown. The stem's first conv reads the f32 blob on both lanes - its
+3 x n_mel columns are not quantized - and where those columns are off the GEMM's 32 lattice (80
+mels: 240) it reads a device copy of its rows zero-padded to the lattice (`tw_conv1_pad_attach`),
+the im2col pass padding its own rows with zeros to the same width.
+
+The whisper-class chain has three forms over one block loop (`TwForm`): the blocks alone, the
+blocks with the tower's post-norm (whisper's encoder output), and the blocks with the projector
+tail - the chat towers' soft tokens (`tw_tail_body`). The tail is the CPU tail's steps at its
+widths, by projector kind: qwen2a pools row pairs (`MetalTwPool2`), norms, and runs one biased
+linear; voxtral pools, norms, and runs the stacked rows through a GELU MLP; ultravox norms every
+position, rms-norms the stacked rows at the projector's own eps, and runs the gated MLP
+(`MetalTwSwigluRows`: silu of a row's second half times its first). A stack is no kernel: the
+stacked row is the same memory read at the wider row. The tail's GEMMs read the f32 blob on the
+f32 tile, so the tail seat serves it on an f32 tower whose widths sit on that tile's lattice
+(`tw_tail_shape_ok`) and serves the blocks alone otherwise - a q8 tower's projector planes are not
+on the device - answering which it served (`TowerTailServed`), so the CPU tail runs exactly when
+the device one did not. Its engage counter is `metal_tower_tail_encodes`, its lever
+`set_metal_tower_tail`.
+
+The vision chains run their ends on the device too. The gemma3v chain ends in its tail - the
+post-norm, the grid mean pool (`MetalTwPool2d`), the soft norm and the projection (`g3v_tail_body`).
+The gemma4v chain takes the stem's columns and runs the patch conv and the position adds itself
+(`g4v_stem_body`; the family registers its seat with `stem` set, and a chain registered without it is
+handed the finished residual stream), then ends in its tail: the grid pool, the sqrt(d) scale and the
+standardize in one row pass (`MetalTwAffineRows`), the weightless rms, and the projection between its
+two clamps (`g4v_tail_body`). With the tail on the device the soft tokens alone come back; the block
+rows stay there.
+
+The gemma4a chain ends in the projector tail, in the blocks' command buffer: the out projection
+and its bias at the encoder's own output width (`gemma4a_mid_dim`, the length of the weightless
+norm's ones row), that norm, then the audio embedder to the decoder's width (`proj_dim`). The
+embedder is square on E2B (1536 by 1536) and widens on E4B (1536 to 2560), so the two widths are
+read apart off the file - the out projection's rows, the embedder's rows - and never assumed equal.
+The chain lands the soft tokens in `Gemma4aState.out` and says so (`out_ready`).
+
+Canary's front runs whole on the device ahead of its block seat (`metal_canary_front`, the front
+seat): off the CPU-windowed frames, the DFT as a GEMM over the transposed twiddles, the power
+spectrum, the mel sums, `MetalCnMelNorm` - the log and the per-feature normalization over the valid
+frames, one thread a feature - then the parakeet front's convs and the input projection. The front
+kernels read tap-major taps and canary's file keeps them channel-major, so the three conv panels
+ride a device copy (`tw_cn_front_attach`); and a stage's valid rows are its conv's image height, so
+a row past them reads as the zero the CPU chain masks it to and no mask pass is dispatched.
+
 The FastConformer chain (canary and parakeet share it: one context, one block body over the
 canary offsets record, parakeet's offsets mapped onto it with no GEMM biases and its tap-major
 depthwise stamp) runs the rel-pos (Transformer-XL) attention one head at a time on the f32 GEMM

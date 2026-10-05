@@ -85,6 +85,8 @@ struct Gemma3vState {
     @scratch @exact_size att : array<float>   // attention score blocks
     @exact_size h : array<float>     // ffn hidden [npos × ff]
     @exact_size pooled : array<float>  // [nout × d]
+    @scratch @exact_size tail : array<float>     // [nout × proj_dim] soft tokens a device chain landed behind its blocks
+    tail_ready : bool                //! `tail` holds this encode's soft tokens: the CPU tail stands down
     @scratch @exact_size xqi : array<int8>    // q8 lane: the requantized GEMM input, grown per site
     @scratch @exact_size xsi : array<float>   // its per-32-block scales
 }
@@ -440,7 +442,7 @@ def stage_gemma3v_tower(path : string) : Gemma3vStaging {
         panic("dasLLAMA: cannot open mmproj gguf '{path}'")
     }
     if (stat(path).size >= GEMMA3V_STAGE_CAP) {
-        panic("dasLLAMA gemma3v: '{path}' is {stat(path).size / 1048576ul} MB - at or past the 1 GiB staged-mint line; serve the f16 mmproj (an f32-widened twin is an oracle artifact, not a serving file)")
+        panic("dasLLAMA gemma3v: '{path}' is {int64(stat(path).size / 1048576ul)} MB - at or past the 1 GiB staged-mint line; serve the f16 mmproj (an f32-widened twin is an oracle artifact, not a serving file)")
     }
     fmap(f) $(var bytes : array<uint8>#) {
         var inscope m <- parse_gguf_meta(bytes)
@@ -712,6 +714,7 @@ def gemma3v_encode(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>
         asr_prof_add("g3v.stem", tp)
     }
     var gpu_served = false
+    s.tail_ready = false
     if (g_g3v_gpu_set) {
         tp = ref_time_ticks()
         gpu_served = invoke(g_g3v_gpu, t, s, npos)
@@ -726,6 +729,15 @@ def gemma3v_encode(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>
         for (l in range64(t.n_layer)) {
             g3v_block(t, s, l, npos)
         }
+    }
+    if (gpu_served && s.tail_ready) {   // the device chain ran the tail behind its blocks
+        let n_side = t.image_px / t.patch / t.merge
+        let n_out = n_side * n_side
+        ensure_length(out, n_out * t.proj_dim)
+        unsafe {
+            memcpy(addr(out[0]), addr(s.tail[0]), uint64(n_out * t.proj_dim * 4l))
+        }
+        return n_out
     }
     tp = ref_time_ticks()
     let nout = g3v_tail(t, s, t.image_px / t.patch, out)

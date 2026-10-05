@@ -76,6 +76,8 @@ var g_tower_rows = 0l
 var g_tower_blocks = 0l
 var g_tower_convs = 0l                       // conv-frontend chunks served on the GPU
 var g_tower_f16_encodes = 0l                 // encodes whose GEMMs rode the f16-W shadow route
+var g_tower_mels = 0l                        // whisper-preprocessor mels served on the GPU
+var g_tower_tail_encodes = 0l                // whisper-class encodes whose projector tail ran behind the blocks
 var g_tower_declines : DeclineCounter
 
 // the whisper ASR-decoder driver's counters (dasllama_metal_asr_dec; counting home here)

@@ -14,7 +14,8 @@ require math
 //   - Audio towers: load_audio_tower reads a multimodal projector (mmproj) GGUF
 //   - create_chat(model, tower) — a conversation that can hear
 //   - add_user_audio + add_user composing one turn; respond() streams the reply
-//   - add_user_audio_rows: pre-encoded carrier rows onto a plain chat (the gemma-4 E-series rail)
+//   - add_user_audio_rows: pre-encoded carrier rows onto a plain chat (the only chat rail for gemma-4 E-series)
+//   - add_user_span + media_body_rows + eval_embd_body: the audio in its place, prefilled as one body
 //   - caps(model) — LlmCaps, the chat layer's honesty contract
 //
 // Audio-capable chat models pair a normal text decoder with a whisper-family audio
@@ -27,8 +28,9 @@ require math
 // The chat template picks the audio framing automatically (qwen2 family wraps the span
 // in <|audio_bos|>/<|audio_eos|>, llama-3 splices bare embeddings, voxtral opens with
 // [BEGIN_AUDIO]) — the calls below are identical for every pair.
-// Qwen3-Omni and Gemma-4 E-series audio are served too, but through the ASR surface
-// (tutorial 07's two-path load_asr_model), not load_audio_tower.
+// Qwen3-Omni and Gemma-4 E-series audio are served too, but not by load_audio_tower:
+// tutorial 07's two-path load_asr_model transcribes them, and a Gemma-4 E-series pair
+// chats here through the AudioEmbedder carrier rail at the end of this file.
 //
 // Prerequisites: a decoder GGUF + its mmproj GGUF + a 16 kHz mono PCM16 WAV.
 //
@@ -89,25 +91,29 @@ def section_render_spans(m : Model; prompt : string) {
 }
 
 // And the rows themselves: the AudioEmbedder carrier is the family-neutral encoder a
-// scheduler owns — probe the mmproj first (0 = no carrier-served audio tower; the
-// load_audio_tower families above are served by the chat's own tower instead), then
-// load_audio_embedder + encode_audio turn the PCM into the soft-token rows that splice
-// between the two spans. The pre-encoded-rows seam closes the loop: add_user_audio_rows
-// moves those rows onto a PLAIN chat (no tower attached) and respond() runs the spliced
-// turn - the shape a scheduler that owns its encoder uses, and how a carrier-served
-// family hears at the chat layer at all.
-def section_carrier_encode(m : Model; mmproj_path : string; samples : array<float>; prompt : string) {
+// scheduler owns. It serves every audio mmproj this tutorial takes - the
+// load_audio_tower families and the gemma-4 E-series alike - and audio_probe_proj_dim
+// answers 0 only for a file no audio family serves. load_audio_embedder + encode_audio
+// turn the PCM into the soft-token rows that splice between the two spans. The
+// pre-encoded-rows seam closes the loop: add_user_audio_rows moves those rows onto a
+// PLAIN chat (no tower attached) and respond() runs the spliced turn - the shape a
+// scheduler that owns its encoder uses, and how a gemma-4 E-series pair hears at the
+// chat layer at all. audio_span_bare says whether the span takes markers: an ultravox
+// span sits bare in a stock Llama template, which knows no audio marker.
+def section_carrier_encode(m : Model; mmproj_path : string; audio_path : string; samples : array<float>; prompt : string) {
     if (audio_probe_proj_dim(mmproj_path) == 0l) {
-        print("carrier: {mmproj_path} carries no carrier-served audio tower (gemma4a) - skipping the encode demo\n")
+        print("carrier: no audio family serves {mmproj_path} - skipping the encode demo\n")
         return
     }
     var inscope e <- load_audio_embedder(mmproj_path)
     var st = AudioState()
     var rows : array<float>
     let n = encode_audio(e, st, samples, rows)
-    print("encode_audio ({audio_family(e)}): {float(length(samples)) / 16000.0}s -> {n} soft tokens x {audio_proj_dim(e)} wide\n")
+    let bare = audio_span_bare(e)
+    print("encode_audio ({audio_family(e)}): {float(length(samples)) / 16000.0}s -> {n} soft tokens x {audio_proj_dim(e)} wide, bare span: {bare}\n")
     var chat <- create_chat(m, "", 96l)
-    add_user_audio_rows(m, chat, rows, n)   // moves the rows in; the turn renders its audio span around them
+    var chat_rows := rows
+    add_user_audio_rows(m, chat, chat_rows, n, bare)   // moves the rows in; the turn renders its audio span around them
     add_user(chat, prompt)
     print("carrier chat > {prompt}\n")
     respond(m, chat, SamplingParams()) $(piece_text) {
@@ -117,6 +123,59 @@ def section_carrier_encode(m : Model; mmproj_path : string; samples : array<floa
     print("\n\n")
     delete chat
     delete st
+    section_inline_body(m, hash(audio_path), rows, n, bare, prompt)
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Section 4 — The audio in its place: one prefill body by hand
+// ──────────────────────────────────────────────────────────────────────────
+//
+// So far the audio led the turn. add_user_span puts it where it sits in the
+// message: text_before bytes into the turn's text. The span carries the
+// media's content key - the same clip, the same key - and render_turn then
+// lays n_rows media position ids where the rows go: negative numbers no vocab
+// id uses, so a prefix cache matches across the span as it does across text.
+//
+// A program that owns its encoder and scheduler prefills that turn as ONE
+// body instead of three evals (text, rows, text). media_body_rows builds the
+// body's rows - head text, the media rows, tail text - and eval_embd_body
+// prefills them. An empty span (0, 0) keeps every row causal, as audio wants;
+// an image passes its span and its grid. On a gemma-4 E-series decoder the
+// session also takes each text row's token id, so text rows get their own
+// per-layer input; eval_embd_body spends the ids.
+def section_inline_body(m : Model; key : uint64; rows : array<float>; n : int64; bare : bool; prompt : string) {
+    let lead = "Here is a recording. "
+    var rchat <- create_chat_renderer(m, "", 64l)
+    add_user(rchat, "{lead}{prompt}")
+    add_user_span(m, rchat, key, n, length(lead), false, bare)
+    var inscope turn <- render_turn(m, rchat)
+    var lo = 0l
+    while (!is_media_position(turn[lo])) {
+        lo ++
+    }
+    var inscope head <- [for (k in range64(lo)); turn[k]]
+    var inscope tail <- [for (k in range64(lo + n, long_length(turn))); turn[k]]
+    print("add_user_span: {long_length(head)} text tokens | {n} media ids | {long_length(tail)} text tokens\n")
+    var s <- create_session(m)
+    var body : array<float>
+    media_body_rows(m, s, head, rows, n, m.config.dim, tail, body)
+    eval_embd_body(m, s, body, long_length(turn), 0l, 0l, int2(0))
+    print("one body > {lead}<audio>{prompt}\n")
+    let stop_ids <- turn_stop_ids(rchat)
+    var guard <- make_nothink_guard(rchat)
+    var one <- [0l]
+    for (_step in range64(64l)) {
+        let tok = sample(s, SamplingParams())
+        let text = piece(m, tok)
+        break if (find_index(stop_ids, tok) >= 0 || nothink_stop_here(guard, tok, text))
+        print("{text}")
+        one[0] = tok
+        eval(m, s, one)
+    }
+    print("\n\n")
+    delete body
+    delete s
+    delete rchat
 }
 
 // Minimal RIFF/WAVE reader for 16-bit PCM mono 16 kHz input — enough for the tutorial;
@@ -185,21 +244,20 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough; the carrier ra
     // the pair must match: the tower projects into the decoder's embedding width, and
     // create_chat panics on a mismatched pair rather than degrading.
     //
-    // Two rails, decided by the mmproj: a carrier-served file (the gemma-4 E-series —
-    // audio_probe_proj_dim answers its width) demos the scheduler-side carrier path and
-    // returns, because load_audio_tower does not serve that family; every load_audio_tower
-    // pair takes the chat rail below.
+    // Two rails, decided by the mmproj: a file load_audio_tower serves
+    // (audio_tower_probe_proj_dim answers its width) runs every section below; any other
+    // file - the gemma-4 E-series - demos only the scheduler-side carrier path and returns.
     var m <- load_model(ggufs[0], QuantMode.q8)
     m.config.seq_len = min(m.config.seq_len, 4096l)
-    if (audio_probe_proj_dim(ggufs[1]) > 0l) {
+    if (audio_tower_probe_proj_dim(ggufs[1]) == 0l) {
         allow_cpu_prefill()
         let carrier_samples <- read_wav_pcm16_mono(audio_path)
         with_job_que() {
             setup_dasllama_jobque()
             section_render_spans(m, prompt)
-            section_carrier_encode(m, ggufs[1], carrier_samples, prompt)
+            section_carrier_encode(m, ggufs[1], audio_path, carrier_samples, prompt)
         }
-        print("this mmproj serves through the AudioEmbedder carrier (the server rail) - the create_chat sections need a load_audio_tower pair (qwen2a / omni / ultravox / voxtral)\n")
+        print("this mmproj serves through the AudioEmbedder carrier only - the create_chat sections need a load_audio_tower pair (qwen2a / omni / ultravox / voxtral)\n")
         return
     }
     var tower <- load_audio_tower(ggufs[1])
@@ -248,5 +306,6 @@ def main {  // nolint:STYLE038 - one linear tutorial walkthrough; the carrier ra
 
         section_splice(m)
         section_render_spans(m, prompt)
+        section_carrier_encode(m, ggufs[1], audio_path, samples, prompt)
     }
 }

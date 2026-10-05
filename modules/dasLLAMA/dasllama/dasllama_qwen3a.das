@@ -163,18 +163,6 @@ def private q3a_announce_lane() {
     to_log(LOG_INFO, "dasLLAMA qwen3a: tower GEMM lane {q3a_serve_q8() ? "q8" : "f32 planes"} - {why}\n")
 }
 
-[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
-def private q3a_gemm_types_uniform(m : GGUFMeta; n_layer : int64; gt : int) : bool {
-    for (l in range64(n_layer)) {
-        for (nm in ["attn_q", "attn_k", "attn_v", "attn_out", "ffn_up", "ffn_down"]) {
-            if (gguf_tensor_type(m, "a.blk.{l}.{nm}.weight") != gt) {
-                return false
-            }
-        }
-    }
-    return true
-}
-
 //! Load a Qwen3-ASR mmproj GGUF (projector type `qwen3a`, bf16/f16/f32 tensors). Like
 //! ``load_model``, caches a box/knob-specific PREPARED IMAGE for fast reload;
 //! ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
@@ -287,7 +275,7 @@ def stage_qwen3a_tower(path : string) : Qwen3aStaging {
         st.e.core <- c
         if (q3a_serve_q8()) {
             tower_quantize(st.e.core, st.core)   // arm the shared core's q8 rail (encoder_blocks reads core.q8)
-        } elif ((gt == GGML_TYPE_BF16 || gt == GGML_TYPE_F16) && q3a_gemm_types_uniform(m, st.e.core.n_layer, gt)) {
+        } elif ((gt == GGML_TYPE_BF16 || gt == GGML_TYPE_F16) && tower_gemm_types_uniform(m, st.e.core.n_layer, gt)) {
             tower_bake_half_twin(st.core.fblob, st.core.wblob, st.e.core.blk_bf16)
         }
 
@@ -384,18 +372,6 @@ def private q3a_cblob_quantize(var t : Qwen3aTower; var cblob : array<float>; va
     tw_repack(qblob, qscales, t.mm2_w_off, d, t.proj_dim)
 }
 
-//! the GPU mel hook: DFT/power/mel off the CPU-windowed xw frames into m.data
-typedef Qwen3aMelGpuFn = function<(xw : array<float>; n_len, n_fft, n_bins, n_mel : int64;
-                                   twiddles, filters : array<float>; var m : WhisperMel) : bool>
-var private g_q3a_mel_gpu : Qwen3aMelGpuFn
-var private g_q3a_mel_gpu_set = false
-
-[arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
-def register_qwen3a_mel_gpu(fn : Qwen3aMelGpuFn) {
-    g_q3a_mel_gpu = fn
-    g_q3a_mel_gpu_set = true
-}
-
 //! Qwen3-ASR's log-mel (WhisperFeatureExtractor, center=True, truncation=False): 200-sample
 //! reflection pad both ends, NO 30s zero tail, clamp max stays in double (unlike the mtmd flavor,
 //! no float round-trip); n_len = min((n_padded−400)/160+1, n_in/160+1), mel-major.
@@ -403,7 +379,7 @@ def log_mel_qwen3a(samples : array<float> | #; n_mel : int64) : WhisperMel {
     let n_in = long_length(samples)
     let head = AUDIO_N_FFT / 2l                        // 200 reflection each side
     let n_padded = n_in + 2l * head
-    var padded : array<float>
+    var inscope padded : array<float>
     padded |> reserve_resize(int(n_padded))
     for (i in range(int(n_in))) {
         padded[int(head) + i] = samples[i]
@@ -425,11 +401,11 @@ def log_mel_qwen3a(samples : array<float> | #; n_mel : int64) : WhisperMel {
     m.n_len_org = m.n_len
     m.data |> reserve_resize(int(n_mel * m.n_len))
 
-    let hann <- build_hann_window(n_fft)
-    let twiddles <- build_dft_twiddles(n_fft)
-    let filters <- build_mel_filterbank(n_mel, n_fft, AUDIO_SAMPLE_RATE)
+    var inscope hann <- build_hann_window(n_fft)
+    var inscope twiddles <- build_dft_twiddles(n_fft)
+    var inscope filters <- build_mel_filterbank(n_mel, n_fft, AUDIO_SAMPLE_RATE)
 
-    var xw : array<float>
+    var inscope xw : array<float>
     xw |> reserve_resize(int(m.n_len * n_fft))
     for (i in range64(m.n_len)) {
         let off = i * AUDIO_HOP
@@ -438,9 +414,9 @@ def log_mel_qwen3a(samples : array<float> | #; n_mel : int64) : WhisperMel {
             xw[i * n_fft + j] = hann[j] * padded[off + j]
         }
     }
-    let mel_on_gpu = g_q3a_mel_gpu_set && invoke(g_q3a_mel_gpu, xw, m.n_len, n_fft, n_bins, n_mel, twiddles, filters, m)
+    let mel_on_gpu = whisper_mel_gpu(xw, m.n_len, n_fft, n_bins, n_mel, twiddles, filters, m)
     if (!mel_on_gpu) {
-        var reim : array<float>
+        var inscope reim : array<float>
         reim |> reserve_resize(int(m.n_len * n_bins * 2l))
         gemm_f32(unsafe(addr(reim[0])), unsafe(addr(xw[0])), unsafe(addr(twiddles[0])),
                  m.n_len, n_fft, n_bins * 2l)
@@ -449,7 +425,7 @@ def log_mel_qwen3a(samples : array<float> | #; n_mel : int64) : WhisperMel {
         // double (reference-exact rounding), floor 2^-24, log10
         let mel_floor = 5.960464477539063e-08lf
         let log10_e = 0.43429448190325176lf
-        var power : array<float>
+        var inscope power : array<float>
         power |> resize(int(n_bins))
         for (i in range64(m.n_len)) {
             for (k in range64(n_bins)) {
@@ -663,7 +639,7 @@ def qwen3a_encode_all(t : Qwen3aTower; var s : EncoderState; var cs : Qwen3aConv
     var total = 0l
     var off = 0l
     while (off < mel.n_len) {
-        let win <- qwen3a_mel_window(mel, off)
+        var inscope win <- qwen3a_mel_window(mel, off)
         qwen3a_encode(t, s, cs, win)
         let n = (win.n_len / QWEN3A_CHUNK) * QWEN3A_TOK_PER_CHUNK
         rows |> reserve(long_length(rows) + n * t.proj_dim)
@@ -720,20 +696,20 @@ def qwen3a_transcribe(dec : Model; t : Qwen3aTower; var s : Qwen3aAsrSession; co
                       samples : array<float> | #; blk : block<(seg : TranscribeSegment)>;
                       var detected_lang : string&) : int {
     let tprof = ref_time_ticks()
-    let mel <- log_mel_qwen3a(samples, t.core.n_mel)
+    var inscope mel <- log_mel_qwen3a(samples, t.core.n_mel)
     asr_prof_add("q3a.mel", tprof)
-    var rows : array<float>
+    var inscope rows : array<float>
     let n_audio = qwen3a_encode_all(t, s.qenc, s.qcs, mel, rows)
     asr_prof_add("q3a.encode", tprof)
 
     let dim = dec.config.dim
     let im_start = special_id(dec, "<|im_start|>")
     let im_end = special_id(dec, "<|im_end|>")
-    var head : array<int64>
+    var inscope head : array<int64>
     head |> push(im_start)
     head |> push_from(encode_(dec, "user\n", false, false))
     head |> push(special_id(dec, "<|audio_start|>"))
-    var tail : array<int64>
+    var inscope tail : array<int64>
     tail |> push(special_id(dec, "<|audio_end|>"))
     if (!empty(context)) {
         tail |> push_from(encode_(dec, context, false, false))
@@ -746,26 +722,21 @@ def qwen3a_transcribe(dec : Model; t : Qwen3aTower; var s : Qwen3aAsrSession; co
     let n_head = long_length(head)
     let n_tail = long_length(tail)
     let npos = n_head + n_audio + n_tail
-    var embd : array<float>
-    embd |> reserve_resize(int(npos * dim))
-    embed_text_rows(dec, head, embd, 0l)
-    for (i in range64(n_audio * dim)) {
-        embd[n_head * dim + i] = rows[i]
-    }
-    embed_text_rows(dec, tail, embd, n_head + n_audio)
+    var inscope embd : array<float>
+    media_body_rows_(dec, s.qctx, head, rows, n_audio, dim, tail, embd)
 
     s.qctx.n_past = 0l   // each transcribe is a fresh sequence; the KV rewinds to position 0
     var tp = ref_time_ticks()
-    eval_embd_(dec, s.qctx, embd, npos)
+    eval_embd_body_(dec, s.qctx, embd, npos, 0l, 0l, int2(0))
     asr_prof_add("q3a.prefill", tp)
 
     let eot = special_id(dec, "<|endoftext|>")
     let max_new = dec.config.seq_len - npos - 1l
-    var one : array<int64>
+    var inscope one : array<int64>
     one |> resize(1)
-    var toks : array<int>
+    var inscope toks : array<int>
     var plog_sum = 0.0lf
-    var raw : array<string>
+    var inscope raw : array<string>
     tp = ref_time_ticks()
     for (_i in range64(max_new)) {
         let ti = ref_time_ticks()
@@ -796,7 +767,7 @@ def qwen3a_transcribe(dec : Model; t : Qwen3aTower; var s : Qwen3aAsrSession; co
         }
         text = slice(full, mark + length("<asr_text>"), length(full))
     }
-    var seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE, text = text)
+    var inscope seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE, text = text)
     seg.tokens := toks
     if (!empty(toks)) {
         seg.avg_logprob = float(plog_sum / double(length(toks) + 1))   // + the stop token's plog
@@ -811,19 +782,19 @@ def qwen3a_transcribe(dec : Model; t : Qwen3aTower; var s : Qwen3aAsrSession; co
 def qwen3omni_transcribe(dec : Model; t : Qwen3aTower; var s : Qwen3aAsrSession;
                          samples : array<float> | #; blk : block<(seg : TranscribeSegment)>) : int {
     let tp = ref_time_ticks()
-    let mel <- log_mel_qwen3a(samples, t.core.n_mel)
-    var arows : array<float>
+    var inscope mel <- log_mel_qwen3a(samples, t.core.n_mel)
+    var inscope arows : array<float>
     let n_audio = qwen3a_encode_all(t, s.qenc, s.qcs, mel, arows)
     asr_prof_add("q3o.encode", tp)
 
     let dim = dec.config.dim
     let im_start = special_id(dec, "<|im_start|>")
     let im_end = special_id(dec, "<|im_end|>")   // = the EOG (151645)
-    var head : array<int64>
+    var inscope head : array<int64>
     head |> push(im_start)
     head |> push_from(encode_(dec, "user\n", false, false))
     head |> push(special_id(dec, "<|audio_start|>"))
-    var tail : array<int64>
+    var inscope tail : array<int64>
     tail |> push(special_id(dec, "<|audio_end|>"))
     tail |> push_from(encode_(dec, "Transcribe the audio.", false, false))
     tail |> push(im_end)
@@ -834,24 +805,19 @@ def qwen3omni_transcribe(dec : Model; t : Qwen3aTower; var s : Qwen3aAsrSession;
     let n_head = long_length(head)
     let npos = n_head + n_audio + long_length(tail)
     asr_ctx_guard(n_audio, npos, dec.config.seq_len)
-    var embd : array<float>
-    embd |> reserve_resize(int(npos * dim))
-    embed_text_rows(dec, head, embd, 0l)
-    for (i in range64(n_audio * dim)) {
-        embd[n_head * dim + i] = arows[i]
-    }
-    embed_text_rows(dec, tail, embd, n_head + n_audio)
+    var inscope embd : array<float>
+    media_body_rows_(dec, s.qctx, head, arows, n_audio, dim, tail, embd)
 
     s.qctx.n_past = 0l   // fresh sequence per transcribe
     let td = ref_time_ticks()
-    eval_embd_(dec, s.qctx, embd, npos)
+    eval_embd_body_(dec, s.qctx, embd, npos, 0l, 0l, int2(0))
 
     let eot = special_id(dec, "<|endoftext|>")
     let max_new = dec.config.seq_len - npos - 1l
-    var one : array<int64>
+    var inscope one : array<int64>
     one |> resize(1)
-    var toks : array<int>
-    var raw : array<string>
+    var inscope toks : array<int>
+    var inscope raw : array<string>
     toks |> reserve(256)
     raw |> reserve(256)
     for (_i in range64(max_new)) {
@@ -871,7 +837,7 @@ def qwen3omni_transcribe(dec : Model; t : Qwen3aTower; var s : Qwen3aAsrSession;
     }
     asr_prof_add("q3o.decode", td)
 
-    var seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE,
+    var inscope seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE,
         text = strip(join(raw, "")))
     seg.tokens := toks
     blk |> invoke(seg)

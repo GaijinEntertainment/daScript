@@ -34,7 +34,7 @@ class FakeChatServer : HvWebServer {
                 respond(server, writer, int(http_status.INTERNAL_SERVER_ERROR), "application/json", "\{\"error\":\"down\"}")
                 return
             }
-            if (find(body, "image_url") >= 0) {   // the image question: one buffered completion, the image's rows in its prompt count
+            if (find(body, "image_url") >= 0 || find(body, "input_audio") >= 0) {   // the media question: one buffered completion, the part's rows in its prompt count
                 respond(server, writer, int(http_status.OK), "application/json", find(body, "\"nousage\"") >= 0 ? replace(SEEN, "\"prompt_tokens\":300", "\"prompt_tokens\":0") : SEEN)
                 return
             }
@@ -57,6 +57,28 @@ class FakeChatServer : HvWebServer {
 }
 
 var g_takes = 0   //! the speech fake's request count, in its own thread's context
+var g_heard : table<string>   //! every upload the speech fake's `seen` model was sent, in its own thread's context
+
+//! what tells one uploaded clip from another: the indices of its samples that are not silence, "" for an upload that is no WAV
+def private upload_key(var req : HttpRequest?) : string {
+    var err = ""
+    let path = create_temp_file("served_bench_upload", ".wav", err)
+    save_form_file(req, "file", path)
+    var samples : array<float>
+    var rate = 0
+    var channels = 0
+    read_wav(path, samples, rate, channels)
+    remove(path)
+    let key = build_string() $(writer) {
+        for (i, s in count(), samples) {
+            if (s != 0.0) {
+                writer |> write("{i} ")
+            }
+        }
+    }
+    delete samples
+    return key
+}
 
 class FakeSpeechServer : HvWebServer {
     def override onInit {
@@ -74,6 +96,12 @@ class FakeSpeechServer : HvWebServer {
             }
             if (model == "slow") {
                 sleep(300u)
+            }
+            if (model == "seen") {
+                let upload = upload_key(req)
+                let again = g_heard |> key_exists(upload)
+                g_heard |> insert(upload)
+                return resp |> JSON("\{\"text\":\"{again ? "heard before" : "new"}\"}")
             }
             return resp |> JSON("\{\"text\":\"hello world\"}")
         }
@@ -134,6 +162,16 @@ def test_speech_rows_against_fakes(t : T?) {
                 t |> equal(clip_row(Speech(url = speech_url), clip, "asr clip", "another text", 3), "", "the text the idle row read is the text a loaded row must read")
                 t |> equal(clip_row(Speech(url = speech_url, model = "drift"), clip, "asr clip", "", 3), "", "three reps, three texts")
                 t |> equal(clip_row(Speech(url = speech_url, model = "fail"), clip, "asr clip", "", 3), "", "a failed rep refuses the row")
+            }
+            t |> run("every request uploads a clip the server has not heard; a clip that is no WAV goes up as it is") @(t : T?) {
+                let wav = silent_wav(160000)   // ten seconds: the copies differ in one sample picked off the clock
+                t |> equal(clip_row(Speech(url = speech_url, model = "seen"), wav, "asr clip", "", 4), "new", "four reps, four uploads the fake never saw")
+                let copy = unseen_clip(wav)
+                t |> success(!empty(copy) && copy != wav && stat(copy).size == stat(wav).size, "the copy is a file of its own, the clip's size")
+                remove(copy)
+                remove(wav)
+                t |> equal(unseen_clip(clip), "", "no WAV, no copy")
+                t |> equal(clip_row(Speech(url = speech_url, model = "seen"), clip, "asr clip", "", 2), "", "the same bytes twice: the fake's second answer differs and the row is refused")
             }
             with_test_server(type<FakeChatServer>) $(chat_url) {
                 t |> run("a loaded row stands while the chat turn outlasts its reps") @(t : T?) {
@@ -356,6 +394,10 @@ def test_turns_against_a_fake_server(t : T?) {
                 var gone <- ["{file}.absent"]
                 let missed = image_rows(Plan(url = base_url, model = "ok", reps = 2), gone, "run")
                 t |> success(missed.rows == 0 && missed.refused == 1, "a missing file refuses its row")
+                let heard = media_rows(Plan(url = base_url, model = "ok", reps = 2), files, "run", true)
+                t |> success(heard.rows == 1 && heard.refused == 0, "one row a chat clip: the file goes up as an input_audio part")
+                let unheard = media_rows(Plan(url = base_url, model = "ok", reps = 2), gone, "run", true)
+                t |> success(unheard.rows == 0 && unheard.refused == 1, "a missing clip refuses its row")
                 delete files
                 delete gone
             }

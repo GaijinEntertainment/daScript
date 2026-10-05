@@ -217,8 +217,7 @@ namespace das
             if ( currentRange.empty() ) return true;
             if ( currentRange.contains(r) ) return false;
             if ( heapOnly ) {
-                int ssize = int(r.to-r.from);
-                ssize = (ssize + 15) & ~15;
+                uint64_t ssize = (uint64_t(r.to-r.from) + 15) & ~uint64_t(15);
                 return context->heap->isOwnPtr(r.from, ssize);
             }
             return true;
@@ -706,8 +705,7 @@ namespace das
             bool result = true;
             ptrRangeStack.push_back(currentRange);
             if ( !r.empty() && !currentRange.contains(r) ) {
-                int ssize = int(r.to-r.from);
-                ssize = (ssize + 15) & ~15;
+                uint64_t ssize = (uint64_t(r.to-r.from) + 15) & ~uint64_t(15);
                 if ( validate ) {
                     if ( context->heap->isOwnPtr(r.from, ssize) ) {
                         if ( context->heap->isValidPtr(r.from, ssize) ) {

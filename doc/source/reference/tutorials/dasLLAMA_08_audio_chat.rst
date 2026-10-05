@@ -15,9 +15,10 @@ decoder reads inline with text. Supported pairs (decoder + mmproj GGUF):
 Qwen2-Audio, Qwen2.5-Omni (audio side), Ultravox v0.5 (over *stock* Llama-3
 decoders), and Voxtral-Mini. The chat template picks the audio framing
 automatically — the code below is identical for every pair. Qwen3-Omni and
-Gemma-4 E-series audio are served too, but through the ASR surface
-(:ref:`tutorial 07 <tutorial_dasLLAMA_speech_to_text>`'s two-path
-``load_asr_model``), not ``load_audio_tower``.
+Gemma-4 E-series audio are served too, but not by ``load_audio_tower``:
+:ref:`tutorial 07 <tutorial_dasLLAMA_speech_to_text>`'s two-path
+``load_asr_model`` transcribes them, and a Gemma-4 E-series pair chats on this
+page through the ``AudioEmbedder`` carrier rail at the end.
 
 Run::
 
@@ -105,33 +106,83 @@ encoder's rows between them. Unlike an image span, audio rows stay *causal*:
 sound has a left-to-right order.
 
 The rows themselves come from the ``AudioEmbedder`` carrier — the
-family-neutral encoder a scheduler owns. Probe the mmproj with
-``audio_probe_proj_dim`` (0 means no carrier-served audio tower), load it with
-``load_audio_embedder``, and ``encode_audio`` turns 16 kHz PCM into the
-soft-token rows that splice between the two spans — ``encode_image``'s audio
-twin, and exactly what the server's media worker does per clip. The tutorial
-probes the mmproj first: a carrier-served file (the gemma-4 E-series) takes the
-carrier rail — ``section_render_spans`` plus ``section_carrier_encode`` — while
-every ``load_audio_tower`` pair takes the chat rail above.
+family-neutral encoder a scheduler owns. It serves every audio mmproj on this
+page: the ``load_audio_tower`` families and the gemma-4 E-series alike. Probe
+the mmproj with ``audio_probe_proj_dim`` (0 means no audio family serves the
+file), load it with ``load_audio_embedder``, and ``encode_audio`` turns 16 kHz
+PCM into the soft-token rows that splice between the two spans —
+``encode_image``'s audio twin, and exactly what the server's media worker does
+per clip. The tutorial asks a second question first:
+``audio_tower_probe_proj_dim`` answers non-zero for a file ``load_audio_tower``
+serves. Such a pair runs every section, the carrier ones last. A gemma-4
+E-series file answers 0 there, so it runs only the carrier rail —
+``section_render_spans`` plus ``section_carrier_encode``.
 
 The carrier rail closes the loop at the chat layer with the pre-encoded-rows
 seam, ``add_user_image_rows``'s audio twin: ``add_user_audio_rows`` moves the
 encoder's rows onto a *plain* chat — no tower attached — and ``respond`` runs
 the spliced turn, the audio span rendered around the rows. That is how a
-carrier-served family hears in a conversation at all, and the path for a
+gemma-4 E-series pair hears in a conversation at all, and the path for a
 scheduler that owns its own encoder; the rows are ``dim``-wide on every family
-and the call length-checks them:
+and the call length-checks them. ``audio_span_bare(e)`` says whether the span
+takes markers: an ultravox span sits bare in a stock Llama template, which
+knows no audio marker, so pass it as ``bare``:
 
-.. das-doc: given var rows : array<float>; let n = 0l
+.. das-doc: given var rows : array<float>; let n = 0l; var e = AudioEmbedder()
 .. code-block:: das
 
    var chat <- create_chat(m, "", 96l)
-   add_user_audio_rows(m, chat, rows, n)   // moves the rows in
+   add_user_audio_rows(m, chat, rows, n, audio_span_bare(e))   // moves the rows in
    add_user(chat, "What did you hear?")
    respond(m, chat, SamplingParams()) $(piece) {
        print("{piece}")
        return true
    }
+
+The audio in its place: one body by hand
+========================================
+
+So far the audio led the turn. A user message often carries its media in the
+middle: "Here is a recording. <audio> What is being said?". ``add_user_span``
+puts the audio where it sits: ``text_before`` bytes into the turn's text. The
+span carries the media's content key — the same clip gives the same key.
+``render_turn`` then writes ``n_rows`` *media position ids* where the rows go.
+They are negative numbers, which no vocab id uses, so a prefix cache matches
+across the span the same way it matches across text. ``render_turn_audio``
+and ``render_turn_image`` take the same ``text_before`` for the two-span shape.
+
+A program that owns its encoder and scheduler prefills that turn as *one body*
+instead of three evals (text, rows, text). ``media_body_rows`` builds the
+body's rows — the head text, the media rows, the tail text — and
+``eval_embd_body`` prefills them. The span ``(0, 0)`` is empty, so every row
+stays causal, as audio wants; an image passes its non-causal span and its
+grid. On a gemma-4 E-series decoder the body does one more thing: each text
+row's token id rides on the session, so text rows get their own per-layer
+input, and ``eval_embd_body`` spends the ids:
+
+.. das-doc: given let bare = false; let key = 0ul
+.. code-block:: das
+
+   let lead = "Here is a recording. "
+   var rchat <- create_chat_renderer(m, "", 64l)
+   add_user(rchat, "{lead}What is being said?")
+   add_user_span(m, rchat, key, n, length(lead), false, bare)   // audio, not image
+   var turn <- render_turn(m, rchat)
+   var lo = 0l
+   while (!is_media_position(turn[lo])) {
+       lo ++
+   }
+   var head <- [for (k in range64(lo)); turn[k]]
+   var tail <- [for (k in range64(lo + n, long_length(turn))); turn[k]]
+   var s <- create_session(m)
+   var body : array<float>
+   media_body_rows(m, s, head, rows, n, m.config.dim, tail, body)
+   eval_embd_body(m, s, body, long_length(turn), 0l, 0l, int2(0))
+   // sample(s, ...) now answers the turn
+
+On Llama-3.2-1B with the ultravox mmproj and the JFK clip the turn renders as
+``36 text tokens | 187 media ids | 13 text tokens``; on gemma-4 E2B it is
+``17 | 100 | 14``. Both decoders then describe the clip from the one body.
 
 .. seealso::
 

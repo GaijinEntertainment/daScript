@@ -76,6 +76,26 @@ def test_kv_pool_alloc_release(t : T?) {
         t |> equal(pool.capacity_groups, 8l)
         delete pool
     }
+    t |> run("growth inside a reserve moves no blob and keeps the rows written; past it the pool still grows") @(t : T?) {
+        let c = mk_config(2l, 4l, 2l, 16l, 32l)
+        var pool <- create_kv_pool_(c, 4l, KVDtype.f32, KVDtype.f32)
+        kv_pool_reserve(pool, 32l)
+        t |> equal(long_capacity(pool.kblobs[0]), 8l * 4l * pool.krow_bytes[0])
+        t |> equal(pool.capacity_groups, 0l)
+        kv_pool_alloc_group(pool)
+        pool.kblobs[0][0] = 0x5au8
+        let home = unsafe(addr(pool.kblobs[0][0]))
+        for (_i in range(7)) {
+            kv_pool_alloc_group(pool)
+        }
+        t |> equal(pool.capacity_groups, 8l)
+        t |> equal(home, unsafe(addr(pool.kblobs[0][0])))
+        t |> equal(pool.kblobs[0][0], 0x5au8)
+        t |> equal(8, kv_pool_alloc_group(pool))
+        t |> equal(pool.capacity_groups, 16l)
+        t |> equal(pool.kblobs[0][0], 0x5au8)
+        delete pool
+    }
 }
 
 [test]

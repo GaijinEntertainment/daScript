@@ -4,6 +4,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget (optio
 require dasllama/dasllama
 require daslib/fio
 require strings
+require daslib/strings_boost
 
 // Tutorial dasLLAMA-02: Chat and Templates
 //
@@ -13,6 +14,7 @@ require strings
 //   - The transcript: chat.history
 //   - Under the hood: chat templates and render_turn
 //   - Replaying history: add_assistant and render_assistant
+//   - Pinning the date a Llama-3.1+ system turn states: set_chat_date
 //
 // Prerequisites: tutorial 01; a chat-tuned GGUF (SmolLM2-135M-Instruct works).
 //
@@ -119,6 +121,7 @@ def main() {
         print("\n")
 
         section_replay(m, chat)
+        section_date(m)
     }
 }
 
@@ -154,4 +157,28 @@ def section_replay(m : Model; chat : ChatSession) {
     var replay_toks : array<int64>
     render_assistant(m, rchat, "Paris.", replay_toks)
     print("one replayed exchange = {length(replay_toks)} tokens, rendered without touching the model\n")
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Section 6 — A dated system turn: set_chat_date
+// ──────────────────────────────────────────────────────────────────────────
+//
+// The Llama-3.1+ template writes two lines into every system turn: the
+// model's knowledge cutoff and today's date. Today's date changes the prompt
+// every midnight, so a test that compares token streams, or a benchmark with
+// a fixed prompt, pins it with set_chat_date. "" gives the clock back. A
+// template that states no date (ChatML, gemma) ignores the pin.
+
+def section_date(m : Model) {
+    set_chat_date("26 Jul 2024")
+    var rchat = create_chat_renderer(m, SYSTEM)
+    add_user(rchat, "What day is it?")
+    let text = decode(m, render_turn(m, rchat))
+    set_chat_date("")
+    let dated <- [for (line in split(text, "\n")); line; where find(line, "Date:") >= 0]
+    if (empty(dated)) {
+        print("\nthis template states no date - set_chat_date leaves its turns as they were\n")
+    } else {
+        print("\nthe pinned system turn states: {dated}\n")
+    }
 }

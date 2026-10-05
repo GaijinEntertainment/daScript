@@ -1291,7 +1291,7 @@ def test_whisper_metal_tower(tst : T?) {
             t |> equal(chunks, 1l, "jfk is one 30s chunk")
             t |> equal(s2.blocks - s1.blocks, 4l * chunks, "blocks delta = n_layer x chunks (tiny = 4)")
             t |> equal(s2.rows - s1.rows, 1500l * chunks, "rows delta = n_ctx x chunks")
-            t |> equal(s2.convs - s1.convs, 0l, "tiny's 3x80 im2col width keeps the CPU conv (the shape carve-out)")
+            t |> equal(s2.convs - s1.convs, chunks, "tiny's 3 x 80 conv columns pad to 256: the conv front served on the device")
             to_log(LOG_INFO, "whisper tiny mtower CPU eyeball: '{cpu.text}'\n")
             to_log(LOG_INFO, "whisper tiny mtower GPU eyeball: '{gpu.text}'\n")
             t |> success(!empty(gpu.text), "non-empty transcript")
@@ -1344,42 +1344,38 @@ def test_whisper_metal_tower(tst : T?) {
             t |> success(z_text != cpu.text, "a zeroed twin layer CHANGES the GPU transcript (the twin is read)")
             set_metal_tensor_crowns("")
             metal_prefill_shutdown()
-            // the q8 SERVING DEFAULT declines (quant_mode) and never dispatches — the shipped path stays CPU
+            // the q8 SERVING DEFAULT serves on the tower: its block GEMMs read the q8 planes as a device blob
             var inscope w8 = WhisperModel()
             var inscope stg8 <- stage_whisper_model(path, true)
             mint_whisper_model(stg8, w8)
             t |> success(w8.enc.q8, "the q8 flavor is on the q8 rail")
+            set_metal_tower(false)
+            let q8_cpu = wdec_transcribe(w8, samples)
+            set_metal_tower(true)
             let sq0 = metal_tower_stats()
-            var q8_text = ""
-            with_dasllama_jobque() {
-                var s8 <- create_session(w8)
-                transcribe(w8, s8, samples) $(seg) {
-                    q8_text += seg.text
-                }
-                delete s8
-            }
+            let tq0 = metal_tower_f16_encodes()
+            let dq0 = metal_tower_declines()?["quant_mode"] ?? 0l
+            let q8_gpu = wdec_transcribe(w8, samples)
             let sq1 = metal_tower_stats()
-            t |> equal(sq1.encodes, sq0.encodes, "q8 default never dispatches the tower")
-            t |> equal(sq1.declines - sq0.declines, 1l, "q8 default records the quant_mode decline")
-            t |> success(key_exists(metal_tower_declines(), "quant_mode"), "the decline reason is quant_mode")
-            t |> success(!empty(q8_text), "q8 default still transcribes (CPU serves)")
-            // required-mode contract: a capability decline (quant_mode) under MetalMode.required
-            // panics instead of silently CPU-serving; the knob decline is POLICY and never does
-            set_metal_mode(MetalMode.required)
-            var tripped = false
-            try {
-                with_dasllama_jobque() {
-                    var s9 <- create_session(w8)
-                    transcribe(w8, s9, samples) $(seg) {
-                        pass
-                    }
-                    delete s9
-                }
-            } recover {
-                tripped = true
+            to_log(LOG_INFO, "whisper tiny q8 mtower CPU eyeball: '{q8_cpu}'\n")
+            to_log(LOG_INFO, "whisper tiny q8 mtower GPU eyeball: '{q8_gpu}'\n")
+            t |> equal(sq1.encodes - sq0.encodes, 1l, "q8: one GPU chunk")
+            t |> equal(sq1.blocks - sq0.blocks, 4l, "q8: blocks delta = n_layer (tiny = 4)")
+            t |> equal((metal_tower_declines()?["quant_mode"] ?? 0l) - dq0, 0l, "q8: no quant_mode decline")
+            t |> equal(metal_tower_f16_encodes(), tq0, "q8: the halfword twin route stays out of it")
+            t |> success(!empty(q8_gpu) && q8_gpu == q8_cpu, "q8: transcript-exact CPU vs GPU")
+            // the control: a q8 tower with one layer's GEMM planes zeroed, through the device chain, reads another text
+            var inscope wz8 = WhisperModel()
+            var inscope stgz8 <- stage_whisper_model(path, true)
+            let zq = stgz8.e.enc.qlayers_off + 2l * stgz8.e.enc.qlayer_stride
+            for (i in range64(stgz8.e.enc.qlayer_stride)) {
+                stgz8.enc.qblob[zq + i] = int8(0)
             }
-            set_metal_mode(MetalMode.when_available)
-            t |> success(tripped, "required mode: the q8 tower decline panics")
+            mint_whisper_model(stgz8, wz8)
+            let sz0 = metal_tower_stats()
+            let zq_text = wdec_transcribe(wz8, samples)
+            t |> equal(metal_tower_stats().encodes - sz0.encodes, 1l, "q8 control: the zeroed tower served on the device")
+            t |> success(zq_text != q8_gpu, "q8 control: a zeroed layer CHANGES the GPU transcript (the q8 blob is read)")
             // the POLICY class: a knob decline never panics, even under required mode
             set_metal_mode(MetalMode.required)
             set_metal_tower(false)
@@ -1504,7 +1500,7 @@ def test_whisper_metal_cross_kv(tst : T?) {
             t |> success(rearm_text == gpu_text, "post-shutdown transcript unchanged")
             // the serving FLOOR: at the default min_d, tiny cross-KV-serves but never steps,
             // and the small decline is recorded as policy
-            set_metal_wdec_step_min_d(1024l)
+            set_metal_wdec_step_min_d(METAL_WDEC_STEP_MIN_D)
             let sm0 = metal_wdec_stats()
             let small_text = wdec_transcribe(w8, samples)
             let sm1 = metal_wdec_stats()
@@ -1747,6 +1743,24 @@ def test_parakeet_tower_q8_decline(tst : T?) {
             t |> success(!empty(text), "transcript non-empty")
             t |> equal(enc_delta, 0l, "no tower encodes on the q8 lane")
             t |> success(dec_delta >= 1l, "the quant_mode decline is counted ({dec_delta})")
+            // required-mode contract: a capability decline (quant_mode) under MetalMode.required
+            // panics instead of silently CPU-serving
+            var tripped = false
+            let mode_was = get_metal_mode()
+            set_metal_mode(MetalMode.required)
+            try {
+                with_dasllama_jobque_() {
+                    var inscope m = AsrModel(kind = AsrKind.parakeet)
+                    var inscope stg <- stage_parakeet_model(path, true)
+                    mint_parakeet_model(stg, m.pk, true)
+                    var inscope s <- create_session(m, "en")
+                    transcribe(m, s, samples)
+                }
+            } recover {
+                tripped = true
+            }
+            set_metal_mode(mode_was)
+            t |> success(tripped, "required mode: the q8 tower decline panics")
             delete samples
         } else {
             t |> skip("no Metal build - the parakeet FastConformer driver has no device to decline")
@@ -2240,11 +2254,21 @@ def test_gemma4a_transcribe_q8_ab(t : T?) {
 
 [test]
 def test_gemma4a_tower_metal(t : T?) {
-    t |> run("gemma4a tower: the Metal Conformer block loop matches the CPU f32 rail on jfk") @(t : T?) {
+    g4a_tower_metal_cell(t, "E2B", "gemma-4-E2B-it-Q8_0.gguf", "mmproj-gemma-4-E2B-it-bf16.gguf", 1536l)
+}
+
+//! E4B's audio embedder widens the encoder's 1536 to the decoder's 2560, where E2B's is square
+[test]
+def test_gemma4a_tower_metal_e4b(t : T?) {
+    g4a_tower_metal_cell(t, "E4B", "gemma-4-E4B-it-Q8_0.gguf", "mmproj-gemma-4-E4B-it-BF16.gguf", 2560l)
+}
+
+def private g4a_tower_metal_cell(tst : T?; tag, dec_file, mmp_file : string; want_proj : int64) {
+    tst |> run("gemma4a tower {tag}: the Metal Conformer chain, the projector tail on the device, matches the CPU f32 rail on jfk") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             return if (!family_on(t, "gemma4a") || !arm_on(t, "mtower") || !jit_only(t))
-            let dec_path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
-            let mmp_path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
+            let dec_path = path_join(models_dir(), dec_file)
+            let mmp_path = path_join(models_dir(), mmp_file)
             if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
             var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
             if (empty(samples)) {
@@ -2264,6 +2288,9 @@ def test_gemma4a_tower_metal(t : T?) {
                 set_gemma4a_q8(false)
                 var inscope enc <- load_gemma4a_encoder(mmp_path)
                 t |> success(!enc.q8, "tower is on the f32 rail")
+                t |> equal(enc.proj_dim, want_proj, "the embedder projects to the decoder's width")
+                t |> equal(enc.proj_dim, dec.config.dim)
+                t |> equal(gemma4a_mid_dim(enc), 1536l, "the encoder's own output width")
                 nlayer = enc.n_layer
                 set_metal_tower(false)
                 var inscope s <- create_gemma4a_asr_session(dec)
@@ -2288,6 +2315,7 @@ def test_gemma4a_tower_metal(t : T?) {
                 gemma4a_log_mel(enc, samples, 0l, long_length(samples), stg)
                 gemma4a_encode(enc, stg)
                 enc_rel_l2 = rel_l2(stg.out, stc.out)
+                t |> success(stg.out_ready && !stc.out_ready, "the device leg ran the projector tail, the CPU leg its own")
                 reset_gemma4a_q8()
                 delete dec
             }
@@ -2356,13 +2384,15 @@ def test_canary_tower_metal(t : T?) {
                 canary_encode(enc, stc)
                 set_metal_tower(true)
                 canary_log_mel(enc, samples, stg)
-                let e0 = metal_tower_stats().encodes
+                let e0 = metal_tower_stats()
                 canary_encode(enc, stg)
-                rows_gpu = metal_tower_stats().encodes - e0
+                rows_gpu = metal_tower_stats().encodes - e0.encodes
+                t |> equal(metal_tower_stats().convs - e0.convs, 1l, "the mel and the subsample front served on the device")
                 enc_rel_l2 = rel_l2(stg.out, stc.out)
-                // the control: the same clip with its mel scaled x3 through the GPU chain must red the bar
-                for (i in range(length(stg.mel))) {
-                    stg.mel[i] *= 3.0
+                // the control: the device front reads the windowed frames, so the clip with the first half of them
+                // silenced, through the GPU chain, must red the bar (a scaled clip would not: the mel normalizes per feature)
+                for (i in range(length(stg.xw) / 2)) {
+                    stg.xw[i] = 0.0
                 }
                 canary_encode(enc, stg)
                 poison_rel_l2 = rel_l2(stg.out, stc.out)

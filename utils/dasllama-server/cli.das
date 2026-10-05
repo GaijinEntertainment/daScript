@@ -243,7 +243,7 @@ def private load_hearing(path : string; var why : string&) : Hearing {
         return <- h
     }
     if (audio_probe_proj_dim(path) == 0l) {
-        why = "{path} carries no audio tower this build serves (gemma4a)"
+        why = "{path} carries no audio tower this build serves (gemma4a, or a whisper-class tower: qwen2a, qwen2.5o, ultravox, voxtral)"
         return <- h
     }
     note("loading audio mmproj {path}")
@@ -266,7 +266,7 @@ def private queue_audio(m : Model; var chat : ChatSession; var h : Hearing; path
     }
     var rows : array<float>
     let n = encode_audio(h.emb, h.state, samples, rows)
-    add_user_audio_rows(m, chat, rows, n)
+    add_user_audio_rows(m, chat, rows, n, audio_span_bare(h.emb))
     note("audio {double(length(samples)) / 16000.0lf} s -> {n} soft tokens")
     return true
 }
@@ -566,11 +566,14 @@ class CliEngine : ReplEngine {
     }
 }
 
-//! The audio tower a chat arms: the flag, else the served mmproj when it carries an audio encoder
-//! (the E-series file serves both towers).
+//! The audio tower a chat arms: the flag, else the served config's audio mmproj, else its image mmproj when that
+//! file carries an audio encoder too (the E-series and Omni files serve both towers).
 def private chat_audio_mmproj(plan : CliPlan; cfg : CliConfig) : string {
     if (!empty(plan.chat.audio_mmproj)) {
         return plan.chat.audio_mmproj
+    }
+    if (!empty(cfg.audio_mmproj)) {
+        return cfg.audio_mmproj
     }
     return (!empty(cfg.image_mmproj) && stat(cfg.image_mmproj).is_valid && audio_probe_proj_dim(cfg.image_mmproj) > 0l) ? cfg.image_mmproj : ""
 }

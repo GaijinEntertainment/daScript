@@ -117,6 +117,12 @@ def prefix_checkpoint_at(cache : PrefixCache; pool : KVPool; session : Session; 
     return prefix_checkpoint_at_(cache, pool, session, prompt, matched, stable_at)
 }
 
+def prefix_match_len(cache : PrefixCache; pool : KVPool; prompt : array<int64>) : int64 {
+    //! How many leading positions of ``prompt`` a ``prefix_attach`` would attach right now, attaching nothing: a probe
+    //! for a caller deciding what a request must bring (a media span's rows). 0 on a recurrent model's cache.
+    return prefix_match_len_(cache, pool, prompt)
+}
+
 def prefix_attach(var cache : PrefixCache; var pool : KVPool; var session : Session; prompt : array<int64>) : int64 {
     //! Attach the longest cached prefix of ``prompt`` to a FRESH paged ``session`` of ``pool``:
     //! matched pages join the session's block table and ``n_past`` advances past them, so the
@@ -179,6 +185,18 @@ def eval_embd(model : Model; var session : Session; embd : array<float>; npos : 
     //! token-major) at the session's current position and advance it — the multimodal splice entry.
     //! ``non_causal`` marks the whole call as one image span (gemma vision); audio rows stay causal.
     eval_embd_(model, session, embd, npos, non_causal)
+}
+
+def eval_embd_body(model : Model; var session : Session; embd : array<float>; npos, span_lo, span_hi : int64; grid : int2) {
+    //! Prefill ``npos`` rows built by ``media_body_rows``: [span_lo, span_hi) a non-causal span (empty = every row
+    //! causal), roped on a merged image ``grid`` where one is given.
+    eval_embd_body_(model, session, embd, npos, span_lo, span_hi, grid)
+}
+
+def media_body_rows(model : Model; var session : Session; head : array<int64>; rows : array<float>; n_media, src_w : int64;
+                    tail : array<int64>; var embd : array<float>) {
+    //! One prefill body's rows for ``eval_embd_body`` on ``session``: ``head`` text, ``n_media`` media rows of width ``src_w``, ``tail`` text.
+    media_body_rows_(model, session, head, rows, n_media, src_w, tail, embd)
 }
 
 def eval_embd_span(model : Model; var session : Session; embd : array<float>; npos, span_lo, span_hi : int64) {
@@ -321,11 +339,24 @@ def add_user_image_rows(model : Model; var chat : ChatSession; var rows : array<
     add_user_image_rows_(model, chat, rows, n_rows, grid)
 }
 
-def add_user_audio_rows(model : Model; var chat : ChatSession; var rows : array<float>; n_rows : int64) {
-    //! Queue PRE-ENCODED audio soft-token rows (what ``encode_audio`` emits — ``dim``-wide on
-    //! every family, length-checked) for the next ``respond``. MOVES ``rows``; works on a plain
-    //! chat — no tower needed: the carrier-served families (the gemma-4 E-series) hear this way.
-    add_user_audio_rows_(model, chat, rows, n_rows)
+def set_chat_date(date : string) {
+    //! Pin the date a Llama-3.1+ system turn states (``"26 Jul 2024"``); ``""`` returns it to the day the turn
+    //! renders. For a prompt that must not move with the calendar - a pinned test stream, a benchmark.
+    set_chat_date_(date)
+}
+
+def add_user_span(model : Model; var chat : ChatSession; key : uint64; n_rows : int64; text_before : int; is_image : bool; bare : bool = false) {
+    //! Mark the pending user turn as carrying a media span inline: ``render_turn`` and ``render_assistant`` then lay
+    //! ``n_rows`` position ids (``media_position_id`` over the media's content ``key``) where the media sits,
+    //! ``text_before`` bytes into the turn's text. The rows themselves are the caller's to eval at those positions.
+    add_user_span_(model, chat, key, n_rows, text_before, is_image, bare)
+}
+
+def add_user_audio_rows(model : Model; var chat : ChatSession; var rows : array<float>; n_rows : int64; bare : bool = false) {
+    //! Queue PRE-ENCODED audio soft-token rows (what ``encode_audio`` emits — ``dim``-wide, length-checked) for the
+    //! next ``respond``. MOVES ``rows``; works on a plain chat, no tower needed. Pass the encoder's
+    //! ``audio_span_bare`` as ``bare``: an ultravox span takes no marker, so a stock template serves it.
+    add_user_audio_rows_(model, chat, rows, n_rows, bare)
 }
 
 def encode_image(embedder : VisionEmbedder; var scratch : VisionState; img : VisionImage;
@@ -377,18 +408,18 @@ def render_turn_marked(model : Model; chat : ChatSession) : RenderedTurn {
     return <- render_turn_marked_(model, chat)
 }
 
-def render_turn_image(model : Model; chat : ChatSession; var head : array<int64>; var tail : array<int64>) {
-    //! ``render_turn``'s IMAGE twin: the turn's prefill as the two token spans that bracket the
-    //! image soft-token splice — ``head`` before the rows, ``tail`` after. Render-only (no KV, no
-    //! embedder): the rows come from ``encode_image``, and a scheduler prefills head, rows, tail.
-    render_turn_image_(model, chat, head, tail)
+def render_turn_image(model : Model; chat : ChatSession; var head : array<int64>; var tail : array<int64>; text_before : int = 0) {
+    //! ``render_turn``'s IMAGE twin: the two token spans that bracket the image soft-token splice — ``head`` before the
+    //! rows, ``tail`` after. Render-only (no KV, no embedder): the rows come from ``encode_image``.
+    //! ``text_before`` bytes of the user text render ahead of the image (0: the image leads the turn).
+    render_turn_image_(model, chat, head, tail, text_before)
 }
 
-def render_turn_audio(model : Model; chat : ChatSession; var head : array<int64>; var tail : array<int64>) {
+def render_turn_audio(model : Model; chat : ChatSession; var head : array<int64>; var tail : array<int64>; text_before : int = 0) {
     //! ``render_turn``'s AUDIO twin: the same two-span contract around the audio soft-token splice
     //! (the template's audio span markers). Render-only (no KV, no encoder): the rows come from
-    //! ``encode_audio``, and a scheduler prefills head, rows, tail.
-    render_turn_audio_(model, chat, head, tail)
+    //! ``encode_audio``, and a scheduler prefills head, rows, tail. ``text_before`` as in ``render_turn_image``.
+    render_turn_audio_(model, chat, head, tail, text_before)
 }
 
 def render_assistant(model : Model; var chat : ChatSession; text : string; var out : array<int64>) {

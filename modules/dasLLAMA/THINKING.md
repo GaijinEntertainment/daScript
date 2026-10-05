@@ -29,8 +29,10 @@ family-blind.
 3. **`think_gate` + `assistant_open_think`** (off -> thinking, gemma-4-shaped): the gate
    (`<|think|>`) opens the system turn - rendered even when no system prompt is set - and the
    generation prompt switches to the bare `assistant_open_think` header so the model emits its
-   own thought channel. gemma-4's default `assistant_open` keeps the closed empty
-   `<|channel>thought\n<channel|>` prefill, so thinking-off renders the exact pre-arc tokens.
+   own thought channel. gemma-4's thinking-off `assistant_open` is read off the model's own
+   template: the larger models' template closes an empty `<|channel>thought\n<channel|>` after the
+   model turn's opener, the E-series' opens the turn bare - with the closed thought ahead of it an
+   E-series model writes its reasoning as the answer.
 4. **`stop_nothink`** - guarded stop tokens in force whenever the next turn is NOT a thinking
    turn. gemma-4 lists its channel markers: an instruct-mode E-series model rambles past its
    answer through a stray `<channel|>` (`...4.<channel|>4`), and the same model opens a media

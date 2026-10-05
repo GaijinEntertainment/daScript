@@ -87,7 +87,7 @@ struct Gemma4aEncoder {
     hann : PlaneF = PlaneF()       // [512]: 320 Hann at the front, zeros to 512
     twiddles : PlaneF = PlaneF()   // DFT twiddle matrix [n_fft × (n_bins·2)]
     pos_emb : PlaneF = PlaneF()    // sinusoidal RPE table [13 × d_model]
-    ones : PlaneF = PlaneF()       // [proj_dim] weight for the final weightless RMSNorm
+    ones : PlaneF = PlaneF()       // [mid] weight for the final weightless RMSNorm; its length IS the encoder's own output width (gemma4a_mid_dim)
     blob : PlaneF = PlaneF()
     qblob : PlaneI8 = PlaneI8()
     qscales : PlaneF = PlaneF()
@@ -313,10 +313,12 @@ def load_gemma4a_encoder(path : string) : Gemma4aEncoder {
         let img = image_path_for(path, tag)
         let ts_img = ref_time_ticks()
         var t = Gemma4aEncoder()
-        if (load_image(img, t, tag)) {
+        // an image minted off a widening embedder read as a square one carries the encoder's width as the decoder's: mint again
+        if (load_image(img, t, tag) && t.proj_dim == gemma4a_probe_proj_dim(path)) {
             to_log(LOG_INFO, "dasLLAMA: prepared gemma4a-encoder image mapped in {get_time_usec(ts_img) / 1000} ms - {img}\n")
             return <- t
         }
+        delete t
         var inscope st <- stage_gemma4a_encoder(path)
         var built = Gemma4aEncoder()
         if (cache_via_image_staged(st, built, img, tag)) {
@@ -352,15 +354,17 @@ def gemma4a_probe_proj_dim(path : string) : int64 {
     }
     var dim = 0l
     fmap(f) $(var bytes : array<uint8>#) {
-        if (length(bytes) < 4 || !(int(bytes[0]) == 'G' && int(bytes[1]) == 'G' && int(bytes[2]) == 'U' && int(bytes[3]) == 'F')) {
+        if (long_length(bytes) < 4l || !(int(bytes[0]) == 'G' && int(bytes[1]) == 'G' && int(bytes[2]) == 'U' && int(bytes[3]) == 'F')) {
             return
         }
         var inscope m <- parse_gguf_meta(bytes)
         let out_proj = gguf_find_tensor(m, "a.pre_encode.out.weight")
-        if (out_proj >= 0 && gguf_has(m, "clip.audio.embedding_length")) {
+        let embedder = gguf_find_tensor(m, "mm.a.input_projection.weight")
+        if (out_proj >= 0 && embedder >= 0 && gguf_has(m, "clip.audio.embedding_length")) {
             let d = gguf_int(m, bytes, "clip.audio.embedding_length")
-            if (d > 0l) {
-                dim = m.tensors[out_proj].n_elem / d
+            let mid = d > 0l ? m.tensors[out_proj].n_elem / d : 0l
+            if (mid > 0l) {
+                dim = m.tensors[embedder].n_elem / mid   // the embedder's rows: the decoder's width
             }
         }
     }
@@ -409,8 +413,9 @@ def private g4a_repack_all(var st : Gemma4aStaging) {
     let ff = st.e.n_ff
     let feat = st.e.sub_ch1 * (st.e.n_mel / 4l)
     g4a_repack(st, st.e.inproj_w, feat, d)
-    g4a_repack(st, st.e.outproj_w, d, st.e.proj_dim)
-    g4a_repack(st, st.e.mmproj_w, st.e.proj_dim, st.e.proj_dim)
+    let mid = long_length(st.ones)
+    g4a_repack(st, st.e.outproj_w, d, mid)
+    g4a_repack(st, st.e.mmproj_w, mid, st.e.proj_dim)
     for (l in range64(st.e.n_layer)) {
         let lo = st.layers[l]
         g4a_repack(st, lo.ff_up, d, ff)
@@ -436,6 +441,7 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
     if (f == null) {
         panic("dasLLAMA gemma4a: cannot open mmproj gguf '{path}'")
     }
+    var mid = 0l   //! the encoder's own output width: the out projection's rows, the weightless norm's, the embedder's columns
     fmap(f) $(var bytes : array<uint8>#) {
         var inscope m <- parse_gguf_meta(bytes)
         let proj = (gguf_has(m, "clip.audio.projector_type")
@@ -462,7 +468,6 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
         }
         st.e.sub_ch0 = m.tensors[i0].n_elem / 9l            // cin = 1
         st.e.sub_ch1 = m.tensors[i1].n_elem / (9l * st.e.sub_ch0)
-        // proj_dim from the audio multimodal embedder mm.a.input_projection [proj_dim × proj_dim]
         let ip = gguf_find_tensor(m, "mm.a.input_projection.weight")
         if (ip < 0) {
             panic("dasLLAMA gemma4a: missing mm.a.input_projection.weight")
@@ -471,7 +476,9 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
         if (op < 0) {
             panic("dasLLAMA gemma4a: missing a.pre_encode.out.weight")
         }
-        st.e.proj_dim = m.tensors[op].n_elem / d            // out proj [d × proj_dim]
+        // the encoder's own output width, then the decoder's: the audio multimodal embedder is square on E2B and widens on E4B
+        mid = m.tensors[op].n_elem / d                      // out proj [d × mid]
+        st.e.proj_dim = m.tensors[ip].n_elem / mid          // mm.a.input_projection [mid × proj_dim]
 
         // blob layout: subsample + output first, then per-layer. GEMM fields ride the q cursor
         // on a q8 load (the field then indexes qblob); convs, norms, biases stay on the blob
@@ -484,9 +491,9 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
         st.e.norm1_w = o; o += st.e.sub_ch1
         let feat = st.e.sub_ch1 * (st.e.n_mel / 4l)          // 32 × 32 = 1024
         st.e.inproj_w = take_cursor(q8, o, qo, d * feat)
-        st.e.outproj_w = take_cursor(q8, o, qo, st.e.proj_dim * d)
-        st.e.outproj_b = o; o += st.e.proj_dim
-        st.e.mmproj_w = take_cursor(q8, o, qo, st.e.proj_dim * st.e.proj_dim)
+        st.e.outproj_w = take_cursor(q8, o, qo, mid * d)
+        st.e.outproj_b = o; o += mid
+        st.e.mmproj_w = take_cursor(q8, o, qo, st.e.proj_dim * mid)
         st.layers |> resize(st.e.n_layer)
         for (l in range64(st.e.n_layer)) {
             var lo = G4aLayer()
@@ -530,9 +537,9 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
         gguf_read_tensor_f32(m, bytes, "a.conv1d.1.weight", st.blob, st.e.c1_w, st.e.sub_ch1 * st.e.sub_ch0 * 9l)
         gguf_read_tensor_f32(m, bytes, "a.conv1d.1.norm.weight", st.blob, st.e.norm1_w, st.e.sub_ch1)
         g4a_read_gemm(m, bytes, "a.input_projection.weight", st, wscratch, st.e.inproj_w, d * feat)
-        g4a_read_gemm(m, bytes, "a.pre_encode.out.weight", st, wscratch, st.e.outproj_w, st.e.proj_dim * d)
-        gguf_read_tensor_f32(m, bytes, "a.pre_encode.out.bias", st.blob, st.e.outproj_b, st.e.proj_dim)
-        g4a_read_gemm(m, bytes, "mm.a.input_projection.weight", st, wscratch, st.e.mmproj_w, st.e.proj_dim * st.e.proj_dim)
+        g4a_read_gemm(m, bytes, "a.pre_encode.out.weight", st, wscratch, st.e.outproj_w, mid * d)
+        gguf_read_tensor_f32(m, bytes, "a.pre_encode.out.bias", st.blob, st.e.outproj_b, mid)
+        g4a_read_gemm(m, bytes, "mm.a.input_projection.weight", st, wscratch, st.e.mmproj_w, st.e.proj_dim * mid)
         for (l in range64(st.e.n_layer)) {
             let lo = st.layers[l]
             let p = "a.blk.{l}"
@@ -597,8 +604,8 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
             st.pos_emb[pp * st.e.d_model + i + num_ts] = cos(scaled)
         }
     }
-    st.ones |> resize(st.e.proj_dim)
-    for (i in range64(st.e.proj_dim)) {
+    st.ones |> resize(mid)
+    for (i in range64(mid)) {
         st.ones[i] = 1.0
     }
     return <- st
@@ -1067,21 +1074,26 @@ def gemma4a_encode(enc : Gemma4aEncoder; var st : Gemma4aState) : int64 {
 def private g4a_tail_after_gpu(enc : Gemma4aEncoder; var st : Gemma4aState; npos : int64) : int64
     => st.out_ready ? npos : g4a_projector_tail(enc, st, npos)
 
+//! The encoder's own output width - the out projection's rows and the audio embedder's columns; `proj_dim` is the
+//! embedder's rows, the decoder's width. Equal on E2B, 1536 against 2560 on E4B.
+def gemma4a_mid_dim(enc : Gemma4aEncoder) : int64 => length(enc.ones)
+
 def private g4a_projector_tail(enc : Gemma4aEncoder; var st : Gemma4aState; npos : int64) : int64 {
     let d = enc.d_model
+    let mid = gemma4a_mid_dim(enc)
     let tprof = ref_time_ticks()
-    ensure_length(st.tmp, npos * enc.proj_dim)
+    ensure_length(st.tmp, npos * mid)
     ensure_length(st.out, npos * enc.proj_dim)
-    g4a_mm_rq(enc, st, st.tmp, enc.outproj_w, st.x, d, enc.proj_dim, npos)
-    add_bias_rows(st.tmp, enc.blob, enc.outproj_b, enc.proj_dim, npos)
+    g4a_mm_rq(enc, st, st.tmp, enc.outproj_w, st.x, d, mid, npos)
+    add_bias_rows(st.tmp, enc.blob, enc.outproj_b, mid, npos)
     unsafe {
         var tp = addr(st.tmp[0])
         let wp = plane_at(enc.ones, 0l)
         for (r in range64(npos)) {
-            rmsnorm(tp + r * enc.proj_dim, tp + r * enc.proj_dim, wp, enc.proj_dim, enc.eps)
+            rmsnorm(tp + r * mid, tp + r * mid, wp, mid, enc.eps)
         }
     }
-    g4a_mm_rq(enc, st, st.out, enc.mmproj_w, st.tmp, enc.proj_dim, enc.proj_dim, npos)
+    g4a_mm_rq(enc, st, st.out, enc.mmproj_w, st.tmp, mid, enc.proj_dim, npos)
     asr_prof_add("g4a.enc.proj", tprof)
     return npos
 }
@@ -1150,22 +1162,22 @@ def gemma4a_transcribe(dec : Model; enc : Gemma4aEncoder; var s : Gemma4aAsrSess
                        samples : array<float> | #; blk : block<(seg : TranscribeSegment)>;
                        var detected_lang : string&) : int {
     var tp = ref_time_ticks()
-    var rows : array<float>
+    var inscope rows : array<float>
     let n_audio = gemma4a_encode_all(enc, s.g4st, samples, rows)
     asr_prof_add("g4a.encode", tp)
 
     let dim = dec.config.dim
-    let nl = encode_(dec, "\n", false, false)
+    var inscope nl <- encode_(dec, "\n", false, false)
     // no-think turn: a bare user turn (no system/`<|think|>`) yields a deterministic transcription
     // — the reasoning channel is near-tie-brittle across float engines, so it is disabled here.
-    var head : array<int64>
+    var inscope head : array<int64>
     head |> push(special_id(dec, "<bos>"))
     head |> push(special_id(dec, "<|turn>"))
     head |> push_from(encode_(dec, "user", false, false))
     head |> push_from(nl)
     var inscope tmpl <- arch_chat("gemma4")
     head |> push(special_id(dec, tmpl.audio_pre.parts[0].s))
-    var tail : array<int64>
+    var inscope tail : array<int64>
     tail |> push(special_id(dec, tmpl.audio_post.parts[0].s))
     tail |> push_from(encode_(dec, "Transcribe this audio.", false, false))
     tail |> push(special_id(dec, "<turn|>"))
@@ -1177,26 +1189,21 @@ def gemma4a_transcribe(dec : Model; enc : Gemma4aEncoder; var s : Gemma4aAsrSess
     let n_head = long_length(head)
     let npos = n_head + n_audio + long_length(tail)
     asr_ctx_guard(n_audio, npos, dec.config.seq_len)
-    var embd : array<float>
-    embd |> resize(int(npos * dim))
-    embed_text_rows(dec, head, embd, 0l)
-    for (i in range64(n_audio * dim)) {
-        embd[n_head * dim + i] = rows[i]
-    }
-    embed_text_rows(dec, tail, embd, n_head + n_audio)
+    var inscope embd : array<float>
+    media_body_rows_(dec, s.qctx, head, rows, n_audio, dim, tail, embd)
 
     s.qctx.n_past = 0l   // fresh sequence per transcribe
     tp = ref_time_ticks()
-    eval_embd_(dec, s.qctx, embd, npos)
+    eval_embd_body_(dec, s.qctx, embd, npos, 0l, 0l, int2(0))
     asr_prof_add("g4a.prefill", tp)
 
     let turn_end = special_id(dec, "<turn|>")
     let eos = special_id(dec, "<eos>")
     let max_new = dec.config.seq_len - npos - 1l
-    var one : array<int64>
+    var inscope one : array<int64>
     one |> resize(1)
-    var toks : array<int>
-    var raw : array<string>
+    var inscope toks : array<int>
+    var inscope raw : array<string>
     toks |> reserve(512)
     raw |> reserve(512)
     tp = ref_time_ticks()
@@ -1221,7 +1228,7 @@ def gemma4a_transcribe(dec : Model; enc : Gemma4aEncoder; var s : Gemma4aAsrSess
     if (mark >= 0) {
         text = slice(full, mark + length("<channel|>"), length(full))
     }
-    var seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE,
+    var inscope seg = TranscribeSegment(t0 = 0l, t1 = long_length(samples) * 100l / AUDIO_SAMPLE_RATE,
         text = strip(text))
     seg.tokens := toks
     detected_lang = "en"

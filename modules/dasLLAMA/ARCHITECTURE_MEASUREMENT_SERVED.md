@@ -33,17 +33,24 @@ cached token count differs between reps.
 
 Its speech rows time a whole transcription request - the clip uploaded as a multipart form to
 `/v1/audio/transcriptions` - one row a clip, over all reps behind one untimed request, every rep
-reading the same text. A second row a clip is timed while a chat turn decodes at the chat
+reading the same text. Every request uploads a copy of the clip with one sample moved, the sample
+picked off the clock: a server that keeps the prompts it has evaluated answers a clip it has heard
+from that cache - audio rows included - and a transcription service is not sent the same audio
+twice. A clip that is no PCM WAV goes up as it is. A second row a clip is timed while a chat turn decodes at the chat
 endpoint: the reps start at that turn's first reply text, and the row is refused when the turn
 ends before they do or the text differs from the idle row's. Where the speech encoder runs -
 beside the chat model on the GPU or on the CPU team - is the server's launch, not the
 instrument's: each placement is one run.
 
-Its image rows time a question about an image answered in one token, so the wall is the image's
-encode, the prompt's prefill and that token: per rep a question under a system line no server has
-seen, then a second question under the same line, which a server that keeps the image's rows
-answers from its cache. The row carries the prompt tokens the image and the text make, the same
-on every rep or the row is refused; the first question's cv is the one that voids it.
+Its media rows (`--image`, and `--chat-clip` for an audio clip sent as an `input_audio` part) time a
+question about the part answered in one token, the part ahead of the text, so the wall is the
+part's encode, the prompt's prefill and that token: per rep a question under a system line no
+server has seen, then a second question under the same line - asked again, which a server that
+pays for a part once answers from its cache, neither encoding nor prefilling the part a second
+time. The untimed request ahead of a row asks for a whole answer with thinking off and the bench prints it (`says:`),
+so a row is read beside what the model said of the part. A second untimed request under a system line of the reps' shape follows it:
+a rep's line shares its opening with the line of the rep before, and without it the first rep alone prefills that opening. The row carries the prompt tokens the part and the text make, the same on every rep or the
+row is refused; the first question's cv is the one that voids it.
 
 Its synthesis rows time a whole `/v1/audio/speech` request, one row a model: the answer is the
 finished WAV, so the wall is the time to first audio, printed beside the seconds of speech the
@@ -76,6 +83,17 @@ for a transcription row, the reference as `llama-server -m <gguf> --mmproj <mmpr
 -ngl 99 -np 1` (with `-c 16384 -ctk f16 -ctv f16` for an image row); the client is
 `served_bench.das -- --url <server> --no-chat --image <file> --reps 5` and
 `served_bench.das -- --asr-url <server> --clip <wav> --reps 5`.
+
+A transcription row with no chat model behind it launches ours with the ASR model alone:
+`main.das -- --asr <whisper bin>` for a whisper model, `main.das -- --asr <gguf> --mmproj <mmproj>`
+for Qwen3-ASR. The whisper reference is whisper.cpp `6fc7c33`, built on the box, as
+`whisper-server -m <bin> --port <port> --inference-path /v1/audio/transcriptions`, so the
+client's transcription request reaches it at the path it sends. The client is
+`served_bench.das -- --no-chat --asr-url <server> --clip <wav> --reps 5`.
+
+An audio-chat row (a clip asked about as an `input_audio` part) launches ours with the tower's
+projector beside the model, `main.das -- -m <gguf> --audio-mmproj <mmproj> -p 8123 -s 1`, and the
+client as `served_bench.das -- --url <server> --no-chat --chat-clip <wav> --reps 5`.
 
 Its figures are ledger figures - `PERF_LEDGER.md`, tagged `served` - and nothing else. No record
 store, board or ladder takes them, and none of them compares against an `lcpp_bench` row: the

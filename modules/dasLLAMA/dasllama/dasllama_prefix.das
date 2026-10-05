@@ -321,6 +321,37 @@ def prefix_attach_(var cache : PrefixCache; var pool : KVPool; var s : Session; 
     return matched
 }
 
+//! How many leading positions of `prompt` `prefix_attach_` would attach right now, with nothing attached and no entry
+//! touched: the whole pages the cache holds, then the rows the page past them shares. 0 on a recurrent model's cache,
+//! which attaches at checkpoints - a caller that needs the count there treats nothing as held.
+def prefix_match_len_(cache : PrefixCache; pool : KVPool; prompt : array<int64>) : int64 {
+    return 0l if (!empty(cache.states))
+    let np = long_length(prompt)
+    let pr = pool.page_rows
+    let pages_max = np > 0l ? (np - 1l) / pr : 0l
+    var hit_hash = 0ul
+    var matched = 0l
+    for (i in range64(pages_max)) {
+        let nh = chain_page_hash(hit_hash, prompt, i * pr, (i + 1l) * pr)
+        break if (!key_exists(cache.entries, nh))
+        let e = unsafe(cache.entries?[nh])
+        break if (e == null || long_length(e.tokens) != pr || !page_tokens_match(*e, prompt, i * pr))
+        hit_hash = nh
+        matched += pr
+    }
+    var rows = 0l
+    if (matched > 0l) {
+        for (key in unsafe(cache.entries?[hit_hash]).nexts) {
+            rows = max(rows, shared_rows(cache, key, prompt, matched))
+        }
+    } else {
+        for (key in cache.roots) {
+            rows = max(rows, shared_rows(cache, key, prompt, matched))
+        }
+    }
+    return matched + rows
+}
+
 // Drop the least-recently-used entry (release its group hold + its chain's live count).
 def private prefix_evict_lru(var cache : PrefixCache; var pool : KVPool) {
     var lru_key = 0ul

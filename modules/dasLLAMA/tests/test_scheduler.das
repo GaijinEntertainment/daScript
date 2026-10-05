@@ -910,10 +910,38 @@ def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model loa
                 var got <- toks_of(events, 1l)
                 t |> success(ids_equal(got, base.toks), "arm {arm}: media stream == the all-token stream")
                 t |> equal(finished_of(events, 1l).n_prompt, np)   // usage counts the rows as positions
+                t |> equal(sch.prefill_evals, 1l, "arm {arm}: the span and the text around it are one prefill call")
                 delete got
                 delete events
                 delete sch
             }
+            // a chunk of text is all a span's call carries: the head rides it, the tail past the chunk evals on its own
+            var sch_cut <- create_scheduler(m, 1l, 4l, 8l, idle_chunk_tokens = 0l)
+            var events_cut : array<SchedEvent>
+            var req_cut <- media_req(m, 2l, prompt, 4l, 10l, false, greedy, 6l)
+            t |> success(submit(m, sch_cut, req_cut), "chunk-bounded media stream queued")
+            drain(m, sch_cut, events_cut)
+            var got_cut <- toks_of(events_cut, 2l)
+            t |> success(ids_equal(got_cut, base.toks), "a body cut at the chunk == the all-token stream")
+            t |> equal(sch_cut.prefill_evals, 1l + (np - 14l + 7l) / 8l, "the body takes the head, the span and four tail tokens; the rest goes a chunk a call")
+            delete got_cut
+            delete events_cut
+            delete sch_cut
+            // a non-causal span with text either side is generate_embd's span form in one call
+            var mid_ref <- embd_span_generate(m, prompt, 4l, 10l, SamplingParams(temp = 0.8, top_k = 40l), 8l, SPAN_SEED)
+            var sch_mid <- create_scheduler(m, 1l, 4l, 64l)
+            var events_mid : array<SchedEvent>
+            var req_mid <- media_req(m, 3l, prompt, 4l, 10l, true, SamplingParams(temp = 0.8, top_k = 40l), 8l)
+            req_mid.seed = SPAN_SEED
+            t |> success(submit(m, sch_mid, req_mid), "non-causal mid-prompt media stream queued")
+            drain(m, sch_mid, events_mid)
+            var got_mid <- toks_of(events_mid, 3l)
+            t |> success(ids_equal(got_mid, mid_ref), "a non-causal span between text == generate_embd's span form")
+            t |> equal(sch_mid.prefill_evals, 1l)
+            delete got_mid
+            delete events_mid
+            delete sch_mid
+            delete mid_ref
             // the non-causal flag reaches the kernel THROUGH the scheduler: with it set the arm must
             // match generate_embd's span form, not the causal one. The span is [1, np) — everything
             // past BOS — and the streams are sampled under one seed: the span moves the prompt's
@@ -948,10 +976,8 @@ def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model loa
             delete sch_nc
             delete span_ref
 
-            // paged: the prefix cache is keyed on TOKEN IDS, and a media stream's KV past the splice
-            // does not follow from them — it must neither attach a hit nor donate. Prime the cache
-            // with a plain stream carrying the media stream's EXACT token prompt: the ids match, so
-            // only the bypass keeps those pages from being attached over the splice.
+            // paged: a media span's positions enter the prompt as ids of its rows' content, so the prefix cache
+            // matches across a span as across text. Prime with a plain stream carrying the media stream's text.
             let mlo = 20l
             let mhi = 26l
             var schp <- create_scheduler(m, 1l, 4l, 64l, 16l)
@@ -966,11 +992,50 @@ def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model loa
             var r1 <- media_req(m, 10l, prompt, mlo, mhi, false, greedy, 6l)
             t |> success(submit(m, schp, r1), "paged media stream queued")
             drain(m, schp, ev)
-            t |> equal(finished_of(ev, 10l).n_cached, 0l)   // no attach: those ids are not this KV
-            t |> equal(schp.cached_tokens, 0l)
+            t |> equal(finished_of(ev, 10l).n_cached, mlo)   // the text ahead of the span attaches; the span's ids are no token's, so the hit stops there
             var paged_toks <- toks_of(ev, 10l)
             t |> success(ids_equal(paged_toks, base.toks), "paged media stream == the all-token stream")
-            t |> equal(prefix_held_groups(schp.prefix), primed)   // and no donate on the way out
+            t |> success(prefix_held_groups(schp.prefix) > primed, "the media stream donates its pages")
+            // the same media again: everything but the last position attaches, the span included
+            ev |> clear()
+            var r2 <- media_req(m, 11l, prompt, mlo, mhi, false, greedy, 6l)
+            t |> success(submit(m, schp, r2), "the same media stream queued again")
+            drain(m, schp, ev)
+            t |> success(finished_of(ev, 11l).n_cached > mhi, "asked again, the span attaches off the cache ({finished_of(ev, 11l).n_cached} of {np} positions)")
+            var again_toks <- toks_of(ev, 11l)
+            t |> success(ids_equal(again_toks, base.toks), "the attached span reads the same stream")
+            // ...and with no rows at all: the request counts on the cache for the span
+            ev |> clear()
+            var r3 <- media_req(m, 12l, prompt, mlo, mhi, false, greedy, 6l)
+            splice_to_span(r3)
+            delete r3.spans[0].rows
+            t |> success(submit(m, schp, r3), "a rowless request queued")
+            drain(m, schp, ev)
+            var rowless_toks <- toks_of(ev, 12l)
+            t |> equal(finished_of(ev, 12l).finish, "length")
+            t |> success(ids_equal(rowless_toks, base.toks), "a span the cache holds needs no rows")
+            // other rows at the same place share only the text ahead of them (the control)
+            ev |> clear()
+            var other <- [for (k in range64(np)); k >= mlo && k < mhi ? prompt[np - 1l - (k - mlo)] : prompt[k]]
+            var r4 <- media_req(m, 13l, other, mlo, mhi, false, greedy, 6l)
+            t |> success(submit(m, schp, r4), "a stream with other rows queued")
+            drain(m, schp, ev)
+            t |> equal(finished_of(ev, 13l).n_cached, mlo)
+            // a rowless request on a cache that never saw the span is told so, and donates nothing
+            var schl <- create_scheduler(m, 1l, 4l, 64l, 16l)
+            var evl : array<SchedEvent>
+            var r5 <- media_req(m, 14l, prompt, mlo, mhi, false, greedy, 6l)
+            splice_to_span(r5)
+            delete r5.spans[0].rows
+            t |> success(submit(m, schl, r5), "a rowless request on a cold cache queued")
+            drain(m, schl, evl)
+            t |> equal(finished_of(evl, 14l).finish, "media_lost")
+            t |> equal(prefix_held_groups(schl.prefix), 0l)
+            delete evl
+            delete schl
+            delete other
+            delete rowless_toks
+            delete again_toks
             delete paged_toks
             delete text_only
             delete ev
@@ -1150,6 +1215,30 @@ def private embd_mrope_generate(m : Model; prompt : array<int64>; lo, hi : int64
     return <- out
 }
 
+//! Paged: the grid span donates, and the same request asked again attaches it off the cache - the session's rope advance
+//! comes back with it, or every position past the span ropes that advance off. Both streams run the flat reference's lane
+//! (classic prefill, the std decode, the CPU rails - the caller's pins); the paged K/V layout alone differs.
+def private mrope_paged_leg(t : T?; m : Model; prompt : array<int64>; lo, hi : int64; grid : int2; mref : array<int64>) {
+    var schp <- create_scheduler(m, 1l, 4l, 64l, 16l)
+    var ep : array<SchedEvent>
+    for (id in fixed_array(31l, 32l)) {
+        var rqp <- media_req(m, id, prompt, lo, hi, true, SamplingParams(), 8l, grid)
+        t |> success(submit(m, schp, rqp), "paged mrope stream {id} queued")
+        scheduler_step(m, schp, ep)   // admits the stream and prefills what the cache does not hold
+        t |> success(length(schp.streams) == 1 && schp.streams[0].session.rope_pos_delta == int64(max(grid.x, grid.y)) - (hi - lo),
+            "paged mrope stream {id}: the session ropes past the span by the grid's advance ({max(grid.x, grid.y)} positions for {hi - lo} rows)")
+        drain(m, schp, ep)
+        var gp <- toks_of(ep, id)
+        to_log(LOG_INFO, "paged mrope stream {id} (cached {finished_of(ep, id).n_cached}): {eyeball_text(m, gp)}\nits grid reference: {eyeball_text(m, mref)}\n")
+        t |> success(ids_equal(gp, mref), "paged mrope stream {id} == the grid reference")
+        delete gp
+    }
+    t |> equal(finished_of(ep, 31l).n_cached, 0l, "the first paged stream finds a cold cache")
+    t |> success(finished_of(ep, 32l).n_cached >= hi, "asked again, the grid span attaches off the cache ({finished_of(ep, 32l).n_cached} of {length(prompt)} positions, the span ends at {hi})")
+    delete ep
+    delete schp
+}
+
 [test]
 def test_scheduler_mrope(t : T?) {
     t |> run("media_grid: the mrope walk reaches the quantum and survives the batched decode (needs SmolLM2-135M)") @(t : T?) {
@@ -1199,6 +1288,7 @@ def test_scheduler_mrope(t : T?) {
             t |> success(ids_equal(g1, mref), "batched mrope stream == its solo grid reference")
             t |> success(ids_equal(g2, tref.toks), "batched text stream == its solo reference")
             t |> success(schb.sum_batch >= 4l, "decode steps actually batched (sum batch {schb.sum_batch})")
+            mrope_paged_leg(t, m, prompt, lo, hi, grid, mref)
             set_fused_decode(prev_fused)
             set_prefill_attn_mode(saved_mode)
             delete g1
@@ -1263,6 +1353,152 @@ def test_scheduler_mrope_validation(t : T?) {
                 tripped = true
             }
             t |> success(tripped, "a grid with n_media == 0 panics instead of dropping silently")
+            delete sch
+            delete prompt
+            delete m
+        }
+    }
+}
+
+// ===== inline spans: a prefix hit stops short of a span it would cut, and submit refuses malformed spans by panic =====
+
+//! [lo, hi) of `prompt` INLINE as one non-causal span: the rows are the prompt's own embedding rows, the position ids
+//! `key_a`'s for the span's first `split` rows and `key_b`'s past them
+def private inline_span_req(m : Model; id : int64; prompt : array<int64>; lo, hi, split : int64; key_a, key_b : uint64;
+                            params : SamplingParams; max_new : int64) : PendingReq {
+    var r <- PendingReq(id = id, params = params, max_new = max_new)
+    r.prompt <- [for (k in range64(long_length(prompt))); (k < lo || k >= hi) ? prompt[k] : media_position_id(k - lo < split ? key_a : key_b, k - lo)]
+    var mid <- [for (k in range64(lo, hi)); prompt[k]]
+    var sp <- MediaSpan(at = lo, n = hi - lo, non_causal = true)
+    sp.rows |> resize((hi - lo) * m.config.dim)
+    embed_text_rows(m, mid, sp.rows, 0l)
+    r.spans |> emplace(sp)
+    delete mid
+    return <- r
+}
+
+[test]
+def test_scheduler_span_cut(t : T?) {
+    t |> run("a prefix hit that ends inside a span is no hit: the span evals whole (needs SmolLM2-135M)") @(t : T?) {
+        return if (model_missing(t))
+        with_dasllama_jobque() {
+            var m <- load_capped_cpu(128l)
+            let saved_mode = get_prefill_attn_mode()
+            set_prefill_attn_mode(AttnPrefillMode.classic)   // the span's call moves the eval boundaries: classic alone is bit-exact under them
+            var prompt <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches from a small hill near the old village bakery and counts every bird that crosses the evening sky", true, false)
+            let np = long_length(prompt)
+            let lo = 4l
+            let hi = 24l
+            let split = 10l   // the second request shares the text and the span's first 10 ids: its hit would end at 14, inside [4, 24)
+            t |> success(np > hi + 4l, "the prompt leaves a tail past the span ({np} tokens)")
+            var other <- [for (k in range64(np)); (k >= lo + split && k < hi) ? prompt[np - 1l - (k - lo - split)] : prompt[k]]
+            t |> success(!ids_equal(other, prompt), "the second span's rows past the split are other tokens'")
+            let greedy = SamplingParams()
+            var ref_a <- embd_span_generate(m, prompt, lo, hi, greedy, 6l)
+            var ref_b <- embd_span_generate(m, other, lo, hi, greedy, 6l)
+            var sch <- create_scheduler(m, 1l, 4l, 64l, 16l)
+            var ev : array<SchedEvent>
+            var ra <- inline_span_req(m, 1l, prompt, lo, hi, hi - lo, 0xa11ul, 0xa11ul, greedy, 6l)
+            t |> success(submit(m, sch, ra), "the first span stream queued")
+            drain(m, sch, ev)
+            var got_a <- toks_of(ev, 1l)
+            to_log(LOG_INFO, "span stream A: {eyeball_text(m, got_a)}\nits reference: {eyeball_text(m, ref_a)}\n")
+            t |> success(ids_equal(got_a, ref_a), "the first span stream == generate_embd's span form")
+            t |> success(prefix_held_groups(sch.prefix) > 0l, "the first stream donates its pages")
+            var rb <- inline_span_req(m, 2l, other, lo, hi, split, 0xa11ul, 0xb22ul, greedy, 6l)
+            t |> success(submit(m, sch, rb), "the second span stream queued")
+            drain(m, sch, ev)
+            var got_b <- toks_of(ev, 2l)
+            to_log(LOG_INFO, "span stream B (cached {finished_of(ev, 2l).n_cached}): {eyeball_text(m, got_b)}\nits reference: {eyeball_text(m, ref_b)}\n")
+            t |> success(finished_of(ev, 2l).n_cached <= lo, "a hit ending inside the span attaches nothing past the span's start ({finished_of(ev, 2l).n_cached}, the span opens at {lo})")
+            t |> success(ids_equal(got_b, ref_b), "the second span stream == its own generate_embd span form")
+            delete got_b
+            delete rb
+            delete got_a
+            delete ra
+            delete ev
+            delete sch
+            delete ref_b
+            delete ref_a
+            delete other
+            delete prompt
+            set_prefill_attn_mode(saved_mode)
+            delete m
+        }
+    }
+}
+
+//! whether `submit` refuses `req` by panic
+def private submit_panics(m : Model; var sch : Scheduler; var req : PendingReq) : bool {
+    var tripped = false
+    try {
+        submit(m, sch, req)
+    } recover {
+        tripped = true
+    }
+    return tripped
+}
+
+//! a well-formed request: the prompt's [4, 10) inline as one span under one key
+def private span_ok_req(m : Model; id : int64; prompt : array<int64>) : PendingReq {
+    return <- inline_span_req(m, id, prompt, 4l, 10l, 6l, 0x5a5ul, 0x5a5ul, SamplingParams(), 4l)
+}
+
+//! the well-formed request's prompt with its one span replaced by rowless spans at `spans`' (at, n) pairs
+def private spans_req(m : Model; id : int64; prompt : array<int64>; spans : array<int2>) : PendingReq {
+    var r <- span_ok_req(m, id, prompt)
+    delete r.spans
+    r.spans |> reserve(length(spans))
+    for (s in spans) {
+        r.spans |> emplace(MediaSpan(at = int64(s.x), n = int64(s.y), non_causal = true))
+    }
+    return <- r
+}
+
+[test]
+def test_scheduler_span_validation(t : T?) {
+    t |> run("submit panics on malformed inline spans (needs SmolLM2-135M)") @(t : T?) {
+        return if (model_missing(t))
+        with_dasllama_jobque() {
+            var m <- load_capped_cpu(128l)
+            var prompt <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches", true, false)
+            let np = long_length(prompt)
+            t |> success(np > 12l, "the prompt holds the span and text past it ({np} tokens)")
+            var sch <- create_scheduler(m, 1l, 64l, 64l)
+            var ok <- span_ok_req(m, 40l, prompt)
+            t |> success(!submit_panics(m, sch, ok), "a well-formed span submits (the control)")
+            var empty_span <- spans_req(m, 41l, prompt, [int2(5, 0)])   // both rows it reads, [4] and [5], are ids
+            t |> success(submit_panics(m, sch, empty_span), "a span of no rows panics")
+            var backward <- spans_req(m, 42l, prompt, [int2(8, 2), int2(4, 2)])
+            t |> success(submit_panics(m, sch, backward), "spans out of prompt order panic")
+            var overlap <- spans_req(m, 43l, prompt, [int2(4, 4), int2(6, 4)])
+            t |> success(submit_panics(m, sch, overlap), "overlapping spans panic")
+            var past <- spans_req(m, 44l, prompt, [int2(int(np) - 2, 3)])
+            t |> success(submit_panics(m, sch, past), "a span past the prompt's end panics")
+            var on_text <- spans_req(m, 45l, prompt, [int2(3, 7)])
+            t |> success(submit_panics(m, sch, on_text), "a span whose first row is a token panics")
+            var off_end <- spans_req(m, 46l, prompt, [int2(4, 7)])
+            t |> success(submit_panics(m, sch, off_end), "a span whose last row is a token panics")
+            var wide <- span_ok_req(m, 47l, prompt)
+            wide.spans[0].rows |> push(0.0)
+            t |> success(submit_panics(m, sch, wide), "rows one float past the span's width panic")
+            var narrow <- span_ok_req(m, 48l, prompt)
+            narrow.spans[0].rows |> resize(length(narrow.spans[0].rows) - int(m.config.dim))
+            t |> success(submit_panics(m, sch, narrow), "rows a row short of the span panic")
+            var both <- span_ok_req(m, 49l, prompt)
+            both.n_media = 2l
+            both.media_at = np   // a splice past the inline span: folded in, the spans would stand in order
+            both.media_embd |> resize(2l * m.config.dim)
+            t |> success(submit_panics(m, sch, both), "a request with both a splice and inline spans panics")
+            var schd <- create_scheduler(m, 1l, 64l, 64l)
+            set_device_kv(schd, true)
+            var dev <- span_ok_req(m, 50l, prompt)
+            t |> success(submit_panics(m, schd, dev), "device mode: a device-home session serves no inline span either")
+            set_device_kv(schd, false)
+            // a panic inside submit's walk over the spans leaves the refused requests' span arrays locked, so they are
+            // not deleted - the heap goes with the context
+            delete schd
+            delete ok
             delete sch
             delete prompt
             delete m

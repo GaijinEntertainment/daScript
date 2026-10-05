@@ -45,6 +45,17 @@ every full page of it. The preview string is only a label for dashboards:
    prefix_insert(cache, pool, s1, p1, "system prompt")
    release_kv_pages(s1)
 
+Before B takes anything, we ask the cache how much of B's prompt it holds.
+``prefix_match_len`` answers with the count ``prefix_attach`` would attach
+right now, and it attaches nothing and touches no entry. A server uses it to
+decide what a request must still bring - the rows of a picture the cache
+already holds need no encode:
+
+.. code-block:: das
+
+   let p2 <- encode(m, "{SYSTEM}{Q2}")
+   print("the cache holds {prefix_match_len(cache, pool, p2)} of B's leading tokens\n")
+
 Stream B starts fresh from the same pool. ``prefix_attach`` walks B's prompt
 against the cached chains: matched pages join B's page table, B's ``n_past``
 jumps past them, and we prefill only the tail. The match is capped one token
@@ -52,7 +63,6 @@ short of the prompt — the model still needs one eval to make logits:
 
 .. code-block:: das
 
-   let p2 <- encode(m, "{SYSTEM}{Q2}")
    var s2 = create_session(m, pool)
    let matched = prefix_attach(cache, pool, s2, p2)
    // eval() only p2[matched..] — the matched pages are already KV
