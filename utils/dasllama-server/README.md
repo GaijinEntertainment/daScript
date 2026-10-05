@@ -710,7 +710,7 @@ absent; set `DASLLAMA_MODELS_DIR`):
   `SmolLM2-135M-Instruct-Q8_0.gguf`.
 - `test_openai_server_stream.das` - SSE chunk framing, the over-long-prompt 400, two concurrent
   clients batching on one server (`peak_active >= 2` via `/v1/stats`), mid-generation disconnect
-  eviction, and the prefix cache returning an identical completion for a repeated request; needs
+  eviction, and a request served off the prefix cache repeating itself token for token; needs
   `SmolLM2-135M-Instruct-Q8_0.gguf`.
 - `test_openai_server_vision.das` - the image route end to end: a data-URI photo on
   `/v1/chat/completions` reaches the embedder, splices as soft tokens between the two rendered

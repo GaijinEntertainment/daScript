@@ -2103,3 +2103,14 @@
    the reference up with the channel's pending count in one step and their owner joins. Several
    workers share one events channel, so the count does not fit them as it stands. Done = a worker
    exit the owner can wait on - a status a worker, or the count sized to the workers.
+
+212. **A request served off the prefix cache can answer differently from its cold run.** A cached run attaches
+    every row of the prompt but its last token's and evals that token alone, where the cold run evaled it
+    inside the prefill batch. On SmolLM2-135M Q8_0 on the CPU, a 138-token prompt (the model's default system
+    line and the robot story of `utils/dasllama-server/test_openai_server_stream.das`) reads "eyes sparkle"
+    cold and "eyes light up" off the cache under greedy sampling, the two parting at the fifth generated
+    token; a 117-token prompt reads the same both ways, and two cached runs always agree. The classic
+    attention mode set in the server's thread did not close it, which a rounding difference alone would
+    predict it to. The work: the cached K/V rows against a cold prefill's row by row at that prompt, to name
+    the row that differs and whether it is the last token's alone; then either the cold run's last row
+    evaled as the cached run evals it, or the difference stated in the server's README.

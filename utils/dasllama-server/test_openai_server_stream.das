@@ -335,10 +335,11 @@ def test_openai_server_stream(t : T?) {   // nolint:STYLE038 — one live server
                 t |> equal(int(resp.status_code), int(http_status.OK))
             }
         }
-        t |> run("prefix cache: the same request twice returns the identical completion, warm run cached") @(t : T?) {
-            // The rendered prompt must span at least one full page (server default P = 64 = the
-            // prefill chunk, so warm chunk boundaries align with cold's and flash prefill repeats
-            // the exact same evals — greedy output is bit-identical, not just similar).
+        t |> run("prefix cache: a request served off the cache repeats itself token for token, warm run cached") @(t : T?) {
+            // The rendered prompt spans whole pages (server default P = 64). The cold run prefills the prompt as a
+            // batch; a cached run attaches every row but the last token's and evals that one alone, and a row
+            // evaled alone and in a batch differ in rounding - so the two cached runs must agree token for token,
+            // and the cold run need not match them (followup_general.md row 212).
             let user = ("Tell me about a little robot who lives in a small village near the mountains" +
                 " and spends every evening counting the birds that cross the sky above the old bakery" +
                 " while dreaming about the day it will finally learn to fly like them." +
@@ -348,7 +349,7 @@ def test_openai_server_stream(t : T?) {   // nolint:STYLE038 — one live server
                 " whether the mountains are lonely too. Please tell the story slowly and gently.")
             let body = "\{\"messages\":[\{\"role\":\"user\",\"content\":\"{user}\"}],\"max_tokens\":24}"
             var replies : array<string>
-            for (_round in range(2)) {
+            for (_round in range(3)) {
                 POST("{base_url}/v1/chat/completions", body) $(resp) {
                     t |> equal(int(resp.status_code), int(http_status.OK))
                     var perr = ""
@@ -364,10 +365,11 @@ def test_openai_server_stream(t : T?) {   // nolint:STYLE038 — one live server
                     }
                 }
             }
-            t |> equal(2, length(replies))
-            if (length(replies) == 2) {
+            t |> equal(3, length(replies))
+            if (length(replies) == 3) {
                 t |> success(!empty(replies[0]), "cold reply non-empty")
-                t |> equal(replies[0], replies[1])
+                t |> success(!empty(replies[1]), "cached reply non-empty")
+                t |> equal(replies[1], replies[2])
             }
             GET("{base_url}/v1/stats") $(resp) {
                 var perr = ""
