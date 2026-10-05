@@ -3405,6 +3405,13 @@ set site, and any reference the analysis cannot classify — a capture, a
 Init-``true`` separator flags never match. Suppress a deliberate keep with
 ``// nolint:STYLE041`` on the declaration line.
 
+STYLE042 — single-``return`` function body
+==========================================
+
+A braced body that only returns a value, ``def f(a : int) : int { return a * 2 }``,
+is an expression body: ``def f(a : int) : int => a * 2`` (``=> <- EXPR`` for a move).
+``--fix`` rewrites it; past 100 columns the expression goes on the line after ``=>``.
+
 -----
 Tests
 -----

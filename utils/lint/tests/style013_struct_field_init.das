@@ -1,5 +1,6 @@
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
+options _nolint = "STYLE042"
 // STYLE013: struct (or `new`-allocated struct pointer) var with default/empty
 // init followed by a run of field assignments.
 //

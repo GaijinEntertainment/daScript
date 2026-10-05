@@ -1,4 +1,5 @@
 options gen2
+options _nolint = "STYLE042"
 // STYLE039 default-off check: this fixture is not under daslib/ or modules/ and does
 // not set 'options _ascii_strings', so the em-dash below must stay silent (no expect line).
 

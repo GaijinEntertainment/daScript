@@ -1,5 +1,6 @@
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
+options _nolint = "STYLE042"
 // STYLE035: non-int numeric variables compared with built-in numeric casts of
 // character literals should be int variables compared directly with chars.
 //

@@ -8,9 +8,8 @@ require strings
 
 def fixture(name : string) : string => replace(fread("{get_das_root()}/tests/daslib/{name}"), "\r", "")
 
-def tokens_only(text : string) : string {
-    return replace(replace(replace(replace(text, " ", ""), "\t", ""), "\r", ""), "\n", "")
-}
+def tokens_only(text : string) : string =>
+    replace(replace(replace(replace(text, " ", ""), "\t", ""), "\r", ""), "\n", "")
 
 def compiles(t : T?; text : string) : bool {
     var ok = false

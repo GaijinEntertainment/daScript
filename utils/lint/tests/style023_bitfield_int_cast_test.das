@@ -1,5 +1,6 @@
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
+options _nolint = "STYLE042"
 // STYLE023: int_cast(bf & BfT.bit) ==/!= 0  →  [!]bf.bit
 //
 // Problem: testing a single bit via `uint(bf & BfT.bit) != 0u` (or any of

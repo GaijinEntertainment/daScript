@@ -56,6 +56,8 @@ require daslib/lint_config
 require math
 require strings
 
+let STYLE042_MAX_LINE = 100
+
 // STYLE033 arity caps — never suggest a call shape with no matching overload.
 let MAX_CONCAT_ARITY = 8
 let MAX_VARIADIC_PUSH_ARITY = 4
@@ -107,6 +109,44 @@ struct St041Candidate {
     observed_refs : int
     poisoned : bool
     msg : string
+}
+
+def private byte_at(s : string; i : int) : int {
+    var b = -1
+    peek_data(s) $(d) {
+        if (i >= 0 && i < length(d)) {
+            b = int(d[i])
+        }
+    }
+    return b
+}
+
+def private code_find(s, two : string) : int {
+    let first_ch = byte_at(two, 0)
+    let second_ch = byte_at(two, 1)
+    var found = -1
+    peek_data(s) $(d) {
+        var quote = 0
+        var escaped = false
+        for (c, i in d, count()) {
+            let ch = int(c)
+            if (quote != 0) {
+                if (escaped) {
+                    escaped = false
+                } elif (ch == '\\') {
+                    escaped = true
+                } elif (ch == quote) {
+                    quote = 0
+                }
+            } elif (ch == '"' || ch == '\'') {
+                quote = ch
+            } elif (ch == first_ch && i + 1 < length(d) && int(d[i + 1]) == second_ch) {
+                found = i
+                break
+            }
+        }
+    }
+    return found
 }
 
 class StyleLintVisitor : AstVisitor {
@@ -193,12 +233,92 @@ class StyleLintVisitor : AstVisitor {
         return result
     }
 
+    def st042_written_body(fn : FunctionPtr) : ExprBlock? {
+        if (fn.flags.generated || fn.body == null || !(fn.body is ExprBlock) || foreign_module_code()) return null
+        var body = fn.body as ExprBlock
+        if (fn.flags.isClassMethod && length(body.list) == 1 && body.list[0] is ExprWith) {
+            let wbody = (body.list[0] as ExprWith).body
+            return null if (wbody == null || !(wbody is ExprBlock))
+            body = wbody as ExprBlock
+        }
+        return body
+    }
+
+    def st042_fix(body : ExprBlock?) : LintFix {
+        let first_ln = int(body.at.line)
+        let last_ln = int(body.at.last_line)
+        let first = lint_source_line(body.at, first_ln)
+        let last = lint_source_line(body.at, last_ln)
+        let open_col = int(body.at.column)
+        var close_col = int(body.at.last_column) - 1
+        if (byte_at(last, close_col) != '}') {
+            close_col++
+        }
+        if (byte_at(first, open_col) != '{' || byte_at(last, close_col) != '}') return LintFix()
+        let middle = last_ln - first_ln == 2 ? lint_source_line(body.at, first_ln + 1) : ""
+        let pieces <- (first_ln == last_ln ? [slice(first, open_col + 1, close_col)]
+            : [slice(first, open_col + 1), middle, slice(last, 0, close_col)])
+        var inner, comment : string
+        for (piece in pieces) {
+            let at = code_find(piece, "//")
+            let code = strip(at >= 0 ? slice(piece, 0, at) : piece)
+            if ((at >= 0 && !empty(comment)) || (!empty(code) && !empty(inner))) return LintFix()
+            if (at >= 0) {
+                comment = strip(slice(piece, at))
+            }
+            if (!empty(code)) {
+                inner = code
+            }
+        }
+        if (!starts_with(inner, "return ")) return LintFix()
+        var expr = strip(slice(inner, 7))
+        if (ends_with(expr, ";")) {
+            expr = strip(slice(expr, 0, length(expr) - 1))
+        }
+        let tail_text = slice(last, close_col + 1)
+        if (starts_with(expr, "\{") || starts_with(expr, "<- \{") || code_find(expr, "..") >= 0) {
+            return LintFix(line = -1)
+        }
+        if (empty(expr) || code_find(expr, "/*") >= 0 || (!empty(comment) && !empty(strip(tail_text)))) return LintFix()
+        if (!empty(comment)) {
+            expr = "{expr}  {comment}"
+        }
+        let tail = length(tail_text)
+        let indent = length(first) - length(strip_left(first))
+        let one_line = open_col + 3 + length(expr) + tail <= STYLE042_MAX_LINE
+        if (!one_line && code_find(pieces[0], "//") >= 0) return LintFix(line = -1)
+        let lead = byte_at(first, open_col - 1) == ' ' ? "" : " "
+        let replacement = one_line ? "{lead}=> {expr}" : "{lead}=>\n{repeat(" ", indent + 4)}{expr}"
+        return LintFix(line = first_ln, column = open_col, last_line = last_ln, last_column = close_col + 1, replacement = replacement)
+    }
+
+    def check_style042_expression_body(fn : FunctionPtr) : void {
+        let body = st042_written_body(fn)
+        if (body == null || body.genFlags.generated || length(body.list) != 1 || !empty(body.finalList)
+                || int(body.at.last_line) - int(body.at.line) > 2) return
+        let ret = body.list[0]
+        if (!(ret is ExprReturn) || ret.genFlags.generated) return
+        let r = ret as ExprReturn
+        if (r.subexpr == null) return
+        var root = fn
+        while (root.fromGeneric != null) {
+            root = root.fromGeneric
+        }
+        let full = string(root.name)
+        let name = fn.flags.isClassMethod ? slice(full, rfind(full, "`") + 1) : full
+        let fix = st042_fix(body)
+        return if (fix.line < 0)
+        let arrow = r.returnFlags.moveSemantics ? "=> <- EXPR" : "=> EXPR"
+        style_warning("STYLE042: function '{name}' body is a single 'return'; write it as an expression body - 'def {name}(...) {arrow}'", fn.at, fix)
+    }
+
     def override preVisitFunction(var fn : FunctionPtr) : void {
         current_function = fn
         unsafe_block_stack |> push(0)
         complexity_stack |> push(1)
         st041_candidates |> clear()
         check_defer_pipe(fn)
+        check_style042_expression_body(fn)
         if (analyze_requires && fn._module == this_module) {
             for (a in fn.annotations) {
                 if (a != null && a.annotation != null) st029_note_module(a.annotation._module)
