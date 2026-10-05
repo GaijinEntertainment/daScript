@@ -17,7 +17,6 @@ require dasllama/dasllama_plane public   // PlaneF/PlaneU16 — re-exported so r
 require dasllama/dasllama_tower   // layernorm rows, mm_plane_b, im2col, bias rows
 require dasllama/dasllama_vision   // encode_image_: geometry + letterbox + normalize ahead of the encoder
 require dasllama/dasllama_env     // g_env_vision: the token-budget knobs the geometry reads
-require math
 
 //! The gemma4uv "unified" vision embedder (gemma-4 dense; 12B is the tested pair): TEN tensors read (the mmproj
 //! file's eleventh, mm.a.input_projection.weight, is the audio projection and never loads), no
