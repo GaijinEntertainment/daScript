@@ -99,6 +99,15 @@ test, not in the thread, and hand the path over as a field of a struct pushed wi
 and read back with `pop_archive` on a `Stream?` (`daslib/jobque_boost`) - a captured string still
 points into the test context's heap.
 
+## Run in this process
+
+A test does its work in the test's own process - `compile_file` then `simulate` (`rtti`), not a
+spawned `daslang`. A child process costs a full startup per run, hides its failures behind an
+exit code and scraped output, and needs the binary path, `-dasroot` and the environment passed
+by hand. Spawn a child only for what a running process cannot reset: process-wide state such as
+built-in modules extended at compile time or a cache read by a fresh run, the exit code, a
+crash, or startup itself - and name that reason in the test's `//!` comment.
+
 ## Common test options
 
 - `options no_unused_function_arguments = false` - suppress warnings for test params

@@ -67,6 +67,14 @@ namespace das {
         });
     }
 
+    uint64_t AstSerializer::builtinHash ( Module * m ) {
+        auto it = builtinHashes.find(m);
+        if ( it == builtinHashes.end() ) {
+            it = builtinHashes.emplace(m, m->getOwnSemanticHash()).first;
+        }
+        return it->second;
+    }
+
     AstSerializer::~AstSerializer () {
         for ( auto fileInfo : deleteUponFinish ) {
             if ( doNotDelete.count(fileInfo) == 0 ) {
@@ -3344,7 +3352,6 @@ namespace das {
             ser.failed = true;
             return;
         }
-        ser.builtinHashDrift = false;   // per-record flavor bit, read by the resume path
         ser.clearNodeIds();             // numbering restarts with every program, on both sides
 
         DAS_SER_PROFILE(ser, "Program");
@@ -3422,7 +3429,8 @@ namespace das {
                 *this << m->name;
 
                 if ( m->builtIn && !m->promoted ) {
-                    *this << m->cumulativeHash;
+                    uint64_t moduleHash = builtinHash(m);
+                    *this << moduleHash;
                     continue;
                 }
 
@@ -3465,7 +3473,7 @@ namespace das {
                     // answers null, and the deref was a SIGSEGV (recoverable throw now;
                     // the resume reparses the record in place)
                     SERIALIZER_VERIFYF(m != nullptr, "builtin module '%s' not found", name.c_str());
-                    uint64_t savedHash = 0, moduleHash = m->cumulativeHash;
+                    uint64_t savedHash = 0, moduleHash = builtinHash(m);
                     *this << savedHash;
 
                     if ( moduleHash != savedHash ) {
@@ -3473,7 +3481,6 @@ namespace das {
                             LOG(LogLevel::warning) << "das: serialize: cumulative hash for module '" << m->name
                                                    << "' differs" << " (" << moduleHash << " vs " << savedHash << ") ";
                         }
-                        ser.builtinHashDrift = true;    // per-process-deterministic drift, not damage
                         program->failToCompile = true;
                         return;
                     }
