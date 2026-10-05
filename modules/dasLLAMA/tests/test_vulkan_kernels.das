@@ -2820,20 +2820,6 @@ def test_vkd_cm2l_split(t0 : T?) {
     }
 }
 
-//! a host buffer of token records holding `rows`, every field of each written - the pads included: a host buffer is not zeroed
-def private tok_buf(rows : array<TokMeta>) : uint64 {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        var tokb = make_host_buf(TOK_META_BYTES * long_length(rows), true)
-        var tm = unsafe(reinterpret<TokMeta?>(tokb.mapped))
-        for (r in range64(long_length(rows))) {
-            unsafe(tm[r]) = rows[r]
-        }
-        return tokb.buf
-    } else {
-        return 0ul
-    }
-}
-
 [test]
 def test_vkd_da_attn_rqk(t0 : T?) {
     t0 |> run("decode attention with the requant folded into its store == the CPU oracle's row, quantized: Q8_0 and Q8_K, the pass and the combine, the 256 and 512 heads") <| @(t : T?) {
@@ -7935,7 +7921,7 @@ def private ar_comb_fixture(n, k, npos : int) : ArCombFix {
 //! the approx bar of `want_x`, the f32 normed rows of `want_y`, and the f16 normed rows `got_h` within the half's rounding - a
 //! half rounds to 2^-11 of the value, the bar four halves of that with the same fraction of the row's largest value as the floor
 //! the near-zero elements read; then, under `ctrl`, one poisoned element of each expectation reds its bar
-def private ar_comb_check(t : T?; tag, ctrl : string; xs, got_x, got_y : array<float>; got_h : array<uint>; var want_x, want_y : array<float>; n : int) {
+def private ar_comb_check(t : T?; tag, ctrl : string; xs, got_x, got_y : array<float>; got_h; var want_x, want_y : array<float>; n : int) {
     t |> success(mismatch_approx(got_x, xs) > 0, "{tag}: the in-place residual rows moved off their input")
     check(t, "{tag}: the residual rows match the CPU oracle", got_x, want_x, BAR_APPROX, Shape(row_width = n))
     check(t, "{tag}: the f32 normed rows match the CPU oracle", got_y, want_y, BAR_APPROX, Shape(row_width = n))
