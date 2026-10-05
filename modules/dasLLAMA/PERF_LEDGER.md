@@ -11,6 +11,44 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-04, `direction-grade`) - a served media turn's first token, and the speech rows beside
+  mlx-audio.** M5 Max, Metal, `dasllama-server` with one model (`main.das -- -m <gguf> --image-mmproj <mmproj>` or
+  `--audio-mmproj <mmproj>`, `-s 1 --ctx 16384`), the pinned llama-server as `-m <gguf> --mmproj <mmproj> -ngl 99
+  -np 1 -c 16384`, `harness/served_bench.das --url <server> --no-chat --reps 5 --image <jpg> --chat-clip <wav>`
+  (tagged `served`, `out-of-process`), a 60 s rest before each life; the tune sidecar predates the binary. The
+  first token of a question about a 640x480 image or an 8 s clip under a system line no server has seen, ms,
+  ours / the reference; a row over 3% cv is marked void.
+  - The paged KV pool grew by doubling, and a doubling copied and zero-filled every cached page inside one
+    request: Qwen3-VL 4B's image row read cv 7.9% with prefills of 116 ms beside ones of 158, 189 and 271. With
+    the pool's address room reserved at scheduler creation, twenty prefills in a row read 116-118 ms and the
+    row cv 0.9-1.2% over three runs. A model whose K/V passes the 4 GiB reserve (Qwen2-Audio, 524 KB a
+    position) still pays one copy a server life: 246 ms, once.
+  - A media prompt prefilled as three calls - text, rows, text - and each short call paid the call's floor
+    (about 20 ms): Voxtral Mini's clip read 214.7 with 102 of encode and 84 of prefill (21 + 41 + 20). As one
+    call it reads 181.0; Qwen3-VL 4B's image 185 to 148; gemma-4 E2B's image 115 to 82 and E4B's 164 to 98,
+    once the body carries each row's token id.
+  - Images: gemma-4 E2B 81.7 / 141.4, E4B 98.3 / 206.9, 12B 164.3 / 371.2; gemma-3 4B 426.6 / 466.8, 12B
+    561.0 / 666.1; Qwen3-VL 4B 147.2 / 196.5 (the reference void, 3.2%), 8B 220.8 / 295.5; Qwen2.5-Omni 3B
+    188.8 (void, 3.8%) / 224.6, 7B 257.0 (void, 5.7%) / 349.3.
+  - Clips: gemma-4 E2B 77.9 / 125.8 (the reference void, 6.3%), E4B 107.4 / 187.2; Qwen2.5-Omni 3B
+    219.3 / 294.5, 7B 348.2 / 465.6; Ultravox 1B 132.0 / 147.9 (the reference void, 6.1%), 8B 219.1 / 292.3;
+    Voxtral Mini 181.6 / 189.1 (the reference void, 5.3%), Small 439.6 / 503.6 (the reference void, 4.2%);
+    Qwen2-Audio 465.0 / 508.2. The E-series rows and the 12B image are single re-runs after their change; the
+    rest are one sweep taken before the instrument's lead-in request, which is what voids the two Omni images.
+  - Asked again under the same line, both servers answer off their cache within a few ms of each other on
+    every row; the one row the reference leads is Voxtral Small, 167.8 / 161.8.
+  - Speech, `main.das -- --tts <gguf>` against `mlx_audio.server` (mlx-audio 0.5.7), `served_bench.das
+    --no-chat --tts-url <server> --reps 8`, one sentence: ms a request / s of speech / real-time factor.
+    Kokoro-82M (the same voice, ours q8, theirs bf16): 73.1 / 5.50 / 0.013 against 108.9 / 5.47 / 0.020; three
+    sentences 218.9 / 17.5 / 0.013 against 323.5 / 17.1 / 0.019. Kitten nano 22.5 / 5.24 / 0.004 against
+    75.1 / 7.93 / 0.009 and mini 64.6 / 5.84 / 0.011 against 242.7 / 7.55 / 0.032 - their files are the 0.8
+    release and speak the sentence longer, so the factor is the comparison. Pocket (ours the English 2026-04
+    file at q8 and kq, theirs Kyutai's without-voice-cloning weights at full and 8 bit): 67.7 / 4.64 / 0.015
+    and 61.7 / 4.80 / 0.013 against 200.3 / 4.96 / 0.040 (void, 8.6%) and 152.6 / 5.12 / 0.030 (void, 6.7%).
+  - The M5 and M4 boards' Metal rows this arc re-routes are withdrawn until a mint on a fresh sidecar: the
+    ASR rows of whisper tiny and large-v3-turbo, Canary-Qwen, Qwen3-ASR 0.6B, Qwen3-Omni 30B and gemma-4 E2B,
+    and the image rows of gemma-4 E2B and E4B.
+
 - **MEASURED (2026-10-04, `direction-grade`) - canary's mel and subsample front run on the Metal tower.**
   M5 Max, Metal, canary-qwen-2.5b (the q8_0 decoder, the f32 encoder), in process as the server's
   ASR worker runs it (the engine's stage clock, the fourth transcription of a clip), the tune sidecar
@@ -21,7 +59,8 @@ what it costs today and what the fix would change.
     629 - and 772 after, the mel and the front together 8.0. An 8 s clip: 163 ms before, 106 after
     (3.5 for the two).
   - The device rows sit 2.1e-3 rel-l2 from the CPU chain's on the jfk clip (3.1e-4 with the CPU
-    front ahead of the device blocks); the transcripts are equal.
+    front ahead of the device blocks); the transcripts are equal. The reading is `test_model_image.das`'s
+    canary `mtower` arm (`canary mtower encode rel-l2`).
 
 - **MEASURED (2026-10-03, `direction-grade`) - the Metal tower reads a whisper encoder's q8 planes.**
   M5 Max, Metal, whisper large-v3-turbo, `dasllama-server` with the ASR model alone
