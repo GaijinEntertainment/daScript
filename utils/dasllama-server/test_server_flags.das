@@ -9,7 +9,6 @@ require dasllama/dasllama                               // MetalMode through the
 require dasllama/dasllama_gpu_tier                      // the K/V room seam a cell doubles
 require daslib/clargs                                   // get_user_args / flag_present: the match cli_has_flag rests on
 require strings
-require daslib/json_boost                               // read_json: the content-part cases
 require daslib/fio                                      // the roster cell writes its config
 
 // Model-free unit coverage for the flag-presence test behind the config surface's provenance:
