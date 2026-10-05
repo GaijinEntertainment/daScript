@@ -772,7 +772,6 @@ def reset_gpu_kv_dtype() {
     //! Lift the in-process ask ``set_gpu_kv_dtype`` made: ``DASLLAMA_GPU_KV`` decides the next load's mirror codec again.
     reset_gpu_kv_dtype_()
 }
-
 def gpu_ctx_pins() : tuple<ctx_max : int64; strict : bool> {
     //! The in-process context pins as set (``set_gpu_ctx_max``, ``set_gpu_ctx_strict``), apart from the
     //! environment's knobs: a fixture reads them before it pins and puts them back after its load.

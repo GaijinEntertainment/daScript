@@ -378,13 +378,13 @@ def kv_load(p : TQ4B const?; base, i : int64) : float {
 // kv_side_off's pointer-typed twin for code that is generic over the cache element type (the
 // flash-decode witness): element offset -> the side's own addressing units
 [unused_argument(p)]
-def kv_head_off(p : float const?; elems : int64) : int64 => elems
+def kv_head_off(p : float const?; elems : int64) : int64 => kv_side_off(KVDtype.f32, elems)
 [unused_argument(p)]
-def kv_head_off(p : uint16 const?; elems : int64) : int64 => elems
+def kv_head_off(p : uint16 const?; elems : int64) : int64 => kv_side_off(KVDtype.f16, elems)
 [unused_argument(p)]
-def kv_head_off(p : uint8 const?; elems : int64) : int64 => elems / 32l * 34l
+def kv_head_off(p : uint8 const?; elems : int64) : int64 => kv_side_off(KVDtype.q8_0, elems)
 [unused_argument(p)]
-def kv_head_off(p : TQ4B const?; elems : int64) : int64 => elems / 32l * 18l
+def kv_head_off(p : TQ4B const?; elems : int64) : int64 => kv_side_off(KVDtype.tq4, elems)
 
 // Bulk one-row dequant into f32 scratch — the flash pack's per-row primitive (and any future
 // codec's bulk-dequant seam: q8_0 adds a cvt overload here, never a new pack shape).

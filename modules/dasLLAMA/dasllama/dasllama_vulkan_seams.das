@@ -52,12 +52,12 @@ def vk_add_rms(var x : array<float>; a : array<float>; w : array<float>; var y :
             vhz_dep(raw, h, VHG_YO, 0u, true)   // x reads back post-fence in the second cmd
             cmd_copy_whole(raw, g_gpu.ar_y_dev, g_gpu.ar_host.buf, bytes)
         }
-        memcpy(addr<void?>(y[0]), g_gpu.ar_host.mapped, bytes)
+        host_buf_read(g_gpu.ar_host, addr<void?>(y[0]), bytes)
         // x is the residual stream: read the updated row back too
         cmd_one_shot() $(raw : VkCommandBuffer; var _h : VkHaz) {
             cmd_copy_whole(raw, g_gpu.ar_x_dev, g_gpu.ar_host.buf, bytes)
         }
-        memcpy(addr<void?>(x[0]), g_gpu.ar_host.mapped, bytes)
+        host_buf_read(g_gpu.ar_host, addr<void?>(x[0]), bytes)
     }
 }
 
@@ -96,9 +96,7 @@ def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow :
     unsafe {
         memcpy(g_gpu.rks_scal.mapped, addr<void?>(cossin[0]), head_size * 4l)   // cos[half] + sin[half]
         var tm = reinterpret<TokMeta?>(g_gpu.rks_tok.mapped)
-        tm.pos = uint(pos)   // mirror row = layerbase(0) + pos * kvd
-        tm.cnt = 0u
-        tm.mirbase = 0u
+        tm[0] = TokMeta(pos = uint(pos), cnt = 0u, parity = 0u, mirbase = 0u, dnslot = 0u)   // mirror row = layerbase(0) + pos * kvd
         upload_region_at(g_gpu.rks_qkv_dev, 0l, addr<uint8 const?>(qkv[0]), (qd + 2l * kv_dim) * 4l)
         // q ropes in place in its own plane — seed it with the raw q rows
         upload_region_at(g_gpu.rks_q_dev, 0l, addr<uint8 const?>(qkv[0]), qd * 4l)
@@ -112,9 +110,9 @@ def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow :
             cmd_copy_range(raw, g_gpu.rks_k_dev, pos * kv_dim * 4l, g_gpu.rks_kv_host.buf, 0l, kv_dim * 4l)
             cmd_copy_range(raw, g_gpu.rks_v_dev, pos * kv_dim * 4l, g_gpu.rks_kv_host.buf, kv_dim * 4l, kv_dim * 4l)
         }
-        memcpy(addr<void?>(qout[0]), g_gpu.rks_q_host.mapped, qd * 4l)
-        memcpy(addr<void?>(krow[0]), g_gpu.rks_kv_host.mapped, kv_dim * 4l)
-        memcpy(addr<void?>(vrow[0]), reinterpret<float?>(g_gpu.rks_kv_host.mapped) + kv_dim, kv_dim * 4l)
+        host_buf_read(g_gpu.rks_q_host, addr<void?>(qout[0]), qd * 4l)
+        host_buf_read(g_gpu.rks_kv_host, addr<void?>(krow[0]), kv_dim * 4l)
+        host_buf_read(g_gpu.rks_kv_host, addr<void?>(vrow[0]), kv_dim * 4l, kv_dim * 4l)
     }
 }
 
@@ -145,8 +143,7 @@ def vk_decode_attn(var q : array<float>; var out : array<float>; cnt, qd, kv_dim
     unsafe {
         upload_region_at(g_gpu.da_q_dev, 0l, addr<uint8 const?>(q[0]), qd * 4l)
         var tm = reinterpret<TokMeta?>(g_gpu.rks_tok.mapped)
-        tm.cnt = uint(cnt)
-        tm.mirbase = 0u   //! the seam's mirror starts at 0: the attention adds the row's base to its push
+        tm[0] = TokMeta(pos = 0u, cnt = uint(cnt), parity = 0u, mirbase = 0u, dnslot = 0u)   //! the seam's mirror starts at 0: the attention adds the row's base to its push
         cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
             var pc = DaAttnArgs(kvd = uint(kv_dim), hs = uint(head_size),
                 kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, rqk = DA_RQ_NONE)
@@ -154,6 +151,6 @@ def vk_decode_attn(var q : array<float>; var out : array<float>; cnt, qd, kv_dim
             vhz_dep(raw, h, VHG_YO, 0u, true)
             cmd_copy_whole(raw, g_gpu.da_out_dev, g_gpu.da_out_host.buf, qd * 4l)
         }
-        memcpy(addr<void?>(out[0]), g_gpu.da_out_host.mapped, qd * 4l)
+        host_buf_read(g_gpu.da_out_host, addr<void?>(out[0]), qd * 4l)
     }
 }

@@ -10,6 +10,7 @@ require dasllama/dasllama_blocks       // ffn_moe_decode / ffn_moe_prefill: the 
 require dasllama/dasllama_arch_qwen35  // the hybrid deltanet / gated-attention dispatch + configure_qwen35moe
 require dasllama/dasllama_kqformat     // GGML_TYPE_* + iq4nl_lut: the hash table's rows decode from their disk blocks
 require dasllama/dasllama_math
+require dasllama/dasllama_gpu_math
 require daslib/f16_cvt      // f16_to_f32: the hash table's block scales
 require daslib/array_boost  // nolint:STYLE030 — temp_array: the decode token as a one-row token array (a generic instance the lint does not see)
 require math
@@ -172,7 +173,7 @@ def private ple_apply_row(t : Model; var s : Session; var res : array<float>; ro
             let sv = dot(reinterpret<float const?>(kn + ch * dim), reinterpret<float const?>(qn + ch * dim), dim) * inv_sq
             let mag = sqrt(max(abs(sv), 1.0e-6))
             let sg = sv > 0.0 ? mag : (sv < 0.0 ? -mag : 0.0)
-            let g = 1.0 / (1.0 + exp(-sg))
+            let g = sigmoid_f32(sg)
             for (i in range64(dim)) {
                 gated[ch * dim + i] = val[i] * g
             }

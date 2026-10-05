@@ -156,16 +156,9 @@ def bar_diff(t : T?; tag : string; ours, ref : array<float>; bar : float; metric
         t |> success(rel_l2(ours, poisoned) >= bar, "{tag}: the bar discriminates an expectation shifted by {shift}")
         return
     }
-    let peak = logits_maxabs(ref)
-    let lim = metric == BarMetric.absolute ? bar : bar * peak
-    let d = max_abs_diff(ours, ref)
-    to_log(LOG_INFO, "{tag}: maxdiff {d} over {length(ref)} (reference peak {peak})\n")
-    t |> success(d <= lim, "{tag}: maxdiff {d} <= {lim}")
-    if (!empty(ref)) {
-        var inscope poisoned := ref
-        poisoned[0] += 2.0 * lim
-        t |> success(max_abs_diff(ours, poisoned) > lim, "{tag}: the bar discriminates a poisoned expectation")
-    }
+    let of_peak = metric == BarMetric.of_peak
+    check(t, tag, ours, ref, Bar(kind = of_peak ? BarKind.rel_of_max : BarKind.rel_of_larger, rel = of_peak ? bar : 0.0, abs_floor = of_peak ? 0.0 : bar,
+        poison = 2.0 * bar, poison_of_max = of_peak, poison_at = 0), FLAT_SHAPE)
 }
 
 //! One stage against its dump within BAR (of the oracle's peak, or absolute); a stage the dump lacks is skipped.
@@ -187,17 +180,20 @@ def spectrum_diff(t : T?; tag : string; ours, ref : array<float>; bins, frames :
     }
     var peak = 0.0
     for (i in range64(n)) {
-        peak = max(peak, abs(ref[i]))
+        if (!is_nan(ref[i])) {
+            peak = max(peak, abs(ref[i]))
+        }
     }
-    var mag_d = 0.0
+    let mag_d = span_maxdiff(ours, ref, 0, 0, int(n)).diff
     var ph_d = 0.0
     var gated = 0l
     for (i in range64(n)) {
-        mag_d = max(mag_d, abs(ours[i] - ref[i]))
         if (ref[i] > 1e-3 * peak) {
             gated++
             var d = abs(ours[n + i] - ref[n + i])
-            if (d > PI) {
+            if (is_nan(d)) {
+                d = INFINITE_DIFF
+            } elif (d > PI) {
                 d = 2.0 * PI - d
             }
             ph_d = max(ph_d, d)

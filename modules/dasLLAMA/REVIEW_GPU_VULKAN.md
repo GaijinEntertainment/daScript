@@ -28,13 +28,14 @@ stamp list in `ARCHITECTURE_GPU.md#gpu-backends`, in the same change.**
 once at the function that starts the encode chain binding the buffer, against a size no buffer of
 that chain can exceed.** The bind site cannot shrink a buffer that was sized wrong.
 
-**Never take a quant byte out of an `unpack8` select in a cm2 decode body - the `decode` method
-of a format's `<Fmt>Cm2T` class in `dasllama/dasllama_vulkan_classes.das` - or its four-wide twin
-(`decode_v4`) - load the 16-bit lane from the `int16[N]` block member and shift the byte out,
-and assemble a field that straddles two lanes from those lanes, never from selected bytes.**
-Indexing `unpack8` of a 32-bit word with a runtime value drops the whole kernel off the
-driver's block-load path, about 3x slower, and an `unpack8` lane select costs another 1.1x to
-1.5x over the shift form.
+**Never take a quant byte out of an `unpack8` select in a kq superblock format's cm2 decode body -
+the `decode` method of its `<Fmt>Cm2T` class in `dasllama/dasllama_vulkan_classes.das`, or its
+four-wide twin (`decode_v4`) - load the 16-bit lane from the `int16[N]` block member and shift
+the byte out, and assemble a field that straddles two lanes from those lanes, never from selected
+bytes.** Indexing `unpack8` of a 32-bit word with a runtime value drops the whole kernel off the
+driver's block-load path, about 3x slower, and on the expert-schedule shape an `unpack8` lane select
+costs another 1.1x to 1.5x over the shift form; the Q8_0 tile's 16-bit-lane select is the measured
+exception (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes`).
 
 **A diff that changes when `vk_rdec_prefill_ids` - the resident prefill that takes token ids
 rather than embeddings - accepts a call, or when the override that routes to it

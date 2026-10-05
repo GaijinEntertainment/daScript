@@ -16,7 +16,8 @@ anchor.
   member, the LAST parameter of every per-format overload family), the `kq_fmt_stamp` call
   macro that binds a member's tag per arm, the `kq_tile_stamp` call macro that stamps a kernel
   home's per-member pick ladders over the enum (with `kq_tile_stem`, the per-32 formats' stamp
-  spelling), the `[grid_words]` annotation that bakes a codebook table into a kernel home's word
+  spelling) and its format-free twin `stamp_ladder`, which stamps a ladder over any word list
+  keyed by ordinal (the flash and decode attention stamps), the `[grid_words]` annotation that bakes a codebook table into a kernel home's word
   accessor, and the `KQ_CM2E_ALIASES_M` roster of the formats whose expert column the m stamp
   serves - the format-keyed facts every kernel home reads. It requires nothing else in
   dasllama, because it is the taxonomy everything keys off. ONE id space - the enum; integer ids
@@ -33,12 +34,15 @@ anchor.
   (tune stamps, bake overrides) stay with their owners and pass plain parameters in.
 - **`dasllama_kv_codec.das`** - the KV-cache runtime codec, one family per cache format, kept
   WHOLE: store (quantize), read (dequant), the attention score dot, and the V-accumulate axpy all
-  share the format's block byte geometry, so a layout change can never span modules. These are
+  share the format's block byte geometry (the two block byte counts a kernel home reads as module `let`s,
+  `KV_Q8_BLOCK_BYTES` / `KV_TQ4_BLOCK_BYTES`, sit beside the tag in `dasllama_kv_dtype.das`, which this
+  module requires), so a layout change can never span the codec and its dispatch. These are
   per-token and per-tokenxposition `[tuned]` hot kernels, not load-time converters. The tq4 FWHT
   rotation and sign vector live with their family. Codec DISPATCH (`KVDtype`) stays at common's
   `kv_store_row`/`kv_load_row`/`kv_dot`/`kv_axpy` seam; the f16 row converts are the generic pair
   in `dasllama_convert` because they are dual-use beyond the cache.
-- **`dasllama_kv_dtype.das`** - the codec tag (`KVDtype`), the tq4 pointer newtype (`TQ4B`) and
+- **`dasllama_kv_dtype.das`** - the codec tag (`KVDtype`), the block codecs' byte counts the kernel
+  homes stamp (`KV_Q8_BLOCK_BYTES`, `KV_TQ4_BLOCK_BYTES`), the tq4 pointer newtype (`TQ4B`) and
   the `kv_codec_side` stamp: a call macro that clones its block once per codec with the byte
   pointer read as that codec's element type behind a runtime ladder. Every attention wrapper
   that hands a worker a typed cache pointer (`attn_head_decode_d`, the three prefill `_d`

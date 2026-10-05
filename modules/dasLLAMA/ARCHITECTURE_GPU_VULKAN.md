@@ -26,9 +26,12 @@ reads `class template KqCm2BatchT` in `dasllama_vulkan_classes.das` and licenses
 `dasllama_vulkan_common.das`, the `row` slab of `ArBase` in `dasllama_vulkan_classes.das` and the
 `c.dim` cap of `attn_dec_shape_ok` in `dasllama_blocks.das`, and licenses no names: the three
 numbers agree. `check_cm2_ladder_sets` walks every `class template <Fmt>Cm2T : KqCm2BatchT` in
-`dasllama_vulkan_classes.das` twice and requires each trio's ladders there (`khr_cls_*`, `cm2e_cls_*`) stamped by
-`kq_tile_stamp` over their `tile_<verb>_<tail>` placeholder - the stamp walks every `KqFmt` member, so a format with
-no class fails the compile. The KHR trio needs `<Fmt>KhrBatch` and its `kq_batch_<fmt>_khr_cls` stamp (per-32:
+`dasllama_vulkan_classes.das` twice (the KHR tile, the e column) and requires the engine's one ladder trio
+(`cm2_cls_*`) stamped by `kq_tile_stamp(fmt, CM2_TILE_NONE, ...)` over its `tile_<verb>()` placeholders, with no
+`<fmt>/<tail>` pair of the `CM2_TILE_NONE` skip list naming a format that has a template on the cm2 base for
+the walked tile, and the kernel cells' KHR ladder (`khr_cls_*`) stamped over `tile_<verb>_khr_cls()` - the stamp
+walks every `KqFmt` member, so a format with no class fails the compile, and a skipped pair would panic at its
+first dispatch instead. The KHR trio needs `<Fmt>KhrBatch` and its `kq_batch_<fmt>_khr_cls` stamp (per-32:
 `<fmt>_batch_khr_cls` - `Q8KhrBatch`, `Q51KhrBatch`, `Mx4KhrBatch`, `Iq4nl32KhrBatch`; the expert schedule rides that tile in mm mode); the e
 trio reads `KQ_CM2E_ALIASES_M` (`dasllama_kqformat.das`): a format whose s stamp steps k by 64 is on it and ships no
 `<Fmt>Cm2EBatch` (its e column is the m stamp byte for byte), a 32-step one is off it and ships `<Fmt>Cm2EBatch` with its `kq_batch_<fmt>_cm2e_cls` (per-32 `<fmt>_batch_cm2e_cls`) stamp; none licensed.
@@ -227,18 +230,16 @@ rows and the alpha rows each through `F16GemmCm2`, eight k chunks into the split
 the reduce into the layer's smalls at the beta and alpha bases (the class is the MoE router's,
 `ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block`). Off that route the f32 arm is a scalar tile GEMM
 over the `[beta ; alpha]` rows: one workgroup covers 16 positions by 16 output rows, one output
-per invocation, and the grid runs over both group axes, so a layer of only `2 x nvh` rows
-(`nvh`, the layer's value-head count) - 64 on the 9B - still fills the card. The q8 arm is two
-q8 GEMMs and copies.
+per invocation, and the grid runs over both group axes, so a layer of only `2 x nvh` rows (`nvh`,
+the layer's value-head count) - 64 on the 9B - still fills the card. The q8 arm is two q8 GEMMs and copies.
 
 The conv is channel-major: a workgroup owns 256 channels over `DN_CONV_PB` positions
 (`dn_conv_wgs` sizes the grid), every thread slides one channel's window over them with the taps
 in registers and one new row read per position, and holds its outputs in registers for the SiLU
 and the per-head L2 norm - the head's sum of squares crosses the head's lanes by shuffles and its
 32-lane blocks by one shared row, a head being `ds` consecutive channels with `ds` dividing 256. The
-position-major form it replaced (one workgroup per position, the row staged in 32 KB of shared
-memory) re-read every input row once per tap and the whole tap table once per position, all from
-L2.
+position-major form it replaced (one workgroup per position, the row staged in 32 KB of shared memory)
+re-read every input row once per tap and the whole tap table once per position, all from L2.
 
 The scan is the plain per-token delta rule in upstream's shape: one column of a head's state per
 lane cluster, 16 state rows per lane in registers, four 32-lane blocks per workgroup, and every lane
@@ -283,9 +284,8 @@ per entry after the `device ready` line, so a box's log says which route each ca
 `VK_NV_cooperative_matrix_decode_vector` runs the scalar decode arm, a device with no
 `VK_NV_shader_sm_builtins` never splits k). The roster re-queries the device rather than reading
 the arming's fields, so the two cannot disagree by construction only where the arming reads the
-same probe - the kernel file's roster cell holds the arming's fields to the roster's entries. The
-module gate keeps the roster complete: every extension name and every such probe the tier calls
-appears in it.
+same probe - the kernel file's roster cell holds the arming's fields to the roster's entries. The module
+gate keeps the roster complete: every extension name and every such probe the tier calls appears in it.
 
 ### The `[vk_dispatch]` lens derives `readonly` from the class family's accesses {#vk-readonly-lens}
 

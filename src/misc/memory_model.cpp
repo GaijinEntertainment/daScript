@@ -240,6 +240,7 @@ namespace das {
     }
 
     void MemoryModel::shrink() {
+        shoe.dropEmptyDecks(DeckRelease::all);
         if constexpr (has_shrink_to_fit<decltype(bigStuff)>::value) {
             bigStuff.shrink_to_fit();
         }
@@ -266,6 +267,7 @@ namespace das {
         return mem;
     }
 
+    // src/misc/ARCHITECTURE.md#empty-deck-release
     void MemoryModel::sweep() {
         totalAllocated = 0;
         // When trackAllocations is on, maxShoeAllocation==0, so no shoe chunks exist
@@ -294,6 +296,7 @@ namespace das {
 #endif
             }
         }
+        shoe.dropEmptyDecks(DeckRelease::keepHead);
         for ( auto it = bigStuff.begin(); it!=bigStuff.end() ; ) {
             if ( it->second & DAS_PAGE_GC_MASK ) {
                 it->second &= ~DAS_PAGE_GC_MASK;

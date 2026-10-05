@@ -7,6 +7,7 @@ require dasllama/dasllama_gemma4a
 require daslib/fio
 require daslib/strings_boost
 require strings
+require _compares
 
 // Model-free contract cells for two facade-boundary pieces the escape-hatched suite cannot see
 // from inside: the lint's ALLOWED set (a facade-only program with NO escape compiles), and
@@ -18,21 +19,44 @@ def fixture_source(requires : array<string>) : string {
 }
 
 def spawn_compile(requires : array<string>; tag : string) : tuple<rc : int; out : string> {
-    let dir_r = create_temp_directory_result("dasllama_lint_{tag}")
-    if (!(dir_r is value)) {
-        return (rc = -1, out = "temp dir failed")
+    return spawn_compile_only(fixture_source(requires), "lint_{tag}", 120.0)
+}
+
+//! a module with a function global above its `[init, boot_restore]` function, and one below it where `below` is set: the annotation
+//! runs as the parser reaches the function, so a global below it would get no guard - the macro refuses the module
+def private spawn_boot_restore_fixture(below : bool; tag : string) : tuple<rc : int; out : string> {
+    var lines <- [
+        "options gen2",
+        "options _dasllama_internal = true",
+        "",
+        "require dasllama/dasllama_lint public",
+        "require dasllama/dasllama_boot_restore",
+        "",
+        "def private f_a : int => 1",
+        "var private g_above = @@f_a",
+        "",
+        "[init, boot_restore]",
+        "def private restore_probe \{\}",
+        ""]
+    if (below) {
+        lines |> push("var private g_below = @@f_a")
     }
-    let dir = unsafe(dir_r.value)
-    let path = path_join(dir, "prog.das")
-    if (!fwrite(path, fixture_source(requires))) {
-        return (rc = -1, out = "fwrite failed")
+    lines |> push("[export]")
+    lines |> push("def main() \{")
+    lines |> push("    print(\"ok\\n\")")
+    lines |> push("\}")
+    return spawn_compile_only(join(lines, "\n"), "boot_restore_{tag}", 120.0)
+}
+
+[test]
+def test_boot_restore_order_gate(t : T?) {
+    t |> run("[boot_restore] refuses a function global declared below its restore function and compiles the module with every global above") @(t : T?) {
+        let bad = spawn_boot_restore_fixture(true, "below")
+        t |> success(bad.rc != 0, "a `= @@fn` global below the restore function must not compile")
+        t |> success(find(bad.out, "is declared below the restore function") >= 0, "the refusal names the global and the order: {bad.out}")
+        let good = spawn_boot_restore_fixture(false, "above")
+        t |> equal(0, good.rc, "every global above the restore function compiles: {good.out}")
     }
-    let argv <- get_command_line_arguments()
-    let self = find(to_generic_path(argv[0]), "/") < 0 ? argv[0] : get_full_file_name(normalize(argv[0]))
-    var out : string
-    let rc = run_and_capture([self, "-compile-only", path], out, 120.0)
-    rmdir_rec_result(dir)
-    return (rc = rc, out = out)
 }
 
 [test]

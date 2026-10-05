@@ -61,11 +61,6 @@ void Module_dasIMGUI::initFunctions_24() {
 	makeExtern<DAS_CALL_METHOD(_method_80), SimNode_ExtFuncCall , imguiTempFn>(lib,"PopClipRect","das_call_member< void (ImDrawList::*)() , &ImDrawList::PopClipRect >::invoke")
 		->args({"self"})
 		->addToModule(*this, SideEffects::worstDefault);
-	using _method_81 = das::das_call_member< void (ImDrawList::*)(ImTextureRef),&ImDrawList::PushTexture >;
-// from imgui.h:3428:21
-	makeExtern<DAS_CALL_METHOD(_method_81), SimNode_ExtFuncCall , imguiTempFn>(lib,"PushTexture","das_call_member< void (ImDrawList::*)(ImTextureRef) , &ImDrawList::PushTexture >::invoke")
-		->args({"self","tex_ref"})
-		->addToModule(*this, SideEffects::worstDefault);
 	using _method_82 = das::das_call_member< void (ImDrawList::*)(),&ImDrawList::PopTexture >;
 // from imgui.h:3429:21
 	makeExtern<DAS_CALL_METHOD(_method_82), SimNode_ExtFuncCall , imguiTempFn>(lib,"PopTexture","das_call_member< void (ImDrawList::*)() , &ImDrawList::PopTexture >::invoke")

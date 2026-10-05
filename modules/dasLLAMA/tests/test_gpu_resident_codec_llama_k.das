@@ -7,7 +7,6 @@ require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration (llama)
 require dasllama/dasllama
 require daslib/jobque_boost
-require daslib/fio
 require _model_tier
 require _kv_codec_cells
 
@@ -29,18 +28,16 @@ let private CODEC_DIST_REL = 1.15   //! the device's distance from the f16 chain
 //! independent quantizations do - under the square root of two.
 let private CODEC_PAIR_REL = 1.4
 
-def private carrier_path() : string => path_join(models_dir(), CARRIER)
-
 [test]
 def test_gpu_resident_codec_llama_k_q8kv(t : T?) {
     t |> run("Llama-3.2-1B Q4_K_M: the q8_0 K/V mirror - resident prefill + decode vs the CPU chain on q8_0 sessions") @(t : T?) {
-        cell_codec_forced_feed(t, carrier_path(), 40l, KVDtype.q8_0, Q8KV_BAR_REL)
+        cell_codec_forced_feed(t, CARRIER, 40l, KVDtype.q8_0, Q8KV_BAR_REL)
     }
 }
 
 [test]
 def test_gpu_resident_codec_llama_k_tq4kv(t : T?) {
     t |> run("Llama-3.2-1B Q4_K_M: the tq4 K/V mirror - resident prefill + decode against the CPU chain's tq4 and f16 rows") @(t : T?) {
-        cell_codec_distance(t, carrier_path(), 40l, KVDtype.tq4, false, CODEC_DIST_REL, CODEC_PAIR_REL)
+        cell_codec_distance(t, CARRIER, 40l, KVDtype.tq4, false, CODEC_DIST_REL, CODEC_PAIR_REL)
     }
 }

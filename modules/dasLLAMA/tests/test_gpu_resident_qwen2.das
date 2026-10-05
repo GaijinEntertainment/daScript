@@ -11,7 +11,6 @@ require daslib/fio
 require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
-require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW and the resolved coopmat mode, where the module exists
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed   // resident_ready, the ramps, resident_then_cpu_feed, feed_steps_within
 require _kv_codec_cells   // the K/V codec cells' rig
@@ -45,34 +44,20 @@ let private CODEC_PAIR_REL = 0.8    //! the two codec chains' distance from each
 //! chains) differ at 0.002-0.01 of their bytes; the prefill's V rows at 0.39 (q8_0) and 0.12 (tq4) - its GEMM reads f16 rows where
 //! the CPU reads Q8_0 blocks - against 0.97 for a row held to the next one (the control)
 let private ROWS_BARS = StoredRowsBars(k = 0.02, v_step = 0.05, v_prefill_of_ctrl = 0.6)
-let private PF_WINDOW_ROWS = 512l  //! the engine's PF_WINDOW, asserted equal by the two-window cell: a prompt past it runs as sequential windows
-
-def private carrier_path() : string => path_join(models_dir(), CARRIER)
 
 [cold_path]
 def private qwen2_forced_feed(t : T?; n : int64) {
-    let path = carrier_path()
+    let path = path_join(models_dir(), CARRIER)
     if (!resident_ready(t, path)) return
     var tr <- load_model_(path, QuantMode.q8)
     t |> success(tr.config.attn_qkv_bias, "the qwen2 carries the q/k/v projection bias the arm exists for")
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the biased model (the load log names any decline)")
     with_dasllama_jobque_() {
-        var prompt <- resident_prompt(n)
-        var toks <- resident_feed(8l)
-        var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {}
-        feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, toks, LOGIT_BAR_REL)
-        delete fed
-        delete prompt
-        delete toks
+        forced_feed_over(t, tr, "", n, 8l, LOGIT_BAR_REL) $ {}
     }
     delete tr
 }
 
-def private assert_pf_window(t : T?) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        t |> equal(PF_WINDOW, PF_WINDOW_ROWS, "the prompt is sized past the engine's own window")
-    }
-}
 
 [test]
 def test_gpu_resident_qwen2_bias(t : T?) {
@@ -88,41 +73,41 @@ def test_gpu_resident_qwen2_bias(t : T?) {
 [test]
 def test_gpu_resident_qwen2_q8kv(t : T?) {
     t |> run("Qwen2.5-0.5B: the q8_0 K/V mirror - resident prefill + decode vs the CPU chain on q8_0 sessions, one window") @(t : T?) {
-        cell_codec_forced_feed(t, carrier_path(), 40l, KVDtype.q8_0, Q8KV_BAR_REL)
+        cell_codec_forced_feed(t, CARRIER, 40l, KVDtype.q8_0, Q8KV_BAR_REL)
     }
     t |> run("Qwen2.5-0.5B: the q8_0 K/V mirror across two windows") @(t : T?) {
         assert_pf_window(t)
-        cell_codec_forced_feed(t, carrier_path(), PF_WINDOW_ROWS + 88l, KVDtype.q8_0, Q8KV_BAR_REL)
+        cell_codec_forced_feed(t, CARRIER, PF_WINDOW_ROWS + 88l, KVDtype.q8_0, Q8KV_BAR_REL)
     }
 }
 
 [test]
 def test_gpu_resident_qwen2_tq4kv(t : T?) {
     t |> run("Qwen2.5-0.5B: the tq4 K/V mirror - resident prefill + decode against the CPU chain's tq4 and f16 rows, one window") @(t : T?) {
-        cell_codec_distance(t, carrier_path(), 40l, KVDtype.tq4, false, CODEC_DIST_REL, CODEC_PAIR_REL)
+        cell_codec_distance(t, CARRIER, 40l, KVDtype.tq4, false, CODEC_DIST_REL, CODEC_PAIR_REL)
     }
     t |> run("Qwen2.5-0.5B: the tq4 K/V mirror across two windows") @(t : T?) {
         assert_pf_window(t)
-        cell_codec_distance(t, carrier_path(), PF_WINDOW_ROWS + 88l, KVDtype.tq4, false, CODEC_DIST_REL, CODEC_PAIR_REL)
+        cell_codec_distance(t, CARRIER, PF_WINDOW_ROWS + 88l, KVDtype.tq4, false, CODEC_DIST_REL, CODEC_PAIR_REL)
     }
 }
 
 [test]
 def test_gpu_resident_qwen2_codec_rows_up(t : T?) {
     t |> run("Qwen2.5-0.5B: the device steps over q8_0 rows the CPU prefill wrote") @(t : T?) {
-        cell_codec_distance(t, carrier_path(), 40l, KVDtype.q8_0, true, CODEC_DIST_REL, CODEC_PAIR_REL)
+        cell_codec_distance(t, CARRIER, 40l, KVDtype.q8_0, true, CODEC_DIST_REL, CODEC_PAIR_REL)
     }
     t |> run("Qwen2.5-0.5B: the device steps over tq4 rows the CPU prefill wrote") @(t : T?) {
-        cell_codec_distance(t, carrier_path(), 40l, KVDtype.tq4, true, CODEC_DIST_REL, CODEC_PAIR_REL)
+        cell_codec_distance(t, CARRIER, 40l, KVDtype.tq4, true, CODEC_DIST_REL, CODEC_PAIR_REL)
     }
 }
 
 [test]
 def test_gpu_resident_qwen2_codec_rows(t : T?) {
     t |> run("Qwen2.5-0.5B: the q8_0 mirror's stored rows against the CPU cache's, layer 0") @(t : T?) {
-        cell_codec_stored_rows(t, carrier_path(), KVDtype.q8_0, ROWS_BARS)
+        cell_codec_stored_rows(t, CARRIER, KVDtype.q8_0, ROWS_BARS)
     }
     t |> run("Qwen2.5-0.5B: the tq4 mirror's stored rows against the CPU cache's, layer 0") @(t : T?) {
-        cell_codec_stored_rows(t, carrier_path(), KVDtype.tq4, ROWS_BARS)
+        cell_codec_stored_rows(t, CARRIER, KVDtype.tq4, ROWS_BARS)
     }
 }

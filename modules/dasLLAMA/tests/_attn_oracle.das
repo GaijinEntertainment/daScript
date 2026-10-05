@@ -28,6 +28,44 @@ def attn_row_oracle(q : array<float>; qbase : int; kk : array<float>; kbase0 : i
     }
 }
 
+//! `attn_row_oracle` over every head of one query row: head hh reads q at qbase + hh * hs and lands at obase + hh * hs
+def attn_heads_oracle(q : array<float>; qbase : int; kk : array<float>; kbase : int; vv : array<float>; vbase : int;
+                      kvd, nheads, hs, kv_mul, cnt : int; scale : float; var out : array<float>; obase : int;
+                      kstart : int = 0; cap : float = 0.0) {
+    for (hh in range(nheads)) {
+        attn_row_oracle(q, qbase + hh * hs, kk, kbase, vv, vbase, kvd, hh, hs, kv_mul, cnt, scale, out, obase + hh * hs, kstart, cap)
+    }
+}
+
+//! `attn_heads_oracle` with head hh's attention sink logit `sinks[hh]` in its softmax
+def attn_heads_oracle(q : array<float>; qbase : int; kk : array<float>; kbase : int; vv : array<float>; vbase : int;
+                      kvd, nheads, hs, kv_mul, cnt : int; scale : float; var out : array<float>; obase : int;
+                      sinks : array<float>; kstart : int = 0; cap : float = 0.0) {
+    for (hh in range(nheads)) {
+        attn_row_oracle(q, qbase + hh * hs, kk, kbase, vv, vbase, kvd, hh, hs, kv_mul, cnt, scale, out, obase + hh * hs, kstart, cap, true, sinks[hh])
+    }
+}
+
+//! one attention sink logit a head for a single query row: past the head's top scaled score over `keys` keys by 2.5 + 0.5 x the head,
+//! so the phantom key carries measurable mass over a flat key row
+def sink_logits(q, kk : array<float>; nheads, hs, kv_mul, keys, kvd : int; scale : float) : array<float> {
+    var sinkh : array<float>
+    sinkh |> resize(nheads)
+    for (hh in range(nheads)) {
+        let khoff = (hh / kv_mul) * hs
+        var smax = -3.0e38
+        for (j in range(keys)) {
+            var sc = 0.0
+            for (e in range(hs)) {
+                sc += q[hh * hs + e] * kk[j * kvd + khoff + e]
+            }
+            smax = max(smax, sc * scale)
+        }
+        sinkh[hh] = smax + 2.5 + 0.5 * float(hh)
+    }
+    return <- sinkh
+}
+
 //! gemma4a's windowed RPE attention, spelled as `gemma4a_encode`'s loop: per head (`hs` wide in rows `d` wide), query row i
 //! attends keys (i - past, i]; a logit is the query times `qscale` and the per-dim `pds`, dotted with the key times `kscale`
 //! plus the relative-position row `rpe[(past - (i - j)) * d ...]`, capped as `cap * tanh(x / cap)`

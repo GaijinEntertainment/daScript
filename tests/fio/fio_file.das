@@ -23,9 +23,7 @@ def operator ==(a, b : array<uint8> implicit) {
 [test]
 def test_empty_array_io(t : T?) {
     t |> run("fwrite/fread of an empty array is a 0-byte no-op, not an OOB addr") @(t : T?) {
-        var terr : string
-        let tmp = temp_directory(terr)   // portable (no /tmp on Windows); cwd as a last resort
-        let fname = path_join(empty(tmp) ? "." : tmp, "fio_empty_io_{ref_time_ticks()}.bin")
+        let fname = path_join(test_temp_dir(), "empty_array.bin")
         var none : array<int>
         var wrote = false
         fopen(fname, "wb") $(f) {
@@ -53,15 +51,13 @@ def test_empty_array_io(t : T?) {
 [test]
 def test_stat_is_exec(t : T?) {
     t |> run("stat reports the execute bit: a data file has none, an executable has it") @(t : T?) {
-        var terr : string
-        let tmp = temp_directory(terr)
-        let dir = empty(tmp) ? "." : tmp
-        let plain = path_join(dir, "fio_exec_probe_{ref_time_ticks()}.txt")
+        let dir = test_temp_dir()
+        let plain = path_join(dir, "exec_probe.txt")
         t |> success(fwrite(plain, "x"), "the probe file is written")
         let st_plain = stat(plain)
         t |> success(st_plain.is_valid && st_plain.is_reg && !st_plain.is_exec, "a data file is not executable")
         if (get_platform_name() == "windows") {
-            let exe = path_join(dir, "fio_exec_probe_{ref_time_ticks()}.exe")
+            let exe = path_join(dir, "exec_probe.exe")
             t |> success(fwrite(exe, "x"), "the .exe probe is written")
             t |> success(stat(exe).is_exec, "Windows: the .exe extension is the execute bit")
             t |> success(remove(exe))
@@ -84,7 +80,7 @@ def test_fopen(t : T?) {
     t |> run("fuzz fopen") @@(t : T?) {
         var fake <- Faker()
         fuzz(TOTAL_FUZZ_FILES) {
-            let fname = fake |> any_file_name           // note: this should be any_string, but we are getting strange strange file names (unicode?), and one does not delete
+            let fname = path_join(test_temp_dir(), fake |> any_file_name)
             var stat : FStat
             if (!stat(fname, stat) && !stat.is_valid) {
                 var f = fopen(fname, "w")
@@ -105,7 +101,7 @@ def test_fopen(t : T?) {
     t |> run("fuzz fread") @@(t : T?) {
         var fake <- Faker()
         fuzz(TOTAL_FUZZ_FILES) {
-            let fname = fake |> any_file_name
+            let fname = path_join(test_temp_dir(), fake |> any_file_name)
             var stat : FStat
             if (!stat(fname, stat) && !stat.is_valid) {
                 fopen(fname, "wb") $(f) {
@@ -122,7 +118,7 @@ def test_fopen(t : T?) {
     t |> run("fuzz fmap") @@(t : T?) {
         var fake <- Faker()
         fuzz(TOTAL_FUZZ_FILES) {
-            let fname = fake |> any_file_name
+            let fname = path_join(test_temp_dir(), fake |> any_file_name)
             var stat : FStat
             if (!stat(fname, stat) && !stat.is_valid) {
                 fopen(fname, "wb") $(f) {

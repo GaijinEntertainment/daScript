@@ -11,7 +11,6 @@ require daslib/fio
 require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
-require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW and the resolved coopmat mode, where the module exists
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed   // resident_ready, the levers, the ramps, resident_then_cpu_feed, feed_steps_within, tile_arm_tag
 require dasllama/dasllama_bench   // bench_tg_batched_rep: the batched row's refusal and its served rep
@@ -19,9 +18,10 @@ require dasllama/dasllama_bench   // bench_tg_batched_rep: the batched row's ref
 // The whole-model resident driver on the llama family (`DASLLAMA_GPU=1`): the NORM rope (adjacent pairs),
 // no q/k/v bias, no q/k norm, GQA, the tied classifier of the 3.2 files. The forced-feed logits-tolerance
 // form of test_gpu_resident_qwen2: the same fixed tokens through the resident chain and the all-CPU chain,
-// the prefill logits and every step's within the bar, the one-step-off control past it. Three carriers -
-// Llama-3.2-1B Q8_0, Llama-3.2-3B Q8_0, Llama-3.1-8B Q4_K_M (the batched step's Q8_0 and K-quant planes) -
-// at one window and two windows; the 1B also runs the batched bench row's refusal and one served rep.
+// the prefill logits and every step's within the bar, the one-step-off control past it. Four carriers -
+// Llama-3.2-1B Q8_0, its Q4_0 requant (the q40 planes), Llama-3.2-3B Q8_0, Llama-3.1-8B Q4_K_M (the batched
+// step's Q8_0 and K-quant planes) - at one window and two windows; the 1B also runs the batched bench row's
+// refusal and one served rep.
 // Every cell skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, or without its file
 // under models_dir() (the 8B is large-tier: DASLLAMA_PARITY_FULL=1).
 
@@ -32,7 +32,6 @@ def private allow_cpu_prefill_intent() {
 
 //! of the step's max |logit|: the qwen2 file's K-quant bar
 let private LOGIT_BAR_REL = 0.06
-let private PF_WINDOW_ROWS = 512l  //! the engine's PF_WINDOW, asserted equal by the two-window cell: a prompt past it runs as sequential windows
 
 //! the carrier's path past its gate - the JIT, the armed tier and the file; "" where the cell already registered its skip
 def private llama_model_path(t : T?; file : string) : string {
@@ -50,18 +49,12 @@ def private llama_forced_feed(t : T?; file : string; n : int64) {
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
     t |> equal(get_jobque_spin_in_force(), get_jobque_spin_gpu_us(), "the armed driver put the GPU-served spin window in force")
     with_dasllama_jobque_() {
-        var prompt <- resident_prompt(n)
-        var toks <- resident_feed(8l)
-        var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {
+        forced_feed_over(t, tr, "{file} ", n, 8l, LOGIT_BAR_REL) $ {
             var passes <- gpu_cpu_passes_()
             t |> equal(length(passes), 0, "the device served every call of the resident run: {passes}")
             delete passes
         }
         t |> equal(get_jobque_spin_in_force(), get_jobque_spin_us(), "the dropped driver handed the pool the CPU window back")
-        feed_steps_within(t, tr, "{file} ", n, fed.gpu, fed.cpu, toks, LOGIT_BAR_REL)
-        delete fed
-        delete prompt
-        delete toks
     }
     delete tr
 }
@@ -71,9 +64,7 @@ def private llama_cells(t : T?; file : string) {
         llama_forced_feed(t, file, 40l)
     }
     t |> run("{file}: the same across two windows") @(t : T?) {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            t |> equal(PF_WINDOW, PF_WINDOW_ROWS, "the prompt is sized past the engine's own window")
-        }
+        assert_pf_window(t)
         llama_forced_feed(t, file, PF_WINDOW_ROWS + 88l)
     }
 }
@@ -113,6 +104,12 @@ def test_gpu_resident_llama_batched_row(t : T?) {
         }
         delete tr
     }
+}
+
+//! the 1B's Q4_0 requant: its q40 planes take the window chain's kq batch arm off the f16 feed and the cm2 tiles on it
+[test]
+def test_gpu_resident_llama_1b_q40(t : T?) {
+    llama_cells(t, "Llama-3.2-1B-Instruct-Q4_0-local.gguf")
 }
 
 [test]

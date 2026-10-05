@@ -27,8 +27,10 @@ def special_file_response_does_not_block_shutdown(t : T?) {
             }
             t |> success(fexist("{root}/ready"), "child server started")
             if (fexist("{root}/ready")) {
+                let port = to_int(fread("{root}/ready"))
+                t |> success(port > 0 && port <= 65535, "ready publishes the complete port")
                 var peer = new WirePeer()
-                t |> success(peer->connect("127.0.0.1", to_int(fread("{root}/ready"))))
+                t |> success(peer->connect("127.0.0.1", port))
                 t |> success(peer->write_text("GET /special HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"))
                 let waiting = ref_time_ticks()
                 while (!peer.disconnected && get_time_usec(waiting) < 3000000) { peer->tick(); sleep(1u) }

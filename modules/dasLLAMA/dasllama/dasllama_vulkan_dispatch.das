@@ -39,32 +39,14 @@ def private mk_gvar(at : LineInfo; nm : string) : ExpressionPtr {
     return new ExprVar(at = at, name := nm)
 }
 
-// a [spirv_kernel] method of a lensed class + its captured blob global name. `want` names the
-// method for multi-kernel classes; "" counts every kernel method and returns the first (the
-// single-kernel form's exactly-one check rides on nmatch)
-def private find_kernel_fn(st : StructurePtr; mod : Module?; want : string; var nmatch : int&; var blob : string&) : Function? {
-    var kfn : Function?
-    let wanted = empty(want) ? "" : "{st.name}`{want}"
-    mod |> for_each_function("") $(fn) {
-        if (!empty(fn.arguments) && fn.arguments[0]._type.structType == st) {
-            for (ann in fn.annotations) {
-                if (ann.annotation.name == "spirv_kernel") {
-                    if (empty(wanted)) {
-                        nmatch++
-                        if (kfn == null) {
-                            kfn = fn
-                            blob = find_arg(ann.arguments, "name") ?as tString ?? "{fn.name}`spirv"
-                        }
-                    } elif (fn.name == wanted) {
-                        nmatch++
-                        kfn = fn
-                        blob = find_arg(ann.arguments, "name") ?as tString ?? "{fn.name}`spirv"
-                    }
-                }
-            }
+//! the captured blob global of a [spirv_kernel] method: its `name =` argument, else `<method>`spirv`
+def private spirv_blob_of(kfn : Function?) : string {
+    for (ann in kfn.annotations) {
+        if (ann.annotation.name == "spirv_kernel") {
+            return find_arg(ann.arguments, "name") ?as tString ?? "{kfn.name}`spirv"
         }
     }
-    return kfn
+    return "{kfn.name}`spirv"
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-readonly-lens")]
@@ -131,6 +113,21 @@ def private mk_if_do(at : LineInfo; var cond : Expression?; var stmt : Expressio
 
 def private mk_not(at : LineInfo; var e : Expression?) : ExpressionPtr {
     return new ExprOp1(at = at, op := "!", subexpr = e)
+}
+
+def private access_fail(var errors : das_string; msg : string; var res : AccessResult; var tracked : table<string>) : bool {
+    errors := msg
+    delete res
+    delete tracked
+    return false
+}
+
+def private add_generated(at : LineInfo; name : string; var result : TypeDeclPtr; var body : array<ExpressionPtr>; decorate : block<(var fn : Function?) : void>) : bool {
+    var fn = new Function(at = at, atDecl = at, name := name, flags = FunctionFlags.generated, result = result)
+    invoke(decorate, fn)
+    fn.body = make_expression_block(body)
+    fn.body |> force_at(at)
+    return compiling_module() |> add_function(fn)
 }
 
 [structure_macro(name = vk_dispatch)]
@@ -275,8 +272,7 @@ class VkDispatch : AstStructureAnnotation {
 
         // the kernel method + derived access -> per-binding read/write masks
         var nmatch = 0
-        var blob = ""
-        let kfn = find_kernel_fn(st, compiling_module(), kern, nmatch, blob)
+        let kfn = find_kernel_fn(st, compiling_module(), "spirv_kernel", kern, nmatch)
         if (empty(kern)) {
             if (kfn == null || nmatch != 1) {
                 errors := "[vk_dispatch] {base}: expected exactly one [spirv_kernel] method on {st.name} (found {nmatch}) - multi-kernel classes pick per instance via kernel="
@@ -285,6 +281,9 @@ class VkDispatch : AstStructureAnnotation {
         } elif (kfn == null) {
             errors := "[vk_dispatch] {base}: no [spirv_kernel] method '{kern}' on {st.name}"
             return false
+        } elif (nmatch != 1) {
+            errors := "[vk_dispatch] {base}: kernel='{kern}' names {nmatch} [spirv_kernel] methods on {st.name} - a prefix picks exactly one"
+            return false
         }
         var tracked : table<string>
         for (bf in bufs) {
@@ -292,10 +291,7 @@ class VkDispatch : AstStructureAnnotation {
         }
         var res <- classify_field_access(kfn, compiling_module(), st, tracked)
         if (!empty(res.err)) {
-            errors := "[vk_dispatch] {base}: {res.err}"
-            delete res
-            delete tracked
-            return false
+            return access_fail(errors, "[vk_dispatch] {base}: {res.err}", res, tracked)
         }
         var rmask = 0u
         var wmask = 0u
@@ -304,10 +300,7 @@ class VkDispatch : AstStructureAnnotation {
             let decl = bf.role
             if (decl == "weight") {
                 if (key_exists(res.writes, bf.name)) {
-                    errors := "[vk_dispatch] {base}: member '{bf.name}' declares @role='weight' but the kernel body writes it"
-                    delete res
-                    delete tracked
-                    return false
+                    return access_fail(errors, "[vk_dispatch] {base}: member '{bf.name}' declares @role='weight' but the kernel body writes it", res, tracked)
                 }
             } elif (multi) {
                 // per-kernel view of shared members: unused-here is fine (a sibling kernel uses
@@ -315,22 +308,13 @@ class VkDispatch : AstStructureAnnotation {
                 let cov = (empty(dr) || decl == "" || decl == "alias" || decl == dr
                     || (decl == "readwrite" && (dr == "read" || dr == "write")))
                 if (!cov) {
-                    errors := "[vk_dispatch] {base}: member '{bf.name}' declares @role='{decl}' but kernel '{kern}' derives '{dr}' - the declared role must cover every kernel"
-                    delete res
-                    delete tracked
-                    return false
+                    return access_fail(errors, "[vk_dispatch] {base}: member '{bf.name}' declares @role='{decl}' but kernel '{kern}' derives '{dr}' - the declared role must cover every kernel", res, tracked)
                 }
             } elif (decl != "" && decl != "alias" && decl != dr) {
                 let drName = empty(dr) ? "unused" : dr
-                errors := "[vk_dispatch] {base}: member '{bf.name}' declares @role='{decl}' but the body derives '{drName}' - fix whichever is wrong"
-                delete res
-                delete tracked
-                return false
+                return access_fail(errors, "[vk_dispatch] {base}: member '{bf.name}' declares @role='{decl}' but the body derives '{drName}' - fix whichever is wrong", res, tracked)
             } elif (decl == "" && empty(dr)) {
-                errors := "[vk_dispatch] {base}: @ssbo member '{bf.name}' is never accessed by the kernel body - declare @role (weight/alias) or drop the binding"
-                delete res
-                delete tracked
-                return false
+                return access_fail(errors, "[vk_dispatch] {base}: @ssbo member '{bf.name}' is never accessed by the kernel body - declare @role (weight/alias) or drop the binding", res, tracked)
             }
             let bit = 1u << uint(bf.binding)
             if (key_exists(res.reads, bf.name)) {
@@ -376,7 +360,7 @@ class VkDispatch : AstStructureAnnotation {
             var cp = new ExprCall(at = at, name := "vkd_class_pipe")
             cp.arguments |> emplace_new <| mk_gvar(at, gname)
             cp.arguments |> emplace_new <| new ExprConstInt(at = at, value = ord)
-            cp.arguments |> emplace_new <| mk_gvar(at, blob)
+            cp.arguments |> emplace_new <| mk_gvar(at, spirv_blob_of(kfn))
             cp.arguments |> emplace_new <| new ExprConstUInt(at = at, value = rmask)
             cp.arguments |> emplace_new <| new ExprConstUInt(at = at, value = wmask)
             cp.arguments |> emplace_new <| new ExprConstString(at = at, value := disp_name)
@@ -396,12 +380,7 @@ class VkDispatch : AstStructureAnnotation {
             body |> push(mk_if_do(at, mk_not(at, new ExprField(at = at, value = mk_gvar(at, gname), name := "ready")), ci))
             body |> push(mk_if_do(at, mk_not(at, pm), cp))
             body |> push(mk_ret_bool(at, true))
-            var fn = new Function(at = at, atDecl = at, name := "ensure_{base}",
-                flags = FunctionFlags.generated,
-                result = new TypeDecl(at = at, baseType = Type.tBool))
-            fn.body = make_expression_block(body)
-            fn.body |> force_at(at)
-            if (!(compiling_module() |> add_function(fn))) {
+            if (!add_generated(at, "ensure_{base}", new TypeDecl(at = at, baseType = Type.tBool), body) $(var _fn : Function?) {}) {
                 errors := "[vk_dispatch] {base}: failed to add ensure_{base}"
                 return false
             }
@@ -415,14 +394,10 @@ class VkDispatch : AstStructureAnnotation {
             cs.arguments |> emplace_new <| new ExprConstUInt(at = at, value = rmask)
             cs.arguments |> emplace_new <| new ExprConstUInt(at = at, value = wmask)
             var body <- array<ExpressionPtr>(cs)
-            var fn = new Function(at = at, atDecl = at, name := "{base}`census",
-                flags = FunctionFlags.generated,
-                result = new TypeDecl(at = at, baseType = Type.tVoid))
-            fn.flags.init = true
-            fn.flags.privateFunction = true
-            fn.body = make_expression_block(body)
-            fn.body |> force_at(at)
-            if (!(compiling_module() |> add_function(fn))) {
+            if (!add_generated(at, "{base}`census", new TypeDecl(at = at, baseType = Type.tVoid), body) $(var fn : Function?) {
+                    fn.flags.init = true
+                    fn.flags.privateFunction = true
+                }) {
                 errors := "[vk_dispatch] {base}: failed to add the census [init]"
                 return false
             }
@@ -438,21 +413,17 @@ class VkDispatch : AstStructureAnnotation {
             ws.arguments |> emplace_new <| mk_gvar(at, "sizes")
             ws.arguments |> emplace_new <| mk_gvar(at, "gbits")
             body |> push(new ExprReturn(at = at, subexpr = ws))
-            var fn = new Function(at = at, atDecl = at, name := "set_{family}",
-                flags = FunctionFlags.generated,
-                result = mk_alias_t(at, "VkDescriptorSet", false))
             var bufs_t = make_fixed_array_type(nb, new TypeDecl(at = at, baseType = Type.tUInt64))
             bufs_t.flags.constant = true
             var sizes_t = make_fixed_array_type(nb, new TypeDecl(at = at, baseType = Type.tInt64))
             sizes_t.flags.constant = true
             var gbits_t = make_fixed_array_type(nb, new TypeDecl(at = at, baseType = Type.tUInt))
             gbits_t.flags.constant = true
-            fn.arguments |> emplace_new <| new Variable(at = at, name := "bufs", _type = bufs_t)
-            fn.arguments |> emplace_new <| new Variable(at = at, name := "sizes", _type = sizes_t)
-            fn.arguments |> emplace_new <| new Variable(at = at, name := "gbits", _type = gbits_t)
-            fn.body = make_expression_block(body)
-            fn.body |> force_at(at)
-            if (!(compiling_module() |> add_function(fn))) {
+            if (!add_generated(at, "set_{family}", mk_alias_t(at, "VkDescriptorSet", false), body) $(var fn : Function?) {
+                    fn.arguments |> emplace_new <| new Variable(at = at, name := "bufs", _type = bufs_t)
+                    fn.arguments |> emplace_new <| new Variable(at = at, name := "sizes", _type = sizes_t)
+                    fn.arguments |> emplace_new <| new Variable(at = at, name := "gbits", _type = gbits_t)
+                }) {
                 errors := "[vk_dispatch] {base}: failed to add set_{family}"
                 return false
             }

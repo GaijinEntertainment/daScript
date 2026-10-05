@@ -8,6 +8,7 @@ require dasllama/dasllama_vad
 require dasllama/dasllama_math   // with_dasllama_jobque_
 require daslib/jobque_boost
 require math
+require dasllama/dasllama_audio_io
 require _model_tier
 
 // Silero-VAD tests. The forward gate is self-contained (the ~1.2 MB weights are checked in at
@@ -55,7 +56,7 @@ def test_vad_forward_lcg(t : T?) {
 def test_vad_segments_jfk(t : T?) {
     t |> run("find_speech_timestamps matches silero get_speech_timestamps on jfk.wav") @(t : T?) {
         let wav = "{models_dir()}/jfk.wav"
-        let samples <- read_wav_pcm16_mono(wav)
+        let samples <- load_audio_16k_mono(wav)
         if (empty(samples)) {
             t |> skip("jfk.wav not present in DASLLAMA_MODELS_DIR")
             return

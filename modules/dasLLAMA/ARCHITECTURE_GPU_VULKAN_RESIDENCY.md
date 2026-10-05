@@ -17,9 +17,9 @@ sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 The resident driver is all-or-nothing, so the plan IS the decision, and it is computed from
 `Model` metadata alone. It sizes four numbers against the tier's weight budget: the dense weight
 planes, the KV mirror at `seq_cap`, the driver's own device scratch, and the headroom the auto
-arm leaves unfilled (zero when the user pins VRAM). The weight planes are ONE list
-(`resident_planes`, a row length, a row count and a format per plane): the plan sums that list's
-bytes and the upload reserves and places the same list, so the two cannot drift; the router rows,
+arm leaves unfilled (zero when the user pins VRAM). The weight planes are ONE list in placement order
+(`resident_planes`: per plane a row length, row count, format, offset and the role the upload registers it as):
+the plan sums its bytes and the upload reserves it and places it in order (`place_plane` panics on a role out of turn), so the two cannot drift; the router rows,
 the beta / alpha rows (f16 on the device) and the optional f32 embedding are the terms beside it. KV is reserved BEFORE weights and never
 grows: on a discrete card the two compete directly, and evicting weights to grow KV would mean
 re-uploading gigabytes. The mirror's codec is f16 by default (`resident_mirror_dtype`): the

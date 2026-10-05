@@ -5,7 +5,7 @@
 - `job_que.cpp` - compute lanes, OS placement, dispatch and spin/park scheduling.
 - `job_que_spin.h` - spin deadline construction, renewal and expiration; its clock type is
   supplied by the runtime or a deterministic test.
-- `sysos.cpp` - the per-platform core-count probes `job_que.cpp` calls.
+- `sysos.cpp` - the per-platform core-count probes `job_que.cpp` calls, and the das root.
 - `network.cpp` - the single-client TCP `Server` the DAP debugger and `daslib/network` sit on,
   the `Client` end beside it, `probe_local_port`, and the two helpers every socket error passes
   through.
@@ -231,3 +231,47 @@ every tier sees the same heap. Without ASan every hook compiles to nothing.
   push does not keep the annotation, so an ASan host lowers every push to the runtime call
   (`gate_array_push_back`, `modules/dasLLVM/daslib/llvm_jit_lower.das`).
 
+
+## 11. The das root is a place, not a spelling {#das-root-absolute}
+
+`setDasRoot` stores the root as an absolute path with forward slashes, no `.` or `..` segment
+and, below a filesystem root, no trailing slash, so `-dasroot .`, `-dasroot build/..` and the
+full path name one root when they point at one folder. A relative root is joined to the working
+directory the process has at that call. The form is lexical: a symlink in the path stays as
+written. The root `getDasRoot` derives from the executable's path goes through the same call,
+the `.` it answers for a binary outside a `bin` folder included. `get_das_root()` therefore
+answers the same string from every such start, and so does everything built on it - the module
+scan's descriptor folders and manifest key (`src/ast/ARCHITECTURE.md#module-scan-manifest`), the
+paths a descriptor registers, the file names a compile reports.
+
+The reason is the manifest key. A descriptor's rows carry the root as the descriptor read it, so
+the key has to compare the same string the rows were built from; were the root kept as typed, two
+starts that spell one tree differently would each find the other's manifest stale and rewrite
+it, on every start, and a start reading mid-rewrite would compile cold beside replayed
+descriptors.
+
+Windows resolves the path with `normalizeFileName`; Linux, macOS and Haiku with
+`std::filesystem`. The root stays as given on every other target (the web build, a console, a
+`DAS_NO_FILEIO` build), and wherever the resolve fails - a path past `MAX_PATH`, a working
+directory that cannot be read.
+
+## 12. A sweep gives a dead deck back; the head of its class stays {#empty-deck-release}
+
+A size class in `MemoryModel` is a chain of decks, newest at the head, and a request walks the
+chain from the head for a free slot. Growth is geometric - each new deck is twice the head it
+replaces unless `customGrow` says otherwise - so the chain behind the head sums to about the head's own size, and it is the part a
+loading burst leaves behind: the burst's objects die, the survivors allocated after it sit in the
+head, and the older decks hold nothing. Before, a deck lived until the context was reset, so the
+reserved capacity of every class was its peak for the life of the context, and a persistent heap
+carried its startup peak as dirty memory for the whole run.
+
+`Shoe::dropEmptyDecks` unlinks every deck whose live count is zero and frees it; a deck's
+destructor frees the chain behind it, so a released deck is detached from its successor before
+`delete`. `MemoryModel::sweep` calls it with `DeckRelease::keepHead` after the per-deck live
+count it already computes, keeping the head deck of each class even when empty: the head is where the next request lands and the base the next growth doubles
+from, so keeping it stops a steady workload from freeing and re-creating the same deck every
+collection. `MemoryModel::shrink` calls it with `DeckRelease::all` - after a reset every deck is empty,
+and shrink's contract is to give unused memory back. A deck with one live object stays
+whole: the heap does not move objects, so a partly used deck is reclaimed only by its last
+object dying. `Shoe::lastChunk` is cleared on every pass, because it may have named a deck that
+is gone. Under ASan `maxShoeAllocation` is 0, so no deck exists and the pass finds nothing.

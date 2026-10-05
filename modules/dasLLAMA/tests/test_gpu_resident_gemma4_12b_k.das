@@ -11,16 +11,15 @@ require _gemma_resident
 // CPU-referenced bar would measure the model's sensitivity to the activation rounding, not the driver. Skips off the
 // JIT, without DASLLAMA_GPU=1 on a device the whole-model driver serves, without the file under models_dir(), or when
 // the residency plan does not fit the card (DASLLAMA_GPU_MIN_CTX shortens the mirror).
-let private GEMMA4_FILE = "gemma-4-12B-it-Q4_K_M.gguf"
+let private GEMMA4_FILE = GemmaFile(file = "gemma-4-12B-it-Q4_K_M.gguf", arm = "g4k")
+let private GEMMA4_FILE_X = GemmaFile(file = GEMMA4_FILE.file, arm = "g4x")
 
 [test]
 def test_gpu_resident_gemma4_prefill_vs_decode(t : T?) {
     t |> run("gemma-4-12B: eight tokens through the window chain against the token command, both arms - the wide heads' prefill kernel against their decode kernel") @(t : T?) {
-        if (!arm_on(t, "g4k")) return
         prefill_vs_decode(t, 8l, GEMMA4_FILE)
     }
     t |> run("gemma-4-12B: the same at 300 tokens - the wide heads over many keys on both paths") @(t : T?) {
-        if (!arm_on(t, "g4x")) return
-        prefill_vs_decode(t, 300l, GEMMA4_FILE)
+        prefill_vs_decode(t, 300l, GEMMA4_FILE_X)
     }
 }

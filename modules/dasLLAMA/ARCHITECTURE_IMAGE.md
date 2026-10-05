@@ -240,8 +240,8 @@ result against the two constants the gate carries, `IMAGE_LAYOUT_STAMP_HASH` and
 The closure, per file in sorted name order: every `Archive` serializer body (a top-level
 `def serialize*` taking an `Archive`), `build_image`, `parse_image`, every `*_prepare` mint of
 `dasllama_tts_blocks.das` (the TTS blocks' plane packers; a driver's `*_prepare` places no image byte), the
-layout helpers `pad_to_page`, `plane_end`, `image_total_bytes`, `w_append`, `w_zeros`,
-`w_header`, `store_u32`, `store_u64`, `kq_plane_name`, and the TTS blob's `blob_push`,
+layout helpers `pad_to_page`, `w_page`, `plane_end`, `image_total_bytes`, `w_append`, `w_zeros`,
+`w_header`, `store_at`, `kq_plane_name`, and the TTS blob's `blob_push`,
 `weight_slot` and `conv1d_weight_row`, and the declaration lines of the layout constants
 `IMAGE_PAGE`, `IMAGE_HEADER_BYTES`, `SECTION_TABLE_SLACK`, `DWRITE_STAGING_BAND`,
 `METAL_BAND_BLOCKS` and `BLOB_ALIGN_FLOATS`. Comments are stripped first, so re-wording one moves nothing, and CRLF
@@ -251,7 +251,7 @@ LF tree does. A body runs from its `def` line to the column-0 `}` that closes it
 keyed by its file name, so moving a serializer between files changes the stamp.
 
 The closure is wider than the byte-moving set on purpose. The two staging bands only decide how
-many bytes a writer stages per pass, and `store_u32` writes header scalars rather than plane
+many bytes a writer stages per pass, and `store_at` writes header scalars rather than plane
 bytes; over-inclusion costs a re-stamp, and under-inclusion serves the wrong bytes. What it does
 not reach is what a plane HOLDS - the loaders, repackers and quantizers upstream of the mint,
 which the identity string and `layout_fingerprint()` cover instead.

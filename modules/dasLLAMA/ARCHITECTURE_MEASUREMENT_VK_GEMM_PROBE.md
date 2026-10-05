@@ -53,8 +53,9 @@ measured against the sweep's reference - the shipped class in `khrx`, the sdot4 
 `mmqx`. An arm that stages constants, or reads its own activation fixture, is timing-only and is
 never read back. A khrx copy passes within a 2e-2 relative difference of the shipped class, and
 reads bit-exact where the lever leaves the arithmetic alone. The shipped class itself is read
-against the k4 CPU oracle on six corners of the output, at the kernel cell's bar:
-`|gpu - cpu| <= 2e-2 |cpu| + 4e-3 max|y|`. The probe's exit code is non-zero on a compared arm
+against the k4 CPU oracle on six corners of the output, at the coopmat kernel cells' bar
+(`bar_ok`): within `4e-3 max|y|`, or within `2e-2` of the larger side floored at 1, a NaN on
+either side off. The probe's exit code is non-zero on a compared arm
 over its bound, a CPU-oracle miss, an unknown `khrprof` arm, or a run that produced no result
 row. The `moe:<fmt>` and `moesk:<fmt>` arms are the first axis over the expert schedule: the
 format's cm2 s and e stamps over the Qwen3-30B-A3B window's routed buckets (512 tokens, 8 routed

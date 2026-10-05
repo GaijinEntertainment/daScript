@@ -102,26 +102,29 @@ def private d_token(x : array<float>; cossin : array<float>; ple_row : array<flo
     return -1l
 }
 
-[unused_argument(x_batch, cos_batch, ple_rows, ple_raw, npos, pos0, logits)]
-def private d_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos, pos0 : int64; var logits : array<float>) {}
+[unused_argument(x_batch, cos_batch, ple_rows, ple_raw, npos, pos0, logits, experts)]
+def private d_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos, pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {}
 
-[unused_argument(l, kp, vp, npos)]
-def private d_sync(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) {}
+var private g_sync_l = -1l
+var private g_sync_row0 = -1l
+var private g_sync_n = -1l
+var private g_read_l = -1l
+var private g_read_row0 = -1l
+var private g_read_n = -1l
 
-var private g_read_pos = -1l
-var private g_read_bulk_npos = -1l
-
-// the readback doubles write a sentinel through the pointers the forwarder handed them
-def private d_read(l, pos : int64; var kp : uint8?; var vp : uint8?) {
-    g_read_pos = pos
-    *kp = uint8(l + 1l)
-    *vp = uint8(pos + 1l)
+[unused_argument(kp, vp)]
+def private d_sync(l, row0, nrows : int64; kp : uint8 const?; vp : uint8 const?) {
+    g_sync_l = l
+    g_sync_row0 = row0
+    g_sync_n = nrows
 }
 
-def private d_read_bulk(l : int64; var kp : uint8?; var vp : uint8?; npos : int64) {
-    g_read_bulk_npos = npos
-    *kp = uint8(npos)
-    *vp = uint8(l)
+def private d_read(l, row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
+    g_read_l = l
+    g_read_row0 = row0
+    g_read_n = nrows
+    *kp = uint8(l + 1l)
+    *vp = uint8(row0 + 1l)
 }
 
 // ===== the ids-form prefill seat's doubles (installed separately from the driver bundle) =====
@@ -131,8 +134,8 @@ var private g_ids_scale = 0.0
 var private g_emb_block = -1l
 var private g_emb_f32_vocab = -1l
 
-[unused_argument(tokens, cos_batch, pos0)]
-def private d_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos, pos0 : int64; var logits : array<float>) {
+[unused_argument(tokens, cos_batch, pos0, experts)]
+def private d_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos, pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
     g_ids_npos = npos
     g_ids_scale = emb_scale
     if (!empty(logits)) {
@@ -221,31 +224,13 @@ def private d_rollback(a : int64) : bool {
 }
 
 var private g_head_warm_ask = false
-var private g_head_sync_row0 = -1l
-var private g_head_sync_n = -1l
-var private g_head_read_row0 = -1l
-var private g_head_read_n = -1l
 
-//! the head warm doubles: the ask kept, a distinctive row count, the sync and read ranges recorded with a byte written through
+//! the head warm doubles: the ask kept, a distinctive row count
 def private d_head_warm_ask(on : bool) {
     g_head_warm_ask = on
 }
 
 def private d_head_warm_rows : int64 => 39l
-
-[unused_argument(vp)]
-def private d_head_sync_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
-    g_head_sync_row0 = row0
-    g_head_sync_n = nrows
-    unsafe(kp[0]) = uint8(7)
-}
-
-[unused_argument(kp)]
-def private d_head_read_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
-    g_head_read_row0 = row0
-    g_head_read_n = nrows
-    unsafe(vp[0]) = uint8(9)
-}
 
 def private arm_on() : bool => true
 
@@ -266,7 +251,7 @@ def test_gpu_tier_contract(t : T?) {
     }
     t |> run("installed rdec doubles receive exactly what the forwarders were handed") @(t : T?) {
         install_moe_gpu_resident(@@d_reserve, @@d_place, @@d_prepare, @@d_norms, @@d_set_layer,
-                                 @@d_set_cls, @@d_token, @@d_prefill, @@d_sync, @@d_read, @@d_read_bulk)
+                                 @@d_set_cls, @@d_token, @@d_prefill, @@d_sync, @@d_read)
         t |> success(moe_gpu_resident_installed(), "install must flip the witness")
         t |> success(rdec_reserve(6, 12345l), "double must answer")
         t |> equal(g_reserve_fmt, 6)
@@ -369,19 +354,23 @@ def test_gpu_cpu_passes(t : T?) {
 [test]
 def test_rdec_readback_reaches_the_doubles(t : T?) {
     install_moe_gpu_resident(@@d_reserve, @@d_place, @@d_prepare, @@d_norms, @@d_set_layer,
-                             @@d_set_cls, @@d_token, @@d_prefill, @@d_sync, @@d_read, @@d_read_bulk)
+                             @@d_set_cls, @@d_token, @@d_prefill, @@d_sync, @@d_read)
     var krow : uint8[2]
     var vrow : uint8[2]
     unsafe {
-        rdec_read_kv(3l, 5l, addr(krow[0]), addr(vrow[0]))
-        rdec_read_kv_bulk(2l, addr(krow[1]), addr(vrow[1]), 7l)
+        rdec_kv_read(3l, 5l, 1l, addr(krow[0]), addr(vrow[0]))
+        t |> equal(g_read_row0, 5l)
+        t |> equal(g_read_n, 1l)
+        rdec_kv_read(2l, 0l, 7l, addr(krow[1]), addr(vrow[1]))
+        rdec_kv_sync(4l, 0l, 9l, addr(krow[0]), addr(vrow[0]))
     }
-    t |> equal(g_read_pos, 5l)
     t |> equal(int(krow[0]), 4, "the read double writes back through kp")
     t |> equal(int(vrow[0]), 6, "the read double writes back through vp")
-    t |> equal(g_read_bulk_npos, 7l)
-    t |> equal(int(krow[1]), 7, "the bulk double writes back through kp")
-    t |> equal(int(vrow[1]), 2, "the bulk double writes back through vp")
+    t |> equal(g_read_l, 2l)
+    t |> equal(g_read_n, 7l)
+    t |> equal(int(krow[1]), 3, "the whole-history read writes back through kp")
+    t |> equal(int(vrow[1]), 1, "the whole-history read writes back through vp")
+    t |> success(g_sync_l == 4l && g_sync_row0 == 0l && g_sync_n == 9l, "the sync forwards its layer and row window")
 }
 
 [test]
@@ -496,7 +485,7 @@ def test_rdec_rollback_seat(t : T?) {
 
 [test]
 def test_rdec_head_warm_seat(t : T?) {
-    t |> run("the head's prompt-warm seat installs apart: unset it keeps no ask and answers no rows, installed it forwards the ask, the row count and both K/V row ranges") @(t : T?) {
+    t |> run("the head's prompt-warm seat installs apart: unset it keeps no ask and answers no rows, installed it forwards the ask and the row count; the head's K/V row ranges ride the row seats at layer n_layers") @(t : T?) {
         var kb : array<uint8>
         var vb : array<uint8>
         kb |> resize(4)
@@ -505,20 +494,21 @@ def test_rdec_head_warm_seat(t : T?) {
         rdec_head_warm_ask(true)
         t |> equal(rdec_head_warm_rows(), 0l, "an unset warm wrote no rows")
         t |> success(!g_head_warm_ask, "the unset ask reaches no double")
-        install_rdec_head_warm(@@d_head_warm_ask, @@d_head_warm_rows, @@d_head_sync_rows, @@d_head_read_rows)
+        install_rdec_head_warm(@@d_head_warm_ask, @@d_head_warm_rows)
         t |> success(rdec_head_warm_installed(), "the install must flip its witness")
         rdec_head_warm_ask(true)
         t |> success(g_head_warm_ask, "the ask forwards")
         t |> equal(rdec_head_warm_rows(), 39l, "the rows answer forwards")
+        install_moe_gpu_resident(@@d_reserve, @@d_place, @@d_prepare, @@d_norms, @@d_set_layer,
+                                 @@d_set_cls, @@d_token, @@d_prefill, @@d_sync, @@d_read)
+        let n_layers = 6l
         unsafe {
-            rdec_head_sync_rows(3l, 5l, addr(kb[0]), addr(vb[0]))
-            rdec_head_read_rows(8l, 2l, addr(kb[0]), addr(vb[0]))
+            rdec_kv_sync(n_layers, 3l, 5l, addr(kb[0]), addr(vb[0]))
+            rdec_kv_read(n_layers, 8l, 2l, addr(kb[0]), addr(vb[0]))
         }
-        t |> equal(g_head_sync_row0, 3l)
-        t |> equal(g_head_sync_n, 5l)
-        t |> equal(g_head_read_row0, 8l)
-        t |> equal(g_head_read_n, 2l)
-        t |> equal(int(kb[0]), 7, "the sync double writes through the K rows the forwarder handed it")
+        t |> success(g_sync_l == n_layers && g_sync_row0 == 3l && g_sync_n == 5l, "the head's sync forwards layer n_layers and its row window")
+        t |> success(g_read_l == n_layers && g_read_row0 == 8l && g_read_n == 2l, "the head's read forwards layer n_layers and its row window")
+        t |> equal(int(kb[0]), 7, "the read double writes through the K rows the forwarder handed it")
         t |> equal(int(vb[0]), 9, "the read double writes through the V rows the forwarder handed it")
         delete kb
         delete vb
@@ -571,7 +561,7 @@ def test_rdec_prefill_ids_seam(t : T?) {
         let cosb : array<float>
         var logits : array<float>
         logits |> resize(4)
-        rdec_prefill_ids(ids, 1.5, cosb, 1l, 0l, logits)
+        rdec_prefill_ids(ids, 1.5, cosb, 1l, 0l, logits, @@d_no_experts_rows)
         t |> equal(g_ids_npos, 1l)
         t |> equal(g_ids_scale, 1.5)
         t |> equal(logits[0], 43.0)

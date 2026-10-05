@@ -19,6 +19,7 @@ require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: 
 require dasllama/dasllama_gpu_resident   // set_gpu_resident_regions_, moe_gpu_resident_active
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_token_n_rows: the N-row command served the batched cells' rows
+require ?vulkan dasllama/dasllama_vulkan_classes
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed   // served_every_call: the shared served witness
 
@@ -39,8 +40,20 @@ def private regions_rig_init() {
     set_gpu_ctx_max(REGIONS_RIG_CTX)
 }
 
+var private g_file_kv_found : tuple<pinned : bool; dt : KVDtype>
+
+//! the K/V mirror asked at `dt` for every load of the file that calls it from its `[init]` - a process runs one test file
+def pin_file_kv(dt : KVDtype) {
+    g_file_kv_found = gpu_kv_dtype_pin()
+    set_gpu_kv_dtype(dt)
+}
+
+//! the codec pin `pin_file_kv` found put back, from the same file's `[finalize]`
+def unpin_file_kv() {
+    restore_gpu_kv_dtype(g_file_kv_found)
+}
+
 let private STEPS = 8l
-let private WINDOW_ROWS = 512l   //! the engine's PF_WINDOW, asserted equal by the continuation cell: its cuts are placed against it
 
 def private prompt_a() : array<int64> => <- resident_prompt(40l)
 def private prompt_b() : array<int64> => <- ramp_ids(57l, 0l, 3000l, 91l, 6000l)
@@ -49,60 +62,33 @@ def private feed_b() : array<int64> => <- ramp_ids(STEPS, 0l, 2500l, 71l, 4500l)
 def private prompt_c() : array<int64> => <- ramp_ids(48l, 0l, 1500l, 59l, 5500l)
 def private feed_c() : array<int64> => <- ramp_ids(STEPS, 0l, 2200l, 67l, 4200l)
 
-def private logits_of(s : Session; vocab : int64) : array<float> => <- [for (i in range64(vocab)); s.logits[i]]
-
 //! one session alone: the prefill's logits, then each fed step's
-def private logits_alone(tr : Model; prompt, toks : array<int64>) : array<array<float>> {
-    var s <- create_session(tr, mirror_kv_dtype())
-    let n = long_length(prompt)
-    var out : array<array<float>>
-    out |> reserve(long_length(toks) + 1l)
-    forward_prefill(tr, s, prompt, n, 0l)
-    out |> emplace <| logits_of(s, tr.config.vocab_size)
-    for (st in range64(long_length(toks))) {
-        forward(tr, s, toks[st], n + st)
-        out |> emplace <| logits_of(s, tr.config.vocab_size)
-    }
-    delete s
-    return <- out
-}
+def private logits_alone(tr : Model; prompt, toks : array<int64>) : array<array<float>> => <- feed_alone(tr, mirror_kv_dtype(), prompt, toks)
 
-def private log_peaks(what : string; got, want : array<float>) {
+//! both rows' argmax, each with its logit and the piece `tr` decodes it to
+def private log_peaks(tr : Model; what : string; got, want : array<float>) {
     let pg = argmax_of(got)
     let pw = argmax_of(want)
-    to_log(LOG_INFO, "{what}: argmax {pg} ({got[pg]}) against {pw} ({want[pw]})\n")
+    to_log(LOG_INFO, "{what}: argmax {pg} '{decode_(tr, [pg])}' ({got[pg]}) against {pw} '{decode_(tr, [pw])}' ({want[pw]})\n")
 }
 
-def private hold_equal(t : T?; got, want : array<float>; what : string) {
-    log_peaks(what, got, want)
+def private hold_equal(t : T?; tr : Model; got, want : array<float>; what : string) {
+    log_peaks(tr, what, got, want)
     let diff = logits_maxdiff(got, want)
     t |> equal(diff, 0.0, "{what}: bit for bit the session alone (maxdiff {diff})")
 }
 
 //! `got` within `rel` of `want`'s peak, and `control` - logits one token off - outside it; under a tq4 mirror, `tq4_within`
-def private hold_within(t : T?; got, want, control : array<float>; what : string; rel : float = SPLIT_BAR_REL) {
-    log_peaks(what, got, want)
+def private hold_within(t : T?; tr : Model; got, want, control : array<float>; what : string; rel : float = SPLIT_BAR_REL) {
+    log_peaks(tr, what, got, want)
     if (mirror_kv_dtype() == KVDtype.tq4) {
         tq4_within(t, got, want, control, what)
         return
     }
-    let bar = rel * live_maxabs(want)
+    let bar = row_bar(want, rel)
     let diff = row_within(t, what, got, want, bar)
     let off = control_past(t, what, got, control, bar)
     to_log(LOG_INFO, "{what}: maxdiff {diff}, the row one off {off}, bar {bar}\n")
-}
-
-//! a tq4 quantizer's step is sixteen times q8_0's, and two passes a float's last bit apart land a quant apart on a rounding
-//! edge: two window splits of one prompt read 0.8-2.0 apart at a 12 max logit and the split q/k norm against the fused one
-//! 1.1-3.5 at 13-15, while a carrier whose rows agree bit for bit has a row one off 1.9 away. The share reads 0.09-0.44
-let private TQ4_CTRL_SHARE = 0.6
-
-//! `got` no further from `want` than `TQ4_CTRL_SHARE` of its distance from `control`: no share of the peak holds a tq4 mirror
-def private tq4_within(t : T?; got, want, control : array<float>; what : string) {
-    let diff = logits_maxdiff(got, want)
-    let off = logits_maxdiff(got, control)
-    t |> success(off > 0.0 && diff <= TQ4_CTRL_SHARE * off, "{what}: within {TQ4_CTRL_SHARE} of the distance to the row one off (maxdiff {diff}, the row one off {off})")
-    to_log(LOG_INFO, "{what}: maxdiff {diff}, the row one off {off}\n")
 }
 
 //! `file` loaded at `regions` regions. A card whose room the plan does not fit registers a skip naming it, any other decline
@@ -110,15 +96,7 @@ def private tq4_within(t : T?; got, want, control : array<float>; what : string)
 def private load_regions(t : T?; file : string; regions : int64) : Model {
     var tr <- load_resident(path_join(models_dir(), file), regions)   //! the rig measures the resident driver: its route is pinned on for the load whatever the environment says
     tr.config.seq_len = min(tr.config.seq_len, REGIONS_RIG_CTX)
-    if (!moe_gpu_resident_active() && moe_gpu_resident_memory_decline()) {
-        t |> skip("the residency plan does not fit this card at {regions} regions ({gpu_resident_decline_()})")
-        return <- tr
-    }
-    t |> success(moe_gpu_resident_active(), "the whole-model driver armed at {regions} regions (the load log names any decline)")
-    let asked = gpu_kv_dtype_pin()
-    if (asked.pinned) {
-        t |> equal(mirror_kv_dtype(), asked.dt, "the mirror armed at the codec the file asks")
-    }
+    resident_admitted(t, "the whole-model driver armed at {regions} regions (the load log names any decline)", " at {regions} regions")
     return <- tr
 }
 
@@ -136,10 +114,27 @@ def private regions_ready(t : T?; file : string) : bool {
     return true
 }
 
+//! how a regions cell loads its carrier: the region count, the context pinned for the load, and the fuse knob off for the load
+//! (the split one-row forms; a no-op without the Vulkan module)
+struct private RegionsLoad {
+    regions : int64 = 2l
+    ctx : int64 = REGIONS_RIG_CTX
+    split_forms : bool
+}
+
 //! the two-region cell's rig: the gate, `file` loaded at two regions, `body` inside the engine's job queue, the model deleted after
 def private with_regions_rig(t : T?; file : string; body : block<(tr : Model) : void>) {
+    with_regions_rig(t, file, RegionsLoad(), body)
+}
+
+//! the rig over the load `load` names, every lever it pins put back after the load
+def private with_regions_rig(t : T?; file : string; load : RegionsLoad; body : block<(tr : Model) : void>) {
     if (!regions_ready(t, file)) return
-    var tr <- load_two_regions(t, file)
+    let levers = resident_levers()
+    split_forms_pin(load.split_forms)
+    set_gpu_ctx_max(load.ctx)
+    var tr <- load_regions(t, file, load.regions)
+    restore_resident_levers(levers)
     if (moe_gpu_resident_active()) {
         with_dasllama_jobque_() {
             invoke(body, tr)
@@ -171,15 +166,15 @@ def private interleaved_single_steps_body(t : T?; tr : Model; pa, pb : array<int
     var sa <- create_session(tr, mirror_kv_dtype())
     var sb <- create_session(tr, mirror_kv_dtype())
     forward_prefill(tr, sa, pa, long_length(pa), 0l)
-    hold_equal(t, sa.logits, al.ra[0], "session A's prefill")
+    hold_equal(t, tr, sa.logits, al.ra[0], "session A's prefill")
     forward_prefill(tr, sb, pb, long_length(pb), 0l)
-    hold_equal(t, sb.logits, al.rb[0], "session B's prefill, A's rows live beside it")
+    hold_equal(t, tr, sb.logits, al.rb[0], "session B's prefill, A's rows live beside it")
     t |> success(sa.rdec_region != sb.rdec_region, "the sessions sit in different regions ({sa.rdec_region}, {sb.rdec_region})")
     for (st in range64(STEPS)) {
         forward(tr, sa, al.fa[st], long_length(pa) + st)
-        hold_equal(t, sa.logits, al.ra[st + 1l], "session A step {st}")
+        hold_equal(t, tr, sa.logits, al.ra[st + 1l], "session A step {st}")
         forward(tr, sb, al.fb[st], long_length(pb) + st)
-        hold_equal(t, sb.logits, al.rb[st + 1l], "session B step {st}")
+        hold_equal(t, tr, sb.logits, al.rb[st + 1l], "session B step {st}")
     }
     served_every_call(t)
     delete sa
@@ -224,18 +219,25 @@ let private SPLIT_BAR_REL = 0.06
 
 def private prose_ids(n, salt : int64) : array<int64> => <- resident_prompt(n, salt)
 
+//! the logits of `prompt`'s first `n - 1` tokens on a session of its own, gone before the caller makes the compared pair (two
+//! regions hold two live sessions): the one-token-short control a prefill compare holds its bar against
+def private short_control(tr : Model; prompt : array<int64>; n : int64) : array<float> {
+    var short <- create_session(tr, mirror_kv_dtype())
+    var less <- [for (i in range64(n - 1l)); prompt[i]]
+    forward_prefill(tr, short, less, n - 1l, 0l)
+    var out <- logits_of(short, tr.config.vocab_size)
+    delete short
+    delete less
+    return <- out
+}
+
 //! `prompt` prefilled in one call against the same prompt prefilled as [0, cut) then [cut, n), then four fed steps on both
 def private continue_at(t : T?; tr : Model; n, cut : int64) {
     var prompt <- prose_ids(n, 0l)
     var head <- [for (i in range64(cut)); prompt[i]]
     var tail <- [for (i in range64(n - cut)); prompt[cut + i]]
     var feed <- feed_a()
-    // the control's session first, and gone before the compared pair: two regions hold two live sessions
-    var short <- create_session(tr, mirror_kv_dtype())
-    var less <- [for (i in range64(n - 1l)); prompt[i]]
-    forward_prefill(tr, short, less, n - 1l, 0l)
-    var short_logits <- logits_of(short, tr.config.vocab_size)
-    delete short
+    var short_logits <- short_control(tr, prompt, n)
     var whole <- create_session(tr, mirror_kv_dtype())
     var split <- create_session(tr, mirror_kv_dtype())
     let served0 = moe_gpu_resident_prefills()
@@ -243,13 +245,13 @@ def private continue_at(t : T?; tr : Model; n, cut : int64) {
     forward_prefill(tr, split, head, cut, 0l)
     forward_prefill(tr, split, tail, n - cut, cut)
     t |> equal(moe_gpu_resident_prefills(), served0 + 3l, "{n} tokens cut at {cut}: the window chain served all three calls, the continuation among them")
-    hold_within(t, split.logits, whole.logits, short_logits, "{n} tokens cut at {cut}: the continued prefill against the one-call prefill")
+    hold_within(t, tr, split.logits, whole.logits, short_logits, "{n} tokens cut at {cut}: the continued prefill against the one-call prefill")
     delete short_logits
     for (st in range64(4l)) {
         var before <- logits_of(whole, tr.config.vocab_size)
         forward(tr, whole, feed[st], n + st)
         forward(tr, split, feed[st], n + st)
-        hold_within(t, split.logits, whole.logits, before, "{n} tokens cut at {cut}, step {st}: decoding over the continued rows")
+        hold_within(t, tr, split.logits, whole.logits, before, "{n} tokens cut at {cut}, step {st}: decoding over the continued rows")
         delete before
     }
     delete whole
@@ -257,19 +259,16 @@ def private continue_at(t : T?; tr : Model; n, cut : int64) {
     delete prompt
     delete head
     delete tail
-    delete less
     delete feed
 }
 
 def cell_prefill_continues_on_the_device(t : T?; file : string) {
     t |> run("a prefill from a position past zero runs the window chain over the region's rows") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
-            static_if (typeinfo builtin_module_exists(vulkan)) {
-                t |> equal(PF_WINDOW, WINDOW_ROWS, "the cuts are placed against the engine's own window")
-            }
+            assert_pf_window(t)
             continue_at(t, tr, 57l, 40l)     // a short tail inside the first window
-            continue_at(t, tr, WINDOW_ROWS + 88l, WINDOW_ROWS)   // the cut on the window boundary
-            continue_at(t, tr, WINDOW_ROWS + 388l, 300l)   // the tail runs a whole window from an unaligned start, then a remainder
+            continue_at(t, tr, PF_WINDOW_ROWS + 88l, PF_WINDOW_ROWS)   // the cut on the window boundary
+            continue_at(t, tr, PF_WINDOW_ROWS + 388l, 300l)   // the tail runs a whole window from an unaligned start, then a remainder
             served_every_call(t)
         }
     }
@@ -293,7 +292,7 @@ def cell_prefill_continues_on_the_device(t : T?; file : string) {
             }
             var before <- logits_of(steps, tr.config.vocab_size)
             forward(tr, steps, turn2[19], 40l + STEPS + 19l)
-            hold_within(t, chat.logits, steps.logits, before, "the second turn through the window chain against the same tokens stepped one by one")
+            hold_within(t, tr, chat.logits, steps.logits, before, "the second turn through the window chain against the same tokens stepped one by one")
             delete before
             served_every_call(t)
             delete chat
@@ -319,11 +318,11 @@ let private WIDE_BAR_REL = 0.10
 
 //! a row's logits against its session alone under `bar`: bit for bit, or within the split or wide bar with `control` - the
 //! row's previous step - outside it
-def private hold_bar(t : T?; got, want, control : array<float>; bar : LogitsBar; what : string) {
+def private hold_bar(t : T?; tr : Model; got, want, control : array<float>; bar : LogitsBar; what : string) {
     if (bar == LogitsBar.bit_exact) {
-        hold_equal(t, got, want, what)
+        hold_equal(t, tr, got, want, what)
     } else {
-        hold_within(t, got, want, control, what, bar == LogitsBar.wide_bar ? WIDE_BAR_REL : SPLIT_BAR_REL)
+        hold_within(t, tr, got, want, control, what, bar == LogitsBar.wide_bar ? WIDE_BAR_REL : SPLIT_BAR_REL)
     }
 }
 
@@ -348,17 +347,17 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : 
     eval(tr, sb, pb)
     let hybrid = tr.config.recr_mask != 0ul
     let home0 = hybrid ? dn_state_home(sb) : 0.0lf   //! session B's state after its prefill: the batched steps must move what comes home
-    var ws <- create_batch_workspace(tr)
-    var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
     let gen_a = sa.rdec_gen
     let gen_b = sb.rdec_gen
     let steps0 = rdec_nrow_steps()
-    for (st in range64(STEPS)) {
-        var toks <- [al.fa[st], al.fb[st]]
-        eval_batch(tr, ws, sess, toks)
-        delete toks
-        hold_bar(t, sa.logits, al.ra[st + 1l], al.ra[st], bar, "batched step {st}, row A")
-        hold_bar(t, sb.logits, al.rb[st + 1l], al.rb[st], bar, "batched step {st}, row B")
+    with_batch_rows(tr, sa, sb) $(var ws; var sess) {
+        for (st in range64(STEPS)) {
+            var toks <- [al.fa[st], al.fb[st]]
+            eval_batch(tr, ws, sess, toks)
+            delete toks
+            hold_bar(t, tr, sa.logits, al.ra[st + 1l], al.ra[st], bar, "batched step {st}, row A")
+            hold_bar(t, tr, sb.logits, al.rb[st + 1l], al.rb[st], bar, "batched step {st}, row B")
+        }
     }
     if (hybrid) {
         t |> success(dn_state_home(sb) != home0, "session B's recurrent state came home from its region's slot after the batched steps")
@@ -372,19 +371,14 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : 
     }
     let stepped = rdec_nrow_steps() - steps0
     t |> equal(stepped, STEPS, "every batched step went through the N-row command ({stepped} of {STEPS})")
-    sess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
-    unsafe {
-        delete ws
-        delete sess
-    }
     delete sa
     delete sb
     delete al
 }
 
-def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
+def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact; split_forms : bool = false) {
     t |> run("two sessions, a region each: a batched step over both reads what each session reads alone, with no history resync") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
+        with_regions_rig(t, file, RegionsLoad(split_forms = split_forms)) $(tr) {
             var pa <- prompt_a()
             var pb <- prompt_b()
             batched_steps_body(t, tr, pa, pb, bar)
@@ -399,8 +393,8 @@ def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBa
 def cell_regions_batched_steps_split(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
     t |> run("two sessions past the unsplit position: the split N-row command reads what each session reads alone") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
-            var pa <- resident_prompt(WINDOW_ROWS + 8l)
-            var pb <- ramp_ids(WINDOW_ROWS + 25l, 0l, 3000l, 91l, 6000l)
+            var pa <- resident_prompt(PF_WINDOW_ROWS + 8l)
+            var pb <- ramp_ids(PF_WINDOW_ROWS + 25l, 0l, 3000l, 91l, 6000l)
             static_if (typeinfo builtin_module_exists(vulkan)) {
                 t |> success(long_length(pa) > RD_UNSPLIT_POS && long_length(pb) > RD_UNSPLIT_POS, "both prompts run past the unsplit position ({RD_UNSPLIT_POS})")
             }
@@ -435,7 +429,7 @@ def cell_regions_fuse_bisect(t : T?; file : string) {
                     var tr <- load_two_regions(t, file)
                     var got <- logits_alone(tr, pa, fa)
                     for (st in range64(STEPS)) {
-                        hold_within(t, got[st + 1l], base[st + 1l], base[st], "bisect bit {bit} step {st}")
+                        hold_within(t, tr, got[st + 1l], base[st + 1l], base[st], "bisect bit {bit} step {st}")
                     }
                     delete got
                     if (bit == 64l) {
@@ -456,6 +450,16 @@ def cell_regions_fuse_bisect(t : T?; file : string) {
     }
 }
 
+//! one one-row step on each of `sa` and `sb`, fed `ta` and `tb`
+def private pair_step(tr : Model; var sa, sb : Session; ta, tb : int64) {
+    var one_a <- [ta]
+    var one_b <- [tb]
+    eval(tr, sa, one_a)
+    eval(tr, sb, one_b)
+    delete one_a
+    delete one_b
+}
+
 //! a batched step before any one-row step, a one-row step on each row, a batched step again - every row under the unsplit
 //! position, so the batched steps take the unsplit twin whether or not a one-row record came first
 def cell_regions_batched_first(t : T?; file : string) {
@@ -469,37 +473,27 @@ def cell_regions_batched_first(t : T?; file : string) {
             var sb <- create_session(tr, mirror_kv_dtype())
             eval(tr, sa, pa)
             eval(tr, sb, pb)
-            var ws <- create_batch_workspace(tr)
-            var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
             var got_a : array<array<float>>
             var got_b : array<array<float>>
-            for (st in range64(STEPS)) {
-                if (st == 1l) {
-                    var one_a <- [fa[st]]
-                    var one_b <- [fb[st]]
-                    eval(tr, sa, one_a)
-                    eval(tr, sb, one_b)
-                    delete one_a
-                    delete one_b
-                } else {
-                    var toks <- [fa[st], fb[st]]
-                    eval_batch(tr, ws, sess, toks)
-                    delete toks
+            with_batch_rows(tr, sa, sb) $(var ws; var sess) {
+                for (st in range64(STEPS)) {
+                    if (st == 1l) {
+                        pair_step(tr, sa, sb, fa[st], fb[st])
+                    } else {
+                        var toks <- [fa[st], fb[st]]
+                        eval_batch(tr, ws, sess, toks)
+                        delete toks
+                    }
+                    got_a |> emplace <| logits_of(sa, tr.config.vocab_size)
+                    got_b |> emplace <| logits_of(sb, tr.config.vocab_size)
                 }
-                got_a |> emplace <| logits_of(sa, tr.config.vocab_size)
-                got_b |> emplace <| logits_of(sb, tr.config.vocab_size)
             }
             served_every_call(t)
             var ra <- logits_alone(tr, pa, fa)
             var rb <- logits_alone(tr, pb, fb)
             for (st in range64(STEPS)) {
-                hold_equal(t, got_a[st], ra[st + 1l], "batched-first step {st}, row A")
-                hold_equal(t, got_b[st], rb[st + 1l], "batched-first step {st}, row B")
-            }
-            sess |> clear()
-            unsafe {
-                delete ws
-                delete sess
+                hold_equal(t, tr, got_a[st], ra[st + 1l], "batched-first step {st}, row A")
+                hold_equal(t, tr, got_b[st], rb[st + 1l], "batched-first step {st}, row B")
             }
             delete sa
             delete sb
@@ -517,6 +511,20 @@ def cell_regions_batched_first(t : T?; file : string) {
 
 def private device_session(tr : Model) : Session => <- create_device_session(tr, gpu_device_session_dtype())
 
+//! two device-home sessions prefilled over `pa` and `pb` for `body`, each parked and deleted after (one the body parked parks
+//! again as a no-op: its claim is gone)
+def private with_device_pair(tr : Model; pa, pb : array<int64>; body : block<(var sa : Session; var sb : Session) : void>) {
+    var sa <- device_session(tr)
+    var sb <- device_session(tr)
+    eval(tr, sa, pa)
+    eval(tr, sb, pb)
+    invoke(body, sa, sb)
+    gpu_device_kv_park(sa)
+    gpu_device_kv_park(sb)
+    delete sa
+    delete sb
+}
+
 def cell_device_home_sessions(t : T?; file : string) {
     t |> run("two device-home sessions step between each other and in one batched step, bit for bit a host-cached session alone") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
@@ -525,48 +533,37 @@ def cell_device_home_sessions(t : T?; file : string) {
             var pb <- prompt_b()
             var al <- alone_runs(tr, pa, pb)
             set_resident_prefill_allowed(false)   // the server's setting: the pin binds host-cached sessions, a device-home one prefills on the device all the same
-            var sa <- device_session(tr)
-            var sb <- device_session(tr)
-            t |> equal(length(sa.key_cache) + length(sa.value_cache), 0, "a device-home session allocates no host cache")
-            eval(tr, sa, pa)
-            hold_equal(t, sa.logits, al.ra[0], "device-home A's prefill")
-            eval(tr, sb, pb)
-            hold_equal(t, sb.logits, al.rb[0], "device-home B's prefill")
-            let half = STEPS / 2l
-            for (st in range64(half)) {
-                var ta <- [al.fa[st]]
-                var tb <- [al.fb[st]]
-                eval(tr, sa, ta)
-                hold_equal(t, sa.logits, al.ra[st + 1l], "device-home A single step {st}")
-                eval(tr, sb, tb)
-                hold_equal(t, sb.logits, al.rb[st + 1l], "device-home B single step {st}")
-                delete ta
-                delete tb
+            with_device_pair(tr, pa, pb) $(var sa; var sb) {
+                t |> equal(length(sa.key_cache) + length(sa.value_cache), 0, "a device-home session allocates no host cache")
+                hold_equal(t, tr, sa.logits, al.ra[0], "device-home A's prefill")
+                hold_equal(t, tr, sb.logits, al.rb[0], "device-home B's prefill")
+                let half = STEPS / 2l
+                for (st in range64(half)) {
+                    var ta <- [al.fa[st]]
+                    var tb <- [al.fb[st]]
+                    eval(tr, sa, ta)
+                    hold_equal(t, tr, sa.logits, al.ra[st + 1l], "device-home A single step {st}")
+                    eval(tr, sb, tb)
+                    hold_equal(t, tr, sb.logits, al.rb[st + 1l], "device-home B single step {st}")
+                    delete ta
+                    delete tb
+                }
+                moe_gpu_hydrate_session(tr, sa)
+                t |> equal(length(sa.key_cache) + length(sa.value_cache), 0, "hydrating a device-home session brings nothing down: it has no host cache to fill")
+                with_batch_rows(tr, sa, sb) $(var ws; var sess) {
+                    for (st in range64(half, STEPS)) {
+                        var toks <- [al.fa[st], al.fb[st]]
+                        eval_batch(tr, ws, sess, toks)
+                        delete toks
+                        hold_equal(t, tr, sa.logits, al.ra[st + 1l], "device-home batched step {st}, row A")
+                        hold_equal(t, tr, sb.logits, al.rb[st + 1l], "device-home batched step {st}, row B")
+                    }
+                }
+                set_resident_prefill_allowed(true)
+                var passes <- gpu_cpu_passes_()
+                t |> equal(length(passes), 0, "the device served every call, the prefills under the pin among them: {passes}")
+                delete passes
             }
-            moe_gpu_hydrate_session(tr, sa)
-            t |> equal(length(sa.key_cache) + length(sa.value_cache), 0, "hydrating a device-home session brings nothing down: it has no host cache to fill")
-            var ws <- create_batch_workspace(tr)
-            var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
-            for (st in range64(half, STEPS)) {
-                var toks <- [al.fa[st], al.fb[st]]
-                eval_batch(tr, ws, sess, toks)
-                delete toks
-                hold_equal(t, sa.logits, al.ra[st + 1l], "device-home batched step {st}, row A")
-                hold_equal(t, sb.logits, al.rb[st + 1l], "device-home batched step {st}, row B")
-            }
-            set_resident_prefill_allowed(true)
-            var passes <- gpu_cpu_passes_()
-            t |> equal(length(passes), 0, "the device served every call, the prefills under the pin among them: {passes}")
-            delete passes
-            sess |> clear()
-            unsafe {
-                delete ws
-                delete sess
-            }
-            gpu_device_kv_park(sa)
-            gpu_device_kv_park(sb)
-            delete sa
-            delete sb
             delete al
             delete pa
             delete pb
@@ -581,33 +578,26 @@ def private cell_device_home_pin(t : T?; file : string) {
             var pa <- prompt_a()
             var pb <- prompt_b()
             var al <- alone_runs(tr, pa, pb)
-            var sa <- device_session(tr)
-            var sb <- device_session(tr)
-            eval(tr, sa, pa)
-            eval(tr, sb, pb)
-            var outsider <- create_session(tr, mirror_kv_dtype())
-            eval(tr, outsider, pa)
-            var passes <- gpu_cpu_passes_()
-            t |> success(length(passes) == 1 && passes[0].reason == "busy", "the outsider's call passed as busy, and only it: {passes}")
-            delete passes
-            var ta <- [al.fa[0]]
-            var tb <- [al.fb[0]]
-            eval(tr, sa, ta)
-            hold_equal(t, sa.logits, al.ra[1], "owner A's next step, its region untouched")
-            eval(tr, sb, tb)
-            hold_equal(t, sb.logits, al.rb[1], "owner B's next step, its region untouched")
-            gpu_device_kv_park(sa)
-            var late <- create_session(tr, mirror_kv_dtype())
-            let served0 = moe_gpu_resident_prefills()
-            eval(tr, late, pa)
-            t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "a parked region is anyone's: the next outsider prefills on the device")
-            gpu_device_kv_park(sb)
-            delete ta
-            delete tb
-            delete late
-            delete outsider
-            delete sa
-            delete sb
+            with_device_pair(tr, pa, pb) $(var sa; var sb) {
+                var outsider <- create_session(tr, mirror_kv_dtype())
+                eval(tr, outsider, pa)
+                only_pass(t, "busy", "the outsider's call passed as busy, and only it")
+                var ta <- [al.fa[0]]
+                var tb <- [al.fb[0]]
+                eval(tr, sa, ta)
+                hold_equal(t, tr, sa.logits, al.ra[1], "owner A's next step, its region untouched")
+                eval(tr, sb, tb)
+                hold_equal(t, tr, sb.logits, al.rb[1], "owner B's next step, its region untouched")
+                gpu_device_kv_park(sa)
+                var late <- create_session(tr, mirror_kv_dtype())
+                let served0 = moe_gpu_resident_prefills()
+                eval(tr, late, pa)
+                t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "a parked region is anyone's: the next outsider prefills on the device")
+                delete ta
+                delete tb
+                delete late
+                delete outsider
+            }
             delete al
             delete pa
             delete pb
@@ -620,12 +610,7 @@ def cell_device_kv_park_adopt(t : T?; file : string) {
         with_regions_rig(t, file) $(tr) {
             var prompt <- prose_ids(57l, 0l)
             var tail <- [for (i in range64(17l)); prompt[40l + i]]
-            var less <- [for (i in range64(56l)); prompt[i]]
-            var short <- create_session(tr, mirror_kv_dtype())
-            eval(tr, short, less)
-            var short_logits <- logits_of(short, tr.config.vocab_size)
-            delete short
-            delete less
+            var short_logits <- short_control(tr, prompt, 57l)
             var first <- device_session(tr)
             eval(tr, first, prompt)
             var want <- logits_of(first, tr.config.vocab_size)
@@ -639,7 +624,7 @@ def cell_device_kv_park_adopt(t : T?; file : string) {
             t |> equal(second.n_past, 40l, "the adopter continues from the adopted rows")
             eval(tr, second, tail)
             t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "one device prefill: the seventeen tokens past the adopted rows")
-            hold_within(t, second.logits, want, short_logits, "the adopter against the whole prompt prefilled in one call")
+            hold_within(t, tr, second.logits, want, short_logits, "the adopter against the whole prompt prefilled in one call")
             delete short_logits
             var third <- device_session(tr)
             t |> success(!gpu_device_kv_adopt(third, claim, 40l), "a claim is spent by its adoption: nobody else takes the rows")
@@ -749,7 +734,7 @@ def cell_scheduler_device_prefill_chunks(t : T?; file : string) {
         with_regions_rig(t, file) $(tr) {
             var sch <- create_scheduler(tr, 2l, 4l, 64l, 0l, 0l, mirror_kv_dtype())
             t |> success(set_device_kv(sch, true), "an idle scheduler switches to device-home sessions")
-            var long_prompt <- prose_ids(WINDOW_ROWS + 188l, 3l)
+            var long_prompt <- prose_ids(PF_WINDOW_ROWS + 188l, 3l)
             var events : array<SchedEvent>
             let served0 = moe_gpu_resident_prefills()
             submit(tr, sch, make_req(1l, long_prompt, 2l))
@@ -774,31 +759,23 @@ def cell_device_home_guards(t : T?; file : string) {
             var pb <- prompt_b()
             var fa <- feed_a()
             var ra <- logits_alone(tr, pa, fa)
-            var sa <- device_session(tr)
-            var sb <- device_session(tr)
-            eval(tr, sa, pa)
-            eval(tr, sb, pb)
-            var third <- device_session(tr)
-            var tripped = false
-            try {
-                eval(tr, third, pa)
-            } recover {
-                tripped = true
+            with_device_pair(tr, pa, pb) $(var sa; var _sb) {
+                var third <- device_session(tr)
+                var tripped = false
+                try {
+                    eval(tr, third, pa)
+                } recover {
+                    tripped = true
+                }
+                t |> success(tripped, "a third device-home session over two regions has nowhere to keep its rows: the CPU cannot take it, so it panics")
+                only_pass(t, "busy", "the refused call was counted as busy, and only it")
+                var ta <- [fa[0]]
+                eval(tr, sa, ta)
+                hold_equal(t, tr, sa.logits, ra[1], "owner A's next step after the refused session")
+                gpu_device_kv_park(third)
+                delete ta
+                delete third
             }
-            t |> success(tripped, "a third device-home session over two regions has nowhere to keep its rows: the CPU cannot take it, so it panics")
-            var passes <- gpu_cpu_passes_()
-            t |> success(length(passes) == 1 && passes[0].reason == "busy", "the refused call was counted as busy, and only it: {passes}")
-            delete passes
-            var ta <- [fa[0]]
-            eval(tr, sa, ta)
-            hold_equal(t, sa.logits, ra[1], "owner A's next step after the refused session")
-            gpu_device_kv_park(sa)
-            gpu_device_kv_park(sb)
-            gpu_device_kv_park(third)
-            delete ta
-            delete third
-            delete sa
-            delete sb
             delete ra
             delete pa
             delete pb
@@ -809,49 +786,44 @@ def cell_device_home_guards(t : T?; file : string) {
 
 def cell_driver_reports(t : T?; file : string) {
     t |> run("every reason a call can pass to the CPU has words of its own, the plan sizes every region, and the status counts the mirrors") @(t : T?) {
-        if (!regions_ready(t, file)) return
-        var tr <- load_two_regions(t, file)
-        if (!moe_gpu_resident_active()) {
-            delete tr
-            return
+        with_regions_rig(t, file) $(tr) {
+            let n = gpu_cpu_pass_reason_count()
+            t |> success(n >= 10, "the armed driver registered its pass reasons ({n})")
+            for (i in range(n)) {
+                note_gpu_cpu_pass(i)
+            }
+            var passes <- gpu_cpu_passes_()
+            t |> equal(length(passes), n, "every reason fired once")
+            var seen : table<string>
+            for (p in passes) {
+                t |> success(!empty(p.words) && p.words != p.reason && !key_exists(seen, p.words), "{p.reason} reads in words of its own: {p.words}")
+                seen |> insert(p.words)
+            }
+            delete passes
+            delete seen
+            reset_gpu_cpu_passes()
+            var none <- gpu_cpu_passes_()
+            t |> equal(length(none), 0, "a reset counter reports nothing")
+            delete none
+            let kv = mirror_kv_dtype()
+            let cap = gpu_device_session_ctx()
+            t |> success(cap > 0l && cap <= REGIONS_RIG_CTX, "a region's context is the rig's cap or under it ({cap})")
+            set_gpu_resident_regions_(1l)
+            let one = resident_plan(tr, cap, kv, kv)
+            set_gpu_resident_regions_(4l)
+            let four = resident_plan(tr, cap, kv, kv)
+            set_gpu_resident_regions_(0l)
+            let zero = resident_plan(tr, cap, kv, kv)
+            set_gpu_resident_regions_(2l)
+            let two = resident_plan(tr, cap, kv, kv)
+            set_gpu_resident_regions_(1l)
+            t |> success(one.kv_bytes > 0l && four.kv_bytes == 4l * one.kv_bytes, "four regions plan four times one region's K/V ({four.kv_bytes} against {one.kv_bytes})")
+            t |> equal(zero.kv_bytes, one.kv_bytes, "a region count under one plans one region")
+            let held = gpu_tier_status_().vram_bytes
+            t |> success(held >= two.kv_bytes, "the status counts both mirror sides of the two regions this load armed ({held} against {two.kv_bytes})")
+            let weights_held = held - two.kv_bytes
+            t |> success(abs(weights_held - two.weight_bytes) * 50l <= two.weight_bytes, "the plan's weight tally is the upload's within 2% ({two.weight_bytes} planned against {weights_held} held): a plane tallied twice or never lands here")
         }
-        let n = gpu_cpu_pass_reason_count()
-        t |> success(n >= 10, "the armed driver registered its pass reasons ({n})")
-        for (i in range(n)) {
-            note_gpu_cpu_pass(i)
-        }
-        var passes <- gpu_cpu_passes_()
-        t |> equal(length(passes), n, "every reason fired once")
-        var seen : table<string>
-        for (p in passes) {
-            t |> success(!empty(p.words) && p.words != p.reason && !key_exists(seen, p.words), "{p.reason} reads in words of its own: {p.words}")
-            seen |> insert(p.words)
-        }
-        delete passes
-        delete seen
-        reset_gpu_cpu_passes()
-        var none <- gpu_cpu_passes_()
-        t |> equal(length(none), 0, "a reset counter reports nothing")
-        delete none
-        let kv = mirror_kv_dtype()
-        let cap = gpu_device_session_ctx()
-        t |> success(cap > 0l && cap <= REGIONS_RIG_CTX, "a region's context is the rig's cap or under it ({cap})")
-        set_gpu_resident_regions_(1l)
-        let one = resident_plan(tr, cap, kv, kv)
-        set_gpu_resident_regions_(4l)
-        let four = resident_plan(tr, cap, kv, kv)
-        set_gpu_resident_regions_(0l)
-        let zero = resident_plan(tr, cap, kv, kv)
-        set_gpu_resident_regions_(2l)
-        let two = resident_plan(tr, cap, kv, kv)
-        set_gpu_resident_regions_(1l)
-        t |> success(one.kv_bytes > 0l && four.kv_bytes == 4l * one.kv_bytes, "four regions plan four times one region's K/V ({four.kv_bytes} against {one.kv_bytes})")
-        t |> equal(zero.kv_bytes, one.kv_bytes, "a region count under one plans one region")
-        let held = gpu_tier_status_().vram_bytes
-        t |> success(held >= two.kv_bytes, "the status counts both mirror sides of the two regions this load armed ({held} against {two.kv_bytes})")
-        let weights_held = held - two.kv_bytes
-        t |> success(abs(weights_held - two.weight_bytes) * 50l <= two.weight_bytes, "the plan's weight tally is the upload's within 2% ({two.weight_bytes} planned against {weights_held} held): a plane tallied twice or never lands here")
-        delete tr
     }
     t |> run("a load under a switched-off whole-model route says it was never attempted") @(t : T?) {
         if (!regions_ready(t, file)) return
@@ -874,67 +846,52 @@ def cell_passes_with_their_rows(t : T?; file : string) {
             eval(tr, s, head)
             t |> success(!s.rdec_host_current, "the prompt's rows live on the device alone")
             forward_prefill(tr, s, tail, 10l, 50l)
-            var passes <- gpu_cpu_passes_()
-            t |> success(length(passes) == 1 && passes[0].reason == "gap" && passes[0].count == 1l, "positions 40 to 49 were never written: the call passed as a gap ({passes})")
+            only_pass(t, "gap", "positions 40 to 49 were never written: the call passed as a gap", 1l)
             t |> success(s.rdec_host_current, "and the CPU took it over rows brought down from the device")
-            delete passes
             delete s
             delete head
             delete tail
         }
     }
     t |> run("a prefill past the region's context passes as cap, its device rows brought down first") @(t : T?) {
-        if (!regions_ready(t, file)) return
-        set_gpu_ctx_max(CAPPED_RIG_CTX)
-        var tr <- load_two_regions(t, file)
-        set_gpu_ctx_max(REGIONS_RIG_CTX)
-        if (!moe_gpu_resident_active()) {
-            delete tr
-            return
-        }
-        with_dasllama_jobque_() {
+        with_regions_rig(t, file, RegionsLoad(ctx = CAPPED_RIG_CTX)) $(tr) {
             t |> equal(gpu_device_session_ctx(), CAPPED_RIG_CTX, "the regions armed at the capped context")
             var head <- prose_ids(CAPPED_RIG_CTX - 96l, 0l)
             var tail <- prose_ids(200l, 9l)
             var s <- create_session(tr, mirror_kv_dtype())
             eval(tr, s, head)
             forward_prefill(tr, s, tail, 200l, CAPPED_RIG_CTX - 96l)
-            var passes <- gpu_cpu_passes_()
-            t |> success(length(passes) == 1 && passes[0].reason == "cap" && passes[0].count == 1l, "200 tokens from 96 short of the region's end: the call passed as cap ({passes})")
+            only_pass(t, "cap", "200 tokens from 96 short of the region's end: the call passed as cap", 1l)
             t |> success(s.rdec_host_current, "and the CPU took it over rows brought down from the device")
-            delete passes
             delete s
             delete head
             delete tail
         }
-        delete tr
     }
 }
 
-//! the census key of the decode attention's `slab` stamp ("", "_g2", "_sink") over the armed mirror codec
-def private da_attn_stamp_key(slab : string) : string {
-    let dt = mirror_kv_dtype()
-    var codec = ""
-    if (dt == KVDtype.f16) {
-        codec = "_f16"
-    } elif (dt == KVDtype.q8_0) {
-        codec = "_q8"
-    } elif (dt == KVDtype.tq4) {
-        codec = "_tq4"
+//! the census key of the decode attention stamp the armed mirror codec and `tr`'s head shape pick, its slab asserted
+//! `slab_heads` q heads wide ("" with no vulkan module)
+def private da_attn_stamp_key(t : T?; tr : Model; slab_heads : int) : string {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let kv_mul = tr.config.n_heads / tr.config.n_kv_heads
+        t |> equal(da_slab_heads(kv_mul), int64(slab_heads), "the carrier's {kv_mul} q heads a kv head pick the {slab_heads}-head slab")
+        return "{da_attn_stamp_name(mirror_kv_dtype(), da_slab_of(tr.config.attn_sinks, kv_mul))}_cls_spv"
+    } else {
+        return ""
     }
-    return "da_attn{codec}{slab}_cls_spv"
 }
 
-//! a session stepped once through the driver dispatches the decode attention's `slab` stamp of the armed mirror codec - the
-//! pick a logits compare cannot see, the census can
-def cell_regions_stamp_served(t : T?; file : string; slab : string) {
+//! a session stepped once through the driver dispatches the decode attention stamp of the armed mirror codec that the
+//! carrier's head shape picks - a slab `slab_heads` q heads wide - the pick a logits compare cannot see, the census can
+def cell_regions_stamp_served(t : T?; file : string; slab_heads : int) {
     t |> run("the driver's step dispatches the stamp the carrier's shape picks") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
             var pa <- prompt_a()
             var fa <- feed_a()
             var s <- create_session(tr, mirror_kv_dtype())
             forward_prefill(tr, s, pa, long_length(pa), 0l)
-            let key = da_attn_stamp_key(slab)
+            let key = da_attn_stamp_key(t, tr, slab_heads)
             let before = census(key)
             forward(tr, s, fa[0], long_length(pa))
             let after = census(key)
@@ -960,10 +917,7 @@ def private split_forms_pin(on : bool) {
 //! fused act + proj); without the Vulkan module the knob does not exist and the cell skips
 def cell_regions_batched_steps_split_forms(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let levers = resident_levers()
-        split_forms_pin(true)
-        cell_regions_batched_steps(t, file, bar)
-        restore_resident_levers(levers)
+        cell_regions_batched_steps(t, file, bar, true)
     } else {
         t |> run("the split one-row forms need the Vulkan driver") @(t : T?) {
             t |> skip("no Vulkan module in this build: the split one-row forms are the Vulkan driver's")
@@ -978,12 +932,7 @@ def private widen_step(tr : Model; var ws : BatchWorkspace; var sa, sb : Session
         eval_batch(tr, ws, two, toks)
         delete toks
     } elif (st == 1l) {
-        var one_a <- [fa[st]]
-        var one_b <- [fb[st]]
-        eval(tr, sa, one_a)
-        eval(tr, sb, one_b)
-        delete one_a
-        delete one_b
+        pair_step(tr, sa, sb, fa[st], fb[st])
     } else {
         var toks <- [fa[st], fb[st], fc[st - 2l]]
         eval_batch(tr, ws, three, toks)
@@ -992,9 +941,9 @@ def private widen_step(tr : Model; var ws : BatchWorkspace; var sa, sb : Session
 }
 
 //! a row's stepped logits against its session alone, from the step it joined at
-def private widen_hold(t : T?; got, ref : array<array<float>>; bar : LogitsBar; row : string; first : int64) {
+def private widen_hold(t : T?; tr : Model; got, ref : array<array<float>>; bar : LogitsBar; row : string; first : int64) {
     for (st in range64(long_length(got))) {
-        hold_bar(t, got[st], ref[st + 1l], ref[st], bar, "widened step {st + first}, {row}")
+        hold_bar(t, tr, got[st], ref[st + 1l], ref[st], bar, "widened step {st + first}, {row}")
     }
 }
 
@@ -1004,16 +953,7 @@ def private widen_hold(t : T?; got, ref : array<array<float>>; bar : LogitsBar; 
 //! `split_forms` pins the fuse knob off for the load, as the split-forms cell does
 def cell_regions_batched_widen(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact; split_forms : bool = false) {
     t |> run("a batched step over two rows, one row alone, then a batched step over three: the rows read what each session reads alone") @(t : T?) {
-        if (!regions_ready(t, file)) return
-        let levers = resident_levers()
-        split_forms_pin(split_forms)
-        var tr <- load_regions(t, file, 3l)
-        restore_resident_levers(levers)
-        if (!moe_gpu_resident_active()) {
-            delete tr
-            return
-        }
-        with_dasllama_jobque_() {
+        with_regions_rig(t, file, RegionsLoad(regions = 3l, split_forms = split_forms)) $(tr) {
             var pa <- prompt_a()
             var pb <- prompt_b()
             var pc <- prompt_c()
@@ -1048,9 +988,9 @@ def cell_regions_batched_widen(t : T?; file : string; bar : LogitsBar = LogitsBa
             var rb <- logits_alone(tr, pb, fb)
             var fc_short <- [for (i in range64(STEPS - 2l)); fc[i]]
             var rc <- logits_alone(tr, pc, fc_short)
-            widen_hold(t, got_a, ra, bar, "row A", 0l)
-            widen_hold(t, got_b, rb, bar, "row B", 0l)
-            widen_hold(t, got_c, rc, bar, "row C", 2l)
+            widen_hold(t, tr, got_a, ra, bar, "row A", 0l)
+            widen_hold(t, tr, got_b, rb, bar, "row B", 0l)
+            widen_hold(t, tr, got_c, rc, bar, "row C", 2l)
             two |> clear()
             three |> clear()
             unsafe {
@@ -1075,6 +1015,5 @@ def cell_regions_batched_widen(t : T?; file : string; bar : LogitsBar = LogitsBa
             delete fc
             delete fc_short
         }
-        delete tr
     }
 }

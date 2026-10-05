@@ -9,16 +9,14 @@ require _gemma_resident
 // gemma-4-E4B Q8_0 (the larger E-series carrier), large tier: arm `g4f`. Skips off the JIT, without DASLLAMA_GPU=1 on
 // a device the whole-model driver serves, without the file under models_dir(), or when the residency plan does not fit
 // the card (DASLLAMA_GPU_MIN_CTX shortens the mirror).
-let private GEMMA4E4_FILE = "gemma-4-E4B-it-Q8_0.gguf"
+let private GEMMA4E4_FILE = GemmaFile(file = "gemma-4-E4B-it-Q8_0.gguf", arm = "g4f")
 
 [test]
 def test_gpu_resident_gemma4_e4b(t : T?) {
     t |> run("gemma-4-E4B Q8_0: resident prefill + decode vs the CPU chain, forty tokens - the E-series arms on the larger carrier") @(t : T?) {
-        if (!arm_on(t, "g4f")) return
         gemma_forced_feed(t, 40l, GEMMA4E4_FILE)
     }
     t |> run("gemma-4-E4B Q8_0: 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain") @(t : T?) {
-        if (!arm_on(t, "g4f")) return
         ppl_compare(t, 150l, 150l, GEMMA4E4_FILE)
     }
 }

@@ -116,6 +116,16 @@ def private vk_stamp(name, cls, base : string; bn, bk : int; unr : int = -1) : s
     return s
 }
 
+//! the engine's cm2 ladder trio `cm2_cls_*`: stamped by `kq_tile_stamp(fmt, CM2_TILE_NONE, ...)` over its `tile_<verb>()` placeholders,
+//! the skip list a module `let` of `<fmt>/<tail>` pairs (`skip` its words)
+def private vk_live_ladder(skip : string) : string {
+    var s = "let private CM2_TILE_TAILS = \"khr_cls cm2e_cls cm2l_cls cm2m_cls cm2s_cls\"\nlet private CM2_TILE_NONE = \"{skip}\"\n\n"
+    s += "def cm2_cls_ensure(fmt : int; tc : int64) : bool \{\n    var r = false\n    kq_tile_stamp(fmt, CM2_TILE_NONE, \"batch\", 0, CM2_TILE_TAILS) <| $() \{\n        r = tile_ensure()\n    \}\n    return r\n\}\n\n"
+    s += "def cm2_cls_set(fmt : int; tc : int64) : int \{\n    var r = 0\n    kq_tile_stamp(fmt, CM2_TILE_NONE, \"batch\", 0, CM2_TILE_TAILS) <| $() \{\n        r = tile_set()\n    \}\n    return r\n\}\n\n"
+    s += "def cm2_cls_enc(fmt : int; tc : int64) \{\n    kq_tile_stamp(fmt, CM2_TILE_NONE, \"batch\", 0, CM2_TILE_TAILS) <| $() \{\n        tile_enc()\n    \}\n\}\n\n"
+    return s
+}
+
 //! one class ladder trio (`<prefix>ensure` / `set` / `enc`): stamped by `kq_tile_stamp` over its `tile_<verb>_<tail>` placeholders (with a skip list where `skip` names one), or the hand-written if-ladders the rule bans
 def private vk_ladder(prefix, tail : string; stamped : bool; skip : string = "") : string {
     if (!stamped) {
@@ -130,7 +140,7 @@ def private vk_ladder(prefix, tail : string; stamped : bool; skip : string = "")
 //! stamps (both formats alias the m stamp, so no e stamp), one GEMV leaf template, both ladder trios stamped. Red: a bodied KHR
 //! stage; a K5 template with no stamp; a K4 e stamp the aliasing ladder never picks, its A tile and unroll contradicting its BK 32;
 //! a K6 whose s stamp steps 32 while the roster aliases it; a K3 on the roster with no m stamp; a K2 stepping 64 on both columns
-//! off the roster; the khr ladders skipping k5, the e ladders hand-written
+//! off the roster; the khr ladders hand-written, the engine's ladder skipping k5's e tile
 def private vk_classes_text(red : bool) : string {
     var parts <- [
         "options gen2\n\nlet SCHED_S_ROWS = 32u\nlet SCHED_M_ROWS = 128u\n\nclass template ArBase : ResidualT \{\n    @workgroup row : float[8192]\n\}\n\n",
@@ -153,8 +163,8 @@ def private vk_classes_text(red : bool) : string {
         parts |> push(vk_stamp("kq_batch_k2_cm2s_cls", "K2Cm2SBatch", "K2Cm2T", 32, 64))
         parts |> push(vk_stamp("kq_batch_k2_cm2m_cls", "K2Cm2MBatch", "K2Cm2T", 128, 64))
     }
-    parts |> push(vk_ladder("khr_cls_", "khr_cls", true, red ? "k5" : ""))
-    parts |> push(vk_ladder("cm2e_cls_", "cm2e_cls", !red))
+    parts |> push(vk_ladder("khr_cls_", "khr_cls", !red))
+    parts |> push(vk_live_ladder(red ? "k5/cm2e_cls" : ""))
     return join(parts, "")
 }
 
@@ -279,14 +289,12 @@ let DASLLAMA_RED_NEEDLE_CENSUS <- [
     "the add+rms row slab triple disagrees: AR_MAX_DIM 4096 (dasllama_vulkan_common.das), ArBase.row[8192], attn_dec_shape_ok's c.dim cap 8192",
     "K5Cm2T has no `class K5KhrBatch : K5Cm2T`",
     "K5Cm2T has no `[vk_dispatch(name = \"kq_batch_k5_khr_cls\"` stamp",
-    "khr_cls_ensure skips k5 in its `kq_tile_stamp` list while `class template K5Cm2T` sits on the cm2 base",
-    "khr_cls_set skips k5 in its `kq_tile_stamp` list while `class template K5Cm2T` sits on the cm2 base",
-    "khr_cls_enc skips k5 in its `kq_tile_stamp` list while `class template K5Cm2T` sits on the cm2 base",
+    "khr_cls_ensure is not stamped by `kq_tile_stamp` over `tile_ensure_khr_cls(`",
+    "khr_cls_set is not stamped by `kq_tile_stamp` over `tile_set_khr_cls(`",
+    "khr_cls_enc is not stamped by `kq_tile_stamp` over `tile_enc_khr_cls(`",
     "K5Cm2T has no `class K5Cm2EBatch : K5Cm2T`",
     "K5Cm2T has no `[vk_dispatch(name = \"kq_batch_k5_cm2e_cls\"` stamp",
-    "cm2e_cls_ensure is not stamped by `kq_tile_stamp` over `tile_ensure_cm2e_cls(`",
-    "cm2e_cls_set is not stamped by `kq_tile_stamp` over `tile_set_cm2e_cls(`",
-    "cm2e_cls_enc is not stamped by `kq_tile_stamp` over `tile_enc_cm2e_cls(`",
+    "CM2_TILE_NONE skips k5/cm2e_cls while `class template K5Cm2T` sits on the cm2 base",
     "K6Cm2T: KQ_CM2E_ALIASES_M names k6 but its expert column steps k by 32 (its s stamp's BK), not the m stamp's 64",
     "K3Cm2T: KQ_CM2E_ALIASES_M names k3 but the file has no `class K3Cm2MBatch` for its e column to alias",
     "K2Cm2T: its expert column steps k by 64 (its s stamp's BK), so its e stamp is the m stamp byte for byte - k2 joins KQ_CM2E_ALIASES_M",

@@ -15,9 +15,9 @@ require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_gguf   // set_mtp_head_path - the split-head fixture names its head explicitly
 require dasllama/dasllama_kv_dtype   // kv_row_bytes / kv_layer_kbase: the head's K row the seam writes
 require daslib/jobque_boost
+require daslib/linq
 require daslib/fio
-require daslib/rtti   // this_context().last_exception: a panic's text read back
-require strings   // find / rtrim over a panic's text
+require daslib/strings_boost
 require _model_tier   // models_dir() + model_available() presence/size-tier gate (see the file's header)
 require _resident_feed   // head_k_row_bytes
 
@@ -28,7 +28,7 @@ require _resident_feed   // head_k_row_bytes
 //      the plain (non-MTP) file — trunk equality was proven with the simple_ids reference decode on both;
 //   2. output-invariance: generate_mtp_greedy() == generate() token-for-token — greedy self-spec
 //      changes wall time, never tokens (accept path reads batch-kernel logits, so this holds only
-//      under the PINNED bit-exact kernels, same reasoning as test_parity's parity_gen_ok);
+//      under the PINNED bit-exact kernels, same reasoning as _model_tier's parity_gen_ok);
 //   3. rollback: a poisoned 2-row verify batch + mtp_state_restore replays plain decode exactly
 //      (the deltanet conv+S state is the only thing a rejected draft leaves behind — KV rows get
 //      overwritten by construction).
@@ -47,34 +47,6 @@ let MTP_WANT <- [2943l, 11l, 4097l, 11l, 4590l, 11l, 7840l, 11l, 7810l, 11l, 112
                  42744l, 11l, 28279l, 11l, 58614l, 11l, 60163l, 11l, 35442l, 11l, 56091l, 11l, 78592l,
                  11l, 59942l, 11l, 90600l, 11l, 16570l, 13l, 198l, 2427l, 494l, 799l, 310l, 16570l]
 
-// Pin the bit-exact kernel modes around `body` and restore the previous modes — classic prefill
-// attention (not flash), scalar libm activations (not exp4), per-token recurrent deltanet prefill
-// (not chunked). Token-exact gates must not ride near-tie kernel variance; see parity_gen_ok.
-def private with_pinned_kernels(body : block) {
-    let prev_attn = get_prefill_attn_mode()
-    set_prefill_attn_mode(AttnPrefillMode.classic)
-    let prev_act = get_act_vec()
-    set_act_vec(false)
-    let prev_dn = get_deltanet_prefill_mode()
-    set_deltanet_prefill_mode(DnPrefillMode.recurrent)
-    invoke(body)
-    set_prefill_attn_mode(prev_attn)
-    set_act_vec(prev_act)
-    set_deltanet_prefill_mode(prev_dn)
-}
-
-// Plain greedy reference over one fresh session (generate()'s echo contract: prompt[1..] then the
-// continuation).
-def private gen_plain(tr : Model; prompt : array<int64>; total : int) : array<int64> {
-    var out : array<int64>
-    with_dasllama_jobque() {
-        var s = make_run_state(tr.config)
-        out <- generate(tr, s, prompt, total)
-        delete s
-    }
-    return <- out
-}
-
 // Depth-1 self-spec greedy over one fresh session; accept telemetry lands in nd/na.
 def private gen_spec(tr : Model; prompt : array<int64>; total : int; var nd, na : int64&) : array<int64> {
     var out : array<int64>
@@ -86,36 +58,17 @@ def private gen_spec(tr : Model; prompt : array<int64>; total : int; var nd, na 
     return <- out
 }
 
-// Spec-off pinned generate-and-compare (parity_gen_ok's shape). Helpers like this stay plain
-// functions on purpose: they JIT-compile, so the deep forward chain runs on the native stack —
-// calling the engine from the [test] run-lambda's interpreted frame overflows its 16K das stack.
-def private specoff_gen_ok(tr : Model; prompt, want : array<int64>) : bool {
-    var ok = false
-    with_dasllama_jobque() {
-        var s = make_run_state(tr.config)
-        let ids <- generate(tr, s, prompt, length(prompt) + length(want))
-        let echo = length(prompt) - 1
-        let got <- [for (i in range(length(want))); ids[echo + i]; where echo + i < length(ids)]
-        ok = ids_equal(got, want)
-        delete s
-    }
-    return ok
-}
-
 //! the manual reject over the CPU restore: a poisoned 2-row verify (the draft a fixed garbage token) advances the deltanet
 //! state past a wrong row, and the restore plus one plain forward must leave it as if the batch never ran; answers the tokens
 //! decoded after it (first = the prefill argmax) and fills `want` with the plain-decode slice they must equal. Free of T? like
-//! specoff_gen_ok: a T? param keeps the helper off the JIT, and the engine chain overflows the interpreter stack
+//! parity_gen_ok: a T? param keeps the helper off the JIT, and the engine chain overflows the interpreter stack
 def private reject_rollback_ids(tr : Model; n_check : int64; var want : array<int64>) : array<int64> {
     var got : array<int64>
+    let np = long_length(MTP_PROMPT)
+    let ref_ids <- greedy_gen(tr, MTP_PROMPT, int(n_check + 1l))
+    delete want
+    want <- copy_span(ref_ids, np - 1l, n_check + 1l)
     with_dasllama_jobque() {
-        let np = long_length(MTP_PROMPT)
-        // plain-decode reference (echo convention: ids[np-1] is the first generated token)
-        var s1 = make_run_state(tr.config)
-        let ref_ids <- generate(tr, s1, MTP_PROMPT, int(np + n_check + 1l))
-        delete s1
-        delete want
-        want <- [for (i in range64(n_check + 1l)); ref_ids[np - 1l + i]]
         var s = make_run_state(tr.config)
         forward_prefill(tr, s, MTP_PROMPT, np, 0l)
         let tok = parallel_argmax(s.logits, tr.config.vocab_size)
@@ -125,13 +78,9 @@ def private reject_rollback_ids(tr : Model; n_check : int64; var want : array<in
         forward_prefill(tr, s, vbatch, 2l, np)
         mtp_state_restore(s)
         forward(tr, s, tok, np)   // re-advance through the accepted token alone
-        var pos = np + 1l
-        for (_i in range64(n_check)) {
-            let next = parallel_argmax(s.logits, tr.config.vocab_size)
-            got |> push(next)
-            forward(tr, s, next, pos)
-            pos++
-        }
+        var tail <- greedy_from(tr, s, np + 1l, n_check)
+        got |> push_from(tail)
+        delete tail
         delete s
         delete vbatch
     }
@@ -150,12 +99,10 @@ struct private RejectRound {
 [cold_path]
 def private reject_round_ids(tr : Model; n_check : int64) : RejectRound {
     var out : RejectRound
+    let np = long_length(MTP_PROMPT)
+    let ref_ids <- greedy_gen(tr, MTP_PROMPT, int(n_check + 1l))
+    out.want <- copy_span(ref_ids, np - 1l, n_check + 1l)
     with_dasllama_jobque() {
-        let np = long_length(MTP_PROMPT)
-        var s1 = make_run_state(tr.config)
-        let ref_ids <- generate(tr, s1, MTP_PROMPT, int(np + n_check + 1l))
-        delete s1
-        out.want <- [for (i in range64(n_check + 1l)); ref_ids[np - 1l + i]]
         let spec0 = get_mtp_spec()
         set_mtp_spec(true)   // the prompt's head warm and the round both key off it, as generate_mtp_greedy arms it
         var s = make_run_state(tr.config)
@@ -163,19 +110,11 @@ def private reject_round_ids(tr : Model; n_check : int64) : RejectRound {
         s.n_past = np
         let tok = parallel_argmax(s.logits, tr.config.vocab_size)
         out.got |> push(tok)
-        let reject0 = get_mtp_force_reject_every()
-        set_mtp_force_reject_every(1l)
-        var acc = 0l
-        out.hit = mtp_spec_eval(tr, s, tok, acc)
-        set_mtp_force_reject_every(reject0)
+        out.hit = forced_reject_round(tr, s, tok)
         set_mtp_spec(spec0)
-        var pos = np + 1l
-        for (_i in range64(n_check)) {
-            let next = parallel_argmax(s.logits, tr.config.vocab_size)
-            out.got |> push(next)
-            forward(tr, s, next, pos)
-            pos++
-        }
+        var tail <- greedy_from(tr, s, np + 1l, n_check)
+        out.got |> push_from(tail)
+        delete tail
         delete s
     }
     return <- out
@@ -183,14 +122,30 @@ def private reject_round_ids(tr : Model; n_check : int64) : RejectRound {
 
 // Run the plain-vs-spec invariance pair on a loaded model and assert token-for-token equality
 // plus sane accept telemetry. `tag` distinguishes the arms in the report.
-def private invariance_ok(t : T?; tr : Model; prompt : array<int64>; n_gen : int; tag : string) {
+def private invariance_ok(t : T?; tr : Model; prompt : array<int64>; n_gen : int; tag : string) : array<int64> {
     let total = length(prompt) + n_gen
-    let ref_ids <- gen_plain(tr, prompt, total)
+    var ref_ids <- greedy_gen(tr, prompt, n_gen)
     var nd = 0l
     var na = 0l
     let spec_ids <- gen_spec(tr, prompt, total, nd, na)
+    log_gen_texts(tr, tag, ref_ids, spec_ids)
     t |> success(ids_equal(ref_ids, spec_ids), "{tag}: spec decode token-for-token vs plain")
-    t |> success(nd > 0l, "{tag}: the draft head actually drafted ({nd} drafts)")
+    t |> success(nd > 0l, "{tag}: the draft head actually drafted ({nd} drafts, {nd - na} rejected on its own)")
+    return <- ref_ids
+}
+
+//! the same speculative decode with every third draft forced to reject: still `ref_ids` token for token, a third of its drafts
+//! or more rejected; the reject cadence goes back to what the getter read before
+def private forced_invariance_ok(t : T?; tr : Model; prompt : array<int64>; n_gen : int; ref_ids : array<int64>; tag : string) {
+    let cadence_found = get_mtp_force_reject_every()
+    set_mtp_force_reject_every(3l)
+    var nd = 0l
+    var na = 0l
+    let forced_ids <- gen_spec(tr, prompt, length(prompt) + n_gen, nd, na)
+    set_mtp_force_reject_every(cadence_found)
+    log_gen_texts(tr, "{tag} forced", ref_ids, forced_ids)
+    t |> success(ids_equal(ref_ids, forced_ids), "{tag} forced: spec decode through the reject branch token-for-token vs plain")
+    t |> success(nd >= 3l && nd - na >= nd / 3l, "{tag} forced: {nd - na} of {nd} drafts rejected - reject branch covered")
 }
 
 [test]
@@ -207,9 +162,7 @@ def test_mtp_loader(t : T?) {
         t |> success(tr.mtp_headnorm_off >= 0l, "nextn shared_head_norm loaded (qwen35 MTP files ship it)")
         tr.config.seq_len = 2048l
         // spec OFF: the -MTP- file's trunk must continue the fixture exactly like the plain file
-        with_pinned_kernels() {
-            t |> success(specoff_gen_ok(tr, MTP_PROMPT, MTP_WANT), "spec-off token-for-token vs the plain-file oracle")
-        }
+        t |> success(parity_gen_ok(tr, MTP_PROMPT, MTP_WANT, eyeball = true), "spec-off token-for-token vs the plain-file oracle")
         delete tr
     }
 }
@@ -322,13 +275,6 @@ def private poison_head_k_row(tr : Model; var s : Session; row : int64) {
     }
 }
 
-def private all_poisoned(row : array<uint8>) : bool {
-    for (b in row) {
-        return false if (b != uint8(0xFF))
-    }
-    return true
-}
-
 //! a continuation window of `tokens` at `SEAM_PROMPT` on a session prefilled over the fixture's first `SEAM_PROMPT` rows with
 //! speculation on, the head's seam row poisoned first, under the seam probe (`serves`) and, under `blob`, the model flagged a
 //! blob with the prefill probe claiming the window: true when the seam row kept its poison (the CPU seam never ran)
@@ -371,7 +317,7 @@ def private seam_row_kept(var tr : Model; serves, blob : bool) : bool {
         select_decode_override(decode0)
         set_mtp_spec(spec0)
         var row <- head_k_row_bytes(tr, s, SEAM_PROMPT - 1l)
-        kept = all_poisoned(row)
+        kept = all(row, $(b) => b == uint8(0xFF))
         delete row
         delete s
         delete first
@@ -409,15 +355,13 @@ def test_mtp_verify_window(t : T?) {
         moe_gpu_drop_model()   // the CPU round is the cell's subject: an armed driver whose mirror matches the session's codec would serve the verify itself, and no window opens
         let why = verify_window_panic(tr)
         to_log(LOG_INFO, "served verify window: {empty(why) ? "no panic" : why}\n")
-        t |> success(says(why, "served a speculative verify window") && says(why, PROBE_PREFILL), "the CPU round panics naming the prefill driver that served its verify window: '{why}'")
+        t |> success(contains(why, "served a speculative verify window") && contains(why, PROBE_PREFILL), "the CPU round panics naming the prefill driver that served its verify window: '{why}'")
         t |> success(g_probe_window_active, "the session's verify window was up while the driver served it")
         t |> success(!g_probe_window_after, "... and is down on the session outside the round")
         t |> success(!g_probe_window_outside, "... and was down for the prompt's own prefill under the same driver")
         delete tr
     }
 }
-
-def private says(s : string; part : string) : bool => find(s, part) >= 0
 
 var private g_probe_window_outside = false
 var private g_probe_window_after = false
@@ -443,11 +387,9 @@ def private verify_window_panic(tr : Model) : string {
         forward_prefill(tr, s2, MTP_PROMPT, np, 0l)   // the prompt through the probe: the flag must read down here
         g_probe_window_outside = g_probe_window_active
         delete s2
-        try {
+        why = panic_text() $ {
             var acc = 0l
             mtp_spec_eval(tr, s, tok, acc)
-        } recover {
-            why = this_context().last_exception |> rtrim
         }
         g_probe_window_after = mtp_verify_window_active(s)
         select_prefill_override(prefill0)
@@ -517,22 +459,8 @@ def test_mtp_invariance_glm(t : T?) {
             // FOLLOW-UP: a margin-gated arm can cover prose — assert that any divergence sits below
             // the quantization noise floor; mtp_verify_logits already computes the margin.
             let code <- encode(tr, "def fibonacci(n):", true, false)
-            let total = length(code) + 40
-            var nd = 0l
-            var na = 0l
-            let ref_ids <- gen_plain(tr, code, total)
-            let spec_ids <- gen_spec(tr, code, total, nd, na)
-            t |> success(ids_equal(ref_ids, spec_ids), "code-glm: spec decode token-for-token vs plain")
-            t |> success(nd > 0l, "code-glm: the draft head actually drafted ({nd} drafts, {nd - na} rejected on its own)")
-            // the reject branch on demand: every third draft rejected, the stream still plain decode's
-            set_mtp_force_reject_every(3l)
-            var nd_forced = 0l
-            var na_forced = 0l
-            let forced_ids <- gen_spec(tr, code, total, nd_forced, na_forced)
-            set_mtp_force_reject_every(0l)
-            t |> success(ids_equal(ref_ids, forced_ids), "code-glm forced: spec decode through the reject branch token-for-token vs plain")
-            t |> success(nd_forced >= 3l && nd_forced - na_forced >= nd_forced / 3l,
-                         "code-glm forced: {nd_forced - na_forced} of {nd_forced} drafts rejected - reject branch covered")
+            let ref_ids <- invariance_ok(t, tr, code, 40, "code-glm")
+            forced_invariance_ok(t, tr, code, 40, ref_ids, "code-glm")
         }
         delete tr
     }
@@ -562,18 +490,8 @@ def test_mtp_invariance_flashnext(t : T?) {
         tr.config.seq_len = 2048l
         let count <- [16l, 11l, 220l, 17l, 11l, 220l, 18l, 11l, 220l, 19l, 11l, 220l, 20l, 11l, 220l, 21l, 11l, 220l, 22l, 11l]
         with_pinned_kernels() {
-            t |> invariance_ok(tr, count, 40, "counting-flashnext")
-            // the reject branch on demand: the n-gram window and the recurrent state both roll back past a rejected draft
-            let total = length(count) + 40
-            let ref_ids <- gen_plain(tr, count, total)
-            set_mtp_force_reject_every(3l)
-            var nd_forced = 0l
-            var na_forced = 0l
-            let forced_ids <- gen_spec(tr, count, total, nd_forced, na_forced)
-            set_mtp_force_reject_every(0l)
-            t |> success(ids_equal(ref_ids, forced_ids), "counting-flashnext forced: spec decode through the reject branch token-for-token vs plain")
-            t |> success(nd_forced >= 3l && nd_forced - na_forced >= nd_forced / 3l,
-                         "counting-flashnext forced: {nd_forced - na_forced} of {nd_forced} drafts rejected - reject branch covered")
+            let ref_ids <- invariance_ok(t, tr, count, 40, "counting-flashnext")
+            forced_invariance_ok(t, tr, count, 40, ref_ids, "counting-flashnext")
         }
         delete tr
     }

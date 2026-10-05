@@ -68,7 +68,7 @@ per-format accessor (`kq_sb`, `kq_qsb`, `kq_ssb`, `kq_elems`, `kq_schema_id`, `k
 - Append the member to `KqFmt` - **append, never reorder**: the int value is the device stack
   tag (`vk_kq_schema_id`) and the image plane id. The member alone breaks every Vulkan build
   until its `<fmt>_batch_cm2e_cls` / `<fmt>_batch_khr_cls` stamps exist (`kq_tile_stamp` walks
-  the whole enum in the `khr_cls_*` / `cm2e_cls_*` ladders), and a Mac whose dasVulkan module is
+  the whole enum in the `cm2_cls_*` ladder, and the kernel cells' `khr_cls_*` one), and a Mac whose dasVulkan module is
   not built never sees it - build the module first (`cmake --build modules/dasVulkan/build`;
   MoltenVK then also runs the sdot4 GEMV cells, the coopmat tile cells skip) and keep the
   identity and the sec.6 stamps in ONE compile-checked step.
@@ -362,8 +362,8 @@ decoded scale row needs no upload work - only the id bridge and the kernels. IQ4
    `override NCOL = true` - the template's `run` picks the shell; a grid format's template adds
    `override GRID = true` with its literal `GRID_WORDS` / `GRID_OFF` (REVIEW.das holds them to the
    `KQ_GRID_<FMT>` chain). `gemv_cls_has_n` admits every `kq_sb` format, so the N leaf is not optional:
-   `gemv_cls_ensure_n` / `gemv_cls_enc_n` take one arm each, or the first batched step on a model
-   carrying the format panics; the format joins `KQ_LEAF_FMTS` in `tests/test_vulkan_kernels.das`,
+   `gemv_cls_ensure_n` / `gemv_cls_enc_n` are `kq_tile_stamp` stamps over every `KqFmt` member, so a
+   format with no N stamp fails the compile; the format joins `KQ_LEAF_FMTS` in `tests/test_vulkan_kernels.das`,
    which the ncol cell holds against the family's roster `kq_gemv_fmts`, and its N stamp joins the
    census's blind list in `tests/test_kernel_coverage.das` naming the regions file that carries it
    (the census's one-region loads never engage the N-row command). A codebook is packed into
@@ -371,17 +371,19 @@ decoded scale row needs no upload work - only the id bridge and the kernels. IQ4
    (`(tbl[q >> 2] >> ((q & 3) * 8)) & 0xFF`): a `fixed_array` local indexed per nibble lowers
    to Function storage the driver spills, and decodes at a third of the speed
    (`followup_general.md` item 136).
-3. `KqBatchIq4xs : KqBatchBase` - `stage_w` decodes the staged words through `iq4_word`
-   (k4's staging otherwise), `stage_ws` fills ONE plane with `d * sc`, `blk_fma` is
+3. `KqBatchIq4xs : KqBatchBase` - `w_quad` decodes the staged words through `iq4_word`
+   (k4's staging otherwise; the base's `stage_w` walks a thread's chunks and calls it), `stage_ws` fills ONE plane with `d * sc`, `blk_fma` is
    `xscl * ws * idot` (q40's without the `- 8 * bsum`). A class child is declared after its
    parent in the file - the class rail resolves parents in declaration order and reports
    "parent structure not found" otherwise. The word compose the GEMV leaf's `blk_decode` and the
-   tile's `stage_w` both need is ONE free function beside `k5_dep` - a k-lattice format's
+   tile's `w_quad` both need is ONE free function beside `k5_dep` - a k-lattice format's
    `<fmt>_quad` over a `uint4` of packed words, a grid format's `<fmt>_idx4` / `<fmt>_sgn4` pick
    (the four grid words and their sign nibbles; the class gathers them through its own grid slab,
    the leaf through `grid4`) - never a second spelling in the tile.
-4. Ladders: `kq_batch_cls_ensure` / `kq_batch_cls_enc_for` / `gemv_cls_ensure` /
-   `gemv_cls_enc` gain an arm; `gemv_cls_set`'s four-way `||` became `kq_sb(fmt)`.
+4. Ladders: nothing to edit - `kq_batch_cls_ensure` / `kq_batch_cls_enc_for` / `gemv_cls_ensure` /
+   `gemv_cls_enc` and the `cm2_cls_*` trio are `kq_tile_stamp` stamps over the enum, so the format's
+   stamps exist with the right names or the compile fails; a per-32 format joins `kq_tile_stem`'s
+   spelling and `CM2_TILE_NONE` (the dense tiles it never serves) in the same change.
 5. The decode GEMV's lanes per row (`dasllama/dasllama_vulkan_classes.das`): join
    `gemv_grid_fmt` where the format's decode gathers from a codebook or a grid, and take the
    lanes from `gemv_lanes_per_row`, which every decode site reaches through `gemv_enc`. Which
@@ -419,8 +421,8 @@ and a decode GEMV in `Q8Gemv`'s shape (`Q51Gemv`, `Mx4Gemv`: one lane a block, `
 `KqGemvK4Gu`'s shape, `Mx4GemvGu`). Its census rows land in `VK_CENSUS_NEVER_DISPATCHED` while no
 stocked small carrier holds such a plane. Its stamps spell `<fmt>_batch_<tail>` the way q8's do, so
 the format joins `kq_tile_stem`'s per-32 list (`dasllama_kqformat.das`) and, since its dense column
-is refused, the `"q51 mx4"` skip lists of the `cm2_cls_*` ladders with an explicit branch of its own
-beside them (`dasllama_vulkan_classes.das`). The module gate (`REVIEW.das`) reads it twice: the
+is refused, the `CM2_TILE_NONE` pairs of the `cm2_cls_*` ladders (its l and m columns) and the s-column
+route of `cm2_tile_tail` (`cm2_b32_routed`, `dasllama_vulkan_classes.das`). The module gate (`REVIEW.das`) reads it twice: the
 template ships the KHR trio like every format on the cm2 template (`CM2_KHR_EXEMPT` is empty), and
 `cm2_dispatch_name` learns that the format spells its expert stamp `<fmt>_batch_cm2e_cls` the way q8
 does.
@@ -449,7 +451,7 @@ k4's for a K-quant or LUT decode, iq2xxs's 32-deep s and e stamps for a grid-cod
 settle the k step on a whole-model MoE row, not the uniform probe alone). A 64-step format's e
 column is its m stamp byte for byte, so it ships no e stamp and joins `KQ_CM2E_ALIASES_M` in
 `dasllama_kqformat.das` instead; the gate holds that roster to every s stamp's k step. The class
-ladders (`cm2_cls_*`, `cm2e_cls_*`, `khr_cls_*`) take no arm: `kq_tile_stamp` walks every `KqFmt`
+ladder `cm2_cls_*` (and the kernel cells' `khr_cls_*`) takes no arm: `kq_tile_stamp` walks every `KqFmt`
 member, so the tree fails to compile until every stamp the new member names exists - and it must,
 since `pf_f16_feed` admits every `kq_sb` format on a cm2 device the moment the enum member exists,
 and a ladder that fell through served the q8 tiles over the new planes - garbage text at full

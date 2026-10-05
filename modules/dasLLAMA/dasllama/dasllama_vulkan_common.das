@@ -22,6 +22,7 @@ require strings
 require daslib/strings_boost
 require daslib/fio
 require daslib/enum_trait
+require daslib/algorithm
 
 // The Vulkan backend's shared infrastructure: device state (GpuState/g_gpu), buffer/descriptor
 // makers, upload + stacks + host-import, the weight arena, command/submit plumbing, the
@@ -124,10 +125,6 @@ def khr_kq_tile_on : bool => g_gpu.has_coopmat && g_gpu.subgroup_size == 32l
 
 //! the cm2 flash tiles serve where the device was created in cm2 mode AND the mode still reads cm2 - a test that forces the mode in-process moves the pick with it
 def cm2_fa_on : bool => g_gpu.has_coopmat2_fa && g_gpu.coopmat_mode == COOPMAT_CM2
-
-//! the KHR flash tile serves a head of 64, 128, 256 or 512 on an ungated model, the softcap at 256 alone (its cap stamps); the pre-flight and the window chain pick from this one predicate
-def fa_khr_serves(hs : int64; cap : float; gated : bool) : bool
-    => (hs == 64l || hs == 128l || hs == 256l || hs == 512l) && !gated && (cap == 0.0 || hs == 256l)
 
 //! the per-32 formats that serve as routed expert planes only: their one cm2 column is the s tile
 def cm2_b32_routed(fmt : int) : bool => fmt == int(KqFmt.q51) || fmt == int(KqFmt.mx4) || fmt == int(KqFmt.iq4nl32)
@@ -2302,7 +2299,7 @@ struct RLayer {
     s_quant_xb2 : VkDescriptorSet
     s_gate, s_up : VkDescriptorSet
     s_actrq : VkDescriptorSet
-    s_gu : VkDescriptorSet          //! the fused gate + up + act + Q8_0 requant dispatch (`Q8GemvGu`), where the triple is q8 with a Q8_0 feed
+    s_gu : VkDescriptorSet          //! the fused gate + up + act + Q8_0 requant dispatch (`Q8GemvGuN1`), where the triple is q8 with a Q8_0 feed
     gu_on : bool
     s_down : VkDescriptorSet
     s_addr_next : VkDescriptorSet
@@ -2794,24 +2791,12 @@ def rd_unmake_sets {
 
 //! every region's token and draft commands and the verify commands re-record: the sets or planes they reference were replaced
 def rd_invalidate_token {
-    for (rec in g_rd.tok_recorded) {
-        rec = false
-    }
-    for (rec in g_rd.seg_recorded) {
-        rec = false
-    }
-    for (rec in g_rd.tok_wide_recorded) {
-        rec = false
-    }
-    for (rec in g_rd.tok_n_recorded) {
-        rec = false
-    }
-    for (rec in g_rd.head_draft_recorded) {
-        rec = false
-    }
-    for (rec in g_rd.v_recorded) {
-        rec = false
-    }
+    fill(g_rd.tok_recorded, false)
+    fill(g_rd.seg_recorded, false)
+    fill(g_rd.tok_wide_recorded, false)
+    fill(g_rd.tok_n_recorded, false)
+    fill(g_rd.head_draft_recorded, false)
+    fill(g_rd.v_recorded, false)
 }
 
 let RD_UNSPLIT_POS = 512l   //! the token command submits its unsplit attention twin under this position (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split`)
@@ -3200,26 +3185,28 @@ def vkd_pipes_rebuild() {
 var g_vkd_spv_keep = false
 var g_vkd_spv_kept : table<string; array<uint>>
 
+//! the class-build gate's one decline: the kernel's `@workgroup` footprint over the device's shared-memory cap
+enum VkdBuildDecline {
+    workgroup
+}
+
 // once-per-class named decline log for the workgroup-footprint gate below
-var private g_wg_declined : table<string>
+var private g_wg_decline : VkDeclineCounter
+var private g_wg_declined : table<string>   //! the classes already declined, so a re-ensure (the TTS stages ask every chunk) builds no string
 
 // the [vk_dispatch]-generated ensure_ calls this BEFORE building the pipeline: a class whose
 // @workgroup members exceed the device's shared-memory cap declines by name instead of dying
 // in vkCreateComputePipelines (MoltenVK: "Threadgroup memory size exceeds the maximum")
 def vkd_wg_fits(wg_bytes : int; kname : string) : bool {
-    if (uint(wg_bytes) <= g_gpu.max_wg_bytes) {
-        return true
-    }
-    vkd_wg_decline(wg_bytes, kname)
-    return false
+    return true if (uint(wg_bytes) <= g_gpu.max_wg_bytes)
+    return false if (key_exists(g_wg_declined, kname))
+    return vkd_wg_decline(wg_bytes, kname)
 }
 
-[cold_path]   // once per declined kernel name
-def private vkd_wg_decline(wg_bytes : int; kname : string) {
-    if (!key_exists(g_wg_declined, kname)) {
-        g_wg_declined |> insert(kname)
-        to_log(LOG_INFO, "dasLLAMA vulkan tier: {kname}: workgroup footprint {wg_bytes} B exceeds device cap {int(g_gpu.max_wg_bytes)} B - kernel declined\n")
-    }
+[cold_path]
+def private vkd_wg_decline(wg_bytes : int; kname : string) : bool {
+    g_wg_declined |> insert(kname)
+    return note(g_wg_decline, kname, "{VkdBuildDecline.workgroup}", "the workgroup footprint {wg_bytes} B exceeds the device cap {int(g_gpu.max_wg_bytes)} B")
 }
 
 [cold_path]   // family layout creation — once per class family
@@ -3614,19 +3601,61 @@ def free_transient_cmd(var raw : VkCommandBuffer) {
 def cmd_one_shot(rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) {
     var raw = alloc_transient_cmd()
     var h : VkHaz
-    record_submit_wait(raw) $(r : VkCommandBuffer) {
+    record_submit_wait(raw, false) $(r : VkCommandBuffer) {
         invoke(rec, r, h)
     }
     free_transient_cmd(raw)
 }
 
-//! `rec` recorded into `raw`, submitted on the compute queue and waited: the one-shot commands' shared body
-def private record_submit_wait(var raw : VkCommandBuffer; rec : block<(raw : VkCommandBuffer) : void>) {
+//! `rec` recorded into `raw` (reset first under `reset`), submitted on the compute queue and waited: the one-shot commands' shared body
+def record_submit_wait(var raw : VkCommandBuffer; reset : bool; rec : block<(raw : VkCommandBuffer) : void>) {
+    cmd_open(raw, reset)
+    invoke(rec, raw)
+    cmd_close(raw)
+    submit_wait(raw)
+}
+
+//! `raw` begun, reset first under `reset`; returns the fresh hazard rail its recording starts on
+def cmd_open(raw : VkCommandBuffer; reset : bool) : VkHaz {
+    if (reset) {
+        let rf : VkCommandBufferResetFlags
+        vk_check(vkResetCommandBuffer(raw, rf), null)
+    }
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw, begin), null)
-    invoke(rec, raw)
+    return VkHaz()
+}
+
+def cmd_close(raw : VkCommandBuffer) {
     vk_check(vkEndCommandBuffer(raw), null)
-    submit_wait(raw)
+}
+
+//! `raw` ended and `next` reset and begun: a recorder's cut between two commands, on a fresh hazard rail
+def cmd_reopen(raw, next : VkCommandBuffer) : VkHaz {
+    cmd_close(raw)
+    return cmd_open(next, true)
+}
+
+//! `raw` recorded by `rec` between `cmd_open` and `cmd_close`
+def record_cmd(raw : VkCommandBuffer; reset : bool; rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) {
+    var h = cmd_open(raw, reset)
+    invoke(rec, raw, h)
+    cmd_close(raw)
+}
+
+//! the same, the rail's node and barrier counts logged under `tag` at DASLLAMA_GPU_PROF=1
+def record_cmd(raw : VkCommandBuffer; reset : bool; tag : string; rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) {
+    var h = cmd_open(raw, reset)
+    invoke(rec, raw, h)
+    cmd_close(raw, h, tag)
+}
+
+//! `raw` ended, its rail's node and barrier counts logged under `tag` at DASLLAMA_GPU_PROF=1
+def cmd_close(raw : VkCommandBuffer; h : VkHaz; tag : string) {
+    if (vk_prof()) {
+        to_log(LOG_INFO, "{tag} hz: {h.disp} nodes, {h.barriers} barriers\n")
+    }
+    cmd_close(raw)
 }
 
 //! the DASLLAMA_GPU_PROF=1 ledger of an encode chain: the role of every GPU timestamp the chain wrote (stamp 0 is the baseline)
@@ -3733,17 +3762,27 @@ def readback_range(dev : uint64; bits : uint; off : int64; hb : HostBuf; var dst
         vhz_dep(raw, h, bits, 0u, true)
         cmd_copy_range(raw, dev, off, hb.buf, 0l, bytes)
     }
+    host_buf_read(hb, unsafe(reinterpret<void?>(dst)), bytes)
+}
+
+//! a host cut's landing: `rows` x rows from `xsrc` and their router logits from `logsrc` into the host buffers the host's routed sum reads
+def host_land(raw : VkCommandBuffer; var h : VkHaz; xsrc : uint64; xhost : HostBuf; logsrc : uint64; loghost : HostBuf; rows : int64) {
+    vhz_dep(raw, h, VHZ_XB | VHZ_MRT, 0u, true)
+    cmd_copy_whole(raw, xsrc, xhost.buf, g_rd.dim * 4l * rows)
+    cmd_copy_whole(raw, logsrc, loghost.buf, g_rd.ner * 4l * rows)
+}
+
+//! `bytes` of a host buffer's mapped memory from byte `off` copied to `dst`
+def host_buf_read(hb : HostBuf; var dst : void?; bytes : int64; off : int64 = 0l) {
     unsafe {
-        memcpy(reinterpret<void?>(dst), hb.mapped, bytes)
+        memcpy(dst, reinterpret<void?>(reinterpret<uint8?>(hb.mapped) + off), bytes)
     }
 }
 
 //! the same on the shared batch command buffer, reset first: the decode's cold state uploads and readbacks
 def batch_cmd_one_shot(rec : block<(raw : VkCommandBuffer) : void>) {
     var raw = g_gpu.batch_cmd
-    let rf : VkCommandBufferResetFlags
-    vk_check(vkResetCommandBuffer(raw, rf), null)
-    record_submit_wait(raw, rec)
+    record_submit_wait(raw, true, rec)
 }
 
 //! a persistent command on `pool`, model-owned through `owned` (the list the model drop frees)
@@ -3761,8 +3800,90 @@ def alloc_xfer_cmd : VkCommandBuffer => alloc_owned_cmd(g_gpu.xfer_pool, g_gpu.m
 
 //! `bytes` of a device buffer from `off` zeroed by a fill command, no host array
 def upload_zeros(dev : uint64; off, bytes : int64) {
+    upload_fill(dev, off, bytes, 0u)
+}
+
+//! a device buffer holding `a` whole
+def dev_upload(a : array<auto(TT)>) : uint64 {
+    let bytes = long_length(a) * int64(typeinfo sizeof(type<TT>))
+    let dev = make_device_buf(bytes)
+    upload_region_at(dev, 0l, unsafe(addr<uint8 const?>(a[0])), bytes)
+    return dev
+}
+
+//! `bytes` of a device buffer from `off` set to the 32-bit `word` by a fill command (`0x3F800000u` is 1.0f), no host array
+def upload_fill(dev : uint64; off, bytes : int64; word : uint) {
     cmd_one_shot() $(raw : VkCommandBuffer; var _h : VkHaz) {
-        cmd_fill_zero(raw, dev, off, bytes)
+        vkCmdFillBuffer(raw, unsafe(reinterpret<VkBuffer>(dev)), uint64(off), uint64(bytes), word)
+    }
+}
+
+//! `tab[key]`, built by `build` on its first ask: the drivers' int-keyed set caches
+def cached(@scratch var tab : table<int; auto(TT)>; key : int; build : block<() : TT>) : TT {
+    if (!key_exists(tab, key)) {
+        tab[key] = invoke(build)
+    }
+    return tab[key]
+}
+
+//! float `ranges` (a source and its element count each) laid end to end with `ones_n` ones after them, staged into `dev`
+//! from its first byte in one upload
+def upload_float_ranges(dev : uint64; ranges : array<tuple<p : float const?; n : int64>>; ones_n : int64 = 0l) {
+    var total = ones_n
+    for (r in ranges) {
+        total += r.n
+    }
+    var rows : array<float>
+    rows |> reserve_resize(total)
+    var at = 0l
+    for (r in ranges) {
+        if (r.n > 0l) {
+            unsafe {
+                memcpy(addr<void?>(rows[at]), reinterpret<void?>(r.p), r.n * 4l)
+            }
+        }
+        at += r.n
+    }
+    for (i in range64(at, total)) {
+        rows[i] = 1.0
+    }
+    upload_region_at(dev, 0l, unsafe(addr<uint8 const?>(rows[0])), total * 4l)
+    delete rows
+}
+
+//! batch GEMM schedule record `rid` = [wblk0, row0, rows, 0] at word 4 rid and its map of `groups` words at the cursor;
+//! returns the map's word offset and advances the cursor
+def batch_sched_map(var mp : uint?; var cur : int64&; rid : int64; wblk0, rows, groups : int64; row0 : int64 = 0l) : uint {
+    unsafe {
+        mp[rid * 4l] = uint(wblk0)
+        mp[rid * 4l + 1l] = uint(row0)
+        mp[rid * 4l + 2l] = uint(rows)
+        mp[rid * 4l + 3l] = 0u
+        let at = cur
+        for (g in range64(groups)) {
+            mp[at + g] = uint(rid)
+        }
+        cur += groups
+        return uint(at)
+    }
+}
+
+//! a device buffer of `bytes` whose words `fill` writes into the staging buffer, staged up once
+def make_staged_buf(bytes : int64; fill : block<(var words : uint?) : void>) : uint64 {
+    let dev = make_device_buf(bytes)
+    invoke(fill, unsafe(reinterpret<uint?>(g_gpu.staging.mapped)))
+    staged_upload(dev, 0l, bytes)
+    return dev
+}
+
+let F32_ONE_WORD = 0x3F800000u   //! 1.0f as the word `upload_fill` writes
+
+//! a device buffer of `n` words counting up from `base`: the slot and row identity maps
+def make_ramp_buf(n, base : int64) : uint64 {
+    return make_staged_buf(n * 4l) $(var words : uint?) {
+        for (i in range64(n)) {
+            unsafe(words[i]) = uint(base + i)
+        }
     }
 }
 

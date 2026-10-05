@@ -655,30 +655,16 @@ def private vt_rel_release(var r : VtResident) {
 
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_rel_proj_set(var r : VtResident; t : VtTile) : VkDescriptorSet {
-    return vt_cached(r.sets_rel_proj, vt_tile_key(t)) $() : VkDescriptorSet {
+    return cached(r.sets_rel_proj, vt_tile_key(t)) $() : VkDescriptorSet {
         return vt_rel_proj_build(r, t)
     }
-}
-
-//! the set (or set bundle) cached under `key`, built through `build` on the first ask
-def private vt_cached(@scratch var tab : table<int; auto(TT)>; key : int; build : block<() : TT>) : TT {
-    if (!key_exists(tab, key)) {
-        tab[key] = invoke(build)
-    }
-    return tab[key]
 }
 
 [cold_path]
 def private vt_rel_proj_build(r : VtResident; t : VtTile) : VkDescriptorSet {
     let b_relq = r.rel_cap_rows * r.d
-    let b_rel = b_relq * 4l
-    if (t.tc > 0l) {
-        let b_relh = (r.rel_cap_rows + TILE_READ_SLACK) * r.d * 2l
-        return cm2_cls_set(int(KqFmt.q8), t.tc, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.rel_tabh_dev, r.rel_proj_dev),
-            fixed_array(r.wq_bytes, r.ws_bytes, r.meta_bytes, b_relh, b_rel), fixed_array(0u, 0u, 0u, VT_REL_TABQ, VT_REL_PROJ))
-    }
-    return q8_batch_cls_set(t.v, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.rel_tabq_dev, r.rel_tabs_dev, r.rel_proj_dev),
-        fixed_array(r.wq_bytes, r.ws_bytes, r.meta_bytes, b_relq, b_relq / kq_elems(KqFmt.q8) * 4l, b_rel), fixed_array(0u, 0u, 0u, VT_REL_TABQ, VT_REL_TABQ, VT_REL_PROJ))
+    return vt_tile_cls_set(t, r.wq_dev, r.ws_dev, r.wq_bytes, r.ws_bytes, r.meta.buf, r.meta_bytes, r.rel_tabh_dev, (r.rel_cap_rows + TILE_READ_SLACK) * r.d * 2l,
+        r.rel_tabq_dev, r.rel_tabs_dev, b_relq, VT_REL_TABQ, r.rel_proj_dev, b_relq * 4l, VT_REL_PROJ)
 }
 
 def private vt_conformer_sets(var r : VtResident; v, vff, v2d, v_rel : VtTile) : tuple<s_h2 : VkDescriptorSet; s_rel : VkDescriptorSet> {
@@ -797,7 +783,7 @@ def private vt_sets_q25v(var r : VtResident) {
     let bph = cap * r.pad_dp * 2l
     let btab = cap * (r.hs / 2l) * 4l
     let bwl = (r.win_cap + 1l) * 4l
-    r.s_rms = set_tower_rms_cls(fixed_array(r.x_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_XB, 0u))
+    r.s_rms = set_hc_norm_cls(fixed_array(r.x_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_XB, 0u))
     r.s_cvt_xb = set_tower_clamp_cvt_cls(fixed_array(r.xb_dev, r.xh_dev), fixed_array(bx, bxh), fixed_array(VT_XB, VT_XQ))
     r.s_cvt_att = set_tower_clamp_cvt_cls(fixed_array(r.att_dev, r.xh_dev), fixed_array(bx, bxh), fixed_array(VT_ATT, VT_XQ))
     r.s_q = f16_gemm_set(gemm_khr, fixed_array(r.wq_dev, r.xh_dev, r.q_dev), fixed_array(r.wq_bytes, bxh, bx), fixed_array(0u, VT_XQ, VT_Q))
@@ -844,6 +830,43 @@ def vt_gather_regions(qblob : PlaneI8; qscales : PlaneF; regions : array<VtRegio
     }
 }
 
+//! one GEMM record of a chain's schedule: its weight block, its rows and its workgroup groups
+struct VtSchedRec {
+    wblk0 : int64
+    rows : int64
+    groups : int64
+}
+
+//! a chain's batch schedule written into `meta`: `nrec` records at its head and their maps after them, record `rid`'s
+//! weight block, rows and groups answered by `rec` in record order; `maps` takes each record's map offset
+def vt_sched_walk(@scratch var maps : array<uint>; meta : HostBuf; nrec : int64; rec : block<(rid : int64) : VtSchedRec>) {
+    maps |> reserve(nrec)
+    maps |> resize(nrec)
+    var mp = unsafe(reinterpret<uint?>(meta.mapped))
+    var cur = nrec * 4l
+    for (rid in range64(nrec)) {
+        let rr = invoke(rec, rid)
+        maps[rid] = batch_sched_map(mp, cur, rid, rr.wblk0, rr.rows, rr.groups)
+    }
+}
+
+//! the q8 planes' regions gathered into the device layout and uploaded, `wq_bytes` of quants to `wq_dev` and `ws_bytes` of
+//! halfword scales to `ws_dev`
+[cold_path]
+def vt_upload_regions(qblob : PlaneI8; qscales : PlaneF; regions : array<VtRegion>; lay : Q8RepackLayout; wq_dev, ws_dev : uint64; wq_bytes, ws_bytes : int64) {
+    var wq : array<uint8>
+    var ws : array<uint8>
+    wq |> reserve_resize(wq_bytes)
+    ws |> reserve_resize(ws_bytes)
+    vt_gather_regions(qblob, qscales, regions, lay, wq, ws)
+    unsafe {
+        upload_region_at(wq_dev, 0l, addr<uint8 const?>(wq[0]), wq_bytes)
+        upload_region_at(ws_dev, 0l, addr<uint8 const?>(ws[0]), ws_bytes)
+    }
+    delete wq
+    delete ws
+}
+
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_upload(var r : VtResident; key : uint64; qblob : PlaneI8; qscales : PlaneF; regions : array<VtRegion>;
                       blob : PlaneF; rows_off, rows_n, ones_n : int64; lay : Q8RepackLayout) : bool {
@@ -859,27 +882,8 @@ def private vt_upload(var r : VtResident; key : uint64; qblob : PlaneI8; qscales
         vt_release(r)
         return false
     }
-    var wq : array<uint8>
-    var ws : array<uint8>
-    wq |> reserve_resize(r.wq_bytes)
-    ws |> reserve_resize(r.ws_bytes)
-    vt_gather_regions(qblob, qscales, regions, lay, wq, ws)
-    unsafe {
-        upload_region_at(r.wq_dev, 0l, addr<uint8 const?>(wq[0]), r.wq_bytes)
-        upload_region_at(r.ws_dev, 0l, addr<uint8 const?>(ws[0]), r.ws_bytes)
-    }
-    delete wq
-    delete ws
-    var norms : array<float>
-    norms |> reserve_resize(rows_n + ones_n)
-    unsafe {
-        memcpy(addr<void?>(norms[0]), reinterpret<void?>(plane_at(blob, rows_off)), rows_n * 4l)
-    }
-    for (i in range64(rows_n, rows_n + ones_n)) {
-        norms[i] = 1.0
-    }
-    upload_region_at(r.norms_dev, 0l, unsafe(addr<uint8 const?>(norms[0])), r.norms_bytes)
-    delete norms
+    vt_upload_regions(qblob, qscales, regions, lay, r.wq_dev, r.ws_dev, r.wq_bytes, r.ws_bytes)
+    upload_float_ranges(r.norms_dev, [(p = plane_at(blob, rows_off), n = rows_n)], ones_n)
     r.cap_rows = 0l
     vt_unbind_batch_sets(r)
     return true
@@ -1029,9 +1033,9 @@ def private vt_sets_g4a(var r : VtResident) {
     let b_relq = r.rel_cap_rows * r.d
     let b_rel = b_relq * 4l
     let b_rels = b_relq / q8e * 4l
-    r.s_rms = set_tower_rms_cls(fixed_array(r.x_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_XB, 0u))
-    r.s_rms_yd = set_tower_rms_cls(fixed_array(r.yd_dev, r.yd_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_YD, VT_YD, 0u))
-    r.s_rms_x = set_tower_rms_cls(fixed_array(r.x_dev, r.x_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_X, 0u))
+    r.s_rms = set_hc_norm_cls(fixed_array(r.x_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_XB, 0u))
+    r.s_rms_yd = set_hc_norm_cls(fixed_array(r.yd_dev, r.yd_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_YD, VT_YD, 0u))
+    r.s_rms_x = set_hc_norm_cls(fixed_array(r.x_dev, r.x_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_X, 0u))
     r.s_rq_xb = set_tower_clamp_rq_cls(fixed_array(r.xb_dev, r.xq_dev, r.xs_dev), fixed_array(bx, bq, bs), fixed_array(VT_XB, VT_XQ, VT_XQ))
     r.s_rq_att = set_tower_clamp_rq_cls(fixed_array(r.att_dev, r.xq_dev, r.xs_dev), fixed_array(bx, bq, bs), fixed_array(VT_ATT, VT_XQ, VT_XQ))
     r.s_rq_hg = set_tower_clamp_rq_cls(fixed_array(r.hg_dev, r.xq_dev, r.xs_dev), fixed_array(bff, bq, bs), fixed_array(VT_HG, VT_XQ, VT_XQ))
@@ -1100,13 +1104,13 @@ def private vt_tail_bufs(var r : VtResident; tail_dim : int64) : bool {
         r.s_feed_pt = set_tower_clamp_rq_cls(fixed_array(r.tail_out_dev, r.xq_dev, r.xs_dev), fixed_array(bp, bq, bs), fixed_array(VT_TAIL_OUT, VT_XQ, VT_XQ))
     }
     r.s_bias_pt = set_tower_bias_act_cls(fixed_array(r.tail_out_dev, r.norms_dev), fixed_array(bp, r.norms_bytes), fixed_array(VT_TAIL_OUT, 0u))
-    r.s_rms_pt = set_tower_rms_cls(fixed_array(r.tail_out_dev, r.tail_out_dev, r.norms_dev), fixed_array(bp, bp, r.norms_bytes), fixed_array(VT_TAIL_OUT, VT_TAIL_OUT, 0u))
+    r.s_rms_pt = set_hc_norm_cls(fixed_array(r.tail_out_dev, r.tail_out_dev, r.norms_dev), fixed_array(bp, bp, r.norms_bytes), fixed_array(VT_TAIL_OUT, VT_TAIL_OUT, 0u))
     return true
 }
 
 //! the tail's GEMM set over its tile: the out-proj into the pt rows, the mm-proj into the po rows, built once per tile key
 def private vt_tail_gemm_set(var r : VtResident; v : VtTile; mmproj : bool) : VkDescriptorSet {
-    return vt_cached(r.sets_front, (mmproj ? VT_G4A_MMPROJ_KEY : VT_G4A_OUTPROJ_KEY) + vt_tile_key(v)) $() : VkDescriptorSet {
+    return cached(r.sets_front, (mmproj ? VT_G4A_MMPROJ_KEY : VT_G4A_OUTPROJ_KEY) + vt_tile_key(v)) $() : VkDescriptorSet {
         return vt_tile_set(r, v, mmproj ? r.tail_proj_dev : r.tail_out_dev, r.tail_cap * r.tail_dim * 4l, mmproj ? VT_TAIL_PROJ : VT_TAIL_OUT)
     }
 }
@@ -1132,7 +1136,7 @@ def private vt_sets_cm2_feed(var r : VtResident) {
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_mm_clamped(raw : VkCommandBuffer; var h : VkHaz; c : Clamp; var s_rq : VkDescriptorSet; nin : int64; var s_gemm : VkDescriptorSet; v : VtTile;
                           n, dout : int64; map_off : uint; groups : int64; var s_cl : VkDescriptorSet; nout : int64) {
-    var pc_rq = TowerClampRqArgs(inbase = 0u, nblk = uint(nin / kq_elems(KqFmt.q8)), lo = vt_lo(c, true), hi = vt_hi(c, true))
+    var pc_rq = RqArgs(inbase = 0u, nblk = uint(nin / kq_elems(KqFmt.q8)), lo = vt_lo(c, true), hi = vt_hi(c, true))
     vt_feed_enc(raw, h, v.tc > 0l, s_rq, pc_rq, nin)
     var pc_g = BatchArgs(n = uint(n), d = uint(dout), map_off = map_off)
     vt_tile_enc(raw, h, v, s_gemm, pc_g, groups)
@@ -1166,7 +1170,7 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
     if (!vk_range_ok(t.qblob.n) || !vk_range_ok(t.blob.n * 4l) || !vk_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, 0l, 0l, false, false))) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
-    if (!ensure_tower_rms_cls() || !ensure_tower_clamp_cls() || !ensure_tower_clamp_rq_cls() || !ensure_tower_post_add_cls()
+    if (!ensure_hc_norm_cls() || !ensure_tower_clamp_cls() || !ensure_tower_clamp_rq_cls() || !ensure_tower_post_add_cls()
             || !ensure_tower_post_add_plain_cls() || !ensure_tower_act_cls() || !ensure_tower_glu_sig_cls() || !ensure_tower_dw_conv5_cls()
             || !(hs == 64l ? ensure_tower_g4a_attn64_cls() : ensure_tower_g4a_attn_cls())) {
         return vt_decline(r, VulkanTowerDecline.device)
@@ -1207,24 +1211,19 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
     var s_rel = sets.s_rel
     var s_outproj = vt_tail_gemm_set(r, vp, false)
     var s_mmproj = vt_tail_gemm_set(r, vp, true)
-    g_vt_maps |> reserve(nrec)
-    g_vt_maps |> resize(nrec)
-    unsafe {
-        var mp = reinterpret<uint?>(r.meta.mapped)
-        var cur = nrec * 4l
-        var recs : VtRegion[int(VT_G4A_GEMMS)]
-        let rec_tiles = fixed_array(vff, v, v, v, v, v, v_rel, v2d, v, vff, v)
-        for (l in range64(t.n_layer)) {
-            vt_g4a_regions(t.layers[l], d, ff, recs)
-            for (g in range64(VT_G4A_GEMMS)) {
-                let rid = l * VT_G4A_GEMMS + g
-                let rows = g == VT_G4A_REL ? rel_cap_rows : vt_tile_rows(rec_tiles[g], npos)   // the rel record keeps its raw rows: its planes are sized to them, and a forced l column would read past them
-                let groups = g == VT_G4A_REL ? g_rel : (g == VT_G4A_PW1 ? g_2d : ((g == VT_G4A_FF_UP || g == VT_G4A_FF_UP_1) ? g_ff : g_d))
-                g_vt_maps[rid] = vt_sched_map(mp, cur, rid, recs[g].woff / q8e, rows, groups)
-            }
+    var recs : VtRegion[int(VT_G4A_GEMMS)]
+    let rec_tiles = fixed_array(vff, v, v, v, v, v, v_rel, v2d, v, vff, v)
+    vt_sched_walk(g_vt_maps, r.meta, nrec) $(rid : int64) : VtSchedRec {
+        if (rid >= nrec - 2l) {
+            return VtSchedRec(wblk0 = (rid == nrec - 2l ? t.outproj_w : t.mmproj_w) / q8e, rows = vt_tile_rows(vp, npos), groups = g_p)
         }
-        g_vt_maps[nrec - 2l] = vt_sched_map(mp, cur, nrec - 2l, t.outproj_w / q8e, vt_tile_rows(vp, npos), g_p)
-        g_vt_maps[nrec - 1l] = vt_sched_map(mp, cur, nrec - 1l, t.mmproj_w / q8e, vt_tile_rows(vp, npos), g_p)
+        let g = rid % VT_G4A_GEMMS
+        if (g == 0l) {
+            vt_g4a_regions(t.layers[rid / VT_G4A_GEMMS], d, ff, recs)
+        }
+        let rows = g == VT_G4A_REL ? rel_cap_rows : vt_tile_rows(rec_tiles[g], npos)   // the rel record keeps its raw rows: its planes are sized to them, and a forced l column would read past them
+        let groups = g == VT_G4A_REL ? g_rel : (g == VT_G4A_PW1 ? g_2d : ((g == VT_G4A_FF_UP || g == VT_G4A_FF_UP_1) ? g_ff : g_d))
+        return VtSchedRec(wblk0 = recs[g].woff / q8e, rows = rows, groups = groups)
     }
     let bx = npos * d * 4l
     let bo = npos * tail_dim * 4l
@@ -1233,14 +1232,14 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
     let nff = npos * ff
     let n2d = npos * 2l * d
     let wg_attn = (npos * t.n_head + 63l) / 64l
-    var pc_rq_rel = TowerClampRqArgs(inbase = 0u, nblk = uint(rel_cap_rows * d / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+    var pc_rq_rel = RqArgs(inbase = 0u, nblk = uint(rel_cap_rows * d / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
     var pc_rel = BatchArgs(n = uint(d), d = uint(d), map_off = 0u)
     var pc_glu = TowerConvModArgs(d = uint(d), nelem = uint(nd))
     var pc_dw = DwConvRowsArgs(c = uint(d), t_in = uint(npos))
     var pc_silu_ff = TowerBiasArgs(d = uint(ff), nelem = uint(nff), boff = 0u, act = BIAS_ACT_SILU)
     var pc_silu_d = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = 0u, act = BIAS_ACT_SILU)
     var pc_attn = TowerG4aAttnArgs(d = uint(d), npos = uint(npos), pdsoff = 0u)
-    var pc_rms = TowerRowArgs(d = uint(d), rows = uint(npos), woff = 0u, eps = t.eps, ln_on = 0u, lnoff = 0u, ascale = 1.0)
+    var pc_rms = tower_rms_args(uint(d), 0u, t.eps)
     var pc_post = TowerLnArgs(d = uint(d), rows = uint(npos), woff = 0u, boff = 0u, eps = t.eps, ln_on = 1u, lnoff = 0u, lnboff = 0u, ascale = 1.0)
     let attn64 = hs == 64l
     vt_chain_one_shot("gemma4a", t.n_layer, npos) $(raw : VkCommandBuffer; var h : VkHaz) {
@@ -1250,7 +1249,7 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
             let lo = t.layers[l]
             let rb = l * VT_G4A_GEMMS
             pc_rms.woff = uint(lo.ff_norm)
-            enc_tower_rms_cls(raw, h, r.s_rms, pc_rms, npos)
+            enc_hc_norm_cls(raw, h, r.s_rms, pc_rms, npos)
             vt_pt(raw, VtProfRole.rms)
             vt_mm_clamped(raw, h, lo.c_ff_up, r.s_rq_xb, nd, r.s_hg, vff, d, ff, g_vt_maps[rb + VT_G4A_FF_UP], g_ff, r.s_clamp_hg, nff)
             vt_pt(raw, VtProfRole.gemm_fc1)
@@ -1294,7 +1293,7 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
             enc_tower_dw_conv5_cls(raw, h, r.s_dw, pc_dw, (nd + 255l) / 256l)
             vt_pt(raw, VtProfRole.dwconv)
             pc_rms.woff = uint(lo.conv_norm)
-            enc_tower_rms_cls(raw, h, r.s_rms_yd, pc_rms, npos)
+            enc_hc_norm_cls(raw, h, r.s_rms_yd, pc_rms, npos)
             vt_pt(raw, VtProfRole.rms)
             enc_tower_act_cls(raw, h, r.s_silu_yd, pc_silu_d, rq_wgs(false, nd))
             vt_pt(raw, VtProfRole.silu)
@@ -1317,15 +1316,15 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
             vt_pt(raw, VtProfRole.post_add)
             pc_post.ln_on = 1u
             pc_rms.woff = uint(lo.ln2)
-            enc_tower_rms_cls(raw, h, r.s_rms_x, pc_rms, npos)
+            enc_hc_norm_cls(raw, h, r.s_rms_x, pc_rms, npos)
             vt_pt(raw, VtProfRole.rms)
         }
         vt_mm_clamped(raw, h, Clamp(), r.s_feed_x, nd, s_outproj, vp, d, tail_dim, g_vt_maps[nrec - 2l], g_p, r.s_clamp_yd, 0l)
         vt_pt(raw, VtProfRole.gemm_o)
         vt_bias_act(raw, h, r.s_bias_pt, tail_dim, npos * tail_dim, t.outproj_b, BIAS_ACT_NONE)
         vt_pt(raw, VtProfRole.bias)
-        var pc_rms_pt = TowerRowArgs(d = uint(tail_dim), rows = uint(npos), woff = uint(r.ones_off), eps = t.eps, ln_on = 0u, lnoff = 0u, ascale = 1.0)
-        enc_tower_rms_cls(raw, h, r.s_rms_pt, pc_rms_pt, npos)
+        var pc_rms_pt = tower_rms_args(uint(tail_dim), uint(r.ones_off), t.eps)
+        enc_hc_norm_cls(raw, h, r.s_rms_pt, pc_rms_pt, npos)
         vt_pt(raw, VtProfRole.rms)
         vt_mm_clamped(raw, h, Clamp(), r.s_feed_pt, npos * tail_dim, s_mmproj, vp, tail_dim, tail_dim, g_vt_maps[nrec - 1l], g_p, r.s_clamp_yd, 0l)
         vt_pt(raw, VtProfRole.gemm_o)
@@ -1538,22 +1537,15 @@ def private vulkan_canary_blocks(t : CanaryEncoder; var s : CanaryState; npos, w
     var sets = vt_conformer_sets(r, v, vff, v2d, v_rel)
     var s_h2 = sets.s_h2
     var s_rel = sets.s_rel
-    g_vt_maps |> reserve(nrec)
-    g_vt_maps |> resize(nrec)
-    unsafe {
-        var mp = reinterpret<uint?>(r.meta.mapped)
-        var cur = nrec * 4l
-        var recs : VtRegion[int(VT_CN_GEMMS)]
-        let rec_tiles = fixed_array(vff, v, v, v, v, v_rel, v, v2d, v, vff, v)
-        for (l in range64(t.n_layer)) {
-            vt_cn_regions(t.layers[l], d, ff, recs)
-            for (g in range64(VT_CN_GEMMS)) {
-                let rid = l * VT_CN_GEMMS + g
-                let rows = vt_tile_rows(rec_tiles[g], g == VT_CN_POS ? ww : npos)
-                let groups = g == VT_CN_POS ? g_rel : (g == VT_CN_PW1 ? g_2d : ((g == VT_CN_FF1A || g == VT_CN_FF2A) ? g_ff : g_d))
-                g_vt_maps[rid] = vt_sched_map(mp, cur, rid, recs[g].woff / q8e, rows, groups)
-            }
+    var recs : VtRegion[int(VT_CN_GEMMS)]
+    let rec_tiles = fixed_array(vff, v, v, v, v, v_rel, v, v2d, v, vff, v)
+    vt_sched_walk(g_vt_maps, r.meta, nrec) $(rid : int64) : VtSchedRec {
+        let g = rid % VT_CN_GEMMS
+        if (g == 0l) {
+            vt_cn_regions(t.layers[rid / VT_CN_GEMMS], d, ff, recs)
         }
+        let groups = g == VT_CN_POS ? g_rel : (g == VT_CN_PW1 ? g_2d : ((g == VT_CN_FF1A || g == VT_CN_FF2A) ? g_ff : g_d))
+        return VtSchedRec(wblk0 = recs[g].woff / q8e, rows = vt_tile_rows(rec_tiles[g], g == VT_CN_POS ? ww : npos), groups = groups)
     }
     let bx = npos * d * 4l
     upload_region_at(r.x_dev, 0l, unsafe(addr<uint8 const?>(s.x[0])), bx)
@@ -1562,13 +1554,13 @@ def private vulkan_canary_blocks(t : CanaryEncoder; var s : CanaryState; npos, w
     let nff = npos * ff
     let n2d = npos * 2l * d
     let wg_attn = (npos + 63l) / 64l
-    var pc_rq_rel = TowerClampRqArgs(inbase = 0u, nblk = uint(ww * d / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
-    var pc_rq_xb = TowerClampRqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+    var pc_rq_rel = RqArgs(inbase = 0u, nblk = uint(ww * d / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+    var pc_rq_xb = RqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
     var pc_rel = BatchArgs(n = uint(d), d = uint(d), map_off = 0u)
     var pc_glu = TowerConvModArgs(d = uint(d), nelem = uint(nd))
     var pc_dw = DwConvRowsArgs(c = uint(d), k = uint(t.conv_kernel), t_in = uint(npos))
     var pc_attn_r = TowerCnAttnRArgs(d = uint(d), npos = uint(npos), buoff = 0u, hoff = 0u)
-    var pc_ln = TowerLnArgs(d = uint(d), rows = uint(npos), woff = 0u, boff = 0u, eps = t.eps, ln_on = 0u, lnoff = 0u, lnboff = 0u, ascale = 1.0)
+    var pc_ln = TowerLnArgs(d = uint(d), rows = uint(npos), eps = t.eps, ln_on = 1u)
     var pc_post = TowerLnArgs(d = uint(d), rows = uint(npos), woff = 0u, boff = 0u, eps = t.eps, ln_on = 1u, lnoff = 0u, lnboff = 0u, ascale = 1.0)
     let no_clamp = Clamp()
     var s_none : VkDescriptorSet
@@ -1580,8 +1572,8 @@ def private vulkan_canary_blocks(t : CanaryEncoder; var s : CanaryState; npos, w
         for (l in range64(t.n_layer)) {
             let lo = t.layers[l]
             let rb = l * VT_CN_GEMMS
-            pc_ln.woff = uint(lo.nf1_w)
-            pc_ln.boff = uint(lo.nf1_b)
+            pc_ln.lnoff = uint(lo.nf1_w)
+            pc_ln.lnboff = uint(lo.nf1_b)
             enc_tower_ln_cls(raw, h, r.s_ln, pc_ln, npos)
             vt_pt(raw, VtProfRole.ln)
             vt_mm_clamped(raw, h, no_clamp, r.s_rq_xb, nd, r.s_hg, vff, d, ff, g_vt_maps[rb + VT_CN_FF1A], g_ff, s_none, 0l)
@@ -1673,8 +1665,8 @@ def private vulkan_canary_blocks(t : CanaryEncoder; var s : CanaryState; npos, w
             enc_tower_post_add_ln_cls(raw, h, r.s_post_d_ln, pc_post, npos)
             vt_pt(raw, VtProfRole.post_add)
             pc_post.ln_on = 1u
-            pc_ln.woff = uint(lo.nout_w)
-            pc_ln.boff = uint(lo.nout_b)
+            pc_ln.lnoff = uint(lo.nout_w)
+            pc_ln.lnboff = uint(lo.nout_b)
             enc_tower_ln_cls(raw, h, r.s_ln_x, pc_ln, npos)
             vt_pt(raw, VtProfRole.ln)
         }
@@ -1696,7 +1688,7 @@ def private vt_sets_g4v(var r : VtResident) {
     let bh = cap * r.d * 2l
     let btabs = cap * r.hs * 4l
     let khr = r.fa_khr
-    r.s_rms = set_tower_rms_cls(fixed_array(r.x_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_XB, 0u))
+    r.s_rms = set_hc_norm_cls(fixed_array(r.x_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_XB, 0u))
     r.s_rq_xb = set_tower_clamp_rq_cls(fixed_array(r.xb_dev, r.xq_dev, r.xs_dev), fixed_array(bx, bq, bs), fixed_array(VT_XB, VT_XQ, VT_XQ))
     r.s_rq_att = set_tower_clamp_rq_cls(fixed_array(r.att_dev, r.xq_dev, r.xs_dev), fixed_array(bx, bq, bs), fixed_array(VT_ATT, VT_XQ, VT_XQ))
     r.s_rq_hg = set_tower_clamp_rq_cls(fixed_array(r.hg_dev, r.xq_dev, r.xs_dev), fixed_array(bff, bq, bs), fixed_array(VT_HG, VT_XQ, VT_XQ))
@@ -1705,9 +1697,9 @@ def private vt_sets_g4v(var r : VtResident) {
     r.s_clamp_v = set_tower_clamp_cls(fixed_array(r.v_dev), fixed_array(bx), fixed_array(VT_V))
     r.s_clamp_yo = set_tower_clamp_cls(fixed_array(r.yo_dev), fixed_array(bx), fixed_array(VT_YO))
     r.s_clamp_yd = set_tower_clamp_cls(fixed_array(r.yd_dev), fixed_array(bx), fixed_array(VT_YD))
-    r.s_hrms_q = set_tower_rms_cls(fixed_array(r.q_dev, r.q2_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_Q, VT_Q2, 0u))
-    r.s_hrms_k = set_tower_rms_cls(fixed_array(r.k_dev, r.k2_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_K, VT_K2, 0u))
-    r.s_hrms_v = set_tower_rms_cls(fixed_array(r.v_dev, r.v2_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_V, VT_V2, 0u))
+    r.s_hrms_q = set_hc_norm_cls(fixed_array(r.q_dev, r.q2_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_Q, VT_Q2, 0u))
+    r.s_hrms_k = set_hc_norm_cls(fixed_array(r.k_dev, r.k2_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_K, VT_K2, 0u))
+    r.s_hrms_v = set_hc_norm_cls(fixed_array(r.v_dev, r.v2_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_V, VT_V2, 0u))
     r.s_rope_q = set_tower_rope2d_cls(fixed_array(r.q2_dev, r.tabs_dev), fixed_array(bx, btabs), fixed_array(VT_Q2, 0u))
     r.s_rope_k = set_tower_rope2d_cls(fixed_array(r.k2_dev, r.tabs_dev), fixed_array(bx, btabs), fixed_array(VT_K2, 0u))
     r.s_cvt_k = set_tower_clamp_cvt_cls(fixed_array(r.k2_dev, r.k16_dev), fixed_array(bx, bh), fixed_array(VT_K2, VT_K16))
@@ -1757,28 +1749,17 @@ def private vt_sets_ln(var r : VtResident) {
 }
 
 [cold_path]
-def private vt_cm2_set(r : VtResident; tc : int64; y_dev : uint64; y_bytes : int64; y_bit : uint) : VkDescriptorSet {
-    let bxh = (r.cap_rows + TILE_READ_SLACK) * max(r.d, r.ff) * 2l
-    return cm2_cls_set(int(KqFmt.q8), tc, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.xh_dev, y_dev),
-        fixed_array(r.wq_bytes, r.ws_bytes, r.meta_bytes, bxh, y_bytes), fixed_array(0u, 0u, 0u, VT_XQ, y_bit))
+def private vt_tile_set(r : VtResident; t : VtTile; y_dev : uint64; y_bytes : int64; y_bit : uint) : VkDescriptorSet {
+    let w = max(r.d, r.ff)
+    return vt_tile_cls_set(t, r.wq_dev, r.ws_dev, r.wq_bytes, r.ws_bytes, r.meta.buf, r.meta_bytes, r.xh_dev, (r.cap_rows + TILE_READ_SLACK) * w * 2l,
+        r.xq_dev, r.xs_dev, r.cap_rows * w, VT_XQ, y_dev, y_bytes, y_bit)
 }
-
-[cold_path]
-def private vt_batch_set(r : VtResident; v : int; y_dev : uint64; y_bytes : int64; y_bit : uint) : VkDescriptorSet {
-    let bq = r.cap_rows * max(r.d, r.ff)
-    return q8_batch_cls_set(v, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.xq_dev, r.xs_dev, y_dev),
-        fixed_array(r.wq_bytes, r.ws_bytes, r.meta_bytes, bq, bq / kq_elems(KqFmt.q8) * 4l, y_bytes), fixed_array(0u, 0u, 0u, VT_XQ, VT_XQ, y_bit))
-}
-
-[cold_path]
-def private vt_tile_set(r : VtResident; t : VtTile; y_dev : uint64; y_bytes : int64; y_bit : uint) : VkDescriptorSet
-    => t.tc > 0l ? vt_cm2_set(r, t.tc, y_dev, y_bytes, y_bit) : vt_batch_set(r, t.v, y_dev, y_bytes, y_bit)
 
 def private vt_tile_words(t : VtTile) : string => t.tc > 0l ? "token column {t.tc}" : "variant {t.v}"
 
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_sets_d(var r : VtResident; t : VtTile) : VtBatchSetsD {
-    return vt_cached(r.sets_d, vt_tile_key(t)) $() : VtBatchSetsD {
+    return cached(r.sets_d, vt_tile_key(t)) $() : VtBatchSetsD {
         let bx = r.cap_rows * r.d * 4l
         to_log(LOG_INFO, "dasLLAMA vulkan tower: d-wide sets at {r.cap_rows} rows - {vt_tile_words(t)} (d {r.d})\n")
         return VtBatchSetsD(s_q = vt_tile_set(r, t, r.q_dev, bx, VT_Q), s_k = vt_tile_set(r, t, r.k_dev, bx, VT_K),
@@ -1788,7 +1769,7 @@ def private vt_sets_d(var r : VtResident; t : VtTile) : VtBatchSetsD {
 
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_sets_ff(var r : VtResident; t : VtTile) : VtBatchSetsFf {
-    return vt_cached(r.sets_ff, vt_tile_key(t)) $() : VtBatchSetsFf {
+    return cached(r.sets_ff, vt_tile_key(t)) $() : VtBatchSetsFf {
         return vt_sets_ff_build(r, t)
     }
 }
@@ -1802,7 +1783,7 @@ def private vt_sets_ff_build(r : VtResident; t : VtTile) : VtBatchSetsFf {
 
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_set_qkv(var r : VtResident; t : VtTile) : VkDescriptorSet {
-    return vt_cached(r.sets_qkv, vt_tile_key(t)) $() : VkDescriptorSet {
+    return cached(r.sets_qkv, vt_tile_key(t)) $() : VkDescriptorSet {
         to_log(LOG_INFO, "dasLLAMA vulkan tower: fused qkv set at {r.cap_rows} rows - {vt_tile_words(t)} (3d {3l * r.d})\n")
         return vt_tile_set(r, t, r.qkv_dev, 3l * r.cap_rows * r.d * 4l, VT_QKV)
     }
@@ -1861,22 +1842,6 @@ def private vt_sets_q3v(var r : VtResident) {
     r.s_post_d_ln = set_tower_post_add_ln_cls(fixed_array(r.x_dev, r.yd_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, bx, r.norms_bytes), fixed_array(VT_X, VT_YD, VT_XB, 0u))
 }
 
-//! record `rid` = [wblk0, 0, rows, 0] at word 4 rid and its map of `groups` words at the cursor; returns the map's word offset and advances the cursor
-def vt_sched_map(var mp : uint?; var cur : int64&; rid : int64; wblk0, rows, groups : int64) : uint {
-    unsafe {
-        mp[rid * 4l] = uint(wblk0)
-        mp[rid * 4l + 1l] = 0u
-        mp[rid * 4l + 2l] = uint(rows)
-        mp[rid * 4l + 3l] = 0u
-        let at = cur
-        for (g in range64(groups)) {
-            mp[at + g] = uint(rid)
-        }
-        cur += groups
-        return uint(at)
-    }
-}
-
 //! the tier's want (DASLLAMA_GPU) and then the device init - the gate every chain and every twin cell reads first: nothing
 //! reads `g_gpu` ahead of this answer
 def public vulkan_tower_arms : bool => gpu_want_arms_tier() && vk_moe_init()
@@ -1897,19 +1862,12 @@ def private vt_arm(r : VtResident; gemm_off_cm2 : bool = false) : tuple<ok : boo
     return (ok = true, khr = khr, gemm_khr = gemm_khr)
 }
 
-//! `bytes` of a host readback buffer the chain's own command filled, from byte `src_off`, landed in `x`
-def private vt_readback_copy(var x : array<float>; hb : HostBuf; bytes : int64; src_off : int64 = 0l) {
-    unsafe {
-        memcpy(addr<void?>(x[0]), reinterpret<void?>(intptr(hb.mapped) + uint64(src_off)), bytes)
-    }
-}
-
 //! the encode's landing, one text for every chain: the residual rows back to the host, the counters, the announcement once
 def private vt_served(var r : VtResident; var x : array<float>; bx, npos, n_layer : int64) : bool
     => vt_served_from(r, r.host, x, bx, npos, n_layer)
 
 def private vt_served_from(var r : VtResident; hb : HostBuf; var x : array<float>; bx, npos, n_layer : int64) : bool {
-    vt_readback_copy(x, hb, bx)
+    host_buf_read(hb, unsafe(addr<void?>(x[0])), bx)
     g_vt_encodes++
     g_vt_rows += npos
     g_vt_blocks += n_layer
@@ -1995,8 +1953,8 @@ def private vt_sk_ensure(var r : VtResident; tc, nsplit : int64) : bool {
     if (!vk_range_ok(need) || (r.sk_bytes < need && !vt_sk_build(r, nsplit, need))) {
         return false
     }
-    if (!key_exists(r.sets_sk, int(tc))) {
-        r.sets_sk[int(tc)] = vt_cm2_set(r, tc, r.sk_dev, r.sk_bytes, VT_SPLITK_PLANES)
+    cached(r.sets_sk, int(tc)) $() : VkDescriptorSet {
+        return vt_tile_set(r, VtTile(tc = tc), r.sk_dev, r.sk_bytes, VT_SPLITK_PLANES)
     }
     return true
 }
@@ -2058,20 +2016,14 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
     let tile_d = VtTile(v = v, tc = tc_d)
     let tile_ff = VtTile(v = vff, tc = tc_ff)
     let tile_fc2 = VtTile(v = v, tc = cm2 ? sk.tc : 0l)
-    g_vt_maps |> reserve(nrec)
-    g_vt_maps |> resize(nrec)
-    unsafe {
-        var mp = reinterpret<uint?>(r.meta.mapped)
-        var cur = nrec * 4l
-        var recs : VtRegion[int(VT_LN_GEMMS)]
-        for (l in range64(nl)) {
-            vt_ln_regions(offs[l], d, ff, recs)
-            for (g in range64(VT_LN_GEMMS)) {
-                let rid = l * VT_LN_GEMMS + g
-                let tile = g == VT_LN_FC1 ? tile_ff : (g == VT_LN_FC2 ? tile_fc2 : tile_d)
-                g_vt_maps[rid] = vt_sched_map(mp, cur, rid, recs[g].woff / q8e, vt_tile_rows(tile, npos), g == VT_LN_FC1 ? g_ff : (g == VT_LN_FC2 ? g_fc2 : g_d))
-            }
+    var recs : VtRegion[int(VT_LN_GEMMS)]
+    vt_sched_walk(g_vt_maps, r.meta, nrec) $(rid : int64) : VtSchedRec {
+        let g = rid % VT_LN_GEMMS
+        if (g == 0l) {
+            vt_ln_regions(offs[rid / VT_LN_GEMMS], d, ff, recs)
         }
+        let tile = g == VT_LN_FC1 ? tile_ff : (g == VT_LN_FC2 ? tile_fc2 : tile_d)
+        return VtSchedRec(wblk0 = recs[g].woff / q8e, rows = vt_tile_rows(tile, npos), groups = g == VT_LN_FC1 ? g_ff : (g == VT_LN_FC2 ? g_fc2 : g_d))
     }
     let bx = npos * d * 4l
     if (r.x_ready) {
@@ -2089,14 +2041,12 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
     let wg_fa = fa_stamp_wgs(khr, nheads, npos)
     var pc_fa = FaArgs(rows = uint(npos), w0 = 0u, qd = uint(dp), kvd = uint(dp), kv_mul = 1u, kvbase = 0u, scale = 1.0 / sqrt(float(hs)), window = 0u, sinkoff = 0u)
     var pc_rs = TowerRestrideArgs(rows = uint(npos), rows_pad = uint(npos_pad), nheads = uint(nheads), hs = uint(hs), hsp = uint(hsp), sstride = uint(d), soff = 0u)
-    var pc_rq = TowerClampRqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
-    var pc_rqh = TowerClampRqArgs(inbase = 0u, nblk = uint(nff / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+    var pc_rq = RqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+    var pc_rqh = RqArgs(inbase = 0u, nblk = uint(nff / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
     var pc_gd = BatchArgs(n = uint(d), d = uint(d), map_off = 0u)
     var pc_gff = BatchArgs(n = uint(d), d = uint(ff), map_off = 0u)
     var pc_dn = BatchArgs(n = uint(ff), d = uint(d), map_off = 0u, ksplit = uint(sk.ksplit))
     let nd_fc2 = vt_tile_rows(tile_fc2, npos) * d
-    var pc_red = SkRedArgs(nelem = uint(nd_fc2), k = uint(sk.nsplit), ybase = 0u)
-    let wg_red = (nd_fc2 + 1_023l) / 1_024l
     var pc_bias = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = 0u, act = BIAS_ACT_NONE)
     var pc_gelu = TowerBiasArgs(d = uint(ff), nelem = uint(nff), boff = 0u, act = fc1_act)
     vt_chain_one_shot("whisper-class", nl, npos) $(raw : VkCommandBuffer; var h : VkHaz) {
@@ -2104,7 +2054,7 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
             let o = offs[l]
             let rb = l * VT_LN_GEMMS
             if (l == 0l) {
-                var pc = TowerLnArgs(d = uint(d), rows = uint(npos), woff = uint(o.ln1_w - norms_base), boff = uint(o.ln1_b - norms_base), eps = eps)
+                var pc = TowerLnArgs(d = uint(d), rows = uint(npos), eps = eps, ln_on = 1u, lnoff = uint(o.ln1_w - norms_base), lnboff = uint(o.ln1_b - norms_base))
                 if (cm2) {
                     enc_tower_ln16_cls(raw, h, r.s_ln16, pc, npos)
                 } else {
@@ -2198,7 +2148,7 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
             vt_tile_enc(raw, h, tile_fc2, s_fc2, pc_dn, g_fc2)
             vt_pt(raw, VtProfRole.gemm_fc2)
             if (split) {
-                enc_splitk_reduce_cls(raw, h, r.s_splitk_reduce, pc_red, wg_red)
+                splitk_reduce_enc(raw, h, r.s_splitk_reduce, nd_fc2, sk.nsplit)
                 vt_pt(raw, VtProfRole.sk_reduce)
             }
             let last = l + 1l == nl
@@ -2350,13 +2300,6 @@ def private vt_aud_front_slab(var r : VtResident; t : AudioTower) : bool {
     var slab16 <- cvt_f32_to_f16_sat_array(slab)
     delete slab
     let rows = 2l * d + t.n_ctx * d
-    var rows_f : array<float>
-    rows_f |> reserve_resize(rows)
-    unsafe {
-        memcpy(addr<void?>(rows_f[0]), reinterpret<void?>(plane_at(t.fblob, t.conv1_b_off)), d * 4l)
-        memcpy(addr<void?>(rows_f[d]), reinterpret<void?>(plane_at(t.fblob, t.conv2_b_off)), d * 4l)
-        memcpy(addr<void?>(rows_f[2l * d]), reinterpret<void?>(plane_at(t.fblob, t.pos_off)), t.n_ctx * d * 4l)
-    }
     r.fw16_bytes = d * kdp * 2l
     r.fw16_dev = vt_dev_buf(r, r.fw16_bytes)
     r.fnorm_bytes = rows * 4l
@@ -2364,10 +2307,10 @@ def private vt_aud_front_slab(var r : VtResident; t : AudioTower) : bool {
     r.front = true
     if (!r.oom) {
         upload_region_at(r.fw16_dev, 0l, unsafe(addr<uint8 const?>(slab16[0])), r.fw16_bytes)
-        upload_region_at(r.fnorm_dev, 0l, unsafe(addr<uint8 const?>(rows_f[0])), r.fnorm_bytes)
+        upload_float_ranges(r.fnorm_dev, [(p = plane_at(t.fblob, t.conv1_b_off), n = d), (p = plane_at(t.fblob, t.conv2_b_off), n = d),
+                                          (p = plane_at(t.fblob, t.pos_off), n = t.n_ctx * d)])
     }
     delete slab16
-    delete rows_f
     return !r.oom
 }
 
@@ -2462,15 +2405,14 @@ def private vulkan_audio_conv_front(t : AudioTower; var s : EncoderState; mel : 
         }
     }
     let skey = VTA_CONV2_KEY + int(tc_d)
-    if (!key_exists(r.sets_front, skey)) {
+    var s_conv2 = cached(r.sets_front, skey) $() : VkDescriptorSet {
         let bxh = (r.cap_rows + TILE_READ_SLACK) * max(r.d, r.ff) * 2l
-        r.sets_front[skey] = cm2_cls_set(int(KqFmt.q8), tc_d, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.xh_dev, r.x_dev),
+        return cm2_cls_set(int(KqFmt.q8), tc_d, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.xh_dev, r.x_dev),
             fixed_array(r.wq_bytes, r.ws_bytes, r.meta_bytes, bxh, r.cap_rows * d * 4l), fixed_array(0u, 0u, 0u, VT_XQ, VT_X))
     }
-    var s_conv2 = r.sets_front[skey]
     var mp = unsafe(reinterpret<uint?>(r.meta.mapped))
     var cur = 4l
-    let map_off = vt_sched_map(mp, cur, 0l, t.conv2_w_off / kq_elems(KqFmt.q8), vt_tile_rows(VtTile(v = 0, tc = tc_d), tt), g_d)
+    let map_off = batch_sched_map(mp, cur, 0l, t.conv2_w_off / kq_elems(KqFmt.q8), vt_tile_rows(VtTile(v = 0, tc = tc_d), tt), g_d)
     upload_region_at(r.fxin_dev, 0l, unsafe(addr<uint8 const?>(mel.data[0])), nm * tin * 4l)
     let act = t.gelu_tanh ? BIAS_ACT_GELU_TANH : BIAS_ACT_GELU_ERF
     let bx = tt * d * 4l
@@ -2622,18 +2564,14 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
         vt_sets_q3v(r)
     }
     vt_bind_tile_sets(r, VtTile(v = v, tc = 0l), VtTile(v = vff, tc = 0l), VtTile(v = vqkv, tc = 0l))
-    g_vt_maps |> reserve(nrec)
-    g_vt_maps |> resize(nrec)
-    var mp = unsafe(reinterpret<uint?>(r.meta.mapped))
-    var cur = nrec * 4l
     var recs : VtRegion[int(QWEN3V_GEMMS)]
     let rec_groups = fixed_array(g_qkv, g_d, g_ff, g_d)
-    for (l in range64(t.n_layer)) {
-        vt_q3v_regions(t, l, recs)
-        for (g in range64(QWEN3V_GEMMS)) {
-            let rid = l * QWEN3V_GEMMS + g
-            g_vt_maps[rid] = vt_sched_map(mp, cur, rid, recs[g].woff / q8e, npos, rec_groups[g])
+    vt_sched_walk(g_vt_maps, r.meta, nrec) $(rid : int64) : VtSchedRec {
+        let g = rid % QWEN3V_GEMMS
+        if (g == 0l) {
+            vt_q3v_regions(t, rid / QWEN3V_GEMMS, recs)
         }
+        return VtSchedRec(wblk0 = recs[g].woff / q8e, rows = npos, groups = rec_groups[g])
     }
     let bx = npos * d * 4l
     let half = hs / 2l
@@ -2658,8 +2596,8 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
     var pc_pad_qkv = TowerRestrideArgs(rows = uint(npos), rows_pad = uint(npos_pad), nheads = uint(t.n_head), hs = uint(hs), hsp = uint(hsp), sstride = uint(3l * d), soff = 0u)
     var pc_unpad = TowerRestrideArgs(rows = uint(npos), rows_pad = uint(npos_pad), nheads = uint(t.n_head), hs = uint(hs), hsp = uint(hsp), sstride = uint(d), soff = 0u)   //! the attention rows are d-wide
     var pc_rope = RopeTabArgs(rows = uint(npos), qs = uint(3l * d), col = 0u, d = uint(t.n_head * hs), dh = uint(hs), coff = 0u, soff = 0u)
-    var pc_rq = TowerClampRqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
-    var pc_rqh = TowerClampRqArgs(inbase = 0u, nblk = uint(nff / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+    var pc_rq = RqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
+    var pc_rqh = RqArgs(inbase = 0u, nblk = uint(nff / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
     var pc_gqkv = BatchArgs(n = uint(d), d = uint(3l * d), map_off = 0u)
     var pc_gd = BatchArgs(n = uint(d), d = uint(d), map_off = 0u)
     var pc_gff = BatchArgs(n = uint(d), d = uint(ff), map_off = 0u)
@@ -2671,7 +2609,7 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
             let o = qwen3v_block_offs(t, l)
             let rb = l * QWEN3V_GEMMS
             if (l == 0l) {
-                var pc = TowerLnArgs(d = uint(d), rows = uint(npos), woff = uint(o.ln1_w - norms_base), boff = uint(o.ln1_b - norms_base), eps = t.eps)
+                var pc = TowerLnArgs(d = uint(d), rows = uint(npos), eps = t.eps, ln_on = 1u, lnoff = uint(o.ln1_w - norms_base), lnboff = uint(o.ln1_b - norms_base))
                 enc_tower_ln_cls(raw, h, r.s_ln, pc, npos)
             }
             enc_tower_clamp_rq_cls(raw, h, r.s_rq_xb, pc_rq, wg_nd)
@@ -2727,7 +2665,7 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
         }
     }
     if (nds > 0l) {
-        vt_readback_copy(s.ds_xtaps, r.host, nds * bx, bx)
+        host_buf_read(r.host, unsafe(addr<void?>(s.ds_xtaps[0])), nds * bx, bx)
     }
     return vt_served(r, s.x, bx, npos, t.n_layer)
 }
@@ -2762,7 +2700,7 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
         return vt_decline(r, VulkanTowerDecline.shape)
     }
     let fa_ok = fa_stamp_ensure(khr, hsp, false, false, false, false, true)
-    if (!fa_ok || !f16_gemm_ensure(gemm_khr) || !ensure_tower_clamp_cvt_cls() || !ensure_tower_rms_cls() || !ensure_tower_bias_act_cls()
+    if (!fa_ok || !f16_gemm_ensure(gemm_khr) || !ensure_tower_clamp_cvt_cls() || !ensure_hc_norm_cls() || !ensure_tower_bias_act_cls()
             || !ensure_tower_rope_tab_cls() || !ensure_tower_hpad_cls() || !ensure_tower_hpad16_cls() || !ensure_tower_hunpad_cls()
             || !ensure_tower_win_attn_cls() || !ensure_tower_post_add_rms_cls() || !ensure_actf16_b_cls()) {
         return vt_decline(r, VulkanTowerDecline.device)
@@ -2814,8 +2752,8 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
             let o = qwen25v_block_offs(t, l)
             let full = qwen25v_layer_full(t, l)
             if (l == 0l) {
-                var pc = TowerRowArgs(d = uint(d), rows = uint(npos), woff = uint(o.ln1_w - norms_base), eps = t.eps)
-                enc_tower_rms_cls(raw, h, r.s_rms, pc, npos)
+                var pc = tower_rms_args(uint(d), uint(o.ln1_w - norms_base), t.eps)
+                enc_hc_norm_cls(raw, h, r.s_rms, pc, npos)
             }
             vt_cvt16(raw, h, r.s_cvt_xb, nd)
             pc_gd.woff = uint(o.w[QWEN25V_GEMM_Q] - w_off)
@@ -2912,7 +2850,7 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
         return vt_decline(r, VulkanTowerDecline.shape)
     }
     let fa_ok = fa_stamp_ensure(khr, hs, false, false, false, false, true)
-    if (!fa_ok || !ensure_tower_rms_cls() || !ensure_tower_clamp_cls() || !ensure_tower_clamp_rq_cls() || !ensure_tower_rope2d_cls()
+    if (!fa_ok || !ensure_hc_norm_cls() || !ensure_tower_clamp_cls() || !ensure_tower_clamp_rq_cls() || !ensure_tower_rope2d_cls()
             || !ensure_tower_post_add_cls() || !ensure_tower_geglu_cls() || !ensure_tower_clamp_cvt_cls()) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
@@ -2937,18 +2875,13 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
         vt_sets_g4v(r)
     }
     vt_bind_tile_sets(r, VtTile(v = v, tc = 0l), VtTile(v = vff, tc = 0l))
-    g_vt_maps |> reserve(nrec)
-    g_vt_maps |> resize(nrec)
-    unsafe {
-        var mp = reinterpret<uint?>(r.meta.mapped)
-        var cur = nrec * 4l
-        for (l in range64(t.n_layer)) {
-            let o = gemma4v_block_offs(t, l)
-            for (g in range64(GEMMA4V_GEMMS)) {
-                let rid = l * GEMMA4V_GEMMS + g
-                g_vt_maps[rid] = vt_sched_map(mp, cur, rid, o.w[g] / q8e, npos, g == GEMMA4V_GEMM_GATE || g == GEMMA4V_GEMM_UP ? g_ff : g_d)
-            }
+    var sched_o = gemma4v_block_offs(t, 0l)
+    vt_sched_walk(g_vt_maps, r.meta, nrec) $(rid : int64) : VtSchedRec {
+        let g = rid % GEMMA4V_GEMMS
+        if (g == 0l) {
+            sched_o = gemma4v_block_offs(t, rid / GEMMA4V_GEMMS)
         }
+        return VtSchedRec(wblk0 = sched_o.w[g] / q8e, rows = npos, groups = g == GEMMA4V_GEMM_GATE || g == GEMMA4V_GEMM_UP ? g_ff : g_d)
     }
     let pairs = hs / 4l
     g_vt_rope2d_tabs |> reserve(npos * 4l * pairs)
@@ -2981,19 +2914,19 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
             let cd = gemma4v_clamp_at(t, o.clamp[GEMMA4V_GEMM_DOWN])
             let rb = l * GEMMA4V_GEMMS
             if (l == 0l) {
-                var pc = TowerRowArgs(d = uint(d), rows = uint(npos), woff = uint(o.ln1 - norms_base), eps = t.eps)
-                enc_tower_rms_cls(raw, h, r.s_rms, pc, npos)
+                var pc = tower_rms_args(uint(d), uint(o.ln1 - norms_base), t.eps)
+                enc_hc_norm_cls(raw, h, r.s_rms, pc, npos)
             }
             let tile = VtTile(v = v, tc = 0l)
             vt_mm_clamped(raw, h, cq, r.s_rq_xb, nd, r.s_q, tile, d, d, g_vt_maps[rb + GEMMA4V_GEMM_Q], g_d, r.s_clamp_q, nd)
             vt_mm_clamped(raw, h, ck, r.s_rq_xb, nd, r.s_k, tile, d, d, g_vt_maps[rb + GEMMA4V_GEMM_K], g_d, r.s_clamp_k, nd)
             vt_mm_clamped(raw, h, cv, r.s_rq_xb, nd, r.s_v, tile, d, d, g_vt_maps[rb + GEMMA4V_GEMM_V], g_d, r.s_clamp_v, nd)
-            var pc_h = TowerRowArgs(d = uint(hs), rows = uint(npos * t.n_head), woff = uint(o.q_norm - norms_base), eps = t.eps)
-            enc_tower_rms_cls(raw, h, r.s_hrms_q, pc_h, npos * t.n_head)
+            var pc_h = tower_rms_args(uint(hs), uint(o.q_norm - norms_base), t.eps)
+            enc_hc_norm_cls(raw, h, r.s_hrms_q, pc_h, npos * t.n_head)
             pc_h.woff = uint(o.k_norm - norms_base)
-            enc_tower_rms_cls(raw, h, r.s_hrms_k, pc_h, npos * t.n_head)
+            enc_hc_norm_cls(raw, h, r.s_hrms_k, pc_h, npos * t.n_head)
             pc_h.woff = uint(r.ones_off)
-            enc_tower_rms_cls(raw, h, r.s_hrms_v, pc_h, npos * t.n_head)
+            enc_hc_norm_cls(raw, h, r.s_hrms_v, pc_h, npos * t.n_head)
             enc_tower_rope2d_cls(raw, h, r.s_rope_q, pc_rope, wg_rope)
             enc_tower_rope2d_cls(raw, h, r.s_rope_k, pc_rope, wg_rope)
             vt_cvt16(raw, h, r.s_cvt_k, nd)
@@ -3003,7 +2936,7 @@ def private vulkan_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos :
             var pc_post = TowerLnArgs(d = uint(d), rows = uint(npos), woff = uint(o.attn_post - norms_base), boff = 0u, eps = t.eps, ln_on = 1u,
                 lnoff = uint(o.ln2 - norms_base), lnboff = 0u, ascale = 1.0)
             enc_tower_post_add_cls(raw, h, r.s_post_o, pc_post, npos)
-            var pc_rq = TowerClampRqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = vt_lo(cg, true), hi = vt_hi(cg, true))
+            var pc_rq = RqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = vt_lo(cg, true), hi = vt_hi(cg, true))
             enc_tower_clamp_rq_cls(raw, h, r.s_rq_xb, pc_rq, wg_nd)
             pc_gff.map_off = g_vt_maps[rb + GEMMA4V_GEMM_GATE]
             q8_batch_cls_enc(vff, raw, h, r.s_hg, pc_gff, g_ff)
@@ -3221,16 +3154,15 @@ def private vulkan_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; 
             return vt_decline(r, VulkanTowerDecline.memory)
         }
     }
-    if (!key_exists(r.sets_rel_proj, int(tc))) {
+    var s_cout = cached(r.sets_rel_proj, int(tc)) $() : VkDescriptorSet {
         let bfeat = (r.cap_rows + TILE_READ_SLACK) * featw * 2l
-        r.sets_rel_proj[int(tc)] = cm2_cls_set(int(KqFmt.q8), tc, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.ffeat_dev, r.fx_dev),
+        return cm2_cls_set(int(KqFmt.q8), tc, fixed_array(r.wq_dev, r.ws_dev, r.meta.buf, r.ffeat_dev, r.fx_dev),
             fixed_array(r.wq_bytes, r.ws_bytes, r.meta_bytes, bfeat, r.cap_rows * d * 4l), fixed_array(0u, 0u, 0u, VTF_FEAT, VTF_X))
     }
-    var s_cout = r.sets_rel_proj[int(tc)]
     let g_cout = cm2_tiles_at(d, npos, tc)
     var mp = unsafe(reinterpret<uint?>(r.meta.mapped))
     var cur = 4l
-    let map_off = vt_sched_map(mp, cur, 0l, t.cout_w_off / kq_elems(KqFmt.q8), npos, g_cout)
+    let map_off = batch_sched_map(mp, cur, 0l, t.cout_w_off / kq_elems(KqFmt.q8), npos, g_cout)
     let xin_n = QWEN3A_CHUNK * nm
     g_vt_q3a_xin |> reserve(n_chunks * xin_n)
     g_vt_q3a_xin |> resize(n_chunks * xin_n)
@@ -3270,7 +3202,7 @@ def private vulkan_q3a_front(t : Qwen3aTower; win : MelChunk; n_chunks : int64; 
         cmd_copy_range(raw, r.fx_dev, 0l, r.host.buf, 0l, bx)
         vt_pt(raw, VtProfRole.copy_out)
     }
-    vt_readback_copy(s.x, r.host, bx)
+    host_buf_read(r.host, unsafe(addr<void?>(s.x[0])), bx)
     g_vt_convs += n_chunks
     vt_announce(r)
     return true
@@ -3429,16 +3361,15 @@ def private vulkan_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len
             return -1l
         }
     }
-    if (!key_exists(r.sets_front, int(tc))) {
+    var s_in = cached(r.sets_front, int(tc)) $() : VkDescriptorSet {
         let cap2 = (r.front_cap - 1l) / 4l + 1l
-        r.sets_front[int(tc)] = cm2_cls_set(int(KqFmt.q8), tc, fixed_array(r.wq_dev, r.ws_dev, r.fmeta.buf, r.ffeat_dev, r.fx_dev),
+        return cm2_cls_set(int(KqFmt.q8), tc, fixed_array(r.wq_dev, r.ws_dev, r.fmeta.buf, r.ffeat_dev, r.fx_dev),
             fixed_array(r.wq_bytes, r.ws_bytes, r.fmeta_bytes, (cap2 + TILE_READ_SLACK) * feat * 2l, cap2 * d * 4l), fixed_array(0u, 0u, 0u, VTF_FEAT, VTF_X))
     }
-    var s_in = r.sets_front[int(tc)]
     let g_in = cm2_tiles_at(d, npos, tc)
     var mp = unsafe(reinterpret<uint?>(r.fmeta.mapped))
     var cur = 4l
-    let map_off = vt_sched_map(mp, cur, 0l, t.inproj_w / kq_elems(KqFmt.q8), npos, g_in)
+    let map_off = batch_sched_map(mp, cur, 0l, t.inproj_w / kq_elems(KqFmt.q8), npos, g_in)
     upload_region_at(r.fxin_dev, 0l, unsafe(addr<uint8 const?>(s.xw[0])), n_len * n_fft * 4l)
     let bx = npos * d * 4l
     vt_chain_one_shot("gemma4a-front", 2l, npos) $(raw : VkCommandBuffer; var h : VkHaz) {
@@ -3477,7 +3408,7 @@ def private vulkan_gemma4a_chunk(t : Gemma4aEncoder; var s : Gemma4aState; n_len
         vt_pt(raw, VtProfRole.copy_out)
     }
     ensure_length(s.x, npos * d)
-    vt_readback_copy(s.x, r.fhost, bx)
+    host_buf_read(r.fhost, unsafe(addr<void?>(s.x[0])), bx)
     g_vt_convs++
     if (!vulkan_gemma4a_blocks(t, s, npos)) {
         return -1l
@@ -3592,7 +3523,7 @@ def private vt_cn_front_scratch(var r : VtResident; t : CanaryEncoder; cap : int
 
 //! the front's cm2 GEMM set of one stage (the pointwise convs into y3 and y6, the input projection into x) at a token column
 def private vt_cn_front_set(var r : VtResident; stage : int; tc : int64; y_dev : uint64; y_bytes : int64; y_bit : uint) : VkDescriptorSet {
-    return vt_cached(r.sets_front, stage * VT_CN_FRONT_KEY + int(tc)) $() : VkDescriptorSet {
+    return cached(r.sets_front, stage * VT_CN_FRONT_KEY + int(tc)) $() : VkDescriptorSet {
         return cm2_cls_set(int(KqFmt.q8), tc, fixed_array(r.wq_dev, r.ws_dev, r.fmeta.buf, r.fcn_feed16_dev, y_dev),
             fixed_array(r.wq_bytes, r.ws_bytes, r.fmeta_bytes, r.fh_bytes, y_bytes), fixed_array(0u, 0u, 0u, VTF_H, y_bit))
     }
@@ -3668,9 +3599,9 @@ def private vulkan_canary_front(t : CanaryEncoder; var s : CanaryState) : int64 
     let q8e = kq_elems(KqFmt.q8)
     var mp = unsafe(reinterpret<uint?>(r.fmeta.mapped))
     var cur = 12l
-    let map3 = vt_sched_map(mp, cur, 0l, t.c3_w / q8e, rows2, g_pw3)
-    let map6 = vt_sched_map(mp, cur, 1l, t.c6_w / q8e, rows3, g_pw6)
-    let mapx = vt_sched_map(mp, cur, 2l, t.pre_w / q8e, tt, g_pre)
+    let map3 = batch_sched_map(mp, cur, 0l, t.c3_w / q8e, rows2, g_pw3)
+    let map6 = batch_sched_map(mp, cur, 1l, t.c6_w / q8e, rows3, g_pw6)
+    let mapx = batch_sched_map(mp, cur, 2l, t.pre_w / q8e, tt, g_pre)
     upload_region_at(r.fxin_dev, 0l, unsafe(addr<uint8 const?>(s.xw[0])), n_len * n_fft * 4l)
     let bx = tt * d * 4l
     vt_chain_one_shot("canary-front", 3l, tt) $(raw : VkCommandBuffer; var h : VkHaz) {
@@ -3725,7 +3656,7 @@ def private vulkan_canary_front(t : CanaryEncoder; var s : CanaryState) : int64 
         vt_pt(raw, VtProfRole.copy_out)
     }
     ensure_length(s.x, tt * d)
-    vt_readback_copy(s.x, r.fhost, bx)
+    host_buf_read(r.fhost, unsafe(addr<void?>(s.x[0])), bx)
     g_vt_convs++
     return tt
 }
@@ -3796,7 +3727,7 @@ def private vulkan_q3a_mel(xw : array<float>; n_len, n_fft, n_bins, n_mel : int6
         cmd_copy_range(raw, r.yo_dev, 0l, r.host.buf, 0l, bout)
         vt_pt(raw, VtProfRole.copy_out)
     }
-    vt_readback_copy(m.data, r.host, bout)
+    host_buf_read(r.host, unsafe(addr<void?>(m.data[0])), bout)
     vt_announce(r)
     g_vt_mels++
     return true

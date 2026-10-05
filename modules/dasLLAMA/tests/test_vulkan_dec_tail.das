@@ -6,17 +6,18 @@ module test_vulkan_dec_tail
 
 require dastest/testing_boost public
 require dasllama/dasllama_math
+require dasllama/dasllama_gpu_math
 require dasllama/dasllama_rope
 require dasllama/dasllama_common   // MoeGate, select_decode_override
 require dasllama/dasllama_blocks   // registers the vulkan_moe_span decode override at init
 require dasllama/dasllama_moe   // moe_select_core: the host select the span's device top-k mirrors
 require ?vulkan dasllama/dasllama_math_vulkan  // the decode attention block + FFN tail under test; the test installs the hooks explicitly (no env gate)
 require ?vulkan dasllama/dasllama_vulkan_decode   // vk_span_reset: the span records once per model, so the second span cell forgets the first's record
-require daslib/f16_cvt
 require math
 require _vk_kq_fixtures
 require _kq_fixtures   // q8_roundtrip: the feeds and requants the device quantizes, through the engine's quantizers
 require _compares
+require _kernel_oracles
 require _attn_oracle   // attn_row_oracle: the block reference's softmax rows
 
 //! The per-op tier's decode attention block and the decode FFN tail against a CPU reference:
@@ -58,14 +59,10 @@ def private fill_norm(var w : array<float>; n : int64; phase : float) {
 
 // y = W x over `rows` rows of width n (row-major dequantized plane)
 def private gemv_ref(w : array<float>; rows, n : int64; x : array<float>; var y : array<float>) {
-    y |> resize(rows)
-    for (r in range64(rows)) {
-        var acc = 0.0
-        for (c in range64(n)) {
-            acc += w[r * n + c] * x[c]
-        }
-        y[r] = acc
-    }
+    var r <- dense_ref_rows(w, x, 1, int(n), int(rows))
+    delete y
+    y <- r.want
+    delete r
 }
 
 //! the device's feed: rms-normed, then quantized in the plane's acts form (Q8_0 for q8 planes, Q8_K for K-quant ones)
@@ -76,25 +73,10 @@ def private feed_ref(x : array<float>; wn : array<float>; fmt : int) : Q8Round {
     return <- q8_roundtrip(xb, N, fmt != 0)
 }
 
-// the device rope's two pairings: neox rotates (j, j + half), the classic form (2j, 2j + 1)
-def private rope_ref(var v : array<float>; nheads : int64; cossin : array<float>; neox : bool) {
-    unsafe {
-        let cosrow = addr<float const?>(cossin[0])
-        let sinrow = addr<float const?>(cossin[HS / 2l])
-        if (neox) {
-            rope_scaled_neox_tab(addr<float?>(v[0]), HS, nheads * HS, cosrow, sinrow)
-        } else {
-            rope_scaled_tab(addr<float?>(v[0]), HS, nheads * HS, cosrow, sinrow)
-        }
-    }
-}
-
 // one head group's decode attention over the f16 mirror rows [0, cnt)
 def private attn_ref(q : array<float>; kmir, vmir : array<float>; cnt : int64; var y : array<float>) {
     y |> resize(QD)
-    for (h in range64(NH)) {
-        attn_row_oracle(q, int(h * HS), kmir, 0, vmir, 0, int(KVD), int(h), int(HS), int(KVM), int(cnt), ATTN_SCALE, y, int(h * HS))
-    }
+    attn_heads_oracle(q, 0, kmir, 0, vmir, 0, int(KVD), int(NH), int(HS), int(KVM), int(cnt), ATTN_SCALE, y, 0)
 }
 
 //! `got` against a non-trivial reference row at ROW_BAR
@@ -137,19 +119,6 @@ struct private Ffn {
     rw : array<float>
 }
 
-// one plane in the quad's format, uploaded at woff and dequantized; false = the upload was refused
-def private plane_up(fmt : int; rows, n, seed, woff : int64; var w : array<float>) : bool {
-    var wqb : array<uint8>
-    var wsb : array<uint8>
-    if (fmt == 0) {
-        fill_q8_stack(rows, n, seed, wqb, wsb, w)
-    } else {
-        fill_kq_stack(fmt, rows, n, seed, true, wqb, wsb)
-        dequant_kq_stack(fmt, wqb, wsb, rows, n, w)
-    }
-    return moe_gpu_upload_stack(wqb, wsb, woff, n, rows, fmt)
-}
-
 //! one attention quad's four planes, uploaded and dequantized; false = no device, hasb = the quad carries bias rows
 def private quad_up(var q : Quad; fmt : int; base : int64; seed : int64; phase : float; neox, hasb : bool) : bool {
     q.fmt = fmt
@@ -178,26 +147,14 @@ def private quad_up(var q : Quad; fmt : int; base : int64; seed : int64; phase :
 // the expert stacks: gate/up k4 over N, down k6 over NFE; expert e's plane starts at e * NFE * N;
 // slot j routes expert j
 def private ffn_up(t : T?; var f : Ffn; base_slot : int64 = 30l) : bool {
-    var wq1 : array<uint8>
-    var ws1 : array<uint8>
-    var wq3 : array<uint8>
-    var ws3 : array<uint8>
-    var wq2 : array<uint8>
-    var ws2 : array<uint8>
-    fill_kq_stack(1, NE * NFE, N, 41l, true, wq1, ws1)
-    fill_kq_stack(1, NE * NFE, N, 43l, true, wq3, ws3)
-    fill_kq_stack(3, NE * N, NFE, 47l, false, wq2, ws2)
     let woff1 = base_slot * STRIDE
     let woff3 = (base_slot + 1l) * STRIDE
     let woff2 = (base_slot + 2l) * STRIDE
-    if (!moe_gpu_upload_stack(wq1, ws1, woff1, N, NE * NFE, 1)) {
+    if (!plane_up(1, NE * NFE, N, 41l, woff1, f.w1)) {
         return false
     }
-    t |> success(moe_gpu_upload_stack(wq3, ws3, woff3, N, NE * NFE, 1), "dec tail: up stack uploaded")
-    t |> success(moe_gpu_upload_stack(wq2, ws2, woff2, NFE, NE * N, 3), "dec tail: down stack uploaded")
-    dequant_kq_stack(1, wq1, ws1, NE * NFE, N, f.w1)
-    dequant_kq_stack(1, wq3, ws3, NE * NFE, N, f.w3)
-    dequant_kq_stack(3, wq2, ws2, NE * N, NFE, f.w2)
+    t |> success(plane_up(1, NE * NFE, N, 43l, woff3, f.w3), "dec tail: up stack uploaded")
+    t |> success(plane_up(3, NE * N, NFE, 47l, woff2, f.w2, false), "dec tail: down stack uploaded")
     fill_norm(f.norm, N, 1.1)
     let ege = NFE * N
     f.offs1 <- [woff1, 0l, 1l, woff1 + ege, 1l, 1l]
@@ -254,8 +211,8 @@ def private block_ref(var q : Quad; x : array<float>; pos : int64; cossin : arra
             vr[i] += q.bv[i]
         }
     }
-    rope_ref(qr, NH, cossin, q.neox)
-    rope_ref(kr, 1l, cossin, q.neox)
+    rope_tab_ref(qr, 0, int(HS), 0, int(NH * HS), q.neox, cossin, cossin, 0, int(HS / 2l))
+    rope_tab_ref(kr, 0, int(HS), 0, int(HS), q.neox, cossin, cossin, 0, int(HS / 2l))
     for (i in range64(KVD)) {
         q.kmir[pos * KVD + i] = f16r(kr[i])
         q.vmir[pos * KVD + i] = f16r(vr[i])
@@ -330,6 +287,19 @@ def private token_cell(t : T?; var qa : Quad; var qb : Quad; f : Ffn; pos : int6
     held_row(t, "{tag} pos {pos} layer B raw k row", kout, krawb_ref)
 }
 
+//! a fresh claim with both layers hydrated empty and serving position 0 after; with `unseen` (two layers the block has not
+//! seen) each asks for its hydrate at position 0 first (zero rows create it), the second still asking after the first one's; the claim
+def private claim_hydrated(t : T?; qa, qb : Quad; tag : string; unseen : bool = true) : int64 {
+    let gen = moe_gpu_attn_dec_claim(true)
+    t |> success(!unseen || moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 0l, gen) == DAT_HYDRATE, "{tag}: an unseen layer asks for a hydrate at position 0")
+    matmul_moe_gpu_attn_dec_hydrate(qa.woq, qa.fmt, null, null, 0l, KVD, true)
+    t |> success(!unseen || moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 0l, gen) == DAT_HYDRATE, "{tag}: the second layer is still unseen after the first one's hydrate")
+    matmul_moe_gpu_attn_dec_hydrate(qb.woq, qb.fmt, null, null, 0l, KVD, true)
+    t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 0l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 0l, gen) == DAT_SERVE,
+        "{tag}: both layers serve position 0 after the empty hydrates")
+    return gen
+}
+
 //! two layers whose q planes sit at ONE offset in two format planes (a mixed-format file's shape): the block keys a layer by
 //! its offset under its format, so each layer serves its own quad and mirror; false = no device
 def private collide_cell(t : T?; f : Ffn; base : int64; tag : string) : bool {
@@ -339,13 +309,7 @@ def private collide_cell(t : T?; f : Ffn; base : int64; tag : string) : bool {
         return false
     }
     t |> success(quad_up(qb, 0, base, 63l, 0.8, true, false), "{tag}: the q8 quad uploaded at the k4 quad's offset")
-    let gen = moe_gpu_attn_dec_claim(true)
-    matmul_moe_gpu_attn_dec_hydrate(qa.woq, qa.fmt, null, null, 0l, KVD, true)
-    t |> success(moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 0l, gen) == DAT_HYDRATE, "{tag}: the second layer at the shared offset is still unseen after the first one's hydrate")
-    matmul_moe_gpu_attn_dec_hydrate(qb.woq, qb.fmt, null, null, 0l, KVD, true)
-    t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 0l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 0l, gen) == DAT_SERVE,
-        "{tag}: both layers serve position 0")
-    two_positions(t, qa, qb, f, gen, tag)
+    two_positions(t, qa, qb, f, claim_hydrated(t, qa, qb, tag), tag)
     return true
 }
 
@@ -366,14 +330,7 @@ def private pair_cell(t : T?; f : Ffn; fmt : int; base : int64; tag : string; ne
         return false
     }
     t |> success(quad_up(qb, fmt, base + 10l * STRIDE, 33l + int64(fmt), 0.7, neox, hasb), "{tag}: layer B's quad uploaded")
-    let gen = moe_gpu_attn_dec_claim(true)
-    // a layer the block has never seen hydrates first (zero rows at position 0 creates it), then serves
-    t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 0l, gen) == DAT_HYDRATE, "{tag}: an unseen layer asks for a hydrate at position 0")
-    matmul_moe_gpu_attn_dec_hydrate(qa.woq, qa.fmt, null, null, 0l, KVD, true)
-    matmul_moe_gpu_attn_dec_hydrate(qb.woq, qb.fmt, null, null, 0l, KVD, true)
-    t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 0l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 0l, gen) == DAT_SERVE,
-        "{tag}: both layers serve position 0 after the empty hydrate")
-    two_positions(t, qa, qb, f, gen, tag)
+    two_positions(t, qa, qb, f, claim_hydrated(t, qa, qb, tag), tag)
     // the hydrate arms: a fresh claim empties both mirrors; A refills from f32 rows, B from f16 rows
     let gen2 = moe_gpu_attn_dec_claim(true)
     t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 2l, gen2) == DAT_HYDRATE, "{tag}: a fresh claim empties the mirrors - position 2 asks for a hydrate")
@@ -382,12 +339,8 @@ def private pair_cell(t : T?; f : Ffn; fmt : int; base : int64; tag : string; ne
     kb |> resize(2l * KVD * 2l)
     vb |> resize(2l * KVD * 2l)
     for (i in range64(2l * KVD)) {
-        let hk = f32_to_f16(qb.kmir[i])
-        let hv = f32_to_f16(qb.vmir[i])
-        kb[i * 2l] = uint8(hk & 0xFFu)
-        kb[i * 2l + 1l] = uint8((hk >> 8u) & 0xFFu)
-        vb[i * 2l] = uint8(hv & 0xFFu)
-        vb[i * 2l + 1l] = uint8((hv >> 8u) & 0xFFu)
+        put_f16(kb, i * 2l, qb.kmir[i])
+        put_f16(vb, i * 2l, qb.vmir[i])
     }
     unsafe {
         matmul_moe_gpu_attn_dec_hydrate(qa.woq, qa.fmt, addr<uint8 const?>(qa.kmir[0]), addr<uint8 const?>(qa.vmir[0]), 2l, KVD, false)
@@ -401,35 +354,19 @@ def private pair_cell(t : T?; f : Ffn; fmt : int; base : int64; tag : string; ne
 
 // the reference routed FFN over a host-selected slot list (the span's device router + top-k
 // picks) onto the residual row - ffn_ref over (idx, w) instead of the fixed pair
+//! expert `e`'s FFN row over the feed `fd`, its hidden row through the engine's requant (Q8_K under `qk`, else Q8_0)
+def private expert_ffn_ref(w1, w3, w2, fd : array<float>; e : int64; qk : bool) : array<float> {
+    var d <- ffn_expert_ref(w1, w3, w2, fd, 1, int(N), int(NFE), int(e * NFE), int(e * NFE), int(e * N)) $(var h) {
+        q8_round_deq(h, qk)
+    }
+    return <- d
+}
+
 def private ffn_ref_sel(f : Ffn; fd : array<float>; idx : array<int64>; w : array<float>; var x1 : array<float>) {
-    let ege = NFE * N
     var acc : array<float>
     acc |> resize(N)
-    var wsl : array<float>
-    wsl |> resize(NFE * N)
     for (j in range64(K)) {
-        let e = idx[j]
-        var gg : array<float>
-        var u : array<float>
-        for (i in range64(NFE * N)) {
-            wsl[i] = f.w1[e * ege + i]
-        }
-        gemv_ref(wsl, NFE, N, fd, gg)
-        for (i in range64(NFE * N)) {
-            wsl[i] = f.w3[e * ege + i]
-        }
-        gemv_ref(wsl, NFE, N, fd, u)
-        var hrow : array<float>
-        hrow |> resize(NFE)
-        for (i in range64(NFE)) {
-            hrow[i] = silu(gg[i]) * u[i]
-        }
-        let hr <- q8_roundtrip(hrow, NFE, true)
-        for (i in range64(N * NFE)) {
-            wsl[i] = f.w2[e * ege + i]
-        }
-        var d : array<float>
-        gemv_ref(wsl, N, NFE, hr.deq, d)
+        let d <- expert_ffn_ref(f.w1, f.w3, f.w2, fd, idx[j], true)
         for (i in range64(N)) {
             acc[i] += w[j] * d[i]
         }
@@ -572,22 +509,11 @@ def private span_layer_ref_sh(var q : Quad; f : Ffn; sh : Shexp; router : array<
     for (i in range64(N)) {
         gl += sh.gate[li * N + i] * r.xb[i]
     }
-    let g = gated ? 1.0 / (1.0 + exp(-gl)) : 1.0
+    let g = gated ? sigmoid_f32(gl) : 1.0
     let fd <- feed_ref(x, f.norm, 1)
     let fd0 <- feed_ref(x, f.norm, 0)
     ffn_ref_sel(f, fd.deq, r.idx, r.w, x)
-    var gg : array<float>
-    var u : array<float>
-    gemv_ref(sh.w1, NFE, N, fd0.deq, gg)
-    gemv_ref(sh.w3, NFE, N, fd0.deq, u)
-    var hrow : array<float>
-    hrow |> resize(NFE)
-    for (i in range64(NFE)) {
-        hrow[i] = silu(gg[i]) * u[i]
-    }
-    let hr <- q8_roundtrip(hrow, NFE, false)
-    var d : array<float>
-    gemv_ref(sh.w2, N, NFE, hr.deq, d)
+    let d <- expert_ffn_ref(sh.w1, sh.w3, sh.w2, fd0.deq, 0l, false)
     for (i in range64(N)) {
         x[i] += g * d[i]
     }
@@ -617,9 +543,7 @@ def test_vulkan_dec_span_cache(t : T?) {
 [test]
 def test_vulkan_dec_span(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
-        set_moe_gpu_attn_dec_hooks(@@vk_moe_attn_dec, @@vk_moe_attn_dec_ok, @@vk_moe_attn_dec_claim, @@vk_moe_attn_dec_hydrate)
-        set_moe_gpu_span_dec_hook(@@vk_moe_span_dec)
+        install_vk_moe_hooks()
         var f : Ffn
         if (!ffn_up(t, f)) {
             t |> skip("dec span: no Vulkan device (or probe/budget refused the upload)")
@@ -629,11 +553,7 @@ def test_vulkan_dec_span(t : T?) {
         var qb : Quad
         t |> success(quad_up(qa, 1, 60l * STRIDE, 51l, 0.4, true, false), "dec span: layer A's quad uploaded")
         t |> success(quad_up(qb, 1, 70l * STRIDE, 63l, 0.8, true, false), "dec span: layer B's quad uploaded")
-        let gen = moe_gpu_attn_dec_claim(true)
-        matmul_moe_gpu_attn_dec_hydrate(qa.woq, qa.fmt, null, null, 0l, KVD, true)
-        matmul_moe_gpu_attn_dec_hydrate(qb.woq, qb.fmt, null, null, 0l, KVD, true)
-        t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 0l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 0l, gen) == DAT_SERVE,
-            "dec span: both layers serve position 0")
+        let gen = claim_hydrated(t, qa, qb, "dec span")
         var sp <- span_planes(qa, qb, f)
         var a <- span_args(qa, qb, f)
         var kout : array<float>
@@ -670,9 +590,7 @@ def test_vulkan_dec_span(t : T?) {
 def test_vulkan_dec_span_shexp(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         vk_span_reset()   //! the span records once per model: this cell is the second model in the process
-        install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
-        set_moe_gpu_attn_dec_hooks(@@vk_moe_attn_dec, @@vk_moe_attn_dec_ok, @@vk_moe_attn_dec_claim, @@vk_moe_attn_dec_hydrate)
-        set_moe_gpu_span_dec_hook(@@vk_moe_span_dec)
+        install_vk_moe_hooks()
         //! bases past every other cell's (the tail pairs sit at 10-23, 40-53 and 80-93 x STRIDE, the
         //! routed stacks at 30-32, the plain span's quads at 60-73): first-hit stack lookup
         var f : Ffn
@@ -692,11 +610,7 @@ def test_vulkan_dec_span_shexp(t : T?) {
         for (gated in fixed_array(true, false)) {
             vk_span_reset()   //! the record keys on the shared expert's gate: the ungated arm is a new span
             let tag = gated ? "gated" : "ungated"
-            let gen = moe_gpu_attn_dec_claim(true)
-            matmul_moe_gpu_attn_dec_hydrate(qa.woq, qa.fmt, null, null, 0l, KVD, true)
-            matmul_moe_gpu_attn_dec_hydrate(qb.woq, qb.fmt, null, null, 0l, KVD, true)
-            t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 0l, gen) == DAT_SERVE && moe_gpu_attn_dec_ok(qb.woq, qb.fmt, 0l, gen) == DAT_SERVE,
-                "dec span shexp ({tag}): both layers serve position 0")
+            claim_hydrated(t, qa, qb, "dec span shexp ({tag})", false)
             var a <- span_args_sh(qa, qb, f, sh, gated)
             var kout : array<float>
             var vout : array<float>
@@ -729,9 +643,7 @@ def test_vulkan_dec_span_shexp(t : T?) {
 [test]
 def test_vulkan_dec_tail(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
-        set_moe_gpu_attn_dec_hooks(@@vk_moe_attn_dec, @@vk_moe_attn_dec_ok, @@vk_moe_attn_dec_claim, @@vk_moe_attn_dec_hydrate)
-        set_moe_gpu_ffn_tail_hooks(@@vk_moe_ffn_tail, @@vk_moe_ffn_tail_pending)
+        install_vk_moe_hooks()
         var f : Ffn
         if (!ffn_up(t, f)) {
             t |> skip("dec tail: no Vulkan device (or probe/budget refused the upload)")

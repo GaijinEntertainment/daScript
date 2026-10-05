@@ -14,9 +14,5 @@ builds, registers, or runs - a doctest skip, a `#if` a configuration leaves unde
 gate on a build option - names in the PR one configuration that does run that test: its
 configure flags and its ctest command.**
 
-**A diff to `check_lane_wiring` or `builds_nothing_for_its_tests` in `REVIEW.das` keeps the gate
-reporting every `CMakeLists.txt` under this folder that labels a test into a `test-<lane>` target
-the top `CMakeLists.txt` defines, neither defines that target nor names it in
-`add_dependencies(test-<lane> ...)`, and builds something for its tests - a test whose command is
-not `${CMAKE_COMMAND}` or `${CMAKE_CTEST_COMMAND}`, or an `add_executable`, `add_library`,
-`add_custom_target` or `add_custom_command`.**
+**A diff to `REVIEW.das` that weakens `check_lane_wiring` or `builds_nothing_for_its_tests` is
+a defect.** What each gate reports is stated at its definition in `REVIEW.das`.

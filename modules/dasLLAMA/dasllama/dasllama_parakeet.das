@@ -15,6 +15,7 @@ require daslib/apply
 require daslib/archive
 require dasllama/dasllama_env
 require dasllama/dasllama_math
+require dasllama/dasllama_gpu_math
 require dasllama/dasllama_gguf
 require dasllama/dasllama_plane public   // PlaneF/PlaneI8/PlaneI32/PlaneI64 — the borrowed weight planes
 require dasllama/dasllama_asr_types public   // TranscribeSegment/AsrCaps — the shared ASR floor
@@ -1427,7 +1428,7 @@ def private pk_blocks_cpu(m : ParakeetModel; var st : ParakeetState; tt, ww, n_r
                             for (j in range64(d)) {
                                 let sg = hp[t * 2l * d + j]
                                 let gt = hp[t * 2l * d + d + j]
-                                xbp[t * d + j] = sg * (1.0 / (1.0 + exp(-gt)))
+                                xbp[t * d + j] = sg * sigmoid_f32(gt)
                             }
                         }
                     }
@@ -1480,7 +1481,7 @@ def private pk_blocks_cpu(m : ParakeetModel; var st : ParakeetState; tt, ww, n_r
                                     }
                                 }
                                 let bv = acc * scp[j] + shp[j]
-                                aop[t * d + j] = bv * (1.0 / (1.0 + exp(-bv)))   // silu
+                                aop[t * d + j] = bv * sigmoid_f32(bv)   // silu
                             }
                         }
                     }
@@ -1627,9 +1628,9 @@ def private pk_lstm_gates(gp, bp : float const?; var cp, hsp, xp : float?; pd, j
                 j += 4l
         }
         for (jj in range64(max(n4, j0), j1)) {   // scalar tail (pd % 4 != 0 models only)
-            let ig = 1.0 / (1.0 + exp(-(gp[jj] + bp[jj])))
-            let fg = 1.0 / (1.0 + exp(-(gp[pd + jj] + bp[pd + jj])))
-            let og = 1.0 / (1.0 + exp(-(gp[2l * pd + jj] + bp[2l * pd + jj])))
+            let ig = sigmoid_f32(gp[jj] + bp[jj])
+            let fg = sigmoid_f32(gp[pd + jj] + bp[pd + jj])
+            let og = sigmoid_f32(gp[2l * pd + jj] + bp[2l * pd + jj])
             let cg = tanh(gp[3l * pd + jj] + bp[3l * pd + jj])
             let cn = fg * cp[jj] + ig * cg
             cp[jj] = cn

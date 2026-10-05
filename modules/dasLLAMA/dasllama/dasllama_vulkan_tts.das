@@ -389,7 +389,7 @@ def private ts_ln(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; ns : TtsN
 //! layernorm rows from x into y (y may be x) against scale and shift rows at `woff` / `boff` of `wn` (the slab, or the aux rows fc(style) landed in)
 def private ts_ln_at(raw : VkCommandBuffer; var h : VkHaz; wn : TsRows; woff, boff : int64; x, y : TsRows; rows, d : int64; eps : float) {
     var s = set_tower_ln_cls(fixed_array(x.dev, y.dev, wn.dev), fixed_array(x.bytes, y.bytes, wn.bytes), fixed_array(x.bit, y.bit, wn.bit))
-    var pa = TowerLnArgs(d = uint(d), rows = uint(rows), woff = uint(woff), boff = uint(boff), eps = eps, ln_on = 0u, lnoff = 0u, lnboff = 0u, ascale = 1.0)
+    var pa = TowerLnArgs(d = uint(d), rows = uint(rows), eps = eps, ln_on = 1u, lnoff = uint(woff), lnboff = uint(boff))
     enc_tower_ln_cls(raw, h, s, pa, rows)
     vt_pt(raw, VtProfRole.tts_ln)
 }
@@ -503,6 +503,7 @@ def private ts_albert_shape_ok(a : St2Albert; t : int64) : bool {
         && long_length(a.pos_emb.a) >= t * a.emb_dim && long_length(a.type_emb.a) >= a.emb_dim && a.n_layers >= 1l && tts_albert_ok(a))
 }
 
+[hot_path]   //! every PL-BERT chunk re-asks through `ts_arm_ensure`'s invoke, which the perf lint's walk cannot follow - the annotation keeps the chain under the lint
 def private ts_albert_ensure : bool {
     return (ensure_f32_gemm_cls() && ensure_f32_gemm_b_cls() && ensure_tower_ln_cls() && ensure_tower_post_add_ln_cls()
         && ensure_tts_row_gather_cls() && ensure_tts_gelu_tanh_cls() && ensure_tts_attn_cls())
@@ -520,7 +521,7 @@ def private vulkan_styletts2_albert(a : St2Albert; ids : array<int>; @scratch @e
     for (id in ids) {
         return ts_decline("albert", VulkanTtsDecline.shape) if (id < 0 || int64(id + 1) * a.emb_dim > long_length(a.word_emb.a))
     }
-    if (!vulkan_tower_arms() || !ts_albert_ensure()) {
+    if (!ts_arm_ensure("albert", @@ts_albert_ensure)) {
         return ts_decline("albert", VulkanTtsDecline.device)
     }
     let d = a.hidden
@@ -605,6 +606,7 @@ def private ts_text_shape_ok(te : St2TextEncoder; t : int64) : bool {
     return tts_text_ok(te, TS_LSTM_MAX_HIDDEN)
 }
 
+[hot_path]   //! re-asked every chunk through `ts_arm_ensure`'s invoke
 def private ts_text_ensure : bool {
     return (ts_lstm_wg_ok() && ensure_f32_gemm_b_cls() && ensure_tower_ln_cls() && ensure_tts_row_gather_cls() && ensure_tts_leaky_cls()
         && ensure_tts_im2col_cls() && ensure_tts_lstm_dir_cls())
@@ -632,7 +634,7 @@ def private vulkan_styletts2_text(te : St2TextEncoder; ids : array<int>; @scratc
     for (id in ids) {
         return ts_decline("text", VulkanTtsDecline.shape) if (id < 0 || int64(id + 1) * cc > long_length(te.emb.a))
     }
-    if (!vulkan_tower_arms() || !ts_text_ensure()) {
+    if (!ts_arm_ensure("text", @@ts_text_ensure)) {
         return ts_decline("text", VulkanTtsDecline.device)
     }
     let hd = te.lstm.fwd.hidden
@@ -762,6 +764,7 @@ def private ts_add_scale(raw : VkCommandBuffer; var h : VkHaz; a, b, o : TsRows;
     vt_pt(raw, VtProfRole.tts_rows)
 }
 
+[hot_path]   //! re-asked every chunk through `ts_arm_ensure`'s invoke
 def private ts_pred_ensure : bool {
     return (ts_lstm_wg_ok() && ensure_f32_gemm_b_cls() && ensure_tower_ln_cls() && ensure_tts_row_gather_cls() && ensure_tts_im2col_cls() && ensure_tts_lstm_dir_cls()
         && ensure_tts_concat_cls() && ensure_tts_sigsum_cls() && ensure_tts_colpart_sum_cls() && ensure_tts_colpart_sq_cls()
@@ -802,7 +805,7 @@ def private vulkan_styletts2_dur_enc(p : St2Predictor; bert : array<float>; t : 
     if (!ts_dur_enc_shape_ok(p, t, sd) || long_length(bert) < t * hidden) {
         return ts_decline("dur_enc", VulkanTtsDecline.shape)
     }
-    if (!vulkan_tower_arms() || !ts_pred_ensure()) {
+    if (!ts_arm_ensure("dur_enc", @@ts_pred_ensure)) {
         return ts_decline("dur_enc", VulkanTtsDecline.device)
     }
     let hd = cc / 2l
@@ -871,7 +874,7 @@ def private vulkan_styletts2_durations(p : St2Predictor; d : array<float>; t : i
         || speed <= 0.0 || long_length(d) < t * width || !tts_pred_ok(p, TS_LSTM_MAX_HIDDEN)) {
         return ts_decline("durations", VulkanTtsDecline.shape)
     }
-    if (!vulkan_tower_arms() || !ts_pred_ensure()) {
+    if (!ts_arm_ensure("durations", @@ts_pred_ensure)) {
         return ts_decline("durations", VulkanTtsDecline.device)
     }
     var fl : TsFloats
@@ -1127,7 +1130,7 @@ def private vulkan_styletts2_prosody(p : St2Predictor; en : array<float>; cc, fr
     if (tf < 0l || tn < 0l || tf != tn) {
         return ts_decline("prosody", VulkanTtsDecline.shape)
     }
-    if (!vulkan_tower_arms() || !ts_pred_ensure()) {
+    if (!ts_arm_ensure("prosody", @@ts_pred_ensure)) {
         return ts_decline("prosody", VulkanTtsDecline.device)
     }
     let fl = ts_pr_floats(sh, cc, hd, frames)
@@ -1494,6 +1497,7 @@ def private ts_decoder_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows
     }
 }
 
+[hot_path]   //! re-asked every chunk through `ts_arm_ensure`'s invoke
 def private ts_dec_ensure : bool {
     return (ts_pred_ensure() && (!f16_gemm_on() || (ensure_tts_im2col16_cls() && f16_gemm_ensure(f16_gemm_khr()))) && ensure_tower_bias_act_cls()
         && ensure_tts_leaky_cls() && ensure_tts_adain_snake_cls() && ensure_tts_axpy_cls() && ensure_tts_pk_rows_cls() && ensure_tts_src_noise_cls()
@@ -1522,7 +1526,7 @@ def private vulkan_styletts2_decode(d : St2Decoder; text_c : int64; source : Sin
         || long_length(f0) < f2 || long_length(nrg) < f2) {
         return ts_decline("decode", VulkanTtsDecline.shape)
     }
-    if (!vulkan_tower_arms() || !ts_dec_ensure()) {
+    if (!ts_arm_ensure("decode", @@ts_dec_ensure)) {
         return ts_decline("decode", VulkanTtsDecline.device)
     }
     let nh = source.n_harm
@@ -1585,7 +1589,7 @@ def private vulkan_styletts2_generator(d : St2Decoder; x_rows : array<float>; cx
     if (cx % 32l != 0l || !tts_gen_shape(d, cx, t, har_frames, TS_MAX_STAGES, sh) || !tts_dec_ok(d) || long_length(x_rows) < t * cx || long_length(har_spec) < spec_floats) {
         return ts_decline("generator", VulkanTtsDecline.shape)
     }
-    if (!vulkan_tower_arms() || !ts_dec_ensure()) {
+    if (!ts_arm_ensure("generator", @@ts_dec_ensure)) {
         return ts_decline("generator", VulkanTtsDecline.device)
     }
     var fl = ts_gen_floats(d, sh)

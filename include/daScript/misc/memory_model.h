@@ -139,6 +139,8 @@ namespace das {
         Deck *      next = nullptr;
     };
 
+    enum class DeckRelease { keepHead, all };
+
     struct Shoe {
         Shoe () {
             lastChunk = nullptr;
@@ -205,6 +207,24 @@ namespace das {
             for ( int i=0; i!=DAS_MAX_SHOE_CUNKS; ++i ) {
                 if ( chunks[i] ) chunks[i]->beforeGC();
             }
+        }
+        // src/misc/ARCHITECTURE.md#empty-deck-release
+        void dropEmptyDecks ( DeckRelease release ) {
+            for ( int i=0; i!=DAS_MAX_SHOE_CUNKS; ++i ) {
+                Deck ** link = &chunks[i];
+                bool isHead = true;
+                while ( Deck * ch = *link ) {
+                    if ( ch->allocated==0 && !(release==DeckRelease::keepHead && isHead) ) {
+                        *link = ch->next;
+                        ch->next = nullptr;
+                        delete ch;
+                    } else {
+                        link = &ch->next;
+                    }
+                    isHead = false;
+                }
+            }
+            lastChunk = nullptr;
         }
         bool isOwnPtr ( char * ptr, uint32_t size ) const {
             DAS_ASSERT(size && size<=DAS_MAX_SHOE_ALLOCATION);

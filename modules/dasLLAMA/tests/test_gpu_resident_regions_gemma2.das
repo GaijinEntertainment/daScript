@@ -32,5 +32,5 @@ def test_regions_batched_first_g2(t : T?) {
 //! stamp on the armed mirror codec - the logits compares above cannot tell the slabs apart, the census can
 [test]
 def test_regions_two_head_slab_served_g2(t : T?) {
-    cell_regions_stamp_served(t, REGIONS_FILE, "_g2")
+    cell_regions_stamp_served(t, REGIONS_FILE, 2)
 }

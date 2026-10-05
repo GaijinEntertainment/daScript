@@ -66,11 +66,6 @@ void Module_dasIMGUI::initFunctions_27() {
 	makeExtern<DAS_CALL_METHOD(_method_139), SimNode_ExtFuncCall , imguiTempFn>(lib,"_OnChangedVtxOffset","das_call_member< void (ImDrawList::*)() , &ImDrawList::_OnChangedVtxOffset >::invoke")
 		->args({"self"})
 		->addToModule(*this, SideEffects::worstDefault);
-	using _method_140 = das::das_call_member< void (ImDrawList::*)(ImTextureRef),&ImDrawList::_SetTexture >;
-// from imgui.h:3547:21
-	makeExtern<DAS_CALL_METHOD(_method_140), SimNode_ExtFuncCall , imguiTempFn>(lib,"_SetTexture","das_call_member< void (ImDrawList::*)(ImTextureRef) , &ImDrawList::_SetTexture >::invoke")
-		->args({"self","tex_ref"})
-		->addToModule(*this, SideEffects::worstDefault);
 	using _method_141 = das::das_call_member< int (ImDrawList::*)(float) const,&ImDrawList::_CalcCircleAutoSegmentCount >;
 // from imgui.h:3548:21
 	makeExtern<DAS_CALL_METHOD(_method_141), SimNode_ExtFuncCall , imguiTempFn>(lib,"_CalcCircleAutoSegmentCount","das_call_member< int (ImDrawList::*)(float) const , &ImDrawList::_CalcCircleAutoSegmentCount >::invoke")

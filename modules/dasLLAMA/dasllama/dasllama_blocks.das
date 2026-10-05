@@ -9,6 +9,7 @@ require dasllama/dasllama_common
 require dasllama/dasllama_moe   // moe_select_core/moe_ffn_core/moe_shexp_gate — the router the MoE blocks drive
 require dasllama/dasllama_attn_prefill   // prefill_attention — the head-threaded prefill the std/dense blocks call
 require dasllama/dasllama_math
+require dasllama/dasllama_gpu_math
 require dasllama/dasllama_par
 require dasllama/dasllama_convert
 require dasllama/dasllama_rope     // mrope_span_positions — the image-span position map
@@ -1164,16 +1165,7 @@ def attention_std_prefill(t : Model; var s : Session; l : int64; npos : int64; s
     if (ktq4 || vtq4) {
         // tq4 basis change at the RoPE seam (see attention_std_decode); xb_b un-rotates below
         let ts_rot = prof_ticks()
-        let sgp = unsafe(addr < float const? >(s.kv_signs[0]))
-        if (ktq4) {
-            tq4_rotate_batch(s.q_b, npos, qd, head_size, sgp)
-            if (!kv_shared) {
-                tq4_rotate_batch(s.k_b, npos, kv_dim, head_size, sgp)
-            }
-        }
-        if (vtq4 && !kv_shared) {
-            tq4_rotate_batch(s.v_b, npos, kv_dim, head_size, sgp)
-        }
+        tq4_rotate_qkv(s.q_b, s.k_b, s.v_b, npos, qd, kv_dim, head_size, unsafe(addr < float const? >(s.kv_signs[0])), ktq4, vtq4, kv_shared)
         prof_add("tq4_rot", ts_rot)
     }
     // separate pass (provably identical to interleaving); shared-KV layers store nothing — already cached
@@ -1868,7 +1860,7 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
                     }
                     moe_select_core(gate, ne, k, norm_topk, wscale, lgp, idxp, wp, p * k, ebp)
                     if (glp != null) {
-                        glp[p] = 1.0 / (1.0 + exp(-dot(gvp, xbp + p * dim, dim)))
+                        glp[p] = sigmoid_f32(dot(gvp, xbp + p * dim, dim))
                     }
                 }
             }

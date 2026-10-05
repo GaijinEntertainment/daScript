@@ -72,3 +72,15 @@ The browser input bridge commits pending composition text in a capture-phase
 `pointerdown` listener before GLFW queues the following `mousedown`. The committed
 text therefore precedes the click that can focus another editor in ImGui's input
 queue.
+
+## 6. A texture reference crosses the native JIT by address {#texture-ref-abi}
+
+The native JIT passes a managed struct argument by address. `ImTextureRef` is a managed
+struct, so an ImGui entry point that takes it by value receives a pointer where it expects
+the struct, and the texture handle does not survive the call. `ImDrawList::AddImage`,
+`AddImageQuad`, `AddImageRounded`, `PushTexture` and `_SetTexture` are therefore excluded
+from the generator (`imgui_skip_func` in `bind/bind_imgui.das`) and hand-bound in
+`src/dasIMGUI.main.cpp` through wrappers taking `const ImTextureRef &`, which the
+interpreter and the JIT both call with a pointer. `tests/texture_ref_abi.das` runs
+interpreted and under `-jit` (CTest `imgui_texture_ref_abi_interpreted` /
+`imgui_texture_ref_abi_jit`) and asserts the handle survives each of the five calls.
