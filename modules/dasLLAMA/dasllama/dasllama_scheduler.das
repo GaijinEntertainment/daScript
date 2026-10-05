@@ -184,7 +184,7 @@ struct Scheduler {
     mtp_acc : array<int64>                  // the joint speculative tick's answer per batch row: the accepted draft, or -1
     chunk : array<int64>                    // the current prefill chunk
     chunk_tail : array<int64>               // a media body's text past its span
-    body : array<float>                     // a media body's rows
+    @exact_size body : array<float>         // a media body's rows
     donate_toks : array<int64>              // reap-time scratch: tail eval + the insert token list
     // counters (/v1/stats and server_bench read these)
     n_admitted : int64

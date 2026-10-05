@@ -103,7 +103,7 @@ struct Gemma4vState {
     @scratch pos_x : array<int64>; @scratch pos_y : array<int64>   // the grid's patch columns / rows
     grid_w : int64       // the grid the tables were built for (0 = none yet)
     grid_h : int64
-    @scratch tail : array<float>   // [nout × proj_dim] soft tokens a device chain landed behind its blocks
+    @scratch @exact_size tail : array<float>   // [nout × proj_dim] soft tokens a device chain landed behind its blocks
     tail_ready : bool    //! `tail` holds this encode's soft tokens: the CPU tail stands down
 }
 

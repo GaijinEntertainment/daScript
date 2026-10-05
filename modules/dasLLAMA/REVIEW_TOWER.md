@@ -59,7 +59,8 @@ checklist names covers, is a defect - add a test cell covering it and name it in
 in the same change.** A gate covers a hook when it asserts a counter rising on a leg where that
 hook is the only hook reachable that raises the counter: `vulkan_tower_stats()`'s or
 `metal_tower_stats()`'s `encodes` and `blocks` for a blocks hook, `encodes` for an encode hook,
-`convs` for a front, conv or chunk hook, on Vulkan `mels` for qwen3a's mel hook; on either
+`convs` for a front, conv or chunk hook, for the mel hook `mels` on Vulkan and `metal_tower_mel_encodes()` on
+Metal, for the whisper-class tail hook `metal_tower_tail_encodes()`; on either
 tower, `styletts2_gpu_stats(<seat>)`'s or `pocket_gpu_stats(<seat>)`'s `served` for a TTS seat.
 
 **A diff that adds a tower kernel (a kernel class a tower driver dispatches), widens the rows an

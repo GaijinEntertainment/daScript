@@ -473,7 +473,7 @@ def set_chat_date_(date : string) {
 //! A Llama-3.1+ system turn's content: the environment line a tool-carrying turn opens with, the template's lead
 //! (its knowledge-cutoff line), the date line, then the caller's system text.
 def private dated_system(c : ChatSession; said : string) : string {
-    let date = !empty(g_chat_date) ? g_chat_date : (!empty(c.tmpl.system_date) ? c.tmpl.system_date : format_time(get_clock(), "%d %b %Y"))
+    let date = !empty(g_chat_date) ? g_chat_date : (!empty(c.tmpl.system_date) ? c.tmpl.system_date : format_time(get_clock(), "%d %b %Y"))   // clock: control — the date the turn states, not timing
     return "{empty(c.tools_json) ? "" : "Environment: ipython\n"}{c.tmpl.system_lead}Today Date: {date}\n\n{strip(said)}"
 }
 

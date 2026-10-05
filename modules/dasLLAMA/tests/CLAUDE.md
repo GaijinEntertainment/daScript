@@ -1020,7 +1020,9 @@ marker, qwen2audio's pair, and the splice at the text offset the message gives -
 inside it, after it - the head and tail carrying exactly the text on their side), the inline-span cell
 (`test_chat_inline_span`: a turn marked with `add_user_span_` renders the splice pair's head, the span's
 position ids and its tail as one stream at each text offset, a replayed turn keeps its span, and a position
-id is no token id and differs by row and by key), and the gemma-4 E2B cells: the
+id is no token id and differs by row and by key; `test_chat_span_refusals`: a span of no rows, an image or a
+marked audio span on a template with no such marker, and a span ahead of the one before it each panic, a bare
+audio span and a span at the last one's offset the controls), and the gemma-4 E2B cells: the
 thinking renderer pins (the instruct prefill token for token, the gate + bare opener, the
 thinking-off extras on `effective_stop_ids`, a mid-conversation toggle staying instruct) and
 the instruct-mode TEXT turn through `respond` (greedy "2+2": the answer, no channel marker in
@@ -1038,7 +1040,9 @@ not (the E-series form); the E2B cells' pinned streams carry the bare opener. `t
 Llama-3.1+ template's system header read off the template - the cutoff line, the date the template
 fixes (3.1) or none where it has a clock (3.2), nothing on a template with no header (3.0); the
 Llama-3 prefill cell pins the date (`set_chat_date`) and holds the header ahead of the system text,
-on a conversation with no system message too, and the unpinned stream differing.
+on a conversation with no system message too, and the unpinned stream differing; its Llama-3.2 arm holds the
+template's own date where one is set, the `Environment: ipython` line ahead of the cutoff line on a turn that
+carries tools and absent without them, and the pinned date over the template's.
 `test_think_split.das` - the reply-side reasoning matcher, model-free: every
 thinking family's wire shape, whole-string and per-chunk down to 1 byte, and the
 instruct-mode stop guard (`nothink_stop_here_`): a channel marker before the reply's first
@@ -1058,7 +1062,14 @@ the non-causal flag reaches the kernel; and on a paged scheduler the text ahead 
 hit stops at the span, the media stream donates, the same media asked again attaches past the span and
 reads the same stream, a request with no rows is served off the cache, other rows at the same place share
 only the text ahead of them (the control), and a rowless request on a cold cache finishes `media_lost` and
-donates nothing. `test_scheduler_idle_quantum` holds the prefill
+donates nothing. Its splice arms hold the span and the text around it at one prefill call (`prefill_evals`),
+a body cut at the chunk at a call a chunk past it, and a non-causal span between text at `generate_embd`'s
+span form. `test_scheduler_span_cut`: a hit that would end inside a span attaches nothing past the span's
+start and the stream reads its own reference. `test_scheduler_span_validation`: a span of no rows, spans out
+of order or overlapping, a span off its position ids, rows of the wrong width, inline spans on a device-home
+scheduler and a splice beside inline spans each refuse, a well-formed request the control. `test_scheduler_mrope`'s
+paged leg asks the grid request twice: the second attaches the span off the cache and its session carries
+the span's rope advance (`rope_pos_delta`). `test_scheduler_idle_quantum` holds the prefill
 quantum's two sizes by the tokens one tick prefills: a lone stream's first tick takes the whole
 prompt under the idle quantum and one chunk with it off (`idle_chunk_tokens = 0`), the two streams
 token for token alike under classic prefill, both decoded in the log; a prompt admitted beside a
@@ -2191,7 +2202,7 @@ encode, the token count, the compare) all vision tier-1 tests use (the `quad` ge
 q1/q2/q3 quarter-offset probe fields live here).
 `test_audio_embedder.das` - stocked suite; model-free cells: the `AudioEmbedder` carrier's own
 arms - the no-audio refusals and the probe's 0-not-panic contract; model-gated: the gemma4a arm on
-the E2B mmproj, carrying the padding-contract cell (a 320-sample clip encodes to exactly 1 soft
+the E2B mmproj (and the E4B mmproj's probe reading the decoder's 2560 where the encoder's width differs), carrying the padding-contract cell (a 320-sample clip encodes to exactly 1 soft
 token) and the direct-image route on the lane-named `.dlim` of the lane the box serves; the
 whisper-class tower arm (`test_audio_embedder_tower_arm`: the ultravox v0_5 1b and the
 Qwen2.5-Omni-3B f16 mmprojs - the probed width, the projector kind, a 5 s clip one chunk of 187 and

@@ -85,7 +85,7 @@ struct Gemma3vState {
     @scratch @exact_size att : array<float>   // attention score blocks
     @exact_size h : array<float>     // ffn hidden [npos × ff]
     @exact_size pooled : array<float>  // [nout × d]
-    @scratch tail : array<float>     // [nout × proj_dim] soft tokens a device chain landed behind its blocks
+    @scratch @exact_size tail : array<float>     // [nout × proj_dim] soft tokens a device chain landed behind its blocks
     tail_ready : bool                //! `tail` holds this encode's soft tokens: the CPU tail stands down
     @scratch @exact_size xqi : array<int8>    // q8 lane: the requantized GEMM input, grown per site
     @scratch @exact_size xsi : array<float>   // its per-32-block scales
