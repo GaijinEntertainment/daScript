@@ -153,7 +153,7 @@ class StyleLintVisitor : AstVisitor {
         return is_lint_suppressed(at, code)
     }
 
-    def style_warning(text : string; at : LineInfo) : void {
+    def style_warning(text : string; at : LineInfo; fix : LintFix = LintFix()) : void {
         if (!is_user_authored_body(current_function) || is_suppressed(text, at)) return
         let key = report_key(at, extract_lint_code(text))
         if (key_exists(reported_locations, key)) return
@@ -173,7 +173,9 @@ class StyleLintVisitor : AstVisitor {
             compiling_program() |> macro_style_warning(at, msg)
         } elif (collect_warnings) {
             warnings |> push("style warning: {msg} at {describe(at)}")
-            issues |> push(make_lint_issue(msg, at))
+            var issue = make_lint_issue(msg, at)
+            issue.fix = fix
+            issues |> push(issue)
         } else {
             to_log(LOG_WARNING, "style warning: {msg} at {describe(at)}\n")
         }

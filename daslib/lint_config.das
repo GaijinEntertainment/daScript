@@ -441,6 +441,14 @@ def public lint_file_skip_reason(file : string; expect_skips : bool = true) : st
     return ""
 }
 
+struct public LintFix {
+    line : int
+    column : int
+    last_line : int
+    last_column : int
+    replacement : string
+}
+
 //! One structured lint finding — the machine-readable twin of the ``"<message> at <file>:<line>:<column>"`` strings the ``*_collect`` overloads emit. Produced by the ``*_collect_issues`` overloads in ``daslib/lint`` / ``daslib/perf_lint`` / ``daslib/style_lint`` for consumers that need positions (e.g. the LSP validate subtool).
 struct public LintIssue {
     code : string           //!< rule id ("LINT002", "PERF018", "STYLE005"); "" when the message carries none
@@ -450,6 +458,52 @@ struct public LintIssue {
     column : int            //!< 0-based start column (byte offset — the LineInfo convention)
     last_line : int         //!< 1-based end line; 0 when unknown
     last_column : int       //!< 0-based end column (byte offset, end-exclusive)
+    fix : LintFix           //!< the edit that resolves the finding; line 0 when the rule offers none
+}
+
+def public apply_lint_fixes(text : string; fixes : array<LintFix>) : tuple<text : string; applied : int> {
+    var line_start : array<int>
+    line_start |> push(0)
+    peek_data(text) $(d) {
+        for (c, i in d, count()) {
+            if (int(c) == '\n') {
+                line_start |> push(i + 1)
+            }
+        }
+    }
+    var spans : array<int3>
+    for (f, k in fixes, count()) {
+        continue if (f.line <= 0 || f.line > length(line_start) || f.last_line < f.line || f.last_line > length(line_start))
+        spans |> push(int3(line_start[f.line - 1] + f.column, line_start[f.last_line - 1] + f.last_column, k))
+    }
+    sort(spans) $(a, b) => a.x < b.x
+    var applied = 0
+    let crlf = find(text, "\r\n") >= 0
+    let tlen = length(text)
+    let result = build_string() $(var w) {
+        peek_data(text) $(d) {
+            var pos = 0
+            for (sp in spans) {
+                continue if (sp.x < pos || sp.y < sp.x || sp.y > tlen)
+                if (sp.x > pos) write_string(w, d, pos, sp.x)
+                w |> write(crlf ? replace(fixes[sp.z].replacement, "\n", "\r\n") : fixes[sp.z].replacement)
+                pos = sp.y
+                applied++
+            }
+            if (tlen > pos) write_string(w, d, pos, tlen)
+        }
+    }
+    return (text = result, applied = applied)
+}
+
+def public lint_source_line(at : LineInfo; ln : int) : string {
+    var text = ""
+    if (at.fileInfo != null && ln > 0) {
+        get_file_source_line(at.fileInfo, uint(ln)) $(line) {
+            text := line
+        }
+    }
+    return text
 }
 
 //! Builds a ``LintIssue`` from a lint message and its source location.

@@ -437,7 +437,7 @@ class PerfLintVisitor : AstVisitor {
         return is_lint_suppressed(at, code)
     }
 
-    def perf_warning(text : string; at : LineInfo) : void {
+    def perf_warning(text : string; at : LineInfo; fix : LintFix = LintFix()) : void {
         if (in_template
             || !is_user_authored_body(current_function)
             || is_suppressed(text, at)) return
@@ -459,7 +459,9 @@ class PerfLintVisitor : AstVisitor {
             compiling_program() |> macro_performance_warning(at, msg)
         } elif (collect_warnings) {
             warnings |> push("performance warning: {msg} at {describe(at)}")
-            issues |> push(make_lint_issue(msg, at))
+            var issue = make_lint_issue(msg, at)
+            issue.fix = fix
+            issues |> push(issue)
         } else {
             to_log(LOG_WARNING, "performance warning: {msg} at {describe(at)}\n")
         }

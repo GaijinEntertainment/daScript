@@ -51,7 +51,8 @@ It goes through `daslib/lint_config.das`, shared by all three passes:
 
 3. Report with `perf_warning("PERFnnn: what it is; the fix", expr.at)`. Call it **bare** -
    `self->perf_warning(...)` trips this tree's own STYLE028. The method covers both compile-time
-   and runtime (print) modes, and dedups by location.
+   and runtime (print) modes, and dedups by location. A mechanical rewrite passes a `LintFix` as
+   the third argument for `--fix` - contract in the STYLE twin's step 3.
 4. Write `utils/lint/tests/perfNNN_<name>.das` with a bad example and a good one:
 
 ```das
