@@ -1366,7 +1366,7 @@ def document_module_dap(_root : string) {
 def document_module_das_source_formatter(_root : string) {
     var mod = find_module("das_source_formatter")
     var groups <- array<DocGroup>(
-        group_by_regex("Formatting", mod, %regex~(format_das_string|format_source_string|format_source)$%%)
+        group_by_regex("Formatting", mod, %regex~(format_das_string|format_source_string|format_source|wrap_long_lines)$%%)
     )
     document("Source code formatter", mod, "das_source_formatter.rst", groups)
 }

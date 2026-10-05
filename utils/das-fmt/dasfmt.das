@@ -159,7 +159,7 @@ def private stripped_source_compiles(file, text : string) : bool {
 }
 
 
-def private format_one_strip_file(file : string; verify, verbose : bool; var verified : bool&; var strip_failures, stripped_count : int&) {
+def private format_one_strip_file(file : string; verify, verbose : bool; max_line_length : int; var verified : bool&; var strip_failures, stripped_count : int&) {
     var before : string
     var after : string
     var open = false
@@ -168,7 +168,7 @@ def private format_one_strip_file(file : string; verify, verbose : bool; var ver
             fmap(fr) $(data) {
                 open = true
                 before = string(data)
-                after = format_source(data, true)
+                after = format_source(data, true, max_line_length)
             }
         }
     }
@@ -226,7 +226,7 @@ def private format_one_strip_file(file : string; verify, verbose : bool; var ver
 }
 
 
-def private format_one_file(file : string; verify, verbose, strip_comments : bool; var verified : bool&) {
+def private format_one_file(file : string; verify, verbose, strip_comments : bool; max_line_length : int; var verified : bool&) {
     // Runs on a job thread: formats `file` in place, or (under --verify) reports
     // it as unformatted and clears `verified`.
     var before : string
@@ -237,7 +237,7 @@ def private format_one_file(file : string; verify, verbose, strip_comments : boo
             fmap(fr) $(data) {
                 open = true
                 before = string(data)
-                after = format_source(data, strip_comments)
+                after = format_source(data, strip_comments, max_line_length)
             }
         }
     }
@@ -288,7 +288,7 @@ def private drop_format_disabled_files(var files : array<string>) : array<Format
     return <- jobs
 }
 
-def private run_format_jobs(var jobs : array<FormatJob>; threadsNum : int; verify, verbose : bool; args : array<string>; var verified : bool&; var strip_failures, stripped_count : int&) {
+def private run_format_jobs(var jobs : array<FormatJob>; threadsNum : int; verify, verbose : bool; max_line_length : int; args : array<string>; var verified : bool&; var strip_failures, stripped_count : int&) {
     var plain_files : array<string>
     var strip_files : array<string>
     for (job in jobs) {
@@ -310,7 +310,7 @@ def private run_format_jobs(var jobs : array<FormatJob>; threadsNum : int; verif
                     unsafe {
                         new_job <| @ capture(& verified, := args) {
                             log::init_log(args)
-                            format_one_file(file, verify, verbose, false, verified)
+                            format_one_file(file, verify, verbose, false, max_line_length, verified)
                             status |> notify_and_release
                         }
                     }
@@ -321,7 +321,7 @@ def private run_format_jobs(var jobs : array<FormatJob>; threadsNum : int; verif
     }
 
     for (file in strip_files) {
-        format_one_strip_file(file, verify, verbose, verified, strip_failures, stripped_count)
+        format_one_strip_file(file, verify, verbose, max_line_length, verified, strip_failures, stripped_count)
     }
 }
 
@@ -333,6 +333,7 @@ def main() {
     let threadsNum = max(args |> get_arg("--t") <| get_total_hw_threads(), 1)
     let verify = args |> find_index("--verify") >= 0
     let verbose = args |> find_index("--verbose") >= 0
+    let max_line_length = args |> get_arg("--max-line-length")
 
     let startTime = ref_time_ticks()
 
@@ -365,7 +366,7 @@ def main() {
     var verified = true
     var strip_failures = 0
     var stripped_count = 0
-    run_format_jobs(jobs, threadsNum, verify, verbose, args, verified, strip_failures, stripped_count)
+    run_format_jobs(jobs, threadsNum, verify, verbose, max_line_length, args, verified, strip_failures, stripped_count)
 
     if (stripped_count > 0) {
         log::verdict("comments were deleted from {stripped_count} file(s) — before committing, run the harvester agent over their strip diff (the '(comments stripped)' files above)")

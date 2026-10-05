@@ -323,6 +323,7 @@ SET(AOT_DASLIB_FILES
     tests/daslib/test_faker.das
     tests/daslib/test_tune_shells.das
     tests/daslib/test_format_raw_assign.das
+    tests/daslib/test_wrap_long_lines.das
 )
 # tests/daslib is listed by hand, so a test file there is exactly one of: listed above, or
 # marked `options no_aot` because a module it requires keeps out of AOT. A file that is neither
