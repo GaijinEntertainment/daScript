@@ -68,7 +68,7 @@ per-format accessor (`kq_sb`, `kq_qsb`, `kq_ssb`, `kq_elems`, `kq_schema_id`, `k
 - Append the member to `KqFmt` - **append, never reorder**: the int value is the device stack
   tag (`vk_kq_schema_id`) and the image plane id. The member alone breaks every Vulkan build
   until its `<fmt>_batch_cm2e_cls` / `<fmt>_batch_khr_cls` stamps exist (`kq_tile_stamp` walks
-  the whole enum in the `khr_cls_*` / `cm2e_cls_*` ladders), and a Mac whose dasVulkan module is
+  the whole enum in the `cm2_cls_*` ladder, and the kernel cells' `khr_cls_*` one), and a Mac whose dasVulkan module is
   not built never sees it - build the module first (`cmake --build modules/dasVulkan/build`;
   MoltenVK then also runs the sdot4 GEMV cells, the coopmat tile cells skip) and keep the
   identity and the sec.6 stamps in ONE compile-checked step.
@@ -451,7 +451,7 @@ k4's for a K-quant or LUT decode, iq2xxs's 32-deep s and e stamps for a grid-cod
 settle the k step on a whole-model MoE row, not the uniform probe alone). A 64-step format's e
 column is its m stamp byte for byte, so it ships no e stamp and joins `KQ_CM2E_ALIASES_M` in
 `dasllama_kqformat.das` instead; the gate holds that roster to every s stamp's k step. The class
-ladders (`cm2_cls_*`, `cm2e_cls_*`, `khr_cls_*`) take no arm: `kq_tile_stamp` walks every `KqFmt`
+ladder `cm2_cls_*` (and the kernel cells' `khr_cls_*`) takes no arm: `kq_tile_stamp` walks every `KqFmt`
 member, so the tree fails to compile until every stamp the new member names exists - and it must,
 since `pf_f16_feed` admits every `kq_sb` format on a cm2 device the moment the enum member exists,
 and a ladder that fell through served the q8 tiles over the new planes - garbage text at full
