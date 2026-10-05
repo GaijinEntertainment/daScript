@@ -112,3 +112,4 @@ Path to shared library, which is used in JIT.
 Path to linker, which is used in JIT.
 compile_file from a script reads and refreshes the default module cache around this compile (keyed by the file, the running binary, the host arguments and these policies).
 Interpreter only: caps how deep fastcall (frameless) calls may nest, panicking past the cap instead of exhausting the native stack; 0 leaves fastcall unchecked. Host-side counterpart of ``options max_fast_call_depth`` (the option overrides the policy).
+Keeps the used-function set and the function and variable indices alive after the main simulate. Off by default, they are freed when rtti is off; a host that calls ``is_used``, ``function_index`` or ``variable_index`` on the program after simulate sets it.
