@@ -106,7 +106,7 @@ struct ServerArgs {
     tts_voices_dir : string
 
     @clarg_name = "image-mmproj"
-    @clarg_doc = "Vision mmproj (gemma4uv, gemma4v, or gemma3v, sniffed) for the default model — enables image_url parts on /v1/chat/completions"
+    @clarg_doc = "Vision mmproj (gemma4uv, gemma4v, or gemma3v, sniffed) for the default model — enables image_url parts on /v1/chat/completions; a file that carries an audio tower too (the gemma-4 E-series) arms input_audio parts with it"
     image_mmproj : string
 
     @clarg_name = "audio-mmproj"

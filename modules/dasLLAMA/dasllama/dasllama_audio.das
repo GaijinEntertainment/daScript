@@ -1076,9 +1076,7 @@ def private audio_tower_half_gemms(path : string) : bool {
     return false if (f == null)
     var half = false
     fmap(f) $(var bytes : array<uint8>#) {
-        if (long_length(bytes) < 4l || rd_u32(bytes, 0l) != 0x46554747u) {
-            return
-        }
+        return if (!gguf_magic_ok(bytes))
         var inscope m <- parse_gguf_meta(bytes)
         let gt = gguf_tensor_type(m, "a.blk.0.attn_q.weight")
         let n_layer = gguf_has(m, "clip.audio.block_count") ? gguf_int(m, bytes, "clip.audio.block_count") : 0l
@@ -1122,9 +1120,7 @@ def private audio_tower_probe(path : string) : tuple<dim : int64; kind : AudioPr
     let f = fopen(path, "rb")
     return res if (f == null)
     fmap(f) $(var bytes : array<uint8>#) {
-        if (long_length(bytes) < 4l || rd_u32(bytes, 0l) != 0x46554747u) {
-            return
-        }
+        return if (!gguf_magic_ok(bytes))
         var inscope m <- parse_gguf_meta(bytes)
         var kind = AudioProjKind.qwen2a
         if (!gguf_has(m, "clip.projector_type") || !audio_tower_projector(gguf_str(m, bytes, "clip.projector_type"), kind)

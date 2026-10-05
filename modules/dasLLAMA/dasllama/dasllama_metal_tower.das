@@ -299,7 +299,7 @@ def private wt_mm(enc : MetalComputeEncoder?; q8 : bool; site : int64; f16w, bf1
 }
 
 // The whisper-class block loop as ONE command buffer; the attention trio rides uend = npos (the
-// non-causal uniform span). Frontend and tail stay CPU. Pad-row garbage is
+// non-causal uniform span). The mel's spectrum and the projector tail ride their own seats. Pad-row garbage is
 // CONTAINED: QK/AV zero k/v rows >= npos, softmax zeroes [uend, np32), pad outputs go unread.
 [hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
 def private metal_tower_blocks(t : AudioTower; var s : EncoderState; npos : int64) : bool
@@ -1739,21 +1739,13 @@ def private g4v_ends_make(t : Gemma4vTower; s : Gemma4vState; npos, mp : int64) 
 }
 
 //! one GEMM off the tower's weights: the halfword twin where the tensor is stored bf16, the f32 blob otherwise
-def private g4v_plane_mm(enc : MetalComputeEncoder?; bf16 : bool; bblob, bwblob : MetalBuffer?; woff : int64;
-                         bsrc, bdst, u_k, u_n : MetalBuffer?; rows, ndim, kdim : int64) {
-    if (bf16) {
-        pf_enc_bf16_mm(enc, bwblob, uint64(woff * 2l), bsrc, bdst, u_k, u_n, rows, ndim, kdim = kdim)
-    } else {
-        enc_f32_mm(enc, bblob, uint64(woff * 4l), bsrc, bdst, 0ul, u_k, u_n, rows, ndim)
-    }
-}
 
 //! The stem on the device: the patch conv over the columns, then each row's position rows.
 [arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private g4v_stem_body(enc : MetalComputeEncoder?; t : Gemma4vTower; e : G4vEnds; bblob, bwblob, bx : MetalBuffer?;
                           u_d, u_totd : MetalBuffer?; mp, npos : int64) {
     let d = t.n_embd
-    g4v_plane_mm(enc, t.patch_bf16, bblob, bwblob, t.patch_w, e.bx0, bx, e.u_pd, u_d, mp, d, t.patch_dim)
+    tw_mm(enc, false, t.patch_bf16, bwblob, bblob, t.patch_w, e.bx0, null, bx, 0ul, e.u_pd, u_d, mp, d, t.patch_dim, false)
     enc_add(enc, bx, 0ul, e.bpos, 0ul, u_totd, npos * d)
 }
 
@@ -1771,7 +1763,7 @@ def private g4v_tail_body(enc : MetalComputeEncoder?; t : Gemma4vTower; e : G4vE
     enc_tw_affine_rows(enc, e.bpool, e.bstd_b, e.bstd_m, TwAffineArgs(width = uint(d), total = uint(nout * d), scale = sqrt(float(d))), nout * d)
     pf_enc_rms(enc, e.bpool, 0ul, g_tw_ones, e.bpool, u_d, u_eps, nout)
     enc_clamp(enc, e.bpool, 0ul, e.bclamp, 0ul, bblob, cb, u_in, e.u_totpool, nout * d)
-    g4v_plane_mm(enc, t.proj_bf16, bblob, bwblob, t.proj_w, e.bclamp, e.bout, u_d, e.u_proj, e.mpo, t.proj_dim, d)
+    tw_mm(enc, false, t.proj_bf16, bwblob, bblob, t.proj_w, e.bclamp, null, e.bout, 0ul, u_d, e.u_proj, e.mpo, t.proj_dim, d, false)
     enc_clamp(enc, e.bout, 0ul, e.bout, 0ul, bblob, cb, u_out, e.u_totout, nout * t.proj_dim)
 }
 
@@ -1801,7 +1793,7 @@ def private g4v_ends_land(t : Gemma4vTower; var e : G4vEnds; ran : bool; var s :
 
 // The gemma4v ViT block loop as ONE command buffer on the file's planes (bf16 GEMMs through the
 // bf16 mul_mm, f32 norms/clamps) — the CPU g4v_block chain dispatch for dispatch, the attention
-// trio at uend = npos / scale 1. Stem and tail stay CPU; a q8-lane tower declines (quant_mode).
+// trio at uend = npos / scale 1. The stem and the tail ride the same command buffer (`g4v_ends_make`); a q8-lane tower declines (quant_mode).
 [hot_path]
 def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {
@@ -2031,7 +2023,7 @@ def private g3v_tail_land(t : Gemma3vTower; var tl : G3vTail; ran : bool; var s 
 
 // The gemma3v SigLIP block loop as ONE command buffer on the f32 blob — LN(w,b), biased f32 GEMMs,
 // scaled attention, GELU. The 72-wide heads restride to the attention tiles' 128 (zero pads exact,
-// scale stays 1/sqrt(72)); ffn serves at the layout's ff_pad. Stem/tail stay CPU; q8 declines.
+// scale stays 1/sqrt(72)); ffn serves at the layout's ff_pad. The tail rides the same command buffer (`g3v_tail_make`), the patch im2col stays CPU; q8 declines.
 [hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-attn-routes")]
 def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {

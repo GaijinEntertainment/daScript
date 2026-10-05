@@ -163,7 +163,6 @@ def private q3a_announce_lane() {
     to_log(LOG_INFO, "dasLLAMA qwen3a: tower GEMM lane {q3a_serve_q8() ? "q8" : "f32 planes"} - {why}\n")
 }
 
-[arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane")]
 //! Load a Qwen3-ASR mmproj GGUF (projector type `qwen3a`, bf16/f16/f32 tensors). Like
 //! ``load_model``, caches a box/knob-specific PREPARED IMAGE for fast reload;
 //! ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.

@@ -4,7 +4,6 @@
 options gen2
 options persistent_heap
 options gc
-options no_aot
 
 require dastest/testing_boost public
 
