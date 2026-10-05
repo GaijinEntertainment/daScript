@@ -134,6 +134,7 @@ namespace das
         bool addIEx ( const string & f, const string & fcpp, int64_t value, const LineInfo & at );
         string describe() const { return name; }
         string getMangledName() const;
+        uint64_t getOwnSemanticHash ( HashBuilder & hb ) const;
         int64_t find ( const string & na, int64_t def ) const;
         string find ( int64_t va, const string & def ) const;
         pair<ExpressionPtr,bool> find ( const string & f ) const;
