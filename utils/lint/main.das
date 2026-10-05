@@ -792,6 +792,7 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene,
             result.issues |> push_from(stale)
         }
     }
+    result.count -= drop_skipped_file_issues(file, result.issues)
     if (!lint_excluded_paths) {
         apply_path_excludes(result)
     }

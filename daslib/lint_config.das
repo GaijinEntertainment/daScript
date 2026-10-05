@@ -464,3 +464,21 @@ def public make_lint_issue(message : string; at : LineInfo) : LintIssue {
         last_line = int(at.last_line),
         last_column = int(at.last_column))
 }
+
+def public drop_skipped_file_issues(target : string; var issues : array<LintIssue>) : int {
+    var skipped : table<string; bool>
+    var kept : array<LintIssue>
+    kept |> reserve(length(issues))
+    for (issue in issues) {
+        if (!empty(issue.file) && issue.file != target && !key_exists(skipped, issue.file)) {
+            skipped[issue.file] = !empty(lint_file_skip_reason(issue.file, false))
+        }
+        if (empty(issue.file) || issue.file == target || !(skipped?[issue.file] ?? false)) {
+            kept |> push(issue)
+        }
+    }
+    let dropped = length(issues) - length(kept)
+    delete issues
+    issues <- kept
+    return dropped
+}
