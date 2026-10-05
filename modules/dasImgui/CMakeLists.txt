@@ -414,6 +414,14 @@ IF(COMMAND ADD_MODULE_CPP)
             ELSE()
                 SET(_imgui_test_args --timeout 600 --isolated-mode --isolated-mode-threads 4)
             ENDIF()
+            ADD_TEST(NAME imgui_texture_ref_abi_interpreted
+                COMMAND daslang -no-module-cache ${DAS_IMGUI_DIR}/tests/texture_ref_abi.das -- --headless --no-imgui-ini)
+            IF(NOT DAS_LLVM_DISABLED)
+                ADD_TEST(NAME imgui_texture_ref_abi_jit
+                    COMMAND daslang -no-module-cache -jit -jit-no-cache ${DAS_IMGUI_DIR}/tests/texture_ref_abi.das -- --headless --no-imgui-ini)
+                SET_TESTS_PROPERTIES(imgui_texture_ref_abi_jit PROPERTIES TIMEOUT 120)
+            ENDIF()
+            SET_TESTS_PROPERTIES(imgui_texture_ref_abi_interpreted PROPERTIES TIMEOUT 60)
             das_lane_dastest_target(run_tests_imgui_integration COMMENT "Testing dasImgui headless"
                 FILES modules/dasImgui/tests
                 ARGS ${_imgui_test_args} --exclude glfw_synth --exclude key_hud --exclude embedded_terminal --headless

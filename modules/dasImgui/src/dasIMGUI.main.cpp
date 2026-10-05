@@ -381,6 +381,23 @@ namespace das {
         drawList.AddText(font,font_size,pos,col,text_begin,nullptr,wrap_width,cpu_fine_clip_rect);
     }
 
+    // modules/dasImgui/ARCHITECTURE.md#texture-ref-abi
+    void DrawListAddImage_das(ImDrawList & self, const ImTextureRef & tex_ref, const ImVec2 & p_min, const ImVec2 & p_max, const ImVec2 & uv_min, const ImVec2 & uv_max, unsigned int col) {
+        self.AddImage(tex_ref, p_min, p_max, uv_min, uv_max, col);
+    }
+    void DrawListAddImageQuad_das(ImDrawList & self, const ImTextureRef & tex_ref, const ImVec2 & p1, const ImVec2 & p2, const ImVec2 & p3, const ImVec2 & p4, const ImVec2 & uv1, const ImVec2 & uv2, const ImVec2 & uv3, const ImVec2 & uv4, unsigned int col) {
+        self.AddImageQuad(tex_ref, p1, p2, p3, p4, uv1, uv2, uv3, uv4, col);
+    }
+    void DrawListAddImageRounded_das(ImDrawList & self, const ImTextureRef & tex_ref, const ImVec2 & p_min, const ImVec2 & p_max, const ImVec2 & uv_min, const ImVec2 & uv_max, unsigned int col, float rounding, int flags) {
+        self.AddImageRounded(tex_ref, p_min, p_max, uv_min, uv_max, col, rounding, flags);
+    }
+    void DrawListPushTexture_das(ImDrawList & self, const ImTextureRef & tex_ref) {
+        self.PushTexture(tex_ref);
+    }
+    void DrawList_SetTexture_das(ImDrawList & self, const ImTextureRef & tex_ref) {
+        self._SetTexture(tex_ref);
+    }
+
     // Image/ImageButton/ImageWithBg take ImTextureRef BY VALUE. These wrappers
     // take `const ImTextureRef&` so the daslang arg binds as const (like ImVec2),
     // letting a const ImTextureRef (GetIO().Fonts.TexRef) pass through.
@@ -688,6 +705,25 @@ namespace das {
                 ->args({"drawList","font","font_size","pos","col","text","wrap_width","cpu_fine_clip_rect"})
                     ->arg_init(6,new ExprConstFloat(0.0f))
                     ->arg_init(7,new ExprConstPtr());
+        addExtern<DAS_BIND_FUN(das::DrawListAddImage_das), SimNode_ExtFuncCall, imguiTempFn>(*this, lib, "AddImage",
+            SideEffects::worstDefault, "das::DrawListAddImage_das")
+                ->args({"self","tex_ref","p_min","p_max","uv_min","uv_max","col"})
+                ->arg_init(6,new ExprConstUInt(0xffffffff));
+        addExtern<DAS_BIND_FUN(das::DrawListAddImageQuad_das), SimNode_ExtFuncCall, imguiTempFn>(*this, lib, "AddImageQuad",
+            SideEffects::worstDefault, "das::DrawListAddImageQuad_das")
+                ->args({"self","tex_ref","p1","p2","p3","p4","uv1","uv2","uv3","uv4","col"})
+                ->arg_init(10,new ExprConstUInt(0xffffffff));
+        makeExtern<DAS_BIND_FUN(das::DrawListAddImageRounded_das), SimNode_ExtFuncCall, imguiTempFn>(lib, "AddImageRounded", "das::DrawListAddImageRounded_das")
+                ->args({"self","tex_ref","p_min","p_max","uv_min","uv_max","col","rounding","flags"})
+                ->arg_type(8,makeType<ImDrawFlags_>(lib))
+                ->arg_init(8,new ExprConstEnumeration(0,makeType<ImDrawFlags_>(lib)))
+                ->addToModule(*this, SideEffects::worstDefault);
+        addExtern<DAS_BIND_FUN(das::DrawListPushTexture_das), SimNode_ExtFuncCall, imguiTempFn>(*this, lib, "PushTexture",
+            SideEffects::worstDefault, "das::DrawListPushTexture_das")
+                ->args({"self","tex_ref"});
+        addExtern<DAS_BIND_FUN(das::DrawList_SetTexture_das), SimNode_ExtFuncCall, imguiTempFn>(*this, lib, "_SetTexture",
+            SideEffects::worstDefault, "das::DrawList_SetTexture_das")
+                ->args({"self","tex_ref"});
         // image API — const ImTextureRef& wrappers (see das:: defs above).
         addExtern<DAS_BIND_FUN(das::Image_das), SimNode_ExtFuncCall, imguiTempFn>(*this, lib, "Image",
             SideEffects::worstDefault, "das::Image_das")

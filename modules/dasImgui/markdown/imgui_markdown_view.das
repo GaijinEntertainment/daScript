@@ -1750,7 +1750,7 @@ def private render_inline(doc : RichDocument const; node_index : int; // nolint:
                     p0.y + max(0.0f, (p1.y - p0.y - scaled_size.y) * 0.5f))
                 let image_p1 = image_p0 + scaled_size
                 unsafe {
-                    var texture = ImTextureRef(binding.texture_id)
+                    let texture = ImTextureRef(binding.texture_id)
                     *dl |> AddImage(texture, image_p0, image_p1,
                                     binding.uv0, binding.uv1,
                                     GetColorU32(binding.tint_color))

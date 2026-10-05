@@ -53,6 +53,11 @@ namespace das {
     DAS_MOD_API void AddText2( ImDrawList & drawList, ImFont* font, float font_size, const ImVec2& pos, ImU32 col,
         const char* text_begin, float wrap_width = 0.0f, const ImVec4* cpu_fine_clip_rect = nullptr);
     // image API — const ImTextureRef& wrappers (const-arg binding).
+    DAS_MOD_API void DrawListAddImage_das(ImDrawList & self, const ImTextureRef & tex_ref, const ImVec2 & p_min, const ImVec2 & p_max, const ImVec2 & uv_min, const ImVec2 & uv_max, unsigned int col);
+    DAS_MOD_API void DrawListAddImageQuad_das(ImDrawList & self, const ImTextureRef & tex_ref, const ImVec2 & p1, const ImVec2 & p2, const ImVec2 & p3, const ImVec2 & p4, const ImVec2 & uv1, const ImVec2 & uv2, const ImVec2 & uv3, const ImVec2 & uv4, unsigned int col);
+    DAS_MOD_API void DrawListAddImageRounded_das(ImDrawList & self, const ImTextureRef & tex_ref, const ImVec2 & p_min, const ImVec2 & p_max, const ImVec2 & uv_min, const ImVec2 & uv_max, unsigned int col, float rounding, int flags);
+    DAS_MOD_API void DrawListPushTexture_das(ImDrawList & self, const ImTextureRef & tex_ref);
+    DAS_MOD_API void DrawList_SetTexture_das(ImDrawList & self, const ImTextureRef & tex_ref);
     DAS_MOD_API void Image_das( const ImTextureRef & tex_ref, const ImVec2 & image_size, const ImVec2 & uv0, const ImVec2 & uv1 );
     DAS_MOD_API void ImageWithBg_das( const ImTextureRef & tex_ref, const ImVec2 & image_size, const ImVec2 & uv0, const ImVec2 & uv1, const ImVec4 & bg_col, const ImVec4 & tint_col );
     DAS_MOD_API bool ImageButton_das( const char* str_id, const ImTextureRef & tex_ref, const ImVec2 & image_size, const ImVec2 & uv0, const ImVec2 & uv1, const ImVec4 & bg_col, const ImVec4 & tint_col );
