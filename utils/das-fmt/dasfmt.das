@@ -160,8 +160,7 @@ def private stripped_source_compiles(file, text : string) : bool {
 
 
 def private format_one_strip_file(file : string; verify, verbose : bool; max_line_length : int; var verified : bool&; var strip_failures, stripped_count : int&) {
-    var before : string
-    var after : string
+    var before, after : string
     var open = false
     fopen(file, "rb") $(fr) {
         if (fr != null) {
@@ -229,8 +228,7 @@ def private format_one_strip_file(file : string; verify, verbose : bool; max_lin
 def private format_one_file(file : string; verify, verbose, strip_comments : bool; max_line_length : int; var verified : bool&) {
     // Runs on a job thread: formats `file` in place, or (under --verify) reports
     // it as unformatted and clears `verified`.
-    var before : string
-    var after : string
+    var before, after : string
     var open = false
     fopen(file, "rb") $(fr) {
         if (fr != null) {
@@ -289,8 +287,7 @@ def private drop_format_disabled_files(var files : array<string>) : array<Format
 }
 
 def private run_format_jobs(var jobs : array<FormatJob>; threadsNum : int; verify, verbose : bool; max_line_length : int; args : array<string>; var verified : bool&; var strip_failures, stripped_count : int&) {
-    var plain_files : array<string>
-    var strip_files : array<string>
+    var plain_files, strip_files : array<string>
     for (job in jobs) {
         if (job.strip_comments) {
             strip_files |> push(job.file)

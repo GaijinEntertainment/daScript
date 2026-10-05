@@ -3412,6 +3412,13 @@ A braced body that only returns a value, ``def f(a : int) : int { return a * 2 }
 is an expression body: ``def f(a : int) : int => a * 2`` (``=> <- EXPR`` for a move).
 ``--fix`` rewrites it; past 100 columns the expression goes on the line after ``=>``.
 
+STYLE043 — consecutive declarations of one type
+===============================================
+
+Adjacent uninitialized declarations of one type, ``var kq : array<uint8>`` and then
+``var ks : array<uint8>``, are one declaration: ``var kq, ks : array<uint8>``.
+A declaration with a comment on its line never joins a run; ``--fix`` joins the names.
+
 -----
 Tests
 -----

@@ -1065,6 +1065,56 @@ class StyleLintVisitor : AstVisitor {
         return (inner as ExprVar.variable)
     }
 
+    def st043_decl(e : ExpressionPtr) : ExprLet const? {
+        if (!(e is ExprLet) || e.genFlags.generated || code_find(lint_source_line(e.at, int(e.at.line)), "//") >= 0) return null
+        let decl = e as ExprLet
+        for (v in decl.variables) {
+            if (v.init != null || v.flags.generated || !empty(v.annotation) || find(string(v.name), "`") >= 0) return null
+        }
+        return decl
+    }
+
+    def st043_same(a, b : ExprLet const?) : bool {
+        let va = a.variables[0]
+        let vb = b.variables[0]
+        return va.flags.inScope == vb.flags.inScope && describe(va._type) == describe(vb._type)
+    }
+
+    def check_style043_declaration_runs(blk : ExprBlock?) : void {
+        if (current_function == null || foreign_module_code()) return
+        let n = length(blk.list)
+        var i = 0
+        while (i < n - 1) {
+            let first = st043_decl(blk.list[i])
+            var j = i + 1
+            while (first != null && j < n) {
+                let next = st043_decl(blk.list[j])
+                break if (next == null || !st043_same(first, next) || int(blk.list[j].at.line) != int(blk.list[j - 1].at.line) + 1)
+                j++
+            }
+            if (j - i >= 2) {
+                let names = build_string() $(var w) {
+                    for (k in range(i, j)) {
+                        for (v in st043_decl(blk.list[k]).variables) {
+                            w |> write(", {v.name}")
+                        }
+                    }
+                }
+                let first_names = build_string() $(var w) {
+                    for (v in first.variables) {
+                        w |> write(", {v.name}")
+                    }
+                }
+                let head = first.variables |> back()
+                let tail = st043_decl(blk.list[j - 1]).variables |> back()
+                style_warning("STYLE043: consecutive declarations share one type; declare them together - '{slice(names, 2)}'", blk.list[i].at,
+                    LintFix(line = int(head.at.line), column = int(head.at.column) + length(string(head.name)),
+                        last_line = int(tail.at.line), last_column = int(tail.at.column) + length(string(tail.name)), replacement = slice(names, length(first_names))))
+            }
+            i = j
+        }
+    }
+
     def override preVisitExprBlock(blk : ExprBlock?) : void {
         if (blk.blockFlags.isClosure) {
             unsafe_block_stack |> push(0)
@@ -1073,6 +1123,7 @@ class StyleLintVisitor : AstVisitor {
         check_style012_chain_runs(blk)
         check_style033_existing_runs(blk)
         check_style033_existing_chain_runs(blk)
+        check_style043_declaration_runs(blk)
         let n = length(blk.list)
         for (i in range(n - 1)) {
             let cur = blk.list[i]

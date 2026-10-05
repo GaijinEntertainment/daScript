@@ -22,3 +22,10 @@ def commented() : int => 3  // a single comment moves to the end of the new line
 def two_comments() : int {   // two comments
     return 4    // keep the block
 }
+
+def sizes() : int {
+    var kq, ks : array<uint8>
+    var x : int
+    var y : int    // a comment keeps the run apart
+    return length(kq) + length(ks) + x + y
+}

@@ -29,3 +29,11 @@ def commented() : int {
 def two_comments() : int {   // two comments
     return 4    // keep the block
 }
+
+def sizes() : int {
+    var kq : array<uint8>
+    var ks : array<uint8>
+    var x : int
+    var y : int    // a comment keeps the run apart
+    return length(kq) + length(ks) + x + y
+}

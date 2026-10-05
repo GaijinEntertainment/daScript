@@ -45,7 +45,7 @@ def test_lint_fix(t : T?) {
     t |> run("--fix edits turn the before fixture into the after fixture") @@(t : T?) {
         let fixes <- collect_fixes(t, fixture("_fixture_lint_fix_before.das"))
         let fixed = apply_lint_fixes(fread(fixture("_fixture_lint_fix_before.das")), fixes)
-        t |> equal(fixed.applied, 6)
+        t |> equal(fixed.applied, 7)
         t |> equal(fixed.text, fread(fixture("_fixture_lint_fix_after.das")))
     }
     t |> run("the after fixture carries no fix") @@(t : T?) {
