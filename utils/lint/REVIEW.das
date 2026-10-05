@@ -15,7 +15,7 @@ let RULE_MODULES <- [ "daslib/lint.das", "daslib/perf_lint.das", "daslib/style_l
 let RST = "doc/source/reference/language/lint.rst"
 let FIXTURE_DIRS <- [ "utils/lint/tests", "tests/lint" ]
 // fixtures whose file name does not carry the id (README.md lists them)
-var FIXTURE_ALIAS <- { "LINT019" => "tests/lint/test_stale_nolint.das" }
+var FIXTURE_ALIAS <- { "LINT019" => "tests/lint/test_stale_nolint.das", "PERF033" => "tests/lint/test_lint_fix.das" }
 
 var private RULE_ID <- %regex~"((LINT|PERF|STYLE)[0-9][0-9][0-9]):%%
 

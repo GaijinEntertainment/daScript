@@ -1225,7 +1225,7 @@ def private wrap_tokens(var ctx : FormatterCtx; max_line_length : int) {
     var opens : array<int>
     var first = 0
     while (first < length(ctx.tokens)) {
-        var spots : array<WrapSpot>
+        var inscope spots : array<WrapSpot>
         var col = 0
         var skip = false
         var k = first

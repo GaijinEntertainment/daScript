@@ -1890,6 +1890,14 @@ a reserve reached through a different alias is not seen; ``// nolint:PERF032``
 with the reason is the answer when the capacity is provably established
 elsewhere.
 
+PERF033 — container declared inside a loop without ``inscope``
+==============================================================
+
+An ``array`` or ``table`` declared inside a loop body is never freed: every iteration
+leaks its buffer until the heap resets. Declare it ``var inscope``; ``--fix`` adds it.
+A container holding raw pointers, lambdas or iterators is not reported - ``inscope``
+would delete what they point at.
+
 PERF019 — ``int(T.a) | int(T.b)`` on bitfield/enum — collapse to one cast
 ==========================================================================
 
