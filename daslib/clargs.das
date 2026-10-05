@@ -417,34 +417,41 @@ def public parse_argument(args : array<string>; arg_info : CommandArgumentInfo; 
     }
 }
 
+//! How many tokens the declared flag at `args[i]` takes: 0 when `args[i]` is no declared flag, 2 when it takes the next token as its value.
+def private declared_flag_span(args : array<string>; i : int; info : CommandInfo) : int {
+    let arg = args[i]
+    for (a in info.args) {
+        if (a.is_positional) continue
+        let has_short = !empty(a.short_flag_name)
+        let exact = arg == a.flag_name || (has_short && arg == a.short_flag_name)
+        let prefixed = starts_with(arg, "{a.flag_name}=") || (has_short && starts_with(arg, "{a.short_flag_name}="))
+        if (exact || prefixed) {
+            let is_bool_simple = (a.value_type == Type.tBool && !a.is_array)
+            return (exact && !is_bool_simple && !a.is_count && i + 1 < length(args)) ? 2 : 1
+        }
+    }
+    return 0
+}
+
+//! The first `--help` / `-h` among `args` that no declared flag claims - not a declared flag, not a flag's value, and before a bare `--`; "" when there is none.
+def public unclaimed_help_flag(args : array<string>; info : CommandInfo) : string {
+    var i = 0
+    while (i < length(args) && args[i] != "--") {
+        let span = declared_flag_span(args, i, info)
+        return args[i] if (span == 0 && (args[i] == "--help" || args[i] == "-h"))
+        i += span == 0 ? 1 : span
+    }
+    return ""
+}
+
 def public collect_positional_args(args : array<string>; info : CommandInfo) : array<string> {
     var result : array<string>
     var i = 0
     while (i < length(args)) {
         let arg = args[i]
-        var matched_flag = false
-        var consumes_value = false
-        for (a in info.args) {
-            if (a.is_positional) continue
-            let has_short = !empty(a.short_flag_name)
-            let exact_long = (arg == a.flag_name)
-            let exact_short = has_short && (arg == a.short_flag_name)
-            let prefix_long = starts_with(arg, "{a.flag_name}=")
-            let prefix_short = has_short && starts_with(arg, "{a.short_flag_name}=")
-            if (exact_long || exact_short || prefix_long || prefix_short) {
-                matched_flag = true
-                let is_bool_simple = (a.value_type == Type.tBool && !a.is_array)
-                if (!is_bool_simple && !a.is_count && (exact_long || exact_short)) {
-                    consumes_value = true
-                }
-                break
-            }
-        }
-        if (matched_flag) {
-            i++
-            if (consumes_value && i < length(args)) {
-                i++
-            }
+        let span = declared_flag_span(args, i, info)
+        if (span != 0) {
+            i += span
             continue
         }
         if (length(arg) >= 2 && first_character(arg) == int(0x2D)) {
@@ -1037,6 +1044,15 @@ class ArgsMacro : AstStructureAnnotation {
         }
     }
 
+    //! `--help` / `-h` reach a bool `help` field the struct gave another flag name, so a help request is never dropped and the tool run instead
+    def make_help_alias_expr(arg : CommandArgumentInfo) : ExpressionPtr {
+        return qmacro_block() {
+            if (!empty(unclaimed_help_flag(args, command_info))) {
+                dst.$f(arg.field_name) = true
+            }
+        }
+    }
+
     def make_parse_fn(var st : StructurePtr; info : CommandInfo) : FunctionPtr {   // nolint:STYLE038 — four parallel qmacro variants (positional × mutex); the enumeration IS the function
         var name_to_index <- { for (i in range(length(st.fields))); string(st.fields[i].name) => i }
         var field_index_by_name <- { for (arg in info.args); arg.field_name => name_to_index[arg.field_name]; where key_exists(name_to_index, arg.field_name) }
@@ -1082,6 +1098,11 @@ class ArgsMacro : AstStructureAnnotation {
                 continue
             }
             init_exprs |> push(make_enum_init_expr(st, i, arg, field_index))
+        }
+        for (arg in info.args) {
+            if (arg.field_name == "help" && arg.flag_name != "--help" && arg.value_type == Type.tBool && !arg.is_array && !arg.is_positional && !arg.is_count) {
+                init_exprs |> push(make_help_alias_expr(arg))
+            }
         }
 
         if (has_positional && has_mutex) {

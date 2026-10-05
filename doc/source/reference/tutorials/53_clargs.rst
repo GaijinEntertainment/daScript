@@ -289,7 +289,9 @@ remaining token:
 Flags and positionals interleave freely: clargs first removes every flag it
 knows (with its value, when the ``--flag value`` form is used), then reads what
 is left in order.  Unknown flag-shaped tokens are dropped rather than counted
-as positionals.
+as positionals - except ``--help`` and ``-h``: when the struct gives its bool
+``help`` field another flag name, they set that field, so a help request is
+never dropped and the tool run instead.
 
 The macro rejects orders it cannot fill: an ``array<string>`` positional must
 be last, a required positional cannot follow an optional one, and
