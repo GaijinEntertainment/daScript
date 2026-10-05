@@ -6,7 +6,7 @@ module _server_rig shared
 require dastest/testing_boost public
 require daslib/fio
 require daslib/clargs   // get_host_binary: the daslang a child runs under
-require openai/openai_vision public   // file_base64, image_file_data_uri: the one file reader and data: URI builder
+require openai/openai_vision   // file_base64, image_file_data_uri: the one file reader and data: URI builder
 require math
 require daslib/jobque_boost   // hold_engine: the holding request and its control on threads of their own
 require strings
@@ -37,6 +37,9 @@ def model_missing(t : T?; paths : array<string>) : bool {
     }
     return false
 }
+
+//! A file's bytes as base64; "" when unreadable.
+def file_base64(path : string) : string => openai_vision::file_base64(path)
 
 //! An image file as the data: URI a browser's FileReader would produce; "" when unreadable.
 def image_data_uri(path : string) : string => image_file_data_uri(path)
