@@ -23,7 +23,7 @@ require _compares   // nolint:STYLE030,LINT019 — the compares, inside the vulk
 require _attn_oracle   // attn_row_scored: the softmax row the attention oracles share
 require _vk_kq_fixtures   // nolint:STYLE030,LINT019 — f16r, inside the vulkan arms alone
 require dasllama/dasllama_math
-require dasllama/dasllama_gpu_math
+require dasllama/dasllama_gpu_math   // nolint:STYLE030,LINT019 - the oracles' device-math twins, used only inside the vulkan static_if arms (a build without the module drops them)
 require daslib/jobque_boost
 require daslib/linq   // nolint:STYLE030,LINT019 — count: the sentinel words a dispatch left, the pads' zero tails, inside the vulkan arms alone
 

@@ -12,7 +12,7 @@ require dasllama/dasllama_gpu_resident   // vulkan_bake_* — the offline flavor
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the vulkan static_if half
 require _model_tier
-require _vulkan_lane
+require _vulkan_lane   // nolint:STYLE030,LINT019 - load_cached_q8, used only inside the vulkan static_if arms (a build without the module drops them)
 
 // The OFFLINE vulkan bake (plan-as-data): the dry tier runs the load walk's accept/refuse
 // arithmetic against the config's numbers with NO device — the converter's `-f vulkan` rail.
