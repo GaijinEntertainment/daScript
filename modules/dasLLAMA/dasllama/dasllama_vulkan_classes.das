@@ -6128,7 +6128,9 @@ class CmI8Batch : MoeCmBase {
     }
 }
 
-//! the mul_mm tile (DASLLAMA_COOPMAT=mm) over the tile edge and the edge policy; its fragment walk keeps the shipped kernel's MMA order: A row by A row, each against every B column
+//! the mul_mm tile (DASLLAMA_COOPMAT=mm) over the tile edge and the edge policy: `l_tile` and `m_tile` differ in BT alone and stay two bodies
+//! with named accumulators - held as one coopmat array walked under `[unroll_full]` the tile read flat per dispatch and 2.5% under on the served
+//! Qwen3-4B Q8_0 pp512 (followup_vulkan.md row 93); each body's MMA order is the shipped kernel's, A row by A row, each against every B column
 [ |> template_struct_instance]
 class template MmBatchT : MoeCmBase {
     @ssbo @binding = 0 wq : array<uint>        // weight quant words
@@ -6217,11 +6219,31 @@ class template MmBatchT : MoeCmBase {
         let warp_c = gl_SubgroupID / 2u   // which half of the B tile
         let lw = tid % 8u                 // which packed word (4 qs) of the staged row's block
         let lr0 = tid / 8u                // staging row base 0..15
-        mm_tile(wblk0, row0, cnt, gm0, gn0, nbb, warp_r, warp_c, lw, lr0)
+        static_if (BT == 128u) {
+            l_tile(wblk0, row0, cnt, gm0, gn0, nbb, warp_r, warp_c, lw, lr0)
+        } else {
+            m_tile(wblk0, row0, cnt, gm0, gn0, nbb, warp_r, warp_c, lw, lr0)
+        }
     }
 
-    def mm_tile(wblk0, row0, cnt, gm0, gn0, nbb, warp_r, warp_c, lw, lr0 : uint) {
-        var acc : coopmatAcc_f16_16x16[int(BT / 32u) * int(BT / 32u)]
+    def l_tile(wblk0, row0, cnt, gm0, gn0, nbb, warp_r, warp_c, lw, lr0 : uint) {   // nolint:STYLE038 — the verbatim tile pass, parity-locked to the shipped kernel
+        static_if (BT == 128u) {
+        var acc00 : coopmatAcc_f16_16x16
+        var acc01 : coopmatAcc_f16_16x16
+        var acc02 : coopmatAcc_f16_16x16
+        var acc03 : coopmatAcc_f16_16x16
+        var acc10 : coopmatAcc_f16_16x16
+        var acc11 : coopmatAcc_f16_16x16
+        var acc12 : coopmatAcc_f16_16x16
+        var acc13 : coopmatAcc_f16_16x16
+        var acc20 : coopmatAcc_f16_16x16
+        var acc21 : coopmatAcc_f16_16x16
+        var acc22 : coopmatAcc_f16_16x16
+        var acc23 : coopmatAcc_f16_16x16
+        var acc30 : coopmatAcc_f16_16x16
+        var acc31 : coopmatAcc_f16_16x16
+        var acc32 : coopmatAcc_f16_16x16
+        var acc33 : coopmatAcc_f16_16x16
         var kb = 0u
         while (kb < nbb) {
             stage_a(wblk0, gm0, nbb, kb, lw, lr0)
@@ -6231,45 +6253,200 @@ class template MmBatchT : MoeCmBase {
                 let k8 = uint(ks) * 8u
                 var ca : coopmatA_f16_16x16
                 var cb : coopmatB_f16_16x16
-                for [unroll_full] (r in range(int(BT / 32u))) {
-                    coopmatLoad(ca, cml_a, int((warp_r * (BT / 2u) + uint(r) * 16u) * CML_SST + k8), int(CML_SST), 0)
-                    for [unroll_full] (c in range(int(BT / 32u))) {
-                        coopmatLoad(cb, cml_b, int((warp_c * (BT / 2u) + uint(c) * 16u) * CML_SST + k8), int(CML_SST), 1)
-                        acc[r * int(BT / 32u) + c] = coopmatMulAdd(ca, cb, acc[r * int(BT / 32u) + c])
-                    }
-                }
+                coopmatLoad(ca, cml_a, int((warp_r * 64u) * CML_SST + k8), int(CML_SST), 0)
+                coopmatLoad(cb, cml_b, int((warp_c * 64u) * CML_SST + k8), int(CML_SST), 1)
+                acc00 = coopmatMulAdd(ca, cb, acc00)
+                coopmatLoad(cb, cml_b, int((warp_c * 64u + 16u) * CML_SST + k8), int(CML_SST), 1)
+                acc01 = coopmatMulAdd(ca, cb, acc01)
+                coopmatLoad(cb, cml_b, int((warp_c * 64u + 32u) * CML_SST + k8), int(CML_SST), 1)
+                acc02 = coopmatMulAdd(ca, cb, acc02)
+                coopmatLoad(cb, cml_b, int((warp_c * 64u + 48u) * CML_SST + k8), int(CML_SST), 1)
+                acc03 = coopmatMulAdd(ca, cb, acc03)
+                coopmatLoad(ca, cml_a, int((warp_r * 64u + 16u) * CML_SST + k8), int(CML_SST), 0)
+                coopmatLoad(cb, cml_b, int((warp_c * 64u) * CML_SST + k8), int(CML_SST), 1)
+                acc10 = coopmatMulAdd(ca, cb, acc10)
+                coopmatLoad(cb, cml_b, int((warp_c * 64u + 16u) * CML_SST + k8), int(CML_SST), 1)
+                acc11 = coopmatMulAdd(ca, cb, acc11)
+                coopmatLoad(cb, cml_b, int((warp_c * 64u + 32u) * CML_SST + k8), int(CML_SST), 1)
+                acc12 = coopmatMulAdd(ca, cb, acc12)
+                coopmatLoad(cb, cml_b, int((warp_c * 64u + 48u) * CML_SST + k8), int(CML_SST), 1)
+                acc13 = coopmatMulAdd(ca, cb, acc13)
+                coopmatLoad(ca, cml_a, int((warp_r * 64u + 32u) * CML_SST + k8), int(CML_SST), 0)
+                coopmatLoad(cb, cml_b, int((warp_c * 64u) * CML_SST + k8), int(CML_SST), 1)
+                acc20 = coopmatMulAdd(ca, cb, acc20)
+                coopmatLoad(cb, cml_b, int((warp_c * 64u + 16u) * CML_SST + k8), int(CML_SST), 1)
+                acc21 = coopmatMulAdd(ca, cb, acc21)
+                coopmatLoad(cb, cml_b, int((warp_c * 64u + 32u) * CML_SST + k8), int(CML_SST), 1)
+                acc22 = coopmatMulAdd(ca, cb, acc22)
+                coopmatLoad(cb, cml_b, int((warp_c * 64u + 48u) * CML_SST + k8), int(CML_SST), 1)
+                acc23 = coopmatMulAdd(ca, cb, acc23)
+                coopmatLoad(ca, cml_a, int((warp_r * 64u + 48u) * CML_SST + k8), int(CML_SST), 0)
+                coopmatLoad(cb, cml_b, int((warp_c * 64u) * CML_SST + k8), int(CML_SST), 1)
+                acc30 = coopmatMulAdd(ca, cb, acc30)
+                coopmatLoad(cb, cml_b, int((warp_c * 64u + 16u) * CML_SST + k8), int(CML_SST), 1)
+                acc31 = coopmatMulAdd(ca, cb, acc31)
+                coopmatLoad(cb, cml_b, int((warp_c * 64u + 32u) * CML_SST + k8), int(CML_SST), 1)
+                acc32 = coopmatMulAdd(ca, cb, acc32)
+                coopmatLoad(cb, cml_b, int((warp_c * 64u + 48u) * CML_SST + k8), int(CML_SST), 1)
+                acc33 = coopmatMulAdd(ca, cb, acc33)
             }
             barrier()
             kb++
         }
         // stores: y[(row0 + token) * d + wrow] — fragment weight-dim contiguous = column-major, stride d
-        let dr = gm0 + warp_r * (BT / 2u)
-        let dc = gn0 + warp_c * (BT / 2u)
-        let whole = !EDGE || (gm0 + BT <= pa.d && gn0 + BT <= cnt)
+        let dr = gm0 + warp_r * 64u
+        let dc = gn0 + warp_c * 64u
+        let whole = !EDGE || (gm0 + 128u <= pa.d && gn0 + 128u <= cnt)
         if (whole) {
             var accw : coopmatAcc_f32_16x16
             let yb = (row0 + dc) * pa.d + dr
-            for [unroll_full] (r in range(int(BT / 32u))) {
-                for [unroll_full] (c in range(int(BT / 32u))) {
-                    coopmatConvert(accw, acc[r * int(BT / 32u) + c])
-                    coopmatStore(accw, y, int(yb + uint(c) * 16u * pa.d + uint(r) * 16u), int(pa.d), 1)
-                }
-            }
+            coopmatConvert(accw, acc00)
+            coopmatStore(accw, y, int(yb), int(pa.d), 1)
+            coopmatConvert(accw, acc01)
+            coopmatStore(accw, y, int(yb + 16u * pa.d), int(pa.d), 1)
+            coopmatConvert(accw, acc02)
+            coopmatStore(accw, y, int(yb + 32u * pa.d), int(pa.d), 1)
+            coopmatConvert(accw, acc03)
+            coopmatStore(accw, y, int(yb + 48u * pa.d), int(pa.d), 1)
+            coopmatConvert(accw, acc10)
+            coopmatStore(accw, y, int(yb + 16u), int(pa.d), 1)
+            coopmatConvert(accw, acc11)
+            coopmatStore(accw, y, int(yb + 16u * pa.d + 16u), int(pa.d), 1)
+            coopmatConvert(accw, acc12)
+            coopmatStore(accw, y, int(yb + 32u * pa.d + 16u), int(pa.d), 1)
+            coopmatConvert(accw, acc13)
+            coopmatStore(accw, y, int(yb + 48u * pa.d + 16u), int(pa.d), 1)
+            coopmatConvert(accw, acc20)
+            coopmatStore(accw, y, int(yb + 32u), int(pa.d), 1)
+            coopmatConvert(accw, acc21)
+            coopmatStore(accw, y, int(yb + 16u * pa.d + 32u), int(pa.d), 1)
+            coopmatConvert(accw, acc22)
+            coopmatStore(accw, y, int(yb + 32u * pa.d + 32u), int(pa.d), 1)
+            coopmatConvert(accw, acc23)
+            coopmatStore(accw, y, int(yb + 48u * pa.d + 32u), int(pa.d), 1)
+            coopmatConvert(accw, acc30)
+            coopmatStore(accw, y, int(yb + 48u), int(pa.d), 1)
+            coopmatConvert(accw, acc31)
+            coopmatStore(accw, y, int(yb + 16u * pa.d + 48u), int(pa.d), 1)
+            coopmatConvert(accw, acc32)
+            coopmatStore(accw, y, int(yb + 32u * pa.d + 48u), int(pa.d), 1)
+            coopmatConvert(accw, acc33)
+            coopmatStore(accw, y, int(yb + 48u * pa.d + 48u), int(pa.d), 1)
         } else {
             static_if (EDGE) {
                 // edge tile: every fragment bounces its f16 acc through this warp's cml_o slab
                 let ob = gl_SubgroupID * 256u
-                for (fi in range(int(BT / 32u) * int(BT / 32u))) {
-                    for [unroll_full] (j in range(int(BT / 32u) * int(BT / 32u))) {
-                        if (j == fi) {
-                            coopmatStore(acc[j], cml_o, int(ob), 16, 0)
-                        }
+                for (fi in range(16)) {
+                    let fr = uint(fi) / 4u       // fragment row: weight offset fr*16
+                    let fc = uint(fi) % 4u       // fragment col: token offset fc*16
+                    if (fi == 0) {
+                        coopmatStore(acc00, cml_o, int(ob), 16, 0)
+                    } elif (fi == 1) {
+                        coopmatStore(acc01, cml_o, int(ob), 16, 0)
+                    } elif (fi == 2) {
+                        coopmatStore(acc02, cml_o, int(ob), 16, 0)
+                    } elif (fi == 3) {
+                        coopmatStore(acc03, cml_o, int(ob), 16, 0)
+                    } elif (fi == 4) {
+                        coopmatStore(acc10, cml_o, int(ob), 16, 0)
+                    } elif (fi == 5) {
+                        coopmatStore(acc11, cml_o, int(ob), 16, 0)
+                    } elif (fi == 6) {
+                        coopmatStore(acc12, cml_o, int(ob), 16, 0)
+                    } elif (fi == 7) {
+                        coopmatStore(acc13, cml_o, int(ob), 16, 0)
+                    } elif (fi == 8) {
+                        coopmatStore(acc20, cml_o, int(ob), 16, 0)
+                    } elif (fi == 9) {
+                        coopmatStore(acc21, cml_o, int(ob), 16, 0)
+                    } elif (fi == 10) {
+                        coopmatStore(acc22, cml_o, int(ob), 16, 0)
+                    } elif (fi == 11) {
+                        coopmatStore(acc23, cml_o, int(ob), 16, 0)
+                    } elif (fi == 12) {
+                        coopmatStore(acc30, cml_o, int(ob), 16, 0)
+                    } elif (fi == 13) {
+                        coopmatStore(acc31, cml_o, int(ob), 16, 0)
+                    } elif (fi == 14) {
+                        coopmatStore(acc32, cml_o, int(ob), 16, 0)
+                    } else {
+                        coopmatStore(acc33, cml_o, int(ob), 16, 0)
                     }
                     barrier()
-                    bounce_out(uint(fi) / (BT / 32u), uint(fi) % (BT / 32u), dr, dc, row0, cnt)
+                    bounce_out(fr, fc, dr, dc, row0, cnt)
                     barrier()
                 }
             }
+        }
+        }
+    }
+
+    def m_tile(wblk0, row0, cnt, gm0, gn0, nbb, warp_r, warp_c, lw, lr0 : uint) {
+        static_if (BT == 64u) {
+        var acc00 : coopmatAcc_f16_16x16
+        var acc01 : coopmatAcc_f16_16x16
+        var acc10 : coopmatAcc_f16_16x16
+        var acc11 : coopmatAcc_f16_16x16
+        var kb = 0u
+        while (kb < nbb) {
+            stage_a(wblk0, gm0, nbb, kb, lw, lr0)
+            stage_b(row0, gn0, cnt, nbb, kb, lw, lr0)
+            barrier()
+            for [unroll] (ks in range(2)) {   // 2 K-subtiles x (2 A rows x 2 B cols), the L MMA order
+                let k8 = uint(ks) * 8u
+                var ca : coopmatA_f16_16x16
+                var cb : coopmatB_f16_16x16
+                coopmatLoad(ca, cml_a, int((warp_r * 32u) * CML_SST + k8), int(CML_SST), 0)
+                coopmatLoad(cb, cml_b, int((warp_c * 32u) * CML_SST + k8), int(CML_SST), 1)
+                acc00 = coopmatMulAdd(ca, cb, acc00)
+                coopmatLoad(cb, cml_b, int((warp_c * 32u + 16u) * CML_SST + k8), int(CML_SST), 1)
+                acc01 = coopmatMulAdd(ca, cb, acc01)
+                coopmatLoad(ca, cml_a, int((warp_r * 32u + 16u) * CML_SST + k8), int(CML_SST), 0)
+                coopmatLoad(cb, cml_b, int((warp_c * 32u) * CML_SST + k8), int(CML_SST), 1)
+                acc10 = coopmatMulAdd(ca, cb, acc10)
+                coopmatLoad(cb, cml_b, int((warp_c * 32u + 16u) * CML_SST + k8), int(CML_SST), 1)
+                acc11 = coopmatMulAdd(ca, cb, acc11)
+            }
+            barrier()
+            kb++
+        }
+        // stores: y[(row0 + token) * d + wrow] — same column-major layout as the L tile
+        let dr = gm0 + warp_r * 32u
+        let dc = gn0 + warp_c * 32u
+        let whole = !EDGE || (gm0 + 64u <= pa.d && gn0 + 64u <= cnt)
+        if (whole) {
+            var accw : coopmatAcc_f32_16x16
+            let yb = (row0 + dc) * pa.d + dr
+            coopmatConvert(accw, acc00)
+            coopmatStore(accw, y, int(yb), int(pa.d), 1)
+            coopmatConvert(accw, acc01)
+            coopmatStore(accw, y, int(yb + 16u * pa.d), int(pa.d), 1)
+            coopmatConvert(accw, acc10)
+            coopmatStore(accw, y, int(yb + 16u), int(pa.d), 1)
+            coopmatConvert(accw, acc11)
+            coopmatStore(accw, y, int(yb + 16u * pa.d + 16u), int(pa.d), 1)
+        } else {
+            static_if (EDGE) {
+                // edge tile: bounce each f16 acc through this warp's cml_o slab, bounds-checked write-out
+                let ob = gl_SubgroupID * 256u
+                for (fi in range(4)) {
+                    let fr = uint(fi) / 2u       // fragment row: weight offset fr*16
+                    let fc = uint(fi) % 2u       // fragment col: token offset fc*16
+                    if (fi == 0) {
+                        coopmatStore(acc00, cml_o, int(ob), 16, 0)
+                    } elif (fi == 1) {
+                        coopmatStore(acc01, cml_o, int(ob), 16, 0)
+                    } elif (fi == 2) {
+                        coopmatStore(acc10, cml_o, int(ob), 16, 0)
+                    } else {
+                        coopmatStore(acc11, cml_o, int(ob), 16, 0)
+                    }
+                    barrier()
+                    bounce_out(fr, fc, dr, dc, row0, cnt)
+                    barrier()
+                }
+            }
+        }
         }
     }
 }
@@ -6887,8 +7064,8 @@ class template Q8Cm2T : KqCm2BatchT {
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
     def decode(blk : VkQ8Blk; bc, cib : uint2) : float16 {
-        let q = int(uint(int(blk.qs[int((cib.y & 30u) >> 1u)])) << (24u - (cib.y & 1u) * 8u)) >> 24
-        return ws[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(q))
+        let q = unpack8(blk.qs[int((cib.y & 30u) >> 1u)])[int(cib.y & 1u)]   //! the 16-bit lane's byte2 select: the shift form read 1.5% under on the served Q8_0 prefill
+        return ws[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y] * float16(float(int(q)))
     }
 
     def override khr_stage16(blk, e0, sbase : uint) : void {

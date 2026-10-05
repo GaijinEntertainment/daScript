@@ -1697,6 +1697,11 @@ module) is independent and can land any time - it is pure structure.
     past +-65504 through `cvt_f32_to_f16` where the old cast gave +-inf (no plane carries such a value).
     Owed on a decode-vector card: the `DECVEC=1` probe rows `REVIEW_GPU_VULKAN.md` asks of the cm2
     decode folds - the pod's RTX PRO 4500 has no coopmat2 decode-vector, so only the `=0` rows were read.
+    Two folds the pass landed and took back on the served row: `MmBatchT`'s `l_tile` / `m_tile` (BT alone)
+    as one coopmat accumulator array walked under `[unroll_full]` read flat per dispatch on the 4096x4096
+    probe and 2.5% under on the served Qwen3-4B Q8_0 pp512 (RTX PRO 4500, 11894 -> 11483 tok/s with the
+    Q8 decode held) - a probe shape is not the served shape; and `Q8Cm2T.decode`'s shift form against its
+    16-bit-lane `unpack8` select, 1.5% under on the same row (11483 -> 11300). Both stay as they were.
     Still open, each a fold only after its probe row reads flat: the 8-row / 4-row flash Q-tiles (`FaT`),
     `MmBatchT`'s two tile edges, the hand-unrolled `DnScan` / `DaAttnBH128T` register blocks, the batch
     tiles' `stage_w` lane helpers against `KqGemvLeafT.grid4`; and the Q8 byte store spelled by

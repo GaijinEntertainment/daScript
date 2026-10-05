@@ -1,8 +1,7 @@
 # dasLLAMA Architecture - the Vulkan tier's GEMM tile family
 
-Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This
-document carries the cooperative-matrix tiles the
-Vulkan tier's GEMMs run on and the decode GEMV family's lane split: how a cm2 tile decodes its
+Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document carries the
+cooperative-matrix tiles the Vulkan tier's GEMMs run on and the decode GEMV family's lane split: how a cm2 tile decodes its
 quant bytes, how a tile and the served GEMM mode are picked, the class-pipeline build seat both
 shader instruments hang on, the MoE expert chain on those tiles, the KHR arm's hand-staged
 tile, and how a GEMV subgroup splits across short rows. `ARCHITECTURE_GPU_VULKAN.md` carries
@@ -25,7 +24,10 @@ runtime position comes out of its lane by a shift, `(uint(int(blk.qs[i >> 1u])) 
 ((i & 1u) * 8u)`, not an `unpack8(w)[i & 1u]` byte2 select (the same lane, but a decode built
 on selects runs slower on the expert-schedule shape - `moe:<fmt>`, RTX 5060 Ti: iq2xxs 1.28x,
 iq3xxs 1.24x, iq3s 1.49x, iq2s 1.08x), and a sign index straddling two bytes (the IQ2_XXS and
-IQ3_XXS aux32 words) is assembled from its two lanes and shifted. The
+IQ3_XXS aux32 words) is assembled from its two lanes and shifted. The Q8_0 tile is the measured
+exception: `Q8Cm2T.decode` selects its byte from the 16-bit lane with `unpack8`, and the shift
+form read 1.5% under it on the dense prefill (Qwen3-4B Q8_0 pp512, RTX PRO 4500) - the dense shape
+is bound elsewhere than the expert schedule the superblock readings came from. The
 scalar callback is written in PAIR form: every read the two elements of an aligned pair share -
 the grid byte, the sign word, the scale row - is derived from the pair's first element (`e &
 ~1u`), both values are computed and the element is selected last, because the driver runs the
@@ -179,8 +181,7 @@ the TTS seats' submits, the Pocket frame loop's hundred sets a frame - would oth
 write every set again on the dispatch path, and grow the descriptor pools until the model drop.
 Any buffer's destruction - device or host - and the drop's pool reset empty the cache, since a
 cached set may bind the buffer or hold a recycled handle. A clear orphans every cached set until
-the model drop's pool reset, so between drops the descriptor pools grow by the sets rebuilt after
-each clear.
+the model drop's pool reset, so between drops the descriptor pools grow by the sets rebuilt after each clear.
 
 **Full subgroups are a whole-run arm, never a per-pipeline one.** `DASLLAMA_VK_FULLSG` on a device
 that reports the feature sets `g_gpu.full_sg_on` once at device init and builds every class pipeline
