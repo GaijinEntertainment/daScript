@@ -3314,7 +3314,7 @@ def private park_media_request(srv : FrontLink; writer : WriterRef;
         return MediaPark.none
     }
     var refusal = ""
-    var has_new = false
+    var n_new = 0
     for (r in refs) {
         if (r.is_audio && !g_slots[g_cur].audio_armed) {
             refusal = "model '{cur_name()}' has no audio arm — start the server with --audio-mmproj (or an --image-mmproj that carries an audio tower) for it to accept input_audio parts"
@@ -3324,8 +3324,9 @@ def private park_media_request(srv : FrontLink; writer : WriterRef;
         let seen = g_media_seen?[r.key] ?? MediaSeen()
         r.n_rows = seen.n_rows
         r.grid = seen.grid
-        has_new ||= seen.n_rows == 0l
+        n_new += seen.n_rows == 0l ? 1 : 0
     }
+    let has_new = n_new > 0
     if (empty(refusal) && length(refs) > MEDIA_SPANS_LIMIT) {
         refusal = "this request carries {length(refs)} media parts; the limit is {MEDIA_SPANS_LIMIT}"
     }
@@ -3339,7 +3340,7 @@ def private park_media_request(srv : FrontLink; writer : WriterRef;
         service_unavailable(srv, writer, "the media worker is not ready")
         return MediaPark.answered
     }
-    if (has_new && g_media_pending >= MEDIA_QUEUE_LIMIT) {
+    if (g_media_pending + n_new > MEDIA_QUEUE_LIMIT) {
         delete refs
         service_unavailable(srv, writer, "the media queue is at capacity ({MEDIA_QUEUE_LIMIT}) — retry shortly")
         return MediaPark.answered
@@ -3521,7 +3522,7 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
         delete nothink
         delete close
     }
-    if (resume_rid != 0l && uncovered_media(prompt, refs)) {
+    if (resume_rid != 0l && g_media_cover_probe && uncovered_media(prompt, refs)) {
         // a part this slot knows, under a prompt whose cached prefix stops short of it: the worker encodes it, and
         // the request resumes here with its rows
         var wire = unsafe(g_media_wires?[resume_rid])
@@ -5652,7 +5653,7 @@ struct private MediaJobRef {
 
 var private g_media_job_ref : table<int64; MediaJobRef>
 
-let MEDIA_QUEUE_LIMIT = 8   // parked image requests are heavy (decoded bytes ride the channel)
+let MEDIA_QUEUE_LIMIT = MEDIA_SPANS_LIMIT   //!< encode jobs queued or in flight, a job a new part: one request's parts fill it alone (decoded bytes ride the channel)
 
 let GEMMA4A_AUDIO_SOFT_TOKENS_PER_SEC = 25l
 let AUDIO_DECODE_SAMPLE_RATE = 16000l
@@ -5668,6 +5669,15 @@ var private g_media_jobs : Channel?
 var private g_media_events : Channel?
 var private g_media_wires : table<int64; MediaWire>
 var private g_media_rows = 0l   // media (image span) rows admitted to prefill since boot
+var private g_media_cover_probe = true
+
+//! Whether a rowless part's span is looked up in the prefix cache before the request is submitted (the default). Off,
+//! every known part goes to the scheduler rowless and a span the cache does not hold comes back `media_lost` - the
+//! route a span evicted between the lookup and the admission takes. Non-private: test_openai_server_audio.das gates
+//! the retry through it.
+def set_media_cover_probe(on : bool) {
+    g_media_cover_probe = on
+}
 var private g_media_ready = 0
 var private g_media_armed = false
 var private g_media_pending = 0   // encode jobs queued or in flight; the wire table undercounts
