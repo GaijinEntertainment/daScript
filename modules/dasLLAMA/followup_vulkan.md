@@ -254,7 +254,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    still unported: the ar+rq fusion (the fq6 gate skips it), the kvm merge (mode-4
    excluded), the wg_blk0 push-constant base (~9% of the decode callback).
    ar fusion PORTED (2026-08-27, commit 4b690e77e): cls_ar_f16_b - the fused add+rms twin's
-   f16 form, bit-identical to the split cls_ar + clamp-convert (`tower_clamp_cvt_cls`) pair (gated). vk_fuse A/B: 3B pp
+   f16 form, bit-identical to the split cls_ar + f16cvt pair (gated). vk_fuse A/B: 3B pp
    7463 -> 7584 (+1.6%), tg +2.6%; tinyllama pp 19978 -> 20374 (+2.0%), tg +4.0% - both
    models' new bests, tinyllama pp now ~100.5% of their row.
    wg_blk0 lever DEAD (same day): the cm2x probe grew a `push` variant (base off pa.ksplit)
@@ -267,7 +267,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    tinyllama +0.5%. fa f16-out stamp (commit 5267a63b1): FaCm2H64/H128 templated
    (OUT16/typedef OT), the O accumulator converts in-kernel and lands the wo feed - the
    per-layer b+6 attn->f16 convert never encodes; bit-exact vs the split pair's own device
-   the clamp-convert (CPU float16() differs on rounding ties - device converts agree with each other).
+   f16cvt (CPU float16() differs on rounding ties - device converts agree with each other).
    A/B: 3B 7669 -> 7737/7708 (+0.7-0.9%), tinyllama 20796 -> 20986 (+0.9%).
    END-OF-DAY BOARD vs b10659: 3B pp 7737.2 +/- 67 = 100.6% - AHEAD of the reference exe for the
    first time; tinyllama pp 20986 +/- 357 = ~103.5%, tg ahead. 3B tg 105.1 = ~95.5% (decode
@@ -1676,12 +1676,6 @@ module) is independent and can land any time - it is pure structure.
     benchmarks/lcpp_bench.das --for-debug-purposes -r 3 -p 512 -n 128 -t 16 --npl 4` on the cm2
     arm and under `DASLLAMA_COOPMAT=mm`, beside llama.cpp b10660's `llama-batched-bench -c 4096 -b
     2048 -ub 512 -npp 512 -ntg 128 -npl 1,4 -ngl 99 -fa on` on the same file the same hour.
-90. **The GEMM probe's own plane fills stay beside the kernel cells' tile table.** `harness/vk_gemm_probe.das`
-    fills its k4 and k6 planes by hand where `tests/_vk_kq_fixtures.das`'s per-format tile table builds
-    the same rows for the cells; the two are kept apart on purpose - moving the probe onto the table
-    changes the k4 bytes behind the `khrx` and `mmqx` races and every recorded probe reading in
-    `PERF_LEDGER.md`. The fold is admissible only together with a re-reading of those rows, in a session
-    that re-stamps them.
 93. **The kernel twins kept as forks, each on its reason.** `gemv_shell` vs `gemv_shell_n` (region
     order, the 4x unroll and the column guard differ - ARCHITECTURE_GPU_VULKAN_GEMM.md 2.2ah, a
     measured row); the one-thread-broadcast out-norm reduces of `RouterGemvT`, `DnScanP3` and
@@ -1703,6 +1697,10 @@ module) is independent and can land any time - it is pure structure.
     past +-65504 through `cvt_f32_to_f16` where the old cast gave +-inf (no plane carries such a value).
     Owed on a decode-vector card: the `DECVEC=1` probe rows `REVIEW_GPU_VULKAN.md` asks of the cm2
     decode folds - the pod's RTX PRO 4500 has no coopmat2 decode-vector, so only the `=0` rows were read.
+    Still open, each a fold only after its probe row reads flat: the 8-row / 4-row flash Q-tiles (`FaT`),
+    `MmBatchT`'s two tile edges, the hand-unrolled `DnScan` / `DaAttnBH128T` register blocks, the batch
+    tiles' `stage_w` lane helpers against `KqGemvLeafT.grid4`; and the Q8 byte store spelled by
+    `Q8BlockStoreT.blk_store` and `ResidualT.quant32` (a template fold, pinned by the codec stamps' dump).
 94. **The qwen25v Vulkan chain's remaining f16 sources.** The chain (`ARCHITECTURE_GPU_TOWER_VULKAN.md`
     2.2ar) holds the exact CPU chain within 1e-2 x rms through eight blocks and within 0.02 to 0.09
     x rms at 32 blocks (the Metal rung's order) with the window layers in f32; what re-rolls the
@@ -1923,7 +1921,7 @@ module) is independent and can land any time - it is pure structure.
     `[hot_path]`, so the allocation lint never walks them. The ncol cell dispatches the one-column class before the N class, so a grid N leaf that skipped
     `stage_grid` would read the grid the previous dispatch left in workgroup memory (a poisoning
     dispatch between them, or the N class first, pins the call).
-93. **MoltenVK reds in the model-free suite.** On a Mac with the dasVulkan module built, MoltenVK
+143. **MoltenVK reds in the model-free suite.** On a Mac with the dasVulkan module built, MoltenVK
     is a live Vulkan device and three model-free files red on it - `test_vulkan_dec_tail` and
     `test_vulkan_tier` on the class-rail asserts ("the class rails must engage on a live device":
     a decode span, FFN tail and add+rms class fails its SPIR-V to MSL conversion), and
@@ -2129,3 +2127,22 @@ module) is independent and can land any time - it is pure structure.
    measurement (`desc_pool_at` at model drop with the tables removed, against today's) on a resident model
    that destroys a buffer mid-life; the tables go if the pools do not grow, and keep a one-line reason
    beside `vkd_cached_set` if they do.
+
+140. **The trim's seven base plane names are spelled twice.** `trim_plane_dropped` names `qblob`,
+   `qscales`, `qscales16`, `wblob`, `bf16blob`, `q4blob` and `q4scales` as a string list and
+   `trim_model_planes` deletes the same seven by field, by hand (`dasllama_gpu_resident.das`); only the
+   kq pairs walk one table (`kq_plane_pair_names`). The fold is one table of base-plane names both read,
+   once a field deletes by name.
+
+141. **The Metal prefill's tq4 un-rotate site stands beside `tq4_unrotate_from_store`.** The rotate
+   before the store folded onto `tq4_rotate_for_store` (`dasllama_metal_prefill.das`), while the un-rotate
+   of the uploaded rows ("tq4 rows dequant ROTATED and un-rotate per head") is still the prefill's own
+   code and the helper's one caller is the CPU blocks file. The fold needs an Apple run (the Metal decode
+   parity arm `arm7b-tq4kv`): it joins the M5 Metal cells this arc owes.
+
+142. **The GEMM probe's own plane fills stay beside the kernel cells' tile table.** `harness/vk_gemm_probe.das`
+    fills its k4 and k6 planes by hand where `tests/_vk_kq_fixtures.das`'s per-format tile table builds
+    the same rows for the cells; the two are kept apart on purpose - moving the probe onto the table
+    changes the k4 bytes behind the `khrx` and `mmqx` races and every recorded probe reading in
+    `PERF_LEDGER.md`. The fold is admissible only together with a re-reading of those rows, in a session
+    that re-stamps them.
