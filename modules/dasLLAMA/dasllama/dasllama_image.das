@@ -486,7 +486,18 @@ struct ImgWriter {
     chunk_cap : uint64 = 0ul
     cur : uint64 = 0ul
     ok : bool = true
+    overrun : bool = false   //! dead by an append past the chunk - a sizing bug; a writer dead with this false lost a write or its open
 }
+
+var private g_image_write_fault = 0ul
+
+//! Test seam: a file write that would carry an image past `after_bytes` fails as a full disk does; 0 turns it off.
+def set_image_write_fault(after_bytes : uint64) {
+    g_image_write_fault = after_bytes
+}
+
+//! Current value of the [[set_image_write_fault]] seam (0 = off), so a fixture restores what it found.
+def get_image_write_fault() : uint64 => g_image_write_fault
 
 def private w_open(path : string; total : uint64) : ImgWriter {
     let h = unsafe(dwrite_open(path, total, uint64(DWRITE_STAGING_BAND)))
@@ -515,10 +526,12 @@ def w_append(var w : ImgWriter; p : void?; nbytes : uint64) {
         if (nbytes > w.chunk_cap - w.cur) {
             to_log(LOG_ERROR, "dasLLAMA image: chunk overrun at {int64(w.cur)} + {int64(nbytes)} > {int64(w.chunk_cap)} - image sizing is wrong\n")
             w.ok = false
+            w.overrun = true
             return
         }
         unsafe(memcpy(mem_at(w.chunk_base, w.cur), p, nbytes))
-    } elif (!unsafe(dwrite_append(w.dwrite_h, p, nbytes))) {
+    } elif ((g_image_write_fault != 0ul && w.cur + nbytes > g_image_write_fault) || !unsafe(dwrite_append(w.dwrite_h, p, nbytes))) {
+        to_log(LOG_ERROR, "dasLLAMA image: a write of {int64(nbytes)} bytes at {int64(w.cur)} failed - disk full or over quota? image save aborted\n")
         w.ok = false   // a dead save stays dead — don't keep pushing bytes at a full disk
         return
     }
@@ -1127,8 +1140,41 @@ def private tmp_name_for(path : string) : string {
     return "{path}.{ref_time_ticks()}.tmp"   // clock: control — unique temp-name suffix, not timing
 }
 
+let private TMP_STALE_S = 3600l   //! a temp file this long unwritten has no live writer
+
+def private all_digits(s : string) : bool {
+    for (c in s) {
+        return false if (!is_number(c))
+    }
+    return !empty(s)
+}
+
+//! the temp files a killed writer of `path` left beside it - `tmp_name_for`'s names gone stale - removed
+[arch(at = "../ARCHITECTURE_IMAGE.md#image-publish")]
+def private sweep_stale_tmps(path : string) {
+    let folder = dir_name(path)
+    let prefix = "{base_name(path)}."
+    let now = int64(get_clock())
+    var stale : array<string>
+    dir(folder) $(name) {
+        if (name |> starts_with(prefix) && name |> ends_with(".tmp") && all_digits(slice(name, length(prefix), length(name) - 4))) {
+            let full = path_join(folder, name)
+            let st = stat(full)
+            if (st.is_valid && now - int64(st.mtime) > TMP_STALE_S) {
+                stale |> push(full)
+            }
+        }
+    }
+    for (full in stale) {
+        if (remove(full)) {
+            to_log(LOG_WARNING, "dasLLAMA image: removed '{full}' - a temp file an earlier save of this image left behind\n")
+        }
+    }
+}
+
 def private save_image_to_file(var t; path : string; extra : uint64; tag : string; quant : string; layout : uint64;
                                plane : block<(name : string; var w : ImgWriter; var sections : array<ImgSection>) : bool>) : bool {
+    sweep_stale_tmps(path)
     let tmp_path = tmp_name_for(path)
     let w = build_image(t, tmp_path, false, extra, tag, quant, false, layout, plane)
     return promote_tmp(tmp_path, path, w.ok, w.cur)
@@ -1136,6 +1182,7 @@ def private save_image_to_file(var t; path : string; extra : uint64; tag : strin
 
 // a finished chunk to disk, header and all — one append, no patch pass (page 0 is already stored)
 def private write_chunk(base : void?; bytes : uint64; path : string) : bool {
+    sweep_stale_tmps(path)
     let tmp_path = tmp_name_for(path)
     var w = w_open(tmp_path, bytes)
     let ts = ref_time_ticks()
@@ -1225,8 +1272,9 @@ def private vk_mint_arm_walk(tag : string) : bool {
     return !empty(tag) && !g_vk_mint_declined && tag == moe_gpu_bake_tag()
 }
 
+//! a writer a failed write killed takes no more bytes and the save declines at the publish, its temp file removed; an overrun is the sizing's bug
 def private vk_mint_sink(p : void?; nbytes : uint64) {
-    if (!g_vk_mint_walk_writer.ok) {
+    if (g_vk_mint_walk_writer.overrun) {
         panic("dasLLAMA image: the vulkan lane's device twin overran the image's reserve mid-walk - the sizing is wrong, see the error above")
     }
     w_append(*g_vk_mint_walk_writer, p, nbytes)

@@ -225,6 +225,34 @@ def test_vulkan_mint_trim_follows_the_driver(tst : T?) {
     }
 }
 
+[test]
+def test_vulkan_mint_failed_write_leaves_nothing(tst : T?) {
+    tst |> run("Qwen3.5-0.8B-MTP: a mint whose write fails writes no lane, leaves no temp file and still serves; the next load mints") @(t : T?) {
+        with_mint_file(t, MINT_FILE) $(path) {
+            with_cold_lane(t, path, "the model") $(var plain; img_v) {
+                delete plain
+                moe_gpu_drop_model()
+                remove(img_v)
+                let fault_found = get_image_write_fault()
+                let tmps_found = image_tmp_siblings(img_v)
+                set_image_write_fault(1ul << 20ul)
+                var held <- load_cached_q8(path)
+                set_image_write_fault(fault_found)
+                t |> success(!stat(img_v).is_valid, "the mint whose write failed a megabyte in published no lane")
+                t |> equal(image_tmp_siblings(img_v), tmps_found, "and left no temp file of its own beside it")
+                t |> success(long_length(held.qblob) > 0l, "the load serves the streamed build from memory")
+                delete held
+                moe_gpu_drop_model()
+                remove(image_path_for(path, "", "q8"))
+                var again <- load_cached_q8(path)
+                t |> success(stat(img_v).is_valid && moe_gpu_resident_active(), "control: with the seam off the next load mints the lane and the driver serves it")
+                delete again
+                moe_gpu_drop_model()
+            }
+        }
+    }
+}
+
 //! the greedy tokens a staged (no image) load of `path` serves on the device at mirror codec `kv`: what a lane serves at that codec
 [cold_path]
 def private staged_tokens_at(t : T?; path : string; kv : KVDtype) : array<int64> {
