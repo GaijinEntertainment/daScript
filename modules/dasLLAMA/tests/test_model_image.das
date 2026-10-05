@@ -37,6 +37,7 @@ require daslib/apply
 require daslib/fio
 require strings
 require math
+require dasllama/dasllama_audio_io
 require _model_tier
 
 // The prepared-model image (.dlim) rail. The mechanics arm exercises save/load on a synthetic
@@ -51,33 +52,7 @@ require _model_tier
 // element-exact plane compare: -1 = length mismatch, else the number of differing elements
 // the staged (owned array) side against the served (borrowed plane) side — the only comparison
 // that can prove an image round-trips, now that a served carrier has no array form
-def private count_mismatch(a : array<float>; b : PlaneF) : int64 {
-    if (long_length(a) != length(b)) {
-        return -1l
-    }
-    var bad = 0l
-    for (i in range64(long_length(a))) {
-        if (a[i] != b[i]) {
-            bad++
-        }
-    }
-    return bad
-}
-
-def private count_mismatch_i8(a : array<int8>; b : PlaneI8) : int64 {
-    if (long_length(a) != length(b)) {
-        return -1l
-    }
-    var bad = 0l
-    for (i in range64(long_length(a))) {
-        if (a[i] != b[i]) {
-            bad++
-        }
-    }
-    return bad
-}
-
-def private count_mismatch_u16(a : array<uint16>; b : PlaneU16) : int64 {
+def private count_mismatch(a : array<auto(TT)>; b : auto(PP)) : int64 {
     if (long_length(a) != length(b)) {
         return -1l
     }
@@ -292,9 +267,7 @@ def test_image_table_slot_names(t : T?) {
         if (!arm_on(t, "mechanics")) {
             return
         }
-        var terr : string
-        let tmp = temp_directory(terr)
-        let path = path_join(empty(tmp) ? "." : tmp, "dasllama_img_table_{ref_time_ticks()}.dlim")
+        let path = path_join(test_temp_dir(), "dasllama_img_table.dlim")
         var p = ImgTableProbe()
         fill_bytes(p.kq[int(KqFmt.k4)].q, 4096, 1)
         fill_bytes(p.kq[int(KqFmt.k4)].s, 512, 2)
@@ -327,9 +300,7 @@ def test_image_mechanics(t : T?) {
         if (!arm_on(t, "mechanics")) {
             return
         }
-        var terr : string
-        let tmp = temp_directory(terr)   // portable (no /tmp on Windows); cwd as a last resort
-        let path = path_join(empty(tmp) ? "." : tmp, "dasllama_img_probe_{ref_time_ticks()}.dlim")
+        let path = path_join(test_temp_dir(), "dasllama_img_probe.dlim")
         var p <- make_probe()
         t |> success(save_image(p, path, "img-probe"), "save")
         t |> success(stat(path).is_valid, "file exists")
@@ -427,9 +398,7 @@ def test_image_mechanics(t : T?) {
         if (!arm_on(t, "mechanics")) {
             return
         }
-        var terr : string
-        let tmp = temp_directory(terr)
-        let path = path_join(empty(tmp) ? "." : tmp, "dasllama_img_stale_{ref_time_ticks()}.dlim")
+        let path = path_join(test_temp_dir(), "dasllama_img_stale.dlim")
         var p <- make_probe()
         t |> success(save_image(p, path, "img-probe"), "save")
         delete p
@@ -446,9 +415,7 @@ def test_image_mechanics(t : T?) {
         if (!arm_on(t, "mechanics")) {
             return
         }
-        var terr : string
-        let tmp = temp_directory(terr)
-        let path = path_join(empty(tmp) ? "." : tmp, "dasllama_img_chunk_{ref_time_ticks()}.dlim")
+        let path = path_join(test_temp_dir(), "dasllama_img_chunk.dlim")
         var truth <- make_probe()   // the off-rail reference, untouched by the build
         var src <- make_probe()
         var cold = ImgProbe()
@@ -503,9 +470,7 @@ def test_image_mechanics(t : T?) {
         if (!arm_on(t, "mechanics")) {
             return
         }
-        var terr : string
-        let tmp = temp_directory(terr)
-        let fake = path_join(empty(tmp) ? "." : tmp, "dasllama_lane_{ref_time_ticks()}.gguf")
+        let fake = path_join(test_temp_dir(), "dasllama_lane.gguf")
         let fk = fopen(fake, "wb")   // the inventory scans the siblings of an existing source file
         t |> success(fk != null, "the fake source exists")
         fclose(fk)
@@ -607,19 +572,6 @@ def test_image_mechanics(t : T?) {
 
 // ===== real carriers: gguf load vs mapped image load =====
 
-// greedy continuation ids on a loaded model (no kernel pins: both sides of every compare run
-// in this process with identical knobs, so determinism is per-run, not per-fixture)
-def private gen_ids(tr : Model; prompt : array<int64>; n_gen : int) : array<int64> {
-    var out : array<int64>
-    with_dasllama_jobque() {
-        var s = make_run_state(tr.config)
-        var ids <- generate(tr, s, prompt, length(prompt) + n_gen)
-        out <- ids
-        delete s
-    }
-    return <- out
-}
-
 // first config field whose value differs between two loads ("" = none) — catches an arch
 // configure clobbering serialized gguf overrides even when short gens can't (sliding_window
 // only bites past the window)
@@ -654,7 +606,7 @@ def private text_image_roundtrip(t : T?; path : string; n_gen : int) {
         g.config.seq_len = 2048l
     }
     var prompt <- encode(g, "Once upon a time")
-    var ga <- gen_ids(g, prompt, n_gen)
+    var ga <- greedy_gen(g, prompt, n_gen)
     delete g
     var a <- load_model(path, QuantMode.q8)
     t |> success(a.image_map != null, "cold load serves the image it built")
@@ -662,7 +614,7 @@ def private text_image_roundtrip(t : T?; path : string; n_gen : int) {
     if (a.config.seq_len > 2048l) {
         a.config.seq_len = 2048l
     }
-    var gcold <- gen_ids(a, prompt, n_gen)
+    var gcold <- greedy_gen(a, prompt, n_gen)
     t |> success(!empty(ga) && count_mismatch(ga, gcold) == 0l, "gguf vs cold-built image tokens")
     delete gcold
     delete a
@@ -681,7 +633,7 @@ def private text_image_roundtrip(t : T?; path : string; n_gen : int) {
     if (b.config.seq_len > 2048l) {
         b.config.seq_len = 2048l
     }
-    var gb <- gen_ids(b, prompt, n_gen)
+    var gb <- greedy_gen(b, prompt, n_gen)
     t |> success(!empty(ga) && count_mismatch(ga, gb) == 0l, "gguf vs image tokens")
     delete b   // unmaps
     var c <- load_model(path, QuantMode.q8)   // the file survives an unmap — map again
@@ -689,7 +641,7 @@ def private text_image_roundtrip(t : T?; path : string; n_gen : int) {
     if (c.config.seq_len > 2048l) {
         c.config.seq_len = 2048l
     }
-    var gc <- gen_ids(c, prompt, n_gen)
+    var gc <- greedy_gen(c, prompt, n_gen)
     t |> success(count_mismatch(ga, gc) == 0l, "re-mapped tokens")
     delete c
     delete ga
@@ -789,7 +741,7 @@ def test_metal_flavor_image(tst : T?) {
             var tc <- load_model(path, QuantMode.q8)
             t |> success(!tc.metal_blob, "CPU-mode load stays planar")
             var prompt <- counting_ids(tc)
-            var g_cpu <- gen_ids(tc, prompt, 16)
+            var g_cpu <- greedy_gen(tc, prompt, 16)
             delete tc
             // cold metal mint: the blob flavor regenerates + saves under its own identity tag
             let img_m = image_path_for(path, METAL_IMAGE_TAG)
@@ -800,7 +752,7 @@ def test_metal_flavor_image(tst : T?) {
             t |> success(tm.image_map != null, "cold metal load serves the image it built")
             t |> success(stat(img_m).is_valid, "cold metal load saved the metal-flavor image")
             t |> success(empty(tm.qblob), "planar q8 planes are gone")
-            var g_mint <- gen_ids(tm, prompt, 16)   // a blob model CANNOT silently CPU-serve —
+            var g_mint <- greedy_gen(tm, prompt, 16)   // a blob model CANNOT silently CPU-serve —
                                                     // completing at all proves the GPU served
             // teacher-forced parity vs a fresh planar CPU control (engine entry, no image
             // cache) — probe-measured noise ~0.75, breakage class 15+; 4.0 = ~4x SNR
@@ -817,18 +769,18 @@ def test_metal_flavor_image(tst : T?) {
             // warm map + the direct-.dlim path form (both flavors' identities probed)
             var tw <- load_model(path, QuantMode.q8)
             t |> success(tw.image_map != null && tw.metal_blob, "warm metal load maps the blob image")
-            var g_map <- gen_ids(tw, prompt, 16)
+            var g_map <- greedy_gen(tw, prompt, 16)
             t |> success(count_mismatch(g_mint, g_map) == 0l, "mint vs mapped tokens")
             delete tw
             var td <- load_model(img_m, QuantMode.q8)
             t |> success(td.metal_blob, "direct .dlim load resolves the metal identity")
-            var g_dir <- gen_ids(td, prompt, 16)
+            var g_dir <- greedy_gen(td, prompt, 16)
             t |> success(count_mismatch(g_mint, g_dir) == 0l, "direct-path tokens")
             // the CPU tripwire: with the overrides off, any inference on a blob model panics
             set_metal_mode(MetalMode.off)
             var tripped = false
             try {
-                var g_bad <- gen_ids(td, prompt, 2)
+                var g_bad <- greedy_gen(td, prompt, 2)
                 delete g_bad
             } recover {
                 tripped = true
@@ -866,7 +818,7 @@ def test_metal_flavor_image(tst : T?) {
             t |> success(!tc.metal_blob && tc.emb_q8 && !tc.cls_q8, "CPU-mode load stays planar and serves the untied q8 table")
             let table_floats = tc.config.vocab_size * tc.config.dim
             var prompt <- counting_ids(tc)
-            var g_cpu <- gen_ids(tc, prompt, 16)
+            var g_cpu <- greedy_gen(tc, prompt, 16)
             delete tc
             let img_m = image_path_for(path, METAL_IMAGE_TAG)
             remove(img_m)
@@ -876,7 +828,7 @@ def test_metal_flavor_image(tst : T?) {
             t |> success(tm.image_map != null && stat(img_m).is_valid, "cold metal load saved and serves the metal-flavor image")
             t |> success(tm.emb_q8 && !tm.cls_q8 && tm.tok_emb_off < 0l && long_length(tm.fblob) < table_floats,
                 "the blob flavor keeps the untied q8 table and no fp32 copy (fblob {long_length(tm.fblob)} floats against a {table_floats}-float table)")
-            var g_mint <- gen_ids(tm, prompt, 16)   // every token's embedding row read from the blob copy
+            var g_mint <- greedy_gen(tm, prompt, 16)   // every token's embedding row read from the blob copy
             var tp <- load_model_(path, QuantMode.q8)
             let np = long_length(prompt)
             var teach <- [for (i in range64(np - 1l, long_length(g_cpu))); g_cpu[i]]
@@ -887,7 +839,7 @@ def test_metal_flavor_image(tst : T?) {
             delete tm
             var tw <- load_model(path, QuantMode.q8)
             t |> success(tw.image_map != null && tw.metal_blob && tw.emb_q8 && !tw.cls_q8, "warm metal load maps the blob image with the untied q8 table")
-            var g_map <- gen_ids(tw, prompt, 16)
+            var g_map <- greedy_gen(tw, prompt, 16)
             t |> success(count_mismatch(g_mint, g_map) == 0l, "mint vs mapped tokens")
             delete tw
             delete g_cpu
@@ -926,14 +878,14 @@ def test_gemma4e_flavor_image(tst : T?) {
             t |> success(tm.metal_blob, "metal-mode load is blob-form")
             t |> success(stat(img_m).is_valid, "cold metal load saved the metal-flavor image")
             var prompt <- counting_ids(tm)
-            var g_mint <- gen_ids(tm, prompt, 8)
+            var g_mint <- greedy_gen(tm, prompt, 8)
             t |> success(length(g_mint) > length(prompt), "mint-backed blob model serves a continuation")
             delete tm
             // warm map: the tripwire's after-borrows seam again, now off the mapped planes
             var tw <- load_model(path, QuantMode.q8)
             tw.config.seq_len = min(tw.config.seq_len, 512l)
             t |> success(tw.image_map != null && tw.metal_blob, "warm metal load maps the blob image")
-            var g_map <- gen_ids(tw, prompt, 8)
+            var g_map <- greedy_gen(tw, prompt, 8)
             log_gen_texts(tw, "E2B mint-vs-mapped", g_mint, g_map)
             t |> success(count_mismatch(g_mint, g_map) == 0l,
                 "mapped-image tokens match the mint's ({count_mismatch(g_mint, g_map)} differ)")
@@ -1203,7 +1155,7 @@ def test_whisper_image_roundtrip(t : T?) {
         if (!family_on(t, "whisper") || !arm_on(t, "whisper")) return
         let path = path_join(whisper_dir(), "ggml-tiny.bin")
         return if (!jit_model_available(t, path))
-        var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+        var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
@@ -1236,9 +1188,9 @@ def test_whisper_image_roundtrip(t : T?) {
         var inscope stg8 <- stage_whisper_model(path, true)
         var inscope w8 <- load_whisper_model(path, true)
         t |> success(w8.image_map != null, "q8 cold load serves the image it streamed")
-        t |> equal(count_mismatch_i8(stg8.dqblob, w8.dqblob), 0l, "streamed dqblob element-exact vs staged")
+        t |> equal(count_mismatch(stg8.dqblob, w8.dqblob), 0l, "streamed dqblob element-exact vs staged")
         t |> equal(count_mismatch(stg8.dqscales, w8.dqscales), 0l, "streamed dqscales element-exact vs staged")
-        t |> equal(count_mismatch_i8(stg8.enc.qblob, w8.enc.qblob), 0l, "streamed enc.qblob element-exact vs staged")
+        t |> equal(count_mismatch(stg8.enc.qblob, w8.enc.qblob), 0l, "streamed enc.qblob element-exact vs staged")
         t |> equal(count_mismatch(stg8.enc.qscales, w8.enc.qscales), 0l, "streamed enc.qscales element-exact vs staged")
         t |> equal(count_mismatch(stg8.dblob, w8.dblob), 0l, "q8 flavor's fp32 dblob element-exact too")
         // and the MIXED flavor (f32 enc / q8 dec — the GPU-tower serving mode): the decoder
@@ -1250,7 +1202,7 @@ def test_whisper_image_roundtrip(t : T?) {
         var inscope wm <- load_whisper_model(path, false, true)
         t |> success(wm.image_map != null, "mixed cold load serves the image it streamed")
         t |> success(!wm.enc.q8 && wm.dq8, "mixed flavor: f32 encoder, q8 decoder")
-        t |> equal(count_mismatch_i8(stgm.dqblob, wm.dqblob), 0l, "mixed streamed dqblob element-exact vs staged")
+        t |> equal(count_mismatch(stgm.dqblob, wm.dqblob), 0l, "mixed streamed dqblob element-exact vs staged")
         t |> equal(count_mismatch(stgm.dqscales, wm.dqscales), 0l, "mixed streamed dqscales element-exact vs staged")
         t |> equal(count_mismatch(stgm.dblob, wm.dblob), 0l, "mixed streamed dblob element-exact vs staged")
         t |> equal(count_mismatch(stgm.enc.fblob, wm.enc.fblob), 0l, "mixed enc.fblob element-exact (full f32 layout)")
@@ -1281,7 +1233,7 @@ def test_whisper_metal_tower(tst : T?) {
             if (!family_on(t, "whisper") || !arm_on(t, "mtower")) return
             let path = path_join(whisper_dir(), "ggml-tiny.bin")
             return if (!jit_model_available(t, path))
-            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present")
                 return
@@ -1438,7 +1390,7 @@ def test_whisper_metal_cross_kv(tst : T?) {
             if (!family_on(t, "whisper") || !arm_on(t, "mtower")) return
             let path = path_join(whisper_dir(), "ggml-tiny.bin")
             return if (!jit_model_available(t, path))
-            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present")
                 return
@@ -1557,7 +1509,7 @@ def test_parakeet_tower_metal(tst : T?) {
             if (!family_on(t, "parakeet") || !arm_on(t, "mtower")) return
             let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
             return if (!jit_model_available(t, path))
-            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present")
                 return
@@ -1735,7 +1687,7 @@ def test_parakeet_tower_q8_decline(tst : T?) {
             if (!family_on(t, "parakeet") || !arm_on(t, "mtower")) return
             let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
             return if (!jit_model_available(t, path))
-            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present")
                 return
@@ -1794,7 +1746,7 @@ def test_parakeet_image_roundtrip(t : T?) {
         if (!family_on(t, "parakeet") || !arm_on(t, "parakeet")) return
         let path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
         return if (!jit_model_available(t, path))
-        var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+        var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present")
             return
@@ -1844,11 +1796,11 @@ def test_qwen3a_tower_image_roundtrip(t : T?) {
         t |> equal(b.proj_dim, a.e.proj_dim)
         t |> equal(b.n_ch, a.e.n_ch)
         t |> equal(count_mismatch(a.core.fblob, b.core.fblob), 0l, "core.fblob element-exact")
-        t |> equal(count_mismatch_i8(a.core.qblob, b.core.qblob), 0l, "core.qblob element-exact")
+        t |> equal(count_mismatch(a.core.qblob, b.core.qblob), 0l, "core.qblob element-exact")
         t |> equal(count_mismatch(a.core.qscales, b.core.qscales), 0l, "core.qscales element-exact")
         t |> equal(count_mismatch(a.cblob, b.cblob), 0l, "cblob element-exact")
         t |> success(b.cq8, "warm tower cblob trio is on the q8 rail")
-        t |> equal(count_mismatch_i8(a.qcblob, b.qcblob), 0l, "qcblob element-exact")
+        t |> equal(count_mismatch(a.qcblob, b.qcblob), 0l, "qcblob element-exact")
         t |> equal(count_mismatch(a.qcscales, b.qcscales), 0l, "qcscales element-exact")
         // the f32 A/B rail still stages + serves (parity legs flip it; serving never does)
         set_qwen3a_q8(false)
@@ -1895,7 +1847,7 @@ def test_gemma4uv_embedder_image_roundtrip(t : T?) {
         t |> equal(b.proj_w, a.e.proj_w)
         t |> equal(b.pos_w, a.e.pos_w)
         t |> equal(count_mismatch(a.blob, b.blob), 0l, "blob element-exact")
-        t |> equal(count_mismatch_u16(a.wblob, b.wblob), 0l, "wblob (the bf16 GEMM) element-exact")
+        t |> equal(count_mismatch(a.wblob, b.wblob), 0l, "wblob (the bf16 GEMM) element-exact")
         // the bf16 plane holds the file's OWN halfwords: exactly the projection, nothing rounded
         t |> equal(long_length(a.wblob), a.e.n_embd * a.e.proj_dim,
                    "the bf16 plane is exactly the projection ({length(a.wblob)} halfwords)")
@@ -1942,7 +1894,7 @@ def test_gemma4v_tower_image_roundtrip(t : T?) {
         t |> equal(b.layer_w_stride, a.t.layer_w_stride)
         t |> equal(b.proj_clamp, a.t.proj_clamp)
         t |> equal(count_mismatch(a.blob, b.blob), 0l, "blob (f32: conv, pos tables, norms, clamp table) element-exact")
-        t |> equal(count_mismatch_u16(a.wblob, b.wblob), 0l, "wblob (the bf16 GEMMs) element-exact")
+        t |> equal(count_mismatch(a.wblob, b.wblob), 0l, "wblob (the bf16 GEMMs) element-exact")
         t |> equal(long_length(a.wblob), a.t.n_layer * a.t.layer_w_stride + a.t.n_embd * a.t.proj_dim,
                    "the bf16 plane is exactly the GEMM set ({length(a.wblob)} halfwords)")
         set_gemma4v_q8(true)
@@ -1953,8 +1905,8 @@ def test_gemma4v_tower_image_roundtrip(t : T?) {
         t |> success(cq.q8 && cq.image_map != null && stat(imgq).is_valid, "q8 lane: cold load built and serves its own image")
         t |> success(imgq != img, "the q8 lane keys a different image")
         t |> equal(count_mismatch(aq.blob, cq.blob), 0l, "q8 lane: blob element-exact")
-        t |> equal(count_mismatch_u16(aq.wblob, cq.wblob), 0l, "q8 lane: wblob (the projection) element-exact")
-        t |> equal(count_mismatch_i8(aq.qblob, cq.qblob), 0l, "q8 lane: qblob element-exact")
+        t |> equal(count_mismatch(aq.wblob, cq.wblob), 0l, "q8 lane: wblob (the projection) element-exact")
+        t |> equal(count_mismatch(aq.qblob, cq.qblob), 0l, "q8 lane: qblob element-exact")
         t |> equal(count_mismatch(aq.qscales, cq.qscales), 0l, "q8 lane: qscales element-exact")
         t |> equal(long_length(aq.qblob), aq.t.n_layer * aq.t.layer_w_stride, "qblob is exactly the block GEMM set")
         t |> equal(long_length(aq.wblob), aq.t.n_embd * aq.t.proj_dim, "q8 lane: the bf16 plane is exactly the projection")
@@ -2008,7 +1960,7 @@ def test_gemma3v_tower_image_roundtrip(t : T?) {
         t |> success(cq.q8 && cq.image_map != null && stat(imgq).is_valid, "q8 lane: cold load built and serves its own image")
         t |> success(imgq != img, "the q8 lane keys a different image")
         t |> equal(count_mismatch(aq.blob, cq.blob), 0l, "q8 lane: blob element-exact")
-        t |> equal(count_mismatch_i8(aq.qblob, cq.qblob), 0l, "q8 lane: qblob element-exact")
+        t |> equal(count_mismatch(aq.qblob, cq.qblob), 0l, "q8 lane: qblob element-exact")
         t |> equal(count_mismatch(aq.qscales, cq.qscales), 0l, "q8 lane: qscales element-exact")
         t |> equal(long_length(aq.qblob), aq.t.n_layer * aq.t.layer_w_stride, "qblob is exactly the padded block GEMM set")
         reset_gemma3v_q8()
@@ -2142,7 +2094,7 @@ def test_canary_encoder_q8_image_roundtrip(t : T?) {
         t |> success(cold.image_map != null, "cold load serves the image it built")
         t |> success(stat(img).is_valid, "cold load saved an image")
         t |> success(cold.q8, "served encoder is on the q8 rail")
-        t |> equal(count_mismatch_i8(a.qblob, cold.qblob), 0l, "cold-built qblob element-exact")
+        t |> equal(count_mismatch(a.qblob, cold.qblob), 0l, "cold-built qblob element-exact")
         var inscope b <- load_canary_encoder(path, true)
         t |> success(b.image_map != null, "warm load is image-backed")
         t |> success(b.q8, "warm encoder is on the q8 rail")
@@ -2150,7 +2102,7 @@ def test_canary_encoder_q8_image_roundtrip(t : T?) {
         t |> equal(b.n_layer, a.e.n_layer)
         t |> equal(b.proj_dim, a.e.proj_dim)
         t |> equal(length(b.layers), long_length(a.layers))
-        t |> equal(count_mismatch_i8(a.qblob, b.qblob), 0l, "qblob element-exact")
+        t |> equal(count_mismatch(a.qblob, b.qblob), 0l, "qblob element-exact")
         t |> equal(count_mismatch(a.qscales, b.qscales), 0l, "qscales element-exact")
         t |> equal(count_mismatch(a.blob, b.blob), 0l, "compact fp32 blob element-exact")
         t |> equal(count_mismatch(a.filters, b.filters), 0l, "filters element-exact")
@@ -2160,7 +2112,7 @@ def test_canary_encoder_q8_image_roundtrip(t : T?) {
         var inscope minted = CanaryEncoder()
         mint_canary_encoder(stg, minted)
         t |> success(minted.q8, "minted encoder is on the staging's q8 rail")
-        t |> equal(count_mismatch_i8(a.qblob, minted.qblob), 0l, "minted qblob element-exact vs staged truth")
+        t |> equal(count_mismatch(a.qblob, minted.qblob), 0l, "minted qblob element-exact vs staged truth")
     }
 }
 
@@ -2180,7 +2132,7 @@ def test_gemma4a_encoder_image_roundtrip(t : T?) {
         t |> success(cold.image_map != null, "cold load serves the image it built")
         t |> success(stat(img).is_valid, "cold load saved an image")
         t |> success(cold.q8, "served encoder is on the q8 rail")
-        t |> equal(count_mismatch_i8(a.qblob, cold.qblob), 0l, "cold-built qblob element-exact")
+        t |> equal(count_mismatch(a.qblob, cold.qblob), 0l, "cold-built qblob element-exact")
         var inscope b <- load_gemma4a_encoder(path)
         t |> success(b.image_map != null, "warm load is image-backed")
         t |> success(b.q8, "warm encoder is on the q8 rail")
@@ -2188,7 +2140,7 @@ def test_gemma4a_encoder_image_roundtrip(t : T?) {
         t |> equal(b.n_layer, a.e.n_layer)
         t |> equal(b.proj_dim, a.e.proj_dim)
         t |> equal(length(b.layers), long_length(a.layers))
-        t |> equal(count_mismatch_i8(a.qblob, b.qblob), 0l, "qblob element-exact")
+        t |> equal(count_mismatch(a.qblob, b.qblob), 0l, "qblob element-exact")
         t |> equal(count_mismatch(a.qscales, b.qscales), 0l, "qscales element-exact")
         t |> equal(count_mismatch(a.blob, b.blob), 0l, "compact fp32 blob element-exact")
         t |> equal(count_mismatch(a.twiddles, b.twiddles), 0l, "twiddles element-exact")
@@ -2215,7 +2167,7 @@ def test_gemma4a_transcribe_q8_ab(t : T?) {
         let dec_path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
         let mmp_path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
         if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
-        var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+        var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present beside the models")
             return
@@ -2258,7 +2210,7 @@ def test_gemma4a_tower_metal(t : T?) {
             let dec_path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf")
             let mmp_path = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
             if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
-            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present beside the models")
                 return
@@ -2326,7 +2278,7 @@ def test_canary_tower_metal(t : T?) {
             let dec_path = path_join(models_dir(), "canary-qwen-2.5b-decoder-q8_0.gguf")
             let mmp_path = path_join(models_dir(), "canary-qwen-2.5b-encoder-f32.bin")
             if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
-            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present beside the models")
                 return
@@ -2406,7 +2358,7 @@ def test_qwen3a_tower_q8_ab(t : T?) {
         if (!family_on(t, "qwen3a") || !arm_on(t, "qwen3a")) return
         let path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
         return if (!jit_model_available(t, path))
-        var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+        var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present beside the models")
             return
@@ -2449,7 +2401,7 @@ def test_qwen3a_transcribe_q8_ab(t : T?) {
         let dec_path = path_join(models_dir(), "Qwen3-ASR-0.6B-Q8_0.gguf")
         let mmp_path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
         if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
-        var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+        var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             t |> skip("jfk.wav not present beside the models")
             return
@@ -2496,7 +2448,7 @@ def test_qwen3a_metal_tower(tst : T?) {
             let dec_path = path_join(models_dir(), "Qwen3-ASR-0.6B-Q8_0.gguf")
             let mmp_path = path_join(models_dir(), "mmproj-Qwen3-ASR-0.6B-bf16.gguf")
             if (!model_available(t, dec_path) || !model_available(t, mmp_path)) return
-            var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
             if (empty(samples)) {
                 t |> skip("jfk.wav not present beside the models")
                 return
@@ -2587,20 +2539,20 @@ def test_fp32_decoder_image_roundtrip(t : T?) {
         var g <- load_model_(path, QuantMode.fp32)
         g.config.seq_len = min(g.config.seq_len, 2048l)
         var prompt <- encode(g, "Once upon a time")
-        var ga <- gen_ids(g, prompt, 16)
+        var ga <- greedy_gen(g, prompt, 16)
         delete g
         var a <- load_model_cached(path, QuantMode.fp32, planar_only = true, image_fp32 = true)
         t |> success(a.image_map != null, "cold load serves the image it built")
         t |> success(stat(img).is_valid, "cold load saved an image")
         a.config.seq_len = min(a.config.seq_len, 2048l)
-        var gcold <- gen_ids(a, prompt, 16)
+        var gcold <- greedy_gen(a, prompt, 16)
         t |> success(!empty(ga) && count_mismatch(ga, gcold) == 0l, "gguf vs cold-built image tokens")
         delete gcold
         delete a
         var b <- load_model_cached(path, QuantMode.fp32, planar_only = true, image_fp32 = true)
         t |> success(b.image_map != null, "warm load is image-backed")
         b.config.seq_len = min(b.config.seq_len, 2048l)
-        var gb <- gen_ids(b, prompt, 16)
+        var gb <- greedy_gen(b, prompt, 16)
         t |> success(!empty(ga) && count_mismatch(ga, gb) == 0l, "gguf vs image tokens")
         delete b
         delete ga
@@ -2986,9 +2938,7 @@ def test_layout_fingerprint(t : T?) {
         if (!arm_on(t, "mechanics")) {
             return
         }
-        var terr : string
-        let tmp = temp_directory(terr)
-        let path = path_join(empty(tmp) ? "." : tmp, "dasllama_img_fp_{ref_time_ticks()}.dlim")
+        let path = path_join(test_temp_dir(), "dasllama_img_fp.dlim")
         var p <- make_probe()
         t |> success(save_image(p, path, "img-probe"), "save")
         var f = fopen(path, "rb+")

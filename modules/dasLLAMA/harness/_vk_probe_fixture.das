@@ -35,6 +35,26 @@ def pfq_avg_us(var raw : VkCommandBuffer; submits, stamps : int) : double {
     return us / double(submits * stamps)
 }
 
+//! a recorded command's host wall per dispatch: `warmups` warm-up submits (pipeline compile, first-touch), then `submits`
+//! timed submits over `submits` x `dispatches`
+def submit_avg_us(var raw : VkCommandBuffer; submits, dispatches, warmups : int) : double {
+    for (_w in range(warmups)) {
+        submit_wait(raw)
+    }
+    let t0 = ref_time_ticks()
+    for (_s in range(submits)) {
+        submit_wait(raw)
+    }
+    return double(get_time_usec(t0)) / double(submits * dispatches)
+}
+
+//! a fresh command `rec` records on one hazard rail, then its `submit_avg_us`
+def time_chain(submits, dispatches, warmups : int; rec : block<(raw : VkCommandBuffer; var hz : VkHaz) : void>) : double {
+    var raw = alloc_cmd()
+    record_cmd(raw, false, rec)
+    return submit_avg_us(raw, submits, dispatches, warmups)
+}
+
 //! two packed f16 scales per word, small positive values (the kernel-suite fixture shape)
 def cool_f16_pair(i : uint) : uint {
     let h = 0x2c00u + (i % 64u)

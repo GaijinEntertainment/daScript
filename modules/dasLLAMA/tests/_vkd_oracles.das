@@ -10,7 +10,6 @@ module _vkd_oracles shared public
 require dasllama/dasllama_lint public
 require math   // tanh, exp: the activation oracles' closed forms
 require daslib/shader_lingua_franca
-require daslib/math_bits   // uint_bits_to_float: the mx4 oracle builds the E8M0 scale from its bits as the decode does
 require vulkan   // VkCommandBuffer: the cell harness's record block
 require daslib/linq   // count: the bucket bounds
 require dasllama/dasllama_kqformat
@@ -29,26 +28,33 @@ let FA_SHADOW_SLACK_ROWS = int(RDEC_MIR_SLACK_ROWS)   //! the flash fixtures pad
 
 let MR_SENT = 0x5A5A5A5Au   //! the schedule planes' fill: a word the kernel never writes stays this on both sides
 
-//! `bytes` of `word` into the device buffer `dev` at `off`
-def fill_upload(dev : uint64; off, bytes : int64; word : uint) {
-    var s : array<uint>
-    s |> resize(bytes / 4l)
-    for (v in s) {
-        v = word
-    }
-    upload_region_at(dev, off, unsafe(addr<uint8 const?>(s[0])), bytes)
-    delete s
+//! NaN-fills a device output's [off, off + bytes) before its dispatch: a stale or unwritten output cannot sit inside any bar
+def nan_sentinel_upload(dev : uint64; bytes : int64; off : int64 = 0l) => upload_fill(dev, off, bytes, NAN_SENTINEL_BITS)
+
+//! one region of `cnt` rows at weight block `wblk0` for `wgs` workgroups: the schedule words the tile classes read at `map_off` 4
+def one_region_words(cnt, wgs : int; wblk0 : int = 0) : array<uint> {
+    var words : array<uint>
+    words |> resize(4 + wgs)
+    var cur = 4l
+    batch_sched_map(unsafe(addr(words[0])), cur, 0l, int64(wblk0), int64(cnt), int64(wgs))
+    return <- words
 }
 
-//! NaN-fills a device output's [off, off + bytes) before its dispatch: a stale or unwritten output cannot sit inside any bar
-def nan_sentinel_upload(dev : uint64; bytes : int64; off : int64 = 0l) => fill_upload(dev, off, bytes, NAN_SENTINEL_BITS)
-
-//! a device buffer holding `a` whole
-def dev_upload(a : array<auto(TT)>) : uint64 {
-    let bytes = long_length(a) * int64(typeinfo sizeof(type<TT>))
-    let dev = make_device_buf(bytes)
-    upload_region_at(dev, 0l, unsafe(addr<uint8 const?>(a[0])), bytes)
-    return dev
+//! `one_region_words` in a device buffer or in host memory (the prefill's `pf_meta` form)
+def one_region_sched(cnt, wgs : int; host : bool = false; wblk0 : int = 0) : tuple<buf : uint64; bytes : int64> {
+    var words <- one_region_words(cnt, wgs, wblk0)
+    let sc_bytes = long_length(words) * 4l
+    if (host) {
+        let hb = make_host_buf(sc_bytes, true)
+        unsafe {
+            memcpy(hb.mapped, addr(words[0]), sc_bytes)
+        }
+        delete words
+        return (buf = hb.buf, bytes = sc_bytes)
+    }
+    let scd = dev_upload(words)
+    delete words
+    return (buf = scd, bytes = sc_bytes)
 }
 
 //! each plane's host offset when the planes stage back to back - the sum of the sizes before it - and the total bytes last
@@ -150,7 +156,7 @@ def out_(var cp : CellPlanes; n : int; base : int = 0; slack : int = 0; bit : ui
 //! a plane the kernels write that is not floats: `bytes` under the sentinel `word` - a NaN in both halves for f16, -128 bytes for Q8_0 quants
 def out_words(var cp : CellPlanes; bytes : int64; word : uint; bit : uint = 0u) : int {
     let dev = make_device_buf(bytes)
-    fill_upload(dev, 0l, bytes, word)
+    upload_fill(dev, 0l, bytes, word)
     return cp |> add_plane(dev, bytes, true, 0, int(bytes / 4l), bit, word)
 }
 
@@ -175,6 +181,31 @@ def cls_set(cp : CellPlanes; idx; set_fn) {
 
 //! one command buffer: `rec` records the dispatches, then every written plane copies back whole, behind its hazard bit, to the staging
 def cell_record(var cp : CellPlanes; rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) {
+    var raw = alloc_transient_cmd()
+    var h = cmd_open(raw, false)
+    cell_record_into(cp, raw, h, rec)
+    cmd_close(raw)
+    submit_wait(raw)
+    free_transient_cmd(raw)
+}
+
+//! `cell_record` on a command the cell keeps: `what` logged under `tag` before the submit and the submit timed after it, so a
+//! device hang names its kernel; the command comes back for a resubmit (`submit_wait`)
+def cell_record_timed(var cp : CellPlanes; tag, what : string; rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) : VkCommandBuffer {
+    var raw = alloc_cmd()
+    var h = cmd_open(raw, false)
+    cell_record_into(cp, raw, h, rec)
+    cmd_close(raw)
+    to_log(LOG_INFO, "{tag}: dispatching {what}\n")
+    let tick = ref_time_ticks()
+    submit_wait(raw)
+    to_log(LOG_INFO, "{tag}: submit + wait {get_time_usec(tick)} us\n")
+    return raw
+}
+
+//! the dispatches `rec` records into `raw` on the rail `h`, then every written plane copied back whole, behind its hazard bit, to
+//! the staging (grown to hold them): `cell_record`'s body, for a cell that records into a command it keeps
+def cell_record_into(var cp : CellPlanes; raw : VkCommandBuffer; var h : VkHaz; rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) {
     var devs : array<uint64>
     var sizes : array<int64>
     var ats : array<int64>
@@ -195,12 +226,16 @@ def cell_record(var cp : CellPlanes; rec : block<(raw : VkCommandBuffer; var h :
         }
         cp.host = make_host_buf(total, true, [cached = true])
     }
-    cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-        invoke(rec, raw, h)
-        cmd_copy_planes(raw, h, devs, cp.host, ats, sizes, bits)
-    }
+    invoke(rec, raw, h)
+    cmd_copy_planes(raw, h, devs, cp.host, ats, sizes, bits)
 }
 
+//! `n` elements of written plane `p` from `at` past its base set to its sentinel inside the command `raw` records, behind the
+//! plane's hazard bit: the fill between two dispatches, so a write the second one skips cannot read as the first one's
+def plane_fill_cmd(cp : CellPlanes; p : int; raw : VkCommandBuffer; var h : VkHaz; at, n : int) {
+    vhz_dep(raw, h, 0u, cp.hazard_bit[p], true)
+    vkCmdFillBuffer(raw, unsafe(reinterpret<VkBuffer>(cp.dev[p])), uint64((cp.base[p] + at) * 4), uint64(n * 4), cp.fill[p])
+}
 //! plane `p`'s live run as `cell_record` staged it
 def plane_run(cp : CellPlanes; p : int) : array<float> {
     return <- staged(cp.host.mapped, cp.host_off[p] + int64(cp.base[p]) * 4l, cp.run[p], type<float>)
@@ -219,7 +254,7 @@ def plane_as(cp : CellPlanes; p : int; elem : auto(TT); n : int; at : int = 0) :
 
 //! the plane's sentinel over written plane `p` again, before a dispatch that must write it anew
 def plane_refill(cp : CellPlanes; p : int) {
-    fill_upload(cp.dev[p], 0l, cp.bytes[p], cp.fill[p])
+    upload_fill(cp.dev[p], 0l, cp.bytes[p], cp.fill[p])
 }
 
 //! `a` over plane `p` from its base, between two `cell_record`s: a rerun's poisoned or rescaled input
@@ -264,29 +299,35 @@ def half_at(a : array<uint>; hi : int) : float {
 // q8 batch GEMM oracle over region records ([wblk0, row0, cnt, wg0] x nrec): per (row, col),
 // int dots per 32-block (exact) folded by the f16 weight scale and the f32 x scale in block
 // order — the device tiles reassociate, so approx bars
-def q8_gemm_oracle(wq : array<uint>; wsw : array<uint>; xq : array<uint>; xs : array<float>;
-                   recs : array<uint>; nrec, n, d : int; var y : array<float>) {
-    let nbb = n / 32
+//! the GEMM oracles' region-record walk: each record's `cnt` rows from `row0` at every output column, y[row * d + c] = `dot`(row, c, wblk0)
+def private rec_walk(recs : array<uint>; nrec, d : int; var y : array<float>; dot : block<(row, c, wblk0 : int) : float>) {
     for (rr in range(nrec)) {
         let wblk0 = int(recs[rr * 4])
         let row0 = int(recs[rr * 4 + 1])
-        let cnt = int(recs[rr * 4 + 2])
-        for (r in range(cnt)) {
+        for (r in range(int(recs[rr * 4 + 2]))) {
             for (c in range(d)) {
-                var acc = 0.0
-                for (b in range(nbb)) {
-                    let wb = wblk0 + c * nbb + b
-                    let xb = (row0 + r) * nbb + b
-                    var idot = 0
-                    for (j in range(8)) {
-                        idot += sdot4(wq[wb * 8 + j], xq[xb * 8 + j])
-                    }
-                    let wsf = wb % 2 == 0 ? unpackHalf2x16(wsw[wb / 2]).x : unpackHalf2x16(wsw[wb / 2]).y
-                    acc += float(idot) * wsf * xs[xb]
-                }
-                y[(row0 + r) * d + c] = acc
+                y[(row0 + r) * d + c] = invoke(dot, row0 + r, c, wblk0)
             }
         }
+    }
+}
+
+def q8_gemm_oracle(wq : array<uint>; wsw : array<uint>; xq : array<uint>; xs : array<float>;
+                   recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nbb = n / 32
+    rec_walk(recs, nrec, d, y) $(row, c, wblk0 : int) : float {
+        var acc = 0.0
+        for (b in range(nbb)) {
+            let wb = wblk0 + c * nbb + b
+            let xb = row * nbb + b
+            var idot = 0
+            for (j in range(8)) {
+                idot += sdot4(wq[wb * 8 + j], xq[xb * 8 + j])
+            }
+            let wsf = wb % 2 == 0 ? unpackHalf2x16(wsw[wb / 2]).x : unpackHalf2x16(wsw[wb / 2]).y
+            acc += float(idot) * wsf * xs[xb]
+        }
+        return acc
     }
 }
 
@@ -296,25 +337,18 @@ def q8_gemm_oracle(wq : array<uint>; wsw : array<uint>; xq : array<uint>; xs : a
 def q8f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
                       recs : array<uint>; nrec, n, d : int; var y : array<float>) {
     let nbb = n / 32
-    for (rr in range(nrec)) {
-        let wblk0 = int(recs[rr * 4])
-        let row0 = int(recs[rr * 4 + 1])
-        let cnt = int(recs[rr * 4 + 2])
-        for (r in range(cnt)) {
-            for (c in range(d)) {
-                var acc = 0.0
-                for (b in range(nbb)) {
-                    let wb = wblk0 + c * nbb + b
-                    let wsf = wb % 2 == 0 ? unpackHalf2x16(wsw[wb / 2]).x : unpackHalf2x16(wsw[wb / 2]).y
-                    var bacc = 0.0
-                    for (j in range(32)) {
-                        bacc += float(byte_s8(wq, wb * 32 + j)) * half_at(xf, (row0 + r) * n + b * 32 + j)
-                    }
-                    acc += bacc * wsf
-                }
-                y[(row0 + r) * d + c] = acc
+    rec_walk(recs, nrec, d, y) $(row, c, wblk0 : int) : float {
+        var acc = 0.0
+        for (b in range(nbb)) {
+            let wb = wblk0 + c * nbb + b
+            let wsf = wb % 2 == 0 ? unpackHalf2x16(wsw[wb / 2]).x : unpackHalf2x16(wsw[wb / 2]).y
+            var bacc = 0.0
+            for (j in range(32)) {
+                bacc += float(byte_s8(wq, wb * 32 + j)) * half_at(xf, row * n + b * 32 + j)
             }
+            acc += bacc * wsf
         }
+        return acc
     }
 }
 
@@ -324,22 +358,15 @@ def q8f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
 //! so approx bars
 def f16_gemm_walk(xf, recs : array<uint>; nrec, n, d, blkw : int; var y : array<float>; w_at : block<(sb, e : int) : float>) {
     let nsb = n / blkw
-    for (rr in range(nrec)) {
-        let wsb0 = int(recs[rr * 4])
-        let row0 = int(recs[rr * 4 + 1])
-        let cnt = int(recs[rr * 4 + 2])
-        for (r in range(cnt)) {
-            for (c in range(d)) {
-                var acc = 0.0
-                for (s in range(nsb)) {
-                    let sb = wsb0 + c * nsb + s
-                    for (e in range(blkw)) {
-                        acc += invoke(w_at, sb, e) * half_at(xf, (row0 + r) * n + s * blkw + e)
-                    }
-                }
-                y[(row0 + r) * d + c] = acc
+    rec_walk(recs, nrec, d, y) $(row, c, wsb0 : int) : float {
+        var acc = 0.0
+        for (s in range(nsb)) {
+            let sb = wsb0 + c * nsb + s
+            for (e in range(blkw)) {
+                acc += invoke(w_at, sb, e) * half_at(xf, row * n + s * blkw + e)
             }
         }
+        return acc
     }
 }
 
@@ -784,21 +811,14 @@ def kq_gemm_oracle(fmt : int; wq, ws, xq : array<uint>; xs : array<float>;
                    recs : array<uint>; nrec, n, d : int; var y : array<float>) {
     var k = kq_cls_ref(fmt, wq, ws, xq, xs)
     let nsb = n / 256
-    for (rr in range(nrec)) {
-        let wblk0 = int(recs[rr * 4])
-        let row0 = int(recs[rr * 4 + 1])
-        let cnt = int(recs[rr * 4 + 2])
-        for (r in range(cnt)) {
-            for (c in range(d)) {
-                var acc = 0.0
-                for (sb in range(nsb)) {
-                    for (blk in range(8)) {
-                        acc += k->blk_contrib(uint(wblk0 + c * nsb + sb), uint(blk), uint((row0 + r) * nsb + sb))
-                    }
-                }
-                y[(row0 + r) * d + c] = acc
+    rec_walk(recs, nrec, d, y) $(row, c, wblk0 : int) : float {
+        var acc = 0.0
+        for (sb in range(nsb)) {
+            for (blk in range(8)) {
+                acc += k->blk_contrib(uint(wblk0 + c * nsb + sb), uint(blk), uint(row * nsb + sb))
             }
         }
+        return acc
     }
     unsafe {
         delete k
@@ -866,16 +886,7 @@ def iq4nl32f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>
 }
 
 //! one MXFP4 weight off its e2m1 code and E8M0 scale byte, as the CPU dot and the cm2 decode compute it (denormal bit patterns below e = 2)
-def mx4_dequant(nib, ex : int) : float {
-    let e = uint(ex)
-    return float(mx4_mag2(nib)) * uint_bits_to_float(e < 2u ? (0x00200000u << e) : ((e - 1u) << 23u))
-}
-
-//! an e2m1 code's DOUBLED magnitude with its sign: the integer the CPU dot and the GEMV kernel multiply against the Q8_0 byte
-def mx4_mag2(nib : int) : int {
-    let kv = fixed_array(0, 1, 2, 3, 4, 6, 8, 12, 0, -1, -2, -3, -4, -6, -8, -12)
-    return kv[nib]
-}
+def mx4_dequant(nib, ex : int) : float => float(int(mx4_lut()[nib])) * e8m0_half(uint(ex))
 
 //! MXFP4 x f16 GEMM oracle (the mx4 s and e stamps' shape): per weight `mx4_dequant` off the per-32 plane - byte j holds
 //! element j in its low nibble and j + 16 in its high, the block's E8M0 byte is the scale plane's byte b (four a word) -

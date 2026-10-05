@@ -8,7 +8,8 @@ require dasllama/dasllama_lint public
 require dasllama/dasllama_common
 require dasllama/dasllama_blocks   // the gated-attention path shares the std attention + FFN block helpers
 require dasllama/dasllama_batch   // attention_batch_decode + BatchWorkspace: the hybrid's batched decode layer rides the std batched attention on its attention layers
-require dasllama/dasllama_math   // the moved DeltaNet kernels call silu/softplus/l2_norm_rows/rope_*/get_dispatch_lanes
+require dasllama/dasllama_math
+require dasllama/dasllama_gpu_math
 require dasllama/dasllama_par    // maybe_parallel_for: the prefill kernels thread over rows
 require math
 require dasllama/dasllama_convert   // quantize_q8_0_into: the Q8_0 activation image the deltanet GEMVs consume
@@ -84,7 +85,7 @@ def private dn_conv_step(var outp : float?; var st : float?; inp : float const?;
 // One delta-rule step for one v-head, autoregressive form: S decays by
 // exp(g); sk = kᵀS; d = (v - sk)·β; S += k⊗d; o = qᵀS (q pre-scaled by 1/sqrt(d_state)).
 // Row-by-row accumulation over k - the fixed order keeps it bit-exact against the reference.
-def private dn_delta_head(var st : float?; q, k, v : float const?; var o : float?; var skd : float?; g, beta : float; ds : int64) {
+def dn_delta_head(var st : float?; q, k, v : float const?; var o : float?; var skd : float?; g, beta : float; ds : int64) {
     unsafe {
         let decay = exp(g)
         for (j in range64(ds)) {
@@ -127,7 +128,7 @@ def private dn_token_prelude(t : Model; var s : Session; l : int64; qkv : float 
     let taps = c.ssm_d_conv - 1l
     unsafe {
         for (h in range64(nvh)) {
-            beta[h] = 1.0 / (1.0 + exp(-beta[h]))
+            beta[h] = sigmoid_f32(beta[h])
             g[h] = t.fblob[t.dn_a_off + l * nvh + h] * softplus(g[h] + t.fblob[t.dn_dt_off + l * nvh + h])
         }
         var cop = addr(s.dn_conv_out[0])
@@ -682,7 +683,7 @@ def private dn_chunked_head(conv : float const?; qoff, koff, voff, cd : int64; /
             var gacc = 0.0
             for (i in range64(cl)) {
                 let crow = conv + (c0 + i) * cd
-                let bv = 1.0 / (1.0 + exp(-bp[(c0 + i) * bg_stride]))
+                let bv = sigmoid_f32(bp[(c0 + i) * bg_stride])
                 gacc += aa * softplus(gp[(c0 + i) * bg_stride] + dtb)
                 gcum[i] = gacc
                 egc[i] = exp(gacc)
@@ -768,14 +769,13 @@ def private dn_chunked_head(conv : float const?; qoff, koff, voff, cd : int64; /
                 let zrow = zp + (c0 + i) * o_stride
                 if (zsig) {   // qwen4exp: σ(z) gates the normed output
                     for (j in range64(ds)) {
-                        orow[j] = och[i * ds + j] / (1.0 + exp(-zrow[j]))
+                        orow[j] = sig_gate(och[i * ds + j], zrow[j])
                     }
                 } elif (vec) {
                     silu_mul4(orow, och + i * ds, zrow, ds)
                 } else {
                     for (j in range64(ds)) {
-                        let zv = zrow[j]
-                        orow[j] = och[i * ds + j] * (zv / (1.0 + exp(-zv)))
+                        orow[j] = och[i * ds + j] * silu_f32(zrow[j])
                     }
                 }
             }

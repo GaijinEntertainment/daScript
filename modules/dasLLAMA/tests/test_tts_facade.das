@@ -221,7 +221,7 @@ def test_wav_writer(t : T?) {
         var terr = ""
         let path = path_join(temp_directory(terr), "dasllama_tts_facade_test.wav")
         t |> success(write_wav_pcm16(path, pcm, 24000), "write")
-        var inscope back <- read_wav_pcm16_mono(path)
+        var inscope back <- load_audio_mono(path, 24000)
         t |> equal(length(back), 2400)
         var worst = 0.0
         for (a, b in pcm, back) {

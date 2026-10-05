@@ -5,8 +5,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require _resident_regions
-require _resident_feed   // restore_kv_pin
-require dasllama/dasllama
+require dasllama/dasllama_kv_dtype
 
 // Qwen2.5-0.5B-Instruct Q8_0 with the K/V mirror asked in q8_0: every cell of the rig on the block codec - the staged stores
 // and the quantize pass at one row and at N rows, the decode attention's q8_0 stamps, the prefill's attention over the f16
@@ -15,17 +14,14 @@ require dasllama/dasllama
 // DASLLAMA_VK_KV32=1 arms an f32 mirror over the codec asked.
 let private REGIONS_FILE = "Qwen2.5-0.5B-Instruct-Q8_0.gguf"
 
-var private g_kv_found : tuple<pinned : bool; dt : KVDtype>
-
 [init]
 def private q8kv_init() {
-    g_kv_found = gpu_kv_dtype_pin()
-    set_gpu_kv_dtype(KVDtype.q8_0)   // every load of this file arms the q8_0 mirror; a process runs one test file
+    pin_file_kv(KVDtype.q8_0)
 }
 
 [finalize]
 def private q8kv_restore() {
-    restore_kv_pin(g_kv_found)
+    unpin_file_kv()
 }
 
 [test]

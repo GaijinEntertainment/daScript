@@ -34,6 +34,7 @@ require dasllama/dasllama_tts_types   // nolint:STYLE030,LINT019 — read only i
 require ?das_metal dasllama/dasllama_metal_tower   // set_metal_tower — the census pins the rail ON
 require ?das_metal dasllama/dasllama_metal_prefill // metal_prefill_shutdown — the crowned twin-W leg re-arms PSOs
 require ?das_metal dasllama/dasllama_metal_asr_dec // set_metal_wdec — the cov_tower mixed chunk's decoder half
+require ?das_metal dasllama/dasllama_audio_io
 require daslib/jobque_boost
 require daslib/fio  // the zoo paths
 require math  // nolint:STYLE030,LINT019 — used only inside the das_metal static_if half
@@ -549,7 +550,7 @@ def private cov_tower(t : T?) {
         set_metal_wdec_step(true)
         set_metal_wdec_step_min_d(0l)   // the census carrier is tiny — under the serving floor
         let wpath = path_join(whisper_dir(), "ggml-tiny.bin")
-        var samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+        var samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
         if (model_available(t, wpath) && !empty(samples)) {
             var inscope w = WhisperModel()
             var inscope stg <- stage_whisper_model(wpath, false, true)
@@ -898,11 +899,11 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // kernel coverage is test_vkt_tower_f16_feeds in test_vulkan_tower_kernels.das
     "tower_ln16_cls_spv", "tower_post_add_ln16_cls_spv", "tower_hpad_b_cls_spv", "tower_hpad16_b_cls_spv", "tower_hunpad16_cls_spv",
     "tower_bias_act_cvt16_cls_spv",
-    // the gemma4v tower's row classes (the norms, clamps, feeds, the two-axis rope, the post-add and the GEGLU): the stocked
+    // the gemma4v tower's row classes (the clamps, feeds, the two-axis rope, the post-add and the GEGLU; its rms rows are hc_norm's): the stocked
     // mmproj-gemma-4-E2B-it-bf16.gguf, dispatched by test_gemma4v_vulkan_twin in test_gemma4v.das - no zoo row; their kernel
-    // coverage is test_vkt_tower_rows in test_vulkan_tower_kernels.das (the clamp + halfword feed also serves every audio
-    // chain's cm2 feed, dispatched by the audio twins; test_vkt_tower_front_movers covers it too)
-    "tower_rms_cls_spv", "tower_clamp_cls_spv", "tower_clamp_cvt_cls_spv", "tower_clamp_rq_cls_spv", "tower_rope2d_cls_spv",
+    // coverage is test_vkt_tower_rows in test_vulkan_tower_kernels.das (the clamp + halfword feed is no entry: it is the LLM
+    // prefill's f32 -> f16 rows too, which the zoo rows dispatch)
+    "tower_clamp_cls_spv", "tower_clamp_rq_cls_spv", "tower_rope2d_cls_spv",
     "tower_post_add_cls_spv", "tower_geglu_cls_spv",
     // the biased-block (SigLIP) row classes: the bias with its GELU, the head restrides to the flash tile's width (the
     // stocked mmproj-gemma-3-4b-it-F16.gguf, dispatched by test_gemma3v_vulkan_twin in test_gemma3v.das; the rope on a
@@ -962,9 +963,6 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // (the batched rows need a region a row; the stocked regions files - test_gpu_resident_regions_qwen3.das and the
     // gemma files - reach them at two regions); their coverage is test_vkd_q8_gemv_gu_n in test_vulkan_kernels.das
     "q8_gemv_gu_n2_cls_spv", "q8_gemv_gu_n4_cls_spv", "q8_gemv_gu_n8_cls_spv",
-    // the N-row command's per-row top-k: the census steps every session a row at a time (the batched step needs two sessions
-    // over two regions - the gpt-oss and Qwen3-30B regions files serve it); its coverage is test_vkd_topk_n in test_vulkan_kernels.das
-    "topk_n_cls_spv",
     // the sink stamps over a block-codec K/V mirror (gpt-oss with the mirror asked in q8_0 or tq4: the census loads no sink
     // carrier); their coverage is the sink arms of test_vkc_q8_da_attn and test_vkc_tq4_da_attn in test_vulkan_kv_codec_kernels.das
     "da_attn_q8_sink_cls_spv", "da_attn_tq4_sink_cls_spv"]
@@ -994,11 +992,7 @@ def private vk_cov_codec_model(t : T?; path, family : string; kv : KVDtype) {
         let pin = gpu_kv_dtype_pin_()
         set_gpu_kv_dtype_(kv)
         var tr <- load_model_(path, QuantMode.q8)
-        if (pin.pinned) {
-            set_gpu_kv_dtype_(pin.dt)
-        } else {
-            reset_gpu_kv_dtype_()
-        }
+        restore_gpu_kv_dtype(pin)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         with_dasllama_jobque() {
             var s = make_run_state(tr.config, kv, kv)

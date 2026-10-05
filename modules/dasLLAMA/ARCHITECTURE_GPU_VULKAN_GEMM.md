@@ -1,8 +1,7 @@
 # dasLLAMA Architecture - the Vulkan tier's GEMM tile family
 
-Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This
-document carries the cooperative-matrix tiles the
-Vulkan tier's GEMMs run on and the decode GEMV family's lane split: how a cm2 tile decodes its
+Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document carries the
+cooperative-matrix tiles the Vulkan tier's GEMMs run on and the decode GEMV family's lane split: how a cm2 tile decodes its
 quant bytes, how a tile and the served GEMM mode are picked, the class-pipeline build seat both
 shader instruments hang on, the MoE expert chain on those tiles, the KHR arm's hand-staged
 tile, and how a GEMV subgroup splits across short rows. `ARCHITECTURE_GPU_VULKAN.md` carries
@@ -25,7 +24,10 @@ runtime position comes out of its lane by a shift, `(uint(int(blk.qs[i >> 1u])) 
 ((i & 1u) * 8u)`, not an `unpack8(w)[i & 1u]` byte2 select (the same lane, but a decode built
 on selects runs slower on the expert-schedule shape - `moe:<fmt>`, RTX 5060 Ti: iq2xxs 1.28x,
 iq3xxs 1.24x, iq3s 1.49x, iq2s 1.08x), and a sign index straddling two bytes (the IQ2_XXS and
-IQ3_XXS aux32 words) is assembled from its two lanes and shifted. The
+IQ3_XXS aux32 words) is assembled from its two lanes and shifted. The Q8_0 tile is the measured
+exception: `Q8Cm2T.decode` selects its byte from the 16-bit lane with `unpack8`, and the shift
+form read 1.5% under it on the dense prefill (Qwen3-4B Q8_0 pp512, RTX PRO 4500) - the dense shape
+is bound elsewhere than the expert schedule the superblock readings came from. The
 scalar callback is written in PAIR form: every read the two elements of an aligned pair share -
 the grid byte, the sign word, the scale row - is derived from the pair's first element (`e &
 ~1u`), both values are computed and the element is selected last, because the driver runs the
@@ -91,8 +93,8 @@ clamped: q8 E2B down 268 -> 612 us) and through the edge path the dispatch waite
 **The k step follows the column and the decode; the k loop is unrolled by hand, a superblock per
 block.** The template's k step (`BK`) is 64 on the dense l and m tiles and on the expert stamps of the K-quants, q4_0, q8 and
 the 4-bit LUT formats - there the e column IS the m stamp (`KQ_CM2E_ALIASES_M` in `dasllama_kqformat.das` names them, the
-`cm2e_cls_*` ladder picks their m class, `REVIEW.das` holds the roster to the s stamps' k steps) - and 32 on the s and e stamps
-of the five grid-codebook formats (iq2xxs, iq2xs, iq2s, iq3xxs, iq3s; their e stamp is `<Fmt>Cm2EBatch`); a stamp's `AT`/`BT` carry its depth. The class pick ladders (`khr_cls_*`, `cm2e_cls_*`, `cm2_cls_*`, in the classes file) are stamped by `kq_tile_stamp` over every `KqFmt` member from one placeholder body, so a format without its stamp fails the compile, never a window. A grid decode is
+`cm2_cls_*` ladder's e tail picks their m class through `kq_tile_target`, `REVIEW.das` holds the roster to the s stamps' k steps) - and 32 on the s and e stamps
+of the five grid-codebook formats (iq2xxs, iq2xs, iq2s, iq3xxs, iq3s; their e stamp is `<Fmt>Cm2EBatch`); a stamp's `AT`/`BT` carry its depth. The class pick ladders (`cm2_cls_*` for the engine, over every tile tail; `khr_cls_*` for the kernel cells' KHR arm, in the classes file) are stamped by `kq_tile_stamp` over every `KqFmt` member from one placeholder body, so a format without its stamp fails the compile, never a window. A grid decode is
 occupancy-bound - a 64-deep column holds twice the A tile, and with the codebook lookup's live range
 a workgroup fewer fits an SM (the iq2xxs gate/up plane 0.611 against 0.730 ms at 32, `moe:<fmt>`,
 RTX 5060 Ti) - while a light decode is step-bound (the k4 s tile 0.744 against 0.679 at 32 (`moesk:k4`), its
@@ -179,8 +181,7 @@ the TTS seats' submits, the Pocket frame loop's hundred sets a frame - would oth
 write every set again on the dispatch path, and grow the descriptor pools until the model drop.
 Any buffer's destruction - device or host - and the drop's pool reset empty the cache, since a
 cached set may bind the buffer or hold a recycled handle. A clear orphans every cached set until
-the model drop's pool reset, so between drops the descriptor pools grow by the sets rebuilt after
-each clear.
+the model drop's pool reset, so between drops the descriptor pools grow by the sets rebuilt after each clear.
 
 **Full subgroups are a whole-run arm, never a per-pipeline one.** `DASLLAMA_VK_FULLSG` on a device
 that reports the feature sets `g_gpu.full_sg_on` once at device init and builds every class pipeline
@@ -216,7 +217,7 @@ cm2 mode, since a forced mode enables no coopmat2 extension - the fa knob is on,
 not gated - this chain wires neither the h256 stamps nor their gated epilogue, so gated models
 keep the flash-style `at_attn` pass. The tile reads f16 K/V: the chain keeps its f32 roped-k /
 raw-v planes at absolute positions for the host readback the CPU cache store consumes, and
-fills f16 shadows of them with the base-less `f16cvt` over the whole attended prefix each window; the fa
+fills f16 shadows of them with the base-less `tower_clamp_cvt` at the half range (`f16_rows_args`) over the whole attended prefix each window; the fa
 output lands in the same out plane `at_attn` writes, so the requant and `wo` stages never learn which pass ran.
 
 **The per-op attention chain adds a q/k/v projection bias (qwen2moe) in its prep stage.** The
@@ -266,8 +267,8 @@ reaches the 49152 B of workgroup memory the tier requires of a device - the floo
 
 **The arm exists at one geometry** - 128 weights by 128 tokens, k step 32 - so in mm mode the
 tile pick answers 128 and the wave model weighs its k chunks alone (a deep, narrow GEMM splits k
-into the same scratch planes and reduce the cm2 tiles use), and `cm2_cls_ensure/set/enc` route to
-the `khr_cls_*` ladders, the same `(fmt)` key on both. The f16 feed admits a kq format in mm mode
+into the same scratch planes and reduce the cm2 tiles use), and `cm2_cls_ensure/set/enc` take the KHR
+tile as their tail-0 arm (`cm2_tile_tail`), the same `(fmt)` key the kernel cells' `khr_cls_*` ladder stamps. The f16 feed admits a kq format in mm mode
 only on a 32-lane subgroup (`khr_kq_tile_on`): the body indexes eight subgroups over the tile, so
 a wave64 device (four subgroups per 256-thread workgroup) keeps its kq planes on the sdot4 tile.
 

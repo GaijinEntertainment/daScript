@@ -14,6 +14,7 @@ require dasllama/dasllama_rope       // the RoPE angle/table generation (Model-f
 require dasllama/dasllama_gpu_tier   // the device-cooperation seam (hooks the loader/dispatch arms call)
 require daslib/array_boost // nolint:STYLE030 — temp_array is [template]; STYLE030 misses template-fn refs and false-flags this as unused
 require dasllama/dasllama_math
+require dasllama/dasllama_gpu_math
 require daslib/jobque_profile  // JOBQUE_PROFILING_ENABLED — the compile-time gate on prof_ticks/prof_add
 require dasllama/dasllama_kv_codec public  // the KV-cache codec families — kv_store_row/kv_load_row/kv_dot/kv_axpy dispatch into them
 require dasllama/dasllama_convert   // cvt_f32_to_f16/cvt_f16_to_f32 — the f16 rows (wscale plane + the f16 KV codec)
@@ -3034,7 +3035,7 @@ def rms_batch(var out : array<float>; src : array<float>; t : Model; woff : int6
 // ===== hyper-connections (config.hyper_conn): the wide residual and the block seams =====
 
 //! grouped RMSNorm of one wide row: stream ch of res normalizes over dim and scales by gamma row ch of w
-def private hc_grouped_norm(var out : float?; res : float const?; w : float const?; dim, nh : int64; eps : float) {
+def hc_grouped_norm(var out : float?; res : float const?; w : float const?; dim, nh : int64; eps : float) {
     unsafe {
         for (ch in range64(nh)) {
             rmsnorm(out + ch * dim, res + ch * dim, w + ch * dim, dim, eps)
@@ -3043,7 +3044,7 @@ def private hc_grouped_norm(var out : float?; res : float const?; w : float cons
 }
 
 //! the mixer's tail over one normed wide row: `inj_w` null = the head mixer (no scatter logits); xb <- the mean of the sigmoid-gated streams
-def private hc_mix_tail(var xn : float?; gate : float const?; inj_w : float const?; var inject : float?; var xb : float?; dim, nh : int64) {
+def hc_mix_tail(var xn : float?; gate : float const?; inj_w : float const?; var inject : float?; var xb : float?; dim, nh : int64) {
     let hcd = nh * dim
     unsafe {
         if (inj_w != null) {   // the scatter logits read the normed streams BEFORE the gate lands in them
@@ -3073,7 +3074,7 @@ def hc_mix_row(t : Model; var s : Session; res : array<float>; roff, norm_off, d
     mm_f(s.hc_lo, t, KqFmt.q8, down_off, s.hc_xn, s.xq, s.xs, s.xbs, hcd, lr)
     for (j in range64(lr)) {
         let v = s.hc_lo[j] * inv
-        s.hc_lo[j] = v / (1.0 + exp(-v))
+        s.hc_lo[j] = silu_f32(v)
     }
     mm_f(s.hc_gate, t, KqFmt.q8, up_off, s.hc_lo, s.xq, s.xs, s.xbs, lr, hcd)
     unsafe {
@@ -3114,7 +3115,7 @@ def hc_mix_b(t : Model; var s : Session; norm_off, down_off, up_off, inject_off,
     mm_b_f(s, s.hc_lo_b, t, KqFmt.q8, down_off, s.hc_xn_b, hcd, lr, npos)
     for (j in range64(npos * lr)) {
         let v = s.hc_lo_b[j] * inv
-        s.hc_lo_b[j] = v / (1.0 + exp(-v))
+        s.hc_lo_b[j] = silu_f32(v)
     }
     mm_b_f(s, s.hc_gate_b, t, KqFmt.q8, up_off, s.hc_lo_b, lr, hcd, npos)
     unsafe {
@@ -3135,7 +3136,7 @@ def hc_mix_b(t : Model; var s : Session; norm_off, down_off, up_off, inject_off,
 }
 
 //! Scatter one block output row into its wide row r: stream ch += out * 2 sigmoid(inject_ch / hc)
-def private hc_combine(var r : float?; out : float const?; inject : float const?; dim, nh : int64) {
+def hc_combine(var r : float?; out : float const?; inject : float const?; dim, nh : int64) {
     unsafe {
         for (ch in range64(nh)) {
             let w = 2.0 / (1.0 + exp(-inject[ch] / float(nh)))
@@ -3862,51 +3863,66 @@ def kv_store_batch(var kcp : uint8?; var vcp : uint8?;
     }
 }
 
-// tq4 basis change over a batch buffer: rotate (or un-rotate) every head segment of every row in
-// place — q_b rows at stride qd, k_b/v_b rows at stride kv_dim, xb_b rows at stride qd. Segments
-// are independent; the cost is O(rows · stride · log head_size), noise next to the GEMMs.
-def tq4_rotate_batch(var buf : array<float>; nrows, stride, head_size : int64; signs : float const?) {
-    unsafe {
-        var p = addr(buf[0])
-        for (sg in range64(nrows * (stride / head_size))) {
-            fwht_signs_row(p + sg * head_size, signs, head_size)
-        }
-    }
-}
-def tq4_unrotate_batch(var buf : array<float>; nrows, stride, head_size : int64; signs : float const?) {
-    unsafe {
-        var p = addr(buf[0])
-        for (sg in range64(nrows * (stride / head_size))) {
-            fwht_unsign_row(p + sg * head_size, signs, head_size)
+//! in place over `nrows` rows of `stride` floats, each `head_size` segment on its own: O(rows · stride · log head_size), noise next to the GEMMs
+def tq4_basis_rows(var p : float?; nrows, stride, head_size : int64; signs : float const?; inverse : bool) {
+    for (sg in range64(nrows * (stride / head_size))) {
+        if (inverse) {
+            fwht_unsign_row(unsafe(p + sg * head_size), signs, head_size)
+        } else {
+            fwht_signs_row(unsafe(p + sg * head_size), signs, head_size)
         }
     }
 }
 
+def tq4_rotate_batch(var buf : array<float>; nrows, stride, head_size : int64; signs : float const?) {
+    tq4_basis_rows(unsafe(addr(buf[0])), nrows, stride, head_size, signs, false)
+}
+
+def tq4_unrotate_batch(var buf : array<float>; nrows, stride, head_size : int64; signs : float const?) {
+    tq4_basis_rows(unsafe(addr(buf[0])), nrows, stride, head_size, signs, true)
+}
+
+//! the K rows at `kp` and V rows at `vp` of `s`'s tq4 cache sides rotated in place into tq4's basis, or under `inverse`
+//! taken back out of it; a side that is not tq4 is left alone
+def tq4_sides(s : Session; var kp, vp : float?; nrows, kv_dim, head_size : int64; inverse : bool) {
+    let ktq4 = s.kv_dtype_k == KVDtype.tq4
+    let vtq4 = s.kv_dtype_v == KVDtype.tq4
+    return if (!ktq4 && !vtq4)
+    let sgp = unsafe(addr<float const?>(s.kv_signs[0]))
+    if (ktq4) {
+        tq4_basis_rows(kp, nrows, kv_dim, head_size, sgp, inverse)
+    }
+    if (vtq4) {
+        tq4_basis_rows(vp, nrows, kv_dim, head_size, sgp, inverse)
+    }
+}
+
+//! whether either cache side of `s` is tq4: the rotations below touch the rows only then
+def private tq4_any_side(s : Session) : bool => s.kv_dtype_k == KVDtype.tq4 || s.kv_dtype_v == KVDtype.tq4
+
 //! K and V rows a device pass attended in the model's basis, rotated into the basis a tq4 side of `s`'s cache stores
 def tq4_rotate_for_store(s : Session; var k, v : array<float>; nrows, kv_dim, head_size : int64) {
-    if (s.kv_dtype_k == KVDtype.tq4) {
-        tq4_rotate_batch(k, nrows, kv_dim, head_size, unsafe(addr<float const?>(s.kv_signs[0])))
-    }
-    if (s.kv_dtype_v == KVDtype.tq4) {
-        tq4_rotate_batch(v, nrows, kv_dim, head_size, unsafe(addr<float const?>(s.kv_signs[0])))
-    }
+    return if (!tq4_any_side(s) || nrows <= 0l)
+    tq4_sides(s, unsafe(addr(k[0])), unsafe(addr(v[0])), nrows, kv_dim, head_size, false)
 }
 
 //! ... and rows a tq4 side of the cache dequantized, taken back into the model's basis for a device mirror of floats
 def tq4_unrotate_from_store(s : Session; var k, v : array<float>; nrows, kv_dim, head_size : int64) {
-    if (s.kv_dtype_k == KVDtype.tq4) {
-        tq4_unrotate_batch(k, nrows, kv_dim, head_size, unsafe(addr<float const?>(s.kv_signs[0])))
-    }
-    if (s.kv_dtype_v == KVDtype.tq4) {
-        tq4_unrotate_batch(v, nrows, kv_dim, head_size, unsafe(addr<float const?>(s.kv_signs[0])))
-    }
+    return if (!tq4_any_side(s) || nrows <= 0l)
+    tq4_sides(s, unsafe(addr(k[0])), unsafe(addr(v[0])), nrows, kv_dim, head_size, true)
 }
 
-// tq4_unrotate_batch's raw-pointer twin — the Metal prefill continuation un-rotates gathered
-// panel rows in place (the GPU attention runs in the raw basis)
-def tq4_unrotate_rows(var p : float?; nrows, stride, head_size : int64; signs : float const?) {
-    for (sg in range64(nrows * (stride / head_size))) {
-        fwht_unsign_row(unsafe(p + sg * head_size), signs, head_size)
+//! a window's q, k and v rows moved into tq4's basis at the RoPE seam: q and k under a tq4 K side, v under a tq4 V side;
+//! a layer that reads another layer's K/V stores none, so its k and v rows stay
+def tq4_rotate_qkv(var q, k, v : array<float>; nrows, qd, kv_dim, head_size : int64; signs : float const?; ktq4, vtq4, kv_shared : bool) {
+    if (ktq4) {
+        tq4_rotate_batch(q, nrows, qd, head_size, signs)
+        if (!kv_shared) {
+            tq4_rotate_batch(k, nrows, kv_dim, head_size, signs)
+        }
+    }
+    if (vtq4 && !kv_shared) {
+        tq4_rotate_batch(v, nrows, kv_dim, head_size, signs)
     }
 }
 

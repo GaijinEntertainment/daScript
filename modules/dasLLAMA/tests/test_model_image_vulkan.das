@@ -12,11 +12,12 @@ require dasllama/dasllama_gpu_resident   // vulkan_bake_* — the offline flavor
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the vulkan static_if half
 require _model_tier
+require _vulkan_lane   // nolint:STYLE030,LINT019 - load_cached_q8, used only inside the vulkan static_if arms (a build without the module drops them)
 
 // The OFFLINE vulkan bake (plan-as-data): the dry tier runs the load walk's accept/refuse
 // arithmetic against the config's numbers with NO device — the converter's `-f vulkan` rail.
 // Drive through run.das --suite image-vulkan (it arms DASLLAMA_GPU + a small VRAM budget);
-// unarmed contexts skip cleanly, so the file is safe in any suite.
+// unarmed contexts skip cleanly, as does a build without the vulkan module, so the file is safe in any suite.
 
 //! the minted twin against the eager dry bake's - the walk over the prepared RAM planes, the mint's reference: the same
 //! entries in the same order, every entry's device bytes equal, a poisoned byte in the reference missing the compare
@@ -61,14 +62,6 @@ def private mint_matches_eager_bake(t : T?; minted : Model; path : string) {
     delete eager
 }
 
-def private load_cached_q8(path : string) : Model {
-    var m = Model()
-    with_dasllama_jobque_() {
-        m <- load_model_cached(path, QuantMode.q8)   // nolint:PERF030,LINT019 -- the move must sit inside with_job_que; the target is fresh-empty, so nothing drops
-    }
-    return <- m
-}
-
 [test]
 def test_vulkan_dry_bake(tst : T?) {
     tst |> run("SmolLM2 q8: dry bake collects a role-stamped plan and the image round-trips") @(t : T?) {
@@ -103,9 +96,7 @@ def test_vulkan_dry_bake(tst : T?) {
             t |> success(roles_ok, "every plan entry carries a stage role")
             t |> success(bounds_ok, "every plan entry's planes sit inside the blob")
             // the flavor image round-trips the plan verbatim
-            var terr : string
-            let tmp = temp_directory(terr)
-            let img = path_join(empty(tmp) ? "." : tmp, "dasllama_vkbake_{ref_time_ticks()}.dlim")
+            let img = path_join(test_temp_dir(), "dasllama_vkbake.dlim")
             let tag = moe_gpu_bake_tag()
             t |> success(!empty(tag), "the armed tier names its bake tag")
             t |> success(save_model_image(m, img, tag, "q8"), "flavor image saves")
@@ -115,7 +106,8 @@ def test_vulkan_dry_bake(tst : T?) {
             t |> equal(long_length(m.vkblob), long_length(b.vkblob), "blob survives the round trip")
             delete b
             delete m
-            remove(img)
+        } else {
+            t |> skip("dasVulkan not present")
         }
     }
 }
@@ -137,11 +129,7 @@ def test_vulkan_inline_bake(tst : T?) {
                 t |> skip("dry bake declined to arm - see the log")
                 return
             }
-            let route0 = gpu_resident_route_lever()
-            let trim_set0 = vulkan_trim_lever_set()
-            let trim0 = vulkan_trim()
-            set_gpu_resident_route(true)   // the trimmed lane's admission reads the driver's route lever
-            set_vulkan_trim(false)
+            let levers = pin_lane_levers()
             let vk_tag = moe_gpu_bake_tag()
             let img_v = image_path_for(path, vk_tag)
             let img_p = image_path_for(path, "", "q8")
@@ -162,8 +150,7 @@ def test_vulkan_inline_bake(tst : T?) {
             t |> success(trimmed_tag != vk_tag, "the trim folds into the lane's identity on the dry tier too ({trimmed_tag} against {vk_tag})")
             remove(img_v)
             var b <- load_cached_q8(path)
-            set_gpu_resident_route(route0)
-            restore_vulkan_trim(trim_set0, trim0)
+            restore_lane_levers(levers)
             t |> success(b.image_map != null && b.planes_trimmed, "the trimmed lane serves, flagged trimmed")
             t |> success(long_length(b.vkplan) > 0l && long_length(b.vkblob) > 0l, "... with the plan and the twin")
             t |> equal(long_length(b.qblob), 0l, "... and no q8 planar plane")
@@ -172,6 +159,8 @@ def test_vulkan_inline_bake(tst : T?) {
             t |> success(!stat(img_p).is_valid, "still no planar lane")
             delete b
             remove(img_v)
+        } else {
+            t |> skip("dasVulkan not present")
         }
     }
 }

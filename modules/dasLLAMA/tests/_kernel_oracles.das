@@ -1,6 +1,7 @@
 // The CPU references the Metal and the Vulkan kernel cells share - the engine's table rope by its pairing, the gated
-// activation, dense GEMM rows with their envelope, the Q8_0 requant block check, the attention cells' query rows, the MoE
-// route's padded-CSR prefix - with no device type and no backend require, so a build without either GPU module reads it.
+// activation, dense GEMM rows with their envelope, an expert's FFN rows, the Q8_0 requant block check, the attention cells'
+// query rows, the MoE route's padded-CSR prefix - with no device type and no backend require, so a build without either GPU
+// module reads it.
 
 options gen2
 options _dasllama_internal = true
@@ -10,15 +11,16 @@ module _kernel_oracles shared public
 require dasllama/dasllama_lint public
 require math
 require dasllama/dasllama_math   // rope_scaled_tab, rope_scaled_neox_tab, rope_scaled_neox_tab_part
+require dasllama/dasllama_gpu_math
 
 //! The engine's table rope over `n` elements of `v` from `base`, heads `hs` wide, on the `tcos` / `tsin` rows: the partial
 //! form whenever `rot` names a prefix short of `hs`, else the NEOX or the interleaved pairing as `neox` names - the engine's
-//! own rule, a `rot` of 0 naming the whole head as the kernels' args take it. The table row starts at `tbase` of `tcos` /
-//! `tsin`.
-def rope_tab_ref(var v : array<float>; base, hs, rot, n : int; neox : bool; tcos, tsin : array<float>; tbase : int = 0) {
+//! own rule, a `rot` of 0 naming the whole head as the kernels' args take it. The cos row starts at `tbase` of `tcos`, the
+//! sin row at `sbase` of `tsin` (`tbase` where it is negative: one base into two tables, or a packed [cos | sin] row).
+def rope_tab_ref(var v : array<float>; base, hs, rot, n : int; neox : bool; tcos, tsin : array<float>; tbase : int = 0; sbase : int = -1) {
     unsafe {
         let cp = addr<float const?>(tcos[tbase])
-        let sp = addr<float const?>(tsin[tbase])
+        let sp = addr<float const?>(tsin[sbase < 0 ? tbase : sbase])
         if (rot > 0 && rot != hs) {
             rope_scaled_neox_tab_part(addr(v[base]), int64(hs), int64(rot), int64(n), cp, sp)
         } elif (neox) {
@@ -57,6 +59,30 @@ def padded_bases(counts : array<int>) : tuple<cnt : array<uint>; base : array<ui
 def act_mul_ref(v, u : float; gelu : bool) : float {
     return (gelu ? (0.5 * v * (1.0 + tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))) * u
         : (v / (1.0 + exp(-v))) * u)
+}
+
+//! the deltanet causal conv over `npos` rows `cd` wide - `dconv` taps a channel at `taps[toff + ch * dconv]`, the rows before row 0
+//! from the per-channel history at `hist[hoff + ch * (dconv - 1)]` - through silu, then the `kd`-wide q and k heads (`ds` wide)
+//! l2-normed at `eps` and the q heads scaled by `qscale`
+def dn_conv_ref(src, hist : array<float>; hoff : int; taps : array<float>; toff, npos, cd, dconv, kd, ds : int; eps, qscale : float) : array<float> {
+    let ntap = dconv - 1
+    var o : array<float>
+    o |> resize(npos * cd)
+    for (p in range(npos)) {
+        for (ch in range(cd)) {
+            var acc = 0.0
+            for (k in range(dconv)) {
+                let sp = p + k - ntap
+                acc += (sp >= 0 ? src[sp * cd + ch] : hist[hoff + ch * ntap + p + k]) * taps[toff + ch * dconv + k]
+            }
+            o[p * cd + ch] = acc / (1.0 + exp(-acc))
+        }
+        l2_norm_rows(unsafe(addr(o[p * cd])), int64(2 * kd / ds), int64(ds), eps)
+        for (j in range(kd)) {
+            o[p * cd + j] *= qscale
+        }
+    }
+    return <- o
 }
 
 //! A dense GEMM's reference: `want[r * ndim + j]` is weight row j dotted with row r of `x`, accumulated in double, and
@@ -124,6 +150,38 @@ def strided_ref(ref : DenseRef; ndim, ys, nout : int; sentinel : float) : DenseR
     return <- out
 }
 
+//! `dense_ref_env` over `ndim` rows of the plane `w`, `kdim` wide, from row `r0`
+def private plane_rows_ref(w, x : array<float>; m, kdim, ndim, r0 : int) : DenseRef {
+    return <- dense_ref_env(m, kdim, ndim, x) $(j; var wrow) {
+        for (c in range(kdim)) {
+            wrow[c] = w[(r0 + j) * kdim + c]
+        }
+    }
+}
+
+//! One expert's FFN over `m` dequantized feed rows `x`, `n` wide: the gate and up rows of `w1` / `w3` from `r1` / `r3` (`nfe` of
+//! them), silu(gate) x up rounded in place by `round_h` row by row - the device's requant or half store - then the `n` down rows
+//! of `w2` from `r2`, `nfe` wide, every dot in double. The `m * n` outputs.
+def ffn_expert_ref(w1, w3, w2, x : array<float>; m, n, nfe, r1, r3, r2 : int; round_h : block<(var h : array<float>) : void>) : array<float> {
+    var g <- plane_rows_ref(w1, x, m, n, nfe, r1)
+    var u <- plane_rows_ref(w3, x, m, n, nfe, r3)
+    var h : array<float>
+    h |> reserve(m * nfe)
+    for (r in range(m)) {
+        var hr <- [for (i in range(nfe)); silu_f32(g.want[r * nfe + i]) * u.want[r * nfe + i]]
+        invoke(round_h, hr)
+        h |> push_from(hr)
+        delete hr
+    }
+    var y <- plane_rows_ref(w2, h, m, nfe, n, r2)
+    var out <- y.want
+    delete g
+    delete u
+    delete h
+    delete y
+    return <- out
+}
+
 //! The Q8_0 blocks a kernel requantized, counted against the activated reference row: `scales` off 2e-3 of the block's
 //! amax / 127, `values` whose dequantized element sits more than a quant step (plus 2e-3 of itself) from the reference,
 //! `poison_inside` blocks whose first expectation, pushed three quant steps, still sits inside. A NaN is off.
@@ -131,11 +189,13 @@ struct Q8BlocksOff {
     scales : int
     values : int
     poison_inside : int
+    worst : float   //! the largest dequantized distance from the reference, in that block's quant steps
+    worst_at : int = -1
 }
 
 //! `Q8BlocksOff` over `nblk` blocks of 32: quants `oq`, scales `os`, the activated reference row `a`
 def q8_blocks_off(oq : array<int8>; os : array<float>; a : array<float>; nblk : int) : Q8BlocksOff {
-    var off : Q8BlocksOff
+    var off = Q8BlocksOff()
     for (blk in range(nblk)) {
         var m = 0.0
         for (e in range(32)) {
@@ -150,6 +210,11 @@ def q8_blocks_off(oq : array<int8>; os : array<float>; a : array<float>; nblk : 
             let deq = float(oq[blk * 32 + e]) * os[blk]
             if (!(abs(deq - w) <= d_ref + 2e-3 * abs(w))) {
                 off.values++
+            }
+            let steps = abs(deq - w) / max(d_ref, 1e-30)
+            if (steps > off.worst) {
+                off.worst = steps
+                off.worst_at = blk * 32 + e
             }
             if (e == 0 && abs(deq - (w + 3.0 * d_ref + 1.0)) <= d_ref + 2e-3 * abs(w)) {
                 off.poison_inside++

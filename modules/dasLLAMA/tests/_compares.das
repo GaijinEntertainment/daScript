@@ -13,9 +13,10 @@ require daslib/linq   // sequence_equal, count, all
 require daslib/algorithm   // fill
 require daslib/math_bits   // uint_bits_to_float: the NaN sentinel as a float
 require dastest/testing_boost   // T?: check asserts through the cell's handle
+require daslib/rtti   // LineInfo: the probe handle's log hook
 require dasllama/dasllama_math   // parallel_argmax
-require daslib/rtti   // this_context().last_exception: a panic's text read back
-require strings   // rtrim over a panic's text
+require daslib/fio
+require daslib/command_line
 
 let POISON = 7.5   //! the slots a kernel must never read or write: a large finite value, so a stray read lands in the sum
 let SLAB_GAP = 3   //! the poisoned slots `put_run` leaves before a run of a slab plane
@@ -223,6 +224,13 @@ struct Bar {
 let BAR_EXACT = Bar(exact = true)
 let BAR_APPROX = Bar(rel = APPROX_REL)
 
+//! The coopmat tiles' bar over the expectation `want`: 2e-2 of the larger magnitude floored at 1, or 4e-3 of `want`'s largest
+//! magnitude - an f16 operand tile rounds every product - the poisoned expectation one plus twice that magnitude off.
+def cm_bar(want : array<float>) : Bar {
+    let m = logits_maxabs(want)
+    return Bar(rel = 2e-2, abs_floor = 4e-3 * m, poison = 2.0 * m, poison_abs = 1.0)
+}
+
 let FLAT_ROWS = 0   //! `check_rows`' row width for a compare with no row structure: the max difference logs at its element
 
 //! How a compare names an element in its log: rows `row_width` wide (0 = flat), each split into heads `head_width` wide (0 = none).
@@ -232,12 +240,6 @@ struct Shape {
 }
 
 let FLAT_SHAPE = Shape()
-
-//! `g` inside `bar` of `w`: bit-equal on an exact bar, else `bar_ok` at the bar's `rel` and `abs_floor`
-def within_bar(bar : Bar; g, w : float) : bool => bar.exact ? g == w : bar_ok(g, w, bar.rel, bar.abs_floor)
-
-//! The elements of `got` outside `bar` of `want`, the first six logged under `tag` on a tolerance bar.
-def mismatch_bar(tag : string; got, want : array<float>; bar : Bar) : int => bar.exact ? mismatch_exact(got, want) : mismatch_rel(tag, got, want, bar.rel, bar.abs_floor)
 
 //! `check` at `bar` with rows `row_width` wide and heads `head_width` wide
 def check_rows(t : T?; tag : string; got, want : array<float>; bar : Bar; row_width : int; head_width : int = 0) {
@@ -294,6 +296,23 @@ def private max_magnitude(want : array<auto(WT)>) : WT {
         }
     }
     return scale
+}
+
+//! the asserts `blk` makes on a probe handle that fail, counted instead of failing the cell
+def probe_fails(blk : block<(p : T?) : void>) : int {
+    var fails = 0
+    var p = new T("probe", ref_time_ticks(), false)
+    unsafe {
+        p.onFail <- @ capture(& fails)(now : bool) {
+            fails++
+        }
+    }
+    p.onLog <- @(msg : string; at : LineInfo) {}
+    invoke(blk, p)
+    unsafe {
+        delete p
+    }
+    return fails
 }
 
 //! `check`'s count alone, with no assert and no log: the elements of `got` outside `bar` of `want` (a NaN on either side, and
@@ -373,13 +392,8 @@ def check(t : T?; tag : string; got : array<float>; want : array<auto(WT)>; bar 
 def check_exact(t : T?; tag : string; got, want : array<auto(TT)>) : int {
     let bad = mismatch_exact(got, want)
     let n = min(length(got), length(want))
-    var first = n
-    for (i in range(n)) {
-        if (got[i] != want[i]) {
-            first = i
-            break
-        }
-    }
+    let fm = first_mismatch(got, want, 0, 0, n)
+    let first = fm >= 0 ? fm : n
     let verdict = "{bad} of {max(length(got), length(want))} elements differ, the first at {first}"
     to_log(LOG_INFO, "{tag}: {verdict}\n")
     t |> success(bad == 0, "{tag}: {verdict}")
@@ -403,6 +417,25 @@ def mismatch_exact(got, want : array<auto(TT)>) : int {
         }
     }
     return bad
+}
+
+//! the count of `got[gbase + i]` not equal to `want[wbase + i]` over `n` elements - `mismatch_exact` over a span of each
+def mismatch_exact(got, want : array<auto(TT)>; gbase, wbase, n : int) : int {
+    var bad = 0
+    for (i in range(n)) {
+        if (got[gbase + i] != want[wbase + i]) {
+            bad++
+        }
+    }
+    return bad
+}
+
+//! the first `i` with `got[gbase + i]` not equal to `want[wbase + i]` over `n` elements, -1 where every one agrees
+def first_mismatch(got, want : array<auto(TT)>; gbase, wbase, n : int) : int {
+    for (i in range(n)) {
+        return i if (got[gbase + i] != want[wbase + i])
+    }
+    return -1
 }
 
 //! The Q8_0 planes' differences, scale for scale then byte for byte: a scale off by more than `scale_bar` relative (floored at
@@ -451,17 +484,6 @@ def top2_margin(a : array<float>; n : int64) : float {
         }
     }
     return m1 - m2
-}
-
-//! `body` run with any panic's text caught: "" where none fired
-def panic_text_of(body : block<void>) : string {
-    var why = ""
-    try {
-        invoke(body)
-    } recover {
-        why = this_context().last_exception |> rtrim
-    }
-    return why
 }
 
 //! true under the JIT; else the cell has registered the JIT-only skip and its caller returns
@@ -547,4 +569,14 @@ def report_sweep(t : T?; name : string; r : Sweep; cases : int = 0; moved : bool
     if (moved) {
         t |> success(r.inert == 0, "{name}: {r.inert} elements the kernel left exactly where it found them")
     }
+}
+
+//! `src` written to `prog_<tag>.das` in the run's temp dir and compiled by a `-compile-only` daslang child within `timeout`
+//! seconds: the child's exit code and output (-1 where the file could not be written)
+def spawn_compile_only(src, tag : string; timeout : float) : tuple<rc : int; out : string> {
+    let path = path_join(test_temp_dir(), "prog_{tag}.das")
+    return (rc = -1, out = "fwrite failed") if (!fwrite(path, src))
+    var out : string
+    let rc = run_and_capture([get_das_exe(), "-compile-only", path], out, timeout)
+    return (rc = rc, out = out)
 }

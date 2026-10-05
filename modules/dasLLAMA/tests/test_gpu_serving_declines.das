@@ -11,7 +11,6 @@ require ?vulkan dasllama/dasllama_vulkan_decode   // rd_routed_slots_fit - the N
 require dasllama/dasllama_metal_shapes   // moe_metal_ok - the Metal routed block's admission, portable
 require strings
 require daslib/strings_boost
-require _compares   // panic_text_of: a panic's text read back
 require daslib/enum_trait   // the format-set drift guard walks the whole KqFmt enum
 
 [unused_argument(rows)]
@@ -40,8 +39,6 @@ def private shell(n_layers : int64; recr_mask : uint64) : Model {
     return <- m
 }
 
-def private says(s : string; part : string) : bool => find(s, part) >= 0
-
 [test]
 def test_resident_unserved_features(t : T?) {
     t |> run("a plain dense config has no unserved feature") @(t : T?) {
@@ -58,8 +55,8 @@ def test_resident_unserved_features(t : T?) {
         t |> equal(resident_unserved_features(c), "")
         c.qk_norm = false
         let s = resident_unserved_features(c)
-        t |> success(says(s, "gated attention without qk-norm"), "gated attention named: {s}")
-        t |> success(says(s, "partial rotary (64 of 256) without qk-norm"), "partial rotary named with its widths: {s}")
+        t |> success(contains(s, "gated attention without qk-norm"), "gated attention named: {s}")
+        t |> success(contains(s, "partial rotary (64 of 256) without qk-norm"), "partial rotary named with its widths: {s}")
         t |> equal(length(split(s, ", ")), 2)
     }
     t |> run("one feature alone is one name, no separator") @(t : T?) {
@@ -123,7 +120,7 @@ def test_resident_layer_decline(t : T?) {
     t |> run("a recurrent layer without deltanet planes is named by number; the attention layers around it pass") @(t : T?) {
         var m <- shell(3l, 2ul)
         t |> equal(resident_layer_decline(m, 0l), "")
-        t |> success(says(resident_layer_decline(m, 1l), "layer 1 lacks a deltanet plane"), "layer 1 named")
+        t |> success(contains(resident_layer_decline(m, 1l), "layer 1 lacks a deltanet plane"), "layer 1 named")
         t |> equal(resident_layer_decline(m, 2l), "")
         m.dnqkv_offs <- [-1l, 0l, -1l]
         m.dngate_offs <- [-1l, 0l, -1l]
@@ -136,13 +133,13 @@ def test_resident_layer_decline(t : T?) {
         m.dngate_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
         m.dnout_fmt <- [KqFmt.q8, KqFmt.q8, KqFmt.q8]
         let sq = resident_layer_decline(m, 1l)
-        t |> success(!says(sq, "kq-tagged") && !says(sq, "do not serve"), "a K-quant qkv/z pair is no format decline: '{sq}'")
+        t |> success(!contains(sq, "kq-tagged") && !contains(sq, "do not serve"), "a K-quant qkv/z pair is no format decline: '{sq}'")
         m.dnout_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
         let so = resident_layer_decline(m, 1l)
-        t |> success(!says(so, "out plane"), "a K-quant out plane is no format decline: '{so}'")
+        t |> success(!contains(so, "out plane"), "a K-quant out plane is no format decline: '{so}'")
         //! an inner width off the format's block leaves the out plane untileable - the decline names it
         m.config.ssm_d_inner = 100l
-        t |> success(says(resident_layer_decline(m, 1l), "layer 1's deltanet out plane carries a format"), "an untileable out plane is named")
+        t |> success(contains(resident_layer_decline(m, 1l), "layer 1's deltanet out plane carries a format"), "an untileable out plane is named")
         delete m
     }
     t |> run("shared K/V, a missing plane and a head size off the kernels' shape each name the layer; a differing FFN width or a sliding window is served") @(t : T?) {
@@ -150,14 +147,14 @@ def test_resident_layer_decline(t : T?) {
         m.kv_src[2] = 1l
         t |> equal(resident_layer_decline(m, 2l), "", "a layer sharing the K/V of a layer below it is served (Q only, the donor's rows)")
         m.kv_src[1] = 2l
-        t |> success(says(resident_layer_decline(m, 1l), "layer 1 shares layer 2's K/V, a layer above it"), "a donor above the sharing layer is named")
+        t |> success(contains(resident_layer_decline(m, 1l), "layer 1 shares layer 2's K/V, a layer above it"), "a donor above the sharing layer is named")
         m.kv_src[1] = 1l
         m.kv_src[2] = 2l
         m.wq_offs[0] = -1l
-        t |> success(says(resident_layer_decline(m, 0l), "layer 0 lacks a q/k plane"), "missing plane named")
+        t |> success(contains(resident_layer_decline(m, 0l), "layer 0 lacks a q/k plane"), "missing plane named")
         m.wq_offs[0] = 0l
         m.wv_offs[0] = -1l
-        t |> success(says(resident_layer_decline(m, 0l), "layer 0 lacks a v plane"), "a missing v plane is named where the layer is not V-from-K")
+        t |> success(contains(resident_layer_decline(m, 0l), "layer 0 lacks a v plane"), "a missing v plane is named where the layer is not V-from-K")
         m.config.v_from_k_mask = 1ul
         t |> equal(resident_layer_decline(m, 0l), "", "a V-from-K layer needs no v plane: V is its k row at its own rms")
         m.ffn_w <- [64l, 96l, 64l]
@@ -168,9 +165,9 @@ def test_resident_layer_decline(t : T?) {
         m.config.head_size = 512l
         t |> equal(resident_layer_decline(m, 1l), "", "a 512 head is served (two elements a thread)")
         m.config.head_size = 544l
-        t |> success(says(resident_layer_decline(m, 1l), "layer 1 head size 544"), "a head past the kernels' 512 is named by layer")
+        t |> success(contains(resident_layer_decline(m, 1l), "layer 1 head size 544"), "a head past the kernels' 512 is named by layer")
         m.config.head_size = 40l
-        t |> success(says(resident_layer_decline(m, 1l), "layer 1 head size 40"), "a head off the 32-multiple is named by layer")
+        t |> success(contains(resident_layer_decline(m, 1l), "layer 1 head size 40"), "a head off the 32-multiple is named by layer")
         delete m
     }
     t |> run("a MoE layer's dense width is its shared expert's; a layer past the dense lead without expert planes is named") @(t : T?) {
@@ -187,7 +184,7 @@ def test_resident_layer_decline(t : T?) {
         t |> success(!layer_is_moe(m, 0l) && layer_is_moe(m, 1l) && !layer_is_moe(m, 2l), "a layer routes only past the dense lead with all three expert planes")
         t |> equal(resident_dense_width(m, 0l), 64l, "the dense-lead layer's width is its FFN's")
         t |> equal(resident_dense_width(m, 1l), 512l, "an MoE layer's width is the shared expert's")
-        t |> success(says(resident_layer_decline(m, 2l), "layer 2 lacks an expert plane"), "a layer past the dense lead without its expert planes is named")
+        t |> success(contains(resident_layer_decline(m, 2l), "layer 2 lacks an expert plane"), "a layer past the dense lead without its expert planes is named")
         t |> equal(resident_layer_decline(m, 0l), "", "the dense-lead layer's own width is its registration's, whatever the shared expert's")
         delete m
     }
@@ -208,13 +205,13 @@ def test_resident_unserved_moe_features(t : T?) {
         c.moe_router_bias = true
         c.moe_exp_probs = true
         let s = resident_unserved_features(c)
-        t |> success(!says(s, "router bias") && says(s, "an expert selection bias"), "the router bias is served (the select adds it), the expert selection bias named: {s}")
+        t |> success(!contains(s, "router bias") && contains(s, "an expert selection bias"), "the router bias is served (the select adds it), the expert selection bias named: {s}")
         c.moe_router_bias = false
         c.moe_exp_probs = false
         c.n_expert = 300l
         c.n_expert_used = 70l
         let g = resident_unserved_features(c)
-        t |> success(says(g, "300 experts") && says(g, "70 routed experts"), "the kernels' reach named with the counts: {g}")
+        t |> success(contains(g, "300 experts") && contains(g, "70 routed experts"), "the kernels' reach named with the counts: {g}")
         c.n_expert = 60l
         c.n_expert_used = 4l
         c.moe_exps_bias = true
@@ -277,11 +274,11 @@ def test_moe_metal_expert_formats(t : T?) {
     t |> run("the resident driver names a biased expert stack feeding a K-quant down plane by layer; a per-32 down plane draws no such decline") @(t : T?) {
         var kb <- moe_shell(KqFmt.k6)
         kb.config.moe_exps_bias = true
-        t |> success(says(resident_layer_decline(kb, 0l), "layer 0's biased expert stacks feed a K-quant down plane"), "the biased K-quant down is named")
+        t |> success(contains(resident_layer_decline(kb, 0l), "layer 0's biased expert stacks feed a K-quant down plane"), "the biased K-quant down is named")
         delete kb
         var qb <- moe_shell(KqFmt.q8)
         qb.config.moe_exps_bias = true
-        t |> success(!says(resident_layer_decline(qb, 0l), "biased expert stacks"), "a biased stack over a Q8_0 down plane draws no bias decline")
+        t |> success(!contains(resident_layer_decline(qb, 0l), "biased expert stacks"), "a biased stack over a Q8_0 down plane draws no bias decline")
         delete qb
     }
     t |> run("the kernel roster and the site-alignment gate name ONE format set - every KqFmt reads the same on both") @(t : T?) {
@@ -453,6 +450,37 @@ def test_resident_binding_ctx(t : T?) {
     }
 }
 
+let private TRIM_KIND_PROBE = "trim-kind-probe"
+
+//! a prefill override that passes every call to the CPU layer loop: the foreign override the trim-kind cell selects
+[unused_argument(tr, s, npos, start_pos)]
+def private pass_prefill_probe(tr : Model; var s : Session; npos : int64; start_pos : int64) : bool => false
+
+//! the trim's admission tells this run's declines (the route, a prefill pin or override, the tier's seams, the card's room) from the
+//! model's (experts, the residual, a feature): a lane minted under the first would be wrong for the next run, so the mint writes none
+[test]
+def test_trim_decline_kind(t : T?) {
+    t |> run("a trimmed lane's decline is this run's or the model's") @(t : T?) {
+        t |> success(resident_trim_decline_is_run_mode("the whole-model driver is not asked for (DASLLAMA_GPU_RESIDENT, set_gpu_resident_route)"), "the route is the run's")
+        t |> success(resident_trim_decline_is_run_mode("the residency plan does not fit the card"), "the card's room is the run's")
+        t |> success(resident_trim_decline_is_run_mode("the tier installed no resident-driver seams"), "the tier's seams are the run's")
+        t |> success(resident_trim_decline_is_run_mode("routed experts (64) - the tier installed no MoE seats; the per-op tier's expert rails serve"), "the MoE seats are the run's")
+        t |> success(!resident_trim_decline_is_run_mode("the trim serves dense models without a hyper-connection residual or per-layer embeddings"), "the model's shape is the model's")
+        t |> success(!resident_trim_decline_is_run_mode("no arm for: sinks"), "a feature is the model's")
+        t |> success(!resident_trim_decline_is_run_mode(""), "an empty decline is no decline")
+    }
+    t |> run("a foreign prefill override selected in-process is a run-mode decline the chain names") @(t : T?) {
+        let found = active_prefill_override()
+        register_prefill_override(TRIM_KIND_PROBE, @@pass_prefill_probe)
+        select_prefill_override(TRIM_KIND_PROBE)
+        let why = resident_run_mode_decline()
+        t |> equal(why, "the '{TRIM_KIND_PROBE}' prefill override is active")
+        t |> success(resident_trim_decline_is_run_mode(why), "the override's decline is this run's")
+        select_prefill_override(found)
+        t |> success(empty(resident_run_mode_decline()) || active_prefill_override() == found, "control: the override put back, the decline reads as the process found it")
+    }
+}
+
 [test]
 def test_resident_mirror_codec_ask(t : T?) {
     t |> run("a block codec's geometry: whole 32-blocks a row and a head, a power-of-two head under tq4") @(t : T?) {
@@ -484,11 +512,21 @@ def test_resident_mirror_codec_ask(t : T?) {
             t |> success(!gpu_kv_dtype_pin_().pinned, "the reset lifts the ask")
             delete m
         }
-        if (pin0.pinned) {
-            set_gpu_kv_dtype_(pin0.dt)
-        } else {
-            reset_gpu_kv_dtype_()
-        }
+        restore_gpu_kv_dtype(pin0)
+    }
+    t |> run("the fixtures' put-back of the codec ask: the pin again where one stood, the reset where none did") @(t : T?) {
+        let found = gpu_kv_dtype_pin_()
+        set_gpu_kv_dtype_(KVDtype.q8_0)
+        let pinned = gpu_kv_dtype_pin_()
+        set_gpu_kv_dtype_(KVDtype.tq4)
+        restore_gpu_kv_dtype(pinned)
+        t |> success(gpu_kv_dtype_pin_().pinned && gpu_kv_dtype_pin_().dt == KVDtype.q8_0, "a pinned ask comes back as the pin it was, not the one set after it")
+        reset_gpu_kv_dtype_()
+        let lifted = gpu_kv_dtype_pin_()
+        set_gpu_kv_dtype_(KVDtype.tq4)
+        restore_gpu_kv_dtype(lifted)
+        t |> success(!gpu_kv_dtype_pin_().pinned, "an unpinned ask comes back lifted")
+        restore_gpu_kv_dtype(found)
     }
     t |> run("a codec's spelling, in any case, and its ordinal across the tier's seam") @(t : T?) {
         let upper = kv_dtype_named("Q8_0")
@@ -497,7 +535,7 @@ def test_resident_mirror_codec_ask(t : T?) {
         let bogus = kv_dtype_named("bogus")
         t |> success(!bogus.known && bogus.dt == KVDtype.f16, "a spelling that names no codec reads f16, marked unknown")
         t |> equal(kv_dtype_of(int(KVDtype.tq4)), KVDtype.tq4, "an ordinal names its codec")
-        let why = panic_text_of() $ {
+        let why = panic_text() $ {
             kv_dtype_of(99)
         }
         t |> success(find(why, "no KVDtype has ordinal 99") >= 0, "an ordinal no codec carries panics by name: {why}")
@@ -862,7 +900,7 @@ def private round_seats_arm(pick, truth : int64; rollback_ok : bool) {
 def private round_under(name : string; var s : Session; m : Model; var hit : bool&) : string {
     let prev = active_decode_override()
     select_decode_override(name)
-    let why = panic_text_of() $ {
+    let why = panic_text() $ {
         var acc = 0l
         hit = mtp_spec_eval(m, s, ROUND_TOKEN, acc)
     }
@@ -882,13 +920,13 @@ def test_mtp_round_panics(t : T?) {
         var hit = false
         let asked = round_under(ROUND_SEATS, s, m, hit)
         to_log(LOG_INFO, "pick ask beside a sampled walk: {empty(asked) ? "no panic" : asked}\n")
-        t |> success(says(asked, "asked for a pick") && says(asked, "sample"), "a pick ask beside a sampled walk panics, naming both: '{asked}'")
+        t |> success(contains(asked, "asked for a pick") && contains(asked, "sample"), "a pick ask beside a sampled walk panics, naming both: '{asked}'")
         t |> equal(g_round_draft_calls, 0l, "the panic fired before the draft")
         s.spec_params = null
         s.pick_asked = false
         let declined = round_under(ROUND_SEATS, s, m, hit)
         to_log(LOG_INFO, "rollback seat declining after a served verify: {empty(declined) ? "no panic" : declined}\n")
-        t |> success(says(declined, "rollback seat declined a reject after its verify seat served") && says(declined, ROUND_SEATS), "the reject panics naming the override whose rollback seat declined: '{declined}'")
+        t |> success(contains(declined, "rollback seat declined a reject after its verify seat served") && contains(declined, ROUND_SEATS), "the reject panics naming the override whose rollback seat declined: '{declined}'")
         t |> equal(g_round_verify_calls, 1l, "the verify seat served the round")
         t |> equal(g_round_rollback_calls, 1l, "the rollback seat was asked once and declined")
         delete s

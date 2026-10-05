@@ -1625,7 +1625,7 @@ def gate_table() : array<GateInfo> {
         GateInfo(name = "sequence", tier = "module", doc = "sequence game release smoke; nightly CI - run it when working on the game", reach <- ["examples/games/sequence/"]),
         GateInfo(name = "imgui", tier = "module", doc = "dasImgui playwright suite; nightly CI - run it when working on dasImgui", reach <- ["modules/dasImgui/", "modules/dasGlfw/", "modules/dasClipboard/"]),
         GateInfo(name = "dasllama-model-free", tier = "module", doc = "dasLLAMA model-free suite via tests/run.das - the module's every-change gate (run.das -- --changed while working)", reach <- ["modules/dasLLAMA/"]),
-        GateInfo(name = "dasllama-stocked", tier = "module", doc = "dasLLAMA stocked suite - the model-gated files, the module's per-PR run on a box with models", reach <- ["modules/dasLLAMA/"])
+        GateInfo(name = "dasllama-stocked", tier = "module", doc = "dasLLAMA stocked suite - every model-gated file; a PR's run on a box with models is run.das -- --changed, which has no lane", reach <- ["modules/dasLLAMA/"])
     ]
 }
 

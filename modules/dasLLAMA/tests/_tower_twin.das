@@ -19,6 +19,7 @@ require _compares   // logits_maxdiff
 require _model_tier   // tower_parity_stats - the rel_l2 statistic the audio twins' bar reads
 require _gpu_knobs public
 require ?vulkan dasllama/dasllama_vulkan_tower
+require ?vulkan dasllama/dasllama_audio_io
 
 let TWIN_SLACK_VK = 1.5   //! 1.5x: the q8 chain's activation quants plus f16 weight scales, the tiles' summation order, the closed-form GELU against the f16 LUT
 let TWIN_ABS_VK = 2e-4    //! the tier-1 dumps' absolute floor, the bar's other term
@@ -51,7 +52,7 @@ def jfk_twin_cell(tt : T?; model_path : string; jit_only : bool; body : block<(s
         if (!model_available(tt, model_path)) {
             return
         }
-        let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+        let samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             tt |> skip("jfk.wav not present")
             return

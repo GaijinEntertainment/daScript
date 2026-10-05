@@ -5,9 +5,11 @@ options _dasllama_internal = true
 module dasllama_gpu_tier shared public
 
 require dasllama/dasllama_lint public
+require dasllama/dasllama_boot_restore
 require dasllama/dasllama_env      // env-driven route defaults + noisy gate
 require dasllama/dasllama_config   // DlimVulkanConfig — the dry-bake seam's config argument
 require daslib/fio                 // describe_pending_dynamic_modules — the absent-backend diagnostic
+require daslib/algorithm
 require math
 
 // The device-COOPERATION seam (SPI): hook types, install/unset slots, route/mark/want/status
@@ -108,16 +110,9 @@ var g_moe_gpu_drop = @@moe_gpu_unset_drop
 var g_moe_gpu_dn = @@moe_gpu_unset_dn
 var g_moe_gpu_attn = @@moe_gpu_unset_attn
 var g_moe_gpu_installed = false
-var g_moe_gpu_layer_count = 0l         // K = layers offloaded from the END (env-driven, set by the tier)
-var g_moe_gpu_from_layer = 1000000l    // first offloaded layer (n_layers - K, set by the loader)
-var g_moe_gpu_cls_off = -1l            // element offset of the resident classifier plane (loader contract)
 var g_moe_gpu_cls_route = true         // runtime routing gate over the resident classifier (--cls-ab lever)
-var g_moe_gpu_stream_from = 1000000l   // first STREAMED layer (streamed range = [stream_from, from_layer))
-var g_moe_gpu_dense_offs : table<int64>   // resident dense planes, keyed woff * 8 + fmt (per-format offset spaces)
 var g_moe_gpu_dense_route = true       // runtime routing gate over the marks (in-process A/B lever)
-var g_moe_gpu_dn_layers : table<int64; int64>   // recurrent layer -> its qkv plane offset (tier-resident triples)
 var g_moe_gpu_dn_route = true          // runtime routing gate over the deltanet marks (--dn-ab lever)
-var g_moe_gpu_attn_layers : table<int64>  // full-attention layers whose q/k/v/o quad is tier-resident
 var g_moe_gpu_attn_route = true        // runtime routing gate over the attention marks (--attn-ab lever)
 
 // ===== the resident whole-stack decode driver hooks =====
@@ -145,12 +140,18 @@ let public RDEC_HEAD_OUT = 4l
 
 //! `qk_hs` = 0 on a model without q/k norms
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]
-def public rdec_head_norm_base(n_layers, dim, qk_hs : int64) : int64 => (n_layers * RDEC_NORM_ROWS + 1l) * dim + (n_layers + 1l) * 2l * qk_hs
+def public rdec_head_norm_base(n_layers, dim, qk_hs : int64) : int64 => rdec_norms_qk_base(n_layers, dim) + (n_layers + 1l) * 2l * qk_hs
+
+//! the norms plane's final-norm row, past every layer's `RDEC_NORM_ROWS` rows
+def public rdec_norms_final_base(n_layers, dim : int64) : int64 => n_layers * RDEC_NORM_ROWS * dim
+
+//! the norms plane's q/k rows, past the final-norm row
+def public rdec_norms_qk_base(n_layers, dim : int64) : int64 => rdec_norms_final_base(n_layers, dim) + dim
 
 //! the norms plane's floats before the eps/ascale pair: the layers' rows, the final norm and the q/k rows, then under `head` the head's q/k slot and block
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]
 def public rdec_norms_len(n_layers, dim, qk_hs : int64; head : bool) : int64
-    => head ? rdec_head_norm_base(n_layers, dim, qk_hs) + RDEC_HEAD_NORM_ROWS * dim : (n_layers * RDEC_NORM_ROWS + 1l) * dim + n_layers * 2l * qk_hs
+    => head ? rdec_head_norm_base(n_layers, dim, qk_hs) + RDEC_HEAD_NORM_ROWS * dim : rdec_norms_qk_base(n_layers, dim) + n_layers * 2l * qk_hs
 
 //! One attention layer's geometry for the resident driver - its attention class (gemma-4's sliding and
 //! global layers differ in head size, kv width and rope), its dense FFN width, and where its rows sit.
@@ -186,11 +187,13 @@ typedef RdecSetClsFn = function<(cls_block : int64; cls_fmt : int; cap : float; 
 //! `ple_row` / `ple_rows`: the per-layer-embedding side input the CPU pre-step built ([layers x ple] a token; position-major over a prompt); empty on a model without one
 //! `pick_only`: land the row's argmax id alone (the answer) and leave `logits` unwritten; false lands the logits and answers -1
 typedef RdecTokenFn = function<(x : array<float>; cossin : array<float>; ple_row : array<float>; pos : int64; cnt : int64; pick_only : bool; var logits : array<float>) : int64>
-//! `ple_raw`: the rows are the gather half alone (sqrt(ple)-scaled table rows) and the driver finishes the pre-step on device; false = the finished side input
-typedef RdecPrefillFn = function<(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; pos0 : int64; var logits : array<float>) : void>
-typedef RdecSyncKvFn = function<(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) : void>
-typedef RdecReadKvFn = function<(l : int64; pos : int64; var kp : uint8?; var vp : uint8?) : void>
-typedef RdecReadKvBulkFn = function<(l : int64; var kp : uint8?; var vp : uint8?; npos : int64) : void>
+//! `ple_raw`: the rows are the gather half alone (sqrt(ple)-scaled table rows) and the driver finishes the pre-step on device; false = the finished side input;
+//! `experts` the host's routed sums of a plain MoE's host layers, asked at each one's cut of the window (unreached on a model without them)
+typedef RdecPrefillFn = function<(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) : void>
+//! layer `l`'s K/V rows [row0, row0 + nrows) of the selected region, `l == n_layers` the NextN head: `kp` / `vp` the host cache from
+//! row 0 - the sync takes the rows up from it, the read brings them back into it
+typedef RdecKvSyncFn = function<(l : int64; row0 : int64; nrows : int64; kp : uint8 const?; vp : uint8 const?) : void>
+typedef RdecKvReadFn = function<(l : int64; row0 : int64; nrows : int64; var kp : uint8?; var vp : uint8?) : void>
 
 [unused_argument(fmt, cap_blocks)]
 def private rdec_unset_reserve(fmt : int; cap_blocks : int64) : bool => false
@@ -217,17 +220,17 @@ def private rdec_unset_token(x : array<float>; cossin : array<float>; ple_row : 
     panic("dasLLAMA: resident decode token hit without an installed GPU driver")
     return -1l
 }
-[unused_argument(x_batch, cos_batch, ple_rows, ple_raw, npos, pos0, logits)]
-def private rdec_unset_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; pos0 : int64; var logits : array<float>) {
+[unused_argument(x_batch, cos_batch, ple_rows, ple_raw, npos, pos0, logits, experts)]
+def private rdec_unset_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
     panic("dasLLAMA: resident prefill hit without an installed GPU driver")
 }
-[unused_argument(l, kp, vp, npos)]
-def private rdec_unset_sync(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) {}
-[unused_argument(l, pos, kp, vp)]
-def private rdec_unset_read(l, pos : int64; var kp : uint8?; var vp : uint8?) {}
-[unused_argument(l, kp, vp, npos)]
-def private rdec_unset_read_bulk(l : int64; var kp : uint8?; var vp : uint8?; npos : int64) {
-    panic("dasLLAMA: resident KV bulk readback hit without an installed GPU driver")
+[unused_argument(l, row0, nrows, kp, vp)]
+def private rdec_unset_kv_sync(l, row0, nrows : int64; kp : uint8 const?; vp : uint8 const?) {
+    panic("dasLLAMA: resident K/V row sync hit without an installed GPU driver")
+}
+[unused_argument(l, row0, nrows, kp, vp)]
+def private rdec_unset_kv_read(l, row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
+    panic("dasLLAMA: resident K/V row readback hit without an installed GPU driver")
 }
 
 var g_rdec_reserve = @@rdec_unset_reserve
@@ -238,9 +241,8 @@ var g_rdec_set_layer = @@rdec_unset_set_layer
 var g_rdec_set_cls = @@rdec_unset_set_cls
 var g_rdec_token = @@rdec_unset_token
 var g_rdec_prefill = @@rdec_unset_prefill
-var g_rdec_sync_kv = @@rdec_unset_sync
-var g_rdec_read_kv = @@rdec_unset_read
-var g_rdec_read_kv_bulk = @@rdec_unset_read_bulk
+var g_rdec_kv_sync = @@rdec_unset_kv_sync
+var g_rdec_kv_read = @@rdec_unset_kv_read
 var g_rdec_installed = false
 var g_rdec_set_dn_layer = @@rdec_unset_set_dn_layer
 var g_rdec_upload_dn_ba = @@rdec_unset_upload_dn_ba
@@ -403,25 +405,6 @@ def public rdec_prefill_hc(x_batch : array<float>; cos_batch : array<float>; sid
     invoke(g_rdec_prefill_hc, x_batch, cos_batch, side, npos, pos0, logits, experts)
 }
 
-[unused_argument(l, xb, logits, acc, row0, nrows)]
-def private rdec_unset_host_rows(l : int64; xb : float const?; logits : float const?; var acc : float?; row0, nrows : int64) {
-}
-
-var g_rdec_host_rows = @@rdec_unset_host_rows
-
-[arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
-def public set_rdec_host_rows(fn : RdecHostExpertsRowsFn) {
-    g_rdec_host_rows = fn
-}
-
-def public clear_rdec_host_rows() {
-    g_rdec_host_rows = @@rdec_unset_host_rows
-}
-
-def public rdec_host_rows(l : int64; xb : float const?; logits : float const?; var acc : float?; row0, nrows : int64) {
-    invoke(g_rdec_host_rows, l, xb, logits, acc, row0, nrows)
-}
-
 def public rdec_hc_installed() : bool => g_rdec_hc_installed
 //! `mtp_head_*` the NextN head's own head mixer and `hnorm_rows` the carry's per-stream norm gammas where the head rides the chain (empty rows and -1 blocks otherwise)
 def public rdec_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_rows : array<float>; down_blks, up_blks : array<int64>; head_norm : array<float>; head_down, head_up : int64;
@@ -563,8 +546,7 @@ def public rdec_dn_prefill_own(l : int64; stp : float?; histp : float?) { invoke
 def public install_moe_gpu_resident(reserve : RdecReserveFn; place : RdecPlaceFn; prepare : RdecPrepareFn;
                                     norms : RdecNormsFn; set_layer : RdecSetLayerFn; set_cls : RdecSetClsFn;
                                     token : RdecTokenFn; prefill : RdecPrefillFn;
-                                    sync_kv : RdecSyncKvFn; read_kv : RdecReadKvFn;
-                                    read_kv_bulk : RdecReadKvBulkFn) {
+                                    kv_sync : RdecKvSyncFn; kv_read : RdecKvReadFn) {
     g_rdec_reserve = reserve
     g_rdec_place = place
     g_rdec_prepare = prepare
@@ -573,13 +555,12 @@ def public install_moe_gpu_resident(reserve : RdecReserveFn; place : RdecPlaceFn
     g_rdec_set_cls = set_cls
     g_rdec_token = token
     g_rdec_prefill = prefill
-    g_rdec_sync_kv = sync_kv
-    g_rdec_read_kv = read_kv
-    g_rdec_read_kv_bulk = read_kv_bulk
+    g_rdec_kv_sync = kv_sync
+    g_rdec_kv_read = kv_read
     g_rdec_installed = true
 }
 
-typedef RdecPrefillIdsFn = function<(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; pos0 : int64; var logits : array<float>) : void>
+typedef RdecPrefillIdsFn = function<(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) : void>
 typedef RdecSetEmbFn = function<(emb_block : int64) : bool>
 typedef RdecUploadEmbF32Fn = function<(fblob : array<float>; off : int64; vocab : int64; dim : int64) : bool>
 
@@ -597,8 +578,8 @@ def public rdec_emb_f32_bytes(vocab, dim : int64) : int64 {
     return bytes > RDEC_EMB_F32_CAP ? 0l : bytes
 }
 
-[unused_argument(tokens, emb_scale, cos_batch, npos, pos0, logits)]
-def private rdec_unset_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; pos0 : int64; var logits : array<float>) {
+[unused_argument(tokens, emb_scale, cos_batch, npos, pos0, logits, experts)]
+def private rdec_unset_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
     panic("dasLLAMA: ids-form resident prefill hit without an installed GPU driver")
 }
 [unused_argument(emb_block)]
@@ -622,7 +603,9 @@ def public install_rdec_prefill_ids(prefill_ids : RdecPrefillIdsFn; set_emb : Rd
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def public rdec_prefill_ids_installed() : bool => g_rdec_prefill_ids_installed
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
-def public rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; pos0 : int64; var logits : array<float>) { invoke(g_rdec_prefill_ids, tokens, emb_scale, cos_batch, npos, pos0, logits) }
+def public rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
+    invoke(g_rdec_prefill_ids, tokens, emb_scale, cos_batch, npos, pos0, logits, experts)
+}
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def public rdec_set_emb(emb_block : int64) : bool => invoke(g_rdec_set_emb, emb_block)
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
@@ -652,7 +635,7 @@ def public rdec_land_carry(row : int64; var dst : array<float>) { invoke(g_rdec_
 typedef RdecSetHeadFn = function<(beh : int64; feh : int; bq : int64; bk : int64; bv : int64; bo : int64; b1 : int64; b3 : int64; b2 : int64; fq : int; fk : int; fv : int; fo : int; f1 : int; f3 : int; f2 : int; g : RdecLayerGeom) : bool>
 //! one NextN draft at head row `row` of the selected region: the host head rows [hyd0, row) at `kp` / `vp` (the head's cache from row 0)
 //! come up, then `x` (the embedded token) and the carry `h` run the head; `rdec_land_carry`'s row 0 takes its hidden, `logits` its logits
-//! unless `pick_only` (they stay on the device), row `row`'s K/V stays on the device (`rdec_head_read_rows` on a pass). Answers the argmax id, -1 where the driver holds no head
+//! unless `pick_only` (they stay on the device), row `row`'s K/V stays on the device (`rdec_kv_read` at layer n_layers on a pass). Answers the argmax id, -1 where the driver holds no head
 typedef RdecDraftFn = function<(x : array<float>; h : array<float>; cossin : array<float>; row : int64; hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64>
 [unused_argument(beh, feh, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g)]
 def private rdec_unset_set_head(beh : int64; feh : int; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) : bool => false
@@ -740,38 +723,26 @@ def public rdec_rollback_installed() : bool => g_rdec_rollback_installed
 def public rdec_rollback(a : int64) : bool => invoke(g_rdec_rollback, a)
 
 //! the NextN head's prompt warm on the window chain: `ask` names whether the next chain warms the head's slab over the prompt rows
-//! it serves, `rows` answers how many head rows the last chain wrote (0 = none); the K/V row seams move the head's rows
-//! [row0, row0 + nrows) of the selected region - `sync` up from the host's `kp` / `vp` (the cache from row 0), `read` back down
+//! it serves, `rows` answers how many head rows the last chain wrote (0 = none); the head's rows move through the K/V row seats at layer `n_layers`
 typedef RdecHeadWarmAskFn = function<(on : bool) : void>
 typedef RdecHeadWarmRowsFn = function<() : int64>
-typedef RdecHeadKvRowsFn = function<(row0 : int64; nrows : int64; var kp : uint8?; var vp : uint8?) : void>
 [unused_argument(on)]
 def private rdec_unset_head_warm_ask(on : bool) {}
 def private rdec_unset_head_warm_rows : int64 => 0l
-[unused_argument(row0, nrows, kp, vp)]
-def private rdec_unset_head_kv_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
-    panic("dasLLAMA: the NextN head's K/V row seam hit without an installed GPU driver")
-}
 var g_rdec_head_warm_ask = @@rdec_unset_head_warm_ask
 var g_rdec_head_warm_rows = @@rdec_unset_head_warm_rows
-var g_rdec_head_sync_rows = @@rdec_unset_head_kv_rows
-var g_rdec_head_read_rows = @@rdec_unset_head_kv_rows
 var g_rdec_head_warm_installed = false
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]
-def public install_rdec_head_warm(ask : RdecHeadWarmAskFn; rows : RdecHeadWarmRowsFn; sync : RdecHeadKvRowsFn; read : RdecHeadKvRowsFn) {
+def public install_rdec_head_warm(ask : RdecHeadWarmAskFn; rows : RdecHeadWarmRowsFn) {
     g_rdec_head_warm_ask = ask
     g_rdec_head_warm_rows = rows
-    g_rdec_head_sync_rows = sync
-    g_rdec_head_read_rows = read
     g_rdec_head_warm_installed = true
 }
 
 def public rdec_head_warm_installed() : bool => g_rdec_head_warm_installed
 def public rdec_head_warm_ask(on : bool) { invoke(g_rdec_head_warm_ask, on) }
 def public rdec_head_warm_rows() : int64 => invoke(g_rdec_head_warm_rows)
-def public rdec_head_sync_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?) { invoke(g_rdec_head_sync_rows, row0, nrows, kp, vp) }
-def public rdec_head_read_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?) { invoke(g_rdec_head_read_rows, row0, nrows, kp, vp) }
 
 //! the per-layer-embedding seats (gemma-4 E-series): `set_ple` sizes the side-input rows at the model's ple width
 //! (after prepare, before the layers); `set_ple_layer` wires one layer's gate [dim x ple] and proj [ple x dim] planes
@@ -828,10 +799,11 @@ def public rdec_upload_norms(norms : array<float>; obias : bool) { invoke(g_rdec
 def public rdec_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) { invoke(g_rdec_set_layer, l, mir_idx, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g) }
 def public rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) { invoke(g_rdec_set_cls, cls_block, cls_fmt, cap, supp) }
 def public rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; pick_only : bool; var logits : array<float>) : int64 => invoke(g_rdec_token, x, cossin, ple_row, pos, cnt, pick_only, logits)
-def public rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; pos0 : int64; var logits : array<float>) { invoke(g_rdec_prefill, x_batch, cos_batch, ple_rows, ple_raw, npos, pos0, logits) }
-def public rdec_sync_kv(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) { invoke(g_rdec_sync_kv, l, kp, vp, npos) }
-def public rdec_read_kv(l, pos : int64; var kp : uint8?; var vp : uint8?) { invoke(g_rdec_read_kv, l, pos, kp, vp) }
-def public rdec_read_kv_bulk(l : int64; var kp : uint8?; var vp : uint8?; npos : int64) { invoke(g_rdec_read_kv_bulk, l, kp, vp, npos) }
+def public rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
+    invoke(g_rdec_prefill, x_batch, cos_batch, ple_rows, ple_raw, npos, pos0, logits, experts)
+}
+def public rdec_kv_sync(l, row0, nrows : int64; kp : uint8 const?; vp : uint8 const?) { invoke(g_rdec_kv_sync, l, row0, nrows, kp, vp) }
+def public rdec_kv_read(l, row0, nrows : int64; var kp : uint8?; var vp : uint8?) { invoke(g_rdec_kv_read, l, row0, nrows, kp, vp) }
 
 //! Install the GPU MoE tier (a GPU backend calls this at [init] when its device probe passes).
 def public install_moe_gpu_tier(ffn : MoeGpuFfnFn; upload : MoeGpuUploadFn; cls : MoeGpuClsFn; dense : MoeGpuDenseFn; drop : MoeGpuDropFn; dn : MoeGpuDnFn; attn : MoeGpuAttnFn) {
@@ -846,44 +818,44 @@ def public install_moe_gpu_tier(ffn : MoeGpuFfnFn; upload : MoeGpuUploadFn; cls 
 }
 
 def public set_moe_gpu_layer_count(k : int64) {
-    g_moe_gpu_layer_count = k
+    g_installed_marks.layer_count = k
 }
 
 def public moe_gpu_layer_count : int64 {
-    return g_moe_gpu_installed ? g_moe_gpu_layer_count : 0l
+    return g_moe_gpu_installed ? g_installed_marks.layer_count : 0l
 }
 
 //! Loader contract: called once per load after the resident set is known (layers - K .. layers).
 def public set_moe_gpu_from_layer(from_layer : int64) {
-    g_moe_gpu_from_layer = from_layer
+    g_installed_marks.from_layer = from_layer
 }
 
 def public moe_gpu_layer_on_gpu(l : int64) : bool {
     // upper bound is load-bearing: the MTP draft block sits at index n_layers, above every uploaded
     // range, so an unbounded `l >= from_layer` dispatches against a region never uploaded.
     // total 0 = loader never reported it; keep the old unbounded answer
-    return (g_moe_gpu_installed && l >= g_moe_gpu_from_layer
-        && (g_moe_gpu_total_layers <= 0l || l < g_moe_gpu_total_layers))
+    return (g_moe_gpu_installed && l >= g_installed_marks.from_layer
+        && (g_installed_marks.total_layers <= 0l || l < g_installed_marks.total_layers))
 }
 
 //! Loader contract: first streamed layer (streamed range = [from, the resident set); reset per
 //! load). Streamed layers keep their CPU planes — only PREFILL batches dispatch on the GPU,
 //! the expert stacks DMA-streamed from pinned host mirrors; decode stays on the CPU.
 def public set_moe_gpu_stream_from(from_layer : int64) {
-    g_moe_gpu_stream_from = from_layer
+    g_installed_marks.stream_from = from_layer
 }
 
 def public moe_gpu_layer_streamed(l : int64) : bool {
-    return g_moe_gpu_installed && l >= g_moe_gpu_stream_from && l < g_moe_gpu_from_layer
+    return g_moe_gpu_installed && l >= g_installed_marks.stream_from && l < g_installed_marks.from_layer
 }
 
 //! Loader contract: the resident classifier plane's element offset (-1 = none; reset per load).
 def public set_moe_gpu_cls_off(woff : int64) {
-    g_moe_gpu_cls_off = woff
+    g_installed_marks.cls_off = woff
 }
 
 def public moe_gpu_cls_on_gpu(woff : int64) : bool {
-    return g_moe_gpu_installed && g_moe_gpu_cls_route && woff == g_moe_gpu_cls_off
+    return g_moe_gpu_installed && g_moe_gpu_cls_route && woff == g_installed_marks.cls_off
 }
 
 //! Runtime routing gate over the resident classifier plane (the --cls-ab in-process lever).
@@ -896,15 +868,11 @@ def public set_moe_gpu_cls_route(on : bool) {
 //! (fmt, element offset) — the same identity the tier resolves stacks by, so the batch GEMM
 //! funnels route any marked weight without knowing layers or arches. Reset per load.
 def public set_moe_gpu_dense_off(fmt : int; woff : int64) {
-    g_moe_gpu_dense_offs |> insert(woff * 8l + int64(fmt))
-}
-
-def public reset_moe_gpu_dense_offs {
-    g_moe_gpu_dense_offs |> clear()
+    g_installed_marks.dense_offs |> insert(woff * 8l + int64(fmt))
 }
 
 def public moe_gpu_dense_on_gpu(fmt : int; woff : int64) : bool {
-    return g_moe_gpu_installed && g_moe_gpu_dense_route && key_exists(g_moe_gpu_dense_offs, woff * 8l + int64(fmt))
+    return g_moe_gpu_installed && g_moe_gpu_dense_route && key_exists(g_installed_marks.dense_offs, woff * 8l + int64(fmt))
 }
 
 //! Runtime routing gate over the dense marks: uploads stay resident, only the funnels' routing
@@ -917,20 +885,20 @@ def public set_moe_gpu_dense_route(on : bool) {
 //! Loader contract: mark one recurrent layer's deltanet triple resident on the tier (reset per
 //! load). woq = the qkv plane's element offset — the decode-step state hooks key tier state by it.
 def public set_moe_gpu_dn_layer(l : int64; woq : int64) {
-    g_moe_gpu_dn_layers |> insert(l, woq)
+    g_installed_marks.dn_layers |> insert(l, woq)
 }
 
 //! The marked layer's qkv plane offset (-1 when the layer carries no resident triple).
 def public moe_gpu_dn_layer_key(l : int64) : int64 {
-    return g_moe_gpu_dn_layers?[l] ?? -1l
+    return g_installed_marks.dn_layers?[l] ?? -1l
 }
 
 def public reset_moe_gpu_dn_layers {
-    g_moe_gpu_dn_layers |> clear()
+    g_installed_marks.dn_layers |> clear()
 }
 
 def public moe_gpu_dn_on_gpu(l : int64) : bool {
-    return g_moe_gpu_installed && g_moe_gpu_dn_route && key_exists(g_moe_gpu_dn_layers, l)
+    return g_moe_gpu_installed && g_moe_gpu_dn_route && key_exists(g_installed_marks.dn_layers, l)
 }
 
 //! Runtime routing gate over the deltanet marks (the --dn-ab in-process lever; uploads stay).
@@ -993,7 +961,7 @@ def public set_gpu_kv_room_hook(f : GpuKvRoomFn) {
 def public gpu_kv_room_hook() : GpuKvRoomFn => g_gpu_kv_room
 
 def public moe_gpu_dnd_on_gpu(l : int64) : bool {
-    return g_moe_gpu_installed && g_moe_gpu_dnd_route && key_exists(g_moe_gpu_dn_layers, l)
+    return g_moe_gpu_installed && g_moe_gpu_dnd_route && key_exists(g_installed_marks.dn_layers, l)
 }
 
 //! Runtime routing gate over the deltanet DECODE step (the --dnd-ab in-process lever).
@@ -1036,15 +1004,11 @@ def public moe_gpu_dn_release(state_lo : uint64; state_hi : uint64) {
 //! Loader contract: mark one full-attention layer's q/k/v/o plane quad resident on the tier —
 //! the prefill attention block then runs as one device chain. Reset per load.
 def public set_moe_gpu_attn_layer(l : int64) {
-    g_moe_gpu_attn_layers |> insert(l)
-}
-
-def public reset_moe_gpu_attn_layers {
-    g_moe_gpu_attn_layers |> clear()
+    g_installed_marks.attn_layers |> insert(l)
 }
 
 def public moe_gpu_attn_on_gpu(l : int64) : bool {
-    return g_moe_gpu_installed && g_moe_gpu_attn_route && key_exists(g_moe_gpu_attn_layers, l)
+    return g_moe_gpu_installed && g_moe_gpu_attn_route && key_exists(g_installed_marks.attn_layers, l)
 }
 
 //! Runtime routing gate over the attention marks (the --attn-ab in-process lever; uploads stay).
@@ -1190,22 +1154,16 @@ def public vk_rdec_rerecord_on : bool => g_vk_rdec_rerecord
 
 // ===== shared-expert residency (decode, async behind the routed experts) =====
 
-var g_moe_gpu_shexp_layers : table<int64>   // layers whose shexp gate/up/down triple is resident
 var g_moe_gpu_shexp_route = true
 var private g_moe_gpu_shexp_said : table<string>   // the prefill's shared-expert decline reasons said for this model
 
 //! Loader contract: mark one layer's shared-expert triple resident on the tier. Reset per load.
 def public set_moe_gpu_shexp_layer(l : int64) {
-    g_moe_gpu_shexp_layers |> insert(l)
-}
-
-def public reset_moe_gpu_shexp_layers {
-    g_moe_gpu_shexp_layers |> clear()
-    g_moe_gpu_shexp_said |> clear()
+    g_installed_marks.shexp_layers |> insert(l)
 }
 
 def public moe_gpu_shexp_on_gpu(l : int64) : bool {
-    return g_moe_gpu_installed && g_moe_gpu_shexp_route && key_exists(g_moe_gpu_shexp_layers, l)
+    return g_moe_gpu_installed && g_moe_gpu_shexp_route && key_exists(g_installed_marks.shexp_layers, l)
 }
 
 //! The prefill's shared expert stays on the CPU for `why`: said once per reason per model while the tier is armed.
@@ -1240,8 +1198,6 @@ def private moe_gpu_unset_qkv(var yq : float?; var yk : float?; var yv : float?;
 }
 
 var g_moe_gpu_qkv = @@moe_gpu_unset_qkv
-var g_moe_gpu_qkv_layers : table<int64>
-var g_moe_gpu_qkv_route = true
 
 //! Tier registration of the decode q/k/v group (beside install_moe_gpu_tier).
 def public set_moe_gpu_qkv_hook(f : MoeGpuQkvFn) {
@@ -1250,20 +1206,11 @@ def public set_moe_gpu_qkv_hook(f : MoeGpuQkvFn) {
 
 //! Loader contract: mark one attention layer's q/k/v triple resident. Reset per load.
 def public set_moe_gpu_qkv_layer(l : int64) {
-    g_moe_gpu_qkv_layers |> insert(l)
-}
-
-def public reset_moe_gpu_qkv_layers {
-    g_moe_gpu_qkv_layers |> clear()
+    g_installed_marks.qkv_layers |> insert(l)
 }
 
 def public moe_gpu_qkv_on_gpu(l : int64) : bool {
-    return g_moe_gpu_installed && g_moe_gpu_qkv_route && key_exists(g_moe_gpu_qkv_layers, l)
-}
-
-//! Runtime routing gate over the qkv marks (the --qkv-ab in-process lever; uploads stay).
-def public set_moe_gpu_qkv_route(on : bool) {
-    g_moe_gpu_qkv_route = on
+    return g_moe_gpu_installed && key_exists(g_installed_marks.qkv_layers, l)
 }
 
 // ===== per-model mark sets + whole-model drop (multi-model hosts) =====
@@ -1286,78 +1233,45 @@ struct MoeGpuMarks {
     unsupported : string
 }
 
+var private g_installed_marks = MoeGpuMarks()
+
 //! Move the installed marks out into `m`; the globals read as no-marks after (routing gates —
 //! the process-wide A/B levers — stay put).
 def public moe_gpu_marks_save(var m : MoeGpuMarks) {
-    m.layer_count = g_moe_gpu_layer_count
-    m.from_layer = g_moe_gpu_from_layer
-    m.stream_from = g_moe_gpu_stream_from
-    m.total_layers = g_moe_gpu_total_layers
-    m.cls_off = g_moe_gpu_cls_off
-    m.dense_offs <- g_moe_gpu_dense_offs
-    m.dn_layers <- g_moe_gpu_dn_layers
-    m.attn_layers <- g_moe_gpu_attn_layers
-    m.shexp_layers <- g_moe_gpu_shexp_layers
-    m.qkv_layers <- g_moe_gpu_qkv_layers
-    m.unsupported = g_moe_gpu_unsupported
-    g_moe_gpu_layer_count = 0l
-    g_moe_gpu_from_layer = 1000000l
-    g_moe_gpu_stream_from = 1000000l
-    g_moe_gpu_total_layers = 0l
-    g_moe_gpu_cls_off = -1l
-    g_moe_gpu_unsupported = ""
+    delete m
+    m <- g_installed_marks
+    delete g_installed_marks
+    g_installed_marks <- MoeGpuMarks()
 }
 
-//! Does a saved mark set carry any armed state? A multi-model host uses this to attribute a
+//! Does a mark set carry any armed state? A multi-model host uses this to attribute a
 //! load's arm outcome to the slot that captured it — the process-global VRAM counter cannot
 //! tell WHOSE planes are resident.
 def public moe_gpu_marks_armed(m : MoeGpuMarks) : bool {
-    return moe_gpu_marks_armed_of(m.dense_offs, m.dn_layers, m.attn_layers, m.shexp_layers, m.qkv_layers,
-        m.cls_off, m.total_layers, m.from_layer, m.stream_from)
+    return (!empty(m.dense_offs) || !empty(m.dn_layers) || !empty(m.attn_layers)
+        || !empty(m.shexp_layers) || !empty(m.qkv_layers) || m.cls_off >= 0l
+        || (m.total_layers > 0l && (m.from_layer < m.total_layers || m.stream_from < m.total_layers)))
 }
 
 //! Do the INSTALLED marks carry any armed state? A load asks before installing its model: a
 //! model deleted without the drop leaves its marks and its device state behind.
-def public moe_gpu_installed_marks_armed() : bool {
-    return moe_gpu_marks_armed_of(g_moe_gpu_dense_offs, g_moe_gpu_dn_layers, g_moe_gpu_attn_layers,
-        g_moe_gpu_shexp_layers, g_moe_gpu_qkv_layers, g_moe_gpu_cls_off, g_moe_gpu_total_layers,
-        g_moe_gpu_from_layer, g_moe_gpu_stream_from)
-}
+def public moe_gpu_installed_marks_armed() : bool => moe_gpu_marks_armed(g_installed_marks)
 
-def private moe_gpu_marks_armed_of(dense_offs : table<int64>; dn_layers : table<int64; int64>;
-                                   attn_layers, shexp_layers, qkv_layers : table<int64>;
-                                   cls_off, total_layers, from_layer, stream_from : int64) : bool {
-    return (!empty(dense_offs) || !empty(dn_layers) || !empty(attn_layers)
-        || !empty(shexp_layers) || !empty(qkv_layers) || cls_off >= 0l
-        || (total_layers > 0l && (from_layer < total_layers || stream_from < total_layers)))
-}
-
-// Release what is installed, then take `src`'s. The restore is public and nothing enforces the
-// save/restore pairing, so an unpaired restore would otherwise drop the old set unreleased.
-def private install_mark_table(var dst : table<auto(KT); auto(VT)>; var src : table<KT; VT>) {
-    delete dst
-    dst <- src
-}
-
-//! Install `m` as the global marks (moves the tables in; `m` reads as no-marks after).
+//! Install `m` as the global marks (moves the tables in; `m` reads as no-marks after). The
+//! installed set is released first: nothing enforces the save/restore pairing.
 def public moe_gpu_marks_restore(var m : MoeGpuMarks) {
-    g_moe_gpu_layer_count = m.layer_count
-    g_moe_gpu_from_layer = m.from_layer
-    g_moe_gpu_stream_from = m.stream_from
-    g_moe_gpu_total_layers = m.total_layers
-    g_moe_gpu_cls_off = m.cls_off
-    install_mark_table(g_moe_gpu_dense_offs, m.dense_offs)
-    install_mark_table(g_moe_gpu_dn_layers, m.dn_layers)
-    install_mark_table(g_moe_gpu_attn_layers, m.attn_layers)
-    install_mark_table(g_moe_gpu_shexp_layers, m.shexp_layers)
-    install_mark_table(g_moe_gpu_qkv_layers, m.qkv_layers)
-    g_moe_gpu_unsupported = m.unsupported
-    m.layer_count = 0l
-    m.from_layer = 1000000l
-    m.stream_from = 1000000l
-    m.total_layers = 0l
-    m.cls_off = -1l
-    m.unsupported = ""
+    delete g_installed_marks
+    g_installed_marks <- m
+    delete m
+    m <- MoeGpuMarks()
+}
+
+//! Install a no-marks set for a load of `total` layers whose resident and streamed ranges start at `from`, the asked layer count kept
+def public reset_moe_gpu_marks(from, total : int64) {
+    let layer_count = g_installed_marks.layer_count
+    delete g_installed_marks
+    g_installed_marks <- MoeGpuMarks(layer_count = layer_count, from_layer = from, stream_from = from, total_layers = total)
+    g_moe_gpu_shexp_said |> clear()
 }
 
 typedef MoeGpuDropModelFn = function<() : void>
@@ -1447,8 +1361,6 @@ struct GpuTierWant {
 
 var g_gpu_want = GpuTierWant()
 var g_moe_gpu_backend = ""            // name registered with the arm hook ("vulkan")
-var g_moe_gpu_unsupported = ""        // loader contract: why the loaded model can't ride the armed tier
-var g_moe_gpu_total_layers = 0l       // loader contract: n_layers of the loaded model (status math)
 
 def private moe_gpu_no_arm : bool => false
 def private moe_gpu_no_vram : int64 => 0l
@@ -1776,7 +1688,7 @@ def public moe_gpu_tier_installed : bool {
 
 //! Loader contract: total transformer layers of the loaded model (resident/streamed counts).
 def public set_moe_gpu_total_layers(n : int64) {
-    g_moe_gpu_total_layers = n
+    g_installed_marks.total_layers = n
 }
 
 var private g_moe_gpu_stream_need = 0l
@@ -1911,7 +1823,7 @@ def public matmul_moe_gpu_span_dec(var a : MoeSpanDec) {
 //! Loader contract: "" = the loaded model rides the armed tier; otherwise the human reason it
 //! cannot (reset per load; meaningless while the tier is unarmed).
 def public set_moe_gpu_model_support(reason : string) {
-    g_moe_gpu_unsupported = reason
+    g_installed_marks.unsupported = reason
 }
 
 //! Live GPU-tier status (the control-page badge): actual post-load residency and routing.
@@ -1933,20 +1845,20 @@ def gpu_tier_status_() : GpuTierStatus {
     if (!g_moe_gpu_installed) {
         return GpuTierStatus(reason = "no GPU tier installed")
     }
-    let total = g_moe_gpu_total_layers
-    let resident = total > 0l ? max(total - g_moe_gpu_from_layer, 0l) : 0l
-    let streamed = total > 0l ? max(min(g_moe_gpu_from_layer, total) - min(g_moe_gpu_stream_from, total), 0l) : 0l
+    let total = g_installed_marks.total_layers
+    let resident = total > 0l ? max(total - g_installed_marks.from_layer, 0l) : 0l
+    let streamed = total > 0l ? max(min(g_installed_marks.from_layer, total) - min(g_installed_marks.stream_from, total), 0l) : 0l
     return GpuTierStatus(
         backend = g_moe_gpu_backend,
         device = invoke(g_moe_gpu_device_report),
-        supported = empty(g_moe_gpu_unsupported),
-        reason = g_moe_gpu_unsupported,
+        supported = empty(g_installed_marks.unsupported),
+        reason = g_installed_marks.unsupported,
         resident_layers = resident,
         streamed_layers = streamed,
-        dn_layers = long_length(g_moe_gpu_dn_layers),
-        attn_layers = long_length(g_moe_gpu_attn_layers),
-        dense_planes = long_length(g_moe_gpu_dense_offs),
-        cls_resident = g_moe_gpu_cls_off >= 0l,
+        dn_layers = long_length(g_installed_marks.dn_layers),
+        attn_layers = long_length(g_installed_marks.attn_layers),
+        dense_planes = long_length(g_installed_marks.dense_offs),
+        cls_resident = g_installed_marks.cls_off >= 0l,
         vram_bytes = invoke(g_moe_gpu_vram_report))
 }
 
@@ -1970,9 +1882,7 @@ def public gpu_cpu_pass_reason_count() : int => length(g_gpu_cpu_pass_reasons)
 
 //! No call has passed yet: the counts are the armed model's, so a drop and every load zero them.
 def public reset_gpu_cpu_passes() {
-    for (n in g_gpu_cpu_pass_counts) {
-        n = 0l
-    }
+    g_gpu_cpu_pass_counts |> fill(0l)
 }
 
 def public note_gpu_cpu_pass(reason_slot : int) {
@@ -2233,288 +2143,5 @@ def public kernel_coverage_report(backend, population : string; cov : table<stri
 }
 
 
-// Function values do not survive the -exe bake's global serialization (the
-// dasllama_config restore names the defect) — every @@-defaulted seam in this
-// module boot-restores here; a real registrar wins via the null guards.
-[init]
-def private restore_gpu_tier_fn_defaults { // nolint:STYLE037,STYLE038 — flat seam list, one guard per global
-    if (g_moe_gpu_ffn == null) {
-        g_moe_gpu_ffn = @@moe_gpu_unset_ffn
-    }
-    if (g_moe_gpu_upload == null) {
-        g_moe_gpu_upload = @@moe_gpu_unset_upload
-    }
-    if (g_moe_gpu_cls == null) {
-        g_moe_gpu_cls = @@moe_gpu_unset_cls
-    }
-    if (g_moe_gpu_dense == null) {
-        g_moe_gpu_dense = @@moe_gpu_unset_dense
-    }
-    if (g_moe_gpu_drop == null) {
-        g_moe_gpu_drop = @@moe_gpu_unset_drop
-    }
-    if (g_moe_gpu_dn == null) {
-        g_moe_gpu_dn = @@moe_gpu_unset_dn
-    }
-    if (g_moe_gpu_attn == null) {
-        g_moe_gpu_attn = @@moe_gpu_unset_attn
-    }
-    if (g_rdec_reserve == null) {
-        g_rdec_reserve = @@rdec_unset_reserve
-    }
-    if (g_rdec_place == null) {
-        g_rdec_place = @@rdec_unset_place
-    }
-    if (g_rdec_prepare == null) {
-        g_rdec_prepare = @@rdec_unset_prepare
-    }
-    if (g_rdec_select_region == null) {
-        g_rdec_select_region = @@rdec_unset_select_region
-    }
-    if (g_rdec_norms == null) {
-        g_rdec_norms = @@rdec_unset_norms
-    }
-    if (g_rdec_set_layer == null) {
-        g_rdec_set_layer = @@rdec_unset_set_layer
-    }
-    if (g_rdec_set_cls == null) {
-        g_rdec_set_cls = @@rdec_unset_set_cls
-    }
-    if (g_rdec_set_dn_layer == null) {
-        g_rdec_set_dn_layer = @@rdec_unset_set_dn_layer
-    }
-    if (g_rdec_upload_dn_ba == null) {
-        g_rdec_upload_dn_ba = @@rdec_unset_upload_dn_ba
-    }
-    if (g_rdec_dn_own == null) {
-        g_rdec_dn_own = @@rdec_unset_dn_own
-    }
-    if (g_rdec_dn_prefill_own == null) {
-        g_rdec_dn_prefill_own = @@rdec_unset_dn_prefill_own
-    }
-    if (g_rdec_token == null) {
-        g_rdec_token = @@rdec_unset_token
-    }
-    if (g_rdec_prefill == null) {
-        g_rdec_prefill = @@rdec_unset_prefill
-    }
-    if (g_rdec_sync_kv == null) {
-        g_rdec_sync_kv = @@rdec_unset_sync
-    }
-    if (g_rdec_read_kv == null) {
-        g_rdec_read_kv = @@rdec_unset_read
-    }
-    if (g_rdec_read_kv_bulk == null) {
-        g_rdec_read_kv_bulk = @@rdec_unset_read_bulk
-    }
-    if (g_rdec_set_ple_table == null) {
-        g_rdec_set_ple_table = @@rdec_unset_set_ple_table
-    }
-    if (g_moe_gpu_dn_flush == null) {
-        g_moe_gpu_dn_flush = @@moe_gpu_noop_dn_flush
-    }
-    if (g_moe_gpu_dn_invalidate == null) {
-        g_moe_gpu_dn_invalidate = @@moe_gpu_noop_dn_invalidate
-    }
-    if (g_moe_gpu_dn_release == null) {
-        g_moe_gpu_dn_release = @@moe_gpu_noop_dn_release
-    }
-    if (g_moe_gpu_dn_room == null) {
-        g_moe_gpu_dn_room = @@moe_gpu_noop_dn_room
-    }
-    if (g_gpu_kv_room == null) {
-        g_gpu_kv_room = @@gpu_kv_room_unbounded
-    }
-    if (g_moe_gpu_heat_query == null) {
-        g_moe_gpu_heat_query = @@moe_gpu_unset_heat_query
-    }
-    if (g_moe_gpu_heat_advise == null) {
-        g_moe_gpu_heat_advise = @@moe_gpu_unset_heat_advise
-    }
-    if (g_moe_gpu_ffn_begin == null) {
-        g_moe_gpu_ffn_begin = @@moe_gpu_unset_ffn_begin
-    }
-    if (g_moe_gpu_ffn_join == null) {
-        g_moe_gpu_ffn_join = @@moe_gpu_unset_ffn_join
-    }
-    if (g_moe_gpu_qkv == null) {
-        g_moe_gpu_qkv = @@moe_gpu_unset_qkv
-    }
-    if (g_moe_gpu_drop_model == null) {
-        g_moe_gpu_drop_model = @@moe_gpu_noop_drop_model
-    }
-    if (g_moe_gpu_arm == null) {
-        g_moe_gpu_arm = @@moe_gpu_no_arm
-    }
-    if (g_moe_gpu_vram_report == null) {
-        g_moe_gpu_vram_report = @@moe_gpu_no_vram
-    }
-    if (g_moe_gpu_device_report == null) {
-        g_moe_gpu_device_report = @@moe_gpu_no_device
-    }
-    if (g_moe_gpu_budget_report == null) {
-        g_moe_gpu_budget_report = @@moe_gpu_no_budget
-    }
-    if (g_moe_gpu_os_memory == null) {
-        g_moe_gpu_os_memory = @@moe_gpu_no_os_memory
-    }
-    if (g_rdec_note_weight_bytes == null) {
-        g_rdec_note_weight_bytes = @@rdec_no_note_weight_bytes
-    }
-    if (g_rdec_upload_bias == null) {
-        g_rdec_upload_bias = @@rdec_unset_upload_bias
-    }
-    if (g_rdec_upload_sinks == null) {
-        g_rdec_upload_sinks = @@rdec_unset_upload_sinks
-    }
-    if (g_rdec_moe_ok == null) {
-        g_rdec_moe_ok = @@rdec_unset_moe_ok
-    }
-    if (g_rdec_prepare_moe == null) {
-        g_rdec_prepare_moe = @@rdec_unset_prepare_moe
-    }
-    if (g_rdec_set_moe_layer == null) {
-        g_rdec_set_moe_layer = @@rdec_unset_set_moe_layer
-    }
-    if (g_rdec_set_moe_experts == null) {
-        g_rdec_set_moe_experts = @@rdec_unset_set_moe_experts
-    }
-    if (g_moe_gpu_binding_cap == null) {
-        g_moe_gpu_binding_cap = @@moe_gpu_no_binding_cap
-    }
-    if (g_rdec_token_n == null) {
-        g_rdec_token_n = @@rdec_unset_token_n
-    }
-    if (g_rdec_token_n_rows == null) {
-        g_rdec_token_n_rows = @@rdec_no_token_n_rows
-    }
-    if (g_moe_gpu_plane_bytes_fn == null) {
-        g_moe_gpu_plane_bytes_fn = @@moe_gpu_no_plane_bytes
-    }
-    if (g_moe_gpu_dry_bake == null) {
-        g_moe_gpu_dry_bake = @@moe_gpu_no_dry_bake
-    }
-    if (g_moe_gpu_slice_window == null) {
-        g_moe_gpu_slice_window = @@moe_gpu_no_slice_window
-    }
-    if (g_moe_gpu_unmap_notify == null) {
-        g_moe_gpu_unmap_notify = @@moe_gpu_no_unmap_notify
-    }
-    if (g_moe_gpu_would_accept == null) {
-        g_moe_gpu_would_accept = @@moe_gpu_always_accept
-    }
-    if (g_moe_gpu_bake_tag == null) {
-        g_moe_gpu_bake_tag = @@moe_gpu_no_bake_tag
-    }
-    if (g_rdec_prefill_ids == null) {
-        g_rdec_prefill_ids = @@rdec_unset_prefill_ids
-    }
-    if (g_rdec_set_ple == null) {
-        g_rdec_set_ple = @@rdec_unset_set_ple
-    }
-    if (g_rdec_set_ple_layer == null) {
-        g_rdec_set_ple_layer = @@rdec_unset_set_ple_layer
-    }
-    if (g_rdec_set_ple_proj == null) {
-        g_rdec_set_ple_proj = @@rdec_unset_set_ple_proj
-    }
-    if (g_rdec_set_emb == null) {
-        g_rdec_set_emb = @@rdec_unset_set_emb
-    }
-    if (g_rdec_upload_emb_f32 == null) {
-        g_rdec_upload_emb_f32 = @@rdec_unset_upload_emb_f32
-    }
-    if (g_rdec_land_carry == null) {
-        g_rdec_land_carry = @@rdec_unset_land_carry
-    }
-    if (g_rdec_set_head == null) {
-        g_rdec_set_head = @@rdec_unset_set_head
-    }
-    if (g_rdec_draft == null) {
-        g_rdec_draft = @@rdec_unset_draft
-    }
-    if (g_rdec_verify == null) {
-        g_rdec_verify = @@rdec_unset_verify
-    }
-    if (g_rdec_verify_rows == null) {
-        g_rdec_verify_rows = @@rdec_no_verify_rows
-    }
-    if (g_rdec_verify_landed_logits == null) {
-        g_rdec_verify_landed_logits = @@rdec_no_verify_landed_logits
-    }
-    if (g_rdec_rollback == null) {
-        g_rdec_rollback = @@rdec_unset_rollback
-    }
-    if (g_rdec_head_warm_ask == null) {
-        g_rdec_head_warm_ask = @@rdec_unset_head_warm_ask
-    }
-    if (g_rdec_head_warm_rows == null) {
-        g_rdec_head_warm_rows = @@rdec_unset_head_warm_rows
-    }
-    if (g_rdec_head_sync_rows == null) {
-        g_rdec_head_sync_rows = @@rdec_unset_head_kv_rows
-    }
-    if (g_rdec_head_read_rows == null) {
-        g_rdec_head_read_rows = @@rdec_unset_head_kv_rows
-    }
-    if (g_rdec_set_hc == null) {
-        g_rdec_set_hc = @@rdec_unset_set_hc
-    }
-    if (g_rdec_set_ngram == null) {
-        g_rdec_set_ngram = @@rdec_unset_set_ngram
-    }
-    if (g_rdec_set_host_experts == null) {
-        g_rdec_set_host_experts = @@rdec_unset_set_host_experts
-    }
-    if (g_rdec_token_split == null) {
-        g_rdec_token_split = @@rdec_unset_token_split
-    }
-    if (g_rdec_ngram_ring == null) {
-        g_rdec_ngram_ring = @@rdec_unset_ngram_ring
-    }
-    if (g_rdec_prefill_hc == null) {
-        g_rdec_prefill_hc = @@rdec_unset_prefill_hc
-    }
-    if (g_rdec_host_rows == null) {
-        g_rdec_host_rows = @@rdec_unset_host_rows
-    }
-    if (g_rdec_hot_layer == null) {
-        g_rdec_hot_layer = @@rdec_unset_hot_layer
-    }
-    if (g_rdec_hot_upload == null) {
-        g_rdec_hot_upload = @@rdec_unset_hot_upload
-    }
-    if (g_rdec_hot_submit == null) {
-        g_rdec_hot_submit = @@rdec_unset_hot_submit
-    }
-    if (g_rdec_hot_submit_rows == null) {
-        g_rdec_hot_submit_rows = @@rdec_unset_hot_submit_rows
-    }
-    if (g_moe_gpu_ffn_xf == null) {
-        g_moe_gpu_ffn_xf = @@moe_gpu_unset_ffn_xf
-    }
-    if (g_moe_gpu_ffn_xf_ok == null) {
-        g_moe_gpu_ffn_xf_ok = @@moe_gpu_no_ffn_xf
-    }
-    if (g_moe_gpu_ffn_xf_begin == null) {
-        g_moe_gpu_ffn_xf_begin = @@moe_gpu_unset_ffn_xf_begin
-    }
-    if (g_moe_gpu_ffn_xf_join == null) {
-        g_moe_gpu_ffn_xf_join = @@moe_gpu_unset_ffn_xf_join
-    }
-    if (g_moe_gpu_ffn_xf_rows == null) {
-        g_moe_gpu_ffn_xf_rows = @@moe_gpu_no_ffn_xf_rows
-    }
-    if (g_moe_gpu_attn_dec == null) {
-        g_moe_gpu_attn_dec = @@moe_gpu_unset_attn_dec
-    }
-    if (g_moe_gpu_attn_dec_ok == null) {
-        g_moe_gpu_attn_dec_ok = @@moe_gpu_no_attn_dec
-    }
-    if (g_moe_gpu_attn_dec_claim == null) {
-        g_moe_gpu_attn_dec_claim = @@moe_gpu_noop_attn_dec_claim
-    }
-    if (g_moe_gpu_attn_dec_hydrate == null) {
-        g_moe_gpu_attn_dec_hydrate = @@moe_gpu_unset_attn_dec_hydrate
-    }
-}
+[init, boot_restore]
+def private restore_gpu_tier_fn_defaults {}

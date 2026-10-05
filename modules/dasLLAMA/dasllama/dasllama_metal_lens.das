@@ -253,34 +253,6 @@ def private const_t(var t : TypeDecl?) : TypeDecl? {
     return t
 }
 
-// the [metal_kernel] method of a lensed class — the body the access classifier walks. `want`
-// names the method for multi-kernel classes, a trailing '*' making it a prefix; "" counts every
-// kernel method and returns the first
-def private find_kernel_fn(st : StructurePtr; mod : Module?; want : string; var nmatch : int&) : Function? {
-    var kfn : Function?
-    let byPrefix = want |> ends_with("*")
-    let stem = byPrefix ? chop(want, 0, length(want) - 1) : want
-    let wanted = empty(want) ? "" : "{st.name}`{stem}"
-    mod |> for_each_function("") $(fn) {
-        if (!empty(fn.arguments) && fn.arguments[0]._type.structType == st) {
-            for (ann in fn.annotations) {
-                if (ann.annotation.name == "metal_kernel") {
-                    if (empty(wanted)) {
-                        nmatch++
-                        if (kfn == null) {
-                            kfn = fn
-                        }
-                    } elif (byPrefix ? ("{fn.name}" |> starts_with(wanted)) : fn.name == wanted) {
-                        nmatch++
-                        kfn = fn
-                    }
-                }
-            }
-        }
-    }
-    return kfn
-}
-
 // the msl globals a [metal_kernel] method names: its `name =` argument when present, else the
 // derived <Class>_<method>_msl (msl_shader.das's msl_global_name is the rule). The emitter hangs
 // _entry/_fastmath/_census/_tgmem off exactly this stem, so a derivation that assumes the
@@ -488,7 +460,7 @@ class MetalDispatch : AstStructureAnnotation {
         var nmatch = 0
         var kfn : Function?
         if (!accessForce || !empty(stamp)) {
-            kfn = find_kernel_fn(st, compiling_module(), kern, nmatch)
+            kfn = find_kernel_fn(st, compiling_module(), "metal_kernel", kern, nmatch)
         }
         if (has_wg && empty(tgmem)) {
             if (empty(stamp) || kfn == null) {
@@ -888,7 +860,7 @@ class MetalManualDispatchCensus : AstPassMacro {
             }
             if (!lensed && !empty(tracked)) {
                 var nmatch = 0
-                kfn = find_kernel_fn(st, mod, "", nmatch)
+                kfn = find_kernel_fn(st, mod, "metal_kernel", "", nmatch)
                 if (kfn != null && nmatch == 1) {
                     var res <- classify_field_access(kfn, mod, st, tracked)
                     if (empty(res.err)) {   // an unanalyzable body keeps the declared contract as-is

@@ -416,6 +416,8 @@ def areas_for_path(path : string) : array<string> {
                 return <- ["vision"]
             } elif (name == "_tower_twin.das") {
                 return <- ["audio", "vision"]
+            } elif (name == "_vkd_oracles.das") {
+                return <- ["llm", "tts", "audio", "vision"]   //! CellPlanes is the harness of the TTS and tower Vulkan cells too
             } elif (name |> starts_with("_vk") || name == "_metal_kernel_common.das" || name == "_mtl_toy.das" || name == "_kq_dot.das" || name == "_kernel_oracles.das") {
                 return <- ["llm"]
             } elif (name == "_kq_fixtures.das") {

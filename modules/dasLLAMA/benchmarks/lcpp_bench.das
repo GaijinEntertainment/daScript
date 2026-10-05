@@ -1157,7 +1157,7 @@ def private argmax_logit(s : Session; vocab : int64) : int64 {
 
 // ===== The parity pregate (--parity: the board's start-of-model gate) =====
 
-// greedy continuation over the same slice test_parity's parity_gen_ok compares
+// greedy continuation over the same slice the test fixtures' parity_gen_ok (tests/_model_tier.das) compares
 def private parity_greedy(t : Model; prompt : array<int64>; n_gen : int64) : array<int64> {
     var got : array<int64>
     got |> reserve(n_gen)
@@ -1204,7 +1204,7 @@ def parity_check(model : string; spec : ModelSpec) : bool {
     if (spec.parity.kq_native) {
         set_kquant_native(prev_kq)
     }
-    // the modes the fixtures were frozen under — keep in step with test_parity's parity_gen_ok
+    // the modes the fixtures were frozen under — keep in step with with_pinned_kernels / parity_gen_ok (tests/_model_tier.das)
     let prev_attn = get_prefill_attn_mode()
     set_prefill_attn_mode(AttnPrefillMode.classic)
     let prev_act = get_act_vec()

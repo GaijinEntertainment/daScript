@@ -23,6 +23,12 @@ require dasllama/dasllama   // create_session, moe_gpu_drop_model; its umbrella 
 //! 8 GB mirror on a 4B and a 30 GB CPU cache on the 26B for prompts of 600
 let GEMMA_RIG_CTX = 32768l
 
+//! one gemma fixture: its file under models_dir() and the arm token that selects its cells
+struct GemmaFile {
+    file : string
+    arm : string
+}
+
 [init]
 def private gemma_rig_init() {
     allow_cpu_prefill()   // the control arm (the model dropped off the device) prefills on the CPU by design
@@ -34,7 +40,6 @@ require daslib/fio
 require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
-require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode, where the module exists
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate, arm_on, live_maxabs, SUPPRESSED_LOGIT
 require _resident_feed public   // resident_ready, load_resident, resident_then_cpu_feed, feed_steps_within, feed_logits
 
@@ -52,13 +57,6 @@ let GEMMA_PPL_RATIO = 1.05
 //! recompile alone moves a 150-position cell - the Q4_K_M file read 1.29 to 1.84 of the CPU chain across the gpt-oss
 //! arc's value-identical kernel rewrites, the IQ3_XXS file 0.68 to 1.71 - so the bar sits past that band (the readings: CLAUDE.md)
 let GEMMA_MOE_PPL_RATIO = 2.0
-let PF_WINDOW_ROWS = 512l     //! the engine's PF_WINDOW, asserted equal by the two-window cells: a prompt past it runs as sequential windows
-
-def assert_pf_window(t : T?) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        t |> equal(PF_WINDOW, PF_WINDOW_ROWS, "the prompt is sized past the engine's own window")
-    }
-}
 
 //! the first `count` ids of ordinary prose through the model's own tokenizer: on a junk prompt gemma's
 //! logits swing twenty points between the CPU chain's own prefill and decode, so a bar on it measures nothing
@@ -82,15 +80,9 @@ def private gemma_model(t : T?; file : string) : Model {
     let path = path_join(models_dir(), file)
     if (!resident_ready(t, path)) return <- Model()
     var tr <- load_resident(path)
-    if (!moe_gpu_resident_active() && moe_gpu_resident_memory_decline()) {
-        t |> skip("the residency plan does not fit this card ({gpu_resident_decline_()}) - DASLLAMA_GPU_MIN_CTX=1024 arms the 12B Q8_0 file on a 16 GB card")
+    if (!resident_admitted(t, "the whole-model driver armed on the model (the load log names any decline)", " - DASLLAMA_GPU_MIN_CTX=1024 arms the 12B Q8_0 file on a 16 GB card")) {
         delete tr
         return <- Model()
-    }
-    t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
-    let asked = gpu_kv_dtype_pin()
-    if (asked.pinned) {
-        t |> equal(mirror_kv_dtype(), asked.dt, "the mirror armed at the codec the cell asks")
     }
     t |> success(tr.config.pre_post_norm && tr.config.sliding_window > 0l && tr.config.ffn_act == FfnAct.gelu,
         "the fixture carries the sandwich norms, a sliding window and the GeGLU FFN (the arms this file gates)")
@@ -98,9 +90,11 @@ def private gemma_model(t : T?; file : string) : Model {
     return <- tr
 }
 
-//! the gemma cell's rig: the fixture on the armed driver (or the cell skipped, saying why), `body` inside the engine's job queue, the model deleted after
-def private with_gemma_rig(t : T?; file : string; body : block<(tr : Model) : void>) {
-    var tr <- gemma_model(t, file)
+//! the gemma cell's rig: the fixture on the armed driver (or the cell skipped, saying why - its arm filtered among the reasons),
+//! `body` inside the engine's job queue, the model deleted after
+def private with_gemma_rig(t : T?; gf : GemmaFile; body : block<(tr : Model) : void>) {
+    return if (!arm_on(t, gf.arm))
+    var tr <- gemma_model(t, gf.file)
     if (tr.config.n_layers > 0l) {
         with_dasllama_jobque_() {
             invoke(body, tr)
@@ -111,8 +105,8 @@ def private with_gemma_rig(t : T?; file : string; body : block<(tr : Model) : vo
 
 //! prefill `n` tokens + 8 fed steps on the resident driver, then the same on the all-CPU chain; the
 //! prefill logits and every step's within the bar, the one-step-off control past it.
-def gemma_forced_feed(t : T?; n : int64; file : string) {
-    with_gemma_rig(t, file) $(tr) {
+def gemma_forced_feed(t : T?; n : int64; gf : GemmaFile) {
+    with_gemma_rig(t, gf) $(tr) {
         var ids <- prose_tokens(tr, n + 8l)
         var prompt <- [for (i in range64(n)); ids[i]]
         var toks <- [for (i in range64(n, n + 8l)); ids[i]]
@@ -129,8 +123,8 @@ def gemma_forced_feed(t : T?; n : int64; file : string) {
 //! on one arm: the two GPU paths' logits at every shared position against each other, then the CPU
 //! arm's own pair as the yardstick of how far a prefill kernel and a decode kernel sit apart on
 //! this model by rounding alone
-def prefill_vs_decode(t : T?; n : int64; file : string) {
-    with_gemma_rig(t, file) $(tr) {
+def prefill_vs_decode(t : T?; n : int64; gf : GemmaFile) {
+    with_gemma_rig(t, gf) $(tr) {
         let RESIDENT = 0
         let CPU = 1
         var toks <- prose_tokens(tr, n + 4l)
@@ -145,12 +139,8 @@ def prefill_vs_decode(t : T?; n : int64; file : string) {
                 moe_gpu_drop_model()
             }
             let name = arm == RESIDENT ? "resident" : "cpu"
-            var sa <- create_session(tr, mirror_kv_dtype())
-            var a <- feed_logits(tr, sa, window_prompt, window_steps)
-            delete sa
-            var sb <- create_session(tr, mirror_kv_dtype())
-            var b <- feed_logits(tr, sb, token_prompt, token_steps)
-            delete sb
+            var a <- feed_alone(tr, mirror_kv_dtype(), window_prompt, window_steps)
+            var b <- feed_alone(tr, mirror_kv_dtype(), token_prompt, token_steps)
             var worst = 0.0
             var worst_off = 0.0
             for (k in range64(long_length(a))) {
@@ -185,19 +175,14 @@ def prefill_vs_decode(t : T?; n : int64; file : string) {
     }
 }
 
-// log-softmax of `target` over the live logits (a pinned id at -1e30 drops out of the sum on its own)
+//! log-softmax of `target` over the live logits (a pinned id at -1e30 drops out of the sum on its own); a NaN anywhere in the
+//! row reads NaN - `hmax` and `hlse` fold with `max`, which drops a NaN operand, so the row is scanned first
 def private target_logp(v : array<float>; target : int64) : float {
-    var m = SUPPRESSED_LOGIT
     for (x in v) {
-        if (x > m) {
-            m = x
-        }
+        return x if (is_nan(x))
     }
-    var sum = 0.0
-    for (x in v) {
-        sum += exp(x - m)
-    }
-    return v[target] - m - log(sum)
+    let m = max(SUPPRESSED_LOGIT, hmax(unsafe(addr<float const?>(v[0])), long_length(v)))
+    return v[target] - m - float(log(hlse(v, m)))
 }
 
 //! teacher-forced negative log-likelihood over `steps` positions after `n` prefilled ids: the sum over the
@@ -233,8 +218,8 @@ def private forced_nll(tr : Model; var s : Session; ids : array<int64>; n, steps
 //! On the 12B the logits sit within a few points at whole stretches of positions (the reference exe's own
 //! margins read 0.6 to 16 on this text), so a maxdiff bar on a single position measures the model, not the driver;
 //! a routed model's near-tie flips move whole positions, so its slack is wider.
-def ppl_compare(t : T?; n, steps : int64; file : string; hits_slack : int64 = 3l; ppl_ratio : float = GEMMA_PPL_RATIO) {
-    with_gemma_rig(t, file) $(tr) {
+def ppl_compare(t : T?; n, steps : int64; gf : GemmaFile; hits_slack : int64 = 3l; ppl_ratio : float = GEMMA_PPL_RATIO) {
+    with_gemma_rig(t, gf) $(tr) {
         var ids <- prose_tokens(tr, n + steps + 1l)
         var sg <- create_session(tr, mirror_kv_dtype())
         let served0 = moe_gpu_resident_prefills()

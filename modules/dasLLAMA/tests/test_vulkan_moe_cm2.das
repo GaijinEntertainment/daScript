@@ -6,9 +6,11 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_math
+require daslib/algorithm
 require ?vulkan dasllama/dasllama_math_vulkan  // the MoE GPU tier under test; the test installs its hooks explicitly (no env gate)
-require _vk_kq_fixtures   // f16r and silu: the CPU reference rounds where the device stages halves, on every lane
-require ?vulkan _compares   // read inside the vulkan cells only, so a lane without dasVulkan sees no use
+require _vk_kq_fixtures
+require _kernel_oracles
+require _compares
 require ?vulkan dasllama/dasllama_vulkan_common   // find_stack_idx: the fresh-base guard; a build with no Vulkan module skips the cells
 require ?vulkan dasllama/dasllama_env   // the split knob the streamed cells name in their tags
 
@@ -37,58 +39,34 @@ def private ref_chain(w1, w3, w2 : array<float>; x : array<float>; inv : array<u
     let kn = int(n)
     let knfe = int(nfe)
     out |> resize(npos * n)
-    for (o in out) {
-        o = 0.0
-    }
-    var x16 : array<float>
-    x16 |> resize(npos * n)
-    for (i in range64(npos * n)) {
-        x16[i] = f16r(x[i])
-    }
-    var h16 : array<float>
-    h16 |> resize(nfe)
+    out |> fill(0.0)
+    var x16 <- [for (v in x); f16r(v)]
     for (j in range64(npos * k)) {
-        let b = int(inv[j])
         let p = j / k
-        let e = expert_of_row[b]
-        for (o in range(knfe)) {
-            var g = 0.0lf
-            var u = 0.0lf
-            for (i in range(kn)) {
-                let xv = double(x16[p * n + int64(i)])
-                g += double(w1[(e * knfe + o) * kn + i]) * xv
-                u += double(w3[(e * knfe + o) * kn + i]) * xv
+        let e = expert_of_row[int(inv[j])]
+        var d <- ffn_expert_ref(w1, w3, w2, copy_span(x16, p * n, n), 1, kn, knfe, e * knfe, e * knfe, e * kn) $(var h) {
+            for (v in h) {
+                v = f16r(v)
             }
-            h16[o] = f16r(silu(float(g)) * float(u))
         }
-        for (o2 in range(kn)) {
-            var d = 0.0lf
-            for (i in range(knfe)) {
-                d += double(w2[(e * kn + o2) * knfe + i]) * double(h16[i])
-            }
-            out[p * n + int64(o2)] += w[j] * float(d)
+        for (o in range(kn)) {
+            out[p * n + int64(o)] += w[j] * d[o]
         }
+        delete d
     }
     delete x16
-    delete h16
 }
 
 //! one_region = the shared expert's call shape: one region over every row, the identity slot map at unit weight
 def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; woff, stride : int64; stream : bool; head_only : bool = false; one_region : bool = false) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        var wq1 : array<uint8>
-        var ws1 : array<uint8>
-        var wq3 : array<uint8>
-        var ws3 : array<uint8>
-        var wq2 : array<uint8>
-        var ws2 : array<uint8>
-        fill_kq_stack(1, NE * nfe, n, 21l + woff % 7l, true, wq1, ws1)
-        fill_kq_stack(1, NE * nfe, n, 37l + woff % 7l, true, wq3, ws3)
-        fill_kq_stack(3, NE * n, nfe, 56l + woff % 7l, false, wq2, ws2)
         let woff1 = woff
         let woff3 = woff + stride
         let woff2 = woff + 2l * stride
-        if (!moe_gpu_upload_stack(wq1, ws1, woff1, n, NE * nfe, 1, [stream = stream])) {
+        var w1 : array<float>
+        var w3 : array<float>
+        var w2 : array<float>
+        if (!plane_up(1, NE * nfe, n, 21l + woff % 7l, woff1, w1, true, stream)) {
             t |> skip("{tag}: no Vulkan device (or probe/budget refused the upload)")
             return
         }
@@ -96,18 +74,12 @@ def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; wof
             t |> success(find_stack_idx(woff1, 1) == length(g_gpu.stacks) - 1, "{tag}: the gate base resolves to the stack just uploaded")
             t |> success(find_stack_idx(woff3, 1) < 0 && find_stack_idx(woff2, 3) < 0, "{tag}: the up/down bases are fresh")
         }
-        t |> success(moe_gpu_upload_stack(wq3, ws3, woff3, n, NE * nfe, 1, [stream = stream]), "{tag}: k4 up stack uploaded")
-        t |> success(moe_gpu_upload_stack(wq2, ws2, woff2, nfe, NE * n, 3, [stream = stream]), "{tag}: k6 down stack uploaded")
+        t |> success(plane_up(1, NE * nfe, n, 37l + woff % 7l, woff3, w3, true, stream), "{tag}: k4 up stack uploaded")
+        t |> success(plane_up(3, NE * n, nfe, 56l + woff % 7l, woff2, w2, false, stream), "{tag}: k6 down stack uploaded")
         if (!moe_gpu_ffn_xf_ok(npos, n, 1, 1, 3)) {
             t |> skip("{tag}: the cm2 expert chain serves only in mode 4 on an NV_coopmat2 device")
             return
         }
-        var w1 : array<float>
-        var w3 : array<float>
-        var w2 : array<float>
-        dequant_kq_stack(1, wq1, ws1, NE * nfe, n, w1)
-        dequant_kq_stack(1, wq3, ws3, NE * nfe, n, w3)
-        dequant_kq_stack(3, wq2, ws2, NE * n, nfe, w2)
         // routing: grid entry j -> bucket row (j * 7) % nk (7 coprime to nk); rows below cnt_a are expert 1's
         let nk = npos * k
         var inv : array<uint>
@@ -166,12 +138,6 @@ def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; wof
         delete w1
         delete w3
         delete w2
-        delete wq1
-        delete ws1
-        delete wq3
-        delete ws3
-        delete wq2
-        delete ws2
     }
 }
 
@@ -179,8 +145,7 @@ def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; wof
 def test_vulkan_moe_cm2_chain(t : T?) {
     t |> run("cm2 expert chain (k4 gate/up + k6 down, f16 feed) == the CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
-            set_moe_gpu_ffn_xf_hooks(@@vk_moe_ffn_xf, @@vk_moe_ffn_xf_ok)
+            install_vk_moe_hooks()
             // small regions (20 + 20 rows): one s-tile row column per region, d = 512 on every GEMM
             chain_cell(t, "small", 512l, 512l, 20l, 2l, 20l, 21000000l, 1000000l, false)
             // a 20 + 10 pair: region B starts at row 20 and ends inside the tile that started it - the
@@ -200,8 +165,7 @@ def test_vulkan_moe_cm2_chain(t : T?) {
 def test_vulkan_moe_cm2_one_region(t : T?) {
     t |> run("cm2 expert chain as the shared expert calls it: one region over every position, the identity slot map at unit weight == the CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
-            set_moe_gpu_ffn_xf_hooks(@@vk_moe_ffn_xf, @@vk_moe_ffn_xf_ok)
+            install_vk_moe_hooks()
             //! k = 1 and every row in region A (cnt_a == nk): the one-region form; 40 rows = one s-tile column plus a partial
             chain_cell(t, "one-region", 512l, 512l, 40l, 1l, 40l, 71000000l, 1000000l, false, false, true)
             //! the same over a 2048-wide dim at 300 rows: the multi-row-tile region and the down GEMM's l-tile pick
@@ -216,8 +180,7 @@ def test_vulkan_moe_cm2_one_region(t : T?) {
 def test_vulkan_moe_cm2_streamed(t : T?) {
     t |> run("cm2 expert chain over a streamed group (slot rebase + the timeline hand-off) == the CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
-            set_moe_gpu_ffn_xf_hooks(@@vk_moe_ffn_xf, @@vk_moe_ffn_xf_ok)
+            install_vk_moe_hooks()
             chain_cell(t, "streamed (DASLLAMA_GPU_MOE_SPLIT={g_env_gpu.gpu_moe_split ? 1 : 0})", 512l, 512l, 40l, 2l, 48l, 41000000l, 1000000l, true)
         } else {
             t |> skip("dasVulkan not installed; the cm2 expert chain is untestable here")
@@ -229,9 +192,7 @@ def test_vulkan_moe_cm2_streamed(t : T?) {
 def test_vulkan_moe_cm2_split(t : T?) {
     t |> run("cm2 expert chain async arm: a region head alone (the streamed-layer split's GPU share, partial slot copy) == the CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
-            set_moe_gpu_ffn_xf_hooks(@@vk_moe_ffn_xf, @@vk_moe_ffn_xf_ok)
-            set_moe_gpu_ffn_xf_async_hooks(@@vk_moe_ffn_xf_begin, @@vk_moe_ffn_xf_join, @@vk_moe_ffn_xf_async_rows)
+            install_vk_moe_hooks()
             t |> success(moe_gpu_ffn_xf_async_rows(512l, 512l) >= 128l, "the async arm serves a window of bucket rows")
             // resident: the async begin/join over region A only
             chain_cell(t, "async", 512l, 512l, 20l, 2l, 20l, 51000000l, 1000000l, false, true)

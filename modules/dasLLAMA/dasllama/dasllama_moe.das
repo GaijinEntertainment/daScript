@@ -7,6 +7,7 @@ module dasllama_moe shared public
 require dasllama/dasllama_lint public
 require dasllama/dasllama_common
 require dasllama/dasllama_math
+require dasllama/dasllama_gpu_math
 require dasllama/dasllama_par
 require dasllama/dasllama_convert   // the q8_0/q8_k row quantizers the expert dispatch feeds
 require dasllama/dasllama_env       // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
@@ -1008,6 +1009,6 @@ def moe_select_core(gate : MoeGate; ne, k : int64; norm_topk : bool; wscale : fl
 def moe_shexp_gate(t : Model; l : int64; xp : float const?) : float {
     let dim = t.config.dim
     unsafe {
-        return 1.0 / (1.0 + exp(-dot(addr(t.fblob[t.shexp_gate_off + l * dim]), xp, dim)))
+        return sigmoid_f32(dot(addr(t.fblob[t.shexp_gate_off + l * dim]), xp, dim))
     }
 }

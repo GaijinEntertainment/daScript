@@ -135,16 +135,11 @@ def private load_outcome(path : string; o : RopeScalingOverride) : string {
 }
 
 def private greedy_text(tr : Model; steps : int) : string {
-    var out = ""
-    with_dasllama_jobque_() {
-        var s = make_run_state(tr.config)
-        var prompt <- encode_(tr, YARN_PROMPT, true, false)
-        var ids <- generate(tr, s, prompt, length(prompt) + steps)
-        out = decode_(tr, ids)
-        delete ids
-        delete prompt
-        delete s
-    }
+    var prompt <- encode_(tr, YARN_PROMPT, true, false)
+    var ids <- greedy_gen(tr, prompt, steps)
+    let out = decode_(tr, ids)
+    delete ids
+    delete prompt
     return out
 }
 

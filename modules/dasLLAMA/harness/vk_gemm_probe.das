@@ -43,6 +43,9 @@ require dasllama/dasllama_kqformat
 require daslib/typemacro_boost
 require _vk_probe_fixture   // hash_word, cool_f16_pair: the synthetic planes both probes build
 require ../tests/_vkd_oracles.das   // k4f16_gemm_oracle: the CPU reference the khrx baseline arm is checked against
+require ../tests/_compares.das
+require _race_fixture
+require daslib/linq
 
 let private MM_TILE = 128
 let private DISPATCHES = 16
@@ -465,45 +468,74 @@ struct private Cm2ShapeDev {
 //! (the engine's arena form; the schedule then carries the plane's block base), `plane_rows` past `cnt` sizes the
 //! feed and output planes to a wider window (the engine's capacity planes) with the GEMM reading the first `cnt` rows
 def private cm2_shape_upload(fmt : int; d, n, cnt : int; slab_blocks : int = 0; plane_rows : int = 0) : Cm2ShapeDev {
+    var h <- cm2_shape_host(fmt, d, n, cnt)
+    let dv = cm2_shape_dev(fmt, d, n, cnt, h, slab_blocks, plane_rows)
+    delete h
+    return dv
+}
+
+//! word `wi` of superblock `sb`'s scale row: word 0 a packed f16 d / dmin pair, the rest hashed - k4's and k5's are 6-bit scale
+//! bytes, every other format's hold f16 d's past word 0 (k6, k3 and k2 at word 4, q40 and iq4nl in every word), so there both
+//! halves are kept finite small f16s
+def private scale_row_word(fmt, sb, wi, ws_words : int) : uint {
+    return packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.00005 * float(1 + sb % 5))) if (wi == 0)
+    let hw = hash_word(uint(sb * ws_words + wi) + 613u)
+    return (fmt == int(KqFmt.k4) || fmt == int(KqFmt.k5)) ? hw : (hw & 0x03FF03FFu) | 0x2C002C00u
+}
+
+//! a kq shape's host planes: `d` rows of `n` weights (hashed quant words; a scale row of `scale_row_word`s) and `cnt` activation
+//! rows as f16 pairs and as Q8_K words with their scales
+struct private Cm2ShapeHost {
+    wq : array<uint>
+    ws : array<uint>
+    xf : array<uint>
+    xq : array<uint>
+    axs : array<float>
+}
+
+def private cm2_shape_host(fmt : int; d, n, cnt : int) : Cm2ShapeHost {
+    let nsb = n / 256
+    let totsb = d * nsb
+    let bb = arena_block_bytes(fmt)
+    let wq_words = int(bb.wq / 4l)
+    let ws_words = int(bb.ws / 4l)
+    var h : Cm2ShapeHost
+    h.wq |> reserve(totsb * wq_words)   //! a wave sweep's fourth wave is 75 MB of q5_K blocks, past the unreserved growth cap
+    h.wq |> resize(totsb * wq_words)
+    h.ws |> reserve(totsb * ws_words)
+    h.ws |> resize(totsb * ws_words)
+    h.xf |> resize(cnt * n / 2)
+    h.xq |> resize(cnt * nsb * 64)
+    h.axs |> resize(cnt * nsb)
+    for (i in range(totsb * wq_words)) {
+        h.wq[i] = hash_word(uint(i) + 29u)
+    }
+    for (sb in range(totsb)) {
+        for (wi in range(ws_words)) {
+            h.ws[sb * ws_words + wi] = scale_row_word(fmt, sb, wi, ws_words)
+        }
+    }
+    for (i in range(cnt * n / 2)) {
+        h.xf[i] = cool_f16_pair(uint(i) * 3u + 5u)
+    }
+    for (i in range(cnt * nsb * 64)) {
+        h.xq[i] = hash_word(uint(i) * 13u + 1u)
+    }
+    for (i in range(cnt * nsb)) {
+        h.axs[i] = 0.0625
+    }
+    return <- h
+}
+
+//! `h` on the device, two output planes beside it; `slab_blocks` and `plane_rows` as in `cm2_shape_upload`
+def private cm2_shape_dev(fmt : int; d, n, cnt : int; h : Cm2ShapeHost; slab_blocks : int = 0; plane_rows : int = 0) : Cm2ShapeDev {
     let nsb = n / 256
     let totsb = d * nsb
     let bb = arena_block_bytes(fmt)
     let blk0 = max(slab_blocks - totsb, 0)
     let prow = max(plane_rows, cnt)
-    let wq_words = int(bb.wq / 4l)
-    let ws_words = int(bb.ws / 4l)
-    var wqh : array<uint>
-    var wsuh : array<uint>
-    var xfh : array<uint>
-    var xqh : array<uint>
-    var axsh : array<float>
-    wqh |> reserve(totsb * wq_words)   //! a wave sweep's fourth wave is 75 MB of q5_K blocks, past the unreserved growth cap
-    wqh |> resize(totsb * wq_words)
-    wsuh |> reserve(totsb * ws_words)
-    wsuh |> resize(totsb * ws_words)
-    xfh |> resize(cnt * n / 2)
-    xqh |> resize(cnt * nsb * 64)
-    axsh |> resize(cnt * nsb)
-    for (i in range(totsb * wq_words)) {
-        wqh[i] = hash_word(uint(i) + 29u)
-    }
-    for (sb in range(totsb)) {
-        wsuh[sb * ws_words] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.00005 * float(1 + sb % 5)))
-        for (wi in range(1, ws_words)) {
-            wsuh[sb * ws_words + wi] = hash_word(uint(sb * ws_words + wi) + 613u)
-        }
-    }
-    for (i in range(cnt * n / 2)) {
-        xfh[i] = cool_f16_pair(uint(i) * 3u + 5u)
-    }
-    for (i in range(cnt * nsb * 64)) {
-        xqh[i] = hash_word(uint(i) * 13u + 1u)
-    }
-    for (i in range(cnt * nsb)) {
-        axsh[i] = 0.0625
-    }
     var dv = Cm2ShapeDev(wq_bytes = int64(blk0 + totsb) * bb.wq, ws_bytes = int64(blk0 + totsb) * bb.ws, xf_bytes = int64(prow * n) * 2l,
-        xq_bytes = long_length(xqh) * 4l, axs_bytes = int64(cnt * nsb) * 4l, y_bytes = int64(prow * d) * 4l, wblk0 = blk0)
+        xq_bytes = long_length(h.xq) * 4l, axs_bytes = int64(cnt * nsb) * 4l, y_bytes = int64(prow * d) * 4l, wblk0 = blk0)
     dv.wqd = make_device_buf(dv.wq_bytes)
     dv.wsd = make_device_buf(dv.ws_bytes)
     dv.xfd = make_device_buf(dv.xf_bytes)
@@ -512,40 +544,13 @@ def private cm2_shape_upload(fmt : int; d, n, cnt : int; slab_blocks : int = 0; 
     dv.yd = make_device_buf(dv.y_bytes)
     dv.yd_b = make_device_buf(dv.y_bytes)
     unsafe {
-        upload_region_at(dv.wqd, int64(blk0) * bb.wq, addr<uint8 const?>(wqh[0]), int64(totsb) * bb.wq)
-        upload_region_at(dv.wsd, int64(blk0) * bb.ws, addr<uint8 const?>(wsuh[0]), long_length(wsuh) * 4l)
-        upload_region_at(dv.xfd, 0l, addr<uint8 const?>(xfh[0]), int64(cnt * n) * 2l)
-        upload_region_at(dv.xqd, 0l, addr<uint8 const?>(xqh[0]), dv.xq_bytes)
-        upload_region_at(dv.axsd, 0l, addr<uint8 const?>(axsh[0]), dv.axs_bytes)
+        upload_region_at(dv.wqd, int64(blk0) * bb.wq, addr<uint8 const?>(h.wq[0]), int64(totsb) * bb.wq)
+        upload_region_at(dv.wsd, int64(blk0) * bb.ws, addr<uint8 const?>(h.ws[0]), long_length(h.ws) * 4l)
+        upload_region_at(dv.xfd, 0l, addr<uint8 const?>(h.xf[0]), int64(cnt * n) * 2l)
+        upload_region_at(dv.xqd, 0l, addr<uint8 const?>(h.xq[0]), dv.xq_bytes)
+        upload_region_at(dv.axsd, 0l, addr<uint8 const?>(h.axs[0]), dv.axs_bytes)
     }
-    delete wqh
-    delete wsuh
-    delete xfh
-    delete xqh
-    delete axsh
     return dv
-}
-
-//! one region of `cnt` rows for `wgs` workgroups: the schedule words the tile classes read at `map_off` 4, in a device buffer or in host memory (the prefill's `pf_meta` form)
-def private one_region_sched(cnt, wgs : int; host : bool = false; wblk0 : int = 0) : tuple<buf : uint64; bytes : int64> {
-    var sched : array<uint>
-    sched |> resize(4 + wgs)
-    sched[0] = uint(wblk0)
-    sched[2] = uint(cnt)
-    let sc_bytes = int64(4 + wgs) * 4l
-    var scd = 0ul
-    unsafe {
-        if (host) {
-            let hb = make_host_buf(sc_bytes, true)
-            memcpy(hb.mapped, addr<void?>(sched[0]), sc_bytes)
-            scd = hb.buf
-        } else {
-            scd = make_device_buf(sc_bytes)
-            upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
-        }
-    }
-    delete sched
-    return (buf = scd, bytes = sc_bytes)
 }
 
 [arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
@@ -562,40 +567,36 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; l_stamp
         let wtile = v == 4 ? 32 : 128
         let wgs = ((cnt + ttile - 1) / ttile) * ((d + wtile - 1) / wtile)
         let sc = one_region_sched(cnt, wgs)
-        var raw = alloc_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
         //! every arm alike: the two output planes alternate across the dispatches, each under a fresh hazard rail (the serial row keeps one of each)
         let sizes5 = fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xf_bytes, dv.y_bytes)
         let gbits5 = fixed_array(1u, 2u, 0u, 4u, 16u)
-        var hzs : VkHaz
-        if (v == 4) {
-            let sizes6 = fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xq_bytes, dv.axs_bytes, dv.y_bytes)
-            let gbits6 = fixed_array(1u, 2u, 0u, 4u, 8u, 16u)
-            var sa = kq_batch_cls_set_for(fmt, false, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xqd, dv.axsd, dv.yd), sizes6, gbits6)
-            var sb = kq_batch_cls_set_for(fmt, false, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xqd, dv.axsd, dv.yd_b), sizes6, gbits6)
-            for (k in range(DISPATCHES)) {
-                var hz : VkHaz
-                kq_batch_cls_enc_for(fmt, false, raw, serial ? hzs : hz, (serial || k % 2 == 0) ? sa : sb, pc, int64(wgs))
-            }
-        } elif (v == 3) {
-            var sa = probe_stwin_set(fmt, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd), sizes5, gbits5)
-            var sb = probe_stwin_set(fmt, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd_b), sizes5, gbits5)
-            for (k in range(DISPATCHES)) {
-                var hz : VkHaz
-                probe_stwin_enc(fmt, raw, serial ? hzs : hz, (serial || k % 2 == 0) ? sa : sb, pc, int64(wgs))
-            }
-        } else {
-            var sa = cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd), sizes5, gbits5)
-            var sb = cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd_b), sizes5, gbits5)
-            for (k in range(DISPATCHES)) {
-                var hz : VkHaz
-                cm2_cls_enc(fmt, int64(ttile), raw, serial ? hzs : hz, (serial || k % 2 == 0) ? sa : sb, pc, int64(wgs))
+        let us = timed_chain() $(raw; var hzs) {
+            if (v == 4) {
+                let sizes6 = fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xq_bytes, dv.axs_bytes, dv.y_bytes)
+                let gbits6 = fixed_array(1u, 2u, 0u, 4u, 8u, 16u)
+                var sa = kq_batch_cls_set_for(fmt, false, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xqd, dv.axsd, dv.yd), sizes6, gbits6)
+                var sb = kq_batch_cls_set_for(fmt, false, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xqd, dv.axsd, dv.yd_b), sizes6, gbits6)
+                for (k in range(DISPATCHES)) {
+                    var hz : VkHaz
+                    kq_batch_cls_enc_for(fmt, false, raw, serial ? hzs : hz, (serial || k % 2 == 0) ? sa : sb, pc, int64(wgs))
+                }
+            } elif (v == 3) {
+                var sa = probe_stwin_set(fmt, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd), sizes5, gbits5)
+                var sb = probe_stwin_set(fmt, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd_b), sizes5, gbits5)
+                for (k in range(DISPATCHES)) {
+                    var hz : VkHaz
+                    probe_stwin_enc(fmt, raw, serial ? hzs : hz, (serial || k % 2 == 0) ? sa : sb, pc, int64(wgs))
+                }
+            } else {
+                var sa = cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd), sizes5, gbits5)
+                var sb = cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, dv.yd_b), sizes5, gbits5)
+                for (k in range(DISPATCHES)) {
+                    var hz : VkHaz
+                    cm2_cls_enc(fmt, int64(ttile), raw, serial ? hzs : hz, (serial || k % 2 == 0) ? sa : sb, pc, int64(wgs))
+                }
             }
         }
-        vk_check(vkEndCommandBuffer(raw), null)
-        let us = usec_per_dispatch(raw)
         let tf = flop / (us * 1000000.0lf)
         print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only{serial ? ", one dispatch at a time" : ""}\n")
     }
@@ -630,16 +631,12 @@ def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measur
             upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
         }
         var s = set_router_gemv_f16_cls(fixed_array(wd, xd, od, xd), fixed_array(w_bytes, x_bytes, o_bytes, x_bytes), fixed_array(0u, 1u, 2u, 0u))
-        var raw = alloc_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var hz : VkHaz
         var pc = RouterArgs(ne = uint(ne), dim = uint(dim), woff = 0u, obase = 16u, ne_split = uint(ne / 2), obase_split = uint(16 + ne))
-        for (_k in range(DISPATCHES)) {
-            enc_router_gemv_f16_cls(raw, hz, s, pc, int64(ne))
+        let us = timed_chain() $(raw; var hz) {
+            for (_k in range(DISPATCHES)) {
+                enc_router_gemv_f16_cls(raw, hz, s, pc, int64(ne))
+            }
         }
-        vk_check(vkEndCommandBuffer(raw), null)
-        let us = usec_per_dispatch(raw)
         print("dec ba gemv f16 {ne}x{dim}: {us} us/dispatch  timing-only\n")
         delete wh
         delete xh
@@ -652,33 +649,13 @@ def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measur
         let kd = nkh * ds
         let di = nvh * ds
         let cd = 2 * kd + di
-        let taps = dconv - 1
-        let beta_off = 16
-        let g_off = beta_off + nvh
-        let a_off = g_off + nvh
-        let dt_off = a_off + nvh
-        let taps_off = dt_off + nvh
-        let wnorm_off = taps_off + cd * dconv
-        let hist_off = wnorm_off + ds
-        let sm_n = hist_off + 2 * cd * taps
+        let sm_n = int(DND_SMALLS_BYTES / 4l)
         let nblk = di / 32
-        var projh : array<float>
-        var sth : array<float>
-        var smh : array<float>
-        projh |> resize(cd + di)
-        sth |> resize(nvh * ds * ds)
-        smh |> resize(sm_n)
-        for (i in range(length(projh))) {
-            projh[i] = float((i * 23) % 71) * 0.03 - 1.0
-        }
-        for (i in range(length(sth))) {
-            sth[i] = float((i * 13) % 53) * 0.02 - 0.5
-        }
-        for (i in range(sm_n)) {
-            smh[i] = float((i * 17) % 43) * 0.02 - 0.4
-        }
+        var projh <- row_fill(cd + di, 23, 0, 0.03, 1.0, 71)
+        var sth <- row_fill(nvh * ds * ds, 13, 0, 0.02, 0.5, 53)
+        var smh <- row_fill(sm_n, 17, 0, 0.02, 0.4, 43)
         for (i in range(nvh)) {
-            smh[a_off + i] = -0.4 - float(i) * 0.1
+            smh[int(DN_SM_A) + i] = -0.4 - float(i) * 0.1
         }
         let proj_bytes = long_length(projh) * 4l
         let st_bytes = long_length(sth) * 4l
@@ -705,19 +682,15 @@ def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measur
             fixed_array(proj_bytes, st_bytes, sm_bytes, sc_bytes, q_bytes, TOK_META_BYTES, of_bytes),
             fixed_array(16u, 2u, 8u, 1u, 4u, 0u, 32u))
         for (oform in range(2)) {
-            var raw = alloc_cmd()
-            let begin = VkCommandBufferBeginInfo()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
-            var hz : VkHaz
             var pc = DnStepArgs(cd = uint(cd), kd = uint(kd), nkh = uint(nkh), ds = uint(ds), dconv = uint(dconv),
-                beta_off = uint(beta_off), g_off = uint(g_off), taps_off = uint(taps_off), wnorm_off = uint(wnorm_off),
-                a_off = uint(a_off), dt_off = uint(dt_off), hist_off = uint(hist_off), eps = 1e-6, qscale = 1.0 / sqrt(float(ds)),
+                beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G), taps_off = uint(DN_SM_TAPS), wnorm_off = uint(DN_SM_WNORM),
+                a_off = uint(DN_SM_A), dt_off = uint(DN_SM_DT), hist_off = uint(DN_SM_HIST), eps = 1e-6, qscale = 1.0 / sqrt(float(ds)),
                 out_f32 = uint(oform))
-            for (_k in range(DISPATCHES)) {
-                enc_dn_step_cls(raw, hz, s, pc, int64(nvh))
+            let us = timed_chain() $(raw; var hz) {
+                for (_k in range(DISPATCHES)) {
+                    enc_dn_step_cls(raw, hz, s, pc, int64(nvh))
+                }
             }
-            vk_check(vkEndCommandBuffer(raw), null)
-            let us = usec_per_dispatch(raw)
             let oname = oform == 0 ? "q8 row" : "f32 row"
             print("dec step nvh {nvh} ds {ds} {oname}: {us} us/dispatch  timing-only\n")
         }
@@ -757,29 +730,25 @@ def private run_cold_shape(fmt : int; name : string; d, n, cnt : int) {
     //! stamp on the engine's forms; 10: the flush alone; 11: the flush then the m stamp on the warm planes
     let vnames = fixed_array("warm    ", "cold    ", "warm    ", "cold    ", "warm    ", "cold    ", "hostmeta", "turns   ", "deepslab", "wideplan", "flush   ", "flushed ")
     for (v in range(12)) {
-        var raw = alloc_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var hz : VkHaz
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
         var wsum = 0
-        for (c in range(COLD_COPIES)) {
-            if (v >= 10) {
-                enc_splitk_reduce_cls(raw, hz, sfl, pfl, fl_wgs)
+        let us = timed_chain(COLD_COPIES) $(raw; var hz) {
+            for (c in range(COLD_COPIES)) {
+                if (v >= 10) {
+                    enc_splitk_reduce_cls(raw, hz, sfl, pfl, fl_wgs)
+                }
+                if (v == 10) continue
+                let t = v < 6 ? v / 2 : (v == 7 ? c % 3 : 1)
+                let cold = v == 7 || (v < 6 && v % 2 == 1)
+                let dv = v == 8 ? deep : (v == 9 ? wide : dvs[cold ? c : 0])
+                let m = v == 6 ? sch : (v == 8 ? scd : scs[t])
+                var s = cm2_cls_set(fmt, int64(tiles[t]), fixed_array(dv.wqd, dv.wsd, m.buf, dv.xfd, dv.yd),
+                    fixed_array(dv.wq_bytes, dv.ws_bytes, m.bytes, dv.xf_bytes, dv.y_bytes),
+                    fixed_array(1u, 2u, 0u, 4u, 16u))
+                cm2_cls_enc(fmt, int64(tiles[t]), raw, hz, s, pc, int64(wgs[t]))
+                wsum += wgs[t]
             }
-            if (v == 10) continue
-            let t = v < 6 ? v / 2 : (v == 7 ? c % 3 : 1)
-            let cold = v == 7 || (v < 6 && v % 2 == 1)
-            let dv = v == 8 ? deep : (v == 9 ? wide : dvs[cold ? c : 0])
-            let m = v == 6 ? sch : (v == 8 ? scd : scs[t])
-            var s = cm2_cls_set(fmt, int64(tiles[t]), fixed_array(dv.wqd, dv.wsd, m.buf, dv.xfd, dv.yd),
-                fixed_array(dv.wq_bytes, dv.ws_bytes, m.bytes, dv.xf_bytes, dv.y_bytes),
-                fixed_array(1u, 2u, 0u, 4u, 16u))
-            cm2_cls_enc(fmt, int64(tiles[t]), raw, hz, s, pc, int64(wgs[t]))
-            wsum += wgs[t]
         }
-        vk_check(vkEndCommandBuffer(raw), null)
-        let us = usec_per_dispatch(raw, COLD_COPIES)
         let tf = flop / (us * 1000000.0lf)
         let tn = v < 6 ? tnames[v / 2] : (v == 7 ? "l/m/s" : (v == 10 ? "none" : "cm2m"))
         print("{name} {tn} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  ({wsum / COLD_COPIES} workgroups)  timing-only\n")
@@ -807,27 +776,23 @@ def private run_ts_pair(fmt : int; d, n, cnt : int) {
         var sb = cm2_cls_set(fmt, 128l, fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, one_plane ? dv.yd : yd2),
             fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xf_bytes, dv.y_bytes),
             fixed_array(1u, 2u, 0u, 4u, one_plane ? 16u : 32u))
-        var raw = alloc_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        g_pfq_on = v == 1
-        g_pfq_n = 0u
-        if (g_pfq_on) {
-            cmd_reset_query_pool(vk_value_to_boost(raw), g_pfq_pool, 0u, PFQ_CAP)
-        }
-        var hz : VkHaz
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-        for (_k in range(DISPATCHES)) {
-            cm2_cls_enc(fmt, 128l, raw, hz, sa, pc, int64(wgs))
-            pfq_ts(raw)
-            if (v == 3) {
-                enc_splitk_reduce_cls(raw, hz, sr, pcr, int64(cnt * d + 1023) / 1_024l)
+        let us = timed_chain() $(raw; var hz) {
+            g_pfq_on = v == 1
+            g_pfq_n = 0u
+            if (g_pfq_on) {
+                cmd_reset_query_pool(vk_value_to_boost(raw), g_pfq_pool, 0u, PFQ_CAP)
             }
-            cm2_cls_enc(fmt, 128l, raw, hz, sb, pc, int64(wgs))
+            for (_k in range(DISPATCHES)) {
+                cm2_cls_enc(fmt, 128l, raw, hz, sa, pc, int64(wgs))
+                pfq_ts(raw)
+                if (v == 3) {
+                    enc_splitk_reduce_cls(raw, hz, sr, pcr, int64(cnt * d + 1023) / 1_024l)
+                }
+                cm2_cls_enc(fmt, 128l, raw, hz, sb, pc, int64(wgs))
+            }
+            g_pfq_on = false
         }
-        g_pfq_on = false
-        vk_check(vkEndCommandBuffer(raw), null)
-        let us = usec_per_dispatch(raw)
         print("ts {vnames[v]}: {us / 1000.0lf} ms per pair of {wgs}-workgroup m stamps ({d} x {n} over {cnt} rows)  timing-only\n")
     }
 }
@@ -928,9 +893,8 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
         wsuh |> reserve(totblk * ws_words)
         wsuh |> resize(totblk * ws_words)
         for (sb in range(totblk)) {
-            wsuh[sb * ws_words] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.00005 * float(1 + sb % 5)))
-            for (wi in range(1, ws_words)) {
-                wsuh[sb * ws_words + wi] = hash_word(uint(sb * ws_words + wi) + 613u)
+            for (wi in range(ws_words)) {
+                wsuh[sb * ws_words + wi] = scale_row_word(fmt, sb, wi, ws_words)
             }
         }
     }
@@ -978,24 +942,19 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
         upload_region_at(ladder_m_d, 0l, addr<uint8 const?>(words_ladder_m[0]), ladder_m_bytes)
         upload_region_at(ladder_s_d, 0l, addr<uint8 const?>(words_ladder_s[0]), ladder_s_bytes)
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(map_off))
-        let begin = VkCommandBufferBeginInfo()
-        var raw = alloc_cmd()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
         let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
         var s_whole_a = cm2_cls_set(fmt, 32l, fixed_array(wqd, wsd, whole_d, xfd, yd_a),
             fixed_array(wq_bytes, ws_bytes, whole_bytes, xf_bytes, y_bytes), gbits)
         var s_whole_b = cm2_cls_set(fmt, 32l, fixed_array(wqd, wsd, whole_d, xfd, yd_b),
             fixed_array(wq_bytes, ws_bytes, whole_bytes, xf_bytes, y_bytes), gbits)
-        for (k in range(DISPATCHES)) {
-            var hz : VkHaz
-            cm2_cls_enc(fmt, 32l, raw, hz, k % 2 == 0 ? s_whole_a : s_whole_b, pc, int64(bound_whole))
+        let us = timed_chain() $(raw; var _h) {
+            for (k in range(DISPATCHES)) {
+                var hz : VkHaz
+                cm2_cls_enc(fmt, 32l, raw, hz, k % 2 == 0 ? s_whole_a : s_whole_b, pc, int64(bound_whole))
+            }
         }
-        vk_check(vkEndCommandBuffer(raw), null)
-        let us = usec_per_dispatch(raw)
         let tf = flop / (us * 1000000.0lf)
         print("{name} {profile} whole s-tile: d={d} K={n} wgs={bound_whole} ({live_whole} live)  {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
-        var raw2 = alloc_cmd()
-        vk_check(vkBeginCommandBuffer(raw2, begin), null)
         var s_ladder_m_a = cm2_cls_set(fmt, CM2_TC_E, fixed_array(wqd, wsd, ladder_m_d, xfd, yd_a),
             fixed_array(wq_bytes, ws_bytes, ladder_m_bytes, xf_bytes, y_bytes), gbits)
         var s_ladder_m_b = cm2_cls_set(fmt, CM2_TC_E, fixed_array(wqd, wsd, ladder_m_d, xfd, yd_b),
@@ -1004,45 +963,41 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
             fixed_array(wq_bytes, ws_bytes, ladder_s_bytes, xf_bytes, y_bytes), gbits)
         var s_ladder_s_b = cm2_cls_set(fmt, 32l, fixed_array(wqd, wsd, ladder_s_d, xfd, yd_b),
             fixed_array(wq_bytes, ws_bytes, ladder_s_bytes, xf_bytes, y_bytes), gbits)
-        for (k in range(DISPATCHES)) {
-            var hz_m : VkHaz
-            var hz_s : VkHaz
-            cm2_cls_enc(fmt, CM2_TC_E, raw2, hz_m, k % 2 == 0 ? s_ladder_m_a : s_ladder_m_b, pc, int64(bound_ladder_m))
-            cm2_cls_enc(fmt, 32l, raw2, hz_s, k % 2 == 0 ? s_ladder_s_a : s_ladder_s_b, pc, int64(bound_ladder_s))
+        let us2 = timed_chain() $(raw2; var _h) {
+            for (k in range(DISPATCHES)) {
+                var hz_m : VkHaz
+                var hz_s : VkHaz
+                cm2_cls_enc(fmt, CM2_TC_E, raw2, hz_m, k % 2 == 0 ? s_ladder_m_a : s_ladder_m_b, pc, int64(bound_ladder_m))
+                cm2_cls_enc(fmt, 32l, raw2, hz_s, k % 2 == 0 ? s_ladder_s_a : s_ladder_s_b, pc, int64(bound_ladder_s))
+            }
         }
-        vk_check(vkEndCommandBuffer(raw2), null)
-        let us2 = usec_per_dispatch(raw2)
         let tf2 = flop / (us2 * 1000000.0lf)
         print("{name} {profile} ladder e+s:   d={d} K={n} wgs={bound_ladder_m}+{bound_ladder_s} ({live_ladder_m}+{live_ladder_s} live)  {us2 / 1000.0lf} ms/dispatch  {tf2} TFLOP/s  timing-only\n")
-        var raw3 = alloc_cmd()
-        vk_check(vkBeginCommandBuffer(raw3, begin), null)
         var s_ladder_dm_a = cm2_cls_set(fmt, 128l, fixed_array(wqd, wsd, ladder_m_d, xfd, yd_a),
             fixed_array(wq_bytes, ws_bytes, ladder_m_bytes, xf_bytes, y_bytes), gbits)
         var s_ladder_dm_b = cm2_cls_set(fmt, 128l, fixed_array(wqd, wsd, ladder_m_d, xfd, yd_b),
             fixed_array(wq_bytes, ws_bytes, ladder_m_bytes, xf_bytes, y_bytes), gbits)
-        for (k in range(DISPATCHES)) {
-            var hz_m : VkHaz
-            var hz_s : VkHaz
-            cm2_cls_enc(fmt, 128l, raw3, hz_m, k % 2 == 0 ? s_ladder_dm_a : s_ladder_dm_b, pc, int64(bound_ladder_m))
-            cm2_cls_enc(fmt, 32l, raw3, hz_s, k % 2 == 0 ? s_ladder_s_a : s_ladder_s_b, pc, int64(bound_ladder_s))
+        let us3 = timed_chain() $(raw3; var _h) {
+            for (k in range(DISPATCHES)) {
+                var hz_m : VkHaz
+                var hz_s : VkHaz
+                cm2_cls_enc(fmt, 128l, raw3, hz_m, k % 2 == 0 ? s_ladder_dm_a : s_ladder_dm_b, pc, int64(bound_ladder_m))
+                cm2_cls_enc(fmt, 32l, raw3, hz_s, k % 2 == 0 ? s_ladder_s_a : s_ladder_s_b, pc, int64(bound_ladder_s))
+            }
         }
-        vk_check(vkEndCommandBuffer(raw3), null)
-        let us3 = usec_per_dispatch(raw3)
         let tf3 = flop / (us3 * 1000000.0lf)
         print("{name} {profile} ladder m+s:   d={d} K={n} wgs={bound_ladder_m}+{bound_ladder_s} ({live_ladder_m}+{live_ladder_s} live)  {us3 / 1000.0lf} ms/dispatch  {tf3} TFLOP/s  timing-only  (the dense 64-deep m stamp)\n")
         if (probe_stwin_has(fmt)) {
-            var raw4 = alloc_cmd()
-            vk_check(vkBeginCommandBuffer(raw4, begin), null)
             var s_whole_tw_a = probe_stwin_set(fmt, fixed_array(wqd, wsd, whole_d, xfd, yd_a),
                 fixed_array(wq_bytes, ws_bytes, whole_bytes, xf_bytes, y_bytes), gbits)
             var s_whole_tw_b = probe_stwin_set(fmt, fixed_array(wqd, wsd, whole_d, xfd, yd_b),
                 fixed_array(wq_bytes, ws_bytes, whole_bytes, xf_bytes, y_bytes), gbits)
-            for (k in range(DISPATCHES)) {
-                var hz : VkHaz
-                probe_stwin_enc(fmt, raw4, hz, k % 2 == 0 ? s_whole_tw_a : s_whole_tw_b, pc, int64(bound_whole))
+            let us4 = timed_chain() $(raw4; var _h) {
+                for (k in range(DISPATCHES)) {
+                    var hz : VkHaz
+                    probe_stwin_enc(fmt, raw4, hz, k % 2 == 0 ? s_whole_tw_a : s_whole_tw_b, pc, int64(bound_whole))
+                }
             }
-            vk_check(vkEndCommandBuffer(raw4), null)
-            let us4 = usec_per_dispatch(raw4)
             let tf4 = flop / (us4 * 1000000.0lf)
             print("{name} {profile} whole s-tile: d={d} K={n} wgs={bound_whole} ({live_whole} live)  {us4 / 1000.0lf} ms/dispatch  {tf4} TFLOP/s  timing-only  (the {probe_stwin_depth(fmt)}-deep twin)\n")
         }
@@ -1056,113 +1011,43 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
     delete words_ladder_s
 }
 
-// k4 (Q4_K) cm2 decode-in-load vs the serving kq tile - per-shape rate on the qwen role shapes
-def private run_k4_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
-    let nsb = n / 256
-    let totsb = d * nsb
-    var wqh : array<uint>
-    var wsuh : array<uint>
-    var xfh : array<uint>
-    var xqh : array<uint>
-    var axsh : array<float>
-    wqh |> resize(totsb * 32)
-    wsuh |> resize(totsb * 5)
-    xfh |> resize(cnt * n / 2)
-    xqh |> resize(cnt * nsb * 64)
-    axsh |> resize(cnt * nsb)
-    for (i in range(totsb * 32)) {
-        wqh[i] = hash_word(uint(i) + 29u)
-    }
-    for (sb in range(totsb)) {
-        wsuh[sb * 5] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.00005 * float(1 + sb % 5)))
-        for (wi in range(4)) {
-            wsuh[sb * 5 + 1 + wi] = hash_word(uint(sb * 4 + wi) + 613u)
-        }
-    }
-    for (i in range(cnt * n / 2)) {
-        xfh[i] = cool_f16_pair(uint(i) * 3u + 5u)
-    }
-    for (i in range(cnt * nsb * 64)) {
-        xqh[i] = hash_word(uint(i) * 13u + 1u)
-    }
-    for (i in range(cnt * nsb)) {
-        axsh[i] = 0.0625
-    }
-    let wq_bytes = int64(totsb) * 128l
-    let ws_bytes = long_length(wsuh) * 4l
-    let xf_bytes = int64(cnt * n) * 2l
-    let xq_bytes = long_length(xqh) * 4l
-    let axs_bytes = int64(cnt * nsb) * 4l
-    let y_bytes = int64(cnt * d) * 4l
-    let wqd = make_device_buf(wq_bytes)
-    let wsd = make_device_buf(ws_bytes)
-    let xfd = make_device_buf(xf_bytes)
-    let xqd = make_device_buf(xq_bytes)
-    let axsd = make_device_buf(axs_bytes)
-    let yd = make_device_buf(y_bytes)
+//! a K-quant format's cm2 decode-in-load tiles against the serving kq tile on one role shape, over the format's tile fixture
+//! planes and one output plane: the l and m tiles under one hazard rail (a barrier between dispatches - the chain's cost), the
+//! l tile and the kq tile un-barriered (`lnb`, `kqnb`); `tag` names the format in the rows
+def private run_kq_role_arms(fmt : int; tag, name : string; dv : Cm2ShapeDev; d, n, cnt : int) {
     let flop = 2.0lf * double(cnt) * double(d) * double(n)
-    unsafe {
-        upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
-        upload_region_at(wsd, 0l, addr<uint8 const?>(wsuh[0]), ws_bytes)
-        upload_region_at(xfd, 0l, addr<uint8 const?>(xfh[0]), xf_bytes)
-        upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
-        upload_region_at(axsd, 0l, addr<uint8 const?>(axsh[0]), axs_bytes)
-        let vnames = fixed_array("k4l ", "k4m ", "k4lnb", "kqnb ")   // kqnb: the kq tile dispatches un-barriered, like k4lnb
-        for (v in range(4)) {
-            let ttile = v == 1 ? 128 : (v == 3 ? 32 : 256)
-            let wtile = v == 3 ? 32 : 128
-            let wgs = ((cnt + ttile - 1) / ttile) * ((d + wtile - 1) / wtile)
-            var sched : array<uint>
-            sched |> resize(4 + wgs)
-            sched[2] = uint(cnt)
-            let sc_bytes = int64(4 + wgs) * 4l
-            let scd = make_device_buf(sc_bytes)
-            upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
-            delete sched
-            var raw = alloc_cmd()
-            let begin = VkCommandBufferBeginInfo()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
-            var hz : VkHaz
-            var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
+    let vnames = fixed_array("{tag}l ", "{tag}m ", "{tag}lnb", "kqnb ")
+    for (v in range(4)) {
+        let ttile = v == 1 ? 128 : (v == 3 ? 32 : 256)
+        let wtile = v == 3 ? 32 : 128
+        let wgs = ((cnt + ttile - 1) / ttile) * ((d + wtile - 1) / wtile)
+        let sched = one_region_sched(cnt, wgs)
+        var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
+        let us = timed_chain() $(raw; var hz) {
             if (v == 3) {
-                var s = kq_batch_cls_set_for(int(KqFmt.k4), false,
-                    fixed_array(wqd, wsd, scd, xqd, axsd, yd),
-                    fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, axs_bytes, y_bytes),
-                    fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                var s = kq_batch_cls_set_for(fmt, false, fixed_array(dv.wqd, dv.wsd, sched.buf, dv.xqd, dv.axsd, dv.yd),
+                    fixed_array(dv.wq_bytes, dv.ws_bytes, sched.bytes, dv.xq_bytes, dv.axs_bytes, dv.y_bytes), fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
                 for (_k in range(DISPATCHES)) {
                     var hz2 : VkHaz
-                    enc_kq_batch_k4_cls(raw, hz2, s, pc, int64(wgs))
+                    kq_batch_cls_enc_for(fmt, false, raw, hz2, s, pc, int64(wgs))
                 }
             } else {
-                var s = (v == 1
-                    ? set_kq_batch_k4_cm2m_cls(fixed_array(wqd, wsd, scd, xfd, yd),
-                        fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes),
-                        fixed_array(1u, 2u, 0u, 4u, 16u))
-                    : set_kq_batch_k4_cm2l_cls(fixed_array(wqd, wsd, scd, xfd, yd),
-                        fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes),
-                        fixed_array(1u, 2u, 0u, 4u, 16u)))
+                var s = cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sched.buf, dv.xfd, dv.yd),
+                    fixed_array(dv.wq_bytes, dv.ws_bytes, sched.bytes, dv.xf_bytes, dv.y_bytes), fixed_array(1u, 2u, 0u, 4u, 16u))
                 for (_k in range(DISPATCHES)) {
-                    if (v == 2) {
-                        var hz2 : VkHaz
-                        enc_kq_batch_k4_cm2l_cls(raw, hz2, s, pc, int64(wgs))
-                    } elif (v == 1) {
-                        enc_kq_batch_k4_cm2m_cls(raw, hz, s, pc, int64(wgs))
-                    } else {
-                        enc_kq_batch_k4_cm2l_cls(raw, hz, s, pc, int64(wgs))
-                    }
+                    var hz2 : VkHaz
+                    cm2_cls_enc(fmt, int64(ttile), raw, v == 2 ? hz2 : hz, s, pc, int64(wgs))
                 }
             }
-            vk_check(vkEndCommandBuffer(raw), null)
-            let us = usec_per_dispatch(raw)
-            let tf = flop / (us * 1000000.0lf)
-            print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
         }
+        print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {flop / (us * 1000000.0lf)} TFLOP/s  timing-only\n")
     }
-    delete wqh
-    delete wsuh
-    delete xfh
-    delete xqh
-    delete axsh
+}
+
+// k4 (Q4_K) cm2 decode-in-load vs the serving kq tile - per-shape rate on the qwen role shapes
+def private run_k4_shape(name : string; d, n, cnt : int) {
+    let fmt = int(KqFmt.k4)
+    run_kq_role_arms(fmt, "k4", name, cm2_shape_upload(fmt, d, n, cnt), d, n, cnt)
 }
 
 // ===== k6 decode-spelling bisect (arg "k6x") - the shipped k6 l-tile body with the decode
@@ -1781,7 +1666,7 @@ let private KHR_ARM_NAMES = fixed_array("nil   ", "ship  ", "dec4  ", "khr   ", 
 let private KHR_ARM_KHR = 3   //! the shipped class: the compared arms' reference and the CPU check's subject
 let private KHR_ARM_KQ = 4    //! the sdot4 kq tile, 32 x 32 where every other arm tiles 128 x 128
 let private KHR_ARM_COMPARED = fixed_array(false, true, true, false, false, true, true, true)   //! khr is the reference; nil stages constants and kq reads its own Q8 activation fixture: timing-only
-let private KHR_ARM_REL_BOUND = 2e-2lf   //! a compared arm passes within this relative difference of the shipped class; the copies read 0, the f32-accumulator arm 0.005-0.009
+let private KHR_ARM_REL_BOUND = 2e-2   //! a compared arm passes within this relative difference of the shipped class; the copies read 0, the f32-accumulator arm 0.005-0.009
 
 //! the bisect arms stage and store whole 128-row tiles - only the two shipped tiles clamp token rows to the window's count, so only they run on a partial window
 def private khr_arm_clamps(v : int) : bool => v == KHR_ARM_KHR || v == KHR_ARM_KQ
@@ -1789,34 +1674,18 @@ let private MMQ_ARMS = 5
 var private g_prof_arm = ""
 var private g_probe_exit = 0   //! the process exit code: a decline, a compared arm over its bound, or a profiler run that dispatched nothing
 
-//! the interleaved timing of one sweep's arms: after a two-submit warm-up each, every round times
-//! SUBMITS / ROUNDS submits of every arm in turn, and an arm's figure is its best round
+//! the interleaved timing of one sweep's arms (`_race_fixture.das`' `time_rounds`): after one dropped warm-up round, every
+//! round times SUBMITS / ROUNDS submits of every arm in turn, and an arm's figure is its best round a dispatch; a null arm reads 0
 def private sweep_best_us(var raws : array<VkCommandBuffer>) : array<double> {
-    var best : array<double>
-    best |> resize(length(raws))
-    for (raw, bv in raws, best) {
-        bv = 1.0e30lf
-        if (raw == null) {
-            continue
-        }
-        submit_wait(raw)
-        submit_wait(raw)
-    }
-    for (_r in range(ROUNDS)) {
-        for (raw, bv in raws, best) {
-            if (raw == null) {
-                continue
-            }
-            let t0 = ref_time_ticks()
+    var times <- time_rounds(length(raws), ROUNDS, 1) $(i : int) {
+        if (raws[i] != null) {
             for (_s in range(SUBMITS / ROUNDS)) {
-                submit_wait(raw)
-            }
-            let us = double(get_time_usec(t0)) / double((SUBMITS / ROUNDS) * DISPATCHES)
-            if (us < bv) {
-                bv = us
+                submit_wait(raws[i])
             }
         }
     }
+    var best <- [for (ts, raw in times, raws); raw == null ? 0.0lf : double(ts |> min()) / double((SUBMITS / ROUNDS) * DISPATCHES)]
+    delete times
     return <- best
 }
 
@@ -1825,25 +1694,48 @@ def private read_back_y(var raw : VkCommandBuffer; dev : uint64; bytes : int64; 
     submit_wait(raw)
     out |> resize(bytes / 4l)
     var host = make_host_buf(bytes, true, [cached = true])
-    var rc = alloc_cmd()
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(rc, begin), null)
-    cmd_copy_whole(rc, dev, host.buf, bytes)
-    vk_check(vkEndCommandBuffer(rc), null)
-    submit_wait(rc)
-    unsafe {
-        memcpy(addr<void?>(out[0]), host.mapped, bytes)
+    readback_range(dev, 0u, host, unsafe(addr(out[0])), bytes)
+    destroy_host_buf(host)
+}
+
+//! a race's command per arm of `narms`: one region of `cnt` rows over `wgs_of(v)` workgroups (`wgs_of` 0 keeps the arm's command
+//! null), DISPATCHES dispatches of `set(v, sched, y)`'s set alternating the outputs `ya` / `yb` under a fresh hazard each - the
+//! served graph's shape - encoded through `enc`
+def private race_arms(narms, n, d, cnt, fmt : int; ya, yb : uint64; wgs_of : block<(v : int) : int>;
+                      set : block<(v : int; sched : uint64; sched_bytes : int64; y : uint64) : VkDescriptorSet>;
+                      enc : function<(v, fmt : int; raw : VkCommandBuffer; var hz : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; wgs : int64) : void>) : array<VkCommandBuffer> {
+    var raws : array<VkCommandBuffer>
+    raws |> reserve(narms)
+    for (v in range(narms)) {
+        let wgs = invoke(wgs_of, v)
+        if (wgs == 0) {
+            var none : VkCommandBuffer
+            raws |> push(none)
+            continue
+        }
+        let sched = one_region_sched(cnt, wgs)
+        var sa = invoke(set, v, sched.buf, sched.bytes, ya)
+        var sb = invoke(set, v, sched.buf, sched.bytes, yb)
+        var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
+        var raw = alloc_cmd()
+        record_cmd(raw, false) $(r; var _h) {
+            for (k in range(DISPATCHES)) {
+                var hz : VkHaz
+                if (k % 2 == 0) {
+                    invoke(enc, v, fmt, r, hz, sa, pc, int64(wgs))
+                } else {
+                    invoke(enc, v, fmt, r, hz, sb, pc, int64(wgs))
+                }
+            }
+        }
+        raws |> push(raw)
     }
+    return <- raws
 }
 
 def private max_rel_diff(a, b : array<float>) : double {
-    var mx = 0.0
-    var mref = 0.0
-    for (x, y in a, b) {
-        mx = max(mx, abs(x - y))
-        mref = max(mref, abs(y))
-    }
-    return mref > 0.0 ? double(mx / mref) : 0.0lf
+    let mref = logits_maxabs(b)
+    return mref > 0.0 ? double(logits_maxdiff(a, b) / mref) : 0.0lf
 }
 
 def private khr_arm_set(v, fmt : int; wqd, wsd, scd, xfd, xqd, axsd, yd : uint64; wq_bytes, ws_bytes, sc_bytes, xf_bytes, xq_bytes, axs_bytes, y_bytes : int64) : VkDescriptorSet {
@@ -1893,12 +1785,15 @@ def private khr_arm_enc(v, fmt : int; raw : VkCommandBuffer; var hz : VkHaz; var
 }
 
 //! the baseline arm against the CPU oracle over six corners of the output - eight weight rows by sixteen tokens at the
-//! first, middle and last rows, at the first and last tokens - on the kernel cell's bar: |gpu - cpu| <= 2e-2 |cpu| + 4e-3 max|y|
+//! first, middle and last rows, at the first and last tokens - on the coopmat cells' bar (`bar_ok`): within 4e-3 of the output's
+//! largest finite magnitude, or within 2e-2 of the larger side floored at 1; a NaN on either side is off
 def private khr_cpu_check(wqh, wsuh, xfh : array<uint>; y_gpu : array<float>; d, n, cnt : int) : tuple<samples : int; off : int; max_abs : double> {
     let nsb = n / 256
     var ymax = 0.0
     for (v in y_gpu) {
-        ymax = max(ymax, abs(v))
+        if (is_finite(v)) {   //! an infinity would make the floor infinite and pass every sample; the compare below reads it as off
+            ymax = max(ymax, abs(v))
+        }
     }
     var samples = 0
     var off = 0
@@ -1913,9 +1808,9 @@ def private khr_cpu_check(wqh, wsuh, xfh : array<uint>; y_gpu : array<float>; d,
                 for (c in range(8)) {
                     let cpu = ys[(t0 + r) * 8 + c]
                     let gpu = y_gpu[(t0 + r) * d + r0 + c]
-                    let diff = abs(gpu - cpu)
+                    let diff = is_nan(gpu) || is_nan(cpu) ? INFINITE_DIFF : abs(gpu - cpu)
                     samples++
-                    if (diff > 2e-2 * abs(cpu) + 4e-3 * ymax) {
+                    if (!bar_ok(gpu, cpu, 2e-2, 4e-3 * ymax)) {
                         off++
                     }
                     max_abs = max(max_abs, double(diff))
@@ -1941,16 +1836,9 @@ def private khr_report(name : string; var raws : array<VkCommandBuffer>; best : 
         var tail = "timing-only"
         if (KHR_ARM_COMPARED[v]) {
             read_back_y(raws[v], last_out, y_bytes, y_arm)
-            let mrd = max_rel_diff(y_arm, y_ref)
-            if (mrd == 0.0lf) {
-                tail = "bit-exact vs khr"
-            } else {
-                let within = mrd <= KHR_ARM_REL_BOUND
-                tail = "max rel diff {mrd:.5f} vs khr ({within ? "within" : "OVER"} {KHR_ARM_REL_BOUND})"
-                if (!within) {
-                    g_probe_exit = 1
-                }
-            }
+            let hd = held(y_arm, y_ref, KHR_ARM_REL_BOUND)
+            tail = compare_words(hd, "khr", "the whole output")
+            g_probe_exit = hd.ok ? g_probe_exit : 1
         }
         print("{name} {KHR_ARM_NAMES[v]}: {best[v] / 1000.0lf} ms/dispatch  {tf} TFLOP/s  {tail}\n")
     }
@@ -1975,96 +1863,32 @@ def private khr_prof_submit(name : string; var raws : array<VkCommandBuffer>) {
 }
 
 [arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
-def private run_khr_shape(name : string; d, n, cnt : int; prof : bool = false) {   // nolint:STYLE038 — one interleaved measurement sweep over eight arms, its compare and its CPU check
+def private run_khr_shape(name : string; d, n, cnt : int; prof : bool = false) {
     let fmt = int(KqFmt.k4)
-    let nsb = n / 256
-    let totsb = d * nsb
-    let bb = arena_block_bytes(fmt)
-    let wq_words = int(bb.wq / 4l)
-    let ws_words = int(bb.ws / 4l)
-    var wqh : array<uint>
-    var wsuh : array<uint>
-    var xfh : array<uint>
-    var xqh : array<uint>
-    var axsh : array<float>
-    wqh |> resize(totsb * wq_words)
-    wsuh |> resize(totsb * ws_words)
-    xfh |> resize(cnt * n / 2)
-    xqh |> resize(cnt * nsb * 64)
-    axsh |> resize(cnt * nsb)
-    for (i in range(totsb * wq_words)) {
-        wqh[i] = hash_word(uint(i) + 29u)
-    }
-    for (sb in range(totsb)) {
-        wsuh[sb * ws_words] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.00005 * float(1 + sb % 5)))
-        for (wi in range(1, ws_words)) {
-            wsuh[sb * ws_words + wi] = hash_word(uint(sb * ws_words + wi) + 613u)
-        }
-    }
-    for (i in range(cnt * n / 2)) {
-        xfh[i] = cool_f16_pair(uint(i) * 3u + 5u)
-    }
-    for (i in range(cnt * nsb * 64)) {
-        xqh[i] = hash_word(uint(i) * 13u + 1u)
-    }
-    for (i in range(cnt * nsb)) {
-        axsh[i] = 0.0625
-    }
-    let wq_bytes = int64(totsb) * bb.wq
-    let ws_bytes = long_length(wsuh) * 4l
-    let xf_bytes = int64(cnt * n) * 2l
-    let xq_bytes = long_length(xqh) * 4l
-    let axs_bytes = int64(cnt * nsb) * 4l
-    let y_bytes = int64(cnt * d) * 4l
-    let wqd = make_device_buf(wq_bytes)
-    let wsd = make_device_buf(ws_bytes)
-    let xfd = make_device_buf(xf_bytes)
-    let xqd = make_device_buf(xq_bytes)
-    let axsd = make_device_buf(axs_bytes)
-    let yd = make_device_buf(y_bytes)
+    var h <- cm2_shape_host(fmt, d, n, cnt)
+    let dv = cm2_shape_dev(fmt, d, n, cnt, h)
+    let wq_bytes = dv.wq_bytes
+    let ws_bytes = dv.ws_bytes
+    let xf_bytes = dv.xf_bytes
+    let xq_bytes = dv.xq_bytes
+    let axs_bytes = dv.axs_bytes
+    let y_bytes = dv.y_bytes
+    let wqd = dv.wqd
+    let wsd = dv.wsd
+    let xfd = dv.xfd
+    let xqd = dv.xqd
+    let axsd = dv.axsd
+    let yd = dv.yd
     let flop = 2.0lf * double(cnt) * double(d) * double(n)
     unsafe {
-        upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
-        upload_region_at(wsd, 0l, addr<uint8 const?>(wsuh[0]), ws_bytes)
-        upload_region_at(xfd, 0l, addr<uint8 const?>(xfh[0]), xf_bytes)
-        upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
-        upload_region_at(axsd, 0l, addr<uint8 const?>(axsh[0]), axs_bytes)
-        let yd2 = make_device_buf(y_bytes)   //! consecutive dispatches alternate outputs, as the served graph overlaps them
+        let yd2 = dv.yd_b   //! consecutive dispatches alternate outputs, as the served graph overlaps them
         let partial = cnt % MM_TILE != 0
-        var raws : array<VkCommandBuffer>
-        raws |> reserve(KHR_ARMS)
-        for (v in range(KHR_ARMS)) {
-            if (partial && !khr_arm_clamps(v)) {
-                var none : VkCommandBuffer
-                raws |> push(none)
-                continue
-            }
+        var raws <- race_arms(KHR_ARMS, n, d, cnt, fmt, yd, yd2, $(v : int) : int {
             let tile = v == KHR_ARM_KQ ? 32 : 128
-            let wgs = ((cnt + tile - 1) / tile) * ((d + tile - 1) / tile)
-            var sched : array<uint>
-            sched |> resize(4 + wgs)
-            sched[2] = uint(cnt)
-            let sc_bytes = int64(4 + wgs) * 4l
-            let scd = make_device_buf(sc_bytes)
-            upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
-            delete sched
-            var sa = khr_arm_set(v, fmt, wqd, wsd, scd, xfd, xqd, axsd, yd, wq_bytes, ws_bytes, sc_bytes, xf_bytes, xq_bytes, axs_bytes, y_bytes)
-            var sb = khr_arm_set(v, fmt, wqd, wsd, scd, xfd, xqd, axsd, yd2, wq_bytes, ws_bytes, sc_bytes, xf_bytes, xq_bytes, axs_bytes, y_bytes)
-            var raw = alloc_cmd()
-            let begin = VkCommandBufferBeginInfo()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
-            var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-            for (k in range(DISPATCHES)) {
-                var hz : VkHaz   //! fresh per dispatch: no barrier between them, the served graph's shape
-                if (k % 2 == 0) {
-                    khr_arm_enc(v, fmt, raw, hz, sa, pc, int64(wgs))
-                } else {
-                    khr_arm_enc(v, fmt, raw, hz, sb, pc, int64(wgs))
-                }
-            }
-            vk_check(vkEndCommandBuffer(raw), null)
-            raws |> push(raw)
-        }
+            return partial && !khr_arm_clamps(v) ? 0 : ((cnt + tile - 1) / tile) * ((d + tile - 1) / tile)
+        }, $(v : int; scd : uint64; sc_bytes : int64; y : uint64) : VkDescriptorSet {
+            return khr_arm_set(v, fmt, wqd, wsd, scd, xfd, xqd, axsd, y, wq_bytes, ws_bytes, sc_bytes, xf_bytes, xq_bytes, axs_bytes, y_bytes)
+        }, @@khr_arm_enc)
         if (prof) {
             khr_prof_submit(name, raws)
         } else {
@@ -2072,7 +1896,7 @@ def private run_khr_shape(name : string; d, n, cnt : int; prof : bool = false) {
             let last_out = DISPATCHES % 2 == 0 ? yd2 : yd
             var y_ref : array<float>
             khr_report(name, raws, best, last_out, y_bytes, flop, y_ref)
-            let cpu = khr_cpu_check(wqh, wsuh, xfh, y_ref, d, n, cnt)
+            let cpu = khr_cpu_check(h.wq, h.ws, h.xf, y_ref, d, n, cnt)
             print("{name} khr vs CPU oracle: {cpu.off} of {cpu.samples} sampled outputs off the cell bar, max |diff| {cpu.max_abs:.5f}\n")
             if (cpu.off != 0) {
                 g_probe_exit = 1
@@ -2082,11 +1906,7 @@ def private run_khr_shape(name : string; d, n, cnt : int; prof : bool = false) {
         }
         delete raws
     }
-    delete wqh
-    delete wsuh
-    delete xfh
-    delete xqh
-    delete axsh
+    delete h
 }
 
 [vk_dispatch(name = "mmqpx_k4", grid = "wgs", params = "wgs : int64")]
@@ -2189,8 +2009,7 @@ class MmqPxK4 : MoeCmBase {
                     let xr = (tg * 4u + uint(t)) * 17u + k0
                     xw[t * 2] = mx4[xr]
                     xw[t * 2 + 1] = mx4[xr + 1u]
-                    bs[t] = (sdot4(xw[t * 2].x, 0x01010101) + sdot4(xw[t * 2].y, 0x01010101) + sdot4(xw[t * 2].z, 0x01010101) + sdot4(xw[t * 2].w, 0x01010101)
-                        + sdot4(xw[t * 2 + 1].x, 0x01010101) + sdot4(xw[t * 2 + 1].y, 0x01010101) + sdot4(xw[t * 2 + 1].z, 0x01010101) + sdot4(xw[t * 2 + 1].w, 0x01010101))
+                    bs[t] = bsum8(xw[t * 2], xw[t * 2 + 1])
                 }
                 for [unroll] (c in range(8)) {
                     let col = cg * 8u + uint(c)
@@ -2199,8 +2018,7 @@ class MmqPxK4 : MoeCmBase {
                     let dsc = w_dsc[uint(bu) * 32u + col]
                     let dmin = w_dmin[uint(bu) * 32u + col]
                     for [unroll] (t in range(4)) {
-                        let idot = (sdot4(w0.x, xw[t * 2].x) + sdot4(w0.y, xw[t * 2].y) + sdot4(w0.z, xw[t * 2].z) + sdot4(w0.w, xw[t * 2].w)
-                            + sdot4(w1.x, xw[t * 2 + 1].x) + sdot4(w1.y, xw[t * 2 + 1].y) + sdot4(w1.z, xw[t * 2 + 1].z) + sdot4(w1.w, xw[t * 2 + 1].w))
+                        let idot = dot8(w0, w1, xw[t * 2], xw[t * 2 + 1])
                         acc[t * 8 + c] += mxs[tg * 4u + uint(t)] * (dsc * float(idot) - dmin * float(bs[t]))
                     }
                 }
@@ -2268,8 +2086,7 @@ class MmqPxK4Blk : MoeCmBase {
                 let wcol = wt * 128u + tid
                 var w0 = uint4(0u)
                 var w1 = uint4(0u)
-                var sa = 0.0
-                var sbv = 0.0
+                var sm = float2(0.0)
                 if (wcol < pa.d) {
                     let wsb = wsb0 + wcol * nsb + s
                     let rb4 = wsb * 32u + uint(bu) * 4u
@@ -2279,16 +2096,12 @@ class MmqPxK4Blk : MoeCmBase {
                     let r3 = wq[rb4 + 3u]
                     w0 = uint4(r0 & 0x0F0F0F0F, r1 & 0x0F0F0F0F, r2 & 0x0F0F0F0F, r3 & 0x0F0F0F0F)
                     w1 = uint4((r0 >> 4u) & 0x0F0F0F0F, (r1 >> 4u) & 0x0F0F0F0F, (r2 >> 4u) & 0x0F0F0F0F, (r3 >> 4u) & 0x0F0F0F0F)
-                    let dm = unpackHalf2x16(wsu[wsb * 5u])
-                    let sc = int((wsu[wsb * 5u + 1u + uint(bu) / 4u] >> ((uint(bu) % 4u) * 8u)) & 0xFF)
-                    let mn = int((wsu[wsb * 5u + 3u + uint(bu) / 4u] >> ((uint(bu) % 4u) * 8u)) & 0xFF)
-                    sa = dm.x * float(sc)
-                    sbv = dm.y * float(mn)
+                    sm = k4_scale_min(unpackHalf2x16(wsu[wsb * 5u]), wsu[wsb * 5u + 1u + uint(bu) / 4u], wsu[wsb * 5u + 3u + uint(bu) / 4u], uint(bu))
                 }
                 bw4[tid * 2u] = w0
                 bw4[tid * 2u + 1u] = w1
-                w_dsc[tid] = sa
-                w_dmin[tid] = sbv
+                w_dsc[tid] = sm.x
+                w_dmin[tid] = sm.y
                 barrier()
                 var xw : uint4[8]
                 var bs : int[4]
@@ -2296,8 +2109,7 @@ class MmqPxK4Blk : MoeCmBase {
                     let xr = (tg * 4u + uint(t)) * 2u
                     xw[t * 2] = bx4[xr]
                     xw[t * 2 + 1] = bx4[xr + 1u]
-                    bs[t] = (sdot4(xw[t * 2].x, 0x01010101) + sdot4(xw[t * 2].y, 0x01010101) + sdot4(xw[t * 2].z, 0x01010101) + sdot4(xw[t * 2].w, 0x01010101)
-                        + sdot4(xw[t * 2 + 1].x, 0x01010101) + sdot4(xw[t * 2 + 1].y, 0x01010101) + sdot4(xw[t * 2 + 1].z, 0x01010101) + sdot4(xw[t * 2 + 1].w, 0x01010101))
+                    bs[t] = bsum8(xw[t * 2], xw[t * 2 + 1])
                 }
                 for [unroll] (c in range(16)) {
                     let col = cg * 16u + uint(c)
@@ -2306,8 +2118,7 @@ class MmqPxK4Blk : MoeCmBase {
                     let dsc = w_dsc[col]
                     let dmin = w_dmin[col]
                     for [unroll] (t in range(4)) {
-                        let idot = (sdot4(wa.x, xw[t * 2].x) + sdot4(wa.y, xw[t * 2].y) + sdot4(wa.z, xw[t * 2].z) + sdot4(wa.w, xw[t * 2].w)
-                            + sdot4(wb.x, xw[t * 2 + 1].x) + sdot4(wb.y, xw[t * 2 + 1].y) + sdot4(wb.z, xw[t * 2 + 1].z) + sdot4(wb.w, xw[t * 2 + 1].w))
+                        let idot = dot8(wa, wb, xw[t * 2], xw[t * 2 + 1])
                         acc[t * 16 + c] += bxs[tg * 4u + uint(t)] * (dsc * float(idot) - dmin * float(bs[t]))
                     }
                 }
@@ -2409,12 +2220,10 @@ class template MmqPxK4CT {   //! standalone: a harness template cannot derive fr
                 } else {
                     let ct = tid - 128u
                     var wv = uint4(0u)
-                    var sa = 0.0
-                    var sbv = 0.0
+                    var sm = float2(0.0)
                     static_if (NOSTAGE) {
                         wv = uint4(0x01020304u + uint(bu), 0x05060708u, 0x090A0B0Cu + s, 0x0D0E0F10u)
-                        sa = 0.001
-                        sbv = 0.0001
+                        sm = float2(0.001, 0.0001)
                     } else {
                         let wcol = wt * 64u + ct / 2u
                         if (wcol < pa.d) {
@@ -2422,17 +2231,13 @@ class template MmqPxK4CT {   //! standalone: a harness template cannot derive fr
                             let rb4 = wsb * 32u + uint(bu) * 4u
                             let sh = (ct % 2u) * 4u
                             wv = uint4((wq[rb4] >> sh) & 0x0F0F0F0F, (wq[rb4 + 1u] >> sh) & 0x0F0F0F0F, (wq[rb4 + 2u] >> sh) & 0x0F0F0F0F, (wq[rb4 + 3u] >> sh) & 0x0F0F0F0F)
-                            let dm = unpackHalf2x16(wsu[wsb * 5u])
-                            let sc = int((wsu[wsb * 5u + 1u + uint(bu) / 4u] >> ((uint(bu) % 4u) * 8u)) & 0xFF)
-                            let mn = int((wsu[wsb * 5u + 3u + uint(bu) / 4u] >> ((uint(bu) % 4u) * 8u)) & 0xFF)
-                            sa = dm.x * float(sc)
-                            sbv = dm.y * float(mn)
+                            sm = k4_scale_min(unpackHalf2x16(wsu[wsb * 5u]), wsu[wsb * 5u + 1u + uint(bu) / 4u], wsu[wsb * 5u + 3u + uint(bu) / 4u], uint(bu))
                         }
                     }
                     bw4[ct] = wv
                     if (ct % 2u == 0u) {
-                        w_dsc[ct / 2u] = sa
-                        w_dmin[ct / 2u] = sbv
+                        w_dsc[ct / 2u] = sm.x
+                        w_dmin[ct / 2u] = sm.y
                     }
                 }
                 barrier()
@@ -2552,87 +2357,31 @@ def private mmq_arm_enc(v, fmt : int; raw : VkCommandBuffer; var hz : VkHaz; var
 }
 
 [arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
-def private run_mmq_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038 — one linear measurement sweep
+def private run_mmq_shape(name : string; d, n, cnt : int) {
     let fmt = int(KqFmt.k4)
-    let nsb = n / 256
-    let totsb = d * nsb
-    let bb = arena_block_bytes(fmt)
-    let wq_words = int(bb.wq / 4l)
-    let ws_words = int(bb.ws / 4l)
-    var wqh : array<uint>
-    var wsuh : array<uint>
-    var xqh : array<uint>
-    var axsh : array<float>
-    wqh |> resize(totsb * wq_words)
-    wsuh |> resize(totsb * ws_words)
-    xqh |> resize(cnt * nsb * 64)
-    axsh |> resize(cnt * nsb)
-    for (i in range(totsb * wq_words)) {
-        wqh[i] = hash_word(uint(i) + 29u)
-    }
-    for (sb in range(totsb)) {
-        wsuh[sb * ws_words] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.00005 * float(1 + sb % 5)))
-        for (wi in range(1, ws_words)) {
-            wsuh[sb * ws_words + wi] = hash_word(uint(sb * ws_words + wi) + 613u)
-        }
-    }
-    for (i in range(cnt * nsb * 64)) {
-        xqh[i] = hash_word(uint(i) * 13u + 1u)
-    }
-    for (i in range(cnt * nsb)) {
-        axsh[i] = 0.0625
-    }
-    let wq_bytes = int64(totsb) * bb.wq
-    let ws_bytes = long_length(wsuh) * 4l
-    let xq_bytes = long_length(xqh) * 4l
-    let axs_bytes = int64(cnt * nsb) * 4l
-    let y_bytes = int64(cnt * d) * 4l
-    let wqd = make_device_buf(wq_bytes)
-    let wsd = make_device_buf(ws_bytes)
-    let xqd = make_device_buf(xq_bytes)
-    let axsd = make_device_buf(axs_bytes)
-    let yd = make_device_buf(y_bytes)
+    let dv = cm2_shape_upload(fmt, d, n, cnt)
+    let wq_bytes = dv.wq_bytes
+    let ws_bytes = dv.ws_bytes
+    let xq_bytes = dv.xq_bytes
+    let axs_bytes = dv.axs_bytes
+    let y_bytes = dv.y_bytes
+    let wqd = dv.wqd
+    let wsd = dv.wsd
+    let xqd = dv.xqd
+    let axsd = dv.axsd
+    let yd = dv.yd
     let flop = 2.0lf * double(cnt) * double(d) * double(n)
     unsafe {
-        upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
-        upload_region_at(wsd, 0l, addr<uint8 const?>(wsuh[0]), ws_bytes)
-        upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
-        upload_region_at(axsd, 0l, addr<uint8 const?>(axsh[0]), axs_bytes)
-        let yd2 = make_device_buf(y_bytes)   //! consecutive dispatches alternate outputs, as the served graph overlaps them
+        let yd2 = dv.yd_b   //! consecutive dispatches alternate outputs, as the served graph overlaps them
         let vnames = fixed_array("kq    ", "mmq   ", "mmqb  ", "mmqc  ", "mmqd  ")
         let compared = fixed_array(false, true, true, true, false)   //! kq is the reference; the ceiling twin reads constants: timing-only
-        var raws : array<VkCommandBuffer>
-        raws |> reserve(MMQ_ARMS)
-        for (v in range(MMQ_ARMS)) {
+        var raws <- race_arms(MMQ_ARMS, n, d, cnt, fmt, yd, yd2, $(v : int) : int {
             let ttile = v == 0 ? 32 : 64
             let wtile = v == 2 ? 128 : (v >= 3 ? 64 : 32)
-            let wgs = ((cnt + ttile - 1) / ttile) * ((d + wtile - 1) / wtile)
-            var sched : array<uint>
-            sched |> resize(4 + wgs)
-            sched[2] = uint(cnt)
-            let sc_bytes = int64(4 + wgs) * 4l
-            let scd = make_device_buf(sc_bytes)
-            upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
-            delete sched
-            let gbits = fixed_array(1u, 2u, 0u, 4u, 8u, 16u)
-            let asizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, axs_bytes, y_bytes)
-            var sa = mmq_arm_set(v, fmt, fixed_array(wqd, wsd, scd, xqd, axsd, yd), asizes, gbits)
-            var sb = mmq_arm_set(v, fmt, fixed_array(wqd, wsd, scd, xqd, axsd, yd2), asizes, gbits)
-            var raw = alloc_cmd()
-            let begin = VkCommandBufferBeginInfo()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
-            var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-            for (k in range(DISPATCHES)) {
-                var hz : VkHaz   //! fresh per dispatch: no barrier between them, the served graph's shape
-                if (k % 2 == 0) {
-                    mmq_arm_enc(v, fmt, raw, hz, sa, pc, int64(wgs))
-                } else {
-                    mmq_arm_enc(v, fmt, raw, hz, sb, pc, int64(wgs))
-                }
-            }
-            vk_check(vkEndCommandBuffer(raw), null)
-            raws |> push(raw)
-        }
+            return ((cnt + ttile - 1) / ttile) * ((d + wtile - 1) / wtile)
+        }, $(v : int; scd : uint64; sc_bytes : int64; y : uint64) : VkDescriptorSet {
+            return mmq_arm_set(v, fmt, fixed_array(wqd, wsd, scd, xqd, axsd, y), fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, axs_bytes, y_bytes), fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+        }, @@mmq_arm_enc)
         var best <- sweep_best_us(raws)
         let last_out = DISPATCHES % 2 == 0 ? yd2 : yd
         var y_ref : array<float>
@@ -2652,155 +2401,57 @@ def private run_mmq_shape(name : string; d, n, cnt : int) {   // nolint:STYLE038
         delete best
         delete raws
     }
-    delete wqh
-    delete wsuh
-    delete xqh
-    delete axsh
 }
 
 // k6 (Q6_K) cm2 decode-in-load vs the serving kq tile - same instrument as run_k4_shape;
 // bisect adds the k6px decode-spelling variants
 [arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
-def private run_k6_shape(name : string; d, n, cnt : int; bisect : bool = false) {   // nolint:STYLE037,STYLE038 — one linear measurement sweep
-    let nsb = n / 256
-    let totsb = d * nsb
-    var wqh : array<uint>
-    var wsuh : array<uint>
-    var xfh : array<uint>
-    var xqh : array<uint>
-    var axsh : array<float>
-    wqh |> resize(totsb * 48)
-    wsuh |> resize(totsb * 5)
-    xfh |> resize(cnt * n / 2)
-    xqh |> resize(cnt * nsb * 64)
-    axsh |> resize(cnt * nsb)
-    for (i in range(totsb * 48)) {
-        wqh[i] = hash_word(uint(i) + 41u)
-    }
-    for (sb in range(totsb)) {
-        for (wi in range(4)) {
-            wsuh[sb * 5 + wi] = hash_word(uint(sb * 4 + wi) + 811u)
-        }
-        wsuh[sb * 5 + 4] = packHalf2x16(float2(0.0002 * float(1 + sb % 7), 0.0))
-    }
-    for (i in range(cnt * n / 2)) {
-        xfh[i] = cool_f16_pair(uint(i) * 3u + 5u)
-    }
-    for (i in range(cnt * nsb * 64)) {
-        xqh[i] = hash_word(uint(i) * 13u + 1u)
-    }
-    for (i in range(cnt * nsb)) {
-        axsh[i] = 0.0625
-    }
-    let wq_bytes = int64(totsb) * 192l
-    let ws_bytes = long_length(wsuh) * 4l
-    let xf_bytes = int64(cnt * n) * 2l
-    let xq_bytes = long_length(xqh) * 4l
-    let axs_bytes = int64(cnt * nsb) * 4l
-    let y_bytes = int64(cnt * d) * 4l
-    let wqd = make_device_buf(wq_bytes)
-    let wsd = make_device_buf(ws_bytes)
-    let xfd = make_device_buf(xf_bytes)
-    let xqd = make_device_buf(xq_bytes)
-    let axsd = make_device_buf(axs_bytes)
-    let yd = make_device_buf(y_bytes)
+def private run_k6_shape(name : string; d, n, cnt : int; bisect : bool = false) {
+    let fmt = int(KqFmt.k6)
+    let dv = cm2_shape_upload(fmt, d, n, cnt)
+    run_kq_role_arms(fmt, "k6", name, dv, d, n, cnt)
+    if (!bisect) return
     let flop = 2.0lf * double(cnt) * double(d) * double(n)
-    unsafe {
-        upload_region_at(wqd, 0l, addr<uint8 const?>(wqh[0]), wq_bytes)
-        upload_region_at(wsd, 0l, addr<uint8 const?>(wsuh[0]), ws_bytes)
-        upload_region_at(xfd, 0l, addr<uint8 const?>(xfh[0]), xf_bytes)
-        upload_region_at(xqd, 0l, addr<uint8 const?>(xqh[0]), xq_bytes)
-        upload_region_at(axsd, 0l, addr<uint8 const?>(axsh[0]), axs_bytes)
-        let vnames = fixed_array("k6l ", "k6m ", "k6lnb", "kqnb ", "xnil ", "xflat", "xql  ", "xpair", "xpr16")   // the shipped k6 decode IS the sfix spelling the bisect ended on
-        for (v in range(bisect ? 9 : 4)) {
-            let ttile = v == 1 ? 128 : (v == 3 ? 32 : 256)
-            let wtile = v == 3 ? 32 : 128
-            let wgs = ((cnt + ttile - 1) / ttile) * ((d + wtile - 1) / wtile)
-            var sched : array<uint>
-            sched |> resize(4 + wgs)
-            sched[2] = uint(cnt)
-            let sc_bytes = int64(4 + wgs) * 4l
-            let scd = make_device_buf(sc_bytes)
-            upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
-            delete sched
-            var raw = alloc_cmd()
-            let begin = VkCommandBufferBeginInfo()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
-            var hz : VkHaz
-            var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-            if (v >= 4) {
-                let bufs = fixed_array(wqd, wsd, scd, xfd, yd)
-                let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
-                let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
-                for (_k in range(DISPATCHES)) {
-                    if (v == 4) {
-                        var s = set_k6px_nil(bufs, sizes, gbits)
-                        enc_k6px_nil(raw, hz, s, pc, int64(wgs))
-                    } elif (v == 5) {
-                        var s = set_k6px_flat(bufs, sizes, gbits)
-                        enc_k6px_flat(raw, hz, s, pc, int64(wgs))
-                    } elif (v == 6) {
-                        var s = set_k6px_ql(bufs, sizes, gbits)
-                        enc_k6px_ql(raw, hz, s, pc, int64(wgs))
-                    } elif (v == 7) {
-                        var s = set_k6px_pair(bufs, sizes, gbits)
-                        enc_k6px_pair(raw, hz, s, pc, int64(wgs))
-                    } else {
-                        var s = set_k6px_pair16(bufs, sizes, gbits)
-                        enc_k6px_pair16(raw, hz, s, pc, int64(wgs))
-                    }
-                }
-            } elif (v == 3) {
-                var s = kq_batch_cls_set_for(int(KqFmt.k6), false,
-                    fixed_array(wqd, wsd, scd, xqd, axsd, yd),
-                    fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, axs_bytes, y_bytes),
-                    fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
-                for (_k in range(DISPATCHES)) {
-                    var hz2 : VkHaz
-                    enc_kq_batch_k6_cls(raw, hz2, s, pc, int64(wgs))
-                }
-            } else {
-                var s = (v == 1
-                    ? set_kq_batch_k6_cm2m_cls(fixed_array(wqd, wsd, scd, xfd, yd),
-                        fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes),
-                        fixed_array(1u, 2u, 0u, 4u, 16u))
-                    : set_kq_batch_k6_cm2l_cls(fixed_array(wqd, wsd, scd, xfd, yd),
-                        fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes),
-                        fixed_array(1u, 2u, 0u, 4u, 16u)))
-                for (_k in range(DISPATCHES)) {
-                    if (v == 2) {
-                        var hz2 : VkHaz
-                        enc_kq_batch_k6_cm2l_cls(raw, hz2, s, pc, int64(wgs))
-                    } elif (v == 1) {
-                        enc_kq_batch_k6_cm2m_cls(raw, hz, s, pc, int64(wgs))
-                    } else {
-                        enc_kq_batch_k6_cm2l_cls(raw, hz, s, pc, int64(wgs))
-                    }
+    let vnames = fixed_array("xnil ", "xflat", "xql  ", "xpair", "xpr16")   // the shipped k6 decode IS the sfix spelling the bisect ended on
+    let wgs = ((cnt + 255) / 256) * ((d + 127) / 128)
+    let sched = one_region_sched(cnt, wgs)
+    let bufs = fixed_array(dv.wqd, dv.wsd, sched.buf, dv.xfd, dv.yd)
+    let sizes = fixed_array(dv.wq_bytes, dv.ws_bytes, sched.bytes, dv.xf_bytes, dv.y_bytes)
+    let gbits = fixed_array(1u, 2u, 0u, 4u, 16u)
+    for (v in range(5)) {
+        var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
+        let us = timed_chain() $(raw; var hz) {
+            for (_k in range(DISPATCHES)) {
+                if (v == 0) {
+                    var s = set_k6px_nil(bufs, sizes, gbits)
+                    enc_k6px_nil(raw, hz, s, pc, int64(wgs))
+                } elif (v == 1) {
+                    var s = set_k6px_flat(bufs, sizes, gbits)
+                    enc_k6px_flat(raw, hz, s, pc, int64(wgs))
+                } elif (v == 2) {
+                    var s = set_k6px_ql(bufs, sizes, gbits)
+                    enc_k6px_ql(raw, hz, s, pc, int64(wgs))
+                } elif (v == 3) {
+                    var s = set_k6px_pair(bufs, sizes, gbits)
+                    enc_k6px_pair(raw, hz, s, pc, int64(wgs))
+                } else {
+                    var s = set_k6px_pair16(bufs, sizes, gbits)
+                    enc_k6px_pair16(raw, hz, s, pc, int64(wgs))
                 }
             }
-            vk_check(vkEndCommandBuffer(raw), null)
-            let us = usec_per_dispatch(raw)
-            let tf = flop / (us * 1000000.0lf)
-            print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
         }
+        print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {flop / (us * 1000000.0lf)} TFLOP/s  timing-only\n")
     }
-    delete wqh
-    delete wsuh
-    delete xfh
-    delete xqh
-    delete axsh
 }
 
 // two warmup submits (pipeline compile + clocks settle), then the timed window
-def private usec_per_dispatch(var raw : VkCommandBuffer; dispatches : int = DISPATCHES) : double {
-    submit_wait(raw)
-    submit_wait(raw)
-    let t0 = ref_time_ticks()
-    for (_s in range(SUBMITS)) {
-        submit_wait(raw)
-    }
-    return double(get_time_usec(t0)) / double(SUBMITS * dispatches)
-}
+def private usec_per_dispatch(var raw : VkCommandBuffer; dispatches : int = DISPATCHES) : double => submit_avg_us(raw, SUBMITS, dispatches, 2)
+
+//! a fresh command `rec` records, timed as `usec_per_dispatch` times one over `dispatches` dispatches a submit
+def private timed_chain(dispatches : int; rec : block<(raw : VkCommandBuffer; var hz : VkHaz) : void>) : double => time_chain(SUBMITS, dispatches, 2, rec)
+
+//! `timed_chain` over DISPATCHES dispatches a submit
+def private timed_chain(rec : block<(raw : VkCommandBuffer; var hz : VkHaz) : void>) : double => time_chain(SUBMITS, DISPATCHES, 2, rec)
 
 //! `with_sdot4_mm` off skips the sdot4 mm tile (the row a shape's cm2 question does not need)
 def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = true) {   // nolint:STYLE038 — one linear measurement sweep
@@ -2824,9 +2475,6 @@ def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = tru
     let xsd = make_device_buf(xs_bytes)
     let xfd = make_device_buf(xf_dev_bytes)
     let yd = make_device_buf(y_bytes)
-    var sched : array<uint>
-    sched |> resize(4 + wgs)
-    sched[2] = uint(cnt)   // one region: [wblk0 = 0, row0 = 0, cnt, wg0 = 0], map all zeros
     var per_us : double
     var cm2l_us = 0.0lf
     var cm2m_us = 0.0lf
@@ -2838,24 +2486,20 @@ def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = tru
         upload_region_at(xqd, 0l, addr<uint8 const?>(b.xq[0]), xq_bytes)
         upload_region_at(xsd, 0l, addr<uint8 const?>(b.xs[0]), xs_bytes)
         upload_region_at(xfd, 0l, addr<uint8 const?>(b.xf[0]), xf_bytes)
-        let sc_bytes = int64(4 + wgs) * 4l
-        let scd = make_device_buf(sc_bytes)
-        upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
+        let sched = one_region_sched(cnt, wgs)
+        let scd = sched.buf
+        let sc_bytes = sched.bytes
         let bufs = fixed_array(wqd, wsd, scd, xqd, xsd, yd)
         let sizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xq_bytes, xs_bytes, y_bytes)
         let gbits = fixed_array(1u, 2u, 0u, 4u, 8u, 16u)
-        let begin = VkCommandBufferBeginInfo()
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
         if (with_sdot4_mm) {
             var sc = set_q8_batch_mm_a_cls(bufs, sizes, gbits)
-            var raw = alloc_cmd()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
-            var hz : VkHaz
-            for (_k in range(DISPATCHES)) {
-                enc_q8_batch_mm_a_cls(raw, hz, sc, pc, int64(wgs))
+            per_us = timed_chain() $(raw; var hz) {
+                for (_k in range(DISPATCHES)) {
+                    enc_q8_batch_mm_a_cls(raw, hz, sc, pc, int64(wgs))
+                }
             }
-            vk_check(vkEndCommandBuffer(raw), null)
-            per_us = usec_per_dispatch(raw)
         }
         if (g_gpu.coopmat_mode == COOPMAT_CM2) {
             // the cm2 tiles at the serving no-split config (f16-fed, decode-in-load); off cm2 mode the device enabled no cm2 extension
@@ -2864,20 +2508,18 @@ def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = tru
             let cgbits = fixed_array(1u, 2u, 0u, 4u, 16u)
             var scl = set_q8_batch_cm2l_cls(cbufs, csizes, cgbits)
             var rawl = alloc_cmd()
-            vk_check(vkBeginCommandBuffer(rawl, begin), null)
-            var hzl : VkHaz
-            for (_k in range(DISPATCHES)) {
-                enc_q8_batch_cm2l_cls(rawl, hzl, scl, pc, int64(lwgs))
+            record_cmd(rawl, false) $(r; var hzl) {
+                for (_k in range(DISPATCHES)) {
+                    enc_q8_batch_cm2l_cls(r, hzl, scl, pc, int64(lwgs))
+                }
             }
-            vk_check(vkEndCommandBuffer(rawl), null)
             var scm = set_q8_batch_cm2m_cls(cbufs, csizes, cgbits)
             var rawm = alloc_cmd()
-            vk_check(vkBeginCommandBuffer(rawm, begin), null)
-            var hzm : VkHaz
-            for (_k in range(DISPATCHES)) {
-                enc_q8_batch_cm2m_cls(rawm, hzm, scm, pc, int64(mwgs))
+            record_cmd(rawm, false) $(r; var hzm) {
+                for (_k in range(DISPATCHES)) {
+                    enc_q8_batch_cm2m_cls(r, hzm, scm, pc, int64(mwgs))
+                }
             }
-            vk_check(vkEndCommandBuffer(rawm), null)
             var lm <- [rawl, rawm]
             let best <- sweep_best_us(lm)   // the two columns are a race: their rounds alternate, each figure its best round
             cm2l_us = best[0]
@@ -2898,7 +2540,6 @@ def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = tru
         print("{name}: cm2l wgs={lwgs}  {cm2l_us / 1000.0lf} ms/dispatch  {ltf} TFLOP/s  timing-only\n")
         print("{name}: cm2m wgs={mwgs}  {cm2m_us / 1000.0lf} ms/dispatch  {mtf} TFLOP/s  timing-only\n")
     }
-    delete sched
     delete b
 }
 
@@ -2926,9 +2567,6 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int; khr : bool =
         delete b
         return
     }
-    var sched : array<uint>
-    sched |> resize(4 + lwgs)
-    sched[2] = uint(cnt)   // one region: [wblk0 = 0, row0 = 0, cnt, wg0 = 0], map all zeros; the tile reads its split plane and tile off its own workgroup id
     var cm2l_us : double
     var cm2m_us : double
     var red_us : double
@@ -2937,45 +2575,39 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int; khr : bool =
         upload_region_at(wqd, 0l, addr<uint8 const?>(b.wq[0]), wq_bytes)
         upload_region_at(wsd, 0l, addr<uint8 const?>(b.ws[0]), ws_bytes)
         upload_region_at(xfd, 0l, addr<uint8 const?>(b.xf[0]), xf_bytes)
-        let sc_bytes = int64(4 + lwgs) * 4l
-        let scd = make_device_buf(sc_bytes)
-        upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
+        let sched = one_region_sched(cnt, lwgs)   // the tile reads its split plane and tile off its own workgroup id
+        let scd = sched.buf
+        let sc_bytes = sched.bytes
         let cbufs = fixed_array(wqd, wsd, scd, xfd, yd)
         let csizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_dev_bytes, y_bytes)
         let cgbits = fixed_array(1u, 2u, 0u, 4u, 16u)
         var pc = BatchArgs(n = uint(n), d = uint(d), map_off = 4u, ksplit = uint(ck))
-        let begin = VkCommandBufferBeginInfo()
         if (khr) {
             verify(ensure_q8_batch_khr_cls(), "the q8 KHR kq tile's probe pipeline must engage")
             var sck = set_q8_batch_khr_cls(cbufs, csizes, cgbits)
-            var rawk = alloc_cmd()
-            vk_check(vkBeginCommandBuffer(rawk, begin), null)
-            var hzk : VkHaz
-            for (_k in range(DISPATCHES)) {
-                enc_q8_batch_khr_cls(rawk, hzk, sck, pc, int64(lwgs))
+            cm2l_us = timed_chain() $(rawk; var hzk) {
+                for (_k in range(DISPATCHES)) {
+                    enc_q8_batch_khr_cls(rawk, hzk, sck, pc, int64(lwgs))
+                }
             }
-            vk_check(vkEndCommandBuffer(rawk), null)
-            cm2l_us = usec_per_dispatch(rawk)
             let tr = time_split_reduce(yd, y_bytes, rows, d, nsplit, sck, pc, lwgs)
             red_us = tr.red
             chain_us = tr.chain
         } else {
             var scl = set_q8_batch_cm2l_cls(cbufs, csizes, cgbits)
             var rawl = alloc_cmd()
-            vk_check(vkBeginCommandBuffer(rawl, begin), null)
-            var hzl : VkHaz
-            for (_k in range(DISPATCHES)) {
-                enc_q8_batch_cm2l_cls(rawl, hzl, scl, pc, int64(lwgs))
+            record_cmd(rawl, false) $(r; var hzl) {
+                for (_k in range(DISPATCHES)) {
+                    enc_q8_batch_cm2l_cls(r, hzl, scl, pc, int64(lwgs))
+                }
             }
-            vk_check(vkEndCommandBuffer(rawl), null)
             var scm = set_q8_batch_cm2m_cls(cbufs, csizes, cgbits)
             var rawm = alloc_cmd()
-            vk_check(vkBeginCommandBuffer(rawm, begin), null)
-            var hzm : VkHaz
-            for (_k in range(DISPATCHES)) {
-                enc_q8_batch_cm2m_cls(rawm, hzm, scm, pc, int64(mwgs))
+            record_cmd(rawm, false) $(r; var hzm) {
+                for (_k in range(DISPATCHES)) {
+                    enc_q8_batch_cm2m_cls(r, hzm, scm, pc, int64(mwgs))
+                }
             }
-            vk_check(vkEndCommandBuffer(rawm), null)
             var lm <- [rawl, rawm]
             let best <- sweep_best_us(lm)   // the two columns are a race: their rounds alternate, each figure its best round
             cm2l_us = best[0]
@@ -2993,7 +2625,6 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int; khr : bool =
         print("{name} split{nsplit} (chunk {ck}): cm2m wgs={mwgs}  {cm2m_us / 1000.0lf} ms/dispatch  {flop / (cm2m_us * 1000000.0lf)} TFLOP/s  timing-only\n")
     }
     print("{name} split{nsplit} (chunk {ck}): reduce {red_us} us, {khr ? "tile" : "l"} + reduce chained {chain_us} us  timing-only\n")
-    delete sched
     delete b
 }
 
@@ -3019,15 +2650,11 @@ def private run_kq_shape_split(fmt : int; name : string; d, n, cnt, nsplit : int
         let sc = one_region_sched(cnt, wgs)
         var s = cm2_cls_set(fmt, int64(ttile), fixed_array(dv.wqd, dv.wsd, sc.buf, dv.xfd, yd),
             fixed_array(dv.wq_bytes, dv.ws_bytes, sc.bytes, dv.xf_bytes, y_bytes), fixed_array(1u, 2u, 0u, 4u, 16u))
-        var raw = alloc_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var hz : VkHaz
-        for (_k in range(DISPATCHES)) {
-            cm2_cls_enc(fmt, int64(ttile), raw, hz, s, pc, int64(wgs))
+        let us = timed_chain() $(raw; var hz) {
+            for (_k in range(DISPATCHES)) {
+                cm2_cls_enc(fmt, int64(ttile), raw, hz, s, pc, int64(wgs))
+            }
         }
-        vk_check(vkEndCommandBuffer(raw), null)
-        let us = usec_per_dispatch(raw)
         if (v == 0) {
             lus = us
             lwgs = wgs
@@ -3047,24 +2674,18 @@ def private time_split_reduce(yd : uint64; y_bytes : int64; rows, d, nsplit : in
     var sr = set_splitk_reduce_cls(fixed_array(yd, outd), fixed_array(y_bytes, out_bytes), fixed_array(16u, 32u))
     var pcr = SkRedArgs(nelem = uint(rows * d), k = uint(nsplit))
     let rwgs = int64(rows * d + 1023) / 1_024l
-    let begin = VkCommandBufferBeginInfo()
-    var rawr = alloc_cmd()
-    vk_check(vkBeginCommandBuffer(rawr, begin), null)
-    var hzr : VkHaz
-    for (_k in range(DISPATCHES)) {
-        enc_splitk_reduce_cls(rawr, hzr, sr, pcr, rwgs)
+    let red = timed_chain() $(rawr; var hzr) {
+        for (_k in range(DISPATCHES)) {
+            enc_splitk_reduce_cls(rawr, hzr, sr, pcr, rwgs)
+        }
     }
-    vk_check(vkEndCommandBuffer(rawr), null)
-    let red = usec_per_dispatch(rawr)
-    var rawc = alloc_cmd()
-    vk_check(vkBeginCommandBuffer(rawc, begin), null)
-    var hzc : VkHaz
-    for (_k in range(DISPATCHES)) {
-        cm2_cls_enc(fmt, tc, rawc, hzc, scl, pc, int64(lwgs))
-        enc_splitk_reduce_cls(rawc, hzc, sr, pcr, rwgs)
+    let chain = timed_chain() $(rawc; var hzc) {
+        for (_k in range(DISPATCHES)) {
+            cm2_cls_enc(fmt, tc, rawc, hzc, scl, pc, int64(lwgs))
+            enc_splitk_reduce_cls(rawc, hzc, sr, pcr, rwgs)
+        }
     }
-    vk_check(vkEndCommandBuffer(rawc), null)
-    return (red = red, chain = usec_per_dispatch(rawc))
+    return (red = red, chain = chain)
 }
 
 // ===== the last-arriving-workgroup hand-off (arg "lastwg") =====
@@ -3167,16 +2788,14 @@ def private run_lastwg(dim : int) {   // nolint:STYLE038 — one linear measurem
     let wnd = make_device_buf(nb)
     var wh : array<float>
     var wnh : array<float>
-    var x0 : array<float>
+    var x0 <- row_fill(dim, 1, 0, 0.001, -0.5, 17)
     wh |> resize(dim * dim)
     wnh |> resize(dim)
-    x0 |> resize(dim)
     for (i in range(dim * dim)) {
         wh[i] = (float(hash_word(uint(i) + 3u) % 2001u) - 1000.0) * 0.00005 / float(dim) * 1152.0
     }
     for (i in range(dim)) {
         wnh[i] = 0.9 + 0.2 * float(i % 7) / 7.0
-        x0[i] = 0.001 * float(i % 17) + 0.5
     }
     unsafe {
         upload_region_at(wd, 0l, addr<uint8 const?>(wh[0]), w_bytes)
@@ -3207,28 +2826,25 @@ def private run_lastwg(dim : int) {   // nolint:STYLE038 — one linear measurem
             upload_region_at(yd, 0l, addr<uint8 const?>(x0[0]), nb)
             upload_region_at(cntd, 0l, addr<uint8 const?>(zero[0]), 16l)
         }
-        var raw = alloc_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var hz : VkHaz
-        if (form == 0) {
-            var sg = set_px_lw_gemv(fixed_array(wd, xnd, yd, cntd, xresd, wnd), fixed_array(w_bytes, nb, nb, 16l, nb, nb),
-                fixed_array(0u, 1u, 2u, 0u, 0u, 0u))
-            var sa = set_cls_ar(fixed_array(xresd, yd, wnd, xnd), fixed_array(nb, nb, nb, nb), fixed_array(4u, 2u, 0u, 1u))
-            for (_k in range(DISPATCHES)) {
-                enc_px_lw_gemv(raw, hz, sg, pc, wgs)
-                enc_cls_ar(raw, hz, sa, pca, 1l)
-            }
-        } else {
-            var sf = set_px_lw_gemv_last(fixed_array(wd, xnd, yd, cntd, xresd, wnd), fixed_array(w_bytes, nb, nb, 16l, nb, nb),
-                fixed_array(0u, 1u, 2u, 8u, 4u, 0u))
-            for (_k in range(DISPATCHES)) {
-                enc_px_lw_gemv_last(raw, hz, sf, pc, wgs)
+        let us = timed_chain() $(raw; var hz) {   //! per step: the split form's step is two dispatches
+            if (form == 0) {
+                var sg = set_px_lw_gemv(fixed_array(wd, xnd, yd, cntd, xresd, wnd), fixed_array(w_bytes, nb, nb, 16l, nb, nb),
+                    fixed_array(0u, 1u, 2u, 0u, 0u, 0u))
+                var sa = set_cls_ar(fixed_array(xresd, yd, wnd, xnd), fixed_array(nb, nb, nb, nb), fixed_array(4u, 2u, 0u, 1u))
+                for (_k in range(DISPATCHES)) {
+                    enc_px_lw_gemv(raw, hz, sg, pc, wgs)
+                    enc_cls_ar(raw, hz, sa, pca, 1l)
+                }
+            } else {
+                var sf = set_px_lw_gemv_last(fixed_array(wd, xnd, yd, cntd, xresd, wnd), fixed_array(w_bytes, nb, nb, 16l, nb, nb),
+                    fixed_array(0u, 1u, 2u, 8u, 4u, 0u))
+                for (_k in range(DISPATCHES)) {
+                    enc_px_lw_gemv_last(raw, hz, sf, pc, wgs)
+                }
             }
         }
-        vk_check(vkEndCommandBuffer(raw), null)
-        let us = usec_per_dispatch(raw)   //! per step: the split form's step is two dispatches
         var rawc = alloc_cmd()
+        let begin = VkCommandBufferBeginInfo()
         vk_check(vkBeginCommandBuffer(rawc, begin), null)
         var hc : VkHaz
         vhz_dep(rawc, hc, 1u | 8u, 0u, true)
@@ -3266,6 +2882,23 @@ def private run_lastwg(dim : int) {   // nolint:STYLE038 — one linear measurem
     delete out_fused
 }
 
+//! the add + rms rows `dim` wide on the device - the residual x, the partner a, the norm row wn and the output y - the first
+//! three uploaded with one ramp
+def private row_kernel_planes(dim : int) : tuple<xd : uint64; ad : uint64; wnd : uint64; yd : uint64> {
+    let nb = int64(dim) * 4l
+    let xd = make_device_buf(nb)
+    let ad = make_device_buf(nb)
+    let wnd = make_device_buf(nb)
+    var ones <- row_fill(dim, 1, 0, 0.001, -0.5, 17)
+    unsafe {
+        upload_region_at(xd, 0l, addr<uint8 const?>(ones[0]), nb)
+        upload_region_at(ad, 0l, addr<uint8 const?>(ones[0]), nb)
+        upload_region_at(wnd, 0l, addr<uint8 const?>(ones[0]), nb)
+    }
+    delete ones
+    return (xd = xd, ad = ad, wnd = wnd, yd = make_device_buf(nb))
+}
+
 // ===== the dependent-dispatch gap by barrier form (arg "barform") =====
 //! `cls_ar` chained through hand-placed barriers of five forms - the hazard rail's (a global memory barrier, compute and
 //! transfer stages both ways), compute-only stages, shader access bits alone, a buffer memory barrier on the row, an
@@ -3273,37 +2906,23 @@ def private run_lastwg(dim : int) {   // nolint:STYLE038 — one linear measurem
 //! no barrier at all (the wrong-but-fast floor), each timed a dispatch
 def private run_barrier_forms(dim : int) {
     let nb = int64(dim) * 4l
-    let xd = make_device_buf(nb)
-    let ad = make_device_buf(nb)
-    let wnd = make_device_buf(nb)
-    let yd = make_device_buf(nb)
-    var ones : array<float>
-    ones |> resize(dim)
-    for (i in range(dim)) {
-        ones[i] = 0.001 * float(i % 17) + 0.5
-    }
-    unsafe {
-        upload_region_at(xd, 0l, addr<uint8 const?>(ones[0]), nb)
-        upload_region_at(ad, 0l, addr<uint8 const?>(ones[0]), nb)
-        upload_region_at(wnd, 0l, addr<uint8 const?>(ones[0]), nb)
-    }
+    let rk = row_kernel_planes(dim)
+    let xd = rk.xd
+    let ad = rk.ad
+    let wnd = rk.wnd
+    let yd = rk.yd
     var pc = ArArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = 1.0e-6, ascale = 1.0)
-    let begin = VkCommandBufferBeginInfo()
     let names = fixed_array("rail (global, compute+transfer)", "global, compute only", "global, shader bits only", "buffer barrier on the row", "execution only", "no barrier")
     for (form in range(6)) {
         var sc = set_cls_ar(fixed_array(xd, ad, wnd, yd), fixed_array(nb, nb, nb, nb), fixed_array(0u, 0u, 0u, 0u))   //! the rail sees no bits: the barriers below are the probe's own
-        var raw = alloc_cmd()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var hz : VkHaz
-        for (_k in range(DISPATCHES)) {
-            enc_cls_ar(raw, hz, sc, pc, 1l)
-            probe_barrier(raw, form, xd, nb)
+        let us = timed_chain() $(raw; var hz) {
+            for (_k in range(DISPATCHES)) {
+                enc_cls_ar(raw, hz, sc, pc, 1l)
+                probe_barrier(raw, form, xd, nb)
+            }
         }
-        vk_check(vkEndCommandBuffer(raw), null)
-        let us = usec_per_dispatch(raw)
         print("barform dim={dim} {names[form]}: cls_ar {us} us/dispatch | timing-only\n")
     }
-    delete ones
 }
 
 //! one barrier of the form `form` after a dispatch that wrote `buf`
@@ -3351,54 +2970,37 @@ def private probe_barrier(raw : VkCommandBuffer; form : int; buf : uint64; bytes
     }
 }
 
-//! the token command's small-kernel floor: the add+rms step (`cls_ar`) and its fused requant twin (`cls_ar_rq`) at
+//! the token command's small-kernel floor: the add+rms step (`cls_ar`) and its fused requant twin (`cls_ar_rq_b`) at
 //! a row width, 64 dispatches chained through the hazard rail (each reads what the last wrote, a barrier between)
 //! against the same 64 with no dependency declared - the per-dispatch cost of a one-workgroup row kernel, with
 //! and without the barrier
 def private run_small_kernels(dim : int) {
     let nb = int64(dim) * 4l
-    let xd = make_device_buf(nb)
-    let ad = make_device_buf(nb)
-    let wnd = make_device_buf(nb)
-    let yd = make_device_buf(nb)
+    let rk = row_kernel_planes(dim)
+    let xd = rk.xd
+    let ad = rk.ad
+    let wnd = rk.wnd
+    let yd = rk.yd
     let xqd = make_device_buf(int64(dim))
     let xsd = make_device_buf(int64(dim / 32) * 4l)
-    var ones : array<float>
-    ones |> resize(dim)
-    for (i in range(dim)) {
-        ones[i] = 0.001 * float(i % 17) + 0.5
-    }
-    unsafe {
-        upload_region_at(xd, 0l, addr<uint8 const?>(ones[0]), nb)
-        upload_region_at(ad, 0l, addr<uint8 const?>(ones[0]), nb)
-        upload_region_at(wnd, 0l, addr<uint8 const?>(ones[0]), nb)
-    }
-    verify(ensure_cls_ar() && ensure_cls_ar_rq(), "the add+rms class rails must engage")
+    verify(ensure_cls_ar() && ensure_cls_ar_rq_b(), "the add+rms class rails must engage")
     var pc = ArArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = 1.0e-6, ascale = 1.0)
-    let begin = VkCommandBufferBeginInfo()
     for (dep in range(2)) {
         let bit = dep == 1 ? 1u : 0u   //! the dependency: x read and written by every dispatch, so the rail barriers between them
         var sc = set_cls_ar(fixed_array(xd, ad, wnd, yd), fixed_array(nb, nb, nb, nb), fixed_array(bit, 0u, 0u, 2u * bit))
-        var raw = alloc_cmd()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var hz : VkHaz
-        for (_k in range(DISPATCHES)) {
-            enc_cls_ar(raw, hz, sc, pc, 1l)
+        let us = timed_chain() $(raw; var hz) {
+            for (_k in range(DISPATCHES)) {
+                enc_cls_ar(raw, hz, sc, pc, 1l)
+            }
         }
-        vk_check(vkEndCommandBuffer(raw), null)
-        let us = usec_per_dispatch(raw)
-        var scq = set_cls_ar_rq(fixed_array(xd, ad, wnd, xqd, xsd), fixed_array(nb, nb, nb, int64(dim), int64(dim / 32) * 4l), fixed_array(bit, 0u, 0u, 2u * bit, 2u * bit))
-        var rawq = alloc_cmd()
-        vk_check(vkBeginCommandBuffer(rawq, begin), null)
-        var hzq : VkHaz
-        for (_k in range(DISPATCHES)) {
-            enc_cls_ar_rq(rawq, hzq, scq, pc, 1l)
+        var scq = set_cls_ar_rq_b(fixed_array(xd, ad, wnd, xqd, xsd), fixed_array(nb, nb, nb, int64(dim), int64(dim / 32) * 4l), fixed_array(bit, 0u, 0u, 2u * bit, 2u * bit))
+        let usq = timed_chain() $(rawq; var hzq) {
+            for (_k in range(DISPATCHES)) {
+                enc_cls_ar_rq_b(rawq, hzq, scq, pc, 1l)
+            }
         }
-        vk_check(vkEndCommandBuffer(rawq), null)
-        let usq = usec_per_dispatch(rawq)
-        print("small dim={dim} {dep == 1 ? "chained (barrier between)" : "independent"}: cls_ar {us} us/dispatch, cls_ar_rq {usq} us/dispatch | timing-only\n")
+        print("small dim={dim} {dep == 1 ? "chained (barrier between)" : "independent"}: cls_ar {us} us/dispatch, cls_ar_rq_b {usq} us/dispatch | timing-only\n")
     }
-    delete ones
 }
 
 // the decode-cost bisect: the shipped cm2l against the three probe variants, one shape
@@ -3418,17 +3020,14 @@ def private run_cm2x_shape(name : string; d, n, cnt : int) {   // nolint:STYLE03
     let xfd = make_device_buf(xf_bytes)
     let yd = make_device_buf(y_bytes)
     let lwgs = ((cnt + 255) / 256) * ((d + 127) / 128)
-    var sched : array<uint>
-    sched |> resize(4 + lwgs)
-    sched[2] = uint(cnt)
     let flop = 2.0lf * double(rows) * double(d) * double(n)
     unsafe {
         upload_region_at(wqd, 0l, addr<uint8 const?>(b.wq[0]), wq_bytes)
         upload_region_at(wsd, 0l, addr<uint8 const?>(b.ws[0]), ws_bytes)
         upload_region_at(xfd, 0l, addr<uint8 const?>(b.xf[0]), xf_bytes)
-        let sc_bytes = int64(4 + lwgs) * 4l
-        let scd = make_device_buf(sc_bytes)
-        upload_region_at(scd, 0l, addr<uint8 const?>(sched[0]), sc_bytes)
+        let sched = one_region_sched(cnt, lwgs)
+        let scd = sched.buf
+        let sc_bytes = sched.bytes
         let cbufs = fixed_array(wqd, wsd, scd, xfd, yd)
         let csizes = fixed_array(wq_bytes, ws_bytes, sc_bytes, xf_bytes, y_bytes)
         let cgbits = fixed_array(1u, 2u, 0u, 4u, 16u)
@@ -3440,80 +3039,71 @@ def private run_cm2x_shape(name : string; d, n, cnt : int) {   // nolint:STYLE03
         let fgbits = fixed_array(1u, 0u, 4u, 16u)
         let vnames = fixed_array("cm2l", "lit ", "flat", "nil ", "f16a", "nobar", "mmnb ", "push")
         let mm_wgs = ((cnt + 127) / 128) * ((d + 127) / 128)
-        var mmsched : array<uint>
-        mmsched |> resize(4 + mm_wgs)
-        mmsched[2] = uint(cnt)
-        let msc_bytes = int64(4 + mm_wgs) * 4l
-        let mscd = make_device_buf(msc_bytes)
-        upload_region_at(mscd, 0l, addr<uint8 const?>(mmsched[0]), msc_bytes)
+        let msc = one_region_sched(cnt, mm_wgs)
+        let mscd = msc.buf
+        let msc_bytes = msc.bytes
         let xq_bytes = int64(rows * nbb) * 32l
         let xs_bytes = int64(rows * nbb) * 4l
         let xqd = make_device_buf(xq_bytes)
         let xsd = make_device_buf(xs_bytes)
         upload_region_at(xqd, 0l, addr<uint8 const?>(b.xq[0]), xq_bytes)
         upload_region_at(xsd, 0l, addr<uint8 const?>(b.xs[0]), xs_bytes)
-        delete mmsched
         for (v in range(8)) {
-            var raw = alloc_cmd()
-            let begin = VkCommandBufferBeginInfo()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
-            var hz : VkHaz
-            if (v == 0) {
-                var s = set_q8_batch_cm2l_cls(cbufs, csizes, cgbits)
-                for (_k in range(DISPATCHES)) {
-                    enc_q8_batch_cm2l_cls(raw, hz, s, pc, int64(lwgs))
-                }
-            } elif (v == 1) {
-                var s = set_cm2px_lit(cbufs, csizes, cgbits)
-                for (_k in range(DISPATCHES)) {
-                    enc_cm2px_lit(raw, hz, s, pc, int64(lwgs))
-                }
-            } elif (v == 2) {
-                var s = set_cm2px_flat(cbufs, csizes, cgbits)
-                for (_k in range(DISPATCHES)) {
-                    enc_cm2px_flat(raw, hz, s, pc, int64(lwgs))
-                }
-            } elif (v == 3) {
-                var s = set_cm2px_nil(cbufs, csizes, cgbits)
-                for (_k in range(DISPATCHES)) {
-                    enc_cm2px_nil(raw, hz, s, pc, int64(lwgs))
-                }
-            } elif (v == 4) {
-                var s = set_cm2px_f16a(fbufs, fsizes, fgbits)
-                for (_k in range(DISPATCHES)) {
-                    enc_cm2px_f16a(raw, hz, s, pc, int64(lwgs))
-                }
-            } elif (v == 5) {
-                // no-barrier arm: a fresh hazard rail per enc drops the y write-write barrier,
-                // so consecutive dispatches overlap on device - sizes the per-dispatch drain
-                var s = set_q8_batch_cm2l_cls(cbufs, csizes, cgbits)
-                for (_k in range(DISPATCHES)) {
-                    var hz2 : VkHaz
-                    enc_q8_batch_cm2l_cls(raw, hz2, s, pc, int64(lwgs))
-                }
-            } elif (v == 6) {
-                // the serving mm kernel, same no-barrier treatment - the fair kernel-rate twin
-                var s = set_q8_batch_mm_a_cls(
-                    fixed_array(wqd, wsd, mscd, xqd, xsd, yd),
-                    fixed_array(wq_bytes, ws_bytes, msc_bytes, xq_bytes, xs_bytes, y_bytes),
-                    fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
-                for (_k in range(DISPATCHES)) {
-                    var hz2 : VkHaz
-                    enc_q8_batch_mm_a_cls(raw, hz2, s, pc, int64(mm_wgs))
-                }
-            } else {
-                var s = set_cm2px_push(cbufs, csizes, cgbits)
-                for (_k in range(DISPATCHES)) {
-                    enc_cm2px_push(raw, hz, s, pc, int64(lwgs))
+            let us = timed_chain() $(raw; var hz) {
+                if (v == 0) {
+                    var s = set_q8_batch_cm2l_cls(cbufs, csizes, cgbits)
+                    for (_k in range(DISPATCHES)) {
+                        enc_q8_batch_cm2l_cls(raw, hz, s, pc, int64(lwgs))
+                    }
+                } elif (v == 1) {
+                    var s = set_cm2px_lit(cbufs, csizes, cgbits)
+                    for (_k in range(DISPATCHES)) {
+                        enc_cm2px_lit(raw, hz, s, pc, int64(lwgs))
+                    }
+                } elif (v == 2) {
+                    var s = set_cm2px_flat(cbufs, csizes, cgbits)
+                    for (_k in range(DISPATCHES)) {
+                        enc_cm2px_flat(raw, hz, s, pc, int64(lwgs))
+                    }
+                } elif (v == 3) {
+                    var s = set_cm2px_nil(cbufs, csizes, cgbits)
+                    for (_k in range(DISPATCHES)) {
+                        enc_cm2px_nil(raw, hz, s, pc, int64(lwgs))
+                    }
+                } elif (v == 4) {
+                    var s = set_cm2px_f16a(fbufs, fsizes, fgbits)
+                    for (_k in range(DISPATCHES)) {
+                        enc_cm2px_f16a(raw, hz, s, pc, int64(lwgs))
+                    }
+                } elif (v == 5) {
+                    // no-barrier arm: a fresh hazard rail per enc drops the y write-write barrier,
+                    // so consecutive dispatches overlap on device - sizes the per-dispatch drain
+                    var s = set_q8_batch_cm2l_cls(cbufs, csizes, cgbits)
+                    for (_k in range(DISPATCHES)) {
+                        var hz2 : VkHaz
+                        enc_q8_batch_cm2l_cls(raw, hz2, s, pc, int64(lwgs))
+                    }
+                } elif (v == 6) {
+                    // the serving mm kernel, same no-barrier treatment - the fair kernel-rate twin
+                    var s = set_q8_batch_mm_a_cls(
+                        fixed_array(wqd, wsd, mscd, xqd, xsd, yd),
+                        fixed_array(wq_bytes, ws_bytes, msc_bytes, xq_bytes, xs_bytes, y_bytes),
+                        fixed_array(1u, 2u, 0u, 4u, 8u, 16u))
+                    for (_k in range(DISPATCHES)) {
+                        var hz2 : VkHaz
+                        enc_q8_batch_mm_a_cls(raw, hz2, s, pc, int64(mm_wgs))
+                    }
+                } else {
+                    var s = set_cm2px_push(cbufs, csizes, cgbits)
+                    for (_k in range(DISPATCHES)) {
+                        enc_cm2px_push(raw, hz, s, pc, int64(lwgs))
+                    }
                 }
             }
-            vk_check(vkEndCommandBuffer(raw), null)
-            let us = usec_per_dispatch(raw)
             let tf = flop / (us * 1000000.0lf)
             print("{name} {vnames[v]}: {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
         }
     }
-    delete sched
     delete b
 }
 
@@ -3737,49 +3327,66 @@ def private run_ref_gemm(d, n, cnt : int) {   // nolint:STYLE038 — one linear 
             fixed_array(ad, bd, yd),
             fixed_array(a_bytes, b_bytes, y_bytes),
             fixed_array(1u, 2u, 4u))
-        var raw = alloc_cmd()
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        for (_k in range(DISPATCHES)) {
-            var hz : VkHaz
-            enc_cm2px_ref(raw, hz, s, pc, int64(wgs))
+        let us = timed_chain() $(raw; var _h) {
+            for (_k in range(DISPATCHES)) {
+                var hz : VkHaz
+                enc_cm2px_ref(raw, hz, s, pc, int64(wgs))
+            }
         }
-        vk_check(vkEndCommandBuffer(raw), null)
-        let us = usec_per_dispatch(raw)
         let tf = flop / (us * 1000000.0lf)
         print("ref cm2 (d={d} K={n} cnt={cnt} wgs={wgs}): {us / 1000.0lf} ms/dispatch  {tf} TFLOP/s  timing-only\n")
         var s2 = set_cm2px_ref2(
             fixed_array(ad, bd, yd, scd),
             fixed_array(a_bytes, b_bytes, y_bytes, sc_bytes),
             fixed_array(1u, 2u, 4u, 8u))
-        var raw2 = alloc_cmd()
-        vk_check(vkBeginCommandBuffer(raw2, begin), null)
-        for (_k in range(DISPATCHES)) {
-            var hz : VkHaz
-            enc_cm2px_ref2(raw2, hz, s2, pc, int64(wgs))
+        let us2 = timed_chain() $(raw2; var _h) {
+            for (_k in range(DISPATCHES)) {
+                var hz : VkHaz
+                enc_cm2px_ref2(raw2, hz, s2, pc, int64(wgs))
+            }
         }
-        vk_check(vkEndCommandBuffer(raw2), null)
-        let us2 = usec_per_dispatch(raw2)
         let tf2 = flop / (us2 * 1000000.0lf)
         print("ref+2plane: {us2 / 1000.0lf} ms/dispatch  {tf2} TFLOP/s  timing-only\n")
         var s3 = set_cm2px_min(
             fixed_array(ad, scd, bd, yd),
             fixed_array(a_bytes, sc_bytes, b_bytes, y_bytes),
             fixed_array(1u, 2u, 4u, 8u))
-        var raw3 = alloc_cmd()
-        vk_check(vkBeginCommandBuffer(raw3, begin), null)
         var pcm = BatchArgs(n = uint(n), d = uint(d), map_off = 4u)
-        for (_k in range(DISPATCHES)) {
-            var hz : VkHaz
-            enc_cm2px_min(raw3, hz, s3, pcm, int64(wgs))
+        let us3 = timed_chain() $(raw3; var _h) {
+            for (_k in range(DISPATCHES)) {
+                var hz : VkHaz
+                enc_cm2px_min(raw3, hz, s3, pcm, int64(wgs))
+            }
         }
-        vk_check(vkEndCommandBuffer(raw3), null)
-        let us3 = usec_per_dispatch(raw3)
         let tf3 = flop / (us3 * 1000000.0lf)
         print("our minimal (min): {us3 / 1000.0lf} ms/dispatch  {tf3} TFLOP/s  timing-only\n")
     }
     delete aw
     delete xf
+}
+
+//! the four-wide decode's A/B in one process, interleaved: `body(round, arm, arms, tag)` over two rounds, so drift shows, each
+//! under both arms where the device serves the twin (the class pipelines rebuilt under each - the twin served, then
+//! stripped) and under the one arm elsewhere; the twin lever put back after
+def private twin_rounds(body : block<(round, arm, arms : int; tag : string) : void>) {
+    let twin_device = g_gpu.decvec_on
+    let arms = twin_device ? 2 : 1
+    for (round in range(2)) {
+        for (arm in range(arms)) {
+            g_gpu.decvec_on = twin_device && arm == 0
+            vkd_pipes_rebuild()
+            invoke(body, round, arm, arms, twin_device ? (arm == 0 ? "twin on " : "twin off") : "no twin ")
+        }
+    }
+    g_gpu.decvec_on = twin_device
+}
+
+//! the per-format arm `a` names - its `<arm>:` prefix, the format name past it - or "" where it names none
+def private fmt_arm_of(a : string) : string {
+    for (pre in fixed_array("cm2:", "cm2d:", "cm2w:", "moe:", "cm2g:", "moesk:", "ts:", "cold:")) {
+        return pre if (a |> starts_with(pre))
+    }
+    return ""
 }
 
 [arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
@@ -3808,38 +3415,10 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
     for (a in get_command_line_arguments()) {
         if (a == "gate" || a == "down" || a == "q" || a == "kv" || a == "kvm" || a == "qkv" || a == "cm2x" || a == "ref" || a == "tl" || a == "g3" || a == "gemma" || a == "wh" || a == "splitk" || a == "khrsk" || a == "small" || a == "lastwg" || a == "barform" || a == "k4" || a == "k6" || a == "k6x" || a == "khrx" || a == "khrprof" || a == "mmqx" || a == "dec") {
             only = a
-        } elif (a |> starts_with("cm2:")) {
-            only = "cm2:"
+        } elif (fmt_arm_of(a) != "") {
+            only = fmt_arm_of(a)
             var pf : KqFmt
-            cm2_fmt = kq_fmt_of_name(slice(a, 4), pf) ? int(pf) : -1
-        } elif (a |> starts_with("cm2d:")) {
-            only = "cm2d:"
-            var pf : KqFmt
-            cm2_fmt = kq_fmt_of_name(slice(a, 5), pf) ? int(pf) : -1
-        } elif (a |> starts_with("cm2w:")) {
-            only = "cm2w:"
-            var pf : KqFmt
-            cm2_fmt = kq_fmt_of_name(slice(a, 5), pf) ? int(pf) : -1
-        } elif (a |> starts_with("moe:")) {
-            only = "moe:"
-            var pf : KqFmt
-            cm2_fmt = kq_fmt_of_name(slice(a, 4), pf) ? int(pf) : -1
-        } elif (a |> starts_with("cm2g:")) {
-            only = "cm2g:"
-            var pf : KqFmt
-            cm2_fmt = kq_fmt_of_name(slice(a, 5), pf) ? int(pf) : -1
-        } elif (a |> starts_with("moesk:")) {
-            only = "moesk:"
-            var pf : KqFmt
-            cm2_fmt = kq_fmt_of_name(slice(a, 6), pf) ? int(pf) : -1
-        } elif (a |> starts_with("ts:")) {
-            only = "ts:"
-            var pf : KqFmt
-            cm2_fmt = kq_fmt_of_name(slice(a, 3), pf) ? int(pf) : -1
-        } elif (a |> starts_with("cold:")) {
-            only = "cold:"
-            var pf : KqFmt
-            cm2_fmt = kq_fmt_of_name(slice(a, 5), pf) ? int(pf) : -1
+            cm2_fmt = kq_fmt_of_name(slice(a, length(only)), pf) ? int(pf) : -1
         } elif (a |> starts_with("khrprof:")) {
             only = "khrprof"
             g_prof_arm = slice(a, 8)
@@ -3892,62 +3471,52 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
             return
         }
         print("ATTRIBUTION SWEEP {only}{cm2_fmt_names()}: timing-only rows, no output compared\n")
-        // the four-wide decode's A/B, both arms in ONE process, interleaved: the class pipelines
-        // rebuild under each arm (the twin served, then stripped), two rounds so drift shows
-        let twin_device = g_gpu.decvec_on
-        let arms = twin_device ? 2 : 1
-        for (round in range(2)) {
-            for (arm in range(arms)) {
-                g_gpu.decvec_on = twin_device && arm == 0
-                vkd_pipes_rebuild()
-                verify(cm2_cls_ensure(cm2_fmt, 256l) && cm2_cls_ensure(cm2_fmt, 128l) && cm2_cls_ensure(cm2_fmt, 32l)
-                    && (!probe_stwin_has(cm2_fmt) || probe_stwin_ensure(cm2_fmt))
-                    && kq_batch_cls_ensure(cm2_fmt, false), "the cm2 sweeps' probe pipelines (the l, m and s stamps, the twin, the kq tile) must engage")
-                let tag = twin_device ? (arm == 0 ? "twin on " : "twin off") : "no twin "
-                if (only == "cm2g:") {
-                    // gemma-4-26B-A4B's dense role shapes (dim 2816, shared expert 2112, q 4096, kv 2048): the file's K-quant planes against the q8 tiles below
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh_gate", 2112, 2816, 512)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh_down", 2816, 2112, 512)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q      ", 4096, 2816, 512)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} wo     ", 2816, 4096, 512)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} k/v    ", 2048, 2816, 512)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh_gate", 2112, 2816, 512, false, true)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh@2176", 2176, 2816, 512, false, true)   //! the shared expert's width padded to whole weight tiles: the partial 17th tile's cost
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh@2048", 2048, 2816, 512, false, true)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q      ", 4096, 2816, 512, false, true)
-                    if (round == 1) {
-                        for (sk in [1, 2, 3, 4, 6]) {
-                            run_kq_shape_split(cm2_fmt, "{tag} sh_gate", 2112, 2816, 512, sk)
-                        }
-                        for (sk in [1, 2, 4]) {
-                            run_kq_shape_split(cm2_fmt, "{tag} q      ", 4096, 2816, 512, sk)
-                            run_kq_shape_split(cm2_fmt, "{tag} k/v    ", 2048, 2816, 512, sk)
-                        }
+        twin_rounds() $(round, arm, arms; tag) {
+            verify(cm2_cls_ensure(cm2_fmt, 256l) && cm2_cls_ensure(cm2_fmt, 128l) && cm2_cls_ensure(cm2_fmt, 32l)
+                && (!probe_stwin_has(cm2_fmt) || probe_stwin_ensure(cm2_fmt))
+                && kq_batch_cls_ensure(cm2_fmt, false), "the cm2 sweeps' probe pipelines (the l, m and s stamps, the twin, the kq tile) must engage")
+            if (only == "cm2g:") {
+                // gemma-4-26B-A4B's dense role shapes (dim 2816, shared expert 2112, q 4096, kv 2048): the file's K-quant planes against the q8 tiles below
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh_gate", 2112, 2816, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh_down", 2816, 2112, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q      ", 4096, 2816, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} wo     ", 2816, 4096, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} k/v    ", 2048, 2816, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh_gate", 2112, 2816, 512, false, true)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh@2176", 2176, 2816, 512, false, true)   //! the shared expert's width padded to whole weight tiles: the partial 17th tile's cost
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} sh@2048", 2048, 2816, 512, false, true)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q      ", 4096, 2816, 512, false, true)
+                if (round == 1) {
+                    for (sk in [1, 2, 3, 4, 6]) {
+                        run_kq_shape_split(cm2_fmt, "{tag} sh_gate", 2112, 2816, 512, sk)
                     }
-                    if (round == 1 && arm == arms - 1) {
-                        run_shape("q8 sh_gate", 2112, 2816, 512)
-                        run_shape("q8 q      ", 4096, 2816, 512)
+                    for (sk in [1, 2, 4]) {
+                        run_kq_shape_split(cm2_fmt, "{tag} q      ", 4096, 2816, 512, sk)
+                        run_kq_shape_split(cm2_fmt, "{tag} k/v    ", 2048, 2816, 512, sk)
                     }
-                    continue
                 }
-                if (only == "cm2d:") {
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate ", 12288, 4096, 512)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} down ", 4096, 12288, 512)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} qkv  ", 8192, 4096, 512)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} z/out", 4096, 4096, 512)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} k/v  ", 1024, 4096, 512)
-                    run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate@500", 12288, 4096, 500)   //! a token count off every column: the stamps' partial-tile store path
-                    continue
+                if (round == 1 && arm == arms - 1) {
+                    run_shape("q8 sh_gate", 2112, 2816, 512)
+                    run_shape("q8 q      ", 4096, 2816, 512)
                 }
-                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate", 9728, 2560, 512)
-                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} down", 2560, 9728, 512)
-                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q/wo", 4096, 2560, 512)
-                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate@64", 9728, 2560, 64)
-                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} shexp", 512, 2048, 512)
-                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} shdown", 2048, 512, 512)
+                return
             }
+            if (only == "cm2d:") {
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate ", 12288, 4096, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} down ", 4096, 12288, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} qkv  ", 8192, 4096, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} z/out", 4096, 4096, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} k/v  ", 1024, 4096, 512)
+                run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate@500", 12288, 4096, 500)   //! a token count off every column: the stamps' partial-tile store path
+                return
+            }
+            run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate", 9728, 2560, 512)
+            run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} down", 2560, 9728, 512)
+            run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} q/wo", 4096, 2560, 512)
+            run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} gate@64", 9728, 2560, 64)
+            run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} shexp", 512, 2048, 512)
+            run_cm2_fmt_shape(cm2_fmt, "r{round} {tag} shdown", 2048, 512, 512)
         }
-        g_gpu.decvec_on = twin_device
         return
     }
     if (only == "ts:" || only == "cold:") {
@@ -3989,20 +3558,12 @@ def private run_probe {   // nolint:STYLE037,STYLE038 — the flat per-arg shape
         }
         print("ATTRIBUTION SWEEP {only}{cm2_fmt_names()}: timing-only rows, no output compared\n")
         let skew = only == "moesk:"
-        let twin_device = g_gpu.decvec_on
-        let arms = twin_device ? 2 : 1
-        for (round in range(2)) {
-            for (arm in range(arms)) {
-                g_gpu.decvec_on = twin_device && arm == 0
-                vkd_pipes_rebuild()
-                verify(cm2_cls_ensure(cm2_fmt, 32l) && cm2_cls_ensure(cm2_fmt, 128l) && cm2_cls_ensure(cm2_fmt, CM2_TC_E)
-                    && (!probe_stwin_has(cm2_fmt) || probe_stwin_ensure(cm2_fmt)), "moe:<fmt> probe pipelines must engage")
-                let tag = twin_device ? (arm == 0 ? "twin on " : "twin off") : "no twin "
-                run_moe_fmt_shape(cm2_fmt, "r{round} {tag} gate/up", 768, 2048, skew)
-                run_moe_fmt_shape(cm2_fmt, "r{round} {tag} down   ", 2048, 768, skew)
-            }
+        twin_rounds() $(round, _arm, _arms; tag) {
+            verify(cm2_cls_ensure(cm2_fmt, 32l) && cm2_cls_ensure(cm2_fmt, 128l) && cm2_cls_ensure(cm2_fmt, CM2_TC_E)
+                && (!probe_stwin_has(cm2_fmt) || probe_stwin_ensure(cm2_fmt)), "moe:<fmt> probe pipelines must engage")
+            run_moe_fmt_shape(cm2_fmt, "r{round} {tag} gate/up", 768, 2048, skew)
+            run_moe_fmt_shape(cm2_fmt, "r{round} {tag} down   ", 2048, 768, skew)
         }
-        g_gpu.decvec_on = twin_device
         return
     }
     if (only == "k6x") {

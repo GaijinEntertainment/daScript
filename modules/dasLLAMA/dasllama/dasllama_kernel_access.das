@@ -684,6 +684,33 @@ def classify_field_access(fn : Function?; mod : Module?; st : StructurePtr; trac
     return <- classify_access(fn, mod, st, tracked, true)
 }
 
+//! the lensed class `st`'s kernel method - a method of `mod` annotated `kernel_ann` - the body the classifier walks: `want` names
+//! the method of a multi-kernel class, a trailing '*' making it a prefix; "" counts every kernel method in `nmatch` and answers the first
+def find_kernel_fn(st : StructurePtr; mod : Module?; kernel_ann, want : string; var nmatch : int&) : Function? {
+    var kfn : Function?
+    let byPrefix = want |> ends_with("*")
+    let stem = byPrefix ? chop(want, 0, length(want) - 1) : want
+    let wanted = empty(want) ? "" : "{st.name}`{stem}"
+    mod |> for_each_function("") $(fn) {
+        if (!empty(fn.arguments) && fn.arguments[0]._type.structType == st) {
+            for (ann in fn.annotations) {
+                if (ann.annotation.name == kernel_ann) {
+                    if (empty(wanted)) {
+                        nmatch++
+                        if (kfn == null) {
+                            kfn = fn
+                        }
+                    } elif (byPrefix ? ("{fn.name}" |> starts_with(wanted)) : fn.name == wanted) {
+                        nmatch++
+                        kfn = fn
+                    }
+                }
+            }
+        }
+    }
+    return kfn
+}
+
 // ===== the dispatch-lens micro-grammar =====
 // The spec-token predicates + AST-emission core both lenses ([metal_dispatch] / [vk_dispatch])
 // share; one owner so the grid/tg/params grammars cannot drift apart again.

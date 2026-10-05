@@ -184,10 +184,9 @@ The head mixer's single row feeds the classifier through row 0 of `pf_xb`.
 
 **A plain MoE with host layers cuts its window the same way, inside `pf_run`.** At a host layer the window
 runs the router alone (`pf_moe_router`), lands the window's FFN-normed rows and logits (`pf_hx_host`,
-`pf_hlog_host`), ends and waits the command, asks the host's rows through the tier's seat
-(`rdec_host_rows`; the seat holds the chain's `rdec_host_experts_rows` from the arm, `set_rdec_host_rows`, and a
-no-op from the model drop, `clear_rdec_host_rows` - the hyper-connection window chain takes its host callback
-per call instead), then re-opens
+`pf_hlog_host`), ends and waits the command, asks the host's rows through the `experts` callback the prefill seat
+takes per call (`rdec_prefill` / `rdec_prefill_ids`, the resident override passing `rdec_host_experts_rows` - the
+hyper-connection window chain takes its host callback the same way), then re-opens
 the same command on a copy of the sums into `pf_hacc_dev` and the plain combine over them (one slot a row
 at the identity map, `pf_ident_dev` / `pf_ones_dev`). The overlap ring is off for such a model - a cut is
 a fence mid-window - and the device layers keep the MoE block.
@@ -199,7 +198,7 @@ host's `ngram_gather` per position) requantize once, the key and value GEMMs run
 it off the ring (`pos0` names the window's first position), and the window's last `min(rows, nrows)` panel
 rows copy into the ring's slots (`pos % nrows`, the region the tok meta's `dnslot` names) for the rows after
 the window - the decode steps then advance the ring on the device (`Session.ple_ring_device`). A prompt
-served this way passes nothing to the CPU (`RdecPass.hc_prefill` is a model the seats do not hold), and
+served this way passes nothing to the CPU (the served-prefill counter `moe_gpu_resident_prefills` rises by one), and
 the deltanet state and the ring stay on the device as any other hybrid's do.
 
 ### The NextN head on the chain {#hc-draft-head}
@@ -223,7 +222,8 @@ N-column leaf ensured for hc columns), then the head's block as a trunk layer's 
 mixer, the shared expert, the router - and lands the FFN-mixed row and the router logits; the host sums
 the head's picks (`rdec_host_experts_step` at layer `n_layers`, the pool's slots where they hit); the
 second segment takes the sum, scatters it, copies the head's wide residual aside as the carry, runs the
-head's head mixer, the classifier and the pick. The seat passes the host step as `RdecDraftFn`'s
+head's head mixer, the classifier, its epilogue and the pick (the plain draft's tail,
+`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`). The seat passes the host step as `RdecDraftFn`'s
 `experts`. The window chain warms the head's slab over the prompt in the hc form (`pf_hc_head_warm`
 after the window's head mixer and tail): head row j pairs the window's embed row j + 1 - carry with the
 trunk's wide residual at the row before it (the previous window's last row for row 0, kept in

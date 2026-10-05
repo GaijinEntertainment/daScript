@@ -20,7 +20,9 @@ require daslib/strings_boost   // split — the DASLLAMA_TEST_ARMS comma list
 require math   // the tower-parity statistics
 require dasllama/dasllama_gguf   // gguf_shard_paths — split models tier on their TOTAL size
 require dasllama/dasllama_common   // decode_ — the eyeball rail detokenizes through the model
+require dasllama/dasllama_tokenizer   // TokKind — a model loaded without its tokenizer logs ids
 require dasllama/dasllama_env
+require dasllama/dasllama_math
 require dasllama/dasllama_gpu_resident   // resident_mirror_dtype — the mirror codec the box arms
 require _compares public
 
@@ -45,17 +47,14 @@ def live_maxabs(v : array<float>) : float {
     return m
 }
 
+//! a machine-local root: `set` (an environment record's field) where it is set, else the default `dflt`
+def root_or(set, dflt : string) : string => empty(set) ? dflt : set
+
 // Machine-local model root; override with DASLLAMA_MODELS_DIR (e.g. the x64 handoff box).
-def models_dir() : string {
-    let env = g_env_harness.models_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama.cpp/models/" : env
-}
+def models_dir() : string => root_or(g_env_harness.models_dir, "/Users/borisbatkin/Work/llama.cpp/models/")
 
 //! the machine-local llama2.c checkout (stories15M.bin, tokenizer.bin); override with DASLLAMA_LLAMA2C_DIR (e.g. the x64 handoff box)
-def llama2c_dir() : string {
-    let env = g_env_test.llama2c_dir
-    return empty(env) ? "/Users/borisbatkin/Work/llama2.c" : env
-}
+def llama2c_dir() : string => root_or(g_env_test.llama2c_dir, "/Users/borisbatkin/Work/llama2.c")
 
 // True when the large tier is enabled for this run (the pre-PR full sweep).
 def parity_full_mode() : bool {
@@ -99,11 +98,75 @@ def private filter_on(t : T?; filter, env, what, name : string; exact : bool) : 
 
 def eyeball_str(s : string) : string => replace(s, "\n", "\\n")
 
-def eyeball_text(m : Model; ids : array<int64>) : string => eyeball_str(decode_(m, ids))
+//! a model loaded without its tokenizer (`load_gguf`) logs the ids themselves, since there is no vocabulary to decode them through
+def eyeball_text(m : Model; ids : array<int64>) : string => m.tok.kind == TokKind.unset ? "ids {ids}" : eyeball_str(decode_(m, ids))
 
 def log_gen_texts(m : Model; tag : string; cpu_ids, gpu_ids : array<int64>) {
     to_log(LOG_INFO, "{tag} CPU text: {eyeball_text(m, cpu_ids)}\n")
     to_log(LOG_INFO, "{tag} GPU text: {eyeball_text(m, gpu_ids)}\n")
+}
+
+//! `prompt` greedily continued `n_gen` ids through `generate` on a fresh session: the prompt's echo past its first id, then the
+//! continuation
+def greedy_gen(tr : Model; prompt : array<int64>; n_gen : int) : array<int64> {
+    var out : array<int64>
+    with_dasllama_jobque_() {
+        var s = make_run_state(tr.config)
+        out <- generate(tr, s, prompt, length(prompt) + n_gen)
+        delete s
+    }
+    return <- out
+}
+
+//! `n` greedy steps through `s` from position `pos`, each pick the argmax of the logits the step before left
+def greedy_from(tr : Model; var s : Session; pos, n : int64) : array<int64> {
+    var ids : array<int64>
+    ids |> reserve(n)
+    for (i in range64(n)) {
+        let next = argmax(s, tr.config.vocab_size)
+        ids |> push(next)
+        forward(tr, s, next, pos + i)
+    }
+    return <- ids
+}
+
+//! `body` under the bit-exact kernel modes a token-exact oracle needs - classic prefill attention, the scalar libm activations and
+//! the per-token recurrent deltanet prefill (chunked under `dn_chunked`) - the previous modes put back after
+def with_pinned_kernels(dn_chunked : bool; body : block) {
+    let prev_attn = get_prefill_attn_mode()
+    set_prefill_attn_mode(AttnPrefillMode.classic)
+    let prev_act = get_act_vec()
+    set_act_vec(false)
+    let prev_dn = get_deltanet_prefill_mode()
+    set_deltanet_prefill_mode(dn_chunked ? DnPrefillMode.chunked : DnPrefillMode.recurrent)
+    invoke(body)
+    set_prefill_attn_mode(prev_attn)
+    set_act_vec(prev_act)
+    set_deltanet_prefill_mode(prev_dn)
+}
+
+//! `body` under the pinned kernels with the recurrent deltanet prefill
+def with_pinned_kernels(body : block) {
+    with_pinned_kernels(false, body)
+}
+
+//! `prompt` greedily continued on a fresh session under the pinned kernels, the continuation against `want` token for token (the
+//! first generated id sits at `length(prompt) - 1`, past generate's echo); `eyeball` logs both decoded. Free of T?, so it JITs
+//! and the engine chain runs on the native stack.
+def parity_gen_ok(tr : Model; prompt, want : array<int64>; dn_chunked : bool = false; eyeball : bool = false) : bool {
+    let n_gen = length(want)
+    var ok = false
+    with_pinned_kernels(dn_chunked) {
+        let ids <- greedy_gen(tr, prompt, n_gen)
+        let echo = length(prompt) - 1
+        let got <- [for (i in range(n_gen)); ids[echo + i]; where echo + i < length(ids)]
+        ok = ids_equal(got, want)
+        if (eyeball) {
+            to_log(LOG_INFO, "eyeball want: {eyeball_text(tr, want)}\n")
+            to_log(LOG_INFO, "eyeball got:  {eyeball_text(tr, got)}\n")
+        }
+    }
+    return ok
 }
 
 //! `steps` greedy decode steps through `s` from BOS at position 0: each step's pick into `ids`, the last step's logits into `logits`
@@ -211,42 +274,8 @@ def tower_parity_deep(t : T?; tag : string; cpu, gpu : array<float>; n_layers : 
 }
 
 // Machine-local whisper-model root; override with DASLLAMA_WHISPER_DIR.
-def whisper_dir() : string {
-    let env = g_env_test.whisper_dir
-    return empty(env) ? "/Users/borisbatkin/Work/whisper.cpp/models/" : env
-}
+def whisper_dir() : string => root_or(g_env_test.whisper_dir, "/Users/borisbatkin/Work/whisper.cpp/models/")
 
-// minimal RIFF/WAVE reader for the 16-bit PCM mono fixtures (jfk.wav and kin)
-def read_wav_pcm16_mono(path : string) : array<float> {
-    var out : array<float>
-    let f = fopen(path, "rb")
-    if (f == null) {
-        return <- out
-    }
-    fmap(f) $(var bytes : array<uint8>#) {
-        let n = long_length(bytes)
-        var o = 12l
-        while (o + 8l <= n) {
-            let id = rd_u32(bytes, o)
-            let sz = int64(rd_u32(bytes, o + 4l))
-            if (id == 0x61746164u) {
-                let cnt = min(sz, n - o - 8l) / 2l
-                out |> resize(cnt)
-                for (i in range64(cnt)) {
-                    var v = int(rd_u16(bytes, o + 8l + i * 2l))
-                    if (v >= 32768) {
-                        v -= 65536
-                    }
-                    out[i] = float(v) / 32768.0
-                }
-                break
-            }
-            o += 8l + sz + (sz & 1l)
-        }
-    }
-    fclose(f)
-    return <- out
-}
 
 //! The TTS cells' data gate: the model, then the g2p pack (and the tagger pack when `postag`); a missing one skips loudly and answers true.
 def tts_data_missing(t : T?; gguf : string; postag : bool = true) : bool {

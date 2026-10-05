@@ -4,9 +4,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require _compares
-require _vk_kq_fixtures
 require daslib/math_bits
-require daslib/rtti   // LineInfo: the probe handle's log hook
 require math
 
 let INF = uint_bits_to_float(0x7f800000u)
@@ -41,32 +39,19 @@ def test_mismatch_counts(t : T?) {
         t |> equal(mismatch_exact([1, 9, 3], [1, 2, 3]), 1, "control: one element off")
         t |> equal(mismatch_exact([1, 2], [1, 2, 3]), 1, "a truncated output is one element short")
         t |> equal(mismatch_exact([1, 9, 3, 4, 5], [1, 2, 3]), 3, "one off and two past the end")
+        t |> equal(mismatch_exact([7, 1, 9, 3], [1, 2, 3], 1, 0, 3), 1, "a span: got from 1 against want from 0, one off")
+        t |> equal(mismatch_exact([7, 1, 2, 3], [1, 2, 3], 1, 0, 3), 0, "control: the same span equal")
+        t |> equal(first_mismatch([7, 1, 2, 9], [0, 1, 2, 3], 1, 1, 3), 2, "the first span element off sits at its index in the span")
+        t |> equal(first_mismatch([7, 1, 2, 3], [0, 1, 2, 3], 1, 1, 3), -1, "control: an equal span reads -1")
     }
-    t |> run("the relative count and the fixture's bar count take a NaN as off") @(t : T?) {
+    t |> run("the relative count takes a NaN as off") @(t : T?) {
         let want <- [1.0, 2.0, 3.0]
         let got <- [1.0, NAN_SENTINEL, 3.0]
         t |> equal(mismatch_rel("nan", got, want, APPROX_REL), 1, "mismatch_rel counts the NaN")
-        t |> equal(count_bad(got, want, 1.0e-3, 1.0e-3), 1, "count_bad counts the NaN")
-        t |> equal(count_bad(want, want, 1.0e-3, 1.0e-3), 0, "control: equal rows")
-        t |> equal(count_bad([1.0, 2.5, 3.0], want, 1.0e-3, 1.0e-3), 1, "control: a finite miss")
+        t |> equal(mismatch_rel("nan", got, want, 0.0, 1.0e-3), 1, "mismatch_rel at an absolute floor counts the NaN")
+        t |> equal(mismatch_rel("equal", want, want, 0.0, 1.0e-3), 0, "control: equal rows")
+        t |> equal(mismatch_rel("miss", [1.0, 2.5, 3.0], want, 0.0, 1.0e-3), 1, "control: a finite miss")
     }
-}
-
-//! the asserts `blk` makes on a probe handle that fail, counted instead of failing the cell
-def private probe_fails(blk : block<(p : T?) : void>) : int {
-    var fails = 0
-    var p = new T("probe", ref_time_ticks(), false)
-    unsafe {
-        p.onFail <- @ capture(& fails)(now : bool) {
-            fails++
-        }
-    }
-    p.onLog <- @(msg : string; at : LineInfo) {}
-    invoke(blk, p)
-    unsafe {
-        delete p
-    }
-    return fails
 }
 
 //! `check` of `got` against `want` at `bar` on a probe: the count it returns and the asserts that failed

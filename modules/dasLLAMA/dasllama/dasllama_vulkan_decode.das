@@ -20,6 +20,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
 require math
 require daslib/strings_boost
+require daslib/algorithm
 
 // The Vulkan DECODE driver (dasllama_metal_decode's twin): the resident whole-stack token step
 // (prepare/set_layer/set_cls + the once-per-epoch recorded command + vk_rdec_token), the KV
@@ -105,8 +106,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     // all-or-nothing: pre-flight every prefill-attention class pf_setup may pick for this head size
     // (the fa tile with its cap stamp at 256, the h128 twin, the chunked pair - a capped or gated
     // layer falls through the ladder) so a declined kernel declines residency PRE-upload
-    let fa_hs_ok = head_size == 64l || head_size == 128l || head_size == 256l || head_size == 512l
-    let will_facm2 = cm2_fa_on() && vk_fa_on() && pf_reads_f16 && fa_hs_ok
+    let will_facm2 = cm2_fa_on() && vk_fa_on() && pf_reads_f16 && fa_head_ok(head_size)
     let will_fakhr = !will_facm2 && khr_kq_tile_on() && vk_fa_on() && pf_reads_f16 && fa_khr_serves(head_size, 0.0, gated_stamp)
     var fa_ok = true
     if (will_facm2 || will_fakhr) {
@@ -114,9 +114,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
         let stamp_ok = fa_stamp_ensure(will_fakhr, head_size, gated256, false, false, false)
         fa_ok = stamp_ok && (head_size != 256l || gated256 || fa_stamp_ensure(will_fakhr, 256l, false, true, false, false))   // an ungated 256 pre-flights its softcap twin
     }
-    let chunked_ok = (g_gpu.has_coopmat && head_size == 128l && vk_fa_on()
-        ? (pf_reads_f16 ? ensure_da_attn_b_h128_f16_cls() : ensure_da_attn_b_h128_cls())
-        : (pf_reads_f16 ? ensure_da_attn_b_f16_cls() : ensure_da_attn_b_cls()))
+    let chunked_ok = da_attn_b_stamp_ensure(g_gpu.has_coopmat && head_size == 128l && vk_fa_on(), false, pf_reads_f16)
     if (kvq && !kv_codec_cls_ensure(dt)) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: a {dt} K/V mirror kernel class declined on this device - resident driver declines, the per-op rails serve\n")
         return false
@@ -181,15 +179,12 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.mir_units = mir_units + mir_slack_units
     r.regions = regions
     // the two largest allocations of the load: a heap the last model fragmented can refuse them though the plan fit - decline, never die mid-upload
-    r.k_mirror = try_device_buf(rd_mir_bytes())
-    r.v_mirror = try_device_buf(rd_mir_bytes())
+    let mir = zeroed_pair(rd_mir_bytes())
+    r.k_mirror = mir.a
+    r.v_mirror = mir.b
     if (r.k_mirror == 0ul || r.v_mirror == 0ul) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the KV mirror ({(2l * rd_mir_bytes()) >> 20l} MB for {regions} regions of ctx {seq_cap}) found no room on the device - resident driver declines, the per-op rails serve\n")
         return false
-    }
-    cmd_one_shot() $(rawz : VkCommandBuffer; var _h : VkHaz) {
-        cmd_fill_zero(rawz, r.k_mirror, 0l, rd_mir_bytes())
-        cmd_fill_zero(rawz, r.v_mirror, 0l, rd_mir_bytes())
     }
     if (kvtq4) {
         var signs : array<float>
@@ -208,15 +203,12 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
                 sm[i] = TokMeta(pos = uint(i))
             }
         }
-        r.ksh_dev = try_device_buf(rd_shadow_bytes())
-        r.vsh_dev = try_device_buf(rd_shadow_bytes())
+        let sh = zeroed_pair(rd_shadow_bytes())
+        r.ksh_dev = sh.a
+        r.vsh_dev = sh.b
         if (r.ksh_dev == 0ul || r.vsh_dev == 0ul) {
             to_log(LOG_WARNING, "dasLLAMA vulkan resident: the block-codec mirror's f16 shadow ({(2l * rd_shadow_bytes()) >> 20l} MB for ctx {seq_cap}) found no room on the device - resident driver declines, the per-op rails serve\n")
             return false
-        }
-        cmd_one_shot() $(rawz : VkCommandBuffer; var _h : VkHaz) {
-            cmd_fill_zero(rawz, r.ksh_dev, 0l, rd_shadow_bytes())
-            cmd_fill_zero(rawz, r.vsh_dev, 0l, rd_shadow_bytes())
         }
     }
     r.hybrid = hybrid
@@ -252,53 +244,48 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.pick_host = make_host_buf(4l * nb, false, [cached = true, xfer_shared = r.log_xfer])
     r.xlog_recorded |> resize(nb + 1l)
     r.xlog_pick_recorded |> resize(nb + 1l)
-    r.xlog_cmd |> reserve(nb + 1l)
-    r.xlog_pick_cmd |> reserve(nb + 1l)
-    for (_i in range64(nb + 1l)) {
-        r.xlog_cmd |> push(r.log_xfer ? alloc_xfer_cmd() : VkCommandBuffer())
-        r.xlog_pick_cmd |> push(r.log_xfer ? alloc_xfer_cmd() : VkCommandBuffer())
-    }
+    alloc_cmds(r.xlog_cmd, nb + 1l, r.log_xfer, true)
+    alloc_cmds(r.xlog_pick_cmd, nb + 1l, r.log_xfer, true)
     r.unsplit_on = r.attn_nsplit > 1l   //! the twins' availability is the device's, decided where their buffers are allocated: never a record's side effect
     r.wide_on = r.attn_nsplit > RD_SPLIT_PIECES
     r.tok_n_recorded |> resize(nb + 1l)
-    r.cmd_n |> reserve(nb + 1l)
-    r.cmd_n_unsplit |> reserve(nb + 1l)
-    for (_i in range64(nb + 1l)) {
-        r.cmd_n |> push(alloc_cmd())
-        r.cmd_n_unsplit |> push(r.unsplit_on ? alloc_cmd() : VkCommandBuffer())
-    }
+    alloc_cmds(r.cmd_n, nb + 1l, true)
+    alloc_cmds(r.cmd_n_unsplit, nb + 1l, r.unsplit_on)
     r.kv_readback = make_host_buf(2l * kv_dim * 4l * KV_READBACK_ROWS, false, [cached = true])
     ensure_ffn_state()   // hq_dev/hs_dev for the FFN act+requant
     r.tok_recorded |> resize(regions)
-    r.cmd |> reserve(regions)
-    r.cmd_unsplit |> resize(regions)
     r.tok_wide_recorded |> resize(regions)
-    r.cmd_wide |> resize(regions)
-    r.head_draft_cmd |> resize(head ? regions : 0l)
     r.head_draft_recorded |> resize(head ? regions : 0l)
     if (head) {
         let vsets = (hybrid ? regions : 1l) * (nb + 1l)
         r.v_recorded |> resize(vsets)
-        r.v_cmd |> reserve(vsets)
-        r.v_cmd_unsplit |> reserve(vsets)
-        for (_i in range64(vsets)) {
-            r.v_cmd |> push(alloc_cmd())
-            r.v_cmd_unsplit |> push(r.unsplit_on ? alloc_cmd() : VkCommandBuffer())
-        }
+        alloc_cmds(r.v_cmd, vsets, true)
+        alloc_cmds(r.v_cmd_unsplit, vsets, r.unsplit_on)
     }
-    for (ri in range64(regions)) {
-        r.cmd |> push(alloc_cmd())
-        if (r.unsplit_on) {
-            r.cmd_unsplit[ri] = alloc_cmd()
-        }
-        if (r.wide_on) {
-            r.cmd_wide[ri] = alloc_cmd()
-        }
-        if (head) {
-            r.head_draft_cmd[ri] = alloc_cmd()
-        }
-    }
+    alloc_cmds(r.cmd, regions, true)
+    alloc_cmds(r.cmd_unsplit, regions, r.unsplit_on)
+    alloc_cmds(r.cmd_wide, regions, r.wide_on)
+    alloc_cmds(r.head_draft_cmd, head ? regions : 0l, true)
     return true
+}
+
+def private alloc_cmds(var arr : array<VkCommandBuffer>; n : int64; on : bool; xfer : bool = false) {
+    arr |> reserve(long_length(arr) + n)
+    for (_i in range64(n)) {
+        arr |> push(!on ? VkCommandBuffer() : (xfer ? alloc_xfer_cmd() : alloc_cmd()))
+    }
+}
+
+def private zeroed_pair(bytes : int64) : tuple<a : uint64; b : uint64> {
+    let a = try_device_buf(bytes)
+    let b = try_device_buf(bytes)
+    if (a != 0ul && b != 0ul) {
+        cmd_one_shot() $(raw : VkCommandBuffer; var _h : VkHaz) {
+            cmd_fill_zero(raw, a, 0l, bytes)
+            cmd_fill_zero(raw, b, 0l, bytes)
+        }
+    }
+    return (a = a, b = b)
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
@@ -327,25 +314,18 @@ def vk_rdec_upload_norms(norms : array<float>; obias : bool) {
     vk_upload_report(key_exists(g_gpu.dev_mapped, g_rd.norms_dev))
 }
 
-//! a decode GEMV set over an arena plane pair `p` (`arena_planes`): the quant and scale planes, the region meta buffer with
-//! its hazard bit, the activation pair the GEMV reads (one bit for both) and its output - the resident driver's every arena site
-def private arena_gemv_set(fmt : int; p : tuple<wq : uint64; ws : uint64; wqb : int64; wsb : int64>; meta : uint64; meta_bytes : int64; meta_bit : uint;
-                           xq, xs : uint64; xq_bytes, xs_bytes : int64; xbit : uint; y : uint64; y_bytes : int64; ybit : uint) : VkDescriptorSet {
-    return gemv_cls_set(fmt, fixed_array(p.wq, p.ws, meta, xq, xs, y), fixed_array(p.wqb, p.wsb, meta_bytes, xq_bytes, xs_bytes, y_bytes),
-        fixed_array(0u, 0u, meta_bit, xbit, xbit, ybit))
-}
 
 //! ... over the resident x feed: the `dim`-wide quant rows of the `nb` regions at `xq_dev` / `xs_dev`
 def private arena_gemv_set_x(fmt : int; p : tuple<wq : uint64; ws : uint64; wqb : int64; wsb : int64>; meta : uint64; y : uint64; y_bytes : int64; ybit : uint) : VkDescriptorSet {
     let dim = g_rd.dim
     let nb = g_rd.nb
-    return arena_gemv_set(fmt, p, meta, META_BYTES, 0u, g_rd.xq_dev, g_rd.xs_dev, dim * nb, (dim / 32l) * 4l * nb, VHZ_XQ, y, y_bytes, ybit)
+    return gemv_planes_set(fmt, p, meta, META_BYTES, 0u, g_rd.xq_dev, g_rd.xs_dev, dim * nb, (dim / 32l) * 4l * nb, VHZ_XQ, y, y_bytes, ybit)
 }
 
 //! a decode GEMV set over stack `si`'s planes: its quant and scale buffers, a region meta buffer, the activation pair and the output
 def private stack_gemv_set(si : int; meta : uint64; meta_bytes : int64; xq, xs : uint64; xq_bytes, xs_bytes : int64; xbit : uint; y : uint64; y_bytes : int64; ybit : uint) : VkDescriptorSet {
     let st & = unsafe(g_gpu.stacks[si])
-    return arena_gemv_set(st.fmt, (wq = st.wqbuf, ws = st.wsbuf, wqb = st.wqbytes, wsb = ws_range(si)), meta, meta_bytes, 0u, xq, xs, xq_bytes, xs_bytes, xbit, y, y_bytes, ybit)
+    return gemv_planes_set(st.fmt, (wq = st.wqbuf, ws = st.wsbuf, wqb = st.wqbytes, wsb = ws_range(si)), meta, meta_bytes, 0u, xq, xs, xq_bytes, xs_bytes, xbit, y, y_bytes, ybit)
 }
 
 //! ... over stack `sx`'s own activation scratch and `si`'s meta, the output at `y`
@@ -360,16 +340,9 @@ def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
     let p1 = arena_planes(f1, b1)
     let p3 = arena_planes(f3, b3)
     let p2 = arena_planes(f2, b2)
+    rd_tail_sets_bare(L, f1, f3, f2)
     L.b1 = b1; L.b3 = b3; L.b2 = b2
-    L.f1 = f1; L.f3 = f3; L.f2 = f2
     L.m_gate = rd_meta(); L.m_up = rd_meta(); L.m_down = rd_meta()
-    // addrms (class): x += xb2, norms, xb out — and the fused twin quantizing in place of xb
-    L.s_addr_ffn = set_cls_ar(fixed_array(g_rd.x_dev, g_rd.xb2_dev, g_rd.norms_dev, g_rd.xb_dev),
-        fixed_array(dim * 4l * nb, dim * 4l * nb, g_rd.norms_bytes, dim * 4l * nb),
-        fixed_array(VHZ_X, VHZ_XB2, 0u, VHZ_XB))
-    rd_unmake_sets()
-    // quantize xb (post-ffn-norm) -> xq/xs
-    L.s_quant_xb2 = rd_quant_xb_set()
     // gate/up GEMV
     L.s_gate = arena_gemv_set_x(f1, p1, L.m_gate.buf, g_rd.gate_dev, hid * 4l * nb, VHZ_GATE)
     L.s_up = arena_gemv_set_x(f3, p3, L.m_up.buf, g_rd.up_dev, hid * 4l * nb, VHZ_UP)
@@ -378,28 +351,55 @@ def private rd_ffn_sets(var L : RLayer; b1, b3, b2 : int64; f1, f3, f2 : int) {
         fixed_array(hid * 4l * nb, hid * 4l * nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),
         fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ))
     //! the fused form: gate and up q8 planes over the Q8_0 x, the hidden row's Q8_0 quants out (DASLLAMA_VK_FUSE=0 keeps the three dispatches)
-    L.gu_on = f1 == int(KqFmt.q8) && f3 == int(KqFmt.q8) && !kq_sb(f2) && vk_fuse_on() && (vk_fuse_bisect_bits() & FUSE_BX_GU) == 0l
+    L.gu_on = rd_gu_fits(f1, f3, f2) && vk_fuse_on() && (vk_fuse_bisect_bits() & FUSE_BX_GU) == 0l
     if (L.gu_on) {
-        verify(ensure_q8_gemv_gu_cls(), "vk decode: the fused gate-up class rail must engage on a live device")
-        L.s_gu = set_q8_gemv_gu_cls(fixed_array(p1.wq, p1.ws, p3.wq, p3.ws, g_rd.xq_dev, g_rd.xs_dev, g_gpu.hq_dev, g_gpu.hs_dev),
-            fixed_array(p1.wqb, p1.wsb, p3.wqb, p3.wsb, dim * nb, (dim / 32l) * 4l * nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),
-            fixed_array(0u, 0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_HQ, VHZ_HQ))
+        verify(ensure_q8_gemv_gu_n1_cls(), "vk decode: the fused gate-up class rail must engage on a live device")
+        let gu = rd_gu_binds(L)
+        L.s_gu = set_q8_gemv_gu_n1_cls(gu.bufs, gu.sizes, gu.bits)
     }
     // down GEMV -> ffnout
-    L.s_down = arena_gemv_set(f2, p2, L.m_down.buf, META_BYTES, 0u, g_gpu.hq_dev, g_gpu.hs_dev, hid * nb, (hid / 32l) * 4l * nb, VHZ_HQ, g_rd.ffnout_dev, dim * 4l * nb, VHZ_FFO)
-    // addrms next: x += ffnout, xb = rms_att[l+1]|final — the fused twin also serves the last layer's final norm
-    L.s_addr_next = set_cls_ar(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev),
-        fixed_array(dim * 4l * nb, dim * 4l * nb, g_rd.norms_bytes, dim * 4l * nb),
-        fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB))
+    L.s_down = gemv_planes_set(f2, p2, L.m_down.buf, META_BYTES, 0u, g_gpu.hq_dev, g_gpu.hs_dev, hid * nb, (hid / 32l) * 4l * nb, VHZ_HQ, g_rd.ffnout_dev, dim * 4l * nb, VHZ_FFO)
 }
 
-def private rd_quant_xb_set() : VkDescriptorSet {
+def private rd_gu_fits(f1, f3, f2 : int) : bool => f1 == int(KqFmt.q8) && f3 == int(KqFmt.q8) && !kq_sb(f2)
+
+def private rd_wo_ar_fits(L : RLayer) : bool => !L.recurrent && L.fo == int(KqFmt.q8) && L.rq_ffn_stamp == RqStamp.rq
+
+def private rd_down_ar_fits(L : RLayer) : bool => has_dense_triple(L) && L.f2 == int(KqFmt.q8) && (L.ple || L.rq_next_stamp == RqStamp.rq)
+
+def private rd_gu_binds(L : RLayer) : tuple<bufs : uint64[8]; sizes : int64[8]; bits : uint[8]> {
     let dim = g_rd.dim
     let nb = g_rd.nb
-    return set_rq_cls(fixed_array(g_rd.xb_dev, g_rd.xq_dev, g_rd.xs_dev),
-        fixed_array(dim * 4l * nb, dim * nb, (dim / 32l) * 4l * nb),
-        fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
+    let p1 = arena_planes(L.f1, L.b1)
+    let p3 = arena_planes(L.f3, L.b3)
+    return (bufs = fixed_array(p1.wq, p1.ws, p3.wq, p3.ws, g_rd.xq_dev, g_rd.xs_dev, g_gpu.hq_dev, g_gpu.hs_dev),
+        sizes = fixed_array(p1.wqb, p1.wsb, p3.wqb, p3.wsb, dim * nb, (dim / 32l) * 4l * nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+        bits = fixed_array(0u, 0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_HQ, VHZ_HQ))
 }
+
+def private rd_topk_binds() : tuple<bufs : uint64[8]; sizes : int64[8]; bits : uint[8]> {
+    let slots_bytes = MAX_ROUTED_SLOTS * 4l
+    return (bufs = fixed_array(g_rd.moe_dlog_dev, g_rd.moe_meta1_dev, g_rd.moe_meta3_dev, g_rd.moe_meta2_dev, g_rd.moe_dw_dev, g_rd.moe_ds_dev, g_rd.moe_rb_dev, g_rd.moe_eidx_dev),
+        sizes = fixed_array(g_rd.ner * 4l * g_rd.nb, META_BYTES, META_BYTES, META_BYTES, slots_bytes, g_rd.moe_ds_bytes, g_rd.moe_rb_bytes, slots_bytes),
+        bits = fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, 0u, 0u, VHZ_MRT))
+}
+
+def private rd_quant_xb_set() : VkDescriptorSet => rd_rq_set(g_rd.xb_dev, VHZ_XB, g_rd.xq_dev, g_rd.xs_dev, VHZ_XQ, g_rd.dim)
+
+def private rd_rq_set(src : uint64; sbit : uint; q, s : uint64; qbit : uint; n : int64) : VkDescriptorSet {
+    let nb = g_rd.nb
+    return set_rq_cls(fixed_array(src, q, s), fixed_array(n * 4l * nb, n * nb, (n / 32l) * 4l * nb), fixed_array(sbit, qbit, qbit))
+}
+
+def private rd_ar_set(add : uint64; abit : uint; out : uint64; obit : uint) : VkDescriptorSet {
+    let rb = g_rd.dim * 4l * g_rd.nb
+    return set_cls_ar(fixed_array(g_rd.x_dev, add, g_rd.norms_dev, out), fixed_array(rb, rb, g_rd.norms_bytes, rb), fixed_array(VHZ_X, abit, 0u, obit))
+}
+
+def private rd_quad_all(L : RLayer; pred : block<(f : int) : bool>) : bool
+    => invoke(pred, L.fq) && (L.kv_shared || (invoke(pred, L.fk) && (L.vfk || invoke(pred, L.fv)))) && invoke(pred, L.fo)
+
+def private rd_triple_all(f1, f3, f2 : int; pred : block<(f : int) : bool>) : bool => invoke(pred, f1) && invoke(pred, f3) && invoke(pred, f2)
 
 def private rd_layer_slot(l : int64) {
     while (long_length(g_rd.layers) <= l) {
@@ -463,15 +463,15 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
         let dt = g_rd.kv_dt
         let kv16 = rd_kv16()
         let kvq = rd_kv_block_codec()
-        verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq() && ensure_q8_actrq_cls() && ensure_q8_gemv_gu_cls()
+        verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq_b() && ensure_q8_actrq_cls() && ensure_q8_gemv_gu_n1_cls()
             && (kv16 ? ensure_rope_kv_f16_cls() : ensure_rope_kv_cls())
-            && (kvq || da_attn_stamp_ensure(dt, false, false))
-            && (kvq || g_rd.has_sinks || !da_slab_is_g2(L.kv_mul) || da_attn_stamp_ensure(dt, false, true))
+            && (kvq || da_attn_stamp_ensure(dt, DaSlab.four))
+            && (kvq || da_slab_of(g_rd.has_sinks, L.kv_mul) != DaSlab.two || da_attn_stamp_ensure(dt, DaSlab.two))
             && (!g_rd.qk_norm || (ensure_qk_rms_cls()
                 && (kv16 ? ensure_qkn_rope_f16_cls() : ensure_qkn_rope_cls())))
             && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls()))
-            && gemv_cls_ensure(fq) && (L.kv_shared || (gemv_cls_ensure(fk) && (L.vfk || gemv_cls_ensure(fv)))) && gemv_cls_ensure(fo)
-            && gemv_cls_ensure(f1) && gemv_cls_ensure(f3) && gemv_cls_ensure(f2),
+            && (rd_quad_all(L) $(f) => gemv_cls_ensure(f))
+            && (rd_triple_all(f1, f3, f2) $(f) => gemv_cls_ensure(f)),
             "vk decode: the class rails must engage on a live device")
         L.m_q = rd_meta(); L.m_k = rd_meta(); L.m_v = rd_meta(); L.m_wo = rd_meta()
         L.s_quant_xb = rd_quant_xb_set()
@@ -535,16 +535,14 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
         }
         // the partials ride the attention-out bit (written and read within the pass); the folded requant lands in the wo feed's aq/as
         let partbytes = (g_rd.attn_cnt_off + g_rd.n_heads * nb) * 4l
-        L.s_attn = da_attn_stamp_set(dt, g_rd.has_sinks,
+        L.s_attn = da_attn_stamp_set(dt, da_slab_of(g_rd.has_sinks, L.kv_mul),
             fixed_array(g_rd.q_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.attn_dev, tok, g_rd.attn_part_dev, g_rd.aq_dev, g_rd.as_dev, g_rd.sinks_dev),
             fixed_array(qplane, mirbytes, mirbytes, qd * 4l * nb, TOK_META_BYTES * nb, partbytes, qd * nb, (qd / 32l) * 4l * nb, g_rd.sinks_bytes),
             fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u, VHZ_ATT, VHZ_AQ, VHZ_AQ, 0u))
         // quantize attn -> aq/as
-        L.s_quant_at = set_rq_cls(fixed_array(g_rd.attn_dev, g_rd.aq_dev, g_rd.as_dev),
-            fixed_array(qd * 4l * nb, qd * nb, (qd / 32l) * 4l * nb),
-            fixed_array(VHZ_ATT, VHZ_AQ, VHZ_AQ))
+        L.s_quant_at = rd_rq_set(g_rd.attn_dev, VHZ_ATT, g_rd.aq_dev, g_rd.as_dev, VHZ_AQ, qd)
         // wo GEMV -> xb2
-        L.s_wo = arena_gemv_set(fo, po, L.m_wo.buf, META_BYTES, 0u, g_rd.aq_dev, g_rd.as_dev, qd * nb, (qd / 32l) * 4l * nb, VHZ_AQ, g_rd.xb2_dev, dim * 4l * nb, VHZ_XB2)
+        L.s_wo = gemv_planes_set(fo, po, L.m_wo.buf, META_BYTES, 0u, g_rd.aq_dev, g_rd.as_dev, qd * nb, (qd / 32l) * 4l * nb, VHZ_AQ, g_rd.xb2_dev, dim * 4l * nb, VHZ_XB2)
     }
 }
 
@@ -595,7 +593,7 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     r.wscale = wscale
     r.router_bias = !empty(rbias)
     r.exps_bias = !empty(gbias)
-    if (!(ensure_router_gemv_cls() && ensure_topk_cls() && ensure_cls_ar_comb()
+    if (!(ensure_router_gemv_cls() && ensure_topk_n_cls() && ensure_cls_ar_comb()
             && ensure_q8_actrq_cls() && ensure_q8k_actrq_cls() && (!r.exps_bias || ensure_q8_actrq_b_cls()))) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the routing class rails declined on this device\n")
         return false
@@ -605,8 +603,7 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     if (r.router_bias) {
         assert(long_length(rbias) == n_moe * ne, "vk_rdec_prepare_moe: the router-bias plane is not [n_moe x ne]")
         r.moe_rb_bytes = long_length(rbias) * 4l
-        r.moe_rb_dev = make_device_buf(r.moe_rb_bytes)
-        upload_region_at(r.moe_rb_dev, 0l, unsafe(addr<uint8 const?>(rbias[0])), r.moe_rb_bytes)
+        r.moe_rb_dev = rd_upload_rows(rbias)
     }
     r.moe_gb_dev = r.dummy
     r.moe_ub_dev = r.dummy
@@ -614,11 +611,7 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     if (!r.exps_bias) {   //! the combine reads the down-bias row unconditionally at row base 0: a biasless model binds a ZERO ROW of the model dim, never the one-float dummy
         r.moe_db_bytes = dim * 4l
         r.moe_db_dev = make_device_buf(r.moe_db_bytes)
-        var zrow : array<float>
-        zrow |> reserve(dim)
-        zrow |> resize(dim)
-        upload_region_at(r.moe_db_dev, 0l, unsafe(addr<uint8 const?>(zrow[0])), r.moe_db_bytes)
-        delete zrow
+        upload_zeros(r.moe_db_dev, 0l, r.moe_db_bytes)
     } else {
         assert(long_length(gbias) == n_moe * ne * nfe && long_length(ubias) == n_moe * ne * nfe && long_length(dbias) == n_moe * ne * dim,
             "vk_rdec_prepare_moe: the expert-bias planes are not [n_moe x ne x nfe] / [n_moe x ne x dim]")
@@ -628,27 +621,17 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
         }
         r.moe_gub_bytes = long_length(gbias) * 4l
         r.moe_db_bytes = long_length(dbias) * 4l
-        r.moe_gb_dev = make_device_buf(r.moe_gub_bytes)
-        r.moe_ub_dev = make_device_buf(r.moe_gub_bytes)
-        r.moe_db_dev = make_device_buf(r.moe_db_bytes)
-        upload_region_at(r.moe_gb_dev, 0l, unsafe(addr<uint8 const?>(gbias[0])), r.moe_gub_bytes)
-        upload_region_at(r.moe_ub_dev, 0l, unsafe(addr<uint8 const?>(ubias[0])), r.moe_gub_bytes)
-        upload_region_at(r.moe_db_dev, 0l, unsafe(addr<uint8 const?>(dbias[0])), r.moe_db_bytes)
+        r.moe_gb_dev = rd_upload_rows(gbias)
+        r.moe_ub_dev = rd_upload_rows(ubias)
+        r.moe_db_dev = rd_upload_rows(dbias)
     }
     r.moe_eidx_dev = make_device_buf(MAX_ROUTED_SLOTS * 4l)
     r.router_bytes = long_length(router) * 4l
     assert(r.router_bytes == n_moe * r.ner * dim * 4l, "vk_rdec_prepare_moe: the router plane is not [n_moe x ner x dim]")
-    r.router_dev = make_device_buf(r.router_bytes)
-    upload_region_at(r.router_dev, 0l, unsafe(addr<uint8 const?>(router[0])), r.router_bytes)
+    r.router_dev = rd_upload_rows(router)
     if (f16g_shape_ok(dim)) {   //! the f16 mirror serves the cm2 route's window GEMM alone
-        var half : array<float16>
-        half |> reserve(long_length(router))
-        half |> resize(long_length(router))
-        cvt_f32_to_f16(unsafe(addr<uint16?>(half[0])), unsafe(addr(router[0])), long_length(router))
-        r.router16_bytes = long_length(half) * 2l
-        r.router16_dev = make_device_buf(r.router16_bytes)
-        upload_region_at(r.router16_dev, 0l, unsafe(addr<uint8 const?>(half[0])), r.router16_bytes)
-        delete half
+        r.router16_bytes = long_length(router) * 2l
+        r.router16_dev = rd_upload_rows_f16(router)
     }
     if (empty(dscale)) {
         r.moe_ds_dev = r.dummy
@@ -656,27 +639,13 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     } else {
         assert(long_length(dscale) == n_moe * ne, "vk_rdec_prepare_moe: the down-scale plane is not [n_moe x ne]")
         r.moe_ds_bytes = long_length(dscale) * 4l
-        r.moe_ds_dev = make_device_buf(r.moe_ds_bytes)
-        upload_region_at(r.moe_ds_dev, 0l, unsafe(addr<uint8 const?>(dscale[0])), r.moe_ds_bytes)
+        r.moe_ds_dev = rd_upload_rows(dscale)
     }
-    r.moe_ident_dev = make_device_buf(MAX_ROUTED_SLOTS * 4l)
-    unsafe {
-        var mp = reinterpret<uint?>(g_gpu.staging.mapped)
-        for (i in range64(MAX_ROUTED_SLOTS)) {
-            mp[i] = uint(i)
-        }
-        staged_upload(r.moe_ident_dev, 0l, MAX_ROUTED_SLOTS * 4l)
-    }
+    r.moe_ident_dev = make_ramp_buf(MAX_ROUTED_SLOTS, 0l)
     let nb = r.nb
     if (g_rd_has_host_layers) {
         r.ones_dev = make_device_buf(MAX_ROUTED_SLOTS * 4l)
-        unsafe {
-            var mp = reinterpret<float?>(g_gpu.staging.mapped)
-            for (i in range64(MAX_ROUTED_SLOTS)) {
-                mp[i] = 1.0
-            }
-            staged_upload(r.ones_dev, 0l, MAX_ROUTED_SLOTS * 4l)
-        }
+        upload_fill(r.ones_dev, 0l, MAX_ROUTED_SLOTS * 4l, F32_ONE_WORD)
         r.hacc_dev = make_device_buf(dim * 4l * nb)
         r.hx_host = make_host_buf(dim * 4l * nb, false, [cached = true])
         r.hlog_host = make_host_buf(r.ner * 4l * nb, false, [cached = true])
@@ -720,7 +689,7 @@ def private rd_moe_sets(var L : RLayer) {
     let pe1 = arena_planes(L.fe1, L.be1)
     let pe3 = arena_planes(L.fe3, L.be3)
     let pe2 = arena_planes(L.fe2, L.be2)
-    verify(gemv_cls_ensure(L.fe1) && gemv_cls_ensure(L.fe3) && gemv_cls_ensure(L.fe2)
+    verify((rd_triple_all(L.fe1, L.fe3, L.fe2) $(f) => gemv_cls_ensure(f))
         && (kq_sb(L.fe1) ? ensure_cls_q8k_rq() : ensure_cls_dn_rq())
         && (kq_sb(L.fe2) ? ensure_q8k_actrq_cls() : ensure_q8_actrq_cls()),
         "vk decode: the expert class rails must engage on a live device")
@@ -734,8 +703,7 @@ def private rd_moe_sets(var L : RLayer) {
     let edn_bytes = nb * k * dim * 4l
     let slots_bytes = MAX_ROUTED_SLOTS * 4l
     if (L.xe_own) {
-        L.s_quant_xe = set_rq_cls(fixed_array(g_rd.xb_dev, g_rd.moe_xq_dev, g_rd.moe_xs_dev),
-            fixed_array(rows_bytes, xq_bytes, xs_bytes), fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
+        L.s_quant_xe = rd_rq_set(g_rd.xb_dev, VHZ_XB, g_rd.moe_xq_dev, g_rd.moe_xs_dev, VHZ_XQ, dim)
     }
     L.pre2_fused = L.moe_g4 && L.xe_own && vk_fuse_on()
     if (L.pre2_fused) {
@@ -746,11 +714,10 @@ def private rd_moe_sets(var L : RLayer) {
     L.rtn_fused = L.moe_g4 && vk_fuse_on()
     L.s_router = set_router_gemv_cls(fixed_array(g_rd.router_dev, L.rtn_fused ? g_rd.x_dev : g_rd.xb_dev, g_rd.moe_dlog_dev, g_rd.norms_dev),
         fixed_array(g_rd.router_bytes, rows_bytes, g_rd.ner * 4l * nb, g_rd.norms_bytes), fixed_array(0u, L.rtn_fused ? VHZ_X : VHZ_XB, VHZ_MRT, 0u))
-    L.s_topk = set_topk_cls(fixed_array(g_rd.moe_dlog_dev, g_rd.moe_meta1_dev, g_rd.moe_meta3_dev, g_rd.moe_meta2_dev, g_rd.moe_dw_dev, g_rd.moe_ds_dev, g_rd.moe_rb_dev, g_rd.moe_eidx_dev),
-        fixed_array(g_rd.ner * 4l * nb, META_BYTES, META_BYTES, META_BYTES, slots_bytes, g_rd.moe_ds_bytes, g_rd.moe_rb_bytes, slots_bytes),
-        fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, 0u, 0u, VHZ_MRT))
-    L.s_egate = arena_gemv_set(L.fe1, pe1, g_rd.moe_meta1_dev, META_BYTES, VHZ_MRT, xqb, xsb, xq_bytes, xs_bytes, VHZ_XQ, g_rd.egate_dev, egu_bytes, VHZ_GATE)
-    L.s_eup = arena_gemv_set(L.fe3, pe3, g_rd.moe_meta3_dev, META_BYTES, VHZ_MRT, xqb, xsb, xq_bytes, xs_bytes, VHZ_XQ, g_rd.eup_dev, egu_bytes, VHZ_UP)
+    let tk = rd_topk_binds()
+    L.s_topk = set_topk_n_cls(tk.bufs, tk.sizes, tk.bits)
+    L.s_egate = gemv_planes_set(L.fe1, pe1, g_rd.moe_meta1_dev, META_BYTES, VHZ_MRT, xqb, xsb, xq_bytes, xs_bytes, VHZ_XQ, g_rd.egate_dev, egu_bytes, VHZ_GATE)
+    L.s_eup = gemv_planes_set(L.fe3, pe3, g_rd.moe_meta3_dev, META_BYTES, VHZ_MRT, xqb, xsb, xq_bytes, xs_bytes, VHZ_XQ, g_rd.eup_dev, egu_bytes, VHZ_UP)
     if (g_rd.exps_bias) {   //! the biased act: the picks' gate and up bias rows join before the activation
         L.s_eact = set_q8_actrq_b_cls(fixed_array(g_rd.egate_dev, g_rd.eup_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.moe_gb_dev, g_rd.moe_ub_dev, g_rd.moe_eidx_dev),
             fixed_array(egu_bytes, egu_bytes, BATCH_HQ_BYTES, BATCH_HS_BYTES, g_rd.moe_gub_bytes, g_rd.moe_gub_bytes, slots_bytes),
@@ -776,7 +743,7 @@ def private rd_moe_sets(var L : RLayer) {
             fixed_array(pe1.wqb, pe1.wsb, META_BYTES, dim, (dim / 32l) * 4l, k * nfe * 4l, META_BYTES, g_rd.moe_gub_bytes, g_rd.moe_gub_bytes, MAX_ROUTED_SLOTS * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
             fixed_array(0u, 0u, VHZ_MRT, VHZ_XQ, VHZ_XQ, VHZ_GATE, VHZ_MRT, 0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ))
     }
-    L.s_edown = arena_gemv_set(L.fe2, pe2, g_rd.moe_meta2_dev, META_BYTES, VHZ_MRT, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES, VHZ_HQ, g_rd.edown_dev, edn_bytes, VHZ_MDN)
+    L.s_edown = gemv_planes_set(L.fe2, pe2, g_rd.moe_meta2_dev, META_BYTES, VHZ_MRT, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES, VHZ_HQ, g_rd.edown_dev, edn_bytes, VHZ_MDN)
     L.edown_sum = L.moe_g4 && L.fe2 == int(KqFmt.q51) && vk_fuse_on() && ensure_q51_gemv_sum_cls()
     if (L.edown_sum) {
         L.s_edown_sum = set_q51_gemv_sum_cls(fixed_array(pe2.wq, pe2.ws, g_rd.moe_meta2_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.edown_dev, g_rd.moe_dw_dev),
@@ -830,17 +797,11 @@ def private rd_ensure_comb_sets {
 //! a layer without a dense triple (an MoE layer with no shared expert): the tail sets the token
 //! command encodes around the routed block - the FFN norm, its requant and the residual step
 def private rd_tail_sets_bare(var L : RLayer; f1, f3, f2 : int) {
-    let dim = g_rd.dim
-    let nb = g_rd.nb
     L.b1 = -1l; L.b3 = -1l; L.b2 = -1l
     L.f1 = f1; L.f3 = f3; L.f2 = f2
-    L.s_addr_ffn = set_cls_ar(fixed_array(g_rd.x_dev, g_rd.xb2_dev, g_rd.norms_dev, g_rd.xb_dev),
-        fixed_array(dim * 4l * nb, dim * 4l * nb, g_rd.norms_bytes, dim * 4l * nb),
-        fixed_array(VHZ_X, VHZ_XB2, 0u, VHZ_XB))
+    L.s_addr_ffn = rd_ar_set(g_rd.xb2_dev, VHZ_XB2, g_rd.xb_dev, VHZ_XB)
     L.s_quant_xb2 = rd_quant_xb_set()
-    L.s_addr_next = set_cls_ar(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev),
-        fixed_array(dim * 4l * nb, dim * 4l * nb, g_rd.norms_bytes, dim * 4l * nb),
-        fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB))
+    L.s_addr_next = rd_ar_set(g_rd.ffnout_dev, VHZ_FFO, g_rd.xb_dev, VHZ_XB)
     rd_unmake_sets()
 }
 
@@ -947,12 +908,12 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
     let nvh = g_rd.dn_nvh
     let ds = g_rd.dn_ds
     let anykq = kq_sb(f1) || kq_sb(f2)
-    verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq() && ensure_q8_actrq_cls()
+    verify(ensure_cls_dn_rq() && ensure_cls_ar() && ensure_cls_ar_rq_b() && ensure_q8_actrq_cls()
         && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls()))
         && (!kq_sb(fout) || ensure_cls_q8k_rq())
-        && gemv_cls_ensure(fqkv) && gemv_cls_ensure(fz) && gemv_cls_ensure(fout)
+        && (rd_triple_all(fqkv, fz, fout) $(f) => gemv_cls_ensure(f))
         && (g_rd.dn_ba_f32 || gemv_cls_ensure(int(KqFmt.q8)))
-        && gemv_cls_ensure(f1) && gemv_cls_ensure(f3) && gemv_cls_ensure(f2),
+        && (rd_triple_all(f1, f3, f2) $(f) => gemv_cls_ensure(f)),
         "vk decode: the class rails must engage on a live device")
     L.m_dnqkv = rd_meta(); L.m_dnz = rd_meta(); L.m_dnout = rd_meta()
     L.s_quant_xb = rd_quant_xb_set()
@@ -992,11 +953,9 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
     let step_bits = fixed_array(VHZ_DNP | VHZ_DNZ, VHZ_DNST, VHZ_DNSM, VHZ_DNO, VHZ_DNO, 0u, VHZ_DNO)
     L.s_dnstep = g_rd.dn_zsig ? set_dn_step_sig_cls(step_bufs, step_bytes, step_bits) : set_dn_step_cls(step_bufs, step_bytes, step_bits)
     if (kq_sb(fout)) {
-        L.s_quant_dno = set_rq_cls(fixed_array(g_rd.dn_of_dev, g_rd.dn_oq_dev, g_rd.dn_os_dev),
-            fixed_array(DND_OQ_BYTES * 4l * nb, DND_OQ_BYTES * nb, DND_OS_BYTES * nb),
-            fixed_array(VHZ_DNO, VHZ_DNO, VHZ_DNO))
+        L.s_quant_dno = rd_rq_set(g_rd.dn_of_dev, VHZ_DNO, g_rd.dn_oq_dev, g_rd.dn_os_dev, VHZ_DNO, DND_OQ_BYTES)
     }
-    L.s_dnout = arena_gemv_set(fout, pout, L.m_dnout.buf, META_BYTES, 0u, g_rd.dn_oq_dev, g_rd.dn_os_dev, di * nb, (di / 32l) * 4l * nb, VHZ_DNO, g_rd.xb2_dev, dim * 4l * nb, VHZ_XB2)
+    L.s_dnout = gemv_planes_set(fout, pout, L.m_dnout.buf, META_BYTES, 0u, g_rd.dn_oq_dev, g_rd.dn_os_dev, di * nb, (di / 32l) * 4l * nb, VHZ_DNO, g_rd.xb2_dev, dim * 4l * nb, VHZ_XB2)
     if (b1 >= 0l) {
         rd_ffn_sets(L, b1, b3, b2, f1, f3, f2)
     } else {
@@ -1013,8 +972,7 @@ def vk_rdec_upload_bias(rows : array<float>) {
     }
     assert(g_rd != null, "vk_rdec_upload_bias before prepare")
     g_rd.bias_bytes = long_length(rows) * 4l
-    g_rd.bias_dev = make_device_buf(g_rd.bias_bytes)
-    upload_region_at(g_rd.bias_dev, 0l, unsafe(addr<uint8 const?>(rows[0])), g_rd.bias_bytes)
+    g_rd.bias_dev = rd_upload_rows(rows)
     g_rd.has_bias = true
 }
 
@@ -1030,14 +988,13 @@ def vk_rdec_upload_sinks(rows : array<float>) : bool {
     }
     let khr = !cm2_fa_on()
     let stamps_ok = (fa_stamp_pair_ensure(khr, 64l, false, false, true, true)
-        && da_attn_stamp_ensure(g_rd.kv_dt, true, false))
+        && da_attn_stamp_ensure(g_rd.kv_dt, DaSlab.sink))
     if (!stamps_ok) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: an attention-sink kernel class declined on this device, the resident driver declines\n")
         return false
     }
     g_rd.sinks_bytes = long_length(rows) * 4l
-    g_rd.sinks_dev = make_device_buf(g_rd.sinks_bytes)
-    upload_region_at(g_rd.sinks_dev, 0l, unsafe(addr<uint8 const?>(rows[0])), g_rd.sinks_bytes)
+    g_rd.sinks_dev = rd_upload_rows(rows)
     g_rd.has_sinks = true
     return true
 }
@@ -1057,14 +1014,20 @@ def vk_rdec_upload_dn_ba(rows : array<float>) {
         return
     }
     assert(g_rd != null && g_rd.hybrid, "vk_rdec_upload_dn_ba before a hybrid prepare")
+    g_rd.dn_ba_bytes = long_length(rows) * 2l
+    g_rd.dn_ba_dev = rd_upload_rows_f16(rows)
+}
+
+def private rd_upload_rows(rows : array<float>) : uint64 => dev_upload(rows)
+
+def private rd_upload_rows_f16(rows : array<float>) : uint64 {
     var half : array<float16>
     half |> reserve(long_length(rows))
     half |> resize(long_length(rows))
     cvt_f32_to_f16(unsafe(addr<uint16?>(half[0])), unsafe(addr(rows[0])), long_length(rows))
-    g_rd.dn_ba_bytes = long_length(half) * 2l
-    g_rd.dn_ba_dev = make_device_buf(g_rd.dn_ba_bytes)
-    upload_region_at(g_rd.dn_ba_dev, 0l, unsafe(addr<uint8 const?>(half[0])), g_rd.dn_ba_bytes)
+    let dev = dev_upload(half)
     delete half
+    return dev
 }
 
 def private rd_dn_advance_parity(slot : int64) {
@@ -1132,9 +1095,7 @@ def vk_rdec_set_ple_layer(l, bgate, bproj : int64; fmt : int) {
     L.m_pg = rd_meta(); L.m_pp = rd_meta()
     let all = g_rd.n_layers * ple
     // the residual row as it is -> xq/xs (the gate reads the unnormed stream)
-    L.s_ple_x = set_rq_cls(fixed_array(g_rd.x_dev, g_rd.xq_dev, g_rd.xs_dev),
-        fixed_array(dim * 4l * nb, dim * nb, (dim / 32l) * 4l * nb),
-        fixed_array(VHZ_X, VHZ_XQ, VHZ_XQ))
+    L.s_ple_x = rd_rq_set(g_rd.x_dev, VHZ_X, g_rd.xq_dev, g_rd.xs_dev, VHZ_XQ, dim)
     // gate GEMV [dim -> ple] into pleg (the FFN gate plane's hazard bit, free by then)
     L.s_ple_gate = arena_gemv_set_x(fmt, pg, L.m_pg.buf, g_rd.pleg_dev, ple * 4l * nb, VHZ_GATE)
     // gelu(gate) x this layer's side-input row -> hq/hs (the row's layer base rides the push; the side rows ride the cos plane's bit)
@@ -1142,8 +1103,8 @@ def vk_rdec_set_ple_layer(l, bgate, bproj : int64; fmt : int) {
         fixed_array(ple * 4l * nb, all * 4l * nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),
         fixed_array(VHZ_GATE, VHZ_COS, VHZ_HQ, VHZ_HQ))
     // proj GEMV [ple -> dim] into ffnout (the residual step's add partner slot)
-    L.s_ple_proj = arena_gemv_set(fmt, pp, L.m_pp.buf, META_BYTES, 0u, g_gpu.hq_dev, g_gpu.hs_dev, ple * nb, (ple / 32l) * 4l * nb, VHZ_HQ, g_rd.ffnout_dev, dim * 4l * nb, VHZ_FFO)
-    L.ple_fused = vk_fuse_on() && fmt == int(KqFmt.q8) && ple <= 256l && ple % 32l == 0l && ensure_cls_ar_rq() && ensure_q8_gemv_pleact_cls()
+    L.s_ple_proj = gemv_planes_set(fmt, pp, L.m_pp.buf, META_BYTES, 0u, g_gpu.hq_dev, g_gpu.hs_dev, ple * nb, (ple / 32l) * 4l * nb, VHZ_HQ, g_rd.ffnout_dev, dim * 4l * nb, VHZ_FFO)
+    L.ple_fused = vk_fuse_on() && fmt == int(KqFmt.q8) && ple <= 256l && ple % 32l == 0l && ensure_cls_ar_rq_b() && ensure_q8_gemv_pleact_cls()
     if (L.ple_fused) {
         L.s_ple_ar_rq = set_ar_rq_stamp(RqStamp.rq, g_rd.ffnout_dev, VHZ_FFO, g_rd.xq_dev, g_rd.xs_dev)
         L.s_ple_pa = set_q8_gemv_pleact_cls(fixed_array(pp.wq, pp.ws, g_rd.pleg_dev, g_rd.ple_dev, g_rd.ffnout_dev),
@@ -1168,7 +1129,7 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<
     g_rd.cls_cap = cap
     g_rd.nsupp = long_length(supp)
     unsafe {
-        verify(ensure_cls_ar() && ensure_cls_ar_rq() && ensure_cls_dn_rq() && gemv_cls_ensure(cls_fmt)
+        verify(ensure_cls_ar() && ensure_cls_ar_rq_b() && ensure_cls_dn_rq() && gemv_cls_ensure(cls_fmt)
             && (!kq_sb(cls_fmt) || ensure_cls_q8k_rq())
             && (!rd_cls_epi_on() || ensure_cls_epi()) && ensure_cls_argmax_part() && ensure_cls_argmax_fin(),
             "vk decode: the class rails must engage on a live device")
@@ -1179,32 +1140,25 @@ def vk_rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<
             var supp_bytes = 256l
             if (g_rd.nsupp > 0l) {
                 supp_bytes = g_rd.nsupp * 4l
-                g_rd.supp_dev = make_device_buf(supp_bytes)
-                var sp = reinterpret<uint?>(g_gpu.staging.mapped)
-                for (i in range64(g_rd.nsupp)) {
-                    sp[i] = uint(supp[i])
+                g_rd.supp_dev = make_staged_buf(supp_bytes) $(var words : uint?) {
+                    for (i in range64(g_rd.nsupp)) {
+                        words[i] = uint(supp[i])
+                    }
                 }
-                staged_upload(g_rd.supp_dev, 0l, supp_bytes)
             }
             g_rd.cls_epi_set = set_cls_epi(fixed_array(g_rd.logits_dev, g_rd.nsupp > 0l ? g_rd.supp_dev : g_rd.dummy),
                 fixed_array(vocab * 4l * nb, supp_bytes), fixed_array(VHZ_LOG, 0u))
         }
         // prologue (class): xb = rms_att[0](x), add off — the aa slot binds x itself (add_on=0 never reads it)
-        g_rd.s_prologue = set_cls_ar(fixed_array(g_rd.x_dev, g_rd.x_dev, g_rd.norms_dev, g_rd.xb_dev),
-            fixed_array(dim * 4l * nb, dim * 4l * nb, g_rd.norms_bytes, dim * 4l * nb),
-            fixed_array(VHZ_X, VHZ_X, 0u, VHZ_XB))
+        g_rd.s_prologue = rd_ar_set(g_rd.x_dev, VHZ_X, g_rd.xb_dev, VHZ_XB)
         rd_unmake_sets()
         // quantize final xb
         g_rd.s_quant_final = rd_quant_xb_set()
         // cls GEMV (class): a device one-pair regions buffer replaces the device-filled meta
         // (device for the same reason — every vocab-row subgroup reads it)
-        g_rd.cls_regions_dev = make_device_buf(CLS_META_BYTES)
-        var mp = reinterpret<uint?>(g_gpu.staging.mapped)
-        mp[0] = uint(arena_local_blk(cls_block))
-        mp[1] = 0u
-        staged_upload(g_rd.cls_regions_dev, 0l, CLS_META_BYTES)
+        g_rd.cls_regions_dev = cls_regions_buf(uint(arena_local_blk(cls_block)))
         let pc = arena_planes(cls_fmt, cls_block)
-        g_rd.cls_set = arena_gemv_set(cls_fmt, pc, g_rd.cls_regions_dev, CLS_META_BYTES, 0u, g_rd.xq_dev, g_rd.xs_dev, dim * nb, (dim / 32l) * 4l * nb, VHZ_XQ, g_rd.logits_dev, vocab * 4l * nb, VHZ_LOG)
+        g_rd.cls_set = gemv_planes_set(cls_fmt, pc, g_rd.cls_regions_dev, CLS_META_BYTES, 0u, g_rd.xq_dev, g_rd.xs_dev, dim * nb, (dim / 32l) * 4l * nb, VHZ_XQ, g_rd.logits_dev, vocab * 4l * nb, VHZ_LOG)
         g_rd.cls_fmt_marker = cls_fmt
         rd_invalidate_token()   // the recorded chain references the replaced cls/prologue sets
         g_rd.ready = true
@@ -1217,7 +1171,7 @@ def private rd_hc_gemv_set(blk : int64; var meta : HostBuf; xq, xs : uint64; n :
     meta = rd_meta()
     fill_gemv_regions(meta, blk)
     let nb = g_rd.nb
-    return arena_gemv_set(int(KqFmt.q8), arena_planes(int(KqFmt.q8), blk), meta.buf, META_BYTES, 0u, xq, xs, n * nb, (n / Q8_BLOCK_ELEMS) * 4l * nb, xbit, y, d * 4l * nb, ybit)
+    return gemv_planes_set(int(KqFmt.q8), arena_planes(int(KqFmt.q8), blk), meta.buf, META_BYTES, 0u, xq, xs, n * nb, (n / Q8_BLOCK_ELEMS) * 4l * nb, xbit, y, d * 4l * nb, ybit)
 }
 
 //! The hyper-connection mixers' planes (`RdecSetHcFn`): the wide residual and every site's device state.
@@ -1283,12 +1237,11 @@ def vk_rdec_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_row
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the hyper-connection inject rows ({n_sites} sites x {hc} x {hcd}) pass the device's storage range {vk_max_storage_range()}\n")
         return false
     }
-    r.hcinjw_dev = make_device_buf(r.hcinjw_bytes)
-    upload_region_at(r.hcinjw_dev, 0l, unsafe(addr<uint8 const?>(inject_rows[0])), r.hcinjw_bytes)
+    r.hcinjw_dev = rd_upload_rows(inject_rows)
     r.s_hc_norm = set_hc_norm_cls(fixed_array(r.hcres_dev, r.hcxn_dev, r.hcn_dev), fixed_array(hcd * 4l * nb, hcd * 4l * nb, r.hcn_bytes), fixed_array(VHZ_X, VHZ_XB2, 0u))
     r.s_hc_inj = set_router_gemv_cls(fixed_array(r.hcinjw_dev, r.hcxn_dev, r.hcinj_dev, r.norms_dev),
         fixed_array(r.hcinjw_bytes, hcd * 4l * nb, hc * 4l * nb, r.norms_bytes), fixed_array(0u, VHZ_XB2, VHZ_MRT, 0u))
-    r.s_hc_xnrq = set_rq_cls(fixed_array(r.hcxn_dev, r.hcxnq_dev, r.hcxns_dev), fixed_array(hcd * 4l * nb, hcd * nb, (hcd / Q8_BLOCK_ELEMS) * 4l * nb), fixed_array(VHZ_XB2, VHZ_XQ, VHZ_XQ))
+    r.s_hc_xnrq = rd_rq_set(r.hcxn_dev, VHZ_XB2, r.hcxnq_dev, r.hcxns_dev, VHZ_XQ, hcd)
     r.s_hc_lorq = set_hc_lo_rq_cls(fixed_array(r.hclo_dev, r.hcloq_dev, r.hclos_dev), fixed_array(lr * 4l * nb, lr * nb, (lr / Q8_BLOCK_ELEMS) * 4l * nb), fixed_array(VHZ_GATE, VHZ_HQ, VHZ_HQ))
     r.s_hc_mix = set_hc_mix_cls(fixed_array(r.hcxn_dev, r.hcgate_dev, r.xb_dev), fixed_array(hcd * 4l * nb, hcd * 4l * nb, dim * 4l * nb), fixed_array(VHZ_XB2, VHZ_UP, VHZ_XB))
     r.s_hc_comb_a = set_hc_comb_cls(fixed_array(r.hcres_dev, r.xb2_dev, r.hcinj_dev, r.dummy, r.dummy),
@@ -1312,10 +1265,7 @@ def vk_rdec_set_hc(hc, lr, n_sites : int64; norm_rows : array<float>; inject_row
         r.head_cat_host = make_host_buf((dim + hcd) * 4l, false, [cached = true])
         r.hcatq_dev = make_device_buf(2l * dim * hc * nb)
         r.hcats_dev = make_device_buf((2l * dim * hc / Q8_BLOCK_ELEMS) * 4l * nb)
-        r.hc_draft_cmd |> resize(long_length(r.head_draft_cmd))
-        for (ri in range64(long_length(r.hc_draft_cmd))) {
-            r.hc_draft_cmd[ri] = alloc_cmd()
-        }
+        alloc_cmds(r.hc_draft_cmd, long_length(r.head_draft_cmd), true)
     }
     r.hc_sites |> resize(n_sites + 1l + (r.hc_nextn ? 1l : 0l))
     for (si in range64(long_length(r.hc_sites))) {
@@ -1344,10 +1294,7 @@ def private rd_host_segments_setup(var r : RDec) {
     }
     r.seg_layer |> push(-1l)
     r.cmd_seg |> clear()
-    r.cmd_seg |> reserve(r.regions * r.nseg)
-    for (_i in range64(r.regions * r.nseg)) {
-        r.cmd_seg |> push(alloc_cmd())
-    }
+    alloc_cmds(r.cmd_seg, r.regions * r.nseg, true)
     r.seg_recorded |> clear()
     r.seg_recorded |> resize(r.regions)
 }
@@ -1401,7 +1348,7 @@ def vk_rdec_set_ngram(l, ind, nrows, kern, dil, bkey, bval : int64; norm_rows : 
     r.plew_dev = make_device_buf(r.plew_bytes)
     upload_region_at(r.plew_dev, 0l, unsafe(addr<uint8 const?>(norm_rows[0])), 3l * hcd * 4l)
     upload_region_at(r.plew_dev, 3l * hcd * 4l, unsafe(addr<uint8 const?>(conv_taps[0])), hcd * kern * 4l)
-    r.s_ple_rq = set_rq_cls(fixed_array(r.ple_emb_dev, r.pleq_dev, r.ples_dev), fixed_array(ind * 4l * nb, ind * nb, (ind / Q8_BLOCK_ELEMS) * 4l * nb), fixed_array(VHZ_COS, VHZ_XQ, VHZ_XQ))
+    r.s_ple_rq = rd_rq_set(r.ple_emb_dev, VHZ_COS, r.pleq_dev, r.ples_dev, VHZ_XQ, ind)
     r.s_ple_key = rd_hc_gemv_set(bkey, r.m_ple_key, r.pleq_dev, r.ples_dev, ind, VHZ_XQ, r.plekey_dev, hcd, VHZ_Q)
     r.s_ple_val = rd_hc_gemv_set(bval, r.m_ple_val, r.pleq_dev, r.ples_dev, ind, VHZ_XQ, r.pleval_dev, dim, VHZ_ATT)
     r.s_ple_gate = set_ple_gate_cls(fixed_array(r.plekey_dev, r.hcres_dev, r.pleval_dev, r.plegated_dev, r.plehist_dev, r.plew_dev, r.tok_meta.buf, r.plepanel_dev),
@@ -1428,13 +1375,7 @@ def vk_rdec_ngram_ring(var host : float?; up : bool) {
         upload_region_at(g_rd.plehist_dev, off, unsafe(reinterpret<uint8 const?>(host)), bytes)
     } else {
         var stage = make_host_buf(bytes, false, [cached = true])
-        cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            vhz_dep(raw, h, VHZ_DNSM, 0u, true)
-            cmd_copy_range(raw, g_rd.plehist_dev, off, stage.buf, 0l, bytes)
-        }
-        unsafe {
-            memcpy(reinterpret<void?>(host), stage.mapped, bytes)
-        }
+        readback_range(g_rd.plehist_dev, VHZ_DNSM, off, stage, host, bytes)
         destroy_host_buf(stage)
     }
 }
@@ -1453,12 +1394,10 @@ def private rd_encode_hc_mix(raw : VkCommandBuffer; var h : VkHaz; site : int64;
         enc_router_gemv_cls(raw, h, g_rd.s_hc_inj, pci, hc)
     }
     rq_enc(raw, h, g_rd.s_hc_xnrq, false, 0l, hcd * nrows)
-    var pcd = GemvArgs(n = uint(hcd), d = uint(lr), nreg = 1u, ybase = 0u, ncols = uint(nrows), ystride = uint(lr))
-    gemv_enc(int(KqFmt.q8), raw, h, S.s_down, pcd, lr)
+    rd_gemv(int(KqFmt.q8), raw, h, S.s_down, hcd, lr, uint(nrows), uint(lr))
     var pcl = HcLoArgs(nblk = uint(lr * nrows / Q8_BLOCK_ELEMS), inv_hc = 1.0 / float(hc))
     enc_hc_lo_rq_cls(raw, h, g_rd.s_hc_lorq, pcl, rq_wgs(false, lr * nrows))
-    var pcu = GemvArgs(n = uint(lr), d = uint(hcd), nreg = 1u, ybase = 0u, ncols = uint(nrows), ystride = uint(hcd))
-    gemv_enc(int(KqFmt.q8), raw, h, S.s_up, pcu, hcd)
+    rd_gemv(int(KqFmt.q8), raw, h, S.s_up, lr, hcd, uint(nrows), uint(hcd))
     var pcm = HcMixArgs(dim = uint(dim), hc = uint(hc), rows = uint(nrows))
     enc_hc_mix_cls(raw, h, g_rd.s_hc_mix, pcm, (dim * nrows + 255l) / 256l)
 }
@@ -1479,10 +1418,8 @@ def private rd_encode_hc_side(raw : VkCommandBuffer; var h : VkHaz; nrows : int6
     let hcd = hc * dim
     let ind = g_rd.ngram_ind
     rq_enc(raw, h, g_rd.s_ple_rq, false, 0l, ind * nrows)
-    var pck = GemvArgs(n = uint(ind), d = uint(hcd), nreg = 1u, ybase = 0u, ncols = uint(nrows), ystride = uint(hcd))
-    gemv_enc(int(KqFmt.q8), raw, h, g_rd.s_ple_key, pck, hcd)
-    var pcv = GemvArgs(n = uint(ind), d = uint(dim), nreg = 1u, ybase = 0u, ncols = uint(nrows), ystride = uint(dim))
-    gemv_enc(int(KqFmt.q8), raw, h, g_rd.s_ple_val, pcv, dim)
+    rd_gemv(int(KqFmt.q8), raw, h, g_rd.s_ple_key, ind, hcd, uint(nrows), uint(hcd))
+    rd_gemv(int(KqFmt.q8), raw, h, g_rd.s_ple_val, ind, dim, uint(nrows), uint(dim))
     let win = nrows > 1l
     var pcg = PleGateArgs(dim = uint(dim), hc = uint(hc), nrows = uint(g_rd.ngram_nrows), rows = win ? uint(nrows) : 0u, pos0 = win ? PLE_POS_TOK : 0u, eps = g_rd.eps, inv_sq = 1.0 / sqrt(float(dim)))
     enc_ple_gate_cls(raw, h, g_rd.s_ple_gate, pcg, hc * nrows)
@@ -1497,8 +1434,11 @@ def private rd_encode_hc_side(raw : VkCommandBuffer; var h : VkHaz; nrows : int6
 //! one stack serves both the window's expert chain and the decode hit chain
 def private rd_hot_stack(base : int64; fmt : int; slots, blocks, elems : int64) : int {
     let bb = arena_block_bytes(fmt)
-    return make_stack_shell(base, slots * elems, fmt, slots * blocks * bb.wq, slots * blocks * bb.ws)
+    return rd_hot_stack(base, fmt, slots, elems, (wq = blocks * bb.wq, ws = blocks * bb.ws))
 }
+
+def private rd_hot_stack(base : int64; fmt : int; slots, elems : int64; pb : tuple<wq : int64; ws : int64>) : int
+    => make_stack_shell(base, slots * elems, fmt, slots * pb.wq, slots * pb.ws)
 
 def private rd_hot_planes(si : int) : tuple<wq : uint64; ws : uint64; wqb : int64; wsb : int64>
     => (wq = g_gpu.stacks[si].wqbuf, ws = g_gpu.stacks[si].wsbuf, wqb = g_gpu.stacks[si].wqbytes, wsb = ws_range(si))
@@ -1516,19 +1456,15 @@ def private rd_hot_shared(slots : int64) {
     r.hot_meta3 = rd_meta()
     r.hot_meta2 = rd_meta()
     r.hot_w = make_host_buf(slots_bytes, true)
-    r.hot_ident1_dev = make_device_buf(slots_bytes)
+    r.hot_ident1_dev = make_ramp_buf(MAX_ROUTED_SLOTS, 1l)
     unsafe {
         var wp = reinterpret<float?>(r.hot_w.mapped)
-        var mp = reinterpret<uint?>(g_gpu.staging.mapped)
         for (i in range64(MAX_ROUTED_SLOTS)) {
             wp[i] = 0.0
-            mp[i] = uint(i + 1l)
         }
-        staged_upload(r.hot_ident1_dev, 0l, slots_bytes)
     }
     ensure_ffn_state()
-    r.s_hot_rq = set_rq_cls(fixed_array(r.xb_dev, r.moe_xq_dev, r.moe_xs_dev),
-        fixed_array(dim * 4l * nb, dim * nb, (dim / 32l) * 4l * nb), fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
+    r.s_hot_rq = rd_rq_set(r.xb_dev, VHZ_XB, r.moe_xq_dev, r.moe_xs_dev, VHZ_XQ, dim)
     r.s_hot_act = set_actrq_cls(fixed_array(r.egate_dev, r.eup_dev, g_gpu.hq_dev, g_gpu.hs_dev),
         fixed_array(egu_bytes, egu_bytes, BATCH_HQ_BYTES, BATCH_HS_BYTES), fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ))
     r.s_hot_comb = set_combine_cls(fixed_array(r.hacc_dev, r.hot_ident1_dev, r.hot_w.buf, r.edown_dev),
@@ -1556,7 +1492,7 @@ def vk_rdec_hot_layer(l, slots : int64; f1, f3, f2 : int) : tuple<base : int64; 
         to_log(LOG_INFO, "dasLLAMA vulkan resident: the hot expert pool skips layer {l} (formats {f1}/{f3}/{f2}, {k} picks a step: a biased stack, a mixed gate and up feed, a row off its block lattice, or more picks than the region records or the hidden plane hold)\n")
         return none
     }
-    if (!(gemv_cls_ensure(f1) && gemv_cls_ensure(f3) && gemv_cls_ensure(f2) && (kq_sb(f1) ? ensure_cls_q8k_rq() : ensure_cls_dn_rq())
+    if (!((rd_triple_all(f1, f3, f2) $(f) => gemv_cls_ensure(f)) && (kq_sb(f1) ? ensure_cls_q8k_rq() : ensure_cls_dn_rq())
             && (kq_sb(f2) ? ensure_q8k_actrq_cls() : ensure_q8_actrq_cls()) && ensure_combine_cls())) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the hot expert pool's class rails declined on this device (layer {l}, formats {f1}/{f3}/{f2})\n")
         return none
@@ -1577,11 +1513,11 @@ def vk_rdec_hot_layer(l, slots : int64; f1, f3, f2 : int) : tuple<base : int64; 
     let p2 = rd_hot_planes(H.st2)
     let xq_bytes = dim * nb
     let xs_bytes = (dim / 32l) * 4l * nb
-    H.s_gate = arena_gemv_set(f1, p1, g_rd.hot_meta1.buf, META_BYTES, 0u, g_rd.moe_xq_dev, g_rd.moe_xs_dev, xq_bytes, xs_bytes, VHZ_XQ,
+    H.s_gate = gemv_planes_set(f1, p1, g_rd.hot_meta1.buf, META_BYTES, 0u, g_rd.moe_xq_dev, g_rd.moe_xs_dev, xq_bytes, xs_bytes, VHZ_XQ,
         g_rd.egate_dev, nb * k * nfe * 4l, VHZ_GATE)
-    H.s_up = arena_gemv_set(f3, p3, g_rd.hot_meta3.buf, META_BYTES, 0u, g_rd.moe_xq_dev, g_rd.moe_xs_dev, xq_bytes, xs_bytes, VHZ_XQ,
+    H.s_up = gemv_planes_set(f3, p3, g_rd.hot_meta3.buf, META_BYTES, 0u, g_rd.moe_xq_dev, g_rd.moe_xs_dev, xq_bytes, xs_bytes, VHZ_XQ,
         g_rd.eup_dev, nb * k * nfe * 4l, VHZ_UP)
-    H.s_down = arena_gemv_set(f2, p2, g_rd.hot_meta2.buf, META_BYTES, 0u, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES, VHZ_HQ,
+    H.s_down = gemv_planes_set(f2, p2, g_rd.hot_meta2.buf, META_BYTES, 0u, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES, VHZ_HQ,
         g_rd.edown_dev, nb * k * dim * 4l, VHZ_MDN)
     H.cmds |> resize(nb * k + 1l)
     H.recorded |> resize(nb * k + 1l)
@@ -1625,76 +1561,37 @@ def private rd_record_hot(l, nhit : int64; nrows : int64 = 1l) {
     var H & = unsafe(g_rd.hot_layers[l])
     let dim = g_rd.dim
     let nfe = g_rd.nfe
-    var raw = alloc_cmd()
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
-    var h : VkHaz
-    rq_enc(raw, h, g_rd.s_hot_rq, H.f1, dim * nrows)
-    var pcg = GemvArgs(n = uint(dim), d = uint(nfe), nreg = uint(nhit), ybase = 0u)
-    gemv_enc(H.f1, raw, h, H.s_gate, pcg, nhit * nfe)
-    gemv_enc(H.f3, raw, h, H.s_up, pcg, nhit * nfe)
-    let dkq = kq_sb(H.f2)
-    var pca = ActArgs(nelem = uint(nhit * nfe), act = act_code(g_rd.act_oai, g_rd.is_gelu), nblk = uint(nhit * nfe / kq_unit(dkq)))
-    actrq_enc(raw, h, g_rd.s_hot_act, dkq, pca, nhit * nfe)
-    var pcd = GemvArgs(n = uint(nfe), d = uint(dim), nreg = uint(nhit), ybase = 0u)
-    gemv_enc(H.f2, raw, h, H.s_down, pcd, nhit * dim)
-    vk_check(vkEndCommandBuffer(raw), null)
-    H.cmds[nhit] = raw
+    var cmd = alloc_cmd()
+    record_cmd(cmd, false) $(raw : VkCommandBuffer; var h : VkHaz) {
+        rq_enc(raw, h, g_rd.s_hot_rq, H.f1, dim * nrows)
+        enc_routed_ffn(raw, h, H.f1, H.f3, H.f2, H.s_gate, H.s_up, g_rd.s_hot_act, H.s_down, dim, nfe, nhit, act_code(g_rd.act_oai, g_rd.is_gelu))
+    }
+    H.cmds[nhit] = cmd
     H.recorded[nhit] = true
 }
 
 //! The hits of layer `l`'s routed step (`RdecHotSubmitFn`): their region records and weights written, the hit chain submitted unwaited.
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool")]
 def vk_rdec_hot_submit(l, nhit : int64; slots : int64 const?; w : float const?) {
-    var H & = unsafe(g_rd.hot_layers[l])
+    let H & = unsafe(g_rd.hot_layers[l])
     assert(H.on && nhit <= g_rd.k, "vk_rdec_hot_submit: a layer with no pool, or more hits than routed slots")
-    unsafe {
-        var m1 = reinterpret<uint?>(g_rd.hot_meta1.mapped)
-        var m3 = reinterpret<uint?>(g_rd.hot_meta3.mapped)
-        var m2 = reinterpret<uint?>(g_rd.hot_meta2.mapped)
-        var wp = reinterpret<float?>(g_rd.hot_w.mapped)
-        for (j in range64(g_rd.k)) {
-            wp[j] = j < nhit ? w[j] : 0.0
-        }
-        for (j in range64(nhit)) {
-            m1[j * 2l] = uint(slots[j] * H.blk1)
-            m1[j * 2l + 1l] = 0u
-            m3[j * 2l] = uint(slots[j] * H.blk3)
-            m3[j * 2l + 1l] = 0u
-            m2[j * 2l] = uint(slots[j] * H.blk2)
-            m2[j * 2l + 1l] = uint(j * H.xnb2)
-        }
-    }
+    rd_hot_stage(H, nhit, g_rd.k, slots, w)
     return if (nhit == 0l)
-    if (!H.recorded[nhit]) {
-        rd_record_hot(l, nhit)
-    }
-    submit_nofence(H.cmds[nhit])
-    g_rd.hot_submits++
+    rd_hot_go(l, nhit, 1l)
     g_rd.hot_hits += nhit
 }
 
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]
-def vk_rdec_hot_submit_rows(l, nrows : int64; slots : int64 const?; w : float const?) {
-    var H & = unsafe(g_rd.hot_layers[l])
-    let k = g_rd.k
-    let nreg = nrows * k
-    if (!H.on) {
-        panic("vk_rdec_hot_submit_rows: layer {l} has no pool")
-    }
-    if (nreg > MAX_ROUTED_SLOTS || nrows > g_rd.nb) {
-        panic("vk_rdec_hot_submit_rows: {nrows} rows x {k} = {nreg} regions against {MAX_ROUTED_SLOTS}, the planes hold {g_rd.nb} rows")
-    }
+def private rd_hot_stage(H : RdHotLayer; nreg, wlen : int64; slots : int64 const?; w : float const?) {
     unsafe {
         var m1 = reinterpret<uint?>(g_rd.hot_meta1.mapped)
         var m3 = reinterpret<uint?>(g_rd.hot_meta3.mapped)
         var m2 = reinterpret<uint?>(g_rd.hot_meta2.mapped)
         var wp = reinterpret<float?>(g_rd.hot_w.mapped)
-        for (j in range64(MAX_ROUTED_SLOTS)) {
+        for (j in range64(wlen)) {
             wp[j] = j < nreg ? w[j] : 0.0
         }
         for (j in range64(nreg)) {
-            let xrow = uint((j / k) * H.xnb1)
+            let xrow = uint((j / g_rd.k) * H.xnb1)
             m1[j * 2l] = uint(slots[j] * H.blk1)
             m1[j * 2l + 1l] = xrow
             m3[j * 2l] = uint(slots[j] * H.blk3)
@@ -1703,11 +1600,30 @@ def vk_rdec_hot_submit_rows(l, nrows : int64; slots : int64 const?; w : float co
             m2[j * 2l + 1l] = uint(j * H.xnb2)
         }
     }
+}
+
+def private rd_hot_go(l, nreg, nrows : int64) {
+    var H & = unsafe(g_rd.hot_layers[l])
     if (!H.recorded[nreg]) {
         rd_record_hot(l, nreg, nrows)
     }
     submit_nofence(H.cmds[nreg])
     g_rd.hot_submits++
+}
+
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]
+def vk_rdec_hot_submit_rows(l, nrows : int64; slots : int64 const?; w : float const?) {
+    let H & = unsafe(g_rd.hot_layers[l])
+    let k = g_rd.k
+    let nreg = nrows * k
+    if (!H.on) {
+        panic("vk_rdec_hot_submit_rows: layer {l} has no pool")
+    }
+    if (nreg > MAX_ROUTED_SLOTS || nrows > g_rd.nb) {
+        panic("vk_rdec_hot_submit_rows: {nrows} rows x {k} = {nreg} regions against {MAX_ROUTED_SLOTS}, the planes hold {g_rd.nb} rows")
+    }
+    rd_hot_stage(H, nreg, MAX_ROUTED_SLOTS, slots, w)
+    rd_hot_go(l, nreg, nrows)
     var hits = 0l
     for (j in range64(nreg)) {
         hits += unsafe(w[j]) != 0.0 ? 1l : 0l
@@ -1734,6 +1650,61 @@ def private rd_encode_routed_sum(raw : VkCommandBuffer; var h : VkHaz; l : int64
     }
 }
 
+[arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
+def private rd_encode_host_cut(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; nrows : int64; stamp : string) {
+    var pcr = RouterArgs(ne = uint(g_rd.ner), dim = uint(g_rd.dim), woff = uint(L.router_slot * g_rd.ner * g_rd.dim), obase = 0u,
+        norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ncols = uint(nrows))
+    enc_router_gemv_cls(raw, h, L.s_router, pcr, g_rd.ner)
+    if (!empty(stamp)) {
+        rd_ts(raw, stamp)
+    }
+    host_land(raw, h, g_rd.xb_dev, g_rd.hx_host, g_rd.moe_dlog_dev, g_rd.hlog_host, nrows)
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool")]
+def private rd_host_resume(var raw : VkCommandBuffer&; var next : VkCommandBuffer; var h : VkHaz; l, nrows : int64) {
+    h = cmd_reopen(raw, next)
+    raw = next
+    rd_encode_routed_sum(raw, h, l, nrows)
+}
+
+def private rd_encode_hc_layer(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nrows : int64; seq, fuse_qkr : bool; nlfin : int64) {
+    let dim = g_rd.dim
+    let ncols = uint(nrows)
+    rd_encode_hc_mix(raw, h, 2l * l, false, nrows)
+    rq_enc(raw, h, L.s_quant_xb, L.recurrent ? L.fqkv : L.fq, dim * nrows)
+    if (L.recurrent) {
+        rd_encode_dn_head(raw, h, L, nrows, ncols, seq)
+    } else {
+        rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, rd_split_pieces()), nrows, ncols, 0)
+    }
+    rd_encode_hc_scatter(raw, h, L, false, nrows)
+    rd_encode_hc_mix(raw, h, 2l * l + 1l, false, nrows)
+    rq_enc(raw, h, L.s_quant_xb2, L.f1, dim * nrows)
+    if (has_dense_triple(L)) {
+        rd_encode_ffn(raw, h, L, l, nlfin, nrows, ncols, 0)
+    }
+}
+
+def private rd_encode_hc_cat_eh(raw : VkCommandBuffer; var h : VkHaz; nrows : int64; src_dev : uint64; pfx : string) {
+    let dim = g_rd.dim
+    let hc = g_rd.hc_n
+    let rowb = dim * 4l
+    for (i in range64(nrows)) {
+        for (c in range64(hc)) {
+            let cat_row = i * hc + c
+            if (src_dev != g_rd.head_cat_dev || cat_row != 0l) {
+                cmd_copy_range(raw, src_dev, i * rowb, g_rd.head_cat_dev, cat_row * 2l * rowb, rowb)
+            }
+            cmd_copy_range(raw, g_rd.hcxn_dev, cat_row * rowb, g_rd.head_cat_dev, cat_row * 2l * rowb + rowb, rowb)
+        }
+    }
+    rq_enc(raw, h, g_rd.head_s_cat_rq, g_rd.head_eh_fmt, 2l * dim * hc * nrows)
+    rd_ts(raw, "{pfx}cat")
+    rd_gemv(g_rd.head_eh_fmt, raw, h, g_rd.head_s_eh_hc, 2l * dim, dim, uint(hc * nrows), uint(dim))
+    rd_ts(raw, "{pfx}eh")
+}
+
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]
 def private rd_record_hc_segments_n(nrows : int64; seq : bool; var segs : array<VkCommandBuffer>; seg0 : int64) {
     rd_fill_gemv_regions_all()
@@ -1746,11 +1717,7 @@ def private rd_record_hc_segments_n(nrows : int64; seq : bool; var segs : array<
     var seg = 0l
     var raw = segs[seg0]
     unsafe {
-        let rf : VkCommandBufferResetFlags
-        vk_check(vkResetCommandBuffer(raw, rf), null)
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
+        var h = cmd_open(raw, true)
         vhz_dep(raw, h, 0u, VHZ_X, true)
         cmd_copy_whole(raw, g_rd.x_host.buf, g_rd.x_dev, dim * 4l * nrows)
         vhz_dep(raw, h, 0u, VHZ_COS, true)
@@ -1767,34 +1734,12 @@ def private rd_record_hc_segments_n(nrows : int64; seq : bool; var segs : array<
             if (g_rd.ngram && l == g_rd.ngram_layer) {
                 rd_encode_hc_side(raw, h, nrows)
             }
-            rd_encode_hc_mix(raw, h, 2l * l, false, nrows)
-            rq_enc(raw, h, L.s_quant_xb, L.recurrent ? L.fqkv : L.fq, dim * nrows)
-            if (L.recurrent) {
-                rd_encode_dn_head(raw, h, L, nrows, ncols, seq)
-            } else {
-                rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, rd_split_pieces()), nrows, ncols, 0)
-            }
-            rd_encode_hc_scatter(raw, h, L, false, nrows)
-            rd_encode_hc_mix(raw, h, 2l * l + 1l, false, nrows)
-            rq_enc(raw, h, L.s_quant_xb2, L.f1, dim * nrows)
-            if (has_dense_triple(L)) {
-                rd_encode_ffn(raw, h, L, l, nlfin, nrows, ncols, 0)
-            }
+            rd_encode_hc_layer(raw, h, L, l, nrows, seq, fuse_qkr, nlfin)
             if (L.moe) {
                 verify(L.experts_host, "vk decode: the hyper-connection chain serves routed experts on the host alone")
-                var pcr = RouterArgs(ne = uint(g_rd.ner), dim = uint(dim), woff = uint(L.router_slot * g_rd.ner * dim), obase = 0u,
-                    norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ncols = ncols)
-                enc_router_gemv_cls(raw, h, L.s_router, pcr, g_rd.ner)
-                vhz_dep(raw, h, VHZ_XB | VHZ_MRT, 0u, true)
-                cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hx_host.buf, dim * 4l * nrows)
-                cmd_copy_whole(raw, g_rd.moe_dlog_dev, g_rd.hlog_host.buf, g_rd.ner * 4l * nrows)
-                vk_check(vkEndCommandBuffer(raw), null)
+                rd_encode_host_cut(raw, h, L, nrows, "")
                 seg++
-                raw = segs[seg0 + seg]
-                vk_check(vkResetCommandBuffer(raw, rf), null)
-                vk_check(vkBeginCommandBuffer(raw, begin), null)
-                h = VkHaz()
-                rd_encode_routed_sum(raw, h, l, nrows)
+                rd_host_resume(raw, segs[seg0 + seg], h, l, nrows)
             }
             rd_encode_hc_scatter(raw, h, L, true, nrows)
         }
@@ -1805,7 +1750,7 @@ def private rd_record_hc_segments_n(nrows : int64; seq : bool; var segs : array<
         if (nrows > 1l) {
             rd_encode_hc_verify_warm(raw, h, nrows)
         }
-        vk_check(vkEndCommandBuffer(raw), null)
+        cmd_close(raw)
     }
     verify(seg + 1l == g_rd.nseg, "vk decode: the split command's segments must be the host-expert layers plus one")
 }
@@ -1848,21 +1793,17 @@ def private rd_encode_hc_verify_warm(raw : VkCommandBuffer; var h : VkHaz; nrows
     var pcn = HcNormArgs(dim = uint(dim), hc = uint(hc), woff = uint(g_rd.hc_hnorm_row * hcd), row0 = 0u, eps = g_rd.eps)
     enc_hc_norm_cls(raw, h, g_rd.s_hc_norm_vsrc, pcn, hc * nrows)
     vhz_dep(raw, h, VHZ_XB2, VHZ_XB, true)
-    for (i in range64(nrows)) {
-        for (c in range64(hc)) {
-            let cat_row = i * hc + c
-            cmd_copy_range(raw, g_rd.xb2_dev, i * rowb, g_rd.head_cat_dev, cat_row * 2l * rowb, rowb)
-            cmd_copy_range(raw, g_rd.hcxn_dev, cat_row * rowb, g_rd.head_cat_dev, cat_row * 2l * rowb + rowb, rowb)
-        }
-    }
-    rq_enc(raw, h, g_rd.head_s_cat_rq, g_rd.head_eh_fmt, 2l * dim * hc * nrows)
-    rd_ts(raw, "t:warm_cat")
-    var pceh = GemvArgs(n = uint(2l * dim), d = uint(dim), nreg = 1u, ybase = 0u, ncols = uint(hc * nrows), ystride = uint(dim))
-    gemv_enc(g_rd.head_eh_fmt, raw, h, g_rd.head_s_eh_hc, pceh, dim)
-    rd_ts(raw, "t:warm_eh")
+    rd_encode_hc_cat_eh(raw, h, nrows, g_rd.xb2_dev, "t:warm_")
     rd_encode_hc_mix(raw, h, 2l * g_rd.n_layers, false, nrows)
     rq_enc(raw, h, L.s_quant_xb, L.fq, dim * nrows)
     rd_encode_attn_head(raw, h, L, g_rd.n_layers, rd_head_fuse_qkr(), rd_norm_final(), rd_layer_pieces(L, rd_split_pieces()), nrows, uint(nrows), 0, true, "t:warm_")
+}
+
+//! the one-row command's TokMeta row at `pos` with `cnt` cached positions (the window chain's: its first position and its rows): the region rides the push, so `mirbase` is 0
+def rd_tok_row(pos, cnt : int64) {
+    var tm = unsafe(reinterpret<TokMeta?>(g_rd.tok_meta.mapped))
+    unsafe(tm[0]) = TokMeta(pos = uint(pos), cnt = uint(cnt), parity = g_rd.hybrid ? uint(g_rd.dn_parity[g_rd.region]) : 0u,
+        mirbase = 0u, dnslot = uint(g_rd.region))
 }
 
 //! The split token (`RdecTokenSplitFn`); `side` is the n-gram side input's gathered row, empty on a model without one.
@@ -1887,48 +1828,26 @@ def vk_rdec_token_split(x : array<float>; cossin : array<float>; side : array<fl
             assert(long_length(side) >= g_rd.ngram_ind, "vk_rdec_token_split: the side input's row is short")
             memcpy(g_rd.ple_emb_host.mapped, addr<void?>(side[0]), g_rd.ngram_ind * 4l)
         }
-        var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
-        tm.pos = uint(pos)
-        tm.cnt = uint(cnt)
-        tm.parity = g_rd.hybrid ? uint(g_rd.dn_parity[g_rd.region]) : 0u
-        tm.mirbase = 0u
-        tm.dnslot = uint(g_rd.region)
+        rd_tok_row(pos, cnt)
         let t1 = ref_time_ticks()
-        var host_us = 0l
-        for (seg in range64(g_rd.nseg - 1l)) {
-            var cmd = g_rd.cmd_seg[seg0 + seg]
-            submit_wait(cmd)
-            let th = ref_time_ticks()
-            invoke(experts, g_rd.seg_layer[seg], reinterpret<float const?>(g_rd.hx_host.mapped), reinterpret<float const?>(g_rd.hlog_host.mapped), reinterpret<float?>(g_rd.hacc_host.mapped))
-            host_us += int64(get_time_usec(th))
+        let host_us = rd_run_host_segments(g_rd.cmd_seg, seg0) $(l : int64) {
+            invoke(experts, l, reinterpret<float const?>(g_rd.hx_host.mapped), reinterpret<float const?>(g_rd.hlog_host.mapped), reinterpret<float?>(g_rd.hacc_host.mapped))
         }
         var last = g_rd.cmd_seg[seg0 + g_rd.nseg - 1l]
-        let t2 = ref_time_ticks()
-        rd_submit_land(last, 1l, picks_only)
-        rd_wait_land()
-        let t3 = ref_time_ticks()
+        let t = rd_submit_wait(last, 1l, picks_only, prof)
         picked = rd_land_one(pick_only, logits)
         if (prof) {
-            rdq_host_add(g_rdq_token_ledger, ts0, t1, t2, t3, ref_time_ticks())
+            rdq_host_add(g_rdq_token_ledger, ts0, t1, t.t1, t.t3, ref_time_ticks())
             g_rdq_token_ledger.host_experts_us += double(host_us)
         }
     }
-    g_rd.tokens_served++
-    if (guard) {
-        rd_logits_guard(unsafe(reinterpret<float const?>(g_rd.logits_host.mapped)), g_rd.vocab)
-    }
-    if (g_rd.tokens_served == 8l) {
-        rd_warmup_check(int64(get_time_usec(ts0)))
-    }
+    rd_token_close(ts0, guard)
     if (prof) {
         g_rdq_token_ledger.wall_us += double(get_time_usec(ts0))
         g_rdq_token_ledger.count++
         if (g_rdq_token_ledger.count % 32l == 0l) {
             rdq_host_report(g_rdq_token_ledger, "token", 1l)
         }
-    }
-    if (g_rd.hybrid) {
-        rd_dn_advance_parity(g_rd.region)
     }
     return picked
 }
@@ -1975,7 +1894,7 @@ def vk_rdec_set_head(beh : int64; feh : int; bq, bk, bv, bo, b1, b3, b2 : int64;
         g_rd.head_s_cat_rq = set_rq_cls(fixed_array(g_rd.head_cat_dev, g_rd.hcatq_dev, g_rd.hcats_dev),
             fixed_array(cat_bytes, xq_bytes, xs_bytes),
             fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
-        g_rd.head_s_eh_hc = arena_gemv_set(feh, arena_planes(feh, beh), g_rd.head_m_eh.buf, META_BYTES, 0u, g_rd.hcatq_dev, g_rd.hcats_dev, xq_bytes, xs_bytes, VHZ_XQ,
+        g_rd.head_s_eh_hc = gemv_planes_set(feh, arena_planes(feh, beh), g_rd.head_m_eh.buf, META_BYTES, 0u, g_rd.hcatq_dev, g_rd.hcats_dev, xq_bytes, xs_bytes, VHZ_XQ,
             g_rd.hcres_dev, g_rd.hc_n * dim * 4l * nb, VHZ_X)
         g_rd.head_s_emb_ar = set_cls_ar(fixed_array(g_rd.hemb_dev, g_rd.hemb_dev, g_rd.norms_dev, g_rd.xb2_dev),
             fixed_array(dim * 4l * nb, dim * 4l * nb, g_rd.norms_bytes, dim * 4l * nb), fixed_array(VHZ_X, VHZ_X, 0u, VHZ_XB2))
@@ -1984,7 +1903,7 @@ def vk_rdec_set_head(beh : int64; feh : int; bq, bk, bv, bo, b1, b3, b2 : int64;
             fixed_array(cat_bytes, xq_bytes, xs_bytes),
             fixed_array(VHZ_XB, VHZ_XQ, VHZ_XQ))
     }
-    g_rd.head_s_eh = arena_gemv_set(feh, arena_planes(feh, beh), g_rd.head_m_eh.buf, META_BYTES, 0u, g_rd.xq_dev, g_rd.xs_dev, xq_bytes, xs_bytes, VHZ_XQ,
+    g_rd.head_s_eh = gemv_planes_set(feh, arena_planes(feh, beh), g_rd.head_m_eh.buf, META_BYTES, 0u, g_rd.xq_dev, g_rd.xs_dev, xq_bytes, xs_bytes, VHZ_XQ,
         g_rd.x_dev, dim * 4l * nb, VHZ_X)
     g_rd.head_s_hx_ar = set_cls_ar(fixed_array(g_rd.x_dev, g_rd.x_dev, g_rd.norms_dev, g_rd.head_cat_dev),
         fixed_array(dim * 4l * nb, dim * 4l * nb, g_rd.norms_bytes, cat_bytes),
@@ -2052,12 +1971,18 @@ def private rd_form_at(pos : int64) : RdForm {
 //! the wide twin: the same chain at RD_SPLIT_WIDE_PIECES into `cmd_wide`, its stamp names kept apart (ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split)
 [cold_path]
 def private rd_record_wide_twin {
-    var split : RdqStamps
-    rd_take_stamps(split, g_rdq_n)
-    rd_encode_token(g_rd.cmd_wide[g_rd.region], 1l, rd_wide_pieces())
-    rd_take_stamps(g_rdq_wide, g_pfq_n)
-    rd_put_back_stamps(split)
+    rd_with_form_stamps() {
+        rd_encode_token(g_rd.cmd_wide[g_rd.region], 1l, rd_wide_pieces())
+        rd_take_stamps(g_rdq_wide, g_pfq_n)
+    }
     g_rd.tok_wide_recorded[g_rd.region] = true
+}
+
+def private rd_with_form_stamps(rec : block<() : void>) {
+    var one : RdqStamps
+    rd_take_stamps(one, g_rdq_n)
+    invoke(rec)
+    rd_put_back_stamps(one)
 }
 
 //! the recorder's working list moved into a form's own slot, with the stamp count `n` (`g_pfq_n` right after the form's encode,
@@ -2146,8 +2071,7 @@ def private set_ar_rq_stamp(stamp : RqStamp; add : uint64; aclass : uint; xq, xs
     let bufs = fixed_array(g_rd.x_dev, add, g_rd.norms_dev, xq, xs)
     let sizes = fixed_array(xbytes, xbytes, norms_bytes, dim * rows, (dim / 32l) * 4l * rows)
     let bits = fixed_array(VHZ_X, aclass, 0u, VHZ_XQ, VHZ_XQ)
-    if (stamp == RqStamp.rq) return set_cls_ar_rq(bufs, sizes, bits)
-    if (stamp == RqStamp.rq_b) return set_cls_ar_rq_b(bufs, sizes, bits)
+    if (stamp == RqStamp.rq || stamp == RqStamp.rq_b) return set_cls_ar_rq_b(bufs, sizes, bits)
     if (stamp == RqStamp.rqk) return set_cls_ar_rqk(bufs, sizes, bits)
     let bufs_x = fixed_array(g_rd.x_dev, add, g_rd.norms_dev, xq, xs, g_rd.xb_dev)
     let sizes_x = fixed_array(xbytes, xbytes, norms_bytes, dim * rows, (dim / 32l) * 4l * rows, xbytes)
@@ -2157,8 +2081,7 @@ def private set_ar_rq_stamp(stamp : RqStamp; add : uint64; aclass : uint; xq, xs
 }
 
 def private ensure_ar_rq_stamp(stamp : RqStamp) : bool {
-    if (stamp == RqStamp.rq) return ensure_cls_ar_rq()
-    if (stamp == RqStamp.rq_b) return ensure_cls_ar_rq_b()
+    if (stamp == RqStamp.rq || stamp == RqStamp.rq_b) return ensure_cls_ar_rq_b()
     if (stamp == RqStamp.rqx) return ensure_cls_ar_rqx()
     if (stamp == RqStamp.rqk) return ensure_cls_ar_rqk()
     return ensure_cls_ar_rqkx()
@@ -2166,10 +2089,8 @@ def private ensure_ar_rq_stamp(stamp : RqStamp) : bool {
 
 //! the stamp's dispatch: one workgroup on the one-row stamps, a workgroup a row on the rows stamp
 def private enc_ar_rq_stamp(stamp : RqStamp; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : ArArgs; rows : int64 = 1l) {
-    if (stamp == RqStamp.rq) {
-        enc_cls_ar_rq(raw, h, s, pc, 1l)
-    } elif (stamp == RqStamp.rq_b) {
-        enc_cls_ar_rq_b(raw, h, s, pc, rows)
+    if (stamp == RqStamp.rq || stamp == RqStamp.rq_b) {
+        enc_cls_ar_rq_b(raw, h, s, pc, stamp == RqStamp.rq ? 1l : rows)
     } elif (stamp == RqStamp.rqx) {
         enc_cls_ar_rqx(raw, h, s, pc, 1l)
     } elif (stamp == RqStamp.rqk) {
@@ -2211,7 +2132,7 @@ def private rd_ensure_fused_sets {
             used[int(L.rq_next_stamp)] = true
         }
     }
-    verify((!used[int(RqStamp.rq)] || ensure_cls_ar_rq()) && (!used[int(RqStamp.rqx)] || ensure_cls_ar_rqx())
+    verify((!used[int(RqStamp.rq)] || ensure_cls_ar_rq_b()) && (!used[int(RqStamp.rqx)] || ensure_cls_ar_rqx())
         && (!used[int(RqStamp.rqk)] || ensure_cls_ar_rqk()) && (!used[int(RqStamp.rqkx)] || ensure_cls_ar_rqkx()),
         "vk decode: the fused add+rms+requant rails must engage on a live device")
     let dim = g_rd.dim
@@ -2219,7 +2140,7 @@ def private rd_ensure_fused_sets {
     for (l in range64(nl)) {
         var L & = unsafe(g_rd.layers[l])
         L.s_addr_ffn_rq = set_ar_rq_stamp(L.rq_ffn_stamp, g_rd.xb2_dev, VHZ_XB2, g_rd.xq_dev, g_rd.xs_dev)
-        L.wo_ar = !L.recurrent && L.fo == int(KqFmt.q8) && L.rq_ffn_stamp == RqStamp.rq && (vk_fuse_bisect_bits() & (FUSE_BX_WO_AR | FUSE_BX_POST_ATT_RQ)) == 0l && ensure_q8_gemv_ar_cls()
+        L.wo_ar = rd_wo_ar_fits(L) && (vk_fuse_bisect_bits() & (FUSE_BX_WO_AR | FUSE_BX_POST_ATT_RQ)) == 0l && ensure_q8_gemv_ar_cls()
         if (L.wo_ar) {
             let po = arena_planes(L.fo, L.bo)
             let nb = g_rd.nb
@@ -2230,7 +2151,7 @@ def private rd_ensure_fused_sets {
         if (!L.moe) {
             L.s_addr_next_rq = set_ar_rq_stamp(L.rq_next_stamp, g_rd.ffnout_dev, VHZ_FFO, g_rd.xq_dev, g_rd.xs_dev)
             //! a PLE layer joins whatever its next stamp is: its step quantizes the row as it is, for the gate's feed
-            L.down_ar = has_dense_triple(L) && L.f2 == int(KqFmt.q8) && (L.ple || L.rq_next_stamp == RqStamp.rq) && (vk_fuse_bisect_bits() & (FUSE_BX_DOWN_AR | FUSE_BX_POST_FFN_RQ)) == 0l && ensure_q8_gemv_ar_cls()
+            L.down_ar = rd_down_ar_fits(L) && (vk_fuse_bisect_bits() & (FUSE_BX_DOWN_AR | FUSE_BX_POST_FFN_RQ)) == 0l && ensure_q8_gemv_ar_cls()
             if (L.down_ar) {
                 let p2 = arena_planes(L.f2, L.b2)
                 let rows = g_rd.nb
@@ -2256,9 +2177,9 @@ def private rd_announce_fuse_bisect {
     var down_elig = false
     var gu_elig = false
     for (L in g_rd.layers) {
-        wo_elig = wo_elig || (!L.recurrent && L.fo == int(KqFmt.q8) && L.rq_ffn_stamp == RqStamp.rq)
-        down_elig = down_elig || (has_dense_triple(L) && L.f2 == int(KqFmt.q8) && (L.ple || L.rq_next_stamp == RqStamp.rq))
-        gu_elig = gu_elig || (L.f1 == int(KqFmt.q8) && L.f3 == int(KqFmt.q8) && !kq_sb(L.f2))
+        wo_elig = wo_elig || rd_wo_ar_fits(L)
+        down_elig = down_elig || rd_down_ar_fits(L)
+        gu_elig = gu_elig || rd_gu_fits(L.f1, L.f3, L.f2)
     }
     let names <- [
         (bit = FUSE_BX_WO_AR, name = "the wo epilogue", live = wo_elig),
@@ -2342,8 +2263,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         gemv_enc(L.fq, raw, h, L.s_qkv, pcqkv, nreg * kvd)
         rd_ts(raw, "{pfx}qkv")
     } elif (!kv_only) {
-        var pcq = GemvArgs(n = uint(dim), d = uint(qrows), nreg = 1u, ybase = 0u, ncols = ncols, ystride = q_plane_row)
-        gemv_enc(L.fq, raw, h, L.s_q, pcq, qrows)
+        rd_gemv(L.fq, raw, h, L.s_q, dim, qrows, ncols, q_plane_row)
         rd_ts(raw, "{pfx}q")
     }
     if (L.kv_shared || L.qkv_merged) {   //! a shared-KV layer projects Q only: the donor layer's rows already sit in the mirror
@@ -2362,8 +2282,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         }
     }
     if ((nrow_bx & (NROW_BX_ATTN | NROW_BX_ROPE)) == (NROW_BX_ATTN | NROW_BX_ROPE)) {
-        var pcw0 = GemvArgs(n = uint(qd), d = uint(dim), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(dim))
-        gemv_enc(L.fo, raw, h, L.s_wo, pcw0, dim)
+        rd_gemv(L.fo, raw, h, L.s_wo, qd, dim, ncols, uint(dim))
         rd_ts(raw, "{pfx}wo")
         return
     }
@@ -2420,7 +2339,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         window = uint(L.window), cap = L.attn_cap, nsplit = uint(nsplit), rqk = rqk, sinkoff = uint(l * g_rd.n_heads),
         rowwg = uint(rowwgs), qrow = q_plane_row, cntoff = uint(g_rd.attn_cnt_off))
     if ((nrow_bx & NROW_BX_ATTN) == 0) {
-        da_attn_stamp_enc(g_rd.kv_dt, g_rd.has_sinks, da_slab_is_g2(L.kv_mul), raw, h, L.s_attn, pca, rowwgs * nrows)
+        da_attn_stamp_enc(g_rd.kv_dt, da_slab_of(g_rd.has_sinks, L.kv_mul), raw, h, L.s_attn, pca, rowwgs * nrows)
         if (rd_kvtq4()) {
             rd_enc_tq4_unrot(raw, h, L.s_unrot, hs, nrows, uint(qd), q_plane_row, qstride)
         }
@@ -2438,13 +2357,17 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         rd_ts(raw, "{pfx}wo_ar")
         return
     }
-    var pcw = GemvArgs(n = uint(qd), d = uint(dim), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(dim))
-    gemv_enc(L.fo, raw, h, L.s_wo, pcw, dim)
+    rd_gemv(L.fo, raw, h, L.s_wo, qd, dim, ncols, uint(dim))
     rd_ts(raw, "{pfx}wo")
 }
 
 //! the epilogue GEMV's workgroups: eight rows a 256-thread workgroup (four times the family's 64-thread rows)
 def private rd_ar_wgs(rows : int64) : int64 => (rows + 4l * g_gpu.rows_per_wg - 1l) / (4l * g_gpu.rows_per_wg)
+
+def private rd_gemv(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; n, d : int64; ncols, ystride : uint) {
+    var pc = GemvArgs(n = uint(n), d = uint(d), nreg = 1u, ybase = 0u, ncols = ncols, ystride = ystride)
+    gemv_enc(fmt, raw, h, s, pc, d)
+}
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
 def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; nrows : int64; ncols : uint; seq : bool) {
@@ -2453,8 +2376,7 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
     let di = g_rd.dn_di
     let nvh = g_rd.dn_nvh
     let nr = uint(nrows)
-    var pcqkv = GemvArgs(n = uint(dim), d = uint(cd), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(cd + di))
-    gemv_enc(L.fqkv, raw, h, L.s_dnqkv, pcqkv, cd)
+    rd_gemv(L.fqkv, raw, h, L.s_dnqkv, dim, cd, ncols, uint(cd + di))
     rd_ts(raw, "d:qkv")
     var pcz = GemvArgs(n = uint(dim), d = uint(di), nreg = 1u, ybase = uint(cd), ncols = ncols, ystride = uint(cd + di))
     gemv_enc(L.fz, raw, h, L.s_dnz, pcz, di)
@@ -2475,11 +2397,9 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
         gemv_enc(int(KqFmt.q8), raw, h, L.s_dnalpha, pcg, nvh)
     }
     rd_ts(raw, "d:ba")
-    var pcd = DnStepArgs(cd = uint(cd), kd = uint(g_rd.dn_kd), nkh = uint(g_rd.dn_nkh), ds = uint(g_rd.dn_ds),
-        dconv = uint(g_rd.dn_dconv), beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G),
-        taps_off = uint(DN_SM_TAPS), wnorm_off = uint(DN_SM_WNORM), a_off = uint(DN_SM_A),
-        dt_off = uint(DN_SM_DT), hist_off = uint(DN_SM_HIST),
-        eps = g_rd.eps, qscale = 1.0 / sqrt(float(g_rd.dn_ds)), out_f32 = kq_sb(L.fout) ? 1u : 0u, beta_row_stride = bstride)
+    var pcd = dn_step_args(cd, g_rd.dn_kd, g_rd.dn_nkh, g_rd.dn_ds, g_rd.dn_dconv, g_rd.eps)
+    pcd.out_f32 = kq_sb(L.fout) ? 1u : 0u
+    pcd.beta_row_stride = bstride
     if (seq) {
         for (i in range64(nrows)) {
             pcd.row0 = uint(i)
@@ -2497,8 +2417,7 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
     if (kq_sb(L.fout)) {   // no stamp here - the requant bills to the out role
         rq_enc(raw, h, L.s_quant_dno, L.fout, di * nrows)
     }
-    var pco = GemvArgs(n = uint(di), d = uint(dim), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(dim))
-    gemv_enc(L.fout, raw, h, L.s_dnout, pco, dim)
+    rd_gemv(L.fout, raw, h, L.s_dnout, di, dim, ncols, uint(dim))
     rd_ts(raw, "d:out")
 }
 
@@ -2578,18 +2497,17 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     let nr = uint(nrows)
     if (L.gu_on && (nrow_bx & (NROW_BX_NCOL1 | NROW_BX_ACTRQ)) == 0) {
         if (one) {
-            var pcgu = GuArgs(n = uint(dim), d = uint(hid), gblk = uint(arena_local_blk(L.b1)), ublk = uint(arena_local_blk(L.b3)), act = act)
-            enc_q8_gemv_gu_cls(raw, h, L.s_gu, pcgu, hid / 32l)
+            var pcgu = GuNArgs(n = uint(dim), d = uint(hid), gblk = uint(arena_local_blk(L.b1)), ublk = uint(arena_local_blk(L.b3)), act = act, ncols = 1u)
+            enc_q8_gemv_gu_n1_cls(raw, h, L.s_gu, pcgu, hid / 32l)
         } else {
             var pcgu = GuNArgs(n = uint(dim), d = uint(hid), gblk = uint(arena_local_blk(L.b1)), ublk = uint(arena_local_blk(L.b3)), act = act, ncols = nr)
             q8_gemv_gu_n_enc(raw, h, L.s_gu_n, pcgu, hid / 32l)
         }
         rd_ts(raw, L.moe ? "m:sh_gu" : "{pfx}gu")
     } else {
-        var pcg = GemvArgs(n = uint(dim), d = uint(hid), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(hid))
-        gemv_enc(L.f1, raw, h, L.s_gate, pcg, hid)
+        rd_gemv(L.f1, raw, h, L.s_gate, dim, hid, ncols, uint(hid))
         rd_ts(raw, "{pfx}gate")
-        gemv_enc(L.f3, raw, h, L.s_up, pcg, hid)
+        rd_gemv(L.f3, raw, h, L.s_up, dim, hid, ncols, uint(hid))
         rd_ts(raw, "{pfx}up")
         if ((nrow_bx & NROW_BX_ACTRQ) == 0) {
             var pc_act = ActArgs(nelem = uint(hid) * nr, act = act)
@@ -2605,8 +2523,7 @@ def private rd_encode_ffn(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         rd_ts(raw, "{pfx}down_ar")
         return
     }
-    var pcd = GemvArgs(n = uint(hid), d = uint(dim), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(dim))
-    gemv_enc(L.f2, raw, h, L.s_down, pcd, dim)
+    rd_gemv(L.f2, raw, h, L.s_down, hid, dim, ncols, uint(dim))
     rd_ts(raw, "{pfx}down")
 }
 
@@ -2619,8 +2536,7 @@ def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         rq_enc(raw, h, L.s_ple_x, false, 0l, dim * nrows)
         rd_ts(raw, "p:rq_x")
     }
-    var pcg = GemvArgs(n = uint(dim), d = uint(ple), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(ple))
-    gemv_enc(L.fpg, raw, h, L.s_ple_gate, pcg, ple)
+    rd_gemv(L.fpg, raw, h, L.s_ple_gate, dim, ple, ncols, uint(ple))
     rd_ts(raw, "p:gate")
     if (L.ple_fused) {
         var pcf = PleActArgs(n = uint(ple), d = uint(dim), wblk = uint(arena_local_blk(L.bpp)), ubase = uint(l * ple), act = ACT_GELU,
@@ -2633,8 +2549,7 @@ def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         ubase = uint(l * ple), ustride = uint(g_rd.n_layers * ple), ulen = uint(ple))
     enc_q8_actrq_cls(raw, h, L.s_ple_act, pca, (ple * nrows / 4l + 255l) / 256l)
     rd_ts(raw, "p:act")
-    var pcp = GemvArgs(n = uint(ple), d = uint(dim), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(dim))
-    gemv_enc(L.fpg, raw, h, L.s_ple_proj, pcp, dim)
+    rd_gemv(L.fpg, raw, h, L.s_ple_proj, ple, dim, ncols, uint(dim))
     rd_ts(raw, "p:proj")
 }
 
@@ -2676,7 +2591,7 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         base2 = uint(arena_local_blk(L.be2)), stride2 = uint(nfe * dim / kq_unit(L.fe2)),
         xnb2 = uint(nfe / kq_unit(L.fe2)), lstride = uint(g_rd.ner), xnb1 = uint(dim / kq_unit(L.fe1)))
     if (one) {
-        enc_topk_cls(raw, h, L.s_topk, pct, 1l)
+        enc_topk_n_cls(raw, h, L.s_topk, pct, 1l)
     } else {
         enc_topk_n_cls(raw, h, L.s_topk_n, pct, nrows)
     }
@@ -2750,12 +2665,8 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
     var raw : VkCommandBuffer = first_seg_raw
     var seg = 0l
     unsafe {
-        let rf : VkCommandBufferResetFlags
-        vk_check(vkResetCommandBuffer(raw, rf), null)
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
+        var h = cmd_open(raw, true)
         rd_stamps_begin(raw)
-        var h : VkHaz
         vhz_dep(raw, h, 0u, VHZ_X, true)
         cmd_copy_whole(raw, g_rd.x_host.buf, g_rd.x_dev, dim * 4l * nrows)
         vhz_dep(raw, h, 0u, VHZ_COS, true)
@@ -2835,20 +2746,9 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
             }
             if (L.moe && L.experts_host) {
                 verify(one && split_seg_base >= 0l, "vk decode: a host layer takes the one-row split command alone")
-                var pcr = RouterArgs(ne = uint(g_rd.ner), dim = uint(dim), woff = uint(L.router_slot * g_rd.ner * dim), obase = 0u,
-                    norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ncols = 1u)
-                enc_router_gemv_cls(raw, h, L.s_router, pcr, g_rd.ner)
-                rd_ts(raw, "m:router")
-                vhz_dep(raw, h, VHZ_XB | VHZ_MRT, 0u, true)
-                cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hx_host.buf, dim * 4l)
-                cmd_copy_whole(raw, g_rd.moe_dlog_dev, g_rd.hlog_host.buf, g_rd.ner * 4l)
-                vk_check(vkEndCommandBuffer(raw), null)
+                rd_encode_host_cut(raw, h, L, 1l, "m:router")
                 seg++
-                raw = g_rd.cmd_seg[split_seg_base + seg]
-                vk_check(vkResetCommandBuffer(raw, rf), null)
-                vk_check(vkBeginCommandBuffer(raw, begin), null)
-                h = VkHaz()
-                rd_encode_routed_sum(raw, h, l, 1l)
+                rd_host_resume(raw, g_rd.cmd_seg[split_seg_base + seg], h, l, 1l)
                 var pc14h = rd_ar_comb_args(L, l, nxt)
                 enc_cls_ar_comb(raw, h, L.s_addr_next, pc14h, 1l)
                 rd_ts(raw, "m:ar2")
@@ -2913,7 +2813,7 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
         }
         rd_encode_tail(raw, h, nrows, ncols, verify, xq_ready)
         pfq_end(raw)
-        vk_check(vkEndCommandBuffer(raw), null)
+        cmd_close(raw)
     }
     verify(split_seg_base < 0l || seg + 1l == g_rd.nseg, "vk decode: the split command's segments must be the host layers plus one")
 }
@@ -2924,8 +2824,7 @@ def private rd_encode_tail(raw : VkCommandBuffer; var h : VkHaz; nrows : int64; 
         rq_enc(raw, h, g_rd.s_quant_final, g_rd.cls_fmt_marker, dim * nrows)
         rd_ts(raw, "t:fin_rq")
     }
-    var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u, ncols = ncols, ystride = uint(g_rd.vocab))
-    gemv_enc(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, g_rd.vocab)
+    rd_gemv(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, dim, g_rd.vocab, ncols, uint(g_rd.vocab))
     rd_ts(raw, "t:cls")
     if (rd_cls_epi_on()) {
         rd_enc_cls_epi(raw, h, nrows)
@@ -3076,26 +2975,25 @@ def private rd_warmup_check(wall_us : int64) {
 //! the logits' trip to host memory on the transfer queue: the copy command for `nrows` rows (the rows' picks behind them), or
 //! under `picks_only` the picks alone, each recorded on first use
 def private rd_xlog(nrows : int64; picks_only : bool) : VkCommandBuffer {
-    var raw = picks_only ? g_rd.xlog_pick_cmd[nrows] : g_rd.xlog_cmd[nrows]
+    var cmd = picks_only ? g_rd.xlog_pick_cmd[nrows] : g_rd.xlog_cmd[nrows]
     let recorded = picks_only ? g_rd.xlog_pick_recorded[nrows] : g_rd.xlog_recorded[nrows]
     if (!recorded) {
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        if (!picks_only) {
-            cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l * nrows)
+        record_cmd(cmd, false) $(raw : VkCommandBuffer; var _h : VkHaz) {
+            if (!picks_only) {
+                cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l * nrows)
+            }
+            cmd_copy_whole(raw, g_rd.pick_dev, g_rd.pick_host.buf, 4l * nrows)
+            if (g_rd.carry_live) {
+                cmd_copy_whole(raw, rd_carry_src(), g_rd.hid_host.buf, rd_carry_width() * 4l * nrows)
+            }
         }
-        cmd_copy_whole(raw, g_rd.pick_dev, g_rd.pick_host.buf, 4l * nrows)
-        if (g_rd.carry_live) {
-            cmd_copy_whole(raw, rd_carry_src(), g_rd.hid_host.buf, rd_carry_width() * 4l * nrows)
-        }
-        vk_check(vkEndCommandBuffer(raw), null)
         if (picks_only) {
             g_rd.xlog_pick_recorded[nrows] = true
         } else {
             g_rd.xlog_recorded[nrows] = true
         }
     }
-    return raw
+    return cmd
 }
 
 var private g_rd_xlog_wait = 0ul   //! the transfer timeline value the step's landing (logits or picks) completes at (0 = the command carried its own copy, the fence is the wait)
@@ -3138,12 +3036,8 @@ def rd_carry_sync {
     g_rd.carry_live = want
     rd_unmake_sets()
     rd_invalidate_token()
-    for (rec in g_rd.xlog_recorded) {
-        rec = false
-    }
-    for (rec in g_rd.xlog_pick_recorded) {
-        rec = false
-    }
+    fill(g_rd.xlog_recorded, false)
+    fill(g_rd.xlog_pick_recorded, false)
 }
 
 //! Resident-driver token: the whole stack on device from the embedded residual `x` and this position's rope row -> logits, or
@@ -3177,7 +3071,6 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
     if (unsplit) {
         g_rd.unsplit_served++
     }
-    var picked = -1l
     let guard = rd_guard_step(g_rd.tokens_served)
     let picks_only = pick_only && !guard
     unsafe {
@@ -3187,43 +3080,19 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
             assert(long_length(ple_row) >= g_rd.n_layers * g_rd.ple, "vk_rdec_token: the per-layer-embedding row is short")
             memcpy(g_rd.ple_host.mapped, addr<void?>(ple_row[0]), g_rd.n_layers * g_rd.ple * 4l)
         }
-        var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
-        tm.pos = uint(pos)   // every carrier composes its mirror row as layerbase + pos * kvd
-        tm.cnt = uint(cnt)
-        tm.parity = g_rd.hybrid ? uint(g_rd.dn_parity[g_rd.region]) : 0u
-        tm.mirbase = 0u   //! the one-row command's region rides its push; an N-row step leaves its row 0 entry here
-        tm.dnslot = uint(g_rd.region)
-        if (prof) {   //! the profiled form splits the wall into its pieces; the served form is one call
-            let t1 = ref_time_ticks()
-            rd_submit_land(cmd, 1l, picks_only)
-            let t2 = ref_time_ticks()
-            rd_wait_land()
-            let t3 = ref_time_ticks()
-            picked = rd_land_one(pick_only, logits)
-            rdq_host_add(g_rdq_token_ledger, ts0, t1, t2, t3, ref_time_ticks())
-        } else {
-            rd_submit_land(cmd, 1l, picks_only)
-            rd_wait_land()
-            picked = rd_land_one(pick_only, logits)
-        }
     }
-    g_rd.tokens_served++
-    if (guard) {
-        rd_logits_guard(unsafe(reinterpret<float const?>(g_rd.logits_host.mapped)), g_rd.vocab)
-    }
-    if (g_rd.tokens_served == 8l) {
-        rd_warmup_check(int64(get_time_usec(ts0)))
-    }
+    rd_tok_row(pos, cnt)
+    let t = rd_submit_wait(cmd, 1l, picks_only, prof)
+    let picked = rd_land_one(pick_only, logits)
     if (prof) {
+        rdq_host_add(g_rdq_token_ledger, ts0, t.t1, t.t2, t.t3, ref_time_ticks())
+    }
+    rd_token_close(ts0, guard)
+    if (prof) {   // the ledger reads the submitted form's stamps: a run crossing a form edge, or arriving from the N-row command, restarts its averages
         g_rdq_token_ledger.wall_us += double(get_time_usec(ts0))
         if (g_rdq_token_ledger.count % 32l == 31l) {
             rdq_host_report(g_rdq_token_ledger, "token", 1l)
         }
-    }
-    if (g_rd.hybrid) {
-        rd_dn_advance_parity(g_rd.region)
-    }
-    if (prof) {   // the ledger reads the submitted form's stamps: a run crossing a form edge, or arriving from the N-row command, restarts its averages
         if (g_rdq_token_ledger.count > 0l && (form != g_rdq_attn_form || g_rdq_form_n)) {
             rdq_form_switch(form, pos)
         }
@@ -3269,15 +3138,15 @@ def vk_rdec_token_n_rows : int64 {
     if (!gemv_cls_has_n(g_rd.cls_fmt_marker)) return rd_n_decline("the classifier's format has no N-column GEMV leaf")
     for (L in g_rd.layers) {
         if (L.recurrent) {
-            if (!(gemv_cls_has_n(L.fqkv) && gemv_cls_has_n(L.fz) && gemv_cls_has_n(L.fout))) return rd_n_decline("a recurrent layer's weight format with no N-column GEMV leaf")
-            if (has_dense_triple(L) && !(gemv_cls_has_n(L.f1) && gemv_cls_has_n(L.f3) && gemv_cls_has_n(L.f2))) return rd_n_decline("a recurrent layer's FFN weight format with no N-column GEMV leaf")
+            if (!(rd_triple_all(L.fqkv, L.fz, L.fout) $(f) => gemv_cls_has_n(f))) return rd_n_decline("a recurrent layer's weight format with no N-column GEMV leaf")
+            if (has_dense_triple(L) && !(rd_triple_all(L.f1, L.f3, L.f2) $(f) => gemv_cls_has_n(f))) return rd_n_decline("a recurrent layer's FFN weight format with no N-column GEMV leaf")
             continue
         }
         if (L.moe && L.experts_host && !g_rd.hc) return rd_n_decline("a routed layer whose experts serve on the host (the split command steps a row at a time)")
         if (L.moe && !rd_routed_slots_fit(g_rd.nb, g_rd.k)) return rd_n_decline("more routed slots than the block's slot planes hold")
         if (L.moe && L.ple) return rd_n_decline("a per-layer-embedding layer with a routed block")
-        if (!(gemv_cls_has_n(L.fq) && (L.kv_shared || (gemv_cls_has_n(L.fk) && (L.vfk || gemv_cls_has_n(L.fv)))) && gemv_cls_has_n(L.fo))
-                || (has_dense_triple(L) && !(gemv_cls_has_n(L.f1) && gemv_cls_has_n(L.f3) && gemv_cls_has_n(L.f2)))
+        if (!(rd_quad_all(L) $(f) => gemv_cls_has_n(f))
+                || (has_dense_triple(L) && !(rd_triple_all(L.f1, L.f3, L.f2) $(f) => gemv_cls_has_n(f)))
                 || (L.ple && !gemv_cls_has_n(L.fpg))) return rd_n_decline("a weight format with no N-column GEMV leaf")
     }
     if (g_rd.n_rail == NRail.unasked) {   //! the command's kernel classes build once, before any step commits to it
@@ -3297,10 +3166,10 @@ def private rd_ensure_n_rail : bool {
             to_log(LOG_INFO, "vk_rdec n rail: layer recurrent {L.recurrent} moe {L.moe} ple {L.ple} dense {has_dense_triple(L)} fq {L.fq} fk {L.fk} fv {L.fv} fo {L.fo} fqkv {L.fqkv} fz {L.fz} fout {L.fout} f1 {L.f1} f3 {L.f3} f2 {L.f2} fpg {L.fpg}\n")
         }
         let head_ok = (L.recurrent   //! its own statement: a `?:` binds looser than the `&&` chain below, which would then be the else arm alone
-                ? (gemv_cls_ensure_n(L.fqkv, nb) && gemv_cls_ensure_n(L.fz, nb) && gemv_cls_ensure_n(L.fout, nb) && (g_rd.dn_ba_f32 || gemv_cls_ensure_n(int(KqFmt.q8), nb)))
-                : (gemv_cls_ensure_n(L.fq, nb) && (L.kv_shared || (gemv_cls_ensure_n(L.fk, nb) && (L.vfk || gemv_cls_ensure_n(L.fv, nb)))) && gemv_cls_ensure_n(L.fo, nb)))
+                ? ((rd_triple_all(L.fqkv, L.fz, L.fout) $(f) => gemv_cls_ensure_n(f, nb)) && (g_rd.dn_ba_f32 || gemv_cls_ensure_n(int(KqFmt.q8), nb)))
+                : (rd_quad_all(L) $(f) => gemv_cls_ensure_n(f, nb)))
         ok = (head_ok
-            && (!has_dense_triple(L) || (gemv_cls_ensure_n(L.f1, nb) && gemv_cls_ensure_n(L.f3, nb) && gemv_cls_ensure_n(L.f2, nb)))
+            && (!has_dense_triple(L) || (rd_triple_all(L.f1, L.f3, L.f2) $(f) => gemv_cls_ensure_n(f, nb)))
             && (!L.gu_on || q8_gemv_gu_n_ensure(nb))   //! the fused gate-up's N form declines the rail whole, as the GEMV leaves do
             && (!L.moe || ensure_topk_n_cls())
             && (!L.ple || gemv_cls_ensure_n(L.fpg, nb)))
@@ -3314,8 +3183,6 @@ def private rd_ensure_n_rail : bool {
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rd_ensure_n_sets {
     if (g_rd.n_sets_made) return
-    let dim = g_rd.dim
-    let nb = g_rd.nb
     if (rd_rows_fuse(rd_head_feed(g_rd.layers[0]))) {
         g_rd.s_prologue_rq_b = set_ar_rq_stamp(RqStamp.rq_b, g_rd.x_dev, VHZ_X, g_rd.xq_dev, g_rd.xs_dev)
     }
@@ -3328,17 +3195,12 @@ def private rd_ensure_n_sets {
             L.s_addr_next_rq_b = set_ar_rq_stamp(RqStamp.rq_b, g_rd.ffnout_dev, VHZ_FFO, g_rd.xq_dev, g_rd.xs_dev)
         }
         if (L.gu_on) {   // the rail ensured the class before any row count recorded
-            let p1 = arena_planes(L.f1, L.b1)
-            let p3 = arena_planes(L.f3, L.b3)
-            L.s_gu_n = q8_gemv_gu_n_set(fixed_array(p1.wq, p1.ws, p3.wq, p3.ws, g_rd.xq_dev, g_rd.xs_dev, g_gpu.hq_dev, g_gpu.hs_dev),
-                fixed_array(p1.wqb, p1.wsb, p3.wqb, p3.wsb, dim * nb, (dim / 32l) * 4l * nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),
-                fixed_array(0u, 0u, 0u, 0u, VHZ_XQ, VHZ_XQ, VHZ_HQ, VHZ_HQ))
+            let gu = rd_gu_binds(L)
+            L.s_gu_n = q8_gemv_gu_n_set(gu.bufs, gu.sizes, gu.bits)
         }
         if (L.moe) {
-            let slots_bytes = MAX_ROUTED_SLOTS * 4l
-            L.s_topk_n = set_topk_n_cls(fixed_array(g_rd.moe_dlog_dev, g_rd.moe_meta1_dev, g_rd.moe_meta3_dev, g_rd.moe_meta2_dev, g_rd.moe_dw_dev, g_rd.moe_ds_dev, g_rd.moe_rb_dev, g_rd.moe_eidx_dev),
-                fixed_array(g_rd.ner * 4l * nb, META_BYTES, META_BYTES, META_BYTES, slots_bytes, g_rd.moe_ds_bytes, g_rd.moe_rb_bytes, slots_bytes),
-                fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, 0u, 0u, VHZ_MRT))
+            let tk = rd_topk_binds()
+            L.s_topk_n = set_topk_n_cls(tk.bufs, tk.sizes, tk.bits)
         }
         if (L.ple && L.ple_fused) {
             L.s_ple_ar_rq_n = set_ar_rq_stamp(RqStamp.rq_b, g_rd.ffnout_dev, VHZ_FFO, g_rd.xq_dev, g_rd.xs_dev)
@@ -3350,15 +3212,14 @@ def private rd_ensure_n_sets {
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rd_record_n_form(var raw : VkCommandBuffer; nrows, nsplit : int64; form : RdForm) {
-    var one : RdqStamps
-    rd_take_stamps(one, g_rdq_n)
-    rd_encode_token(raw, nrows, nsplit)
-    if (form == RdForm.split) {
-        rd_take_stamps(g_rdq_nrow, g_pfq_n)
-    } else {
-        rd_take_stamps(g_rdq_nrow_unsplit, g_pfq_n)
+    rd_with_form_stamps() {
+        rd_encode_token(raw, nrows, nsplit)
+        if (form == RdForm.split) {
+            rd_take_stamps(g_rdq_nrow, g_pfq_n)
+        } else {
+            rd_take_stamps(g_rdq_nrow_unsplit, g_pfq_n)
+        }
     }
-    rd_put_back_stamps(one)
 }
 
 
@@ -3377,9 +3238,7 @@ def private rd_land_one(pick_only : bool; var logits : array<float>) : int64 {
     if (pick_only) {
         return rd_landed_pick(0l)
     }
-    unsafe {
-        memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l)
-    }
+    host_buf_read(g_rd.logits_host, unsafe(addr<void?>(logits[0])), g_rd.vocab * 4l)
     return -1l
 }
 
@@ -3395,9 +3254,7 @@ def vk_rdec_land_carry(row : int64; var dst : array<float>) {
     assert(g_rd != null && g_rd.carry, "vk_rdec_land_carry on a driver prepared without the carry")
     let row_bytes = rd_carry_width() * 4l
     assert(row >= 0l && row < g_rd.nb && long_length(dst) * 4l >= row_bytes, "vk_rdec_land_carry: the row is past the landed rows, or the destination is short of a row")
-    unsafe {
-        memcpy(addr<void?>(dst[0]), reinterpret<void?>(reinterpret<uint8?>(g_rd.hid_host.mapped) + row * row_bytes), row_bytes)
-    }
+    host_buf_read(g_rd.hid_host, unsafe(addr<void?>(dst[0])), row_bytes, row * row_bytes)
 }
 
 def private rd_fill_head_regions {
@@ -3416,14 +3273,10 @@ def private rd_record_draft {
     var L & = unsafe(g_rd.head)
     rd_fill_head_regions()
     var raw = g_rd.head_draft_cmd[g_rd.region]
-    let rf : VkCommandBufferResetFlags
-    vk_check(vkResetCommandBuffer(raw, rf), null)
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
+    var h = cmd_open(raw, true)
     var one : RdqStamps
     rd_take_stamps(one, g_rdq_n)
     rd_stamps_begin(raw)
-    var h : VkHaz
     rd_encode_head_cat_eh(raw, h, 1l, "p:upload", "p:draft_", g_rd.s_prologue, L.s_quant_xb)
     rd_encode_attn_head(raw, h, L, l, rd_head_fuse_qkr(), rd_norm_final(), rd_layer_pieces(L, rd_split_pieces()), 1l, 1u, 0)
     var pcf = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(hb + RDEC_HEAD_FFN * dim), eps = g_rd.eps, ascale = 1.0)
@@ -3435,19 +3288,33 @@ def private rd_record_draft {
     rd_encode_ffn(raw, h, L, l, nxt, 1l, 1u, 0)
     var pco = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
     enc_cls_ar(raw, h, L.s_addr_next, pco, 1l)
-    rq_enc(raw, h, g_rd.s_quant_final, g_rd.cls_fmt_marker, dim)
-    rd_ts(raw, "t:draft_norm")
-    var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u, ncols = 1u, ystride = uint(g_rd.vocab))
-    gemv_enc(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, g_rd.vocab)
-    rd_ts(raw, "t:draft_cls")
-    var pcp = ArgmaxArgs(vocab = uint(g_rd.vocab))
-    enc_cls_argmax_part(raw, h, g_rd.s_pick_part, pcp, RD_PICK_CHUNKS)
-    enc_cls_argmax_fin(raw, h, g_rd.s_pick_fin, pcp, 1l)
-    rd_ts(raw, "t:draft_pick")
+    rd_encode_draft_pick(raw, h)
     if (!g_rd.log_xfer || !g_rd.carry_live) {   //! the head's own hidden lands whatever the knob says: the draft command copies it wherever the transfer command will not
         vhz_dep(raw, h, VHZ_XB, 0u, true)
         cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hid_host.buf, dim * 4l)
     }
+    rd_close_draft(raw, h)
+    rd_take_stamps(g_rdq_draft, g_pfq_n)
+    rd_put_back_stamps(one)
+    g_rd.head_draft_recorded[g_rd.region] = true
+}
+
+def private rd_encode_draft_pick(raw : VkCommandBuffer; var h : VkHaz) {
+    rq_enc(raw, h, g_rd.s_quant_final, g_rd.cls_fmt_marker, g_rd.dim)
+    rd_ts(raw, "t:draft_norm")
+    rd_gemv(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, g_rd.dim, g_rd.vocab, 1u, uint(g_rd.vocab))
+    rd_ts(raw, "t:draft_cls")
+    if (rd_cls_epi_on()) {
+        rd_enc_cls_epi(raw, h)
+        rd_ts(raw, "t:draft_epi")
+    }
+    var pcp = ArgmaxArgs(vocab = uint(g_rd.vocab))
+    enc_cls_argmax_part(raw, h, g_rd.s_pick_part, pcp, RD_PICK_CHUNKS)
+    enc_cls_argmax_fin(raw, h, g_rd.s_pick_fin, pcp, 1l)
+    rd_ts(raw, "t:draft_pick")
+}
+
+def private rd_close_draft(raw : VkCommandBuffer; var h : VkHaz) {
     if (!g_rd.log_xfer) {
         vhz_dep(raw, h, VHZ_LOG, 0u, true)
         cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l)
@@ -3455,10 +3322,7 @@ def private rd_record_draft {
         rd_ts(raw, "t:dma")
     }
     pfq_end(raw)
-    vk_check(vkEndCommandBuffer(raw), null)
-    rd_take_stamps(g_rdq_draft, g_pfq_n)
-    rd_put_back_stamps(one)
-    g_rd.head_draft_recorded[g_rd.region] = true
+    cmd_close(raw)
 }
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head")]   //! once per region and set epoch
@@ -3472,15 +3336,11 @@ def private rd_record_hc_draft {
     var L & = unsafe(g_rd.head)
     verify(L.moe && L.experts_host, "vk decode: the hyper-connection chain's NextN head serves its routed experts on the host")
     rd_fill_head_regions()
-    let rf : VkCommandBufferResetFlags
-    let begin = VkCommandBufferBeginInfo()
     var raw = g_rd.head_draft_cmd[g_rd.region]
-    vk_check(vkResetCommandBuffer(raw, rf), null)
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
+    var h = cmd_open(raw, true)
     var one : RdqStamps
     rd_take_stamps(one, g_rdq_n)
     rd_stamps_begin(raw)
-    var h : VkHaz
     vhz_dep(raw, h, 0u, VHZ_X, true)
     cmd_copy_whole(raw, g_rd.head_cat_host.buf, g_rd.head_cat_in_dev, dim * 4l)
     cmd_copy_range(raw, g_rd.head_cat_host.buf, dim * 4l, g_rd.hccarry_dev, 0l, hcd * 4l)
@@ -3492,40 +3352,15 @@ def private rd_record_hc_draft {
     var pcn = HcNormArgs(dim = uint(dim), hc = uint(hc), woff = uint(g_rd.hc_hnorm_row * hcd), row0 = 0u, eps = g_rd.eps)
     enc_hc_norm_cls(raw, h, g_rd.s_hc_norm_carry, pcn, hc)
     vhz_dep(raw, h, VHZ_XB | VHZ_XB2, VHZ_XB, true)
-    for (c in range64(hc)) {
-        if (c > 0l) {
-            cmd_copy_range(raw, g_rd.head_cat_dev, 0l, g_rd.head_cat_dev, c * 2l * dim * 4l, dim * 4l)
-        }
-        cmd_copy_range(raw, g_rd.hcxn_dev, c * dim * 4l, g_rd.head_cat_dev, (c * 2l + 1l) * dim * 4l, dim * 4l)
-    }
-    rq_enc(raw, h, g_rd.head_s_cat_rq, g_rd.head_eh_fmt, 2l * dim * hc)
-    rd_ts(raw, "p:draft_cat")
-    var pceh = GemvArgs(n = uint(2l * dim), d = uint(dim), nreg = 1u, ybase = 0u, ncols = uint(hc), ystride = uint(dim))
-    gemv_enc(g_rd.head_eh_fmt, raw, h, g_rd.head_s_eh_hc, pceh, dim)
-    rd_ts(raw, "p:draft_eh")
-    rd_encode_hc_mix(raw, h, 2l * l, false)
-    rq_enc(raw, h, L.s_quant_xb, L.fq, dim)
-    rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, rd_split_pieces()), 1l, 1u, 0)
-    rd_encode_hc_scatter(raw, h, L, false)
-    rd_encode_hc_mix(raw, h, 2l * l + 1l, false)
-    rq_enc(raw, h, L.s_quant_xb2, L.f1, dim)
-    if (has_dense_triple(L)) {
-        rd_encode_ffn(raw, h, L, l, nlfin, 1l, 1u, 0)
-    }
-    var pcr = RouterArgs(ne = uint(g_rd.ner), dim = uint(dim), woff = uint(L.router_slot * g_rd.ner * dim), obase = 0u,
-        norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ncols = 1u)
-    enc_router_gemv_cls(raw, h, L.s_router, pcr, g_rd.ner)
-    vhz_dep(raw, h, VHZ_XB | VHZ_MRT, 0u, true)
-    cmd_copy_whole(raw, g_rd.xb_dev, g_rd.hx_host.buf, dim * 4l)
-    cmd_copy_whole(raw, g_rd.moe_dlog_dev, g_rd.hlog_host.buf, g_rd.ner * 4l)
+    rd_encode_hc_cat_eh(raw, h, 1l, g_rd.head_cat_dev, "p:draft_")
+    rd_encode_hc_layer(raw, h, L, l, 1l, false, fuse_qkr, nlfin)
+    rd_encode_host_cut(raw, h, L, 1l, "")
     pfq_end(raw)
-    vk_check(vkEndCommandBuffer(raw), null)
+    cmd_close(raw)
     rd_take_stamps(g_rdq_draft, g_pfq_n)
     raw = g_rd.hc_draft_cmd[g_rd.region]
-    vk_check(vkResetCommandBuffer(raw, rf), null)
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
+    h = cmd_open(raw, true)
     rd_stamps_begin(raw)
-    h = VkHaz()
     rd_encode_routed_sum(raw, h, l)
     rd_encode_hc_scatter(raw, h, L, true)
     vhz_dep(raw, h, VHZ_X, rd_carry_bit(), true)
@@ -3535,23 +3370,8 @@ def private rd_record_hc_draft {
         cmd_copy_whole(raw, g_rd.hccarry_out_dev, g_rd.hid_host.buf, hcd * 4l)
     }
     rd_encode_hc_mix(raw, h, g_rd.hc_mtp_site, true)
-    rq_enc(raw, h, g_rd.s_quant_final, g_rd.cls_fmt_marker, dim)
-    rd_ts(raw, "t:draft_norm")
-    var pcc = GemvArgs(n = uint(dim), d = uint(g_rd.vocab), nreg = 1u, ybase = 0u, ncols = 1u, ystride = uint(g_rd.vocab))
-    gemv_enc(g_rd.cls_fmt_marker, raw, h, g_rd.cls_set, pcc, g_rd.vocab)
-    rd_ts(raw, "t:draft_cls")
-    var pcp = ArgmaxArgs(vocab = uint(g_rd.vocab))
-    enc_cls_argmax_part(raw, h, g_rd.s_pick_part, pcp, RD_PICK_CHUNKS)
-    enc_cls_argmax_fin(raw, h, g_rd.s_pick_fin, pcp, 1l)
-    rd_ts(raw, "t:draft_pick")
-    if (!g_rd.log_xfer) {
-        vhz_dep(raw, h, VHZ_LOG, 0u, true)
-        cmd_copy_whole(raw, g_rd.logits_dev, g_rd.logits_host.buf, g_rd.vocab * 4l)
-        cmd_copy_whole(raw, g_rd.pick_dev, g_rd.pick_host.buf, 4l)
-        rd_ts(raw, "t:dma")
-    }
-    pfq_end(raw)
-    vk_check(vkEndCommandBuffer(raw), null)
+    rd_encode_draft_pick(raw, h)
+    rd_close_draft(raw, h)
     rd_take_stamps(g_rdq_hc_draft_tail, g_pfq_n)
     rd_put_back_stamps(one)
     g_rd.head_draft_recorded[g_rd.region] = true
@@ -3566,7 +3386,7 @@ def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row
     let prof = vk_prof()
     let ts0 = ref_time_ticks()
     var pick : int64
-    vk_rdec_head_sync_rows(hyd0, row - hyd0, kp, vp)
+    vk_rdec_kv_sync(g_rd.n_layers, hyd0, row - hyd0, kp, vp)
     unsafe {
         if (!g_rd.head_draft_recorded[g_rd.region]) {
             if (g_rd.hc_nextn) {
@@ -3579,11 +3399,7 @@ def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row
         memcpy(reinterpret<void?>(reinterpret<uint8?>(g_rd.head_cat_host.mapped) + dim * 4l), addr<void?>(h[0]), rd_carry_width() * 4l)
         memcpy(g_rd.head_cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l)
         var tm = reinterpret<TokMeta?>(g_rd.head_tok.mapped)
-        tm.pos = uint(row)
-        tm.cnt = uint(row + 1l)
-        tm.parity = 0u   // the head is an attention layer: no deltanet step reads its block
-        tm.mirbase = 0u   // the head's region rides the draft command's push
-        tm.dnslot = uint(g_rd.region)
+        tm[0] = TokMeta(pos = uint(row), cnt = uint(row + 1l), parity = 0u, mirbase = 0u, dnslot = uint(g_rd.region))   // the head's region rides the draft command's push
         var cmd = g_rd.head_draft_cmd[g_rd.region]
         let t1 = ref_time_ticks()
         if (g_rd.hc_nextn) {
@@ -3676,8 +3492,7 @@ def private rd_encode_head_cat_eh(raw : VkCommandBuffer; var h : VkHaz; nrows : 
     }
     rq_enc(raw, h, g_rd.head_s_cat_rq, g_rd.head_eh_fmt, 2l * dim * nrows)
     rd_ts(raw, "{pfx}cat")
-    var pceh = GemvArgs(n = uint(2l * dim), d = uint(dim), nreg = 1u, ybase = 0u, ncols = uint(nrows), ystride = uint(dim))
-    gemv_enc(g_rd.head_eh_fmt, raw, h, g_rd.head_s_eh, pceh, dim)
+    rd_gemv(g_rd.head_eh_fmt, raw, h, g_rd.head_s_eh, 2l * dim, dim, uint(nrows), uint(dim))
     rd_ts(raw, "{pfx}eh")
     var pca = ArArgs(dim = uint(dim), add_on = 0u, woff = hb + uint(RDEC_HEAD_ATT * dim), eps = g_rd.eps, ascale = 1.0)
     enc_cls_ar(raw, h, norm_set, pca, nrows)
@@ -3702,26 +3517,21 @@ def private rd_record_verify(n : int64) {
         g_rdq_verify |> resize(n + 1l)
         g_rdq_verify_unsplit |> resize(n + 1l)
     }
-    var one : RdqStamps
-    rd_take_stamps(one, g_rdq_n)
-    rd_encode_token(g_rd.v_cmd[vi], n, rd_split_pieces(), true)
-    rd_take_stamps(g_rdq_verify[n], g_pfq_n)
-    if (g_rd.unsplit_on) {
-        rd_encode_token(g_rd.v_cmd_unsplit[vi], n, 1l, true)
-        rd_take_stamps(g_rdq_verify_unsplit[n], g_pfq_n)
+    rd_with_form_stamps() {
+        rd_encode_token(g_rd.v_cmd[vi], n, rd_split_pieces(), true)
+        rd_take_stamps(g_rdq_verify[n], g_pfq_n)
+        if (g_rd.unsplit_on) {
+            rd_encode_token(g_rd.v_cmd_unsplit[vi], n, 1l, true)
+            rd_take_stamps(g_rdq_verify_unsplit[n], g_pfq_n)
+        }
     }
-    rd_put_back_stamps(one)
     g_rd.v_recorded[vi] = true
 }
 
 //! once a driver: the verify's segment command buffers, a region's `nseg`, and the per-region recorded flags
 [cold_path]
 def private rd_hc_v_seg_alloc() {
-    g_rd.hc_v_seg |> reserve(g_rd.regions * g_rd.nseg)
-    g_rd.hc_v_seg |> resize(g_rd.regions * g_rd.nseg)
-    for (i in range64(long_length(g_rd.hc_v_seg))) {
-        g_rd.hc_v_seg[i] = alloc_cmd()
-    }
+    alloc_cmds(g_rd.hc_v_seg, g_rd.regions * g_rd.nseg, true)
     g_rd.hc_v_recorded |> reserve(g_rd.regions)
     g_rd.hc_v_recorded |> resize(g_rd.regions)
 }
@@ -3754,6 +3564,82 @@ def private rd_v_rows_mismatch(n : int64) : bool {
     return false
 }
 
+def private rd_verify_stage(x, cossin, hcos : array<float>; pos, n : int64) {
+    let r = g_rd.region
+    let par = g_rd.hybrid ? g_rd.dn_parity[r] : 0
+    unsafe {
+        memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l * n)
+        memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l * n)
+        memcpy(g_rd.head_cos_host.mapped, addr<void?>(hcos[0]), g_rd.cos_elems * 4l * n)
+        var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
+        var hm = reinterpret<TokMeta?>(g_rd.head_tok.mapped)
+        for (i in range64(n)) {
+            tm[i] = TokMeta(pos = uint(pos + i), cnt = uint(pos + i + 1l), parity = g_rd.hybrid ? uint(par ^ int(i & 1l)) : 0u,
+                mirbase = uint(r * g_rd.mir_units), dnslot = uint(r))
+            hm[i] = TokMeta(pos = uint(pos - 1l + i), cnt = uint(pos + i), parity = 0u, mirbase = uint(r * g_rd.mir_units), dnslot = uint(r))
+        }
+    }
+}
+
+def private rd_verify_land(n, width : int64; picks_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>) {
+    if (!picks_only) {
+        host_buf_read(g_rd.logits_host, unsafe(addr<void?>(logits[0])), g_rd.vocab * 4l * n)
+    }
+    host_buf_read(g_rd.hid_host, unsafe(addr<void?>(hid[0])), width * 4l * n)
+    for (i in range64(n)) {
+        picks[i] = rd_landed_pick(i)
+    }
+}
+
+def private rd_verify_close(n : int64; guard : bool) {
+    let r = g_rd.region
+    g_rd.tokens_served += n
+    if (guard) {
+        rd_logits_guard(unsafe(reinterpret<float const?>(g_rd.logits_host.mapped)), g_rd.vocab)
+    }
+    if (g_rd.hybrid) {
+        for (_i in range64(n)) {
+            rd_dn_advance_parity(r)
+        }
+        g_rd.roll_region = g_rd.roll_dev != 0ul ? r : -1l
+        g_rd.roll_vrows = n
+    }
+}
+
+def private rd_token_close(ts0 : int64; guard : bool) {
+    g_rd.tokens_served++
+    if (guard) {
+        rd_logits_guard(unsafe(reinterpret<float const?>(g_rd.logits_host.mapped)), g_rd.vocab)
+    }
+    if (g_rd.tokens_served == 8l) {
+        rd_warmup_check(int64(get_time_usec(ts0)))
+    }
+    if (g_rd.hybrid) {
+        rd_dn_advance_parity(g_rd.region)
+    }
+}
+
+def private rd_submit_wait(var cmd : VkCommandBuffer; n : int64; picks_only, prof : bool) : tuple<t1 : int64; t2 : int64; t3 : int64> {
+    let t1 = prof ? ref_time_ticks() : 0l
+    rd_submit_land(cmd, n, picks_only)
+    let t2 = prof ? ref_time_ticks() : 0l
+    rd_wait_land()
+    let t3 = prof ? ref_time_ticks() : 0l
+    return (t1 = t1, t2 = t2, t3 = t3)
+}
+
+def private rd_run_host_segments(var cmds : array<VkCommandBuffer>; seg0 : int64; host : block<(l : int64) : void>) : int64 {
+    var host_us = 0l
+    for (seg in range64(g_rd.nseg - 1l)) {
+        var cmd = cmds[seg0 + seg]
+        submit_wait(cmd)
+        let th = ref_time_ticks()
+        invoke(host, g_rd.seg_layer[seg])
+        host_us += int64(get_time_usec(th))
+    }
+    return host_us
+}
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-verify-rows")]   //! per speculative round, reached through the tier's registered seat
 def private rd_hc_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool {
     if (g_rd.v_rail == NRail.unasked) {
@@ -3777,72 +3663,31 @@ def private rd_hc_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n 
         rd_record_hc_segments_n(n, true, g_rd.hc_v_seg, seg0)
         g_rd.hc_v_recorded[r] = true
     }
-    let par = g_rd.hybrid ? g_rd.dn_parity[r] : 0
     let guard = rd_guard_rows(g_rd.tokens_served, n)
     let picks_only = pick_only && !guard
     g_rd_verify_landed_logits = !picks_only
     let prof = vk_prof()
     let ts0 = ref_time_ticks()
-    var host_us = 0l
+    rd_verify_stage(x, cossin, hcos, pos, n)
     unsafe {
-        memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), dim * 4l * n)
-        memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l * n)
-        memcpy(g_rd.head_cos_host.mapped, addr<void?>(hcos[0]), g_rd.cos_elems * 4l * n)
         memcpy(g_rd.hemb_host.mapped, addr<void?>(hemb[0]), dim * 4l * n)
         memcpy(reinterpret<void?>(reinterpret<uint8?>(g_rd.head_cat_host.mapped) + dim * 4l), addr<void?>(h0[0]), hcd * 4l)
         if (g_rd.ngram) {
             memcpy(g_rd.ple_emb_host.mapped, addr<void?>(side[0]), g_rd.ngram_ind * 4l * n)
         }
-        var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
-        var hm = reinterpret<TokMeta?>(g_rd.head_tok.mapped)
-        for (i in range64(n)) {
-            tm[i].pos = uint(pos + i)
-            tm[i].cnt = uint(pos + i + 1l)
-            tm[i].parity = g_rd.hybrid ? uint(par ^ int(i & 1l)) : 0u
-            tm[i].mirbase = uint(r * g_rd.mir_units)
-            tm[i].dnslot = uint(r)
-            hm[i].pos = uint(pos - 1l + i)
-            hm[i].cnt = uint(pos + i)
-            hm[i].parity = 0u
-            hm[i].mirbase = uint(r * g_rd.mir_units)
-            hm[i].dnslot = uint(r)
-        }
         let t1 = ref_time_ticks()
-        for (seg in range64(g_rd.nseg - 1l)) {
-            var cmd = g_rd.hc_v_seg[seg0 + seg]
-            submit_wait(cmd)
-            let th = ref_time_ticks()
-            invoke(experts, g_rd.seg_layer[seg], reinterpret<float const?>(g_rd.hx_host.mapped), reinterpret<float const?>(g_rd.hlog_host.mapped), reinterpret<float?>(g_rd.hacc_host.mapped), 0l, n)
-            host_us += int64(get_time_usec(th))
+        let host_us = rd_run_host_segments(g_rd.hc_v_seg, seg0) $(l : int64) {
+            invoke(experts, l, reinterpret<float const?>(g_rd.hx_host.mapped), reinterpret<float const?>(g_rd.hlog_host.mapped), reinterpret<float?>(g_rd.hacc_host.mapped), 0l, n)
         }
         var last = g_rd.hc_v_seg[seg0 + g_rd.nseg - 1l]
-        let t2 = ref_time_ticks()
-        rd_submit_land(last, n, picks_only)
-        rd_wait_land()
-        let t3 = ref_time_ticks()
-        if (!picks_only) {
-            memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l * n)
-        }
-        memcpy(addr<void?>(hid[0]), g_rd.hid_host.mapped, hcd * 4l * n)
+        let t = rd_submit_wait(last, n, picks_only, prof)
+        rd_verify_land(n, hcd, picks_only, logits, picks, hid)
         if (prof) {
-            rdq_host_add(g_rdq_verify_ledger, ts0, t1, t2, t3, ref_time_ticks())
+            rdq_host_add(g_rdq_verify_ledger, ts0, t1, t.t1, t.t3, ref_time_ticks())
             g_rdq_verify_ledger.host_experts_us += double(host_us)
         }
     }
-    for (i in range64(n)) {
-        picks[i] = rd_landed_pick(i)
-    }
-    g_rd.tokens_served += n
-    if (guard) {
-        rd_logits_guard(unsafe(reinterpret<float const?>(g_rd.logits_host.mapped)), g_rd.vocab)
-    }
-    if (g_rd.hybrid) {
-        for (_i in range64(n)) {
-            rd_dn_advance_parity(r)
-        }
-        g_rd.roll_region = g_rd.roll_dev != 0ul ? r : -1l
-        g_rd.roll_vrows = n
-    }
+    rd_verify_close(n, guard)
     if (prof) {
         g_rdq_verify_ledger.wall_us += double(get_time_usec(ts0))
         g_rdq_verify_ledger.count++
@@ -3861,7 +3706,6 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int6
     return rd_v_rows_mismatch(n) if (n < 2l || n > vk_rdec_verify_rows())
     rd_carry_sync()
     let dim = g_rd.dim
-    let r = g_rd.region
     verify(pos >= 1l && long_length(logits) >= n * g_rd.vocab && long_length(picks) >= n && long_length(hid) >= n * dim,
         "vk_rdec_verify: a verify below row 1 (the head's first row is pos - 1), or a landing short of its rows")
     let vi = rd_v_idx(n)
@@ -3869,74 +3713,29 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int6
         rd_record_verify(n)
     }
     let unsplit = g_rd.unsplit_on && pos + n - 1l < RD_UNSPLIT_POS
-    let par = g_rd.hybrid ? g_rd.dn_parity[r] : 0
     let guard = rd_guard_rows(g_rd.tokens_served, n)
     let picks_only = pick_only && !guard
     g_rd_verify_landed_logits = !picks_only
     let prof = vk_prof()
     let ts0 = ref_time_ticks()
-    var t1 = ts0
-    var t2 = ts0
-    var t3 = ts0
+    rd_verify_stage(x, cossin, hcos, pos, n)
     unsafe {
-        memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), dim * 4l * n)
-        memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l * n)
-        memcpy(g_rd.head_cos_host.mapped, addr<void?>(hcos[0]), g_rd.cos_elems * 4l * n)
         let cat = reinterpret<uint8?>(g_rd.head_cat_host.mapped)
         for (i in range64(n)) {
             memcpy(reinterpret<void?>(cat + 2l * i * dim * 4l), addr<void?>(hemb[i * dim]), dim * 4l)
         }
         memcpy(reinterpret<void?>(cat + dim * 4l), addr<void?>(h0[0]), dim * 4l)
-        var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
-        var hm = reinterpret<TokMeta?>(g_rd.head_tok.mapped)
-        for (i in range64(n)) {
-            tm[i].pos = uint(pos + i)
-            tm[i].cnt = uint(pos + i + 1l)
-            tm[i].parity = g_rd.hybrid ? uint(par ^ int(i & 1l)) : 0u
-            tm[i].mirbase = uint(r * g_rd.mir_units)
-            tm[i].dnslot = uint(r)
-            hm[i].pos = uint(pos - 1l + i)
-            hm[i].cnt = uint(pos + i)
-            hm[i].parity = 0u
-            hm[i].mirbase = uint(r * g_rd.mir_units)
-            hm[i].dnslot = uint(r)
-        }
-        var cmd = unsplit ? g_rd.v_cmd_unsplit[vi] : g_rd.v_cmd[vi]
-        if (prof) {
-            t1 = ref_time_ticks()
-            rd_submit_land(cmd, n, picks_only)
-            t2 = ref_time_ticks()
-            rd_wait_land()
-            t3 = ref_time_ticks()
-        } else {
-            rd_submit_land(cmd, n, picks_only)
-            rd_wait_land()
-        }
-        if (!picks_only) {
-            memcpy(addr<void?>(logits[0]), g_rd.logits_host.mapped, g_rd.vocab * 4l * n)
-        }
-        memcpy(addr<void?>(hid[0]), g_rd.hid_host.mapped, dim * 4l * n)
     }
-    for (i in range64(n)) {
-        picks[i] = rd_landed_pick(i)
-    }
+    var cmd = unsplit ? g_rd.v_cmd_unsplit[vi] : g_rd.v_cmd[vi]
+    let t = rd_submit_wait(cmd, n, picks_only, prof)
+    rd_verify_land(n, dim, picks_only, logits, picks, hid)
     if (prof) {
-        rdq_host_add(g_rdq_verify_ledger, ts0, t1, t2, t3, ref_time_ticks())
-    }
-    g_rd.tokens_served += n
-    if (guard) {
-        rd_logits_guard(unsafe(reinterpret<float const?>(g_rd.logits_host.mapped)), g_rd.vocab)
+        rdq_host_add(g_rdq_verify_ledger, ts0, t.t1, t.t2, t.t3, ref_time_ticks())
     }
     if (unsplit) {
         g_rd.unsplit_served += n
     }
-    if (g_rd.hybrid) {
-        for (_i in range64(n)) {
-            rd_dn_advance_parity(r)
-        }
-        g_rd.roll_region = g_rd.roll_dev != 0ul ? r : -1l
-        g_rd.roll_vrows = n
-    }
+    rd_verify_close(n, guard)
     if (prof) {
         g_rdq_verify_ledger.wall_us += double(get_time_usec(ts0))
         if (g_rdq_verify_ledger.count % 32l == 31l) {
@@ -4041,25 +3840,14 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>;
         }
         var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
         for (i in range64(nrows)) {
-            tm[i].pos = uint(poss[i])
-            tm[i].cnt = uint(cnts[i])
-            tm[i].parity = g_rd.hybrid ? uint(g_rd.dn_parity[regs[i]]) : 0u
-            tm[i].mirbase = uint(regs[i] * g_rd.mir_units)
-            tm[i].dnslot = uint(regs[i])
+            tm[i] = TokMeta(pos = uint(poss[i]), cnt = uint(cnts[i]), parity = g_rd.hybrid ? uint(g_rd.dn_parity[regs[i]]) : 0u,
+                mirbase = uint(regs[i] * g_rd.mir_units), dnslot = uint(regs[i]))
         }
         var cmd = unsplit ? g_rd.cmd_n_unsplit[nrows] : g_rd.cmd_n[nrows]
-        if (prof) {   // the profiled form splits the wall into its pieces, as the one-row submit does
-            let t1 = ref_time_ticks()
-            rd_submit_land(cmd, nrows, all_pick)
-            let t2 = ref_time_ticks()
-            rd_wait_land()
-            let t3 = ref_time_ticks()
-            rd_land_rows_n(lrows, picks, nrows)
-            rdq_host_add(g_rdq_token_ledger, ts0, t1, t2, t3, ref_time_ticks())
-        } else {
-            rd_submit_land(cmd, nrows, all_pick)
-            rd_wait_land()
-            rd_land_rows_n(lrows, picks, nrows)
+        let t = rd_submit_wait(cmd, nrows, all_pick, prof)
+        rd_land_rows_n(lrows, picks, nrows)
+        if (prof) {
+            rdq_host_add(g_rdq_token_ledger, ts0, t.t1, t.t2, t.t3, ref_time_ticks())
         }
     }
     g_rd.tokens_served += nrows
@@ -4089,48 +3877,15 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>;
     }
 }
 
-//! Batch-decode support: upload one layer's KV history ([npos x kvd] codec rows) into the shared
-//! mirror at layer `l`, positions [0, npos). The session codec matches the mirror codec (the arm
-//! gate), so the rows byte-copy.
-[hot_path]   // per layer per batch-decode row
-def vk_rdec_sync_kv(l : int64; kp : uint8 const?; vp : uint8 const?; npos : int64) {
-    assert(g_rd != null, "vk_rdec_sync_kv before prepare")
-    let L & = unsafe(g_rd.layers[l])
-    if (L.mir_idx < 0l) {
-        return
-    }
-    let rowb = rd_kv_row_units(L.kvd) * kv_unit_bytes(g_rd.kv_dt)
-    let base = rd_mir_base(L) * kv_unit_bytes(g_rd.kv_dt)
-    upload_region_at(g_rd.k_mirror, base, kp, npos * rowb)
-    upload_region_at(g_rd.v_mirror, base, vp, npos * rowb)
-}
-
-//! Bulk hydration: read layer `l`'s mirror rows [0, npos) into the caller's cache (kp/vp,
-//! [npos x kvd] codec rows each), one submit per KV_READBACK_ROWS rows. The host-KV-authoritative
-//! rail — makes continuations, CPU fallback, and slot switches valid after a device-resident prefill.
-[hot_path]   // the hydration rail — per layer, KV_READBACK_ROWS rows per submit
-def vk_rdec_read_kv_bulk(l : int64; var kp : uint8?; var vp : uint8?; npos : int64) {
-    read_kv_rows(l, 0l, npos, kp, vp)
-}
-
-//! Batch-decode writeback: read layer `l`'s new K/V row at `pos` from the mirror back into the
-//! caller's cache row (kp/vp, one codec row each). Keeps the CPU cache current after a GPU decode step.
-[hot_path]
-def vk_rdec_read_kv(l, pos : int64; var kp : uint8?; var vp : uint8?) {
-    read_kv_rows(l, pos, 1l, kp, vp)
-}
-
-//! the readback both rails are: layer `l`'s mirror rows [row0, row0 + nrows) into kp / vp from their first row, KV_READBACK_ROWS rows a submit
-def private read_kv_rows(l, row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
-    assert(g_rd != null, "read_kv_rows before prepare")
-    read_kv_rows_of(g_rd.layers[l], row0, nrows, kp, vp)
-}
-
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]   //! per prefill, reached through the tier's registered seat
-def vk_rdec_head_sync_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
-    assert(g_rd != null && g_rd.head_on, "vk_rdec_head_sync_rows on a driver without the head")
+//! layer `l`'s mirror rows [row0, row0 + nrows) up from the host cache `kp` / `vp` (from row 0), `l == n_layers` the NextN head; the
+//! session codec matches the mirror codec (the arm gate), so the rows byte-copy
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]   //! per batch-decode row and per prefill, reached through the tier's registered seat
+def vk_rdec_kv_sync(l, row0, nrows : int64; kp : uint8 const?; vp : uint8 const?) {
+    assert(g_rd != null, "vk_rdec_kv_sync before prepare")
+    assert(l < g_rd.n_layers || (l == g_rd.n_layers && g_rd.head_on), "vk_rdec_kv_sync: a layer past the trunk, or a head row on a driver without the head")
     return if (nrows <= 0l)
-    let L & = unsafe(g_rd.head)
+    let L & = unsafe(l == g_rd.n_layers ? g_rd.head : g_rd.layers[l])
+    return if (L.mir_idx < 0l)
     let rowb = rd_kv_row_units(L.kvd) * kv_unit_bytes(g_rd.kv_dt)
     let base = rd_mir_base(L) * kv_unit_bytes(g_rd.kv_dt) + row0 * rowb
     unsafe {
@@ -4139,21 +3894,15 @@ def vk_rdec_head_sync_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?
     }
 }
 
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]   //! per prefill, reached through the tier's registered seat
-def vk_rdec_head_read_rows(row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
-    assert(g_rd != null && g_rd.head_on, "vk_rdec_head_read_rows on a driver without the head")
+//! layer `l`'s mirror rows [row0, row0 + nrows) back into the host cache `kp` / `vp` (from row 0), `l == n_layers` the NextN head,
+//! KV_READBACK_ROWS rows a submit - the hydration rail, the batch decode's row writeback and the head's pass
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]   //! per layer per batch-decode row, reached through the tier's registered seat
+def vk_rdec_kv_read(l, row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
+    assert(g_rd != null, "vk_rdec_kv_read before prepare")
+    assert(l < g_rd.n_layers || (l == g_rd.n_layers && g_rd.head_on), "vk_rdec_kv_read: a layer past the trunk, or a head row on a driver without the head")
     return if (nrows <= 0l)
-    let L & = unsafe(g_rd.head)
-    let rowb = rd_kv_row_units(L.kvd) * kv_unit_bytes(g_rd.kv_dt)
-    read_kv_rows_of(L, row0, nrows, unsafe(kp + row0 * rowb), unsafe(vp + row0 * rowb))
-}
-
-//! `L` is a trunk layer or the NextN head (`RDec.head`)
-def private read_kv_rows_of(L : RLayer; row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
-    if (L.mir_idx < 0l) {
-        return
-    }
-    assert(g_rd != null, "vk decode: K/V rows read with no resident model on the device")
+    let L & = unsafe(l == g_rd.n_layers ? g_rd.head : g_rd.layers[l])
+    return if (L.mir_idx < 0l)
     let rowb = rd_kv_row_units(L.kvd) * kv_unit_bytes(g_rd.kv_dt)
     var p0 = 0l
     var raw = alloc_transient_cmd()   // re-recorded per chunk (the pool allows reset), freed below
@@ -4161,15 +3910,13 @@ def private read_kv_rows_of(L : RLayer; row0, nrows : int64; var kp : uint8?; va
         let rows = min(KV_READBACK_ROWS, nrows - p0)
         let bytes = rows * rowb
         let off = rd_mir_base(L) * kv_unit_bytes(g_rd.kv_dt) + (row0 + p0) * rowb
+        record_submit_wait(raw, false) $(r : VkCommandBuffer) {
+            cmd_copy_range(r, g_rd.k_mirror, off, g_rd.kv_readback.buf, 0l, bytes)
+            cmd_copy_range(r, g_rd.v_mirror, off, g_rd.kv_readback.buf, bytes, bytes)
+        }
         unsafe {
-            let begin = VkCommandBufferBeginInfo()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
-            cmd_copy_range(raw, g_rd.k_mirror, off, g_rd.kv_readback.buf, 0l, bytes)
-            cmd_copy_range(raw, g_rd.v_mirror, off, g_rd.kv_readback.buf, bytes, bytes)
-            vk_check(vkEndCommandBuffer(raw), null)
-            submit_wait(raw)
-            memcpy(reinterpret<void?>(kp + p0 * rowb), g_rd.kv_readback.mapped, bytes)
-            memcpy(reinterpret<void?>(vp + p0 * rowb), reinterpret<uint8?>(g_rd.kv_readback.mapped) + bytes, bytes)
+            memcpy(reinterpret<void?>(kp + (row0 + p0) * rowb), g_rd.kv_readback.mapped, bytes)
+            memcpy(reinterpret<void?>(vp + (row0 + p0) * rowb), reinterpret<uint8?>(g_rd.kv_readback.mapped) + bytes, bytes)
         }
         p0 += rows
     }
@@ -4194,23 +3941,30 @@ def private ensure_dnd_state {
     to_log(LOG_INFO, "dasLLAMA vulkan tier: deltanet decode step engaged\n")
 }
 
+//! stack `si`'s GEMV scratch made and its one region pinned to the plane at `wo` (feed rows `xnb` blocks apart): the per-op stacks serve no other decode GEMV
+def private pin_stack_region(si : int; wo : int64; xnb : int64 = 0l) {
+    ensure_gemv_scratch(si)
+    var region = fixed_array(wo, 0l, 1l)
+    fill_stack_sched_rows(si, unsafe(addr(region[0])), 1l, 1l, xnb)
+}
+
 // create one layer's step chain: per-layer state/smalls buffers, the three sets, the once-filled
 // GEMV metas (dn stacks never serve FFN GEMVs, so their host metas are ours to pin), and the
 // warm cmd — per token only acts/β/γ refresh and the cmd resubmits as-is.
+def private dn_step_args(cd, kd, nkh, ds, dconv : int64; eps : float) : DnStepArgs {
+    return DnStepArgs(cd = uint(cd), kd = uint(kd), nkh = uint(nkh), ds = uint(ds),
+        dconv = uint(dconv), beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G),
+        taps_off = uint(DN_SM_TAPS), wnorm_off = uint(DN_SM_WNORM), a_off = uint(DN_SM_A),
+        dt_off = uint(DN_SM_DT), hist_off = uint(DN_SM_HIST),
+        eps = eps, qscale = 1.0 / sqrt(float(ds)))
+}
+
 [cold_path]
 def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
                           dim, cd, kd, di, nvh, nkh, ds, taps : int64; eps : float) {
-    ensure_gemv_scratch(s_qkv)
-    ensure_gemv_scratch(s_z)
-    ensure_gemv_scratch(s_o)
-    var qkv_region = fixed_array(woq, 0l, 1l)
-    var z_region = fixed_array(woz, 0l, 1l)
-    var o_region = fixed_array(woo, 0l, 1l)
-    unsafe {   // regions are ours to pin: dn stacks never serve FFN GEMVs
-        fill_stack_sched_rows(s_qkv, addr(qkv_region[0]), 1l, 1l, 0l)
-        fill_stack_sched_rows(s_z, addr(z_region[0]), 1l, 1l, 0l)
-        fill_stack_sched_rows(s_o, addr(o_region[0]), 1l, 1l, 0l)
-    }
+    pin_stack_region(s_qkv, woq)
+    pin_stack_region(s_z, woz)
+    pin_stack_region(s_o, woo)
     var st = DnStep(state_dev = make_device_buf(nvh * ds * ds * 4l),
                     smalls_dev = make_device_buf(DND_SMALLS_BYTES),
                     cmd = alloc_cmd(), s_qkv = s_qkv, s_z = s_z, s_o = s_o,
@@ -4234,31 +3988,21 @@ def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
     // the qkv stack's class set plays Y1 in this chain (role-fluid sets re-declare per record)
     var qset = stack_gemv_cls_set(s_qkv)
     hz_set_bits(qset, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
-    let raw = st.cmd
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
-    var h : VkHaz
-    vhz_dep(raw, h, 0u, VHG_SM, true)   // one declaration for the smalls copy group
-    cmd_copy_range(raw, g_gpu.dnd_bg.buf, 0l, st.smalls_dev, DN_SM_BETA * 4l, nvh * 4l)
-    cmd_copy_range(raw, g_gpu.dnd_bg.buf, nvh * 4l, st.smalls_dev, DN_SM_G * 4l, nvh * 4l)
-    var pcqkv = GemvArgs(n = uint(dim), d = uint(cd), nreg = 1u, ybase = 0u)
-    gemv_enc(fqkv, raw, h, qset, pcqkv, cd)
-    var pcz = GemvArgs(n = uint(dim), d = uint(di), nreg = 1u, ybase = uint(cd))
-    gemv_enc(fz, raw, h, st.z_set, pcz, di)
-    var pcd = DnStepArgs(cd = uint(cd), kd = uint(kd), nkh = uint(nkh), ds = uint(ds),
-        dconv = uint(taps + 1l), beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G),
-        taps_off = uint(DN_SM_TAPS), wnorm_off = uint(DN_SM_WNORM), a_off = uint(DN_SM_A),
-        dt_off = uint(DN_SM_DT), hist_off = uint(DN_SM_HIST),
-        eps = eps, qscale = 1.0 / sqrt(float(ds)))
-    enc_dn_step_cls(raw, h, st.fused_set, pcd, nvh)
-    var pco = GemvArgs(n = uint(di), d = uint(dim), nreg = 1u, ybase = 0u)
-    gemv_enc(fo, raw, h, st.out_set, pco, dim)
-    vhz_dep(raw, h, VHG_YO, 0u, true)
-    cmd_copy_whole(raw, g_gpu.stacks[s_o].y_dev, g_gpu.stacks[s_o].y.buf, dim * 4l)
-    if (vk_prof()) {
-        to_log(LOG_INFO, "vk_dnd hz: {h.disp} nodes, {h.barriers} barriers\n")
+    record_cmd(st.cmd, false, "vk_dnd") $(raw : VkCommandBuffer; var h : VkHaz) {
+        vhz_dep(raw, h, 0u, VHG_SM, true)   // one declaration for the smalls copy group
+        cmd_copy_range(raw, g_gpu.dnd_bg.buf, 0l, st.smalls_dev, DN_SM_BETA * 4l, nvh * 4l)
+        cmd_copy_range(raw, g_gpu.dnd_bg.buf, nvh * 4l, st.smalls_dev, DN_SM_G * 4l, nvh * 4l)
+        var pcqkv = GemvArgs(n = uint(dim), d = uint(cd), nreg = 1u, ybase = 0u)
+        gemv_enc(fqkv, raw, h, qset, pcqkv, cd)
+        var pcz = GemvArgs(n = uint(dim), d = uint(di), nreg = 1u, ybase = uint(cd))
+        gemv_enc(fz, raw, h, st.z_set, pcz, di)
+        var pcd = dn_step_args(cd, kd, nkh, ds, taps + 1l, eps)
+        enc_dn_step_cls(raw, h, st.fused_set, pcd, nvh)
+        var pco = GemvArgs(n = uint(di), d = uint(dim), nreg = 1u, ybase = 0u)
+        gemv_enc(fo, raw, h, st.out_set, pco, dim)
+        vhz_dep(raw, h, VHG_YO, 0u, true)
+        cmd_copy_whole(raw, g_gpu.stacks[s_o].y_dev, g_gpu.stacks[s_o].y.buf, dim * 4l)
     }
-    vk_check(vkEndCommandBuffer(raw), null)
     g_gpu.dnd_steps |> insert(woq, st)
 }
 
@@ -4315,9 +4059,7 @@ def vk_moe_dn_step(var yp : float?; s_qkv, s_z, s_o : int; woq, woz, woo : int64
         memcpy(reinterpret<void?>(bg), reinterpret<void?>(bp), nvh * 4l)
         memcpy(reinterpret<void?>(bg + nvh), reinterpret<void?>(gp), nvh * 4l)
         var tm = reinterpret<TokMeta?>(st.tok.mapped)
-        tm.parity = uint(st.parity)
-        tm.mirbase = 0u
-        tm.dnslot = 0u
+        tm[0] = TokMeta(pos = 0u, cnt = 0u, parity = uint(st.parity), mirbase = 0u, dnslot = 0u)
     }
     let ts1 = ref_time_ticks()
     submit_wait(st.cmd)
@@ -4473,34 +4215,28 @@ def private ffn_chain_enc(raw : VkCommandBuffer; var h : VkHaz; var fc : FfnCmd;
     var uset = stack_gemv_cls_set(s3)
     hz_set_bits(gset, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
     hz_set_bits(uset, 0u, 0u, 0u, 0u, 0u, VHG_Y2)
-    var pcg = GemvArgs(n = uint(n), d = uint(nfe), nreg = uint(nrows), ybase = 0u)
-    gemv_enc(g_gpu.stacks[s1].fmt, raw, h, gset, pcg, nrows * nfe)
-    gemv_enc(g_gpu.stacks[s3].fmt, raw, h, uset, pcg, nrows * nfe)
-    var pca = ActArgs(nelem = uint(nrows * nfe), act = is_gelu ? ACT_GELU : ACT_SILU)
-    actrq_enc(raw, h, fc.actrq_set, kq_sb(g_gpu.stacks[s2].fmt), pca, nrows * nfe)
-    var pcd = GemvArgs(n = uint(nfe), d = uint(n), nreg = uint(nrows), ybase = 0u)
-    gemv_enc(g_gpu.stacks[s2].fmt, raw, h, fc.down_set, pcd, nrows * n)
+    enc_routed_ffn(raw, h, g_gpu.stacks[s1].fmt, g_gpu.stacks[s3].fmt, g_gpu.stacks[s2].fmt, gset, uset, fc.actrq_set, fc.down_set, n, nfe, nrows, act_code(false, is_gelu))
+}
+
+def private enc_routed_ffn(raw : VkCommandBuffer; var h : VkHaz; f1, f3, f2 : int; var sg, su, sa, sd : VkDescriptorSet; n, nfe, nreg : int64; act : uint) {
+    var pcg = GemvArgs(n = uint(n), d = uint(nfe), nreg = uint(nreg), ybase = 0u)
+    gemv_enc(f1, raw, h, sg, pcg, nreg * nfe)
+    gemv_enc(f3, raw, h, su, pcg, nreg * nfe)
+    var pca = ActArgs(nelem = uint(nreg * nfe), act = act)
+    actrq_enc(raw, h, sa, kq_sb(f2), pca, nreg * nfe)
+    var pcd = GemvArgs(n = uint(nfe), d = uint(n), nreg = uint(nreg), ybase = 0u)
+    gemv_enc(f2, raw, h, sd, pcd, nreg * n)
 }
 
 def private ffn_cmd_for(s1, s3, s2 : int; nrows, n, nfe : int64; is_gelu : bool) : VkCommandBuffer {
     let key = ffn_cmd_key(s1, s3, s2)
     var fc = g_gpu.ffn_cmds[key]
     if (fc.nrows != nrows || fc.gelu != is_gelu) {
-        if (fc.nrows != 0l) {
-            let rf : VkCommandBufferResetFlags
-            vk_check(vkResetCommandBuffer(fc.cmd, rf), null)
+        record_cmd(fc.cmd, fc.nrows != 0l, "vk_ffng") $(raw : VkCommandBuffer; var h : VkHaz) {
+            ffn_chain_enc(raw, h, fc, s1, s3, s2, nrows, n, nfe, is_gelu)
+            vhz_dep(raw, h, VHG_YO, 0u, true)
+            cmd_copy_whole(raw, g_gpu.stacks[s2].y_dev, g_gpu.stacks[s2].y.buf, nrows * n * 4l)
         }
-        let raw = fc.cmd
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
-        ffn_chain_enc(raw, h, fc, s1, s3, s2, nrows, n, nfe, is_gelu)
-        vhz_dep(raw, h, VHG_YO, 0u, true)
-        cmd_copy_whole(raw, g_gpu.stacks[s2].y_dev, g_gpu.stacks[s2].y.buf, nrows * n * 4l)
-        if (vk_prof()) {
-            to_log(LOG_INFO, "vk_ffng hz: {h.disp} nodes, {h.barriers} barriers\n")
-        }
-        vk_check(vkEndCommandBuffer(raw), null)
         g_gpu.ffn_cmds[key] = FfnCmd(cmd = fc.cmd, actrq_set = fc.actrq_set,
             down_set = fc.down_set, nrows = nrows, gelu = is_gelu)
     }
@@ -4613,22 +4349,16 @@ def private tail_cmd_for(s1, s3, s2, sq : int; woq_next : int64; fq_next : int; 
             fixed_array(n * 4l, n * 4l, n * 4l, n * 4l), fixed_array(VHG_XRES, VHG_XRES, 0u, VHG_XB))
         tc.s_rq = set_rq_cls(fixed_array(g_gpu.tail_xb_dev, g_gpu.stacks[sq].xq.buf, g_gpu.stacks[sq].xs.buf),
             fixed_array(n * 4l, XQ_BYTES, XS_BYTES), fixed_array(VHG_XB, VHG_ACTS, VHG_ACTS))
-        let raw = tc.cmd
-        let begin = VkCommandBufferBeginInfo()
-        vk_check(vkBeginCommandBuffer(raw, begin), null)
-        var h : VkHaz
-        ffn_chain_enc(raw, h, fc, s1, s3, s2, nrows, n, nfe, is_gelu)
-        var pcc = DecCombineArgs(n = uint(n), k = uint(nrows))
-        enc_dec_combine_cls(raw, h, tc.s_comb, pcc, (n + 255l) / 256l)
-        var pca = ArArgs(dim = uint(n), add_on = 0u, woff = 0u, eps = eps, ascale = 1.0)
-        enc_cls_ar(raw, h, tc.s_ar, pca, 1l)
-        rq_enc(raw, h, tc.s_rq, fq_next, n)
-        vhz_dep(raw, h, VHG_XRES | VHG_ACTS, 0u, true)
-        cmd_copy_whole(raw, g_gpu.tail_xres_dev, g_gpu.tail_xres.buf, n * 4l)
-        if (vk_prof()) {
-            to_log(LOG_INFO, "vk_ffn_tail hz: {h.disp} nodes, {h.barriers} barriers\n")
+        record_cmd(tc.cmd, false, "vk_ffn_tail") $(raw : VkCommandBuffer; var h : VkHaz) {
+            ffn_chain_enc(raw, h, fc, s1, s3, s2, nrows, n, nfe, is_gelu)
+            var pcc = DecCombineArgs(n = uint(n), k = uint(nrows))
+            enc_dec_combine_cls(raw, h, tc.s_comb, pcc, (n + 255l) / 256l)
+            var pca = ArArgs(dim = uint(n), add_on = 0u, woff = 0u, eps = eps, ascale = 1.0)
+            enc_cls_ar(raw, h, tc.s_ar, pca, 1l)
+            rq_enc(raw, h, tc.s_rq, fq_next, n)
+            vhz_dep(raw, h, VHG_XRES | VHG_ACTS, 0u, true)
+            cmd_copy_whole(raw, g_gpu.tail_xres_dev, g_gpu.tail_xres.buf, n * 4l)
         }
-        vk_check(vkEndCommandBuffer(raw), null)
         g_gpu.tail_cmds |> insert(woq_next, tc)
     }
     var tc = g_gpu.tail_cmds[woq_next]
@@ -4681,13 +4411,11 @@ def private span_layer_sets(a : MoeSpanDec; li : int64) : SpanLayer {
     ensure_gemv_scratch(SL.s2)
     SL.s_ar_ffn = set_cls_ar(fixed_array(g_gpu.span_x_dev, g_gpu.dat_xb2_dev, g_gpu.span_norms_dev, g_gpu.span_xb_dev),
         fixed_array(nb, nb, nl * 2l * nb, nb), fixed_array(VHS_X, VHZ_XB2, 0u, VHS_XB))
-    SL.s_rq_g1 = set_rq_cls(fixed_array(g_gpu.span_xb_dev, g_gpu.stacks[SL.s1].xq.buf, g_gpu.stacks[SL.s1].xs.buf),
-        fixed_array(nb, XQ_BYTES, XS_BYTES), fixed_array(VHS_XB, VHS_GACTS, VHS_GACTS))
-    SL.s_rq_g3 = set_rq_cls(fixed_array(g_gpu.span_xb_dev, g_gpu.stacks[SL.s3].xq.buf, g_gpu.stacks[SL.s3].xs.buf),
-        fixed_array(nb, XQ_BYTES, XS_BYTES), fixed_array(VHS_XB, VHS_GACTS, VHS_GACTS))
+    SL.s_rq_g1 = span_rq_set(SL.s1, nb, VHS_GACTS)
+    SL.s_rq_g3 = span_rq_set(SL.s3, nb, VHS_GACTS)
     SL.s_router = set_router_gemv_cls(fixed_array(g_gpu.span_router_dev, g_gpu.span_xb_dev, g_gpu.span_logits_dev, g_gpu.span_xb_dev),
         fixed_array(nl * a.ne * nb, nb, MOE_MAX_EXPERTS * 4l, nb), fixed_array(0u, VHS_XB, VHS_LOG, 0u))   //! the norms slot: the span's router reads the normed row, never the norm
-    SL.s_topk = set_topk_cls(   //! the span folds no down scale: the logits row fills the ds binding, never read at NO_DSCALE
+    SL.s_topk = set_topk_n_cls(   //! the span folds no down scale: the logits row fills the ds binding, never read at NO_DSCALE
         fixed_array(g_gpu.span_logits_dev, g_gpu.stacks[SL.s1].meta.buf, g_gpu.stacks[SL.s3].meta.buf, g_gpu.stacks[SL.s2].meta.buf, g_gpu.span_w_dev, g_gpu.span_logits_dev, g_gpu.span_logits_dev, g_gpu.span_eidx_dev),
         fixed_array(MOE_MAX_EXPERTS * 4l, META_BYTES, META_BYTES, META_BYTES, MAX_ROUTED_SLOTS * 4l, MOE_MAX_EXPERTS * 4l, MOE_MAX_EXPERTS * 4l, MAX_ROUTED_SLOTS * 4l),
         fixed_array(VHS_LOG, VHS_META, VHS_META, VHS_META, VHS_META, VHS_LOG, VHS_LOG, VHS_META))
@@ -4698,21 +4426,11 @@ def private span_layer_sets(a : MoeSpanDec; li : int64) : SpanLayer {
         SL.sh1 = find_stack(a.wsh1[li], q8, "span shared gate")
         SL.sh3 = find_stack(a.wsh3[li], q8, "span shared up")
         SL.sh2 = find_stack(a.wsh2[li], q8, "span shared down")
-        ensure_gemv_scratch(SL.sh1)
-        ensure_gemv_scratch(SL.sh3)
-        ensure_gemv_scratch(SL.sh2)
-        var reg1 = fixed_array(a.wsh1[li], 0l, 1l)
-        var reg3 = fixed_array(a.wsh3[li], 0l, 1l)
-        var reg2 = fixed_array(a.wsh2[li], 0l, 1l)
-        unsafe {
-            fill_stack_sched_rows(SL.sh1, addr(reg1[0]), 1l, 1l, dim / 32l)
-            fill_stack_sched_rows(SL.sh3, addr(reg3[0]), 1l, 1l, dim / 32l)
-            fill_stack_sched_rows(SL.sh2, addr(reg2[0]), 1l, 1l, a.nsh / 32l)
-        }
-        SL.s_rq_sh1 = set_rq_cls(fixed_array(g_gpu.span_xb_dev, g_gpu.stacks[SL.sh1].xq.buf, g_gpu.stacks[SL.sh1].xs.buf),
-            fixed_array(nb, XQ_BYTES, XS_BYTES), fixed_array(VHS_XB, VHS_GACTS, VHS_GACTS))
-        SL.s_rq_sh3 = set_rq_cls(fixed_array(g_gpu.span_xb_dev, g_gpu.stacks[SL.sh3].xq.buf, g_gpu.stacks[SL.sh3].xs.buf),
-            fixed_array(nb, XQ_BYTES, XS_BYTES), fixed_array(VHS_XB, VHS_GACTS, VHS_GACTS))
+        pin_stack_region(SL.sh1, a.wsh1[li], dim / 32l)
+        pin_stack_region(SL.sh3, a.wsh3[li], dim / 32l)
+        pin_stack_region(SL.sh2, a.wsh2[li], a.nsh / 32l)
+        SL.s_rq_sh1 = span_rq_set(SL.sh1, nb, VHS_GACTS)
+        SL.s_rq_sh3 = span_rq_set(SL.sh3, nb, VHS_GACTS)
         if (a.sh_gated) {
             SL.s_shgate = set_router_gemv_cls(fixed_array(g_gpu.span_shgate_dev, g_gpu.span_xb_dev, g_gpu.span_logits_dev, g_gpu.span_xb_dev),
                 fixed_array(nl * nb, nb, SPAN_LOGITS_BYTES, nb), fixed_array(0u, VHS_XB, VHS_LOG, 0u))
@@ -4727,11 +4445,14 @@ def private span_layer_sets(a : MoeSpanDec; li : int64) : SpanLayer {
         ensure_gemv_scratch(sqn)
         SL.s_ar_att = set_cls_ar(fixed_array(g_gpu.span_x_dev, g_gpu.span_x_dev, g_gpu.span_norms_dev, g_gpu.span_xb_dev),
             fixed_array(nb, nb, nl * 2l * nb, nb), fixed_array(VHS_X, VHS_X, 0u, VHS_XB))
-        SL.s_rq_att = set_rq_cls(fixed_array(g_gpu.span_xb_dev, g_gpu.stacks[sqn].xq.buf, g_gpu.stacks[sqn].xs.buf),
-            fixed_array(nb, XQ_BYTES, XS_BYTES), fixed_array(VHS_XB, VHS_ACTS, VHS_ACTS))
+        SL.s_rq_att = span_rq_set(sqn, nb, VHS_ACTS)
     }
     return SL
 }
+
+def private span_rq_set(si : int; row_bytes : int64; bit : uint) : VkDescriptorSet
+    => set_rq_cls(fixed_array(g_gpu.span_xb_dev, g_gpu.stacks[si].xq.buf, g_gpu.stacks[si].xs.buf),
+        fixed_array(row_bytes, XQ_BYTES, XS_BYTES), fixed_array(VHS_XB, bit, bit))
 
 let private SPAN_LOGITS_BYTES = (MOE_MAX_EXPERTS + 1l) * 4l   //! the router logits, then the shared expert's gate logit
 
@@ -4750,10 +4471,8 @@ def private span_record(a : MoeSpanDec) {
     let qd = a.qd
     let kvd = a.kvd
     g_gpu.span_cmd = alloc_cmd()
-    var raw = g_gpu.span_cmd
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
-    var h : VkHaz
+    let raw = g_gpu.span_cmd
+    var h = cmd_open(raw, false)
     vhz_dep(raw, h, 0u, VHS_X, true)
     cmd_copy_whole(raw, g_gpu.span_xin.buf, g_gpu.span_x_dev, dim * 4l)
     for (li in range64(nl)) {
@@ -4774,7 +4493,7 @@ def private span_record(a : MoeSpanDec) {
             base3 = span_meta_base(a.we3[li], SL.s3, a.f3[li]), stride3 = uint(a.nfe * dim / kq_unit(a.f3[li])),
             base2 = span_meta_base(a.we2[li], SL.s2, a.f2[li]), stride2 = uint(a.nfe * dim / kq_unit(a.f2[li])),
             xnb2 = uint(a.nfe / kq_unit(a.f2[li])))
-        enc_topk_cls(raw, h, SL.s_topk, pct, 1l)
+        enc_topk_n_cls(raw, h, SL.s_topk, pct, 1l)
         vhz_dep(raw, h, VHS_META, 0u)
         var fc = g_gpu.ffn_cmds[ffn_cmd_key(SL.s1, SL.s3, SL.s2)]
         ffn_chain_enc(raw, h, fc, SL.s1, SL.s3, SL.s2, a.k, dim, a.nfe, a.is_gelu)
@@ -4806,7 +4525,7 @@ def private span_record(a : MoeSpanDec) {
     if (vk_prof()) {
         to_log(LOG_INFO, "vk_span hz: {h.disp} nodes, {h.barriers} barriers over {nl} layers\n")
     }
-    vk_check(vkEndCommandBuffer(raw), null)
+    cmd_close(raw)
 }
 
 //! Forget the recorded span so the next token records anew: the span records once per model and
@@ -4831,7 +4550,7 @@ def private ensure_span_state(a : MoeSpanDec) {
         return
     }
     assert(a.ne <= MOE_MAX_EXPERTS && a.k <= MAX_ROUTED_SLOTS, "dasLLAMA vulkan tier: decode span routing exceeds the top-k kernel's reach")
-    verify(ensure_router_gemv_cls() && ensure_topk_cls() && ensure_dec_combine_cls() && ensure_cls_ar()
+    verify(ensure_router_gemv_cls() && ensure_topk_n_cls() && ensure_dec_combine_cls() && ensure_cls_ar()
             && ensure_cls_q8k_rq() && ensure_cls_dn_rq() && (a.nsh == 0l || ensure_dec_combine_sh_cls()),
         "vk decode span: the class rails must engage on a live device")
     let dim = a.dim
@@ -4888,9 +4607,7 @@ def vk_moe_span_dec(var a : MoeSpanDec) {
         memcpy(g_gpu.span_xin.mapped, reinterpret<void?>(a.x), a.dim * 4l)
         memcpy(g_gpu.dat_cos.mapped, reinterpret<void?>(a.cossin), a.hs * 4l)
         var tm = reinterpret<TokMeta?>(g_gpu.dat_tok.mapped)
-        tm.pos = uint(a.pos)
-        tm.cnt = uint(a.pos + 1l)
-        tm.mirbase = 0u   //! the block's mirror rides the push: the attention adds the row's base to it
+        tm[0] = TokMeta(pos = uint(a.pos), cnt = uint(a.pos + 1l), parity = 0u, mirbase = 0u, dnslot = 0u)   //! the block's mirror rides the push: the attention adds the row's base to it
     }
     let ts1 = ref_time_ticks()
     submit_wait(g_gpu.span_cmd)
@@ -4908,13 +4625,17 @@ def vk_moe_span_dec(var a : MoeSpanDec) {
         L.cnt = a.pos + 1l
     }
     if (vk_prof()) {
-        g_dec_prof_attn_rec_us += int64(get_time_usec(ts0)) - int64(get_time_usec(ts1))
-        g_dec_prof_attn_wait_us += int64(get_time_usec(ts1))
-        g_dec_prof_attn_us += int64(get_time_usec(ts0))
-        g_dec_prof_attn_n++
-        if (g_dec_prof_first_woq < 0l) {
-            g_dec_prof_first_woq = a.woq[0]
-        }
+        dec_prof_attn(ts0, ts1, int64(get_time_usec(ts1)), a.woq[0])
+    }
+}
+
+def private dec_prof_attn(ts0, ts1, wait_us, woq : int64) {
+    g_dec_prof_attn_rec_us += int64(get_time_usec(ts0)) - int64(get_time_usec(ts1))
+    g_dec_prof_attn_wait_us += wait_us
+    g_dec_prof_attn_us += int64(get_time_usec(ts0))
+    g_dec_prof_attn_n++
+    if (g_dec_prof_first_woq < 0l) {
+        g_dec_prof_first_woq = woq
     }
 }
 
@@ -4922,18 +4643,19 @@ def vk_moe_span_dec(var a : MoeSpanDec) {
 // Shared activation image + shared y (per-plane bases via the GEMV meta) ⇒ ONE submit, not three
 // (~74us each would eat the win). Serial-chain work: pays on GPU read speed, nothing hides here.
 
+def private qkv_gemv_enc(raw : VkCommandBuffer; var h : VkHaz; fq, fk, fv : int; var sq, sk, sv : VkDescriptorSet; n, dq, dk, dv : int64) {
+    var pcq = GemvArgs(n = uint(n), d = uint(dq), nreg = 1u, ybase = 0u)
+    gemv_enc(fq, raw, h, sq, pcq, dq)
+    var pck = GemvArgs(n = uint(n), d = uint(dk), nreg = 1u, ybase = uint(dq))
+    gemv_enc(fk, raw, h, sk, pck, dk)
+    var pcv = GemvArgs(n = uint(n), d = uint(dv), nreg = 1u, ybase = uint(dq + dk))
+    gemv_enc(fv, raw, h, sv, pcv, dv)
+}
+
 def private qkv_cmd_make(sq, sk, sv : int; woq, wok, wov : int64; n, dq, dk, dv : int64) {
-    ensure_gemv_scratch(sq)
-    ensure_gemv_scratch(sk)
-    ensure_gemv_scratch(sv)
-    var qreg = fixed_array(woq, 0l, 1l)
-    var kreg = fixed_array(wok, 0l, 1l)
-    var vreg = fixed_array(wov, 0l, 1l)
-    unsafe {   // regions are ours to pin: these stacks serve no other decode GEMV
-        fill_stack_sched_rows(sq, addr(qreg[0]), 1l, 1l, 0l)
-        fill_stack_sched_rows(sk, addr(kreg[0]), 1l, 1l, 0l)
-        fill_stack_sched_rows(sv, addr(vreg[0]), 1l, 1l, 0l)
-    }
+    pin_stack_region(sq, woq)
+    pin_stack_region(sk, wok)
+    pin_stack_region(sv, wov)
     var qc = QkvCmd(cmd = alloc_cmd(), sq = sq, ybytes = (dq + dk + dv) * 4l)
     assert(qc.ybytes <= Y_BYTES, "dasLLAMA vulkan tier: qkv group exceeds output capacity")
     let fk = g_gpu.stacks[sk].fmt
@@ -4943,23 +4665,15 @@ def private qkv_cmd_make(sq, sk, sv : int; woq, wok, wov : int64; n, dq, dk, dv 
     // three disjoint row levels on the shared y (Y1/Y2/Y3): k/v sets ride the q stack's acts image
     qc.k_set = stack_gemv_set_x(sk, sq, g_gpu.stacks[sq].y_dev, Y_BYTES, VHG_Y2)
     qc.v_set = stack_gemv_set_x(sv, sq, g_gpu.stacks[sq].y_dev, Y_BYTES, VHG_Y3)
-    let raw = qc.cmd
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
     let fq = g_gpu.stacks[sq].fmt
     // the q stack's class set plays Y1 in this chain (role-fluid, re-declared per record)
     var qset = stack_gemv_cls_set(sq)
     hz_set_bits(qset, 0u, 0u, 0u, 0u, 0u, VHG_Y1)
-    var h : VkHaz
-    var pcq = GemvArgs(n = uint(n), d = uint(dq), nreg = 1u, ybase = 0u)
-    gemv_enc(fq, raw, h, qset, pcq, dq)
-    var pck = GemvArgs(n = uint(n), d = uint(dk), nreg = 1u, ybase = uint(dq))
-    gemv_enc(fk, raw, h, qc.k_set, pck, dk)
-    var pcv = GemvArgs(n = uint(n), d = uint(dv), nreg = 1u, ybase = uint(dq + dk))
-    gemv_enc(fv, raw, h, qc.v_set, pcv, dv)
-    vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_Y3, 0u, true)
-    cmd_copy_whole(raw, g_gpu.stacks[sq].y_dev, g_gpu.stacks[sq].y.buf, qc.ybytes)
-    vk_check(vkEndCommandBuffer(raw), null)
+    record_cmd(qc.cmd, false) $(raw : VkCommandBuffer; var h : VkHaz) {
+        qkv_gemv_enc(raw, h, fq, fk, fv, qset, qc.k_set, qc.v_set, n, dq, dk, dv)
+        vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_Y3, 0u, true)
+        cmd_copy_whole(raw, g_gpu.stacks[sq].y_dev, g_gpu.stacks[sq].y.buf, qc.ybytes)
+    }
     g_gpu.qkv_cmds |> insert(woq, qc)
 }
 
@@ -5026,9 +4740,9 @@ def private heat_pool_make(l : int64; b1, b3, b2 : int64; f1, f3, f2 : int; n, n
         return
     }
     let base = HEAT_BASE + l * 3l * HEAT_STRIDE
-    pool.s1 = make_stack_shell(base, c * pool.ege, f1, c * pb1.wq, c * pb1.ws)
-    pool.s3 = make_stack_shell(base + HEAT_STRIDE, c * pool.ege, f3, c * pb3.wq, c * pb3.ws)
-    pool.s2 = make_stack_shell(base + 2l * HEAT_STRIDE, c * pool.ege, f2, c * pb2.wq, c * pb2.ws)
+    pool.s1 = rd_hot_stack(base, f1, c, pool.ege, pb1)
+    pool.s3 = rd_hot_stack(base + HEAT_STRIDE, f3, c, pool.ege, pb3)
+    pool.s2 = rd_hot_stack(base + 2l * HEAT_STRIDE, f2, c, pool.ege, pb2)
     ensure_gemv_scratch(pool.s1)
     ensure_gemv_scratch(pool.s3)
     ensure_gemv_scratch(pool.s2)
@@ -5102,10 +4816,7 @@ def vk_moe_heat_advise(l : int64; b1, b3, b2 : int64; f1, f3, f2 : int; n, nfe :
         }
         break if (free_s >= pool.nslots)
         if (up == 0) {
-            let rf : VkCommandBufferResetFlags
-            vk_check(vkResetCommandBuffer(raw, rf), null)
-            let begin = VkCommandBufferBeginInfo()
-            vk_check(vkBeginCommandBuffer(raw, begin), null)
+            cmd_open(raw, true)
         }
         heat_record_slice(raw, pool.src1, pool.s1, e, int64(free_s), n, pool.ege)
         heat_record_slice(raw, pool.src3, pool.s3, e, int64(free_s), n, pool.ege)
@@ -5115,7 +4826,7 @@ def vk_moe_heat_advise(l : int64; b1, b3, b2 : int64; f1, f3, f2 : int; n, nfe :
         up++
     }
     if (up > 0) {
-        vk_check(vkEndCommandBuffer(raw), null)
+        cmd_close(raw)
         submit_wait(raw)
     }
 }
@@ -5152,6 +4863,15 @@ def vk_moe_heat_query(l : int64; idx : int64 const?; k : int64; var hit : int8?;
 // One-time dispatch state for a resident classifier plane: the regions pair never changes (ONE
 // region covering the whole plane, activations at image row 0), so it uploads device-local once
 // and the command buffer records once — per token only the activation refresh and the submit remain.
+def private cls_regions_buf(base : uint) : uint64 {
+    return make_staged_buf(CLS_META_BYTES) $(var words : uint?) {
+        unsafe {
+            words[0] = base
+            words[1] = 0u
+        }
+    }
+}
+
 def private ensure_cls(si : int; woff, n, d : int64) {
     if (g_gpu.stacks[si].cls_made) {
         return
@@ -5159,24 +4879,16 @@ def private ensure_cls(si : int; woff, n, d : int64) {
     ensure_gemv_scratch(si)
     let fmt = g_gpu.stacks[si].fmt
     verify(gemv_cls_ensure(fmt), "vk decode: the gemv class rail must engage on a live device")
-    unsafe {
-        var mp = reinterpret<uint?>(g_gpu.staging.mapped)
-        mp[0] = span_meta_base(woff, si, fmt)
-        mp[1] = 0u
-    }
-    g_gpu.stacks[si].cls_regions_dev = make_device_buf(CLS_META_BYTES)
-    staged_upload(g_gpu.stacks[si].cls_regions_dev, 0l, CLS_META_BYTES)
+    g_gpu.stacks[si].cls_regions_dev = cls_regions_buf(span_meta_base(woff, si, fmt))
     g_gpu.stacks[si].cls_set = stack_gemv_set(si, g_gpu.stacks[si].cls_regions_dev, CLS_META_BYTES, g_gpu.stacks[si].xq.buf, g_gpu.stacks[si].xs.buf, XQ_BYTES, XS_BYTES, 0u, g_gpu.stacks[si].y_dev, Y_BYTES, VHG_YO)
-    var raw = alloc_cmd()
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
-    var h : VkHaz
-    var pc = GemvArgs(n = uint(n), d = uint(d), nreg = 1u, ybase = 0u)
-    gemv_enc(fmt, raw, h, g_gpu.stacks[si].cls_set, pc, d)
-    vhz_dep(raw, h, VHG_YO, 0u, true)
-    cmd_copy_whole(raw, g_gpu.stacks[si].y_dev, g_gpu.stacks[si].y.buf, d * 4l)
-    vk_check(vkEndCommandBuffer(raw), null)
-    g_gpu.stacks[si].cls_cmd = raw
+    var cmd = alloc_cmd()
+    record_cmd(cmd, false) $(raw : VkCommandBuffer; var h : VkHaz) {
+        var pc = GemvArgs(n = uint(n), d = uint(d), nreg = 1u, ybase = 0u)
+        gemv_enc(fmt, raw, h, g_gpu.stacks[si].cls_set, pc, d)
+        vhz_dep(raw, h, VHG_YO, 0u, true)
+        cmd_copy_whole(raw, g_gpu.stacks[si].y_dev, g_gpu.stacks[si].y.buf, d * 4l)
+    }
+    g_gpu.stacks[si].cls_cmd = cmd
     g_gpu.stacks[si].cls_made = true
 }
 
@@ -5236,20 +4948,10 @@ def private dat_layer_sets(woq, wok, wov, woo : int64; fq, fk, fv, fo : int; rms
     let sk = find_stack(wok, fk, "decode attn k")
     let sv = find_stack(wov, fv, "decode attn v")
     let so = find_stack(woo, fo, "decode attn o")
-    ensure_gemv_scratch(sq)
-    ensure_gemv_scratch(sk)
-    ensure_gemv_scratch(sv)
-    ensure_gemv_scratch(so)
-    var qreg = fixed_array(woq, 0l, 1l)
-    var kreg = fixed_array(wok, 0l, 1l)
-    var vreg = fixed_array(wov, 0l, 1l)
-    var oreg = fixed_array(woo, 0l, 1l)
-    unsafe {   // regions are ours to pin: these stacks serve no other decode GEMV
-        fill_stack_sched_rows(sq, addr(qreg[0]), 1l, 1l, 0l)
-        fill_stack_sched_rows(sk, addr(kreg[0]), 1l, 1l, 0l)
-        fill_stack_sched_rows(sv, addr(vreg[0]), 1l, 1l, 0l)
-        fill_stack_sched_rows(so, addr(oreg[0]), 1l, 1l, 0l)
-    }
+    pin_stack_region(sq, woq)
+    pin_stack_region(sk, wok)
+    pin_stack_region(sv, wov)
+    pin_stack_region(so, woo)
     verify(gemv_cls_ensure(fq) && gemv_cls_ensure(fk) && gemv_cls_ensure(fv) && gemv_cls_ensure(fo),
         "vk decode attention: the gemv class rail must engage on a live device")
     let qd = g_gpu.dat_qd
@@ -5374,12 +5076,7 @@ def vk_moe_attn_dec_hydrate(woq : int64; fq : int; kp : uint8 const?; vp : uint8
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]
 def private at_chain_enc(raw : VkCommandBuffer; var h : VkHaz; var L : DatLayer; fq, fk, fv, fo : int; dim, qd, kvd, hs, n_heads, kv_mul : int64; scale, eps : float; neox, qk_norm : bool) {
-    var pcq = GemvArgs(n = uint(dim), d = uint(qd), nreg = 1u, ybase = 0u)
-    gemv_enc(fq, raw, h, L.s_q, pcq, qd)
-    var pck = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 1u, ybase = uint(qd))
-    gemv_enc(fk, raw, h, L.s_k, pck, kvd)
-    var pcv = GemvArgs(n = uint(dim), d = uint(kvd), nreg = 1u, ybase = uint(qd + kvd))
-    gemv_enc(fv, raw, h, L.s_v, pcv, kvd)
+    qkv_gemv_enc(raw, h, fq, fk, fv, L.s_q, L.s_k, L.s_v, dim, qd, kvd, kvd)
     let hb = L.has_bias ? 1u : 0u   // the layer's own row is bound, so boff stays 0
     if (qk_norm) {
         var pcf = QknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2l),
@@ -5402,24 +5099,17 @@ def private at_chain_enc(raw : VkCommandBuffer; var h : VkHaz; var L : DatLayer;
 //! submit move. k and v come back raw - the host derives its cache row.
 [cold_path]   // recording leg (also the rerecord A/B probe) - not the steady-state token path
 def private at_record_layer(var L : DatLayer; fq, fk, fv, fo : int; dim, qd, kvd, hs, n_heads, kv_mul : int64; scale, eps : float; neox, qk_norm : bool) {
-if (!L.recorded || vk_rdec_rerecord_on()) {
+    return if (L.recorded && !vk_rdec_rerecord_on())
     if (!L.recorded) {
         L.cmd = alloc_cmd()
-    } else {
-        let rf : VkCommandBufferResetFlags
-        vk_check(vkResetCommandBuffer(L.cmd, rf), null)
     }
-    var raw = L.cmd
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw, begin), null)
-    var h : VkHaz
-    at_chain_enc(raw, h, L, fq, fk, fv, fo, dim, qd, kvd, hs, n_heads, kv_mul, scale, eps, neox, qk_norm)
-    vhz_dep(raw, h, VHZ_XB2 | VHZ_KVK | VHZ_KVV, 0u, true)
-    cmd_copy_whole(raw, g_gpu.dat_xb2_dev, g_gpu.dat_out.buf, dim * 4l)
-    cmd_copy_range(raw, g_gpu.dat_kv_dev, qd * 4l, g_gpu.dat_out.buf, dim * 4l, 2l * kvd * 4l)
-    vk_check(vkEndCommandBuffer(raw), null)
+    record_cmd(L.cmd, L.recorded) $(raw : VkCommandBuffer; var h : VkHaz) {
+        at_chain_enc(raw, h, L, fq, fk, fv, fo, dim, qd, kvd, hs, n_heads, kv_mul, scale, eps, neox, qk_norm)
+        vhz_dep(raw, h, VHZ_XB2 | VHZ_KVK | VHZ_KVV, 0u, true)
+        cmd_copy_whole(raw, g_gpu.dat_xb2_dev, g_gpu.dat_out.buf, dim * 4l)
+        cmd_copy_range(raw, g_gpu.dat_kv_dev, qd * 4l, g_gpu.dat_out.buf, dim * 4l, 2l * kvd * 4l)
+    }
     L.recorded = true
-}
 }
 
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#decode-attention-block")]   // per token
@@ -5444,16 +5134,11 @@ def vk_moe_attn_dec(var xb2p : float?; var kp : float?; var vp : float?; woq, wo
     unsafe {
         memcpy(g_gpu.dat_cos.mapped, reinterpret<void?>(cosp), hs * 4l)
         var tm = reinterpret<TokMeta?>(g_gpu.dat_tok.mapped)
-        tm.pos = uint(pos)
-        tm.cnt = uint(pos + 1l)
-        tm.mirbase = 0u
+        tm[0] = TokMeta(pos = uint(pos), cnt = uint(pos + 1l), parity = 0u, mirbase = 0u, dnslot = 0u)
     }
     let ts1 = ref_time_ticks()
     submit_wait(L.cmd)
-    if (vk_prof()) {
-        g_dec_prof_attn_rec_us += int64(get_time_usec(ts0)) - int64(get_time_usec(ts1))
-        g_dec_prof_attn_wait_us += int64(get_time_usec(ts1))
-    }
+    let wait_us = vk_prof() ? int64(get_time_usec(ts1)) : 0l
     unsafe {
         var op = reinterpret<uint8?>(g_gpu.dat_out.mapped)
         memcpy(reinterpret<void?>(xb2p), reinterpret<void?>(op), dim * 4l)
@@ -5469,11 +5154,7 @@ def vk_moe_attn_dec(var xb2p : float?; var kp : float?; var vp : float?; woq, wo
         g_gpu.tail_xout = null
     }
     if (vk_prof()) {
-        g_dec_prof_attn_us += int64(get_time_usec(ts0))
-        g_dec_prof_attn_n++
-        if (g_dec_prof_first_woq < 0l) {
-            g_dec_prof_first_woq = woq
-        }
+        dec_prof_attn(ts0, ts1, wait_us, woq)
         if (woq == g_dec_prof_first_woq) {
             g_dec_prof_tokens++
             if (g_dec_prof_tokens % 32l == 0l) {

@@ -7,7 +7,6 @@ require dastest/testing_boost public
 require dasllama/dasllama_transformer   // umbrella fires each arch [init] registration (qwen3)
 require dasllama/dasllama
 require daslib/jobque_boost
-require daslib/fio
 require _model_tier
 require _kv_codec_cells   // cell_perop_codec
 
@@ -28,21 +27,19 @@ let private CARRIER = "Qwen3-0.6B-Q8_0.gguf"
 //! codec chain's 48.7 where the device prefilled and 38.4 against 42.6 over rows the CPU quantized; the f16 rows one step off sum to 80-95.
 let private BARS = PeropBars(rows = 0.05, dist_rel = 1.0)
 
-def private carrier_path() : string => path_join(models_dir(), CARRIER)
-
 [test]
 def test_gpu_perop_tq4(t : T?) {
     t |> run("Qwen3-0.6B on the per-op rails, a tq4 session: the device prefill's rows and the steps' rows land rotated in the cache") @(t : T?) {
-        cell_perop_codec(t, carrier_path(), 40l, KVDtype.tq4, BARS)
+        cell_perop_codec(t, CARRIER, 40l, KVDtype.tq4, BARS)
     }
     t |> run("... and a prompt under the device prefill's floor: the block hydrates from the tq4 rows the CPU prefill wrote") @(t : T?) {
-        cell_perop_codec(t, carrier_path(), 20l, KVDtype.tq4, BARS)
+        cell_perop_codec(t, CARRIER, 20l, KVDtype.tq4, BARS)
     }
 }
 
 [test]
 def test_gpu_perop_q8(t : T?) {
     t |> run("Qwen3-0.6B on the per-op rails, a q8_0 session: the device prefill and the steps over the block's f16 mirror") @(t : T?) {
-        cell_perop_codec(t, carrier_path(), 40l, KVDtype.q8_0, BARS)
+        cell_perop_codec(t, CARRIER, 40l, KVDtype.q8_0, BARS)
     }
 }

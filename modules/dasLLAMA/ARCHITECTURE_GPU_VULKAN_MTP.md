@@ -32,8 +32,9 @@ planes (`xq_dev`, `xs_dev`) hold twice `dim` a row: eh_proj reads the `[enorm ; 
 them (`vk_rdec_prepare`'s `wide`, `vk_rdec_set_head`'s `xq_bytes`). The draft command, one per region, norms the
 uploaded embed row and carry `h` into one `[enorm ; hnorm]` row, runs eh_proj into x, the layer
 through the token command's attention and FFN encoders on its slot at row `pos - 1` (the head's
-own `TokMeta` block and rope rows), the head norm into the carry's row, the classifier and the
-pick; the pick and that row land (`mtp_h`, `mtp_h_pos1` 0), and the seat answers the pick as the
+own `TokMeta` block and rope rows), the head norm into the carry's row, the classifier, its
+epilogue (a final softcap, the suppressed ids pinned - the token command's, so a draft never picks
+a suppressed id) and the pick; the pick and that row land (`mtp_h`, `mtp_h_pos1` 0), and the seat answers the pick as the
 draft's token (`MtpDraftOverrideFn`), so the round's greedy walk (`mtp_draft`, `pick_only`)
 compares ids the host never re-derives and the logits stay on the device - the picks-only
 transfer twin (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue`); `forward_mtp`'s
@@ -50,7 +51,7 @@ with the higher count (`rdec_head_device_wrote`, `rdec_head_host_writes`;
 `test_gpu_resident_hybrid_mtp_draft_upload` holds a draft's upload counted and hydrated back).
 The device's rows come down on a pass
 (`rdec_head_hydrate`: the rows below the row the CPU reads next that the device holds and the host
-does not, through the head warm seat's `read`) - a draft or a verify the seat declines, the
+does not, through the K/V row read seat at layer `n_layers`, `rdec_kv_read`) - a draft or a verify the seat declines, the
 continuation's seam, which the driver's seam seat (`register_mtp_seam_override("vulkan", ...)`)
 hydrates for and leaves to the CPU seam, a steal and a drop (`rdec_hydrate_host`) - so no served
 round reads a head row back, and the CPU round's reject path and a draft the seat declines read
@@ -61,7 +62,8 @@ command stamps its dispatches into a list of its own (`g_rdq_draft`): the upload
 norms and requant (`draft_cat`), the eh_proj GEMV (`draft_eh`), the head's attention norm and
 feed requant (`draft_attnorm`), the head layer's roles under the trunk's names (`q`, `kv`,
 `qknrope`, `attn`, `wo`, `ar1`, `rq_f`, the FFN's), the head norm and classifier feed
-(`draft_norm`), the classifier (`draft_cls`) and the picks (`draft_pick`); its samples go to the
+(`draft_norm`), the classifier (`draft_cls`), its epilogue where the model has one (`draft_epi`) and
+the picks (`draft_pick`); its samples go to the
 draft's own ledger (`g_rdq_draft_ledger`), printed every 32 drafts as `vk_rdec gpu avg/draft over N: ...`
 (the idle at its end is the gap since the verify sampled before it) and `vk_rdec host wall/draft
 over N: ...` - the memcpys piece holds the hydrate's upload where one ran, the wait the

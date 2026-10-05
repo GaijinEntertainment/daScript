@@ -37,10 +37,13 @@ def kv_block_codec(dt : KVDtype) : bool => dt == KVDtype.q8_0 || dt == KVDtype.t
 //! layout seam: q8_0 32-blocks of {f16 d; int8 qs[32]} = 34 B, tq4 32-blocks of {f16 d; uint8 qs[16]} =
 //! 18 B (elems % 32 == 0 by create). The _d wrappers prescale with it so the workers' walks stay unit-correct.
 def kv_side_off(dt : KVDtype; elems : int64) : int64 {
-    if (dt == KVDtype.q8_0) return elems / 32l * 34l
-    if (dt == KVDtype.tq4) return elems / 32l * 18l
+    if (dt == KVDtype.q8_0) return elems / 32l * int64(KV_Q8_BLOCK_BYTES)
+    if (dt == KVDtype.tq4) return elems / 32l * int64(KV_TQ4_BLOCK_BYTES)
     return elems
 }
+
+let KV_Q8_BLOCK_BYTES = 34u    //! a q8_0 K/V block in bytes: its f16 scale, then 32 quant bytes
+let KV_TQ4_BLOCK_BYTES = 18u   //! a tq4 K/V block in bytes: its f16 scale, then 16 bytes of two 4-bit quants each
 
 //! Byte stride of one position row of width kv_dim under codec dt: the side offset of the whole
 //! row, in bytes for a block codec already, scaled by the element size for a scalar one.

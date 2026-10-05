@@ -24,9 +24,10 @@ let CODEC_ROWS_CTRL = 0.2   //! a stored row held to the next one differs at 0.3
 //! rows in the codec's place would read near 0 (every resident carrier reads 0.95-1.01)
 let CODEC_APPLIED_REL = 0.5
 
-//! `blk` over `path` loaded with the whole-model route pinned on and the mirror asked at `kv` (the levers put back), inside the
+//! `blk` over `file` (under models_dir()) loaded with the whole-model route pinned on and the mirror asked at `kv` (the levers put back), inside the
 //! engine's job queue. Skips without the JIT, the model, the armed tier, or where DASLLAMA_VK_KV32=1 armed f32 over the ask.
-def with_codec_model(t : T?; path : string; kv : KVDtype; blk : block<(tr : Model) : void>) {
+def with_codec_model(t : T?; file : string; kv : KVDtype; blk : block<(tr : Model) : void>) {
+    let path = path_join(models_dir(), file)
     return if (!resident_ready(t, path))
     var tr <- load_resident_at(path, kv)
     if (mirror_kv_dtype() == KVDtype.f32 && kv != KVDtype.f32) {
@@ -45,17 +46,11 @@ def with_codec_model(t : T?; path : string; kv : KVDtype; blk : block<(tr : Mode
 //! The forced-feed form at a block codec: an `n`-token prompt and `CODEC_FED_STEPS` fed tokens through the device and the CPU
 //! chain, both on sessions of `kv`, every row within `bar_rel` of the CPU row's largest live logit, the row one step off past it.
 [cold_path]
-def cell_codec_forced_feed(t : T?; path : string; n : int64; kv : KVDtype; bar_rel : float) {
-    with_codec_model(t, path, kv) $(tr) {
-        var prompt <- resident_prompt(n)
-        var toks <- resident_feed(CODEC_FED_STEPS)
-        var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {
+def cell_codec_forced_feed(t : T?; file : string; n : int64; kv : KVDtype; bar_rel : float) {
+    with_codec_model(t, file, kv) $(tr) {
+        forced_feed_over(t, tr, "{kv} mirror: ", n, CODEC_FED_STEPS, bar_rel) $ {
             served_every_call(t)
         }
-        feed_steps_within(t, tr, "{kv} mirror: ", n, fed.gpu, fed.cpu, toks, bar_rel)
-        delete fed
-        delete prompt
-        delete toks
     }
 }
 
@@ -65,8 +60,8 @@ def cell_codec_forced_feed(t : T?; path : string; n : int64; kv : KVDtype; bar_r
 //! distance of each other; each upper bound's control, its second side one step off, lands outside it. With `cpu_prefill` the device's prompt runs on the CPU rails - its steps
 //! read rows the CPU wrote and the driver uploaded - and the prompt's row, the CPU's on both codec chains, stays out of the sums.
 [cold_path]
-def cell_codec_distance(t : T?; path : string; n : int64; kv : KVDtype; cpu_prefill : bool; dist_rel, pair_rel : float) {
-    with_codec_model(t, path, kv) $(tr) {
+def cell_codec_distance(t : T?; file : string; n : int64; kv : KVDtype; cpu_prefill : bool; dist_rel, pair_rel : float) {
+    with_codec_model(t, file, kv) $(tr) {
         codec_distance_over(t, tr, n, kv, cpu_prefill, dist_rel, pair_rel)
     }
 }
@@ -85,9 +80,7 @@ def codec_distance_over(t : T?; tr : Model; n : int64; kv : KVDtype; cpu_prefill
     set_resident_prefill_allowed(allowed0)
     if (cpu_prefill) {
         t |> equal(moe_gpu_resident_prefills(), served0, "the prompt read on the CPU rails")
-        var passes <- gpu_cpu_passes_()
-        t |> success(length(passes) == 1 && passes[0].reason == "pinned_off", "the device served every call but the prompt the pin kept off it: {passes}")
-        delete passes
+        only_pass(t, "pinned_off", "the device served every call but the prompt the pin kept off it")
     } else {
         t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the prompt")
         served_every_call(t)
@@ -95,12 +88,8 @@ def codec_distance_over(t : T?; tr : Model; n : int64; kv : KVDtype; cpu_prefill
     t |> success(moe_gpu_resident_active(), "the driver stayed armed through the run")
     delete sg
     moe_gpu_drop_model()
-    var sc <- create_session(tr, kv)
-    var cpu <- feed_logits(tr, sc, prompt, toks)
-    delete sc
-    var sf <- create_session(tr, KVDtype.f16)
-    var f16_rows <- feed_logits(tr, sf, prompt, toks)
-    delete sf
+    var cpu <- feed_alone(tr, kv, prompt, toks)
+    var f16_rows <- feed_alone(tr, KVDtype.f16, prompt, toks)
     let what = "{kv}, {n} tokens{cpu_prefill ? ", the prompt on the CPU rails" : ""}"
     let dist = chain_distances(t, tr, what, gpu, cpu, f16_rows, cpu_prefill ? 1 : 0)
     t |> success(dist.cpu_ref > 0.0, "{what}: the codec moves the CPU chain off its f16 rows")
@@ -123,7 +112,6 @@ struct StoredRowsBars {
     v_prefill_of_ctrl : float    //! the prefill's V rows, of the share a row held to the next one differs by
 }
 
-let private PLAN_WINDOW_ROWS = 512l   //! the prefill window the plan sizes the staged rows by (the engine's PF_WINDOW)
 let private PLAN_PROBE_CTX = 4096l
 
 //! the plan charges a block codec's scratch over the f16 plan's: both sides' f16 shadow of one layer's rows at the context,
@@ -132,7 +120,7 @@ def private plan_charges_codec_scratch(t : T?; tr : Model; kv : KVDtype) {
     let kvd = layer_kv_dim(tr.config, 0l)
     let codec_plan = resident_plan(tr, PLAN_PROBE_CTX, kv, kv)
     let f16_plan = resident_plan(tr, PLAN_PROBE_CTX, KVDtype.f16, KVDtype.f16)
-    let want = 2l * PLAN_PROBE_CTX * kvd * 2l + 2l * PLAN_WINDOW_ROWS * kvd * 4l
+    let want = 2l * PLAN_PROBE_CTX * kvd * 2l + 2l * PF_WINDOW_ROWS * kvd * 4l
     t |> equal(codec_plan.scratch_bytes - f16_plan.scratch_bytes, want, "{kv}: the plan charges the shadow planes and the staged rows ({want} B at {PLAN_PROBE_CTX} positions of a {kvd}-wide row)")
 }
 
@@ -140,8 +128,8 @@ def private plan_charges_codec_scratch(t : T?; tr : Model; kv : KVDtype) {
 //! 0's bytes against the CPU cache's after the same tokens, within `bars`; a row held to the next one is the control. The
 //! cell also holds the plan's scratch charge for the codec.
 [cold_path]
-def cell_codec_stored_rows(t : T?; path : string; kv : KVDtype; bars : StoredRowsBars) {
-    with_codec_model(t, path, kv) $(tr) {
+def cell_codec_stored_rows(t : T?; file : string; kv : KVDtype; bars : StoredRowsBars) {
+    with_codec_model(t, file, kv) $(tr) {
         plan_charges_codec_scratch(t, tr, kv)
         let npf = 40l
         let rows = npf + CODEC_FED_STEPS
@@ -196,7 +184,8 @@ let PEROP_PREFILL_FLOOR = 32l   //! the shortest prompt the per-op device prefil
 //! the device prefilled a prompt at `PEROP_PREFILL_FLOOR` or longer and no shorter one. Skips where the tier marked no
 //! attention layer of the model for the block.
 [cold_path]
-def cell_perop_codec(t : T?; path : string; n : int64; kv : KVDtype; bars : PeropBars) {
+def cell_perop_codec(t : T?; file : string; n : int64; kv : KVDtype; bars : PeropBars) {
+    let path = path_join(models_dir(), file)
     return if (!resident_ready(t, path))
     let route0 = gpu_resident_route_lever()
     set_gpu_resident_route(false)
@@ -231,9 +220,7 @@ def private perop_codec_compare(t : T?; tr : Model; n : int64; kv : KVDtype; bar
     var cpu <- feed_logits(tr, sc, prompt, toks)
     var host <- layer_rows(tr, sc, 0l, rows)
     delete sc
-    var sf <- create_session(tr, KVDtype.f16)
-    var f16_rows <- feed_logits(tr, sf, prompt, toks)
-    delete sf
+    var f16_rows <- feed_alone(tr, KVDtype.f16, prompt, toks)
     let what = "{kv}, {n} tokens on the per-op rails"
     if (attn0 != NO_CENSUS) {
         t |> success(attn1 - attn0 >= CODEC_FED_STEPS, "{what}: the device's attention block served the steps ({attn1 - attn0} dispatches)")
