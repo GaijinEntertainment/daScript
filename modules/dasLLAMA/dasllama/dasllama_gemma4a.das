@@ -405,7 +405,7 @@ def private g4a_repack(var st : Gemma4aStaging; woff, n, d : int64) {
 
 // repack every GEMM region for the active backend's q8q8 kernels; without a selected
 // backend matmul_q8q8_batch reads the flat Q8_0 image as-is
-def private g4a_repack_all(var st : Gemma4aStaging) {
+def private g4a_repack_all(var st : Gemma4aStaging; mid : int64) {
     if (!st.e.q8 || !select_matmul_backend_for_load_()) {
         return
     }
@@ -413,7 +413,6 @@ def private g4a_repack_all(var st : Gemma4aStaging) {
     let ff = st.e.n_ff
     let feat = st.e.sub_ch1 * (st.e.n_mel / 4l)
     g4a_repack(st, st.e.inproj_w, feat, d)
-    let mid = long_length(st.ones)
     g4a_repack(st, st.e.outproj_w, d, mid)
     g4a_repack(st, st.e.mmproj_w, mid, st.e.proj_dim)
     for (l in range64(st.e.n_layer)) {
@@ -583,7 +582,7 @@ def stage_gemma4a_encoder(path : string) : Gemma4aStaging {
         }
     }
     fclose(f)
-    g4a_repack_all(st)
+    g4a_repack_all(st, mid)
 
     // HTK filterbank, 512 Hann (320 at the front, zeros to 512), DFT twiddles, RPE table, ones
     st.filters <- g4a_htk_filterbank(st.e.n_mel, G4A_N_FFT, AUDIO_SAMPLE_RATE)
