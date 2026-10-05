@@ -402,7 +402,7 @@ def document_module_dasllama(_root : string) {
         dasllama_type_stanza(f, "struct-dasllama_vision_embedder-VisionState", "VisionState",
             "Caller-owned scratch for the embedder forward of whichever family is carried: the buffers ``encode_image`` reuses across calls. One per embedder user; holds no image state between calls.")
         dasllama_type_stanza(f, "struct-dasllama_audio_embedder-AudioEmbedder", "AudioEmbedder",
-            "A loaded audio encoder of whatever family the mmproj GGUF turned out to be (gemma4a — the gemma-4 E-series Conformer), as produced by ``load_audio_embedder``, which probes the file; ``audio_probe_proj_dim`` answers 0 where absence is an answer. ``audio_proj_dim`` must match the decoder's embedding width. The server's media worker owns one per armed slot.")
+            "A loaded audio encoder of whatever family the mmproj GGUF turned out to be (gemma4a — the gemma-4 E-series Conformer; or a whisper-class tower that ``load_audio_tower`` also serves — qwen2-audio, qwen2.5-omni, ultravox, voxtral), as produced by ``load_audio_embedder``, which probes the file; ``audio_probe_proj_dim`` answers 0 where absence is an answer. ``audio_proj_dim`` must match the decoder's embedding width. The server's media worker owns one per armed slot.")
         dasllama_type_stanza(f, "struct-dasllama_audio_embedder-AudioState", "AudioState",
             "Caller-owned scratch for the audio encoder forward of whichever family is carried: the buffers ``encode_audio`` reuses across calls. One per embedder user; holds no clip state between calls.")
         dasllama_type_stanza(f, "struct-dasllama_image-DlimImageInfo", "DlimImageInfo",
