@@ -249,7 +249,10 @@ def private tw_q8_region(t : AudioTower; off, n, rows : int64; lay : Q8RepackLay
 //! The whisper-class tower's q8 block GEMM planes on the device, uploaded once a tower. False where the buffer cannot be made.
 [cold_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private tw_q8_attach(t : AudioTower) : bool {
-    let key = hash_combine64(intptr(plane_at(t.qblob, 0l)), uint64(length(t.qblob)))
+    // a pure read of the layout the load repacked under: selecting again here could name another
+    let lay = active_q8_repack_layout(kernel_backend_needs_repack(active_kernel_backend()))
+    let shape = hash_combine64(hash_combine64(uint64(lay.mr), uint64(lay.kgroup)), hash_combine64(uint64(lay.wbias), lay.repacked ? 1ul : 0ul))
+    let key = hash_combine64(hash_combine64(intptr(plane_at(t.qblob, 0l)), uint64(length(t.qblob))), shape)
     return true if (st2_slab_current(g_tw_q8, key))
     st2_slab_free(g_tw_q8)
     let d = t.d_model
@@ -257,8 +260,6 @@ def private tw_q8_attach(t : AudioTower) : bool {
     let layer_elems = 4l * d * d + 2l * d * ff
     var staging : array<uint8>
     staging |> reserve_resize(((t.n_layer * layer_elems + 3l * d * d) / Q8_BLOCK_ELEMS) * TW_Q8_BLOCK_BYTES + 16l * (t.n_layer * TW_Q8_MATS + 1l))
-    // a pure read of the layout the load repacked under: selecting again here could name another
-    let lay = active_q8_repack_layout(kernel_backend_needs_repack(active_kernel_backend()))
     g_tw_q8_boffs |> resize(t.n_layer * TW_Q8_MATS)
     var cur = 0ul
     g_tw_q8_conv2 = tw_q8_region(t, t.conv2_w_off, 3l * d, d, lay, staging, cur)
@@ -376,6 +377,7 @@ def private tw_tail_make(t : AudioTower; npos : int64) : TwTail {
         bytes_n1 = uint64(m1in * 4l), bytes_n2 = uint64(half * 4l))
     tl.bin = pool_acquire_pinned(g_tw_pool, g_dev, tl.bytes_in)
     tl.bout = pool_acquire_pinned(g_tw_pool, g_dev, tl.bytes_out)
+    zero_rows(tl.bin, rows, mpr, m1in)   //! the tail's kernels write the live rows alone and the GEMMs read the row pad: the buffers are pooled
     tl.u_in = uniform_u32(uint(m1in))
     tl.u_proj = uniform_u32(uint(t.proj_dim))
     tl.u_tot = uniform_u32(uint(rows * (mlp ? t.mm1_out : t.proj_dim)))
@@ -385,6 +387,7 @@ def private tw_tail_make(t : AudioTower; npos : int64) : TwTail {
     }
     if (uv) {
         tl.bgate = pool_acquire_pinned(g_tw_pool, g_dev, tl.bytes_gate)
+        zero_rows(tl.bgate, rows, mpr, half)
         tl.bn1 = pool_acquire_pinned(g_tw_pool, g_dev, tl.bytes_n1)
         tl.bn2 = pool_acquire_pinned(g_tw_pool, g_dev, tl.bytes_n2)
         tl.u_gate = uniform_u32(uint(half))
@@ -1716,6 +1719,8 @@ def private g4v_ends_make(t : Gemma4vTower; s : Gemma4vState; npos, mp : int64) 
     e.bytes_std = uint64(d * 4l)
     e.bpool = pool_acquire_pinned(g_tw_pool, g_dev, e.bytes_pool)
     e.bclamp = pool_acquire_pinned(g_tw_pool, g_dev, e.bytes_pool)
+    zero_rows(e.bpool, e.nout, e.mpo, d)   //! the pool and the clamp write the live rows alone and the projection reads the row pad: the buffers are pooled
+    zero_rows(e.bclamp, e.nout, e.mpo, d)
     e.bout = pool_acquire_pinned(g_tw_pool, g_dev, e.bytes_out)
     e.bstd_b = pool_acquire_pinned(g_tw_pool, g_dev, e.bytes_std)
     e.bstd_m = pool_acquire_pinned(g_tw_pool, g_dev, e.bytes_std)
@@ -1987,6 +1992,7 @@ def private g3v_tail_make(t : Gemma3vTower; npos : int64) : G3vTail {
     tl.bytes_soft = uint64(d * 4l)
     tl.bpool = pool_acquire_pinned(g_tw_pool, g_dev, tl.bytes_pool)
     tl.bout = pool_acquire_pinned(g_tw_pool, g_dev, tl.bytes_out)
+    zero_rows(tl.bpool, tl.nout, tl.mpo, d)   //! the pool writes the live rows alone and the projection reads the row pad: the buffers are pooled
     tl.bsoft = pool_acquire_pinned(g_tw_pool, g_dev, tl.bytes_soft)
     tl.u_proj = uniform_u32(uint(t.proj_dim))
     unsafe(memcpy(metal_buffer_contents(tl.bsoft), plane_at(t.blob, t.soft_norm_w), tl.bytes_soft))

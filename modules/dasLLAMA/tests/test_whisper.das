@@ -784,7 +784,7 @@ def test_whisper_q8_0_file(t : T?) {
         let f16_path = path_join(whisper_dir(), "ggml-tiny.bin")
         let q8_path = path_join(whisper_dir(), "ggml-tiny-q8_0.bin")
         return if (!jit_model_available(tt, f16_path) || !jit_model_available(tt, q8_path))
-        let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+        let samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             tt |> skip("jfk.wav not present")
             return
@@ -828,7 +828,7 @@ def test_parakeet_q8_0_file(t : T?) {
         let f32_path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-f32.bin")
         let q8_path = path_join(whisper_dir(), "ggml-parakeet-tdt-0.6b-v3-q8_0.bin")
         return if (!jit_model_available(tt, f32_path) || !jit_model_available(tt, q8_path))
-        let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+        let samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
         if (empty(samples)) {
             tt |> skip("jfk.wav not present")
             return
@@ -862,7 +862,7 @@ def test_whisper_metal_ln_post(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
             return if (!jit_model_available(tt, model_path))
-            let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            let samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
             if (empty(samples)) {
                 tt |> skip("jfk.wav not present")
                 return
@@ -922,7 +922,7 @@ def test_whisper_metal_wdec_flush(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             let model_path = path_join(whisper_dir(), "ggml-tiny.bin")
             return if (!jit_model_available(tt, model_path))
-            let samples <- read_wav_pcm16_mono(path_join(models_dir(), "jfk.wav"))
+            let samples <- load_audio_16k_mono(path_join(models_dir(), "jfk.wav"))
             if (empty(samples)) {
                 tt |> skip("jfk.wav not present")
                 return
@@ -1370,7 +1370,7 @@ def test_canary_qwen_oracle(t : T?) {
                  6540, 315, 5561, 151645])
             check_canary_clip(t, m, path_join(corpus_dir(), "librispeech/05_1089-134686-0004.wav"),
                 [2833, 5779, 29160, 451, 11896, 374, 8580, 389, 498, 13, 7684, 3729, 9972, 151645])
-            var inscope jfk <- read_wav_pcm16_mono(path_join(corpus_dir(), "jfk.wav"))
+            var inscope jfk <- load_audio_16k_mono(path_join(corpus_dir(), "jfk.wav"))
             if (!empty(jfk)) {
                 var inscope hs <- create_session(m, "en")
                 heap_flat_leg(t, m, hs, jfk, "canary")
