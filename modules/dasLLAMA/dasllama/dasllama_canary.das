@@ -1250,16 +1250,11 @@ def canary_transcribe(dec : Model; enc : CanaryEncoder; var s : CanaryAsrSession
     let npos = n_head + n_audio + long_length(tail)
     asr_ctx_guard(n_audio, npos, dec.config.seq_len)
     var inscope embd : array<float>
-    embd |> resize(int(npos * dim))
-    embed_text_rows(dec, head, embd, 0l)
-    for (i in range64(n_audio * dim)) {
-        embd[n_head * dim + i] = s.cst.out[i]
-    }
-    embed_text_rows(dec, tail, embd, n_head + n_audio)
+    media_body_rows_(dec, s.qctx, head, s.cst.out, n_audio, dim, tail, embd)
 
     let tpf = ref_time_ticks()
     s.qctx.n_past = 0l   // fresh sequence per transcribe
-    eval_embd_(dec, s.qctx, embd, npos)
+    eval_embd_body_(dec, s.qctx, embd, npos, 0l, 0l, int2(0))
     asr_prof_add("cn.prefill", tpf)
 
     let max_new = min(dec.config.seq_len - npos - 1l, CN_MAX_NEW)

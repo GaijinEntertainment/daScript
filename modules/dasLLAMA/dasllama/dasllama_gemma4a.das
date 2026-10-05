@@ -1190,16 +1190,11 @@ def gemma4a_transcribe(dec : Model; enc : Gemma4aEncoder; var s : Gemma4aAsrSess
     let npos = n_head + n_audio + long_length(tail)
     asr_ctx_guard(n_audio, npos, dec.config.seq_len)
     var inscope embd : array<float>
-    embd |> resize(int(npos * dim))
-    embed_text_rows(dec, head, embd, 0l)
-    for (i in range64(n_audio * dim)) {
-        embd[n_head * dim + i] = rows[i]
-    }
-    embed_text_rows(dec, tail, embd, n_head + n_audio)
+    media_body_rows_(dec, s.qctx, head, rows, n_audio, dim, tail, embd)
 
     s.qctx.n_past = 0l   // fresh sequence per transcribe
     tp = ref_time_ticks()
-    eval_embd_(dec, s.qctx, embd, npos)
+    eval_embd_body_(dec, s.qctx, embd, npos, 0l, 0l, int2(0))
     asr_prof_add("g4a.prefill", tp)
 
     let turn_end = special_id(dec, "<turn|>")

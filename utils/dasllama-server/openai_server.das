@@ -2439,19 +2439,6 @@ def private message_parts(mv : JsonValue?; route : string; var images : array<st
     return ""
 }
 
-//! How many bytes of a message's text sit ahead of its first media part: where the media splices in the rendered turn
-def media_text_before(mv : JsonValue?) : int {
-    let cv = mv?["content"]
-    return 0 if (cv == null || !(cv.value is _array))
-    var n = 0
-    for (pv in (cv.value as _array)) {
-        let ptype = pv?["type"] ?? ""
-        return n if (ptype == "image_url" || ptype == "input_image" || ptype == "input_audio")
-        n += ptype == "text" ? length(pv?["text"] ?? "") : 0
-    }
-    return 0
-}
-
 // `message_parts` for routes with no media path: image/audio parts warn and drop.
 def private message_text(mv : JsonValue?; route : string) : string {
     var images : array<string>

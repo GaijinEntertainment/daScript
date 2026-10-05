@@ -57,7 +57,6 @@ require openai/openai_vision   // chat_vision: the image row's request
 require audio/audio_wav   // decode_wav / read_wav: the seconds of speech an answer carries
 require daslib/strings_convert   // try_to_int: the --sizes list
 require daslib/fio
-require daslib/base64   // the --chat-clip file as an input_audio part
 require strings
 require math
 require daslib/jobque_boost   // the load turn's thread: its job over a Stream, its state in an atomic
@@ -642,20 +641,6 @@ def see(plan : Plan; system, question, payload : string; is_audio : bool = false
     }
     delete res
     return seen
-}
-
-//! the base64 of the file at `path`, "" for a file that cannot be read
-def private file_base64(path : string) : string {
-    var bytes : array<uint8>
-    fopen(path, "rb") $(f) {
-        if (f != null) {
-            bytes |> resize(int64(fstat(f).size))
-            fread(f, bytes)
-        }
-    }
-    let text = empty(bytes) ? "" : base64_encode(bytes)
-    delete bytes
-    return text
 }
 
 //! The image rows, one an image: per rep a question under a system line no server has seen, then another question

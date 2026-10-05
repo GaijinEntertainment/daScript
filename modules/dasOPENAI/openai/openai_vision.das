@@ -24,19 +24,24 @@ def private vision_image_part(image_url : string) : JsonValue? {
     return JV(tab)
 }
 
-def image_file_data_uri(path : string) : string {
-    //! The image file at ``path`` as the ``data:`` URL a browser would send (``image/png`` for a ``.png``
-    //! name, ``image/jpeg`` otherwise); "" for a file that cannot be read.
-    var bytes : array<uint8>
+def file_base64(path : string) : string {
+    //! The bytes of the file at ``path`` as base64 - a byte read, since an image or a clip carries interior NULs a
+    //! string read stops at; "" for a file that cannot be read.
+    var inscope bytes : array<uint8>
     fopen(path, "rb") $(f) {
         if (f != null) {
             bytes |> resize(int64(fstat(f).size))
             fread(f, bytes)
         }
     }
-    let uri = empty(bytes) ? "" : "data:image/{ends_with(to_lower(path), ".png") ? "png" : "jpeg"};base64,{base64_encode(bytes)}"
-    delete bytes
-    return uri
+    return empty(bytes) ? "" : base64_encode(bytes)
+}
+
+def image_file_data_uri(path : string) : string {
+    //! The image file at ``path`` as the ``data:`` URL a browser would send (``image/png`` for a ``.png``
+    //! name, ``image/jpeg`` otherwise); "" for a file that cannot be read.
+    let b64 = file_base64(path)
+    return empty(b64) ? "" : "data:image/{ends_with(to_lower(path), ".png") ? "png" : "jpeg"};base64,{b64}"
 }
 
 def private audio_part(audio_base64, format : string) : JsonValue? {

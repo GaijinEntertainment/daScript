@@ -2752,9 +2752,7 @@ Every `[test]` file requiring a `dasllama/*` module outside this folder, each wi
 - `utils/dasllama-server/test_worker_dispatch.das` - requires the server (`openai_server`) by
   bare same-dir name, like the server suites beside it.
 - `utils/dasllama-server/test_server_flags.das` - requires the server's program root (`main`) and
-  `openai_server` by bare same-dir name; its `test_media_text_before` cell holds the text offset a
-  media part splices at (the text parts ahead of the first media part; 0 for a leading part, a
-  plain string or no media); its ctx-clamp cell doubles the engine's K/V room seam
+  `openai_server` by bare same-dir name; its ctx-clamp cell doubles the engine's K/V room seam
   (`dasllama_gpu_tier`) under the internal escape, so a blob-only Model shell's `seq_len` is cut to
   the rows the seam answers while a planar shell's stands; its slot-codec cell holds the K/V codec
   a slot runs on (`slot_kv_dtype`, which the live-load clamp reads): the server default for a slot
