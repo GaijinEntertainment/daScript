@@ -4594,3 +4594,47 @@ board's (`performance/records/gnr.json`).
   99.02 +- 0.50 / 30.29 +- 0.48 - the biased arm is 0.95x on both legs. `.jitted_scripts` was
   kept across these four processes; the perm's `bias` argument keys the biased arm's kernels
   apart.
+
+### From the Vulkan dedup pass (2026-10-05, RunPod RTX PRO 4500 Blackwell, 16 lanes, the models network volume)
+
+The pass folds 247 tier-A and 76 tier-B duplicate sets across the Vulkan engine, its kernel classes
+and the test rigs (one commit per fold, net about -5300 lines against master 1a0729a6ef) and means
+to move no served number. The readings are `lcpp_bench.das` rows on the same card in one process a
+row, master then the tip right after it, `--ngl 0 -p 512 -n 128 -r 5 -t 16`, the Vulkan lane minted
+once per model and shared by both trees. pp512 on this card spreads past 10% between reps on the
+small models (the 1B reads +-12500 of 30600 on master), so tg128 is the column that holds a verdict
+and pp512 is read against its own spread.
+
+- **tg128 holds on every row.** Master then the tip: Llama-3.2-1B Q4_K_M 554.87 +- 0.51 / 551.73 +-
+  0.55; Qwen3-4B Q8_0 146.54 +- 12.62 / 152.21 +- 0.22; gemma-4-E4B Q8_0 98.33 +- 15.27 / 112.00 +-
+  0.05; gemma-4-12B Q4_K_M 82.12 +- 0.02 / 82.18 +- 0.02; Qwen3.5-9B-MTP Q5_K_XL 105.20 +- 0.03 /
+  105.07 +- 0.03; Qwen3.8-27B Q4_K_M under the tq4 K/V codec 36.97 +- 0.01 / 36.96 +- 0.01 and under
+  q8_0 36.98 +- 0.09 / 37.01 +- 0.01. The +-12 to +-15 spreads land on either tree at random (the
+  10-rep recheck put them on master once and on the tip once) - a stall, not a tree.
+- **Two folds cost the Q8_0 prefill 3.7% and came back.** pp512 read Qwen3-4B Q8_0 11948 +- 344 ->
+  11423 +- 256 and gemma-4-E4B Q8_0 9661 +- 113 -> 9371 +- 107, held by a 10-rep master-tip-master-tip
+  recheck (11734 / 11294 / 11688 / 11277 and 9559 / 9269 / 9496 / 9268). The per-stage GPU profile
+  (`DASLLAMA_GPU_PROF=1`, Qwen3-4B Q8_0, 512 tokens) put every Q8 weight GEMM stage 3-5% longer (q
+  4229 -> 4426, k 2482 -> 2560, wo 3685 -> 3816, gate 8353 -> 8799, up 8288 -> 8652, down 7872 ->
+  8244 us) and the rest flat. An A/B on the tip named them: `Q8Cm2T.decode` back to its 16-bit-lane
+  `unpack8` select reads 11483 +- 243 (the shift form of the F8 rule change, 1.5%); that plus
+  `MmBatchT`'s two tiles back as two bodies reads 11894 +- 331 (the one coopmat accumulator array
+  walked under `[unroll_full]`, 2.5% - its own 4096x4096 probe had read flat per dispatch, 147.63 ->
+  147.68 us; the served shape did not agree, and the old and new tiles load the same fragments, so
+  the array itself is what the driver stops keeping in registers). A probe shape is not the served
+  shape: the served row is the gate a fold passes.
+- **The tq4 mirror's control share reads as the constant's doc says on this card.** The hybrid file's
+  `tq4_within` holds a tolerance row to `TQ4_CTRL_SHARE` 0.85 of its distance from the one-token-off row
+  (`tests/_resident_feed.das`): the share reads 0.09-0.44 on the RTX 5060 Ti and 0.73 on the RTX PRO
+  4500 (the 900-token prompt cut at 300), so the bar sits halfway from the widest reading to the row one
+  off's 1.0; the model-free controls hold a device row at 0.8 of the distance and red one at 0.9, and a
+  NaN reference row with no control row reds. The pod's hybrid file: 69 cells, 65 passed, 4 skipped.
+- **The resident llama file's Q4_0 carrier holds the file's logit bar.** `Llama-3.2-1B-Instruct-Q4_0-local.gguf`
+  (the 1B requantized, the q40 planes on the window chain's kq batch arm) runs the file's cells under
+  `LOGIT_BAR_REL` 0.06 of each row's largest live |logit| with the one-step-off control past it: 14 cells,
+  12 passed, 2 skipped on the pod.
+- **`rows_within_control` is the one bar statistic the resident rigs read.** The per-file copies
+  (`carries_within`, `head_rows_within`, `rows_bar_fails`) fold onto it: every row within `rel` of its CPU
+  row's largest live |value| (`live_maxabs`, a NaN and the suppressed-id floor left out) and the control row
+  past `ctrl_bars` bars, the widest miss and the tightest control logged with their rows. The cells it
+  serves read the same verdicts before and after the fold (hybrid, moe, hc, the regions files 26/26 twice).
