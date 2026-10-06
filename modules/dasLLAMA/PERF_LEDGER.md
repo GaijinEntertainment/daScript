@@ -11,6 +11,33 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-06, `direction-grade`) - Pocket's text prompt on the device takes a third of its request on
+  both boxes; the thirteen TTS kernels moved to templates both homes stamp read as before.** The prompt seat runs the
+  chunk's text rows through the frames slab's layers at the voice's positions (`ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames`,
+  `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-pocket-chain`), the keys and values back to the host; the last layer ends at
+  its K/V on every rail, including the CPU's. `dasllama-server` with the TTS model alone, `harness/served_bench.das
+  --no-chat --tts-url <server> --reps 8`, one sentence, master and the branch alternated twice in one sitting on each
+  box (the master lives first); the stages are the engine's own stage clock. The M5's tune sidecar predates the binary.
+  - M5 Max, Metal, ms a request, master / branch: Pocket q8 67.5 / 49.5 and 67.5 / 49.4 (4.56 s of speech on master,
+    4.64 on the branch - the device prompt moves the EOS frame by one), its stages prompt 15.5 / 2.1, backbone
+    38.4 / 34.2 (the attention's unrolled loads and the frames call's upload of rows the device already holds),
+    codec 8.8 / 8.6; Kokoro-82M 73.5 / 73.5 (a third branch life 73.5, two branch lives void at cv 3.3% and 3.4%),
+    its stages the same to the tenth (decoder 41.22 / 41.29); Kitten mini 64.5 / 64.5 (one branch life void at cv
+    4.1%), decoder 29.37 / 29.36.
+  - RTX PRO 4500, Vulkan (driver 580.159), ms a request, master / branch: Pocket q8 114.7 / 68.1 and 114.2 / 67.9,
+    its stages prompt 50.0 / 3.8, backbone 50.2 / 49.2, codec 8.7 / 8.8; Kokoro-82M 48.3 / 48.1 and 48.3 / 47.9 (the
+    first master row void at cv 9.3%), its stages the same to the tenth (bert 4.29 / 4.29, decoder 13.9 / 13.9);
+    Kitten mini 48.6 / 46.4 and 52.5 / 47.8, every row void on spread (that box's round trip jitters), its stages the
+    same to the tenth (decoder 10.5 / 10.4). The shared reduce base the row kernels now derive puts one call under
+    every `WgReduceBase` reduce (eight audio-tower stamps and five TTS stamps moved by it, `harness/vk_spv_diff.das`):
+    the backbone and bert stages above ride it, and whisper large-v3-turbo q8 served (`main.das -- --asr <bin>`,
+    `served_bench.das --no-chat --asr-url <server> --clip jfk_ask_not.wav --reps 8`) reads 48.8 / 48.5 on the one
+    round both sides held under 3% (54.2 / 54.7 on the other, both void).
+  - Quality, `harness/tts_rig.py` on the 200-sentence corpus, flag-free on the M5 (the Metal seats serve), WER % /
+    UTMOS before -> after: Pocket f32 4.18 / 4.373 -> 3.95 / 4.368, q8 4.41 / 4.363 -> 4.23 / 4.354, kq 3.91 / 4.325 ->
+    3.77 / 4.314, stuart-kq 3.32 / 4.137 -> 3.27 / 4.139 (the device prompt moves an EOS frame here and there);
+    kitten-nano 3.09 / 3.980 -> 3.09 / 3.976, kitten-mini 2.77 / 4.331 -> 2.77 / 4.331, kokoro 2.73 / 4.501 ->
+    2.73 / 4.501.
 - **MEASURED (2026-10-05, `direction-grade`, `debug-jit`) - the depth-1 NextN round on the M1 Max: the draft at two
   rows, then chained into the verify's command buffer.** M1 Max (MacBookPro18,2, 64 GB), Metal,
   Qwen3.6-35B-A3B-MTP UD-Q4_K_M, `benchmarks/lcpp_bench.das` as the `-jit` script (`-no-module-cache`):
@@ -1234,7 +1261,7 @@ what it costs today and what the fix would change.
   pays the device bring-up and the slab builds; of the spread only the min named below is in the
   record, the rest is the run's log). Pocket q8 (`pocket-tts-en-q8.gguf`, alba): 132 ms a
   sentence, the first 641, a steady sentence about 99 - the prompt 27 ms of it on the CPU chain
-  (`followup_vulkan.md` 107), the backbone 62, the codec 10. kokoro (`kokoro-82m.gguf`): 98 ms,
+  (the prompt seat since serves it on the device, the entry above), the backbone 62, the codec 10. kokoro (`kokoro-82m.gguf`): 98 ms,
   the first 785, min 36, the steady sentences about 62, against the torch CUDA reference row of
   52 ms a sentence (`external`: `harness/tts_ref_bench.py --device cuda --models
   kokoro-82m:af_heart --limit 20` on the pod under
@@ -1290,7 +1317,7 @@ what it costs today and what the fix would change.
   before the change: sampled within 5% of greedy. `lcpp_bench` carries no sampler flag (its
   `--mtp-temp` sets a temperature alone), so no board row holds the sampled rate.
 - **LANDED (2026-09-25) - the Pocket TTS frame loop rides the Metal tower as the family's second
-  seat (`ARCHITECTURE_GPU_TOWER.md#tower-pocket-frames`): the backbone step and the flow head for every
+  seat (`ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames`): the backbone step and the flow head for every
   frame, eight frames a command buffer over a per-voice device K/V slot, the EOS rule on the host
   between batches, the q8 backbone on the decode GEMV, the head's GEMVs carrying their norm and
   activations, the attention row a threadgroup a head with its scores staged.** The bare q8
@@ -1338,7 +1365,7 @@ what it costs today and what the fix would change.
   `harness/tts_rig.py` on the 200-sentence corpus against the codec-seat rows: q8 4.23 / 4.364 -> 4.18 / 4.364, kq 4.04 / 4.333 -> 3.91 / 4.325, stuart-kq 3.23 / 4.117 -> 3.36 / 4.136 (WER / UTMOS, a word or two of the 2201 either way, the UTMOS within a hundredth). The
   levers left are `followup_metal.md` sec.27.
 
-- **LANDED (2026-09-25) - the Pocket TTS codec rides the Metal tower (`ARCHITECTURE_GPU_TOWER.md#tower-pocket-codec`): a chunk's latents up, its samples back, one command buffer, the CPU's windowed codec
+- **LANDED (2026-09-25) - the Pocket TTS codec rides the Metal tower (`ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-codec`): a chunk's latents up, its samples back, one command buffer, the CPU's windowed codec
   run as one shot over the chunk on the f32-exact GEMM stamps, the K-quant transformer linears
   dequantized into the slab so the small form serves too.** Box: the M5 Max, every das figure
   `-jit` on this tree with `DAS_TUNE_MANIFEST=performance/m5.tune.json` (its runtime section

@@ -1360,6 +1360,13 @@ def kv_cache_init(var kc : TtsKvCache; heads, dh, cap : int64) {
 
 //! Append the `t` token-major rows of k and v [t][hidden] at positions kc.n .. kc.n + t - 1.
 def kv_cache_append(var kc : TtsKvCache; k, v : array<float>; t, hidden : int64) {
+    unsafe {
+        kv_cache_append_rows(kc, addr<float const?>(k[0]), addr<float const?>(v[0]), t, hidden)
+    }
+}
+
+//! `kv_cache_append` over the rows at `ks` and `vs` - a device readback's staging
+def kv_cache_append_rows(var kc : TtsKvCache; ks, vs : float const?; t, hidden : int64) {
     let hh = kc.heads
     let dh = kc.dh
     let cap = kc.cap
@@ -1370,8 +1377,6 @@ def kv_cache_append(var kc : TtsKvCache; k, v : array<float>; t, hidden : int64)
     unsafe {
         var kp = addr(kc.k[0])
         var vp = addr(kc.v[0])
-        let ks = addr<float const?>(k[0])
-        let vs = addr<float const?>(v[0])
         for (r in range64(t)) {
             for (h in range64(hh)) {
                 for (j in range64(dh)) {

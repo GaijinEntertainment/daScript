@@ -435,7 +435,9 @@ a panel; the rel-shift softmax (`fc_pexp`) over two heads at 24 and 300 keys - t
 one half step of the oracle's, the stat within 1e-5 of a double sum, pad rows and pad columns
 left as they were, a poisoned rel score reddening both. The Pocket chain's cells (the same
 file): the row copies with and without the ELU, the layer scale, the rows rope over a row stride
-from a column with the tables bound at a position's row, the attention
+from a column with the tables bound at a position's row, the prompt's rope from the voice tables at a
+position base (`pk_rope_tab_gate`: the k span of 23 rows from position 37 against `rope_rows`, the q
+and v spans untouched, a poisoned k element reddening the compare), the attention
 row against `attention_causal_rows` over a `TtsKvCache` (every key and an 8-key window, an
 unseen key's poison staying silent), the rope-and-store kernel's f32 stamp at the frame loop's
 binds (no bias, the whole head, the tables and the caches at the position's row) against
@@ -562,11 +564,11 @@ the pad columns stay out of the sum), `test_vkt_colstats` the column statistics 
 double-precision sums at t 45 / 72 channels, t 300 / 20 and t 1000 / 300 (eight blocks, a lane's
 second channel),
 `test_vkt_adain` the statistics then both fused AdaIN stamps (`TtsAdainLeaky`, `TtsAdainSnake`) against
-the CPU `adain_rows_into` followed by `leaky_relu` or `snake_rows`, every plane at an element base
+the CPU `adain_rows_into` followed by `leaky_relu` or `snake_rows`, the style rows at an element base
 off zero, plus the leaky stamp in place (bit for bit the out-of-place rows, the input overwritten),
-the prefixes before the bases kept, and `test_vkt_add_scale` the residual join (`TtsAddScale`)
-bit-exact against (a + b) / sqrt(2) in f32 over 1030 elements at offsets, out of place and in place,
-the elements outside the run kept.
+the elements past the run kept, and `test_vkt_add_scale` the residual join (`TtsAddScale`)
+bit-exact against (a + b) / sqrt(2) in f32 over 1030 elements, out of place and in place,
+the elements past the run kept.
 `test_vulkan_tts_source_kernels.das` - model-free (a Vulkan device, else skips): the TTS tower's
 Vulkan decoder tail against the CPU chain - `test_vkt_axpy` holds the stage sum's axpy (`TtsAxpy`)
 bit-exact against o + 0.25 y in f32 over 1030 elements at offsets, accumulating onto a filled o and
@@ -601,7 +603,7 @@ non-negative ones pass bit for bit), every element outside the window left at it
 `test_vkt_pk_attn` the causal cached attention row (`TtsPkAttn`) against `attention_causal_rows`
 over a `TtsKvCache` of two 64-wide heads, the device's key and value rows written from the cache's
 own layouts with three poisoned rows past the appended 45 - a 45-query prompt over every key, a
-decode step at position 44 over an 8-key window (the query at a row offset of the q plane) and the
+decode step at position 44 over an 8-key window (the query its own one-row plane) and the
 prompt over a 16-key window - at the approx bar (controls: a poisoned key just before the decode
 step's window leaves its output bit for bit, the 16-key window moves the prompt's rows);
 `test_vkt_pk_gemv` the row GEMV's five stamps (`TtsPkGemvDot`, `TtsPkGemvLnSilu`, `TtsPkGemvGate`,
@@ -968,8 +970,9 @@ facade lint trips DASLLAMA001 (code 50503) on a direct engine require with no es
 guard trips on a path-require resolving into modules/dasLLAMA, name prefix or not.
 `test_dasllama_lint_escape.das` - model-free: `options _dasllama_internal = true` admits a
 direct engine require (the lint's escape hatch).
-`test_dasllama_lint_contracts.das` - model-free: the lint's ALLOWED set (a facade-only program
-with no escape compiles; an internal require does not) via spawned compiles,
+`test_dasllama_lint_contracts.das` - model-free: the lint's ALLOWED set (one program on the
+facade, scheduler, exchange-schema and bench entries with no escape compiles - one engine-wide
+spawn, since each costs the windows nightly runner two minutes; an internal require does not),
 `load_audio_16k_mono`'s empty-on-failure contract, `decode_audio_16k_mono`'s frame cap (a
 synthetic `sampleRate=1` WAV bomb is refused before decode, an uncapped call still works), and
 `gemma4a_probe_proj_dim`'s 0-not-panic contract on `.dlim` / missing / non-GGUF inputs.
@@ -2382,7 +2385,13 @@ pod) with the generator check, batches of three (the encode count within one of 
 the batch the EOS frame lands in may split the tail - the latents within the bar, a batch below
 one clamping to one), and the
 seats taken by an empty record and given back (`register_pocket_gpu` / `unregister_pocket_gpu`,
-the hook unreached then serving again); the frames seat after the LLM tier's model drop in the same
+the hook unreached then serving again); the prompt seat's model-free rules (`test_pocket_prompt_rules`: the cache admission's four refusals on a
+bare voice state, and the residency record spent by one take and missing on another slot build, row
+count, fill or embedding rows); the prompt seat (`test_pocket_prompt_gpu`: every layer's K and V rows of one case's text, the
+seat against the CPU chain, within `GPU_PROMPT_BAR` on the f32 lane and `GPU_PROMPT_SERVED_BAR` on
+the q8 and kq files' served planes, each with the bar's one-element control, the text rotated by one
+token as the compare's control, one hook call and one encode served, the knob-off leg bit-equal with
+its decline); the frames seat after the LLM tier's model drop in the same
 process (`test_pocket_frames_after_model_drop`: one served leg on the q8 file, `moe_gpu_drop_model`,
 the same leg again serving and reading the same frame count - the slabs, the scratch and the voice
 slot rebuilt behind the drop); the served frames cell takes both oracle voices in turn
@@ -2390,8 +2399,8 @@ on each file, so the second voice's slot displaces the first's, within `GPU_FRAM
 with the x3-scaled noise as the compare's control; the seat record's refusal of a
 name no seat carries and its seat names in order (`test_pocket_seat_stats`, model-free); the
 long chunk's codec seat declining by shape; and the served synthesis across the knob, every
-chunk's codec and frame loop served, the encodes
-past one a chunk, the knob-off chunks declining at both seats - where no GPU device serves all
+chunk's prompt, codec and frame loop served, the encodes
+past one a chunk, the knob-off chunks declining at every seat - where no GPU device serves all
 three skip loudly, a present device that declines is a red; the parity, stream and frames cells
 pin the tower off, since the CPU chain is what they hold; the published Q8_0 file
 (`pocket-tts-en-q8.gguf`) against the f16 file's load-time quants - every backbone GEMM arrived

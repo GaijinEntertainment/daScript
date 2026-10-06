@@ -695,16 +695,20 @@ def private proj(l : TtsLinear; x : array<float>; t : int64; @scratch @exact_siz
     }
 }
 
+//! `kv_only` ends the layer at its cache append - the last layer of a prompt, whose residual nothing reads
 def private layer_attention(l : PocketLayer; tf : PocketTransformer; var x : array<float>; t, pos0 : int64;
-                            var kc : TtsKvCache; var sc : PocketScratch) {
+                            var kc : TtsKvCache; var sc : PocketScratch; kv_only : bool = false) {
     let d = tf.d
     let dh = d / tf.heads
     layernorm_rows_into(x, sc.xb, t, d, l.norm1, tf.eps)
     proj(l.in_proj, sc.xb, t, sc.qkv)
     split_qkv(sc.qkv, t, d, sc.q, sc.k, sc.v)
-    rope_rows(sc.q, t, d, dh, pos0, tf.period)
+    if (!kv_only) {
+        rope_rows(sc.q, t, d, dh, pos0, tf.period)
+    }
     rope_rows(sc.k, t, d, dh, pos0, tf.period)
     kv_cache_append(kc, sc.k, sc.v, t, d)
+    return if (kv_only)
     attention_causal_rows(sc.q, t, d, tf.context, kc, sc.ctx)
     proj(l.out_proj, sc.ctx, t, sc.xb)
     if (!empty(l.scale1.a)) {
@@ -726,10 +730,15 @@ def private layer_ffn(l : PocketLayer; tf : PocketTransformer; var x : array<flo
 }
 
 //! `t` rows of x [t][d] through the transformer at positions pos0.., every layer's keys and
-//! values appended to its cache; x carries the residual out.
-def transformer_rows(tf : PocketTransformer; var x : array<float>; t, pos0 : int64; var caches : array<TtsKvCache>; var sc : PocketScratch) {
+//! values appended to its cache; x carries the residual out - unless `kv_only_last`, which ends
+//! the last layer at its cache append (a prompt, whose residual nothing reads).
+def transformer_rows(tf : PocketTransformer; var x : array<float>; t, pos0 : int64; var caches : array<TtsKvCache>; var sc : PocketScratch;
+                     kv_only_last : bool = false) {
+    let last = length(tf.layers) - 1
     for (i, l in iter_range(tf.layers), tf.layers) {
-        layer_attention(l, tf, x, t, pos0, caches[i], sc)
+        let kv_only = kv_only_last && i == last
+        layer_attention(l, tf, x, t, pos0, caches[i], sc, kv_only)
+        continue if (kv_only)
         layer_ffn(l, tf, x, t, sc)
     }
 }
@@ -827,10 +836,16 @@ typedef PocketCodecGpuFn = function<(m : PocketModel; latents : array<float>; fr
 typedef PocketFramesGpuFn = function<(m : PocketModel; var vs : PocketVoiceState; n_txt : int64; std : float; frames_after_eos : int;
                                       captured, forced : array<float>; max_frames : int64; var sc : PocketScratch) : tuple<frames : int64; eos_at : int64>>
 
+//! The text prompt's rows through the backbone after the voice's: `prompt_rows`' contract - the
+//! embedding rows of `sc.rows` (`pocket_prompt_embed`) at positions vs.len.., every layer's cache
+//! appended on the host; false = declined, the caches untouched.
+typedef PocketPromptGpuFn = function<(m : PocketModel; var vs : PocketVoiceState; n_txt : int64; var sc : PocketScratch) : bool>
+
 //! A driver's seats, one per stage; a seat left empty keeps the CPU form for that stage.
 struct PocketGpuDriver {
     codec : PocketCodecGpuFn
     frames : PocketFramesGpuFn
+    prompt : PocketPromptGpuFn
 }
 
 var private g_pk_drv : PocketGpuDriver
@@ -838,7 +853,8 @@ var private g_pk_drv_prev : PocketGpuDriver   //! the registration a caller's se
 
 let private PK_SEAT_CODEC = 0
 let private PK_SEAT_FRAMES = 1
-var private g_pk_seats <- tts_seats(["codec", "frames"])
+let private PK_SEAT_PROMPT = 2
+var private g_pk_seats <- tts_seats(["codec", "frames", "prompt"])
 
 [arch(at = "../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
 def register_pocket_gpu(drv : PocketGpuDriver) {
@@ -1005,7 +1021,7 @@ def voice_state_from_latents(m : PocketModel; lat : array<float>; frames : int64
     }
     vs.len = frames + bos
     caches_init(vs.caches, m.backbone, vs.len + chunk_rows(int64(POCKET_MAX_TOKENS)))
-    transformer_rows(m.backbone, rows, vs.len, 0l, vs.caches, sc)
+    transformer_rows(m.backbone, rows, vs.len, 0l, vs.caches, sc, kv_only_last = true)
     return <- vs
 }
 
@@ -1417,13 +1433,33 @@ def pocket_max_frames(n_tokens : int64) : int64 {
     return int64(ceil((float(n_tokens) / MAX_GEN_TOKENS_PER_SECOND + GEN_SECONDS_PADDING) * FRAME_RATE))
 }
 
+//! The text prompt's embedding rows [n_txt][d] into `sc.rows` - the backbone's input on either rail.
+def pocket_prompt_embed(m : PocketModel; ids : array<int64>; var sc : PocketScratch) {
+    let d = m.backbone.d
+    unsafe(scratch_resize(sc.rows, long_length(ids) * d))
+    gather_rows(sc.rows, m.text_emb.a, ids, d)
+}
+
 //! The text prompt's rows through the backbone after the voice's, every layer's cache filled.
 def private prompt_rows(m : PocketModel; ids : array<int64>; var vs : PocketVoiceState; var sc : PocketScratch) {
-    let d = m.backbone.d
     let n_txt = long_length(ids)
-    unsafe(scratch_resize(sc.rows, n_txt * d))
-    gather_rows(sc.rows, m.text_emb.a, ids, d)
-    transformer_rows(m.backbone, sc.rows, n_txt, vs.len, vs.caches, sc)
+    pocket_prompt_embed(m, ids, sc)
+    if (g_pk_drv.prompt != null) {
+        tts_seat_call(g_pk_seats, PK_SEAT_PROMPT)
+        if (invoke(g_pk_drv.prompt, m, vs, n_txt, sc)) {
+            tts_seat_served(g_pk_seats, PK_SEAT_PROMPT)
+            return
+        }
+    }
+    transformer_rows(m.backbone, sc.rows, n_txt, vs.len, vs.caches, sc, kv_only_last = true)
+}
+
+//! The prompt's rows into the voice's caches alone, on whichever rail serves it - `pocket_synthesize`'s opening, the
+//! caches reset to the voice's rows first.
+[cold_path]
+def pocket_prompt_rows(m : PocketModel; ids : array<int64>; var vs : PocketVoiceState; var sc : PocketScratch) {
+    caches_ready(vs, long_length(ids))
+    prompt_rows(m, ids, vs, sc)
 }
 
 //! One prepared chunk in one voice: the text prompt after the voice's rows, frames until EOS plus

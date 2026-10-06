@@ -85,8 +85,8 @@ def test_vkt_reflect1(t0 : T?) {
                 let xp = cp |> in_(x)
                 let yp = cp |> out_(total, 0, SLACK)
                 var s = cp |> cls_set(fixed_array(xp, yp), @@set_tts_pk_rows_cls)
-                var shift = TtsPkRowsArgs(rows = uint(RF_T), width = uint(RF_C), ss = uint(RF_C), sc = 0u, sr0 = 0u, ds = uint(RF_C), dc = 0u, dr0 = 1u)
-                var head = TtsPkRowsArgs(rows = 1u, width = uint(RF_C), ss = uint(RF_C), sc = 0u, sr0 = 1u, ds = uint(RF_C), dc = 0u, dr0 = 0u)
+                var shift = GkPkRowsArgs(rows = uint(RF_T), width = uint(RF_C), ss = uint(RF_C), sc = 0u, sr0 = 0u, ds = uint(RF_C), dc = 0u, dr0 = 1u)
+                var head = GkPkRowsArgs(rows = 1u, width = uint(RF_C), ss = uint(RF_C), sc = 0u, sr0 = 1u, ds = uint(RF_C), dc = 0u, dr0 = 0u)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_tts_pk_rows_cls(raw, h, s, shift, int64(RF_T * RF_C))
                     enc_tts_pk_rows_cls(raw, h, s, head, int64(RF_C))
@@ -147,7 +147,7 @@ def private src_run(f : TtsSrcFixture; torch : bool; f0 : array<float>; noise : 
             let lowp = cp |> out_(nlow)
             let lowcp = cp |> out_(nlow)
             let harp = cp |> out_(f.n, 0, SLACK)
-            var pa = TtsSourceArgs(n = uint(f.n), nlow = uint(f.nlow), nh = uint(TTS_SRC_NH), up = uint(f.up), sr = TTS_SRC_SR, sine_amp = 0.1,
+            var pa = GkSourceArgs(n = uint(f.n), nlow = uint(f.nlow), nh = uint(TTS_SRC_NH), up = uint(f.up), sr = TTS_SRC_SR, sine_amp = 0.1,
                 noise_std = 0.003, voiced_thr = 10.0, seed = seed, woff = uint(SRC_WOFF), boff = uint(src_boff()))
             var s_nz = cp |> cls_set(fixed_array(nzp), @@set_tts_src_noise_cls)
             let low_ix = fixed_array(f0p, nup, lowp)
@@ -197,7 +197,7 @@ def private long_cumsum_arm(t : T?; tag : string; torch : bool; up : int) {
             let cp_out = cp |> out_(nlong)
             let ix = fixed_array(lp, cp_out)
             var s = torch ? cp |> cls_set(ix, @@set_tts_src_cumsum_torch_cls) : cp |> cls_set(ix, @@set_tts_src_cumsum_onnx_cls)
-            var pa = TtsSourceArgs(n = uint(nlong * up), nlow = uint(nlong), nh = 1u, up = uint(up))
+            var pa = GkSourceArgs(n = uint(nlong * up), nlow = uint(nlong), nh = 1u, up = uint(up))
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 if (torch) {
                     enc_tts_src_cumsum_torch_cls(raw, h, s, pa, 1l)
@@ -360,7 +360,7 @@ def private stft_arm(t : T?; reflect : bool) {
             let spp = cp |> out_(nspec, 0, SLACK)
             var s = reflect ? cp |> cls_set(fixed_array(hp, wp, sp), @@set_tts_stft_reflect_cls) : cp |> cls_set(fixed_array(hp, wp, sp), @@set_tts_stft_edge_cls)
             var sq = reflect ? cp |> cls_set(fixed_array(hpp, wp, spp), @@set_tts_stft_reflect_cls) : cp |> cls_set(fixed_array(hpp, wp, spp), @@set_tts_stft_edge_cls)
-            var pa = TtsStftArgs(n = uint(ST_N), frames = uint(frames), bins = uint(ST_BINS), k = uint(ST_K), hop = uint(ST_HOP), pad = uint(ST_PAD),
+            var pa = GkStftArgs(n = uint(ST_N), frames = uint(frames), bins = uint(ST_BINS), k = uint(ST_K), hop = uint(ST_HOP), pad = uint(ST_PAD),
                 eps = 1e-9, reoff = uint(ST_REOFF), imoff = uint(imoff))
             let total = int64(frames * ST_BINS)
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
@@ -440,7 +440,7 @@ def private istft_arm(t : T?; envelope : bool) {
             let opq = cp |> out_(n, 0, SLACK)
             var s = cp |> cls_set(fixed_array(yq, wq, oq), @@set_tts_istft_cls)
             var sq = cp |> cls_set(fixed_array(ypq, wq, opq), @@set_tts_istft_cls)
-            var pa = TtsIstftArgs(tt = uint(IS_TT), stride = uint(IS_STRIDE), bins = uint(IS_BINS), k = uint(IS_K), hop = uint(IS_HOP),
+            var pa = GkIstftArgs(tt = uint(IS_TT), stride = uint(IS_STRIDE), bins = uint(IS_BINS), k = uint(IS_K), hop = uint(IS_HOP),
                 pad = uint(IS_PAD), envelope = envelope ? 1u : 0u, n = uint(n), reoff = uint(IS_REOFF), imoff = uint(imoff), wnoff = uint(wnoff))
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_tts_istft_cls(raw, h, s, pa, int64(n))

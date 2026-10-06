@@ -979,10 +979,53 @@ def tts_pk_frames_ok(m : PocketModel; hs, max_nin : int64; lin_ok : block<(l : T
     return invoke(lin_ok, h.final_adaln) && h.final_adaln.nin == n && h.final_adaln.nout == 2l * n && invoke(lin_ok, h.final_linear) && h.final_linear.nin == n && h.final_linear.nout == ld
 }
 
-//! the voice's caches hold this frames call: a cache a layer, voice + text + frames within capacity, capacity within `max_keys`
-def tts_pk_frames_admit(m : PocketModel; vs : PocketVoiceState; n_txt, max_frames, max_keys : int64) : bool {
-    return (max_frames >= 1l && n_txt >= 0l && !empty(vs.caches) && length(vs.caches) == length(m.backbone.layers)
-        && vs.len + n_txt + max_frames <= vs.caches[0].cap && vs.caches[0].cap <= max_keys)
+//! the voice's caches hold `rows` more rows past the voice's: a cache a layer, the rows within capacity, capacity within `max_keys`
+def tts_pk_caches_admit(m : PocketModel; vs : PocketVoiceState; rows, max_keys : int64) : bool {
+    return (!empty(vs.caches) && length(vs.caches) == length(m.backbone.layers) && vs.len + rows <= vs.caches[0].cap && vs.caches[0].cap <= max_keys)
+}
+
+//! the frames call's admission: at least one frame, the text and the frames within the caches
+def tts_pk_frames_admit(m : PocketModel; vs : PocketVoiceState; n_txt, max_frames, max_keys : int64) : bool
+    => max_frames >= 1l && n_txt >= 0l && tts_pk_caches_admit(m, vs, n_txt + max_frames, max_keys)
+
+//! the prompt call's admission: one row or more, the text within the caches
+def tts_pk_prompt_admit(m : PocketModel; vs : PocketVoiceState; n_txt, max_keys : int64) : bool
+    => n_txt >= 1l && tts_pk_caches_admit(m, vs, n_txt, max_keys)
+
+//! the prompt rows a served prompt seat left in the voice slot for the frames call after it: the voice they belong
+//! to, the slot build they sit in (`gen`, counted up at every rebuild), the rows [len, len + n) and a sample of the
+//! embedding rows they came from; a frames call over another voice, slot, fill or prompt uploads every row itself
+struct TtsPkPromptDev {
+    key : uint64
+    gen : uint64
+    len : int64
+    n : int64
+    emb : uint64
+}
+
+//! a sample of the prompt's embedding rows [n][d] - the first and last row's leading floats and the whole's length - the
+//! key two prompts of one length part on
+def tts_pk_prompt_emb_key(rows : array<float>; n, d : int64) : uint64 {
+    var key = 31ul + uint64(n) * 11ul
+    let last = max(n - 1l, 0l) * d
+    for (i in range64(min(d, 32l))) {
+        key = hash_combine64(key, uint64(unsafe(reinterpret<uint>(rows[i]))))
+        key = hash_combine64(key, uint64(unsafe(reinterpret<uint>(rows[last + i]))))
+    }
+    return key
+}
+
+//! the rows [vs.len, vs.len + n_txt) the record holds on the device for this frames call, 0 where it holds another voice,
+//! slot build or prompt; the record is spent either way, so a frames call that never came cannot leave it to the next
+def tts_pk_prompt_dev_take(var rec : TtsPkPromptDev; vs : PocketVoiceState; gen : uint64; rows : array<float>; n_txt, d : int64) : int64 {
+    let n = (rec.key == tts_pk_voice_key(vs) && rec.gen == gen && rec.len == vs.len && rec.n == n_txt
+        && rec.emb == tts_pk_prompt_emb_key(rows, n_txt, d)) ? rec.n : 0l
+    rec = TtsPkPromptDev()
+    return n
+}
+
+def tts_pk_prompt_dev_set(var rec : TtsPkPromptDev; vs : PocketVoiceState; gen : uint64; rows : array<float>; n_txt, d : int64) {
+    rec = TtsPkPromptDev(key = tts_pk_voice_key(vs), gen = gen, len = vs.len, n = n_txt, emb = tts_pk_prompt_emb_key(rows, n_txt, d))
 }
 
 //! the conditioning rows a frames call reads back after the loop stepped `stepped` frames: every frame made and the breaking frame's row, as the CPU loop leaves them

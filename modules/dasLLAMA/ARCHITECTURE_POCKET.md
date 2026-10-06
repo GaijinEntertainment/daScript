@@ -28,12 +28,15 @@ The TTS block home, facade and phoneme families are `ARCHITECTURE_TTS.md`.
   block home's but the residual add, the towers' `add_inplace_rows`: the transformer layer runs on
   `linear_rows`, `layernorm_rows_into`, `rope_rows`, `attention_causal_rows` over a `TtsKvCache`,
   `gelu`, `layer_scale_rows`; the codec on `conv1d_rows`, `conv1d_rows_transposed_depthwise` and
-  `elu_rows`. The codec decoder and the
-  frame loop are the two seats of the family's hook record (`PocketGpuDriver`,
-  `register_pocket_gpu`, `pocket_gpu_stats`; `ARCHITECTURE_GPU_TOWER.md#tower-pocket-codec` and
-  `ARCHITECTURE_GPU_TOWER.md#tower-pocket-frames`): a registered driver gets the first refusal of `pocket_decode_latents` and of the
-  loop inside `pocket_synthesize` (once the prompt's rows sit in the caches), and the CPU form
-  serves a decline; a served loop's wall reads as the backbone's timing, its head timing zero.
+  `elu_rows`. The codec decoder, the
+  frame loop and the text prompt are the three seats of the family's hook record (`PocketGpuDriver`,
+  `register_pocket_gpu`, `pocket_gpu_stats`; `ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-codec` and
+  `ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames`): a registered driver gets the first refusal of `pocket_decode_latents`, of the
+  prompt's rows into the caches (`prompt_rows`, over the embedding rows `pocket_prompt_embed` gathers on
+  either rail) and of the loop inside `pocket_synthesize` once those rows sit there, and the CPU form
+  serves a decline; a served loop's wall reads as the backbone's timing, its head timing zero. A prompt's
+  residual is read by nothing after its last layer's keys and values, so the CPU chain runs the prompt and
+  the voice state through `transformer_rows` under `kv_only_last` - every layer whole but the last, which ends at its cache append.
   Both drivers run the served loop's host side through `pocket_frames_batched` (the batch of
   frames a submit carries, the noise draws, the end-of-speech check) at the one batch knob
   `set_pocket_frame_batch` / `pocket_frame_batch()`.

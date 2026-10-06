@@ -102,7 +102,13 @@ declares), a hand-written fold of one plain float sum or max (no compensation te
 carried alongside) over every lane of a Vulkan kernel's workgroup - a subgroup shuffle loop, a
 lane-0 loop over a `@workgroup` array, one `@workgroup` value that one lane writes and every lane
 reads - is a defect: derive `WgReduceBase` and call its `wg_sum`, `wg_max` or `wg_rms_inv`
-instead.** A fold into more than one result - separate sums over parts of the
+instead.**
+
+**A diff that adds or changes, in a class template in `dasllama/dasllama_gpu_kernels_common.das`, a
+hand-written fold of one plain float sum or max (no compensation term, no index carried
+alongside) over every lane of the workgroup - a subgroup or simd shuffle loop, a lane-0 loop over
+a `@workgroup` array, one `@workgroup` value that one lane writes and every lane reads - is a
+defect: derive `GkWgReduce` and call its `wg_sum_into` / `wg_max_into` instead.** A fold into more than one result - separate sums over parts of the
 workgroup - is not one value; `ARCHITECTURE_GPU.md#gpu-backends` names the bodies that fold that
 way.
 

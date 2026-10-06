@@ -11,6 +11,7 @@ require dasllama/dasllama_tts
 require dasllama/dasllama_audio_io
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_tts_blocks
+require dasllama/dasllama_tts_slab   // the prompt's cache admission and residency record, model-free
 require dasllama/dasllama_math   // with_dasllama_jobque_
 require dasllama/dasllama   // moe_gpu_drop_model: the LLM tier's model drop between two syntheses
 require daslib/jobque_boost
@@ -42,6 +43,8 @@ require _model_tier
 let GPU_CODEC_BAR = 1e-5   //! the codec seat against the CPU chain on the f32 lane: reads 9e-7 on the exact stamps (M5 Max, -jit)
 let GPU_FRAME_BAR = 2e-5   //! the frames seat against the CPU chain on the f32 lane, teacher-forced: reads 2e-6 on the latents (M5 Max, -jit)
 let GPU_CODEC_SERVED_BAR = 2e-1   //! the codec seat on the served planes: reads 1.3e-2 / 7.7e-3 (q8 / kq) on the M5 Max and 9.2e-2 / 1.5e-1 on the pod's x64 CPU chain, all of it the CPU's Q8_0 activation blocks of the first layer's rows (the tower reads the same quants dequantized and feeds f32: it sits at 3e-6 of the CPU f32 chain on either box)
+let GPU_PROMPT_BAR = 1e-5   //! the prompt seat's K/V rows against the CPU chain on the f32 lane (`test_pocket_prompt_gpu`, `-jit`, no overrides): reads 5e-7 / 1.6e-6 (keys / values) on the M5 Max under its tune sidecar, 5e-7 / 1.5e-6 on the RTX PRO 4500
+let GPU_PROMPT_SERVED_BAR = 5e-2   //! the prompt seat's K/V rows on the served planes against the file's own CPU chain (the same cell): reads 3e-3 / 1.2e-2 on the q8 file, 7e-3 / 2.8e-2 on the kq file (M5 Max); 3e-3 / 1.2e-2 and 6e-3 / 2.3e-2 on the RTX PRO 4500
 let GPU_FRAME_SERVED_BAR = 1e-1   //! the frames seat on the served planes, teacher-forced: reads 1.9e-2 / 3.7e-2 on the q8 file, 3.8e-2 / 7.1e-2 on the kq file (alba / caro_davy) on the M5 Max
 let GPU_FRAME_FREE_BAR = 5e-3   //! the frames seat free-running on the f32 lane, its own noise from the same seed, every frame fed its own output: reads 1.5e-4 and 1.1e-4 on the two stage cases on the M5 Max, 7e-5 and 1.8e-3 on the pod (lj028's 150 frames compound the f16 GEMM feed's rounding)
 
@@ -629,7 +632,7 @@ def private frames_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : s
         return <- r if (fg != fc)
         t |> success(same_rng(sc.rng, rng_cpu), "{tag}: the generator ends where the CPU loop's does")
         let batch = pocket_frame_batch()
-        t |> equal(e1 - e0, (fc + batch) / batch + 1l, "{tag}: one tower encode a batch of {batch}, and the codec's")
+        t |> equal(e1 - e0, (fc + batch) / batch + 2l, "{tag}: one tower encode a batch of {batch}, the prompt's and the codec's")
         var inscope gpu <- frame_rows(m, sc, fg)
         let dl = rel_l2(gpu.lat, r.cpu.lat)
         let dc = rel_l2(gpu.conds, r.cpu.conds)
@@ -658,6 +661,54 @@ def private frames_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : s
     return <- r
 }
 
+//! The prompt seat's two model-free rules on a bare voice state: the cache admission's four refusals, and the
+//! residency record - spent by one take, and held to the voice, the slot build, the fill, the row count and the
+//! embedding rows it was set under.
+[test]
+def test_pocket_prompt_rules(t : T?) {
+    t |> run("the prompt admission refuses an empty prompt, a cache count off the layers, rows past the capacity and a capacity past the keys") @(t : T?) {
+        var inscope m = PocketModel()
+        m.backbone.layers |> resize(2)
+        m.backbone.d = 8l
+        m.backbone.heads = 2l
+        var inscope vs = PocketVoiceState(len = 5l)
+        vs.caches |> resize(2)
+        for (kc in vs.caches) {
+            kv_cache_init(kc, 2l, 4l, 20l)
+        }
+        t |> success(tts_pk_prompt_admit(m, vs, 3l, 64l), "a three-row prompt over a 20-row cache of two layers is admitted")
+        t |> success(!tts_pk_prompt_admit(m, vs, 0l, 64l), "an empty prompt is refused")
+        t |> success(!tts_pk_prompt_admit(m, vs, 16l, 64l), "voice + text past the capacity is refused")
+        t |> success(tts_pk_prompt_admit(m, vs, 15l, 20l), "a capacity at the keys' cap is admitted")
+        t |> success(!tts_pk_prompt_admit(m, vs, 3l, 16l), "a capacity past the keys' cap is refused")
+        vs.caches |> resize(1)
+        t |> success(!tts_pk_prompt_admit(m, vs, 3l, 64l), "a cache count off the layers is refused")
+    }
+    t |> run("the residency record is spent by one take and held to what it was set under") @(t : T?) {
+        var inscope vs = PocketVoiceState(len = 5l)
+        vs.caches |> resize(1)
+        kv_cache_init(vs.caches[0], 2l, 4l, 20l)
+        var inscope rows <- [for (i in range(3 * 8)); float(i) * 0.25]
+        var rec : TtsPkPromptDev
+        t |> equal(tts_pk_prompt_dev_take(rec, vs, 7ul, rows, 3l, 8l), 0l, "an empty record holds no rows")
+        tts_pk_prompt_dev_set(rec, vs, 7ul, rows, 3l, 8l)
+        t |> equal(tts_pk_prompt_dev_take(rec, vs, 7ul, rows, 3l, 8l), 3l, "the record set under this voice, build, prompt and rows hands them back")
+        t |> equal(tts_pk_prompt_dev_take(rec, vs, 7ul, rows, 3l, 8l), 0l, "one take spends it")
+        tts_pk_prompt_dev_set(rec, vs, 7ul, rows, 3l, 8l)
+        t |> equal(tts_pk_prompt_dev_take(rec, vs, 8ul, rows, 3l, 8l), 0l, "another slot build misses it")
+        tts_pk_prompt_dev_set(rec, vs, 7ul, rows, 3l, 8l)
+        t |> equal(tts_pk_prompt_dev_take(rec, vs, 7ul, rows, 2l, 8l), 0l, "another row count misses it")
+        tts_pk_prompt_dev_set(rec, vs, 7ul, rows, 3l, 8l)
+        var inscope other := rows
+        other[1]++
+        t |> equal(tts_pk_prompt_dev_take(rec, vs, 7ul, other, 3l, 8l), 0l, "other embedding rows of the same length miss it")
+        tts_pk_prompt_dev_set(rec, vs, 7ul, rows, 3l, 8l)
+        vs.len = 6l
+        t |> equal(tts_pk_prompt_dev_take(rec, vs, 7ul, rows, 3l, 8l), 0l, "another fill misses it")
+        t |> equal(tts_pk_prompt_dev_take(rec, vs, 7ul, rows, 3l, 8l), 0l, "a miss spends it too")
+    }
+}
+
 [test]
 def test_pocket_seat_stats(t : T?) {
     t |> run("a seat name no stage carries panics, so a misspelt key cannot read as zero counters") @(t : T?) {
@@ -668,13 +719,106 @@ def test_pocket_seat_stats(t : T?) {
     }
     t |> run("the record names its seats in dispatch order, and each name reads its counters") @(t : T?) {
         var inscope seats <- pocket_gpu_seats()
-        t |> equal(length(seats), 2, "two seats")
+        t |> equal(length(seats), 3, "three seats")
         t |> equal(seats[0], "codec", "the codec first")
         t |> equal(seats[1], "frames", "the frame loop second")
+        t |> equal(seats[2], "prompt", "the prompt third")
         for (s in seats) {
             let st = pocket_gpu_stats(s)
             t |> success(st.served <= st.calls, "{s}: served never past called")
         }
+    }
+}
+
+typedef PromptRows = tuple<k : array<float>; v : array<float>>
+
+//! every layer's K and V rows [vs.len, vs.len + n) as the prompt left them, each layer's rows after the one before
+def private prompt_kv(vs : PocketVoiceState; n : int64) : PromptRows {
+    var r : PromptRows
+    let d = vs.caches[0].heads * vs.caches[0].dh
+    let per = n * d
+    r.k |> resize(per * long_length(vs.caches))
+    r.v |> resize(per * long_length(vs.caches))
+    unsafe {
+        for (li, kc in iter_range(vs.caches), vs.caches) {
+            kv_cache_read_rows(kc, vs.len, vs.len + n, 0l, addr(r.k[int64(li) * per]), addr(r.v[int64(li) * per]))
+        }
+    }
+    return <- r
+}
+
+//! The prompt seat against the CPU chain over one case's text: every layer's K and V rows within `bar` with the bar's
+//! one-element control and the text rotated by one token as the compare's control, one hook call served, one encode,
+//! the knob-off leg bit-equal with its decline recorded; false where no device serves (the skip registered).
+[cold_path, unused_argument(t, m, k, tag, bar, sc)]   // off-Apple the gated body is empty
+def private prompt_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : string; bar : float; var sc : PocketScratch) : bool {
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        let n = long_length(k.ids)
+        set_serving_gpu_tower(false)
+        pocket_prompt_rows(m, k.ids, k.vs, sc)
+        var inscope cpu <- prompt_kv(k.vs, n)
+        set_serving_gpu_tower(true)
+        let h0 = pocket_gpu_stats("prompt")
+        let e0 = gpu_encodes()
+        pocket_prompt_rows(m, k.ids, k.vs, sc)
+        let h1 = pocket_gpu_stats("prompt")
+        let e1 = gpu_encodes()
+        return false if (h1.served - h0.served != 1 && !tower_served(t, tag, "{gpu_declines()}"))
+        t |> equal(h1.calls - h0.calls, 1, "{tag}: one hook call")
+        t |> equal(e1 - e0, 1l, "{tag}: one tower encode")
+        var inscope gpu <- prompt_kv(k.vs, n)
+        let dk = rel_l2(gpu.k, cpu.k)
+        let dv = rel_l2(gpu.v, cpu.v)
+        to_log(LOG_INFO, "pocket {tag}: rel-l2 keys {dk} values {dv} against the CPU chain over {n} rows x {length(k.vs.caches)} layers (bar {bar})\n")
+        t |> success(dk <= bar && dv <= bar, "{tag}: the keys and values within {bar}")
+        var inscope w <- one_wrong(gpu.v, cpu.v, bar)
+        t |> success(rel_l2(w, cpu.v) > bar, "{tag}: one value moved by twice the bar reds it (the bar's control)")
+        knob_off_leg(t, tag, 1l, $ => pocket_gpu_stats("prompt")) $ {
+            pocket_prompt_rows(m, k.ids, k.vs, sc)
+            var inscope off <- prompt_kv(k.vs, n)
+            return rel_l2(off.k, cpu.k) == 0.0 && rel_l2(off.v, cpu.v) == 0.0
+        }
+        set_serving_gpu_tower(true)
+        var inscope ids_rot <- [for (i in range64(n)); k.ids[(i + 1l) % n]]
+        pocket_prompt_rows(m, ids_rot, k.vs, sc)
+        var inscope gx <- prompt_kv(k.vs, n)
+        t |> success(rel_l2(gx.k, cpu.k) > bar && rel_l2(gx.v, cpu.v) > bar, "{tag}: the text rotated by one token reds the keys' and the values' bars (the compare's control)")
+        return true
+    } else {
+        return false
+    }
+}
+
+//! The prompt seat on the f32 lane and on the served planes of the q8 and kq files, as `prompt_seat_leg` holds it.
+[test]
+def test_pocket_prompt_gpu(t : T?) {
+    let path = gguf_path()
+    if (!model_available(t, path)) {
+        return
+    }
+    var inscope man <- stocked_manifest(t)
+    return if (empty(man.cases))
+    static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
+        pocket_lane_cell(PocketLane.f32) {
+            var inscope m <- load_pocket(path)
+            var inscope sc = PocketScratch()
+            for (c in man.cases) {
+                continue if (!c.stages || c.voice != "alba")
+                var inscope k <- forced_case(m, c, man, sc)
+                return if (!prompt_seat_leg(t, m, k, "{c.id} {c.voice} prompt", GPU_PROMPT_BAR, sc))
+                break
+            }
+        }
+        pocket_served_files(t) $(spath : string; m : PocketModel; var sc : PocketScratch) : bool {
+            for (c in man.cases) {
+                continue if (!c.stages || c.voice != "alba")
+                var inscope k <- forced_case(m, c, man, sc)
+                return prompt_seat_leg(t, m, k, "{c.id} {c.voice} {base_name(spath)} prompt served", GPU_PROMPT_SERVED_BAR, sc)
+            }
+            return true
+        }
+    } else {
+        t |> skip("no GPU module in this build")
     }
 }
 
@@ -704,7 +848,7 @@ def test_pocket_frames_metal(t : T?) {
                 var inscope leg <- frames_seat_leg(t, m, k, tag, GPU_FRAME_BAR, true, sc)
                 return if (leg.fc < 0l)
                 let fc = leg.fc
-                knob_off_leg(t, tag, 2l, $ => pocket_gpu_stats("frames")) $ {
+                knob_off_leg(t, tag, 3l, $ => pocket_gpu_stats("frames")) $ {
                     let fo = forced_frames(m, k, k.x0, k.x1, sc)
                     var inscope off <- frame_rows(m, sc, fo)
                     return fo == fc && rel_l2(off.lat, leg.cpu.lat) == 0.0
@@ -737,9 +881,9 @@ def test_pocket_frames_metal(t : T?) {
                 let eb1 = gpu_encodes()
                 var inscope b3 <- frame_rows(m, sc, f3)
                 t |> equal(f3, fc, "{tag}: batches of three make the frame count")
-                let batches3 = (fc + 2l) / 3l + 1l   // the frames in threes and the codec's encode; the batch the EOS frame lands in may split the tail into one more
+                let batches3 = (fc + 2l) / 3l + 2l   // the frames in threes, the prompt's and the codec's encodes; the batch the EOS frame lands in may split the tail into one more
                 let extra = eb1 - eb0 - batches3
-                t |> success(extra >= 0l && extra <= 1l, "{tag}: one tower encode a batch of three, and the codec's ({eb1 - eb0} encodes over {fc} frames, {batches3} or one more)")
+                t |> success(extra >= 0l && extra <= 1l, "{tag}: one tower encode a batch of three, the prompt's and the codec's ({eb1 - eb0} encodes over {fc} frames, {batches3} or one more)")
                 t |> success(f3 == fc && rel_l2(b3.lat, leg.cpu.lat) <= GPU_FRAME_BAR, "{tag}: batches of three land within {GPU_FRAME_BAR}")
                 set_pocket_frame_batch(0l)
                 t |> equal(pocket_frame_batch(), 1l, "{tag}: a batch below one clamps to one")
@@ -826,7 +970,7 @@ def test_pocket_frames_after_model_drop(t : T?) {
 }
 
 //! The served synthesis across the tower knob on the served lane: every chunk's codec and frame
-//! loop on the tower, one codec encode a chunk, the knob-off leg declining both seats per chunk,
+//! loop on the tower, one codec encode a chunk, the knob-off leg declining every seat per chunk,
 //! both legs speaking.
 [test]
 def test_pocket_synthesis_metal(t : T?) {

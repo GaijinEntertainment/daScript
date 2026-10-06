@@ -3724,6 +3724,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_pk_rows_elu = compile_stamp(metal_pk_rows_elu_msl, ok)
     g_pso_pk_row_scale = compile_stamp(metal_pk_row_scale_msl, ok)
     g_pso_pk_attn = compile_stamp(metal_pk_attn_msl, ok)
+    g_pso_pk_rope_tab = compile_stamp(metal_pk_rope_tab_msl, ok)
     g_pso_pk_add_ln = compile_stamp(metal_pk_add_ln_msl, ok)
     g_pso_pk_gemv_f32 = compile_stamp(metal_pk_gemv_f32_msl, ok)
     g_pso_pk_gemv_f32_ln_silu = compile_stamp(metal_pk_gemv_f32_ln_silu_msl, ok)
@@ -3738,7 +3739,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_st2_adain_snake = compile_stamp(metal_st2_adain_snake_msl, ok)
     g_pso_st2_leaky = compile_stamp(metal_st2_leaky_msl, ok)
     g_pso_st2_axpy = compile_stamp(metal_st2_axpy_msl, ok)
-    g_pso_st2_add = compile_stamp(MetalSt2Add_metal_ew2_msl, ok)
+    g_pso_st2_add = compile_stamp(metal_st2_add_msl, ok)
     g_pso_st2_reflect1 = compile_stamp(metal_st2_reflect1_msl, ok)
     g_pso_dn_gate = compile_stamp(MetalDnGate_metal_dn_gate_msl, ok)
     g_pso_dn_gate_sig = compile_stamp(MetalDnGateSig_metal_dn_gate_msl, ok)
@@ -4687,7 +4688,7 @@ def metal_kernels_release {
     release_handles(g_pso_dn_scan_h, g_pso_dn_prep)
     release_handles(g_pso_dn_gate_sig, g_pso_hc_norm, g_pso_hc_lo, g_pso_hc_init, g_pso_hc_mix, g_pso_hc_combine, g_pso_ple_gate, g_pso_ple_conv)
     release_handles(g_pso_st2_attn)
-    release_handles(g_pso_pk_rows, g_pso_pk_rows_elu, g_pso_pk_row_scale, g_pso_pk_attn)
+    release_handles(g_pso_pk_rows, g_pso_pk_rows_elu, g_pso_pk_row_scale, g_pso_pk_attn, g_pso_pk_rope_tab)
     release_handles(g_pso_pk_add_ln, g_pso_pk_gemv_f32, g_pso_pk_gemv_f32_ln_silu, g_pso_pk_gemv_f32_gate, g_pso_pk_gemv_f32_add_silu)
     release_handles(g_pso_pk_gemv_f32_tail, g_pso_pk_gemv_q8_ln_silu, g_pso_pk_gemv_q8_gate, g_pso_pk_gemv_q8_add_silu, g_pso_pk_gemv_q8_tail)
     release_handles(g_pso_st2_adain_leaky, g_pso_row_gather, g_pso_st2_concat, g_pso_st2_pool_dw, g_pso_st2_lstm, g_pso_st2_sigsum, g_pso_st2_gelu_tanh,
@@ -10776,48 +10777,10 @@ class MetalSt2ColStats : MetalTgReduceBase {
     }
 }
 
-struct St2AdainArgs {
-    c : uint
-    t : uint
-    eps : float
-    total : uint
-}
-
-//! AdaIN as the CPU folds it, then Snake or LeakyReLU(0.2); an affine-less norm binds ones and zeros; Snake's alpha binds on the Snake stamp alone.
-[ |> template_struct_instance]
-class template MetalSt2AdainT {
-    @template_constant SNAKE : bool = true
-    @ssbo @binding = 0 @role = "read" x : array<float>       //!< [t x c]
-    @ssbo @binding = 1 @role = "write" y : array<float>      //!< [t x c], x itself allowed
-    @ssbo @binding = 2 @role = "read" stats : array<float>   //!< [2 x c] from the column stats
-    @ssbo @binding = 3 @role = "read" @off = "hoff" h : array<float>       //!< [2 x c] the AdaIN fc of the style: gamma, then beta
-    @ssbo @binding = 4 @role = "weight" @off = "gwoff" gw : array<float>   //!< [c] the norm's scale
-    @ssbo @binding = 5 @role = "weight" @off = "gboff" gb : array<float>   //!< [c] the norm's shift
-    @ssbo @binding = 6 @role = "weight" @off = "aoff" @template_gate = SNAKE alpha : array<float> //!< [c] Snake's alpha
-    @uniform @binding = 7 ka : St2AdainArgs
-
-    def adain_body {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= ka.t * ka.c) {
-            return
-        }
-        let ci = gid % ka.c
-        var scale = 0.0
-        var shift = 0.0
-        tts_adain_affine(stats[ci], stats[ka.c + ci], float(ka.t), ka.eps, gw[ci], gb[ci], h[ci], h[ka.c + ci], scale, shift)
-        let v = x[gid] * scale + shift
-        static_if (SNAKE) {
-            let a = alpha[ci]
-            let sn = sin(a * v)
-            y[gid] = v + (1.0 / a) * (sn * sn)
-        } else {
-            y[gid] = v > 0.0 ? v : v * 0.2
-        }
-    }
-}
-
 [metal_dispatch(name = "enc_st2_adain_snake", pso = "g_pso_st2_adain_snake", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2AdainSnake : MetalSt2AdainT {
+class MetalSt2AdainSnake : GkAdain {
+    override SNAKE = true
+
     [metal_kernel(name="metal_st2_adain_snake_msl")]
     def metal_st2_adain_snake {
         adain_body()
@@ -10825,9 +10788,7 @@ class MetalSt2AdainSnake : MetalSt2AdainT {
 }
 
 [metal_dispatch(name = "enc_st2_adain_leaky", pso = "g_pso_st2_adain_leaky", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2AdainLeaky : MetalSt2AdainT {
-    override SNAKE = false
-
+class MetalSt2AdainLeaky : GkAdain {
     [metal_kernel(name="metal_st2_adain_leaky_msl")]
     def metal_st2_adain_leaky {
         adain_body()
@@ -10856,13 +10817,14 @@ class MetalSt2Axpy : GkAxpy {
     }
 }
 
-//! o = (g + u) * ascale out of place: the AdaIN blocks' join (1 / sqrt 2) and the generator's averaged stage sum
-//! into a third buffer; the in-place sums take the residual add (enc_add_c).
-[metal_dispatch(name = "enc_st2_add", pso = "g_pso_st2_add", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2Add : MetalEw2T {
-    override ACT = 2
-    override HAS_ASCALE = true
-    override OUT = true
+//! the residual join's add-and-scale: the AdaIN blocks' join (1 / sqrt 2) and the generator's averaged stage sum, in place where o is a
+//! - off the `MetalEw2T` family onto the template both homes stamp (`GkAddScale`), whose body is the Vulkan twin's
+[metal_dispatch(name = "enc_st2_add", pso = "g_pso_st2_add", tg = 64, grid = "nelem/64", params = "nelem : int64")]
+class MetalSt2Add : GkAddScale {
+    [metal_kernel(name="metal_st2_add_msl")]
+    def metal_st2_add {
+        add_scale_body()
+    }
 }
 
 //! y [t + 1][c] = x [t][c] behind one reflected row (row 0 = x's row 1): the last stage's left reflect pad.
@@ -10934,43 +10896,12 @@ class MetalSt2Concat : GkConcat {
     }
 }
 
-//! The depthwise transposed pool on rows: each output row gathers the input rows its taps reach, w [c][k].
-struct St2PoolArgs {
-    c : uint
-    k : uint
-    stride : uint
-    pad_l : uint
-    dil : uint
-    t_in : uint
-    total : uint
-}
-
+//! The depthwise transposed pool on rows - the transposed form of the depthwise conv both homes stamp.
 [metal_dispatch(name = "enc_st2_pool_dw", pso = "g_pso_st2_pool_dw", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2PoolDw {
-    @ssbo @binding = 0 @role = "read" x : array<float>
-    @ssbo @binding = 1 @role = "write" y : array<float>
-    @ssbo @binding = 2 @role = "weight" @off = "woff" w : array<float>
-    @ssbo @binding = 3 @role = "weight" @off = "boff" b : array<float>
-    @uniform @binding = 4 ka : St2PoolArgs
-
+class MetalSt2PoolDw : GkDwConvRows {
     [metal_kernel(name="metal_st2_pool_dw_msl")]
     def metal_st2_pool_dw {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= ka.total) {
-            return
-        }
-        let p = gid / ka.c
-        let j = gid % ka.c
-        var acc = b[j]
-        var kk = 0u
-        while (kk < ka.k) {
-            let src = conv_src_tr_row(p, kk, 0u, ka.pad_l, ka.dil, ka.stride, ka.t_in)
-            if (src >= 0) {
-                acc += w[j * ka.k + kk] * x[uint(src) * ka.c + j]
-            }
-            kk++
-        }
-        y[gid] = acc
+        dw_conv_rows_body()
     }
 }
 
@@ -11120,384 +11051,109 @@ class MetalSt2GeluTanh : MetalEw1BaseT {
     }
 }
 
+//! the duration sigmoid sums - the CPU `styletts2_durations`' raw durations
 [metal_dispatch(name = "enc_st2_sigsum", pso = "g_pso_st2_sigsum", tg = 64, grid = "t/64", params = "t : int64")]
-class MetalSt2SigSum {
-    @ssbo @binding = 0 @role = "read" logits : array<float>
-    @ssbo @binding = 1 @role = "write" raw : array<float>
-    @uniform @binding = 2 nb : uint
-    @uniform @binding = 3 ls : uint
-    @uniform @binding = 4 speed : float
-    @uniform @binding = 5 t : uint
-
+class MetalSt2SigSum : GkSigSum {
     [metal_kernel(name="metal_st2_sigsum_msl")]
     def metal_st2_sigsum {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= t) {
-            return
-        }
-        var acc = 0.0
-        var j = 0u
-        while (j < nb) {
-            acc += sigmoid_f32(logits[gid * ls + j])
-            j++
-        }
-        raw[gid] = acc / speed   //! the CPU divides; a reciprocal multiply rounds a raw duration apart from it
-    }
-}
-
-struct St2SourceArgs {
-    n : uint
-    nlow : uint
-    nh : uint
-    up : uint
-    sr : float
-    sine_amp : float
-    noise_std : float
-    voiced_thr : float
-    seed : uint
-    total : uint
-}
-
-//! The low-rate phase increments per harmonic on either resample law (TORCH: the torch taps and
-//! mix; else onnxruntime's), the first sample's initial phases folded in.
-[ |> template_struct_instance]
-class template MetalSt2SrcLowT {
-    @template_constant TORCH : bool = false
-    @ssbo @binding = 0 @role = "read" f0 : array<float>
-    @ssbo @binding = 1 @role = "read" noise_u : array<float>
-    @ssbo @binding = 2 @role = "write" low : array<float>    //!< [nh x nlow]
-    @uniform @binding = 3 ka : St2SourceArgs
-
-    def st2_src_low_body {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= ka.nh * ka.nlow) {
-            return
-        }
-        let h = gid / ka.nlow
-        let k = gid % ka.nlow
-        var i0 = 0u
-        var i1 = 0u
-        var l0 = 0.0
-        var l1 = 0.0
-        let scale = 1.0 / float(ka.up)
-        static_if (TORCH) {
-            tts_resize_taps_torch(ka.n, k, 1.0 / scale, i0, i1, l0, l1)
-        } else {
-            tts_resize_taps_onnx(ka.n, (float(k) + 0.5) / scale, i0, i1, l0, l1)
-        }
-        let r0 = tts_src_rad(f0[i0 / ka.up] * float(h + 1u) / ka.sr, noise_u[h], i0, h)
-        let r1 = tts_src_rad(f0[i1 / ka.up] * float(h + 1u) / ka.sr, noise_u[h], i1, h)
-        static_if (TORCH) {
-            low[gid] = tts_resize_mix_torch(r0, r1, l0, l1)
-        } else {
-            low[gid] = tts_resize_mix_onnx(r0, r1, l0, l1, h + 1u == ka.nh)
-        }
+        sigsum_body()
     }
 }
 
 [metal_dispatch(name = "enc_st2_src_low_torch", pso = "g_pso_st2_src_low_torch", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2SrcLowTorch : MetalSt2SrcLowT {
+class MetalSt2SrcLowTorch : GkSrcLow {
     override TORCH = true
 
     [metal_kernel(name="metal_st2_src_low_torch_msl", fastmath=false)]
     def metal_st2_src_low_torch {
-        st2_src_low_body()
+        src_low_body()
     }
 }
 
 [metal_dispatch(name = "enc_st2_src_low_onnx", pso = "g_pso_st2_src_low_onnx", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2SrcLowOnnx : MetalSt2SrcLowT {
+class MetalSt2SrcLowOnnx : GkSrcLow {
     [metal_kernel(name="metal_st2_src_low_onnx_msl", fastmath=false)]
     def metal_st2_src_low_onnx {
-        st2_src_low_body()
-    }
-}
-
-//! The phase per frame as the running sum of the increments: the torch law's double accumulator
-//! as a two-float sum carrying its rounding error, the onnx law's plain float sum.
-[ |> template_struct_instance]
-class template MetalSt2SrcCumsumT {
-    @template_constant TORCH : bool = false
-    @ssbo @binding = 0 @role = "read" low : array<float>
-    @ssbo @binding = 1 @role = "write" lowc : array<float>   //!< [nh x nlow] the phase per frame
-    @uniform @binding = 2 ka : St2SourceArgs
-
-    def st2_src_cumsum_body {
-        let h = gl_LocalInvocationID.x
-        if (h >= ka.nh) {
-            return
-        }
-        var acc = 0.0
-        var lo = 0.0
-        var k = 0u
-        while (k < ka.nlow) {
-            let x = low[h * ka.nlow + k]
-            static_if (TORCH) {
-                tts_two_sum_add(acc, lo, x)
-            } else {
-                acc += x
-            }
-            lowc[h * ka.nlow + k] = tts_phase_rad(acc, ka.up)
-            k++
-        }
+        src_low_body()
     }
 }
 
 [metal_dispatch(name = "enc_st2_src_cumsum_torch", pso = "g_pso_st2_src_cumsum_torch", tg = "nh", grid = "1", params = "nh : int64")]
-class MetalSt2SrcCumsumTorch : MetalSt2SrcCumsumT {
+class MetalSt2SrcCumsumTorch : GkSrcCumsum {
     override TORCH = true
 
     [metal_kernel(name="metal_st2_src_cumsum_torch_msl", fastmath=false)]   //! fast math folds the compensation away
     def metal_st2_src_cumsum_torch {
-        st2_src_cumsum_body()
+        src_cumsum_body()
     }
 }
 
 [metal_dispatch(name = "enc_st2_src_cumsum_onnx", pso = "g_pso_st2_src_cumsum_onnx", tg = "nh", grid = "1", params = "nh : int64")]
-class MetalSt2SrcCumsumOnnx : MetalSt2SrcCumsumT {
+class MetalSt2SrcCumsumOnnx : GkSrcCumsum {
     [metal_kernel(name="metal_st2_src_cumsum_onnx_msl", fastmath=false)]
     def metal_st2_src_cumsum_onnx {
-        st2_src_cumsum_body()
+        src_cumsum_body()
     }
 }
 
-//! The source's own noise draw, one normal per (sample, harmonic), into the rows the sines
-//! kernel reads - the captured stream's seat when no stream was captured.
+//! The source's own noise draw - the captured stream's seat when no stream was captured.
 [metal_dispatch(name = "enc_st2_src_noise", pso = "g_pso_st2_src_noise", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2SrcNoise {
-    @ssbo @binding = 0 @role = "write" noise_n : array<float>     //!< [n x nh]
-    @uniform @binding = 1 ka : St2SourceArgs
-
+class MetalSt2SrcNoise : GkSrcNoise {
     [metal_kernel(name="metal_st2_src_noise_msl")]
     def metal_st2_src_noise {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= ka.n * ka.nh) {
-            return
-        }
-        noise_n[gid] = tts_hash_normal(ka.seed, gid)
-    }
-}
-
-//! The mixed source signal per sample on either resample law: the harmonics' sines at the
-//! interpolated phases, the noise rows scaled by voicing, the source linear and its tanh.
-[ |> template_struct_instance]
-class template MetalSt2SrcSinesT {
-    @template_constant TORCH : bool = false
-    @ssbo @binding = 0 @role = "read" f0 : array<float>
-    @ssbo @binding = 1 @role = "read" lowc : array<float>
-    @ssbo @binding = 2 @role = "read" noise_n : array<float>     //!< [n x nh]
-    @ssbo @binding = 3 @role = "weight" @off = "woff" lw : array<float>   //!< [nh] the source linear
-    @ssbo @binding = 4 @role = "weight" @off = "boff" lb : array<float>   //!< [1] its bias
-    @ssbo @binding = 5 @role = "write" har : array<float>
-    @uniform @binding = 6 ka : St2SourceArgs
-
-    def st2_src_sines_body {
-        let i = gl_GlobalInvocationID.x
-        if (i >= ka.n) {
-            return
-        }
-        var i0 = 0u
-        var i1 = 0u
-        var l0 = 0.0
-        var l1 = 0.0
-        static_if (TORCH) {
-            tts_resize_taps_torch(ka.nlow, i, 1.0 / float(ka.up), i0, i1, l0, l1)
-        } else {
-            tts_resize_taps_onnx(ka.nlow, (float(i) + 0.5) / float(ka.up), i0, i1, l0, l1)
-        }
-        let uv = f0[i / ka.up] > ka.voiced_thr ? 1.0 : 0.0
-        let noise_amp = tts_noise_amp(uv, ka.noise_std, ka.sine_amp)
-        var acc = lb[0]
-        var h = 0u
-        while (h < ka.nh) {
-            var phase = 0.0
-            static_if (TORCH) {
-                phase = tts_resize_mix_torch(lowc[h * ka.nlow + i0], lowc[h * ka.nlow + i1], l0, l1)
-            } else {
-                phase = tts_resize_mix_onnx(lowc[h * ka.nlow + i0], lowc[h * ka.nlow + i1], l0, l1, h + 1u == ka.nh)
-            }
-            acc += tts_src_term(lw[h], tts_sin_big(phase) * ka.sine_amp, uv, noise_amp, noise_n[i * ka.nh + h])
-            h++
-        }
-        har[i] = tts_tanh(acc)
+        src_noise_body()
     }
 }
 
 [metal_dispatch(name = "enc_st2_src_sines_torch", pso = "g_pso_st2_src_sines_torch", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2SrcSinesTorch : MetalSt2SrcSinesT {
+class MetalSt2SrcSinesTorch : GkSrcSines {
     override TORCH = true
 
     [metal_kernel(name="metal_st2_src_sines_torch_msl", fastmath=false)]
     def metal_st2_src_sines_torch {
-        st2_src_sines_body()
+        src_sines_body()
     }
 }
 
 [metal_dispatch(name = "enc_st2_src_sines_onnx", pso = "g_pso_st2_src_sines_onnx", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2SrcSinesOnnx : MetalSt2SrcSinesT {
+class MetalSt2SrcSinesOnnx : GkSrcSines {
     [metal_kernel(name="metal_st2_src_sines_onnx_msl", fastmath=false)]
     def metal_st2_src_sines_onnx {
-        st2_src_sines_body()
+        src_sines_body()
     }
 }
 
 //! spec rows [frames][2 bins], the magnitudes then the phases; a zero imaginary part on the negative real axis reads +pi.
-struct St2StftArgs {
-    n : uint
-    frames : uint
-    bins : uint
-    k : uint
-    hop : uint
-    pad : uint
-    eps : float
-    total : uint
-}
-
-//! The STFT as two convs over the padded signal: the pad law is the stamp's - REFLECT mirrors
-//! the signal past its ends, else the edge sample repeats.
-[ |> template_struct_instance]
-class template MetalSt2StftT {
-    @template_constant REFLECT : bool = false
-    @ssbo @binding = 0 @role = "read" har : array<float>
-    @ssbo @binding = 1 @role = "weight" @off = "reoff" wre : array<float>   //!< [bins x k]
-    @ssbo @binding = 2 @role = "weight" @off = "imoff" wim : array<float>
-    @ssbo @binding = 3 @role = "write" spec : array<float>
-    @uniform @binding = 4 ka : St2StftArgs
-
-    def st2_stft_body {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= ka.frames * ka.bins) {
-            return
-        }
-        let f = gid / ka.bins
-        let b = gid % ka.bins
-        var re = 0.0
-        var im = 0.0
-        var tap = 0u
-        while (tap < ka.k) {
-            let p = int(f * ka.hop + tap) - int(ka.pad)
-            var src = 0
-            static_if (REFLECT) {
-                src = tts_pad_reflect(p, int(ka.n))
-            } else {
-                src = clamp(p, 0, int(ka.n) - 1)
-            }
-            let v = har[uint(src)]
-            re += wre[b * ka.k + tap] * v
-            im += wim[b * ka.k + tap] * v
-            tap++
-        }
-        spec[f * 2u * ka.bins + b] = tts_stft_mag(re, im, ka.eps)
-        spec[f * 2u * ka.bins + ka.bins + b] = tts_stft_phase(re, im)
-    }
-}
-
 [metal_dispatch(name = "enc_st2_stft_reflect", pso = "g_pso_st2_stft_reflect", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2StftReflect : MetalSt2StftT {
+class MetalSt2StftReflect : GkStft {
     override REFLECT = true
 
     [metal_kernel(name="metal_st2_stft_reflect_msl")]
     def metal_st2_stft_reflect {
-        st2_stft_body()
+        stft_body()
     }
 }
 
 [metal_dispatch(name = "enc_st2_stft_edge", pso = "g_pso_st2_stft_edge", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2StftEdge : MetalSt2StftT {
+class MetalSt2StftEdge : GkStft {
     [metal_kernel(name="metal_st2_stft_edge_msl")]
     def metal_st2_stft_edge {
-        st2_stft_body()
+        stft_body()
     }
 }
 
 //! From conv_post's rows y [tt][stride] - a bin's log magnitude, then its phase; a non-negligible envelope divided out.
-struct St2IstftArgs {
-    tt : uint
-    stride : uint
-    bins : uint
-    k : uint
-    hop : uint
-    pad : uint
-    envelope : uint
-    n : uint
-}
-
+//! The inverse STFT from conv_post's rows.
 [metal_dispatch(name = "enc_st2_istft", pso = "g_pso_st2_istft", tg = 64, grid = "n/64", params = "n : int64")]
-class MetalSt2Istft {
-    @ssbo @binding = 0 @role = "read" y : array<float>
-    @ssbo @binding = 1 @role = "weight" @off = "reoff" wre : array<float>   //!< [k x bins] - the transposed conv's operand layout
-    @ssbo @binding = 2 @role = "weight" @off = "imoff" wim : array<float>
-    @ssbo @binding = 3 @role = "weight" @off = "wnoff" window : array<float> //!< [k]
-    @ssbo @binding = 4 @role = "write" wave : array<float>
-    @uniform @binding = 5 ka : St2IstftArgs
-
+class MetalSt2Istft : GkIstft {
     [metal_kernel(name="metal_st2_istft_msl")]
     def metal_st2_istft {
-        let i = gl_GlobalInvocationID.x
-        if (i >= ka.n) {
-            return
-        }
-        let m = i + ka.pad
-        var acc = 0.0
-        var env = 0.0
-        var tap = 0u
-        while (tap < ka.k) {
-            if (m >= tap && (m - tap) % ka.hop == 0u) {
-                let q = (m - tap) / ka.hop
-                if (q < ka.tt) {
-                    var b = 0u
-                    while (b < ka.bins) {
-                        acc += tts_istft_term(y[q * ka.stride + b], y[q * ka.stride + ka.bins + b], wre[tap * ka.bins + b], wim[tap * ka.bins + b])
-                        b++
-                    }
-                    env += window[tap] * window[tap]
-                }
-            }
-            tap++
-        }
-        wave[i] = (ka.envelope != 0u && env > 1e-11) ? acc / env : acc
-    }
-}
-
-//! `rows` rows of `width` floats from src [.][ss] at column sc, rows sr0.., into dst [.][ds] at column dc, rows dr0..
-struct PkRowsArgs {
-    rows : uint
-    width : uint
-    ss : uint
-    sc : uint
-    sr0 : uint
-    ds : uint
-    dc : uint
-    dr0 : uint
-}
-
-//! The row copy of the codec stream - a window into a conv's staging rows behind its carry, a
-//! carry's tail to its head, the K and V columns into their caches, the sample column out; the
-//! ELU stamp applies the activation on the way (the CPU's `elu_rows` before a conv).
-[ |> template_struct_instance]
-class template MetalPkRowsT {
-    @template_constant ELU : bool = false
-    @ssbo @binding = 0 @role = "read" src : array<float>
-    @ssbo @binding = 1 @role = "write" dst : array<float>
-    @uniform @binding = 2 ka : PkRowsArgs
-
-    def pk_rows_body {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= ka.rows * ka.width) {
-            return
-        }
-        let r = gid / ka.width
-        let j = gid % ka.width
-        var v = src[(ka.sr0 + r) * ka.ss + ka.sc + j]
-        static_if (ELU) {
-            v = max(v, 0.0) + min(exp(v) - 1.0, 0.0)
-        }
-        dst[(ka.dr0 + r) * ka.ds + ka.dc + j] = v
+        istft_body()
     }
 }
 
 [metal_dispatch(name = "enc_pk_rows", pso = "g_pso_pk_rows", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalPkRows : MetalPkRowsT {
+class MetalPkRows : GkPkRows {
     [metal_kernel(name="metal_pk_rows_msl")]
     def metal_pk_rows {
         pk_rows_body()
@@ -11505,7 +11161,7 @@ class MetalPkRows : MetalPkRowsT {
 }
 
 [metal_dispatch(name = "enc_pk_rows_elu", pso = "g_pso_pk_rows_elu", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalPkRowsElu : MetalPkRowsT {
+class MetalPkRowsElu : GkPkRows {
     override ELU = true
 
     [metal_kernel(name="metal_pk_rows_elu_msl")]
@@ -11525,95 +11181,29 @@ class MetalPkRowScale : MetalRowMapT {
     }
 }
 
-//! q [t][qs] at column qcol, k and v the caches' rows [.][d], o [t][d]; query i at position pos0 + i
-//! sees the keys up to itself, the last `ctx` of them when ctx is nonzero, 2048 at most; heads of PK_ATTN_HS
-//! (the literal 64 in the body - a kernel reads no module global); a threadgroup a (head, row) over staged scores.
-let PK_ATTN_HS = 64   //!< the head size the attention row's body is stamped for
-let PK_ATTN_MAX_KEYS = 2048l   //!< the scores the attention row stages in threadgroup memory - the body's literal
-struct PkAttnArgs {
-    t : uint
-    qs : uint
-    qcol : uint
-    d : uint
-    pos0 : uint
-    ctx : uint
+//! the Pocket prompt's adjacent-pair rope over a span of rows from the voice slot's tables at an element base
+//! (the position the rows start at): the Vulkan chain's rope, stamped here for the prompt stage
+[metal_dispatch(name = "enc_pk_rope_tab", pso = "g_pso_pk_rope_tab", tg = 64, grid = "pairs/64", params = "pairs : int64")]
+class MetalPkRopeTab : GkRopeTab {
+    [metal_kernel(name="metal_pk_rope_tab_msl")]
+    def metal_pk_rope_tab {
+        rope_tab_body()
+    }
 }
 
+let PK_ATTN_HS = int(GK_PK_ATTN_HS)   //!< the head size the attention row's body is stamped for
+let PK_ATTN_MAX_KEYS = int64(GK_PK_ATTN_MAX_KEYS)   //!< the scores the attention row stages in threadgroup memory - the body's literal
+
+//! the subgroup primitives the shared reductions ride, Metal's spelling
+def gk_subgroup_add(v : float) : float => simd_sum(v)
+def gk_subgroup_max(v : float) : float => simd_max(v)
+
+//! The Pocket chains' causal cached attention row; a threadgroup a (head, row) over staged scores.
 [metal_dispatch(name = "enc_pk_attn", pso = "g_pso_pk_attn", tgmem = "metal_pk_attn_msl_tgmem", tg = 256, grid = "total", params = "total : int64")]
-class MetalPkAttn {
-    @ssbo @binding = 0 @role = "read" q : array<float>
-    @ssbo @binding = 1 @role = "read" k : array<float>
-    @ssbo @binding = 2 @role = "read" v : array<float>
-    @ssbo @binding = 3 @role = "write" o : array<float>
-    @uniform @binding = 4 ka : PkAttnArgs
-    @workgroup qh : float[128]
-    @workgroup sc : float[2048]   // == PK_ATTN_MAX_KEYS
-    @workgroup po : float[512]
-    @workgroup red : float[16]
-
-    //! the scaled scores of keys j0.. into the stage, then their normalized softmax weights
-    def pk_attn_scores(h, j0, nk, lid : uint) {
-        var m = -1.0e30
-        var j = lid
-        while (j < nk) {
-            let krow = (j0 + j) * ka.d + h * 64u
-            var sdot = 0.0
-            var e = 0u
-            while (e < 64u) {
-                sdot += qh[e] * k[krow + e]
-                e++
-            }
-            sc[j] = sdot
-            m = max(m, sdot)
-            j += 256u
-        }
-        let mall = tg_max_all(m, red)
-        barrier()
-        let inv = 1.0 / sq_exp_sum(sc, red, mall, nk, lid, 256u)
-        j = lid
-        while (j < nk) {
-            sc[j] *= inv
-            j += 256u
-        }
-        barrier()   // fences the weights for the V loop
-    }
-
+class MetalPkAttn : GkPkAttn {
     [metal_kernel(name="metal_pk_attn_msl")]
     def metal_pk_attn {
-        let wg = gl_WorkGroupID.x
-        let h = wg / ka.t
-        let i = wg % ka.t
-        let lid = gl_LocalInvocationID.x
-        let p = ka.pos0 + i
-        let j0 = tts_window_start(p, ka.ctx)
-        let nk = p + 1u - j0
-        if (lid < 64u) {
-            qh[lid] = q[i * ka.qs + ka.qcol + h * 64u + lid] / sqrt(float(64u))
-        }
-        barrier()
-        pk_attn_scores(h, j0, nk, lid)
-        let parts = 256u / 64u
-        if (lid < parts * 64u) {
-            let e = lid % 64u
-            let part = lid / 64u
-            var acc = 0.0
-            var jj = part
-            while (jj < nk) {
-                acc += sc[jj] * v[(j0 + jj) * ka.d + h * 64u + e]
-                jj += parts
-            }
-            po[part * 64u + e] = acc
-        }
-        barrier()
-        if (lid < 64u) {
-            var tot = 0.0
-            var pp = 0u
-            while (pp < parts) {
-                tot += po[pp * 64u + lid]
-                pp++
-            }
-            o[i * ka.d + h * 64u + lid] = tot
-        }
+        pk_attn_body()
     }
 }
 

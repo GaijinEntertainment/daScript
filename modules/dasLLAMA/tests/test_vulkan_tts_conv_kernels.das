@@ -387,7 +387,7 @@ def private pool_dw_arm(t : T?) {
             let yp = cp |> out_(ny)
             let wp = cp |> in_(wn)
             var s = cp |> cls_set(fixed_array(xp, yp, wp), @@set_tts_pool_dw_cls)
-            var pa = DwConvRowsArgs(c = uint(PD_C), k = uint(PD_K), stride = 2u, pad_l = 1u, dil = 1u, t_in = uint(PD_TIN), t_out = uint(tout),
+            var pa = GkDwConvRowsArgs(c = uint(PD_C), k = uint(PD_K), stride = 2u, pad_l = 1u, dil = 1u, t_in = uint(PD_TIN), t_out = uint(tout),
                 woff = uint(PD_WOFF), boff = uint(PD_WOFF + PD_C * PD_K + PD_GAP))
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_tts_pool_dw_cls(raw, h, s, pa, int64(ny))
