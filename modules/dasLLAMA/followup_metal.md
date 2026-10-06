@@ -970,3 +970,25 @@ same record in `dasllama_vulkan_asr_dec.das`). A transcription makes a fresh sta
 window was dropped never returns: eight bytes a transcription, for as long as the server runs. The work: the
 pending mark on the state itself (a flag beside `DecoderState.gpu_uid`, the driver's one pending id beside
 it), so nothing outlives the state; both drivers in one change, the Vulkan one on a Vulkan box.
+
+## 43. The same-slab row probe cannot read a recurrent model's verify past one row
+
+`harness/batch_rows_probe.das --sameslab` sends its rows through the generic batch driver, whose row
+preparation asks the recurrent-state mirror for consecutive positions of one session and declines
+(`dn_state`); the verify the speculative round runs serves those rows through its shadow replay
+(`ARCHITECTURE_GPU_MTP.md#mtp-dn-shadow-replay`). On a DeltaNet hybrid the one-row same-slab step reads and
+every higher count declines, so the verify's per-row cost there has no probe (the two-session batch step
+stands in, `PERF_LEDGER.md`'s 2026-10-05 depth-1 NextN entry). The work: route the probe's same-slab rows through the
+verify entry the round uses, or give the batch driver the shadow replay.
+
+## 44. A one-row rows-form step drafts differently from the two-row form
+
+The NextN draft rows step keeps two rows for a solo stream (`nrows = max(ng, 2)`,
+`ARCHITECTURE_GPU_MTP.md#mtp-joint-verify`) because a one-row rows-form step drafts other tokens than the
+two-row form on a share of the rounds, while the two- and three-row forms agree
+(`PERF_LEDGER.md`'s 2026-10-05 depth-1 NextN entry). The cause is not found: the shared layer encoder's single-row-driver
+branches keyed on the row count (`ple_side_step`, the `attn_d` gate at one row) do not fire on the model
+measured, and forcing the rows forms on for a one-row draft widened the gap. What a one-row step does
+differently: `mp = 1` buffers under a two-row tile, no `verify` row-total uniforms, the zero-copy logits
+(`acquire_step`). The work: find which of those the rows form reads wrong at one row, key every single-row
+branch on `SINGLE`, then race the one-row draft against the two-row form.

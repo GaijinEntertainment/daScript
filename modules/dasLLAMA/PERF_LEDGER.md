@@ -11,6 +11,44 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-05, `direction-grade`, `debug-jit`) - the depth-1 NextN round on the M1 Max: the draft at two
+  rows, then chained into the verify's command buffer.** M1 Max (MacBookPro18,2, 64 GB), Metal,
+  Qwen3.6-35B-A3B-MTP UD-Q4_K_M, `benchmarks/lcpp_bench.das` as the `-jit` script (`-no-module-cache`):
+  `-m <gguf> --ngl 99 -n 64 -r 2 --mtp-ab --prof --for-debug-purposes` under `JOBQUE_PROFILING=1
+  DAS_LOG_LEVEL=info DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/m1.tune.json` (the sidecar re-minted on
+  the binary by `harness/dasllama_tuner.das`), `DAS_TUNE_POLICY` and `DASLLAMA_PIN_BACKEND` unset; the
+  tg-real64 row is the mean and stdev over 2 reps of 8 prompts, the per-round split one untimed
+  `forward_profile` window of 36-37 rounds, each arm one commit - `add367ec1` (the four-row tile, the host
+  chain), `bf99297f5` (two rows), `3826f59ff` (two rows, chained). Decode rates are MTP off / on, tok/s, the
+  parenthesis the on arm against the off arm; the round's parts are ms a round. The chained round parks its
+  draft step through the verify, so the pool holds one more step than the host chain did: its logits rows
+  `max(ng, 2) x vocab x 4` bytes (1.99 MB at one or two streams, 0.99 MB a stream past that on this vocabulary)
+  beside a few activation rows.
+
+  | | `add367ec1` | `bf99297f5` | `3826f59ff` |
+  |---|---|---|---|
+  | tg-real64 off / on | 71.8 +/- 0.0 / 69.1 +/- 0.1 (0.96x) | 71.7 +/- 0.0 / 73.9 +/- 0.9 (1.03x) | 71.7 +/- 0.0 / 74.3 +/- 0.0 (1.04x) |
+  | acceptance | 76.4% (440/576) | 76.4% (440/576) | 76.4% (440/576) |
+  | mtp.draft, host wall | 3.92 | 2.55 | 0.01 |
+  | mtp.verify (its GPU wait) | 20.9 (20.5) | 20.5 (20.1) | 23.1 (22.6), the draft's GPU inside it |
+  | mtp.walk + mtp.replay | 0.57 | 0.60 | 0.57 |
+
+  - The four-row tile cost a solo stream a second pair of rows over the draft layer and the 417 MB Q6_K
+    classifier (248320 x 2048); the two-row tile drafts the same tokens (0 of 288 rounds differ,
+    `DASLLAMA_MTP_DEBUG=trace`, `-r 1`, the same flags) and the one-row form does not: 36 of 257 differ, that
+    run an uncommitted probe edit of `bf99297f5` (`nrows = ng`, the rows forms' buffers and uniforms forced on
+    for a draft step), no commit carries it (`followup_metal.md` 44).
+  - The chain removed the draft's join, its 1 MB logits readback and the host argmax - 0.4 ms of the 2.55;
+    the draft's GPU work now sits inside the verify's wait. The chained round drafts and commits the two-row
+    host chain's tokens on every traced round (0 of 288 differ, the same trace flags).
+  - The row-cost ladder at `a8655daf0`, `harness/batch_rows_probe.das -m <gguf> --bs 1,2,4 --steps 32` (two
+    sessions a row) and `--sameslab --bs 1` (one session), same flags, ms a step: the single-row driver
+    13.6; the rows driver at one row 15.5 (x1.14), at two rows 19.8 (x1.45), at four 31.2 (x2.29), every
+    ratio against the single-row driver's step. The verify's 22.2 ms of GPU is that two-row step plus the
+    draft layer, two classifier passes and the draft-slab re-warm; two rows route to two expert sets, so the
+    step streams their union. At 1.76 tokens a round over a 1.45x step the depth-1 ceiling here is 1.21x.
+  - The same-slab probe declines at two rows on this hybrid (`followup_metal.md` 43), so the two-row figure is
+    the two-session batch step, not the verify itself.
 - **MEASURED (2026-10-05, `direction-grade`) - Axpy and Concat as kernels both GPU homes stamp read as before on
   both.** The two kernels moved to one class template each (`dasllama_gpu_kernels_common.das`); on Metal their
   arguments became one struct and Axpy lost two offsets no site passed, on Vulkan the body became a function the

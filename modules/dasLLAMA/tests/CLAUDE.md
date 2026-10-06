@@ -1463,10 +1463,24 @@ stream the row runs host-cached through the Metal batched driver - Llama-3.2-1B 
 E-series gemma-4-E2B Q8, the shared-expert Qwen1.5-MoE-A2.7B Q8 (large-tier), the deltanet
 hybrid Qwen3.5-0.8B Q8 (at four streams and at nine - more than the recurrent mirror cache rests
 at, which grows to the batch) and, under the scheduler's self-speculative mode, Qwen3.5-0.8B-MTP Q8 -
-a rate, every timed step counted a device step by `batch_step_census`; the MTP carrier also
-runs the joint-verify invariance cell: three speculative streams admitted together emit,
+a rate, every timed step counted a device step by `batch_step_census`; the shared-expert
+carrier also runs the one-row same-slab cell (`test_metal_batched_row_shexp_sameslab`; same-slab =
+consecutive positions of ONE session as the rows of one batched step, `../ARCHITECTURE_GPU_MTP.md#batch-same-slab`):
+twelve rounds of one row through `verify_batch_step` against the single-row step on a second
+session of the same prompt, the logits within the plain-MoE bar of 2.0 at every round (reads
+1.6e-3 at most on the M1 Max, the one-step-off control 9.7 at least, asserted outside the bar),
+every round served by the batched driver - a rows step at one row takes the rows forms, never the
+single-row step's shared-expert GEMV over its `bh12s` panel
+(`../ARCHITECTURE_GPU_MTP_DECODE.md#metal-layer-enc`); the MTP carrier also runs the depth-2 cell
+(`test_metal_batched_row_mtp_depth2`): a greedy walk (`generate_mtp_greedy`) at depth 1 and at
+depth 2 over up to 24 reply tokens, the same tokens, the depth-2 walk drafting more than the
+depth-1 walk (at depth 2 each draft joins on the host before the next is made) and accepting some;
+the MTP carrier also runs the joint-verify invariance cell
+(`test_metal_batched_row_mtp_joint_invariance`): three speculative streams admitted together emit,
 token for token, what each emits alone on a one-stream speculative scheduler (the verify's
-rows forms are per row, so the joint pass and the solo pass round alike), and its staggered twin:
+rows forms are per row, so the joint pass and the solo pass round alike), the joint ticks' draft
+and accept counts equal the three solo streams' sums, the solo rounds accept more than half their
+drafts; and its staggered twin (`test_metal_batched_row_mtp_joint_staggered`):
 the same three streams with the LAST one on a prompt past 200 tokens, so the joint round's groups
 sit at different depths across three 64-row chunk boundaries - the round's chunk count, its
 attention form and every group's layer bases must follow that group's own depth and mirror cap,
