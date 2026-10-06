@@ -27,9 +27,8 @@ let XML = ("<cars>" +
     "</cars>")
 
 [inline]
-def fold_contains_o(doc : pugixml::xml_document? const) : array<Car> {
-    return <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>))._where(_.brand |> contains("o")).to_array())
-}
+def fold_contains_o(doc : pugixml::xml_document? const) : array<Car> =>
+    <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>))._where(_.brand |> contains("o")).to_array())
 
 [test]
 def test_must_inline_folded_temp_string_call_heals(t : T?) {

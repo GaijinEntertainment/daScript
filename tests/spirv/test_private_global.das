@@ -37,9 +37,7 @@ def privg {
     pg_out = float4(pg_col[k], pg_dist[k])
 }
 
-def private privg_words : array<uint> {
-    return clone_to_move(privg_spv)
-}
+def private privg_words : array<uint> => clone_to_move(privg_spv)
 
 def private validate(t : T?; words : array<uint>; lbl : string) {
     let r = validate_spirv(words)

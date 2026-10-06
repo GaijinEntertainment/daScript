@@ -225,9 +225,8 @@ def private score_row(row : Row; terms : array<string>; query_lower : string; id
     return Hit(idx = idx, exact = row.name_lower == query_lower, matched_terms = matched, score = total)
 }
 
-def private query_terms(query : string) : array<string> {
-    return <- [for (w in tokens_of(query)); w; where !(STOPWORDS |> key_exists(w))]
-}
+def private query_terms(query : string) : array<string> =>
+    <- [for (w in tokens_of(query)); w; where !(STOPWORDS |> key_exists(w))]
 
 def private parse_limit(limit : string) : int {
     return 12 if (empty(limit))

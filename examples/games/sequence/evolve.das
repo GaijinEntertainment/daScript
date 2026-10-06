@@ -299,7 +299,7 @@ def main() {
     with_job_que() {
         for (gen in range(ES_GENERATIONS)) {
             // Generate λ children (sequential — fast, needs shared seed)
-            var children : array<array<float>>
+            var inscope children : array<array<float>>
             for (_i in range(ES_LAMBDA)) {
                 children |> emplace(mutate_weights(parent, sigma, seed, num_greedy))
             }
@@ -321,7 +321,7 @@ def main() {
             }
 
             // Quick baseline check — parent vs default
-            var default_arr <- default_weights_array(is_lookahead, depth, jack_lookahead)
+            var inscope default_arr <- default_weights_array(is_lookahead, depth, jack_lookahead)
             let vs_default_wins = head_to_head(parent, default_arr, bot_type, depth, jack_lookahead, ES_GAMES_PER_PAIR, gen * 10000 + 9500)
             delete default_arr
             print("  vs_default: {vs_default_wins}/{ES_GAMES_PER_PAIR}\n")

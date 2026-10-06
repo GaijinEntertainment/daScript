@@ -44,13 +44,11 @@ def private text_at(lines : array<string>; line, column, count : int) : string {
     return slice(ln, column, column + count)
 }
 
-def private span_head(lines : array<string>; li : LineInfo; count : int) : string {
-    return text_at(lines, int(li.line), int(li.column), count)
-}
+def private span_head(lines : array<string>; li : LineInfo; count : int) : string =>
+    text_at(lines, int(li.line), int(li.column), count)
 
-def private span_tail(lines : array<string>; li : LineInfo; count : int) : string {
-    return text_at(lines, int(li.last_line), int(li.last_column) - count, count)
-}
+def private span_tail(lines : array<string>; li : LineInfo; count : int) : string =>
+    text_at(lines, int(li.last_line), int(li.last_column) - count, count)
 
 
 def private collect_inits(var blk : ExprBlock?; var inits : array<ExpressionPtr>;
@@ -75,8 +73,7 @@ def private check_make_nodes(t : T?; var fn : FunctionPtr; lines : array<string>
         return
     }
     var inits : array<ExpressionPtr>
-    var initEndLine : array<int>
-    var initEndColumn : array<int>
+    var initEndLine, initEndColumn : array<int>
     collect_inits(blk, inits, initEndLine, initEndColumn)
     t |> equal(length(inits), 4, "four initializers in make_them")
     if (length(inits) != 4) return

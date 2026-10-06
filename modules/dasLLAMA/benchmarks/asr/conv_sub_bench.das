@@ -338,9 +338,7 @@ def bench_c0(ih : int64; rounds : int) {
             wt[tap * cout + o] = w9[o * 9l + tap]
         }
     }
-    var col : array<float>
-    var out_cur : array<float>
-    var out_f4 : array<float>
+    var col, out_cur, out_f4 : array<float>
     sized(col, rows * 9l)
     sized(out_cur, rows * cout)
     sized(out_f4, rows * cout)
@@ -446,15 +444,13 @@ def bias_relu_f4(var y : array<float>; b : array<float>; d, npos : int64) {
     }
 }
 
-def bench_tail(frames : int64; rounds : int) {   // nolint:STYLE038 — flat bench driver: setup, then one timed variant per stage
+def bench_tail(frames : int64; rounds : int) {
     let t1 = (frames - 1l) / 2l + 1l
     let t2 = (t1 - 1l) / 2l + 1l
     let tt = (t2 - 1l) / 2l + 1l
     let feat = 16l * NCH
     print("\n--- permute variants: tt={tt} [t][16][256] -> [t][4096] ---\n")
-    var y6 : array<float>
-    var xf_cur : array<float>
-    var xf_v : array<float>
+    var y6, xf_cur, xf_v : array<float>
     sized(y6, tt * feat)
     sized(xf_cur, tt * feat)
     sized(xf_v, tt * feat)
@@ -491,10 +487,7 @@ def bench_tail(frames : int64; rounds : int) {   // nolint:STYLE038 — flat ben
 
     print("\n--- bias+relu epilogue: d=256, npos={t2 * 32l} (c3 shape) ---\n")
     let npos = t2 * 32l
-    var yy0 : array<float>
-    var yy : array<float>
-    var yv : array<float>
-    var bb : array<float>
+    var yy0, yy, yv, bb : array<float>
     sized(yy0, npos * NCH)
     sized(yy, npos * NCH)
     sized(yv, npos * NCH)
@@ -595,9 +588,7 @@ def bench_meldot(rounds : int) {
     let frames = 1101l   // one jfk of matvecs per timed rep
     let mel_eps = 5.960464477539063e-08lf
     print("\n--- mel matvec variants: {n_mel} x {n_bins}, {frames} frames/rep ---\n")
-    var fp : array<float>
-    var flt : array<float>
-    var md : array<float>
+    var fp, flt, md : array<float>
     sized(fp, n_bins)
     sized(flt, n_mel * n_bins)
     sized(md, n_mel * 3l)
@@ -688,10 +679,7 @@ def bench_dw(iw, ih : int64; rounds : int) {
     let ow = (iw - 1l) / 2l + 1l
     let oh = (ih - 1l) / 2l + 1l
     print("\n--- dwconv variants: {iw}x{ih} x {ch}ch -> {ow}x{oh} ---\n")
-    var x : array<float>
-    var w9 : array<float>
-    var wt : array<float>
-    var b : array<float>
+    var x, w9, wt, b : array<float>
     sized(x, ih * iw * ch)
     sized(w9, ch * 9l)
     sized(wt, 9l * ch)
@@ -704,9 +692,7 @@ def bench_dw(iw, ih : int64; rounds : int) {
             wt[tap * ch + c] = w9[c * 9l + tap]
         }
     }
-    var out_cur : array<float>
-    var out_u : array<float>
-    var out_f4 : array<float>
+    var out_cur, out_u, out_f4 : array<float>
     sized(out_cur, oh * ow * ch)
     sized(out_u, oh * ow * ch)
     sized(out_f4, oh * ow * ch)
@@ -767,15 +753,7 @@ def run_bench(frames : int64; rounds : int) {   // nolint:STYLE038 — flat benc
     print("conv_sub bench: frames={frames} t1={t1} t2={t2} tt={tt} feat={feat}, {rounds} rounds, jobs={get_total_hw_jobs()}, jit={jit_enabled()}\n")
 
     // activations
-    var mel : array<float>
-    var col : array<float>
-    var y0 : array<float>
-    var y2 : array<float>
-    var y3 : array<float>
-    var y5 : array<float>
-    var y6 : array<float>
-    var xf : array<float>
-    var xout : array<float>
+    var mel, col, y0, y2, y3, y5, y6, xf, xout : array<float>
     sized(mel, frames * MEL)
     sized(col, rows1 * 9l)
     sized(y0, rows1 * NCH)
@@ -795,18 +773,7 @@ def run_bench(frames : int64; rounds : int) {   // nolint:STYLE038 — flat benc
     xs |> resize(rqmax / 32l)
 
     // weights: c0/dw taps fp32 (like the engine); 1x1 + pre as repacked q8
-    var cw0 : array<float>
-    var cb0 : array<float>
-    var cw2 : array<float>
-    var cb2 : array<float>
-    var cw3 : array<float>
-    var cb3 : array<float>
-    var cw5 : array<float>
-    var cb5 : array<float>
-    var cw6 : array<float>
-    var cb6 : array<float>
-    var wpre : array<float>
-    var bpre : array<float>
+    var cw0, cb0, cw2, cb2, cw3, cb3, cw5, cb5, cw6, cb6, wpre, bpre : array<float>
     sized(cw0, NCH * 9l)
     sized(cb0, NCH)
     sized(cw2, NCH * 9l)

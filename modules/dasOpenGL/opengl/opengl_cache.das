@@ -62,9 +62,7 @@ def public cache_image(_filename : string# implicit) : uint {
     return value
 }
 
-def private has_agent {
-    return has_debug_agent_context("opengl_cache")
-}
+def private has_agent => has_debug_agent_context("opengl_cache")
 
 def private install_agent {
     install_new_debug_agent(new DapiDebugAgent(), "opengl_cache")

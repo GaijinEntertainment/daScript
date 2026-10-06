@@ -2,9 +2,7 @@ options gen2
 require UnitTest
 require dastest/testing_boost public
 
-def cmresTest(a : int) {
-    return TestObjectFoo(fooData = a)
-}
+def cmresTest(a : int) => TestObjectFoo(fooData = a)
 
 struct OverFoo {
     a : int

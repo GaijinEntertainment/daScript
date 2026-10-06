@@ -10,9 +10,7 @@ require dastest/testing_boost public
 require daslib/ast
 require daslib/ast_boost
 
-def fixture_path() : string {
-    return "{get_das_root()}/tests/ast/_make_array_const_values_fixture.das"
-}
+def fixture_path() : string => "{get_das_root()}/tests/ast/_make_array_const_values_fixture.das"
 
 // `array<T>(...)` globals init as to_array_move(ExprMakeArray); `fixed_array<T>(...)` as the
 // ExprMakeArray itself

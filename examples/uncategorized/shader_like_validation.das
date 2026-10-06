@@ -19,9 +19,7 @@ options shader_like
 // global array requires heap → error 40104
 var arr : array<int>
 
-def add(a, b) {
-    return a + b
-}
+def add(a, b) => a + b
 
 struct Foo {
     a : int = 13

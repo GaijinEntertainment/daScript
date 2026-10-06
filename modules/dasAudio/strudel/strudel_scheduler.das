@@ -195,9 +195,8 @@ def mark_pools_scratch(var sched : Scheduler) {
 }
 
 // Convert wall-clock time to cycle position.
-def private current_cycle(sched : Scheduler; wall_time : double) : double {
-    return (wall_time - sched.startTime) * sched.cps
-}
+def private current_cycle(sched : Scheduler; wall_time : double) : double =>
+    (wall_time - sched.startTime) * sched.cps
 
 //! Same contract as `mark_pools_scratch`, for one orbit bus's send/return buffers.
 [unsafe_operation]
@@ -855,9 +854,7 @@ def private osc_render_voices(var sched : Scheduler; var output : array<float>; 
         // fold the orbit's continuous level into this voice's gain for the chunk (restored below)
         let saved_osc_gain = sched.osc_voices[i].gain
         sched.osc_voices[i].gain = saved_osc_gain * orbit_gain(sched, orb)
-        var reverb_buf : array<float>?
-        var delay_buf : array<float>?
-        var chorus_buf : array<float>?
+        var reverb_buf, delay_buf, chorus_buf : array<float>?
         if (sched.osc_voices[i].reverb_send > 0.0) {
             reverb_buf = get_orbit_reverb_send(sched, orb)
         }
@@ -876,9 +873,7 @@ def private osc_render_voices(var sched : Scheduler; var output : array<float>; 
             for (s in range(chunkSamples)) {
                 sched.voice_fx_buf[s] = 0.0
             }
-            var empty1 : array<float>
-            var empty2 : array<float>
-            var empty3 : array<float>
+            var inscope empty1, empty2, empty3 : array<float>
             osc_render_chunk(sched.osc_voices[i], sched.voice_fx_buf, empty1, empty2, empty3, chunkFrames)
             if (has_fx) {
                 fx_apply(sched.osc_voices[i].fx, sched.voice_fx_buf, chunkFrames)
@@ -910,9 +905,7 @@ def private osc_render_voices(var sched : Scheduler; var output : array<float>; 
             for (s in range(chunkSamples)) {
                 sched.voice_fx_buf[s] = 0.0
             }
-            var empty1 : array<float>
-            var empty2 : array<float>
-            var empty3 : array<float>
+            var inscope empty1, empty2, empty3 : array<float>
             osc_render_chunk(sched.osc_voices[i], sched.voice_fx_buf, empty1, empty2, empty3, chunkFrames)
             fx_apply(sched.osc_voices[i].fx, sched.voice_fx_buf, chunkFrames)
             let rev_send = sched.osc_voices[i].reverb_send
@@ -931,9 +924,7 @@ def private osc_render_voices(var sched : Scheduler; var output : array<float>; 
         } else {
             // osc_render_chunk needs non-null array refs — pass per-orbit buffers when present,
             // empty locals otherwise (osc_render_chunk bounds-checks each).
-            var empty_r : array<float>
-            var empty_d : array<float>
-            var empty_c : array<float>
+            var inscope empty_r, empty_d, empty_c : array<float>
             osc_render_chunk_routed(sched.osc_voices[i], output, reverb_buf, delay_buf, chorus_buf, empty_r, empty_d, empty_c, chunkFrames)
         }
         sched.osc_voices[i].gain = saved_osc_gain
@@ -1116,7 +1107,7 @@ def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time 
                     sched.osc_voices |> push(oscv)
                 } else {
                     // sample/drum path: pre-render to buffer
-                    var stereo <- render_event_stereo(h.value, durSec, bank)
+                    var inscope stereo <- render_event_stereo(h.value, durSec, bank)
                     // per-voice effects (crush/coarse/shape/djf/bpf) are applied
                     // once post-render; state is local to this call
                     fx_apply_to_samples(h.value, stereo, float(SAMPLE_RATE))

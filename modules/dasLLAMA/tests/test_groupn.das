@@ -26,21 +26,16 @@ let NREG = 3l
 let REF_ULP_PER_BLOCK = 2.0e-6
 let REF_POISON = 0.05
 
-def private build_offs() : array<int64> {
-    return <- [N * D * 0l, 0l, N * D * 1l, 0l, N * D * 2l, N]
-}
+def private build_offs() : array<int64> => <- [N * D * 0l, 0l, N * D * 1l, 0l, N * D * 2l, N]
 
-def private slice_i8(src : array<int8>; off, n : int64) : array<int8> {
-    return <- [for (i in range64(off, off + n)); src[i]]
-}
+def private slice_i8(src : array<int8>; off, n : int64) : array<int8> =>
+    <- [for (i in range64(off, off + n)); src[i]]
 
-def private slice_u8(src : array<uint8>; off, n : int64) : array<uint8> {
-    return <- [for (i in range64(off, off + n)); src[i]]
-}
+def private slice_u8(src : array<uint8>; off, n : int64) : array<uint8> =>
+    <- [for (i in range64(off, off + n)); src[i]]
 
-def private slice_f(src : array<float>; off, n : int64) : array<float> {
-    return <- [for (i in range64(off, off + n)); src[i]]
-}
+def private slice_f(src : array<float>; off, n : int64) : array<float> =>
+    <- [for (i in range64(off, off + n)); src[i]]
 
 //! the NREG q8 weight regions [D x N], quantized
 def private q8_weights() : Q8Tensor {
@@ -82,15 +77,14 @@ def test_q8q8_groupn(t : T?) {
         let xq <- q8_rows()
         var offs <- build_offs()
         //! reference and bar built once off the row-major quants - a repack only permutes the same weights, so both are backend-free
-        var refy : array<float>
-        var refbar : array<float>
+        var refy, refbar : array<float>
         ref_plane(refy, refbar, 0l, NREG, D, N / 32l, REF_ULP_PER_BLOCK) $(r, row) => ref_dot_q8_f64(wq0.q, wq0.scales, r * D * N + row * N, xq.q, xq.scales, offs[r * 2l + 1l], N)
         let seat = kernel_backend_seat()
         for (name in kernel_backend_names()) {
             pin_kernel_backend(name)
             // per-backend weight copy: repack backends read their interleaved layout
-            var wq : array<int8>
-            var ws : array<float>
+            var inscope wq : array<int8>
+            var inscope ws : array<float>
             wq := wq0.q
             ws := wq0.scales
             if (kernel_backend_needs_repack(name)) {
@@ -98,21 +92,21 @@ def test_q8q8_groupn(t : T?) {
                     repack_q8q8_weight(wq, ws, r * D * N, N, D)
                 }
             }
-            var want : array<float>
+            var inscope want : array<float>
             want |> resize(int(NREG * D))
             for (r in range64(NREG)) {   // per-region single GEMVs = the reference
-                let rwq <- slice_i8(wq, r * D * N, D * N)
-                let rws <- slice_f(ws, r * D * N / 32l, D * N / 32l)
-                let rxq <- slice_i8(xq.q, offs[r * 2l + 1l], N)
-                let rxs <- slice_f(xq.scales, offs[r * 2l + 1l] / 32l, N / 32l)
-                var yv : array<float>
+                var inscope rwq <- slice_i8(wq, r * D * N, D * N)
+                var inscope rws <- slice_f(ws, r * D * N / 32l, D * N / 32l)
+                var inscope rxq <- slice_i8(xq.q, offs[r * 2l + 1l], N)
+                var inscope rxs <- slice_f(xq.scales, offs[r * 2l + 1l] / 32l, N / 32l)
+                var inscope yv : array<float>
                 yv |> resize(int(D))
                 matmul_q8q8(yv, rwq, rws, rxq, rxs, N, D)
                 for (i in range(int(D))) {
                     want[int(r * D) + i] = yv[i]
                 }
             }
-            var y : array<float>
+            var inscope y : array<float>
             y |> resize(int(NREG * D))
             matmul_q8q8_groupn(y, wq, ws, offs, NREG, xq.q, xq.scales, N, D)
             for (i in range(int(NREG * D))) {
@@ -132,8 +126,7 @@ def test_groupn_bias_fold(t : T?) {
     t |> run("biased groupN == unbiased + add-after, q8 and mx4, every backend") @(t : T?) {
         let wq0 <- q8_weights()
         let xq <- q8_rows()
-        var wn0 : array<uint8>
-        var we0 : array<uint8>
+        var wn0, we0 : array<uint8>
         mx4_weights(wn0, we0)
         // one bias vector per region, in a shared "fblob"-style buffer at per-region offsets
         var bias : array<float>
@@ -150,10 +143,9 @@ def test_groupn_bias_fold(t : T?) {
         let seat = kernel_backend_seat()
         for (name in kernel_backend_names()) {
             pin_kernel_backend(name)
-            var wq : array<int8>
-            var ws : array<float>
-            var wn : array<uint8>
-            var we : array<uint8>
+            var inscope wq : array<int8>
+            var inscope ws : array<float>
+            var inscope wn, we : array<uint8>
             wq := wq0.q
             ws := wq0.scales
             wn := wn0
@@ -165,7 +157,7 @@ def test_groupn_bias_fold(t : T?) {
                 }
             }
             // q8: reference = unbiased + add-after
-            var want : array<float>
+            var inscope want : array<float>
             want |> resize(int(NREG * D))
             matmul_q8q8_groupn(want, wq, ws, offs, NREG, xq.q, xq.scales, N, D)
             for (r in range64(NREG)) {
@@ -173,7 +165,7 @@ def test_groupn_bias_fold(t : T?) {
                     want[r * D + i] += bias[boffs[r] + i]
                 }
             }
-            var y : array<float>
+            var inscope y : array<float>
             y |> resize(int(NREG * D))
             matmul_q8q8_groupn(y, wq, ws, offs, NREG, xq.q, xq.scales, bias, boffs, N, D)
             for (i in range(int(NREG * D))) {
@@ -198,16 +190,14 @@ def test_groupn_bias_fold(t : T?) {
 [test]
 def test_mx4q8_groupn(t : T?) {
     t |> run("mx4 groupN == per-region GEMV under every backend (repack where needed)") @(t : T?) {
-        var wn0 : array<uint8>
-        var we0 : array<uint8>
+        var wn0, we0 : array<uint8>
         mx4_weights(wn0, we0)
         let xq <- q8_rows()
         var offs <- build_offs()
         let seat = kernel_backend_seat()
         for (name in kernel_backend_names()) {
             pin_kernel_backend(name)
-            var wn : array<uint8>
-            var we : array<uint8>
+            var inscope wn, we : array<uint8>
             wn := wn0
             we := we0
             if (kernel_backend_needs_repack(name)) {
@@ -215,21 +205,21 @@ def test_mx4q8_groupn(t : T?) {
                     repack_mx4_weight(wn, we, r * D * N, N, D)
                 }
             }
-            var want : array<float>
+            var inscope want : array<float>
             want |> resize(int(NREG * D))
             for (r in range64(NREG)) {
-                let rwn <- slice_u8(wn, r * D * N / 2l, D * N / 2l)
-                let rwe <- slice_u8(we, r * D * N / 32l, D * N / 32l)
-                let rxq <- slice_i8(xq.q, offs[r * 2l + 1l], N)
-                let rxs <- slice_f(xq.scales, offs[r * 2l + 1l] / 32l, N / 32l)
-                var yv : array<float>
+                var inscope rwn <- slice_u8(wn, r * D * N / 2l, D * N / 2l)
+                var inscope rwe <- slice_u8(we, r * D * N / 32l, D * N / 32l)
+                var inscope rxq <- slice_i8(xq.q, offs[r * 2l + 1l], N)
+                var inscope rxs <- slice_f(xq.scales, offs[r * 2l + 1l] / 32l, N / 32l)
+                var inscope yv : array<float>
                 yv |> resize(int(D))
                 matmul_mx4q8(yv, rwn, rwe, rxq, rxs, N, D)
                 for (i in range(int(D))) {
                     want[int(r * D) + i] = yv[i]
                 }
             }
-            var y : array<float>
+            var inscope y : array<float>
             y |> resize(int(NREG * D))
             matmul_mx4q8_groupn(y, wn, we, offs, NREG, xq.q, xq.scales, N, D)
             for (i in range(int(NREG * D))) {

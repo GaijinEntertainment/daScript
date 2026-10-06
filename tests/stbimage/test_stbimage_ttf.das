@@ -8,9 +8,7 @@ require stbimage/stbimage_boost
 require daslib/fio
 require dastest/testing_boost public
 
-def font_path() : string {
-    return "{get_das_root()}/modules/dasStbImage/fonts/droidsansmono.ttf"
-}
+def font_path() : string => "{get_das_root()}/modules/dasStbImage/fonts/droidsansmono.ttf"
 
 // ---- load_ttf ----
 

@@ -189,9 +189,8 @@ def is_decl_start(line : string) : bool {
     return line |> starts_with("[") || line |> starts_with("@")
 }
 
-def is_hoist(line : string) : bool {
-    return (line |> starts_with("require ")) || (line |> starts_with("options ")) || (line |> starts_with("module "))
-}
+def is_hoist(line : string) : bool =>
+    (line |> starts_with("require ")) || (line |> starts_with("options ")) || (line |> starts_with("module "))
 
 struct Chunk {
     kind : string   // "hoist" | "decl" | "stmt"
@@ -266,9 +265,7 @@ struct Renamer {
     def_headers : table<string>   // exact-duplicate def headers rename; overloads keep the name
 }
 
-def is_ident_char(c : int) : bool {
-    return is_alpha(c) || is_number(c) || c == '_'
-}
+def is_ident_char(c : int) : bool => is_alpha(c) || is_number(c) || c == '_'
 
 // the end the modifier walkers below compare against: a prefix like "private " only counts
 // when its trailing space is real source, not the line's own trailing whitespace
@@ -314,7 +311,7 @@ def type_decl_name_mods(line : string; var mods : string&) : string {
             continue if (!starts_with(d, kw))
             var pos = skip_white_space(d, length(kw))
             var again = true
-            var mod_list : array<string>
+            var inscope mod_list : array<string>
             while (again) {
                 again = false
                 for (m in TYPE_MODIFIERS) {
@@ -512,9 +509,7 @@ def apply_renames(ren : Renamer; line : string) : string {
     return out
 }
 
-def rename_line(var ren : Renamer; line : string) : string {
-    return rename_line_ex(ren, line, true)
-}
+def rename_line(var ren : Renamer; line : string) : string => rename_line_ex(ren, line, true)
 
 // a line declares either a type name or a list of variable names
 def private declare_line_names(var ren : Renamer; line : string) {
@@ -797,9 +792,8 @@ def append_stmts(var seg : Segment; var ren : Renamer; chunk : Chunk; tag : stri
     seg.stmts |> push("")
 }
 
-def is_global_decl(line : string) : bool {
-    return (line |> starts_with("var ")) || (line |> starts_with("let "))
-}
+def is_global_decl(line : string) : bool =>
+    (line |> starts_with("var ")) || (line |> starts_with("let "))
 
 def seed_renamer(var ren : Renamer; givens : array<string>) {
     for (g in givens) {
@@ -867,8 +861,7 @@ def flush_segment(var seg : Segment; hoists : array<string>; givens : array<stri
 def append_member_block(var seg : Segment; var ren : Renamer; blk : RstBlock; var hoists : array<string>) {
     var body := blk.body
     mark_elisions(body)
-    var members : array<string>
-    var stmts : array<string>
+    var members, stmts : array<string>
     for (chunk in chunks_of(body)) {
         if (chunk.kind == "hoist") {
             for (h in chunk.lines) {
@@ -1021,7 +1014,7 @@ def emit_page(page : PageSource; cfg : Config) : EmittedPage {
             seed_renamer(ren, page.givens)
         }
         em.checked++
-        var body := blk.body
+        var inscope body := blk.body
         mark_elisions(body)
         let tag = "// --- {base_name(page.path)}:{blk.rst_line}"
         for (chunk in chunks_of(body)) {
@@ -1060,9 +1053,8 @@ def compile_file_rc(cfg : Config; path : string; var output : string&) : int {
     return run_and_capture(args, output, 120.0)
 }
 
-def spawn_failure(cfg : Config) : string {
-    return "cannot spawn '{cfg.daslang}' - pass --daslang <path to the daslang binary>"
-}
+def spawn_failure(cfg : Config) : string =>
+    "cannot spawn '{cfg.daslang}' - pass --daslang <path to the daslang binary>"
 
 def first_lines(s : string; n : int) : array<string> {
     var out : array<string>
@@ -1099,10 +1091,10 @@ struct SweepReport {
 
 def check_expects(em : EmittedPage; cfg : Config; base_file : string; var rep : PageReport) {
     for (ex in em.expects) {
-        var body := ex.body
+        var inscope body := ex.body
         mark_elisions(body)
         let ex_file = replace(base_file, ".das", "__expect_{ex.rst_line}.das")
-        var lines <- split(fread(base_file), "\n")
+        var inscope lines <- split(fread(base_file), "\n")
         for (chunk in chunks_of(body)) {
             if (chunk.kind == "decl" || chunk.kind == "hoist") {
                 lines |> push_from(chunk.lines)

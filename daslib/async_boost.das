@@ -227,17 +227,14 @@ class CollectAndReplaceIteratorFields : AstVisitor {
         return <- res
     }
 
-    def override visitExprCopy(var expr : ExprCopy?) : ExpressionPtr {
-        return <- move_clone_copy(expr, voidRoutine, retType, AssignOp.copy)
-    }
+    def override visitExprCopy(var expr : ExprCopy?) : ExpressionPtr =>
+        <- move_clone_copy(expr, voidRoutine, retType, AssignOp.copy)
 
-    def override visitExprMove(var expr : ExprMove?) : ExpressionPtr {
-        return <- move_clone_copy(expr, voidRoutine, retType, AssignOp.move)
-    }
+    def override visitExprMove(var expr : ExprMove?) : ExpressionPtr =>
+        <- move_clone_copy(expr, voidRoutine, retType, AssignOp.move)
 
-    def override visitExprClone(var expr : ExprClone?) : ExpressionPtr {
-        return <- move_clone_copy(expr, voidRoutine, retType, AssignOp.clone)
-    }
+    def override visitExprClone(var expr : ExprClone?) : ExpressionPtr =>
+        <- move_clone_copy(expr, voidRoutine, retType, AssignOp.clone)
 
     def override visitExprCall(var expr : ExprCall?) : ExpressionPtr {
         if (expr.name == "await_next_frame") {
@@ -372,8 +369,7 @@ def public async_timeout(var a : iterator<auto>; max_frames : int) : bool {
 def public async_race(var a : iterator<auto>; var b : iterator<auto>) : int {
     //! This function runs two async functions concurrently and returns the
     //! index (0 or 1) of whichever finishes first. The other is abandoned.
-    var ta : bool
-    var tb : bool
+    var ta, tb : bool
     while (true) {
         if (!next(a, ta) || empty(a)) return 0
         if (!next(b, tb) || empty(b)) return 1

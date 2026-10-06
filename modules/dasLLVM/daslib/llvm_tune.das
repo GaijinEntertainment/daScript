@@ -97,16 +97,12 @@ def tune_aot_gate() : bool {
 //! True when this compile must retain reference bodies. Documentation roots
 //! inspect source APIs and, like frozen/AOT consumers, must never consult or
 //! stamp per-box tune state.
-def tune_stamp_free_gate() : bool {
-    return tune_aot_gate() || is_building_documentation()
-}
+def tune_stamp_free_gate() : bool => tune_aot_gate() || is_building_documentation()
 
     //! True when this compile produces a standalone exe (`llvm-jit -exe`). Stamping still runs:
     //! with a sidecar the exe ships those winners, without one the generic `fallback=` stamps.
     //! Only the policy rail (`[tune_policy]`, `--tune`) is dead.
-def tune_exe_gate() : bool {
-    return compiling_program().policies.jit_exe_mode
-}
+def tune_exe_gate() : bool => compiling_program().policies.jit_exe_mode
 
 // ===== the per-app sidecar =====
 
@@ -161,9 +157,8 @@ def set_tune_manifest_runtime_path(p : string) {
 
 //! Whether the sidecar location was chosen (`set_tune_manifest_runtime_path` or `DAS_TUNE_MANIFEST`)
 //! rather than defaulted beside the app.
-def tune_manifest_explicit() : bool {
-    return !empty(g_runtime_manifest) || !empty(g_env_tune.tune_manifest)
-}
+def tune_manifest_explicit() : bool =>
+    !empty(g_runtime_manifest) || !empty(g_env_tune.tune_manifest)
 
     //! The tune sidecar location: the in-process override (`set_tune_manifest_runtime_path` names
     //! a file of the process's own choosing, so it outranks the ambient env), else `DAS_TUNE_MANIFEST`,
@@ -947,9 +942,7 @@ var private g_tune_fat_built = 0
 //! The classes this box runs a fat exe's clones for, one bit per class (`tune_fat_class_bit`);
 //! 0 until the exe's `[init]` ran, which every dispatch reads as the baseline clone.
 [llvm_code(name = "llvm_tune_fat_word::load", global = "das.tune.fat_mask")]
-def tune_fat_mask() : int {
-    return g_tune_fat_mask
-}
+def tune_fat_mask() : int => g_tune_fat_mask
 
 [llvm_code(name = "llvm_tune_fat_word::store", global = "das.tune.fat_mask")]
 def private tune_fat_mask_set(mask : int) {
@@ -957,9 +950,7 @@ def private tune_fat_mask_set(mask : int) {
 }
 
 [llvm_code(name = "llvm_tune_fat_word::load", global = "das.tune.fat_built")]
-def private tune_fat_built_word() : int {
-    return g_tune_fat_built
-}
+def private tune_fat_built_word() : int => g_tune_fat_built
 
 [llvm_code(name = "llvm_tune_fat_word::store", global = "das.tune.fat_built")]
 def private tune_fat_built_set(built : int) {
@@ -968,9 +959,7 @@ def private tune_fat_built_set(built : int) {
 
 //! True inside a fat exe once its `[init]` ran - what a library asks before it races the
 //! runtime section at first start (a plain build has a policy rail and a tuner for that).
-def tune_fat_built() : bool {
-    return tune_fat_built_word() != 0
-}
+def tune_fat_built() : bool => tune_fat_built_word() != 0
 
 //! A class's bit in the fat mask: its position on its arch's ladder, most capable class first.
 def tune_fat_class_bit(klass : string) : int {
@@ -1041,9 +1030,7 @@ def tune_fat_init(baseline : string) {
 //! The program's tune decisions — one row per `[tune]` function. Populated whenever the
 //! policy rail ran (a declared `[tune_policy]` or the auto default on any app with tune
 //! scopes); empty under the gates (AOT, `-exe`, grid modes, `DAS_TUNE_MANIFEST`).
-def tune_status() : array<TuneStatus> {
-    return clone_to_move(g_tune_status)
-}
+def tune_status() : array<TuneStatus> => clone_to_move(g_tune_status)
 
 
 // ===== [tune_scope] data — library-owned tuner wiring =====
@@ -1276,8 +1263,7 @@ def private scope_status_row(prog : Program?; sc : TuneScope; mpath : string; co
     if (!empty(sc.versionKey)) {
         fnames |> push("{TUNE_VERSION_TOKEN}{sc.versionKey}={sc.versionExpected}")
     }
-    var fallbacks : array<string>
-    var unprofiled : array<string>
+    var fallbacks, unprofiled : array<string>
     let fat = tune_mode() == "fat"
     let baseline = jit_baseline_class()
     for (fname in fnames) {
@@ -1573,9 +1559,7 @@ def private requires_ok_in_fingerprint(requires : string; fingerprint : string) 
     return ok
 }
 
-def private perm_requires_ok(p : TunePerm) : bool {
-    return tune_requires_ok(p.requires)
-}
+def private perm_requires_ok(p : TunePerm) : bool => tune_requires_ok(p.requires)
 
 def private suffix_piece(name : string; v : RttiValue) : string {
     if (v is tBool) return (v as tBool) ? name : "no{name}"
@@ -1781,9 +1765,7 @@ def private emit_registry(var mod : Module?; base : FunctionPtr; perms : array<T
 // ===== fat mode (compile time) =====
 
 // `x86-vnni512` -> `x86_vnni512`, the class as an identifier piece
-def private class_ident(klass : string) : string {
-    return replace(klass, "-", "_")
-}
+def private class_ident(klass : string) : string => replace(klass, "-", "_")
 
 // the classes a fat exe carries clones for: every class of the baseline's ladder that some
 // scope ships a profile for, plus the baseline itself; most capable first, the baseline last
@@ -1794,7 +1776,7 @@ def private fat_ship_set(baseline : string) : array<string> {
         break if (c == baseline)
         var k = ""
         var p = ""
-        var prof <- profile_kernels(k, p, c)
+        var inscope prof <- profile_kernels(k, p, c)
         delete prof
         if (!empty(p)) {
             ship |> push(c)
@@ -1948,7 +1930,7 @@ def private stamp_fat(var func : FunctionPtr; genKey : string; perms : array<Tun
             if (source == "profile") {
                 var pk = ""
                 var pp = ""
-                var prof <- profile_kernels(pk, pp, klass)
+                var inscope prof <- profile_kernels(pk, pp, klass)
                 own = prof?["{c.fnname}"] ?? ""
                 delete prof
                 var ownOk = false
@@ -2242,9 +2224,8 @@ def tune_apply(var func : FunctionPtr; var _group : ModuleGroup; // nolint:STYLE
 
 // ===== [tune_scope] / [tune_policy] — the tuner-wiring UX rail =====
 
-def private resolve_decl_path(declFile : string; p : string) : string {
-    return is_absolute(p) ? p : path_join(dir_name(declFile), p)
-}
+def private resolve_decl_path(declFile : string; p : string) : string =>
+    is_absolute(p) ? p : path_join(dir_name(declFile), p)
 
 def private module_compiled(name : string) : bool {
     var found = false
@@ -2359,9 +2340,7 @@ def private apply_cli_tune_flags() : bool {
 
 //! The runtime read of `--tune` / `--tune-only` (and the verbosity flags), called by the injected
 //! auto guard: true when this run asked for a forced tune.
-def tune_cli_force() : bool {
-    return apply_cli_tune_flags()
-}
+def tune_cli_force() : bool => apply_cli_tune_flags()
 
 // the exact command a user (or the auto path) runs to tune one scope; the env prefix leads
 // so the command never starts with a quote (cmd.exe strips a leading quote)
@@ -2418,9 +2397,7 @@ def tune_set_verbosity(v : string) {
 
 // A process draws the display only when its own stdout is a terminal. Otherwise it forwards
 // events untouched, so whoever is capturing us (a supervisor, a parent tuner) can draw instead.
-def private is_progress_renderer() : bool {
-    return is_stdout_terminal()
-}
+def private is_progress_renderer() : bool => is_stdout_terminal()
 
 // Emitting goes through the same relay as receiving, so the rule is uniform: a tuner run
 // straight from a terminal draws its own display instead of spewing raw event lines, and one
@@ -2569,9 +2546,7 @@ def tune_progress_feed(line : string) : bool {
 }
 
 //! True while a progress display is live — a `plan` event has arrived and no scope has ended.
-def tune_progress_active() : bool {
-    return g_prog.active
-}
+def tune_progress_active() : bool => g_prog.active
 
 //! Drop the progress state, for a front end starting a fresh scope.
 def tune_progress_reset() {
@@ -2853,9 +2828,7 @@ def tune_auto_reexec() : bool {
 }
 
 //! The re-exec'd child's exit code — what an `int` main returns after `tune_auto_reexec()`.
-def tune_reexec_code() : int {
-    return g_reexec_code
-}
+def tune_reexec_code() : int => g_reexec_code
 
 // the pre-tune scope resolver: consulted by the auto and restart guards before spawning the
 // tuner; an app registers one from an [init] (which runs before the guard at the top of main)
@@ -2894,15 +2867,11 @@ def tune_interrupt_requested() : bool {
 
     //! The `DAS_TUNE_POLICY` override, verbatim ("" = none) — how a sibling stamping macro
     //! (e.g. a library's `[tuned]` loop-hint rail) honors `reference` and `fallback` too.
-def tune_policy_env() : string {
-    return g_env_tune.tune_policy
-}
+def tune_policy_env() : string => g_env_tune.tune_policy
 
     //! The `--tune-only` re-mint filter (`DAS_TUNE_ONLY`), verbatim: comma-separated name
     //! tokens, empty = race everything.
-def tune_only_filter() : string {
-    return g_env_tune.tune_only
-}
+def tune_only_filter() : string => g_env_tune.tune_only
 
     //! True when family `name` should race under the `--tune-only` filter - no filter set, or
     //! some comma-separated token is a substring of the name. A harness consults this at each
@@ -3044,9 +3013,8 @@ def private tune_policy_gated() : bool {
 
     // -exe owes the status [init] even under a DAS_TUNE_MANIFEST redirect (report ≠ policy —
     // else a redirect-built exe ships stamp-less rows); stamp-free/grid still win
-def private exe_status_report() : bool {
-    return tune_exe_gate() && !tune_stamp_free_gate() && (tune_mode() == "normal" || tune_mode() == "fat")
-}
+def private exe_status_report() : bool =>
+    tune_exe_gate() && !tune_stamp_free_gate() && (tune_mode() == "normal" || tune_mode() == "fat")
 
 // the runtime status table: one tune_status_add per [tune] function, off the stamped AST
 // truth — emitted by policy runs AND by -exe builds (an artifact must be able to report
@@ -3250,9 +3218,7 @@ def tune_policy_apply(var func : FunctionPtr; var _group : ModuleGroup;
 [function_macro(name = "tune_policy_default_applied")]
 class private TunePolicyDefaultMarker : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       var args : AnnotationArgumentList; var errors : das_string) : bool {
-        return true
-    }
+                       var args : AnnotationArgumentList; var errors : das_string) : bool => true
 }
 
     //! The "untuned does not start" default: a program root with a `main`, some `[tune_scope]` in

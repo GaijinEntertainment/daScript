@@ -54,9 +54,7 @@ var active_filenames : table<string>
 let JIT_PACKED_FIND_STR_EARLY_OUT = true
 
 [macro_function]
-def private get_expr_ptr(expr : ExpressionPtr) {
-    return expr
-}
+def private get_expr_ptr(expr : ExpressionPtr) => expr
 
 struct private IteBlock {
     if_true  : LLVMOpaqueBasicBlock?
@@ -237,9 +235,7 @@ struct TableWalkState {
     stride  : int                // value stride in bytes (values lane; keys GEP by element type)
 }
 
-def private is_int64_or_uint64(t : Type) : bool {
-    return t == Type.tInt64 || t == Type.tUInt64
-}
+def private is_int64_or_uint64(t : Type) : bool => t == Type.tInt64 || t == Type.tUInt64
 
 [macro]
 class public LlvmJitVisitor : AstVisitor {
@@ -319,9 +315,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
 // Debug info
-    def const debug_info_enabled() {
-        return g_di_builder != null
-    }
+    def const debug_info_enabled() => g_di_builder != null
 
     [arch(at="../ARCHITECTURE_DEBUG_INFO.md#di-subprogram-naming")]
     def debug_subprogram(dasName : string; at : LineInfo;
@@ -335,9 +329,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     [arch(at="../ARCHITECTURE_DEBUG_INFO.md#di-subprogram-naming")]
-    def impl_is_local_to_unit() {
-        return !g_jit_split_active
-    }
+    def impl_is_local_to_unit() => !g_jit_split_active
 
     def debug_before_function(fun : FunctionPtr) {
         if (debug_info_enabled()) {
@@ -348,9 +340,8 @@ class public LlvmJitVisitor : AstVisitor {
         }
     }
 
-    def block_das_name(blk : ExprBlock?; func : Function?) {
-        return func != null ? "{func.name}_block_at_{int(blk.at.line)}" : "block_at_{int(blk.at.line)}"
-    }
+    def block_das_name(blk : ExprBlock?; func : Function?) =>
+        func != null ? "{func.name}_block_at_{int(blk.at.line)}" : "block_at_{int(blk.at.line)}"
 
     def debug_before_block(blk : ExprBlock?; func : Function?) {
         if (debug_info_enabled()) {
@@ -381,13 +372,11 @@ class public LlvmJitVisitor : AstVisitor {
         }
     }
 
-    def get_debug_file_location_by_name(filename : string) : LLVMOpaqueMetadata? {
-        return di_file_of(g_di_builder, filename)
-    }
+    def get_debug_file_location_by_name(filename : string) : LLVMOpaqueMetadata? =>
+        di_file_of(g_di_builder, filename)
 
-    def di_current_scope : LLVMOpaqueMetadata ? {
-        return di_scopes |> empty() ? di_subprogram : di_scopes |> back()
-    }
+    def di_current_scope : LLVMOpaqueMetadata ? =>
+        di_scopes |> empty() ? di_subprogram : di_scopes |> back()
 
     [arch(at="../ARCHITECTURE_DEBUG_INFO.md#di-scopes")]
     def di_push_lexical_block(at : LineInfo) {
@@ -429,9 +418,7 @@ class public LlvmJitVisitor : AstVisitor {
         }
     }
 
-    def slot_holds_pointer(v : VariablePtr) {
-        return v._type.flags.ref && !v.flags.aliasCMRES
-    }
+    def slot_holds_pointer(v : VariablePtr) => v._type.flags.ref && !v.flags.aliasCMRES
 
     // a local and a parameter differ only in the DILocalVariable they build; argNo is the
     // parameter's 1-based position, which is what tells the two apart
@@ -482,8 +469,7 @@ class public LlvmJitVisitor : AstVisitor {
 
 // Function
     def build_noalias_list(annotations : AnnotationList) : tuple<noalias : table<string>; nocapture : table<string>> {
-        var noalias : table<string>
-        var nocapture : table<string>
+        var noalias, nocapture : table<string>
         // Skip user hints entirely on wasm32 — host-LLVM wasm codegen has had
         // miscompiles around them. Tracked alongside the alwaysinline gotcha.
         if (g_target_is_wasm) return <- (noalias <- noalias, nocapture <- nocapture)
@@ -505,9 +491,7 @@ class public LlvmJitVisitor : AstVisitor {
         return <- (noalias <- noalias, nocapture <- nocapture)
     }
 
-    def append_basic_block(name : string) {
-        return LLVMAppendBasicBlockInContext(g_ctx, ffunc, name)
-    }
+    def append_basic_block(name : string) => LLVMAppendBasicBlockInContext(g_ctx, ffunc, name)
 
     def process_function_hints(annotations : AnnotationList; var arguments : dasvector`ptr`Variable) {
         var alwaysInline = false
@@ -980,9 +964,8 @@ class public LlvmJitVisitor : AstVisitor {
         LLVMPositionBuilderAtEnd(g_builder, function_body)
     }
 
-    def override canVisitFunctionArgumentInit(fun : Function?; arg : VariablePtr; value : ExpressionPtr) : bool {
-        return false
-    }
+    def override canVisitFunctionArgumentInit(fun : Function?; arg : VariablePtr; value : ExpressionPtr) : bool =>
+        false
 
     def override preVisitFunction(var fun : FunctionPtr) : void {
         assert(g_builder != null, "missing builder")
@@ -1016,9 +999,8 @@ class public LlvmJitVisitor : AstVisitor {
         }
     }
 
-    def current_block_terminates {
-        return LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(g_builder)) != null
-    }
+    def current_block_terminates =>
+        LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(g_builder)) != null
 
     def override visitFunction(fun : FunctionPtr) : FunctionPtr {
         LLVMPositionBuilderAtEnd(g_builder, function_entry)
@@ -1911,13 +1893,9 @@ class public LlvmJitVisitor : AstVisitor {
         return expr
     }
 
-    def override canVisitCall(expr : ExprCall?) : bool {
-        return !skipCall |> key_exists(expr)
-    }
+    def override canVisitCall(expr : ExprCall?) : bool => !skipCall |> key_exists(expr)
 
-    def override canVisitWithAliasSubexpression(expr : ExprAssume?) : bool {
-        return false
-    }
+    def override canVisitWithAliasSubexpression(expr : ExprAssume?) : bool => false
 
 // ExprNullCoalescing
     def override preVisitExprNullCoalescing(expr : ExprNullCoalescing?) : void {
@@ -1969,9 +1947,8 @@ class public LlvmJitVisitor : AstVisitor {
 // ExprAt
     // True for `int` / `int64` index types -- the cases where widening must use
     // SExt to keep negative-index detection working against arrays > UINT32_MAX.
-    def is_signed_index_type(t : TypeDeclPtr) : bool {
-        return t != null && (t.baseType == Type.tInt || t.baseType == Type.tInt64)
-    }
+    def is_signed_index_type(t : TypeDeclPtr) : bool =>
+        t != null && (t.baseType == Type.tInt || t.baseType == Type.tInt64)
 
     // Bring two integer LLVM values to a common width by zero-extending the narrower one.
     // Needed since Array.size widened to i64 but daslang's default int index is still i32.
@@ -2589,9 +2566,8 @@ class public LlvmJitVisitor : AstVisitor {
 
     // Integer / workhorse tab?[key] / find: inline open-addressed probe (non-string tables are
     // open-addressed at every capacity — see runtime_table.h; no packed regime, no C++ interop).
-    def build_int_table_find(ttype : Type; tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int) : LLVMOpaqueValue? {
-        return build_workhorse_table_find(ttype, tab, key)
-    }
+    def build_int_table_find(ttype : Type; tab : LLVMOpaqueValue?; key : LLVMOpaqueValue?; valueTypeSize : int) : LLVMOpaqueValue? =>
+        build_workhorse_table_find(ttype, tab, key)
 
     // nolint:STYLE014
     // Integer / workhorse tab[key] (insert-or-get): the whole operation is inlined EXCEPT a grow.
@@ -3060,9 +3036,8 @@ class public LlvmJitVisitor : AstVisitor {
             || ((expr is ExprConstUInt64) && (expr as ExprConstUInt64).value != 0ul))
     }
 
-    def build_str_cmp(a, b : LLVMOpaqueValue?) : LLVMOpaqueValue? {
-        return build_jit_runtime_call(g_builder, JitRuntime.jit_str_cmp, fixed_array(a, b))
-    }
+    def build_str_cmp(a, b : LLVMOpaqueValue?) : LLVMOpaqueValue? =>
+        build_jit_runtime_call(g_builder, JitRuntime.jit_str_cmp, fixed_array(a, b))
 
     def build_str_cat(a, b : LLVMOpaqueValue?; at : LineInfo) : LLVMOpaqueValue? {
         var typ = g_fn_types[FN_JIT_STR_CAT]
@@ -3093,9 +3068,8 @@ class public LlvmJitVisitor : AstVisitor {
         make_call(expr, false)
     }
 
-    def isNumeric(opType : TypeDeclPtr) {
-        return opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt));
-    }
+    def isNumeric(opType : TypeDeclPtr) =>
+        opType.isInteger || (opType.isVectorType && (opType.vectorBaseType == Type.tInt || opType.vectorBaseType == Type.tUInt))
 
     def isEnumeration(opType : TypeDeclPtr) {
         return (opType.baseType == Type.tEnumeration ||
@@ -3110,9 +3084,8 @@ class public LlvmJitVisitor : AstVisitor {
             opType.vectorBaseType == Type.tInt16 || opType.vectorBaseType == Type.tUInt16)
     }
 
-    def isBinary(opType : TypeDeclPtr) {
-        return isNumeric(opType) || isEnumeration(opType) || isLatticeIntVec(opType)
-    }
+    def isBinary(opType : TypeDeclPtr) =>
+        isNumeric(opType) || isEnumeration(opType) || isLatticeIntVec(opType)
 
     def visitExprOp2_NonMonade(var expr : ExprOp2?) {
         var left = getE(expr.left)
@@ -3743,9 +3716,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
 // ExprTryCatch
-    def override canVisitTryCatchBody(expr : ExprTryCatch?) : bool {
-        return false
-    }
+    def override canVisitTryCatchBody(expr : ExprTryCatch?) : bool => false
 
     def override preVisitExprTryCatch(expr : ExprTryCatch?) : void {
         let try_ptr = emit_block_value(expr.try_block, expr.at)
@@ -3931,9 +3902,7 @@ class public LlvmJitVisitor : AstVisitor {
     // liveness regimes; see runtime_table.h tableLiveSlot). The daslib generics instantiate into
     // the compiling module under the origin-prefixed name `builtin`keys`<hash>` — the backtick
     // prefix is compiler-generated, so it can't collide with a user function.
-    def table_walk_is_keys_call(cf : ExprCall?) {
-        return starts_with(cf.func.name, "builtin`keys`")
-    }
+    def table_walk_is_keys_call(cf : ExprCall?) => starts_with(cf.func.name, "builtin`keys`")
 
     def is_table_keys_values(expr : ExpressionPtr) {
         if (!(expr is ExprCall)) return false
@@ -5114,13 +5083,11 @@ class public LlvmJitVisitor : AstVisitor {
             flags : int; count : int; size : int; firstGcField : int; annotationCount : int>>)
     }
 
-    def get_llvm_type_for_enumvalueinfo() : LLVMTypeRef {
-        return jit_struct_type(type<tuple<name : void?; value : int64>>)
-    }
+    def get_llvm_type_for_enumvalueinfo() : LLVMTypeRef =>
+        jit_struct_type(type<tuple<name : void?; value : int64>>)
 
-    def get_llvm_type_for_annotation_argument_info() : LLVMTypeRef {
-        return jit_struct_type(type<tuple<typeCode : int; name : void?; sValue : void?; ulValue : uint64>>)
-    }
+    def get_llvm_type_for_annotation_argument_info() : LLVMTypeRef =>
+        jit_struct_type(type<tuple<typeCode : int; name : void?; sValue : void?; ulValue : uint64>>)
 
     def get_llvm_type_for_annotation_info() : LLVMTypeRef {
         // resolved is a lazy Annotation* cache, starts null
@@ -5549,8 +5516,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def override visitExprInvoke(expr : ExprInvoke?) : ExpressionPtr {
         assume blockT = expr.arguments[0]._type
-        var cmresEval : LLVMOpaqueValue?
-        var cmresEvalPtr : LLVMOpaqueValue?
+        var cmresEval, cmresEvalPtr : LLVMOpaqueValue?
         if (isCMRESType(expr._type)) {
             if (call2cmres |> key_exists(expr)) {
                 cmresEval = call2cmres[get_expr_ptr(expr)]
@@ -6753,8 +6719,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def make_block_function(blockExpr : ExpressionPtr; captured : array<CapturedVariable>; first_field_index : int; captureType : LLVMOpaqueType?) : tuple<func : LLVMOpaqueValue?; impl : LLVMOpaqueValue?> {
         var astVisitor = new LlvmJitVisitor(prog, jit_context, types, uid, flags, mode, g_di_builder, attributes)
-        var result : LLVMOpaqueValue?
-        var impl : LLVMOpaqueValue?
+        var result, impl : LLVMOpaqueValue?
         make_visitor(*astVisitor) $(mv_adapter) {
             astVisitor.adapter = mv_adapter
             let fmna = (*astVisitor)->pre_make_block(unsafe(reinterpret<ExprBlock?>(blockExpr)), thisFunc, captureType)
@@ -6784,9 +6749,7 @@ class public LlvmJitVisitor : AstVisitor {
         return (func = result, impl = impl)
     }
 
-    def override canVisitMakeBlockBody(expr : ExprMakeBlock?) : bool {
-        return false
-    }
+    def override canVisitMakeBlockBody(expr : ExprMakeBlock?) : bool => false
 
     def override preVisitExprMakeBlock(expr : ExprMakeBlock?) : void {
         let blk_ptr = emit_block_value(expr._block, expr.at)
@@ -7774,8 +7737,7 @@ def private add_ctor_dtor_function(ctor_dtor : array<tuple<LLVMOpaqueValue?, LLV
     let dtorStructType = StructType(types, dtorTypes)
 
     let n_entries = length(ctor_dtor)
-    var ctorFields : array<LLVMOpaqueValue?>
-    var dtorFields : array<LLVMOpaqueValue?>
+    var ctorFields, dtorFields : array<LLVMOpaqueValue?>
     ctorFields |> reserve(n_entries * 3)
     dtorFields |> reserve(n_entries * 3)
 
@@ -8130,15 +8092,12 @@ class public DisableJitVisitor : AstVisitor {
         disable = false
     }
 
-    def override canVisitWithAliasSubexpression(expr : ExprAssume?) : bool {
-        return false
-    }
+    def override canVisitWithAliasSubexpression(expr : ExprAssume?) : bool => false
     // Default-argument inits are inlined into call sites at infer, so the copy left on the
     // argument is a dead husk LlvmJitVisitor declines too - and ClearUnusedSymbols nulls refs
     // inside it, so expr.func there is legitimately null.
-    def override canVisitFunctionArgumentInit(fun : Function?; arg : VariablePtr; value : ExpressionPtr) : bool {
-        return false
-    }
+    def override canVisitFunctionArgumentInit(fun : Function?; arg : VariablePtr; value : ExpressionPtr) : bool =>
+        false
     // 16/8-bit lattice floor: data movement (loads/stores/moves/locals/indexing/swizzles) and the
     // vec4f wrapper ABI lower natively; what still falls back is lattice values crossing a BUILTIN CALL
     // boundary (ctors/converts/operators) — the builtin-address gates below catch those.

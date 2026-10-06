@@ -75,9 +75,8 @@ def private ref_generate(m : Model; prompt : array<int64>; params : SamplingPara
     return <- r
 }
 
-def private pieces_of(events : array<SchedEvent>; id : int64) : array<string> {
-    return <- [for (e in events); e.text; where e.stream == id && e.kind == SchedEventKind.piece]
-}
+def private pieces_of(events : array<SchedEvent>; id : int64) : array<string> =>
+    <- [for (e in events); e.text; where e.stream == id && e.kind == SchedEventKind.piece]
 
 // both sides of a stream compare, decoded - a near-tie synonym flip and a broken walk read alike as ids
 def private log_streams(la : string; ea : array<SchedEvent>; ida : int64; lb : string; eb : array<SchedEvent>; idb : int64) {
@@ -278,10 +277,10 @@ def test_scheduler_chunk_sizes(t : T?) {
             var streams : array<array<int64>>
             for (ci, K in range(4), [1l, 3l, 17l, 64l]) {
                 var sch <- create_scheduler(m, 1l, 4l, K, [idle_chunk_tokens = 0l])
-                var events : array<SchedEvent>
+                var inscope events : array<SchedEvent>
                 t |> success(submit(m, sch, make_req(int64(ci), prompt, greedy, 6l, none)), "stream queued (K={K})")
                 drain(m, sch, events)
-                var got <- toks_of(events, int64(ci))
+                var inscope got <- toks_of(events, int64(ci))
                 first[ci] = !empty(got) ? got[0] : -1l
                 to_log(LOG_INFO, "K={K}: \"{text_of(pieces_of(events, int64(ci)))}\" {got}\n")
                 streams |> emplace(got)
@@ -322,7 +321,7 @@ def test_scheduler_idle_quantum(t : T?) {
             var streams : array<array<int64>>
             for (idle in [-1l, 0l]) {   // the backend's default, then off
                 var sch <- create_scheduler(m, 1l, 4l, K, [idle_chunk_tokens = idle])
-                var events : array<SchedEvent>
+                var inscope events : array<SchedEvent>
                 t |> success(submit(m, sch, make_req(1l, prompt, greedy, 6l, none)), "lone stream queued (idle quantum {idle})")
                 scheduler_step(m, sch, events)
                 t |> equal(sch.idle_chunk_tokens, idle < 0l ? chunk_defaults(m).idle : idle, "idle quantum {idle} resolves to {sch.idle_chunk_tokens}")
@@ -903,11 +902,11 @@ def test_scheduler_media_splice(t : T?) {   // nolint:STYLE038 — one model loa
             // head (no leading tokens), middle (both spans), tail (no trailing tokens)
             for (arm, lo, hi in ["head", "middle", "tail"], [0l, 4l, np - 5l], [5l, 4l + 6l, np]) {
                 var sch <- create_scheduler(m, 1l, 4l, 64l)
-                var events : array<SchedEvent>
+                var inscope events : array<SchedEvent>
                 var req <- media_req(m, 1l, prompt, lo, hi, false, greedy, 6l)
                 t |> success(submit(m, sch, req), "media stream queued (arm {arm}: rows [{lo},{hi}))")
                 drain(m, sch, events)
-                var got <- toks_of(events, 1l)
+                var inscope got <- toks_of(events, 1l)
                 t |> success(ids_equal(got, base.toks), "arm {arm}: media stream == the all-token stream")
                 t |> equal(finished_of(events, 1l).n_prompt, np)   // usage counts the rows as positions
                 t |> equal(sch.prefill_evals, 1l, "arm {arm}: the span and the text around it are one prefill call")
@@ -1099,7 +1098,7 @@ def test_scheduler_device_mode_switch(t : T?) {
                     t |> success(tripped, "device mode: a device-home session serves no media span, so submit panics")
                 } else {
                     t |> success(taken && !tripped, "host-cached mode takes the same request (the control)")
-                    var events : array<SchedEvent>
+                    var inscope events : array<SchedEvent>
                     drain(m, sch, events)
                     delete events
                 }
@@ -1228,7 +1227,7 @@ def private mrope_paged_leg(t : T?; m : Model; prompt : array<int64>; lo, hi : i
         t |> success(length(schp.streams) == 1 && schp.streams[0].session.rope_pos_delta == int64(max(grid.x, grid.y)) - (hi - lo),
             "paged mrope stream {id}: the session ropes past the span by the grid's advance ({max(grid.x, grid.y)} positions for {hi - lo} rows)")
         drain(m, schp, ep)
-        var gp <- toks_of(ep, id)
+        var inscope gp <- toks_of(ep, id)
         to_log(LOG_INFO, "paged mrope stream {id} (cached {finished_of(ep, id).n_cached}): {eyeball_text(m, gp)}\nits grid reference: {eyeball_text(m, mref)}\n")
         t |> success(ids_equal(gp, mref), "paged mrope stream {id} == the grid reference")
         delete gp
@@ -1440,9 +1439,8 @@ def private submit_panics(m : Model; var sch : Scheduler; var req : PendingReq) 
 }
 
 //! a well-formed request: the prompt's [4, 10) inline as one span under one key
-def private span_ok_req(m : Model; id : int64; prompt : array<int64>) : PendingReq {
-    return <- inline_span_req(m, id, prompt, 4l, 10l, 6l, 0x5a5ul, 0x5a5ul, SamplingParams(), 4l)
-}
+def private span_ok_req(m : Model; id : int64; prompt : array<int64>) : PendingReq =>
+    <- inline_span_req(m, id, prompt, 4l, 10l, 6l, 0x5a5ul, 0x5a5ul, SamplingParams(), 4l)
 
 //! the well-formed request's prompt with its one span replaced by rowless spans at `spans`' (at, n) pairs
 def private spans_req(m : Model; id : int64; prompt : array<int64>; spans : array<int2>) : PendingReq {

@@ -318,9 +318,7 @@ def public type_int(var m : SpirvModule; width, signedness : uint) : uint {
     return id
 }
 
-def public type_uint(var m : SpirvModule) : uint {
-    return type_int(m, 32u, 0u)
-}
+def public type_uint(var m : SpirvModule) : uint => type_int(m, 32u, 0u)
 
 def public type_float(var m : SpirvModule; width : uint) : uint {
     let key = "f{width}"
@@ -588,16 +586,14 @@ def public type_struct_block(var m : SpirvModule; members : array<uint>; offsets
 // As above, plus per-member matrix strides: mat_strides[k] > 0 marks member k as a matrix needing
 // ColMajor + MatrixStride decorations (daslang matrices are column-major, so ColMajor matches). The
 // stride is part of the dedup key so the decorations stay tied to a single deduped type emission.
-def public type_struct_block(var m : SpirvModule; members : array<uint>; offsets : array<int>; mat_strides : array<int>) : uint {
-    return type_struct_decorated(m, members, offsets, mat_strides, true)
-}
+def public type_struct_block(var m : SpirvModule; members : array<uint>; offsets : array<int>; mat_strides : array<int>) : uint =>
+    type_struct_decorated(m, members, offsets, mat_strides, true)
 
 // A laid-out struct WITHOUT the Block decoration — used as the element type of an SSBO runtime array
 // (the outer wrapping struct carries Block; the element struct only needs member Offset/matrix
 // decorations). Same offset/matrix-stride contract as type_struct_block.
-def public type_struct_layout(var m : SpirvModule; members : array<uint>; offsets : array<int>; mat_strides : array<int>) : uint {
-    return type_struct_decorated(m, members, offsets, mat_strides, false)
-}
+def public type_struct_layout(var m : SpirvModule; members : array<uint>; offsets : array<int>; mat_strides : array<int>) : uint =>
+    type_struct_decorated(m, members, offsets, mat_strides, false)
 
 // Shared core: emit a laid-out OpTypeStruct with member Offset (+ ColMajor/MatrixStride for matrix
 // members), optionally Block-decorated. `as_block` is part of the dedup key so a Block and a non-Block

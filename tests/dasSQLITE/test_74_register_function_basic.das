@@ -8,45 +8,25 @@ require daslib/sql_linq
 
 // Basic shapes: 0/1/2/3/4-arg, every supported type round-trips correctly.
 
-def fn_zero() : int64 {
-    return 42l
-}
+def fn_zero() : int64 => 42l
 
-def fn_one_int(a : int) : int {
-    return a * 2
-}
+def fn_one_int(a : int) : int => a * 2
 
-def fn_one_int64(a : int64) : int64 {
-    return a + 1l
-}
+def fn_one_int64(a : int64) : int64 => a + 1l
 
-def fn_one_double(a : double) : double {
-    return a * 2.5lf
-}
+def fn_one_double(a : double) : double => a * 2.5lf
 
-def fn_one_float(a : float) : float {
-    return a * 0.5f
-}
+def fn_one_float(a : float) : float => a * 0.5f
 
-def fn_one_string(a : string) : string {
-    return a
-}
+def fn_one_string(a : string) : string => a
 
-def fn_one_bool(a : bool) : bool {
-    return !a
-}
+def fn_one_bool(a : bool) : bool => !a
 
-def fn_two_mixed(a : int; b : double) : double {
-    return double(a) + b
-}
+def fn_two_mixed(a : int; b : double) : double => double(a) + b
 
-def fn_three_strings(a : string; b : string; c : string) : string {
-    return a + b + c
-}
+def fn_three_strings(a : string; b : string; c : string) : string => a + b + c
 
-def fn_four_int(a : int; b : int; c : int; d : int) : int {
-    return a + b + c + d
-}
+def fn_four_int(a : int; b : int; c : int; d : int) : int => a + b + c + d
 
 [test]
 def test_zero_arg(t : T?) {

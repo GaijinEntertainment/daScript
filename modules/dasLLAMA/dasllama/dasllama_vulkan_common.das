@@ -776,9 +776,7 @@ var g_vk_upload_bytes = 0l
 //! DASLLAMA_GPU_PROF=1: per-piece batch-chain timing to log
 def vk_prof : bool => g_env_gpu.gpu_prof
 
-def dev_raw : VkDevice {
-    return boost_value_to_vk(g_gpu.device)
-}
+def dev_raw : VkDevice => boost_value_to_vk(g_gpu.device)
 
 // host-visible memory comes in two flavors on discrete cards: write-combined (fast CPU writes,
 // ~100x SLOWER CPU reads) and host-cached. Buffers the CPU reads back (the y planes) MUST be

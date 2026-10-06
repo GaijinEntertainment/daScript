@@ -65,7 +65,7 @@ class ContextStateAgent : DapiDebugAgent {
                             tinfo = invoke(fnTypeInfo)
                         }
                     }
-                    var arr : array<uint8>
+                    var inscope arr : array<uint8>
                     unsafe(_builtin_make_temp_array_i64(arr, unsafe(addr(c.data[0])), arch.size))
                     cv.values = sprint_data(unsafe(addr(arr)), tinfo, print_flags.singleLine)
                 }

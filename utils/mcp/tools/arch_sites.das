@@ -41,9 +41,9 @@ def private collect_sites(folder, doc, anchor : string) : array<Site> {
     for (f in files) {
         let text = fread(f)
         continue if (empty(text))
-        let cites <- collect_arch_citations(arch_path(f), text)
+        var inscope cites <- collect_arch_citations(arch_path(f), text)
         continue if (empty(cites))
-        let lines <- split(text, "\n")
+        var inscope lines <- split(text, "\n")
         let rel = make_relative_path(f, root)
         for (c in cites) {
             continue if (c.doc != doc || (!empty(anchor) && c.anchor != anchor))
@@ -115,7 +115,7 @@ def do_arch_sites(doc : string) : string {
     searched_in |> reserve(1 + length(roots))
     for (croot in roots) {
         searched_in |> push(make_relative_path(croot, get_das_root()))
-        let more <- collect_sites(croot, resolved, anchor)
+        var inscope more <- collect_sites(croot, resolved, anchor)
         // a C++ root may contain the document's own folder: the same site is not listed twice
         sites |> push_from([for (s in more); s; where !(seen |> key_exists("{s.file}:{s.line}#{s.anchor}"))])
         for (s in more) {

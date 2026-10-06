@@ -107,19 +107,16 @@ def private mm_blob_run(blob : array<float>; x : array<float>) : array<float> {
 }
 
 def private mm_blob_case(t : T?) {
-    var blob : array<float>
-    var x : array<float>
+    var blob, x : array<float>
     mm_fixture(blob, x)
-    var want : array<double>
-    var env : array<double>
+    var want, env : array<double>
     gemm_ref(blob, MM_WOFF, x, MM_N, MM_D, MM_T, want, env)
     let y <- mm_blob_run(blob, x)
     held_env(t, "mm_blob_b blob+woff", y, want, env, MM_REL, MM_FLOOR, 0.05lf)
 }
 
 def private mm_plane_case(t : T?) {
-    var blob : array<float>
-    var x : array<float>
+    var blob, x : array<float>
     mm_fixture(blob, x)
     let y_arr <- mm_blob_run(blob, x)
     var y_pl <- nan_plane(int(MM_T * MM_D))
@@ -129,11 +126,9 @@ def private mm_plane_case(t : T?) {
 
 def private mm_bf16_case(t : T?) {
     var wq : array<uint16>
-    var wf : array<float>
-    var x : array<float>
+    var wf, x : array<float>
     mm_bf16_fixture(wq, wf, x)
-    var want : array<double>
-    var env : array<double>
+    var want, env : array<double>
     gemm_ref(wf, MM_WOFF, x, MM_N, MM_D, MM_T, want, env)
     var y <- nan_plane(int(MM_T * MM_D))
     mm_bf16_b(y, borrowed(wq), MM_WOFF, x, MM_N, MM_D, MM_T)
@@ -142,8 +137,7 @@ def private mm_bf16_case(t : T?) {
 
 def private mm_route_case(t : T?; bf16 : bool) {
     var wq : array<uint16>
-    var wf : array<float>
-    var x : array<float>
+    var wf, x : array<float>
     mm_bf16_fixture(wq, wf, x)
     var want <- nan_plane(int(MM_T * MM_D))
     var got <- nan_plane(int(MM_T * MM_D))
@@ -158,12 +152,10 @@ def private mm_route_case(t : T?; bf16 : bool) {
 
 def private mm_pad_case(t : T?) {
     lcg_seed(0x9AD0ul)
-    var w : array<float>
-    var x : array<float>
+    var w, x : array<float>
     fill(w, MM_N * MM_D, 1.0)
     fill(x, MM_T * MM_N, 1.0)
-    var wp : array<float>
-    var xp : array<float>
+    var wp, xp : array<float>
     wp |> resize(MM_NPAD * MM_D)
     xp |> resize(MM_T * MM_NPAD)
     for (j in range64(MM_D)) {
@@ -237,22 +229,18 @@ def private ln_scalar_run(x : array<float>; wb : array<float>) : array<float> {
 }
 
 def private ln_scalar_case(t : T?) {
-    var x : array<float>
-    var wb : array<float>
+    var x, wb : array<float>
     ln_fixture(x, wb)
-    var want : array<double>
-    var env : array<double>
+    var want, env : array<double>
     ln_ref(x, wb, want, env)
     let out <- ln_scalar_run(x, wb)
     held_env(t, "layernorm row form", out, want, env, LN_REL, LN_FLOOR, 0.01lf)
 }
 
 def private ln_batch_case(t : T?) {
-    var x : array<float>
-    var wb : array<float>
+    var x, wb : array<float>
     ln_fixture(x, wb)
-    var want : array<double>
-    var env : array<double>
+    var want, env : array<double>
     ln_ref(x, wb, want, env)
     var out <- nan_plane(int(LN_POS * LN_DIM))
     layernorm_batch(out, x, wb, LN_OFF, LN_OFF + LN_DIM, LN_DIM, LN_POS, LN_EPS)
@@ -260,8 +248,7 @@ def private ln_batch_case(t : T?) {
 }
 
 def private ln_plane_case(t : T?) {
-    var x : array<float>
-    var wb : array<float>
+    var x, wb : array<float>
     ln_fixture(x, wb)
     var y_arr <- nan_plane(int(LN_POS * LN_DIM))
     var y_pl <- nan_plane(int(LN_POS * LN_DIM))
@@ -293,8 +280,7 @@ def private ab_ref(y : array<float>; blob : array<float>) : array<float> {
 }
 
 def private add_bias_case(t : T?; as_plane : bool) {
-    var y : array<float>
-    var blob : array<float>
+    var y, blob : array<float>
     ab_fixture(y, blob)
     let want <- ab_ref(y, blob)
     if (as_plane) {
@@ -307,8 +293,7 @@ def private add_bias_case(t : T?; as_plane : bool) {
 
 def private add_inplace_case(t : T?) {
     lcg_seed(0xADD1ul)
-    var x : array<float>
-    var r : array<float>
+    var x, r : array<float>
     fill(x, AI_N, 2.0)
     fill(r, AI_N, 1.0)
     var want : array<float>
@@ -353,8 +338,7 @@ def private gelu_ref(x : array<float>; var want : array<double>; var env : array
 def private gelu_batch_case(t : T?) {
     var x : array<float>
     gelu_fixture(x)
-    var want : array<double>
-    var env : array<double>
+    var want, env : array<double>
     gelu_ref(x, want, env)
     gelu_erf_batch(x, GE_D, GE_POS)
     held_env(t, "gelu_erf_batch vs the fp64 erf series", x, want, env, GE_REL, GE_FLOOR, 0.001lf)
@@ -415,13 +399,10 @@ def private rope_ref(v : array<float>; ct : array<float>; st : array<float>;
 
 def private rope_case(t : T?) {
     lcg_seed(0x40BEul)
-    var v : array<float>
-    var ct : array<float>
-    var st : array<float>
+    var v, ct, st : array<float>
     fill(v, RP_POS * RP_HEADS * RP_HS, 2.0)
     rope_tabs(ct, st, -1l)
-    var want : array<double>
-    var env : array<double>
+    var want, env : array<double>
     rope_ref(v, ct, st, want, env)
     rope_neox_tab_rows(v, RP_POS, RP_HEADS, RP_HS, ct, st)
     held_env(t, "rope_neox_tab_rows one table row per token, shared by every head", v, want, env, RP_REL, RP_FLOOR, 0.001lf)
@@ -429,16 +410,13 @@ def private rope_case(t : T?) {
 
 def private rope_row_index_case(t : T?; live_row : int64) {
     lcg_seed(0x41BEul)
-    var v : array<float>
-    var ct : array<float>
-    var st : array<float>
+    var v, ct, st : array<float>
     fill(v, RP_POS * RP_HEADS * RP_HS, 2.0)
     let before := v
     rope_tabs(ct, st, live_row)
     rope_neox_tab_rows(v, RP_POS, RP_HEADS, RP_HS, ct, st)
     let d = RP_HEADS * RP_HS
-    var got : array<float>
-    var want : array<float>
+    var got, want : array<float>
     got |> resize((RP_POS - 1l) * d)
     want |> resize((RP_POS - 1l) * d)
     var o = 0l
@@ -469,9 +447,7 @@ let AW_SCALE = 0.35
 let AW_REL = 1.0e-5lf
 let AW_FLOOR = 1.0e-6lf
 
-def private aw_win() : array<int64> {
-    return <- [0l, 7l, 23l, 26l, 47l, 48l]
-}
+def private aw_win() : array<int64> => <- [0l, 7l, 23l, 26l, 47l, 48l]
 
 def private aw_fixture(win : array<int64>; var qq : array<float>; var kk : array<float>; var vv : array<float>) {
     lcg_seed(0x77A0ul)
@@ -540,16 +516,12 @@ def private aw_ref(qq : array<float>; kk : array<float>; vv : array<float>; win 
 
 def private aw_case(t : T?) {
     var win <- aw_win()
-    var qq : array<float>
-    var kk : array<float>
-    var vv : array<float>
+    var qq, kk, vv : array<float>
     aw_fixture(win, qq, kk, vv)
-    var want : array<double>
-    var env : array<double>
+    var want, env : array<double>
     aw_ref(qq, kk, vv, win, want, env)
     var out <- nan_plane(length(qq))
-    var hp : array<float>
-    var att : array<float>
+    var hp, att : array<float>
     attention_bidir_windows(out, qq, kk, vv, hp, att, win, AW_D, AW_HEADS, AW_SCALE)
     held_env(t, "attention_bidir_windows vs an oracle attending strictly inside each ragged window", out, want, env, AW_REL, AW_FLOOR, 0.05lf)
 }
@@ -611,8 +583,7 @@ def private interp_case(t : T?; sw : int64; sh : int64; dw : int64; dh : int64; 
     lcg_seed(0x1E40ul + uint64(dw * 131l + sh))
     var src : array<float>
     fill(src, src_off + sw * sh * d, 2.0)
-    var want : array<double>
-    var env : array<double>
+    var want, env : array<double>
     interp_ref(src, src_off, sw, sh, dw, dh, d, want, env)
     var out <- nan_plane(int(dw * dh * d))
     interpolate_grid_bilinear_aa(out, borrowed(src), src_off, sw, sh, dw, dh, d)
@@ -651,8 +622,7 @@ def private fft_case(t : T?; n : int64) {
     lcg_seed(0xFF70ul + uint64(n))
     var reim : array<float>
     fill(reim, 2l * n, 1.0)
-    var want : array<double>
-    var env : array<double>
+    var want, env : array<double>
     dft_ref(reim, n, want, env)
     var p <- build_fft_plan(n)
     unsafe {
@@ -663,8 +633,7 @@ def private fft_case(t : T?; n : int64) {
 
 def private fft_plan_tw_case(t : T?; n : int64) {
     let p <- build_fft_plan(n)
-    var want : array<double>
-    var env : array<double>
+    var want, env : array<double>
     want |> resize(n)
     env |> resize(n)
     for (k in range64(n / 2l)) {
@@ -710,8 +679,7 @@ def private fft_plan_refuses(n : int64) : bool {
 def private dft_twiddle_case(t : T?) {
     let n_bins = DFT_N / 2l + 1l
     let b <- build_dft_twiddles(DFT_N)
-    var want : array<double>
-    var env : array<double>
+    var want, env : array<double>
     want |> resize(DFT_N * n_bins * 2l)
     env |> resize(DFT_N * n_bins * 2l)
     for (j in range64(DFT_N)) {
@@ -785,8 +753,7 @@ def private rl_torch_ref(x : array<float>; scale : float; var want : array<doubl
 def private resize_case(t : T?; torch : bool; scale : float) {
     var x : array<float>
     rs_fixture(x, scale)
-    var want : array<double>
-    var env : array<double>
+    var want, env : array<double>
     let want_t = torch ? rl_torch_ref(x, scale, want, env) : rl_onnx_ref(x, scale, want, env)
     var y <- nan_plane(int(RS_C * want_t))
     let got_t = resize_linear(torch, x, RS_C, RS_T, scale, y)
@@ -803,9 +770,7 @@ let MP_REL = 2.0e-6lf
 let MP_FLOOR = 1.0e-6lf
 
 [sideeffects]
-def private neg_zero() : float {
-    return unsafe(reinterpret<float>(0x80000000u))
-}
+def private neg_zero() : float => unsafe(reinterpret<float>(0x80000000u))
 
 def private mp_fixture(var re : array<float>; var im : array<float>) {
     lcg_seed(0x3A9Ful)
@@ -839,11 +804,9 @@ def private mp_ref(re : array<float>; im : array<float>; var want : array<double
 }
 
 def private mp_case(t : T?) {
-    var re : array<float>
-    var im : array<float>
+    var re, im : array<float>
     mp_fixture(re, im)
-    var want : array<double>
-    var env : array<double>
+    var want, env : array<double>
     mp_ref(re, im, want, env)
     var out <- nan_plane(int(2l * MP_BINS * MP_FRAMES))
     magnitude_phase(re, im, MP_BINS, MP_FRAMES, MP_EPS, out)
@@ -892,8 +855,7 @@ def private istft_case(t : T?; n : int64; k : int64; hop : int64; pad : int64; z
     var wave : array<float>
     fill(wave, n, 2.0)
     let wave0 := wave
-    var want : array<double>
-    var env : array<double>
+    var want, env : array<double>
     istft_ref(wave0, n, window, k, hop, pad, want, env)
     istft_envelope_divide(wave, n, window, k, hop, pad)
     let nm = "istft_envelope_divide n={n} k={k} hop={hop} pad={pad} zero-window={zeroed}"

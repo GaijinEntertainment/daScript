@@ -17,9 +17,8 @@ struct public PreflightSettings {
 
 //! The pure half of the untracked-files gate: repo-relative paths from
 //! `git ls-files --others --exclude-standard` output, CR and blank lines dropped.
-def public untracked_from_ls(out : string) : array<string> {
-    return <- [for (ln in split(out, "\n")); strip(ln); where !empty(strip(ln))]
-}
+def public untracked_from_ls(out : string) : array<string> =>
+    <- [for (ln in split(out, "\n")); strip(ln); where !empty(strip(ln))]
 
 //! The pure half of the dasLLAMA gates' trigger: does a changed path (as `git diff --name-only`
 //! prints them - repo-relative, forward slashes, maybe CR-terminated) sit under `prefix`?
@@ -76,9 +75,8 @@ def public is_sweep_root_path(path : string) : bool {
 }
 
 //! the tier rule: the fast tier runs on every run, the lane tier under --full, the module tier never
-def public tier_runs(tier : string; full : bool) : bool {
-    return tier == "fast" || (full && tier == "lane")
-}
+def public tier_runs(tier : string; full : bool) : bool =>
+    tier == "fast" || (full && tier == "lane")
 
 //! trees the compile sweep leaves alone, each with why: a native module a CMake option builds, a resolution the
 //! plain compile cannot do, a platform the box is not, fixtures that are broken on purpose
@@ -134,17 +132,14 @@ def private standalone_module_tree(path : string) : bool {
 }
 
 //! a program root is a file with an exported main; a module or a fixture is not
-def public is_sweep_root_text(text : string) : bool {
-    return find(text, "[export]") >= 0 && find(text, "def main") >= 0
-}
+def public is_sweep_root_text(text : string) : bool =>
+    find(text, "[export]") >= 0 && find(text, "def main") >= 0
 
 //! the require whose roots pay the engine compile (~24 s each on the M5 box) - they run serially
 //! through one shared module cache instead of contending in the pool
 let public SWEEP_HEAVY_REQUIRE = "require dasllama/"
 
-def public is_heavy_sweep_root(text : string) : bool {
-    return find(text, SWEEP_HEAVY_REQUIRE) >= 0
-}
+def public is_heavy_sweep_root(text : string) : bool => find(text, SWEEP_HEAVY_REQUIRE) >= 0
 
 //! The files dastest's closing FAILURES block names, comma-joined, at most five.
 def public failed_files_block(out : string) : string {
@@ -226,9 +221,7 @@ def public parse_gate_reports(out : string) : array<GateReport> {
     return <- reports
 }
 
-def public valid_jit_max_file_time_override(value : float) : bool {
-    return value == -1.0 || value >= 0.0
-}
+def public valid_jit_max_file_time_override(value : float) : bool => value == -1.0 || value >= 0.0
 
 //! Resolve the read-only per-user config. ``DAS_PREFLIGHT_CONFIG`` overrides
 //! the platform default for hermetic tests and unusual installations.

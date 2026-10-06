@@ -161,9 +161,8 @@ def public clipboard_memory_dispose(var memory : ClipboardMemory) {
     memory = ClipboardMemory()  // nolint:PERF030 - its only owned field is released by clipboard_dispose_content above
 }
 
-def public clipboard_capabilities() : ClipboardCapabilities {
-    return unsafe(reinterpret<ClipboardCapabilities>(_clipboard_capabilities()))
-}
+def public clipboard_capabilities() : ClipboardCapabilities =>
+    unsafe(reinterpret<ClipboardCapabilities>(_clipboard_capabilities()))
 
 def public clipboard_set_text(text : string) : ClipboardStatus {
     //! Replace the system clipboard with UTF-8 text. Empty text clears it.
@@ -222,6 +221,5 @@ def public clipboard_get_text(var text : string&) : ClipboardStatus {
     return status
 }
 
-def public clipboard_clear() : ClipboardStatus {
-    return unsafe(reinterpret<ClipboardStatus>(_clipboard_clear()))
-}
+def public clipboard_clear() : ClipboardStatus =>
+    unsafe(reinterpret<ClipboardStatus>(_clipboard_clear()))

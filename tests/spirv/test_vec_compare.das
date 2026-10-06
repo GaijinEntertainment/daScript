@@ -37,9 +37,7 @@ def vec_cmp {
     vc_col = tint
 }
 
-def public vec_cmp_words : array<uint> {
-    return clone_to_move(vec_cmp_spv)
-}
+def public vec_cmp_words : array<uint> => clone_to_move(vec_cmp_spv)
 
 [test]
 def test_vec_compare(t : T?) {

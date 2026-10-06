@@ -91,9 +91,7 @@ enum public BlockLayoutRules {
     std430
 }
 
-def public arith_width_ok(cls, width : int) : bool {
-    return width <= 32 || (width == 64 && cls == 2)
-}
+def public arith_width_ok(cls, width : int) : bool => width <= 32 || (width == 64 && cls == 2)
 
 def public arith_class(bt : Type) : int {
     let ni = numeric_info(bt)
@@ -173,7 +171,7 @@ def public compute_block_layout(sname : string; st : Structure?; var fields : ar
             continue
         }
         if (fld._type != null && fld._type.baseType == Type.tStructure && fld._type.structType != null) {
-            var inner : array<BlockField>
+            var inscope inner : array<BlockField>
             let inner_layout = compute_block_layout("{sname}.{fld.name}", fld._type.structType, inner, errors, rules)
             delete inner
             if (!inner_layout.ok) {
@@ -219,7 +217,7 @@ def public compute_block_layout(sname : string; st : Structure?; var fields : ar
                 continue
             }
             if (et.baseType == Type.tStructure && et.structType != null) {
-                var inner : array<BlockField>
+                var inscope inner : array<BlockField>
                 let inner_layout = compute_block_layout("{sname}.{fld.name}[]", et.structType, inner, errors, rules)
                 delete inner
                 if (!inner_layout.ok) {

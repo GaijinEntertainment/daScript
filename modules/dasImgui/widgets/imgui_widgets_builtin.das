@@ -843,12 +843,10 @@ def drag_int_range2(var state : DragStateRangeInt; text : string;
 // A zero-init bounds (a forgotten bounds=) is a degenerate min==max==0 slider that can't move;
 // substitute ImGui's stock range so a slider with no bounds set is still usable instead of silently
 // dead. Sliders only — drag's (0,0)=unbounded is deliberate and keeps its zero-init default.
-def private slider_range(b : tuple<float; float>) : tuple<float; float> {
-    return b._0 == 0.0f && b._1 == 0.0f ? (0.0f, 1.0f) : b
-}
-def private slider_range(b : tuple<int; int>) : tuple<int; int> {
-    return b._0 == 0 && b._1 == 0 ? (0, 100) : b
-}
+def private slider_range(b : tuple<float; float>) : tuple<float; float> =>
+    b._0 == 0.0f && b._1 == 0.0f ? (0.0f, 1.0f) : b
+def private slider_range(b : tuple<int; int>) : tuple<int; int> =>
+    b._0 == 0 && b._1 == 0 ? (0, 100) : b
 
 [widget]
 def slider_float(var state : SliderStateFloat; text : string;

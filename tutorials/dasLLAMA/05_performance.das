@@ -41,9 +41,7 @@ def model_path() : string {
     return get_env_variable("DASLLAMA_MODEL")
 }
 
-def mb(bytes : int64) : int {
-    return int(bytes / 1000000l)
-}
+def mb(bytes : int64) : int => int(bytes / 1000000l)
 
 // Generate N_GEN tokens greedily and report the session's stats. Two numbers matter:
 // prefill t/s (the prompt runs as ONE batched forward — compute-bound, fast) and gen t/s

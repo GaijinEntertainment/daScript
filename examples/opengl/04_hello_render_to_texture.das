@@ -31,9 +31,7 @@ def checker(uv : float2; checkSize : float = 8.0) {
     return max(sign(fmodResult), 0.0)
 }
 
-def greyscale(color : float3) {
-    return dot(color, float3(0.2126, 0.7152, 0.0722))
-}
+def greyscale(color : float3) => dot(color, float3(0.2126, 0.7152, 0.0722))
 
 [fragment_program]
 def fs_effect {

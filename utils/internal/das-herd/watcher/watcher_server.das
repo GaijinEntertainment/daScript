@@ -221,9 +221,8 @@ struct private WatcherError {
     error : string
 }
 
-def private json_error(message : string) : string {
-    return sprint_json(WatcherError(error = message), false)
-}
+def private json_error(message : string) : string =>
+    sprint_json(WatcherError(error = message), false)
 
 def private hex_nibble(value : int) : int {
     if (is_number(value)) return value - '0'
@@ -310,9 +309,8 @@ class DasHerdWatcherServer : HvWebServer {
             || query_value_raw(url, "token") == token)
     }
 
-    def respond_error(var resp : HttpResponse?; status : http_status; message : string) : http_status {
-        return resp |> JSON(json_error(message), status)
-    }
+    def respond_error(var resp : HttpResponse?; status : http_status; message : string) : http_status =>
+        resp |> JSON(json_error(message), status)
 
     def require_auth(var req : HttpRequest?; var resp : HttpResponse?) : bool {
         if (req != null && authorized(string(req.url))) return true
@@ -1063,8 +1061,7 @@ class DasHerdWatcherServer : HvWebServer {
                 repository_id = pending.repository_id,
                 worktree_path = pending.new_worktree_path,
                 task_context = pending.task_context), create_error)
-            var launch_error : string
-            var pty_session_id : string
+            var launch_error, pty_session_id : string
             if (empty(herd_id)) {
                 launch_error = create_error
             } else {
@@ -1647,8 +1644,7 @@ class DasHerdWatcherServer : HvWebServer {
             }
             send_herd_sessions(client, true)
         } elif (incoming.op == "worktree_delete") {
-            var reason : string
-            var detail : string
+            var reason, detail : string
             var ok = false
             let herd_user = herd_worktree_user(incoming.worktree_path)
             let running_user = (empty(herd_user)

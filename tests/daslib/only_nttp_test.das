@@ -6,9 +6,7 @@ require daslib/ast_boost
 require daslib/rtti
 require strings
 
-def fixture_path(name : string) : string {
-    return "{get_das_root()}/tests/daslib/{name}.das"
-}
+def fixture_path(name : string) : string => "{get_das_root()}/tests/daslib/{name}.das"
 
 def compile_fixture(name : string; blk : block<(ok : bool; issues : string) : void>) {
     var inscope access <- make_file_access("")

@@ -50,7 +50,7 @@ def example_streaming_sweep() {
         let freq = start_freq + (end_freq - start_freq) * t
 
         // Generate one chunk of sine wave, maintaining phase continuity
-        var samples <- [for (x in range(chunk_samples));
+        var inscope samples <- [for (x in range(chunk_samples));
             sin(phase + 2.0 * PI * freq * float(x) / float(MA_SAMPLE_RATE)) * 0.5
         ]
 
@@ -90,7 +90,7 @@ def example_rising_chord() {
     let chunk_samples = MA_SAMPLE_RATE / 10  // 100ms
     for (i in range(10)) {
         let freq = 440.0 + float(i) * 44.0
-        var samples <- [for (x in range(chunk_samples));
+        var inscope samples <- [for (x in range(chunk_samples));
             sin(2.0 * PI * freq * float(x) / float(MA_SAMPLE_RATE)) * 0.4
         ]
         append_to_pcm(sid, samples)

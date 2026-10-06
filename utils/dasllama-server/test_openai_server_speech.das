@@ -99,9 +99,8 @@ def private phonemes_request(base_url : string; body : string; blk : block<(stat
     }
 }
 
-def private le32(b : array<uint8>; o : int) : int {
-    return int(b[o]) | (int(b[o + 1]) << 8) | (int(b[o + 2]) << 16) | (int(b[o + 3]) << 24)
-}
+def private le32(b : array<uint8>; o : int) : int =>
+    int(b[o]) | (int(b[o + 1]) << 8) | (int(b[o + 2]) << 16) | (int(b[o + 3]) << 24)
 
 // the `tts` member of /v1/stats — a MISS node when the boot serves no speech model, since a
 // missing key reads back as a shared _null node rather than a null pointer
@@ -118,9 +117,7 @@ def private with_tts_stats(base_url : string; blk : block<(tts : JsonValue?) : v
     }
 }
 
-def private json_present(v : JsonValue?) : bool {
-    return v != null && !(v is _null)
-}
+def private json_present(v : JsonValue?) : bool => v != null && !(v is _null)
 
 def private json_strings(v : JsonValue?) : array<string> {
     var out : array<string>

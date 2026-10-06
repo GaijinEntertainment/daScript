@@ -30,9 +30,8 @@ class ConnectionLimitServer : HvWebServer {
         send(channel, msg, size, opcode, true)
     }
 }
-def private handshake : string {
-    return "GET /ws HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
-}
+def private handshake : string =>
+    "GET /ws HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
 def private check_connection_budget(t : T?; count, bytes : int) {
     var server = new ConnectionLimitServer(per_messages = count, per_bytes = bytes)
     server->init(0); t |> success(server->set_bind_host("127.0.0.1")); t |> equal(server->start(), 0)

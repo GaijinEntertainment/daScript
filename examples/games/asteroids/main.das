@@ -215,7 +215,7 @@ def build_note_sequence(notes : float[]; note_dur : float; volume : float; risin
     for (ni in range(length(notes))) {
         let f1 = notes[ni]
         let f2 = (rising ? notes[ni] * 1.05 : notes[ni] * 0.9)
-        let note <- gen_sine_sweep(f1, f2, note_dur, volume)
+        var inscope note <- gen_sine_sweep(f1, f2, note_dur, volume)
         let offset = ni * int(float(AUDIO_RATE) * note_dur)
         for (i in range(length(note))) {
             if (offset + i < total_samples) {
@@ -379,9 +379,7 @@ def random_f() : float {
     return float(int(global_rng_seed >> 16u) % 1000) / 1000.0
 }
 
-def random_range(min, max : float) : float {
-    return min + random_f() * (max - min)
-}
+def random_range(min, max : float) : float => min + random_f() * (max - min)
 
 def wrap_pos(pos : float3) : float3 {
     let x = (pos.x + FIELD_W) % FIELD_W
@@ -426,9 +424,7 @@ def segment_hits_wrapped_circle(p0, p1, center : float3; radius : float) : bool 
     return dot(closest, closest) <= radius * radius
 }
 
-def ship_forward(rotation : float) : float3 {
-    return float3(-sin(rotation), cos(rotation), 0.0)
-}
+def ship_forward(rotation : float) : float3 => float3(-sin(rotation), cos(rotation), 0.0)
 
 def update_mouse_world() {
     var win_w, win_h : int

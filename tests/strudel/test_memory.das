@@ -14,19 +14,19 @@ require strudel/strudel
 // If batch2 rate equals batch1, there's a real leak.
 def measure_leak_rate(var pat : Pattern; warmup, batch : int) : tuple<int64; int64> {
     for (i in range(warmup)) {
-        var haps <- pat(TimeSpan(start = double(i), stop = double(i + 1)))
+        var inscope haps <- pat(TimeSpan(start = double(i), stop = double(i + 1)))
         delete haps
     }
     let h1 = heap_bytes_allocated()
     for (i in range(batch)) {
         let cycle = warmup + i
-        var haps <- pat(TimeSpan(start = double(cycle), stop = double(cycle + 1)))
+        var inscope haps <- pat(TimeSpan(start = double(cycle), stop = double(cycle + 1)))
         delete haps
     }
     let h2 = heap_bytes_allocated()
     for (i in range(batch)) {
         let cycle = warmup + batch + i
-        var haps <- pat(TimeSpan(start = double(cycle), stop = double(cycle + 1)))
+        var inscope haps <- pat(TimeSpan(start = double(cycle), stop = double(cycle + 1)))
         delete haps
     }
     let h3 = heap_bytes_allocated()

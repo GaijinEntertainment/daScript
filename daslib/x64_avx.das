@@ -112,9 +112,7 @@ def mx4_dequant32(lut : int8 const?; wn : uint8 const?; var dst : int8?) {
 //! dot32 with the VNNI dot step: same signature, same exact int4 result, lane for lane. With
 //! 256-bit VNNI (AVX-VNNI, or AVX512-VNNI+VL) the VPMADDUBSW+VPMADDWD pair becomes ONE VPDPBUSD
 //! (u8xs8 quad dot into i32, no 16-bit intermediate); sign trick and high/low fold are unchanged.
-def dot32_vnni(acc : int4; w : int8 const?; x : int8 const?) : int4 {
-    return dot32(acc, w, x)
-}
+def dot32_vnni(acc : int4; w : int8 const?; x : int8 const?) : int4 => dot32(acc, w, x)
 
 //! dot32_acc8 with the VNNI dot step (see dot32_vnni): the 8 int32 quads come from ONE VPDPBUSD
 //! instead of the VPMADDUBSW+VPMADDWD pair, then convert and multiply-accumulate into the caller's
@@ -126,9 +124,8 @@ def dot32_acc8_vnni(var acc : float?; w : int8 const?; x : int8 const?; s : floa
 //! dot32_mx4 with the VNNI dot step (see dot32_vnni): the ymm PSHUFB LUT dequant is unchanged;
 //! the dequantized block dots against `x` via ONE VPDPBUSD instead of the VPMADDUBSW+VPMADDWD
 //! pair. Integer arithmetic throughout — bit-identical to dot32_mx4 and to this fallback.
-def dot32_mx4_vnni(acc : int4; lut : int8 const?; wn : uint8 const?; x : int8 const?) : int4 {
-    return dot32_mx4(acc, lut, wn, x)
-}
+def dot32_mx4_vnni(acc : int4; lut : int8 const?; wn : uint8 const?; x : int8 const?) : int4 =>
+    dot32_mx4(acc, lut, wn, x)
 
 //! 512-bit dot32_acc8: TWO consecutive Q8 blocks (64 int8 per operand) into a caller-local
 //! float[16] — lane j += float(block-0 quad j) * s0, lane 8+j += float(block-1 quad j) * s1.

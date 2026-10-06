@@ -21,61 +21,39 @@ var G_CTOR = 2.5
 // ----- fold phase: zero-lane kill + splat collapse -----
 
 [flatten]
-def z_kill(x : float) : float2 {
-    return float2(sin(x) * 12.0, 13.0) * float2(0.0, 123.0)
-}
+def z_kill(x : float) : float2 => float2(sin(x) * 12.0, 13.0) * float2(0.0, 123.0)
 
 [flatten]
-def z_partial(x, y : float) : float3 {
-    return float3(sin(x), y * 2.0, 5.0) * float3(0.0, 2.0, 3.0)
-}
+def z_partial(x, y : float) : float3 => float3(sin(x), y * 2.0, 5.0) * float3(0.0, 2.0, 3.0)
 
 [flatten]
-def z_int(n : int) : int2 {
-    return int2(n * 7, 5) * int2(0, 3)
-}
+def z_int(n : int) : int2 => int2(n * 7, 5) * int2(0, 3)
 
 [flatten]
-def z_uint(n : uint) : uint2 {
-    return uint2(n * 7u, 5u) * uint2(0u, 3u)
-}
+def z_uint(n : uint) : uint2 => uint2(n * 7u, 5u) * uint2(0u, 3u)
 
 [flatten]
-def sp_mul(v : float3; s : float) : float3 {
-    return v * float3(s)
-}
+def sp_mul(v : float3; s : float) : float3 => v * float3(s)
 
 [flatten]
-def sp_div(v : float3; s : float) : float3 {
-    return v / float3(s)
-}
+def sp_div(v : float3; s : float) : float3 => v / float3(s)
 
 [flatten]
-def sp_rdiv(v : float3; s : float) : float3 {
-    return float3(s) / v
-}
+def sp_rdiv(v : float3; s : float) : float3 => float3(s) / v
 
 // ----- fuse phase: lane re-vectorization -----
 
 [flatten]
-def rv_add(v : float3) : float3 {
-    return sin(float3(v.x + 0.1, v.y + 0.2, v.z + 0.3))
-}
+def rv_add(v : float3) : float3 => sin(float3(v.x + 0.1, v.y + 0.2, v.z + 0.3))
 
 [flatten]
-def rv_swiz(v : float4) : float3 {
-    return float3(v.z + 1.0, v.x + 2.0, v.y + 3.0)
-}
+def rv_swiz(v : float4) : float3 => float3(v.z + 1.0, v.x + 2.0, v.y + 3.0)
 
 [flatten]
-def rv_gather(v : float2; s1, s2 : float) : float2 {
-    return float2(v.x * s1, v.y * s2)
-}
+def rv_gather(v : float2; s1, s2 : float) : float2 => float2(v.x * s1, v.y * s2)
 
 [flatten]
-def rv_eq_add(v : float3; s : float) : float3 {
-    return float3(s + v.x, s + v.y, s + v.z)
-}
+def rv_eq_add(v : float3; s : float) : float3 => float3(s + v.x, s + v.y, s + v.z)
 
 // ----- fuse phase: shared factor / majority compensation -----
 
@@ -86,19 +64,13 @@ def sf_var(x : float) : float3 {
 }
 
 [flatten]
-def sf_const(x, y, z : float) : float3 {
-    return float3(x * 13.0, y * 13.0, z * 13.0)
-}
+def sf_const(x, y, z : float) : float3 => float3(x * 13.0, y * 13.0, z * 13.0)
 
 [flatten]
-def sf_div(x, y, z, s : float) : float3 {
-    return float3(x / s, y / s, z / s)
-}
+def sf_div(x, y, z, s : float) : float3 => float3(x / s, y / s, z / s)
 
 [flatten]
-def mj_comp(x, y, z : float) : float3 {
-    return float3(x * 13.0, y * 13.0, z * 12.0)
-}
+def mj_comp(x, y, z : float) : float3 => float3(x * 13.0, y * 13.0, z * 12.0)
 
 // ----- differential driver -----
 

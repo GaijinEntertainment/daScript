@@ -9,17 +9,11 @@ bitfield TestFlags64 : uint64 {
     hi
 }
 
-def get_bitfield64_value() : TestFlags64 {
-    return bitfield64(1ul << 63ul)
-}
+def get_bitfield64_value() : TestFlags64 => bitfield64(1ul << 63ul)
 
-def pass_and_return_bitfield64(f : TestFlags64) : TestFlags64 {
-    return f
-}
+def pass_and_return_bitfield64(f : TestFlags64) : TestFlags64 => f
 
-def bitfield64_to_uint64(f : TestFlags64) : uint64 {
-    return uint64(f)
-}
+def bitfield64_to_uint64(f : TestFlags64) : uint64 => uint64(f)
 
 [test]
 def test_bitfield64_high_bit(t : T?) {

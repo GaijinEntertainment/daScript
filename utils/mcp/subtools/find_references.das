@@ -47,13 +47,10 @@ def position_key(at : LineInfo) : string {
     return "{file}:{int(at.line)}:{int(at.column)}"
 }
 
-def to_void(p) : void? {
-    return unsafe(reinterpret<void?>(p))
-}
+def to_void(p) : void? => unsafe(reinterpret<void?>(p))
 
-def variable_target(variable : Variable const?) : RefTarget {
-    return RefTarget(kind = RefTargetKind.variable, target_ptr = to_void(variable), name = source_name(string(variable.name)))
-}
+def variable_target(variable : Variable const?) : RefTarget =>
+    RefTarget(kind = RefTargetKind.variable, target_ptr = to_void(variable), name = source_name(string(variable.name)))
 
 //! the field `fname` of `st` as a target; a class method field is its function instead
 def field_target(st : Structure const?; fname : string) : RefTarget {

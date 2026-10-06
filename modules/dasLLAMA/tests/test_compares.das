@@ -14,7 +14,7 @@ def test_maxdiff_sees_nan(t : T?) {
     t |> run("a NaN on either side is the largest difference, wherever it sits") @(t : T?) {
         let ones <- [1.0, 1.0, 1.0, 1.0]
         for (at in range(4)) {
-            var row <- [1.0, 1.0, 1.0, 1.0]
+            var inscope row <- [1.0, 1.0, 1.0, 1.0]
             row[at] = NAN_SENTINEL
             t |> equal(logits_maxdiff(row, ones), INF, "a NaN in got at {at}")
             t |> equal(logits_maxdiff(ones, row), INF, "a NaN in want at {at}")

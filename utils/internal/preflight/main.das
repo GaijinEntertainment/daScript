@@ -135,22 +135,16 @@ def run_argv(args : array<string>; timeout : float) : tuple<rc : int; out : stri
     return (rc = rc, out = output)
 }
 
-def run_argv(args : array<string>) : tuple<rc : int; out : string> {
-    return run_argv(args, 0.0)
-}
+def run_argv(args : array<string>) : tuple<rc : int; out : string> => run_argv(args, 0.0)
 
 def tool_available(exe, probe_flag : string) : bool {
     let r = run_argv([exe, probe_flag], 30.0)
     return r.rc == 0
 }
 
-def tool_available(exe : string) : bool {
-    return tool_available(exe, "--version")
-}
+def tool_available(exe : string) : bool => tool_available(exe, "--version")
 
-def seconds_since(t0 : int64) : double {
-    return double(get_time_usec(t0)) / 1000000.0lf
-}
+def seconds_since(t0 : int64) : double => double(get_time_usec(t0)) / 1000000.0lf
 
 def split_csv(s : string) : array<string> {
     var out : array<string>
@@ -171,9 +165,8 @@ def temp_dir_or_cwd() : string {
 
 // unique per run — the system temp dir is shared across checkouts, so a
 // fixed name lets concurrent preflights clobber each other's files
-def unique_temp_path(prefix, suffix : string) : string {
-    return path_join(temp_dir_or_cwd(), "{prefix}_{ref_time_ticks()}{suffix}")
-}
+def unique_temp_path(prefix, suffix : string) : string =>
+    path_join(temp_dir_or_cwd(), "{prefix}_{ref_time_ticks()}{suffix}")
 
 def non_empty_lines(s : string) : array<string> {
     var out : array<string>
@@ -535,7 +528,7 @@ def gate_hash_refs() : GateResult {
     for (sha in non_empty_lines(shas.out)) {
         let body = run_argv(["git", "log", "-1", "--format=%B", sha])
         continue if (body.rc != 0)
-        var hits : array<int64>
+        var inscope hits : array<int64>
         bare_hash_refs(body.out, hits)
         found_n |> push_from(hits)
         found_sha |> reserve(long_length(found_sha) + long_length(hits))
@@ -795,12 +788,11 @@ def private build_sweep_argvs(ctx : PreflightCtx; in_scope : array<string>) : tu
     // run_chunk_workers spawns one thread per argv, so per-TU flags must not become per-TU
     // argvs: group the sweep by identical flag set first (the whole tree collapses to a
     // handful of sets), then chunk inside each group
-    var groups : table<string; array<string>>
-    var group_flags : table<string; array<string>>
+    var groups, group_flags : table<string; array<string>>
     var from_db = 0
     for (f in in_scope) {
         let abs = cc_key(path_join(cwd, f))
-        var flags : array<string>
+        var inscope flags : array<string>
         if (cc |> key_exists(abs)) {
             flags := cc[abs]
             from_db++
@@ -809,7 +801,7 @@ def private build_sweep_argvs(ctx : PreflightCtx; in_scope : array<string>) : tu
         }
         let key = join(flags, "\n")
         if (!(group_flags |> key_exists(key))) {
-            var gf : array<string>
+            var inscope gf : array<string>
             gf := flags
             group_flags[key] <- gf
             groups[key] |> reserve(length(in_scope))
@@ -822,9 +814,9 @@ def private build_sweep_argvs(ctx : PreflightCtx; in_scope : array<string>) : tu
     argvs |> reserve(workers + length(group_flags))
     for (key, files in keys(groups), values(groups)) {
         let share = max(1, (workers * length(files) + total - 1) / total)
-        let chunks <- chunk_files(files, share)
+        var inscope chunks <- chunk_files(files, share)
         for (chunk in chunks) {
-            var av : array<string>
+            var inscope av : array<string>
             av |> reserve(1 + length(group_flags[key]) + length(syntax_flags) + length(chunk))
             av |> push(ctx.clang)
             av |> push_from(group_flags[key], syntax_flags, chunk)
@@ -845,8 +837,7 @@ def gate_cpp_syntax(ctx : PreflightCtx) : GateResult {
         return GateResult(name = "cpp-syntax", status = GateStatus.Skip, seconds = seconds_since(t0),
             detail = "clang not found — install the VS ClangCL component (CI-faithful) or LLVM clang-cl on PATH, or pass --clang <path>; the dasLLVM prebuilt's clang-cl has no resource headers and is skipped")
     }
-    var in_scope : array<string>
-    var skipped : array<string>
+    var in_scope, skipped : array<string>
     var sweep_note = ""
     if (ctx.changed_hdr > 0) {
         // a changed header can break template instantiation in any TU that
@@ -1113,12 +1104,12 @@ def gate_ci_das(ctx : PreflightCtx) : GateResult {
     for (raw_line in split(list_text, "\n")) {
         let line = strip(replace(raw_line, "\r", ""))
         continue if (empty(line) || starts_with(line, "#"))
-        let parts <- split(line, "|")
+        var inscope parts <- split(line, "|")
         continue if (length(parts) < 3)
         let pattern = strip(parts[0])
-        let allow_skip <- split_csv(parts[1])
+        var inscope allow_skip <- split_csv(parts[1])
         let hint = strip(parts[2])
-        var files : array<string>
+        var inscope files : array<string>
         expand_glob(pattern, files)
         if (empty(files)) {
             fail_parts |> push("{pattern}: no files matched (stale ci_only_das.txt entry?)\n")
@@ -1207,8 +1198,7 @@ def collect_sweep_roots() : tuple<light : array<string>; heavy : array<string>> 
             }
         }
     }
-    var light : array<string>
-    var heavy : array<string>
+    var light, heavy : array<string>
     for (f in files) {
         continue if (sweep_excluded(f) || !is_sweep_root_path(f))
         let text = fread(f)
@@ -1445,9 +1435,7 @@ def gate_tests_cpp(ctx : PreflightCtx) : GateResult {
 
 //! The build fan-out for every cmake invocation: the user's ``-j`` when set, else hardware
 //! threads. A bare ``--parallel`` is unlimited ``make -j`` on the Makefile generator.
-def cmake_jobs(ctx : PreflightCtx) : string {
-    return "{ctx.jobs > 0 ? ctx.jobs : get_total_hw_threads()}"
-}
+def cmake_jobs(ctx : PreflightCtx) : string => "{ctx.jobs > 0 ? ctx.jobs : get_total_hw_threads()}"
 
 def gate_tests_aot(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
@@ -1652,7 +1640,7 @@ def private run_lanes(ctx : PreflightCtx; cfg : Config; names : array<string>) :
     var argvs : array<array<string>>
     argvs |> reserve(length(names))
     for (name in names) {
-        var av <- [ctx.daslang, "utils/internal/preflight/main.das", "--", "--only", name, "--base", cfg.base,
+        var inscope av <- [ctx.daslang, "utils/internal/preflight/main.das", "--", "--only", name, "--base", cfg.base,
                    "--daslang", ctx.daslang, "--build-dir", cfg.build_dir]
         if (cfg.jobs > 0) {
             av |> push("-j")
@@ -1679,7 +1667,7 @@ def private run_lanes(ctx : PreflightCtx; cfg : Config; names : array<string>) :
     var results : array<GateResult>
     results |> reserve(length(names) + 8)   // the docs lane reports its seven gates
     for (name, child in names, children) {
-        let reports <- parse_gate_reports(child.stdout)
+        var inscope reports <- parse_gate_reports(child.stdout)
         if (empty(reports)) {
             results |> emplace(GateResult(name = name, status = GateStatus.Fail,
                 detail = "lane child exited {child.exit_code} without a verdict", output = child.stdout))
@@ -1834,7 +1822,7 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
         }
         to_log(LOG_INFO, "[RUN ] {info.name}\n")
         if (info.name == "docs") {
-            var doc_results : array<GateResult>
+            var inscope doc_results : array<GateResult>
             gate_docs(ctx, doc_results)
             for (r in doc_results) {
                 report_gate(r, cfg.verbose)

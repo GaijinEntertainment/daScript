@@ -23,8 +23,7 @@ def test_i_var(t : T?) {
 def test_i_from_op2(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(a + b)
-        var left_name : string
-        var right_name : string
+        var left_name, right_name : string
         let r = qmatch(expr, $i(left_name) + $i(right_name))
         t |> success(r.matched, "should extract both var names from op2")
         t |> equal(left_name, "a")

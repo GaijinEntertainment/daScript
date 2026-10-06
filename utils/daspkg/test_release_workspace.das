@@ -6,8 +6,7 @@ require release_workspace
 
 [test]
 def release_workspaces_are_isolated_and_removed(t : T?) {
-    var outer_path : string
-    var inner_path : string
+    var outer_path, inner_path : string
     let rc = with_release_workspace() $(outer) : int {
         outer_path = outer
         fwrite(path_join(outer, "deps.json"), "outer")

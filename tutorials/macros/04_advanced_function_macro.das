@@ -64,9 +64,7 @@ def slow_add(a, b : int) : int {
 // in the cache via insert_clone.
 
 [memoize]
-def greet(name : string) : string {
-    return "hello, {name}!"
-}
+def greet(name : string) : string => "hello, {name}!"
 
 // ── Error examples (uncomment to see compile-time errors) ──
 

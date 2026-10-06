@@ -14,9 +14,7 @@ struct template r {
 
 // A computed goto inside a captured block. Its label lives in the enclosing function, which
 // the block's own label table does not carry.
-def label_target : int {
-    return 6
-}
+def label_target : int => 6
 
 [export]
 def computed_goto_in_a_captured_block {
@@ -30,9 +28,7 @@ def computed_goto_in_a_captured_block {
 // A type macro allocated with new, in the dim of an option result type that also holds an
 // auto. The macro type carries no alias name, so looking it up as one matched the whole result
 // type - the very type the new sits in - and copied it into itself.
-def new_of_type_macro_in_option_result : auto(v) | int[(new<$T>())] {
-    return 1
-}
+def new_of_type_macro_in_option_result : auto(v) | int[(new<$T>())] => 1
 
 [export]
 def main {

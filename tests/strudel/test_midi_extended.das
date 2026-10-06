@@ -189,7 +189,7 @@ def test_voice_cleanup(t : T?) {
         init_playback(state, unsafe(addr(midi)), "test", 1.0, false)
         // tick enough for the voice to finish its release
         for (_ in range(100)) {
-            var chunk <- midi_tick(state, 0.05)
+            var inscope chunk <- midi_tick(state, 0.05)
             delete chunk
         }
         // all voices should be cleaned up

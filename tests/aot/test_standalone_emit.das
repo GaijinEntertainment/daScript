@@ -54,9 +54,8 @@ def private generate_standalone_files(t : T?; fixture, out_dir : string; cross_p
     return files
 }
 
-def private generate_standalone_source(t : T?; fixture, out_dir : string) : string {
-    return generate_standalone_files(t, fixture, out_dir).source
-}
+def private generate_standalone_source(t : T?; fixture, out_dir : string) : string =>
+    generate_standalone_files(t, fixture, out_dir).source
 
 //! the emitted C++ name whose prefix is `name_prefix`, read off its prototype
 def private emitted_name(source, name_prefix : string) : string {

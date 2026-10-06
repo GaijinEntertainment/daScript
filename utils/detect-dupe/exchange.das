@@ -179,9 +179,8 @@ def public normalize_path(p : string) : string {
 // records but not about clustering helpers). Path is normalized so
 // Windows runs (mixed `\` and `/` from `fileInfo.name`) match Unix
 // baselines.
-def member_id(file : string; line : int; name : string) : string {
-    return "{normalize_path(file)}:{line}:{name}"
-}
+def member_id(file : string; line : int; name : string) : string =>
+    "{normalize_path(file)}:{line}:{name}"
 
 
 // Read an exported envelope and project it down to two sets:

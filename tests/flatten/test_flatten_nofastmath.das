@@ -24,66 +24,43 @@ var G_NF = 2.5
 // ----- gated rewrites: skipped under the option, value bit-exact -----
 
 [flatten]
-def nf_mul0(x : float) : float {
-    return x * 0.0
-}
+def nf_mul0(x : float) : float => x * 0.0
 
 [flatten]
-def nf_vmul0(v : float3) : float3 {
-    return v * float3(0.0, 0.0, 0.0)
-}
+def nf_vmul0(v : float3) : float3 => v * float3(0.0, 0.0, 0.0)
 
 [flatten]
-def nf_subself(x : float) : float {
-    return (x * 3.0) - (x * 3.0) // nolint:LINT007 — the x-x gate is exactly what's under test
-}
+def nf_subself(x : float) : float =>
+    (x * 3.0) - (x * 3.0)  // nolint:LINT007 — the x-x gate is exactly what's under test
 
 [flatten]
-def nf_reassoc(x : float) : float {
-    return 0.25 + x + 0.5
-}
+def nf_reassoc(x : float) : float => 0.25 + x + 0.5
 
 [flatten]
-def nf_lerp0(a, b : float) : float {
-    return lerp(a, b, 0.0)
-}
+def nf_lerp0(a, b : float) : float => lerp(a, b, 0.0)
 
 [flatten]
-def nf_div(x : float) : float {
-    return x / 3.0
-}
+def nf_div(x : float) : float => x / 3.0
 
 [flatten]
-def nf_unidiv(x : float) : float {
-    return x / G_NF
-}
+def nf_unidiv(x : float) : float => x / G_NF
 
 [flatten]
-def nf_zkill(x : float) : float2 {
-    return float2(sin(x) * 12.0, 13.0) * float2(0.0, 123.0)
-}
+def nf_zkill(x : float) : float2 => float2(sin(x) * 12.0, 13.0) * float2(0.0, 123.0)
 
 [flatten]
-def nf_mj(x, y, z : float) : float3 {
-    return float3(x * 13.0, y * 13.0, z * 12.0)
-}
+def nf_mj(x, y, z : float) : float3 => float3(x * 13.0, y * 13.0, z * 12.0)
 
 // ----- exact rewrites: still fire under the option -----
 
 [flatten]
-def nf_imul0(n : int) : int {
-    return n * 0
-}
+def nf_imul0(n : int) : int => n * 0
 
 [flatten]
-def nf_ireassoc(n : int) : int {
-    return 2 + n + 3
-}
+def nf_ireassoc(n : int) : int => 2 + n + 3
 
 [flatten]
-def nf_mad(x, y, z : float) : float {
-    return x * y + z
-}
+def nf_mad(x, y, z : float) : float => x * y + z
 
 [flatten]
 def nf_preshader(x : float) : float {

@@ -27,9 +27,7 @@ let EXE_SCRIPT = "{OUTPUT_DIR}/trap_block_ann_exe.das"
 let EXE_PATH = "{OUTPUT_DIR}/trap_block_ann_exe"
 let EXE_BINARY = "{OUTPUT_DIR}/trap_block_ann_exe.exe"
 
-def call_block(blk : block<(x : int) : int>) : int {
-    return invoke(blk, 20)
-}
+def call_block(blk : block<(x : int) : int>) : int => invoke(blk, 20)
 
 // The payload must reach the runtime block, not merely "the block runs" -- that is the point of
 // annotationData and the only thing a host ECS reads. The writer here is a das-side
@@ -57,9 +55,7 @@ def test_finish_reaches_lambda(t : T?) {
     t |> equal(invoke(l), 1)
 }
 
-def probe_annotation_data(blk : block<(x : int) : int>) : uint64 {
-    return testBlockAnnotationData(blk)
-}
+def probe_annotation_data(blk : block<(x : int) : int>) : uint64 => testBlockAnnotationData(blk)
 
 def write_exe_script() : bool {
     var ok = false

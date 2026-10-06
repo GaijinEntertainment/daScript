@@ -23,13 +23,9 @@ def greet(name : string) {
 
 // === Return type specified with : after the parameters ===
 
-def add(a, b : int) : int {
-    return a + b
-}
+def add(a, b : int) : int => a + b
 
-def multiply(a, b : float) : float {
-    return a * b
-}
+def multiply(a, b : float) : float => a * b
 
 // === Pass-by-value vs pass-by-reference ===
 
@@ -49,9 +45,7 @@ def increment(var x : int&) {
 
 // === Default arguments ===
 
-def formatNumber(value : int; prefix : string = "#") : string {
-    return "{prefix}{value}"
-}
+def formatNumber(value : int; prefix : string = "#") : string => "{prefix}{value}"
 
 // === Function overloading ===
 // Multiple functions with the same name but different parameter types.
@@ -70,9 +64,8 @@ def describe(x : string) {
 
 // === Returning multiple values with tuples ===
 
-def divmod(a, b : int) : tuple<quotient : int; remainder : int> {
-    return (quotient = a / b, remainder = a % b)
-}
+def divmod(a, b : int) : tuple<quotient : int; remainder : int> =>
+    (quotient = a / b, remainder = a % b)
 
 // === Early return ===
 

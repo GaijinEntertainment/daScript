@@ -58,7 +58,7 @@ def cpp_locate_compile_db(build_dir : string) : string {
         if (fexist(c)) return c
     }
     for (pat in ["build*/compile_commands.json", "cmake-build-*/compile_commands.json"]) {
-        var hits : array<string>
+        var inscope hits : array<string>
         parse_file_list(path_join(root, pat), hits)
         for (h in hits) {
             if (fexist(h)) return h
@@ -124,9 +124,8 @@ def private cpp_load_compile_db(db_path : string; var entries : array<CompileEnt
     return true
 }
 
-def private same_path(a, b : string) : bool {
-    return to_lower(to_generic_path(a)) == to_lower(to_generic_path(b))
-}
+def private same_path(a, b : string) : bool =>
+    to_lower(to_generic_path(a)) == to_lower(to_generic_path(b))
 
 def private find_entry(entries : array<CompileEntry>; abs_file : string) : int {
     for (i in range(length(entries))) {
@@ -176,9 +175,8 @@ def private command_is_msvc(cmd : string) : bool {
 // Strip a matching pair of surrounding double-quotes. split_ws keeps quotes on
 // tokens, and a compiler path under "C:\Program Files\..." is quoted — without
 // this, base_name() would keep the trailing quote and MSVC detection would fail.
-def private unquote(s : string) : string {
-    return (length(s) >= 2 && starts_with(s, "\"") && ends_with(s, "\"")) ? slice(s, 1, length(s) - 1) : s
-}
+def private unquote(s : string) : string =>
+    (length(s) >= 2 && starts_with(s, "\"") && ends_with(s, "\"")) ? slice(s, 1, length(s) - 1) : s
 
 def private compiler_of(cmd : string) : string {
     let toks <- split_ws(cmd)
@@ -256,9 +254,8 @@ def private run_syntax_check(work_dir, cmd : string; var output : string&) : int
     return rc
 }
 
-def private no_db_message() : string {
-    return "No compile_commands.json found. Configure a CMake build with -DCMAKE_EXPORT_COMPILE_COMMANDS=ON (the Ninja and Makefile generators emit it; the Visual Studio generator does NOT — use a side Ninja build dir on Windows). Pass build_dir to point at a specific build directory."
-}
+def private no_db_message() : string =>
+    "No compile_commands.json found. Configure a CMake build with -DCMAKE_EXPORT_COMPILE_COMMANDS=ON (the Ninja and Makefile generators emit it; the Visual Studio generator does NOT — use a side Ninja build dir on Windows). Pass build_dir to point at a specific build directory."
 
 def do_cpp_compile_check(file : string; build_dir : string = ""; json : bool = false) : string {
     if (empty(file)) return make_tool_result("'file' argument is required", true)

@@ -329,9 +329,7 @@ class ParseMacro : AstCallMacro {
         return false
     }
 
-    def override canFoldReturnResult(expr : ExprCallMacro?) : bool {
-        return false
-    }
+    def override canFoldReturnResult(expr : ExprCallMacro?) : bool => false
 
     def override visit(prog : ProgramPtr; mod : Module?; expr : ExprCallMacro?) : ExpressionPtr {
         g_failed = false // refresh for new errors

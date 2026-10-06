@@ -39,8 +39,7 @@ def test_opt_ptr_view_semantics(t : T?) {
     vk_view_destroy(gp)
 
     // count-from-length on the batch allocate-info shape
-    let dsl_a : DescriptorSetLayout
-    let dsl_b : DescriptorSetLayout
+    let dsl_a, dsl_b : DescriptorSetLayout
     var dsai = DescriptorSetAllocateInfo(pSetLayouts <- [dsl_a, dsl_b])
     let vdsai = vk_view_create_unsafe(dsai)
     t |> equal(int(vdsai.descriptorSetCount), 2)

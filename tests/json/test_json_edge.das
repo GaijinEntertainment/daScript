@@ -544,9 +544,7 @@ struct TestStruct {
     score : float
 }
 
-def operator ==(a, b : TestStruct) {
-    return a.name == b.name && a.value == b.value && a.score == b.score
-}
+def operator ==(a, b : TestStruct) => a.name == b.name && a.value == b.value && a.score == b.score
 
 [test]
 def test_from_jv(t : T?) {

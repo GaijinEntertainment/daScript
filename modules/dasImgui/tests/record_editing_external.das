@@ -29,14 +29,11 @@ def bbox_of(var snap : JsonValue?; ident : string) : float4 {
 }
 
 // Point at fractional (fx, fy) inside a bbox -- rides the widget's real rect instead of hard pixels.
-def frac_point(bb : float4; fx : float; fy : float) : tuple<float; float> {
-    return (bb.x + (bb.z - bb.x) * fx, bb.y + (bb.w - bb.y) * fy)
-}
+def frac_point(bb : float4; fx : float; fy : float) : tuple<float; float> =>
+    (bb.x + (bb.z - bb.x) * fx, bb.y + (bb.w - bb.y) * fy)
 
 // Click point inside an input's editable text field -- left of the trailing +/- step buttons.
-def field_click(bb : float4) : tuple<float; float> {
-    return (bb.x + 42.0f, (bb.y + bb.w) * 0.5f)
-}
+def field_click(bb : float4) : tuple<float; float> => (bb.x + 42.0f, (bb.y + bb.w) * 0.5f)
 
 [export]
 def main { // nolint:STYLE038

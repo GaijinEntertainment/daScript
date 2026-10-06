@@ -99,7 +99,7 @@ def public parse_verdict(input : JsonValue?; n_members : int; var v : Verdict) {
         if (length(g) == 1) {
             v.false_positives |> push(g[0])
         } else {
-            var keep <- g
+            var inscope keep <- g
             canonical_groups |> emplace(keep)
         }
     }

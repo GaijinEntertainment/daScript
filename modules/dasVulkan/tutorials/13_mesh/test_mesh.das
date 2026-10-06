@@ -17,9 +17,7 @@ options indenting = 4
 require dastest/testing_boost public
 require mesh_tut
 
-def private is_background(c : int3) : bool {
-    return c.x < 100 && c.y < 100 && c.z < 100
-}
+def private is_background(c : int3) : bool => c.x < 100 && c.y < 100 && c.z < 100
 
 [test]
 def test_mesh_cull(t : T?) {

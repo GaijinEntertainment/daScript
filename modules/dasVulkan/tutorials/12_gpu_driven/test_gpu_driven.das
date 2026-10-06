@@ -29,9 +29,8 @@ def private px_at(pixels : array<uint8>; vp : float4x4; i, panel : int) : int3 {
 
 //! The occluder fragment shader is a flat constant (0.45, 0.45, 0.5) -> (115, 115, 127) in 8-bit, with
 //! no lighting, so a pixel showing the wall lands tightly on that triple.
-def private is_occluder_gray(c : int3) : bool {
-    return abs(c.x - 115) < 14 && abs(c.y - 115) < 14 && abs(c.z - 127) < 16
-}
+def private is_occluder_gray(c : int3) : bool =>
+    abs(c.x - 115) < 14 && abs(c.y - 115) < 14 && abs(c.z - 127) < 16
 
 def private luma(c : int3) : int => (c.x * 77 + c.y * 150 + c.z * 29) / 256
 

@@ -571,9 +571,8 @@ let INDICATOR_H = 16
 
 //! Pick the "final" image -- the one with the actual rendered pixels after resolve. show_msaa.das
 //! and the recording driver both call this to know which image to blit / read back.
-def public final_image(res : MsaaResources; use_msaa : bool) : Image {
-    return use_msaa ? res.color_resolve.image : res.color_1x.image
-}
+def public final_image(res : MsaaResources; use_msaa : bool) : Image =>
+    use_msaa ? res.color_resolve.image : res.color_1x.image
 
 //! Record the cube draw with dynamic rendering. `use_msaa` picks 4x MSAA + resolve or 1x raster; each
 //! path has its own pipeline + color/depth attachments built up front, so toggling needs no rebuild.

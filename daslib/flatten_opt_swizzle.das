@@ -41,9 +41,8 @@ def private float_ctor_of(e : ExpressionPtr) : ExprCall? {
     return c
 }
 
-def private r2v_unwrap(var e : ExpressionPtr) : ExpressionPtr {
-    return e is ExprRef2Value ? (e as ExprRef2Value).subexpr : e
-}
+def private r2v_unwrap(var e : ExpressionPtr) : ExpressionPtr =>
+    e is ExprRef2Value ? (e as ExprRef2Value).subexpr : e
 
 def private swizzle_decomposable(e : ExpressionPtr) : bool {
     if (e == null) return false

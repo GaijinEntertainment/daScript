@@ -54,27 +54,19 @@ def some(v : auto(TT)) {
 //! for arrays/tables). Useful for non-copyable payloads where ``some`` would
 //! clone; for workhorse types (``int``, ``float``, ``string``, …) ``some`` is
 //! equivalent and cheaper to read.
-def move_some(var v : auto(TT)) {
-    return <- (_has_value = true, _value <- v)
-}
+def move_some(var v : auto(TT)) => <- (_has_value = true, _value <- v)
 
 //! Construct an empty ``Option<T>``. Pass the payload type as a witness::
 //!
 //!     let o = none(type<int>)
 [template(t)]
-def none(t : auto(TT)) {
-    return default<$Option<TT -const> >
-}
+def none(t : auto(TT)) => default<$Option<TT -const> >
 
 //! ``true`` iff the option carries a value.
-def is_some(o : $Option<auto(TT)>) : bool {
-    return o._has_value
-}
+def is_some(o : $Option<auto(TT)>) : bool => o._has_value
 
 //! ``true`` iff the option is empty.
-def is_none(o : $Option<auto(TT)>) : bool {
-    return !o._has_value
-}
+def is_none(o : $Option<auto(TT)>) : bool => !o._has_value
 
 //! Apply ``f`` to the payload, producing ``Option<U>``. ``none`` stays ``none``.
 def map(o : $Option<auto(TT)>; f : block<(v : TT) : auto(UU)>) {
@@ -246,18 +238,10 @@ def operator ==(a, b : $Option<auto(TT)> implicit) : bool {
 }
 
 //! Equality against payload value: ``some(v) == v``, ``none != v``.
-def operator ==(o : $Option<auto(TT)>; v : TT) : bool {
-    return o._has_value && o._value == v
-}
+def operator ==(o : $Option<auto(TT)>; v : TT) : bool => o._has_value && o._value == v
 
-def operator ==(v : auto(TT); o : $Option<TT>) : bool {
-    return o._has_value && o._value == v
-}
+def operator ==(v : auto(TT); o : $Option<TT>) : bool => o._has_value && o._value == v
 
-def operator !=(o : $Option<auto(TT)>; v : TT) : bool {
-    return !(o == v)
-}
+def operator !=(o : $Option<auto(TT)>; v : TT) : bool => !(o == v)
 
-def operator !=(v : auto(TT); o : $Option<TT>) : bool {
-    return !(o == v)
-}
+def operator !=(v : auto(TT); o : $Option<TT>) : bool => !(o == v)

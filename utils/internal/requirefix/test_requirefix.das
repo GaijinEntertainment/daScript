@@ -4,9 +4,7 @@ require dastest/testing_boost public
 require requirefix
 require daslib/fio
 
-def testdata_path(name : string) : string {
-    return "utils/internal/requirefix/testdata/{name}"
-}
+def testdata_path(name : string) : string => "utils/internal/requirefix/testdata/{name}"
 
 def run_analysis(target : string) : ModuleAnalysisResult {
     var config = RequirefixConfig(
@@ -35,7 +33,7 @@ def find_module_tag(var result : ModuleAnalysisResult; name : string) : string {
 def find_module_refs(var result : ModuleAnalysisResult; name : string) : array<string> {
     for (mod in result.modules) {
         if (mod.name == name) {
-            var refs : array<string>
+            var inscope refs : array<string>
             reserve(refs, length(mod.refs))
             for (ref in mod.refs) {
                 refs |> push("{ref.kind}/{ref.key}:{ref.line}")

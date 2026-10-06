@@ -49,9 +49,7 @@ def kitten_phonemes_from_misaki(ps : string) : string {
 
 let private ELLIPSIS_CPT = 8230   // the driver closes every sequence with an ellipsis
 
-def private kitten_word_cpt(c : int) : bool {
-    return cpt_is_letter(c) || cpt_is_number(c) || c == '_'
-}
+def private kitten_word_cpt(c : int) : bool => cpt_is_letter(c) || cpt_is_number(c) || c == '_'
 
 //! The token ids the model reads for an espeak-inventory phoneme string: the reference
 //! driver's re-spacing (runs of word characters and single punctuation marks, one space

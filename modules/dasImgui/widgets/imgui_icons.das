@@ -35,11 +35,10 @@ struct IconCtx {
     th : float      // stroke thickness in px
 }
 
-def private rad(d : float) : float { return d * 3.14159265f / 180.0f }
+def private rad(d : float) : float => d * 3.14159265f / 180.0f
 
-def private P(ctx : IconCtx; gx, gy : float) : float2 {
-    return float2(ctx.org.x + gx * ctx.s / 24.0f, ctx.org.y + gy * ctx.s / 24.0f)
-}
+def private P(ctx : IconCtx; gx, gy : float) : float2 =>
+    float2(ctx.org.x + gx * ctx.s / 24.0f, ctx.org.y + gy * ctx.s / 24.0f)
 
 // stroked line with round caps (matches the SVG stroke-linecap:round look)
 def private L(var ctx : IconCtx; x1, y1, x2, y2 : float) {

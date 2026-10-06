@@ -143,9 +143,7 @@ def is_valid_job_hash(h : string) : bool {
     return is_lower_hex(h, 64, 64)
 }
 
-def is_valid_job_toolchain(t : string) : bool {
-    return is_lower_hex(t, 7, 64)
-}
+def is_valid_job_toolchain(t : string) : bool => is_lower_hex(t, 7, 64)
 
 def unpack_sources(src_dir : string; source : string) : string {
     //! Materialize a job's source document into src_dir and return the entry

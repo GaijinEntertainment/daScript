@@ -65,9 +65,8 @@ def like_escape_substring(s : string) : string {
     return "%" + (s |> replace("\\", "\\\\") |> replace("%", "\\%") |> replace("_", "\\_")) + "%"
 }
 
-def private glob_escape(s : string) : string {
-    return s |> replace("[", "[[]") |> replace("*", "[*]") |> replace("?", "[?]")
-}
+def private glob_escape(s : string) : string =>
+    s |> replace("[", "[[]") |> replace("*", "[*]") |> replace("?", "[?]")
 
 def glob_escape_prefix(s : string) : string {
     //! Returns `s` with GLOB metacharacters bracket-escaped, then `*` appended.
@@ -87,32 +86,20 @@ def glob_escape_substring(s : string) : string {
     return "*" + glob_escape(s) + "*"
 }
 
-def sql_bind(v : int64) : int64 {
-    return v
-}
+def sql_bind(v : int64) : int64 => v
 
 [unused_argument(t)]
-def sql_extract(v : int64; t : type<int64>) : int64 {
-    return v
-}
+def sql_extract(v : int64; t : type<int64>) : int64 => v
 
-def sql_bind(v : double) : double {
-    return v
-}
+def sql_bind(v : double) : double => v
 
 [unused_argument(t)]
-def sql_extract(v : double; t : type<double>) : double {
-    return v
-}
+def sql_extract(v : double; t : type<double>) : double => v
 
-def sql_bind(s : string) : string {
-    return s
-}
+def sql_bind(s : string) : string => s
 
 [unused_argument(t)]
-def sql_extract(s : string; t : type<string>) : string {
-    return s
-}
+def sql_extract(s : string; t : type<string>) : string => s
 
 def sql_bind(b : array<uint8>) : array<uint8> {
     //! Identity passthrough for BLOB columns. For multi-MB payloads prefer the streaming
@@ -121,63 +108,37 @@ def sql_bind(b : array<uint8>) : array<uint8> {
 }
 
 [unused_argument(t)]
-def sql_extract(b : array<uint8>; t : type<array<uint8>>) : array<uint8> {
-    return <- clone_to_move(b)
-}
+def sql_extract(b : array<uint8>; t : type<array<uint8>>) : array<uint8> => <- clone_to_move(b)
 
-def sql_bind(v : int) : int64 {
-    return int64(v)
-}
+def sql_bind(v : int) : int64 => int64(v)
 
 [unused_argument(t)]
-def sql_extract(v : int64; t : type<int>) : int {
-    return int(v)
-}
+def sql_extract(v : int64; t : type<int>) : int => int(v)
 
-def sql_bind(v : int8) : int64 {
-    return int64(v)
-}
+def sql_bind(v : int8) : int64 => int64(v)
 
 [unused_argument(t)]
-def sql_extract(v : int64; t : type<int8>) : int8 {
-    return int8(v)
-}
+def sql_extract(v : int64; t : type<int8>) : int8 => int8(v)
 
-def sql_bind(v : int16) : int64 {
-    return int64(v)
-}
+def sql_bind(v : int16) : int64 => int64(v)
 
 [unused_argument(t)]
-def sql_extract(v : int64; t : type<int16>) : int16 {
-    return int16(v)
-}
+def sql_extract(v : int64; t : type<int16>) : int16 => int16(v)
 
-def sql_bind(v : uint) : int64 {
-    return int64(v)
-}
+def sql_bind(v : uint) : int64 => int64(v)
 
 [unused_argument(t)]
-def sql_extract(v : int64; t : type<uint>) : uint {
-    return uint(v)
-}
+def sql_extract(v : int64; t : type<uint>) : uint => uint(v)
 
-def sql_bind(v : uint8) : int64 {
-    return int64(v)
-}
+def sql_bind(v : uint8) : int64 => int64(v)
 
 [unused_argument(t)]
-def sql_extract(v : int64; t : type<uint8>) : uint8 {
-    return uint8(v)
-}
+def sql_extract(v : int64; t : type<uint8>) : uint8 => uint8(v)
 
-def sql_bind(v : uint16) : int64 {
-    return int64(v)
-}
+def sql_bind(v : uint16) : int64 => int64(v)
 
 [unused_argument(t)]
-def sql_extract(v : int64; t : type<uint16>) : uint16 {
-    return uint16(v)
-}
+def sql_extract(v : int64; t : type<uint16>) : uint16 => uint16(v)
 
 def sql_bind(v : uint64) : int64 {
     //! Reinterpret cast — values above ``int64.max`` round-trip through
@@ -187,27 +148,17 @@ def sql_bind(v : uint64) : int64 {
 }
 
 [unused_argument(t)]
-def sql_extract(v : int64; t : type<uint64>) : uint64 {
-    return uint64(v)
-}
+def sql_extract(v : int64; t : type<uint64>) : uint64 => uint64(v)
 
-def sql_bind(v : float) : double {
-    return double(v)
-}
+def sql_bind(v : float) : double => double(v)
 
 [unused_argument(t)]
-def sql_extract(v : double; t : type<float>) : float {
-    return float(v)
-}
+def sql_extract(v : double; t : type<float>) : float => float(v)
 
-def sql_bind(v : bool) : int64 {
-    return v ? 1l : 0l
-}
+def sql_bind(v : bool) : int64 => v ? 1l : 0l
 
 [unused_argument(t)]
-def sql_extract(v : int64; t : type<bool>) : bool {
-    return v != 0l
-}
+def sql_extract(v : int64; t : type<bool>) : bool => v != 0l
 
 def sql_bind(value : auto(TT)) : int64 {
     static_if (typeinfo is_enum(value)) {
@@ -219,9 +170,7 @@ def sql_bind(value : auto(TT)) : int64 {
 }
 
 [unused_argument(value)]
-def sql_bind(value : $Option < auto(TT) >) {
-    return _::sql_bind(default<TT>)
-}
+def sql_bind(value : $Option < auto(TT) >) => _::sql_bind(default<TT>)
 
 [unused_argument(t)]
 def sql_extract(value : int64; t : type<auto(TT)>) : TT {
@@ -240,24 +189,16 @@ def sql_extract(value : int64; t : type<auto(TT)>) : TT {
 }
 
 [unused_argument(witness)]
-def sql_storage_type_witness(witness : int64) : string {
-    return "INTEGER"
-}
+def sql_storage_type_witness(witness : int64) : string => "INTEGER"
 
 [unused_argument(witness)]
-def sql_storage_type_witness(witness : double) : string {
-    return "REAL"
-}
+def sql_storage_type_witness(witness : double) : string => "REAL"
 
 [unused_argument(witness)]
-def sql_storage_type_witness(witness : string) : string {
-    return "TEXT"
-}
+def sql_storage_type_witness(witness : string) : string => "TEXT"
 
 [unused_argument(witness)]
-def sql_storage_type_witness(witness : array<uint8>) : string {
-    return "BLOB"
-}
+def sql_storage_type_witness(witness : array<uint8>) : string => "BLOB"
 
 [unused_argument(witness)]
 def sql_storage_type_witness(witness : auto(SS)) : string {
@@ -266,9 +207,8 @@ def sql_storage_type_witness(witness : auto(SS)) : string {
 }
 
 [unused_argument(t)]
-def sql_storage_type_for(t : type<auto(TT)>) : string {
-    return sql_storage_type_witness(default<typedecl(_::sql_bind(default<TT>))>)
-}
+def sql_storage_type_for(t : type<auto(TT)>) : string =>
+    sql_storage_type_witness(default<typedecl(_::sql_bind(default<TT>))>)
 
 [unused_argument(t)]
 def sql_storage_type_for(t : type<$Option<auto(TT)>>) : string {
@@ -278,24 +218,16 @@ def sql_storage_type_for(t : type<$Option<auto(TT)>>) : string {
 }
 
 [unused_argument(witness)]
-def sql_storage_enum_witness(witness : int64) : SqlType {
-    return SqlType.Integer
-}
+def sql_storage_enum_witness(witness : int64) : SqlType => SqlType.Integer
 
 [unused_argument(witness)]
-def sql_storage_enum_witness(witness : double) : SqlType {
-    return SqlType.Real
-}
+def sql_storage_enum_witness(witness : double) : SqlType => SqlType.Real
 
 [unused_argument(witness)]
-def sql_storage_enum_witness(witness : string) : SqlType {
-    return SqlType.Text
-}
+def sql_storage_enum_witness(witness : string) : SqlType => SqlType.Text
 
 [unused_argument(witness)]
-def sql_storage_enum_witness(witness : array<uint8>) : SqlType {
-    return SqlType.Blob
-}
+def sql_storage_enum_witness(witness : array<uint8>) : SqlType => SqlType.Blob
 
 [unused_argument(witness)]
 def sql_storage_enum_witness(witness : auto(SS)) : SqlType {
@@ -304,14 +236,11 @@ def sql_storage_enum_witness(witness : auto(SS)) : SqlType {
 }
 
 [unused_argument(t)]
-def sql_storage_enum_for(t : type<auto(TT)>) : SqlType {
-    return sql_storage_enum_witness(default<typedecl(_::sql_bind(default<TT>))>)
-}
+def sql_storage_enum_for(t : type<auto(TT)>) : SqlType =>
+    sql_storage_enum_witness(default<typedecl(_::sql_bind(default<TT>))>)
 
 [unused_argument(t)]
-def sql_storage_enum_for(t : type<$Option<auto(TT)>>) : SqlType {
-    return sql_storage_enum_for(type<TT>)
-}
+def sql_storage_enum_for(t : type<$Option<auto(TT)>>) : SqlType => sql_storage_enum_for(type<TT>)
 [unused_argument(t), template(t)]
 def column_info(t : type<auto(TT)>) : array<ColumnInfo> {
     //! Returns the column metadata for a `[sql_table]`-tagged struct ``T``.
@@ -329,9 +258,8 @@ def find_annotation(args : AnnotationArgumentList; argn : string; default_value 
     return default_value
 }
 
-def private find_string_array_annotation(args : AnnotationArgumentList; argn : string) : array<string> {
-    return <- [for (a in args); string(a.sValue); where a.name == argn && a.basicType == Type.tString]
-}
+def private find_string_array_annotation(args : AnnotationArgumentList; argn : string) : array<string> =>
+    <- [for (a in args); string(a.sValue); where a.name == argn && a.basicType == Type.tString]
 
 let private SQL_DEFAULT_FN_WHITELIST = ["CURRENT_TIMESTAMP", "CURRENT_DATE", "CURRENT_TIME"]
 
@@ -1212,8 +1140,7 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_bind_row_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
-        var with_pk_exprs : array<ExpressionPtr>
-        var no_pk_exprs : array<ExpressionPtr>
+        var with_pk_exprs, no_pk_exprs : array<ExpressionPtr>
         with_pk_exprs |> reserve(length(fields))
         no_pk_exprs |> reserve(length(fields))
 
@@ -1754,9 +1681,8 @@ def make_void_panic_stub_helper_fn(var st : StructurePtr; helper_name, msg : str
     }
 }
 
-def private make_view_table_name_fn(var st : StructurePtr; view_name : string) : FunctionPtr {
-    return <- make_const_string_helper_fn(st, "_sql_table_name", view_name)
-}
+def private make_view_table_name_fn(var st : StructurePtr; view_name : string) : FunctionPtr =>
+    <- make_const_string_helper_fn(st, "_sql_table_name", view_name)
 
 def private make_view_drop_sql_fn(var st : StructurePtr; view_name : string) : FunctionPtr {
     return <- make_const_string_helper_fn(st, "_sql_drop_view_if_exists_sql",
@@ -2083,16 +2009,14 @@ def private emit_create_index(prog : ProgramPtr; var call : ExprCallMacro?; is_u
 
 [call_macro(name="create_index")]
 class private CreateIndexMacro : AstCallMacro {
-    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
-        return emit_create_index(prog, call, false)
-    }
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? =>
+        emit_create_index(prog, call, false)
 }
 
 [call_macro(name="create_unique_index")]
 class private CreateUniqueIndexMacro : AstCallMacro {
-    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
-        return emit_create_index(prog, call, true)
-    }
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? =>
+        emit_create_index(prog, call, true)
 }
 
 enum public SqlFnTag : uint8 {

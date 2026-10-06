@@ -191,8 +191,7 @@ def dwm_hint(var out : array<float>; x, w9, bm, bv, bw, bb : array<float>; d, tt
 // BN folded to per-channel scale/shift (y = acc·sc + sh), silu via exp4 — the conv_sub
 // dw-winner recipe applied to the 1D k9 form
 def dwm_f4(var out : array<float>; x, wt, bm, bv, bw, bb : array<float>; d, tt : int64) {
-    var sc : array<float>
-    var sh : array<float>
+    var sc, sh : array<float>
     sized(sc, d)
     sized(sh, d)
     let one = float4(1.0, 1.0, 1.0, 1.0)
@@ -295,10 +294,7 @@ def bench_glu(tt : int64; rounds : int) {
     var h : array<float>
     sized(h, tt * 2l * d)
     fill_sin(h, 2.0, 0.171)
-    var out_cur : array<float>
-    var out_hint : array<float>
-    var out_e4 : array<float>
-    var out_u2 : array<float>
+    var out_cur, out_hint, out_e4, out_u2 : array<float>
     sized(out_cur, tt * d)
     sized(out_hint, tt * d)
     sized(out_e4, tt * d)
@@ -342,13 +338,7 @@ def bench_glu(tt : int64; rounds : int) {
 def bench_dwm(tt : int64; rounds : int) {
     let d = DD
     print("\n--- dwconv+BN+silu variants: {tt} rows x {d}ch, k9 ---\n")
-    var x : array<float>
-    var w9 : array<float>
-    var wt : array<float>
-    var bm : array<float>
-    var bv : array<float>
-    var bw : array<float>
-    var bb : array<float>
+    var x, w9, wt, bm, bv, bw, bb : array<float>
     sized(x, tt * d)
     sized(w9, d * NK)
     sized(wt, NK * d)
@@ -367,9 +357,7 @@ def bench_dwm(tt : int64; rounds : int) {
             wt[int(tap * d + c)] = w9[int(c * NK + tap)]
         }
     }
-    var out_cur : array<float>
-    var out_hint : array<float>
-    var out_f4 : array<float>
+    var out_cur, out_hint, out_f4 : array<float>
     sized(out_cur, tt * d)
     sized(out_hint, tt * d)
     sized(out_f4, tt * d)

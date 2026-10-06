@@ -63,9 +63,7 @@ struct private ProbePlanes {
 //! and scales over `xrows` rows, `blocks` weight blocks a plane copy (the region table's stride), the copies' regions;
 //! `yd2` is the second output plane the `cols` chain alternates with `yd`
 def private probe_fill(seed : uint; wq_words, ws_words, xq_words, xs_words, blocks : int; var p : ProbePlanes) : tuple<wqd : uint64; wsd : uint64; xqd : uint64; xsd : uint64; yd : uint64; yd2 : uint64; rgd : uint64> {
-    var wqh : array<uint>
-    var wsh : array<uint>
-    var xqh : array<uint>
+    var wqh, wsh, xqh : array<uint>
     var xsh <- row_fill(xs_words, 1, 0, 0.25, -0.5, 7)
     wqh |> reserve(wq_words)
     wqh |> resize(wq_words)
@@ -122,7 +120,7 @@ def private probe_time(fmt : KqFmt; ncols : int; p : ProbePlanes; b : tuple<wqd 
         if (g_cold) {   //! a region table a copy, each its own set, so a dispatch names one copy
             sets |> reserve(p.copies)
             for (i in range(p.copies)) {
-                var pair <- [uint(i * p.blocks), 0u]
+                var inscope pair <- [uint(i * p.blocks), 0u]
                 let rgd = make_device_buf(8l)
                 upload_region_at(rgd, 0l, addr<uint8 const?>(pair[0]), 8l)
                 let bufs = fixed_array(b.wqd, b.wsd, rgd, b.xqd, b.xsd, b.yd)
@@ -190,9 +188,8 @@ def private probe_fmt(fmt : KqFmt; n, d : int; lanes_per_row : uint; ncols : int
 }
 
 //! one probe row of either class at `ncols` (0 = the one-column class)
-def private probe_any(fmt : KqFmt; n, d : int; ncols : int) : tuple<mb : double; us : double> {
-    return probe_fmt(fmt, n, d, fmt == KqFmt.q8 ? 0u : gemv_lanes_per_row(int(fmt), int64(n)), ncols)
-}
+def private probe_any(fmt : KqFmt; n, d : int; ncols : int) : tuple<mb : double; us : double> =>
+    probe_fmt(fmt, n, d, fmt == KqFmt.q8 ? 0u : gemv_lanes_per_row(int(fmt), int64(n)), ncols)
 
 //! the N-column ruler: the one-column class, then the N-column class at 1, 2, 4 and 8 rows, per format (the q8 rows
 //! take the two-rows-a-subgroup stamps past `g_q8_n2_min_n`, which `main` holds at 0 for the run unless `n2off`),

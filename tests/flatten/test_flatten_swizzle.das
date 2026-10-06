@@ -13,87 +13,59 @@ require math
 
 // ----- full leading vector arg selected whole: the ctor and the 1f die -----
 [flatten]
-def s_ctor3(v : float3) : float3 {
-    return float4(v, 1.0).xyz
-}
+def s_ctor3(v : float3) : float3 => float4(v, 1.0).xyz
 
 // ----- nested swizzle composes through the ctor: float4(v.zyx, 1).xz -> v.zx -----
 [flatten]
-def s_nestedxz(v : float3) : float2 {
-    return float4(v.zyx, 1.0).xz
-}
+def s_nestedxz(v : float3) : float2 => float4(v.zyx, 1.0).xz
 
 // ----- single lane kills the whole ctor -----
 [flatten]
-def s_lane(a : float; b : float; c : float) : float {
-    return float3(a, b, c).y
-}
+def s_lane(a : float; b : float; c : float) : float => float3(a, b, c).y
 
 // ----- swizzle-of-swizzle composes to one mask -----
 [flatten]
-def s_swsw(v : float4) : float2 {
-    return v.zyx.xz
-}
+def s_swsw(v : float4) : float2 => v.zyx.xz
 
 // ----- mixed ctor: selected scalar + const re-pack narrower -----
 [flatten]
-def s_mixed(v : float2; s : float) : float2 {
-    return float4(v, s, 2.0).zw
-}
+def s_mixed(v : float2; s : float) : float2 => float4(v, s, 2.0).zw
 
 // ----- dropped lanes' compute dies with them -----
 [flatten]
-def s_dropdead(x : float) : float2 {
-    return float4(sin(x), x, 3.0, cos(x)).yz
-}
+def s_dropdead(x : float) : float2 => float4(sin(x), x, 3.0, cos(x)).yz
 
 // ----- splat ctor narrows to a splat -----
 [flatten]
-def s_splat(s : float) : float2 {
-    return float4(s).xy
-}
+def s_splat(s : float) : float2 => float4(s).xy
 
 // ----- identity selection just drops the swizzle node -----
 [flatten]
-def s_identity(v : float2; s : float) : float3 {
-    return float3(v, s).xyz
-}
+def s_identity(v : float2; s : float) : float3 => float3(v, s).xyz
 
 // ----- all-const lanes collapse to a vector literal -----
 [flatten]
-def s_const(x : float) : float2 {
-    return float4(1.0, 2.0, 3.0, 4.0).wy + float2(x)
-}
+def s_const(x : float) : float2 => float4(1.0, 2.0, 3.0, 4.0).wy + float2(x)
 
 // ----- component-read args re-vectorize to the base itself -----
 [flatten]
-def s_revec(v : float3) : float3 {
-    return float3(v.x, v.y, v.z).xyz
-}
+def s_revec(v : float3) : float3 => float3(v.x, v.y, v.z).xyz
 
 // ----- permutation re-pack: the extract dies, args reorder -----
 [flatten]
-def s_perm(a : float; b : float; c : float) : float3 {
-    return float3(a, b, c).zyx
-}
+def s_perm(a : float; b : float; c : float) : float3 => float3(a, b, c).zyx
 
 // ----- whole-base run + scalar ride into a narrower ctor -----
 [flatten]
-def s_widen(v : float2; s : float) : float3 {
-    return float4(v, s, 4.0).xyz
-}
+def s_widen(v : float2; s : float) : float3 => float4(v, s, 4.0).xyz
 
 // ----- repeated source lane: the duplicate clones -----
 [flatten]
-def s_repeat(a : float; b : float; c : float; d : float) : float3 {
-    return float4(a, b, c, d).xyx
-}
+def s_repeat(a : float; b : float; c : float; d : float) : float3 => float4(a, b, c, d).xyx
 
 // ----- partial base run stays: re-packing would pay extracts the original didn't -----
 [flatten]
-def s_partial(v : float2; s : float) : float2 {
-    return float3(v, s).yz
-}
+def s_partial(v : float2; s : float) : float2 => float3(v, s).yz
 
 var GRID <- [-100.0, -3.5, -1.0, 0.0, 1.0, 2.5, 7.0, 100.0]
 

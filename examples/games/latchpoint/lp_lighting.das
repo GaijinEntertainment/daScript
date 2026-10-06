@@ -25,9 +25,8 @@ def storm_flash(time : float; reduced : bool) : float {
         smoothstep(1.1, 1.16, age) * (1.0 - smoothstep(1.25, 1.85, age)) * 0.38)
 }
 
-def yard_wind(time : float) : float2 {
-    return float2(0.55 + sin(time * 0.19) * 0.18, 0.16 + sin(time * 0.31 + 1.4) * 0.12)
-}
+def yard_wind(time : float) : float2 =>
+    float2(0.55 + sin(time * 0.19) * 0.18, 0.16 + sin(time * 0.31 + 1.4) * 0.12)
 
 def hanging_lamp(time : float) : float3 {
     let wind = yard_wind(time)

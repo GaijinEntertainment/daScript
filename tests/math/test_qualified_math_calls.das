@@ -16,9 +16,7 @@ struct Vec2 {
 }
 
 //! the file's own sqrt overload - it is what makes the math:: qualifier necessary on the builtin calls
-def sqrt(v : Vec2) : Vec2 {
-    return Vec2(x = math::sqrt(v.x), y = math::sqrt(v.y))
-}
+def sqrt(v : Vec2) : Vec2 => Vec2(x = math::sqrt(v.x), y = math::sqrt(v.y))
 
 // the operands stay mutable module globals - a literal or a `let` const-folds the call
 // away before any backend sees it

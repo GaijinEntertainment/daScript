@@ -7,27 +7,20 @@ require strings
 // are wrapped in _temp_string_result and ride the 1-slot dispose queue (persistent heap only).
 // Also covers the single-site-per-call soundness rule for the older builder temp marking.
 
-def make_str(x : int) : string {
-    return string(x) // return position - never wrapped
-}
+def make_str(x : int) : string => string(x)  // return position - never wrapped
 
 // [never_inline] pins the propagation path - auto-inline would splice the body and the
 // call site would reclaim via the direct-arg rule instead of the propagated flag
 
 [never_inline]
-def wrap_conv(x : int) : string {
-    return string(x) // every return is a fresh producer -> flag propagates
-}
+def wrap_conv(x : int) : string => string(x)  // every return is a fresh producer -> flag propagates
 
 [never_inline]
-def wrap_pick(c : bool; x : int; y : int) : string {
-    return c ? to_upper("v{x}") : string(y) // ternary of fresh producers qualifies
-}
+def wrap_pick(c : bool; x : int; y : int) : string =>
+    c ? to_upper("v{x}") : string(y)  // ternary of fresh producers qualifies
 
 [never_inline]
-def wrap_pass(s : string) : string {
-    return s // passthrough - must NOT be flagged
-}
+def wrap_pass(s : string) : string => s  // passthrough - must NOT be flagged
 
 [test]
 def test_temp_string_reclaim_flatness(t : T?) {

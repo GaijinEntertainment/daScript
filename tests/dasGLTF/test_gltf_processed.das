@@ -39,10 +39,10 @@ def test_processed_files_preserve_geometry_and_animation(t : T?){
             t |> equal(hash(loaded), hash(cooked), "both containers restore the same asset")
             delete loaded
         }
-        var strides : array<int>
+        var inscope strides : array<int>
         for (mesh in cooked.meshes){for (p in mesh.primitives){
             t |> success(p.stride < 104, "GPU vertices remain compact")
-            var vertices <- processed_vertex_bytes(p)
+            var inscope vertices <- processed_vertex_bytes(p)
             t |> equal(length(vertices), p.vertex_count * p.stride)
             delete vertices
         }}

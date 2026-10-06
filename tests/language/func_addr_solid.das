@@ -10,13 +10,9 @@ require dastest/testing_boost public
 
 typedef SolidFn = function<(a, b : int) : int>
 
-def sa_add(a, b : int) : int {
-    return a + b
-}
+def sa_add(a, b : int) : int => a + b
 
-def sa_handle_of(f : SolidFn) : uint64 {
-    return intptr(f)
-}
+def sa_handle_of(f : SolidFn) : uint64 => intptr(f)
 
 [test]
 def test_solid_context_function_address(t : T?) {

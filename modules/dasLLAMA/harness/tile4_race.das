@@ -239,7 +239,7 @@ def private race(sh : Shape; mr : int64) : int {
     for (arm in range(narms)) {
         poison(y)
         step(arm, p, sh, mr, 0l, 1l, y)
-        var img := y
+        var inscope img := y
         images |> emplace(img)
     }
     var times <- time_rounds(narms, ROUNDS, WARMUP) $(arm : int) {

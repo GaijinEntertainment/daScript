@@ -35,13 +35,10 @@ def mathb {
     mb_out = float4(r + vh.x + vi.x + vf.x + vr.x, 0.0f, 0.0f, 1.0f)
 }
 
-def private mathb_words : array<uint> {
-    return clone_to_move(mathb_spv)
-}
+def private mathb_words : array<uint> => clone_to_move(mathb_spv)
 
-def private has_ext(words : array<uint>; op : GLSLstd450) : bool {
-    return op_has_operand_at(words, SpvOp.ExtInst, 3, uint(op))   // operand 3 = GLSLstd450 instruction literal
-}
+def private has_ext(words : array<uint>; op : GLSLstd450) : bool =>
+    op_has_operand_at(words, SpvOp.ExtInst, 3, uint(op))  // operand 3 = GLSLstd450 instruction literal
 
 [test]
 def test_glsl_std450_breadth_stage2(t : T?) {

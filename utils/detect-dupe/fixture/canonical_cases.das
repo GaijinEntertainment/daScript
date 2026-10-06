@@ -5,28 +5,18 @@ options gen2
 // These three functions differ only in identifier names and parameter
 // types; CanonicalVisitor must collapse them all to the same tag stream
 // (var slots numbered by declaration order; TYP for any concrete type).
-def case_add_baseline(a, b : int) : int {
-    return a + b
-}
+def case_add_baseline(a, b : int) : int => a + b
 
-def case_add_renamed(x, y : int) : int {
-    return x + y
-}
+def case_add_renamed(x, y : int) : int => x + y
 
-def case_add_typed_float(a, b : float) : float {
-    return a + b
-}
+def case_add_typed_float(a, b : float) : float => a + b
 
 
 // ── Literal collapse ──────────────────────────────────────────────────
 // All numeric/string literals collapse to LIT regardless of value.
-def case_lit_one(a : int) : int {
-    return a + 1
-}
+def case_lit_one(a : int) : int => a + 1
 
-def case_lit_big(a : int) : int {
-    return a + 999
-}
+def case_lit_big(a : int) : int => a + 999
 
 
 // ── Call-name preservation ────────────────────────────────────────────
@@ -46,15 +36,11 @@ struct CanonField {
     value : int
 }
 
-def case_field_read(s : CanonField) : int {
-    return s.value
-}
+def case_field_read(s : CanonField) : int => s.value
 
 
 // ── Swizzle (.SWZ) ────────────────────────────────────────────────────
-def case_swizzle(v : float4) : float2 {
-    return v.xy
-}
+def case_swizzle(v : float4) : float2 => v.xy
 
 
 // ── While vs for ──────────────────────────────────────────────────────

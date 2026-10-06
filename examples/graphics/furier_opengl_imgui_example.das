@@ -38,13 +38,9 @@ def angle(c : float2) {
     return atan2(C.y, C.x)
 }
 
-def format_angle(c : float2) : string {
-    return fmt(":.2f", angle(c) / PI) + "*PI"
-}
+def format_angle(c : float2) : string => fmt(":.2f", angle(c) / PI) + "*PI"
 
-def format_length(c : float2) : string {
-    return fmt(":.2f", length(c))
-}
+def format_length(c : float2) : string => fmt(":.2f", length(c))
 
 def edit_coefficients_window() {
     window(SETUP_WIN, (text = "Setup vectors and circles", closable = false,
@@ -277,13 +273,9 @@ def create_gl_objects {
     }
 }
 
-def mul_complex(a, b : float2) {
-    return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x)
-}
+def mul_complex(a, b : float2) => float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x)
 
-def rot_complex(phi : float) {
-    return float2(cos(phi), sin(phi))
-}
+def rot_complex(phi : float) => float2(cos(phi), sin(phi))
 
 def compute_fn(t : float) {
     let p0 = c0

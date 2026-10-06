@@ -204,8 +204,7 @@ def private ctor_fuse_same_op(var that : ExprCall?; d : int) : ExpressionPtr {
         }
     }
     if (sameOp == "") return null
-    var aN : ExpressionPtr
-    var bN : ExpressionPtr
+    var aN, bN : ExpressionPtr
     let ka = vectorize_side(that, d, true, aN)
     let kb = vectorize_side(that, d, false, bN)
     if (ka != SIDE_COMPONENT && kb != SIDE_COMPONENT) return null
@@ -315,8 +314,7 @@ def private majority_factor(laneC : array<float>; laneE : array<ExpressionPtr>; 
 }
 
 def private ctor_fuse_majority_const(var that : ExprCall?; d : int) : ExpressionPtr {
-    var laneC : array<float>
-    var laneV : array<float>
+    var laneC, laneV : array<float>
     var laneE : array<ExpressionPtr>
     lane_const_factors(that, d, laneC, laneV, laneE)
     var bestC = 0.0
@@ -555,9 +553,7 @@ class private CtorFuseVisitor : AstVisitor {
 class private MadFuseVisitor : AstVisitor {
     changed : bool
     def override visitExprOp2(var that : ExprOp2?) : ExpressionPtr {
-        var ma : ExpressionPtr
-        var mb : ExpressionPtr
-        var mc : ExpressionPtr
+        var ma, mb, mc : ExpressionPtr
         if (match_mad(that, ma, mb, mc)) {
             changed = true
             var cll = new ExprCall(at = that.at, name := "mad")
@@ -566,8 +562,7 @@ class private MadFuseVisitor : AstVisitor {
             emplace(cll.arguments, mc)
             return cll
         }
-        var pos : ExpressionPtr
-        var neg : ExpressionPtr
+        var pos, neg : ExpressionPtr
         if (match_neg_add(that, pos, neg)) {
             changed = true
             return new ExprOp2(at = that.at, op := "-", left = pos, right = neg)
@@ -579,9 +574,7 @@ class private MadFuseVisitor : AstVisitor {
 class private LerpFuseVisitor : AstVisitor {
     changed : bool
     def override visitExprCall(var that : ExprCall?) : ExpressionPtr {
-        var la : ExpressionPtr
-        var lb : ExpressionPtr
-        var lt : ExpressionPtr
+        var la, lb, lt : ExpressionPtr
         if (match_lerp(that, la, lb, lt)) {
             changed = true
             var cll = new ExprCall(at = that.at, name := "lerp")
@@ -669,9 +662,8 @@ def private has_unary_vec_overload(mod : Module?; fname : string; want : Type) :
     return found
 }
 
-def private float_vec_type(dim : int) : Type {
-    return dim == 2 ? Type.tFloat2 : (dim == 3 ? Type.tFloat3 : Type.tFloat4)
-}
+def private float_vec_type(dim : int) : Type =>
+    dim == 2 ? Type.tFloat2 : (dim == 3 ? Type.tFloat3 : Type.tFloat4)
 
 def private make_hadd_arg(var lanes : array<ExpressionPtr>; w : int; at : LineInfo; mod : Module?) : ExpressionPtr {
     let g = shared_elementwise_unary(lanes)
@@ -722,8 +714,7 @@ def private make_reduce_group_call(var terms : array<ReTerm>; cand : array<int>;
         }
     }
     if (weighted) {
-        var scalars : array<ExpressionPtr>
-        var weights : array<ExpressionPtr>
+        var scalars, weights : array<ExpressionPtr>
         scalars |> reserve(w)
         weights |> reserve(w)
         for (li in range(w)) {
@@ -906,23 +897,18 @@ class public FuseResidualVisitor : AstVisitor {
         if (!checkMad) {
             return
         }
-        var ma : ExpressionPtr
-        var mb : ExpressionPtr
-        var mc : ExpressionPtr
+        var ma, mb, mc : ExpressionPtr
         if (match_mad(expr, ma, mb, mc)) {
             foundMad = true
         }
-        var pos : ExpressionPtr
-        var neg : ExpressionPtr
+        var pos, neg : ExpressionPtr
         if (match_neg_add(expr, pos, neg)) {
             foundNegAdd = true
         }
     }
     def override preVisitExprCall(var expr : ExprCall?) : void {
         if (checkLerp) {
-            var la : ExpressionPtr
-            var lb : ExpressionPtr
-            var lt : ExpressionPtr
+            var la, lb, lt : ExpressionPtr
             if (match_lerp(expr, la, lb, lt)) {
                 foundLerp = true
             }

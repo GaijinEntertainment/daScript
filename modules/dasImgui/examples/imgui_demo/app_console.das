@@ -119,9 +119,7 @@ def private exec_command(cmd : string) {
 // InputText callback — TAB completion + Up/Down history
 // =============================================================================
 
-def private is_word_sep(c : int) : bool {
-    return c == ' ' || c == '\t' || c == ',' || c == ';'
-}
+def private is_word_sep(c : int) : bool => c == ' ' || c == '\t' || c == ',' || c == ';'
 
 def private text_edit_callback(var data : ImGuiInputTextCallbackData) : int {
     if (data.EventFlag == ImGuiInputTextFlags.CallbackCompletion) {

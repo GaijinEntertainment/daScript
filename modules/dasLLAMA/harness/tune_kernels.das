@@ -277,9 +277,8 @@ def private size_windows(ok : array<bool>) {
     }
 }
 
-def private row_median(i : int) : double {
-    return (length(g_samples) > i && !empty(g_samples[i])) ? tune_median(g_samples[i]) : 0.0lf
-}
+def private row_median(i : int) : double =>
+    (length(g_samples) > i && !empty(g_samples[i])) ? tune_median(g_samples[i]) : 0.0lf
 
 // after the screen: the finalists are the rows whose screen median beats the shipped fallback
 // by the margin AND sit within that band of the best such row — the best and its twins, the
@@ -653,29 +652,22 @@ def private race_variants(vs : array<auto>; gate : block<(i : int) : bool>; befo
 }
 
 def private race_variants(vs : array<auto>; gate : block<(i : int) : bool>; window : block<(i : int) : void>;
-                          round_end : block<() : void>) : RaceRows {
-    return <- race_variants(vs, gate, $(_i : int) {}, window, round_end)
-}
+                          round_end : block<() : void>) : RaceRows =>
+                              <- race_variants(vs, gate, $(_i : int) {}, window, round_end)
 
-def private race_variants(vs : array<auto>; gate : block<(i : int) : bool>; window : block<(i : int) : void>) : RaceRows {
-    return <- race_variants(vs, gate, $(_i : int) {}, window, $ {})
-}
+def private race_variants(vs : array<auto>; gate : block<(i : int) : bool>; window : block<(i : int) : void>) : RaceRows =>
+    <- race_variants(vs, gate, $(_i : int) {}, window, $ {})
 
-def private report(kernel : string; rows : RaceRows) : string {
-    return report(kernel, rows.names, rows.best, rows.ok)
-}
+def private report(kernel : string; rows : RaceRows) : string =>
+    report(kernel, rows.names, rows.best, rows.ok)
 
 //! the relative error an f64-reference gate holds a variant's output to (TOL)
-def private rel_err(got, want : double) : double {
-    return abs(got - want) / (abs(want) + 1.0lf)
-}
+def private rel_err(got, want : double) : double => abs(got - want) / (abs(want) + 1.0lf)
 
 let REL_INF = uint64_bits_to_double(0x7ff0000000000000ul)   //! a NaN error reads as +infinity: it fails the bar and no later finite error replaces it
 
 //! the running worst of `maxrel` and `rel`, a NaN `rel` sticky as +infinity
-def private worst_rel(maxrel, rel : double) : double {
-    return is_nan(rel) ? REL_INF : max(maxrel, rel)
-}
+def private worst_rel(maxrel, rel : double) : double => is_nan(rel) ? REL_INF : max(maxrel, rel)
 
 //! a use of a race's accumulated result, so the timed calls are not dead code
 def private keep_live(sink : float) {
@@ -701,9 +693,7 @@ def ref_dot(a : float const?; b : float const?; n : int64) : double {
 let DOT_WALK_ROWS = 8192l
 
 def bench_dot() : string {
-    var inscope w : array<float>
-    var inscope x : array<float>
-    var inscope o : array<float>
+    var inscope w, x, o : array<float>
     w |> reserve_resize(DOT_WALK_ROWS * N)   // 128 MB — DRAM-streaming, like a decode GEMV
     x |> resize(N)
     o |> resize(DOT_WALK_ROWS)
@@ -754,8 +744,7 @@ def bench_binary(kernel : string; vs : array<tuple<string; BinFn>>;
                  d0 : array<float>; s : array<float>; ref_elem : function<(a : float; b : float) : double>) : string {
     // both streams on pinned, distinct-offset bases: the same set geometry on every race, every
     // run, every box - a per-process allocator roll once read the fallback row 23% slow here
-    var inscope db : array<float>
-    var inscope sb : array<float>
+    var inscope db, sb : array<float>
     var dp = aligned_stream(db, N, 0)
     var sp = aligned_stream(sb, N, 1)
     for (j in range64(N)) {
@@ -791,8 +780,7 @@ def bench_binary(kernel : string; vs : array<tuple<string; BinFn>>;
 
 // add / mul / copy share the (var d, s) signature - one bench, per-kernel data + reference
 def bench_add_inplace() : string {
-    var d0 : array<float>
-    var s : array<float>
+    var d0, s : array<float>
     d0 |> resize(N)
     s |> resize(N)
     for (i in range64(N)) {
@@ -804,8 +792,7 @@ def bench_add_inplace() : string {
 }
 
 def bench_mul_inplace() : string {
-    var d0 : array<float>
-    var s : array<float>
+    var d0, s : array<float>
     d0 |> resize(N)
     s |> resize(N)
     for (i in range64(N)) {
@@ -817,8 +804,7 @@ def bench_mul_inplace() : string {
 }
 
 def bench_copy_floats() : string {
-    var d0 : array<float>
-    var s : array<float>
+    var d0, s : array<float>
     d0 |> resize(N)
     s |> resize(N)
     for (i in range64(N)) {
@@ -865,9 +851,7 @@ def private bench_axpy_rows(kernel : string; vs : array<auto>; var d : array<flo
 
 def bench_axpy() : string {
     let vs <- axpy_template_variants()
-    var inscope d0 : array<float>
-    var inscope s : array<float>
-    var inscope d : array<float>
+    var inscope d0, s, d : array<float>
     d0 |> resize(N)
     s |> resize(N)
     d |> resize(N)
@@ -996,8 +980,7 @@ def bench_cvt_f16_to_f32() : string {
 def bench_scale() : string {
     let vs <- scale_inplace_template_variants()
     let scale = 1.0001f   // near 1.0 so scale^REPS stays in normal float range with per-block reset
-    var inscope d0 : array<float>
-    var inscope d : array<float>
+    var inscope d0, d : array<float>
     d0 |> resize(N)
     d |> resize(N)
     for (i in range64(N)) {
@@ -1035,8 +1018,7 @@ def bench_scale() : string {
 
 def bench_softmax() : string {
     let vs <- softmax_template_variants()
-    var inscope d0 : array<float>
-    var inscope d : array<float>
+    var inscope d0, d : array<float>
     d0 |> resize(N)
     d |> resize(N)
     for (i in range64(N)) {
@@ -1088,9 +1070,7 @@ def bench_softmax() : string {
 def bench_rmsnorm() : string {
     let vs <- rmsnorm_template_variants()
     let eps = 1.0e-5f
-    var inscope x : array<float>
-    var inscope w : array<float>
-    var inscope o : array<float>
+    var inscope x, w, o : array<float>
     var xp = aligned_f32(x, N)
     var wp = aligned_f32(w, N)
     var op = aligned_f32(o, N)
@@ -1133,8 +1113,7 @@ def bench_rmsnorm() : string {
 
 def bench_dot_q4() : string {
     let vs <- dot_q4_template_variants()
-    var inscope wf : array<float>
-    var inscope x : array<float>
+    var inscope wf, x : array<float>
     wf |> resize(N)
     x |> resize(N)
     for (i in range64(N)) {
@@ -1274,8 +1253,7 @@ def private q8kv_elem(row : array<uint8>; i : int64) : double {
 }
 
 def bench_dot_q8kv() : string {
-    var inscope a : array<float>
-    var inscope wf : array<float>
+    var inscope a, wf : array<float>
     var inscope row : array<uint8>
     a |> resize(N)
     wf |> resize(N)
@@ -1308,8 +1286,7 @@ def bench_dot_q8kv() : string {
 }
 
 def bench_dot_q8q8kv() : string {
-    var inscope xf : array<float>
-    var inscope wf : array<float>
+    var inscope xf, wf : array<float>
     var inscope row : array<uint8>
     xf |> resize(N)
     wf |> resize(N)
@@ -1351,8 +1328,7 @@ def bench_dot_q8q8kv() : string {
 
 def bench_axpy_q8kv() : string {
     let vs <- axpy_q8kv_template_variants()
-    var inscope d0 : array<float>
-    var inscope wf : array<float>
+    var inscope d0, wf : array<float>
     var inscope row : array<uint8>
     var inscope d : array<float>
     d0 |> resize(N)
@@ -1408,8 +1384,7 @@ def bench_cvt_q8kv_to_f32() : string {
 def bench_quantize_q8kv_row() : string {
     let vs <- quantize_q8kv_row_template_variants()
     var inscope src : array<float>
-    var inscope ref_row : array<uint8>
-    var inscope d : array<uint8>
+    var inscope ref_row, d : array<uint8>
     src |> resize(N)
     for (i in range64(N)) {
         src[i] = 300.0f * sin(float(i) * 0.11f)
@@ -1449,8 +1424,7 @@ def bench_quantize_q8kv_row() : string {
 def bench_dot_mx4q8() : string {
     let vs <- dot_mx4q8_template_variants()
     let nb = N / 32l
-    var inscope wn : array<uint8>
-    var inscope we : array<uint8>
+    var inscope wn, we : array<uint8>
     wn |> resize(N / 2l)
     we |> resize(nb)
     for (i in range64(N / 2l)) {
@@ -1623,15 +1597,13 @@ def bench_rope_tab() : string {
     let vs <- rope_scaled_neox_tab_template_variants()
     let head_size = 64l
     let half = head_size / 2l
-    var inscope v0 : array<float>
-    var inscope v : array<float>
+    var inscope v0, v : array<float>
     v0 |> resize(N)
     v |> resize(N)
     for (i in range64(N)) {
         v0[i] = sin(float(i) * 0.1f)
     }
-    var inscope cosr : array<float>
-    var inscope sinr : array<float>
+    var inscope cosr, sinr : array<float>
     cosr |> resize(half)
     sinr |> resize(half)
     for (j in range64(half)) {
@@ -1684,9 +1656,7 @@ def bench_gemm_tile() : string {
     let vs <- gemm_f32_uk_4x16_template_variants()
     let K = 256l
     let NN = 16l   // C/B row stride == tile width, so the 4×16 tile is the whole C
-    var inscope a : array<float>
-    var inscope b : array<float>
-    var inscope c : array<float>
+    var inscope a, b, c : array<float>
     var ap = aligned_f32(a, 4l * K)
     var bp = aligned_f32(b, K * NN)
     var cp = aligned_f32(c, 4l * NN)

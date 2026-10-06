@@ -38,9 +38,8 @@ def private shared_artifact(stem : string) : string {
 }
 
 
-def private static_artifact(stem : string) : string {
-    return get_platform_name() == "windows" ? "{stem}.lib" : "{stem}.a"
-}
+def private static_artifact(stem : string) : string =>
+    get_platform_name() == "windows" ? "{stem}.lib" : "{stem}.a"
 
 
 def private build_lib(bin, source, stem, flags, jit_flags : string; var lines : array<string>) : int {

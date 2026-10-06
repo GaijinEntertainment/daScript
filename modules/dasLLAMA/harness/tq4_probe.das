@@ -122,8 +122,7 @@ def compute_lloyd16 : array<float> {
     let NG = 160001
     let X0 = -8.0lf
     let DX = 16.0lf / double(NG - 1)
-    var xs : array<double>
-    var ws : array<double>
+    var xs, ws : array<double>
     xs |> resize(NG)
     ws |> resize(NG)
     for (i in range(NG)) {
@@ -133,8 +132,7 @@ def compute_lloyd16 : array<float> {
     }
     var c <- [for (k in range(16)); -3.0lf + 6.0lf * (double(k) + 0.5lf) / 16.0lf]
     for (_it in range(2000)) {
-        var wsum : double[16]
-        var xsum : double[16]
+        var wsum, xsum : double[16]
         var cell = 0
         for (i in range(NG)) {
             let x = xs[i]
@@ -209,10 +207,7 @@ def run_model(name : string; outliers : bool; cb : array<float>; signs : array<f
     // configs: 0 = direct uniform, 1 = direct lloyd, 2 = rot uniform, 3 = rot lloyd
     var acc : Acc[4]
     var seed = 0x12345u
-    var k : array<float>
-    var q : array<float>
-    var work : array<float>
-    var dq : array<float>
+    var k, q, work, dq : array<float>
     k |> resize(HEAD_DIM)
     q |> resize(HEAD_DIM)
     work |> resize(HEAD_DIM)
@@ -291,8 +286,7 @@ def main {
     // FWHT identities
     {
         var seed = 777u
-        var x : array<float>
-        var y : array<float>
+        var x, y : array<float>
         x |> resize(HEAD_DIM)
         y |> resize(HEAD_DIM)
         gen_row(x, seed, true)

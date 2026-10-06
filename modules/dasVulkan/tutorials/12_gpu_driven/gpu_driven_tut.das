@@ -142,9 +142,7 @@ def public god_view_proj() : float4x4 {
 //! the wall slab model matrix for a given X (animated viewers sweep `wall_x`; the oracle pins it). Wide
 //! enough (half-width 2) that whole columns of the field sit fully behind it: the conservative max-
 //! downsampled HZB culls only a cube whose ENTIRE footprint is covered, so an edge-thin wall never would.
-def public wall_model(wall_x : float) : float4x4 {
-    return model_ts(wall_x, 0.0, 2.5, 3.2, 16.0, 0.5)
-}
+def public wall_model(wall_x : float) : float4x4 => model_ts(wall_x, 0.0, 2.5, 3.2, 16.0, 0.5)
 
 //! World center of instance `i` -- the single source of truth shared by the instance-buffer builder
 //! and the oracle (so the test projects the exact cubes the GPU placed).
@@ -169,9 +167,7 @@ def public project_panel(vp : float4x4; world : float3; p : int) : int2 {
 // ===== instance scene =====
 
 //! float bit pattern as uint, for packing the std430 instance buffer.
-def private f2u(f : float) : uint {
-    return unsafe(reinterpret<uint>(f))
-}
+def private f2u(f : float) : uint => unsafe(reinterpret<uint>(f))
 
 //! Build the N_INSTANCES x 8-word (32-byte) std430 instance buffer: a GRID_N x GRID_N field of cubes
 //! spread in X/Y at a depth behind the wall, with a gentle per-cube Z ripple so the field is not a
@@ -642,9 +638,8 @@ def private build_color_pipeline(device : Device; rp : RenderPass; layout : Pipe
 }
 
 //! cube vertex-input (pos + normal + uv) shared by main + god pipelines.
-def private cube_vbindings() : array<VkVertexInputBindingDescription> {
-    return <- [VkVertexInputBindingDescription(binding = 0u, stride = VERT_STRIDE, inputRate = VkVertexInputRate.VERTEX)]
-}
+def private cube_vbindings() : array<VkVertexInputBindingDescription> =>
+    <- [VkVertexInputBindingDescription(binding = 0u, stride = VERT_STRIDE, inputRate = VkVertexInputRate.VERTEX)]
 def private cube_vattrs() : array<VkVertexInputAttributeDescription> {
     return <- [
         VkVertexInputAttributeDescription(location = 0u, binding = 0u, format = VkFormat.R32G32B32_SFLOAT, offset = 0u),
@@ -653,12 +648,10 @@ def private cube_vattrs() : array<VkVertexInputAttributeDescription> {
     ]
 }
 //! occluder vertex-input (position only; occluder_vs ignores normal/uv).
-def private occ_vbindings() : array<VkVertexInputBindingDescription> {
-    return <- [VkVertexInputBindingDescription(binding = 0u, stride = VERT_STRIDE, inputRate = VkVertexInputRate.VERTEX)]
-}
-def private occ_vattrs() : array<VkVertexInputAttributeDescription> {
-    return <- [VkVertexInputAttributeDescription(location = 0u, binding = 0u, format = VkFormat.R32G32B32_SFLOAT, offset = 0u)]
-}
+def private occ_vbindings() : array<VkVertexInputBindingDescription> =>
+    <- [VkVertexInputBindingDescription(binding = 0u, stride = VERT_STRIDE, inputRate = VkVertexInputRate.VERTEX)]
+def private occ_vattrs() : array<VkVertexInputAttributeDescription> =>
+    <- [VkVertexInputAttributeDescription(location = 0u, binding = 0u, format = VkFormat.R32G32B32_SFLOAT, offset = 0u)]
 
 // ===== resources =====
 

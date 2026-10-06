@@ -41,33 +41,16 @@ class SourceAdapter {
     def abstract element_type() : TypeDeclPtr
     def abstract wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression?
     def abstract wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression?
-    def can_reserve_by_length() : bool {
-        return false
-    }
-    def has_own_loop_or_count_lane() : bool {
-        return false
-    }
-    def const can_group_by() : bool {
-        return false
-    }
-    def const can_join() : bool {
-        return false
-    }
-    def supports_direct_return() : bool {
-        return false
-    }
-    def effective_dispatch(base : LoopDispatch) : LoopDispatch {
-        return base
-    }
-    def name_prefix() : string {
-        return ""
-    }
-    def emit_loop_or_count(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
-        return null
-    }
-    def emit_reverse_skip_into_tail(var takeArg : Expression?; isIter : bool; var termLam : Expression?; termElemType : TypeDeclPtr; at : LineInfo) : Expression? {
-        return null
-    }
+    def can_reserve_by_length() : bool => false
+    def has_own_loop_or_count_lane() : bool => false
+    def const can_group_by() : bool => false
+    def const can_join() : bool => false
+    def supports_direct_return() : bool => false
+    def effective_dispatch(base : LoopDispatch) : LoopDispatch => base
+    def name_prefix() : string => ""
+    def emit_loop_or_count(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? => null
+    def emit_reverse_skip_into_tail(var takeArg : Expression?; isIter : bool; var termLam : Expression?; termElemType : TypeDeclPtr; at : LineInfo) : Expression? =>
+        null
     // nolint:STYLE014 — No-predicate `last` / `reverse |> first`: a backward-walking source returns the
     // last element in ONE step. Only for the no-where case — a predicated last scans backward to unknown
     // depth, and reverse DOM traversal is ~2x cache-hostile per node (profiled), so predicated last keeps
@@ -75,39 +58,20 @@ class SourceAdapter {
     // termSelLam = raw post-reverse _select / null; defaultExpr non-null = *_or_default / null = panic.
     def emit_reverse_last_backward(bindName : string; var valueExpr : Expression?; var termSelLam : Expression?;
                                    var defaultExpr : Expression?; rowType : TypeDeclPtr;
-                                   outElemType : TypeDeclPtr; at : LineInfo) : Expression? {
-        return null
-    }
-    def emit_distinct_take_loop(bindName : string; takenName : string; takeLimName : string; var perElement : Expression?; at : LineInfo) : Expression? {
-        return null
-    }
-    def build_group_by_adapter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : SourceAdapter? {
-        return null
-    }
-    def emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
-        return null
-    }
-    def const defers_materialization() : bool {
-        return false
-    }
-    def handle_type() : TypeDeclPtr {
-        return null
-    }
-    def current_handle_expr(at : LineInfo) : Expression? {
-        return null
-    }
-    def materialize_handle(var handleExpr : Expression?; outBind : string; at : LineInfo) : Expression? {
-        return null
-    }
-    def count_shortcut(opName : string; at : LineInfo) : Expression? {
-        return null
-    }
-    def loop_source_expr() : Expression? {
-        return null
-    }
-    def loop_source_name() : string {
-        return ""
-    }
+                                   outElemType : TypeDeclPtr; at : LineInfo) : Expression? => null
+    def emit_distinct_take_loop(bindName : string; takenName : string; takeLimName : string; var perElement : Expression?; at : LineInfo) : Expression? =>
+        null
+    def build_group_by_adapter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : SourceAdapter? =>
+        null
+    def emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? => null
+    def const defers_materialization() : bool => false
+    def handle_type() : TypeDeclPtr => null
+    def current_handle_expr(at : LineInfo) : Expression? => null
+    def materialize_handle(var handleExpr : Expression?; outBind : string; at : LineInfo) : Expression? =>
+        null
+    def count_shortcut(opName : string; at : LineInfo) : Expression? => null
+    def loop_source_expr() : Expression? => null
+    def loop_source_name() : string => ""
     def invoke_param_type() : TypeDeclPtr {
         var top = loop_source_expr()
         return top != null ? invoke_src_param_type(top) : null
@@ -119,18 +83,10 @@ class ProjectedSourceAdapter : SourceAdapter {
     selectLam : Expression?
     projType  : TypeDeclPtr
     projName  : string
-    def override name_prefix() : string {
-        return inner->name_prefix()
-    }
-    def override bind_name(at : LineInfo) : string {
-        return projName
-    }
-    def override supports_direct_return() : bool {
-        return inner->supports_direct_return()
-    }
-    def override element_type() : TypeDeclPtr {
-        return clone_type(projType)
-    }
+    def override name_prefix() : string => inner->name_prefix()
+    def override bind_name(at : LineInfo) : string => projName
+    def override supports_direct_return() : bool => inner->supports_direct_return()
+    def override element_type() : TypeDeclPtr => clone_type(projType)
     def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         let innerBind = inner->bind_name(at)
         var projExpr = peel_lambda_rename_var(selectLam, innerBind)
@@ -141,9 +97,8 @@ class ProjectedSourceAdapter : SourceAdapter {
         }
         return inner->wrap_source_loop(loopShape, newBody, at)
     }
-    def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
-        return inner->wrap_invoke(stmts, retType, wrapIter, at)
-    }
+    def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? =>
+        inner->wrap_invoke(stmts, retType, wrapIter, at)
 }
 
 class RowUsageScanner : AstVisitor {
@@ -321,25 +276,14 @@ struct SplicePattern {
     emit     : EmitFn
 }
 
-def m_literal(s : string) : SlotMatcher {
-    return SlotMatcher(literal = s)
-}
-def m_alias(s : string) : SlotMatcher {
-    return SlotMatcher(alias = s)
-}
-def c_one() : SlotCardinality {
-    return SlotCardinality(one = null)
-}
-def c_opt() : SlotCardinality {
-    return SlotCardinality(optional = null)
-}
-def c_chain() : SlotCardinality {
-    return SlotCardinality(chain = null)
-}
+def m_literal(s : string) : SlotMatcher => SlotMatcher(literal = s)
+def m_alias(s : string) : SlotMatcher => SlotMatcher(alias = s)
+def c_one() : SlotCardinality => SlotCardinality(one = null)
+def c_opt() : SlotCardinality => SlotCardinality(optional = null)
+def c_chain() : SlotCardinality => SlotCardinality(chain = null)
 
-def slot_chain_of(var names : array<string>; cap : string) : Slot {
-    return Slot(matcher = SlotMatcher(one_of <- names), cardinality = c_chain(), capture_name = cap)
-}
+def slot_chain_of(var names : array<string>; cap : string) : Slot =>
+    Slot(matcher = SlotMatcher(one_of <- names), cardinality = c_chain(), capture_name = cap)
 
 def slot_matchers_equal(a : SlotMatcher; b : SlotMatcher) : bool {
     if (a is literal && b is literal) return (a as literal) == (b as literal)
@@ -484,23 +428,19 @@ def match_pattern(p : SplicePattern;
 }
 
 [unused_argument(c, src)]
-def array_source(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
-    return top != null && top._type != null && (top._type.isGoodArrayType || top._type.isArray)
-}
+def array_source(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool =>
+    top != null && top._type != null && (top._type.isGoodArrayType || top._type.isArray)
 
-def non_array_source(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
-    return !array_source(c, top, src)
-}
+def non_array_source(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool =>
+    !array_source(c, top, src)
 
 [unused_argument(c, top)]
-def can_join_source(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
-    return src != null && src->can_join()
-}
+def can_join_source(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool =>
+    src != null && src->can_join()
 
 [unused_argument(c, top)]
-def can_group_by_source(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
-    return src != null && src->can_group_by()
-}
+def can_group_by_source(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool =>
+    src != null && src->can_group_by()
 
 [unused_argument(top, src)]
 def take_arg_is_int(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
@@ -511,9 +451,8 @@ def take_arg_is_int(var c : Captures; var top : Expression?; src : SourceAdapter
 }
 
 [unused_argument(top, src)]
-def no_terminator(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
-    return !(c.single |> key_exists("term"))
-}
+def no_terminator(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool =>
+    !(c.single |> key_exists("term"))
 
 [unused_argument(top, src)]
 def inline_cmp_available(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
@@ -527,9 +466,8 @@ def inline_cmp_available(var c : Captures; var top : Expression?; src : SourceAd
 }
 
 [unused_argument(top, src)]
-def has_where_or_distinct(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
-    return (c.single |> key_exists("where")) || (c.single |> key_exists("distinct"))
-}
+def has_where_or_distinct(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool =>
+    (c.single |> key_exists("where")) || (c.single |> key_exists("distinct"))
 
 [unused_argument(top, src)]
 def decs_join_invariants(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
@@ -549,14 +487,12 @@ def srcb_is_array_shaped(var c : Captures; captureName : string) : bool {
 }
 
 [unused_argument(top, src)]
-def no_order_with_count(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
-    return !((c.single |> key_exists("trailing_order")) && (c.single |> key_exists("term")))
-}
+def no_order_with_count(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool =>
+    !((c.single |> key_exists("trailing_order")) && (c.single |> key_exists("term")))
 
 [unused_argument(top, src)]
-def join_no_select_with_count(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
-    return !((c.single |> key_exists("trailing_select")) && (c.single |> key_exists("term")))
-}
+def join_no_select_with_count(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool =>
+    !((c.single |> key_exists("trailing_select")) && (c.single |> key_exists("term")))
 
 [unused_argument(top, src)]
 def zip_arity_2_or_3(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
@@ -1423,9 +1359,8 @@ def strip_const_ref(var t : TypeDeclPtr) : TypeDeclPtr {
 }
 
 [macro_function]
-def mut_result_type(projection : Expression?; elementType : TypeDeclPtr) : TypeDeclPtr {
-    return strip_const_ref(clone_type(projection != null ? projection._type : elementType))
-}
+def mut_result_type(projection : Expression?; elementType : TypeDeclPtr) : TypeDeclPtr =>
+    strip_const_ref(clone_type(projection != null ? projection._type : elementType))
 
 [macro_function, unused_argument(itName)]
 def emit_counter_lane(var adapter : SourceAdapter?; accName, itName : string; names : RangeStateNames;
@@ -1590,8 +1525,7 @@ def emit_min_max_family_lane(
     let totName = qn("mmtot", at)
     let cntName = qn("mmcnt", at)
     let firstName = qn("mmfirst", at)
-    var minCmp : Expression?
-    var maxCmp : Expression?
+    var minCmp, maxCmp : Expression?
     if (isBy) {
         var keyVal = peel_lambda_replace_var(keyLam, qmacro($i(valName)))
         var keyMin = peel_lambda_replace_var(keyLam, qmacro($i(minName)))
@@ -1770,8 +1704,7 @@ def emit_early_exit_lane(
         }
         valueName = projBindName
     }
-    var preludeStmts : array<Expression?>
-    var tailStmts : array<Expression?>
+    var preludeStmts, tailStmts : array<Expression?>
     let directReturn = (adapter == null || adapter->supports_direct_return())
     var dispatch = directReturn ? LoopDispatch(Each = null) : adapter->effective_dispatch(LoopDispatch(Each = null))
     if (opName == "first") {
@@ -2279,11 +2212,8 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
     if (lane == LinqLane.UNKNOWN) return null
     let counting = lane == LinqLane.COUNTER || (lane == LinqLane.ACCUMULATOR && lastName == "long_count")
     if (top._type == null || top._type.firstType == null) return null
-    var whereCond : Expression?
-    var postTakeWhereCond : Expression?
-    var projection : Expression?
-    var intermediateBinds : array<Expression?>
-    var preCondStmts : array<Expression?>
+    var whereCond, postTakeWhereCond, projection : Expression?
+    var intermediateBinds, preCondStmts : array<Expression?>
     var seenSelect = false
     var allProjectionsPure = true
     var elementType = clone_type(top._type.firstType)
@@ -2339,10 +2269,7 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
     if (projection != null && has_sideeffects(projection)) {
         allProjectionsPure = false
     }
-    var skipExpr : Expression?
-    var skipWhileCond : Expression?
-    var takeWhileCond : Expression?
-    var takeExpr : Expression?
+    var skipExpr, skipWhileCond, takeWhileCond, takeExpr : Expression?
     if (c.single |> key_exists("skip")) {
         var skipArg = c.single["skip"].arguments[1]
         if (skipArg == null || skipArg._type == null || skipArg._type.baseType != Type.tInt) return null
@@ -2720,9 +2647,8 @@ def make_inline_less_call(orderKey : Expression?; orderName : string;
 
 
 [macro_function]
-def private renamed_key_clone(body : Expression?; argName, newName : string) : Expression? {
-    return clone_and_rename_var(body, argName, newName)
-}
+def private renamed_key_clone(body : Expression?; argName, newName : string) : Expression? =>
+    clone_and_rename_var(body, argName, newName)
 
 [macro_function, unused_argument(elemType, at)]
 def try_make_inline_cmp_keys(orderKey : Expression?; descMask : uint;
@@ -2982,8 +2908,7 @@ def emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Exp
             var dRet = (oc.selectLam != null
                 ? peel_lambda_replace_var(oc.selectLam, qmacro($i(matItName)))
                 : qmacro($i(matItName)))
-            var dPrologue : array<Expression?>
-            var dTail : array<Expression?>
+            var dPrologue, dTail : array<Expression?>
             if (oc.firstName == "first") {
                 dPrologue |> push_from <| qmacro_block_to_array() {
                     var $i(bestKeyName) = default<$t(keyType)>
@@ -3043,8 +2968,7 @@ def emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Exp
         }
     }
     var outElemType = (oc.selectLam != null) ? oc.selectElemType : elemType
-    var prologue : array<Expression?>
-    var tailStmts : array<Expression?>
+    var prologue, tailStmts : array<Expression?>
     if (oc.firstName == "first") {
         var firstRetExpr : Expression?
         if (oc.selectLam != null) {
@@ -3062,8 +2986,7 @@ def emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Exp
         }
     } else {
         let dBindName = qn("order_d", at)
-        var bestRetExpr : Expression?
-        var dRetExpr : Expression?
+        var bestRetExpr, dRetExpr : Expression?
         if (oc.selectLam != null) {
             bestRetExpr = peel_lambda_replace_var(oc.selectLam, qmacro($i(bestName)))
             dRetExpr = peel_lambda_replace_var(oc.selectLam, qmacro($i(dBindName)))
@@ -3148,8 +3071,7 @@ def emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expr
     var rowType = clone_type(oc.orderElemType)
 
     var deferred = ctx.src->defers_materialization() && oc.hasKey
-    var keyType : TypeDeclPtr
-    var handleType : TypeDeclPtr
+    var keyType, handleType : TypeDeclPtr
     var keyBody : Expression?
     if (deferred) {
         keyType = (oc.orderKey != null && oc.orderKey._type != null) ? strip_const_ref(clone_type(oc.orderKey._type.firstType)) : null
@@ -3162,8 +3084,7 @@ def emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expr
 
     var laneBufType : TypeDeclPtr
     var perElementPush : Expression?
-    var postBufDeclStmts : array<Expression?>
-    var tailStmts : array<Expression?>
+    var postBufDeclStmts, tailStmts : array<Expression?>
 
     if (deferred) {
         laneBufType = build_surrogate_type(keyType, handleType, at)
@@ -3281,8 +3202,7 @@ def emit_buffer_helper_dispatch(var c : Captures; var ctx : EmitCtx; at : LineIn
     let topNName = order_top_n_call_name(oc.orderName)
     let minMaxName = order_min_call_name(oc.orderName, oc.hasKey)
     let needIterWrap = ctx.expr_is_iterator
-    var emission : Expression?
-    var firstCount : Expression?
+    var emission, firstCount : Expression?
     if (oc.firstName != "") {
         firstCount = oc.takeExpr != null ? qmacro(($e(oc.takeExpr) > 0 ? 1 : 0)) : qmacro(1)
     }
@@ -4419,9 +4339,8 @@ struct ReducerSpec {
 }
 
 [macro_function]
-def is_average_spec(spec : ReducerSpec) : bool {
-    return spec.name == "average" || spec.name == "average_inner_select"
-}
+def is_average_spec(spec : ReducerSpec) : bool =>
+    spec.name == "average" || spec.name == "average_inner_select"
 
 [macro_function]
 def mk_avg_acc_type(at : LineInfo) : TypeDeclPtr {
@@ -4993,10 +4912,8 @@ def plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;    // nol
     let dummyName  = qn("{prefix}dummy", at)
     let outName    = qn("{prefix}out", at)
     var segBinds : array<array<Expression?>>
-    var segWheres : array<Expression?>
-    var currentBinds : array<Expression?>
-    var currentWhere : Expression?
-    var projection : Expression?
+    var segWheres, currentBinds : array<Expression?>
+    var currentWhere, projection : Expression?
     var lastBindName = adapter->bind_name(at)
     var elemType = strip_const_ref(adapter->element_type())
     var totalBindCount = 0
@@ -5109,8 +5026,7 @@ def plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;    // nol
             var $i(dummyName) : tuple<typedecl(invoke($e(keyBlock), default<$t(elemType)>)) -const -&; $t(accType2)>
         }
     }
-    var missInitStmts : array<Expression?>
-    var hitUpdateStmts : array<Expression?>
+    var missInitStmts, hitUpdateStmts : array<Expression?>
     var reducerAdapter : SourceAdapter? = (adapter->defers_materialization() && itName == adapter->bind_name(at)) ? adapter : null
     for (s in specs) {
         let (mi, hu) = emit_reducer_branches(s, at, entryName, itName, reducerAdapter)
@@ -5623,8 +5539,7 @@ def build_join_pair_core(
     let cntName     = qn(namePrefix + "_cnt", at)
     let bufName     = qn(namePrefix + "_buf", at)
     let resBindName = qn(namePrefix + "_res", at)
-    var preludeStmts : array<Expression?>
-    var pairStmts : array<Expression?>
+    var preludeStmts, pairStmts : array<Expression?>
     var returnStmt : Expression?
     var invokeRetType : TypeDeclPtr
     if (countOnly) {
@@ -5726,8 +5641,7 @@ def build_join_standalone_pieces(
     let arrName     = qn(namePrefix + "_arr", at)
     let bufName     = qn(namePrefix + "_buf", at)
     let emptyArrName = qn(namePrefix + "_empty", at)
-    var preludeStmts : array<Expression?>
-    var probeInnerStmts : array<Expression?>
+    var preludeStmts, probeInnerStmts : array<Expression?>
     var returnStmt : Expression?
     var invokeRetType : TypeDeclPtr
     var groupEmptyExpr : Expression?
@@ -5957,9 +5871,8 @@ def build_join_rows {
 }
 
 [macro_function]
-def emit_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
-    return ctx.src->emit_join_hook(c, ctx, at)
-}
+def emit_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? =>
+    ctx.src->emit_join_hook(c, ctx, at)
 
 [macro_function]
 def emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {

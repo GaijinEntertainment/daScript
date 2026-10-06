@@ -4,24 +4,16 @@ options no_unused_block_arguments = false
 require dastest/testing_boost public
 
 // Helper: accepts a block, calls it, returns the result
-def call_block(blk : block<() : int>) : int {
-    return invoke(blk)
-}
+def call_block(blk : block<() : int>) : int => invoke(blk)
 
 // Helper: accepts a block with an argument
-def call_block_with_arg(value : int; blk : block<(v : int) : int>) : int {
-    return invoke(blk, value)
-}
+def call_block_with_arg(value : int; blk : block<(v : int) : int>) : int => invoke(blk, value)
 
 // Class with a method that accepts a block
 class Receiver {
     value : int = 100
-    def call_method(blk : block<() : int>) : int {
-        return invoke(blk)
-    }
-    def call_method_with_arg(extra : int; blk : block<(v : int) : int>) : int {
-        return invoke(blk, extra)
-    }
+    def call_method(blk : block<() : int>) : int => invoke(blk)
+    def call_method_with_arg(extra : int; blk : block<(v : int) : int>) : int => invoke(blk, extra)
 }
 
 // Struct with a lambda field for -> pipe testing

@@ -13,8 +13,7 @@ require strings
 
 [export]
 def main : int {
-    var host_args : array<string>
-    var child_pairs : array<string>
+    var host_args, child_pairs : array<string>
     var token = ""
     var collecting = false
     var expect_token = false

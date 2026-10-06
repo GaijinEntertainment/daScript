@@ -94,7 +94,7 @@ def probe_stereo_voice(sf2 : SF2File; pi : int; z : int2) {
 // Scans presets for the first zone backed by a stereo-linked (left) sample and probes it.
 def probe_stereo_preset(sf2 : SF2File) {
     for (pi in range(length(sf2.presets))) {
-        let zones = sf2_find_zones(sf2, pi, 60, 100)
+        var inscope zones = sf2_find_zones(sf2, pi, 60, 100)
         for (z in zones) {
             let inst = sf2.instruments[z.x]
             let izone = inst.zones[z.y]
@@ -117,7 +117,7 @@ def report_chorus_sends(sf2 : SF2File) {
     print("\n── Chorus send ──\n")
     var chorus_presets = 0
     for (pi in range(length(sf2.presets))) {
-        let zones = sf2_find_zones(sf2, pi, 60, 100)
+        var inscope zones = sf2_find_zones(sf2, pi, 60, 100)
         for (z in zones) {
             let preset = sf2.presets[pi]
             let csend = sf2_get_chorus_send(sf2, z.x, z.y, null, preset.global_zone)

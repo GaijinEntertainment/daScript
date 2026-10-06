@@ -122,14 +122,10 @@ def private each_dim_any(info) {
 }
 
 [generic]
-def each_dim(info : TypeInfo) {
-    return <- each_dim_any(info)
-}
+def each_dim(info : TypeInfo) => <- each_dim_any(info)
 
 [generic]
-def each_dim(info : VarInfo) {
-    return <- each_dim_any(info)
-}
+def each_dim(info : VarInfo) => <- each_dim_any(info)
 
 def private arg_types_any(info) {
     unsafe {
@@ -148,14 +144,10 @@ def private arg_types_any(info) {
 }
 
 [generic]
-def arg_types(info : TypeInfo) {
-    return <- arg_types_any(info)
-}
+def arg_types(info : TypeInfo) => <- arg_types_any(info)
 
 [generic]
-def arg_types(info : VarInfo) {
-    return <- arg_types_any(info)
-}
+def arg_types(info : VarInfo) => <- arg_types_any(info)
 
 def private arg_names_any(info) {
     unsafe {
@@ -174,14 +166,10 @@ def private arg_names_any(info) {
 }
 
 [generic]
-def arg_names(info : TypeInfo) {
-    return <- arg_names_any(info)
-}
+def arg_names(info : TypeInfo) => <- arg_names_any(info)
 
 [generic]
-def arg_names(info : VarInfo) {
-    return <- arg_names_any(info)
-}
+def arg_names(info : VarInfo) => <- arg_names_any(info)
 
 def public class_info(cl) : StructInfo const? {
     static_if (typeinfo is_pointer(cl)) {
@@ -273,9 +261,8 @@ def public is_lint_suppressed(at : LineInfo; code : string) : bool {
 
 //! True when a diagnostic already consumed the ``// nolint:code`` directive at `fname`:`line`
 //! (1-based) during this run. The query half of the LINT019 stale-nolint scan.
-def public was_nolint_consumed(fname : string; line : int; code : string) : bool {
-    return key_exists(nolint_consumed, "{fname}:{line}:{code}")
-}
+def public was_nolint_consumed(fname : string; line : int; code : string) : bool =>
+    key_exists(nolint_consumed, "{fname}:{line}:{code}")
 
 //! Extracts the leading code from a lint message such as "LINT001: foo bar"
 //! (returns "LINT001"). Returns empty string if no colon is present.

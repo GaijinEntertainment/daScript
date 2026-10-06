@@ -34,9 +34,8 @@ var private g_status = "(nothing selected yet)"
 // Two equivalent ways to build the filter list. The typed array is explicit;
 // `file_filters` parses the terse C#-style "caption|ext;ext|caption|ext|..."
 // pipe spec (';'-separated extensions = a multi-extension filter, "" = all).
-def private das_filters() : array<FileDialogFilter> {
-    return <- file_filters("daslang (*.das)|das|Images (*.png *.jpg)|png;jpg;jpeg|All files|")
-}
+def private das_filters() : array<FileDialogFilter> =>
+    <- file_filters("daslang (*.das)|das|Images (*.png *.jpg)|png;jpg;jpeg|All files|")
 
 [export]
 def init() {

@@ -5,9 +5,7 @@ require dastest/testing_boost public
 // within one pattern, across patterns, and in for-loop destructures - while every
 // real name still follows the `let` shadowing rules.
 
-def two_of_three() : tuple<int; float; string> {
-    return (1, 2.0, "three")
-}
+def two_of_three() : tuple<int; float; string> => (1, 2.0, "three")
 
 [test]
 def test_tuple_destructure_discard(t : T?) {

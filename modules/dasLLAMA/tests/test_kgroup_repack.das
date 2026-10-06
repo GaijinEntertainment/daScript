@@ -75,15 +75,14 @@ def test_kg8_generic_dot_parity(t : T?) {
         }
         quantize_q8_0_into(xrow, n, xq, xs, 0l, 0l)
         for (mr in [4l, 8l]) {
-            var q4 := q
-            var s4 := s
-            var q8v := q
-            var s8v := s
+            var inscope q4 := q
+            var inscope s4 := s
+            var inscope q8v := q
+            var inscope s8v := s
             unsafe {
                 repack_q8q8_grp(addr(q4[0]), addr(s4[0]), n, d, mr, 0l, 4l)
                 repack_q8q8_grp(addr(q8v[0]), addr(s8v[0]), n, d, mr, 0l, 8l)
-                var y4 : array<float>
-                var y8 : array<float>
+                var inscope y4, y8 : array<float>
                 y4 |> resize(int(d))
                 y8 |> resize(int(d))
                 for (g in range64(d / mr)) {

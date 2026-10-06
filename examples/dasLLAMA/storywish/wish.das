@@ -24,9 +24,8 @@ def public wish_words(typed : string) : string {
 }
 
 //! the request in the corpus's own layout - the fields, then `Story:` and its line break
-def public build_prompt(words : string; dialogue : bool) : string {
-    return "{dialogue ? "Features: Dialogue\n" : ""}Words: {words}\nStory: \n"
-}
+def public build_prompt(words : string; dialogue : bool) : string =>
+    "{dialogue ? "Features: Dialogue\n" : ""}Words: {words}\nStory: \n"
 
 //! a line the model has written so far opens with a field name: it has moved on from the story
 def public line_is_a_field(line : string) : bool {

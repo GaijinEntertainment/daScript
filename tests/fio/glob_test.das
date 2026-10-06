@@ -222,9 +222,7 @@ def test_glob_filesystem(t : T?) { // nolint:STYLE038 - flat list of independent
         t |> equal(length(hits), 4)
     }
     t |> run("glob_filtered honors excludes") @(t : T?) {
-        var hits : array<string>
-        var includes : array<string>
-        var excludes : array<string>
+        var hits, includes, excludes : array<string>
         includes |> push_clone("**/*.das")
         excludes |> push_clone("tests/**")
         glob_filtered(root, includes, excludes) $(filename, is_dir) {
@@ -266,8 +264,7 @@ def test_glob_filesystem(t : T?) { // nolint:STYLE038 - flat list of independent
         // An empty include list means "match nothing", so the callback must
         // not fire even when entries exist under root.
         var hits : array<string>
-        let includes : array<string>
-        let excludes : array<string>
+        let includes, excludes : array<string>
         glob_filtered(root, includes, excludes) $(filename, is_dir) {
             hits |> push_clone(filename)
         }

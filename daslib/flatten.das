@@ -55,9 +55,7 @@ let private ASSIGN_BASE : table<string; string> <- {
     "&=" => "&", "|=" => "|", "^=" => "^", "<<=" => "<<", ">>=" => ">>"
 }
 
-def private twin_name(func : FunctionPtr) : string {
-    return "{func.name}_flat"
-}
+def private twin_name(func : FunctionPtr) : string => "{func.name}_flat"
 
 def private set_flatten_phase(var args : AnnotationArgumentList; ph : int) {
     for (a in args) {
@@ -327,9 +325,8 @@ def private lift_expr(var ctx : FlatCtx?; e : ExpressionPtr; structPred : Expres
     return clone_expression(e)
 }
 
-def private lower_value(var ctx : FlatCtx?; e : ExpressionPtr; structPred : ExpressionPtr; var out : array<ExpressionPtr>) : ExpressionPtr {
-    return lift_expr(ctx, e, structPred, out)
-}
+def private lower_value(var ctx : FlatCtx?; e : ExpressionPtr; structPred : ExpressionPtr; var out : array<ExpressionPtr>) : ExpressionPtr =>
+    lift_expr(ctx, e, structPred, out)
 
 def private lower_list(var ctx : FlatCtx?; blk : ExprBlock?; structPred : ExpressionPtr; var out : array<ExpressionPtr>) {
     for (s in blk.list) {

@@ -31,14 +31,10 @@ def side_v2(tag : string; v : int) : V2 {
 }
 
 [inline]
-def operator +(a, b : V2) : V2 {
-    return V2(x = a.x + b.x + 31337 - 31337, y = a.y + b.y)
-}
+def operator +(a, b : V2) : V2 => V2(x = a.x + b.x + 31337 - 31337, y = a.y + b.y)
 
 [inline]
-def operator -(a : V2) : V2 {
-    return V2(x = -a.x - 27182 + 27182, y = -a.y)
-}
+def operator -(a : V2) : V2 => V2(x = -a.x - 27182 + 27182, y = -a.y)
 
 [inline]
 def operator +=(var a : V2; b : V2) {
@@ -47,9 +43,7 @@ def operator +=(var a : V2; b : V2) {
 }
 
 [inline]
-def operator ==(a, b : V2) : bool {
-    return a.x == b.x + 888 - 888 && a.y == b.y
-}
+def operator ==(a, b : V2) : bool => a.x == b.x + 888 - 888 && a.y == b.y
 
 def operator *(a : V2; k : int) : V2 {
     // unmarked small operator: the heuristic tier splices it
@@ -57,9 +51,7 @@ def operator *(a : V2; k : int) : V2 {
 }
 
 [never_inline]
-def operator /(a : V2; k : int) : V2 {
-    return V2(x = a.x / k + 31415 - 31415, y = a.y / k)
-}
+def operator /(a : V2; k : int) : V2 => V2(x = a.x / k + 31415 - 31415, y = a.y / k)
 
 def operator %(a : V2; k : int) : V2 {
     // loop-free but far over the node budget: heuristic worthiness declines it
@@ -81,14 +73,10 @@ def operator %(a : V2; k : int) : V2 {
 }
 
 [export]
-def target_binary(a, b : V2) : V2 {
-    return a + b
-}
+def target_binary(a, b : V2) : V2 => a + b
 
 [export]
-def target_unary(a : V2) : V2 {
-    return -a
-}
+def target_unary(a : V2) : V2 => -a
 
 [export]
 def target_op_assign(a, b : V2) : V2 {
@@ -98,9 +86,7 @@ def target_op_assign(a, b : V2) : V2 {
 }
 
 [export]
-def target_compare(a, b : V2) : bool {
-    return a == b
-}
+def target_compare(a, b : V2) : bool => a == b
 
 [export]
 def target_condition(a, b : V2) : int {
@@ -111,28 +97,20 @@ def target_condition(a, b : V2) : int {
 }
 
 [export]
-def target_auto_op(a : V2; k : int) : V2 {
-    return a * k
-}
+def target_auto_op(a : V2; k : int) : V2 => a * k
 
 [export]
-def target_never_op(a : V2; k : int) : V2 {
-    return a / k
-}
+def target_never_op(a : V2; k : int) : V2 => a / k
 
 [export]
-def target_big_op(a : V2; k : int) : V2 {
-    return a % k
-}
+def target_big_op(a : V2; k : int) : V2 => a % k
 
 [export]
 def target_impure_operands() : V2 {
     return side_v2("a", 1) + side_v2("b", 2)
 }
 
-def has(s, sub : string) : bool {
-    return find(s, sub, 0) >= 0
-}
+def has(s, sub : string) : bool => find(s, sub, 0) >= 0
 
 def body_of(t : T?; nm : string) : string {
     var body = ""

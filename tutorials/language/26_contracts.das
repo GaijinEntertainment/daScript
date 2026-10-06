@@ -42,15 +42,11 @@ def print_first(arr) {
 
 // [expect_any_numeric] — matches int, uint, float, double, etc.
 [expect_any_numeric(a), expect_any_numeric(b)]
-def safe_add(a, b) {
-    return a + b
-}
+def safe_add(a, b) => a + b
 
 // [expect_any_enum] — matches any enumeration type
 [expect_any_enum(e)]
-def enum_index(e) : int {
-    return int(e)
-}
+def enum_index(e) : int => int(e)
 
 enum Color {
     red
@@ -73,9 +69,7 @@ def struct_info(s) {
 
 // AND (&&) — both constraints must match
 [expect_any_numeric(a) && expect_any_numeric(b)]
-def multiply_nums(a, b) {
-    return a * b
-}
+def multiply_nums(a, b) => a * b
 
 // OR (||) — at least one constraint must match
 variant IntOrFloat {
@@ -84,27 +78,19 @@ variant IntOrFloat {
 }
 
 [expect_any_tuple(x) || expect_any_variant(x)]
-def is_compound(x) : bool {
-    return true
-}
+def is_compound(x) : bool => true
 
-def is_compound(x) : bool {    // fallback for non-compound types
-    return false
-}
+def is_compound(x) : bool => false  // fallback for non-compound types
 
 // NOT (!) — constraint must NOT match
 [!expect_any_numeric(x)]
-def not_a_number(x) : string {
-    return "not numeric"
-}
+def not_a_number(x) : string => "not numeric"
 
 // Fallback that accepts anything (including numeric)
 // When x IS numeric, the contract [!expect_any_numeric] fails,
 // so this fallback is selected instead.
 [unused_argument(x)]
-def not_a_number(x : int) : string {
-    return "is numeric"
-}
+def not_a_number(x : int) : string => "is numeric"
 
 // === concept_assert — custom compile-time checks ===
 // concept_assert(condition, "message")

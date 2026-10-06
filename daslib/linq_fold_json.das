@@ -140,8 +140,7 @@ def private build_pruned_array_walk(srcName : string; elemType : TypeDeclPtr; bi
     let curName = qn("jcur", at)
     let defName = qn("jdef", at)
     var declT = strip_const_ref(clone_type(elemType))
-    var prelude : array<Expression?>
-    var inner : array<Expression?>
+    var prelude, inner : array<Expression?>
     build_json_materializer(body, bindName, declT, defName, curName, at, prelude, inner)
     var loop = build_json_array_walk(srcName, curName, inner, breakGuard)
     return hoist_prelude(prelude, loop, at)
@@ -180,18 +179,10 @@ class JsonAdapter : SourceAdapter {
     jsonExpr : Expression?
     srcName  : string
     elemType : TypeDeclPtr
-    def override name_prefix() : string {
-        return "json_"
-    }
-    def override supports_direct_return() : bool {
-        return true
-    }
-    def override const can_group_by() : bool {
-        return true
-    }
-    def override const can_join() : bool {
-        return true
-    }
+    def override name_prefix() : string => "json_"
+    def override supports_direct_return() : bool => true
+    def override const can_group_by() : bool => true
+    def override const can_join() : bool => true
     def override emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
         if (c.single_name |> key_exists("join") && c.single_name["join"] == "group_join") return null
         var joinCall = c.single["join"]
@@ -266,18 +257,11 @@ class JsonAdapter : SourceAdapter {
         return new JsonAdapter(jsonExpr = clone_expression(jsonExpr), srcName = qn("jsrc", at),
                                elemType = clone_type(elemType))
     }
-    def override loop_source_name() : string {
-        return srcName
-    }
-    def override bind_name(at : LineInfo) : string {
-        return qn("it", at)
-    }
-    def override element_type() : TypeDeclPtr {
-        return clone_type(elemType)
-    }
-    def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
-        return build_pruned_array_walk(srcName, elemType, bind_name(at), body, null, at)
-    }
+    def override loop_source_name() : string => srcName
+    def override bind_name(at : LineInfo) : string => qn("it", at)
+    def override element_type() : TypeDeclPtr => clone_type(elemType)
+    def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? =>
+        build_pruned_array_walk(srcName, elemType, bind_name(at), body, null, at)
     def override emit_distinct_take_loop(bindName : string; takenName : string; takeLimName : string; var perElement : Expression?; at : LineInfo) : Expression? {
         var breakGuard = qmacro($i(takenName) >= $i(takeLimName))
         return build_pruned_array_walk(srcName, elemType, bindName, perElement, breakGuard, at)
@@ -305,9 +289,7 @@ class JsonAdapter : SourceAdapter {
         }
         return emission
     }
-    def override const defers_materialization() : bool {
-        return true
-    }
+    def override const defers_materialization() : bool => true
     def override handle_type() : TypeDeclPtr {
         var ht = strip_const_ref(clone_type(jsonExpr._type))
         if (ht.firstType != null) {
@@ -354,18 +336,10 @@ struct JsonJoinShape {
 
 class JsonJoinAdapter : SourceAdapter {
     shape : JsonJoinShape
-    def override name_prefix() : string {
-        return "jjoin_"
-    }
-    def override supports_direct_return() : bool {
-        return true
-    }
-    def override bind_name(at : LineInfo) : string {
-        return shape.resBindName
-    }
-    def override element_type() : TypeDeclPtr {
-        return clone_type(shape.resultType)
-    }
+    def override name_prefix() : string => "jjoin_"
+    def override supports_direct_return() : bool => true
+    def override bind_name(at : LineInfo) : string => shape.resBindName
+    def override element_type() : TypeDeclPtr => clone_type(shape.resultType)
     def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         let jhashName = qn("jjoin_jhash", at)
         let arrName   = qn("jjoin_jarr", at)
@@ -385,9 +359,8 @@ class JsonJoinAdapter : SourceAdapter {
             $e(probeWalk)
         }
     }
-    def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
-        return build_json_join_invoke(shape.jsonExpr, shape.srcName, stmts, shape.srcBName, shape.srcBType, shape.srcBExpr, retType, wrapIter, at)
-    }
+    def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? =>
+        build_json_join_invoke(shape.jsonExpr, shape.srcName, stmts, shape.srcBName, shape.srcBType, shape.srcBExpr, retType, wrapIter, at)
 }
 
 [macro_function]

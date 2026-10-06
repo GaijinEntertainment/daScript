@@ -13,9 +13,8 @@ require strings
 
 let private BUDGET_USEC = 5000000
 
-def private fixture_path(name : string) : string {
-    return "{get_das_root()}/tests/daslib/_verify_completion_{name}_fixture.das"
-}
+def private fixture_path(name : string) : string =>
+    "{get_das_root()}/tests/daslib/_verify_completion_{name}_fixture.das"
 
 [test]
 def test_recursion_walk_visits_each_function_once(t : T?) {

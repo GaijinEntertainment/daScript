@@ -251,9 +251,7 @@ def private is_annotated_dest(var expr : Expression?; name : string) : bool {
     return false
 }
 
-def private is_scratch_dest(var expr : Expression?) : bool {
-    return is_annotated_dest(expr, "scratch")
-}
+def private is_scratch_dest(var expr : Expression?) : bool => is_annotated_dest(expr, "scratch")
 
 def private takes_scratch_arg(fn : Function?) : bool {
     return false if (fn == null)
@@ -268,9 +266,8 @@ def private is_explicit_capacity_call(n : string) : bool {
             || n == "scratch_reserve" || n == "scratch_ensure_capacity" || n == "scratch_resize")
 }
 
-def private is_env_builtin(n : string) : bool {
-    return n == "get_env_variable" || n == "has_env_variable" || n == "set_env_variable"
-}
+def private is_env_builtin(n : string) : bool =>
+    n == "get_env_variable" || n == "has_env_variable" || n == "set_env_variable"
 
 def private is_io_builtin(n : string) : bool {
     return (n == "print" || n == "to_log" || n == "fprint" || n == "fopen" || n == "fclose"
@@ -547,9 +544,7 @@ class PerfLintVisitor : AstVisitor {
         return null
     }
 
-    def make_path_key(v : Variable?; path : string) : string {
-        return "{intptr(v)}{path}"
-    }
+    def make_path_key(v : Variable?; path : string) : string => "{intptr(v)}{path}"
 
     def find_string_var_from_expr(expr : Expression?) : Variable? {
         return null if (expr == null)
@@ -2158,13 +2153,10 @@ class PerfLintVisitor : AstVisitor {
         }
     }
 
-    def hot_file_of(at : LineInfo) : string {
-        return at.fileInfo != null ? "{at.fileInfo.name}" : ""
-    }
+    def hot_file_of(at : LineInfo) : string => at.fileInfo != null ? "{at.fileInfo.name}" : ""
 
-    def hot_visit_key(fn_hash : uint64; anchor : ExpressionPtr) : uint64 {
-        return fn_hash * 1099511628211ul + intptr(anchor)
-    }
+    def hot_visit_key(fn_hash : uint64; anchor : ExpressionPtr) : uint64 =>
+        fn_hash * 1099511628211ul + intptr(anchor)
 
     def hot_ensure_summary(var fn : Function?; var hc : HotCache) {
         let h = fn.getMangledNameHash

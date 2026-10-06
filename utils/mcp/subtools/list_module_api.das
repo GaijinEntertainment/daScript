@@ -11,13 +11,10 @@ def is_operator_function(name : string) : bool {
     return !is_alpha(ch) && !is_number(ch) && ch != '_'
 }
 
-def name_matches_filter(name : string; filter : string) : bool {
-    return empty(filter) || symbol_matches(name, filter)
-}
+def name_matches_filter(name : string; filter : string) : bool =>
+    empty(filter) || symbol_matches(name, filter)
 
-def want_section(section : string; name : string) : bool {
-    return empty(section) || section == name
-}
+def want_section(section : string; name : string) : bool => empty(section) || section == name
 
 def write_compact_func_signature(var w : StringBuilderWriter; func) {
     var has_args = false
@@ -41,21 +38,7 @@ def write_compact_func_signature(var w : StringBuilderWriter; func) {
 
 def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : string = ""; section : string = ""; compact : bool = false) { // nolint:STYLE037,STYLE038 — one arm per API section kind, then one emit block per section
     write(writer, "Module: {mod.name}\n")
-    var funcs : array<string>
-    var generics : array<string>
-    var operators : array<string>
-    var structs : array<string>
-    var handled : array<string>
-    var enums : array<string>
-    var globals : array<string>
-    var func_annotations : array<string>
-    var struct_annotations : array<string>
-    var call_macros : array<string>
-    var reader_macros : array<string>
-    var variant_macros : array<string>
-    var typeinfo_macros : array<string>
-    var for_loop_macros : array<string>
-    var type_macros : array<string>
+    var funcs, generics, operators, structs, handled, enums, globals, func_annotations, struct_annotations, call_macros, reader_macros, variant_macros, typeinfo_macros, for_loop_macros, type_macros : array<string>
     if (want_section(section, "functions") || want_section(section, "operators")) {
         for_each_function(mod, "") $(func) {
             if (func.flags.privateFunction || func.flags._lambda || func.flags.generated) return

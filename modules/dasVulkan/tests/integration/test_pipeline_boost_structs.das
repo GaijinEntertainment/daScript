@@ -75,8 +75,7 @@ def test_pipeline_boost_structs(t : T?) {   // nolint:STYLE038 - flat test cell
     var st_frag = PipelineShaderStageCreateInfo(module_ = weak_copy(frag), pName = "main")
     st_frag.stage.fragment = true
 
-    var vin_a : PipelineVertexInputStateCreateInfo
-    var vin_b : PipelineVertexInputStateCreateInfo
+    var vin_a, vin_b : PipelineVertexInputStateCreateInfo
     var ia = PipelineInputAssemblyStateCreateInfo(topology = VkPrimitiveTopology.TRIANGLE_LIST)
     var vp : PipelineViewportStateCreateInfo
     var vport = Viewport(width = float(TRI_W), height = float(TRI_H), maxDepth = 1.0f)

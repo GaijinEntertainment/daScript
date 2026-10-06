@@ -61,8 +61,7 @@ def indexed_range() : int {
 [test]
 def test_zip_with_count(t : T?) {
     t |> run("async generator zipped with count()") @(t : T?) {
-        var indices : array<int>
-        var values : array<int>
+        var indices, values : array<int>
         for (idx, v in count(), indexed_range()) {
             indices |> push(idx)
             if (v is res) {

@@ -12,9 +12,7 @@ require daslib/flatten
 
 // ----- helper callee (inlined inside an unrolled iteration) -----
 
-def sq(a : int) : int {
-    return a * a
-}
+def sq(a : int) : int => a * a
 
 // ----- compound assignment + increment (no loop): the latent-bug regression -----
 // `a += x` is an ExprOp2 op="+=" and `a++` is an ExprOp1 op="++"; neither is an

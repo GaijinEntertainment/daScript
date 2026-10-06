@@ -248,8 +248,7 @@ def test_expand_glob_backslash(t : T?) {
         // backslash pattern by replacing `/` with `\` in the same input.
         let fwd = "{root}/sub/*.das"
         let back = replace(fwd, "/", "\\")
-        var slash : array<string>
-        var bs : array<string>
+        var slash, bs : array<string>
         parse_file_list(fwd, slash)
         parse_file_list(back, bs)
         sort(slash)

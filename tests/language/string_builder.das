@@ -1,9 +1,7 @@
 options gen2
 require dastest/testing_boost public
 
-def sb_test_arg(a : string) : string {
-    return "hello,{a}!"
-}
+def sb_test_arg(a : string) : string => "hello,{a}!"
 
 [test]
 def test_string_builder(t : T?) {

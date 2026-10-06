@@ -12,19 +12,15 @@ require daslib/tune
 // probe only asserts "generated or reference, never garbage".
 
 [llvm_code(name = "llvm_code_selftest::add_i32")]
-def jadd(a, b : int) : int {
-    return a + b
-}
+def jadd(a, b : int) : int => a + b
 
 [llvm_code(name = "llvm_code_selftest::add_i32")]
-def jadd_probe(a, b : int) : int {
-    return a - b - 1000000  // sentinel result — visible only when the generator did NOT replace the body
-}
+def jadd_probe(a, b : int) : int =>
+    a - b - 1000000  // sentinel result — visible only when the generator did NOT replace the body
 
 [llvm_code(name = "llvm_code_selftest::add_i32")]
-def fsub_decline(a, b : float) : float {
-    return a - b  // generator declines (float): the reference body compiles as the fallback tier
-}
+def fsub_decline(a, b : float) : float =>
+    a - b  // generator declines (float): the reference body compiles as the fallback tier
 
 [test]
 def test_llvm_code(t : T?) {

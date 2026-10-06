@@ -7,9 +7,7 @@ require inline_reader
 // re-parsed in place. These lock the inline-rewrite path that the old module-level-only suffix
 // could not reach (a `var x = %m~…%%` / in-function suffix used to strand the host statement).
 
-def dbl(a : int) : int {
-    return a * 2
-}
+def dbl(a : int) : int => a * 2
 
 [test]
 def test_inline_plain(t : T?) {

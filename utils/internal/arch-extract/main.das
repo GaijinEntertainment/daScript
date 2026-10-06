@@ -102,7 +102,7 @@ def private close_over_sections(var citedDocs, citedAnchors : table<string; void
     var scanned : table<string; void?>
     var pending <- [for (k in keys(citedAnchors)); k]
     while (!empty(pending)) {
-        var next : array<string>
+        var inscope next : array<string>
         for (key in pending) {
             continue if (scanned |> key_exists(key))
             scanned |> insert(key, null)
@@ -186,8 +186,7 @@ def main : int {
     }
     files |> sort
 
-    var citedDocs : table<string; void?>
-    var citedAnchors : table<string; void?>
+    var citedDocs, citedAnchors : table<string; void?>
     var citations = 0
     var failures = collect_cited(files, citedDocs, citedAnchors, citations)
     if (failures == 0) {

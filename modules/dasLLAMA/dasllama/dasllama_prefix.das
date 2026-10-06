@@ -104,9 +104,8 @@ def private page_tokens_match(entry : PrefixEntry; tokens : array<int64>; lo : i
 //! Create a prefix cache for the sessions of one pool. ``max_groups`` caps how many page groups
 //! the cache retains (LRU-dropped past it; a dropped page a session still uses stays alive — only
 //! the cache's hold is released); 0 = unbounded.
-def create_prefix_cache_(max_groups : int64 = 0l; max_states : int64 = DEFAULT_PREFIX_STATES) : PrefixCache {
-    return <- PrefixCache(max_groups = max_groups, max_states = max(max_states, 0l))
-}
+def create_prefix_cache_(max_groups : int64 = 0l; max_states : int64 = DEFAULT_PREFIX_STATES) : PrefixCache =>
+    <- PrefixCache(max_groups = max_groups, max_states = max(max_states, 0l))
 
 let DEFAULT_PREFIX_STATES = 4l   //! a recurrent model's checkpoints kept: a reused opening, a conversation's last turn, and two to spare
 

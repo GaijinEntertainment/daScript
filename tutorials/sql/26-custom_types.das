@@ -36,14 +36,10 @@ struct DateTime {
     unix_seconds : int64
 }
 
-def sql_bind(dt : DateTime) : int64 {
-    return dt.unix_seconds
-}
+def sql_bind(dt : DateTime) : int64 => dt.unix_seconds
 
 [unused_argument(t)]
-def sql_extract(v : int64; t : type<DateTime>) : DateTime {
-    return DateTime(unix_seconds = v)
-}
+def sql_extract(v : int64; t : type<DateTime>) : DateTime => DateTime(unix_seconds = v)
 
 // --- Guid as BLOB (16 raw bytes) -----------------------------------------
 // Same pattern, different primitive: the return type ``array<uint8>`` picks
@@ -65,9 +61,7 @@ def sql_bind(g : Guid) : array<uint8> {
 }
 
 [unused_argument(t)]
-def sql_extract(var v : array<uint8>; t : type<Guid>) : Guid {
-    return Guid(bytes <- v)
-}
+def sql_extract(var v : array<uint8>; t : type<Guid>) : Guid => Guid(bytes <- v)
 
 // --- Domain enum (auto-handled by dasSQLITE's generic overload) ----------
 // dasSQLITE ships ``def sql_bind $T (e : T) : int64 where T : enum`` and

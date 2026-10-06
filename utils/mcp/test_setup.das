@@ -40,9 +40,8 @@ def private json_array_has(arr : JsonValue?; needle : string) : bool {
     return false
 }
 
-def private string_of(js : JsonValue?) : string {
-    return js != null && js.value is _string ? js.value as _string : ""
-}
+def private string_of(js : JsonValue?) : string =>
+    js != null && js.value is _string ? js.value as _string : ""
 
 def private no_leftovers(t : T?; root : string) {
     t |> success(!fexist(path_join(root, ".mcp.json.tmp")), "no .mcp.json.tmp is left behind")

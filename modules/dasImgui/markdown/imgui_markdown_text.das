@@ -40,13 +40,11 @@ def private markdown_uri_copy(target : string) : ClipboardStatus {
     return status
 }
 
-def private fragment_min(origin : float2; fragment : TextFlowFragment) : float2 {
-    return origin + float2(fragment.rect.x, fragment.rect.y)
-}
+def private fragment_min(origin : float2; fragment : TextFlowFragment) : float2 =>
+    origin + float2(fragment.rect.x, fragment.rect.y)
 
-def private fragment_max(origin : float2; fragment : TextFlowFragment) : float2 {
-    return origin + float2(fragment.rect.z, fragment.rect.w)
-}
+def private fragment_max(origin : float2; fragment : TextFlowFragment) : float2 =>
+    origin + float2(fragment.rect.z, fragment.rect.w)
 
 def public markdown_uri_paragraph(id : string; prefix, display_text, suffix, target : string; // nolint:STYLE038
                                   max_width : float = 0.0f;

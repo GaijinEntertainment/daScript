@@ -91,9 +91,7 @@ def is_valid_utf8(data : array<uint8> const# implicit) : bool {
     return is_utf8_string_valid(data)
 }
 
-def is_valid_utf8(s : string) : bool {
-    return is_utf8_string_valid(s)
-}
+def is_valid_utf8(s : string) : bool => is_utf8_string_valid(s)
 
 def private rate_exceeded(db : SqlRunner; client_ip : string; policy : StorePolicy; now : int64) : bool {
     // count() lowers to SELECT COUNT(*), so the ceiling costs one scalar row on

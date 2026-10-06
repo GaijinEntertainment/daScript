@@ -15,9 +15,7 @@ struct Color {
     b : int
 }
 
-def sql_bind(value : Color) : string {
-    return "{value.r},{value.g},{value.b}"
-}
+def sql_bind(value : Color) : string => "{value.r},{value.g},{value.b}"
 
 [unused_argument(t)]
 def sql_extract(s : string; t : type<Color>) : Color {

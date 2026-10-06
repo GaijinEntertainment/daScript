@@ -44,7 +44,7 @@ def private ref_chain(w1, w3, w2 : array<float>; x : array<float>; inv : array<u
     for (j in range64(npos * k)) {
         let p = j / k
         let e = expert_of_row[int(inv[j])]
-        var d <- ffn_expert_ref(w1, w3, w2, copy_span(x16, p * n, n), 1, kn, knfe, e * knfe, e * knfe, e * kn) $(var h) {
+        var inscope d <- ffn_expert_ref(w1, w3, w2, copy_span(x16, p * n, n), 1, kn, knfe, e * knfe, e * knfe, e * kn) $(var h) {
             for (v in h) {
                 v = f16r(v)
             }
@@ -63,9 +63,7 @@ def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; wof
         let woff1 = woff
         let woff3 = woff + stride
         let woff2 = woff + 2l * stride
-        var w1 : array<float>
-        var w3 : array<float>
-        var w2 : array<float>
+        var w1, w3, w2 : array<float>
         if (!plane_up(1, NE * nfe, n, 21l + woff % 7l, woff1, w1, true, stream)) {
             t |> skip("{tag}: no Vulkan device (or probe/budget refused the upload)")
             return
@@ -100,9 +98,7 @@ def private chain_cell(t : T?; tag : string; n, nfe, npos, k, cnt_a : int64; wof
         var offs1 <- [woff1 + ege1, 0l, cnt_a, woff1, cnt_a, nk - cnt_a]
         var offs3 <- [woff3 + ege1, 0l, cnt_a, woff3, cnt_a, nk - cnt_a]
         var offs2 <- [woff2 + ege2, 0l, cnt_a, woff2, cnt_a, nk - cnt_a]
-        var x : array<float>
-        var gout : array<float>
-        var refv : array<float>
+        var x, gout, refv : array<float>
         gout |> resize(npos * n)
         // head_only = the async arm over region A alone (the split's shape); region B's slots weigh 0
         var wg : array<float>

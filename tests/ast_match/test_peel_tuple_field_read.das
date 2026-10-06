@@ -26,9 +26,8 @@ def private mk_field(var value : Expression?; fieldName : string) : Expression? 
     return f
 }
 
-def private mk_r2v(var inner : Expression?) : Expression? {
-    return new ExprRef2Value(at = LineInfo(), subexpr = inner)
-}
+def private mk_r2v(var inner : Expression?) : Expression? =>
+    new ExprRef2Value(at = LineInfo(), subexpr = inner)
 
 // ── Direct matches ──────────────────────────────────────────────────────
 

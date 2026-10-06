@@ -18,13 +18,9 @@ struct Foo {
     d : bitfield8 = 1
 }
 
-def returns_uint8() : uint8 {
-    return 200
-}
+def returns_uint8() : uint8 => 200
 
-def returns_float() : float {
-    return 42
-}
+def returns_float() : float => 42
 
 [test]
 def test_var_init_local(t : T?) {

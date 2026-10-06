@@ -48,18 +48,14 @@ def private smin(a, b, k : float) : float {
 }
 
 // SDF primitives. Each returns the signed distance from p to the surface (negative = inside).
-def private sd_sphere(p : float3; r : float) : float {
-    return length(p) - r
-}
+def private sd_sphere(p : float3; r : float) : float => length(p) - r
 
 def private sd_torus(p : float3; major, minor : float) : float {
     let q = float2(length(p.xz) - major, p.y)
     return length(q) - minor
 }
 
-def private sd_plane(p : float3; h : float) : float {
-    return p.y - h
-}
+def private sd_plane(p : float3; h : float) : float => p.y - h
 
 // 2D rotation around the origin; used to spin the torus's local coordinate frame about Y.
 def private rot2(p : float2; ang : float) : float2 {
@@ -85,9 +81,7 @@ def private map(p : float3; t : float) : float2 {
 }
 
 // Scalar overload for the shadow march (no material needed).
-def private map_d(p : float3; t : float) : float {
-    return map(p, t).x
-}
+def private map_d(p : float3; t : float) : float => map(p, t).x
 
 // Forward-difference normal at p: 4 SDF taps (1 baseline + 3 axis-displaced), normalized. Cheaper
 // than the 6-tap symmetric central difference; the slight +eps bias is invisible at this eps and at

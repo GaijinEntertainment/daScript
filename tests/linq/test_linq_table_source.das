@@ -320,9 +320,7 @@ def test_table_point_lookup(t : T?) { // nolint:STYLE038 flat list of independen
 
 typedef IKV = tuple<key : int; value : int>
 
-def flip_kv(kv : IKV) : tuple<int; int> {
-    return (kv.value => kv.key)
-}
+def flip_kv(kv : IKV) : tuple<int; int> => (kv.value => kv.key)
 
 // Joins: a table in the srcB slot joined on its bare key (`d.key` / bare set element) probes the user's
 // table instead of building the join's internal hash; a table lead rides the same emitter through the
@@ -662,8 +660,7 @@ def test_table_group_by(t : T?) { // nolint:STYLE038 flat list of independent ru
                             ._group_by(_.key % 3)
                             ._select((K = _._0, N = _._1 |> count(), S = _._1 |> select($(kv : IKV) => kv.value) |> sum()))
                             .to_array())
-        var expN : table<int; int>
-        var expS : table<int; int>
+        var expN, expS : table<int; int>
         for (k, v in keys(tab), values(tab)) {
             expN[k % 3] ++
             expS[k % 3] += v

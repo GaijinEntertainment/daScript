@@ -18,17 +18,14 @@ let FEATURE = "examples/text/main.das"
 let DEADLOCK_GUARD_SEC = 30.0f
 let SOURCE_EDITOR = "DOCK_ROOT/g_document_windows[1]/DOCUMENT_CONTENT/EDITOR_PANE/editor"
 
-def private viewer_state(app : ImguiApp) : JsonValue? {
-    return post_command(app, "text_viewer_state", null)
-}
+def private viewer_state(app : ImguiApp) : JsonValue? =>
+    post_command(app, "text_viewer_state", null)
 
-def private edit_text_state(app : ImguiApp) : JsonValue? {
-    return post_command(app, "text_viewer_edit_text", null)
-}
+def private edit_text_state(app : ImguiApp) : JsonValue? =>
+    post_command(app, "text_viewer_edit_text", null)
 
-def private run_create(app : ImguiApp; id : string) : JsonValue? {
-    return post_command(app, "text_viewer_command", JV((id = "create." + id)))
-}
+def private run_create(app : ImguiApp; id : string) : JsonValue? =>
+    post_command(app, "text_viewer_command", JV((id = "create." + id)))
 
 def private open_md_editing(t : T?; app : ImguiApp; temp_dir, body : string) : bool {
     let fixture = path_join(temp_dir, "create.md")

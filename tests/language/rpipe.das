@@ -1,9 +1,7 @@
 options gen2
 require dastest/testing_boost public
 
-def rp_addX(a, b) {
-    return a + b
-}
+def rp_addX(a, b) => a + b
 
 [test]
 def test_rpipe(t : T?) {

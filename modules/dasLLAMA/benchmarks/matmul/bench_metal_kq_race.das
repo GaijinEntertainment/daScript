@@ -232,8 +232,8 @@ def private load_ref_table(path : string; var tab : table<string; double>) {
         }
         let text = fread(f)
         for (ln in split(text, "\n")) {
-            let cols <- split_by_chars(strip(ln), " \t")
-            var vals <- [for (c in cols); c; where !empty(c)]
+            var inscope cols <- split_by_chars(strip(ln), " \t")
+            var inscope vals <- [for (c in cols); c; where !empty(c)]
             if (length(vals) >= 4) {
                 let us = try_to_double(vals[3]) ?? -1.0lf
                 if (us > 0.0lf) {
@@ -302,8 +302,7 @@ def private race_cell(queue, dev; f : KqRaceFmt; tier, shname : string; n, d : i
     let is_mvb = tier == "mvb"   //! 2-column batch decode: gemv's dispatch shape at gdiv 8, ka args at binding 5
     let nb = n / 256
     let nsb = d * nb
-    var kq : array<uint8>
-    var ks : array<uint8>
+    var kq, ks : array<uint8>
     kq_fill_planes(f.fmt, nsb, kq, ks)
     let xrows = is_mm ? PREFILL_M : (is_mvb ? 2 : 1)
     var xf : array<float>
@@ -311,8 +310,7 @@ def private race_cell(queue, dev; f : KqRaceFmt; tier, shname : string; n, d : i
     for (i in range(xrows * n)) {
         xf[i] = 0.11 * float(i % 41) - 2.2
     }
-    var want : array<float>
-    var env : array<float>
+    var want, env : array<float>
     want |> resize(xrows * d)
     env |> resize(xrows * d)
     build_oracle(f.fmt, n, d, nsb, kq, ks, xf, n, xrows, want, env)

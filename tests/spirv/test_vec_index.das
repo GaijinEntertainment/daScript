@@ -61,8 +61,7 @@ def private extract_widths(words : array<uint>) : array<int> {
 }
 
 def private has_function_float_chain(words : array<uint>) : bool {
-    var float_ids : table<uint>
-    var fn_float_ptr : table<uint>
+    var float_ids, fn_float_ptr : table<uint>
     foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
         if (opcode == uint(SpvOp.TypeFloat) && n >= 2 && w[s + 1] == 32u) {
             float_ids |> insert(w[s])

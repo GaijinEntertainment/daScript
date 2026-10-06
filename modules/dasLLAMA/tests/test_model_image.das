@@ -612,8 +612,7 @@ def test_image_mechanics(t : T?) {
 // configure clobbering serialized gguf overrides even when short gens can't (sliding_window
 // only bites past the window)
 def private config_diff_field(a, b : Config) : string {
-    var names : array<string>
-    var vals : array<string>
+    var names, vals : array<string>
     apply(a) $(name : string; field) {
         names |> push(name)
         vals |> push("{field}")
@@ -715,9 +714,8 @@ def test_model_image_roundtrip(t : T?) {
 // ===== the metal (blob-only) flavor =====
 
 // counting prompt: confident continuations — the decode-parity suite's CPU-vs-GPU token bar
-def private counting_ids(tr : Model) : array<int64> {
-    return <- encode(tr, "The numbers from one to ten are: one, two, three,")
-}
+def private counting_ids(tr : Model) : array<int64> =>
+    <- encode(tr, "The numbers from one to ten are: one, two, three,")
 
 // Teacher-forced max-logits-diff: both models step through the SAME token sequence and the
 // per-step logits compare — the valid cross-backend instrument for a 135M (greedy token
@@ -739,7 +737,7 @@ def private forced_logits_maxd(tc, tg : Model; prompt, teach : array<int64>; tag
         }
         for (tok in teach) {
             picks |> push(argmax_of(sb.logits))
-            var one : array<int64>
+            var inscope one : array<int64>
             one |> push(tok)
             eval_(tc, sa, one)
             eval_(tg, sb, one)
@@ -2759,8 +2757,8 @@ def test_k6_scale_split_sizing(t : T?) {
             let tail = f == KqFmt.k2 ? 4l : 2l              // k2 carries d AND dmin; every other split format d alone
             let strip_at = strip_first ? 0l : 4l            // the source offset the 16 sub-scale bytes start at
             let tail_at = strip_first ? 16l : 0l            // and the one the d bytes start at
-            var src <- split_scale_src(ssb, nsb)
-            var dst : array<uint8>
+            var inscope src <- split_scale_src(ssb, nsb)
+            var inscope dst : array<uint8>
             kq_split_scale_plane(f, unsafe(addr<uint8 const?>(src[0])), nsb, dst)
             t |> equal(long_length(dst), nsb * (16l + tail), "{f}: the split plane is nsb x (16 + {tail})")
             for (sb in range64(nsb)) {
@@ -2774,9 +2772,9 @@ def test_k6_scale_split_sizing(t : T?) {
             // the poison is a value ADDED to sb1's FIRST tail byte - a byte this arm reads only
             // into the tail, and the other arm would read into the strip; it must move exactly
             // one tail byte and nothing in the strip
-            var poisoned <- split_scale_src(ssb, nsb)
+            var inscope poisoned <- split_scale_src(ssb, nsb)
             poisoned[ssb + tail_at] = uint8(int(poisoned[ssb + tail_at]) + 7)
-            var pdst : array<uint8>
+            var inscope pdst : array<uint8>
             kq_split_scale_plane(f, unsafe(addr<uint8 const?>(poisoned[0])), nsb, pdst)
             t |> equal(int(pdst[nsb * 16l + tail]), int(dst[nsb * 16l + tail]) + 7, "{f}: the poison lands in sb1's tail")
             var strip_moved = 0l

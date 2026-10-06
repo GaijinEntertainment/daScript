@@ -341,13 +341,7 @@ def rate(turn : Turn; span_us : float) : float => span_us > 0.0 ? float(turn.com
 
 //! the three rows of one prompt size; false when a turn refused them
 def private size_rows(plan : Plan; base, run : string; size : int; chars_per_token : float) : bool {
-    var ttft_cold : array<float>
-    var ttft_warm : array<float>
-    var prefill : array<float>
-    var decode : array<float>
-    var own_cold : array<float>
-    var own_warm : array<float>
-    var own_decode : array<float>
+    var ttft_cold, ttft_warm, prefill, decode, own_cold, own_warm, own_decode : array<float>
     var prompt_tokens = 0l
     var warm_cached = -1l
     ttft_cold |> reserve(plan.reps)
@@ -750,8 +744,7 @@ def tts_rows(url, tag : string; models : array<string>; voice, text : string; re
             tally.refused++
             continue
         }
-        var spoken : array<float>
-        var rtfs : array<float>
+        var inscope spoken, rtfs : array<float>
         spoken |> reserve(reps)
         rtfs |> reserve(reps)
         var walls <- collect_reps(reps) $(_rep) {
@@ -876,9 +869,8 @@ def private scene_alone(load : LoadJob; var lanes : array<SceneJob>; reps : int;
 }
 
 //! the real-time factor of every sample of `lane` that carried speech: its wall over the speech it returned
-def private lane_rtfs(samples : array<SceneSample>; lane : int) : array<float> {
-    return <- [for (smp in samples); smp.value / (smp.audio_s * 1000.0); where smp.lane == lane && smp.audio_s > 0.0]
-}
+def private lane_rtfs(samples : array<SceneSample>; lane : int) : array<float> =>
+    <- [for (smp in samples); smp.value / (smp.audio_s * 1000.0); where smp.lane == lane && smp.audio_s > 0.0]
 
 //! why lane `lane` has no row: a request of its that failed, or a round of `rounds` it finished no request in; "" when it stands
 def private scene_lane_refusal(lane, rounds : int; alone, together : array<SceneSample>) : string {

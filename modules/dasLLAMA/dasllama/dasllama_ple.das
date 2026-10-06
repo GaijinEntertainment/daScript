@@ -72,8 +72,7 @@ def private ple_gather_row(t : Model; row : int64; var dst : array<float>; doff 
         dequant_q8_row(t, eloff, all, unsafe(addr(dst[doff])))
         return
     }
-    var kqp : array<uint8> const?
-    var ksp : array<uint8> const?
+    var kqp, ksp : array<uint8> const?
     kq_planes_of(t, t.ple_emb_fmt, kqp, ksp)
     for (blk in range64(all / 256l)) {
         let sb = (eloff + blk * 256l) / 256l

@@ -29,9 +29,7 @@ def acc_pick(sel : float) : float {
 }
 
 [flatten]
-def inline_acc(sel : float) : float {
-    return acc_pick(sel)
-}
+def inline_acc(sel : float) : float => acc_pick(sel)
 
 [test]
 def test_flatten_inline_accumulator(t : T?) {

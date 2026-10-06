@@ -70,9 +70,7 @@ def test_4x4(t : T?) {
 }
 
 [sideeffects]
-def passx(a) {
-    return a
-}
+def passx(a) => a
 
 def test_any(t : T?; var m : auto(matT)) {
     let _v : auto(vec) = m[0]

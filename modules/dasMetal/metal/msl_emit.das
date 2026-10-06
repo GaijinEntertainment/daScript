@@ -108,9 +108,8 @@ let private MSL_RESERVED : table<string> <- {
     "union", "signed", "unsigned", "void", "atomic_int", "atomic_uint"
 }
 
-def private msl_safe_name(name : string) : string {
-    return key_exists(MSL_RESERVED, name) ? "{name}_" : name
-}
+def private msl_safe_name(name : string) : string =>
+    key_exists(MSL_RESERVED, name) ? "{name}_" : name
 
 // a call to a GENERIC instance arrives named `__::module`name`hash` (the sgmat load/store
 // overloads take an untyped buffer parameter, so they instantiate); the base name is the
@@ -944,9 +943,7 @@ def private census_class(t : TypeDecl?) : string {
     return "{prefix}{scalar_width(bt)}{suffix}"
 }
 
-def private is_vec_class(cls : string) : bool {
-    return cls |> ends_with("v")
-}
+def private is_vec_class(cls : string) : bool => cls |> ends_with("v")
 
 def private op2_census_name(op : string) : string {
     if (op == "+") {
@@ -1016,9 +1013,7 @@ def private compound_base(op : string) : string {
 }
 
 // das interpolates uint as hex ("{1u}" is "0x1"); go through int64 for a decimal MSL literal
-def private msl_uint_literal(v : uint) : string {
-    return "{int64(uint64(v))}u"
-}
+def private msl_uint_literal(v : uint) : string => "{int64(uint64(v))}u"
 
 // das prints integral floats bare ("{2f}" is "2"), and bare-int + suffix is not a valid MSL
 // literal; `suffix` is "f" for float and "h" for half (the das float16 literal's MSL spelling)
@@ -1318,13 +1313,11 @@ def private sgmat_type_name(t : TypeDecl?) : string {
     return (name == "simdgroup_float8x8" || name == "simdgroup_half8x8") ? name : ""
 }
 
-def private sgmat_census_class(sgname : string) : string {
-    return sgname == "simdgroup_half8x8" ? "f16" : "f32"
-}
+def private sgmat_census_class(sgname : string) : string =>
+    sgname == "simdgroup_half8x8" ? "f16" : "f32"
 
-def private sgmat_elem_name(sgname : string) : string {
-    return sgname == "simdgroup_half8x8" ? "half" : "float"
-}
+def private sgmat_elem_name(sgname : string) : string =>
+    sgname == "simdgroup_half8x8" ? "half" : "float"
 
 // das zero-init has one sound MSL spelling for the opaque tile types: a zero fill (= {} does not
 // construct a simdgroup_matrix)
@@ -2294,8 +2287,7 @@ def private emit_sgmat_multiply(var ctx : MslCtx; ec : ExprCall?; indent : strin
         err(ctx, ec.at, "{cname} takes {want} simdgroup-matrix arguments")
         return
     }
-    var classes : array<string>
-    var parts : array<string>
+    var classes, parts : array<string>
     for (arg in ec.arguments) {
         let sgname = sgmat_type_name(arg._type)
         if (empty(sgname)) {

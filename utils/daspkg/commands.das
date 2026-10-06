@@ -1030,7 +1030,7 @@ def upgrade_dependencies(root, pkg_name : string; var lf : LockFile; is_global :
             log("  Installing new dependency: {dep_name}...\n")
             let dep_source = resolve_dep_source(root, d.source)
             if (empty(dep_source)) continue
-            var visiting : table<string; bool>
+            var inscope visiting : table<string; bool>
             let drc = install_git(root, dep_name, dep_source, "", lf, visiting, [is_root = false, is_global = is_global, force = force])
             if (drc != 0) {
                 to_log(LOG_ERROR, "Error: failed to install new dependency '{dep_name}' (rc={drc})\n")
@@ -1791,14 +1791,12 @@ def private release_tuner_cmd(daslang : string; ts : TuneScopeDep; paranoid : bo
     return "{envs}\"{daslang}\" -jit \"{ts.tuner}\" -dasroot \"{get_das_root()}\"{tune_args}"
 }
 
-def private release_elapsed(t0 : int64) : string {
-    return fmt(":.1f", float(double(get_time_usec(t0)) / 1000000.0lf))
-}
+def private release_elapsed(t0 : int64) : string =>
+    fmt(":.1f", float(double(get_time_usec(t0)) / 1000000.0lf))
 
 // Bundle path for the standalone exe (daslang -exe appends `.exe` itself).
-def private bundle_exe_path(bundle_dir, bundle_name : string) : string {
-    return path_join(bundle_dir, bundle_name)
-}
+def private bundle_exe_path(bundle_dir, bundle_name : string) : string =>
+    path_join(bundle_dir, bundle_name)
 
 // Sanitize one component of a derived CFBundleIdentifier so it satisfies
 // Apple's [A-Za-z0-9.-] rule. Lowercases, replaces every other byte with
@@ -3239,11 +3237,8 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
     }
 
     // 3. Gather wasm64 archives + per-module emcc args / embeds.
-    var archives : array<string>
-    var emcc_args : array<string>
-    var embeds : array<string>
-    var seen : table<string>
-    var built_external : table<string>
+    var archives, emcc_args, embeds : array<string>
+    var seen, built_external : table<string>
     for (e in deps.shared_modules) {
         if (empty(e.rel)) continue
         let arch = "{wasm_lib_dir}/{wasm_archive_name(e.rel)}"

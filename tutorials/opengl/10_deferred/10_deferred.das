@@ -226,9 +226,7 @@ var @out frag_color : float4
 
 let SHADOW_DIM_F = 1024.0
 
-def reflect3(i, nn : float3) : float3 {
-    return i - nn * (2.0 * dot(nn, i))
-}
+def reflect3(i, nn : float3) : float3 => i - nn * (2.0 * dot(nn, i))
 
 def equirect_uv(d : float3) : float2 {
     let u = atan2(d.z, d.x) * 0.15915494 + 0.5

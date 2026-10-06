@@ -322,9 +322,7 @@ struct RunResult {
 // The file the downstream command should write progress into, or "" when this
 // call streams none. The handler forwards it (e.g. as a --progress-file
 // argument) only when non-empty.
-def mcp_progress_path() : string {
-    return current_progress_file
-}
+def mcp_progress_path() : string => current_progress_file
 
 // The token lives at params._meta.progressToken and is a string or integer per
 // the MCP spec. Return its JSON verbatim (so the same type is echoed back), or

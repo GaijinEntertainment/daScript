@@ -23,9 +23,7 @@ struct register {
 // --- class named after a C++ keyword ---
 class extern {
     payload : int = 99
-    def get_payload() : int {
-        return payload
-    }
+    def get_payload() : int => payload
 }
 
 // --- enum named after a C++ keyword ---
@@ -46,14 +44,10 @@ typedef short = int
 typedef extern_ptr = int?
 
 // --- function arg named after a C++ keyword ---
-def double_it(char : int) : int {
-    return char * 2
-}
+def double_it(char : int) : int => char * 2
 
 // --- function type with a keyword arg name ---
-def call_with_int(f : function<(char : int) : int>; v : int) : int {
-    return invoke(f, v)
-}
+def call_with_int(f : function<(char : int) : int>; v : int) : int => invoke(f, v)
 
 // --- global var named after a C++ keyword ---
 var g_char = 100

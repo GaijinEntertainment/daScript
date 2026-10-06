@@ -27,9 +27,7 @@ class RangeChecker : AstVisitor {
     src_lines : array<string>
     problems : array<string>
 
-    def line_of(l : int) : string {
-        return (l >= 1 && l <= length(src_lines)) ? src_lines[l - 1] : ""
-    }
+    def line_of(l : int) : string => (l >= 1 && l <= length(src_lines)) ? src_lines[l - 1] : ""
 
     def char_at(l, c : int) : string {
         let ln = line_of(l)
@@ -183,8 +181,7 @@ def test_lineinfo_ranges_gen1_eof(t : T?) {
         let nlPath = unsafe(nlFile.value)
         let eofPath = unsafe(eofFile.value)
         t |> success(fwrite(nlPath, "{body}\n") && fwrite(eofPath, body), "temporary fixtures written")
-        var nlSpans : array<string>
-        var eofSpans : array<string>
+        var nlSpans, eofSpans : array<string>
         let nlOk = gen1_block_spans(nlPath, nlSpans)
         let eofOk = gen1_block_spans(eofPath, eofSpans)
         remove(nlPath)

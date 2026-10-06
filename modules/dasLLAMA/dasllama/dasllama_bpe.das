@@ -216,8 +216,7 @@ def private bigram_try_push(pair_merge : table<int64; int64>; var h : array<Bigr
 def private bigram_merge_heap(pair_merge : table<int64; int64>; var syms : array<int64>) {
     let n = length(syms)
     return if (n < 2)
-    var nxt : array<int>
-    var prv : array<int>
+    var nxt, prv : array<int>
     nxt |> resize(n)
     prv |> resize(n)
     for (i in range(n)) {
@@ -351,7 +350,7 @@ def private bpe_encode_spm_space(tk : BpeTokenizer; text : string) : array<int64
             }
         }
         if (!done) {
-            var syms : array<int64>
+            var inscope syms : array<int64>
             syms |> reserve(e - pos)
             for (i in range(pos, e)) {
                 let cid = tk.cpt_id?[cpts[i]] ?? -1l
@@ -397,7 +396,7 @@ def bpe_encode(tk : BpeTokenizer; text : string) : array<int64> {
     var cpb : array<uint8>   // one codepoint's UTF-8 bytes, reused across the walk (no string per codepoint)
     cpb |> reserve(4)
     for (off in offs) {
-        var syms : array<int64>
+        var inscope syms : array<int64>
         syms |> reserve(off)
         var has_unk = false
         for (i in range(pos, pos + off)) {
@@ -502,6 +501,4 @@ def bpe_decode_ids(tk : BpeTokenizer; ids : array<int64>) : string {
 }
 
 //! Look up a special/added token id by its surface form (e.g. "<|eot_id|>"); -1 if absent.
-def special_id(tk : BpeTokenizer; name : string) : int64 {
-    return tk.lookup?[name] ?? -1l
-}
+def special_id(tk : BpeTokenizer; name : string) : int64 => tk.lookup?[name] ?? -1l

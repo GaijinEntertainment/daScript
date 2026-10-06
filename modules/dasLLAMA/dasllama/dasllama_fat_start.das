@@ -6,7 +6,7 @@ module dasllama_fat_start shared private
 
 require dasllama/dasllama_lint public
 require dasllama/dasllama_common
-require dasllama/dasllama_env   // nolint:STYLE030 - dasllama_home_dir, used only inside the llvm_tune static_if half
+require dasllama/dasllama_env   // nolint:STYLE030,LINT019 - dasllama_home_dir, used only inside the llvm_tune static_if half
 require daslib/fio
 require dasllama/dasllama_math   // the runtime knob getters the snapshot records
 require dasllama/dasllama_par    // get_total_hw_jobs - the advisory "threads" entry
@@ -125,9 +125,8 @@ def public dasllama_fat_first_start() : bool {
 
 //! Where a fat exe keeps its sidecar: `<dasllama home>/tune/<exe name>.tune.json`, so an installed
 //! exe never writes beside itself. `beside` is the default path next to the exe.
-def public dasllama_fat_sidecar_path(dasllama_home, beside : string) : string {
-    return path_join(path_join(dasllama_home, "tune"), base_name(beside))
-}
+def public dasllama_fat_sidecar_path(dasllama_home, beside : string) : string =>
+    path_join(path_join(dasllama_home, "tune"), base_name(beside))
 
 //! Make `home_path`'s directory, and copy the sidecar at `beside` there when `home_path` has none.
 def public dasllama_adopt_sidecar(beside, home_path : string) {

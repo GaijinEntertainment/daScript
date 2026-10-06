@@ -46,9 +46,7 @@ def ping(input : JsonValue?) : JsonValue? {
 
 // --- Tests (run on the client thread) ---
 
-def base_url() : string {
-    return "http://127.0.0.1:{live_api_port}"
-}
+def base_url() : string => "http://127.0.0.1:{live_api_port}"
 
 def test_status() {
     print("--- GET /status ---\n")

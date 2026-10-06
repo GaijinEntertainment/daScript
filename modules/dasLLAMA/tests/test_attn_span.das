@@ -28,9 +28,8 @@ let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 let NPOS = 48l
 
 // deterministic pseudo-random embd rows in a tame range; `perturb_last` perturbs ONLY the final row
-def private make_embd(dim : int64; perturb_last : int) : array<float> {
-    return <- make_embd_at(dim, perturb_last != 0 ? NPOS - 1l : -1l)
-}
+def private make_embd(dim : int64; perturb_last : int) : array<float> =>
+    <- make_embd_at(dim, perturb_last != 0 ? NPOS - 1l : -1l)
 
 // same rows; `perturb_row` >= 0 perturbs ONLY that row
 def private make_embd_at(dim, perturb_row : int64) : array<float> {

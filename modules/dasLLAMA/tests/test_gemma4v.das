@@ -241,9 +241,7 @@ def test_gemma4v_std_guard(t : T?) {
         set_every_gpu_tower(false)
         set_gemma4v_q8(false)
         let planes <- make_planes("cb", 96, 96)
-        var plain : array<float>
-        var neutral : array<float>
-        var biased : array<float>
+        var plain, neutral, biased : array<float>
         with_dasllama_jobque_() {
             var inscope stg0 <- stage_gemma4v_tower(mm)
             tt |> success(!stg0.t.has_std, "E2B carries no std pair - the arm is synthesized below")

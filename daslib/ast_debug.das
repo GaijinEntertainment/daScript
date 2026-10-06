@@ -40,13 +40,9 @@ def isModulePtrType(_vinfo; mod, what : string) {
     return vinfo.annotation.name == what
 }
 
-def isAstPtrType(_vinfo; what : string) {
-    return isModulePtrType(_vinfo, "ast_core", what)
-}
+def isAstPtrType(_vinfo; what : string) => isModulePtrType(_vinfo, "ast_core", what)
 
-def isRttiPtrType(_vinfo; what : string) {
-    return isModulePtrType(_vinfo, "rtti_core", what)
-}
+def isRttiPtrType(_vinfo; what : string) => isModulePtrType(_vinfo, "rtti_core", what)
 
 def isRttiType(vinfo; what : string) {
     if (vinfo.basicType != Type.tHandle
@@ -101,9 +97,7 @@ class SampleStackWalker : DapiStackWalker {
             describe_arg(*ctxid, vinfo, arg)
         }
     }
-    def override onAfterCall(pp : Prologue) : bool {
-        return false
-    }
+    def override onAfterCall(pp : Prologue) : bool => false
 }
 
 class ContextStateAgent : DapiDebugAgent {

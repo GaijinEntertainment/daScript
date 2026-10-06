@@ -20,9 +20,8 @@ def has_line(lines : array<string>; s : string) : bool {
     return false
 }
 
-def child_argv(fixture, ready, release : string) : array<string> {
-    return [das_exe(), "-dasroot", get_das_root(), fixture, "--", ready, release]
-}
+def child_argv(fixture, ready, release : string) : array<string> =>
+    [das_exe(), "-dasroot", get_das_root(), fixture, "--", ready, release]
 
 def make_temp_root(t : T?; prefix : string) : string {
     let tmp = create_temp_directory_result(prefix)
@@ -36,9 +35,8 @@ def make_temp_root(t : T?; prefix : string) : string {
 //! a deadline on a child's startup or exit, never a claim about speed: a Debug host compiles
 //! what the child requires several times slower, so the deadline stretches threefold there,
 //! never past five minutes
-def guard(seconds : float) : float {
-    return shared_module_extension() == "_debug.shared_module" ? min(seconds * 3.0, 300.0) : seconds
-}
+def guard(seconds : float) : float =>
+    shared_module_extension() == "_debug.shared_module" ? min(seconds * 3.0, 300.0) : seconds
 
 // drain until the child's ready file appears; the file event drives it, the clock only guards
 def wait_for_ready(t : T?; var p : process; ready : string) {

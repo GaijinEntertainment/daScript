@@ -619,9 +619,7 @@ def private class_method(mod : Module?; st : StructurePtr; mname : string) : Fun
 
 def private classify_access(fn : Function?; mod : Module?; st : StructurePtr; tracked : table<string>; fieldMode : bool) : AccessResult {
     var res : AccessResult
-    var pending : table<string>
-    var visited : table<string>
-    var callees : table<string>
+    var pending, visited, callees : table<string>
     analyze_one(fn, mod, st, tracked, fieldMode, res, callees)
     visited |> insert(string(fn.name))
     // Field mode does not recurse into FREE callees — shader intrinsics have das shims whose
@@ -644,7 +642,7 @@ def private classify_access(fn : Function?; mod : Module?; st : StructurePtr; tr
             continue
         }
         visited |> insert(name)
-        var next : table<string>
+        var inscope next : table<string>
         let mfn = fieldMode ? class_method(mod, st, name) : null
         if (mfn != null) {
             analyze_one(mfn, mod, st, tracked, fieldMode, res, next)
@@ -681,9 +679,8 @@ def classify_global_access(fn : Function?; mod : Module?; tracked : table<string
 //! on anything else (float4 components like wv.y) never matches. `st` is the kernel class, so a
 //! body that delegates to its own METHODS is followed through them (an override resolves against
 //! the concrete class, like the emitter does); free callees stay intra-body.
-def classify_field_access(fn : Function?; mod : Module?; st : StructurePtr; tracked : table<string>) : AccessResult {
-    return <- classify_access(fn, mod, st, tracked, true)
-}
+def classify_field_access(fn : Function?; mod : Module?; st : StructurePtr; tracked : table<string>) : AccessResult =>
+    <- classify_access(fn, mod, st, tracked, true)
 
 //! the lensed class `st`'s kernel method - a method of `mod` annotated `kernel_ann` - the body the classifier walks: `want` names
 //! the method of a multi-kernel class, a trailing '*' making it a prefix; "" counts every kernel method in `nmatch` and answers the first

@@ -53,9 +53,8 @@ struct public RenderCache {
     ov_runs : array<DrawRun>
 }
 
-def public col32(rgb : uint; a : int) : uint {
-    return rgba(int((rgb >> 16u) & 255u), int((rgb >> 8u) & 255u), int(rgb & 255u), a)
-}
+def public col32(rgb : uint; a : int) : uint =>
+    rgba(int((rgb >> 16u) & 255u), int((rgb >> 8u) & 255u), int(rgb & 255u), a)
 
 def private blend_rgb(a, b : uint; k : float) : uint {
     let ar = float((a >> 16u) & 255u)

@@ -245,8 +245,7 @@ def private ff_cell(t : T?; tr, trg : Model; tag, pn : string; prompt : array<in
 }
 
 def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int64>; depth : int64; sampled : bool = false) {
-    var plain : array<int64>
-    var spec : array<int64>
+    var plain, spec : array<int64>
     var drafted = 0l
     var parked = 0l
     mtp_pos_reset()
@@ -475,7 +474,7 @@ def private dff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps : in
 //! a skip hid the partial-rope gate mismatch (rows built at rope-dim width, the gate asking head width)
 def private dff_cell(t : T?; tr, trg : Model; tag : string; prose_a, prose_b : array<int64>; tol : float; wide : bool = false; must_serve : bool = false) {
     for (nb in (wide ? [5l, 8l] : [2l, 4l])) {
-        var sub : array<array<int64>>
+        var inscope sub : array<array<int64>>
         sub |> reserve(nb)
         for (i in range64(nb)) {
             sub |> emplace <| clone_to_move((i & 1l) == 0l ? prose_a : prose_b)

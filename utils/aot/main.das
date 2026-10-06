@@ -98,7 +98,7 @@ def parse_input_file(filename : string) {
             for (line in normalize_line_endings(string(data)) |> split("\n")) {
                 if (line.empty()) continue
                 // aot/ctx in.das out.cpp
-                let parts = line |> split(" ")
+                var inscope parts = line |> split(" ")
                 let mode = parts[0]
                 if (mode == "aot") {
                     aot_files |> push((parts[1], parts[2]))

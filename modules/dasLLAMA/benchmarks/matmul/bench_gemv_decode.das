@@ -300,14 +300,11 @@ def bench_shape(name : string; n, d : int64; reps_st, reps_thr : int) {   // nol
     to_log(LOG_INFO, "\n=== {name}  n={n} d={d}  laneq {wmb} MB / inline {imb} MB  x{ncopies} copies ===\n")
 
     // interleaved race: ROUNDS passes, every variant timed once per pass, ST then THR sections
-    var st_sum : array<double>
-    var thr_sum : array<double>
-    var thr_min : array<double>
+    var st_sum, thr_sum, thr_min : array<double>
     st_sum |> resize(NV)
     thr_sum |> resize(NV)
     thr_min |> resize(NV)
-    var thr_sum_al : array<double>
-    var thr_min_al : array<double>
+    var thr_sum_al, thr_min_al : array<double>
     thr_sum_al |> resize(NV)
     thr_min_al |> resize(NV)
     for (_round in range(ROUNDS)) {

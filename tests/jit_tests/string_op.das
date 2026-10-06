@@ -2,9 +2,7 @@ options gen2
 require dastest/testing_boost
 
 [sideeffects]
-def strcat(a, b : string) {
-    return a + b
-}
+def strcat(a, b : string) => a + b
 
 [sideeffects]
 def strcati(var a : string&; b : string) {

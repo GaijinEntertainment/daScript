@@ -52,9 +52,8 @@ def join_path(a, path_b : string) : string {
 }
 
 
-def fix_path(path : string) : string {
-    return path |> trim_path() |> file_name_to_uri() |> normalize_uri() |> uri_to_file_name()
-}
+def fix_path(path : string) : string =>
+    path |> trim_path() |> file_name_to_uri() |> normalize_uri() |> uri_to_file_name()
 
 
 def scan_dir(path : string; var cache : table<string; void?>; var res : array<string>; suffix = ".das") : bool {

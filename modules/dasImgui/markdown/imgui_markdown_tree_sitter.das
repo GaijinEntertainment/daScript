@@ -214,7 +214,7 @@ def public markdown_tree_sitter_prepare(doc : RichDocument const;
         let node = doc.nodes[node_index]
         if (node.kind != RichNodeKind.code_block
                 || markdown_view_syntax_bound(state, document_revision, node_index)) continue
-        var projected : array<MarkdownSyntaxToken>
+        var inscope projected : array<MarkdownSyntaxToken>
         if (highlight_markdown_code(doc, node_index,
                                     syntax_canonical_language(node.language),
                                     projected)) highlighted++
@@ -244,7 +244,7 @@ def public markdown_tree_sitter_prepare(doc : RichDocument const;
 
         let _ = markdown_view_unbind_syntax(
             state, document_revision, node_index)
-        var projected : array<MarkdownSyntaxToken>
+        var inscope projected : array<MarkdownSyntaxToken>
         if (highlight_markdown_code(
                 doc, node_index, language, projected)) highlighted++
         markdown_view_bind_syntax(

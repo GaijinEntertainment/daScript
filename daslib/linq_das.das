@@ -49,9 +49,7 @@ require daslib/linq_boost public
 // the inner collection is a per-row value, not a table). join and both crosses share the post-source tail
 // (emit_two_source). One extra `from` only; `from … from` + `join` in one query is rejected.
 
-def private is_ident_byte(c : int) : bool {
-    return is_alnum(c) || c == '_'
-}
+def private is_ident_byte(c : int) : bool => is_alnum(c) || c == '_'
 
 def private strip_query_comments(query : string) : string {
     return modify_data(query) $(var arr) {
@@ -466,8 +464,7 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
             return "(0)"
         }
     }
-    var preWheres : array<string>
-    var postWheres : array<string>
+    var preWheres, postWheres : array<string>
     var firstPostWhere = -1
     var wp = firstWhere
     var whereErr = ""

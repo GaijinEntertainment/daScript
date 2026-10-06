@@ -10,21 +10,13 @@ require dastest/testing_boost public
 
 // ── Helpers to build test expressions ───────────────────────────────────
 
-def make_int(val : int) : ExpressionPtr {
-    return qmacro($v(val))
-}
+def make_int(val : int) : ExpressionPtr => qmacro($v(val))
 
-def make_bool(val : bool) : ExpressionPtr {
-    return qmacro($v(val))
-}
+def make_bool(val : bool) : ExpressionPtr => qmacro($v(val))
 
-def make_add_ab() : ExpressionPtr {
-    return qmacro(a + b)
-}
+def make_add_ab() : ExpressionPtr => qmacro(a + b)
 
-def make_add_xb() : ExpressionPtr {
-    return qmacro(x + b)
-}
+def make_add_xb() : ExpressionPtr => qmacro(x + b)
 
 // ── Basic matching ──────────────────────────────────────────────────────
 
@@ -114,8 +106,7 @@ def test_capture_e_op2(t : T?) {
     ast_gc_guard() {
         // Match a + b, capture left and right as ExpressionPtr
         var expr <- make_add_ab()
-        var left : ExpressionPtr
-        var right : ExpressionPtr
+        var left, right : ExpressionPtr
         let r = qmatch(expr, $e(left) + $e(right))
         t |> success(r.matched, "should match with $e captures")
         if (r.matched) {
@@ -177,8 +168,7 @@ def test_capture_i_from_op2(t : T?) {
     ast_gc_guard() {
         // Extract variable names from a + b
         var expr <- make_add_ab()
-        var left_name : string
-        var right_name : string
+        var left_name, right_name : string
         let r = qmatch(expr, $i(left_name) + $i(right_name))
         t |> success(r.matched, "should match a + b with $i captures")
         if (r.matched) {

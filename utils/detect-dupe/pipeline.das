@@ -39,14 +39,11 @@ def public read_path_lines_from_file(path : string; var paths : array<string>;
 
 // Files no scan should parse: builtin.das and the ast-fuzz selftest victims
 // (deliberately broken; test_ast_fuzz.das owns them).
-def public is_skip_file(path : string; basename : string) : bool {
-    return basename == "builtin.das" || normalize_path(path) |> contains("ast-fuzz/selftest/")
-}
+def public is_skip_file(path : string; basename : string) : bool =>
+    basename == "builtin.das" || normalize_path(path) |> contains("ast-fuzz/selftest/")
 
 
-def public is_skip_dir(name : string) : bool {
-    return name |> starts_with(".")
-}
+def public is_skip_dir(name : string) : bool => name |> starts_with(".")
 
 
 def public has_expect_directive(file : string) : bool {
@@ -213,9 +210,8 @@ def public apply_pattern_filter(var records : array<FuncRecord>;
 }
 
 
-def public collect_candidate_refs(records : array<FuncRecord>) : array<MemberRef> {
-    return <- [for (r in records); r.ref; where r.is_candidate]
-}
+def public collect_candidate_refs(records : array<FuncRecord>) : array<MemberRef> =>
+    <- [for (r in records); r.ref; where r.is_candidate]
 
 
 // The grammar reports its abort as `invalid_expression` with a `syntax error, ...` text, the

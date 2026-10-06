@@ -19,9 +19,7 @@ def nvm_step(x : int) : int => x + 1
 var g_seed = 1
 
 [never_inline]  // structural anchors resist the heuristic tier (skills/internal/tests_in_repo.md)
-def target_must() : int {
-    return nvm_add(g_seed, 2)
-}
+def target_must() : int => nvm_add(g_seed, 2)
 
 [never_inline]
 def target_literal() : int {
@@ -31,9 +29,7 @@ def target_literal() : int {
 }
 
 [never_inline]
-def target_instance() : int {
-    return nvm_gen(6 + g_seed)
-}
+def target_instance() : int => nvm_gen(6 + g_seed)
 
 [never_inline]
 def target_baseline() : int {
@@ -47,9 +43,7 @@ def target_canon() : int {
     }
 }
 
-def has(s, sub : string) : bool {
-    return !empty(sub) && find(s, sub) >= 0
-}
+def has(s, sub : string) : bool => !empty(sub) && find(s, sub) >= 0
 
 def body_of(t : T?; nm : string) : string {
     var body = ""

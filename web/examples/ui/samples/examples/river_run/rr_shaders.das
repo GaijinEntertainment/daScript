@@ -106,17 +106,11 @@ var @out @location = 1 f_FragNormalDepth : float4
 
 // math::fract and glsl_common::fract both match here, so spell the fractional
 // part out; it lowers to the same GLSL either way.
-def private frac1(x : float) : float {
-    return x - floor(x)
-}
+def private frac1(x : float) : float => x - floor(x)
 
-def private frac2(p : float2) : float2 {
-    return p - floor(p)
-}
+def private frac2(p : float2) : float2 => p - floor(p)
 
-def private hash21(p : float2) : float {
-    return frac1(sin(dot(p, float2(127.1, 311.7))) * 43758.545)
-}
+def private hash21(p : float2) : float => frac1(sin(dot(p, float2(127.1, 311.7))) * 43758.545)
 
 // Value noise with a smooth (cubic) interpolant. The bank shading uses this
 // instead of the old floor()-quantized hash, which tiled the ground into a

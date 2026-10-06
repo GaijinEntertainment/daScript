@@ -52,9 +52,7 @@ def sum_alias_local() : int {
 
 // [NEW] return ownership: the callee allocates and returns it (FreshOwned), so the CALLER
 // owns `x` and frees it at scope exit - even though x's init is a call, not a `new`.
-def make_node(i : int) : Node? {
-    return new Node(x = i, y = i * 2)
-}
+def make_node(i : int) : Node? => new Node(x = i, y = i * 2)
 def sum_return_owned() : int {
     var total = 0
     for (i in range(N)) {

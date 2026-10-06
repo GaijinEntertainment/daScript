@@ -28,9 +28,7 @@ def target_cross() : int {
     return cnt_outer(2 + impure())
 }
 
-def has(s, sub : string) : bool {
-    return !empty(sub) && find(s, sub) >= 0
-}
+def has(s, sub : string) : bool => !empty(sub) && find(s, sub) >= 0
 
 def body_of(t : T?; nm : string) : string {
     var body = ""

@@ -65,9 +65,7 @@ def set5 {
     return b
 }
 
-def get_a : Foo {
-    return g_a
-}
+def get_a : Foo => g_a
 
 // potential alias - global variable cmres vs global variable g_a via get_a function
 def set6 {

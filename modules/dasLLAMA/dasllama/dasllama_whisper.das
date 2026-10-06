@@ -276,14 +276,11 @@ def private wm_repack(var dqblob : array<int8>; var dqscales : array<float>; wof
 
 //! The loaded precision as ``<encoder>/<decoder>`` — whisper's half of the facade's
 //! [[asr_exec_fmt]] stamp.
-def whisper_exec_fmt(w : WhisperModel) : string {
-    return "{w.enc.q8 ? "q8" : "f32"}/{w.dq8 ? "q8" : "f32"}"
-}
+def whisper_exec_fmt(w : WhisperModel) : string =>
+    "{w.enc.q8 ? "q8" : "f32"}/{w.dq8 ? "q8" : "f32"}"
 
 //! Whisper's encode-total ``asr_prof`` bucket (the facade's [[asr_encode_bucket]] arm).
-def whisper_encode_bucket : string {
-    return "wh.encode_total"
-}
+def whisper_encode_bucket : string => "wh.encode_total"
 
 //! Quantizes the decoder's GEMM set to Q8_0 COMPACT planes: per-layer self/cross mats + fc1/fc2
 //! dense in dqblob; the tied token embedding gets a q8 copy (the logits GEMV weight) while its
@@ -454,9 +451,8 @@ def private whisper_tag(enc_q8, dec_q8 : bool) : string {
 //! Loads a whisper.cpp ggml-*.bin model (f32/f16 only; verified byte-for-byte against the
 //! reference loader). Like ``load_model``, caches a box/knob-specific PREPARED IMAGE for fast
 //! reload; ``DASLLAMA_IMAGE=0`` disables it, a ``.dlim`` path loads one directly.
-def load_whisper_model(path : string; q8 : bool = false) : WhisperModel {
-    return <- load_whisper_model(path, q8, q8)
-}
+def load_whisper_model(path : string; q8 : bool = false) : WhisperModel =>
+    <- load_whisper_model(path, q8, q8)
 
 //! The per-half form: ``enc_q8`` quantizes the encoder (the CPU tower rail; the metal tower
 //! declines it), ``dec_q8`` the decoder. The GPU-tower serving mode is (false, true) —
@@ -540,9 +536,8 @@ def mint_whisper_model(var st : WhisperStaging; var out : WhisperModel; enc_q8, 
 
 //! The ggml-bin reader proper: scalars land in the served model, plane bytes in the staging
 //! arrays beside it. Nothing here is servable — the image build is what produces a live model.
-def stage_whisper_model(path : string; q8 : bool = false) : WhisperStaging {
-    return <- stage_whisper_model(path, q8, q8)
-}
+def stage_whisper_model(path : string; q8 : bool = false) : WhisperStaging =>
+    <- stage_whisper_model(path, q8, q8)
 
 //! The per-half staging twin (see ``load_whisper_model``'s per-half form for the pair's meaning).
 def stage_whisper_model(path : string; enc_q8, dec_q8 : bool) : WhisperStaging {
@@ -553,8 +548,7 @@ def stage_whisper_model(path : string; enc_q8, dec_q8 : bool) : WhisperStaging {
     }
     fmap(f) $(var bytes : array<uint8>#) {
         var recs : table<string; WTensorRec>
-        var encJobs : array<WFillJob>
-        var decJobs : array<WFillJob>
+        var encJobs, decJobs : array<WFillJob>
         let sz = whisper_index(bytes, int64(stat(path).size), st, recs, encJobs, decJobs)
         st.enc.fblob |> reserve_resize(sz.enc_len)
         for (j in encJobs) {
@@ -715,8 +709,7 @@ def private stream_whisper_model(path : string; enc_q8, dec_q8 : bool; img, tag 
     fmap(f) $(var bytes : array<uint8>#) {
         var st = WhisperStaging()
         var recs : table<string; WTensorRec>
-        var encJobs : array<WFillJob>
-        var decJobs : array<WFillJob>
+        var encJobs, decJobs : array<WFillJob>
         let sz = whisper_index(bytes, int64(stat(path).size), st, recs, encJobs, decJobs)
         // the streamed meta must carry the compact offsets the eager quantizers write
         if (enc_q8) {

@@ -15,14 +15,10 @@ require daslib/strings_boost
 var g_seed = 1
 
 [never_inline]
-def apply_ro(v : int; blk : block<(x : int) : int>) : int {
-    return invoke(blk, v)
-}
+def apply_ro(v : int; blk : block<(x : int) : int>) : int => invoke(blk, v)
 
 [never_inline]
-def apply_rw(v : int; blk : block<(var y : int) : int>) : int {
-    return invoke(blk, v)
-}
+def apply_rw(v : int; blk : block<(var y : int) : int>) : int => invoke(blk, v)
 
 [never_inline]
 def fixture_shape() : int {

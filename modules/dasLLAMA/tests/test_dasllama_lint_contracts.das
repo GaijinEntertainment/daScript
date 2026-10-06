@@ -14,17 +14,15 @@ require _compares
 // load_audio_16k_mono's empty-on-failure contract that every caller must guard.
 
 // a one-function program requiring `requires` (one per line), no escape line
-def fixture_source(requires : array<string>) : string {
-    return join(requires, "\n") + "\n\n[export]\ndef main() " + "\{\n    print(\"ok\\n\")\n\}\n"
-}
+def fixture_source(requires : array<string>) : string =>
+    join(requires, "\n") + "\n\n[export]\ndef main() " + "\{\n    print(\"ok\\n\")\n\}\n"
 
 //! an engine-wide compile: the facade pulls every engine module, and the windows nightly runner compiles it in about two
 //! minutes, so the cap sits well past that
 let ENGINE_COMPILE_CAP_SEC = 480.0
 
-def spawn_compile(requires : array<string>; tag : string) : tuple<rc : int; out : string> {
-    return spawn_compile_only(fixture_source(requires), "lint_{tag}", ENGINE_COMPILE_CAP_SEC)
-}
+def spawn_compile(requires : array<string>; tag : string) : tuple<rc : int; out : string> =>
+    spawn_compile_only(fixture_source(requires), "lint_{tag}", ENGINE_COMPILE_CAP_SEC)
 
 //! a module with a function global above its `[init, boot_restore]` function, and one below it where `below` is set: the annotation
 //! runs as the parser reaches the function, so a global below it would get no guard - the macro refuses the module

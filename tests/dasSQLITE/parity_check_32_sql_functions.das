@@ -26,9 +26,7 @@ require daslib/sql_linq
 // SQL-binding side.
 
 [sql_function(deterministic=true)]
-def score(hp : float; armor : int) : double {
-    return double(hp) * (1.0lf - double(armor) / 100.0lf)
-}
+def score(hp : float; armor : int) : double => double(hp) * (1.0lf - double(armor) / 100.0lf)
 
 [sql_table(name = "Enemies")]
 struct Enemy {

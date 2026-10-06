@@ -31,9 +31,8 @@ let MID_PUBLIC = "options gen2\nmodule mid\nrequire [probe_group] public\n"
 let MID_PUBLIC_TAB = "options gen2\nmodule mid_tab\nrequire [probe_group]\tpublic\n"
 let MID_PRIVATE = "options gen2\nmodule mid_private\nrequire [probe_group]\n"
 
-def driver(requires : string; expr : string) : string {
-    return "options gen2\n{requires}\n[export]\ndef main \{\n    print(\"PROBE \{{expr}\}\\n\")\n\}\n"
-}
+def driver(requires : string; expr : string) : string =>
+    "options gen2\n{requires}\n[export]\ndef main \{\n    print(\"PROBE \{{expr}\}\\n\")\n\}\n"
 
 struct Fixture {
     tmp : string
@@ -76,9 +75,8 @@ def write_driver(fx : Fixture; name : string; requires : string; expr : string) 
     return path
 }
 
-def run_driver(fx : Fixture; script : string; var out : string&; cache : string = "-no-module-cache") : int {
-    return run_child("{fx.cmdPrefix} {cache} \"{script}\"", out)
-}
+def run_driver(fx : Fixture; script : string; var out : string&; cache : string = "-no-module-cache") : int =>
+    run_child("{fx.cmdPrefix} {cache} \"{script}\"", out)
 
 //! run_driver, reported as run_child_reported reports: the run is its own statement, never an
 //! argument beside the `out` it writes

@@ -67,9 +67,7 @@ let ROUNDS = 8
 let GEN_KEEP = 1.20lf
 
 // the sticky margin as a factor: a new crown must beat the incumbent's best by win_margin_pct()
-def private gen_margin() : double {
-    return 1.0lf + win_margin_pct() / 100.0lf
-}
+def private gen_margin() : double => 1.0lf + win_margin_pct() / 100.0lf
 
 require tuner_cli              // the shared tuner CLI
 
@@ -686,9 +684,7 @@ def run_kq_gemv_team(gemv; fx : KqFixture; kq : array<uint8>; ks : array<uint8>;
 // production shapes (intermediate terms are large, the sum is small) — gate against the
 // fixture's magnitude instead; a real generator bug (wrong stride/lane/scale) is orders louder
 // than fast-math fold-order noise
-def kq_tol(fx : KqFixture; count : int) : float {
-    return close_tol(max_abs(fx.yref, count))
-}
+def kq_tol(fx : KqFixture; count : int) : float => close_tol(max_abs(fx.yref, count))
 
 def close_to_kq_ref(fx : KqFixture; y : array<float>; var maxdiff : float&; form : int64 = 0l) : bool {
     let tol = max(kq_tol(fx, length(y)), bf16_envelope(fx.yref, length(y), form))
@@ -714,12 +710,12 @@ def kq_gate_variant(suffix : string; tile : KqTileFn; gemv : KqRowsFn; tile4 : K
                     kfxs : array<KqFixture>; mr : int64; var maxdiff : float&; form : int64 = 0l) : bool {
     var ok = true
     for (kfx in kfxs) {
-        var kqv := kfx.kq
-        var ksv := kfx.ks
+        var inscope kqv := kfx.kq
+        var inscope ksv := kfx.ks
         unsafe {
             repack_kq_grp_fmt(kfx.fmt, addr(kqv[0]), addr(ksv[0]), kfx.n, kfx.d, mr)
         }
-        var yk : array<float>
+        var inscope yk : array<float>
         yk |> resize(kfx.ntok * kfx.d)
         if (form > 0l) {
             run_kq_tile_bf16(tile, gemv, panel, kfx, kqv, ksv, mr, form, yk)
@@ -732,7 +728,7 @@ def kq_gate_variant(suffix : string; tile : KqTileFn; gemv : KqRowsFn; tile4 : K
             dump_mismatch("k{kfx.fmt} tile {suffix} n={kfx.n}", yk, kfx.yref, int(kfx.d)) $(_i : int) => tol
         }
         ok = ok && tok
-        var ykg : array<float>
+        var inscope ykg : array<float>
         ykg |> resize(kfx.d)
         run_gemv_sums(gemv, kfx, kqv, ksv, mr, ykg)
         let gok = close_to_kq_ref(kfx, ykg, maxdiff)
@@ -741,7 +737,7 @@ def kq_gate_variant(suffix : string; tile : KqTileFn; gemv : KqRowsFn; tile4 : K
             dump_mismatch("k{kfx.fmt} gemv {suffix} n={kfx.n}", ykg, kfx.yref, 0) $(_i : int) => tol
         }
         ok = ok && gok
-        var yk4 : array<float>
+        var inscope yk4 : array<float>
         yk4 |> resize(kfx.ntok * kfx.d)
         run_kq_tile(tile4, kfx, kqv, ksv, mr, yk4)
         let t4ok = close_to_kq_ref(kfx, yk4, maxdiff)
@@ -775,9 +771,8 @@ struct B32Fixture {
 }
 
 //! the format's scalar disk-order dot - the oracle every per-32 variant is held to
-def b32_scalar_dot(fmt : KqFmt; wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float {
-    return fmt == KqFmt.q51 ? dot_q51q8_scalar(wq, ws, xq, xs, n) : dot_iq4nl32q8_scalar(wq, ws, xq, xs, n)
-}
+def b32_scalar_dot(fmt : KqFmt; wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float =>
+    fmt == KqFmt.q51 ? dot_q51q8_scalar(wq, ws, xq, xs, n) : dot_iq4nl32q8_scalar(wq, ws, xq, xs, n)
 
 def build_b32_fixture(fmt : KqFmt; n, d : int64) : B32Fixture {
     var fx = B32Fixture(fmt = fmt, n = n, d = d, nb = n / 32l, qb = kq_qsb(fmt), sb = kq_ssb(fmt))
@@ -872,10 +867,10 @@ def b32_tune_family(fmt : KqFmt; var rows_out : table<string; JsonValue?>) : str
     yh |> resize(hfx.d)
     for (v in tvs) {
         let mr = int64(mrs?[v._0] ?? mr0)
-        var sq := sfx.qq
-        var ss := sfx.qs
-        var hq := hfx.qq
-        var hs := hfx.qs
+        var inscope sq := sfx.qq
+        var inscope ss := sfx.qs
+        var inscope hq := hfx.qq
+        var inscope hs := hfx.qs
         unsafe {
             repack_kq_grp(fmt, addr(sq[0]), addr(ss[0]), sfx.n, sfx.d, mr)
             repack_kq_grp(fmt, addr(hq[0]), addr(hs[0]), hfx.n, hfx.d, mr)
@@ -994,9 +989,7 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>; var ge
         }
     }
     let nmr = length(kmrs)
-    var bbuf : array<KqBuf>
-    var gbuf : array<KqBuf>
-    var hbuf : array<KqBuf>
+    var bbuf, gbuf, hbuf : array<KqBuf>
     bbuf |> resize(nmr)
     gbuf |> resize(nmr)
     hbuf |> resize(nmr)
@@ -1231,12 +1224,12 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
         var gmaxdiff = 0.0
         var t4maxdiff = 0.0
         for (fx in fxs) {
-            var qv := fx.q
-            var sv := fx.s
+            var inscope qv := fx.q
+            var inscope sv := fx.s
             unsafe {
                 repack_q8q8_grp(addr(qv[0]), addr(sv[0]), fx.n, fx.d, mr, wbias, kgv)
             }
-            var y : array<float>
+            var inscope y : array<float>
             y |> resize(fx.ntok * fx.d)
             if (formv > 0l) {
                 run_tile_bf16(v._1, ctab[v._0], ptab[v._0], fx, qv, sv, mr, formv, y)
@@ -1249,7 +1242,7 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
             }
             ok = ok && fxok
             // the gemv rows core on the same buffers: token 0's row of the oracle
-            var yg : array<float>
+            var inscope yg : array<float>
             yg |> resize(fx.d)
             run_gemv(gtab[v._0], fx, qv, sv, mr, yg)
             let gfxok = close_to_ref(fx, yg, gmaxdiff)
@@ -1257,7 +1250,7 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
                 dump_mismatch("gemv {v._0} n={fx.n}", yg, fx.yref, 0) $(i : int) => close_tol(fx.yref[i])
             }
             gok = gok && gfxok
-            var y4 : array<float>
+            var inscope y4 : array<float>
             y4 |> resize(fx.ntok * fx.d)
             run_tile(t4tab[v._0], ctab[v._0], fx, qv, sv, mr, 4l, 1l, y4)
             let t4fxok = close_to_ref(fx, y4, t4maxdiff)
@@ -1275,12 +1268,12 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
         var mok = true
         var mmaxdiff = 0.0
         for (mfx in mfxs) {
-            var nv := mfx.wn
-            var ev := mfx.we
+            var inscope nv := mfx.wn
+            var inscope ev := mfx.we
             unsafe {
                 repack_kq_grp(KqFmt.mx4, addr(nv[0]), addr(ev[0]), mfx.n, mfx.d, mr)
             }
-            var ym : array<float>
+            var inscope ym : array<float>
             ym |> resize(mfx.d)
             run_gemv(mtab[v._0], mfx, nv, ev, mr, ym)
             let mfxok = close_to_ref(mfx, ym, mmaxdiff)
@@ -1302,7 +1295,7 @@ def test_mode : bool { // nolint:STYLE037,STYLE038 — flat per-variant correctn
     // grid mr, ntok=32 is one whole bf16 tile - a shorter fixture walks a bf16 row's rows core alone and never its tile
     var kids <- kq_family_ids()
     for (fmt in kids) {
-        var kfxs <- [ <- build_kq_fixture(fmt, 256l, 32l, 32l), <- build_kq_fixture(fmt, 768l, 32l, 32l), <- build_kq_fixture(fmt, 2048l, 32l, 32l)]
+        var inscope kfxs <- [ <- build_kq_fixture(fmt, 256l, 32l, 32l), <- build_kq_fixture(fmt, 768l, 32l, 32l), <- build_kq_fixture(fmt, 2048l, 32l, 32l)]
         allok = kq_test_family(fmt, kfxs) && allok
         delete kfxs
     }
@@ -1577,15 +1570,11 @@ def private q8q8_tune_family : string { // nolint:STYLE037,STYLE038 - the q8q8 r
     delete wtab
     let nv = length(vs)
     // per-variant repacked buffers, built once outside the timing loop
-    var bufs : array<VBuf>
-    var gbufs : array<VBuf>
-    var hbufs : array<VBuf>
+    var bufs, gbufs, hbufs : array<VBuf>
     bufs |> resize(nv)
     gbufs |> resize(nv)
     hbufs |> resize(nv)
-    var vmr : array<int64>
-    var vts : array<int64>
-    var vgs : array<int64>
+    var vmr, vts, vgs : array<int64>
     var vform : array<int64>   // the tile form per variant: a bf16 variant runs the panel walk and holds the bf16 bar
     vmr |> resize(nv)
     vts |> resize(nv)

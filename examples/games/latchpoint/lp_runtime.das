@@ -29,9 +29,8 @@ var save_path = ""
 var trace_path = ""
 var @live runtime_logging = true
 
-def runtime_path(file : string) : string {
-    return path_join(get_das_root(), "examples/games/latchpoint/{file}")
-}
+def runtime_path(file : string) : string =>
+    path_join(get_das_root(), "examples/games/latchpoint/{file}")
 
 def record_world_event(event : string) {
     world.events |> push(clone_string(event))
@@ -129,9 +128,8 @@ def advance_starter(dt : float; held : bool) : bool {
     return true
 }
 
-def runtime_snapshot() : string {
-    return write_json(JV((version = 1, world = JV(world), conversations = JV(histories))))
-}
+def runtime_snapshot() : string =>
+    write_json(JV((version = 1, world = JV(world), conversations = JV(histories))))
 
 def runtime_load(text : string) : bool {
     var error : string

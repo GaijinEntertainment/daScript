@@ -12,13 +12,9 @@ require daslib/sql_linq
 //      visible from a different connection (per-DB scope).
 //   3. Across connection close + open the binding does not survive.
 
-def fn_v1(x : int) : int {
-    return x + 100
-}
+def fn_v1(x : int) : int => x + 100
 
-def fn_v2(x : int) : int {
-    return x + 200
-}
+def fn_v2(x : int) : int => x + 200
 
 [test]
 def test_replace_by_re_registering(t : T?) {

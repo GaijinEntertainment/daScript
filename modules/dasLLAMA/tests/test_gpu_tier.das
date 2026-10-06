@@ -242,8 +242,7 @@ def test_gpu_tier_contract(t : T?) {
     t |> run("uninstalled slots decline - never serve") @(t : T?) {
         t |> success(!moe_gpu_resident_installed(), "resident must start uninstalled")
         t |> success(!rdec_reserve(4, 100l), "unset reserve must decline")
-        var wq : array<uint8>
-        var ws : array<uint8>
+        var wq, ws : array<uint8>
         t |> equal(rdec_place(wq, ws, 256l, 1l, 4), -1l)
         t |> success(!moe_gpu_tier_arm_(), "tier must start unarmed")
         t |> success(!moe_gpu_backend_registered(), "no backend registered at start")
@@ -257,8 +256,7 @@ def test_gpu_tier_contract(t : T?) {
         t |> success(rdec_reserve(6, 12345l), "double must answer")
         t |> equal(g_reserve_fmt, 6)
         t |> equal(g_reserve_blocks, 12345l)
-        var wq : array<uint8>
-        var ws : array<uint8>
+        var wq, ws : array<uint8>
         t |> equal(rdec_place(wq, ws, 512l, 2l, 5), 7l)
         t |> success(rdec_prepare(2l, 1l, 64l, 64l, 64l, 8l, 8l, 128l, 100l, 32l, true, 1e-5, 1.0, false, int(KVDtype.q8_0), true, 4l,
             RdecDnGeom(cd = 96l, kd = 32l, di = 32l, nvh = 1l, nkh = 1l, ds = 32l, dconv = 4l, ba_f32 = true), 0l, 0l, 1l, true, true, 3l))
@@ -269,10 +267,7 @@ def test_gpu_tier_contract(t : T?) {
         t |> success(g_prepared_gated, "the gated-q flag must forward to the double")
         t |> equal(g_prepared_rot, 4l)
         t |> equal(g_prepared_dn_cd, 96l)
-        var x : array<float>
-        var cs : array<float>
-        var ple : array<float>
-        var logits : array<float>
+        var x, cs, ple, logits : array<float>
         logits |> resize(4)
         rdec_token(x, cs, ple, 9l, 10l, false, logits)
         t |> equal(g_token_pos, 9l)
@@ -356,8 +351,7 @@ def test_gpu_cpu_passes(t : T?) {
 def test_rdec_readback_reaches_the_doubles(t : T?) {
     install_moe_gpu_resident(@@d_reserve, @@d_place, @@d_prepare, @@d_norms, @@d_set_layer,
                              @@d_set_cls, @@d_token, @@d_prefill, @@d_sync, @@d_read)
-    var krow : uint8[2]
-    var vrow : uint8[2]
+    var krow, vrow : uint8[2]
     unsafe {
         rdec_kv_read(3l, 5l, 1l, addr(krow[0]), addr(vrow[0]))
         t |> equal(g_read_row0, 5l)
@@ -438,8 +432,7 @@ def test_rdec_draft_seat(t : T?) {
 def test_rdec_verify_seat(t : T?) {
     t |> run("the same-slab verify seat installs apart and forwards the rows, the position, the pick ask and every landing") @(t : T?) {
         let rows : array<float>
-        var logits : array<float>
-        var hid : array<float>
+        var logits, hid : array<float>
         var picks : array<int64>
         logits |> resize(4)
         hid |> resize(4)
@@ -487,8 +480,7 @@ def test_rdec_rollback_seat(t : T?) {
 [test]
 def test_rdec_head_warm_seat(t : T?) {
     t |> run("the head's prompt-warm seat installs apart: unset it keeps no ask and answers no rows, installed it forwards the ask and the row count; the head's K/V row ranges ride the row seats at layer n_layers") @(t : T?) {
-        var kb : array<uint8>
-        var vb : array<uint8>
+        var kb, vb : array<uint8>
         kb |> resize(4)
         vb |> resize(4)
         t |> success(!rdec_head_warm_installed(), "no head warm seat before its install")

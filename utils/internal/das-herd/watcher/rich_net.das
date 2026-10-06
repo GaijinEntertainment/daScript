@@ -473,9 +473,8 @@ class WatcherRichClient : HvWebSocketClient {
         }
     }
 
-    def session_is_interactive(session : WatcherSessionInfo const) : bool {
-        return !session_is_task(session.kind)
-    }
+    def session_is_interactive(session : WatcherSessionInfo const) : bool =>
+        !session_is_task(session.kind)
 
     def attach_session(session_id : string; follow_origin : bool = true) {
         if (!connected || empty(session_id)) return

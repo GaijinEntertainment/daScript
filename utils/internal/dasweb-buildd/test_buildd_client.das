@@ -23,9 +23,8 @@ def private upload_landing : string {
     return path_join(temp_directory(err), "dasweb_buildd_client_upload.bin")
 }
 
-def private stub_bearer_ok(var req : HttpRequest?) : bool {
-    return get_header(req, "Authorization") == "Bearer {STUB_TOKEN}"
-}
+def private stub_bearer_ok(var req : HttpRequest?) : bool =>
+    get_header(req, "Authorization") == "Bearer {STUB_TOKEN}"
 
 // Canned dasweb-playground build surface: enough contract to prove the client
 // (bearer header, claim shapes, multipart result with sha verification).

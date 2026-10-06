@@ -81,8 +81,8 @@ def processed_stride(flags : int) : int {
     return 16 + ((flags & VERTEX_UV) != 0 ? 4 : 0) + ((flags & VERTEX_TANGENT) != 0 ? 4 : 0) + ((flags & VERTEX_SKIN) != 0 ? 8 : 0) + ((flags & VERTEX_UV1) != 0 ? 4 : 0) + ((flags & VERTEX_COLOR) != 0 ? 4 : 0)
 }
 [arch(at="../ARCHITECTURE.md#processed-vertex-portability")]
-def private pack_uv(v : float2) : uint {return f32_to_f16(v.x) | (f32_to_f16(v.y) << 16)}
-def private unpack_uv(v : uint) : float2 {return float2(f16_to_f32(v & 65535u), f16_to_f32(v >> 16))}
+def private pack_uv(v : float2) : uint => f32_to_f16(v.x) | (f32_to_f16(v.y) << 16)
+def private unpack_uv(v : uint) : float2 => float2(f16_to_f32(v & 65535u), f16_to_f32(v >> 16))
 def private pack_direction(v : float4) : uint {
     let x = int(round(clamp(v.x, -1.0, 1.0) * 511.0))
     let y = int(round(clamp(v.y, -1.0, 1.0) * 511.0))
@@ -214,7 +214,7 @@ def unpack_processed_geometry(asset : ProcessedAsset) : GltfScene {
         result.primitives |> reserve(length(mesh.primitives))
         for (p in mesh.primitives){
             var prim = GltfPrimitive(material = p.material, mode = p.mode)
-            var bytes <- processed_vertex_bytes(p); var words : array<uint>; words |> reserve(length(bytes) / 4); words |> resize(length(bytes) / 4)
+            var inscope bytes <- processed_vertex_bytes(p); var inscope words : array<uint>; words |> reserve(length(bytes) / 4); words |> resize(length(bytes) / 4)
             if (!empty(bytes)){unsafe{memcpy(addr(words[0]), addr(bytes[0]), length(bytes))}}
             prim.vertices |> reserve(p.vertex_count); prim.vertices |> resize(p.vertex_count)
             for (v, i in prim.vertices, count()){
@@ -252,7 +252,7 @@ def processed_valid(a : ProcessedAsset) : bool {
 }
 def private processed_payloads_valid(a : ProcessedAsset) : bool {
     for (mesh in a.meshes){for (p in mesh.primitives){
-        var vertices : array<uint8>
+        var inscope vertices : array<uint8>
         if (p.encoded && !meshopt_decode_vertices(vertices, p.vertices, uint(p.vertex_count), uint(p.stride))){delete vertices; return false}
         if (!p.encoded && (p.attributes & VERTEX_SKIN) != 0){vertices <- clone(p.vertices)}
         if ((p.attributes & VERTEX_SKIN) != 0){
@@ -264,7 +264,7 @@ def private processed_payloads_valid(a : ProcessedAsset) : bool {
             }
         }
         delete vertices
-        var indices : array<uint>
+        var inscope indices : array<uint>
         if (p.encoded){
             if (p.mode != GltfPrimitiveMode.triangles || p.index_count == 0 || p.index_count % 3 != 0 ||
                 !meshopt_decode_indices(indices, p.indices, uint(p.index_count))){delete indices; return false}

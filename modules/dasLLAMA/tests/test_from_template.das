@@ -4,9 +4,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_tune
 
-def template twice_template(x : int) : int {
-    return PH(x) + PH(x)
-}
+def template twice_template(x : int) : int => PH(x) + PH(x)
 
 def private inc(x : int) : int => x + 1
 
@@ -18,9 +16,7 @@ def private twice_inc(x : int) : int {}
 [from_template(src = "twice_template", PH = "dbl")]
 def private twice_dbl(x : int) : int {}
 
-def template scale_template(ws : float const ?; bi : int64) : float {
-    return WS(ws, bi) * 2.0
-}
+def template scale_template(ws : float const ?; bi : int64) : float => WS(ws, bi) * 2.0
 
 def private ws_f32(ws : float const?; bi : int64) : float {
     unsafe {

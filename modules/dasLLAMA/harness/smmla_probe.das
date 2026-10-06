@@ -27,8 +27,7 @@ def main() {   // nolint:STYLE038 — flat probe phases (gate, fill, run, report
         print("compile-only: DLL linked, execution skipped (pre-i8mm host)\n")
         return
     }
-    var a : array<int8>
-    var b : array<int8>
+    var a, b : array<int8>
     a |> resize(2 * K)   // 2 interleaved token rows
     b |> resize(2 * K)   // 2 interleaved weight rows
     for (i in range(2 * K)) {

@@ -122,7 +122,7 @@ def harmony_tools_namespace(tools_json : array<string>) : string {
                 w |> write("type {name} = () => any;\n\n")
             } else {
                 w |> write("type {name} = (_: \{\n")
-                var req : table<string>
+                var inscope req : table<string>
                 let rv = params?["required"]
                 if (rv != null && rv.value is _array) {
                     for (r in (rv.value as _array)) {
@@ -244,8 +244,7 @@ def private harmony_header(s : array<uint8> const#; var pos : int&; var name : s
 //! at `<|end|>` (+ optional re-header); the terminal one at end-of-reply (stops never appear).
 def harmony_parse(reply : string) : ToolReply {
     var out = ToolReply()
-    var rparts : array<string>
-    var cparts : array<string>
+    var rparts, cparts : array<string>
     peek_data(reply) $(d) {
         var pos = 0
         let n = length(d)

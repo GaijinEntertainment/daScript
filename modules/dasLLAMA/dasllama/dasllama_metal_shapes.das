@@ -153,9 +153,7 @@ def metal_needs(t : Model) : MetalNeed {
     return n
 }
 
-def metal_missing_needs(t : Model; ok : MetalNeed) : MetalNeed {
-    return metal_needs(t) & ~ok
-}
+def metal_missing_needs(t : Model; ok : MetalNeed) : MetalNeed => metal_needs(t) & ~ok
 
 // one `need_*` key per missing bit — the support-matrix cells assert these names as strings
 def record_needs(var tab : table<string; int64>; missing : MetalNeed) {
@@ -180,9 +178,8 @@ def record_needs(var tab : table<string; int64>; missing : MetalNeed) {
 // the kq formats the Metal kernels implement — anything else (a future format) must DECLINE
 // kquant_native instead of falling into a wrong-layout kernel branch (the dispatchers below
 // treat "not k4/k6" as k5)
-def kq_fmt_gpu_supported(f : KqFmt) : bool {
-    return f == KqFmt.q8 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.iq4xs || f == KqFmt.k3 || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq4nl || f == KqFmt.q40 || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs
-}
+def kq_fmt_gpu_supported(f : KqFmt) : bool =>
+    f == KqFmt.q8 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.iq4xs || f == KqFmt.k3 || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq4nl || f == KqFmt.q40 || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs
 
 def private kq_fmts_gpu_supported(a : array<KqFmt>) : bool {
     for (f in a) {

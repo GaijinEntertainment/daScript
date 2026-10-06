@@ -51,13 +51,10 @@ def private with_playground_server_at(port : int; policy : StorePolicy; curated_
     }
 }
 
-def private default_policy : StorePolicy {
-    return StorePolicy()
-}
+def private default_policy : StorePolicy => StorePolicy()
 
-def private tiny_policy : StorePolicy {
-    return StorePolicy(max_source_bytes = 64, max_inserts_per_ip_hour = 3)
-}
+def private tiny_policy : StorePolicy =>
+    StorePolicy(max_source_bytes = 64, max_inserts_per_ip_hour = 3)
 
 [test]
 def test_health_and_unknown_routes(t : T?) {
@@ -175,7 +172,7 @@ def test_forged_forwarded_hops_share_one_bucket(t : T?) {
     with_playground_server(tiny_policy()) $(base_url) {
         t |> run("a caller cannot escape the ceiling by varying earlier hops") @(tt : T?) {
             for (i in range(3)) {
-                var h : table<string; string>
+                var inscope h : table<string; string>
                 h |> insert("X-Forwarded-For", "198.51.100.{i}, 10.0.0.42")
                 POST("{base_url}/api/samples", "forged {i}", h) $(resp) {
                     tt |> equal(int(resp.status_code), 200)

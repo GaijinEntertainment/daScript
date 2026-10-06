@@ -2338,9 +2338,7 @@ def public set_span_fuse(on : bool) {
 // An override that cannot serve the per-query span mask registers the split-span capability
 // (register_prefill_override_split_span) and keeps the three-eval splice; Metal serves the
 // fused mask (AttnArgs.ulo), and the CPU arms mask per query.
-def private span_fusable : bool {
-    return g_span_fuse && !active_prefill_splits_span()
-}
+def private span_fusable : bool => g_span_fuse && !active_prefill_splits_span()
 
 //! `eval_embd_` for a prompt carrying ONE non-causal image span: rows [span_lo, span_hi) prefill
 //! non-causally, the text around them causally. One fused eval (per-query mask) where the backend

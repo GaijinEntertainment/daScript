@@ -265,8 +265,7 @@ def private attn_arm(t : T?; rows, heads, hs : int) {
             }
             let got <- cp |> plane_run(op)
             let gotz <- cp |> plane_run(ozp)
-            var want : array<float>
-            var wantz : array<float>
+            var want, wantz : array<float>
             attention_rows(q, k, v, int64(rows), int64(d), int64(heads), want)
             attention_rows(q, kz, v, int64(rows), int64(d), int64(heads), wantz)
             check_rows(t, "{tag} vs the CPU attention_rows", got, want, Bar(rel = TTS_REL, poison = 1e-4), d, hs)

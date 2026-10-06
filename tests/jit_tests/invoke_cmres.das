@@ -8,23 +8,16 @@ struct Big {
     d : int
 }
 
-def make_big(k : int) : Big {
-    return Big(a = k, b = k * 2, c = k * 3, d = k * 4)
-}
+def make_big(k : int) : Big => Big(a = k, b = k * 2, c = k * 3, d = k * 4)
 
-def via_fn_ptr(fun : function<(k : int) : Big>; k : int) : Big {
-    return invoke(fun, k)
-}
+def via_fn_ptr(fun : function<(k : int) : Big>; k : int) : Big => invoke(fun, k)
 
-def via_lambda(fun : lambda<(k : int) : Big>; k : int) : Big {
-    return invoke(fun, k)
-}
+def via_lambda(fun : lambda<(k : int) : Big>; k : int) : Big => invoke(fun, k)
 
 class Maker {
     scale : int
-    def make(k : int) : Big {
-        return Big(a = k * scale, b = k * scale * 2, c = k * scale * 3, d = k * scale * 4)
-    }
+    def make(k : int) : Big =>
+        Big(a = k * scale, b = k * scale * 2, c = k * scale * 3, d = k * scale * 4)
 }
 
 def expect_big(t : T?; got : Big; a, b, c, d : int) {

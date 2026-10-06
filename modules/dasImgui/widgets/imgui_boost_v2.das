@@ -199,9 +199,7 @@ class WidgetCallMacro : AstCallMacro {
     // Auto-gen state-global identifier for no-ident call forms: `__widget_` +
     // line + column, a unique-within-module legal identifier (same-line calls
     // differ by column so they don't collide).
-    def private synth_bare_name(at : LineInfo) : string {
-        return "__widget_{at.line:d}_{at.column:d}"
-    }
+    def private synth_bare_name(at : LineInfo) : string => "__widget_{at.line:d}_{at.column:d}"
 
     // Auto-gen telemetry path key `<module>:<line>:<column>`, surfaced in
     // imgui_snapshot. Shifts on edits — use explicit idents when path
@@ -350,9 +348,7 @@ class WidgetCallMacro : AstCallMacro {
         // Four call forms: 1 EXPLICIT kind(IDENT,(...)) drives the state global;
         // 2 AUTO-GEN kind((...)) and 3 POSITIONAL kind("str") synth the ident from
         // source location; 4 BARE kind() (all args defaulted). Read state ⇒ form 1.
-        var bareName : string
-        var widgetIdentOverride : string
-        var rawName : string
+        var bareName, widgetIdentOverride, rawName : string
         var flagsReversed : array<string>
         var indexExpr : ExpressionPtr
         var firstUserArg = 1
@@ -805,9 +801,8 @@ class WidgetCallMacro : AstCallMacro {
 class EditWidgetFunctionMacro : AstFunctionAnnotation {
     //! ``[edit_widget]`` annotation — registers an external-pointer widget. First parameter is the user-owned pointer (``T?``); macro injects ``widget_ident : string`` at index 1 and installs a call_macro that requires an explicit ``id="..."`` literal at the call site.
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
-                       var args : AnnotationArgumentList; var errors : das_string) : bool {
-        return apply_edit_widget_or_container(func, errors, false)
-    }
+                       var args : AnnotationArgumentList; var errors : das_string) : bool =>
+                           apply_edit_widget_or_container(func, errors, false)
 }
 
 [function_macro(name = "edit_container")]

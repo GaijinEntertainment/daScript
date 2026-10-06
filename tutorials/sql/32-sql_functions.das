@@ -43,9 +43,8 @@ require math
 // Game-style damage calculation: base × (1 − armor/100) × multiplier.
 // Marked deterministic so SQLite is allowed to factor it out of inner
 // loops or use it as the indexed expression in a `CREATE INDEX … ON …`.
-def damage_formula(base : float; armor : int; mult : float) : float {
-    return base * (1.0f - float(armor) / 100.0f) * mult
-}
+def damage_formula(base : float; armor : int; mult : float) : float =>
+    base * (1.0f - float(armor) / 100.0f) * mult
 
 // --- Example 2 — String normalization ----------------------------------
 // A trivial "hash" — in real code this would be a domain hasher.
@@ -188,9 +187,7 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
 def normalize(s : string) : string => s |> to_upper
 
 [sql_function(deterministic=true)]
-def score(hp : float; armor : int) : double {
-    return double(hp) * (1.0lf - double(armor) / 100.0lf)
-}
+def score(hp : float; armor : int) : double => double(hp) * (1.0lf - double(armor) / 100.0lf)
 
 [sql_function(name="event_id")]
 def sql_event(tag : string) : int {

@@ -271,7 +271,7 @@ def public copy_prop_pass(var out : array<ExpressionPtr>) {
     while (changed) {
         changed = false
         let n = length(out)
-        var storeIdx : table<uint64; array<int>>
+        var inscope storeIdx : table<uint64; array<int>>
         collect_store_indices(out, storeIdx)
         var ub = new FlatUsesBuilder()
         make_visitor(*ub) $(adapter) {
@@ -281,8 +281,8 @@ def public copy_prop_pass(var out : array<ExpressionPtr>) {
                 visit(out[j], adapter)
             }
         }
-        var srcReads : table<uint64>
-        var useJs : array<int>
+        var inscope srcReads : table<uint64>
+        var inscope useJs : array<int>
         for (k in range(n)) {
             if (!(out[k] is ExprLet)) continue
             var lc = out[k] as ExprLet

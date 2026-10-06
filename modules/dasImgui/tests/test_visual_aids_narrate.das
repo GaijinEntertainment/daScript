@@ -26,13 +26,9 @@ let BOX_WIDE  = float2(300.0f, 40.0f)
 let VIEW_HD   = float2(1280.0f, 720.0f)
 let VIEW_SD   = float2(800.0f, 600.0f)
 
-def near(a, b : float; eps : float = 0.5f) : bool {
-    return abs(a - b) < eps
-}
+def near(a, b : float; eps : float = 0.5f) : bool => abs(a - b) < eps
 
-def near2(a, b : float2; eps : float = 0.5f) : bool {
-    return near(a.x, b.x, eps) && near(a.y, b.y, eps)
-}
+def near2(a, b : float2; eps : float = 0.5f) : bool => near(a.x, b.x, eps) && near(a.y, b.y, eps)
 
 [test]
 def test_anchor_centered_widget_picks_right(t : T?) {

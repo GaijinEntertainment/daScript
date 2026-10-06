@@ -460,9 +460,8 @@ def private advance_with(m : Model; var st : Stream; tok : int64; var events : a
     return true
 }
 
-def private sample_advance(m : Model; var st : Stream; var events : array<SchedEvent>) : bool {
-    return advance_with(m, st, sample(st.session, st.params), events)
-}
+def private sample_advance(m : Model; var st : Stream; var events : array<SchedEvent>) : bool =>
+    advance_with(m, st, sample(st.session, st.params), events)
 
 //! Evict a stream (the client disconnected): an active stream finishes "evicted" (its finished
 //! event appends NOW; the session is reaped next step), a queued request is dropped with the same

@@ -45,7 +45,6 @@ class AtLineReader : AstReaderMacro {
         return true
     }
     def override suffix(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; info : LineInfo;
-                        var outLine : int&; var outFile : FileInfo?&) : string {
-        return "({int(info.line)})"
-    }
+                        var outLine : int&; var outFile : FileInfo?&) : string =>
+                            "({int(info.line)})"
 }

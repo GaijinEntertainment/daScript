@@ -522,9 +522,8 @@ def public markdown_view_invalidate(var state : MarkdownViewState) {
 }
 
 def public markdown_view_code_collapsed(state : MarkdownViewState const;
-                                        node_index : int) : bool {
-    return state.collapsed_nodes?[node_index] ?? false
-}
+                                        node_index : int) : bool =>
+                                            state.collapsed_nodes?[node_index] ?? false
 
 def public markdown_view_set_code_collapsed(var state : MarkdownViewState;
                                             node_index : int;
@@ -540,9 +539,8 @@ def public markdown_view_set_code_collapsed(var state : MarkdownViewState;
     return true
 }
 
-def public markdown_view_collapsed_count(state : MarkdownViewState const) : int {
-    return length(state.collapsed_nodes)
-}
+def public markdown_view_collapsed_count(state : MarkdownViewState const) : int =>
+    length(state.collapsed_nodes)
 
 def public markdown_view_copy_code_block(var state : MarkdownViewState;
                                          node_index : int;
@@ -606,9 +604,8 @@ def private image_binding_index(state : MarkdownViewState const;
 }
 
 def public markdown_view_image_bound(state : MarkdownViewState const;
-                                     document_revision, node_index : int) : bool {
-    return image_binding_index(state, document_revision, node_index) >= 0
-}
+                                     document_revision, node_index : int) : bool =>
+                                         image_binding_index(state, document_revision, node_index) >= 0
 
 def public markdown_view_bind_image(var state : MarkdownViewState;
                                     binding : MarkdownImageBinding const) : bool {
@@ -673,9 +670,8 @@ def private syntax_binding_index(state : MarkdownViewState const;
 }
 
 def public markdown_view_syntax_bound(state : MarkdownViewState const;
-                                      document_revision, node_index : int) : bool {
-    return syntax_binding_index(state, document_revision, node_index) >= 0
-}
+                                      document_revision, node_index : int) : bool =>
+                                          syntax_binding_index(state, document_revision, node_index) >= 0
 
 def public markdown_view_syntax_token_count(state : MarkdownViewState const;
                                             document_revision, node_index : int) : int {
@@ -802,13 +798,10 @@ def private ensure_inline(doc : RichDocument const; node_index : int;
     }
 }
 
-def private view_zoom(style : MarkdownViewStyle const) : float {
-    return clamp(style.zoom, 0.5f, 3.0f)
-}
+def private view_zoom(style : MarkdownViewStyle const) : float => clamp(style.zoom, 0.5f, 3.0f)
 
-def private zoomed(style : MarkdownViewStyle const; value : float) : float {
-    return value * view_zoom(style)
-}
+def private zoomed(style : MarkdownViewStyle const; value : float) : float =>
+    value * view_zoom(style)
 
 def private syntax_color(style_id : int; style : MarkdownViewStyle const) : float4 {
     if (style_id == int(MarkdownSyntaxStyle.comment)) return style.syntax_comment_color
@@ -847,9 +840,7 @@ def private run_style(run : RichInlineRun const) : int {
     return value
 }
 
-def private has_style(value, flag : int) : bool {
-    return (value & flag) != 0
-}
+def private has_style(value, flag : int) : bool => (value & flag) != 0
 
 def private font_for_style(style_id : int; var roles : FontRoleSet;
                            var fallback : ImFont?) : ImFont? {
@@ -1035,9 +1026,8 @@ def private link_target(doc : RichDocument const; content : RichInlineContent co
     return content.runs[index].destination
 }
 
-def private selected_source(state : MarkdownViewState const) : TextSourceRange {
-    return md_text_selection_range(state.selection_anchor, state.selection_focus)
-}
+def private selected_source(state : MarkdownViewState const) : TextSourceRange =>
+    md_text_selection_range(state.selection_anchor, state.selection_focus)
 
 def private same_text_position(a, b : RichTextPosition const) : bool {
     return (a.valid == b.valid && a.inline_node == b.inline_node
@@ -2637,11 +2627,9 @@ def public rich_document_view(id : string; doc : RichDocument const;
 }
 
 def public rich_document_view(id : string; doc : RichDocument const;
-                              var style : MarkdownViewStyle) : MarkdownViewResult {
-    return <- markdown_view(id, doc, style)
-}
+                              var style : MarkdownViewStyle) : MarkdownViewResult =>
+                                  <- markdown_view(id, doc, style)
 
 def public rich_document_view(id : string;
-                              doc : RichDocument const) : MarkdownViewResult {
-    return <- markdown_view(id, doc)
-}
+                              doc : RichDocument const) : MarkdownViewResult =>
+                                  <- markdown_view(id, doc)

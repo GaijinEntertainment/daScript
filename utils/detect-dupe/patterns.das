@@ -89,7 +89,7 @@ def try_emit(canonical : string; var hit : PatternHit) : bool {
     if (empty(stmts) || length(stmts) > 6) return false
     var emit_count = 0
     for (stmt in stmts) {
-        let toks <- tokenize_canonical(stmt)
+        var inscope toks <- tokenize_canonical(stmt)
         if (length(toks) < 2 || (toks[0] != "STMT" && toks[0] != "FIN_STMT")) return false
         let head = toks[1]
         if (head == "RET") {

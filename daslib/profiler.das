@@ -67,13 +67,9 @@ struct ProfilerConfig {
 
 var map_time_units : table<string; int64> <- {"ns" => 1l, "us" => 1_000l, "ms" => 1_000_000l, "s" => 1_000_000_000l}
 
-def is_time_unit_correct(unit : string) {
-    return key_exists(map_time_units, unit)
-}
+def is_time_unit_correct(unit : string) => key_exists(map_time_units, unit)
 
-def convert_ns_to_unit(time : int64; to : string) {
-    return time / map_time_units[to]
-}
+def convert_ns_to_unit(time : int64; to : string) => time / map_time_units[to]
 
 def parse_profiler_args() : ProfilerConfig {
     //! Parses daslang profiler command-line flags into a :ref:`struct ProfilerConfig`.

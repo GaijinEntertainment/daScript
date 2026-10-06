@@ -16,7 +16,7 @@ def private check_transfers(t : T?; copy, move : auto(FT); zero : auto(N)){
     t |> success(!jit_enabled() || is_jit_function(move))
     invoke(copy, null, null, zero); invoke(move, null, null, zero)
     for (size in fixed_array(0, 1, 3, 7, 31, 63, 129)){
-        var source : uint8[160]; var destination : uint8[160]
+        var source, destination : uint8[160]
         for (i in range(160)){source[i] = uint8(i); destination[i] = 0xa5u8}
         invoke(copy, unsafe(addr(destination[3])), unsafe(addr(source[1])), N(size))
         for (i in range(160)){t |> equal(destination[i], i >= 3 && i < size + 3 ? uint8(i - 2) : 0xa5u8); t |> equal(source[i], uint8(i))}

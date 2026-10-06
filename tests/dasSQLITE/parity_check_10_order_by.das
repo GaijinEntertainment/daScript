@@ -59,9 +59,7 @@ def cars_equal(a : array<Car>; b : array<Car>) : bool {
     return true
 }
 
-def prices_of(cars : array<Car>) : array<int> {
-    return <- [for (c in cars); c.Price]
-}
+def prices_of(cars : array<Car>) : array<int> => <- [for (c in cars); c.Price]
 
 def int_array_eq(a : array<int>; b : array<int>) : bool {
     if (length(a) != length(b)) {

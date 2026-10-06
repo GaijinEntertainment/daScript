@@ -90,9 +90,8 @@ def test_pilot_gate_fixtures(t : T?) {
 // constants, a layout helper, a `_prepare` one-liner, and the two closure entry points. The
 // `PROBE_TAIL` line sits between the one-liner and the next def on purpose - it is outside the
 // closure only if a `def ... => expr` window ends on its own header line.
-def dasllama_image_text(header_bytes, pad_body, tail : string) : string {
-    return "options gen2\n\nlet IMAGE_VERSION = 7\n\nlet IMAGE_PAGE = 16384l\nlet private IMAGE_HEADER_BYTES = {header_bytes}\n\ndef pad_to_page(cur : uint64) : uint64 \{\n    return {pad_body}\n\}\n\ndef private plane_map_prepare() : bool => true\n\nlet PROBE_TAIL = {tail}\n\ndef build_image() \{\n\}\n\ndef parse_image() \{\n\}\n"
-}
+def dasllama_image_text(header_bytes, pad_body, tail : string) : string =>
+    "options gen2\n\nlet IMAGE_VERSION = 7\n\nlet IMAGE_PAGE = 16384l\nlet private IMAGE_HEADER_BYTES = {header_bytes}\n\ndef pad_to_page(cur : uint64) : uint64 \{\n    return {pad_body}\n\}\n\ndef private plane_map_prepare() : bool => true\n\nlet PROBE_TAIL = {tail}\n\ndef build_image() \{\n\}\n\ndef parse_image() \{\n\}\n"
 
 // A guarded struct serializer plus the bulk payload form the tripwire check licenses: the
 // bulk one writes two fields in the call spelling and carries no verify, and takes an array,

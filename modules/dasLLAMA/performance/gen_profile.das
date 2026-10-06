@@ -44,9 +44,8 @@ struct Args {
     help : bool
 }
 
-def private build_prompt(n : int64) : array<int64> {
-    return <- [for (i in range64(n)); 1000l + (i % 5000l)]
-}
+def private build_prompt(n : int64) : array<int64> =>
+    <- [for (i in range64(n)); 1000l + (i % 5000l)]
 
 //! the emission window's serial greedy pick - the timed body the profile rows were measured with, not the engine's
 //! team-scanned argmax

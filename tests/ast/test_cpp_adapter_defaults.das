@@ -12,8 +12,8 @@ require daslib/clargs
 
 class AdapterProbe {
     def abstract required(value : int) : int
-    def defaulted(value : int) : int { return value + 1 }
-    def hidden(value : int) : int { return value - 1 }
+    def defaulted(value : int) : int => value + 1
+    def hidden(value : int) : int => value - 1
 }
 
 [test]

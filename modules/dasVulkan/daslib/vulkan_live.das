@@ -83,15 +83,13 @@ def public vk_live_set_target(device : Device; phys : VkPhysicalDevice; queue : 
     }
 }
 
-def private is_bgra(fmt : VkFormat) : bool {
-    return fmt == VkFormat.B8G8R8A8_SRGB || fmt == VkFormat.B8G8R8A8_UNORM
-}
+def private is_bgra(fmt : VkFormat) : bool =>
+    fmt == VkFormat.B8G8R8A8_SRGB || fmt == VkFormat.B8G8R8A8_UNORM
 
 //! Readback assumes a tightly packed 4-byte 8888 surface (the formats choose_surface_format picks);
 //! anything wider (R16G16B16A16, A2B10G10R10, ...) would mis-size the host buffer + swizzle.
-def private is_rgba8(fmt : VkFormat) : bool {
-    return is_bgra(fmt) || fmt == VkFormat.R8G8B8A8_SRGB || fmt == VkFormat.R8G8B8A8_UNORM
-}
+def private is_rgba8(fmt : VkFormat) : bool =>
+    is_bgra(fmt) || fmt == VkFormat.R8G8B8A8_SRGB || fmt == VkFormat.R8G8B8A8_UNORM
 
 def private ensure_readback(nbytes : uint64) {
     if (g_readback_cap >= nbytes) {

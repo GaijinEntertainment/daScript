@@ -30,21 +30,13 @@ def memoryBarrierImage {
     assert(false, "we should not be here\n")
 }
 
-def fract(x : float) {
-    return x - floor(x)
-}
+def fract(x : float) => x - floor(x)
 
-def fract(x : float2) {
-    return x - floor(x)
-}
+def fract(x : float2) => x - floor(x)
 
-def fract(x : float3) {
-    return x - floor(x)
-}
+def fract(x : float3) => x - floor(x)
 
-def fract(x : float4) {
-    return x - floor(x)
-}
+def fract(x : float4) => x - floor(x)
 
 // ===== Legacy GLSL 1.x builtins =====
 // GL-only; NOT in the lingua franca. Invalid in GLSL ES 3.00 and desktop core -- superseded by

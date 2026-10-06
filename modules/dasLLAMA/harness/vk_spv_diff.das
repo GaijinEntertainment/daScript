@@ -75,9 +75,8 @@ def diff_dumps(var base, fresh : table<string; array<uint8>>) : DumpDiff {
 
 //! the gate's verdict over a diff: identical means every stamp both sides hold matches and neither side holds a stamp alone,
 //! and a side with no stamps at all fails it (nothing was compared)
-def dumps_identical(d : DumpDiff; base_count, fresh_count : int) : bool {
-    return base_count > 0 && fresh_count > 0 && empty(d.moved) && empty(d.appeared) && empty(d.vanished)
-}
+def dumps_identical(d : DumpDiff; base_count, fresh_count : int) : bool =>
+    base_count > 0 && fresh_count > 0 && empty(d.moved) && empty(d.appeared) && empty(d.vanished)
 
 [export]
 def main : int {

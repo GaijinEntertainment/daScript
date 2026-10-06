@@ -320,13 +320,9 @@ var key_up = false
 var key_down = false
 var key_grab = false
 
-def half_w() : float {
-    return float(g_cave.cols) * CELL_SIZE * 0.5
-}
+def half_w() : float => float(g_cave.cols) * CELL_SIZE * 0.5
 
-def half_h() : float {
-    return float(g_cave.rows) * CELL_SIZE * 0.5
-}
+def half_h() : float => float(g_cave.rows) * CELL_SIZE * 0.5
 
 def cell_to_world(col, row : int) : float2 {
     return float2(
@@ -473,9 +469,8 @@ def tile_color(t : Tile) : float3 {
     return COL_FLOOR
 }
 
-def tile_sphere(t : Tile) : bool {
-    return t == Tile.boulder || t == Tile.boulder_fall || t == Tile.amoeba || t == Tile.player || is_insect(t) || is_explode(t)
-}
+def tile_sphere(t : Tile) : bool =>
+    t == Tile.boulder || t == Tile.boulder_fall || t == Tile.amoeba || t == Tile.player || is_insect(t) || is_explode(t)
 
 def draw_tile(t : Tile; pos : float3) {
     return if (t == Tile.empty)
@@ -1084,9 +1079,7 @@ def cmd_set_diamonds(input : JsonValue?) : JsonValue? {
 }
 
 [live_command(description="Dump current cave as ASCII")]
-def cmd_dump_cave(_input : JsonValue?) : JsonValue? {
-    return JV(cave_to_ascii(g_cave))
-}
+def cmd_dump_cave(_input : JsonValue?) : JsonValue? => JV(cave_to_ascii(g_cave))
 
 struct CmdAsciiArgs {
     ascii : string = ""

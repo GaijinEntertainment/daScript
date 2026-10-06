@@ -16,9 +16,7 @@ def private das_exe() : string {
     return find(to_generic_path(argv[0]), "/") < 0 ? argv[0] : get_full_file_name(normalize(argv[0]))
 }
 
-def private out_tail(s : string) : string {
-    return slice(s, max(0, length(s) - 600))
-}
+def private out_tail(s : string) : string => slice(s, max(0, length(s) - 600))
 
 def private count_of(s : string; needle : string) : int {
     var n = 0

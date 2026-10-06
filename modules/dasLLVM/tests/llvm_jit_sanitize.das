@@ -30,9 +30,8 @@ def private dump_ir(t : T?; root : string; jit_args : array<string>) : string {
     return out
 }
 
-def private run_interpreted(root : string; var out : string&) : int {
-    return run_and_capture([das_exe(), "-no-module-cache", "{FIXTURES}/{root}"], out, 300.0)
-}
+def private run_interpreted(root : string; var out : string&) : int =>
+    run_and_capture([das_exe(), "-no-module-cache", "{FIXTURES}/{root}"], out, 300.0)
 
 //! the exit code of a child a sanitizer stops; one code for both, since a host with both runtimes applies the last one set
 let SANITIZER_EXIT = 77

@@ -211,9 +211,8 @@ def private root_vars_of(chunk : string; root_funcs : table<string>; seed : tabl
     return <- vars
 }
 
-def private is_write_mode(mode : string) : bool {
-    return starts_with(mode, "\"w") || starts_with(mode, "\"a") || find(mode, "+") >= 0
-}
+def private is_write_mode(mode : string) : bool =>
+    starts_with(mode, "\"w") || starts_with(mode, "\"a") || find(mode, "+") >= 0
 
 def private line_of(text : string; at : int) : int {
     var line = 1

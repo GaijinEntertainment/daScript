@@ -486,9 +486,7 @@ def set_rule_handle(var subrule_ : Rule_?; handle : string) {
 }
 
 
-def get_action_block(var alternative : Alternative) : ExpressionPtr {
-    return <- alternative.action
-}
+def get_action_block(var alternative : Alternative) : ExpressionPtr => <- alternative.action
 
 
 // Contract: block is managed externally and will clean up its own memory

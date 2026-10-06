@@ -47,7 +47,7 @@ def public capture_apng(apng_path : string; w, h, n_frames, frame_ms : int;
     }
     var ok = true
     for (f in range(n_frames)) {
-        var pixels <- invoke(render, f)
+        var inscope pixels <- invoke(render, f)
         if (length(pixels) < w * h * 4) {
             to_log(LOG_ERROR, "[record] frame {f}: short buffer ({length(pixels)} < {w * h * 4})\n")
             ok = false

@@ -68,7 +68,7 @@ def public prepare_voiceover(apng_path : string;
                 }
             }
         }
-        var samples : array<float>
+        var inscope samples : array<float>
         var rate = 0
         var channels = 0
         if (!read_wav(wav_path, samples, rate, channels) || rate <= 0 || channels <= 0) {

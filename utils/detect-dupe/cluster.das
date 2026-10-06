@@ -59,7 +59,7 @@ def public exact_buckets(var records : array<FuncRecord>; min_tokens : int;
         if (key_exists(buckets, key)) {
             buckets[key] |> push(i)
         } else {
-            var lst : array<int>
+            var inscope lst : array<int>
             lst |> push(i)
             buckets[key] <- lst
         }
@@ -170,9 +170,7 @@ def public fuzzy_pairs(records : array<FuncRecord>; threshold : float; min_token
 }
 
 
-def public member_key(m : MemberRef) : string {
-    return "{m.file}:{m.line}:{m.name}"
-}
+def public member_key(m : MemberRef) : string => "{m.file}:{m.line}:{m.name}"
 
 
 // Sort clusters by member count descending; tie-break on token_count

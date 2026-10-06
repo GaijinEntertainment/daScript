@@ -290,9 +290,7 @@ def private read_fourcc(data : array<uint8>; var cursor : int&) : string {
     return cc
 }
 
-def private character_at(b : uint8) : string {
-    return to_char(int(b))
-}
+def private character_at(b : uint8) : string => to_char(int(b))
 
 def private read_fixed_string(data : array<uint8>; var cursor : int&; max_len : int) : string {
     let end_pos = min(cursor + max_len, length(data))
@@ -652,12 +650,9 @@ def public sf2_parse(data : array<uint8>) : SF2File? {  // nolint:STYLE037,STYLE
     // raw pdta arrays
     var raw_phdr : array<RawPresetHeader>
     var raw_inst : array<RawInstrumentHeader>
-    var raw_pbag : array<RawBag>
-    var raw_ibag : array<RawBag>
-    var raw_pgen : array<SF2Generator>
-    var raw_igen : array<SF2Generator>
-    var raw_pmod : array<SF2Modulator>
-    var raw_imod : array<SF2Modulator>
+    var raw_pbag, raw_ibag : array<RawBag>
+    var raw_pgen, raw_igen : array<SF2Generator>
+    var raw_pmod, raw_imod : array<SF2Modulator>
 
     // parse LIST chunks
     while (cursor < length(data) - 8) {

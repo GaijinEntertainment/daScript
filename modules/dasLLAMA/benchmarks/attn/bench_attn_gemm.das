@@ -136,12 +136,10 @@ def gate_variant(cref : array<float>; var ctry : array<float>; a, b : array<floa
 }
 
 def bench_shape(name : string; M, K, N : int64; reps : int) {
-    var a : array<float>
-    var b : array<float>
+    var a, b : array<float>
     fillf(a, M * K, 1l)
     fillf(b, K * N, 7l)
-    var cref : array<float>
-    var ctil : array<float>
+    var cref, ctil : array<float>
     cref |> resize(M * N)
     ctil |> resize(M * N)
     // correctness gate: every variant vs the scalar reference before any timing
@@ -170,14 +168,7 @@ def bench_shape(name : string; M, K, N : int64; reps : int) {
 def head_emu_ms(Q, tt, dh : int64; jo : bool; rounds : int) : double {
     let ww = 2l * tt - 1l
     let scale = 1.0 / sqrt(float(dh))
-    var qu : array<float>
-    var qv : array<float>
-    var kt : array<float>
-    var pop : array<float>
-    var vh : array<float>
-    var sc : array<float>
-    var rl : array<float>
-    var oh : array<float>
+    var qu, qv, kt, pop, vh, sc, rl, oh : array<float>
     fillf(qu, tt * dh, 1l)
     fillf(qv, tt * dh, 3l)
     fillf(kt, dh * tt, 7l)

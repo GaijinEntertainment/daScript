@@ -10,9 +10,7 @@ require daslib/fio
 require daslib/strings_boost
 require strings
 
-def temp_log_path() : string {
-    return path_join(test_temp_dir(), "_test_log_{ref_time_ticks()}.log")
-}
+def temp_log_path() : string => path_join(test_temp_dir(), "_test_log_{ref_time_ticks()}.log")
 
 // Read the file, split on newlines, drop the trailing empty line.
 def read_lines(path : string) : array<string> {

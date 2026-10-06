@@ -70,9 +70,7 @@ def compress_channel(gray : array<float>; w, h : int; quality : int; var recon :
         print("compress_channel: failed to build DCT plan\n")
         return 0.0f   // recon already holds the original image
     }
-    var coeff : array<float>
-    var deq : array<float>
-    var blk : array<float>
+    var coeff, deq, blk : array<float>
     blk |> resize(BLOCK * BLOCK)
 
     var zeros = 0
@@ -182,7 +180,7 @@ def main {
     print("\n  quality   PSNR(dB)   coeffs zeroed\n")
     print("  -------   --------   -------------\n")
     for (quality in [90, 50, 20, 5]) {
-        var recon : array<float>
+        var inscope recon : array<float>
         let zfrac = compress_channel(original, w, h, quality, recon)
         let p = psnr(original, recon)
         print("  {quality}\t  {p}\t   {int(zfrac * 100.0f)}%\n")

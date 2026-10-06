@@ -6,9 +6,7 @@ require daslib/ast_boost
 require daslib/rtti
 require math
 
-def fixture_path() : string {
-    return "{get_das_root()}/tests/daslib/eval_single_expression_fixture.das"
-}
+def fixture_path() : string => "{get_das_root()}/tests/daslib/eval_single_expression_fixture.das"
 
 def compile_fixture(t : T?; blk : block<(program : smart_ptr<Program>; ctx : smart_ptr<Context>) : void>) {
     var inscope access <- make_file_access("")

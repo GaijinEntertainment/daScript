@@ -50,22 +50,16 @@ def private build_uint_array_literal(words : array<uint>; at : LineInfo) : Expre
 // [macro_function]: both helpers are called from the backend subclass during patch/apply (macro
 // context), mirroring glsl_internal::bind_uniform_function_name.
 [macro_function]
-def bind_uniform_function_name(fnMain : FunctionPtr) {
-    return "{fnMain.name}_bind_uniform"
-}
+def bind_uniform_function_name(fnMain : FunctionPtr) => "{fnMain.name}_bind_uniform"
 [macro_function]
-def push_constants_function_name(fnMain : FunctionPtr) {
-    return "{fnMain.name}_push_constants"
-}
+def push_constants_function_name(fnMain : FunctionPtr) => "{fnMain.name}_push_constants"
 
 class SpirvShader : AstFunctionAnnotation {
     // overridden per stage; drives the entry-point execution model + execution mode in generate_spirv
     def shader_stage() : ShaderStage => ShaderStage.Compute
     // overridden by [spirv_kernel]: the kernel class whose annotated members are the resources.
     // null = the module-globals frontend (every stage annotation below).
-    def kernel_self_of(func : FunctionPtr) : Structure const? {
-        return null
-    }
+    def kernel_self_of(func : FunctionPtr) : Structure const? => null
     // Backend-specific hooks. Base = no-op (keeps dasSpirv usable without a host backend). A backend
     // subclass (e.g. dasVulkan's SpirvVulkanShader) overrides all four: the _dummy form reserves an
     // empty function during apply() so consumer code references resolve in the first inference pass;
@@ -228,9 +222,7 @@ class SpirvKernelShader : SpirvShader {
         }
         return SpirvShader`apply(self, func, group, args, errors)
     }
-    def override kernel_self_of(func : FunctionPtr) : Structure const? {
-        return func.classParent
-    }
+    def override kernel_self_of(func : FunctionPtr) : Structure const? => func.classParent
 }
 
 [function_macro(name="vertex_shader")]

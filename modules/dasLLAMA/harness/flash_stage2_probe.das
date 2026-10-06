@@ -155,18 +155,13 @@ def main() {
         return
     }
     let nsl = (CNT + SLICE - 1l) / SLICE
-    var k : array<float>
-    var v : array<float>
-    var q : array<float>
-    var att : array<float>
-    var flop : array<float>
+    var k, v, q, att, flop : array<float>
     fill(k, NL * CNT * KV_DIM, 0.1)
     fill(v, NL * CNT * KV_DIM, 0.7)
     fill(q, NQH * HS, 1.3)
     att |> resize(NQH * SEQ)
     flop |> resize(NQH * nsl * HS)
-    var att2 : array<float>
-    var flop2 : array<float>
+    var att2, flop2 : array<float>
     att2 |> resize(NQH * SEQ)
     flop2 |> resize(NQH * nsl * HS)
 

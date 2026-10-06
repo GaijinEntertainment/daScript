@@ -525,8 +525,7 @@ def find_index(var src : iterator<auto(TT)>; blk : block<(what : TT -&) : bool>)
 
 def private partition_any(var src : iterator<auto(TT)>; predicate) : tuple<array<TT -const -&>, array<TT -const -&>> {
     //! splits elements into `(matching, non_matching)` arrays
-    var yes : array<TT -const -&>
-    var no  : array<TT -const -&>
+    var yes, no : array<TT -const -&>
     for (x in src) {
         if (invoke(predicate, x)) {
             yes |> push(x)

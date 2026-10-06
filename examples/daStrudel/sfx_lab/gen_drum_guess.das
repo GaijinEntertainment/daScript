@@ -10,9 +10,7 @@ require strudel/strudel_sfx
 require strudel/strudel_modal
 require daslib/fio
 
-def lab_dir : string {
-    return "{get_das_root()}/examples/daStrudel/sfx_lab"
-}
+def lab_dir : string => "{get_das_root()}/examples/daStrudel/sfx_lab"
 
 def save_guess(name : string; doc : Sound) {
     let path = "{lab_dir()}/sounds/{name}.sfx"

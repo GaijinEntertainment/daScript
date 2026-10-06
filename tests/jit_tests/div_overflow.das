@@ -1,21 +1,13 @@
 options gen2
 require dastest/testing_boost
 
-def div_jit(a : int, b : int) {
-    return a / b
-}
+def div_jit(a : int, b : int) => a / b
 
-def mod_jit(a : int, b : int) {
-    return a % b
-}
+def mod_jit(a : int, b : int) => a % b
 
-def div64_jit(a : int64, b : int64) {
-    return a / b
-}
+def div64_jit(a : int64, b : int64) => a / b
 
-def mod64_jit(a : int64, b : int64) {
-    return a % b
-}
+def mod64_jit(a : int64, b : int64) => a % b
 
 def set_div_jit(a : int, b : int) {
     var r = a

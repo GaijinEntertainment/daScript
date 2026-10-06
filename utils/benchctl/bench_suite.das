@@ -30,9 +30,8 @@ struct BenchFile {
     skip_lanes : table<string; string>
 }
 
-def skip_reason(f : BenchFile; lane : string) : string {
-    return !empty(f.skip) ? f.skip : f.skip_lanes?[lane] ?? ""
-}
+def skip_reason(f : BenchFile; lane : string) : string =>
+    !empty(f.skip) ? f.skip : f.skip_lanes?[lane] ?? ""
 
 def load_suite_config(path : string; var error : string&) : SuiteConfig {
     error = ""

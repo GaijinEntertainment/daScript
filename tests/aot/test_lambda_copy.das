@@ -6,9 +6,7 @@ require dastest/testing_boost public
 
 typedef Counter = lambda<() : int>
 
-def invoke_twice(g : Counter) : int {
-    return invoke(g) + invoke(g)
-}
+def invoke_twice(g : Counter) : int => invoke(g) + invoke(g)
 
 [test]
 def test_aot_lambda_copy_aliases_capture(t : T?) {

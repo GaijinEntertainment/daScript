@@ -120,7 +120,7 @@ def test_playback(tt : T?) {
         tt |> success(is_scratch(state.csf2_voices), "sf2 voice pool marked scratch at init")
         var has_sound = false
         for (_ in range(20)) {
-            var chunk <- midi_tick(state, 0.05)
+            var inscope chunk <- midi_tick(state, 0.05)
             for (s in chunk) {
                 if (abs(s) > 0.001) {
                     has_sound = true

@@ -34,7 +34,7 @@ def measure_tokens(tr : Model; reps : int) : double {
     var best = 1.0e30lf
     for (_r in range(reps)) {
         var s <- make_run_state(tr.config)
-        var toks : array<int64>
+        var inscope toks : array<int64>
         toks |> reserve(NPOS)
         for (i in range64(NPOS)) {
             toks |> push(100l + i % 5000l)
@@ -58,7 +58,7 @@ def measure_span(tr : Model; wide : bool; reps : int; lo : int64 = SPAN_LO; hi :
     var best = 1.0e30lf
     for (_r in range(reps)) {
         var s <- make_run_state(tr.config)
-        var embd : array<float>
+        var inscope embd : array<float>
         embd |> resize(NPOS * stride)
         for (i in range64(NPOS * stride)) {
             embd[i] = 0.01 * sin(float(i % 1024l))

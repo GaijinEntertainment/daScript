@@ -33,9 +33,7 @@ def private token_index(line : string; tok : string) : int {
     return at
 }
 
-def private has_token(line : string; tok : string) : bool {
-    return token_index(line, tok) >= 0
-}
+def private has_token(line : string; tok : string) : bool => token_index(line, tok) >= 0
 
 def private is_write_of(line : string; tok : string) : bool {
     let idx = find(line, tok)
@@ -77,9 +75,7 @@ def private body_range(lines : array<string>; fname : string) : int2 {
     return int2(0, 0)
 }
 
-def private inside(span : int2; line : int) : bool {
-    return span.x > 0 && line >= span.x && line <= span.y
-}
+def private inside(span : int2; line : int) : bool => span.x > 0 && line >= span.x && line <= span.y
 
 def private check_network_error_sources {
     if (!fexist(NETWORK_CPP)) {

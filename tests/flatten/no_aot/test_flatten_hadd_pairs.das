@@ -14,15 +14,11 @@ require math
 
 // ----- 2-way sum -> hadd(float2(...)) (the opt-in pays for the combine here) -----
 [flatten]
-def hp_two(a, b : float) : float {
-    return a + b
-}
+def hp_two(a, b : float) : float => a + b
 
 // ----- 5 terms: plan_groups(5,2) = [3,2] -> hadd3 + hadd2 (the width-2 remainder emits) -----
 [flatten]
-def hp_five(a, b, c, d, e : float) : float {
-    return a + b + c + d + e
-}
+def hp_five(a, b, c, d, e : float) : float => a + b + c + d + e
 
 var GRID <- [-100.0, -3.5, -1.0, 0.0, 1.0, 2.5, 7.0, 100.0]
 

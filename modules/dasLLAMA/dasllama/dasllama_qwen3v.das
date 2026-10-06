@@ -307,9 +307,7 @@ def private q3v_announce_lane() {
 // the block GEMM tensors in QWEN3V_GEMM_* order; every per-GEMM list follows it
 let private Q3V_BLK_GEMM_NAMES <- [ "attn_qkv", "attn_out", "ffn_up", "ffn_down" ]
 
-def private q3v_gemm_sizes(d, ff : int64) : array<int64> {
-    return <- [ 3l * d * d, d * d, d * ff, ff * d ]
-}
+def private q3v_gemm_sizes(d, ff : int64) : array<int64> => <- [ 3l * d * d, d * d, d * ff, ff * d ]
 
 def private q3v_verify_tensors(m : GGUFMeta; t : Qwen3vTower; gemm_sizes : array<int64>) {
     let d = t.n_embd
@@ -805,9 +803,8 @@ def private q3v_stem_cols(t : Qwen3vTower; var s : Qwen3vState; planes : array<f
 
 //! Whether the last [[q3v_stem_cols]] left the position rows in ``s.pos_rs`` (grid off the
 //! learned side) - the GPU stem reads them there; on-plane grids read ``t.pos_w`` directly.
-def qwen3v_pos_resized(t : Qwen3vTower; s : Qwen3vState) : bool {
-    return s.grid_w != t.pos_side || s.grid_h != t.pos_side
-}
+def qwen3v_pos_resized(t : Qwen3vTower; s : Qwen3vState) : bool =>
+    s.grid_w != t.pos_side || s.grid_h != t.pos_side
 
 //! the stem's compute half, the CPU route: patch GEMM + the merge-walk assemble into s.x
 def private q3v_stem_finish(t : Qwen3vTower; var s : Qwen3vState; npos, pw, ph : int64) {

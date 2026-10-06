@@ -9,9 +9,7 @@ require daslib/ast_cursor
 require daslib/rtti
 require strings
 
-def fixture_path() : string {
-    return "{get_das_root()}/tests/daslib/ast_cursor_fixture.das"
-}
+def fixture_path() : string => "{get_das_root()}/tests/daslib/_ast_cursor_fixture.das"
 
 def compile_fixture(blk : block<(program : smart_ptr<Program>) : void>) {
     var inscope access <- make_file_access("")

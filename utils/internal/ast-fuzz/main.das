@@ -103,9 +103,7 @@ struct Config {
     help : bool
 }
 
-def read_text(path : string) : string {
-    return fread(path)
-}
+def read_text(path : string) : string => fread(path)
 
 def build_victim(cfg : Config; seed : int) : string {
     return build_string() $(var w) {
@@ -167,9 +165,7 @@ def run_wrapper(bin : string; verify : bool; var out : string&; timeout : float)
     return run_and_capture(argv, out, timeout)
 }
 
-def is_timeout(exit_code : int) : bool {
-    return exit_code == popen_timed_out
-}
+def is_timeout(exit_code : int) : bool => exit_code == popen_timed_out
 
 def is_resource(out : string) : bool {
     return (find(out, "bad_alloc") >= 0 || find(out, "std::unexpected") >= 0

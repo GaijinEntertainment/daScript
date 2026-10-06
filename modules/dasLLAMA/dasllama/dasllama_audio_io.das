@@ -15,9 +15,7 @@ require audio   // miniaudio: decode any audio container to PCM
 //! facade takes samples, not a path, so audio-file IO stays out of the core module; this
 //! optional companion is the decode rail apps require when they have a file. Empty array on
 //! a decode failure (missing / unreadable / unsupported file).
-def load_audio_16k_mono(path : string) : array<float> {
-    return <- load_audio_mono(path, 16000)
-}
+def load_audio_16k_mono(path : string) : array<float> => <- load_audio_mono(path, 16000)
 
 //! ``load_audio_16k_mono`` at any rate: mono f32 PCM at ``sample_rate`` Hz, resampled from the
 //! file's own - a voice clip for a TTS model goes in at ``caps().sample_rate``. Empty array on a

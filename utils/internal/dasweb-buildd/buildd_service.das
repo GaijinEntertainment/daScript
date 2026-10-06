@@ -33,9 +33,7 @@ def is_loopback_peer(peer : string) : bool {
     return peer == "127.0.0.1" || peer == "::1" || peer == "::ffff:127.0.0.1"
 }
 
-def private is_loopback_caller(var req : HttpRequest?) : bool {
-    return is_loopback_peer(client_ip(req))
-}
+def private is_loopback_caller(var req : HttpRequest?) : bool => is_loopback_peer(client_ip(req))
 
 class BuilddHealthServer : HvWebServer {
     def override onInit {

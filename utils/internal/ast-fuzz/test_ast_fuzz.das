@@ -13,9 +13,8 @@ def private das_exe() : string {
 
 let BIN = das_exe()
 
-def private run(argv : array<string>; var out : string&; timeout : float) : int {
-    return run_and_capture(argv, out, timeout)
-}
+def private run(argv : array<string>; var out : string&; timeout : float) : int =>
+    run_and_capture(argv, out, timeout)
 
 def private died(ec : int; out : string) : bool {
     // popen_argv reports a POSIX signal death as the raw signal number (2..31), not 128+n; daslang itself exits 0/1/255

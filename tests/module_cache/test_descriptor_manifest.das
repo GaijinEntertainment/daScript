@@ -112,9 +112,8 @@ struct Fixture {
 }
 
 //! the child that runs the driver under project root `tmp`: `exe` started with `-dasroot root`
-def fixture_cmd(tmp, exe, root : string) : string {
-    return "{trace_prefix()}\"{exe}\" -dasroot \"{root}\" -no-module-cache -project_root \"{tmp}\" \"{path_join(tmp, "use.das")}\""
-}
+def fixture_cmd(tmp, exe, root : string) : string =>
+    "{trace_prefix()}\"{exe}\" -dasroot \"{root}\" -no-module-cache -project_root \"{tmp}\" \"{path_join(tmp, "use.das")}\""
 
 //! a project root holding one pure-das module whose descriptor registers one require path,
 //! a module whose descriptor registers an absent C++ artifact, a module whose descriptor does

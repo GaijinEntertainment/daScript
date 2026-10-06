@@ -26,9 +26,7 @@ def private fake_image(var b : array<uint8>) {
     }
 }
 
-def private image_base(b : array<uint8>) : uint8 const? {
-    return unsafe(addr<uint8 const?>(b[0]))
-}
+def private image_base(b : array<uint8>) : uint8 const? => unsafe(addr<uint8 const?>(b[0]))
 
 [test]
 def test_plane_float_binds_and_reads(t : T?) {

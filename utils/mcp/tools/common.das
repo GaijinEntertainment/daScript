@@ -23,9 +23,7 @@ def symbol_matches(name, query : string) : bool {
 
 // True when `name` looks like a path-qualified module ("daslib/ast", "foo/bar").
 // Used to gate the auto-`daslib/` fallback: only single-token names get rewritten.
-def is_qualified_module_name(name : string) : bool {
-    return find(name, "/") >= 0
-}
+def is_qualified_module_name(name : string) : bool => find(name, "/") >= 0
 
 // Result of an attempt by an MCP tool helper that compiles a stub-with-`require`.
 // `retryable=false` means the failure happened before compile (e.g. temp-file write),
@@ -77,9 +75,7 @@ def private bootstrap_hint(tree : string) : string {
 
 // A `relative()` result escapes its base only when its first segment is `..` — exactly ".." or a
 // "../" prefix. A segment that merely begins with ".." (a dir named "..foo") stays inside the base.
-def private escapes_root(rel : string) : bool {
-    return rel == ".." || starts_with(rel, "../")
-}
+def private escapes_root(rel : string) : bool => rel == ".." || starts_with(rel, "../")
 
 //! The cross-tree warning for a `file` argument — "" when every path it names is relative
 //! (server-cwd-relative, so in-tree) or under the server's root (`project_root` if given, else the
@@ -176,9 +172,8 @@ def write_deduped(var writer : StringBuilderWriter; messages : array<string>; pr
     }
 }
 
-def compile_and_simulate(file : string; project : string = ""; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
-    return compile_program(file, false, false, project) <| blk
-}
+def compile_and_simulate(file : string; project : string = ""; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string =>
+    compile_program(file, false, false, project) <| blk
 
 def compile_and_simulate_ctx(file : string; project : string = ""; blk : block<(program : smart_ptr<Program>; var ctx : smart_ptr<Context>; issues : string) : string>) : string {
     let proj_err = validate_project_arg(project)
@@ -211,9 +206,8 @@ def compile_and_simulate_ctx(file : string; project : string = ""; blk : block<(
     return make_tool_result(result, had_error)
 }
 
-def compile_program(file : string; _export_all : bool; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
-    return compile_program(file, _export_all, false, "") <| blk
-}
+def compile_program(file : string; _export_all : bool; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string =>
+    compile_program(file, _export_all, false, "") <| blk
 
 def compile_program(file : string; _export_all : bool; _no_opt : bool; project : string = ""; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
     let proj_err = validate_project_arg(project)
@@ -259,9 +253,8 @@ def private setup_introspection_policies(var cop : CodeOfPolicies; _export_all, 
     }
 }
 
-def compile_only(file : string; _export_all : bool; project : string = ""; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
-    return compile_only(file, _export_all, false, project, false) <| blk
-}
+def compile_only(file : string; _export_all : bool; project : string = ""; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string =>
+    compile_only(file, _export_all, false, project, false) <| blk
 
 def compile_only(file : string; _export_all : bool; _no_opt : bool; project : string = ""; _lint : bool = false; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
     let proj_err = validate_project_arg(project)
@@ -288,9 +281,8 @@ def compile_only(file : string; _export_all : bool; _no_opt : bool; project : st
     return make_tool_result(result, had_error)
 }
 
-def arg_needs_documenting(tt) : bool {
-    return tt.baseType != Type.fakeContext && tt.baseType != Type.fakeLineInfo
-}
+def arg_needs_documenting(tt) : bool =>
+    tt.baseType != Type.fakeContext && tt.baseType != Type.fakeLineInfo
 
 def write_func_signature(var w : StringBuilderWriter; func) {
     var has_args = false
@@ -336,9 +328,7 @@ def write_handled_type(var w : StringBuilderWriter; value : Annotation const) {
 
 def write_function_list(var writer : StringBuilderWriter; program : smart_ptr<Program>) {
     let thisMod = get_this_module(program)
-    var user_funcs : array<string>
-    var generic_instances : array<string>
-    var class_methods : array<string>
+    var user_funcs, generic_instances, class_methods : array<string>
     for_each_function(thisMod, "") $(func) {
         if (func.flags.builtIn) return
         var line = ""
@@ -388,9 +378,7 @@ def write_function_list(var writer : StringBuilderWriter; program : smart_ptr<Pr
 // ── Executable path ──────────────────────────────────────────────────
 
 // Returns absolute path to the daslang executable, with backslashes on Windows
-def get_daslang_exe() : string {
-    return get_das_exe()
-}
+def get_daslang_exe() : string => get_das_exe()
 
 // ── Source text ──────────────────────────────────────────────────────
 
@@ -514,16 +502,12 @@ def run_mcp_subtool(subtool_name : string; args : array<string>;
 // ── Temp file utilities ──────────────────────────────────────────────
 
 // Returns a unique temp .das file path that won't collide with concurrent processes.
-def make_temp_das_file() : string {
-    return path_join(get_das_root(), "_mcp_stub_{ref_time_ticks()}.das")
-}
+def make_temp_das_file() : string => path_join(get_das_root(), "_mcp_stub_{ref_time_ticks()}.das")
 
 // ── File path utilities ──────────────────────────────────────────────
 
 [arch(at="../README.md#served-tree")]
-def server_root() : string {
-    return to_generic_path(getcwd())
-}
+def server_root() : string => to_generic_path(getcwd())
 
 //! the files that make a served tree a project: one of them at its root is what the C++ index follows
 let CPP_PROJECT_MARKERS = fixed_array(".git", "CMakeLists.txt", ".mcp.json", "compile_commands.json")

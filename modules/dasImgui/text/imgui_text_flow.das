@@ -125,17 +125,12 @@ struct private TextFlowUnit {
     is_control : bool = false
 }
 
-def private continuation_byte(b : uint) : bool {
-    return (b & 0xC0u) == 0x80u
-}
+def private continuation_byte(b : uint) : bool => (b & 0xC0u) == 0x80u
 
-def private ascii_alpha(b : int) : bool {
-    return ((b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z')) // nolint:PERF014
-}
+def private ascii_alpha(b : int) : bool =>
+    ((b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z'))  // nolint:PERF014
 
-def private ascii_digit(b : int) : bool {
-    return b >= '0' && b <= '9' // nolint:PERF014
-}
+def private ascii_digit(b : int) : bool => b >= '0' && b <= '9'  // nolint:PERF014
 
 def private uri_boundary_before(bytes : array<uint8> const#; at : int) : bool {
     if (at <= 0) return true
@@ -299,9 +294,7 @@ def private decode_scalars(text : string; var out : array<TextScalar>) {
     }
 }
 
-def private in_range(cp, lo, hi : uint) : bool {
-    return cp >= lo && cp <= hi
-}
+def private in_range(cp, lo, hi : uint) : bool => cp >= lo && cp <= hi
 
 def private is_control(cp : uint) : bool {
     return (cp == 0x000Au || cp == 0x000Du
@@ -352,29 +345,22 @@ def private is_prepend(cp : uint) : bool {
         || cp == 0x08E2u || cp == 0x110BDu || in_range(cp, 0x111C2u, 0x111C3u))
 }
 
-def private is_regional_indicator(cp : uint) : bool {
-    return in_range(cp, 0x1F1E6u, 0x1F1FFu)
-}
+def private is_regional_indicator(cp : uint) : bool => in_range(cp, 0x1F1E6u, 0x1F1FFu)
 
-def private is_hangul_l(cp : uint) : bool {
-    return in_range(cp, 0x1100u, 0x115Fu) || in_range(cp, 0xA960u, 0xA97Cu)
-}
+def private is_hangul_l(cp : uint) : bool =>
+    in_range(cp, 0x1100u, 0x115Fu) || in_range(cp, 0xA960u, 0xA97Cu)
 
-def private is_hangul_v(cp : uint) : bool {
-    return in_range(cp, 0x1160u, 0x11A7u) || in_range(cp, 0xD7B0u, 0xD7C6u)
-}
+def private is_hangul_v(cp : uint) : bool =>
+    in_range(cp, 0x1160u, 0x11A7u) || in_range(cp, 0xD7B0u, 0xD7C6u)
 
-def private is_hangul_t(cp : uint) : bool {
-    return in_range(cp, 0x11A8u, 0x11FFu) || in_range(cp, 0xD7CBu, 0xD7FBu)
-}
+def private is_hangul_t(cp : uint) : bool =>
+    in_range(cp, 0x11A8u, 0x11FFu) || in_range(cp, 0xD7CBu, 0xD7FBu)
 
-def private is_hangul_lv(cp : uint) : bool {
-    return in_range(cp, 0xAC00u, 0xD7A3u) && ((cp - 0xAC00u) % 28u) == 0u
-}
+def private is_hangul_lv(cp : uint) : bool =>
+    in_range(cp, 0xAC00u, 0xD7A3u) && ((cp - 0xAC00u) % 28u) == 0u
 
-def private is_hangul_lvt(cp : uint) : bool {
-    return in_range(cp, 0xAC00u, 0xD7A3u) && ((cp - 0xAC00u) % 28u) != 0u
-}
+def private is_hangul_lvt(cp : uint) : bool =>
+    in_range(cp, 0xAC00u, 0xD7A3u) && ((cp - 0xAC00u) % 28u) != 0u
 
 def private should_break_grapheme(prev, cur : uint; regional_run : int) : bool {
     if (prev == 0x000Du && cur == 0x000Au) return false
@@ -522,9 +508,7 @@ def public text_next_grapheme_boundary(text : string; at : int) : int {
     return result
 }
 
-def private natural_break_after(cp : uint) : bool {
-    return cp == 0x0020u || cp == 0x0009u || cp == 0x200Bu
-}
+def private natural_break_after(cp : uint) : bool => cp == 0x0020u || cp == 0x0009u || cp == 0x200Bu
 
 def private uri_break_after(cp : int) : bool {
     return (cp == '/' || cp == '?' || cp == '&'
@@ -559,7 +543,7 @@ def private push_span_units(var units : array<TextFlowUnit>; source : string;
                 is_control = true))
         }
         let span_text = slice(bytes, a, b)
-        var graphemes <- text_graphemes(span_text)
+        var inscope graphemes <- text_graphemes(span_text)
         for (g in graphemes) {
             let ga = a + g.source.start_byte
             let gb = a + g.source.end_byte
@@ -795,7 +779,7 @@ def public text_flow_hit_test_ranges(source : string;
         let a = clamp(fragment.source.start_byte, 0, length(source))
         let b = clamp(fragment.source.end_byte, a, length(source))
         let value = slice(source, a, b)
-        var graphemes <- text_graphemes(value)
+        var inscope graphemes <- text_graphemes(value)
         var x = fragment.rect.x
         var hit = TextFlowHit()
         for (g in graphemes) {
@@ -867,9 +851,7 @@ def public layout_text_flow(source : string; spans : array<TextFlowSpan> const;
         })
 }
 
-def private byte_char(value : int) : string {
-    return to_char(value & 255)
-}
+def private byte_char(value : int) : string => to_char(value & 255)
 
 def public codepoint_utf8(codepoint : int) : string {
     //! Encode one Unicode codepoint as a UTF-8 string. Shared by the terminal

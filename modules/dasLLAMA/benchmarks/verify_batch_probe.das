@@ -106,7 +106,7 @@ def main() {   // nolint:STYLE038 — flat probe driver: arg handling, then one 
         // would understate the union cost the batched arms are here to expose
         var ids : array<int64>
         for (tx in texts) {
-            var seg <- encode(tk, tx, false)
+            var inscope seg <- encode(tk, tx, false)
             ids |> push_from(seg)
             delete seg
         }
@@ -155,7 +155,7 @@ def main() {   // nolint:STYLE038 — flat probe driver: arg handling, then one 
         for (w in widths) {
             var s <- make_run_state(c)
             forward_prefill(t, s, pre, plen, 0l)
-            var batch : array<int64>
+            var inscope batch : array<int64>
             batch |> resize(w)
             var pos = plen
             for (_w in range64(WARM_STEPS)) {

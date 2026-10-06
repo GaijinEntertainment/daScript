@@ -105,9 +105,7 @@ def private aggregate_arm(key : string; stats : array<BenchmarkRunStats>) : Samp
         bytes = median_i64(bytes), allocs = median_i64(allocs), string_bytes = median_i64(sbytes), string_allocs = median_i64(sallocs))
 }
 
-def is_failure(st : FileStatus) : bool {
-    return st != FileStatus.ok && st != FileStatus.skipped
-}
+def is_failure(st : FileStatus) : bool => st != FileStatus.ok && st != FileStatus.skipped
 
 def classify_run_output(lines : array<string>; report_text : string; exit_code : int; var res : FileResult&) {
     var scan <- OutputScan()

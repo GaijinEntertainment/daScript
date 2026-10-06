@@ -772,9 +772,7 @@ def stage_parakeet_model(path : string; q8 : bool = false) : ParakeetStaging {
 
 //! The loaded precision (one tag — parakeet is a single carrier): the facade's
 //! [[asr_exec_fmt]] arm.
-def parakeet_exec_fmt(p : ParakeetModel) : string {
-    return p.q8 ? "q8" : "f32"
-}
+def parakeet_exec_fmt(p : ParakeetModel) : string => p.q8 ? "q8" : "f32"
 
 //! Parakeet's log-mel: preemphasis 0.97, zero center-pad n_fft/2, the file's STFT window, power
 //! spectra, mel dot, NATURAL log(sum + 2⁻²⁴), then per-feature mean/std normalization over the

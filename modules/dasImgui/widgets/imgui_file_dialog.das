@@ -475,9 +475,7 @@ def public file_dialog_open(cfg : FileDialogConfig) {
 //! The folder of the last confirmed selection this session ("" if none yet). Persist
 //! it to app config on exit, then restore via file_dialog_set_last_dir on startup to
 //! make the dialog reopen at the user's last folder across runs.
-def public file_dialog_last_dir() : string {
-    return g_last_dir
-}
+def public file_dialog_last_dir() : string => g_last_dir
 
 //! Seed the remembered start folder (e.g. from saved app config on startup). An empty
 //! string clears it (back to cwd-default).
@@ -715,9 +713,7 @@ def public file_dialog_selection() : array<string> {
 }
 
 //! First confirmed path (convenience for single-select callers).
-def public file_dialog_selected_path() : string {
-    return empty(g_fd.result) ? "" : g_fd.result[0]
-}
+def public file_dialog_selected_path() : string => empty(g_fd.result) ? "" : g_fd.result[0]
 
 def public file_dialog_current_dir() : string => g_fd.cur_dir
 

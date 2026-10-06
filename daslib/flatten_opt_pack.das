@@ -151,8 +151,7 @@ def private vectorize(exprs : array<ExpressionPtr>; nameToRole : table<string; i
     if (exprs[0] is ExprOp2) {
         let l0 = exprs[0] as ExprOp2
         let op0 = "{l0.op}"
-        var lefts : array<ExpressionPtr>
-        var rights : array<ExpressionPtr>
+        var lefts, rights : array<ExpressionPtr>
         lefts |> reserve(N)
         rights |> reserve(N)
         var okk = true
@@ -237,9 +236,8 @@ def private vectorize(exprs : array<ExpressionPtr>; nameToRole : table<string; i
     return null
 }
 
-def private make_vec_let(vecName : string; var vecExpr : ExpressionPtr) : ExpressionPtr {
-    return qmacro_expr(${ let $i(vecName) = $e(vecExpr); })
-}
+def private make_vec_let(vecName : string; var vecExpr : ExpressionPtr) : ExpressionPtr =>
+    qmacro_expr(${ let $i(vecName) = $e(vecExpr); })
 
 def private hreduce(vecName : string; width : int; op : string; at : LineInfo) : ExpressionPtr {
     assert(width >= 2 && width <= 4, "hreduce expects a packed group of width 2..4")
@@ -286,8 +284,8 @@ def private collect_lane_lets(var blk : ExprBlock?; chainIdx : array<int>; laneO
     for (k in range(M)) {
         let prev = k == 0 ? initIdx : chainIdx[k - 1]
         var inits : array<ExpressionPtr>
-        var names : array<string>
-        var own : table<uint64>
+        var inscope names : array<string>
+        var inscope own : table<uint64>
         var bail = false
         inits |> reserve(R)
         names |> reserve(R)
@@ -327,7 +325,7 @@ def private lanes_independent(links : array<LinkInfo>; headAccRef : string; chai
     for (k in range(M)) {
         if (!ok) break
         for (r in range(R)) {
-            var refs <- collect_var_hashes(laneInit[k][r])
+            var inscope refs <- collect_var_hashes(laneInit[k][r])
             for (rh in keys(refs)) {
                 if (key_exists(spineHash, rh) ||
                         (key_exists(roleHash, rh) && !key_exists(laneOwnHash[k], rh))) {
@@ -351,7 +349,7 @@ def private build_packed_lets(var blk : ExprBlock?; groups : array<int>; var lan
     var laneBase = 0
     for (gid in range(length(groups))) {
         let w = groups[gid]
-        var roleVecName : array<string>
+        var inscope roleVecName : array<string>
         roleVecName |> reserve(R)
         for (r in range(R)) {
             roleVecName |> push("_pk{h}_{gid}_{r}")

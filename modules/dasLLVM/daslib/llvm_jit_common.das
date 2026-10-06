@@ -455,9 +455,8 @@ def public arm64_forced_plus_features() : string {
 }
 
 // the baseline class's append first, the env's forced names after it (the last spelling of a name wins in LLVM)
-def private join_plus_features(base, forced : string) : string {
-    return empty(base) ? forced : (empty(forced) ? base : "{base},{forced}")
-}
+def private join_plus_features(base, forced : string) : string =>
+    empty(base) ? forced : (empty(forced) ? base : "{base},{forced}")
 
 // "+name" present in LLVM's host-features string (comma-separated "+feat"/"-feat" entries;
 // exact match on the enabled spelling, so a "-i8mm" entry never reads as support)
@@ -483,16 +482,14 @@ def private x64_forced_feature(name : string) : bool {
     return false
 }
 
-def private x64_target_feature(name : string) : bool {
-    return cpu_supports(name) || x64_forced_feature(name)
-}
+def private x64_target_feature(name : string) : bool =>
+    cpu_supports(name) || x64_forced_feature(name)
 
 // Tier truth per target kind: host targets read cpuid (OR'd with the emission-only force);
 // explicit cross-compile triples read the force string ONLY — the host's cpuid says nothing about
 // a cross target, so without DAS_JIT_X64_FORCE_FEATURES a cross x64 module gets no AVX emission.
-def private x64_tier_feature(name : string; cross : bool) : bool {
-    return cross ? x64_forced_feature(name) : x64_target_feature(name)
-}
+def private x64_tier_feature(name : string; cross : bool) : bool =>
+    cross ? x64_forced_feature(name) : x64_target_feature(name)
 
 // The forced names as an LLVM target-feature append ("+avxvnni,+avx512bw"); the matrix/tier names
 // (avx2, avxvnni, avx512f/bw/vl/vnni, avxvnniint8) are spelled identically in cpuid and LLVM.
@@ -513,9 +510,8 @@ var public g_target_wasm_threads = false
 var public g_jit_check_handled_abi = false
 
 [arch(at = "../ARCHITECTURE_TARGET_FEATURES.md#wasm-feature-string")]
-def private wasm_target_features() : string {
-    return g_target_wasm_threads ? "+simd128,+nontrapping-fptoint,+atomics,+bulk-memory" : "+simd128,+nontrapping-fptoint"
-}
+def private wasm_target_features() : string =>
+    g_target_wasm_threads ? "+simd128,+nontrapping-fptoint,+atomics,+bulk-memory" : "+simd128,+nontrapping-fptoint"
 
 def public LLVMAddFunctionWithType(mod : LLVMModuleRef; name : string; typ : LLVMTypeRef) {
     var rv = LLVMAddFunction(mod, name, typ)
@@ -556,9 +552,8 @@ def public mark_sanitize_address(mod : LLVMOpaqueModule?) {
 // jit_add_extern declares one C++ runtime helper (add + global-mapping + function attrs, plus optional
 // per-arg attrs). Pair with jit_fn_type(signature) (llvm_dsl) to derive `typ` from a das signature.
 
-def public jit_extern_type(t : Type) : LLVMTypeRef {
-    return t == Type.tVoid ? g_prim_t.t_void : base_type_to_llvm_type(t)
-}
+def public jit_extern_type(t : Type) : LLVMTypeRef =>
+    t == Type.tVoid ? g_prim_t.t_void : base_type_to_llvm_type(t)
 
 def public declare_extern_fn(name : string; typ : LLVMTypeRef) : LLVMOpaqueValue? {
     var fn = LLVMGetNamedFunction(g_mod, name)
@@ -1287,9 +1282,8 @@ def public build_string_constant(message : string implicit; msg_size : uint) {
     return str
 }
 
-def public get_basetype_pointer(t : Type) : LLVMOpaqueType? {
-    return LLVMPointerType(base_type_to_llvm_type(t), 0u)
-}
+def public get_basetype_pointer(t : Type) : LLVMOpaqueType? =>
+    LLVMPointerType(base_type_to_llvm_type(t), 0u)
 
 def public get_type_pointer(t : TypeDeclPtr) : LLVMOpaqueType? {
     if (t == null || t.isVoid) {
@@ -1299,9 +1293,8 @@ def public get_type_pointer(t : TypeDeclPtr) : LLVMOpaqueType? {
     }
 }
 
-def public get_empty_string(builder : LLVMOpaqueBuilder?) {
-    return LLVMBuildPointerCast(builder, build_string_constant(""), g_prim_t.get_type_string(), "empty string_constant")
-}
+def public get_empty_string(builder : LLVMOpaqueBuilder?) =>
+    LLVMBuildPointerCast(builder, build_string_constant(""), g_prim_t.get_type_string(), "empty string_constant")
 
 def public get_string_constant_ptr(builder : LLVMOpaqueBuilder?; message : string) {
     if (empty(message)) return LLVMConstPointerNull(g_prim_t.get_type_string())

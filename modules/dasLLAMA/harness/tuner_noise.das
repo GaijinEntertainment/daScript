@@ -53,8 +53,7 @@ def private probe_dot(a : float const?; b : float const?; n : int) : float {
 }
 
 def private probe_once(settle_ms : int; var med_out : double&) : double {
-    var a : array<float>
-    var b : array<float>
+    var a, b : array<float>
     a |> resize(PROBE_N)
     b |> resize(PROBE_N)
     for (i in range(PROBE_N)) {
@@ -102,9 +101,7 @@ def private probe_once(settle_ms : int; var med_out : double&) : double {
 
 //! The highest probe cv seen so far this run, in percent — the measured noise floor a winner
 //! must beat the shipped fallback by before it deserves the seat.
-def noise_floor_pct() : double {
-    return g_floor_pct
-}
+def noise_floor_pct() : double => g_floor_pct
 
 //! The win margin, in percent: a seat needs this over the fallback or the incumbent, in race and re-race.
 let TUNE_WIN_MARGIN_PCT = 3.0lf

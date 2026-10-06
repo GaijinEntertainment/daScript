@@ -14,9 +14,7 @@ require spirv/spirv_grammar
 require spirv/spirv_dis
 require strings
 
-def fixture_path() : string {
-    return "{get_das_root()}/tests/spirv/_lint_fold_fixture.das"
-}
+def fixture_path() : string => "{get_das_root()}/tests/spirv/_lint_fold_fixture.das"
 
 def shader_words(program : ProgramPtr; name : string) : array<uint> {
     var words : array<uint>

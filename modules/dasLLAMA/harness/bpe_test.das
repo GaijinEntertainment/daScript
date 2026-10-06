@@ -54,8 +54,8 @@ def main() {
     var npass = 0
     var nfail = 0
     for (i in range(length(inputs))) {
-        let want = parse_out_ids(outlines[i])
-        let got <- bpe_encode(tk, inputs[i])
+        var inscope want = parse_out_ids(outlines[i])
+        var inscope got <- bpe_encode(tk, inputs[i])
         if (ids_equal(got, want)) {
             npass++
         } else {

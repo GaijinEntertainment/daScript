@@ -51,9 +51,7 @@ def private percentile_us(var values : array<int64>; numerator : int) : int64 {
 }
 
 def private summarize(samples : array<GitProbeSample> const) : LaneSummary {
-    var total : array<int64>
-    var exit : array<int64>
-    var first : array<int64>
+    var total, exit, first : array<int64>
     total |> reserve(length(samples))
     exit |> reserve(length(samples))
     first |> reserve(length(samples))
@@ -172,7 +170,7 @@ def main() : int {
     print("drain policy: 250000us quiet after root-process exit\n")
     var ok = true
     for (command in make_git_probe_commands(cfg.repository)) {
-        var summaries : array<LaneSummary>
+        var inscope summaries : array<LaneSummary>
         summaries |> reserve(3)
         for (lane in [GitProbeLane.direct_capture,
                       GitProbeLane.direct_logged,

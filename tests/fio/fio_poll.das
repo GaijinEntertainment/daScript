@@ -16,9 +16,8 @@ def das_exe() : string {
 
 //! a deadline on a child, never a claim about speed: a Debug host compiles what the child
 //! requires several times slower
-def guard(seconds : float) : float {
-    return shared_module_extension() == "_debug.shared_module" ? min(seconds * 3.0, 300.0) : seconds
-}
+def guard(seconds : float) : float =>
+    shared_module_extension() == "_debug.shared_module" ? min(seconds * 3.0, 300.0) : seconds
 
 [test]
 def test_fpoll_pipe(t : T?) {

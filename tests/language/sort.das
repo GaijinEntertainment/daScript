@@ -49,9 +49,7 @@ struct Foo {
     x, y : int
 }
 
-def operator <(a, b : Foo) {
-    return a.x + a.y < b.x + b.y
-}
+def operator <(a, b : Foo) => a.x + a.y < b.x + b.y
 
 def test_vector_sort(t : T?) {
     var arr <- [float2(4, 0), float2(3, 1), float2(5, 2)]

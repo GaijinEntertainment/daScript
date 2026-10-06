@@ -13,73 +13,49 @@ require math
 
 // ----- bare horizontal adds, every width -----
 [flatten]
-def d_hadd2(v : float2) : float {
-    return v.x + v.y
-}
+def d_hadd2(v : float2) : float => v.x + v.y
 
 [flatten]
-def d_hadd3(v : float3) : float {
-    return v.x + v.y + v.z
-}
+def d_hadd3(v : float3) : float => v.x + v.y + v.z
 
 [flatten]
-def d_hadd4(v : float4) : float {
-    return v.x + v.y + v.z + v.w
-}
+def d_hadd4(v : float4) : float => v.x + v.y + v.z + v.w
 
 // ----- partial lanes of a wider vector: the skipped lane rides as mask 0 -----
 [flatten]
-def d_partial4(v : float4) : float {
-    return v.x + v.y + v.z
-}
+def d_partial4(v : float4) : float => v.x + v.y + v.z
 
 // ----- const-weighted lanes (the luma idiom) -----
 [flatten]
-def d_luma(c : float3) : float {
-    return c.x * 0.299 + c.y * 0.587 + c.z * 0.114
-}
+def d_luma(c : float3) : float => c.x * 0.299 + c.y * 0.587 + c.z * 0.114
 
 // ----- negated lane -> negative mask weight -----
 [flatten]
-def d_neg(v : float3) : float {
-    return v.x - v.y
-}
+def d_neg(v : float3) : float => v.x - v.y
 
 // ----- non-lane leftover term + negated lanes -----
 [flatten]
-def d_mixed(v : float3; e : float) : float {
-    return e - v.x - v.y
-}
+def d_mixed(v : float3; e : float) : float => e - v.x - v.y
 
 // ----- repeated lane accumulates its weight: (2, 1) -----
 [flatten]
-def d_dup(v : float2) : float {
-    return v.x + v.x + v.y
-}
+def d_dup(v : float2) : float => v.x + v.x + v.y
 
 // ----- weighted AND negated lanes in one chain -> dot(a, (2, 3, -4)) -----
 [flatten]
-def d_wneg(a : float3) : float {
-    return 2.0 * a.x + 3.0 * a.y - 4.0 * a.z
-}
+def d_wneg(a : float3) : float => 2.0 * a.x + 3.0 * a.y - 4.0 * a.z
 
 // ----- two base vectors in one sum -> two independent dots -----
 [flatten]
-def d_two(a : float2; b : float2) : float {
-    return a.x + a.y + b.x + b.y
-}
+def d_two(a : float2; b : float2) : float => a.x + a.y + b.x + b.y
 
 // ----- lane sum buried inside a call argument -----
 [flatten]
-def d_nested(v : float2) : float {
-    return sin(v.x + v.y)
-}
+def d_nested(v : float2) : float => sin(v.x + v.y)
 
 // ----- variable weight is NOT a lane term: one lane left -> no dot, mad fuses instead -----
 [flatten]
-def d_varweight(v : float2; w : float) : float {
-    return v.x * w + v.y
-}
+def d_varweight(v : float2; w : float) : float => v.x * w + v.y
 
 var GRID <- [-100.0, -3.5, -1.0, 0.0, 1.0, 2.5, 7.0, 100.0]
 

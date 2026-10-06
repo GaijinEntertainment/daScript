@@ -32,9 +32,7 @@ def model_path() : string {
 }
 
 // First characters of a long span, for compact printing.
-def head(s : string; n : int) : string {
-    return length(s) <= n ? s : slice(s, 0, n) + "..."
-}
+def head(s : string; n : int) : string => length(s) <= n ? s : slice(s, 0, n) + "..."
 
 // ──────────────────────────────────────────────────────────────────────────
 // Section 1 — The reply carries its reasoning; Section 2 — split_reasoning

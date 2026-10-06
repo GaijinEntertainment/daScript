@@ -34,9 +34,8 @@ struct Config {
 
 var g_cfg = Config()
 
-def private run(argv : array<string>; var out : string&; timeout = 600.0) : int {
-    return run_and_capture(argv, out, timeout)
-}
+def private run(argv : array<string>; var out : string&; timeout = 600.0) : int =>
+    run_and_capture(argv, out, timeout)
 
 def private git_lines(args : array<string>) : array<string> {
     var argv <- ["git"]
@@ -168,9 +167,7 @@ def private gate_stamp_reach() : bool {
     return ok
 }
 
-def private touched_scopes() : array<string> {
-    return <- scopes_of(changed_files("*.das"))
-}
+def private touched_scopes() : array<string> => <- scopes_of(changed_files("*.das"))
 
 def private gate_dupes(daslang : string) : bool {
     let das_files <- changed_files("*.das")
@@ -223,9 +220,8 @@ def private gate_dupes(daslang : string) : bool {
     return true
 }
 
-def private diff_touches(patterns : array<string>) : bool {
-    return any_path_matches(changed_files(), patterns)
-}
+def private diff_touches(patterns : array<string>) : bool =>
+    any_path_matches(changed_files(), patterns)
 
 def private gate_ast_verify(daslang : string) : bool {
     if (!diff_touches(["daslib/", "src/ast/", "utils/"])) {
@@ -288,9 +284,7 @@ def private print_judgment_checklist() {
     to_log(LOG_INFO, "  - docs substeps when publics/RST changed; .md stop; PR body template; babysit after open\n")
 }
 
-def private want(gate : string) : bool {
-    return want_gate(g_cfg.only, g_cfg.skip, gate)
-}
+def private want(gate : string) : bool => want_gate(g_cfg.only, g_cfg.skip, gate)
 
 [export]
 def main() : int {

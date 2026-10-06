@@ -1,24 +1,16 @@
 options gen2
 require dastest/testing_boost
 
-def div_checked(a : int, b : int) {
-    return a / b
-}
+def div_checked(a : int, b : int) => a / b
 
 [hint(unsafe_division_check)]
-def div_unchecked(a : int, b : int) {
-    return a / b
-}
+def div_unchecked(a : int, b : int) => a / b
 
 [hint(unsafe_division_check)]
-def mod_unchecked(a : int, b : int) {
-    return a % b
-}
+def mod_unchecked(a : int, b : int) => a % b
 
 [hint(unsafe_division_check)]
-def mod64_unchecked(a : int64, b : int64) {
-    return a % b
-}
+def mod64_unchecked(a : int64, b : int64) => a % b
 
 [hint(unsafe_division_check)]
 def set_div_unchecked(a : int, b : int) {

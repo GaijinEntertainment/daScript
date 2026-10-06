@@ -88,8 +88,7 @@ def bench_shape(name : string; n, d : int64) : int64 {   // nolint:STYLE037,STYL
     delete xs
 
     let ntb = length(TB_GRID)
-    var y : array<float>
-    var yref : array<float>
+    var y, yref : array<float>
     y |> resize(NTOK * d)
     yref |> resize(NTOK * d)
 

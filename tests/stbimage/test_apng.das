@@ -26,9 +26,8 @@ def private temp_output(ext : string) : string {
     return create_temp_file("stbimage_test", ext, error)
 }
 
-def be_u32_at(b0, b1, b2, b3 : uint8) : uint {
-    return ((uint(b0) << 24u) | (uint(b1) << 16u) | (uint(b2) << 8u) | uint(b3))
-}
+def be_u32_at(b0, b1, b2, b3 : uint8) : uint =>
+    ((uint(b0) << 24u) | (uint(b1) << 16u) | (uint(b2) << 8u) | uint(b3))
 
 def parse_png_chunks(path : string) : ChunkSummary {
     var out : ChunkSummary
@@ -110,7 +109,7 @@ def test_apng_basic(t : T?) {
         tt |> success(writer != null, "stbi_apng_begin succeeded")
         return if (writer == null)
         for (frame in range(4)) {
-            var pixels : array<uint8>
+            var inscope pixels : array<uint8>
             make_gradient_frame(pixels, W, H, frame)
             let ok = stbi_apng_frame(writer, unsafe(addr(pixels[0])), W * 4, 100)
             tt |> equal(ok, 1)

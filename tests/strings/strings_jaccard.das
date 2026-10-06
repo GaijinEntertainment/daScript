@@ -44,8 +44,7 @@ def test_jaccard_table(t : T?) {
     }
 
     t |> run("both empty returns 0") @@(t : T?) {
-        let a : table<string>
-        let b : table<string>
+        let a, b : table<string>
         t |> equal(jaccard(a, b), 0.0f)
     }
 }

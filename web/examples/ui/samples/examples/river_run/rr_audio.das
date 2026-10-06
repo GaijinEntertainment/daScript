@@ -80,7 +80,7 @@ def build_note_sequence(notes : float[]; note_dur, volume : float; rising : bool
     for (ni in range(length(notes))) {
         let f1 = notes[ni]
         let f2 = (rising ? notes[ni] * 1.06 : notes[ni] * 0.92)
-        let note <- gen_sine_sweep(f1, f2, note_dur, volume)
+        var inscope note <- gen_sine_sweep(f1, f2, note_dur, volume)
         let offset = ni * int(float(AUDIO_RATE) * note_dur)
         for (i in range(length(note))) {
             if (offset + i < total_samples) {

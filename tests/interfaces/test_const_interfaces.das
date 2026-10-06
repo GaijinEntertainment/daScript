@@ -34,12 +34,8 @@ class Widget {
         value = v
         name = n
     }
-    def const IReadable`get_value() : int {
-        return value
-    }
-    def const IReadable`get_name() : string {
-        return name
-    }
+    def const IReadable`get_value() : int => value
+    def const IReadable`get_name() : string => name
 }
 
 [implements(IMixed)]
@@ -48,9 +44,7 @@ class Counter {
     def Counter() {
         pass
     }
-    def const IMixed`read_only() : int {
-        return count
-    }
+    def const IMixed`read_only() : int => count
     def IMixed`mutate() {
         count++
     }

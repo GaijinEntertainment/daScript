@@ -18,9 +18,7 @@ def cmd_exec(cmd : string) : string {
     return trim(out)
 }
 
-def file_exists(filename : string) : bool {
-    return stat(filename).is_valid
-}
+def file_exists(filename : string) : bool => stat(filename).is_valid
 
 def read_file(filename : string) : string {
     var result = ""
@@ -43,18 +41,10 @@ def bare_str(str : string) : string {
     ])
 }
 
-def red_str(str : string) : string {
-    return colored_output ? "\x1B[31m{str}\x1B[0m" : str
-}
+def red_str(str : string) : string => colored_output ? "\x1B[31m{str}\x1B[0m" : str
 
-def green_str(str : string) : string {
-    return colored_output ? "\x1B[32m{str}\x1B[0m" : str
-}
+def green_str(str : string) : string => colored_output ? "\x1B[32m{str}\x1B[0m" : str
 
-def yellow_str(str : string) : string {
-    return colored_output ? "\x1B[33m{str}\x1B[0m" : str
-}
+def yellow_str(str : string) : string => colored_output ? "\x1B[33m{str}\x1B[0m" : str
 
-def blue_str(str : string) : string {
-    return colored_output ? "\x1B[34m{str}\x1B[0m" : str
-}
+def blue_str(str : string) : string => colored_output ? "\x1B[34m{str}\x1B[0m" : str

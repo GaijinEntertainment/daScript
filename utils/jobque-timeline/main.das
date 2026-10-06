@@ -593,7 +593,7 @@ def timeline_describe(input : JsonValue?) : JsonValue? {
         let doc & = unsafe(g_docs[i])
         let ui & = unsafe(g_ui[i])
         var visible = 0
-        var cat_busy : array<double>
+        var inscope cat_busy : array<double>
         cat_busy |> resize(length(doc.cats))
         for (lane in doc.lanes) {
             var j = lane_lower_bound(lane, ui.t0 - lane.max_dur)

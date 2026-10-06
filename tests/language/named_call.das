@@ -6,45 +6,39 @@ require dastest/testing_boost public
 // ---- functions under test ----------------------------------------------------
 
 // mixed positional + a trailing default; used for the flagship bare form
-def three(a : int; hint : string; extra : int = 7) : string {
-    return "{a}/{hint}/{extra}"
-}
+def three(a : int; hint : string; extra : int = 7) : string => "{a}/{hint}/{extra}"
 
 // four positional floats + a named hint -- the tool_slider(...) shape
-def slider4(name : string; val, lo, hi : float; hint : string) : string {
-    return "{name}:{hint}:{int(val)}:{int(lo)}:{int(hi)}"
-}
+def slider4(name : string; val, lo, hi : float; hint : string) : string =>
+    "{name}:{hint}:{int(val)}:{int(lo)}:{int(hi)}"
 
 // overload set disambiguated by the named argument's name + type
-def over(a : int; kind : string) : string { return "{a}:S:{kind}" }
-def over(a : int; count : int) : string { return "{a}:I:{count}" }
+def over(a : int; kind : string) : string => "{a}:S:{kind}"
+def over(a : int; count : int) : string => "{a}:I:{count}"
 
 // generic first argument + a named argument
-def gen_named(a; hint : string) : string { return "{a}:{hint}" }
+def gen_named(a; hint : string) : string => "{a}:{hint}"
 
 // a named call INSIDE a generic body: the body is cloned (clone_function) on instantiation,
 // before the named call demotes - the clone must carry the positional in nonNamedArguments,
 // else 'g' is dropped and matching fails "can't skip hint" (regression for ExprNamedCall::clone)
-def in_generic(g) : string { return three(g, hint = "gen") }
+def in_generic(g) : string => three(g, hint = "gen")
 
 // mutable-ref param: lets clone (:=) be observed vs by-ref (= / <-).
 // _tag is a leading positional so the array can be bound as a named arg.
 def drain(_tag : int; var a : array<int>) { a |> clear() }
 
 // piped block as the trailing positional, with a named option after it
-def section(_tag : int; body : block<() : int>; open : bool = false) : int {
-    return invoke(body) + (open ? 1000 : 0)
-}
+def section(_tag : int; body : block<() : int>; open : bool = false) : int =>
+    invoke(body) + (open ? 1000 : 0)
 
 // method-style (dot) call target
 struct Widget { id : int }
-def render(self : Widget; title : string; depth : int = 0) : string {
-    return "W{self.id}:{title}:{depth}"
-}
+def render(self : Widget; title : string; depth : int = 0) : string => "W{self.id}:{title}:{depth}"
 
 // a name that is BOTH a struct and a function (struct construction must win)
 struct SameName { p : int }
-def SameName(p : int; q : int) : string { return "fn:{p}:{q}" }
+def SameName(p : int; q : int) : string => "fn:{p}:{q}"
 
 // genuine class method (def inside class {}) - a middle positional after self plus a
 // named/defaulted arg. render() above is a FREE function via dot, so it resolves through the
@@ -52,13 +46,9 @@ def SameName(p : int; q : int) : string { return "fn:{p}:{q}" }
 // the member-call path where middle positionals after self used to be dropped.
 class Gadget {
     id : int
-    def paint(title : string; depth : int = 0) : string {
-        return "G{id}:{title}:{depth}"
-    }
+    def paint(title : string; depth : int = 0) : string => "G{id}:{title}:{depth}"
     // calls its own method with implicit self
-    def repaint(title : string) : string {
-        return paint(title, depth = 5)
-    }
+    def repaint(title : string) : string => paint(title, depth = 5)
 }
 
 // ---- tests -------------------------------------------------------------------

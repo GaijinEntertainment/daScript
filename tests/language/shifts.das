@@ -67,12 +67,12 @@ class ShiftA {
     x : int
 }
 
-def operator <<(a : ShiftA; y : int) { return new ShiftA(x = a.x << y); }
-def operator >>(a : ShiftA; y : int) { return new ShiftA(x = a.x >> y); }
+def operator <<(a : ShiftA; y : int) => new ShiftA(x = a.x << y)
+def operator >>(a : ShiftA; y : int) => new ShiftA(x = a.x >> y)
 def operator <<=(var a : ShiftA; y : int) { a.x <<= y; }
 def operator >>=(var a : ShiftA; y : int) { a.x >>= y; }
-def operator <<(a : ShiftA; b : ShiftA) { return new ShiftA(x = a.x << b.x); }
-def operator >>(a : ShiftA; b : ShiftA) { return new ShiftA(x = a.x >> b.x); }
+def operator <<(a : ShiftA; b : ShiftA) => new ShiftA(x = a.x << b.x)
+def operator >>(a : ShiftA; b : ShiftA) => new ShiftA(x = a.x >> b.x)
 def operator <<=(var a : ShiftA; b : ShiftA) { a.x <<= b.x; }
 def operator >>=(var a : ShiftA; b : ShiftA) { a.x >>= b.x; }
 

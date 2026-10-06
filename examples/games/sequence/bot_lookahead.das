@@ -166,14 +166,14 @@ def private eval_future(game : GameState; remaining_cards : array<Card>;
     let color = player_chip_color(player_idx)
     var best_future = 0.0
     for (card in remaining_cards) {
-        var positions <- inner_positions(game, card, player_idx, w, w.jack_lookahead)
+        var inscope positions <- inner_positions(game, card, player_idx, w, w.jack_lookahead)
         for (pos in positions) {
             let s = score_move(game, card, pos.x, pos.y, player_idx, w)
             var deeper = 0.0
             if (current_depth < max_depth) {
                 var sim := game
                 sim_apply(sim, card, pos.x, pos.y, color)
-                var next_cards <- unique_cards_excluding(remaining_cards, card)
+                var inscope next_cards <- unique_cards_excluding(remaining_cards, card)
                 deeper = eval_future(sim, next_cards, player_idx, w, current_depth + 1, max_depth)
                 delete next_cards
             }
@@ -234,7 +234,7 @@ def bot_lookahead_move(game : GameState; player_idx : int; seed : int; w : Looka
         var sim <- make_sim_state(game)
         sim_apply(sim, card, m.row, m.col, color)
         // Get remaining cards for future turns
-        var remaining <- unique_hand_cards(game, player_idx, m.card_idx)
+        var inscope remaining <- unique_hand_cards(game, player_idx, m.card_idx)
         let future = eval_future(sim, remaining, player_idx, w, 2, w.depth)
         delete remaining
         let total = score1 + w.future_discount * future
@@ -256,6 +256,5 @@ def bot_lookahead_move(game : GameState; player_idx : int; seed : int; w : Looka
 }
 
 // Convenience overload with default weights
-def bot_lookahead_move(game : GameState; player_idx : int; seed : int) : Move {
-    return bot_lookahead_move(game, player_idx, seed, LOOKAHEAD_DEFAULT)
-}
+def bot_lookahead_move(game : GameState; player_idx : int; seed : int) : Move =>
+    bot_lookahead_move(game, player_idx, seed, LOOKAHEAD_DEFAULT)

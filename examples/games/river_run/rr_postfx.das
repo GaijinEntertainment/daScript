@@ -188,13 +188,10 @@ def fs_ssao {
     p_FragColor = float4(ao, ao, ao, 1.0)
 }
 
-def private hash_noise(p : float2) : float {
-    return (p.x * 0.0 + fract_local(sin(dot(floor(p), float2(12.9898, 78.233))) * 43758.545))
-}
+def private hash_noise(p : float2) : float =>
+    (p.x * 0.0 + fract_local(sin(dot(floor(p), float2(12.9898, 78.233))) * 43758.545))
 
-def private fract_local(x : float) : float {
-    return x - floor(x)
-}
+def private fract_local(x : float) : float => x - floor(x)
 
 // --- Cross-shaped AO blur (cheap, and the AO signal is already low frequency)
 
@@ -275,9 +272,7 @@ def fs_composite {
 
 // --- FXAA + vignette + grain, straight to the back buffer
 
-def private luma(c : float3) : float {
-    return dot(c, float3(0.299, 0.587, 0.114))
-}
+def private luma(c : float3) : float => dot(c, float3(0.299, 0.587, 0.114))
 
 [fragment_program]
 def fs_present {

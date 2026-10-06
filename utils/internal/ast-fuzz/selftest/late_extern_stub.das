@@ -5,9 +5,7 @@ require dasbind public
 // retargeted to the DasBindFunction proxy), so the zero-arg int() below legitimately
 // keeps a null func - the post-infer verify must skip it, like every pass it guards.
 [extern(cdecl, late, name="NoSuchFunction", library="NoSuchLibrary")]
-def late_extern_stub() : int {
-    return int()
-}
+def late_extern_stub() : int => int()
 
 [export]
 def main {

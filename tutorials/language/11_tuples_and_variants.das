@@ -191,15 +191,11 @@ def main { // nolint:STYLE038 — tutorial walkthrough: one linear story by desi
     // typedef Callback = function<(x:int):void>
 }
 
-def divmod_tuple(a, b : int) : tuple<int; int> {
-    return (a / b, a % b)
-}
+def divmod_tuple(a, b : int) : tuple<int; int> => (a / b, a % b)
 
 // Return-position shorthand: the bare-var positional literal promotes to the
 // declared named-tuple result type when the names match in order.
-def make_hit(eid : int; distSq : float) : tuple<eid : int; distSq : float> {
-    return (eid, distSq)
-}
+def make_hit(eid : int; distSq : float) : tuple<eid : int; distSq : float> => (eid, distSq)
 
 // output:
 // pair = (42, 3.14)

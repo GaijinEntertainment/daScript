@@ -16,9 +16,7 @@ def private das_exe() : string {
     return find(to_generic_path(argv[0]), "/") < 0 ? argv[0] : get_full_file_name(normalize(argv[0]))
 }
 
-def private tail(s : string) : string {
-    return slice(s, max(0, length(s) - 400))
-}
+def private tail(s : string) : string => slice(s, max(0, length(s) - 400))
 
 //! the dumped IR of one function, by its dumped name - mangled (`branchy Cb`) unless the signature is nullary; signature to closing brace
 def private function_ir(dump : string; name : string) : string {

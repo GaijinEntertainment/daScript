@@ -37,10 +37,8 @@ def test_fused_decode_bit_exact(t : T?) {
         let prev_thresh = get_target_chunk_work()
         with_dasllama_jobque_() {   // team mode on — the fused gate requires it
             set_target_chunk_work(1l)
-            var ids_std : array<int64>
-            var ids_fused : array<int64>
-            var lg_std : array<float>
-            var lg_fused : array<float>
+            var ids_std, ids_fused : array<int64>
+            var lg_std, lg_fused : array<float>
             set_fused_decode(false)
             var s1 <- make_run_state(c)
             greedy_ids(tr, s1, N_STEPS, ids_std, lg_std)
@@ -76,10 +74,8 @@ def test_fused_decode_bit_exact(t : T?) {
 [cold_path]
 def private fused_vs_std_bit_exact(t : T?; tr : Model) {
     let c = tr.config
-    var ids_std : array<int64>
-    var ids_fused : array<int64>
-    var lg_std : array<float>
-    var lg_fused : array<float>
+    var ids_std, ids_fused : array<int64>
+    var lg_std, lg_fused : array<float>
     set_fused_decode(false)
     var s1 <- make_run_state(c)
     greedy_ids(tr, s1, N_STEPS, ids_std, lg_std)

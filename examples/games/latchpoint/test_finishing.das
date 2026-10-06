@@ -32,7 +32,7 @@ def test_finishing_materials(suite : T?) {
     suite |> run("voice coloration is subtle, bounded and bypassable") @(t : T?) {
         let original <- mechanical_pcm(0.2, 210.0, 0.3, 0.2)
         for (resident in range(3)) {
-            var samples := original
+            var inscope samples := original
             voice_processing = true
             process_robot_voice(samples, EFFECT_RATE, 1, resident)
             var error = 0.0

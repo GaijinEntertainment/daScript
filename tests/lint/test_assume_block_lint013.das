@@ -5,9 +5,7 @@ require daslib/ast
 require daslib/lint
 require strings
 
-def fixture_path() : string {
-    return "{get_das_root()}/tests/lint/_assume_block_lint013_fixture.das"
-}
+def fixture_path() : string => "{get_das_root()}/tests/lint/_assume_block_lint013_fixture.das"
 
 def compile_and_collect(t : T?; blk : block<(issues : array<string>; count : int) : void>) {
     var inscope access <- make_file_access("")

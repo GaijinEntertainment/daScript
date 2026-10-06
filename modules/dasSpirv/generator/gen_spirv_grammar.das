@@ -14,13 +14,9 @@ require strings
 require daslib/json_boost
 require daslib/clargs
 
-def private j_str(obj : JsonValue?; key : string) : string {
-    return obj?[key] ?? ""
-}
+def private j_str(obj : JsonValue?; key : string) : string => obj?[key] ?? ""
 
-def private j_int(obj : JsonValue?; key : string) : int {
-    return obj?[key] ?? -1
-}
+def private j_int(obj : JsonValue?; key : string) : int => obj?[key] ?? -1
 
 // SPIR-V grammar encodes ValueEnum values as integers and BitEnum values as hex strings
 // ("0x0004"). Emit a uint literal verbatim in both cases — daslang hex literals are uint.
@@ -84,8 +80,7 @@ def main {  // nolint:STYLE038 - one-shot generator: flat CLI handling then a si
         panic("cannot read grammar JSON under {root}/spirv_headers")
     }
 
-    var cerr : string
-    var eerr : string
+    var cerr, eerr : string
     var cj = read_json(core_text, cerr)
     var ej = read_json(ext_text, eerr)
     if (cj == null) {

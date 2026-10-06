@@ -30,8 +30,7 @@ def max_abs_diff(a, b : array<float>; cnt : int64) : float {
 }
 
 def bench_shape(b : B?; name : string; n, d : int64) {
-    var w : array<float>
-    var x : array<float>
+    var w, x : array<float>
     fillf(w, n * d)
     fillf(x, n)
     let qt8 <- quantize_q8_0(w, n * d)
@@ -47,8 +46,7 @@ def bench_shape(b : B?; name : string; n, d : int64) {
     repack_q8q8_4(qt8.q, qt8.scales, n, d, wgq, wgs)
 
     // correctness gate
-    var yref : array<float>
-    var ylq : array<float>
+    var yref, ylq : array<float>
     yref |> resize(d)
     ylq |> resize(d)
     matmul_q8q8_sdot4x4(yref, qt8.q, qt8.scales, xq, xs, n, d)

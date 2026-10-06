@@ -45,9 +45,7 @@ require strings
 class BasicStackWalker : DapiStackWalker {
     frame_depth : int = 0
 
-    def make_indent() : string {
-        return repeat("  ", frame_depth)
-    }
+    def make_indent() : string => repeat("  ", frame_depth)
 
     def override onCallAt(pp : Prologue; info : FuncInfo; at : LineInfo) : void {
         let indent = make_indent()

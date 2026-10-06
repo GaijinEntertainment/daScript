@@ -16,21 +16,13 @@ struct public DllName {
         name = s |> replace_multiple([(text = "@", replacement = "`At`"), (text = "=", replacement = "`Eq`"), (text = "<", replacement = "`Lt`"), (text = ">", replacement = "`Gt`"), (text = ",", replacement = "`C`")])
     }
 
-    def const impl() {
-        return "{name} implementation"
-    }
+    def const impl() => "{name} implementation"
 
-    def const publ() {
-        return "{name}"
-    }
+    def const publ() => "{name}"
 
-    def const glob() {
-        return "{name} glob"
-    }
+    def const glob() => "{name} glob"
 
-    def const id() {
-        return "{name} hash"
-    }
+    def const id() => "{name} hash"
 }
 
 // We need unique ids for dll names. Visitor generates this ids.
@@ -127,9 +119,7 @@ class public UidNodes {
         id_map <- tab
     }
 
-    def const get_namesp_prefix() {
-        return namesp
-    }
+    def const get_namesp_prefix() => namesp
 
     def private get_base(ptr : void?; hint : string) {
         if (!(id_map |> key_exists(ptr))) {
@@ -153,65 +143,47 @@ class public UidNodes {
         return DllName("{get_namesp_prefix()}`{fnPart}_{id}_{hint}")
     }
 
-    def get_addr(expr : ExprAddr?) : DllName {
-        return get_base(expr, "addr_{get_mangled_name(expr.func)}")
-    }
+    def get_addr(expr : ExprAddr?) : DllName => get_base(expr, "addr_{get_mangled_name(expr.func)}")
 
-    def get_new(expr : TypeDeclPtr) : DllName {
-        return get_base(expr, "new`handle`{get_mangled_name(expr)}")
-    }
+    def get_new(expr : TypeDeclPtr) : DllName =>
+        get_base(expr, "new`handle`{get_mangled_name(expr)}")
 
-    def get_ascend_new(expr : ExprAscend?) {
-        return get_base(expr, "ascend_new`handle`{get_mangled_name(expr.subexpr._type)}")
-    }
+    def get_ascend_new(expr : ExprAscend?) =>
+        get_base(expr, "ascend_new`handle`{get_mangled_name(expr.subexpr._type)}")
 
-    def get_delete_type(t : TypeDeclPtr) : DllName {
-        return get_base(t, "delete`handle`{get_mangled_name(t)}")
-    }
+    def get_delete_type(t : TypeDeclPtr) : DllName =>
+        get_base(t, "delete`handle`{get_mangled_name(t)}")
 
-    def get_clone_type(t : TypeDeclPtr) : DllName {
-        return get_base(t, "clone`handle`{get_mangled_name(t)}")
-    }
+    def get_clone_type(t : TypeDeclPtr) : DllName =>
+        get_base(t, "clone`handle`{get_mangled_name(t)}")
 
-    def get_each_type(t : TypeDeclPtr) : DllName {
-        return get_base(t, "each`handle`{get_mangled_name(t)}")
-    }
+    def get_each_type(t : TypeDeclPtr) : DllName => get_base(t, "each`handle`{get_mangled_name(t)}")
 
-    def get_at_type(t : TypeDeclPtr; ixT : TypeDeclPtr) : DllName {
-        return get_base(t, "at`handle`{get_mangled_name(t)}`{get_mangled_name(ixT)}")
-    }
+    def get_at_type(t : TypeDeclPtr; ixT : TypeDeclPtr) : DllName =>
+        get_base(t, "at`handle`{get_mangled_name(t)}`{get_mangled_name(ixT)}")
 
-    def get_tinfo(expr : ExprTypeInfo?) {
-        return get_base(expr, "tinfo_{expr.typeexpr.get_mnh}")
-    }
+    def get_tinfo(expr : ExprTypeInfo?) => get_base(expr, "tinfo_{expr.typeexpr.get_mnh}")
 
-    def get_ctor(expr : ExprMakeStruct?) {
-        return get_base(expr, "ctor_{expr.constructor}")
-    }
+    def get_ctor(expr : ExprMakeStruct?) => get_base(expr, "ctor_{expr.constructor}")
 
-    def get_call(expr : ExprCallFunc?) : DllName {
-        return get_base(expr, "call_{get_mangled_name(expr.func)}")
-    }
+    def get_call(expr : ExprCallFunc?) : DllName =>
+        get_base(expr, "call_{get_mangled_name(expr.func)}")
 
-    def public get_block_name_ptr(blk : ExprBlock?) : DllName {
-        return get_base(blk, "block_{get_mangled_name(blk)}")
-    }
+    def public get_block_name_ptr(blk : ExprBlock?) : DllName =>
+        get_base(blk, "block_{get_mangled_name(blk)}")
 
-    def public get_block_name(blk : ExprBlock?) : DllName {
-        return get_base(blk, "block_{get_mangled_name(blk)}")
-    }
+    def public get_block_name(blk : ExprBlock?) : DllName =>
+        get_base(blk, "block_{get_mangled_name(blk)}")
 
     def reset(var func : Function?) {
         thisFunc = func
     }
 
-    def const get_dll_fn_name_ptr(fn : Function?) : DllName {
-        return DllName("{get_namesp_prefix()}`{fn |> get_mangled_name()}")
-    }
+    def const get_dll_fn_name_ptr(fn : Function?) : DllName =>
+        DllName("{get_namesp_prefix()}`{fn |> get_mangled_name()}")
 
-    def const get_dll_fn_name(fn : FunctionPtr) : DllName {
-        return DllName("{get_namesp_prefix()}`{fn |> get_mangled_name()}")
-    }
+    def const get_dll_fn_name(fn : FunctionPtr) : DllName =>
+        DllName("{get_namesp_prefix()}`{fn |> get_mangled_name()}")
 
 }
 
@@ -272,9 +244,8 @@ class public DLLHandle {
         return handle |> get_function_address(fn.impl());
     }
 
-    def get_function_hash(fn : DllName) {
-        return unsafe(reinterpret<uint64?>(handle |> get_function_address(fn.id())))
-    }
+    def get_function_hash(fn : DllName) =>
+        unsafe(reinterpret<uint64?>(handle |> get_function_address(fn.id())))
 
     def set_glob_address(fn : DllName, ptr : void?) {
         assert(handle != null, "dynamic_lib_handle is null")
@@ -328,6 +299,5 @@ def public artifact_path(path : string; kind : JitArtifact) : string {
 }
 
 
-def public get_dll_by_path(path : string) : DLLHandle? {
-    return new DLLHandle(handle = load_dynamic_library(artifact_path(path, JitArtifact.jit_dll)))
-}
+def public get_dll_by_path(path : string) : DLLHandle? =>
+    new DLLHandle(handle = load_dynamic_library(artifact_path(path, JitArtifact.jit_dll)))

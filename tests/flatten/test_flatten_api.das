@@ -16,32 +16,22 @@ require math
 //! const selects. The flattened twin must match an unflattened reference.
 
 // Unflattened reference (identical body) for differential comparison.
-def ref_max_min(x : int) : int {
-    return max(x, 0) + min(x, 10)
-}
+def ref_max_min(x : int) : int => max(x, 0) + min(x, 10)
 
 [flat_api]
-def api_demo(x : int) : int {
-    return max(x, 0) + min(x, 10)
-}
+def api_demo(x : int) : int => max(x, 0) + min(x, 10)
 
 // A recursive user function the backend whitelists as a leaf primitive. flatten
 // must KEEP the call (whitelist precedence), not inline it — inlining a recursive
 // function would trip the recursion boundary and fail the compile. That this
 // compiles + matches the reference proves whitelisted calls survive un-inlined
 // even though they have a (here recursive) body — the [hint]/[stub] shader case.
-def myrec(n : int) : int {
-    return n <= 0 ? 0 : n + myrec(n - 1)
-}
+def myrec(n : int) : int => n <= 0 ? 0 : n + myrec(n - 1)
 
-def ref_rec(x : int) : int {
-    return myrec(x) + 1
-}
+def ref_rec(x : int) : int => myrec(x) + 1
 
 [flat_api]
-def api_rec(x : int) : int {
-    return myrec(x) + 1
-}
+def api_rec(x : int) : int => myrec(x) + 1
 
 // A loop-var-gated accumulator: each unrolled copy's `i >= 3` is a compile-time
 // constant, so flatten_fold (run via the backend-style cycle 2 in flat_api_macro)

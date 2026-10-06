@@ -40,21 +40,13 @@ def variant_as_panic(var f : FooT) {
     return f as a
 }
 
-def make_variant_cmres : FooT {
-    return FooT(a = 13)
-}
+def make_variant_cmres : FooT => FooT(a = 13)
 
-def make_variant_with_subvariant_cmres : BarT {
-    return BarT(foo = FooT(a = 13))
-}
+def make_variant_with_subvariant_cmres : BarT => BarT(foo = FooT(a = 13))
 
-def FooT : FooT {
-    return FooT(c = "1234")
-}
+def FooT : FooT => FooT(c = "1234")
 
-def make_variant_with_field_call_to_cmres : BarT {
-    return BarT(foo = FooT())
-}
+def make_variant_with_field_call_to_cmres : BarT => BarT(foo = FooT())
 
 def make_variant_on_stack(which : bool) : FooT {
     let a = FooT(a = 1)

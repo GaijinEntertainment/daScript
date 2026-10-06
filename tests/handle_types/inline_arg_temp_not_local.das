@@ -16,9 +16,7 @@ require dastest/testing_boost
 // argument temps need the same check, and must leave the call alone instead of emitting a local
 // whose internal name reaches the user.
 
-def read_data(o : TestObjectNotLocal) : int {
-    return o.fooData
-}
+def read_data(o : TestObjectNotLocal) : int => o.fooData
 
 def pick_not_local(c : bool) : int {
     var total = 0

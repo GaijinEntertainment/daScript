@@ -21,9 +21,7 @@ def shingle_hash(token_hashes : array<uint64>; start, n : int) : uint64 {
 
 
 // Apply the k-th hash function of the MinHash family to a base shingle hash.
-def hash_with_seed(sh : uint64; k : int) : uint64 {
-    return hash_combine64(sh, uint64(k))
-}
+def hash_with_seed(sh : uint64; k : int) : uint64 => hash_combine64(sh, uint64(k))
 
 
 // Build a K-slot MinHash signature for a token list. Pads short token

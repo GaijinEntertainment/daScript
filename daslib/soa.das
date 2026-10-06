@@ -226,8 +226,7 @@ class SoaStructMacro : AstStructureAnnotation {
                 structType = st
             )
         )
-        var reserveExprs : array<ExpressionPtr>
-        var bodyExprs : array<ExpressionPtr>
+        var reserveExprs, bodyExprs : array<ExpressionPtr>
         for (fld in st.fields) {
             let fieldName = string(fld.name)
             reserveExprs |> push(qmacro(reserve(st.$f(fieldName), length(st.$f(fieldName)) + length(arr))))

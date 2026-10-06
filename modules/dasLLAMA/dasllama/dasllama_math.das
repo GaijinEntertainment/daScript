@@ -31,9 +31,8 @@ require dasllama/dasllama_gpu_math  // silu_f32: the one SiLU form the CPU and t
 //! module's stubs (examples/dasLLAMA, `-use-aot`). A runtime probe of one kernel's binding, not
 //! `aot_enabled()`: that one folds at compile time, differently under AOT generation and the
 //! AOT-consuming run, and would desync every caller's semantic hash (error[50101]).
-def aot_kernels_linked() : bool {
-    return is_aot_function(@@ < (var x : float?; size : int64) : void > silu)
-}
+def aot_kernels_linked() : bool =>
+    is_aot_function(@@ < (var x : float?; size : int64) : void > silu)
 
 //! The library-seam compiled-tier stop: dasLLAMA inference NEVER runs interpreted (kernels 10-40x
 //! slower). The JIT, a standalone exe, and linked AOT stubs each pass; inference seams call it,
@@ -198,11 +197,11 @@ def overwrite_resize(@scratch var a : array<auto(numT)>; need : int64) {
 // gaps of a decode/prefill loop, keeping workers hot through a whole token instead of parking.
 var g_jobque_spin_us = 30000l
 def set_jobque_spin_us_(v : int64) { g_jobque_spin_us = max(v, 0l) }
-def get_jobque_spin_us_() : int64 { return g_jobque_spin_us }
+def get_jobque_spin_us_() : int64 => g_jobque_spin_us
 
 var g_jobque_spin_gpu_us = 500l
 def set_jobque_spin_gpu_us_(v : int64) { g_jobque_spin_gpu_us = max(v, 0l) }
-def get_jobque_spin_gpu_us_() : int64 { return g_jobque_spin_gpu_us }
+def get_jobque_spin_gpu_us_() : int64 => g_jobque_spin_gpu_us
 var g_dispatch_gpu_served = false
 //! the window the pool runs: the GPU window while the resident driver serves the model, the CPU window otherwise
 def get_jobque_spin_in_force_() : int64 => g_dispatch_gpu_served ? g_jobque_spin_gpu_us : g_jobque_spin_us
@@ -222,21 +221,21 @@ def public set_dispatch_gpu_served(on : bool) {
 // calling thread and is bounded (~100ms).
 var g_jobque_join_poll = 50l
 def public set_jobque_join_poll(v : int64) { g_jobque_join_poll = max(v, 0l) }
-def public get_jobque_join_poll() : int64 { return g_jobque_join_poll }
+def public get_jobque_join_poll() : int64 => g_jobque_join_poll
 
 // Worker-pool limit (JobQue::setWorkerLimit — workers above the limit sleep dormant): the
 // tiny-model dial. An inline-dominated decode token runs FASTER with fewer awake workers (zen2
 // 135M: T=8 176 t/s vs T=48 149 — T-1 pollers interfere with main-thread weight streaming). 0 = no limit.
 var g_dispatch_worker_limit = 0
 def set_dispatch_worker_limit_(v : int) { g_dispatch_worker_limit = max(v, 0) }
-def get_dispatch_worker_limit_() : int { return g_dispatch_worker_limit }
+def get_dispatch_worker_limit_() : int => g_dispatch_worker_limit
 
 // Per-op team rank gate (JobQue::setTeamRankGate — each team op admits only as many workers as
 // its widest stage published chunks). Server-core boxes want it ON (135M T=48: +10% zen2/+48% SPR,
 // >=1B neutral); heterogeneous P/E (M1) keep it off. Tri-state: -1 = que default, 0/1 = force.
 var g_team_rank_gate = -1
 def public set_team_rank_gate(v : int) { g_team_rank_gate = clamp(v, -1, 1) }
-def public get_team_rank_gate() : int { return g_team_rank_gate }
+def public get_team_rank_gate() : int => g_team_rank_gate
 
 // Trace op tags (jobque_trace_tag): stamped before dispatches so the lane-timeline viewer colors
 // by OP rather than stage-count. Gated — set_trace_tags(true) rides with jobque_trace_start in
@@ -370,23 +369,23 @@ def dasllama_jobque_affinity_default() {
 var g_q8_chunks_per_job = 2
 var g_q4_chunks_per_job = 4
 def public set_q8_chunks_per_job(v : int) { g_q8_chunks_per_job = max(v, 1) }
-def public get_q8_chunks_per_job() : int { return g_q8_chunks_per_job }
+def public get_q8_chunks_per_job() : int => g_q8_chunks_per_job
 def public set_q4_chunks_per_job(v : int) { g_q4_chunks_per_job = max(v, 1) }
-def public get_q4_chunks_per_job() : int { return g_q4_chunks_per_job }
+def public get_q4_chunks_per_job() : int => g_q4_chunks_per_job
 
 // Oversplit factor for the quantized BATCH matmuls (prefill GEMM): chunks = hw_jobs * this.
 // More chunks than workers lets awake workers pop a late-woken worker's remaining chunks off the
 // fifo (3990X @32 workers: fork/join bill -41% -> -15% at x4; x8 is past the per-chunk-overhead knee).
 var g_q8_batch_chunks_per_job = 4
 def public set_q8_batch_chunks_per_job(v : int) { g_q8_batch_chunks_per_job = max(v, 1) }
-def public get_q8_batch_chunks_per_job() : int { return g_q8_batch_chunks_per_job }
+def public get_q8_batch_chunks_per_job() : int => g_q8_batch_chunks_per_job
 
 // Dispatch lanes for a fork/join chunk split: worker threads PLUS the calling thread (team mode
 // by design). Sizing chunk counts to workers alone leaves the last wave short (7 workers x4 = 28
 // chunks/8 lanes = 87.5%); sizing to lanes took decode GEMV ~109 -> ~118 GB/s on M1 Max.
 var g_dispatch_caller_lane = true
 def public set_dispatch_caller_lane(v : bool) { g_dispatch_caller_lane = v }
-def public get_dispatch_caller_lane() : bool { return g_dispatch_caller_lane }
+def public get_dispatch_caller_lane() : bool => g_dispatch_caller_lane
 def public get_dispatch_lanes() : int {
     // The calling thread is the only lane, so every shaper answers "inline".
     if (!is_job_que_available() || get_single_thread_()) {
@@ -410,7 +409,7 @@ def public get_dispatch_slot_bound() : int {
 // boxes (EPYC 9654: kv 2048x512 GEMM 2.5x slower at 192 lanes than at 48). 0 disables.
 var g_matmul_min_chunk_rows = 16
 def public set_matmul_min_chunk_rows(v : int) { g_matmul_min_chunk_rows = max(v, 0) }
-def public get_matmul_min_chunk_rows() : int { return g_matmul_min_chunk_rows }
+def public get_matmul_min_chunk_rows() : int => g_matmul_min_chunk_rows
 
 // The dispatch invariant that killed the prefill regression: a chunk count > lanes MUST be a whole
 // multiple of dispatch lanes, so no wave is ragged (a partial final wave makes the join wait on
@@ -426,18 +425,18 @@ def private assert_wave_aligned(chunks, lanes : int) {
 // admit — the old 1M default left every per-layer attn matmul of a <=4B model single-lane (-5..-17% tok/s).
 var g_target_chunk_work = 1l
 def public set_target_chunk_work(v : int64) { g_target_chunk_work = max(v, 1l) }
-def public get_target_chunk_work() : int64 { return g_target_chunk_work }
+def public get_target_chunk_work() : int64 => g_target_chunk_work
 
 // Per-regime lane caps (0 = uncapped). GEMV rides memory bandwidth — past the box's DRAM knee
 // extra lanes just queue at the memory door (team_probe's streaming ladder finds the knee).
 // Batch (GEMM) is compute-bound and caps at the overhead knee instead.
 var g_gemv_lane_cap = 0
 def public set_gemv_lane_cap(v : int) { g_gemv_lane_cap = max(v, 0) }
-def public get_gemv_lane_cap() : int { return g_gemv_lane_cap }
+def public get_gemv_lane_cap() : int => g_gemv_lane_cap
 
 var g_batch_lane_cap = 0
 def public set_batch_lane_cap(v : int) { g_batch_lane_cap = max(v, 0) }
-def public get_batch_lane_cap() : int { return g_batch_lane_cap }
+def public get_batch_lane_cap() : int => g_batch_lane_cap
 
 var g_phase_decode_workers = -1   //! the decode-phase worker limit; -1 = per-phase parking off (homogeneous box)
 def public set_phase_decode_workers(v : int) {
@@ -446,13 +445,12 @@ def public set_phase_decode_workers(v : int) {
     }
     g_phase_decode_workers = v < 1 ? -1 : v
 }
-def public get_phase_decode_workers() : int { return g_phase_decode_workers }
+def public get_phase_decode_workers() : int => g_phase_decode_workers
 
 //! both phase entries move the same limit, so they share one admission test - a term added to
 //! one and not the other would park a phase the other never wakes
-def private phase_parking_armed() : bool {
-    return g_phase_decode_workers >= 0 && g_dispatch_worker_limit <= 0 && is_job_que_available() && !get_single_thread_()
-}
+def private phase_parking_armed() : bool =>
+    g_phase_decode_workers >= 0 && g_dispatch_worker_limit <= 0 && is_job_que_available() && !get_single_thread_()
 
 [arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
 def public dispatch_phase_decode {
@@ -520,7 +518,7 @@ def public matmul_chunks(rows : int; oversplit : int; work : int64) : int {
 // wave (a starved shape idles lanes); big GEMMs keep the weight-stationary 1-D walk regardless.
 var g_batch_grid_2d = 0
 def public set_batch_grid_2d(v : int) { g_batch_grid_2d = clamp(v, 0, 2) }
-def public get_batch_grid_2d() : int { return g_batch_grid_2d }
+def public get_batch_grid_2d() : int => g_batch_grid_2d
 
 def private gcd_int(a, b : int) : int {
     var x = max(a, 1)
@@ -573,21 +571,21 @@ def public matmul_grid(units : int; unit_rows : int64; oversplit : int; work : i
 // grain 64 = +13-15% decode at default threads). 0 disables.
 var g_matmul_min_chunk_rows_gemv = 64
 def public set_matmul_min_chunk_rows_gemv(v : int) { g_matmul_min_chunk_rows_gemv = max(v, 0) }
-def public get_matmul_min_chunk_rows_gemv() : int { return g_matmul_min_chunk_rows_gemv }
+def public get_matmul_min_chunk_rows_gemv() : int => g_matmul_min_chunk_rows_gemv
 
 // GEMV tail: the one-chunk-per-lane equal split leaves the join waiting out the SLOWEST lane's
 // whole chunk (median lane idles 14-24% of every GEMV stage, per-lane trace 3990X). >1 publishes
 // wave-aligned chunks per lane so finished lanes keep serving (only bites past 64*waves*lanes rows); 1 = equal split.
 var g_gemv_chunks_per_lane = 8
 def public set_gemv_chunks_per_lane(v : int) { g_gemv_chunks_per_lane = max(v, 1) }
-def public get_gemv_chunks_per_lane() : int { return g_gemv_chunks_per_lane }
+def public get_gemv_chunks_per_lane() : int => g_gemv_chunks_per_lane
 
 // Wave fill: when the grain-derived count lands below admitted lanes, round UP to one full wave —
 // underfilling always idles more than going sub-grain (30B decode router: 128 rows/grain 64 = 2
 // chunks on 16 lanes, 14 idle, ~3.3% of token). rows < lanes is the only natural floor.
 var g_gemv_wave_fill = true
 def public set_gemv_wave_fill(v : bool) { g_gemv_wave_fill = v }
-def public get_gemv_wave_fill() : bool { return g_gemv_wave_fill }
+def public get_gemv_wave_fill() : bool => g_gemv_wave_fill
 
 //! matmul_chunks for GEMV-shaped dispatches (single-token mm/group3/groupn): L = lanes_for_work
 //! (work, gemv cap); 1 => inline; else the coarser GEMV grain, capped at ONE chunk per lane (a
@@ -1009,7 +1007,7 @@ def matmul_q8(var y : array<float>; wq : array<int8> | #; ws : array<float> | #;
 // TB×n activation slice stays L2-resident. Tuned default 128 (Llama-3.2-1B, M1 Max); clamped >= 1.
 var g_q8_token_block = 128l
 def public set_q8_token_block(tb : int64) { g_q8_token_block = max(tb, 1l) }
-def public get_q8_token_block() : int64 { return g_q8_token_block }
+def public get_q8_token_block() : int64 => g_q8_token_block
 let BF16_TOKEN_BLOCK_FLOOR = 512l
 var g_bf16_token_block_floor = BF16_TOKEN_BLOCK_FLOOR
 //! the least token block a bf16 tile walk reads, where its pp512 stops gaining on Granite Rapids (PERF_LEDGER.md, the AMX bf16 tile arc)
@@ -1027,13 +1025,12 @@ def public set_bf16_token_block_floor(tb : int64) {
 // off a cliff (M1 Max: knee at TB ≈ L2/n). TB clamped to this budget; default 4MB is PROVISIONAL.
 var g_q8_l2_budget = 4l * 1024l * 1024l
 def public set_q8_l2_budget(bytes : int64) { g_q8_l2_budget = max(bytes, 1l) }
-def public get_q8_l2_budget() : int64 { return g_q8_l2_budget }
+def public get_q8_l2_budget() : int64 => g_q8_l2_budget
 
 //! Clamp a requested token-block width so the TB×n int8 activation slice stays within the per-box L2
 //! budget. n = contraction dim (one int8 per activation element). Returns >= 1.
-def public effective_token_block(tb, n : int64) : int64 {
-    return clamp(tb, 1l, max(1l, g_q8_l2_budget / max(n, 1l)))   // floor 1 (a 0 block width infinite-loops the kernel)
-}
+def public effective_token_block(tb, n : int64) : int64 =>
+    clamp(tb, 1l, max(1l, g_q8_l2_budget / max(n, 1l)))  // floor 1 (a 0 block width infinite-loops the kernel)
 
 // ===== Q8·Q8 matmul: pluggable kernel-backend registry =====
 // A *backend* (KernelBackend) is a named kernel-set + weight repack, registered per ISA at [init];
@@ -1771,9 +1768,8 @@ def set_bake_q51_repack(f : RepackQ51Fn) {
 
 //! The q51 repack the LOAD path invokes — the gen generic under a cross-box override with a
 //! grp<mr> q51 target, else the active backend's slot.
-def active_repack_q51() : RepackQ51Fn {
-    return g_bake_cpu_override && g_bake_cpu.q51_mr > 1l ? g_bake_q51_repack : g_repack_q51
-}
+def active_repack_q51() : RepackQ51Fn =>
+    g_bake_cpu_override && g_bake_cpu.q51_mr > 1l ? g_bake_q51_repack : g_repack_q51
 
 var private g_bake_iq4nl32_repack = @@repack_iq4nl32_identity
 
@@ -1782,9 +1778,8 @@ def set_bake_iq4nl32_repack(f : RepackQ51Fn) {
 }
 
 //! The iq4nl32 repack the LOAD path invokes — active_repack_q51's twin over the iq4nl32 planes.
-def active_repack_iq4nl32() : RepackQ51Fn {
-    return g_bake_cpu_override && g_bake_cpu.iq4nl32_mr > 1l ? g_bake_iq4nl32_repack : g_repack_iq4nl32
-}
+def active_repack_iq4nl32() : RepackQ51Fn =>
+    g_bake_cpu_override && g_bake_cpu.iq4nl32_mr > 1l ? g_bake_iq4nl32_repack : g_repack_iq4nl32
 
 // The bake twins (registered by math_gen like set_bake_q51_repack): override-getter bodies that
 // only ever run inline on the converter main thread. The REGISTERED slots stay global-free —
@@ -1807,23 +1802,15 @@ def set_bake_kq_repack(f : RepackKqFn) {
 
 //! The repack to HOIST as a value (repack_regions) or call inline (stream_repack_one): the
 //! registered slot normally, the bake twin while a cross-box override is armed.
-def active_repack_q8q8() : RepackQ8Q8Fn {
-    return g_bake_cpu_override ? g_bake_q8q8_repack : g_repack_q8q8
-}
+def active_repack_q8q8() : RepackQ8Q8Fn => g_bake_cpu_override ? g_bake_q8q8_repack : g_repack_q8q8
 
-def active_repack_mx4() : RepackMx4Fn {
-    return g_bake_cpu_override ? g_bake_mx4_repack : g_repack_mx4
-}
+def active_repack_mx4() : RepackMx4Fn => g_bake_cpu_override ? g_bake_mx4_repack : g_repack_mx4
 
-def active_repack_kq() : RepackKqFn {
-    return g_bake_cpu_override ? g_bake_kq_repack : g_repack_kq
-}
+def active_repack_kq() : RepackKqFn => g_bake_cpu_override ? g_bake_kq_repack : g_repack_kq
 
 //! True while a cross-box bake override is armed (converter main thread only — the streaming
 //! bake repacks inline, never on lanes).
-def bake_cpu_override_active() : bool {
-    return g_bake_cpu_override
-}
+def bake_cpu_override_active() : bool => g_bake_cpu_override
 [unused_argument(yp, wp, sp, xqp, xsp, n, d)]
 def private q8q8_unset_kernel(var yp : float?; wp : int8 const?; sp : float const?; xqp : int8 const?; xsp : float const?; n, d : int64) { no_backend() }
 [unused_argument(yp, wp, sp, xqp, xsp, n, d, ntok)]
@@ -2092,9 +2079,7 @@ def select_batch_backend(name : string) {
 
 //! The backend serving the BATCH-shaped slots (== active_kernel_backend() unless a batch pin
 //! overrode them — diagnostics / tests).
-def active_batch_backend() : string {
-    return g_active_batch_backend
-}
+def active_batch_backend() : string => g_active_batch_backend
 
 //! Select the best backend for a model load — INCLUDING repack backends (arm64 laneq). Honors a pin.
 //! Returns true if the selected backend needs the loader to repack every weight tensor (via
@@ -2119,58 +2104,40 @@ def select_matmul_backend_for_load_() : bool {
 }
 
 //! The active backend's name (diagnostics / tests). "" until a backend registers.
-def active_kernel_backend() : string {
-    return g_active_backend
-}
+def active_kernel_backend() : string => g_active_backend
 
 //! Does the active backend carry a row-range GEMV core (mm_rows)? The fused multi-stage decode
 //! chains gate on this and fall back to the per-op dispatch path when false.
-def kernel_backend_has_rows() : bool {
-    return g_active_has_rows
-}
+def kernel_backend_has_rows() : bool => g_active_has_rows
 
 //! The active backend's row-range GEMV core (see MatmulQ8Q8RowsFn). Read it into a local in the
 //! MAIN context and capture that in worker lambdas — same rule as every kernel-pointer read.
-def mm_q8q8_rows_fn() : MatmulQ8Q8RowsFn {
-    return g_mm_q8q8_rows
-}
+def mm_q8q8_rows_fn() : MatmulQ8Q8RowsFn => g_mm_q8q8_rows
 
 //! Does the active backend carry the mx4 row-range GEMV core (mx4_rows)? The fused MoE expert
 //! chain gates on this and falls back to the per-op groupn dispatch path when false.
-def kernel_backend_has_mx4_rows() : bool {
-    return g_active_has_mx4_rows
-}
+def kernel_backend_has_mx4_rows() : bool => g_active_has_mx4_rows
 
 //! The active backend's mx4 row-range GEMV core (see MatmulMx4RowsFn) — the MoE chain's twin of
 //! mm_q8q8_rows_fn. Same read-into-a-local-then-capture rule.
-def mx4_rows_fn() : MatmulMx4RowsFn {
-    return g_mm_mx4q8_rows
-}
+def mx4_rows_fn() : MatmulMx4RowsFn => g_mm_mx4q8_rows
 
 //! Does the active backend carry the f16-scale kernel twins (the wscale_f16 rail)? The loader's
 //! scale-plane convert gates on this — without them the model keeps the f32 plane (logged).
-def kernel_backend_has_wscale16() : bool {
-    return g_active_has_wscale16
-}
+def kernel_backend_has_wscale16() : bool => g_active_has_wscale16
 
 //! The active backend's f16-scale row-range GEMV core (see MatmulQ8Q8RowsFnS16) — the chains'
 //! twin of mm_q8q8_rows_fn. Same read-into-a-local rule.
-def mm_q8q8_rows16_fn() : MatmulQ8Q8RowsFnS16 {
-    return g_mm_q8q8_rows_s16
-}
+def mm_q8q8_rows16_fn() : MatmulQ8Q8RowsFnS16 => g_mm_q8q8_rows_s16
 
 //! Does the active backend carry the f16-scale row-range GEMV core? The chains' twin of
 //! kernel_backend_has_rows — a wscale_f16 model's fused chains gate on it.
-def kernel_backend_has_rows16() : bool {
-    return g_active_has_rows16
-}
+def kernel_backend_has_rows16() : bool => g_active_has_rows16
 
 //! Does the active backend carry the native K-quant slots (mm_kq + kq_rows_* + repack_kq)?
 //! Decides at LOAD whether the kq planes get repacked; a Model records the answer
 //! (kq_repacked) and every later dispatch routes off that record, not this live query.
-def kernel_backend_has_kq() : bool {
-    return g_active_has_kq
-}
+def kernel_backend_has_kq() : bool => g_active_has_kq
 
 //! The active backend's K-quant rows core for `fmt` (4/5/6/40) — the chains' kq twin of
 //! mm_q8q8_rows_fn. Same read-into-a-local-then-capture rule. Any other id (kq_fi's q8
@@ -2195,9 +2162,7 @@ def kq_rows_fn(fmt : int) : MatmulKqRowsFn {
 
 //! Does the active backend carry the batched kq GEMM (kq_batch — the prefill tile)? The
 //! batched dispatch gates on it and falls back to serial per-position GEMVs when down.
-def kernel_backend_has_kq_batch() : bool {
-    return g_active_has_kq_batch
-}
+def kernel_backend_has_kq_batch() : bool => g_active_has_kq_batch
 
 //! A/B override for the grouped-MoE-prefill mx4 route: native mx4 batch GEMMs vs expand-to-Q8 +
 //! Q8 batch. Safe to flip after load (both routes read the same repacked planes); forcing `true`
@@ -2208,15 +2173,11 @@ def set_mx4_native_batch(on : bool) {
 
 //! Does the active backend carry the region-list kq GEMV (kq_groupn — MoE expert dispatch)?
 //! The MoE dispatch gates on it and falls back to per-region GEMVs when down.
-def kernel_backend_has_kq_groupn() : bool {
-    return g_active_has_kq_groupn
-}
+def kernel_backend_has_kq_groupn() : bool => g_active_has_kq_groupn
 
 //! Does the active backend carry the fused batched region-list kq GEMM (kq_batch_groupn — the
 //! fused MoE prefill)? The grouped prefill gates on it and keeps per-expert tiles when down.
-def kernel_backend_has_kq_batch_groupn() : bool {
-    return g_active_has_kq_batch_groupn
-}
+def kernel_backend_has_kq_batch_groupn() : bool => g_active_has_kq_batch_groupn
 
 //! Batched region-list K-quant GEMM over REPACKED planes (triple offs — see the typedef).
 //! Callers guard with kq_repacked && kernel_backend_has_kq_batch_groupn().
@@ -2286,9 +2247,7 @@ def repack_kq_weight(fmt : int; var kq : array<uint8>; var ks : array<uint8>; wo
 }
 
 //! Registered backend names (diagnostics / tests).
-def kernel_backend_names() : array<string> {
-    return <- [for (k in keys(g_kernel_backends)); k]
-}
+def kernel_backend_names() : array<string> => <- [for (k in keys(g_kernel_backends)); k]
 
 //! Backend `name`'s f32 batch kernel (a batch-only donor's small-ntok / unsupported-shape
 //! fallback rail — the metal backend delegates to "portable" through this). The panic stub

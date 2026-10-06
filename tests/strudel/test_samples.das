@@ -129,7 +129,7 @@ def test_render_sample_quarter_slices(t : T?) {
         for (i in range(4)) {
             let b = float(i) * 0.25
             let e = float(i + 1) * 0.25
-            let q <- render_sample(bank, "bd", 0, 1.0, b, e)
+            var inscope q <- render_sample(bank, "bd", 0, 1.0, b, e)
             totalQuarterFrames += length(q) / 2
         }
         // 4 quarters should sum to ~ full length (±8 frames for rounding per slice)

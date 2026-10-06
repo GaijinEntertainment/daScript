@@ -86,18 +86,10 @@ def file_info_hr(at : LineInfo; uri_path : bool) {
 }
 
 
-def red_str(str : string) {
-    return useTtyColors ? "\x1B[31m{str}\x1B[0m" : str
-}
-def green_str(str : string) {
-    return useTtyColors ? "\x1B[32m{str}\x1B[0m" : str
-}
-def yellow_str(str : string) {
-    return useTtyColors ? "\x1B[33m{str}\x1B[0m" : str
-}
-def blue_str(str : string) {
-    return useTtyColors ? "\x1B[34m{str}\x1B[0m" : str
-}
+def red_str(str : string) => useTtyColors ? "\x1B[31m{str}\x1B[0m" : str
+def green_str(str : string) => useTtyColors ? "\x1B[32m{str}\x1B[0m" : str
+def yellow_str(str : string) => useTtyColors ? "\x1B[33m{str}\x1B[0m" : str
+def blue_str(str : string) => useTtyColors ? "\x1B[34m{str}\x1B[0m" : str
 
 def time_dt_hr(dt : int) : string {
     return build_string() $(str) {

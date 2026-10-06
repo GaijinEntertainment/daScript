@@ -21,9 +21,8 @@ require daslib/json_boost public
 
 let TRIGGERS_FEATURE = "modules/dasImgui/examples/features/triggers.das"
 
-def alias_x(var snap : JsonValue?; v_button : int) : float {
-    return find_widget(snap, "MAIN_WIN/DIFFICULTY#{v_button}")?["bbox"]?["x"] ?? -1.0f
-}
+def alias_x(var snap : JsonValue?; v_button : int) : float =>
+    find_widget(snap, "MAIN_WIN/DIFFICULTY#{v_button}")?["bbox"]?["x"] ?? -1.0f
 
 [test]
 def test_radio_int_per_site_targeting(t : T?) {

@@ -110,9 +110,7 @@ def newFoo_helper() {
     return f
 }
 
-def addBar_helper(a, b : FooCMR) {
-    return a.bar + b.bar
-}
+def addBar_helper(a, b : FooCMR) => a.bar + b.bar
 
 def makeSeq_helper(var base : int; max : int) {
     var a : array<int>

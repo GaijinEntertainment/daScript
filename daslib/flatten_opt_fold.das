@@ -412,9 +412,8 @@ def private chain_has_const(e : ExpressionPtr; addOp : string) : bool {
     return is_all_const(e)
 }
 
-def private already_grouped(that : ExprOp2?; addOp : string) : bool {
-    return that.op == addOp && is_all_const(that.right) && !chain_has_const(that.left, addOp)
-}
+def private already_grouped(that : ExprOp2?; addOp : string) : bool =>
+    that.op == addOp && is_all_const(that.right) && !chain_has_const(that.left, addOp)
 
 def private vars_sorted(vars : array<ReTerm>) : bool {
     for (i in range(1, length(vars))) {
@@ -427,8 +426,7 @@ def private vars_sorted(vars : array<ReTerm>) : bool {
 }
 
 def private regroup(that : ExprOp2?; var terms : array<ReTerm>; addOp, subOp : string) : ExpressionPtr {
-    var vars : array<ReTerm>
-    var consts : array<ReTerm>
+    var vars, consts : array<ReTerm>
     for (t in terms) {
         if (is_all_const(t.e)) {
             consts |> push(t)
@@ -619,7 +617,7 @@ def public fuse_select_chains(var blk : ExprBlock?) : bool {
     var changed = false
     for (i in range(n)) {
         if (key_exists(consumed, i)) continue
-        var chain <- build_select_chain(ub, blk, mutableVars, consumed, i)
+        var inscope chain <- build_select_chain(ub, blk, mutableVars, consumed, i)
         if (length(chain) >= 2) {
             var baseExpr = clone_expression(sel3((blk.list[chain[0]] as ExprLet).variables[0].init).right)
             for (ci in range(length(chain) - 1)) {
@@ -657,7 +655,7 @@ def public has_fusable_select_chain(var blk : ExprBlock?) : bool {
     var consumed : table<int>
     var found = false
     for (i in range(n)) {
-        var chain <- build_select_chain(ub, blk, mutableVars, consumed, i)
+        var inscope chain <- build_select_chain(ub, blk, mutableVars, consumed, i)
         let isChain = length(chain) >= 2
         delete chain
         if (isChain) {

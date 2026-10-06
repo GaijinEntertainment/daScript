@@ -1,9 +1,7 @@
 options gen2
 require dastest/testing_boost
 
-def nullc(a, b) {
-    return a ?? b
-}
+def nullc(a, b) => a ?? b
 
 def nullc_ref(var a : Foo?; var b : Foo; c : int) {
     (a ?? b).a = c
@@ -39,17 +37,13 @@ def test_null_coalescing(t : T?) {
     }
 }
 
-def bOrD(f : Foo?; d : int) {
-    return f?.b ?? d
-}
+def bOrD(f : Foo?; d : int) => f?.b ?? d
 
 struct Bar {
     f : Foo?
 }
 
-def bOrD2(b : Bar?; d : int) {
-    return b?.f?.b ?? d
-}
+def bOrD2(b : Bar?; d : int) => b?.f?.b ?? d
 
 [test]
 def test_safe_field(t : T?) {
@@ -71,9 +65,7 @@ def test_safe_field(t : T?) {
     }
 }
 
-def jit_safe_at(a, b, c) {
-    return a?[b] ?? c
-}
+def jit_safe_at(a, b, c) => a?[b] ?? c
 
 [test]
 def test_safe_at(t : T?) {
@@ -150,13 +142,9 @@ variant IOrF {
     f : float
 }
 
-def safe_as_i(a : IOrF; b : int) {
-    return (a ?as i) ?? b
-}
+def safe_as_i(a : IOrF; b : int) => (a ?as i) ?? b
 
-def safe_as_pi(a : IOrF?; b : int) {
-    return (a ?as i) ?? b
-}
+def safe_as_pi(a : IOrF?; b : int) => (a ?as i) ?? b
 
 [test]
 def test_safe_variant_as(t : T?) {

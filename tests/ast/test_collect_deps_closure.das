@@ -12,33 +12,21 @@ require _test_collect_deps_closure_helper
 
 // runtime-only bodies: a constant one is folded at its call site before patch() runs, and the
 // edge to it with it
-def leaf() : int {
-    return int(ref_time_ticks() & 0l) + 1
-}
+def leaf() : int => int(ref_time_ticks() & 0l) + 1
 
-def helper_for_global() : int {
-    return int(ref_time_ticks() & 0l) + 2
-}
+def helper_for_global() : int => int(ref_time_ticks() & 0l) + 2
 
 let g_dep = helper_for_global()
 
-def mid() : int {
-    return leaf() + g_dep
-}
+def mid() : int => leaf() + g_dep
 
-def unrelated() : int {
-    return 42
-}
+def unrelated() : int => 42
 
 [probe_deps(functions = "helper_for_global,leaf,mid,root", variables = "g_dep")]
-def root() : int {
-    return mid()
-}
+def root() : int => mid()
 
 [probe_deps(functions = "leaf,twice", variables = "")]
-def twice() : int {
-    return leaf() + leaf()
-}
+def twice() : int => leaf() + leaf()
 
 [test]
 def test_collect_deps_closure(t : T?) {

@@ -18,23 +18,19 @@ def das_exe() : string {
     return empty(args) ? "" : get_full_file_name(args[0])
 }
 
-def fixture_path() : string {
-    return path_join(get_das_root(), "tests/watchdog/_fixture_watchdog_child.das")
-}
+def fixture_path() : string =>
+    path_join(get_das_root(), "tests/watchdog/_fixture_watchdog_child.das")
 
 //! a deadline on a child's startup or exit, never a claim about speed: a Debug host compiles
 //! what the child requires several times slower, so the deadline stretches threefold there,
 //! never past five minutes
-def guard(seconds : float) : float {
-    return shared_module_extension() == "_debug.shared_module" ? min(seconds * 3.0, 300.0) : seconds
-}
+def guard(seconds : float) : float =>
+    shared_module_extension() == "_debug.shared_module" ? min(seconds * 3.0, 300.0) : seconds
 
 //! the deadline on a supervision whose child runs in script mode (`daslang -jit`): every launch
 //! JITs the fixture's whole require closure into a fresh cwd with no cache, about ten seconds on a
 //! Release host and near sixty on the leak-tracking RelWithDebInfo one, and the cells wait for two
-def script_mode_guard() : float {
-    return guard(180.0)
-}
+def script_mode_guard() : float => guard(180.0)
 
 def make_temp(t : T?; prefix : string) : string {
     let tmp = create_temp_directory_result(prefix)
@@ -65,9 +61,8 @@ def read_events(log_path : string) : array<JsonValue?> {
     return <- events
 }
 
-def event_names(events : array<JsonValue?>) : array<string> {
-    return <- [for (ev in events); ev?["event"] ?? ""]
-}
+def event_names(events : array<JsonValue?>) : array<string> =>
+    <- [for (ev in events); ev?["event"] ?? ""]
 
 def count_event(events : array<JsonValue?>; name : string) : int {
     var n = 0
@@ -89,9 +84,8 @@ def event_int(events : array<JsonValue?>; name, key : string; nth : int = 0) : i
     return -999999
 }
 
-def child_args(state_dir, mode : string) : array<string> {
-    return ["-dasroot", get_das_root(), fixture_path(), "--", state_dir, mode]
-}
+def child_args(state_dir, mode : string) : array<string> =>
+    ["-dasroot", get_das_root(), fixture_path(), "--", state_dir, mode]
 
 def program_mode_args(root, state_dir, mode : string) : array<string> {
     var args <- ["--program", das_exe(), "--name", "wdtest", "--cwd", root, "--no-health",
@@ -274,13 +268,9 @@ def test_tray_mark(t : T?) {
 // to live in a process the desktop can see. Every arm ends through finish(), with the icon torn
 // down: the park fixture leaves on the stop file, which the tray's Shutdown writes on Linux and
 // the arms that cannot click write themselves; the crash-then-ok fixture leaves on its own.
-def tray_log_path(root : string) : string {
-    return path_join(root, "logs/wdtray-watchdog.log")
-}
+def tray_log_path(root : string) : string => path_join(root, "logs/wdtray-watchdog.log")
 
-def tray_stop_file(root : string) : string {
-    return path_join(root, "stop")
-}
+def tray_stop_file(root : string) : string => path_join(root, "stop")
 
 // the dasllama mark rides along as the icon file, by a path relative to --cwd, the way a bundle's
 // watchdog.json names it

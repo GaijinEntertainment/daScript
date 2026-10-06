@@ -118,8 +118,7 @@ def test_if_capture_bodies(t : T?) {
     ast_gc_guard() {
         // Capture both branches
         var expr = qmacro($ { if (a < 5) { return b; } else { return c; }; })
-        var then_body : ExpressionPtr
-        var else_body : ExpressionPtr
+        var then_body, else_body : ExpressionPtr
         let r = qmatch_block(expr) $ {
             if (a < 5) {
                 $e(then_body)
@@ -368,8 +367,7 @@ def test_for_capture_source(t : T?) {
 def test_for_capture_two_sources(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { for (k, v in keys, values) { print(); }; })
-        var src1 : ExpressionPtr
-        var src2 : ExpressionPtr
+        var src1, src2 : ExpressionPtr
         let r = qmatch_block(expr) $ {
             for (k, v in $e(src1), $e(src2)) {
                 print()
@@ -428,9 +426,7 @@ def test_for_capture_iterator_and_sources(t : T?) {
     ast_gc_guard() {
         var expr = qmacro($ { for (k, v in keys, values) { a + b; }; })
         var name1 : string
-        var src1 : ExpressionPtr
-        var src2 : ExpressionPtr
-        var body_expr : ExpressionPtr
+        var src1, src2, body_expr : ExpressionPtr
         let r = qmatch_block(expr) $ {
             for ($i(name1), v in $e(src1), $e(src2)) {
                 $e(body_expr)

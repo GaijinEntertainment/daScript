@@ -27,9 +27,8 @@ def public selection_key(comparison, path : string) : string => "{comparison}:{p
 
 def public selection_count(sel : GitChangelistSelection) : int => length(sel.keys)
 
-def public selection_contains(sel : GitChangelistSelection; key : string) : bool {
-    return key_exists(sel.keys, key)
-}
+def public selection_contains(sel : GitChangelistSelection; key : string) : bool =>
+    key_exists(sel.keys, key)
 
 def public selection_clear(var sel : GitChangelistSelection) {
     sel.repository_id = ""

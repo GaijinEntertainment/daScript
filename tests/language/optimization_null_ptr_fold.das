@@ -11,9 +11,7 @@ require dastest/testing_boost public
 // a void? subexpr and SimulateVisitor::visit(ExprSafeAt*) crashed on the null
 // firstType (SIGSEGV, not a diagnostic).
 
-def safe_or_default(p : float?; i : int64) : float {
-    return unsafe(p?[i]) ?? -1.0
-}
+def safe_or_default(p : float?; i : int64) : float => unsafe(p?[i]) ?? -1.0
 
 [test]
 def test_null_ptr_let_fold(t : T?) {

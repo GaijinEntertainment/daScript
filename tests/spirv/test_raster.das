@@ -26,13 +26,11 @@ def private validate(t : T?; words : array<uint>; lbl : string) {
     }
 }
 
-def private has_builtin(words : array<uint>; bi : SpvBuiltIn) : bool {
-    return op_has_operand_pair(words, SpvOp.Decorate, uint(SpvDecoration.BuiltIn), uint(bi))
-}
+def private has_builtin(words : array<uint>; bi : SpvBuiltIn) : bool =>
+    op_has_operand_pair(words, SpvOp.Decorate, uint(SpvDecoration.BuiltIn), uint(bi))
 
-def private has_location(words : array<uint>; loc : uint) : bool {
-    return op_has_operand_pair(words, SpvOp.Decorate, uint(SpvDecoration.Location), loc)
-}
+def private has_location(words : array<uint>; loc : uint) : bool =>
+    op_has_operand_pair(words, SpvOp.Decorate, uint(SpvDecoration.Location), loc)
 
 [test]
 def test_vertex_passthrough(t : T?) {

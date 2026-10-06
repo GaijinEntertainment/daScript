@@ -104,7 +104,7 @@ def public load_compile_commands(build_dir : string; want_cl : bool) : table<str
     var db : array<CcEntry>
     return <- out if (!sscan_json(raw, db))
     for (e in db) {
-        let argv <- cc_tokenize(e.command)
+        var inscope argv <- cc_tokenize(e.command)
         continue if (length(argv) < 2)
         // the format allows `file` relative to `directory`; the caller looks up by absolute
         // path, and a miss falls back silently
@@ -113,7 +113,7 @@ def public load_compile_commands(build_dir : string; want_cl : bool) : table<str
         // spelling is wrong for it
         let entry_is_cl = argv[0] |> ends_with("cl") || argv[0] |> ends_with("cl.exe")
         continue if (entry_is_cl != want_cl)
-        var flags : array<string>
+        var inscope flags : array<string>
         flags |> reserve(length(argv))
         var i = 1
         while (i < length(argv)) {

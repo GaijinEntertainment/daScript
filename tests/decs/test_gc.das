@@ -227,7 +227,7 @@ def test_gc_stress(t : T?) {   // nolint:STYLE037,STYLE038 - one randomized stre
         if (r == 0) {
             pass
         } elif (r == 1) {
-            var data <- mem_archive_save(decsState)
+            var inscope data <- mem_archive_save(decsState)
             restart()
             data |> mem_archive_load(decsState)
         } else {

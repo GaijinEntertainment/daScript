@@ -152,13 +152,9 @@ def private const_key(expr : Expression?) : string {   // nolint:STYLE037 - one 
     return ""
 }
 
-def private annotation_key(anns : AnnotationList) : string {
-    return empty(anns) ? "" : describe(anns)
-}
+def private annotation_key(anns : AnnotationList) : string => empty(anns) ? "" : describe(anns)
 
-def private annotation_key(args : AnnotationArgumentList) : string {
-    return describe(args)
-}
+def private annotation_key(args : AnnotationArgumentList) : string => describe(args)
 
 def private func_key(fn : Function?) : string {
     return "" if (fn == null)
@@ -391,9 +387,8 @@ class private DupeIndexer : AstVisitor {
         n_escape++
     }
 
-    def stmt_loop_base() : int {
-        return empty(stmt_frames) ? 0 : stmt_frames[length(stmt_frames) - 1].loops
-    }
+    def stmt_loop_base() : int =>
+        empty(stmt_frames) ? 0 : stmt_frames[length(stmt_frames) - 1].loops
 
     def override preVisitExprBreak(expr : ExprBreak?) {
         if (loop_depth <= stmt_loop_base()) {
@@ -462,7 +457,7 @@ class private DupeIndexer : AstVisitor {
                 && n_defer == f.defer_calls && n_scoped == f.scoped && n_bind == f.binds
                 && n_unsafe_ops == f.unsafe_ops)
             while (length(by_block) <= f.blk_id) {
-                var fresh : array<int>
+                var inscope fresh : array<int>
                 by_block |> emplace(fresh)
             }
             stmt_pos_in_block |> push(length(by_block[f.blk_id]))
@@ -513,8 +508,7 @@ def private subtree_equal(var ix : DupeIndexer?; a, b : int;
 }
 
 def private run_equal(var ix : DupeIndexer?; a_blk, a_pos, b_blk, b_pos, len : int) : bool {
-    var m_ab : table<int; int>
-    var m_ba : table<int; int>
+    var m_ab, m_ba : table<int; int>
     for (k in range(len)) {
         let sa = ix.stmt_node[ix.by_block[a_blk][a_pos + k]]
         let sb = ix.stmt_node[ix.by_block[b_blk][b_pos + k]]
@@ -600,9 +594,7 @@ def private run_key(ix : DupeIndexer?; blk, pos, len : int) : uint64 {
     return h
 }
 
-def private stmt_hash(ix : DupeIndexer?; si : int) : uint64 {
-    return ix.nodes[ix.stmt_node[si]].hash
-}
+def private stmt_hash(ix : DupeIndexer?; si : int) : uint64 => ix.nodes[ix.stmt_node[si]].hash
 
 def private extend_run(ix : DupeIndexer?; a_blk, a_pos, b_blk, b_pos : int) : int {
     let a_stop = length(ix.by_block[a_blk])

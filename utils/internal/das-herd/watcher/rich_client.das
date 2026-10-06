@@ -551,9 +551,8 @@ def private command_powershell() {
 
 // ImGuiKey_0..9 sit immediately before ImGuiKey_A; the "0".."9" enum entries
 // are not spellable as identifiers.
-def private digit_key(digit : int) : ImGuiKey {
-    return unsafe(reinterpret<ImGuiKey>(int(ImGuiKey.A) - 10 + digit))
-}
+def private digit_key(digit : int) : ImGuiKey =>
+    unsafe(reinterpret<ImGuiKey>(int(ImGuiKey.A) - 10 + digit))
 
 // One registration per user-triggerable action (note 23): menus, chords, the
 // Shortcuts editor, and the herder_command rail all dispatch through these ids.

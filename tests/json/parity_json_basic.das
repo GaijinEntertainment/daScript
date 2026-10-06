@@ -32,9 +32,7 @@ def fixture_array() : array<Car> {
 
 // Same 8 rows as a JSON array of objects (reflective JV(Car)), so the fused JSON lane is directly
 // comparable to fixture_array.
-def fixture_json() : JsonValue? {
-    return JV([for (c in fixture_array()); JV(c)])
-}
+def fixture_json() : JsonValue? => JV([for (c in fixture_array()); JV(c)])
 
 [test]
 def parity_where_select(t : T?) {

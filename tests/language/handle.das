@@ -108,9 +108,7 @@ def test_nc_alias(t : T?) {
     }
 }
 
-def is_valid_eid(e : EntityId) : bool {
-    return !!e
-}
+def is_valid_eid(e : EntityId) : bool => !!e
 
 def test_handle_to_bool(t : T?) {
     // The const-folder used to collapse !!x -> x for a builtIn operator! that is a type-changing

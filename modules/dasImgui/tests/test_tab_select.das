@@ -18,9 +18,8 @@ require daslib/json_boost public
 
 let FEATURE = "modules/dasImgui/examples/features/containers_layout.das"
 
-def private is_selected(var snap : JsonValue?; tab : string) : bool {
-    return widget_payload_field(snap, tab, "selected") ?? false
-}
+def private is_selected(var snap : JsonValue?; tab : string) : bool =>
+    widget_payload_field(snap, tab, "selected") ?? false
 
 [test]
 def test_tab_select_smoke(t : T?) {

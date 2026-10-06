@@ -11,9 +11,8 @@ def operator delete(var p : MorPipeline) {
     p.a = 0
 }
 
-def mor_create_pipelines() : array<MorPipeline?> {
-    return <- [new MorPipeline(a = 1), new MorPipeline(a = 2)]
-}
+def mor_create_pipelines() : array<MorPipeline?> =>
+    <- [new MorPipeline(a = 1), new MorPipeline(a = 2)]
 
 def mor_fooBar() : MorPipeline? {
     var pipelines <- mor_create_pipelines()

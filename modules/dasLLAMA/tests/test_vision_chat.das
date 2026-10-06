@@ -95,8 +95,7 @@ def test_vision_chat(t : T?) {   // nolint:STYLE038 — one sequential turn stor
             }
             tt |> success(mixed, "audio beside a queued image panics instead of dropping rows")
             // TIER 2 - the stream shape: head ends at the open marker, tail opens at the close one
-            var head : array<int64>
-            var tail : array<int64>
+            var head, tail : array<int64>
             render_prompt_image(m, chat, head, tail)
             tt |> success(!empty(head) && !empty(tail), "both spans render")
             tt |> equal(head[long_length(head) - 1l], IMAGE_OPEN, "head ends with <|image>")
@@ -186,8 +185,7 @@ def test_vision_chat_e2b(t : T?) {
             add_user_image_(chat, img)
             add_user_(chat, "describe this image")
             tt |> equal(chat.n_image_rows, CATS_ROWS, "image span length from the geometry (mtmd: 130)")
-            var head : array<int64>
-            var tail : array<int64>
+            var head, tail : array<int64>
             render_prompt_image(m, chat, head, tail)
             tt |> success(!empty(head) && !empty(tail), "both spans render")
             tt |> equal(head[long_length(head) - 1l], IMAGE_OPEN, "head ends with <|image>")
@@ -283,8 +281,7 @@ def test_vision_chat_gemma3(t : T?) {
             add_user_image_(chat, img)
             add_user_(chat, "describe this image")
             tt |> equal(chat.n_image_rows, G3_ROWS, "the fixed canvas always splices 256 rows")
-            var head : array<int64>
-            var tail : array<int64>
+            var head, tail : array<int64>
             render_prompt_image(m, chat, head, tail)
             tt |> success(!empty(head) && !empty(tail), "both spans render")
             tt |> equal(head[long_length(head) - 1l], G3_IMAGE_OPEN, "head ends with <start_of_image>")
@@ -374,8 +371,7 @@ def test_vision_chat_omni(t : T?) {
             add_user_(chat, "describe this image")
             tt |> equal(chat.n_image_rows, Q_CATS_ROWS, "640x480 is 32-aligned: 300 soft tokens")
             tt |> equal(chat.image_grid, int2(20, 15), "the merged grid reaches the chat (position advance 20)")
-            var head : array<int64>
-            var tail : array<int64>
+            var head, tail : array<int64>
             render_prompt_image(m, chat, head, tail)
             tt |> equal(head[long_length(head) - 1l], Q_IMAGE_OPEN, "head ends with <|vision_start|>")
             tt |> equal(tail[0], Q_IMAGE_CLOSE, "tail starts with <|vision_end|>")
@@ -617,8 +613,7 @@ def test_render_image_span_qwen25o(t : T?) {
         var m <- load_model_(dec, QuantMode.q8)
         var chat <- create_chat_(m, "", 8l)
         add_user_(chat, "describe this image")
-        var head : array<int64>
-        var tail : array<int64>
+        var head, tail : array<int64>
         render_turn_image_(m, chat, head, tail)
         tt |> success(!empty(head) && !empty(tail), "both spans render")
         tt |> equal(head[length(head) - 1], special_id(m, "<|vision_bos|>"), "the head closes on the vocab's bos marker")

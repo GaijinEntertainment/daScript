@@ -297,8 +297,7 @@ def private run_prompt(t : Model; tk : Tokenizer; ids : array<int64>; plen, roun
                 }
             }
             if (cfg.verbose) {
-                var a16 : array<int64>
-                var b16 : array<int64>
+                var a16, b16 : array<int64>
                 a16 |> reserve(16l)
                 b16 |> reserve(16l)
                 for (i in range64(min(16l, min(long_length(seq), long_length(ref))))) {
@@ -376,7 +375,7 @@ def main() {
             if (used >= cfg.nprompts) {
                 break
             }
-            var ids <- encode(tk, tx, false)
+            var inscope ids <- encode(tk, tx, false)
             if (long_length(ids) < plen) {
                 delete ids
                 continue

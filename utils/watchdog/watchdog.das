@@ -119,9 +119,8 @@ def private home_dir() : string {
     return !empty(profile) ? profile : get_env_variable("HOME")
 }
 
-def private resolve_from(path, base : string) : string {
-    return get_full_file_name(is_absolute(path) ? path : path_join(base, path))
-}
+def private resolve_from(path, base : string) : string =>
+    get_full_file_name(is_absolute(path) ? path : path_join(base, path))
 
 //! An unset path stays unset; a set one resolves against `base`.
 def private resolve_optional(var path : string&; base : string) {
@@ -144,7 +143,7 @@ def private config_to_args(config : JsonValue?; cli : array<string>; source : st
     for (key, val in keys(config as _object), values(config as _object)) {
         if (key == "server_args") continue
         if (!(known |> key_exists(key))) {
-            var names <- [for (arg in info.args); arg.field_name]
+            var inscope names <- [for (arg in info.args); arg.field_name]
             names |> sort()
             return <- err("{source} has unknown key '{key}'; known keys: {join(names, ", ")}", type<array<string>>)
         }
@@ -266,9 +265,8 @@ def private is_program_candidate(path, fname : string) : bool {
 
 //! Where a daslang may sit, nearest first: beside the script, beside the watchdog, and one level
 //! up from the watchdog - `bin/watchdog` in a source tree finds `bin/daslang` through its parent.
-def private daslang_roots(program_dir, cwd : string) : array<string> {
-    return <- [cwd, program_dir, dir_name(program_dir)]
-}
+def private daslang_roots(program_dir, cwd : string) : array<string> =>
+    <- [cwd, program_dir, dir_name(program_dir)]
 
 //! The daslang under one of `dirs`, or "" - never a bare name, which `fexist` would resolve against
 //! the process cwd and treat as found.
@@ -284,9 +282,8 @@ def private find_daslang(dirs : array<string>) : string {
 
 //! A name, not a path: a file of that name beside the program (the flat-bundle layout) may still
 //! claim it, PATH resolves it at spawn otherwise - never test it against the process cwd.
-def private daslang_on_path() : string {
-    return get_platform_name() == "windows" ? "daslang.exe" : "daslang"
-}
+def private daslang_on_path() : string =>
+    get_platform_name() == "windows" ? "daslang.exe" : "daslang"
 
 struct public ResolvedConfig {
     cfg : WatchdogConfig = WatchdogConfig()
@@ -311,8 +308,7 @@ def private resolved_config_error(error : string; quiet : bool) : ResolvedConfig
 //! and crash bundles then resolve against `state_dir`, every other path against `cwd`. Everything after the first `--` goes to the child verbatim (the config's
 //! `server_args` when there is no `--`). `error` carries the text of a fatal configuration.
 def public resolve_config(args : array<string>; program_dir : string) : ResolvedConfig {
-    var head : array<string>
-    var tail : array<string>
+    var head, tail : array<string>
     var past_separator = false
     for (arg in args) {
         if (!past_separator && arg == "--") {
@@ -463,13 +459,10 @@ class public Emitter {
 // ---------------------------------------------------------------------------------------------
 // desktop notification: best effort, never fatal, no dependency beyond the platform's own helper
 
-def private applescript_quote(s : string) : string {
-    return replace(replace(replace(s, "\\", "\\\\"), "\"", "\\\""), "\n", " - ")
-}
+def private applescript_quote(s : string) : string =>
+    replace(replace(replace(s, "\\", "\\\\"), "\"", "\\\""), "\n", " - ")
 
-def private powershell_quote(s : string) : string {
-    return replace(s, "'", "''")
-}
+def private powershell_quote(s : string) : string => replace(s, "'", "''")
 
 //! Off under tests and on a headless box, where a balloon has no one to reach.
 var public notifications_enabled = true
@@ -651,7 +644,7 @@ def private reg_query_value(key, name : string; var value : string&) : bool {
     for (line in split(out, "\n")) {
         let trimmed = strip(line)
         if (!starts_with(trimmed, name)) continue
-        let parts <- split(trimmed, "    ")
+        var inscope parts <- split(trimmed, "    ")
         if (length(parts) >= 3) {
             value = strip(parts[length(parts) - 1])
             return true
@@ -666,13 +659,11 @@ def public windows_local_dump_config(exe_name : string) : tuple<dump_type : int;
     if (get_platform_name() != "windows") return (dump_type = -1, folder = "")
     for (app_specific in [true, false]) {
         let key = app_specific ? "{WER_LOCAL_DUMPS}\\{exe_name}" : WER_LOCAL_DUMPS
-        var dump_type_text : string
-        var folder_text : string
+        var dump_type_text, folder_text : string
         let has_type = reg_query_value(key, "DumpType", dump_type_text)
         let has_folder = reg_query_value(key, "DumpFolder", folder_text)
         if (!app_specific) {
-            var dump_count : string
-            var flags : string
+            var dump_count, flags : string
             let has_policy = (has_type || has_folder
                 || reg_query_value(key, "DumpCount", dump_count) || reg_query_value(key, "CustomDumpFlags", flags))
             if (!has_policy) continue
@@ -1108,21 +1099,17 @@ let public TRAY_ICON_MAX = 256
 //! An icon file past this size is refused before it is read: the whole file is copied into memory
 let public TRAY_ICON_FILE_MAX = 4l * 1024l * 1024l
 
-def private read_u16(bytes : array<uint8>; at : int) : int {
-    return int(bytes[at]) | (int(bytes[at + 1]) << 8)
-}
+def private read_u16(bytes : array<uint8>; at : int) : int =>
+    int(bytes[at]) | (int(bytes[at + 1]) << 8)
 
-def private read_u32(bytes : array<uint8>; at : int) : int {
-    return read_u16(bytes, at) | (read_u16(bytes, at + 2) << 16)
-}
+def private read_u32(bytes : array<uint8>; at : int) : int =>
+    read_u16(bytes, at) | (read_u16(bytes, at + 2) << 16)
 
-def private is_png(bytes : array<uint8>; at, len : int) : bool {
-    return len >= 8 && bytes[at] == 0x89u8 && bytes[at + 1] == uint8('P') && bytes[at + 2] == uint8('N') && bytes[at + 3] == uint8('G')
-}
+def private is_png(bytes : array<uint8>; at, len : int) : bool =>
+    len >= 8 && bytes[at] == 0x89u8 && bytes[at + 1] == uint8('P') && bytes[at + 2] == uint8('N') && bytes[at + 3] == uint8('G')
 
-def private is_ico(bytes : array<uint8>) : bool {
-    return length(bytes) >= 6 && read_u16(bytes, 0) == 0 && read_u16(bytes, 2) == 1
-}
+def private is_ico(bytes : array<uint8>) : bool =>
+    length(bytes) >= 6 && read_u16(bytes, 0) == 0 && read_u16(bytes, 2) == 1
 
 //! The ICO directory: six header bytes, then sixteen per frame - width, height (0 reads 256),
 //! two reserved, planes, bit depth, byte size, byte offset. The chosen frame is the largest the
@@ -1308,9 +1295,7 @@ class public WatchdogTray {
         }
     }
 
-    def notify(title, message : string) : bool {
-        return tray_notify(title, message)
-    }
+    def notify(title, message : string) : bool => tray_notify(title, message)
 
     def destroy() {
         tray_destroy()
@@ -1320,9 +1305,7 @@ class public WatchdogTray {
 // ---------------------------------------------------------------------------------------------
 // the supervision loop, as a state machine the host steps
 
-def private now_seconds(origin : int64) : float {
-    return float(get_time_usec(origin)) / 1000000.0
-}
+def private now_seconds(origin : int64) : float => float(get_time_usec(origin)) / 1000000.0
 
 //! The two heaps' live bytes, on the heartbeat and the last event: a supervisor runs for months,
 //! and its host collects between ticks - this is where a leak would show.
@@ -1387,9 +1370,7 @@ class public Supervisor {
         }
     }
 
-    def now() : float {
-        return now_seconds(origin)
-    }
+    def now() : float => now_seconds(origin)
 
     //! The host's stop signal (Ctrl-C, SIGTERM, a tray item): the child is asked to stop on the
     //! next tick, and supervision ends with 0 once it has.

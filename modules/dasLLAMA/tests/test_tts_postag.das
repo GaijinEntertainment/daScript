@@ -97,7 +97,7 @@ def test_tokenizer(t : T?) {
         let rows <- load_tts_corpus()
         var mismatches = 0
         for (r in rows) {
-            let toks <- pos_tokenize(tg, r.norm)
+            var inscope toks <- pos_tokenize(tg, r.norm)
             var same = length(toks) == length(r.tokens)
             if (same) {
                 for (tok, want in toks, r.tokens) {
@@ -158,8 +158,8 @@ def test_tagger(t : T?) {
         var het_n = 0
         var het_same = 0
         for (r in rows) {
-            let words <- [for (tok in r.tokens); tok[0]]
-            let tags <- pos_tag_words(tg, words)
+            var inscope words <- [for (tok in r.tokens); tok[0]]
+            var inscope tags <- pos_tag_words(tg, words)
             for (tok, tag in r.tokens, tags) {
                 n++
                 same += tag == tok[1] ? 1 : 0

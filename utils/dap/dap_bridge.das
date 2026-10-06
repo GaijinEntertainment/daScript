@@ -38,9 +38,7 @@ struct private Stopwatch {
     banked : double
 }
 
-def private stopwatch() : Stopwatch {
-    return Stopwatch(started = ref_time_ticks())
-}
+def private stopwatch() : Stopwatch => Stopwatch(started = ref_time_ticks())
 
 def private elapsed_sec(var sw : Stopwatch) : double {
     let usec = get_time_usec(sw.started)
@@ -132,9 +130,8 @@ def public parse_dap_frame(data : array<uint8>; at_eof : bool) : FrameParse {
     return FrameParse(message = message, consumed = pos + content_length)
 }
 
-def public dap_frame_text(message_json : string) : string {
-    return "Content-Length: {length(message_json)}\r\n\r\n{message_json}"
-}
+def public dap_frame_text(message_json : string) : string =>
+    "Content-Length: {length(message_json)}\r\n\r\n{message_json}"
 
 // ===== JSON helpers =====
 
@@ -169,9 +166,8 @@ def private int_of(v : JsonValue?) : int64 {
     return int64(v.value as _number)
 }
 
-def private is_number_node(v : JsonValue?) : bool {
-    return v != null && (v.value is _longint || v.value is _number)
-}
+def private is_number_node(v : JsonValue?) : bool =>
+    v != null && (v.value is _longint || v.value is _number)
 
 def private number_of(v : JsonValue?) : double {
     if (v.value is _longint) return double(v.value as _longint)
@@ -241,9 +237,7 @@ class public DapClient : Client {
         buffer |> clear()
     }
 
-    def connected() : bool {
-        return is_connected() && !stopped
-    }
+    def connected() : bool => is_connected() && !stopped
 
     //! connects, retrying a refused socket until `timeout` seconds pass - a just-launched
     //! debuggee opens its port a moment after it starts
@@ -558,9 +552,7 @@ struct public ToolOutcome {
     text : string
 }
 
-def private failed(text : string) : ToolOutcome {
-    return ToolOutcome(ok = false, text = text)
-}
+def private failed(text : string) : ToolOutcome => ToolOutcome(ok = false, text = text)
 
 def private succeeded(var value : JsonValue?) : ToolOutcome {
     let text = write_json(value)
@@ -571,9 +563,7 @@ def private succeeded(var value : JsonValue?) : ToolOutcome {
 let private RESUME_COMMANDS <- {"debug_continue" => "continue", "debug_step_in" => "stepIn", "debug_step_over" => "next", "debug_step_out" => "stepOut"}
 
 //! the DAP command a resuming tool sends; empty for a tool that is not one
-def public resume_command(tool : string) : string {
-    return RESUME_COMMANDS?[tool] ?? ""
-}
+def public resume_command(tool : string) : string => RESUME_COMMANDS?[tool] ?? ""
 
 class public DapBridge {
     repo_root : string
@@ -1016,10 +1006,7 @@ class public DapBridge {
         if (proc == null) return failed("failed to launch debug session: cannot spawn {exe}")
         pid = unsafe(process_pid(proc))
         owned_command := command
-        var connection : JsonValue?
-        var initialized : JsonValue?
-        var launched : JsonValue?
-        var initialized_event : JsonValue?
+        var connection, initialized, launched, initialized_event : JsonValue?
         let failure = launch_session(args, host, port, connect_timeout, cwd, connection, initialized, launched, initialized_event)
         if (!empty(failure)) {
             dap->end_session("client_close")

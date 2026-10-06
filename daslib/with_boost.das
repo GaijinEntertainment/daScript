@@ -51,10 +51,7 @@ def private is_lvalue_chain(e : ExpressionPtr) : bool {
 }
 
 def private emit_with_sequence(var call : ExprCallMacro?; containerCount : int; var rewrittenBlock : ExprMakeBlock?) : ExpressionPtr {
-    var preStmts : array<ExpressionPtr>
-    var lockStmts : array<ExpressionPtr>
-    var unlockStmts : array<ExpressionPtr>
-    var argRefs : array<ExpressionPtr>
+    var preStmts, lockStmts, unlockStmts, argRefs : array<ExpressionPtr>
     preStmts |> reserve(containerCount * 2)
     lockStmts |> reserve(containerCount)
     unlockStmts |> reserve(containerCount)

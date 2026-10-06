@@ -10,9 +10,7 @@ def call_function(a : int; b : float) {
     return 13
 }
 
-def test_invoke_call(fun : function<(a : int; b : float) : int>) {
-    return invoke(fun, 1, 2.0)
-}
+def test_invoke_call(fun : function<(a : int; b : float) : int>) => invoke(fun, 1, 2.0)
 
 struct Foo {
     a : int
@@ -25,13 +23,9 @@ def call2cmres_function(a : int; b : float) {
     return Foo(a = a + 10, b = b + 10.)
 }
 
-def test_invoke_call2cmres(fun : function<(a : int; b : float) : Foo>) {
-    return invoke(fun, 1, 2.0)
-}
+def test_invoke_call2cmres(fun : function<(a : int; b : float) : Foo>) => invoke(fun, 1, 2.0)
 
-def test_invoke_lambda(lmb : lambda<(a : int; b : float) : int>) {
-    return invoke(lmb, 1, 2.0)
-}
+def test_invoke_lambda(lmb : lambda<(a : int; b : float) : int>) => invoke(lmb, 1, 2.0)
 
 def test_invoke_and_delete_lambda(var lmb : lambda<(a : int; b : float) : int>) {
     let res = invoke(lmb, 1, 2.0)
@@ -39,17 +33,11 @@ def test_invoke_and_delete_lambda(var lmb : lambda<(a : int; b : float) : int>) 
     return res
 }
 
-def test_invoke_lambda2cmres(lmb : lambda<(a : int; b : float) : Foo>) {
-    return invoke(lmb, 1, 2.0)
-}
+def test_invoke_lambda2cmres(lmb : lambda<(a : int; b : float) : Foo>) => invoke(lmb, 1, 2.0)
 
-def test_invoke_block(blk : block<(a : int; b : float) : int>) {
-    return invoke(blk, 1, 2.0)
-}
+def test_invoke_block(blk : block<(a : int; b : float) : int>) => invoke(blk, 1, 2.0)
 
-def test_invoke_block2cmres(blk : block<(a : int; b : float) : Foo>) {
-    return invoke(blk, 1, 2.0)
-}
+def test_invoke_block2cmres(blk : block<(a : int; b : float) : Foo>) => invoke(blk, 1, 2.0)
 
 [test]
 def test_ref(t : T?) {    // nolint:STYLE038 -- flat list of independent JIT arms, one per invoke shape

@@ -15,13 +15,11 @@ struct OverrideRow {
 
 // A user override that always returns a sentinel, distinct from any by-name materialize.
 [unused_argument(v, ent)]
-def from_JV(v : JsonValue const explicit?; ent : OverrideRow; defV : OverrideRow = OverrideRow()) : OverrideRow {
-    return OverrideRow(name = "OVERRIDDEN", tag = 999)
-}
+def from_JV(v : JsonValue const explicit?; ent : OverrideRow; defV : OverrideRow = OverrideRow()) : OverrideRow =>
+    OverrideRow(name = "OVERRIDDEN", tag = 999)
 
-def mkjson() : JsonValue? {
-    return JV([JV(OverrideRow(name = "real0", tag = 0)), JV(OverrideRow(name = "real1", tag = 1))])
-}
+def mkjson() : JsonValue? =>
+    JV([JV(OverrideRow(name = "real0", tag = 0)), JV(OverrideRow(name = "real1", tag = 1))])
 
 [test]
 def test_from_json_ignores_override(t : T?) {

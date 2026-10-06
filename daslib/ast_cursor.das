@@ -81,9 +81,7 @@ def public source_name(name : string) : string {
     return at > 2 ? slice(name, 2, at) : name
 }
 
-def private is_ident_byte(c : uint8) : bool {
-    return utf32_is_word_char(uint(c))
-}
+def private is_ident_byte(c : uint8) : bool => utf32_is_word_char(uint(c))
 
 def public word_at(line_text : string; col : int) : tuple<word : string; start : int> {
     //! The identifier the 0-based byte column `col` is on in `line_text`, with its start column; a caret right after a word is on it, as in an editor, and the word is empty when `col` is on none.
@@ -184,9 +182,8 @@ def private in_file(at : LineInfo; file : string) : bool {
     return find(string(at.fileInfo.name), file) >= 0
 }
 
-def private on_line(at : LineInfo; file : string; line : int) : bool {
-    return int(at.line) == line && in_file(at, file)
-}
+def private on_line(at : LineInfo; file : string; line : int) : bool =>
+    int(at.line) == line && in_file(at, file)
 
 def public declared_name_column(at : LineInfo; name : string) : int {
     //! Where the line a declaration starts on spells its `name`; `at.column` when it does not.
@@ -372,14 +369,10 @@ class CursorVisitor : AstVisitor {
         targetLineText = line_text
     }
 
-    def in_target_file(at : LineInfo) : bool {
-        return in_file(at, targetFile)
-    }
+    def in_target_file(at : LineInfo) : bool => in_file(at, targetFile)
 
     [arch(at="ARCHITECTURE_CURSOR.md#cursor-variable-position")]
-    def cursor_on_variable(v : Variable const?) : bool {
-        return cursor_on_token(v.at, string(v.name))
-    }
+    def cursor_on_variable(v : Variable const?) : bool => cursor_on_token(v.at, string(v.name))
 
     def add_variable_at_cursor(v : Variable const?) : void {
         return if (!withDeclarations || inSynthesized || v == null || v.flags.generated || !in_target_file(v.at) || !cursor_on_variable(v))

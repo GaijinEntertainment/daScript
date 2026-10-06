@@ -59,9 +59,7 @@ var g_env_tex         = 0u
 var g_model_name = ""
 var g_load_error = ""
 
-def media_dir : string {
-    return "{get_das_root()}/examples/gltf/media"
-}
+def media_dir : string => "{get_das_root()}/examples/gltf/media"
 
 def model_path : string {
     // get_command_line_arguments() includes the interpreter + script + harness flags, so pick the first

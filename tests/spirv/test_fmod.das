@@ -30,9 +30,7 @@ def fmodm {
         0.0f, 1.0f)
 }
 
-def private fmodm_words : array<uint> {
-    return clone_to_move(fmodm_spv)
-}
+def private fmodm_words : array<uint> => clone_to_move(fmodm_spv)
 
 [test]
 def test_fmod_vs_mod(t : T?) {

@@ -151,9 +151,7 @@ def hybrid_for(value : int) {
 }
 
 [jit]
-def array_comp(value : int) {
-    return <- [for (x in range(0, value)); x]
-}
+def array_comp(value : int) => <- [for (x in range(0, value)); x]
 
 [test]
 def test_comprehension(t : T?) {

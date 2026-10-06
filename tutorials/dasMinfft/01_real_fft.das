@@ -64,9 +64,7 @@ def magnitude_helpers() {
     var spectrum : array<float2>
     fft_real_forward(signal, spectrum)
 
-    var raw : array<float>
-    var norm : array<float>
-    var logm : array<float>
+    var raw, norm, logm : array<float>
     fft_calculate_magnitudes(spectrum, raw)
     fft_calculate_normalized_magnitudes(spectrum, norm)
     fft_calculate_log_magnitudes(spectrum, logm)

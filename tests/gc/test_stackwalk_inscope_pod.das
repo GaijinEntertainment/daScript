@@ -12,9 +12,7 @@ require _stackwalk_common
 // so it must gate live at parks inside the body - and must NOT gate live before
 // the loop ever ran (its slot is garbage there)
 
-def make_names() : array<string> {
-    return <- [for (i in range(4)); "name_{i}"]
-}
+def make_names() : array<string> => <- [for (i in range(4)); "name_{i}"]
 
 def walk_names(var w : CollectingWalker?) : int {
     var total = 0

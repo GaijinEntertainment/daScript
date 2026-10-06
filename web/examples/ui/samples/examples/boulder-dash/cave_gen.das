@@ -14,9 +14,7 @@ def rand_span(var rng : int4&; lo, hi : int) : int {
     return lo + (random_int(rng) % (hi - lo))
 }
 
-def chance(var rng : int4&; p : float) : bool {
-    return random_float(rng) < p
-}
+def chance(var rng : int4&; p : float) : bool => random_float(rng) < p
 
 def fill_rect(var c : Cave; x, y, w, h : int; t : Tile) {
     let x1 = max(x, 0)
@@ -127,9 +125,8 @@ def place_slime_patch(var c : Cave; var rng : int4&) {
     fill_rect(c, x, y, 3, 2, Tile.slime)
 }
 
-def gen_seed(world_seed, cave_index : int) : int4 {
-    return random_seed(world_seed * 73856093 + cave_index * 19349663 + 83492791)
-}
+def gen_seed(world_seed, cave_index : int) : int4 =>
+    random_seed(world_seed * 73856093 + cave_index * 19349663 + 83492791)
 
 def replace_all_player(var c : Cave) {
     for (i in range(length(c.cells))) {

@@ -44,7 +44,7 @@ def test_padding_boundaries(t : T?) {
                 (65, "9537c5fdf120482f7d58d25e9ed583f52c02b4e304ea814db1633ad565aed7e9"),
                 (119, "000b48d4edf0fa7bee3c6236ecd2785baa5db4eeb8bb54341b029e0d9fa5fb0c"),
                 (120, "13f05a0b594787f5ecd315edc96141bd3243203d1b7d4f0836f37308b276ba98"))) {
-            var bytes <- [for (_i in range(c._0)); uint8('x')]
+            var inscope bytes <- [for (_i in range(c._0)); uint8('x')]
             let str = build_string() $(var writer) {
                 for (_i in range(c._0)) {
                     writer |> write("x")

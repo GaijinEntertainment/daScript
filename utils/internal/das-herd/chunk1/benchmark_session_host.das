@@ -40,9 +40,7 @@ struct ComparisonSummary {
     hosted_outer_p50 : int64
 }
 
-def private elapsed_us(started : int64) : int64 {
-    return get_time_nsec(started) / 1000l
-}
+def private elapsed_us(started : int64) : int64 => get_time_nsec(started) / 1000l
 
 def private parse_options() : BenchmarkOptions {
     var cfg = BenchmarkOptions(repository = get_das_root())
@@ -82,7 +80,7 @@ def read_file(path : string; var error : string&) : string {
 def private parse_host_result(output : string; var sample : HostedSample) {
     for (line in split_by_chars(output, "\n")) {
         if (!starts_with(line, "DASHERD_HOST_RESULT\t")) continue
-        let fields <- split_by_chars(strip(line), "\t")
+        var inscope fields <- split_by_chars(strip(line), "\t")
         if (length(fields) != 10) {
             sample.error = "malformed host result: {line}"
             return
@@ -199,8 +197,7 @@ def private summarize(direct, terminal : array<GitProbeSample> const;
 
 def private run_command(command : GitProbeCommand const; cfg : BenchmarkOptions const;
                         root : string; var results : FILE const?) : bool {
-    var direct : array<GitProbeSample>
-    var terminal : array<GitProbeSample>
+    var direct, terminal : array<GitProbeSample>
     var hosted : array<HostedSample>
     direct |> reserve(cfg.rounds)
     terminal |> reserve(cfg.rounds)

@@ -141,9 +141,7 @@ def private q8_amax3(m0 : float) : float {
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
-def private q8_quant1(v, id : float) : int8 {
-    return int8(int(round(v * id)))
-}
+def private q8_quant1(v, id : float) : int8 => int8(int(round(v * id)))
 
 // ... and the Q8_K twin: whole-subgroup 5-shuffle amax fold
 def private q8k_amax5(m0 : float) : float {
@@ -546,8 +544,7 @@ class template ArCombBase : ArBase {
         }
         let pk = p * pa.slots
         let nreg = min(pa.slots, 8u)
-        var rb : uint[8]
-        var bb : uint[8]
+        var rb, bb : uint[8]
         var sw : float[8]
         for (j in range(8)) {
             if (uint(j) < nreg) {
@@ -2419,8 +2416,7 @@ class DnConv {
         var x1 = xrow(int(p0) - 2, cch, taps)
         var x2 = xrow(int(p0) - 1, cch, taps)
         let normed = live && ch < 2u * pa.kd
-        var y : float[int(DN_CONV_PB)]
-        var s : float[int(DN_CONV_PB)]
+        var y, s : float[int(DN_CONV_PB)]
         for [unroll] (i in range(int(DN_CONV_PB))) {
             let p = p0 + uint(i)
             let x3 = p < pa.npos ? xrow(int(p), cch, taps) : 0.0
@@ -2817,8 +2813,7 @@ class DnScan {
             s[i] = state[sb + uint(i) * row_stride]
         }
         //! the last token re-reads its own row
-        var k_next : float[16]
-        var q_next : float[16]
+        var k_next, q_next : float[16]
         var v_next = conv[voff]
         for [unroll_full] (i in range(16)) {
             k_next[i] = conv[k_elem0 + uint(i) * lanes_per_col]
@@ -2831,8 +2826,7 @@ class DnScan {
             let eg = egs[t]
             let bt = bts[t]
             let v = v_next
-            var k : float[16]
-            var q : float[16]
+            var k, q : float[16]
             for [unroll_full] (i in range(16)) {
                 k[i] = k_next[i]
             }
@@ -3569,8 +3563,7 @@ class template FaT {
             coopmatScale(q, pa.scale)
             var qf : QA
             coopmatConvert(qf, q)
-            var mrow : SACC
-            var lrow : SACC
+            var mrow, lrow : SACC
             static_if (SINK) {
                 coopmatFill(mrow, sinks[pa.sinkoff + h])
                 coopmatFill(lrow, 1.0)
@@ -5180,9 +5173,7 @@ class Q8Batch : MoeCmBase {
 // each is an override, and the devirtualizer inlines the family back to four standalone kernels.
 
 //! hb's four low bits to bit 4 of each byte lane: the multiply's shifted copies never overlap, so no carry crosses a lane
-def private k5_dep(hb : uint) : uint {
-    return ((hb & 0xFu) * 0x02040810u) & 0x10101010u
-}
+def private k5_dep(hb : uint) : uint => ((hb & 0xFu) * 0x02040810u) & 0x10101010u
 
 //! Q5_K - the nibble half at `sh` (0 or 4) of four packed words with the 5th bits deposited from the block's qh byte lanes
 def private k5_quad(r : uint4; qh, sh : uint) : uint4 {
@@ -5309,9 +5300,7 @@ def iq4xs_sc(w0, w1, blk : uint) : int {
 }
 
 [arch(at="../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
-def grid_sc(w1, blk : uint) : int {
-    return 1 + 2 * int((w1 >> (4u * blk)) & 15u)
-}
+def grid_sc(w1, blk : uint) : int => 1 + 2 * int((w1 >> (4u * blk)) & 15u)
 
 
 class KqBatchBase : MoeCmBase {
@@ -5423,9 +5412,7 @@ class KqBatchBase : MoeCmBase {
     // the variant points — every [spirv_kernel] leaf overrides w_quad; q40/k6 also stage_ws/blk_fma
     //! the format's staged int8 lanes of chunk `k` - block `bu`'s half `hh` - of the weight superblock at `wsb`
     [unused_argument(wsb, bu, hh, k)]
-    def w_quad(wsb, bu, hh, k : uint) : uint4 {
-        return uint4(0u)
-    }
+    def w_quad(wsb, bu, hh, k : uint) : uint4 => uint4(0u)
 
     def stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
         for (ki in range(2)) {
@@ -5454,9 +5441,7 @@ class KqBatchBase : MoeCmBase {
         wsw[sblk * 32u + slane] = sa
     }
 
-    def blk_fma(bu, grp, word : uint; xscl : float) : float4 {
-        return fma_dm(bu, grp, word, xscl)
-    }
+    def blk_fma(bu, grp, word : uint; xscl : float) : float4 => fma_dm(bu, grp, word, xscl)
 
     def tile_shell {
         let reg = region_rec()
@@ -6209,22 +6194,7 @@ class template MmBatchT : MoeCmBase {
 
     def l_tile(wblk0, row0, cnt, gm0, gn0, nbb, warp_r, warp_c, lw, lr0 : uint) {   // nolint:STYLE038 — the verbatim tile pass, parity-locked to the shipped kernel
         static_if (BT == 128u) {
-        var acc00 : coopmatAcc_f16_16x16
-        var acc01 : coopmatAcc_f16_16x16
-        var acc02 : coopmatAcc_f16_16x16
-        var acc03 : coopmatAcc_f16_16x16
-        var acc10 : coopmatAcc_f16_16x16
-        var acc11 : coopmatAcc_f16_16x16
-        var acc12 : coopmatAcc_f16_16x16
-        var acc13 : coopmatAcc_f16_16x16
-        var acc20 : coopmatAcc_f16_16x16
-        var acc21 : coopmatAcc_f16_16x16
-        var acc22 : coopmatAcc_f16_16x16
-        var acc23 : coopmatAcc_f16_16x16
-        var acc30 : coopmatAcc_f16_16x16
-        var acc31 : coopmatAcc_f16_16x16
-        var acc32 : coopmatAcc_f16_16x16
-        var acc33 : coopmatAcc_f16_16x16
+        var acc00, acc01, acc02, acc03, acc10, acc11, acc12, acc13, acc20, acc21, acc22, acc23, acc30, acc31, acc32, acc33 : coopmatAcc_f16_16x16
         var kb = 0u
         while (kb < nbb) {
             stage_a(wblk0, gm0, nbb, kb, lw, lr0)
@@ -6364,10 +6334,7 @@ class template MmBatchT : MoeCmBase {
 
     def m_tile(wblk0, row0, cnt, gm0, gn0, nbb, warp_r, warp_c, lw, lr0 : uint) {
         static_if (BT == 64u) {
-        var acc00 : coopmatAcc_f16_16x16
-        var acc01 : coopmatAcc_f16_16x16
-        var acc10 : coopmatAcc_f16_16x16
-        var acc11 : coopmatAcc_f16_16x16
+        var acc00, acc01, acc10, acc11 : coopmatAcc_f16_16x16
         var kb = 0u
         while (kb < nbb) {
             stage_a(wblk0, gm0, nbb, kb, lw, lr0)
@@ -8893,10 +8860,8 @@ class F16GemmKhr {
         var acc : coopmatAcc_f32_16x16[4]
         var k = 0u
         while (k < pa.n) {
-            var a0 : coopmatA_f16_16x16
-            var a1 : coopmatA_f16_16x16
-            var b0 : coopmatB_f16_16x16
-            var b1 : coopmatB_f16_16x16
+            var a0, a1 : coopmatA_f16_16x16
+            var b0, b1 : coopmatB_f16_16x16
             if (sg_row0 < pa.rows) {
                 coopmatLoad(a0, xf16, sg_row0 * pa.n + k, int(pa.n), 0)
             }
@@ -10177,8 +10142,7 @@ class template TowerCnAttnRT {
         let d = pa.d
         let hoff = pa.hoff
         let hs = HS
-        var qu : float[128]
-        var acc : float[128]
+        var qu, acc : float[128]
         var n = 0u
         while (n < hs) {
             qu[n] = q[ii * d + hoff + n] + wn[pa.buoff + hoff + n]
@@ -11655,8 +11619,7 @@ class template Q8GemvNT {
             let xb0 = regions[r * 2u + 1u]
             let lane = gl_SubgroupInvocationID
             let bpp = gl_SubgroupSize / 2u
-            var acc0 : float[8]
-            var acc1 : float[8]
+            var acc0, acc1 : float[8]
             for [unroll] (c in range(NC)) {
                 acc0[c] = 0.0
                 acc1[c] = 0.0
@@ -11874,8 +11837,7 @@ class template Q8GemvGuNT {
         let ub0 = pa.ublk + row * nb
         let lane = gl_SubgroupInvocationID
         let bpp = gl_SubgroupSize / 2u
-        var accg : float[8]
-        var accu : float[8]
+        var accg, accu : float[8]
         for [unroll] (c in range(NC)) {
             accg[c] = 0.0
             accu[c] = 0.0
@@ -12336,9 +12298,7 @@ class KqGemvBase {
     @push_constant pa : GemvArgs
 
     //! fills wl / wh with the lo / hi int8 quads (x's lo / hi words), returns (A_lo, B_lo, A_hi, B_hi): the block adds axs x (A_lo dot_lo + B_lo bsum_lo + A_hi dot_hi + B_hi bsum_hi)
-    def blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
-        return float4(0.0)
-    }
+    def blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 => float4(0.0)
 
     //! the fold carries B terms (a min or an offset against the block sums): the k-lattice leaves; the codebook and grid leaves skip the sums
     def fold_reads_bsum : bool => false
@@ -12680,9 +12640,8 @@ def gemv_wgs(rows : int64; lanes_per_row : uint) : int64 {
 }
 
 //! the codebook and grid formats: a block's decode gathers, so a lane wants more blocks in flight than the k-lattice's
-def gemv_grid_fmt(fmt : int) : bool {
-    return fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.iq4nl) || fmt == int(KqFmt.iq3s4)
-}
+def gemv_grid_fmt(fmt : int) : bool =>
+    fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.iq4nl) || fmt == int(KqFmt.iq3s4)
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes")]
 def gemv_lanes_per_row(fmt : int; n : int64) : uint {
@@ -12716,9 +12675,7 @@ def gemv_cls_has_n(fmt : int) : bool => fmt == int(KqFmt.q8) || kq_sb(fmt)
 let private GEMV_NO_N_LEAF = "q8 q51 mx4 iq4nl32"
 
 //! the decode GEMV family's roster - q8 and every kq leaf, in enum order: what the kernel cells and the probe's ruler walk
-def kq_gemv_fmts() : array<KqFmt> {
-    return <- [for (f in type<KqFmt>); f; where gemv_cls_has_n(int(f))]
-}
+def kq_gemv_fmts() : array<KqFmt> => <- [for (f in type<KqFmt>); f; where gemv_cls_has_n(int(f))]
 
 //! the reduction width past which the q8 N-column form pairs output rows a subgroup; off until a box's token command proves the pair
 var g_q8_n2_min_n = 0xFFFFFFFFu

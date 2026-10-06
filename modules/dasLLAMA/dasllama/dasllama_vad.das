@@ -279,8 +279,7 @@ def vad_chunk_prob(m : VadModel; var st : VadState; chunk : array<float> | #) : 
 def vad_probs(m : VadModel; samples : array<float> | #) : array<float> {
     var st : VadState
     vad_reset(st)
-    var out : array<float>
-    var chunk : array<float>
+    var out, chunk : array<float>
     chunk |> resize(int(SV_CHUNK))
     let n = long_length(samples)
     var start = 0l

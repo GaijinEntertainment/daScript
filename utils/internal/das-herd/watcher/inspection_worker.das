@@ -169,9 +169,7 @@ def private prepare_changed_source_ranges(source : string;
     return <- result
 }
 
-def private source_lines(source : string) : array<string> {
-    return <- split(source, "\n")
-}
+def private source_lines(source : string) : array<string> => <- split(source, "\n")
 
 def public inspector_reconstruct_old_source(new_source : string;
                                             patch : GitParsedPatch const) : string {
@@ -345,12 +343,12 @@ def private prepare_worker_main(var jobs : Channel?&; // nolint:STYLE038
             var view_document = TextSourceDocument()
             var markdown_document = RichDocument()
             var markdown_view = MarkdownViewState()
-            var changed_ranges : array<TextSourceRange>
+            var inscope changed_ranges : array<TextSourceRange>
             var view_source = ""
             var view_text_ready = false
             var syntax_capped = false
             var inscope decoded_view_bytes : array<uint8>
-            var preview_pixels : array<uint8>
+            var inscope preview_pixels : array<uint8>
             var preview_width = 0
             var preview_height = 0
             var preview_error = ""

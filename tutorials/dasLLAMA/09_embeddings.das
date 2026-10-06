@@ -106,7 +106,7 @@ def main() {   // nolint:STYLE038 - the tutorial is one linear read; the section
 
         var scored : array<tuple<float; string>>
         for (c in candidates) {
-            let cv <- embed(m, c)
+            var inscope cv <- embed(m, c)
             scored |> push((cosine(qv, cv), c))
         }
         sort(scored) $(a, b) => a._0 > b._0

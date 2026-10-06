@@ -286,9 +286,7 @@ let NCELL = 9
 // cell index -> the K width it runs: cells 0-3 are bk = 64 and 4-7 bk = 128, both over
 // 32/64/96/128 (so each bk meets a full 64-deep walk, a bare 32-deep tail, and both together);
 // the last cell is the deva 72-half tile, which is a kk = 64 shape by construction
-def private cell_kk(ci : int) : uint {
-    return ci == NCELL - 1 ? 64u : 32u * uint(ci % 4 + 1)
-}
+def private cell_kk(ci : int) : uint => ci == NCELL - 1 ? 64u : 32u * uint(ci % 4 + 1)
 
 class TmmBkKernels {
     @ssbo @binding = 0 xah : array<float16>   // A: M x KMAX f16 activations, row stride KMAX
@@ -455,9 +453,7 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
         fill_oracle(oracle)
         gl_LocalInvocationID = uint3(0u, 0u, 0u)
         gl_WorkGroupSize = uint3(1u, 1u, 1u)   // width-1 replay: staging strides cover whole tiles
-        var want_bf : array<float>
-        var want_q8 : array<float>
-        var want_q8h : array<float>
+        var want_bf, want_q8, want_q8h : array<float>
         oracle->tmm_bf16_k()
         want_bf := oracle.oc
         oracle->tmm_q8_k()
@@ -796,9 +792,7 @@ def private fill_devab_oracle(var o : TmmDevabKernels?) {
 }
 
 //! the B element at output column 5, reduction step 44 - inside the second step's kk range
-def private devab_poison_index(natural : bool) : int {
-    return natural ? 44 * DV_LD + 5 : 5 * DV_LD + 44
-}
+def private devab_poison_index(natural : bool) : int => natural ? 44 * DV_LD + 5 : 5 * DV_LD + 44
 
 def private devab_replay(var o : TmmDevabKernels?; natural : bool) : array<float> {
     if (natural) {
@@ -885,8 +879,7 @@ def test_tmm2d_devab(t : T?) { // nolint:STYLE038 - both flavors x clean/poisone
         fill_devab_oracle(oracle)
         gl_LocalInvocationID = uint3(0u, 0u, 0u)
         gl_WorkGroupSize = uint3(1u, 1u, 1u)
-        var want : array<array<float>>
-        var want_poisoned : array<array<float>>
+        var want, want_poisoned : array<array<float>>
         var wh_poisoned : array<array<float16>>
         want |> reserve(2)
         want_poisoned |> reserve(2)
@@ -894,9 +887,9 @@ def test_tmm2d_devab(t : T?) { // nolint:STYLE038 - both flavors x clean/poisone
         for (fl in range(2)) {
             let natural = fl == 1
             want |> emplace(devab_replay(oracle, natural))
-            var whp := oracle.wh
+            var inscope whp := oracle.wh
             whp[devab_poison_index(natural)] = float16(60.0)
-            var clean <- oracle.wh
+            var inscope clean <- oracle.wh
             oracle.wh <- whp
             want_poisoned |> emplace(devab_replay(oracle, natural))
             wh_poisoned |> emplace(oracle.wh)

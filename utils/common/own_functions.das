@@ -6,9 +6,7 @@ require daslib/fio
 require strings
 
 
-def private normalized(p : string) : string {
-    return normalize(p) |> replace("\\", "/")
-}
+def private normalized(p : string) : string => normalize(p) |> replace("\\", "/")
 
 
 def private is_own(func : FunctionPtr; file_norm : string; var seen : table<string; void?>) : bool {

@@ -974,7 +974,7 @@ def private cov_prefill_two_steps(tr : Model; var s : Session) {
     eval_(tr, s, p)
     var cur = argmax_of(s.logits, vocab)
     for (_i in range(2)) {
-        var one <- [cur]
+        var inscope one <- [cur]
         eval_(tr, s, one)
         delete one
         cur = argmax_of(s.logits, vocab)
@@ -1021,19 +1021,19 @@ def private vk_cov_model(t : T?; path, family : string; nbs : array<int>) {
             for (kdt in [KVDtype.f32, KVDtype.f16]) {
                 var s = make_run_state(tr.config, kdt, kdt)
                 cov_prefill_two_steps(tr, s)
-                var p2 <- encode(tr, counting_prompt(50, 90), false, false)
+                var inscope p2 <- encode(tr, counting_prompt(50, 90), false, false)
                 eval_(tr, s, p2)
                 delete p2
                 delete s
             }
             for (nb in nbs) {
-                var ss : array<Session>
+                var inscope ss : array<Session>
                 ss |> reserve(nb)
                 var sess : array<Session?>
-                var curs : array<int64>
+                var inscope curs : array<int64>
                 for (i in range(nb)) {
                     ss |> emplace <| make_run_state(tr.config, KVDtype.f32, KVDtype.f32)
-                    let pb <- encode(tr, counting_prompt(3 + i, 44 + i), true, false)
+                    var inscope pb <- encode(tr, counting_prompt(3 + i, 44 + i), true, false)
                     eval_(tr, ss[i], pb)
                     sess |> push(unsafe(addr(ss[i])))
                     curs |> push(argmax_of(ss[i].logits, vocab))

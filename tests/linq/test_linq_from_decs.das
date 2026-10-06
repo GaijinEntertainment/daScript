@@ -229,9 +229,7 @@ def private count_expr_for(expr : Expression?) : int { // nolint:STYLE037 exact-
 }
 
 [export, marker(no_coverage)]
-def target_unroll_count_fold() : int {
-    return _fold(from_decs_template(type<UnrollCountRow>).count())
-}
+def target_unroll_count_fold() : int => _fold(from_decs_template(type<UnrollCountRow>).count())
 
 [test]
 def test_unroll_count_parity(t : T?) {
@@ -295,24 +293,20 @@ def private fixture_unroll2(n : int) {
 }
 
 [export, marker(no_coverage)]
-def target_unroll_select_sum_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).sum())
-}
+def target_unroll_select_sum_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).sum())
 
 [export, marker(no_coverage)]
-def target_unroll_where_count_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1).count())
-}
+def target_unroll_where_count_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1).count())
 
 [export, marker(no_coverage)]
-def target_unroll_where_select_sum_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1)._select(_.val).sum())
-}
+def target_unroll_where_select_sum_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1)._select(_.val).sum())
 
 [export, marker(no_coverage)]
-def target_unroll_long_count_fold() : int64 {
-    return _fold(from_decs_template(type<UnrollChainRow>).long_count())
-}
+def target_unroll_long_count_fold() : int64 =>
+    _fold(from_decs_template(type<UnrollChainRow>).long_count())
 
 [test]
 def test_unroll_select_sum_parity(t : T?) {
@@ -362,24 +356,20 @@ def test_unroll_select_sum_splice_shape(t : T?) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 [export, marker(no_coverage)]
-def target_unroll_min_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).min())
-}
+def target_unroll_min_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).min())
 
 [export, marker(no_coverage)]
-def target_unroll_max_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).max())
-}
+def target_unroll_max_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).max())
 
 [export, marker(no_coverage)]
-def target_unroll_average_fold() : double {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).average())
-}
+def target_unroll_average_fold() : double =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).average())
 
 [export, marker(no_coverage)]
-def target_unroll_where_max_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1)._select(_.val).max())
-}
+def target_unroll_where_max_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1)._select(_.val).max())
 
 [test]
 def test_unroll_min_parity(t : T?) {
@@ -437,34 +427,27 @@ def test_unroll_max_splice_shape(t : T?) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 [export, marker(no_coverage)]
-def target_unroll_any_bare_fold() : bool {
-    return _fold(from_decs_template(type<UnrollChainRow>).any())
-}
+def target_unroll_any_bare_fold() : bool => _fold(from_decs_template(type<UnrollChainRow>).any())
 
 [export, marker(no_coverage)]
-def target_unroll_any_pred_fold() : bool {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val)._any(_ > 100))
-}
+def target_unroll_any_pred_fold() : bool =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val)._any(_ > 100))
 
 [export, marker(no_coverage)]
-def target_unroll_all_fold() : bool {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val)._all(_ >= 0))
-}
+def target_unroll_all_fold() : bool =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val)._all(_ >= 0))
 
 [export, marker(no_coverage)]
-def target_unroll_contains_fold() : bool {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).contains(3))
-}
+def target_unroll_contains_fold() : bool =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).contains(3))
 
 [export, marker(no_coverage)]
-def target_unroll_first_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1)._select(_.val).first())
-}
+def target_unroll_first_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1)._select(_.val).first())
 
 [export, marker(no_coverage)]
-def target_unroll_first_or_default_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.val > 1000)._select(_.val).first_or_default(-7))
-}
+def target_unroll_first_or_default_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._where(_.val > 1000)._select(_.val).first_or_default(-7))
 
 [test]
 def test_unroll_any_bare_parity(t : T?) {
@@ -585,9 +568,8 @@ def test_unroll_contains_findreturn_shape(t : T?) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 [export, marker(no_coverage)]
-def target_unroll_to_array_fold() : array<int> {
-    return <- _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1)._select(_.val).to_array())
-}
+def target_unroll_to_array_fold() : array<int> =>
+    <- _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1)._select(_.val).to_array())
 
 [test]
 def test_unroll_to_array_parity(t : T?) {
@@ -623,44 +605,36 @@ def test_unroll_to_array_splice_shape(t : T?) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 [export, marker(no_coverage)]
-def target_unroll_chained_select_sum_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val)._select(_ * 10).sum())
-}
+def target_unroll_chained_select_sum_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val)._select(_ * 10).sum())
 
 [export, marker(no_coverage)]
-def target_unroll_select_then_where_sum_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val)._where(_ > 1).sum())
-}
+def target_unroll_select_then_where_sum_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val)._where(_ > 1).sum())
 
 [export, marker(no_coverage)]
-def target_unroll_where_select_where_sum_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1)._select(_.val)._where(_ > 1).sum())
-}
+def target_unroll_where_select_where_sum_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1)._select(_.val)._where(_ > 1).sum())
 
 [export, marker(no_coverage)]
-def target_unroll_count_pred_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._count(_.val > 2))
-}
+def target_unroll_count_pred_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._count(_.val > 2))
 
 [export, marker(no_coverage)]
-def target_unroll_long_count_pred_fold() : int64 {
-    return _fold(from_decs_template(type<UnrollChainRow>)._long_count(_.val >= 3))
-}
+def target_unroll_long_count_pred_fold() : int64 =>
+    _fold(from_decs_template(type<UnrollChainRow>)._long_count(_.val >= 3))
 
 [export, marker(no_coverage)]
-def target_unroll_chained_select_to_array_fold() : array<int> {
-    return <- _fold(from_decs_template(type<UnrollChainRow>)._select(_.val)._select(_ + 100).to_array())
-}
+def target_unroll_chained_select_to_array_fold() : array<int> =>
+    <- _fold(from_decs_template(type<UnrollChainRow>)._select(_.val)._select(_ + 100).to_array())
 
 [export, marker(no_coverage)]
-def target_unroll_min_by_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val)._min_by(-_))
-}
+def target_unroll_min_by_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val)._min_by(-_))
 
 [export, marker(no_coverage)]
-def target_unroll_max_by_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val)._max_by(-_))
-}
+def target_unroll_max_by_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val)._max_by(-_))
 
 [test]
 def test_unroll_chained_select_sum_parity(t : T?) {
@@ -683,9 +657,8 @@ def test_unroll_where_select_where_sum_parity(t : T?) {
     t |> equal(target_unroll_where_select_where_sum_parity_compute(), 8, "where→select→where→sum splice parity")
 }
 
-def private target_unroll_where_select_where_sum_parity_compute() : int {
-    return target_unroll_where_select_where_sum_fold()
-}
+def private target_unroll_where_select_where_sum_parity_compute() : int =>
+    target_unroll_where_select_where_sum_fold()
 
 [test]
 def test_unroll_count_pred_parity(t : T?) {
@@ -781,34 +754,28 @@ def test_unroll_min_by_splice_shape(t : T?) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 [export, marker(no_coverage)]
-def target_unroll_take_count_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>).take(3).count())
-}
+def target_unroll_take_count_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>).take(3).count())
 
 [export, marker(no_coverage)]
-def target_unroll_skip_count_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>).skip(2).count())
-}
+def target_unroll_skip_count_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>).skip(2).count())
 
 [export, marker(no_coverage)]
-def target_unroll_skip_take_count_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>).skip(1).take(2).count())
-}
+def target_unroll_skip_take_count_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>).skip(1).take(2).count())
 
 [export, marker(no_coverage)]
-def target_unroll_where_take_count_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1).take(2).count())
-}
+def target_unroll_where_take_count_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1).take(2).count())
 
 [export, marker(no_coverage)]
-def target_unroll_select_take_sum_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3).sum())
-}
+def target_unroll_select_take_sum_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3).sum())
 
 [export, marker(no_coverage)]
-def target_unroll_take_first_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(2).first())
-}
+def target_unroll_take_first_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(2).first())
 
 [export, marker(no_coverage)]
 def target_unroll_take_neg_count_fold() : int {
@@ -817,14 +784,12 @@ def target_unroll_take_neg_count_fold() : int {
 }
 
 [export, marker(no_coverage)]
-def target_unroll_skip_beyond_count_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>).skip(100).count())
-}
+def target_unroll_skip_beyond_count_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>).skip(100).count())
 
 [export, marker(no_coverage)]
-def target_unroll_take_to_array_fold() : array<int> {
-    return <- _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3).to_array())
-}
+def target_unroll_take_to_array_fold() : array<int> =>
+    <- _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3).to_array())
 
 [test]
 def test_unroll_take_count_parity(t : T?) {
@@ -930,19 +895,16 @@ def test_unroll_skip_count_splice_shape(t : T?) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 [export, marker(no_coverage)]
-def target_unroll_take_any_no_pred_fold() : bool {
-    return _fold(from_decs_template(type<UnrollChainRow>).take(0).any())
-}
+def target_unroll_take_any_no_pred_fold() : bool =>
+    _fold(from_decs_template(type<UnrollChainRow>).take(0).any())
 
 [export, marker(no_coverage)]
-def target_unroll_take_any_pred_no_match_fold() : bool {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3)._any(_ > 100))
-}
+def target_unroll_take_any_pred_no_match_fold() : bool =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3)._any(_ > 100))
 
 [export, marker(no_coverage)]
-def target_unroll_take_any_pred_match_fold() : bool {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3)._any(_ == 1))
-}
+def target_unroll_take_any_pred_match_fold() : bool =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3)._any(_ == 1))
 
 [export, marker(no_coverage)]
 def target_unroll_take_all_pass_fold() : bool {
@@ -957,14 +919,12 @@ def target_unroll_take_all_fail_fold() : bool {
 }
 
 [export, marker(no_coverage)]
-def target_unroll_take_contains_hit_fold() : bool {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(5).contains(2))
-}
+def target_unroll_take_contains_hit_fold() : bool =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(5).contains(2))
 
 [export, marker(no_coverage)]
-def target_unroll_take_contains_miss_fold() : bool {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(2).contains(100))
-}
+def target_unroll_take_contains_miss_fold() : bool =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(2).contains(100))
 
 [test]
 def test_unroll_take_any_no_pred_empty(t : T?) {
@@ -1027,9 +987,8 @@ def private take_n_with_side_effect() : int {
 }
 
 [export, marker(no_coverage)]
-def target_unroll_take_with_side_effect_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>).take(take_n_with_side_effect()).count())
-}
+def target_unroll_take_with_side_effect_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>).take(take_n_with_side_effect()).count())
 
 [test]
 def test_unroll_take_n_evaluated_once(t : T?) {
@@ -1051,24 +1010,20 @@ def test_unroll_take_n_evaluated_once(t : T?) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 [export, marker(no_coverage)]
-def target_unroll_take_while_count_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3).count())
-}
+def target_unroll_take_while_count_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3).count())
 
 [export, marker(no_coverage)]
-def target_unroll_skip_while_count_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._skip_while(_.val < 3).count())
-}
+def target_unroll_skip_while_count_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._skip_while(_.val < 3).count())
 
 [export, marker(no_coverage)]
-def target_unroll_skip_while_take_while_count_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._skip_while(_.val < 2)._take_while(_.val < 5).count())
-}
+def target_unroll_skip_while_take_while_count_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._skip_while(_.val < 2)._take_while(_.val < 5).count())
 
 [export, marker(no_coverage)]
-def target_unroll_where_take_while_count_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1)._take_while(_.val < 5).count())
-}
+def target_unroll_where_take_while_count_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1)._take_while(_.val < 5).count())
 
 // take_while + select is REJECTED by extract_decs_ranges (canonical order forbids
 // select-after-range — array side bails at linq_fold.das:1623). So for sum/first/
@@ -1085,9 +1040,8 @@ def target_unroll_take_while_first_fold() : int {
 }
 
 [export, marker(no_coverage)]
-def target_unroll_take_while_to_array_fold() : array<tuple<val : int; flag : int>> {
-    return <- _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3).to_array())
-}
+def target_unroll_take_while_to_array_fold() : array<tuple<val : int; flag : int>> =>
+    <- _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3).to_array())
 
 [export, marker(no_coverage)]
 def target_unroll_take_while_min_by_fold() : int {
@@ -1139,9 +1093,8 @@ def target_unroll_skip_while_take_count_fold() : int {
 // routing in emit_early_exit_lane's !supports_direct_return arm (decs + range present).
 
 [export, marker(no_coverage)]
-def target_unroll_take_while_any_match_fold() : bool {
-    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3)._any(_.val == 2))
-}
+def target_unroll_take_while_any_match_fold() : bool =>
+    _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3)._any(_.val == 2))
 
 [export, marker(no_coverage)]
 def target_unroll_take_while_any_after_window_fold() : bool {
@@ -1150,9 +1103,8 @@ def target_unroll_take_while_any_after_window_fold() : bool {
 }
 
 [export, marker(no_coverage)]
-def target_unroll_take_while_all_pass_fold() : bool {
-    return _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3)._all(_.val < 5))
-}
+def target_unroll_take_while_all_pass_fold() : bool =>
+    _fold(from_decs_template(type<UnrollChainRow>)._take_while(_.val < 3)._all(_.val < 5))
 
 [export, marker(no_coverage)]
 def target_unroll_take_while_all_fail_fold() : bool {
@@ -1746,9 +1698,8 @@ def private fixture_unroll5d() {
 // ── order_by + to_array (bare sort) ──
 
 [export, marker(no_coverage)]
-def target_unroll5d_order_by_to_array_fold() : array<tuple<id : int; price : int; flag : int>> {
-    return <- _fold(from_decs_template(type<Unroll5dRow>)._order_by(_.price).to_array())
-}
+def target_unroll5d_order_by_to_array_fold() : array<tuple<id : int; price : int; flag : int>> =>
+    <- _fold(from_decs_template(type<Unroll5dRow>)._order_by(_.price).to_array())
 
 [test]
 def test_unroll5d_order_by_to_array_parity(t : T?) {
@@ -1763,9 +1714,8 @@ def test_unroll5d_order_by_to_array_parity(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_unroll5d_order_by_desc_to_array_fold() : array<tuple<id : int; price : int; flag : int>> {
-    return <- _fold(from_decs_template(type<Unroll5dRow>)._order_by_descending(_.price).to_array())
-}
+def target_unroll5d_order_by_desc_to_array_fold() : array<tuple<id : int; price : int; flag : int>> =>
+    <- _fold(from_decs_template(type<Unroll5dRow>)._order_by_descending(_.price).to_array())
 
 [test]
 def test_unroll5d_order_by_desc_to_array_parity(t : T?) {
@@ -1781,9 +1731,8 @@ def test_unroll5d_order_by_desc_to_array_parity(t : T?) {
 // ── order_by + take ──
 
 [export, marker(no_coverage)]
-def target_unroll5d_order_by_take3_fold() : array<tuple<id : int; price : int; flag : int>> {
-    return <- _fold(from_decs_template(type<Unroll5dRow>)._order_by(_.price).take(3).to_array())
-}
+def target_unroll5d_order_by_take3_fold() : array<tuple<id : int; price : int; flag : int>> =>
+    <- _fold(from_decs_template(type<Unroll5dRow>)._order_by(_.price).take(3).to_array())
 
 [test]
 def test_unroll5d_order_by_take_parity(t : T?) {
@@ -1797,9 +1746,8 @@ def test_unroll5d_order_by_take_parity(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_unroll5d_order_by_desc_take3_fold() : array<tuple<id : int; price : int; flag : int>> {
-    return <- _fold(from_decs_template(type<Unroll5dRow>)._order_by_descending(_.price).take(3).to_array())
-}
+def target_unroll5d_order_by_desc_take3_fold() : array<tuple<id : int; price : int; flag : int>> =>
+    <- _fold(from_decs_template(type<Unroll5dRow>)._order_by_descending(_.price).take(3).to_array())
 
 [test]
 def test_unroll5d_order_by_desc_take_parity(t : T?) {
@@ -1815,9 +1763,8 @@ def test_unroll5d_order_by_desc_take_parity(t : T?) {
 // ── order_by + first ──
 
 [export, marker(no_coverage)]
-def target_unroll5d_order_by_first_fold() : tuple<id : int; price : int; flag : int> {
-    return _fold(from_decs_template(type<Unroll5dRow>)._order_by(_.price).first())
-}
+def target_unroll5d_order_by_first_fold() : tuple<id : int; price : int; flag : int> =>
+    _fold(from_decs_template(type<Unroll5dRow>)._order_by(_.price).first())
 
 [test]
 def test_unroll5d_order_by_first_parity(t : T?) {
@@ -1826,9 +1773,8 @@ def test_unroll5d_order_by_first_parity(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_unroll5d_order_by_desc_first_fold() : tuple<id : int; price : int; flag : int> {
-    return _fold(from_decs_template(type<Unroll5dRow>)._order_by_descending(_.price).first())
-}
+def target_unroll5d_order_by_desc_first_fold() : tuple<id : int; price : int; flag : int> =>
+    _fold(from_decs_template(type<Unroll5dRow>)._order_by_descending(_.price).first())
 
 [test]
 def test_unroll5d_order_by_desc_first_parity(t : T?) {
@@ -1839,9 +1785,8 @@ def test_unroll5d_order_by_desc_first_parity(t : T?) {
 // ── order_by + first_or_default ──
 
 [export, marker(no_coverage)]
-def target_unroll5d_order_by_first_or_default_fold() : tuple<id : int; price : int; flag : int> {
-    return _fold(from_decs_template(type<Unroll5dRow>)._order_by(_.price).first_or_default((id = -1, price = -99, flag = -1)))
-}
+def target_unroll5d_order_by_first_or_default_fold() : tuple<id : int; price : int; flag : int> =>
+    _fold(from_decs_template(type<Unroll5dRow>)._order_by(_.price).first_or_default((id = -1, price = -99, flag = -1)))
 
 [test]
 def test_unroll5d_order_by_first_or_default_nonempty(t : T?) {
@@ -1886,9 +1831,8 @@ def test_unroll5d_order_by_first_or_default_eval_order(t : T?) {
 // ── where + order_by + take ──
 
 [export, marker(no_coverage)]
-def target_unroll5d_where_order_by_take_fold() : array<tuple<id : int; price : int; flag : int>> {
-    return <- _fold(from_decs_template(type<Unroll5dRow>)._where(_.flag == 1)._order_by(_.price).take(2).to_array())
-}
+def target_unroll5d_where_order_by_take_fold() : array<tuple<id : int; price : int; flag : int>> =>
+    <- _fold(from_decs_template(type<Unroll5dRow>)._where(_.flag == 1)._order_by(_.price).take(2).to_array())
 
 [test]
 def test_unroll5d_where_order_by_take_parity(t : T?) {
@@ -1903,9 +1847,8 @@ def test_unroll5d_where_order_by_take_parity(t : T?) {
 // ── where + order_by + first ──
 
 [export, marker(no_coverage)]
-def target_unroll5d_where_order_by_first_fold() : tuple<id : int; price : int; flag : int> {
-    return _fold(from_decs_template(type<Unroll5dRow>)._where(_.flag == 1)._order_by(_.price).first())
-}
+def target_unroll5d_where_order_by_first_fold() : tuple<id : int; price : int; flag : int> =>
+    _fold(from_decs_template(type<Unroll5dRow>)._where(_.flag == 1)._order_by(_.price).first())
 
 [test]
 def test_unroll5d_where_order_by_first_parity(t : T?) {
@@ -1917,9 +1860,8 @@ def test_unroll5d_where_order_by_first_parity(t : T?) {
 // ── reverse + to_array ──
 
 [export, marker(no_coverage)]
-def target_unroll5d_reverse_to_array_fold() : array<tuple<id : int; price : int; flag : int>> {
-    return <- _fold(from_decs_template(type<Unroll5dRow>).reverse().to_array())
-}
+def target_unroll5d_reverse_to_array_fold() : array<tuple<id : int; price : int; flag : int>> =>
+    <- _fold(from_decs_template(type<Unroll5dRow>).reverse().to_array())
 
 [test]
 def test_unroll5d_reverse_to_array_parity(t : T?) {
@@ -1939,9 +1881,8 @@ def test_unroll5d_reverse_to_array_parity(t : T?) {
 // ── reverse + take ──
 
 [export, marker(no_coverage)]
-def target_unroll5d_reverse_take_fold() : array<tuple<id : int; price : int; flag : int>> {
-    return <- _fold(from_decs_template(type<Unroll5dRow>).reverse().take(3).to_array())
-}
+def target_unroll5d_reverse_take_fold() : array<tuple<id : int; price : int; flag : int>> =>
+    <- _fold(from_decs_template(type<Unroll5dRow>).reverse().take(3).to_array())
 
 [test]
 def test_unroll5d_reverse_take_parity(t : T?) {
@@ -1985,9 +1926,8 @@ def test_unroll5d_reverse_take_single_eval(t : T?) {
 // ── reverse + count (identity — counter loop) ──
 
 [export, marker(no_coverage)]
-def target_unroll5d_reverse_count_fold() : int {
-    return _fold(from_decs_template(type<Unroll5dRow>).reverse().count())
-}
+def target_unroll5d_reverse_count_fold() : int =>
+    _fold(from_decs_template(type<Unroll5dRow>).reverse().count())
 
 [test]
 def test_unroll5d_reverse_count_parity(t : T?) {
@@ -1998,9 +1938,8 @@ def test_unroll5d_reverse_count_parity(t : T?) {
 // ── reverse + first (= last of source) ──
 
 [export, marker(no_coverage)]
-def target_unroll5d_where_reverse_first_or_default_fold() : tuple<id : int; price : int; flag : int> {
-    return _fold(from_decs_template(type<Unroll5dRow>)._where(_.flag == 1).reverse().first_or_default((id = -1, price = -99, flag = -1)))
-}
+def target_unroll5d_where_reverse_first_or_default_fold() : tuple<id : int; price : int; flag : int> =>
+    _fold(from_decs_template(type<Unroll5dRow>)._where(_.flag == 1).reverse().first_or_default((id = -1, price = -99, flag = -1)))
 
 [test]
 def test_unroll5d_where_reverse_first_or_default_empty(t : T?) {
@@ -2020,9 +1959,8 @@ def test_unroll5d_where_reverse_first_or_default_nonempty(t : T?) {
 // ── where + reverse + to_array ──
 
 [export, marker(no_coverage)]
-def target_unroll5d_where_reverse_to_array_fold() : array<tuple<id : int; price : int; flag : int>> {
-    return <- _fold(from_decs_template(type<Unroll5dRow>)._where(_.flag == 1).reverse().to_array())
-}
+def target_unroll5d_where_reverse_to_array_fold() : array<tuple<id : int; price : int; flag : int>> =>
+    <- _fold(from_decs_template(type<Unroll5dRow>)._where(_.flag == 1).reverse().to_array())
 
 [test]
 def test_unroll5d_where_reverse_to_array_parity(t : T?) {
@@ -2037,9 +1975,8 @@ def test_unroll5d_where_reverse_to_array_parity(t : T?) {
 // ── where + select + reverse + to_array (projection through reverse) ──
 
 [export, marker(no_coverage)]
-def target_unroll5d_where_select_reverse_to_array_fold() : array<int> {
-    return <- _fold(from_decs_template(type<Unroll5dRow>)._where(_.flag == 1)._select(_.id).reverse().to_array())
-}
+def target_unroll5d_where_select_reverse_to_array_fold() : array<int> =>
+    <- _fold(from_decs_template(type<Unroll5dRow>)._where(_.flag == 1)._select(_.id).reverse().to_array())
 
 [test]
 def test_unroll5d_where_select_reverse_to_array_parity(t : T?) {
@@ -2168,9 +2105,8 @@ def private fixture_unroll5c() {
 // ── distinct |> to_array (bare select + distinct) ──
 
 [export, marker(no_coverage)]
-def target_unroll5c_select_distinct_to_array_fold() : array<int> {
-    return <- _fold(from_decs_template(type<Unroll5cRow>)._select(_.brand).distinct().to_array())
-}
+def target_unroll5c_select_distinct_to_array_fold() : array<int> =>
+    <- _fold(from_decs_template(type<Unroll5cRow>)._select(_.brand).distinct().to_array())
 
 [test]
 def test_unroll5c_select_distinct_to_array_parity(t : T?) {
@@ -2195,9 +2131,8 @@ def test_unroll5c_select_distinct_to_array_empty(t : T?) {
 // ── distinct |> count ──
 
 [export, marker(no_coverage)]
-def target_unroll5c_select_distinct_count_fold() : int {
-    return _fold(from_decs_template(type<Unroll5cRow>)._select(_.brand).distinct().count())
-}
+def target_unroll5c_select_distinct_count_fold() : int =>
+    _fold(from_decs_template(type<Unroll5cRow>)._select(_.brand).distinct().count())
 
 [test]
 def test_unroll5c_select_distinct_count_parity(t : T?) {
@@ -2208,9 +2143,8 @@ def test_unroll5c_select_distinct_count_parity(t : T?) {
 // ── distinct |> long_count ──
 
 [export, marker(no_coverage)]
-def target_unroll5c_select_distinct_long_count_fold() : int64 {
-    return _fold(from_decs_template(type<Unroll5cRow>)._select(_.brand).distinct().long_count())
-}
+def target_unroll5c_select_distinct_long_count_fold() : int64 =>
+    _fold(from_decs_template(type<Unroll5cRow>)._select(_.brand).distinct().long_count())
 
 [test]
 def test_unroll5c_select_distinct_long_count_parity(t : T?) {
@@ -2221,9 +2155,8 @@ def test_unroll5c_select_distinct_long_count_parity(t : T?) {
 // ── distinct |> sum ──
 
 [export, marker(no_coverage)]
-def target_unroll5c_select_distinct_sum_fold() : int {
-    return _fold(from_decs_template(type<Unroll5cRow>)._select(_.brand).distinct().sum())
-}
+def target_unroll5c_select_distinct_sum_fold() : int =>
+    _fold(from_decs_template(type<Unroll5cRow>)._select(_.brand).distinct().sum())
 
 [test]
 def test_unroll5c_select_distinct_sum_parity(t : T?) {
@@ -2235,9 +2168,8 @@ def test_unroll5c_select_distinct_sum_parity(t : T?) {
 // ── distinct |> take(N) |> to_array (streaming early-exit) ──
 
 [export, marker(no_coverage)]
-def target_unroll5c_select_distinct_take2_fold() : array<int> {
-    return <- _fold(from_decs_template(type<Unroll5cRow>)._select(_.brand).distinct().take(2).to_array())
-}
+def target_unroll5c_select_distinct_take2_fold() : array<int> =>
+    <- _fold(from_decs_template(type<Unroll5cRow>)._select(_.brand).distinct().take(2).to_array())
 
 [test]
 def test_unroll5c_select_distinct_take_parity(t : T?) {
@@ -2266,9 +2198,8 @@ def test_unroll5c_select_distinct_take_beyond(t : T?) {
 // ── where + distinct |> to_array ──
 
 [export, marker(no_coverage)]
-def target_unroll5c_where_distinct_to_array_fold() : array<int> {
-    return <- _fold(from_decs_template(type<Unroll5cRow>)._where(_.id < 8)._select(_.brand).distinct().to_array())
-}
+def target_unroll5c_where_distinct_to_array_fold() : array<int> =>
+    <- _fold(from_decs_template(type<Unroll5cRow>)._where(_.id < 8)._select(_.brand).distinct().to_array())
 
 [test]
 def test_unroll5c_where_distinct_parity(t : T?) {
@@ -2281,9 +2212,8 @@ def test_unroll5c_where_distinct_parity(t : T?) {
 // ── distinct_by(key) |> to_array ──
 
 [export, marker(no_coverage)]
-def target_unroll5c_distinct_by_to_array_fold() : array<tuple<id : int; brand : int; price : int>> {
-    return <- _fold(from_decs_template(type<Unroll5cRow>)._distinct_by(_.brand).to_array())
-}
+def target_unroll5c_distinct_by_to_array_fold() : array<tuple<id : int; brand : int; price : int>> =>
+    <- _fold(from_decs_template(type<Unroll5cRow>)._distinct_by(_.brand).to_array())
 
 [test]
 def test_unroll5c_distinct_by_parity(t : T?) {
@@ -2300,9 +2230,8 @@ def test_unroll5c_distinct_by_parity(t : T?) {
 // ── distinct_by(key) |> count ──
 
 [export, marker(no_coverage)]
-def target_unroll5c_distinct_by_count_fold() : int {
-    return _fold(from_decs_template(type<Unroll5cRow>)._distinct_by(_.brand).count())
-}
+def target_unroll5c_distinct_by_count_fold() : int =>
+    _fold(from_decs_template(type<Unroll5cRow>)._distinct_by(_.brand).count())
 
 [test]
 def test_unroll5c_distinct_by_count_parity(t : T?) {
@@ -2313,9 +2242,8 @@ def test_unroll5c_distinct_by_count_parity(t : T?) {
 // ── distinct_by(key) |> take(N) |> to_array ──
 
 [export, marker(no_coverage)]
-def target_unroll5c_distinct_by_take2_fold() : array<tuple<id : int; brand : int; price : int>> {
-    return <- _fold(from_decs_template(type<Unroll5cRow>)._distinct_by(_.brand).take(2).to_array())
-}
+def target_unroll5c_distinct_by_take2_fold() : array<tuple<id : int; brand : int; price : int>> =>
+    <- _fold(from_decs_template(type<Unroll5cRow>)._distinct_by(_.brand).take(2).to_array())
 
 [test]
 def test_unroll5c_distinct_by_take_parity(t : T?) {
@@ -2469,9 +2397,8 @@ def private fixture_wave4(n : int) {
 }
 
 [export, marker(no_coverage)]
-def target_wave4_pruned_select_sum_fold() : int {
-    return _fold(from_decs_template(type<Wave4Row>)._select(_.price).sum())
-}
+def target_wave4_pruned_select_sum_fold() : int =>
+    _fold(from_decs_template(type<Wave4Row>)._select(_.price).sum())
 
 [test]
 def test_wave4_pruned_select_sum_parity(t : T?) {
@@ -2481,9 +2408,8 @@ def test_wave4_pruned_select_sum_parity(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_wave4_pruned_where_count_fold() : int {
-    return _fold(from_decs_template(type<Wave4Row>)._where(_.price > 50).count())
-}
+def target_wave4_pruned_where_count_fold() : int =>
+    _fold(from_decs_template(type<Wave4Row>)._where(_.price > 50).count())
 
 [test]
 def test_wave4_pruned_where_count_parity(t : T?) {
@@ -2493,9 +2419,8 @@ def test_wave4_pruned_where_count_parity(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_wave4_pruned_select_where_to_array_fold() : array<int> {
-    return <- _fold(from_decs_template(type<Wave4Row>)._where(_.price > 50)._select(_.brand).to_array())
-}
+def target_wave4_pruned_select_where_to_array_fold() : array<int> =>
+    <- _fold(from_decs_template(type<Wave4Row>)._where(_.price > 50)._select(_.brand).to_array())
 
 [test]
 def test_wave4_pruned_select_where_to_array_parity(t : T?) {
@@ -2507,9 +2432,8 @@ def test_wave4_pruned_select_where_to_array_parity(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_wave4_unpruned_bare_to_array_fold() : array<tuple<brand : int; price : int; year : int>> {
-    return <- _fold(from_decs_template(type<Wave4Row>).to_array())
-}
+def target_wave4_unpruned_bare_to_array_fold() : array<tuple<brand : int; price : int; year : int>> =>
+    <- _fold(from_decs_template(type<Wave4Row>).to_array())
 
 [test]
 def test_wave4_unpruned_bare_to_array_parity(t : T?) {
@@ -2531,14 +2455,12 @@ def test_wave4_unpruned_bare_to_array_parity(t : T?) {
     t |> equal(year_sum, 2000 + 2001 + 2002, "year sum (full tuple preserved)")
 }
 
-def private wave4_pred_uses_whole_tup(t : tuple<brand : int; price : int; year : int>) : bool {
-    return (t.brand + t.price + t.year) > 0
-}
+def private wave4_pred_uses_whole_tup(t : tuple<brand : int; price : int; year : int>) : bool =>
+    (t.brand + t.price + t.year) > 0
 
 [export, marker(no_coverage)]
-def target_wave4_unpruned_pass_to_fn_fold() : int {
-    return _fold(from_decs_template(type<Wave4Row>)._where(wave4_pred_uses_whole_tup(_)).count())
-}
+def target_wave4_unpruned_pass_to_fn_fold() : int =>
+    _fold(from_decs_template(type<Wave4Row>)._where(wave4_pred_uses_whole_tup(_)).count())
 
 [test]
 def test_wave4_unpruned_pass_to_fn_parity(t : T?) {
@@ -2607,9 +2529,8 @@ def test_wave4_unpruned_bare_to_array_splice_shape(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_wave4_take_count_no_field_ref_fold() : int {
-    return _fold(from_decs_template(type<Wave4Row>).take(5).count())
-}
+def target_wave4_take_count_no_field_ref_fold() : int =>
+    _fold(from_decs_template(type<Wave4Row>).take(5).count())
 
 [test]
 def test_wave4_take_count_no_field_ref_parity(t : T?) {
@@ -2660,9 +2581,8 @@ def test_wave4_all_fields_via_access_splice_shape(t : T?) {
 // ── C2: buffer-required planners (order/reverse/distinct) ──────────────────────
 
 [export, marker(no_coverage)]
-def target_wave4_unpruned_reverse_to_array_fold() : array<tuple<brand : int; price : int; year : int>> {
-    return <- _fold(from_decs_template(type<Wave4Row>).reverse().to_array())
-}
+def target_wave4_unpruned_reverse_to_array_fold() : array<tuple<brand : int; price : int; year : int>> =>
+    <- _fold(from_decs_template(type<Wave4Row>).reverse().to_array())
 
 [test]
 def test_wave4_unpruned_reverse_to_array_parity(t : T?) {
@@ -2685,9 +2605,8 @@ def test_wave4_unpruned_reverse_to_array_parity(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_wave4_unpruned_distinct_to_array_fold() : array<tuple<brand : int; price : int; year : int>> {
-    return <- _fold(from_decs_template(type<Wave4Row>).distinct().to_array())
-}
+def target_wave4_unpruned_distinct_to_array_fold() : array<tuple<brand : int; price : int; year : int>> =>
+    <- _fold(from_decs_template(type<Wave4Row>).distinct().to_array())
 
 [test]
 def test_wave4_unpruned_distinct_to_array_parity(t : T?) {
@@ -2699,9 +2618,8 @@ def test_wave4_unpruned_distinct_to_array_parity(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_wave4_pruned_select_reverse_to_array_fold() : array<int> {
-    return <- _fold(from_decs_template(type<Wave4Row>)._select(_.brand).reverse().to_array())
-}
+def target_wave4_pruned_select_reverse_to_array_fold() : array<int> =>
+    <- _fold(from_decs_template(type<Wave4Row>)._select(_.brand).reverse().to_array())
 
 [test]
 def test_wave4_pruned_select_reverse_to_array_parity(t : T?) {
@@ -2715,9 +2633,8 @@ def test_wave4_pruned_select_reverse_to_array_parity(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_wave4_pruned_select_distinct_count_fold() : int {
-    return _fold(from_decs_template(type<Wave4Row>)._select(_.brand).distinct().count())
-}
+def target_wave4_pruned_select_distinct_count_fold() : int =>
+    _fold(from_decs_template(type<Wave4Row>)._select(_.brand).distinct().count())
 
 [test]
 def test_wave4_pruned_select_distinct_count_parity(t : T?) {
@@ -2749,9 +2666,8 @@ def test_wave4_pruned_select_distinct_count_splice_shape(t : T?) {
 // ── C3: group_by via shared adapter_emit_source_loop ───────────────────────────
 
 [export, marker(no_coverage)]
-def target_wave4_pruned_groupby_count_fold() : array<tuple<Brand : int; N : int>> {
-    return <- _fold(from_decs_template(type<Wave4Row>)._group_by(_.brand)._select((Brand = _._0, N = _._1 |> length)).to_array())
-}
+def target_wave4_pruned_groupby_count_fold() : array<tuple<Brand : int; N : int>> =>
+    <- _fold(from_decs_template(type<Wave4Row>)._group_by(_.brand)._select((Brand = _._0, N = _._1 |> length)).to_array())
 
 [test]
 def test_wave4_pruned_groupby_count_parity(t : T?) {
@@ -2767,9 +2683,8 @@ def test_wave4_pruned_groupby_count_parity(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_wave4_pruned_groupby_sum_fold() : array<tuple<Brand : int; S : int>> {
-    return <- _fold(from_decs_template(type<Wave4Row>)._group_by(_.brand)._select((Brand = _._0, S = _._1 |> _select(_.price) |> sum)).to_array())
-}
+def target_wave4_pruned_groupby_sum_fold() : array<tuple<Brand : int; S : int>> =>
+    <- _fold(from_decs_template(type<Wave4Row>)._group_by(_.brand)._select((Brand = _._0, S = _._1 |> _select(_.price) |> sum)).to_array())
 
 [test]
 def test_wave4_pruned_groupby_sum_parity(t : T?) {
@@ -2823,39 +2738,31 @@ def test_wave4_pruned_groupby_count_splice_shape(t : T?) {
 // ----- Parity: lambda-arg form returns the same answer as the type-arg form -----
 
 [export, marker(no_coverage)]
-def target_lambda_count_fold() : int {
-    return _fold(from_decs($(unroll_val : int) {}).count())
-}
+def target_lambda_count_fold() : int => _fold(from_decs($(unroll_val : int) {}).count())
 
 [export, marker(no_coverage)]
-def target_lambda_where_count_fold() : int {
-    return _fold(from_decs($(unroll_val : int) {})._where(_.unroll_val >= 3).count())
-}
+def target_lambda_where_count_fold() : int =>
+    _fold(from_decs($(unroll_val : int) {})._where(_.unroll_val >= 3).count())
 
 [export, marker(no_coverage)]
-def target_lambda_select_sum_fold() : int {
-    return _fold(from_decs($(unroll_val : int) {})._select(_.unroll_val).sum())
-}
+def target_lambda_select_sum_fold() : int =>
+    _fold(from_decs($(unroll_val : int) {})._select(_.unroll_val).sum())
 
 [export, marker(no_coverage)]
-def target_lambda_take_count_fold() : int {
-    return _fold(from_decs($(unroll_val : int) {}).take(3).count())
-}
+def target_lambda_take_count_fold() : int =>
+    _fold(from_decs($(unroll_val : int) {}).take(3).count())
 
 [export, marker(no_coverage)]
-def target_lambda_distinct_count_fold() : int {
-    return _fold(from_decs($(unroll_val : int) {})._select(_.unroll_val).distinct().count())
-}
+def target_lambda_distinct_count_fold() : int =>
+    _fold(from_decs($(unroll_val : int) {})._select(_.unroll_val).distinct().count())
 
 [export, marker(no_coverage)]
-def target_lambda_to_array_fold() : array<tuple<unroll_val : int>> {
-    return <- _fold(from_decs($(unroll_val : int) {}).to_array())
-}
+def target_lambda_to_array_fold() : array<tuple<unroll_val : int>> =>
+    <- _fold(from_decs($(unroll_val : int) {}).to_array())
 
 [export, marker(no_coverage)]
-def target_lambda_groupby_count_fold() : array<tuple<Bucket : int; N : int>> {
-    return <- _fold(from_decs($(unroll_val : int) {})._group_by(_.unroll_val % 3)._select((Bucket = _._0, N = _._1 |> length)).to_array())
-}
+def target_lambda_groupby_count_fold() : array<tuple<Bucket : int; N : int>> =>
+    <- _fold(from_decs($(unroll_val : int) {})._group_by(_.unroll_val % 3)._select((Bucket = _._0, N = _._1 |> length)).to_array())
 
 def private populate_unroll(n : int) {
     restart()
@@ -3009,34 +2916,28 @@ def test_lambda_pruned_select_sum_splice_shape(t : T?) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 [export, marker(no_coverage)]
-def target_unroll_last_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).last())
-}
+def target_unroll_last_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).last())
 
 [export, marker(no_coverage)]
-def target_unroll_last_or_default_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.val > 1000)._select(_.val).last_or_default(-9))
-}
+def target_unroll_last_or_default_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._where(_.val > 1000)._select(_.val).last_or_default(-9))
 
 [export, marker(no_coverage)]
-def target_unroll_single_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.val == 3)._select(_.val).single())
-}
+def target_unroll_single_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._where(_.val == 3)._select(_.val).single())
 
 [export, marker(no_coverage)]
-def target_unroll_single_or_default_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.val > 1000)._select(_.val).single_or_default(-7))
-}
+def target_unroll_single_or_default_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._where(_.val > 1000)._select(_.val).single_or_default(-7))
 
 [export, marker(no_coverage)]
-def target_unroll_aggregate_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).aggregate(0) <| $(a, x) => a + x * x)
-}
+def target_unroll_aggregate_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).aggregate(0) <| $(a, x) => a + x * x)
 
 [export, marker(no_coverage)]
-def target_unroll_element_at_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).element_at(3))
-}
+def target_unroll_element_at_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).element_at(3))
 
 [export, marker(no_coverage)]
 def target_unroll_element_at_or_default_fold() : int {
@@ -3073,9 +2974,8 @@ def test_unroll_single_or_default_empty(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_unroll_single_or_default_multi_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.val < 100)._select(_.val).single_or_default(-7))
-}
+def target_unroll_single_or_default_multi_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._where(_.val < 100)._select(_.val).single_or_default(-7))
 
 [test]
 def test_unroll_single_or_default_multi(t : T?) {
@@ -3114,9 +3014,8 @@ def test_unroll_element_at_or_default_out_of_range(t : T?) {
 
 // Range interaction: take + last / take + aggregate
 [export, marker(no_coverage)]
-def target_unroll_take_last_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3).last())
-}
+def target_unroll_take_last_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3).last())
 
 [test]
 def test_unroll_take_last_parity(t : T?) {
@@ -3126,9 +3025,8 @@ def test_unroll_take_last_parity(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_unroll_where_aggregate_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1)._select(_.val).aggregate(0) <| $(a, x) => a + x)
-}
+def target_unroll_where_aggregate_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._where(_.flag == 1)._select(_.val).aggregate(0) <| $(a, x) => a + x)
 
 [test]
 def test_unroll_where_aggregate_parity(t : T?) {
@@ -3224,9 +3122,8 @@ def test_unroll_take_last_splice_shape(t : T?) {
 // to the _find dispatch (the range guard's `return true` only works in a bool-lambda), and caps the
 // counter-driven element_at. take+last covers `last`; these cover the rest of the migrated terminators.
 [export, marker(no_coverage)]
-def target_unroll_take_single_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(1).single())
-}
+def target_unroll_take_single_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(1).single())
 
 [test]
 def test_unroll_take_single_parity(t : T?) {
@@ -3251,9 +3148,8 @@ def test_unroll_take_single_splice_shape(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_unroll_take_aggregate_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3).aggregate(0) <| $(a, x) => a + x)
-}
+def target_unroll_take_aggregate_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3).aggregate(0) <| $(a, x) => a + x)
 
 [test]
 def test_unroll_take_aggregate_parity(t : T?) {
@@ -3278,9 +3174,8 @@ def test_unroll_take_aggregate_splice_shape(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_unroll_take_element_at_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3).element_at(1))
-}
+def target_unroll_take_element_at_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>)._select(_.val).take(3).element_at(1))
 
 [test]
 def test_unroll_take_element_at_parity(t : T?) {
@@ -3538,19 +3433,14 @@ def test_decs_join_to_array_projection(t : T?) {
 typedef UnrollTuple = tuple<val : int; flag : int>
 
 [export, marker(no_coverage)]
-def target_bare_last_fold() : UnrollTuple {
-    return _fold(from_decs_template(type<UnrollChainRow>).last())
-}
+def target_bare_last_fold() : UnrollTuple => _fold(from_decs_template(type<UnrollChainRow>).last())
 
 [export, marker(no_coverage)]
-def target_bare_last_cascade() : UnrollTuple {
-    return from_decs_template(type<UnrollChainRow>) |> last()
-}
+def target_bare_last_cascade() : UnrollTuple => from_decs_template(type<UnrollChainRow>) |> last()
 
 [export, marker(no_coverage)]
-def target_bare_last_or_default_fold() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>).last_or_default((val = -1, flag = -1))).val
-}
+def target_bare_last_or_default_fold() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>).last_or_default((val = -1, flag = -1))).val
 
 [test]
 def test_bare_last_parity(t : T?) {
@@ -3586,9 +3476,8 @@ def private bare_side_effecting_default() : UnrollTuple {
 }
 
 [export, marker(no_coverage)]
-def target_bare_last_or_default_sidefx() : int {
-    return _fold(from_decs_template(type<UnrollChainRow>).last_or_default(bare_side_effecting_default())).val
-}
+def target_bare_last_or_default_sidefx() : int =>
+    _fold(from_decs_template(type<UnrollChainRow>).last_or_default(bare_side_effecting_default())).val
 
 [test]
 def test_bare_last_or_default_eager_eval(t : T?) {
@@ -3637,24 +3526,20 @@ def private fixture_fallback(n : int) {
 }
 
 [export, marker(no_coverage)]
-def target_fb_last_fold() : tuple<val : int; hp : int> {
-    return _fold(from_decs_template(type<FallbackRow>).last())
-}
+def target_fb_last_fold() : tuple<val : int; hp : int> =>
+    _fold(from_decs_template(type<FallbackRow>).last())
 
 [export, marker(no_coverage)]
-def target_fb_last_cascade() : tuple<val : int; hp : int> {
-    return from_decs_template(type<FallbackRow>) |> last()
-}
+def target_fb_last_cascade() : tuple<val : int; hp : int> =>
+    from_decs_template(type<FallbackRow>) |> last()
 
 [export, marker(no_coverage)]
-def target_fb_reverse_take_fold() : array<tuple<val : int; hp : int>> {
-    return <- _fold(from_decs_template(type<FallbackRow>).reverse().take(2).to_array())
-}
+def target_fb_reverse_take_fold() : array<tuple<val : int; hp : int>> =>
+    <- _fold(from_decs_template(type<FallbackRow>).reverse().take(2).to_array())
 
 [export, marker(no_coverage)]
-def target_fb_reverse_take_cascade() : array<tuple<val : int; hp : int>> {
-    return <- (from_decs_template(type<FallbackRow>) |> reverse() |> take(2) |> to_array())
-}
+def target_fb_reverse_take_cascade() : array<tuple<val : int; hp : int>> =>
+    <- (from_decs_template(type<FallbackRow>) |> reverse() |> take(2) |> to_array())
 
 [test]
 def test_fb_last_parity(t : T?) {

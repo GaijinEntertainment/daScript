@@ -3,41 +3,25 @@ require dastest/testing_boost public
 
 require daslib/contracts
 
-def take_not(a) {
-    return 1
-}
+def take_not(a) => 1
 
 [!expect_dim(a)]
-def take_not(a) {
-    return 2
-}
+def take_not(a) => 2
 
 [expect_any_tuple(a) || expect_any_variant(a)]
-def take_or(a) {
-    return 1
-}
+def take_or(a) => 1
 
-def take_or(a) {
-    return 2
-}
+def take_or(a) => 2
 
 [expect_any_tuple(a) && expect_any_variant(b)]
-def take_and(a, b) {
-    return 1
-}
+def take_and(a, b) => 1
 
-def take_and(a, b) {
-    return 2
-}
+def take_and(a, b) => 2
 
 [expect_any_tuple(a) ^^ expect_any_variant(b)]
-def take_xor(a, b) {
-    return 1
-}
+def take_xor(a, b) => 1
 
-def take_xor(a, b) {
-    return 2
-}
+def take_xor(a, b) => 2
 
 
 variant Foo {
@@ -72,14 +56,10 @@ def test_logical_ops(t : T?) {
 }
 
 [sideeffects]
-def take_i(a : auto ==&) {
-    return false
-}
+def take_i(a : auto ==&) => false
 
 [sideeffects]
-def take_i(a : auto& ==&) {
-    return true
-}
+def take_i(a : auto& ==&) => true
 
 [sideeffects]
 def tam(var a : auto(TT)& ==&) : array<TT -const -&> {

@@ -193,8 +193,7 @@ def private embed_k6_gate(t : T?; var dev, queue; dim, vocab, tok : int) {
         let nb = dim / 256
         let nsb = vocab * nb
         let escale = 2.0
-        var inscope kq : array<uint8>
-        var inscope ks : array<uint8>
+        var inscope kq, ks : array<uint8>
         kq_fill_planes(6, nsb, kq, ks)
         var inscope want : array<float>
         want |> resize(dim)
@@ -228,9 +227,7 @@ def private add_rms_gate(t : T?; var dev, queue; batched : bool; dim, nrows : in
         var pso = mc |> keep_stamp(s1, err)   //! the single-row and batched builders dispatch the one MetalAddRms kernel
         return if (!pso_ok(t, tag, pso, err))
         let total = nrows * dim
-        var inscope xv : array<float>
-        var inscope av : array<float>
-        var inscope w : array<float>
+        var inscope xv, av, w : array<float>
         xv |> resize(total)
         av |> resize(total)
         w |> resize(dim)
@@ -241,8 +238,7 @@ def private add_rms_gate(t : T?; var dev, queue; batched : bool; dim, nrows : in
         for (i in range(dim)) {
             w[i] = 0.5 + 0.04 * float(i % 13)
         }
-        var inscope want_x : array<float>
-        var inscope want_y : array<float>
+        var inscope want_x, want_y : array<float>
         want_x |> resize(total)
         want_y |> resize(total)
         for (i in range(total)) {
@@ -285,10 +281,7 @@ def private pre_add_rms_gate(t : T?; var dev, queue; dim : int) {
         let st = stamp_of(@@enc_preaddrms_c)
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
-        var inscope xv : array<float>
-        var inscope av : array<float>
-        var inscope wpa : array<float>
-        var inscope wffn : array<float>
+        var inscope xv, av, wpa, wffn : array<float>
         xv |> resize(dim)
         av |> resize(dim)
         wpa |> resize(dim)
@@ -299,8 +292,7 @@ def private pre_add_rms_gate(t : T?; var dev, queue; dim : int) {
             wpa[i] = 0.4 + 0.05 * float(i % 11)
             wffn[i] = 0.6 + 0.03 * float(i % 17)
         }
-        var inscope want_x : array<float>
-        var inscope want_y : array<float>
+        var inscope want_x, want_y : array<float>
         want_x |> resize(dim)
         want_y |> resize(dim)
         rmsnorm(want_x, av, wpa, int64(dim), EPS)
@@ -340,8 +332,7 @@ def private qk_norm_gate(t : T?; var dev, queue; hs, nq, nk, nrows : int; vfusio
         let rstride = qd + 2 * kvd
         let soffe = qd                          // K region read base
         let koffe = vfusion ? qd + kvd : qd     // write base: v segment under fusion, in-place otherwise
-        var inscope xv : array<float>
-        var inscope w : array<float>
+        var inscope xv, w : array<float>
         xv |> resize(nrows * rstride)
         w |> resize(2 * hs)
         for (i in range(nrows * rstride)) {
@@ -384,8 +375,7 @@ def private ew2_act_gate(t : T?; var dev, queue; name : string; st; total : int;
         var err : string
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
-        var inscope g : array<float>
-        var inscope u : array<float>
+        var inscope g, u : array<float>
         g |> resize(total)
         u |> resize(total)
         for (i in range(total)) {
@@ -505,16 +495,14 @@ def private rope2d_gate(t : T?; var dev, queue; npos, n_head, hs : int) {
         let st = stamp_of(@@enc_rope2d)
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
-        var inscope pos_x : array<int64>
-        var inscope pos_y : array<int64>
+        var inscope pos_x, pos_y : array<int64>
         pos_x |> resize(npos)
         pos_y |> resize(npos)
         for (i in range(npos)) {
             pos_x[i] = int64(i % 7)
             pos_y[i] = int64(i / 7)
         }
-        var inscope cx, sx, cy, sy : array<float>
-        var inscope no_ff : array<float>
+        var inscope cx, sx, cy, sy, no_ff : array<float>
         build_rope_tabs_rows(cx, sx, 100.0, 1.0, 1.0, no_ff, false, pos_x, int64(npos), int64(hs / 2))
         build_rope_tabs_rows(cy, sy, 100.0, 1.0, 1.0, no_ff, false, pos_y, int64(npos), int64(hs / 2))
         var inscope x : array<float>
@@ -559,9 +547,7 @@ def private layernorm_gate(t : T?; var dev, queue; dim, nrows : int; eps : float
         let st = stamp_of(@@enc_ln)
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
-        var inscope x : array<float>
-        var inscope w : array<float>
-        var inscope b : array<float>
+        var inscope x, w, b : array<float>
         x |> resize(nrows * dim)
         w |> resize(dim)
         b |> resize(dim)
@@ -693,8 +679,7 @@ def private rms_gate(t : T?; var dev, queue; dim, nrows : int; eps : float; weig
         let sp = stamp_of(@@pf_enc_rms)   //! the rows form: one 256-lane threadgroup a row
         var pso = hx ? (mc |> keep_stamp(sh, err)) : (mc |> keep_stamp(sp, err))
         return if (!pso_ok(t, tag, pso, err))
-        var inscope x : array<float>
-        var inscope w : array<float>
+        var inscope x, w : array<float>
         x |> resize(nrows * dim)
         w |> resize(dim)
         for (i in range(nrows * dim)) {
@@ -751,8 +736,7 @@ def private ew2_hx_gate(t : T?; var dev, queue; geglu, hx, bounded : bool; rows,
         return if (!pso_ok(t, tag, pso, err))
         let total = bound_rows * row_elems
         let live = rows * row_elems
-        var inscope sg : array<float>
-        var inscope su : array<float>
+        var inscope sg, su : array<float>
         sg |> resize(total)
         su |> resize(total)
         for (k in range(total)) {
@@ -806,8 +790,7 @@ def private pos_add_gate(t : T?; var dev, queue; npos, dim, ncols, pos_entries :
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
         let total = npos * dim
-        var inscope x : array<float>
-        var inscope tbl : array<float>
+        var inscope x, tbl : array<float>
         x |> resize(total)
         tbl |> resize(2 * pos_entries * dim)
         for (i in range(total)) {
@@ -968,12 +951,9 @@ def private wdec_attn_pc_gate(t : T?; var dev, queue; n, dim, hh, tstride, len0 
         let scale = 1.0 / sqrt(float(hs))
         let maxlen = causal ? len0 + n - 1 : len0
         let nch = (maxlen + 255) / 256
-        var inscope q : array<float>
-        var inscope qb : array<float>
-        var inscope kvh : array<uint16>
-        var inscope vvh : array<uint16>
-        var inscope kv : array<float>
-        var inscope vv : array<float>
+        var inscope q, qb : array<float>
+        var inscope kvh, vvh : array<uint16>
+        var inscope kv, vv : array<float>
         q |> resize(n * dim)
         qb |> resize(dim)
         kvh |> resize(hh * tstride * hs)
@@ -1048,9 +1028,7 @@ def private bias_rows_gate(t : T?; var dev, queue; nrows, dim : int; gelu : bool
         var pso = gelu ? (mc |> keep_stamp(sg, err)) : (mc |> keep_stamp(sr, err))
         return if (!pso_ok(t, tag, pso, err))
         let total = nrows * dim
-        var inscope x : array<float>
-        var inscope y : array<float>
-        var inscope b : array<float>
+        var inscope x, y, b : array<float>
         x |> resize(total)
         y |> resize(total)
         b |> resize(dim)
@@ -1290,9 +1268,7 @@ def private hc_norm_gate(t : T?; var dev, queue; dim, hc, nrows : int) {
         return if (!pso_ok(t, tag, pso, err))
         let hcd = hc * dim
         let rows = nrows * hc
-        var inscope x : array<float>
-        var inscope w : array<float>
-        var inscope want : array<float>
+        var inscope x, w, want : array<float>
         x |> resize(rows * dim)
         w |> resize(hcd)
         want |> resize(rows * dim)
@@ -1332,8 +1308,7 @@ def private hc_init_gate(t : T?; var dev, queue; dim, hc, nrows : int) {
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
         let hcd = hc * dim
-        var inscope x : array<float>
-        var inscope want : array<float>
+        var inscope x, want : array<float>
         x |> resize(nrows * dim)
         want |> resize(nrows * hcd)
         for (i in range(nrows * dim)) {
@@ -1369,8 +1344,7 @@ def private hc_lo_gate(t : T?; var dev, queue; lr, hc : int) {
         let st = stamp_of(@@enc_hc_lo)
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
-        var inscope x : array<float>
-        var inscope want : array<float>
+        var inscope x, want : array<float>
         x |> resize(lr)
         want |> resize(lr)
         for (i in range(lr)) {
@@ -1403,9 +1377,7 @@ def private hc_mix_gate(t : T?; var dev, queue; dim, hc, nrows : int) {
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
         let hcd = hc * dim
-        var inscope xn : array<float>
-        var inscope gt : array<float>
-        var inscope want : array<float>
+        var inscope xn, gt, want : array<float>
         xn |> resize(nrows * hcd)
         gt |> resize(nrows * hcd)
         want |> resize(nrows * dim)
@@ -1447,10 +1419,7 @@ def private hc_combine_gate(t : T?; var dev, queue; dim, hc, nrows : int) {
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
         let hcd = hc * dim
-        var inscope res : array<float>
-        var inscope o : array<float>
-        var inscope inj : array<float>
-        var inscope want : array<float>
+        var inscope res, o, inj, want : array<float>
         res |> resize(nrows * hcd)
         o |> resize(nrows * dim)
         inj |> resize(nrows * hc)
@@ -1505,12 +1474,7 @@ def private ple_gate_gate(t : T?; var dev, queue; dim, hc, rows, pos0, roff_rows
         return if (!pso_ok(t, tag, pso, err))
         let hcd = hc * dim
         let dst_rows = direct ? nrows : rows   //! the panel holds the window's rows, the ring `rows` slots
-        var inscope res : array<float>
-        var inscope key : array<float>
-        var inscope val : array<float>
-        var inscope wk : array<float>
-        var inscope wq : array<float>
-        var inscope wc : array<float>
+        var inscope res, key, val, wk, wq, wc : array<float>
         res |> resize(nrows * hcd)
         key |> resize(nrows * hcd)
         val |> resize(nrows * dim)
@@ -1538,9 +1502,7 @@ def private ple_gate_gate(t : T?; var dev, queue; dim, hc, rows, pos0, roff_rows
             val[i] = 0.31 * float(i % 19) - 2.7
         }
         // the oracle: ple_apply_row's gate half in plain code, a row at a time
-        var inscope gwant : array<float>
-        var inscope kn : array<float>
-        var inscope qn : array<float>
+        var inscope gwant, kn, qn : array<float>
         gwant |> resize(nrows * hcd)
         kn |> resize(nrows * hcd)
         qn |> resize(nrows * hcd)
@@ -1614,11 +1576,7 @@ def private ple_conv_gate(t : T?; var dev, queue; dim, hc, kern, dil, rows, pos0
         let hcd = hc * dim
         let roff_rows = 2
         let coff_rows = 1
-        var inscope res : array<float>
-        var inscope gated : array<float>
-        var inscope w : array<float>
-        var inscope ring : array<float>
-        var inscope panel : array<float>
+        var inscope res, gated, w, ring, panel : array<float>
         res |> resize(nrows * hcd)
         gated |> resize(nrows * hcd)
         w |> resize(hcd * kern)
@@ -1875,9 +1833,8 @@ def test_metal_misc_kernels(t : T?) {
 
 // writes `src` into a per-tag temp directory and compiles it with this binary - the shared half
 // of every lens-refusal fixture, whose claim is the child's exit code plus its diagnostic text
-def private spawn_lens_compile(tag, src : string) : tuple<rc : int; out : string> {
-    return spawn_compile_only(src, "lens_{tag}", 120.0)
-}
+def private spawn_lens_compile(tag, src : string) : tuple<rc : int; out : string> =>
+    spawn_compile_only(src, "lens_{tag}", 120.0)
 
 //! the require preamble every lens fixture opens with
 def private lens_fixture_head : string {

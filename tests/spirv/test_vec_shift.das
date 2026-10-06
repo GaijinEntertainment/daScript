@@ -30,8 +30,7 @@ def vsh {
 // The component type of every OpCompositeConstruct's result: signed iff OpTypeInt's signedness is 1.
 // A splat that took the base's type would report unsigned here, which is exactly the bug.
 def private all_splats_are_signed_int(words : array<uint>) : bool {
-    var int_signedness : table<uint; uint>
-    var vec_comp : table<uint; uint>
+    var int_signedness, vec_comp : table<uint; uint>
     foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
         if (opcode == uint(SpvOp.TypeInt) && n >= 3) {
             int_signedness[w[s]] = w[s + 2]

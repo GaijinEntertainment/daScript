@@ -14,13 +14,9 @@ struct Dealer {
     id : int
 }
 
-def make_cars() : array<Car> {
-    return <- [for (i in range(1000)); Car(id = i, dealer = i % 10)]
-}
+def make_cars() : array<Car> => <- [for (i in range(1000)); Car(id = i, dealer = i % 10)]
 
-def make_dealers() : array<Dealer> {
-    return <- [for (i in range(10)); Dealer(id = i)]
-}
+def make_dealers() : array<Dealer> => <- [for (i in range(10)); Dealer(id = i)]
 
 [test]
 def test_group_join_fold_frees_its_buckets(t : T?) {

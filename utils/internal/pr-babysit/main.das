@@ -56,9 +56,8 @@ def private gh_line(args : array<string>) : string {
     return gh(args, out) == 0 ? trim(out) : ""
 }
 
-def private head_sha(cfg : Config) : string {
-    return gh_line(["api", "repos/{cfg.repo}/pulls/{cfg.pr}", "--jq", ".head.sha"])
-}
+def private head_sha(cfg : Config) : string =>
+    gh_line(["api", "repos/{cfg.repo}/pulls/{cfg.pr}", "--jq", ".head.sha"])
 
 // non-empty output lines; ok=false on spawn/api failure so a caller never reads an error page as data
 def private gh_lines(args : array<string>; var ok : bool&) : array<string> {
@@ -94,7 +93,7 @@ def private unresolved_threads(cfg : Config; var ok : bool&) : array<string> {
         let after = empty(cursor) ? "" : ", after: \"{cursor}\""
         let query = "query \{ repository(owner: \"{owner}\", name: \"{name}\") \{ pullRequest(number: {cfg.pr}) \{ reviewThreads(first: 100{after}) \{ pageInfo \{ hasNextPage endCursor \} nodes \{ id isResolved path \} \} \} \} \}"
         var page_ok = false
-        let lines <- gh_lines(["api", "graphql", "-f", "query={query}", "--jq",
+        var inscope lines <- gh_lines(["api", "graphql", "-f", "query={query}", "--jq",
             "(.data.repository.pullRequest.reviewThreads.pageInfo | (.hasNextPage|tostring) + \" \" + (.endCursor // \"\")), (.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved==false) | .id + \" \" + (.path // \"\"))"], page_ok)
         if (!page_ok || empty(lines)) {
             ok = false
@@ -162,8 +161,8 @@ def private watch(cfg : Config) : int {
         let head = head_sha(cfg)
         var checks_ok = false
         var reviews_ok = false
-        let checks <- check_lines(cfg, checks_ok)
-        let reviews <- bot_review_shas(cfg, reviews_ok)
+        var inscope checks <- check_lines(cfg, checks_ok)
+        var inscope reviews <- bot_review_shas(cfg, reviews_ok)
         let unresolved = unresolved_count(cfg)
         if (empty(head) || !checks_ok || !reviews_ok || unresolved < 0) {
             to_log(LOG_WARNING, "pr-babysit: api read failed, retrying\n")

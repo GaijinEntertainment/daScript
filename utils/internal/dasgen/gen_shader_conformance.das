@@ -63,9 +63,7 @@ def ctor_gen(spec : ShaderTypeSpec; lane : block<(i : int) : int>) : string {
     }
 }
 
-def ctor(spec : ShaderTypeSpec; base : int) : string {
-    return ctor_gen(spec) $(i) => base + i
-}
+def ctor(spec : ShaderTypeSpec; base : int) : string => ctor_gen(spec) $(i) => base + i
 
 // the shader body shared by both rails: local ctor + splat + (arith) + swizzle read,
 // reduced to one scalar so the value flows into the output (nothing dead-code-elided)
@@ -109,9 +107,8 @@ def emit_body(var writer; spec : ShaderTypeSpec; seed : string) {
 // fp16 and fp64 rows need the sink narrowed to the float SSBO element (float16 / double r -> float
 // elem); storage rows pre-widen to int/uint and 32-bit arith rows already produce the element type
 // (PERF020: same-type cast)
-def ssbo_sink(spec : ShaderTypeSpec) : string {
-    return (spec.kind == "half" || spec.kind == "double") ? "{ssbo_elem(spec)}(r)" : "r"
-}
+def ssbo_sink(spec : ShaderTypeSpec) : string =>
+    (spec.kind == "half" || spec.kind == "double") ? "{ssbo_elem(spec)}(r)" : "r"
 
 def ssbo_elem(spec : ShaderTypeSpec) : string {
     if (spec.kind == "uint") {
@@ -180,9 +177,7 @@ def seed_expr(spec : ShaderTypeSpec) : string {
 }
 
 // reduce the result scalar back to a float lane for the color output
-def out_expr(spec : ShaderTypeSpec) : string {
-    return spec.kind == "float" ? "r" : "float(r)"
-}
+def out_expr(spec : ShaderTypeSpec) : string => spec.kind == "float" ? "r" : "float(r)"
 
 // the GL_EXT_* line expected in the guarded extension chain's #else branch ("" = 32-bit row).
 // real desktop drivers take the GL_NV_gpu_shader5 / AMD branch instead — same type spellings

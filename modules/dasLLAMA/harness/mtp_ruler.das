@@ -125,9 +125,8 @@ def private head_of(s : string; n : int) : string {
     return r
 }
 
-def private is_bos_piece(p : string) : bool {
-    return p == "<bos>" || p == "<s>" || p == "<|begin_of_text|>" || p == "<|endoftext|>"
-}
+def private is_bos_piece(p : string) : bool =>
+    p == "<bos>" || p == "<s>" || p == "<|begin_of_text|>" || p == "<|endoftext|>"
 
 def private argmax_of(s : Session; vocab : int64) : int64 {
     var best = 0l
@@ -185,7 +184,7 @@ def private render_prompts(model : string; texts : array<string>; ngen : int; gp
             var cs <- create_chat_renderer_(t, "", 0l)
             set_thinking_(cs, false)
             add_user_(cs, text)
-            var ids <- render_turn_(t, cs)
+            var inscope ids <- render_turn_(t, cs)
             finalize(cs)
             let sb = build_string() $(w) {
                 var first = true
@@ -398,9 +397,8 @@ def private run_lcpp_arm(cfg : Args; head : string; kmax : int; rendered, ours :
 
 // ===== --render: one markdown table per ruler JSON =====
 
-def private pct(acc, dr : int64) : string {
-    return dr > 0l ? "{double(acc) * 100.0lf / double(dr):.1f}%" : "-"
-}
+def private pct(acc, dr : int64) : string =>
+    dr > 0l ? "{double(acc) * 100.0lf / double(dr):.1f}%" : "-"
 
 //! Row (engine, depth, prompt) -> cell text: "tok/s (accept%)" for an ON arm, "tok/s" for OFF
 def private cell(rows : array<JsonValue?>; engine : string; depth, prompt : int64) : string {
@@ -541,8 +539,7 @@ def main() : int {
     if (cfg.ngl == 0) {
         allow_cpu_prefill()   //! a CPU row prefills its control text on the CPU by design
     }
-    var rendered : array<string>
-    var ours : array<string>
+    var rendered, ours : array<string>
     render_prompts(cfg.model, texts, cfg.no_greedy ? 0 : cfg.ngen, cfg.ngl > 0, rendered, ours)
     rows |> reserve(length(rows) + length(ours))
     for (pi in range(length(ours))) {

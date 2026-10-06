@@ -62,9 +62,7 @@ def parse_fixture(file : string; var records : array<FuncRecord>; lambdas_only :
 }
 
 
-def fabs_f(x : float) : float {
-    return abs(x)
-}
+def fabs_f(x : float) : float => abs(x)
 
 
 def parse_canonical_fixture(t : T?; var records : array<FuncRecord>) : bool {
@@ -132,8 +130,7 @@ def test_minhash_padding_for_short_input(t : T?) {
 
 [test]
 def test_minhash_deterministic(t : T?) {
-    var toks_a : array<string>
-    var toks_b : array<string>
+    var toks_a, toks_b : array<string>
     toks_a |> reserve(20)
     toks_b |> reserve(20)
     for (i in range(20)) {
@@ -167,8 +164,7 @@ def test_jaccard_identical(t : T?) {
 
 [test]
 def test_jaccard_empty(t : T?) {
-    let empty_a : array<uint64>
-    let empty_b : array<uint64>
+    let empty_a, empty_b : array<uint64>
     t |> equal(jaccard_estimate(empty_a, empty_b), 0.0f)
 }
 
@@ -184,8 +180,7 @@ def test_jaccard_length_mismatch(t : T?) {
 
 [test]
 def test_jaccard_unrelated_low(t : T?) {
-    var toks_a : array<string>
-    var toks_b : array<string>
+    var toks_a, toks_b : array<string>
     toks_a |> reserve(30)
     toks_b |> reserve(30)
     for (i in range(30)) {
@@ -1080,8 +1075,7 @@ def test_baseline_load_canonical_set(t : T?) {
         <- make_record("c", "FN AAA ENDFN", 3, false)]
     write_export(records, path)
 
-    var canonicals : table<string; void?>
-    var members : table<string; void?>
+    var canonicals, members : table<string; void?>
     var err : string
     let ok = load_baseline_canonicals(path, canonicals, members, err)
     t |> success(ok, "load_baseline_canonicals returned true; err={err}")
@@ -1108,8 +1102,7 @@ def test_baseline_load_rejects_bad_schema(t : T?) {
             fw |> fprint(body)
         }
     }
-    var canonicals : table<string; void?>
-    var members : table<string; void?>
+    var canonicals, members : table<string; void?>
     var err : string
     let ok = load_baseline_canonicals(path, canonicals, members, err)
     t |> success(!ok, "load_baseline_canonicals rejects bad schema_version")

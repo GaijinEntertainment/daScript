@@ -77,9 +77,8 @@ def same_color(left, right : TerminalColor const) : bool {
         left.red == right.red && left.green == right.green && left.blue == right.blue)
 }
 
-def default_color(color : TerminalColor const) : bool {
-    return color.kind == TerminalColorKind.default_color
-}
+def default_color(color : TerminalColor const) : bool =>
+    color.kind == TerminalColorKind.default_color
 
 def relevant_cell(cell : TerminalCell const) : bool {
     return (cell.grapheme != " " || cell.width != 1 || cell.attributes != 0 ||

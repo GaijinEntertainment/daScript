@@ -83,9 +83,7 @@ def public jit_class_plus_features(name : string) : string {
 
 //! The baseline class this process builds for - `DAS_JIT_BASELINE` - or "" when the build
 //! targets the running box.
-def public jit_baseline_class() : string {
-    return strip(g_env_jit.jit_baseline)
-}
+def public jit_baseline_class() : string => strip(g_env_jit.jit_baseline)
 
 //! True when a baseline is set and its class carries the feature.
 def public jit_baseline_has(feature : string) : bool {

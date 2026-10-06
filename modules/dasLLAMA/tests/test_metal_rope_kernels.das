@@ -43,11 +43,7 @@ def private rpst_flat_gate(t : T?; var dev, queue; f16dst : bool; hs, nheads, kv
         let halfr = rot / 2
         let npairs_q = qd / 2
         let npairs = (qd + kvd) / 2
-        var inscope qk : array<float>
-        var inscope vsrc : array<float>
-        var inscope bias : array<float>
-        var inscope tcos : array<float>
-        var inscope tsin : array<float>
+        var inscope qk, vsrc, bias, tcos, tsin : array<float>
         qk |> resize(qd + kvd)
         vsrc |> resize(kvd)
         bias |> resize(qd + 2 * kvd)
@@ -130,12 +126,7 @@ def private rpst_h16_gate(t : T?; var dev, queue; hs, nheads, kv_mul, rot : int;
         let kvd = nkvh * hs
         let halfr = rot / 2
         let eps = 1.0e-5
-        var inscope qk : array<float>
-        var inscope vsrc : array<float>
-        var inscope bias : array<float>
-        var inscope w : array<float>
-        var inscope tcos : array<float>
-        var inscope tsin : array<float>
+        var inscope qk, vsrc, bias, w, tcos, tsin : array<float>
         qk |> resize(qd + kvd)
         vsrc |> resize(kvd)
         bias |> resize(qd + 2 * kvd)
@@ -234,11 +225,7 @@ def private rpst_q8_gate(t : T?; var dev, queue; hs, nheads, kv_mul : int; neox,
         let nblk = kvd / 32
         let npairs_q = qd / 2
         let nthreads = npairs_q + 2 * nblk
-        var inscope qk : array<float>
-        var inscope vsrc : array<float>
-        var inscope bias : array<float>
-        var inscope tcos : array<float>
-        var inscope tsin : array<float>
+        var inscope qk, vsrc, bias, tcos, tsin : array<float>
         qk |> resize(qd + kvd)
         vsrc |> resize(kvd)
         bias |> resize(qd + 2 * kvd)
@@ -267,8 +254,7 @@ def private rpst_q8_gate(t : T?; var dev, queue; hs, nheads, kv_mul : int; neox,
                 v_exp[k] += bias[qd + kvd + k]
             }
         }
-        var inscope kwant : array<uint8>
-        var inscope vwant : array<uint8>
+        var inscope kwant, vwant : array<uint8>
         kwant |> resize(nblk * 34)
         vwant |> resize(nblk * 34)
         rope_tab_ref(qk_exp, 0, hs, rot, qd, neox, tcos, tsin)
@@ -316,12 +302,7 @@ def private rpst_tq4_gate(t : T?; var dev, queue; hs, nheads, kv_mul : int; neox
         let kvd = nkvh * hs
         let half = rot > 0 ? rot / 2 : hs / 2   // the rope table row: rot/2 wide on a partial carrier
         let rowb = (kvd / 32) * 18
-        var inscope qk : array<float>
-        var inscope vsrc : array<float>
-        var inscope bias : array<float>
-        var inscope tcos : array<float>
-        var inscope tsin : array<float>
-        var inscope signs : array<float>
+        var inscope qk, vsrc, bias, tcos, tsin, signs : array<float>
         qk |> resize(qd + kvd)
         vsrc |> resize(kvd)
         bias |> resize(qd + 2 * kvd)
@@ -351,8 +332,7 @@ def private rpst_tq4_gate(t : T?; var dev, queue; hs, nheads, kv_mul : int; neox
                 v_exp[k] += bias[qd + kvd + k]
             }
         }
-        var inscope kwant : array<uint8>
-        var inscope vwant : array<uint8>
+        var inscope kwant, vwant : array<uint8>
         kwant |> resize(rowb)
         vwant |> resize(rowb)
         rope_tab_ref(qk_exp, 0, hs, rot, qd, neox, tcos, tsin)
@@ -414,10 +394,7 @@ def private rpst_b_gate(t : T?; var dev, queue; f16dst : bool; hs, nheads, kv_mu
         let lay = 1
         let laystride = 9000
         let asz = 36000
-        var inscope qk : array<float>
-        var inscope bias : array<float>
-        var inscope tcos : array<float>
-        var inscope tsin : array<float>
+        var inscope qk, bias, tcos, tsin : array<float>
         var inscope rt : array<uint4>
         qk |> resize(nb * qstride)
         bias |> resize(qd + 2 * kvd)
@@ -440,8 +417,7 @@ def private rpst_b_gate(t : T?; var dev, queue; f16dst : bool; hs, nheads, kv_mu
         // CPU: per row, bias -> rope q in the fused row, rope k -> the k arena, v third + bias -> the
         // v arena. Whole arenas compare against sentinel-filled expectations — stray writes are reds.
         var inscope want_qk := qk
-        var inscope want_ka : array<float>
-        var inscope want_va : array<float>
+        var inscope want_ka, want_va : array<float>
         want_ka |> resize(asz)
         want_va |> resize(asz)
         for (k in range(asz)) {
@@ -516,10 +492,7 @@ def private rpst_bq8_gate(t : T?; var dev, queue; hs, nheads, kv_mul, nb : int; 
         let lay = 1
         let laystride = 8192
         let asz = 28672
-        var inscope qk : array<float>
-        var inscope bias : array<float>
-        var inscope tcos : array<float>
-        var inscope tsin : array<float>
+        var inscope qk, bias, tcos, tsin : array<float>
         var inscope rt : array<uint4>
         qk |> resize(nb * qstride)
         bias |> resize(qd + 2 * kvd)
@@ -548,8 +521,7 @@ def private rpst_bq8_gate(t : T?; var dev, queue; hs, nheads, kv_mul, nb : int; 
         unsafe {
             for (r in range(nb)) {
                 let qb = r * qstride
-                var inscope krow : array<float>
-                var inscope vrow : array<float>
+                var inscope krow, vrow : array<float>
                 krow |> resize(kvd)
                 vrow |> resize(kvd)
                 for (k in range(kvd)) {
@@ -606,11 +578,7 @@ def private rpst_btq4_gate(t : T?; var dev, queue; hs, nheads, kv_mul, nb : int;
         let lay = 1
         let laystride = 8192
         let asz = 28672
-        var inscope qk : array<float>
-        var inscope bias : array<float>
-        var inscope tcos : array<float>
-        var inscope tsin : array<float>
-        var inscope signs : array<float>
+        var inscope qk, bias, tcos, tsin, signs : array<float>
         var inscope rt : array<uint4>
         qk |> resize(nb * qstride)
         bias |> resize(qd + 2 * kvd)
@@ -640,8 +608,7 @@ def private rpst_btq4_gate(t : T?; var dev, queue; hs, nheads, kv_mul, nb : int;
         unsafe {
             for (r in range(nb)) {
                 let qb = r * qstride
-                var inscope krow : array<float>
-                var inscope vrow : array<float>
+                var inscope krow, vrow : array<float>
                 krow |> resize(kvd)
                 vrow |> resize(kvd)
                 for (k in range(kvd)) {
@@ -699,8 +666,7 @@ def private unsign_gate(t : T?; var dev, queue; hs, nheads, nrows, pad : int) {
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
         let qstride = nheads * hs + pad
-        var inscope yo : array<float>
-        var inscope signs : array<float>
+        var inscope yo, signs : array<float>
         yo |> resize(nrows * qstride)
         tq4_fill_signs(signs, int64(hs))
         for (k in range(nrows * qstride)) {

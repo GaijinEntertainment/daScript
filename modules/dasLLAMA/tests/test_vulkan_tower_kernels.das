@@ -48,9 +48,7 @@ def private fa_bidir_arm(t : T?; khr : bool; hs : int) {
         let rows = TOWER_ROWS
         let qd = nheads * hs
         let kpad = rows + TOWER_SLACK_ROWS
-        var qh : array<float>
-        var kh : array<float>
-        var vh : array<float>
+        var qh, kh, vh : array<float>
         qh |> resize(rows * qd)
         kh |> resize(kpad * qd)
         vh |> resize(kpad * qd)
@@ -203,8 +201,7 @@ def private wdec_fused_rq_shape(t : T?; d, rows, nch : int) {   // nolint:STYLE0
             let pmsp = cp |> in_(pms, 0, 0, B_P)
             let pyp = cp |> in_(py, 0, 0, B_P)
             let BIAS_PAIR = 2   // the pairs' Q8_0 planes: the separate pass at an even index, the fused stamp at the odd one after it; the bias arm's pair is ff-wide
-            var qp : int[8]
-            var sp : int[8]
+            var qp, sp : int[8]
             for (i in range(8)) {
                 let wide = i / 2 == BIAS_PAIR
                 qp[i] = cp |> out_words(int64(wide ? nff : nd), I8_SENTINEL_BITS, B_Q)
@@ -295,8 +292,8 @@ def private wdec_fused_rq_shape(t : T?; d, rows, nch : int) {   // nolint:STYLE0
             }
             for (i in range(8)) {
                 if (i % 2 == 1) {
-                    var qr <- cp |> plane_as(qp[i], type<int8>, int(cp.bytes[qp[i]]))
-                    var sr <- cp |> plane_run(sp[i])
+                    var inscope qr <- cp |> plane_as(qp[i], type<int8>, int(cp.bytes[qp[i]]))
+                    var inscope sr <- cp |> plane_run(sp[i])
                     let moved = mismatch_q8(qr, sr, qs[i], ss[i], 0.0, 0)
                     t |> success(moved > 0, "{names[i / 2]} ({shape}): the poisoned input moves the fused bytes ({moved} differ)")
                     t |> equal(count(qr, $(v) => int(v) == -128), 0, "{names[i / 2]} ({shape}): the poisoned run rewrote every block over the sentinel")
@@ -488,10 +485,7 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
                 xs_poison[0] += 0.5
                 t |> success(mismatch_q8(xq_dev, xs_dev, xq_ref, xs_poison, APPROX_REL, 1) > 0, "tower_clamp_rq: the bar reds a poisoned scale")
                 var q_ref := q
-                var cos_x : array<float>
-                var sin_x : array<float>
-                var cos_y : array<float>
-                var sin_y : array<float>
+                var cos_x, sin_x, cos_y, sin_y : array<float>
                 cos_x |> resize(rows * pairs)
                 sin_x |> resize(rows * pairs)
                 cos_y |> resize(rows * pairs)
@@ -906,8 +900,7 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
                 qph_poison[tail_hi - 1] = uint16(f32_to_f16(0.5))
                 t |> success(count(each(range(tail_lo, tail_hi)), $(i) => qp_poison[i] != 0.0) > 0 && count(each(range(tail_lo, tail_hi)), $(i) => uint(qph_poison[i]) != 0u) > 0, "tower_hpad / hpad16: the tail check reds a poisoned element")
                 check_rows(t, "tower_hunpad compact rows back off the padded panel", qc_dev, q, BAR_EXACT, d_compact, LN_HS)
-                var k_ref : array<float>
-                var k_dev : array<float>
+                var k_ref, k_dev : array<float>
                 k_ref |> resize(rows * d_compact)
                 k_dev |> resize(rows * d_compact)
                 var bad_slots = 0
@@ -1326,9 +1319,7 @@ def test_vkt_tower_padded_attn(t0 : T?) {
                     enc_tower_hunpad_cls(raw, h, s_un, pa_rs, wg_rs)
                 }
                 let att_dev <- cp |> plane_run(attp)
-                var att_ref : array<float>
-                var hp : array<float>
-                var attsc : array<float>
+                var att_ref, hp, attsc : array<float>
                 att_ref |> resize(rows * dc)
                 with_dasllama_jobque_() {
                     attention_bidir(att_ref, q, k, v, hp, attsc, int64(rows), int64(dc), int64(PAT_HEADS), scale)
@@ -1425,9 +1416,7 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
                 let x0_dev <- cp |> plane_run(x0p)
                 let xb0_dev <- cp |> plane_as(xb0p, type<uint>, nd)
                 let g_dev <- [for (hv in gh_dev); f16_to_f32(uint(hv))]
-                var att_ref : array<float>
-                var hpp : array<float>
-                var attsc : array<float>
+                var att_ref, hpp, attsc : array<float>
                 att_ref |> resize(rows * dc)
                 with_dasllama_jobque_() {
                     attention_bidir_windows(att_ref, q, k, v, hpp, attsc, win_lo, int64(dc), int64(WIN_HEADS), scale)
@@ -1649,8 +1638,7 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
                     fs_want[gid] = fs_src[(tt * fs_w + rem % fs_w) * fs_c + rem / fs_w]
                 }
                 check_rows(t, "tower_feat_shuffle [time][ch][freq] rows off the [time][freq][ch] image", fs_dev, fs_want, BAR_EXACT, fs_w * fs_c)
-                var gq_want : array<float>
-                var gp_want : array<float>
+                var gq_want, gp_want : array<float>
                 gq_want |> resize(rows * hs)
                 gp_want |> resize(rows * hs)
                 for (r in range(rows)) {
@@ -1816,8 +1804,7 @@ def test_vkt_tower_front_mel(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                 let dw_dev <- cp |> plane_run(dwyp)
                 let dw_idle <- cp |> plane_as(dwyp, type<uint>, dw_lanes - dw_out, dw_out)
                 let rel_dev <- cp |> plane_run(relp)
-                var mag_want : array<float>
-                var pow_want : array<float>
+                var mag_want, pow_want : array<float>
                 mag_want |> resize(n_pw)
                 pow_want |> resize(n_pw)
                 for (gid in range(n_pw)) {
@@ -1835,9 +1822,7 @@ def test_vkt_tower_front_mel(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                 check_rows(t, "tower_spec_dft (magnitude) frames' spectra vs the double DFT", mag_dev, mag_want, BAR_APPROX, MEL_NBINS)
                 check_rows(t, "tower_spec_dft (power) vs re^2 + im^2", pow_dev, pow_want, BAR_APPROX, MEL_NBINS)
                 t |> success(!approx(pow_dev[1], mag_want[1]), "tower_spec_dft control: the power arm is not the magnitude")
-                var g4a_want : array<float>
-                var cn_want : array<float>
-                var wh_want : array<float>
+                var g4a_want, cn_want, wh_want : array<float>
                 g4a_want |> resize(n_mel)
                 cn_want |> resize(n_mel)
                 wh_want |> resize(n_mel)

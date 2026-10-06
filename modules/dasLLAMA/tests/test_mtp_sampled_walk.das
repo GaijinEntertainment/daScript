@@ -30,9 +30,7 @@ def private set_row(var s : Session; row : int64; vals : array<float>) {
     }
 }
 
-def private same_rng(a, b : int4) : bool {
-    return a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w
-}
+def private same_rng(a, b : int4) : bool => a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w
 
 // plain sampled decode over the same rows: the emitted tokens, and where the drafts stop matching
 def private plain_sampled_decode(var r : Session; params : SamplingParams; drafts : array<int64>; var accepted : int64&) : int64 {

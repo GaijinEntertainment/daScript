@@ -18,9 +18,7 @@ def fill(var a : array<float>; count : int) {
 // Correctness gate: a variant must match the production kernel before its timing means anything.
 // (float4 reorders the summation, so results differ in the low bits — compare with a tolerance.)
 def check_same(b : B?; w, x : array<float>; n, d : int) {
-    var yn : array<float>
-    var yf : array<float>
-    var yv : array<float>
+    var yn, yf, yv : array<float>
     yn |> resize(d)
     yf |> resize(d)
     yv |> resize(d)
@@ -42,9 +40,7 @@ def bench_matmul(b : B?) {   // nolint:STYLE038 — flat bench driver: one scope
     }
     // stories15M attention/FFN projection — W is 288 x 288.
     {
-        var w : array<float>
-        var x : array<float>
-        var y : array<float>
+        var w, x, y : array<float>
         fill(w, 288 * 288)
         fill(x, 288)
         y |> resize(288)
@@ -61,9 +57,7 @@ def bench_matmul(b : B?) {   // nolint:STYLE038 — flat bench driver: one scope
     }
     // stories15M classifier head — W is 32000 x 288 (the heaviest single matmul).
     {
-        var w : array<float>
-        var x : array<float>
-        var y : array<float>
+        var w, x, y : array<float>
         fill(w, 32000 * 288)
         fill(x, 288)
         y |> resize(32000)
@@ -154,10 +148,7 @@ def bench_matmul(b : B?) {   // nolint:STYLE038 — flat bench driver: one scope
 // Q4 correctness gate: dequant the weights, run the fp32 kernel on them, compare to each Q4 kernel.
 // Algebraically identical (scale factors out of each block), so the gap is fp-order only.
 def check_q4(b : B?; qt : Q4Tensor; wdeq, x : array<float>; n, d : int) {
-    var yref : array<float>
-    var ya : array<float>
-    var yb : array<float>
-    var yc : array<float>
+    var yref, ya, yb, yc : array<float>
     yref |> resize(d)
     ya |> resize(d)
     yb |> resize(d)
@@ -177,8 +168,7 @@ def check_q4(b : B?; qt : Q4Tensor; wdeq, x : array<float>; n, d : int) {
 // BOTH dequantized weights and the dequantized activation. matmul_q8q8 computes the same block sums
 // (exact int dot * the two scales), so the gap is fp-order only.
 def check_q8q8(b : B?; qt : Q8Tensor; wdeq : array<float>; xq : array<int8>; xs : array<float>; xdeq : array<float>; n, d : int) {
-    var yref : array<float>
-    var ya : array<float>
+    var yref, ya : array<float>
     yref |> resize(d)
     ya |> resize(d)
     matmul_llvm_vec(yref, wdeq, xdeq, int64(n), int64(d))
@@ -193,11 +183,7 @@ def check_q8q8(b : B?; qt : Q8Tensor; wdeq : array<float>; xq : array<int8>; xs 
 // Q8 correctness gate: dequant the weights, run the fp32 kernel on them, compare to matmul_q8.
 // They are algebraically identical (scale factors out of each block), so the gap is fp-order only.
 def check_q8(b : B?; qt : Q8Tensor; wdeq, x : array<float>; n, d : int) {
-    var yref : array<float>
-    var ya : array<float>
-    var yb : array<float>
-    var yc : array<float>
-    var yd : array<float>
+    var yref, ya, yb, yc, yd : array<float>
     yref |> resize(d)
     ya |> resize(d)
     yb |> resize(d)

@@ -24,9 +24,7 @@ require daslib/json_boost public
 let FEATURE = "modules/dasImgui/examples/features/macos_chords.das"
 let GUARD_SEC = 15.0f
 
-def private probe(app : ImguiApp) : JsonValue? {
-    return post_command(app, "macos_chords_state", null)
-}
+def private probe(app : ImguiApp) : JsonValue? => post_command(app, "macos_chords_state", null)
 
 [test]
 def test_macos_chords(t : T?) {

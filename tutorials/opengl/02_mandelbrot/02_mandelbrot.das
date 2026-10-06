@@ -41,9 +41,7 @@ let ESCAPE2 = 65536.0       // B*B with the IQ bailout radius B = 256
 let AA = 4                  // 4x4 supersampling: 16 colour samples per pixel
 
 // complex multiply -- (a.x + i a.y) * (b.x + i b.y)
-def private cmul(a, b : float2) : float2 {
-    return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x)
-}
+def private cmul(a, b : float2) : float2 => float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x)
 
 // IQ's cheap interior tests: skip iteration inside the main cardioid and the
 // period-2 bulb.

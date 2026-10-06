@@ -110,47 +110,26 @@ class TableAdapter : SourceAdapter {
     srcName  : string
     elemType : TypeDeclPtr
     lane     : TableLane
-    def override name_prefix() : string {
-        return "tab_"
-    }
-    def override supports_direct_return() : bool {
-        return true
-    }
-    def override can_reserve_by_length() : bool {
-        return true
-    }
-    def override const can_join() : bool {
-        return true
-    }
-    def override const can_group_by() : bool {
-        return true
-    }
-    def override emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
-        return emit_array_join(c, ctx, at)
-    }
+    def override name_prefix() : string => "tab_"
+    def override supports_direct_return() : bool => true
+    def override can_reserve_by_length() : bool => true
+    def override const can_join() : bool => true
+    def override const can_group_by() : bool => true
+    def override emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? =>
+        emit_array_join(c, ctx, at)
     def override build_group_by_adapter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : SourceAdapter? {
         if (c.single |> key_exists("upstream_join")) return null
         return new TableAdapter(tabExpr = clone_expression(tabExpr), srcName = qn("tsrc", at),
                                 elemType = clone_type(elemType), lane = lane)
     }
-    def override loop_source_expr() : Expression? {
-        return tabExpr
-    }
-    def override loop_source_name() : string {
-        return srcName
-    }
-    def override bind_name(at : LineInfo) : string {
-        return qn("it", at)
-    }
-    def override element_type() : TypeDeclPtr {
-        return clone_type(elemType)
-    }
-    def override count_shortcut(opName : string; at : LineInfo) : Expression? {
-        return emit_length_shortcut(opName, tabExpr, srcName, at)
-    }
-    def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
-        return build_table_walk(lane, srcName, bind_name(at), body, null, at)
-    }
+    def override loop_source_expr() : Expression? => tabExpr
+    def override loop_source_name() : string => srcName
+    def override bind_name(at : LineInfo) : string => qn("it", at)
+    def override element_type() : TypeDeclPtr => clone_type(elemType)
+    def override count_shortcut(opName : string; at : LineInfo) : Expression? =>
+        emit_length_shortcut(opName, tabExpr, srcName, at)
+    def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? =>
+        build_table_walk(lane, srcName, bind_name(at), body, null, at)
     def override emit_distinct_take_loop(bindName : string; takenName : string; takeLimName : string; var perElement : Expression?; at : LineInfo) : Expression? {
         var breakGuard = qmacro($i(takenName) >= $i(takeLimName))
         return build_table_walk(lane, srcName, bindName, perElement, breakGuard, at)
@@ -247,8 +226,7 @@ def try_table_point_lookup(var calls : array<tuple<ExprCall?; LinqCall?>>; var a
     let termName = calls[n - 1]._1.name
     let termArgs = length(termCall.arguments)
     var selCall : ExprCall?
-    var keyX : Expression?
-    var residual : Expression?
+    var keyX, residual : Expression?
     let kName = qn("plk_k", at)
     let dName = qn("plk_d", at)
     let pName = qn("plk_p", at)

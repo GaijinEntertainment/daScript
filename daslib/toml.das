@@ -69,9 +69,7 @@ let private {
     Tok_error    = typeinfo variant_index<_error>(type<TomlToken>)
 }
 
-def private is_bare_char(c : int) : bool {
-    return is_alpha(c) || is_number(c) || c == '-' || c == '_'
-}
+def private is_bare_char(c : int) : bool => is_alpha(c) || is_number(c) || c == '-' || c == '_'
 
 def private hex_value(c : int) : int {
     if (is_number(c)) return c - '0'
@@ -1001,7 +999,7 @@ def private parse_inline_table(var ts : TomlTokenStream&; var err : string&) : J
         return root
     }
     while (true) {
-        var path : array<string>
+        var inscope path : array<string>
         var pline, prow : int
         if (!parse_key_path(ts, path, err, pline, prow)) return null
         var tk : TomlTokenAt
@@ -1072,9 +1070,7 @@ struct private TomlState {
     inline_closed : table<uint64>
 }
 
-def private jvkey(p : JsonValue?) : uint64 {
-    return intptr(unsafe(reinterpret<void?>(p)))
-}
+def private jvkey(p : JsonValue?) : uint64 => intptr(unsafe(reinterpret<void?>(p)))
 
 def private mark_inline_subtree(var closed : table<uint64>&; v : JsonValue?) : void {
     //! Recursively marks every `_object` JsonValue in `v`'s subtree as inline-closed. Caller-supplied target table lets us reuse the walker for both top-level state (apply_keyval) and inline-table-internal tracking (parse_inline_table).
@@ -1188,7 +1184,7 @@ def private apply_keyval(var state : TomlState&; var current : JsonValue?; path 
         }
         holder = ensure_table(holder, path[i], err, at_line, at_row)
         if (holder == null) return false
-        var prefix : array<string>
+        var inscope prefix : array<string>
         prefix |> reserve(length(state.current_path) + i + 1)
         prefix |> push_from(state.current_path)
         for (j in range(i + 1)) {
@@ -1240,7 +1236,7 @@ def public read_toml(text : string implicit; var error : string&) : JsonValue? {
                 is_aot = true
                 ts.has_ahead = false
             }
-            var path : array<string>
+            var inscope path : array<string>
             var pline, prow : int
             if (!parse_key_path(ts, path, error, pline, prow)) return null
             var tk : TomlTokenAt
@@ -1279,7 +1275,7 @@ def public read_toml(text : string implicit; var error : string&) : JsonValue? {
             }
             continue
         }
-        var path : array<string>
+        var inscope path : array<string>
         var pline, prow : int
         if (!parse_key_path(ts, path, error, pline, prow)) return null
         var tk : TomlTokenAt

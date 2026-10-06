@@ -557,13 +557,9 @@ class CliEngine : ReplEngine {
         chat <- open_chat(m, cr, st.turns)
     }
 
-    def override last_stats : string {
-        return stats_line_text
-    }
+    def override last_stats : string => stats_line_text
 
-    def override can_speak : bool {
-        return sp.armed
-    }
+    def override can_speak : bool => sp.armed
 }
 
 //! The audio tower a chat arms: the flag, else the served config's audio mmproj, else its image mmproj when that

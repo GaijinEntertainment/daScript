@@ -30,12 +30,8 @@ typedef PatternTransform = lambda<(var pat : Pattern) : Pattern>
 // (`gain(0.5)`), and doubles (`fast(2.0lf)`) uniformly. The PERF020 suppression
 // is centralized here: `double(n)`/`float(n)` is a no-op for the same-type union
 // member, but is required to cover the other two.
-def private numd(n : int | float | double) : double {
-    return double(n)
-}
-def private numf(n : int | float | double) : float {
-    return float(n)
-}
+def private numd(n : int | float | double) : double => double(n)
+def private numf(n : int | float | double) : float => float(n)
 
 // ─── Constructors ───
 
@@ -168,7 +164,7 @@ def stack(var pats : array<Pattern>) : Pattern {
     return @capture(<- pats) (span : TimeSpan) : array<Hap> {
         var result : array<Hap>
         for (pat in pats) {
-            var haps <- pat(span)
+            var inscope haps <- pat(span)
             result |> push_from(haps)
             delete haps
         }
@@ -193,7 +189,7 @@ def cat(var pats : array<Pattern>) : Pattern {
             //! pattern idx sees its own k-th cycle at cycle idx + k*N: a nested alternation advances with the outer clock
             let shift = cycle - double((int(cycle) - idx) / cn)
             let innerSpan = TimeSpan(start = sub.start - shift, stop = sub.stop - shift)
-            var haps <- invoke(pats[idx], innerSpan)
+            var inscope haps <- invoke(pats[idx], innerSpan)
             result |> reserve(length(result) + length(haps))
             for (h in haps) {
                 result |> push(Hap(
@@ -240,7 +236,7 @@ def weighted_fastcat(var pats : array<Pattern>; var weights : array<float>) : Pa
                 if (elemStop > relStart && elemStart < relStop) {
                     let qStart = min((max(relStart, elemStart) - elemStart) / w, 1.0lf)
                     let qStop = min((min(relStop, elemStop) - elemStart) / w, 1.0lf)
-                    var haps <- invoke(pats[i], TimeSpan(start = qStart, stop = qStop))
+                    var inscope haps <- invoke(pats[i], TimeSpan(start = qStart, stop = qStop))
                     result |> reserve(length(result) + length(haps))
                     for (h in haps) {
                         result |> push(Hap(
@@ -963,7 +959,7 @@ def rev(var pat : Pattern) : Pattern {
             let mirStart = 1.0lf - relStop
             let mirStop = 1.0lf - relStart
             let mirSpan = TimeSpan(start = mirStart + cycle, stop = mirStop + cycle)
-            var haps <- pat(mirSpan)
+            var inscope haps <- pat(mirSpan)
             result |> reserve(length(result) + length(haps))
             for (h in haps) {
                 let hCycle = floor(h.whole.start)
@@ -1130,7 +1126,7 @@ def innerJoin(var param_pat : Pattern; var fn : lambda<(val : float) : Pattern>)
         for (oh in outer_haps) {
             if (!oh.has_whole) continue
             var inner_pat <- fn(oh.value.note) // nolint:LINT003
-            var inner_haps <- inner_pat(span)
+            var inscope inner_haps <- inner_pat(span)
             for (ih in inner_haps) {
                 let pStart = max(ih.part.start, oh.part.start)
                 let pStop = min(ih.part.stop, oh.part.stop)
@@ -1163,7 +1159,7 @@ def slow(var pat : Pattern; var factor_pat : Pattern) : Pattern {
             if (factor == 0.0lf) continue
             let n = 1.0lf / factor
             let innerSpan = TimeSpan(start = span.start * n, stop = span.stop * n)
-            var haps <- pat(innerSpan)
+            var inscope haps <- pat(innerSpan)
             for (h in haps) {
                 let p = TimeSpan(start = h.part.start / n, stop = h.part.stop / n)
                 let pStart = max(p.start, oh.part.start)
@@ -1195,7 +1191,7 @@ def fast(var pat : Pattern; var factor_pat : Pattern) : Pattern {
             let n = double(oh.value.note)
             if (n == 0.0lf) continue
             let innerSpan = TimeSpan(start = span.start * n, stop = span.stop * n)
-            var haps <- pat(innerSpan)
+            var inscope haps <- pat(innerSpan)
             for (h in haps) {
                 let p = TimeSpan(start = h.part.start / n, stop = h.part.stop / n)
                 let pStart = max(p.start, oh.part.start)
@@ -1309,7 +1305,7 @@ def combineWith(var pat : Pattern; var val_pat : Pattern; var fn : lambda<(e : E
             // sample the value pattern at a tiny window around the hap's onset
             let onset = h.has_whole ? h.whole.start : h.part.start
             let sampleSpan = TimeSpan(start = onset, stop = onset + 0.001lf)
-            var val_haps <- val_pat(sampleSpan)
+            var inscope val_haps <- val_pat(sampleSpan)
             if (!empty(val_haps)) {
                 let sampled = val_haps[0].value.note
                 result |> push(Hap(
@@ -1686,7 +1682,7 @@ def combineWithStr(var pat : Pattern; var val_pat : Pattern; var fn : lambda<(e 
         for (h in haps) {
             let onset = h.has_whole ? h.whole.start : h.part.start
             let sampleSpan = TimeSpan(start = onset, stop = onset + 0.001lf)
-            var val_haps <- val_pat(sampleSpan)
+            var inscope val_haps <- val_pat(sampleSpan)
             if (!empty(val_haps)) {
                 let sampled = val_haps[0].value.s
                 result |> push(Hap(
@@ -1787,7 +1783,7 @@ def palindrome(var pat : Pattern) : Pattern {
         for (sub in split) {
             let cycle = int(sameCycle(sub.start))
             if (cycle % 2 == 0) {
-                var haps <- pat(sub)
+                var inscope haps <- pat(sub)
                 result |> push_from(haps)
                 delete haps
             } else {
@@ -1798,7 +1794,7 @@ def palindrome(var pat : Pattern) : Pattern {
                 let mirStart = 1.0lf - relStop
                 let mirStop = 1.0lf - relStart
                 let mirSpan = TimeSpan(start = mirStart + cyc, stop = mirStop + cyc)
-                var haps <- pat(mirSpan)
+                var inscope haps <- pat(mirSpan)
                 result |> reserve(length(result) + length(haps))
                 for (h in haps) {
                     let hCycle = floor(h.whole.start)
@@ -1858,7 +1854,7 @@ def echo(var pat : Pattern; times : int; time : int | float | double; feedback :
             let g = gains[layer]
             // Echoes play LATER than original: query pat at (span - off), emit at (hap + off)
             let innerSpan = TimeSpan(start = span.start - off, stop = span.stop - off)
-            var haps <- pat(innerSpan)
+            var inscope haps <- pat(innerSpan)
             result |> reserve(length(result) + length(haps))
             for (h in haps) {
                 var ev = h.value
@@ -1930,7 +1926,7 @@ def iter(var pat : Pattern; n : int) : Pattern {
                 shift ++
             }
             let innerSpan = TimeSpan(start = sub.start + shift, stop = sub.stop + shift)
-            var haps <- pat(innerSpan)
+            var inscope haps <- pat(innerSpan)
             result |> reserve(length(result) + length(haps))
             for (h in haps) {
                 result |> push(Hap(
@@ -1960,7 +1956,7 @@ def iterBack(var pat : Pattern; n : int) : Pattern {
                 shift --
             }
             let innerSpan = TimeSpan(start = sub.start + shift, stop = sub.stop + shift)
-            var haps <- pat(innerSpan)
+            var inscope haps <- pat(innerSpan)
             result |> reserve(length(result) + length(haps))
             for (h in haps) {
                 result |> push(Hap(
@@ -1987,11 +1983,11 @@ def when_cycle(var pat : Pattern; var cond : lambda<(cycle : int) : bool>; trans
         for (sub in split) {
             let cycle = int(sameCycle(sub.start))
             if (cond(cycle)) {
-                var haps <- transformed(sub)
+                var inscope haps <- transformed(sub)
                 result |> push_from(haps)
                 delete haps
             } else {
-                var haps <- pat(sub)
+                var inscope haps <- pat(sub)
                 result |> push_from(haps)
                 delete haps
             }
@@ -2027,7 +2023,7 @@ def linger(var pat : Pattern; t : int | float | double) : Pattern {
                         start = cycle + (overlapStart - chunkStart),
                         stop = cycle + (overlapStop - chunkStart)
                     )
-                    var haps <- pat(innerSpan)
+                    var inscope haps <- pat(innerSpan)
                     result |> reserve(length(result) + length(haps))
                     for (h in haps) {
                         // shift events by chunkStart so they land in the output iteration
@@ -2072,7 +2068,7 @@ def compress(var pat : Pattern; b, e : int | float | double) : Pattern {
             // map [winStart,winStop] → [cycle,cycle+1]
             let innerStart = cycle + (overStart - winStart) / dur
             let innerStop = cycle + (overStop - winStart) / dur
-            var haps <- pat(TimeSpan(start = innerStart, stop = innerStop))
+            var inscope haps <- pat(TimeSpan(start = innerStart, stop = innerStop))
             result |> reserve(length(result) + length(haps))
             for (h in haps) {
                 // map back: [cycle,cycle+1] → [winStart,winStop]
@@ -2119,11 +2115,11 @@ def chunk(var pat : Pattern; n : int; transform : PatternTransform) : Pattern {
                 if (overStart >= overStop) continue
                 let querySpan = TimeSpan(start = overStart, stop = overStop)
                 if (i == activeChunk) {
-                    var haps <- transformed(querySpan)
+                    var inscope haps <- transformed(querySpan)
                     result |> push_from(haps)
                     delete haps
                 } else {
-                    var haps <- pat(querySpan)
+                    var inscope haps <- pat(querySpan)
                     result |> push_from(haps)
                     delete haps
                 }
@@ -2216,7 +2212,7 @@ def slice(var pat : Pattern; n : int; var idx_pat : Pattern) : Pattern {
         result |> reserve(length(ihaps))
         for (ih in ihaps) {
             let onset = ih.has_whole ? ih.whole.start : ih.part.start
-            var shaps <- pat(TimeSpan(start = onset, stop = onset + 0.001lf))
+            var inscope shaps <- pat(TimeSpan(start = onset, stop = onset + 0.001lf))
             var ev = !empty(shaps) ? shaps[0].value : ih.value
             delete shaps
             // wrap the slice index into [0, n-1] so out-of-range values cycle (live-coding: never crash)
@@ -2257,7 +2253,7 @@ def struct_(var pat : Pattern; var bool_pat : Pattern) : Pattern {
         for (mh in mask_haps) {
             if (!mh.has_whole || !truthy(mh.value)) continue
             // query inner pattern at mask hap's whole
-            var inner_haps <- pat(mh.whole)
+            var inscope inner_haps <- pat(mh.whole)
             for (ih in inner_haps) {
                 let pStart = max(ih.part.start, mh.part.start)
                 let pStop = min(ih.part.stop, mh.part.stop)
@@ -2285,7 +2281,7 @@ def mask(var pat : Pattern; var mask_pat : Pattern) : Pattern {
         var haps <- pat(span)
         for (h in haps) {
             if (!h.has_whole) continue
-            var mask_haps <- mask_pat(h.whole)
+            var inscope mask_haps <- mask_pat(h.whole)
             var keep = false
             for (mh in mask_haps) {
                 if (truthy(mh.value)) {
@@ -2313,7 +2309,7 @@ def choose(var pats : array<Pattern>) : Pattern {
         for (sub in split) {
             let cycle = int(sameCycle(sub.start))
             let idx = int(strudel_hash32(double(cycle), 0) % uint(cn))
-            var haps <- invoke(pats[idx], sub)
+            var inscope haps <- invoke(pats[idx], sub)
             result |> push_from(haps)
             delete haps
         }
@@ -2345,7 +2341,7 @@ def wchoose(var pats : array<Pattern>; var weights : array<float>) : Pattern {
                     break
                 }
             }
-            var haps <- invoke(pats[idx], sub)
+            var inscope haps <- invoke(pats[idx], sub)
             result |> push_from(haps)
             delete haps
         }
@@ -2409,7 +2405,7 @@ def shuffle(var pat : Pattern; n : int) : Pattern {
         for (sub in split) {
             let cycle = int(sameCycle(sub.start))
             // Fisher-Yates shuffle using cycle as seed
-            var perm : array<int>
+            var inscope perm : array<int>
             perm |> resize(n)
             for (i in range(n)) {
                 perm[i] = i
@@ -2432,7 +2428,7 @@ def shuffle(var pat : Pattern; n : int) : Pattern {
                 // query the perm[i]-th subdivision
                 let srcStart = cyc + double(perm[i]) / nf
                 let srcStop = cyc + double(perm[i] + 1) / nf
-                var haps <- pat(TimeSpan(start = srcStart, stop = srcStop))
+                var inscope haps <- pat(TimeSpan(start = srcStart, stop = srcStop))
                 result |> reserve(length(result) + length(haps))
                 for (h in haps) {
                     // remap to destination slot
@@ -2470,7 +2466,7 @@ def scramble(var pat : Pattern; n : int) : Pattern {
                 let srcIdx = int(strudel_hash32(double(cycle), i) % uint(n))
                 let srcStart = cyc + double(srcIdx) / nf
                 let srcStop = cyc + double(srcIdx + 1) / nf
-                var haps <- pat(TimeSpan(start = srcStart, stop = srcStop))
+                var inscope haps <- pat(TimeSpan(start = srcStart, stop = srcStop))
                 result |> reserve(length(result) + length(haps))
                 for (h in haps) {
                     let shift = slotStart - srcStart

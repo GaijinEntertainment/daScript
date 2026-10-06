@@ -17,8 +17,7 @@ require math
 // byte-based), then finish; strip like split_reasoning_ so both paths compare equal.
 def private stream_split(tmpl : ChatTemplate; reply : string; chunk : int) : ThinkSplit {
     var ts = make_think_stream_(tmpl, true)
-    var rp : array<string>
-    var cp : array<string>
+    var rp, cp : array<string>
     peek_data(reply) $(d) {
         var pos = 0
         let n = length(d)
@@ -213,9 +212,8 @@ def test_split_ff_vt_whitespace(t : T?) {
 let CH_OPEN = 100l    // the guarded ids are opaque to the guard; the pieces carry the marker text
 let CH_CLOSE = 101l
 
-def private feed_stops(var g : NothinkStopGuard; steps : array<tuple<id : int64; piece : string>>) : array<bool> {
-    return <- [for (s in steps); nothink_stop_here_(g, s.id, s.piece)]
-}
+def private feed_stops(var g : NothinkStopGuard; steps : array<tuple<id : int64; piece : string>>) : array<bool> =>
+    <- [for (s in steps); nothink_stop_here_(g, s.id, s.piece)]
 
 [test]
 def test_nothink_stop_guard(t : T?) {

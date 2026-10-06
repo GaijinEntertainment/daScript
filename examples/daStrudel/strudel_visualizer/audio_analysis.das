@@ -41,8 +41,7 @@ def audio_analysis_feed(var aa : AudioAnalysis; samples : array<float>) {
 }
 
 def audio_analysis_update_spectrum(var aa : AudioAnalysis) {
-    var re : array<float>
-    var im : array<float>
+    var re, im : array<float>
     re |> resize(FFT_SIZE)
     im |> resize(FFT_SIZE)
     for (i in range(FFT_SIZE)) {

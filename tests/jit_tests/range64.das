@@ -2,34 +2,22 @@ options gen2
 require dastest/testing_boost
 
 [sideeffects]
-def test_const_r64 {
-    return range64(1, 2)
-}
+def test_const_r64 => range64(1, 2)
 
 [sideeffects]
-def test_const_ur64 {
-    return urange64(3, 4)
-}
+def test_const_ur64 => urange64(3, 4)
 
 [sideeffects]
-def test_make_r64_from_int(a : int) {
-    return range64(a)
-}
+def test_make_r64_from_int(a : int) => range64(a)
 
 [sideeffects]
-def test_make_r64_from_2xr64(a, b : int64) {
-    return range64(a, b)
-}
+def test_make_r64_from_2xr64(a, b : int64) => range64(a, b)
 
 [sideeffects]
-def test_make_r64_from_2xfloat(a, b : float) {
-    return range64(a, b)
-}
+def test_make_r64_from_2xfloat(a, b : float) => range64(a, b)
 
 [sideeffects]
-def test_r64_yx(r : range64) : range64 {
-    return r.yx
-}
+def test_r64_yx(r : range64) : range64 => r.yx
 
 [sideeffects]
 def test_for_range64 {

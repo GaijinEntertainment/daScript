@@ -104,19 +104,13 @@ def arch() : string {
 }
 
 [export_c]
-def n_layers() : int {
-    return g_loaded ? int(g_model.config.n_layers) : 0
-}
+def n_layers() : int => g_loaded ? int(g_model.config.n_layers) : 0
 
 [export_c]
-def n_vocab() : int {
-    return g_loaded ? int(g_model.config.vocab_size) : 0
-}
+def n_vocab() : int => g_loaded ? int(g_model.config.vocab_size) : 0
 
 [export_c]
-def context_size() : int {
-    return g_loaded ? int(g_model.config.seq_len) : 0
-}
+def context_size() : int => g_loaded ? int(g_model.config.seq_len) : 0
 
 [export_c]
 def set_sampling(temp : float; top_k : int; seed : int) {
@@ -318,9 +312,8 @@ def tts_speed() : double {
 }
 
 //! the engine's own stats counters are filled by the one-call generate, which a pull loop never runs
-def private per_second(tokens, elapsed_us : int64) : double {
-    return elapsed_us > 0l ? double(tokens) * 1.0e6lf / double(elapsed_us) : 0.0lf
-}
+def private per_second(tokens, elapsed_us : int64) : double =>
+    elapsed_us > 0l ? double(tokens) * 1.0e6lf / double(elapsed_us) : 0.0lf
 
 [export_c]
 def prefill_tps() : double {

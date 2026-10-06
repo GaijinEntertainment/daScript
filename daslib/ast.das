@@ -75,35 +75,25 @@ def for_each_gc_expression(mod : Module?; blk : block<(var value : ExpressionPtr
 
 
 [generic]
-def describe(decl : TypeDecl?; extra, contracts, modules : bool = true) {
-    return describe_typedecl(decl, extra, contracts, modules)
-}
+def describe(decl : TypeDecl?; extra, contracts, modules : bool = true) =>
+    describe_typedecl(decl, extra, contracts, modules)
 
 [generic]
-def describe_cpp(decl : TypeDecl?; substitureRef, skipRef, skipConst : bool = false; redundantConst : bool = true; chooseSmartPtr : bool = true) {
-    return describe_typedecl_cpp(decl, substitureRef, skipRef, skipConst, redundantConst, chooseSmartPtr)
-}
+def describe_cpp(decl : TypeDecl?; substitureRef, skipRef, skipConst : bool = false; redundantConst : bool = true; chooseSmartPtr : bool = true) =>
+    describe_typedecl_cpp(decl, substitureRef, skipRef, skipConst, redundantConst, chooseSmartPtr)
 
 [generic]
-def describe(expr : Expression?) {
-    return describe_expression(expr)
-}
+def describe(expr : Expression?) => describe_expression(expr)
 
 [generic]
-def describe(expr : FunctionPtr) {
-    return describe_function(expr)
-}
+def describe(expr : FunctionPtr) => describe_function(expr)
 
 [generic]
-def describe(prog : smart_ptr<Program>) {
-    return describe_program(prog)
-}
+def describe(prog : smart_ptr<Program>) => describe_program(prog)
 
 
 [generic]
-def get_mangled_name(decl : ExprBlock?) {
-    return get_mangled_name(unsafe(reinterpret<ExprBlock?>(decl)))
-}
+def get_mangled_name(decl : ExprBlock?) => get_mangled_name(unsafe(reinterpret<ExprBlock?>(decl)))
 
 [macro_interface]
 class AstFunctionAnnotation {
@@ -906,11 +896,7 @@ def find_module(prog : smart_ptr<Program>; name : string) : Module? {
 }
 
 [generic]
-def find_module(name : string) : Module? {
-    return find_module(this_program(), name)
-}
+def find_module(name : string) : Module? => find_module(this_program(), name)
 
 [generic]
-def find_compiling_module(name : string) : Module? {
-    return find_module(compiling_program(), name)
-}
+def find_compiling_module(name : string) : Module? => find_module(compiling_program(), name)

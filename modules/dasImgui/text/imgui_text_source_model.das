@@ -113,9 +113,7 @@ def private ascii_markdown_delimiter(b : int) : bool {
         || b == '(' || b == ')' || b == '!')
 }
 
-def private ascii_digit_byte(b : int) : bool {
-    return b >= '0' && b <= '9' // nolint:PERF014
-}
+def private ascii_digit_byte(b : int) : bool => b >= '0' && b <= '9'  // nolint:PERF014
 
 def private push_source_span(var document : TextSourceDocument;
                              start_byte, end_byte : int; marker : bool) {

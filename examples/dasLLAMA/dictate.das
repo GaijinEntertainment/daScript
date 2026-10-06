@@ -24,9 +24,7 @@ let RATE = 16000
 let MAX_SECONDS_DEFAULT = 30.0
 let END_SILENCE_S = 1.5    // stop the take after this much trailing silence past the last utterance
 
-def vad_bin_default() : string {
-    return "{get_das_root()}/modules/dasLLAMA/models/silero_vad.bin"
-}
+def vad_bin_default() : string => "{get_das_root()}/modules/dasLLAMA/models/silero_vad.bin"
 
 // slice [s,e) out of the running take and transcribe it once
 def transcribe_slice(var m : AsrModel; lang : string; take : array<float>; s, e : int64) : string {

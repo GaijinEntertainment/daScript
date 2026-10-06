@@ -7,9 +7,8 @@ require _test_common
 require daslib/clargs
 require strings
 
-def private fresh_result(status : FileStatus = FileStatus.ok) : FileResult {
-    return <- FileResult(path = "core/x.das", id = "core/x", group = "core", lane = "interp", status = status)
-}
+def private fresh_result(status : FileStatus = FileStatus.ok) : FileResult =>
+    <- FileResult(path = "core/x.das", id = "core/x", group = "core", lane = "interp", status = status)
 
 def private parsed(lines : array<string>; report : string; exit_code : int; status : FileStatus = FileStatus.ok) : FileResult {
     var res <- fresh_result(status)
@@ -60,9 +59,8 @@ def test_classify_run_output(t : T?) {
     }
 }
 
-def private bench_file() : BenchFile {
-    return BenchFile(path = "x/y.das", id = "x/y", group = "x", timeout_seconds = 2)
-}
+def private bench_file() : BenchFile =>
+    BenchFile(path = "x/y.das", id = "x/y", group = "x", timeout_seconds = 2)
 
 [test]
 def test_run_bench_file(t : T?) {

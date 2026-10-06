@@ -29,25 +29,15 @@ struct Vec2 {
     y : float
 }
 
-def operator +(a, b : Vec2) : Vec2 {
-    return Vec2(x = a.x + b.x, y = a.y + b.y)
-}
+def operator +(a, b : Vec2) : Vec2 => Vec2(x = a.x + b.x, y = a.y + b.y)
 
-def operator -(a, b : Vec2) : Vec2 {
-    return Vec2(x = a.x - b.x, y = a.y - b.y)
-}
+def operator -(a, b : Vec2) : Vec2 => Vec2(x = a.x - b.x, y = a.y - b.y)
 
-def operator *(a : Vec2; s : float) : Vec2 {
-    return Vec2(x = a.x * s, y = a.y * s)
-}
+def operator *(a : Vec2; s : float) : Vec2 => Vec2(x = a.x * s, y = a.y * s)
 
-def operator *(s : float; a : Vec2) : Vec2 {
-    return a * s
-}
+def operator *(s : float; a : Vec2) : Vec2 => a * s
 
-def operator /(a : Vec2; s : float) : Vec2 {
-    return Vec2(x = a.x / s, y = a.y / s)
-}
+def operator /(a : Vec2; s : float) : Vec2 => Vec2(x = a.x / s, y = a.y / s)
 
 def arithmetic_operators() {
     print("=== Arithmetic operators ===\n")
@@ -75,18 +65,12 @@ def arithmetic_operators() {
 // === Comparison Operators ===
 // Overload ==, !=, <, >, <=, >= for custom ordering.
 
-def operator ==(a, b : Vec2) : bool {
-    return a.x == b.x && a.y == b.y
-}
+def operator ==(a, b : Vec2) : bool => a.x == b.x && a.y == b.y
 
-def operator !=(a, b : Vec2) : bool {
-    return !(a == b)
-}
+def operator !=(a, b : Vec2) : bool => !(a == b)
 
 // Order by magnitude (length squared, to avoid sqrt)
-def operator <(a, b : Vec2) : bool {
-    return (a.x * a.x + a.y * a.y) < (b.x * b.x + b.y * b.y)
-}
+def operator <(a, b : Vec2) : bool => (a.x * a.x + a.y * a.y) < (b.x * b.x + b.y * b.y)
 
 def comparison_operators() {
     print("\n=== Comparison operators ===\n")
@@ -106,9 +90,7 @@ def comparison_operators() {
 // === Unary Operators ===
 // Overload unary -, !, ~, prefix ++/-- and postfix ++/--.
 
-def operator -(a : Vec2) : Vec2 {
-    return Vec2(x = -a.x, y = -a.y)
-}
+def operator -(a : Vec2) : Vec2 => Vec2(x = -a.x, y = -a.y)
 
 // A simple counter to demonstrate increment/decrement.
 struct Counter {
@@ -187,9 +169,7 @@ struct Matrix2x2 {
 }
 
 // Free-function index operators: read and write by linear index.
-def operator [] (m : Matrix2x2; i : int) : float {
-    return m.data[i]
-}
+def operator [] (m : Matrix2x2; i : int) : float => m.data[i]
 
 def operator [] =(var m : Matrix2x2&; i : int; v : float) {
     m.data[i] = v
@@ -233,9 +213,7 @@ struct Particle {
 }
 
 // Named property: "speed" (computed from pos_x and pos_y as magnitude)
-def operator . speed(p : Particle) : float {
-    return sqrt(p.pos_x * p.pos_x + p.pos_y * p.pos_y)
-}
+def operator . speed(p : Particle) : float => sqrt(p.pos_x * p.pos_x + p.pos_y * p.pos_y)
 
 // Named property setter
 def operator . speed :=(var p : Particle&; value : float) {
@@ -299,9 +277,7 @@ struct Stack {
     items : array<int>
 
     // Read: peek at index from bottom
-    def const operator [] (index : int) : int {
-        return items[index]
-    }
+    def const operator [] (index : int) : int => items[index]
 
     // Write: set value at index
     def operator [] =(index : int; value : int) {
@@ -343,9 +319,7 @@ struct Vec3 {
 
 // A generic dot-product that works with any type that has x and y fields.
 // (Both Vec2 and Vec3 qualify, though for Vec3 only x and y are used.)
-def dot_2d(a, b : auto) : float {
-    return a.x * b.x + a.y * b.y
-}
+def dot_2d(a, b : auto) : float => a.x * b.x + a.y * b.y
 
 def generic_operators() {
     print("\n=== Generic operators ===\n")

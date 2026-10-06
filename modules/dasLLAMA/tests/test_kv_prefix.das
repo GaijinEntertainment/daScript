@@ -415,7 +415,7 @@ def test_prefix_checkpoint_budget(t : T?) {
         lists |> reserve(3)
         for (k in range64(3l)) {
             var s <- mk_recurrent(c, pool, 5l)
-            var toks <- [for (i in range64(8l)); 100l * (k + 1l) + i]
+            var inscope toks <- [for (i in range64(8l)); 100l * (k + 1l) + i]
             if (k == 2l) {   // the first checkpoint is used again before the third lands, so the second is the oldest
                 var w <- mk_recurrent(c, pool, 0l)
                 t |> equal(5l, prefix_attach_(cache, pool, w, lists[0]))
@@ -587,8 +587,7 @@ def test_prefix_warm_equals_cold(t : T?) {   // nolint:STYLE038 — cold/warm/di
             var cold <- make_run_state_paged(c, pool)
             eval_(tr, cold, prompt)
             var cold_all := cold.logits
-            var cold_toks : array<int64>
-            var one : array<int64>
+            var cold_toks, one : array<int64>
             one |> resize(1)
             var tok = argmax(cold, c.vocab_size)
             for (_i in range64(nsteps)) {

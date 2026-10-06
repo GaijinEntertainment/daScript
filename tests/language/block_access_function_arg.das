@@ -2,9 +2,7 @@ options gen2
 options no_unused_function_arguments = false
 require dastest/testing_boost public
 
-def addValue(a, blk) {
-    return invoke(blk, a)
-}
+def addValue(a, blk) => invoke(blk, a)
 
 [test]
 def test_block_access_function_arg(t : T?) {

@@ -7,13 +7,10 @@ require dastest/testing_boost
 require strudel/strudel
 require math
 
-def query_cycle(var pat : Pattern; cycle_start : double; cycle_end : double) : array<Hap> {
-    return <- pat(TimeSpan(start = cycle_start, stop = cycle_end))
-}
+def query_cycle(var pat : Pattern; cycle_start : double; cycle_end : double) : array<Hap> =>
+    <- pat(TimeSpan(start = cycle_start, stop = cycle_end))
 
-def query_one_cycle(var pat : Pattern) : array<Hap> {
-    return <- query_cycle(pat, 0.0lf, 1.0lf)
-}
+def query_one_cycle(var pat : Pattern) : array<Hap> => <- query_cycle(pat, 0.0lf, 1.0lf)
 
 // ─── Tokenizer ───
 

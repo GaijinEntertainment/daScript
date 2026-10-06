@@ -45,21 +45,21 @@ require dasbind
 
 // Returns the absolute value of an integer.
 [extern(cdecl, name="abs", windows_library="msvcrt", linux_library="libc.so.6", macos_library="libSystem.B.dylib")]
-def c_abs(x : int) : int { return 0; }
+def c_abs(x : int) : int => 0
 
 // Returns the current time as seconds since epoch.
 [extern(cdecl, name="time", windows_library="msvcrt", linux_library="libc.so.6", macos_library="libSystem.B.dylib")]
-def c_time(timer : void?) : int64 { return int64(0); }
+def c_time(timer : void?) : int64 => int64(0)
 
 // Try `late`:
 
 // Computes the square root of a double.
 [extern(cdecl, late, name="sqrt", windows_library="msvcrt", linux_library="libm.so.6", macos_library="libSystem.B.dylib")]
-def c_sqrt(x : double) : double { return 0.0lf; }
+def c_sqrt(x : double) : double => 0.0lf
 
 // Returns the length of a C string.
 [extern(cdecl, late, name="strlen", windows_library="msvcrt", linux_library="libc.so.6", macos_library="libSystem.B.dylib")]
-def c_strlen(s : string) : int64 { return int64(0); }
+def c_strlen(s : string) : int64 => int64(0)
 
 // --- Main ---
 

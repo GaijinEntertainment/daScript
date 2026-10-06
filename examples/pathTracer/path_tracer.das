@@ -45,9 +45,7 @@ struct Ray {
     pad2 : float
 }
 
-def pointAt(ray : Ray const; t : float) {
-    return ray.orig + ray.dir * t
-}
+def pointAt(ray : Ray const; t : float) => ray.orig + ray.dir * t
 
 struct Hit {
     pos    : float3
@@ -245,8 +243,7 @@ def trace(r : Ray; var inoutRayCount : int&) {
         ++inoutRayCount
         if (ray |> hitWorld(kMinT, kMaxT, rec, id)) {
             var scattered : Ray
-            var attenuation : float3
-            var lightE : float3
+            var attenuation, lightE : float3
             var matE = s_SphereMats[id].emissive
             if (s_SphereMats[id] |> scatter(ray, rec, attenuation, scattered, lightE, inoutRayCount)) {
                 if (!doMaterialE) {

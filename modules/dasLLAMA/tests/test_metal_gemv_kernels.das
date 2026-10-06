@@ -61,8 +61,7 @@ def private kq_gemv_gate(t : T?; var dev, queue; vform : string; n, d : int) {
         return if (!pso_ok(t, tag, pso, err))
         let nb = n / 256
         let nsb = d * nb
-        var inscope kq : array<uint8>
-        var inscope ks : array<uint8>
+        var inscope kq, ks : array<uint8>
         kq_fill_planes(fmt, nsb, kq, ks)
         var inscope xv : array<float>
         xv |> resize(n)
@@ -153,8 +152,7 @@ def private kq_mvb_gate(t : T?; var dev, queue; fmt, bwidth, n, d, nr, ys : int;
         return if (!pso_ok(t, tag, pso, err))
         let nb = n / 256
         let nsb = d * nb
-        var inscope kq : array<uint8>
-        var inscope ks : array<uint8>
+        var inscope kq, ks : array<uint8>
         kq_fill_planes(fmt, nsb, kq, ks)
         // x is padded to the kernel's column-group width (the driver's mp guarantee); pad rows zero
         let gcols = bwidth == 4 ? (nr + 3) / 4 : 1
@@ -206,8 +204,7 @@ def private kq_k4_pairs_gate(t : T?; var queue; n, d, nr, ys : int) {
     with_metal_cell(g_dev, queue) $(var mc : MetalCell) {
         let nb = n / 256
         let nsb = d * nb
-        var inscope kq : array<uint8>
-        var inscope ks : array<uint8>
+        var inscope kq, ks : array<uint8>
         kq_fill_planes(4, nsb, kq, ks)
         var inscope xv : array<float>
         xv |> resize(nr * n)
@@ -276,8 +273,7 @@ def private moe_kq_gemv_gate(t : T?; var dev, queue; fmt, n, d, net, k, nst : in
         return if (!pso_ok(t, tag, pso, err))
         let nb = n / 256
         let nsb = net * d * nb              // the whole expert stack's superblocks
-        var inscope kq : array<uint8>
-        var inscope ks : array<uint8>
+        var inscope kq, ks : array<uint8>
         kq_fill_planes(fmt, nsb, kq, ks)
         // selection rows: [k idx u32][k w f32] per stream — only the idx section is read here
         var inscope sel : array<uint>
@@ -293,8 +289,7 @@ def private moe_kq_gemv_gate(t : T?; var dev, queue; fmt, n, d, net, k, nst : in
         for (i in range(xrows * n)) {
             xv[i] = 0.07 * float(i % 37) - 1.2
         }
-        var inscope want : array<float>
-        var inscope env : array<float>
+        var inscope want, env : array<float>
         want |> reserve(nst * k * d)
         env |> reserve(nst * k * d)
         for (s in range(nst)) {
@@ -349,8 +344,7 @@ def private qkv_rs_gate(t : T?; var dev, queue; f16 : bool; neox, has_bias : boo
         q8_blob_fill(ddim, nb, blob, wdeq)   // one stacked blob: q rows, then k, then v (segment offsets)
         var inscope xf : array<float>
         q8_x_fill(ndim, xf)
-        var inscope tcos : array<float>
-        var inscope tsin : array<float>
+        var inscope tcos, tsin : array<float>
         tcos |> resize(half)
         tsin |> resize(half)
         for (j in range(half)) {
@@ -362,9 +356,7 @@ def private qkv_rs_gate(t : T?; var dev, queue; f16 : bool; neox, has_bias : boo
         for (i in range(ddim)) {
             bias[i] = float((i * 13) % 9 - 4) * 0.25
         }
-        var inscope qwant : array<float>
-        var inscope kwant : array<float>
-        var inscope vwant : array<float>
+        var inscope qwant, kwant, vwant : array<float>
         qwant |> resize(qd)
         kwant |> resize(kvd)
         vwant |> resize(kvd)
@@ -722,9 +714,7 @@ def test_metal_kq_gemv_kernels(t : T?) {
 // ===== the verify's q8 row tilers (enc_gemv_rows / enc_gemv_w13sw_rows over the decode PSOs) =====
 
 // the rows a tiler writes at nrows live rows: the B2 form covers two, every B4 tile four
-def private tiler_rows_written(nrows : int) : int {
-    return nrows <= 2 ? 2 : ((nrows + 3) / 4) * 4
-}
+def private tiler_rows_written(nrows : int) : int => nrows <= 2 ? 2 : ((nrows + 3) / 4) * 4
 
 //! the compare covers the whole padded panel, so a live row the tiler skipped keeps its sentinel and reads as a mismatch
 def private gemv_rows_gate(t : T?; var queue; nrows, ndim, ddim, ys : int) {

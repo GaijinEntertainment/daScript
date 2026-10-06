@@ -199,59 +199,37 @@ def ref_binder(var v : array<int>) : int {
 }
 
 [export]
-def target_expr_body(a, b : int) : int {
-    return small_mul(a, b) + small_mul(b, a + 1)
-}
+def target_expr_body(a, b : int) : int => small_mul(a, b) + small_mul(b, a + 1)
 
 [export]
-def target_stmt_body(a : int) : int {
-    return small_stmts(a)
-}
+def target_stmt_body(a : int) : int => small_stmts(a)
 
 [export]
-def target_canonicalized(x : float) : float {
-    return clamped01(x)
-}
+def target_canonicalized(x : float) : float => clamped01(x)
 
 [export]
-def target_two_arms(x : int) : int {
-    return two_arm_pick(x)
-}
+def target_two_arms(x : int) : int => two_arm_pick(x)
 
 [export]
-def target_private_loop_ret(src : array<int>; k : int) : int {
-    return find_gt_once(src, k)
-}
+def target_private_loop_ret(src : array<int>; k : int) : int => find_gt_once(src, k)
 
 [export]
-def target_never_inline(a, b : int) : int {
-    return marked_off(a, b)
-}
+def target_never_inline(a, b : int) : int => marked_off(a, b)
 
 [export]
-def target_over_budget(a : int) : int {
-    return big_pure(a)
-}
+def target_over_budget(a : int) : int => big_pure(a)
 
 [export]
-def target_loopy(a : int) : int {
-    return loopy_sum(a)
-}
+def target_loopy(a : int) : int => loopy_sum(a)
 
 [export]
-def target_private_once(src : array<int>) : int {
-    return big_private_once(src)
-}
+def target_private_once(src : array<int>) : int => big_private_once(src)
 
 [export]
-def target_private_twice_1(a : int) : int {
-    return big_private_twice(a)
-}
+def target_private_twice_1(a : int) : int => big_private_twice(a)
 
 [export]
-def target_private_twice_2(a : int) : int {
-    return big_private_twice(a + 1)
-}
+def target_private_twice_2(a : int) : int => big_private_twice(a + 1)
 
 [export]
 def target_private_addr(a : int) : int {
@@ -260,14 +238,10 @@ def target_private_addr(a : int) : int {
 }
 
 [export]
-def target_recursive(n : int) : int {
-    return recur_inc(n)
-}
+def target_recursive(n : int) : int => recur_inc(n)
 
 [export]
-def target_generic(a, b : int) : int {
-    return gadd(a, b)
-}
+def target_generic(a, b : int) : int => gadd(a, b)
 
 [export]
 def target_mixed_ternary_graft(f : bool; v : int) : int {
@@ -371,9 +345,7 @@ def deferred_inc(a : int) : int {
 def target_fn_finally(a : int) : int => deferred_inc(a)
 
 [export]
-def target_cross_origin_generic(a, k : int) : int {
-    return gscale(a, k)
-}
+def target_cross_origin_generic(a, k : int) : int => gscale(a, k)
 
 [export]
 def target_locked_name_dispatch(a : int) : int {
@@ -445,14 +417,10 @@ def poke_tuple(var tp : tuple<int; int>) {
 }
 
 [never_inline]
-def make_wr_plain : WrPlain {
-    return WrPlain()
-}
+def make_wr_plain : WrPlain => WrPlain()
 
 [never_inline]
-def make_wr_kid : WrKid {
-    return WrKid()
-}
+def make_wr_kid : WrKid => WrKid()
 
 [export]
 def target_cast_param(var s : WrPlain) {
@@ -526,9 +494,7 @@ def target_upcast_of_rvalue {
     poke_n(cast<WrPlain>(make_wr_kid()))
 }
 
-def has(s, sub : string) : bool {
-    return find(s, sub, 0) >= 0
-}
+def has(s, sub : string) : bool => find(s, sub, 0) >= 0
 
 def body_of(t : T?; nm : string) : string {
     var body = ""

@@ -32,9 +32,7 @@ var private g_exit_code = -1l
 var private g_done = false
 var private g_error : string
 
-def private elapsed_us() : int64 {
-    return get_time_nsec(g_started) / 1000l
-}
+def private elapsed_us() : int64 => get_time_nsec(g_started) / 1000l
 
 def private option_value(prefix : string; fallback : string) : string {
     for (arg in get_command_line_arguments()) {

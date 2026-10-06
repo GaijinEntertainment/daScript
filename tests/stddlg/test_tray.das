@@ -16,9 +16,7 @@ def das_exe() : string {
     return empty(args) ? "" : get_full_file_name(args[0])
 }
 
-def fixture_path() : string {
-    return path_join(get_das_root(), "tests/stddlg/_fixture_tray_child.das")
-}
+def fixture_path() : string => path_join(get_das_root(), "tests/stddlg/_fixture_tray_child.das")
 
 struct TrayRig {
     bus : process
@@ -101,9 +99,8 @@ def stop_rig(var rig : TrayRig) {
 
 //! `dbus-send` against the child; `reply` asks for --print-reply and returns the dump, otherwise the
 //! call is fire-and-forget and the result is empty.
-def dbus_send(rig : TrayRig; reply : bool; path : string; method : string; args : array<string>) : string {
-    return dbus_send_to(rig.address, rig.dest, reply, path, method, args)
-}
+def dbus_send(rig : TrayRig; reply : bool; path : string; method : string; args : array<string>) : string =>
+    dbus_send_to(rig.address, rig.dest, reply, path, method, args)
 
 def with_rig(t : T?; blk : block<(var rig : TrayRig) : void>) {
     var rig : TrayRig

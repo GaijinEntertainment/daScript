@@ -49,8 +49,7 @@ def example_read_back(path : string) {
     print("\n=== Section 2: Read WAV back ===\n")
 
     var samples : array<float>
-    var sample_rate : int
-    var channels : int
+    var sample_rate, channels : int
 
     if (!read_wav(path, samples, sample_rate, channels)) {
         print("  ERROR: Failed to read {path}\n")
@@ -86,8 +85,7 @@ def example_reverse(media_path, out_path : string) {
 
     let gong_path = "{media_path}/audio/gong.wav"
     var samples : array<float>
-    var sample_rate : int
-    var channels : int
+    var sample_rate, channels : int
 
     if (!read_wav(gong_path, samples, sample_rate, channels)) {
         print("  ERROR: Could not read {gong_path}\n")
@@ -110,8 +108,7 @@ def example_reverse(media_path, out_path : string) {
     // Play original
     print("  Playing original gong...\n")
     var original : array<float>
-    var sr2 : int
-    var ch2 : int
+    var sr2, ch2 : int
     if (read_wav(gong_path, original, sr2, ch2)) {
         play_sound_from_pcm(sr2, ch2, original)
         sleep(2500u)
@@ -137,8 +134,7 @@ def example_amplify(media_path, out_path : string) {
 
     let gong_path = "{media_path}/audio/gong.wav"
     var samples : array<float>
-    var sample_rate : int
-    var channels : int
+    var sample_rate, channels : int
 
     if (!read_wav(gong_path, samples, sample_rate, channels)) {
         print("  ERROR: Could not read {gong_path}\n")
@@ -156,8 +152,7 @@ def example_amplify(media_path, out_path : string) {
     // Play original at full volume
     print("  Playing original gong (full volume)...\n")
     var original : array<float>
-    var sr2 : int
-    var ch2 : int
+    var sr2, ch2 : int
     if (read_wav(gong_path, original, sr2, ch2)) {
         play_sound_from_pcm(sr2, ch2, original)
         sleep(2500u)

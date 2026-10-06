@@ -154,9 +154,7 @@ def public touch_take_injected() : array<TouchPoint> {
     return <- out
 }
 
-def public touch_injection_seen() : bool {
-    return g_touch_injected_ever
-}
+def public touch_injection_seen() : bool => g_touch_injected_ever
 
 struct TouchInjectFinger {
     id : int

@@ -73,8 +73,7 @@ def test_e8m0_half(t : T?) {
 def test_dot_mx4q8(t : T?) {
     t |> run("scalar reference vs fp64 elementwise dequant") @(t : T?) {
         let n = 128l
-        var wn : array<uint8>
-        var we : array<uint8>
+        var wn, we : array<uint8>
         var xq : array<int8>
         var xs : array<float>
         fill_case(n, wn, we, xq, xs, 1)
@@ -89,10 +88,9 @@ def test_dot_mx4q8(t : T?) {
     t |> run("TBL+SDOT dot vs scalar reference (block sums exact; same flush order)") @(t : T?) {
         // n = 96 is NOT a multiple of the u2-unrolled superblock, exercising the unroll tail too
         for (n in [96l, 128l, 256l]) {
-            var wn : array<uint8>
-            var we : array<uint8>
-            var xq : array<int8>
-            var xs : array<float>
+            var inscope wn, we : array<uint8>
+            var inscope xq : array<int8>
+            var inscope xs : array<float>
             fill_case(n, wn, we, xq, xs, int(n))
             var lut : int8[16]
             mxfp4_fill_lut(lut)
@@ -126,11 +124,9 @@ def private gemv_case(var wn : array<uint8>; var we : array<uint8>; var xq : arr
 [test]
 def test_matmul_mx4q8(t : T?) {
     t |> run("active backend GEMV matches the per-row scalar leaf") @(t : T?) {
-        var wn : array<uint8>
-        var we : array<uint8>
+        var wn, we : array<uint8>
         var xq : array<int8>
-        var xs : array<float>
-        var want : array<float>
+        var xs, want : array<float>
         gemv_case(wn, we, xq, xs, want, 64l, 5l)
         var y : array<float>
         y |> resize(5)
@@ -140,11 +136,9 @@ def test_matmul_mx4q8(t : T?) {
         }
     }
     t |> run("every row-major backend agrees (pin A/B)") @(t : T?) {
-        var wn : array<uint8>
-        var we : array<uint8>
+        var wn, we : array<uint8>
         var xq : array<int8>
-        var xs : array<float>
-        var want : array<float>
+        var xs, want : array<float>
         gemv_case(wn, we, xq, xs, want, 64l, 5l)
         let saved = active_kernel_backend()
         for (name in kernel_backend_names()) {
@@ -152,7 +146,7 @@ def test_matmul_mx4q8(t : T?) {
                 continue
             }
             pin_kernel_backend(name)
-            var y : array<float>
+            var inscope y : array<float>
             y |> resize(5)
             matmul_mx4q8(y, wn, we, xq, xs, 64l, 5l)
             for (i in range(5)) {
@@ -170,11 +164,9 @@ def test_matmul_mx4q8(t : T?) {
             return
         }
         // d = 6 = one 4-row group + 2 row-major tail rows
-        var wn : array<uint8>
-        var we : array<uint8>
+        var wn, we : array<uint8>
         var xq : array<int8>
-        var xs : array<float>
-        var want : array<float>
+        var xs, want : array<float>
         gemv_case(wn, we, xq, xs, want, 64l, 6l)
         let saved = active_kernel_backend()
         pin_kernel_backend("arm64-gen")

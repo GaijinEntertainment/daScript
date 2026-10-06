@@ -58,9 +58,8 @@ struct ImgSection {
 }
 
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-identity-backend-order")]
-def image_identity(tag : string = ""; quant : string = "q8") : string {
-    return image_identity_of(image_config_for(tag, quant), tag)
-}
+def image_identity(tag : string = ""; quant : string = "q8") : string =>
+    image_identity_of(image_config_for(tag, quant), tag)
 
 //! The configuration an image under `tag` is keyed and stored by: the box's current one, or the
 //! default one for a family registered config-free (no CPU knob shapes its bytes, so its image
@@ -75,9 +74,8 @@ def image_config_for(tag : string; quant : string = "q8") : DlimConfiguration {
 //! The identity of an explicit configuration — the ONE spelling every identity consumer (the
 //! loader, the peek verdicts, the converter's want/have compare, the tests) formats through, so
 //! the schema version and the pack-code version can never be folded in two different ways.
-def image_identity_of(c : DlimConfiguration; tag : string = "") : string {
-    return dlim_identity(c, IMAGE_VERSION, tag, PACK_VERSION)
-}
+def image_identity_of(c : DlimConfiguration; tag : string = "") : string =>
+    dlim_identity(c, IMAGE_VERSION, tag, PACK_VERSION)
 
 //! the CPU lane's spelling: the box's tune class where the tune framework is built, the architecture alone otherwise -
 //! never the active backend, which is a pin the identity supersedes
@@ -1145,9 +1143,8 @@ def private promote_tmp(tmp_path : string; path : string; built : bool; want_byt
 
 // per-writer name: concurrent savers must not clobber each other; last rename wins, same content
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-publish")]
-def private tmp_name_for(path : string) : string {
-    return "{path}.{ref_time_ticks()}{IMAGE_TMP_SUFFIX}"   // clock: control — unique temp-name suffix, not timing
-}
+def private tmp_name_for(path : string) : string =>
+    "{path}.{ref_time_ticks()}{IMAGE_TMP_SUFFIX}"  // clock: control — unique temp-name suffix, not timing
 
 let private IMAGE_TMP_SUFFIX = ".tmp"
 
@@ -1217,9 +1214,8 @@ def save_image(var t; path : string; tag : string = ""; quant : string = "q8") :
 
 //! Model entry point (the AudioTower one is load_audio_tower's cache in dasllama_audio).
 //! `tag` names the flavor (METAL_IMAGE_TAG for blob-only metal-flavor models, "" planar).
-def save_model_image(var t : Model; path : string; tag : string = ""; quant : string = "q8") : bool {
-    return save_image(t, path, tag, quant)
-}
+def save_model_image(var t : Model; path : string; tag : string = ""; quant : string = "q8") : bool =>
+    save_image(t, path, tag, quant)
 
 //! the planes a streaming save sizes as empty and fills from the gguf mapping - the quant halves the loader streams
 def private streamed_q_planes() : array<string> {
@@ -1846,9 +1842,7 @@ def private vulkan_bake_flavor(var t : Model; path : string; vk_tag : string) {
 
 //! Whether a cold build persists its image. Off = build it in memory and serve that, leaving no
 //! .dlim behind; the run pays a second copy of the model for it, so on by default.
-def image_save_enabled : bool {
-    return g_env_engine.image_save
-}
+def image_save_enabled : bool => g_env_engine.image_save
 
 // ~36 MB per band: the interleave amortizes and appends stay bulk, with a staging cost that never registers
 let private METAL_BAND_BLOCKS = 1048576l

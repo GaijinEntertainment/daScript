@@ -39,13 +39,11 @@ def public operator ~(a : ImGuiItemFlags) : ImGuiItemFlags {
 //! and ``ImGuiButtonFlagsPrivate`` (internal behavior flags) are one flag set split across two C++ enums; these
 //! overloads combine either into the ``ImGuiButtonFlags`` ``ButtonEx``/``ArrowButtonEx`` accept (lone private: ``.None | ...Private.X``).
 
-def public operator |(a : ImGuiButtonFlags; b : ImGuiButtonFlagsPrivate) : ImGuiButtonFlags {
-    return unsafe(reinterpret<ImGuiButtonFlags>(int(a) | int(b)))
-}
+def public operator |(a : ImGuiButtonFlags; b : ImGuiButtonFlagsPrivate) : ImGuiButtonFlags =>
+    unsafe(reinterpret<ImGuiButtonFlags>(int(a) | int(b)))
 
-def public operator |(a : ImGuiButtonFlagsPrivate; b : ImGuiButtonFlags) : ImGuiButtonFlags {
-    return unsafe(reinterpret<ImGuiButtonFlags>(int(a) | int(b)))
-}
+def public operator |(a : ImGuiButtonFlagsPrivate; b : ImGuiButtonFlags) : ImGuiButtonFlags =>
+    unsafe(reinterpret<ImGuiButtonFlags>(int(a) | int(b)))
 
 def public operator |(a, b : ImGuiButtonFlagsPrivate) : ImGuiButtonFlags {
     //! Two private flags combine into ``ImGuiButtonFlags`` (the *Ex arg type).
@@ -56,13 +54,11 @@ def public operator |(a, b : ImGuiButtonFlagsPrivate) : ImGuiButtonFlags {
 //! ``AllowOverlap`` / …) in ``ImGuiItemFlagsPrivate`` combine with the public ``ImGuiItemFlags`` that
 //! ``with_item_flag`` / ``PushItemFlag`` accept. A lone private flag uses ``ImGuiItemFlags.None | ...Private.X``.
 
-def public operator |(a : ImGuiItemFlags; b : ImGuiItemFlagsPrivate) : ImGuiItemFlags {
-    return unsafe(reinterpret<ImGuiItemFlags>(int(a) | int(b)))
-}
+def public operator |(a : ImGuiItemFlags; b : ImGuiItemFlagsPrivate) : ImGuiItemFlags =>
+    unsafe(reinterpret<ImGuiItemFlags>(int(a) | int(b)))
 
-def public operator |(a : ImGuiItemFlagsPrivate; b : ImGuiItemFlags) : ImGuiItemFlags {
-    return unsafe(reinterpret<ImGuiItemFlags>(int(a) | int(b)))
-}
+def public operator |(a : ImGuiItemFlagsPrivate; b : ImGuiItemFlags) : ImGuiItemFlags =>
+    unsafe(reinterpret<ImGuiItemFlags>(int(a) | int(b)))
 
 def public operator |(a, b : ImGuiItemFlagsPrivate) : ImGuiItemFlags {
     //! Two private flags combine into ``ImGuiItemFlags`` (the PushItemFlag arg type).

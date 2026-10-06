@@ -82,9 +82,8 @@ def private note_ref(var self : RefIndex; fn : Function?; raw_name : string) : v
     }
 }
 
-def private knows(self : RefIndex; fn : Function?; nm : string) : bool {
-    return key_exists(self.functions, fn) || key_exists(self.names, nm)
-}
+def private knows(self : RefIndex; fn : Function?; nm : string) : bool =>
+    key_exists(self.functions, fn) || key_exists(self.names, nm)
 
 def private note_type(var self : RefIndex; t : TypeDecl?; depth : int; skip : Structure const? = null) : void {
     return if (t == null || depth > 24)
@@ -191,9 +190,8 @@ struct private Lint030Frame {
 //! another not; a key sits at `true` while its scan runs, so a recursive chain reads as writing
 var private lint030_writers : table<string; bool>
 
-def private lint030_bare_var(e : Expression?) : Variable const? {
-    return e is ExprVar ? (e as ExprVar).variable : null
-}
+def private lint030_bare_var(e : Expression?) : Variable const? =>
+    e is ExprVar ? (e as ExprVar).variable : null
 
 //! the variable a chain of plain field accesses is rooted at (`dr.offs`, `s.k.v`), the bare
 //! variable itself, or null for any other shape; a field reached through a pointer is a value
@@ -212,13 +210,11 @@ struct private Lint030ArgFrame {
 }
 
 //! an operator that assigns to its left operand: `=` is an ExprCopy, these are the compound forms
-def private lint030_assigns(op : string) : bool {
-    return op |> ends_with("=") && op != "==" && op != "!=" && op != "<=" && op != ">="
-}
+def private lint030_assigns(op : string) : bool =>
+    op |> ends_with("=") && op != "==" && op != "!=" && op != "<=" && op != ">="
 
-def private lint030_steps(op : string) : bool {
-    return op == "++" || op == "--" || op == "+++" || op == "---"
-}
+def private lint030_steps(op : string) : bool =>
+    op == "++" || op == "--" || op == "+++" || op == "---"
 
 //! scans one function body for a write to `param` during the call; which compiler write marks
 //! count and which are discounted is `daslib/ARCHITECTURE_LINT.md` sec.3's LINT030 entry
@@ -1502,9 +1498,7 @@ class LintVisitor : AstVisitor {
         lint_error(msg, at)
     }
 
-    def override canVisitWithAliasSubexpression(_expr : ExprAssume?) : bool {
-        return false
-    }
+    def override canVisitWithAliasSubexpression(_expr : ExprAssume?) : bool => false
 
     def override preVisitExprLet(expr : ExprLet?) : void {
         for (v in expr.variables) {
@@ -1834,9 +1828,7 @@ def public paranoid_collect_issues(prog : ProgramPtr; var issues : array<LintIss
     return count
 }
 
-def private is_nolint_space(b : uint8) : bool {
-    return int(b) == ' ' || int(b) == '\t'
-}
+def private is_nolint_space(b : uint8) : bool => int(b) == ' ' || int(b) == '\t'
 
 def private comment_start_outside_literals(d : array<uint8> const# implicit) : int {
     let n = length(d)

@@ -301,9 +301,8 @@ def extra_module_diagnostic(base : string; extras : array<string>) : string {
     return text
 }
 
-def reports_readably(text, must_contain : string) : bool {
-    return !empty(text) && find(text, must_contain) >= 0 && find(text, "internal error") < 0
-}
+def reports_readably(text, must_contain : string) : bool =>
+    !empty(text) && find(text, must_contain) >= 0 && find(text, "internal error") < 0
 
 [test]
 def test_extra_module_missing(t : T?) {

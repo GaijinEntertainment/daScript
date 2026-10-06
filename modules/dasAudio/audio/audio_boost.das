@@ -174,15 +174,11 @@ def public default_attenuation {
 class AudioSource {
     bitrate : int = MA_SAMPLE_RATE  // samples per second
     channels : int = 1              // 1 or 2
-    def ready : bool {
-        return true
-    }
+    def ready : bool => true
     def abstract get_samples(nframes : int) : array<float>
     def abstract append(var data : array<float>) : bool
     def abstract append_temporary(data : array<float>) : bool
-    def set_position(pos : uint64) : uint64 {
-        return 0ul
-    }
+    def set_position(pos : uint64) : uint64 => 0ul
     def update_status(var status : AudioChannelStatus) {
         status.stream_que_length = 0
     }
@@ -566,12 +562,8 @@ class AudioSourcePCMLoop : AudioSource {
         }
         return <- data
     }
-    def override append(var data : array<float>) : bool {
-        return false
-    }
-    def override append_temporary(data : array<float>) : bool {
-        return false
-    }
+    def override append(var data : array<float>) : bool => false
+    def override append_temporary(data : array<float>) : bool => false
     def override set_position(pos : uint64) : uint64 {
         let offsetFrames = clamp(int(pos), 0, length(samples) / channels)
         offset = offsetFrames * channels
@@ -607,9 +599,7 @@ class AudioSourceDecoder : AudioSource {
             delete decoder
         }
     }
-    def override ready : bool {
-        return isReady
-    }
+    def override ready : bool => isReady
     def override get_samples(nframes : int) : array<float> {
         var samples : array<float>
         samples |> resize(nframes * channels)
@@ -620,12 +610,8 @@ class AudioSourceDecoder : AudioSource {
         samples |> resize(rframes * channels)
         return <- samples
     }
-    def override append(var data : array<float>) : bool {
-        return false
-    }
-    def override append_temporary(data : array<float>) : bool {
-        return false
-    }
+    def override append(var data : array<float>) : bool => false
+    def override append_temporary(data : array<float>) : bool => false
     def override set_position(pos : uint64) : uint64 {
         ma_decoder_seek_to_pcm_frame(decoder, pos)
         var cursor : uint64
@@ -1705,9 +1691,7 @@ def public decode_audio(data : array<uint8> | #; var channels, rate : int&) : ar
     return <- samples
 }
 
-def public get_audio_command_stream : void ? {
-    return g_command_stream
-}
+def public get_audio_command_stream : void ? => g_command_stream
 
 [unsafe_operation]
 def public set_audio_thread_command_stream(ch : void?) {
@@ -1732,9 +1716,7 @@ def public adopt_audio_thread_command_stream(ch : void?) {
     g_command_stream = unsafe(reinterpret<Stream?>(ch))
 }
 
-def public get_sound_sid : void ? {
-    return g_sound_sid
-}
+def public get_sound_sid : void ? => g_sound_sid
 
 def public set_sound_sid(next_sid : void?) {
     var sid = unsafe(reinterpret<Atomic64?>(next_sid))

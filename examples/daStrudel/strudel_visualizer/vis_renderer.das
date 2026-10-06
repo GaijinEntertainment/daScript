@@ -306,9 +306,7 @@ struct DrumPad {
     last_trigger_cycle : float = -1000.0
 }
 
-def drum_pad_key(h : PianorollHap) : string {
-    return "{int(h.note)}:{h.sound}"
-}
+def drum_pad_key(h : PianorollHap) : string => "{int(h.note)}:{h.sound}"
 
 struct DrumPanelState {
     pads    : array<DrumPad>

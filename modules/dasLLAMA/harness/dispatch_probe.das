@@ -154,9 +154,7 @@ def main {
             print("batch dispatch ON\n")
         }
         print("workers: {get_total_hw_jobs()}\n")
-        var push_ns : array<int64>
-        var start_ns : array<int64>
-        var end_ns : array<int64>
+        var push_ns, start_ns, end_ns : array<int64>
         push_ns |> resize(MAXJ)
         start_ns |> resize(MAXJ)
         end_ns |> resize(MAXJ)

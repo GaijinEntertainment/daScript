@@ -25,9 +25,8 @@ class RequestServer : HvWebServer {
         origins |> push(clone(get_header(request, "Origin")))
     }
 }
-def private handshake(cookie, path : string) : string {
-    return "GET {path} HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nOrigin: https://allowed.example\r\nCookie: sid={cookie}\r\nSec-WebSocket-Protocol: test.v1\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
-}
+def private handshake(cookie, path : string) : string =>
+    "GET {path} HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nOrigin: https://allowed.example\r\nCookie: sid={cookie}\r\nSec-WebSocket-Protocol: test.v1\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
 [test]
 def opened_request_belongs_to_its_channel_and_rejected_requests_never_open(t : T?) {
     var server = new RequestServer(); server->init(0)

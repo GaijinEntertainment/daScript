@@ -500,9 +500,7 @@ struct RefTarget {
 // const? param: both pointer flavors (T? / T const?) converge on one
 // instantiation — same-name instances differing only in pointee const trip the
 // mangler ICE 50609 (see CLAUDE.md "Generic-mangling pitfall")
-def private to_void(p : auto(TT) const?) : void? {
-    return unsafe(reinterpret<void?>(p))
-}
+def private to_void(p : auto(TT) const?) : void? => unsafe(reinterpret<void?>(p))
 
 def private identify_target(program : smart_ptr<Program>; hit : CursorHit) : RefTarget { // nolint:STYLE037 — exact-type `is` ladder, one arm per Expression class
     if (hit.variable != null) {
@@ -608,9 +606,8 @@ def private field_target(st : Structure const?; name : string; field_type : Type
         signature = field_type != null ? "{name} : {describe(unsafe(reinterpret<TypeDecl?>(field_type)))}" : "")
 }
 
-def private same_site(at : LineInfo; target : RefTarget) : bool {
-    return int(at.line) == target.decl_line && int(at.column) == target.decl_column && lineinfo_file(at) == target.decl_file
-}
+def private same_site(at : LineInfo; target : RefTarget) : bool =>
+    int(at.line) == target.decl_line && int(at.column) == target.decl_column && lineinfo_file(at) == target.decl_file
 
 struct DeclHit {
     target : RefTarget
@@ -1047,9 +1044,8 @@ def private origin_function(func : Function const?) : Function const? {
     return func
 }
 
-def private has_source(func : Function const?) : bool {
-    return func != null && int(func.at.line) > 0 && !empty(lineinfo_file(func.at))
-}
+def private has_source(func : Function const?) : bool =>
+    func != null && int(func.at.line) > 0 && !empty(lineinfo_file(func.at))
 
 def private make_hier_item(func : Function const?) : HierItem {
     let f = lineinfo_file(func.at)
@@ -1100,9 +1096,8 @@ def private function_at_cursor(program : smart_ptr<Program>; file : string; line
     return origin_function(result)
 }
 
-def private matches_decl(func : Function const?; decl_path : string; decl_line : int; name : string) : bool {
-    return func != null && int(func.at.line) == decl_line && to_generic_path(lineinfo_file(func.at)) == decl_path && func.name == name
-}
+def private matches_decl(func : Function const?; decl_path : string; decl_line : int; name : string) : bool =>
+    func != null && int(func.at.line) == decl_line && to_generic_path(lineinfo_file(func.at)) == decl_path && func.name == name
 
 // every Function in the program that IS the pinned declaration: the function
 // (or generic) itself plus all instances cloned from it

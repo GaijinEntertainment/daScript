@@ -77,7 +77,7 @@ def test_stream_push_pop_bytes(t : T?) {
     t |> run("FIFO ordering") @(t : T?) {
         with_stream() $(var s : Stream?) {
             for (i in range(5)) {
-                let b = [uint8(i * 2)]
+                var inscope b = [uint8(i * 2)]
                 s |> push(b)
             }
             t |> equal(5, s.total)

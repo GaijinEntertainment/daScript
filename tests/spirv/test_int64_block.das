@@ -31,9 +31,7 @@ def int64_block_vs {
     i64_out = i64ubo.tail
 }
 
-def public int64_block_words : array<uint> {
-    return clone_to_move(int64_block_spv)
-}
+def public int64_block_words : array<uint> => clone_to_move(int64_block_spv)
 
 [test]
 def test_int64_block(t : T?) {

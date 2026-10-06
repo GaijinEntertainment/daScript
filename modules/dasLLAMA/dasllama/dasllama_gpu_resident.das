@@ -451,9 +451,8 @@ struct private PlaneUp {
     slice_rows : int64
 }
 
-def private plane_up(f : KqFmt; woff, n, rows : int64; slice_rows : int64 = -1l) : PlaneUp {
-    return PlaneUp(f = f, woff = woff, n = n, rows = rows, slice_rows = slice_rows < 0l ? rows : slice_rows)
-}
+def private plane_up(f : KqFmt; woff, n, rows : int64; slice_rows : int64 = -1l) : PlaneUp =>
+    PlaneUp(f = f, woff = woff, n = n, rows = rows, slice_rows = slice_rows < 0l ? rows : slice_rows)
 
 //! layer l's routed expert stacks as one gather-upload group, gate, up and down, each sliced an expert at a time
 def private resident_expert_ups(t : Model; l : int64) : array<PlaneUp> {
@@ -566,9 +565,8 @@ def private resident_expert_plane(t : Model; l : int64; kind : int) : tuple<f : 
 }
 
 //! the gate, up and down formats of layer l's routed experts, as the seats take them
-def private resident_expert_fmts(t : Model; l : int64) : tuple<f1 : int; f3 : int; f2 : int> {
-    return (f1 = int(rdec_efmt(t, t.we1_fmt, l)), f3 = int(rdec_efmt(t, t.we3_fmt, l)), f2 = int(rdec_efmt(t, t.we2_fmt, l)))
-}
+def private resident_expert_fmts(t : Model; l : int64) : tuple<f1 : int; f3 : int; f2 : int> =>
+    (f1 = int(rdec_efmt(t, t.we1_fmt, l)), f3 = int(rdec_efmt(t, t.we3_fmt, l)), f2 = int(rdec_efmt(t, t.we2_fmt, l)))
 
 //! what the upload registers a planned plane as; `ResidentPlane.l` names its layer, mixer site or the NextN head (n_layers)
 enum ResidentRole {
@@ -1454,8 +1452,7 @@ def resident_arm_floor(env_floor, pin : int64; strict : bool = false) : int64 {
 // instead of upload_stack.
 def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
                            mr, kgroup, wbias : int64; slice_rows : int64 = -1l) : int64 {
-    var wq : array<uint8>
-    var ws : array<uint8>
+    var wq, ws : array<uint8>
     moe_gpu_gather(t, f, woff, n, rows, slice_rows > 0l ? slice_rows : rows, mr, kgroup, wbias, wq, ws)
     let blk = rdec_place(wq, ws, n, rows, int(f))
     if (blk >= 0l) {
@@ -1500,8 +1497,7 @@ def private resident_upload_hc(t : Model; planes : array<ResidentPlane>; var cur
     let norm_rows <- fblob_rows(t, t.hc_norm_off, n_sites * hcd)
     let inject_rows <- fblob_rows(t, t.hc_inject_off, n_sites * hc * hcd)
     let head_norm <- fblob_rows(t, t.hc_head_norm_off, hcd)
-    var down_blks : array<int64>
-    var up_blks : array<int64>
+    var down_blks, up_blks : array<int64>
     down_blks |> reserve(n_sites)
     up_blks |> reserve(n_sites)
     for (site in range64(n_sites)) {
@@ -1942,8 +1938,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     var mir_base = 0l
     var rec_idx = 0l
     // per layer: its mirror base and slot (a shared-KV layer records its donor's), for the layers above it that share
-    var mir_bases : array<int64>
-    var mir_slots : array<int64>
+    var mir_bases, mir_slots : array<int64>
     mir_bases |> reserve_resize(c.n_layers)
     mir_slots |> reserve_resize(c.n_layers)
     let ple = has_ple(c) ? c.n_embd_per_layer : 0l
@@ -2253,10 +2248,7 @@ def private resident_prepare_moe(t : Model; n_moe : int64; sh_gated : bool) : bo
             di++
         }
     }
-    var rbias : array<float>
-    var gbias : array<float>
-    var ubias : array<float>
-    var dbias : array<float>
+    var rbias, gbias, ubias, dbias : array<float>
     let nfe = c.n_ff_exp
     if (c.moe_router_bias) {
         rbias |> reserve_resize(n_moe * ne)
@@ -3413,8 +3405,8 @@ def private rdec_trace_write() {
             fwrite(f, g_rdec_trace_rows[i])
             let n = int64(g_rdec_trace_rows[i]) * k
             if (n > 0l) {
-                var ids <- [for (j in range64(n)); g_rdec_trace_idx[pos + j]]
-                var ws <- [for (j in range64(n)); g_rdec_trace_w[pos + j]]
+                var inscope ids <- [for (j in range64(n)); g_rdec_trace_idx[pos + j]]
+                var inscope ws <- [for (j in range64(n)); g_rdec_trace_w[pos + j]]
                 fwrite(f, ids)
                 fwrite(f, ws)
                 pos += n
@@ -3949,9 +3941,7 @@ struct GpuModelMarks {
 
 //! A fresh no-model GpuModelMarks — the facade's ctor-shaped re-export delegates here
 //! (a generated constructor is not callable through a facade typedef).
-def gpu_model_marks_init_() : GpuModelMarks {
-    return <- GpuModelMarks()
-}
+def gpu_model_marks_init_() : GpuModelMarks => <- GpuModelMarks()
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#gpu-slot-marks")]
 def moe_gpu_model_marks_save_(var st : GpuModelMarks) {
@@ -4292,8 +4282,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     let kgroup = lay.kgroup
     let wbias = lay.wbias
     var from_l = layers
-    var wq : array<uint8>
-    var ws : array<uint8>
+    var wq, ws : array<uint8>
     // classifier plane first — the board's best ms-per-GB region (one whole-vocab GEMV serves
     // every token). One slice: the repack groups the plane globally, tail rows disk-order.
     // DASLLAMA_GPU_CLS=0 keeps it on the CPU (A/B lever).
@@ -4313,7 +4302,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         var dense_stop = false
         var dense_skips : WalkSkips
         for (l in range64(layers)) {
-            var uploads : array<tuple<f : KqFmt; woff : int64; n : int64; rows : int64>>
+            var inscope uploads : array<tuple<f : KqFmt; woff : int64; n : int64; rows : int64>>
             if (layer_is_recurrent(t.config, l)) {
                 // kq-tagged dn planes (CPU-rail loads) are not tier-servable — the dn chain reads q8
                 if (t.dnqkv_offs[l] < 0l || t.dngate_offs[l] < 0l || t.dnout_offs[l] < 0l) {
@@ -4371,7 +4360,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         let she = dim * nsh
         var sh_marked = 0l
         for (l in range64(layers)) {
-            var ups <- [plane_up(KqFmt.q8, t.wsh1_off + l * she, dim, nsh),
+            var inscope ups <- [plane_up(KqFmt.q8, t.wsh1_off + l * she, dim, nsh),
                         plane_up(KqFmt.q8, t.wsh3_off + l * she, dim, nsh),
                         plane_up(KqFmt.q8, t.wsh2_off + l * she, nsh, dim)]
             let ok = gather_upload_group(t, ups, mr, kgroup, wbias, wq, ws)
@@ -4413,7 +4402,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
             }
             let cd = dn_conv_dim(t.config)
             let di = t.config.ssm_d_inner
-            var ups <- [plane_up(KqFmt.q8, t.dnqkv_offs[l], dim, cd),
+            var inscope ups <- [plane_up(KqFmt.q8, t.dnqkv_offs[l], dim, cd),
                         plane_up(KqFmt.q8, t.dngate_offs[l], dim, di),
                         plane_up(KqFmt.q8, t.dnout_offs[l], di, dim)]
             let ok = gather_upload_group(t, ups, mr, kgroup, wbias, wq, ws)
@@ -4481,7 +4470,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
                 walk_skip(at_skips, l, "geometry outside the chain (hs {hs}, qd {qd}, kvd {kvd}, heads {c.n_heads}, rot {rot})")
                 continue
             }
-            var ups : array<PlaneUp>
+            var inscope ups : array<PlaneUp>
             if (!moe_gpu_dense_on_gpu(int(fq), t.wq_offs[l])) {
                 ups |> push(plane_up(fq, t.wq_offs[l], dim, c.q_gated ? 2l * qd : qd))
             }
@@ -4525,7 +4514,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
                 walk_skip(qkv_skips, l, "q/k/v formats {int(fq)}/{int(fk)}/{int(fv)} not tier-servable as one image")
                 continue
             }
-            var ups <- [plane_up(fq, t.wq_offs[l], dim, t.config.q_gated ? 2l * qd : qd),
+            var inscope ups <- [plane_up(fq, t.wq_offs[l], dim, t.config.q_gated ? 2l * qd : qd),
                         plane_up(fk, t.wk_offs[l], dim, kv),
                         plane_up(fv, t.wv_offs[l], dim, kv)]
             let ok = gather_upload_group(t, ups, mr, kgroup, wbias, wq, ws)
@@ -4548,7 +4537,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         // The Q4_K_M MoE recipe bumps ffn_down_exps to Q5_0/Q8_0, so k4/k4/q8 is the COMMON shape (glm4moe,
         // gemma). The walk stops on refusal so the resident set stays contiguous from the end.
         break if (l < t.config.n_layer_dense_lead || t.we1_offs[l] < 0l || tier_expert_walk_stops(t, l, "expert"))
-        var ups <- resident_expert_ups(t, l)
+        var inscope ups <- resident_expert_ups(t, l)
         let ok = gather_upload_group(t, ups, mr, kgroup, wbias, wq, ws)
         delete ups
         break if (!ok)   // VRAM budget hit — this and lower layers stay on CPU
@@ -4562,7 +4551,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     for (i in range64(has_experts ? max(nstream, 0l) : 0l)) {
         let l = from_l - 1l - i
         break if (l < t.config.n_layer_dense_lead || t.we1_offs[l] < 0l || tier_expert_walk_stops(t, l, "streamed"))
-        var ups <- resident_expert_ups(t, l)
+        var inscope ups <- resident_expert_ups(t, l)
         let ok = gather_upload_group(t, ups, mr, kgroup, wbias, wq, ws, [stream = true])
         delete ups
         break if (!ok)   // pinned-mirror budget hit — this and lower layers stay CPU-only

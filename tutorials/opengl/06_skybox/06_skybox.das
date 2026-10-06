@@ -85,9 +85,7 @@ def scene_vs {
 }
 
 // GLSL-style reflect(I, N) = I - 2*dot(N,I)*N, I the incident (eye->surface) direction.
-def reflect_dir(i, n : float3) : float3 {
-    return i - n * (2.0 * dot(n, i))
-}
+def reflect_dir(i, n : float3) : float3 => i - n * (2.0 * dot(n, i))
 
 [fragment_program]
 def sphere_fs {
@@ -180,9 +178,7 @@ let cube_indices = fixed_array<int>(
 
 let SUN_DIR : float3 = normalize(float3(0.45, 0.55, 0.85))
 
-def mix3(a, b : float3; t : float) : float3 {
-    return a + (b - a) * t
-}
+def mix3(a, b : float3; t : float) : float3 => a + (b - a) * t
 
 def sample_sky(dir : float3) : float3 {
     let altitude = clamp(dir.y, -1.0, 1.0)
@@ -253,7 +249,7 @@ def create_skybox_cubemap(dim : int) : uint {
     glGenTextures(1, safe_addr(tex))
     glBindTexture(GL_TEXTURE_CUBE_MAP, tex)
     for (face in range(N_FACES)) {
-        var pixels <- gen_sky_face(face, dim)
+        var inscope pixels <- gen_sky_face(face, dim)
         glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + uint(face), 0, int(GL_RGBA), dim, dim, 0,
             GL_RGBA, GL_UNSIGNED_BYTE, unsafe(addr(pixels[0])))
         delete pixels

@@ -12,14 +12,10 @@ require dastest/testing_boost public
 // ── Target functions ─────────────────────────────────────────────────────
 
 [export, marker(no_coverage)]
-def target_add(a, b : int) : int {
-    return a + b
-}
+def target_add(a, b : int) : int => a + b
 
 [export, marker(no_coverage)]
-def target_three(x, y, z : float) : float {
-    return x + y + z
-}
+def target_three(x, y, z : float) : float => x + y + z
 
 // ── qmatch_function argument names ───────────────────────────────────────
 
@@ -192,9 +188,7 @@ def test_block_no_args_fails_when_target_has_args(t : T?) {
 // ── $a(var) — capture remaining arguments ────────────────────────────────
 
 [export, marker(no_coverage), unused_argument(b), unused_argument(c), unused_argument(d), unused_argument(e)]
-def target_five(a, b : int; c : float; d : string; e : bool) : int {
-    return a
-}
+def target_five(a, b : int; c : float; d : string; e : bool) : int => a
 
 [test]
 def test_a_capture_all(t : T?) {

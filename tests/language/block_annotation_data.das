@@ -14,13 +14,9 @@ require dastest/testing_boost
 // SimNode_ClosureBlock, C++ AOT emits __context__->adBySid(sid), and the LLVM JIT calls
 // jit_ad_by_sid(sid, ctx) -- three routes to one table, so this test is what keeps them in step.
 
-def probe(blk : block<(x : int) : int>) : uint64 {
-    return testBlockAnnotationData(blk)
-}
+def probe(blk : block<(x : int) : int>) : uint64 => testBlockAnnotationData(blk)
 
-def call_block(blk : block<(x : int) : int>) : int {
-    return invoke(blk, 20)
-}
+def call_block(blk : block<(x : int) : int>) : int => invoke(blk, 20)
 
 [test]
 def test_block_annotation_data(t : T?) {

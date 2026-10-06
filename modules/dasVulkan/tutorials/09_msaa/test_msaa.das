@@ -17,9 +17,7 @@ let TEST_CAM  : float = 0.18
 
 // sRGB-encoded clear colour: linear (0.02, 0.0, 0.06) → sRGB ≈ (39, 0, 69) per hw encoder.
 // The thresholds below are tuned to accept this colour and reject anything brighter/different.
-def bg(p : int3) : bool {
-    return p.x < 50 && p.y < 5 && p.z < 80
-}
+def bg(p : int3) : bool => p.x < 50 && p.y < 5 && p.z < 80
 
 //! Faint near-background pixels: above the clear colour (bg.z ~69) but in the aliasing-speckle band.
 //! In sRGB space the speckle from thin-spike partial coverage lands in [74,120]; 1x has far more

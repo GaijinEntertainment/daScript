@@ -19,9 +19,7 @@ let DOT_POISON = 0.5
 let ROUND_U = 1.0e-7
 let BAR_FLOOR = 1.0e-6
 
-def private dot_bar(n : int) : float {
-    return ROUND_U * float(n) * float(n) + BAR_FLOOR
-}
+def private dot_bar(n : int) : float => ROUND_U * float(n) * float(n) + BAR_FLOOR
 
 def private lcg_grid(n : int; seed : uint; step : float; signed_values : bool) : array<float> {
     var st = opaque(seed)
@@ -47,9 +45,8 @@ def private lcg_unit(n : int; seed : uint) : array<float> {
     return <- a
 }
 
-def private to_bf16(src : array<float>) : array<uint16> {
-    return <- [for (v in src); bf16_bits_truncated(v)]
-}
+def private to_bf16(src : array<float>) : array<uint16> =>
+    <- [for (v in src); bf16_bits_truncated(v)]
 
 //! one swept length of an in-place kernel: bit-exact, and the elements left where they were counted
 def private tally(var r : Sweep; n : int; got, want, before : array<float>) {
@@ -66,8 +63,8 @@ def private report_inplace(t : T?; name : string; r : Sweep) => report_sweep(t, 
 def private sweep_dot_exact() : Sweep {
     var r = Sweep()
     for (n in SWEEP) {
-        let a <- lcg_grid(n, opaque(0x11a3u) + uint(n), 0.125, true)
-        let b <- lcg_grid(n, opaque(0x9e37u) + uint(n), 0.375, true)
+        var inscope a <- lcg_grid(n, opaque(0x11a3u) + uint(n), 0.125, true)
+        var inscope b <- lcg_grid(n, opaque(0x9e37u) + uint(n), 0.375, true)
         var want = 0.0lf
         for (av, bv in a, b) {
             want += double(av) * double(bv)
@@ -81,8 +78,8 @@ def private sweep_dot_exact() : Sweep {
 def private sweep_dot_bar() : Sweep {
     var r = Sweep()
     for (n in SWEEP) {
-        let a <- lcg_unit(n, opaque(0x4d2bu) + uint(n))
-        let b <- lcg_unit(n, opaque(0xa51fu) + uint(n))
+        var inscope a <- lcg_unit(n, opaque(0x4d2bu) + uint(n))
+        var inscope b <- lcg_unit(n, opaque(0xa51fu) + uint(n))
         var want = 0.0lf
         for (av, bv in a, b) {
             want += double(av) * double(bv)
@@ -96,9 +93,9 @@ def private sweep_dot_bar() : Sweep {
 def private sweep_dot_bf16_exact() : Sweep {
     var r = Sweep()
     for (n in SWEEP) {
-        let a <- lcg_grid(n, opaque(0x3c07u) + uint(n), 0.125, true)
-        let bf <- lcg_grid(n, opaque(0x7b91u) + uint(n), 0.375, true)
-        let b <- to_bf16(bf)
+        var inscope a <- lcg_grid(n, opaque(0x3c07u) + uint(n), 0.125, true)
+        var inscope bf <- lcg_grid(n, opaque(0x7b91u) + uint(n), 0.375, true)
+        var inscope b <- to_bf16(bf)
         var want = 0.0lf
         for (av, bw in a, b) {
             want += double(av) * double(bf16_value(bw))
@@ -112,9 +109,9 @@ def private sweep_dot_bf16_exact() : Sweep {
 def private sweep_dot_bf16_bar() : Sweep {
     var r = Sweep()
     for (n in SWEEP) {
-        let a <- lcg_unit(n, opaque(0x2f6eu) + uint(n))
-        let bf <- lcg_unit(n, opaque(0xc0deu) + uint(n))
-        let b <- to_bf16(bf)
+        var inscope a <- lcg_unit(n, opaque(0x2f6eu) + uint(n))
+        var inscope bf <- lcg_unit(n, opaque(0xc0deu) + uint(n))
+        var inscope b <- to_bf16(bf)
         var want = 0.0lf
         for (av, bw in a, b) {
             want += double(av) * double(bf16_value(bw))
@@ -128,13 +125,13 @@ def private sweep_dot_bf16_bar() : Sweep {
 def private sweep_copy_floats() : Sweep {
     var r = Sweep()
     for (n in SWEEP) {
-        let s <- lcg_unit(n, opaque(0x51c0u) + uint(n))
-        var before : array<float>
+        var inscope s <- lcg_unit(n, opaque(0x51c0u) + uint(n))
+        var inscope before : array<float>
         before |> resize(n)
         for (v in before) {
             v = SENTINEL
         }
-        var d := before
+        var inscope d := before
         copy_floats(unsafe(addr(d[0])), unsafe(addr(s[0])), int64(n))
         tally(r, n, d, s, before)
     }
@@ -144,14 +141,14 @@ def private sweep_copy_floats() : Sweep {
 def private sweep_add_inplace() : Sweep {
     var r = Sweep()
     for (n in SWEEP) {
-        let before <- lcg_grid(n, opaque(0x6a12u) + uint(n), 0.125, true)
-        let s <- lcg_grid(n, opaque(0xb33fu) + uint(n), 0.375, true)
-        var want : array<float>
+        var inscope before <- lcg_grid(n, opaque(0x6a12u) + uint(n), 0.125, true)
+        var inscope s <- lcg_grid(n, opaque(0xb33fu) + uint(n), 0.375, true)
+        var inscope want : array<float>
         want |> resize(n)
         for (w, b, sv in want, before, s) {
             w = float(double(b) + double(sv))
         }
-        var d := before
+        var inscope d := before
         add_inplace(unsafe(addr(d[0])), unsafe(addr(s[0])), int64(n))
         tally(r, n, d, want, before)
     }
@@ -161,14 +158,14 @@ def private sweep_add_inplace() : Sweep {
 def private sweep_add_scale_inplace() : Sweep {
     var r = Sweep()
     for (n in SWEEP) {
-        let before <- lcg_grid(n, opaque(0x1de5u) + uint(n), 0.125, false)
-        let s <- lcg_grid(n, opaque(0x8c44u) + uint(n), 0.375, false)
-        var want : array<float>
+        var inscope before <- lcg_grid(n, opaque(0x1de5u) + uint(n), 0.125, false)
+        var inscope s <- lcg_grid(n, opaque(0x8c44u) + uint(n), 0.375, false)
+        var inscope want : array<float>
         want |> resize(n)
         for (w, b, sv in want, before, s) {
             w = float((double(b) + double(sv)) * double(TEST_SCALE))
         }
-        var d := before
+        var inscope d := before
         add_scale_inplace(unsafe(addr(d[0])), unsafe(addr(s[0])), TEST_SCALE, int64(n))
         tally(r, n, d, want, before)
     }
@@ -178,14 +175,14 @@ def private sweep_add_scale_inplace() : Sweep {
 def private sweep_mul_inplace() : Sweep {
     var r = Sweep()
     for (n in SWEEP) {
-        let before <- lcg_grid(n, opaque(0x9077u) + uint(n), 0.125, true)
-        let s <- lcg_grid(n, opaque(0x2bb8u) + uint(n), 0.375, true)
-        var want : array<float>
+        var inscope before <- lcg_grid(n, opaque(0x9077u) + uint(n), 0.125, true)
+        var inscope s <- lcg_grid(n, opaque(0x2bb8u) + uint(n), 0.375, true)
+        var inscope want : array<float>
         want |> resize(n)
         for (w, b, sv in want, before, s) {
             w = float(double(b) * double(sv))
         }
-        var d := before
+        var inscope d := before
         mul_inplace(unsafe(addr(d[0])), unsafe(addr(s[0])), int64(n))
         tally(r, n, d, want, before)
     }
@@ -195,13 +192,13 @@ def private sweep_mul_inplace() : Sweep {
 def private sweep_scale_inplace() : Sweep {
     var r = Sweep()
     for (n in SWEEP) {
-        let before <- lcg_grid(n, opaque(0x4e19u) + uint(n), 0.125, true)
-        var want : array<float>
+        var inscope before <- lcg_grid(n, opaque(0x4e19u) + uint(n), 0.125, true)
+        var inscope want : array<float>
         want |> resize(n)
         for (w, b in want, before) {
             w = float(double(b) * double(TEST_SCALE))
         }
-        var d := before
+        var inscope d := before
         scale_inplace(unsafe(addr(d[0])), TEST_SCALE, int64(n))
         tally(r, n, d, want, before)
     }
@@ -211,14 +208,14 @@ def private sweep_scale_inplace() : Sweep {
 def private sweep_axpy() : Sweep {
     var r = Sweep()
     for (n in SWEEP) {
-        let before <- lcg_grid(n, opaque(0x7231u) + uint(n), 0.125, true)
-        let s <- lcg_grid(n, opaque(0xd4a0u) + uint(n), 0.375, true)
-        var want : array<float>
+        var inscope before <- lcg_grid(n, opaque(0x7231u) + uint(n), 0.125, true)
+        var inscope s <- lcg_grid(n, opaque(0xd4a0u) + uint(n), 0.375, true)
+        var inscope want : array<float>
         want |> resize(n)
         for (w, b, sv in want, before, s) {
             w = float(double(b) + double(TEST_SCALE) * double(sv))
         }
-        var d := before
+        var inscope d := before
         axpy(unsafe(addr(d[0])), unsafe(addr(s[0])), TEST_SCALE, int64(n))
         tally(r, n, d, want, before)
     }

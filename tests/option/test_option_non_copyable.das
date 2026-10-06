@@ -39,9 +39,7 @@ def operator ==(a : array<int>; b : array<int>) : bool {
     return true
 }
 
-def make_arr(a : int; b : int) : array<int> {
-    return <- [a, b]
-}
+def make_arr(a : int; b : int) : array<int> => <- [a, b]
 
 [test]
 def test_constructors(t : T?) {

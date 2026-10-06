@@ -35,19 +35,16 @@ def private looks_like_anthropic_missing(output : string) : bool {
 }
 
 
-def private looks_like_api_key_missing(output : string) : bool {
-    return find(output, "ANTHROPIC_API_KEY") >= 0
-}
+def private looks_like_api_key_missing(output : string) : bool =>
+    find(output, "ANTHROPIC_API_KEY") >= 0
 
 
-def private daspkg_install_hint() : string {
-    return "find-dupe requires the `anthropic/anthropic` daspkg. From the project root run:\n  bin/daslang utils/daspkg/main.das -- install --root utils/find-dupe\nThen retry."
-}
+def private daspkg_install_hint() : string =>
+    "find-dupe requires the `anthropic/anthropic` daspkg. From the project root run:\n  bin/daslang utils/daspkg/main.das -- install --root utils/find-dupe\nThen retry."
 
 
-def private api_key_hint() : string {
-    return "ANTHROPIC_API_KEY is not set in the daslang subprocess's environment. On macOS, add to ~/.zshenv (which is sourced by every zsh, including non-interactive subshells):\n  export ANTHROPIC_API_KEY=\"sk-ant-...\"\nThen restart the MCP server."
-}
+def private api_key_hint() : string =>
+    "ANTHROPIC_API_KEY is not set in the daslang subprocess's environment. On macOS, add to ~/.zshenv (which is sourced by every zsh, including non-interactive subshells):\n  export ANTHROPIC_API_KEY=\"sk-ant-...\"\nThen restart the MCP server."
 
 
 // Trim oversized stdout for the envelope. The full output already went into

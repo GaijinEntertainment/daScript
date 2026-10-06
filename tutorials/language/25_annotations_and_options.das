@@ -35,9 +35,7 @@ options gen2
 // === Private functions ===
 // Use the `private` keyword — not callable from other modules.
 
-def private helper() : string {
-    return "I'm private"
-}
+def private helper() : string => "I'm private"
 
 // === [sideeffects] ===
 // Tells the compiler this function has side effects.
@@ -54,30 +52,22 @@ def log_message(msg : string) {
 // Useful for callback signatures where some args are required but not used.
 
 [unused_argument(y)]
-def use_only_x(x : int; y : int) : int {
-    return x * 2
-}
+def use_only_x(x : int; y : int) : int => x * 2
 
 // === [deprecated] ===
 // Using a deprecated function produces a compile-time warning.
 // (We won't call it here to avoid the warning in this tutorial.)
 
 [deprecated(message="use new_greet instead")]
-def old_greet(name : string) : string {
-    return "Hi, {name}"
-}
+def old_greet(name : string) : string => "Hi, {name}"
 
-def new_greet(name : string) : string {
-    return "Hello, {name}!"
-}
+def new_greet(name : string) : string => "Hello, {name}!"
 
 // === [unsafe_operation] ===
 // Calling this function requires an unsafe block.
 
 [unsafe_operation]
-def dangerous_compute(x : int) : int {
-    return x * x  // pretend this does something unsafe
-}
+def dangerous_compute(x : int) : int => x * x  // pretend this does something unsafe
 
 // === Struct annotations ===
 

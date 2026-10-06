@@ -54,9 +54,7 @@ def test_add(input : JsonValue?) : JsonValue? {
 }
 
 [live_command]
-def test_null_return(_input : JsonValue?) : JsonValue? {
-    return null
-}
+def test_null_return(_input : JsonValue?) : JsonValue? => null
 
 // --- Tests ---
 

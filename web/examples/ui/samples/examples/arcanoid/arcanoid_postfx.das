@@ -122,18 +122,13 @@ def private view_from_uv(uv : float2; depth : float) : float3 {
     return float3(ndc.x * p_params2.x * depth, ndc.y * p_params2.y * depth, -depth)
 }
 
-def private hash_noise(p : float2) : float {
-    return fract_local(sin(dot(floor(p), float2(12.9898, 78.233))) * 43758.545)
-}
+def private hash_noise(p : float2) : float =>
+    fract_local(sin(dot(floor(p), float2(12.9898, 78.233))) * 43758.545)
 
-def private fract_local(x : float) : float {
-    return x - floor(x)
-}
+def private fract_local(x : float) : float => x - floor(x)
 
 //! the scene writes (normal.xy, depth high byte, depth low byte); the background stays at depth 1
-def private nd_depth(nd : float4) : float {
-    return nd.z + nd.w / 255.0
-}
+def private nd_depth(nd : float4) : float => nd.z + nd.w / 255.0
 
 [fragment_program]
 def fs_ssao {

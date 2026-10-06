@@ -21,9 +21,7 @@ struct private Shape {
 }
 
 
-def private has(text, needle : string) : bool {
-    return text |> find(needle) >= 0
-}
+def private has(text, needle : string) : bool => text |> find(needle) >= 0
 
 
 def private convert_shape(t : T?; shape : Shape; var out : string&) : bool {

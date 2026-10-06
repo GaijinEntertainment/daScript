@@ -93,8 +93,7 @@ def build_mel_filterbank(n_mel, n_fft, sample_rate : int64) : array<float> {
 //! theta, float trig). Shared by every mel flavor (whisper/mtmd here, qwen3a's module).
 def build_dft_twiddles(n_fft : int64) : array<float> {
     let n_bins = n_fft / 2l + 1l
-    var cos_tab : array<float>
-    var sin_tab : array<float>
+    var cos_tab, sin_tab : array<float>
     cos_tab |> resize(n_fft)
     sin_tab |> resize(n_fft)
     for (i in range64(n_fft)) {
@@ -348,8 +347,7 @@ def build_whisper_mel_plan(n_fft : int64) : WhisperMelPlan {
     var p = WhisperMelPlan(n_fft = n_fft)
     p.hann <- build_hann_window(n_fft)
     let n_bins = n_fft / 2l + 1l
-    var cos_tab : array<float>
-    var sin_tab : array<float>
+    var cos_tab, sin_tab : array<float>
     cos_tab |> resize(n_fft)
     sin_tab |> resize(n_fft)
     for (i in range64(n_fft)) {

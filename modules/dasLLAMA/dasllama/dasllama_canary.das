@@ -310,9 +310,8 @@ def private cn_bytes_str(b : array<uint8> | #; o, n : int64) : string {
     return s
 }
 
-def private cn_rd_i64(b : array<uint8> | #; o : int64) : int64 {
-    return int64(rd_u32(b, o)) | (int64(rd_u32(b, o + 4l)) << 32l)
-}
+def private cn_rd_i64(b : array<uint8> | #; o : int64) : int64 =>
+    int64(rd_u32(b, o)) | (int64(rd_u32(b, o + 4l)) << 32l)
 
 def private cn_read_rec(b : array<uint8> | #; rec : CnRec; var blob : array<float>; o : int64) {
     for (i in range64(rec.n_elem)) {
@@ -478,14 +477,11 @@ def load_canary_encoder(path : string; q8 : bool = false) : CanaryEncoder {
 
 //! The loaded precision as ``<encoder>/<decoder>`` (the decoder tag comes from the facade,
 //! which owns the shared LLM): the facade's [[asr_exec_fmt]] arm.
-def canary_exec_fmt(e : CanaryEncoder; dec_fmt : string) : string {
-    return "{e.q8 ? "q8" : "f32"}/{dec_fmt}"
-}
+def canary_exec_fmt(e : CanaryEncoder; dec_fmt : string) : string =>
+    "{e.q8 ? "q8" : "f32"}/{dec_fmt}"
 
 //! Canary's encode-total ``asr_prof`` bucket (the facade's [[asr_encode_bucket]] arm).
-def canary_encode_bucket : string {
-    return "cn.encode"
-}
+def canary_encode_bucket : string => "cn.encode"
 
 //! Mint a served encoder from a staged read WITHOUT touching disk — the in-memory image rail.
 //! The off-rail control for suites: a live encoder that came from no `.dlim` file.

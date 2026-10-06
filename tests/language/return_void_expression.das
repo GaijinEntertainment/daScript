@@ -41,9 +41,7 @@ def forward_void(blk : block<() : void>) {
     return blk()
 }
 
-def forward_generic(blk) {
-    return blk()
-}
+def forward_generic(blk) => blk()
 
 def mixed_result(n : int) : int {
     call_void() $(x) => bump_by(x)

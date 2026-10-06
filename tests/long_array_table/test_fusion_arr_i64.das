@@ -55,9 +55,7 @@ def test_arr_i64_via_argument(t : T?) {
     t |> equal(read_at(arr, 7_l), 1007)
 }
 
-def read_at(arr : array<int>; idx : int64) : int {
-    return arr[idx]
-}
+def read_at(arr : array<int>; idx : int64) : int => arr[idx]
 
 [test]
 def test_arr_i64_float_value_type(t : T?) {

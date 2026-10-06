@@ -40,9 +40,7 @@ def private read_golden(name : string) : string {
 
 // Compare EOL-agnostically: goldens are stored -text (see _golden/.gitattributes), but strip any \r
 // so the gate never breaks on an autocrlf checkout (dump() always emits \n).
-def private nocr(s : string) : string {
-    return replace(s, "\r", "")
-}
+def private nocr(s : string) : string => replace(s, "\r", "")
 
 def private check(t : T?; name : string; var words : array<uint>) {
     let got = nocr(dump(words))
@@ -68,7 +66,7 @@ def private canon(s : string) : string {
                 wr |> write("{line}\n")
                 continue
             }
-            var toks <- split(line, " ")
+            var inscope toks <- split(line, " ")
             let opName = toks[0]
             for (ti in range(length(toks))) {
                 if (ti > 0) {

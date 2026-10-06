@@ -1,13 +1,9 @@
 options gen2
 require dastest/testing_boost public
 
-def apply_to_7(a : block<(x : int) : int>) : int {
-    return a(7)
-}
+def apply_to_7(a : block<(x : int) : int>) : int => a(7)
 
-def build_with_7(a : block<(x : int) : array<int>>) : array<int> {
-    return <- a(7)
-}
+def build_with_7(a : block<(x : int) : array<int>>) : array<int> => <- a(7)
 
 [test]
 def test_call_site_block_arrow_body(t : T?) {

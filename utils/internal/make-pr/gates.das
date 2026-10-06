@@ -25,9 +25,8 @@ def public want_gate(only : string; skip : array<string>; gate : string) : bool 
 //! each) or off the critical path (dupes: an advisory report); each still runs by name through --only
 let public NAMED_ONLY_GATES <- fixed_array("review-md", "ast-verify", "dupes")
 
-def public in_default_chain(only : string; gate : string) : bool {
-    return !empty(only) || NAMED_ONLY_GATES |> find_index(gate) < 0
-}
+def public in_default_chain(only : string; gate : string) : bool =>
+    !empty(only) || NAMED_ONLY_GATES |> find_index(gate) < 0
 
 def public unknown_gate_names(only : string; skip : array<string>) : array<string> {
     var bad <- [for (g in skip); g; where GATE_NAMES |> find_index(g) < 0]
@@ -41,7 +40,7 @@ def public scopes_of(files : array<string>) : array<string> {
     var seen : table<string>
     var scopes : array<string>
     for (f in files) {
-        let parts <- split(to_generic_path(f), "/")
+        var inscope parts <- split(to_generic_path(f), "/")
         if (length(parts) < 2) {
             continue
         }

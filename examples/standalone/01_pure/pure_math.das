@@ -23,14 +23,10 @@ enum Axis {
 let TAPS = fixed_array<float>(0.25, 0.5, 0.25)
 
 [export]
-def dot(a, b : Vec3) : float {
-    return a.x * b.x + a.y * b.y + a.z * b.z
-}
+def dot(a, b : Vec3) : float => a.x * b.x + a.y * b.y + a.z * b.z
 
 [export]
-def scale(v : Vec3; k : float) : Vec3 {
-    return Vec3(x = v.x * k, y = v.y * k, z = v.z * k)
-}
+def scale(v : Vec3; k : float) : Vec3 => Vec3(x = v.x * k, y = v.y * k, z = v.z * k)
 
 [export]
 def component(v : Vec3; axis : Axis) : float {

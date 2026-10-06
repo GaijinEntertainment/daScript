@@ -15,17 +15,11 @@ let stringval = "hello, world"
 let some_a = "test"
 let some_b <- [some_a]
 
-def foo(b : block<(a : int) : int>) {
-    return invoke(b, 3)
-}
+def foo(b : block<(a : int) : int>) => invoke(b, 3)
 
-def foobar(b : block<(a : int; b : float) : string>) {
-    return invoke(b, 1, 2.0) + "bar"
-}
+def foobar(b : block<(a : int; b : float) : string>) => invoke(b, 1, 2.0) + "bar"
 
-def madd(a, b, c) {
-    return a * b + c
-}
+def madd(a, b, c) => a * b + c
 
 def take_arr(a : int[]) {
     var summ = 0
@@ -35,22 +29,18 @@ def take_arr(a : int[]) {
     return summ
 }
 
-def random_pick(source : string[]; var seed : int4&) : string {
-    return "pick_1"
-}
+def random_pick(source : string[]; var seed : int4&) : string => "pick_1"
 
-def random_pick(source : tuple<string; float>[]; var seed : int4&) : string {
-    return "pick_2"
-}
+def random_pick(source : tuple<string; float>[]; var seed : int4&) : string => "pick_2"
 
 [sideeffects]
 def qq(a : auto(T1); b : block<(a1 : T1; a2 : T2) : bool>; c : auto(T2)) {
     pass
 }
 
-def fn3 { return 3; }
-def fn2 { return fn3() + 1; }
-def fn1 { return fn2() + 2; }
+def fn3 => 3
+def fn2 => fn3() + 1
+def fn1 => fn2() + 2
 
 [test]
 def test_auto_infer(t : T?) {

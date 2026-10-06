@@ -55,9 +55,7 @@ def locate_binary(root : string) : string {
 }
 
 // Run a command with inherited stdio so cmake's progress streams live.
-def run_visible(cmd : string) : int {
-    return unsafe(system(cmd))
-}
+def run_visible(cmd : string) : int => unsafe(system(cmd))
 
 // Reject paths with characters that could break out of the double-quoted shell
 // commands we hand to cmake via system() — the quote itself, POSIX command

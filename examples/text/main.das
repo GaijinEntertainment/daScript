@@ -226,18 +226,15 @@ let CMD_FIND = "find.open"
 let CMD_FIND_NEXT = "find.next"
 let CMD_FIND_PREV = "find.prev"
 
-def private mode_name(doc : TextViewerDocument const) : string {
-    return doc.mode == TextViewMode.markdown ? "markdown" : "plain"
-}
+def private mode_name(doc : TextViewerDocument const) : string =>
+    doc.mode == TextViewMode.markdown ? "markdown" : "plain"
 
 def private surface_name(doc : TextViewerDocument const) : string {
     if (doc.edit_surface == EditSurface.split) return "split"
     return doc.edit_surface == EditSurface.preview ? "preview" : "source"
 }
 
-def private zoom_percent(doc : TextViewerDocument const) : int {
-    return doc.zoom_step * 5
-}
+def private zoom_percent(doc : TextViewerDocument const) : int => doc.zoom_step * 5
 
 def private set_zoom_percent(var doc : TextViewerDocument; percent : int) {
     doc.zoom_step = clamp((percent + 2) / 5, 10, 60)
@@ -260,13 +257,11 @@ def private set_mode(var doc : TextViewerDocument; mode : TextViewMode) {
     text_source_view_clear_selection(doc.source_view)
 }
 
-def private document_dirty(doc : TextViewerDocument const) : bool {
-    return text_document_dirty(doc.source) || (doc.editing && doc.edit.dirty)
-}
+def private document_dirty(doc : TextViewerDocument const) : bool =>
+    text_document_dirty(doc.source) || (doc.editing && doc.edit.dirty)
 
-def private edit_language_for(path : string) : string {
-    return markdown_path(path) ? "markdown" : extension(path)
-}
+def private edit_language_for(path : string) : string =>
+    markdown_path(path) ? "markdown" : extension(path)
 
 def private record_disk_stamp(var doc : TextViewerDocument) {
     doc.external_change = false
@@ -1481,9 +1476,8 @@ def private draw_editor_rich_das(var doc : TextViewerDocument) {
         edit_style, md_style, g_commands)
 }
 
-def private rich_das_capable(doc : TextViewerDocument const) : bool {
-    return doc.edit.language == "daslang"
-}
+def private rich_das_capable(doc : TextViewerDocument const) : bool =>
+    doc.edit.language == "daslang"
 
 def private draw_document_editor(var doc : TextViewerDocument) {
     let md_capable = doc.mode == TextViewMode.markdown

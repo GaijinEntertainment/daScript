@@ -15,101 +15,69 @@ require math
 
 // ----- 2-way sum: below the default width-3 floor -> stays a scalar add -----
 [flatten]
-def h_two(a, b : float) : float {
-    return a + b
-}
+def h_two(a, b : float) : float => a + b
 
 // ----- 3-way sum -> hadd(float3(...)) -----
 [flatten]
-def h_three(a, b, c : float) : float {
-    return a + b + c
-}
+def h_three(a, b, c : float) : float => a + b + c
 
 // ----- pure 4-way sum -> hadd(float4(...)) -----
 [flatten]
-def h_four(a, b, c, d : float) : float {
-    return a + b + c + d
-}
+def h_four(a, b, c, d : float) : float => a + b + c + d
 
 // ----- 5 terms: plan_groups(5,3) = [4] -> hadd4, the 5th lane stays a scalar add (sub-width-3 tail) -----
 [flatten]
-def h_five(a, b, c, d, e : float) : float {
-    return a + b + c + d + e
-}
+def h_five(a, b, c, d, e : float) : float => a + b + c + d + e
 
 // ----- 7 terms: plan_groups splits [4,3] -> hadd4 + hadd3 -----
 [flatten]
-def h_seven(a, b, c, d, e, f, g : float) : float {
-    return a + b + c + d + e + f + g
-}
+def h_seven(a, b, c, d, e, f, g : float) : float => a + b + c + d + e + f + g
 
 // ----- 8 terms: two groups of four -> two PARALLEL hadd4 (never a nested hadd) -----
 [flatten]
-def h_eight(a, b, c, d, e, f, g, h : float) : float {
-    return a + b + c + d + e + f + g + h
-}
+def h_eight(a, b, c, d, e, f, g, h : float) : float => a + b + c + d + e + f + g + h
 
 // ----- one lane only: `a` is the sole reduce lane, `b*c` is a runtime*runtime product (mad, not a
 // weighted lane) -> nothing to pack -----
 [flatten]
-def h_one_lane(a, b, c : float) : float {
-    return a + b * c
-}
+def h_one_lane(a, b, c : float) : float => a + b * c
 
 // ----- negated tail: four positives pack, the `- e` stays -----
 [flatten]
-def h_neg(a, b, c, d, e : float) : float {
-    return a + b + c + d - e
-}
+def h_neg(a, b, c, d, e : float) : float => a + b + c + d - e
 
 // ----- const term stays out of the ctor (it folds), four vars pack -----
 [flatten]
-def h_const(a, b, c, d : float) : float {
-    return a + b + c + d + 0.5
-}
+def h_const(a, b, c, d : float) : float => a + b + c + d + 0.5
 
 // ----- horizontal sum buried inside a call argument -----
 [flatten]
-def h_buried(a, b, c, d : float) : float {
-    return sin(a + b + c + d)
-}
+def h_buried(a, b, c, d : float) : float => sin(a + b + c + d)
 
 // ----- the plasma shape: `(sum) * s + k` -> mad(hadd(...), s, k) -----
 [flatten]
-def h_mad(a, b, c, d : float) : float {
-    return (a + b + c + d) * 2.0 + 1.0
-}
+def h_mad(a, b, c, d : float) : float => (a + b + c + d) * 2.0 + 1.0
 
 // ----- const-weighted lanes pack into a DOT, not hadd: `n*w` summed -> dot(floatN(n), floatN(w)) -----
 // (the weighted reduction beats the mad-chain at width>=3: combine + dot vs N mads — the mandelbrot fBm)
 [flatten]
-def h_weighted(a, b, c, d : float) : float {
-    return a * 2.0 + b * 3.0 + c * 4.0 + d * 5.0
-}
+def h_weighted(a, b, c, d : float) : float => a * 2.0 + b * 3.0 + c * 4.0 + d * 5.0
 
 // ----- mixed plain + weighted lanes share one dot with a unit weight: `a + b*2 + c*3` -> dot(.,(1,2,3)) -----
 [flatten]
-def h_wmixed(a, b, c : float) : float {
-    return a + b * 2.0 + c * 3.0
-}
+def h_wmixed(a, b, c : float) : float => a + b * 2.0 + c * 3.0
 
 // ----- producer-vectorization: same elementwise-unary lanes collapse the producer -> hadd(sin(float3(...))) -----
 [flatten]
-def h_trig(a, b, c : float) : float {
-    return sin(a) + sin(b) + sin(c)
-}
+def h_trig(a, b, c : float) : float => sin(a) + sin(b) + sin(c)
 
 // ----- producer-vectorization at width 4 -> hadd(cos(float4(...))) -----
 [flatten]
-def h_trig4(a, b, c, d : float) : float {
-    return cos(a) + cos(b) + cos(c) + cos(d)
-}
+def h_trig4(a, b, c, d : float) : float => cos(a) + cos(b) + cos(c) + cos(d)
 
 // ----- mixed producers (sin / cos / sin) do NOT vectorize: leaf-pack hadd(float3(sin,cos,sin)) -----
 [flatten]
-def h_mixed(a, b, c : float) : float {
-    return sin(a) + cos(b) + sin(c)
-}
+def h_mixed(a, b, c : float) : float => sin(a) + cos(b) + sin(c)
 
 var GRID <- [-100.0, -3.5, -1.0, 0.0, 1.0, 2.5, 7.0, 100.0]
 

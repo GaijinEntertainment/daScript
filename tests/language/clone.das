@@ -142,21 +142,13 @@ struct SHolder {
     f : CFoo
 }
 
-def make_vfoo(arr : array<string>) : VFoo {
-    return VFoo(a := arr)
-}
+def make_vfoo(arr : array<string>) : VFoo => VFoo(a := arr)
 
-def make_tbar(arr : array<string>) : TBar {
-    return TBar(a := arr, b = 1.5)
-}
+def make_tbar(arr : array<string>) : TBar => TBar(a := arr, b = 1.5)
 
-def make_generic(proto : auto(TT); arr : array<string>) : TT -const {
-    return <- TT(a := arr, b = 2.5)
-}
+def make_generic(proto : auto(TT); arr : array<string>) : TT -const => <- TT(a := arr, b = 2.5)
 
-def take_named(a : array<string>) : int {
-    return length(a)
-}
+def take_named(a : array<string>) : int => length(a)
 
 [sideeffects]
 def test_clone_init_field(t : T?) {

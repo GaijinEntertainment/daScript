@@ -18,9 +18,7 @@ let Q5_D_BITS <- fixed_array(0x3C00, 0xB800, 0x3400)
 let Q5_D_VALS <- fixed_array(1.0, -0.5, 0.25)
 let Q5_QH <- fixed_array(0x00000000, 0xFFFFFFFF, 0x5A5A3CC3)
 
-def private q5_qs_byte(blk, j : int) : uint {
-    return uint((j * 7 + blk * 13) & 255)
-}
+def private q5_qs_byte(blk, j : int) : uint => uint((j * 7 + blk * 13) & 255)
 
 // Independent reference: lane k of block blk (Q5_0 dequant semantics — the high bit of
 // lane k is bit k of qh; the nibble is split-half packed).
@@ -189,8 +187,7 @@ def test_q5k_encoder(t : T?) {
     // The ceiling is a regression gate, not a spec: measured rel-rmse is ~0.036 on synthetic
     // gaussian and ~0.031 on GLM-4.5-Air's real ffn_down. A mis-packed scale strip lands near 1.0.
     t |> run("q5_k encode round-trip stays within the 5-bit budget") @(t : T?) {
-        var x : array<float>
-        var y : array<float>
+        var x, y : array<float>
         x |> resize(n)
         y |> resize(n)
         for (sb in range64(nsb)) {
@@ -198,8 +195,7 @@ def test_q5k_encoder(t : T?) {
                 x[sb * 256l + i] = k5_src(sb, i)
             }
         }
-        var kq : array<uint8>
-        var ks : array<uint8>
+        var kq, ks : array<uint8>
         kq |> resize(nsb * 160l)
         ks |> resize(nsb * 20l)
         quantize_k5_plane(x, n, kq, ks, 0l)
@@ -223,12 +219,10 @@ def test_q5k_encoder(t : T?) {
     }
     // All-zero input takes the d == 0 early-out; it must still emit a well-formed, zeroed block.
     t |> run("q5_k encode handles an all-zero superblock") @(t : T?) {
-        var x : array<float>
-        var y : array<float>
+        var x, y : array<float>
         x |> resize(256l)
         y |> resize(256l)
-        var kq : array<uint8>
-        var ks : array<uint8>
+        var kq, ks : array<uint8>
         kq |> resize(160l)
         ks |> resize(20l)
         quantize_k5_plane(x, 256l, kq, ks, 0l)
@@ -267,18 +261,17 @@ def test_gguf_f32_reader_superblock_types(t : T?) {
             let sbb = ggml_type_bytes(gtype, 256l)
             t |> success(sbb > 0l, "type {gtype} has a disk stride")
             let fmt = gguf_kq_fmt_of_type(gtype)
-            let data <- synth_sb_bytes(sbb, 7 + ti)
-            let gg <- synth_gguf(gtype, 512l, data)
+            var inscope data <- synth_sb_bytes(sbb, 7 + ti)
+            var inscope gg <- synth_gguf(gtype, 512l, data)
             var m <- parse_gguf_meta(gg)
-            var deq : array<float>
+            var inscope deq : array<float>
             deq |> resize(512)
             gguf_read_tensor_f32(m, gg, "t", deq, 0l, 512l)
             // the oracle: the native two-step over the same bytes
-            var kq : array<uint8>
-            var ks : array<uint8>
+            var inscope kq, ks : array<uint8>
             kq |> resize(int(kq_qsb(fmt)))
             ks |> resize(int(kq_ssb(fmt)))
-            var want : array<float>
+            var inscope want : array<float>
             want |> resize(512)
             let base = long_length(gg) - sbb * 2l
             for (blk in range64(2l)) {

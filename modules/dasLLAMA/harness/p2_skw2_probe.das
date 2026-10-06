@@ -57,11 +57,7 @@ def upload_u32(dev; v : uint) {
 //! rep (disjoint buffers overlap; reps serialize on the shared Y hazards). us per rep.
 def time_split(dev, queue, pso; parts : int; reps : int; tgmem : uint64) : double {
     let kpart = KDIM / parts
-    var bw : array<MetalBuffer?>
-    var bx : array<MetalBuffer?>
-    var by : array<MetalBuffer?>
-    var bk : array<MetalBuffer?>
-    var bn : array<MetalBuffer?>
+    var bw, bx, by, bk, bn : array<MetalBuffer?>
     bw |> reserve(parts)
     bx |> reserve(parts)
     by |> reserve(parts)

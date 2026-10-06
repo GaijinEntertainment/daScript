@@ -84,6 +84,4 @@ def test_skybox_oracle(t : T?) {
     delete pixels
 }
 
-def get_lum(p : int3) : int {
-    return p.x + p.y + p.z
-}
+def get_lum(p : int3) : int => p.x + p.y + p.z

@@ -102,8 +102,7 @@ def main() {   // nolint:STYLE038 — flat probe driver: args, load, prefill, sl
         forward_prefill(t, s, prompt, p, 0l)
     }
     // walk each layer's slab: seq_len rows of layer_kv_dim, but only the p filled positions
-    var khist : array<int64>
-    var vhist : array<int64>
+    var khist, vhist : array<int64>
     khist |> resize(HIST_N)
     vhist |> resize(HIST_N)
     var kall = Range()

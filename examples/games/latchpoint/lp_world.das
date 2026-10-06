@@ -49,9 +49,8 @@ var starter_progress = 0.0
 var starter_engaged = false
 let PATCH_SERVICE_POSITION = float3(7.5, 9.5, 0.0)
 
-def patch_can_assist() : bool {
-    return world.patch_repaired && world.patch_following && length(patch_position.xy - PATCH_SERVICE_POSITION.xy) < 0.9
-}
+def patch_can_assist() : bool =>
+    world.patch_repaired && world.patch_following && length(patch_position.xy - PATCH_SERVICE_POSITION.xy) < 0.9
 var barriers : array<Barrier>
 let BRACK_POSITION = float3(1.6, 3.5, 0.0)
 let VESPER_POSITION = float3(-4.4, 8.1, 0.0)
@@ -64,13 +63,10 @@ let ACTUATOR_CRATE_HALF_SIZE = float3(0.4, 0.4, 0.5)
 let ACTUATOR_RADIUS = 0.12
 let SALVAGE_CRATE_SPACING = 1.2
 
-def actuator_center() : float3 {
-    return ACTUATOR_CRATE_CENTER + float3(0.0, 0.0, ACTUATOR_CRATE_HALF_SIZE.z + ACTUATOR_RADIUS)
-}
+def actuator_center() : float3 =>
+    ACTUATOR_CRATE_CENTER + float3(0.0, 0.0, ACTUATOR_CRATE_HALF_SIZE.z + ACTUATOR_RADIUS)
 
-def actuator_available() : bool {
-    return find_index(world.salvaged, "actuator") < 0
-}
+def actuator_available() : bool => find_index(world.salvaged, "actuator") < 0
 
 def reset_avatar(pose_path : string = "") {
     avatar = float3(0.0, -9.0, 1.65)
@@ -82,13 +78,10 @@ def reset_avatar(pose_path : string = "") {
     if (!save_avatar_to(destination)) { to_log(LOG_WARNING, "Could not save Latchpoint avatar position.") }
 }
 
-def avatar_save_allowed(menu_is_open : bool) : bool {
-    return !menu_is_open
-}
+def avatar_save_allowed(menu_is_open : bool) : bool => !menu_is_open
 
-def avatar_save_path() : string {
-    return path_join(get_das_root(), "examples/games/latchpoint/saves/scene-pose.json")
-}
+def avatar_save_path() : string =>
+    path_join(get_das_root(), "examples/games/latchpoint/saves/scene-pose.json")
 
 def save_avatar_to(path : string) : bool {
     let pose = SavedPose(player = avatar, patch = patch_position, yaw = heading, tilt = pitch, patch_yaw = patch_heading)

@@ -25,13 +25,9 @@ def fixture(db : SqlRunner) {
     db |> insert(Item(Id = 4, Name = "delta", Score = 50))
 }
 
-def doubler(x : int) : int {
-    return x * 2
-}
+def doubler(x : int) : int => x * 2
 
-def add_prefix(s : string) : string {
-    return "X_" + s
-}
+def add_prefix(s : string) : string => "X_" + s
 
 [test]
 def test_udf_in_where(t : T?) {

@@ -52,21 +52,15 @@ def private push_source_syntax_span(var document : TextSourceDocument;
         syntax_style = style))
 }
 
-def private ascii_upper(value : int) : bool {
-    return value >= 'A' && value <= 'Z'
-}
+def private ascii_upper(value : int) : bool => value >= 'A' && value <= 'Z'
 
-def private ascii_lower(value : int) : bool {
-    return value >= 'a' && value <= 'z'
-}
+def private ascii_lower(value : int) : bool => value >= 'a' && value <= 'z'
 
-def private das_identifier_start(value : int) : bool {
-    return value == '_' || ascii_upper(value) || ascii_lower(value)
-}
+def private das_identifier_start(value : int) : bool =>
+    value == '_' || ascii_upper(value) || ascii_lower(value)
 
-def private das_identifier_continue(value : int) : bool {
-    return das_identifier_start(value) || is_number(value)
-}
+def private das_identifier_continue(value : int) : bool =>
+    das_identifier_start(value) || is_number(value)
 
 let private DAS_TYPE_WORDS : table<string> <- {
     "array", "auto", "block", "bool", "double", "float", "float2", "float3",
@@ -99,9 +93,8 @@ def private ensure_das_keyword_styles {
     }
 }
 
-def private das_keyword_style(word : string) : TextSourceSyntaxStyle {
-    return g_das_keyword_styles?[word] ?? TextSourceSyntaxStyle.none
-}
+def private das_keyword_style(word : string) : TextSourceSyntaxStyle =>
+    g_das_keyword_styles?[word] ?? TextSourceSyntaxStyle.none
 
 def public text_source_das_keyword_style(word : string) : TextSourceSyntaxStyle {
     //! Fallback-lexer style for a daslang word; `none` when it is not one of
@@ -268,13 +261,11 @@ def private apply_syntax_fallback(var document : TextSourceDocument;
     document.spans <- merged
 }
 
-def private json_whitespace(value : int) : bool {
-    return value == ' ' || value == '\t' || value == '\r' || value == '\n'
-}
+def private json_whitespace(value : int) : bool =>
+    value == ' ' || value == '\t' || value == '\r' || value == '\n'
 
-def private json_number_byte(value : int) : bool {
-    return is_number(value) || value == '-' || value == '+' || value == '.' || value == 'e' || value == 'E'
-}
+def private json_number_byte(value : int) : bool =>
+    is_number(value) || value == '-' || value == '+' || value == '.' || value == 'e' || value == 'E'
 
 def private push_json_span(var document : TextSourceDocument;
                            var covered_until : int&;

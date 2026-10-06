@@ -53,22 +53,7 @@ def ourmm_kernel {   // nolint:STYLE038 - compute-shader body; the staging/barri
     // staging map: 8 uint-pair slots per 32-K block row; 16 rows per pass
     let lw = tid % 8                          // which pair-of-u16 (4 qs) in the row's block
     let lr0 = tid / 8                         // row base 0..15
-    var acc00 : coopmatAcc_f16_16x16
-    var acc01 : coopmatAcc_f16_16x16
-    var acc02 : coopmatAcc_f16_16x16
-    var acc03 : coopmatAcc_f16_16x16
-    var acc10 : coopmatAcc_f16_16x16
-    var acc11 : coopmatAcc_f16_16x16
-    var acc12 : coopmatAcc_f16_16x16
-    var acc13 : coopmatAcc_f16_16x16
-    var acc20 : coopmatAcc_f16_16x16
-    var acc21 : coopmatAcc_f16_16x16
-    var acc22 : coopmatAcc_f16_16x16
-    var acc23 : coopmatAcc_f16_16x16
-    var acc30 : coopmatAcc_f16_16x16
-    var acc31 : coopmatAcc_f16_16x16
-    var acc32 : coopmatAcc_f16_16x16
-    var acc33 : coopmatAcc_f16_16x16
+    var acc00, acc01, acc02, acc03, acc10, acc11, acc12, acc13, acc20, acc21, acc22, acc23, acc30, acc31, acc32, acc33 : coopmatAcc_f16_16x16
     var kb = 0
     while (kb < nbk) {
         // stage A: 128 rows x one q8_0 block each — d = u16[ib*17], qs pairs at u16[ib*17+1..16]
@@ -381,7 +366,7 @@ def main {   // nolint:STYLE038 - linear Vulkan probe; every `var inscope` handl
     for (m, k in ms, ks) {
         let nbk = k / 32
         // data: biased (non-cancelling) synthetic, f16-exact values
-        var a_bytes : array<uint8>
+        var inscope a_bytes : array<uint8>
         a_bytes |> resize(m * nbk * 34)
         for (r in range(m)) {
             for (b in range(nbk)) {
@@ -392,22 +377,22 @@ def main {   // nolint:STYLE038 - linear Vulkan probe; every `var inscope` handl
                 }
             }
         }
-        var b_bytes : array<uint8>
+        var inscope b_bytes : array<uint8>
         b_bytes |> resize(N * k * 4)
         for (r in range(N)) {
             for (j in range(k)) {
                 put_f32(b_bytes, r * k + j, float((r * 2 + j) % 7 - 2) * 0.03125)
             }
         }
-        var meta_bytes : array<uint8>
+        var inscope meta_bytes : array<uint8>
         meta_bytes |> resize(16)
         unsafe {
             var mp = addr<uint?>(meta_bytes[0])
             mp[0] = uint(m); mp[1] = uint(k); mp[2] = uint(nbk); mp[3] = 0u
         }
-        var d_theirs : array<uint8>
+        var inscope d_theirs : array<uint8>
         d_theirs |> resize(m * N * 4)
-        var d_ours : array<uint8>
+        var inscope d_ours : array<uint8>
         d_ours |> resize(m * N * 4)
 
         var da <- make_dev_buf(device, phys, length(a_bytes))
@@ -419,8 +404,7 @@ def main {   // nolint:STYLE038 - linear Vulkan probe; every `var inscope` handl
         staging_roundtrip(device, phys, pool, queue, db, b_bytes, true)
         staging_roundtrip(device, phys, pool, queue, dmeta, meta_bytes, true)
 
-        var set_theirs : VkDescriptorSet
-        var set_ours : VkDescriptorSet
+        var set_theirs, set_ours : VkDescriptorSet
         var dsai = VkDescriptorSetAllocateInfo()
         dsai.descriptorPool = boost_value_to_vk(desc_pool)
         dsai.descriptorSetCount = 1u

@@ -35,9 +35,8 @@ def fixture_source() : string {
     ] |> join("\n")
 }
 
-def fixture_path() : string {
-    return "{get_das_root()}/tests/lint/_collect_issues_fixture.das"  // virtual — not on disk
-}
+def fixture_path() : string =>
+    "{get_das_root()}/tests/lint/_collect_issues_fixture.das"  // virtual — not on disk
 
 def check_issue(t : T?; issue : LintIssue; code : string; line : int; needle : string) {
     t |> equal(issue.code, code)

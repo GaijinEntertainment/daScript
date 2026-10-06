@@ -4,21 +4,13 @@
 options gen2
 require dastest/testing_boost public
 
-def operator ==(a : short4; b : int4) : bool {
-    return int4(a) == b
-}
+def operator ==(a : short4; b : int4) : bool => int4(a) == b
 
-def operator +(a : half4; b : float) : half4 {
-    return a + half4(float16(b))
-}
+def operator +(a : half4; b : float) : half4 => a + half4(float16(b))
 
-def use_eq(a : short4; b : int4) : bool {
-    return a == b
-}
+def use_eq(a : short4; b : int4) : bool => a == b
 
-def use_add(a : half4; b : float) : half4 {
-    return a + b
-}
+def use_add(a : half4; b : float) : half4 => a + b
 
 [test]
 def test_lattice_user_operators(t : T?) {

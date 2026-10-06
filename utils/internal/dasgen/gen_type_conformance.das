@@ -65,9 +65,7 @@ def ctor_gen(spec : TypeSpec; lane : block<(i : int) : int>) : string {
     }
 }
 
-def ctor(spec : TypeSpec; base : int) : string {
-    return ctor_gen(spec) $(i) => base + i
-}
+def ctor(spec : TypeSpec; base : int) : string => ctor_gen(spec) $(i) => base + i
 
 def wrap_size(spec : TypeSpec) : int {
     let a = spec.align_bytes

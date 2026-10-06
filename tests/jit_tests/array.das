@@ -23,9 +23,7 @@ def resizeLocked(var a : array<int>) {
     }
 }
 
-def outOfRange(var a : array<int>) {
-    return a[13]
-}
+def outOfRange(var a : array<int>) => a[13]
 
 def resizeUnreserved(var a : array<int>) {
     a |> resize(17000000)   // 68 MB: past the default 64 MB max_unreserved_size, no reserve

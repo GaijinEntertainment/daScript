@@ -6,9 +6,7 @@ require daslib/fio
 require daslib/json_boost
 require strings
 
-def private no_args : array<string> {
-    return <- array<string>()
-}
+def private no_args : array<string> => <- array<string>()
 
 [test]
 def test_defaults_and_toml(t : T?) {

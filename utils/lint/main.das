@@ -132,20 +132,15 @@ def write_deduped(var writer : StringBuilderWriter; issues : array<LintIssue>; p
     }
 }
 
-def is_skip_file(name : string) : bool {
-    return name == "builtin.das"
-}
+def is_skip_file(name : string) : bool => name == "builtin.das"
 
-def is_skip_dir(name : string) : bool {
-    return name |> starts_with(".") || name == "node_modules"
-}
+def is_skip_dir(name : string) : bool => name |> starts_with(".") || name == "node_modules"
 
 // A CMake build tree is not source, whatever it is named: FetchContent checkouts under it
 // carry .das and .md the tree never wrote. Neither is another repository's checkout inside this
 // one (the EASTL local-verify clones): its comments cite documents of its own.
-def is_build_tree(path : string) : bool {
-    return stat("{path}/CMakeCache.txt").is_valid || stat("{path}/.git").is_valid
-}
+def is_build_tree(path : string) : bool =>
+    stat("{path}/CMakeCache.txt").is_valid || stat("{path}/.git").is_valid
 
 def scan_das_files(path : string; var files : array<string>; var cache : table<string; void?>; var skipped : int&) {
     let st = stat(path)
@@ -196,9 +191,8 @@ def is_rule_doc_name(name : string) : bool {
 }
 
 // A rule runs unless --disable names it, or --enable put the run in whitelist mode without it.
-def rule_is_on(code : string; disabled_codes, enabled_codes : table<string>) : bool {
-    return !key_exists(disabled_codes, code) && (empty(enabled_codes) || key_exists(enabled_codes, code))
-}
+def rule_is_on(code : string; disabled_codes, enabled_codes : table<string>) : bool =>
+    !key_exists(disabled_codes, code) && (empty(enabled_codes) || key_exists(enabled_codes, code))
 
 // Directories under `path` the two tagged-or-present folder rules answer for: a folder whose
 // OWN .lint_config sets rule_docs_only feeds LINT025, and any folder holding a rule document
@@ -265,7 +259,7 @@ def collect_folder_mds(folder : string; rule_docs : bool; var out : array<string
 def run_rule_docs_pass(folders : array<string>) : int {
     var found = 0
     for (folder in folders) {
-        var strays : array<string>
+        var inscope strays : array<string>
         collect_folder_mds(folder, false, strays)
         strays |> sort
         for (md in strays) {
@@ -447,7 +441,7 @@ def run_rule_doc_text_pass(folders : array<string>; roots : array<string>; want_
     var names_indexed = false
     for (folder in folders) {
         let root = owning_root(folder, roots)
-        var docs : array<string>
+        var inscope docs : array<string>
         collect_folder_mds(folder, true, docs)
         docs |> sort
         var cells : table<string; void?>
@@ -455,14 +449,14 @@ def run_rule_doc_text_pass(folders : array<string>; roots : array<string>; want_
         for (md in docs) {
             let is_checklist = base_name(md) |> starts_with("REVIEW")
             continue if (!is_checklist)
-            let lines <- fread(md) |> split("\n")
+            var inscope lines <- fread(md) |> split("\n")
             for (line, i in lines, count()) {
                 if (want_pos && line_cites_by_position(line)) {
                     print("{md}:{i + 1}: LINT032: a checklist cites a rule by position (\"above\" / \"below\") - name what the rule binds instead; rules are order-independent\n")
                     found ++
                 }
                 continue if (!want_names)
-                var toks : array<string>
+                var inscope toks : array<string>
                 backticked_tokens(line, toks)
                 for (tok in toks) {
                     if (token_is_rule_doc_path(tok)) {
@@ -518,7 +512,7 @@ def count_text_lines(text : string) : int {
 def run_doc_lines_pass(folders : array<string>) : int {
     var found = 0
     for (folder in folders) {
-        var docs : array<string>
+        var inscope docs : array<string>
         collect_folder_mds(folder, true, docs)
         docs |> sort
         for (md in docs) {
@@ -562,6 +556,28 @@ def private scan_arch_folder(path : string; var mds, dases : array<string>; var 
     }
 }
 
+def private ancestor_docs(roots : array<string>; seen : table<string; void?>) : array<string> {
+    var docs : array<string>
+    var visited : table<string>
+    for (root in roots) {
+        var dir = dir_name(root)
+        while (!empty(dir) && dir != "." && !key_exists(visited, dir)) {
+            visited |> insert(dir)
+            if (!key_exists(seen, dir)) {
+                fio::dir(dir) $(name) {
+                    if (name |> ends_with(".md") && stat("{dir}/{name}").is_reg) {
+                        docs |> push("{dir}/{name}")
+                    }
+                }
+            }
+            let up = dir_name(dir)
+            break if (up == dir)
+            dir = up
+        }
+    }
+    return <- docs
+}
+
 // [arch] citation pass, both directions off one read of each file: forward reports every
 // citation that does not resolve and every .das citation that resolves but sits inside a
 // comment, reverse every anchor no citation names - an anchor is a
@@ -570,8 +586,7 @@ def private scan_arch_folder(path : string; var mds, dases : array<string>; var 
 // daslib citer satisfies a module's anchor), each .md parsed once through the shared index.
 // A folder pass like LINT025 - once per invocation, not once per file.
 def run_arch_pass(roots : array<string>) : int {
-    var mds : array<string>
-    var dases : array<string>
+    var mds, dases : array<string>
     var seen : table<string; void?>
     for (root in roots) {
         scan_arch_folder(root, mds, dases, seen)
@@ -607,6 +622,15 @@ def run_arch_pass(roots : array<string>) : int {
                 continue
             }
             cited |> insert("{c.doc}#{c.anchor}")
+        }
+    }
+    for (md in ancestor_docs(roots, seen)) {
+        let text = fread(md)
+        continue if (empty(text) || find(text, ".md#") < 0)
+        for (c in collect_md_citations(md, text)) {
+            if (empty(citation_failure_reason(docs, c))) {
+                cited |> insert("{c.doc}#{c.anchor}")
+            }
         }
     }
     for (md in mds) {
@@ -649,7 +673,7 @@ def is_valid_rule_code(code : string) : bool {
 // (caller emits error + exits); on success returns "" and dest is populated.
 def normalize_rule_list(raw : array<string>; var dest : table<string>) : string {
     for (entry in raw) {
-        let parts <- entry |> split(",")
+        var inscope parts <- entry |> split(",")
         for (p in parts) {
             let token = p |> strip |> to_upper
             continue if (empty(token))
@@ -951,7 +975,7 @@ def run_parallel_lint(files : array<string>; cfg : Config) : array<LintResult> {
             print("error: could not write chunk file {cp}\n")
             return <- results
         }
-        var argv <- build_worker_argv(spawn_prefix, cp, cfg)
+        var inscope argv <- build_worker_argv(spawn_prefix, cp, cfg)
         argvs |> emplace(argv)
     }
 
@@ -1078,7 +1102,7 @@ def stale_scan_at_end(stale_eligible : array<string>; cfg : Config; disabled_cod
         let src = fread(file)
         continue if (empty(src))
         var result = LintResult(file = file)
-        var stale : array<LintIssue>
+        var inscope stale : array<LintIssue>
         result.count = stale_nolint_collect(file, src, disabled_codes, enabled_codes, stale)
         result.issues <- stale
         if (!cfg.lint_excluded_paths) {
@@ -1115,8 +1139,7 @@ def run_folder_passes(docs_roots : array<string>; disabled_codes, enabled_codes 
     let want_doc_lines = rule_is_on("LINT027", disabled_codes, enabled_codes)
     let want_pos = rule_is_on("LINT032", disabled_codes, enabled_codes)
     let want_names = rule_is_on("LINT033", disabled_codes, enabled_codes)
-    var rule_docs_folders : array<string>
-    var line_folders : array<string>
+    var rule_docs_folders, line_folders : array<string>
     collect_docs_folders(docs_roots, want_rule_docs, want_doc_lines || want_pos || want_names, rule_docs_folders, line_folders)
     var found = 0
     if (want_rule_docs) {
@@ -1178,8 +1201,7 @@ def main() : int {
     let run_perf = !any_only || cfg.perf_only
     let run_style = !any_only || cfg.style_only
 
-    var disabled_codes : table<string>
-    var enabled_codes : table<string>
+    var disabled_codes, enabled_codes : table<string>
     if (!resolve_rule_filters(cfg, disabled_codes, enabled_codes)) return 1
 
     // Worker mode: lint a pre-resolved list from a paths-from file and emit
@@ -1195,8 +1217,7 @@ def main() : int {
     }
 
     // Driver mode: scan positional paths, collect file list.
-    var files : array<string>
-    var docs_roots : array<string>
+    var files, docs_roots : array<string>
     let collect_rc = collect_input_files(files, docs_roots)
     if (collect_rc >= 0) return collect_rc
 

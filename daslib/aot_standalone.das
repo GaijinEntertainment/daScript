@@ -31,7 +31,7 @@ def writeStandaloneContextMethods(var prog : ProgramPtr; var logs : StringBuilde
             write(logs, "    ");
         }
         write(logs, "auto {prefix}{c_ident(standalone_function_name(fn))} ( ");
-        var vars : array<string>
+        var inscope vars : array<string>
         vars |> reserve(length(fn.arguments))
         for (variable in fn.arguments) {
             let type_str = build_string() $(var wr) {
@@ -113,16 +113,14 @@ def private usedGlobals(var program : ProgramPtr) : array<Variable?> {
 }
 
 //! `options gc`: the program collects its own heaps.
-def private standaloneCollects(program : ProgramPtr) : bool {
-    return program._options |> find_arg("gc") ?as tBool ?? false
-}
+def private standaloneCollects(program : ProgramPtr) : bool =>
+    program._options |> find_arg("gc") ?as tBool ?? false
 
 //! A `VarInfo` per global, made before the helper dumps its tables so every type they name is in
 //! the dump: the collector walks each global through its info, the way the interpreter's
 //! simulate step wires it.
-def private makeGlobalVarInfos(program : ProgramPtr; var helper : AotDebugInfoHelper?; globals : array<Variable?>) : array<tuple<index : int; info : VarInfo?>> {
-    return <- [for (pvar in globals); (index = variable_index(program, pvar), info = helper.helper |> make_variable_debug_info(pvar))]
-}
+def private makeGlobalVarInfos(program : ProgramPtr; var helper : AotDebugInfoHelper?; globals : array<Variable?>) : array<tuple<index : int; info : VarInfo?>> =>
+    <- [for (pvar in globals); (index = variable_index(program, pvar), info = helper.helper |> make_variable_debug_info(pvar))]
 
 def private writeGlobalVarInfos(var helper : AotDebugInfoHelper?; infos : array<tuple<index : int; info : VarInfo?>>; var tw : StringBuilderWriter) {
     for (entry in infos) {
@@ -309,9 +307,8 @@ class StandaloneContextGen : CppAot {
     used_functions : table<string>;
     emittedForeignHashes : table<uint64>;
 
-    def override emitsForeignBody(func : Function?) : bool {
-        return emittedForeignHashes |> key_exists(func.getMangledNameHash);
-    }
+    def override emitsForeignBody(func : Function?) : bool =>
+        emittedForeignHashes |> key_exists(func.getMangledNameHash)
 
     def override preVisitGlobalLet(prog : ProgramPtr) {
         CppAot`preVisitGlobalLet(self, prog);
@@ -619,7 +616,7 @@ def private writeCApiBodies(var writer : StringBuilderWriter; var exports : arra
     for (e in exports) {
         var fn = e.fn
         write(writer, "{c_declaration(e, names)} \{\n")
-        var args : array<string>
+        var inscope args : array<string>
         args |> reserve(length(e.params) + 1)
         for (p, variable in e.params, fn.arguments) {
             let cpp = describeCppType(variable._type, DescribeConfig(skip_ref = true, cross_platform = cfg.cross_platform))
@@ -792,9 +789,8 @@ def public standalone_aot(input, output_dir, bindings_path, bindings_library : s
 }
 
 [export, unused_argument(paranoid_validation)]
-def public standalone_aot(input : string; output_dir : string; cross_platform : bool, paranoid_validation : bool; cop : CodeOfPolicies; before_emit : block<(var program : ProgramPtr) : void>) {
-    return standalone_aot(input, output_dir, "", "", cross_platform, paranoid_validation, cop, before_emit)
-}
+def public standalone_aot(input : string; output_dir : string; cross_platform : bool, paranoid_validation : bool; cop : CodeOfPolicies; before_emit : block<(var program : ProgramPtr) : void>) =>
+    standalone_aot(input, output_dir, "", "", cross_platform, paranoid_validation, cop, before_emit)
 
 
 [export, unused_argument(paranoid_validation)]

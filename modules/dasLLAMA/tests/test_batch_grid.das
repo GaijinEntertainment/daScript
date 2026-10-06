@@ -32,8 +32,7 @@ def private run_batch(var y : array<float>; wq : array<int8>; ws : array<float>;
 
 def private check_shape(t : T?; n, d, ntok, tb : int64) {
     let nb = n / 32l
-    var wf : array<float>
-    var xf : array<float>
+    var wf, xf : array<float>
     wf |> resize(n * d)
     xf |> resize(ntok * n)
     for (i in range64(n * d)) {
@@ -60,16 +59,14 @@ def private check_shape(t : T?; n, d, ntok, tb : int64) {
     let seat = kernel_backend_seat()
     for (name in kernel_backend_names()) {
         pin_kernel_backend(name)
-        var wq : array<int8>
-        var ws : array<float>
+        var inscope wq : array<int8>
+        var inscope ws : array<float>
         wq := wq0.q
         ws := wq0.scales
         if (kernel_backend_needs_repack(name)) {
             repack_q8q8_weight(wq, ws, 0l, n, d)
         }
-        var y0 : array<float>
-        var y1 : array<float>
-        var y2 : array<float>
+        var inscope y0, y1, y2 : array<float>
         y0 |> resize(ntok * d)
         y1 |> resize(ntok * d)
         y2 |> resize(ntok * d)

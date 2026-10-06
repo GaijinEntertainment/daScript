@@ -41,7 +41,7 @@ def test_corpus_records(t : T?) {
         var stores <- list_record_stores(RECORDS_DIR)
         t |> success(length(stores) >= 5, "the corpus is present")
         for (p in stores) {
-            var errors : array<string>
+            var inscope errors : array<string>
             let ok = validate_record_store(read_text(p), errors)
             report(t, base_name(p), ok, errors)
             delete errors

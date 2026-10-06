@@ -722,6 +722,4 @@ def run_server(port : int; db_path : string; policy : LadderPolicy; official_dir
     shutdown_server()
 }
 
-def private current_unix_time : int64 {
-    return int64(get_clock())
-}
+def private current_unix_time : int64 => int64(get_clock())

@@ -6,9 +6,7 @@ typedef TestObjectSmartPtr = smart_ptr<TestObjectSmart>
 
 
 [export]
-def mks() {
-    return <- default<TestObjectSmartPtr>
-}
+def mks() => <- default<TestObjectSmartPtr>
 
 [test]
 def test_mksmart_zero(t : T?) {

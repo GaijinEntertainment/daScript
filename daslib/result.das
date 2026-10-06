@@ -62,9 +62,8 @@ def ok(v : auto(TT); etype : auto(EE)) {
 //! (``length(src) == 0`` for arrays/tables). Useful for non-copyable
 //! payloads where ``ok`` would clone.
 [template(etype)]
-def move_ok(var v : auto(TT); etype : auto(EE)) {
-    return <- (_is_ok = true, _value <- v, _error = default<EE>)
-}
+def move_ok(var v : auto(TT); etype : auto(EE)) =>
+    <- (_is_ok = true, _value <- v, _error = default<EE>)
 
 //! Construct ``Result<T, E>`` carrying error ``e``. Pass the value type as a witness::
 //!
@@ -90,19 +89,14 @@ def err(e : auto(EE); ttype : auto(TT)) {
 //! (``length(src) == 0`` for arrays/tables). Useful for non-copyable error
 //! payloads where ``err`` would clone.
 [template(ttype)]
-def move_err(var e : auto(EE); ttype : auto(TT)) {
-    return <- (_is_ok = false, _value = default<TT>, _error <- e)
-}
+def move_err(var e : auto(EE); ttype : auto(TT)) =>
+    <- (_is_ok = false, _value = default<TT>, _error <- e)
 
 //! ``true`` iff the result is a successful ``ok``.
-def is_ok(r : $Result<auto(TT); auto(EE)>) : bool {
-    return r._is_ok
-}
+def is_ok(r : $Result<auto(TT); auto(EE)>) : bool => r._is_ok
 
 //! ``true`` iff the result is a failed ``err``.
-def is_err(r : $Result<auto(TT); auto(EE)>) : bool {
-    return !r._is_ok
-}
+def is_err(r : $Result<auto(TT); auto(EE)>) : bool => !r._is_ok
 
 //! Apply ``f`` to the ok payload. ``err`` stays ``err`` (same ``E``).
 def map(r : $Result<auto(TT); auto(EE)>; f : block<(v : TT) : auto(UU)>) {
@@ -327,18 +321,10 @@ def operator ==(a, b : $Result<auto(TT); auto(EE)> implicit) : bool {
 }
 
 //! Equality against ok payload: ``ok(v) == v``, ``err(...) != v``.
-def operator ==(r : $Result<auto(TT); auto(EE)>; v : TT) : bool {
-    return r._is_ok && r._value == v
-}
+def operator ==(r : $Result<auto(TT); auto(EE)>; v : TT) : bool => r._is_ok && r._value == v
 
-def operator ==(v : auto(TT); r : $Result<TT; auto(EE)>) : bool {
-    return r._is_ok && r._value == v
-}
+def operator ==(v : auto(TT); r : $Result<TT; auto(EE)>) : bool => r._is_ok && r._value == v
 
-def operator !=(r : $Result<auto(TT); auto(EE)>; v : TT) : bool {
-    return !(r == v)
-}
+def operator !=(r : $Result<auto(TT); auto(EE)>; v : TT) : bool => !(r == v)
 
-def operator !=(v : auto(TT); r : $Result<TT; auto(EE)>) : bool {
-    return !(r == v)
-}
+def operator !=(v : auto(TT); r : $Result<TT; auto(EE)>) : bool => !(r == v)

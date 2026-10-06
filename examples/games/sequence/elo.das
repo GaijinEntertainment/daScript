@@ -27,21 +27,17 @@ struct BotEntry {
     draws : int
 }
 
-def make_random_bot(name : string) : BotEntry {
-    return BotEntry(name = name, bot_type = "random", elo = ELO_START)
-}
+def make_random_bot(name : string) : BotEntry =>
+    BotEntry(name = name, bot_type = "random", elo = ELO_START)
 
-def make_greedy_bot(name : string; w : GreedyWeights = GreedyWeights()) : BotEntry {
-    return BotEntry(name = name, bot_type = "greedy", weights = w, elo = ELO_START)
-}
+def make_greedy_bot(name : string; w : GreedyWeights = GreedyWeights()) : BotEntry =>
+    BotEntry(name = name, bot_type = "greedy", weights = w, elo = ELO_START)
 
-def make_lookahead_bot(name : string; w : LookaheadWeights = LookaheadWeights()) : BotEntry {
-    return BotEntry(name = name, bot_type = "lookahead", la_weights = w, elo = ELO_START)
-}
+def make_lookahead_bot(name : string; w : LookaheadWeights = LookaheadWeights()) : BotEntry =>
+    BotEntry(name = name, bot_type = "lookahead", la_weights = w, elo = ELO_START)
 
-def elo_expected(rating_a, rating_b : float) : float {
-    return 1.0 / (1.0 + pow(10.0, (rating_b - rating_a) / 400.0))
-}
+def elo_expected(rating_a, rating_b : float) : float =>
+    1.0 / (1.0 + pow(10.0, (rating_b - rating_a) / 400.0))
 
 def elo_update(var a_elo, b_elo : float&; a_won : bool) {
     let ea = elo_expected(a_elo, b_elo)

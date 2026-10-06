@@ -26,9 +26,7 @@ def finalize(var r : Resource) {
 }
 
 // === Function that creates a resource ===
-def acquire_resource(n : string; i : int) : Resource {
-    return Resource(name = n, id = i)
-}
+def acquire_resource(n : string; i : int) : Resource => Resource(name = n, id = i)
 
 // === Function returning a non-copyable type ===
 def make_data() : array<int> {

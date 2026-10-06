@@ -6,15 +6,9 @@ require dastest/testing_boost public
 class StaticCounter {
     static count : int = 1
     static mount : array<int> <- array<int>(1, 2, 3, 4)
-    def next {
-        return count++
-    }
-    def get {
-        return count
-    }
-    def static next_func {
-        return count++
-    }
+    def next => count++
+    def get => count
+    def static next_func => count++
 }
 
 [test]

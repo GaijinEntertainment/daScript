@@ -43,30 +43,20 @@ class DecsAdapter : SourceAdapter {
     calls : array<tuple<ExprCall?; LinqCall?>>
     intermediateEnd : int
     rangeInfo : DecsRangeInfo?
-    def override name_prefix() : string {
-        return "decs_"
-    }
-    def override has_own_loop_or_count_lane() : bool {
-        return true
-    }
+    def override name_prefix() : string => "decs_"
+    def override has_own_loop_or_count_lane() : bool => true
     def override effective_dispatch(base : LoopDispatch) : LoopDispatch {
         if (rangeInfo != null && base is Each && (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)) {
             return LoopDispatch(Find = null)
         }
         return base
     }
-    def override const can_group_by() : bool {
-        return true
-    }
-    def override const can_join() : bool {
-        return true
-    }
-    def override emit_loop_or_count(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
-        return emit_loop_or_count_lane_decs(bridge, tupName, c, ctx, at)
-    }
-    def override emit_reverse_skip_into_tail(var takeArg : Expression?; isIter : bool; var termLam : Expression?; termElemType : TypeDeclPtr; at : LineInfo) : Expression? {
-        return emit_decs_reverse_skip_into_tail(takeArg, bridge, tupName, isIter, termLam, termElemType, at)
-    }
+    def override const can_group_by() : bool => true
+    def override const can_join() : bool => true
+    def override emit_loop_or_count(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? =>
+        emit_loop_or_count_lane_decs(bridge, tupName, c, ctx, at)
+    def override emit_reverse_skip_into_tail(var takeArg : Expression?; isIter : bool; var termLam : Expression?; termElemType : TypeDeclPtr; at : LineInfo) : Expression? =>
+        emit_decs_reverse_skip_into_tail(takeArg, bridge, tupName, isIter, termLam, termElemType, at)
     def override emit_distinct_take_loop(bindName : string; takenName : string; takeLimName : string; var perElement : Expression?; at : LineInfo) : Expression? {
         if (bridge == null) return null
         let archName = bridge.archName
@@ -107,9 +97,8 @@ class DecsAdapter : SourceAdapter {
         }
         return new DecsAdapter(bridge = bridge, tupName = qn("decs_tup", at))
     }
-    def override emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
-        return emit_decs_join_impl(bridge, c, ctx, at)
-    }
+    def override emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? =>
+        emit_decs_join_impl(bridge, c, ctx, at)
     def override count_shortcut(opName : string; at : LineInfo) : Expression? {
         if (opName != "count") return null
         return emit_decs_count_archsize(bridge, at)
@@ -188,15 +177,9 @@ class DecsAdapter : SourceAdapter {
 
 class DecsJoinAdapter : SourceAdapter {
     shape : DecsJoinShape
-    def override name_prefix() : string {
-        return "djoin_"
-    }
-    def override bind_name(at : LineInfo) : string {
-        return shape.resBindName
-    }
-    def override element_type() : TypeDeclPtr {
-        return clone_type(shape.resultType)
-    }
+    def override name_prefix() : string => "djoin_"
+    def override bind_name(at : LineInfo) : string => shape.resBindName
+    def override element_type() : TypeDeclPtr => clone_type(shape.resultType)
     def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         let jhashName = qn("djoin_jhash", at)
         let arrName   = qn("djoin_jarr", at)
@@ -326,8 +309,7 @@ def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string
             return emit_counter_lane(adapter, accName, finalBind, names, null, null, null, loopBody, at, termName == "long_count")
         }
         if (chainInfo.selectCount == 0 || elementType == null) return null
-        var noBinds : array<Expression?>
-        var noPre : array<Expression?>
+        var noBinds, noPre : array<Expression?>
         return emit_accumulator_lane(termName, adapter, null, null, clone_expression(rangeInfo.postTakeWhereCond),
             noBinds, noPre, elementType, accName, finalBind, names, null, null, null, null, at)
     }
@@ -346,8 +328,7 @@ def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string
         var elementType = clone_type(chainInfo.finalType)
         let names <- make_range_names(at)
         var adapter = make_decs_term_adapter(bridge, chainInfo, rangeInfo, calls, rangeInfo.chainEnd)
-        var noBinds : array<Expression?>
-        var noPre : array<Expression?>
+        var noBinds, noPre : array<Expression?>
         return emit_early_exit_lane(termName, adapter, null, null, clone_expression(rangeInfo.postTakeWhereCond),
             noBinds, noPre, elementType, termCall, chainInfo.finalBind, names, null, null, null, null, at)
     }
@@ -361,10 +342,7 @@ def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string
         $i(bufName) |> push_clone($i(finalBind))
     }
     pushExpr = wrap_with_condition(pushExpr, clone_expression(rangeInfo.postTakeWhereCond))
-    var prologueStmts : array<Expression?>
-    var reserveStmts : array<Expression?>
-    var preCondStmts : array<Expression?>
-    var tailStmts : array<Expression?>
+    var prologueStmts, reserveStmts, preCondStmts, tailStmts : array<Expression?>
     tailStmts |> push <| qmacro_expr() {
         return <- $i(bufName)
     }

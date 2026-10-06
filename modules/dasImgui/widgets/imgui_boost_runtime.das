@@ -521,9 +521,7 @@ struct TextFilterState {
 // JV + archive::serialize overrides for TextFilterState: the bound `ImGuiTextFilter` has no
 // daslang JV/serialize binding (and no safe `delete`), so the generic field-walking generics would
 // fail to instantiate. Only the editor-text mirror is serialized; the filter regenerates from `value` post-reload.
-def public JV(value : TextFilterState) : JsonValue? {
-    return JV((value = value.value))
-}
+def public JV(value : TextFilterState) : JsonValue? => JV((value = value.value))
 
 def public serialize(var arch : Archive; var value : TextFilterState) {
     arch |> _::serialize(value.value)

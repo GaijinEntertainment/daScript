@@ -21,9 +21,7 @@ variant Setting {
 
 // --- helpers ---
 
-def count_keys(tab : table<string; int>) : int {
-    return length(tab)
-}
+def count_keys(tab : table<string; int>) : int => length(tab)
 
 def sum_values(tab : table<string; int>) : int {
     var total = 0
@@ -41,9 +39,7 @@ def make_nested_table() : table<int; table<string; int>> {
     return {1 => {"a" => 10}, 2 => {"b" => 20}}
 }
 
-def accept_table(tab : table<string; int>) : int {
-    return length(tab)
-}
+def accept_table(tab : table<string; int>) : int => length(tab)
 
 // --- tests ---
 

@@ -29,9 +29,7 @@ def bitcast_frag {
         uint_bits_to_float(k))
 }
 
-def public bitcast_words : array<uint> {
-    return clone_to_move(bitcast_spv)
-}
+def public bitcast_words : array<uint> => clone_to_move(bitcast_spv)
 
 [test]
 def test_bit_cast(t : T?) {

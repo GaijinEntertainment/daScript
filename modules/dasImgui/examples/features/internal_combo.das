@@ -26,17 +26,12 @@ require imgui/imgui_harness
 var g_fruit = 0
 var g_color = 0
 
-def private fruit_name(i : int) : string {
-    return i == 0 ? "Apple" : (i == 1 ? "Banana" : "Cherry")
-}
+def private fruit_name(i : int) : string => i == 0 ? "Apple" : (i == 1 ? "Banana" : "Cherry")
 
-def private color_name(i : int) : string {
-    return i == 0 ? "Red" : (i == 1 ? "Green" : "Blue")
-}
+def private color_name(i : int) : string => i == 0 ? "Red" : (i == 1 ? "Green" : "Blue")
 
-def private color_swatch(i : int) : uint {
-    return i == 0 ? rgba(220u, 70u, 70u, 255u) : (i == 1 ? rgba(70u, 200u, 90u, 255u) : rgba(80u, 120u, 230u, 255u))
-}
+def private color_swatch(i : int) : uint =>
+    i == 0 ? rgba(220u, 70u, 70u, 255u) : (i == 1 ? rgba(70u, 200u, 90u, 255u) : rgba(80u, 120u, 230u, 255u))
 
 [export]
 def init() {

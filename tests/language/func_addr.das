@@ -4,25 +4,17 @@ require dastest/testing_boost public
 
 typedef FaFn = function<(a, b : int) : int>
 
-def fa_add(a, b : int) : int {
-    return a + b
-}
+def fa_add(a, b : int) : int => a + b
 
-def fa_mul(a, b : int) : int {
-    return a * b
-}
+def fa_mul(a, b : int) : int => a * b
 
 struct FaSlot {
     handle : uint64
 }
 
-def fa_handle_of(f : FaFn) : uint64 {
-    return intptr(f)
-}
+def fa_handle_of(f : FaFn) : uint64 => intptr(f)
 
-def fa_inline_handle : uint64 {
-    return unsafe(reinterpret<uint64>(@@fa_add))
-}
+def fa_inline_handle : uint64 => unsafe(reinterpret<uint64>(@@fa_add))
 
 [test]
 def test_func_addr(t : T?) {

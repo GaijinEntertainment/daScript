@@ -211,7 +211,7 @@ def run_compile_phase(cfg : Config; bundle : string) : int {
         }
         fwrite(tmp, body)
         tmpfiles |> push(tmp)
-        var argv <- spawn_argv_prefix()
+        var inscope argv <- spawn_argv_prefix()
         argv |> push("--")
         argv |> push("--bundle")
         argv |> push(bundle)

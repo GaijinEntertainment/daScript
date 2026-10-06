@@ -61,9 +61,8 @@ def private find_clang_format_config(start_dir : string) : string {
     return ""
 }
 
-def private one_result(r : CppFormatResult; is_error : bool = false) : string {
-    return make_tool_result(sprint_json([r], false), is_error)
-}
+def private one_result(r : CppFormatResult; is_error : bool = false) : string =>
+    make_tool_result(sprint_json([r], false), is_error)
 
 def do_cpp_format_file(file : string) : string {
     if (empty(file)) return one_result(CppFormatResult(file = file, status = "error", message = "'file' argument is required"), true)

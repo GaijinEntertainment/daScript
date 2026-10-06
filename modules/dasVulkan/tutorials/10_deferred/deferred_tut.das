@@ -1191,9 +1191,7 @@ def public debug_mode_label(m : int) : string {
     return "lit"
 }
 
-def public next_debug_mode(m : int) : int {
-    return (m + 1) % DBG_MODE_COUNT
-}
+def public next_debug_mode(m : int) : int => (m + 1) % DBG_MODE_COUNT
 
 // ===== 7-state UX toggle (auto-cycle + 6 fixed modes) =====
 

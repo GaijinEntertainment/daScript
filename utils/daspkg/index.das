@@ -32,9 +32,7 @@ struct IndexEntry {
     platforms : array<string>
 }
 
-def get_index_cache_dir(root : string) : string {
-    return "{root}/modules/.daspkg_cache/index"
-}
+def get_index_cache_dir(root : string) : string => "{root}/modules/.daspkg_cache/index"
 
 def private parse_string_array(val : JsonValue?; field : string) : array<string> {
     var result : array<string>
@@ -148,9 +146,8 @@ def resolve_from_index(root, name : string) : string {
     }
 }
 
-def is_index_name(spec : string) : bool {
-    return find(spec, "/") < 0 && find(spec, "\\") < 0 && find(spec, ".") < 0
-}
+def is_index_name(spec : string) : bool =>
+    find(spec, "/") < 0 && find(spec, "\\") < 0 && find(spec, ".") < 0
 
 // ── Search ──────────────────────────────────────────────────────────
 
@@ -573,7 +570,7 @@ def private tag_index_lines(names : array<string>; entries : array<IndexEntry>) 
         for (t in entry.tags) {
             unsafe {
                 if (!(all_tags |> key_exists(t))) {
-                    var arr : array<string>
+                    var inscope arr : array<string>
                     arr |> push(name)
                     all_tags[t] <- arr
                 } else {
@@ -668,7 +665,7 @@ def generate_index_readme_from_index(index : table<string; IndexEntry>) : string
         for (name, entry in names, entries) {
             writer |> write("### {name}\n\n")
             writer |> write("{entry.description}\n\n")
-            var details <- entry_detail_lines(entry)
+            var inscope details <- entry_detail_lines(entry)
             for (d in details) {
                 writer |> write("- {d}\n")
             }
@@ -722,9 +719,7 @@ struct IndexPushTarget {
 }
 
 // True when `gh api ... --jq .permissions.push` reports write access (exact "true").
-def index_has_push_access(gh_output : string) : bool {
-    return strip(gh_output) == "true"
-}
+def index_has_push_access(gh_output : string) : bool => strip(gh_output) == "true"
 
 // Where the change branch is pushed and what head ref the PR opens against.
 // Write access → origin + bare branch; otherwise the user's fork + "<login>:<branch>".
@@ -822,8 +817,7 @@ def private push_and_pr(cache_dir, branch_name, pr_title, pr_body : string) : in
 
 def cmd_introduce(root, source : string) : int {
     // step 1: determine package directory and URL
-    var pkg_dir : string
-    var pkg_url : string
+    var pkg_dir, pkg_url : string
     if (empty(source)) {
         pkg_dir = root
         pkg_url = get_git_remote_url(root)
@@ -1044,8 +1038,7 @@ def cmd_update_index(root : string; commit : bool = false; dry_run : bool = fals
     mkdir(tmp_base)
 
     // collect names first to avoid iterating locked table
-    var pkg_names : array<string>
-    var pkg_urls : array<string>
+    var pkg_names, pkg_urls : array<string>
     for (name, entry in keys(index), values(index)) {
         pkg_names |> push(name)
         pkg_urls |> push(entry.url)

@@ -11,6 +11,4 @@ require llvm/daslib/llvm_env
 let OUT_PATH = "modules/dasLLVM/ENVIRONMENT.md"
 
 [export]
-def main : int {
-    return save_generated_doc("{get_das_root()}/{OUT_PATH}", env_markdown()) ? 0 : 1
-}
+def main : int => save_generated_doc("{get_das_root()}/{OUT_PATH}", env_markdown()) ? 0 : 1

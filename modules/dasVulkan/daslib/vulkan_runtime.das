@@ -40,6 +40,5 @@ def public weak_copy(b : auto(TT)) : TT {
 }
 
 //! VK_MAKE_API_VERSION(0, major, minor, patch)
-def public make_api_version(major, minor, patch : uint) : uint {
-    return (major << 22u) | (minor << 12u) | patch
-}
+def public make_api_version(major, minor, patch : uint) : uint =>
+    (major << 22u) | (minor << 12u) | patch

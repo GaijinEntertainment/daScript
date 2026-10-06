@@ -1,9 +1,7 @@
 options gen2
 require dastest/testing_boost public
 
-def foo {
-    return (1, "2", 3.0)
-}
+def foo => (1, "2", 3.0)
 
 [test]
 def test_tuple_expansion(t : T?) {

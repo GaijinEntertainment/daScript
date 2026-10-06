@@ -223,9 +223,7 @@ def test_array_of_tables(t : T?) {
 }
 
 [sideeffects]
-def private opaque(x : double) : double {
-    return x
-}
+def private opaque(x : double) : double => x
 
 // A host built -ffinite-math-only folds the nan compares the three tests below rely on, so
 // they skip there. The probe is a compare, never is_nan: is_nan / is_finite answer IEEE on

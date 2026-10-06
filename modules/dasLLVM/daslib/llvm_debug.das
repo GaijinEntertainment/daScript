@@ -22,17 +22,11 @@ def isLLVMOpaquePtr(_vinfo; what : string) {
     return vinfo.annotation.name == what
 }
 
-def isLLVMOpaqueValuePtr(vinfo) {
-    return isLLVMOpaquePtr(vinfo, "LLVMOpaqueValue")
-}
+def isLLVMOpaqueValuePtr(vinfo) => isLLVMOpaquePtr(vinfo, "LLVMOpaqueValue")
 
-def isLLVMOpaqueTypePtr(vinfo) {
-    return isLLVMOpaquePtr(vinfo, "LLVMOpaqueType")
-}
+def isLLVMOpaqueTypePtr(vinfo) => isLLVMOpaquePtr(vinfo, "LLVMOpaqueType")
 
-def isLLVMOpaqueBlockPtr(vinfo) {
-    return isLLVMOpaquePtr(vinfo, "LLVMOpaqueBasicBlock")
-}
+def isLLVMOpaqueBlockPtr(vinfo) => isLLVMOpaquePtr(vinfo, "LLVMOpaqueBasicBlock")
 
 def describe_arg(var ctxid : Context; vinfo; arg : void?) : void {
     let parg = unsafe(reinterpret<void ??>(arg))
@@ -70,9 +64,7 @@ class SampleStackWalker : DapiStackWalker {
             describe_arg(*ctxid, vinfo, arg)
         }
     }
-    def override onAfterCall(pp : Prologue) : bool {
-        return false    // only stack top
-    }
+    def override onAfterCall(pp : Prologue) : bool => false  // only stack top
 }
 
 class ContextStateAgent : DapiDebugAgent {

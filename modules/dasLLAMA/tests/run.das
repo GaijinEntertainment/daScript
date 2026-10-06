@@ -389,9 +389,8 @@ let MODULE_AREAS <- {
     "dasllama_vulkan_decode" => "llm", "dasllama_vulkan_prefill" => "llm", "dasllama_vulkan_seams" => "llm"
 }
 
-def private csv_list(csv : string) : array<string> {
-    return <- [for (tok in split(csv, ",")); strip(tok); where !empty(strip(tok))]
-}
+def private csv_list(csv : string) : array<string> =>
+    <- [for (tok in split(csv, ",")); strip(tok); where !empty(strip(tok))]
 
 //! a changed path -> the areas it reaches (empty for a path outside the module, and for a model-suite
 //! test file - those take --arm). Non-private: test_run_suites.das pins the table
@@ -444,8 +443,7 @@ def areas_for_path(path : string) : array<string> {
 //! --exclude: a file whose base name contains any comma-separated token is dropped. Non-private:
 //! test_run_suites.das gates it
 def exclude_files(files : array<string>; exclude : string) : tuple<kept : array<string>; dropped : array<string>> {
-    var kept : array<string>
-    var dropped : array<string>
+    var kept, dropped : array<string>
     let tokens <- [for (tok in split(exclude, ",")); strip(tok); where !empty(strip(tok))]
     for (file in files) {
         let name = base_name(file)
@@ -616,7 +614,7 @@ def select_areas(cfg : RunArgs) : tuple<status : int; areas : array<string>> {
             return <- (status = 2, areas <- none)
         }
         for (p in changed_paths(cfg.base)) {
-            let hit <- areas_for_path(p)
+            var inscope hit <- areas_for_path(p)
             if (empty(hit)) {
                 if ((p |> replace("\\", "/")) |> starts_with("modules/dasLLAMA/")) {
                     to_log(LOG_INFO, "CHANGED {p} -> a model suite file: run its suite with --arm scoped to the change\n")

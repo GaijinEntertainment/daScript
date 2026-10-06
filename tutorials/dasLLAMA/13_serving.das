@@ -68,7 +68,7 @@ def section_raw(m : Model) {
     var s2 = create_session(m, pool)
     var rows <- [unsafe(addr(s0)), unsafe(addr(s1)), unsafe(addr(s2))]
     for (i in range(3)) {
-        let prompt <- encode(m, QUESTIONS[i])
+        var inscope prompt <- encode(m, QUESTIONS[i])
         eval(m, *rows[i], prompt)   // prefill each stream at its own position
     }
     var toks : array<int64>

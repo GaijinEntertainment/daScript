@@ -53,9 +53,7 @@ def area(r : Rect) : float {
     return w * h
 }
 
-def describe(p : Point) : string {
-    return "({p.x}, {p.y})"
-}
+def describe(p : Point) : string => "({p.x}, {p.y})"
 
 // Pass by mutable reference to modify
 def translate(var p : Point&; dx, dy : float) {

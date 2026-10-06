@@ -616,8 +616,7 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) : 
 //! its position ids. A text chunk breaks at a span, so no BPE merge crosses one; text a family folds ahead of the
 //! user text (a system prompt with no role of its own) rides ahead of the first span.
 def private render_user_spans(m : Model; c : ChatSession; user_content : string; var out : array<int64>) {
-    var inscope lead : array<ChatPart>
-    var inscope after : array<ChatPart>
+    var inscope lead, after : array<ChatPart>
     var seen = false
     for (p in c.tmpl.user.parts) {
         if (p.kind == ChatPartKind.content) {
@@ -732,8 +731,7 @@ def private render_prompt_media(m : Model; c : ChatSession; pre_parts, post_part
             user_content = "{fold}\n\n{c.pending}"
         }
     }
-    var before : array<ChatPart>
-    var after : array<ChatPart>
+    var before, after : array<ChatPart>
     var seen = false
     for (p in c.tmpl.user.parts) {
         if (p.kind == ChatPartKind.content) {
@@ -1084,9 +1082,7 @@ def effective_stop_ids_(c : ChatSession) : array<int64> {
 }
 
 //! The template's own stop ids for the NEXT generation: a token among them ends the turn outright.
-def turn_stop_ids_(c : ChatSession) : array<int64> {
-    return <- clone_to_move(c.stop_ids)
-}
+def turn_stop_ids_(c : ChatSession) : array<int64> => <- clone_to_move(c.stop_ids)
 
 //! The template's thinking-off extras (gemma-4's channel markers) while the next turn is NOT a
 //! thinking turn; empty on a thinking turn.
@@ -1107,9 +1103,8 @@ struct NothinkStopGuard {
 }
 
 //! The guard for `c`'s NEXT turn: armed on an instruct-shaped turn of a family with `stop_nothink`.
-def make_nothink_guard_(c : ChatSession) : NothinkStopGuard {
-    return <- make_nothink_guard_(c.tmpl, nothink_stop_ids_(c))
-}
+def make_nothink_guard_(c : ChatSession) : NothinkStopGuard =>
+    <- make_nothink_guard_(c.tmpl, nothink_stop_ids_(c))
 
 //! The low-level form: the template's reply matcher over `ids` (tests hand the ids in directly).
 def make_nothink_guard_(tmpl : ChatTemplate; ids : array<int64>) : NothinkStopGuard {
@@ -1338,9 +1333,8 @@ def make_think_stream_(tmpl : ChatTemplate; thinking : bool) : ThinkStream {
 //! The reply matcher for `c`'s NEXT turn: armed on a thinking turn (`think_turn_active_`) and on
 //! an instruct turn of a family whose channel markers are guarded stops (`stop_nothink`) - the
 //! tolerated leading thought splits like any other.
-def make_think_stream_(c : ChatSession) : ThinkStream {
-    return make_think_stream_(c.tmpl, think_turn_active_(c) || !empty(c.stop_ids_nothink))
-}
+def make_think_stream_(c : ChatSession) : ThinkStream =>
+    make_think_stream_(c.tmpl, think_turn_active_(c) || !empty(c.stop_ids_nothink))
 
 // Longest k < length(mark) where the view's tail from `from` ends with mark's first k characters —
 // the hold-back length that keeps a marker split across feed boundaries matchable.
@@ -1560,8 +1554,7 @@ def private channel_content_arm(var ts : ThinkStream; d : array<uint8> const#; v
 def think_feed_(var ts : ThinkStream; piece : string; var reasoning, content : string&) {
     let work = empty(ts.hold) ? piece : "{ts.hold}{piece}"
     ts.hold = ""
-    var rp : array<string>
-    var cp : array<string>
+    var rp, cp : array<string>
     if (ts.mode == ThinkMode.channel_switch) {
         think_feed_channel(ts, work, rp, cp)
     } else {
@@ -1716,8 +1709,7 @@ def private respond_media_or_text_(m : Model; var c : ChatSession; params : Samp
     if (c.n_audio_rows > 0l || c.n_image_rows > 0l) {
         // media turn: spans around the splice; ONE kind per turn (the add_user_* pair enforces it)
         let is_image = c.n_image_rows > 0l
-        var inscope head : array<int64>
-        var inscope tail : array<int64>
+        var inscope head, tail : array<int64>
         if (is_image) {
             render_prompt_image(m, c, head, tail)
         } else {

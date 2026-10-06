@@ -83,9 +83,8 @@ def site_cells_json(models : array<BenchModel>) : string {
 
 //! Every file the site merge writes, with its text - one list for the writer, `--verify`, and
 //! the drift gate, so the set cannot drift between them.
-def site_outputs(models : array<BenchModel>) : array<tuple<path : string; text : string>> {
-    return <- [(path = SITE_PATH, text = sprint_json(models, true)), (path = SITE_CELLS_PATH, text = site_cells_json(models))]
-}
+def site_outputs(models : array<BenchModel>) : array<tuple<path : string; text : string>> =>
+    <- [(path = SITE_PATH, text = sprint_json(models, true)), (path = SITE_CELLS_PATH, text = site_cells_json(models))]
 
 [CommandLineArgs]
 struct GenSiteArgs {
@@ -107,7 +106,7 @@ def merge_site_records(var merged : array<BenchModel>) : bool {
         return false
     }
     for (path in stores) {
-        var models : array<BenchModel>
+        var inscope models : array<BenchModel>
         if (!read_bench_records(path, models)) {
             to_log(LOG_ERROR, "gen_site_records: cannot parse {path}\n")
             return false

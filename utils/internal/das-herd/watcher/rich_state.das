@@ -544,9 +544,8 @@ struct HerdUiSettings {
 
 var g_ui_settings = HerdUiSettings()
 
-def settings_path() : string {
-    return path_join(dir_name(repository_default_config_path()), "dasHerd.ui.json")
-}
+def settings_path() : string =>
+    path_join(dir_name(repository_default_config_path()), "dasHerd.ui.json")
 
 def settings_save() {
     let _ = fwrite(settings_path(), sprint_json(g_ui_settings, true))
@@ -644,9 +643,7 @@ var g_worktree_files_loading = false
 var g_worktree_files_error = ""
 var g_files_expanded : table<string; bool>
 
-def session_is_task(kind : string) : bool {
-    return starts_with(kind, "git-") || kind == "worktree-create"
-}
+def session_is_task(kind : string) : bool => starts_with(kind, "git-") || kind == "worktree-create"
 
 var g_active_focus_message = ""
 
@@ -1018,13 +1015,10 @@ let CONTENT_TERMINAL = "terminal"
 let CONTENT_VIEW = "view"
 let CONTENT_DIFF = "diff"
 
-def content_zoom_percent(kind : string) : int {
-    return clamp(g_ui_settings.content_zoom?[kind] ?? 100, 50, 300)
-}
+def content_zoom_percent(kind : string) : int =>
+    clamp(g_ui_settings.content_zoom?[kind] ?? 100, 50, 300)
 
-def content_zoom_scale(kind : string) : float {
-    return float(content_zoom_percent(kind)) * 0.01f
-}
+def content_zoom_scale(kind : string) : float => float(content_zoom_percent(kind)) * 0.01f
 
 def set_content_zoom(kind : string; percent : int) {
     let clamped = clamp(percent, 50, 300)
@@ -1091,9 +1085,7 @@ def git_file_in_group(file : GitFileState const; group : int) : bool {
     return file.code == "??"
 }
 
-def git_group_scope(group : int) : string {
-    return group == 1 ? "staged" : "working"
-}
+def git_group_scope(group : int) : string => group == 1 ? "staged" : "working"
 
 def prune_changelist_selection(repositories : array<RepositorySnapshot> const) {
     //! Re-derive the keys the LIVE status list offers for the selection's own

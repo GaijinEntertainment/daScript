@@ -282,14 +282,14 @@ def private lattice_plane_cells(t : T?) {
     t |> run("q51 planes unpack the hand-packed Q5_1 blocks exactly") @(t : T?) {
         for (blk in range(4)) {
             var inscope p <- plane_row(KqFmt.q51, build_q51_block(blk))
-            let want <- formula_row(32) $(k) => q51_d(blk) * float(q5_pat(k + blk)) + q51_m(blk)
+            var inscope want <- formula_row(32) $(k) => q51_d(blk) * float(q5_pat(k + blk)) + q51_m(blk)
             check(t, "q51 block {blk} plane against the hand-packed values", p.w, want, BAR_EXACT, FLAT_SHAPE)
         }
     }
     t |> run("iq4nl32 planes unpack the hand-packed IQ4_NL blocks through the codebook exactly") @(t : T?) {
         for (blk in range(4)) {
             var inscope p <- plane_row(KqFmt.iq4nl32, build_iq4nl32_block(blk))
-            let want <- formula_row(32) $(k) => iq4nl32_w(blk, k)
+            var inscope want <- formula_row(32) $(k) => iq4nl32_w(blk, k)
             check(t, "iq4nl32 block {blk} plane against the hand-packed values", p.w, want, BAR_EXACT, FLAT_SHAPE)
         }
     }
@@ -360,7 +360,7 @@ def private p32_fill_planes(var kq : array<uint8>; var ks : array<uint8>; rows, 
     ks |> resize(rows * nb * sb)
     for (r in range64(rows)) {
         for (b in range64(nb)) {
-            let blkb <- p32_block(int(r * 31l + b), f)
+            var inscope blkb <- p32_block(int(r * 31l + b), f)
             kq_transcode_superblock(kf, blkb, 0l, kq, (r * nb + b) * qb, ks, (r * nb + b) * sb)
         }
     }
@@ -384,8 +384,7 @@ def private q51_fill_acts(var xq : array<int8>; var xs : array<float>; rows, n :
 def private p32_dot_gate(t : T?; f : auto(TT)) {
     let n = p32_n(f)
     let kf = p32_fmt(f)
-    var inscope kq : array<uint8>
-    var inscope ks : array<uint8>
+    var inscope kq, ks : array<uint8>
     p32_fill_planes(kq, ks, 1l, n, f)
     var inscope w : array<float>
     w |> resize(n)
@@ -428,8 +427,7 @@ def private p32_groupn_gate(t : T?; f : auto(TT)) {
     let kf = p32_fmt(f)
     let d = 8l
     let nreg = 3l
-    var inscope kq : array<uint8>
-    var inscope ks : array<uint8>
+    var inscope kq, ks : array<uint8>
     p32_fill_planes(kq, ks, nreg * d, n, f)
     var inscope xq : array<int8>
     var inscope xs : array<float>
@@ -452,8 +450,7 @@ def private p32_batch_gate(t : T?; f : auto(TT)) {
     let d = 8l
     let ntok = 5l
     let nreg = 2l
-    var inscope kq : array<uint8>
-    var inscope ks : array<uint8>
+    var inscope kq, ks : array<uint8>
     p32_fill_planes(kq, ks, nreg * d, n, f)
     var inscope xq : array<int8>
     var inscope xs : array<float>
@@ -480,8 +477,7 @@ def private p32_grp_gate(t : T?; f : auto(TT)) {
     let rs = n / 32l * kq_ssb(kf)
     let nb = n / 32l
     let d = 26l   // 3 grp8 (6 grp4) groups + a 2-row disk-order tail
-    var inscope kq : array<uint8>
-    var inscope ks : array<uint8>
+    var inscope kq, ks : array<uint8>
     p32_fill_planes(kq, ks, d, n, f)
     var inscope xq : array<int8>
     var inscope xs : array<float>
@@ -541,13 +537,11 @@ def private p32_gather_gate(t : T?; f : auto(TT)) {
     let kf = p32_fmt(f)
     let nb = n / 32l
     let d = 26l   // 3 grp8 groups + a 2-row disk-order tail
-    var inscope kq : array<uint8>
-    var inscope ks : array<uint8>
+    var inscope kq, ks : array<uint8>
     p32_fill_planes(kq, ks, d, n, f)
     var m = Model()
     p32_put_planes(m, kq, ks, f)
-    var inscope wqDisk : array<uint8>
-    var inscope wsDisk : array<uint8>
+    var inscope wqDisk, wsDisk : array<uint8>
     p32_gather(m, n, d, false, 1l, wqDisk, wsDisk, f)
     check_exact(t, "the {kf} disk-order gather against the plane itself", wqDisk, kq)
     t |> equal(long_length(wqDisk), d * nb * kq_qsb(kf))
@@ -556,8 +550,7 @@ def private p32_gather_gate(t : T?; f : auto(TT)) {
         var g = Model()
         p32_put_planes(g, kq, ks, f)
         p32_repack_model(g, n, d, mr, f)
-        var inscope wqGrp : array<uint8>
-        var inscope wsGrp : array<uint8>
+        var inscope wqGrp, wsGrp : array<uint8>
         p32_gather(g, n, d, true, mr, wqGrp, wsGrp, f)
         check_exact(t, "grp{mr}: the gathered {kf} quant bytes against the disk-order gather", wqGrp, wqDisk)
         check_exact(t, "grp{mr}: the gathered {kf} scale words against the disk-order gather", wsGrp, wsDisk)
@@ -609,8 +602,7 @@ def private plane_dequant(kf : KqFmt; kq, ks : array<uint8>; rows, n : int64) : 
 //! the integer-domain dot over LCG-distinct superblocks (no offset bug cancels) against the fp64 dot over the plane dequant
 def private kq_dot_gate(t : T?; fmt : int; n : int64 = 512l) {
     let kf = kq_fmt_of_id(fmt, "kq_dot_gate")
-    var inscope kq : array<uint8>
-    var inscope ks : array<uint8>
+    var inscope kq, ks : array<uint8>
     synth_kq_region(fmt, kq, ks, 1l, n, 0x12345u, 0u)
     var inscope w <- plane_dequant(kf, kq, ks, 1l, n)   // the reference weights
     var inscope x <- build_q8k_acts(1l, n, Wave(a = 1.7, fa = 0.23, b = 0.3, fb = 0.071))   // kq v2: Q8_K-form activations, all formats
@@ -651,8 +643,7 @@ def private kq_gemv_rows_gate(t : T?; fmt : int; n : int64 = 512l) {
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
     let kf = kq_fmt_of_id(fmt, "kq_gemv_gate")
-    var inscope kq : array<uint8>
-    var inscope ks : array<uint8>
+    var inscope kq, ks : array<uint8>
     synth_kq_region(fmt, kq, ks, d, n, 0x9E3779Bu, 0x85EBCA6Bu)   // per-row LCG over the quant payload only (scale planes stay valid f16/int8)
     var inscope x <- build_q8k_acts(1l, n, Wave(a = 1.1, fa = 0.31, b = 0.5, fb = 0.043))
     var inscope y <- nan_plane(int(d))
@@ -754,8 +745,7 @@ def private kq_repack_gate(t : T?; fmt : int; mr : int64; n : int64 = 512l) {
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
     let kf = kq_fmt_of_id(fmt, "kq_rows_gate")
-    var inscope kq : array<uint8>
-    var inscope ks : array<uint8>
+    var inscope kq, ks : array<uint8>
     synth_kq_region(fmt, kq, ks, d, n, 0x9E3779Bu, 0x85EBCA6Bu)
     var inscope x <- build_q8k_acts(1l, n, Wave(a = 1.3, fa = 0.19, b = -0.4, fb = 0.057))
     var inscope want <- nan_plane(int(d))
@@ -882,12 +872,10 @@ def private kq_groupn_gate(t : T?; fmt : int; n : int64 = 512l; d : int64 = 32l;
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
     let kf = kq_fmt_of_id(fmt, "kq_groupn_gate")
-    var inscope kq : array<uint8>
-    var inscope ks : array<uint8>
+    var inscope kq, ks : array<uint8>
     synth_kq_region(fmt, kq, ks, nreg * d, n, 0x51ED270Bu, 0x85EBCA6Bu)
     var inscope x <- build_q8k_acts(nreg, n, Wave(a = 1.1, fa = 0.23, b = -0.6, fb = 0.071))   // nreg activation rows, bs-quantized per row
-    var inscope offs_sh : array<int64>
-    var inscope offs_pr : array<int64>
+    var inscope offs_sh, offs_pr : array<int64>
     offs_sh |> reserve(nreg * 2l)
     offs_pr |> reserve(nreg * 2l)
     for (r in range64(nreg)) {
@@ -1004,8 +992,7 @@ def private kq_batch_groupn_cell(t : T?; fmt : int; n, d : int64) {
     for (c in cnts) {
         nk += c
     }
-    var inscope kq : array<uint8>
-    var inscope ks : array<uint8>
+    var inscope kq, ks : array<uint8>
     synth_kq_region(fmt, kq, ks, nreg * d, n, 0x7F4A7C15u, 0x85EBCA6Bu)
     unsafe {
         for (r in range64(nreg)) {   // per-region grp repack — the per-expert-slice shape
@@ -1270,8 +1257,8 @@ def private q40_repacked_cell(t : T?; tr : Model; path : string) {
     var upbad = 0.0
     var mustred = 0.0
     for (e in range64(4l)) {
-        var wg <- read_prefix(path, "blk.0.ffn_gate_up_exps.weight", rows * dim, gt, e * 2l * nfe * dim)
-        var wu <- read_prefix(path, "blk.0.ffn_gate_up_exps.weight", rows * dim, gt, (e * 2l * nfe + nfe) * dim)
+        var inscope wg <- read_prefix(path, "blk.0.ffn_gate_up_exps.weight", rows * dim, gt, e * 2l * nfe * dim)
+        var inscope wu <- read_prefix(path, "blk.0.ffn_gate_up_exps.weight", rows * dim, gt, (e * 2l * nfe + nfe) * dim)
         mm_f(y, tr, fmt_at(tr.we1_fmt, 0l), tr.we1_offs[0] + e * ege, x, xq, xs, xbs, dim, nfe)
         gatebad = max(gatebad, rows_dot_dev(wg, x, y, dim, rows))
         mustred = max(mustred, rows_dot_dev(wu, x, y, dim, rows))
@@ -1451,8 +1438,7 @@ def test_iq4nl_planes(t : T?) {
     t |> run("the per-32 formats refuse the lattice codecs by name: q8 has no plane transcode and no grp repack") @(t : T?) {
         var blkb : array<uint8>
         blkb |> resize(34)
-        var kq : array<uint8>
-        var ks : array<uint8>
+        var kq, ks : array<uint8>
         kq |> resize(128)
         ks |> resize(16)
         var tripped = false
@@ -1482,8 +1468,7 @@ def test_iq4nl_planes(t : T?) {
 
 def private iq4nl_lane_cell(t : T?) {
     let blkb <- build_iq4nl_block()
-    var kq : array<uint8>
-    var ks : array<uint8>
+    var kq, ks : array<uint8>
     kq |> resize(128)
     ks |> resize(16)
     kq_transcode_superblock(KqFmt.iq4nl, blkb, 0l, kq, 0l, ks, 0l)
@@ -1551,7 +1536,7 @@ def test_kq_plane_sb_metal_blob_form(t : T?) {
         for (gtype in gtypes) {
             let fmt = gguf_kq_fmt_of_type(gtype)
             let sbb = ggml_type_bytes(gtype, 256l)
-            var bytes : array<uint8>
+            var inscope bytes : array<uint8>
             bytes |> reserve(sbb * 3l)
             var x = uint(seed) * 2654435761u
             for (_i in range64(sbb * 3l)) {
@@ -1560,18 +1545,16 @@ def test_kq_plane_sb_metal_blob_form(t : T?) {
             }
             let qsb = kq_qsb(fmt)
             let ssb = kq_ssb(fmt)
-            var kq : array<uint8>
-            var ks : array<uint8>
+            var inscope kq, ks : array<uint8>
             kq |> resize(int(qsb * 3l))
             ks |> resize(int(ssb * 3l))
             for (sb in range64(3l)) {
                 kq_transcode_superblock(fmt, bytes, sb * sbb, kq, sb * qsb, ks, sb * ssb)
             }
-            var rowform : array<float>
-            var blobform : array<float>
+            var inscope rowform, blobform : array<float>
             rowform |> resize(768)
             blobform |> resize(768)
-            let split <- split_scale_plane(ks, ssb)
+            var inscope split <- split_scale_plane(ks, ssb)
             for (sb in range64(3l)) {
                 dequant_kq_plane_sb(fmt, kq, ks, sb, false, rowform, sb * 256l)
                 dequant_kq_plane_sb(fmt, kq, split, sb, true, blobform, sb * 256l)
@@ -1666,20 +1649,17 @@ def private kq_gpu_gather_gate(t : T?; fmt : int) {
     let d = 32l
     let mr = kq_layout_of(fmt)
     let kf = kq_fmt_of_id(fmt, "kq_gpu_gather_gate")
-    var inscope kq : array<uint8>
-    var inscope ks : array<uint8>
+    var inscope kq, ks : array<uint8>
     synth_kq_region(fmt, kq, ks, d, n, 0xC0FFEEu, 0x9E3779Bu)
     var m = Model()
     m.kq[int(kf)].q := kq
     m.kq[int(kf)].s := ks
-    var inscope wqDisk : array<uint8>
-    var inscope wsDisk : array<uint8>
+    var inscope wqDisk, wsDisk : array<uint8>
     moe_gpu_gather_stack_kq(m, kf, 0l, n, d, d, false, mr, wqDisk, wsDisk)
     unsafe {
         repack_kq_grp(kf, addr(m.kq[int(kf)].q[0]), addr(m.kq[int(kf)].s[0]), n, d, mr)
     }
-    var inscope wqGrp : array<uint8>
-    var inscope wsGrp : array<uint8>
+    var inscope wqGrp, wsGrp : array<uint8>
     moe_gpu_gather_stack_kq(m, kf, 0l, n, d, d, true, mr, wqGrp, wsGrp)
     check_exact(t, "kq {fmt}: quant device bytes from the grp planes against the disk-order ones", wqGrp, wqDisk)
     check_exact(t, "kq {fmt}: scale device bytes from the grp planes against the disk-order ones", wsGrp, wsDisk)
@@ -1687,9 +1667,8 @@ def private kq_gpu_gather_gate(t : T?; fmt : int) {
 }
 
 //! the decoded sub-scale byte a synthetic plane row carries at (row, blk): iq4xs's ls - 32, the iq3 family's 1 + 2s
-def private iq_plane_sc(fmt : KqFmt; r, blk : int64) : int {
-    return fmt == KqFmt.iq4xs ? int((r * 5l + blk * 7l) % 64l) - 32 : 1 + 2 * int((r * 3l + blk * 5l) % 16l)
-}
+def private iq_plane_sc(fmt : KqFmt; r, blk : int64) : int =>
+    fmt == KqFmt.iq4xs ? int((r * 5l + blk * 7l) % 64l) - 32 : 1 + 2 * int((r * 3l + blk * 5l) % 16l)
 
 def private iq_plane_d(r : int64) : float => 0.25 + 0.5 * float(r)
 
@@ -1700,8 +1679,7 @@ def private kq_gpu_gather_iq_gate(t : T?; fmt : KqFmt) {
     let mr = kq_layout_of(int(fmt))
     let qsb = kq_qsb(fmt)
     let ssb = kq_ssb(fmt)
-    var kq : array<uint8>
-    var ks : array<uint8>
+    var kq, ks : array<uint8>
     kq |> resize(d * nsb * qsb)
     ks |> resize(d * nsb * ssb)
     var st = 0xC0FFEEu
@@ -1723,8 +1701,7 @@ def private kq_gpu_gather_iq_gate(t : T?; fmt : KqFmt) {
     var m = Model()
     m.kq[int(fmt)].q := kq
     m.kq[int(fmt)].s := ks
-    var wqDisk : array<uint8>
-    var wsDisk : array<uint8>
+    var wqDisk, wsDisk : array<uint8>
     moe_gpu_gather_stack_kq(m, fmt, 0l, n, d, d, false, mr, wqDisk, wsDisk)
     // the device row is two words: word 0 = the f16 d with iq4xs's high scale bits above it, word 1 = eight 4-bit fields
     var bad = 0
@@ -1751,8 +1728,7 @@ def private kq_gpu_gather_iq_gate(t : T?; fmt : KqFmt) {
         unsafe {
             repack_kq_grp(fmt, addr(m.kq[int(fmt)].q[0]), addr(m.kq[int(fmt)].s[0]), n, d, mr)
         }
-        var wqGrp : array<uint8>
-        var wsGrp : array<uint8>
+        var wqGrp, wsGrp : array<uint8>
         moe_gpu_gather_stack_kq(m, fmt, 0l, n, d, d, true, mr, wqGrp, wsGrp)
         check_exact(t, "kq {fmt}: quant device bytes from the grp planes against the disk-order ones", wqGrp, wqDisk)
         check_exact(t, "kq {fmt}: scale device bytes from the grp planes against the disk-order ones", wsGrp, wsDisk)

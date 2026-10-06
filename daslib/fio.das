@@ -413,9 +413,7 @@ def tilde_home(text : string) : string {
 
 //! Convert a path to use forward slashes regardless of host OS.
 [temp_string_result]
-def to_generic_path(s : string) : string {
-    return replace(s, "\\", "/")
-}
+def to_generic_path(s : string) : string => replace(s, "\\", "/")
 
 //! Walk `root` recursively and invoke `blk` for every entry whose path (relative to `root`) matches `pattern`. Both the matched path and the path passed to `blk` are normalized via `to_generic_path` so callbacks receive stable `/`-separated paths regardless of host.
 [generic]
@@ -459,9 +457,8 @@ def glob_filtered(root : string; includes : array<string>; excludes : array<stri
 
 //! Returns true if `pattern` contains any glob metacharacter (`*`, `?`, `[`).
 //! Used by callers that treat literal patterns differently from glob patterns.
-def is_glob_pattern(pattern : string) : bool {
-    return find(pattern, '*') >= 0 || find(pattern, '?') >= 0 || find(pattern, '[') >= 0
-}
+def is_glob_pattern(pattern : string) : bool =>
+    find(pattern, '*') >= 0 || find(pattern, '?') >= 0 || find(pattern, '[') >= 0
 
 //! Expand a single glob pattern (e.g. `src/**/*.das`) into a sorted list of matching file paths.
 def expand_glob(pattern : string; var result : array<string>) {

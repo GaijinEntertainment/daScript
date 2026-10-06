@@ -35,9 +35,7 @@ def fixture_array() : array<Car> {
     ]
 }
 
-def car_eq(a : Car; b : Car) : bool {
-    return a.Id == b.Id && a.Name == b.Name && a.Price == b.Price
-}
+def car_eq(a : Car; b : Car) : bool => a.Id == b.Id && a.Name == b.Name && a.Price == b.Price
 
 [test]
 def parity_first_match(t : T?) {

@@ -143,7 +143,7 @@ def private race(sh : Shape) : int {
         walked |> push(kq_token_block(FMT, sh.n))
         poison(y)
         matmul_kq_batch(FMT, y, p.kq, p.ks, 0l, p.xq, p.xs, p.xbs, sh.n, sh.d, NTOK)
-        var img <- [for (i in at); y[i]]
+        var inscope img <- [for (i in at); y[i]]
         images |> emplace(img)
     }
     var times <- time_rounds(length(sh.blocks), ROUNDS, WARMUP, $(ci : int) {

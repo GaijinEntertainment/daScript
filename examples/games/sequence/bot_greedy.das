@@ -45,6 +45,5 @@ def bot_greedy_move(game : GameState; player_idx : int; seed : int; w : GreedyWe
 }
 
 // Convenience overload with default weights
-def bot_greedy_move(game : GameState; player_idx : int; seed : int) : Move {
-    return bot_greedy_move(game, player_idx, seed, GREEDY_DEFAULT)
-}
+def bot_greedy_move(game : GameState; player_idx : int; seed : int) : Move =>
+    bot_greedy_move(game, player_idx, seed, GREEDY_DEFAULT)

@@ -19,9 +19,8 @@ def private das_exe() : string {
 
 //! the environment form is the one a build edge uses, because it reaches the processes the edge
 //! spawns. It rides a command prefix so this process never arms its own recorder
-def private env_prefix(name : string; value : string) : string {
-    return get_platform_name() == "windows" ? "set \"{name}={value}\"&& " : "{name}=\"{value}\" "
-}
+def private env_prefix(name : string; value : string) : string =>
+    get_platform_name() == "windows" ? "set \"{name}={value}\"&& " : "{name}=\"{value}\" "
 
 def private run(cmd : string; var output : string&) : int {
     return unsafe(popen_timeout(cmd, 300.0, $(f) {
@@ -33,9 +32,7 @@ def private run(cmd : string; var output : string&) : int {
 
 //! the recorder writes `/`, because a backslash is an escape in a Make depfile - and a windows
 //! temp path spelled into a generated source would be one too
-def private slashes(path : string) : string {
-    return path |> replace("\\", "/")
-}
+def private slashes(path : string) : string => path |> replace("\\", "/")
 
 def private tree(t : T?; prefix : string) : string {
     var error : string

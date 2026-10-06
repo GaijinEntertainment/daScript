@@ -122,9 +122,7 @@ def settings_key(key : int) : bool {
     return false
 }
 
-def is_confirm_key(key : int) : bool {
-    return key == GLFW_KEY_ENTER || key == GLFW_KEY_KP_ENTER
-}
+def is_confirm_key(key : int) : bool => key == GLFW_KEY_ENTER || key == GLFW_KEY_KP_ENTER
 
 def editing_key(key : int) {
     if (is_confirm_key(key)) { send_typed() }
@@ -569,9 +567,8 @@ def init() {
     menu_selection = has_saved_game ? 1 : 0
 }
 
-def framebuffer_drawable(window_w, window_h, buffer_w, buffer_h : int) : bool {
-    return window_w > 0 && window_h > 0 && buffer_w > 0 && buffer_h > 0
-}
+def framebuffer_drawable(window_w, window_h, buffer_w, buffer_h : int) : bool =>
+    window_w > 0 && window_h > 0 && buffer_w > 0 && buffer_h > 0
 
 def tick_nonvisual(time : float; can_draw : bool) {
     poll_dialogue()

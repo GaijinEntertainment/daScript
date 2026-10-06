@@ -5,13 +5,9 @@ var count = 1
 
 let shared shar <- [ "shared"]
 
-def inc_global {
-    return count++
-}
+def inc_global => count++
 
-def get_first_shared {
-    return shar[0]
-}
+def get_first_shared => shar[0]
 
 [test]
 def test_global(t : T?) {

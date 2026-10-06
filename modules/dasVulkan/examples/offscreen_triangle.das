@@ -22,9 +22,7 @@ def sample(pixels : array<uint8>; x, y : int) : int3 {
 }
 
 //! the clear color is (0.1, 0.1, 0.15) -> roughly (26, 26, 38) in 8-bit
-def is_clear(c : int3) : bool {
-    return abs(c.x - 26) <= 8 && abs(c.y - 26) <= 8 && abs(c.z - 38) <= 8
-}
+def is_clear(c : int3) : bool => abs(c.x - 26) <= 8 && abs(c.y - 26) <= 8 && abs(c.z - 38) <= 8
 
 def vcheck(what : string; ok : bool) : int {
     print("  [{ok ? "PASS" : "FAIL"}] {what}\n")

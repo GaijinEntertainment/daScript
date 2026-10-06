@@ -6,14 +6,10 @@ require dastest/testing_boost public
 // --- helpers that take string in different ways ---
 
 // string by value (workhorse type, copies the pointer)
-def take_string_by_value(s : string) : string {
-    return s
-}
+def take_string_by_value(s : string) : string => s
 
 // string by const value
-def take_string_by_const_value(s : string const) : string {
-    return s
-}
+def take_string_by_const_value(s : string const) : string => s
 
 // string by reference (mutable)
 def take_string_by_ref(var s : string&; new_val : string) {
@@ -21,16 +17,12 @@ def take_string_by_ref(var s : string&; new_val : string) {
 }
 
 // string by const reference
-def take_string_by_const_ref(s : string const&) : string {
-    return s
-}
+def take_string_by_const_ref(s : string const&) : string => s
 
 // --- helpers that take TestObjectBar and access simple_string ---
 
 // TestObjectBar by const (default for handled types)
-def read_ss(bar : TestObjectBar) : string {
-    return bar.simple_string
-}
+def read_ss(bar : TestObjectBar) : string => bar.simple_string
 
 // TestObjectBar by mutable reference
 def write_ss(var bar : TestObjectBar; val : string) {
@@ -38,9 +30,7 @@ def write_ss(var bar : TestObjectBar; val : string) {
 }
 
 // TestObjectBar by explicit const
-def read_ss_const(bar : TestObjectBar const) : string {
-    return bar.simple_string
-}
+def read_ss_const(bar : TestObjectBar const) : string => bar.simple_string
 
 // --- tests ---
 

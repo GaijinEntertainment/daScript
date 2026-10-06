@@ -160,7 +160,7 @@ def init_audio_samples() {
     let total_samples = int(float(AUDIO_RATE) * total_dur)
     snd_win |> resize(total_samples)
     for (ni in range(length(notes))) {
-        let note <- gen_sine_sweep(notes[ni], notes[ni], note_dur, 0.25)
+        var inscope note <- gen_sine_sweep(notes[ni], notes[ni], note_dur, 0.25)
         let offset = ni * int(float(AUDIO_RATE) * note_dur)
         for (i in range(length(note))) {
             if (offset + i < total_samples) {
@@ -175,7 +175,7 @@ def init_audio_samples() {
     let go_total_samples = int(float(AUDIO_RATE) * go_total_dur)
     snd_game_over |> resize(go_total_samples)
     for (ni in range(length(go_notes))) {
-        let note <- gen_sine_sweep(go_notes[ni], go_notes[ni] * 0.9, go_note_dur, 0.3)
+        var inscope note <- gen_sine_sweep(go_notes[ni], go_notes[ni] * 0.9, go_note_dur, 0.3)
         let offset = ni * int(float(AUDIO_RATE) * go_note_dur)
         for (i in range(length(note))) {
             if (offset + i < go_total_samples) {
@@ -718,9 +718,7 @@ def target_paddle_w() : float {
     return PADDLE_W
 }
 
-def current_paddle_w() : float {
-    return display_paddle_w
-}
+def current_paddle_w() : float => display_paddle_w
 
 def current_ball_speed() : float {
     let base = BALL_SPEED * g_levels[clamp(level, 0, level_count() - 1)].speed
@@ -743,8 +741,7 @@ def spawn_bonus(pos : float3; always : bool) {
 def activate_bonus(btype : int) {
     if (btype == int(BonusType.triple_ball)) {
         // Spawn 2 extra balls from existing ball positions
-        var positions : array<float3>
-        var velocities : array<float3>
+        var positions, velocities : array<float3>
         query() $(b : Ball) {
             positions |> push(b.pos)
             velocities |> push(b.vel)
@@ -953,13 +950,11 @@ def update_bot_paddle(dt : float) {
 }
 
 // the arrows and A / D both steer, for the left hand
-def paddle_left_pressed() : bool {
-    return glfwGetKey(live_window, GLFW_KEY_LEFT) == GLFW_PRESS || glfwGetKey(live_window, GLFW_KEY_A) == GLFW_PRESS
-}
+def paddle_left_pressed() : bool =>
+    glfwGetKey(live_window, GLFW_KEY_LEFT) == GLFW_PRESS || glfwGetKey(live_window, GLFW_KEY_A) == GLFW_PRESS
 
-def paddle_right_pressed() : bool {
-    return glfwGetKey(live_window, GLFW_KEY_RIGHT) == GLFW_PRESS || glfwGetKey(live_window, GLFW_KEY_D) == GLFW_PRESS
-}
+def paddle_right_pressed() : bool =>
+    glfwGetKey(live_window, GLFW_KEY_RIGHT) == GLFW_PRESS || glfwGetKey(live_window, GLFW_KEY_D) == GLFW_PRESS
 
 def update_paddle(dt : float) {
     if (spectator) {
@@ -1168,9 +1163,7 @@ var @live level = 0
 var @live level_card_timer = 0.0
 let LEVEL_CARD_TIME = 2.2
 
-def level_count() : int {
-    return length(g_levels)
-}
+def level_count() : int => length(g_levels)
 
 //! one brick per stencil cell of the current level, the rows centred on the field
 def spawn_bricks() {
@@ -1305,9 +1298,7 @@ def bonus_spin(phase : float) : float4 {
     return quat_mul(quat_axis(float3(0.0, 1.0, 0.0), t * 1.1), quat_axis(float3(1.0, 0.0, 0.0), t * 2.6))
 }
 
-def bonus_pulse(phase : float) : float {
-    return 0.9 + 0.1 * sin(get_uptime() * 4.0 + phase)
-}
+def bonus_pulse(phase : float) : float => 0.9 + 0.1 * sin(get_uptime() * 4.0 + phase)
 
 // A capsule is built in layers the way river_run's pickups are: a steel shell that takes the
 // scene light, end caps and a core in the capsule's own colour hot enough to bloom, and a badge
@@ -1656,9 +1647,7 @@ def cmd_spawn_bonus(input : JsonValue?) : JsonValue? {
 }
 
 [live_command(description="Dump DECS archetypes, entities, and queries")]
-def cmd_decs_dump(_input : JsonValue?) : JsonValue? {
-    return JV(debug_dump_string())
-}
+def cmd_decs_dump(_input : JsonValue?) : JsonValue? => JV(debug_dump_string())
 
 [live_command(description="Drop a powerup above paddle. Args: type (triple_ball, wide_paddle, narrow_paddle, sticky_paddle, fireball, extra_life, speed_up, speed_down, shield)")]
 def cmd_drop_powerup(input : JsonValue?) : JsonValue? {
@@ -2069,9 +2058,8 @@ let FOV_Y = 45.0 * PI / 180.0
 let DESIGN_ASPECT = 1024.0 / 768.0
 
 // A window narrower than the design aspect opens the vertical field of view instead of cropping the field.
-def fitted_fov_y(aspect : float) : float {
-    return aspect < DESIGN_ASPECT ? 2.0 * atan(tan(FOV_Y * 0.5) * DESIGN_ASPECT / aspect) : FOV_Y
-}
+def fitted_fov_y(aspect : float) : float =>
+    aspect < DESIGN_ASPECT ? 2.0 * atan(tan(FOV_Y * 0.5) * DESIGN_ASPECT / aspect) : FOV_Y
 
 def post_settings(aspect : float) : PostSettings {
     var cfg = PostSettings()

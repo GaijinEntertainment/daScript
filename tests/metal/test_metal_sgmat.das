@@ -28,8 +28,7 @@ class SgMatGpu {
 
     [metal_kernel(name="sgmat_gpu_msl"), marker(no_coverage)]
     def sgmat_gpu {
-        var ma : simdgroup_float8x8
-        var mb : simdgroup_float8x8
+        var ma, mb : simdgroup_float8x8
         simdgroup_load(ma, fa, off_a, stride_a)
         simdgroup_load(mb, fb, 0u, 8u)
         var mm : simdgroup_float8x8
@@ -38,8 +37,7 @@ class SgMatGpu {
         var acc = make_filled_simdgroup_float8x8(1.0)
         simdgroup_multiply_accumulate(acc, ma, mb, acc)
         simdgroup_store(acc, fd, 0u, 8u)
-        var hx : simdgroup_half8x8
-        var hy : simdgroup_half8x8
+        var hx, hy : simdgroup_half8x8
         simdgroup_load(hx, ha, 0u, 8u)
         simdgroup_load(hy, hb, 0u, 8u)
         var hacc = make_filled_simdgroup_half8x8(0.5h)

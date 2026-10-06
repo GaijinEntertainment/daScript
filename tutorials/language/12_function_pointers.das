@@ -15,33 +15,22 @@ options gen2
 
 // === Named functions ===
 
-def double_it(x : int) : int {
-    return x * 2
-}
+def double_it(x : int) : int => x * 2
 
-def triple_it(x : int) : int {
-    return x * 3
-}
+def triple_it(x : int) : int => x * 3
 
-def negate(x : int) : int {
-    return -x
-}
+def negate(x : int) : int => -x
 
 // === Overloaded function — same name, different signatures ===
 
-def add(a, b : int) : int {
-    return a + b
-}
+def add(a, b : int) : int => a + b
 
-def add(a, b : float) : float {
-    return a + b
-}
+def add(a, b : float) : float => a + b
 
 // === Function that accepts a function<> parameter ===
 
-def apply(f : function<(x : int) : int>; value : int) : int {
-    return f(value)    // call syntax — just like calling a regular function
-}
+def apply(f : function<(x : int) : int>; value : int) : int =>
+    f(value)  // call syntax — just like calling a regular function
 
 def transform_array(arr : array<int>; f : function<(x : int) : int>) {
     for (_i, v in count(), arr) {

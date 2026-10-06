@@ -248,9 +248,8 @@ def start_story() {
 }
 
 // the corpus writes curly quotes; the screen font carries ASCII, so they would vanish
-def plain_quotes(piece : string) : string {
-    return piece |> replace("“", "\"") |> replace("”", "\"") |> replace("‘", "'") |> replace("’", "'")
-}
+def plain_quotes(piece : string) : string =>
+    piece |> replace("“", "\"") |> replace("”", "\"") |> replace("‘", "'") |> replace("’", "'")
 
 def append_text(piece : string) {
     g_story = "{g_story}{piece}"
@@ -323,9 +322,8 @@ def status_line() : string {
         : "the end - change the words for another")
 }
 
-def chosen_words() : array<string> {
-    return <- [for (w in split(wish_words(g_wish), ", ")); w; where !empty(w)]
-}
+def chosen_words() : array<string> =>
+    <- [for (w in split(wish_words(g_wish), ", ")); w; where !empty(w)]
 
 def toggle_word(word : string) {
     var words <- chosen_words()
@@ -494,9 +492,8 @@ def shutdown() {
     harness_shutdown()
 }
 
-def story_read_out() : bool {
-    return g_phase == Phase.told && g_unplayed_sentences == 0 && g_elapsed_s >= g_speaking_until
-}
+def story_read_out() : bool =>
+    g_phase == Phase.told && g_unplayed_sentences == 0 && g_elapsed_s >= g_speaking_until
 
 def done_for_smoke() : bool {
     return true if (g_args.max_frames > 0 && g_frames >= g_args.max_frames)

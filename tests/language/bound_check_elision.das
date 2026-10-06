@@ -74,21 +74,15 @@ def count_at(nm : string) : int2 {
 }
 
 // manual override: not provable, but [hint(unsafe_range_check)] forces the mark (as the JIT does)
-[export, hint(unsafe_range_check)] def target_hint(a : array<int>; i : int) : int {
-    return a[i]
-}
+[export, hint(unsafe_range_check)] def target_hint(a : array<int>; i : int) : int => a[i]
 
 // ===== targets: NOT provable -> nothing elided =====
 
 // const index but the array length is unknown (dynamic) -> can't prove 3 < length
-[export] def target_const_dyn(x : array<int>) : int {
-    return x[3]
-}
+[export] def target_const_dyn(x : array<int>) : int => x[3]
 
 // unconstrained index into a dynamic array
-[export] def target_unprovable(x : array<int>; k : int) : int {
-    return x[k]
-}
+[export] def target_unprovable(x : array<int>; k : int) : int => x[k]
 
 // the loop's length bound is killed because the body mutates the array
 [export] def target_mutated(var x : array<int>) {

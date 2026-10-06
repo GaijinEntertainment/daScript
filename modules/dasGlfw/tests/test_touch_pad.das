@@ -10,9 +10,8 @@ require glfw/glfw_boost
 //! The on-screen pad without a window: fingers are injected in window points and the keys a
 //! zone holds are read back through ``pad_key_held``.
 
-def private finger(id : int; x, y : float; began : bool = false; ended : bool = false) : PadTouch {
-    return PadTouch(id = id, pos = float2(x, y), began = began, ended = ended)
-}
+def private finger(id : int; x, y : float; began : bool = false; ended : bool = false) : PadTouch =>
+    PadTouch(id = id, pos = float2(x, y), began = began, ended = ended)
 
 def private frame(touches : array<PadTouch>) {
     pad_inject(touches)

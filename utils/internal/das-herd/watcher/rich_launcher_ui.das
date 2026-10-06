@@ -61,9 +61,7 @@ def collect_agent_launch_locations(
     }
 }
 
-def private launcher_name_slug : string {
-    return replace(strip(LAUNCHER_NAME.value), " ", "-")
-}
+def private launcher_name_slug : string => replace(strip(LAUNCHER_NAME.value), " ", "-")
 
 def private suggest_from_name() {
     let slug = launcher_name_slug()
@@ -322,9 +320,7 @@ def open_launcher_modal() {
     open_popup(LAUNCHER_DIALOG)
 }
 
-def launcher_modal_open() : bool {
-    return LAUNCHER_DIALOG.open
-}
+def launcher_modal_open() : bool => LAUNCHER_DIALOG.open
 
 def draw_launcher_modal() {
     popup_modal(LAUNCHER_DIALOG.PUBLIC, (text = "New Session###NewSession",

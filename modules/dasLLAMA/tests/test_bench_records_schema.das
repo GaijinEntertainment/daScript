@@ -342,7 +342,7 @@ def test_image_chat_rows_pin_the_fixture(t : T?) {
         var stores <- list_record_stores("modules/dasLLAMA/performance/records")
         var rows = 0
         for (path in stores) {
-            var models : array<BenchModel>
+            var inscope models : array<BenchModel>
             t |> success(read_bench_records(path, models), "{path} parses")
             for (m in models) {
                 for (r in m.runs) {
@@ -372,7 +372,7 @@ def test_batched_rows_carry_the_leg_shape(t : T?) {
         var stores <- list_record_stores("modules/dasLLAMA/performance/records")
         var rows = 0
         for (path in stores) {
-            var models : array<BenchModel>
+            var inscope models : array<BenchModel>
             t |> success(read_bench_records(path, models), "{path} parses")
             for (m in models) {
                 for (r in m.runs) {
@@ -485,7 +485,7 @@ def test_image_ref_flag_invariants(t : T?) {
         var stores <- list_record_stores("modules/dasLLAMA/performance/records")
         var rows = 0
         for (path in stores) {
-            var models : array<BenchModel>
+            var inscope models : array<BenchModel>
             t |> success(read_bench_records(path, models), "{path} parses")
             for (m in models) {
                 for (r in m.runs) {
@@ -521,7 +521,7 @@ def test_das_rows_cite_archived_generations(t : T?) {
         var stores <- list_record_stores("modules/dasLLAMA/performance/records")
         var rows = 0
         for (path in stores) {
-            var models : array<BenchModel>
+            var inscope models : array<BenchModel>
             t |> success(read_bench_records(path, models), "{path} parses")
             for (m in models) {
                 for (r in m.runs) {

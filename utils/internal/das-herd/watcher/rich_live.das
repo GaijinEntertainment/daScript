@@ -541,13 +541,10 @@ def herder_changelist_state(input : JsonValue?) : JsonValue? {
                             selection_key(comparison, file.path)))))
                 }
             }
-            var stage_paths : array<string>
-            var unstage_paths : array<string>
+            var inscope stage_paths, unstage_paths : array<string>
             changelist_selection_actions(repository, worktree, stage_paths,
                 unstage_paths)
-            var modified_paths : array<string>
-            var staged_paths : array<string>
-            var untracked_paths : array<string>
+            var inscope modified_paths, staged_paths, untracked_paths : array<string>
             var conflicted = 0
             changelist_selection_discards(repository, worktree,
                 modified_paths, staged_paths, untracked_paths, conflicted)
@@ -603,12 +600,12 @@ def herder_changelist_select(input : JsonValue?) : JsonValue? {
             selection_toggle_click(g_changelist_selection, args.repository_id,
                 args.worktree_path, args.group, key)
         } elif (args.mode == "range") {
-            let group_keys <- changelist_group_keys(repository,
+            var inscope group_keys <- changelist_group_keys(repository,
                 args.worktree_path, args.group)
             selection_range_click(g_changelist_selection, args.repository_id,
                 args.worktree_path, args.group, group_keys, key)
         } elif (args.mode == "group") {
-            let group_keys <- changelist_group_keys(repository,
+            var inscope group_keys <- changelist_group_keys(repository,
                 args.worktree_path, args.group)
             selection_set_group(g_changelist_selection, args.repository_id,
                 args.worktree_path, args.group, group_keys, args.selected)
@@ -636,9 +633,7 @@ def herder_changelist_action(input : JsonValue?) : JsonValue? { // nolint:STYLE0
             if (repository.record.id != args.repository_id) continue
             for (worktree in repository.worktrees) {
                 if (worktree.path != args.worktree_path) continue
-                var modified_paths : array<string>
-                var staged_paths : array<string>
-                var untracked_paths : array<string>
+                var inscope modified_paths, staged_paths, untracked_paths : array<string>
                 var conflicted = 0
                 changelist_selection_discards(repository, worktree,
                     modified_paths, staged_paths, untracked_paths, conflicted)
@@ -683,8 +678,7 @@ def herder_changelist_action(input : JsonValue?) : JsonValue? { // nolint:STYLE0
             if (repository.record.id != args.repository_id) continue
             for (worktree in repository.worktrees) {
                 if (worktree.path != args.worktree_path) continue
-                var stage_paths : array<string>
-                var unstage_paths : array<string>
+                var inscope stage_paths, unstage_paths : array<string>
                 changelist_selection_actions(repository, worktree,
                     stage_paths, unstage_paths)
                 if (args.action == "stage") {
@@ -1002,9 +996,7 @@ def herder_git_select_worktree(input : JsonValue?) : JsonValue? {
 
 [live_command(description = "Inspect the selected worktree PR model, including outgoing commits, included files, and not-included files.")]
 def herder_git_review_state(_input : JsonValue?) : JsonValue? {
-    var commits : array<JsonValue?>
-    var included : array<JsonValue?>
-    var not_included : array<JsonValue?>
+    var commits, included, not_included : array<JsonValue?>
     if (g_client != null) {
         for (repository in g_client.repositories) {
             if (repository.record.id != g_selected_repository_id) continue
@@ -1061,10 +1053,7 @@ def herder_git_review_state(_input : JsonValue?) : JsonValue? {
 
 [live_command(description = "Inspect selected worktree History and Tree data, including refs, commits, and selected-commit files.")]
 def herder_git_history_state(_input : JsonValue?) : JsonValue? {
-    var refs : array<JsonValue?>
-    var commits : array<JsonValue?>
-    var graph_rows : array<JsonValue?>
-    var files : array<JsonValue?>
+    var refs, commits, graph_rows, files : array<JsonValue?>
     if (g_client != null) {
         for (repository in g_client.repositories) {
             if (repository.record.id != g_selected_repository_id) continue
@@ -1121,8 +1110,7 @@ def herder_git_history_state(_input : JsonValue?) : JsonValue? {
 
 [live_command(description = "Inspect the semantic Tree filter, focus, nodes, and edges.")]
 def herder_git_tree_state(_input : JsonValue?) : JsonValue? {
-    var nodes : array<JsonValue?>
-    var edges : array<JsonValue?>
+    var nodes, edges : array<JsonValue?>
     nodes |> reserve(length(g_tree_model.nodes))
     edges |> reserve(length(g_tree_model.edges))
     if (g_client != null) {
@@ -1604,8 +1592,7 @@ def herder_attention_state(_input : JsonValue?) : JsonValue? {
 
 [live_command(description = "Inspect selected dasHerd session origin, purpose, and multi-repository Review Bundles.")]
 def herder_session_state(_input : JsonValue?) : JsonValue? {
-    var session_id, session_state, session_kind, session_purpose : string
-    var task_context, repository_id, worktree_path, context_path : string
+    var session_id, session_state, session_kind, session_purpose, task_context, repository_id, worktree_path, context_path : string
     var bundles : array<JsonValue?>
     if (g_client != null) {
         for (session in g_client.sessions) {

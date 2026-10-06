@@ -685,7 +685,7 @@ namespace das
         DAS_PROFILE_NODE
         SimNode ** __restrict tail = list + total;
         if ( this->totalFinal == 0 ) {
-            while ( cond->evalBool(context) && !context.stopFlags ) {
+            while ( !context.stopFlags && cond->evalBool(context) ) {
                 SimNode ** __restrict body = list;
             loopbegin:;
                 for (; body!=tail; ++body) {
@@ -694,7 +694,7 @@ namespace das
                 }
             }
         } else {
-            while ( cond->evalBool(context) && !context.stopFlags ) {
+            while ( !context.stopFlags && cond->evalBool(context) ) {
                 SimNode ** __restrict body = list;
             loopbegin_fin:;
                 for (; body!=tail; ++body) {
@@ -716,7 +716,7 @@ namespace das
         DAS_PROFILE_NODE
         SimNode ** __restrict tail = list + total;
         if ( this->totalFinal == 0 ) {
-            while ( cond->evalBool(context) && !context.stopFlags ) {
+            while ( !context.stopFlags && cond->evalBool(context) ) {
                 SimNode ** __restrict body = list;
             loopbegin:;
                 for (; body!=tail; ++body) {
@@ -726,7 +726,7 @@ namespace das
                 }
             }
         } else {
-            while ( cond->evalBool(context) && !context.stopFlags ) {
+            while ( !context.stopFlags && cond->evalBool(context) ) {
                 SimNode ** __restrict body = list;
             loopbegin_fin:;
                 for (; body!=tail; ++body) {
@@ -750,7 +750,7 @@ namespace das
         DAS_PROFILE_NODE
         SimNode ** __restrict tail = list + total;
         if ( this->totalFinal == 0 ) {
-            while ( cond->evalBool(context) && !context.stopFlags ) {
+            while ( !context.stopFlags && cond->evalBool(context) ) {
                 SimNode ** __restrict body = list;
             loopbegin:;
                 DAS_KEEPALIVE_LOOP(&context);
@@ -760,7 +760,7 @@ namespace das
                 }
             }
         } else {
-            while ( cond->evalBool(context) && !context.stopFlags ) {
+            while ( !context.stopFlags && cond->evalBool(context) ) {
                 SimNode ** __restrict body = list;
             loopbegin_fin:;
                 DAS_KEEPALIVE_LOOP(&context);

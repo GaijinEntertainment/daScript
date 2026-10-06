@@ -125,15 +125,13 @@ def private half_vec_type_id(words : array<uint>; half_id : uint; lanes : uint) 
 
 // How many `op` instructions produce a value of type `type_id`? An arithmetic op's result type is
 // operand 0, so this is what separates a native 16-bit lowering from a widened 32-bit one.
-def private count_op_of_type(words : array<uint>; op : SpvOp; type_id : uint) : int {
-    return count_op_operand_at(words, op, 0, type_id)
-}
+def private count_op_of_type(words : array<uint>; op : SpvOp; type_id : uint) : int =>
+    count_op_operand_at(words, op, 0, type_id)
 
 // How many OpExtInst carry `ext` as their ext-op selector? Operands are [result-type, result-id,
 // set-id, ext-op, args...], so the selector sits at index 3.
-def private count_ext_op(words : array<uint>; ext : GLSLstd450) : int {
-    return count_op_operand_at(words, SpvOp.ExtInst, 3, uint(ext))
-}
+def private count_ext_op(words : array<uint>; ext : GLSLstd450) : int =>
+    count_op_operand_at(words, SpvOp.ExtInst, 3, uint(ext))
 
 def private check_float16_surface(t : T?; words : array<uint>; what : string) {
     t |> success(op_has_operand(words, SpvOp.Capability, uint(SpvCapability.Float16)),

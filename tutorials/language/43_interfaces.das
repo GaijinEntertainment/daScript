@@ -39,9 +39,7 @@ class FriendlyGreeter {
     }
     // Method names are prefixed with the interface name and a backtick:
     //   IGreeter`greet  — implements IGreeter.greet
-    def IGreeter`greet(name : string) : string {
-        return "Hey, {name}!"
-    }
+    def IGreeter`greet(name : string) : string => "Hey, {name}!"
 }
 
 def demo_basic_interface() {
@@ -121,9 +119,7 @@ class Sprite {
     def IDrawable`draw(x, y : int) {
         print("    Sprite \"{name}\" at ({x},{y})\n")
     }
-    def ISerializable`serialize() : string {
-        return "sprite:{name}"
-    }
+    def ISerializable`serialize() : string => "sprite:{name}"
 }
 
 def demo_multiple_interfaces() {
@@ -191,15 +187,9 @@ class Dog {
         dog_name = n
         owner_name = o
     }
-    def IPet`name() : string {
-        return dog_name
-    }
-    def IPet`sound() : string {
-        return "Woof"
-    }
-    def IPet`owner() : string {
-        return owner_name
-    }
+    def IPet`name() : string => dog_name
+    def IPet`sound() : string => "Woof"
+    def IPet`owner() : string => owner_name
 }
 
 def demo_interface_inheritance() {
@@ -233,9 +223,7 @@ def demo_interface_inheritance() {
 class ILogger {
     def abstract log_name : string
     // Default implementation — not required to override
-    def format(message : string) : string {
-        return "[{self.log_name()}] {message}"
-    }
+    def format(message : string) : string => "[{self.log_name()}] {message}"
 }
 
 [implements(ILogger)]
@@ -243,9 +231,7 @@ class SimpleLogger {
     def SimpleLogger() {
         pass
     }
-    def ILogger`log_name() : string {
-        return "simple"
-    }
+    def ILogger`log_name() : string => "simple"
     // format() uses the default from ILogger
 }
 
@@ -254,13 +240,9 @@ class FancyLogger {
     def FancyLogger() {
         pass
     }
-    def ILogger`log_name() : string {
-        return "fancy"
-    }
+    def ILogger`log_name() : string => "fancy"
     // Override the default
-    def ILogger`format(message : string) : string {
-        return "*** [fancy] {message} ***"
-    }
+    def ILogger`format(message : string) : string => "*** [fancy] {message} ***"
 }
 
 def demo_default_methods() {
@@ -315,9 +297,7 @@ class Document {
     def Document(t : string) {
         text = t
     }
-    def IReadable`read() : string {
-        return text
-    }
+    def IReadable`read() : string => text
 }
 
 def print_content(doc : Document? const) {

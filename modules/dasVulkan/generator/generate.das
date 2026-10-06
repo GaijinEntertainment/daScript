@@ -150,9 +150,7 @@ def main() : int {
     if (!cfg.no_cpp) {
         raw_cmd_skips <- emit_all(reg, em, out_dir)   // nolint:PERF030 - fresh empty local, filled at most once
     }
-    var boost_struct_skips : array<string>
-    var boost_cmd_skips : array<string>
-    var non_copyable : array<string>
+    var boost_struct_skips, boost_cmd_skips, non_copyable : array<string>
     emit_boost(reg, em, boost_dir, boost_struct_skips, boost_cmd_skips, non_copyable)
     if (!cfg.no_cpp) {
         // the skip-ratchet report needs the raw-command skips, so it is only written on full runs

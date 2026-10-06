@@ -48,13 +48,10 @@ let GPU_PROMPT_SERVED_BAR = 5e-2   //! the prompt seat's K/V rows on the served 
 let GPU_FRAME_SERVED_BAR = 1e-1   //! the frames seat on the served planes, teacher-forced: reads 1.9e-2 / 3.7e-2 on the q8 file, 3.8e-2 / 7.1e-2 on the kq file (alba / caro_davy) on the M5 Max
 let GPU_FRAME_FREE_BAR = 5e-3   //! the frames seat free-running on the f32 lane, its own noise from the same seed, every frame fed its own output: reads 1.5e-4 and 1.1e-4 on the two stage cases on the M5 Max, 7e-5 and 1.8e-3 on the pod (lj028's 150 frames compound the f16 GEMM feed's rounding)
 
-def private gguf_path() : string {
-    return path_join(models_dir(), "pocket-tts-en.gguf")
-}
+def private gguf_path() : string => path_join(models_dir(), "pocket-tts-en.gguf")
 
-def private tokens_fixture_path() : string {
-    return "{get_das_root()}/modules/dasLLAMA/tests/_tts_fixtures/pocket_tokens.json"
-}
+def private tokens_fixture_path() : string =>
+    "{get_das_root()}/modules/dasLLAMA/tests/_tts_fixtures/pocket_tokens.json"
 
 struct private TokRow {
     id : string
@@ -216,9 +213,7 @@ def test_prepare_pocket_text(t : T?) {
 
 // ===== the parity rail against harness/pocket_oracle.py =====
 
-def private oracle_dir() : string {
-    return path_join(models_dir(), "tts_oracle/pocket_english_2026-04")
-}
+def private oracle_dir() : string => path_join(models_dir(), "tts_oracle/pocket_english_2026-04")
 
 struct private PocketCase {
     file : string
@@ -357,9 +352,8 @@ def private head_over_frames(m : PocketModel; var sc : PocketScratch; conds, x0 
 }
 
 // the rows of the codec chain's ping-pong scratch, the window's working set
-def private codec_scratch_bytes(sc : PocketScratch) : int64 {
-    return (long_capacity(sc.ca) + long_capacity(sc.cb) + long_capacity(sc.cc) + long_capacity(sc.cpad) + long_capacity(sc.cs) + long_capacity(sc.ct)) * 4l
-}
+def private codec_scratch_bytes(sc : PocketScratch) : int64 =>
+    (long_capacity(sc.ca) + long_capacity(sc.cb) + long_capacity(sc.cc) + long_capacity(sc.cpad) + long_capacity(sc.cs) + long_capacity(sc.ct)) * 4l
 
 let STREAM_BAR = 1.0e-5   // absolute, on a waveform or a latent frame: float noise of the same sums in another batching
 
@@ -603,9 +597,8 @@ def private frame_rows(m : PocketModel; sc : PocketScratch; frames : int64) : Fr
     return <- r
 }
 
-def private same_rng(a, b : TtsRng) : bool {
-    return a.state == b.state && a.inc == b.inc && a.has_spare == b.has_spare && (!a.has_spare || a.spare == b.spare)
-}
+def private same_rng(a, b : TtsRng) : bool =>
+    a.state == b.state && a.inc == b.inc && a.has_spare == b.has_spare && (!a.has_spare || a.spare == b.spare)
 
 typedef FrameRows = tuple<lat : array<float>; conds : array<float>; eos : array<float>>
 
@@ -1037,9 +1030,7 @@ def test_pocket_q8_lane(t : T?) {
     }
 }
 
-def private q8_gguf_path() : string {
-    return path_join(models_dir(), "pocket-tts-en-q8.gguf")
-}
+def private q8_gguf_path() : string => path_join(models_dir(), "pocket-tts-en-q8.gguf")
 
 // the frames of one teacher-forced case on a model, for a lane-to-lane compare
 def private forced_latents(m : PocketModel; c : PocketCase; man : PocketManifest; var sc : PocketScratch; odir : string = oracle_dir()) : array<float> {
@@ -1108,9 +1099,7 @@ let Q8_FILE_BAR = 5.0e-2
 let KQ_EXACT_BAR = 5.0e-2   //! the kq lane against the exact lane of the same file (measured 3.4e-2): the head's Q8_0 route and the activation quants
 let KQ_HEAD_BAR = 2.0e-2    //! the flow head on its Q8_0 route against the f32 oracle's frames (measured 9.8e-3), the oracle's own conditioning and noise in
 
-def private kq_gguf_path() : string {
-    return path_join(models_dir(), "pocket-tts-en-kq.gguf")
-}
+def private kq_gguf_path() : string => path_join(models_dir(), "pocket-tts-en-kq.gguf")
 
 [test]
 def test_pocket_kq_file(t : T?) {

@@ -35,9 +35,7 @@ var DOC_EXEMPT_ROUTES <- {
     "/favicon.ico"
 }
 
-def is_route_byte(b : int) : bool {
-    return is_alnum(b) || b == '/' || b == '_' || b == '-'
-}
+def is_route_byte(b : int) : bool => is_alnum(b) || b == '/' || b == '_' || b == '-'
 
 // every path the server answers: the front's ROUTES rows, and the GET( / POST( / STREAM( / ANY( rows of onInit
 def served_routes() : table<string> {
@@ -364,9 +362,8 @@ def private bundle_license_owners() : array<string> {
     return <- out
 }
 
-def private is_notice_file(name : string) : bool {
-    return find(name, "LICENSE") >= 0 || find(name, "COPYING") >= 0 || find(name, "NOTICES") >= 0
-}
+def private is_notice_file(name : string) : bool =>
+    find(name, "LICENSE") >= 0 || find(name, "COPYING") >= 0 || find(name, "NOTICES") >= 0
 
 //! The `install(FILES <src>... DESTINATION $\{DAS_INSTALL_DOCDIR\} [RENAME <name>])` rows of one
 //! CMake file as (source relative to the repo root, name at the doc root). A source under
@@ -379,7 +376,7 @@ def private doc_root_licenses(owner : string) : array<tuple<source : string; nam
         continue if (length(args) < 3 || args[0] != "FILES")
         var dest = ""
         var rename = ""
-        var sources : array<string>
+        var inscope sources : array<string>
         var i = 1
         while (i < length(args)) {
             let a = args[i]

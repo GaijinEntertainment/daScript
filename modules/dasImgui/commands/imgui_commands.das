@@ -121,14 +121,12 @@ def public with_alt_chord(binding : CommandBinding; key : ImGuiKey;
     return result
 }
 
-def private definition_index(registry : CommandRegistry const; id : string) : int {
-    return find_index_if(registry.definitions) $(definition) => definition.id == id
-}
+def private definition_index(registry : CommandRegistry const; id : string) : int =>
+    find_index_if(registry.definitions) $(definition) => definition.id == id
 
 def private binding_index(registry : CommandRegistry const; id : string;
-                          scope : CommandScope) : int {
-    return find_index_if(registry.bindings) $(binding) => binding.command_id == id && binding.scope == scope
-}
+                          scope : CommandScope) : int =>
+                              find_index_if(registry.bindings) $(binding) => binding.command_id == id && binding.scope == scope
 
 def public command_define(var registry : CommandRegistry;
                           definition : CommandDefinition const;

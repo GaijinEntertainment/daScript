@@ -71,9 +71,8 @@ def private opens_for_write(text : string) : bool {
     return find(text, "\"w") >= 0 || find(text, "\"a") >= 0 || find(text, "\"r+") >= 0
 }
 
-def private writes(text : string; sinks : table<string>) : bool {
-    return calls_any(text, sinks) || opens_for_write(text)
-}
+def private writes(text : string; sinks : table<string>) : bool =>
+    calls_any(text, sinks) || opens_for_write(text)
 
 def private def_name(line : string) : string {
     var rest = slice(line, length("def "))

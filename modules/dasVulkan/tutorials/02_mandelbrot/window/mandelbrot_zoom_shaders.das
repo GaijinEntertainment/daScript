@@ -36,9 +36,7 @@ struct Push {
 var @push_constant pc : Push
 
 // complex multiply -- (a.x + i a.y) * (b.x + i b.y)
-def private cmul(a, b : float2) : float2 {
-    return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x)
-}
+def private cmul(a, b : float2) : float2 => float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x)
 
 // iq's cheap interior tests: skip the iteration inside the main cardioid and the period-2 bulb.
 def private is_interior(c : float2) : bool {

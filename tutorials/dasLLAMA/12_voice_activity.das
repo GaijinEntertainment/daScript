@@ -24,13 +24,10 @@ require math
 
 // Minimal RIFF/WAVE reader for 16-bit PCM mono 16 kHz input — enough for the tutorial;
 // real programs decode arbitrary formats through dasAudio's miniaudio bindings.
-def private wav_u16(b : array<uint8> | #; o : int64) : uint {
-    return uint(b[o]) | (uint(b[o + 1l]) << 8u)
-}
+def private wav_u16(b : array<uint8> | #; o : int64) : uint => uint(b[o]) | (uint(b[o + 1l]) << 8u)
 
-def private wav_u32(b : array<uint8> | #; o : int64) : uint {
-    return wav_u16(b, o) | (wav_u16(b, o + 2l) << 16u)
-}
+def private wav_u32(b : array<uint8> | #; o : int64) : uint =>
+    wav_u16(b, o) | (wav_u16(b, o + 2l) << 16u)
 
 def read_wav_pcm16_mono(path : string) : array<float> {
     var out : array<float>
@@ -165,7 +162,7 @@ def section_streaming(m : VadModel; speech : array<float>) {
     let n = length(speech)
     while (fed < n) {
         let step = min(1234, n - fed)   // deliberately odd-sized "capture" chunks
-        var piece : array<float>
+        var inscope piece : array<float>
         piece |> resize(step)
         for (j in range(step)) {
             piece[j] = speech[fed + j]
@@ -191,7 +188,7 @@ def section_transcribe(asr_paths : array<string>; speech : array<float>; segs : 
     var am <- (length(asr_paths) >= 2 ? load_asr_model(asr_paths[0], asr_paths[1]) : load_asr_model(asr_paths[0]))
     var s = create_session(am, "en")
     for (g in segs) {
-        var cut : array<float>
+        var inscope cut : array<float>
         cut |> resize(g.end - g.start)
         for (j in range(length(cut))) {
             cut[j] = speech[int(g.start) + j]

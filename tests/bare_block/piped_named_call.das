@@ -9,23 +9,17 @@ struct Holder {
     v : int
 }
 
-def setv(self : Holder; _caption : string; blk : block<() : int>; x : int = 0) : int {
-    return self.v + x + invoke(blk)
-}
+def setv(self : Holder; _caption : string; blk : block<() : int>; x : int = 0) : int =>
+    self.v + x + invoke(blk)
 
-def freefn(tag : int; blk : block<() : int>; scale : int = 1) : int {
-    return tag + scale * invoke(blk)
-}
+def freefn(tag : int; blk : block<() : int>; scale : int = 1) : int => tag + scale * invoke(blk)
 
 // block parameter is LAST, behind a defaulted 'opt' -> needs padding
-def sec(tag : int; opt : int = 0; body : block<() : int>) : int {
-    return tag + opt + invoke(body)
-}
+def sec(tag : int; opt : int = 0; body : block<() : int>) : int => tag + opt + invoke(body)
 
 // two defaults between the positional and the block param
-def two(tag : int; a : int = 0; b : int = 0; body : block<() : int>) : int {
-    return tag + a + b + invoke(body)
-}
+def two(tag : int; a : int = 0; b : int = 0; body : block<() : int>) : int =>
+    tag + a + b + invoke(body)
 
 // a piped named call INSIDE a generic body: the body is cloned (clone_function) on
 // instantiation, before it demotes - the clone must carry nonNamedArguments (the positional
@@ -37,32 +31,28 @@ def in_generic(g) : int {
 }
 
 // overload set - least padding wins (the 3-arg one, block closer)
-def ov(a : int; x : int = 0; body : block<() : int>) : int { return 100 + a + x + invoke(body) }
-def ov(a : int; x : int = 0; y : int = 0; body : block<() : int>) : int { return 200 + a + x + y + invoke(body) }
+def ov(a : int; x : int = 0; body : block<() : int>) : int => 100 + a + x + invoke(body)
+def ov(a : int; x : int = 0; y : int = 0; body : block<() : int>) : int =>
+    200 + a + x + y + invoke(body)
 
 struct Panel { depth : int }
 // free function called via dot (w.draw(...) == draw(w, ...)); block param last -> pads
-def draw(self : Panel; _caption : string; indent : int = 0; body : block<() : int>) : int {
-    return self.depth + indent + invoke(body)
-}
+def draw(self : Panel; _caption : string; indent : int = 0; body : block<() : int>) : int =>
+    self.depth + indent + invoke(body)
 // generic first argument, block param last -> pads
-def gdraw(tag; opt : int = 0; body : block<() : int>) : int { return opt + invoke(body) }
+def gdraw(tag; opt : int = 0; body : block<() : int>) : int => opt + invoke(body)
 
 // genuine class method (def inside class {}): a struct field, unreachable by bare name, so it
 // resolves through the member-call path. block param last, behind a defaulted 'indent' -> pads.
 class Frame {
     depth : int
-    def region(_caption : string; indent : int = 0; body : block<() : int>) : int {
-        return depth + indent + invoke(body)
-    }
+    def region(_caption : string; indent : int = 0; body : block<() : int>) : int =>
+        depth + indent + invoke(body)
     // two defaults between the middle positional and the block param
-    def region2(_caption : string; a : int = 0; b : int = 0; body : block<() : int>) : int {
-        return depth + a + b + invoke(body)
-    }
+    def region2(_caption : string; a : int = 0; b : int = 0; body : block<() : int>) : int =>
+        depth + a + b + invoke(body)
     // block param right after self+caption (no default between) -> no padding
-    def plain(_caption : string; body : block<() : int>) : int {
-        return depth + invoke(body)
-    }
+    def plain(_caption : string; body : block<() : int>) : int => depth + invoke(body)
     // implicit-self member call from within another method, block param pads across 'indent'
     def wrap() : int {
         return region("hi", indent = 4) {
@@ -74,9 +64,8 @@ class Frame {
 // struct (not class) method with a block param last, behind a defaulted arg -> pads
 struct Box {
     v : int
-    def cell(_caption : string; pad : int = 0; body : block<() : int>) : int {
-        return v + pad + invoke(body)
-    }
+    def cell(_caption : string; pad : int = 0; body : block<() : int>) : int =>
+        v + pad + invoke(body)
 }
 
 [test]

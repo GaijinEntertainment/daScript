@@ -550,9 +550,7 @@ def private build_status_payload(hash : string; toolchain : string) : string {
     return write_json(JV((state = st.state)))   // building
 }
 
-def private builds_enabled : bool {
-    return !empty(g_build.token) && !empty(g_build.blobs_dir)
-}
+def private builds_enabled : bool => !empty(g_build.token) && !empty(g_build.blobs_dir)
 
 def private handle_build_info(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
     let t0 = ref_time_ticks()
@@ -795,6 +793,4 @@ def run_server(port : int; db_path : string; policy : StorePolicy; base_url : st
     shutdown_server()
 }
 
-def private current_unix_time : int64 {
-    return int64(get_clock())
-}
+def private current_unix_time : int64 => int64(get_clock())

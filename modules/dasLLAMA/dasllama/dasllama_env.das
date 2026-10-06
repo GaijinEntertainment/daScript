@@ -878,14 +878,11 @@ let public g_env_core = env_config(type<CoreEnv>)
 
 //! The per-user dasLLAMA directory under `home`: the standalone programs' models, config, tune
 //! state and logs, so an install directory can stay read-only.
-def public dasllama_home_dir_from(home : string) : string {
-    return path_join(home, ".dasllama")
-}
+def public dasllama_home_dir_from(home : string) : string => path_join(home, ".dasllama")
 
 //! `<home>/.dasllama`, home being USERPROFILE (Windows), else HOME.
-def public dasllama_home_dir() : string {
-    return dasllama_home_dir_from(!empty(g_env_core.user_profile) ? g_env_core.user_profile : g_env_core.home)
-}
+def public dasllama_home_dir() : string =>
+    dasllama_home_dir_from(!empty(g_env_core.user_profile) ? g_env_core.user_profile : g_env_core.home)
 
 //! A dasLLAMA app's config `name`, looked for in the working directory, then in `dasllama_home`,
 //! then in `anchor_dir` (beside the program or its script); "" when none exists. The one lookup

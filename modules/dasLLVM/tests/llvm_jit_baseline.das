@@ -18,26 +18,19 @@ let BASELINE_LINE = "DAS_JIT_BASELINE="
 
 // the lowest class of this arch's ladder that every CI box of the arch runs, and the tier bits
 // the class's gates bake: avx2 + f16c on x86, dotprod + fullfp16 on arm
-def private lowest_class() : string {
-    return get_architecture_name() == "x86_64" ? "x86-avx2" : "arm-neon"
-}
+def private lowest_class() : string => get_architecture_name() == "x86_64" ? "x86-avx2" : "arm-neon"
 
-def private lowest_class_bits() : int {
-    return get_architecture_name() == "x86_64" ? 3 : 1280
-}
+def private lowest_class_bits() : int => get_architecture_name() == "x86_64" ? 3 : 1280
 
-def private foreign_class() : string {
-    return get_architecture_name() == "x86_64" ? "arm-neon" : "x86-avx2"
-}
+def private foreign_class() : string =>
+    get_architecture_name() == "x86_64" ? "arm-neon" : "x86-avx2"
 
 // a linux triple of this arch and of the other one - the cross-target cases compile only
-def private own_arch_triple() : string {
-    return get_architecture_name() == "x86_64" ? "x86_64-unknown-linux-gnu" : "aarch64-unknown-linux-gnu"
-}
+def private own_arch_triple() : string =>
+    get_architecture_name() == "x86_64" ? "x86_64-unknown-linux-gnu" : "aarch64-unknown-linux-gnu"
 
-def private foreign_arch_triple() : string {
-    return get_architecture_name() == "x86_64" ? "aarch64-unknown-linux-gnu" : "x86_64-unknown-linux-gnu"
-}
+def private foreign_arch_triple() : string =>
+    get_architecture_name() == "x86_64" ? "aarch64-unknown-linux-gnu" : "x86_64-unknown-linux-gnu"
 
 def private write_probe_script(script : string) : bool {
     var ok = false

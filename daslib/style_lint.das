@@ -1504,7 +1504,7 @@ class StyleLintVisitor : AstVisitor {
                 count++
             }
             if (count >= 2) {
-                var field_names : array<string>
+                var inscope field_names : array<string>
                 for (j in range(idx + 1, idx + 1 + count)) {
                     let name = field_name_of(blk.list[j])
                     if (!empty(name)) field_names |> push(name)
@@ -2284,8 +2284,7 @@ class StyleLintVisitor : AstVisitor {
             }
         }
         var keep : table<string; bool>
-        var verdict : table<string; string>
-        var members : table<string; string>
+        var verdict, members : table<string; string>
         prog |> for_each_require_declaration() $ [unused_argument(file)] (mod, req_name, file, pub, at) {
             if (mod == null || pub
                 || at.fileInfo == null || !key_exists(module_files, string(at.fileInfo.name))) return
@@ -2350,9 +2349,7 @@ class StyleLintVisitor : AstVisitor {
         }
     }
 
-    def st030_decl_key(at : LineInfo) : string {
-        return "{at.fileInfo.name}:{at.line}:{at.column}"
-    }
+    def st030_decl_key(at : LineInfo) : string => "{at.fileInfo.name}:{at.line}:{at.column}"
 
     def st030_is_group_line(src : string) : bool {
         //! `require [group]` or `require ?guard [group]` - the bracket right after the keyword
@@ -2396,8 +2393,7 @@ class StyleLintVisitor : AstVisitor {
         if (mod == null) return
         var file_first_decl : table<string; uint>
         var fn_file : array<string>
-        var fn_starts : array<uint>
-        var fn_ends : array<uint>
+        var fn_starts, fn_ends : array<uint>
         var fn_private : array<bool>
         for_each_function(mod, "") $(var fn) {
             if (fn.body == null || fn.at.fileInfo == null || fn.at.line == 0u
@@ -2711,9 +2707,8 @@ class StyleLintVisitor : AstVisitor {
         }
     }
 
-    def is_lowered_unsafe_delete(expr : ExpressionPtr) : bool {
-        return expr is ExprCall && lowered_unsafe_delete(expr as ExprCall)
-    }
+    def is_lowered_unsafe_delete(expr : ExpressionPtr) : bool =>
+        expr is ExprCall && lowered_unsafe_delete(expr as ExprCall)
 
     def variable_owns_unsafe(v : VariablePtr) : bool {
         let vt = v._type
@@ -2947,9 +2942,8 @@ class StyleLintVisitor : AstVisitor {
         }
     }
 
-    def is_module_with(expr : ExpressionPtr) : bool {
-        return expr is ExprWith && !empty((expr as ExprWith).moduleName)
-    }
+    def is_module_with(expr : ExpressionPtr) : bool =>
+        expr is ExprWith && !empty((expr as ExprWith).moduleName)
 
     def override preVisitExprWith(var expr : ExprWith?) : void {
         if (with_module_is_unsafe && !expr.genFlags.generated && !empty(expr.moduleName)) {
@@ -3028,9 +3022,8 @@ def private ascii_strings_for(prog : ProgramPtr) : bool {
 }
 
 //! infer falls back to the host's policy, which lint cannot read; the policy header's default is on.
-def private strict_smart_pointers_for(prog : ProgramPtr) : bool {
-    return prog._options |> find_arg("strict_smart_pointers") ?as tBool ?? true
-}
+def private strict_smart_pointers_for(prog : ProgramPtr) : bool =>
+    prog._options |> find_arg("strict_smart_pointers") ?as tBool ?? true
 
 def private duplicate_regions_for(prog : ProgramPtr) : bool {
     let configured = prog._options |> find_arg("_duplicate_regions")

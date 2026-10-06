@@ -12,8 +12,7 @@ require ../performance/profile_common.das
 def test_model_specs_invariants(t : T?) {
     t |> run("spec rows are keyed, unique, and facet-coherent") @(t : T?) {
         var inscope specs <- model_specs()
-        var seen : table<string>
-        var displays : table<string>
+        var seen, displays : table<string>
         for (s in specs) {
             t |> success(!empty(s.file), "every spec is keyed by file")
             t |> success(!key_exists(seen, s.file), "file keys are unique: {s.file}")

@@ -13,9 +13,7 @@ def apply_twice(x : int) : int {
     return invoke(add3, invoke(add3, x))
 }
 
-def double_it(x : int) : int {
-    return x + x
-}
+def double_it(x : int) : int => x + x
 
 [export]
 def call_through_pointer(x : int) : int {

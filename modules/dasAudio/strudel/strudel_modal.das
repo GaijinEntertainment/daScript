@@ -43,9 +43,7 @@ def render_modal_voice(v : ModalVoice) : array<float> {
 
     let nm = clamp(v.n_modes, 1, 8)
     // precompute per-mode frequency / decay rate / gain
-    var mf : array<float>
-    var mr : array<float>
-    var mg : array<float>
+    var mf, mr, mg : array<float>
     mf |> reserve(nm)
     mr |> reserve(nm)
     mg |> reserve(nm)

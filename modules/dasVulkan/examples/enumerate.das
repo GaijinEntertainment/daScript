@@ -10,9 +10,8 @@ def device_name(var props : VkPhysicalDeviceProperties) : string {
     }
 }
 
-def version_str(v : uint) : string {
-    return "{int((v >> 22u) & 0x7Fu)}.{int((v >> 12u) & 0x3FFu)}.{int(v & 0xFFFu)}"
-}
+def version_str(v : uint) : string =>
+    "{int((v >> 22u) & 0x7Fu)}.{int((v >> 12u) & 0x3FFu)}.{int(v & 0xFFFu)}"
 
 [export]
 def main() : int {
@@ -43,7 +42,7 @@ def main() : int {
 
         var qcount = 0u
         vkGetPhysicalDeviceQueueFamilyProperties(d, qcount, null)
-        var qprops : array<VkQueueFamilyProperties>
+        var inscope qprops : array<VkQueueFamilyProperties>
         qprops |> resize(int(qcount))
         vkGetPhysicalDeviceQueueFamilyProperties(d, qcount, unsafe(addr(qprops[0])))
         print("  queue families: {int(qcount)}\n")

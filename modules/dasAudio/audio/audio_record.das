@@ -36,8 +36,7 @@ def public record_to_wav(fname : string; seconds : float; rate : int = 44100; ch
     //! the device fails to open, produces no audio, or stalls mid-capture, or if the WAV cannot be written.
     // invalid args or an already-active recording short-circuit before sound_record_start, so this never panics
     return false if (seconds <= 0.0 || rate <= 0 || channels <= 0 || sound_is_recording() || !sound_record_start(rate, channels, rate, device_index))
-    var samples : array<float>
-    var scratch : array<float>
+    var samples, scratch : array<float>
     scratch |> resize(rate * channels)   // ~1s drain buffer
     let total_frames = int(float(rate) * seconds)
     samples |> reserve(total_frames * channels)   // final size is known up front — reserve once, no intermediate reallocs

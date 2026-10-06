@@ -344,10 +344,8 @@ def parity_group_by_sum(t : T?) {
         var m5f <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>))._group_by(_.brand)._select((b = _._0, total = _._1 |> _select(_.qty) |> sum())).to_array())
         var m3f <- _fold(each(arr)._group_by(_.brand)._select((b = _._0, total = _._1 |> _select(_.qty) |> sum())).to_array())
         t |> equal(length(m5f), length(m3f))
-        var s5 : table<string; int>
-        var sf : table<string; int>
-        for (g in m5f) { s5[g.b] = g.total }
-        for (g in m3f) { sf[g.b] = g.total }
+        var s5 <- { for (g in m5f); g.b => g.total }
+        let sf <- { for (g in m3f); g.b => g.total }
         t |> equal(length(s5), length(sf))
         for (k, v in keys(s5), values(s5)) {
             t |> equal(v, sf?[k] ?? -1)
@@ -366,10 +364,8 @@ def parity_group_by(t : T?) {
         var m3f <- _fold(each(arr)._group_by(_.brand)._select((b = _._0, n = _._1 |> count())).to_array())
         t |> equal(length(m5f), length(m3f))
         // build brand->count maps and compare (group order is not guaranteed)
-        var c5 : table<string; int>
-        var cf : table<string; int>
-        for (g in m5f) { c5[g.b] = g.n }
-        for (g in m3f) { cf[g.b] = g.n }
+        var c5 <- { for (g in m5f); g.b => g.n }
+        let cf <- { for (g in m3f); g.b => g.n }
         t |> equal(length(c5), length(cf))
         for (k, v in keys(c5), values(c5)) {
             t |> equal(v, cf?[k] ?? -1)
@@ -388,8 +384,7 @@ def parity_group_by_first(t : T?) {
         var m5f <- _fold(unsafe(from_xml_node(doc.document_element, type<Car>))._group_by(_.brand)._select((b = _._0, first = _._1 |> first())).to_array())
         var m3f <- _fold(each(arr)._group_by(_.brand)._select((b = _._0, first = _._1 |> first())).to_array())
         t |> equal(length(m5f), length(m3f))
-        var f5 : table<string; int>
-        var ff : table<string; int>
+        var f5, ff : table<string; int>
         for (g in m5f) {
             f5[g.b] = g.first.id
             t |> equal(g.first.brand, g.b)   // materialized survivor's own brand must match its group key

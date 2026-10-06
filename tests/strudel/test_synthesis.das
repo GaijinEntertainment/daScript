@@ -22,9 +22,7 @@ def private render_voice_stereo(var voice : OscVoice; frames : int) : array<floa
     for (s in output) {
         s = 0.0
     }
-    var empty_send : array<float>
-    var empty_delay_send : array<float>
-    var empty_chorus_send : array<float>
+    var empty_send, empty_delay_send, empty_chorus_send : array<float>
     osc_render_chunk(voice, output, empty_send, empty_delay_send, empty_chorus_send, frames)
     return <- output
 }

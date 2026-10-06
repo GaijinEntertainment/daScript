@@ -328,9 +328,8 @@ def public di_subroutine_of(dib : LLVMOpaqueDIBuilder?; file : LLVMMetadataRef;
         uint(length(types)), LLVMDIFlags.LLVMDIFlagZero)
 }
 
-def public di_empty_expression(dib : LLVMOpaqueDIBuilder?) : LLVMMetadataRef {
-    return LLVMDIBuilderCreateExpression(dib, null, 0ul)
-}
+def public di_empty_expression(dib : LLVMOpaqueDIBuilder?) : LLVMMetadataRef =>
+    LLVMDIBuilderCreateExpression(dib, null, 0ul)
 
 def public di_deref_expression(dib : LLVMOpaqueDIBuilder?) : LLVMMetadataRef {
     var ops <- array<uint64>(DW_OP_DEREF)

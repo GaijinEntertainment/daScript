@@ -51,9 +51,7 @@ struct template DemoPair {
 // when qmacro_template_function clones the function — it reads the tag
 // and substitutes whatever TypeDeclPtr `t_value` holds at expansion time.
 // -----------------------------------------------------------------------
-def template demo_add(a, b : $t(t_value)) : $t(t_value) {
-    return a + b
-}
+def template demo_add(a, b : $t(t_value)) : $t(t_value) => a + b
 
 // -----------------------------------------------------------------------
 // The main call macro.

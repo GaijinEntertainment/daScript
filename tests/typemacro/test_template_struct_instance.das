@@ -12,9 +12,7 @@ class template TKern {
     @template_constant WIDE : bool = true
     @template_constant OFFS : int = -3
 
-    def plain : int {
-        return x
-    }
+    def plain : int => x
     def gated : int {
         static_if (WIDE) {
             return x + 1
@@ -22,12 +20,8 @@ class template TKern {
             return x + 100
         }
     }
-    def doubled : int {
-        return 2 * x
-    }
-    def offset : int {
-        return x + OFFS
-    }
+    def doubled : int => 2 * x
+    def offset : int => x + OFFS
 }
 
 class ToyNarrow : TKern {
@@ -35,9 +29,7 @@ class ToyNarrow : TKern {
     override WIDE = false
     override OFFS = -7
 
-    def override doubled : int { // instance-authored override must win over the template's
-        return 20 * x
-    }
+    def override doubled : int => 20 * x  // instance-authored override must win over the template's
     def probe : int { // template constant read from an instance-authored method
         return WIDE ? -1 : 1000 + x
     }
@@ -79,9 +71,7 @@ class template CKern : Counter {
     x : KT
     @template_constant STEP : int = 1
 
-    def override tag : int {
-        return x + STEP
-    }
+    def override tag : int => x + STEP
 }
 
 class CInt : CKern {
@@ -99,32 +89,21 @@ class LateInt : LateKern {
     // no typedef — [tsi_test_bind_kt] supplies KT after the reifier; unbound names are left for infer to resolve
 }
 
-def tsi_sdot(a, b : int) : int {
-    return a * b
-}
+def tsi_sdot(a, b : int) : int => a * b
 
-def tsi_ssdot(a, b : int) : int {
-    return a * b * 1000
-}
+def tsi_ssdot(a, b : int) : int => a * b * 1000
 
-def tsi_via_ptr(f : function<(a, b : int) : int>; a, b : int) : int {
-    return invoke(f, a, b)
-}
+def tsi_via_ptr(f : function<(a, b : int) : int>; a, b : int) : int => invoke(f, a, b)
 
 [ |> template_struct_instance]
 class template DotT {
     x : KT
     @template_call tsi_sdot = @@tsi_sdot // the field name is what bodies call; the init is the default target
 
-    def run(v : KT) : KT {
-        return tsi_sdot(x, v)
-    }
-    def run_ptr(v : KT) : KT {
-        return tsi_via_ptr(@@tsi_sdot, x, v) // @@ address targets rebind too
-    }
-    def run_qual(v : KT) : KT {
-        return _::tsi_sdot(x, v) // `_::` keeps normal resolution: pinned to the real function, past any rebind
-    }
+    def run(v : KT) : KT => tsi_sdot(x, v)
+    def run_ptr(v : KT) : KT => tsi_via_ptr(@@tsi_sdot, x, v)  // @@ address targets rebind too
+    def run_qual(v : KT) : KT =>
+        _::tsi_sdot(x, v)  // `_::` keeps normal resolution: pinned to the real function, past any rebind
 }
 
 class DotDefault : DotT {
@@ -210,9 +189,7 @@ def test_tsi_cross_module(t : T?) {
 class template XModOverKern : XModBase {
     @template_constant STEP : int = 1
 
-    def value : int {
-        return hits * STEP
-    }
+    def value : int => hits * STEP
 }
 
 class XModOverInt : XModOverKern {
@@ -332,9 +309,7 @@ class template TagKernT {
     x : KT
 
     [tsi_test_fn_tag]
-    def tick : KT {
-        return x + x
-    }
+    def tick : KT => x + x
 }
 
 class TagInt : TagKernT {
@@ -363,9 +338,7 @@ class template ChainBase {
 
     def abstract leaf_add(x : int) : int
 
-    def run(x : int) : int {
-        return leaf_add(x) * SCALE + base_v
-    }
+    def run(x : int) : int => leaf_add(x) * SCALE + base_v
 }
 
 [ |> template_struct_instance]
@@ -373,9 +346,7 @@ class template ChainMid : ChainBase {
     @template_constant BUMP : int = 0
     mid_v : TT
 
-    def override leaf_add(x : int) : int {
-        return x + int(mid_v) + BUMP
-    }
+    def override leaf_add(x : int) : int => x + int(mid_v) + BUMP
 }
 
 class ChainLeaf : ChainMid {
@@ -406,19 +377,13 @@ class ChainRoot {
 class template RootedBase : ChainRoot {
     @template_constant SCALE : int = 1
 
-    def accum(x : int) : int {
-        return x * 2
-    }
-    def run(x : int) : int {
-        return accum(x) * SCALE + hits
-    }
+    def accum(x : int) : int => x * 2
+    def run(x : int) : int => accum(x) * SCALE + hits
 }
 
 [ |> template_struct_instance]
 class template RootedMid : RootedBase {
-    def override accum(x : int) : int {
-        return x * 3
-    }
+    def override accum(x : int) : int => x * 3
 }
 
 class RootedLeaf : RootedMid {

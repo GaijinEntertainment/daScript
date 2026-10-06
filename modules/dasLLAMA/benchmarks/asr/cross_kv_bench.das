@@ -203,11 +203,7 @@ def main() : int {
     var tmp : array<float>
     sized(tmp, TA * d)
     fill_sin(tmp, 2.0, 0.171)
-    var kx_c : array<float>
-    var kx_a : array<float>
-    var kx_b : array<float>
-    var vx_c : array<float>
-    var vx_a : array<float>
+    var kx_c, kx_a, kx_b, vx_c, vx_a : array<float>
     sized(kx_c, TA * d)
     sized(kx_a, TA * d)
     sized(kx_b, TA * d)

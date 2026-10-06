@@ -3,9 +3,7 @@ require daslib/lpipe
 require dastest/testing_boost public
 
 [sideeffects]
-def add(a, b) {
-    return a + b
-}
+def add(a, b) => a + b
 
 var g_add_res = 0
 
@@ -18,9 +16,7 @@ struct Foo {
     a : int
 }
 
-def operator +(a, b : Foo) {
-    return Foo(a = a.a + b.a)
-}
+def operator +(a, b : Foo) => Foo(a = a.a + b.a)
 
 [test]
 def test_lpipe(t : T?) {

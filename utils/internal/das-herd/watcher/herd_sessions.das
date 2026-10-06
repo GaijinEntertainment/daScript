@@ -112,9 +112,8 @@ def public herd_display_worktree(path : string) : string {
     return replace(path, "\\", "/")
 }
 
-def private herd_holds_worktrees(record : HerdSession const) : bool {
-    return record.state != "closed" && !record.archived
-}
+def private herd_holds_worktrees(record : HerdSession const) : bool =>
+    record.state != "closed" && !record.archived
 
 def private refresh_conflicts : bool {
     var inscope counts : table<string; int>

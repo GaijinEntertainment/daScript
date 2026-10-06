@@ -172,13 +172,11 @@ def dot_q8q8_idot4_ps_f16s(wq : int8 const?; ws : uint16 const?; xq : int8 const
 def private wasm_target() : bool => get_target_architecture_name() == "wasm64" || get_target_architecture_name() == "wasm32"
 
 [arch(at = "../ARCHITECTURE_CPU_KERNELS.md#cpu-tier-target-select")]
-def private dot_q8q8_p(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float {
-    return wasm_target() ? dot_q8q8_idot4_ps(wq, ws, xq, xs, n) : dot_q8q8(wq, ws, xq, xs, n)
-}
+def private dot_q8q8_p(wq : int8 const?; ws : float const?; xq : int8 const?; xs : float const?; n : int64) : float =>
+    wasm_target() ? dot_q8q8_idot4_ps(wq, ws, xq, xs, n) : dot_q8q8(wq, ws, xq, xs, n)
 
-def private dot_q8q8_f16s_p(wq : int8 const?; ws : uint16 const?; xq : int8 const?; xs : float const?; n : int64) : float {
-    return wasm_target() ? dot_q8q8_idot4_ps_f16s(wq, ws, xq, xs, n) : dot_q8q8_f16s(wq, ws, xq, xs, n)
-}
+def private dot_q8q8_f16s_p(wq : int8 const?; ws : uint16 const?; xq : int8 const?; xs : float const?; n : int64) : float =>
+    wasm_target() ? dot_q8q8_idot4_ps_f16s(wq, ws, xq, xs, n) : dot_q8q8_f16s(wq, ws, xq, xs, n)
 
 // ----- parallel_for dispatch profiler (off by default) -----
 // Records each worker's start time (rel. to pf-start) into g_pf_ws[rb]; a large first/last-worker gap

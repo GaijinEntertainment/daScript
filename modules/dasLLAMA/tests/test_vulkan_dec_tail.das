@@ -195,9 +195,7 @@ def private shexp_up(t : T?; var sh : Shexp; base : int64) : bool {
 // the block's reference for one position: the feed, q/k/v, rope, the mirror row, attention, wo
 def private block_ref(var q : Quad; x : array<float>; pos : int64; cossin : array<float>; var xb2 : array<float>; var kraw : array<float>) {
     let feed <- feed_ref(x, q.norm, q.fmt)
-    var qr : array<float>
-    var kr : array<float>
-    var vr : array<float>
+    var qr, kr, vr : array<float>
     gemv_ref(q.wq, QD, N, feed.deq, qr)
     gemv_ref(q.wk, KVD, N, feed.deq, kr)
     gemv_ref(q.wv, KVD, N, feed.deq, vr)
@@ -241,23 +239,19 @@ def private k_copies(gxq1 : array<int8>; gxs1 : array<float>; var gxq : array<in
 
 // one position through both layers: block(A) from host acts, the host residual, the tail, block(B)
 def private token_cell(t : T?; var qa : Quad; var qb : Quad; f : Ffn; pos : int64; tag : string) {
-    var no_freqs : array<float>
-    var cossin : array<float>
+    var no_freqs, cossin : array<float>
     cossin |> resize(HS)
     build_rope_row_packed(cossin, 0l, pos, HS, 10000.0, 1.0, 1.0, no_freqs)
     var x : array<float>
     fill_row(x, N, 0.2 + 0.9 * float(pos))
-    var xb2 : array<float>
-    var kout : array<float>
-    var vout : array<float>
+    var xb2, kout, vout : array<float>
     xb2 |> resize(N)
     kout |> resize(KVD)
     vout |> resize(KVD)
     var feed <- feed_ref(x, qa.norm, qa.fmt)
     matmul_moe_gpu_attn_dec(xb2, kout, vout, qa.woq, qa.wok, qa.wov, qa.woo, qa.fmt, qa.fmt, qa.fmt, qa.fmt, feed.xq, feed.xs, cossin, null, null,
         bias_ptr(qa.bq), bias_ptr(qa.bk), bias_ptr(qa.bv), pos, N, QD, KVD, HS, NH, KVM, ATTN_SCALE, EPS, qa.neox, false)
-    var xb2_ref : array<float>
-    var kraw_ref : array<float>
+    var xb2_ref, kraw_ref : array<float>
     block_ref(qa, x, pos, cossin, xb2_ref, kraw_ref)
     held_row(t, "{tag} pos {pos} layer A wo row", xb2, xb2_ref)
     held_row(t, "{tag} pos {pos} layer A raw k row", kout, kraw_ref)
@@ -280,8 +274,7 @@ def private token_cell(t : T?; var qa : Quad; var qb : Quad; f : Ffn; pos : int6
         bias_ptr(qb.bq), bias_ptr(qb.bk), bias_ptr(qb.bv), pos, N, QD, KVD, HS, NH, KVM, ATTN_SCALE, EPS, qb.neox, false)
     t |> success(!moe_gpu_ffn_tail_pending(), "{tag} pos {pos}: layer B's attention collected the tail")
     held_row(t, "{tag} pos {pos} residual row after FFN A (the tail's combine)", x, x1_ref)
-    var xb2b_ref : array<float>
-    var krawb_ref : array<float>
+    var xb2b_ref, krawb_ref : array<float>
     block_ref(qb, x, pos, cossin, xb2b_ref, krawb_ref)
     held_row(t, "{tag} pos {pos} layer B wo row (fed by the tail)", xb2, xb2b_ref)
     held_row(t, "{tag} pos {pos} layer B raw k row", kout, krawb_ref)
@@ -303,8 +296,7 @@ def private claim_hydrated(t : T?; qa, qb : Quad; tag : string; unseen : bool = 
 //! two layers whose q planes sit at ONE offset in two format planes (a mixed-format file's shape): the block keys a layer by
 //! its offset under its format, so each layer serves its own quad and mirror; false = no device
 def private collide_cell(t : T?; f : Ffn; base : int64; tag : string) : bool {
-    var qa : Quad
-    var qb : Quad
+    var qa, qb : Quad
     if (!quad_up(qa, 1, base, 51l, 0.4, true, false)) {
         return false
     }
@@ -324,8 +316,7 @@ def private two_positions(t : T?; var qa : Quad; var qb : Quad; f : Ffn; gen : i
 
 // one quad pair in one plane format through two positions; false = no device
 def private pair_cell(t : T?; f : Ffn; fmt : int; base : int64; tag : string; neox, hasb : bool) : bool {
-    var qa : Quad
-    var qb : Quad
+    var qa, qb : Quad
     if (!quad_up(qa, fmt, base, 21l + int64(fmt), 0.3, neox, hasb)) {
         return false
     }
@@ -334,8 +325,7 @@ def private pair_cell(t : T?; f : Ffn; fmt : int; base : int64; tag : string; ne
     // the hydrate arms: a fresh claim empties both mirrors; A refills from f32 rows, B from f16 rows
     let gen2 = moe_gpu_attn_dec_claim(true)
     t |> success(moe_gpu_attn_dec_ok(qa.woq, qa.fmt, 2l, gen2) == DAT_HYDRATE, "{tag}: a fresh claim empties the mirrors - position 2 asks for a hydrate")
-    var kb : array<uint8>
-    var vb : array<uint8>
+    var kb, vb : array<uint8>
     kb |> resize(2l * KVD * 2l)
     vb |> resize(2l * KVD * 2l)
     for (i in range64(2l * KVD)) {
@@ -366,7 +356,7 @@ def private ffn_ref_sel(f : Ffn; fd : array<float>; idx : array<int64>; w : arra
     var acc : array<float>
     acc |> resize(N)
     for (j in range64(K)) {
-        let d <- expert_ffn_ref(f.w1, f.w3, f.w2, fd, idx[j], true)
+        var inscope d <- expert_ffn_ref(f.w1, f.w3, f.w2, fd, idx[j], true)
         for (i in range64(N)) {
             acc[i] += w[j] * d[i]
         }
@@ -549,23 +539,20 @@ def test_vulkan_dec_span(t : T?) {
             t |> skip("dec span: no Vulkan device (or probe/budget refused the upload)")
             return
         }
-        var qa : Quad
-        var qb : Quad
+        var qa, qb : Quad
         t |> success(quad_up(qa, 1, 60l * STRIDE, 51l, 0.4, true, false), "dec span: layer A's quad uploaded")
         t |> success(quad_up(qb, 1, 70l * STRIDE, 63l, 0.8, true, false), "dec span: layer B's quad uploaded")
         let gen = claim_hydrated(t, qa, qb, "dec span")
         var sp <- span_planes(qa, qb, f)
         var a <- span_args(qa, qb, f)
-        var kout : array<float>
-        var vout : array<float>
+        var kout, vout : array<float>
         kout |> resize(2l * KVD)
         vout |> resize(2l * KVD)
         var cossin : array<float>
         cossin |> resize(HS)
         for (pos in range64(2)) {
             var rows <- span_position(a, qa, sp, cossin, pos, kout, vout)
-            var kraw_a : array<float>
-            var kraw_b : array<float>
+            var inscope kraw_a, kraw_b : array<float>
             span_layer_ref(qa, f, sp.router, 0l, rows.x_ref, pos, cossin, kraw_a)
             span_layer_ref(qb, f, sp.router, 1l, rows.x_ref, pos, cossin, kraw_b)
             held_row(t, "span pos {pos} layer A raw k row", copy_span(kout, 0l, KVD), kraw_a)
@@ -600,8 +587,7 @@ def test_vulkan_dec_span_shexp(t : T?) {
         }
         var sh : Shexp
         t |> success(shexp_up(t, sh, 103l * STRIDE), "dec span shexp: the shared gate plane uploaded")
-        var qa : Quad
-        var qb : Quad
+        var qa, qb : Quad
         t |> success(quad_up(qa, 1, 110l * STRIDE, 51l, 0.4, true, false), "dec span shexp: layer A's quad uploaded")
         t |> success(quad_up(qb, 1, 120l * STRIDE, 63l, 0.8, true, false), "dec span shexp: layer B's quad uploaded")
         var sp <- span_planes(qa, qb, f)
@@ -612,23 +598,20 @@ def test_vulkan_dec_span_shexp(t : T?) {
             let tag = gated ? "gated" : "ungated"
             claim_hydrated(t, qa, qb, "dec span shexp ({tag})", false)
             var a <- span_args_sh(qa, qb, f, sh, gated)
-            var kout : array<float>
-            var vout : array<float>
+            var inscope kout, vout : array<float>
             kout |> resize(2l * KVD)
             vout |> resize(2l * KVD)
             a.shgate = unsafe(addr<float const?>(sh.gate[0]))
             for (pos in range64(2)) {
                 var rows <- span_position(a, qa, sp, cossin, pos, kout, vout)
-                var kraw_a : array<float>
-                var kraw_b : array<float>
+                var inscope kraw_a, kraw_b : array<float>
                 span_layer_ref_sh(qa, f, sh, sp.router, 0l, rows.x_ref, pos, cossin, kraw_a, gated)
                 span_layer_ref_sh(qb, f, sh, sp.router, 1l, rows.x_ref, pos, cossin, kraw_b, gated)
                 held_row(t, "span shexp ({tag}) pos {pos} residual row after both layers", rows.x, rows.x_ref)
                 if (pos == 0l) {
-                    var x_no : array<float>
+                    var inscope x_no : array<float>
                     fill_row(x_no, N, 0.5)
-                    var ka : array<float>
-                    var kb : array<float>
+                    var inscope ka, kb : array<float>
                     span_layer_ref(qa, f, sp.router, 0l, x_no, 0l, cossin, ka)
                     span_layer_ref(qb, f, sp.router, 1l, x_no, 0l, cossin, kb)
                     t |> success(check_count(rows.x, x_no, ROW_BAR) > 0, "span shexp ({tag}): the reference without the shared expert misses the device row")

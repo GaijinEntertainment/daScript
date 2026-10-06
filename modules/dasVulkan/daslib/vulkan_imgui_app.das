@@ -290,13 +290,9 @@ def public harness_device : Device {
     return weak_copy(app_or_panic().device)
 }
 
-def public harness_phys : VkPhysicalDevice {
-    return app_or_panic().phys
-}
+def public harness_phys : VkPhysicalDevice => app_or_panic().phys
 
-def public harness_queue : VkQueue {
-    return app_or_panic().queue
-}
+def public harness_queue : VkQueue => app_or_panic().queue
 
 def public harness_pool : CommandPool {
     //! Non-owning view of the harness command pool (weak_copy — never delete it).

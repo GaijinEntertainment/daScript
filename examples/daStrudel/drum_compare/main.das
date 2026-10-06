@@ -227,8 +227,7 @@ def fft_in_place(var re, im : array<float>) {
 def analyze_spectrum(name : string; pcm : array<float>) {
     // mix stereo to mono, take first 4096 samples for FFT
     let fft_size = 4096
-    var re : array<float>
-    var im : array<float>
+    var re, im : array<float>
     re |> resize(fft_size)
     im |> resize(fft_size)
     let nframes = min(length(pcm) / 2, fft_size)
@@ -296,7 +295,7 @@ def prerender_sf2_drums(sf2 : SF2File) {
     let render_dur = fixed_array(2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 5.0, 5.0, 2.0, 2.0, 2.0)
     to_log(LOG_INFO, "SF2 drum durations:\n")
     for (i in range(length(keys))) {
-        var pcm <- render_sf2_drum(sf2, keys[i], 127, render_dur[i])
+        var inscope pcm <- render_sf2_drum(sf2, keys[i], 127, render_dur[i])
         if (!empty(pcm)) {
             let dur = measure_audible_duration(pcm)
             to_log(LOG_INFO, "  {names[i]} (key {keys[i]}): {dur}s\n")
@@ -313,7 +312,7 @@ def analyze_synth_drums() {
     to_log(LOG_INFO, "Synth drum spectra:\n")
     let names = fixed_array("bd", "sd", "hh", "oh", "cp", "tom_low", "tom_high", "ride", "crash", "rimshot", "cowbell", "tambourine")
     for (name in names) {
-        var pcm <- render_synth_drum(name)
+        var inscope pcm <- render_synth_drum(name)
         analyze_spectrum(name, pcm)
         delete pcm
     }
@@ -596,7 +595,7 @@ def update() { // nolint:STYLE038 — linear per-frame UI flow
     // text labels — pass LOGICAL window size so they align with the logically-projected pads
     if (!empty(g_font.bitmap.bytes)) {
         for (pad in g_pads) {
-            var lbl <- g_font |> create_quads(pad.title)
+            var inscope lbl <- g_font |> create_quads(pad.title)
             let dim = quads_dim(lbl)
             let tw = dim.vmax.x - dim.vmin.x
             g_font |> draw_quads_2d(lbl, ww, wh, int(pad.cx - tw * 0.5), int(pad.cy + PAD_RADIUS + 8.0), float3(0.8, 0.8, 0.85))

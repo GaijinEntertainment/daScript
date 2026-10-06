@@ -341,8 +341,7 @@ class CoverageMacro : AstVisitor {
             block_num = file_reg.branchCounter
             file_reg.branchCounter++
         }
-        var true_idx : uint
-        var false_idx : uint
+        var true_idx, false_idx : uint
         registration_data |> get_with_default(file) $(var file_reg) {
             true_idx = uint(file_reg.allBranches |> length)
             file_reg.allBranches |> push(tuple(line, block_num, 0u))
@@ -457,12 +456,12 @@ class CoveragePass : AstPassMacro {
             var blk = unsafe(reinterpret<ExprBlock?>(initFn.body))
             blk.list |> clear()
             for (file, values in keys(coverageData), values(coverageData)) {
-                let lineArr <- [for (line in keys(values.line_cov.lines)); line]
+                var inscope lineArr <- [for (line in keys(values.line_cov.lines)); line]
                 blk.list |> emplace_new <| qmacro(_::register_coverage_lines($v(file), $v(lineArr)))
             }
             for (file, reg_data in keys(registration_data), values(registration_data)) {
-                var nameArr : array<string>
-                var lineArr : array<uint>
+                var inscope nameArr : array<string>
+                var inscope lineArr : array<uint>
                 for (fname, fline in keys(reg_data.allFunctions), values(reg_data.allFunctions)) {
                     nameArr |> push(fname)
                     lineArr |> push(fline)
@@ -470,14 +469,12 @@ class CoveragePass : AstPassMacro {
                 blk.list |> emplace_new <| qmacro(coverage::register_coverage_functions($v(file), $v(nameArr), $v(lineArr)))
 
                 for (fname, flines in keys(reg_data.funcLines), values(reg_data.funcLines)) {
-                    let flineArr <- [for (fl in keys(flines)); fl]
+                    var inscope flineArr <- [for (fl in keys(flines)); fl]
                     blk.list |> emplace_new <| qmacro(coverage::register_coverage_func_lines($v(file), $v(fname), $v(flineArr)))
                 }
 
                 let nbranches = reg_data.allBranches |> length()
-                var blines : array<uint>
-                var block_nums : array<uint>
-                var branch_nums : array<uint>
+                var inscope blines, block_nums, branch_nums : array<uint>
                 blines |> reserve(nbranches)
                 block_nums |> reserve(nbranches)
                 branch_nums |> reserve(nbranches)
@@ -504,8 +501,7 @@ def get_coverage_summary(cov_data : table<string; CoverageData>;
     //! Returns a human-readable coverage summary table string (line coverage).
     //! When per_function is true, also lists each function with its hit count.
     var summary <- get_summary(cov_data)
-    var total_hits : uint
-    var total_missed : uint
+    var total_hits, total_missed : uint
     var max_len = 4
     for (s in summary) {
         if (s.file |> length > max_len) {
@@ -542,8 +538,7 @@ def get_coverage_summary(cov_data : table<string; CoverageData>;
             if (per_function) {
                 cov_data |> get(s.file) $(data) {
                     for (fname, fc in keys(data.func_cov), values(data.func_cov)) {
-                        var fLineHits : uint
-                        var fLineMissed : uint
+                        var fLineHits, fLineMissed : uint
                         for (v in values(fc.line_cov.lines)) {
                             if (v > 0u) {
                                 fLineHits++
@@ -703,9 +698,7 @@ def public fill_coverage_report(var dest : string?; name : string = "") {
 }
 
 [export, unused_argument(cov)]
-def public get_coverage_details(var cov : table<string; CoverageData>?) {
-    return <- clone(coverageData)
-}
+def public get_coverage_details(var cov : table<string; CoverageData>?) => <- clone(coverageData)
 
 [export]
 def public summary_from_lcov_file(filename : string; exclude : array<string>) {

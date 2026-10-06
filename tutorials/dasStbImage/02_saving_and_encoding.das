@@ -75,7 +75,7 @@ def example_jpeg_quality() {
         let (ok, _) = img.save(path, q)
         if (ok) {
             // Encode to memory to show size difference
-            var buf : array<uint8>
+            var inscope buf : array<uint8>
             let (ok2, _) = img.encode("jpg", buf, q)
             if (ok2) {
                 print("  JPEG quality {q}: {length(buf)} bytes\n")
@@ -97,7 +97,7 @@ def example_encode_to_memory() {
     var inscope img <- make_test_image()
     let formats = fixed_array("png", "bmp", "tga", "jpg")
     for (fmt in formats) {
-        var buf : array<uint8>
+        var inscope buf : array<uint8>
         let (ok, error) = img.encode(fmt, buf)
         if (ok) {
             print("  Encoded {fmt}: {length(buf)} bytes\n")

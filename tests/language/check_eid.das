@@ -9,14 +9,10 @@ var {
 }
 
 [sideeffects]
-def GetGoo(arg : string) {
-    return CheckEid(foo, arg)
-}
+def GetGoo(arg : string) => CheckEid(foo, arg)
 
 [sideeffects]
-def GetGoo2(arg : string) {
-    return CheckEid2(foo, arg)
-}
+def GetGoo2(arg : string) => CheckEid2(foo, arg)
 
 [test]
 def test_check_eid(t : T?) {

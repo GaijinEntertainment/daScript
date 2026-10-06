@@ -102,17 +102,14 @@ def subgroup_dynamic_broadcast {
 // words[1] is the SPIR-V version word of the module header (magic, version, generator, bound, schema).
 let VERSION_WORD = 1
 
-def private has_group_op(words : array<uint>; op : SpvOp; gop : SpvGroupOperation) : bool {
-    return op_has_operand_at(words, op, GROUP_OP_OPERAND, uint(gop))
-}
+def private has_group_op(words : array<uint>; op : SpvOp; gop : SpvGroupOperation) : bool =>
+    op_has_operand_at(words, op, GROUP_OP_OPERAND, uint(gop))
 
-def private has_cap(words : array<uint>; cap : SpvCapability) : bool {
-    return op_has_operand_at(words, SpvOp.Capability, CAP_OPERAND, uint(cap))
-}
+def private has_cap(words : array<uint>; cap : SpvCapability) : bool =>
+    op_has_operand_at(words, SpvOp.Capability, CAP_OPERAND, uint(cap))
 
-def private has_builtin(words : array<uint>; bi : SpvBuiltIn) : bool {
-    return op_has_operand_pair(words, SpvOp.Decorate, uint(SpvDecoration.BuiltIn), uint(bi))
-}
+def private has_builtin(words : array<uint>; bi : SpvBuiltIn) : bool =>
+    op_has_operand_pair(words, SpvOp.Decorate, uint(SpvDecoration.BuiltIn), uint(bi))
 
 [test]
 def test_subgroup_ops(t : T?) { // nolint:STYLE038 - flat list of opcode/capability assertions

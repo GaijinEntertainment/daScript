@@ -29,17 +29,15 @@ let CLOSE_ABS = 1e-5
 
 var private g_seed = int4(20260704, 17, 3, 1)
 
-def private rand_q8(n : int64) : array<int8> {
-    return <- [for (_i in range64(n)); int8(random_int(g_seed) % 256)]
-}
+def private rand_q8(n : int64) : array<int8> =>
+    <- [for (_i in range64(n)); int8(random_int(g_seed) % 256)]
 
 // ACTIVATION bytes are [-127, 127] by construction in production (the Q8 quantizer's
 // d = amax/127) — and the x64 sign-trick kernels (hand dot32 tiers and the generated
 // maddubs/vpdpbusd legs) are exact ONLY under that precondition (PSIGNB of -128 wraps; see
 // x64_avx.das dot32). Weights stay full-range rand_q8: w = -128 is legal and must be covered.
-def private rand_q8_activation(n : int64) : array<int8> {
-    return <- [for (_i in range64(n)); int8(random_int(g_seed) % 255 - 127)]
-}
+def private rand_q8_activation(n : int64) : array<int8> =>
+    <- [for (_i in range64(n)); int8(random_int(g_seed) % 255 - 127)]
 
 def private rand_scales(n : int64) : array<float> {
     // positive, spread over a couple of octaves — like real Q8 block scales
@@ -105,9 +103,7 @@ def main {   // nolint:STYLE038 - flat probe ladder: one reference/gen pair per 
 
         // reference: the portable row-major backend
         pin_kernel_backend("portable")
-        var yref0 : array<float>
-        var yref1 : array<float>
-        var yref2 : array<float>
+        var yref0, yref1, yref2 : array<float>
         yref0 |> resize(d0)
         yref1 |> resize(d1)
         yref2 |> resize(d2)
@@ -140,9 +136,7 @@ def main {   // nolint:STYLE038 - flat probe ladder: one reference/gen pair per 
         matmul_q8q8_batch(yb, wq, ws, xq, xs, n, d0, ntok)   // batch slot: tile + token tail
         compare("batch d={d0} ntok={ntok}", yb, yref_b, fails)
 
-        var y0 : array<float>
-        var y1 : array<float>
-        var y2 : array<float>
+        var y0, y1, y2 : array<float>
         y0 |> resize(d0)
         y1 |> resize(d1)
         y2 |> resize(d2)

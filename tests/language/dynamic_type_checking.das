@@ -12,17 +12,13 @@ class Shape {
 
 class Circle : Shape {
     radius : float = 1.0
-    def override const area() : float {
-        return 3.14159 * radius * radius
-    }
+    def override const area() : float => 3.14159 * radius * radius
 }
 
 class Rectangle : Shape {
     width : float = 1.0
     height : float = 1.0
-    def override const area() : float {
-        return width * height
-    }
+    def override const area() : float => width * height
 }
 
 class Square : Rectangle {
@@ -173,9 +169,7 @@ def test_variant_with_base_pointers(t : T?) {
     }
 }
 
-def take_shape(s : Shape?) : float {
-    return s->area()
-}
+def take_shape(s : Shape?) : float => s->area()
 
 [test]
 def test_pass_derived_to_function(t : T?) {

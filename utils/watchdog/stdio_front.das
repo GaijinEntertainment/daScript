@@ -98,13 +98,11 @@ def public is_jsonrpc_message(line : string) : bool {
 }
 
 
-def private jsonrpc_result(id_text, result_json : string) : string {
-    return "\{\"jsonrpc\":\"2.0\",\"id\":{id_text},\"result\":{result_json}\}"
-}
+def private jsonrpc_result(id_text, result_json : string) : string =>
+    "\{\"jsonrpc\":\"2.0\",\"id\":{id_text},\"result\":{result_json}\}"
 
-def private jsonrpc_error(id_text : string; code : int; message : string) : string {
-    return "\{\"jsonrpc\":\"2.0\",\"id\":{id_text},\"error\":\{\"code\":{code},\"message\":{write_json_compact(JV(message))}\}\}"
-}
+def private jsonrpc_error(id_text : string; code : int; message : string) : string =>
+    "\{\"jsonrpc\":\"2.0\",\"id\":{id_text},\"error\":\{\"code\":{code},\"message\":{write_json_compact(JV(message))}\}\}"
 
 class public StdioFront {
     cfg : WatchdogConfig = WatchdogConfig()

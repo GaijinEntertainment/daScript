@@ -445,13 +445,13 @@ def private paint_narrates {
             }
         }
         // Collect every registered widget bbox except the target's so the post-it doesn't land on a sibling (linear scan, ≤ 30 entries).
-        var other_bboxes : array<float4>
+        var inscope other_bboxes : array<float4>
         for (k, w in keys(imgui_boost_runtime::g_registry), values(imgui_boost_runtime::g_registry)) {
             continue if (have_target && k == g_narrates[i].target)
             other_bboxes |> push(w.bbox)
         }
         // Sibling targets are HARD-avoided (scored like the anchor). Plain loop, not a comprehension, so widget_rect(av) resolves once per target.
-        var avoid_bboxes : array<float4>
+        var inscope avoid_bboxes : array<float4>
         for (av in g_narrates[i].avoid) {
             let r = widget_rect(av)
             if (r._0) {

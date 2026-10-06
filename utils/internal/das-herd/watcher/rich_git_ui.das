@@ -698,8 +698,7 @@ def draw_git_discard_popup() { // nolint:STYLE038
 def draw_changelist_row_menu(repository : RepositorySnapshot const;
                              worktree : WorktreeState const;
                              file_row : int; busy : bool) {
-    var stage_paths : array<string>
-    var unstage_paths : array<string>
+    var stage_paths, unstage_paths : array<string>
     changelist_selection_actions(repository, worktree, stage_paths,
         unstage_paths)
     let stage_count = length(stage_paths)
@@ -718,9 +717,7 @@ def draw_changelist_row_menu(repository : RepositorySnapshot const;
         g_client->changelist_action(repository.record.id, worktree.path,
             "unstage", unstage_paths)
     }
-    var modified_paths : array<string>
-    var staged_paths : array<string>
-    var untracked_paths : array<string>
+    var modified_paths, staged_paths, untracked_paths : array<string>
     var conflicted = 0
     changelist_selection_discards(repository, worktree, modified_paths,
         staged_paths, untracked_paths, conflicted)
@@ -815,7 +812,7 @@ def draw_git_file_group(repository : RepositorySnapshot const; // nolint:STYLE03
                 : (group == 0 ? "Stage the resolution" : "Stage this file"),
             action_clicked)
         if (action_clicked && g_client != null) {
-            var single <- [file.path]
+            var inscope single <- [file.path]
             g_client->changelist_action(repository.record.id, worktree.path,
                 group == 1 ? "unstage" : "stage", single)
         } elif (selected) {
@@ -1629,9 +1626,7 @@ def git_changelist_status(repository : RepositorySnapshot const;
     return GitWindowStatus(text = "staged {worktree.staged}   unstaged {worktree.unstaged}   untracked {worktree.untracked}   conflicted {worktree.conflicted}{ahead_behind}")
 }
 
-def network_ready : bool {
-    return (g_client != null && g_client.connected && !changelist_rail_busy())
-}
+def network_ready : bool => (g_client != null && g_client.connected && !changelist_rail_busy())
 
 def network_icon(index : int; glyph, tip : string;
                  enabled : bool; count : int) : bool {
@@ -1741,7 +1736,7 @@ def draw_git_changelist_window() {
                                 + worktree.untracked + worktree.conflicted)
                             g_changelist_view = dirt > 0 ? "changes" : "pr"
                         }
-                        let view_labels <- ["Changes", "PR result"]
+                        var inscope view_labels <- ["Changes", "PR result"]
                         let switched = view_switch(0, "changelist-view",
                             view_labels,
                             g_changelist_view == "changes" ? 0 : 1)
@@ -1790,7 +1785,7 @@ def draw_git_activity_window() {
                 for (worktree in repository.worktrees) {
                     if (worktree.path != g_selected_worktree_path) continue
                     found = true
-                    let perspective_labels <- ["PR", "History", "Tree", "Project"]
+                    var inscope perspective_labels <- ["PR", "History", "Tree", "Project"]
                     var active = 0
                     if (g_git_perspective == "history") {
                         active = 1

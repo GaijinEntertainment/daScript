@@ -337,42 +337,37 @@ class QPartialSortMacro : AstCallMacro {
     //! Implements ``qpartial_sort(value, n, block)`` — dispatches to
     //! ``partial_sort`` for array sources or ``partial_sort(temp_array(value),
     //! …)`` for handled vector types.
-    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
-        return <- build_dispatch_call(prog, expr, "qpartial_sort", "partial_sort", true)
-    }
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr =>
+        <- build_dispatch_call(prog, expr, "qpartial_sort", "partial_sort", true)
 }
 
 [call_macro(name="qnth_element")]
 class QNthElementMacro : AstCallMacro {
     //! Implements ``qnth_element(value, n, block)`` for arrays and handled
     //! vectors. Same dispatch shape as ``qpartial_sort``.
-    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
-        return <- build_dispatch_call(prog, expr, "qnth_element", "nth_element", true)
-    }
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr =>
+        <- build_dispatch_call(prog, expr, "qnth_element", "nth_element", true)
 }
 
 [call_macro(name="qmake_heap")]
 class QMakeHeapMacro : AstCallMacro {
     //! Implements ``qmake_heap(value, block)`` for arrays and handled vectors.
-    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
-        return <- build_dispatch_call(prog, expr, "qmake_heap", "make_heap", false)
-    }
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr =>
+        <- build_dispatch_call(prog, expr, "qmake_heap", "make_heap", false)
 }
 
 [call_macro(name="qpush_heap")]
 class QPushHeapMacro : AstCallMacro {
     //! Implements ``qpush_heap(value, block)`` for arrays and handled vectors.
     //! Pre: new element already at end.
-    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
-        return <- build_dispatch_call(prog, expr, "qpush_heap", "push_heap", false)
-    }
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr =>
+        <- build_dispatch_call(prog, expr, "qpush_heap", "push_heap", false)
 }
 
 [call_macro(name="qpop_heap")]
 class QPopHeapMacro : AstCallMacro {
     //! Implements ``qpop_heap(value, block)`` for arrays and handled vectors.
     //! Moves max to end; caller drops it.
-    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
-        return <- build_dispatch_call(prog, expr, "qpop_heap", "pop_heap", false)
-    }
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr =>
+        <- build_dispatch_call(prog, expr, "qpop_heap", "pop_heap", false)
 }

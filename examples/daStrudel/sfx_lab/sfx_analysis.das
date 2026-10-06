@@ -251,9 +251,8 @@ def private stft_mag(buf : array<float>; start, nfft : int; var mags : array<flo
 }
 
 // peak-normalized RMS energy over `npts` frames across the whole buffer (the falloff shape).
-def public energy_curve(buf : array<float>; npts : int) : array<float> {
-    return <- rms_env_abs(buf, length(buf), npts)
-}
+def public energy_curve(buf : array<float>; npts : int) : array<float> =>
+    <- rms_env_abs(buf, length(buf), npts)
 
 // spectral centroid (Hz) per time frame — exposes a pitch sweep (centroid moving over time).
 def public centroid_curve(buf : array<float>; rate, nframes : int) : array<float> {
@@ -265,7 +264,7 @@ def public centroid_curve(buf : array<float>; rate, nframes : int) : array<float
     let last = max(n - 1, 0)
     for (f in range(nframes)) {
         let start = min(f * hop, last)
-        var mags : array<float>
+        var inscope mags : array<float>
         stft_mag(buf, start, STFT_N, mags)
         var num = 0.0
         var den = 0.0
@@ -292,7 +291,7 @@ def private log_spectro(buf : array<float>; win_len, rate, nframes, nbins : int;
     let hz_to_bin = float(STFT_N) / float(rate)
     for (f in range(nframes)) {
         let start = f * hop
-        var mags : array<float>
+        var inscope mags : array<float>
         stft_mag(buf, start, STFT_N, mags)
         let mlen = length(mags)
         for (r in range(nbins)) {
@@ -313,9 +312,8 @@ def private log_spectro(buf : array<float>; win_len, rate, nframes, nbins : int;
 }
 
 // UI spectrogram: frames spread across the whole buffer (spectrum over time, for plot_heatmap).
-def public spectrogram(buf : array<float>; rate, nframes, nbins : int; fmax : float) : array<float> {
-    return <- log_spectro(buf, length(buf), rate, nframes, nbins, fmax)
-}
+def public spectrogram(buf : array<float>; rate, nframes, nbins : int; fmax : float) : array<float> =>
+    <- log_spectro(buf, length(buf), rate, nframes, nbins, fmax)
 
 // subtract the max cell so the loudest = 0 dB (level-invariant)
 def private norm_db(var s : array<float>) {
@@ -358,9 +356,7 @@ def public spectral_evo_fit(a, b : array<float>; rate : int) : float {
 // ===== composite-fit components (spectral timbre + temporal shape + attack) =====
 
 // smooth, bounded distance -> dissimilarity [0,1); nonzero gradient everywhere (good for hill-climb)
-def private squash(d, scale : float) : float {
-    return 1.0 - exp(-d / max(scale, 1.0e-6))
-}
+def private squash(d, scale : float) : float => 1.0 - exp(-d / max(scale, 1.0e-6))
 
 struct SpecPeakHz {
     hz  : float
@@ -490,7 +486,7 @@ def public mean_flatness(buf : array<float>; rate : int) : float {
     for (fr in range(NF)) {
         let start = fr * hop
         break if (start >= n)
-        var mags : array<float>
+        var inscope mags : array<float>
         stft_mag(buf, start, STFT_N, mags)
         var sum_log = 0.0
         var sum_lin = 0.0

@@ -6,9 +6,8 @@ require daslib/result
 require daslib/sql_linq
 require strings
 
-def private test_policy : StorePolicy {
-    return StorePolicy(max_source_bytes = 64, max_inserts_per_ip_hour = 3)
-}
+def private test_policy : StorePolicy =>
+    StorePolicy(max_source_bytes = 64, max_inserts_per_ip_hour = 3)
 
 [test]
 def test_migration(t : T?) {

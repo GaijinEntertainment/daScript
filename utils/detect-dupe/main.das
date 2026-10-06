@@ -173,9 +173,8 @@ def strict_drop_baseline_clusters(var clusters : array<Cluster>;
 // Lay out chunk + shard temp paths next to the user's --export-functions
 // output. Avoids relying on $TMPDIR / %TEMP%, and the path the caller
 // supplied is by definition writable.
-def shard_path_for(out_path : string; tag : string; kind : string; index : int) : string {
-    return "{out_path}.{tag}.{kind}-{index}"
-}
+def shard_path_for(out_path : string; tag : string; kind : string; index : int) : string =>
+    "{out_path}.{tag}.{kind}-{index}"
 
 
 // Write one chunk's file list as the newline-delimited `--paths-from`
@@ -250,7 +249,7 @@ def run_parallel_export(files : array<string>; cfg : Config) {
         }
         chunk_paths |> push(cp)
         shard_paths |> push(sp)
-        var argv <- child_argv_for_chunk(spawn_prefix, cp, sp, cfg)
+        var inscope argv <- child_argv_for_chunk(spawn_prefix, cp, sp, cfg)
         argvs |> emplace(argv)
     }
 
@@ -551,8 +550,7 @@ def main() { // nolint:STYLE037,STYLE038 — flat CLI validation ladder plus one
     // --baseline-strict, which post-filters clusters whose canonical
     // already existed in baseline (so only "brand-new canonical"
     // clusters survive, not "existing canonical, new member" growth).
-    var baseline_canonicals : table<string; void?>
-    var baseline_members : table<string; void?>
+    var baseline_canonicals, baseline_members : table<string; void?>
     if (has_baseline) {
         var berr : string
         if (!load_baseline_canonicals(cfg.baseline, baseline_canonicals, baseline_members, berr)) {

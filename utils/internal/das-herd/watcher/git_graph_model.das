@@ -110,9 +110,7 @@ def private graph_mark_ancestors(head : string;
     }
 }
 
-def private graph_owned_commit_key(owner, hash : string) : string {
-    return "{owner}\n{hash}"
-}
+def private graph_owned_commit_key(owner, hash : string) : string => "{owner}\n{hash}"
 
 def private graph_mark_owned_ancestors(owner, head : string;
                                        commits : array<GitCommitState> const;
@@ -167,7 +165,7 @@ def private graph_assign_first_parent(head, identity : string;
             && key_exists(visible, hash) && !key_exists(owner_slot, hash)) {
         owner_slot[hash] = slot
         owner_name[hash] = identity
-        let parents = split(commits[commit_by_hash?[hash] ?? -1].parents, " ")
+        var inscope parents = split(commits[commit_by_hash?[hash] ?? -1].parents, " ")
         hash = !empty(parents) ? parents[0] : ""
     }
 }

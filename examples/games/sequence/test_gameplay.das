@@ -385,7 +385,7 @@ def test_full_game_simulation(t : T?) {
     while (game.phase == GamePhase.playing && turns < 200) {
         let p = game.current_player
         discard_dead_cards(game, p)
-        let moves <- legal_moves(game, p)
+        var inscope moves <- legal_moves(game, p)
         if (empty(moves)) {
             break
         }

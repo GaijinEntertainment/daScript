@@ -370,9 +370,8 @@ def gitignore_remove(root, pattern : string) {
 // a package is its files, not its history or its build residue: .git costs more than
 // the rest of the tree, and a copied build dir (_build or build) carries a CMakeCache
 // pointing at the source path, which aborts the installed package's own configure
-def private is_package_content(name : string) : bool {
-    return name != "." && name != ".." && name != ".git" && name != "_build" && name != "build"
-}
+def private is_package_content(name : string) : bool =>
+    name != "." && name != ".." && name != ".git" && name != "_build" && name != "build"
 
 // streamed through a fixed window: sizing a buffer by the file costs that file in
 // memory, and panics outright on one past max_unreserved_size

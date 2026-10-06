@@ -50,25 +50,20 @@ struct ModuleRef {
     line : int
 }
 
-def ref_function_call(name : string; line : uint) : ModuleRef {
-    return ModuleRef(kind = ModuleRefKind.function_call, key = name, line = int(line))
-}
+def ref_function_call(name : string; line : uint) : ModuleRef =>
+    ModuleRef(kind = ModuleRefKind.function_call, key = name, line = int(line))
 
-def ref_variable(name : string; line : uint) : ModuleRef {
-    return ModuleRef(kind = ModuleRefKind.variable, key = name, line = int(line))
-}
+def ref_variable(name : string; line : uint) : ModuleRef =>
+    ModuleRef(kind = ModuleRefKind.variable, key = name, line = int(line))
 
-def ref_annotation(name : string; line : uint) : ModuleRef {
-    return ModuleRef(kind = ModuleRefKind.annotation, key = name, line = int(line))
-}
+def ref_annotation(name : string; line : uint) : ModuleRef =>
+    ModuleRef(kind = ModuleRefKind.annotation, key = name, line = int(line))
 
-def ref_overloaded_operator(name : string; line : uint) : ModuleRef {
-    return ModuleRef(kind = ModuleRefKind.overloaded_operator, key = name, line = int(line))
-}
+def ref_overloaded_operator(name : string; line : uint) : ModuleRef =>
+    ModuleRef(kind = ModuleRefKind.overloaded_operator, key = name, line = int(line))
 
-def ref_pub_require(name : string; line : uint) : ModuleRef {
-    return ModuleRef(kind = ModuleRefKind.pub_require, key = name, line = int(line))
-}
+def ref_pub_require(name : string; line : uint) : ModuleRef =>
+    ModuleRef(kind = ModuleRefKind.pub_require, key = name, line = int(line))
 
 struct RequirefixConfig {
     target : string
@@ -133,13 +128,9 @@ def public analyze_module_usages(var config : RequirefixConfig) : ModuleAnalysis
     return <- result
 }
 
-def is_builtin_like(name : string) : bool {
-    return name == "$" || name == "builtin"
-}
+def is_builtin_like(name : string) : bool => name == "$" || name == "builtin"
 
-def is_builtin_like(name : das_string) : bool {
-    return name == "$" || name == "builtin"
-}
+def is_builtin_like(name : das_string) : bool => name == "$" || name == "builtin"
 
 def collect_public_deps(mod : Module?; root_mod : string; var exported : table<string>) {
     module_for_each_dependency(mod) $(dep, is_pub) {
@@ -286,7 +277,7 @@ def analyze_file(var ctx : RequirefixContext?; var mg : ModuleGroup; cop : CodeO
         // To properly map the symbols from B reachable from A to A,
         // we would need an extra mapping of symbol providers.
         for (req in required) {
-            var exported : table<string>
+            var inscope exported : table<string>
             collect_public_deps(req.mod, req.mod_name, exported)
             for (name in keys(exported)) {
                 ctx.providers[name] |> push(req.mod_name)

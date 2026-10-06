@@ -19,9 +19,7 @@ require _inline_scope_helper
 
 var g_shared = 555      // collides with _inline_scope_helper's g_shared on purpose
 
-def has(s, sub : string) : bool {
-    return !empty(sub) && find(s, sub) >= 0
-}
+def has(s, sub : string) : bool => !empty(sub) && find(s, sub) >= 0
 
 def body_of(t : T?; nm : string) : string {
     var body = ""
@@ -51,9 +49,7 @@ def target_mirror_rule() : int {
 }
 
 [export]
-def target_block_literal(src : array<int>) : int {
-    return scoped_filter_sum(src) $(v) => v % 2 == 0
-}
+def target_block_literal(src : array<int>) : int => scoped_filter_sum(src) $(v) => v % 2 == 0
 
 [export]
 def target_inside_with(a, b : int) : int {

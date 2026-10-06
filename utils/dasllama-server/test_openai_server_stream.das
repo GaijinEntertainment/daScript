@@ -165,7 +165,7 @@ def test_openai_server_stream(t : T?) {   // nolint:STYLE038 — one live server
                 POST("{base_url}/v1/{route}",
                      "\{{payload},\"max_tokens\":6,\"stream\":true,\"stream_options\":\{\"include_usage\":true}}") $(resp) {
                     t |> equal(int(resp.status_code), int(http_status.OK))
-                    var datas <- sse_datas(string(resp.body))
+                    var inscope datas <- sse_datas(string(resp.body))
                     t |> success(length(datas) >= 3, "{route}: a usage chunk and [DONE] behind the reply ({length(datas)} events)")
                     if (length(datas) >= 3) {
                         t |> equal(datas[length(datas) - 1], "[DONE]")

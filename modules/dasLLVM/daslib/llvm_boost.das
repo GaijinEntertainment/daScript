@@ -42,58 +42,33 @@ class PrimitiveTypes {
         t_void = LLVMVoidTypeInContext(ctx)
     }
 
-    def PointerType(typ : LLVMOpaqueType?) {
-        return LLVMPointerType(typ, 0u)
-    }
+    def PointerType(typ : LLVMOpaqueType?) => LLVMPointerType(typ, 0u)
 
-    def const StructType(var fields : LLVMOpaqueType ??; len : uint; packed : int = 0) {
-        return LLVMStructTypeInContext(ctx, fields, len, packed)
-    }
+    def const StructType(var fields : LLVMOpaqueType ??; len : uint; packed : int = 0) =>
+        LLVMStructTypeInContext(ctx, fields, len, packed)
 
-    def const LLVMFloat4Type {
-        return LLVMVectorType(t_float, 4u)
-    }
+    def const LLVMFloat4Type => LLVMVectorType(t_float, 4u)
 
-    def const LLVMFloat3Type {
-        return LLVMVectorType(t_float, 3u)
-    }
+    def const LLVMFloat3Type => LLVMVectorType(t_float, 3u)
 
-    def const LLVMFloat2Type {
-        return LLVMVectorType(t_float, 2u)
-    }
+    def const LLVMFloat2Type => LLVMVectorType(t_float, 2u)
 
-    def const LLVMInt4Type {
-        return LLVMVectorType(t_int32, 4u)
-    }
+    def const LLVMInt4Type => LLVMVectorType(t_int32, 4u)
 
-    def const LLVMInt3Type {
-        return LLVMVectorType(t_int32, 3u)
-    }
+    def const LLVMInt3Type => LLVMVectorType(t_int32, 3u)
 
-    def const LLVMInt2Type {
-        return LLVMVectorType(t_int32, 2u)
-    }
+    def const LLVMInt2Type => LLVMVectorType(t_int32, 2u)
 
-    def const LLVMRange64Type {
-        return LLVMVectorType(t_int64, 2u)
-    }
+    def const LLVMRange64Type => LLVMVectorType(t_int64, 2u)
 
     // 16/8-bit lattice — byte-packed lane vectors match the das value layout exactly
-    def const LLVMHalfVecType(lanes : uint) {
-        return LLVMVectorType(t_half, lanes)
-    }
+    def const LLVMHalfVecType(lanes : uint) => LLVMVectorType(t_half, lanes)
 
-    def const LLVMShortVecType(lanes : uint) {
-        return LLVMVectorType(t_int16, lanes)
-    }
+    def const LLVMShortVecType(lanes : uint) => LLVMVectorType(t_int16, lanes)
 
-    def const LLVMByteVecType(lanes : uint) {
-        return LLVMVectorType(t_int8, lanes)
-    }
+    def const LLVMByteVecType(lanes : uint) => LLVMVectorType(t_int8, lanes)
 
-    def const get_type_string : LLVMOpaqueType ? {
-        return LLVMPointerType(t_int8, 0u)
-    }
+    def const get_type_string : LLVMOpaqueType ? => LLVMPointerType(t_int8, 0u)
 
     def LLVMIntPtrType : LLVMOpaqueType ? {
         static_if (typeinfo sizeof(type<void?>) == 8) {
@@ -103,45 +78,26 @@ class PrimitiveTypes {
         }
     }
 
-    def const LLVMVoidPtrType : LLVMOpaqueType ? {
-        return LLVMPointerType(t_int8, 0u)
-    }
+    def const LLVMVoidPtrType : LLVMOpaqueType ? => LLVMPointerType(t_int8, 0u)
 
-    def const ConstI1(val : bool) {
-        return LLVMConstInt(t_int1, uint64(val ? 1 : 0), 0);
-    }
+    def const ConstI1(val : bool) => LLVMConstInt(t_int1, uint64(val ? 1 : 0), 0)
 
-    def const ConstI8(val : int8) {
-        return LLVMConstInt(t_int8, val |> uint64(), 0);
-    }
+    def const ConstI8(val : int8) => LLVMConstInt(t_int8, val |> uint64(), 0)
 
-    def const ConstI16(val : int16) {
-        return LLVMConstInt(t_int16, val |> uint64, 0);
-    }
+    def const ConstI16(val : int16) => LLVMConstInt(t_int16, val |> uint64, 0)
 
-    def const ConstI32(val : uint64) {
-        return LLVMConstInt(t_int32, val, 0);
-    }
+    def const ConstI32(val : uint64) => LLVMConstInt(t_int32, val, 0)
 
-    def const ConstI64(val : uint64) {
-        return LLVMConstInt(t_int64, val, 0);
-    }
+    def const ConstI64(val : uint64) => LLVMConstInt(t_int64, val, 0)
 
-    def const ConstPtr(val : uint64; tp : LLVMOpaqueType?) {
-        return LLVMConstIntToPtr(LLVMConstInt(t_int64, val, 0), tp);
-    }
+    def const ConstPtr(val : uint64; tp : LLVMOpaqueType?) =>
+        LLVMConstIntToPtr(LLVMConstInt(t_int64, val, 0), tp)
 
-    def const ConstReal(value : double) {
-        return LLVMConstReal(t_float, value)
-    }
+    def const ConstReal(value : double) => LLVMConstReal(t_float, value)
 
-    def const ConstHalf(value : double) {
-        return LLVMConstReal(t_half, value)
-    }
+    def const ConstHalf(value : double) => LLVMConstReal(t_half, value)
 
-    def const ConstDouble(value : double) {
-        return LLVMConstReal(t_double, value)
-    }
+    def const ConstDouble(value : double) => LLVMConstReal(t_double, value)
 
 
 
@@ -162,9 +118,7 @@ class PrimitiveTypes {
 
 }
 
-def public array_data_ptr(var arr : auto(T)[]) : T? {
-    return unsafe(addr(arr[0]))
-}
+def public array_data_ptr(var arr : auto(T)[]) : T? => unsafe(addr(arr[0]))
 
 def public array_data_ptr(var arr : array<auto(T)>) : T? {
     if (arr |> empty()) {
@@ -174,18 +128,15 @@ def public array_data_ptr(var arr : array<auto(T)>) : T? {
     }
 }
 
-def StructType(types : PrimitiveTypes?; var fields : LLVMOpaqueType? []) {
-    return types.StructType(array_data_ptr(fields), uint(length(fields)))
-}
+def StructType(types : PrimitiveTypes?; var fields : LLVMOpaqueType? []) =>
+    types.StructType(array_data_ptr(fields), uint(length(fields)))
 
-def StructType(types : PrimitiveTypes?; var fields : array<LLVMOpaqueType?>) {
-    return types.StructType(array_data_ptr(fields), uint(length(fields)))
-}
+def StructType(types : PrimitiveTypes?; var fields : array<LLVMOpaqueType?>) =>
+    types.StructType(array_data_ptr(fields), uint(length(fields)))
 
 
-def LLVMIsVector3(typ : LLVMOpaqueType?) : bool {
-    return (LLVMGetTypeKind(typ) == LLVMTypeKind.LLVMVectorTypeKind) && (LLVMGetVectorSize(typ) == 3u)
-}
+def LLVMIsVector3(typ : LLVMOpaqueType?) : bool =>
+    (LLVMGetTypeKind(typ) == LLVMTypeKind.LLVMVectorTypeKind) && (LLVMGetVectorSize(typ) == 3u)
 
 [unused_argument(name)]
 def LLVMBuildLoadVector3(builder : LLVMOpaqueBuilder?; var types : PrimitiveTypes?; var typ : LLVMOpaqueType?; ptr : LLVMOpaqueValue?; name : string) {
@@ -225,9 +176,8 @@ def LLVMBuildStore2Aligned(builder : LLVMOpaqueBuilder?; var types : PrimitiveTy
     return st
 }
 
-def LLVMGetEnumAttributeKindForName(attr_name : string) {
-    return LLVMGetEnumAttributeKindForName(attr_name, uint64(long_length(attr_name)))
-}
+def LLVMGetEnumAttributeKindForName(attr_name : string) =>
+    LLVMGetEnumAttributeKindForName(attr_name, uint64(long_length(attr_name)))
 
 def LLVMGetEnumAttribute(ctx : LLVMContextRef; attr_name : string) : LLVMOpaqueAttributeRef? {
     let attr_id = LLVMGetEnumAttributeKindForName(attr_name)
@@ -295,9 +245,8 @@ def LLVMBuildGEP2(builder : LLVMOpaqueBuilder?; ty : LLVMOpaqueType?; ptr : LLVM
     return LLVMBuildGEP2(builder, ty, ptr, unsafe(addr(index)), 1u, name)
 }
 
-def LLVMFunctionType(ret_type : LLVMTypeRef; var param_types : LLVMTypeRef[]; isVariadic : bool = false) {
-    return LLVMFunctionType(ret_type, array_data_ptr(param_types), uint(length(param_types)), isVariadic ? 1 : 0)
-}
+def LLVMFunctionType(ret_type : LLVMTypeRef; var param_types : LLVMTypeRef[]; isVariadic : bool = false) =>
+    LLVMFunctionType(ret_type, array_data_ptr(param_types), uint(length(param_types)), isVariadic ? 1 : 0)
 
 def LLVMFunctionType(ret_type : LLVMTypeRef; var param_types : array<LLVMTypeRef>; isVariadic : bool = false) {
     let nparam = length(param_types)
@@ -308,9 +257,8 @@ def LLVMFunctionType(ret_type : LLVMTypeRef; var param_types : array<LLVMTypeRef
     }
 }
 
-def LLVMFunctionType(ret_type : LLVMTypeRef; isVariadic : bool = false) {
-    return LLVMFunctionType(ret_type, null, 0u, isVariadic ? 1 : 0)
-}
+def LLVMFunctionType(ret_type : LLVMTypeRef; isVariadic : bool = false) =>
+    LLVMFunctionType(ret_type, null, 0u, isVariadic ? 1 : 0)
 
 def LLVMVerifyModule(mod : LLVMOpaqueModule?; action : LLVMVerifierFailureAction; fail : bool = true) {
     var error : string
@@ -405,13 +353,11 @@ def LLVMBuildFloat4_xyzw(builder : LLVMOpaqueBuilder?; var types : PrimitiveType
     return LLVMBuildInsertElement(builder, vres, w, types.ConstI32(3ul), name)
 }
 
-def LLVMBuildCall2(builder : LLVMOpaqueBuilder?; typ : LLVMOpaqueType?; func : LLVMOpaqueValue?; var args : LLVMOpaqueValue? []; name : string) {
-    return LLVMBuildCall2(builder, typ, func, array_data_ptr(args), uint(length(args)), name)
-}
+def LLVMBuildCall2(builder : LLVMOpaqueBuilder?; typ : LLVMOpaqueType?; func : LLVMOpaqueValue?; var args : LLVMOpaqueValue? []; name : string) =>
+    LLVMBuildCall2(builder, typ, func, array_data_ptr(args), uint(length(args)), name)
 
-def LLVMBuildCall2(builder : LLVMOpaqueBuilder?; typ : LLVMOpaqueType?; func : LLVMOpaqueValue?; name : string) {
-    return LLVMBuildCall2(builder, typ, func, null, 0u, name)
-}
+def LLVMBuildCall2(builder : LLVMOpaqueBuilder?; typ : LLVMOpaqueType?; func : LLVMOpaqueValue?; name : string) =>
+    LLVMBuildCall2(builder, typ, func, null, 0u, name)
 
 def LLVMBuildCall2(builder : LLVMOpaqueBuilder?; typ : LLVMOpaqueType?; func : LLVMOpaqueValue?; var args : array<LLVMOpaqueValue?>; name : string) {
     let nparams = length(args)
@@ -422,9 +368,7 @@ def LLVMBuildCall2(builder : LLVMOpaqueBuilder?; typ : LLVMOpaqueType?; func : L
     }
 }
 
-def LLVMLookupIntrinsicID(name : string) {
-    return LLVMLookupIntrinsicID(name, uint64(long_length(name)))
-}
+def LLVMLookupIntrinsicID(name : string) => LLVMLookupIntrinsicID(name, uint64(long_length(name)))
 
 //! Looks up an intrinsic name the emitter BUILT, and panics naming it when LLVM has none. A built name that does not resolve is an emitter defect - a table row, a stem, or a type suffix - and no caller can recover from it. A target-specific literal a trimmed LLVM may genuinely lack keeps the raw lookup and its own fallback.
 def public intrinsic_id(name : string) : uint {
@@ -462,15 +406,12 @@ def describe(blk : LLVMOpaqueBasicBlock?) {
 }
 
 // 16/8-bit lattice types (contiguous appended block in the Type enum)
-def public is_lattice_small_type(t : Type) {
-    return int(t) >= int(Type.tFloat16) && int(t) <= int(Type.tUByte16)
-}
+def public is_lattice_small_type(t : Type) =>
+    int(t) >= int(Type.tFloat16) && int(t) <= int(Type.tUByte16)
 
 // the fp16 sub-family (scalar float16 + half2/3/4/8) — fpext/fptrunc through half needs
 // hardware convert support (any aarch64, or x86-64 with F16C); the int lattice does not
-def public is_f16_small_type(t : Type) {
-    return int(t) >= int(Type.tFloat16) && int(t) <= int(Type.tHalf8)
-}
+def public is_f16_small_type(t : Type) => int(t) >= int(Type.tFloat16) && int(t) <= int(Type.tHalf8)
 
 // set by init_jit_target_flags (llvm_jit_common): true when the target lowers half
 // converts in hardware (aarch64 || x64-F16C), so fp16 operators may emit

@@ -46,9 +46,7 @@ def private type_name(t : int) : string {
 // machine line format a native `sg_compile` driver can parse — same fields as
 // the engine IR-builder calls, one line per call, full float precision.
 
-def sg_ir_want_sgir_dump() : bool {
-    return has_env_variable("FLATTEN_DUMP_SGIR")
-}
+def sg_ir_want_sgir_dump() : bool => has_env_variable("FLATTEN_DUMP_SGIR")
 
 def private f4_fields(v : float4) : string {
     return build_string() $(var writer) {

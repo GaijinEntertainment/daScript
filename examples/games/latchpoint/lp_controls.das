@@ -1,8 +1,6 @@
 options gen2
 
-def camera_dragging(left, right : bool) : bool {
-    return left || right
-}
+def camera_dragging(left, right : bool) : bool => left || right
 
 def ui_scissor_rect(x, y, width, height : int; logical_size, pixel_size : int2) : int4 {
     let scale = float2(pixel_size) / max(float2(logical_size), float2(1.0))

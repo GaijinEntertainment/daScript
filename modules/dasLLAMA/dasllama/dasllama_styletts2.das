@@ -413,9 +413,8 @@ let private STFT_PAD = ST2_STFT_PAD
 
 def private need_tensor(m : GGUFMeta; name : string) : int => gguf_need_tensor(m, name, "styletts2")
 
-def private read_arr(m : GGUFMeta; bytes : array<uint8> | #; name : string) : array<float> {
-    return <- gguf_read_f32_arr(m, bytes, name, "styletts2")
-}
+def private read_arr(m : GGUFMeta; bytes : array<uint8> | #; name : string) : array<float> =>
+    <- gguf_read_f32_arr(m, bytes, name, "styletts2")
 
 [arch(at = "../ARCHITECTURE_TTS.md#tts-padded-input-width")]
 def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; wname, bname : string; rows : bool = false; cin_s : int64 = 0l) : TtsConv1d {
@@ -445,9 +444,8 @@ def private read_conv(m : GGUFMeta; bytes : array<uint8> | #; wname, bname : str
     return <- c
 }
 
-def private read_conv_p(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; rows : bool = false; cin_s : int64 = 0l) : TtsConv1d {
-    return <- read_conv(m, bytes, "{prefix}.weight", "{prefix}.bias", rows, cin_s)
-}
+def private read_conv_p(m : GGUFMeta; bytes : array<uint8> | #; prefix : string; rows : bool = false; cin_s : int64 = 0l) : TtsConv1d =>
+    <- read_conv(m, bytes, "{prefix}.weight", "{prefix}.bias", rows, cin_s)
 
 // the input width a conv will read, from its tensor dims and geometry - known before the read
 def private conv_cin_of(m : GGUFMeta; bytes : array<uint8> | #; wname : string) : int64 {
@@ -793,9 +791,7 @@ def load_styletts2(path : string) : StyleTts2Model {
 }
 
 //! True when `name` is one of the model's voices.
-def styletts2_has_voice(m : StyleTts2Model; name : string) : bool {
-    return key_exists(m.voices, name)
-}
+def styletts2_has_voice(m : StyleTts2Model; name : string) : bool => key_exists(m.voices, name)
 
 //! The style row `row` of voice `name` (a canonical name), `style_dim` floats.
 def styletts2_style(m : StyleTts2Model; name : string; row : int; @exact_size var style : array<float>) {

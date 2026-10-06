@@ -37,8 +37,7 @@ def test_vad_resampler(t : T?) {
         t |> success(abs(at_once[2] - take[3]) < 1.0e-6, "position 3.0 lands on the take's third sample")
         t |> success(abs(at_once[1] - 0.5 * (take[1] + take[2])) < 1.0e-6, "position 1.5 is the mean of its neighbours")
         var drained = VadResampler()
-        var stream : array<float>
-        var partial : array<float>
+        var stream, partial : array<float>
         var fed = 0
         var chunk = 37
         while (fed < 24000) {
@@ -49,7 +48,7 @@ def test_vad_resampler(t : T?) {
             }
             fed += n
             chunk = (chunk * 7 + 11) % 900 + 1   // drains of every size the device might hand over
-            var piece : array<float>
+            var inscope piece : array<float>
             resample_step(drained, partial, piece)
             stream |> push_from(piece)
         }

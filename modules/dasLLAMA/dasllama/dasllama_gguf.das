@@ -94,13 +94,10 @@ let private MXFP4_KVALUES = fixed_array(0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0,
                                         0.0, -1.0, -2.0, -3.0, -4.0, -6.0, -8.0, -12.0)
 
 
-def private rd_u64(b : array<uint8> | #; o : int64) : uint64 {
-    return uint64(rd_u32(b, o)) | (uint64(rd_u32(b, o + 4l)) << 32ul)
-}
+def private rd_u64(b : array<uint8> | #; o : int64) : uint64 =>
+    uint64(rd_u32(b, o)) | (uint64(rd_u32(b, o + 4l)) << 32ul)
 
-def private rd_i64(b : array<uint8> | #; o : int64) : int64 {
-    return int64(rd_u64(b, o))
-}
+def private rd_i64(b : array<uint8> | #; o : int64) : int64 => int64(rd_u64(b, o))
 
 // Read a length-prefixed string (u64 length + raw bytes), advancing the cursor.
 def private rd_str(b : array<uint8> | #; var o : int64&) : string {
@@ -179,9 +176,8 @@ def private skip_array(b : array<uint8> | #; off : int64; arr_type : int; count 
 
 let GGUF_FIXED_HEADER_BYTES = 24l   // magic, version, tensor count, kv count: what parse_gguf_meta reads before any table
 
-def gguf_magic_ok(bytes : array<uint8> | #) : bool {
-    return long_length(bytes) >= 4l && int(bytes[0]) == 'G' && int(bytes[1]) == 'G' && int(bytes[2]) == 'U' && int(bytes[3]) == 'F'
-}
+def gguf_magic_ok(bytes : array<uint8> | #) : bool =>
+    long_length(bytes) >= 4l && int(bytes[0]) == 'G' && int(bytes[1]) == 'G' && int(bytes[2]) == 'U' && int(bytes[3]) == 'F'
 
 //! Parse the GGUF header, KV metadata, and tensor-info table out of `bytes`.
 def parse_gguf_meta(bytes : array<uint8> | #) : GGUFMeta {
@@ -310,9 +306,8 @@ def mtp_head_sidecar(path : string) : string {
     return head_file_or_empty(path_join(dir_name(path), "mtp-{name}"))
 }
 
-def private head_file_or_empty(side : string) : string {
-    return fexist(side) && !gguf_is_assistant(side) ? side : ""
-}
+def private head_file_or_empty(side : string) : string =>
+    fexist(side) && !gguf_is_assistant(side) ? side : ""
 
 //! Expand a model path into its shard list: a GGUF split name ("<prefix>-00001-of-00003.gguf") yields
 //! every sibling (any index normalizes), anything else [path]; a split NextN head rides LAST. A
@@ -446,7 +441,7 @@ def parse_gguf_meta_shards(bases : array<void?>; sizes : array<int64>) : GGUFMet
         // a head shard carries the nextn count the trunk file dropped (a split conversion writes the
         // trunk without the head, the head as its own file); shard-0 KVs otherwise rule, so promote it only when absent there
         unsafe {
-            let kb <- temp_array(reinterpret<uint8?>(bases[k]), sizes[k], type<uint8>)
+            var inscope kb <- temp_array(reinterpret<uint8?>(bases[k]), sizes[k], type<uint8>)
             let arch = gguf_has(mk, "general.architecture") ? gguf_str(mk, kb, "general.architecture") : ""
             let key = "{arch}.nextn_predict_layers"
             if (!empty(arch) && gguf_has(mk, key) && !gguf_has(m, key)) {
@@ -461,9 +456,7 @@ def parse_gguf_meta_shards(bases : array<void?>; sizes : array<int64>) : GGUFMet
 // ===== typed getters (call inside the mmap block — they read from `bytes`) =====
 
 //! True if `key` is present in the metadata.
-def gguf_has(m : GGUFMeta; key : string) : bool {
-    return key_exists(m.kv, key)
-}
+def gguf_has(m : GGUFMeta; key : string) : bool => key_exists(m.kv, key)
 
 //! Read an integer-typed value (any width / signedness) widened to int64.
 def gguf_int(m : GGUFMeta; bytes : array<uint8> | #; key : string) : int64 {
@@ -920,8 +913,7 @@ def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : strin
         }
         let sbb = ggml_type_bytes(gtype, 256l)
         let fmt = gguf_kq_fmt_of_type(gtype)
-        var kq : array<uint8>
-        var ks : array<uint8>
+        var kq, ks : array<uint8>
         kq |> resize(int(kq_qsb(fmt)))
         ks |> resize(int(kq_ssb(fmt)))
         let nb = expect_n / 256l

@@ -12,18 +12,10 @@ require dastest/testing_boost public
 struct L { id : int; k : int }
 struct R { k : int; v : int }
 
-def fixture_ints_a() : array<int> {
-    return <- [1, 2, 3, 3]
-}
-def fixture_ints_b() : array<int> {
-    return <- [3, 4, 4, 5]
-}
-def fixture_l() : array<L> {
-    return <- [L(id = 1, k = 1), L(id = 2, k = 2), L(id = 3, k = 1)]
-}
-def fixture_r() : array<R> {
-    return <- [R(k = 1, v = 10), R(k = 2, v = 20), R(k = 1, v = 30)]
-}
+def fixture_ints_a() : array<int> => <- [1, 2, 3, 3]
+def fixture_ints_b() : array<int> => <- [3, 4, 4, 5]
+def fixture_l() : array<L> => <- [L(id = 1, k = 1), L(id = 2, k = 2), L(id = 3, k = 1)]
+def fixture_r() : array<R> => <- [R(k = 1, v = 10), R(k = 2, v = 20), R(k = 1, v = 30)]
 
 // Assert an iterator result (mixed lane) matches the array ground truth element-wise. Both lanes
 // run the same *_impl, so output order is identical — a direct compare (not a checksum) is valid.

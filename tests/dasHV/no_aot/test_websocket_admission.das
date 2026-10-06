@@ -31,9 +31,8 @@ class AdmissionServer : HvWebServer {
     def override onWsOpen(channel : WebSocketChannel; url : string#) { opened++ }
 }
 
-def private upgrade_request(origin : string = "https://allowed.example") : string {
-    return "GET /socket HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nOrigin: {origin}\r\nCookie: sid=fixture\r\nSec-WebSocket-Protocol: test.v1\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
-}
+def private upgrade_request(origin : string = "https://allowed.example") : string =>
+    "GET /socket HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nOrigin: {origin}\r\nCookie: sid=fixture\r\nSec-WebSocket-Protocol: test.v1\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
 
 [test]
 def approval_precedes_upgrade_without_blocking_http(t : T?) {

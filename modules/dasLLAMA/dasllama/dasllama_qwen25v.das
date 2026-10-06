@@ -221,14 +221,11 @@ def private q25v_gemm_types_uniform(m : GGUFMeta; n_layer : int64; gt : int) : b
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-padded-widths")]
 def q25v_patch_pad(t : Qwen25vTower) : int64 => (t.patch_dim + 63l) / 64l * 64l
 
-def private q25v_gemm_sizes(d, ffp : int64) : array<int64> {
-    return <- [ d * d, d * d, d * d, d * d, d * ffp, d * ffp, ffp * d ]
-}
+def private q25v_gemm_sizes(d, ffp : int64) : array<int64> =>
+    <- [ d * d, d * d, d * d, d * d, d * ffp, d * ffp, ffp * d ]
 
 // the SERVED bias element counts (gate/up biases at ff_pad, zero tails)
-def private q25v_bias_sizes(d, ffp : int64) : array<int64> {
-    return <- [ d, d, d, d, ffp, ffp, d ]
-}
+def private q25v_bias_sizes(d, ffp : int64) : array<int64> => <- [ d, d, d, d, ffp, ffp, d ]
 
 def private q25v_verify_tensors(m : GGUFMeta; t : Qwen25vTower) {
     let d = t.n_embd

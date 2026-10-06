@@ -15,9 +15,7 @@ def spawn(input : JsonValue?) : JsonValue? {
 }
 
 [live_command, unused_argument(input)]
-def get_status(input : JsonValue?) : JsonValue? {
-    return JV("alive")
-}
+def get_status(input : JsonValue?) : JsonValue? => JV("alive")
 
 [export]
 def init() {

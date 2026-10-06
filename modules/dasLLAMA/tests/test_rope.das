@@ -65,8 +65,7 @@ def private ff_none() : array<float> {
 [test]
 def test_rope_gen_pos0(t : T?) {
     t |> run("pos 0: cos row = mscale exactly, sin row = 0, both layouts") @(t : T?) {
-        var ct : array<float>
-        var st : array<float>
+        var ct, st : array<float>
         var ff <- ff_none()
         build_rope_tabs(ct, st, 10000.0, 1.0, 1.5, ff, true, 0l, 1l, 8l)
         var packed : array<float>
@@ -94,10 +93,7 @@ def test_rope_gen_ff_ones(t : T?) {
             c = 1.0
         }
         var none <- ff_none()
-        var c1 : array<float>
-        var s1 : array<float>
-        var c2 : array<float>
-        var s2 : array<float>
+        var c1, s1, c2, s2 : array<float>
         build_rope_tabs(c1, s1, 10000.0, 0.7, 1.0, ones, true, 5l, 3l, 16l)
         build_rope_tabs(c2, s2, 10000.0, 0.7, 1.0, none, true, 5l, 3l, 16l)
         var same = true
@@ -121,9 +117,7 @@ def private ulp_rank(x : float) : int64 {
     return bits >= 0 ? int64(bits) : -2147483648l - int64(bits)
 }
 
-def private ulps_apart(a, b : float) : int64 {
-    return abs(ulp_rank(a) - ulp_rank(b))
-}
+def private ulps_apart(a, b : float) : int64 => abs(ulp_rank(a) - ulp_rank(b))
 
 //! the two layouts agree to the ulp, not the bit: under -jit the packed row's single loop vectorizes
 //! onto the aarch64 polynomial sin/cos rail while the tabs' nested loop stays on scalar libm, and the
@@ -131,8 +125,7 @@ def private ulps_apart(a, b : float) : int64 {
 [test]
 def test_rope_gen_cross_layout(t : T?) {
     t |> run("packed row and two-tab row agree within 1 ulp at fscale=1 (the orders coincide there)") @(t : T?) {
-        var ct : array<float>
-        var st : array<float>
+        var ct, st : array<float>
         var ff <- ff_none()
         let pos = 37l
         let hs = 32l
@@ -166,10 +159,7 @@ def test_rope_gen_rows_twin(t : T?) {
         for (i in range(8)) {
             ff[i] = 1.0 + 0.25 * float(i)
         }
-        var c1 : array<float>
-        var s1 : array<float>
-        var c2 : array<float>
-        var s2 : array<float>
+        var c1, s1, c2, s2 : array<float>
         var pos <- [1234l]
         build_rope_tabs_rows(c1, s1, 500000.0, 0.5, 0.8, ff, true, pos, 1l, 16l)
         build_rope_tabs(c2, s2, 500000.0, 0.5, 0.8, ff, true, 1234l, 1l, 16l)
@@ -209,10 +199,7 @@ def test_rope_gen_imrope_collapse(t : T?) {
         var ff : array<float>
         var p4 <- [int4(7, 7, 7, 7), int4(1234, 1234, 1234, 1234), int4(0, 0, 0, 0)]
         var pl <- [7l, 1234l, 0l]
-        var c1 : array<float>
-        var s1 : array<float>
-        var c2 : array<float>
-        var s2 : array<float>
+        var c1, s1, c2, s2 : array<float>
         build_rope_tabs_imrope(c1, s1, 1000000.0, 1.0, 1.0, ff, false, p4, qsec, 3l, 128l)
         build_rope_tabs_rows(c2, s2, 1000000.0, 1.0, 1.0, ff, false, pl, 3l, 128l)
         var same = true
@@ -238,8 +225,7 @@ def test_rope_gen_imrope_reference(t : T?) {
     t |> run("image row matches a per-element ggml-order reference") @(t : T?) {
         var ff : array<float>
         var p4 <- [int4(100, 103, 117, 0)]
-        var ct : array<float>
-        var st : array<float>
+        var ct, st : array<float>
         build_rope_tabs_imrope(ct, st, 1000000.0, 1.0, 1.0, ff, false, p4, qsec, 1l, 128l)
         var same = true
         for (j in range(64)) {
@@ -275,10 +261,7 @@ def test_rope_gen_imrope_shape(t : T?) {
         var ff : array<float>
         var pa <- [int4(50, 52, 57, 0)]
         var pb <- [int4(50, 53, 57, 0)]
-        var ca : array<float>
-        var sa : array<float>
-        var cb : array<float>
-        var sb : array<float>
+        var ca, sa, cb, sb : array<float>
         build_rope_tabs_imrope(ca, sa, 1000000.0, 1.0, 1.0, ff, false, pa, qsec, 1l, 128l)
         build_rope_tabs_imrope(cb, sb, 1000000.0, 1.0, 1.0, ff, false, pb, qsec, 1l, 128l)
         var shape_ok = true
@@ -321,10 +304,7 @@ def test_rope_gen_mrope_noninterleaved(t : T?) {
         // text rows collapse bit-exactly to the rows builder, like the interleaved form
         var p4 <- [int4(7, 7, 7, 7), int4(1234, 1234, 1234, 1234)]
         var pl <- [7l, 1234l]
-        var c1 : array<float>
-        var s1 : array<float>
-        var c2 : array<float>
-        var s2 : array<float>
+        var c1, s1, c2, s2 : array<float>
         build_rope_tabs_mrope(c1, s1, 1000000.0, 1.0, 1.0, ff, false, p4, qsec, 2l, 128l)
         build_rope_tabs_rows(c2, s2, 1000000.0, 1.0, 1.0, ff, false, pl, 2l, 128l)
         var same = true
@@ -334,8 +314,7 @@ def test_rope_gen_mrope_noninterleaved(t : T?) {
         t |> success(same, "the (p,p,p,p) collapse must be bit-exact")
         // an image-shaped row reads each axis over its CONTIGUOUS range, frequencies continuous
         var pi4 <- [int4(100, 103, 117, 0)]
-        var ct : array<float>
-        var st : array<float>
+        var ct, st : array<float>
         build_rope_tabs_mrope(ct, st, 1000000.0, 1.0, 1.0, ff, false, pi4, qsec, 1l, 128l)
         var ref_ok = true
         for (j in range(64)) {
@@ -348,8 +327,7 @@ def test_rope_gen_mrope_noninterleaved(t : T?) {
         }
         t |> success(ref_ok, "every half-dim must read its contiguous-section axis")
         // the two walks must genuinely differ on grid rows (same sections both ways)
-        var ci : array<float>
-        var si : array<float>
+        var ci, si : array<float>
         build_rope_tabs_imrope(ci, si, 1000000.0, 1.0, 1.0, ff, false, pi4, qsec, 1l, 128l)
         var differs = false
         for (j in range(64)) {
@@ -408,8 +386,7 @@ def test_rope_gen_vision(t : T?) {
     // freq divisor hs/2 (VISION mode: sections hs/4 x4, each axis independent).
     t |> run("vision table matches the per-element ladder reference") @(t : T?) {
         var p2 <- [int2(3, 11), int2(0, 0)]
-        var ct : array<float>
-        var st : array<float>
+        var ct, st : array<float>
         build_rope_tabs_vision(ct, st, 10000.0, p2, 2l, 72l)
         var same = true
         for (j in range(36)) {
@@ -431,10 +408,7 @@ def test_rope_gen_vision(t : T?) {
 def test_rope_gen_mscale(t : T?) {
     t |> run("mscale is a pure post-scale: mscale=2 row == 2 x mscale=1 row") @(t : T?) {
         var ff <- ff_none()
-        var c1 : array<float>
-        var s1 : array<float>
-        var c2 : array<float>
-        var s2 : array<float>
+        var c1, s1, c2, s2 : array<float>
         build_rope_tabs(c1, s1, 10000.0, 1.3, 1.0, ff, true, 9l, 2l, 8l)
         build_rope_tabs(c2, s2, 10000.0, 1.3, 2.0, ff, true, 9l, 2l, 8l)
         var same = true

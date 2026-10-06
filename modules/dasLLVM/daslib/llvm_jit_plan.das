@@ -73,27 +73,17 @@ let public LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS_DEFAULT = false   
 var public LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS_DEFAULT
 
 // We use global variable to store pointer to jit table methods.
-def public FN_JIT_TABLE_AT(t : Type) {
-    return "`jit`table_at`{t}`"
-}
+def public FN_JIT_TABLE_AT(t : Type) => "`jit`table_at`{t}`"
 
-def public FN_JIT_TABLE_ERASE(t : Type) {
-    return "`jit`table_erase`{t}`"
-}
+def public FN_JIT_TABLE_ERASE(t : Type) => "`jit`table_erase`{t}`"
 
-def public FN_JIT_TABLE_FIND(t : Type) {
-    return "`jit`table_find`{t}`"
-}
+def public FN_JIT_TABLE_FIND(t : Type) => "`jit`table_find`{t}`"
 
 // String-key at that takes a precomputed hash (string-only, no per-type matrix; the grow fallback
 // for the inline large-string at). String find is fully inline — no C++ helper.
-def public FN_JIT_STRING_TABLE_AT_WITH_HASH() {
-    return "`jit`string_table_at_with_hash`"
-}
+def public FN_JIT_STRING_TABLE_AT_WITH_HASH() => "`jit`string_table_at_with_hash`"
 
-def public FN_JIT_STRING_TABLE_AT_AFTER_PACKED_MISS() {
-    return "`jit`string_table_at_after_packed_miss`"
-}
+def public FN_JIT_STRING_TABLE_AT_AFTER_PACKED_MISS() => "`jit`string_table_at_after_packed_miss`"
 
 def public jit_sec(us : int) : double => double(us) / 1000000.0lf
 
@@ -537,9 +527,7 @@ class public DllExternResolver : AstVisitor {
     @do_not_delete uid : UidNodes?
     errors : array<string>
 
-    def override canVisitWithAliasSubexpression(expr : ExprAssume?) : bool {
-        return false
-    }
+    def override canVisitWithAliasSubexpression(expr : ExprAssume?) : bool => false
 
     def override preVisitFunction(var fun : FunctionPtr) : void {
         uid.reset(fun)

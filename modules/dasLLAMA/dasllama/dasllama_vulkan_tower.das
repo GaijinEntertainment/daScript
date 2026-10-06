@@ -55,14 +55,11 @@ let VK_DECLINE_WORDS_DEVICE = "the tier has no device (DASLLAMA_GPU=1 arms it), 
 let VK_DECLINE_WORDS_MEMORY = "a device allocation failed"
 
 //! Engage / decline counters; `blocks` = transformer blocks the driver ran. Model-level gates assert DELTAS on these.
-def vulkan_tower_stats : tuple<encodes : int64; rows : int64; blocks : int64; declines : int64; convs : int64; mels : int64> {
-    return (encodes = g_vt_encodes, rows = g_vt_rows, blocks = g_vt_blocks, declines = g_vt_declines.total, convs = g_vt_convs, mels = g_vt_mels)
-}
+def vulkan_tower_stats : tuple<encodes : int64; rows : int64; blocks : int64; declines : int64; convs : int64; mels : int64> =>
+    (encodes = g_vt_encodes, rows = g_vt_rows, blocks = g_vt_blocks, declines = g_vt_declines.total, convs = g_vt_convs, mels = g_vt_mels)
 
 //! The declines-by-reason table (a copy), keyed by `VulkanTowerDecline` value names.
-def vulkan_tower_declines : table<string; int64> {
-    return <- clone_to_move(g_vt_declines.counts)
-}
+def vulkan_tower_declines : table<string; int64> => <- clone_to_move(g_vt_declines.counts)
 
 //! Test A/B seat: pin the tower driver on / off in-process (the env knob's setter twin).
 def set_vulkan_tower(on : bool) {
@@ -854,8 +851,7 @@ def vt_sched_walk(@scratch var maps : array<uint>; meta : HostBuf; nrec : int64;
 //! halfword scales to `ws_dev`
 [cold_path]
 def vt_upload_regions(qblob : PlaneI8; qscales : PlaneF; regions : array<VtRegion>; lay : Q8RepackLayout; wq_dev, ws_dev : uint64; wq_bytes, ws_bytes : int64) {
-    var wq : array<uint8>
-    var ws : array<uint8>
+    var wq, ws : array<uint8>
     wq |> reserve_resize(wq_bytes)
     ws |> reserve_resize(ws_bytes)
     vt_gather_regions(qblob, qscales, regions, lay, wq, ws)

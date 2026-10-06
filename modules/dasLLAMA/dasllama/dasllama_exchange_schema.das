@@ -422,9 +422,8 @@ def private validate_store_doc(doc : JsonValue const?; submission : bool; var er
 }
 
 // a path-bearing string loses its leading directories; a KEY=path token keeps its key
-def private redact_bare(s : string) : string {
-    return (find(s, "/") >= 0 || find(s, "\\") >= 0) ? base_name(s) : s
-}
+def private redact_bare(s : string) : string =>
+    (find(s, "/") >= 0 || find(s, "\\") >= 0) ? base_name(s) : s
 
 def private redact_token(tok : string) : string {
     let eq = find(tok, "=")

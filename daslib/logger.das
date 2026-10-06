@@ -110,9 +110,7 @@ def private resolve_level(category : string) : int {
     return found ? level : log_min_level
 }
 
-def private should_log(level : int; category : string) : bool {
-    return level >= resolve_level(category)
-}
+def private should_log(level : int; category : string) : bool => level >= resolve_level(category)
 
 def private ensure_dir(path : string) {
     let dir = dir_name(path)

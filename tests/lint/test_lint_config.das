@@ -5,9 +5,7 @@ require daslib/lint_config
 require daslib/fio
 require strings
 
-def fixture_path() : string {
-    return path_join(test_temp_dir(), "fixture.toml")
-}
+def fixture_path() : string => path_join(test_temp_dir(), "fixture.toml")
 
 def write_fixture(content : string) {
     fopen(fixture_path(), "wb") $(f) {

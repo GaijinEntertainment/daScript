@@ -38,30 +38,15 @@ struct ArrayJoinShape {
 class ArrayAdapter : SourceAdapter {
     top : Expression?
     srcName : string
-    def override can_reserve_by_length() : bool {
-        return true
-    }
-    def override const can_group_by() : bool {
-        return true
-    }
-    def override const can_join() : bool {
-        return true
-    }
-    def override supports_direct_return() : bool {
-        return true
-    }
-    def override emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
-        return emit_array_join(c, ctx, at)
-    }
-    def override loop_source_expr() : Expression? {
-        return top
-    }
-    def override loop_source_name() : string {
-        return srcName
-    }
-    def override bind_name(at : LineInfo) : string {
-        return qn("it", at)
-    }
+    def override can_reserve_by_length() : bool => true
+    def override const can_group_by() : bool => true
+    def override const can_join() : bool => true
+    def override supports_direct_return() : bool => true
+    def override emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? =>
+        emit_array_join(c, ctx, at)
+    def override loop_source_expr() : Expression? => top
+    def override loop_source_name() : string => srcName
+    def override bind_name(at : LineInfo) : string => qn("it", at)
     def override element_type() : TypeDeclPtr {
         if (top == null || top._type == null) {
             return null
@@ -179,18 +164,10 @@ def private wrap_two_source_invoke(shape; var stmts : array<Expression?>; retTyp
 
 class ZipAdapter : SourceAdapter {
     shape : ZipShape
-    def override name_prefix() : string {
-        return "zip_"
-    }
-    def override supports_direct_return() : bool {
-        return true
-    }
-    def override bind_name(at : LineInfo) : string {
-        return qn("it", at)
-    }
-    def override element_type() : TypeDeclPtr {
-        return null
-    }
+    def override name_prefix() : string => "zip_"
+    def override supports_direct_return() : bool => true
+    def override bind_name(at : LineInfo) : string => qn("it", at)
+    def override element_type() : TypeDeclPtr => null
     def override count_shortcut(opName : string; at : LineInfo) : Expression? {
         if (!type_has_length(shape.srcAExpr._type) || !type_has_length(shape.srcBExpr._type)) return null
         let aN = shape.srcAName
@@ -222,25 +199,16 @@ class ZipAdapter : SourceAdapter {
             }
         }
     }
-    def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
-        return wrap_two_source_invoke(shape, stmts, retType, wrapIter, at)
-    }
+    def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? =>
+        wrap_two_source_invoke(shape, stmts, retType, wrapIter, at)
 }
 
 class ArrayJoinAdapter : SourceAdapter {
     shape : ArrayJoinShape
-    def override name_prefix() : string {
-        return "ajoin_"
-    }
-    def override supports_direct_return() : bool {
-        return true
-    }
-    def override bind_name(at : LineInfo) : string {
-        return shape.resBindName
-    }
-    def override element_type() : TypeDeclPtr {
-        return clone_type(shape.resultType)
-    }
+    def override name_prefix() : string => "ajoin_"
+    def override supports_direct_return() : bool => true
+    def override bind_name(at : LineInfo) : string => shape.resBindName
+    def override element_type() : TypeDeclPtr => clone_type(shape.resultType)
     def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         let jhashName = qn("ajoin_jhash", at)
         let arrName   = qn("ajoin_jarr", at)
@@ -264,9 +232,8 @@ class ArrayJoinAdapter : SourceAdapter {
             }
         }
     }
-    def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
-        return wrap_two_source_invoke(shape, stmts, retType, wrapIter, at)
-    }
+    def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? =>
+        wrap_two_source_invoke(shape, stmts, retType, wrapIter, at)
 }
 
 [macro_function]
@@ -342,12 +309,7 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     var srcAType = invoke_src_param_type(srcAExpr)
     var srcBType = invoke_src_param_type(srcBExpr)
     var elementType = clone_type(zipCall._type.firstType)
-    var whereCond : Expression?
-    var projection : Expression?
-    var skipExpr : Expression?
-    var takeExpr : Expression?
-    var skipWhileCond : Expression?
-    var takeWhileCond : Expression?
+    var whereCond, projection, skipExpr, takeExpr, skipWhileCond, takeWhileCond : Expression?
     var seenSelect = false
     let seenReverse = c.single |> key_exists("trailing_reverse")
     var allProjectionsPure = true

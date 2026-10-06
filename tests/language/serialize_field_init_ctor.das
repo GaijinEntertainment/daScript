@@ -56,9 +56,7 @@ def private arg_helper() : int {
 }
 
 [export]
-def default_arg_anchor(x : int = arg_helper()) : int {
-    return x
-}
+def default_arg_anchor(x : int = arg_helper()) : int => x
 
 variant PodVariant {
     i : int

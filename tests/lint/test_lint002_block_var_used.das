@@ -14,9 +14,7 @@ def apply_via_invoke(x : int) : int {
     return invoke(add_one, invoke(add_one, x))
 }
 
-def apply_block(blk : block<(v : int) : int>; x : int) : int {
-    return invoke(blk, x)
-}
+def apply_block(blk : block<(v : int) : int>; x : int) : int => invoke(blk, x)
 
 def apply_via_call(x : int) : int {
     let add_two = $(v : int) : int { return v + 2 }

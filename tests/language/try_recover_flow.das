@@ -186,9 +186,7 @@ def return_moved_array : int {
     return length(got)
 }
 
-def call_it(blk : block<(x : int) : int>) : int {
-    return invoke(blk, 5)
-}
+def call_it(blk : block<(x : int) : int>) : int => invoke(blk, 5)
 
 [export, no_jit]
 def return_ref_in_try : int & {

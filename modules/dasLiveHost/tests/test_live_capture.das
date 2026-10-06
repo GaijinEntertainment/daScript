@@ -4,7 +4,7 @@ require live/live_capture
 
 var value = 7
 var unwanted_calls = 0
-def read_fixture(_args : JsonValue?) : JsonValue? {return JV((number = value))}
+def read_fixture(_args : JsonValue?) : JsonValue? => JV((number = value))
 def validate_fixture(args : JsonValue?; var error : string&) : bool {
     if ((args?.number ?? -1) < 0 || (args?.number ?? -1) > 100){error = "fixture out of range"; return false}
     return true
@@ -80,7 +80,7 @@ def custom_capture_artifact(_file : string) : bool {
     capture_artifact_width = 17; capture_artifact_height = 9
     return true
 }
-def failed_capture_artifact(_file : string) : bool { return false }
+def failed_capture_artifact(_file : string) : bool => false
 [test]
 def test_capture_artifact_metadata_and_failure(t : T?) {
     setup_capture_fixture()

@@ -1382,8 +1382,7 @@ def player_vs_fuel_depots() {
 // Player vs bonuses — collect burst origins/colors and spawn AFTER the
 // query (create_entities can't run inside a decs query).
 def player_vs_bonuses() {
-    var burst_origins : array<float3>
-    var burst_colors : array<float3>
+    var burst_origins, burst_colors : array<float3>
     query() $(eid : EntityId; b : BonusPickup) {
         let r = PLAYER_SIZE + BONUS_PICKUP_RADIUS
         if (dist2d_sq(b.pos, player_pos) < r * r) {
@@ -1457,17 +1456,11 @@ def player_vs_bridges() {
 
 // --- Rendering ---
 
-def quat_y_rot(angle : float) : float4 {
-    return float4(0.0, sin(angle * 0.5), 0.0, cos(angle * 0.5))
-}
+def quat_y_rot(angle : float) : float4 => float4(0.0, sin(angle * 0.5), 0.0, cos(angle * 0.5))
 
-def quat_x_rot(angle : float) : float4 {
-    return float4(sin(angle * 0.5), 0.0, 0.0, cos(angle * 0.5))
-}
+def quat_x_rot(angle : float) : float4 => float4(sin(angle * 0.5), 0.0, 0.0, cos(angle * 0.5))
 
-def quat_z_rot(angle : float) : float4 {
-    return float4(0.0, 0.0, sin(angle * 0.5), cos(angle * 0.5))
-}
+def quat_z_rot(angle : float) : float4 => float4(0.0, 0.0, sin(angle * 0.5), cos(angle * 0.5))
 
 // Rotate unit Z to direction v (for aligning cylinders along a velocity vector)
 def quat_align_z(v : float3) : float4 {
@@ -1870,13 +1863,11 @@ def render_houses() {
 // halo ring and a pool of light on the water under it. Each type also gets its
 // own silhouette, so what you are collecting is readable before the colour is.
 
-def private bonus_pulse(game_time : float; phase : float) : float {
-    return 0.88 + 0.12 * sin(game_time * 4.0 + phase)
-}
+def private bonus_pulse(game_time : float; phase : float) : float =>
+    0.88 + 0.12 * sin(game_time * 4.0 + phase)
 
-def private bonus_body_rot(game_time : float; phase : float) : float4 {
-    return quat_mul(quat_z_rot(game_time * BONUS_SPIN_SPEED + phase), quat_y_rot(PI * 0.5))
-}
+def private bonus_body_rot(game_time : float; phase : float) : float4 =>
+    quat_mul(quat_z_rot(game_time * BONUS_SPIN_SPEED + phase), quat_y_rot(PI * 0.5))
 
 def render_bonuses(game_time : float) {
     query() $(b : BonusPickup) {

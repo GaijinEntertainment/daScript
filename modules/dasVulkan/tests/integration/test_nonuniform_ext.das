@@ -86,7 +86,7 @@ def private render_one_id(id : int) : array<uint8> {   // nolint:STYLE038 - flat
     var inscope textures : array<Tex>
     textures |> reserve(N_DESC)
     for (k in range(N_DESC)) {
-        var texel <- texel_color(k)
+        var inscope texel <- texel_color(k)
         textures |> emplace(create_1x1_texture(device, phys, queue, cmd_pool, fmt, texel))
         delete texel
     }

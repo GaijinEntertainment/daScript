@@ -63,8 +63,8 @@ def test_bank_remap_preserves_audio(t : T?) {
     t |> run("legacy (fs, fe) equals corrected (fs, 2*fe - fs) sample for sample") @(tt : T?) {
         var cases <- [(180.0, 90.0, 0.05, 0.2), (980.0, 1560.0, 0.09, 0.28), (440.0, 80.0, 0.5, 0.3)]
         for (cs in cases) {
-            var old_s <- legacy_sweep(cs._0, cs._1, cs._2, cs._3)
-            var new_s <- gen_sine_sweep(cs._0, 2.0 * cs._1 - cs._0, cs._2, cs._3)
+            var inscope old_s <- legacy_sweep(cs._0, cs._1, cs._2, cs._3)
+            var inscope new_s <- gen_sine_sweep(cs._0, 2.0 * cs._1 - cs._0, cs._2, cs._3)
             tt |> equal(length(new_s), length(old_s), "same sample count")
             var max_diff = 0.0
             for (a, b in old_s, new_s) {

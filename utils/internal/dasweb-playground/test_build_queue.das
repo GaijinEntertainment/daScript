@@ -10,9 +10,8 @@ require strings
 // carries the full v1..v4 stream, the way every real program that opens
 // samples.db loads it.
 
-def private test_cfg : BuildConfig {
-    return BuildConfig(claim_timeout_seconds = 600, max_build_attempts = 3)
-}
+def private test_cfg : BuildConfig =>
+    BuildConfig(claim_timeout_seconds = 600, max_build_attempts = 3)
 
 let H1 = "1111111111111111111111111111111111111111111111111111111111111111"
 let H2 = "2222222222222222222222222222222222222222222222222222222222222222"

@@ -46,13 +46,9 @@ struct Gen {
     cfg : GenCfg
 }
 
-def rnd(var g : Gen&; n : int) : int {
-    return random_int(g.seed) % n
-}
+def rnd(var g : Gen&; n : int) : int => random_int(g.seed) % n
 
-def chance(var g : Gen&; pct : int) : bool {
-    return rnd(g, 100) < pct
-}
+def chance(var g : Gen&; pct : int) : bool => rnd(g, 100) < pct
 
 def next_id(var g : Gen&) : int {
     let i = g.counter
@@ -468,9 +464,8 @@ var g_residual_warnings = 0
 // flatten-fuzz runs never clobber each other's generated source / read a stale one.
 var g_tmp_suffix = ""
 
-def tmp_path(kind : string) : string {
-    return path_join(get_das_root(), "_flatten_fuzz_{kind}_{g_tmp_suffix}.das")
-}
+def tmp_path(kind : string) : string =>
+    path_join(get_das_root(), "_flatten_fuzz_{kind}_{g_tmp_suffix}.das")
 
 def build_file(units : array<string>) : string {
     return build_string() $(var w) {

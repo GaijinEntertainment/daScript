@@ -6,9 +6,7 @@ require dastest/testing_boost public
 options optimize = false
 
 [sideeffects]
-def rightPolicyCeili(a : float) : int {
-    return ceili(a)
-}
+def rightPolicyCeili(a : float) : int => ceili(a)
 
 [test]
 def test_math_misc(t : T?) { // nolint:STYLE038 one flat assertion per math entry point under test

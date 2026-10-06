@@ -58,13 +58,9 @@ struct Boxed {
     v : int
 }
 
-def operator ??(a : Boxed?; b : Boxed; scale : int = 2) {
-    return a != null ? *a : Boxed(v = b.v * scale)
-}
+def operator ??(a : Boxed?; b : Boxed; scale : int = 2) => a != null ? *a : Boxed(v = b.v * scale)
 
-def operator [] (b : Boxed; i : int; scale : int = 3) {
-    return b.v * i * scale
-}
+def operator [] (b : Boxed; i : int; scale : int = 3) => b.v * i * scale
 
 [test]
 def test_operator_defaults_that_pad(t : T?) {

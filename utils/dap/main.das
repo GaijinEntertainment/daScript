@@ -28,13 +28,11 @@ let private LAUNCH_HOST_PORT = "\"host\":\{\"type\":\"string\",\"description\":\
 let private SESSION_SETTINGS = "\"cwd\":\{\"type\":\"string\"\},\"paths\":\{\"type\":\"array\",\"items\":\{\"type\":\"string\"\}\},\"path_aliases\":\{\"type\":\"object\",\"additionalProperties\":\{\"type\":\"string\"\}\},\"inline_preview_limit\":\{\"type\":\"integer\",\"minimum\":0\},\"max_children_count\":\{\"type\":\"integer\",\"minimum\":0\},\"collect_all_globals\":\{\"type\":\"boolean\"\}"
 let private THREAD_ID = "\"thread_id\":\{\"type\":\"integer\",\"minimum\":1,\"description\":\"DAP thread id.\"\}"
 
-def private schema(properties : string; required : string) : string {
-    return "\{\"type\":\"object\",\"properties\":\{{properties}\},\"required\":[{required}],\"additionalProperties\":false\}"
-}
+def private schema(properties : string; required : string) : string =>
+    "\{\"type\":\"object\",\"properties\":\{{properties}\},\"required\":[{required}],\"additionalProperties\":false\}"
 
-def private tool_json(name, description, properties, required : string) : string {
-    return "\{\"name\":{quoted(name)},\"description\":{quoted(description)},\"inputSchema\":{schema(properties, required)}\}"
-}
+def private tool_json(name, description, properties, required : string) : string =>
+    "\{\"name\":{quoted(name)},\"description\":{quoted(description)},\"inputSchema\":{schema(properties, required)}\}"
 
 def private call_bridge_tool(name : string; args : JsonValue?) : string {
     let outcome = g_bridge->call(name, args)

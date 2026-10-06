@@ -223,9 +223,8 @@ def test_3b_parity_handwritten(t : T?) {
 [test]
 def test_c4_zip_reverse_to_array(t : T?) {
     t |> run("C4: each(a) |> zip(each(b)) |> reverse() |> to_array() — array lane, reverse_inplace tail") @(tt : T?) {
-        var a : array<int>; var b : array<int>
-        a |> push(1); a |> push(2); a |> push(3); a |> push(4)
-        b |> push(10); b |> push(20); b |> push(30); b |> push(40)
+        var a <- [1, 2, 3, 4]
+        var b <- [10, 20, 30, 40]
         let got <- _fold(each(a) |> zip(each(b)) |> reverse() |> to_array())
         tt |> equal(length(got), 4)
         tt |> equal(got[0]._0, 4); tt |> equal(got[0]._1, 40)
@@ -249,9 +248,8 @@ def test_c4_zip_reverse_count(t : T?) {
 [test]
 def test_c4_zip_reverse_sum(t : T?) {
     t |> run("C4-sum: zip + select(sum-of-pair) + reverse + sum — accumulator lane, reverse identity") @(tt : T?) {
-        var a : array<int>; var b : array<int>
-        a |> push(1); a |> push(2); a |> push(3)
-        b |> push(10); b |> push(20); b |> push(30)
+        var a <- [1, 2, 3]
+        var b <- [10, 20, 30]
         // pair sums: 11, 22, 33; sum after reverse = 66 (identity)
         let got = _fold(each(a) |> zip(each(b)) |> _select(_._0 + _._1) |> reverse() |> sum())
         tt |> equal(got, 66)
@@ -338,9 +336,8 @@ def test_anti_3b_distinct_with_first_cascades(t : T?) {
 [test]
 def test_anti_c4_zip_reverse_first_cascades(t : T?) {
     t |> run("anti-C4-first: zip + reverse + first — out of v1 scope (reverse is NOT identity for first), cascades correctly") @(tt : T?) {
-        var a : array<int>; var b : array<int>
-        a |> push(1); a |> push(2); a |> push(3)
-        b |> push(10); b |> push(20); b |> push(30)
+        let a <- [1, 2, 3]
+        let b <- [10, 20, 30]
         let got = _fold(each(a) |> zip(each(b)) |> reverse() |> first())
         // reverse → [(3,30),(2,20),(1,10)]; first = (3,30)
         tt |> equal(got._0, 3); tt |> equal(got._1, 30)
@@ -350,9 +347,8 @@ def test_anti_c4_zip_reverse_first_cascades(t : T?) {
 [test]
 def test_anti_c4_zip_reverse_select_cascades(t : T?) {
     t |> run("anti-C4-not-last: zip + reverse + select — reverse not last chain op, splice bails (select after reverse), cascades correctly") @(tt : T?) {
-        var a : array<int>; var b : array<int>
-        a |> push(1); a |> push(2); a |> push(3)
-        b |> push(10); b |> push(20); b |> push(30)
+        let a <- [1, 2, 3]
+        let b <- [10, 20, 30]
         let got <- _fold(each(a) |> zip(each(b)) |> reverse() |> _select(_._0 + _._1) |> to_array())
         tt |> equal(length(got), 3)
         tt |> equal(got[0], 33); tt |> equal(got[1], 22); tt |> equal(got[2], 11)

@@ -19,7 +19,7 @@ def private check_rp_law {
         line_no++
         let at = find(line, "matmul2d_descriptor(")
         continue if (at < 0)
-        let args <- split(slice(line, at + length("matmul2d_descriptor(")), ",")
+        var inscope args <- split(slice(line, at + length("matmul2d_descriptor(")), ",")
         if (length(args) < 6) {
             gate_finding(EMITTER, line_no, "matmul2d_descriptor with fewer than 6 arguments - the relaxed_precision position is missing")
             continue

@@ -108,9 +108,7 @@ def private topic_path(topic : string) : string {
     return stat(twin, st) ? twin : path
 }
 
-def private md_read_topic(topic : string) : string {
-    return fread(topic_path(topic))
-}
+def private md_read_topic(topic : string) : string => fread(topic_path(topic))
 
 def private md_strip_rst(text : string) : string {
     var s = text |> replace("``", "`")
@@ -259,38 +257,24 @@ def public mark_module_pageless(name : string) {
     pageless_ref_modules |> insert(name)
 }
 
-def has_ref_page(mod) : bool {
-    return !key_exists(pageless_ref_modules, module_name(mod))
-}
+def has_ref_page(mod) : bool => !key_exists(pageless_ref_modules, module_name(mod))
 
 def has_handle_entry(ann) : bool {
     //! True when the page run documents `ann` under its `handle-` label, so a signature may link it.
     return has_ref_page(ann._module) && !key_exists(hook_hidden_labels, handle_label_name(ann))
 }
 
-def alias_label_name(td : TypeDeclPtr) {
-    return "alias-{td.alias}"
-}
+def alias_label_name(td : TypeDeclPtr) => "alias-{td.alias}"
 
-def global_label_name(value : Variable?) {
-    return "global-{module_name(value._module)}-{value.name}"
-}
+def global_label_name(value : Variable?) => "global-{module_name(value._module)}-{value.name}"
 
-def enum_label_name(value : Enumeration?) {
-    return "enum-{module_name(value._module)}-{value.name}"
-}
+def enum_label_name(value : Enumeration?) => "enum-{module_name(value._module)}-{value.name}"
 
-def struct_label_name(value : Structure?) {
-    return "struct-{module_name(value._module)}-{value.name}"
-}
+def struct_label_name(value : Structure?) => "struct-{module_name(value._module)}-{value.name}"
 
-def handle_label_name(value) {
-    return "handle-{module_name(value._module)}-{value.name}"
-}
+def handle_label_name(value) => "handle-{module_name(value._module)}-{value.name}"
 
-def call_macro_label_name(mod, value) {
-    return "call-macro-{module_name(mod)}-{value}"
-}
+def call_macro_label_name(mod, value) => "call-macro-{module_name(mod)}-{value}"
 
 def public safe_function_name(name : string) : string {
     //! Replaces special characters in a function name to produce a safe RST label identifier.
@@ -793,13 +777,9 @@ def describe_type(td : TypeDecl?) { // nolint:STYLE038 — the full type-writer:
     }
 }
 
-def make_domain(attr : string) {
-    return ".. {attr}:: "
-}
+def make_domain(attr : string) => ".. {attr}:: "
 
-def make_label(name : string) {
-    return ".. _{name}:\n\n"
-}
+def make_label(name : string) => ".. _{name}:\n\n"
 
 def make_ref(name, text : string) {
     let t = (text |> replace_multiple([
@@ -862,9 +842,7 @@ def make_table(title : string; tab : array<array<string>>) {
     }
 }
 
-def private is_nosearch(name : string) : bool {
-    return key_exists(nosearch_symbols, name)
-}
+def private is_nosearch(name : string) : bool => key_exists(nosearch_symbols, name)
 
 def private indent_block(text : string) : string {
     return build_string() $(writer) {
@@ -928,7 +906,7 @@ def document_function_topic(doc_file : file; resType : TypeDecl?&; topic, conten
             let l = lines[lineIdx]
             var found = false
             if (l |> starts_with(":param")) {
-                let parts <- l |> slice(7) |> split(":")
+                var inscope parts <- l |> slice(7) |> split(":")
                 let name = parts[0] |> trim()
                 for (arg, idx in args, count()) {
                     continue if (idx == 0)
@@ -1100,7 +1078,7 @@ def document_bitfield(mod : Module?; doc_file : file; name : string; value : Typ
     var tab : array<array<string>>
     emplace(tab, array<string>("field", "bit"))
     for (an, bit in value.argNames, urange(32)) {
-        var line <- [string(an), "{1ul << uint64(bit)}"]
+        var inscope line <- [string(an), "{1ul << uint64(bit)}"]
         emplace(tab, line)
     }
 
@@ -1123,7 +1101,7 @@ def document_variant(mod : Module?; doc_file : file; name : string; value : Type
     var tab : array<array<string>>
     emplace(tab, array<string>("field", "type"))
     for (an, at in value.argNames, value.argTypes) {
-        var line <- [string(an), describe_type(at)]
+        var inscope line <- [string(an), describe_type(at)]
         emplace(tab, line)
     }
     document_topic("Variants", doc_file, topic("typedef", mod, name), describe(value), tab, is_nosearch(name))
@@ -1181,9 +1159,8 @@ def document_typedefs(doc_file : file; mods : array<Module?>) {
     }
 }
 
-def is_public_distinct_type(value) : bool {
-    return value.isDistinctTypeAnnotation && !is_distinct_type_private(value)
-}
+def is_public_distinct_type(value) : bool =>
+    value.isDistinctTypeAnnotation && !is_distinct_type_private(value)
 
 def document_distinct_type(doc_file : file; mod : Module?; value) {
     let name = string(value.name)
@@ -1263,7 +1240,7 @@ def public document_enumeration(doc_file : file; mod : Module?; value) {
     var tab : array<array<string>>
     emplace(tab, array<string>("name", "value"))
     for (en in value.list) {
-        var line : array<string>
+        var inscope line : array<string>
         push(line, string(en.name))
         push(line, short_enum_value(describe(en.value)))
         emplace(tab, line)
@@ -1333,7 +1310,7 @@ def document_function_arguments(doc_file : file; argNames : array<string>; argTy
     for (an, at in argNames, argTypes) {
         continue if (skip-- > 0)
         if (argument_needs_documenting(at)) {
-            var line <- [an, describe_type(at)]
+            var inscope line <- [an, describe_type(at)]
             emplace(tab, line)
         }
     }
@@ -1456,14 +1433,12 @@ def is_written_ctor(mod : Module?; value : Structure?; func : FunctionPtr) {
     return written
 }
 
-def is_class_method(value; fld : FieldDeclaration&) {
-    return fld.flags.classMethod
-}
+def is_class_method(value; fld : FieldDeclaration&) => fld.flags.classMethod
 
 def private collect_field_rows(value : StructurePtr; hasValues : bool; var rows : array<array<string>>) : void {
     for (fld in value.fields) {
         if (!is_class_method(value, fld) && !(fld.flags.generated) && fld.flags.implemented && !fld.flags.privateField && !(fld.flags.parentType) && (fld.name != "__rtti")) {
-            var line <- [string(fld.name), describe_type(fld._type)]
+            var inscope line <- [string(fld.name), describe_type(fld._type)]
             if (hasValues) {
                 push(line, fld.init != null ? describe(fld.init) : "")
             }
@@ -1496,7 +1471,7 @@ def document_classes(doc_file : file; mods : array<Module?>) {
             fwrite(doc_file, "\n\n")
             fwrite(doc_file, make_requirements_list(value))
 
-            var fields : array<array<string>>
+            var inscope fields : array<array<string>>
             fields |> emplace(array<string>("field", "type"))
             var hasValues = false
             for (fld in value.fields) {
@@ -1513,7 +1488,7 @@ def document_classes(doc_file : file; mods : array<Module?>) {
             for_each_global(mod) $(gVar) {
                 peek(gVar.name) $(gvar_name) {
                 if (!gVar.flags.private_variable && gvar_name |> starts_with(staticFieldPrefix)) {
-                    var line <- ["{value.name}.{gvar_name |> slice(length(staticFieldPrefix))}", describe_type(gVar._type)]
+                    var inscope line <- ["{value.name}.{gvar_name |> slice(length(staticFieldPrefix))}", describe_type(gVar._type)]
                     if (hasValues) {
                         push(line, gVar.init != null ? describe(gVar.init) : "")
                     }
@@ -1543,7 +1518,7 @@ def document_typemacro(doc_file : file; mod : Module?; value) {
         if (ann.annotation.name == "typemacro_documentation") {
             found = true
             var first = true
-            var tab : array<array<string>>
+            var inscope tab : array<array<string>>
             for (arg in ann.arguments) {
                 if (first) {
                     fwrite(doc_file, make_label(call_macro_label_name(mod, string(arg.name))))
@@ -1720,7 +1695,7 @@ def document_structure_annotation(doc_file : file; mod : Module?; value) {
     fields |> sort($(a, b) => a.offset < b.offset)
     tab |> reserve(length(fields))
     for (f in fields) {
-        var line : array<string>
+        var inscope line : array<string>
         push(line, f.name)
         push(line, f.typ)
         emplace(tab, line)
@@ -2099,7 +2074,7 @@ def document_functions(doc_file : file; mods : array<Module?>; var groups : arra
                 }
                 fwrite(doc_file, "\n")
                 if (group_function_overloads) {
-                    var multi_overload : table<string>
+                    var inscope multi_overload : table<string>
                     var prev_count_name = ""
                     var count_run = 0
                     for (func in grp.func) {

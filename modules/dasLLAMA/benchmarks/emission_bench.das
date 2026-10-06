@@ -55,9 +55,8 @@ struct Args {
 
 // deterministic synthetic prompt ids (vocab-safe low range; per-prompt seed varies the content —
 // the same convention as decode_prof, so runs are comparable across models and time)
-def private build_prompt(n : int64; seed : int64) : array<int64> {
-    return <- [for (i in range64(n)); 1000l + ((i * 17l + seed * 131l) % 5000l)]
-}
+def private build_prompt(n : int64; seed : int64) : array<int64> =>
+    <- [for (i in range64(n)); 1000l + ((i * 17l + seed * 131l) % 5000l)]
 
 [export]
 def main() {   // nolint:STYLE038 — flat bench driver: arg handling, then one timed cell per prompt bucket
@@ -119,11 +118,10 @@ def main() {   // nolint:STYLE038 — flat bench driver: arg handling, then one 
             forward(t, s, warm[plen - 1l], plen - 1l)
             delete s
         }
-        var ttft_ms : array<double>
-        var emit_tps : array<double>
+        var ttft_ms, emit_tps : array<double>
         for (pi in range(np)) {
             var s <- make_run_state(c)
-            let prompt <- build_prompt(plen, int64(pi))
+            var inscope prompt <- build_prompt(plen, int64(pi))
             let t0 = ref_time_ticks()
             eval_(t, s, prompt)
             forward(t, s, prompt[plen - 1l], plen - 1l)

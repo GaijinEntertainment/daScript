@@ -13,9 +13,7 @@ require jit
 
 def add_pair(a : int; b : int) : int => a + b * 3
 
-def sum_via_invoke(fun : function<(a : int; b : int) : int>) {
-    return invoke(fun, 5, 7)
-}
+def sum_via_invoke(fun : function<(a : int; b : int) : int>) => invoke(fun, 5, 7)
 
 [test]
 def test_fastpath_arms(t : T?) {

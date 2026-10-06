@@ -10,13 +10,9 @@ struct Foo {
     v : int3 = int3(1, 2, 3)
 }
 
-def funV(v : int3) : int3 {
-    return v
-}
+def funV(v : int3) : int3 => v
 
-def funU(v : uint4) : uint4 {
-    return v
-}
+def funU(v : uint4) : uint4 => v
 
 def test_vec2_swizzle(tt : T?; a : auto(vec2) -const -&) {
     var f2_x = vec2(1, 2)

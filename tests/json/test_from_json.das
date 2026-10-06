@@ -13,9 +13,8 @@ struct Car {
     price : int = -1
 }
 
-def mkjson(n : int) : JsonValue? {
-    return JV([for (i in range(n)); JV(Car(id = i + 1, name = "Car{i}", price = i * 10))])
-}
+def mkjson(n : int) : JsonValue? =>
+    JV([for (i in range(n)); JV(Car(id = i + 1, name = "Car{i}", price = i * 10))])
 
 [test]
 def test_for_loop(t : T?) {

@@ -73,11 +73,7 @@ def private qk_rope_gate(t : T?; var dev, queue; hx, donorm, neox, partial : boo
         let rstride = nh * hs
         let rot = partial ? hs / 2 : hs
         let halfr = rot / 2
-        var inscope xv : array<float>
-        var inscope wv : array<float>
-        var inscope tc : array<float>
-        var inscope ts : array<float>
-        var inscope want : array<float>
+        var inscope xv, wv, tc, ts, want : array<float>
         xv |> resize(nrows * rstride)
         want |> resize(nrows * rstride)
         wv |> resize(hs)
@@ -168,10 +164,7 @@ def private attn_trio_gate(t : T?; var dev, queue; head_size, n_heads, n_kv_head
         var pso_av = mc |> keep_stamp(kav, err)
         return if (!pso_ok(t, "{tag} av", pso_av, err) || !sc_ok || !sm_ok)
         let scale = 1.0 / sqrt(float(head_size))
-        var inscope aq : array<float>
-        var inscope ak : array<float>
-        var inscope av : array<float>
-        var inscope axb_want : array<float>
+        var inscope aq, ak, av, axb_want : array<float>
         aq |> resize(qp * qd)
         ak |> resize(nkp * kv_dim)
         av |> resize(nkp * kv_dim)
@@ -224,9 +217,7 @@ def private attn_trio_gate(t : T?; var dev, queue; head_size, n_heads, n_kv_head
 
 //! the f16-exact q / k / v rows of `n` elements the tower and conformer attention cells share
 def private f16_qkv_rows(n : int) : tuple<q : array<float>; k : array<float>; v : array<float>> {
-    var q : array<float>
-    var k : array<float>
-    var v : array<float>
+    var q, k, v : array<float>
     q |> resize(n)
     k |> resize(n)
     v |> resize(n)
@@ -261,8 +252,7 @@ def private tower_flash_kvhc_gate(t : T?; var dev, queue) {
         for (i in range(64 * qd, np * qd)) {
             kv[i] = kv[i] * 4.0
         }
-        var inscope khc : array<float16>
-        var inscope vhc : array<float16>
+        var inscope khc, vhc : array<float16>
         khc |> resize(np * qd)
         vhc |> resize(np * qd + 256)   //! + the flash's V tail slack: its dead PV tiles read past the last V row
         for (p in range(np)) {
@@ -274,8 +264,7 @@ def private tower_flash_kvhc_gate(t : T?; var dev, queue) {
         var inscope want : array<float>
         want |> resize(np * qd)
         let scale = 1.0 / sqrt(float(hs))
-        var inscope hp : array<float>
-        var inscope att : array<float>
+        var inscope hp, att : array<float>
         with_dasllama_jobque_() {
             attention_bidir(want, qv, kv, vv, hp, att, int64(np), int64(qd), int64(heads), scale)
         }
@@ -337,8 +326,7 @@ def private tower_win_gate(t : T?; var dev, queue) {
         want |> resize(np * qd)
         let scale = 1.0 / sqrt(float(hs))
         let win_lo <- [for (w in wlo); int64(w)]
-        var inscope hp : array<float>
-        var inscope att : array<float>
+        var inscope hp, att : array<float>
         with_dasllama_jobque_() {
             attention_bidir_windows(want, qv, kv, vv, hp, att, win_lo, int64(qd), int64(heads), scale)
         }
@@ -675,8 +663,7 @@ def private fc_dw_gate(t : T?; var dev, queue; tap_major : bool) {
         for (i in range(d * nk)) {
             wv[i] = float(float16(0.06 * float((i * 7) % 31) - 0.8))
         }
-        var inscope bnw : array<float>
-        var inscope bnb : array<float>
+        var inscope bnw, bnb : array<float>
         bnw |> resize(d)
         bnb |> resize(d)
         for (i in range(d)) {
@@ -879,8 +866,7 @@ def private tw_tail_rows_gate(t : T?; var dev, queue) {
         let total = rows * width
         var inscope x <- [for (i in range(2 * total)); float((i * 37) % 101 - 50) * 0.043]
         var inscope pooled <- [for (i in range(total)); 0.5 * (x[(i / width) * 2 * width + i % width] + x[(i / width) * 2 * width + width + i % width])]
-        var inscope gated : array<float>
-        var inscope swapped : array<float>
+        var inscope gated, swapped : array<float>
         for (i in range(total)) {
             let a = double(x[(i / width) * 2 * width + i % width])
             let g = double(x[(i / width) * 2 * width + width + i % width])
@@ -957,8 +943,7 @@ def private tw_pool2d_gate(t : T?; var dev, queue) {
         let ow = gw / k
         let total = ow * (gh / k) * width
         var inscope x <- [for (i in range(gw * gh * width)); float((i * 37) % 101 - 50) * 0.043]
-        var inscope want : array<float>
-        var inscope row_only : array<float>
+        var inscope want, row_only : array<float>
         for (i in range(total)) {
             let o = i / width
             let c = i % width
@@ -1301,10 +1286,7 @@ def private st2_adain_gate(t : T?; var dev, queue; nrows : int; snake : bool) {
         for (i in range(n)) {
             x[i] = f16_at((i * 11) % 53, 0.04, -1.1)
         }
-        var inscope h : array<float>
-        var inscope gw : array<float>
-        var inscope gb : array<float>
-        var inscope alpha : array<float>
+        var inscope h, gw, gb, alpha : array<float>
         h |> resize(2 * c)
         gw |> resize(c)
         gb |> resize(c)
@@ -1317,8 +1299,7 @@ def private st2_adain_gate(t : T?; var dev, queue; nrows : int; snake : bool) {
             alpha[i] = f16_at((i * 3) % 7, 0.1, 0.3)
         }
         var ka = GkAdainArgs(c = uint(c), t = uint(nrows), hoff = 0u, gwoff = 0u, gboff = uint(c), aoff = uint(2 * c))
-        var inscope want_st : array<float>
-        var inscope want : array<float>
+        var inscope want_st, want : array<float>
         want_st |> resize(2 * c)
         want |> resize(n)
         for (ci in range(c)) {
@@ -1409,19 +1390,14 @@ def private st2_rows_gate(t : T?; var dev, queue) {
         let c = 24
         let nrows = 9
         let n = nrows * c   //! 216: three threadgroups and a 24-lane tail
-        var inscope a : array<float>
-        var inscope b : array<float>
+        var inscope a, b : array<float>
         a |> resize(n)
         b |> resize(n)
         for (i in range(n)) {
             a[i] = f16_at((i * 7) % 31, 0.1, -1.5)
             b[i] = f16_at((i * 5) % 29, 0.1, -1.4)
         }
-        var inscope want_lk : array<float>
-        var inscope want_ax0 : array<float>
-        var inscope want_ax1 : array<float>
-        var inscope want_add : array<float>
-        var inscope want_rf : array<float>
+        var inscope want_lk, want_ax0, want_ax1, want_add, want_rf : array<float>
         want_lk |> resize(n)
         want_ax0 |> resize(n)
         want_ax1 |> resize(n)
@@ -1721,8 +1697,7 @@ def private st2_lstm_gate(t : T?; var dev, queue) {
         var inscope want : array<float>
         want |> resize(steps * 2 * hd)
         for (dir in range(2)) {
-            var inscope h : array<float>
-            var inscope cs : array<float>
+            var inscope h, cs : array<float>
             h |> resize(hd)
             cs |> resize(hd)
             for (step in range(steps)) {
@@ -2003,9 +1978,7 @@ def private rope_stride_gate(t : T?; var dev, queue) {
                 want[r * stride + col + j] = y[r * d + j]
             }
         }
-        var inscope none : array<float>
-        var inscope tcos : array<float>
-        var inscope tsin : array<float>
+        var inscope none, tcos, tsin : array<float>
         build_rope_tabs(tcos, tsin, period, 1.0, 1.0, none, false, 0l, int64(pos0 + tt), int64(dh))
         let pcos = mc |> in_(tcos)
         let psin = mc |> in_(tsin)
@@ -2135,8 +2108,7 @@ def private rope_store_pocket_gate(t : T?; var dev, queue) {
         let cap = 8
         let period = 10000.0
         var inscope qkv <- f16_fill(3 * d, 13, 0.4, -0.9)
-        var inscope q : array<float>
-        var inscope k : array<float>
+        var inscope q, k : array<float>
         q |> resize(d)
         k |> resize(d)
         for (j in range(d)) {
@@ -2146,8 +2118,7 @@ def private rope_store_pocket_gate(t : T?; var dev, queue) {
         rope_rows(q, 1l, int64(d), int64(dh), int64(pos), period)
         rope_rows(k, 1l, int64(d), int64(dh), int64(pos), period)
         var inscope want_qkv := qkv
-        var inscope want_k : array<float>
-        var inscope want_v : array<float>
+        var inscope want_k, want_v : array<float>
         want_k |> resize(cap * d)
         want_v |> resize(cap * d)
         for (i in range(cap * d)) {
@@ -2159,9 +2130,7 @@ def private rope_store_pocket_gate(t : T?; var dev, queue) {
             want_k[pos * d + j] = k[j]
             want_v[pos * d + j] = qkv[2 * d + j]
         }
-        var inscope none : array<float>
-        var inscope tcos : array<float>
-        var inscope tsin : array<float>
+        var inscope none, tcos, tsin : array<float>
         build_rope_tabs(tcos, tsin, period, 1.0, 1.0, none, false, 0l, int64(cap), int64(dh))
         let ka = RopeStoreArgs(qd = uint(d), head_size = uint(dh), npairs_q = uint(d / 2), npairs = uint(d), neox = 0u, has_bias = 0u, rot = uint(dh))
         let pcos = mc |> in_(tcos)
@@ -2825,9 +2794,7 @@ struct private RopeArm {
 def private rope_arm_gate(t : T?; var dev, queue; pso; arm : RopeArm) {
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         let half = arm.rot / 2
-        var inscope rv : array<float>
-        var inscope rcos : array<float>
-        var inscope rsin : array<float>
+        var inscope rv, rcos, rsin : array<float>
         rv |> resize(NPOS * QD)
         rcos |> resize(NPOS * half)
         rsin |> resize(NPOS * half)
@@ -3185,8 +3152,7 @@ def private swiglu_oai_gate(t : T?; var dev, queue; total : int) {
         let st = stamp_of(@@enc_swiglu_oai)
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
-        var inscope g : array<float>
-        var inscope u : array<float>
+        var inscope g, u : array<float>
         g |> resize(total)
         u |> resize(total)
         for (i in range(total)) {
@@ -3219,8 +3185,7 @@ def private swiglu_oai_pf_gate(t : T?; var dev, queue; nfe : int; counts : array
         var inscope(cnt, basep, pad) <- padded_bases(counts)
         let live = pad * nfe
         let total = (pad + extra_rows) * nfe
-        var inscope g : array<float>
-        var inscope u : array<float>
+        var inscope g, u : array<float>
         g |> resize(total)
         u |> resize(total)
         for (i in range(total)) {
@@ -3253,8 +3218,7 @@ def private g4_router_norm_gate(t : T?; var dev, queue; rows, dim : int) {
         return if (!pso_ok(t, tag, pso, err))
         let eps = 1.0e-5
         let invd = 1.0 / sqrt(float(dim))
-        var inscope x : array<float>
-        var inscope rs : array<float>
+        var inscope x, rs : array<float>
         x |> resize(rows * dim)
         rs |> resize(dim)
         for (i in range(rows * dim)) {
@@ -3303,8 +3267,7 @@ def private moe_wscale_gate(t : T?; var dev, queue; rows, nk, ne : int) {
         for (e in range(ne)) {
             ds[e] = float((e * 3) % 7 - 3) * 0.5
         }
-        var inscope sel : array<uint>
-        var inscope want : array<uint>
+        var inscope sel, want : array<uint>
         sel |> resize(rows * 2 * nk)
         want |> resize(rows * 2 * nk)
         for (r in range(rows)) {
@@ -3339,9 +3302,7 @@ def private moe_router_gate(t : T?; var dev, queue; dim, ne, npos : int; hasb : 
         let srb = stamp_of(@@enc_moe_router_b)
         var pso = npos > 1 ? mc |> keep_stamp(srb, err) : mc |> keep_stamp(sr, err)
         return if (!pso_ok(t, tag, pso, err))
-        var inscope w : array<float>
-        var inscope x : array<float>
-        var inscope rb : array<float>
+        var inscope w, x, rb : array<float>
         w |> resize(ne * dim)
         x |> resize(npos * dim)
         rb |> resize(ne)
@@ -3405,8 +3366,7 @@ def private csr_ref(sel : array<uint>; npos, ne, nk : int) : tuple<cnt : array<u
     }
     var (cnt, base, pad) <- padded_bases(counts)
     base |> push(uint(pad))
-    var bkt : array<uint>
-    var inv : array<uint>
+    var bkt, inv : array<uint>
     bkt |> resize(pad)
     inv |> resize(total)
     for (i in range(pad)) {
@@ -3635,8 +3595,7 @@ def private ple_gather_gate(t : T?; var dev, queue; fmt, vocab, nlayers, ple, np
             tok[p] = uint((p * 23 + 5) % vocab)
         }
         let sc0 = sqrt(float(ple))
-        var inscope wrow : array<float>
-        var inscope want : array<float>
+        var inscope wrow, want : array<float>
         wrow |> resize(rowlen)
         want |> resize(nlayers * npos * ple)
         for (p in range(npos)) {
@@ -3681,9 +3640,7 @@ def private ple_finish_gate(t : T?; var dev, queue; nlayers, ple, npos : int) {
         let eps = 1.0e-5
         let inv_sd = 0.125   // stands in for 1/sqrt(dim)
         let inv_s2 = 1.0 / sqrt(2.0)
-        var inscope proj : array<float>
-        var inscope pnorm : array<float>
-        var inscope side : array<float>
+        var inscope proj, pnorm, side : array<float>
         proj |> resize(npos * rowlen)
         pnorm |> resize(ple)
         side |> resize(nlayers * npos * ple)
@@ -3696,8 +3653,7 @@ def private ple_finish_gate(t : T?; var dev, queue; nlayers, ple, npos : int) {
         for (i in range(nlayers * npos * ple)) {
             side[i] = 0.07 * float(i % 19) - 0.6
         }
-        var inscope want : array<float>
-        var inscope v : array<float>
+        var inscope want, v : array<float>
         want |> resize(nlayers * npos * ple)
         v |> resize(ple)
         for (l in range(nlayers)) {
@@ -3733,8 +3689,7 @@ def private add_bias_rows_gate(t : T?; var dev, queue; nrows, n : int) {
         var pso = mc |> keep_stamp(kernel_of(@@enc_add_bias_rows), err)
         return if (!pso_ok(t, tag, pso, err))
         let total = nrows * n
-        var inscope x : array<float>
-        var inscope b : array<float>
+        var inscope x, b : array<float>
         x |> resize(total)
         b |> resize(n)
         for (i in range(total)) {
@@ -3767,8 +3722,7 @@ def private pf_cat2_gate(t : T?; var dev, queue; npos, d : int) {
         var pso = mc |> keep_stamp(kernel_of(@@pf_enc_cat2), err)
         return if (!pso_ok(t, tag, pso, err))
         let total = npos * d
-        var inscope a : array<float>
-        var inscope b : array<float>
+        var inscope a, b : array<float>
         a |> resize(total)
         b |> resize(total)
         for (i in range(total)) {
@@ -3851,8 +3805,7 @@ def private gemv_gate(t : T?; var dev, queue; n, d : int) {
         var inscope blob : array<uint8>
         var inscope wdeq : array<float>
         q8_blob_fill(d, n / 32, blob, wdeq)
-        var inscope xv : array<float>
-        var inscope want : array<float>
+        var inscope xv, want : array<float>
         xv |> resize(n)
         want |> resize(d)
         for (i in range(n)) {
@@ -4013,8 +3966,7 @@ let private MX4_VT = fixed_array(0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0,
 
 //! An expert stack's planes in `fmt` (q8: plane 1 empty, one blob serves both views) and their exact dequant, BIT-exact under any GPU reduction order.
 def private moe_gemv_planes(fmt : KqFmt; rows, n) : tuple<p0 : array<uint8>; p1 : array<uint8>; wref : array<float>> {   //! `rows`, `n` untyped: q8_blob_fill sits behind the optional das_metal require
-    var p0 : array<uint8>
-    var p1 : array<uint8>
+    var p0, p1 : array<uint8>
     var wref : array<float>
     if (fmt == KqFmt.q8) {
         q8_blob_fill(rows, n / 32, p0, wref)
@@ -4441,9 +4393,7 @@ def private dn_rule_oracle(cv, braw, graw, aa, dtb, st0 : array<float>; nkh, nvh
             decay[p * nvh + h] = exp(aa[h] * (gr > 20.0 ? gr : log(1.0 + exp(gr))))
         }
     }
-    var o : array<float>
-    var st : array<float>
-    var stmid : array<float>
+    var o, st, stmid : array<float>
     var inscope skd : array<float>
     o |> resize(npos * di)
     st := st0
@@ -4651,16 +4601,7 @@ def private dn_chain_gate(t : T?; var dev, queue; nkh, nvh, dconv, npos : int) {
         var pso_gate_sig = mc |> keep_stamp(sgsig, err)
         return if (!pso_ok(t, "dn gate sig", pso_gate_sig, err) || !conv_ok || !hist_ok || !l2_ok || !scan_ok || !gate_ok)
         // inputs — hash patterns; ssm_a strictly negative (= -exp(A_log)), nonzero history + state
-        var inscope xq : array<float>
-        var inscope hist : array<float>
-        var inscope cw : array<float>
-        var inscope braw : array<float>
-        var inscope graw : array<float>
-        var inscope aa : array<float>
-        var inscope dtb : array<float>
-        var inscope st0 : array<float>
-        var inscope zz : array<float>
-        var inscope wn : array<float>
+        var inscope xq, hist, cw, braw, graw, aa, dtb, st0, zz, wn : array<float>
         xq |> resize(npos * cd)
         hist |> resize(cd * taps)
         cw |> resize(cd * dconv)
@@ -4698,8 +4639,7 @@ def private dn_chain_gate(t : T?; var dev, queue; nkh, nvh, dconv, npos : int) {
             wn[k] = 0.6 + 0.02 * float(k % 17)
         }
         // stage 1 mirror: conv + SiLU (window rows or history straddle), then the history advance
-        var inscope cv : array<float>
-        var inscope hwant : array<float>
+        var inscope cv, hwant : array<float>
         cv |> resize(npos * cd)
         hwant |> resize(cd * taps)
         for (p in range(npos)) {
@@ -4848,9 +4788,7 @@ def private dn_deint_sigmul_gate(t : T?; var dev, queue; nh, hs, npos : int) {
         var pso_de = mc |> keep_stamp(sde, err)
         return if (!pso_ok(t, "dn deint", pso_de, err))
         let qs = qd + 64          // a wider destination row stride (the qkv panel form)
-        var inscope qg : array<float>
-        var inscope qwant : array<float>
-        var inscope gwant : array<float>
+        var inscope qg, qwant, gwant : array<float>
         qg |> resize(npos * 2 * qd)
         qwant |> resize(npos * qd)
         gwant |> resize(npos * qd)
@@ -4881,8 +4819,7 @@ def private dn_deint_sigmul_gate(t : T?; var dev, queue; nh, hs, npos : int) {
         check(t, "{tag} q", qgot, qwant, BAR_EXACT, Shape(row_width = qd, head_width = hs))
         check_buf(t, "{tag} gate", mc.buf[bgt], gwant, BAR_EXACT, Shape(row_width = qd, head_width = hs))
         // sigmul: x ⊙ σ(g) on the deinterleaved gate rows
-        var inscope xv : array<float>
-        var inscope swant : array<float>
+        var inscope xv, swant : array<float>
         xv |> resize(npos * qd)
         swant |> resize(npos * qd)
         for (k in range(npos * qd)) {
@@ -4903,10 +4840,7 @@ def private axpy_sig_gate(t : T?; var dev, queue; npos, dim : int) {
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, "axpy_sig", pso, err))
         let total = npos * dim
-        var inscope yv : array<float>
-        var inscope xv : array<float>
-        var inscope gv : array<float>
-        var inscope want : array<float>
+        var inscope yv, xv, gv, want : array<float>
         yv |> resize(total)
         xv |> resize(total)
         gv |> resize(npos)

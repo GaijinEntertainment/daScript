@@ -58,9 +58,8 @@ def private instance_range(src : Source; lex : Lexical; st : MakeStruct?; var fr
 }
 
 
-def private call_name(typeText : string) : string {
-    return typeText |> ends_with("#") ? "struct<{typeText}>" : typeText
-}
+def private call_name(typeText : string) : string =>
+    typeText |> ends_with("#") ? "struct<{typeText}>" : typeText
 
 
 def public rule_make_struct(src : Source; lex : Lexical; msd : ExprMakeStruct?; wrapped : bool;
@@ -135,9 +134,7 @@ def public rule_make_struct(src : Source; lex : Lexical; msd : ExprMakeStruct?; 
 }
 
 
-def private is_make_tuple(e : ExpressionPtr) : bool {
-    return e.__rtti == "ExprMakeTuple"
-}
+def private is_make_tuple(e : ExpressionPtr) : bool => e.__rtti == "ExprMakeTuple"
 
 
 def public rule_make_array(src : Source; lex : Lexical; mka : ExprMakeArray?; wrapped : bool;

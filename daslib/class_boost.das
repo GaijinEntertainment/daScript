@@ -45,9 +45,7 @@ class ClassMethodMacro : AstFunctionAnnotation {
         }
         return true
     }
-    def override isAppliedToGeneric : bool {
-        return true
-    }
+    def override isAppliedToGeneric : bool => true
 }
 
 [function_macro(name="explicit_const_class_method")]

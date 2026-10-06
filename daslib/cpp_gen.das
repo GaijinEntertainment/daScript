@@ -878,7 +878,7 @@ def getFunctions(df, df_method : FILE const?) {
 
     fprint(df_method, "// ------------\n// methods \n// ------------\n\n")
     for (st in values(ast.structs)) {
-        var all_met : table<string; int>
+        var inscope all_met : table<string; int>
         for (fn in st.methods) {
             all_met[fn.name] ++
         }
@@ -1153,7 +1153,7 @@ def genDefineConstants(fnames : array<string>; prefix : string) {
                     panic("can't open {fname}")
                 }
                 let data = fread(f)
-                var dup : table<string; bool>
+                var inscope dup : table<string; bool>
                 searchAndGenConst(reg_def_hex, "uint32_t", "u", data, dup, hf)
                 searchAndGenConst(reg_def_dec, "int32_t", "", data, dup, hf)
                 searchAndGenConst(reg_def_UINT8, const_uint8_type, "u", data, dup, hf)

@@ -10,26 +10,18 @@ require daslib/functional
 // Helper functions / lambdas for tests
 // ===========================
 
-def is_even(x : int) : bool {
-    return x % 2 == 0
-}
+def is_even(x : int) : bool => x % 2 == 0
 
-def square(x : int) : int {
-    return x * x
-}
+def square(x : int) : int => x * x
 
-def add(a, b : int) : int {
-    return a + b
-}
+def add(a, b : int) : int => a + b
 
 def max_of(a, b : int) : int {
     return a if (a > b)
     return b
 }
 
-def double_it(x : int) : int {
-    return x * 2
-}
+def double_it(x : int) : int => x * 2
 
 // ===========================
 // filter tests
@@ -587,8 +579,7 @@ def test_enumerate(t : T?) {
     t |> run("enumerate basic") @(t : T?) {
         var src <- [iterator for(x in [10, 20, 30]); x]
         var en <- enumerate(src)
-        var result : array<int>
-        var indices : array<int>
+        var result, indices : array<int>
         for (v in en) {
             indices |> push(v._0)
             result |> push(v._1)

@@ -47,9 +47,7 @@ def get_coverage_report(input_file : string) : string {
     return report
 }
 
-def has_line(report : string; line : string) : bool {
-    return find(report, line) >= 0
-}
+def has_line(report : string; line : string) : bool => find(report, line) >= 0
 
 def normalize_report(report : string) : string {
     // Replace absolute path prefix with relative "tests/" prefix

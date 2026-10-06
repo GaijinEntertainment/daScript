@@ -43,8 +43,7 @@ def private time_split(rows, cnt, hs, nheads, kv_mul, nsplit, slab : int) : doub
     for (i in range(qd * rows)) {
         qh[i] = hash_unit(uint(i))
     }
-    var kw : array<uint>
-    var vw : array<uint>
+    var kw, vw : array<uint>
     kw |> resize(mir_elems * rows / 2)
     vw |> resize(mir_elems * rows / 2)
     for (i in range(mir_elems * rows / 2)) {

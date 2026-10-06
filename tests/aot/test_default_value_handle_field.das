@@ -22,9 +22,7 @@ class ClockHolder {
     def init(t : clock) {
         c = t
     }
-    def get() : clock {
-        return c
-    }
+    def get() : clock => c
 }
 
 [test]
