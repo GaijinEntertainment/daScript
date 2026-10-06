@@ -41,7 +41,7 @@ every cell of it by a binary of that build - re-mint otherwise.**
 
 **A reference-engine row (a run row whose `engine` is not `das`) carrying a `sha` carries the
 standing ref pin (`DEFAULT_REF_SHA`, `../benchmarks/setup_lcpp_ref.das`), and every cell of it is
-timed by a binary built from that pinned checkout, in either flavor `setup_lcpp_ref.das` builds
+timed by a binary built from that pinned checkout, in either flavor `../benchmarks/setup_lcpp_ref.das` builds
 (`clean-cpu`, `stock`) - re-mint otherwise.**
 
 **A row whose cells two exes timed - a flat cell and a batched cell from two binaries of one
