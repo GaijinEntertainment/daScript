@@ -273,7 +273,17 @@ key it has on that home.
   in the arguments is one set. A kernel every site reads from element zero carries none.
 - **The two emitters place the body differently.** The MSL emitter splices a called method flat into the
   kernel; the SPIR-V emitter keeps it a function the entry point calls. A kernel moved here therefore
-  reads, on Vulkan, as its old words plus one call.
+  reads, on Vulkan, as its old words plus one call. Because the MSL emitter splices, a template method of
+  more than one statement cannot sit in value position: a helper that returns a value - a workgroup
+  reduction, a partial sum - is written as a statement method that lands its result in a `var` reference
+  (`wg_max_into`, `wg_sum_into`, `value_sum_into` in `GkPkAttn`).
+- **A home's lane primitive is reached by one name.** A template method resolves in the module that
+  stamps it, so a shared reduction calls `gk_subgroup_add` / `gk_subgroup_max`, and each kernel home
+  defines the pair over its own primitive (`subgroupAdd` on Vulkan, `simd_sum` on Metal). A free function
+  in the common module resolves in the common module and sees neither home, so a body that needs a
+  home's primitive keeps it in a method. A buffer a body hands whole to a free helper of the common
+  module takes the helper's parameter direction: the access classifier looks the callee up in the
+  compiling module first and in `dasllama_gpu_kernels_common` after it.
 - **What stays per home:** the GEMM and attention tiles, which each home builds on its own matrix
   primitives. A pair whose two forms differ in shape (the elementwise maps run one element a thread on
   Metal and four an invocation on Vulkan) folds onto one body when both homes profile the same on it, and

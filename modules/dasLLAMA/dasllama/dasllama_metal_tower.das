@@ -3590,21 +3590,22 @@ def private st2_ln(enc : MetalComputeEncoder?; var c : St2GpuCtx; bx, by : Metal
 //! AdaIN and the site's activation from bin into bout; the two may be one buffer.
 def private st2_adain(enc : MetalComputeEncoder?; var c : St2GpuCtx; bin, bout : MetalBuffer?; t, cc : int64;
                       a : TtsAdaIn; ns : St2NormSlot; s : array<float>; snake : bool) {
-    let hoff = st2_style_rows(c, a.fc, s, cc, false)
+    let hoff = uint(st2_style_rows(c, a.fc, s, cc, false) / 4ul)   // the style rows' element offset
     let u_t = st2_u(c, uint(t))
     let u_c = st2_u(c, uint(cc))
     enc_st2_colstats(enc, bin, c.bstats, u_t, u_c, cc)
     let n = t * cc
-    var ka = St2AdainArgs(c = uint(cc), t = uint(t), eps = ST2_ADAIN_EPS)
+    var ka = GkAdainArgs(c = uint(cc), t = uint(t), eps = ST2_ADAIN_EPS, hoff = hoff, gwoff = uint(ns.gwoff / 4ul), gboff = uint(ns.gboff / 4ul),
+        aoff = uint(ns.aux_off / 4ul))
     if (snake) {
-        enc_st2_adain_snake(enc, bin, bout, c.bstats, c.bh, hoff, c.slab, ns.gwoff, c.slab, ns.gboff, c.slab, ns.aux_off, ka, n)
+        enc_st2_adain_snake(enc, bin, bout, c.bstats, c.bh, c.slab, ka, n)
     } else {
-        enc_st2_adain_leaky(enc, bin, bout, c.bstats, c.bh, hoff, c.slab, ns.gwoff, c.slab, ns.gboff, ka, n)
+        enc_st2_adain_leaky(enc, bin, bout, c.bstats, c.bh, c.slab, ka, n)
     }
 }
 
 //! o = (a + b) * scale: the in-place sum (o == a) is the residual add, another o the out-of-place stamp.
-def private st2_add(enc : MetalComputeEncoder?; var c : St2GpuCtx; ba, bb, bo : MetalBuffer?; n : int64; scale : float) {
+def private st2_add(enc : MetalComputeEncoder?; ba, bb, bo : MetalBuffer?; n : int64; scale : float) {
     enc_st2_add(enc, ba, bb, bo, GkAddScaleArgs(nelem = uint(n), scale = scale), n)
 }
 
@@ -3653,9 +3654,9 @@ def private st2_res_blk(enc : MetalComputeEncoder?; var c : St2GpuCtx; b : St2Ad
     var t1 = t
     if (b.upsample) {
         t1 = conv1d_out_len(b.pool, t)
-        var ka = St2PoolArgs(c = uint(b.pool.cin), k = uint(b.pool.k), stride = uint(b.pool.stride), pad_l = uint(b.pool.pad_l),
-            dil = uint(b.pool.dilation), t_in = uint(t), total = uint(t1 * b.pool.cin))
-        enc_st2_pool_dw(enc, r.br, r.bpool, c.slab, sl.pool_w, c.slab, sl.pool_b, ka, t1 * b.pool.cin)
+        var ka = GkDwConvRowsArgs(c = uint(b.pool.cin), k = uint(b.pool.k), stride = uint(b.pool.stride), pad_l = uint(b.pool.pad_l),
+            dil = uint(b.pool.dilation), t_in = uint(t), t_out = uint(t1), woff = uint(sl.pool_w / 4ul), boff = uint(sl.pool_b / 4ul))
+        enc_st2_pool_dw(enc, r.br, r.bpool, c.slab, ka, t1 * b.pool.cin)
         st2_conv(enc, c, sl.c1, b.conv1, r.bpool, t1, r.bc1)
     } else {
         st2_conv(enc, c, sl.c1, b.conv1, r.br, t1, r.bc1)
@@ -3668,15 +3669,15 @@ def private st2_res_blk(enc : MetalComputeEncoder?; var c : St2GpuCtx; b : St2Ad
         enc_row_gather(enc, bin, 0ul, r.bidx, bin, 0ul, bin, 0ul, r.bsc, kg, t1 * b.dim_in_s)
         if (b.learned_sc) {
             st2_conv(enc, c, sl.c1x1, b.conv1x1, r.bsc, t1, r.bsc2)
-            st2_add(enc, c, bout, r.bsc2, bout, n, ST2_JOIN)
+            st2_add(enc, bout, r.bsc2, bout, n, ST2_JOIN)
         } else {
-            st2_add(enc, c, bout, r.bsc, bout, n, ST2_JOIN)
+            st2_add(enc, bout, r.bsc, bout, n, ST2_JOIN)
         }
     } elif (b.learned_sc) {
         st2_conv(enc, c, sl.c1x1, b.conv1x1, bin, t1, r.bsc2)
-        st2_add(enc, c, bout, r.bsc2, bout, n, ST2_JOIN)
+        st2_add(enc, bout, r.bsc2, bout, n, ST2_JOIN)
     } else {
-        st2_add(enc, c, bout, bin, bout, n, ST2_JOIN)
+        st2_add(enc, bout, bin, bout, n, ST2_JOIN)
     }
     return t1
 }
@@ -3691,7 +3692,7 @@ def private st2_gen_res_block(enc : MetalComputeEncoder?; var c : St2GpuCtx; b :
         st2_conv(enc, c, sl.c1[j], b.convs1[j], bxt, t, by1)
         st2_adain(enc, c, by1, by1, t, b.c, b.adain2[j], sl.n2[j], s, true)
         st2_conv(enc, c, sl.c2[j], b.convs2[j], by1, t, bxt)
-        st2_add(enc, c, src, bxt, bout, n, 1.0)
+        st2_add(enc, src, bxt, bout, n, 1.0)
     }
 }
 
@@ -3728,7 +3729,7 @@ def private st2_stage(enc : MetalComputeEncoder?; var c : St2GpuCtx; d : St2Deco
         let u_c = st2_u(c, uint(c2))
         enc_st2_reflect1(enc, g.bxt, g.by, u_c, u_n, n)
     }
-    st2_add(enc, c, g.by, g.bsres, g.by, n, 1.0)
+    st2_add(enc, g.by, g.bsres, g.by, n, 1.0)
     let nk = d.n_kernels
     let nnoise = long_length(d.noise_res)
     for (j in range64(nk)) {
@@ -3955,7 +3956,7 @@ def private st2_decoder_chain(enc : MetalComputeEncoder?; var c : St2GpuCtx; d :
         cwr = blk.dim_out
     }
     if (!in_x) {   //! the generator ping-pongs bx and bo from bx: the stream lands in bx first
-        st2_add(enc, c, g.bo, g.bo, b.bx, tt * cwr, 0.5)
+        st2_add(enc, g.bo, g.bo, b.bx, tt * cwr, 0.5)
     }
 }
 
@@ -4293,13 +4294,13 @@ def private metal_styletts2_albert(a : St2Albert; ids : array<int>; @scratch @ex
             st2_lin(enc, c, sl.v, bx, t, bv)
             enc_st2_attn(enc, bq, bk, bv, bxb2, ka, a.heads * t)
             st2_lin(enc, c, sl.dense, bxb2, t, bxb)
-            st2_add(enc, c, bxb, bx, bxb, nd, 1.0)
+            st2_add(enc, bxb, bx, bxb, nd, 1.0)
             st2_ln(enc, c, bxb, bxb, t, d, ST2_ALBERT_EPS, c.slab, sl.attn_ln.gwoff, sl.attn_ln.gboff)
             st2_lin(enc, c, sl.ffn, bxb, t, bffn)
             let u_nf = st2_u(c, uint(t * ff))
             enc_st2_gelu_tanh(enc, bffn, 0ul, u_nf, t * ff)
             st2_lin(enc, c, sl.ffn_out, bffn, t, bxb2)
-            st2_add(enc, c, bxb2, bxb, bx, nd, 1.0)
+            st2_add(enc, bxb2, bxb, bx, nd, 1.0)
             st2_ln(enc, c, bx, bx, t, d, ST2_ALBERT_EPS, c.slab, sl.full_ln.gwoff, sl.full_ln.gboff)
         }
     }
@@ -4549,13 +4550,13 @@ def private pk_transformer(enc : MetalComputeEncoder?; var c : St2GpuCtx; tf : P
         enc_pk_rows(enc, b.bqkv, g_tw_pk_sc.bk[i], kc, nd)
         kc.sc = uint(2l * d)
         enc_pk_rows(enc, b.bqkv, g_tw_pk_sc.bv[i], kc, nd)
-        var ka = PkAttnArgs(t = uint(t), qs = qs, qcol = 0u, d = uint(d), pos0 = 0u, ctx = uint(tf.context))
+        var ka = GkPkAttnArgs(t = uint(t), qs = qs, qcol = 0u, d = uint(d), pos0 = 0u, ctx = uint(tf.context))
         enc_pk_attn(enc, b.bqkv, g_tw_pk_sc.bk[i], g_tw_pk_sc.bv[i], b.bctx, ka, tf.heads * t)
         st2_lin(enc, c, s.out_proj, b.bctx, t, b.bxb)
         if (s.has_s1) {
             enc_pk_row_scale(enc, b.bxb, 0ul, c.slab, s.scale1_off, u_d, u_nd, nd)
         }
-        st2_add(enc, c, bx, b.bxb, bx, nd, 1.0)
+        st2_add(enc, bx, b.bxb, bx, nd, 1.0)
         st2_ln(enc, c, bx, b.bxb, t, d, tf.eps, c.slab, s.n2.gwoff, s.n2.gboff)
         st2_lin(enc, c, s.ffn1, b.bxb, t, b.bh)
         let nf = t * s.ffn1.cout_p
@@ -4564,7 +4565,7 @@ def private pk_transformer(enc : MetalComputeEncoder?; var c : St2GpuCtx; tf : P
         if (s.has_s2) {
             enc_pk_row_scale(enc, b.bxb, 0ul, c.slab, s.scale2_off, u_d, u_nd, nd)
         }
-        st2_add(enc, c, bx, b.bxb, bx, nd, 1.0)
+        st2_add(enc, bx, b.bxb, bx, nd, 1.0)
     }
 }
 
@@ -4576,7 +4577,7 @@ def private pk_res_block(enc : MetalComputeEncoder?; var c : St2GpuCtx; b : Pock
     pk_conv(enc, c, s1, b.conv1, bcc, t, w, bcp)
     pk_elu(enc, bcp, t, s1.cout_p)
     pk_conv(enc, c, s2, b.conv2, bcp, t, s1.cout_p, by)
-    st2_add(enc, c, by, bx, by, t * w, 1.0)
+    st2_add(enc, by, bx, by, t * w, 1.0)
 }
 
 def private pk_codec_chain(enc : MetalComputeEncoder?; var c : St2GpuCtx; mm : PocketMimi; sl : PkCodecSlab; blat : MetalBuffer?;
@@ -4587,9 +4588,9 @@ def private pk_codec_chain(enc : MetalComputeEncoder?; var c : St2GpuCtx; mm : P
     var bq = st2_rows_buf(c, frames, sl.quant.cout_p)
     pk_conv(enc, c, sl.quant, mm.quant_proj, blat, frames, mm.quant_proj.cin, bq)
     var bx = st2_rows_buf(c, t1, d)
-    var kp = St2PoolArgs(c = uint(d), k = uint(mm.upsample.k), stride = uint(mm.upsample.stride), pad_l = 0u, dil = uint(mm.upsample.dilation),
-        t_in = uint(frames), total = uint(t1 * d))
-    enc_st2_pool_dw(enc, bq, bx, c.slab, sl.up_w, c.slab, sl.up_b, kp, t1 * d)
+    var kp = GkDwConvRowsArgs(c = uint(d), k = uint(mm.upsample.k), stride = uint(mm.upsample.stride), pad_l = 0u, dil = uint(mm.upsample.dilation),
+        t_in = uint(frames), t_out = uint(t1), woff = uint(sl.up_w / 4ul), boff = uint(sl.up_b / 4ul))
+    enc_st2_pool_dw(enc, bq, bx, c.slab, kp, t1 * d)
     var tb = pk_tf_bufs(c, mm.dec_tf, sl, t1)
     pk_transformer(enc, c, mm.dec_tf, sl, tb, bx, t1)
     var bcur = st2_rows_buf(c, t1, sl.dec_in.cout_p)
@@ -5041,7 +5042,7 @@ def private pk_fr_layer(enc : MetalComputeEncoder?; var c : St2GpuCtx; tf : Pock
     var kr = RopeStoreArgs(qd = uint(d), head_size = dh, npairs_q = uint(d / 2l), npairs = uint(d), neox = 0u, has_bias = 0u, rot = dh)
     enc_rpst32_c(enc, b.qkv, b.qkv, uint64(2l * d * 4l), g_tw_pk_voice.bk[li], uint64(p * d * 4l), g_tw_pk_voice.bv[li], uint64(p * d * 4l),
         g_tw_pk_voice.bcos, uint64(p * (d / tf.heads / 2l) * 4l), g_tw_pk_voice.bsin, g_one, kr, d)
-    var ka = PkAttnArgs(t = 1u, qs = uint(3l * d), qcol = 0u, d = uint(d), pos0 = uint(p), ctx = uint(tf.context))
+    var ka = GkPkAttnArgs(t = 1u, qs = uint(3l * d), qcol = 0u, d = uint(d), pos0 = uint(p), ctx = uint(tf.context))
     enc_pk_attn(enc, b.qkv, g_tw_pk_voice.bk[li], g_tw_pk_voice.bv[li], b.ctx, ka, tf.heads)
     pk_lin(enc, c, L.out_proj, b.ctx, 0ul, b.xb, 0ul)
     if (L.has_s1) {
@@ -5241,13 +5242,13 @@ def private pk_prompt_rows(enc : MetalComputeEncoder?; var c : St2GpuCtx; tf : P
         kc.sc = uint(2l * d)
         enc_pk_rows(enc, b.bqkv, v.bv[i], kc, nd)
         continue if (kv_only)
-        var ka = PkAttnArgs(t = uint(t), qs = uint(3l * d), qcol = 0u, d = uint(d), pos0 = uint(pos0), ctx = uint(tf.context))
+        var ka = GkPkAttnArgs(t = uint(t), qs = uint(3l * d), qcol = 0u, d = uint(d), pos0 = uint(pos0), ctx = uint(tf.context))
         enc_pk_attn(enc, b.bqkv, v.bk[i], v.bv[i], b.bctx, ka, tf.heads * t)
         pk_rows_lin(enc, c, s.out_proj, b.bctx, bxh, b.bxb, t)
         if (s.has_s1) {
             enc_pk_row_scale(enc, b.bxb, 0ul, c.slab, s.scale1_off, u_d, u_nd, nd)
         }
-        st2_add(enc, c, bx, b.bxb, bx, nd, 1.0)
+        st2_add(enc, bx, b.bxb, bx, nd, 1.0)
         st2_ln(enc, c, bx, b.bxb, t, d, tf.eps, c.slab, s.n2.gwoff, s.n2.gboff)
         pk_rows_lin(enc, c, s.ffn1, b.bxb, bxh, b.bh, t)
         let nf = t * tf.ffn
@@ -5256,7 +5257,7 @@ def private pk_prompt_rows(enc : MetalComputeEncoder?; var c : St2GpuCtx; tf : P
         if (s.has_s2) {
             enc_pk_row_scale(enc, b.bxb, 0ul, c.slab, s.scale2_off, u_d, u_nd, nd)
         }
-        st2_add(enc, c, bx, b.bxb, bx, nd, 1.0)
+        st2_add(enc, bx, b.bxb, bx, nd, 1.0)
     }
 }
 

@@ -142,10 +142,6 @@ let private PA_CAP = 300
 let private PA_QS = 264      //! q's row stride: the query span sits at PA_QCOL among other columns
 let private PA_QCOL = 8
 let private PA_PROWS = 48    //! the device caches' rows: the 45 appended, then three poisoned rows no query may see
-let private PA_QOFF = 5
-let private PA_KOFF = 7
-let private PA_VOFF = 11
-let private PA_OOFF = 13
 let private PA_DEC_POS = 44  //! the decode step's position: the last appended key
 let private PA_DEC_CTX = 8
 let private PA_WIN_CTX = 16
@@ -207,26 +203,26 @@ def private pk_attn_device(kc : TtsKvCache; qfull : array<float>) : PkAttnOut {
         var inscope rows <- pk_cache_rows(kc, -1l)
         var inscope rows_x <- pk_cache_rows(kc, int64(PA_DEC_POS - PA_DEC_CTX))
         with_cell_planes() $(var cp : CellPlanes) {
-            let qp = cp |> in_(qfull, PA_QOFF, SLACK)
-            let kp = cp |> in_(rows.k, PA_KOFF, SLACK)
-            let vp = cp |> in_(rows.v, PA_VOFF, SLACK)
-            let kxp = cp |> in_(rows_x.k, PA_KOFF, SLACK)
-            let vxp = cp |> in_(rows_x.v, PA_VOFF, SLACK)
-            let oa = cp |> out_(PA_T * d, PA_OOFF)
-            let ob = cp |> out_(d, PA_OOFF)
-            let ox = cp |> out_(d, PA_OOFF)
-            let oc = cp |> out_(PA_T * d, PA_OOFF)
+            let qp = cp |> in_(qfull, 0, SLACK)
+            var inscope qdec <- copy_span(qfull, PA_DEC_POS * PA_QS, PA_QS)
+            let qdp = cp |> in_(qdec, 0, SLACK)
+            let kp = cp |> in_(rows.k, 0, SLACK)
+            let vp = cp |> in_(rows.v, 0, SLACK)
+            let kxp = cp |> in_(rows_x.k, 0, SLACK)
+            let vxp = cp |> in_(rows_x.v, 0, SLACK)
+            let oa = cp |> out_(PA_T * d)
+            let ob = cp |> out_(d)
+            let ox = cp |> out_(d)
+            let oc = cp |> out_(PA_T * d)
             var s_a = cp |> cls_set(fixed_array(qp, kp, vp, oa), @@set_tts_pk_attn_cls)
-            var s_b = cp |> cls_set(fixed_array(qp, kp, vp, ob), @@set_tts_pk_attn_cls)
-            var s_x = cp |> cls_set(fixed_array(qp, kxp, vxp, ox), @@set_tts_pk_attn_cls)
+            var s_b = cp |> cls_set(fixed_array(qdp, kp, vp, ob), @@set_tts_pk_attn_cls)
+            var s_x = cp |> cls_set(fixed_array(qdp, kxp, vxp, ox), @@set_tts_pk_attn_cls)
             var s_c = cp |> cls_set(fixed_array(qp, kp, vp, oc), @@set_tts_pk_attn_cls)
-            var pa = TtsPkAttnArgs(t = uint(PA_T), qs = uint(PA_QS), qcol = uint(PA_QCOL), d = uint(d), pos0 = 0u, ctx = 0u,
-                qoff = uint(PA_QOFF), koff = uint(PA_KOFF), voff = uint(PA_VOFF), ooff = uint(PA_OOFF))
+            var pa = GkPkAttnArgs(t = uint(PA_T), qs = uint(PA_QS), qcol = uint(PA_QCOL), d = uint(d), pos0 = 0u, ctx = 0u)
             var pb = pa
             pb.t = 1u
             pb.pos0 = uint(PA_DEC_POS)
             pb.ctx = uint(PA_DEC_CTX)
-            pb.qoff = uint(PA_QOFF + PA_DEC_POS * PA_QS)
             var pc = pa
             pc.ctx = uint(PA_WIN_CTX)
             let heads = int64(PA_HEADS)
@@ -271,7 +267,7 @@ def test_vkt_pk_attn(t0 : T?) {
                 }
             }
             t |> success(moved > 0, "tts_pk_attn control: the 16-key window moves the prompt's late rows off the every-key rows ({moved} apart)")
-            t |> success(outside_run(got.a_whole, PA_OOFF, PA_T * d, NAN_SENTINEL), "tts_pk_attn: the prefix before ooff keeps its sentinel")
+            t |> success(outside_run(got.a_whole, 0, PA_T * d, NAN_SENTINEL), "tts_pk_attn: the elements past the rows keep their sentinel")
         } else {
             t |> skip("dasVulkan not present")
         }

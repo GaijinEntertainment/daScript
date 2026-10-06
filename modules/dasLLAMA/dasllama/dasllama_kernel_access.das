@@ -150,16 +150,31 @@ def private scan_param_dir(cfn : Function?; base : string; idx : int;
     found = true
 }
 
-def private callee_param_dir(mod : Module?; cname : string; idx : int) : string {
-    let base = callee_base_name(cname)
-    var dir = ""
-    var found = false
-    var conflict = false
+//! the module a kernel both homes stamp carries its helpers in: a body resolving there hands a buffer whole to them
+let private GK_COMMON_MODULE = "dasllama_gpu_kernels_common"
+
+def private scan_module_param_dir(mod : Module?; base : string; idx : int; var dir : string&; var found, conflict : bool&) {
     mod |> for_each_function(base) $(cfn) {
         scan_param_dir(cfn, base, idx, dir, found, conflict)
     }
     mod |> for_each_generic(base) $(cfn) {
         scan_param_dir(cfn, base, idx, dir, found, conflict)
+    }
+}
+
+//! the callee's parameter direction: the compiling module's declaration, else the shared kernel module's
+def private callee_param_dir(mod : Module?; cname : string; idx : int) : string {
+    let base = callee_base_name(cname)
+    var dir = ""
+    var found = false
+    var conflict = false
+    scan_module_param_dir(mod, base, idx, dir, found, conflict)
+    if (!found && mod.name != GK_COMMON_MODULE) {
+        program_for_each_module(compiling_program()) $(cm) {
+            if (cm.name == GK_COMMON_MODULE) {
+                scan_module_param_dir(cm, base, idx, dir, found, conflict)
+            }
+        }
     }
     return found && !conflict ? dir : ""
 }

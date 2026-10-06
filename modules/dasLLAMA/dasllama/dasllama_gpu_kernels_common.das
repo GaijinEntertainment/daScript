@@ -460,3 +460,292 @@ class template GkSrcSines : GkSrcLaw {
         }
     }
 }
+
+struct GkAdainArgs {
+    c : uint       //! the channels
+    t : uint       //! the rows the statistics ran over
+    eps : float    //! the instance norm's eps
+    hoff : uint    //! the style fc rows' base in h: gamma [c], then beta [c]
+    gwoff : uint   //! the norm's scale row in wn
+    gboff : uint   //! the norm's shift row in wn
+    aoff : uint    //! Snake's alpha row in wn, read by the Snake stamp alone
+}
+
+//! AdaIN as the CPU `adain_affine` folds it - the column statistics, the norm's own scale and shift, then (1 + gamma) and
+//! beta - followed by Snake or LeakyReLU(0.2); y may be x itself; one element an invocation over t * c
+[ |> template_struct_instance]
+class template GkAdain {
+    @template_constant SNAKE : bool = false
+    @ssbo @binding = 0 @role = "read" x : array<float>
+    @ssbo @binding = 1 @role = "write" y : array<float>
+    @ssbo @binding = 2 @role = "read" stats : array<float>
+    @ssbo @binding = 3 @role = "read" h : array<float>
+    @ssbo @binding = 4 @role = "read" wn : array<float>
+    @kargs pa : GkAdainArgs
+
+    def adain_body {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.t * pa.c) {
+            let ci = gid % max(pa.c, 1u)
+            var scale = 0.0
+            var shift = 0.0
+            tts_adain_affine(stats[ci], stats[pa.c + ci], float(pa.t), pa.eps, wn[pa.gwoff + ci], wn[pa.gboff + ci], h[pa.hoff + ci],
+                h[pa.hoff + pa.c + ci], scale, shift)
+            let v = mad(x[gid], scale, shift)
+            static_if (SNAKE) {
+                let a = wn[pa.aoff + ci]
+                let sn = sin(a * v)
+                y[gid] = mad(1.0 / a, sn * sn, v)
+            } else {
+                y[gid] = v > 0.0 ? v : v * 0.2
+            }
+        }
+    }
+}
+
+struct GkDwConvRowsArgs {
+    c : uint       //! the channels, one tap row each
+    k : uint       //! the taps, where the stamp does not fix them
+    stride : uint  //! the transposed stamp's stride
+    pad_l : uint   //! the transposed stamp's cropped left edge
+    dil : uint     //! the transposed stamp's dilation
+    t_in : uint    //! the input rows, and the output rows of the causal and the centered stamps
+    t_out : uint   //! the transposed stamp's output rows
+    woff : uint    //! w [c][k]'s element base in wn
+    boff : uint    //! the transposed stamp's bias row in wn
+    bnwoff : uint  //! the centered stamp's folded BatchNorm scale row in wn
+    bnboff : uint  //! the centered stamp's folded BatchNorm shift row in wn
+}
+
+//! a depthwise conv on rows, y [t_out][c] from x [t_in][c] and w [c][k], one element an invocation; FORM is the source
+//! rule and the epilogue: 0 the transposed conv gathered, the bias row first and one mad a tap (the CPU
+//! `conv1d_rows_transposed_depthwise`); 1 the causal conv, a row reading the k - 1 rows before it (gemma4a's conv module);
+//! 2 the centered conv, the folded BatchNorm and silu after it (canary's conv module tail)
+[ |> template_struct_instance]
+class template GkDwConvRows {
+    @template_constant FORM : int = 0   //!< spelled as its literal: a template constant folds only a literal
+    @template_constant K : uint = 0u    //!< the taps where the stamp fixes them, else 0 and the taps are `pa.k`
+    @ssbo @binding = 0 @role = "read" x : array<float>
+    @ssbo @binding = 1 @role = "write" y : array<float>
+    @ssbo @binding = 2 @role = "read" wn : array<float>
+    @kargs pa : GkDwConvRowsArgs
+
+    def rows_out : uint {
+        static_if (FORM == 0) {
+            return pa.t_out
+        } else {
+            return pa.t_in
+        }
+    }
+
+    def taps : uint {
+        static_if (K != 0u) {
+            return K
+        } else {
+            return pa.k
+        }
+    }
+
+    def src_row(t, kk : uint) : int {
+        static_if (FORM == 0) {
+            return conv_src_tr_row(t, kk, 0u, pa.pad_l, pa.dil, max(pa.stride, 1u), pa.t_in)
+        } else {
+            static_if (FORM == 1) {
+                return conv_src_fwd_row(t, kk, 0u, taps() - 1u, 1u, 1u, pa.t_in)
+            } else {
+                return conv_src_fwd_row(t, kk, 0u, (taps() - 1u) / 2u, 1u, 1u, pa.t_in)
+            }
+        }
+    }
+
+    def dw_conv_rows_body {
+        let e = gl_GlobalInvocationID.x
+        if (e < rows_out() * pa.c) {
+            let c = max(pa.c, 1u)
+            let t = e / c
+            let j = e % c
+            let nk = taps()
+            var acc = 0.0
+            static_if (FORM == 0) {
+                acc = wn[pa.boff + j]
+            }
+            var kk = 0u
+            while (kk < nk) {
+                let src = src_row(t, kk)
+                if (src >= 0) {
+                    static_if (FORM == 0) {
+                        acc = mad(wn[pa.woff + j * nk + kk], x[uint(src) * pa.c + j], acc)
+                    } else {
+                        acc += wn[pa.woff + j * nk + kk] * x[uint(src) * pa.c + j]
+                    }
+                }
+                kk++
+            }
+            static_if (FORM == 2) {
+                y[e] = silu_f32(acc * wn[pa.bnwoff + j] + wn[pa.bnboff + j])
+            } else {
+                y[e] = acc
+            }
+        }
+    }
+}
+
+let GK_PK_ATTN_HS = 64u            //! the head size the attention row is stamped for, the body's literal: another head size declines at the driver
+let GK_PK_ATTN_MAX_KEYS = 2048u    //! the scores a row stages, the body's literal: a longer key range declines at the driver
+
+struct GkPkAttnArgs {
+    t : uint      //! the query rows
+    qs : uint     //! q's row stride
+    qcol : uint   //! the query span's first column in q's rows
+    d : uint      //! the heads' width, the cache rows' and o's row stride
+    pos0 : uint   //! the first query's position
+    ctx : uint    //! the keys a query sees at most, 0 = every key up to itself
+}
+
+//! the causal cached attention of one query row over the caches' rows (the CPU `attention_causal_rows`): query i at
+//! position pos0 + i sees the keys up to itself, the last `ctx` of them when ctx is nonzero; the scaled query staged,
+//! the scores staged and softmaxed in two passes, the value sum in four parts of 64 columns; a workgroup of 256 a
+//! (head, row); the subgroup reductions ride `gk_subgroup_add` / `gk_subgroup_max`, each home's lane primitive, as statement methods
+[ |> template_struct_instance]
+class template GkPkAttn {
+    @ssbo @binding = 0 @role = "read" q : array<float>
+    @ssbo @binding = 1 @role = "read" k : array<float>
+    @ssbo @binding = 2 @role = "read" v : array<float>
+    @ssbo @binding = 3 @role = "write" o : array<float>
+    @kargs pa : GkPkAttnArgs
+    @workgroup qh : float[64]
+    @workgroup sc : float[2048]   //! == GK_PK_ATTN_MAX_KEYS, the array's literal
+    @workgroup po : float[256]
+    @workgroup part : float[128]   //! two slots of 64 subgroup partials, one slot a reduce
+
+    //! the workgroup sum every thread holds alike; `slot` alternates 0 / 1 between consecutive reduces; a statement with its
+    //! result by reference, the form the MSL emitter inlines
+    def wg_sum_into(v0 : float; slot : uint; var tot : float&) {
+        let ss = gk_subgroup_add(v0)
+        if (gl_SubgroupInvocationID == 0u) {
+            part[slot * 64u + gl_SubgroupID] = ss
+        }
+        barrier()
+        tot = 0.0
+        var sgi = 0u
+        while (sgi < gl_NumSubgroups) {
+            tot += part[slot * 64u + sgi]
+            sgi++
+        }
+    }
+
+    //! the workgroup max every thread holds alike
+    def wg_max_into(v0 : float; slot : uint; var m : float&) {
+        let sm = gk_subgroup_max(v0)
+        if (gl_SubgroupInvocationID == 0u) {
+            part[slot * 64u + gl_SubgroupID] = sm
+        }
+        barrier()
+        m = -3.0e38
+        var sgi = 0u
+        while (sgi < gl_NumSubgroups) {
+            m = max(m, part[slot * 64u + sgi])
+            sgi++
+        }
+    }
+
+    //! a column's quarter of the value sum: the keys `quarter`, `quarter` + 4, ... in order, eight a step with their loads
+    //! in flight together, the column at `vb` in the first key's row
+    def value_sum_into(vb, quarter, nk : uint; var acc : float&) {
+        acc = 0.0
+        var jj = quarter
+        while (jj + 28u < nk) {
+            let v0 = v[vb + jj * pa.d]
+            let v1 = v[vb + (jj + 4u) * pa.d]
+            let v2 = v[vb + (jj + 8u) * pa.d]
+            let v3 = v[vb + (jj + 12u) * pa.d]
+            let v4 = v[vb + (jj + 16u) * pa.d]
+            let v5 = v[vb + (jj + 20u) * pa.d]
+            let v6 = v[vb + (jj + 24u) * pa.d]
+            let v7 = v[vb + (jj + 28u) * pa.d]
+            acc += sc[jj] * v0
+            acc += sc[jj + 4u] * v1
+            acc += sc[jj + 8u] * v2
+            acc += sc[jj + 12u] * v3
+            acc += sc[jj + 16u] * v4
+            acc += sc[jj + 20u] * v5
+            acc += sc[jj + 24u] * v6
+            acc += sc[jj + 28u] * v7
+            jj += 32u
+        }
+        while (jj < nk) {
+            acc += sc[jj] * v[vb + jj * pa.d]
+            jj += 4u
+        }
+    }
+
+    def pk_attn_body {
+        let wg = gl_WorkGroupID.x
+        let t = max(pa.t, 1u)
+        let h = wg / t
+        let i = wg % t
+        let lid = gl_LocalInvocationID.x
+        let p = pa.pos0 + i
+        let j0 = tts_window_start(p, pa.ctx)
+        let nk = p + 1u - j0
+        if (lid < 64u) {
+            qh[lid] = q[i * pa.qs + pa.qcol + h * 64u + lid] / sqrt(float(64u))
+        }
+        barrier()
+        var m = -1.0e30
+        var j = lid
+        while (j < nk) {
+            let krow = (j0 + j) * pa.d + h * 64u
+            var sdot = 0.0
+            var e = 0u
+            while (e < 64u) {
+                let k0 = k[krow + e]
+                let k1 = k[krow + e + 1u]
+                let k2 = k[krow + e + 2u]
+                let k3 = k[krow + e + 3u]
+                sdot += qh[e] * k0
+                sdot += qh[e + 1u] * k1
+                sdot += qh[e + 2u] * k2
+                sdot += qh[e + 3u] * k3
+                e += 4u
+            }
+            sc[j] = sdot
+            m = max(m, sdot)
+            j += 256u
+        }
+        var mall = 0.0
+        wg_max_into(m, 0u, mall)
+        var l = 0.0
+        j = lid
+        while (j < nk) {
+            let pw = exp(sc[j] - mall)
+            sc[j] = pw
+            l += pw
+            j += 256u
+        }
+        var lsum = 0.0
+        wg_sum_into(l, 1u, lsum)
+        let inv = 1.0 / lsum
+        j = lid
+        while (j < nk) {
+            sc[j] = sc[j] * inv
+            j += 256u
+        }
+        barrier()
+        let col = lid % 64u
+        let quarter = lid / 64u
+        var vs = 0.0
+        value_sum_into(j0 * pa.d + h * 64u + col, quarter, nk, vs)
+        po[quarter * 64u + col] = vs
+        barrier()
+        if (lid < 64u) {
+            var tot = 0.0
+            var pp = 0u
+            while (pp < 4u) {
+                tot += po[pp * 64u + lid]
+                pp++
+            }
+            o[i * pa.d + h * 64u + lid] = tot
+        }
+    }
+}

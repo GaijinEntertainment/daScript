@@ -1316,7 +1316,7 @@ def private st2_adain_gate(t : T?; var dev, queue; nrows : int; snake : bool) {
             gb[i] = f16_at((i * 2) % 11, 0.01, -0.05)
             alpha[i] = f16_at((i * 3) % 7, 0.1, 0.3)
         }
-        var ka = St2AdainArgs(c = uint(c), t = uint(nrows), eps = 1e-5)
+        var ka = GkAdainArgs(c = uint(c), t = uint(nrows), eps = 1e-5, hoff = 0u, gwoff = 0u, gboff = uint(c), aoff = uint(2 * c))
         var inscope want_st : array<float>
         var inscope want : array<float>
         want_st |> resize(2 * c)
@@ -1347,9 +1347,10 @@ def private st2_adain_gate(t : T?; var dev, queue; nrows : int; snake : bool) {
         let bst = mc |> out_words(2 * c, -1.0e30)
         let by = mc |> out_words(n, -1.0e30)
         let bh = mc |> in_(h)
-        let bgw = mc |> in_(gw)
-        let bgb = mc |> in_(gb)
-        let balpha = mc |> in_(alpha)
+        var inscope wn <- clone_to_move(gw)
+        wn |> push_from(gb)
+        wn |> push_from(alpha)
+        let bwn = mc |> in_(wn)
         let bx = mc |> in_(x)
         let bt = mc |> in_plain([uint(nrows)])
         let bc = mc |> in_plain([uint(c)])
@@ -1366,11 +1367,11 @@ def private st2_adain_gate(t : T?; var dev, queue; nrows : int; snake : bool) {
                 }
                 if (snake) {
                     stamp_run(ssn, pso) {
-                        invoke(ssn.enc, enc, px, mc.buf[by], pst, mc.buf[bh], 0ul, mc.buf[bgw], 0ul, mc.buf[bgb], 0ul, mc.buf[balpha], 0ul, ka, int64(n))
+                        invoke(ssn.enc, enc, px, mc.buf[by], pst, mc.buf[bh], mc.buf[bwn], ka, int64(n))
                     }
                 } else {
                     stamp_run(slk, pso) {
-                        invoke(slk.enc, enc, px, mc.buf[by], pst, mc.buf[bh], 0ul, mc.buf[bgw], 0ul, mc.buf[bgb], 0ul, ka, int64(n))
+                        invoke(slk.enc, enc, px, mc.buf[by], pst, mc.buf[bh], mc.buf[bwn], ka, int64(n))
                     }
                 }
             }
@@ -1676,8 +1677,9 @@ def private st2_pool_gate(t : T?; var dev, queue) {
                 want[p * c + j] = float(acc)
             }
         }
-        let pw = mc |> in_(w)
-        let pb = mc |> in_(b)
+        var inscope wn <- clone_to_move(w)
+        wn |> push_from(b)
+        let pwn = mc |> in_(wn)
         let py = mc |> out_words(t_out * c, -1.0e30)
         let px = mc |> in_(x)
         for (leg in range(2)) {
@@ -1685,10 +1687,11 @@ def private st2_pool_gate(t : T?; var dev, queue) {
                 x[4 * c + 6] += 2.0
                 mc |> plane_upload(px, x)
             }
-            var ka = St2PoolArgs(c = uint(c), k = uint(k), stride = uint(stride), pad_l = uint(pad_l), dil = 1u, t_in = uint(t_in), total = uint(t_out * c))
+            var ka = GkDwConvRowsArgs(c = uint(c), k = uint(k), stride = uint(stride), pad_l = uint(pad_l), dil = 1u, t_in = uint(t_in), t_out = uint(t_out),
+                woff = 0u, boff = uint(length(w)))
             let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
                 stamp_run(st, pso) {
-                    invoke(st.enc, enc, mc.buf[px], mc.buf[py], mc.buf[pw], 0ul, mc.buf[pb], 0ul, ka, int64(t_out * c))
+                    invoke(st.enc, enc, mc.buf[px], mc.buf[py], mc.buf[pwn], ka, int64(t_out * c))
                 }
             }
             continue if (!ran)
@@ -2016,7 +2019,7 @@ def private pk_attn_gate(t : T?; var dev, queue; ctx, n_old : int) {
         with_dasllama_jobque_() {
             attention_causal_rows(qn, int64(tt), int64(d), int64(ctx), kc, want)
         }
-        let ka = PkAttnArgs(t = uint(tt), qs = uint(qs), qcol = uint(qcol), d = uint(d), pos0 = uint(n_old), ctx = uint(ctx))
+        let ka = GkPkAttnArgs(t = uint(tt), qs = uint(qs), qcol = uint(qcol), d = uint(d), pos0 = uint(n_old), ctx = uint(ctx))
         let pq = mc |> in_(q)
         let pv = mc |> in_(vv)
         var bq = mc.buf[pq]

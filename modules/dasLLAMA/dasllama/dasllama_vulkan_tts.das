@@ -727,8 +727,7 @@ def private ts_adain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : 
     let bufs = fixed_array(x.dev, y.dev, sc_.stats.dev, sc_.aux.dev, slab.dev)
     let sizes = fixed_array(x.bytes, y.bytes, sc_.stats.bytes, sc_.aux.bytes, slab.bytes)
     let bits = fixed_array(x.bit, y.bit, sc_.stats.bit, sc_.aux.bit, 0u)
-    static_assert(TTS_ADAIN_EPS == ST2_ADAIN_EPS, "the AdaIN stamps' eps is the model's")
-    var p2 = TtsAdainArgs(c = uint(c), t = uint(t), xoff = 0u, yoff = 0u, hoff = uint(hoff), gwoff = uint(ns.gwoff), gboff = uint(ns.gboff),
+    var p2 = GkAdainArgs(c = uint(c), t = uint(t), eps = ST2_ADAIN_EPS, hoff = uint(hoff), gwoff = uint(ns.gwoff), gboff = uint(ns.gboff),
         aoff = uint(ns.aux_off))
     if (snake) {
         var s2 = set_tts_adain_snake_cls(bufs, sizes, bits)
@@ -743,7 +742,7 @@ def private ts_adain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : 
 //! the depthwise transposed pool on rows: y [t_out][c] from x [t_in][c] over the slab's w [c][k] at `woff` and b [c] at `boff`
 def private ts_pool_dw(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; cv : TtsConv1d; woff, boff : int64; x, y : TsRows; t_in, t_out : int64) {
     var s = set_tts_pool_dw_cls(fixed_array(x.dev, y.dev, slab.dev), fixed_array(x.bytes, y.bytes, slab.bytes), fixed_array(x.bit, y.bit, 0u))
-    var pa = DwConvRowsArgs(c = uint(cv.cin), k = uint(cv.k), stride = uint(cv.stride), pad_l = uint(cv.pad_l), dil = uint(cv.dilation), t_in = uint(t_in),
+    var pa = GkDwConvRowsArgs(c = uint(cv.cin), k = uint(cv.k), stride = uint(cv.stride), pad_l = uint(cv.pad_l), dil = uint(cv.dilation), t_in = uint(t_in),
         t_out = uint(t_out), woff = uint(woff), boff = uint(boff))
     enc_tts_pool_dw_cls(raw, h, s, pa, t_out * cv.cin)
     vt_pt(raw, VtProfRole.tts_rows)
@@ -1819,7 +1818,7 @@ def private ts_pk_rope(raw : VkCommandBuffer; var h : VkHaz; tabs : TsRows; coff
 //! the causal cached attention: q from the qkv rows [t][qs] at column 0, k and v the cache rows [pos][d], o [t][d]; query i at position pos0 + i
 def private ts_pk_attn(raw : VkCommandBuffer; var h : VkHaz; qkv, k, v, o : TsRows; t, qs, d, heads, pos0, ctx : int64) {
     var s = set_tts_pk_attn_cls(fixed_array(qkv.dev, k.dev, v.dev, o.dev), fixed_array(qkv.bytes, k.bytes, v.bytes, o.bytes), fixed_array(qkv.bit, k.bit, v.bit, o.bit))
-    var pa = TtsPkAttnArgs(t = uint(t), qs = uint(qs), qcol = 0u, d = uint(d), pos0 = uint(pos0), ctx = uint(ctx), qoff = 0u, koff = 0u, voff = 0u, ooff = 0u)
+    var pa = GkPkAttnArgs(t = uint(t), qs = uint(qs), qcol = 0u, d = uint(d), pos0 = uint(pos0), ctx = uint(ctx))
     enc_tts_pk_attn_cls(raw, h, s, pa, tts_attn_wgs(t, heads))
     vt_pt(raw, VtProfRole.tts_pk_attn)
 }
@@ -2059,7 +2058,7 @@ def private ts_pk_codec_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRow
     let r_x = ts_rows(sc_, TS_C_X)
     ts_pk_conv(raw, h, slab, sl.quant, mm.quant_proj, frames, ts_rows(sc_, TS_C_LAT), r_col, r_q)
     var sp = set_tts_pool_dw_cls(fixed_array(r_q.dev, r_x.dev, slab.dev), fixed_array(r_q.bytes, r_x.bytes, slab.bytes), fixed_array(r_q.bit, r_x.bit, 0u))
-    var pp = DwConvRowsArgs(c = uint(d), k = uint(mm.upsample.k), stride = uint(mm.upsample.stride), pad_l = 0u, dil = uint(mm.upsample.dilation), t_in = uint(frames),
+    var pp = GkDwConvRowsArgs(c = uint(d), k = uint(mm.upsample.k), stride = uint(mm.upsample.stride), pad_l = 0u, dil = uint(mm.upsample.dilation), t_in = uint(frames),
         t_out = uint(t1), woff = uint(sl.up_w), boff = uint(sl.up_b))
     enc_tts_pool_dw_cls(raw, h, sp, pp, t1 * d)
     vt_pt(raw, VtProfRole.tts_rows)

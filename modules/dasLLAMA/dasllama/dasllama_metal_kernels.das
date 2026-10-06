@@ -10777,48 +10777,10 @@ class MetalSt2ColStats : MetalTgReduceBase {
     }
 }
 
-struct St2AdainArgs {
-    c : uint
-    t : uint
-    eps : float
-    total : uint
-}
-
-//! AdaIN as the CPU folds it, then Snake or LeakyReLU(0.2); an affine-less norm binds ones and zeros; Snake's alpha binds on the Snake stamp alone.
-[ |> template_struct_instance]
-class template MetalSt2AdainT {
-    @template_constant SNAKE : bool = true
-    @ssbo @binding = 0 @role = "read" x : array<float>       //!< [t x c]
-    @ssbo @binding = 1 @role = "write" y : array<float>      //!< [t x c], x itself allowed
-    @ssbo @binding = 2 @role = "read" stats : array<float>   //!< [2 x c] from the column stats
-    @ssbo @binding = 3 @role = "read" @off = "hoff" h : array<float>       //!< [2 x c] the AdaIN fc of the style: gamma, then beta
-    @ssbo @binding = 4 @role = "weight" @off = "gwoff" gw : array<float>   //!< [c] the norm's scale
-    @ssbo @binding = 5 @role = "weight" @off = "gboff" gb : array<float>   //!< [c] the norm's shift
-    @ssbo @binding = 6 @role = "weight" @off = "aoff" @template_gate = SNAKE alpha : array<float> //!< [c] Snake's alpha
-    @uniform @binding = 7 ka : St2AdainArgs
-
-    def adain_body {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= ka.t * ka.c) {
-            return
-        }
-        let ci = gid % ka.c
-        var scale = 0.0
-        var shift = 0.0
-        tts_adain_affine(stats[ci], stats[ka.c + ci], float(ka.t), ka.eps, gw[ci], gb[ci], h[ci], h[ka.c + ci], scale, shift)
-        let v = x[gid] * scale + shift
-        static_if (SNAKE) {
-            let a = alpha[ci]
-            let sn = sin(a * v)
-            y[gid] = v + (1.0 / a) * (sn * sn)
-        } else {
-            y[gid] = v > 0.0 ? v : v * 0.2
-        }
-    }
-}
-
 [metal_dispatch(name = "enc_st2_adain_snake", pso = "g_pso_st2_adain_snake", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2AdainSnake : MetalSt2AdainT {
+class MetalSt2AdainSnake : GkAdain {
+    override SNAKE = true
+
     [metal_kernel(name="metal_st2_adain_snake_msl")]
     def metal_st2_adain_snake {
         adain_body()
@@ -10826,9 +10788,7 @@ class MetalSt2AdainSnake : MetalSt2AdainT {
 }
 
 [metal_dispatch(name = "enc_st2_adain_leaky", pso = "g_pso_st2_adain_leaky", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2AdainLeaky : MetalSt2AdainT {
-    override SNAKE = false
-
+class MetalSt2AdainLeaky : GkAdain {
     [metal_kernel(name="metal_st2_adain_leaky_msl")]
     def metal_st2_adain_leaky {
         adain_body()
@@ -10935,43 +10895,12 @@ class MetalSt2Concat : GkConcat {
     }
 }
 
-//! The depthwise transposed pool on rows: each output row gathers the input rows its taps reach, w [c][k].
-struct St2PoolArgs {
-    c : uint
-    k : uint
-    stride : uint
-    pad_l : uint
-    dil : uint
-    t_in : uint
-    total : uint
-}
-
+//! The depthwise transposed pool on rows - the transposed form of the depthwise conv both homes stamp.
 [metal_dispatch(name = "enc_st2_pool_dw", pso = "g_pso_st2_pool_dw", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2PoolDw {
-    @ssbo @binding = 0 @role = "read" x : array<float>
-    @ssbo @binding = 1 @role = "write" y : array<float>
-    @ssbo @binding = 2 @role = "weight" @off = "woff" w : array<float>
-    @ssbo @binding = 3 @role = "weight" @off = "boff" b : array<float>
-    @uniform @binding = 4 ka : St2PoolArgs
-
+class MetalSt2PoolDw : GkDwConvRows {
     [metal_kernel(name="metal_st2_pool_dw_msl")]
     def metal_st2_pool_dw {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= ka.total) {
-            return
-        }
-        let p = gid / ka.c
-        let j = gid % ka.c
-        var acc = b[j]
-        var kk = 0u
-        while (kk < ka.k) {
-            let src = conv_src_tr_row(p, kk, 0u, ka.pad_l, ka.dil, ka.stride, ka.t_in)
-            if (src >= 0) {
-                acc += w[j * ka.k + kk] * x[uint(src) * ka.c + j]
-            }
-            kk++
-        }
-        y[gid] = acc
+        dw_conv_rows_body()
     }
 }
 
@@ -11261,95 +11190,19 @@ class MetalPkRopeTab : GkRopeTab {
     }
 }
 
-//! q [t][qs] at column qcol, k and v the caches' rows [.][d], o [t][d]; query i at position pos0 + i
-//! sees the keys up to itself, the last `ctx` of them when ctx is nonzero, 2048 at most; heads of PK_ATTN_HS
-//! (the literal 64 in the body - a kernel reads no module global); a threadgroup a (head, row) over staged scores.
-let PK_ATTN_HS = 64   //!< the head size the attention row's body is stamped for
-let PK_ATTN_MAX_KEYS = 2048l   //!< the scores the attention row stages in threadgroup memory - the body's literal
-struct PkAttnArgs {
-    t : uint
-    qs : uint
-    qcol : uint
-    d : uint
-    pos0 : uint
-    ctx : uint
-}
+let PK_ATTN_HS = int(GK_PK_ATTN_HS)   //!< the head size the attention row's body is stamped for
+let PK_ATTN_MAX_KEYS = int64(GK_PK_ATTN_MAX_KEYS)   //!< the scores the attention row stages in threadgroup memory - the body's literal
 
+//! the subgroup primitives the shared reductions ride, Metal's spelling
+def gk_subgroup_add(v : float) : float => simd_sum(v)
+def gk_subgroup_max(v : float) : float => simd_max(v)
+
+//! The Pocket chains' causal cached attention row; a threadgroup a (head, row) over staged scores.
 [metal_dispatch(name = "enc_pk_attn", pso = "g_pso_pk_attn", tgmem = "metal_pk_attn_msl_tgmem", tg = 256, grid = "total", params = "total : int64")]
-class MetalPkAttn {
-    @ssbo @binding = 0 @role = "read" q : array<float>
-    @ssbo @binding = 1 @role = "read" k : array<float>
-    @ssbo @binding = 2 @role = "read" v : array<float>
-    @ssbo @binding = 3 @role = "write" o : array<float>
-    @uniform @binding = 4 ka : PkAttnArgs
-    @workgroup qh : float[128]
-    @workgroup sc : float[2048]   // == PK_ATTN_MAX_KEYS
-    @workgroup po : float[512]
-    @workgroup red : float[16]
-
-    //! the scaled scores of keys j0.. into the stage, then their normalized softmax weights
-    def pk_attn_scores(h, j0, nk, lid : uint) {
-        var m = -1.0e30
-        var j = lid
-        while (j < nk) {
-            let krow = (j0 + j) * ka.d + h * 64u
-            var sdot = 0.0
-            var e = 0u
-            while (e < 64u) {
-                sdot += qh[e] * k[krow + e]
-                e++
-            }
-            sc[j] = sdot
-            m = max(m, sdot)
-            j += 256u
-        }
-        let mall = tg_max_all(m, red)
-        barrier()
-        let inv = 1.0 / sq_exp_sum(sc, red, mall, nk, lid, 256u)
-        j = lid
-        while (j < nk) {
-            sc[j] *= inv
-            j += 256u
-        }
-        barrier()   // fences the weights for the V loop
-    }
-
+class MetalPkAttn : GkPkAttn {
     [metal_kernel(name="metal_pk_attn_msl")]
     def metal_pk_attn {
-        let wg = gl_WorkGroupID.x
-        let h = wg / ka.t
-        let i = wg % ka.t
-        let lid = gl_LocalInvocationID.x
-        let p = ka.pos0 + i
-        let j0 = tts_window_start(p, ka.ctx)
-        let nk = p + 1u - j0
-        if (lid < 64u) {
-            qh[lid] = q[i * ka.qs + ka.qcol + h * 64u + lid] / sqrt(float(64u))
-        }
-        barrier()
-        pk_attn_scores(h, j0, nk, lid)
-        let parts = 256u / 64u
-        if (lid < parts * 64u) {
-            let e = lid % 64u
-            let part = lid / 64u
-            var acc = 0.0
-            var jj = part
-            while (jj < nk) {
-                acc += sc[jj] * v[(j0 + jj) * ka.d + h * 64u + e]
-                jj += parts
-            }
-            po[part * 64u + e] = acc
-        }
-        barrier()
-        if (lid < 64u) {
-            var tot = 0.0
-            var pp = 0u
-            while (pp < parts) {
-                tot += po[pp * 64u + lid]
-                pp++
-            }
-            o[i * ka.d + h * 64u + lid] = tot
-        }
+        pk_attn_body()
     }
 }
 

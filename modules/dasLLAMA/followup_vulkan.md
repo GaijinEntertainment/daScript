@@ -1930,19 +1930,25 @@ module) is independent and can land any time - it is pure structure.
     skip on it as they do on a missing device) or the offending opcode is spelled the way
     MoltenVK's converter accepts, and the three files read green under MoltenVK.
 
-115. **Seventeen TTS kernels are one algorithm under two class shells.** `TtsSrcCumsumT`, `TtsStftT`,
-    `TtsIstft`, `TtsSrcSinesT`, `TtsSrcLowT`, `TtsAdainT`, `TtsPkAttn`, `TtsPkGemvT`,
-    `TtsPoolDw`, `TtsIm2colT`, `TtsElemT`, `TtsAddScale`, `TtsPkRowScale`, `TtsRowGather`,
-    `TtsPkRowsT` (the reflect pad's two copies included), `TtsSigSum` and
-    `TtsSrcNoise` each have a `MetalSt2*` / `MetalPk*` twin whose body is the same arithmetic, held in
-    `dasllama_gpu_math.das`; what stays twice is the shell - the binding declarations, the entry, the
-    workgroup count. The shell folds as `TtsConcat` and `TtsAxpy` did: one `class template` in
-    `dasllama_gpu_kernels_common.das` both homes stamp (`ARCHITECTURE_GPU.md#gpu-shared-kernels`). A pair
-    whose two bodies were tuned apart (`TtsElemT` maps four elements an invocation, its Metal twin one a
-    thread) keeps both and shares the per-element function. The seat chains the two
-    drivers write per backend are the other half of the same picture and a separate arc: the host flow of
-    every TTS seat - the stage ping-pong, the concat when the width differs, the head-block loop - is
-    identical and could run once over an encoder interface, about 450 lines.
+115. **The TTS kernel pairs still under two shells, and what each fold costs.** The kernels both GPU
+    homes run as one `class template` (`ARCHITECTURE_GPU.md#gpu-shared-kernels`) cover the Pocket
+    row copy, rope and attention, the duration sums, the whole harmonic source, the STFT pair, AdaIN,
+    the depthwise rows conv, the residual add-and-scale, Axpy and Concat. What stays twice, by kind:
+    (a) the same output under a different thread-to-work split - `TtsElemT` / `TtsPkRowScale` /
+    `TtsGeluTanh` (Vulkan four elements an invocation, Metal one a thread), the reflect pad (two
+    `TtsPkRows` copies against `MetalSt2Reflect1`), the column statistics (four dispatches against
+    one), the Pocket row GEMV (`TtsPkGemvT`'s float4 lane against `MetalPkGemvT`'s strided lane, five
+    stamps) - each folds onto one body and is profiled on both boxes, two bodies kept only where the
+    profile parts; (b) a different algorithm - the LSTM direction (each home's slab writer lays `w_hh`
+    out its own way) and the ALBERT attention (a two-pass softmax against an online one) - which stay
+    two; (c) pairs whose Metal twin serves another family's chain and folds with that family's PR -
+    `TtsRowGather` (`MetalRowGather` is the decode greedy embed's and the whisper stem's) and
+    `TtsIm2colT` (`MetalSt2Im2colCm` is the whisper twin). Vulkan's four fused frame-loop GEMV stamps
+    (`LnQkv`, `AddScale`, `Add`, `LnGelu`) have no Metal twin: once the GEMV template is shared, Metal
+    gains them and the five-dispatch layer. The seat chains the two drivers write per backend are the
+    other half of the same picture and a separate arc: the host flow of every TTS seat - the stage
+    ping-pong, the concat when the width differs, the head-block loop - is identical and could run
+    once over an encoder interface, about 450 lines.
 
 116. **The speculative round has no Vulkan round seat.** The round's four backend seats
     (`register_mtp_spec_override`, `_spec_batch_`, `_round_`, `_seam_` in `dasllama_common.das`)

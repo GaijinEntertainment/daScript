@@ -485,9 +485,8 @@ let private AD_T = 45
 let private AD_C = 72
 let private AD_SD = 16      //! the style vector's width
 let private AD_EPS = 1e-5
-let private AD_XOFF = 5     //! each plane's element base: the prefix before it is never written
-let private AD_YOFF = 9
-let private AD_HOFF = 7
+let private AD_HOFF = 7     //! the style rows' element base: the prefix before it is never read
+let private AD_SLACK = 5    //! elements past the run, left at the sentinel
 let private AD_GWOFF = 3    //! the slab's norm scale row, then its shift row and Snake's alpha row, POISON between
 
 //! an AdaIN over AD_C channels from an AD_SD-wide style: fc w [2c][sd] and b, the norm's scale and shift rows
@@ -550,26 +549,22 @@ def test_vkt_adain(t0 : T?) {
             var f <- adain_fixture()
             with_cell_planes() $(var cp : CellPlanes) {
                 let x0p = cp |> in_(f.x)
-                let xp = cp |> in_(f.x, AD_XOFF)
-                let xip = cp |> io_(f.x, AD_XOFF)
+                let xp = cp |> in_(f.x)
+                let xip = cp |> io_(f.x, 0, AD_SLACK)
                 let hp = cp |> in_(f.style_fc, AD_HOFF)
                 let wp = cp |> in_(f.slab)
                 let stp = cp |> out_(colstats_floats(AD_T, c))
-                let ylp = cp |> out_(n, AD_YOFF)
-                let ysp = cp |> out_(n, AD_YOFF)
+                let ylp = cp |> out_(n, 0, AD_SLACK)
+                let ysp = cp |> out_(n, 0, AD_SLACK)
                 var s_l = cp |> cls_set(fixed_array(xp, ylp, stp, hp, wp), @@set_tts_adain_leaky_cls)
                 var s_s = cp |> cls_set(fixed_array(xp, ysp, stp, hp, wp), @@set_tts_adain_snake_cls)
                 var s_i = cp |> cls_set(fixed_array(xip, xip, stp, hp, wp), @@set_tts_adain_leaky_cls)
-                static_assert(AD_EPS == TTS_ADAIN_EPS, "the CPU oracle's eps is the stamps' literal")
-                var pa = TtsAdainArgs(c = uint(c), t = uint(AD_T), xoff = uint(AD_XOFF), yoff = uint(AD_YOFF), hoff = uint(AD_HOFF),
-                    gwoff = uint(AD_GWOFF), gboff = uint(f.gboff), aoff = uint(f.aoff))
-                var pi = pa
-                pi.yoff = uint(AD_XOFF)
+                var pa = GkAdainArgs(c = uint(c), t = uint(AD_T), eps = AD_EPS, hoff = uint(AD_HOFF), gwoff = uint(AD_GWOFF), gboff = uint(f.gboff), aoff = uint(f.aoff))
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     colstats_enc(raw, h, cp, x0p, stp, AD_T, c)
                     enc_tts_adain_leaky_cls(raw, h, s_l, pa, int64(n))
                     enc_tts_adain_snake_cls(raw, h, s_s, pa, int64(n))
-                    enc_tts_adain_leaky_cls(raw, h, s_i, pi, int64(n))
+                    enc_tts_adain_leaky_cls(raw, h, s_i, pa, int64(n))
                 }
                 let got_l <- cp |> plane_run(ylp)
                 let got_i <- cp |> plane_run(xip)
@@ -578,9 +573,9 @@ def test_vkt_adain(t0 : T?) {
                 check_rows(t, "tts_adain_leaky in place vs the CPU adain_rows_into and leaky_relu", got_i, f.want_leaky, BAR_APPROX, AD_C)
                 t |> success(got_i[0] != f.x[0], "tts_adain_leaky in place control: the input row is overwritten")
                 t |> equal(mismatch_exact(got_i, got_l), 0, "tts_adain_leaky: in place == out of place, bit for bit")
-                t |> success(outside_run(cp |> plane_whole(ylp), AD_YOFF, n, NAN_SENTINEL) && outside_run(cp |> plane_whole(ysp), AD_YOFF, n, NAN_SENTINEL),
-                    "tts_adain: the prefix before yoff keeps its sentinel")
-                t |> success(outside_run(cp |> plane_whole(xip), AD_XOFF, n, POISON), "tts_adain in place: the prefix before xoff is untouched")
+                t |> success(outside_run(cp |> plane_whole(ylp), 0, n, NAN_SENTINEL) && outside_run(cp |> plane_whole(ysp), 0, n, NAN_SENTINEL),
+                    "tts_adain: the elements past the run keep their sentinel")
+                t |> success(outside_run(cp |> plane_whole(xip), 0, n, POISON), "tts_adain in place: the elements past the run are untouched")
             }
             delete f
         } else {
