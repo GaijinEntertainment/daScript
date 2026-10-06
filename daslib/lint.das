@@ -1903,20 +1903,42 @@ def private stale_scan_line(bytes : array<uint8> const# implicit; fname : string
     }
 }
 
+def private uninstanced_generic_lines(prog : ProgramPtr; fname : string) : array<int2> {
+    let mod = prog.getThisModule
+    var instanced : table<int>
+    for_each_function(mod, "") $(fn) {
+        var root = fn.fromGeneric
+        while (root != null && root.fromGeneric != null) {
+            root = root.fromGeneric
+        }
+        if (root != null && root._module == mod) {
+            instanced |> insert(int(root.at.line))
+        }
+    }
+    var lines : array<int2>
+    for_each_generic(mod, "") $(g) {
+        if (g.body != null && g.at.fileInfo != null && g.at.fileInfo.name == fname && !key_exists(instanced, int(g.at.line))) {
+            lines |> push(int2(int(g.at.line), int(g.body.at.last_line)))
+        }
+    }
+    return <- lines
+}
+
 //! LINT019 - stale nolint detection: reports every leading ``// nolint:CODE`` directive in
 //! `source` (recognition rule: stale_scan_line) whose code suppressed nothing this process.
 //! Call AFTER all lint passes ran; a partial run under-consumes and would lie.
-def public stale_nolint_collect(fname, source : string; disabled_codes, enabled_codes : table<string>; var issues : array<LintIssue>) : int {
+def public stale_nolint_collect(prog : ProgramPtr; fname, source : string; disabled_codes, enabled_codes : table<string>; var issues : array<LintIssue>) : int {
     return 0 if (key_exists(disabled_codes, "LINT019")
                     || (!empty(enabled_codes) && !key_exists(enabled_codes, "LINT019")))
     var count = 0
     var line_no = 0
     var stale_codes : array<string>
     stale_codes |> reserve(4)
+    let skipped <- uninstanced_generic_lines(prog, fname)
     for (raw_line in split(source, "\n")) {
         line_no++
         let line = raw_line |> ends_with("\r") ? slice(raw_line, 0, length(raw_line) - 1) : raw_line
-        continue if (find(line, "nolint:") < 0)
+        continue if (find(line, "nolint:") < 0 || find_index_if(skipped, $(r) => line_no >= r.x && line_no <= r.y) >= 0)
         stale_codes |> clear()
         var self_suppressed = false
         peek_data(line) $(bytes) {

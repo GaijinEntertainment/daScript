@@ -20,6 +20,12 @@ def run_argv(args : array<string>; var output : string&) : int {
     }))
 }
 
+def lint_fixtures_run(exe, root : string; extra : array<string>; var output : string&) : int {
+    var argv <- [exe, "-dasroot", root, "{root}/utils/lint/main.das", "--", "--lint-fixtures", "--lint-excluded-paths"]
+    argv |> push_from(extra)
+    return run_argv(argv, output)
+}
+
 [test]
 def test_stale_nolint(t : T?) {
     let root = get_das_root()
@@ -57,9 +63,7 @@ def test_stale_nolint(t : T?) {
         run_argv([exe, "-dasroot", root, "{root}/utils/lint/main.das", "--", fixture, "--lint-fixtures", "--lint-excluded-paths", "--disable", "LINT019"], output)
         t |> success(find(output, "LINT019") < 0, "no LINT019 under --disable: {output}")
     }
-    t |> run("generic-body directive consumed by a later-sorted consumer (end-scan)") @(t : T?) {
-        // serial mode scans staleness AFTER all compiles: the consumer sorts after the
-        // generic, so a per-file scan would falsely report both directives stale
+    t |> run("generic-body directive consumed by another file's compile") @(t : T?) {
         let gen = "{root}/tests/lint/stale_fixtures/_fixture_stale_gen.das"
         let consumer = "{root}/tests/lint/stale_fixtures/_fixture_stale_gen_consumer.das"
         var output = ""
@@ -81,5 +85,16 @@ def test_stale_nolint(t : T?) {
         run_argv([exe, "-dasroot", root, "{root}/utils/lint/main.das", "--", fixture, "--lint-fixtures", "--lint-excluded-paths"], output)
         t |> success(find(output, "lint-skip-file") < 0, "the deep occurrence is not honored: {output}")
         t |> success(find(output, "PASS") >= 0, "the file lints normally: {output}")
+    }
+}
+
+[test]
+def test_stale_nolint_generic_alone(t : T?) {
+    let root = get_das_root()
+    let exe = das_exe()
+    t |> run("a nolint in a generic no file in the run instantiates is not judged") @(t : T?) {
+        var output = ""
+        lint_fixtures_run(exe, root, ["{root}/tests/lint/stale_fixtures/_fixture_stale_gen.das"], output)
+        t |> success(find(output, "LINT019") < 0, "the generic alone: its directives are not stale: {output}")
     }
 }
