@@ -1770,12 +1770,6 @@ module) is independent and can land any time - it is pure structure.
     windowed the same way, or the sample-rate convs' columns gathered inside the tile so no column
     slot exists; the instrument is the attach ledger's `vk tts scratch` line and the codec served
     cells.
-107. **The Pocket prompt stays on the CPU.** The text rows' backbone prefill over the voice's
-    caches runs the CPU chain, since the family's hook record carries a codec and a frames seat
-    only (the Metal twin's too); its share of a steady Pocket sentence on the pod is the prompt
-    bucket of the `PERF_LEDGER.md` Vulkan TTS seats entry. A prompt seat is the frames seat's layer
-    chain at t = n_txt rows on the f32 tile, writing the caches' rows the frames seat reads; the
-    instrument is `harness/tts_synth.das`'s prompt bucket beside the two rows.
 106. **The TTS LSTM recurrence walks one SM.** `TtsLstmDir` runs a direction in one workgroup
     (four lanes a hidden unit over the recurrence transposed to [H][4H]), and a step costs the same
     whatever the k loop's shape (four independent accumulators read the same as one): the

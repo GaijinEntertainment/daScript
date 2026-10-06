@@ -4,7 +4,7 @@ Companion to `ARCHITECTURE_GPU_TOWER_VULKAN.md`; a section is cited by its ancho
 carries the seats the Vulkan TTS driver serves: the StyleTTS2 synthesis seats of the kitten and
 kokoro families, and the Pocket TTS codec and frames seats. The Metal twin of every StyleTTS2 seat
 is `ARCHITECTURE_GPU_TOWER.md#tower-tts-chain`, of the Pocket seats
-`ARCHITECTURE_GPU_TOWER.md#tower-pocket-codec` and `ARCHITECTURE_GPU_TOWER.md#tower-pocket-frames`,
+`ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-codec` and `ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames`,
 and the CPU chain is the specification, dispatch for dispatch. The GPU backend role table these
 sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
@@ -130,8 +130,8 @@ host inverse STFT, as the Metal twin does.
 
 ### The Pocket seats on Vulkan {#vk-pocket-chain}
 
-The Pocket family's two seats ride the same driver and knob, registered through
-`register_pocket_gpu`. Every Pocket linear is f32 rows in the slab - a q8 or K-quant file
+The Pocket family's three seats - the codec, the frame loop and the text prompt - ride the same
+driver and knob, registered through `register_pocket_gpu`. Every Pocket linear is f32 rows in the slab - a q8 or K-quant file
 dequantized through the active repack at slab time; the driver carries no q8 blob route, so the
 served lanes read the weights at f32 where the CPU chain reads quants. The codec seat is one
 submit over the whole run (at most 512 frames; a longer chunk declines by shape and the CPU's
@@ -149,7 +149,8 @@ ratio the ELU (`TtsPkRowsElu`), the transposed upsample and the ELU-conv-ELU-con
 block, the last ELU, dec_out and the sample column copied out. The frames seat: the voice's
 K/V rows live on the device per backbone layer as [cap][d] rows under a key over the host
 caches, with the rope tables for every position they can hold; the chunk's text rows come up
-before the loop; each frame is the CPU's `frame_step` and `head_step` at t = 1 - the input
+before the loop, but for the rows a served prompt seat left there (`TtsPkPromptDev`, spent by the
+frames call after it); each frame is the CPU's `frame_step` and `head_step` at t = 1 - the input
 linear, per layer five dispatches (the qkv row off the residual's norm with its q span roped in
 place and its k and v spans roped and stored into the caches' row at the frame's position, the
 attention over the cache, the out projection added into the residual under its layer scale, the
@@ -165,7 +166,15 @@ the four lattice - and the tail that adds the noise row and denormalizes the lat
 batches of eight a submit (`set_pocket_frame_batch`, the one knob both drivers read), the EOS rule
 walked on the host between batches from the logits read back, the generator rewound past the frames
 made - the one host loop both drivers run (`pocket_frames_batched`, `dasllama_pocket.das`), each
-handing it its noise sink, its submit and its EOS source.
+handing it its noise sink, its submit and its EOS source. The prompt seat is the codec
+transformer's layer loop (`ts_pk_rows_tf`, the one rows form both chains dispatch) over the frames
+slab's layers and the chunk's embedding rows (the host's gather, `pocket_prompt_embed`) at the
+positions after the voice's rows: the rope from the voice slot's tables at the first row's
+position (`TtsPkRope`, stamped from the `GkRopeTab` template both homes share), the keys and
+values into the voice slot's rows at those positions, the attention over the slot's rows below
+them, the last layer ending at its keys and values (only the caches are read after a prompt - the
+CPU chain's `cache_rows` makes the same cut); the rows come back to the host caches after the
+submit, so the CPU frame loop reads them as its own.
 
 The declines: `knob`, `shape` (a width off the 64 lattice, a head width other than 64 or 128,
 more than 512 tokens for the attention stage, an LSTM direction over 256 hidden), `device` (the

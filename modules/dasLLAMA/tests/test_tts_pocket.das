@@ -703,7 +703,6 @@ def private prompt_kv(vs : PocketVoiceState; n : int64) : PromptRows {
 //! the knob-off leg bit-equal with its decline recorded; false where no device serves (the skip registered).
 [cold_path, unused_argument(t, m, k, tag, bar, sc)]   // off-Apple the gated body is empty
 def private prompt_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : string; bar : float; var sc : PocketScratch) : bool {
-    var ran = false
     static_if (typeinfo builtin_module_exists(das_metal) || typeinfo builtin_module_exists(vulkan)) {
         let n = long_length(k.ids)
         set_serving_gpu_tower(false)
@@ -731,16 +730,14 @@ def private prompt_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : s
             return rel_l2(off.k, cpu.k) == 0.0 && rel_l2(off.v, cpu.v) == 0.0
         }
         set_serving_gpu_tower(true)
-        var inscope ids3 : array<int64>
-        for (i in range64(n)) {
-            ids3 |> push(k.ids[(i + 1l) % n])
-        }
+        var inscope ids3 <- [for (i in range64(n)); k.ids[(i + 1l) % n]]
         pocket_prompt_rows(m, ids3, k.vs, sc)
         var inscope gx <- prompt_kv(k.vs, n)
         t |> success(rel_l2(gx.k, cpu.k) > bar, "{tag}: the text rotated by one token reds the bar (the compare's control)")
-        ran = true
+        return true
+    } else {
+        return false
     }
-    return ran
 }
 
 //! The prompt seat on the f32 lane and on the served planes of the q8 and kq files, as `prompt_seat_leg` holds it.

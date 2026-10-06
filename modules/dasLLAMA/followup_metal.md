@@ -745,15 +745,14 @@ Snake blocks at 512 channels, where a wider N tile or the AdaIN pass folded into
 loader are the A/Bs. The served-lane synthesis cell (`tests/_tts_parity.das`,
 `tts_gpu_synthesis`) gates counters and sample counts and logs its sample-wise waveform figure
 without a bar; a phase-insensitive instrument - a per-window spectral compare tolerant of one
-frame of shift - would gate the served lane end to end. Pocket TTS rides the tower in two seats
-(`ARCHITECTURE_GPU_TOWER.md#tower-pocket-codec` and `ARCHITECTURE_GPU_TOWER.md#tower-pocket-frames`); what its frame loop still costs is the
+frame of shift - would gate the served lane end to end. Pocket TTS rides the tower in three seats
+(`ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-codec` and `ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames`); what its frame loop still costs is the
 GPU's own time, `debug-jit` on the M5 Max 0.6 ms a frame on the q8 file against the CPU's 1.3
 (`PERF_LEDGER.md`, `harness/pocket_stage_probe.das`), 0.44 of it the backbone's 57 dispatches
 and 0.19 the head's 22, the encode under 0.03: the levers are
 the head as one threadgroup over q8 weights (nine million parameters, one dispatch in place of
-22 - where the CPU's head is q8 already, the kq files), the first norm folded into the q8 GEMV's
-prologue as the f32 route already folds it, and the text prompt's rows on the tower (the
-`prompt` stage clock of `test_pocket_synthesis_metal`, six milliseconds a chunk on the CPU). The frames' K/V never return to the host, so a chunk
+22 - where the CPU's head is q8 already, the kq files) and the first norm folded into the q8 GEMV's
+prologue as the f32 route already folds it. The frames' K/V never return to the host, so a chunk
 whose command buffer fails reruns whole on the CPU. The codec transformer's layer
 (`pk_transformer`) and the frame loop's (`pk_fr_layer`) are two bodies of one layer: one body
 waits on a rows form of the rope-and-store (`MetalRopeStoreBKvT` with a row table is the

@@ -1290,7 +1290,7 @@ what it costs today and what the fix would change.
   before the change: sampled within 5% of greedy. `lcpp_bench` carries no sampler flag (its
   `--mtp-temp` sets a temperature alone), so no board row holds the sampled rate.
 - **LANDED (2026-09-25) - the Pocket TTS frame loop rides the Metal tower as the family's second
-  seat (`ARCHITECTURE_GPU_TOWER.md#tower-pocket-frames`): the backbone step and the flow head for every
+  seat (`ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames`): the backbone step and the flow head for every
   frame, eight frames a command buffer over a per-voice device K/V slot, the EOS rule on the host
   between batches, the q8 backbone on the decode GEMV, the head's GEMVs carrying their norm and
   activations, the attention row a threadgroup a head with its scores staged.** The bare q8
@@ -1338,7 +1338,7 @@ what it costs today and what the fix would change.
   `harness/tts_rig.py` on the 200-sentence corpus against the codec-seat rows: q8 4.23 / 4.364 -> 4.18 / 4.364, kq 4.04 / 4.333 -> 3.91 / 4.325, stuart-kq 3.23 / 4.117 -> 3.36 / 4.136 (WER / UTMOS, a word or two of the 2201 either way, the UTMOS within a hundredth). The
   levers left are `followup_metal.md` sec.27.
 
-- **LANDED (2026-09-25) - the Pocket TTS codec rides the Metal tower (`ARCHITECTURE_GPU_TOWER.md#tower-pocket-codec`): a chunk's latents up, its samples back, one command buffer, the CPU's windowed codec
+- **LANDED (2026-09-25) - the Pocket TTS codec rides the Metal tower (`ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-codec`): a chunk's latents up, its samples back, one command buffer, the CPU's windowed codec
   run as one shot over the chunk on the f32-exact GEMM stamps, the K-quant transformer linears
   dequantized into the slab so the small form serves too.** Box: the M5 Max, every das figure
   `-jit` on this tree with `DAS_TUNE_MANIFEST=performance/m5.tune.json` (its runtime section

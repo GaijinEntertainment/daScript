@@ -4627,7 +4627,7 @@ def private pk_codec_chain(enc : MetalComputeEncoder?; var c : St2GpuCtx; mm : P
     enc_pk_rows(enc, bo, bwave, kw, t)
 }
 
-[hot_path, unused_argument(sc), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-pocket-codec")]   //! the carrier is the CPU chain's; the seat's rows live in the pool
+[hot_path, unused_argument(sc), arch(at="../ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-codec")]   //! the carrier is the CPU chain's; the seat's rows live in the pool
 def private metal_pocket_codec(m : PocketModel; latents : array<float>; frames : int64; var sc : PocketScratch; @scratch @exact_size var wave : array<float>) : bool {
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
@@ -4894,7 +4894,7 @@ def private pk_frames_rebuild(m : PocketModel; key : uint64) : bool {
 }
 
 //! Host rows [r0, r1) of one cache as the device's [pos][d] rows, written straight into the shared buffers.
-[arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-pocket-frames")]
+[arch(at="../ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames")]
 def private pk_kv_rows(kc : TtsKvCache; bk, bv : MetalBuffer?; r0, r1 : int64) {
     unsafe {
         var kp = reinterpret<float?>(metal_buffer_contents(bk))
@@ -4987,7 +4987,7 @@ def private pk_site(var c : St2GpuCtx; var bx : MetalBuffer?; xoff : uint64; var
 }
 
 //! The row GEMV at a site under one of the five stamp kinds.
-[arch(at = "../ARCHITECTURE_GPU_TOWER.md#tower-pocket-frames")]
+[arch(at = "../ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames")]
 def private pk_gemv(enc : MetalComputeEncoder?; var c : St2GpuCtx; p : PkLin; kind : int; s : PkGemvSite) {
     var ka = PkGemvArgs(nin = uint(p.nin), nout = uint(p.nout), stride = p.q8 ? 0u : uint(p.f.kdim_p), eps = POCKET_HEAD_LN_EPS)
     let woff = p.q8 ? 0ul : p.f.woff
@@ -5141,7 +5141,7 @@ def private pk_frames_loop(m : PocketModel; var sl : PkFramesSlab; var c : St2Gp
     })
 }
 
-[hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-pocket-frames")]
+[hot_path, arch(at="../ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames")]
 def private metal_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_txt : int64; std : float; frames_after_eos : int;
                                 captured, forced : array<float>; max_frames : int64; var sc : PocketScratch) : tuple<frames : int64; eos_at : int64> {
     let none = (frames = -1l, eos_at = -1l)
@@ -5214,7 +5214,8 @@ def private pk_rows_lin(enc : MetalComputeEncoder?; var c : St2GpuCtx; p : PkLin
     pf_enc_q8_mm(enc, g_tw_pk_frames.blob, p.qoff, bx, bxh, by, p.u_nin, p.u_nout, mp, p.nout, p.nin)
     if (p.has_b) {
         let n = rows * p.nout
-        enc_add_bias_rows(enc, by, 0ul, c.slab, p.boff, p.u_nout, st2_u(c, uint(n)), n)
+        let u_n = st2_u(c, uint(n))
+        enc_add_bias_rows(enc, by, 0ul, c.slab, p.boff, p.u_nout, u_n, n)
     }
 }
 
@@ -5224,14 +5225,14 @@ def private pk_rows_lin(enc : MetalComputeEncoder?; var c : St2GpuCtx; p : PkLin
 def private pk_prompt_rows(enc : MetalComputeEncoder?; var c : St2GpuCtx; tf : PocketTransformer; sl : PkFramesSlab; b : PkTfBufs; bx, bxh : MetalBuffer?; t, pos0 : int64) {
     let d = tf.d
     let dh = uint(d / tf.heads)
-    let half = d / tf.heads / 2l
+    let tab0 = uint(pos0 * (d / tf.heads / 2l))   // the tables' row of the first prompt position
     let nd = t * d
     let u_d = st2_u(c, uint(d))
     let u_nd = st2_u(c, uint(nd))
     let v & = g_tw_pk_voice
     let last = length(tf.layers) - 1
     var kc = PkRowsArgs(rows = uint(t), width = uint(d), ss = uint(3l * d), sc = uint(d), sr0 = 0u, ds = uint(d), dc = 0u, dr0 = uint(pos0))
-    var ra = GkRopeTabArgs(rows = uint(t), qs = uint(3l * d), col = 0u, d = uint(d), dh = dh, coff = uint(pos0 * half), soff = uint(pos0 * half))
+    var ra = GkRopeTabArgs(rows = uint(t), qs = uint(3l * d), col = 0u, d = uint(d), dh = dh, coff = tab0, soff = tab0)
     let pairs = t * (d / 2l)
     for (i in range(length(tf.layers))) {
         let s & = unsafe(sl.layers[i])
@@ -5283,7 +5284,7 @@ def private pk_prompt_readback(var vs : PocketVoiceState; t, d : int64) {
 //! The text prompt's rows through the backbone after the voice's: the frames slab's layers in the rows form at
 //! positions vs.len.., the keys and values into the voice slot and back to the host caches, the slot's rows left
 //! for the frames call after it.
-[hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-pocket-frames")]
+[hot_path, arch(at="../ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames")]
 def private metal_pocket_prompt(m : PocketModel; var vs : PocketVoiceState; n_txt : int64; var sc : PocketScratch) : bool {
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
