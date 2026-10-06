@@ -111,3 +111,4 @@ JIT size optimization level for compiled code (0-3).
 Path to shared library, which is used in JIT.
 Path to linker, which is used in JIT.
 compile_file from a script reads and refreshes the default module cache around this compile (keyed by the file, the running binary, the host arguments and these policies).
+Interpreter only: caps how deep fastcall (frameless) calls may nest, panicking past the cap instead of exhausting the native stack; 0 leaves fastcall unchecked. Host-side counterpart of ``options max_fast_call_depth`` (the option overrides the policy).

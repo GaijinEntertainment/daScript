@@ -3254,7 +3254,7 @@ namespace das {
         X(strict_properties) X(no_writing_to_nameless) X(no_optimizations) X(no_fold_unsafe) X(fast_math) X(disable_dse) \
         X(disable_cse) X(disable_temp_string_reclaim) X(disable_inline) X(disable_auto_inline) \
         X(auto_inline_functions) X(auto_inline_cost) X(disable_run) X(no_infer_time_folding) \
-        X(fail_on_no_aot) X(fail_on_lack_of_aot_export) X(no_fast_call) X(fusion) X(scoped_stack_allocator) \
+        X(fail_on_no_aot) X(fail_on_lack_of_aot_export) X(no_fast_call) X(max_fast_call_depth) X(fusion) X(scoped_stack_allocator) \
         X(force_inscope_pod) X(log_inscope_pod) X(debugger) X(profiler) X(jit_enabled) \
         X(jit_jit_all_functions) X(jit_debug_info) X(jit_opt_level) X(jit_size_level) X(jit_dll_mode) \
         X(jit_output_path) X(jit_path_to_shared_lib) X(jit_path_to_linker) X(threadlock_context) \

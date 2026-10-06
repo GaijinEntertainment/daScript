@@ -101,6 +101,11 @@ def test_compile_file_module_cache(t : T?) {
     targetNooptOk = targetNooptOk && !served(targetNoopt, leafFile) && !served(targetNoopt, rootFile)
     t |> success(targetNooptOk, "other policies beside a --jit-target still compile cold:\n{targetNoopt}")
     t |> equal(cache_files(cacheDir, "mc_cf_root"), 5, "the policies hash survives the jit target in the key")
+    var depth : string
+    var depthOk = run_child_reported(t, "depth", "{drv} cache depth", depth, "MC_CF_COMPILED")
+    depthOk = depthOk && !served(depth, leafFile) && !served(depth, rootFile)
+    t |> success(depthOk, "a fastcall depth cap is a policy the key folds, so it compiles cold:\n{depth}")
+    t |> equal(cache_files(cacheDir, "mc_cf_root"), 6, "max_fast_call_depth keys a sixth record")
     var err : string
     rmdir_rec(tmp, err)
 }

@@ -98,6 +98,38 @@ to have finished - a capture macro's check that a captured `JobStatus` was relea
 again inside a destructor, which is `noexcept`, and the process dies in `std::terminate`. The
 guard costs nothing where exceptions are off.
 
+## The fastcall depth guard {#fastcall-depth-guard}
+
+A fastcall function (`Function::fastCall`, decided in `src/ast/ast_allocate_stack.cpp`, repo
+root) pushes no das stack frame: its body is a single expression evaluated straight from the
+caller's node, so a call chain of fastcall functions grows only the native C++ stack. A
+regular call fails cleanly at `stack.push` with `stack overflow while calling` once the das
+stack is spent; unbounded fastcall recursion runs to the native guard page instead, which is a
+process crash no `recover` sees. The guard is `CodeOfPolicies::max_fast_call_depth` (also
+`options max_fast_call_depth`), mirrored into `Context::maxFastCallDepth` by
+`Program::simulate` and `Context::setup`, and copied into every clone. When it is nonzero,
+`Function::makeSimNode` (`src/ast/ast_simulate.cpp`, repo root) emits
+`SimNode_FastCallChecked<N>` in place of `SimNode_FastCall<N>`: the same node with
+`Context::enterCheckedFastCall` before the body - increment `fastCallDepth`, panic past the cap
+- and a decrement after. The fused one- and two-argument shapes are a second family registered
+under `"FastCallChecked"` (`src/simulate/simulate_fusion_call1.cpp` / `call2.cpp`, repo root),
+so a checked call keeps its superinstructions; the unchecked `"FastCall"` family never gains
+the counter, and a program with the cap at zero emits only the unchecked `FastCall` nodes -
+the guard costs the unprotected call path nothing.
+
+The counter is a plain integer the panic path does not unwind: a panic is a longjmp in a
+build without C++ exceptions, so every frame between the throw and the handler skips its
+decrement. Each handler that restores `abiArg` after a caught panic - `SimNode_TryCatch`, its
+debugger twin, `das_try_recover` for AOT, `jit_try_recover` (`src/builtin/jit_runtime.cpp`,
+repo root) and the `evalWithCatch` / `runWithCatch` family
+(`src/simulate/simulate_exceptions.cpp`, repo root) - restores `fastCallDepth` to the value it
+held at the `try`, and `Context::restart` zeroes it, so a recovered overflow leaves no drift.
+Calls that resolve at runtime - function pointers, lambdas, class methods through
+`SimNode_InvokeFn` and its kin - push a regular frame and are bounded by the das stack
+already; `Context::callOrFastcall`, the entry AOT and JIT code use to call back into an
+interpreted function, stays frameless and uncounted, and the native code around it has no
+guard of its own either.
+
 ## Sanctioned hot-path additions
 
 The ledger the checklist's hot-path rules route to. Each entry: what was added, where, why
@@ -137,6 +169,17 @@ correctness required it, and the alternative that was rejected.
 - **`v_pow_signed`** (`sim_policy.h`) - vector `Pow` xors back the sign `v_log2_est_p5` drops:
   the odd bit of `trunc(y)` shifted to bit 31, anded with x. `pow_est` is the same without the
   xor, which is `GLSLstd450.Pow` - undefined for a negative base, as GLSL leaves it.
+
+- **The fastcall depth counter's save and restore at every panic handler** - one 32-bit load
+  of `Context::fastCallDepth` at the entry of `SimNode_TryCatch::eval`, its debugger twin,
+  `das_try_recover` (`src/simulate/simulate_exceptions.cpp`, repo root), `jit_try_recover`
+  (`src/builtin/jit_runtime.cpp`, repo root) and the `evalWithCatch` / `runWithCatch` family,
+  held across the `setjmp` or `try`, and one store on the catch path, cap set or not.
+  Correctness requires it because a panic is a longjmp that runs no frame's epilogue, so the
+  checked node's decrement is skipped for every frame between the throw and the handler, and
+  the handler is the only place the counter can be put back (`ARCHITECTURE.md#fastcall-depth-guard`).
+  Rejected alternatives: a save guarded on `maxFastCallDepth != 0` is a branch on the same
+  path for the same load; an RAII guard runs no destructor under longjmp.
 
 - **`das_ordered2`** (`aot.h`) - a function the AOT emitter wraps around any binary op whose
   operands are not both side-effect-free. It takes the op and one thunk per operand, and runs

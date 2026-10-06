@@ -175,6 +175,14 @@ Optimization
      - bool
      - false
      - Disables the fastcall optimization.
+   * - ``max_fast_call_depth``
+     - int
+     - 0
+     - Interpreter only. Caps how deep fastcall (frameless) calls may nest; past the cap the
+       call panics with ``stack overflow, max_fast_call_depth <cap> exceeded while calling
+       <function>``, which ``recover`` can catch, instead of exhausting the native stack. ``0``
+       leaves fastcall unchecked and costs nothing. Calls through function pointers, lambdas
+       and class methods push a regular frame and are already bounded by ``stack``.
 
 --------------------
 Memory

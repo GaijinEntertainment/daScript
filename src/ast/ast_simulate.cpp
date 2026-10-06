@@ -628,6 +628,10 @@ namespace das
         if ( copyOnReturn || moveOnReturn ) {
             return context.code->makeNodeUnrollAny<SimNode_CallAndCopyOrMove>(int(arguments.size()), at);
         } else if ( fastCall ) {
+            // include/daScript/simulate/ARCHITECTURE.md#fastcall-depth-guard
+            if ( context.maxFastCallDepth ) {
+                return context.code->makeNodeUnrollAny<SimNode_FastCallChecked>(int(arguments.size()), at);
+            }
             return context.code->makeNodeUnrollAny<SimNode_FastCall>(int(arguments.size()), at);
         } else {
             return context.code->makeNodeUnrollAny<SimNode_Call>(int(arguments.size()), at);
@@ -3689,6 +3693,7 @@ namespace das
         context.failed = true;
         context.verySafeContext = options.getBoolOption("very_safe_context",policies.very_safe_context);
         context.maxUnreservedSize = options.getUInt64Option("max_unreserved_size", policies.max_unreserved_size);
+        context.maxFastCallDepth = uint32_t(options.getIntOption("max_fast_call_depth", int32_t(policies.max_fast_call_depth)));
         astTypeInfo.clear();    // this is to be filled via typeinfo(ast_typedecl and such)
         auto disableInit = options.getBoolOption("no_init", policies.no_init);
         context.thisProgram = this;

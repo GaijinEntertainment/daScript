@@ -468,6 +468,7 @@ namespace das
             stopFlags = 0;
             exception = nullptr;
             last_exception = nullptr;
+            fastCallDepth = 0;
         }
 
         __forceinline void restartHeaps() {
@@ -617,6 +618,12 @@ namespace das
             abiArg = aa;
             stack.pop(EP, SP);
             return result;
+        }
+
+        __forceinline void enterCheckedFastCall ( const LineInfo & at, const SimFunction * fn ) {
+            if ( ++fastCallDepth > maxFastCallDepth ) {
+                throw_error_at(at, "stack overflow, max_fast_call_depth %u exceeded while calling %s", maxFastCallDepth, fn->mangledName);
+            }
         }
 
         DAS_EVAL_ABI __forceinline vec4f callOrFastcall(const SimFunction * fn, vec4f * args, LineInfo * line) {
@@ -945,6 +952,10 @@ namespace das
         vector<Context *>               forkContextPool;
         mutex                           forkContextPoolMutex;
         atomic<int32_t>                 forkContextsBorrowed{0};    // acquired and not yet released; the destructor waits for zero
+    public:
+        // include/daScript/simulate/ARCHITECTURE.md#fastcall-depth-guard
+        uint32_t                        fastCallDepth = 0;
+        uint32_t                        maxFastCallDepth = 0;       //! fixed at simulate: 0 exactly when the program carries no guarded fastcall nodes
     };
 
     struct DebugAgentInstance {
