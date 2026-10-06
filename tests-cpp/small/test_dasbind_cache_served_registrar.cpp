@@ -43,7 +43,7 @@ ProbeRun run_probe ( const string & script, const string & cachePath ) {
     // the same module list the record stream carries instead of skipping the promoted ones
     CodeOfPolicies policies;
     policies.ignore_shared_modules = true;
-    auto program = compileDaScript(script, fAccess, tout, libGroup, policies);
+    auto program = compileDaScript(script, fAccess, tout, libGroup, policies, cache.stream());
     run.compiled = !program->failed();
     if ( run.compiled ) {
         Context ctx(program->getContextStackSize());

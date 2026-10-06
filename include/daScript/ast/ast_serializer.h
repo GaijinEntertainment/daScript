@@ -518,18 +518,6 @@ namespace das {
     #define DAS_SER_PROFILE(ser, name)
 #endif
 
-    // File-backed driver for the env module-cache rail (daScriptEnvironment::serializer_read
-    // / serializer_write): install() binds a reader (when the file exists and is non-empty)
-    // and/or a writer around a compile; finish() unbinds, classifies what the reader saw,
-    // and saves the refreshed stream (write-to-temp + rename, creating missing parent
-    // directories) when the writeback fired.
-    // The writeback fires when there was no usable reader, the stream went stale, or a
-    // resumed record failed the THROWING way (damaged bytes - the rewrite repairs it); a
-    // drift-flavored 'partial' (a lazily populated builtin like dasbind, deterministic per
-    // process) deliberately does NOT rewrite - that reparse cost recurs per run by design.
-    // Pass the same path as both readFrom and writeTo for a self-maintaining cache; quiet
-    // silences the reader's per-record diagnostics. Under DAS_NO_FILEIO the cache
-    // degrades to a stub: install() binds nothing and finish() answers 'unavailable'.
     struct DAS_API ModuleFileCache {
         enum class ReadVerdict {
             none,       // no reader installed, or nothing was ever read (e.g. debugger disabled the rail)
@@ -549,9 +537,11 @@ namespace das {
             uint64_t    wroteBytes = 0;
         };
         void install ( const string & readFrom, const string & writeTo, bool quiet = false );
+        ModuleCacheStream stream () const { return ModuleCacheStream { reader.get(), writer.get() }; }
         Result finish ();
         static string defaultPath ( const string & scriptPath, const string & hostBinary, const string & hostOptions );
         static string embeddedHostOptions ( const CodeOfPolicies & policies );   // hostOptions for a script's compile_file: argv up to `--` + policies hash
+        static string embeddedPath ( const string & scriptPath, const CodeOfPolicies & policies );
         SerializationStorageVector  readStorage, writeStorage;
         unique_ptr<AstSerializer>   reader, writer;
         string                      writePath;
