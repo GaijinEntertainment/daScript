@@ -96,12 +96,8 @@ class CollectFinally : AstVisitor {
             }
         }
     }
-    def override canVisitMakeBlockBody(expr : ExprMakeBlock?) : bool {
-        return false
-    }
-    def override canVisitTryCatchBody(expr : ExprTryCatch?) : bool {
-        return !skipTryCatch
-    }
+    def override canVisitMakeBlockBody(expr : ExprMakeBlock?) : bool => false
+    def override canVisitTryCatchBody(expr : ExprTryCatch?) : bool => !skipTryCatch
 }
 
 [macro_function]
@@ -128,12 +124,8 @@ class CollectLabels : AstVisitor {
     def override preVisitExprLabel(expr : ExprLabel?) : void {
         labels |> insert(expr.labelName)
     }
-    def override canVisitMakeBlockBody(expr : ExprMakeBlock?) : bool {
-        return false
-    }
-    def override canVisitTryCatchBody(expr : ExprTryCatch?) : bool {
-        return !skipTryCatch
-    }
+    def override canVisitMakeBlockBody(expr : ExprMakeBlock?) : bool => false
+    def override canVisitTryCatchBody(expr : ExprTryCatch?) : bool => !skipTryCatch
 }
 
 [macro_function]

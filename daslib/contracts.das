@@ -58,9 +58,7 @@ class IsAnyType : AstFunctionAnnotation {
         }
         return true
     }
-    def override isSpecialized : bool {
-        return true
-    }
+    def override isSpecialized : bool => true
 }
 
 [contract(name="expect_any_array")]

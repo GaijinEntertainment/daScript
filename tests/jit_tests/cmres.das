@@ -48,13 +48,9 @@ def cmres_call_native {
     return a
 }
 
-def cmres_return_call_cmres {
-    return testCMRES()
-}
+def cmres_return_call_cmres => testCMRES()
 
-def cmres_passthrough(var a : int[10]) {
-    return cmres_via_copy(a)
-}
+def cmres_passthrough(var a : int[10]) => cmres_via_copy(a)
 
 struct ReturnFromFinally {
     values : table<string; int>

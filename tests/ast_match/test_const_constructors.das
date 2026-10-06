@@ -9,9 +9,7 @@ require daslib/ast_match
 require dastest/testing_boost public
 
 [export, marker(no_coverage)]
-def target_range13() : range {
-    return range(13)
-}
+def target_range13() : range => range(13)
 
 [test]
 def test_range_one_val_folded(t : T?) {

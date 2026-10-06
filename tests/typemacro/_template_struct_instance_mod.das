@@ -10,9 +10,7 @@ class template public XModKern {
     x : KT
     @template_constant BIAS : int = 0
 
-    def value : int {
-        return x + BIAS
-    }
+    def value : int => x + BIAS
 }
 
 class public XModBase {
@@ -37,9 +35,7 @@ class TsiTestBindKt : AstStructureAnnotation {
 class template public LateKern {
     x : KT
 
-    def take(v : KT) : KT {
-        return v + x
-    }
+    def take(v : KT) : KT => v + x
 }
 
 // apply adds an int global named for the function — the stamped-clone annotation arm asserts

@@ -221,9 +221,8 @@ struct private WatcherError {
     error : string
 }
 
-def private json_error(message : string) : string {
-    return sprint_json(WatcherError(error = message), false)
-}
+def private json_error(message : string) : string =>
+    sprint_json(WatcherError(error = message), false)
 
 def private hex_nibble(value : int) : int {
     if (is_number(value)) return value - '0'
@@ -310,9 +309,8 @@ class DasHerdWatcherServer : HvWebServer {
             || query_value_raw(url, "token") == token)
     }
 
-    def respond_error(var resp : HttpResponse?; status : http_status; message : string) : http_status {
-        return resp |> JSON(json_error(message), status)
-    }
+    def respond_error(var resp : HttpResponse?; status : http_status; message : string) : http_status =>
+        resp |> JSON(json_error(message), status)
 
     def require_auth(var req : HttpRequest?; var resp : HttpResponse?) : bool {
         if (req != null && authorized(string(req.url))) return true

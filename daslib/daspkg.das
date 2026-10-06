@@ -67,14 +67,11 @@ let PLATFORM_NAMES <- ["windows", "darwin", "linux", "emscripten"]
 let PLATFORM_ALIASES : table<string; string> <- { "wasm" => "emscripten", "wasm32" => "emscripten", "wasm64" => "emscripten", "macos" => "darwin", "osx" => "darwin", "win" => "windows", "win32" => "windows", "win64" => "windows" }
 
 //! True for a name in `PLATFORM_NAMES`.
-def is_known_platform(name : string) : bool {
-    return find_index(PLATFORM_NAMES, name) >= 0
-}
+def is_known_platform(name : string) : bool => find_index(PLATFORM_NAMES, name) >= 0
 
 //! The names in `platforms` outside `PLATFORM_NAMES`; empty when every name is known.
-def unknown_platforms(platforms : array<string>) : array<string> {
-    return <- [for (p in platforms); p; where !is_known_platform(p)]
-}
+def unknown_platforms(platforms : array<string>) : array<string> =>
+    <- [for (p in platforms); p; where !is_known_platform(p)]
 
 //! The refusal for a declaration naming a platform outside the vocabulary, `subject` being the package or manifest refused; empty when every name is known.
 def unknown_platforms_error(subject : string; platforms : array<string>) : string {

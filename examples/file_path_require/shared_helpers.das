@@ -7,6 +7,4 @@ options gen2
 module shared_helpers
 
 [export]
-def shared_greeting() : string {
-    return "Hello from shared_helpers.das"
-}
+def shared_greeting() : string => "Hello from shared_helpers.das"

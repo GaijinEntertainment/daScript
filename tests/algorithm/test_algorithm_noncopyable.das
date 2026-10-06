@@ -12,17 +12,11 @@ struct NoCopy {
     data : array<int>
 }
 
-def operator ==(a, b : NoCopy) : bool {
-    return a.id == b.id
-}
+def operator ==(a, b : NoCopy) : bool => a.id == b.id
 
-def operator !=(a, b : NoCopy) : bool {
-    return a.id != b.id
-}
+def operator !=(a, b : NoCopy) : bool => a.id != b.id
 
-def operator <(a, b : NoCopy) : bool {
-    return a.id < b.id
-}
+def operator <(a, b : NoCopy) : bool => a.id < b.id
 
 // ---- erase_all with non-copyable type ----
 

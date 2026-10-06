@@ -69,9 +69,7 @@ let private {
     Tok_error    = typeinfo variant_index<_error>(type<TomlToken>)
 }
 
-def private is_bare_char(c : int) : bool {
-    return is_alpha(c) || is_number(c) || c == '-' || c == '_'
-}
+def private is_bare_char(c : int) : bool => is_alpha(c) || is_number(c) || c == '-' || c == '_'
 
 def private hex_value(c : int) : int {
     if (is_number(c)) return c - '0'
@@ -1072,9 +1070,7 @@ struct private TomlState {
     inline_closed : table<uint64>
 }
 
-def private jvkey(p : JsonValue?) : uint64 {
-    return intptr(unsafe(reinterpret<void?>(p)))
-}
+def private jvkey(p : JsonValue?) : uint64 => intptr(unsafe(reinterpret<void?>(p)))
 
 def private mark_inline_subtree(var closed : table<uint64>&; v : JsonValue?) : void {
     //! Recursively marks every `_object` JsonValue in `v`'s subtree as inline-closed. Caller-supplied target table lets us reuse the walker for both top-level state (apply_keyval) and inline-table-internal tracking (parse_inline_table).

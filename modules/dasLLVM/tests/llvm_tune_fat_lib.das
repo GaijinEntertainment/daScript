@@ -13,17 +13,13 @@ require llvm/daslib/llvm_tune public
 struct private ScopeDecl {}
 
 // companion sibling — a fat build clones it per class too, and its dispatch switches with fat_add's
-def fat_kv() : int {
-    return -1  // reference tier sentinel
-}
+def fat_kv() : int => -1  // reference tier sentinel
 
 [tune_perm(k = 0), tune_perm(k = 1), tune_perm(k = 2),
  tune_perm(k = 3, requires = "avx2|neon"),
  tune_companion(fn = "fat_kv", gen = "llvm_code_selftest::k_value"),
  tune(gen = "llvm_code_selftest::add_plus_k", fallback = "k1")]
-def fat_add(a, b : int) : int {
-    return a + b
-}
+def fat_add(a, b : int) : int => a + b
 
 // a void kernel: its dispatch arms call and return with no value, and the generator declines
 // the signature, so every clone runs this reference body

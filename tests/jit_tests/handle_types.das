@@ -4,9 +4,7 @@ require dastest/testing_boost
 require daslib/math_boost
 require UnitTest
 
-def handle_fun(var a : float4x4) {
-    return inverse(a)
-}
+def handle_fun(var a : float4x4) => inverse(a)
 
 def handle_ref_op1(a : float4x4) {
     let c = -a
@@ -25,9 +23,7 @@ def handle_val(var num : int&) {
     return iid2
 }
 
-def handle_eid(l : lambda<(val : int) : EntityId>) {
-    return invoke(l, 13)
-}
+def handle_eid(l : lambda<(val : int) : EntityId>) => invoke(l, 13)
 
 def handle_fields(var m : float4x4) {
     m.x = float4(1, 0, 0, 0)

@@ -18,9 +18,7 @@ let GLTF_TEST_H = 256
 let GLTF_COLOR_FMT = VkFormat.R8G8B8A8_UNORM   // the shader sRGB-encodes; an _SRGB target would double-encode
 let GLTF_DEPTH_FMT = VkFormat.D32_SFLOAT
 
-def private model_path(name : string) : string {
-    return "{get_das_root()}/tests/dasGLTF/models/{name}"
-}
+def private model_path(name : string) : string => "{get_das_root()}/tests/dasGLTF/models/{name}"
 
 // perspective_rh_0_to_1 gives Vulkan's z in [0,1]; Vulkan NDC additionally has +Y down, so flip Y
 def private perspective_vk_01(fovy, aspect, znear, zfar : float) : float4x4 {

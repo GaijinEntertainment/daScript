@@ -34,15 +34,12 @@ def resample_step(var r : VadResampler; take : array<float>; var out : array<flo
 }
 
 //! a 16 kHz sample index of the detector as a 24 kHz index into the take
-def vad_to_mic(sample16 : int64) : int64 {
-    return sample16 * int64(MIC_RATE) / int64(VAD_RATE)
-}
+def vad_to_mic(sample16 : int64) : int64 => sample16 * int64(MIC_RATE) / int64(VAD_RATE)
 
 //! whether the take ends now: speech was heard and the quiet after it has lasted, the cap, or a
 //! device that gave nothing for long enough to be gone
-def take_ends(speech_seen, in_speech : bool; quiet_for_s, seconds, silent_device_for_s : float) : bool {
-    return (speech_seen && !in_speech && quiet_for_s >= SILENCE_ENDS_TAKE_S) || seconds >= TAKE_CAP_S || silent_device_for_s >= NO_FRAMES_ENDS_TAKE_S
-}
+def take_ends(speech_seen, in_speech : bool; quiet_for_s, seconds, silent_device_for_s : float) : bool =>
+    (speech_seen && !in_speech && quiet_for_s >= SILENCE_ENDS_TAKE_S) || seconds >= TAKE_CAP_S || silent_device_for_s >= NO_FRAMES_ENDS_TAKE_S
 
 //! the clip's window in the take: the speech plus a pad at both ends, an open speech running to
 //! the take's end, and never longer than the model's clip cap

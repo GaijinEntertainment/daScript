@@ -3084,9 +3084,8 @@ def private pred_fail(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo; msg :
 }
 
 [macro_function]
-def private is_string_typed(e : ExpressionPtr) : bool {
-    return e != null && e._type != null && e._type.baseType == Type.tString
-}
+def private is_string_typed(e : ExpressionPtr) : bool =>
+    e != null && e._type != null && e._type.baseType == Type.tString
 
 def private mentions_source_arg(node : ExpressionPtr; q : SqlQuery; asReceiver : bool = false) : bool {    // nolint:STYLE037 — exact-type is-ladder over handled AST node types
     if (node == null) return false
@@ -3903,9 +3902,8 @@ def private is_none_call(node : ExpressionPtr) : bool {
 }
 
 [macro_function]
-def private next_bind_placeholder(bytes : array<uint8> const implicit; from : int) : int {
-    return next_placeholder(bytes, from)._0
-}
+def private next_bind_placeholder(bytes : array<uint8> const implicit; from : int) : int =>
+    next_placeholder(bytes, from)._0
 
 [macro_function]
 def private next_placeholder(bytes : array<uint8> const implicit; from : int) : tuple<int; uint8> {
@@ -4404,16 +4402,14 @@ def private emit_pragma_or_vacuum(prog : ProgramPtr; var call : ExprCallMacro?;
 
 [call_macro(name="_sql_pragma")]
 class private SqlPragmaMacro : AstCallMacro {
-    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
-        return emit_pragma_or_vacuum(prog, call, true)
-    }
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? =>
+        emit_pragma_or_vacuum(prog, call, true)
 }
 
 [call_macro(name="_sql_vacuum_into")]
 class private SqlVacuumIntoMacro : AstCallMacro {
-    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
-        return emit_pragma_or_vacuum(prog, call, false)
-    }
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? =>
+        emit_pragma_or_vacuum(prog, call, false)
 }
 
 [macro_function]
@@ -4462,9 +4458,8 @@ def private find_field_annotation_string(rootT : TypeDeclPtr; fieldName : string
 }
 
 [macro_function]
-def private field_to_column_name(rootT : TypeDeclPtr; fieldName : string) : string {
-    return find_field_annotation_string(rootT, fieldName, "sql_column", fieldName)
-}
+def private field_to_column_name(rootT : TypeDeclPtr; fieldName : string) : string =>
+    find_field_annotation_string(rootT, fieldName, "sql_column", fieldName)
 
 [macro_function]
 def private find_single_pk_field(rootT : TypeDeclPtr; prog : ProgramPtr; at : LineInfo) : string {
@@ -5077,15 +5072,11 @@ def private validate_outer_args(prog : ProgramPtr; var call : ExprCallMacro?; va
 }
 
 class private OuterArgZeroMacro : AstCallMacro {
-    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
-        return argIndex == 0
-    }
+    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool => argIndex == 0
 }
 
 class private OuterArgTwoMacro : AstCallMacro {
-    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
-        return argIndex < 2
-    }
+    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool => argIndex < 2
 }
 
 [call_macro(name="_sql_update")]

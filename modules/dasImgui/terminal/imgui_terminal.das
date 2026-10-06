@@ -407,9 +407,7 @@ def public imgui_terminal_paste_clipboard(terminal : Terminal const) : bool {
     return terminal_send_paste(terminal, text)
 }
 
-def private pressed(key : ImGuiKey) : bool {
-    return IsKeyPressed(key, false)
-}
+def private pressed(key : ImGuiKey) : bool => IsKeyPressed(key, false)
 
 def private dispatch_input(terminal : Terminal const; text : string;
                            external_input : bool; var output : string&) : bool {

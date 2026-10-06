@@ -10,9 +10,7 @@ options no_unused_function_arguments = false
 require stbimage/stbimage_ttf
 require stbimage/stbimage_boost
 
-def get_script_dir() : string {
-    return "{get_das_root()}/modules/dasStbImage/examples"
-}
+def get_script_dir() : string => "{get_das_root()}/modules/dasStbImage/examples"
 
 [export]
 def main() {

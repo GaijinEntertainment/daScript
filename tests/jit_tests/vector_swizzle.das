@@ -26,37 +26,21 @@ def swizzle_ref_y(var v : float4&; x : float) {
 }
 
 
-def swizzle_xyz(v : float4) {
-    return v.xyz
-}
+def swizzle_xyz(v : float4) => v.xyz
 
-def swizzle_xy(v : float4) {
-    return v.xy
-}
-def swizzle_x(v : float4) {
-    return v.x
-}
+def swizzle_xy(v : float4) => v.xy
+def swizzle_x(v : float4) => v.x
 
-def swizzle_yzw(v : float4) {
-    return v.yzw
-}
+def swizzle_yzw(v : float4) => v.yzw
 
-def swizzle_yz(v : float4) {
-    return v.yz
-}
+def swizzle_yz(v : float4) => v.yz
 
-def swizzle_y(v : float4) {
-    return v.y
-}
+def swizzle_y(v : float4) => v.y
 
 [sideeffects]
-def get_screen_size(x, y : float) {
-    return float2(x, y)
-}
+def get_screen_size(x, y : float) => float2(x, y)
 
-def swizzle_1 {
-    return get_screen_size(1., 2.).y
-}
+def swizzle_1 => get_screen_size(1., 2.).y
 
 [test]
 def test_vector_swizzle(t : T?) {

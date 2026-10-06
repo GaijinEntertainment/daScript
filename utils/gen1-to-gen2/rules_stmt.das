@@ -82,9 +82,8 @@ def private group_open_before(src : Source; lex : Lexical; from : int;
 }
 
 
-def private paren_open_before(src : Source; lex : Lexical; from : int) : int {
-    return group_open_before(src, lex, from, ")", "(")
-}
+def private paren_open_before(src : Source; lex : Lexical; from : int) : int =>
+    group_open_before(src, lex, from, ")", "(")
 
 
 def private literal_pipe(src : Source; lex : Lexical; start : int) : LiteralPipe {

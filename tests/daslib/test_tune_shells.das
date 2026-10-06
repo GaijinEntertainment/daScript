@@ -13,20 +13,14 @@ require daslib/tune
 [tune_scope(name = "test_tune_shells")]
 struct private TuneShellsScope {}
 
-def private ref_add(a, b : int) : int {
-    return a + b + 7
-}
+def private ref_add(a, b : int) : int => a + b + 7
 
 [tune_perm(k = 7), tune_perm(k = 0),
  tune(gen = "llvm_code_selftest::add_plus_k", fallback = "k7")]
-def shell_add(a, b : int) : int {
-    return a + b + 7
-}
+def shell_add(a, b : int) : int => a + b + 7
 
 [tune_policy(missing = "fallback")]
-def private shell_policy_probe(a : int) : int {
-    return a * 2
-}
+def private shell_policy_probe(a : int) : int => a * 2
 
 [test]
 def test_tune_shell_result_matches_the_reference(t : T?) {

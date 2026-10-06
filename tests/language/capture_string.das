@@ -33,9 +33,7 @@ def capture_by_calling_capture(a : string) {
 }
 
 [export]
-def capture_by_return(a : string) {
-    return a
-}
+def capture_by_return(a : string) => a
 
 [export]
 def capture_by_set_arg(var a : string&) {

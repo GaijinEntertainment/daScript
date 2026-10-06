@@ -53,9 +53,8 @@ struct Args {
     help : bool
 }
 
-def private build_prompt(n, salt : int64) : array<int64> {
-    return <- [for (i in range64(n)); 1000l + ((i * 7l + salt * 131l) % 5000l)]
-}
+def private build_prompt(n, salt : int64) : array<int64> =>
+    <- [for (i in range64(n)); 1000l + ((i * 7l + salt * 131l) % 5000l)]
 
 def private pct(var xs : array<int64>; p : float) : int64 {
     if (empty(xs)) {

@@ -273,9 +273,8 @@ def public text_edit_load(var ed : TextEditState; source : string) {
     restyle_lines(ed, 0, length(ed.lines) - 1)
 }
 
-def public text_edit_source(ed : TextEditState const) : string {
-    return join(ed.lines, ed.crlf ? "\r\n" : "\n")
-}
+def public text_edit_source(ed : TextEditState const) : string =>
+    join(ed.lines, ed.crlf ? "\r\n" : "\n")
 
 def public text_edit_text(ed : TextEditState const) : string {
     //! LF-joined buffer text — the search / byte-mapping domain
@@ -319,9 +318,7 @@ def public text_edit_range_of_bytes(ed : TextEditState const;
         end_line = tail.x, end_column = tail.y)
 }
 
-def public text_edit_line_count(ed : TextEditState const) : int {
-    return max(1, length(ed.lines))
-}
+def public text_edit_line_count(ed : TextEditState const) : int => max(1, length(ed.lines))
 
 def private ensure_line(var ed : TextEditState) {
     if (empty(ed.lines)) {
@@ -769,17 +766,12 @@ def public text_edit_push_undo_stop(var ed : TextEditState) {
     ed.undo_open = false
 }
 
-def public text_edit_can_undo(ed : TextEditState const) : bool {
-    return !empty(ed.undo_stack)
-}
+def public text_edit_can_undo(ed : TextEditState const) : bool => !empty(ed.undo_stack)
 
-def public text_edit_can_redo(ed : TextEditState const) : bool {
-    return !empty(ed.redo_stack)
-}
+def public text_edit_can_redo(ed : TextEditState const) : bool => !empty(ed.redo_stack)
 
-def private journal_serial(ed : TextEditState const) : int {
-    return empty(ed.undo_stack) ? 0 : ed.undo_stack[length(ed.undo_stack) - 1].serial
-}
+def private journal_serial(ed : TextEditState const) : int =>
+    empty(ed.undo_stack) ? 0 : ed.undo_stack[length(ed.undo_stack) - 1].serial
 
 def private refresh_dirty(var ed : TextEditState) {
     ed.dirty = journal_serial(ed) != ed.saved_serial
@@ -2090,9 +2082,8 @@ def private snippet_parse(pattern, selection, indent : string;
     }
 }
 
-def private snippet_absolute(rel : int2; line, column : int) : int2 {
-    return int2(line + rel.x, rel.x == 0 ? column + rel.y : rel.y)
-}
+def private snippet_absolute(rel : int2; line, column : int) : int2 =>
+    int2(line + rel.x, rel.x == 0 ? column + rel.y : rel.y)
 
 def private snippet_focus_stop(var ed : TextEditState) {
     let stop = ed.snippet_stops[ed.snippet_index]
@@ -2103,9 +2094,7 @@ def private snippet_focus_stop(var ed : TextEditState) {
     }
 }
 
-def public text_edit_snippet_active(ed : TextEditState const) : bool {
-    return ed.snippet_index >= 0
-}
+def public text_edit_snippet_active(ed : TextEditState const) : bool => ed.snippet_index >= 0
 
 def public text_edit_snippet_end(var ed : TextEditState) {
     //! Drop the tab-stop session; the buffer is untouched.
@@ -2364,9 +2353,8 @@ def public text_edit_replace_all(var ed : TextEditState;
     return count_
 }
 
-def private pos_before(a_line, a_column, b_line, b_column : int) : bool {
-    return a_line < b_line || (a_line == b_line && a_column < b_column)
-}
+def private pos_before(a_line, a_column, b_line, b_column : int) : bool =>
+    a_line < b_line || (a_line == b_line && a_column < b_column)
 
 def public text_edit_move_selection_to(var ed : TextEditState;
                                        line, column : int) : bool {

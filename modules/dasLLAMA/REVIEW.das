@@ -799,15 +799,13 @@ var private LAYOUT_CONSTANTS <- {
     "DWRITE_STAGING_BAND", "METAL_BAND_BLOCKS", "BLOB_ALIGN_FLOATS"
 }
 
-def private is_archive_serializer(header : string) : bool {
-    return (header |> starts_with("def serialize") || header |> starts_with("def private serialize")) && find(header, "Archive") >= 0
-}
+def private is_archive_serializer(header : string) : bool =>
+    (header |> starts_with("def serialize") || header |> starts_with("def private serialize")) && find(header, "Archive") >= 0
 
 // A meta serializer hand-lists a STRUCT's fields, so its count can be pinned; the bulk payload
 // forms take an `array` and have no field list of their own.
-def private is_meta_serializer(header : string) : bool {
-    return is_archive_serializer(header) && find(header, "array<") < 0
-}
+def private is_meta_serializer(header : string) : bool =>
+    is_archive_serializer(header) && find(header, "array<") < 0
 
 //! the `*_prepare` mints that place image bytes are the TTS block file's (`conv1d_prepare`, `linear_prepare`); a driver's prepare (`vk_rdec_prepare`, `mirror_prepare`) places none
 def private is_layout_function(file : string; header : string) : bool {
@@ -817,9 +815,7 @@ def private is_layout_function(file : string; header : string) : bool {
     return name == "build_image" || name == "parse_image" || (find(name, "_prepare") >= 0 && "{DASLLAMA_DIR}/{file}" == TTS_BLOCKS_FILE)
 }
 
-def private read_lf(path : string) : string {
-    return replace(fread(path), "\r\n", "\n")
-}
+def private read_lf(path : string) : string => replace(fread(path), "\r\n", "\n")
 
 // the declaration lines of the layout constants a file declares, in file order
 def private layout_constant_lines(path : string) : array<tuple<line : int; body : string>> {
@@ -1119,9 +1115,8 @@ struct private LadderTrio {
     why : string        //! what a missing arm does at run time
 }
 
-def private cm2_dispatch_name(fmt, tail : string) : string {
-    return fmt == "q8" || fmt == "q51" || fmt == "mx4" || fmt == "iq4nl32" ? "{fmt}_batch_{tail}" : "kq_batch_{fmt}_{tail}"
-}
+def private cm2_dispatch_name(fmt, tail : string) : string =>
+    fmt == "q8" || fmt == "q51" || fmt == "mx4" || fmt == "iq4nl32" ? "{fmt}_batch_{tail}" : "kq_batch_{fmt}_{tail}"
 
 //! the words of a `let [private] NAME = "..."` line in `path`, or none with a finding: a roster the gate reads where the code reads it
 def private let_words(path, name : string) : array<string> {
@@ -1665,7 +1660,7 @@ let private GEMM_GEN_FILES = [
     "modules/dasLLAMA/dasllama/dasllama_gemm_gen.das",
     "modules/dasLLAMA/dasllama/dasllama_gemm_schema.das"
 ]
-let private GEMM_GEN_STAMP_HASH = 0x81db69026507ad94ul
+let private GEMM_GEN_STAMP_HASH = 0xd682989cb9f7bd0eul
 
 [arch(at = "ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers")]
 def private check_gemm_gen_stamp {

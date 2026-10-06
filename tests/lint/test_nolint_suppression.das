@@ -6,13 +6,9 @@ require daslib/lint
 require strings
 require daslib/strings_boost
 
-def fixture_path() : string {
-    return "{get_das_root()}/tests/lint/_fixture_nolint_lint003.das"
-}
+def fixture_path() : string => "{get_das_root()}/tests/lint/_fixture_nolint_lint003.das"
 
-def hardening_fixture_path() : string {
-    return "{get_das_root()}/tests/lint/_fixture_nolint_hardening.das"
-}
+def hardening_fixture_path() : string => "{get_das_root()}/tests/lint/_fixture_nolint_hardening.das"
 
 def compile_and_collect(t : T?; path : string; blk : block<(issues : array<string>; count : int) : void>) {
     var inscope access <- make_file_access("")

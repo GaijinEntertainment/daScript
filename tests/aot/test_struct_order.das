@@ -30,9 +30,7 @@ struct Inc {
     w : float
 }
 
-def outer_tag(o : Outer) : int {
-    return o.tag * 2
-}
+def outer_tag(o : Outer) : int => o.tag * 2
 
 [test]
 def test_struct_order(t : T?) {

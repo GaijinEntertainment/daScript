@@ -45,9 +45,7 @@ let SERVER_PORT = 18087
 //
 // Helper: format one SSE event as a string.
 
-def sse_event_string(data, event : string) : string {
-    return "event: {event}\ndata: {data}\n\n"
-}
+def sse_event_string(data, event : string) : string => "event: {event}\ndata: {data}\n\n"
 
 class SseTutorialServer : HvWebServer {
     def override onInit {

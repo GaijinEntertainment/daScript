@@ -48,21 +48,13 @@ def temperature_centi(adc : int) : int {
 
 // The table itself, so a caller can dump or checksum what got baked in.
 [export]
-def curve_point(index : int) : int {
-    return index >= 0 && index < TABLE_SIZE ? CURVE[index] : 0
-}
+def curve_point(index : int) : int => index >= 0 && index < TABLE_SIZE ? CURVE[index] : 0
 
 [export]
-def curve_size : int {
-    return TABLE_SIZE
-}
+def curve_size : int => TABLE_SIZE
 
 [export]
-def adc_range_lo : int {
-    return ADC_LO
-}
+def adc_range_lo : int => ADC_LO
 
 [export]
-def adc_range_hi : int {
-    return ADC_HI
-}
+def adc_range_hi : int => ADC_HI

@@ -1298,13 +1298,9 @@ class FixerVisitor : AstVisitor {
 // CLI
 // =====================================================================
 
-def is_skip_file(name : string) : bool {
-    return name == "builtin.das"
-}
+def is_skip_file(name : string) : bool => name == "builtin.das"
 
-def is_skip_dir(name : string) : bool {
-    return name |> starts_with(".")
-}
+def is_skip_dir(name : string) : bool => name |> starts_with(".")
 
 def has_expect_directive(file : string) : bool {
     //! Mirrors utils/lint/main.das — skip files with intentional compile errors.

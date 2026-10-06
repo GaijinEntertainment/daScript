@@ -14,13 +14,9 @@ require strings
 require daslib/json_boost
 require daslib/clargs
 
-def private j_str(obj : JsonValue?; key : string) : string {
-    return obj?[key] ?? ""
-}
+def private j_str(obj : JsonValue?; key : string) : string => obj?[key] ?? ""
 
-def private j_int(obj : JsonValue?; key : string) : int {
-    return obj?[key] ?? -1
-}
+def private j_int(obj : JsonValue?; key : string) : int => obj?[key] ?? -1
 
 // SPIR-V grammar encodes ValueEnum values as integers and BitEnum values as hex strings
 // ("0x0004"). Emit a uint literal verbatim in both cases — daslang hex literals are uint.

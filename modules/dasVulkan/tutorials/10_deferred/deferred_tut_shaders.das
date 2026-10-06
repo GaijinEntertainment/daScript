@@ -230,9 +230,7 @@ let SSAO_BIAS     = 0.03
 let SSAO_STRENGTH = 1.7      // scales raw occlusion so the cat-floor crease reads in the composite
 
 //! Per-pixel rotation hash -- breaks the 16-sample spiral pattern so the AO doesn't band.
-def private hash21(p : float2) : float {
-    return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453)
-}
+def private hash21(p : float2) : float => fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453)
 
 [vulkan_fragment_shader(name="ssao_frag_spv")]
 def ssao_fs {

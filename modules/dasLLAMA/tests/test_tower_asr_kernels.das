@@ -469,9 +469,7 @@ let AW_SCALE = 0.35
 let AW_REL = 1.0e-5lf
 let AW_FLOOR = 1.0e-6lf
 
-def private aw_win() : array<int64> {
-    return <- [0l, 7l, 23l, 26l, 47l, 48l]
-}
+def private aw_win() : array<int64> => <- [0l, 7l, 23l, 26l, 47l, 48l]
 
 def private aw_fixture(win : array<int64>; var qq : array<float>; var kk : array<float>; var vv : array<float>) {
     lcg_seed(0x77A0ul)
@@ -803,9 +801,7 @@ let MP_REL = 2.0e-6lf
 let MP_FLOOR = 1.0e-6lf
 
 [sideeffects]
-def private neg_zero() : float {
-    return unsafe(reinterpret<float>(0x80000000u))
-}
+def private neg_zero() : float => unsafe(reinterpret<float>(0x80000000u))
 
 def private mp_fixture(var re : array<float>; var im : array<float>) {
     lcg_seed(0x3A9Ful)

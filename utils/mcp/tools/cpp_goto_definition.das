@@ -105,10 +105,6 @@ def do_cpp_goto_definition(file, line_str, column_str : string) : string { // no
     return make_tool_result(output)
 }
 
-def private is_cpp_ident_word_char(ch : int) : bool {
-    return is_alpha(ch) || is_number(ch) || ch == '_'
-}
+def private is_cpp_ident_word_char(ch : int) : bool => is_alpha(ch) || is_number(ch) || ch == '_'
 
-def private is_cpp_ident_start_char(ch : int) : bool {
-    return is_alpha(ch) || ch == '_'
-}
+def private is_cpp_ident_start_char(ch : int) : bool => is_alpha(ch) || ch == '_'

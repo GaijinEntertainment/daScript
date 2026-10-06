@@ -34,9 +34,7 @@ def apply_transform(values : array<int>; transform : function<(x : int) : int>) 
     return <- result
 }
 
-def fn_double(x : int) : int {
-    return x * 2
-}
+def fn_double(x : int) : int => x * 2
 
 [test]
 def test_higher_order(t : T?) {

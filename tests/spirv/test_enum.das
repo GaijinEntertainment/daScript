@@ -46,9 +46,7 @@ def regime_weight(r : Regime) : int {
 
 // An enum-typed ternary is an OpSelect over the integer: the result type has to
 // peel to that integer or the lane count comes out zero and the select is refused.
-def regime_pick(hot : bool) : Regime {
-    return hot ? Regime.frozen : Regime.dry
-}
+def regime_pick(hot : bool) : Regime => hot ? Regime.frozen : Regime.dry
 
 // A `var` local of enum type -- a Function-storage OpVariable whose pointee is the plain integer.
 def cell_weight(c : Cell) : int {
@@ -59,9 +57,7 @@ def cell_weight(c : Cell) : int {
     return regime_weight(r) + c.depth
 }
 
-def cell_regime(c : Cell) : Regime {
-    return c.regime
-}
+def cell_regime(c : Cell) : Regime => c.regime
 
 [compute_shader(local_size_x=64, name="enum_spv"), marker(no_coverage)]
 def enum_shader {
@@ -77,9 +73,7 @@ def enum_struct_shader {
     enum_data[gi] = cell_weight(c) + int(cell_regime(c))
 }
 
-def flag_on(f : Flag) : bool {
-    return f == Flag.on
-}
+def flag_on(f : Flag) : bool => f == Flag.on
 
 [compute_shader(local_size_x=64, name="enum_u8_spv"), marker(no_coverage)]
 def enum_u8_shader {

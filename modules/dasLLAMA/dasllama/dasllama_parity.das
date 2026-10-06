@@ -18,13 +18,9 @@ require math
 // names the cell + its parameters, and `DASLLAMA_TRUTH_REFRESH=1` forces recompute+resave
 // (bump/refresh when a cell's prompts or the CPU engine's numerics change on purpose).
 
-def parity_ref_path(model_path, key : string) : string {
-    return "{model_path}.ref.{key}.tsv"
-}
+def parity_ref_path(model_path, key : string) : string => "{model_path}.ref.{key}.tsv"
 
-def parity_refresh : bool {
-    return g_env_engine.truth_refresh
-}
+def parity_refresh : bool => g_env_engine.truth_refresh
 
 def save_ref_ids(path : string; ids : array<int64>) {
     fopen(path, "wb") $(f) {

@@ -72,13 +72,9 @@ def test_dim_i64_via_argument(t : T?) {
     t |> equal(read_at_u(arr, 6_ul), 1006)
 }
 
-def read_at(arr : int[8]; idx : int64) : int {
-    return arr[idx]
-}
+def read_at(arr : int[8]; idx : int64) : int => arr[idx]
 
-def read_at_u(arr : int[8]; idx : uint64) : int {
-    return arr[idx]
-}
+def read_at_u(arr : int[8]; idx : uint64) : int => arr[idx]
 
 [test]
 def test_dim_i64_float_value_type(t : T?) {

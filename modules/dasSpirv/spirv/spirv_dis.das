@@ -40,9 +40,7 @@ def public count_op(words : array<uint>; op : SpvOp) : int {
     return c
 }
 
-def public has_op(words : array<uint>; op : SpvOp) : bool {
-    return count_op(words, op) > 0
-}
+def public has_op(words : array<uint>; op : SpvOp) : bool => count_op(words, op) > 0
 
 // The set of distinct opcodes present — the per-module input to the opcode census meta-test.
 def public opcode_set(words : array<uint>) : table<uint> {

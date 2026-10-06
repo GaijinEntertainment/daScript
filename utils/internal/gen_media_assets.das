@@ -49,9 +49,7 @@ def synth_gong(var samples : array<float>) {
     }
 }
 
-def note_hz(semis_from_a4 : int) : float {
-    return 440.0 * pow(2.0, float(semis_from_a4) / 12.0)
-}
+def note_hz(semis_from_a4 : int) : float => 440.0 * pow(2.0, float(semis_from_a4) / 12.0)
 
 let C3 = -21
 let E3 = -17
@@ -95,9 +93,8 @@ def synth_music(var samples : array<float>) {
     }
 }
 
-def orb_radius(theta, phi : float) : float {
-    return 1.0 + 0.12 * sin(6.0 * theta) * sin(4.0 * phi) + 0.05 * sin(9.0 * phi)
-}
+def orb_radius(theta, phi : float) : float =>
+    1.0 + 0.12 * sin(6.0 * theta) * sin(4.0 * phi) + 0.05 * sin(9.0 * phi)
 
 def orb_pos(theta, phi : float) : float3 {
     let r = orb_radius(theta, phi)

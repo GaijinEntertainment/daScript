@@ -259,9 +259,7 @@ def counting_prompt(start, last : int) : string {
 // the gemma4 fixture prompt, 1..320 (~1490 tokens): the sliding window is genuinely engaged
 // (kstart > 0). The short 21-token counting prompt was rejected — its oracle continuation
 // drifts into the channel format on a near-tie that flips under the pinned classic+libm kernels.
-def private gemma4_counting_prompt() : string {
-    return counting_prompt(320)
-}
+def private gemma4_counting_prompt() : string => counting_prompt(320)
 
 // the dense-gemma4 continuation (frozen on the 12B, shared by every dense gemma4 carrier —
 // same vocab, all count; each reuse verified per-file against the oracle)
@@ -920,22 +918,19 @@ def private spec_view(keep : block<(s : ModelSpec) : bool>) : array<ModelSpec> {
 
 //! The profiled text-LLM view over [[model_specs]] — the rows gen_profile / the baseline
 //! establisher measure (a spec with a scoreboard display name).
-def llm_catalog() : array<ModelSpec> {
-    return <- spec_view() $(s : ModelSpec) : bool { return !empty(s.display); }
-}
+def llm_catalog() : array<ModelSpec> =>
+    <- spec_view() $(s : ModelSpec) : bool { return !empty(s.display); }
 
 //! The public-board view over [[model_specs]] — the rows gen_bench_records sweeps: community-
 //! popular GGUFs, one popular quant each, NOT the internal quant matrix (curated to what
 //! people run THIS year). Absent files skip with a warning, so one list serves every box.
-def official_catalog() : array<ModelSpec> {
-    return <- spec_view() $(s : ModelSpec) : bool { return s.official; }
-}
+def official_catalog() : array<ModelSpec> =>
+    <- spec_view() $(s : ModelSpec) : bool { return s.official; }
 
 //! Every row of [[model_specs]] - the sweep view: gen_bench_records `--catalog all` visits each
 //! stocked file, board row or not (absent files skip with a warning like the board view's).
-def full_catalog() : array<ModelSpec> {
-    return <- spec_view() $(s : ModelSpec) : bool { return !empty(s.file); }
-}
+def full_catalog() : array<ModelSpec> =>
+    <- spec_view() $(s : ModelSpec) : bool { return !empty(s.file); }
 
 //! The spec's vision mmproj companion basename ("" = no vision pairing) — the image-chat
 //! cell's second file. A row with one is a vision decoder; the driver pairs it with
@@ -952,9 +947,7 @@ def mmproj_companion(s : ModelSpec) : string {
 //! The one pinned picture every image-chat cell measures (provenanced as a companion of the
 //! spec row that owns it) — cells across models and boxes stay comparable because the input
 //! never varies.
-def bench_image_fixture() : string {
-    return "coco-val2017-000000039769.jpg"
-}
+def bench_image_fixture() : string => "coco-val2017-000000039769.jpg"
 
 //! The spec row keyed `file` - its models-dir path or its base name (a split-shard row sits in a subfolder, the
 //! pregate holds the base name); an empty `file` back = no such spec. A fresh copy, never a reference into the table.

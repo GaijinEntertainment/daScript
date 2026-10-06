@@ -51,13 +51,10 @@ def private with_playground_server_at(port : int; policy : StorePolicy; curated_
     }
 }
 
-def private default_policy : StorePolicy {
-    return StorePolicy()
-}
+def private default_policy : StorePolicy => StorePolicy()
 
-def private tiny_policy : StorePolicy {
-    return StorePolicy(max_source_bytes = 64, max_inserts_per_ip_hour = 3)
-}
+def private tiny_policy : StorePolicy =>
+    StorePolicy(max_source_bytes = 64, max_inserts_per_ip_hour = 3)
 
 [test]
 def test_health_and_unknown_routes(t : T?) {

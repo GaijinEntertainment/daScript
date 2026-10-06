@@ -1791,14 +1791,12 @@ def private release_tuner_cmd(daslang : string; ts : TuneScopeDep; paranoid : bo
     return "{envs}\"{daslang}\" -jit \"{ts.tuner}\" -dasroot \"{get_das_root()}\"{tune_args}"
 }
 
-def private release_elapsed(t0 : int64) : string {
-    return fmt(":.1f", float(double(get_time_usec(t0)) / 1000000.0lf))
-}
+def private release_elapsed(t0 : int64) : string =>
+    fmt(":.1f", float(double(get_time_usec(t0)) / 1000000.0lf))
 
 // Bundle path for the standalone exe (daslang -exe appends `.exe` itself).
-def private bundle_exe_path(bundle_dir, bundle_name : string) : string {
-    return path_join(bundle_dir, bundle_name)
-}
+def private bundle_exe_path(bundle_dir, bundle_name : string) : string =>
+    path_join(bundle_dir, bundle_name)
 
 // Sanitize one component of a derived CFBundleIdentifier so it satisfies
 // Apple's [A-Za-z0-9.-] rule. Lowercases, replaces every other byte with

@@ -122,9 +122,7 @@ def iterator_demo() {
 
 // === Practical: dice roll ===
 
-def roll_dice(var seed : int4&) : int {
-    return (random_int(seed) % 6) + 1
-}
+def roll_dice(var seed : int4&) : int => (random_int(seed) % 6) + 1
 
 def dice_demo() {
     print("\n=== dice rolls ===\n")

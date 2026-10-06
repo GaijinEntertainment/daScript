@@ -500,18 +500,15 @@ class private AstCallMacro_LinqJoinBase : AstCallMacro {
         res.force_at(call.at)
         return res
     }
-    def result_param1_type(iterTypeB : TypeDeclPtr; at : LineInfo) : TypeDeclPtr {
-        return null
-    }
+    def result_param1_type(iterTypeB : TypeDeclPtr; at : LineInfo) : TypeDeclPtr => null
 }
 
 [call_macro(name="_join")]
 class private LinqJoin : AstCallMacro_LinqJoinBase {
     //! implements _join(srca, srcb, on, result) shorthand notation that expands into join(srca, srcb, keya, keyb, result).
     override fnName = "join"
-    def override result_param1_type(iterTypeB : TypeDeclPtr; at : LineInfo) : TypeDeclPtr {
-        return clone_type(iterTypeB)
-    }
+    def override result_param1_type(iterTypeB : TypeDeclPtr; at : LineInfo) : TypeDeclPtr =>
+        clone_type(iterTypeB)
 }
 
 [call_macro(name="_group_join")]

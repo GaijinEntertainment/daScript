@@ -117,9 +117,7 @@ def artifact_rel_dir(toolchain : string; hash : string) : string {
     return path_join(toolchain, hash)
 }
 
-def private stage_root(blobs_dir : string) : string {
-    return path_join(blobs_dir, "tmp")
-}
+def private stage_root(blobs_dir : string) : string => path_join(blobs_dir, "tmp")
 
 def clear_stage_dirs(blobs_dir : string) {
     //! Startup sweep: a crash mid-upload leaks a stage dir; they live under

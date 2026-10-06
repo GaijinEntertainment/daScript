@@ -227,17 +227,14 @@ class CollectAndReplaceIteratorFields : AstVisitor {
         return <- res
     }
 
-    def override visitExprCopy(var expr : ExprCopy?) : ExpressionPtr {
-        return <- move_clone_copy(expr, voidRoutine, retType, AssignOp.copy)
-    }
+    def override visitExprCopy(var expr : ExprCopy?) : ExpressionPtr =>
+        <- move_clone_copy(expr, voidRoutine, retType, AssignOp.copy)
 
-    def override visitExprMove(var expr : ExprMove?) : ExpressionPtr {
-        return <- move_clone_copy(expr, voidRoutine, retType, AssignOp.move)
-    }
+    def override visitExprMove(var expr : ExprMove?) : ExpressionPtr =>
+        <- move_clone_copy(expr, voidRoutine, retType, AssignOp.move)
 
-    def override visitExprClone(var expr : ExprClone?) : ExpressionPtr {
-        return <- move_clone_copy(expr, voidRoutine, retType, AssignOp.clone)
-    }
+    def override visitExprClone(var expr : ExprClone?) : ExpressionPtr =>
+        <- move_clone_copy(expr, voidRoutine, retType, AssignOp.clone)
 
     def override visitExprCall(var expr : ExprCall?) : ExpressionPtr {
         if (expr.name == "await_next_frame") {

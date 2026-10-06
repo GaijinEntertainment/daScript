@@ -65,13 +65,9 @@ class KmKern {
     @ssbo @binding = 0 xs : array<float>
     @ssbo @binding = 1 ys : array<float>
 
-    def gain : float {
-        return 3.0
-    }
+    def gain : float => 3.0
 
-    def scale(v : float) : float {
-        return v * gain()
-    }
+    def scale(v : float) : float => v * gain()
 
     [spirv_kernel(local_size_x=64, name="km_spv")]
     def km {
@@ -83,21 +79,15 @@ class KmKern {
 class KBase {
     @ssbo @binding = 0 bxs : array<float>
 
-    def gain : float {
-        return 2.0
-    }
+    def gain : float => 2.0
 
-    def bias : float {
-        return 1.0
-    }
+    def bias : float => 1.0
 }
 
 class KDeriv : KBase {
     @ssbo @binding = 1 bys : array<float>
 
-    def override gain : float {
-        return 3.0
-    }
+    def override gain : float => 3.0
 
     [spirv_kernel(local_size_x=64, name="kd_spv")]
     def kd {

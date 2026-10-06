@@ -28,9 +28,7 @@ class Bar : Foo {
 
 [check_add_field_flags(is_abstract = false, is_inherited = false)]
 class Far : Bar {
-    def override add(a, b : int) : int {
-        return a + b
-    }
+    def override add(a, b : int) : int => a + b
 }
 
 [test]

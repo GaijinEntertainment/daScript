@@ -64,9 +64,7 @@ def set_channel(name : string; value : int) {
 
 // A pure computation — no print calls, so [no_print] is satisfied.
 [no_print]
-def compute(a, b : int) : int {
-    return a * b + 1
-}
+def compute(a, b : int) : int => a * b + 1
 
 // This function DOES call print — [no_print] would reject it.
 // Try adding [no_print] to see the compile-time lint error.

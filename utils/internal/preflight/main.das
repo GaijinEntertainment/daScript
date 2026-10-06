@@ -135,22 +135,16 @@ def run_argv(args : array<string>; timeout : float) : tuple<rc : int; out : stri
     return (rc = rc, out = output)
 }
 
-def run_argv(args : array<string>) : tuple<rc : int; out : string> {
-    return run_argv(args, 0.0)
-}
+def run_argv(args : array<string>) : tuple<rc : int; out : string> => run_argv(args, 0.0)
 
 def tool_available(exe, probe_flag : string) : bool {
     let r = run_argv([exe, probe_flag], 30.0)
     return r.rc == 0
 }
 
-def tool_available(exe : string) : bool {
-    return tool_available(exe, "--version")
-}
+def tool_available(exe : string) : bool => tool_available(exe, "--version")
 
-def seconds_since(t0 : int64) : double {
-    return double(get_time_usec(t0)) / 1000000.0lf
-}
+def seconds_since(t0 : int64) : double => double(get_time_usec(t0)) / 1000000.0lf
 
 def split_csv(s : string) : array<string> {
     var out : array<string>
@@ -171,9 +165,8 @@ def temp_dir_or_cwd() : string {
 
 // unique per run — the system temp dir is shared across checkouts, so a
 // fixed name lets concurrent preflights clobber each other's files
-def unique_temp_path(prefix, suffix : string) : string {
-    return path_join(temp_dir_or_cwd(), "{prefix}_{ref_time_ticks()}{suffix}")
-}
+def unique_temp_path(prefix, suffix : string) : string =>
+    path_join(temp_dir_or_cwd(), "{prefix}_{ref_time_ticks()}{suffix}")
 
 def non_empty_lines(s : string) : array<string> {
     var out : array<string>
@@ -1445,9 +1438,7 @@ def gate_tests_cpp(ctx : PreflightCtx) : GateResult {
 
 //! The build fan-out for every cmake invocation: the user's ``-j`` when set, else hardware
 //! threads. A bare ``--parallel`` is unlimited ``make -j`` on the Makefile generator.
-def cmake_jobs(ctx : PreflightCtx) : string {
-    return "{ctx.jobs > 0 ? ctx.jobs : get_total_hw_threads()}"
-}
+def cmake_jobs(ctx : PreflightCtx) : string => "{ctx.jobs > 0 ? ctx.jobs : get_total_hw_threads()}"
 
 def gate_tests_aot(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()

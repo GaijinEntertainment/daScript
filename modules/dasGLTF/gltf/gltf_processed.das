@@ -81,8 +81,8 @@ def processed_stride(flags : int) : int {
     return 16 + ((flags & VERTEX_UV) != 0 ? 4 : 0) + ((flags & VERTEX_TANGENT) != 0 ? 4 : 0) + ((flags & VERTEX_SKIN) != 0 ? 8 : 0) + ((flags & VERTEX_UV1) != 0 ? 4 : 0) + ((flags & VERTEX_COLOR) != 0 ? 4 : 0)
 }
 [arch(at="../ARCHITECTURE.md#processed-vertex-portability")]
-def private pack_uv(v : float2) : uint {return f32_to_f16(v.x) | (f32_to_f16(v.y) << 16)}
-def private unpack_uv(v : uint) : float2 {return float2(f16_to_f32(v & 65535u), f16_to_f32(v >> 16))}
+def private pack_uv(v : float2) : uint => f32_to_f16(v.x) | (f32_to_f16(v.y) << 16)
+def private unpack_uv(v : uint) : float2 => float2(f16_to_f32(v & 65535u), f16_to_f32(v >> 16))
 def private pack_direction(v : float4) : uint {
     let x = int(round(clamp(v.x, -1.0, 1.0) * 511.0))
     let y = int(round(clamp(v.y, -1.0, 1.0) * 511.0))

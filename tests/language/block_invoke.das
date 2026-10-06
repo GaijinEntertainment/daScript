@@ -46,13 +46,9 @@ def bi_func4(b : block) {
     bi_crapOnStack()
 }
 
-def bi_badd(ext : int; b : block<(arg : int) : int>) : int {
-    return invoke(b, ext)
-}
+def bi_badd(ext : int; b : block<(arg : int) : int>) : int => invoke(b, ext)
 
-def bi_radd(var ext : int&; b : block<(var arg : int&) : int>) : int {
-    return invoke(b, ext)
-}
+def bi_radd(var ext : int&; b : block<(var arg : int&) : int>) : int => invoke(b, ext)
 
 [test]
 def test_block_invoke(t : T?) {

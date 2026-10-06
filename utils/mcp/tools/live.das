@@ -54,13 +54,9 @@ def live_post(path, port : string; body : string = "") : string {
 
 // --- Tools ---
 
-def do_live_status(port : string) : string {
-    return live_get("/status", port)
-}
+def do_live_status(port : string) : string => live_get("/status", port)
 
-def do_live_error(port : string) : string {
-    return live_get("/error", port)
-}
+def do_live_error(port : string) : string => live_get("/error", port)
 
 def do_live_reload(full, port : string) : string {
     let path = full == "true" ? "/reload/full" : "/reload"
@@ -87,9 +83,7 @@ def do_live_commands(commands, port : string) : string {
     return live_post("/commands", port, commands)
 }
 
-def do_live_shutdown(port : string) : string {
-    return live_post("/shutdown", port)
-}
+def do_live_shutdown(port : string) : string => live_post("/shutdown", port)
 
 def live_is_running(port : string) : bool {
     let p = empty(port) ? "9090" : port

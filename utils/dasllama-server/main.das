@@ -380,9 +380,8 @@ def set_cli_source(key : string; given : bool) {
 
 //! The ids of this boot's speech roster, in serving order - the path stands in for an entry that names none.
 //! Non-private: test_server_flags.das gates the [[asr]] / [[tts]] read.
-def speech_roster_ids(tts : bool) : array<string> {
-    return <- [for (m in tts ? g_tts_models : g_asr_models); empty(m.id) ? m.path : m.id]
-}
+def speech_roster_ids(tts : bool) : array<string> =>
+    <- [for (m in tts ? g_tts_models : g_asr_models); empty(m.id) ? m.path : m.id]
 
 //! whether any configured speech model has its whole file set: such a boot serves its speech route with no LLM
 def private any_speech_present : bool {

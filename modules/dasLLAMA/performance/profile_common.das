@@ -34,28 +34,21 @@ require box_ident                         // derive_box_name — the hardware-ke
 //! ({das_root}/logs/dasllama_profile_<box>.log), appended across all four tools (LLM/ASR ×
 //! establisher/generator). `tail`/`type` it for live, per-model, wall-clock-stamped progress — the
 //! logger fflushes every record, so there is no stdout-buffering blind spot.
-def public prof_log_name() : string {
-    return "dasllama_profile_{box_name()}"
-}
+def public prof_log_name() : string => "dasllama_profile_{box_name()}"
 
 // Machine-local model root; override with DASLLAMA_MODELS_DIR (the x64/handoff boxes).
-def models_dir() : string {
-    return models_dir_resolved()   // ONE resolution, in dasllama_env — the tuner's confirm ladder shares it
-}
+def models_dir() : string =>
+    models_dir_resolved()  // ONE resolution, in dasllama_env — the tuner's confirm ladder shares it
 
 // Short box tag baked into the JSON/TSV filenames (profile_llm_<box>.json). DASLLAMA_BOX
 // overrides; otherwise DERIVED FROM HARDWARE (box_ident) — a defaulted tag silently serves
 // another box's crowns and poisons its store.
-def box_name() : string {
-    return derive_box_name(g_env_prof.box)
-}
+def box_name() : string => derive_box_name(g_env_prof.box)
 
 //! The per-box shared tune manifest (`DAS_TUNE_MANIFEST` target): ONE tune per box, so every
 //! rig process — every cell — stamps the same winners and their .dlim image
 //! identities agree. Gitignored (machine-local; staleness = older than the binary).
-def public rig_tune_manifest() : string {
-    return "modules/dasLLAMA/performance/{box_name()}.tune.json"
-}
+def public rig_tune_manifest() : string => "modules/dasLLAMA/performance/{box_name()}.tune.json"
 
 //! Profiling lane/thread count: min(16, physical performance cores), same count both engines,
 //! pinned — one rule for every box (M1 Max 8, M4 Pro 10, M3 Air 4, big x86 16). Fixed by policy:
@@ -80,15 +73,11 @@ def profile_threads() : int {
 //! physical cores (OS placement is a lottery — SMT pairs measured pp512 bimodal on the 3990X).
 //! darwin: jobque mode 2 maps to QoS classification — unclassified workers demote under ambient
 //! load (big-model decode measured -5% tg). The llama-bench CPU mask stays Windows-only: lcpp_mask_on.
-def affinity_on() : bool {
-    return is_windows() || get_platform_name() == "darwin"
-}
+def affinity_on() : bool => is_windows() || get_platform_name() == "darwin"
 
 //! True when llama-bench gets explicit CPU-mask arguments — Windows only; macOS llama-bench has
 //! no thread-affinity support, and the das-side darwin treatment (QoS) has no llama-bench counterpart.
-def lcpp_mask_on() : bool {
-    return is_windows()
-}
+def lcpp_mask_on() : bool => is_windows()
 
 //! llama-bench affinity arguments — an empty array when lcpp_mask_on() is false: the first
 //! `threads` physical cores as a logical-CPU mask — SMT siblings are adjacent on Windows, so even
@@ -159,9 +148,7 @@ def stored_row_leg(backend, flavor : string; var leg : string&) : bool {
 }
 
 // Full path to a catalog entry's GGUF.
-def model_path(m : ModelSpec) : string {
-    return "{models_dir()}{m.file}"
-}
+def model_path(m : ModelSpec) : string => "{models_dir()}{m.file}"
 
 //! The scoreboard spelling of a quant mode (the JSON `quant` cell).
 def quant_str(q : QuantMode) : string {
@@ -176,9 +163,8 @@ def quant_str(q : QuantMode) : string {
 
 //! The scoreboard quant cell for a catalog entry: its explicit label when set (the kq-native
 //! Q4_K_M carriers load under QuantMode.q8), else the plain quant-mode spelling.
-def model_quant_str(m : ModelSpec) : string {
-    return empty(m.quant_label) ? quant_str(m.quant) : m.quant_label
-}
+def model_quant_str(m : ModelSpec) : string =>
+    empty(m.quant_label) ? quant_str(m.quant) : m.quant_label
 
 //! Active (per-token) parameter count in billions, derived from `t`'s Config geometry: the full
 //! embedding (also the tied classifier) + attention + FFN, counting only the `n_expert_used` routed
@@ -272,9 +258,8 @@ def model_exec_fmt(t : Model) : string {
 //! The reference sibling's execution receipt, derived from the build flavor: every gguf tensor
 //! runs in its disk format; the cpu backend additionally layout-repacks supported types at load
 //! (GGML_CPU_REPACK is ON in both pinned ref flavors).
-def lcpp_exec_fmt(backend : string) : string {
-    return backend == "cpu" ? "native gguf formats; cpu runtime layout repack" : "native gguf formats"
-}
+def lcpp_exec_fmt(backend : string) : string =>
+    backend == "cpu" ? "native gguf formats; cpu runtime layout repack" : "native gguf formats"
 
 //! True when `m` is present on disk AND in the requested tier. `sz` receives the file size (0 if absent).
 def model_selected(m : ModelSpec; tier : Tier; var sz : uint64&) : bool {
@@ -425,9 +410,7 @@ def das_version() : string {
 }
 
 // True on a Windows box (cmd sets OS=Windows_NT). macOS/Linux leave it empty.
-def private is_windows() : bool {
-    return g_env_prof.win_os == "Windows_NT"
-}
+def private is_windows() : bool => g_env_prof.win_os == "Windows_NT"
 
 // Windows CPU marketing name from the registry — non-interactive (no `date`-style prompt/hang).
 def private win_cpu_name() : string {
@@ -514,9 +497,7 @@ var private g_tune_gate_bypassed = false
 
 //! True once `tune_gate` let a cell through on `DASLLAMA_ALLOW_UNTUNED=1` - the flavor stamp
 //! carries it so no such number reads as a tuned one.
-def tune_gate_bypassed() : bool {
-    return g_tune_gate_bypassed
-}
+def tune_gate_bypassed() : bool => g_tune_gate_bypassed
 
 def tune_gate() : bool {
     static_if (typeinfo module_exists(llvm_tune)) {
@@ -631,9 +612,8 @@ def private fat_gate_why(_) : string {
 //! ``tune_sha`` stamp. The store-time gate reads this: the M4 board stored 7 such rows under a
 //! mis-shipped stale sidecar (the file-level gate passed — the sidecar WAS a valid old mint;
 //! the staleness drop to fallback happened later, leaving stamps empty and nothing checking).
-def das_run_unstamped(r : BenchRun) : bool {
-    return r.engine == "das" && (empty(r.tune) || empty(r.tune_sha))
-}
+def das_run_unstamped(r : BenchRun) : bool =>
+    r.engine == "das" && (empty(r.tune) || empty(r.tune_sha))
 
 // Gather the platform block. `llama_cpp` (the reference commit) and `date` are passed in — the caller
 // reads them from the freshly-run baseline / the environment so they stay honest per run. CPU/OS come
@@ -703,9 +683,7 @@ def process_listed(name : string; except_path : string = "") : bool {
     return executable_in(run_capture("ps -e -o comm= 2>/dev/null", false), name, except_path)
 }
 
-def private is_macos() : bool {
-    return !is_windows() && run_capture("uname -s", true) == "Darwin"
-}
+def private is_macos() : bool => !is_windows() && run_capture("uname -s", true) == "Darwin"
 
 def private platform_arch() : string {
     if (is_windows()) {
@@ -860,9 +838,8 @@ def physical_perf_cores() : int {
 }
 
 // mac machine model ("MacBookPro18,2" / "Mac16,11") — the two-different-M1-Pros disambiguator
-def private platform_model_id() : string {
-    return is_macos() ? run_capture("sysctl -n hw.model", true) : ""
-}
+def private platform_model_id() : string =>
+    is_macos() ? run_capture("sysctl -n hw.model", true) : ""
 
 // RAM module layout — the bandwidth identity on PC ("4×32 GB DDR4-3200"). Apple unified memory
 // has no modules; the chip name already implies the bandwidth class there.
@@ -1008,9 +985,8 @@ def private sidecar_noise_verdict(path : string) : string {
 }
 
     //! sha256 of an explicit sidecar file — the oracle's current-generation probe; "" when absent.
-def sidecar_generation_sha(path : string) : string {
-    return stat(path).is_valid ? compute_sha256(path) : ""
-}
+def sidecar_generation_sha(path : string) : string =>
+    stat(path).is_valid ? compute_sha256(path) : ""
 
 def file_identity(path : string; role : string) : InputFile {
     var fi = InputFile(role = role, name = base_name(path))
@@ -1068,9 +1044,8 @@ struct LlmBaseline {
 
 // `suffix` distinguishes measurement axes on the same box (e.g. "_metal" for the GPU-offload sweep);
 // the default "" is the canonical CPU baseline that gen_profile merges.
-def baseline_llm_path(suffix : string = "") : string {
-    return "modules/dasLLAMA/performance/baseline_llm_{box_name()}{suffix}.tsv"
-}
+def baseline_llm_path(suffix : string = "") : string =>
+    "modules/dasLLAMA/performance/baseline_llm_{box_name()}{suffix}.tsv"
 
 def write_llm_baselines(rows : array<LlmBaseline>; suffix : string = "") {
     fopen(baseline_llm_path(suffix), "wb") $(f) {
@@ -1137,9 +1112,7 @@ struct LlmProfile {
     tests : array<LlmRec>
 }
 
-def profile_llm_path() : string {
-    return "modules/dasLLAMA/performance/profile_llm_{box_name()}.json"
-}
+def profile_llm_path() : string => "modules/dasLLAMA/performance/profile_llm_{box_name()}.json"
 
 def write_llm_profile(p : LlmProfile) {
     let text = sprint_json(p, true)
@@ -1186,14 +1159,11 @@ def whisper_models_dir() : string {
 }
 
 // The bench corpus (relative to the repo-root cwd these tools run in).
-def asr_corpus_dir() : string {
-    return "modules/dasLLAMA/benchmarks/asr/corpus/"
-}
+def asr_corpus_dir() : string => "modules/dasLLAMA/benchmarks/asr/corpus/"
 
 // The five standard corpus buckets, shortest→longest (11 s .. 547 s).
-def corpus_buckets() : array<string> {
-    return <- ["jfk.wav", "jfk3.wav", "gb1.wav", "hp0.wav", "hp0x2.wav"]
-}
+def corpus_buckets() : array<string> =>
+    <- ["jfk.wav", "jfk3.wav", "gb1.wav", "hp0.wav", "hp0x2.wav"]
 
 // ===== ASR: the audio-model catalog =====
 
@@ -1387,16 +1357,12 @@ def asr_workload(spec : AsrModelSpec) : string {
 
 //! The `BenchRun.engine` name for a reference tool — the tool IS the engine identity here
 //! (parakeet-cli lives in the whisper.cpp tree, but the row names what actually ran).
-def asr_engine_name(tool : string) : string {
-    return tool == "mtmd" ? "llama-mtmd-cli" : tool
-}
+def asr_engine_name(tool : string) : string => tool == "mtmd" ? "llama-mtmd-cli" : tool
 
 // Box-neutral defaults: every reference lands where setup_asr_rig puts it — the checkouts as
 // siblings of the repo root, the venvs inside the repo — so a fresh box needs NO exports
 // (the env vars remain the overrides). A laptop-absolute default here is a BRINGUP bug.
-def whisper_cpp_root() : string {
-    return g_env_prof.whisper_cpp
-}
+def whisper_cpp_root() : string => g_env_prof.whisper_cpp
 
 def whisper_cpp_bin(cli : string) : string {
     let root = whisper_cpp_root()
@@ -1419,13 +1385,11 @@ def venv_python(venv : string) : string {
     return normalize(stat(posix).is_valid ? posix : "{venv}/Scripts/python.exe")
 }
 
-def onnx_py() : string {
-    return normalize(empty(g_env_prof.onnx_py) ? venv_python("modules/dasLLAMA/benchmarks/asr/.venv-onnx") : g_env_prof.onnx_py)
-}
+def onnx_py() : string =>
+    normalize(empty(g_env_prof.onnx_py) ? venv_python("modules/dasLLAMA/benchmarks/asr/.venv-onnx") : g_env_prof.onnx_py)
 
-def nemo_py() : string {
-    return normalize(empty(g_env_prof.nemo_py) ? venv_python("modules/dasLLAMA/benchmarks/asr/.venv-nemo") : g_env_prof.nemo_py)
-}
+def nemo_py() : string =>
+    normalize(empty(g_env_prof.nemo_py) ? venv_python("modules/dasLLAMA/benchmarks/asr/.venv-nemo") : g_env_prof.nemo_py)
 
 //! The Metal twin of mtmd_bin() — the same patched checkout built with Metal ON
 //! (setup_asr_rig's build-metal, Apple boxes); "" when absent, and the gpu ref leg skips loudly.
@@ -1457,9 +1421,7 @@ def mtmd_bin() : string {
 }
 
 // The python bench scripts live beside the corpus (asr/); these tools run from the repo-root cwd.
-def asr_dir() : string {
-    return "modules/dasLLAMA/benchmarks/asr"
-}
+def asr_dir() : string => "modules/dasLLAMA/benchmarks/asr"
 
 // The numeric token immediately before an "ms" token on a whitespace line (whisper.cpp timing lines:
 // "whisper_print_timings:  total time =  1234.56 ms"). -1 if none.
@@ -1552,14 +1514,10 @@ def sibling_mtmd(refStock : string) : string {
 //! The image-chat pair's turn definition, ONE home for both engines: `lcpp_bench --image`'s
 //! default question and decode budget, and the driver's llama-mtmd-cli `-p` / `-n`. A second
 //! copy would let the two sides silently price different turns.
-def image_turn_prompt() : string {
-    return "What is in this picture? Answer in one sentence."
-}
+def image_turn_prompt() : string => "What is in this picture? Answer in one sentence."
 
 //! The image turn's decode budget (tokens), same contract as [[image_turn_prompt]].
-def image_turn_steps() : int {
-    return 32
-}
+def image_turn_steps() : int => 32
 
 //! One image turn's timing split from patched llama-mtmd-cli output, the image-chat ref cell's
 //! shape: `enc_ms` sums every "mtmd batch encoding done in N ms" line (one per media chunk),
@@ -1740,14 +1698,11 @@ def asr_pybench_args(tool, handle : string; clips : array<string>; threads, reps
     return <- args
 }
 
-def asr_pybench_out_path() : string {
-    return "{asr_dir()}/_pybench_rows.txt"
-}
+def asr_pybench_out_path() : string => "{asr_dir()}/_pybench_rows.txt"
 
 [arch(at="../ARCHITECTURE_MEASUREMENT.md#asr-gpu-pairs")]
-def asr_gpu_pair_tool(tool : string) : bool {
-    return tool == "whisper-cli" || tool == "mtmd" || tool == "nemo"
-}
+def asr_gpu_pair_tool(tool : string) : bool =>
+    tool == "whisper-cli" || tool == "mtmd" || tool == "nemo"
 
 //! The record run's exit verdict: any FAILED cell reds the run, and a run that measured
 //! ZERO cells reds too — every selected cell skipping or declining is never a green board.
@@ -1781,9 +1736,8 @@ def private git_commit_at(path : string) : string {
 
 // -uno: tracked modifications only — untracked files (.dlim caches, our .sha sidecars) don't
 // change what was built, and counting them would taint every reference tree as dirty
-def private git_dirty_at(path : string) : bool {
-    return !empty(strip(run_capture("git -C \"{path}\" status --porcelain -uno 2>&1", false)))
-}
+def private git_dirty_at(path : string) : bool =>
+    !empty(strip(run_capture("git -C \"{path}\" status --porcelain -uno 2>&1", false)))
 
 //! Version line for the whisper.cpp checkout (whisper-cli AND parakeet-cli — one tree). A dirty
 //! tree taints the identity loudly: nobody can rebuild "+dirty".
@@ -1811,13 +1765,11 @@ def mtmd_versions(bin : string = "") : string {
     return empty(commit) ? "llama.cpp + {ptag}" : "llama.cpp @ {commit} + {ptag}"
 }
 
-def onnx_versions() : string {
-    return run_capture("{onnx_py()} -c \"import onnx_asr, onnxruntime; print('onnx-asr', getattr(onnx_asr, '__version__', '?'), '/ onnxruntime', onnxruntime.__version__, '(requirements-onnx.txt)')\" 2>&1", true)
-}
+def onnx_versions() : string =>
+    run_capture("{onnx_py()} -c \"import onnx_asr, onnxruntime; print('onnx-asr', getattr(onnx_asr, '__version__', '?'), '/ onnxruntime', onnxruntime.__version__, '(requirements-onnx.txt)')\" 2>&1", true)
 
-def nemo_versions() : string {
-    return run_capture("{nemo_py()} -c \"import nemo, torch; print('nemo', nemo.__version__, '/ torch', torch.__version__, '(requirements-nemo.txt)')\" 2>&1", true)
-}
+def nemo_versions() : string =>
+    run_capture("{nemo_py()} -c \"import nemo, torch; print('nemo', nemo.__version__, '/ torch', torch.__version__, '(requirements-nemo.txt)')\" 2>&1", true)
 
 //! The version line for one reference tool — dispatch by catalog tool name.
 def asr_tool_versions(tool : string) : string {
@@ -1858,9 +1810,7 @@ def libri_wavs() : array<string> {
 //! The one BenchTest key both sides of the LibriSpeech aggregate record under: total
 //! best-of-reps ms over the 25 clips (+ total audio seconds) — the dictation stat is a
 //! whole-set number, never 25 table rows.
-def libri_test_key() : string {
-    return "asr:librispeech25"
-}
+def libri_test_key() : string => "asr:librispeech25"
 
 // ===== Public bench records (schema: modules/dasLLAMA/METHODOLOGY.md "The record") =====
 
@@ -1982,9 +1932,7 @@ def private shell_quote(s : string) : string {
 //! The run's REAL invocation, from the process argv — binary, interpreter flags, script and args
 //! alike. Not a reconstruction: a rebuilt `-- {parsed args}` string loses the binary actually used
 //! and silently drops anything the arg parser did not model.
-def bench_cmd_line() : string {
-    return argv_receipt(get_command_line_arguments())
-}
+def bench_cmd_line() : string => argv_receipt(get_command_line_arguments())
 
 //! One argv as the receipt a public row carries: every element shell-quoted where it must be,
 //! every home directory spelled `~` outside the quotes so a shell still expands it - the same
@@ -2044,9 +1992,7 @@ struct BenchAnnotation {
                                    // site renders no win for them
 }
 
-def annotations_path() : string {
-    return "modules/dasLLAMA/performance/records/annotations.json"
-}
+def annotations_path() : string => "modules/dasLLAMA/performance/records/annotations.json"
 
 def read_annotations(var out : array<BenchAnnotation>) : bool {
     let path = annotations_path()
@@ -2056,9 +2002,8 @@ def read_annotations(var out : array<BenchAnnotation>) : bool {
     return sscan_json(fread(path), out)
 }
 
-def private anno_is_model_level(a : BenchAnnotation) : bool {
-    return empty(a.box) && empty(a.engine) && empty(a.backend) && empty(a.flavor) && empty(a.workload)
-}
+def private anno_is_model_level(a : BenchAnnotation) : bool =>
+    empty(a.box) && empty(a.engine) && empty(a.backend) && empty(a.flavor) && empty(a.workload)
 
 def private anno_matches_run(a : BenchAnnotation; r : BenchRun) : bool {
     return ((empty(a.box) || a.box == r.box) && (empty(a.engine) || a.engine == r.engine)
@@ -2092,14 +2037,10 @@ def apply_annotations(var models : array<BenchModel>; annos : array<BenchAnnotat
 }
 
 //! True on a macOS box — the gate for Metal cells in the record driver.
-def is_apple_box : bool {
-    return !is_windows() && run_capture("uname -s", true) == "Darwin"
-}
+def is_apple_box : bool => !is_windows() && run_capture("uname -s", true) == "Darwin"
 
 //! The official per-box record store the site build merges.
-def bench_records_path : string {
-    return "modules/dasLLAMA/performance/records/{box_name()}.json"
-}
+def bench_records_path : string => "modules/dasLLAMA/performance/records/{box_name()}.json"
 
 //! Every per-box store under records/, STRICT: ``records/{box}.json`` only — a dotted stem is
 //! a tune archive, ``annotations.json`` is the hand-note overlay, ``_``-prefixed is scratch.
@@ -2125,9 +2066,8 @@ def read_bench_records(path : string; var models : array<BenchModel>) : bool {
     return sscan_json(fread(path), models)
 }
 
-def write_bench_records(path : string; models : array<BenchModel>) : bool {
-    return write_records_text(path, sprint_json(models, true))
-}
+def write_bench_records(path : string; models : array<BenchModel>) : bool =>
+    write_records_text(path, sprint_json(models, true))
 
 //! One record file, written whole; false (and a log line) when the path cannot be opened -
 //! a caller writing several artifacts fails on the first, never reports a partial set as written.
@@ -2194,9 +2134,8 @@ enum OracleVerdict {
     fail
 }
 
-def oracle_verdict_str(v : OracleVerdict) : string {
-    return v == OracleVerdict.fail ? "FAIL" : (v == OracleVerdict.warn ? "WARN" : "OK")
-}
+def oracle_verdict_str(v : OracleVerdict) : string =>
+    v == OracleVerdict.fail ? "FAIL" : (v == OracleVerdict.warn ? "WARN" : "OK")
 
 //! Gate a fresh das run against its stored row, one line per stored tok/s test key. One-sided:
 //! a drop past ``fail_pct`` fails, past ``warn_pct`` warns; a gain reports (flagged as

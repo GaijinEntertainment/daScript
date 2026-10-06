@@ -16,9 +16,7 @@ def sample(pixels : array<uint8>; x, y : int) : int3 {
     return int3(int(pixels[p]), int(pixels[p + 1]), int(pixels[p + 2]))
 }
 
-def is_clear(c : int3) : bool {
-    return abs(c.x - 26) <= 8 && abs(c.y - 26) <= 8 && abs(c.z - 38) <= 8
-}
+def is_clear(c : int3) : bool => abs(c.x - 26) <= 8 && abs(c.y - 26) <= 8 && abs(c.z - 38) <= 8
 
 def vcheck(what : string; ok : bool) : int {
     print("  [{ok ? "PASS" : "FAIL"}] {what}\n")

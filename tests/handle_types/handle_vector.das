@@ -3,9 +3,7 @@ require dastest/testing_boost
 
 require UnitTest
 
-def operator [] (arr : Point3Array; ind : int) {
-    return 2.0 * arr.[ind]
-}
+def operator [] (arr : Point3Array; ind : int) => 2.0 * arr.[ind]
 
 def test_point3_array_index(t : T?; arr : Point3Array) {
     assert(arr |> length == 10)

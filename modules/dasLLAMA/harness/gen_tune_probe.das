@@ -67,9 +67,7 @@ let ROUNDS = 8
 let GEN_KEEP = 1.20lf
 
 // the sticky margin as a factor: a new crown must beat the incumbent's best by win_margin_pct()
-def private gen_margin() : double {
-    return 1.0lf + win_margin_pct() / 100.0lf
-}
+def private gen_margin() : double => 1.0lf + win_margin_pct() / 100.0lf
 
 require tuner_cli              // the shared tuner CLI
 
@@ -686,9 +684,7 @@ def run_kq_gemv_team(gemv; fx : KqFixture; kq : array<uint8>; ks : array<uint8>;
 // production shapes (intermediate terms are large, the sum is small) — gate against the
 // fixture's magnitude instead; a real generator bug (wrong stride/lane/scale) is orders louder
 // than fast-math fold-order noise
-def kq_tol(fx : KqFixture; count : int) : float {
-    return close_tol(max_abs(fx.yref, count))
-}
+def kq_tol(fx : KqFixture; count : int) : float => close_tol(max_abs(fx.yref, count))
 
 def close_to_kq_ref(fx : KqFixture; y : array<float>; var maxdiff : float&; form : int64 = 0l) : bool {
     let tol = max(kq_tol(fx, length(y)), bf16_envelope(fx.yref, length(y), form))
@@ -775,9 +771,8 @@ struct B32Fixture {
 }
 
 //! the format's scalar disk-order dot - the oracle every per-32 variant is held to
-def b32_scalar_dot(fmt : KqFmt; wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float {
-    return fmt == KqFmt.q51 ? dot_q51q8_scalar(wq, ws, xq, xs, n) : dot_iq4nl32q8_scalar(wq, ws, xq, xs, n)
-}
+def b32_scalar_dot(fmt : KqFmt; wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float =>
+    fmt == KqFmt.q51 ? dot_q51q8_scalar(wq, ws, xq, xs, n) : dot_iq4nl32q8_scalar(wq, ws, xq, xs, n)
 
 def build_b32_fixture(fmt : KqFmt; n, d : int64) : B32Fixture {
     var fx = B32Fixture(fmt = fmt, n = n, d = d, nb = n / 32l, qb = kq_qsb(fmt), sb = kq_ssb(fmt))

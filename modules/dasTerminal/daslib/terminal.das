@@ -224,9 +224,7 @@ struct public Terminal {
     read_buffer : array<uint8>
 }
 
-def private blank_cell(row, column : int) : TerminalCell {
-    return TerminalCell(row = row, column = column)
-}
+def private blank_cell(row, column : int) : TerminalCell => TerminalCell(row = row, column = column)
 
 def private blank_row(columns, row : int) : TerminalRow {
     var result = TerminalRow()
@@ -255,13 +253,11 @@ def private reset_buffer(var buffer : TerminalBuffer; columns, rows : int) {
     buffer.scroll_bottom = rows - 1
 }
 
-def private screen_index(buffer : TerminalBuffer const; row : int) : int {
-    return (buffer.screen_start + row) % length(buffer.screen)
-}
+def private screen_index(buffer : TerminalBuffer const; row : int) : int =>
+    (buffer.screen_start + row) % length(buffer.screen)
 
-def private history_index(buffer : TerminalBuffer const; row : int) : int {
-    return (buffer.history_start + row) % length(buffer.history)
-}
+def private history_index(buffer : TerminalBuffer const; row : int) : int =>
+    (buffer.history_start + row) % length(buffer.history)
 
 def private active_buffer(var terminal : Terminal) : TerminalBuffer? {
     unsafe {
@@ -312,9 +308,7 @@ def private codepoint_utf8(codepoint : uint) : string {
         to_char(int(0x80u | (codepoint & 0x3fu))))
 }
 
-def private in_range(value, first, last : uint) : bool {
-    return value >= first && value <= last
-}
+def private in_range(value, first, last : uint) : bool => value >= first && value <= last
 
 def private is_combining(value : uint) : bool {
     return (in_range(value, 0x0300u, 0x036fu) || in_range(value, 0x0483u, 0x0489u) ||
@@ -335,22 +329,19 @@ def private is_wide(value : uint) : bool {
         in_range(value, 0x20000u, 0x3fffdu))
 }
 
-def public terminal_codepoint_width(value : uint) : int {
-    return is_combining(value) ? 0 : (is_wide(value) ? 2 : 1)
-}
+def public terminal_codepoint_width(value : uint) : int =>
+    is_combining(value) ? 0 : (is_wide(value) ? 2 : 1)
 
-def private indexed_color(index : int) : TerminalColor {
-    return TerminalColor(kind = TerminalColorKind.indexed, index = clamp(index, 0, 255))
-}
+def private indexed_color(index : int) : TerminalColor =>
+    TerminalColor(kind = TerminalColorKind.indexed, index = clamp(index, 0, 255))
 
 def private rgb_color(red, green, blue : int) : TerminalColor {
     return TerminalColor(kind = TerminalColorKind.rgb,
         red = clamp(red, 0, 255), green = clamp(green, 0, 255), blue = clamp(blue, 0, 255))
 }
 
-def private parameter_or(parameters : array<int> const; index, fallback : int) : int {
-    return index >= length(parameters) || parameters[index] <= 0 ? fallback : parameters[index]
-}
+def private parameter_or(parameters : array<int> const; index, fallback : int) : int =>
+    index >= length(parameters) || parameters[index] <= 0 ? fallback : parameters[index]
 
 def private parse_bounded_decimal(bytes : array<uint8> const; first, past_last : int) : int {
     var index = first
@@ -1107,33 +1098,25 @@ def public terminal_poll(var terminal : Terminal;
     return status
 }
 
-def public terminal_write_bytes(terminal : Terminal const; bytes : array<uint8> const) : bool {
-    return terminal.transport != null && _pty_write(terminal.transport, bytes)
-}
+def public terminal_write_bytes(terminal : Terminal const; bytes : array<uint8> const) : bool =>
+    terminal.transport != null && _pty_write(terminal.transport, bytes)
 
-def public terminal_process_id(terminal : Terminal const) : int {
-    return terminal.transport != null ? _pty_process_id(terminal.transport) : 0
-}
+def public terminal_process_id(terminal : Terminal const) : int =>
+    terminal.transport != null ? _pty_process_id(terminal.transport) : 0
 
-def public terminal_process_exited(terminal : Terminal const) : bool {
-    return terminal.transport != null && _pty_process_exited(terminal.transport)
-}
+def public terminal_process_exited(terminal : Terminal const) : bool =>
+    terminal.transport != null && _pty_process_exited(terminal.transport)
 
-def public terminal_exit_code(terminal : Terminal const) : int64 {
-    return terminal.transport != null ? _pty_exit_code(terminal.transport) : -1l
-}
+def public terminal_exit_code(terminal : Terminal const) : int64 =>
+    terminal.transport != null ? _pty_exit_code(terminal.transport) : -1l
 
-def public terminal_terminate(terminal : Terminal const; exit_code : int = 1) : bool {
-    return terminal.transport != null && _pty_terminate(terminal.transport, exit_code)
-}
+def public terminal_terminate(terminal : Terminal const; exit_code : int = 1) : bool =>
+    terminal.transport != null && _pty_terminate(terminal.transport, exit_code)
 
-def public terminal_transport_error(terminal : Terminal const) : string {
-    return terminal.transport != null ? _pty_error(terminal.transport) : ""
-}
+def public terminal_transport_error(terminal : Terminal const) : string =>
+    terminal.transport != null ? _pty_error(terminal.transport) : ""
 
-def public terminal_revision(terminal : Terminal const) : int64 {
-    return terminal.revision
-}
+def public terminal_revision(terminal : Terminal const) : int64 => terminal.revision
 
 def private resize_buffer(var buffer : TerminalBuffer; old_columns, old_rows,
                           columns, rows : int) {
@@ -1265,9 +1248,8 @@ def public terminal_write(terminal : Terminal const; text : string) : bool {
     return terminal_write_bytes(terminal, bytes)
 }
 
-def private key_modifier(event : TerminalKeyEvent const) : int {
-    return 1 + (event.shift ? 1 : 0) + (event.alt ? 2 : 0) + (event.control ? 4 : 0)
-}
+def private key_modifier(event : TerminalKeyEvent const) : int =>
+    1 + (event.shift ? 1 : 0) + (event.alt ? 2 : 0) + (event.control ? 4 : 0)
 
 def private append_alt_prefix(var output : array<uint8>; alt : bool) {
     if (alt) output |> push(uint8(0x1b))

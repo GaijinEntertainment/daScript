@@ -715,9 +715,8 @@ def test_model_image_roundtrip(t : T?) {
 // ===== the metal (blob-only) flavor =====
 
 // counting prompt: confident continuations — the decode-parity suite's CPU-vs-GPU token bar
-def private counting_ids(tr : Model) : array<int64> {
-    return <- encode(tr, "The numbers from one to ten are: one, two, three,")
-}
+def private counting_ids(tr : Model) : array<int64> =>
+    <- encode(tr, "The numbers from one to ten are: one, two, three,")
 
 // Teacher-forced max-logits-diff: both models step through the SAME token sequence and the
 // per-step logits compare — the valid cross-backend instrument for a 135M (greedy token

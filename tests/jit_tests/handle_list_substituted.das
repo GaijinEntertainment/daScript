@@ -5,9 +5,7 @@ require math
 require dastest/testing_boost public
 
 [jit]
-def list_length(p : Float3x4List?) : int {
-    return length(*p)
-}
+def list_length(p : Float3x4List?) : int => length(*p)
 
 [test]
 def test_jit_length_of_a_substituted_math_list(t : T?) {

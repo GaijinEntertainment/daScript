@@ -13,9 +13,8 @@ let XML = ("<root>" +
     "<item id=\"4\"/>" +
     "</root>")
 
-def ids_each_reverse(root : xml_node) : array<int> {
-    return <- [for (ch in each_child_reverse(root)); ch["id"] as int]
-}
+def ids_each_reverse(root : xml_node) : array<int> =>
+    <- [for (ch in each_child_reverse(root)); ch["id"] as int]
 
 def ids_block_reverse(root : xml_node) : array<int> {
     var ids : array<int>
@@ -25,9 +24,8 @@ def ids_block_reverse(root : xml_node) : array<int> {
     return <- ids
 }
 
-def ids_each_reverse_named(root : xml_node; name : string) : array<int> {
-    return <- [for (ch in each_child_reverse(root, name)); ch["id"] as int]
-}
+def ids_each_reverse_named(root : xml_node; name : string) : array<int> =>
+    <- [for (ch in each_child_reverse(root, name)); ch["id"] as int]
 
 def ids_block_reverse_named(root : xml_node; name : string) : array<int> {
     var ids : array<int>
@@ -37,9 +35,8 @@ def ids_block_reverse_named(root : xml_node; name : string) : array<int> {
     return <- ids
 }
 
-def ids_each_forward(root : xml_node) : array<int> {
-    return <- [for (ch in each_child(root)); ch["id"] as int]
-}
+def ids_each_forward(root : xml_node) : array<int> =>
+    <- [for (ch in each_child(root)); ch["id"] as int]
 
 def eq_ints(t : T?; a : array<int>; b : array<int>; msg : string) {
     t |> equal(length(a), length(b))

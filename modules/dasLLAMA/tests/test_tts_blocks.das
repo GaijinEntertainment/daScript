@@ -802,9 +802,8 @@ def private at_split(axis : SplitAxis; narrow : bool; blk : block<() : void>) {
     }
 }
 
-def private axis_name(axis : SplitAxis) : string {
-    return axis == SplitAxis.worker_limit ? "worker limit" : "lane cap"
-}
+def private axis_name(axis : SplitAxis) : string =>
+    axis == SplitAxis.worker_limit ? "worker limit" : "lane cap"
 
 // the lanes a rows GEMM's shaper answers under a pinned leg - the anti-vacuous witness: the cap
 // clamps inside lanes_for_work, the worker limit moves the get_dispatch_lanes() it clamps

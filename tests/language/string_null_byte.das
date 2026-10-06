@@ -9,30 +9,21 @@ def private byte_at(s : string; i : int) : int {
     }
 }
 
-def private bytes_of(s : string) : int4 {
-    return int4(length(s), byte_at(s, 1), byte_at(s, 2), byte_at(s, 3))
-}
+def private bytes_of(s : string) : int4 =>
+    int4(length(s), byte_at(s, 1), byte_at(s, 2), byte_at(s, 3))
 
-def private hex_escape() : int4 {
-    return bytes_of("a\x00b")
-}
+def private hex_escape() : int4 => bytes_of("a\x00b")
 
-def private unicode_escape() : int4 {
-    return bytes_of("a\u0000b")
-}
+def private unicode_escape() : int4 => bytes_of("a\u0000b")
 
 def private null_then_hex_digit() : int2 {
     let s = "\x00a"
     return int2(byte_at(s, 0), byte_at(s, 1))
 }
 
-def private returned_blob() : string {
-    return "q\x00r"
-}
+def private returned_blob() : string => "q\x00r"
 
-def private blob_in_builder() : string {
-    return "{"a\x00b"}tail"
-}
+def private blob_in_builder() : string => "{"a\x00b"}tail"
 
 let private g_blob = "g\x00h"
 
@@ -47,13 +38,9 @@ def private same_blob_twice() : int2 {
     return int2(byte_at(first, 2), byte_at(second, 2))
 }
 
-def private passed_blob(s : string) : int {
-    return byte_at(s, 2)
-}
+def private passed_blob(s : string) : int => byte_at(s, 2)
 
-def private blobs_compare() : bool {
-    return "c\x00x" == "c\x00y"
-}
+def private blobs_compare() : bool => "c\x00x" == "c\x00y"
 
 [test]
 def test_null_constant_handling(t : T?) {

@@ -75,9 +75,8 @@ def private ref_generate(m : Model; prompt : array<int64>; params : SamplingPara
     return <- r
 }
 
-def private pieces_of(events : array<SchedEvent>; id : int64) : array<string> {
-    return <- [for (e in events); e.text; where e.stream == id && e.kind == SchedEventKind.piece]
-}
+def private pieces_of(events : array<SchedEvent>; id : int64) : array<string> =>
+    <- [for (e in events); e.text; where e.stream == id && e.kind == SchedEventKind.piece]
 
 // both sides of a stream compare, decoded - a near-tie synonym flip and a broken walk read alike as ids
 def private log_streams(la : string; ea : array<SchedEvent>; ida : int64; lb : string; eb : array<SchedEvent>; idb : int64) {
@@ -1440,9 +1439,8 @@ def private submit_panics(m : Model; var sch : Scheduler; var req : PendingReq) 
 }
 
 //! a well-formed request: the prompt's [4, 10) inline as one span under one key
-def private span_ok_req(m : Model; id : int64; prompt : array<int64>) : PendingReq {
-    return <- inline_span_req(m, id, prompt, 4l, 10l, 6l, 0x5a5ul, 0x5a5ul, SamplingParams(), 4l)
-}
+def private span_ok_req(m : Model; id : int64; prompt : array<int64>) : PendingReq =>
+    <- inline_span_req(m, id, prompt, 4l, 10l, 6l, 0x5a5ul, 0x5a5ul, SamplingParams(), 4l)
 
 //! the well-formed request's prompt with its one span replaced by rowless spans at `spans`' (at, n) pairs
 def private spans_req(m : Model; id : int64; prompt : array<int64>; spans : array<int2>) : PendingReq {

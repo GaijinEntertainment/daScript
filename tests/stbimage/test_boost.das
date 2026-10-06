@@ -8,9 +8,7 @@ require daslib/safe_addr
 require daslib/fio
 require dastest/testing_boost public
 
-def test_image_path(name : string) : string {
-    return "{get_das_root()}/tests/stbimage/{name}"
-}
+def test_image_path(name : string) : string => "{get_das_root()}/tests/stbimage/{name}"
 
 // ---- struct queries ----
 

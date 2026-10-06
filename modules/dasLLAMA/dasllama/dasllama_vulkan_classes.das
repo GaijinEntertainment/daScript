@@ -141,9 +141,7 @@ def private q8_amax3(m0 : float) : float {
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
-def private q8_quant1(v, id : float) : int8 {
-    return int8(int(round(v * id)))
-}
+def private q8_quant1(v, id : float) : int8 => int8(int(round(v * id)))
 
 // ... and the Q8_K twin: whole-subgroup 5-shuffle amax fold
 def private q8k_amax5(m0 : float) : float {
@@ -5180,9 +5178,7 @@ class Q8Batch : MoeCmBase {
 // each is an override, and the devirtualizer inlines the family back to four standalone kernels.
 
 //! hb's four low bits to bit 4 of each byte lane: the multiply's shifted copies never overlap, so no carry crosses a lane
-def private k5_dep(hb : uint) : uint {
-    return ((hb & 0xFu) * 0x02040810u) & 0x10101010u
-}
+def private k5_dep(hb : uint) : uint => ((hb & 0xFu) * 0x02040810u) & 0x10101010u
 
 //! Q5_K - the nibble half at `sh` (0 or 4) of four packed words with the 5th bits deposited from the block's qh byte lanes
 def private k5_quad(r : uint4; qh, sh : uint) : uint4 {
@@ -5309,9 +5305,7 @@ def iq4xs_sc(w0, w1, blk : uint) : int {
 }
 
 [arch(at="../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
-def grid_sc(w1, blk : uint) : int {
-    return 1 + 2 * int((w1 >> (4u * blk)) & 15u)
-}
+def grid_sc(w1, blk : uint) : int => 1 + 2 * int((w1 >> (4u * blk)) & 15u)
 
 
 class KqBatchBase : MoeCmBase {
@@ -5423,9 +5417,7 @@ class KqBatchBase : MoeCmBase {
     // the variant points — every [spirv_kernel] leaf overrides w_quad; q40/k6 also stage_ws/blk_fma
     //! the format's staged int8 lanes of chunk `k` - block `bu`'s half `hh` - of the weight superblock at `wsb`
     [unused_argument(wsb, bu, hh, k)]
-    def w_quad(wsb, bu, hh, k : uint) : uint4 {
-        return uint4(0u)
-    }
+    def w_quad(wsb, bu, hh, k : uint) : uint4 => uint4(0u)
 
     def stage_w(wsb0, wcol, nsb, s, word, grp : uint) {
         for (ki in range(2)) {
@@ -5454,9 +5446,7 @@ class KqBatchBase : MoeCmBase {
         wsw[sblk * 32u + slane] = sa
     }
 
-    def blk_fma(bu, grp, word : uint; xscl : float) : float4 {
-        return fma_dm(bu, grp, word, xscl)
-    }
+    def blk_fma(bu, grp, word : uint; xscl : float) : float4 => fma_dm(bu, grp, word, xscl)
 
     def tile_shell {
         let reg = region_rec()
@@ -12336,9 +12326,7 @@ class KqGemvBase {
     @push_constant pa : GemvArgs
 
     //! fills wl / wh with the lo / hi int8 quads (x's lo / hi words), returns (A_lo, B_lo, A_hi, B_hi): the block adds axs x (A_lo dot_lo + B_lo bsum_lo + A_hi dot_hi + B_hi bsum_hi)
-    def blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 {
-        return float4(0.0)
-    }
+    def blk_decode(wsb, blk : uint; var wl : uint4&; var wh : uint4&) : float4 => float4(0.0)
 
     //! the fold carries B terms (a min or an offset against the block sums): the k-lattice leaves; the codebook and grid leaves skip the sums
     def fold_reads_bsum : bool => false
@@ -12680,9 +12668,8 @@ def gemv_wgs(rows : int64; lanes_per_row : uint) : int64 {
 }
 
 //! the codebook and grid formats: a block's decode gathers, so a lane wants more blocks in flight than the k-lattice's
-def gemv_grid_fmt(fmt : int) : bool {
-    return fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.iq4nl) || fmt == int(KqFmt.iq3s4)
-}
+def gemv_grid_fmt(fmt : int) : bool =>
+    fmt == int(KqFmt.iq2s) || fmt == int(KqFmt.iq2xs) || fmt == int(KqFmt.iq2xxs) || fmt == int(KqFmt.iq3xxs) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.iq4nl) || fmt == int(KqFmt.iq3s4)
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes")]
 def gemv_lanes_per_row(fmt : int; n : int64) : uint {
@@ -12716,9 +12703,7 @@ def gemv_cls_has_n(fmt : int) : bool => fmt == int(KqFmt.q8) || kq_sb(fmt)
 let private GEMV_NO_N_LEAF = "q8 q51 mx4 iq4nl32"
 
 //! the decode GEMV family's roster - q8 and every kq leaf, in enum order: what the kernel cells and the probe's ruler walk
-def kq_gemv_fmts() : array<KqFmt> {
-    return <- [for (f in type<KqFmt>); f; where gemv_cls_has_n(int(f))]
-}
+def kq_gemv_fmts() : array<KqFmt> => <- [for (f in type<KqFmt>); f; where gemv_cls_has_n(int(f))]
 
 //! the reduction width past which the q8 N-column form pairs output rows a subgroup; off until a box's token command proves the pair
 var g_q8_n2_min_n = 0xFFFFFFFFu

@@ -4,15 +4,11 @@ require dastest/testing_boost
 require daslib/dynamic_cast_rtti
 
 class Foo {
-    def hello {
-        return "hello from Foo!"
-    }
+    def hello => "hello from Foo!"
 }
 
 class Bar : Foo {
-    def override hello {
-        return "hello from Bar!"
-    }
+    def override hello => "hello from Bar!"
 }
 
 

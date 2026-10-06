@@ -791,9 +791,7 @@ def private tts_slot_of(model : string) : int {
 //! The weight lane ``/v1/audio/speech`` requested for its default model — what ``configure_tts`` kept
 //! after normalizing. The lane the worker actually pinned rides the ``tts`` block of
 //! ``GET /v1/stats``.
-def server_tts_lane : string {
-    return empty(g_tts) ? TTS_LANE_DEFAULT : g_tts[0].lane
-}
+def server_tts_lane : string => empty(g_tts) ? TTS_LANE_DEFAULT : g_tts[0].lane
 
 //! Configure the TTS model ``/v1/audio/speech`` serves: one worker thread loads and owns it in
 //! its own context, the route id is the file's stem. Call once before ``run_server``. A missing
@@ -833,9 +831,7 @@ def add_tts_model(path : string; lane : string = TTS_LANE_DEFAULT; voices_dir : 
 
 //! True when a TTS model is armed: false when none was configured, and false when every configured
 //! one's file set was incomplete or its worker could not load it.
-def server_has_tts : bool {
-    return tts_default() >= 0
-}
+def server_has_tts : bool => tts_default() >= 0
 
 //! True when a speech model serves with no LLM slot beside it: an armed TTS model or a configured ASR model.
 def server_has_speech : bool
@@ -879,14 +875,10 @@ def set_config_surface(surface_json : string; save_path : string; model_path : s
 
 //! True when the drain was started by ``POST /restart`` — the lifecycle host exits with the
 //! watchdog's config-restart code (4) instead of 0 so it relaunches with the saved config.
-def server_restart_requested : bool {
-    return g_restart_requested
-}
+def server_restart_requested : bool => g_restart_requested
 
 //! True while a benchmark runs - the A/B child measuring this box, or the in-process rows.
-def server_bench_running : bool {
-    return g_bench_state == "running"
-}
+def server_bench_running : bool => g_bench_state == "running"
 
 // ===== benchmark button (the llama.cpp A/B) =====
 // POST /bench runs, QUIESCED ONLY, one lcpp_bench child (--ref runs llama-bench inside it — same
@@ -1031,9 +1023,8 @@ def private drain_bench_events() {
 
 //! `ab` when POST /bench spawns the lcpp_bench + llama-bench child (a source-tree daslang and
 //! `lcpp_bin` both configured), else `inprocess`: the rows run on the served model right here.
-def private bench_mode() : string {
-    return (!empty(g_lcpp_bin) && !empty(g_daslang_bin)) ? "ab" : "inprocess"
-}
+def private bench_mode() : string =>
+    (!empty(g_lcpp_bin) && !empty(g_daslang_bin)) ? "ab" : "inprocess"
 
 def private handle_bench_start(var resp : Reply) : http_status {
     if (g_bench_state == "running") {
@@ -1114,19 +1105,14 @@ var private g_ibench_session : Session
 var private g_ibench_passes0 = 0l   // the CPU-pass count as the rows began: a GPU slot's rows that move it say so
 
 //! True while the in-process rows run.
-def ibench_running() : bool {
-    return g_ibench_phase != IBENCH_PHASE_IDLE
-}
+def ibench_running() : bool => g_ibench_phase != IBENCH_PHASE_IDLE
 
 //! True while any benchmark measures this box - the in-process rows, or the A/B child: every
 //! route that could contend with it holds on this, whichever mode runs.
-def bench_hold_active() : bool {
-    return server_bench_running()
-}
+def bench_hold_active() : bool => server_bench_running()
 
-def private ibench_hold_text() : string {
-    return "a benchmark is running on this server - retry when GET /bench reports it done"
-}
+def private ibench_hold_text() : string =>
+    "a benchmark is running on this server - retry when GET /bench reports it done"
 
 //! the deferred routes' hold: the audio and speech workers share the cores the timed reps run
 //! on, so their queues answer 503 for the run's duration like the text routes do
@@ -2099,13 +2085,10 @@ def private next_id() : int64 {
 
 // `created` is a unix-seconds field no OpenAI client validates; a monotone stand-in is honest and
 // avoids a wall-clock dependency in the hot path.
-def private created_ts() : int64 {
-    return 1751200000l + g_req_counter
-}
+def private created_ts() : int64 => 1751200000l + g_req_counter
 
-def private error_body(msg, kind : string) : string {
-    return sprint_json(OaiErr(error = OaiErrDetail(message = msg, _type = kind)), false)
-}
+def private error_body(msg, kind : string) : string =>
+    sprint_json(OaiErr(error = OaiErrDetail(message = msg, _type = kind)), false)
 
 // Terminal error on a streaming route's writer (chat/completions run through the writer).
 def private bad_request(srv : FrontLink; writer : WriterRef; msg : string) {
@@ -2347,14 +2330,11 @@ def private send_compl_chunk(srv : FrontLink; writer : WriterRef;
 }
 
 // Clamp a requested reply budget to [1, model context].
-def private clamp_max(requested : int64) : int64 {
-    return clamp(requested, 1l, cur_model().config.seq_len)
-}
+def private clamp_max(requested : int64) : int64 => clamp(requested, 1l, cur_model().config.seq_len)
 
 // Error on a buffered (resp-based) route — /v1/models and the audio endpoints use the response path.
-def private resp_error(var resp : Reply; status : http_status; msg : string) : http_status {
-    return resp |> JSON(error_body(msg, "invalid_request_error"), status)
-}
+def private resp_error(var resp : Reply; status : http_status; msg : string) : http_status =>
+    resp |> JSON(error_body(msg, "invalid_request_error"), status)
 
 def private tmpdir() : string {
     var err = ""
@@ -2630,9 +2610,8 @@ def private handle_embeddings(req : FrontReq; var resp : Reply) : http_status {
     return resp |> JSON(body, http_status.OK)
 }
 
-def private streams_busy() : bool {
-    return total_active() > 0l || total_queued() > 0l || g_asr_pending > 0 || g_media_pending > 0
-}
+def private streams_busy() : bool =>
+    total_active() > 0l || total_queued() > 0l || g_asr_pending > 0 || g_media_pending > 0
 
 // Free the tier for a runtime load and recreate the boot precondition (nothing installed, the
 // want set for THIS load). Boot-order semantics: the load arms under the engine's want, so the
@@ -3934,9 +3913,8 @@ struct private OaiStatsResponse {
 // budget only when the device already EXISTS (tier.device is "" until first upload creates
 // it) — the budget hook device-inits on first call, and `supported` can read true while the
 // tier is merely armed, so it must not gate this
-def private gpu_weight_budget_bytes() : int64 {
-    return !empty(gpu_tier_status().device) ? moe_gpu_weight_budget() : 0l
-}
+def private gpu_weight_budget_bytes() : int64 =>
+    !empty(gpu_tier_status().device) ? moe_gpu_weight_budget() : 0l
 
 // The `tts` member of /v1/stats, comma-prefixed, or "" when the boot configured no speech model.
 // A boot whose worker could not load its model still carries the block: `ready` reads false and
@@ -4117,9 +4095,7 @@ struct private OaiStreamsResponse {
 
 // Age of a ref_time_ticks stamp in seconds, wrap-safe: get_time_usec returns int and wraps at
 // ~35.8 min — poison for prefix-cache chains and anything else that lives hours.
-def private age_seconds(t : int64) : float {
-    return float(double(get_time_nsec(t)) * 1e-9lf)
-}
+def private age_seconds(t : int64) : float => float(double(get_time_nsec(t)) * 1e-9lf)
 
 def private handle_streams(var resp : Reply) : http_status {
     // the stream list below aggregates every slot, so the lane capacity the page sizes its
@@ -4378,9 +4354,8 @@ def private handle_vad(req : FrontReq; var resp : Reply) : http_status {
     return resp |> JSON(body, http_status.OK)
 }
 
-def private json_str(s : string) : string {
-    return sprint_json(s, false)   // a bare string serializes as its quoted+escaped JSON literal
-}
+def private json_str(s : string) : string =>
+    sprint_json(s, false)  // a bare string serializes as its quoted+escaped JSON literal
 
 def private kind_name(kind : string) : string {
     if (kind == "s") {
@@ -4559,9 +4534,8 @@ def private same_origin_or_headerless(req : HttpRequest?) : bool {
 }
 
 // the forbidden reply shared by every operator/control route (the public inference API stays open)
-def private deny_operator(var resp : Reply) : http_status {
-    return resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
-}
+def private deny_operator(var resp : Reply) : http_status =>
+    resp |> JSON(error_body("loopback-only (operator surface)", "forbidden"), http_status.FORBIDDEN)
 
 [arch(at = "README.md#exchange-policy")]
 def private handle_exchange_get(req : FrontReq; var resp : Reply) : http_status {
@@ -5345,9 +5319,7 @@ def private tts_input_field(srv : FrontLink; writer : WriterRef; js : JsonValue?
     return input
 }
 
-def private served_tts_ids : string {
-    return join([for (m in g_tts); "'{m.id}'"; where m.armed], ", ")
-}
+def private served_tts_ids : string => join([for (m in g_tts); "'{m.id}'"; where m.armed], ", ")
 
 // the `model` field both TTS routes take: a served id, or nothing (the default model). The model's slot, or -1
 // when the request is already refused.
@@ -5648,9 +5620,8 @@ let AUDIO_DECODE_SAMPLE_RATE = 16000l
 //! The 16 kHz decode-frame ceiling for a clip a model with `seq_len` context can hold: the clip's
 //! soft tokens must fit the context, so the longest usable clip is `seq_len / tokens-per-sec`
 //! seconds. Caps the decode of an untrusted upload before a compressed bomb reaches the encoder.
-def private audio_decode_frame_cap(seq_len : int64) : int {
-    return max(int(AUDIO_DECODE_SAMPLE_RATE), int(seq_len / GEMMA4A_AUDIO_SOFT_TOKENS_PER_SEC * AUDIO_DECODE_SAMPLE_RATE))
-}
+def private audio_decode_frame_cap(seq_len : int64) : int =>
+    max(int(AUDIO_DECODE_SAMPLE_RATE), int(seq_len / GEMMA4A_AUDIO_SOFT_TOKENS_PER_SEC * AUDIO_DECODE_SAMPLE_RATE))
 
 var private g_media_jobs : Channel?
 var private g_media_events : Channel?

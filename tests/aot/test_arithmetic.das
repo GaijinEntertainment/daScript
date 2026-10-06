@@ -34,9 +34,7 @@ def test_basic_math(t : T?) {
     }
 }
 
-def add_values(a, b : int) : int {
-    return a + b
-}
+def add_values(a, b : int) : int => a + b
 
 def factorial(n : int) : int {
     if (n <= 1) {
@@ -58,17 +56,11 @@ def test_function_calls(t : T?) {
     }
 }
 
-def apply_op(a, b : int; op : function<(x : int; y : int) : int>) : int {
-    return invoke(op, a, b)
-}
+def apply_op(a, b : int; op : function<(x : int; y : int) : int>) : int => invoke(op, a, b)
 
-def fn_add(x, y : int) : int {
-    return x + y
-}
+def fn_add(x, y : int) : int => x + y
 
-def fn_mul(x, y : int) : int {
-    return x * y
-}
+def fn_mul(x, y : int) : int => x * y
 
 [test]
 def test_function_pointers(t : T?) {

@@ -163,4 +163,5 @@ struct GltfPbrLight {
     environment : float  = 1.0
 }
 
-def gltf_shadow_edge_blend(center, negative, positive : float) : float {return center * .5 + (negative + positive) * .25}
+def gltf_shadow_edge_blend(center, negative, positive : float) : float =>
+    center * .5 + (negative + positive) * .25

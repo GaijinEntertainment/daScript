@@ -185,9 +185,7 @@ def test_download_refusals(t : T?) {
 
 // the family test the document is handed in place of the engine's: a file named as a Pocket
 // form reads text and needs no pack, everything else is a phoneme family
-def private needs_packs_by_name(path : string) : bool {
-    return find(base_name(path), "pocket-tts-") < 0
-}
+def private needs_packs_by_name(path : string) : bool => find(base_name(path), "pocket-tts-") < 0
 
 [test]
 def test_state_json(t : T?) {

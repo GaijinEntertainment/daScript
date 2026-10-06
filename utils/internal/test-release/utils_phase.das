@@ -139,13 +139,10 @@ def public judged(check : ToolCheck; rc : int; out : string) : tuple<rc : int; h
     return empty(miss) ? (rc = 0, head = out) : (rc = 1, head = miss)
 }
 
-def public judged_rc(check : ToolCheck; rc : int; out : string) : int {
-    return judged(check, rc, out).rc
-}
+def public judged_rc(check : ToolCheck; rc : int; out : string) : int => judged(check, rc, out).rc
 
-def public judged_head(check : ToolCheck; rc : int; out : string) : string {
-    return judged(check, rc, out).head
-}
+def public judged_head(check : ToolCheck; rc : int; out : string) : string =>
+    judged(check, rc, out).head
 
 //! "" when the output satisfies the row, else the first unmet expectation - the FAIL head.
 def public unmet(check : ToolCheck; out : string) : string {

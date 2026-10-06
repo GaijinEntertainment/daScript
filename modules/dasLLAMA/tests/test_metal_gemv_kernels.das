@@ -722,9 +722,7 @@ def test_metal_kq_gemv_kernels(t : T?) {
 // ===== the verify's q8 row tilers (enc_gemv_rows / enc_gemv_w13sw_rows over the decode PSOs) =====
 
 // the rows a tiler writes at nrows live rows: the B2 form covers two, every B4 tile four
-def private tiler_rows_written(nrows : int) : int {
-    return nrows <= 2 ? 2 : ((nrows + 3) / 4) * 4
-}
+def private tiler_rows_written(nrows : int) : int => nrows <= 2 ? 2 : ((nrows + 3) / 4) * 4
 
 //! the compare covers the whole padded panel, so a live row the tiler skipped keeps its sentinel and reads as a mismatch
 def private gemv_rows_gate(t : T?; var queue; nrows, ndim, ddim, ys : int) {

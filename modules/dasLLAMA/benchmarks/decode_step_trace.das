@@ -56,9 +56,8 @@ struct Args {
     help : bool
 }
 
-def private build_prompt(n : int64) : array<int64> {
-    return <- [for (i in range64(n)); 1000l + (i % 5000l)]
-}
+def private build_prompt(n : int64) : array<int64> =>
+    <- [for (i in range64(n)); 1000l + (i % 5000l)]
 
 def private run_trace(cfg) {   // untyped param = generic — non-Apple builds never compile the Metal-typed body
     if (empty(g_env_engine.pin_backend)) {

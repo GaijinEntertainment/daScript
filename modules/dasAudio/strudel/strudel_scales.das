@@ -91,9 +91,7 @@ def private parse_scale_root(root_str : string) : int {
 
 // Normalize scale type: replace ":" with "_" so "minor:pentatonic" matches "minor_pentatonic".
 // This lets users write "C4:minor:pentatonic" matching mini-notation syntax.
-def private normalize_scale_type(raw : string) : string {
-    return replace(raw, ":", "_")
-}
+def private normalize_scale_type(raw : string) : string => replace(raw, ":", "_")
 
 //! `C4:major`, `C4:harmonic:minor` or strudel.cc's `C4 major`; a bare type keeps the C3 root
 def private parse_scale_def(scale_def : string) : tuple<int; string> {

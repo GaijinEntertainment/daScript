@@ -19,9 +19,8 @@ require daslib/flatten_opt_common
 require daslib/flatten_opt_fuse
 
 
-def private psh_reserved(name : das_string) : bool {
-    return name |> starts_with("__flat_") || name |> starts_with("__ssa_") || name |> starts_with("_preshader_")
-}
+def private psh_reserved(name : das_string) : bool =>
+    name |> starts_with("__flat_") || name |> starts_with("__ssa_") || name |> starts_with("_preshader_")
 
 def private name_counter_suffix(name : das_string; prefix : string) : int {
     if (!(name |> starts_with(prefix))) return -1
@@ -408,9 +407,7 @@ def private cse_body(var blk : ExprBlock?; var counter : int&) : bool {   // nol
     return anyChange
 }
 
-def private cm_key(l, r : ExpressionPtr) : string {
-    return "{describe(l)}\t-\t{describe(r)}"
-}
+def private cm_key(l, r : ExpressionPtr) : string => "{describe(l)}\t-\t{describe(r)}"
 
 class private CmTally : AstVisitor {
     counts : table<string; int>

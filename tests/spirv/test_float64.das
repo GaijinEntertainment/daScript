@@ -34,9 +34,7 @@ var @ssbo @binding = 0 f64_data : array<float>
 
 // The terrain-noise read, in miniature: the SSBO stays 32-bit, so a double closure widens on the way
 // in and narrows on the way out -- one OpFConvert each way, which is what the GLSL spends too.
-def f64_widen(x : float) : double {
-    return double(x)
-}
+def f64_widen(x : float) : double => double(x)
 
 [compute_shader(local_size_x=64, name="f64_spv"), marker(no_coverage)]
 def f64_shader {
@@ -107,9 +105,8 @@ def private has_const64(words : array<uint>; type_id, lo, hi : uint) : bool {
 
 // How many `op` instructions produce a value of type `type_id`? An arithmetic op's result type is
 // operand 0, so this is what separates a native 64-bit lowering from a 32-bit one.
-def private count_op_of_type(words : array<uint>; op : SpvOp; type_id : uint) : int {
-    return count_op_operand_at(words, op, 0, type_id)
-}
+def private count_op_of_type(words : array<uint>; op : SpvOp; type_id : uint) : int =>
+    count_op_operand_at(words, op, 0, type_id)
 
 def private check_float64_surface(t : T?; words : array<uint>; what : string) {
     t |> success(op_has_operand(words, SpvOp.Capability, uint(SpvCapability.Float64)),

@@ -128,9 +128,8 @@ def private join_path(a, path_b : string) : string {
     return fix_path(res)
 }
 
-def private fix_path(path : string) : string {
-    return path |> trim_path() |> file_name_to_uri() |> normalize_uri() |> uri_to_file_name()
-}
+def private fix_path(path : string) : string =>
+    path |> trim_path() |> file_name_to_uri() |> normalize_uri() |> uri_to_file_name()
 
 def private resolve_path(path : string; paths : array<string>) : string {
     if (path |> empty()) return path

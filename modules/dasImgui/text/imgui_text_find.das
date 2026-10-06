@@ -128,9 +128,7 @@ def public text_find_needs_rebuild(state : TextFindState const;
         || state.use_regex != state.matched_regex)
 }
 
-def private fold_case(b : int) : int {
-    return b >= 'A' && b <= 'Z' ? b + 32 : b
-}
+def private fold_case(b : int) : int => b >= 'A' && b <= 'Z' ? b + 32 : b
 
 def private literal_matches(query : string; source : string;
                             var matches : array<TextSourceRange>) {

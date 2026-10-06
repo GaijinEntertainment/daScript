@@ -1,23 +1,15 @@
 options gen2
 require dastest/testing_boost
 
-def fnmad(a, b, c : int) {
-    return a * b + c
-}
+def fnmad(a, b, c : int) => a * b + c
 
 [sideeffects]
-def jit_addr {
-    return @@fnmad
-}
+def jit_addr => @@fnmad
 
 [sideeffects]
-def jit_pass_addr {
-    return take_fun(@@fnmad)
-}
+def jit_pass_addr => take_fun(@@fnmad)
 
-def take_fun(fn : function<(a, b, c : int) : int>) {
-    return invoke(fn, 1, 2, 3)
-}
+def take_fun(fn : function<(a, b, c : int) : int>) => invoke(fn, 1, 2, 3)
 
 [test]
 def test_assert(t : T?) {

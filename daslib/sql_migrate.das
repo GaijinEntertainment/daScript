@@ -349,9 +349,8 @@ def try_migrate_to_latest(db) : Result<int, string> {
     return <- _migrate_inner(db, false)
 }
 
-def private _audit_has_version(db; version : int) : bool {
-    return _scalar_int_or_zero(db, "SELECT COUNT(*) FROM __schema_version WHERE version = {version}") > 0
-}
+def private _audit_has_version(db; version : int) : bool =>
+    _scalar_int_or_zero(db, "SELECT COUNT(*) FROM __schema_version WHERE version = {version}") > 0
 
 def private _baseline_inner(db; version : int; blocking : bool) : Result<int, string> {
     let stream = _::_migration_stream_key(db)

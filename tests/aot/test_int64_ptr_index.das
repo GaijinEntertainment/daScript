@@ -6,29 +6,19 @@ require dastest/testing_boost public
 // non-var pointer form (das_index<T * const> lacked 64-bit at/safe_at overloads).
 // Non-var params cover the gap; var / const-pointee params are the already-working controls.
 
-def read_i64(p : float?; i : int64) : float {
-    return unsafe(p[i])
-}
+def read_i64(p : float?; i : int64) : float => unsafe(p[i])
 
-def read_u64(p : float?; i : uint64) : float {
-    return unsafe(p[i])
-}
+def read_u64(p : float?; i : uint64) : float => unsafe(p[i])
 
-def safe_read_i64(p : float?; i : int64) : float {
-    return unsafe(p?[i]) ?? -1.0
-}
+def safe_read_i64(p : float?; i : int64) : float => unsafe(p?[i]) ?? -1.0
 
-def safe_read_u64(p : float?; i : uint64) : float {
-    return unsafe(p?[i]) ?? -1.0
-}
+def safe_read_u64(p : float?; i : uint64) : float => unsafe(p?[i]) ?? -1.0
 
 def write_i64(var p : float?; i : int64; v : float) {
     unsafe(p[i]) = v
 }
 
-def read_const_pointee_i64(p : float const?; i : int64) : float {
-    return unsafe(p[i])
-}
+def read_const_pointee_i64(p : float const?; i : int64) : float => unsafe(p[i])
 
 [test]
 def test_int64_ptr_index(t : T?) {

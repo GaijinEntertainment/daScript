@@ -41,9 +41,8 @@ def public register_llvm_code_generator(name : string; gen : function<(var gc : 
     g_llvm_code_generators |> insert(name, gen)
 }
 
-def public has_llvm_code_generator(name : string) : bool {
-    return g_llvm_code_generators |> key_exists(name)
-}
+def public has_llvm_code_generator(name : string) : bool =>
+    g_llvm_code_generators |> key_exists(name)
 
 def public invoke_llvm_code_generator(name : string; var gc : LlvmCodeCtx) : bool {
     var generated = false

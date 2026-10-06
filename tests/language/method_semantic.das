@@ -8,17 +8,11 @@ struct MethodPoint {
     dot = @@method_point_dot
 }
 
-def MethodPoint(X, Y) {
-    return MethodPoint(x = X, y = Y)
-}
+def MethodPoint(X, Y) => MethodPoint(x = X, y = Y)
 
-def method_point_magnitude(that : MethodPoint) {
-    return that.x * that.x + that.y * that.y
-}
+def method_point_magnitude(that : MethodPoint) => that.x * that.x + that.y * that.y
 
-def method_point_dot(that, p : MethodPoint) {
-    return that.x * p.x + that.y * p.y
-}
+def method_point_dot(that, p : MethodPoint) => that.x * p.x + that.y * p.y
 
 [test]
 def test_method_semantic(t : T?) {

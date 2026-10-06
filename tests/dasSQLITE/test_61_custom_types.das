@@ -19,14 +19,10 @@ struct DateTime {
     unix_seconds : int64
 }
 
-def sql_bind(dt : DateTime) : int64 {
-    return dt.unix_seconds
-}
+def sql_bind(dt : DateTime) : int64 => dt.unix_seconds
 
 [unused_argument(t)]
-def sql_extract(v : int64; t : type<DateTime>) : DateTime {
-    return DateTime(unix_seconds = v)
-}
+def sql_extract(v : int64; t : type<DateTime>) : DateTime => DateTime(unix_seconds = v)
 
 struct Guid {
     @safe_when_uninitialized bytes : array<uint8>
@@ -39,9 +35,7 @@ def sql_bind(g : Guid) : array<uint8> {
 }
 
 [unused_argument(t)]
-def sql_extract(var v : array<uint8>; t : type<Guid>) : Guid {
-    return Guid(bytes <- v)
-}
+def sql_extract(var v : array<uint8>; t : type<Guid>) : Guid => Guid(bytes <- v)
 
 enum OrderStatus {
     Pending

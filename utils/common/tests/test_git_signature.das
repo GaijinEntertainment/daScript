@@ -22,9 +22,7 @@ def cleanup_root(root : string) {
     }
 }
 
-def md_predicate(p : string) : bool {
-    return ends_with(p, ".md")
-}
+def md_predicate(p : string) : bool => ends_with(p, ".md")
 
 // ─── extract_status_path ─────────────────────────────────────────────
 

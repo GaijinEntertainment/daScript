@@ -160,14 +160,11 @@ def vulkan_wdec_stats : tuple<windows : int64; steps : int64; tokens : int64; de
 }
 
 //! The declines-by-reason table (a copy), keyed by `VulkanWdecDecline` value names.
-def vulkan_wdec_declines : table<string; int64> {
-    return <- clone_to_move(g_wd_declines.counts)
-}
+def vulkan_wdec_declines : table<string; int64> => <- clone_to_move(g_wd_declines.counts)
 
 //! The step-time split across every served decode batch: the submit's wall against the host encode, microseconds.
-def vulkan_wdec_times : tuple<us_gpu : int64; us_encode : int64> {
-    return (us_gpu = g_wd_us_gpu, us_encode = g_wd_us_encode)
-}
+def vulkan_wdec_times : tuple<us_gpu : int64; us_encode : int64> =>
+    (us_gpu = g_wd_us_gpu, us_encode = g_wd_us_encode)
 
 //! Test A/B seat: pin the ASR-decoder driver on / off in-process (the env knob's setter twin).
 def set_vulkan_wdec(on : bool) {

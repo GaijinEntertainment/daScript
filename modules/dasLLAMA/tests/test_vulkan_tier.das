@@ -104,9 +104,8 @@ def private offs_triple(experts, row0s, cnts : array<int64>; woffs : Bases; n, n
 
 //! the two FFN arm shapes' regions: decode = 2 rows, one each over experts 1 and 2 (the engine's k = 2 GEMV shape); batch = 40
 //! rows (>= the 32-row tile, deliberately unpadded), 24 over expert 0 and 16 over expert 2
-def private region_triple(decode : bool; woffs : Bases; n, nfe : int64) : OffsTriple {
-    return <- decode ? offs_triple([1l, 2l], [0l, 1l], [1l, 1l], woffs, n, nfe) : offs_triple([0l, 2l], [0l, 24l], [24l, 16l], woffs, n, nfe)
-}
+def private region_triple(decode : bool; woffs : Bases; n, nfe : int64) : OffsTriple =>
+    <- decode ? offs_triple([1l, 2l], [0l, 1l], [1l, 1l], woffs, n, nfe) : offs_triple([0l, 2l], [0l, 24l], [24l, 16l], woffs, n, nfe)
 
 //! One FFN arm through matmul_moe_gpu_ffn: the decode or the batch shape over the stacks at `woffs` in formats `fmts` (gate, up,
 //! down; the activation rows follow the gate's form), against `refer`'s reference over the same offsets. The device rows.

@@ -175,9 +175,7 @@ def compute_sum(n : int) : int {
     return s
 }
 
-def compute_product(a, b : int) : int {
-    return a * b
-}
+def compute_product(a, b : int) : int => a * b
 
 def do_work() {
     let s = compute_sum(10)

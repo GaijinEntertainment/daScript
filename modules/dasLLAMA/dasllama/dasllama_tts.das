@@ -186,13 +186,11 @@ def private voice_lang(m : TtsModel; vname : string) : string {
     return m.kind == TtsKind.kitten ? "en-us" : kokoro_voice_lang(vname)
 }
 
-def private family_name(m : TtsModel) : string {
-    return m.kind == TtsKind.pocket ? "pocket-tts {m.pocket.name}" : "{m.model.family} {m.model.name}"
-}
+def private family_name(m : TtsModel) : string =>
+    m.kind == TtsKind.pocket ? "pocket-tts {m.pocket.name}" : "{m.model.family} {m.model.name}"
 
-def private sample_rate_of(m : TtsModel) : int {
-    return m.kind == TtsKind.pocket ? m.pocket.sample_rate : m.model.sample_rate
-}
+def private sample_rate_of(m : TtsModel) : int =>
+    m.kind == TtsKind.pocket ? m.pocket.sample_rate : m.model.sample_rate
 
 def caps(m : TtsModel) : TtsCaps {
     //! What the loaded model offers: the canonical voice names the front end can drive, each with

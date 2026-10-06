@@ -10,15 +10,11 @@ require UnitTest
 // the function must be [export] so it gets a register-return wrapper (the
 // register-return ABI is what makes it non-cmres and triggers the bug).
 [export]
-def make_big : BigEntityId {
-    return <- BigEntityId()
-}
+def make_big : BigEntityId => <- BigEntityId()
 
 // consume the result without string-interpolating it (interpolating a handled
 // value type walks it, which is an unrelated path).
-def sink(_b : BigEntityId) : int {
-    return 1
-}
+def sink(_b : BigEntityId) : int => 1
 
 [test]
 def test_handle_value_move_return(t : T?) {

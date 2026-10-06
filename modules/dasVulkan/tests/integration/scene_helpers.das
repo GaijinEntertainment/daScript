@@ -316,9 +316,7 @@ def public run_compute_spirv(var words : array<uint>; n : int) : array<uint> {  
 }
 
 //! the boost-descriptor compute square, now fed by the daslang-emitted `square_spv` blob.
-def public run_compute_boost(n : int) : array<uint> {
-    return <- run_compute_spirv(square_spv, n)
-}
+def public run_compute_boost(n : int) : array<uint> => <- run_compute_spirv(square_spv, n)
 
 //! the dasSpirv storage-image GPU gate: run a compute blob (`words`) that writes a w*h RGBA8 storage
 //! image at set=0/binding=0, then read it back as RGBA8 bytes. The image analog of run_compute_spirv.

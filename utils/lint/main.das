@@ -132,20 +132,15 @@ def write_deduped(var writer : StringBuilderWriter; issues : array<LintIssue>; p
     }
 }
 
-def is_skip_file(name : string) : bool {
-    return name == "builtin.das"
-}
+def is_skip_file(name : string) : bool => name == "builtin.das"
 
-def is_skip_dir(name : string) : bool {
-    return name |> starts_with(".") || name == "node_modules"
-}
+def is_skip_dir(name : string) : bool => name |> starts_with(".") || name == "node_modules"
 
 // A CMake build tree is not source, whatever it is named: FetchContent checkouts under it
 // carry .das and .md the tree never wrote. Neither is another repository's checkout inside this
 // one (the EASTL local-verify clones): its comments cite documents of its own.
-def is_build_tree(path : string) : bool {
-    return stat("{path}/CMakeCache.txt").is_valid || stat("{path}/.git").is_valid
-}
+def is_build_tree(path : string) : bool =>
+    stat("{path}/CMakeCache.txt").is_valid || stat("{path}/.git").is_valid
 
 def scan_das_files(path : string; var files : array<string>; var cache : table<string; void?>; var skipped : int&) {
     let st = stat(path)
@@ -196,9 +191,8 @@ def is_rule_doc_name(name : string) : bool {
 }
 
 // A rule runs unless --disable names it, or --enable put the run in whitelist mode without it.
-def rule_is_on(code : string; disabled_codes, enabled_codes : table<string>) : bool {
-    return !key_exists(disabled_codes, code) && (empty(enabled_codes) || key_exists(enabled_codes, code))
-}
+def rule_is_on(code : string; disabled_codes, enabled_codes : table<string>) : bool =>
+    !key_exists(disabled_codes, code) && (empty(enabled_codes) || key_exists(enabled_codes, code))
 
 // Directories under `path` the two tagged-or-present folder rules answer for: a folder whose
 // OWN .lint_config sets rule_docs_only feeds LINT025, and any folder holding a rule document

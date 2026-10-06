@@ -251,9 +251,8 @@ def private stft_mag(buf : array<float>; start, nfft : int; var mags : array<flo
 }
 
 // peak-normalized RMS energy over `npts` frames across the whole buffer (the falloff shape).
-def public energy_curve(buf : array<float>; npts : int) : array<float> {
-    return <- rms_env_abs(buf, length(buf), npts)
-}
+def public energy_curve(buf : array<float>; npts : int) : array<float> =>
+    <- rms_env_abs(buf, length(buf), npts)
 
 // spectral centroid (Hz) per time frame — exposes a pitch sweep (centroid moving over time).
 def public centroid_curve(buf : array<float>; rate, nframes : int) : array<float> {
@@ -313,9 +312,8 @@ def private log_spectro(buf : array<float>; win_len, rate, nframes, nbins : int;
 }
 
 // UI spectrogram: frames spread across the whole buffer (spectrum over time, for plot_heatmap).
-def public spectrogram(buf : array<float>; rate, nframes, nbins : int; fmax : float) : array<float> {
-    return <- log_spectro(buf, length(buf), rate, nframes, nbins, fmax)
-}
+def public spectrogram(buf : array<float>; rate, nframes, nbins : int; fmax : float) : array<float> =>
+    <- log_spectro(buf, length(buf), rate, nframes, nbins, fmax)
 
 // subtract the max cell so the loudest = 0 dB (level-invariant)
 def private norm_db(var s : array<float>) {
@@ -358,9 +356,7 @@ def public spectral_evo_fit(a, b : array<float>; rate : int) : float {
 // ===== composite-fit components (spectral timbre + temporal shape + attack) =====
 
 // smooth, bounded distance -> dissimilarity [0,1); nonzero gradient everywhere (good for hill-climb)
-def private squash(d, scale : float) : float {
-    return 1.0 - exp(-d / max(scale, 1.0e-6))
-}
+def private squash(d, scale : float) : float => 1.0 - exp(-d / max(scale, 1.0e-6))
 
 struct SpecPeakHz {
     hz  : float

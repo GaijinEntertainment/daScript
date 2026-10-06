@@ -82,9 +82,8 @@ var g_pf_ffn_slice = true
 
 //! The first row of a layer's FFN dispatches: the last layer's, on the f16-fed cm2 route, starts 32 rows below the window's end
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
-def pf_ffn_slice_row0(l, n_layers, wlen : int64; f16_gate, f16_down : bool) : int64 {
-    return g_pf_ffn_slice && g_env_vulkan.vk_ffn_slice && l + 1l == n_layers && f16_gate && f16_down ? max(wlen - 32l, 0l) : 0l
-}
+def pf_ffn_slice_row0(l, n_layers, wlen : int64; f16_gate, f16_down : bool) : int64 =>
+    g_pf_ffn_slice && g_env_vulkan.vk_ffn_slice && l + 1l == n_layers && f16_gate && f16_down ? max(wlen - 32l, 0l) : 0l
 
 //! the h128 coopmat twin serves a 128-head layer where the cm2 flash tiles do not
 def private pf_fa128s : bool => !(cm2_fa_on() && vk_fa_on() && rd_pf_reads_f16()) && g_gpu.has_coopmat && vk_fa_on()
@@ -2946,9 +2945,8 @@ def private ensure_at_state {
 //! Does the cm2 flash-attention tile serve this window? A coopmat2-fa device, the fa knob, head 64
 //! or 128, and no gate (this chain wires neither the h256 stamps nor their gated epilogue - gated models keep at_attn).
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain")]
-def private at_fa_serves(hs : int64; gated : bool) : bool {
-    return !gated && cm2_fa_on() && vk_fa_on() && (hs == 64l || hs == 128l)
-}
+def private at_fa_serves(hs : int64; gated : bool) : bool =>
+    !gated && cm2_fa_on() && vk_fa_on() && (hs == 64l || hs == 128l)
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain")]
 def private ensure_at_fa_state(hs : int64) {

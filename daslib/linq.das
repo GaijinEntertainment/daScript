@@ -143,9 +143,8 @@ def private to_table_impl(var a; tt : auto(TT); key : block<(v : TT -&) : auto>;
 }
 
 [unused_argument(tt)]
-def private to_table_impl_const(a : auto(ARGT); tt : auto(TT); key : block<(v : TT -&) : auto>; elementSelector : block<(v : TT -&) : auto>) : table<typedecl(_::unique_key(type<TT>)) -const -&, typedecl(elementSelector(type<TT>)) -const -&> {
-    return <- to_table_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, key, elementSelector)
-}
+def private to_table_impl_const(a : auto(ARGT); tt : auto(TT); key : block<(v : TT -&) : auto>; elementSelector : block<(v : TT -&) : auto>) : table<typedecl(_::unique_key(type<TT>)) -const -&, typedecl(elementSelector(type<TT>)) -const -&> =>
+    <- to_table_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, key, elementSelector)
 
 def to_table(var a : iterator<auto(TT)>; key : block<(v : TT -&) : auto>; elementSelector : block<(v : TT -&) : auto>) : table<typedecl(_::unique_key(type<TT>)) -const -&, typedecl(elementSelector(type<TT>)) -const -&> {
     //! Converts an iterator to a table
@@ -215,9 +214,8 @@ def private concat_impl(var a; var b; tt : auto(TT); reserveSize : int) : array<
 }
 
 [unused_argument(tt)]
-def private concat_impl_const(a : auto(ARGT); b : auto(ARGU); tt : auto(TT); reserveSize : int) : array<TT -const -&> {
-    return <- concat_impl(unsafe(reinterpret<ARGT -const>(a)), unsafe(reinterpret<ARGU -const>(b)), type<TT -const -&>, reserveSize)
-}
+def private concat_impl_const(a : auto(ARGT); b : auto(ARGU); tt : auto(TT); reserveSize : int) : array<TT -const -&> =>
+    <- concat_impl(unsafe(reinterpret<ARGT -const>(a)), unsafe(reinterpret<ARGU -const>(b)), type<TT -const -&>, reserveSize)
 
 def concat(a, b : array<auto(TT)>) : array<TT -const -&> {
     //! Concatenates two arrays
@@ -288,9 +286,8 @@ def private concat3_impl(var a; var b; var c; tt : auto(TT); reserveSize : int) 
 }
 
 [unused_argument(tt)]
-def private concat3_impl_const(a : auto(ARGA); b : auto(ARGB); c : auto(ARGC); tt : auto(TT); reserveSize : int) : array<TT -const -&> {
-    return <- concat3_impl(unsafe(reinterpret<ARGA -const>(a)), unsafe(reinterpret<ARGB -const>(b)), unsafe(reinterpret<ARGC -const>(c)), type<TT -const -&>, reserveSize)
-}
+def private concat3_impl_const(a : auto(ARGA); b : auto(ARGB); c : auto(ARGC); tt : auto(TT); reserveSize : int) : array<TT -const -&> =>
+    <- concat3_impl(unsafe(reinterpret<ARGA -const>(a)), unsafe(reinterpret<ARGB -const>(b)), unsafe(reinterpret<ARGC -const>(c)), type<TT -const -&>, reserveSize)
 
 def concat(a, b, c : array<auto(TT)>) : array<TT -const -&> {
     //! Concatenates three arrays
@@ -339,9 +336,8 @@ def private concat4_impl(var a; var b; var c; var d; tt : auto(TT); reserveSize 
 }
 
 [unused_argument(tt)]
-def private concat4_impl_const(a : auto(ARGA); b : auto(ARGB); c : auto(ARGC); d : auto(ARGD); tt : auto(TT); reserveSize : int) : array<TT -const -&> {
-    return <- concat4_impl(unsafe(reinterpret<ARGA -const>(a)), unsafe(reinterpret<ARGB -const>(b)), unsafe(reinterpret<ARGC -const>(c)), unsafe(reinterpret<ARGD -const>(d)), type<TT -const -&>, reserveSize)
-}
+def private concat4_impl_const(a : auto(ARGA); b : auto(ARGB); c : auto(ARGC); d : auto(ARGD); tt : auto(TT); reserveSize : int) : array<TT -const -&> =>
+    <- concat4_impl(unsafe(reinterpret<ARGA -const>(a)), unsafe(reinterpret<ARGB -const>(b)), unsafe(reinterpret<ARGC -const>(c)), unsafe(reinterpret<ARGD -const>(d)), type<TT -const -&>, reserveSize)
 
 def concat(a, b, c, d : array<auto(TT)>) : array<TT -const -&> {
     //! Concatenates four arrays
@@ -395,9 +391,8 @@ def private concat5_impl(var a; var b; var c; var d; var e; tt : auto(TT); reser
 }
 
 [unused_argument(tt)]
-def private concat5_impl_const(a : auto(ARGA); b : auto(ARGB); c : auto(ARGC); d : auto(ARGD); e : auto(ARGE); tt : auto(TT); reserveSize : int) : array<TT -const -&> {
-    return <- concat5_impl(unsafe(reinterpret<ARGA -const>(a)), unsafe(reinterpret<ARGB -const>(b)), unsafe(reinterpret<ARGC -const>(c)), unsafe(reinterpret<ARGD -const>(d)), unsafe(reinterpret<ARGE -const>(e)), type<TT -const -&>, reserveSize)
-}
+def private concat5_impl_const(a : auto(ARGA); b : auto(ARGB); c : auto(ARGC); d : auto(ARGD); e : auto(ARGE); tt : auto(TT); reserveSize : int) : array<TT -const -&> =>
+    <- concat5_impl(unsafe(reinterpret<ARGA -const>(a)), unsafe(reinterpret<ARGB -const>(b)), unsafe(reinterpret<ARGC -const>(c)), unsafe(reinterpret<ARGD -const>(d)), unsafe(reinterpret<ARGE -const>(e)), type<TT -const -&>, reserveSize)
 
 def concat(a, b, c, d, e : array<auto(TT)>) : array<TT -const -&> {
     //! Concatenates five arrays
@@ -456,9 +451,8 @@ def private concat6_impl(var a; var b; var c; var d; var e; var f; tt : auto(TT)
 }
 
 [unused_argument(tt)]
-def private concat6_impl_const(a : auto(ARGA); b : auto(ARGB); c : auto(ARGC); d : auto(ARGD); e : auto(ARGE); f : auto(ARGF); tt : auto(TT); reserveSize : int) : array<TT -const -&> {
-    return <- concat6_impl(unsafe(reinterpret<ARGA -const>(a)), unsafe(reinterpret<ARGB -const>(b)), unsafe(reinterpret<ARGC -const>(c)), unsafe(reinterpret<ARGD -const>(d)), unsafe(reinterpret<ARGE -const>(e)), unsafe(reinterpret<ARGF -const>(f)), type<TT -const -&>, reserveSize)
-}
+def private concat6_impl_const(a : auto(ARGA); b : auto(ARGB); c : auto(ARGC); d : auto(ARGD); e : auto(ARGE); f : auto(ARGF); tt : auto(TT); reserveSize : int) : array<TT -const -&> =>
+    <- concat6_impl(unsafe(reinterpret<ARGA -const>(a)), unsafe(reinterpret<ARGB -const>(b)), unsafe(reinterpret<ARGC -const>(c)), unsafe(reinterpret<ARGD -const>(d)), unsafe(reinterpret<ARGE -const>(e)), unsafe(reinterpret<ARGF -const>(f)), type<TT -const -&>, reserveSize)
 
 def concat(a, b, c, d, e, f : array<auto(TT)>) : array<TT -const -&> {
     //! Concatenates six arrays
@@ -522,9 +516,8 @@ def private concat7_impl(var a; var b; var c; var d; var e; var f; var g; tt : a
 }
 
 [unused_argument(tt)]
-def private concat7_impl_const(a : auto(ARGA); b : auto(ARGB); c : auto(ARGC); d : auto(ARGD); e : auto(ARGE); f : auto(ARGF); g : auto(ARGG); tt : auto(TT); reserveSize : int) : array<TT -const -&> {
-    return <- concat7_impl(unsafe(reinterpret<ARGA -const>(a)), unsafe(reinterpret<ARGB -const>(b)), unsafe(reinterpret<ARGC -const>(c)), unsafe(reinterpret<ARGD -const>(d)), unsafe(reinterpret<ARGE -const>(e)), unsafe(reinterpret<ARGF -const>(f)), unsafe(reinterpret<ARGG -const>(g)), type<TT -const -&>, reserveSize)
-}
+def private concat7_impl_const(a : auto(ARGA); b : auto(ARGB); c : auto(ARGC); d : auto(ARGD); e : auto(ARGE); f : auto(ARGF); g : auto(ARGG); tt : auto(TT); reserveSize : int) : array<TT -const -&> =>
+    <- concat7_impl(unsafe(reinterpret<ARGA -const>(a)), unsafe(reinterpret<ARGB -const>(b)), unsafe(reinterpret<ARGC -const>(c)), unsafe(reinterpret<ARGD -const>(d)), unsafe(reinterpret<ARGE -const>(e)), unsafe(reinterpret<ARGF -const>(f)), unsafe(reinterpret<ARGG -const>(g)), type<TT -const -&>, reserveSize)
 
 def concat(a, b, c, d, e, f, g : array<auto(TT)>) : array<TT -const -&> {
     //! Concatenates seven arrays
@@ -593,9 +586,8 @@ def private concat8_impl(var a; var b; var c; var d; var e; var f; var g; var h;
 }
 
 [unused_argument(tt)]
-def private concat8_impl_const(a : auto(ARGA); b : auto(ARGB); c : auto(ARGC); d : auto(ARGD); e : auto(ARGE); f : auto(ARGF); g : auto(ARGG); h : auto(ARGH); tt : auto(TT); reserveSize : int) : array<TT -const -&> {
-    return <- concat8_impl(unsafe(reinterpret<ARGA -const>(a)), unsafe(reinterpret<ARGB -const>(b)), unsafe(reinterpret<ARGC -const>(c)), unsafe(reinterpret<ARGD -const>(d)), unsafe(reinterpret<ARGE -const>(e)), unsafe(reinterpret<ARGF -const>(f)), unsafe(reinterpret<ARGG -const>(g)), unsafe(reinterpret<ARGH -const>(h)), type<TT -const -&>, reserveSize)
-}
+def private concat8_impl_const(a : auto(ARGA); b : auto(ARGB); c : auto(ARGC); d : auto(ARGD); e : auto(ARGE); f : auto(ARGF); g : auto(ARGG); h : auto(ARGH); tt : auto(TT); reserveSize : int) : array<TT -const -&> =>
+    <- concat8_impl(unsafe(reinterpret<ARGA -const>(a)), unsafe(reinterpret<ARGB -const>(b)), unsafe(reinterpret<ARGC -const>(c)), unsafe(reinterpret<ARGD -const>(d)), unsafe(reinterpret<ARGE -const>(e)), unsafe(reinterpret<ARGF -const>(f)), unsafe(reinterpret<ARGG -const>(g)), unsafe(reinterpret<ARGH -const>(h)), type<TT -const -&>, reserveSize)
 
 def concat(a, b, c, d, e, f, g, h : array<auto(TT)>) : array<TT -const -&> {
     //! Concatenates eight arrays
@@ -835,13 +827,10 @@ def less(a, b : tuple<auto(TT), auto(UU), auto(VV), auto(WW)>) : bool {
     return a._3 < b._3
 }
 
-def private key_less(a, b; desc : bool) : bool {
-    return desc ? b < a : a < b
-}
+def private key_less(a, b; desc : bool) : bool => desc ? b < a : a < b
 
-def private less_masked(a, b : tuple<auto(TT)>; mask : uint) : bool {
-    return key_less(a._0, b._0, (mask & 1u) != 0u)
-}
+def private less_masked(a, b : tuple<auto(TT)>; mask : uint) : bool =>
+    key_less(a._0, b._0, (mask & 1u) != 0u)
 
 def private less_masked(a, b : tuple<auto(TT), auto(UU)>; mask : uint) : bool {
     let d0 = (mask & 1u) != 0u
@@ -1098,9 +1087,8 @@ def private distinct_impl(var a; tt : auto(TT)) : array<TT -const -&> {
     return <- buffer
 }
 
-def private distinct_impl_const(a : auto(ARGT); tt : auto(TT)) : array<TT -const -&> {
-    return <- distinct_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>)
-}
+def private distinct_impl_const(a : auto(ARGT); tt : auto(TT)) : array<TT -const -&> =>
+    <- distinct_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>)
 
 def distinct(a : array<auto(TT)>) : array<TT -const -&> {
     //! Returns distinct elements from an array
@@ -1165,9 +1153,8 @@ def private distinct_by_impl(var a; tt : auto(TT); key : block<(arg : TT -&) : a
 }
 
 [unused_argument(tt)]
-def private distinct_by_impl_const(a : auto(ARGT); tt : auto(TT); key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
-    return <- distinct_by_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, key)
-}
+def private distinct_by_impl_const(a : auto(ARGT); tt : auto(TT); key : block<(arg : TT -&) : auto>) : array<TT -const -&> =>
+    <- distinct_by_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, key)
 
 def distinct_by(a : array<auto(TT)>; key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
     //! Returns distinct elements from an array based on a key
@@ -1355,9 +1342,8 @@ def private where_impl(var src; tt : auto(TT); len : int; predicate : block<(arg
 }
 
 [unused_argument(tt)]
-def private where_impl_const(src : auto(ARGT); tt : auto(TT); len : int; predicate : block<(arg : TT -&) : bool>) : array<TT -& -const> {
-    return <- where_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -& -const>, len, predicate)
-}
+def private where_impl_const(src : auto(ARGT); tt : auto(TT); len : int; predicate : block<(arg : TT -&) : bool>) : array<TT -& -const> =>
+    <- where_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -& -const>, len, predicate)
 
 def where_(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : iterator<TT -& -const> {
     //! Filters elements in an iterator based on a predicate
@@ -1467,9 +1453,8 @@ def private skip_while_impl(var src; tt : auto(TT); predicate : block<(arg : TT 
 }
 
 [unused_argument(tt)]
-def private skip_while_impl_const(src : auto(ARGT); tt : auto(TT); predicate : block<(arg : TT -&) : bool>) : array<TT -& -const> {
-    return <- skip_while_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -& -const>, predicate)
-}
+def private skip_while_impl_const(src : auto(ARGT); tt : auto(TT); predicate : block<(arg : TT -&) : bool>) : array<TT -& -const> =>
+    <- skip_while_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -& -const>, predicate)
 
 def skip_while(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : iterator<TT -& -const> {
     //! Skips all elements of an iterator while the predicate is true
@@ -1663,9 +1648,8 @@ def private take_while_impl(var src; tt : auto(TT); predicate : block<(arg : TT 
 }
 
 [unused_argument(tt)]
-def private take_while_impl_const(src : auto(ARGT); tt : auto(TT); predicate : block<(arg : TT -&) : bool>) : array<TT -& -const> {
-    return <- take_while_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -& -const>, predicate)
-}
+def private take_while_impl_const(src : auto(ARGT); tt : auto(TT); predicate : block<(arg : TT -&) : bool>) : array<TT -& -const> =>
+    <- take_while_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -& -const>, predicate)
 
 def take_while(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : iterator<TT -& -const> {
     //! Yields only the elements of an iterator while the predicate is true
@@ -1867,9 +1851,8 @@ def private max_sel_impl(var src; tt : auto(TT); selector) : typedecl(selector(t
 }
 
 [unused_argument(tt)]
-def private max_sel_impl_const(src : auto(ARGT); tt : auto(TT); selector) : typedecl(selector(type<TT>)) - const - & {
-    return <- max_sel_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, selector)
-}
+def private max_sel_impl_const(src : auto(ARGT); tt : auto(TT); selector) : typedecl(selector(type<TT>)) - const - & =>
+    <- max_sel_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, selector)
 
 def max(var src : iterator<auto(TT)>; selector) : typedecl(selector(type<TT>)) - const - & {
     //! Maximum of ``selector(x)`` over iterator elements (C# ``Max(selector)``).
@@ -1900,9 +1883,8 @@ def private min_sel_impl(var src; tt : auto(TT); selector) : typedecl(selector(t
 }
 
 [unused_argument(tt)]
-def private min_sel_impl_const(src : auto(ARGT); tt : auto(TT); selector) : typedecl(selector(type<TT>)) - const - & {
-    return <- min_sel_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, selector)
-}
+def private min_sel_impl_const(src : auto(ARGT); tt : auto(TT); selector) : typedecl(selector(type<TT>)) - const - & =>
+    <- min_sel_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, selector)
 
 def min(var src : iterator<auto(TT)>; selector) : typedecl(selector(type<TT>)) - const - & {
     //! Minimum of ``selector(x)`` over iterator elements (C# ``Min(selector)``).
@@ -1978,9 +1960,8 @@ def private min_max_by_impl(var src; tt : auto(TT); key) : tuple<TT -& -const, T
 }
 
 [unused_argument(tt)]
-def private min_max_by_impl_const(src : auto(ARGT); tt : auto(TT); key) : tuple<TT -& -const, TT -& -const> {
-    return <- min_max_by_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, key)
-}
+def private min_max_by_impl_const(src : auto(ARGT); tt : auto(TT); key) : tuple<TT -& -const, TT -& -const> =>
+    <- min_max_by_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, key)
 
 def min_max_by(var src : iterator<auto(TT)>; key) : tuple<TT -& -const, TT -& -const> {
     //! Finds the minimum and maximum elements in an iterator by key
@@ -2078,9 +2059,8 @@ def private sum_sel_impl(var src; tt : auto(TT); selector) : typedecl(selector(t
 }
 
 [unused_argument(tt)]
-def private sum_sel_impl_const(src : auto(ARGT); tt : auto(TT); selector) : typedecl(selector(type<TT>)) - const - & {
-    return <- sum_sel_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, selector)
-}
+def private sum_sel_impl_const(src : auto(ARGT); tt : auto(TT); selector) : typedecl(selector(type<TT>)) - const - & =>
+    <- sum_sel_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, selector)
 
 def sum(var src : iterator<auto(TT)>; selector) : typedecl(selector(type<TT>)) - const - & {
     //! Sum of ``selector(x)`` over iterator elements (C# ``Sum(selector)``).
@@ -2192,9 +2172,8 @@ def private min_max_average_impl(var src; tt : auto(TT)) : tuple<TT -const -&, T
 }
 
 [unused_argument(tt)]
-def private min_max_average_impl_const(src : auto(ARGT); tt : auto(TT)) : tuple<TT -const -&, TT -const -&, TT -const -&> {
-    return <- min_max_average_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>)
-}
+def private min_max_average_impl_const(src : auto(ARGT); tt : auto(TT)) : tuple<TT -const -&, TT -const -&, TT -const -&> =>
+    <- min_max_average_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>)
 
 def min_max_average(var src : iterator<auto(TT)>) : tuple<TT -const -&, TT -const -&, TT -const -&> {
     //! Finds the minimum, maximum, and average elements in an iterator
@@ -2240,9 +2219,8 @@ def private min_max_average_by_impl(var src; tt : auto(TT); key) : tuple<TT -con
 }
 
 [unused_argument(tt)]
-def private min_max_average_by_impl_const(src : auto(ARGT); tt : auto(TT); key) : tuple<TT -const -&, TT -const -&, TT -const -&> {
-    return <- min_max_average_by_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, key)
-}
+def private min_max_average_by_impl_const(src : auto(ARGT); tt : auto(TT); key) : tuple<TT -const -&, TT -const -&, TT -const -&> =>
+    <- min_max_average_by_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, key)
 
 def min_max_average_by(var src : iterator<auto(TT)>; key) : tuple<TT -const -&, TT -const -&, TT -const -&> {
     //! Finds the minimum, maximum, and average elements in an iterator by key
@@ -2273,9 +2251,8 @@ def private join_impl(var srca; var srcb; ta : auto(TA); tb : auto(TB); keya, ke
     return <- buffer
 }
 
-def private join_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); ta : auto(TA); tb : auto(TB); keya, keyb; result) : array<typedecl(result(type<TA>, type<TB>)) -const -&> {
-    return <- join_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<ARGTB -const>(srcb)), type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
-}
+def private join_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); ta : auto(TA); tb : auto(TB); keya, keyb; result) : array<typedecl(result(type<TA>, type<TB>)) -const -&> =>
+    <- join_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<ARGTB -const>(srcb)), type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
 
 def join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<TA>, type<TB>)) -const -&> {
     //! Joins two iterators based on matching keys (inner join)
@@ -2333,9 +2310,8 @@ def private group_join_impl(var srca; var srcb; ta : auto(TA); tb : auto(TB); ke
 }
 
 [unused_argument(ta, tb)]
-def private group_join_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); ta : auto(TA); tb : auto(TB); keya, keyb; result) : array<typedecl(result(type<TA>, type<array<TB -const -&>>)) -const -&> {
-    return <- group_join_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<ARGTB -const>(srcb)), type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
-}
+def private group_join_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); ta : auto(TA); tb : auto(TB); keya, keyb; result) : array<typedecl(result(type<TA>, type<array<TB -const -&>>)) -const -&> =>
+    <- group_join_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<ARGTB -const>(srcb)), type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
 
 def group_join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<TA>, type<array<TB -const -&>>)) -const -&> {
     //! C# GroupJoin (outer): `result` receives every TA paired with the array of matching TB — an empty array when none match.
@@ -2398,9 +2374,8 @@ def private left_join_impl(var srca; var srcb; ta : auto(TA); tb : auto(TB); key
 }
 
 [unused_argument(ta, tb)]
-def private left_join_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); ta : auto(TA); tb : auto(TB); keya, keyb; result) : array<typedecl(result(type<TA>, type<$Option<TB -const -&>>)) -const -&> {
-    return <- left_join_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<ARGTB -const>(srcb)), type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
-}
+def private left_join_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); ta : auto(TA); tb : auto(TB); keya, keyb; result) : array<typedecl(result(type<TA>, type<$Option<TB -const -&>>)) -const -&> =>
+    <- left_join_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<ARGTB -const>(srcb)), type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
 
 def left_join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<TA>, type<$Option<TB -const -&>>)) -const -&> {
     //! Left outer join — every TA emits at least one row; right side is Option<TB> (none when no match)
@@ -2462,9 +2437,8 @@ def private right_join_impl(var srca; var srcb; ta : auto(TA); tb : auto(TB); ke
 }
 
 [unused_argument(ta, tb)]
-def private right_join_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); ta : auto(TA); tb : auto(TB); keya, keyb; result) : array<typedecl(result(type<$Option<TA -const -&>>, type<TB>)) -const -&> {
-    return <- right_join_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<ARGTB -const>(srcb)), type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
-}
+def private right_join_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); ta : auto(TA); tb : auto(TB); keya, keyb; result) : array<typedecl(result(type<$Option<TA -const -&>>, type<TB>)) -const -&> =>
+    <- right_join_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<ARGTB -const>(srcb)), type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
 
 def right_join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<$Option<TA -const -&>>, type<TB>)) -const -&> {
     //! Right outer join — every TB emits at least one row; left side is Option<TA> (none when no left match)
@@ -2536,9 +2510,8 @@ def private full_outer_join_impl(var srca; var srcb; ta : auto(TA); tb : auto(TB
 }
 
 [unused_argument(ta, tb)]
-def private full_outer_join_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); ta : auto(TA); tb : auto(TB); keya, keyb; result) : array<typedecl(result(type<$Option<TA -const -&>>, type<$Option<TB -const -&>>)) -const -&> {
-    return <- full_outer_join_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<ARGTB -const>(srcb)), type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
-}
+def private full_outer_join_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); ta : auto(TA); tb : auto(TB); keya, keyb; result) : array<typedecl(result(type<$Option<TA -const -&>>, type<$Option<TB -const -&>>)) -const -&> =>
+    <- full_outer_join_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<ARGTB -const>(srcb)), type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
 
 def full_outer_join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<$Option<TA -const -&>>, type<$Option<TB -const -&>>)) -const -&> {
     //! Full outer join — both sides surface; unmatched rows pair with `none` on the other side
@@ -2587,9 +2560,8 @@ def private cross_join_impl(var srca; srcb : array<auto(TB) -const -&>; ta : aut
 }
 
 [unused_argument(ta, tb)]
-def private cross_join_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); ta : auto(TA); tb : auto(TB); result) : array<typedecl(result(type<TA>, type<TB>)) -const -&> {
-    return <- cross_join_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<array<TB -const -&>>(srcb)), type<TA -const -&>, type<TB -const -&>, result)
-}
+def private cross_join_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); ta : auto(TA); tb : auto(TB); result) : array<typedecl(result(type<TA>, type<TB>)) -const -&> =>
+    <- cross_join_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<array<TB -const -&>>(srcb)), type<TA -const -&>, type<TB -const -&>, result)
 
 def cross_join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; result) : iterator<typedecl(result(type<TA>, type<TB>)) -const -&> {
     //! Cross join — every (TA, TB) pair. srcb is materialized first since cross needs to re-iterate it per srca row.
@@ -2650,9 +2622,8 @@ def private group_by_impl(var source; tt : auto(TT); key; element_selector; resu
 }
 
 [unused_argument(tt)]
-def private group_by_impl_const(source : auto(ARGT); tt : auto(TT); key; element_selector; result_selector)  {
-    return <- group_by_impl(unsafe(reinterpret<ARGT -const>(source)), type<TT -const -&>, key, element_selector, result_selector)
-}
+def private group_by_impl_const(source : auto(ARGT); tt : auto(TT); key; element_selector; result_selector)  =>
+    <- group_by_impl(unsafe(reinterpret<ARGT -const>(source)), type<TT -const -&>, key, element_selector, result_selector)
 
 def group_by(var source : iterator<auto(TT)>; key; element_selector; result_selector)  {
     //! Groups the elements of an iterator according to a specified key selector function
@@ -2697,9 +2668,8 @@ def private group_by_lazy_impl(var source; tt : auto(TT); key)  {
 }
 
 [unused_argument(tt)]
-def private group_by_lazy_impl_const(source : auto(ARGT); tt : auto(TT); key)  {
-    return <- group_by_lazy_impl(unsafe(reinterpret<ARGT -const>(source)), type<TT -const -&>, key)
-}
+def private group_by_lazy_impl_const(source : auto(ARGT); tt : auto(TT); key)  =>
+    <- group_by_lazy_impl(unsafe(reinterpret<ARGT -const>(source)), type<TT -const -&>, key)
 
 def group_by_lazy(var source : iterator<auto(TT)>; key)  {
     //! IGrouping shape — yields ``(key, array<TT>)`` per group; per-bucket processing is left to the caller.
@@ -2741,9 +2711,8 @@ def private union_impl(var srca; var srcb; tt : auto(TT)) : array<TT -const -&> 
 }
 
 [unused_argument(tt)]
-def private union_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); tt : auto(TT)) : array<TT -const -&> {
-    return <- union_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<ARGTB -const>(srcb)), type<TT -const -&>)
-}
+def private union_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); tt : auto(TT)) : array<TT -const -&> =>
+    <- union_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<ARGTB -const>(srcb)), type<TT -const -&>)
 
 def union(srca, srcb : array<auto(TT)>) : array<TT -const -&> {
     //! Returns distinct elements from the concatenation of two arrays
@@ -2803,9 +2772,8 @@ def private union_by_impl(var srca; var srcb; tt : auto(TT); key : block<(arg : 
 }
 
 [unused_argument(tt)]
-def private union_by_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); tt : auto(TT); key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
-    return <- union_by_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<ARGTB -const>(srcb)), type<TT -const -&>, key)
-}
+def private union_by_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); tt : auto(TT); key : block<(arg : TT -&) : auto>) : array<TT -const -&> =>
+    <- union_by_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<ARGTB -const>(srcb)), type<TT -const -&>, key)
 
 def union_by(var srca, srcb : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : iterator<TT -const -&> {
     //! Returns distinct elements from the concatenation of two iterators by key
@@ -2864,9 +2832,8 @@ def private any_impl(var src; tt : auto(TT); predicate : block<(arg : auto(TT) -
 }
 
 [unused_argument(tt)]
-def private any_impl_const(src : auto(ARGT); tt : auto(TT); predicate : block<(arg : auto(TT) -&) : bool>) : bool {
-    return any_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, predicate)
-}
+def private any_impl_const(src : auto(ARGT); tt : auto(TT); predicate : block<(arg : auto(TT) -&) : bool>) : bool =>
+    any_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, predicate)
 
 def any(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : bool {
     //! Returns true if any element in the iterator satisfies the predicate
@@ -2887,9 +2854,8 @@ def private all_impl(var src; tt : auto(TT); predicate : block<(arg : auto(TT) -
 }
 
 [unused_argument(tt)]
-def private all_impl_const(src : auto(ARGT); tt : auto(TT); predicate : block<(arg : auto(TT) -&) : bool>) : bool {
-    return all_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, predicate)
-}
+def private all_impl_const(src : auto(ARGT); tt : auto(TT); predicate : block<(arg : auto(TT) -&) : bool>) : bool =>
+    all_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, predicate)
 
 def all(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : bool {
     //! Returns true if all elements in the iterator satisfy the predicate
@@ -2923,9 +2889,8 @@ def private none_impl(var src; tt : auto(TT); predicate : block<(arg : auto(TT) 
 }
 
 [unused_argument(tt)]
-def private none_impl_const(src : auto(ARGT); tt : auto(TT); predicate : block<(arg : auto(TT) -&) : bool>) : bool {
-    return none_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, predicate)
-}
+def private none_impl_const(src : auto(ARGT); tt : auto(TT); predicate : block<(arg : auto(TT) -&) : bool>) : bool =>
+    none_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, predicate)
 
 def none(var src : iterator<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : bool {
     //! Returns true if no element in the iterator satisfies the predicate
@@ -2956,9 +2921,8 @@ def private except_impl(var src, exclude; tt : auto(TT)) : array<TT -const -&> {
 }
 
 [unused_argument(tt)]
-def private except_impl_const(src : auto(ARGT); exclude : auto(ARGTE); tt : auto(TT)) : array<TT -const -&> {
-    return <- except_impl(unsafe(reinterpret<ARGT -const>(src)), unsafe(reinterpret<ARGTE -const>(exclude)), type<TT -const -&>)
-}
+def private except_impl_const(src : auto(ARGT); exclude : auto(ARGTE); tt : auto(TT)) : array<TT -const -&> =>
+    <- except_impl(unsafe(reinterpret<ARGT -const>(src)), unsafe(reinterpret<ARGTE -const>(exclude)), type<TT -const -&>)
 
 def except(var src, exclude : iterator<auto(TT)>) : iterator<TT -const -&> {
     //! Returns elements from the first iterator that are not in the second iterator
@@ -3014,9 +2978,8 @@ def private except_by_impl(var src, exclude; tt : auto(TT); key : block<(arg : T
 }
 
 [unused_argument(tt)]
-def private except_by_impl_const(src : auto(ARGT); exclude : auto(ARGTE); tt : auto(TT); key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
-    return <- except_by_impl(unsafe(reinterpret<ARGT -const>(src)), unsafe(reinterpret<ARGTE -const>(exclude)), type<TT -const -&>, key)
-}
+def private except_by_impl_const(src : auto(ARGT); exclude : auto(ARGTE); tt : auto(TT); key : block<(arg : TT -&) : auto>) : array<TT -const -&> =>
+    <- except_by_impl(unsafe(reinterpret<ARGT -const>(src)), unsafe(reinterpret<ARGTE -const>(exclude)), type<TT -const -&>, key)
 
 def except_by(var src, exclude : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : iterator<TT -const -&> {
     //! Returns elements from the first iterator that are not in the second iterator by key
@@ -3072,9 +3035,8 @@ def private intersect_impl(var srca, srcb; tt : auto(TT)) : array<TT -const -&> 
 }
 
 [unused_argument(tt)]
-def private intersect_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); tt : auto(TT)) : array<TT -const -&> {
-    return <- intersect_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<ARGTB -const>(srcb)), type<TT -const -&>)
-}
+def private intersect_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); tt : auto(TT)) : array<TT -const -&> =>
+    <- intersect_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<ARGTB -const>(srcb)), type<TT -const -&>)
 
 def intersect(var srca, srcb : iterator<auto(TT)>) : iterator<TT -const -&> {
     //! Returns elements that are present in both iterators
@@ -3130,9 +3092,8 @@ def private intersect_by_impl(var srca, srcb; tt : auto(TT); key : block<(arg : 
 }
 
 [unused_argument(tt)]
-def private intersect_by_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); tt : auto(TT); key : block<(arg : TT -&) : auto>) : array<TT -const -&> {
-    return <- intersect_by_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<ARGTB -const>(srcb)), type<TT -const -&>, key)
-}
+def private intersect_by_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); tt : auto(TT); key : block<(arg : TT -&) : auto>) : array<TT -const -&> =>
+    <- intersect_by_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<ARGTB -const>(srcb)), type<TT -const -&>, key)
 
 def intersect_by(var srca, srcb : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>) : iterator<TT -const -&> {
     //! Returns elements that are present in both iterators by key
@@ -3178,9 +3139,8 @@ def private contains_impl(var src; tt : auto(TT); element : TT -&) : bool {
 }
 
 [unused_argument(tt)]
-def private contains_impl_const(src : auto(ARGT); tt : auto(TT); element : TT -&) : bool {
-    return contains_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, element)
-}
+def private contains_impl_const(src : auto(ARGT); tt : auto(TT); element : TT -&) : bool =>
+    contains_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, element)
 
 def contains(var src : iterator<auto(TT)>; element : TT -&) : bool {
     //! Returns true if the element is present in the iterator
@@ -3623,9 +3583,8 @@ def private prepend_impl(var arr; tt : auto(TT); reserveSize : int; value : TT -
     return <- buffer
 }
 
-def private prepend_impl_const(arr : auto(ARGT); tt : auto(TT); reserveSize : int; value : TT -&) : array<TT -const -&> {
-    return <- prepend_impl(unsafe(reinterpret<ARGT -const>(arr)), type<TT -const -&>, reserveSize, value)
-}
+def private prepend_impl_const(arr : auto(ARGT); tt : auto(TT); reserveSize : int; value : TT -&) : array<TT -const -&> =>
+    <- prepend_impl(unsafe(reinterpret<ARGT -const>(arr)), type<TT -const -&>, reserveSize, value)
 
 def prepend(arr : array<auto(TT)>; value : TT -&) : array<TT -const -&> {
     //! Prepends a value to the beginning of an array
@@ -3676,9 +3635,8 @@ def private append_impl(var arr; tt : auto(TT); reserveSize : int; value : TT -&
 }
 
 [unused_argument(tt)]
-def private append_impl_const(arr : auto(ARGT); tt : auto(TT); reserveSize : int; value : TT -&) : array<TT -const -&> {
-    return <- append_impl(unsafe(reinterpret<ARGT -const>(arr)), type<TT -const -&>, reserveSize, value)
-}
+def private append_impl_const(arr : auto(ARGT); tt : auto(TT); reserveSize : int; value : TT -&) : array<TT -const -&> =>
+    <- append_impl(unsafe(reinterpret<ARGT -const>(arr)), type<TT -const -&>, reserveSize, value)
 
 def append(arr : array<auto(TT)>; value : TT -&) : array<TT -const -&> {
     //! Appends a value to the end of an array
@@ -3730,9 +3688,8 @@ def private select_impl(var src; tt : auto(TT)) : array<tuple<int, TT -const -&>
 }
 
 [unused_argument(tt)]
-def private select_impl_const(src : auto(ARGT); tt : auto(TT)) : array<tuple<int, TT -const -&>> {
-    return <- select_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>)
-}
+def private select_impl_const(src : auto(ARGT); tt : auto(TT)) : array<tuple<int, TT -const -&>> =>
+    <- select_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>)
 
 def select(var src : iterator<auto(TT)>) : iterator<tuple<int, TT -const -&>> {
     //! Projects each element of an iterator into a new form
@@ -3761,9 +3718,8 @@ def private select_impl(var src; tt : auto(TT); len : int; selector) : array<typ
 }
 
 [unused_argument(tt)]
-def private select_impl_const(src : auto(ARGT); tt : auto(TT); len : int; selector) : array<typedecl(selector(type<TT>)) -const -&> {
-    return <- select_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, len, selector)
-}
+def private select_impl_const(src : auto(ARGT); tt : auto(TT); len : int; selector) : array<typedecl(selector(type<TT>)) -const -&> =>
+    <- select_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, len, selector)
 
 def select(var src : iterator<auto(TT)>; result_selector) : iterator<typedecl(result_selector(type<TT>)) -const -&> {
     //! Projects each element of an iterator into a new form using a selector function
@@ -3804,9 +3760,8 @@ def private chunk_impl(var src; tt : auto(TT); size : int) : array<array<TT -con
 }
 
 [unused_argument(tt)]
-def private chunk_impl_const(src : auto(ARGT); tt : auto(TT); size : int) : array<array<TT -const -&>> {
-    return <- chunk_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, size)
-}
+def private chunk_impl_const(src : auto(ARGT); tt : auto(TT); size : int) : array<array<TT -const -&>> =>
+    <- chunk_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, size)
 
 def chunk(src : array<auto(TT)>; size : int) : array<array<TT -const -&>> {
     //! Splits an array into chunks of a specified size
@@ -3853,9 +3808,8 @@ def private select_many_impl(var src; tt : auto(TT); result_selector) : array<ty
 }
 
 [unused_argument(tt)]
-def private select_many_impl_const(src : auto(ARGT); tt : auto(TT); result_selector) : array<typedecl(result_selector(iter_type(type<TT>))) -const -&> {
-    return <- select_many_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, result_selector)
-}
+def private select_many_impl_const(src : auto(ARGT); tt : auto(TT); result_selector) : array<typedecl(result_selector(iter_type(type<TT>))) -const -&> =>
+    <- select_many_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, result_selector)
 
 def select_many(var src : iterator<auto(TT)>; result_selector) : iterator<typedecl(result_selector(iter_type(type<TT>))) -const -&> {
     //! Projects each element of an iterator to an iterator and flattens the resulting iterators into one iterator
@@ -3888,9 +3842,8 @@ def private select_many_impl(var src; tt : auto(TT); collection_selector; result
 }
 
 [unused_argument(tt)]
-def private select_many_impl_const(src : auto(ARGT); tt : auto(TT); collection_selector; result_selector) : array<typedecl(result_selector(iter_type(collection_selector(type<TT>)))) -const -&> {
-    return <- select_many_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, collection_selector, result_selector)
-}
+def private select_many_impl_const(src : auto(ARGT); tt : auto(TT); collection_selector; result_selector) : array<typedecl(result_selector(iter_type(collection_selector(type<TT>)))) -const -&> =>
+    <- select_many_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, collection_selector, result_selector)
 
 def select_many(var src : iterator<auto(TT)>; collection_selector; result_selector) : iterator<typedecl(result_selector(iter_type(collection_selector(type<TT>)))) -const -&> {
     //! Projects each element of an iterator to an iterator and flattens the resulting iterators into one iterator
@@ -3922,9 +3875,8 @@ def private select_many_pair_impl(var src; tt : auto(TT); collection_selector; r
 }
 
 [unused_argument(tt)]
-def private select_many_pair_impl_const(src : auto(ARGT); tt : auto(TT); collection_selector; result_selector) : array<typedecl(result_selector(type<TT>, iter_type(collection_selector(type<TT>)))) -const -&> {
-    return <- select_many_pair_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, collection_selector, result_selector)
-}
+def private select_many_pair_impl_const(src : auto(ARGT); tt : auto(TT); collection_selector; result_selector) : array<typedecl(result_selector(type<TT>, iter_type(collection_selector(type<TT>)))) -const -&> =>
+    <- select_many_pair_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>, collection_selector, result_selector)
 
 def select_many_pair(var src : iterator<auto(TT)>; collection_selector; result_selector) : iterator<typedecl(result_selector(type<TT>, iter_type(collection_selector(type<TT>)))) -const -&> {
     //! SelectMany whose result selector receives both the outer element and each flattened inner element — C# `from o … from x in o.coll select f(o, x)`. Iterator source, iterator result.
@@ -3961,9 +3913,8 @@ def private zip_impl(var a; tt : auto(TT); var b; var uu : auto(UU)) : array<tup
 }
 
 [unused_argument(tt, uu)]
-def private zip_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU)) : array<tuple<TT -const -&, UU -const -&>> {
-    return <- zip_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>)
-}
+def private zip_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU)) : array<tuple<TT -const -&, UU -const -&>> =>
+    <- zip_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>)
 
 def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>) : iterator<tuple<TT -const -&, UU -const -&>> {
     //! Merges two iterators into an iterator of tuples
@@ -4013,9 +3964,8 @@ def private zip_impl(var a; tt : auto(TT); var b; uu : auto(UU); result_selector
 }
 
 [unused_argument(tt, uu)]
-def private zip_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); result_selector : block<(l : TT -&; r : UU -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>)) -const -&> {
-    return <- zip_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, result_selector)
-}
+def private zip_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); result_selector : block<(l : TT -&; r : UU -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>)) -const -&> =>
+    <- zip_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, result_selector)
 
 def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; result_selector : block<(l : TT -&; r : UU -&) : auto>) : iterator<typedecl(result_selector(type<TT>, type<UU>)) -const -&> {
     //! Merges two iterators into an iterator by applying a specified function
@@ -4073,9 +4023,8 @@ def private zip3_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : au
 }
 
 [unused_argument(tt, uu, ww)]
-def private zip3_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW)) : array<tuple<TT -const -&, UU -const -&, WW -const -&>> {
-    return <- zip3_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>)
-}
+def private zip3_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW)) : array<tuple<TT -const -&, UU -const -&, WW -const -&>> =>
+    <- zip3_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>)
 
 def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>) : iterator<tuple<TT -const -&, UU -const -&, WW -const -&>> {
     //! Merges three iterators into an iterator of tuples
@@ -4106,9 +4055,8 @@ def private zip3_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : au
 }
 
 [unused_argument(tt, uu, ww)]
-def private zip3_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); result_selector : block<(l : TT -&; r : UU -&; w : WW -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>)) -const -&> {
-    return <- zip3_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, result_selector)
-}
+def private zip3_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); result_selector : block<(l : TT -&; r : UU -&; w : WW -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>)) -const -&> =>
+    <- zip3_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, result_selector)
 
 def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&) : auto>) : iterator<typedecl(result_selector(type<TT>, type<UU>, type<WW>)) -const -&> {
     //! Merges three iterators into an iterator by applying a specified function
@@ -4147,9 +4095,8 @@ def private zip4_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : au
 }
 
 [unused_argument(tt, uu, ww, xx)]
-def private zip4_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&>> {
-    return <- zip4_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>)
-}
+def private zip4_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&>> =>
+    <- zip4_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>)
 
 def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>) : iterator<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&>> {
     //! Merges four iterators into an iterator of tuples
@@ -4180,9 +4127,8 @@ def private zip4_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : au
 }
 
 [unused_argument(tt, uu, ww, xx)]
-def private zip4_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>)) -const -&> {
-    return <- zip4_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, result_selector)
-}
+def private zip4_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>)) -const -&> =>
+    <- zip4_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, result_selector)
 
 def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&) : auto>) : iterator<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>)) -const -&> {
     //! Merges four iterators into an iterator by applying a specified function
@@ -4222,9 +4168,8 @@ def private zip5_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : au
 }
 
 [unused_argument(tt, uu, ww, xx, yy)]
-def private zip5_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&>> {
-    return <- zip5_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>)
-}
+def private zip5_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&>> =>
+    <- zip5_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>)
 
 def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>) : iterator<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&>> {
     //! Merges five iterators into an iterator of tuples
@@ -4255,9 +4200,8 @@ def private zip5_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : au
 }
 
 [unused_argument(tt, uu, ww, xx, yy)]
-def private zip5_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>)) -const -&> {
-    return <- zip5_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>, result_selector)
-}
+def private zip5_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>)) -const -&> =>
+    <- zip5_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>, result_selector)
 
 def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&) : auto>) : iterator<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>)) -const -&> {
     //! Merges five iterators into an iterator by applying a specified function
@@ -4298,9 +4242,8 @@ def private zip6_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : au
 }
 
 [unused_argument(tt, uu, ww, xx, yy, zz)]
-def private zip6_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY); f : auto(ARGF); zz : auto(ZZ)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&>> {
-    return <- zip6_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>, unsafe(reinterpret<ARGF -const>(f)), type<ZZ -const -&>)
-}
+def private zip6_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY); f : auto(ARGF); zz : auto(ZZ)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&>> =>
+    <- zip6_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>, unsafe(reinterpret<ARGF -const>(f)), type<ZZ -const -&>)
 
 def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>; var f : iterator<auto(ZZ)>) : iterator<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&>> {
     //! Merges six iterators into an iterator of tuples
@@ -4331,9 +4274,8 @@ def private zip6_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : au
 }
 
 [unused_argument(tt, uu, ww, xx, yy, zz)]
-def private zip6_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY); f : auto(ARGF); zz : auto(ZZ); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>)) -const -&> {
-    return <- zip6_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>, unsafe(reinterpret<ARGF -const>(f)), type<ZZ -const -&>, result_selector)
-}
+def private zip6_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY); f : auto(ARGF); zz : auto(ZZ); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>)) -const -&> =>
+    <- zip6_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>, unsafe(reinterpret<ARGF -const>(f)), type<ZZ -const -&>, result_selector)
 
 def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>; var f : iterator<auto(ZZ)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&) : auto>) : iterator<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>)) -const -&> {
     //! Merges six iterators into an iterator by applying a specified function
@@ -4375,9 +4317,8 @@ def private zip7_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : au
 }
 
 [unused_argument(tt, uu, ww, xx, yy, zz, rr)]
-def private zip7_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY); f : auto(ARGF); zz : auto(ZZ); g : auto(ARGG); rr : auto(RR)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&, RR -const -&>> {
-    return <- zip7_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>, unsafe(reinterpret<ARGF -const>(f)), type<ZZ -const -&>, unsafe(reinterpret<ARGG -const>(g)), type<RR -const -&>)
-}
+def private zip7_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY); f : auto(ARGF); zz : auto(ZZ); g : auto(ARGG); rr : auto(RR)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&, RR -const -&>> =>
+    <- zip7_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>, unsafe(reinterpret<ARGF -const>(f)), type<ZZ -const -&>, unsafe(reinterpret<ARGG -const>(g)), type<RR -const -&>)
 
 def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>; var f : iterator<auto(ZZ)>; var g : iterator<auto(RR)>) : iterator<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&, RR -const -&>> {
     //! Merges seven iterators into an iterator of tuples
@@ -4408,9 +4349,8 @@ def private zip7_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : au
 }
 
 [unused_argument(tt, uu, ww, xx, yy, zz, rr)]
-def private zip7_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY); f : auto(ARGF); zz : auto(ZZ); g : auto(ARGG); rr : auto(RR); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&; m : RR -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>, type<RR>)) -const -&> {
-    return <- zip7_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>, unsafe(reinterpret<ARGF -const>(f)), type<ZZ -const -&>, unsafe(reinterpret<ARGG -const>(g)), type<RR -const -&>, result_selector)
-}
+def private zip7_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY); f : auto(ARGF); zz : auto(ZZ); g : auto(ARGG); rr : auto(RR); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&; m : RR -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>, type<RR>)) -const -&> =>
+    <- zip7_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>, unsafe(reinterpret<ARGF -const>(f)), type<ZZ -const -&>, unsafe(reinterpret<ARGG -const>(g)), type<RR -const -&>, result_selector)
 
 def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>; var f : iterator<auto(ZZ)>; var g : iterator<auto(RR)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&; m : RR -&) : auto>) : iterator<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>, type<RR>)) -const -&> {
     //! Merges seven iterators into an iterator by applying a specified function
@@ -4453,9 +4393,8 @@ def private zip8_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : au
 }
 
 [unused_argument(tt, uu, ww, xx, yy, zz, rr, ss)]
-def private zip8_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY); f : auto(ARGF); zz : auto(ZZ); g : auto(ARGG); rr : auto(RR); h : auto(ARGH); ss : auto(SS)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&, RR -const -&, SS -const -&>> {
-    return <- zip8_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>, unsafe(reinterpret<ARGF -const>(f)), type<ZZ -const -&>, unsafe(reinterpret<ARGG -const>(g)), type<RR -const -&>, unsafe(reinterpret<ARGH -const>(h)), type<SS -const -&>)
-}
+def private zip8_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY); f : auto(ARGF); zz : auto(ZZ); g : auto(ARGG); rr : auto(RR); h : auto(ARGH); ss : auto(SS)) : array<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&, RR -const -&, SS -const -&>> =>
+    <- zip8_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>, unsafe(reinterpret<ARGF -const>(f)), type<ZZ -const -&>, unsafe(reinterpret<ARGG -const>(g)), type<RR -const -&>, unsafe(reinterpret<ARGH -const>(h)), type<SS -const -&>)
 
 def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>; var f : iterator<auto(ZZ)>; var g : iterator<auto(RR)>; var h : iterator<auto(SS)>) : iterator<tuple<TT -const -&, UU -const -&, WW -const -&, XX -const -&, YY -const -&, ZZ -const -&, RR -const -&, SS -const -&>> {
     //! Merges eight iterators into an iterator of tuples
@@ -4486,9 +4425,8 @@ def private zip8_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : au
 }
 
 [unused_argument(tt, uu, ww, xx, yy, zz, rr, ss)]
-def private zip8_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY); f : auto(ARGF); zz : auto(ZZ); g : auto(ARGG); rr : auto(RR); h : auto(ARGH); ss : auto(SS); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&; m : RR -&; n : SS -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>, type<RR>, type<SS>)) -const -&> {
-    return <- zip8_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>, unsafe(reinterpret<ARGF -const>(f)), type<ZZ -const -&>, unsafe(reinterpret<ARGG -const>(g)), type<RR -const -&>, unsafe(reinterpret<ARGH -const>(h)), type<SS -const -&>, result_selector)
-}
+def private zip8_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); d : auto(ARGD); xx : auto(XX); e : auto(ARGE); yy : auto(YY); f : auto(ARGF); zz : auto(ZZ); g : auto(ARGG); rr : auto(RR); h : auto(ARGH); ss : auto(SS); result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&; m : RR -&; n : SS -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>, type<RR>, type<SS>)) -const -&> =>
+    <- zip8_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, unsafe(reinterpret<ARGD -const>(d)), type<XX -const -&>, unsafe(reinterpret<ARGE -const>(e)), type<YY -const -&>, unsafe(reinterpret<ARGF -const>(f)), type<ZZ -const -&>, unsafe(reinterpret<ARGG -const>(g)), type<RR -const -&>, unsafe(reinterpret<ARGH -const>(h)), type<SS -const -&>, result_selector)
 
 def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; var d : iterator<auto(XX)>; var e : iterator<auto(YY)>; var f : iterator<auto(ZZ)>; var g : iterator<auto(RR)>; var h : iterator<auto(SS)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&; x : XX -&; y : YY -&; z : ZZ -&; m : RR -&; n : SS -&) : auto>) : iterator<typedecl(result_selector(type<TT>, type<UU>, type<WW>, type<XX>, type<YY>, type<ZZ>, type<RR>, type<SS>)) -const -&> {
     //! Merges eight iterators into an iterator by applying a specified function

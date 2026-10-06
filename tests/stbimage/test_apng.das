@@ -26,9 +26,8 @@ def private temp_output(ext : string) : string {
     return create_temp_file("stbimage_test", ext, error)
 }
 
-def be_u32_at(b0, b1, b2, b3 : uint8) : uint {
-    return ((uint(b0) << 24u) | (uint(b1) << 16u) | (uint(b2) << 8u) | uint(b3))
-}
+def be_u32_at(b0, b1, b2, b3 : uint8) : uint =>
+    ((uint(b0) << 24u) | (uint(b1) << 16u) | (uint(b2) << 8u) | uint(b3))
 
 def parse_png_chunks(path : string) : ChunkSummary {
     var out : ChunkSummary

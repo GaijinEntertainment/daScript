@@ -648,12 +648,8 @@ class FakeEngine : ReplEngine {
     def override reopen(var st : ReplState) : void {
         reopened++
     }
-    def override last_stats : string {
-        return stats
-    }
-    def override can_speak : bool {
-        return speak_ok
-    }
+    def override last_stats : string => stats
+    def override can_speak : bool => speak_ok
 }
 
 def private drive(lines : array<string>; speak_ok : bool = false) : tuple<st : ReplState; eng : FakeEngine?> {

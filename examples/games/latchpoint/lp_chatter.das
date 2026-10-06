@@ -24,9 +24,7 @@ var chatter_previous_flash = 0.0
 var chatter_initialized = false
 var @live chatter_last_line = ""
 
-def chatter_world_key() : string {
-    return sprint_json(world, false)
-}
+def chatter_world_key() : string => sprint_json(world, false)
 
 def chatter_player_busy() : bool {
     return (menu_open || editing || !empty(pending_job) || inference_busy() || starter_engaged ||

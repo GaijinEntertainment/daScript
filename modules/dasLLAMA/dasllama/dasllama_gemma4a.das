@@ -689,15 +689,12 @@ def private g4a_announce_lane() {
 //! The tower's precision half of the facade's [[asr_exec_fmt]] stamp (the decoder tag comes
 //! from the facade, which owns the shared LLM) - read off the LOADED encoder, not the lane
 //! policy, which a `reset_gemma4a_q8` after the load moves out from under the stamp.
-def gemma4a_exec_fmt(enc : Gemma4aEncoder; dec_fmt : string) : string {
-    return "{enc.q8 ? "q8" : "f32"}/{dec_fmt}"
-}
+def gemma4a_exec_fmt(enc : Gemma4aEncoder; dec_fmt : string) : string =>
+    "{enc.q8 ? "q8" : "f32"}/{dec_fmt}"
 
 //! Gemma4a's encode-total ``asr_prof`` bucket (the facade's [[asr_encode_bucket]] arm);
 //! the `g4a.mel` + `g4a.enc.*` sites split it under asr_stage_probe.
-def gemma4a_encode_bucket : string {
-    return "g4a.encode"
-}
+def gemma4a_encode_bucket : string => "g4a.encode"
 
 //! The mel's CPU half for one ≤30 s chunk: semicausal left-pad (window/2) + right-pad to the
 //! PyTorch frame count, 512 Hann (320-front) windowed frames into ``st.xw`` (fills ``st.n_len``).
@@ -1150,9 +1147,8 @@ def gemma4a_asr_caps() : AsrCaps {
 }
 
 //! The facade's session arm: a fresh decoder session (no language conditioning).
-def create_gemma4a_asr_session(dec : Model; kv : KVDtype = KVDtype.f16) : Gemma4aAsrSession {
-    return <- Gemma4aAsrSession(qctx <- create_session_(dec, kv, kv))
-}
+def create_gemma4a_asr_session(dec : Model; kv : KVDtype = KVDtype.f16) : Gemma4aAsrSession =>
+    <- Gemma4aAsrSession(qctx <- create_session_(dec, kv, kv))
 
 // Gemma-4 E-series audio transcription: gemma4a Conformer encode + mm embedder, soft tokens spliced
 // into the gemma-4 chat template, greedy decode until `<turn|>`/`<eos>` (emitted into the ids). The

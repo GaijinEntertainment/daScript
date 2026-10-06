@@ -21,22 +21,25 @@ require daslib/f16_cvt
 // ===== loop shaping =====
 // ===== simdgroup reductions + shuffles (Metal spellings — the Metal value-add) =====
 // simd_sum(v): sum of v across the simdgroup's active lanes.
-[unused_argument(v), sideeffects] def public simd_sum(v : auto(TT)) : TT { return v }
+[unused_argument(v), sideeffects] def public simd_sum(v : auto(TT)) : TT => v
 
 //! simd_max(v): maximum of v across the simdgroup's active lanes.
-[unused_argument(v), sideeffects] def public simd_max(v : auto(TT)) : TT { return v }
+[unused_argument(v), sideeffects] def public simd_max(v : auto(TT)) : TT => v
 
 // simd_shuffle(v, lane): v from the given absolute lane. Reading an inactive lane is undefined —
 // keep shuffles in simdgroup-uniform control flow and select the edge cases on the VALUE after.
-[unused_argument(lane), sideeffects] def public simd_shuffle(v : auto(TT); lane : uint) : TT { return v }
+[unused_argument(lane), sideeffects] def public simd_shuffle(v : auto(TT); lane : uint) : TT => v
 
 // simd_shuffle_up/_down(v, delta): v from lane - delta / lane + delta (NOT wrapping — the result
 // is undefined for lanes whose source falls outside the simdgroup).
-[unused_argument(delta), sideeffects] def public simd_shuffle_up(v : auto(TT); delta : uint) : TT { return v }
-[unused_argument(delta), sideeffects] def public simd_shuffle_down(v : auto(TT); delta : uint) : TT { return v }
+[unused_argument(delta), sideeffects] def public simd_shuffle_up(v : auto(TT); delta : uint) : TT =>
+    v
+[unused_argument(delta), sideeffects] def public simd_shuffle_down(v : auto(TT); delta : uint) : TT =>
+    v
 
 // simd_shuffle_xor(v, mask): v from lane ^ mask (the butterfly primitive; always in range).
-[unused_argument(mask), sideeffects] def public simd_shuffle_xor(v : auto(TT); mask : uint) : TT { return v }
+[unused_argument(mask), sideeffects] def public simd_shuffle_xor(v : auto(TT); mask : uint) : TT =>
+    v
 
 // ===== simdgroup_matrix 8x8 tiles (Metal spellings; reference bodies = CPU semantics) =====
 // The reference structs hold a row-major 8x8 tile; every op below is the FULL cooperative tile

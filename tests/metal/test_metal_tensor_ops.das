@@ -286,9 +286,7 @@ let NCELL = 9
 // cell index -> the K width it runs: cells 0-3 are bk = 64 and 4-7 bk = 128, both over
 // 32/64/96/128 (so each bk meets a full 64-deep walk, a bare 32-deep tail, and both together);
 // the last cell is the deva 72-half tile, which is a kk = 64 shape by construction
-def private cell_kk(ci : int) : uint {
-    return ci == NCELL - 1 ? 64u : 32u * uint(ci % 4 + 1)
-}
+def private cell_kk(ci : int) : uint => ci == NCELL - 1 ? 64u : 32u * uint(ci % 4 + 1)
 
 class TmmBkKernels {
     @ssbo @binding = 0 xah : array<float16>   // A: M x KMAX f16 activations, row stride KMAX
@@ -796,9 +794,7 @@ def private fill_devab_oracle(var o : TmmDevabKernels?) {
 }
 
 //! the B element at output column 5, reduction step 44 - inside the second step's kk range
-def private devab_poison_index(natural : bool) : int {
-    return natural ? 44 * DV_LD + 5 : 5 * DV_LD + 44
-}
+def private devab_poison_index(natural : bool) : int => natural ? 44 * DV_LD + 5 : 5 * DV_LD + 44
 
 def private devab_replay(var o : TmmDevabKernels?; natural : bool) : array<float> {
     if (natural) {

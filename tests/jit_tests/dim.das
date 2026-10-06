@@ -13,9 +13,7 @@ struct Fooo {
     a, b : int[5]
 }
 
-def Foo(x, y : int) {
-    return Foo(a = x, b = y)
-}
+def Foo(x, y : int) => Foo(a = x, b = y)
 
 def makeAll13(var a : int[10]) {
     for (i in range(10)) {
@@ -31,13 +29,9 @@ def addAll(var a : int[10]) {
     return c
 }
 
-def outOfRange(var a : int[10]; index : int) {
-    return a[index]
-}
+def outOfRange(var a : int[10]; index : int) => a[index]
 
-def make_dim_cmres {
-    return fixed_array<int>(1, 2, 3, 4, 5)
-}
+def make_dim_cmres => fixed_array<int>(1, 2, 3, 4, 5)
 
 def make_dim_on_stack(which : bool) {
     let a = fixed_array<int>(1, 2, 3, 4, 5)
@@ -45,9 +39,8 @@ def make_dim_on_stack(which : bool) {
     return which ? a : b
 }
 
-def make_dim_with_index_call_to_cmres {
-    return fixed_array<Foo>(Foo(1, 6), Foo(2, 7), Foo(3, 8), Foo(4, 9), Foo(5, 10))
-}
+def make_dim_with_index_call_to_cmres =>
+    fixed_array<Foo>(Foo(1, 6), Foo(2, 7), Foo(3, 8), Foo(4, 9), Foo(5, 10))
 
 def make_struct_with_subdim {
     return Fooo(

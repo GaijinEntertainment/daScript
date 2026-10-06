@@ -9,41 +9,25 @@ struct Foo {
     a, b : int
 }
 
-def func : Foo {
-    return Foo(a = 1, b = 2)
-}
+def func : Foo => Foo(a = 1, b = 2)
 
-def funcC : Foo const {
-    return Foo(a = 1, b = 2)
-}
+def funcC : Foo const => Foo(a = 1, b = 2)
 
-def funcA(t : int) : Foo {
-    return Foo(a = t, b = t + 1)
-}
+def funcA(t : int) : Foo => Foo(a = t, b = t + 1)
 
-def funcAC(t : int) : Foo const {
-    return Foo(a = t, b = t + 1)
-}
+def funcAC(t : int) : Foo const => Foo(a = t, b = t + 1)
 
 [hybrid]
-def hfunc : Foo {
-    return Foo(a = 1, b = 2)
-}
+def hfunc : Foo => Foo(a = 1, b = 2)
 
 [hybrid]
-def hfuncC : Foo const {
-    return Foo(a = 1, b = 2)
-}
+def hfuncC : Foo const => Foo(a = 1, b = 2)
 
 [hybrid]
-def hfuncA(t : int) : Foo {
-    return Foo(a = t, b = t + 1)
-}
+def hfuncA(t : int) : Foo => Foo(a = t, b = t + 1)
 
 [hybrid]
-def hfuncAC(t : int) : Foo const {
-    return Foo(a = t, b = t + 1)
-}
+def hfuncAC(t : int) : Foo const => Foo(a = t, b = t + 1)
 
 def check(t : T?; f : Foo) {
     t |> equal(f.a, 1)

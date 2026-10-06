@@ -29,29 +29,19 @@ def local_unsafe_sum(src : array<int>; blk : block<(v : int) : int>) : int {
 }
 
 [export]
-def target_block_unsafe(src : array<int>) : int {
-    return src |> sum_via_ptr() $(v) => v * v
-}
+def target_block_unsafe(src : array<int>) : int => src |> sum_via_ptr() $(v) => v * v
 
 [export]
-def target_single_return_unsafe(src : array<int>) : int {
-    return src |> first_via_ptr() $(v) => v + 10
-}
+def target_single_return_unsafe(src : array<int>) : int => src |> first_via_ptr() $(v) => v + 10
 
 [export]
-def target_expr_unsafe(src : array<int>) : int {
-    return src |> expr_unsafe_sum() $(v) => v * 3
-}
+def target_expr_unsafe(src : array<int>) : int => src |> expr_unsafe_sum() $(v) => v * 3
 
 [export]
-def target_local_unsafe(src : array<int>) : int {
-    return src |> local_unsafe_sum() $(v) => v - 1
-}
+def target_local_unsafe(src : array<int>) : int => src |> local_unsafe_sum() $(v) => v - 1
 
 [export]
-def target_unsafe_deref(src : array<int>) : int {
-    return src |> deref_first() $(v) => v + 1
-}
+def target_unsafe_deref(src : array<int>) : int => src |> deref_first() $(v) => v + 1
 
 [export]
 def target_must_unsafe(x : int) : int {
@@ -68,9 +58,7 @@ def target_devirt_unsafe_literal(x : int) : int {
     return invoke(blk, x)
 }
 
-def has(s, sub : string) : bool {
-    return find(s, sub, 0) >= 0
-}
+def has(s, sub : string) : bool => find(s, sub, 0) >= 0
 
 def body_of(t : T?; nm : string) : string {
     var body = ""

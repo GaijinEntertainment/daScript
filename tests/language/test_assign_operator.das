@@ -178,9 +178,7 @@ def test_init_reaches_generic_and_mutable_source_overloads(t : T?) {
 }
 
 [inline]
-def pass_through(src : Counted) : Counted {
-    return src
-}
+def pass_through(src : Counted) : Counted => src
 
 def with_finally(src : Counted) : int {
     let held : Counted = src

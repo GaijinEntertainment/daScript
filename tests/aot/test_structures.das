@@ -35,9 +35,7 @@ def inc(var c : Counter) {
     c.value++
 }
 
-def get_value(c : Counter) : int {
-    return c.value
-}
+def get_value(c : Counter) : int => c.value
 
 [test]
 def test_struct_mutation(t : T?) {
@@ -56,15 +54,11 @@ class Animal {
 }
 
 class Dog : Animal {
-    def override speak() : string {
-        return "Woof"
-    }
+    def override speak() : string => "Woof"
 }
 
 class Cat : Animal {
-    def override speak() : string {
-        return "Meow"
-    }
+    def override speak() : string => "Meow"
 }
 
 [test]

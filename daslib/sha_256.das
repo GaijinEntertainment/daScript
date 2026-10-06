@@ -53,9 +53,7 @@ def sha256_init : Sha256State {
     return st
 }
 
-def private rotr(x : uint; n : uint) : uint {
-    return (x >> n) | (x << (32u - n))
-}
+def private rotr(x : uint; n : uint) : uint => (x >> n) | (x << (32u - n))
 
 def private compress(var st : Sha256State) {
     var w : uint[64]

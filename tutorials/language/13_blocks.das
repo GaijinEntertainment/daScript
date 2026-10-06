@@ -23,9 +23,8 @@ def do_twice(action : block) {
 }
 
 // A function that takes a block with parameters and a return value.
-def apply_to(value : int; transform : block<(x : int) : int>) : int {
-    return transform(value)    // call syntax, not invoke
-}
+def apply_to(value : int; transform : block<(x : int) : int>) : int =>
+    transform(value)  // call syntax, not invoke
 
 // Filter elements using a predicate block
 def filter_array(arr : array<int>; predicate : block<(x : int) : bool>) {

@@ -18,9 +18,7 @@ let MCP_LIST_MODULES_REQ = "\{\"jsonrpc\":\"2.0\",\"id\":42,\"method\":\"tools/c
 let MCP_INITIALIZE_REQ   = "\{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\"}"
 let MCP_TOOLS_LIST_REQ   = "\{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}"
 
-def private mcp_script() : string {
-    return path_join(get_das_root(), "utils/mcp/main.das")
-}
+def private mcp_script() : string => path_join(get_das_root(), "utils/mcp/main.das")
 
 // fgets reads up to one buffer-full (~16KB on most platforms) — large MCP
 // responses (e.g. tools/list) exceed that and arrive as multiple chunks.
@@ -80,9 +78,8 @@ def private parse_response(t : T?; line : string) : JsonValue? {
 
 // JSON integers parse as _longint, doubles as _number. Treat both as
 // numeric — tests don't care about the source representation.
-def private is_numeric(v : JsonValue?) : bool {
-    return v != null && (v.value is _number || v.value is _longint)
-}
+def private is_numeric(v : JsonValue?) : bool =>
+    v != null && (v.value is _number || v.value is _longint)
 
 def private to_int(v : JsonValue?) : int {
     if (v == null) return 0

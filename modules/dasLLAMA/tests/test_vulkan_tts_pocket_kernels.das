@@ -35,9 +35,8 @@ let private PR_ROWS = 7
 let private PR_WIDTH = 13   //! the window: 91 elements, off every workgroup and float4 multiple
 
 //! the window's elements out of a whole dst plane, row by row
-def private pk_window(dst : array<float>) : array<float> {
-    return <- [for (e in range(PR_ROWS * PR_WIDTH)); dst[(PR_DR0 + e / PR_WIDTH) * PR_DS + PR_DC + e % PR_WIDTH]]
-}
+def private pk_window(dst : array<float>) : array<float> =>
+    <- [for (e in range(PR_ROWS * PR_WIDTH)); dst[(PR_DR0 + e / PR_WIDTH) * PR_DS + PR_DC + e % PR_WIDTH]]
 
 [test]
 def test_vkt_pk_rows(t0 : T?) {

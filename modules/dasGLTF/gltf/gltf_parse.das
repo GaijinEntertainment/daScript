@@ -207,9 +207,7 @@ def private parse_path(s : string) : GltfPath {
     return GltfPath.translation
 }
 
-def private attr(prim : JPrimitive; key : string) : int {
-    return prim.attributes?[key] ?? -1
-}
+def private attr(prim : JPrimitive; key : string) : int => prim.attributes?[key] ?? -1
 
 // dasGLTF implements no glTF extensions yet; when one lands, list its name here.
 [unused_argument(name)]
@@ -223,9 +221,8 @@ def private extension_supported(name : string) : bool => false
 // glTF can name an out-of-range buffer or a span past the buffer end; failing this leaves the decode
 // zero-filled (or skips the sparse/image patch) rather than panicking, keeping load_gltf's documented
 // fail-closed contract (return an empty scene on bad input).
-def private buffer_range_ok(buffers : array<array<uint8>>; bufIdx : int; base, span : int64) : bool {
-    return bufIdx >= 0 && bufIdx < length(buffers) && base >= 0l && base + span <= long_length(buffers[bufIdx])
-}
+def private buffer_range_ok(buffers : array<array<uint8>>; bufIdx : int; base, span : int64) : bool =>
+    bufIdx >= 0 && bufIdx < length(buffers) && base >= 0l && base + span <= long_length(buffers[bufIdx])
 
 def private decode_floats(gltf : JGltf; buffers : array<array<uint8>>; ai : int) : array<float4> {
     var result : array<float4>

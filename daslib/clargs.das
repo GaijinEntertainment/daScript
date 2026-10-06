@@ -47,9 +47,7 @@ def public get_cli_arguments(all_args : array<string>) : array<string> {
     return <- result
 }
 
-def public get_cli_arguments() : array<string> {
-    return <- get_cli_arguments(get_command_line_arguments())
-}
+def public get_cli_arguments() : array<string> => <- get_cli_arguments(get_command_line_arguments())
 
 def public get_program_args(all_args : array<string>) : array<string> {
     var result : array<string>
@@ -61,9 +59,7 @@ def public get_program_args(all_args : array<string>) : array<string> {
     return <- result
 }
 
-def public get_program_args() : array<string> {
-    return <- get_program_args(get_command_line_arguments())
-}
+def public get_program_args() : array<string> => <- get_program_args(get_command_line_arguments())
 
 def public get_user_args() : array<string> {
     let argv <- get_command_line_arguments()
@@ -85,9 +81,8 @@ def public get_host_binary() : string {
     return arg0
 }
 
-def clargs_flag_name(field_name : string) : string {
-    return "--" + replace_multiple(field_name, [(text="_", replacement="-")])
-}
+def clargs_flag_name(field_name : string) : string =>
+    "--" + replace_multiple(field_name, [(text="_", replacement="-")])
 
 def public find_bool_flag_raw_value(args : array<string>; flag_name : string) : Option<string> {
     let prefix = "{flag_name}="
@@ -160,9 +155,8 @@ def public env_config_text(name : string) : Option<string> {
     return some(v)
 }
 
-def env_raw_value(arg_info : CommandArgumentInfo) : Option<string> {
-    return env_config_text(arg_info.env_name)
-}
+def env_raw_value(arg_info : CommandArgumentInfo) : Option<string> =>
+    env_config_text(arg_info.env_name)
 
 def public env_config_flag(name : string; dflt : bool) : bool {
     let v = env_config_text(name)

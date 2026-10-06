@@ -63,13 +63,9 @@ def draw_text_centered(text : string; cx, y : float; size : float = TEXT_BODY;
     draw_text(text, cx - w * 0.5, y, size, tint)
 }
 
-def private design_w() : float {
-    return float(display_w) / hud_scale()
-}
+def private design_w() : float => float(display_w) / hud_scale()
 
-def private design_h() : float {
-    return float(display_h) / hud_scale()
-}
+def private design_h() : float => float(display_h) / hud_scale()
 
 // A dimming plate behind a full-screen message, so titles never fight the
 // scene behind them.

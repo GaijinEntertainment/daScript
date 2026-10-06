@@ -5,9 +5,7 @@ options gen2
 var result : int = 0
 
 [export]
-def add(a, b : int) : int {
-    return a + b
-}
+def add(a, b : int) : int => a + b
 
 [export]
 def compute(x : int) {

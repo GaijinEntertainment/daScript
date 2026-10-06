@@ -104,9 +104,7 @@ struct EmitModel {
     skipped : table<string; string>
 }
 
-def private supported(protect : string) : bool {
-    return key_exists(SUPPORTED_PROTECTS, protect)
-}
+def private supported(protect : string) : bool => key_exists(SUPPORTED_PROTECTS, protect)
 
 def private guard_open(f : FILE const?; guard, protect : string) {
     return if (empty(guard))

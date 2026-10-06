@@ -290,9 +290,7 @@ def private read_fourcc(data : array<uint8>; var cursor : int&) : string {
     return cc
 }
 
-def private character_at(b : uint8) : string {
-    return to_char(int(b))
-}
+def private character_at(b : uint8) : string => to_char(int(b))
 
 def private read_fixed_string(data : array<uint8>; var cursor : int&; max_len : int) : string {
     let end_pos = min(cursor + max_len, length(data))

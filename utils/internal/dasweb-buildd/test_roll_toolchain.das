@@ -19,9 +19,8 @@ def private tool_answers(tool : string) : bool {
 }
 
 // The script from the repo root, bash, and the one tool the seam under test spawns.
-def private tools_present(tool : string) : bool {
-    return stat(SCRIPT).is_valid && tool_answers("bash") && tool_answers(tool)
-}
+def private tools_present(tool : string) : bool =>
+    stat(SCRIPT).is_valid && tool_answers("bash") && tool_answers(tool)
 
 def private git(dir : string; args : array<string>) : int {
     var argv <- ["git", "-C", dir, "-c", "core.autocrlf=false", "-c", "user.name=t", "-c", "user.email=t@t"]
@@ -77,9 +76,8 @@ def private run_of(name : string; conclusion : string; event : string = "push") 
     return "\{\"name\":\"{name}\",\"event\":\"{event}\",\"conclusion\":{c}\}"
 }
 
-def private runs_of(items : array<string>) : string {
-    return "\{\"workflow_runs\":[" + join(items, ",") + "]\}"
-}
+def private runs_of(items : array<string>) : string =>
+    "\{\"workflow_runs\":[" + join(items, ",") + "]\}"
 
 def private all_required : array<string> {
     return <- [run_of("wasm_build", "success"), run_of("build", "success"),

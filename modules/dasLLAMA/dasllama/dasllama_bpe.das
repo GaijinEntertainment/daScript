@@ -502,6 +502,4 @@ def bpe_decode_ids(tk : BpeTokenizer; ids : array<int64>) : string {
 }
 
 //! Look up a special/added token id by its surface form (e.g. "<|eot_id|>"); -1 if absent.
-def special_id(tk : BpeTokenizer; name : string) : int64 {
-    return tk.lookup?[name] ?? -1l
-}
+def special_id(tk : BpeTokenizer; name : string) : int64 => tk.lookup?[name] ?? -1l

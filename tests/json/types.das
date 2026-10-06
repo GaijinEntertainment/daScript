@@ -94,18 +94,14 @@ struct SFoo {
     b : float
 }
 
-def operator ==(a, b : SFoo | #) {
-    return a.a == b.a && a.b == b.b
-}
+def operator ==(a, b : SFoo | #) => a.a == b.a && a.b == b.b
 
 struct NFoo {
     c : double
     s : SFoo
 }
 
-def operator ==(a, b : NFoo) {
-    return a.c == b.c && a.s == b.s
-}
+def operator ==(a, b : NFoo) => a.c == b.c && a.s == b.s
 
 [test]
 def struct_types(t : T?) {
@@ -155,9 +151,7 @@ def array_types(t : T?) {
 
 typedef TFoo = tuple<int; float; string>
 
-def operator ==(a, b : TFoo | #) {
-    return a._0 == b._0 && a._1 == b._1 && a._2 == b._2
-}
+def operator ==(a, b : TFoo | #) => a._0 == b._0 && a._1 == b._1 && a._2 == b._2
 
 [test]
 def tuple_types(t : T?) {
@@ -176,13 +170,9 @@ def op_equ_tab(a, b : table<string; auto(TT)>) {
     return true
 }
 
-def operator ==(a, b : table<string; int>) {
-    return op_equ_tab(a, b)
-}
+def operator ==(a, b : table<string; int>) => op_equ_tab(a, b)
 
-def operator ==(a, b : table<string; SFoo>) {
-    return op_equ_tab(a, b)
-}
+def operator ==(a, b : table<string; SFoo>) => op_equ_tab(a, b)
 
 [test]
 def string_table(t : T?) {

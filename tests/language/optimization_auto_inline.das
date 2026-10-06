@@ -170,9 +170,7 @@ def outer_same(k : int; blk : block<(v : int) : int>) : OptInt {
 }
 
 [export]
-def target_auto(src : array<int>) : int {
-    return src |> transform_sum() $(v) => v * v
-}
+def target_auto(src : array<int>) : int => src |> transform_sum() $(v) => v * v
 
 [export]
 def target_void_auto(src : array<int>) : int {
@@ -184,19 +182,13 @@ def target_void_auto(src : array<int>) : int {
 }
 
 [export]
-def target_chain(src : array<int>) : int {
-    return src |> chain_sum(100) $(v) => v + 1
-}
+def target_chain(src : array<int>) : int => src |> chain_sum(100) $(v) => v + 1
 
 [export]
-def target_multi_exit(src : array<int>) : int {
-    return src |> multi_exit() $(v) => v * 3
-}
+def target_multi_exit(src : array<int>) : int => src |> multi_exit() $(v) => v * 3
 
 [export]
-def target_canonicalized(src : array<int>) : int {
-    return src |> guarded_first() $(v) => v * 3
-}
+def target_canonicalized(src : array<int>) : int => src |> guarded_first() $(v) => v * 3
 
 [export]
 def target_struct_result(k : int) : int {
@@ -216,9 +208,7 @@ def target_array_result(src : array<int>) : int {
 }
 
 [export]
-def target_recursive(src : array<int>) : int {
-    return recursive_taker(length(src)) $(v) => v + 7
-}
+def target_recursive(src : array<int>) : int => recursive_taker(length(src)) $(v) => v + 7
 
 [export]
 def target_impure_args(a, b : int) : int {
@@ -238,9 +228,7 @@ def target_flavor_match(n : int) : int {
 }
 
 [export]
-def target_flavor_mismatch(src : array<int>) : int {
-    return iter_sum_cref(unsafe(each(src))) $(v) => v + 1
-}
+def target_flavor_mismatch(src : array<int>) : int => iter_sum_cref(unsafe(each(src))) $(v) => v + 1
 
 [export]
 def target_clone_from_param(n : int) : int {
@@ -328,9 +316,7 @@ def private locked_forward(node : int; var counted : array<int>) : float {
     return m
 }
 
-def has(s, sub : string) : bool {
-    return find(s, sub, 0) >= 0
-}
+def has(s, sub : string) : bool => find(s, sub, 0) >= 0
 
 def body_of(t : T?; nm : string) : string {
     var body = ""

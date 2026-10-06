@@ -170,9 +170,7 @@ def public fuzzy_pairs(records : array<FuncRecord>; threshold : float; min_token
 }
 
 
-def public member_key(m : MemberRef) : string {
-    return "{m.file}:{m.line}:{m.name}"
-}
+def public member_key(m : MemberRef) : string => "{m.file}:{m.line}:{m.name}"
 
 
 // Sort clusters by member count descending; tie-break on token_count

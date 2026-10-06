@@ -30,14 +30,11 @@ struct SVec {
 }
 
 [inline]
-def add(a, b : int) : int {
-    return a + b;
-}
+def add(a, b : int) : int => a + b
 
 [inline]
-def clamp01f(x : float) : float {
-    return x < 0.0 ? 0.0 : (x > 1.0 ? 1.0 : x); // nolint:PERF015 -- ternaries in the inline body are the point
-}
+def clamp01f(x : float) : float =>
+    x < 0.0 ? 0.0 : (x > 1.0 ? 1.0 : x)  // nolint:PERF015 -- ternaries in the inline body are the point
 
 [inline]
 def madd(a, b, c : int) : int {
@@ -58,9 +55,7 @@ def add_g(a : int) : int {
 }
 
 [inline]
-def vsum(v : SVec) : int {
-    return v.x + v.y;
-}
+def vsum(v : SVec) : int => v.x + v.y
 
 [inline]
 def wsum(var v : SVec) : int {
@@ -89,19 +84,13 @@ def sum_range(n : int) : int {
 }
 
 [inline]
-def chain_inner(x : int) : int {
-    return x + 1;
-}
+def chain_inner(x : int) : int => x + 1
 
 [inline]
-def chain_outer(x : int) : int {
-    return chain_inner(x) + 2;
-}
+def chain_outer(x : int) : int => chain_inner(x) + 2
 
 [inline]
-def twice(x : auto) {
-    return x + x;
-}
+def twice(x : auto) => x + x
 
 [inline]
 def guard_ladder(x : int) : int {
@@ -202,14 +191,11 @@ def gathered_sum(src : array<int>; k : int) : int {
 }
 
 [export]
-def target_basic(x, y : int) : int {
-    return add(x, y + 1); // inlines to x + (y + 1), zero temps
-}
+def target_basic(x, y : int) : int => add(x, y + 1)  // inlines to x + (y + 1), zero temps
 
 [export]
-def target_fold : float {
-    return clamp01f(2.5); // nolint:PERF015,LINT019 -- constant arg folds through the inlined body; the inliner splices clamp01f's nolinted ternary to this call site in optimized lint configs
-}
+def target_fold : float =>
+    clamp01f(2.5)  // nolint:PERF015,LINT019 -- constant arg folds through the inlined body; the inliner splices clamp01f's nolinted ternary to this call site in optimized lint configs
 
 [export]
 def target_multi_stmt(x : int) : int {
@@ -217,9 +203,8 @@ def target_multi_stmt(x : int) : int {
 }
 
 [export]
-def target_generic(x : int; f : float) : float {
-    return float(twice(x)) + twice(f); // one instance per type, both inlined
-}
+def target_generic(x : int; f : float) : float =>
+    float(twice(x)) + twice(f)  // one instance per type, both inlined
 
 [export]
 def target_while(x : int) : int {
@@ -252,13 +237,9 @@ def target_loop_ret(src : array<int>; k : int) : int {
     return find_first_gt(src, k); // return under a loop: generated flag + break
 }
 
-def has(s, sub : string) : bool {
-    return find(s, sub, 0) >= 0;
-}
+def has(s, sub : string) : bool => find(s, sub, 0) >= 0
 
-def count_of(s, sub : string) : int {
-    return length(split(s, sub)) - 1;
-}
+def count_of(s, sub : string) : int => length(split(s, sub)) - 1
 
 def body_of(t : T?; nm : string) : string {
     var body = "";

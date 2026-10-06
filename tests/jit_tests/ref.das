@@ -8,9 +8,7 @@ def inc_local_ref(var a : int&) {
     }
 }
 
-def inc_arg_ref(var a : int&) {
-    return a++
-}
+def inc_arg_ref(var a : int&) => a++
 
 var global_ref = 13
 

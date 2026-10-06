@@ -12,13 +12,9 @@ def cmr_newFoo() : CmrFoo {
     return tf
 }
 
-def cmr_newFooB(b : block<CmrFoo>) : CmrFoo {
-    return invoke(b)
-}
+def cmr_newFooB(b : block<CmrFoo>) : CmrFoo => invoke(b)
 
-def cmr_addBar(a, b : CmrFoo) : int {
-    return a.bar + b.bar
-}
+def cmr_addBar(a, b : CmrFoo) : int => a.bar + b.bar
 
 def cmr_makeSequence(var base : auto(numT) -&; max : numT) : array<numT> {
     var a : array<numT>
@@ -35,9 +31,7 @@ def cmr_joinSequences(l : array<auto(numT)>; r : array<numT>) : array<numT> {
     return <- a
 }
 
-def cmr_makeSequenceB(b : block<array<auto>>) : auto {
-    return <- invoke(b)
-}
+def cmr_makeSequenceB(b : block<array<auto>>) : auto => <- invoke(b)
 
 [test]
 def test_copy_and_move_on_return(t : T?) {

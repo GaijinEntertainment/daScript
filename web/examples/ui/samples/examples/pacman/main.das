@@ -46,10 +46,10 @@ let GHOST_FLEE_SPEED = 2.0
 let POWER_DURATION  = 8.0
 
 // Level-scaled difficulty helpers
-def eff_pac_speed()        { return min(PAC_SPEED       + float(level - 1) * 0.15, 7.5); }
-def eff_ghost_speed()      { return min(GHOST_SPEED     + float(level - 1) * 0.12, 5.5); }
-def eff_ghost_flee_speed() { return min(GHOST_FLEE_SPEED + float(level - 1) * 0.08, 4.0); }
-def eff_power_duration()   { return max(POWER_DURATION  - float(level - 1) * 0.7, 2.0); }
+def eff_pac_speed()        => min(PAC_SPEED       + float(level - 1) * 0.15, 7.5)
+def eff_ghost_speed()      => min(GHOST_SPEED     + float(level - 1) * 0.12, 5.5)
+def eff_ghost_flee_speed() => min(GHOST_FLEE_SPEED + float(level - 1) * 0.08, 4.0)
+def eff_power_duration()   => max(POWER_DURATION  - float(level - 1) * 0.7, 2.0)
 
 let PELLET_SCORE      = 10
 let POWER_SCORE       = 50
@@ -463,9 +463,7 @@ def init_pellets() {
     }
 }
 
-def pellet_idx(col, row : int) : int {
-    return row * MAZE_COLS + col
-}
+def pellet_idx(col, row : int) : int => row * MAZE_COLS + col
 
 def has_pellets() : bool {
     for (p in pellets) {
@@ -522,9 +520,7 @@ var @live pac_next : int2       // queued next direction from input
 var @live pac_anim = 0.0        // mouth open/close phase
 var @live pac_dead = false
 
-def pac_start_pos() : float2 {
-    return cell_to_world(10, 17)
-}
+def pac_start_pos() : float2 => cell_to_world(10, 17)
 
 def reset_pac() {
     pac_pos        = pac_start_pos()

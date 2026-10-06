@@ -22,9 +22,8 @@ var private g_batch_steps_per_row = 0l
 //! how the batched steps since load were served: a device driver ran the whole stack in one pass, the
 //! CPU batched stack ran it, or the rows stepped one at a time - a weight pass a row (one row, a q4_0
 //! model, a non-standard graph, or a blob-only model whose device driver declined the step)
-def public batch_step_census() : tuple<device : int64; cpu_stack : int64; per_row : int64> {
-    return (device = g_batch_steps_device, cpu_stack = g_batch_steps_cpu_stack, per_row = g_batch_steps_per_row)
-}
+def public batch_step_census() : tuple<device : int64; cpu_stack : int64; per_row : int64> =>
+    (device = g_batch_steps_device, cpu_stack = g_batch_steps_cpu_stack, per_row = g_batch_steps_per_row)
 
 //! a batched step served outside `eval_batch_` joins the census: the scheduler's joint speculative
 //! verify counts as a device step when every stream's rows rode it, as per-row otherwise

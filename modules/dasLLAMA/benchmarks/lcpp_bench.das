@@ -1176,9 +1176,8 @@ def private parity_greedy(t : Model; prompt : array<int64>; n_gen : int64) : arr
     return <- got
 }
 
-def private parity_eyeball(t : Model; ids : array<int64>) : string {
-    return replace(decode_(t, ids), "\n", "\\n")
-}
+def private parity_eyeball(t : Model; ids : array<int64>) : string =>
+    replace(decode_(t, ids), "\n", "\\n")
 
 // The board's start-of-model gate: one pinned run against the spec's frozen evidence — the same
 // fixture test_parity's generic loop drives. Loads the PLANAR rail (load_model_ — the layout the
@@ -1285,9 +1284,8 @@ def private bench_fixture_gate(var t : Model; spec : ModelSpec; fmt : OutFmt) : 
 
 //! The timed run's fixture gate on an already-loaded model - public so a test can drive it with
 //! the table's own spec and a deliberately wrong one.
-def fixture_gate_check(var t : Model; spec : ModelSpec) : bool {
-    return bench_fixture_gate(t, spec, OutFmt.txt)
-}
+def fixture_gate_check(var t : Model; spec : ModelSpec) : bool =>
+    bench_fixture_gate(t, spec, OutFmt.txt)
 
 // progress line — stdout in txt mode, stderr when stdout carries the md table / json records
 def private say(fmt : OutFmt; text : string) {

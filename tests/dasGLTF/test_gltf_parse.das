@@ -7,9 +7,7 @@ require math
 require daslib/fio
 require strings
 
-def private model_path(name : string) : string {
-    return "{get_das_root()}/tests/dasGLTF/models/{name}"
-}
+def private model_path(name : string) : string => "{get_das_root()}/tests/dasGLTF/models/{name}"
 
 // read a JSON fixture, inject `inject` right after the opening '{', parse from memory
 def private load_patched(name : string; inject : string) : GltfScene {

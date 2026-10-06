@@ -10,21 +10,13 @@ require dastest/testing_boost public
 
 // ── Helpers to build test expressions ───────────────────────────────────
 
-def make_int(val : int) : ExpressionPtr {
-    return qmacro($v(val))
-}
+def make_int(val : int) : ExpressionPtr => qmacro($v(val))
 
-def make_bool(val : bool) : ExpressionPtr {
-    return qmacro($v(val))
-}
+def make_bool(val : bool) : ExpressionPtr => qmacro($v(val))
 
-def make_add_ab() : ExpressionPtr {
-    return qmacro(a + b)
-}
+def make_add_ab() : ExpressionPtr => qmacro(a + b)
 
-def make_add_xb() : ExpressionPtr {
-    return qmacro(x + b)
-}
+def make_add_xb() : ExpressionPtr => qmacro(x + b)
 
 // ── Basic matching ──────────────────────────────────────────────────────
 

@@ -11,9 +11,7 @@ require strings
 //! subprocess pipe). Validates the round-trip semantics that the MCP
 //! subprocess tests depend on, isolated from MCP itself.
 
-def private fixture_path(name : string) : string {
-    return path_join(get_das_root(), "tests/mcp/{name}")
-}
+def private fixture_path(name : string) : string => path_join(get_das_root(), "tests/mcp/{name}")
 
 [test]
 def test_echo_roundtrip(t : T?) {

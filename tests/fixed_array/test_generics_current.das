@@ -11,17 +11,11 @@
 options gen2
 require dastest/testing_boost public
 
-def pick(a : auto(TT)) : string {
-    return "plain"
-}
+def pick(a : auto(TT)) : string => "plain"
 
-def pick(a : auto(TT)[]) : string {
-    return "dim"
-}
+def pick(a : auto(TT)[]) : string => "dim"
 
-def container_name(a : auto(TT)) : string {
-    return typeinfo typename(type<TT>)
-}
+def container_name(a : auto(TT)) : string => typeinfo typename(type<TT>)
 
 def sum_unsized(a : int[]) : int {
     var sum = 0
@@ -37,9 +31,7 @@ def fill_unsized(var a : int[] ==const) {
     }
 }
 
-def first_exact(a : int[4]) : int {
-    return a[0]
-}
+def first_exact(a : int[4]) : int => a[0]
 
 [test]
 def test_overload_preference(t : T?) {

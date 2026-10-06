@@ -58,9 +58,7 @@ def drill_rotation(time : float) : float {
         clamp(age - 11.0, 0.0, 3.5) + 2.5 * (fall - fall * fall * fall + 0.5 * fall * fall * fall * fall))
 }
 
-def drill_contact_position() : float3 {
-    return BRACK_POSITION + float3(1.12, -1.50, 0.26)
-}
+def drill_contact_position() : float3 => BRACK_POSITION + float3(1.12, -1.50, 0.26)
 
 def drill_head_position(time : float) : float3 {
     // The lowest cutting edge is 0.47 below the head. Retract vertically,
@@ -125,9 +123,8 @@ struct RobotAttachment {
     rotation : float4
 }
 
-def attachment_rotation(angle : float) : float4 {
-    return float4(0.0, 0.0, sin(angle * 0.5), cos(angle * 0.5))
-}
+def attachment_rotation(angle : float) : float4 =>
+    float4(0.0, 0.0, sin(angle * 0.5), cos(angle * 0.5))
 
 def robot_attachment(resident : int; time : float) : RobotAttachment {
     let base = resident == 1 ? patch_heading : 0.0

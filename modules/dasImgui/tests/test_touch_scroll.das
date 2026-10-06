@@ -17,9 +17,8 @@ require math
 let FEATURE = "modules/dasImgui/examples/features/touch_scroll.das"
 let STEP = 70.0
 
-def private fingers(a, b : float2; ended : bool = false) : array<TouchPoint> {
-    return <- [TouchPoint(id = 1, pos = a, ended = ended), TouchPoint(id = 2, pos = b, ended = ended)]
-}
+def private fingers(a, b : float2; ended : bool = false) : array<TouchPoint> =>
+    <- [TouchPoint(id = 1, pos = a, ended = ended), TouchPoint(id = 2, pos = b, ended = ended)]
 
 [test]
 def test_touch_scroll_machine(t : T?) {

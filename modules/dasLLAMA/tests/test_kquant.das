@@ -1687,9 +1687,8 @@ def private kq_gpu_gather_gate(t : T?; fmt : int) {
 }
 
 //! the decoded sub-scale byte a synthetic plane row carries at (row, blk): iq4xs's ls - 32, the iq3 family's 1 + 2s
-def private iq_plane_sc(fmt : KqFmt; r, blk : int64) : int {
-    return fmt == KqFmt.iq4xs ? int((r * 5l + blk * 7l) % 64l) - 32 : 1 + 2 * int((r * 3l + blk * 5l) % 16l)
-}
+def private iq_plane_sc(fmt : KqFmt; r, blk : int64) : int =>
+    fmt == KqFmt.iq4xs ? int((r * 5l + blk * 7l) % 64l) - 32 : 1 + 2 * int((r * 3l + blk * 5l) % 16l)
 
 def private iq_plane_d(r : int64) : float => 0.25 + 0.5 * float(r)
 

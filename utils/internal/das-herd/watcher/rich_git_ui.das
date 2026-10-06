@@ -1629,9 +1629,7 @@ def git_changelist_status(repository : RepositorySnapshot const;
     return GitWindowStatus(text = "staged {worktree.staged}   unstaged {worktree.unstaged}   untracked {worktree.untracked}   conflicted {worktree.conflicted}{ahead_behind}")
 }
 
-def network_ready : bool {
-    return (g_client != null && g_client.connected && !changelist_rail_busy())
-}
+def network_ready : bool => (g_client != null && g_client.connected && !changelist_rail_busy())
 
 def network_icon(index : int; glyph, tip : string;
                  enabled : bool; count : int) : bool {

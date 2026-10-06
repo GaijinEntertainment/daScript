@@ -38,9 +38,7 @@ var @ssbo @binding = 0 i16_packed : array<int>
 var @ssbo @binding = 1 i16_pair : array<int2>
 var @ssbo @binding = 2 i16_quad : array<int4>
 
-def i16_unpack(packed : int) : short2 {
-    return short2(packed >> 16, packed & 0xffff)
-}
+def i16_unpack(packed : int) : short2 => short2(packed >> 16, packed & 0xffff)
 
 def i16_unpack_out(packed : int; var tc : short2&) {
     tc = short2(packed >> 16, packed & 0xffff)
@@ -124,9 +122,8 @@ def private ushort_type_id(words : array<uint>) : uint {
 
 // How many OpExtInst carry `ext` as their ext-op selector? Operands are [result-type, result-id,
 // set-id, ext-op, args...], so the selector sits at index 3.
-def private count_ext_op(words : array<uint>; ext : GLSLstd450) : int {
-    return count_op_operand_at(words, SpvOp.ExtInst, 3, uint(ext))
-}
+def private count_ext_op(words : array<uint>; ext : GLSLstd450) : int =>
+    count_op_operand_at(words, SpvOp.ExtInst, 3, uint(ext))
 
 // The id OpTypeInt 16 1 declares (0 if absent). Operand layout is [result-id, width, signedness],
 // so the width/signedness pair sits at 1..2 and the id we want at 0 -- which is why this cannot be
@@ -154,9 +151,8 @@ def private short_vec_type_id(words : array<uint>; short_id : uint; lanes : uint
 
 // How many `op` instructions produce a value of type `type_id`? An arithmetic op's result type is
 // operand 0, so this is what separates a native 16-bit lowering from a widened 32-bit one.
-def private count_op_of_type(words : array<uint>; op : SpvOp; type_id : uint) : int {
-    return count_op_operand_at(words, op, 0, type_id)
-}
+def private count_op_of_type(words : array<uint>; op : SpvOp; type_id : uint) : int =>
+    count_op_operand_at(words, op, 0, type_id)
 
 // `signedness` is which 16-bit type the fixture is expected to declare: a fixture that only ever spells
 // uint16 has no signed one to find.

@@ -41,9 +41,7 @@ def fixture_array() : array<User> {
     ]
 }
 
-def user_eq(a : User; b : User) : bool {
-    return a.Id == b.Id && a.Name == b.Name
-}
+def user_eq(a : User; b : User) : bool => a.Id == b.Id && a.Name == b.Name
 
 [test]
 def parity_try_sql_first_ok(t : T?) {

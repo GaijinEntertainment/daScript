@@ -27,9 +27,7 @@ def fixture_array() : array<Car> {
         Car(id = 7, price = 150,   qty = 5, brand = "Ford")]
 }
 
-def fixture_json() : JsonValue? {
-    return JV([for (c in fixture_array()); JV(c)])
-}
+def fixture_json() : JsonValue? => JV([for (c in fixture_array()); JV(c)])
 
 [test]
 def query_where_select(t : T?) {

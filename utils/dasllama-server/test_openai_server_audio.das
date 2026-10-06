@@ -90,9 +90,8 @@ def private tiny_wav_b64(n_samples : int) : string {
     return out
 }
 
-def private audio_chat_body(b64 : string; text : string) : string {
-    return "\{\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"input_audio\",\"input_audio\":\{\"data\":\"{b64}\",\"format\":\"wav\"}},\{\"type\":\"text\",\"text\":\"{text}\"}]}]}"
-}
+def private audio_chat_body(b64 : string; text : string) : string =>
+    "\{\"messages\":[\{\"role\":\"user\",\"content\":[\{\"type\":\"input_audio\",\"input_audio\":\{\"data\":\"{b64}\",\"format\":\"wav\"}},\{\"type\":\"text\",\"text\":\"{text}\"}]}]}"
 
 //! what a buffered chat reply says: its prompt and cached position counts, its finish reason, its content
 struct private ChatReply {

@@ -412,9 +412,8 @@ def private chain_has_const(e : ExpressionPtr; addOp : string) : bool {
     return is_all_const(e)
 }
 
-def private already_grouped(that : ExprOp2?; addOp : string) : bool {
-    return that.op == addOp && is_all_const(that.right) && !chain_has_const(that.left, addOp)
-}
+def private already_grouped(that : ExprOp2?; addOp : string) : bool =>
+    that.op == addOp && is_all_const(that.right) && !chain_has_const(that.left, addOp)
 
 def private vars_sorted(vars : array<ReTerm>) : bool {
     for (i in range(1, length(vars))) {

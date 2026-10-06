@@ -14,9 +14,7 @@ def operator . res :=(var f : Foo; st : string#) {
 // Class with getter/setter property pair
 class sealed UIFrame {
     _size : float2
-    def const operator . sizezz() : float2 {
-        return _size
-    }
+    def const operator . sizezz() : float2 => _size
     def operator . sizezz :=(value : float2) {
         _size = value
     }

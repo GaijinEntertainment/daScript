@@ -173,9 +173,8 @@ def private rig_exe_path() : string {
     return "{RIG_EXE_OUT}/dasllama-bench/dasllama-bench.exe"
 }
 
-def private rig_build_line() : string {
-    return "bin/daslang utils/daspkg/main.das -- release --root modules/dasLLAMA/benchmarks --out {RIG_EXE_OUT}"
-}
+def private rig_build_line() : string =>
+    "bin/daslang utils/daspkg/main.das -- release --root modules/dasLLAMA/benchmarks --out {RIG_EXE_OUT}"
 
 //! the codegen form the rig build line produces (no `--jit-split-modules` / `--jit-lto`): every das
 //! row names it, so a rate built one way is never compared with one built another
@@ -192,9 +191,8 @@ def das_child_args(exe : string; jit : bool; rest : array<string>) : array<strin
     return <- args
 }
 
-def private das_args(exe : string; rest : array<string>) : array<string> {
-    return <- das_child_args(exe, g_jit_bench, rest)
-}
+def private das_args(exe : string; rest : array<string>) : array<string> =>
+    <- das_child_args(exe, g_jit_bench, rest)
 
 //! The batched row's shape on a leg, both engines alike: the cpu legs' `--npl-cpu-plen` /
 //! `--npl-cpu-reps`, the metal leg the flat rows' own -p and -r
@@ -209,16 +207,13 @@ def npl_cpu_shape_ok(npl, plen, reps : int) : bool
 
 //! The rows `--catalog` selects: `official` (the public board) or `all` (every `model_specs` row
 //! the box stocks - the sweep form). False = a spelling the caller refuses.
-def catalog_known(catalog : string) : bool {
-    return catalog == "official" || catalog == "all"
-}
+def catalog_known(catalog : string) : bool => catalog == "official" || catalog == "all"
 
 //! A store path whose parent folders read `performance/records/` - the folder the site merge
 //! publishes - relative or absolute, dot segments not collapsed; "" is the default store, which
 //! is the box's board file.
-def store_is_board(store : string) : bool {
-    return empty(store) || (base_name(dir_name(store)) == "records" && base_name(dir_name(dir_name(store))) == "performance")
-}
+def store_is_board(store : string) : bool =>
+    empty(store) || (base_name(dir_name(store)) == "records" && base_name(dir_name(dir_name(store))) == "performance")
 
 //! The guard on `records/<box>.json`, the store the site merge publishes: a debug-jit run stamps
 //! rows no board may carry, and a `--catalog all` sweep mints rows for models the board does not
@@ -340,13 +335,9 @@ def private batch_start_wipe(workload : string) {
     }
 }
 
-def private daslang_bin() : string {
-    return g_env_prof.daslang_bin
-}
+def private daslang_bin() : string => g_env_prof.daslang_bin
 
-def private elapsed_ms(t0 : int64) : int {
-    return get_time_usec(t0) / 1000
-}
+def private elapsed_ms(t0 : int64) : int => get_time_usec(t0) / 1000
 
 // Stamp source + the catalog note and upsert every run of `cell` into the store, then persist.
 // the records directory carries each sidecar generation ONCE, by shasum: a row's tune_sha
@@ -454,9 +445,7 @@ def cell_rates(cell : array<BenchModel>) : CellRates {
 //! The warm re-run keeps its cell only when it reads at least as fast as the cold one on BOTH
 //! axes. Map warming can only make a re-run faster, so slower on either axis is heat: the cold
 //! cell is the honest one, and `--das-settle` is short for that tier.
-def keep_cold(cold, warm : CellRates) : bool {
-    return warm.pp < cold.pp || warm.tg < cold.tg
-}
+def keep_cold(cold, warm : CellRates) : bool => warm.pp < cold.pp || warm.tg < cold.tg
 
 // One lcpp_bench child with the cold-map cv retry — the shared engine of das_cell and the oracle
 // cells. Fills `cell` from the child's --json-path records; false = the child failed or its

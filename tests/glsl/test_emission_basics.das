@@ -76,9 +76,8 @@ def mrt_fragment {
 // _inl<N>_arg_* temps, and when that host function is itself inlined, those
 // temps are renamed into the outer _inl<N>_l_ namespace — a join that used to
 // spell `_inl1_l__inl0_arg_a`.
-def private cmul_nested(a, b : float2) : float2 {
-    return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x)
-}
+def private cmul_nested(a, b : float2) : float2 =>
+    float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x)
 
 def private iterate_nested(c : float2) : float2 {
     var z = float2(0.0, 0.0)
@@ -110,9 +109,8 @@ def nested_inline_fragment {
 // The other seam: a PARAMETER spelled with a leading underscore reaches the
 // manufactured `_arg_` temp name directly (`_inl<N>_arg_` + `_a`), before any
 // nesting — and then rides the rename seam too. Both joins must re-encode.
-def private mul_underscore(_a, _b : float2) : float2 {
-    return float2(_a.x * _b.x - _a.y * _b.y, _a.x * _b.y + _a.y * _b.x)
-}
+def private mul_underscore(_a, _b : float2) : float2 =>
+    float2(_a.x * _b.x - _a.y * _b.y, _a.x * _b.y + _a.y * _b.x)
 
 def private iterate_underscore(c : float2) : float2 {
     var z = float2(0.1, 0.1)
@@ -145,9 +143,8 @@ def nested_underscore_fragment {
 // must stay FOUR distinct GLSL names — an escape that merely strips or
 // collapses leading underscores would silently merge them into one variable,
 // which is wrong code, worse than a reserved name.
-def private mixmul(_a, u_a : float2) : float2 {
-    return float2(_a.x * u_a.x - _a.y * u_a.y, _a.x * u_a.y + _a.y * u_a.x)
-}
+def private mixmul(_a, u_a : float2) : float2 =>
+    float2(_a.x * u_a.x - _a.y * u_a.y, _a.x * u_a.y + _a.y * u_a.x)
 
 def private iterate_mixed(c : float2) : float2 {
     var _z = float2(0.1, 0.1) // nolint:LINT004 the underscore spelling is the subject under test
@@ -184,9 +181,7 @@ struct private _Coll {
     v : float2
 }
 
-def private _Coll(a : float2) : float2 {
-    return a * 2.0
-}
+def private _Coll(a : float2) : float2 => a * 2.0
 
 [fragment_program(name="uniquify_fs_glsl")]
 def uniquify_fragment {

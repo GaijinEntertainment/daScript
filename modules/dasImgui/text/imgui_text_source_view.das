@@ -165,13 +165,10 @@ let private SOURCE_STYLE_REGULAR = 0
 let private SOURCE_STYLE_MARKER = 1
 let private SOURCE_STYLE_SYNTAX_OFFSET = 1
 
-def private source_zoom(style : TextSourceViewStyle const) : float {
-    return clamp(style.zoom, 0.5f, 3.0f)
-}
+def private source_zoom(style : TextSourceViewStyle const) : float => clamp(style.zoom, 0.5f, 3.0f)
 
-def private source_font(var style : TextSourceViewStyle; var fallback : ImFont?) : ImFont? {
-    return style.fonts.monospace != null ? style.fonts.monospace : fallback
-}
+def private source_font(var style : TextSourceViewStyle; var fallback : ImFont?) : ImFont? =>
+    style.fonts.monospace != null ? style.fonts.monospace : fallback
 
 def private same_flow_key(a, b : TextSourceLayoutKey const) : bool {
     // Fold state deliberately excluded: a fold toggle restores the cached flow.
@@ -182,9 +179,8 @@ def private same_flow_key(a, b : TextSourceLayoutKey const) : bool {
         && a.tab_cells == b.tab_cells)
 }
 
-def private same_layout_key(a, b : TextSourceLayoutKey const) : bool {
-    return same_flow_key(a, b) && a.fold_revision == b.fold_revision
-}
+def private same_layout_key(a, b : TextSourceLayoutKey const) : bool =>
+    same_flow_key(a, b) && a.fold_revision == b.fold_revision
 
 def private selected_source(state : TextSourceViewState const) : TextSourceRange {
     if (state.anchor_byte < 0 || state.focus_byte < 0) {
@@ -194,9 +190,8 @@ def private selected_source(state : TextSourceViewState const) : TextSourceRange
                            end_byte = max(state.anchor_byte, state.focus_byte))
 }
 
-def public text_source_view_selection(state : TextSourceViewState const) : TextSourceRange {
-    return selected_source(state)
-}
+def public text_source_view_selection(state : TextSourceViewState const) : TextSourceRange =>
+    selected_source(state)
 
 def public text_source_view_clear_selection(var state : TextSourceViewState) {
     let had_selection = state.anchor_byte >= 0 || state.focus_byte >= 0
@@ -345,9 +340,8 @@ def public text_source_view_expand_for_byte(document : TextSourceDocument const;
     return expanded
 }
 
-def public text_source_view_collapsed_count(state : TextSourceViewState const) : int {
-    return length(state.collapsed_folds)
-}
+def public text_source_view_collapsed_count(state : TextSourceViewState const) : int =>
+    length(state.collapsed_folds)
 
 def public text_source_view_fold_handle_pos(
                                             document : TextSourceDocument const;
@@ -413,9 +407,8 @@ def private range_columns(source : string; start_byte, end_byte, tab_cells : int
 }
 
 def private range_width(source : string; start_byte, end_byte, tab_cells : int;
-                        cell_width : float) : float {
-    return float(range_columns(source, start_byte, end_byte, tab_cells)) * cell_width
-}
+                        cell_width : float) : float =>
+                            float(range_columns(source, start_byte, end_byte, tab_cells)) * cell_width
 
 def private rebuild_cells(document : TextSourceDocument const;
                           var state : TextSourceViewState;

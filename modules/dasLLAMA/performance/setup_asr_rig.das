@@ -327,9 +327,8 @@ def private setup_refs(cfg : Args) : bool {
     return ok
 }
 
-def private probe_python_version(cand : string) : int {
-    return to_int(strip(run_capture("{cand} -c \"import sys; print(sys.version_info.major * 100 + sys.version_info.minor)\" 2>&1", true)))
-}
+def private probe_python_version(cand : string) : int =>
+    to_int(strip(run_capture("{cand} -c \"import sys; print(sys.version_info.major * 100 + sys.version_info.minor)\" 2>&1", true)))
 
 // the base interpreter: POSIX ships `python3`, Windows ships `python` (and a Store-alias stub
 // that answers `python3` with an install nag) — probe in order. The pins were frozen on
@@ -453,9 +452,7 @@ def private check_all() : bool {
     return ok
 }
 
-def private is_windows_box() : bool {
-    return g_env_prof.win_os == "Windows_NT"
-}
+def private is_windows_box() : bool => g_env_prof.win_os == "Windows_NT"
 
 [export, tune_policy(missing = "fallback")]
 def main : int {

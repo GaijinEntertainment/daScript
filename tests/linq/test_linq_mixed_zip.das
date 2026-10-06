@@ -11,12 +11,8 @@ require dastest/testing_boost public
 // the shorter source. The _fold lane exercises the fold's array-rewrite, which lowers an
 // iterator-sourced zip to zip_to_array(iterator, array) — the path that needed the mixed overload.
 
-def fixture_a() : array<int> {
-    return <- [10, 20, 30, 40]
-}
-def fixture_b() : array<int> {
-    return <- [1, 2, 3]
-}
+def fixture_a() : array<int> => <- [10, 20, 30, 40]
+def fixture_b() : array<int> => <- [1, 2, 3]
 
 // Compare two tuple<int;int> arrays element-wise. All zip lanes share zip_impl, so order is
 // identical — a direct compare (not a checksum) is valid. auto(TT) dodges the exact tuple spelling.

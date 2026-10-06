@@ -9,9 +9,7 @@ require strudel/strudel
 require strudel/strudel_time
 require math
 
-def private at(d : double) : TimeSpan {
-    return TimeSpan(start = 0.0lf, stop = d)
-}
+def private at(d : double) : TimeSpan => TimeSpan(start = 0.0lf, stop = d)
 
 def private hc(p : Pattern) : int {
     let h <- p(TimeSpan(start = 0.0lf, stop = 1.0lf))

@@ -14,6 +14,4 @@ struct private ScopeDecl {}
 
 [tune_perm(k = 0), tune_perm(k = 1), tune_perm(k = 2),
  tune(gen = "llvm_code_selftest::add_plus_k", fallback = "k1")]
-def ver_add(a, b : int) : int {
-    return a + b
-}
+def ver_add(a, b : int) : int => a + b

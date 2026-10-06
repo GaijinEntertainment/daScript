@@ -125,9 +125,8 @@ def public dasllama_fat_first_start() : bool {
 
 //! Where a fat exe keeps its sidecar: `<dasllama home>/tune/<exe name>.tune.json`, so an installed
 //! exe never writes beside itself. `beside` is the default path next to the exe.
-def public dasllama_fat_sidecar_path(dasllama_home, beside : string) : string {
-    return path_join(path_join(dasllama_home, "tune"), base_name(beside))
-}
+def public dasllama_fat_sidecar_path(dasllama_home, beside : string) : string =>
+    path_join(path_join(dasllama_home, "tune"), base_name(beside))
 
 //! Make `home_path`'s directory, and copy the sidecar at `beside` there when `home_path` has none.
 def public dasllama_adopt_sidecar(beside, home_path : string) {

@@ -66,9 +66,8 @@ def private has_expect_directive(lines : array<string>) : bool {
     return false
 }
 
-def private lint_severity(code : string) : int {
-    return code |> starts_with("STYLE") ? 3 : 2  // Information : Warning
-}
+def private lint_severity(code : string) : int =>
+    code |> starts_with("STYLE") ? 3 : 2  // Information : Warning
 
 def private push_lint_issues(var result : ValidateResult; issues : array<LintIssue>;
                              lines : array<string>; target : string) {

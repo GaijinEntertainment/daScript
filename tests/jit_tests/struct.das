@@ -35,49 +35,29 @@ def struct_ptr_field(var f : Foo?) {
     return f.d
 }
 
-def struct_ctor_call {
-    return Foo()
-}
+def struct_ctor_call => Foo()
 
-def make_struct_cmres {
-    return Foo(uninitialized a = 1, c = "bar")
-}
+def make_struct_cmres => Foo(uninitialized a = 1, c = "bar")
 
 // // def make_struct_with_block {
 //     return Foo(a = 1, c = "bar") $(var f) { f.a = 2; }
 // }
 
-def make_struct_cmres_with_init {
-    return Foo(a = 1, c = "bar")
-}
+def make_struct_cmres_with_init => Foo(a = 1, c = "bar")
 
-def make_struct_heap {
-    return new Foo(uninitialized a = 1, c = "bar")
-}
+def make_struct_heap => new Foo(uninitialized a = 1, c = "bar")
 
-def make_struct_heap_with_init {
-    return new Foo(a = 1, c = "bar")
-}
+def make_struct_heap_with_init => new Foo(a = 1, c = "bar")
 
-def make_struct_with_substruct_cmres {
-    return Bar(a = 1, foo = Foo(uninitialized a = 2, b = 3.), b = 4)
-}
+def make_struct_with_substruct_cmres => Bar(a = 1, foo = Foo(uninitialized a = 2, b = 3.), b = 4)
 
-def make_struct_with_substruct_cmres_with_init {
-    return Bar(b = 10, foo = Foo(a = 2, b = 3.))
-}
+def make_struct_with_substruct_cmres_with_init => Bar(b = 10, foo = Foo(a = 2, b = 3.))
 
-def make_struct_with_substruct_heap {
-    return new Bar(a = 1, foo = Foo(uninitialized a = 2, b = 3.), b = 4)
-}
+def make_struct_with_substruct_heap => new Bar(a = 1, foo = Foo(uninitialized a = 2, b = 3.), b = 4)
 
-def make_struct_with_substruct_heap_with_init {
-    return new Bar(b = 10, foo = Foo(a = 2, b = 3.))
-}
+def make_struct_with_substruct_heap_with_init => new Bar(b = 10, foo = Foo(a = 2, b = 3.))
 
-def make_struct_with_field_call_to_cmres {
-    return Bar(a = 1, foo = Foo(), b = 4)
-}
+def make_struct_with_field_call_to_cmres => Bar(a = 1, foo = Foo(), b = 4)
 
 def make_struct_on_stack(which : bool) {
     let a = Foo(a = 1, b = 2.0, c = "3", d = 4)
@@ -91,13 +71,9 @@ def make_struct_with_substruct_on_stack(which : bool) {
     return which ? a : b
 }
 
-def new_struct_on_heap {
-    return new Foo
-}
+def new_struct_on_heap => new Foo
 
-def new_struct_with_ctor_on_heap {
-    return new Foo()
-}
+def new_struct_with_ctor_on_heap => new Foo()
 
 def struct_field_move_init {
     var fb : FooBar

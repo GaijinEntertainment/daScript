@@ -40,9 +40,7 @@ let CACHE_DIR = ".cache/daslang/module_cache"
 
 //! the stems carry the binary kind: the dynamic and the static suite run this file at once in
 //! one tree, and each counts only the cache files its own children wrote
-def kind_stem(stem : string) : string {
-    return das_is_dll_build() ? stem : "{stem}_static"
-}
+def kind_stem(stem : string) : string => das_is_dll_build() ? stem : "{stem}_static"
 
 //! the cache files written for one root: `<CACHE_DIR>/<stem>-<hash>.dascache`
 def cache_files(stem : string) : int {
@@ -93,9 +91,7 @@ def remove_cache_files(stem : string) {
     }
 }
 
-def quiet(out : string) : bool {
-    return find(out, "deser:") < 0 && find(out, "ser:") < 0
-}
+def quiet(out : string) : bool => find(out, "deser:") < 0 && find(out, "ser:") < 0
 
 //! an explicit -module-cache says how many modules the cache served and where the cutoff fell
 [test]

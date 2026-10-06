@@ -110,9 +110,7 @@ def private graph_mark_ancestors(head : string;
     }
 }
 
-def private graph_owned_commit_key(owner, hash : string) : string {
-    return "{owner}\n{hash}"
-}
+def private graph_owned_commit_key(owner, hash : string) : string => "{owner}\n{hash}"
 
 def private graph_mark_owned_ancestors(owner, head : string;
                                        commits : array<GitCommitState> const;

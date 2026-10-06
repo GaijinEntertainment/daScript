@@ -87,9 +87,7 @@ def private count_braces(s : string; var block_depth : int&) : tuple<int; int> {
 }
 
 
-def private is_private_decl_start(line : string) : bool {
-    return regex_match(HEADER_RE, line) >= 0
-}
+def private is_private_decl_start(line : string) : bool => regex_match(HEADER_RE, line) >= 0
 
 
 def private strip_trailing_doc(line : string) : string {

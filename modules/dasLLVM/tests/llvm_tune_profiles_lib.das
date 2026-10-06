@@ -17,6 +17,4 @@ struct private ScopeDecl {}
 [tune_perm(k = 0), tune_perm(k = 1), tune_perm(k = 2),
  tune_perm(k = 3, requires = "avx2|neon"),
  tune(gen = "llvm_code_selftest::add_plus_k", fallback = "k1")]
-def prof_add(a, b : int) : int {
-    return a + b
-}
+def prof_add(a, b : int) : int => a + b

@@ -5,9 +5,7 @@ require dastest/testing_boost public
 require gltf/gltf_boost
 require math
 
-def private model_path(name : string) : string {
-    return "{get_das_root()}/tests/dasGLTF/models/{name}"
-}
+def private model_path(name : string) : string => "{get_das_root()}/tests/dasGLTF/models/{name}"
 
 // CPU mirror of the PBR vertex shader's linear-blend skinning: blend the vertex through each joint's
 // palette matrix by its weight. Used to prove the palette + animation math without a GL context.

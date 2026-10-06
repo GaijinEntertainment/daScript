@@ -13,6 +13,4 @@ struct private ScopeDecl2 {}
 
 [tune_perm(k = 0), tune_perm(k = 1), tune_perm(k = 2),
  tune(gen = "llvm_code_selftest::add_plus_k", fallback = "k2")]
-def scope_mul(a, b : int) : int {
-    return a + b
-}
+def scope_mul(a, b : int) : int => a + b

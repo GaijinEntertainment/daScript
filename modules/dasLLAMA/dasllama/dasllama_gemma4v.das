@@ -297,9 +297,8 @@ let private G4V_BLK_GEMM_NAMES <- [ "attn_q", "attn_k", "attn_v", "attn_out", "f
 
 // the block GEMM element counts in GEMMA4V_GEMM_* order — the staged layout and the served
 // offsets both size from this one list
-def private g4v_gemm_sizes(d, ff : int64) : array<int64> {
-    return <- [ d * d, d * d, d * d, d * d, d * ff, d * ff, ff * d ]
-}
+def private g4v_gemm_sizes(d, ff : int64) : array<int64> =>
+    <- [ d * d, d * d, d * d, d * d, d * ff, d * ff, ff * d ]
 
 // every tensor the forward reads, by name and element count, before any layout is committed
 def private g4v_verify_tensors(m : GGUFMeta; t : Gemma4vTower; gemm_sizes : array<int64>) {

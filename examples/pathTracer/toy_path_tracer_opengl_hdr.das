@@ -98,9 +98,8 @@ var @uniform@format = rgba32f@stage = 2 c_bloom_htex : image2D
 var @uniform c_bloom_weights : float[9]
 var @uniform c_bloom_iweights_summ : float
 
-def gaussian(x, sigma : float) {
-    return (1. / (sqrt(2. * PI) * sigma)) * exp(-(x * x) / (2. * sigma * sigma))
-}
+def gaussian(x, sigma : float) =>
+    (1. / (sqrt(2. * PI) * sigma)) * exp(-(x * x) / (2. * sigma * sigma))
 
 [compute_program(local_size_x=16, local_size_y=16)]
 def bloom_effect_copy {

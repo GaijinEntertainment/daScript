@@ -11,9 +11,8 @@ require _spirv_common
 require spirv/spirv_dis
 require spirv/spirv_grammar
 
-def private has_ext(words : array<uint>; op : GLSLstd450) : bool {
-    return op_has_operand_at(words, SpvOp.ExtInst, 3, uint(op))   // operand 3 = GLSLstd450 instruction literal
-}
+def private has_ext(words : array<uint>; op : GLSLstd450) : bool =>
+    op_has_operand_at(words, SpvOp.ExtInst, 3, uint(op))  // operand 3 = GLSLstd450 instruction literal
 
 [test]
 def test_glsl_std450_breadth(t : T?) {

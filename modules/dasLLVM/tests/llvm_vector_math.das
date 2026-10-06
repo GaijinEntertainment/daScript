@@ -49,17 +49,12 @@ struct private ErrReport {
 // written before sampling so the samples cannot fold to constants at compile time
 var private g_offset = 0.0
 
-def private on_aarch64 : bool {
-    return get_architecture_name() == "arm64"
-}
+def private on_aarch64 : bool => get_architecture_name() == "arm64"
 
-def private op_on_poly_rail(which : int) : bool {
-    return on_aarch64() || which == OP_LOG2 || which == OP_LOG || which == OP_POW
-}
+def private op_on_poly_rail(which : int) : bool =>
+    on_aarch64() || which == OP_LOG2 || which == OP_LOG || which == OP_POW
 
-def private bound(tightValue : float) : float {
-    return on_aarch64() ? tightValue : COARSE_REL
-}
+def private bound(tightValue : float) : float => on_aarch64() ? tightValue : COARSE_REL
 
 def private ramp(lo, hi : float; n : int) : array<float4> {
     var xs : array<float4>
@@ -193,13 +188,10 @@ def private report_rel(t : T?; what : string; r : ErrReport; relBound : float; w
 // the two run different algorithms by design (JIT keeps @llvm.*, interp keeps vecmath), and
 // without -jit BOTH workers are the interpreter, so the comparison only says something where the
 // emitters actually run - everywhere else it is reported as not applicable rather than green.
-def private rail_applicable(onRail : bool) : bool {
-    return jit_enabled() && onRail
-}
+def private rail_applicable(onRail : bool) : bool => jit_enabled() && onRail
 
-def private not_applicable_reason(what : string) : string {
-    return jit_enabled() ? "{what} is not on the polynomial rail on {get_architecture_name()}" : "{what}: not jitted"
-}
+def private not_applicable_reason(what : string) : string =>
+    jit_enabled() ? "{what} is not on the polynomial rail on {get_architecture_name()}" : "{what}: not jitted"
 
 def private report_div(t : T?; what : string; r : ErrReport; relBound : float; wantLanes : int) {
     t |> equal(r.lanes, wantLanes, "{what}: lanes compared")

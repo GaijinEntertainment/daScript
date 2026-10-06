@@ -389,9 +389,8 @@ def intrinsic_builtin_variant_index(var ctx : JitCtx; _expr : ExprCallFunc?; arg
     return LLVMBuildLoad2(ctx.builder, ctx.types.t_int32, arguments[0], "$::variant_index")
 }
 
-def intrinsic_builtin_set_variant_index(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
-    return LLVMBuildStore2(ctx.builder, ctx.types, ctx.types.t_int32, arguments[1], arguments[0])
-}
+def intrinsic_builtin_set_variant_index(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? =>
+    LLVMBuildStore2(ctx.builder, ctx.types, ctx.types.t_int32, arguments[1], arguments[0])
 
 def intrinsic_builtin_length(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
     assume argType = expr.arguments[0]._type
@@ -432,9 +431,8 @@ def intrinsic_is_standalone_exe(var ctx : JitCtx; _expr : ExprCallFunc?; _argume
 // ASAN/DAS_SAFE_HASH==1). Both compute the same value. Shared by the $::hash intrinsic
 // and the string-keyed table lookup lowering; for a constant key the optimizer folds the
 // whole loop to an immediate (item 4).
-def public build_string_hash(var ctx : JitCtx; strPtr : LLVMOpaqueValue?) : LLVMOpaqueValue? {
-    return is_safe_hash() ? build_string_hash_safe(ctx, strPtr) : build_string_hash_fast(ctx, strPtr)
-}
+def public build_string_hash(var ctx : JitCtx; strPtr : LLVMOpaqueValue?) : LLVMOpaqueValue? =>
+    is_safe_hash() ? build_string_hash_safe(ctx, strPtr) : build_string_hash_fast(ctx, strPtr)
 
 def build_string_hash_fast(var ctx : JitCtx; strPtr : LLVMOpaqueValue?) : LLVMOpaqueValue? {
     let i8ptr = LLVMPointerType(ctx.types.t_int8, 0u)
@@ -1022,9 +1020,8 @@ def build_math_minmax(g_builder : LLVMOpaqueBuilder?; math_op : string; expr : E
     return LLVMBuildCall2(g_builder, typ, decl, args, math_op)
 }
 
-def intrinsic_math_minmax(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
-    return build_math_minmax(ctx.builder, string(expr.func.name), expr, arguments[0], arguments[1])
-}
+def intrinsic_math_minmax(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? =>
+    build_math_minmax(ctx.builder, string(expr.func.name), expr, arguments[0], arguments[1])
 
 def intrinsic_math_clamp(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var mini = build_math_minmax(ctx.builder, "max", expr, arguments[0], arguments[1])
@@ -1083,9 +1080,8 @@ def intrinsic_math_any_float_op1(math_op : string; g_builder : LLVMOpaqueBuilder
     return LLVMBuildCall2(g_builder, typ, decl, args, math_op)
 }
 
-def intrinsic_math_float_op1(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
-    return intrinsic_math_any_float_op1(string(expr.func.name), ctx.builder, expr, arguments)
-}
+def intrinsic_math_float_op1(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? =>
+    intrinsic_math_any_float_op1(string(expr.func.name), ctx.builder, expr, arguments)
 
 def intrinsic_math_float_op1_to_int(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var op_name = ""
@@ -1204,19 +1200,16 @@ def private vmath_isplat(ctx : JitCtx; dim : int; v : uint64) : LLVMOpaqueValue?
     return res
 }
 
-def private vmath_fsplat(ctx : JitCtx; opType : TypeDeclPtr; v : double) : LLVMOpaqueValue? {
-    return build_broadcast_vector(ctx.builder, opType, LLVMConstReal(ctx.types.t_float, v))
-}
+def private vmath_fsplat(ctx : JitCtx; opType : TypeDeclPtr; v : double) : LLVMOpaqueValue? =>
+    build_broadcast_vector(ctx.builder, opType, LLVMConstReal(ctx.types.t_float, v))
 
 // ===== the inline-polynomial rail =====
 [arch(at = "../ARCHITECTURE_VECTOR_MATH.md#vector-poly-rail")]
-def private vmath_aarch64_poly_gate(opType : TypeDeclPtr) : bool {
-    return g_target_is_aarch64 && vmath_vector_float(opType)
-}
+def private vmath_aarch64_poly_gate(opType : TypeDeclPtr) : bool =>
+    g_target_is_aarch64 && vmath_vector_float(opType)
 
-def private vmath_vector_float(opType : TypeDeclPtr) : bool {
-    return opType.isVectorType && opType.vectorBaseType == Type.tFloat
-}
+def private vmath_vector_float(opType : TypeDeclPtr) : bool =>
+    opType.isVectorType && opType.vectorBaseType == Type.tFloat
 
 def private vmath_fma_decl(opType : TypeDeclPtr; lt : LLVMOpaqueType?) : LLVMOpaqueValue? {
     let fid = intrinsic_id(build_op_name("fmuladd", opType))
@@ -1224,9 +1217,8 @@ def private vmath_fma_decl(opType : TypeDeclPtr; lt : LLVMOpaqueType?) : LLVMOpa
 }
 
 [arch(at = "../ARCHITECTURE_VECTOR_MATH.md#vector-poly-fusion")]
-def private vmath_poly_step(bld : LLVMOpaqueBuilder?; a, b, c : LLVMOpaqueValue?) : LLVMOpaqueValue? {
-    return LLVMBuildFAdd(bld, LLVMBuildFMul(bld, a, b, ""), c, "")
-}
+def private vmath_poly_step(bld : LLVMOpaqueBuilder?; a, b, c : LLVMOpaqueValue?) : LLVMOpaqueValue? =>
+    LLVMBuildFAdd(bld, LLVMBuildFMul(bld, a, b, ""), c, "")
 
 def private vmath_call1(ctx : JitCtx; opType : TypeDeclPtr; op_name : string; x : LLVMOpaqueValue?) : LLVMOpaqueValue? {
     let lt = type_to_llvm_type(opType)
@@ -2550,15 +2542,13 @@ def intrinsic_dot32_ps_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : 
 // promotes it to a ymm across a block loop — the llama.cpp vec_dot shape: no per-block fold or
 // hsum, ONE reduce per row in the caller). The das call is void — the non-null return only marks
 // "intrinsic emitted" for make_call.
-def intrinsic_dot32_acc8_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
-    return emit_dot32_acc8(ctx, _expr, arguments, false)
-}
+def intrinsic_dot32_acc8_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? =>
+    emit_dot32_acc8(ctx, _expr, arguments, false)
 
 // Emitter for x64_avx::dot32_acc8_vnni (gated by g_x64_vnni256_intrin_lookup): the acc8 shape with
 // the quads from ONE VPDPBUSD — identical exact quads, identical float tail.
-def intrinsic_dot32_acc8_vnni_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
-    return emit_dot32_acc8(ctx, _expr, arguments, true)
-}
+def intrinsic_dot32_acc8_vnni_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? =>
+    emit_dot32_acc8(ctx, _expr, arguments, true)
 
 def emit_dot32_acc8(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>; use_vnni : bool) : LLVMOpaqueValue? {
     var quads = emit_dot32_quads(ctx, _expr, arguments[1], arguments[2], use_vnni)
@@ -2583,15 +2573,13 @@ def emit_dot32_acc8(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<L
 // x64_avx::dot32_mx4 — LUT dequant in-register (emit_mx4_dequant_v), then dot32's exact chain +
 // fold on the dequantized bytes (|lut| <= 12 bounds PMADDUBSW pair sums to 3072 — no saturation).
 // Integer arithmetic throughout, so this and the daslang fallback agree bit for bit.
-def intrinsic_dot32_mx4_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
-    return emit_dot32_mx4(ctx, _expr, arguments, false)
-}
+def intrinsic_dot32_mx4_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? =>
+    emit_dot32_mx4(ctx, _expr, arguments, false)
 
 // Emitter for x64_avx::dot32_mx4_vnni (gated by g_x64_vnni256_intrin_lookup): the mx4 LUT dequant
 // unchanged, the dot step as ONE VPDPBUSD — identical exact int4 result.
-def intrinsic_dot32_mx4_vnni_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
-    return emit_dot32_mx4(ctx, _expr, arguments, true)
-}
+def intrinsic_dot32_mx4_vnni_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? =>
+    emit_dot32_mx4(ctx, _expr, arguments, true)
 
 def emit_dot32_mx4(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>; use_vnni : bool) : LLVMOpaqueValue? {
     let v32i8 = LLVMVectorType(ctx.types.t_int8, 32u)
@@ -2754,13 +2742,11 @@ def emit_dot32_quads_v(var ctx : JitCtx; _expr : ExprCallFunc?; wvec, xvec : LLV
     return LLVMBuildCall2(ctx.builder, maddwdTy, maddwd_decl, maddwdArgs, "dot32.quads")
 }
 
-def intrinsic_dot64_acc16_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
-    return emit_dot64_acc16(ctx, _expr, arguments, false)
-}
+def intrinsic_dot64_acc16_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? =>
+    emit_dot64_acc16(ctx, _expr, arguments, false)
 
-def intrinsic_dot64_acc16_vnni_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
-    return emit_dot64_acc16(ctx, _expr, arguments, true)
-}
+def intrinsic_dot64_acc16_vnni_x64(var ctx : JitCtx; _expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? =>
+    emit_dot64_acc16(ctx, _expr, arguments, true)
 
 // Core for x64_avx::dot64_acc16 / _vnni: TWO Q8 blocks per call on zmm. There is no VPSIGNB at
 // 512 bits, so sign application is compare+negate+select — w==0 lanes keep x instead of zeroing,

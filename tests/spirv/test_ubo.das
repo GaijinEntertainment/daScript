@@ -23,9 +23,8 @@ def private validate(t : T?; words : array<uint>; lbl : string) {
 
 // MemberDecorate operands are [struct_id, member, decoration, value]; Offset is at idx 2 with the
 // byte offset adjacent at idx 3, so op_has_operand_pair(Offset, off) is an exact layout assertion.
-def private has_member_offset(words : array<uint>; off : uint) : bool {
-    return op_has_operand_pair(words, SpvOp.MemberDecorate, uint(SpvDecoration.Offset), off)
-}
+def private has_member_offset(words : array<uint>; off : uint) : bool =>
+    op_has_operand_pair(words, SpvOp.MemberDecorate, uint(SpvDecoration.Offset), off)
 
 [test]
 def test_ubo_fragment(t : T?) {

@@ -179,17 +179,15 @@ def each_child_reverse(node : xml_node; name : string) : iterator<xml_node> {
 
 // ============ LINQ source — typed iteration over child elements ============
 
-def private read_xml_attr(a : xml_attribute; defv : auto(TT)) : TT {
-    return defv     // generic fallback — a field type with no specific reader keeps its default
-}
-def private read_xml_attr(a : xml_attribute; defv : int) : int { return as_int(a, defv); }
-def private read_xml_attr(a : xml_attribute; defv : uint) : uint { return as_uint(a, defv); }
-def private read_xml_attr(a : xml_attribute; defv : float) : float { return as_float(a, defv); }
-def private read_xml_attr(a : xml_attribute; defv : double) : double { return as_double(a, defv); }
-def private read_xml_attr(a : xml_attribute; defv : bool) : bool { return as_bool(a, defv); }
-def private read_xml_attr(a : xml_attribute; defv : string) : string {
-    return clone_string(as_string(a, defv))     // clone out of the document so the row survives the RAII block
-}
+def private read_xml_attr(a : xml_attribute; defv : auto(TT)) : TT =>
+    defv  // generic fallback — a field type with no specific reader keeps its default
+def private read_xml_attr(a : xml_attribute; defv : int) : int => as_int(a, defv)
+def private read_xml_attr(a : xml_attribute; defv : uint) : uint => as_uint(a, defv)
+def private read_xml_attr(a : xml_attribute; defv : float) : float => as_float(a, defv)
+def private read_xml_attr(a : xml_attribute; defv : double) : double => as_double(a, defv)
+def private read_xml_attr(a : xml_attribute; defv : bool) : bool => as_bool(a, defv)
+def private read_xml_attr(a : xml_attribute; defv : string) : string =>
+    clone_string(as_string(a, defv))  // clone out of the document so the row survives the RAII block
 
 def build_xml_row(node : xml_node; var row) {
     //! Fills *row*'s scalar fields from same-named attributes of *node*. A missing attribute

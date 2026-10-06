@@ -89,9 +89,7 @@ def private cell_arm_enc(arm, fmt : int; raw; var h; var s; var pc; groups : int
     }
 }
 
-def private tile_arms_all() : array<int> {
-    return <- [ARM_CM2_L, ARM_CM2_M, ARM_CM2_S, ARM_KHR, ARM_CM2_E]
-}
+def private tile_arms_all() : array<int> => <- [ARM_CM2_L, ARM_CM2_M, ARM_CM2_S, ARM_KHR, ARM_CM2_E]
 
 //! a tile cell's fixture: the format's packed weight and scale planes moved in, the f16 activation plane built here with the engine's read slack past the two regions
 struct TileFixture {
@@ -1522,14 +1520,11 @@ def private safe_half(i : uint) : uint {
     return tab[i % 8u]
 }
 
-def private ws_word(i : uint) : uint {
-    return safe_half(i * 7u + 3u) | (safe_half(i * 3u + 1u) << 16u)
-}
+def private ws_word(i : uint) : uint => safe_half(i * 7u + 3u) | (safe_half(i * 3u + 1u) << 16u)
 
 //! `n` scale words `ws_word(i * mul + add)`: two finite halves a word
-def private ws_plane(n : int; mul, add : uint) : array<uint> {
-    return <- [for (i in range(n)); ws_word(uint(i) * mul + add)]
-}
+def private ws_plane(n : int; mul, add : uint) : array<uint> =>
+    <- [for (i in range(n)); ws_word(uint(i) * mul + add)]
 
 // ===== CPU oracles =====
 // The reference side of every arm: plain sequential math (the Metal kernel-unit pattern), or the
@@ -4380,9 +4375,7 @@ struct NformPlanes {
 }
 
 //! a read-back plane's words as the floats the kernel stored
-def private plane_floats(w : array<uint>) : array<float> {
-    return <- [for (x in w); uint_bits_to_float(x)]
-}
+def private plane_floats(w : array<uint>) : array<float> => <- [for (x in w); uint_bits_to_float(x)]
 
 //! the words of `ncols` live columns of a plane off between the forms; a live column the N form never wrote - every word still the sentinel - counts whole
 def private nform_plane_mismatch(one, nf : array<uint>; ncols, head, words : int) : int {
@@ -6458,9 +6451,8 @@ def private dn_fixture(nrows, nslots, ds : int; out_f32 : bool) : DnFixture {
 }
 
 //! `dn_step_rows_run` over the fixture's `nrows` rows (`proj` the rows' projections, `st` the slots' states, `sm` the smalls) in `pars` / `slots`
-def private dn_fixture_run(f : DnFixture; proj, st, sm : array<float>; pars, slots : array<int>; nrows : int; ds : int; out_f32 : bool; seq : bool = false) : DnRowsOut {
-    return <- dn_step_rows_run(proj, st, sm, pars, slots, nrows, f.nblk, ds, f.nvh, f.nkh, f.cd, f.dconv, f.offs, f.eps, f.qscale, out_f32, seq)
-}
+def private dn_fixture_run(f : DnFixture; proj, st, sm : array<float>; pars, slots : array<int>; nrows : int; ds : int; out_f32 : bool; seq : bool = false) : DnRowsOut =>
+    <- dn_step_rows_run(proj, st, sm, pars, slots, nrows, f.nblk, ds, f.nvh, f.nkh, f.cd, f.dconv, f.offs, f.eps, f.qscale, out_f32, seq)
 
 //! a row's beta and alpha rows moved to row 0's place in a copy of `sm`: the one-row dispatch reads row 0
 def private dn_row_smalls(sm : array<float>; r, beta_off, g_off, bstride, nvh : int) : array<float> {

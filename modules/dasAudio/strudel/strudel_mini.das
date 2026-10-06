@@ -169,9 +169,7 @@ struct private Parser {
     pos    : int = 0
 }
 
-def private peek(p : Parser) : Token {
-    return p.tokens[p.pos]
-}
+def private peek(p : Parser) : Token => p.tokens[p.pos]
 
 def private advance(var p : Parser) : Token {
     let tok = p.tokens[p.pos]
@@ -187,9 +185,7 @@ def private expect_token(var p : Parser; kind : TokenKind) : Token {
     return advance(p)
 }
 
-def private at_end(p : Parser) : bool {
-    return p.tokens[p.pos].kind == TokenKind.EOF_TOKEN
-}
+def private at_end(p : Parser) : bool => p.tokens[p.pos].kind == TokenKind.EOF_TOKEN
 
 // Is the current token the start of an element?
 def private is_element_start(p : Parser) : bool {
@@ -348,9 +344,7 @@ def private parse_atom(var p : Parser) : Pattern {
 // ─── Note Name Parsing ───
 
 //! the note letter folded to lower case: `C4` and `Bb3` name the same notes as `c4` and `bb3`
-def private note_letter(ch : int) : int {
-    return (ch >= 'A' && ch <= 'G') ? ch + ('a' - 'A') : ch
-}
+def private note_letter(ch : int) : int => (ch >= 'A' && ch <= 'G') ? ch + ('a' - 'A') : ch
 
 def parse_note_name(name : string) : float {
     //! Parse a note name with explicit octave (`"c3"`, `"eb4"`, `"fs2"`) into a MIDI

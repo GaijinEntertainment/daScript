@@ -11,29 +11,21 @@ require dasllama/dasllama_unicode
 // llama3 chunks digits \p{N}{1,3}, qwen2 emits one digit per token — `group_digits` selects between
 // them; qwen35 = qwen2 digits plus marks absorbed into letter runs ([\p{L}\p{M}]+).
 
-def private tolower_ascii(c : int) : int {
-    return (c >= 'A' && c <= 'Z') ? c + 32 : c
-}
+def private tolower_ascii(c : int) : int => (c >= 'A' && c <= 'Z') ? c + 32 : c
 
-def private uL(cpts : array<int>; pos : int) : bool {
-    return pos >= 0 && pos < length(cpts) && cpt_is_letter(cpts[pos])
-}
+def private uL(cpts : array<int>; pos : int) : bool =>
+    pos >= 0 && pos < length(cpts) && cpt_is_letter(cpts[pos])
 // letter-or-mark: the qwen35 letter class [\p{L}\p{M}] when marks, plain \p{L} otherwise
-def private is_lm(cpt : int; marks : bool) : bool {
-    return cpt_is_letter(cpt) || (marks && cpt_is_mark(cpt))
-}
-def private uLM(cpts : array<int>; pos : int; marks : bool) : bool {
-    return pos >= 0 && pos < length(cpts) && is_lm(cpts[pos], marks)
-}
-def private uN(cpts : array<int>; pos : int) : bool {
-    return pos >= 0 && pos < length(cpts) && cpt_is_number(cpts[pos])
-}
-def private uW(cpts : array<int>; pos : int) : bool {
-    return pos >= 0 && pos < length(cpts) && cpt_is_whitespace(cpts[pos])
-}
-def private uC(cpts : array<int>; pos : int) : int {
-    return (pos >= 0 && pos < length(cpts)) ? cpts[pos] : -1
-}
+def private is_lm(cpt : int; marks : bool) : bool =>
+    cpt_is_letter(cpt) || (marks && cpt_is_mark(cpt))
+def private uLM(cpts : array<int>; pos : int; marks : bool) : bool =>
+    pos >= 0 && pos < length(cpts) && is_lm(cpts[pos], marks)
+def private uN(cpts : array<int>; pos : int) : bool =>
+    pos >= 0 && pos < length(cpts) && cpt_is_number(cpts[pos])
+def private uW(cpts : array<int>; pos : int) : bool =>
+    pos >= 0 && pos < length(cpts) && cpt_is_whitespace(cpts[pos])
+def private uC(cpts : array<int>; pos : int) : int =>
+    (pos >= 0 && pos < length(cpts)) ? cpts[pos] : -1
 
 def pretok_split(cpts : array<int>; group_digits : bool; marks : bool = false) : array<int> {   // nolint:STYLE037,STYLE038 - one arm per alternation of the llama3 pre-tokenizer regex; splitting hides the regex shape
     var offs : array<int>

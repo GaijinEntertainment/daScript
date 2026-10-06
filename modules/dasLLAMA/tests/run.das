@@ -389,9 +389,8 @@ let MODULE_AREAS <- {
     "dasllama_vulkan_decode" => "llm", "dasllama_vulkan_prefill" => "llm", "dasllama_vulkan_seams" => "llm"
 }
 
-def private csv_list(csv : string) : array<string> {
-    return <- [for (tok in split(csv, ",")); strip(tok); where !empty(strip(tok))]
-}
+def private csv_list(csv : string) : array<string> =>
+    <- [for (tok in split(csv, ",")); strip(tok); where !empty(strip(tok))]
 
 //! a changed path -> the areas it reaches (empty for a path outside the module, and for a model-suite
 //! test file - those take --arm). Non-private: test_run_suites.das pins the table

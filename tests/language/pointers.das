@@ -214,13 +214,9 @@ def test_intptr(t : T?) {
     }
 }
 
-def ip_twice(a : int) : int {
-    return a * 2
-}
+def ip_twice(a : int) : int => a * 2
 
-def ip_thrice(a : int) : int {
-    return a * 3
-}
+def ip_thrice(a : int) : int => a * 3
 
 [test]
 def test_reinterpret(t : T?) {

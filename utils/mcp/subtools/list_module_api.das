@@ -11,13 +11,10 @@ def is_operator_function(name : string) : bool {
     return !is_alpha(ch) && !is_number(ch) && ch != '_'
 }
 
-def name_matches_filter(name : string; filter : string) : bool {
-    return empty(filter) || symbol_matches(name, filter)
-}
+def name_matches_filter(name : string; filter : string) : bool =>
+    empty(filter) || symbol_matches(name, filter)
 
-def want_section(section : string; name : string) : bool {
-    return empty(section) || section == name
-}
+def want_section(section : string; name : string) : bool => empty(section) || section == name
 
 def write_compact_func_signature(var w : StringBuilderWriter; func) {
     var has_args = false

@@ -10,9 +10,8 @@ require ../harness/vk_spv_diff.das
 // "byte-identical" claim rests on: its four bins over two in-memory dumps, and the verdict's refusal
 // of a side with nothing in it.
 
-def private dump_of(stamps : table<string; array<uint8>>) : table<string; array<uint8>> {
-    return <- clone_to_move(stamps)
-}
+def private dump_of(stamps : table<string; array<uint8>>) : table<string; array<uint8>> =>
+    <- clone_to_move(stamps)
 
 [test]
 def test_vk_spv_diff_bins(t : T?) {

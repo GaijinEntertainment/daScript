@@ -266,9 +266,8 @@ def public finalize(var m : GltfVkModel) {
 
 def private pair_key(mat_slot, skin_slot : int) : int => mat_slot * 4096 + skin_slot + 1
 
-def private variant_key(skinned, blend, double_sided : bool) : int {
-    return (skinned ? 1 : 0) | (blend ? 2 : 0) | (double_sided ? 4 : 0)
-}
+def private variant_key(skinned, blend, double_sided : bool) : int =>
+    (skinned ? 1 : 0) | (blend ? 2 : 0) | (double_sided ? 4 : 0)
 
 def private material_at(scene : GltfScene; mat_slot : int) : GltfMaterial {
     if (mat_slot >= 0 && mat_slot < length(scene.materials)) {

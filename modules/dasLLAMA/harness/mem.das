@@ -13,13 +13,9 @@ require dasllama/dasllama_transformer   // umbrella fires each arch [init] regis
 
 let DEFAULT_MODEL = "/Users/borisbatkin/Work/llama.cpp/models/tinyllama-1.1b-chat-v1.0.Q8_0.gguf"
 
-def mb(b : int64) : double {
-    return double(b) / 1048576.0lf
-}
+def mb(b : int64) : double => double(b) / 1048576.0lf
 
-def heap_mb() : double {
-    return double(int64(heap_bytes_allocated())) / 1048576.0lf
-}
+def heap_mb() : double => double(int64(heap_bytes_allocated())) / 1048576.0lf
 
 def report(tag : string; t : Model) {
     let f = footprint(t)

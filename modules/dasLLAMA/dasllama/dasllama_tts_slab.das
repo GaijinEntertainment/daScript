@@ -500,9 +500,8 @@ def tts_conv_ok(c : TtsConv1d) : bool {
         && (c.q8 ? !empty(c.wq) : (!empty(c.w) || !empty(c.wt) || !empty(c.transposed ? c.wtr : c.wk))))
 }
 
-def tts_lin_ok(l : TtsLinear) : bool {
-    return l.nin >= 1l && l.nout >= 1l && (l.q8 ? !empty(l.wq) : (l.kq_fmt != 0 ? !empty(l.kq) : (!empty(l.w) || !empty(l.wt))))
-}
+def tts_lin_ok(l : TtsLinear) : bool =>
+    l.nin >= 1l && l.nout >= 1l && (l.q8 ? !empty(l.wq) : (l.kq_fmt != 0 ? !empty(l.kq) : (!empty(l.w) || !empty(l.wt))))
 
 //! a linear the dense GEMM stamps serve: `nin` a multiple of 32, since the stamps read X's K columns to the padded width and the row buffers carry no zeroed pad
 def tts_gemm_lin_ok(l : TtsLinear) : bool => tts_lin_ok(l) && l.nin % 32l == 0l
@@ -929,9 +928,8 @@ def tts_pk_layer_dims_ok(l : PocketLayer; d, ffn : int64) : bool {
         && long_length(l.norm1.w) == d && long_length(l.norm2.w) == d)
 }
 
-def tts_pk_layer_ok(l : PocketLayer; d, ffn : int64) : bool {
-    return tts_pk_layer_dims_ok(l, d, ffn) && tts_gemm_lin_ok(l.in_proj) && tts_gemm_lin_ok(l.out_proj) && tts_gemm_lin_ok(l.ffn1) && tts_gemm_lin_ok(l.ffn2)
-}
+def tts_pk_layer_ok(l : PocketLayer; d, ffn : int64) : bool =>
+    tts_pk_layer_dims_ok(l, d, ffn) && tts_gemm_lin_ok(l.in_proj) && tts_gemm_lin_ok(l.out_proj) && tts_gemm_lin_ok(l.ffn1) && tts_gemm_lin_ok(l.ffn2)
 
 //! a transformer the row kernels serve: the width on the 32 lattice, heads of `hs`, the ffn on the 32 lattice
 def tts_pk_tf_ok(tf : PocketTransformer; hs : int64) : bool {

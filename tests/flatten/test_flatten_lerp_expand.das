@@ -20,38 +20,27 @@ var G_B = 4.0
 
 // ----- round trip: expand -> nothing folds -> re-fuse to the same call -----
 [flatten]
-def le_round(a : float; b : float; t : float) : float {
-    return lerp(a, b, t)
-}
+def le_round(a : float; b : float; t : float) : float => lerp(a, b, t)
 
 [flatten]
-def le_vec(a : float3; b : float3; t : float) : float3 {
-    return lerp(a, b, t)
-}
+def le_vec(a : float3; b : float3; t : float) : float3 => lerp(a, b, t)
 
 // ----- const selectors: fire on the call before any expansion -----
 [flatten]
-def le_t0(a : float; b : float) : float {
-    return lerp(a, b, 0.0)
-}
+def le_t0(a : float; b : float) : float => lerp(a, b, 0.0)
 
 [flatten]
-def le_t1(a : float; b : float) : float {
-    return lerp(a, b, 1.0)
-}
+def le_t1(a : float; b : float) : float => lerp(a, b, 1.0)
 
 // ----- the smin shape: expansion hands the pieces to reassoc/mad fusion; whether the lerp
 // ----- re-fuses depends on the canonical term order, so this twin is differential-only
 [flatten]
-def le_merge(d : float; ds : float; h : float; k : float) : float {
-    return lerp(d, ds, h) + k * h * (h - 1.0)
-}
+def le_merge(d : float; ds : float; h : float; k : float) : float =>
+    lerp(d, ds, h) + k * h * (h - 1.0)
 
 // ----- uniform bounds: expansion exposes `G_B - G_A` to the preshader split -----
 [flatten]
-def le_preshader(x : float) : float {
-    return lerp(G_A, G_B, x)
-}
+def le_preshader(x : float) : float => lerp(G_A, G_B, x)
 
 var GRID <- [-100.0, -3.5, -1.0, 0.0, 1.0, 2.5, 7.0, 100.0]
 

@@ -62,9 +62,8 @@ def private moe_gpu_unset_ffn(var goutp : float?; offs1 : int64 const?; offs3 : 
 }
 
 [unused_argument(wq, ws, woff, n, rows, fmt, stream)]
-def private moe_gpu_unset_upload(wq : uint8 const?; ws : uint8 const?; woff : int64; n : int64; rows : int64; fmt : int; stream : bool) : bool {
-    return false
-}
+def private moe_gpu_unset_upload(wq : uint8 const?; ws : uint8 const?; woff : int64; n : int64; rows : int64; fmt : int; stream : bool) : bool =>
+    false
 
 [unused_argument(yp, woff, xqp, xsp, n, d, fmt)]
 def private moe_gpu_unset_cls(var yp : float?; woff : int64; xqp : int8 const?; xsp : float const?; n, d : int64; fmt : int) {
@@ -821,9 +820,7 @@ def public set_moe_gpu_layer_count(k : int64) {
     g_installed_marks.layer_count = k
 }
 
-def public moe_gpu_layer_count : int64 {
-    return g_moe_gpu_installed ? g_installed_marks.layer_count : 0l
-}
+def public moe_gpu_layer_count : int64 => g_moe_gpu_installed ? g_installed_marks.layer_count : 0l
 
 //! Loader contract: called once per load after the resident set is known (layers - K .. layers).
 def public set_moe_gpu_from_layer(from_layer : int64) {
@@ -845,18 +842,16 @@ def public set_moe_gpu_stream_from(from_layer : int64) {
     g_installed_marks.stream_from = from_layer
 }
 
-def public moe_gpu_layer_streamed(l : int64) : bool {
-    return g_moe_gpu_installed && l >= g_installed_marks.stream_from && l < g_installed_marks.from_layer
-}
+def public moe_gpu_layer_streamed(l : int64) : bool =>
+    g_moe_gpu_installed && l >= g_installed_marks.stream_from && l < g_installed_marks.from_layer
 
 //! Loader contract: the resident classifier plane's element offset (-1 = none; reset per load).
 def public set_moe_gpu_cls_off(woff : int64) {
     g_installed_marks.cls_off = woff
 }
 
-def public moe_gpu_cls_on_gpu(woff : int64) : bool {
-    return g_moe_gpu_installed && g_moe_gpu_cls_route && woff == g_installed_marks.cls_off
-}
+def public moe_gpu_cls_on_gpu(woff : int64) : bool =>
+    g_moe_gpu_installed && g_moe_gpu_cls_route && woff == g_installed_marks.cls_off
 
 //! Runtime routing gate over the resident classifier plane (the --cls-ab in-process lever).
 //! Route flip only — the upload and its VRAM residency stay, matching the other tier gates.
@@ -871,9 +866,8 @@ def public set_moe_gpu_dense_off(fmt : int; woff : int64) {
     g_installed_marks.dense_offs |> insert(woff * 8l + int64(fmt))
 }
 
-def public moe_gpu_dense_on_gpu(fmt : int; woff : int64) : bool {
-    return g_moe_gpu_installed && g_moe_gpu_dense_route && key_exists(g_installed_marks.dense_offs, woff * 8l + int64(fmt))
-}
+def public moe_gpu_dense_on_gpu(fmt : int; woff : int64) : bool =>
+    g_moe_gpu_installed && g_moe_gpu_dense_route && key_exists(g_installed_marks.dense_offs, woff * 8l + int64(fmt))
 
 //! Runtime routing gate over the dense marks: uploads stay resident, only the funnels' routing
 //! flips. The in-process A/B lever — both arms share one process, one residency, one budget
@@ -889,17 +883,14 @@ def public set_moe_gpu_dn_layer(l : int64; woq : int64) {
 }
 
 //! The marked layer's qkv plane offset (-1 when the layer carries no resident triple).
-def public moe_gpu_dn_layer_key(l : int64) : int64 {
-    return g_installed_marks.dn_layers?[l] ?? -1l
-}
+def public moe_gpu_dn_layer_key(l : int64) : int64 => g_installed_marks.dn_layers?[l] ?? -1l
 
 def public reset_moe_gpu_dn_layers {
     g_installed_marks.dn_layers |> clear()
 }
 
-def public moe_gpu_dn_on_gpu(l : int64) : bool {
-    return g_moe_gpu_installed && g_moe_gpu_dn_route && key_exists(g_installed_marks.dn_layers, l)
-}
+def public moe_gpu_dn_on_gpu(l : int64) : bool =>
+    g_moe_gpu_installed && g_moe_gpu_dn_route && key_exists(g_installed_marks.dn_layers, l)
 
 //! Runtime routing gate over the deltanet marks (the --dn-ab in-process lever; uploads stay).
 def public set_moe_gpu_dn_route(on : bool) {
@@ -960,9 +951,8 @@ def public set_gpu_kv_room_hook(f : GpuKvRoomFn) {
 
 def public gpu_kv_room_hook() : GpuKvRoomFn => g_gpu_kv_room
 
-def public moe_gpu_dnd_on_gpu(l : int64) : bool {
-    return g_moe_gpu_installed && g_moe_gpu_dnd_route && key_exists(g_installed_marks.dn_layers, l)
-}
+def public moe_gpu_dnd_on_gpu(l : int64) : bool =>
+    g_moe_gpu_installed && g_moe_gpu_dnd_route && key_exists(g_installed_marks.dn_layers, l)
 
 //! Runtime routing gate over the deltanet DECODE step (the --dnd-ab in-process lever).
 def public set_moe_gpu_dnd_route(on : bool) {
@@ -973,9 +963,8 @@ def public set_moe_gpu_dnd_route(on : bool) {
 def public moe_gpu_dnd_route() : bool => g_moe_gpu_dnd_route
 
 //! The installed state-residency seams, for a cell that overrides one and restores the set.
-def public moe_gpu_dn_state_hooks() : tuple<flush : MoeGpuDnFlushFn; inval : MoeGpuDnInvalidateFn; release : MoeGpuDnReleaseFn> {
-    return (flush = g_moe_gpu_dn_flush, inval = g_moe_gpu_dn_invalidate, release = g_moe_gpu_dn_release)
-}
+def public moe_gpu_dn_state_hooks() : tuple<flush : MoeGpuDnFlushFn; inval : MoeGpuDnInvalidateFn; release : MoeGpuDnReleaseFn> =>
+    (flush = g_moe_gpu_dn_flush, inval = g_moe_gpu_dn_invalidate, release = g_moe_gpu_dn_release)
 
 //! Tier registration of the state-residency seams (beside install_moe_gpu_tier).
 def public set_moe_gpu_dn_state_hooks(flush : MoeGpuDnFlushFn; inval : MoeGpuDnInvalidateFn; release : MoeGpuDnReleaseFn) {
@@ -1007,9 +996,8 @@ def public set_moe_gpu_attn_layer(l : int64) {
     g_installed_marks.attn_layers |> insert(l)
 }
 
-def public moe_gpu_attn_on_gpu(l : int64) : bool {
-    return g_moe_gpu_installed && g_moe_gpu_attn_route && key_exists(g_installed_marks.attn_layers, l)
-}
+def public moe_gpu_attn_on_gpu(l : int64) : bool =>
+    g_moe_gpu_installed && g_moe_gpu_attn_route && key_exists(g_installed_marks.attn_layers, l)
 
 //! Runtime routing gate over the attention marks (the --attn-ab in-process lever; uploads stay).
 def public set_moe_gpu_attn_route(on : bool) {
@@ -1031,9 +1019,8 @@ typedef MoeGpuFfnJoinFn = function<(var goutp : float?) : void>
 
 [unused_argument(l, idx, k, hit, o1, o3, o2)]
 def private moe_gpu_unset_heat_query(l : int64; idx : int64 const?; k : int64;
-                                     var hit : int8?; var o1 : int64?; var o3 : int64?; var o2 : int64?) : int64 {
-    return 0l
-}
+                                     var hit : int8?; var o1 : int64?; var o3 : int64?; var o2 : int64?) : int64 =>
+                                         0l
 
 [unused_argument(l, b1, b3, b2, f1, f3, f2, n, nfe, ids, nids)]
 def private moe_gpu_unset_heat_advise(l : int64; b1, b3, b2 : int64; f1, f3, f2 : int;
@@ -1068,9 +1055,7 @@ def public set_moe_gpu_heat_hooks(query : MoeGpuHeatQueryFn; advise : MoeGpuHeat
     g_moe_gpu_heat_installed = true
 }
 
-def public moe_gpu_heat_on : bool {
-    return g_moe_gpu_heat_installed && g_moe_gpu_heat_route
-}
+def public moe_gpu_heat_on : bool => g_moe_gpu_heat_installed && g_moe_gpu_heat_route
 
 // ===== the f16-fed (cm2) expert chain: an optional seat beside the FFN hook =====
 
@@ -1096,9 +1081,8 @@ def public set_moe_gpu_ffn_xf_hooks(ffn : MoeGpuFfnXfFn; ok : MoeGpuFfnXfOkFn) {
 
 //! Does the tier serve a layer whose expert triple is (f1, f3, f2) through the f16-fed chain at
 //! this window? Asked per layer: the formats decide, and the tier's x plane bounds the window.
-def public moe_gpu_ffn_xf_ok(npos, n : int64; f1, f3, f2 : int) : bool {
-    return invoke(g_moe_gpu_ffn_xf_ok, npos, n, f1, f3, f2)
-}
+def public moe_gpu_ffn_xf_ok(npos, n : int64; f1, f3, f2 : int) : bool =>
+    invoke(g_moe_gpu_ffn_xf_ok, npos, n, f1, f3, f2)
 
 // The async twin of the f16-fed chain: begin submits and returns, join waits and reads the
 // combined rows. ONE in flight. The streamed-layer split runs its CPU tail between the two.
@@ -1133,9 +1117,8 @@ def public set_moe_gpu_ffn_xf_async_hooks(begin : MoeGpuFfnXfBeginFn; join : Moe
 }
 
 //! The bucket-row cap of the async arm (one chunk); 0 when no async chain is installed.
-def public moe_gpu_ffn_xf_async_rows(n, nfe : int64) : int64 {
-    return invoke(g_moe_gpu_ffn_xf_rows, n, nfe)
-}
+def public moe_gpu_ffn_xf_async_rows(n, nfe : int64) : int64 =>
+    invoke(g_moe_gpu_ffn_xf_rows, n, nfe)
 
 //! Runtime routing gate over the heat cache (the --heat-ab in-process lever; pins/uploads stay).
 def public set_moe_gpu_heat_route(on : bool) {
@@ -1162,9 +1145,8 @@ def public set_moe_gpu_shexp_layer(l : int64) {
     g_installed_marks.shexp_layers |> insert(l)
 }
 
-def public moe_gpu_shexp_on_gpu(l : int64) : bool {
-    return g_moe_gpu_installed && g_moe_gpu_shexp_route && key_exists(g_installed_marks.shexp_layers, l)
-}
+def public moe_gpu_shexp_on_gpu(l : int64) : bool =>
+    g_moe_gpu_installed && g_moe_gpu_shexp_route && key_exists(g_installed_marks.shexp_layers, l)
 
 //! The prefill's shared expert stays on the CPU for `why`: said once per reason per model while the tier is armed.
 [cold_path]
@@ -1209,9 +1191,8 @@ def public set_moe_gpu_qkv_layer(l : int64) {
     g_installed_marks.qkv_layers |> insert(l)
 }
 
-def public moe_gpu_qkv_on_gpu(l : int64) : bool {
-    return g_moe_gpu_installed && key_exists(g_installed_marks.qkv_layers, l)
-}
+def public moe_gpu_qkv_on_gpu(l : int64) : bool =>
+    g_moe_gpu_installed && key_exists(g_installed_marks.qkv_layers, l)
 
 // ===== per-model mark sets + whole-model drop (multi-model hosts) =====
 // The loader-contract marks are keyed by WEIGHT ELEMENT OFFSETS and two models' offset spaces
@@ -1513,9 +1494,7 @@ def public warn_gpu_backend_absent {
 
 //! (Re-)arm the GPU tier from the current want. False = no GPU backend in this build,
 //! nothing requested, or the device probe failed.
-def moe_gpu_tier_arm_() : bool {
-    return invoke(g_moe_gpu_arm)
-}
+def moe_gpu_tier_arm_() : bool => invoke(g_moe_gpu_arm)
 
 //! The tier reports its resident VRAM bytes through this hook (registered beside the arm probe).
 def public set_moe_gpu_vram_report(f : function<() : int64>) {
@@ -1620,9 +1599,8 @@ def public moe_gpu_dry_bake_arm(v : DlimVulkanConfig) : bool => invoke(g_moe_gpu
 typedef MoeGpuSliceWindow = tuple<wq : void?; ws : void?; wqb : int64; wsb : int64>
 
 [unused_argument(woff, fmt)]
-def private moe_gpu_no_slice_window(woff : int64; fmt : int) : MoeGpuSliceWindow {
-    return default<MoeGpuSliceWindow>
-}
+def private moe_gpu_no_slice_window(woff : int64; fmt : int) : MoeGpuSliceWindow =>
+    default<MoeGpuSliceWindow>
 
 var private g_moe_gpu_slice_window = @@moe_gpu_no_slice_window
 
@@ -1661,9 +1639,8 @@ def public set_moe_gpu_would_accept_fn(f : function<(n : int64; rows : int64; fm
     g_moe_gpu_would_accept = f
 }
 
-def public moe_gpu_would_accept(n : int64; rows : int64; fmt : int; stream : bool) : bool {
-    return invoke(g_moe_gpu_would_accept, n, rows, fmt, stream)
-}
+def public moe_gpu_would_accept(n : int64; rows : int64; fmt : int; stream : bool) : bool =>
+    invoke(g_moe_gpu_would_accept, n, rows, fmt, stream)
 
 def private moe_gpu_no_bake_tag : string => ""
 
@@ -1682,9 +1659,7 @@ def public moe_gpu_bake_tag : string => invoke(g_moe_gpu_bake_tag)
 //! Device-layout bytes one [rows x n] plane of `fmt` occupies (quants + scales). 0 = no tier.
 def public moe_gpu_plane_bytes(n, rows : int64; fmt : int) : int64 => invoke(g_moe_gpu_plane_bytes_fn, n, rows, fmt)
 
-def public moe_gpu_tier_installed : bool {
-    return g_moe_gpu_installed
-}
+def public moe_gpu_tier_installed : bool => g_moe_gpu_installed
 
 //! Loader contract: total transformer layers of the loaded model (resident/streamed counts).
 def public set_moe_gpu_total_layers(n : int64) {
@@ -1893,9 +1868,8 @@ def public note_gpu_cpu_pass(reason_slot : int) {
 }
 
 //! Calls the served GPU path handed to the CPU rails since the model armed, one row per reason that fired - an empty answer is the device serving every call.
-def gpu_cpu_passes_() : array<tuple<reason : string; words : string; count : int64>> {
-    return <- [for (r, w, n in g_gpu_cpu_pass_reasons, g_gpu_cpu_pass_words, g_gpu_cpu_pass_counts); (reason = r, words = w, count = n); where n > 0l]
-}
+def gpu_cpu_passes_() : array<tuple<reason : string; words : string; count : int64>> =>
+    <- [for (r, w, n in g_gpu_cpu_pass_reasons, g_gpu_cpu_pass_words, g_gpu_cpu_pass_counts); (reason = r, words = w, count = n); where n > 0l]
 
 //! Upload one weight stack ([rows x n] at woff) as the GPU tier's row-major planes — q8 (fmt 0):
 //! int8 quants + f16 scales; native K-quant (k4/k5/k6): superblock payloads + decoded scale rows.
@@ -2031,16 +2005,13 @@ def public matmul_moe_gpu_attn_dec_hydrate(woq : int64; fq : int; kp : uint8 con
 //! The mirrors change hands: after a GPU prefill from position 0 they hold the prefilling session's
 //! rows (fresh = false keeps them); a session decoding from position 0 starts them EMPTY (fresh =
 //! true zeroes every layer's count). The tier mints a generation the session keeps (Session.dat_gen).
-def public moe_gpu_attn_dec_claim(fresh : bool) : int64 {
-    return invoke(g_moe_gpu_attn_dec_claim, fresh)
-}
+def public moe_gpu_attn_dec_claim(fresh : bool) : int64 => invoke(g_moe_gpu_attn_dec_claim, fresh)
 
 //! Does the block serve the token at `pos` of the layer whose q plane sits at `woq` in format `fq` (the pair is the layer's
 //! identity: offsets are per format plane) for the session holding generation `gen`?
 //! One of DAT_SERVE / DAT_STALE_GEN / DAT_HYDRATE / DAT_NEVER.
-def public moe_gpu_attn_dec_ok(woq : int64; fq : int; pos, gen : int64) : int {
-    return invoke(g_moe_gpu_attn_dec_ok, woq, fq, pos, gen)
-}
+def public moe_gpu_attn_dec_ok(woq : int64; fq : int; pos, gen : int64) : int =>
+    invoke(g_moe_gpu_attn_dec_ok, woq, fq, pos, gen)
 
 //! One layer's decode attention on the GPU (q/k/v projections, bias, qk-norm+rope into the layer's
 //! mirror, attention over it, wo). `xb2` gets the wo row; `k`/`v` the RAW projection rows (before the

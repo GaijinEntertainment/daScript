@@ -256,6 +256,5 @@ def bot_lookahead_move(game : GameState; player_idx : int; seed : int; w : Looka
 }
 
 // Convenience overload with default weights
-def bot_lookahead_move(game : GameState; player_idx : int; seed : int) : Move {
-    return bot_lookahead_move(game, player_idx, seed, LOOKAHEAD_DEFAULT)
-}
+def bot_lookahead_move(game : GameState; player_idx : int; seed : int) : Move =>
+    bot_lookahead_move(game, player_idx, seed, LOOKAHEAD_DEFAULT)

@@ -56,9 +56,8 @@ def private gh_line(args : array<string>) : string {
     return gh(args, out) == 0 ? trim(out) : ""
 }
 
-def private head_sha(cfg : Config) : string {
-    return gh_line(["api", "repos/{cfg.repo}/pulls/{cfg.pr}", "--jq", ".head.sha"])
-}
+def private head_sha(cfg : Config) : string =>
+    gh_line(["api", "repos/{cfg.repo}/pulls/{cfg.pr}", "--jq", ".head.sha"])
 
 // non-empty output lines; ok=false on spawn/api failure so a caller never reads an error page as data
 def private gh_lines(args : array<string>; var ok : bool&) : array<string> {

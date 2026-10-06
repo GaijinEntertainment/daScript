@@ -264,9 +264,8 @@ def private g3v_gemm_types_uniform(m : GGUFMeta; names : array<string>; n_layer 
 
 // the SERVED block GEMM element counts in GEMMA3V_GEMM_* order (the FFN pair at ff_pad; the
 // file's tensors are n_ff-sized and the stage read zero-pads them into these regions)
-def private g3v_gemm_sizes(d, fp : int64) : array<int64> {
-    return <- [ d * d, d * d, d * d, d * d, d * fp, fp * d ]
-}
+def private g3v_gemm_sizes(d, fp : int64) : array<int64> =>
+    <- [ d * d, d * d, d * d, d * d, d * fp, fp * d ]
 
 // every tensor the forward reads, by name and FILE element count, before any layout is committed
 def private g3v_verify_tensors(m : GGUFMeta; t : Gemma3vTower; names : array<string>) {

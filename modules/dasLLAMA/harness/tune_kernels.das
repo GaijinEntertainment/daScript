@@ -277,9 +277,8 @@ def private size_windows(ok : array<bool>) {
     }
 }
 
-def private row_median(i : int) : double {
-    return (length(g_samples) > i && !empty(g_samples[i])) ? tune_median(g_samples[i]) : 0.0lf
-}
+def private row_median(i : int) : double =>
+    (length(g_samples) > i && !empty(g_samples[i])) ? tune_median(g_samples[i]) : 0.0lf
 
 // after the screen: the finalists are the rows whose screen median beats the shipped fallback
 // by the margin AND sit within that band of the best such row — the best and its twins, the
@@ -653,29 +652,22 @@ def private race_variants(vs : array<auto>; gate : block<(i : int) : bool>; befo
 }
 
 def private race_variants(vs : array<auto>; gate : block<(i : int) : bool>; window : block<(i : int) : void>;
-                          round_end : block<() : void>) : RaceRows {
-    return <- race_variants(vs, gate, $(_i : int) {}, window, round_end)
-}
+                          round_end : block<() : void>) : RaceRows =>
+                              <- race_variants(vs, gate, $(_i : int) {}, window, round_end)
 
-def private race_variants(vs : array<auto>; gate : block<(i : int) : bool>; window : block<(i : int) : void>) : RaceRows {
-    return <- race_variants(vs, gate, $(_i : int) {}, window, $ {})
-}
+def private race_variants(vs : array<auto>; gate : block<(i : int) : bool>; window : block<(i : int) : void>) : RaceRows =>
+    <- race_variants(vs, gate, $(_i : int) {}, window, $ {})
 
-def private report(kernel : string; rows : RaceRows) : string {
-    return report(kernel, rows.names, rows.best, rows.ok)
-}
+def private report(kernel : string; rows : RaceRows) : string =>
+    report(kernel, rows.names, rows.best, rows.ok)
 
 //! the relative error an f64-reference gate holds a variant's output to (TOL)
-def private rel_err(got, want : double) : double {
-    return abs(got - want) / (abs(want) + 1.0lf)
-}
+def private rel_err(got, want : double) : double => abs(got - want) / (abs(want) + 1.0lf)
 
 let REL_INF = uint64_bits_to_double(0x7ff0000000000000ul)   //! a NaN error reads as +infinity: it fails the bar and no later finite error replaces it
 
 //! the running worst of `maxrel` and `rel`, a NaN `rel` sticky as +infinity
-def private worst_rel(maxrel, rel : double) : double {
-    return is_nan(rel) ? REL_INF : max(maxrel, rel)
-}
+def private worst_rel(maxrel, rel : double) : double => is_nan(rel) ? REL_INF : max(maxrel, rel)
 
 //! a use of a race's accumulated result, so the timed calls are not dead code
 def private keep_live(sink : float) {

@@ -33,9 +33,8 @@ def private shuffle_masked() : byte16 {
     return shuffle(mk_lut(), ubyte16(15u, 14u, 13u, 12u, 0u, 1u, 2u, 3u, 31u, 16u, 5u, 5u, 5u, 5u, 7u, 8u))
 }
 
-def private shuffle_identity() : byte16 {
-    return shuffle(mk_lut(), ubyte16(0u, 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u, 13u, 14u, 15u))
-}
+def private shuffle_identity() : byte16 =>
+    shuffle(mk_lut(), ubyte16(0u, 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u, 13u, 14u, 15u))
 
 [test]
 def test_lattice_idot(t : T?) {

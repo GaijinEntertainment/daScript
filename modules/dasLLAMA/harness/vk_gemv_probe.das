@@ -190,9 +190,8 @@ def private probe_fmt(fmt : KqFmt; n, d : int; lanes_per_row : uint; ncols : int
 }
 
 //! one probe row of either class at `ncols` (0 = the one-column class)
-def private probe_any(fmt : KqFmt; n, d : int; ncols : int) : tuple<mb : double; us : double> {
-    return probe_fmt(fmt, n, d, fmt == KqFmt.q8 ? 0u : gemv_lanes_per_row(int(fmt), int64(n)), ncols)
-}
+def private probe_any(fmt : KqFmt; n, d : int; ncols : int) : tuple<mb : double; us : double> =>
+    probe_fmt(fmt, n, d, fmt == KqFmt.q8 ? 0u : gemv_lanes_per_row(int(fmt), int64(n)), ncols)
 
 //! the N-column ruler: the one-column class, then the N-column class at 1, 2, 4 and 8 rows, per format (the q8 rows
 //! take the two-rows-a-subgroup stamps past `g_q8_n2_min_n`, which `main` holds at 0 for the run unless `n2off`),

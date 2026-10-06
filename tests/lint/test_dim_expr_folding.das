@@ -6,9 +6,7 @@ require daslib/ast_boost
 require daslib/perf_lint
 require strings
 
-def fixture_path() : string {
-    return "{get_das_root()}/tests/lint/_fixture_dim_expr_folding.das"
-}
+def fixture_path() : string => "{get_das_root()}/tests/lint/_fixture_dim_expr_folding.das"
 
 def compile_under_lint_policies(t : T?; blk : block<(program : smart_ptr<Program>) : void>) {
     var inscope access <- make_file_access("")

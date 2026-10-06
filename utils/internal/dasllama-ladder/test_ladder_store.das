@@ -10,9 +10,8 @@ require daslib/strings_boost   // replace — the re-measure fixture edit
 // Store-level coverage: policy gates, source stamping, the sidecar lookup ladder,
 // official replace-by-identity, and the admin levers — no HTTP anywhere.
 
-def private test_policy : LadderPolicy {
-    return LadderPolicy(max_records_bytes = 65536, max_sidecar_bytes = 4096, max_submissions_per_ip_hour = 2)
-}
+def private test_policy : LadderPolicy =>
+    LadderPolicy(max_records_bytes = 65536, max_sidecar_bytes = 4096, max_submissions_per_ip_hour = 2)
 
 def private ident_a : BoxIdentity {
     var b : BoxIdentity

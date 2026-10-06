@@ -52,30 +52,22 @@ require math
 //! The layout companion (six-function stamp): the repack interleave (mr) the stamped tile reads.
 //! Reference body = the reference tile's grp4; generator declines in lockstep with the tile
 //! generator, so a perm the tile can't emit keeps the grp4 reference pair on both sides.
-def q8q8_layout_gen() : int {
-    return q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
-}
+def q8q8_layout_gen() : int => q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
 
 //! The wbias companion (slice H): additive bias baked into the grp<mr> plane's GROUP-row bytes —
 //! 128 for bias128 vpdpbusd perms (w^0x80, −128·Σx acc-init correction), 0 otherwise. Reference
 //! body = the unbiased grp4 pair, declining in lockstep so plane bytes and kernels never disagree.
-def q8q8_wbias_gen() : int {
-    return q8q8_repack_type(GEMM_REFERENCE_MR()).wbias
-}
+def q8q8_wbias_gen() : int => q8q8_repack_type(GEMM_REFERENCE_MR()).wbias
 
 //! The kgroup companion (slice J): k-bytes per row per interleave group — 8 for smmla perms
 //! (row-pair × 8-k MMA operands), 4 for every vector-dot perm. Reference body = the kg4 grp4
 //! pair, declining in lockstep so plane byte order and kernels never disagree.
-def q8q8_kgroup_gen() : int {
-    return q8q8_repack_type(GEMM_REFERENCE_MR()).kgroup
-}
+def q8q8_kgroup_gen() : int => q8q8_repack_type(GEMM_REFERENCE_MR()).kgroup
 
 //! The tokstep companion (slice I): tokens one stamped tile call covers — 16·nrsplit for amx int8
 //! perms (TMUL macro is square in tile units), 32 for amx bf16, 4 for every vector perm; the batch wrapper walks
 //! its (token, row-group) space off it. Reference body = the 4-token contract.
-def q8q8_tokstep_gen() : int {
-    return 4
-}
+def q8q8_tokstep_gen() : int => 4
 
 //! The tile-config companion (slice K I1): a raw-tile stamp (int8 latch=1, every bf16 perm) carries
 //! no per-call ldtilecfg/tilerelease, so the batch wrapper calls this once per dispatch chunk to load
@@ -84,9 +76,7 @@ def q8q8_amx_cfg_gen() : void {}
 
 //! The tile-form companion: 0 = the int8 plane and Q8 activations; N = the bf16 TMUL leg over a
 //! bf16 panel of N row groups (the kq families' contract). Reference body = the plane form.
-def q8q8_tileform_gen() : int {
-    return 0
-}
+def q8q8_tileform_gen() : int => 0
 
 def q8q8_panel_gen(wg : int8 const?; sg : float const?; mr, nb, n, ngr : int64; var dst : uint16?) : void {
     unsafe {
@@ -123,9 +113,7 @@ def q8q8_panel_s16_gen(wg : int8 const?; sg : uint16 const?; mr, nb, n, ngr : in
 //! The witness companion: did the stamped family actually EMIT here? true ⟺ every slot below is
 //! generated code. Read at backend SELECTION time only, never [init] (the slice C rule) — a
 //! declined stamp keeps x64-gen unavailable (slow NEON fallback) but arm64-gen stays available.
-def q8q8_family_live() : bool {
-    return false
-}
+def q8q8_family_live() : bool => false
 
 //! The GEMV companion (nr=1 sub-family, slice D): a rows-range core over rows [rb, re) of one
 //! region, no internal dispatch, rb/re multiples of the stamped mr. Reference body = the hand
@@ -266,206 +254,142 @@ def kq_grp_row_dot(fmt : int64; kqg : uint8 const?; ksg : uint8 const?; r, mr : 
 //! The per-format K-quant layout companions: plane interleave (mr) each format's stamped kernels
 //! read. Each format tunes separately and takes its own winner's mr — k5/k6 tiles prefer grp4
 //! while q8 crowns grp8 (M1, 2026-07-12). Reference bodies = grp4, declining in lockstep.
-def k4q8_layout_gen() : int {
-    return q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
-}
+def k4q8_layout_gen() : int => q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
 
-def k5q8_layout_gen() : int {
-    return q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
-}
+def k5q8_layout_gen() : int => q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
 
-def k6q8_layout_gen() : int {
-    return q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
-}
+def k6q8_layout_gen() : int => q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
 
-def q40q8_layout_gen() : int {
-    return q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
-}
+def q40q8_layout_gen() : int => q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
 
 //! The kq families' amx companions (the amx_bf16 leg): tileform = the operand form (0 = quant planes +
 //! Q8_K; N = a bf16 panel of N groups + bf16 activations, a tile call covering amx_bf16_tile_tokens()),
 //! amx_cfg = the per-chunk LDTILECFG, witness = the XTILEDATA grant.
 def amx_bf16_tile_tokens() : int64 => 32l
 
-def k4q8_tileform_gen() : int {
-    return 0
-}
+def k4q8_tileform_gen() : int => 0
 
 def k4q8_amx_cfg_gen() : void {}
 
-def k4q8_witness_gen() : bool {
-    return false
-}
+def k4q8_witness_gen() : bool => false
 
-def k5q8_tileform_gen() : int {
-    return 0
-}
+def k5q8_tileform_gen() : int => 0
 
 def k5q8_amx_cfg_gen() : void {}
 
-def k5q8_witness_gen() : bool {
-    return false
-}
+def k5q8_witness_gen() : bool => false
 
-def k6q8_tileform_gen() : int {
-    return 0
-}
+def k6q8_tileform_gen() : int => 0
 
 def k6q8_amx_cfg_gen() : void {}
 
-def k6q8_witness_gen() : bool {
-    return false
-}
+def k6q8_witness_gen() : bool => false
 
-def q40q8_tileform_gen() : int {
-    return 0
-}
+def q40q8_tileform_gen() : int => 0
 
 def q40q8_amx_cfg_gen() : void {}
 
-def q40q8_witness_gen() : bool {
-    return false
-}
+def q40q8_witness_gen() : bool => false
 
 def q40q8_panel_gen(kqg : uint8 const?; ksg : uint8 const?; mr, nsb, n, ngr : int64; var dst : uint16?) : void {
     kq_panel_rows_bf16(40, kqg, ksg, mr, nsb, n, ngr, dst)
 }
 
-def iq4xsq8_tileform_gen() : int {
-    return 0
-}
+def iq4xsq8_tileform_gen() : int => 0
 
 def iq4xsq8_amx_cfg_gen() : void {}
 
-def iq4xsq8_witness_gen() : bool {
-    return false
-}
+def iq4xsq8_witness_gen() : bool => false
 
 def iq4xsq8_panel_gen(kqg : uint8 const?; ksg : uint8 const?; mr, nsb, n, ngr : int64; var dst : uint16?) : void {
     kq_panel_rows_bf16(44, kqg, ksg, mr, nsb, n, ngr, dst)
 }
 
-def iq3s4q8_tileform_gen() : int {
-    return 0
-}
+def iq3s4q8_tileform_gen() : int => 0
 
 def iq3s4q8_amx_cfg_gen() : void {}
 
-def iq3s4q8_witness_gen() : bool {
-    return false
-}
+def iq3s4q8_witness_gen() : bool => false
 
 def iq3s4q8_panel_gen(kqg : uint8 const?; ksg : uint8 const?; mr, nsb, n, ngr : int64; var dst : uint16?) : void {
     kq_panel_rows_bf16(35, kqg, ksg, mr, nsb, n, ngr, dst)
 }
 
-def k3q8_tileform_gen() : int {
-    return 0
-}
+def k3q8_tileform_gen() : int => 0
 
 def k3q8_amx_cfg_gen() : void {}
 
-def k3q8_witness_gen() : bool {
-    return false
-}
+def k3q8_witness_gen() : bool => false
 
 def k3q8_panel_gen(kqg : uint8 const?; ksg : uint8 const?; mr, nsb, n, ngr : int64; var dst : uint16?) : void {
     kq_panel_rows_bf16(3, kqg, ksg, mr, nsb, n, ngr, dst)
 }
 
-def iq3sq8_tileform_gen() : int {
-    return 0
-}
+def iq3sq8_tileform_gen() : int => 0
 
 def iq3sq8_amx_cfg_gen() : void {}
 
-def iq3sq8_witness_gen() : bool {
-    return false
-}
+def iq3sq8_witness_gen() : bool => false
 
 def iq3sq8_panel_gen(kqg : uint8 const?; ksg : uint8 const?; mr, nsb, n, ngr : int64; var dst : uint16?) : void {
     kq_panel_rows_bf16(33, kqg, ksg, mr, nsb, n, ngr, dst)
 }
 
-def iq3xxsq8_tileform_gen() : int {
-    return 0
-}
+def iq3xxsq8_tileform_gen() : int => 0
 
 def iq3xxsq8_amx_cfg_gen() : void {}
 
-def iq3xxsq8_witness_gen() : bool {
-    return false
-}
+def iq3xxsq8_witness_gen() : bool => false
 
 def iq3xxsq8_panel_gen(kqg : uint8 const?; ksg : uint8 const?; mr, nsb, n, ngr : int64; var dst : uint16?) : void {
     kq_panel_rows_bf16(34, kqg, ksg, mr, nsb, n, ngr, dst)
 }
 
-def iq4nlq8_tileform_gen() : int {
-    return 0
-}
+def iq4nlq8_tileform_gen() : int => 0
 
 def iq4nlq8_amx_cfg_gen() : void {}
 
-def iq4nlq8_witness_gen() : bool {
-    return false
-}
+def iq4nlq8_witness_gen() : bool => false
 
 def iq4nlq8_panel_gen(kqg : uint8 const?; ksg : uint8 const?; mr, nsb, n, ngr : int64; var dst : uint16?) : void {
     kq_panel_rows_bf16(45, kqg, ksg, mr, nsb, n, ngr, dst)
 }
 
-def k2q8_tileform_gen() : int {
-    return 0
-}
+def k2q8_tileform_gen() : int => 0
 
 def k2q8_amx_cfg_gen() : void {}
 
-def k2q8_witness_gen() : bool {
-    return false
-}
+def k2q8_witness_gen() : bool => false
 
 def k2q8_panel_gen(kqg : uint8 const?; ksg : uint8 const?; mr, nsb, n, ngr : int64; var dst : uint16?) : void {
     kq_panel_rows_bf16(2, kqg, ksg, mr, nsb, n, ngr, dst)
 }
 
-def iq2sq8_tileform_gen() : int {
-    return 0
-}
+def iq2sq8_tileform_gen() : int => 0
 
 def iq2sq8_amx_cfg_gen() : void {}
 
-def iq2sq8_witness_gen() : bool {
-    return false
-}
+def iq2sq8_witness_gen() : bool => false
 
 def iq2sq8_panel_gen(kqg : uint8 const?; ksg : uint8 const?; mr, nsb, n, ngr : int64; var dst : uint16?) : void {
     kq_panel_rows_bf16(23, kqg, ksg, mr, nsb, n, ngr, dst)
 }
 
-def iq2xsq8_tileform_gen() : int {
-    return 0
-}
+def iq2xsq8_tileform_gen() : int => 0
 
 def iq2xsq8_amx_cfg_gen() : void {}
 
-def iq2xsq8_witness_gen() : bool {
-    return false
-}
+def iq2xsq8_witness_gen() : bool => false
 
 def iq2xsq8_panel_gen(kqg : uint8 const?; ksg : uint8 const?; mr, nsb, n, ngr : int64; var dst : uint16?) : void {
     kq_panel_rows_bf16(24, kqg, ksg, mr, nsb, n, ngr, dst)
 }
 
-def iq2xxsq8_tileform_gen() : int {
-    return 0
-}
+def iq2xxsq8_tileform_gen() : int => 0
 
 def iq2xxsq8_amx_cfg_gen() : void {}
 
-def iq2xxsq8_witness_gen() : bool {
-    return false
-}
+def iq2xxsq8_witness_gen() : bool => false
 
 def iq2xxsq8_panel_gen(kqg : uint8 const?; ksg : uint8 const?; mr, nsb, n, ngr : int64; var dst : uint16?) : void {
     kq_panel_rows_bf16(25, kqg, ksg, mr, nsb, n, ngr, dst)
@@ -678,45 +602,25 @@ def k6q8_panel_gen(kqg : uint8 const?; ksg : uint8 const?; mr, nsb, n, ngr : int
     kq_panel_rows_bf16(6, kqg, ksg, mr, nsb, n, ngr, dst)
 }
 
-def iq4xsq8_layout_gen() : int {
-    return q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
-}
+def iq4xsq8_layout_gen() : int => q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
 
-def iq3s4q8_layout_gen() : int {
-    return q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
-}
+def iq3s4q8_layout_gen() : int => q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
 
-def k3q8_layout_gen() : int {
-    return q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
-}
+def k3q8_layout_gen() : int => q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
 
-def iq3sq8_layout_gen() : int {
-    return q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
-}
+def iq3sq8_layout_gen() : int => q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
 
-def iq3xxsq8_layout_gen() : int {
-    return q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
-}
+def iq3xxsq8_layout_gen() : int => q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
 
-def iq4nlq8_layout_gen() : int {
-    return q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
-}
+def iq4nlq8_layout_gen() : int => q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
 
-def k2q8_layout_gen() : int {
-    return q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
-}
+def k2q8_layout_gen() : int => q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
 
-def iq2sq8_layout_gen() : int {
-    return q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
-}
+def iq2sq8_layout_gen() : int => q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
 
-def iq2xsq8_layout_gen() : int {
-    return q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
-}
+def iq2xsq8_layout_gen() : int => q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
 
-def iq2xxsq8_layout_gen() : int {
-    return q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
-}
+def iq2xxsq8_layout_gen() : int => q8q8_repack_type(GEMM_REFERENCE_MR()).interleave
 
 // the KernelBackend.kq_layout slot form of kq_layout_of (registered on both gen backends)
 def private kq_layout_fmt_gen(fmt : int) : int => int(kq_layout_of(fmt))
@@ -1662,9 +1566,7 @@ def private repack_mx4_bake(var np : uint8?; var ep : uint8?; n, d : int64) {
 //! The q51 layout companion: the grp interleave the stamped q51 rows core reads. Reference
 //! body = 1 (grp1 IS the disk order byte-for-byte), so a declined stamp keeps the verbatim
 //! planes and the scalar walk coherent.
-def q51q8_layout_gen() : int {
-    return 1
-}
+def q51q8_layout_gen() : int => 1
 
 
 // the backend q51 repack slot: stamped only; the bake twin below is what set_bake_q51_repack
@@ -1747,9 +1649,7 @@ def q51q8_tile_gen(var yp : float?; qgp : uint8 const?; sgp : uint8 const?; xqp 
 // bytes + one f16 d a block, the codebook decode, no min term) =====
 
 //! The iq4nl32 layout companion: reference body = 1 (grp1 IS the disk order), the q51 rule.
-def iq4nl32q8_layout_gen() : int {
-    return 1
-}
+def iq4nl32q8_layout_gen() : int => 1
 
 def private repack_iq4nl32_gen(var qp : uint8?; var sp : uint8?; n, d : int64) {
     repack_kq_grp(KqFmt.iq4nl32, qp, sp, n, d, int64(iq4nl32q8_layout_gen()))
@@ -2980,21 +2880,13 @@ struct KqRegistries {
     panel : array<tuple<string; KqPanelGenFn>>
 }
 
-def kq_registries(_f : KqTag_q8) : KqRegistries {
-    return <- KqRegistries()
-}
+def kq_registries(_f : KqTag_q8) : KqRegistries => <- KqRegistries()
 
-def kq_registries(_f : KqTag_q51) : KqRegistries {
-    return <- KqRegistries()
-}
+def kq_registries(_f : KqTag_q51) : KqRegistries => <- KqRegistries()
 
-def kq_registries(_f : KqTag_iq4nl32) : KqRegistries {
-    return <- KqRegistries()
-}
+def kq_registries(_f : KqTag_iq4nl32) : KqRegistries => <- KqRegistries()
 
-def kq_registries(_f : KqTag_mx4) : KqRegistries {
-    return <- KqRegistries()
-}
+def kq_registries(_f : KqTag_mx4) : KqRegistries => <- KqRegistries()
 
 def kq_registries(_f : KqTag_k4) : KqRegistries {
     static_if (typeinfo module_exists(llvm_tune)) {

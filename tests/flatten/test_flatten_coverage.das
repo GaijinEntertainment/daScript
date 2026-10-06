@@ -12,31 +12,21 @@ require daslib/flatten
 
 // ----- helper callees -----
 
-def sq(a : int) : int {
-    return a * a
-}
+def sq(a : int) : int => a * a
 
-def addk(a : int; k : int) : int {
-    return a + k
-}
+def addk(a : int; k : int) : int => a + k
 
-def konst : int {       // 0-parameter callee
-    return 42
-}
+def konst : int => 42  // 0-parameter callee
 
 // ----- lift_expr: ExprOp1 (unary) wrapping a user call -----
 [flatten]
-def f_unary(x : int) : int {
-    return -sq(x) + 1
-}
+def f_unary(x : int) : int => -sq(x) + 1
 
 // ----- lift_expr: ExprOp3 (source ternary) with a user call in each arm -----
 // Branchless lowering inlines BOTH arms unconditionally, then selects — relies
 // on both callees being pure (double-eval is harmless).
 [flatten]
-def f_ternary(x : int) : int {
-    return x > 0 ? sq(x) : addk(x, 5)
-}
+def f_ternary(x : int) : int => x > 0 ? sq(x) : addk(x, 5)
 
 // ----- inline_call: structPred non-null (user call inside an if branch) -----
 [flatten]
@@ -49,9 +39,7 @@ def f_call_in_if(x : int) : int {
 
 // ----- inline_call: 0-parameter callee (param-bind loop runs zero times) -----
 [flatten]
-def f_zero_param(x : int) : int {
-    return x + konst()
-}
+def f_zero_param(x : int) : int => x + konst()
 
 // ----- lower_stmt: bare expression statement (discarded user call) -----
 [flatten]

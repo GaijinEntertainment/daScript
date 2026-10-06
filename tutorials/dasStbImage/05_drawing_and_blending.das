@@ -17,9 +17,8 @@ require daslib/fio
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────
 
-def pack_rgba(r, g, b, a : int) : uint {
-    return uint(r) | (uint(g) << 8u) | (uint(b) << 16u) | (uint(a) << 24u)
-}
+def pack_rgba(r, g, b, a : int) : uint =>
+    uint(r) | (uint(g) << 8u) | (uint(b) << 16u) | (uint(a) << 24u)
 
 def print_pixel(img : Image; x, y : int; lbl : string) {
     let idx = (y * img.width + x) * 4

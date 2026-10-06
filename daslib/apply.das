@@ -269,9 +269,7 @@ class FindEscapingReturn : AstVisitor {
     def override preVisitExprReturn(expr : ExprReturn?) : void {
         found = true
     }
-    def override canVisitMakeBlockBody(expr : ExprMakeBlock?) : bool {
-        return false
-    }
+    def override canVisitMakeBlockBody(expr : ExprMakeBlock?) : bool => false
 }
 
 [macro_function]

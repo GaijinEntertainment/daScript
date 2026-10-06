@@ -33,9 +33,7 @@ struct public TextLanguageProfile {
     ghost_completion : bool = true
 }
 
-def private standard_brackets : array<int2> {
-    return <- [int2('(', ')'), int2('{', '}'), int2('[', ']')]
-}
+def private standard_brackets : array<int2> => <- [int2('(', ')'), int2('{', '}'), int2('[', ']')]
 
 def private profile_daslang : TextLanguageProfile {
     return <- TextLanguageProfile(name = "daslang",
@@ -134,9 +132,8 @@ def private profile_json : TextLanguageProfile {
         ghost_completion = false)
 }
 
-def private profile_plain : TextLanguageProfile {
-    return <- TextLanguageProfile(name = "plain", ghost_completion = false)
-}
+def private profile_plain : TextLanguageProfile =>
+    <- TextLanguageProfile(name = "plain", ghost_completion = false)
 
 var private g_profiles : table<string; TextLanguageProfile>
 

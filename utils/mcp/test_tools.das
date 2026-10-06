@@ -72,9 +72,7 @@ def parse_result(result : string; var text : string&; var is_error : bool&) : bo
     return true
 }
 
-def fixture_path(name : string) : string {
-    return "utils/mcp/tests/{name}"
-}
+def fixture_path(name : string) : string => "utils/mcp/tests/{name}"
 
 def private require_ast_grep(t : T?) : bool {
     if (!empty(get_ast_grep_cmd())) return true
@@ -396,9 +394,8 @@ def private json_array_has(arr : JsonValue?; wanted : string) : bool {
     return false
 }
 
-def private project_root_fixture() : string {
-    return path_join(get_das_root(), "utils/mcp/tests/_pretend_root")
-}
+def private project_root_fixture() : string =>
+    path_join(get_das_root(), "utils/mcp/tests/_pretend_root")
 
 //! the pretend root's second module folder: its descriptor registers the tree's UnitTest C++ module
 //! and a require path of its own, and every tool asked with project_root sees both - as does a plain run
@@ -2035,9 +2032,8 @@ def make_temp_text_file(t : T?; prefix : string; ext : string; body : string) : 
 }
 
 
-def make_temp_corpus_file(t : T?; body : string) : string {
-    return make_temp_text_file(t, "detect_dupe_mcp_test", ".json", body)
-}
+def make_temp_corpus_file(t : T?; body : string) : string =>
+    make_temp_text_file(t, "detect_dupe_mcp_test", ".json", body)
 
 
 [test]
@@ -2184,9 +2180,8 @@ def test_export_corpus_writes_envelope(t : T?) {
 }
 
 
-def make_temp_paths_file(t : T?; content : string) : string {
-    return make_temp_text_file(t, "export_corpus_paths", ".txt", content)
-}
+def make_temp_paths_file(t : T?; content : string) : string =>
+    make_temp_text_file(t, "export_corpus_paths", ".txt", content)
 
 
 [test]
@@ -2734,9 +2729,7 @@ def test_cpp_using_alias_visible(t : T?) {
 }
 
 
-def private has_compile_db(text : string) : bool {
-    return find(text, "No compile_commands.json") < 0
-}
+def private has_compile_db(text : string) : bool => find(text, "No compile_commands.json") < 0
 
 [test]
 def test_cpp_compile_check(t : T?) {

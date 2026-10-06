@@ -26,9 +26,7 @@ def bary_frag {
     out_color = float4(dot(v, w), w.x, w.y, w.z)
 }
 
-def public bary_words : array<uint> {
-    return clone_to_move(bary_spv)
-}
+def public bary_words : array<uint> => clone_to_move(bary_spv)
 
 // OpExtension operand words encode the extension-name string (LSB-first bytes, NUL-terminated).
 // Reassemble across each OpExtension and substring-search the requested name.

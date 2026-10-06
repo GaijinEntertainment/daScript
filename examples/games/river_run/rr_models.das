@@ -48,9 +48,7 @@ def private weld(var dst : GeometryFragment; src : GeometryFragment;
     }
 }
 
-def private no_rot() : float4 {
-    return float4(0.0, 0.0, 0.0, 1.0)
-}
+def private no_rot() : float4 => float4(0.0, 0.0, 0.0, 1.0)
 
 def private axis_rot(axis : float3; angle : float) : float4 {
     let h = angle * 0.5
@@ -336,9 +334,7 @@ def private gen_shard(seed : int) : GeometryFragment {
     return <- frag
 }
 
-def gen_shard_variant(i : int) : GeometryFragment {
-    return <- gen_shard(i % SHARD_VARIANTS)
-}
+def gen_shard_variant(i : int) : GeometryFragment => <- gen_shard(i % SHARD_VARIANTS)
 
 // ============================================================================
 // Bank flora

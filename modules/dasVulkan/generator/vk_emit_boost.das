@@ -101,9 +101,7 @@ struct OwnerInfo {
     pool_owned : bool       //! freed by a pool (cmd buffers / descriptor sets) -> finalize no-op
 }
 
-def private is_boost_handle(em : EmitModel; tn : string) : bool {
-    return key_exists(em.handle_names, tn)
-}
+def private is_boost_handle(em : EmitModel; tn : string) : bool => key_exists(em.handle_names, tn)
 
 //! a command is a destroyer if it is named vkDestroy*/vkFree* and takes a handle param
 def private find_destroyers(reg : VkRegistry; em : EmitModel) : table<string; int> {
@@ -234,9 +232,7 @@ def private count_members_of(s : VkStructDef) : table<string> {
     return <- counts
 }
 
-def private elem_is_handle(em : EmitModel; tn : string) : bool {
-    return key_exists(em.handle_names, tn)
-}
+def private elem_is_handle(em : EmitModel; tn : string) : bool => key_exists(em.handle_names, tn)
 
 //! resolve a C type name to a das scalar, chasing one base_types alias (VkDeviceSize -> uint64)
 def private arr_scalar_elem(reg : VkRegistry; tn : string) : string {
@@ -280,9 +276,7 @@ def private is_double_ptr_alt(s : VkStructDef; m : VkMember) : bool {
 //! map a struct member to a boost field; FieldKind.hard signals "skip the whole struct".
 //! `mappable` is the set of struct names known to have a boost vk_view (for array-of-struct).
 //! a len member that denotes a SIZE IN BYTES rather than a count of elements
-def private len_is_bytes(len : string) : bool {
-    return len == "size" || len |> ends_with("Size")
-}
+def private len_is_bytes(len : string) : bool => len == "size" || len |> ends_with("Size")
 
 def private classify_field(reg : VkRegistry; em : EmitModel; s : VkStructDef; m : VkMember; counts : table<string>; mappable : table<string>) : BoostField {
     var bf = BoostField(name = das_safe_name(m.name), raw_name = m.name)
@@ -513,9 +507,8 @@ def public derive_views(reg : VkRegistry; em : EmitModel; var skip_log : array<s
     return <- views
 }
 
-def private is_array_kind(k : FieldKind) : bool {
-    return k == FieldKind.arr_scalar || k == FieldKind.arr_handle || k == FieldKind.arr_struct
-}
+def private is_array_kind(k : FieldKind) : bool =>
+    k == FieldKind.arr_scalar || k == FieldKind.arr_handle || k == FieldKind.arr_struct
 
 //! vk_view_create_unsafe writes `b` (its scratch fields) only for array / opt-struct-ptr fields;
 //! a struct with none is read-only, so the create param drops `var` and the destroy is a no-op.

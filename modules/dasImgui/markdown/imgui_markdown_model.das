@@ -582,13 +582,11 @@ def public md_selected_display_range(run : RichInlineRun const;
     return run.display
 }
 
-def private md_html_text(value : string) : string {
-    return value |> replace("&", "&amp;") |> replace("<", "&lt;") |> replace(">", "&gt;")
-}
+def private md_html_text(value : string) : string =>
+    value |> replace("&", "&amp;") |> replace("<", "&lt;") |> replace(">", "&gt;")
 
-def private md_html_attribute(value : string) : string {
-    return value |> md_html_text() |> replace("\"", "&quot;") |> replace("'", "&#39;")
-}
+def private md_html_attribute(value : string) : string =>
+    value |> md_html_text() |> replace("\"", "&quot;") |> replace("'", "&#39;")
 
 def private md_markdown_text(value : string) : string {
     var result = value |> replace("\\", "\\\\")
@@ -601,9 +599,8 @@ def private md_markdown_text(value : string) : string {
     return result
 }
 
-def private md_markdown_destination(value : string) : string {
-    return value |> replace("\\", "\\\\") |> replace(")", "\\)")
-}
+def private md_markdown_destination(value : string) : string =>
+    value |> replace("\\", "\\\\") |> replace(")", "\\)")
 
 def private md_export_uri(var value : string&; uri : string) {
     if (empty(uri)) return

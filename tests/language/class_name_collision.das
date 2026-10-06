@@ -9,9 +9,7 @@ require _finalize_collision_helper
 // with error[30810] on the class declaration itself.
 class Doppel {
     y : int = 2
-    def value : int {
-        return y
-    }
+    def value : int => y
 }
 
 // deriving from the required module's twin while the local Doppel exists - the

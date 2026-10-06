@@ -602,9 +602,8 @@ class ValidateShaderVisitor : AstVisitor {
     }
 
 
-    def override canVisitFunctionArgumentInit(fun : Function?; arg : VariablePtr; value : ExpressionPtr) : bool {
-        return false
-    }
+    def override canVisitFunctionArgumentInit(fun : Function?; arg : VariablePtr; value : ExpressionPtr) : bool =>
+        false
 
     // Field access on I/O contract struct arguments: inp.uv, inp.worldPos, etc.
     // Any other field access remains an error.
@@ -725,9 +724,8 @@ class ValidateShaderVisitor : AstVisitor {
         register_node(decl.value, irNode)
     }
 
-    def override visitExprMakeStructField(expr : ExprMakeStruct?; index : int; var decl : MakeFieldDeclPtr; last : bool) : MakeFieldDeclPtr {
-        return <- decl
-    }
+    def override visitExprMakeStructField(expr : ExprMakeStruct?; index : int; var decl : MakeFieldDeclPtr; last : bool) : MakeFieldDeclPtr =>
+        <- decl
 
     def override visitExprMakeStruct(var expr : ExprMakeStruct?) : ExpressionPtr {
         if (!empty(makeStructStates)) {
@@ -1711,9 +1709,8 @@ class PixelShaderMacro : AstFunctionAnnotation {
         return true
     }
     def override finish(var func : FunctionPtr; var group : ModuleGroup;
-                        var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string) : bool {
-        return shader_build_ir(func, group, errors, "pixel")
-    }
+                        var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string) : bool =>
+                            shader_build_ir(func, group, errors, "pixel")
 }
 
 

@@ -180,9 +180,8 @@ def public create_ttf_objects {
     return program
 }
 
-def public get_ttf_program : tuple<vtx : string; frag : string> {
-    return (vtx = TTF_VERTEX_SRC, frag = TTF_FRAGMENT_SRC)
-}
+def public get_ttf_program : tuple<vtx : string; frag : string> =>
+    (vtx = TTF_VERTEX_SRC, frag = TTF_FRAGMENT_SRC)
 
 def public set_ttf_objects(prog : uint) {
     //! Set an externally-created shader program for TTF rendering.

@@ -30,9 +30,7 @@ struct public ConvertOptions {
 //! The compiler's own detector (`detectGen2Syntax`) scans the WHOLE file for the first one
 //! outside a comment or a string, so a marker on line 12 counts exactly as much as one on
 //! line 1 - and a rewriter that only looks at line 1 will contradict it.
-def public gen2_marker(src : Source; lex : Lexical) : int {
-    return find_token(src, lex, 0, "options gen2")
-}
+def public gen2_marker(src : Source; lex : Lexical) : int => find_token(src, lex, 0, "options gen2")
 
 
 def private rule_gen2_header(src : Source; lex : Lexical; file : string; opt : ConvertOptions;
@@ -189,9 +187,7 @@ class ConvertVisitor : AstVisitor {
             span_begin((*src), expr.if_false.at), "else", is_braced((*src), expr.if_false.at), edits)
     }
 
-    def is_wrapped(at : LineInfo) : bool {
-        return wrapped ?[span_begin((*src), at)] ?? false
-    }
+    def is_wrapped(at : LineInfo) : bool => wrapped ?[span_begin((*src), at)] ?? false
 }
 
 

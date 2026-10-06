@@ -62,14 +62,12 @@ def cpp_rule_id_to_kind(rule_id : string) : string {
     return "unknown"
 }
 
-def is_cpp_ident_char(ch : int) : bool {
-    return is_alpha(ch) || is_number(ch) || ch == '_' || ch == ':' || ch == '~'
-}
+def is_cpp_ident_char(ch : int) : bool =>
+    is_alpha(ch) || is_number(ch) || ch == '_' || ch == ':' || ch == '~'
 
 // the whitespace set this file's scanners recognize inside a C++ declaration
-def private is_cpp_space_char(ch : int) : bool {
-    return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r'
-}
+def private is_cpp_space_char(ch : int) : bool =>
+    ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r'
 
 def is_cpp_op_char(ch : int) : bool {
     // chars that may appear as part of operator overloads (operator+, operator==, operator<<, etc.)
@@ -813,9 +811,7 @@ def ensure_cpp_index() {
 // to surface a "tool unavailable" message to the user (e.g. `cpp_goto_definition`
 // when no candidates are found) should call this to disambiguate "really no
 // matches" from "the index couldn't build".
-def cpp_index_status() : string {
-    return cpp_index_error
-}
+def cpp_index_status() : string => cpp_index_error
 
 // Look up a C++ name (qualified or unqualified). Returns true if found and
 // fills `match` with the FIRST stored match. Tries the name as given first,

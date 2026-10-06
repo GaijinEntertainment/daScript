@@ -7,9 +7,7 @@ require stbimage/stbimage_boost
 require daslib/safe_addr
 require dastest/testing_boost public
 
-def test_image_path(name : string) : string {
-    return "{get_das_root()}/tests/stbimage/{name}"
-}
+def test_image_path(name : string) : string => "{get_das_root()}/tests/stbimage/{name}"
 
 // helper: fill image bytes with position-based pattern
 // each pixel's first byte = (x + y * width) & 0xFF

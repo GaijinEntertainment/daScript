@@ -5,9 +5,7 @@ require mc_extern_dep
 require dasbind
 
 [extern(cdecl, late, name="mc_extern_nope2", library="mc_extern_nope")]
-def mc_extern_nope2(x : int) : int {
-    return 0
-}
+def mc_extern_nope2(x : int) : int => 0
 
 [export]
 def main() {

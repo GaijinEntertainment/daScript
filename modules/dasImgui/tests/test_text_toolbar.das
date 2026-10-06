@@ -20,13 +20,11 @@ let FEATURE = "examples/text/main.das"
 let DEADLOCK_GUARD_SEC = 30.0f
 let TOOLBAR_FIXTURE = "# Title line\n\nFirst paragraph body text.\n\nSecond paragraph body text.\n"
 
-def private viewer_state(app : ImguiApp) : JsonValue? {
-    return post_command(app, "text_viewer_state", null)
-}
+def private viewer_state(app : ImguiApp) : JsonValue? =>
+    post_command(app, "text_viewer_state", null)
 
-def private edit_text_state(app : ImguiApp) : JsonValue? {
-    return post_command(app, "text_viewer_edit_text", null)
-}
+def private edit_text_state(app : ImguiApp) : JsonValue? =>
+    post_command(app, "text_viewer_edit_text", null)
 
 def private real_click_at(app : ImguiApp; x, y : float) {
     post_command(app, "imgui_mouse_pos", JV((x = x, y = y)))

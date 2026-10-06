@@ -4,9 +4,7 @@ require dastest/testing_boost public
 require requirefix
 require daslib/fio
 
-def testdata_path(name : string) : string {
-    return "utils/internal/requirefix/testdata/{name}"
-}
+def testdata_path(name : string) : string => "utils/internal/requirefix/testdata/{name}"
 
 def run_analysis(target : string) : ModuleAnalysisResult {
     var config = RequirefixConfig(

@@ -36,9 +36,8 @@ def gen_noise_burst(duration : float; volume : float = 0.2) : array<float> {
     return <- samples
 }
 
-def gen_tone(freq, duration, volume : float) : array<float> {
-    return <- gen_sine_sweep(freq, freq, duration, volume)
-}
+def gen_tone(freq, duration, volume : float) : array<float> =>
+    <- gen_sine_sweep(freq, freq, duration, volume)
 
 def overlay_at(var dst : array<float>; src : array<float>; at : int) {
     let need = at + length(src)

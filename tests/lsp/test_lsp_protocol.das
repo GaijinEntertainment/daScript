@@ -241,9 +241,7 @@ def private echo_item_data(item : JsonValue const?) : HierItemData {
         name = item?["data"]?["name"] ?? "")
 }
 
-def private das_exe() : string {
-    return get_full_file_name(get_das_exe())
-}
+def private das_exe() : string => get_full_file_name(get_das_exe())
 
 //! the static exe beside the daslang binary, when it is built
 def private watchdog_exe() : string {
@@ -268,9 +266,7 @@ def private front_hosts() : array<FrontHost> {
     return <- hosts
 }
 
-def private path_to_uri(path : string) : string {
-    return file_name_to_uri(path)
-}
+def private path_to_uri(path : string) : string => file_name_to_uri(path)
 
 def private uri_for_compare(uri : string) : string {
     // Windows paths are case-insensitive, and pathlib.resolve() may return

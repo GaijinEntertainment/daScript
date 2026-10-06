@@ -14,38 +14,26 @@ require daslib/strings_boost
 // optimization_fast_math.das.
 
 [export]
-def target_mul_zero_f(f : float) : float {
-    return f * 0.0
-}
+def target_mul_zero_f(f : float) : float => f * 0.0
 
 [export]
-def target_sub_self_f(f : float) : float {
-    return f - f // nolint:LINT007 -- deliberate: the fold under test
-}
+def target_sub_self_f(f : float) : float =>
+    f - f  // nolint:LINT007 -- deliberate: the fold under test
 
 [export]
-def target_sub_self_swizzle_f(v : float2) : float {
-    return v.x - v.x // nolint:LINT007 -- deliberate: sameAs-shape fold under fast_math
-}
+def target_sub_self_swizzle_f(v : float2) : float =>
+    v.x - v.x  // nolint:LINT007 -- deliberate: sameAs-shape fold under fast_math
 
 [export]
-def target_rcp(f : float) : float {
-    return f / 4.0
-}
+def target_rcp(f : float) : float => f / 4.0
 
 [export]
-def target_flip_f(f : float) : bool {
-    return !(f < 4.0)
-}
+def target_flip_f(f : float) : bool => !(f < 4.0)
 
 [export]
-def target_reassoc_f(f : float) : float {
-    return (f + 1.0) + 2.0
-}
+def target_reassoc_f(f : float) : float => (f + 1.0) + 2.0
 
-def has(s, sub : string) : bool {
-    return find(s, sub, 0) >= 0
-}
+def has(s, sub : string) : bool => find(s, sub, 0) >= 0
 
 def body_of(t : T?; nm : string) : string {
     var body = ""

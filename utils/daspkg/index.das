@@ -32,9 +32,7 @@ struct IndexEntry {
     platforms : array<string>
 }
 
-def get_index_cache_dir(root : string) : string {
-    return "{root}/modules/.daspkg_cache/index"
-}
+def get_index_cache_dir(root : string) : string => "{root}/modules/.daspkg_cache/index"
 
 def private parse_string_array(val : JsonValue?; field : string) : array<string> {
     var result : array<string>
@@ -148,9 +146,8 @@ def resolve_from_index(root, name : string) : string {
     }
 }
 
-def is_index_name(spec : string) : bool {
-    return find(spec, "/") < 0 && find(spec, "\\") < 0 && find(spec, ".") < 0
-}
+def is_index_name(spec : string) : bool =>
+    find(spec, "/") < 0 && find(spec, "\\") < 0 && find(spec, ".") < 0
 
 // ── Search ──────────────────────────────────────────────────────────
 
@@ -722,9 +719,7 @@ struct IndexPushTarget {
 }
 
 // True when `gh api ... --jq .permissions.push` reports write access (exact "true").
-def index_has_push_access(gh_output : string) : bool {
-    return strip(gh_output) == "true"
-}
+def index_has_push_access(gh_output : string) : bool => strip(gh_output) == "true"
 
 // Where the change branch is pushed and what head ref the PR opens against.
 // Write access → origin + bare branch; otherwise the user's fork + "<login>:<branch>".

@@ -13,49 +13,31 @@ require dastest/testing_boost public
 // ── Target functions with various constant types ─────────────────────────
 
 [export, marker(no_coverage)]
-def target_int64(x : int64) : int64 {
-    return x + 100l
-}
+def target_int64(x : int64) : int64 => x + 100l
 
 [export, marker(no_coverage)]
-def target_uint(x : uint) : uint {
-    return x + 0xFFu
-}
+def target_uint(x : uint) : uint => x + 0xFFu
 
 [export, marker(no_coverage)]
-def target_double(x : double) : double {
-    return x + 3.14lf
-}
+def target_double(x : double) : double => x + 3.14lf
 
 [export, marker(no_coverage)]
-def target_uint64(x : uint64) : uint64 {
-    return x + 1000ul
-}
+def target_uint64(x : uint64) : uint64 => x + 1000ul
 
 [export, marker(no_coverage)]
-def target_null_check(x : int?) : bool {
-    return x == null
-}
+def target_null_check(x : int?) : bool => x == null
 
 [export, marker(no_coverage)]
-def target_range() : range {
-    return range(1, 10)
-}
+def target_range() : range => range(1, 10)
 
 [export, marker(no_coverage)]
-def target_enum(x : Type) : Type {
-    return x
-}
+def target_enum(x : Type) : Type => x
 
 [export, marker(no_coverage)]
-def target_float2() : float2 {
-    return float2(1.0, 2.0)
-}
+def target_float2() : float2 => float2(1.0, 2.0)
 
 [export, marker(no_coverage)]
-def target_int2() : int2 {
-    return int2(3, 4)
-}
+def target_int2() : int2 => int2(3, 4)
 
 // ── Tests ────────────────────────────────────────────────────────────────
 
@@ -321,9 +303,7 @@ def test_identity_enum(t : T?) {
 // ── Tag capture in constant constructors ─────────────────────────────────
 
 [export, marker(no_coverage)]
-def target_float4() : float4 {
-    return float4(1.0, 2.0, 3.0, 4.0)
-}
+def target_float4() : float4 => float4(1.0, 2.0, 3.0, 4.0)
 
 [test]
 def test_float2_capture_v(t : T?) {

@@ -876,9 +876,8 @@ def private scene_alone(load : LoadJob; var lanes : array<SceneJob>; reps : int;
 }
 
 //! the real-time factor of every sample of `lane` that carried speech: its wall over the speech it returned
-def private lane_rtfs(samples : array<SceneSample>; lane : int) : array<float> {
-    return <- [for (smp in samples); smp.value / (smp.audio_s * 1000.0); where smp.lane == lane && smp.audio_s > 0.0]
-}
+def private lane_rtfs(samples : array<SceneSample>; lane : int) : array<float> =>
+    <- [for (smp in samples); smp.value / (smp.audio_s * 1000.0); where smp.lane == lane && smp.audio_s > 0.0]
 
 //! why lane `lane` has no row: a request of its that failed, or a round of `rounds` it finished no request in; "" when it stands
 def private scene_lane_refusal(lane, rounds : int; alone, together : array<SceneSample>) : string {

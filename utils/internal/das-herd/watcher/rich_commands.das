@@ -63,13 +63,10 @@ def herd_commands_dispose() {
 }
 
 def run_herd_command(id : string;
-                     source : CommandSource = CommandSource.programmatic) : bool {
-    return command_invoke(g_command_registry, id, source)
-}
+                     source : CommandSource = CommandSource.programmatic) : bool =>
+                         command_invoke(g_command_registry, id, source)
 
-def herd_command_shortcut(id : string) : string {
-    return command_shortcut_text(g_command_registry, id)
-}
+def herd_command_shortcut(id : string) : string => command_shortcut_text(g_command_registry, id)
 
 def herd_command_definition_scope(id : string; var scope : CommandScope&) : bool {
     for (definition in g_command_registry.definitions) {

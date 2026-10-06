@@ -7,13 +7,9 @@ require rr_globals public
 // River is defined by a ring of RiverSegment, each with left/right bank X at a world Y.
 // Banks are rendered as a triangle strip rebuilt each frame.
 
-def river_section_amplitude(sec : int) : float {
-    return 1.5 + float(min(sec, 5)) * 0.5
-}
+def river_section_amplitude(sec : int) : float => 1.5 + float(min(sec, 5)) * 0.5
 
-def river_section_frequency(sec : int) : float {
-    return 0.018 + float(min(sec, 6)) * 0.003
-}
+def river_section_frequency(sec : int) : float => 0.018 + float(min(sec, 6)) * 0.003
 
 def river_target_half_width(sec : int) : float {
     let s = float(min(sec, 8))
@@ -229,9 +225,7 @@ def river_clamp_x_secondary(world_y, prefer_x : float) : float2 {
 }
 
 // Compatibility helper used by existing gameplay code.
-def river_clamp_x(world_y : float) : float2 {
-    return river_clamp_x_for(world_y, player_pos.x)
-}
+def river_clamp_x(world_y : float) : float2 => river_clamp_x_for(world_y, player_pos.x)
 
 // Check if world position is outside river banks
 def is_out_of_river(pos : float3) : bool {

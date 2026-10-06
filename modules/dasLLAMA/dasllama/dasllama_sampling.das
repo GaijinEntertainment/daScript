@@ -278,9 +278,8 @@ def sample_logits_row_reference(var s : Session; params : SamplingParams; var ro
 }
 
 [hot_path]   // the accept walk's row sampler, reached through the registry once per verify row
-def private mtp_sample_row(var s : Session; var rows : array<float>; off, vocab : int64) : int64 {
-    return sample_logits_row(s, deref(s.spec_params), rows, off, vocab)
-}
+def private mtp_sample_row(var s : Session; var rows : array<float>; off, vocab : int64) : int64 =>
+    sample_logits_row(s, deref(s.spec_params), rows, off, vocab)
 
 [init]
 def private sampling_init {

@@ -29,13 +29,9 @@ struct LockFile {
 let LOCK_FILE_NAME = "daspkg.lock"
 let GLOBAL_LOCK_FILE_NAME = ".daspkg_global.lock"
 
-def lock_file_path(project_root : string) : string {
-    return "{project_root}/{LOCK_FILE_NAME}"
-}
+def lock_file_path(project_root : string) : string => "{project_root}/{LOCK_FILE_NAME}"
 
-def global_lock_file_path() : string {
-    return "{get_das_root()}/modules/{GLOBAL_LOCK_FILE_NAME}"
-}
+def global_lock_file_path() : string => "{get_das_root()}/modules/{GLOBAL_LOCK_FILE_NAME}"
 
 // find index of package by name, -1 if not found
 def find_package(lf : LockFile; name : string) : int {
@@ -45,9 +41,7 @@ def find_package(lf : LockFile; name : string) : int {
     return -1
 }
 
-def has_package(lf : LockFile; name : string) : bool {
-    return find_package(lf, name) >= 0
-}
+def has_package(lf : LockFile; name : string) : bool => find_package(lf, name) >= 0
 
 def get_package(lf : LockFile; name : string) : PackageEntry {
     let idx = find_package(lf, name)
@@ -105,18 +99,13 @@ def write_lock_file_at(path : string; lf : LockFile) : bool {
     return ok
 }
 
-def read_lock_file(project_root : string; var lf : LockFile) : bool {
-    return read_lock_file_at(lock_file_path(project_root), lf)
-}
+def read_lock_file(project_root : string; var lf : LockFile) : bool =>
+    read_lock_file_at(lock_file_path(project_root), lf)
 
-def write_lock_file(project_root : string; lf : LockFile) : bool {
-    return write_lock_file_at(lock_file_path(project_root), lf)
-}
+def write_lock_file(project_root : string; lf : LockFile) : bool =>
+    write_lock_file_at(lock_file_path(project_root), lf)
 
-def read_global_lock_file(var lf : LockFile) : bool {
-    return read_lock_file_at(global_lock_file_path(), lf)
-}
+def read_global_lock_file(var lf : LockFile) : bool =>
+    read_lock_file_at(global_lock_file_path(), lf)
 
-def write_global_lock_file(lf : LockFile) : bool {
-    return write_lock_file_at(global_lock_file_path(), lf)
-}
+def write_global_lock_file(lf : LockFile) : bool => write_lock_file_at(global_lock_file_path(), lf)

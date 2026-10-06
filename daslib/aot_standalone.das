@@ -113,16 +113,14 @@ def private usedGlobals(var program : ProgramPtr) : array<Variable?> {
 }
 
 //! `options gc`: the program collects its own heaps.
-def private standaloneCollects(program : ProgramPtr) : bool {
-    return program._options |> find_arg("gc") ?as tBool ?? false
-}
+def private standaloneCollects(program : ProgramPtr) : bool =>
+    program._options |> find_arg("gc") ?as tBool ?? false
 
 //! A `VarInfo` per global, made before the helper dumps its tables so every type they name is in
 //! the dump: the collector walks each global through its info, the way the interpreter's
 //! simulate step wires it.
-def private makeGlobalVarInfos(program : ProgramPtr; var helper : AotDebugInfoHelper?; globals : array<Variable?>) : array<tuple<index : int; info : VarInfo?>> {
-    return <- [for (pvar in globals); (index = variable_index(program, pvar), info = helper.helper |> make_variable_debug_info(pvar))]
-}
+def private makeGlobalVarInfos(program : ProgramPtr; var helper : AotDebugInfoHelper?; globals : array<Variable?>) : array<tuple<index : int; info : VarInfo?>> =>
+    <- [for (pvar in globals); (index = variable_index(program, pvar), info = helper.helper |> make_variable_debug_info(pvar))]
 
 def private writeGlobalVarInfos(var helper : AotDebugInfoHelper?; infos : array<tuple<index : int; info : VarInfo?>>; var tw : StringBuilderWriter) {
     for (entry in infos) {
@@ -309,9 +307,8 @@ class StandaloneContextGen : CppAot {
     used_functions : table<string>;
     emittedForeignHashes : table<uint64>;
 
-    def override emitsForeignBody(func : Function?) : bool {
-        return emittedForeignHashes |> key_exists(func.getMangledNameHash);
-    }
+    def override emitsForeignBody(func : Function?) : bool =>
+        emittedForeignHashes |> key_exists(func.getMangledNameHash)
 
     def override preVisitGlobalLet(prog : ProgramPtr) {
         CppAot`preVisitGlobalLet(self, prog);
@@ -792,9 +789,8 @@ def public standalone_aot(input, output_dir, bindings_path, bindings_library : s
 }
 
 [export, unused_argument(paranoid_validation)]
-def public standalone_aot(input : string; output_dir : string; cross_platform : bool, paranoid_validation : bool; cop : CodeOfPolicies; before_emit : block<(var program : ProgramPtr) : void>) {
-    return standalone_aot(input, output_dir, "", "", cross_platform, paranoid_validation, cop, before_emit)
-}
+def public standalone_aot(input : string; output_dir : string; cross_platform : bool, paranoid_validation : bool; cop : CodeOfPolicies; before_emit : block<(var program : ProgramPtr) : void>) =>
+    standalone_aot(input, output_dir, "", "", cross_platform, paranoid_validation, cop, before_emit)
 
 
 [export, unused_argument(paranoid_validation)]

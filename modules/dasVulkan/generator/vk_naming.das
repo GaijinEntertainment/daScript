@@ -21,9 +21,7 @@ let DAS_KEYWORDS : table<string> <- {
 }
 
 //! suffix '_' onto das reserved words
-def public das_safe_name(s : string) : string {
-    return key_exists(DAS_KEYWORDS, s) ? "{s}_" : s
-}
+def public das_safe_name(s : string) : string => key_exists(DAS_KEYWORDS, s) ? "{s}_" : s
 
 //! "VkStructureType" -> "VK_STRUCTURE_TYPE"; acronym runs stay one word (ASTCDecode -> ASTC_DECODE)
 def public camel_to_screaming(s : string) : string {

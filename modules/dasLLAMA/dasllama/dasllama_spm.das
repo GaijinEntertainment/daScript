@@ -301,9 +301,7 @@ def encode(tk : SpmTokenizer; text : string; bos, eos : bool) : array<int64> {
 
 //! Resolve a special/control token id by its surface form (e.g. "<end_of_turn>"); -1 if absent.
 //! SPM special tokens live in the vocab, so this is a plain lookup — same contract as the BPE overload.
-def special_id(tk : SpmTokenizer; name : string) : int64 {
-    return tk.lookup?[name] ?? -1l
-}
+def special_id(tk : SpmTokenizer; name : string) : int64 => tk.lookup?[name] ?? -1l
 
 // ===== the unigram arm: a SentencePiece model of type UNIGRAM (GGUF `tokenizer.ggml.model =
 // "t5"`) over the same vocabulary and scores - a Viterbi lattice instead of the merge heap =====
@@ -329,9 +327,8 @@ def private spm_piece_of(d : array<uint8> const#; i, n : int) : string {
 def private hex_char(v : int) : int => v < 10 ? '0' + v : 'A' + v - 10
 
 // the byte piece's name, "<0xXX>", built without a string walk
-def private byte_piece_name(bv : int) : string {
-    return string([uint8('<'), uint8('0'), uint8('x'), uint8(hex_char(bv >> 4)), uint8(hex_char(bv & 15)), uint8('>')])
-}
+def private byte_piece_name(bv : int) : string =>
+    string([uint8('<'), uint8('0'), uint8('x'), uint8(hex_char(bv >> 4)), uint8(hex_char(bv & 15)), uint8('>')])
 
 // the next codepoint boundary after byte position i
 def private cpt_end(d : array<uint8> const#; i, n : int) : int {

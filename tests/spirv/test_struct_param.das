@@ -17,9 +17,7 @@ struct SpArr {
 
 var @ssbo @binding = 0 sp_data : array<float>
 
-def private sp_pick(c : SpArr; i : int) : float {
-    return c.arr[i] * c.k
-}
+def private sp_pick(c : SpArr; i : int) : float => c.arr[i] * c.k
 
 [compute_shader(local_size_x=64, name="sparam_spv"), marker(no_coverage)]
 def sparam {

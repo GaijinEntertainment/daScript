@@ -26,9 +26,7 @@ def print_value(v) {
 // === Named auto: ensure types match ===
 // auto(T) names the type so multiple arguments share the same type.
 
-def add(a, b : auto(T)) : T {
-    return a + b
-}
+def add(a, b : auto(T)) : T => a + b
 
 // === auto(T) for local variables ===
 // Use the named type T in local variable declarations.

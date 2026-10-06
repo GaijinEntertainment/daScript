@@ -16,9 +16,7 @@ let {
 }
 
 [export]
-def go_test_0() : array<string> {
-    return <- clone(go_some_0)
-}
+def go_test_0() : array<string> => <- clone(go_some_0)
 
 [test]
 def test_global_order(t : T?) {

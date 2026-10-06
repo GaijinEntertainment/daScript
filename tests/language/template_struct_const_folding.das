@@ -17,9 +17,7 @@ struct template v2{r = i((3 ? reinterpret<bitfield<>>(([],) < (0 > t)) as r * ([
 }
 
 [export]
-def ma{
- return float4(uint(), 2, -9, 3);
-}
+def ma => float4(uint(), 2, -9, 3)
 
 [export]
 def main {

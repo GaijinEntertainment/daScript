@@ -20,9 +20,8 @@ def square {
     data[i] = i * i
 }
 
-def find_mem(phys : VkPhysicalDevice; bits : uint; want : VkMemoryPropertyFlags) : uint {
-    return find_memory_type(phys, bits, want)
-}
+def find_mem(phys : VkPhysicalDevice; bits : uint; want : VkMemoryPropertyFlags) : uint =>
+    find_memory_type(phys, bits, want)
 
 [export]
 def main() : int {   // nolint:STYLE038 - flat example scaffold

@@ -26,115 +26,75 @@ var G_B = 4.0
 
 // ----- mad fusion: plain mul-add, both operand orders -----
 [flatten]
-def m_basic(a : float; b : float; c : float) : float {
-    return a * b + c
-}
+def m_basic(a : float; b : float; c : float) : float => a * b + c
 
 [flatten]
-def m_right(a : float; b : float; c : float) : float {
-    return c + a * b
-}
+def m_right(a : float; b : float; c : float) : float => c + a * b
 
 // ----- the shader remap idiom x*C + C -----
 [flatten]
-def m_remap(x : float) : float {
-    return x * 0.5 + 0.5
-}
+def m_remap(x : float) : float => x * 0.5 + 0.5
 
 // ----- `-` forms: const-negatable addend / const factor -----
 [flatten]
-def m_subc(a : float; b : float) : float {
-    return a * b - 1.0
-}
+def m_subc(a : float; b : float) : float => a * b - 1.0
 
 [flatten]
-def m_csub(b : float) : float {
-    return 1.0 - 2.0 * b
-}
+def m_csub(b : float) : float => 1.0 - 2.0 * b
 
 // ----- two muls: greedy fuse absorbs one, the other stays mad's addend -----
 [flatten]
-def m_chain(a : float; b : float; c : float; d : float) : float {
-    return a * b + c * d
-}
+def m_chain(a : float; b : float; c : float; d : float) : float => a * b + c * d
 
 // ----- int mad (exact in every tier) -----
 [flatten]
-def m_int(a : int; b : int; c : int) : int {
-    return a * b + c
-}
+def m_int(a : int; b : int; c : int) : int => a * b + c
 
 // ----- vector mad + the MadS scalar-broadcast form (hardware-fused -> approx) -----
 [flatten]
-def m_vec(a : float3; b : float3; c : float3) : float3 {
-    return a * b + c
-}
+def m_vec(a : float3; b : float3; c : float3) : float3 => a * b + c
 
 [flatten]
-def m_vecs(v : float3; s : float; w : float3) : float3 {
-    return v * s + w
-}
+def m_vecs(v : float3; s : float; w : float3) : float3 => v * s + w
 
 // ----- int vector mad + int MadS (exact) -----
 [flatten]
-def m_veci(a : int3; b : int3; c : int3) : int3 {
-    return a * b + c
-}
+def m_veci(a : int3; b : int3; c : int3) : int3 => a * b + c
 
 [flatten]
-def m_intvs(v : int3; s : int; w : int3) : int3 {
-    return v * s + w
-}
+def m_intvs(v : int3; s : int; w : int3) : int3 => v * s + w
 
 // ----- lerp const-selector short-circuits -----
 [flatten]
-def l_t0(a : float; b : float) : float {
-    return lerp(a, b, 0.0)
-}
+def l_t0(a : float; b : float) : float => lerp(a, b, 0.0)
 
 [flatten]
-def l_t1(a : float; b : float) : float {
-    return lerp(a, b, 1.0)
-}
+def l_t1(a : float; b : float) : float => lerp(a, b, 1.0)
 
 [flatten]
-def l_same(a : float; t : float) : float {
-    return lerp(a, a, t)
-}
+def l_same(a : float; t : float) : float => lerp(a, a, t)
 
 // ----- lerp with a const selector hitting the t=1 arm directly on the call -----
 [flatten]
-def l_const1(d : float) : float {
-    return lerp(1.0, d, 1.0)
-}
+def l_const1(d : float) : float => lerp(1.0, d, 1.0)
 
 // ----- plain lerp: survives as the same call (no expansion by default) -----
 [flatten]
-def l_round(a : float; b : float; t : float) : float {
-    return lerp(a, b, t)
-}
+def l_round(a : float; b : float; t : float) : float => lerp(a, b, t)
 
 [flatten]
-def l_vec(a : float3; b : float3; t : float) : float3 {
-    return lerp(a, b, t)
-}
+def l_vec(a : float3; b : float3; t : float) : float3 => lerp(a, b, t)
 
 // ----- raw arithmetic canonicalized INTO lerp (never spelled `lerp` in source) -----
 [flatten]
-def l_manual(a : float; b : float; t : float) : float {
-    return (b - a) * t + a
-}
+def l_manual(a : float; b : float; t : float) : float => (b - a) * t + a
 
 [flatten]
-def l_vec_manual(a : float3; b : float3; t : float) : float3 {
-    return (b - a) * t + a
-}
+def l_vec_manual(a : float3; b : float3; t : float) : float3 => (b - a) * t + a
 
 // ----- uniform lerp bounds: the call survives whole, bounds ride as const operands -----
 [flatten]
-def p_lerp(x : float) : float {
-    return lerp(G_A, G_B, x)
-}
+def p_lerp(x : float) : float => lerp(G_A, G_B, x)
 
 var GRID <- [-100.0, -3.5, -1.0, 0.0, 1.0, 2.5, 7.0, 100.0]
 

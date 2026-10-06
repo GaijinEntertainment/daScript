@@ -5,9 +5,8 @@ require daslib/faker
 require daslib/constant_expression
 
 [jit, sideeffects]
-def test_min(a, b : int) {
-    return a < b ? a : b    // nolint:PERF015 -- the ternary is the PHI shape under test; min() would not emit one
-}
+def test_min(a, b : int) =>
+    a < b ? a : b  // nolint:PERF015 -- the ternary is the PHI shape under test; min() would not emit one
 
 [jit, sideeffects]
 def test_min(a, b, c : int) {

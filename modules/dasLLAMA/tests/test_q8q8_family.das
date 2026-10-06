@@ -21,13 +21,11 @@ require _kq_fixtures   // the unit fills, the Q8_0 rows and their sums, the fp64
 let WIDTHS <- [64l, 96l, 512l, 1024l, 1056l, 3072l]
 let REF_POISON = 0.25
 
-def private slice_i8(src : array<int8>; off, cnt : int64) : array<int8> {
-    return <- [for (i in range64(off, off + cnt)); src[i]]
-}
+def private slice_i8(src : array<int8>; off, cnt : int64) : array<int8> =>
+    <- [for (i in range64(off, off + cnt)); src[i]]
 
-def private slice_f(src : array<float>; off, cnt : int64) : array<float> {
-    return <- [for (i in range64(off, off + cnt)); src[i]]
-}
+def private slice_f(src : array<float>; off, cnt : int64) : array<float> =>
+    <- [for (i in range64(off, off + cnt)); src[i]]
 
 //! bit for bit, the control `REF_POISON` added at the middle expected element
 def private identical(t : T?; got : array<float>; want : array<float>; what : string) {

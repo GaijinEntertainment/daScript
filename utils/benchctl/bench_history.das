@@ -184,6 +184,5 @@ def build_dataset(runs : array<RunRecord>; generated, repo_url : string) : Datas
     return <- ds
 }
 
-def report_verdict(ds : Dataset) : StandExit {
-    return ds.latest < 0 || ds.runs[ds.latest].status != RunStatus.ok ? StandExit.failed : StandExit.ok
-}
+def report_verdict(ds : Dataset) : StandExit =>
+    ds.latest < 0 || ds.runs[ds.latest].status != RunStatus.ok ? StandExit.failed : StandExit.ok

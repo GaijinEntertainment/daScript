@@ -44,9 +44,9 @@ var gl_BaryCoordEXT         : float3     // BuiltIn BaryCoordKHR (Input, fragmen
 // test exercises only the decoration + cap + extension. Identity passthrough; the stub body never
 // runs, only the call AST is read.
 [unused_argument(x), sideeffects]
-def public nonuniformEXT(x : int) : int { return x }
+def public nonuniformEXT(x : int) : int => x
 [unused_argument(x), sideeffects]
-def public nonuniformEXT(x : uint) : uint { return x }
+def public nonuniformEXT(x : uint) : uint => x
 
 // ===== combined image samplers =====
 // sampler2D and the base texture(sampler2D, uv) sample live in shader_lingua_franca (shared). The
@@ -75,9 +75,8 @@ struct texture2D {}
 struct sampler {}
 
 [unused_argument(tex, smp, uv), sideeffects]
-def public sampleTexture(tex : texture2D; smp : sampler; uv : float2) : float4 {
-    return float4(0.0, 0.0, 0.0, 0.0)
-}
+def public sampleTexture(tex : texture2D; smp : sampler; uv : float2) : float4 =>
+    float4(0.0, 0.0, 0.0, 0.0)
 
 // ===== uniform texel buffer =====
 // textureBuffer is a buffer-backed image (Dim=Buffer, no sampler): the host binds a VkBufferView
@@ -90,9 +89,7 @@ def public sampleTexture(tex : texture2D; smp : sampler; uv : float2) : float4 {
 struct textureBuffer {}
 
 [unused_argument(tb, index), sideeffects]
-def public texelFetch(tb : textureBuffer; index : int) : float4 {
-    return float4(0.0, 0.0, 0.0, 0.0)
-}
+def public texelFetch(tb : textureBuffer; index : int) : float4 => float4(0.0, 0.0, 0.0, 0.0)
 
 // ===== sampled cube array =====
 // samplerCubeArray is a LAYERED cubemap: the sampled counterpart of imageCubeArray, and SPIR-V-only
@@ -104,14 +101,11 @@ def public texelFetch(tb : textureBuffer; index : int) : float4 {
 struct samplerCubeArray { textureCubeArray : uint }
 
 [unused_argument(s, uvl, lod), sideeffects]
-def public textureLod(s : samplerCubeArray; uvl : float4; lod : float) : float4 {
-    return float4(0.0, 0.0, 0.0, 0.0)
-}
+def public textureLod(s : samplerCubeArray; uvl : float4; lod : float) : float4 =>
+    float4(0.0, 0.0, 0.0, 0.0)
 
 [unused_argument(s, lod), sideeffects]
-def public textureSize(s : samplerCubeArray; lod : int) : int3 {
-    return int3(0, 0, 0)
-}
+def public textureSize(s : samplerCubeArray; lod : int) : int3 => int3(0, 0, 0)
 
 // ===== storage images =====
 // image2D and image3D, with imageStore/imageLoad/imageSize, live in shader_lingua_franca (shared). The
@@ -134,23 +128,15 @@ def public imageStore(img : image2DArray; uvw : int3; data : float4) : void {}
 def public imageStore(img : imageCubeArray; uvw : int3; data : float4) : void {}
 
 [unused_argument(img, uvw), sideeffects]
-def public imageLoad(img : image2DArray; uvw : int3) : float4 {
-    return float4(0.0, 0.0, 0.0, 0.0)
-}
+def public imageLoad(img : image2DArray; uvw : int3) : float4 => float4(0.0, 0.0, 0.0, 0.0)
 [unused_argument(img, uvw), sideeffects]
-def public imageLoad(img : imageCubeArray; uvw : int3) : float4 {
-    return float4(0.0, 0.0, 0.0, 0.0)
-}
+def public imageLoad(img : imageCubeArray; uvw : int3) : float4 => float4(0.0, 0.0, 0.0, 0.0)
 
 // (width, height, layers); for imageCubeArray the layer count is 6 * cubes, matching GLSL.
 [unused_argument(img), sideeffects]
-def public imageSize(img : image2DArray) : int3 {
-    return int3(0, 0, 0)
-}
+def public imageSize(img : image2DArray) : int3 => int3(0, 0, 0)
 [unused_argument(img), sideeffects]
-def public imageSize(img : imageCubeArray) : int3 {
-    return int3(0, 0, 0)
-}
+def public imageSize(img : imageCubeArray) : int3 => int3(0, 0, 0)
 
 // ===== subpass input attachments (Vulkan deferred-rendering rail) =====
 // subpassInput is an opaque marker for a Vulkan subpass input attachment: a per-fragment read of a
@@ -166,9 +152,7 @@ def public imageSize(img : imageCubeArray) : int3 {
 struct subpassInput {}
 
 [unused_argument(i), sideeffects]
-def public subpassLoad(i : subpassInput) : float4 {
-    return float4(0.0, 0.0, 0.0, 0.0)
-}
+def public subpassLoad(i : subpassInput) : float4 => float4(0.0, 0.0, 0.0, 0.0)
 
 // ===== fragment realism =====
 // discard(), the dFdx/dFdy partial derivatives, and fwidth (= |dFdx| + |dFdy|) all live in
@@ -194,25 +178,30 @@ def public subpassLoad(i : subpassInput) : float4 {
 // OpCapability AtomicFloat32AddEXT + OpExtension "SPV_EXT_shader_atomic_float_add". It is the only
 // float-capable family here: the float min/max opcodes sit behind a different capability, so a float
 // target on any other atomic is a compile error rather than a blob only the driver would reject.
-[unused_argument(value), sideeffects] def public atomicAdd(mem : int &; value : int) : int { return mem }
-[unused_argument(value), sideeffects] def public atomicAdd(mem : uint &; value : uint) : uint { return mem }
-[unused_argument(value), sideeffects] def public atomicAdd(mem : float &; value : float) : float { return mem }
-[unused_argument(value), sideeffects] def public atomicMin(mem : int &; value : int) : int { return mem }
-[unused_argument(value), sideeffects] def public atomicMin(mem : uint &; value : uint) : uint { return mem }
-[unused_argument(value), sideeffects] def public atomicMax(mem : int &; value : int) : int { return mem }
-[unused_argument(value), sideeffects] def public atomicMax(mem : uint &; value : uint) : uint { return mem }
-[unused_argument(value), sideeffects] def public atomicAnd(mem : int &; value : int) : int { return mem }
-[unused_argument(value), sideeffects] def public atomicAnd(mem : uint &; value : uint) : uint { return mem }
-[unused_argument(value), sideeffects] def public atomicOr(mem : int &; value : int) : int { return mem }
-[unused_argument(value), sideeffects] def public atomicOr(mem : uint &; value : uint) : uint { return mem }
-[unused_argument(value), sideeffects] def public atomicXor(mem : int &; value : int) : int { return mem }
-[unused_argument(value), sideeffects] def public atomicXor(mem : uint &; value : uint) : uint { return mem }
-[unused_argument(value), sideeffects] def public atomicExchange(mem : int &; value : int) : int { return mem }
-[unused_argument(value), sideeffects] def public atomicExchange(mem : uint &; value : uint) : uint { return mem }
+[unused_argument(value), sideeffects] def public atomicAdd(mem : int &; value : int) : int => mem
+[unused_argument(value), sideeffects] def public atomicAdd(mem : uint &; value : uint) : uint => mem
+[unused_argument(value), sideeffects] def public atomicAdd(mem : float &; value : float) : float =>
+    mem
+[unused_argument(value), sideeffects] def public atomicMin(mem : int &; value : int) : int => mem
+[unused_argument(value), sideeffects] def public atomicMin(mem : uint &; value : uint) : uint => mem
+[unused_argument(value), sideeffects] def public atomicMax(mem : int &; value : int) : int => mem
+[unused_argument(value), sideeffects] def public atomicMax(mem : uint &; value : uint) : uint => mem
+[unused_argument(value), sideeffects] def public atomicAnd(mem : int &; value : int) : int => mem
+[unused_argument(value), sideeffects] def public atomicAnd(mem : uint &; value : uint) : uint => mem
+[unused_argument(value), sideeffects] def public atomicOr(mem : int &; value : int) : int => mem
+[unused_argument(value), sideeffects] def public atomicOr(mem : uint &; value : uint) : uint => mem
+[unused_argument(value), sideeffects] def public atomicXor(mem : int &; value : int) : int => mem
+[unused_argument(value), sideeffects] def public atomicXor(mem : uint &; value : uint) : uint => mem
+[unused_argument(value), sideeffects] def public atomicExchange(mem : int &; value : int) : int =>
+    mem
+[unused_argument(value), sideeffects] def public atomicExchange(mem : uint &; value : uint) : uint =>
+    mem
 // atomicCompSwap(mem, compare, value): if mem == compare, store value; returns the OLD value either
 // way (OpAtomicCompareExchange). The lock-free CAS primitive.
-[unused_argument(compare, value), sideeffects] def public atomicCompSwap(mem : int &; compare, value : int) : int { return mem }
-[unused_argument(compare, value), sideeffects] def public atomicCompSwap(mem : uint &; compare, value : uint) : uint { return mem }
+[unused_argument(compare, value), sideeffects] def public atomicCompSwap(mem : int &; compare, value : int) : int =>
+    mem
+[unused_argument(compare, value), sideeffects] def public atomicCompSwap(mem : uint &; compare, value : uint) : uint =>
+    mem
 
 // ===== subgroup operations (Vulkan 1.1 / SPIR-V 1.3 GroupNonUniform*) =====
 // Cross-lane cooperation within one subgroup (warp/wave). The reduce family folds a value across all
@@ -224,21 +213,22 @@ def public subpassLoad(i : subpassInput) : float4 {
 // 32-bit scalars and their 2/3/4 vectors; any other operand type is rejected with a clean error at
 // emit. The stub bodies model the one-invocation view (identity / true) and never run in a shader --
 // only the call AST is read.
-[sideeffects] def public subgroupAll(pred : bool) : bool { return pred }
-[sideeffects] def public subgroupAny(pred : bool) : bool { return pred }
-[sideeffects] def public subgroupBroadcastFirst(v : auto(TT)) : TT { return v }
-[unused_argument(id), sideeffects] def public subgroupBroadcast(v : auto(TT); id : uint) : TT { return v }
-[unused_argument(id), sideeffects] def public subgroupShuffle(v : auto(TT); id : uint) : TT { return v }
-[unused_argument(mask), sideeffects] def public subgroupShuffleXor(v : auto(TT); mask : uint) : TT { return v }
-[sideeffects] def public subgroupAdd(v : auto(TT)) : TT { return v }
-[sideeffects] def public subgroupMin(v : auto(TT)) : TT { return v }
-[sideeffects] def public subgroupMax(v : auto(TT)) : TT { return v }
-[sideeffects] def public subgroupElect() : bool { return true }
+[sideeffects] def public subgroupAll(pred : bool) : bool => pred
+[sideeffects] def public subgroupAny(pred : bool) : bool => pred
+[sideeffects] def public subgroupBroadcastFirst(v : auto(TT)) : TT => v
+[unused_argument(id), sideeffects] def public subgroupBroadcast(v : auto(TT); id : uint) : TT => v
+[unused_argument(id), sideeffects] def public subgroupShuffle(v : auto(TT); id : uint) : TT => v
+[unused_argument(mask), sideeffects] def public subgroupShuffleXor(v : auto(TT); mask : uint) : TT =>
+    v
+[sideeffects] def public subgroupAdd(v : auto(TT)) : TT => v
+[sideeffects] def public subgroupMin(v : auto(TT)) : TT => v
+[sideeffects] def public subgroupMax(v : auto(TT)) : TT => v
+[sideeffects] def public subgroupElect() : bool => true
 // cluster_size partitions the subgroup into equal clusters and reduces within each. SPIR-V requires the
 // ClusterSize operand to be a constant instruction that is a power of two, so the emitter demands a
 // compile-time constant here rather than letting an invalid blob reach spirv-val.
 [unused_argument(cluster_size), sideeffects]
-def public subgroupClusteredAdd(v : auto(TT); cluster_size : uint) : TT { return v }
+def public subgroupClusteredAdd(v : auto(TT); cluster_size : uint) : TT => v
 
 // The subgroup builtins (gl_Subgroup*, all uint Inputs) live in shader_lingua_franca (shared —
 // MSL lowers the same names to simdgroup attributes). Emitter-enforced SPIR-V stage split:
@@ -339,17 +329,20 @@ def public rayQueryInitializeEXT(var rq : rayQueryEXT; accel : accelerationStruc
                                  ray_flags : uint; cull_mask : uint; origin : float3; tmin : float;
                                  direction : float3; tmax : float) : void {}
 [unused_argument(rq), sideeffects]
-def public rayQueryProceedEXT(var rq : rayQueryEXT) : bool { return false }
+def public rayQueryProceedEXT(var rq : rayQueryEXT) : bool => false
 [unused_argument(rq, committed), sideeffects]
-def public rayQueryGetIntersectionTypeEXT(var rq : rayQueryEXT; committed : bool) : uint { return 0u }
+def public rayQueryGetIntersectionTypeEXT(var rq : rayQueryEXT; committed : bool) : uint => 0u
 [unused_argument(rq, committed), sideeffects]
-def public rayQueryGetIntersectionInstanceCustomIndexEXT(var rq : rayQueryEXT; committed : bool) : int { return 0 }
+def public rayQueryGetIntersectionInstanceCustomIndexEXT(var rq : rayQueryEXT; committed : bool) : int =>
+    0
 [unused_argument(rq, committed), sideeffects]
-def public rayQueryGetIntersectionPrimitiveIndexEXT(var rq : rayQueryEXT; committed : bool) : int { return 0 }
+def public rayQueryGetIntersectionPrimitiveIndexEXT(var rq : rayQueryEXT; committed : bool) : int =>
+    0
 [unused_argument(rq, committed), sideeffects]
-def public rayQueryGetIntersectionBarycentricsEXT(var rq : rayQueryEXT; committed : bool) : float2 { return float2(0.0, 0.0) }
+def public rayQueryGetIntersectionBarycentricsEXT(var rq : rayQueryEXT; committed : bool) : float2 =>
+    float2(0.0, 0.0)
 [unused_argument(rq, committed), sideeffects]
-def public rayQueryGetIntersectionTEXT(var rq : rayQueryEXT; committed : bool) : float { return 0.0 }
+def public rayQueryGetIntersectionTEXT(var rq : rayQueryEXT; committed : bool) : float => 0.0
 
 // ===== cooperative matrices (VK_KHR_cooperative_matrix — Tensor-Core MMA) =====
 // A coopmat is a subgroup-scoped MMA tile (OpTypeCooperativeMatrixKHR) held in a Function-storage LOCAL,
@@ -378,7 +371,8 @@ def public coopmatLoad(var dst : coopmatB_f16_16x16; src; idx : int | uint; stri
 [unused_argument(mat, dst, idx, stride, layout), sideeffects]
 def public coopmatStore(mat : coopmatAcc_f32_16x16; dst; idx, stride, layout : int) : void {}
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatA_f16_16x16; b : coopmatB_f16_16x16; c : coopmatAcc_f32_16x16) : coopmatAcc_f32_16x16 { return c }
+def public coopmatMulAdd(a : coopmatA_f16_16x16; b : coopmatB_f16_16x16; c : coopmatAcc_f32_16x16) : coopmatAcc_f32_16x16 =>
+    c
 
 // The f16-ACCUMULATOR variant (llama.cpp's NV default): halves accumulator register pressure so
 // big-tile kernels (many fragments per subgroup) stay register-resident. coopmatConvert widens the
@@ -388,7 +382,8 @@ struct coopmatAcc_f16_16x16 {}
 [unused_argument(mat, dst, idx, stride, layout), sideeffects]
 def public coopmatStore(mat : coopmatAcc_f16_16x16; dst; idx, stride, layout : int) : void {}
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatA_f16_16x16; b : coopmatB_f16_16x16; c : coopmatAcc_f16_16x16) : coopmatAcc_f16_16x16 { return c }
+def public coopmatMulAdd(a : coopmatA_f16_16x16; b : coopmatB_f16_16x16; c : coopmatAcc_f16_16x16) : coopmatAcc_f16_16x16 =>
+    c
 [unused_argument(dst, src), sideeffects]
 def public coopmatConvert(var dst : coopmatAcc_f32_16x16; src : coopmatAcc_f16_16x16) : void {}
 
@@ -408,7 +403,8 @@ def public coopmatLoad(var dst : coopmatB_s8_32x16; src; idx : int | uint; strid
 [unused_argument(mat, dst, idx, stride, layout), sideeffects]
 def public coopmatStore(mat : coopmatAcc_s32_16x16; dst; idx, stride, layout : int) : void {}
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatA_s8_16x32; b : coopmatB_s8_32x16; c : coopmatAcc_s32_16x16) : coopmatAcc_s32_16x16 { return c }
+def public coopmatMulAdd(a : coopmatA_s8_16x32; b : coopmatB_s8_32x16; c : coopmatAcc_s32_16x16) : coopmatAcc_s32_16x16 =>
+    c
 
 // ===== cooperative matrices v2 (SPV_NV_cooperative_matrix2 — tensor addressing, workgroup scope) =====
 // A cm2 tile is WORKGROUP-scoped (the whole workgroup owns one MxN tile; the driver manages staging)
@@ -471,65 +467,95 @@ struct coopmatWgAcc_s32_64x64 {}
 
 // wg-scope MulAdd twins (the emitter arm is shape-agnostic; these type the das call)
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_64x16; b : coopmatWgB_f16_16x16; c : coopmatWgAcc_f16_64x16) : coopmatWgAcc_f16_64x16 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_64x16; b : coopmatWgB_f16_16x16; c : coopmatWgAcc_f16_64x16) : coopmatWgAcc_f16_64x16 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_64x16; b : coopmatWgB_f16_16x32; c : coopmatWgAcc_f16_64x32) : coopmatWgAcc_f16_64x32 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_64x16; b : coopmatWgB_f16_16x32; c : coopmatWgAcc_f16_64x32) : coopmatWgAcc_f16_64x32 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_64x16; b : coopmatWgB_f16_16x64; c : coopmatWgAcc_f16_64x64) : coopmatWgAcc_f16_64x64 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_64x16; b : coopmatWgB_f16_16x64; c : coopmatWgAcc_f16_64x64) : coopmatWgAcc_f16_64x64 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_64x16; b : coopmatWgB_f16_16x16; c : coopmatWgAcc_f32_64x16) : coopmatWgAcc_f32_64x16 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_64x16; b : coopmatWgB_f16_16x16; c : coopmatWgAcc_f32_64x16) : coopmatWgAcc_f32_64x16 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_64x16; b : coopmatWgB_f16_16x32; c : coopmatWgAcc_f32_64x32) : coopmatWgAcc_f32_64x32 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_64x16; b : coopmatWgB_f16_16x32; c : coopmatWgAcc_f32_64x32) : coopmatWgAcc_f32_64x32 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_64x16; b : coopmatWgB_f16_16x64; c : coopmatWgAcc_f32_64x64) : coopmatWgAcc_f32_64x64 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_64x16; b : coopmatWgB_f16_16x64; c : coopmatWgAcc_f32_64x64) : coopmatWgAcc_f32_64x64 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x256; c : coopmatWgAcc_f16_128x256) : coopmatWgAcc_f16_128x256 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x256; c : coopmatWgAcc_f16_128x256) : coopmatWgAcc_f16_128x256 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x256; c : coopmatWgAcc_f32_128x256) : coopmatWgAcc_f32_128x256 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x256; c : coopmatWgAcc_f32_128x256) : coopmatWgAcc_f32_128x256 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x128; c : coopmatWgAcc_f16_128x128) : coopmatWgAcc_f16_128x128 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x128; c : coopmatWgAcc_f16_128x128) : coopmatWgAcc_f16_128x128 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x128; c : coopmatWgAcc_f32_128x128) : coopmatWgAcc_f32_128x128 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x128; c : coopmatWgAcc_f32_128x128) : coopmatWgAcc_f32_128x128 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x32; c : coopmatWgAcc_f16_128x32) : coopmatWgAcc_f16_128x32 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x32; c : coopmatWgAcc_f16_128x32) : coopmatWgAcc_f16_128x32 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x32; c : coopmatWgAcc_f32_128x32) : coopmatWgAcc_f32_128x32 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_128x64; b : coopmatWgB_f16_64x32; c : coopmatWgAcc_f32_128x32) : coopmatWgAcc_f32_128x32 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_128x32; b : coopmatWgB_f16_32x128; c : coopmatWgAcc_f16_128x128) : coopmatWgAcc_f16_128x128 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_128x32; b : coopmatWgB_f16_32x128; c : coopmatWgAcc_f16_128x128) : coopmatWgAcc_f16_128x128 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_128x32; b : coopmatWgB_f16_32x32; c : coopmatWgAcc_f16_128x32) : coopmatWgAcc_f16_128x32 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_128x32; b : coopmatWgB_f16_32x32; c : coopmatWgAcc_f16_128x32) : coopmatWgAcc_f16_128x32 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_64x64; b : coopmatWgB_f16_64x64; c : coopmatWgAcc_f32_64x64) : coopmatWgAcc_f32_64x64 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_64x64; b : coopmatWgB_f16_64x64; c : coopmatWgAcc_f32_64x64) : coopmatWgAcc_f32_64x64 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_64x64; b : coopmatWgB_f16_64x128; c : coopmatWgAcc_f32_64x128) : coopmatWgAcc_f32_64x128 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_64x64; b : coopmatWgB_f16_64x128; c : coopmatWgAcc_f32_64x128) : coopmatWgAcc_f32_64x128 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_64x128; b : coopmatWgB_f16_128x32; c : coopmatWgAcc_f32_64x32) : coopmatWgAcc_f32_64x32 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_64x128; b : coopmatWgB_f16_128x32; c : coopmatWgAcc_f32_64x32) : coopmatWgAcc_f32_64x32 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x32; c : coopmatWgAcc_f32_64x32) : coopmatWgAcc_f32_64x32 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x32; c : coopmatWgAcc_f32_64x32) : coopmatWgAcc_f32_64x32 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x128; c : coopmatWgAcc_f32_64x128) : coopmatWgAcc_f32_64x128 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x128; c : coopmatWgAcc_f32_64x128) : coopmatWgAcc_f32_64x128 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_64x256; b : coopmatWgB_f16_256x32; c : coopmatWgAcc_f32_64x32) : coopmatWgAcc_f32_64x32 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_64x256; b : coopmatWgB_f16_256x32; c : coopmatWgAcc_f32_64x32) : coopmatWgAcc_f32_64x32 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x256; c : coopmatWgAcc_f32_64x256) : coopmatWgAcc_f32_64x256 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x256; c : coopmatWgAcc_f32_64x256) : coopmatWgAcc_f32_64x256 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_64x512; b : coopmatWgB_f16_512x32; c : coopmatWgAcc_f32_64x32) : coopmatWgAcc_f32_64x32 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_64x512; b : coopmatWgB_f16_512x32; c : coopmatWgAcc_f32_64x32) : coopmatWgAcc_f32_64x32 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x512; c : coopmatWgAcc_f32_64x512) : coopmatWgAcc_f32_64x512 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x512; c : coopmatWgAcc_f32_64x512) : coopmatWgAcc_f32_64x512 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_64x64; b : coopmatWgB_f16_64x64; c : coopmatWgAcc_f16_64x64) : coopmatWgAcc_f16_64x64 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_64x64; b : coopmatWgB_f16_64x64; c : coopmatWgAcc_f16_64x64) : coopmatWgAcc_f16_64x64 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x128; c : coopmatWgAcc_f16_64x128) : coopmatWgAcc_f16_64x128 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x128; c : coopmatWgAcc_f16_64x128) : coopmatWgAcc_f16_64x128 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x256; c : coopmatWgAcc_f16_64x256) : coopmatWgAcc_f16_64x256 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x256; c : coopmatWgAcc_f16_64x256) : coopmatWgAcc_f16_64x256 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x512; c : coopmatWgAcc_f16_64x512) : coopmatWgAcc_f16_64x512 { return c }
+def public coopmatMulAdd(a : coopmatWgA_f16_64x32; b : coopmatWgB_f16_32x512; c : coopmatWgAcc_f16_64x512) : coopmatWgAcc_f16_64x512 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_s8_64x32; b : coopmatWgB_s8_32x16; c : coopmatWgAcc_s32_64x16) : coopmatWgAcc_s32_64x16 { return c }
+def public coopmatMulAdd(a : coopmatWgA_s8_64x32; b : coopmatWgB_s8_32x16; c : coopmatWgAcc_s32_64x16) : coopmatWgAcc_s32_64x16 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_s8_64x32; b : coopmatWgB_s8_32x32; c : coopmatWgAcc_s32_64x32) : coopmatWgAcc_s32_64x32 { return c }
+def public coopmatMulAdd(a : coopmatWgA_s8_64x32; b : coopmatWgB_s8_32x32; c : coopmatWgAcc_s32_64x32) : coopmatWgAcc_s32_64x32 =>
+    c
 [unused_argument(a, b), sideeffects]
-def public coopmatMulAdd(a : coopmatWgA_s8_64x32; b : coopmatWgB_s8_32x64; c : coopmatWgAcc_s32_64x64) : coopmatWgAcc_s32_64x64 { return c }
+def public coopmatMulAdd(a : coopmatWgA_s8_64x32; b : coopmatWgB_s8_32x64; c : coopmatWgAcc_s32_64x64) : coopmatWgAcc_s32_64x64 =>
+    c
 
 // Tensor layout objects (Function-storage locals, like coopmat tiles). tensorLayout2D = clamp
 // Undefined (the aligned fast path: every slice window must be fully in-bounds); tensorLayout2DPad =

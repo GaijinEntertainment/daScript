@@ -26,6 +26,5 @@ def skin_pack8(joints, weights : float4) : uint2 {
     for (i in range(1, 4)) { var j = i; while (j > 0 && quantized_weights[j] > quantized_weights[j - 1]) { swap(quantized_weights[j], quantized_weights[j - 1]); swap(indices[j], indices[j - 1]); j-- } }
     return uint2(indices.x | (indices.y << 8u) | (indices.z << 16u) | (indices.w << 24u), quantized_weights.x | (quantized_weights.y << 8u) | (quantized_weights.z << 16u) | (quantized_weights.w << 24u))
 }
-def skin_unpack8(bits : uint2) : SkinInfluences {
-    return SkinInfluences(joints = float4(float(bits.x & 255u), float((bits.x >> 8u) & 255u), float((bits.x >> 16u) & 255u), float(bits.x >> 24u)), weights = float4(float(bits.y & 255u), float((bits.y >> 8u) & 255u), float((bits.y >> 16u) & 255u), float(bits.y >> 24u)) / 255.0)
-}
+def skin_unpack8(bits : uint2) : SkinInfluences =>
+    SkinInfluences(joints = float4(float(bits.x & 255u), float((bits.x >> 8u) & 255u), float((bits.x >> 16u) & 255u), float(bits.x >> 24u)), weights = float4(float(bits.y & 255u), float((bits.y >> 8u) & 255u), float((bits.y >> 16u) & 255u), float(bits.y >> 24u)) / 255.0)

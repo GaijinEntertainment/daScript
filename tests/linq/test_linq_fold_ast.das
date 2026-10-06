@@ -16,61 +16,45 @@ require dastest/testing_boost public
 
 // `_fold` targets — used by behavioral *_fold_result tests + new loop-AST tests.
 [export, marker(no_coverage)]
-def target_where_fold() : array<int> {
-    return <- [1, 2, 3, 4, 5]._where(_ > 3)._fold()
-}
+def target_where_fold() : array<int> => <- [1, 2, 3, 4, 5]._where(_ > 3)._fold()
 
 [export, marker(no_coverage)]
-def target_select_fold() : array<int> {
-    return <- [1, 2, 3, 4, 5]._select(_ * 2)._fold()
-}
+def target_select_fold() : array<int> => <- [1, 2, 3, 4, 5]._select(_ * 2)._fold()
 
 [export, marker(no_coverage)]
-def target_where_select_fold() : array<int> {
-    return <- [1, 2, 3, 4, 5]._where(_ > 3)._select(_ * 2)._fold()
-}
+def target_where_select_fold() : array<int> =>
+    <- [1, 2, 3, 4, 5]._where(_ > 3)._select(_ * 2)._fold()
 
 [export, marker(no_coverage)]
-def target_reverse_where_fold() : array<int> {
-    return <- [1, 2, 3, 4, 5].to_sequence().reverse()._where(_ > 3).to_array()._fold()
-}
+def target_reverse_where_fold() : array<int> =>
+    <- [1, 2, 3, 4, 5].to_sequence().reverse()._where(_ > 3).to_array()._fold()
 
 [export, marker(no_coverage)]
-def target_zip_fold() : array<tuple<int; int>> {
-    return <- [1, 2, 3]._select(_ * 2).zip([10, 20, 30]._select(_ + 1))._fold()
-}
+def target_zip_fold() : array<tuple<int; int>> =>
+    <- [1, 2, 3]._select(_ * 2).zip([10, 20, 30]._select(_ + 1))._fold()
 
 // Phase 2 Z1 targets — bare zip (no upstream select) hits plan_zip splice.
 [export, marker(no_coverage)]
-def target_zip_bare_arr_fold() : array<tuple<int; int>> {
-    return <- [1, 2, 3].zip([10, 20, 30])._fold()
-}
+def target_zip_bare_arr_fold() : array<tuple<int; int>> => <- [1, 2, 3].zip([10, 20, 30])._fold()
 
 [export, marker(no_coverage)]
-def target_zip_bare_iter_fold() : array<tuple<int; int>> {
-    return <- zip([1, 2, 3].each(), [10, 20, 30].each()).to_array()._fold()
-}
+def target_zip_bare_iter_fold() : array<tuple<int; int>> =>
+    <- zip([1, 2, 3].each(), [10, 20, 30].each()).to_array()._fold()
 
 [export, marker(no_coverage)]
-def target_zip_bare_iter_seq_fold() : iterator<tuple<int; int>> {
-    return <- zip([1, 2, 3].each(), [10, 20, 30].each())._fold()
-}
+def target_zip_bare_iter_seq_fold() : iterator<tuple<int; int>> =>
+    <- zip([1, 2, 3].each(), [10, 20, 30].each())._fold()
 
 [export, marker(no_coverage)]
-def target_zip_bare_unequal_fold() : array<tuple<int; int>> {
-    return <- [1, 2, 3, 4, 5].zip([10, 20, 30])._fold()
-}
+def target_zip_bare_unequal_fold() : array<tuple<int; int>> =>
+    <- [1, 2, 3, 4, 5].zip([10, 20, 30])._fold()
 
 // Phase 2 Z2 targets — count / long_count terminators on bare zip.
 [export, marker(no_coverage)]
-def target_zip_count_fold() : int {
-    return _fold([1, 2, 3].zip([10, 20, 30]).count())
-}
+def target_zip_count_fold() : int => _fold([1, 2, 3].zip([10, 20, 30]).count())
 
 [export, marker(no_coverage)]
-def target_zip_long_count_fold() : int64 {
-    return _fold([1, 2, 3].zip([10, 20, 30]).long_count())
-}
+def target_zip_long_count_fold() : int64 => _fold([1, 2, 3].zip([10, 20, 30]).long_count())
 
 [export, marker(no_coverage)]
 def target_zip_count_iter_fold() : int {
@@ -79,56 +63,45 @@ def target_zip_count_iter_fold() : int {
 }
 
 [export, marker(no_coverage)]
-def target_zip_count_unequal_fold() : int {
-    return _fold([1, 2, 3, 4, 5].zip([10, 20, 30]).count())
-}
+def target_zip_count_unequal_fold() : int => _fold([1, 2, 3, 4, 5].zip([10, 20, 30]).count())
 
 // Phase 2 Z3 targets — chain ops between zip and terminator (where_/select/take/skip/take_while/skip_while).
 // All use the `$(t : tuple<int;int>)` block form so the typer accepts the chain at the inner-arg level (needed before plan_zip fires).
 [export, marker(no_coverage)]
-def target_zip_where_arr_fold() : array<tuple<int; int>> {
-    return <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> where_($(t : tuple<int; int>) => t._0 > 20) |> _fold()
-}
+def target_zip_where_arr_fold() : array<tuple<int; int>> =>
+    <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> where_($(t : tuple<int; int>) => t._0 > 20) |> _fold()
 
 [export, marker(no_coverage)]
-def target_zip_select_arr_fold() : array<int> {
-    return <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> _fold()
-}
+def target_zip_select_arr_fold() : array<int> =>
+    <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> _fold()
 
 [export, marker(no_coverage)]
-def target_zip_where_select_fold() : array<int> {
-    return <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> where_($(t : tuple<int; int>) => t._0 > 20) |> select($(t : tuple<int; int>) => t._0 + t._1) |> _fold()
-}
+def target_zip_where_select_fold() : array<int> =>
+    <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> where_($(t : tuple<int; int>) => t._0 > 20) |> select($(t : tuple<int; int>) => t._0 + t._1) |> _fold()
 
 [export, marker(no_coverage)]
-def target_zip_take_fold() : array<tuple<int; int>> {
-    return <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> take(2) |> _fold()
-}
+def target_zip_take_fold() : array<tuple<int; int>> =>
+    <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> take(2) |> _fold()
 
 [export, marker(no_coverage)]
-def target_zip_skip_fold() : array<tuple<int; int>> {
-    return <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> skip(3) |> _fold()
-}
+def target_zip_skip_fold() : array<tuple<int; int>> =>
+    <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> skip(3) |> _fold()
 
 [export, marker(no_coverage)]
-def target_zip_take_while_fold() : array<tuple<int; int>> {
-    return <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> take_while($(t : tuple<int; int>) => t._0 < 30) |> _fold()
-}
+def target_zip_take_while_fold() : array<tuple<int; int>> =>
+    <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> take_while($(t : tuple<int; int>) => t._0 < 30) |> _fold()
 
 [export, marker(no_coverage)]
-def target_zip_skip_while_fold() : array<tuple<int; int>> {
-    return <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> skip_while($(t : tuple<int; int>) => t._0 < 30) |> _fold()
-}
+def target_zip_skip_while_fold() : array<tuple<int; int>> =>
+    <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> skip_while($(t : tuple<int; int>) => t._0 < 30) |> _fold()
 
 [export, marker(no_coverage)]
-def target_zip_where_count_fold() : int {
-    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> where_($(t : tuple<int; int>) => t._0 > 20) |> count())
-}
+def target_zip_where_count_fold() : int =>
+    _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> where_($(t : tuple<int; int>) => t._0 > 20) |> count())
 
 [export, marker(no_coverage)]
-def target_zip_take_count_fold() : int {
-    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> take(3) |> count())
-}
+def target_zip_take_count_fold() : int =>
+    _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> take(3) |> count())
 
 [export, marker(no_coverage)]
 def target_zip_select_count_fold() : int {
@@ -138,15 +111,13 @@ def target_zip_select_count_fold() : int {
 
 // Phase 2 Z6 bail target — result-selector zip form. plan_zip bails on zipArgCount != 2; tier-2 cascade (fold_linq_default) handles it. Test only that result is correct end-to-end.
 [export, marker(no_coverage)]
-def target_zip_result_selector_bail() : array<int> {
-    return <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5], $(p : int; q : int) => p + q) |> _fold()
-}
+def target_zip_result_selector_bail() : array<int> =>
+    <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5], $(p : int; q : int) => p + q) |> _fold()
 
 // Phase 2 Z6 bail target — chain op (order) that plan_zip doesn't fuse. Tier-2 cascade handles it.
 [export, marker(no_coverage)]
-def target_zip_order_bail() : array<int> {
-    return <- [30, 10, 40, 20, 50].zip([3, 1, 4, 2, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> order() |> _fold()
-}
+def target_zip_order_bail() : array<int> =>
+    <- [30, 10, 40, 20, 50].zip([3, 1, 4, 2, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> order() |> _fold()
 
 // PR #2741 Copilot review thread #r3269663361 — impure select projection ahead of a range op. Eager pipeline runs proj on every element; spliced order would skip it on dropped items, so plan_zip bails. Track proj-eval count via a global counter to assert tier-2 semantics survived.
 var g_zip_proj_hits = 0
@@ -157,67 +128,55 @@ def private side_effect_zip_proj(p : int) : int {
 }
 
 [export, marker(no_coverage)]
-def target_zip_impure_select_skip_bails() : array<int> {
-    return <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => side_effect_zip_proj(t._0)) |> skip(2) |> _fold()
-}
+def target_zip_impure_select_skip_bails() : array<int> =>
+    <- [10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => side_effect_zip_proj(t._0)) |> skip(2) |> _fold()
 
 // ── PR Phase 2B+ — accumulator (sum/min/max/average) terminators on zip ──
 // sum/min/max/average require a `select` projection to scalarize the tuple element (accumulator ops aren't defined on tuples). `long_count` is the exception: it routes through the COUNTER path locally (length shortcut + counter loop) since the accumulator is just `int64 acc++` regardless of element type.
 [export, marker(no_coverage)]
-def target_zip_sum_proj_fold() : int {
-    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> sum())
-}
+def target_zip_sum_proj_fold() : int =>
+    _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> sum())
 
 [export, marker(no_coverage)]
-def target_zip_min_proj_fold() : int {
-    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 - t._1) |> min())
-}
+def target_zip_min_proj_fold() : int =>
+    _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 - t._1) |> min())
 
 [export, marker(no_coverage)]
-def target_zip_max_proj_fold() : int {
-    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 * t._1) |> max())
-}
+def target_zip_max_proj_fold() : int =>
+    _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 * t._1) |> max())
 
 [export, marker(no_coverage)]
-def target_zip_average_proj_fold() : double {
-    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> average())
-}
+def target_zip_average_proj_fold() : double =>
+    _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> average())
 
 [export, marker(no_coverage)]
-def target_zip_where_sum_proj_fold() : int {
-    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> where_($(t : tuple<int; int>) => t._0 > 20) |> select($(t : tuple<int; int>) => t._0 + t._1) |> sum())
-}
+def target_zip_where_sum_proj_fold() : int =>
+    _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> where_($(t : tuple<int; int>) => t._0 > 20) |> select($(t : tuple<int; int>) => t._0 + t._1) |> sum())
 
 [export, marker(no_coverage)]
-def target_zip_where_long_count_fold() : int64 {
-    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> where_($(t : tuple<int; int>) => t._0 > 20) |> long_count())
-}
+def target_zip_where_long_count_fold() : int64 =>
+    _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> where_($(t : tuple<int; int>) => t._0 > 20) |> long_count())
 
 // ── PR Phase 2B+ — early-exit (first/first_or_default/any/all/contains) terminators on zip ──
 [export, marker(no_coverage)]
-def target_zip_first_no_proj_fold() : tuple<int; int> {
-    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> first())
-}
+def target_zip_first_no_proj_fold() : tuple<int; int> =>
+    _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> first())
 
 [export, marker(no_coverage)]
-def target_zip_first_proj_fold() : int {
-    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> first())
-}
+def target_zip_first_proj_fold() : int =>
+    _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> first())
 
 [export, marker(no_coverage)]
-def target_zip_where_first_fold() : tuple<int; int> {
-    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> where_($(t : tuple<int; int>) => t._0 > 20) |> first())
-}
+def target_zip_where_first_fold() : tuple<int; int> =>
+    _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> where_($(t : tuple<int; int>) => t._0 > 20) |> first())
 
 [export, marker(no_coverage)]
-def target_zip_first_or_default_proj_fold() : int {
-    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> where_($(v : int) => v > 1000) |> first_or_default(-1))
-}
+def target_zip_first_or_default_proj_fold() : int =>
+    _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> where_($(v : int) => v > 1000) |> first_or_default(-1))
 
 [export, marker(no_coverage)]
-def target_zip_any_no_pred_fold() : bool {
-    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> any())
-}
+def target_zip_any_no_pred_fold() : bool =>
+    _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> any())
 
 [export, marker(no_coverage)]
 def target_zip_any_no_pred_empty_fold() : bool {
@@ -226,29 +185,24 @@ def target_zip_any_no_pred_empty_fold() : bool {
 }
 
 [export, marker(no_coverage)]
-def target_zip_any_pred_fold() : bool {
-    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> any($(t : tuple<int; int>) => t._0 > 30))
-}
+def target_zip_any_pred_fold() : bool =>
+    _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> any($(t : tuple<int; int>) => t._0 > 30))
 
 [export, marker(no_coverage)]
-def target_zip_all_pred_true_fold() : bool {
-    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> all($(t : tuple<int; int>) => t._0 > 0))
-}
+def target_zip_all_pred_true_fold() : bool =>
+    _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> all($(t : tuple<int; int>) => t._0 > 0))
 
 [export, marker(no_coverage)]
-def target_zip_all_pred_false_fold() : bool {
-    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> all($(t : tuple<int; int>) => t._0 > 30))
-}
+def target_zip_all_pred_false_fold() : bool =>
+    _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> all($(t : tuple<int; int>) => t._0 > 30))
 
 [export, marker(no_coverage)]
-def target_zip_contains_proj_fold() : bool {
-    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> contains(33))
-}
+def target_zip_contains_proj_fold() : bool =>
+    _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> contains(33))
 
 [export, marker(no_coverage)]
-def target_zip_contains_proj_miss_fold() : bool {
-    return _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> contains(999))
-}
+def target_zip_contains_proj_miss_fold() : bool =>
+    _fold([10, 20, 30, 40, 50].zip([1, 2, 3, 4, 5]) |> select($(t : tuple<int; int>) => t._0 + t._1) |> contains(999))
 
 // Empty-source average target. Verifies the 2-site emit_accumulator_lane.average + emit_decs_accumulator.average alignment with linq.das (double accumulator + cnt==0 guard → 0.0lf). See test_zip_average_empty_returns_zero below.
 [export, marker(no_coverage)]
@@ -259,14 +213,12 @@ def target_zip_average_empty_fold() : double {
 }
 
 [export, marker(no_coverage)]
-def target_zip3_fold() : array<tuple<int; int; int>> {
-    return <- [1, 2, 3]._select(_ * 2).zip([10, 20, 30]._select(_ + 1), [100, 200, 300]._select(_ / 10))._fold()
-}
+def target_zip3_fold() : array<tuple<int; int; int>> =>
+    <- [1, 2, 3]._select(_ * 2).zip([10, 20, 30]._select(_ + 1), [100, 200, 300]._select(_ / 10))._fold()
 
 [export, marker(no_coverage)]
-def target_zip3_predicate_fold() : array<int> {
-    return <- [1, 2, 3]._select(_ * 2).zip([10, 20, 30]._select(_ + 1), [100, 200, 300]._select(_ / 10), $(a, b, c : int) => a + b + c)._fold()
-}
+def target_zip3_predicate_fold() : array<int> =>
+    <- [1, 2, 3]._select(_ * 2).zip([10, 20, 30]._select(_ + 1), [100, 200, 300]._select(_ / 10), $(a, b, c : int) => a + b + c)._fold()
 
 [test]
 def test_zip3_fold_result(t : T?) {
@@ -882,34 +834,25 @@ def test_zip_first_proj_emits_early_return(t : T?) {
 // ── Targets for `_fold` Phase-2A loop planner ──────────────────────────
 
 [export, marker(no_coverage)]
-def target_chained_where_fold() : array<int> {
-    return <- [1, 2, 3, 4, 5]._where(_ > 1)._where(_ < 5)._fold()
-}
+def target_chained_where_fold() : array<int> =>
+    <- [1, 2, 3, 4, 5]._where(_ > 1)._where(_ < 5)._fold()
 
 [export, marker(no_coverage)]
-def target_chained_select_fold() : array<int> {
-    return <- [1, 2, 3, 4, 5]._select(_ * 2)._select(_ + 1)._fold()
-}
+def target_chained_select_fold() : array<int> =>
+    <- [1, 2, 3, 4, 5]._select(_ * 2)._select(_ + 1)._fold()
 
 [export, marker(no_coverage)]
-def target_where_count_fold() : int {
-    return _fold(each([1, 2, 3, 4, 5])._where(_ > 2).count())
-}
+def target_where_count_fold() : int => _fold(each([1, 2, 3, 4, 5])._where(_ > 2).count())
 
 [export, marker(no_coverage)]
-def target_chained_where_count_fold() : int {
-    return _fold(each([1, 2, 3, 4, 5])._where(_ > 1)._where(_ < 5).count())
-}
+def target_chained_where_count_fold() : int =>
+    _fold(each([1, 2, 3, 4, 5])._where(_ > 1)._where(_ < 5).count())
 
 [export, marker(no_coverage)]
-def target_count_fold() : int {
-    return _fold(each([1, 2, 3, 4, 5]).count())
-}
+def target_count_fold() : int => _fold(each([1, 2, 3, 4, 5]).count())
 
 [export, marker(no_coverage)]
-def target_select_count_fold() : int {
-    return _fold(each([1, 2, 3, 4, 5])._select(_ * 2).count())
-}
+def target_select_count_fold() : int => _fold(each([1, 2, 3, 4, 5])._select(_ * 2).count())
 
 var g_select_count_proj_hits = 0
 
@@ -919,34 +862,25 @@ def side_effect_select_proj(x : int) : int {
 }
 
 [export, marker(no_coverage)]
-def target_select_count_fold_impure() : int {
-    return _fold(each([1, 2, 3, 4, 5])._select(side_effect_select_proj(_)).count())
-}
+def target_select_count_fold_impure() : int =>
+    _fold(each([1, 2, 3, 4, 5])._select(side_effect_select_proj(_)).count())
 
 // `each(range(...))` — argument is a `range`, not an array. peel_each must NOT fire
 // here; we'd otherwise replace the iterator-yielding each call with the raw range
 // and downstream length-shortcut / reserve-by-length would silently misbehave.
 [export, marker(no_coverage)]
-def target_each_range_count() : int {
-    return _fold(each(range(10))._where(_ > 5).count())
-}
+def target_each_range_count() : int => _fold(each(range(10))._where(_ > 5).count())
 
 // ── Targets for Phase-2B Ring 1 accumulator lane ───────────────────────
 
 [export, marker(no_coverage)]
-def target_sum_fold() : int {
-    return _fold(each([1, 2, 3, 4, 5]).sum())
-}
+def target_sum_fold() : int => _fold(each([1, 2, 3, 4, 5]).sum())
 
 [export, marker(no_coverage)]
-def target_min_workhorse_fold() : int {
-    return _fold(each([5, 3, 8, 1, 4]).min())
-}
+def target_min_workhorse_fold() : int => _fold(each([5, 3, 8, 1, 4]).min())
 
 [export, marker(no_coverage)]
-def target_max_workhorse_fold() : int {
-    return _fold(each([5, 3, 8, 1, 4]).max())
-}
+def target_max_workhorse_fold() : int => _fold(each([5, 3, 8, 1, 4]).max())
 
 [export, marker(no_coverage)]
 def target_min_non_workhorse_fold() : tuple<int; int> {
@@ -956,9 +890,7 @@ def target_min_non_workhorse_fold() : tuple<int; int> {
 }
 
 [export, marker(no_coverage)]
-def target_average_fold() : double {
-    return _fold(each([2, 4, 6, 8]).average())
-}
+def target_average_fold() : double => _fold(each([2, 4, 6, 8]).average())
 
 [export, marker(no_coverage)]
 def target_long_count_loop_fold() : int64 {
@@ -975,19 +907,14 @@ def target_long_count_shortcut_fold() : int64 {
 // ── Targets for Phase-2B Ring 2 early-exit lane ────────────────────────
 
 [export, marker(no_coverage)]
-def target_first_fold() : int {
-    return _fold(each([1, 2, 3, 4, 5])._where(_ > 2).first())
-}
+def target_first_fold() : int => _fold(each([1, 2, 3, 4, 5])._where(_ > 2).first())
 
 [export, marker(no_coverage)]
-def target_first_or_default_fold() : int {
-    return _fold(each([1, 2, 3, 4, 5])._where(_ > 99).first_or_default(-1))
-}
+def target_first_or_default_fold() : int =>
+    _fold(each([1, 2, 3, 4, 5])._where(_ > 99).first_or_default(-1))
 
 [export, marker(no_coverage)]
-def target_any_loop_fold() : bool {
-    return _fold(each([1, 2, 3, 4, 5])._where(_ > 3).any())
-}
+def target_any_loop_fold() : bool => _fold(each([1, 2, 3, 4, 5])._where(_ > 3).any())
 
 [export, marker(no_coverage)]
 def target_any_shortcut_fold() : bool {
@@ -996,14 +923,10 @@ def target_any_shortcut_fold() : bool {
 }
 
 [export, marker(no_coverage)]
-def target_all_fold() : bool {
-    return _fold(each([1, 2, 3, 4, 5])._all(_ > 0))
-}
+def target_all_fold() : bool => _fold(each([1, 2, 3, 4, 5])._all(_ > 0))
 
 [export, marker(no_coverage)]
-def target_contains_fold() : bool {
-    return _fold(each([1, 2, 3, 4, 5]).contains(3))
-}
+def target_contains_fold() : bool => _fold(each([1, 2, 3, 4, 5]).contains(3))
 
 // ── Tests: `_fold` Phase-2A loop emission ──────────────────────────────
 // Phase-2A `_fold` emits explicit for-loops inside an `invoke($block, $src)` wrapper
@@ -1874,14 +1797,12 @@ def test_contains_loop_shape(t : T?) {
 // ── Phase 2C take/skip splice ──────────────────────────────────────────
 
 [export, marker(no_coverage)]
-def target_where_take_count_fold() : int {
-    return _fold(each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])._where(_ % 2 == 0).take(3).count())
-}
+def target_where_take_count_fold() : int =>
+    _fold(each([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])._where(_ % 2 == 0).take(3).count())
 
 [export, marker(no_coverage)]
-def target_skip_take_to_array_fold() : array<int> {
-    return <- _fold(each([1, 2, 3, 4, 5, 6, 7]).skip(2).take(3).to_array())
-}
+def target_skip_take_to_array_fold() : array<int> =>
+    <- _fold(each([1, 2, 3, 4, 5, 6, 7]).skip(2).take(3).to_array())
 
 [export, marker(no_coverage)]
 def target_order_by_take_falls_through() : array<int> {
@@ -1897,9 +1818,7 @@ def target_distinct_to_array_fold() : array<int> {
 }
 
 [export, marker(no_coverage)]
-def target_take_sum_fold() : int {
-    return _fold([1, 2, 3, 4, 5]._select(_ * 10).take(3).sum())
-}
+def target_take_sum_fold() : int => _fold([1, 2, 3, 4, 5]._select(_ * 10).take(3).sum())
 
 // AST helper — total break/continue count anywhere in the subtree. Used to assert that the
 // take-limit `break` and skip-counter `continue` actually got spliced into the per-element body.
@@ -2042,29 +1961,24 @@ def test_distinct_to_array_emits_streaming_dedup(t : T?) {
 // ── Phase 3 — order-family splice arms (plan_order_family) ─────────────
 
 [export, marker(no_coverage)]
-def target_order_by_take_splices_fold() : array<int> {
-    return <- _fold(each([10, 20, 5, 8, 30, 15, 2, 25])._order_by(_).take(3).to_array())
-}
+def target_order_by_take_splices_fold() : array<int> =>
+    <- _fold(each([10, 20, 5, 8, 30, 15, 2, 25])._order_by(_).take(3).to_array())
 
 [export, marker(no_coverage)]
-def target_order_by_descending_take_splices_fold() : array<int> {
-    return <- _fold(each([10, 20, 5, 8, 30, 15, 2, 25])._order_by_descending(_).take(3).to_array())
-}
+def target_order_by_descending_take_splices_fold() : array<int> =>
+    <- _fold(each([10, 20, 5, 8, 30, 15, 2, 25])._order_by_descending(_).take(3).to_array())
 
 [export, marker(no_coverage)]
-def target_bare_order_by_splices_fold() : array<int> {
-    return <- _fold(each([10, 20, 5, 8, 30])._order_by(_).to_array())
-}
+def target_bare_order_by_splices_fold() : array<int> =>
+    <- _fold(each([10, 20, 5, 8, 30])._order_by(_).to_array())
 
 [export, marker(no_coverage)]
-def target_where_order_by_splices_fold() : array<int> {
-    return <- _fold(each([10, 20, 5, 8, 30, 15, 2, 25])._where(_ > 5)._order_by(_).to_array())
-}
+def target_where_order_by_splices_fold() : array<int> =>
+    <- _fold(each([10, 20, 5, 8, 30, 15, 2, 25])._where(_ > 5)._order_by(_).to_array())
 
 [export, marker(no_coverage)]
-def target_where_order_by_take_splices_fold() : array<int> {
-    return <- _fold(each([10, 20, 5, 8, 30, 15, 2, 25])._where(_ > 5)._order_by(_).take(2).to_array())
-}
+def target_where_order_by_take_splices_fold() : array<int> =>
+    <- _fold(each([10, 20, 5, 8, 30, 15, 2, 25])._where(_ > 5)._order_by(_).take(2).to_array())
 
 struct private MkRec {
     a : int
@@ -2267,24 +2181,20 @@ def test_where_order_by_take_correct_result(t : T?) {
 // ── Phase 3d — select + where splice via replaceVariablePeeling ────────
 
 [export, marker(no_coverage)]
-def target_select_where_count_splices_fold() : int {
-    return _fold(each([1, 2, 3, 4, 5, 6, 7, 8])._select(_ * 2)._where(_ > 5).count())
-}
+def target_select_where_count_splices_fold() : int =>
+    _fold(each([1, 2, 3, 4, 5, 6, 7, 8])._select(_ * 2)._where(_ > 5).count())
 
 [export, marker(no_coverage)]
-def target_select_where_sum_splices_fold() : int {
-    return _fold(each([1, 2, 3, 4, 5])._select(_ * 10)._where(_ > 15).sum())
-}
+def target_select_where_sum_splices_fold() : int =>
+    _fold(each([1, 2, 3, 4, 5])._select(_ * 10)._where(_ > 15).sum())
 
 [export, marker(no_coverage)]
-def target_select_where_any_splices_fold() : bool {
-    return _fold(each([1, 2, 3])._select(_ * 100)._where(_ > 50).any())
-}
+def target_select_where_any_splices_fold() : bool =>
+    _fold(each([1, 2, 3])._select(_ * 100)._where(_ > 50).any())
 
 [export, marker(no_coverage)]
-def target_select_where_to_array_splices_fold() : array<int> {
-    return <- _fold(each([1, 2, 3, 4, 5])._select(_ * 2)._where(_ > 4).to_array())
-}
+def target_select_where_to_array_splices_fold() : array<int> =>
+    <- _fold(each([1, 2, 3, 4, 5])._select(_ * 2)._where(_ > 4).to_array())
 
 [test]
 def test_select_where_count_emits_fused_loop(t : T?) {
@@ -2478,9 +2388,8 @@ def test_order_by_take_side_effecting_key_correct_result(t : T?) {
 // ── Phase 3+ — buffer-required splice arms (plan_reverse) ──────────────
 
 [export, marker(no_coverage)]
-def target_reverse_to_array_fold() : array<int> {
-    return <- _fold(each([1, 2, 3, 4, 5]) |> reverse() |> to_array())
-}
+def target_reverse_to_array_fold() : array<int> =>
+    <- _fold(each([1, 2, 3, 4, 5]) |> reverse() |> to_array())
 
 [test]
 def test_reverse_to_array_emits_single_loop_plus_inplace(t : T?) {
@@ -2507,9 +2416,8 @@ def test_reverse_to_array_emits_single_loop_plus_inplace(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_where_reverse_to_array_fold() : array<int> {
-    return <- _fold(each([1, 2, 3, 4, 5])._where(_ > 2) |> reverse() |> to_array())
-}
+def target_where_reverse_to_array_fold() : array<int> =>
+    <- _fold(each([1, 2, 3, 4, 5])._where(_ > 2) |> reverse() |> to_array())
 
 [test]
 def test_reverse_with_where_fuses_into_loop(t : T?) {
@@ -2534,14 +2442,12 @@ def test_reverse_with_where_fuses_into_loop(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_select_reverse_to_array_fold() : array<int> {
-    return <- _fold(each([1, 2, 3, 4, 5])._select(_ * 10) |> reverse() |> to_array())
-}
+def target_select_reverse_to_array_fold() : array<int> =>
+    <- _fold(each([1, 2, 3, 4, 5])._select(_ * 10) |> reverse() |> to_array())
 
 [export, marker(no_coverage)]
-def target_reverse_take_to_array_fold() : array<int> {
-    return <- _fold(each([1, 2, 3, 4, 5, 6, 7, 8]) |> reverse() |> take(3) |> to_array())
-}
+def target_reverse_take_to_array_fold() : array<int> =>
+    <- _fold(each([1, 2, 3, 4, 5, 6, 7, 8]) |> reverse() |> take(3) |> to_array())
 
 [test]
 def test_reverse_take_emits_backward_index_loop(t : T?) {
@@ -2606,9 +2512,8 @@ def test_reverse_take_iterator_source_uses_reverse_inplace(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_reverse_count_fold() : int {
-    return _fold(each([1, 2, 3, 4, 5])._where(_ > 2) |> reverse() |> count())
-}
+def target_reverse_count_fold() : int =>
+    _fold(each([1, 2, 3, 4, 5])._where(_ > 2) |> reverse() |> count())
 
 [test]
 def test_reverse_count_elides_buffer_and_reverse(t : T?) {
@@ -2631,9 +2536,8 @@ def test_reverse_count_elides_buffer_and_reverse(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_reverse_first_fold() : int {
-    return _fold(each([1, 2, 3, 4, 5])._where(_ > 2) |> reverse() |> first())
-}
+def target_reverse_first_fold() : int =>
+    _fold(each([1, 2, 3, 4, 5])._where(_ > 2) |> reverse() |> first())
 
 [test]
 def test_reverse_first_uses_last_survivor_tracker(t : T?) {
@@ -2657,9 +2561,8 @@ def test_reverse_first_uses_last_survivor_tracker(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_reverse_first_or_default_fold() : int {
-    return _fold(each([1, 2, 3, 4, 5])._where(_ > 100) |> reverse() |> first_or_default(-1))
-}
+def target_reverse_first_or_default_fold() : int =>
+    _fold(each([1, 2, 3, 4, 5])._where(_ > 100) |> reverse() |> first_or_default(-1))
 
 [test]
 def test_reverse_first_or_default_returns_default_when_empty(t : T?) {
@@ -2683,9 +2586,8 @@ def test_reverse_first_or_default_returns_default_when_empty(t : T?) {
 // ── Phase 3+ — plan_distinct stages D2-D7 ──────────────────────────────
 
 [export, marker(no_coverage)]
-def target_where_distinct_to_array_fold() : array<int> {
-    return <- _fold([1, 2, 3, 2, 4, 1, 5].to_sequence()._where(_ > 1).distinct().to_array())
-}
+def target_where_distinct_to_array_fold() : array<int> =>
+    <- _fold([1, 2, 3, 2, 4, 1, 5].to_sequence()._where(_ > 1).distinct().to_array())
 
 [test]
 def test_distinct_with_where_fuses_into_loop(t : T?) {
@@ -2706,9 +2608,8 @@ def test_distinct_with_where_fuses_into_loop(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_select_distinct_to_array_fold() : array<int> {
-    return <- _fold([1, 2, 3, 4].to_sequence()._select(_ % 3).distinct().to_array())
-}
+def target_select_distinct_to_array_fold() : array<int> =>
+    <- _fold([1, 2, 3, 4].to_sequence()._select(_ % 3).distinct().to_array())
 
 [test]
 def test_distinct_select_uses_projection_as_key(t : T?) {
@@ -2729,9 +2630,8 @@ def test_distinct_select_uses_projection_as_key(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_distinct_by_to_array_fold() : array<int> {
-    return <- _fold([10, 21, 32, 11, 23, 42].to_sequence()._distinct_by(_ % 10).to_array())
-}
+def target_distinct_by_to_array_fold() : array<int> =>
+    <- _fold([10, 21, 32, 11, 23, 42].to_sequence()._distinct_by(_ % 10).to_array())
 
 [test]
 def test_distinct_by_with_key_substitutes_keyfn(t : T?) {
@@ -2753,9 +2653,8 @@ def test_distinct_by_with_key_substitutes_keyfn(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_distinct_take_to_array_fold() : array<int> {
-    return <- _fold([1, 1, 2, 2, 3, 3, 4, 4, 5, 5].to_sequence().distinct().take(3).to_array())
-}
+def target_distinct_take_to_array_fold() : array<int> =>
+    <- _fold([1, 1, 2, 2, 3, 3, 4, 4, 5, 5].to_sequence().distinct().take(3).to_array())
 
 [test]
 def test_distinct_take_emits_early_exit(t : T?) {
@@ -2776,9 +2675,7 @@ def test_distinct_take_emits_early_exit(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_distinct_count_fold() : int {
-    return _fold([1, 2, 2, 3, 3, 3].to_sequence().distinct().count())
-}
+def target_distinct_count_fold() : int => _fold([1, 2, 2, 3, 3, 3].to_sequence().distinct().count())
 
 [test]
 def test_distinct_count_elides_buffer(t : T?) {
@@ -2799,9 +2696,7 @@ def test_distinct_count_elides_buffer(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_distinct_sum_fold() : int {
-    return _fold([1, 2, 2, 3, 3, 3, 4].to_sequence().distinct().sum())
-}
+def target_distinct_sum_fold() : int => _fold([1, 2, 2, 3, 3, 3, 4].to_sequence().distinct().sum())
 
 [test]
 def test_distinct_sum_emits_inline_accumulator(t : T?) {
@@ -3391,9 +3286,8 @@ def test_group_by_average_bare_emits_avg_acc(t : T?) {
 }
 
 [export, marker(no_coverage)]
-def target_group_by_average_named_fold() : array<tuple<K : int; Avg : double>> {
-    return <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select((K = _._0, Avg = _._1 |> average)))
-}
+def target_group_by_average_named_fold() : array<tuple<K : int; Avg : double>> =>
+    <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select((K = _._0, Avg = _._1 |> average)))
 
 [test]
 def test_group_by_average_named_preserves_field_name(t : T?) {
@@ -3493,44 +3387,33 @@ def test_reverse_select_pushes_projection_not_source(t : T?) {
 // ── Phase 3+ terminal-walk lane: last / single / element_at / aggregate ─────
 
 [export, marker(no_coverage)]
-def target_last_fold() : int {
-    return _fold(each([1, 2, 3, 4, 5])._where(_ < 4).last())
-}
+def target_last_fold() : int => _fold(each([1, 2, 3, 4, 5])._where(_ < 4).last())
 
 [export, marker(no_coverage)]
-def target_last_or_default_fold() : int {
-    return _fold(each([1, 2, 3, 4, 5])._where(_ > 99).last_or_default(-1))
-}
+def target_last_or_default_fold() : int =>
+    _fold(each([1, 2, 3, 4, 5])._where(_ > 99).last_or_default(-1))
 
 [export, marker(no_coverage)]
-def target_single_fold() : int {
-    return _fold(each([1, 2, 3, 4, 5])._where(_ == 3).single())
-}
+def target_single_fold() : int => _fold(each([1, 2, 3, 4, 5])._where(_ == 3).single())
 
 [export, marker(no_coverage)]
-def target_single_or_default_fold() : int {
-    return _fold(each([1, 2, 3, 4, 5])._where(_ > 99).single_or_default(-1))
-}
+def target_single_or_default_fold() : int =>
+    _fold(each([1, 2, 3, 4, 5])._where(_ > 99).single_or_default(-1))
 
 [export, marker(no_coverage)]
-def target_element_at_fold() : int {
-    return _fold(each([10, 20, 30, 40, 50]).element_at(3))
-}
+def target_element_at_fold() : int => _fold(each([10, 20, 30, 40, 50]).element_at(3))
 
 [export, marker(no_coverage)]
-def target_element_at_or_default_fold() : int {
-    return _fold(each([10, 20, 30]).element_at_or_default(100))
-}
+def target_element_at_or_default_fold() : int =>
+    _fold(each([10, 20, 30]).element_at_or_default(100))
 
 [export, marker(no_coverage)]
-def target_aggregate_fold() : int {
-    return _fold(each([1, 2, 3, 4, 5]).aggregate(0, $(acc : int, x : int) => acc + x * 2))
-}
+def target_aggregate_fold() : int =>
+    _fold(each([1, 2, 3, 4, 5]).aggregate(0, $(acc : int, x : int) => acc + x * 2))
 
 [export, marker(no_coverage)]
-def target_aggregate_with_where_fold() : int {
-    return _fold(each([1, 2, 3, 4, 5])._where(_ % 2 == 1).aggregate(0, $(acc : int, x : int) => acc + x * x))
-}
+def target_aggregate_with_where_fold() : int =>
+    _fold(each([1, 2, 3, 4, 5])._where(_ % 2 == 1).aggregate(0, $(acc : int, x : int) => acc + x * x))
 
 [test]
 def test_last_splices(t : T?) {
@@ -3734,39 +3617,28 @@ def test_aggregate_with_where_fuses(t : T?) {
 // ── take_while / skip_while splice targets (PR-G) ──────────────────────
 
 [export, marker(no_coverage)]
-def target_take_while_array_fold() : array<int> {
-    return <- _fold(each([5, 3, 8, 1, 4])._take_while(_ < 8).to_array())
-}
+def target_take_while_array_fold() : array<int> =>
+    <- _fold(each([5, 3, 8, 1, 4])._take_while(_ < 8).to_array())
 
 [export, marker(no_coverage)]
-def target_take_while_count_fold() : int {
-    return _fold(each([5, 3, 8, 1, 4])._take_while(_ < 8).count())
-}
+def target_take_while_count_fold() : int => _fold(each([5, 3, 8, 1, 4])._take_while(_ < 8).count())
 
 [export, marker(no_coverage)]
-def target_take_while_sum_fold() : int {
-    return _fold(each([5, 3, 8, 1, 4])._take_while(_ < 8).sum())
-}
+def target_take_while_sum_fold() : int => _fold(each([5, 3, 8, 1, 4])._take_while(_ < 8).sum())
 
 [export, marker(no_coverage)]
-def target_take_while_first_fold() : int {
-    return _fold(each([5, 3, 8, 1, 4])._take_while(_ < 8).first())
-}
+def target_take_while_first_fold() : int => _fold(each([5, 3, 8, 1, 4])._take_while(_ < 8).first())
 
 [export, marker(no_coverage)]
-def target_skip_while_array_fold() : array<int> {
-    return <- _fold(each([5, 3, 8, 1, 4])._skip_while(_ > 3).to_array())
-}
+def target_skip_while_array_fold() : array<int> =>
+    <- _fold(each([5, 3, 8, 1, 4])._skip_while(_ > 3).to_array())
 
 [export, marker(no_coverage)]
-def target_skip_while_count_fold() : int {
-    return _fold(each([5, 3, 8, 1, 4])._skip_while(_ > 3).count())
-}
+def target_skip_while_count_fold() : int => _fold(each([5, 3, 8, 1, 4])._skip_while(_ > 3).count())
 
 [export, marker(no_coverage)]
-def target_skip_while_then_take_while_fold() : int {
-    return _fold(each([5, 3, 8, 1, 4])._skip_while(_ > 3)._take_while(_ < 8).count())
-}
+def target_skip_while_then_take_while_fold() : int =>
+    _fold(each([5, 3, 8, 1, 4])._skip_while(_ > 3)._take_while(_ < 8).count())
 
 [export, marker(no_coverage)]
 def target_select_then_take_while_cascades_fold() : array<int> {
@@ -3908,24 +3780,20 @@ def test_select_then_take_while_cascades_to_tier2(t : T?) {
 // ── order_by + first → min_by / max_by splice arm ───────────────────────
 
 [export, marker(no_coverage)]
-def target_order_by_first_splices_min_by() : int {
-    return _fold(each([10, 20, 5, 8, 30, 15, 2, 25])._order_by(_).first())
-}
+def target_order_by_first_splices_min_by() : int =>
+    _fold(each([10, 20, 5, 8, 30, 15, 2, 25])._order_by(_).first())
 
 [export, marker(no_coverage)]
-def target_order_by_descending_first_splices_max_by() : int {
-    return _fold(each([10, 20, 5, 8, 30, 15, 2, 25])._order_by_descending(_).first())
-}
+def target_order_by_descending_first_splices_max_by() : int =>
+    _fold(each([10, 20, 5, 8, 30, 15, 2, 25])._order_by_descending(_).first())
 
 [export, marker(no_coverage)]
-def target_where_order_by_first_splices_min_by_on_buf() : int {
-    return _fold(each([10, 20, 5, 8, 30, 15, 2, 25])._where(_ > 5)._order_by(_).first())
-}
+def target_where_order_by_first_splices_min_by_on_buf() : int =>
+    _fold(each([10, 20, 5, 8, 30, 15, 2, 25])._where(_ > 5)._order_by(_).first())
 
 [export, marker(no_coverage)]
-def target_order_by_first_or_default_splices_top_n_by() : int {
-    return _fold(each([10, 20, 5, 8, 30])._order_by(_).first_or_default(-1))
-}
+def target_order_by_first_or_default_splices_top_n_by() : int =>
+    _fold(each([10, 20, 5, 8, 30])._order_by(_).first_or_default(-1))
 
 [export, marker(no_coverage)]
 def target_order_with_cmp_first_bails_to_tier2() : int {
@@ -4042,14 +3910,10 @@ def test_order_with_cmp_first_bails_no_min_max(t : T?) {
 
 
 [export, marker(no_coverage)]
-def target_min_max_fold() : tuple<int; int> {
-    return _fold([5, 1, 9]._where(_ > 0) |> min_max())
-}
+def target_min_max_fold() : tuple<int; int> => _fold([5, 1, 9]._where(_ > 0) |> min_max())
 
 [export, marker(no_coverage)]
-def target_min_by_fold() : int {
-    return _fold([5, 1, 9] |> _min_by(_ % 5))
-}
+def target_min_by_fold() : int => _fold([5, 1, 9] |> _min_by(_ % 5))
 
 [test]
 def test_min_max_family_splice_shape(t : T?) {

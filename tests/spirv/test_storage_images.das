@@ -76,9 +76,8 @@ def private has_storage_image(words : array<uint>; dim : SpvDim; arrayed : uint;
     return found
 }
 
-def private has_cap(words : array<uint>; cap : SpvCapability) : bool {
-    return op_has_operand_at(words, SpvOp.Capability, CAP_OPERAND, uint(cap))
-}
+def private has_cap(words : array<uint>; cap : SpvCapability) : bool =>
+    op_has_operand_at(words, SpvOp.Capability, CAP_OPERAND, uint(cap))
 
 // How many OpAccessChain instructions are based on the descriptor-array VARIABLE -- i.e. how many
 // pool[idx] accesses lowered. Counting bare OpAccessChain would also catch the builtin component
@@ -115,9 +114,8 @@ def private count_pool_access_chains(words : array<uint>) : int {
     return n
 }
 
-def private count_decoration(words : array<uint>; dec : SpvDecoration) : int {
-    return count_op_operand_at(words, SpvOp.Decorate, 1, uint(dec))
-}
+def private count_decoration(words : array<uint>; dec : SpvDecoration) : int =>
+    count_op_operand_at(words, SpvOp.Decorate, 1, uint(dec))
 
 [test]
 def test_storage_images(t : T?) {

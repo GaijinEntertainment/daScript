@@ -20,9 +20,7 @@ struct public ParsingError {
     index : int
 }
 
-def public operator !=(a, b : ParsingError) : bool {
-    return a.text != b.text || a.index != b.index
-}
+def public operator !=(a, b : ParsingError) : bool => a.text != b.text || a.index != b.index
 
 def public operator <(a, b : ParsingError) : bool {
     if (a.index == b.index) {
@@ -47,9 +45,8 @@ def public matches(var parser; tmpl : string; strlen : int) : bool {
     return false
 }
 
-def at_around(text : string; position, window : int) : string {
-    return text |> chop(position - window / 2, window)
-}
+def at_around(text : string; position, window : int) : string =>
+    text |> chop(position - window / 2, window)
 
 def public move(var parser; offset) {
     parser.index += offset
@@ -80,13 +77,10 @@ def public log_info(var parser, message) {
     print("[.] {message}\n" |> blue_str <| parser.color_output)
 }
 
-def public reached_EOF(var parser) : bool {
-    return parser.input |> length <= parser.index
-}
+def public reached_EOF(var parser) : bool => parser.input |> length <= parser.index
 
-def public reached_EOL(var parser) : bool {
-    return parser |> matches("\n", 1) || parser |> matches("\r\n", 2)
-}
+def public reached_EOL(var parser) : bool =>
+    parser |> matches("\n", 1) || parser |> matches("\r\n", 2)
 
 def public skip_whitespace(var parser) {
     while (parser |> get_current_char |> is_white_space) {

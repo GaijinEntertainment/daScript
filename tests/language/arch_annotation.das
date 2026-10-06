@@ -7,21 +7,15 @@ require dastest/testing_boost public
 // This file is the compile-side contract: the shapes that must be accepted, everywhere.
 
 [arch(at="_arch_annotation_doc.md#tokenizer")]
-def cited_function : int {
-    return 17
-}
+def cited_function : int => 17
 
 // one function may answer for more than one section
 [arch(at="_arch_annotation_doc.md#tokenizer"), arch(at="_arch_annotation_doc.md#buffers")]
-def twice_cited_function : int {
-    return 4
-}
+def twice_cited_function : int => 4
 
 // the marker composes with the annotations it sits beside
 [never_inline, arch(at="_arch_annotation_doc.md#tokenizer")]
-def cited_beside_another : int {
-    return 9
-}
+def cited_beside_another : int => 9
 
 [arch(at="_arch_annotation_doc.md#token")]
 struct CitedStruct {

@@ -3,9 +3,7 @@ require dastest/testing_boost public
 
 options very_safe_context
 
-def iliketomoveitmoveit(var a) {
-    return <- a
-}
+def iliketomoveitmoveit(var a) => <- a
 
 [test]
 def test_moves(t : T?) {

@@ -59,6 +59,5 @@ def public exit_for(verdict : WatchVerdict) : int {
     return -1
 }
 
-def public poll_budget(timeout_min : int; interval_sec : int) : int {
-    return max(1, (timeout_min * 60) / max(1, interval_sec))
-}
+def public poll_budget(timeout_min : int; interval_sec : int) : int =>
+    max(1, (timeout_min * 60) / max(1, interval_sec))

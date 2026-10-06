@@ -6,9 +6,8 @@ require llvm/daslib/llvm_jit_plan
 require daslib/ast_boost
 require daslib/rtti
 
-def private salt(layouts : uint64) : uint64 {
-    return jit_env_salt(3, 0, false, false, "", true, true, JitSanitize(), layouts)
-}
+def private salt(layouts : uint64) : uint64 =>
+    jit_env_salt(3, 0, false, false, "", true, true, JitSanitize(), layouts)
 
 [test]
 def test_layout_term(t : T?) {

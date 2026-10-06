@@ -23,17 +23,14 @@ require strings
 let FEATURE = "modules/dasImgui/examples/features/markdown_viewer.das"
 let DEADLOCK_GUARD_SEC = 30.0f
 
-def private markdown_state(app : ImguiApp) : JsonValue? {
-    return post_command(app, "markdown_probe_state", null)
-}
+def private markdown_state(app : ImguiApp) : JsonValue? =>
+    post_command(app, "markdown_probe_state", null)
 
-def private markdown_fragment(app : ImguiApp; text : string) : JsonValue? {
-    return post_command(app, "markdown_probe_fragment", JV((text = text)))
-}
+def private markdown_fragment(app : ImguiApp; text : string) : JsonValue? =>
+    post_command(app, "markdown_probe_fragment", JV((text = text)))
 
-def private markdown_image(app : ImguiApp) : JsonValue? {
-    return post_command(app, "markdown_probe_image", null)
-}
+def private markdown_image(app : ImguiApp) : JsonValue? =>
+    post_command(app, "markdown_probe_image", null)
 
 def private same_rect(var a : JsonValue?; var b : JsonValue?) : bool {
     return ((a?["x0"] ?? -1.0f) == (b?["x0"] ?? -2.0f)

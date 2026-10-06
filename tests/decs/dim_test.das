@@ -8,9 +8,7 @@ struct Coord {
     xyz : float[3]
 }
 
-def operator ==(a, b : float[3]) {
-    return a[0] == b[0] && a[1] == b[1] && a[2] == b[2]
-}
+def operator ==(a, b : float[3]) => a[0] == b[0] && a[1] == b[1] && a[2] == b[2]
 
 [test]
 def dim_test {

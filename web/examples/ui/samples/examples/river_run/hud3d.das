@@ -74,13 +74,9 @@ def hud_panel(x, y, w, h : float; alpha : float = 0.72) {
     hud_rect(x + w - 1.5, y, 1.5, h, COLOR_FRAME, alpha * 0.5)
 }
 
-def design_width() : float {
-    return float(display_w) / hud_scale()
-}
+def design_width() : float => float(display_w) / hud_scale()
 
-def design_height() : float {
-    return float(display_h) / hud_scale()
-}
+def design_height() : float => float(display_h) / hud_scale()
 
 // --- Fuel + throttle cluster (bottom left) ---
 

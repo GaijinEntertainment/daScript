@@ -5,9 +5,7 @@ require dastest/testing_boost
 require strudel/strudel
 require math
 
-def query_one_cycle(var pat : Pattern) : array<Hap> {
-    return <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
-}
+def query_one_cycle(var pat : Pattern) : array<Hap> => <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
 
 [test]
 def test_tokenize(t : T?) {

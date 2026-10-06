@@ -74,25 +74,16 @@ let SUIT_COUNT = 4
 let RANK_COUNT = 13
 
 // Suit/rank extraction via arithmetic
-def card_suit_idx(card : Card) : int {
-    return (int(card) - 1) / RANK_COUNT
-}
+def card_suit_idx(card : Card) : int => (int(card) - 1) / RANK_COUNT
 
-def card_rank_idx(card : Card) : int {
-    return (int(card) - 1) % RANK_COUNT
-}
+def card_rank_idx(card : Card) : int => (int(card) - 1) % RANK_COUNT
 
-def is_jack(card : Card) : bool {
-    return card == Card.club_jack || card == Card.spade_jack || card == Card.heart_jack || card == Card.diamond_jack
-}
+def is_jack(card : Card) : bool =>
+    card == Card.club_jack || card == Card.spade_jack || card == Card.heart_jack || card == Card.diamond_jack
 
-def is_black_jack(card : Card) : bool {
-    return card == Card.club_jack || card == Card.spade_jack
-}
+def is_black_jack(card : Card) : bool => card == Card.club_jack || card == Card.spade_jack
 
-def is_red_jack(card : Card) : bool {
-    return card == Card.heart_jack || card == Card.diamond_jack
-}
+def is_red_jack(card : Card) : bool => card == Card.heart_jack || card == Card.diamond_jack
 
 // Convert Card enum to dasCards string name (for GPU card lookup).
 // E.g. Card.heart_queen → "heart_queen", Card.card_none → ""
@@ -109,9 +100,8 @@ def card_to_string(card : Card) : string {
 }
 
 // Make a Card from suit and rank indices
-def make_card(suit_idx, rank_idx : int) : Card {
-    return unsafe(reinterpret<Card>(suit_idx * RANK_COUNT + rank_idx + 1))
-}
+def make_card(suit_idx, rank_idx : int) : Card =>
+    unsafe(reinterpret<Card>(suit_idx * RANK_COUNT + rank_idx + 1))
 
 // Parse a card name string to Card enum. Returns card_none if invalid.
 def string_to_card(name : string) : Card {
@@ -184,13 +174,10 @@ def board_card(row, col : int) : Card {
     return BOARD_LAYOUT[row * BOARD_COLS + col]
 }
 
-def is_free_space(row, col : int) : bool {
-    return board_card(row, col) == FREE
-}
+def is_free_space(row, col : int) : bool => board_card(row, col) == FREE
 
-def is_corner(row, col : int) : bool {
-    return (row == 0 || row == BOARD_ROWS - 1) && (col == 0 || col == BOARD_COLS - 1)
-}
+def is_corner(row, col : int) : bool =>
+    (row == 0 || row == BOARD_ROWS - 1) && (col == 0 || col == BOARD_COLS - 1)
 
 // ============================================================================
 // Chip helpers
@@ -649,9 +636,7 @@ def count_sequences(game : GameState; color : ChipColor) : int {
     return count
 }
 
-def sequences_to_win(num_players : int) : int {
-    return num_players == 2 ? 2 : 1
-}
+def sequences_to_win(num_players : int) : int => num_players == 2 ? 2 : 1
 
 def check_win(game : GameState) : int {
     let needed = sequences_to_win(game.num_players)

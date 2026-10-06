@@ -8,7 +8,7 @@ require _inline_shadow_helper
 // spells the same name captures the block's variable instead: a plain block reports 30701 at the
 // callee, and a can_shadow block (host query blocks, linq_boost) is silently wrong.
 
-[never_inline] def apply_team(blk : block<(team : int) : int>) : int { return invoke(blk, 5) }
+[never_inline] def apply_team(blk : block<(team : int) : int>) : int => invoke(blk, 5)
 
 def callee(squad_team : int) : int {
     return apply_team() $ [shadowable] (team : int) : int {
@@ -16,7 +16,7 @@ def callee(squad_team : int) : int {
     }
 }
 
-def caller(team : int) : int { return callee(team) }
+def caller(team : int) : int => callee(team)
 
 // the explicit [inline] flavor of this shape is a hard error by design (30100) - the can_shadow
 // argument name is semantic, so the capture cannot be renamed away and the demanded splice must
@@ -30,7 +30,7 @@ def plain_callee(squad_team : int) : int {
     }
 }
 
-def plain_caller(team : int) : int { return plain_callee(team) }
+def plain_caller(team : int) : int => plain_callee(team)
 
 [test]
 def test_no_capture_when_inlined(t : T?) {

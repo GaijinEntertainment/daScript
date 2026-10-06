@@ -11,28 +11,18 @@ struct Foo {
 }
 
 [sideeffects]
-def take_any_hash_table(a : $TFlatHashTable<auto(TT); auto(QQ)>) {
-    return "any_flat"
-}
+def take_any_hash_table(a : $TFlatHashTable<auto(TT); auto(QQ)>) => "any_flat"
 
 [sideeffects]
-def take_any_hash_map(a : $TFlatHashTable<string; auto(QQ)>) {
-    return "string;any"
-}
+def take_any_hash_map(a : $TFlatHashTable<string; auto(QQ)>) => "string;any"
 
 [sideeffects]
-def take_any_hash_map(a) {
-    return "nothing"
-}
+def take_any_hash_map(a) => "nothing"
 [sideeffects]
-def take_dict_map(a : $TFlatHashTable<auto(TT); auto(TT)>(@@hash_string)) {
-    return "dict_map"
-}
+def take_dict_map(a : $TFlatHashTable<auto(TT); auto(TT)>(@@hash_string)) => "dict_map"
 
 [sideeffects]
-def take_any_hash_table(a : $TCuckooHashTable<auto(TT); auto(QQ)>) {
-    return "any_cuckoo"
-}
+def take_any_hash_table(a : $TCuckooHashTable<auto(TT); auto(QQ)>) => "any_cuckoo"
 
 typedef FlatHashMap_int_Foo = $TFlatHashTable<int; Foo>
 typedef FlatHashMap_string_int = $TFlatHashTable<string; int>

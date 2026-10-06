@@ -26,21 +26,16 @@ let NREG = 3l
 let REF_ULP_PER_BLOCK = 2.0e-6
 let REF_POISON = 0.05
 
-def private build_offs() : array<int64> {
-    return <- [N * D * 0l, 0l, N * D * 1l, 0l, N * D * 2l, N]
-}
+def private build_offs() : array<int64> => <- [N * D * 0l, 0l, N * D * 1l, 0l, N * D * 2l, N]
 
-def private slice_i8(src : array<int8>; off, n : int64) : array<int8> {
-    return <- [for (i in range64(off, off + n)); src[i]]
-}
+def private slice_i8(src : array<int8>; off, n : int64) : array<int8> =>
+    <- [for (i in range64(off, off + n)); src[i]]
 
-def private slice_u8(src : array<uint8>; off, n : int64) : array<uint8> {
-    return <- [for (i in range64(off, off + n)); src[i]]
-}
+def private slice_u8(src : array<uint8>; off, n : int64) : array<uint8> =>
+    <- [for (i in range64(off, off + n)); src[i]]
 
-def private slice_f(src : array<float>; off, n : int64) : array<float> {
-    return <- [for (i in range64(off, off + n)); src[i]]
-}
+def private slice_f(src : array<float>; off, n : int64) : array<float> =>
+    <- [for (i in range64(off, off + n)); src[i]]
 
 //! the NREG q8 weight regions [D x N], quantized
 def private q8_weights() : Q8Tensor {

@@ -37,13 +37,10 @@ require math
 
 // Minimal RIFF/WAVE reader for 16-bit PCM mono 16 kHz input — enough for the tutorial;
 // real programs decode arbitrary formats through dasAudio's miniaudio bindings.
-def private wav_u16(b : array<uint8> | #; o : int64) : uint {
-    return uint(b[o]) | (uint(b[o + 1l]) << 8u)
-}
+def private wav_u16(b : array<uint8> | #; o : int64) : uint => uint(b[o]) | (uint(b[o + 1l]) << 8u)
 
-def private wav_u32(b : array<uint8> | #; o : int64) : uint {
-    return wav_u16(b, o) | (wav_u16(b, o + 2l) << 16u)
-}
+def private wav_u32(b : array<uint8> | #; o : int64) : uint =>
+    wav_u16(b, o) | (wav_u16(b, o + 2l) << 16u)
 
 def read_wav_pcm16_mono(path : string) : array<float> {
     var out : array<float>

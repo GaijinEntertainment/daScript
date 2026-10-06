@@ -59,6 +59,4 @@ def fill_table(var tab : table<int64; int>; k : int64; v : int) {
     tab[k] = v
 }
 
-def read_table(var tab : table<int64; int>; k : int64) : int {
-    return tab[k]
-}
+def read_table(var tab : table<int64; int>; k : int64) : int => tab[k]

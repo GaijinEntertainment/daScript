@@ -6,9 +6,7 @@ options gen2
 // on subsequent runs.
 
 [export]
-def greet(name : string) : string {
-    return "Hello, {name}!"
-}
+def greet(name : string) : string => "Hello, {name}!"
 
 [export]
 def sum_to(n : int) : int {

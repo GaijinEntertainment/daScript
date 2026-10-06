@@ -53,9 +53,7 @@ def private act_check(var r : Sweep; n : int; bar : float; got, want : array<flo
 //! `report_sweep`, and every element of the in-place run moved
 def private report_moved(t : T?; name : string; r : Sweep) => report_sweep(t, name, r, 0, true)
 
-def private softmax_bar(n : int) : float {
-    return 1.0e-6 + 4.0e-7 * float(n)
-}
+def private softmax_bar(n : int) : float => 1.0e-6 + 4.0e-7 * float(n)
 
 def private softmax_sink_ref(x : array<float>; sink : float) : tuple<array<float>; float> {
     var mx = double(sink)
@@ -125,9 +123,7 @@ def private softcap_ref(x : array<float>; cap : float) : array<float> {
     return <- out
 }
 
-def private softcap_bar(cap : float) : float {
-    return 1.0e-6 + 1.0e-6 * cap
-}
+def private softcap_bar(cap : float) : float => 1.0e-6 + 1.0e-6 * cap
 
 def private sweep_softcap(cap : float; vec : bool) : Sweep {
     var r = Sweep()
@@ -321,9 +317,7 @@ def private l2_ref(v : array<float>; rows, row_size : int; eps : float) : array<
     return <- out
 }
 
-def private l2_bar(row_size : int) : float {
-    return 1.0e-6 + 2.0e-7 * float(row_size)
-}
+def private l2_bar(row_size : int) : float => 1.0e-6 + 2.0e-7 * float(row_size)
 
 def private sweep_l2_norm_rows() : Sweep {
     var r = Sweep()
@@ -390,9 +384,7 @@ def private gemm_ref(c0, a, b : array<float>; M, K, N : int) : array<float> {
     return <- out
 }
 
-def private gemm_bar(K : int) : float {
-    return 6.0e-8 * float(K) * (float(K) + 2.0) + 1.0e-6
-}
+def private gemm_bar(K : int) : float => 6.0e-8 * float(K) * (float(K) + 2.0) + 1.0e-6
 
 def private sweep_gemm() : GemmCase {
     var r = GemmCase()

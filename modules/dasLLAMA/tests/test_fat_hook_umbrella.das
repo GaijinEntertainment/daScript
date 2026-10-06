@@ -10,9 +10,7 @@ require dasllama/dasllama_common
 // box-profile apply. The shipped bench exe is such a program, and without this registration its
 // first start on a Metal box would serve the twins uncrowned forever and never write a sidecar.
 
-def private fake_race() : bool {
-    return false
-}
+def private fake_race() : bool => false
 
 [test]
 def test_the_umbrella_registers_the_first_start_hook(t : T?) {

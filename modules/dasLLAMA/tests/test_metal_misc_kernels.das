@@ -1875,9 +1875,8 @@ def test_metal_misc_kernels(t : T?) {
 
 // writes `src` into a per-tag temp directory and compiles it with this binary - the shared half
 // of every lens-refusal fixture, whose claim is the child's exit code plus its diagnostic text
-def private spawn_lens_compile(tag, src : string) : tuple<rc : int; out : string> {
-    return spawn_compile_only(src, "lens_{tag}", 120.0)
-}
+def private spawn_lens_compile(tag, src : string) : tuple<rc : int; out : string> =>
+    spawn_compile_only(src, "lens_{tag}", 120.0)
 
 //! the require preamble every lens fixture opens with
 def private lens_fixture_head : string {

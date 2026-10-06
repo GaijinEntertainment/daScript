@@ -30,13 +30,10 @@ def stepfn {
     ss_out = float4(s_scalar + ss_scalar + s_vec.x + ss_vec.x, 0.0f, 0.0f, 1.0f)
 }
 
-def private stepfn_words : array<uint> {
-    return clone_to_move(stepfn_spv)
-}
+def private stepfn_words : array<uint> => clone_to_move(stepfn_spv)
 
-def private has_ext(words : array<uint>; op : GLSLstd450) : bool {
-    return op_has_operand_at(words, SpvOp.ExtInst, 3, uint(op))   // operand 3 = GLSLstd450 instruction literal
-}
+def private has_ext(words : array<uint>; op : GLSLstd450) : bool =>
+    op_has_operand_at(words, SpvOp.ExtInst, 3, uint(op))  // operand 3 = GLSLstd450 instruction literal
 
 [test]
 def test_glsl_std450_step(t : T?) {

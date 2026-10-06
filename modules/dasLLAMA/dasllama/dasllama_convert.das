@@ -23,17 +23,12 @@ require dasllama/dasllama_tune_scope  // nolint:STYLE030 — the dasllama [tune_
 
 // ===== little-endian byte readers =====
 
-def rd_u16(b : array<uint8> | #; o : int64) : uint {
-    return uint(b[o]) | (uint(b[o + 1l]) << 8u)
-}
+def rd_u16(b : array<uint8> | #; o : int64) : uint => uint(b[o]) | (uint(b[o + 1l]) << 8u)
 
-def rd_u32(b : array<uint8> | #; o : int64) : uint {
-    return uint(b[o]) | (uint(b[o + 1l]) << 8u) | (uint(b[o + 2l]) << 16u) | (uint(b[o + 3l]) << 24u)
-}
+def rd_u32(b : array<uint8> | #; o : int64) : uint =>
+    uint(b[o]) | (uint(b[o + 1l]) << 8u) | (uint(b[o + 2l]) << 16u) | (uint(b[o + 3l]) << 24u)
 
-def rd_f32(b : array<uint8> | #; o : int64) : float {
-    return unsafe(reinterpret<float>(rd_u32(b, o)))
-}
+def rd_f32(b : array<uint8> | #; o : int64) : float => unsafe(reinterpret<float>(rd_u32(b, o)))
 
 let GGML_BIN_Q8_BLOCK_ELEMS = 32l   //!< a Q8_0 block of a ggml bin: an f16 scale, then this many quants
 let GGML_BIN_Q8_BLOCK_BYTES = 34l
@@ -61,9 +56,7 @@ def ggml_bin_read_f32(b : array<uint8> | #; ttype : int; off, n : int64; var dst
 }
 
 
-def rd_i32(b : array<uint8> | #; o : int64) : int {
-    return int(rd_u32(b, o))
-}
+def rd_i32(b : array<uint8> | #; o : int64) : int => int(rd_u32(b, o))
 
 // ===== K-quant superblock dequant (256-weight superblocks, on-disk Q4_K / Q6_K) =====
 

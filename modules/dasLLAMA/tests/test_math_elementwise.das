@@ -19,9 +19,7 @@ let DOT_POISON = 0.5
 let ROUND_U = 1.0e-7
 let BAR_FLOOR = 1.0e-6
 
-def private dot_bar(n : int) : float {
-    return ROUND_U * float(n) * float(n) + BAR_FLOOR
-}
+def private dot_bar(n : int) : float => ROUND_U * float(n) * float(n) + BAR_FLOOR
 
 def private lcg_grid(n : int; seed : uint; step : float; signed_values : bool) : array<float> {
     var st = opaque(seed)
@@ -47,9 +45,8 @@ def private lcg_unit(n : int; seed : uint) : array<float> {
     return <- a
 }
 
-def private to_bf16(src : array<float>) : array<uint16> {
-    return <- [for (v in src); bf16_bits_truncated(v)]
-}
+def private to_bf16(src : array<float>) : array<uint16> =>
+    <- [for (v in src); bf16_bits_truncated(v)]
 
 //! one swept length of an in-place kernel: bit-exact, and the elements left where they were counted
 def private tally(var r : Sweep; n : int; got, want, before : array<float>) {

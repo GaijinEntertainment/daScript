@@ -78,9 +78,7 @@ def test_chain_prefix_of_alias_equality(t : T?) {
     }
 }
 
-def null_emit(var _c : Captures; var _ctx : EmitCtx; _at : LineInfo) : Expression? {
-    return null
-}
+def null_emit(var _c : Captures; var _ctx : EmitCtx; _at : LineInfo) : Expression? => null
 
 // ─── c_chain cardinality (PR B) — constructor + lint-helper structural tests ───
 // Semantic coverage of c_chain (empty / all-match / prefix-then-stop / arity gate) is end-to-end

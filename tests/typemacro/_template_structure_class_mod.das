@@ -23,7 +23,5 @@ class template public ProbeScalarCommand : BaseCommand {
         executions--
     }
 
-    def getValue() : ValueType {
-        return newValue
-    }
+    def getValue() : ValueType => newValue
 }

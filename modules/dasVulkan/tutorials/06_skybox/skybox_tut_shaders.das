@@ -97,9 +97,7 @@ var @in @location = 1 f_world_pos    : float3
 var @in @location = 2 f_world_normal : float3
 
 //! GLSL-style reflect(I, N) = I - 2*dot(N,I)*N, with I the incident (eye->surface) direction.
-def private reflect_dir(i, n : float3) : float3 {
-    return i - n * (2.0 * dot(n, i))
-}
+def private reflect_dir(i, n : float3) : float3 => i - n * (2.0 * dot(n, i))
 
 //! Mirror-metal sphere. Reflect the view about the surface normal, sample the cubemap, and tint by
 //! the cycled ``material`` (Schlick metal Fresnel: tinted reflectance at normal incidence ramping to

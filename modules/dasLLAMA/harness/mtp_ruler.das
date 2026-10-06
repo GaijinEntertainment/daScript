@@ -125,9 +125,8 @@ def private head_of(s : string; n : int) : string {
     return r
 }
 
-def private is_bos_piece(p : string) : bool {
-    return p == "<bos>" || p == "<s>" || p == "<|begin_of_text|>" || p == "<|endoftext|>"
-}
+def private is_bos_piece(p : string) : bool =>
+    p == "<bos>" || p == "<s>" || p == "<|begin_of_text|>" || p == "<|endoftext|>"
 
 def private argmax_of(s : Session; vocab : int64) : int64 {
     var best = 0l
@@ -398,9 +397,8 @@ def private run_lcpp_arm(cfg : Args; head : string; kmax : int; rendered, ours :
 
 // ===== --render: one markdown table per ruler JSON =====
 
-def private pct(acc, dr : int64) : string {
-    return dr > 0l ? "{double(acc) * 100.0lf / double(dr):.1f}%" : "-"
-}
+def private pct(acc, dr : int64) : string =>
+    dr > 0l ? "{double(acc) * 100.0lf / double(dr):.1f}%" : "-"
 
 //! Row (engine, depth, prompt) -> cell text: "tok/s (accept%)" for an ON arm, "tok/s" for OFF
 def private cell(rows : array<JsonValue?>; engine : string; depth, prompt : int64) : string {

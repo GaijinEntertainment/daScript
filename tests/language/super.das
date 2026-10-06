@@ -10,12 +10,8 @@ class Base {
     def Base(val : int) {
         x = val
     }
-    def get_value() : int {
-        return x
-    }
-    def add(a, b : int) : int {
-        return a + b
-    }
+    def get_value() : int => x
+    def add(a, b : int) : int => a + b
 }
 
 class Derived : Base {
@@ -28,15 +24,9 @@ class Derived : Base {
         super(val)
         y = val * 2
     }
-    def override get_value() : int {
-        return x + y
-    }
-    def override add(a, b : int) : int {
-        return super.add(a, b) * 2
-    }
-    def get_base_value() : int {
-        return super.get_value()
-    }
+    def override get_value() : int => x + y
+    def override add(a, b : int) : int => super.add(a, b) * 2
+    def get_base_value() : int => super.get_value()
 }
 
 class Derived2 : Derived {
@@ -45,18 +35,10 @@ class Derived2 : Derived {
         super()
         z = 30
     }
-    def override get_value() : int {
-        return x + y + z
-    }
-    def override add(a, b : int) : int {
-        return super.add(a, b) + z
-    }
-    def get_derived_value() : int {
-        return super.get_value()
-    }
-    def get_base_value_from_derived2() : int {
-        return super.get_base_value()
-    }
+    def override get_value() : int => x + y + z
+    def override add(a, b : int) : int => super.add(a, b) + z
+    def get_derived_value() : int => super.get_value()
+    def get_base_value_from_derived2() : int => super.get_base_value()
 }
 
 // Both if/else branches call super — CFG walker must accept (min=max=1 per path).
@@ -141,15 +123,9 @@ class SkipLeaf : SkipMid {
         super(val)
         z = val + 100
     }
-    def override get_value() : int {
-        return x + z
-    }
-    def get_super_value() : int {
-        return super.get_value()
-    }
-    def override add(a, b : int) : int {
-        return super.add(a, b) + z
-    }
+    def override get_value() : int => x + z
+    def get_super_value() : int => super.get_value()
+    def override add(a, b : int) : int => super.add(a, b) + z
 }
 
 [test]

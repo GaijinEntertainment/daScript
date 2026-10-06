@@ -41,17 +41,12 @@ def private batch_mode() : bool {
     return false
 }
 
-def private placeholder(at : LineInfo) : ExpressionPtr {
-    return new ExprConstInt(at = at, value = 0)
-}
+def private placeholder(at : LineInfo) : ExpressionPtr => new ExprConstInt(at = at, value = 0)
 
-def private placeholder_block(at : LineInfo) : ExpressionPtr {
-    return new ExprBlock(at = at)
-}
+def private placeholder_block(at : LineInfo) : ExpressionPtr => new ExprBlock(at = at)
 
-def private placeholder_bool(at : LineInfo) : ExpressionPtr {
-    return new ExprConstBool(at = at, value = false)
-}
+def private placeholder_bool(at : LineInfo) : ExpressionPtr =>
+    new ExprConstBool(at = at, value = false)
 
 let private STMT_ONLY_RTTI <- {
     "ExprBlock", "ExprLet", "ExprWhile", "ExprFor", "ExprIfThenElse", "ExprWith",
@@ -60,9 +55,8 @@ let private STMT_ONLY_RTTI <- {
     "ExprStaticAssert", "ExprAssume"
 }
 
-def private is_stmt_node(e : ExpressionPtr) : bool {
-    return e != null && key_exists(STMT_ONLY_RTTI, e.__rtti)
-}
+def private is_stmt_node(e : ExpressionPtr) : bool =>
+    e != null && key_exists(STMT_ONLY_RTTI, e.__rtti)
 
 
 def private repair_kind(want : string; at : LineInfo) : ExpressionPtr {
@@ -81,9 +75,7 @@ def private unqualified(nm : string) : string {
     return c >= 0 ? slice(nm, c + 2) : nm
 }
 
-def private same_var_name(a, b : string) : bool {
-    return unqualified(a) == unqualified(b)
-}
+def private same_var_name(a, b : string) : bool => unqualified(a) == unqualified(b)
 
 def private compact_nulls(var list : auto(LT)) : int {
     var removed = 0
@@ -103,9 +95,8 @@ let private UNARY_OPS <- { "-", "+", "~", "!", "++", "--", "+++", "---" }
 
 let private LVALUE_OPS <- { "++", "--", "+++", "---" }
 
-def private is_cpp_binding_at(at : LineInfo) : bool {
-    return at.fileInfo != null && starts_with(string(at.fileInfo.name), "<c++ binding")
-}
+def private is_cpp_binding_at(at : LineInfo) : bool =>
+    at.fileInfo != null && starts_with(string(at.fileInfo.name), "<c++ binding")
 
 def private is_enum_type(bt : Type) : bool {
     return (bt == Type.tEnumeration || bt == Type.tEnumeration8
@@ -177,9 +168,7 @@ class private AstVerifyVisitor : AstVisitor {
     type_ancestors : table<void?>
     closure_depth : int = 0
 
-    def override canVisitFunction(fun : Function?) : bool {
-        return !fun.flags.generated
-    }
+    def override canVisitFunction(fun : Function?) : bool => !fun.flags.generated
 
     def report(at : LineInfo; msg : string) : void {
         error_count++
@@ -325,9 +314,7 @@ class private AstVerifyVisitor : AstVisitor {
         return expr
     }
 
-    def is_ancestor(slot : ExpressionPtr) : bool {
-        return slot != null && key_exists(ancestors, slot)
-    }
+    def is_ancestor(slot : ExpressionPtr) : bool => slot != null && key_exists(ancestors, slot)
 
     def dropped(n : int; what : string; at : LineInfo) : void {
         if (n > 0) {
@@ -517,9 +504,7 @@ class private AstVerifyVisitor : AstVisitor {
         }
     }
 
-    def override canVisitQuoteSubexpression(_expr : ExprQuote?) : bool {
-        return true
-    }
+    def override canVisitQuoteSubexpression(_expr : ExprQuote?) : bool => true
 
     def override preVisitExprBlock(var expr : ExprBlock?) : void {
         dropped(compact_nulls(expr.arguments), "ExprBlock.arguments", expr.at)
@@ -727,17 +712,14 @@ class private AstVerifyVisitor : AstVisitor {
         return placeholder(expr.at)
     }
 
-    def override visitExprReader(var expr : ExprReader?) : ExpressionPtr {
-        return payload_slot(expr, expr.macro != null, "macro")
-    }
+    def override visitExprReader(var expr : ExprReader?) : ExpressionPtr =>
+        payload_slot(expr, expr.macro != null, "macro")
 
-    def override visitExprCallMacro(var expr : ExprCallMacro?) : ExpressionPtr {
-        return payload_slot(expr, expr.macro != null, "macro")
-    }
+    def override visitExprCallMacro(var expr : ExprCallMacro?) : ExpressionPtr =>
+        payload_slot(expr, expr.macro != null, "macro")
 
-    def override visitExprConstEnumeration(var expr : ExprConstEnumeration?) : ExpressionPtr {
-        return payload_slot(expr, expr.enumType != null, "enumType")
-    }
+    def override visitExprConstEnumeration(var expr : ExprConstEnumeration?) : ExpressionPtr =>
+        payload_slot(expr, expr.enumType != null, "enumType")
 
     def override visitExprVar(var expr : ExprVar?) : ExpressionPtr {
         let v = expr.variable
@@ -869,13 +851,9 @@ struct private Anchor {
     phrase : string
 }
 
-def private located(e : Expression?) : bool {
-    return e != null && e.at.fileInfo != null
-}
+def private located(e : Expression?) : bool => e != null && e.at.fileInfo != null
 
-def private usable(e : Expression?) : bool {
-    return located(e) && !is_cpp_binding_at(e.at)
-}
+def private usable(e : Expression?) : bool => located(e) && !is_cpp_binding_at(e.at)
 
 class private FirstLocatedVisitor : AstVisitor {
     @do_not_delete found : Expression?
@@ -884,12 +862,8 @@ class private FirstLocatedVisitor : AstVisitor {
             found = expr
         }
     }
-    def override canVisitWithAliasSubexpression(_expr : ExprAssume?) : bool {
-        return false
-    }
-    def override canVisitStructureFieldInit(st : StructurePtr) : bool {
-        return !st.flags.isTemplate
-    }
+    def override canVisitWithAliasSubexpression(_expr : ExprAssume?) : bool => false
+    def override canVisitStructureFieldInit(st : StructurePtr) : bool => !st.flags.isTemplate
 }
 
 def private first_located_inside(var expr : ExpressionPtr) : Expression? {
@@ -940,9 +914,8 @@ class private AstPostInferVerifyVisitor : AstVisitor {
             phrase = passed != null ? "preceded by {passed.__rtti}" : last_passed.phrase)
     }
 
-    def override canVisitFunction(fun : Function?) : bool {
-        return !fun.moreFlags.isTemplate && !fun.moreFlags.stub
-    }
+    def override canVisitFunction(fun : Function?) : bool =>
+        !fun.moreFlags.isTemplate && !fun.moreFlags.stub
 
     def override preVisitFunction(var fun : FunctionPtr) : void {
         current_fn = fun
@@ -962,18 +935,14 @@ class private AstPostInferVerifyVisitor : AstVisitor {
         return expr
     }
 
-    def override canVisitWithAliasSubexpression(_expr : ExprAssume?) : bool {
-        return false
-    }
+    def override canVisitWithAliasSubexpression(_expr : ExprAssume?) : bool => false
 
     def override canVisitStructureFieldInit(st : StructurePtr) : bool {
         decl_init_depth++
         return !st.flags.isTemplate
     }
 
-    def override canVisitStructure(st : Structure?) : bool {
-        return !st.flags.isTemplate
-    }
+    def override canVisitStructure(st : Structure?) : bool => !st.flags.isTemplate
 
     decl_init_depth : int = 0
 
@@ -1400,9 +1369,7 @@ class private AstGcReachVisitor : AstVisitor {
         }
     }
 
-    def override canVisitQuoteSubexpression(_expr : ExprQuote?) : bool {
-        return true
-    }
+    def override canVisitQuoteSubexpression(_expr : ExprQuote?) : bool => true
 
     def override preVisitExpression(var expr : ExpressionPtr) : void {
         reach_expr(expr, expr == null ? "expression" : "{expr.__rtti}")

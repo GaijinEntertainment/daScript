@@ -54,9 +54,8 @@ def private has_extension(words : array<uint>; want : string) : bool {
 
 // Walk every OpExecutionMode and check whether one of them lists `mode` as the second operand
 // (operand 1). The first operand (operand 0) is the entry-point id; the mode literal sits at index 1.
-def private has_execution_mode(words : array<uint>; mode : SpvExecutionMode) : bool {
-    return op_has_operand_at(words, SpvOp.ExecutionMode, 1, uint(mode))
-}
+def private has_execution_mode(words : array<uint>; mode : SpvExecutionMode) : bool =>
+    op_has_operand_at(words, SpvOp.ExecutionMode, 1, uint(mode))
 
 // Operand count (excluding word0) of the FIRST instruction with opcode `op`, or -1 if none.
 // Used to tell OpEmitMeshTasksEXT's 4-operand payload form (gx, gy, gz, payload) from the 3-operand

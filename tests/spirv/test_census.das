@@ -11,9 +11,7 @@ require _spirv_common
 require spirv/spirv_dis
 require spirv/spirv_grammar
 
-def private op_name(op : uint) : string {
-    return SPV_OP_NAMES?[op] ?? "op#{op}"
-}
+def private op_name(op : uint) : string => SPV_OP_NAMES?[op] ?? "op#{op}"
 
 def private add_set(var dst : table<uint>; var words : array<uint>) {
     var s <- opcode_set(words)

@@ -47,17 +47,14 @@ var atmosphere_color = 0u
 var atmosphere_width = 0
 var atmosphere_height = 0
 
-def camera_ray(ndc, scale : float2; forward, right, up : float3) : float3 {
-    return forward + right * (ndc.x * scale.x) + up * (ndc.y * scale.y)
-}
+def camera_ray(ndc, scale : float2; forward, right, up : float3) : float3 =>
+    forward + right * (ndc.x * scale.x) + up * (ndc.y * scale.y)
 
-def transformed_normal(normal, scale : float3; model : float4x4) : float3 {
-    return normalize(float3x3(model) * (normal / (scale * scale)))
-}
+def transformed_normal(normal, scale : float3; model : float4x4) : float3 =>
+    normalize(float3x3(model) * (normal / (scale * scale)))
 
-def hdr_pixel_valid(pixel : float4) : bool {
-    return abs(pixel.x) <= 65504.0 && abs(pixel.y) <= 65504.0 && abs(pixel.z) <= 65504.0
-}
+def hdr_pixel_valid(pixel : float4) : bool =>
+    abs(pixel.x) <= 65504.0 && abs(pixel.y) <= 65504.0 && abs(pixel.z) <= 65504.0
 
 [vertex_program]
 def vs_latch_sky {
@@ -297,13 +294,10 @@ let DARK_METAL = float4(0.56, 0.75, 0.3, 0.0)
 let STONE = float4(0.90, 0.0, 0.0, 0.0)
 let GLOW = float4(0.35, 0.4, 0.0, 3.0)
 
-def robot_glow(resident : int; time : float) : float4 {
-    return GLOW * float4(1.0, 1.0, 1.0, robot_indicator(resident, time))
-}
+def robot_glow(resident : int; time : float) : float4 =>
+    GLOW * float4(1.0, 1.0, 1.0, robot_indicator(resident, time))
 
-def z_rotation(a : float) : float4 {
-    return float4(0.0, 0.0, sin(a * 0.5), cos(a * 0.5))
-}
+def z_rotation(a : float) : float4 => float4(0.0, 0.0, sin(a * 0.5), cos(a * 0.5))
 
 def part(pos, size, color : float3; surface : float4 = DARK_METAL;
          shape : Shape = Shape.box; rot : float4 = float4(0.0, 0.0, 0.0, 1.0)) {

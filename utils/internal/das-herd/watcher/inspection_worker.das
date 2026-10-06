@@ -169,9 +169,7 @@ def private prepare_changed_source_ranges(source : string;
     return <- result
 }
 
-def private source_lines(source : string) : array<string> {
-    return <- split(source, "\n")
-}
+def private source_lines(source : string) : array<string> => <- split(source, "\n")
 
 def public inspector_reconstruct_old_source(new_source : string;
                                             patch : GitParsedPatch const) : string {

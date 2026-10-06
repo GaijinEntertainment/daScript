@@ -5,45 +5,35 @@ require daslib/fuzzer
 require daslib/faker
 require daslib/constant_expression
 
-def shl_jit(a, b) {
-    return a << b
-}
+def shl_jit(a, b) => a << b
 
 def test_shl(t : T?; a : auto(TTA); b : auto(TTB)) {
     t |> success(!jit_enabled() || is_jit_function(@@ < (a : TTA; b : TTB) : void > shl_jit))
     t |> strictEqual(a << b, shl_jit(a, b), "a << b")
 }
 
-def shr_jit(a, b) {
-    return a >> b
-}
+def shr_jit(a, b) => a >> b
 
 def test_shr(t : T?; a : auto(TTA); b : auto(TTB)) {
     t |> success(!jit_enabled() || is_jit_function(@@ < (a : TTA; b : TTB) : void > shr_jit))
     t |> strictEqual(a >> b, shr_jit(a, b), "a >> b")
 }
 
-def and_jit(a, b) {
-    return a & b
-}
+def and_jit(a, b) => a & b
 
 def test_and(t : T?; a, b : auto(TT)) {
     t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : TT) : void > and_jit))
     t |> strictEqual(a & b, and_jit(a, b), "a & b")
 }
 
-def or_jit(a, b) {
-    return a | b
-}
+def or_jit(a, b) => a | b
 
 def test_or(t : T?; a, b : auto(TT)) {
     t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : TT) : void > or_jit))
     t |> strictEqual(a | b, or_jit(a, b), "a | b")
 }
 
-def xor_jit(a, b) {
-    return a ^ b
-}
+def xor_jit(a, b) => a ^ b
 
 def test_xor(t : T?; a, b : auto(TT)) {
     t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT; b : TT) : void > xor_jit))
@@ -105,18 +95,14 @@ def test_shr_equ(t : T?; a : auto(TTA); b : auto(TTB)) {
     t |> strictEqual(a >> b, shr_equ_jit(a, b), "a >>= b")
 }
 
-def rol_jit(a, b) {
-    return a <<< b
-}
+def rol_jit(a, b) => a <<< b
 
 def test_rol(t : T?; a : auto(TTA); b : auto(TTB)) {
     t |> success(!jit_enabled() || is_jit_function(@@ < (a : TTA; b : TTB) : void > rol_jit))
     t |> strictEqual(a <<< b, rol_jit(a, b), "a <<< b")
 }
 
-def ror_jit(a, b) {
-    return a >>> b
-}
+def ror_jit(a, b) => a >>> b
 
 def test_ror(t : T?; a : auto(TTA); b : auto(TTB)) {
     t |> success(!jit_enabled() || is_jit_function(@@ < (a : TTA; b : TTB) : void > ror_jit))
@@ -162,9 +148,7 @@ def test_bit_arithmetics_op2(t : T?) {
     }
 }
 
-def neg_jit(a) {
-    return ~a
-}
+def neg_jit(a) => ~a
 
 def test_neg(t : T?; a : auto(TT)) {
     t |> success(!jit_enabled() || is_jit_function(@@ < (a : TT) : void > neg_jit))

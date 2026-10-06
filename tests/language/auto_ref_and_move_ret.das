@@ -3,9 +3,7 @@ options no_unused_function_arguments = false
 require dastest/testing_boost public
 require math
 
-def armr_abs(i : int) : int {
-    return abs(i)
-}
+def armr_abs(i : int) : int => abs(i)
 
 def armr_foo(var bar : array<int>) : array<int> {
     var b & = unsafe(bar)

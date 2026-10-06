@@ -8,9 +8,7 @@ require daslib/fio
 require daslib/cross_context
 require _mc_common
 
-def fixture(name : string) : string {
-    return "%/tests/module_cache/_fixtures/{name}.das"
-}
+def fixture(name : string) : string => "%/tests/module_cache/_fixtures/{name}.das"
 
 // the in-process arms issue their late requires from this [init]: a require after the walk is
 // a compile's, and a test body runs after the compile, where the wrapper panics
@@ -72,24 +70,20 @@ def late_probe {
 }
 
 //! a late require from the driver's [init], with the fixture's compile logged per module
-def late_driver() : string {
-    return "options gen2\nrequire daslib/cross_context\n\nvar answer = 0\n\n[init]\ndef late_init \{\n    var inscope no_access : smart_ptr<FileAccess>\n    using() $(var cop : CodeOfPolicies) \{\n        cop.log_module_compile_time = true\n        require_module_now(\"{fixture("mc_late_mod")}\", no_access, cop) $(var mod : Module?; issues : das_string) \{\n            print(\"LATE LOG \{issues\}\\n\")\n            if (mod != null) \{\n                unsafe \{\n                    invoke_in_context(addr(find_macro_context(mod)), \"late_answer\", addr(answer))\n                \}\n            \}\n        \}\n    \}\n\}\n\n[export]\ndef main \{\n    print(\"LATE \{answer\}\\n\")\n\}\n"
-}
+def late_driver() : string =>
+    "options gen2\nrequire daslib/cross_context\n\nvar answer = 0\n\n[init]\ndef late_init \{\n    var inscope no_access : smart_ptr<FileAccess>\n    using() $(var cop : CodeOfPolicies) \{\n        cop.log_module_compile_time = true\n        require_module_now(\"{fixture("mc_late_mod")}\", no_access, cop) $(var mod : Module?; issues : das_string) \{\n            print(\"LATE LOG \{issues\}\\n\")\n            if (mod != null) \{\n                unsafe \{\n                    invoke_in_context(addr(find_macro_context(mod)), \"late_answer\", addr(answer))\n                \}\n            \}\n        \}\n    \}\n\}\n\n[export]\ndef main \{\n    print(\"LATE \{answer\}\\n\")\n\}\n"
 
 //! the wrapper called from a running script
-def running_driver() : string {
-    return "options gen2\nrequire daslib/cross_context\n\n[export]\ndef main \{\n    let m = require_module_now(\"{fixture("mc_late_mod")}\")\n    print(\"LATE \{m != null\}\\n\")\n\}\n"
-}
+def running_driver() : string =>
+    "options gen2\nrequire daslib/cross_context\n\n[export]\ndef main \{\n    let m = require_module_now(\"{fixture("mc_late_mod")}\")\n    print(\"LATE \{m != null\}\\n\")\n\}\n"
 
 //! the block form called from a running script - the builtin's own refusal
-def running_block_driver() : string {
-    return "options gen2\nrequire daslib/ast\n\n[export]\ndef main \{\n    var inscope no_access : smart_ptr<FileAccess>\n    using() $(var cop : CodeOfPolicies) \{\n        require_module_now(\"{fixture("mc_late_mod")}\", no_access, cop) $(var mod : Module?; issues : das_string) \{\n            print(\"LATE \{mod != null\}\\n\")\n        \}\n    \}\n\}\n"
-}
+def running_block_driver() : string =>
+    "options gen2\nrequire daslib/ast\n\n[export]\ndef main \{\n    var inscope no_access : smart_ptr<FileAccess>\n    using() $(var cop : CodeOfPolicies) \{\n        require_module_now(\"{fixture("mc_late_mod")}\", no_access, cop) $(var mod : Module?; issues : das_string) \{\n            print(\"LATE \{mod != null\}\\n\")\n        \}\n    \}\n\}\n"
 
 //! a late require issued from a call macro during the requirer's own compile; `tail` follows the call
-def macro_driver(tail : string) : string {
-    return "options gen2\nrequire {fixture("mc_late_macro_user")}\n\n[export]\ndef main \{\n    print(\"LATE \{late_probe_call()\}\\n\")\n{tail}\}\n"
-}
+def macro_driver(tail : string) : string =>
+    "options gen2\nrequire {fixture("mc_late_macro_user")}\n\n[export]\ndef main \{\n    print(\"LATE \{late_probe_call()\}\\n\")\n{tail}\}\n"
 
 def count_prefix(dir : string; prefix : string) : int {
     var n = 0

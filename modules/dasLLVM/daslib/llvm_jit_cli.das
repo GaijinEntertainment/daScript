@@ -109,6 +109,5 @@ struct public JitCliOptions {
 }
 
 //! `--jit-compile-only` over `options jit_compile_only`
-def public jit_compile_only(cli : JitCliOptions; prog : Program?) : bool {
-    return cli.compile_only |> unwrap_or((prog._options |> find_arg("jit_compile_only")) ?as tBool ?? false)
-}
+def public jit_compile_only(cli : JitCliOptions; prog : Program?) : bool =>
+    cli.compile_only |> unwrap_or((prog._options |> find_arg("jit_compile_only")) ?as tBool ?? false)

@@ -20,19 +20,14 @@ enum ColAlign {
 }
 
 //! Wraps ``s`` in ``**`` bold markers.
-def public md_bold(s : string) : string {
-    return "**{s}**"
-}
+def public md_bold(s : string) : string => "**{s}**"
 
 //! Escapes the ``|`` cell separator in ``s`` so it renders as literal text inside a table cell.
 [temp_string_result]
-def public md_escape(s : string) : string {
-    return s |> replace("|", "\\|")
-}
+def public md_escape(s : string) : string => s |> replace("|", "\\|")
 
-def private md_pad(cell : string; align : ColAlign; width : int) : string {
-    return align == ColAlign.right ? pad_left(cell, width) : pad_right(cell, width)
-}
+def private md_pad(cell : string; align : ColAlign; width : int) : string =>
+    align == ColAlign.right ? pad_left(cell, width) : pad_right(cell, width)
 
 def private md_row(cells : array<string>; aligns : array<ColAlign>; width : array<int>) : string {
     return build_string() $(writer) {

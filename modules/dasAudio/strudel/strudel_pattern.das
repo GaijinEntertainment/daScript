@@ -30,12 +30,8 @@ typedef PatternTransform = lambda<(var pat : Pattern) : Pattern>
 // (`gain(0.5)`), and doubles (`fast(2.0lf)`) uniformly. The PERF020 suppression
 // is centralized here: `double(n)`/`float(n)` is a no-op for the same-type union
 // member, but is required to cover the other two.
-def private numd(n : int | float | double) : double {
-    return double(n)
-}
-def private numf(n : int | float | double) : float {
-    return float(n)
-}
+def private numd(n : int | float | double) : double => double(n)
+def private numf(n : int | float | double) : float => float(n)
 
 // ─── Constructors ───
 

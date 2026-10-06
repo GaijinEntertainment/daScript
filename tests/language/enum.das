@@ -74,9 +74,7 @@ enum AutoIncrAfterExpr {
 }
 
 [sideeffects]
-def getZenOne {
-    return Zen.not_zero
-}
+def getZenOne => Zen.not_zero
 
 [export, unused_argument(arg)]
 def testBindEnum(arg : SomeEnum) {

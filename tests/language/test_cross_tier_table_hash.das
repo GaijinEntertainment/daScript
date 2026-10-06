@@ -25,9 +25,7 @@ def write_interpreted {
     }
 }
 
-def read_aot : int {
-    return g_tab ?[EntityId(7)] ?? -1
-}
+def read_aot : int => g_tab ?[EntityId(7)] ?? -1
 
 def read_aot_misses : int {
     var misses = 0

@@ -16,9 +16,9 @@ struct Far : Bar {
     c : int
 }
 
-def test(_a : Foo; _b : Foo) { return "foo foo"; }
-def test(_a : Foo; _b : Bar) { return "foo bar"; }
-def test(_a : Bar; _b : Foo) { return "bar foo"; }
+def test(_a : Foo; _b : Foo) => "foo foo"
+def test(_a : Foo; _b : Bar) => "foo bar"
+def test(_a : Bar; _b : Foo) => "bar foo"
 
 def test_distance(t : T?) {
     t |> equal(test(Foo(uninitialized), Foo(uninitialized)), "foo foo")
@@ -30,33 +30,33 @@ def test_distance(t : T?) {
     }
 }
 
-def gen_1(a : Foo; b) { return "Foo *"; }
-def gen_1(a; b) { return "* *"; }
+def gen_1(a : Foo; b) => "Foo *"
+def gen_1(a; b) => "* *"
 
-def gen_2(a : Foo; b) { return "Foo *"; }
-def gen_2(a : Bar; b) { return "Bar *"; }
+def gen_2(a : Foo; b) => "Foo *"
+def gen_2(a : Bar; b) => "Bar *"
 
-def gen_3(arr) { return "*"; }
-def gen_3(arr : auto[]) { return "[*]"; }
-def gen_3(arr : auto[3]) { return "[3]"; }
+def gen_3(arr) => "*"
+def gen_3(arr : auto[]) => "[*]"
+def gen_3(arr : auto[3]) => "[3]"
 
-def gen_4(arr) { return "*"; }
-def gen_4(arr : array<auto>) { return "array<*>"; }
+def gen_4(arr) => "*"
+def gen_4(arr : array<auto>) => "array<*>"
 
-def gen_5(arr : array<auto?>) { return "<*?>"; }
-def gen_5(arr : array<auto>) { return "<*>"; }
+def gen_5(arr : array<auto?>) => "<*?>"
+def gen_5(arr : array<auto>) => "<*>"
 
-def gen_6(arr) { return "*"; }
-def gen_6(arr : table<auto; auto?>) { return "<*:*?>"; }
-def gen_6(arr : table<int; auto>) { return "<int:*>"; }
-def gen_6(arr : table<int; auto?>) { return "<int:*?>"; }
+def gen_6(arr) => "*"
+def gen_6(arr : table<auto; auto?>) => "<*:*?>"
+def gen_6(arr : table<int; auto>) => "<int:*>"
+def gen_6(arr : table<int; auto?>) => "<int:*?>"
 
-def gen_7(arr : tuple<auto; auto?; int>) { return "<*:*?:int>"; }
-def gen_7(arr : tuple<auto; auto; auto>) { return "<*:*:*>"; }
+def gen_7(arr : tuple<auto; auto?; int>) => "<*:*?:int>"
+def gen_7(arr : tuple<auto; auto; auto>) => "<*:*:*>"
 
-def gen_8(arr : auto) { return "*"; }
-def gen_8(arr : function<(arg : auto; arg2 : int) : auto?>) { return "(*:int):?"; }
-def gen_8(arr : function<(arg : auto; arg2 : int) : auto>) { return "(*:int):*"; }
+def gen_8(arr : auto) => "*"
+def gen_8(arr : function<(arg : auto; arg2 : int) : auto?>) => "(*:int):?"
+def gen_8(arr : function<(arg : auto; arg2 : int) : auto>) => "(*:int):*"
 
 [test]
 def test_partial_specialization(t : T?) {

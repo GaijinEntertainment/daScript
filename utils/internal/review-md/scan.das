@@ -32,9 +32,8 @@ def affected_review_md(root : string; changed : array<string>) : array<string> {
 
 //! Repo-relative paths from `git diff --name-only` output: one per line, CR and blank
 //! lines dropped.
-def changed_from_git_output(out : string) : array<string> {
-    return <- [for (ln in split(out, "\n")); strip(ln); where !empty(strip(ln))]
-}
+def changed_from_git_output(out : string) : array<string> =>
+    <- [for (ln in split(out, "\n")); strip(ln); where !empty(strip(ln))]
 
 //! The REVIEW.das siblings of the given REVIEW.md paths, for the checklists that have one.
 def sibling_gates(root : string; mds : array<string>) : array<string> {
@@ -50,9 +49,8 @@ def sibling_gates(root : string; mds : array<string>) : array<string> {
 }
 
 //! The finding line both walkers print for an orphan gate.
-def orphan_finding(gate : string) : string {
-    return "{gate}: REVIEW.das without a sibling REVIEW.md — the checklist keeps the judgment half and the weakening-is-a-defect rule"
-}
+def orphan_finding(gate : string) : string =>
+    "{gate}: REVIEW.das without a sibling REVIEW.md — the checklist keeps the judgment half and the weakening-is-a-defect rule"
 
 //! Gates missing their sibling REVIEW.md — a REVIEW.das without its checklist is a defect.
 def orphan_gates(root : string; gates : array<string>) : array<string> {

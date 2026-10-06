@@ -79,14 +79,11 @@ def public export_c_name_override(fn : Function?) : string {
 }
 
 
-def public has_export_c_annotation(var fn : Function?) : bool {
-    return (fn |> find_annotation("export_c")) != null
-}
+def public has_export_c_annotation(var fn : Function?) : bool =>
+    (fn |> find_annotation("export_c")) != null
 
 
-def private aotFunctionName(str : string) {
-    return replace(str, "`", "__")
-}
+def private aotFunctionName(str : string) => replace(str, "`", "__")
 
 def public standalone_function_name(fn : Function?) : string {
     let renamed = fn |> export_c_name_override()
@@ -123,14 +120,12 @@ struct CVector {
 }
 
 
-def private is_unsigned_type(t : Type) : bool {
-    return t == Type.tUInt || t == Type.tUInt8 || t == Type.tUInt16 || t == Type.tUInt64
-}
+def private is_unsigned_type(t : Type) : bool =>
+    t == Type.tUInt || t == Type.tUInt8 || t == Type.tUInt16 || t == Type.tUInt64
 
 
-def private c_int_name(is_signed : bool; bytes : int) : string {
-    return "{is_signed ? "" : "u"}int{bytes * 8}_t"
-}
+def private c_int_name(is_signed : bool; bytes : int) : string =>
+    "{is_signed ? "" : "u"}int{bytes * 8}_t"
 
 
 def private scalar_of(t : TypeDeclPtr) : string {
@@ -178,9 +173,8 @@ let VEC_LANE_NAMES <- ["x", "y", "z", "w"]
 let SPAN_LANE_NAMES <- ["from", "to"]
 
 
-def private vector_field_names(v : CVector) : array<string> {
-    return [for (i in range(v.lanes)); v.span ? SPAN_LANE_NAMES[i] : VEC_LANE_NAMES[i]]
-}
+def private vector_field_names(v : CVector) : array<string> =>
+    [for (i in range(v.lanes)); v.span ? SPAN_LANE_NAMES[i] : VEC_LANE_NAMES[i]]
 
 
 struct public CNames {
@@ -205,9 +199,8 @@ def private peel(var t : TypeDeclPtr) : TypeDeclPtr {
 }
 
 
-def private is_pod_struct(var st : Structure?) : bool {
-    return st != null && !st.flags.isClass && !(st.fields |> empty())
-}
+def private is_pod_struct(var st : Structure?) : bool =>
+    st != null && !st.flags.isClass && !(st.fields |> empty())
 
 
 def private pointee_ok(var t : TypeDeclPtr) : bool {
@@ -433,9 +426,8 @@ def private describe_params(var fn : Function?; names : CNames; var out : array<
 }
 
 
-def private returns_cmres(var fn : Function?) : bool {
-    return fn.flags.copyOnReturn || fn.flags.moveOnReturn
-}
+def private returns_cmres(var fn : Function?) : bool =>
+    fn.flags.copyOnReturn || fn.flags.moveOnReturn
 
 
 def public describe_c_signature(var fn : Function?; names : CNames; c_name : string) : tuple<exp : CExport; reject : CReject> {

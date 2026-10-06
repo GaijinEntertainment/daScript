@@ -22,9 +22,7 @@ var G_BIAS = -0.75
 var G_TINT = float3(0.3, 0.59, 0.11)
 var G_SEED = 5
 
-def gi(p : int) : int {
-    return p * 3 + 1
-}
+def gi(p : int) : int => p * 3 + 1
 
 // ----- preshader extraction: whole-uniform let -----
 [flatten]
@@ -35,9 +33,7 @@ def p_whole(x : float) : float {
 
 // ----- preshader: a uniform subtree BURIED under a varying parent -----
 [flatten]
-def p_buried(x : float3) : float3 {
-    return x * (dot(G_TINT, float3(1.0, 1.0, 1.0)) + G_GAIN)
-}
+def p_buried(x : float3) : float3 => x * (dot(G_TINT, float3(1.0, 1.0, 1.0)) + G_GAIN)
 
 // ----- preshader: uniform local feeding another uniform local (topological order) -----
 [flatten]
@@ -106,9 +102,7 @@ var PAL <- [1.0, 2.0, 3.0, 4.0]
 // recursions must descend through them — else the dup is tallied (universal visitor) but never
 // replaced (manual dispatch), leaving a CSE residual and spinning the round loop. -----
 [flatten]
-def c_at(a : int; b : int) : float {
-    return PAL[(a * 3 + b) & 3] + PAL[(a * 3 + b) & 3]
-}
+def c_at(a : int; b : int) : float => PAL[(a * 3 + b) & 3] + PAL[(a * 3 + b) & 3]
 
 var G_BUF : int[8]
 
@@ -141,9 +135,7 @@ def r_anyconst(b : float; e : float; c : float) : float {
 
 // ----- no grouped twin anywhere -> no regroup, canonical order stands (differential guard) -----
 [flatten]
-def r_notwin(b : float; e : float) : float {
-    return 1.0 - b + e
-}
+def r_notwin(b : float; e : float) : float => 1.0 - b + e
 
 var GRID <- [-100.0, -3.5, -1.0, 0.0, 1.0, 2.5, 7.0, 100.0]
 

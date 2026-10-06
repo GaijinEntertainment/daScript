@@ -29,13 +29,9 @@ def test_concrete() {
 // The function accepts any Pair instantiation.  The compiler matches
 // `auto(T1)` / `auto(T2)` against the stored structure aliases.
 
-def get_first(p : pair(type<auto(T1)>, type<auto(T2)>)) : T1 {
-    return p.first
-}
+def get_first(p : pair(type<auto(T1)>, type<auto(T2)>)) : T1 => p.first
 
-def get_second(p : pair(type<auto(T1)>, type<auto(T2)>)) : T2 {
-    return p.second
-}
+def get_second(p : pair(type<auto(T1)>, type<auto(T2)>)) : T2 => p.second
 
 // --- 3. Generic return type ---
 // The macro can appear in return-type position as well.  Here we swap

@@ -6,9 +6,7 @@ struct Cell {
     raw : int
 }
 
-def operator . value(c : Cell) : int {
-    return c . . raw * 2
-}
+def operator . value(c : Cell) : int => c . . raw * 2
 
 def operator . value :=(var c : Cell; v : int) {
     c . . raw = v / 2
@@ -18,9 +16,7 @@ def operator . value +=(var c : Cell; v : int) {
     c . . raw += v / 2
 }
 
-def operator .(c : Cell; name : string) : int {
-    return name == "twice" ? c . . raw * 2 : -1
-}
+def operator .(c : Cell; name : string) : int => name == "twice" ? c . . raw * 2 : -1
 
 [test]
 def test_property_promotion_paths(t : T?) {

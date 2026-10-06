@@ -11,9 +11,8 @@ require daslib/strings_boost
 require strings
 require math
 
-def private sample(id : string; ns : double) : Sample {
-    return Sample(id = id, ns = ns, ns_median = ns, spread = 0.05lf, runs = 3)
-}
+def private sample(id : string; ns : double) : Sample =>
+    Sample(id = id, ns = ns, ns_median = ns, spread = 0.05lf, runs = 3)
 
 def private file_ok(id, lane : string; samples : array<Sample>) : FileResult {
     var f <- FileResult(path = "{id}.das", id = id, group = dir_name(id), lane = lane, status = FileStatus.ok)
@@ -21,9 +20,8 @@ def private file_ok(id, lane : string; samples : array<Sample>) : FileResult {
     return <- f
 }
 
-def private file_bad(id, lane : string; status : FileStatus; message : string) : FileResult {
-    return <- FileResult(path = "{id}.das", id = id, group = dir_name(id), lane = lane, status = status, message = message)
-}
+def private file_bad(id, lane : string; status : FileStatus; message : string) : FileResult =>
+    <- FileResult(path = "{id}.das", id = id, group = dir_name(id), lane = lane, status = status, message = message)
 
 def private night(n : int; files : array<FileResult>) : RunRecord {
     var rec <- RunRecord(run_id = "r{n:02}", started = "2026-09-{n + 1:02}T03:00:00Z", finished = "2026-09-{n + 1:02}T04:00:00Z", seconds = 3600.0lf,

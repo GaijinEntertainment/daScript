@@ -63,9 +63,8 @@ def private from_cli(user_args : array<string>; key : string) : bool {
     return key == "port" && flag_present(user_args, "-p")
 }
 
-def private toml_wins(root : JsonValue?; key : string; auth : bool; user_args : array<string>) : bool {
-    return key_exists(root, key) && (auth || !from_cli(user_args, key))
-}
+def private toml_wins(root : JsonValue?; key : string; auth : bool; user_args : array<string>) : bool =>
+    key_exists(root, key) && (auth || !from_cli(user_args, key))
 
 def private cfg_from_toml(root : JsonValue?; key : string; var field : string&; auth : bool; user_args : array<string>; var sources : table<string; string>; var error : string&) : bool {
     if (!toml_wins(root, key, auth, user_args)) {

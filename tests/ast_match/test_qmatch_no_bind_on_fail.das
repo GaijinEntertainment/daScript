@@ -158,9 +158,7 @@ def test_b_untouched_on_late_fail(t : T?) {
 // ── $a — remaining-args capture ─────────────────────────────────────────
 
 [export, marker(no_coverage)]
-def nbof_target(a, b, c : int) : int {
-    return a + b + c
-}
+def nbof_target(a, b, c : int) : int => a + b + c
 
 [test]
 def test_a_untouched_on_body_fail(t : T?) {

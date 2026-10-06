@@ -120,9 +120,7 @@ def public pad_key_held(key : int) : bool {
     return find_index(g_keys_held, key) >= 0
 }
 
-def public pad_touches() : array<PadTouch> {
-    return <- clone_to_move(g_touches)
-}
+def public pad_touches() : array<PadTouch> => <- clone_to_move(g_touches)
 
 def private hold_key(key : int) {
     return if (key < 0 || pad_key_held(key))
@@ -212,22 +210,17 @@ def public pad_begin_frame() {
     }
 }
 
-def private to_px(fx, fy : float) : float2 {
-    return float2(fx * g_win.x, fy * g_win.y)
-}
+def private to_px(fx, fy : float) : float2 => float2(fx * g_win.x, fy * g_win.y)
 
-def private radius_px(r : float) : float {
-    return r * min(g_win.x, g_win.y)
-}
+def private radius_px(r : float) : float => r * min(g_win.x, g_win.y)
 
 def private finger_down(t : PadTouch) : bool {
     //! A finger that ended this frame is a release, unless it also began this frame - a same-frame tap.
     return !t.claimed && (!t.ended || t.began)
 }
 
-def private finger_in_disc(t : PadTouch; c : float2; r : float) : bool {
-    return finger_down(t) && length(t.pos - c) <= r
-}
+def private finger_in_disc(t : PadTouch; c : float2; r : float) : bool =>
+    finger_down(t) && length(t.pos - c) <= r
 
 def public pad_button(fx, fy, r : float; key : int; alt_key : int = -1) : bool {
     //! A round button: any finger inside holds ``key`` (and ``alt_key``). Returns whether it is held.

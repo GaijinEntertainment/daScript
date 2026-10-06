@@ -11,9 +11,7 @@ struct Bar {
     a : float
 }
 
-def operator as Bar(a : Foo) {
-    return Bar(a = float(a.a))
-}
+def operator as Bar(a : Foo) => Bar(a = float(a.a))
 
 def operator ?as Bar(a : Foo?) : Bar? {
     if (a == null) {
@@ -22,21 +20,15 @@ def operator ?as Bar(a : Foo?) : Bar? {
     return new Bar(a = float(a.a))
 }
 
-def operator is Bar(anything) {
-    return false
-}
+def operator is Bar(anything) => false
 
-def operator is Bar(_a : Bar) {
-    return true
-}
+def operator is Bar(_a : Bar) => true
 
 struct Goo {
     a : string
 }
 
-def operator [] (t : Goo; cmp : string) {
-    return "{t . . a}-{cmp}"
-}
+def operator [] (t : Goo; cmp : string) => "{t . . a}-{cmp}"
 
 def operator ?[] (t : Goo; cmp : string) : string const?# {
     if (cmp == t . . a) {
@@ -50,9 +42,7 @@ def operator ?[] (t : Goo; cmp : string) : string const?# {
     }
 }
 
-def operator .(t : Goo; name : string) {
-    return Goo(a = "{t . . a}.{name}")
-}
+def operator .(t : Goo; name : string) => Goo(a = "{t . . a}.{name}")
 
 def operator ?.(t : Goo; name : string) : string const?# {
     if (name == "yes") {
@@ -66,13 +56,9 @@ def operator ?.(t : Goo; name : string) : string const?# {
     }
 }
 
-def operator . length(t : Goo) {
-    return length(t . . a)
-}
+def operator . length(t : Goo) => length(t . . a)
 
-def operator ?. length(t : Goo) {
-    return length(t . . a) + 1
-}
+def operator ?. length(t : Goo) => length(t . . a) + 1
 
 [test]
 def test_operators(t : T?) {
@@ -189,13 +175,9 @@ def test_index_operators(t : T?) {
 
 // ===== raw (original) operator family — `!` before an access/test operator bypasses the overload =====
 
-def operator [] (_a : array<float>; _i : int) : float {
-    return -999.0
-}
+def operator [] (_a : array<float>; _i : int) : float => -999.0
 
-def operator ?[] (_a : array<float>; _i : int) : float? {
-    return null
-}
+def operator ?[] (_a : array<float>; _i : int) : float? => null
 
 def operator [] =(var _a : array<float>; _i : int; _v : float) {
     pass    // a lying setter: swallows the write
@@ -205,30 +187,20 @@ struct Qoo {
     v : int
 }
 
-def operator ??(_p : Qoo? const; _d : Qoo const) : Qoo {
-    return Qoo(v = -777)
-}
+def operator ??(_p : Qoo? const; _d : Qoo const) : Qoo => Qoo(v = -777)
 
 variant IntFloat {
     i : int
     f : float
 }
 
-def operator is i(_v : IntFloat) {
-    return false
-}
+def operator is i(_v : IntFloat) => false
 
-def operator as i(_v : IntFloat) {
-    return -888
-}
+def operator as i(_v : IntFloat) => -888
 
-def operator ?as i(_v : IntFloat) : int? {
-    return null
-}
+def operator ?as i(_v : IntFloat) : int? => null
 
-def operator is int(_g : Goo) {
-    return true
-}
+def operator is int(_g : Goo) => true
 
 [test]
 def test_raw_operators(t : T?) {

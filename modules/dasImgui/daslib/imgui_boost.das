@@ -65,17 +65,14 @@ def clear(var buf : ImGuiInputTextBuffer) {
     }
 }
 
-def InputText(lab : string; buf : ImGuiInputTextBuffer; flags : ImGuiInputTextFlags = ImGuiInputTextFlags.None) {
-    return _builtin_InputText(buf, lab, flags)
-}
+def InputText(lab : string; buf : ImGuiInputTextBuffer; flags : ImGuiInputTextFlags = ImGuiInputTextFlags.None) =>
+    _builtin_InputText(buf, lab, flags)
 
-def InputTextWithHint(lab, hint : string; buf : ImGuiInputTextBuffer; flags : ImGuiInputTextFlags = ImGuiInputTextFlags.None) {
-    return _builtin_InputTextWithHint(buf, lab, hint, flags)
-}
+def InputTextWithHint(lab, hint : string; buf : ImGuiInputTextBuffer; flags : ImGuiInputTextFlags = ImGuiInputTextFlags.None) =>
+    _builtin_InputTextWithHint(buf, lab, hint, flags)
 
-def InputTextMultiline(lab : string; buf : ImGuiInputTextBuffer; siz : float2 = float2(0.0f, 0.0f); flags : ImGuiInputTextFlags = ImGuiInputTextFlags.None) {
-    return _builtin_InputTextMultiline(buf, lab, siz, flags)
-}
+def InputTextMultiline(lab : string; buf : ImGuiInputTextBuffer; siz : float2 = float2(0.0f, 0.0f); flags : ImGuiInputTextFlags = ImGuiInputTextFlags.None) =>
+    _builtin_InputTextMultiline(buf, lab, siz, flags)
 
 // note - this needs to correspond to C++ structure
 struct ImGuiSizeConstraints {
@@ -107,9 +104,8 @@ def ImGuiComboGetter(var lmb : lambda<(idx : int; var result : string&) : bool>)
     return <- self
 }
 
-def Combo(lab : string; current_item : int? implicit; getter : ImGuiComboGetter; items_count : int; popup_max_height_in_items : int = -1) {
-    return _builtin_Combo(getter, lab, current_item, items_count, popup_max_height_in_items)
-}
+def Combo(lab : string; current_item : int? implicit; getter : ImGuiComboGetter; items_count : int; popup_max_height_in_items : int = -1) =>
+    _builtin_Combo(getter, lab, current_item, items_count, popup_max_height_in_items)
 
 // note - this needs to correspond to C++ structure
 struct ImGuiPlotGetter {
@@ -146,13 +142,11 @@ let IM_COL32_WHITE = IM_COL32(255, 255, 255, 255)
 let IM_COL32_BLACK = IM_COL32(0, 0, 0, 255)
 let IM_COL32_BLACK_TRANS = IM_COL32(0, 0, 0, 0)
 
-def IM_COL32(R, G, B, A : uint) {
-    return (A << uint(IM_COL32_A_SHIFT)) | (B << uint(IM_COL32_B_SHIFT)) | (G << uint(IM_COL32_G_SHIFT)) | (R << uint(IM_COL32_R_SHIFT))
-}
+def IM_COL32(R, G, B, A : uint) =>
+    (A << uint(IM_COL32_A_SHIFT)) | (B << uint(IM_COL32_B_SHIFT)) | (G << uint(IM_COL32_G_SHIFT)) | (R << uint(IM_COL32_R_SHIFT))
 
-def IM_COL32(R, G, B, A : int) {
-    return (uint(A) << uint(IM_COL32_A_SHIFT)) | (uint(B) << uint(IM_COL32_B_SHIFT)) | (uint(G) << uint(IM_COL32_G_SHIFT)) | (uint(R) << uint(IM_COL32_R_SHIFT))
-}
+def IM_COL32(R, G, B, A : int) =>
+    (uint(A) << uint(IM_COL32_A_SHIFT)) | (uint(B) << uint(IM_COL32_B_SHIFT)) | (uint(G) << uint(IM_COL32_G_SHIFT)) | (uint(R) << uint(IM_COL32_R_SHIFT))
 
 def Combo(lab : string; current_item : int? implicit; items : array<string>; popul_max_heigh_in_items : int = -1) {
     let nItems = length(items)
@@ -434,21 +428,13 @@ def ImRect_Expanded(rect : float4&; x, y : float) {
     return result
 }
 
-def GetTL(rect : float4) {
-    return rect.xy
-}
+def GetTL(rect : float4) => rect.xy
 
-def GetTR(rect : float4) {
-    return rect.zy
-}
+def GetTR(rect : float4) => rect.zy
 
-def GetBL(rect : float4) {
-    return rect.xw
-}
+def GetBL(rect : float4) => rect.xw
 
-def GetBR(rect : float4) {
-    return rect.zw
-}
+def GetBR(rect : float4) => rect.zw
 
 def VerticalSeparator(name : string; var PANNEL_WIDTH : float&; inverted : float = 1.; min_width : float = 200.; max_width : float = 100500.0) {
     let IO & = unsafe(imgui::GetIO())

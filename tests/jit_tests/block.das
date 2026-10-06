@@ -11,17 +11,11 @@ struct Foo {
     b : float
 }
 
-def test_invoke_block_jit(lmb : block<(a : int; b : float) : int>) {
-    return invoke(lmb, 1, 2.0)
-}
+def test_invoke_block_jit(lmb : block<(a : int; b : float) : int>) => invoke(lmb, 1, 2.0)
 
-def test_invoke_block(lmb : block<(a : int; b : float) : int>) {
-    return invoke(lmb, 1, 2.0)
-}
+def test_invoke_block(lmb : block<(a : int; b : float) : int>) => invoke(lmb, 1, 2.0)
 
-def test_invoke_block_refval(lmb : block<(a : int; b : float) : Foo>) {
-    return invoke(lmb, 1, 2.0)
-}
+def test_invoke_block_refval(lmb : block<(a : int; b : float) : Foo>) => invoke(lmb, 1, 2.0)
 
 def test_invoke_block_void(lmb : block<(a : int; b : float) : void>) {
     invoke(lmb, 1, 2.0)

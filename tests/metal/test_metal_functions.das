@@ -20,9 +20,7 @@ def private fk_lane : uint => gl_GlobalInvocationID.x
 
 def private fk_mix(x, y : float) : float => x * 2.0 + y
 
-def private fk_pick(src : array<auto(TT)>; i : uint) : TT {
-    return src[i] + src[i]
-}
+def private fk_pick(src : array<auto(TT)>; i : uint) : TT => src[i] + src[i]
 
 def private fk_accum(var acc : float&; v : float) {
     acc += v

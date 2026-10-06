@@ -5,21 +5,15 @@ options gen2
 
 // A simple function that adds two integers.
 [export]
-def add(a : int; b : int) : int {
-    return a + b
-}
+def add(a : int; b : int) : int => a + b
 
 // A function that takes a float and returns its square.
 [export]
-def square(x : float) : float {
-    return x * x
-}
+def square(x : float) : float => x * x
 
 // A function that takes a string and returns a greeting.
 [export]
-def greet(name : string) : string {
-    return "Hello, {name}!"
-}
+def greet(name : string) : string => "Hello, {name}!"
 
 // A function that takes multiple argument types and prints them.
 [export]
@@ -35,9 +29,7 @@ struct Vec2 {
 
 // A function that returns a structure.
 [export]
-def make_vec2(x : float; y : float) : Vec2 {
-    return Vec2(x = x, y = y)
-}
+def make_vec2(x : float; y : float) : Vec2 => Vec2(x = x, y = y)
 
 // A function that deliberately panics — the C++ host catches the exception.
 [export]

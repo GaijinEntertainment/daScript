@@ -16,20 +16,14 @@ require teapot_tut
 require math
 
 //! Warm ceramic: red dominant and clearly lit — the teapot body/spout/handle/knob.
-def private is_ceramic_lit(c : int3) : bool {
-    return c.x > 120 && c.x > c.y && c.y > c.z
-}
+def private is_ceramic_lit(c : int3) : bool => c.x > 120 && c.x > c.y && c.y > c.z
 
 //! Env sky: cool blue, blue channel dominant and bright. Distinct from the warm ceramic + gray floor.
-def private is_sky(c : int3) : bool {
-    return c.z > 150 && c.z > c.x + 20
-}
+def private is_sky(c : int3) : bool => c.z > 150 && c.z > c.x + 20
 
 //! Ground floor: near-neutral gray (the checker), mid brightness — holds whether the tile is light,
 //! dark, or shadowed; distinct from the blue sky and the warm ceramic.
-def private is_floor(c : int3) : bool {
-    return abs(c.x - c.z) < 25 && c.x > 30 && c.x < 230
-}
+def private is_floor(c : int3) : bool => abs(c.x - c.z) < 25 && c.x > 30 && c.x < 230
 
 //! Average (r+g+b) over a box. Cancels the checker pattern so a shadowed region reads as a clean
 //! brightness drop independent of which tiles the box covers.

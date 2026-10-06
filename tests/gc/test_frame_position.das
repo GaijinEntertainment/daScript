@@ -15,9 +15,7 @@ def positions_pair : tuple<a : int; b : int> {
 }
 
 [inline]
-def inlined_position : int {
-    return frame_position()
-}
+def inlined_position : int => frame_position()
 
 [test]
 def test_frame_position(t : T?) {

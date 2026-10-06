@@ -1,13 +1,9 @@
 options gen2
 require dastest/testing_boost
 
-def jit_not(a : bool) {
-    return !a
-}
+def jit_not(a : bool) => !a
 
-def jit_xorxor(a, b : bool) {
-    return a ^^ b
-}
+def jit_xorxor(a, b : bool) => a ^^ b
 
 def jit_set_xorxor(var a : bool; b : bool) {
     a ^^= b
@@ -23,9 +19,7 @@ def getA_true {
 }
 
 [sideeffects]
-def getA_false {
-    return false
-}
+def getA_false => false
 
 [sideeffects]
 def getB_true {
@@ -39,21 +33,13 @@ def getB_false {
     return false
 }
 
-def jit_andand_true_true {
-    return getA_true() && getB_true()
-}
+def jit_andand_true_true => getA_true() && getB_true()
 
-def jit_andand_true_false {
-    return getA_true() && getB_false()
-}
+def jit_andand_true_false => getA_true() && getB_false()
 
-def jit_andand_false_true {
-    return getA_false() && getB_true()
-}
+def jit_andand_false_true => getA_false() && getB_true()
 
-def jit_andand_false_false {
-    return getA_false() && getB_false()
-}
+def jit_andand_false_false => getA_false() && getB_false()
 
 def jit_set_andand_true_true {
     var a = getA_true()
@@ -80,21 +66,13 @@ def jit_set_andand_false_false {
 }
 
 
-def jit_oror_true_true {
-    return getA_true() || getB_true()
-}
+def jit_oror_true_true => getA_true() || getB_true()
 
-def jit_oror_true_false {
-    return getA_true() || getB_false()
-}
+def jit_oror_true_false => getA_true() || getB_false()
 
-def jit_oror_false_true {
-    return getA_false() || getB_true()
-}
+def jit_oror_false_true => getA_false() || getB_true()
 
-def jit_oror_false_false {
-    return getA_false() || getB_false()
-}
+def jit_oror_false_false => getA_false() || getB_false()
 
 def jit_set_oror_true_true {
     var a = getA_true()

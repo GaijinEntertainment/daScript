@@ -8,9 +8,7 @@ struct Bar {
     ta : array<float> <- make_10()
 }
 
-def make_10 {
-    return <- [for (i in range(10)); float(i)]
-}
+def make_10 => <- [for (i in range(10)); float(i)]
 
 [safe_when_uninitialized]
 struct Foo {

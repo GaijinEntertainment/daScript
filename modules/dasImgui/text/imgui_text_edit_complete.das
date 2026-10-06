@@ -51,9 +51,7 @@ def public text_edit_complete_dispose(var comp : TextEditCompletion) {
     delete fresh
 }
 
-def private ident_byte(b : int) : bool {
-    return is_alpha(b) || is_number(b) || b == '_' || b >= 0x80
-}
+def private ident_byte(b : int) : bool => is_alpha(b) || is_number(b) || b == '_' || b >= 0x80
 
 def private byte_before_caret(ed : TextEditState const) : int {
     return -1 if (empty(ed.lines) || ed.cursor_line >= length(ed.lines)

@@ -189,9 +189,8 @@ def is_decl_start(line : string) : bool {
     return line |> starts_with("[") || line |> starts_with("@")
 }
 
-def is_hoist(line : string) : bool {
-    return (line |> starts_with("require ")) || (line |> starts_with("options ")) || (line |> starts_with("module "))
-}
+def is_hoist(line : string) : bool =>
+    (line |> starts_with("require ")) || (line |> starts_with("options ")) || (line |> starts_with("module "))
 
 struct Chunk {
     kind : string   // "hoist" | "decl" | "stmt"
@@ -266,9 +265,7 @@ struct Renamer {
     def_headers : table<string>   // exact-duplicate def headers rename; overloads keep the name
 }
 
-def is_ident_char(c : int) : bool {
-    return is_alpha(c) || is_number(c) || c == '_'
-}
+def is_ident_char(c : int) : bool => is_alpha(c) || is_number(c) || c == '_'
 
 // the end the modifier walkers below compare against: a prefix like "private " only counts
 // when its trailing space is real source, not the line's own trailing whitespace
@@ -512,9 +509,7 @@ def apply_renames(ren : Renamer; line : string) : string {
     return out
 }
 
-def rename_line(var ren : Renamer; line : string) : string {
-    return rename_line_ex(ren, line, true)
-}
+def rename_line(var ren : Renamer; line : string) : string => rename_line_ex(ren, line, true)
 
 // a line declares either a type name or a list of variable names
 def private declare_line_names(var ren : Renamer; line : string) {
@@ -797,9 +792,8 @@ def append_stmts(var seg : Segment; var ren : Renamer; chunk : Chunk; tag : stri
     seg.stmts |> push("")
 }
 
-def is_global_decl(line : string) : bool {
-    return (line |> starts_with("var ")) || (line |> starts_with("let "))
-}
+def is_global_decl(line : string) : bool =>
+    (line |> starts_with("var ")) || (line |> starts_with("let "))
 
 def seed_renamer(var ren : Renamer; givens : array<string>) {
     for (g in givens) {
@@ -1060,9 +1054,8 @@ def compile_file_rc(cfg : Config; path : string; var output : string&) : int {
     return run_and_capture(args, output, 120.0)
 }
 
-def spawn_failure(cfg : Config) : string {
-    return "cannot spawn '{cfg.daslang}' - pass --daslang <path to the daslang binary>"
-}
+def spawn_failure(cfg : Config) : string =>
+    "cannot spawn '{cfg.daslang}' - pass --daslang <path to the daslang binary>"
 
 def first_lines(s : string; n : int) : array<string> {
     var out : array<string>

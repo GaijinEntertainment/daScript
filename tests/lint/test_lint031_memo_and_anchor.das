@@ -6,9 +6,7 @@ require daslib/lint
 require strings
 require daslib/strings_boost
 
-def fixture_path(name : string) : string {
-    return "{get_das_root()}/tests/lint/{name}"
-}
+def fixture_path(name : string) : string => "{get_das_root()}/tests/lint/{name}"
 
 def compile_and_collect(t : T?; path : string; blk : block<(issues : array<string>; count : int) : void>) {
     var inscope access <- make_file_access("")

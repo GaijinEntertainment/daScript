@@ -41,9 +41,7 @@ def public uri_to_path(uri : string) : string {
     return empty(path) ? uri : path
 }
 
-def public path_to_uri(path : string) : string {
-    return file_name_to_uri(get_full_file_name(path))
-}
+def public path_to_uri(path : string) : string => file_name_to_uri(get_full_file_name(path))
 
 //! the nearest ancestor holding a `.git` entry - a directory in the main tree, a file in a
 //! linked worktree; empty when none
@@ -70,9 +68,8 @@ def private under(path, root : string) : bool {
 }
 
 //! a diagnostic that carries the endpoint's own trouble, on the file's first character
-def public tool_diagnostic(message : string; severity : int = 1) : string {
-    return "\{\"range\":\{\"start\":\{\"line\":0,\"character\":0\},\"end\":\{\"line\":0,\"character\":1\}\},\"severity\":{severity},\"source\":\"daslang-lsp\",\"message\":{quoted(message)}\}"
-}
+def public tool_diagnostic(message : string; severity : int = 1) : string =>
+    "\{\"range\":\{\"start\":\{\"line\":0,\"character\":0\},\"end\":\{\"line\":0,\"character\":1\}\},\"severity\":{severity},\"source\":\"daslang-lsp\",\"message\":{quoted(message)}\}"
 
 //! the warning for a file in another git worktree than the compiler serving it: that binary's
 //! compiled-in bindings and module sources are its own tree's. Empty when the trees agree, the
@@ -93,9 +90,8 @@ def public crosstree_diagnostic(path, compiler, project_root : string) : string 
 
 // ===== the compiler =====
 
-def private exe_name(base : string) : string {
-    return get_running_platform_name() == "windows" ? "{base}.exe" : base
-}
+def private exe_name(base : string) : string =>
+    get_running_platform_name() == "windows" ? "{base}.exe" : base
 
 //! `name` resolved through PATH to an absolute path, or empty
 def private find_on_path(name : string) : string {

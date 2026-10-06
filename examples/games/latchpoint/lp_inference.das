@@ -24,17 +24,12 @@ struct InferenceJob {
     done : uint64
 }
 
-def inference_job_ready(job : InferenceJob) : bool {
-    return job.done != 0ul && unsafe(reinterpret<JobStatus?>(job.done)).isReady
-}
+def inference_job_ready(job : InferenceJob) : bool =>
+    job.done != 0ul && unsafe(reinterpret<JobStatus?>(job.done)).isReady
 
-def inference_timeout(route : string) : int {
-    return route == "/chat/completions" ? 90 : 25
-}
+def inference_timeout(route : string) : int => route == "/chat/completions" ? 90 : 25
 
-def inference_busy() : bool {
-    return inference_done != 0ul
-}
+def inference_busy() : bool => inference_done != 0ul
 
 def launch_inference(route, payload : string; binary : bool = false) {
     return if (inference_busy())

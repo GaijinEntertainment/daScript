@@ -15,9 +15,7 @@ require daslib/flatten
 //! loop), and with an inlined callee whose own early `return` must NOT kill any of
 //! the caller's masks (frame isolation).
 
-def sq(a : int) : int {
-    return a * a
-}
+def sq(a : int) : int => a * a
 
 // ----- runtime break (depends on x) -----
 [flatten]

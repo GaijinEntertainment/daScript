@@ -33,9 +33,7 @@ var private TEXT_EXTS <- { ".das", ".py", ".sh", ".ps1", ".psm1", ".bat", ".cmd"
                            ".rst", ".yml", ".yaml", ".json", ".txt", ".cmake", ".html",
                            ".css", ".js", ".ts" }
 
-def private is_path_name_byte(b : int) : bool {
-    return is_alnum(b) || b == '_' || b == '-'
-}
+def private is_path_name_byte(b : int) : bool => is_alnum(b) || b == '_' || b == '-'
 
 // True when `text` mentions path `p` as a whole component prefix — `utils/aot` matches
 // `utils/aot/main.das` and `DESTINATION utils/aot)`, never `utils/aot-extra`.
@@ -100,9 +98,8 @@ def private check_kebab_case(externals, internals : array<string>) {
     }
 }
 
-def private install_blocks_of(text : string) : array<string> {
-    return <- cmake_command_blocks(text, "install")
-}
+def private install_blocks_of(text : string) : array<string> =>
+    <- cmake_command_blocks(text, "install")
 
 def private check_install_symmetry(externals : array<string>) {
     let cm = fread("CMakeLists.txt")

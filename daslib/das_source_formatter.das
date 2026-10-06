@@ -114,9 +114,8 @@ def isUtf8Bom(text : array<uint8>&) : bool {
 }
 
 
-def eq(ctx : FormatterCtx; index : int; s : string const implicit) {
-    return (index < 0 || index >= length(ctx.tokens)) ? false : ctx.tokens[index].str == s
-}
+def eq(ctx : FormatterCtx; index : int; s : string const implicit) =>
+    (index < 0 || index >= length(ctx.tokens)) ? false : ctx.tokens[index].str == s
 
 
 def eq(ctx : FormatterCtx; index : int; s0, s1 : string const implicit) {
@@ -137,9 +136,8 @@ def eq(ctx : FormatterCtx; index : int; s0, s1, s2, s3 : string const implicit) 
 }
 
 
-def new_line_before(ctx : FormatterCtx; index : int) {
-    return (index <= 1 || index >= length(ctx.tokens)) ? true : ctx.tokens[index].newLines > 0
-}
+def new_line_before(ctx : FormatterCtx; index : int) =>
+    (index <= 1 || index >= length(ctx.tokens)) ? true : ctx.tokens[index].newLines > 0
 
 
 def next_char(var ctx : FormatterCtx) {
@@ -1225,9 +1223,8 @@ def private is_kept_comment(s : string) : bool {
 }
 
 
-def private opens_kept_block(s : string) : bool {
-    return is_kept_comment(s) && !(s |> starts_with("//fmt:"))
-}
+def private opens_kept_block(s : string) : bool =>
+    is_kept_comment(s) && !(s |> starts_with("//fmt:"))
 
 
 def private strip_comment_tokens(var ctx : FormatterCtx) {

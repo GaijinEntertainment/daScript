@@ -35,9 +35,7 @@ def private mk_alias_t(at : LineInfo; nm : string; is_const : bool) : TypeDeclPt
     return t
 }
 
-def private mk_gvar(at : LineInfo; nm : string) : ExpressionPtr {
-    return new ExprVar(at = at, name := nm)
-}
+def private mk_gvar(at : LineInfo; nm : string) : ExpressionPtr => new ExprVar(at = at, name := nm)
 
 //! the captured blob global of a [spirv_kernel] method: its `name =` argument, else `<method>`spirv`
 def private spirv_blob_of(kfn : Function?) : string {
@@ -97,9 +95,8 @@ def private stamp_readonly(var st : StructurePtr; base : string; write_mask : ui
     return true
 }
 
-def private mk_ret_bool(at : LineInfo; v : bool) : ExpressionPtr {
-    return new ExprReturn(at = at, subexpr = new ExprConstBool(at = at, value = v))
-}
+def private mk_ret_bool(at : LineInfo; v : bool) : ExpressionPtr =>
+    new ExprReturn(at = at, subexpr = new ExprConstBool(at = at, value = v))
 
 def private mk_if_ret(at : LineInfo; var cond : Expression?; ret_val : bool) : ExpressionPtr {
     var blk <- [mk_ret_bool(at, ret_val)]
@@ -111,9 +108,8 @@ def private mk_if_do(at : LineInfo; var cond : Expression?; var stmt : Expressio
     return new ExprIfThenElse(at = at, cond = cond, if_true = make_expression_block(blk))
 }
 
-def private mk_not(at : LineInfo; var e : Expression?) : ExpressionPtr {
-    return new ExprOp1(at = at, op := "!", subexpr = e)
-}
+def private mk_not(at : LineInfo; var e : Expression?) : ExpressionPtr =>
+    new ExprOp1(at = at, op := "!", subexpr = e)
 
 def private access_fail(var errors : das_string; msg : string; var res : AccessResult; var tracked : table<string>) : bool {
     errors := msg

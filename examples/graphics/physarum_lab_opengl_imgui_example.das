@@ -211,9 +211,7 @@ def create_gl_objects {
 
 // ===== helpers =====
 
-def read_off : int {
-    return g_field_idx * TW * TH
-}
+def read_off : int => g_field_idx * TW * TH
 
 def wrap_i(v, n : int) : int {
     var r = v % n
@@ -223,9 +221,7 @@ def wrap_i(v, n : int) : int {
     return r
 }
 
-def wrap_f(v, n : float) : float {
-    return v - floor(v / n) * n
-}
+def wrap_f(v, n : float) : float => v - floor(v / n) * n
 
 // A tiny self-contained xorshift so workers need no shared RNG state (each has its own local seed).
 def rand_next(var s : uint&) : uint {
@@ -235,9 +231,7 @@ def rand_next(var s : uint&) : uint {
     return s
 }
 
-def rand_f(var s : uint&) : float {
-    return float(rand_next(s) >> 8u) * (1.0f / 16777216.0f)
-}
+def rand_f(var s : uint&) : float => float(rand_next(s) >> 8u) * (1.0f / 16777216.0f)
 
 // Nearest-cell read of the live field (called from workers; the deref is the only unsafe op).
 def sense(pfield : array<float>?; off : int; px, py : float) : float {
@@ -597,9 +591,7 @@ def private measure_slow_runtime : bool {
     return get_time_usec(t0) > 20000 && acc != 12345u
 }
 
-def default_agents : int {
-    return g_light_defaults ? DEF_AGENTS_WEB_INTERP : DEF_AGENTS
-}
+def default_agents : int => g_light_defaults ? DEF_AGENTS_WEB_INTERP : DEF_AGENTS
 
 def reset_to_defaults {
     g_sensor_angle_deg = DEF_SENSOR_ANGLE

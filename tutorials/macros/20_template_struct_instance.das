@@ -48,9 +48,7 @@ class IntLatest : TopKeeperT {
 class IntShouty : TopKeeperT {
     typedef KT = int
 
-    def override report : string {
-        return "BEST {best} OF {n}!"
-    }
+    def override report : string => "BEST {best} OF {n}!"
 }
 
 // --- 4. Call parameter ---

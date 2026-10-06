@@ -131,9 +131,7 @@ def tts_missing_file(path : string) : string {
 //! True when `path` names a TTS model with its front-end packs beside it — the outcome
 //! ``configure_tts`` will reach, answerable BEFORE the call (an empty path reads false: nothing
 //! to serve). A boot that decides setup mode ahead of ``configure_tts`` reads this.
-def tts_files_present(path : string) : bool {
-    return !empty(path) && empty(tts_missing_file(path))
-}
+def tts_files_present(path : string) : bool => !empty(path) && empty(tts_missing_file(path))
 
 // ===== The --gpu backend pick =====
 

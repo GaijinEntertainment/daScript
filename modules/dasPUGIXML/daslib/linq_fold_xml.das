@@ -209,18 +209,11 @@ class XmlAdapter : SourceAdapter {
     srcName  : string
     elemType : TypeDeclPtr
     nameArg  : Expression?
-    def override name_prefix() : string {
-        return "xml_"
-    }
-    def override supports_direct_return() : bool {
-        return true   // single flat DOM while-walk inside the invoke (not decs's 2-level archetype callback)
-    }
-    def override const can_group_by() : bool {
-        return true
-    }
-    def override const can_join() : bool {
-        return true
-    }
+    def override name_prefix() : string => "xml_"
+    def override supports_direct_return() : bool =>
+        true  // single flat DOM while-walk inside the invoke (not decs's 2-level archetype callback)
+    def override const can_group_by() : bool => true
+    def override const can_join() : bool => true
     def override emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
         // XML standalone join: hashed equi-join collecting srcB into a table, then probing from the
         // field-pruned DOM walk (mirrors emit_array_join, but srcA is the XML node, not an array param).
@@ -308,18 +301,11 @@ class XmlAdapter : SourceAdapter {
         return new XmlAdapter(nodeExpr = clone_expression(nodeExpr), srcName = qn("xnode", at),
                               elemType = clone_type(elemType), nameArg = nameClone)
     }
-    def override loop_source_name() : string {
-        return srcName
-    }
-    def override bind_name(at : LineInfo) : string {
-        return qn("it", at)
-    }
-    def override element_type() : TypeDeclPtr {
-        return clone_type(elemType)
-    }
-    def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
-        return build_pruned_dom_walk(srcName, nameArg, elemType, bind_name(at), body, null, at)
-    }
+    def override loop_source_name() : string => srcName
+    def override bind_name(at : LineInfo) : string => qn("it", at)
+    def override element_type() : TypeDeclPtr => clone_type(elemType)
+    def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? =>
+        build_pruned_dom_walk(srcName, nameArg, elemType, bind_name(at), body, null, at)
     def override emit_distinct_take_loop(bindName : string; takenName : string; takeLimName : string; var perElement : Expression?; at : LineInfo) : Expression? {
         // distinct(...) |> take(N): same field-pruned DOM walk, breaking once N distinct elements have been
         // taken (perElement's distinct gate bumps `taken`).
@@ -447,12 +433,8 @@ class XmlAdapter : SourceAdapter {
     // Deferred materialization: a buffered reducer (order/take, distinct) holds `(orderKey, xml_node)`
     // surrogates and runs build_xml_row only for the K survivors — `from_xml_node` otherwise materializes
     // all N. The handle is the per-element node `xcur` bound inside build_pruned_dom_walk's walk.
-    def override const defers_materialization() : bool {
-        return true
-    }
-    def override handle_type() : TypeDeclPtr {
-        return strip_const_ref(clone_type(nodeExpr._type))
-    }
+    def override const defers_materialization() : bool => true
+    def override handle_type() : TypeDeclPtr => strip_const_ref(clone_type(nodeExpr._type))
     def override current_handle_expr(at : LineInfo) : Expression? {
         let cn = qn("xcur", at)
         return qmacro($i(cn))
@@ -483,18 +465,11 @@ struct XmlJoinShape {
 // the field-pruned DOM walk). Mirrors ArrayJoinAdapter / DecsJoinAdapter.
 class XmlJoinAdapter : SourceAdapter {
     shape : XmlJoinShape
-    def override name_prefix() : string {
-        return "xjoin_"
-    }
-    def override supports_direct_return() : bool {
-        return true   // collect for{} + probe DOM while-walk, both single-level inside the invoke
-    }
-    def override bind_name(at : LineInfo) : string {
-        return shape.resBindName
-    }
-    def override element_type() : TypeDeclPtr {
-        return clone_type(shape.resultType)
-    }
+    def override name_prefix() : string => "xjoin_"
+    def override supports_direct_return() : bool =>
+        true  // collect for{} + probe DOM while-walk, both single-level inside the invoke
+    def override bind_name(at : LineInfo) : string => shape.resBindName
+    def override element_type() : TypeDeclPtr => clone_type(shape.resultType)
     def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         let jhashName = qn("xjoin_jhash", at)
         let arrName   = qn("xjoin_jarr", at)
@@ -514,9 +489,8 @@ class XmlJoinAdapter : SourceAdapter {
             $e(probeWalk)
         }
     }
-    def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
-        return build_xml_join_invoke(shape.nodeExpr, shape.srcName, stmts, shape.srcBName, shape.srcBType, shape.srcBExpr, retType, wrapIter, at)
-    }
+    def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? =>
+        build_xml_join_invoke(shape.nodeExpr, shape.srcName, stmts, shape.srcBName, shape.srcBType, shape.srcBExpr, retType, wrapIter, at)
 }
 
 // Recognize a `from_xml_node(node[, name], type<Row>)` chain top. Returns the call (caller reads

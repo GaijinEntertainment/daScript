@@ -335,13 +335,10 @@ def public repository_default_config_path : string {
     return path_join(path_join(base, "daScript"), "dasHerd.json")
 }
 
-def private valid_path(path : string) : bool {
-    return !empty(path) && find(path, "\r") < 0 && find(path, "\n") < 0
-}
+def private valid_path(path : string) : bool =>
+    !empty(path) && find(path, "\r") < 0 && find(path, "\n") < 0
 
-def private normalized_path(path : string) : string {
-    return get_full_file_name(path)
-}
+def private normalized_path(path : string) : string => get_full_file_name(path)
 
 def public repository_same_worktree_identity(left, right : string) : bool {
     //! One path identity for guard checks: full-name normalized, case folded
@@ -359,9 +356,8 @@ def private repository_id(target_id, path : string) : string {
     return "{target_id}:{identity_path}"
 }
 
-def public repository_id_for_path(path : string) : string {
-    return repository_id("local", normalized_path(path))
-}
+def public repository_id_for_path(path : string) : string =>
+    repository_id("local", normalized_path(path))
 
 def public repository_valid_relative_file_path(path : string) : bool {
     if (!valid_path(path) || starts_with(path, "/") || starts_with(path, "\\")
@@ -432,9 +428,7 @@ def public repository_shutdown() {
     g_revision = 0l
 }
 
-def public repository_revision : int64 {
-    return g_revision
-}
+def public repository_revision : int64 => g_revision
 
 def public repository_list_json : string {
     var inscope parts : array<string>
@@ -1921,9 +1915,8 @@ def public repository_parse_inventory(text : string; var worktrees : array<Workt
     }
 }
 
-def private conflict_code(code : string) : bool {
-    return code == "DD" || code == "AU" || code == "UD" || code == "UA" || code == "DU" || code == "AA" || code == "UU"
-}
+def private conflict_code(code : string) : bool =>
+    code == "DD" || code == "AU" || code == "UD" || code == "UA" || code == "DU" || code == "AA" || code == "UU"
 
 def private rename_or_copy_code(code : string) : bool {
     if (length(code) != 2) return false
@@ -2854,9 +2847,8 @@ def private poll_task(session_id : string) : GitTaskResult {
     return <- result
 }
 
-def private task_overflow_message(session_id : string) : string {
-    return "Git structured output exceeded the watcher raw-history limit; inspect session {session_id}"
-}
+def private task_overflow_message(session_id : string) : string =>
+    "Git structured output exceeded the watcher raw-history limit; inspect session {session_id}"
 
 def private advance_worktree(var runtime : RepositoryRuntime?) {
     runtime.worktree_index++

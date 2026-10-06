@@ -146,9 +146,7 @@ def private maybe(var value : ReNode?) {
     return MaybeReNode(value = value)
 }
 
-def private eos(expr : string; offset : int) {
-    return offset >= length(expr)
-}
+def private eos(expr : string; offset : int) => offset >= length(expr)
 
 def private at(expr : string; offset : int) : int {
     static_if (range_check_enabled) {
@@ -254,21 +252,15 @@ def private set_meta(var cset : CharSet; che : int) {
 let private meta = "\\+*.()[]|^\{}"
 let private meta_set = "wWsSdDnrtfvbB"
 
-def private is_meta_character(ch : int) : bool {
-    return find(meta, ch) != -1
-}
+def private is_meta_character(ch : int) : bool => find(meta, ch) != -1
 
-def private is_set_character(ch : int) : bool {
-    return find(meta_set, ch) != -1
-}
+def private is_set_character(ch : int) : bool => find(meta_set, ch) != -1
 
-def private is_digit(ch : int) : bool {
-    return ch >= '0' && ch <= '9'  // nolint:PERF014 (regex char-class primitive)
-}
+def private is_digit(ch : int) : bool =>
+    ch >= '0' && ch <= '9'  // nolint:PERF014 (regex char-class primitive)
 
-def private is_word_character(ch : int) : bool {
-    return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_'  // nolint:PERF014
-}
+def private is_word_character(ch : int) : bool =>
+    (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_'  // nolint:PERF014
 
 def private from_hex(ch : int) {
     if (ch >= '0' && ch <= '9') return ch - '0'  // nolint:PERF014
@@ -278,17 +270,11 @@ def private from_hex(ch : int) {
     return 0
 }
 
-def private from_hex(ch1, ch2) {
-    return from_hex(ch1) * 16 + from_hex(ch2)
-}
+def private from_hex(ch1, ch2) => from_hex(ch1) * 16 + from_hex(ch2)
 
-def private string_from_hex(ch1 : int) {
-    return to_char(from_hex(ch1))
-}
+def private string_from_hex(ch1 : int) => to_char(from_hex(ch1))
 
-def private string_from_hex(ch1, ch2 : int) {
-    return to_char(from_hex(ch1, ch2))
-}
+def private string_from_hex(ch1, ch2 : int) => to_char(from_hex(ch1, ch2))
 
 def private re_char(expr : string; offset : int) : MaybeReNode {
     trace("re_char", offset)

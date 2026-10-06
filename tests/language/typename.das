@@ -6,25 +6,16 @@ struct TnFoo {
     bar : int
 }
 
-def tn_testInfT(var a : auto(numT)) {
-    return typeinfo typename(type<numT>)
-}
+def tn_testInfT(var a : auto(numT)) => typeinfo typename(type<numT>)
 
-def tn_testVarRefT(var a) {
-    return typeinfo typename(a)
-}
+def tn_testVarRefT(var a) => typeinfo typename(a)
 
-def tn_testVarValT(var a) {
-    return typeinfo typename(a + 0)
-}
+def tn_testVarValT(var a) => typeinfo typename(a + 0)
 
-def tn_arrType(var a : array<auto(arrT)>) {
-    return typeinfo typename(type<arrT>)
-}
+def tn_arrType(var a : array<auto(arrT)>) => typeinfo typename(type<arrT>)
 
-def tn_tabTypes(var a : table<auto(key); auto(value)>) {
-    return typeinfo typename(type<key>) + ":" + typeinfo typename(type<value>)
-}
+def tn_tabTypes(var a : table<auto(key); auto(value)>) =>
+    typeinfo typename(type<key>) + ":" + typeinfo typename(type<value>)
 
 [test]
 def test_typename(t : T?) {

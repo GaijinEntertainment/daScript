@@ -2350,9 +2350,7 @@ class StyleLintVisitor : AstVisitor {
         }
     }
 
-    def st030_decl_key(at : LineInfo) : string {
-        return "{at.fileInfo.name}:{at.line}:{at.column}"
-    }
+    def st030_decl_key(at : LineInfo) : string => "{at.fileInfo.name}:{at.line}:{at.column}"
 
     def st030_is_group_line(src : string) : bool {
         //! `require [group]` or `require ?guard [group]` - the bracket right after the keyword
@@ -2711,9 +2709,8 @@ class StyleLintVisitor : AstVisitor {
         }
     }
 
-    def is_lowered_unsafe_delete(expr : ExpressionPtr) : bool {
-        return expr is ExprCall && lowered_unsafe_delete(expr as ExprCall)
-    }
+    def is_lowered_unsafe_delete(expr : ExpressionPtr) : bool =>
+        expr is ExprCall && lowered_unsafe_delete(expr as ExprCall)
 
     def variable_owns_unsafe(v : VariablePtr) : bool {
         let vt = v._type
@@ -2947,9 +2944,8 @@ class StyleLintVisitor : AstVisitor {
         }
     }
 
-    def is_module_with(expr : ExpressionPtr) : bool {
-        return expr is ExprWith && !empty((expr as ExprWith).moduleName)
-    }
+    def is_module_with(expr : ExpressionPtr) : bool =>
+        expr is ExprWith && !empty((expr as ExprWith).moduleName)
 
     def override preVisitExprWith(var expr : ExprWith?) : void {
         if (with_module_is_unsafe && !expr.genFlags.generated && !empty(expr.moduleName)) {
@@ -3028,9 +3024,8 @@ def private ascii_strings_for(prog : ProgramPtr) : bool {
 }
 
 //! infer falls back to the host's policy, which lint cannot read; the policy header's default is on.
-def private strict_smart_pointers_for(prog : ProgramPtr) : bool {
-    return prog._options |> find_arg("strict_smart_pointers") ?as tBool ?? true
-}
+def private strict_smart_pointers_for(prog : ProgramPtr) : bool =>
+    prog._options |> find_arg("strict_smart_pointers") ?as tBool ?? true
 
 def private duplicate_regions_for(prog : ProgramPtr) : bool {
     let configured = prog._options |> find_arg("_duplicate_regions")

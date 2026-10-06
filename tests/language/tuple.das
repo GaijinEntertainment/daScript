@@ -4,27 +4,17 @@ require dastest/testing_boost public
 // Tests tuple creation, named fields, positional access, sizeof, heap allocation,
 // make_tuple syntax, fixed_array of tuples, and finalize/clone operations.
 
-def testI(arg : tuple<i : int; f : float>) {
-    return arg.i == 1
-}
+def testI(arg : tuple<i : int; f : float>) => arg.i == 1
 
-def testF(arg : tuple<i : int; f : float>) {
-    return arg.f == 3.14
-}
+def testF(arg : tuple<i : int; f : float>) => arg.f == 3.14
 
-def overload_pick(_x : tuple<int; float>) {
-    return 1
-}
+def overload_pick(_x : tuple<int; float>) => 1
 
-def overload_pick(_x : tuple<x : int; y : float>) {
-    return 2
-}
+def overload_pick(_x : tuple<x : int; y : float>) => 2
 
 // return-position shorthand: positional bare-var tuple promotes to the
 // function's declared named-tuple result type
-def make_hit_return(eid : int; distSq : float) : tuple<eid : int; distSq : float> {
-    return (eid, distSq)
-}
+def make_hit_return(eid : int; distSq : float) : tuple<eid : int; distSq : float> => (eid, distSq)
 
 def make_hit_locals() : tuple<eid : int; distSq : float> {
     let eid = 17

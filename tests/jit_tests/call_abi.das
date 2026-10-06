@@ -9,14 +9,10 @@ struct Box {
     y : int
 }
 
-def take_bool(b : bool) : int {
-    return b ? 1 : 0
-}
+def take_bool(b : bool) : int => b ? 1 : 0
 
 [sideeffects]
-def take_two_bools(a, b : bool) : bool {
-    return a && b
-}
+def take_two_bools(a, b : bool) : bool => a && b
 
 [sideeffects]
 def pass_loaded_bool(v : bool) : int {
@@ -31,19 +27,13 @@ def return_loaded_bool(v : bool) : bool {
 }
 
 [sideeffects]
-def return_compared_bool(a, b : int) : bool {
-    return a < b
-}
+def return_compared_bool(a, b : int) : bool => a < b
 
-def take_box(b : Box) : int {
-    return b.x + b.y
-}
+def take_box(b : Box) : int => b.x + b.y
 
 // a temporary passed where the parameter is taken by reference
 [sideeffects]
-def pass_temp_struct(x, y : int) : int {
-    return take_box(Box(x = x, y = y))
-}
+def pass_temp_struct(x, y : int) : int => take_box(Box(x = x, y = y))
 
 [test]
 def test_call_abi(t : T?) {

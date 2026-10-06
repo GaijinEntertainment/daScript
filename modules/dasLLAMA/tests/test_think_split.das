@@ -213,9 +213,8 @@ def test_split_ff_vt_whitespace(t : T?) {
 let CH_OPEN = 100l    // the guarded ids are opaque to the guard; the pieces carry the marker text
 let CH_CLOSE = 101l
 
-def private feed_stops(var g : NothinkStopGuard; steps : array<tuple<id : int64; piece : string>>) : array<bool> {
-    return <- [for (s in steps); nothink_stop_here_(g, s.id, s.piece)]
-}
+def private feed_stops(var g : NothinkStopGuard; steps : array<tuple<id : int64; piece : string>>) : array<bool> =>
+    <- [for (s in steps); nothink_stop_here_(g, s.id, s.piece)]
 
 [test]
 def test_nothink_stop_guard(t : T?) {

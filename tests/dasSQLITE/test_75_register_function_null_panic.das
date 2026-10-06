@@ -31,9 +31,7 @@ def fn_panic(x : int) : int {
     return x * 2
 }
 
-def fn_panic2(x : int) : int {
-    return x * x
-}
+def fn_panic2(x : int) : int => x * x
 
 [test]
 def test_null_short_circuits_invocation(t : T?) {

@@ -176,9 +176,7 @@ class Cm2PxNil : MoeCmBase {
     @workgroup wg_blk0 : uint
 
     [spirv_decode]
-    def decode_q8(blk : VkQ8Blk; bc, cib : uint2) : float16 {
-        return float16(0.05)
-    }
+    def decode_q8(blk : VkQ8Blk; bc, cib : uint2) : float16 => float16(0.05)
 
     [spirv_kernel(local_size_x = 256, name = "cm2px_nil_spv")]
     def run {
@@ -1064,9 +1062,7 @@ class K6PxBase : MoeCmBase {
     @workgroup wg_blk0 : uint
 
     [spirv_decode]
-    def decode_k6(blk : VkK6Blk; bc, cib : uint2) : float16 {
-        return float16(0.05)
-    }
+    def decode_k6(blk : VkK6Blk; bc, cib : uint2) : float16 => float16(0.05)
 
     def body {
         let rb = sched[pa.map_off + gl_WorkGroupID.x] * 4u

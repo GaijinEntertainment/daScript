@@ -8,9 +8,8 @@ require strudel/strudel
 // that spells false, the space form of a scale name, the time shifts, the 25% chance, and the
 // pattern-valued add and sub.
 
-def haps_of(var pat : Pattern; start, stop : double) : array<Hap> {
-    return <- pat(TimeSpan(start = start, stop = stop))
-}
+def haps_of(var pat : Pattern; start, stop : double) : array<Hap> =>
+    <- pat(TimeSpan(start = start, stop = stop))
 
 def sounds(var pat : Pattern; start, stop : double) : array<string> {
     var haps <- haps_of(pat, start, stop)

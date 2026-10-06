@@ -489,9 +489,7 @@ def gen_image_point(w : int; c : uint) {
     return <- surface
 }
 
-def private s_to_int(s : string) {
-    return empty(s) ? -1 : int(s)
-}
+def private s_to_int(s : string) => empty(s) ? -1 : int(s)
 
 def private split_sptn(sptn : string) : tuple<p : int; t : int; n : int> {
     let ptn <- split(sptn, "/")

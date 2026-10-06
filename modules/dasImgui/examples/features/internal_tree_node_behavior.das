@@ -25,9 +25,8 @@ require imgui/imgui_harness
 // A custom tree node from the raw primitive: TreeNodeBehavior draws the arrow +
 // label, toggles open/closed on click, and (when open, without NoTreePushOnOpen)
 // pushes a tree layer — so the caller renders children + tree_pop() on a true return.
-def private custom_tree(lbl : string; flags : ImGuiTreeNodeFlags) : bool {
-    return TreeNodeBehavior(GetID(lbl), flags, lbl)
-}
+def private custom_tree(lbl : string; flags : ImGuiTreeNodeFlags) : bool =>
+    TreeNodeBehavior(GetID(lbl), flags, lbl)
 
 [export]
 def init() {

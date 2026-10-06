@@ -91,9 +91,7 @@ enum public BlockLayoutRules {
     std430
 }
 
-def public arith_width_ok(cls, width : int) : bool {
-    return width <= 32 || (width == 64 && cls == 2)
-}
+def public arith_width_ok(cls, width : int) : bool => width <= 32 || (width == 64 && cls == 2)
 
 def public arith_class(bt : Type) : int {
     let ni = numeric_info(bt)

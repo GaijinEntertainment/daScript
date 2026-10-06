@@ -18,13 +18,9 @@ def target_disabled(x, y : int) : int {
     return a + b
 }
 
-def has(s, sub : string) : bool {
-    return find(s, sub, 0) >= 0
-}
+def has(s, sub : string) : bool => find(s, sub, 0) >= 0
 
-def count_of(s, sub : string) : int {
-    return length(split(s, sub)) - 1
-}
+def count_of(s, sub : string) : int => length(split(s, sub)) - 1
 
 [test]
 def test_cse_disabled(t : T?) {

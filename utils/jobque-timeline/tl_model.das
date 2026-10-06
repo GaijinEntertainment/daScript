@@ -11,9 +11,8 @@ let public EV_WAKE = 3
 let public EV_FIFO = 4
 
 // meta packing: kind(3b) | stage(6b) | nstages(6b) | cat(8b)
-def public ev_meta(kind, stage, nstages, cat : int) : uint {
-    return uint(kind & 7) | (uint(stage & 63) << 3u) | (uint(nstages & 63) << 9u) | (uint(cat & 255) << 15u)
-}
+def public ev_meta(kind, stage, nstages, cat : int) : uint =>
+    uint(kind & 7) | (uint(stage & 63) << 3u) | (uint(nstages & 63) << 9u) | (uint(cat & 255) << 15u)
 
 def public ev_kind(meta : uint) : int => int(meta & 7u)
 def public ev_stage(meta : uint) : int => int((meta >> 3u) & 63u)

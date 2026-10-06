@@ -316,9 +316,8 @@ def private builtin_info(name : string) : tuple<ok : bool; bi : SpvBuiltIn; stor
 // gl_SubgroupSize and gl_SubgroupInvocationID describe the invocation's place in its SUBGROUP, a
 // notion every execution model has, so SPIR-V puts no stage restriction on them: any stage may read
 // them under GroupNonUniform. Their builtin_info req is nominal -- this lifts it.
-def private subgroup_any_stage_builtin(name : string) : bool {
-    return name == "gl_SubgroupSize" || name == "gl_SubgroupInvocationID"
-}
+def private subgroup_any_stage_builtin(name : string) : bool =>
+    name == "gl_SubgroupSize" || name == "gl_SubgroupInvocationID"
 
 // The multi-stage validity sets for the ray-tracing builtins (and gl_PrimitiveID's closest-hit reuse).
 // Returns ok=true when `name` is one of the multi-stage names AND `stage` is in its set; a name not
@@ -351,9 +350,8 @@ def private stage_name(stage : ShaderStage) : string {
     return "compute"
 }
 
-def private is_rt_stage(stage : ShaderStage) : bool {
-    return stage == ShaderStage.RayGen || stage == ShaderStage.Miss || stage == ShaderStage.ClosestHit
-}
+def private is_rt_stage(stage : ShaderStage) : bool =>
+    stage == ShaderStage.RayGen || stage == ShaderStage.Miss || stage == ShaderStage.ClosestHit
 
 // Pull the StorageBuffer8/16BitAccess capability for a sub-32-bit member reachable through an
 // @ssbo (std430) layout. std140 blocks never see sub-32 members (compute_block_layout rejects
@@ -3019,9 +3017,8 @@ def private splat_to_vec(var m : SpirvModule; vec_type : uint; scalar_id : uint;
 // match Base's component COUNT -- `uint4 >> 8` (the only vector-shift spelling daslang has, the
 // shift count being an int) would otherwise build a v4uint out of int constituents, which compiles
 // and fails spirv-val.
-def private splat_type(var m : SpirvModule; scalar : TypeDecl?; n : int) : uint {
-    return type_vector(m, emit_type(m, scalar), n)
-}
+def private splat_type(var m : SpirvModule; scalar : TypeDecl?; n : int) : uint =>
+    type_vector(m, emit_type(m, scalar), n)
 
 // ===== `*` over matrices / vectors / scalars =====
 // SPIR-V splits multiplication by operand shape: OpMatrixTimesMatrix / OpMatrixTimesVector /
@@ -7144,9 +7141,8 @@ class SpirvEmit : AstVisitor {
     // is NOT the order the named arguments are written in. Every field must be given: SPIR-V has no
     // partial composite, and daslang only omits a field when its declaration carries a default, which
     // would have to be materialised here; fail closed instead of constructing a short (invalid) composite.
-    def override canVisitExprMakeStructBody(expr : ExprMakeStruct?) : bool {
-        return true    // descend: the field initialisers are ordinary expressions and must lower first
-    }
+    def override canVisitExprMakeStructBody(expr : ExprMakeStruct?) : bool =>
+        true  // descend: the field initialisers are ordinary expressions and must lower first
     def override visitExprMakeStruct(var expr : ExprMakeStruct?) : ExpressionPtr {
         var bm & = unsafe(*m)
         let st = expr.makeType != null ? expr.makeType.structType : null

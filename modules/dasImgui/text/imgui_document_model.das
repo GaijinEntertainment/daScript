@@ -211,9 +211,7 @@ struct public RichControlAction {
     edit : TextEdit = TextEdit()
 }
 
-def private utf8_bom() : string {
-    return "\xEF\xBB\xBF"
-}
+def private utf8_bom() : string => "\xEF\xBB\xBF"
 
 def public text_document_install_bytes(var document : TextDocumentSource;
                                        bytes, path : string;
@@ -241,13 +239,11 @@ def public text_document_install_text(var document : TextDocumentSource;
     return TextDocumentStatus.ok
 }
 
-def public text_document_bytes(document : TextDocumentSource const) : string {
-    return document.has_utf8_bom ? utf8_bom() + document.text : document.text
-}
+def public text_document_bytes(document : TextDocumentSource const) : string =>
+    document.has_utf8_bom ? utf8_bom() + document.text : document.text
 
-def public text_document_dirty(document : TextDocumentSource const) : bool {
-    return document.revision != document.saved_revision
-}
+def public text_document_dirty(document : TextDocumentSource const) : bool =>
+    document.revision != document.saved_revision
 
 def public text_document_mark_saved(var document : TextDocumentSource;
                                     path : string = "") {

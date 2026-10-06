@@ -17,39 +17,25 @@ require daslib/strings_boost
 // optimization_folding.das — a silently disabled fold passes there but fails here.
 
 [export]
-def target_mul_one(x : int) : int {
-    return x * 1
-}
+def target_mul_one(x : int) : int => x * 1
 
 [export]
-def target_add_zero(f : float) : float {
-    return f + 0.0
-}
+def target_add_zero(f : float) : float => f + 0.0
 
 [export]
-def target_mul_zero(x : int) : int {
-    return x * 0
-}
+def target_mul_zero(x : int) : int => x * 0
 
 [export]
-def target_compare_flip(x : int) : bool {
-    return !(x < 5)
-}
+def target_compare_flip(x : int) : bool => !(x < 5)
 
 [export]
-def target_cast(x : int) : int {
-    return int(x) // nolint:PERF020 -- deliberate: the fold under test
-}
+def target_cast(x : int) : int => int(x)  // nolint:PERF020 -- deliberate: the fold under test
 
 [export]
-def target_not_not(b : bool) : bool {
-    return !!b
-}
+def target_not_not(b : bool) : bool => !!b
 
 [export]
-def target_tern_bool(x : int) : bool {
-    return x > 3 ? true : false
-}
+def target_tern_bool(x : int) : bool => x > 3 ? true : false
 
 [export]
 def target_dead_while(x : int) : int {
@@ -70,39 +56,25 @@ def target_dead_for(x : int) : int {
 }
 
 [export]
-def target_splat(v : float3; s : float) : float3 {
-    return v * float3(s)
-}
+def target_splat(v : float3; s : float) : float3 => v * float3(s)
 
 [export]
-def target_splat_swap(v : float3; s : float) : float3 {
-    return float3(s) * v
-}
+def target_splat_swap(v : float3; s : float) : float3 => float3(s) * v
 
 [export]
-def target_div_one(f : float) : float {
-    return f / 1.0
-}
+def target_div_one(f : float) : float => f / 1.0
 
 [export]
-def target_shift_zero(u : uint) : uint {
-    return u << 0u
-}
+def target_shift_zero(u : uint) : uint => u << 0u
 
 [export]
-def target_xor_self(u : uint) : uint {
-    return u ^ u // nolint:LINT007 -- deliberate: the fold under test
-}
+def target_xor_self(u : uint) : uint => u ^ u  // nolint:LINT007 -- deliberate: the fold under test
 
 [export]
-def target_and_false(b : bool) : bool {
-    return b && false
-}
+def target_and_false(b : bool) : bool => b && false
 
 [export]
-def target_reassoc(f : float) : float {
-    return (f + 1.0) + 2.0
-}
+def target_reassoc(f : float) : float => (f + 1.0) + 2.0
 
 // ===== Expression::sameAs powered folds (same-shape operands beyond bare vars) =====
 
@@ -119,34 +91,28 @@ def bump_side() : int {
 }
 
 [export]
-def target_xor_self_field(s : SamePair) : int {
-    return s.a ^ s.a // nolint:LINT007 -- deliberate: the fold under test
-}
+def target_xor_self_field(s : SamePair) : int =>
+    s.a ^ s.a  // nolint:LINT007 -- deliberate: the fold under test
 
 [export]
-def target_sub_self_swizzle(v : int2) : int {
-    return v.x - v.x // nolint:LINT007 -- deliberate: the fold under test
-}
+def target_sub_self_swizzle(v : int2) : int =>
+    v.x - v.x  // nolint:LINT007 -- deliberate: the fold under test
 
 [export]
-def target_and_self_at(arr : int[4]; i : int) : int {
-    return arr[i] & arr[i] // nolint:LINT007 -- deliberate: the fold under test
-}
+def target_and_self_at(arr : int[4]; i : int) : int =>
+    arr[i] & arr[i]  // nolint:LINT007 -- deliberate: the fold under test
 
 [export]
-def target_tern_same_arms(c : bool; s : SamePair) : int {
-    return c ? s.b : s.b // nolint:LINT008 -- deliberate: the fold under test
-}
+def target_tern_same_arms(c : bool; s : SamePair) : int =>
+    c ? s.b : s.b  // nolint:LINT008 -- deliberate: the fold under test
 
 [export]
-def target_sub_self_impure() : int {
-    return bump_side() - bump_side() // nolint:LINT007 -- deliberate: impure operands must NOT fold
-}
+def target_sub_self_impure() : int =>
+    bump_side() - bump_side()  // nolint:LINT007 -- deliberate: impure operands must NOT fold
 
 [export]
-def target_sub_self_float(f : float) : float {
-    return f - f // nolint:LINT007 -- deliberate: stays without fast_math (inf/NaN)
-}
+def target_sub_self_float(f : float) : float =>
+    f - f  // nolint:LINT007 -- deliberate: stays without fast_math (inf/NaN)
 
 // ===== CondFolding: if/else-return => ternary =====
 
@@ -193,9 +159,7 @@ def target_defer_in_arm(c : bool) : int {
     }
 }
 
-def has(s, sub : string) : bool {
-    return find(s, sub, 0) >= 0
-}
+def has(s, sub : string) : bool => find(s, sub, 0) >= 0
 
 def body_of(t : T?; nm : string) : string {
     var body = ""

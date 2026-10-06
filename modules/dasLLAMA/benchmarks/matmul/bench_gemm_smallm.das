@@ -129,9 +129,8 @@ def time_case(var cd : CaseData; c : GemmCase) : double {
     return double(get_time_usec(t0))
 }
 
-def gmacs(c : GemmCase; reps : int; us : double) : double {
-    return double(c.n * c.d * c.m) * double(reps) / (us * 1000.0lf)
-}
+def gmacs(c : GemmCase; reps : int; us : double) : double =>
+    double(c.n * c.d * c.m) * double(reps) / (us * 1000.0lf)
 
 def report_case(c : GemmCase; var cd : CaseData; best_us : double) {
     // one extra diag call to read the dispatch shape this config takes

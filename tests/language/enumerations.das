@@ -52,9 +52,7 @@ def test_enum_macro_conversions(t : T?) {
 // Regression: a user-defined operator over two DIFFERENT enums must be honored.
 // The "operations on different enumerations are prohibited" gate now runs only
 // AFTER operator-overload lookup fails (reportOp2Errors), so this overload wins.
-def operator |(a : Foo; b : Bar) : Foo {
-    return unsafe(reinterpret<Foo>(int(a) | int(b)))
-}
+def operator |(a : Foo; b : Bar) : Foo => unsafe(reinterpret<Foo>(int(a) | int(b)))
 
 [test]
 def test_cross_enum_operator(t : T?) {

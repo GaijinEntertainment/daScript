@@ -26,9 +26,7 @@ def private bom() : string {
     return string(bytes)
 }
 
-def private has_line(text, line : string) : bool {
-    return find(text, "\n{line}\n") >= 0
-}
+def private has_line(text, line : string) : bool => find(text, "\n{line}\n") >= 0
 
 [test]
 def test_rst_digest_rows(t : T?) {

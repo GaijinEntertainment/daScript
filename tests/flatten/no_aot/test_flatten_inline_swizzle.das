@@ -14,27 +14,19 @@ require daslib/flatten
 //! plain flatten. The file COMPILING proves the twins build; the equal() checks prove equivalence.
 
 // helper whose by-value vector param is read via single-component swizzles
-def axis_mix(p : float3) : float {
-    return p.x * 0.5 + p.y - p.z * 0.25
-}
+def axis_mix(p : float3) : float => p.x * 0.5 + p.y - p.z * 0.25
 
 // value source: the call argument is arithmetic (force_field's `(scrolledPos * gridScale).x`)
 [flatten]
-def inl_swizzle_val(s : float) : float {
-    return axis_mix(float3(s, s * 2.0, s - 1.0) * 1.5)
-}
+def inl_swizzle_val(s : float) : float => axis_mix(float3(s, s * 2.0, s - 1.0) * 1.5)
 
 // ref source: the argument is a (by-value) vector param; the `var __flat_arg = v` value-copy
 // still feeds a non-ref swizzle base after copy_prop (heal_3d's `inp.worldPos`)
 [flatten]
-def inl_swizzle_ref(v : float3) : float {
-    return axis_mix(v)
-}
+def inl_swizzle_ref(v : float3) : float => axis_mix(v)
 
 // loop-unroll + helper inline, accumulating swizzled reads (heal_3d's per-seed loop)
-def hatch(p : float3; k : float) : float {
-    return p.y * k + p.x
-}
+def hatch(p : float3; k : float) : float => p.y * k + p.x
 
 [flatten]
 def inl_swizzle_loop(base : float3) : float {

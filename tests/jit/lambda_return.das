@@ -17,13 +17,9 @@ def make_fn_capture(n : int) : MyFn {
     }
 }
 
-def wrap_fn(var fn : MyFn) : MyFn {
-    return <- fn
-}
+def wrap_fn(var fn : MyFn) : MyFn => <- fn
 
-def double_wrap(var fn : MyFn) : MyFn {
-    return <- wrap_fn(fn)
-}
+def double_wrap(var fn : MyFn) : MyFn => <- wrap_fn(fn)
 
 [test]
 def test_lambda_return(t : T?) {

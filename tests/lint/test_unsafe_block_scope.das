@@ -9,9 +9,7 @@ require daslib/style_lint
 require daslib/strings_boost
 require strings
 
-def private fixture_path() : string {
-    return "{get_das_root()}/tests/lint/_unsafe_block_scope_fixture.das"
-}
+def private fixture_path() : string => "{get_das_root()}/tests/lint/_unsafe_block_scope_fixture.das"
 
 def private style_codes(t : T?; fold : bool) : array<string> {
     var codes : array<string>

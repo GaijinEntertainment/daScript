@@ -173,9 +173,8 @@ def strict_drop_baseline_clusters(var clusters : array<Cluster>;
 // Lay out chunk + shard temp paths next to the user's --export-functions
 // output. Avoids relying on $TMPDIR / %TEMP%, and the path the caller
 // supplied is by definition writable.
-def shard_path_for(out_path : string; tag : string; kind : string; index : int) : string {
-    return "{out_path}.{tag}.{kind}-{index}"
-}
+def shard_path_for(out_path : string; tag : string; kind : string; index : int) : string =>
+    "{out_path}.{tag}.{kind}-{index}"
 
 
 // Write one chunk's file list as the newline-delimited `--paths-from`

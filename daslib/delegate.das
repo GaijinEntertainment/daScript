@@ -95,22 +95,17 @@ struct template public DelegateReturn {
         return <- $e(lastCall)
     }
 
-    def empty() : bool {
-        return empty(invocation_list)
-    }
+    def empty() : bool => empty(invocation_list)
 
-    def length() : int {
-        return length(invocation_list)
-    }
+    def length() : int => length(invocation_list)
 
     def clear() {
         invocation_list |> clear()
     }
 
     [unsafe_outside_of_for]
-    def static each(var self : DelegateReturn == const) : auto {
-        return <- unsafe(each(self.invocation_list))
-    }
+    def static each(var self : DelegateReturn == const) : auto =>
+        <- unsafe(each(self.invocation_list))
 }
 
 struct template public DelegateVoid {
@@ -153,22 +148,17 @@ struct template public DelegateVoid {
         }
     }
 
-    def empty() : bool {
-        return empty(invocation_list)
-    }
+    def empty() : bool => empty(invocation_list)
 
-    def length() : int {
-        return length(invocation_list)
-    }
+    def length() : int => length(invocation_list)
 
     def clear() {
         invocation_list |> clear()
     }
 
     [unsafe_outside_of_for]
-    def static each(var self : DelegateVoid == const) : auto {
-        return <- unsafe(each(self.invocation_list))
-    }
+    def static each(var self : DelegateVoid == const) : auto =>
+        <- unsafe(each(self.invocation_list))
 }
 
 [typemacro_function]

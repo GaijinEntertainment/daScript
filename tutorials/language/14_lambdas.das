@@ -205,9 +205,7 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
     // Output shows: body twice, then "about to delete", then finally once.
 }
 
-def apply_lambda(fn : lambda<(x : int) : int>; value : int) : int {
-    return fn(value)
-}
+def apply_lambda(fn : lambda<(x : int) : int>; value : int) : int => fn(value)
 
 // output:
 // mul_lambda(5) = 50

@@ -109,6 +109,5 @@ def print_child_tail(outp : string; n : int) {
 }
 
 //! The line a mint prints when the sidecar at `path` would not take its write.
-def mint_write_failure(path : string) : string {
-    return "FAILED to write {path} - if the app dir is read-only, set DAS_TUNE_MANIFEST to a writable path\n"
-}
+def mint_write_failure(path : string) : string =>
+    "FAILED to write {path} - if the app dir is read-only, set DAS_TUNE_MANIFEST to a writable path\n"

@@ -59,9 +59,7 @@ def private _push_node(var st : ParseState; var n : Fts5Node) : int {
     return idx
 }
 
-def private _is_space(cp : int) : bool {
-    return cp == 0x20 || cp == 0x09 || cp == 0x0A || cp == 0x0D
-}
+def private _is_space(cp : int) : bool => cp == 0x20 || cp == 0x09 || cp == 0x0A || cp == 0x0D
 
 def private _skip_ws(var st : ParseState) {
     let n = length(st.codepoints)
@@ -75,9 +73,7 @@ def private _peek(st : ParseState) : int {
     return int(st.codepoints[st.pos])
 }
 
-def private _is_word_cp(cp : int) : bool {
-    return utf32_is_word_char(uint(cp))
-}
+def private _is_word_cp(cp : int) : bool => utf32_is_word_char(uint(cp))
 
 def private _consume_name(var st : ParseState) : string {
     var bytes : array<uint8>

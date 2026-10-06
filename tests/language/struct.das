@@ -13,13 +13,9 @@ struct Balls {
     a, b : Ball
 }
 
-def get_ball_radius(b : Ball) : float {
-    return b.radius
-}
+def get_ball_radius(b : Ball) : float => b.radius
 
-def get_balls_radius(b : Balls) : float {
-    return b.a.radius + b.b.radius
-}
+def get_balls_radius(b : Balls) : float => b.a.radius + b.b.radius
 
 def set_default_ball(var b : Ball) {
     b.position = float3(1.0, 2.0, 3.0)
@@ -42,9 +38,7 @@ def test_ref_ptr(t : T?; var a : Ball?&; var b : Ball?) {
     t |> equal(a, b)
 }
 
-def test_ret_ptr(var a : Ball?) : Ball? {
-    return a
-}
+def test_ret_ptr(var a : Ball?) : Ball? => a
 
 struct L3 {
     a : int

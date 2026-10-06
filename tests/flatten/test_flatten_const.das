@@ -30,144 +30,94 @@ require math
 // ----- float algebraic identities (#1a) -----
 
 [flatten]
-def f_mul1(x : float) : float {
-    return x * 1.0
-}
+def f_mul1(x : float) : float => x * 1.0
 
 [flatten]
-def f_mul1l(x : float) : float {
-    return 1.0 * x
-}
+def f_mul1l(x : float) : float => 1.0 * x
 
 [flatten]
-def f_mulneg1(x : float) : float {
-    return x * -1.0
-}
+def f_mulneg1(x : float) : float => x * -1.0
 
 [flatten]
-def f_mul0(x : float) : float {
-    return x * 0.0
-}
+def f_mul0(x : float) : float => x * 0.0
 
 [flatten]
-def f_add0(x : float) : float {
-    return x + 0.0
-}
+def f_add0(x : float) : float => x + 0.0
 
 [flatten]
-def f_sub0(x : float) : float {
-    return x - 0.0
-}
+def f_sub0(x : float) : float => x - 0.0
 
 [flatten]
-def f_zerosub(x : float) : float {
-    return 0.0 - x
-}
+def f_zerosub(x : float) : float => 0.0 - x
 
 // Chained identities collapse bottom-up: (x*1) + (x*0) - 0 -> x + 0 - 0 -> x.
 [flatten]
-def f_combo(x : float) : float {
-    return (x * 1.0) + (x * 0.0) - 0.0
-}
+def f_combo(x : float) : float => (x * 1.0) + (x * 0.0) - 0.0
 
 // Scalar const on a vector. `x:float3 * 1.0` folds to x (the non-const operand carries the
 // result type). `x:float3 * 0.0` folds to a width-matched float3(0): zero_const_of keys on
 // the RESULT type, so the scalar zero never mistypes float3 -> float. Both value-correct
 // (finite inputs). The dedicated *vector-const* arms (`x * float3(1)`, …) are f_vc* below.
 [flatten]
-def f_vec1(x : float3) : float3 {
-    return x * 1.0
-}
+def f_vec1(x : float3) : float3 => x * 1.0
 
 [flatten]
-def f_vec0(x : float3) : float3 {
-    return x * 0.0
-}
+def f_vec0(x : float3) : float3 => x * 0.0
 
 // ----- integer algebraic identities (two's-complement exact, incl. x*-1 at edges) -----
 
 [flatten]
-def f_imul1(x : int) : int {
-    return x * 1
-}
+def f_imul1(x : int) : int => x * 1
 
 [flatten]
-def f_imul1l(x : int) : int {
-    return 1 * x
-}
+def f_imul1l(x : int) : int => 1 * x
 
 [flatten]
-def f_imulneg1(x : int) : int {
-    return x * -1
-}
+def f_imulneg1(x : int) : int => x * -1
 
 [flatten]
-def f_imulneg1l(x : int) : int {
-    return -1 * x
-}
+def f_imulneg1l(x : int) : int => -1 * x
 
 [flatten]
-def f_imul0(x : int) : int {
-    return x * 0
-}
+def f_imul0(x : int) : int => x * 0
 
 [flatten]
-def f_iadd0(x : int) : int {
-    return x + 0
-}
+def f_iadd0(x : int) : int => x + 0
 
 [flatten]
-def f_iadd0l(x : int) : int {
-    return 0 + x
-}
+def f_iadd0l(x : int) : int => 0 + x
 
 [flatten]
-def f_isub0(x : int) : int {
-    return x - 0
-}
+def f_isub0(x : int) : int => x - 0
 
 [flatten]
-def f_izerosub(x : int) : int {
-    return 0 - x
-}
+def f_izerosub(x : int) : int => 0 - x
 
 // Scalar const on an int vector: `x:int3 * 1` folds to x; `x:int3 * 0` folds to int3(0)
 // (zero_const_of on the result type — exact for integers, no fast-math). The dedicated
 // *vector-const* arms (`x * int3(1)`, …) are f_ivc* below.
 [flatten]
-def f_ivec1(x : int3) : int3 {
-    return x * 1
-}
+def f_ivec1(x : int3) : int3 => x * 1
 
 [flatten]
-def f_ivec0(x : int3) : int3 {
-    return x * 0
-}
+def f_ivec0(x : int3) : int3 => x * 0
 
 // ----- const-constructor folding (#1c): vector ctors over const args fold to a
 // single const literal (the typer leaves them; flatten collapses them) -----
 
 [flatten]
-def f_ctor_zero : float3 {
-    return float3(0.0)
-}
+def f_ctor_zero : float3 => float3(0.0)
 
 [flatten]
-def f_ctor_arith : float3 {
-    return float3(2.0 * 3.0)
-}
+def f_ctor_arith : float3 => float3(2.0 * 3.0)
 
 [flatten]
-def f_ctor_mixed : float3 {
-    return float3(1.0, 2.0, 3.0)
-}
+def f_ctor_mixed : float3 => float3(1.0, 2.0, 3.0)
 
 // A const ctor buried under arithmetic with a runtime operand: the ctor folds, the
 // surrounding add stays.
 [flatten]
-def f_ctor_mixed_rt(x : float3) : float3 {
-    return x + float3(0.5)
-}
+def f_ctor_mixed_rt(x : float3) : float3 => x + float3(0.5)
 
 // ----- vector-const operands: floatX / intX const operands fold like scalar consts -----
 //
@@ -177,113 +127,71 @@ def f_ctor_mixed_rt(x : float3) : float3 {
 // proves the ungated arms fire (a survivor is flagged); the differential proves the value.
 
 [flatten]
-def f_vcmul1(x : float3) : float3 {
-    return x * float3(1.0)
-}
+def f_vcmul1(x : float3) : float3 => x * float3(1.0)
 
 [flatten]
-def f_vcmulneg1(x : float3) : float3 {
-    return x * float3(-1.0)
-}
+def f_vcmulneg1(x : float3) : float3 => x * float3(-1.0)
 
 [flatten]
-def f_vcadd0(x : float3) : float3 {
-    return x + float3(0.0)
-}
+def f_vcadd0(x : float3) : float3 => x + float3(0.0)
 
 [flatten]
-def f_vcsub0(x : float3) : float3 {
-    return x - float3(0.0)
-}
+def f_vcsub0(x : float3) : float3 => x - float3(0.0)
 
 [flatten]
-def f_vczerosub(x : float3) : float3 {
-    return float3(0.0) - x
-}
+def f_vczerosub(x : float3) : float3 => float3(0.0) - x
 
 [flatten]
-def f_vcmul0(x : float3) : float3 {
-    return x * float3(0.0)
-}
+def f_vcmul0(x : float3) : float3 => x * float3(0.0)
 
 // int vector-const operands — exact (no fast-math); covers IGRID incl. edges for `*-1`.
 [flatten]
-def f_ivcmul1(x : int3) : int3 {
-    return x * int3(1)
-}
+def f_ivcmul1(x : int3) : int3 => x * int3(1)
 
 [flatten]
-def f_ivcmulneg1(x : int3) : int3 {
-    return x * int3(-1)
-}
+def f_ivcmulneg1(x : int3) : int3 => x * int3(-1)
 
 [flatten]
-def f_ivcadd0(x : int3) : int3 {
-    return x + int3(0)
-}
+def f_ivcadd0(x : int3) : int3 => x + int3(0)
 
 [flatten]
-def f_ivcsub0(x : int3) : int3 {
-    return x - int3(0)
-}
+def f_ivcsub0(x : int3) : int3 => x - int3(0)
 
 [flatten]
-def f_ivczerosub(x : int3) : int3 {
-    return int3(0) - x
-}
+def f_ivczerosub(x : int3) : int3 => int3(0) - x
 
 [flatten]
-def f_ivcmul0(x : int3) : int3 {
-    return x * int3(0)
-}
+def f_ivcmul0(x : int3) : int3 => x * int3(0)
 
 // ----- uint: scalar identities (no *-1 — unsigned), vectors, and const constructors -----
 
 [flatten]
-def f_umul1(x : uint) : uint {
-    return x * 1u
-}
+def f_umul1(x : uint) : uint => x * 1u
 
 [flatten]
-def f_uadd0(x : uint) : uint {
-    return x + 0u
-}
+def f_uadd0(x : uint) : uint => x + 0u
 
 [flatten]
-def f_usub0(x : uint) : uint {
-    return x - 0u
-}
+def f_usub0(x : uint) : uint => x - 0u
 
 [flatten]
-def f_umul0(x : uint) : uint {
-    return x * 0u
-}
+def f_umul0(x : uint) : uint => x * 0u
 
 [flatten]
-def f_uvmul1(x : uint3) : uint3 {
-    return x * uint3(1u)
-}
+def f_uvmul1(x : uint3) : uint3 => x * uint3(1u)
 
 [flatten]
-def f_uvadd0(x : uint3) : uint3 {
-    return x + uint3(0u)
-}
+def f_uvadd0(x : uint3) : uint3 => x + uint3(0u)
 
 [flatten]
-def f_uvmul0(x : uint3) : uint3 {
-    return x * uint3(0u)
-}
+def f_uvmul0(x : uint3) : uint3 => x * uint3(0u)
 
 // uint const constructors fold to a literal (eval_to_const now covers uint scalar + vector).
 [flatten]
-def f_uctor : uint3 {
-    return uint3(1u, 2u, 3u)
-}
+def f_uctor : uint3 => uint3(1u, 2u, 3u)
 
 [flatten]
-def f_uctor_splat : uint3 {
-    return uint3(5u)
-}
+def f_uctor_splat : uint3 => uint3(5u)
 
 // ----- boolean algebraic identities (&&, ||, !, bool-select) -----
 //
@@ -294,64 +202,40 @@ def f_uctor_splat : uint3 {
 // new arms directly. Differential proves the fold is value-preserving either way.
 
 [flatten]
-def f_and_tl(x : bool) : bool {
-    return true && x
-}
+def f_and_tl(x : bool) : bool => true && x
 
 [flatten]
-def f_and_tr(x : bool) : bool {
-    return x && true
-}
+def f_and_tr(x : bool) : bool => x && true
 
 [flatten]
-def f_and_fl(x : bool) : bool {
-    return false && x
-}
+def f_and_fl(x : bool) : bool => false && x
 
 [flatten]
-def f_and_fr(x : bool) : bool {
-    return x && false
-}
+def f_and_fr(x : bool) : bool => x && false
 
 [flatten]
-def f_or_fl(x : bool) : bool {
-    return false || x
-}
+def f_or_fl(x : bool) : bool => false || x
 
 [flatten]
-def f_or_fr(x : bool) : bool {
-    return x || false
-}
+def f_or_fr(x : bool) : bool => x || false
 
 [flatten]
-def f_or_tl(x : bool) : bool {
-    return true || x
-}
+def f_or_tl(x : bool) : bool => true || x
 
 [flatten]
-def f_or_tr(x : bool) : bool {
-    return x || true
-}
+def f_or_tr(x : bool) : bool => x || true
 
 [flatten]
-def f_not_t : bool {
-    return !true
-}
+def f_not_t : bool => !true
 
 [flatten]
-def f_not_f : bool {
-    return !false
-}
+def f_not_f : bool => !false
 
 [flatten]
-def f_sel_tf(c : bool) : bool {
-    return c ? true : false
-}
+def f_sel_tf(c : bool) : bool => c ? true : false
 
 [flatten]
-def f_sel_ft(c : bool) : bool {
-    return c ? false : true
-}
+def f_sel_ft(c : bool) : bool => c ? false : true
 
 // Early-return variants: the early return reassigns the live mask, so the mask-collapse
 // pass bails (empty const map) and the post-infer FoldVisitor folds the boolean. Scalar
@@ -458,24 +342,16 @@ def f_acc_flatname : int {
 // COMPILE. So compiling at all proves the gate relaxed; the differential proves the value.
 
 [flatten]
-def f_cast_float : float {
-    return float(7)
-}
+def f_cast_float : float => float(7)
 
 [flatten]
-def f_cast_int : int {
-    return int(3.9)
-}
+def f_cast_int : int => int(3.9)
 
 [flatten]
-def f_cast_expr : float {
-    return float(3) * 2.0 + float(1)
-}
+def f_cast_expr : float => float(3) * 2.0 + float(1)
 
 [flatten]
-def f_cast_vec : float2 {
-    return float2(float(1), float(2))
-}
+def f_cast_vec : float2 => float2(float(1), float(2))
 
 // The motivating case: a const cast inside a loop accumulator (was whitelist-rejected).
 [flatten]
@@ -511,14 +387,10 @@ def f_fix_local(b : int) : int {
 
 // inline-substitution reveals it via a runtime-operand identity flatten folds but the
 // typer will not: `(0 * b) + 24 → 24`, then the typer folds the shift to `0`.
-def fix_callee(p0, q : int) : int {
-    return q - (p0 >> (p0 & 31))
-}
+def fix_callee(p0, q : int) : int => q - (p0 >> (p0 & 31))
 
 [flatten]
-def f_fix_inline(b : int) : int {
-    return fix_callee((0 * b) + 24, b + 7)
-}
+def f_fix_inline(b : int) : int => fix_callee((0 * b) + 24, b + 7)
 
 // ----- reassociation (#1c): scattered consts gather into one folded literal -----
 //
@@ -528,69 +400,47 @@ def f_fix_inline(b : int) : int {
 // `fapprox` (reassoc genuinely changes rounding); integer arms are exact (`+`/`*` are associative).
 
 [flatten]
-def f_re_add(x : float) : float {
-    return 0.5 + x + 0.6
-}
+def f_re_add(x : float) : float => 0.5 + x + 0.6
 
 [flatten]
-def f_re_add2(x : float; y : float) : float {
-    return 0.5 + x + y + 0.6
-}
+def f_re_add2(x : float; y : float) : float => 0.5 + x + y + 0.6
 
 [flatten]
-def f_re_sub(x : float) : float {
-    return x - 0.3 - 0.2
-}
+def f_re_sub(x : float) : float => x - 0.3 - 0.2
 
 [flatten]
-def f_re_mul(x : float) : float {
-    return 2.0 * x * 3.0
-}
+def f_re_mul(x : float) : float => 2.0 * x * 3.0
 
 // Scalar consts broadcast over a vector var: `0.5 * 2.0 = 1.0`, then `v * 1.0 → v`. Reassoc must
 // preserve the float3 result type through the gather (the `*1` cleanup carries its own
 // same_base_type gate). Exact (1.0 is exact).
 [flatten]
-def f_re_broad(v : float3) : float3 {
-    return v * 0.5 * 2.0
-}
+def f_re_broad(v : float3) : float3 => v * 0.5 * 2.0
 
 // Vector-const operands gather + fold via the all-const ExprOp2 arm (the typer leaves vector const
 // arithmetic). `float3(0.5) + v + float3(0.6) → v + float3(1.1)`.
 [flatten]
-def f_re_vec(v : float3) : float3 {
-    return float3(0.5) + v + float3(0.6)
-}
+def f_re_vec(v : float3) : float3 => float3(0.5) + v + float3(0.6)
 
 [flatten]
-def f_re_iadd(x : int) : int {
-    return 2 + x + 3
-}
+def f_re_iadd(x : int) : int => 2 + x + 3
 
 [flatten]
-def f_re_imul(x : int) : int {
-    return 2 * x * 3
-}
+def f_re_imul(x : int) : int => 2 * x * 3
 
 [flatten]
-def f_re_isub(x : int) : int {
-    return x - 3 - 2
-}
+def f_re_isub(x : int) : int => x - 3 - 2
 
 // Var terms are sorted into a canonical (structural) order so commutative chains converge to one
 // form (for a later CSE). Vars written out of order here (c, a, b) + scattered consts must give
 // the same value as the original; the twin gathers to a sorted `((a + b) + c) + <const>`.
 [flatten]
-def f_re_sort(a : int; b : int; c : int) : int {
-    return c + 3 + a + 1 + b
-}
+def f_re_sort(a : int; b : int; c : int) : int => c + 3 + a + 1 + b
 
 // Subtraction with out-of-order vars: sorting must carry the sign (`b - a` canonicalizes via
 // `-a + b`), so the value is preserved.
 [flatten]
-def f_re_sortsub(a : int; b : int) : int {
-    return b - a + 10 - 4
-}
+def f_re_sortsub(a : int; b : int) : int => b - a + 10 - 4
 
 // ----- differential driver -----
 

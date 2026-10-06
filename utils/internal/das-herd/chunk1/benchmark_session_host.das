@@ -40,9 +40,7 @@ struct ComparisonSummary {
     hosted_outer_p50 : int64
 }
 
-def private elapsed_us(started : int64) : int64 {
-    return get_time_nsec(started) / 1000l
-}
+def private elapsed_us(started : int64) : int64 => get_time_nsec(started) / 1000l
 
 def private parse_options() : BenchmarkOptions {
     var cfg = BenchmarkOptions(repository = get_das_root())

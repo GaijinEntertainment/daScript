@@ -744,9 +744,7 @@ def register_devw_kq_mirror(f : DevwKqMirrorFn) {
 
 //! Can this model's streamed build mint the metal blob flavor? False on an unregistered layout
 //! module too — a caller without the hooks takes the planar rail rather than a wrong image.
-def blob_stream_eligible(t : Model) : bool {
-    return g_blob_hooks_set && invoke(g_blob_eligible, t)
-}
+def blob_stream_eligible(t : Model) : bool => g_blob_hooks_set && invoke(g_blob_eligible, t)
 
 //! Every Model plane field a blob build puts in its device form, in Model.blob_scaled bit order.
 let BLOB_SCALE_PLANES = fixed_array("k4s", "k5s", "k6s", "iq4xss", "k3s", "iq3ss", "iq3xxss",

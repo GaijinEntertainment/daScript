@@ -62,9 +62,7 @@ def parse_fixture(file : string; var records : array<FuncRecord>; lambdas_only :
 }
 
 
-def fabs_f(x : float) : float {
-    return abs(x)
-}
+def fabs_f(x : float) : float => abs(x)
 
 
 def parse_canonical_fixture(t : T?; var records : array<FuncRecord>) : bool {

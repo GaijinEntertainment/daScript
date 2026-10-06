@@ -28,17 +28,13 @@ class Shape {
 
 class Circle : Shape {
     radius : float
-    def override const area() : float {
-        return 3.14159265 * radius * radius
-    }
+    def override const area() : float => 3.14159265 * radius * radius
 }
 
 class Rectangle : Shape {
     width : float
     height : float
-    def override const area() : float {
-        return width * height
-    }
+    def override const area() : float => width * height
 }
 
 class Square : Rectangle {

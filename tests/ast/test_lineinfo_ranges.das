@@ -27,9 +27,7 @@ class RangeChecker : AstVisitor {
     src_lines : array<string>
     problems : array<string>
 
-    def line_of(l : int) : string {
-        return (l >= 1 && l <= length(src_lines)) ? src_lines[l - 1] : ""
-    }
+    def line_of(l : int) : string => (l >= 1 && l <= length(src_lines)) ? src_lines[l - 1] : ""
 
     def char_at(l, c : int) : string {
         let ln = line_of(l)

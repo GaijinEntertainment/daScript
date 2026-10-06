@@ -22,9 +22,7 @@ def test_string_operations(t : T?) {
     }
 }
 
-def greet(name : string) : string {
-    return "Hello, {name}!"
-}
+def greet(name : string) : string => "Hello, {name}!"
 
 [test]
 def test_string_functions(t : T?) {

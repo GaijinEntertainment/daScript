@@ -174,9 +174,8 @@ def private shade_normal(uv : float2) : float3 {
 var @uniform @stage = 8 u_ssao_tex : sampler2D
 var @uniform u_ssao_enabled : float
 var @uniform u_ssao_inverse_size : float2
-def gltf_surface_roughness(mr : float4) : float {
-    return clamp(lerp(mr.y * u_roughness_factor * u_material_scale.x, .16, clamp(u_material_wetness * mr.x, 0.0, 1.0)), .04, 1.0)
-}
+def gltf_surface_roughness(mr : float4) : float =>
+    clamp(lerp(mr.y * u_roughness_factor * u_material_scale.x, .16, clamp(u_material_wetness * mr.x, 0.0, 1.0)), .04, 1.0)
 [fragment_program]
 def gltf_pbr_normal_fs {
     let base = texture(u_base_color_tex, v_uv0) * u_base_color_factor
@@ -354,9 +353,8 @@ def gltf_pbr_set_environment(var r : GltfPbrRenderer; tex : uint; max_lod : floa
 }
 
 //! Compile + link the PBR program. Call with a current GL context; `delete` the renderer to release it.
-def gltf_pbr_create : GltfPbrRenderer {
-    return GltfPbrRenderer(program = create_shader_program(@@gltf_pbr_vs, @@gltf_pbr_fs), shadowComparison = gltf_shadow_comparison_create())
-}
+def gltf_pbr_create : GltfPbrRenderer =>
+    GltfPbrRenderer(program = create_shader_program(@@gltf_pbr_vs, @@gltf_pbr_fs), shadowComparison = gltf_shadow_comparison_create())
 
 def finalize(var r : GltfPbrRenderer) {
     delete r.shadowComparison

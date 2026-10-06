@@ -27,9 +27,8 @@ let public BENCH_WARM_SEED = 999l   // the warmup's prompt seed; the timed reps 
 def public bench_synth_id(i, seed : int64) : int64 => 1000l + ((i * 17l + seed * 131l) % 5000l)
 
 //! the prompt one pp rep prefills: `n` synthetic ids under one seed
-def public bench_prompt(n, seed : int64) : array<int64> {
-    return <- [for (i in range64(n)); bench_synth_id(i, seed)]
-}
+def public bench_prompt(n, seed : int64) : array<int64> =>
+    <- [for (i in range64(n)); bench_synth_id(i, seed)]
 
 struct public BenchRow {
     test : string

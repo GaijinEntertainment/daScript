@@ -63,9 +63,7 @@ def test_rtti : StructInfo const ? {
 }
 
 [sideeffects]
-def test_ast_typedecl {
-    return <- typeinfo ast_typedecl(type<int const>)
-}
+def test_ast_typedecl => <- typeinfo ast_typedecl(type<int const>)
 
 [test]
 def test_type_info(t : T?) {

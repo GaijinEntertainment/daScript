@@ -44,13 +44,9 @@ struct SpeakArgs {
     help : bool
 }
 
-def private le16(b : array<uint8>; o : int) : int {
-    return int(b[o]) | (int(b[o + 1]) << 8)
-}
+def private le16(b : array<uint8>; o : int) : int => int(b[o]) | (int(b[o + 1]) << 8)
 
-def private le32(b : array<uint8>; o : int) : int {
-    return le16(b, o) | (le16(b, o + 2) << 16)
-}
+def private le32(b : array<uint8>; o : int) : int => le16(b, o) | (le16(b, o + 2) << 16)
 
 // seconds of PCM behind a canonical 44-byte RIFF/WAVE header, or 0 when the body is not one
 def private wav_seconds(b : array<uint8>) : float {

@@ -93,9 +93,7 @@ struct TokenStream {
     shortCircuited : bool //! True while an operand is being parsed whose value a logical operator has already decided without it; such an operand reports syntax errors but not evaluation errors.
 }
 
-def TokenStream(st : string) {
-    return <- TokenStream(tokens <- each_token(st))
-}
+def TokenStream(st : string) => <- TokenStream(tokens <- each_token(st))
 
 def token(var st : TokenStream) {
     var token : Token
@@ -638,9 +636,7 @@ def expr_logic_or(var st : TokenStream) : Result {
     return <- leftValue
 }
 
-def expr(var st : TokenStream) : Result {
-    return expr_logic_or(st)
-}
+def expr(var st : TokenStream) : Result => expr_logic_or(st)
 
 def public debug_eval(context : table<string; Result>; expr : string) : Result {
     //! Evaluates a debug expression string with the given variable context and returns the result.

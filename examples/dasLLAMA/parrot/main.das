@@ -370,9 +370,8 @@ def poll_answers() {
 }
 
 //! a say is audible or about to be - playing, queued, or still generating its first clip
-def playback_active() : bool {
-    return g_playing_sid != INVALID_SID || !empty(g_clips) || (g_chunks_known && !all_spoken(g_chunks))
-}
+def playback_active() : bool =>
+    g_playing_sid != INVALID_SID || !empty(g_clips) || (g_chunks_known && !all_spoken(g_chunks))
 
 //! the playing clip's position, off the mixer's own clock, and the next clip once it is done
 [arch(at = "../ARCHITECTURE.md#parrot-panels")]
@@ -660,9 +659,7 @@ def apply_jobque_knobs() {
     }
 }
 
-def lanes_label() : string {
-    return SINGLE.value ? "on one thread" : "at {JOBS.value} jobs"
-}
+def lanes_label() : string => SINGLE.value ? "on one thread" : "at {JOBS.value} jobs"
 
 // ===== the screen =====
 
@@ -695,9 +692,8 @@ def phase_chip() : tuple<text : string; color : uint> {
 }
 
 //! something is going on: a take, a clone, a say still generating or playing
-def busy() : bool {
-    return g_phase != Phase.idle || g_playing_sid != INVALID_SID || (g_chunks_known && !all_spoken(g_chunks))
-}
+def busy() : bool =>
+    g_phase != Phase.idle || g_playing_sid != INVALID_SID || (g_chunks_known && !all_spoken(g_chunks))
 
 //! the promise line first, then the state chip - pulsing, with a spinner beside it while something
 //! is going on - and the status line
@@ -891,18 +887,12 @@ def draw_text_panel() {
     }
 }
 
-def ms(us : int64) : string {
-    return fmt(":.0f", double(us) / 1000.0lf)
-}
+def ms(us : int64) : string => fmt(":.0f", double(us) / 1000.0lf)
 
 //! seconds and speeds to a tenth
-def s1(x : float) : string {
-    return fmt(":.1f", x)
-}
+def s1(x : float) : string => fmt(":.1f", x)
 
-def s1(x : double) : string {
-    return fmt(":.1f", x)
-}
+def s1(x : double) : string => fmt(":.1f", x)
 
 def draw_output_panel() {
     let ticks <- [for (row in g_chunks); row.start; where row.start > 0l]
@@ -1165,9 +1155,8 @@ def shutdown() {
     harness_shutdown()
 }
 
-def read_out() : bool {
-    return g_says > 0 && g_chunks_known && all_spoken(g_chunks) && empty(g_clips) && g_playing_sid == INVALID_SID
-}
+def read_out() : bool =>
+    g_says > 0 && g_chunks_known && all_spoken(g_chunks) && empty(g_clips) && g_playing_sid == INVALID_SID
 
 def done_for_smoke() : bool {
     return true if (g_args.max_frames > 0 && g_frames >= g_args.max_frames)

@@ -14,9 +14,7 @@ require UnitTest
 // value. These tests pin that behavior — interp and JIT.
 
 [inline]
-def wrapped(p : float3) : float3 {
-    return UnitTest::doubleSamplePoint3(p)
-}
+def wrapped(p : float3) : float3 => UnitTest::doubleSamplePoint3(p)
 
 [inline]
 def wrapped_chain(p : float3) : float3 {

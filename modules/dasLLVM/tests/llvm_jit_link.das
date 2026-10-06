@@ -13,15 +13,12 @@ def private das_exe() : string {
     return find(to_generic_path(argv[0]), "/") < 0 ? argv[0] : get_full_file_name(normalize(argv[0]))
 }
 
-def private tail(s : string) : string {
-    return slice(s, max(0, length(s) - 600))
-}
+def private tail(s : string) : string => slice(s, max(0, length(s) - 600))
 
 //! the fixture prints its answer and whether the emitter module is in the process; `options
 //! log_compile_time` is what turns the backend's phase line on
-def private fixture(bound : int) : string {
-    return "options gen2\noptions log_compile_time\nrequire daslib/rtti\n\n[export]\ndef main \{\n    var s = 0\n    for (i in range({bound})) \{\n        s += i * i\n    \}\n    print(\"PROBE \{s\}\\n\")\n    print(\"EMITTER \{has_module(\"llvm_macro\")\}\\n\")\n\}\n"
-}
+def private fixture(bound : int) : string =>
+    "options gen2\noptions log_compile_time\nrequire daslib/rtti\n\n[export]\ndef main \{\n    var s = 0\n    for (i in range({bound})) \{\n        s += i * i\n    \}\n    print(\"PROBE \{s\}\\n\")\n    print(\"EMITTER \{has_module(\"llvm_macro\")\}\\n\")\n\}\n"
 
 //! a helper the DLL holds; `no_jit` on it after the cold run makes the DLL hold a function the
 //! plan disables, which the probe calls a miss
@@ -31,9 +28,8 @@ def private fixture_with_helper(no_jit_helper : bool) : string {
 }
 
 //! nothing to jit: the only function is `[no_jit]`, so the plan's candidate set is empty
-def private fixture_nothing_to_jit() : string {
-    return "options gen2\noptions log_compile_time\nrequire daslib/rtti\n\n[no_jit, export]\ndef main \{\n    print(\"PROBE none\\n\")\n    print(\"EMITTER \{has_module(\"llvm_macro\")\}\\n\")\n\}\n"
-}
+def private fixture_nothing_to_jit() : string =>
+    "options gen2\noptions log_compile_time\nrequire daslib/rtti\n\n[no_jit, export]\ndef main \{\n    print(\"PROBE none\\n\")\n    print(\"EMITTER \{has_module(\"llvm_macro\")\}\\n\")\n\}\n"
 
 def private jit_argv(script, cache, pinned : string; in_memory : bool) : array<string> {
     var argv <- [das_exe(), "-jit", "-log-compile-time", "-module-cache", cache, "-output", pinned, script]

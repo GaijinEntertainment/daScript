@@ -152,9 +152,8 @@ def kq_cm2e_aliases_m(fmt_name : string) : bool => word_in(KQ_CM2E_ALIASES_M, fm
 
 //! the stem of a format's stamp functions in a stamp family - `batch` (the batch tiles) or `gemv` (the decode GEMVs):
 //! `<verb>_<stem>_<tail>`, the stem `<fmt>_<family>` on q8 and the per-32 formats, `kq_<family>_<fmt>` on a kq format
-def kq_tile_stem(fmt_name : string; family : string = "batch") : string {
-    return fmt_name == "q8" || fmt_name == "q51" || fmt_name == "mx4" || fmt_name == "iq4nl32" ? "{fmt_name}_{family}" : "kq_{family}_{fmt_name}"
-}
+def kq_tile_stem(fmt_name : string; family : string = "batch") : string =>
+    fmt_name == "q8" || fmt_name == "q51" || fmt_name == "mx4" || fmt_name == "iq4nl32" ? "{fmt_name}_{family}" : "kq_{family}_{fmt_name}"
 
 //! a `<prefix><verb>[_<tail>]` placeholder -> `<verb>_<stem>_<tail>`, the tail the placeholder's or, where it names none, `arm_tail`
 def private stamp_target(placeholder, prefix, stem, arm_tail : string) : string {
@@ -242,9 +241,8 @@ def private macro_words(prog : ProgramPtr; arg : ExpressionPtr) : string {
 }
 
 //! `macro_words`' words, empty ones dropped; no argument reads none
-def private macro_word_list(prog : ProgramPtr; arg : ExpressionPtr) : array<string> {
-    return <- arg == null ? array<string>() : [for (w in split(macro_words(prog, arg), " ")); w; where !empty(w)]
-}
+def private macro_word_list(prog : ProgramPtr; arg : ExpressionPtr) : array<string> =>
+    <- arg == null ? array<string>() : [for (w in split(macro_words(prog, arg), " ")); w; where !empty(w)]
 
 //! the block of an argument-less `<| $() { ... }` the stamp macros take last
 def private stamp_block(prog : ProgramPtr; var expr : ExprCallMacro?; what : string) : ExpressionPtr {

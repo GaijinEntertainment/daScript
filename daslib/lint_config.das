@@ -259,21 +259,18 @@ def private module_source_path(prog : ProgramPtr) : string {
     return res
 }
 
-def private path_has_segment(file : string; seg : string) : bool {
-    return starts_with(file, seg + "/") || find(file, "/" + seg + "/") >= 0
-}
+def private path_has_segment(file : string; seg : string) : bool =>
+    starts_with(file, seg + "/") || find(file, "/" + seg + "/") >= 0
 
 //! True when the compiling module's source lives under ``daslib/``.
 //! Default gate for rules that hold the standard library to a stricter bar (STYLE014/STYLE015).
-def public is_daslib_source(prog : ProgramPtr) : bool {
-    return path_has_segment(module_source_path(prog), "daslib")
-}
+def public is_daslib_source(prog : ProgramPtr) : bool =>
+    path_has_segment(module_source_path(prog), "daslib")
 
 //! True when the compiling module's source lives under ``daslib/`` or ``modules/`` -
 //! shipped library code whose emitted strings flow into every consumer's logs (STYLE039).
-def public lint029_source_exempt(prog : ProgramPtr) : bool {
-    return path_has_segment(module_source_path(prog), "daslib")
-}
+def public lint029_source_exempt(prog : ProgramPtr) : bool =>
+    path_has_segment(module_source_path(prog), "daslib")
 
 def public is_shipped_library_source(prog : ProgramPtr) : bool {
     let file = module_source_path(prog)
@@ -335,9 +332,8 @@ def private docs_flag_at(config_path, key : string) : bool {
 //! True when the ``.lint_config`` at `config_path` sets ``[docs] rule_docs_only = true`` — the folder
 //! carries rule documents only (``REVIEW*.md`` / ``ARCHITECTURE*.md``). A folder property,
 //! NOT the ``[format]`` cascade: only that one file is read, and anything missing reads as false.
-def public rule_docs_only_at(config_path : string) : bool {
-    return docs_flag_at(config_path, "rule_docs_only")
-}
+def public rule_docs_only_at(config_path : string) : bool =>
+    docs_flag_at(config_path, "rule_docs_only")
 
 def private config_dir_of(file : string) : string {
     let dir = to_generic_path(dir_name(to_generic_path(file)))
@@ -422,9 +418,8 @@ def public is_user_authored_body(fn : Function?) : bool {
 //! True for the lint-fixture naming convention: an underscore-led basename containing
 //! ``fixture``. Such files violate rules BY DESIGN, for tests that compile them or spawn
 //! the lint CLI over them, so the runner skips them (re-enabled via ``--lint-fixtures``).
-def public is_lint_fixture_name(base : string) : bool {
-    return starts_with(base, "_") && find(base, "fixture") >= 0
-}
+def public is_lint_fixture_name(base : string) : bool =>
+    starts_with(base, "_") && find(base, "fixture") >= 0
 
 let public LINT_SKIP_HEADER_LINES = 16
 

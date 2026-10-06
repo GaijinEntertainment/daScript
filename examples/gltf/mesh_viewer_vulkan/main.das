@@ -106,9 +106,7 @@ def viewer_quad_fs {
 
 // ----- paths / loading -----
 
-def media_dir : string {
-    return "{get_das_root()}/examples/gltf/media"
-}
+def media_dir : string => "{get_das_root()}/examples/gltf/media"
 
 def model_path : string {
     // get_command_line_arguments() includes the interpreter + script + harness flags, so pick the first

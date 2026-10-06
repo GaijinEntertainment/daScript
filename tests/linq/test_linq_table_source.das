@@ -320,9 +320,7 @@ def test_table_point_lookup(t : T?) { // nolint:STYLE038 flat list of independen
 
 typedef IKV = tuple<key : int; value : int>
 
-def flip_kv(kv : IKV) : tuple<int; int> {
-    return (kv.value => kv.key)
-}
+def flip_kv(kv : IKV) : tuple<int; int> => (kv.value => kv.key)
 
 // Joins: a table in the srcB slot joined on its bare key (`d.key` / bare set element) probes the user's
 // table instead of building the join's internal hash; a table lead rides the same emitter through the

@@ -14,22 +14,14 @@ require daslib/strings_boost
 // still lint
 
 [inline]
-def add(a, b : int) : int {
-    return a + b;
-}
+def add(a, b : int) : int => a + b
 
 [export]
-def target_disabled(x, y : int) : int {
-    return add(x, y + 1);
-}
+def target_disabled(x, y : int) : int => add(x, y + 1)
 
-def has(s, sub : string) : bool {
-    return find(s, sub, 0) >= 0;
-}
+def has(s, sub : string) : bool => find(s, sub, 0) >= 0
 
-def count_of(s, sub : string) : int {
-    return length(split(s, sub)) - 1;
-}
+def count_of(s, sub : string) : int => length(split(s, sub)) - 1
 
 [test]
 def test_inline_disabled(t : T?) {

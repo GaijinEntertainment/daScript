@@ -639,12 +639,9 @@ class MatchMacro : AstCallMacro {
     //! Implements `match` macro.
     report_match_errors = true
     multi_match = false
-    def override canVisitArgument(expr : ExprCallMacro?; argIndex : int) : bool {
-        return !is_reporting_compilation_errors()
-    }
-    def override canFoldReturnResult(expr : ExprCallMacro?) : bool {
-        return false
-    }
+    def override canVisitArgument(expr : ExprCallMacro?; argIndex : int) : bool =>
+        !is_reporting_compilation_errors()
+    def override canFoldReturnResult(expr : ExprCallMacro?) : bool => false
     def override preVisit(prog : ProgramPtr; mod : Module?; expr : ExprCallMacro?) : void {
         return if (length(expr.arguments) != 2)
         assume blk = expr.arguments[1]

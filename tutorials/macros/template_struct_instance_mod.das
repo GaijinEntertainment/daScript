@@ -30,18 +30,12 @@ class template public TopKeeperT {
         }
         n++
     }
-    def report : string {
-        return "kept {best} out of {n}"
-    }
+    def report : string => "kept {best} out of {n}"
 }
 
-def public dot_i(a, b : int) : int {
-    return a * b
-}
+def public dot_i(a, b : int) : int => a * b
 
-def public dot_i_scaled(a, b : int) : int {
-    return a * b * 100
-}
+def public dot_i_scaled(a, b : int) : int => a * b * 100
 
 // A call parameter. `@template_call` names a free function the body calls:
 // the field name is what the body spells, the init is where the call goes,

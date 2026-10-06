@@ -34,6 +34,4 @@ def spawn_entity(n : string; px, py, pz : float) {
 }
 
 [export]
-def get_entity_count() : int {
-    return length(entities)
-}
+def get_entity_count() : int => length(entities)

@@ -310,9 +310,8 @@ def private ngram_fixture(var t : Model; eos : int64) {
 }
 
 //! the row each head landed on, read back off the gathered F32 values
-def private gathered_rows(dst : array<float>) : array<int64> {
-    return <- [for (h in range64(4l)); int64(dst[h * HD] + 0.5)]
-}
+def private gathered_rows(dst : array<float>) : array<int64> =>
+    <- [for (h in range64(4l)); int64(dst[h * HD] + 0.5)]
 
 [test]
 def test_ngram_gather(t : T?) {

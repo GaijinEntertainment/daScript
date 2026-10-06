@@ -54,9 +54,7 @@ struct private MockModelList {
     data : array<Model>
 }
 
-def private sse_frame(json : string) : string {
-    return "data: {json}\n\n"
-}
+def private sse_frame(json : string) : string => "data: {json}\n\n"
 
 def private mock_chat_json(content : string) : string {
     let r = ChatCompletionResponse(id = "chatcmpl-mock", _object = "chat.completion",

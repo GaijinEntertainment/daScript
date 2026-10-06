@@ -12,9 +12,7 @@ require daslib/ast_boost
 
 let MAX_FIND_RESULTS = 50
 
-def module_display_name(mname : string) : string {
-    return mname == "$" ? "builtin" : mname
-}
+def module_display_name(mname : string) : string => mname == "$" ? "builtin" : mname
 
 def write_location(var w : StringBuilderWriter; at) {
     if (int(at.line) > 0) {

@@ -20,9 +20,8 @@ struct public Lexical {
 }
 
 
-def private is_at(bytes : array<uint8> const#; i : int; a, b : int) : bool {
-    return i + 1 < length(bytes) && bytes[i] == uint8(a) && bytes[i + 1] == uint8(b)
-}
+def private is_at(bytes : array<uint8> const#; i : int; a, b : int) : bool =>
+    i + 1 < length(bytes) && bytes[i] == uint8(a) && bytes[i + 1] == uint8(b)
 
 def private end_of_quoted(bytes : array<uint8> const#; start : int; quote : int) : int {
     var i = start + 1

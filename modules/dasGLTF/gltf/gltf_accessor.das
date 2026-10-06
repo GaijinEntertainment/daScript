@@ -9,17 +9,12 @@ require math
 // (matches x86 native), so these compose bytes directly. Pattern mirrors the
 // dasLLAMA GGUF reader (modules/dasLLAMA/dasllama/dasllama_gguf.das).
 
-def gltf_rd_u8(b : array<uint8> | #; o : int64) : uint {
-    return uint(b[o])
-}
+def gltf_rd_u8(b : array<uint8> | #; o : int64) : uint => uint(b[o])
 
-def gltf_rd_u16(b : array<uint8> | #; o : int64) : uint {
-    return uint(b[o]) | (uint(b[o + 1l]) << 8u)
-}
+def gltf_rd_u16(b : array<uint8> | #; o : int64) : uint => uint(b[o]) | (uint(b[o + 1l]) << 8u)
 
-def gltf_rd_u32(b : array<uint8> | #; o : int64) : uint {
-    return uint(b[o]) | (uint(b[o + 1l]) << 8u) | (uint(b[o + 2l]) << 16u) | (uint(b[o + 3l]) << 24u)
-}
+def gltf_rd_u32(b : array<uint8> | #; o : int64) : uint =>
+    uint(b[o]) | (uint(b[o + 1l]) << 8u) | (uint(b[o + 2l]) << 16u) | (uint(b[o + 3l]) << 24u)
 
 def gltf_rd_i8(b : array<uint8> | #; o : int64) : int {
     let v = int(b[o])
@@ -31,9 +26,8 @@ def gltf_rd_i16(b : array<uint8> | #; o : int64) : int {
     return v >= 32768 ? v - 65536 : v
 }
 
-def gltf_rd_f32(b : array<uint8> | #; o : int64) : float {
-    return unsafe(reinterpret<float>(gltf_rd_u32(b, o)))
-}
+def gltf_rd_f32(b : array<uint8> | #; o : int64) : float =>
+    unsafe(reinterpret<float>(gltf_rd_u32(b, o)))
 
 // ===== Component-type helpers =====
 // glTF componentType enum: 5120 BYTE, 5121 UNSIGNED_BYTE, 5122 SHORT,

@@ -451,9 +451,8 @@ struct private PlaneUp {
     slice_rows : int64
 }
 
-def private plane_up(f : KqFmt; woff, n, rows : int64; slice_rows : int64 = -1l) : PlaneUp {
-    return PlaneUp(f = f, woff = woff, n = n, rows = rows, slice_rows = slice_rows < 0l ? rows : slice_rows)
-}
+def private plane_up(f : KqFmt; woff, n, rows : int64; slice_rows : int64 = -1l) : PlaneUp =>
+    PlaneUp(f = f, woff = woff, n = n, rows = rows, slice_rows = slice_rows < 0l ? rows : slice_rows)
 
 //! layer l's routed expert stacks as one gather-upload group, gate, up and down, each sliced an expert at a time
 def private resident_expert_ups(t : Model; l : int64) : array<PlaneUp> {
@@ -566,9 +565,8 @@ def private resident_expert_plane(t : Model; l : int64; kind : int) : tuple<f : 
 }
 
 //! the gate, up and down formats of layer l's routed experts, as the seats take them
-def private resident_expert_fmts(t : Model; l : int64) : tuple<f1 : int; f3 : int; f2 : int> {
-    return (f1 = int(rdec_efmt(t, t.we1_fmt, l)), f3 = int(rdec_efmt(t, t.we3_fmt, l)), f2 = int(rdec_efmt(t, t.we2_fmt, l)))
-}
+def private resident_expert_fmts(t : Model; l : int64) : tuple<f1 : int; f3 : int; f2 : int> =>
+    (f1 = int(rdec_efmt(t, t.we1_fmt, l)), f3 = int(rdec_efmt(t, t.we3_fmt, l)), f2 = int(rdec_efmt(t, t.we2_fmt, l)))
 
 //! what the upload registers a planned plane as; `ResidentPlane.l` names its layer, mixer site or the NextN head (n_layers)
 enum ResidentRole {
@@ -3949,9 +3947,7 @@ struct GpuModelMarks {
 
 //! A fresh no-model GpuModelMarks — the facade's ctor-shaped re-export delegates here
 //! (a generated constructor is not callable through a facade typedef).
-def gpu_model_marks_init_() : GpuModelMarks {
-    return <- GpuModelMarks()
-}
+def gpu_model_marks_init_() : GpuModelMarks => <- GpuModelMarks()
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#gpu-slot-marks")]
 def moe_gpu_model_marks_save_(var st : GpuModelMarks) {

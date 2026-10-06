@@ -11,17 +11,11 @@ require dastest/testing_boost public
 
 let CONST_BITS = 0xFF
 
-def typed_uint_on_right(bits : uint) : uint {
-    return 31 - clz(bits)
-}
+def typed_uint_on_right(bits : uint) : uint => 31 - clz(bits)
 
-def typed_uint_on_left(bits : uint) : uint {
-    return clz(bits) - 31
-}
+def typed_uint_on_left(bits : uint) : uint => clz(bits) - 31
 
-def minus_one(a : auto(T)) {
-    return a - 1
-}
+def minus_one(a : auto(T)) => a - 1
 
 [test]
 def test_folded_constant_keeps_its_type(t : T?) {

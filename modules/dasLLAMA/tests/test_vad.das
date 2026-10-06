@@ -17,9 +17,7 @@ require _model_tier
 // (harness/silero_vad_oracle.py). The segment case additionally needs jfk.wav (DASLLAMA_MODELS_DIR)
 // and matches silero get_speech_timestamps sample-for-sample.
 
-def private vad_bin_path() : string {
-    return "{get_das_root()}/modules/dasLLAMA/models/silero_vad.bin"
-}
+def private vad_bin_path() : string => "{get_das_root()}/modules/dasLLAMA/models/silero_vad.bin"
 
 // deterministic integer LCG (Numerical Recipes), fp32-mapped to [-0.15, 0.15) — identical to
 // the python freeze in the oracle run, so the inputs are bit-for-bit equal on both sides.

@@ -1021,9 +1021,7 @@ def asr_prof_add(name : string; t0 : int64) {
 }
 
 //! One bucket's accumulated ms (0 when absent) — the store's encode-split reader.
-def asr_prof_ms(name : string) : double {
-    return double(g_asr_prof?[name] ?? 0l) / 1000.0lf
-}
+def asr_prof_ms(name : string) : double => double(g_asr_prof?[name] ?? 0l) / 1000.0lf
 
 //! Reset the accumulators without printing — per-rep sampling (asr_prof_report also clears).
 def asr_prof_reset() {

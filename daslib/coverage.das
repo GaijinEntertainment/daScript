@@ -703,9 +703,7 @@ def public fill_coverage_report(var dest : string?; name : string = "") {
 }
 
 [export, unused_argument(cov)]
-def public get_coverage_details(var cov : table<string; CoverageData>?) {
-    return <- clone(coverageData)
-}
+def public get_coverage_details(var cov : table<string; CoverageData>?) => <- clone(coverageData)
 
 [export]
 def public summary_from_lcov_file(filename : string; exclude : array<string>) {

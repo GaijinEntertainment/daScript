@@ -17,9 +17,7 @@ require math
 // ----- functions under flatten -----
 
 [flatten]
-def tail(x : int) : int {
-    return x * 2 + 1
-}
+def tail(x : int) : int => x * 2 + 1
 
 [flatten]
 def guard(x : int) : int {
@@ -43,13 +41,9 @@ def nested(x : int) : int {
     return r + 1
 }
 
-def square(a : int) : int {
-    return a * a
-}
+def square(a : int) : int => a * a
 
-def addk(a : int; k : int) : int {
-    return a + k
-}
+def addk(a : int; k : int) : int => a + k
 
 [flatten]
 def inlines(x : int) : int {
@@ -57,27 +51,17 @@ def inlines(x : int) : int {
     return addk(s, 3) + square(x + 1)
 }
 
-def cc(n : int) : int {
-    return n + 100
-}
+def cc(n : int) : int => n + 100
 
-def bb(n : int) : int {
-    return cc(n) * 2
-}
+def bb(n : int) : int => cc(n) * 2
 
-def aa(n : int) : int {
-    return bb(n) - 1
-}
+def aa(n : int) : int => bb(n) - 1
 
 [flatten]
-def transitive(x : int) : int {
-    return aa(x) + aa(x + 1)
-}
+def transitive(x : int) : int => aa(x) + aa(x + 1)
 
 [flatten]
-def with_builtin(x : int) : int {
-    return max(x, 0) + min(x, 5)
-}
+def with_builtin(x : int) : int => max(x, 0) + min(x, 5)
 
 // helper WITH a local — inlining it at multiple sites (loop unroll, or two direct
 // call sites) must uniquify the callee's locals, else the copies emit a colliding
@@ -99,9 +83,7 @@ def inline_loop(x : int) : int {
 }
 
 [flatten]
-def inline_twice(x : int) : int {
-    return withlocal(x) + withlocal(x + 1)
-}
+def inline_twice(x : int) : int => withlocal(x) + withlocal(x + 1)
 
 // A STRUCT return type with an early return: the predicated `__flat_ret = pred ? v :
 // __flat_ret` write reads the bare accumulator decl, which a live early return leaves
@@ -115,9 +97,7 @@ struct Pt {
 }
 
 [flatten]
-def struct_uncond(x : float) : Pt {
-    return Pt(a = float3(x))
-}
+def struct_uncond(x : float) : Pt => Pt(a = float3(x))
 
 [flatten]
 def struct_guard(x : float; c : bool) : Pt {
@@ -154,9 +134,7 @@ def partial_scalar(x : float) : float {
 // fixed-array literal in a flatten body (ExprMakeArray): elements lower/optimize like any operand,
 // and a user call inside is inlined (lift_expr recurses the array). Integer arithmetic so reassoc
 // stays exact for the differential equal().
-def isq(a : int) : int {
-    return a * a + 1
-}
+def isq(a : int) : int => a * a + 1
 
 [flatten]
 def fixed_arr(x : int) : int {

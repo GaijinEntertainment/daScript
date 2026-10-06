@@ -26,9 +26,8 @@ def bbox_of(var snap : JsonValue?; ident : string) : float4 {
 
 // Point at fractional (fx, fy) inside a bbox — lets the channel / square drag targets ride the
 // widget's real rect instead of hard-coded pixels (the layout is fixed but this stays honest).
-def frac_point(bb : float4; fx : float; fy : float) : tuple<float; float> {
-    return (bb.x + (bb.z - bb.x) * fx, bb.y + (bb.w - bb.y) * fy)
-}
+def frac_point(bb : float4; fx : float; fy : float) : tuple<float; float> =>
+    (bb.x + (bb.z - bb.x) * fx, bb.y + (bb.w - bb.y) * fy)
 
 [export]
 def main {

@@ -23,13 +23,11 @@ def private validate(t : T?; words : array<uint>; lbl : string) {
     }
 }
 
-def private has_array_stride(words : array<uint>; stride : uint) : bool {
-    return op_has_operand_pair(words, SpvOp.Decorate, uint(SpvDecoration.ArrayStride), stride)
-}
+def private has_array_stride(words : array<uint>; stride : uint) : bool =>
+    op_has_operand_pair(words, SpvOp.Decorate, uint(SpvDecoration.ArrayStride), stride)
 
-def private has_member_offset(words : array<uint>; off : uint) : bool {
-    return op_has_operand_pair(words, SpvOp.MemberDecorate, uint(SpvDecoration.Offset), off)
-}
+def private has_member_offset(words : array<uint>; off : uint) : bool =>
+    op_has_operand_pair(words, SpvOp.MemberDecorate, uint(SpvDecoration.Offset), off)
 
 [test]
 def test_ssbo_vector_elements(t : T?) {

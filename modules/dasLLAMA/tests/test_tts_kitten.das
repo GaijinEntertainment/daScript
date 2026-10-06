@@ -85,18 +85,13 @@ def test_spectrum_diff_reds_a_nan(t : T?) {
     }
 }
 
-def private oracle_dir(size : string) : string {
-    return path_join(models_dir(), "tts_oracle/kitten_{size}")
-}
+def private oracle_dir(size : string) : string =>
+    path_join(models_dir(), "tts_oracle/kitten_{size}")
 
-def private gguf_path(size : string) : string {
-    return path_join(models_dir(), "kitten-{size}.gguf")
-}
+def private gguf_path(size : string) : string => path_join(models_dir(), "kitten-{size}.gguf")
 
 // the front end's espeak-inventory phonemes, as the fixture carries them, into the driver's ids
-def private kitten_ids_of(ps : string) : array<int> {
-    return <- kitten_token_ids(ps)
-}
+def private kitten_ids_of(ps : string) : array<int> => <- kitten_token_ids(ps)
 
 // text in, speech out through the facade: the front end's packs sit beside the GGUF in the store
 [test]

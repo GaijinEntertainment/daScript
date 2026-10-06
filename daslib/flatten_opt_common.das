@@ -143,13 +143,9 @@ def public fold_children_or(e : ExpressionPtr; pred : block<(c : ExpressionPtr) 
     return false
 }
 
-def public is_flat_temp(name : das_string) : bool {
-    return name |> starts_with("__flat_")
-}
+def public is_flat_temp(name : das_string) : bool => name |> starts_with("__flat_")
 
-def public is_flat_inlined_local(name : das_string) : bool {
-    return name |> starts_with("__flat_loc_")
-}
+def public is_flat_inlined_local(name : das_string) : bool => name |> starts_with("__flat_loc_")
 
 class public FlatVarRef : AstVisitor {
     name  : string
@@ -314,17 +310,14 @@ def public is_int_vec_neg_one(e : ExpressionPtr) : bool {
     return true
 }
 
-def public is_zero_const_op(e : ExpressionPtr) : bool {
-    return is_int_val(e, 0l) || is_real_val(e, 0.0lf) || is_int_vec_val(e, 0l) || is_real_vec_val(e, 0.0lf)
-}
+def public is_zero_const_op(e : ExpressionPtr) : bool =>
+    is_int_val(e, 0l) || is_real_val(e, 0.0lf) || is_int_vec_val(e, 0l) || is_real_vec_val(e, 0.0lf)
 
-def public is_one_const_op(e : ExpressionPtr) : bool {
-    return is_int_val(e, 1l) || is_real_val(e, 1.0lf) || is_int_vec_val(e, 1l) || is_real_vec_val(e, 1.0lf)
-}
+def public is_one_const_op(e : ExpressionPtr) : bool =>
+    is_int_val(e, 1l) || is_real_val(e, 1.0lf) || is_int_vec_val(e, 1l) || is_real_vec_val(e, 1.0lf)
 
-def public is_neg_one_const_op(e : ExpressionPtr) : bool {
-    return is_int_neg_one(e) || is_real_val(e, -1.0lf) || is_int_vec_neg_one(e) || is_real_vec_val(e, -1.0lf)
-}
+def public is_neg_one_const_op(e : ExpressionPtr) : bool =>
+    is_int_neg_one(e) || is_real_val(e, -1.0lf) || is_int_vec_neg_one(e) || is_real_vec_val(e, -1.0lf)
 
 def public is_bool_val(e : ExpressionPtr; want : bool) : bool {
     if (e == null) return false
@@ -332,9 +325,8 @@ def public is_bool_val(e : ExpressionPtr; want : bool) : bool {
     return false
 }
 
-def public negate(var e : ExpressionPtr) : ExpressionPtr {
-    return new ExprOp1(at = e.at, op := "-", subexpr = e)
-}
+def public negate(var e : ExpressionPtr) : ExpressionPtr =>
+    new ExprOp1(at = e.at, op := "-", subexpr = e)
 
 def public zero_const_of(t : TypeDeclPtr; at : LineInfo) : ExpressionPtr {   // nolint:STYLE037 — one match arm per numeric baseType
     if (t == null) return null
@@ -362,9 +354,8 @@ def public zero_const_of(t : TypeDeclPtr; at : LineInfo) : ExpressionPtr {   // 
     return null
 }
 
-def public expr_bt(e : ExpressionPtr) : Type {
-    return (e == null || e._type == null) ? Type.none : e._type.baseType
-}
+def public expr_bt(e : ExpressionPtr) : Type =>
+    (e == null || e._type == null) ? Type.none : e._type.baseType
 
 def public vec_elem_bt(bt : Type) : Type {
     if (bt == Type.tFloat2 || bt == Type.tFloat3 || bt == Type.tFloat4) return Type.tFloat
@@ -373,9 +364,8 @@ def public vec_elem_bt(bt : Type) : Type {
     return Type.none
 }
 
-def public is_float_family(bt : Type) : bool {
-    return bt == Type.tFloat || bt == Type.tFloat2 || bt == Type.tFloat3 || bt == Type.tFloat4
-}
+def public is_float_family(bt : Type) : bool =>
+    bt == Type.tFloat || bt == Type.tFloat2 || bt == Type.tFloat3 || bt == Type.tFloat4
 
 def public is_float_valued(e : ExpressionPtr) : bool {
     let bt = expr_bt(e)
@@ -396,9 +386,8 @@ def public ctor_dim_by_name(c : ExprCall?) : int {
     return length(c.arguments) == d ? d : 0
 }
 
-def public is_float_vec(bt : Type) : bool {
-    return bt == Type.tFloat2 || bt == Type.tFloat3 || bt == Type.tFloat4
-}
+def public is_float_vec(bt : Type) : bool =>
+    bt == Type.tFloat2 || bt == Type.tFloat3 || bt == Type.tFloat4
 
 def public splat_scalar_arg(e : ExpressionPtr) : ExpressionPtr {
     if (e == null || !(e is ExprCall)) return null
@@ -433,9 +422,8 @@ def public mad_shape(ta, tb, tc : Type) : bool {
     return ta == tc && tb != Type.none && vec_elem_bt(ta) == tb
 }
 
-def public lerp_shape(ta, tb, tt : Type) : bool {
-    return ta == tb && is_float_family(ta) && tt == Type.tFloat
-}
+def public lerp_shape(ta, tb, tt : Type) : bool =>
+    ta == tb && is_float_family(ta) && tt == Type.tFloat
 
 def public is_all_const(e : ExpressionPtr) : bool {
     if (e == null) return false
@@ -583,9 +571,7 @@ def public build_chain(var terms : array<ReTerm>; at : LineInfo; addOp, subOp : 
     return acc
 }
 
-def public sel3(e : ExpressionPtr) : ExprOp3? {
-    return (e != null && e is ExprOp3) ? (e as ExprOp3) : null
-}
+def public sel3(e : ExpressionPtr) : ExprOp3? => (e != null && e is ExprOp3) ? (e as ExprOp3) : null
 
 def public ref_var_name(e : ExpressionPtr) : string {
     var x = e

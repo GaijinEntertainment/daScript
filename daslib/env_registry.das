@@ -19,13 +19,10 @@ require daslib/strings_boost
 // (HOME, PROCESSOR_IDENTIFIER, ...). Same set-but-empty-is-unset rule as the loaders. Not for
 // hot paths, and a LITERAL knob name through these must still be declared in the registry.
 
-def public env_is_set(name : string) : bool {
-    return has_env_variable(name) && !empty(get_env_variable(name))
-}
+def public env_is_set(name : string) : bool =>
+    has_env_variable(name) && !empty(get_env_variable(name))
 
-def public env_value_of(name : string) : string {
-    return get_env_variable(name)
-}
+def public env_value_of(name : string) : string => get_env_variable(name)
 
 //! A hand-written doc row for knobs no struct field can tell the truth about (compile-time
 //! constants, foreign variables) — appended to a section after its `write_env_info_rows`.

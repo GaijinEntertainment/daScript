@@ -12,9 +12,7 @@ require dastest/testing_boost public
 // ── Target functions (compiled with optimizations) ──────────────────────
 
 [export, marker(no_coverage)]
-def target_simple(a, b : int) : int {
-    return a + b
-}
+def target_simple(a, b : int) : int => a + b
 
 [export, marker(no_coverage)]
 def target_if_return(a, b, c : int) : int {

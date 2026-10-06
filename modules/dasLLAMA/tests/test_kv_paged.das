@@ -255,9 +255,7 @@ def test_kv_paged_store_roundtrip(t : T?) {
 
 let MODEL_PATH = path_join(llama2c_dir(), "stories15M.bin")
 
-def private mk_prompt(n : int64) : array<int64> {
-    return <- [for (i in range64(n)); 2l + i % 40l]
-}
+def private mk_prompt(n : int64) : array<int64> => <- [for (i in range64(n)); 2l + i % 40l]
 
 def private logits_equal(a : Session; b : Session; vocab : int64) : bool {
     for (i in range64(vocab)) {

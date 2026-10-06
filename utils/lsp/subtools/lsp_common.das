@@ -100,9 +100,7 @@ def public make_range(lines : array<string>; line, column, last_line, last_colum
             LspPosition(line = start.line, character = start.character + 1)))
 }
 
-def public load_file_lines(path : string) : array<string> {
-    return <- split(fread(path), "\n")
-}
+def public load_file_lines(path : string) : array<string> => <- split(fread(path), "\n")
 
 // user args come after the `--` separator (CLI flags like -project_root go before)
 def public lsp_user_args(raw : array<string>) : array<string> {

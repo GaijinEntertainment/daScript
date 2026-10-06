@@ -1084,9 +1084,7 @@ def effective_stop_ids_(c : ChatSession) : array<int64> {
 }
 
 //! The template's own stop ids for the NEXT generation: a token among them ends the turn outright.
-def turn_stop_ids_(c : ChatSession) : array<int64> {
-    return <- clone_to_move(c.stop_ids)
-}
+def turn_stop_ids_(c : ChatSession) : array<int64> => <- clone_to_move(c.stop_ids)
 
 //! The template's thinking-off extras (gemma-4's channel markers) while the next turn is NOT a
 //! thinking turn; empty on a thinking turn.
@@ -1107,9 +1105,8 @@ struct NothinkStopGuard {
 }
 
 //! The guard for `c`'s NEXT turn: armed on an instruct-shaped turn of a family with `stop_nothink`.
-def make_nothink_guard_(c : ChatSession) : NothinkStopGuard {
-    return <- make_nothink_guard_(c.tmpl, nothink_stop_ids_(c))
-}
+def make_nothink_guard_(c : ChatSession) : NothinkStopGuard =>
+    <- make_nothink_guard_(c.tmpl, nothink_stop_ids_(c))
 
 //! The low-level form: the template's reply matcher over `ids` (tests hand the ids in directly).
 def make_nothink_guard_(tmpl : ChatTemplate; ids : array<int64>) : NothinkStopGuard {
@@ -1338,9 +1335,8 @@ def make_think_stream_(tmpl : ChatTemplate; thinking : bool) : ThinkStream {
 //! The reply matcher for `c`'s NEXT turn: armed on a thinking turn (`think_turn_active_`) and on
 //! an instruct turn of a family whose channel markers are guarded stops (`stop_nothink`) - the
 //! tolerated leading thought splits like any other.
-def make_think_stream_(c : ChatSession) : ThinkStream {
-    return make_think_stream_(c.tmpl, think_turn_active_(c) || !empty(c.stop_ids_nothink))
-}
+def make_think_stream_(c : ChatSession) : ThinkStream =>
+    make_think_stream_(c.tmpl, think_turn_active_(c) || !empty(c.stop_ids_nothink))
 
 // Longest k < length(mark) where the view's tail from `from` ends with mark's first k characters —
 // the hold-back length that keeps a marker split across feed boundaries matchable.

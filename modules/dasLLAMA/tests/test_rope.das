@@ -121,9 +121,7 @@ def private ulp_rank(x : float) : int64 {
     return bits >= 0 ? int64(bits) : -2147483648l - int64(bits)
 }
 
-def private ulps_apart(a, b : float) : int64 {
-    return abs(ulp_rank(a) - ulp_rank(b))
-}
+def private ulps_apart(a, b : float) : int64 => abs(ulp_rank(a) - ulp_rank(b))
 
 //! the two layouts agree to the ulp, not the bit: under -jit the packed row's single loop vectorizes
 //! onto the aarch64 polynomial sin/cos rail while the tabs' nested loop stays on scalar libm, and the

@@ -102,9 +102,7 @@ class public CollectExternVisitor : AstVisitor {
 
     // Create the initialize_modules() function, position a builder in it, and emit das_ensure_environment
     // plus the builtin-module registrations (all native modules if register_all, else $ + strings). Returns the builder.
-    def override canVisitWithAliasSubexpression(expr : ExprAssume?) : bool {
-        return false
-    }
+    def override canVisitWithAliasSubexpression(expr : ExprAssume?) : bool => false
 
     def private setup_init_builder(register_all : bool) : LLVMBuilderRef {
         let init_fn = LLVMGetNamedFunction(g_mod, "initialize_modules")

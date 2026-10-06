@@ -4,9 +4,7 @@ options no_aot // `test_abi_func` etc is not declared in headers.
 require UnitTest
 require dastest/testing_boost public
 
-def jit_test_abi_mad(a, b, c) {
-    return test_abi_mad(a, b, c)
-}
+def jit_test_abi_mad(a, b, c) => test_abi_mad(a, b, c)
 
 def test_vec_abi(t : T?) {
     {

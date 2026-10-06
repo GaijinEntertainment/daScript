@@ -1424,9 +1424,8 @@ def private punct_chars(text : string) : string {
     return cpts_to_utf8(out)
 }
 
-def private make_token(text, tag : string; space_after : bool) : G2pToken {
-    return G2pToken(text = text, tag = tag, space_after = space_after, phonemes = "", has_ps = false, rating = 0, is_head = true, prespace = false, alias = "")
-}
+def private make_token(text, tag : string; space_after : bool) : G2pToken =>
+    G2pToken(text = text, tag = tag, space_after = space_after, phonemes = "", has_ps = false, rating = 0, is_head = true, prespace = false, alias = "")
 
 //! the pieces' surfaces joined with the spaces between them (none after the last)
 def private group_text(toks : array<G2pToken>; a, b : int) : string {

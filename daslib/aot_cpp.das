@@ -269,9 +269,8 @@ def hex_char(var Ch : int) {
     }
 }
 
-def aotSuffixNameEx(funcName : das_string; suffix : string; force : bool = false) {
-    return aotSuffixNameEx(string(funcName), suffix, force);
-}
+def aotSuffixNameEx(funcName : das_string; suffix : string; force : bool = false) =>
+    aotSuffixNameEx(string(funcName), suffix, force)
 
 def aotSuffixNameEx(funcName : string; suffix : string; force : bool = false) {
     var prefix = force || is_cpp_keyword(funcName);
@@ -321,13 +320,10 @@ def aotSuffixNameEx(funcName : string; suffix : string; force : bool = false) {
 
 var private g_struct_enum_collide : table<string>
 
-def private structEnumNsKey(moduleName : string; name : string) : string {
-    return "{moduleName}::{name}";
-}
+def private structEnumNsKey(moduleName : string; name : string) : string => "{moduleName}::{name}"
 
-def private structEnumNsKey(pm : Module?; name : string) : string {
-    return structEnumNsKey(aotModuleName(pm), name);
-}
+def private structEnumNsKey(pm : Module?; name : string) : string =>
+    structEnumNsKey(aotModuleName(pm), name)
 
 def buildStructEnumCollisions(program : ProgramPtr) {
     g_struct_enum_collide |> clear();
@@ -357,9 +353,7 @@ def aotEnumName(enu : Enumeration?) {
     return aotSuffixNameEx(enu.name, "_E", collide);
 }
 
-def aotEnumValueName(name : das_string) {
-    return aotSuffixNameEx(name, "_V");
-}
+def aotEnumValueName(name : das_string) => aotSuffixNameEx(name, "_V")
 
 
 def fa_element(t : TypeDeclPtr) {
@@ -643,9 +637,7 @@ class UseTypeMarker : AstVisitor {
     def override preVisitTypeDecl(typeDecl : TypeDeclPtr) {
     }
 
-    def override canVisitFunction(fn : Function?) {
-        return !fn.flags.noAot;
-    }
+    def override canVisitFunction(fn : Function?) => !fn.flags.noAot
 
     def override preVisitFunction(fun : FunctionPtr) {
         inUsedCode = is_used(program, fun);
@@ -724,19 +716,13 @@ class UseTypeMarker : AstVisitor {
 };
 
 
-def enumInfoName(info : EnumInfo?) {
-    return "__enum_info__{info.hash:x}";
-}
+def enumInfoName(info : EnumInfo?) => "__enum_info__{info.hash:x}"
 def public funcInfoName(info : FuncInfo?) {
     //! Returns the C++ identifier name for a function's runtime info based on its hash.
     return "__func_info__{info.hash:x}";
 }
-def structInfoName(info : StructInfo?) {
-    return "__struct_info__{info.hash:x}";
-}
-def typeInfoName(info : TypeInfo?) {
-    return "__type_info__{info.hash:x}";
-}
+def structInfoName(info : StructInfo?) => "__struct_info__{info.hash:x}"
+def typeInfoName(info : TypeInfo?) => "__type_info__{info.hash:x}"
 
 class public DebugVarCache {
     //! Cache for deduplicating debug variable declarations in AOT output.
@@ -757,17 +743,11 @@ class public DebugVarCache {
         return tuple(res_val, success)
     }
 
-    def get(k : string) : string {
-        return info2Name.get_value(k);
-    }
+    def get(k : string) : string => info2Name.get_value(k)
 
-    def contains(k : string) : bool {
-        return argNamesCache |> key_exists(k);
-    }
+    def contains(k : string) : bool => argNamesCache |> key_exists(k)
 
-    def empty() : bool {
-        return argNamesCache |> empty();
-    }
+    def empty() : bool => argNamesCache |> empty()
 
     def clear() {
         argNamesCache |> clear();
@@ -777,9 +757,7 @@ class public DebugVarCache {
 
 
 // `\?` is `?` to a C compiler and hides the ??-sequences it would otherwise read as trigraphs
-def private c_literal(s : auto implicit) : string {
-    return escape(s) |> replace("?", "\\?")
-}
+def private c_literal(s : auto implicit) : string => escape(s) |> replace("?", "\\?")
 
 
 def private writeAnnotationArgInit(var sb : StringBuilderWriter; arg : AnnotationArgumentInfo) {
@@ -1202,12 +1180,8 @@ class public BlockVariableCollector : AstVisitor {
     def override preVisitExprBlock(blk : ExprBlock?) {
         push(stack, blk as ExprBlock);
     }
-    def getVarName(variable : VariablePtr) {
-        return rename?[variable] ?? string(variable.name)
-    }
-    def isMoved(variable : VariablePtr) {
-        return moved |> key_exists(variable)
-    }
+    def getVarName(variable : VariablePtr) => rename?[variable] ?? string(variable.name)
+    def isMoved(variable : VariablePtr) => moved |> key_exists(variable)
     def renameVariableTo(variable : VariablePtr; newName : string) {
         rename |> insert(variable, newName);
     }
@@ -1216,9 +1190,7 @@ class public BlockVariableCollector : AstVisitor {
         stack |> pop();
         return blk;
     }
-    def needRenaming(variable : VariablePtr) {
-        return true;
-    }
+    def needRenaming(variable : VariablePtr) => true
     def renameVariable(variable : VariablePtr) {
         if (needRenaming(variable)) {
             rename |> insert(variable, "__{aotSuffixNameEx(variable.name,"_Var")}_rename_at_{variable.at.line:d}_{(tempCounter++):d}");
@@ -1422,9 +1394,7 @@ class TryExitScanner : AstVisitor {
     }
 };
 
-def private anyExit(exits : TryExits) {
-    return exits.hasBreak || exits.hasContinue || exits.hasReturn;
-}
+def private anyExit(exits : TryExits) => exits.hasBreak || exits.hasContinue || exits.hasReturn
 
 class public CppAot : AstVisitor {
     //! Main AST visitor that generates C++ ahead-of-time compiled code from daslang AST.
@@ -1467,13 +1437,10 @@ class public CppAot : AstVisitor {
     def newLine() {
         write(*ss, "\n");
     }
-    def tabs() {
-        return build_string() $(writer) { write_chars(writer, ' ', 4 * tab); }
-    }
+    def tabs() => build_string() $(writer) { write_chars(writer, ' ', 4 * tab); }
 
-    def noBracket(expr : ExpressionPtr) {
-        return expr.printFlags.topLevel || expr.printFlags.bottomLevel || expr.printFlags.argLevel;
-    }
+    def noBracket(expr : ExpressionPtr) =>
+        expr.printFlags.topLevel || expr.printFlags.bottomLevel || expr.printFlags.argLevel
     def override preVisitEnumeration(enu : EnumerationPtr) {
         if (enu.external) {
             write(*ss, "#if 0 // external enum\n");
@@ -1499,13 +1466,9 @@ class public CppAot : AstVisitor {
         }
         return enu;
     }
-    def override canVisitStructureFieldInit(st : StructurePtr) : bool {
-        return false;
-    }
+    def override canVisitStructureFieldInit(st : StructurePtr) : bool => false
 
-    def override canVisitStructure(st : Structure?) {
-        return !st.flags.isTemplate;
-    }
+    def override canVisitStructure(st : Structure?) => !st.flags.isTemplate
     def override preVisitStructure(that : StructurePtr) {
         if (that.flags.cppLayout) {
             write(*ss, "\n#if 0 // skipping structure {that.name} declaration due to CPP layout");
@@ -1664,15 +1627,12 @@ class public CppAot : AstVisitor {
         }
         write(*ss, " {collector.getVarName(arg)}");
     }
-    def override canVisitFunctionArgumentInit(fn : Function?; variable : VariablePtr; expr : ExpressionPtr) {
-        return false;
-    }
+    def override canVisitFunctionArgumentInit(fn : Function?; variable : VariablePtr; expr : ExpressionPtr) =>
+        false
     def override preVisitFunctionArgumentInit(fn : FunctionPtr; arg : VariablePtr; expr : ExpressionPtr) {
         write(*ss, " = ");
     }
-    def override visitFunctionArgument(fn : FunctionPtr; that : VariablePtr; last : bool) {
-        return that;
-    }
+    def override visitFunctionArgument(fn : FunctionPtr; that : VariablePtr; last : bool) => that
     def override visitFunction(fn : FunctionPtr) {
         if (fn.flags.aotNeedPrologue || prologue) {
             write(*ss, "}\n");
@@ -1707,9 +1667,8 @@ class public CppAot : AstVisitor {
         }
         return "_temp_make_local_{expr.at.line:d}_{expr.at.column:d}_{local_temp_names |> get_value(expr):d}";
     }
-    def stackNewName(expr : ExpressionPtr) {
-        return "_stack_new_{expr.at.line:d}_{expr.at.column:d}_{collector.stackNewIds |> get_value(expr):d}";
-    }
+    def stackNewName(expr : ExpressionPtr) =>
+        "_stack_new_{expr.at.line:d}_{expr.at.column:d}_{collector.stackNewIds |> get_value(expr):d}"
     def override preVisitExprBlock(var blk : ExprBlock?) {
         push(scopes, blk);
         blk.blockFlags.finallyBeforeBody = true;
@@ -1802,9 +1761,7 @@ class public CppAot : AstVisitor {
         scopes |> pop();
         return blk;
     }
-    def finallyName(blk : ExprBlock?) {
-        return "__finally_{blk.at.line:d}";
-    }
+    def finallyName(blk : ExprBlock?) => "__finally_{blk.at.line:d}"
     def override preVisitExprBlockFinal(blk : ExprBlock?) {
         write(*ss, "{tabs()}/* finally */ auto {finallyName(blk)}= das_finally([&]()\{\n");
     }
@@ -2028,9 +1985,8 @@ class public CppAot : AstVisitor {
         if (is_alpha(first_character(that.op))) return true;
         return that.subexpr._type.isPolicyType;
     }
-    def isF16Op1(that : ExprOp1?) {
-        return that._type.baseType == Type.tFloat16 || (that._type.isVectorType && that._type.vectorBaseType == Type.tFloat16);
-    }
+    def isF16Op1(that : ExprOp1?) =>
+        that._type.baseType == Type.tFloat16 || (that._type.isVectorType && that._type.vectorBaseType == Type.tFloat16)
     def override preVisitExprOp1(var that : ExprOp1?) {
         if (!that.func.flags.builtIn || that.func.flags.callBased) {
             that.arguments |> clear();
@@ -2134,9 +2090,8 @@ class public CppAot : AstVisitor {
         let op = string(that.op);
         return op == "&&" || op == "||";
     }
-    def policyRefArg(pt, argType : TypeDeclPtr) {
-        return policyArgNeedCast(pt, argType) && argType.isRefType;
-    }
+    def policyRefArg(pt, argType : TypeDeclPtr) =>
+        policyArgNeedCast(pt, argType) && argType.isRefType
     def plainOp2Text(that : ExprOp2?) : string {
         if (that._type.baseType == Type.tBool) {
             let that_op = string(that.op)
@@ -2326,9 +2281,8 @@ class public CppAot : AstVisitor {
         }
         return that;
     }
-    def returnLevel(expr : ExprReturn?) : int {
-        return expr.returnFunc == null ? -1 : flowLevel(ExitKind.Return);
-    }
+    def returnLevel(expr : ExprReturn?) : int =>
+        expr.returnFunc == null ? -1 : flowLevel(ExitKind.Return)
     def override preVisitExprReturn(expr : ExprReturn?) {
         let at = returnLevel(expr);
         write(*ss, at < 0 ? "return " : "\{ ");
@@ -2920,9 +2874,7 @@ class public CppAot : AstVisitor {
         }
         return c;
     }
-    def override canVisitWithAliasSubexpression(_expr : ExprAssume?) : bool {
-        return false;
-    }
+    def override canVisitWithAliasSubexpression(_expr : ExprAssume?) : bool => false
     def override preVisitExprAssume(expr : ExprAssume?) {
         write(*ss, "\n#if 0 // assume {expr.alias} = {describe(expr.subexpr) |> replace("\n", " ")}\n");
     }
@@ -2990,9 +2942,8 @@ class public CppAot : AstVisitor {
         }
         return ifte;
     }
-    def is_lattice_elem(t : Type) : bool {
-        return t == Type.tFloat16 || t == Type.tInt16 || t == Type.tUInt16 || t == Type.tInt8 || t == Type.tUInt8
-    }
+    def is_lattice_elem(t : Type) : bool =>
+        t == Type.tFloat16 || t == Type.tInt16 || t == Type.tUInt16 || t == Type.tInt8 || t == Type.tUInt8
     def override preVisitExprSwizzle(expr : ExprSwizzle?) {
         assume srcT = expr.value._type
         if (srcT.isVectorType && is_lattice_elem(srcT.vectorBaseType)) {
@@ -3221,9 +3172,8 @@ class public CppAot : AstVisitor {
         }
         return tc;
     }
-    def isDistinctDeref(ptr2ref : ExprPtr2Ref?) {
-        return ptr2ref.subexpr._type != null && ptr2ref.subexpr._type.baseType == Type.tDistinct
-    }
+    def isDistinctDeref(ptr2ref : ExprPtr2Ref?) =>
+        ptr2ref.subexpr._type != null && ptr2ref.subexpr._type.baseType == Type.tDistinct
     def override preVisitExprPtr2Ref(ptr2ref : ExprPtr2Ref?) {
         if (isDistinctDeref(ptr2ref)) {
             write(*ss, "(");
@@ -3250,9 +3200,8 @@ class public CppAot : AstVisitor {
         write(*ss, ")");
         return ref2ptr;
     }
-    def queryByMNH(name : string; hash : uint64) {
-        return "Func(__context__->fnByMangledName(/*{name}*/ 0x{hash:x}))";
-    }
+    def queryByMNH(name : string; hash : uint64) =>
+        "Func(__context__->fnByMangledName(/*{name}*/ 0x{hash:x}))"
 
     def override preVisitExprAddr(expr : ExprAddr?) {
         if (expr.func != null) {
@@ -3399,9 +3348,7 @@ class public CppAot : AstVisitor {
         }
         return enew;
     }
-    def needTempSrc(expr : ExprMakeLocal?) {
-        return expectsLocalTemp(expr);
-    }
+    def needTempSrc(expr : ExprMakeLocal?) => expectsLocalTemp(expr)
     def mkvName(expr : ExprMakeVariant?) {
         if (needTempSrc(expr)) {
             return makeLocalTempName(expr);
@@ -3532,7 +3479,7 @@ class public CppAot : AstVisitor {
         write(*ss, "));\n");
         return decl;
     }
-    def override canVisitExprMakeStructBlock(str : ExprMakeStruct?; expr : ExpressionPtr) { return false; }
+    def override canVisitExprMakeStructBlock(str : ExprMakeStruct?; expr : ExpressionPtr) => false
 
     def override visitExprMakeStruct(var expr : ExprMakeStruct?) : ExpressionPtr {
         if (expr._block != null) {
@@ -3636,9 +3583,7 @@ class public CppAot : AstVisitor {
         write(*ss, "{tabs()}\})())");
         return expr;
     }
-    def override canVisitMakeBlockBody(blk : ExprMakeBlockPtr) {
-        return blk.aotFunctorName.empty();
-    }
+    def override canVisitMakeBlockBody(blk : ExprMakeBlockPtr) => blk.aotFunctorName.empty()
     def override preVisitExprMakeBlock(expr : ExprMakeBlockPtr) {
         let blk = expr._block as ExprBlock;
         if (!blk.blockFlags.aotSkipMakeBlock) {
@@ -3889,12 +3834,9 @@ class public CppAot : AstVisitor {
     }
     //! true when this unit emits the C++ body of the foreign function, so a call to it is a plain
     //! C++ call; the regular -aot and -lib units emit no foreign body and answer false
-    def emitsForeignBody(func : Function?) : bool {
-        return false;
-    }
-    def needsArgPassType(argType : TypeDeclPtr) {
-        return !argType.flags.constant && !argType.isGoodBlockType;
-    }
+    def emitsForeignBody(func : Function?) : bool => false
+    def needsArgPassType(argType : TypeDeclPtr) =>
+        !argType.flags.constant && !argType.isGoodBlockType
     def needsArgPass(expr : ExpressionPtr) {
         if (expr is ExprMakeBlock) {
             let mkblk = expr as ExprMakeBlock;
@@ -4013,9 +3955,7 @@ class public CppAot : AstVisitor {
         if (passExpr is ExprConstPtr) return true;
         return argType.isVoidPointer ^^ passType.isVoidPointer;
     }
-    def needStringCast(func : Function?; arg : TypeDeclPtr) {
-        return arg.isString && !arg.flags.ref;
-    }
+    def needStringCast(func : Function?; arg : TypeDeclPtr) => arg.isString && !arg.flags.ref
     def CallFunc_preVisitCallArg(call : ExprCallFunc?; arg : ExpressionPtr; is_last : bool) {
         if (call.func.moreFlags.propertyFunction) return ;
         var argIndex = 0;
@@ -4146,12 +4086,8 @@ class public CppAot : AstVisitor {
         CallFunc_visit(call);
         return call;
     }
-    def forSrcName(varName : das_string) {
-        return "__{aotSuffixNameEx(varName, "")}_iterator";
-    }
-    def needLoopName(ffor : ExprFor?) {
-        return "__need_loop_{ffor.at.line:d}";
-    }
+    def forSrcName(varName : das_string) => "__{aotSuffixNameEx(varName, "")}_iterator"
+    def needLoopName(ffor : ExprFor?) => "__need_loop_{ffor.at.line:d}"
     def override preVisitExprFor(ffor : ExprFor?) {
         write(*ss, "\{\n");
         tab ++;
@@ -4511,9 +4447,7 @@ let public DEFAULT_MODULE_ORDER = [
     "Module_Debugger", "Module_Network", "Module_UriParser", "Module_JobQue", "Module_FIO", "Module_DASBIND"
 ]
 
-def private isCppModule(mod : Module?) : bool {
-    return !empty(mod.cppClassName)
-}
+def private isCppModule(mod : Module?) : bool => !empty(mod.cppClassName)
 
 def private canAotModule(mod : Module?) : bool {
     var ok = false

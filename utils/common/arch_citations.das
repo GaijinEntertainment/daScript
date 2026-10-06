@@ -59,16 +59,13 @@ struct public ArchDocs {
 // True for an entry name every [arch] walk skips: `_`/`.`-prefixed entries, and
 // `builtin.das`, which sits outside the citation system in LINT026's walk
 // (utils/lint/main.das), the census walk (arch_common), and extraction alike.
-def public arch_walk_skips(name : string) : bool {
-    return name |> starts_with("_") || name |> starts_with(".") || name == "builtin.das" || name == "node_modules"
-}
+def public arch_walk_skips(name : string) : bool =>
+    name |> starts_with("_") || name |> starts_with(".") || name == "builtin.das" || name == "node_modules"
 
 
 // The one spelling a path is compared under: lexical, so it works on a document that is not
 // there, and '/'-folded, so a Windows walk and a citation agree.
-def public arch_path(path : string) : string {
-    return normalize(path) |> replace("\\", "/")
-}
+def public arch_path(path : string) : string => normalize(path) |> replace("\\", "/")
 
 
 // Where a match sits: its 1-based line, and the offset that line starts at - which is what lets
@@ -116,19 +113,15 @@ def public is_cpp_source(name : string) : bool {
 
 
 // True for a file an [arch] walk reads for citations: a .das, or a C/C++ source (a markdown document cites too; the lint walks those on its own list).
-def public arch_cites_source(name : string) : bool {
-    return name |> ends_with(".das") || is_cpp_source(name)
-}
+def public arch_cites_source(name : string) : bool =>
+    name |> ends_with(".das") || is_cpp_source(name)
 
 
-def private is_path_char(c : int) : bool {
-    return is_alpha(c) || is_number(c) || c == '_' || c == '.' || c == '/' || c == '-'
-}
+def private is_path_char(c : int) : bool =>
+    is_alpha(c) || is_number(c) || c == '_' || c == '.' || c == '/' || c == '-'
 
 
-def private is_anchor_char(c : int) : bool {
-    return is_alpha(c) || is_number(c) || c == '_' || c == '-'
-}
+def private is_anchor_char(c : int) : bool => is_alpha(c) || is_number(c) || c == '_' || c == '-'
 
 
 // A C++ pointer's document is spelled root-relative (`src/ast/ARCHITECTURE.md`), and the root is
@@ -221,9 +214,8 @@ def public collect_arch_citations(file, text : string) : array<ArchCitation> {
 
 //! every `arch(at="...")` a .das source spells behind a `//` on its line, in file order: prose about the annotation, or a
 //! citation pasted into a comment, which annotates nothing - the lint tells the two apart by whether it resolves
-def public collect_commented_arch_citations(file, text : string) : array<ArchCitation> {
-    return <- das_arch_matches(file, text, true)
-}
+def public collect_commented_arch_citations(file, text : string) : array<ArchCitation> =>
+    <- das_arch_matches(file, text, true)
 
 
 def private das_arch_matches(file, text : string; commented : bool) : array<ArchCitation> {

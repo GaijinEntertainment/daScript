@@ -45,9 +45,7 @@ struct Ray {
     pad2 : float
 }
 
-def pointAt(ray : Ray const; t : float) {
-    return ray.orig + ray.dir * t
-}
+def pointAt(ray : Ray const; t : float) => ray.orig + ray.dir * t
 
 struct Hit {
     pos    : float3

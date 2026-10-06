@@ -4,14 +4,10 @@ require dastest/testing_boost
 
 // Distinct-pointer key: built fresh each call so query pointers differ from stored
 // ones, forcing a real KeyCompare (not the a==b fast path).
-def dkey(prefix : string; i : int) : string {
-    return "{prefix}_{i}"
-}
+def dkey(prefix : string; i : int) : string => "{prefix}_{i}"
 
 // Fresh string copy with exact content "k{n}" (distinct pointer each call, forcing real strcmp).
-def kcopy(n : int) : string {
-    return "k{n}"
-}
+def kcopy(n : int) : string => "k{n}"
 
 def sorted_keys(tab : table<int; int>) : array<int> {
     var got <- [for (k in keys(tab)); k]

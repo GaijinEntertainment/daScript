@@ -159,6 +159,4 @@ def main : int { // nolint:STYLE037,STYLE038 — flat CLI dispatch, one arm per 
     return 1
 }
 
-def private current_unix_time : int64 {
-    return int64(get_clock())
-}
+def private current_unix_time : int64 => int64(get_clock())

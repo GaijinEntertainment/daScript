@@ -39,9 +39,7 @@ struct public GitProbeSample {
     error : string
 }
 
-def private elapsed_us(started : int64) : int64 {
-    return get_time_nsec(started) / 1000l
-}
+def private elapsed_us(started : int64) : int64 => get_time_nsec(started) / 1000l
 
 def private quote_terminal_arg(arg : string) : string {
     if (empty(arg)) return "\"\""

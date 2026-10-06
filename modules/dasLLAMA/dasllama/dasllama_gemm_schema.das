@@ -34,9 +34,8 @@ struct Q8RepackType {
 //! The repack layout an mr-row tile perm requires: mr-row block interleave with f32 group
 //! scales, group bytes biased by `wbias`, `kgroup` k-bytes per row per group. `needs_repack`
 //! and every kernel stride derive from this.
-def q8q8_repack_type(mr : int; wbias : int = 0; kgroup : int = 4) : Q8RepackType {
-    return Q8RepackType(interleave = mr, f32_scales = true, wbias = wbias, kgroup = kgroup)
-}
+def q8q8_repack_type(mr : int; wbias : int = 0; kgroup : int = 4) : Q8RepackType =>
+    Q8RepackType(interleave = mr, f32_scales = true, wbias = wbias, kgroup = kgroup)
 
 //! The mr of the REFERENCE tier's layout (q8q8_repack_type(4), the old hand arm64-laneq layout
 //! the reference stub bodies read). Non-reference mr runs the generated grp<mr> kernel/layout pair,
@@ -83,9 +82,8 @@ def kq_ssb(fmt : int) : int64 => kq_ssb(kq_fmt_of_id(fmt, "kq_ssb"))
 
 //! True for the kq ids whose tile reads the packed quant plane directly; the others (k5/k6 and
 //! the grid formats) read a byte-expanded panel unpacked once per (group, token-block).
-def kq_reads_packed_planes(fmt : int64) : bool {
-    return fmt == 4l || fmt == 40l || fmt == 44l || fmt == 3l || fmt == 45l || fmt == 2l || fmt == 35l
-}
+def kq_reads_packed_planes(fmt : int64) : bool =>
+    fmt == 4l || fmt == 40l || fmt == 44l || fmt == 3l || fmt == 45l || fmt == 2l || fmt == 35l
 
 //! eight +-1 bytes for sign byte `sb`, lane k negative when bit k is set
 def pm1_of(sb : int) : uint64 {

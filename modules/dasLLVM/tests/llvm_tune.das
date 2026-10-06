@@ -15,30 +15,22 @@ require llvm/daslib/llvm_tune
 // companion sibling (the two-function stamp): stamped with tadd_tuned's winner from the same
 // entry — k_value emits `return k`, so the stamped perm is observable on the sibling too.
 // Declared before the tuned function (the [tune_companion] declare-before rule).
-def tadd_kv() : int {
-    return -1  // reference tier sentinel
-}
+def tadd_kv() : int => -1  // reference tier sentinel
 
 [tune_perm(k = 0), tune_perm(k = 2), tune_perm(suffix = "declined", decline = true),
  tune_companion(fn = "tadd_kv", gen = "llvm_code_selftest::k_value"),
  tune(gen = "llvm_code_selftest::add_plus_k", fallback = "k2")]
-def tadd_tuned(a, b : int) : int {
-    return a + b
-}
+def tadd_tuned(a, b : int) : int => a + b
 
 [tune_perm(k = 1), tune(gen = "llvm_code_selftest::add_plus_k")]  // no fallback: reference body
-def tadd_reference(a, b : int) : int {
-    return a + b
-}
+def tadd_reference(a, b : int) : int => a + b
 
 // per-ISA fallback chain: ';'-list walked in order, first perm whose requires= hint passes
 // on this box wins. k9 requires a feature no box has (also pins that requires= is stripped
 // from the auto-derived suffix — the row still keys as "k9"); k4 has no requires and stamps.
 [tune_perm(k = 9, requires = "__no_such_cpuid_feature"), tune_perm(k = 4),
  tune(gen = "llvm_code_selftest::add_plus_k", fallback = "k9;k4")]
-def tadd_chain(a, b : int) : int {
-    return a + b
-}
+def tadd_chain(a, b : int) : int => a + b
 
 [test]
 def test_llvm_tune(t : T?) {

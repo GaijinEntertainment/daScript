@@ -14,39 +14,25 @@ def private host_folds_nan_compares() : bool {
 }
 
 [sideeffects]
-def eq(a, b) {
-    return a == b
-}
+def eq(a, b) => a == b
 
 [sideeffects]
-def neq(a, b) {
-    return a != b
-}
+def neq(a, b) => a != b
 
 [sideeffects]
-def less(a, b) {
-    return a < b
-}
+def less(a, b) => a < b
 
 [sideeffects]
-def greater(a, b) {
-    return a > b
-}
+def greater(a, b) => a > b
 
 [sideeffects]
-def leq(a, b) {
-    return a <= b
-}
+def leq(a, b) => a <= b
 
 [sideeffects]
-def geq(a, b) {
-    return a >= b
-}
+def geq(a, b) => a >= b
 
 [sideeffects]
-def opaque(x) {
-    return x
-}
+def opaque(x) => x
 
 [test]
 def test_half_subnormals_survive_conversion(t : T?) {

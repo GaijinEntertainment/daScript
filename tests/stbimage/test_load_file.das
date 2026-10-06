@@ -8,9 +8,7 @@ require math
 require daslib/safe_addr
 require dastest/testing_boost public
 
-def test_image_path(name : string) : string {
-    return "{get_das_root()}/tests/stbimage/{name}"
-}
+def test_image_path(name : string) : string => "{get_das_root()}/tests/stbimage/{name}"
 
 // gradient pattern: pixel(x,y) = R=x*4, G=y*4, B=128, A=255
 def verify_pixel_exact(tt : T?; pixels : uint8?; stride : int; px, py, expected_r, expected_g, expected_b, expected_a : int) {

@@ -48,9 +48,8 @@ let TEXT = "daslang speaks. The text becomes phonemes, the phonemes become durat
 
 let PARAGRAPH = "Dr. Smith read the report on Feb. 3. It ran to 3.5 pages, which is short. Every sentence becomes its own chunk, and a sentence past the cap splits on a word boundary."
 
-def seconds(pcm : array<float>; sample_rate : int) : float {
-    return float(length(pcm)) / float(sample_rate)
-}
+def seconds(pcm : array<float>; sample_rate : int) : float =>
+    float(length(pcm)) / float(sample_rate)
 
 [export]
 def main {  // nolint:STYLE038 - one linear tutorial walkthrough

@@ -19,44 +19,29 @@ require math
 var G_RCP = 3.0
 
 [flatten]
-def r_pow2(x : float) : float {
-    return x / 4.0
-}
+def r_pow2(x : float) : float => x / 4.0
 
 [flatten]
-def r_npow2(x : float) : float {
-    return x / 3.0
-}
+def r_npow2(x : float) : float => x / 3.0
 
 [flatten]
-def r_vecdiv(v : float3) : float3 {
-    return v / 2.0
-}
+def r_vecdiv(v : float3) : float3 => v / 2.0
 
 [flatten]
-def r_vconst(v : float3) : float3 {
-    return v / float3(2.0, 4.0, 8.0)
-}
+def r_vconst(v : float3) : float3 => v / float3(2.0, 4.0, 8.0)
 
 [flatten]
-def r_uni(x : float) : float {
-    return x / G_RCP
-}
+def r_uni(x : float) : float => x / G_RCP
 
 [flatten]
-def r_two(x, y : float) : float {
-    return (x / G_RCP) + (y / G_RCP)
-}
+def r_two(x, y : float) : float => (x / G_RCP) + (y / G_RCP)
 
 [flatten]
-def r_zero(x : float) : float {
-    return x / 0.0 // nolint:LINT006 — the zero-divisor bail (no inf literal) is what's under test
-}
+def r_zero(x : float) : float =>
+    x / 0.0  // nolint:LINT006 — the zero-divisor bail (no inf literal) is what's under test
 
 [flatten]
-def i_div(n : int) : int {
-    return n / 3
-}
+def i_div(n : int) : int => n / 3
 
 // ----- differential driver -----
 

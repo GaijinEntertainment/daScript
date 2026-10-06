@@ -25,9 +25,7 @@ def event_handler_false(arg : string) : bool {
     return false
 }
 
-def compute_handler(a : int; b : float) : int {
-    return a + int(b)
-}
+def compute_handler(a : int; b : float) : int => a + int(b)
 
 def tick_handler() {
     feint("tick\n")

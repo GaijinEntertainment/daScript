@@ -185,19 +185,13 @@ def private range_flags(cpt : int) : int {
 }
 
 //! True if codepoint is a unicode letter (regex \p{L}).
-def cpt_is_letter(cpt : int) : bool {
-    return (range_flags(cpt) & 4) != 0
-}
+def cpt_is_letter(cpt : int) : bool => (range_flags(cpt) & 4) != 0
 
 //! True if codepoint is a unicode number (regex \p{N}).
-def cpt_is_number(cpt : int) : bool {
-    return (range_flags(cpt) & 2) != 0
-}
+def cpt_is_number(cpt : int) : bool => (range_flags(cpt) & 2) != 0
 
 //! True if codepoint is a unicode combining mark (regex \p{M}).
-def cpt_is_mark(cpt : int) : bool {
-    return (range_flags(cpt) & 16) != 0
-}
+def cpt_is_mark(cpt : int) : bool => (range_flags(cpt) & 16) != 0
 
 //! True if codepoint is whitespace (regex \s), per the upstream whitespace set.
 def cpt_is_whitespace(cpt : int) : bool => find_index(WS, cpt) >= 0

@@ -281,9 +281,8 @@ def private tab_part_gate(t : T?; pos, hs, rot, nh : int64; theta, fscale, mscal
     delete st
 }
 
-def private ff_ramp(half, period : int64) : array<float> {
-    return <- [for (j in range64(half)); 1.0 + 0.5 * float(j % period)]
-}
+def private ff_ramp(half, period : int64) : array<float> =>
+    <- [for (j in range64(half)); 1.0 + 0.5 * float(j % period)]
 
 [test]
 def test_rope_apply_part_factors(t : T?) {

@@ -75,9 +75,8 @@ def private _qualify_schema(sql : string; schema_name : string) : string {
     return out
 }
 
-def private _db_prepare(db : SqlRunner; sql : string; var stmt : sqlite3_stmt?&) : int {
-    return sqlite3_prepare_v2(db.sqlite_handle, _qualify_schema(sql, db.schema_name), stmt)
-}
+def private _db_prepare(db : SqlRunner; sql : string; var stmt : sqlite3_stmt?&) : int =>
+    sqlite3_prepare_v2(db.sqlite_handle, _qualify_schema(sql, db.schema_name), stmt)
 
 // ===== High-level API: runner, RAII, exec, last_insert_rowid =====
 
@@ -362,24 +361,20 @@ def sql_bind_to_stmt(var stmt : sqlite3_stmt?; idx : int; v : auto(TT)) : void {
 // --- read direction ---
 
 [unused_argument(witness)]
-def sql_read_witness(stmt : sqlite3_stmt?; col : int; witness : int64) : int64 {
-    return sqlite3_column_int64(stmt, col)
-}
+def sql_read_witness(stmt : sqlite3_stmt?; col : int; witness : int64) : int64 =>
+    sqlite3_column_int64(stmt, col)
 
 [unused_argument(witness)]
-def sql_read_witness(stmt : sqlite3_stmt?; col : int; witness : double) : double {
-    return sqlite3_column_double(stmt, col)
-}
+def sql_read_witness(stmt : sqlite3_stmt?; col : int; witness : double) : double =>
+    sqlite3_column_double(stmt, col)
 
 [unused_argument(witness)]
-def sql_read_witness(stmt : sqlite3_stmt?; col : int; witness : string) : string {
-    return sqlite3_column_text_(stmt, col)
-}
+def sql_read_witness(stmt : sqlite3_stmt?; col : int; witness : string) : string =>
+    sqlite3_column_text_(stmt, col)
 
 [unused_argument(witness)]
-def sql_read_witness(stmt : sqlite3_stmt?; col : int; witness : array<uint8>) : array<uint8> {
-    return <- sqlite3_column_blob_(stmt, col)
-}
+def sql_read_witness(stmt : sqlite3_stmt?; col : int; witness : array<uint8>) : array<uint8> =>
+    <- sqlite3_column_blob_(stmt, col)
 
 [unused_argument(stmt, col, witness)]
 def sql_read_witness(stmt : sqlite3_stmt?; col : int; witness : auto(SS)) : SS {
@@ -609,9 +604,8 @@ def try_query_one(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(
 // ---- query_one (strict) — TT; 0..3 positional args; panics on err ----
 
 [unused_argument(t)]
-def query_one(db : SqlRunner; sql : string; t : type<auto(TT)>) : TT -const -# {
-    return <- query_one_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {})
-}
+def query_one(db : SqlRunner; sql : string; t : type<auto(TT)>) : TT -const -# =>
+    <- query_one_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {})
 
 [unused_argument(t)]
 def query_one(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0)) : TT -const -# {
@@ -639,9 +633,8 @@ def query_one(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0);
 
 // ---- query_one_opt — Option<TT>; 0..3 positional args; panics only on prepare/step error ----
 
-def query_one_opt(db : SqlRunner; sql : string; t : type<auto(TT)>) : Option<TT -const -#> {
-    return <- query_one_opt_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {})
-}
+def query_one_opt(db : SqlRunner; sql : string; t : type<auto(TT)>) : Option<TT -const -#> =>
+    <- query_one_opt_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {})
 
 def query_one_opt(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0)) : Option<TT -const -#> {
     return <- query_one_opt_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
@@ -724,9 +717,8 @@ def try_query(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0);
 // ---- query (strict) — array<TT>; 0..3 positional args; panics on err ----
 
 [unused_argument(t)]
-def query(db : SqlRunner; sql : string; t : type<auto(TT)>) : array<TT -const -#> {
-    return <- query_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {})
-}
+def query(db : SqlRunner; sql : string; t : type<auto(TT)>) : array<TT -const -#> =>
+    <- query_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {})
 
 [unused_argument(t)]
 def query(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0)) : array<TT -const -#> {
@@ -1244,9 +1236,7 @@ def private txn_begin_sql(was_in_txn : bool; mode : SqliteTxnMode) : string {
     return "BEGIN"
 }
 
-def private txn_commit_sql(was_in_txn : bool) : string {
-    return was_in_txn ? "RELEASE das_sp" : "COMMIT"
-}
+def private txn_commit_sql(was_in_txn : bool) : string => was_in_txn ? "RELEASE das_sp" : "COMMIT"
 
 def private txn_best_effort_rollback(db : SqlRunner; was_in_txn : bool) : void {
     // Swallow rollback errors so the original failure reaches the caller intact.

@@ -17,39 +17,25 @@ struct P {
     b : int
 }
 
-def mk(x : int) : P {
-    return P(a = x + 1, b = x * 2)
-}
+def mk(x : int) : P => P(a = x + 1, b = x * 2)
 
-def vec(x : float) : float4 {
-    return float4(x, x + 1.0, x + 2.0, 1.0)
-}
+def vec(x : float) : float4 => float4(x, x + 1.0, x + 2.0, 1.0)
 
-def sq(a : int) : int {
-    return a * a
-}
+def sq(a : int) : int => a * a
 
-def addk(a : int; k : int) : int {
-    return a + k
-}
+def addk(a : int; k : int) : int => a + k
 
 // ExprField — user call as the object of a `.field` read (wrapped in ExprRef2Value)
 [flatten]
-def f_field(x : int) : int {
-    return mk(x).a + mk(x).b
-}
+def f_field(x : int) : int => mk(x).a + mk(x).b
 
 // ExprSwizzle — user call as the value of a `.xyz` swizzle
 [flatten]
-def f_swizzle(x : float) : float3 {
-    return vec(x).xyz
-}
+def f_swizzle(x : float) : float3 => vec(x).xyz
 
 // ExprMakeStruct — user call inside a returned struct field
 [flatten]
-def f_makestruct(x : int) : P {
-    return P(a = mk(x).b, b = mk(x).a)
-}
+def f_makestruct(x : int) : P => P(a = mk(x).b, b = mk(x).a)
 
 // ExprMakeTuple — user calls inside a tuple constructor, then tuple field access
 [flatten]
@@ -60,17 +46,13 @@ def f_tuple(x : int) : int {
 
 // nested: a call buried under swizzle + field + op together
 [flatten]
-def f_nested(x : float) : float {
-    return vec(x).x + vec(x * 2.0).y
-}
+def f_nested(x : float) : float => vec(x).x + vec(x * 2.0).y
 
 // inline_call argument is itself a user call — the argument must be lifted
 // (nested call inlined) BEFORE binding to the frame temp, else `sq(x)` survives
 // in `var __flat_arg = sq(x)` and the cycle-2 scan rejects the twin.
 [flatten]
-def f_arg_call(x : int) : int {
-    return addk(sq(x), sq(x + 1))
-}
+def f_arg_call(x : int) : int => addk(sq(x), sq(x + 1))
 
 var GRID <- [-7, -1, 0, 1, 3, 10, 42]
 

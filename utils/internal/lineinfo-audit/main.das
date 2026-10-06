@@ -47,9 +47,7 @@ struct Config {
 }
 
 
-def normalize_path(p : string) : string {
-    return normalize(p) |> replace("\\", "/")
-}
+def normalize_path(p : string) : string => normalize(p) |> replace("\\", "/")
 
 
 def has_expect_directive(file : string) : bool {
@@ -162,9 +160,7 @@ class AuditVisitor : AstVisitor {
             check = check, node = node, expected = expected, actual = actual))
     }
 
-    def line_of(l : int) : string {
-        return (l >= 1 && l <= length(src_lines)) ? src_lines[l - 1] : ""
-    }
+    def line_of(l : int) : string => (l >= 1 && l <= length(src_lines)) ? src_lines[l - 1] : ""
 
     // single-line slice [column, last_column); diagnostic tag when the
     // range itself is malformed

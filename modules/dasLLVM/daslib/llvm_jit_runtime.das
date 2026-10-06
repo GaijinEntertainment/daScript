@@ -58,9 +58,8 @@ def private define_str_cmp(name : string) : LLVMOpaqueValue? {
 }
 
 //! a field of the lock header Array and Table share, on the helper's first argument
-def private header(f : JIT_ARRAY) : Ir {
-    return field(arg(0), jit_struct_type(type<tuple<data : void?; size : int64; capacity : int64; magic : int; lock : int; flags : int>>), int(f))
-}
+def private header(f : JIT_ARRAY) : Ir =>
+    field(arg(0), jit_struct_type(type<tuple<data : void?; size : int64; capacity : int64; magic : int; lock : int; flags : int>>), int(f))
 
 //! array_lock / table_lock (runtime_array.cpp, runtime_table.cpp)
 def private define_lock(name, what : string) : LLVMOpaqueValue? {

@@ -55,9 +55,8 @@ def private catalog_entry_of(s : ModelSpec) : CatalogEntry {
 //! The serving catalog: a VIEW over `model_specs()` (the one model set) — rows carrying a
 //! `serve_name`. Every entry is commit-pinned + sha-canonical there; every one is
 //! load-tested on this engine before it ships.
-def public model_catalog() : array<CatalogEntry> {
-    return <- [for (s in model_specs()); catalog_entry_of(s); where !empty(s.serve_name)]
-}
+def public model_catalog() : array<CatalogEntry> =>
+    <- [for (s in model_specs()); catalog_entry_of(s); where !empty(s.serve_name)]
 
 //! The pure resolution core: env override > config key > `<dasllama home>/models`;
 //! no trailing separator. Split from the wrapper so every arm is testable without
@@ -75,9 +74,8 @@ def public catalog_models_dir_from(cfg_models_dir, env_override, dasllama_home :
 //! The SERVER's models-dir resolution: DASLLAMA_MODELS_DIR > the `models_dir` config key >
 //! `~/.dasllama/models` (USERPROFILE on Windows). Distinct from the rig/test resolution
 //! `models_dir_resolved()` (dasllama_env), whose fallback is the rig dir.
-def public catalog_models_dir(cfg_models_dir : string) : string {
-    return catalog_models_dir_from(cfg_models_dir, catalog_env_override(), dasllama_home_dir())
-}
+def public catalog_models_dir(cfg_models_dir : string) : string =>
+    catalog_models_dir_from(cfg_models_dir, catalog_env_override(), dasllama_home_dir())
 
 //! The env-rail override the resolution honours ("" = unset) — exposed so facade-only
 //! callers (main's boot announce, the tests) never touch g_env_* themselves.
@@ -137,9 +135,8 @@ struct private DlEvent {
     text : string      // failed: the reason
 }
 
-def public catalog_download_running() : bool {
-    return g_dl_state == "downloading" || g_dl_state == "verifying"
-}
+def public catalog_download_running() : bool =>
+    g_dl_state == "downloading" || g_dl_state == "verifying"
 
 //! Create the standing download-events channel (call from init_server, like the bake channel).
 def public catalog_events_init {
@@ -293,9 +290,8 @@ def private download_start_item(dir, id, file, url, want_sha : string; want_byte
 }
 
 //! Start downloading catalog entry `e` into `dir`. One at a time; "" on success, else the refusal.
-def public catalog_download_start(dir : string; e : CatalogEntry) : string {
-    return download_start_item(dir, e.name, e.file, e.url, e.sha256, e.bytes)
-}
+def public catalog_download_start(dir : string; e : CatalogEntry) : string =>
+    download_start_item(dir, e.name, e.file, e.url, e.sha256, e.bytes)
 
 //! Start downloading entry `e`'s vision tower (download id "vision:<name>"). "" on success.
 def public catalog_download_start_vision(dir : string; e : CatalogEntry) : string {

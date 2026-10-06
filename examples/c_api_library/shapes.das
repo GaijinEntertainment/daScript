@@ -10,15 +10,9 @@ struct Vec2 {
 }
 
 [export_c]
-def dot(a, b : Vec2) : float {
-    return a.x * b.x + a.y * b.y
-}
+def dot(a, b : Vec2) : float => a.x * b.x + a.y * b.y
 
 [export_c(name = "scaled")]
-def scale(v : Vec2; k : float) : Vec2 {
-    return Vec2(x = v.x * k, y = v.y * k)
-}
+def scale(v : Vec2; k : float) : Vec2 => Vec2(x = v.x * k, y = v.y * k)
 
-def length_squared(v : Vec2) : float {
-    return dot(v, v)
-}
+def length_squared(v : Vec2) : float => dot(v, v)

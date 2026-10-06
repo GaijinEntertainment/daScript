@@ -9,9 +9,7 @@ require strings
 require daslib/strings_boost
 
 // every string stored in the model must be cloned — pugixml accessors return pointers into the document, which dies at the open_xml block exit
-def private cs(s : string) : string {
-    return clone_string(s)
-}
+def private cs(s : string) : string => clone_string(s)
 
 //! One struct member or command parameter, as parsed from vk.xml mixed content.
 struct public VkMember {

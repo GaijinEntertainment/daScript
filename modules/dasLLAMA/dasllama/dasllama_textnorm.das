@@ -689,9 +689,8 @@ def private match_amount(c : array<int>; i : int) : int {
     return j
 }
 
-def private amount_words(raw : string) : string {
-    return find(raw, '.') >= 0 ? float_to_words(raw) : cardinal_words(raw)
-}
+def private amount_words(raw : string) : string =>
+    find(raw, '.') >= 0 ? float_to_words(raw) : cardinal_words(raw)
 
 def private plural(unit : string; count : int64) : string => count != 1l ? "{unit}s" : unit
 

@@ -20,13 +20,9 @@ require daslib/functional
 
 // === Helper functions ===
 
-def is_even(x : int) : bool {
-    return x % 2 == 0
-}
+def is_even(x : int) : bool => x % 2 == 0
 
-def add(a, b : int) : int {
-    return a + b
-}
+def add(a, b : int) : int => a + b
 
 // === filter — keep matching elements ===
 // filter takes an iterator and a lambda or function predicate.

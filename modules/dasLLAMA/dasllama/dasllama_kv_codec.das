@@ -408,19 +408,16 @@ def kv_row_to_f32(var d : float?; p : TQ4B const?; base, n : int64) {
 // int8×int8 kernel. Lets the flash-decode witness recompute scores exactly as the sliced path did.
 [unused_argument(qq, qs)]
 def kv_score(qp : float const?; qq : int8 const?; qs : float const?; kcp : float const?;
-             koff, qoff, head_size : int64) : float {
-    return kv_dot(unsafe(qp + qoff), unsafe(kcp + koff), head_size)
-}
+             koff, qoff, head_size : int64) : float =>
+                 kv_dot(unsafe(qp + qoff), unsafe(kcp + koff), head_size)
 [unused_argument(qq, qs)]
 def kv_score(qp : float const?; qq : int8 const?; qs : float const?; kcp : uint16 const?;
-             koff, qoff, head_size : int64) : float {
-    return kv_dot(unsafe(qp + qoff), unsafe(kcp + koff), head_size)
-}
+             koff, qoff, head_size : int64) : float =>
+                 kv_dot(unsafe(qp + qoff), unsafe(kcp + koff), head_size)
 [unused_argument(qp)]
 def kv_score(qp : float const?; qq : int8 const?; qs : float const?; kcp : uint8 const?;
-             koff, qoff, head_size : int64) : float {
-    return dot_q8q8kv(unsafe(qq + qoff), unsafe(qs + qoff / 32l), unsafe(kcp + koff), head_size)
-}
+             koff, qoff, head_size : int64) : float =>
+                 dot_q8q8kv(unsafe(qq + qoff), unsafe(qs + qoff / 32l), unsafe(kcp + koff), head_size)
 // tq4 K: same pre-quantized-query planes as q8_0 — the drivers fill them from the ROTATED query,
 // so the int8×int4 dot runs entirely in the rotated basis
 [unused_argument(qp)]

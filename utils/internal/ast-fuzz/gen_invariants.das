@@ -40,9 +40,7 @@ struct Config {
     help : bool
 }
 
-def read_text(path : string) : string {
-    return fread(path)
-}
+def read_text(path : string) : string => fread(path)
 
 def struct_name(line : string) : string {
     for (tok in split_by_chars(line, " \t")) {

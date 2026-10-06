@@ -132,9 +132,7 @@ def tile_to_char(t : Tile) : int {
     return TILE_CH[i]
 }
 
-def tile_from_int(i : int) : Tile {
-    return unsafe(reinterpret<Tile>(i))
-}
+def tile_from_int(i : int) : Tile => unsafe(reinterpret<Tile>(i))
 
 def char_to_tile(ch : int) : Tile {
     for (i in range(TILE_N)) {
@@ -145,13 +143,9 @@ def char_to_tile(ch : int) : Tile {
     return Tile.steel
 }
 
-def in_bounds(c : Cave; x, y : int) : bool {
-    return x >= 0 && y >= 0 && x < c.cols && y < c.rows
-}
+def in_bounds(c : Cave; x, y : int) : bool => x >= 0 && y >= 0 && x < c.cols && y < c.rows
 
-def cave_idx(c : Cave; x, y : int) : int {
-    return y * c.cols + x
-}
+def cave_idx(c : Cave; x, y : int) : int => y * c.cols + x
 
 def cave_at(c : Cave; x, y : int) : Tile {
     if (!in_bounds(c, x, y)) {
@@ -177,13 +171,11 @@ def cave_is_scanned(c : Cave; x, y : int) : bool {
     return c.scanned[cave_idx(c, x, y)]
 }
 
-def is_rounded(t : Tile) : bool {
-    return t == Tile.boulder || t == Tile.boulder_fall || t == Tile.diamond || t == Tile.diamond_fall || t == Tile.brick
-}
+def is_rounded(t : Tile) : bool =>
+    t == Tile.boulder || t == Tile.boulder_fall || t == Tile.diamond || t == Tile.diamond_fall || t == Tile.brick
 
-def is_fallable(t : Tile) : bool {
-    return t == Tile.boulder || t == Tile.boulder_fall || t == Tile.diamond || t == Tile.diamond_fall
-}
+def is_fallable(t : Tile) : bool =>
+    t == Tile.boulder || t == Tile.boulder_fall || t == Tile.diamond || t == Tile.diamond_fall
 
 def is_firefly(t : Tile) : bool {
     let i = int(t)
@@ -195,18 +187,14 @@ def is_butterfly(t : Tile) : bool {
     return i >= int(Tile.butterfly_u) && i <= int(Tile.butterfly_l)
 }
 
-def is_insect(t : Tile) : bool {
-    return is_firefly(t) || is_butterfly(t)
-}
+def is_insect(t : Tile) : bool => is_firefly(t) || is_butterfly(t)
 
 def is_explode(t : Tile) : bool {
     let i = int(t)
     return i >= int(Tile.explode0) && i <= int(Tile.dexplode2)
 }
 
-def is_gem_tile(t : Tile) : bool {
-    return t == Tile.diamond || t == Tile.diamond_fall
-}
+def is_gem_tile(t : Tile) : bool => t == Tile.diamond || t == Tile.diamond_fall
 
 def insect_dir(t : Tile) : int {
     if (is_firefly(t)) {
@@ -223,13 +211,9 @@ def insect_tile(fly : bool; dir : int) : Tile {
     return tile_from_int(int(Tile.butterfly_u) + d)
 }
 
-def falling_variant(gem : bool) : Tile {
-    return gem ? Tile.diamond_fall : Tile.boulder_fall
-}
+def falling_variant(gem : bool) : Tile => gem ? Tile.diamond_fall : Tile.boulder_fall
 
-def settled_variant(gem : bool) : Tile {
-    return gem ? Tile.diamond : Tile.boulder
-}
+def settled_variant(gem : bool) : Tile => gem ? Tile.diamond : Tile.boulder
 
 def make_cave(cols, rows : int) : Cave {
     var c <- Cave(cols = cols, rows = rows)
@@ -344,9 +328,7 @@ def add_mover(var c : Cave; fx, fy, tx, ty : int; t : Tile) {
     )
 }
 
-def moved_later(fx, fy, tx, ty : int) : bool {
-    return ty > fy || (ty == fy && tx > fx)
-}
+def moved_later(fx, fy, tx, ty : int) : bool => ty > fy || (ty == fy && tx > fx)
 
 def move_tile(var c : Cave; x, y, nx, ny : int; result : Tile) {
     cave_set(c, x, y, Tile.empty)

@@ -37,13 +37,9 @@ def tab_set_insert(var tab : table<int>; key : int) {
     __builtin_table_set_insert(tab, key)
 }
 
-def tab_find(var tab : table<int; string>; key : int) {
-    return __builtin_table_find(tab, key)
-}
+def tab_find(var tab : table<int; string>; key : int) => __builtin_table_find(tab, key)
 
-def tab_key_exist(var tab : table<int; string>; key : int) {
-    return __builtin_table_key_exists(tab, key)
-}
+def tab_key_exist(var tab : table<int; string>; key : int) => __builtin_table_key_exists(tab, key)
 
 [test]
 def test_table(t : T?) {

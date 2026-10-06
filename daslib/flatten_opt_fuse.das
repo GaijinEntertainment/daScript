@@ -669,9 +669,8 @@ def private has_unary_vec_overload(mod : Module?; fname : string; want : Type) :
     return found
 }
 
-def private float_vec_type(dim : int) : Type {
-    return dim == 2 ? Type.tFloat2 : (dim == 3 ? Type.tFloat3 : Type.tFloat4)
-}
+def private float_vec_type(dim : int) : Type =>
+    dim == 2 ? Type.tFloat2 : (dim == 3 ? Type.tFloat3 : Type.tFloat4)
 
 def private make_hadd_arg(var lanes : array<ExpressionPtr>; w : int; at : LineInfo; mod : Module?) : ExpressionPtr {
     let g = shared_elementwise_unary(lanes)

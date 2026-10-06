@@ -22,9 +22,8 @@ require math
 // Helper — generate a 1-second 440 Hz sine tone for reuse
 // ──────────────────────────────────────────────────────────────────────────
 
-def generate_tone() : array<float> {
-    return <- [for (x in range(MA_SAMPLE_RATE)); sin(2.0 * PI * 440.0 * float(x) / float(MA_SAMPLE_RATE))]
-}
+def generate_tone() : array<float> =>
+    <- [for (x in range(MA_SAMPLE_RATE)); sin(2.0 * PI * 440.0 * float(x) / float(MA_SAMPLE_RATE))]
 
 // ──────────────────────────────────────────────────────────────────────────
 // Section 1 — Instant volume changes

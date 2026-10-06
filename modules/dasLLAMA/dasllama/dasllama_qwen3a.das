@@ -662,15 +662,12 @@ struct Qwen3aAsrSession {
 //! The tower's precision half of the facade's [[asr_exec_fmt]] stamp (the decoder tag comes
 //! from the facade, which owns the shared LLM) - read off the LOADED tower, not the lane
 //! policy, which a `reset_qwen3a_q8` after the load moves out from under the stamp.
-def qwen3a_exec_fmt(t : Qwen3aTower; dec_fmt : string) : string {
-    return "{t.core.q8 ? "q8" : "f32"}/{dec_fmt}"
-}
+def qwen3a_exec_fmt(t : Qwen3aTower; dec_fmt : string) : string =>
+    "{t.core.q8 ? "q8" : "f32"}/{dec_fmt}"
 
 //! The family's encode-total ``asr_prof`` bucket (the facade's [[asr_encode_bucket]] arm):
 //! the ASR turn and the Omni chat turn time their encodes under different keys.
-def qwen3a_encode_bucket(omni : bool) : string {
-    return omni ? "q3o.encode" : "q3a.encode"
-}
+def qwen3a_encode_bucket(omni : bool) : string => omni ? "q3o.encode" : "q3a.encode"
 
 //! Qwen3-ASR self-detects the language (``languages`` empty) and takes context biasing via the
 //! session's ``context``; Qwen3-Omni is a chat model driven as a transcription turn — no prompt.

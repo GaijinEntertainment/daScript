@@ -12,9 +12,7 @@ def public px(pixels : array<uint8>; x, y : int) : int3 {
     return int3(int(pixels[p]), int(pixels[p + 1]), int(pixels[p + 2]))
 }
 
-def luminance(rgb : int3) : int {
-    return (rgb.x + rgb.y + rgb.z) / 3
-}
+def luminance(rgb : int3) : int => (rgb.x + rgb.y + rgb.z) / 3
 
 [test]
 def test_shadow_oracle(t : T?) {

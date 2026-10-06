@@ -372,13 +372,9 @@ struct CmdMove : Cmd {
     y : float
 }
 
-def operator is CmdMove(cmd : Cmd) {
-    return cmd.rtti == "CmdMove"
-}
+def operator is CmdMove(cmd : Cmd) => cmd.rtti == "CmdMove"
 
-def operator is CmdMove(anything) {
-    return false
-}
+def operator is CmdMove(anything) => false
 
 def operator as CmdMove(cmd : Cmd ==const) : CmdMove const& {
     assert(cmd.rtti == "CmdMove")

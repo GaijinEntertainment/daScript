@@ -2,21 +2,13 @@ options gen2
 options no_unused_function_arguments = false
 require dastest/testing_boost public
 
-def irc_logT(x : auto(numT)&) : string {
-    return typeinfo typename(type<numT>)
-}
+def irc_logT(x : auto(numT)&) : string => typeinfo typename(type<numT>)
 
-def irc_logTNoRef(x : auto(numT) -&) : string {
-    return typeinfo typename(type<numT>)
-}
+def irc_logTNoRef(x : auto(numT) -&) : string => typeinfo typename(type<numT>)
 
-def irc_logTNoRefNoConst(x : auto(numT) -const -&) : string {
-    return typeinfo typename(type<numT>)
-}
+def irc_logTNoRefNoConst(x : auto(numT) -const -&) : string => typeinfo typename(type<numT>)
 
-def irc_aliasLogT(x : auto(numT)&; y : numT) : string {
-    return typeinfo typename(type<numT>)
-}
+def irc_aliasLogT(x : auto(numT)&; y : numT) : string => typeinfo typename(type<numT>)
 
 def irc_aliasLogTNoRef(x : auto(numT); y : numT -&) : string {
     let _z : auto(passT) = y

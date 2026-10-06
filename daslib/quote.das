@@ -198,9 +198,7 @@ def private get_dst_type(src_tp : TypeDecl?; at : LineInfo) {
 }
 
 
-def private create_string_expr(name; at : LineInfo) {
-    return new ExprConstString(value := name, at = at);
-}
+def private create_string_expr(name; at : LineInfo) => new ExprConstString(value := name, at = at)
 
 def private fix_path_spelling(p : string) : string {
     var r = p |> replace("\\", "/")
@@ -300,9 +298,8 @@ def private is_quote_field_allowed(f_name, class_name, data) {
 
 }
 
-def private create_field_expr(name; var res_field; loc; flags) {
-    return new MakeFieldDecl(name := name, value = res_field, at := loc, flags = flags);
-}
+def private create_field_expr(name; var res_field; loc; flags) =>
+    new MakeFieldDecl(name := name, value = res_field, at := loc, flags = flags)
 
 def private convert_quote_struct_field(mod : Module?, data : uint8 const?,
                                        tstr : string, name : string,

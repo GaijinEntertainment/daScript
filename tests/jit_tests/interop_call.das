@@ -1,9 +1,7 @@
 options gen2
 require dastest/testing_boost
 
-def print_me(foo : int) {
-    return sprint(foo, print_flags.singleLine)
-}
+def print_me(foo : int) => sprint(foo, print_flags.singleLine)
 
 [test]
 def test_ref(t : T?) {

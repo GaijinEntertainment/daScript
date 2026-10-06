@@ -1,9 +1,7 @@
 options gen2
 require dastest/testing_boost
 
-def private apply_it(blk : block<(x : int) : int>) : int {
-    return invoke(blk, 1)
-}
+def private apply_it(blk : block<(x : int) : int>) : int => invoke(blk, 1)
 
 def scope_in_arm : int {
     return apply_it() $(x : int) : int {

@@ -152,9 +152,7 @@ def private do_bundle_sync(bundle_json : string) : string {
     return herd_http(true, "/api/v1/bundles/sync", body)
 }
 
-def private do_repository_list : string {
-    return herd_http(false, "/api/v1/repositories", "")
-}
+def private do_repository_list : string => herd_http(false, "/api/v1/repositories", "")
 
 def private do_repository_add(path, display_name : string) : string {
     if (empty(strip(path))) return make_tool_result("path is required", true)

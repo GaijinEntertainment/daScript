@@ -1,9 +1,7 @@
 options gen2
 require dastest/testing_boost
 
-def length_jit(a : string) {
-    return length(a)
-}
+def length_jit(a : string) => length(a)
 
 [test]
 def test_ref(t : T?) {

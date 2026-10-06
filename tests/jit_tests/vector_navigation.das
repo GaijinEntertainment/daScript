@@ -1,9 +1,7 @@
 options gen2
 require dastest/testing_boost
 
-def vec_at_r2v(vec; idx : int) {
-    return vec[idx]
-}
+def vec_at_r2v(vec; idx : int) => vec[idx]
 
 def check_vec2_at_r2v(t : T?; v : auto(vecT); a1, a2 : auto(argT)) {
     t |> success(!jit_enabled() || is_jit_function(@@ < (vec : vecT; idx : int) : argT > vec_at_r2v))

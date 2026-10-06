@@ -18,17 +18,11 @@ require dap_bridge
 //! stepping debugger; the frame parser's limits; the resume-command mapping; and the debugger
 //! fixtures that must run clean on their own.
 
-def private das_exe() : string {
-    return get_full_file_name(get_das_exe())
-}
+def private das_exe() : string => get_full_file_name(get_das_exe())
 
-def private root() : string {
-    return get_full_file_name(get_das_root())
-}
+def private root() : string => get_full_file_name(get_das_root())
 
-def private fixture(name : string) : string {
-    return path_join(root(), "utils/dap/{name}")
-}
+def private fixture(name : string) : string => path_join(root(), "utils/dap/{name}")
 
 def private source_line(path, needle : string) : int {
     var line = 0
@@ -39,9 +33,7 @@ def private source_line(path, needle : string) : int {
     return -1
 }
 
-def private free_port() : int {
-    return probe_local_port("127.0.0.1", 0)
-}
+def private free_port() : int => probe_local_port("127.0.0.1", 0)
 
 // ===== the MCP client over the pipe =====
 
@@ -133,9 +125,7 @@ def private has_line(lines : JsonValue?; needle : string) : bool {
     return false
 }
 
-def private stepping_args(stepping : bool) : string {
-    return stepping ? ",\"stepping_debugger\":true" : ""
-}
+def private stepping_args(stepping : bool) : string => stepping ? ",\"stepping_debugger\":true" : ""
 
 def private launch_external(port : int; stepping : bool) : process {
     var argv <- [das_exe(), "--das-wait-debugger", fixture("_fixture.das"), "--", "--das-debug-port", "{port}"]
@@ -308,9 +298,8 @@ def test_execution_command_mapping(t : T?) {
 
 // ===== the session =====
 
-def private bridge_argv() : array<string> {
-    return [das_exe(), path_join(root(), "utils/dap/main.das"), "--", "--repo-root", root(), "--executable", das_exe()]
-}
+def private bridge_argv() : array<string> =>
+    [das_exe(), path_join(root(), "utils/dap/main.das"), "--", "--repo-root", root(), "--executable", das_exe()]
 
 //! launches `file`, arms `lines`, and returns the line of the first stop
 def private first_stop_line(t : T?; var m : Mcp&; file : string; lines : string; optimize, stepping : bool) : int {

@@ -133,9 +133,8 @@ struct private PlaybackTime {
 }
 
 [arch(at="../ARCHITECTURE.md#strudel-worker-backpressure")]
-def private strudel_buffered_frames(st : AudioChannelStatus) : uint64 {
-    return max(st.stream_queued_frames, g_diagnostics.generated_frames > st.consumed_position ? g_diagnostics.generated_frames - st.consumed_position : 0ul)
-}
+def private strudel_buffered_frames(st : AudioChannelStatus) : uint64 =>
+    max(st.stream_queued_frames, g_diagnostics.generated_frames > st.consumed_position ? g_diagnostics.generated_frames - st.consumed_position : 0ul)
 def public strudel_get_diagnostics() : StrudelDiagnostics {
     //! Returns a read-only producer/consumer telemetry snapshot; threaded playback reads it from the separate diagnostics ``SeqBox``.
     var result = g_diagnostics

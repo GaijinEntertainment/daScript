@@ -244,9 +244,7 @@ def register_prefill_override_split_span(name : string) {
     g_prefill_split_span[name] = true
 }
 
-def active_prefill_splits_span : bool {
-    return g_prefill_split_span?[g_prefill_override_name] ?? false
-}
+def active_prefill_splits_span : bool => g_prefill_split_span?[g_prefill_override_name] ?? false
 
 //! Registered beside the override: `true` = this override ropes from the session's per-row
 //! cos/sin tables, so an mrope quantum's grid map reaches it through `prefill_rope_tables`.
@@ -255,9 +253,7 @@ def register_prefill_override_mrope_tables(name : string) {
     g_prefill_mrope_tables[name] = true
 }
 
-def active_prefill_serves_mrope : bool {
-    return g_prefill_mrope_tables?[g_prefill_override_name] ?? false
-}
+def active_prefill_serves_mrope : bool => g_prefill_mrope_tables?[g_prefill_override_name] ?? false
 
 //! Registered beside the override: `true` = this override performs the deepstack per-layer
 //! slice adds (Session.ds_embd). Unregistered overrides decline ds quanta to the CPU loop.
@@ -265,9 +261,7 @@ def register_prefill_override_ds_adds(name : string) {
     g_prefill_ds_adds[name] = true
 }
 
-def active_prefill_serves_ds : bool {
-    return g_prefill_ds_adds?[g_prefill_override_name] ?? false
-}
+def active_prefill_serves_ds : bool => g_prefill_ds_adds?[g_prefill_override_name] ?? false
 
 //! Activate a registered whole-prefill override by name ("" deactivates). false = unknown name.
 def select_prefill_override(name : string) : bool {
@@ -284,9 +278,7 @@ def select_prefill_override(name : string) : bool {
     return true
 }
 
-def active_prefill_override : string {
-    return g_prefill_override_name
-}
+def active_prefill_override : string => g_prefill_override_name
 
 //! The GPU-PLE pre-step gates, one per direction: a prefill override that builds the E-series PLE
 //! side input on device registers the prefill gate, a decode override that gathers the token's row
@@ -580,9 +572,7 @@ def penalties_off(p : SamplingParams) : bool {
 
 //! A sampler that is a bare argmax: temperature at or below zero and no penalty - the only sampler
 //! whose pick equals the raw argmax the greedy accept walk compares.
-def sampler_is_argmax(p : SamplingParams) : bool {
-    return p.temp <= 0.0 && penalties_off(p)
-}
+def sampler_is_argmax(p : SamplingParams) : bool => p.temp <= 0.0 && penalties_off(p)
 
 //! Whether a round's accept walk goes through the caller's sampler: one is pointed at, the row
 //! sampler is installed, and the sampler is not a bare argmax (a penalized greedy sampler picks a
@@ -702,9 +692,7 @@ def register_metal_servable(fn : MetalServableFn) {
     g_metal_servable_set = true
 }
 
-def metal_model_servable(t : Model) : bool {
-    return g_metal_servable_set && invoke(g_metal_servable, t)
-}
+def metal_model_servable(t : Model) : bool => g_metal_servable_set && invoke(g_metal_servable, t)
 
 // ===== disk->compute layout hooks (registered by dasllama_layout at [init]) =====
 
@@ -915,19 +903,14 @@ def batch_same_slab() : bool => g_batch_same_slab
 
 def batch_decode_override_armed() : bool => !empty(g_batch_decode_override_name)
 
-def batch_decode_override_invoke(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
-    return invoke(g_batch_decode_override, t, ws, sessions, nrows)
-}
+def batch_decode_override_invoke(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool =>
+    invoke(g_batch_decode_override, t, ws, sessions, nrows)
 
-def active_decode_override : string {
-    return g_decode_override_name
-}
+def active_decode_override : string => g_decode_override_name
 
 //! Is a whole-prefill/decode override registered under `name`? (Apple builds register "metal"
 //! at [init]; other platforms have none.)
-def has_prefill_override(name : string) : bool {
-    return key_exists(g_prefill_overrides, name)
-}
+def has_prefill_override(name : string) : bool => key_exists(g_prefill_overrides, name)
 
 // CPU batched prefill above this length on a Metal-capable build is a measurement hazard, not a
 // serving path — days of profiling time went to tools silently CPU-prefilling. forward_prefill_body
@@ -968,9 +951,7 @@ def blob_only_panic(t : Model; what : string) {
     }
 }
 
-def has_decode_override(name : string) : bool {
-    return key_exists(g_decode_overrides, name)
-}
+def has_decode_override(name : string) : bool => key_exists(g_decode_overrides, name)
 
 //! How the Metal pipeline engages — ONE knob for all three GPU paths (prefill, single-stream
 //! decode, batched decode).
@@ -1006,9 +987,7 @@ def set_metal_mode(mode : MetalMode) {
     g_metal_mode = mode
 }
 
-def get_metal_mode : MetalMode {
-    return g_metal_mode
-}
+def get_metal_mode : MetalMode => g_metal_mode
 
 // set by an override that ALSO produced this position's logits; reset before every invocation
 var private g_decode_logits_done = false
@@ -1366,9 +1345,7 @@ struct Model {
 // and no carrier needs a second field: a miss means "mapping".
 var private g_image_chunks : table<uint64; array<uint8>>
 
-def private ptr_key(p : void?) : uint64 {
-    return unsafe(reinterpret<uint64>(p))
-}
+def private ptr_key(p : void?) : uint64 => unsafe(reinterpret<uint64>(p))
 
 //! Allocate an image chunk of `bytes`, its base aligned to `align` — the in-memory twin of
 //! ``fmap_open``. Uninitialized by design: a multi-GB image is fully overwritten by the build
@@ -1633,14 +1610,10 @@ def register_arch(name : string; var desc : ArchDesc) {
 }
 
 //! Is `name` a registered architecture?
-def has_arch(name : string) : bool {
-    return key_exists(g_arch_registry, name)
-}
+def has_arch(name : string) : bool => key_exists(g_arch_registry, name)
 
 //! The registered architecture names (for diagnostics / tests).
-def arch_names() : array<string> {
-    return <- [for (k in keys(g_arch_registry)); k]
-}
+def arch_names() : array<string> => <- [for (k in keys(g_arch_registry)); k]
 
 //! A clone of `name`'s chat template (the chat layer / tests consume this).
 def arch_chat(name : string) : ChatTemplate {
@@ -1650,14 +1623,11 @@ def arch_chat(name : string) : ChatTemplate {
 }
 
 //! `name`'s declared LLM capabilities (see LlmCaps).
-def arch_lcaps(name : string) : LlmCaps {
-    return key_exists(g_arch_registry, name) ? g_arch_registry[name].lcaps : LlmCaps()
-}
+def arch_lcaps(name : string) : LlmCaps =>
+    key_exists(g_arch_registry, name) ? g_arch_registry[name].lcaps : LlmCaps()
 
 //! The loaded model's declared LLM capabilities (its arch registration's LlmCaps).
-def caps_(m : Model) : LlmCaps {
-    return arch_lcaps(m.arch)
-}
+def caps_(m : Model) : LlmCaps => arch_lcaps(m.arch)
 
 // Look the arch up, apply its config flags, and copy its (copyable) block kernels onto the model.
 // The full descriptor stays in the registry; only the hot-path pointers ride on the Model.
@@ -1691,9 +1661,7 @@ var g_wscale_f16 = true
 def public set_wscale_f16(on : bool) {
     g_wscale_f16 = on
 }
-def public get_wscale_f16() : bool {
-    return g_wscale_f16
-}
+def public get_wscale_f16() : bool => g_wscale_f16
 
 // Two error rails for unsupported model/quant combos at load: API-facing tools (probes,
 // harnesses, benchmarks) fail loud — panic with the exact reason. A user-facing server opts
@@ -1704,9 +1672,7 @@ var private g_resilient_load = false
 def public set_resilient_load(on : bool) {
     g_resilient_load = on
 }
-def public get_resilient_load() : bool {
-    return g_resilient_load
-}
+def public get_resilient_load() : bool => g_resilient_load
 
 // Native K-quant weight planes: Q4_K/Q5_K/Q6_K tensors stay packed in per-format planes instead of
 // requantizing to Q8. Default ON since the kernel tier landed; OFF loads through the q8-requant
@@ -1728,9 +1694,7 @@ var private g_box_profile_runtime_applied = false
 var private g_box_profile_runtime_declined = ""
 
 //! True once a sidecar's runtime section was applied in this process.
-def public box_profile_runtime_applied() : bool {
-    return g_box_profile_runtime_applied
-}
+def public box_profile_runtime_applied() : bool => g_box_profile_runtime_applied
 
 // the race that mints a missing runtime section in place (a fat exe's first start); it writes
 // the app sidecar and answers true, and the checked apply then reads the file it wrote
@@ -1746,9 +1710,7 @@ def public set_runtime_race_hook(hook : function<() : bool>) : function<() : boo
     return old
 }
 
-def private runtime_race_writes() : bool {
-    return g_runtime_race_armed && invoke(g_runtime_race_hook)
-}
+def private runtime_race_writes() : bool => g_runtime_race_armed && invoke(g_runtime_race_hook)
 
 var private g_sidecar_place_hook : function<() : void>
 
@@ -1763,9 +1725,7 @@ def public set_sidecar_place_hook(hook : function<() : void>) : function<() : vo
 
 //! Why the checked apply declined the box sidecar - the `TuneSidecarReason` name, "" when it
 //! did not decline (or was never asked).
-def public box_profile_runtime_declined() : string {
-    return g_box_profile_runtime_declined
-}
+def public box_profile_runtime_declined() : string => g_box_profile_runtime_declined
 
 //! The default (no path) route checks the sidecar's standing; an explicit path applies as given.
 def apply_box_profile_runtime(path : string = "") {
@@ -1909,9 +1869,7 @@ def apply_box_profile_runtime_at(ppath : string) {   // nolint:STYLE038 — a fl
 def public set_kquant_native(on : bool) {
     g_kquant_native = on
 }
-def public get_kquant_native() : bool {
-    return g_kquant_native
-}
+def public get_kquant_native() : bool => g_kquant_native
 
 // The q40 tier's bring-up knob (like kquant_native had): OFF keeps Q4_0 tensors on the
 // q8-requant fallback (2x memory, exact) — the zero-risk A/B rail while the tier proves out.
@@ -1922,9 +1880,7 @@ var private g_kq_q40_native = true
 def public set_kq_q40_native(on : bool) {
     g_kq_q40_native = on
 }
-def public get_kq_q40_native() : bool {
-    return g_kq_q40_native
-}
+def public get_kq_q40_native() : bool => g_kq_q40_native
 
 // Q5_0 -> k5 re-encode knob. Unlike the other tags this one is NOT a relabel: Q5_0 has no exact
 // Q5_K embedding, so the load re-quantizes (measured +0.031 rel-rmse on GLM's ffn_down) to buy
@@ -1936,9 +1892,7 @@ var private g_kq_q50_native = false
 def public set_kq_q50_native(on : bool) {
     g_kq_q50_native = on
 }
-def public get_kq_q50_native() : bool {
-    return g_kq_q50_native
-}
+def public get_kq_q50_native() : bool => g_kq_q50_native
 
 // The q51 tier's bring-up knob: OFF keeps Q5_1 tensors on the q8-requant fallback (~1.4x expert
 // memory, exact) — the zero-risk A/B rail while the tier proves out.
@@ -1949,9 +1903,7 @@ var private g_kq_q51_native = true
 def public set_kq_q51_native(on : bool) {
     g_kq_q51_native = on
 }
-def public get_kq_q51_native() : bool {
-    return g_kq_q51_native
-}
+def public get_kq_q51_native() : bool => g_kq_q51_native
 
 //! Whether an IQ3_S weight loads as the iq3s4 served form (DASLLAMA_IQ3S_SERVE): `lut` / `grid` decide
 //! outright; `auto` = the LUT form wherever the rails that serve the load decode it - the CPU rails and the
@@ -2092,19 +2044,16 @@ def kq_fmt_expert_ok(f : KqFmt; n : int64) : KqFmt {
 }
 
 // Any K-quant-tagged expert stack in layer `l`? (The MoE dispatch and prefill gates branch on this.)
-def moe_layer_kq(t : Model; l : int64) : bool {
-    return fmt_at(t.we1_fmt, l) != KqFmt.q8 || fmt_at(t.we2_fmt, l) != KqFmt.q8 || fmt_at(t.we3_fmt, l) != KqFmt.q8
-}
+def moe_layer_kq(t : Model; l : int64) : bool =>
+    fmt_at(t.we1_fmt, l) != KqFmt.q8 || fmt_at(t.we2_fmt, l) != KqFmt.q8 || fmt_at(t.we3_fmt, l) != KqFmt.q8
 
-def dn_layer_q8(t : Model; l : int64) : bool {
-    return fmt_at(t.dnqkv_fmt, l) == KqFmt.q8 && fmt_at(t.dngate_fmt, l) == KqFmt.q8 && fmt_at(t.dnout_fmt, l) == KqFmt.q8
-}
+def dn_layer_q8(t : Model; l : int64) : bool =>
+    fmt_at(t.dnqkv_fmt, l) == KqFmt.q8 && fmt_at(t.dngate_fmt, l) == KqFmt.q8 && fmt_at(t.dnout_fmt, l) == KqFmt.q8
 
 // Any expert stack on the SUPERBLOCK kq lattice? (q51 excluded — its grouped-prefill kernels are
 // always available, so it never gates on kq_repacked / the kq batch tile.)
-def moe_layer_sb_kq(t : Model; l : int64) : bool {
-    return kq_sb(fmt_at(t.we1_fmt, l)) || kq_sb(fmt_at(t.we2_fmt, l)) || kq_sb(fmt_at(t.we3_fmt, l))
-}
+def moe_layer_sb_kq(t : Model; l : int64) : bool =>
+    kq_sb(fmt_at(t.we1_fmt, l)) || kq_sb(fmt_at(t.we2_fmt, l)) || kq_sb(fmt_at(t.we3_fmt, l))
 
 // Convert the (already repacked/permuted) f32 scale plane to raw binary16 halfwords and free the
 // f32 plane. f16->f32->f16 round-trips exactly for gguf-Q8 tensors (bit-identical dots);
@@ -2171,9 +2120,7 @@ var private g_weights_epoch = 0l
 //! Monotonic count of model loads this process. Weight caches keyed by HOST ADDRESS flush when it
 //! moves — a new load can land arrays at a deleted model's recycled addresses, and an address-keyed
 //! cache would silently serve the dead model's buffers.
-def public weights_epoch() : int64 {
-    return g_weights_epoch
-}
+def public weights_epoch() : int64 => g_weights_epoch
 
 // the push half of the contract: caches don't poll for staleness (a poll is a call every
 // consumer must remember), the bump invokes them — dasllama_metal_common subscribes its drop
@@ -2830,9 +2777,8 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
 //! Create a fresh session (KV cache + scratch) sized to `model`. A model serves many sessions,
 //! each with its own position and cache — so one model drives many independent conversations.
 //! `kdt`/`vdt` pick this session's KV-cache codec (per-session state, no globals).
-def create_session_(model : Model; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDtype.f32) : Session {
-    return <- make_run_state(model.config, kdt, vdt)
-}
+def create_session_(model : Model; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDtype.f32) : Session =>
+    <- make_run_state(model.config, kdt, vdt)
 
 //! Create a DEVICE-HOME session: scratch and no host cache - its K/V lives only in the armed GPU driver's mirror
 //! region, so nothing crosses the bus per token and nothing is allocated per request. The caller holds as many live
@@ -2864,9 +2810,8 @@ def make_run_state_paged(c : Config; var pool : KVPool) : Session {
 }
 
 //! `create_session_`'s paged twin — see make_run_state_paged / create_kv_pool_.
-def create_session_(model : Model; var pool : KVPool) : Session {
-    return <- make_run_state_paged(model.config, pool)
-}
+def create_session_(model : Model; var pool : KVPool) : Session =>
+    <- make_run_state_paged(model.config, pool)
 
 //! THE eval primitive: run `tokens` at the session's current position and advance it. Prefill =
 //! eval(prompt); each step = eval([token]) — same call, different batch size. Logits → `s.logits`.
@@ -2893,9 +2838,7 @@ def public set_metal_tensor_crowns(list : string) {
     }
 }
 
-def public metal_tensor_crowned(family : string) : bool {
-    return key_exists(g_tensor_crowns, family)
-}
+def public metal_tensor_crowned(family : string) : bool => key_exists(g_tensor_crowns, family)
 
 //! The comma-list form of the current crowns — what a cell captures to restore on exit.
 def public get_metal_tensor_crowns : string {
@@ -2957,29 +2900,20 @@ def public set_metal_cvt_min_rows(v : int64) {
 def public metal_cvt_min_rows : int64 => g_metal_cvt_min_rows
 
 //! Encode text to token ids using the model's tokenizer.
-def encode_(m : Model; text : string; add_special = true; parse_special = false) : array<int64> {
-    return <- encode(m.tok, text, add_special, parse_special)
-}
+def encode_(m : Model; text : string; add_special = true; parse_special = false) : array<int64> =>
+    <- encode(m.tok, text, add_special, parse_special)
 
 //! Decode a full id sequence to text using the model's tokenizer.
-def decode_(m : Model; ids : array<int64>) : string {
-    return decode(m.tok, ids)
-}
+def decode_(m : Model; ids : array<int64>) : string => decode(m.tok, ids)
 
 //! Decode a single token to text (streaming) using the model's tokenizer.
-def piece_(m : Model; id : int64) : string {
-    return piece(m.tok, id)
-}
+def piece_(m : Model; id : int64) : string => piece(m.tok, id)
 
 //! Resolve a special-token id by its surface form (chat templates reference these by spelling).
-def special_id(m : Model; name : string) : int64 {
-    return special_id(m.tok, name)
-}
+def special_id(m : Model; name : string) : int64 => special_id(m.tok, name)
 
 //! The model's BOS token id (per the tokenizer metadata).
-def bos_id(m : Model) : int64 {
-    return bos_id(m.tok)
-}
+def bos_id(m : Model) : int64 => bos_id(m.tok)
 
 // fp32 matmul with the weight at element offset `woff` in the big-weight blob (blob+offset kernel
 // form — array_view's block invoke is an LLVM optimization boundary, and the kernel only ever
@@ -4273,9 +4207,7 @@ def kq_plane_s(t : Model; fmt : KqFmt; woff : int64) : uint8 const? {
     return unsafe(addr<uint8 const?>(t.kq[int(fmt)].s[(woff / 256l) * kq_ssb(fmt)]))
 }
 
-def kq_rows_for(fmt : KqFmt) : MatmulKqRowsFn {
-    return kq_rows_fn(kq_fi(fmt))
-}
+def kq_rows_for(fmt : KqFmt) : MatmulKqRowsFn => kq_rows_fn(kq_fi(fmt))
 
 // Can the fused chains serve a weight of this format? q8 always; superblock kq only off a
 // repacked load (the backend rows cores read the grp layout). q51 NEVER — no chain/rows arms.
@@ -5706,9 +5638,7 @@ def set_prefill_attn_mode(m : AttnPrefillMode) {
 }
 
 //! The prefill attention algorithm currently selected.
-def get_prefill_attn_mode() : AttnPrefillMode {
-    return g_attn_prefill_mode
-}
+def get_prefill_attn_mode() : AttnPrefillMode => g_attn_prefill_mode
 
 var g_dn_prefill_mode = DnPrefillMode.chunked   // A/B toggle; see DnPrefillMode (chunked is fastest)
 
@@ -5718,9 +5648,7 @@ def set_deltanet_prefill_mode(m : DnPrefillMode) {
 }
 
 //! The deltanet prefill algorithm currently selected.
-def get_deltanet_prefill_mode() : DnPrefillMode {
-    return g_dn_prefill_mode
-}
+def get_deltanet_prefill_mode() : DnPrefillMode => g_dn_prefill_mode
 
 // Fused decode chains: ONE multi-stage team dispatch per attention block and per dense-FFN block
 // instead of one per matmul — team_parallel_stages replaces the per-op rendezvous with worker-side
@@ -5735,9 +5663,7 @@ def set_fused_decode(on : bool) {
 }
 
 //! Whether decode uses the fused per-block stage chains.
-def get_fused_decode() : bool {
-    return g_fused_decode
-}
+def get_fused_decode() : bool => g_fused_decode
 
 // test-only witness rail for the flash-decode slicing (see attention_chain_decode): when on,
 // every sliced layer recomputes exact single-pass attention from the raw scores and panics past
@@ -5752,9 +5678,7 @@ def set_flash_decode_check(on : bool) {
 }
 
 //! Sliced-attention layers checked since set_flash_decode_check(true).
-def get_flash_decode_check_count() : int {
-    return g_flash_decode_checked
-}
+def get_flash_decode_check_count() : int => g_flash_decode_checked
 
 // Prefill RoPE: when true (default) precompute the cos/sin table once per prefill and look it up;
 // when false fall back to the classic per-position pow/cos/sin path. A/B toggle for benchmarking
@@ -5767,9 +5691,7 @@ def set_rope_table_mode(on : bool) {
 }
 
 //! Whether prefill RoPE uses the precomputed cos/sin table.
-def get_rope_table_mode() : bool {
-    return g_use_rope_table
-}
+def get_rope_table_mode() : bool => g_use_rope_table
 
 // FFN gate activation: when true (default) use the vectorized exp4 fused kernels (swiglu4/geglu4,
 // ~2 ulp, non-bit-exact); when false the scalar libm swiglu/geglu (bit-exact reference). The oracle
@@ -5783,9 +5705,7 @@ def set_act_vec(on : bool) {
 }
 
 //! Whether the FFN gate uses the vectorized exp4 kernels.
-def get_act_vec() : bool {
-    return g_act_vec
-}
+def get_act_vec() : bool => g_act_vec
 
 // Grouped MoE prefill: when true (default) bucket positions by selected expert and run one batched
 // GEMM per touched expert; when false fall back to the per-position reference path. A/B toggle for
@@ -5810,9 +5730,7 @@ def set_moe_fused_expert_gemms(on : bool) {
 }
 
 //! Whether the MoE prefill uses the grouped expert-bucketed path.
-def get_moe_grouped_prefill() : bool {
-    return g_moe_grouped_prefill
-}
+def get_moe_grouped_prefill() : bool => g_moe_grouped_prefill
 
 var g_forward_prof_acc : table<string; int64>
 
@@ -5879,9 +5797,7 @@ def prof_add(name : string; t0 : int64) {   // nolint:LINT012,LINT019 — args o
 }
 
 //! The accumulated time (us) for one section since the last reset (0 if the section never ran).
-def forward_profile_get(name : string) : int64 {
-    return g_forward_prof_acc?[name] ?? 0l
-}
+def forward_profile_get(name : string) : int64 => g_forward_prof_acc?[name] ?? 0l
 
 //! Print the accumulated per-section times (us) since the last reset.
 def forward_profile_report() {
@@ -5965,15 +5881,9 @@ def generate(t : Model; var s : Session; prompt_tokens : array<int64>; steps : i
 //! Chat-template part builders (for arch registration + the chat engine). `chat_text` is literal
 //! text; `chat_special` is a special-token spelling the renderer resolves to an id; `chat_content`
 //! is the slot the message text fills.
-def chat_text(s : string) : ChatPart {
-    return ChatPart(kind = ChatPartKind.text, s = s)
-}
-def chat_special(s : string) : ChatPart {
-    return ChatPart(kind = ChatPartKind.special, s = s)
-}
-def chat_content() : ChatPart {
-    return ChatPart(kind = ChatPartKind.content, s = "")
-}
+def chat_text(s : string) : ChatPart => ChatPart(kind = ChatPartKind.text, s = s)
+def chat_special(s : string) : ChatPart => ChatPart(kind = ChatPartKind.special, s = s)
+def chat_content() : ChatPart => ChatPart(kind = ChatPartKind.content, s = "")
 
 //! Install the ChatML turns every ``<|im_start|>`` GGUF maps to, including empty-think suppression.
 //! Template resolution removes unsupported reasoning forms; suppression also requires the think

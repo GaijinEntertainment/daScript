@@ -18,9 +18,8 @@ require math
 def pad2(v : int64) => v < 10l ? "0{v}" : "{v}"
 
 // centiseconds -> hh:mm:ss.cc (whisper-cli's timestamp shape)
-def fmt_ts(cs : int64) : string {
-    return "{pad2(cs / 360000l)}:{pad2(cs / 6000l % 60l)}:{pad2(cs / 100l % 60l)}.{pad2(cs % 100l)}"
-}
+def fmt_ts(cs : int64) : string =>
+    "{pad2(cs / 360000l)}:{pad2(cs / 6000l % 60l)}:{pad2(cs / 100l % 60l)}.{pad2(cs % 100l)}"
 
 [export]
 def main {

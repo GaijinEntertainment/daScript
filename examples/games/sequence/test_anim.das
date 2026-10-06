@@ -25,9 +25,7 @@ def chip_remove_scale(t : float) : float {
     }
 }
 
-def chip_remove_alpha(t : float) : float {
-    return 1.0 - clamp(t, 0.0, 1.0)
-}
+def chip_remove_alpha(t : float) : float => 1.0 - clamp(t, 0.0, 1.0)
 
 [test]
 def test_chip_place_scale(t : T?) {

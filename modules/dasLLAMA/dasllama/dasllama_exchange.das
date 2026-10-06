@@ -350,9 +350,8 @@ def private sidecar_sibling_path(manifest : string; ext : string) : string {
 // the sidecar-sibling consent file: "accepted" / "declined", one word. An explicit exchange
 // config (any exchange_* key, TOML or env) is itself consent, so the file only governs the
 // zero-config default path.
-def private exchange_consent_path() : string {
-    return sidecar_sibling_path(tune_manifest_path(), "consent")
-}
+def private exchange_consent_path() : string =>
+    sidecar_sibling_path(tune_manifest_path(), "consent")
 
 //! The recorded first-contact choice: "accepted" | "declined" | "" (never asked).
 def exchange_consent_status() : string {
@@ -507,9 +506,8 @@ def private exchange_scope_resolver(scope_name : string; manifest_path : string;
 // ===== the submit half =====
 
 // the sidecar-sibling state file remembering what this box already shared
-def private exchange_state_path(manifest : string) : string {
-    return sidecar_sibling_path(manifest, "exchange.json")
-}
+def private exchange_state_path(manifest : string) : string =>
+    sidecar_sibling_path(manifest, "exchange.json")
 
 def private state_submitted_for(manifest : string) : string {
     let text = fread(exchange_state_path(manifest))

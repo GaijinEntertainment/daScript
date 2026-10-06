@@ -134,9 +134,8 @@ def private teacher_logits(t : Model; nb, nsteps : int64; feeds : array<int64>; 
     return <- out
 }
 
-def private truth_path(prefix : string; nb, nsteps : int64) : string {
-    return "{prefix}.b{nb}.n{nsteps}.tsv"
-}
+def private truth_path(prefix : string; nb, nsteps : int64) : string =>
+    "{prefix}.b{nb}.n{nsteps}.tsv"
 
 def private save_truth(path : string; feeds : array<int64>; logits : array<float>) {
     fopen(path, "wb") $(f) {

@@ -195,9 +195,8 @@ def mark_pools_scratch(var sched : Scheduler) {
 }
 
 // Convert wall-clock time to cycle position.
-def private current_cycle(sched : Scheduler; wall_time : double) : double {
-    return (wall_time - sched.startTime) * sched.cps
-}
+def private current_cycle(sched : Scheduler; wall_time : double) : double =>
+    (wall_time - sched.startTime) * sched.cps
 
 //! Same contract as `mark_pools_scratch`, for one orbit bus's send/return buffers.
 [unsafe_operation]

@@ -1,9 +1,7 @@
 options gen2
 require dastest/testing_boost
 
-def abc_jit(a : int; b : float; c : string) {
-    return "a = {a} b = {b} c = {c}"
-}
+def abc_jit(a : int; b : float; c : string) => "a = {a} b = {b} c = {c}"
 
 [test]
 def test_ref(t : T?) {

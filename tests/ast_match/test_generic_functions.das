@@ -12,14 +12,10 @@ require dastest/testing_boost public
 // ── Generic functions ────────────────────────────────────────────────────
 
 [sideeffects]
-def generic_add(a, b : auto) : auto {
-    return a + b
-}
+def generic_add(a, b : auto) : auto => a + b
 
 [sideeffects]
-def generic_identity(x : auto) : auto {
-    return x
-}
+def generic_identity(x : auto) : auto => x
 
 [sideeffects]
 def generic_branch(a : auto; threshold : int) : auto {
@@ -33,24 +29,16 @@ def generic_branch(a : auto; threshold : int) : auto {
 // ── Target functions that call generics ──────────────────────────────────
 
 [export, marker(no_coverage)]
-def target_add_int(a, b : int) : int {
-    return generic_add(a, b)
-}
+def target_add_int(a, b : int) : int => generic_add(a, b)
 
 [export, marker(no_coverage)]
-def target_add_float(a, b : float) : float {
-    return generic_add(a, b)
-}
+def target_add_float(a, b : float) : float => generic_add(a, b)
 
 [export, marker(no_coverage)]
-def target_identity(x : int) : int {
-    return generic_identity(x)
-}
+def target_identity(x : int) : int => generic_identity(x)
 
 [export, marker(no_coverage)]
-def target_branch(a : int; threshold : int) : int {
-    return generic_branch(a, threshold)
-}
+def target_branch(a : int; threshold : int) : int => generic_branch(a, threshold)
 
 // ── Tests ────────────────────────────────────────────────────────────────
 

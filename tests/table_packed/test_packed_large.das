@@ -10,9 +10,7 @@ require dastest/testing_boost
 
 // Distinct-pointer string key (fresh each call) so queries differ from the stored pointers,
 // forcing a real KeyCompare on the large-table string path.
-def dkey(i : int) : string {
-    return "key_{i}"
-}
+def dkey(i : int) : string => "key_{i}"
 
 def sorted_int_keys(tab : table<int; int>) : array<int> {
     var got <- [for (k in keys(tab)); k]

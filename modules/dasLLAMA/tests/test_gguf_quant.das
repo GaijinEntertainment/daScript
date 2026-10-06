@@ -18,9 +18,7 @@ let Q5_D_BITS <- fixed_array(0x3C00, 0xB800, 0x3400)
 let Q5_D_VALS <- fixed_array(1.0, -0.5, 0.25)
 let Q5_QH <- fixed_array(0x00000000, 0xFFFFFFFF, 0x5A5A3CC3)
 
-def private q5_qs_byte(blk, j : int) : uint {
-    return uint((j * 7 + blk * 13) & 255)
-}
+def private q5_qs_byte(blk, j : int) : uint => uint((j * 7 + blk * 13) & 255)
 
 // Independent reference: lane k of block blk (Q5_0 dequant semantics — the high bit of
 // lane k is bit k of qh; the nibble is split-half packed).

@@ -9,22 +9,16 @@ require dastest/testing_boost public
 
 typedef M4 = float[4][4]
 
-def plain_name(a : auto(TT)) : string {
-    return typeinfo typename(type<TT>)
-}
+def plain_name(a : auto(TT)) : string => typeinfo typename(type<TT>)
 
-def dim_name(a : auto(TT)[]) : string {
-    return typeinfo typename(type<TT>)
-}
+def dim_name(a : auto(TT)[]) : string => typeinfo typename(type<TT>)
 
 def dim_name_var(var a : auto(TT)[]) : string {
     a[0] = a[1] // exercise the var-ness: mutable row copy through the peeled binding
     return typeinfo typename(type<TT>)
 }
 
-def peel_name(a : auto(TT)) : string {
-    return typeinfo typename(type<TT - []>)
-}
+def peel_name(a : auto(TT)) : string => typeinfo typename(type<TT - []>)
 
 def zeroed_count(a : auto(TT)) : int {
     var z = default<TT>
@@ -35,13 +29,9 @@ def zeroed_count(a : auto(TT)) : int {
     return n
 }
 
-def pick(a : auto(TT)) : string {
-    return "plain"
-}
+def pick(a : auto(TT)) : string => "plain"
 
-def pick(a : auto(TT)[]) : string {
-    return "dim"
-}
+def pick(a : auto(TT)[]) : string => "dim"
 
 [test]
 def test_whole_array_binding(t : T?) {

@@ -27,19 +27,13 @@ require _model_tier
 // skip where no device serves or the driver registers no seat for the stage, and red where a
 // present seat declines a stage.
 
-def private gguf_path() : string {
-    return path_join(models_dir(), "kokoro-82m.gguf")
-}
+def private gguf_path() : string => path_join(models_dir(), "kokoro-82m.gguf")
 
-def private oracle_dir() : string {
-    return path_join(models_dir(), "tts_oracle/kokoro")
-}
+def private oracle_dir() : string => path_join(models_dir(), "tts_oracle/kokoro")
 
 var private g_family : KokoroFamily
 
-def private kokoro_ids_of(ps : string) : array<int> {
-    return <- kokoro_token_ids(g_family, ps)
-}
+def private kokoro_ids_of(ps : string) : array<int> => <- kokoro_token_ids(g_family, ps)
 
 // The samples the model speaks for one phoneme string in one voice - the facade's chunk path with
 // its dialect pick taken out, so a synthesis can be held against the string it should have read.

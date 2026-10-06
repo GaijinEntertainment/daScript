@@ -25,16 +25,14 @@ def private validate(t : T?; words : array<uint>; lbl : string) {
     }
 }
 
-def private has_member_offset(words : array<uint>; off : uint) : bool {
-    return op_has_operand_pair(words, SpvOp.MemberDecorate, uint(SpvDecoration.Offset), off)
-}
+def private has_member_offset(words : array<uint>; off : uint) : bool =>
+    op_has_operand_pair(words, SpvOp.MemberDecorate, uint(SpvDecoration.Offset), off)
 
 // OpDecorate <id> ArrayStride <stride>: stride lives at operand index 2 immediately after the
 // decoration token at index 1. op_has_operand_pair pins the pair so a coincidental ArrayStride on
 // some other id with a different stride won't satisfy the assert.
-def private has_array_stride(words : array<uint>; stride : uint) : bool {
-    return op_has_operand_pair(words, SpvOp.Decorate, uint(SpvDecoration.ArrayStride), stride)
-}
+def private has_array_stride(words : array<uint>; stride : uint) : bool =>
+    op_has_operand_pair(words, SpvOp.Decorate, uint(SpvDecoration.ArrayStride), stride)
 
 [test]
 def test_ubo_nested(t : T?) {

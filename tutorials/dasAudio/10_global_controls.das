@@ -24,9 +24,8 @@ require math
 // Helper — a 1-second looping tone at a given frequency
 // ──────────────────────────────────────────────────────────────────────────
 
-def generate_tone(freq : float) : array<float> {
-    return <- [for (x in range(MA_SAMPLE_RATE)); sin(2.0 * PI * freq * float(x) / float(MA_SAMPLE_RATE))]
-}
+def generate_tone(freq : float) : array<float> =>
+    <- [for (x in range(MA_SAMPLE_RATE)); sin(2.0 * PI * freq * float(x) / float(MA_SAMPLE_RATE))]
 
 [export]
 def main() {

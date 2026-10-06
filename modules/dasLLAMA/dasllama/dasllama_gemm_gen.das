@@ -443,9 +443,8 @@ def private load_vec(var te : TileEmit; ty : LLVMOpaqueType?; var base, off : LL
     return LLVMBuildLoad2Aligned(te.builder, ty, p, 1u, name)
 }
 
-def private load_v16i8(var te : TileEmit; var base, off : LLVMOpaqueValue?; name : string) : LLVMOpaqueValue? {
-    return load_vec(te, te.v16i8, base, off, name)
-}
+def private load_v16i8(var te : TileEmit; var base, off : LLVMOpaqueValue?; name : string) : LLVMOpaqueValue? =>
+    load_vec(te, te.v16i8, base, off, name)
 
 def private splat_f32(var te : TileEmit; var v : LLVMOpaqueValue?; name : string) : LLVMOpaqueValue? => splat_to(te, te.vnf32, v, name)
 
@@ -692,9 +691,8 @@ def private nibbles(te : TileEmit; var v : LLVMOpaqueValue?; loName, hiName : st
 }
 
 //! the 2-bit field at bit `sh` of every byte - the k2 quant, the k3 quant's low bits
-def private crumb_at(te : TileEmit; var v : LLVMOpaqueValue?; sh : int; name : string) : LLVMOpaqueValue? {
-    return LLVMBuildAnd(te.builder, sh == 0 ? v : LLVMBuildLShr(te.builder, v, splat_i8w(te, sh), ""), splat_i8w(te, 3), name)
-}
+def private crumb_at(te : TileEmit; var v : LLVMOpaqueValue?; sh : int; name : string) : LLVMOpaqueValue? =>
+    LLVMBuildAnd(te.builder, sh == 0 ? v : LLVMBuildLShr(te.builder, v, splat_i8w(te, sh), ""), splat_i8w(te, 3), name)
 
 //! bit `sh` of every byte moved to bit 2 - the k3 quant's high bit
 def private k3_high_bit(te : TileEmit; var h : LLVMOpaqueValue?; sh : int) : LLVMOpaqueValue? {
@@ -1463,9 +1461,8 @@ def private decode_iq3s_dword(var te : TileEmit; var base : LLVMOpaqueValue?; bl
 }
 
 //! iq3xxs: an 8-bit index into the halved grid, read through its column dword
-def private decode_iq3xxs_dword(var te : TileEmit; var base : LLVMOpaqueValue?; blk, l, h : int) : LLVMOpaqueValue? {
-    return grid_word(te, wg_col_byte(te, base, blk * 8 + 2 * l + h))
-}
+def private decode_iq3xxs_dword(var te : TileEmit; var base : LLVMOpaqueValue?; blk, l, h : int) : LLVMOpaqueValue? =>
+    grid_word(te, wg_col_byte(te, base, blk * 8 + 2 * l + h))
 
 //! iq2xs: row `base`'s u16 word for (blk, l) - low 9 bits the grid index, the top 7 the ksigns code,
 //! read as its two column bytes
@@ -1812,9 +1809,8 @@ def private grid_emit_globals(var te : TileEmit; fmt : int; mod : LLVMOpaqueModu
 //! grid entries per format: the compact plane's byte count
 def private vbmi_entries(kq : int) : int => (kq == 25 || kq == 34) ? 256 : (kq == 23 ? 1024 : 512)
 
-def private vbmi_const_bytes(te : TileEmit; mod : LLVMOpaqueModule?; name : string; var elems : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
-    return const_table_global(mod, name, te.types.t_int8, elems)
-}
+def private vbmi_const_bytes(te : TileEmit; mod : LLVMOpaqueModule?; name : string; var elems : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? =>
+    const_table_global(mod, name, te.types.t_int8, elems)
 
 //! one 64-byte slice of a constant byte table (the lattice's register operands; loop-invariant, LLVM hoists them)
 def private vbmi_table_part(var te : TileEmit; var tbl : LLVMOpaqueValue?; part : int; name : string) : LLVMOpaqueValue? {
@@ -2566,9 +2562,8 @@ def private setup_amx_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePerm
 // The raw register plan (latch perms): C tiles tmm0-3 by (r·nt+ts), A tiles tmm4+ts,
 // B tiles tmm6+r; the cfg companion's palette sets exactly these shapes (C 16×64, A 16×32,
 // B 8×64). Internal-SSA perms ignore the plan — the backend allocates tmm itself.
-def private amx_tmm(te : TileEmit; v : int) : LLVMOpaqueValue? {
-    return LLVMConstInt(te.types.t_int8, uint64(v), 0)
-}
+def private amx_tmm(te : TileEmit; v : int) : LLVMOpaqueValue? =>
+    LLVMConstInt(te.types.t_int8, uint64(v), 0)
 
 // one B-plane tile load: internal returns the virtual tile; raw loads into tmm6+r, null result
 def private amx_load_b(var te : TileEmit; r : int; var wp : LLVMOpaqueValue?; name : string) : LLVMOpaqueValue? {
@@ -3025,17 +3020,13 @@ def private int_companion(var gc : LlvmCodeCtx; value : block<(p : TilePerm) : i
     return true
 }
 
-def private layout_gen(var gc : LlvmCodeCtx) : bool {
-    return int_companion(gc) $(p) => q8q8_repack_type(p.mr).interleave
-}
+def private layout_gen(var gc : LlvmCodeCtx) : bool =>
+    int_companion(gc) $(p) => q8q8_repack_type(p.mr).interleave
 
-def private wbias_gen(var gc : LlvmCodeCtx) : bool {
-    return int_companion(gc) $(p) => p.bias
-}
+def private wbias_gen(var gc : LlvmCodeCtx) : bool => int_companion(gc) $(p) => p.bias
 
-def private kgroup_gen(var gc : LlvmCodeCtx) : bool {
-    return int_companion(gc) $(p) => q8q8_repack_type(p.mr, p.bias, kgroup_of(p)).kgroup
-}
+def private kgroup_gen(var gc : LlvmCodeCtx) : bool =>
+    int_companion(gc) $(p) => q8q8_repack_type(p.mr, p.bias, kgroup_of(p)).kgroup
 
 def private tokstep_gen(var gc : LlvmCodeCtx) : bool {
     return int_companion(gc) $(p) {
@@ -3044,9 +3035,8 @@ def private tokstep_gen(var gc : LlvmCodeCtx) : bool {
     }
 }
 
-def private tileform_gen(var gc : LlvmCodeCtx) : bool {
-    return int_companion(gc) $(p) => dot_kind(p.dotPrim) == DOT_AMX_BF16 ? p.nrsplit : 0
-}
+def private tileform_gen(var gc : LlvmCodeCtx) : bool =>
+    int_companion(gc) $(p) => dot_kind(p.dotPrim) == DOT_AMX_BF16 ? p.nrsplit : 0
 
 def private is_witness_signature(fn : Function const?) : bool => nullary_signature(fn, Type.tBool)
 
@@ -3374,9 +3364,8 @@ def private emit_amx_bf16_tile(var gc : LlvmCodeCtx; p : TilePerm) : bool { // n
     return true
 }
 
-def private is_panel_signature(fn : Function const?) : bool {
-    return length(fn.arguments) == 7 && fn.result.baseType == Type.tVoid
-}
+def private is_panel_signature(fn : Function const?) : bool =>
+    length(fn.arguments) == 7 && fn.result.baseType == Type.tVoid
 
 def private panel_pair_splat(builder : LLVMOpaqueBuilder?; var types : PrimitiveTypes?; var v : LLVMOpaqueValue?; half : int; name : string) : LLVMOpaqueValue? {
     var mask : array<int>

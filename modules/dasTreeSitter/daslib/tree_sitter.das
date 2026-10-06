@@ -98,9 +98,8 @@ def public syntax_canonical_language(language : string) : string {
     return value
 }
 
-def public syntax_language_available(language : string) : bool {
-    return _tree_sitter_language_available(language)
-}
+def public syntax_language_available(language : string) : bool =>
+    _tree_sitter_language_available(language)
 
 def public syntax_role_for_capture(capture_name : string) : SyntaxRole { // nolint:STYLE037 — ordered prefix ladder; a split hides that `string.escape` must be tested before `string`
     if (capture_name == "none") return SyntaxRole.none

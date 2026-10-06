@@ -7,9 +7,7 @@ require daslib/ast_boost
 require daslib/ast_print
 require strings
 
-def private fixture_path() : string {
-    return "{get_das_root()}/tests/ast/_string_null_byte_fixture.das"
-}
+def private fixture_path() : string => "{get_das_root()}/tests/ast/_string_null_byte_fixture.das"
 
 def private returned_constant(fn : FunctionPtr) : ExprConstString? {
     let blk = fn.body ?as ExprBlock

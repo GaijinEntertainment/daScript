@@ -12,16 +12,12 @@ require daslib/tune
 
 // companion sibling — grid modes clone it per perm too (modes_kv__k0 ... ), so the child run
 // proves per-perm args reach the companion generator and the declined row falls back with it
-def modes_kv() : int {
-    return -1  // reference tier sentinel
-}
+def modes_kv() : int => -1  // reference tier sentinel
 
 [tune_perm(k = 0), tune_perm(k = 1), tune_perm(k = 2), tune_perm(suffix = "declined", decline = true),
  tune_companion(fn = "modes_kv", gen = "llvm_code_selftest::k_value"),
  tune(gen = "llvm_code_selftest::add_plus_k", fallback = "k1")]
-def modes_add(a, b : int) : int {
-    return a + b
-}
+def modes_add(a, b : int) : int => a + b
 
 [export]
 def main {

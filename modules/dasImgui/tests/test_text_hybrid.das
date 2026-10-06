@@ -20,17 +20,14 @@ let DEADLOCK_GUARD_SEC = 30.0f
 let HYBRID_EDITOR = "DOCK_ROOT/g_document_windows[1]/DOCUMENT_CONTENT/editor"
 let HYBRID_FIXTURE = "# Hybrid probe\n\nFirst paragraph line.\n\nSecond paragraph line.\n\n- alpha\n- beta\n\nTail paragraph.\n"
 
-def private viewer_state(app : ImguiApp) : JsonValue? {
-    return post_command(app, "text_viewer_state", null)
-}
+def private viewer_state(app : ImguiApp) : JsonValue? =>
+    post_command(app, "text_viewer_state", null)
 
-def private edit_text_state(app : ImguiApp) : JsonValue? {
-    return post_command(app, "text_viewer_edit_text", null)
-}
+def private edit_text_state(app : ImguiApp) : JsonValue? =>
+    post_command(app, "text_viewer_edit_text", null)
 
-def private hybrid_segments(app : ImguiApp) : JsonValue? {
-    return post_command(app, "text_viewer_hybrid_segments", null)
-}
+def private hybrid_segments(app : ImguiApp) : JsonValue? =>
+    post_command(app, "text_viewer_hybrid_segments", null)
 
 def private set_cursor(app : ImguiApp; line : int; column : int = 0) : JsonValue? {
     return post_command(app, "text_viewer_set_cursor",

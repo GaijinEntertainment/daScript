@@ -29,9 +29,8 @@ def fixture_source() : string {
     ] |> join("\n")
 }
 
-def fixture_path() : string {
-    return "{get_das_root()}/tests/lint/_perf030_delete_before_move_fixture.das"  // virtual - not on disk
-}
+def fixture_path() : string =>
+    "{get_das_root()}/tests/lint/_perf030_delete_before_move_fixture.das"  // virtual - not on disk
 
 [test]
 def test_perf030_skips_move_after_delete(t : T?) {

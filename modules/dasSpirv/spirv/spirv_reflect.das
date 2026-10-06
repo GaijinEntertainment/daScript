@@ -115,9 +115,7 @@ def private kind_from_int(k : int) : SpirvDescriptorKind {
 
 // Whole-value cast, not bit-by-bit `s.vertex = bool`: the AOT C++ emitter lowers the latter
 // to an ambiguous __bit_set(Bitfield, uint, bool) -> C2666; the cast form AOT-compiles cleanly.
-def private stage_flags_from_uint(raw : uint) : SpirvStageFlags {
-    return SpirvStageFlags(raw)
-}
+def private stage_flags_from_uint(raw : uint) : SpirvStageFlags => SpirvStageFlags(raw)
 
 //! Decode the producer's word stream into a typed reflection. A malformed stream (empty, wrong magic,
 //! or a declared binding/push count that would run past the words) decodes to whatever was parsed so

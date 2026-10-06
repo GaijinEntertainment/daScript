@@ -13,9 +13,7 @@ require ../../utils/watchdog/stdio_front.das
 //! are answered before any child exists, the first tool call spawns the daslang MCP server, the
 //! server's own `shutdown` tool kills it, and the next tool call respawns it unseen
 
-def private das_exe() : string {
-    return get_full_file_name(get_das_exe())
-}
+def private das_exe() : string => get_full_file_name(get_das_exe())
 
 def private watchdog_exe() : string {
     let beside = path_join(dir_name(das_exe()), "watchdog{get_platform_name() == "windows" ? ".exe" : ""}")

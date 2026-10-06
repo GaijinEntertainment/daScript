@@ -29,17 +29,15 @@ let CLOSE_ABS = 1e-5
 
 var private g_seed = int4(20260704, 17, 3, 1)
 
-def private rand_q8(n : int64) : array<int8> {
-    return <- [for (_i in range64(n)); int8(random_int(g_seed) % 256)]
-}
+def private rand_q8(n : int64) : array<int8> =>
+    <- [for (_i in range64(n)); int8(random_int(g_seed) % 256)]
 
 // ACTIVATION bytes are [-127, 127] by construction in production (the Q8 quantizer's
 // d = amax/127) — and the x64 sign-trick kernels (hand dot32 tiers and the generated
 // maddubs/vpdpbusd legs) are exact ONLY under that precondition (PSIGNB of -128 wraps; see
 // x64_avx.das dot32). Weights stay full-range rand_q8: w = -128 is legal and must be covered.
-def private rand_q8_activation(n : int64) : array<int8> {
-    return <- [for (_i in range64(n)); int8(random_int(g_seed) % 255 - 127)]
-}
+def private rand_q8_activation(n : int64) : array<int8> =>
+    <- [for (_i in range64(n)); int8(random_int(g_seed) % 255 - 127)]
 
 def private rand_scales(n : int64) : array<float> {
     // positive, spread over a couple of octaves — like real Q8 block scales

@@ -144,6 +144,4 @@ def ShowAboutWindow() {
     }
 }
 
-def private fmt_hex(v : uint) : string {
-    return "0x{v}"
-}
+def private fmt_hex(v : uint) : string => "0x{v}"

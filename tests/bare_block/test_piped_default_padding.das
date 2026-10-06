@@ -8,51 +8,35 @@ require UnitTest
 // helpers: defaults before the block parameter
 // ============================================================
 
-def pad_b(_a : int; b : float = 3.25; blk : block<(y : float) : float>) : float {
-    return invoke(blk, b)
-}
+def pad_b(_a : int; b : float = 3.25; blk : block<(y : float) : float>) : float => invoke(blk, b)
 
-def pad_two(a : int; b : int = 7; c : float = 0.5; blk : block<(y : int; z : float) : float>) : float {
-    return invoke(blk, a + b, c)
-}
+def pad_two(a : int; b : int = 7; c : float = 0.5; blk : block<(y : int; z : float) : float>) : float =>
+    invoke(blk, a + b, c)
 
-def pad_all(a : int = 13; blk : block<(x : int) : int>) : int {
-    return invoke(blk, a)
-}
+def pad_all(a : int = 13; blk : block<(x : int) : int>) : int => invoke(blk, a)
 
-def pad_lambda(a : int; b : int = 5; lam : lambda<(x : int) : int>) : int {
-    return invoke(lam, a + b)
-}
+def pad_lambda(a : int; b : int = 5; lam : lambda<(x : int) : int>) : int => invoke(lam, a + b)
 
-def pad_funcptr(a : int; b : int = 6; fn : function<(x : int) : int>) : int {
-    return invoke(fn, a + b)
-}
+def pad_funcptr(a : int; b : int = 6; fn : function<(x : int) : int>) : int => invoke(fn, a + b)
 
-def side_default() : int {
-    return 21
-}
+def side_default() : int => 21
 
-def pad_call_default(a : int; b : int = side_default(); blk : block<(x : int) : int>) : int {
-    return invoke(blk, a + b)
-}
+def pad_call_default(a : int; b : int = side_default(); blk : block<(x : int) : int>) : int =>
+    invoke(blk, a + b)
 
 struct PadPoint {
     x : int = 3
     y : int = 4
 }
 
-def pad_struct(a : int; p : PadPoint = default<PadPoint>; blk : block<(s : int) : int>) : int {
-    return invoke(blk, a + p.x + p.y)
-}
+def pad_struct(a : int; p : PadPoint = default<PadPoint>; blk : block<(s : int) : int>) : int =>
+    invoke(blk, a + p.x + p.y)
 
-def pad_or(a : int | float; b : int = 2; blk : block<(x : int) : int>) : int {
-    return invoke(blk, b)
-}
+def pad_or(a : int | float; b : int = 2; blk : block<(x : int) : int>) : int => invoke(blk, b)
 
 // generic callee: auto first arg + auto in the block signature
-def gpad(a : auto; b : float = 1.5; blk : block<(x : auto; y : float) : float>) : float {
-    return invoke(blk, a, b)
-}
+def gpad(a : auto; b : float = 1.5; blk : block<(x : auto; y : float) : float>) : float =>
+    invoke(blk, a, b)
 
 // ============================================================
 // A. core padding
@@ -174,29 +158,18 @@ def test_pad_generic_callee(t : T?) {
 // B. overload ranking
 // ============================================================
 
-def pick(_a : int; b : int = 1; blk : block<() : int>) : int {
-    return 300 + b + invoke(blk)
-}
+def pick(_a : int; b : int = 1; blk : block<() : int>) : int => 300 + b + invoke(blk)
 
-def pick(_a : int; b : int = 1; c : int = 2; blk : block<() : int>) : int {
-    return 400 + b + c + invoke(blk)
-}
+def pick(_a : int; b : int = 1; c : int = 2; blk : block<() : int>) : int =>
+    400 + b + c + invoke(blk)
 
-def cdist(var _a : int&; b : int = 1; blk : block<() : int>) : int {
-    return 1000 + invoke(blk)
-}
+def cdist(var _a : int&; b : int = 1; blk : block<() : int>) : int => 1000 + invoke(blk)
 
-def cdist(_a : int; b : int = 2; blk : block<() : int>) : int {
-    return 2000 + invoke(blk)
-}
+def cdist(_a : int; b : int = 2; blk : block<() : int>) : int => 2000 + invoke(blk)
 
-def fn_vs_gen(_a : int; b : int = 1; blk : block<() : int>) : int {
-    return 3000 + invoke(blk)
-}
+def fn_vs_gen(_a : int; b : int = 1; blk : block<() : int>) : int => 3000 + invoke(blk)
 
-def fn_vs_gen(_a : auto; b : int = 1; blk : block<() : int>) : int {
-    return 4000 + invoke(blk)
-}
+def fn_vs_gen(_a : auto; b : int = 1; blk : block<() : int>) : int => 4000 + invoke(blk)
 
 [test]
 def test_least_padding_wins(t : T?) {
@@ -252,9 +225,7 @@ def testPipedDefaults(a : int; extra : int = 1; b : float = 2.0; blk : block<(x 
 
 class Widget {
     base : int = 10
-    def scaled(k : int = 3; blk : block<(v : int) : int>) : int {
-        return invoke(blk, base * k)
-    }
+    def scaled(k : int = 3; blk : block<(v : int) : int>) : int => invoke(blk, base * k)
 }
 
 [test]
@@ -340,9 +311,8 @@ def test_nested_piped_calls(t : T?) {
     }
 }
 
-def lam_then_blk(a : int; lam : lambda<(x : int) : int> = @ (x : int) => x; blk : block<() : int>) : int {
-    return invoke(lam, invoke(blk) + a)
-}
+def lam_then_blk(a : int; lam : lambda<(x : int) : int> = @ (x : int) => x; blk : block<() : int>) : int =>
+    invoke(lam, invoke(blk) + a)
 
 [test]
 def test_landing_is_type_driven(t : T?) {
@@ -356,9 +326,8 @@ def test_landing_is_type_driven(t : T?) {
 
 class Gadget {
     bias : int = 2
-    def mixed(lam : lambda<(x : int) : int> = @ (x : int) => x; blk : block<() : int>) : int {
-        return invoke(lam, invoke(blk) + bias)
-    }
+    def mixed(lam : lambda<(x : int) : int> = @ (x : int) => x; blk : block<() : int>) : int =>
+        invoke(lam, invoke(blk) + bias)
 }
 
 [test]

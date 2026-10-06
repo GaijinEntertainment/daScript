@@ -6,9 +6,7 @@ struct SafeOpFoo {
     a : string
 }
 
-def operator [] (tf : SafeOpFoo; cmp : string) : string {
-    return "{tf . . a}-{cmp}"
-}
+def operator [] (tf : SafeOpFoo; cmp : string) : string => "{tf . . a}-{cmp}"
 
 def operator ?[] (tf : SafeOpFoo; cmp : string) : string const?# {
     if (cmp == tf . . a) {
@@ -22,9 +20,7 @@ def operator ?[] (tf : SafeOpFoo; cmp : string) : string const?# {
     }
 }
 
-def operator .(tf : SafeOpFoo; name : string) : SafeOpFoo {
-    return SafeOpFoo(a = "{tf . . a}.{name}")
-}
+def operator .(tf : SafeOpFoo; name : string) : SafeOpFoo => SafeOpFoo(a = "{tf . . a}.{name}")
 
 def operator ?.(tf : SafeOpFoo; name : string) : string const?# {
     if (name == "yes") {

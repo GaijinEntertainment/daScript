@@ -167,13 +167,11 @@ def private accept_until_double_percent(var expr : ExprReader?; ch : int) : bool
 [reader_macro(name="spoof_template")]
 class SpoofTemplateReader : AstReaderMacro {
     //! Reader macro that parses spoof template definitions.
-    def override accept(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; ch : int; info : LineInfo) : bool {
-        return accept_until_double_percent(expr, ch)
-    }
+    def override accept(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; ch : int; info : LineInfo) : bool =>
+        accept_until_double_percent(expr, ch)
 
-    def override visit(prog : ProgramPtr; mod : Module?; expr : ExprReader?) : ExpressionPtr {
-        return <- new ExprConstString(at = expr.at, value := expr.sequence)
-    }
+    def override visit(prog : ProgramPtr; mod : Module?; expr : ExprReader?) : ExpressionPtr =>
+        <- new ExprConstString(at = expr.at, value := expr.sequence)
 }
 
 struct SpoofInvocation {
@@ -237,9 +235,8 @@ def instance_args(invocation : string; blk : block<(var res : SpoofInvocation; e
 [reader_macro(name="spoof_instance")]
 class SpoofInstanceReader : AstReaderMacro {
     //! Reader macro that instantiates a spoof template.
-    def override accept(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; ch : int; info : LineInfo) : bool {
-        return accept_until_double_percent(expr, ch)
-    }
+    def override accept(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; ch : int; info : LineInfo) : bool =>
+        accept_until_double_percent(expr, ch)
 
     def override suffix(prog : ProgramPtr; mod : Module?; var expr : ExprReader?; info : LineInfo; var outLine : int&; var outFile : FileInfo?&) : string {
         outLine = int(info.line)

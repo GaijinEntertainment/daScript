@@ -237,9 +237,8 @@ def private emit_fallback_registry(var mod : Module?; var errors : das_string) :
 [structure_macro(name="dasllama_fallbacks")]
 class private FallbacksMacro : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup;
-                       var args : AnnotationArgumentList; var errors : das_string) : bool {
-        return emit_fallback_registry(compiling_module(), errors)
-    }
+                       var args : AnnotationArgumentList; var errors : das_string) : bool =>
+                           emit_fallback_registry(compiling_module(), errors)
 }
 
 //! `[dasllama_grid(src="dot_template")]` on any (dummy) struct emits the full grid of

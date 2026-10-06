@@ -15,9 +15,7 @@ def private das_exe() : string {
     return find(to_generic_path(argv[0]), "/") < 0 ? argv[0] : get_full_file_name(normalize(argv[0]))
 }
 
-def private tail(s : string) : string {
-    return slice(s, max(0, length(s) - 400))
-}
+def private tail(s : string) : string => slice(s, max(0, length(s) - 400))
 
 def private run_capture(cmd : string; var out : string&) : int {
     return unsafe(popen_timeout(cmd, 300.0, $(f) {

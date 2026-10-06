@@ -145,9 +145,8 @@ def metal_blob_eligible(t : Model) : bool {
 
 //! Block count of the blob plane and its stride — the 34B gguf-native block_q8_0, which is the
 //! layout the planar load SPLIT into qblob+qscales when it read the file.
-def metal_blob_shape(t : Model) : tuple<blocks : int64; stride : int64> {
-    return (blocks = long_length(t.qblob) / Q8_BLOCK_ELEMS, stride = Q8_QPB + Q8_SPB)
-}
+def metal_blob_shape(t : Model) : tuple<blocks : int64; stride : int64> =>
+    (blocks = long_length(t.qblob) / Q8_BLOCK_ELEMS, stride = Q8_QPB + Q8_SPB)
 
 //! Interleave blob blocks [b0, b0+nblk) from the planar planes into `dst` (>= nblk*34 bytes).
 //! The whole-plane call materializes mblob; the image writer calls it band by band instead, which

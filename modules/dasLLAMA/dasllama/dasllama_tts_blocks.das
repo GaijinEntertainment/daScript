@@ -462,9 +462,8 @@ def linear_weight_row(l : TtsLinear; o : int64; var dst : array<float>; doff : i
 }
 
 //! Can this conv serve the q8 rows form: a dense forward conv whose widths quantize per 32.
-def conv1d_q8_eligible(c : TtsConv1d) : bool {
-    return c.groups == 1l && !c.transposed && c.stride == 1l && c.cin % 32l == 0l && c.cout % 32l == 0l
-}
+def conv1d_q8_eligible(c : TtsConv1d) : bool =>
+    c.groups == 1l && !c.transposed && c.stride == 1l && c.cin % 32l == 0l && c.cout % 32l == 0l
 
 [arch(at = "../ARCHITECTURE_TTS.md#tts-tap-stacking")]
 def private conv1d_prepare_q8(var c : TtsConv1d; repack : bool) {
@@ -1830,9 +1829,8 @@ def scale_rows(var y : array<float>; s : float; n : int64) {
 }
 
 //! A conv's (cin, cout) from its weight dims: [k][cin][cout] forward, [k][cout][cin] transposed, the grouped dimension times groups.
-def conv1d_dims_of(dims : array<int64>; transposed : bool; groups : int64) : tuple<cin : int64; cout : int64> {
-    return transposed ? (cin = dims[2], cout = dims[1] * groups) : (cin = dims[1] * groups, cout = dims[2])
-}
+def conv1d_dims_of(dims : array<int64>; transposed : bool; groups : int64) : tuple<cin : int64; cout : int64> =>
+    transposed ? (cin = dims[2], cout = dims[1] * groups) : (cin = dims[1] * groups, cout = dims[2])
 
 //! dst [rows x width] = the table's rows ids[r] - an embedding lookup.
 def gather_rows(var dst : array<float>; emb : array<float>; ids : array<auto(TT)>; width : int64) {
@@ -2083,9 +2081,7 @@ def resize_nearest_rows(x : array<float>; t, c, factor : int64; @scratch @exact_
 
 //! Fused multiply-add through double: a * b is exact there and the sum rounds once to double,
 //! then to float - the reference kernel's fma to within a double-rounding tie.
-def private fmaf(a, b, c : float) : float {
-    return float(double(a) * double(b) + double(c))
-}
+def private fmaf(a, b, c : float) : float => float(double(a) * double(b) + double(c))
 
 //! The columns a linear resample of T source columns by `scale` writes.
 def resize_len(t : int64; scale : float) : int64 => int64(floor(float(t) * scale))
@@ -2286,9 +2282,7 @@ def rng_u32(var r : TtsRng) : uint {
 }
 
 //! Uniform in [0, 1).
-def rng_uniform(var r : TtsRng) : float {
-    return float(rng_u32(r) >> 8u) * (1.0 / 16777216.0)
-}
+def rng_uniform(var r : TtsRng) : float => float(rng_u32(r) >> 8u) * (1.0 / 16777216.0)
 
 //! Standard normal (Marsaglia polar). A generator nobody seeded is a stuck stream (an even
 //! increment of zero), and the rejection loop would spin on it forever, so it panics instead.

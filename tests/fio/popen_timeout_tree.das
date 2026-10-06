@@ -9,9 +9,7 @@ let LIMIT_SECONDS = 1.0
 let RETURN_GUARD_SECONDS = 10.0
 
 //! `sleep N; true` keeps the shell a parent: a shell given one command execs it and leaves no grandchild
-def shell_with_grandchild() : string {
-    return "sleep {GRANDCHILD_SECONDS}; true"
-}
+def shell_with_grandchild() : string => "sleep {GRANDCHILD_SECONDS}; true"
 
 //! `spawn` starts the shell under LIMIT_SECONDS, drains its pipe through `drain` and answers the exit code
 def expect_tree_killed(t : T?; spawn : block<(drain : block<(f : FILE const?) : void>) : int>) {

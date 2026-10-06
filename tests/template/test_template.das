@@ -3,9 +3,7 @@ require daslib/templates
 require dastest/testing_boost public
 
 [template(a), sideeffects]
-def boo(x : int; a : auto(TT)) {
-    return "{x}_{typeinfo typename(type<TT>)}"
-}
+def boo(x : int; a : auto(TT)) => "{x}_{typeinfo typename(type<TT>)}"
 
 [test]
 def test_template(t : T?) {

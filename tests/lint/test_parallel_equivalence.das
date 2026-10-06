@@ -44,9 +44,7 @@ def collect_fixtures() : array<string> {
 }
 
 
-def lint_main_path() : string {
-    return "{get_das_root()}/utils/lint/main.das"
-}
+def lint_main_path() : string => "{get_das_root()}/utils/lint/main.das"
 
 
 def build_argv(workers : int; fixtures : array<string>; quiet : bool = true) : array<string> {

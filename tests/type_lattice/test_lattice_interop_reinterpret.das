@@ -20,9 +20,7 @@ def seed_runtime_zeros {
     runtime_izero = int(runtime_fzero)
 }
 
-def pack_bits(v : float2) : uint {
-    return unsafe(reinterpret<uint>(half2(v)))
-}
+def pack_bits(v : float2) : uint => unsafe(reinterpret<uint>(half2(v)))
 
 [test]
 def test_lattice_reinterpret_composition(t : T?) {

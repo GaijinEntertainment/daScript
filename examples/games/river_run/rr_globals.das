@@ -597,37 +597,21 @@ def random_f() : float {
     return float(int(global_rng_seed >> 16u) % 1000) / 1000.0
 }
 
-def random_range(lo, hi : float) : float {
-    return lo + random_f() * (hi - lo)
-}
+def random_range(lo, hi : float) : float => lo + random_f() * (hi - lo)
 
-def random_sign() : float {
-    return (random_f() < 0.5 ? -1.0 : 1.0)
-}
+def random_sign() : float => (random_f() < 0.5 ? -1.0 : 1.0)
 
-def section_idx() : int {
-    return min(current_section, MAX_SECTIONS - 1)
-}
+def section_idx() : int => min(current_section, MAX_SECTIONS - 1)
 
-def get_river_color() : float3 {
-    return env_now.river_color
-}
+def get_river_color() : float3 => env_now.river_color
 
-def get_bank_color() : float3 {
-    return env_now.bank_color
-}
+def get_bank_color() : float3 => env_now.bank_color
 
-def get_fog_color() : float3 {
-    return env_now.fog_color
-}
+def get_fog_color() : float3 => env_now.fog_color
 
-def section_speed_mult_for(section : int) : float {
-    return 1.0 + float(section) * 0.15
-}
+def section_speed_mult_for(section : int) : float => 1.0 + float(section) * 0.15
 
-def section_speed_mult() : float {
-    return section_speed_mult_for(current_section)
-}
+def section_speed_mult() : float => section_speed_mult_for(current_section)
 
 // Which section owns a world Y, anchored to the next boundary ahead of the
 // player -- prespawned content and river generation agree on zone edges.
@@ -655,6 +639,4 @@ def fuel_bar_color() : float3 {
 // framebuffer. display_w/display_h are framebuffer pixels, not window points --
 // on a retina display that is 2x, which is why the old fixed-pixel HUD came out
 // half size.
-def hud_scale() : float {
-    return max(float(display_h) / 720.0, 0.5)
-}
+def hud_scale() : float => max(float(display_h) / 720.0, 0.5)

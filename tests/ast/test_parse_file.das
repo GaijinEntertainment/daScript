@@ -44,13 +44,11 @@ def private text_at(lines : array<string>; line, column, count : int) : string {
     return slice(ln, column, column + count)
 }
 
-def private span_head(lines : array<string>; li : LineInfo; count : int) : string {
-    return text_at(lines, int(li.line), int(li.column), count)
-}
+def private span_head(lines : array<string>; li : LineInfo; count : int) : string =>
+    text_at(lines, int(li.line), int(li.column), count)
 
-def private span_tail(lines : array<string>; li : LineInfo; count : int) : string {
-    return text_at(lines, int(li.last_line), int(li.last_column) - count, count)
-}
+def private span_tail(lines : array<string>; li : LineInfo; count : int) : string =>
+    text_at(lines, int(li.last_line), int(li.last_column) - count, count)
 
 
 def private collect_inits(var blk : ExprBlock?; var inits : array<ExpressionPtr>;

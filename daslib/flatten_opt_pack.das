@@ -237,9 +237,8 @@ def private vectorize(exprs : array<ExpressionPtr>; nameToRole : table<string; i
     return null
 }
 
-def private make_vec_let(vecName : string; var vecExpr : ExpressionPtr) : ExpressionPtr {
-    return qmacro_expr(${ let $i(vecName) = $e(vecExpr); })
-}
+def private make_vec_let(vecName : string; var vecExpr : ExpressionPtr) : ExpressionPtr =>
+    qmacro_expr(${ let $i(vecName) = $e(vecExpr); })
 
 def private hreduce(vecName : string; width : int; op : string; at : LineInfo) : ExpressionPtr {
     assert(width >= 2 && width <= 4, "hreduce expects a packed group of width 2..4")

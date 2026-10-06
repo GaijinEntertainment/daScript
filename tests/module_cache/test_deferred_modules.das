@@ -165,9 +165,8 @@ def copy_loaded(out : string; dir : string; artifact : string) : bool {
     return false
 }
 
-def child_cmd(fx : Fixture; script : string; flags : string = ""; cache : string = "-no-module-cache") : string {
-    return "{trace_prefix()}\"{das_exe()}\" -dasroot \"{get_das_root()}\" {cache} -project_root \"{fx.tmp}\" {flags} \"{script}\""
-}
+def child_cmd(fx : Fixture; script : string; flags : string = ""; cache : string = "-no-module-cache") : string =>
+    "{trace_prefix()}\"{das_exe()}\" -dasroot \"{get_das_root()}\" {cache} -project_root \"{fx.tmp}\" {flags} \"{script}\""
 
 def has_shared_modules(dir : string; names : array<string>) : bool {
     for (name in names) {

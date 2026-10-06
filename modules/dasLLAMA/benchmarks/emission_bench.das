@@ -55,9 +55,8 @@ struct Args {
 
 // deterministic synthetic prompt ids (vocab-safe low range; per-prompt seed varies the content —
 // the same convention as decode_prof, so runs are comparable across models and time)
-def private build_prompt(n : int64; seed : int64) : array<int64> {
-    return <- [for (i in range64(n)); 1000l + ((i * 17l + seed * 131l) % 5000l)]
-}
+def private build_prompt(n : int64; seed : int64) : array<int64> =>
+    <- [for (i in range64(n)); 1000l + ((i * 17l + seed * 131l) % 5000l)]
 
 [export]
 def main() {   // nolint:STYLE038 — flat bench driver: arg handling, then one timed cell per prompt bucket

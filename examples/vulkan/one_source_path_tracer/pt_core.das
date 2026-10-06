@@ -76,9 +76,7 @@ def pt_rng_uint(var state : uint&) : uint {
     return (word >> 22u) ^ word
 }
 
-def pt_rng(var state : uint&) : float {
-    return float(pt_rng_uint(state) >> 8u) * (1.0 / 16777216.0)
-}
+def pt_rng(var state : uint&) : float => float(pt_rng_uint(state) >> 8u) * (1.0 / 16777216.0)
 
 def pt_seed(x, y, frame : int) : uint {
     var state = (uint(x) * 1973u + uint(y) * 9277u + uint(frame) * 26699u) | 1u

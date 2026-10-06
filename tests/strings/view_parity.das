@@ -84,9 +84,7 @@ def private number_cases() : array<Case> {
 }
 
 // negative / in-range / at-the-boundary / overshooting, for every index-like argument
-def private idx_lattice(n : int) : array<int> {
-    return <- [-100, -2, -1, 0, 1, 3, n - 1, n, n + 1, 100]
-}
+def private idx_lattice(n : int) : array<int> => <- [-100, -2, -1, 0, 1, 3, n - 1, n, n + 1, 100]
 
 def private high_needle() : string {
     return build_string() $(var w) {

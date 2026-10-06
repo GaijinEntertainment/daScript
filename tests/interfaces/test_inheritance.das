@@ -42,20 +42,14 @@ class ISerializable {
 class IGreeter {
     def abstract greet_name : string
     // Default method — does not need to be overridden
-    def greet : string {
-        return "Hello, {self.greet_name()}!"
-    }
+    def greet : string => "Hello, {self.greet_name()}!"
 }
 
 // Interface with ALL methods having defaults
 [interface]
 class IDefaults {
-    def default_value : int {
-        return 42
-    }
-    def default_message : string {
-        return "default"
-    }
+    def default_value : int => 42
+    def default_message : string => "default"
 }
 
 // ═══════════════════════════════════════
@@ -72,12 +66,8 @@ class Dog {
         breed = b
     }
     // IAnimal methods (via IGuideDog → IPet → IAnimal)
-    def IGuideDog`name() : string {
-        return "Dog({breed})"
-    }
-    def IGuideDog`sound() : string {
-        return "Woof"
-    }
+    def IGuideDog`name() : string => "Dog({breed})"
+    def IGuideDog`sound() : string => "Woof"
     // IPet method (via IGuideDog → IPet)
     def IGuideDog`move(distance : float) {
         total_distance += distance
@@ -87,9 +77,7 @@ class Dog {
         guided_to = destination
     }
     // ISerializable (separate hierarchy)
-    def ISerializable`serialize() : string {
-        return "Dog:{breed}"
-    }
+    def ISerializable`serialize() : string => "Dog:{breed}"
 }
 
 // Implements only IPet (middle of the chain)
@@ -100,12 +88,8 @@ class Cat {
     def Cat(n : string) {
         cat_name = n
     }
-    def IPet`name() : string {
-        return cat_name
-    }
-    def IPet`sound() : string {
-        return "Meow"
-    }
+    def IPet`name() : string => cat_name
+    def IPet`sound() : string => "Meow"
     def IPet`move(distance : float) {
         moved += distance
     }
@@ -118,9 +102,7 @@ class SimpleGreeter {
     def SimpleGreeter(n : string) {
         the_name = n
     }
-    def IGreeter`greet_name() : string {
-        return the_name
-    }
+    def IGreeter`greet_name() : string => the_name
     // greet() NOT overridden — uses default from IGreeter
 }
 
@@ -131,12 +113,8 @@ class FormalGreeter {
     def FormalGreeter(n : string) {
         the_name = n
     }
-    def IGreeter`greet_name() : string {
-        return the_name
-    }
-    def IGreeter`greet() : string {
-        return "Good day, {the_name}. How do you do?"
-    }
+    def IGreeter`greet_name() : string => the_name
+    def IGreeter`greet() : string => "Good day, {the_name}. How do you do?"
 }
 
 // Implements IDefaults — overrides nothing (all methods have defaults)
@@ -154,9 +132,7 @@ class PartialOverride {
     def PartialOverride() {
         pass
     }
-    def IDefaults`default_value() : int {
-        return 99
-    }
+    def IDefaults`default_value() : int => 99
     // default_message() NOT overridden — uses default
 }
 

@@ -8,9 +8,7 @@ bitfield bits123 {
     three
 }
 
-def is_one(b : bits123) {
-    return b.one
-}
+def is_one(b : bits123) => b.one
 
 def set_one(var b : bits123) {
     b |= bits123.one    // nolint:STYLE022 -- the |= codegen is the JIT shape under test

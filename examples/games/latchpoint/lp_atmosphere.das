@@ -68,9 +68,8 @@ def fs_latch_dust {
     f_FragColor = float4(dust_color, alpha)
 }
 
-def effect_view_position(uv : float2; depth : float) : float3 {
-    return float3((uv * 2.0 - float2(1.0)) * f_CamScale * depth, -depth)
-}
+def effect_view_position(uv : float2; depth : float) : float3 =>
+    float3((uv * 2.0 - float2(1.0)) * f_CamScale * depth, -depth)
 
 [fragment_program]
 def fs_latch_atmosphere {

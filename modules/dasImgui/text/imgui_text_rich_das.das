@@ -95,13 +95,11 @@ def public rich_das_classify_line(ed : TextEditState const;
     return covered ? RichDasLineClass.full_comment : RichDasLineClass.code
 }
 
-def private line_indent(ed : TextEditState const; row : int) : string {
-    return leading_whitespace(ed.lines[row])
-}
+def private line_indent(ed : TextEditState const; row : int) : string =>
+    leading_whitespace(ed.lines[row])
 
-def private begins_in_block(ed : TextEditState const; row : int) : bool {
-    return row < length(ed.line_styles) && ed.line_styles[row].in_block_comment
-}
+def private begins_in_block(ed : TextEditState const; row : int) : bool =>
+    row < length(ed.line_styles) && ed.line_styles[row].in_block_comment
 
 def public rich_das_collect_groups(ed : TextEditState const;
                                    var spans : array<RichDasGroupSpan>) {

@@ -91,9 +91,7 @@ class GlslShader : AstFunctionAnnotation {
     allow_unitialized_local_arrays = false
     resolve_supported_semantics = false
     pack_std140_uniforms = false
-    def get_glsl_prefix {
-        return ""
-    }
+    def get_glsl_prefix => ""
     def generate_bind_uniform_dummy(var func : FunctionPtr) {
         pass
     }
@@ -524,9 +522,7 @@ class GlslExport : AstVisitor {
         }
         return st
     }
-    def describe_glsl_type(t : TypeDeclPtr) {
-        return describe_glsl_type_ex(t, true)
-    }
+    def describe_glsl_type(t : TypeDeclPtr) => describe_glsl_type_ex(t, true)
     def write_dim_suffix(t : TypeDeclPtr) {
         // GLSL declarator suffix: one [d] per chain level, outermost first
         var lvl = t
@@ -887,9 +883,7 @@ class GlslExport : AstVisitor {
         return typ
     }
 // enumeration
-    def override canVisitEnumeration(enu : Enumeration?) {
-        return false
-    }
+    def override canVisitEnumeration(enu : Enumeration?) => false
 // structure
     def override canVisitStructure(str : Structure?) {
         if (!(depStruct |> key_exists(intptr(str)))) return false
@@ -1002,9 +996,8 @@ class GlslExport : AstVisitor {
         }
         return arg
     }
-    def override canVisitFunctionArgumentInit(fun : Function?; arg : VariablePtr; value : ExpressionPtr) : bool {
-        return false
-    }
+    def override canVisitFunctionArgumentInit(fun : Function?; arg : VariablePtr; value : ExpressionPtr) : bool =>
+        false
 // block
     def override preVisitExprBlock(blk : ExprBlock?) {
         if (blk.blockFlags.isClosure) {
@@ -1377,9 +1370,7 @@ class GlslExport : AstVisitor {
         error("named call is not supported", expr.at)
     }
 // looks like call (debug,assert,verify,erase,find,key_exists,keys,values,invoke,memzero etc)
-    def isInvokeMethod(expr : ExprLooksLikeCall?) {
-        return (expr ?as ExprInvoke)?.isInvokeMethod ?? false
-    }
+    def isInvokeMethod(expr : ExprLooksLikeCall?) => (expr ?as ExprInvoke)?.isInvokeMethod ?? false
     def override preVisitExprLooksLikeCall(expr : ExprLooksLikeCall?) {
         if (isInvokeMethod(expr)) {
             pass
@@ -1608,9 +1599,7 @@ class GlslExport : AstVisitor {
         }
     }
 // for
-    def isDimFor(svar : ExpressionPtr) {
-        return svar._type.baseType == Type.tFixedArray
-    }
+    def isDimFor(svar : ExpressionPtr) => svar._type.baseType == Type.tFixedArray
     def isRangeFor(svar : ExpressionPtr) {
         let bt = svar._type.baseType
         return bt == Type.tRange || bt == Type.tURange
@@ -1755,9 +1744,7 @@ class GlslExport : AstVisitor {
         }
         *writer |> write(")")
     }
-    def override canVisitExprMakeStructBody(expr : ExprMakeStruct?) : bool {
-        return false
-    }
+    def override canVisitExprMakeStructBody(expr : ExprMakeStruct?) : bool => false
 // make array
     def override preVisitExprMakeArray(expr : ExprMakeArray?) {
         let atype = describe_glsl_type(expr._type)
@@ -2265,9 +2252,7 @@ def generate_glsl(fnMain : FunctionPtr; var errors : array<string>; shaderType :
 }
 
 [macro_function]
-def bind_uniform_function_name(fnMain : FunctionPtr) {
-    return "{fnMain.name}_bind_uniform"
-}
+def bind_uniform_function_name(fnMain : FunctionPtr) => "{fnMain.name}_bind_uniform"
 
 [macro_function]
 def is_glsl_structure(arg; name : string) {
@@ -2291,9 +2276,7 @@ def is_shadow_compare_call(expr : ExprCall?) : bool {
 // GLSL has its own (undefined-but-not-trapping) out-of-bounds behavior, so the emitter drops the check
 // and writes `base[index]`, eliding the two trailing __context__ / __lineinfo__ args.
 [macro_function]
-def is_index_op_call(expr : ExprCall?) : bool {
-    return expr != null && expr.name == ".[]"
-}
+def is_index_op_call(expr : ExprCall?) : bool => expr != null && expr.name == ".[]"
 
 [macro_function]
 def is_any_matrix(typ : TypeDeclPtr) {

@@ -62,9 +62,8 @@ def live_capture(args : JsonValue?) : JsonValue? {
         platform = get_running_platform_name(), sequence = capture_sequence++, frame = capture_frame,
         description = args?.description ?? "", providers = JV(providers), diagnostics = JV(diagnostics), history = JV(capture_history)))
 }
-def private capture_document(args : JsonValue?) : JsonValue? {
-    return capture_clone(key_exists(args, "snapshot") ? args?.snapshot : args)
-}
+def private capture_document(args : JsonValue?) : JsonValue? =>
+    capture_clone(key_exists(args, "snapshot") ? args?.snapshot : args)
 def live_capture_validate(document : JsonValue?; var error : string&) : bool {
     if ((document?.schema ?? "") != "daslang.live.capture/1"){error = "Unsupported capture schema"; return false}
     if ((document?.application ?? "") != capture_application){error = "Capture belongs to a different application"; return false}

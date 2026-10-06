@@ -38,9 +38,7 @@ class SkipStructWalker : DapiDataWalker {
 // A walker that skips arrays
 class SkipArrayWalker : DapiDataWalker {
     log : string
-    def override canVisitArray(pa : void?; ti : TypeInfo) : bool {
-        return false
-    }
+    def override canVisitArray(pa : void?; ti : TypeInfo) : bool => false
     def override Int(var value : int&) : void {
         log += "Int:{value}\n"
     }
@@ -70,9 +68,7 @@ class SkipArrayDataWalker : DapiDataWalker {
 // A walker that skips table data
 class SkipTableDataWalker : DapiDataWalker {
     log : string
-    def override canVisitTableData(ti : TypeInfo) : bool {
-        return false
-    }
+    def override canVisitTableData(ti : TypeInfo) : bool => false
     def override beforeTable(pa : DapiTable; ti : TypeInfo) : void {
         log += "beforeTable\n"
     }
@@ -90,9 +86,7 @@ class SkipTableDataWalker : DapiDataWalker {
 // A walker that skips pointer dereference
 class SkipPointerWalker : DapiDataWalker {
     log : string
-    def override canVisitPointer(ti : TypeInfo) : bool {
-        return false
-    }
+    def override canVisitPointer(ti : TypeInfo) : bool => false
     def override beforePtr(ps : void?; ti : TypeInfo) : void {
         log += "beforePtr\n"
     }
@@ -108,9 +102,7 @@ class SkipPointerWalker : DapiDataWalker {
 class SelectiveStructWalker : DapiDataWalker {
     log : string
     skip_name : string
-    def override canVisitStructure(ps : void?; si : StructInfo) : bool {
-        return si.name != skip_name
-    }
+    def override canVisitStructure(ps : void?; si : StructInfo) : bool => si.name != skip_name
     def override beforeStructure(ps : void?; si : StructInfo) : void {
         log += "visit:{si.name}\n"
     }
