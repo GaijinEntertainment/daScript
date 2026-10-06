@@ -5165,8 +5165,9 @@ def private metal_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_tx
     asr_prof_add("tts.pocket.gpu.slab", tc)
     tc = ref_time_ticks()
     residency_flush()
+    let dev_rows = tts_pk_prompt_dev_take(g_tw_pk_prompt_dev, vs, n_txt)
     for (li, kc in iter_range(vs.caches), vs.caches) {
-        pk_kv_rows(kc, g_tw_pk_voice.bk[li], g_tw_pk_voice.bv[li], vs.len, base)
+        pk_kv_rows(kc, g_tw_pk_voice.bk[li], g_tw_pk_voice.bv[li], vs.len + dev_rows, base)
     }
     var sl & = g_tw_pk_frames
     let batch = min(pocket_frame_batch(), max_frames)
@@ -5197,7 +5198,144 @@ def private metal_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_tx
     return r
 }
 
-def private metal_pocket_driver : PocketGpuDriver => PocketGpuDriver(codec = @@metal_pocket_codec, frames = @@metal_pocket_frames)
+var private g_tw_pk_prompt_dev : TtsPkPromptDev
+
+//! A frame-slab linear over `rows` rows: the f32 slot's exact GEMM, or the blob's q8 blocks under the prefill
+//! ladder's q8 GEMM with the bias row after it (`bxh` the rows' half twin where that GEMM reads one).
+def private pk_rows_lin(enc : MetalComputeEncoder?; var c : St2GpuCtx; p : PkLin; bx, bxh, by : MetalBuffer?; rows : int64) {
+    if (!p.q8) {
+        st2_lin(enc, c, p.f, bx, rows, by)
+        return
+    }
+    let mp = round_up(rows, 32l)
+    if (bxh != null) {
+        enc_cvt_half(enc, bx, bxh, mp * p.nin)
+    }
+    pf_enc_q8_mm(enc, g_tw_pk_frames.blob, p.qoff, bx, bxh, by, p.u_nin, p.u_nout, mp, p.nout, p.nin)
+    if (p.has_b) {
+        let n = rows * p.nout
+        enc_add_bias_rows(enc, by, 0ul, c.slab, p.boff, p.u_nout, st2_u(c, uint(n)), n)
+    }
+}
+
+//! The backbone over the prompt's rows x [t][d] at positions pos0.. - `pk_transformer`'s loop over the frames slab's
+//! layers, the keys and values into the voice slot's rows from pos0 (the slot's rope tables at that row), the last
+//! layer ending at them: only the caches are read after the prompt.
+def private pk_prompt_rows(enc : MetalComputeEncoder?; var c : St2GpuCtx; tf : PocketTransformer; sl : PkFramesSlab; b : PkTfBufs; bx, bxh : MetalBuffer?; t, pos0 : int64) {
+    let d = tf.d
+    let dh = uint(d / tf.heads)
+    let half = d / tf.heads / 2l
+    let nd = t * d
+    let u_d = st2_u(c, uint(d))
+    let u_nd = st2_u(c, uint(nd))
+    let v & = g_tw_pk_voice
+    let last = length(tf.layers) - 1
+    var kc = PkRowsArgs(rows = uint(t), width = uint(d), ss = uint(3l * d), sc = uint(d), sr0 = 0u, ds = uint(d), dc = 0u, dr0 = uint(pos0))
+    var ra = GkRopeTabArgs(rows = uint(t), qs = uint(3l * d), col = 0u, d = uint(d), dh = dh, coff = uint(pos0 * half), soff = uint(pos0 * half))
+    let pairs = t * (d / 2l)
+    for (i in range(length(tf.layers))) {
+        let s & = unsafe(sl.layers[i])
+        let kv_only = i == last
+        st2_ln(enc, c, bx, b.bxb, t, d, tf.eps, c.slab, s.n1.gwoff, s.n1.gboff)
+        pk_rows_lin(enc, c, s.in_proj, b.bxb, bxh, b.bqkv, t)
+        if (!kv_only) {
+            ra.col = 0u
+            enc_pk_rope_tab(enc, b.bqkv, v.bcos, v.bsin, ra, pairs)
+        }
+        ra.col = uint(d)
+        enc_pk_rope_tab(enc, b.bqkv, v.bcos, v.bsin, ra, pairs)
+        kc.sc = uint(d)
+        enc_pk_rows(enc, b.bqkv, v.bk[i], kc, nd)
+        kc.sc = uint(2l * d)
+        enc_pk_rows(enc, b.bqkv, v.bv[i], kc, nd)
+        continue if (kv_only)
+        var ka = PkAttnArgs(t = uint(t), qs = uint(3l * d), qcol = 0u, d = uint(d), pos0 = uint(pos0), ctx = uint(tf.context))
+        enc_pk_attn(enc, b.bqkv, v.bk[i], v.bv[i], b.bctx, ka, tf.heads * t)
+        pk_rows_lin(enc, c, s.out_proj, b.bctx, bxh, b.bxb, t)
+        if (s.has_s1) {
+            enc_pk_row_scale(enc, b.bxb, 0ul, c.slab, s.scale1_off, u_d, u_nd, nd)
+        }
+        st2_add(enc, c, bx, b.bxb, bx, nd, 1.0)
+        st2_ln(enc, c, bx, b.bxb, t, d, tf.eps, c.slab, s.n2.gwoff, s.n2.gboff)
+        pk_rows_lin(enc, c, s.ffn1, b.bxb, bxh, b.bh, t)
+        let nf = t * tf.ffn
+        enc_st2_gelu_tanh(enc, b.bh, 0ul, st2_u(c, uint(nf)), nf)
+        pk_rows_lin(enc, c, s.ffn2, b.bh, bxh, b.bxb, t)
+        if (s.has_s2) {
+            enc_pk_row_scale(enc, b.bxb, 0ul, c.slab, s.scale2_off, u_d, u_nd, nd)
+        }
+        st2_add(enc, c, bx, b.bxb, bx, nd, 1.0)
+    }
+}
+
+//! The prompt's K/V rows [vs.len, vs.len + t) of every layer back from the voice slot's shared buffers into the host caches.
+def private pk_prompt_readback(var vs : PocketVoiceState; t, d : int64) {
+    let v & = g_tw_pk_voice
+    unsafe {
+        for (li, kc in iter_range(vs.caches), vs.caches) {
+            let kp = reinterpret<float const?>(metal_buffer_contents(v.bk[li]))
+            let vp = reinterpret<float const?>(metal_buffer_contents(v.bv[li]))
+            kv_cache_append_rows(kc, kp + vs.len * d, vp + vs.len * d, t, d)
+        }
+    }
+}
+
+//! The text prompt's rows through the backbone after the voice's: the frames slab's layers in the rows form at
+//! positions vs.len.., the keys and values into the voice slot and back to the host caches, the slot's rows left
+//! for the frames call after it.
+[hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-pocket-frames")]
+def private metal_pocket_prompt(m : PocketModel; var vs : PocketVoiceState; n_txt : int64; var sc : PocketScratch) : bool {
+    if (!g_tw_env_tower) {
+        return tw_decline(MetalTowerDecline.knob)
+    }
+    let tf & = unsafe(m.backbone)
+    let d = tf.d
+    var lin_mm_ok = tf.ffn % 64l == 0l && d % 64l == 0l
+    for (l in tf.layers) {
+        lin_mm_ok = lin_mm_ok && l.in_proj.nin % 32l == 0l && l.out_proj.nin % 32l == 0l && l.ffn1.nin % 32l == 0l && l.ffn2.nin % 32l == 0l
+    }
+    if (!tts_pk_prompt_admit(m, vs, n_txt, PK_ATTN_MAX_KEYS) || !pk_frames_ok(m) || !lin_mm_ok) {
+        return tw_decline(MetalTowerDecline.shape)
+    }
+    var tc = ref_time_ticks()
+    if (!metal_tower_init() || !pk_frames_attach(m) || !pk_voice_attach(vs, tf)) {
+        return tw_decline(MetalTowerDecline.device)
+    }
+    asr_prof_add("tts.pocket.gpu.slab", tc)
+    tc = ref_time_ticks()
+    residency_flush()
+    var sl & = g_tw_pk_frames
+    var c = St2GpuCtx()
+    st2_ctx_make(c, sl.buf, 1l, 1l, 0ul)
+    c.exact = true
+    var bx = st2_rows_buf(c, n_txt, d)
+    st2_upload(bx, sc.rows, n_txt * d)
+    var b = PkTfBufs(bxb = st2_rows_buf(c, n_txt, d), bqkv = st2_rows_buf(c, n_txt, 3l * d), bctx = st2_rows_buf(c, n_txt, d), bh = st2_rows_buf(c, n_txt, tf.ffn))
+    var bxh : MetalBuffer? = null
+    if (sl.blob != null && pf_q8_mm_half()) {
+        bxh = st2_rows_buf(c, n_txt, (max(d, tf.ffn) + 1l) / 2l)
+    }
+    asr_prof_add("tts.pocket.gpu.upload", tc)
+    tc = ref_time_ticks()
+    var err = ""
+    let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026,LINT019 — the error-text fetch runs only on the failure leg
+        pk_prompt_rows(enc, c, tf, sl, b, bx, bxh, n_txt, vs.len)
+    }
+    asr_prof_add("tts.pocket.gpu.prompt", tc)
+    if (ran) {
+        pk_prompt_readback(vs, n_txt, d)
+        tts_pk_prompt_dev_set(g_tw_pk_prompt_dev, vs, n_txt)
+        g_tower_encodes++
+        g_tower_rows += n_txt
+    }
+    st2_ctx_release(c)
+    if (!ran) {
+        return tw_decline(MetalTowerDecline.gpu_error)
+    }
+    return true
+}
+
+def private metal_pocket_driver : PocketGpuDriver => PocketGpuDriver(codec = @@metal_pocket_codec, frames = @@metal_pocket_frames, prompt = @@metal_pocket_prompt)
 
 def private metal_styletts2_driver : St2GpuDriver {
     return St2GpuDriver(albert = @@metal_styletts2_albert, text = @@metal_styletts2_text, dur_enc = @@metal_styletts2_dur_enc,

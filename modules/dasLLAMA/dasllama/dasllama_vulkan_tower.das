@@ -2595,7 +2595,7 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
     var pc_fa = FaArgs(rows = uint(npos), w0 = 0u, qd = uint(dp), kvd = uint(dp), kv_mul = 1u, kvbase = 0u, scale = 1.0 / sqrt(float(hs)), window = 0u, sinkoff = 0u)
     var pc_pad_qkv = TowerRestrideArgs(rows = uint(npos), rows_pad = uint(npos_pad), nheads = uint(t.n_head), hs = uint(hs), hsp = uint(hsp), sstride = uint(3l * d), soff = 0u)
     var pc_unpad = TowerRestrideArgs(rows = uint(npos), rows_pad = uint(npos_pad), nheads = uint(t.n_head), hs = uint(hs), hsp = uint(hsp), sstride = uint(d), soff = 0u)   //! the attention rows are d-wide
-    var pc_rope = RopeTabArgs(rows = uint(npos), qs = uint(3l * d), col = 0u, d = uint(t.n_head * hs), dh = uint(hs), coff = 0u, soff = 0u)
+    var pc_rope = GkRopeTabArgs(rows = uint(npos), qs = uint(3l * d), col = 0u, d = uint(t.n_head * hs), dh = uint(hs), coff = 0u, soff = 0u)
     var pc_rq = RqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
     var pc_rqh = RqArgs(inbase = 0u, nblk = uint(nff / q8e), lo = -VT_NO_CLAMP, hi = VT_NO_CLAMP)
     var pc_gqkv = BatchArgs(n = uint(d), d = uint(3l * d), map_off = 0u)
@@ -2740,7 +2740,7 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
     let scale = 1.0 / sqrt(float(hs))
     var pc_fa = FaArgs(rows = uint(npos), w0 = 0u, qd = uint(dp), kvd = uint(dp), kv_mul = 1u, kvbase = 0u, scale = scale, window = 0u, sinkoff = 0u)
     var pc_rs = TowerRestrideArgs(rows = uint(npos), rows_pad = uint(npos_pad), nheads = uint(t.n_head), hs = uint(hs), hsp = uint(hsp), sstride = uint(d), soff = 0u)
-    var pc_rope = RopeTabArgs(rows = uint(npos), qs = uint(d), col = 0u, d = uint(t.n_head * hs), dh = uint(hs), coff = 0u, soff = 0u)
+    var pc_rope = GkRopeTabArgs(rows = uint(npos), qs = uint(d), col = 0u, d = uint(t.n_head * hs), dh = uint(hs), coff = 0u, soff = 0u)
     var pc_gd = F16GemmArgs(n = uint(d), d = uint(d), rows = uint(npos), woff = 0u, ybase = 0u, ystride = uint(d), ksplit = 0u)
     var pc_gff = F16GemmArgs(n = uint(d), d = uint(ff), rows = uint(npos), woff = 0u, ybase = 0u, ystride = uint(ff), ksplit = 0u)
     var pc_dn = F16GemmArgs(n = uint(ff), d = uint(d), rows = uint(npos), woff = 0u, ybase = 0u, ystride = uint(d), ksplit = 0u)

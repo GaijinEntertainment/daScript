@@ -787,7 +787,7 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
                 let cosp = cp |> in_(cos_t)
                 let sinp = cp |> in_(sin_t)
                 var s_rope = cp |> cls_set(fixed_array(qkvp, cosp, sinp), @@set_tower_rope_tab_cls)
-                var pa_rope = RopeTabArgs(rows = uint(rows), qs = uint(3 * d_compact), col = uint(d_compact), d = uint(ROWS_HEADS * LN_HS), dh = uint(LN_HS),
+                var pa_rope = GkRopeTabArgs(rows = uint(rows), qs = uint(3 * d_compact), col = uint(d_compact), d = uint(ROWS_HEADS * LN_HS), dh = uint(LN_HS),
                     coff = 0u, soff = 0u)
                 var s_ln = cp |> cls_set(fixed_array(xp, xbp, wp), @@set_tower_ln_cls)
                 var s_acts <- [for (ap in act_p); cp |> cls_set(fixed_array(ap, wp), @@set_tower_bias_act_cls)]

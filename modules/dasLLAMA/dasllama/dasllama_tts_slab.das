@@ -985,6 +985,32 @@ def tts_pk_frames_admit(m : PocketModel; vs : PocketVoiceState; n_txt, max_frame
         && vs.len + n_txt + max_frames <= vs.caches[0].cap && vs.caches[0].cap <= max_keys)
 }
 
+//! the voice's caches take this prompt: a cache a layer, one row or more, voice + text within capacity, capacity within `max_keys`
+def tts_pk_prompt_admit(m : PocketModel; vs : PocketVoiceState; n_txt, max_keys : int64) : bool {
+    return (n_txt >= 1l && !empty(vs.caches) && length(vs.caches) == length(m.backbone.layers)
+        && vs.len + n_txt <= vs.caches[0].cap && vs.caches[0].cap <= max_keys)
+}
+
+//! the prompt rows a served prompt seat left in the voice slot for the frames call after it: the voice they belong
+//! to and the rows [len, len + n); a frames call over another voice, fill or prompt uploads every row itself
+struct TtsPkPromptDev {
+    key : uint64
+    len : int64
+    n : int64
+}
+
+//! the rows [vs.len, vs.len + n_txt) the record holds on the device for this frames call, 0 where it holds another
+//! prompt's; the record is spent either way, so a frames call that never came cannot leave it to the next
+def tts_pk_prompt_dev_take(var rec : TtsPkPromptDev; vs : PocketVoiceState; n_txt : int64) : int64 {
+    let n = (rec.key == tts_pk_voice_key(vs) && rec.len == vs.len && rec.n == n_txt) ? rec.n : 0l
+    rec = TtsPkPromptDev()
+    return n
+}
+
+def tts_pk_prompt_dev_set(var rec : TtsPkPromptDev; vs : PocketVoiceState; n_txt : int64) {
+    rec = TtsPkPromptDev(key = tts_pk_voice_key(vs), len = vs.len, n = n_txt)
+}
+
 //! the conditioning rows a frames call reads back after the loop stepped `stepped` frames: every frame made and the breaking frame's row, as the CPU loop leaves them
 def tts_pk_cond_rows(frames, stepped : int64) : int64 => min(frames + 1l, stepped)
 

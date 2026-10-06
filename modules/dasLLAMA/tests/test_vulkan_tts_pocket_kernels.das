@@ -479,7 +479,7 @@ def test_vkt_pk_rope(t0 : T?) {
                 let xp = cp |> io_(x, 0, SLACK)
                 let wp = cp |> in_(slab)
                 var s = cp |> cls_set(fixed_array(xp, wp, wp), @@set_tts_pk_rope_cls)
-                var pa = RopeTabArgs(rows = uint(PO_T), qs = uint(PO_QS), col = uint(PO_D), d = uint(PO_D), dh = uint(PO_DH), coff = uint(coff), soff = uint(soff))
+                var pa = GkRopeTabArgs(rows = uint(PO_T), qs = uint(PO_QS), col = uint(PO_D), d = uint(PO_D), dh = uint(PO_DH), coff = uint(coff), soff = uint(soff))
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_tts_pk_rope_cls(raw, h, s, pa, int64(nk / 2))
                 }

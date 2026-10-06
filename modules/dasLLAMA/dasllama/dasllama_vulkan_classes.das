@@ -10913,79 +10913,15 @@ class template TowerWinAttnT {
 [vk_dispatch(name = "tower_win_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-routes")]
 class TowerWinAttn : TowerWinAttnT {}
 
-struct RopeTabArgs {
-    rows : uint   //! the rows roped, row r at position r
-    qs : uint     //! x's row stride
-    col : uint    //! the roped span's first column (a fused [q | k | v] row's q or k slot)
-    d : uint      //! the span's width, its heads side by side
-    dh : uint     //! the head size
-    coff : uint   //! the cos table [pos][dh / 2]'s element base in its binding
-    soff : uint   //! the sin table's element base in its binding, laid out as the cos table
-}
-
-//! the rotary embedding over a span of rows in place from per-position tables: row r at position r turns each pair
-//! of each head by the tables' angle j at that position - NEOX the pairs (j, j + dh / 2), the CPU `rope_neox_tab_rows` (the
-//! vision mrope tables), else the adjacent pairs (2j, 2j + 1), the CPU `rope_rows`; one pair an invocation over rows * d / 2
-[ |> template_struct_instance]
-class template RopeTabT {
-    @template_constant NEOX : bool = false
-    @template_constant SLAB_TABS : bool = false   //!< the tables sit in a weight slab, not in per-encode planes
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 @template_gate = "!SLAB_TABS" cos_t : array<float>
-    @ssbo @binding = 2 @template_gate = "!SLAB_TABS" sin_t : array<float>
-    @ssbo @binding = 1 @role = "weight" @template_gate = SLAB_TABS cos_w : array<float>
-    @ssbo @binding = 2 @role = "weight" @template_gate = SLAB_TABS sin_w : array<float>
-    @push_constant pa : RopeTabArgs
-
-    def pair_first(hb, j : uint) : uint {
-        static_if (NEOX) {
-            return hb + j
-        } else {
-            return hb + 2u * j
-        }
-    }
-
-    def pair_partner_dist(hh : uint) : uint {
-        static_if (NEOX) {
-            return hh
-        } else {
-            return 1u
-        }
-    }
+//! the vision towers' full-head NEOX rope over q or k rows, one table row a position shared by every head
+[vk_dispatch(name = "tower_rope_tab_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerRopeTab : GkRopeTab {
+    override NEOX = true
 
     [spirv_kernel(local_size_x = 256)]
     def run {
-        let gid = gl_GlobalInvocationID.x
-        let half = pa.d / 2u
-        if (gid < pa.rows * half) {
-            let r = gid / max(half, 1u)
-            let pi = gid % max(half, 1u)
-            let hh = max(pa.dh / 2u, 1u)
-            let j = pi % hh
-            let i0 = pair_first(r * pa.qs + pa.col + (pi / hh) * pa.dh, j)
-            let i1 = i0 + pair_partner_dist(hh)
-            let tb = r * hh + j
-            var cv = 0.0
-            var sv = 0.0
-            static_if (SLAB_TABS) {
-                cv = cos_w[pa.coff + tb]
-                sv = sin_w[pa.soff + tb]
-            } else {
-                cv = cos_t[pa.coff + tb]
-                sv = sin_t[pa.soff + tb]
-            }
-            let v0 = x[i0]
-            let v1 = x[i1]
-            x[i0] = v0 * cv - v1 * sv
-            x[i1] = v0 * sv + v1 * cv
-        }
+        rope_tab_body()
     }
-}
-
-//! the vision towers' full-head NEOX rope over q or k rows, one table row a position shared by every head
-[vk_dispatch(name = "tower_rope_tab_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TowerRopeTab : RopeTabT {
-    override NEOX = true
 }
 
 struct RopeKvArgs {
@@ -14645,8 +14581,11 @@ class TtsPkGemvLnGelu : TtsPkGemvT {
     override EPI = 8
 }
 
-//! the Pocket codec's adjacent-pair rope over the q and k spans, the tables in the slab (cos_w and sin_w bind one buffer)
+//! the Pocket chains' adjacent-pair rope over the q and k spans, the tables in a slab or the voice slot (cos_t and sin_t bind one buffer)
 [vk_dispatch(name = "tts_pk_rope_cls", kernel = "run", grid = "pairs/256", params = "pairs : int64")]
-class TtsPkRope : RopeTabT {
-    override SLAB_TABS = true
+class TtsPkRope : GkRopeTab {
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        rope_tab_body()
+    }
 }

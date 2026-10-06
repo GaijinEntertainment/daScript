@@ -319,6 +319,7 @@ def private ts_forget {
     ts_scratch_release(g_ts_dec_scratch)
     ts_scratch_release(g_ts_pkc_scratch)
     ts_scratch_release(g_ts_pkf_scratch)
+    ts_scratch_release(g_ts_pkp_scratch)
     ts_pk_voice_drop()
 }
 
@@ -1810,7 +1811,7 @@ def private ts_pk_row_scale(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows;
 //! the adjacent-pair rope over the span `d` wide at column `col` of x's rows [rows][qs], positions 0.., on the tables in `tabs` (cos at coff, sin at soff)
 def private ts_pk_rope(raw : VkCommandBuffer; var h : VkHaz; tabs : TsRows; coff, soff : int64; x : TsRows; rows, qs, col, d, dh : int64) {
     var s = set_tts_pk_rope_cls(fixed_array(x.dev, tabs.dev, tabs.dev), fixed_array(x.bytes, tabs.bytes, tabs.bytes), fixed_array(x.bit, tabs.bit, tabs.bit))
-    var pa = RopeTabArgs(rows = uint(rows), qs = uint(qs), col = uint(col), d = uint(d), dh = uint(dh), coff = uint(coff), soff = uint(soff))
+    var pa = GkRopeTabArgs(rows = uint(rows), qs = uint(qs), col = uint(col), d = uint(d), dh = uint(dh), coff = uint(coff), soff = uint(soff))
     enc_tts_pk_rope_cls(raw, h, s, pa, rows * d / 2l)
     vt_pt(raw, VtProfRole.tts_pk)
 }
@@ -1964,37 +1965,57 @@ def private ts_pk_codec_floats(mm : PocketMimi; frames : int64) : TsFloats {
     return fl
 }
 
-//! the codec transformer over the residual rows X [t][d] at positions 0..: the CPU's layer loop, dispatch for dispatch
-def private ts_pk_transformer(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : TsScratch; tf : PocketTransformer; sl : TtsPkCodecSlab; t : int64) {
+//! a transformer's rows form: every layer's keys and values written at row `kv_row0` of its cache rows, the rope tables'
+//! row of position 0 at `coff` / `soff`, the queries at `pos0`; `kv_only_last` ends the last layer at its cache rows
+struct private TsPkRowsForm {
+    pos0 : int64
+    kv_row0 : int64
+    tabs : TsRows
+    coff : int64
+    soff : int64
+    zero : int64
+    kv_only_last : bool
+}
+
+//! a transformer over the residual rows X [t][d] of the scratch's slot set: the CPU's layer loop, dispatch for dispatch
+def private ts_pk_rows_tf(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : TsScratch; tf : PocketTransformer; layers : array<TtsPkLayerSlots>;
+                          t : int64; f : TsPkRowsForm; slot_x, slot_xb, slot_qkv, slot_ctx, slot_h : int; kv : block<(li : int) : tuple<k : TsRows; v : TsRows>>) {
     let d = tf.d
     let dh = d / tf.heads
     let nd = t * d
-    let r_x = ts_rows(sc_, TS_C_X)
-    let r_xb = ts_rows(sc_, TS_C_XB)
-    let r_qkv = ts_rows(sc_, TS_C_QKV)
-    let r_ctx = ts_rows(sc_, TS_C_CTX)
-    let r_h = ts_rows(sc_, TS_C_H)
-    let r_k = ts_rows(sc_, TS_C_K)
-    let r_v = ts_rows(sc_, TS_C_V)
-    var kc = TtsPkRowsArgs(rows = uint(t), width = uint(d), ss = uint(3l * d), sc = uint(d), sr0 = 0u, ds = uint(d), dc = 0u, dr0 = 0u)
+    let half = dh / 2l
+    let r_x = ts_rows(sc_, slot_x)
+    let r_xb = ts_rows(sc_, slot_xb)
+    let r_qkv = ts_rows(sc_, slot_qkv)
+    let r_ctx = ts_rows(sc_, slot_ctx)
+    let r_h = ts_rows(sc_, slot_h)
+    var kc = TtsPkRowsArgs(rows = uint(t), width = uint(d), ss = uint(3l * d), sc = uint(d), sr0 = 0u, ds = uint(d), dc = 0u, dr0 = uint(f.kv_row0))
     var pa_gelu = TtsElemArgs(nelem = uint(t * tf.ffn), off = 0u, slope = 0.0)
     var s_gelu = set_tts_gelu_tanh_cls(fixed_array(r_h.dev), fixed_array(r_h.bytes), fixed_array(r_h.bit))
-    for (i in range(length(tf.layers))) {
-        let s & = unsafe(sl.layers[i])
+    let coff = f.coff + f.pos0 * half
+    let soff = f.soff + f.pos0 * half
+    let last = length(layers) - 1
+    for (i in range(length(layers))) {
+        let s & = unsafe(layers[i])
+        let cache = invoke(kv, i)
+        let kv_only = f.kv_only_last && i == last
         ts_ln(raw, h, slab, s.n1, r_x, r_xb, t, d, tf.eps)
         ts_lin(raw, h, slab, s.in_proj, d, 3l * d, r_xb, r_qkv, t)
-        ts_pk_rope(raw, h, slab, sl.rope_cos, sl.rope_sin, r_qkv, t, 3l * d, 0l, d, dh)
-        ts_pk_rope(raw, h, slab, sl.rope_cos, sl.rope_sin, r_qkv, t, 3l * d, d, d, dh)
+        if (!kv_only) {
+            ts_pk_rope(raw, h, f.tabs, coff, soff, r_qkv, t, 3l * d, 0l, d, dh)
+        }
+        ts_pk_rope(raw, h, f.tabs, coff, soff, r_qkv, t, 3l * d, d, d, dh)
         kc.sc = uint(d)
-        ts_pk_rows(raw, h, r_qkv, r_k, kc, false)
+        ts_pk_rows(raw, h, r_qkv, cache.k, kc, false)
         kc.sc = uint(2l * d)
-        ts_pk_rows(raw, h, r_qkv, r_v, kc, false)
-        ts_pk_attn(raw, h, r_qkv, r_k, r_v, r_ctx, t, 3l * d, d, tf.heads, 0l, tf.context)
+        ts_pk_rows(raw, h, r_qkv, cache.v, kc, false)
+        continue if (kv_only)
+        ts_pk_attn(raw, h, r_qkv, cache.k, cache.v, r_ctx, t, 3l * d, d, tf.heads, f.pos0, tf.context)
         ts_lin(raw, h, slab, s.out_proj, d, d, r_ctx, r_xb, t)
         if (s.has_s1) {
             ts_pk_row_scale(raw, h, slab, r_xb, t, d, s.scale1_off)
         }
-        ts_pk_add_ln(raw, h, slab, sl.zero, s.n2, r_x, r_xb, r_xb, t, d, tf.eps)
+        ts_pk_add_ln(raw, h, slab, f.zero, s.n2, r_x, r_xb, r_xb, t, d, tf.eps)
         ts_lin(raw, h, slab, s.ffn1, d, tf.ffn, r_xb, r_h, t)
         enc_tts_gelu_tanh_cls(raw, h, s_gelu, pa_gelu, t * tf.ffn)
         vt_pt(raw, VtProfRole.tts_act)
@@ -2003,6 +2024,16 @@ def private ts_pk_transformer(raw : VkCommandBuffer; var h : VkHaz; slab : TsRow
             ts_pk_row_scale(raw, h, slab, r_xb, t, d, s.scale2_off)
         }
         ts_add_scale(raw, h, r_x, r_xb, r_x, nd, 1.0)
+    }
+}
+
+//! the codec transformer over the residual rows X [t][d] at positions 0.., its keys and values in the scratch's one row set
+def private ts_pk_transformer(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : TsScratch; tf : PocketTransformer; sl : TtsPkCodecSlab; t : int64) {
+    let r_k = ts_rows(sc_, TS_C_K)
+    let r_v = ts_rows(sc_, TS_C_V)
+    let f = TsPkRowsForm(pos0 = 0l, kv_row0 = 0l, tabs = slab, coff = sl.rope_cos, soff = sl.rope_sin, zero = sl.zero, kv_only_last = false)
+    ts_pk_rows_tf(raw, h, slab, sc_, tf, sl.layers, t, f, TS_C_X, TS_C_XB, TS_C_QKV, TS_C_CTX, TS_C_H) $(_li : int) {
+        return (k = r_k, v = r_v)
     }
 }
 
@@ -2294,8 +2325,9 @@ def private vulkan_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_t
         ts_decline("frames", VulkanTtsDecline.memory)
         return none
     }
+    let dev_rows = tts_pk_prompt_dev_take(g_ts_pk_prompt_dev, vs, n_txt)
     for (li, kc in iter_range(vs.caches), vs.caches) {
-        ts_pk_kv_upload(kc, g_ts_pk_voice.k[li], g_ts_pk_voice.v[li], vs.len, base)
+        ts_pk_kv_upload(kc, g_ts_pk_voice.k[li], g_ts_pk_voice.v[li], vs.len + dev_rows, base)
     }
     let sl & = g_ts_pk_frames_slots
     let sc_ & = g_ts_pkf_scratch
@@ -2312,6 +2344,76 @@ def private vulkan_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_t
     return r
 }
 
+var private g_ts_pkp_scratch : TsScratch
+var private g_ts_pk_prompt_dev : TtsPkPromptDev
+
+//! the prompt seat's slots: the rows form's five at the prompt's rows (the frames slots' indices, its own scratch)
+def private ts_pk_prompt_floats(m : PocketModel; t : int64) : TsFloats {
+    let d = m.backbone.d
+    var fl : TsFloats
+    fl[TS_F_X] = t * d
+    fl[TS_F_XB] = t * d
+    fl[TS_F_QKV] = t * 3l * d
+    fl[TS_F_CTX] = t * d
+    fl[TS_F_H] = t * m.backbone.ffn
+    return fl
+}
+
+//! the prompt's K/V rows [vs.len, vs.len + t) of every layer back from the voice slot into the host caches
+def private ts_pk_prompt_readback(var vs : PocketVoiceState; sc_ : TsScratch; t, d : int64) {
+    let v & = g_ts_pk_voice
+    g_ts_pk_kv_host |> ensure_length(2l * t * d)
+    unsafe {
+        var kp = addr(g_ts_pk_kv_host[0])
+        var vp = addr(g_ts_pk_kv_host[t * d])
+        for (li, kc in iter_range(vs.caches), vs.caches) {
+            readback_range(v.k[li].dev, v.k[li].bit, vs.len * d * 4l, sc_.hb, kp, t * d * 4l)
+            readback_range(v.v[li].dev, v.v[li].bit, vs.len * d * 4l, sc_.hb, vp, t * d * 4l)
+            kv_cache_append_rows(kc, kp, vp, t, d)
+        }
+    }
+}
+
+//! the text prompt's rows through the backbone after the voice's: the frames slab's layers in the rows form at
+//! positions vs.len.., the keys and values into the voice slot and back to the host caches, the slot's rows left for
+//! the frames call after it
+[hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-pocket-chain")]
+def private vulkan_pocket_prompt(m : PocketModel; var vs : PocketVoiceState; n_txt : int64; var sc : PocketScratch) : bool {
+    if (!vulkan_tower_on()) {
+        return ts_decline("prompt", VulkanTtsDecline.knob)
+    }
+    let tf & = unsafe(m.backbone)
+    let d = tf.d
+    let shape_ok = tts_pk_frames_ok(m, TS_PK_ATTN_HS, TS_PK_GEMV_MAX_NIN) $(l : TtsLinear) : bool {
+        return tts_gemm_lin_ok(l)
+    }
+    if (!tts_pk_prompt_admit(m, vs, n_txt, TS_PK_ATTN_MAX_KEYS) || d % 4l != 0l || !shape_ok) {
+        return ts_decline("prompt", VulkanTtsDecline.shape)
+    }
+    if (!ts_arm_ensure("pocket prompt", @@ts_pk_codec_ensure)) {
+        return ts_decline("prompt", VulkanTtsDecline.device)
+    }
+    let fl = ts_pk_prompt_floats(m, n_txt)
+    if (!ts_pk_frames_attach(m) || !ts_pk_voice_attach(vs, tf) || !ts_scratch_ready(g_ts_pkp_scratch, fl, 0l, 0l, n_txt * d)) {
+        return ts_decline("prompt", VulkanTtsDecline.memory)
+    }
+    let sl & = g_ts_pk_frames_slots
+    let sc_ & = g_ts_pkp_scratch
+    let slab = g_ts_pk_frames.rows
+    let v & = g_ts_pk_voice
+    ts_upload(ts_rows(sc_, TS_F_X), sc.rows, n_txt * d)
+    let f = TsPkRowsForm(pos0 = vs.len, kv_row0 = vs.len, tabs = v.rope, coff = 0l, soff = v.sin_off, zero = sl.zero, kv_only_last = true)
+    vt_chain_one_shot("pocket prompt", long_length(tf.layers), n_txt) $(raw : VkCommandBuffer; var h : VkHaz) {
+        ts_pk_rows_tf(raw, h, slab, sc_, tf, sl.layers, n_txt, f, TS_F_X, TS_F_XB, TS_F_QKV, TS_F_CTX, TS_F_H) $(li : int) {
+            return (k = v.k[li], v = v.v[li])
+        }
+    }
+    g_ts_encodes++
+    ts_pk_prompt_readback(vs, sc_, n_txt, d)
+    tts_pk_prompt_dev_set(g_ts_pk_prompt_dev, vs, n_txt)
+    return true
+}
+
 [init]
 def dasllama_vulkan_tts_register {
     register_vk_drop_hook(@@ts_forget)
@@ -2320,6 +2422,6 @@ def dasllama_vulkan_tts_register {
         register_styletts2_gpu(St2GpuDriver(albert = @@vulkan_styletts2_albert, text = @@vulkan_styletts2_text, dur_enc = @@vulkan_styletts2_dur_enc,
             durations = @@vulkan_styletts2_durations, prosody = @@vulkan_styletts2_prosody, decode = @@vulkan_styletts2_decode,
             gen = @@vulkan_styletts2_generator))
-        register_pocket_gpu(PocketGpuDriver(codec = @@vulkan_pocket_codec, frames = @@vulkan_pocket_frames))
+        register_pocket_gpu(PocketGpuDriver(codec = @@vulkan_pocket_codec, frames = @@vulkan_pocket_frames, prompt = @@vulkan_pocket_prompt))
     }
 }
