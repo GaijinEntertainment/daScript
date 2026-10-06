@@ -100,6 +100,24 @@ watermark only has to cover the base, since a draft at `pos + i` reads exactly t
 chain wrote above it, while the slab capacity must still cover the row being written. Gating on the
 drafted position refuses every round past the first draft.
 
+**A depth-1 round on a Q8_0 embedding table is one command buffer.** The rows step's draft is
+parked (`g_chain_rd`) and encoded ahead of the verify on the verify's own serial encoder, with
+`enc_argmax_rows` landing every row's winner in the step's `btok`; the verify then embeds each
+group's row 1 from that slot on the device (`enc_embed`, into its rows and the head's cat image)
+and the host reads the winners into `mtp_vbatch` only after the verify's join - one commit, one
+join, no readback between the draft and the verify. The draft body reads the groups in the draft
+layout (one row a group at the seam), so the encoder sets that layout around it and restores the
+verify layout, in which a group's row count is its own `nr`, not the step's total
+(`set_groups_layout` writes both). The landing after the join still writes the seam row's draft
+K/V back to the host cache, as the host chain's landing did, so a mirror rebuilt from host rows
+carries the draft's row and not the previous verify's warm. The host prep embeds a valid
+placeholder into row 1 (the committed token), since on a fresh session the slot holds nothing
+yet; a model with a PLE n-gram layer gathers its rows from the host's tokens before the join, so
+it keeps the host chain. A parked draft whose arena moved under the verify's acquire holds stale
+offsets and refuses the round. Depth 2 and up keep the host chain: each draft joins before the
+next. The reject debug knob rejects the chained draft at the walk, the row 1 the verify embedded
+notwithstanding.
+
 ### The verify step re-warms the draft slab from committed history {#mtp-verify-draft-warm}
 
 **The NextN verify encodes the draft head as one more layer and re-warms its K/V slab in the same
@@ -188,18 +206,19 @@ with speculation off - reaches its next speculative round warm instead of cold-f
 same-slab verify lands its rows into `mtp_hrows` instead and the walk sets the carry per group.
 The drafts are rows steps too: draft i of every warm stream is one rows step (`mtp_draft_rows`)
 whose row is that stream's previous draft at its own trunk position - the same route-table fill
-as the verify (`group_routes`), the draft head's rows form (`encode_draft_rows_step`: the
+as the verify (`group_routes`), the draft head's rows form (`encode_draft_rows_body`: the
 enorm/hnorm rows into the cat, one eh_proj pass, the draft layer through the rows-form layer
 encoder at every row's own slab, the head norm and ONE classifier pass) - and the landing writes
-each row's draft-slab K/V row and carry hidden into its stream and takes the row's argmax as its
-next draft, so a k-deep round reads the draft layer and the classifier plane k times for the
-tick, never once per stream. The rows step carries at least two rows (`nrows = max(ng, 2)`,
-the row past a solo stream cloning row 0's inputs and route): the rows forms are keyed on
-`nrows > 1`, and a one-row step would take the single-row driver's branches of the shared layer
-encoder, whose drafts diverge from the rows form's on about one round in seven. The two-row and
-three-row tiles draft identically, so a solo stream's drafts round as they do beside others - the
-joint invariance cell's claim - at the two-row tile's cost. A stream whose mirror cannot take the
-row (its watermark or capacity short) declines the whole rows step and every warm stream plain-steps.
+each row's draft-slab K/V row into its stream (the host chain's landing its carry hidden too) and
+takes the row's argmax as its next draft, so a k-deep round reads the draft layer and the
+classifier plane k times for the tick, never once per stream. The rows step carries at least two
+rows (`nrows = max(ng, 2)`, the row past a solo stream cloning row 0's inputs and route): a
+one-row rows-form step drafts other tokens than the two-row form on a share of the rounds
+(`followup_metal.md` 44; the measured share is in `PERF_LEDGER.md`), while the two- and three-row
+forms drafted the same tokens on every traced round, so a solo stream's drafts round as they do
+beside others - the joint invariance cell's claim - at the two-row tile's cost. A stream whose
+mirror cannot take the row (its watermark or capacity short) declines the whole rows step and
+every warm stream plain-steps.
 
 ### The verify encodes on the serial encoder {#verify-serial-encoder}
 

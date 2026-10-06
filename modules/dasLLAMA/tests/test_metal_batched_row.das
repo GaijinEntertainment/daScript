@@ -114,6 +114,89 @@ def test_metal_batched_row_shexp(t : T?) {
     }
 }
 
+//! the rows and the single GEMV forms round the router's logits apart and a near-tie flips an expert: the plain-MoE bar of
+//! test_metal_mtp_parity's q30 arms (reads 1.6e-3 at most on the M1 Max, the one-step-off control 9.7 at least)
+let SHEXP_SAMESLAB_BAR = 2.0
+let SHEXP_SAMESLAB_ROUNDS = 12l
+
+[test]
+def test_metal_batched_row_shexp_sameslab(t : T?) {
+    t |> run("one row of a shared-expert MoE through the batched driver's same-slab verify binds its own panels: its logits are the single-row step's (Qwen1.5-MoE-A2.7B Q8)") <| @(t : T?) {
+        if (!family_on(t, "qwen2moe")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let path = path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf")
+            return if (!jit_model_available(t, path))
+            let prior_mode = get_metal_mode()
+            set_metal_mode(MetalMode.when_available)
+            var tr <- blob_twin(t, path, 256l)
+            with_dasllama_jobque_() {
+                let c = tr.config
+                let vocab = c.vocab_size
+                var prompt <- encode(tr, "The capital of France is Paris, the capital of Italy is", true, false)
+                var sa = make_run_state(c, KVDtype.f16, KVDtype.f16)
+                var sb = make_run_state(c, KVDtype.f16, KVDtype.f16)
+                let floor_before = get_metal_prefill_min_npos()
+                select_prefill_override("metal")
+                set_metal_prefill_min_npos(1l)
+                eval_(tr, sa, prompt)
+                eval_(tr, sb, prompt)
+                select_prefill_override("")
+                set_metal_prefill_min_npos(floor_before)
+                select_decode_override("metal")
+                var ws <- create_batch_workspace_(tr)
+                let before = metal_batch_decode_stats().steps
+                var one <- [parallel_argmax(sa.logits, vocab)]
+                eval_(tr, sa, one)   // the mirror-building step on both
+                eval_(tr, sb, one)
+                finish_pending_step()
+                var prev := sa.logits
+                var maxd = 0.0
+                var off_min = 1e30
+                var served_rounds = 0l
+                for (r in range64(SHEXP_SAMESLAB_ROUNDS)) {
+                    one[0] = parallel_argmax(sa.logits, vocab)
+                    eval_(tr, sa, one)
+                    finish_pending_step()
+                    let pos = sb.n_past
+                    if (!verify_batch_step(tr, ws, sb, one, pos, 1l)) {
+                        t |> failure("round {r}: the same-slab verify declined one row")
+                        break
+                    }
+                    served_rounds++
+                    sb.n_past = pos + 1l
+                    var d = 0.0
+                    var doff = 0.0
+                    for (v in range64(vocab)) {
+                        d = max(d, abs(sa.logits[v] - sb.mtp_logits_b[v]))
+                        doff = max(doff, abs(prev[v] - sb.mtp_logits_b[v]))
+                    }
+                    maxd = max(maxd, d)
+                    off_min = min(off_min, doff)
+                    let single_top = parallel_argmax(sa.logits, vocab)
+                    let verify_top = parallel_argmax(sb.mtp_logits_b, vocab)
+                    to_log(LOG_INFO, "shexp same-slab round {r} pos={pos} maxd={d} off={doff} single_top={single_top} '{eyeball_text(tr, [single_top])}' verify_top={verify_top} '{eyeball_text(tr, [verify_top])}'\n")
+                    prev := sa.logits
+                }
+                select_decode_override("")
+                t |> equal(served_rounds, SHEXP_SAMESLAB_ROUNDS, "every round's one-row verify served")
+                t |> success(metal_batch_decode_stats().steps - before >= SHEXP_SAMESLAB_ROUNDS, "the batched driver stepped every round ({metal_batch_decode_stats().steps - before} steps)")
+                t |> success(maxd <= SHEXP_SAMESLAB_BAR, "the one-row verify's logits sit within {SHEXP_SAMESLAB_BAR} of the single-row step's at every round (widest {maxd})")
+                t |> success(off_min > SHEXP_SAMESLAB_BAR, "the one-step-off control lands outside the bar at every round (nearest {off_min})")
+                delete ws
+                delete one
+                delete prev
+                delete sa
+                delete sb
+                delete prompt
+            }
+            set_metal_mode(prior_mode)
+            delete tr
+        } else {
+            t |> skip("dasMetal not built")
+        }
+    }
+}
+
 [test]
 def test_metal_batched_row_nextn_plain(t : T?) {
     t |> run("the plain batched row serves a NextN-headed model with GPU logits, each row's post-norm hidden landing as its stream's carry (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
@@ -197,6 +280,50 @@ def test_metal_batched_row_mtp(t : T?) {
 }
 
 [test]
+def test_metal_batched_row_mtp_depth2(t : T?) {
+    t |> run("a depth-2 walk drafts its second token through the host chain and emits what the depth-1 walk emits (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
+        if (!family_on(t, "qwen35")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
+            return if (!jit_model_available(t, path))
+            let prior_mode = get_metal_mode()
+            set_metal_mode(MetalMode.when_available)
+            var tr <- blob_twin(t, path, 512l)
+            with_dasllama_jobque_() {
+                var prompt <- encode(tr, "Count from one to twenty: one, two, three,", true, false)
+                let total = long_length(prompt) - 1l + 24l
+                var toks : array<array<int64>>
+                var drafted : array<int64>
+                var accepted : array<int64>
+                for (k in range64(1l, 3l)) {   //! the scheduler's round is depth 1 by contract; the depth-k entry is the greedy walk's
+                    set_mtp_depth(k)
+                    var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
+                    var nd = 0l
+                    var na = 0l
+                    toks |> emplace(generate_mtp_greedy(tr, s, prompt, total, nd, na))
+                    drafted |> push(nd)
+                    accepted |> push(na)
+                    delete s
+                }
+                clear_mtp_depth()
+                log_gen_texts(tr, "depth 1, depth 2", toks[0], toks[1])
+                t |> success(ids_equal(toks[1], toks[0]), "depth 2 tokens == depth 1 tokens")
+                t |> success(drafted[1] > drafted[0], "the depth-2 rounds drafted more than the depth-1 rounds over the same reply ({drafted[1]} against {drafted[0]}): the second draft is made")
+                t |> success(accepted[1] > 0l, "depth 2 accepted drafts ({accepted[1]} of {drafted[1]})")
+                delete toks
+                delete drafted
+                delete accepted
+                delete prompt
+            }
+            set_metal_mode(prior_mode)
+            delete tr
+        } else {
+            t |> skip("dasMetal not built")
+        }
+    }
+}
+
+[test]
 def test_metal_batched_row_mtp_joint_invariance(t : T?) {
     t |> run("three self-speculative streams verified together emit what each emits alone (Qwen3.5-0.8B-MTP Q8)") <| @(t : T?) {
         if (!family_on(t, "qwen35")) return
@@ -216,15 +343,21 @@ def test_metal_batched_row_mtp_joint_invariance(t : T?) {
                 let greedy = SamplingParams()
                 // each stream alone: its rounds verify two rows through the same rows forms
                 var refs : array<array<int64>>
+                var solo_drafted = 0l
+                var solo_accepted = 0l
                 for (pi in range64(3l)) {
                     var sch0 <- create_scheduler(tr, 1l, 4l, 64l, 0l, 0l, KVDtype.f16, true)
                     var events0 : array<SchedEvent>
                     t |> success(submit(tr, sch0, make_req(pi + 1l, prompts[pi], greedy, 20l, none)), "solo stream {pi + 1l} queued")
                     drain(tr, sch0, events0)
                     refs |> emplace(toks_of(events0, pi + 1l))
+                    solo_drafted += sch0.mtp_drafted
+                    solo_accepted += sch0.mtp_accepted
                     delete sch0
                     delete events0
                 }
+                //! the solo rounds draft on the two-row tile, the joint ones on a wider tile: the same drafts, so the same accepts
+                t |> success(solo_accepted * 2l > solo_drafted, "the solo rounds accept more than half their drafts ({solo_accepted} of {solo_drafted})")
                 // together: one joint verify a tick over every stream's rows
                 var sch <- create_scheduler(tr, 3l, 4l, 64l, 0l, 0l, KVDtype.f16, true)
                 var events : array<SchedEvent>
@@ -243,7 +376,8 @@ def test_metal_batched_row_mtp_joint_invariance(t : T?) {
                     delete got
                 }
                 t |> success(sch.mtp_drafted > 0l, "the joint ticks drafted ({sch.mtp_drafted} drafts)")
-                t |> success(sch.mtp_accepted > 0l, "some drafts accepted ({sch.mtp_accepted} of {sch.mtp_drafted})")
+                t |> equal(sch.mtp_drafted, solo_drafted, "the joint ticks drafted what the three solo streams drafted together ({sch.mtp_drafted} against {solo_drafted})")
+                t |> equal(sch.mtp_accepted, solo_accepted, "... and accepted the same drafts ({sch.mtp_accepted} against {solo_accepted})")
                 t |> success(census1.device - census0.device > 0l, "ticks with every stream decoding rode one joint verify ({census1.device - census0.device} device steps)")
                 delete sch
                 delete events
