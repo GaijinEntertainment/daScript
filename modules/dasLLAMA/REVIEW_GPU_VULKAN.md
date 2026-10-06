@@ -194,7 +194,8 @@ whatever their number (`ARCHITECTURE_GPU_VULKAN.md#kq-gemv-grid-buffer`).
 
 **Never let a reduce write a workgroup slot while the previous reduce's partials still occupy it -
 pass the other slot, or put a `barrier()` between the two reduces.** A reduce sums a value across
-the workgroup through a `@workgroup` staging array - every `WgReduceBase` or `GkWgReduce` reduce that takes a `slot`
+the workgroup through a `@workgroup` staging array - every `WgReduceBase` reduce
+(`dasllama/dasllama_vulkan_classes.das`) or `GkWgReduce` reduce (`dasllama/dasllama_gpu_kernels_common.das`) that takes a `slot`
 argument, 0 or 1 (`dasllama/dasllama_vulkan_classes.das`); a slot is the run of partials one
 reduce writes into that array. A reduce carries one barrier, so a thread still summing the first
 reduce's partials would read the second's writes out of the same slot.
@@ -252,15 +253,15 @@ profile to another form's role names.
 returned before it submits any command that writes the buffer that copy reads.** The host's wait
 is the only order between the copy's read and that write.
 
-**A diff that adds an integer division or modulo to `dasllama/dasllama_vulkan_classes.das` or
-`dasllama/dasllama_gpu_kernels_common.das` kernel code - a kernel body or any method it reaches
-through calls, `dasllama/dasllama_gpu_math.das`'s helpers included - or changes one's divisor, the values that feed it, or the clamp or `if` that
-guards it, where the divisor is not a literal or a template constant, clamps the divisor to at
+**A diff that adds an integer division or modulo to kernel code in `dasllama/dasllama_vulkan_classes.das`
+or `dasllama/dasllama_gpu_kernels_common.das` - a kernel body or any method it calls,
+`dasllama/dasllama_gpu_math.das`'s helpers included - or changes its divisor, the values that feed it,
+or its guard, where the divisor is not a literal or a template constant, clamps the divisor to at
 least one (`max(1u, ...)`) before the division, or places the division inside an `if` whose
-condition tests that same divisor expression and is false when it is zero (a guard on a product the
-divisor is a factor of, `gid < rows * width`, does not test the divisor).** An integer division
-by zero is undefined in SPIR-V, and some drivers evaluate both arms of a `?:` select, so neither
-a select nor a test on a field the divisor is computed from guards it.
+condition compares that divisor expression itself with zero.** An integer division by zero is
+undefined in SPIR-V, and some drivers evaluate both arms of a `?:` select, so neither a select nor a
+condition on another expression - a field the divisor is computed from, a product it is a factor
+of - guards it.
 
 **A diff that adds or changes a path under `dasllama/` that re-records the split form of the
 one-row token command in `RDec.cmd[region]` - the chain recorded there with the attention at
