@@ -264,11 +264,12 @@ def private moe_gemv_stamp(f) {
     return stamp_of(@@enc_moe_gemv_q40_c)
 }
 
-def private moe_kq_gemv_gate(t : T?; var dev, queue; fmt, n, d, net, k, nst : int; perslot : bool) {
-    let tag = "moe_gemv_k{fmt} n={n} d={d} net={net} k={k} nst={nst} perslot={perslot}"
+//! `f4` runs the iq3s gathered site's f4-slab twin (the dense twin's crown gates it in serving; the gate compiles it unconditionally)
+def private moe_kq_gemv_gate(t : T?; var dev, queue; fmt, n, d, net, k, nst : int; perslot : bool; f4 : bool = false) {
+    let tag = "moe_gemv_k{fmt}{f4 ? " f4" : ""} n={n} d={d} net={net} k={k} nst={nst} perslot={perslot}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let st = moe_gemv_stamp(kq_fmt_of_id(fmt, "moe_kq_gemv_gate"))
+        let st = f4 ? stamp_of(@@enc_moe_gemv_iq3s_f4_c) : moe_gemv_stamp(kq_fmt_of_id(fmt, "moe_kq_gemv_gate"))
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
         let nb = n / 256
@@ -669,6 +670,12 @@ def test_metal_kq_gemv_kernels(t : T?) {
                 // the q40 expert row at the gemma-4-26B-A4B decode geometry: n = dim 2816 (the
                 // gate/up site's reduction), d = 7 rows of the 704-wide stack
                 moe_kq_gemv_gate(t, dev, queue, 40, 2816, 7, 5, 3, 2, false)
+                // the iq3s gathered f4-slab twin: the cell shapes above (a row tail past the 8-row tile), then the
+                // Qwen3.6-35B expert geometry - gate/up n = dim 2048 over d = 512, down n = 512 over d = 2048
+                moe_kq_gemv_gate(t, dev, queue, 33, 512, 9, 5, 3, 2, false, true)
+                moe_kq_gemv_gate(t, dev, queue, 33, 512, 9, 5, 3, 2, true, true)
+                moe_kq_gemv_gate(t, dev, queue, 33, 2048, 512, 4, 2, 2, false, true)
+                moe_kq_gemv_gate(t, dev, queue, 33, 512, 2048, 4, 2, 1, true, true)
                 // the fused QKV rope-store pair: norm/neox x bias x f16/f32 mirror
                 qkv_rs_gate(t, dev, queue, true, false, true, 64, 16, 8, 8)
                 qkv_rs_gate(t, dev, queue, true, true, false, 64, 16, 8, 8)
