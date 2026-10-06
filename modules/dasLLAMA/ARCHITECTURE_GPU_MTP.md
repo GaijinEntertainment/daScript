@@ -114,7 +114,9 @@ carries the draft's row and not the previous verify's warm. The host prep embeds
 placeholder into row 1 (the committed token), since on a fresh session the slot holds nothing
 yet; a model with a PLE n-gram layer gathers its rows from the host's tokens before the join, so
 it keeps the host chain. A parked draft whose arena moved under the verify's acquire holds stale
-offsets and refuses the round. Depth 2 and up keep the host chain: each draft joins before the
+offsets and refuses the round. A verify whose command buffer failed lands nothing from the parked
+draft - its winners and its slab row are undefined - so the parked step is dropped whole and the
+plain fallback runs. Depth 2 and up keep the host chain: each draft joins before the
 next. The reject debug knob rejects the chained draft at the walk, the row 1 the verify embedded
 notwithstanding.
 

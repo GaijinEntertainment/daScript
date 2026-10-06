@@ -1188,7 +1188,9 @@
    through `sample_` (the row copied into `s.logits`, `s.recent` advanced per accepted token) and
    accepts while the draw equals the draft, the scheduler gate drops to "MTP on", and a seeded
    counting run at temp 0.8 matches plain sampled decode token for token.
-102. **The NextN draft chain is k command buffers, a submit and a wait a draft.**
+102. **The NextN draft chain at depth 2 and up, or on an embedding table that is not Q8_0, is k command
+   buffers, a submit and a wait a draft** (depth 1 on a Q8_0 table rides the verify's command buffer,
+   `ARCHITECTURE_GPU_MTP.md#mtp-nextn-chain`).
    `metal_mtp_spec_round` runs k `metal_mtp_draft_forward` calls - a submit, a wait, a 1 MB logits
    readback and a CPU argmax each (about 0.4 ms of a 2.8 ms draft on Qwen3.8-27B, M5: `lcpp_bench
    --mtp-ab --prof --for-debug-purposes` under `JOBQUE_PROFILING=1`, the `mtp.draft.*` sections) - where the
