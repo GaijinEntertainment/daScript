@@ -21,7 +21,7 @@ require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_vulkan_tower
 
 //! The Vulkan TTS driver: the kitten and kokoro families' synthesis seats and the Pocket family's
-//! codec and frames seats on the tower's knob (`ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md`); the Metal
+//! codec, frames and prompt seats on the tower's knob (`ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md`); the Metal
 //! tower driver fills the same seats on an Apple build.
 
 var private g_ts_declines : VkDeclineCounter
@@ -727,7 +727,8 @@ def private ts_adain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : 
     let bufs = fixed_array(x.dev, y.dev, sc_.stats.dev, sc_.aux.dev, slab.dev)
     let sizes = fixed_array(x.bytes, y.bytes, sc_.stats.bytes, sc_.aux.bytes, slab.bytes)
     let bits = fixed_array(x.bit, y.bit, sc_.stats.bit, sc_.aux.bit, 0u)
-    var p2 = GkAdainArgs(c = uint(c), t = uint(t), eps = ST2_ADAIN_EPS, hoff = uint(hoff), gwoff = uint(ns.gwoff), gboff = uint(ns.gboff),
+    static_assert(GK_ADAIN_EPS == ST2_ADAIN_EPS, "the AdaIN stamps' eps is the model's")
+    var p2 = GkAdainArgs(c = uint(c), t = uint(t), hoff = uint(hoff), gwoff = uint(ns.gwoff), gboff = uint(ns.gboff),
         aoff = uint(ns.aux_off))
     if (snake) {
         var s2 = set_tts_adain_snake_cls(bufs, sizes, bits)
@@ -1698,6 +1699,7 @@ struct private TsPkVoice {
     v : array<TsRows>
     rope : TsRows
     sin_off : int64
+    gen : uint64      //! counted up at every rebuild: a prompt's residency record names the build it sits in
 }
 
 var private g_ts_pk_voice : TsPkVoice
@@ -1737,6 +1739,7 @@ def private ts_pk_voice_attach(vs : PocketVoiceState; tf : PocketTransformer) : 
 def private ts_pk_voice_rebuild(vs : PocketVoiceState; tf : PocketTransformer) : bool {
     var v & = g_ts_pk_voice
     ts_pk_voice_drop()
+    v.gen++
     let t0 = ref_time_ticks()
     let cap = vs.caches[0].cap
     let d = tf.d
@@ -2298,7 +2301,7 @@ def private ts_pk_frames_loop(m : PocketModel; sl : TtsPkFramesSlab; slab : TsRo
 def private vulkan_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_txt : int64; std : float; frames_after_eos : int;
                                  captured, forced : array<float>; max_frames : int64; var sc : PocketScratch) : tuple<frames : int64; eos_at : int64> {
     let none = (frames = -1l, eos_at = -1l)
-    let dev_rows = tts_pk_prompt_dev_take(g_ts_pk_prompt_dev, vs, n_txt)   //! spent on entry: a decline below must not leave it for a later chunk
+    let dev_rows = tts_pk_prompt_dev_take(g_ts_pk_prompt_dev, vs, g_ts_pk_voice.gen, sc.rows, n_txt, m.backbone.d)   //! spent on entry: a decline below must not leave it for a later chunk
     if (!vulkan_tower_on()) {
         ts_decline("frames", VulkanTtsDecline.knob)
         return none
@@ -2409,7 +2412,7 @@ def private vulkan_pocket_prompt(m : PocketModel; var vs : PocketVoiceState; n_t
     }
     g_ts_encodes++
     ts_pk_prompt_readback(vs, sc_, n_txt, d)
-    tts_pk_prompt_dev_set(g_ts_pk_prompt_dev, vs, n_txt)
+    tts_pk_prompt_dev_set(g_ts_pk_prompt_dev, vs, v.gen, sc.rows, n_txt, d)
     return true
 }
 

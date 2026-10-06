@@ -1735,7 +1735,7 @@ module) is independent and can land any time - it is pure structure.
     the compensated sums they protect can fold. Done = the arm sets the knob where the user has not,
     and the source kernels' cells run green on the Mac.
 112. **`tts_div`'s Newton step relies on `mad` being fused.** The source kernels divide as the
-    CPU's IEEE division rounds through `tts_div` (`dasllama_vulkan_classes.das`): a reciprocal
+    CPU's IEEE division rounds through `tts_div` (`dasllama_gpu_math.das`, both homes' bodies): a reciprocal
     refined once and the quotient corrected by its exact remainder, each correction a `mad` whose
     exactness needs one rounding. `mad` lowers to `Fma`, which the `precise` mark does not decorate
     and which Vulkan lets a driver evaluate as a multiply then an add
@@ -1812,7 +1812,7 @@ module) is independent and can land any time - it is pure structure.
     `vk_prof()` reports) under `DASLLAMA_GPU_PROF=1` - one cell reading the report text; the
     bench's `--asr-clips` override and the served-clip stamping, and the `DASLLAMA_VK_WDEC` knob
     read; the lower-side guards of `TowerDwConv5` and `TowerCnDw` (`st >= 0` in
-    `conv_src_fwd_row`, which their `DwConvRowsT.src_row` calls) and `TowerDwConv` (`iy >= 0`,
+    `conv_src_fwd_row`, which their `GkDwConvRows.src_row` calls) and `TowerDwConv` (`iy >= 0`,
     `ix >= 0`) - a wrapped index lands gigabytes past any buffer and
     robust buffer access reads zero, so the fixtures cannot reach them without a source base offset
     in the args that lets a garbage prefix sit before the block (the upper-side guards are

@@ -271,7 +271,7 @@ struct GkStftArgs {
 class template GkStft {
     @template_constant REFLECT : bool = false
     @ssbo @binding = 0 @role = "read" har : array<float>
-    @ssbo @binding = 1 @role = "read" wn : array<float>
+    @ssbo @binding = 1 @role = "weight" wn : array<float>
     @ssbo @binding = 2 @role = "write" spec : array<float>
     @kargs pa : GkStftArgs
 
@@ -322,7 +322,7 @@ struct GkIstftArgs {
 [ |> template_struct_instance]
 class template GkIstft {
     @ssbo @binding = 0 @role = "read" y : array<float>
-    @ssbo @binding = 1 @role = "read" wn : array<float>
+    @ssbo @binding = 1 @role = "weight" wn : array<float>
     @ssbo @binding = 2 @role = "write" wave : array<float>
     @kargs pa : GkIstftArgs
 
@@ -435,7 +435,7 @@ class template GkSrcSines : GkSrcLaw {
     @ssbo @binding = 0 @role = "read" f0 : array<float>
     @ssbo @binding = 1 @role = "read" lowc : array<float>
     @ssbo @binding = 2 @role = "read" noise_n : array<float>
-    @ssbo @binding = 3 @role = "read" wn : array<float>
+    @ssbo @binding = 3 @role = "weight" wn : array<float>
     @ssbo @binding = 4 @role = "write" har : array<float>
     @kargs pa : GkSourceArgs
 
@@ -461,10 +461,11 @@ class template GkSrcSines : GkSrcLaw {
     }
 }
 
+let GK_ADAIN_EPS = 1e-5   //! the instance norms' eps - the body spells the literal (a kernel reads no module global); a driver holds it to its model's
+
 struct GkAdainArgs {
     c : uint       //! the channels
     t : uint       //! the rows the statistics ran over
-    eps : float    //! the instance norm's eps
     hoff : uint    //! the style fc rows' base in h: gamma [c], then beta [c]
     gwoff : uint   //! the norm's scale row in wn
     gboff : uint   //! the norm's shift row in wn
@@ -480,7 +481,7 @@ class template GkAdain {
     @ssbo @binding = 1 @role = "write" y : array<float>
     @ssbo @binding = 2 @role = "read" stats : array<float>
     @ssbo @binding = 3 @role = "read" h : array<float>
-    @ssbo @binding = 4 @role = "read" wn : array<float>
+    @ssbo @binding = 4 @role = "weight" wn : array<float>
     @kargs pa : GkAdainArgs
 
     def adain_body {
@@ -489,7 +490,7 @@ class template GkAdain {
             let ci = gid % max(pa.c, 1u)
             var scale = 0.0
             var shift = 0.0
-            tts_adain_affine(stats[ci], stats[pa.c + ci], float(pa.t), pa.eps, wn[pa.gwoff + ci], wn[pa.gboff + ci], h[pa.hoff + ci],
+            tts_adain_affine(stats[ci], stats[pa.c + ci], float(pa.t), 1e-5, wn[pa.gwoff + ci], wn[pa.gboff + ci], h[pa.hoff + ci],
                 h[pa.hoff + pa.c + ci], scale, shift)
             let v = mad(x[gid], scale, shift)
             static_if (SNAKE) {
@@ -527,7 +528,7 @@ class template GkDwConvRows {
     @template_constant K : uint = 0u    //!< the taps where the stamp fixes them, else 0 and the taps are `pa.k`
     @ssbo @binding = 0 @role = "read" x : array<float>
     @ssbo @binding = 1 @role = "write" y : array<float>
-    @ssbo @binding = 2 @role = "read" wn : array<float>
+    @ssbo @binding = 2 @role = "weight" wn : array<float>
     @kargs pa : GkDwConvRowsArgs
 
     def rows_out : uint {

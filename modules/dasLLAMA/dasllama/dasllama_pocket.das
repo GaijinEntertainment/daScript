@@ -1456,6 +1456,7 @@ def private prompt_rows(m : PocketModel; ids : array<int64>; var vs : PocketVoic
 
 //! The prompt's rows into the voice's caches alone, on whichever rail serves it - `pocket_synthesize`'s opening, the
 //! caches reset to the voice's rows first.
+[cold_path]
 def pocket_prompt_rows(m : PocketModel; ids : array<int64>; var vs : PocketVoiceState; var sc : PocketScratch) {
     caches_ready(vs, long_length(ids))
     prompt_rows(m, ids, vs, sc)

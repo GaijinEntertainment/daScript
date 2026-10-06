@@ -559,7 +559,8 @@ def test_vkt_adain(t0 : T?) {
                 var s_l = cp |> cls_set(fixed_array(xp, ylp, stp, hp, wp), @@set_tts_adain_leaky_cls)
                 var s_s = cp |> cls_set(fixed_array(xp, ysp, stp, hp, wp), @@set_tts_adain_snake_cls)
                 var s_i = cp |> cls_set(fixed_array(xip, xip, stp, hp, wp), @@set_tts_adain_leaky_cls)
-                var pa = GkAdainArgs(c = uint(c), t = uint(AD_T), eps = AD_EPS, hoff = uint(AD_HOFF), gwoff = uint(AD_GWOFF), gboff = uint(f.gboff), aoff = uint(f.aoff))
+                static_assert(AD_EPS == GK_ADAIN_EPS, "the CPU oracle's eps is the stamps' literal")
+                var pa = GkAdainArgs(c = uint(c), t = uint(AD_T), hoff = uint(AD_HOFF), gwoff = uint(AD_GWOFF), gboff = uint(f.gboff), aoff = uint(f.aoff))
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     colstats_enc(raw, h, cp, x0p, stp, AD_T, c)
                     enc_tts_adain_leaky_cls(raw, h, s_l, pa, int64(n))

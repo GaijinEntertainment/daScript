@@ -11,6 +11,24 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-06, `direction-grade`) - Pocket's text prompt on the device takes a third of its request on
+  both boxes; the thirteen TTS kernels moved to templates both homes stamp read as before.** The prompt seat runs the
+  chunk's text rows through the frames slab's layers at the voice's positions (`ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames`,
+  `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-pocket-chain`), the keys and values back to the host; the last layer ends at
+  its K/V on every rail, including the CPU's. `dasllama-server` with the TTS model alone, `harness/served_bench.das
+  --no-chat --tts-url <server> --reps 8`, one sentence, master and the branch alternated twice in one sitting on each
+  box (the master lives first); the stages are the engine's own stage clock. The M5's tune sidecar predates the binary.
+  - M5 Max, Metal, ms a request, master / branch: Pocket q8 67.5 / 49.5 and 67.5 / 49.4 (4.56 s of speech on master,
+    4.64 on the branch - the device prompt moves the EOS frame by one), its stages prompt 15.5 / 2.1, backbone
+    38.4 / 34.2 (the attention's unrolled loads and the frames call's upload of rows the device already holds),
+    codec 8.8 / 8.6; Kokoro-82M 73.5 / 73.5 (a third branch life 73.5, two branch lives void at cv 3.3% and 3.4%),
+    its stages the same to the tenth (decoder 41.22 / 41.29); Kitten mini 64.5 / 64.5 (one branch life void at cv
+    4.1%), decoder 29.37 / 29.36.
+  - RTX PRO 4500, Vulkan (driver 580.159), ms a request, master / branch: Pocket q8 115.8 / 68.1 and 114.1 / 68.5
+    (the last void at cv 5.3%), its stages prompt 49.6 / 3.9, backbone 50.3 / 49.3, codec 8.7 / 8.8; Kokoro-82M
+    decoder stage 13.89 / 14.18 and 13.87 / 13.88 (the walls 47.9-48.4, two of four void), Kitten mini decoder
+    10.93 / 10.53 and 10.49 / 10.44 (the walls 46.2-50.6, every row void on spread - that box's round trip jitters,
+    its stage clock does not).
 - **MEASURED (2026-10-05, `direction-grade`, `debug-jit`) - the depth-1 NextN round on the M1 Max: the draft at two
   rows, then chained into the verify's command buffer.** M1 Max (MacBookPro18,2, 64 GB), Metal,
   Qwen3.6-35B-A3B-MTP UD-Q4_K_M, `benchmarks/lcpp_bench.das` as the `-jit` script (`-no-module-cache`):
@@ -1234,7 +1252,7 @@ what it costs today and what the fix would change.
   pays the device bring-up and the slab builds; of the spread only the min named below is in the
   record, the rest is the run's log). Pocket q8 (`pocket-tts-en-q8.gguf`, alba): 132 ms a
   sentence, the first 641, a steady sentence about 99 - the prompt 27 ms of it on the CPU chain
-  (`followup_vulkan.md` 107), the backbone 62, the codec 10. kokoro (`kokoro-82m.gguf`): 98 ms,
+  (the prompt seat since serves it on the device, the entry above), the backbone 62, the codec 10. kokoro (`kokoro-82m.gguf`): 98 ms,
   the first 785, min 36, the steady sentences about 62, against the torch CUDA reference row of
   52 ms a sentence (`external`: `harness/tts_ref_bench.py --device cuda --models
   kokoro-82m:af_heart --limit 20` on the pod under

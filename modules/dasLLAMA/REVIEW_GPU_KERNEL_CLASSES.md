@@ -63,7 +63,8 @@ writes any field declared on it - fields in the stamp or in the shell may share 
 **A diff that moves a kernel class out of the class template its siblings stamp, or off the base
 shell they derive from, gives the class a `//!` line above its `[metal_dispatch]` /
 `[vk_dispatch]` declaration naming the body difference that keeps it out of that template or
-shell.**
+shell - or, for a move onto a template both homes stamp (`dasllama_gpu_kernels_common.das`), the
+template it joined.**
 
 **A diff that adds or changes a `[metal_dispatch]` / `[vk_dispatch]` binding that no site writes
 after arming - a binding filled before the first encode and never written again - puts

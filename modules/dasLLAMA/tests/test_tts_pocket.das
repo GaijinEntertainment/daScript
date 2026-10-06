@@ -42,8 +42,8 @@ require _model_tier
 let GPU_CODEC_BAR = 1e-5   //! the codec seat against the CPU chain on the f32 lane: reads 9e-7 on the exact stamps (M5 Max, -jit)
 let GPU_FRAME_BAR = 2e-5   //! the frames seat against the CPU chain on the f32 lane, teacher-forced: reads 2e-6 on the latents (M5 Max, -jit)
 let GPU_CODEC_SERVED_BAR = 2e-1   //! the codec seat on the served planes: reads 1.3e-2 / 7.7e-3 (q8 / kq) on the M5 Max and 9.2e-2 / 1.5e-1 on the pod's x64 CPU chain, all of it the CPU's Q8_0 activation blocks of the first layer's rows (the tower reads the same quants dequantized and feeds f32: it sits at 3e-6 of the CPU f32 chain on either box)
-let GPU_PROMPT_BAR = 1e-5   //! the prompt seat's K/V rows against the CPU chain on the f32 lane: reads 5e-7 / 1.6e-6 (keys / values) on the M5 Max
-let GPU_PROMPT_SERVED_BAR = 5e-2   //! the prompt seat's K/V rows on the served planes against the file's own CPU chain: reads 3e-3 / 1.2e-2 on the q8 file, 7e-3 / 2.8e-2 on the kq file (M5 Max)
+let GPU_PROMPT_BAR = 1e-5   //! the prompt seat's K/V rows against the CPU chain on the f32 lane (`test_pocket_prompt_gpu`, `-jit`, no overrides): reads 5e-7 / 1.6e-6 (keys / values) on the M5 Max under its tune sidecar, 5e-7 / 1.5e-6 on the RTX PRO 4500
+let GPU_PROMPT_SERVED_BAR = 5e-2   //! the prompt seat's K/V rows on the served planes against the file's own CPU chain (the same cell): reads 3e-3 / 1.2e-2 on the q8 file, 7e-3 / 2.8e-2 on the kq file (M5 Max); 3e-3 / 1.2e-2 and 6e-3 / 2.3e-2 on the RTX PRO 4500
 let GPU_FRAME_SERVED_BAR = 1e-1   //! the frames seat on the served planes, teacher-forced: reads 1.9e-2 / 3.7e-2 on the q8 file, 3.8e-2 / 7.1e-2 on the kq file (alba / caro_davy) on the M5 Max
 let GPU_FRAME_FREE_BAR = 5e-3   //! the frames seat free-running on the f32 lane, its own noise from the same seed, every frame fed its own output: reads 1.5e-4 and 1.1e-4 on the two stage cases on the M5 Max, 7e-5 and 1.8e-3 on the pod (lj028's 150 frames compound the f16 GEMM feed's rounding)
 
@@ -733,7 +733,7 @@ def private prompt_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : s
         var inscope ids3 <- [for (i in range64(n)); k.ids[(i + 1l) % n]]
         pocket_prompt_rows(m, ids3, k.vs, sc)
         var inscope gx <- prompt_kv(k.vs, n)
-        t |> success(rel_l2(gx.k, cpu.k) > bar, "{tag}: the text rotated by one token reds the bar (the compare's control)")
+        t |> success(rel_l2(gx.k, cpu.k) > bar && rel_l2(gx.v, cpu.v) > bar, "{tag}: the text rotated by one token reds the keys' and the values' bars (the compare's control)")
         return true
     } else {
         return false

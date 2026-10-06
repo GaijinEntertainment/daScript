@@ -2,7 +2,7 @@
 
 Companion to `ARCHITECTURE_GPU_TOWER_VULKAN.md`; a section is cited by its anchor. This document
 carries the seats the Vulkan TTS driver serves: the StyleTTS2 synthesis seats of the kitten and
-kokoro families, and the Pocket TTS codec and frames seats. The Metal twin of every StyleTTS2 seat
+kokoro families, and the Pocket TTS codec, frames and prompt seats. The Metal twin of every StyleTTS2 seat
 is `ARCHITECTURE_GPU_TOWER.md#tower-tts-chain`, of the Pocket seats
 `ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-codec` and `ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames`,
 and the CPU chain is the specification, dispatch for dispatch. The GPU backend role table these

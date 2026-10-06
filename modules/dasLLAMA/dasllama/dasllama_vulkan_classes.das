@@ -13793,7 +13793,8 @@ let TTS_PK_ATTN_MAX_KEYS = GK_PK_ATTN_MAX_KEYS
 def gk_subgroup_add(v : float) : float => subgroupAdd(v)
 def gk_subgroup_max(v : float) : float => subgroupMax(v)
 
-//! the Pocket chains' causal cached attention row
+//! the Pocket chains' causal cached attention row - off `WgReduceBase` onto the template both homes stamp (`GkPkAttn`, which
+//! derives the same reductions through `GkWgReduce`)
 [vk_dispatch(name = "tts_pk_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TtsPkAttn : GkPkAttn {
     [spirv_kernel(local_size_x = 256)]

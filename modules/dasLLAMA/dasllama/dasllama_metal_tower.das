@@ -3595,7 +3595,8 @@ def private st2_adain(enc : MetalComputeEncoder?; var c : St2GpuCtx; bin, bout :
     let u_c = st2_u(c, uint(cc))
     enc_st2_colstats(enc, bin, c.bstats, u_t, u_c, cc)
     let n = t * cc
-    var ka = GkAdainArgs(c = uint(cc), t = uint(t), eps = ST2_ADAIN_EPS, hoff = hoff, gwoff = uint(ns.gwoff / 4ul), gboff = uint(ns.gboff / 4ul),
+    static_assert(GK_ADAIN_EPS == ST2_ADAIN_EPS, "the AdaIN stamps' eps is the model's")
+    var ka = GkAdainArgs(c = uint(cc), t = uint(t), hoff = hoff, gwoff = uint(ns.gwoff / 4ul), gboff = uint(ns.gboff / 4ul),
         aoff = uint(ns.aux_off / 4ul))
     if (snake) {
         enc_st2_adain_snake(enc, bin, bout, c.bstats, c.bh, c.slab, ka, n)
@@ -4697,6 +4698,7 @@ struct private PkVoiceSlot {
     bv : array<MetalBuffer?>
     bcos : MetalBuffer?
     bsin : MetalBuffer?
+    gen : uint64      //!< counted up at every rebuild: a prompt's residency record names the build it sits in
 }
 
 var private g_tw_pk_frames : PkFramesSlab
@@ -4795,11 +4797,13 @@ def private pk_frames_write(var w : TtsSlabWriter; var qb : PkBlobWriter; m : Po
 }
 
 def private pk_voice_drop {
+    let gen = g_tw_pk_voice.gen
     st2_release_any(g_tw_pk_voice)
     unsafe {
         delete g_tw_pk_voice
     }
     g_tw_pk_voice.meta = TtsPkVoiceMeta()
+    g_tw_pk_voice.gen = gen + 1ul
 }
 
 //! A GEMV-served linear: q8 quants 32-wide, a K-quant plane 256-wide, f32 rows as they are.
@@ -5105,7 +5109,7 @@ def private pk_frames_loop(m : PocketModel; var sl : PkFramesSlab; var c : St2Gp
 def private metal_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_txt : int64; std : float; frames_after_eos : int;
                                 captured, forced : array<float>; max_frames : int64; var sc : PocketScratch) : tuple<frames : int64; eos_at : int64> {
     let none = (frames = -1l, eos_at = -1l)
-    let dev_rows = tts_pk_prompt_dev_take(g_tw_pk_prompt_dev, vs, n_txt)   //! spent on entry: a decline below must not leave it for a later chunk
+    let dev_rows = tts_pk_prompt_dev_take(g_tw_pk_prompt_dev, vs, g_tw_pk_voice.gen, sc.rows, n_txt, m.backbone.d)   //! spent on entry: a decline below must not leave it for a later chunk
     if (!g_tw_env_tower) {
         tw_decline(MetalTowerDecline.knob)
         return none
@@ -5300,7 +5304,7 @@ def private metal_pocket_prompt(m : PocketModel; var vs : PocketVoiceState; n_tx
     asr_prof_add("tts.pocket.gpu.prompt", tc)
     if (ran) {
         pk_prompt_readback(vs, n_txt, d)
-        tts_pk_prompt_dev_set(g_tw_pk_prompt_dev, vs, n_txt)
+        tts_pk_prompt_dev_set(g_tw_pk_prompt_dev, vs, g_tw_pk_voice.gen, sc.rows, n_txt, d)
         g_tower_encodes++
         g_tower_rows += n_txt
     }

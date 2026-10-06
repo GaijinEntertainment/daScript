@@ -85,8 +85,8 @@ buffers, the chunk cap and the idle release, the streamed source - is `ARCHITECT
 - **`dasllama_tts_slab.das`** - the shared slab writer both GPU tower drivers build their TTS
   slabs through: the writer struct and allocator, the q8 and K-quant dequant into f32 rows over the
   job pool, the conv, linear and norm row writers, the block slot writers (an LSTM transposed or not by
-  `lstm_transposed`), the two-pass build, every slab key, `tts_style_rows`, the Pocket frames admission
-  and voice record, and the decoder shape walks, generic over the driver's record and `tts_note_*`
+  `lstm_transposed`), the two-pass build, every slab key, `tts_style_rows`, the Pocket cache admissions
+  (frames, prompt), the voice record and the prompt's residency record, and the decoder shape walks, generic over the driver's record and `tts_note_*`
   hooks. Element offsets only - a driver turns them into its own binding offsets - and no device call.
 - **`dasllama_styletts2.das`** - the StyleTTS2-lineage model both families share: the weight
   map of the converted GGUF (conv geometry rides as `styletts2.conv.<weight>` metadata, so the

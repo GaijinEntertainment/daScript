@@ -435,7 +435,9 @@ a panel; the rel-shift softmax (`fc_pexp`) over two heads at 24 and 300 keys - t
 one half step of the oracle's, the stat within 1e-5 of a double sum, pad rows and pad columns
 left as they were, a poisoned rel score reddening both. The Pocket chain's cells (the same
 file): the row copies with and without the ELU, the layer scale, the rows rope over a row stride
-from a column with the tables bound at a position's row, the attention
+from a column with the tables bound at a position's row, the prompt's rope from the voice tables at a
+position base (`pk_rope_tab_gate`: the k span of 23 rows from position 37 against `rope_rows`, the q
+and v spans untouched, a poisoned k element reddening the compare), the attention
 row against `attention_causal_rows` over a `TtsKvCache` (every key and an 8-key window, an
 unseen key's poison staying silent), the rope-and-store kernel's f32 stamp at the frame loop's
 binds (no bias, the whole head, the tables and the caches at the position's row) against
@@ -562,11 +564,11 @@ the pad columns stay out of the sum), `test_vkt_colstats` the column statistics 
 double-precision sums at t 45 / 72 channels, t 300 / 20 and t 1000 / 300 (eight blocks, a lane's
 second channel),
 `test_vkt_adain` the statistics then both fused AdaIN stamps (`TtsAdainLeaky`, `TtsAdainSnake`) against
-the CPU `adain_rows_into` followed by `leaky_relu` or `snake_rows`, every plane at an element base
+the CPU `adain_rows_into` followed by `leaky_relu` or `snake_rows`, the style rows at an element base
 off zero, plus the leaky stamp in place (bit for bit the out-of-place rows, the input overwritten),
-the prefixes before the bases kept, and `test_vkt_add_scale` the residual join (`TtsAddScale`)
-bit-exact against (a + b) / sqrt(2) in f32 over 1030 elements at offsets, out of place and in place,
-the elements outside the run kept.
+the elements past the run kept, and `test_vkt_add_scale` the residual join (`TtsAddScale`)
+bit-exact against (a + b) / sqrt(2) in f32 over 1030 elements, out of place and in place,
+the elements past the run kept.
 `test_vulkan_tts_source_kernels.das` - model-free (a Vulkan device, else skips): the TTS tower's
 Vulkan decoder tail against the CPU chain - `test_vkt_axpy` holds the stage sum's axpy (`TtsAxpy`)
 bit-exact against o + 0.25 y in f32 over 1030 elements at offsets, accumulating onto a filled o and
@@ -601,7 +603,7 @@ non-negative ones pass bit for bit), every element outside the window left at it
 `test_vkt_pk_attn` the causal cached attention row (`TtsPkAttn`) against `attention_causal_rows`
 over a `TtsKvCache` of two 64-wide heads, the device's key and value rows written from the cache's
 own layouts with three poisoned rows past the appended 45 - a 45-query prompt over every key, a
-decode step at position 44 over an 8-key window (the query at a row offset of the q plane) and the
+decode step at position 44 over an 8-key window (the query its own one-row plane) and the
 prompt over a 16-key window - at the approx bar (controls: a poisoned key just before the decode
 step's window leaves its output bit for bit, the 16-key window moves the prompt's rows);
 `test_vkt_pk_gemv` the row GEMV's five stamps (`TtsPkGemvDot`, `TtsPkGemvLnSilu`, `TtsPkGemvGate`,

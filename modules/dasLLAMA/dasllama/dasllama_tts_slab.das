@@ -993,23 +993,39 @@ def tts_pk_prompt_admit(m : PocketModel; vs : PocketVoiceState; n_txt, max_keys 
     => n_txt >= 1l && tts_pk_caches_admit(m, vs, n_txt, max_keys)
 
 //! the prompt rows a served prompt seat left in the voice slot for the frames call after it: the voice they belong
-//! to and the rows [len, len + n); a frames call over another voice, fill or prompt uploads every row itself
+//! to, the slot build they sit in (`gen`, counted up at every rebuild), the rows [len, len + n) and a sample of the
+//! embedding rows they came from; a frames call over another voice, slot, fill or prompt uploads every row itself
 struct TtsPkPromptDev {
     key : uint64
+    gen : uint64
     len : int64
     n : int64
+    emb : uint64
 }
 
-//! the rows [vs.len, vs.len + n_txt) the record holds on the device for this frames call, 0 where it holds another
-//! prompt's; the record is spent either way, so a frames call that never came cannot leave it to the next
-def tts_pk_prompt_dev_take(var rec : TtsPkPromptDev; vs : PocketVoiceState; n_txt : int64) : int64 {
-    let n = (rec.key == tts_pk_voice_key(vs) && rec.len == vs.len && rec.n == n_txt) ? rec.n : 0l
+//! a sample of the prompt's embedding rows [n][d] - the first and last row's leading floats and the whole's length - the
+//! key two prompts of one length part on
+def tts_pk_prompt_emb_key(rows : array<float>; n, d : int64) : uint64 {
+    var key = 31ul + uint64(n) * 11ul
+    let last = max(n - 1l, 0l) * d
+    for (i in range64(min(d, 32l))) {
+        key = hash_combine64(key, uint64(unsafe(reinterpret<uint>(rows[i]))))
+        key = hash_combine64(key, uint64(unsafe(reinterpret<uint>(rows[last + i]))))
+    }
+    return key
+}
+
+//! the rows [vs.len, vs.len + n_txt) the record holds on the device for this frames call, 0 where it holds another voice,
+//! slot build or prompt; the record is spent either way, so a frames call that never came cannot leave it to the next
+def tts_pk_prompt_dev_take(var rec : TtsPkPromptDev; vs : PocketVoiceState; gen : uint64; rows : array<float>; n_txt, d : int64) : int64 {
+    let n = (rec.key == tts_pk_voice_key(vs) && rec.gen == gen && rec.len == vs.len && rec.n == n_txt
+        && rec.emb == tts_pk_prompt_emb_key(rows, n_txt, d)) ? rec.n : 0l
     rec = TtsPkPromptDev()
     return n
 }
 
-def tts_pk_prompt_dev_set(var rec : TtsPkPromptDev; vs : PocketVoiceState; n_txt : int64) {
-    rec = TtsPkPromptDev(key = tts_pk_voice_key(vs), len = vs.len, n = n_txt)
+def tts_pk_prompt_dev_set(var rec : TtsPkPromptDev; vs : PocketVoiceState; gen : uint64; rows : array<float>; n_txt, d : int64) {
+    rec = TtsPkPromptDev(key = tts_pk_voice_key(vs), gen = gen, len = vs.len, n = n_txt, emb = tts_pk_prompt_emb_key(rows, n_txt, d))
 }
 
 //! the conditioning rows a frames call reads back after the loop stepped `stepped` frames: every frame made and the breaking frame's row, as the CPU loop leaves them

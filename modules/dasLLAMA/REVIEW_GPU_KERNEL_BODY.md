@@ -94,7 +94,8 @@ bounds.
 no index carried alongside) across the threadgroup by hand - a `simd_shuffle_xor` loop that
 halves the lane distance each step, a lane-0 loop over a `@workgroup` float array with one slot
 per simdgroup, one `@workgroup` value that one lane writes and every lane reads - is a defect: a
-class deriving `MetalTgReduceBase` calls its fold methods over its own `partial[]`; any other
+class deriving `MetalTgReduceBase` calls its fold methods over its own `partial[]`; a kernel both
+homes stamp derives `GkWgReduce` and calls its `wg_sum_into` / `wg_max_into`; any other
 class calls `tg_sum_all` / `tg_max_all` over its own `@workgroup` array.**
 
 **A diff that adds or changes, in the body of a dispatched kernel class (one a `[vk_dispatch]`

@@ -273,8 +273,9 @@ a model card (the provenance-and-licence page beside a released model or pack), 
 adopt or reject a model, a dataset, or a dependency; anywhere else in prose it is a defect.**
 
 **A diff that moves a family encode stage - a `dasllama/dasllama_<family>.das` stage that turns
-input into embeddings - onto a GPU hook leaves the CPU form in place and changes none of its
-arithmetic.** The CPU form serves every box with no driver.
+input into embeddings or fills a cache the next stage reads - onto a GPU hook leaves the CPU form
+in place and changes no value a reader of the stage's outputs reads (work the stage ran that no
+reader consumed may go, bit for bit on what is read).** The CPU form serves every box with no driver.
 
 **A call to a `set_*_q8` lane setter - one that picks whether a model family's weights run the
 q8 or the float path - in a file under `dasllama/` or `harness/`, outside the body of another

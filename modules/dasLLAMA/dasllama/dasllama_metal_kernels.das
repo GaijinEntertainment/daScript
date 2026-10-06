@@ -10818,6 +10818,7 @@ class MetalSt2Axpy : GkAxpy {
 }
 
 //! the residual join's add-and-scale: the AdaIN blocks' join (1 / sqrt 2) and the generator's averaged stage sum, in place where o is a
+//! - off the `MetalEw2T` family onto the template both homes stamp (`GkAddScale`), whose body is the Vulkan twin's
 [metal_dispatch(name = "enc_st2_add", pso = "g_pso_st2_add", tg = 64, grid = "nelem/64", params = "nelem : int64")]
 class MetalSt2Add : GkAddScale {
     [metal_kernel(name="metal_st2_add_msl")]
