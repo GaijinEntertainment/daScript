@@ -381,7 +381,7 @@ class public LspFront {
     //! is killed and reported as such
     def private poll_validates() {
         for (uri in [for (u in keys(inflight)); u]) {
-            var lines : array<string>
+            var inscope lines : array<string>
             unsafe(process_drain(inflight[uri].proc) $(line) {
                 lines |> push(clone_string(line))
             })
@@ -395,7 +395,7 @@ class public LspFront {
                 }
                 continue
             }
-            var rest : array<string>
+            var inscope rest : array<string>
             unsafe(process_drain(inflight[uri].proc) $(line) {
                 rest |> push(clone_string(line))
             })

@@ -95,11 +95,11 @@ def truncate() {
     let factor = float(2 * n)
 
     for (keep in [n, 8, 4, 2]) {
-        var trunc <- clone_to_move(coeff)
+        var inscope trunc <- clone_to_move(coeff)
         for (k in range(keep, n)) {
             trunc[k] = 0.0f
         }
-        var back : array<float>
+        var inscope back : array<float>
         idct(trunc, back, plan)
         var max_err = 0.0f
         for (i in range(n)) {

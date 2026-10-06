@@ -148,7 +148,7 @@ def early_void(var s : SVec; x : int) {
 def move_under_loop(n : int) : array<int> {
     for (k in range(n)) {
         if (k == 3) {
-            var early <- [k, k]; // nolint:PERF009 -- named-local move-return is the shape under test
+            var inscope early <- [k, k]; // nolint:PERF009 -- named-local move-return is the shape under test
             return <- early;
         }
     }

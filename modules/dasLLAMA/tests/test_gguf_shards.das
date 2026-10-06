@@ -15,7 +15,7 @@ def test_shard_name_passthrough(t : T?) {
     t |> run("non-split shapes yield just [path]") @(t : T?) {
         for (p in ["model.gguf", "m-1-of-3.gguf", "m-00000-of-00003.gguf",
                    "m-00004-of-00003.gguf", "m-abcde-of-00003.gguf", "m-00001-of-00003.bin"]) {
-            var shards <- gguf_shard_paths(p)
+            var inscope shards <- gguf_shard_paths(p)
             t |> equal(length(shards), 1, "single path for '{p}'")
             t |> equal(shards[0], p, "path unchanged for '{p}'")
             delete shards

@@ -243,7 +243,7 @@ def private parity_sweep(t : T?; params : SamplingParams) : ParityCount {
     t |> success(!prob_within(0.25 + 1.0e-4, 0.25), "a 1e-4 poison on a 0.25 probability misses the bound")
     for (trial in range(PARITY_ROWS)) {
         let seed = 100 + trial
-        let row <- parity_row(trial)
+        var inscope row <- parity_row(trial)
         var sf = mk_sampler(PARITY_VOCAB)
         var sr = mk_sampler(PARITY_VOCAB)
         set_logits(sf, row)

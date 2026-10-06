@@ -99,7 +99,7 @@ def private teacher_logits(t : Model; nb, nsteps : int64; feeds : array<int64>; 
     ss |> reserve(nb)
     for (i in range64(nb)) {
         ss |> emplace <| make_run_state(c, KVDtype.f16, KVDtype.f16)
-        var prompt <- stream_prompt(t, i)
+        var inscope prompt <- stream_prompt(t, i)
         eval_(t, ss[i], prompt)
         delete prompt
     }
@@ -253,8 +253,8 @@ def main() : int {   // nolint:STYLE038 — flat probe driver: arg handling, the
             if (nb < 1l) {
                 continue
             }
-            var feeds : array<int64>
-            var truth : array<float>
+            var inscope feeds : array<int64>
+            var inscope truth : array<float>
             let cpath = empty(cfg.truth) ? "" : truth_path(cfg.truth, nb, nsteps)
             var cached = false
             if (!empty(cpath)) {
@@ -262,7 +262,7 @@ def main() : int {   // nolint:STYLE038 — flat probe driver: arg handling, the
             }
             if (!cached) {
                 select_decode_override("")
-                var sink : array<int64>
+                var inscope sink : array<int64>
                 delete truth   // a rejected cache can leave rows behind (feeds empty, logits parsed)
                 truth <- teacher_logits(t, nb, nsteps, sink, feeds)
                 delete sink
@@ -281,8 +281,8 @@ def main() : int {   // nolint:STYLE038 — flat probe driver: arg handling, the
             // and sharing the GPU prefill across A/B arms keeps rail-on/off diffs prefill-free
             select_prefill_override("metal")
             select_decode_override("metal")
-            var sink2 : array<int64>
-            var gpu <- teacher_logits(tg, nb, nsteps, feeds, sink2)
+            var inscope sink2 : array<int64>
+            var inscope gpu <- teacher_logits(tg, nb, nsteps, feeds, sink2)
             select_prefill_override("")
             select_decode_override("")
             delete sink2

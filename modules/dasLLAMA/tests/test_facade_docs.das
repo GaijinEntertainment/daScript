@@ -116,7 +116,7 @@ def test_facade_engine_names_one_to_one(t : T?) {
 def test_examples_are_facade_only(t : T?) {
     t |> run("run.das / chat.das require only the facade from dasLLAMA") @(t : T?) {
         for (path in EXAMPLES) {
-            var dasllama_requires : array<string>
+            var inscope dasllama_requires : array<string>
             for (line in read_lines(path)) {
                 if (starts_with(line, "require dasllama/")) {
                     let rest = slice(line, length("require "), length(line))

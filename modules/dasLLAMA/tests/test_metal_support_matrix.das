@@ -208,7 +208,7 @@ def private split_generate(trp, trd : Model; prompt : array<int64>; steps : int)
         break if (token == 1l)   // BOS delimits sequences (generate's stop)
         ids |> push(token)
         break if (long_length(ids) >= int64(steps))
-        var one <- [token]
+        var inscope one <- [token]
         eval_(trd, s, one)
         delete one
         token = argmax_of(s.logits, trp.config.vocab_size)
@@ -1514,8 +1514,8 @@ def private batch_pair_steps(trp, trd : Model; pa, pb : array<int64>; nsteps : i
 // the B=2 cells' eyeball rail: de-interleave the pair streams and log each as text
 def private log_pair_texts(m : Model; tag : string; cpu, gpu : array<int64>) {
     for (ph in range(2)) {
-        var c <- [for (i in range(length(cpu))); cpu[i]; where i % 2 == ph]
-        var g <- [for (i in range(length(gpu))); gpu[i]; where i % 2 == ph]
+        var inscope c <- [for (i in range(length(cpu))); cpu[i]; where i % 2 == ph]
+        var inscope g <- [for (i in range(length(gpu))); gpu[i]; where i % 2 == ph]
         to_log(LOG_INFO, "{tag} stream {ph} CPU text: {eyeball_text(m, c)}\n")
         to_log(LOG_INFO, "{tag} stream {ph} GPU text: {eyeball_text(m, g)}\n")
         delete c

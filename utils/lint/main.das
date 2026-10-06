@@ -259,7 +259,7 @@ def collect_folder_mds(folder : string; rule_docs : bool; var out : array<string
 def run_rule_docs_pass(folders : array<string>) : int {
     var found = 0
     for (folder in folders) {
-        var strays : array<string>
+        var inscope strays : array<string>
         collect_folder_mds(folder, false, strays)
         strays |> sort
         for (md in strays) {
@@ -441,7 +441,7 @@ def run_rule_doc_text_pass(folders : array<string>; roots : array<string>; want_
     var names_indexed = false
     for (folder in folders) {
         let root = owning_root(folder, roots)
-        var docs : array<string>
+        var inscope docs : array<string>
         collect_folder_mds(folder, true, docs)
         docs |> sort
         var cells : table<string; void?>
@@ -449,14 +449,14 @@ def run_rule_doc_text_pass(folders : array<string>; roots : array<string>; want_
         for (md in docs) {
             let is_checklist = base_name(md) |> starts_with("REVIEW")
             continue if (!is_checklist)
-            let lines <- fread(md) |> split("\n")
+            var inscope lines <- fread(md) |> split("\n")
             for (line, i in lines, count()) {
                 if (want_pos && line_cites_by_position(line)) {
                     print("{md}:{i + 1}: LINT032: a checklist cites a rule by position (\"above\" / \"below\") - name what the rule binds instead; rules are order-independent\n")
                     found ++
                 }
                 continue if (!want_names)
-                var toks : array<string>
+                var inscope toks : array<string>
                 backticked_tokens(line, toks)
                 for (tok in toks) {
                     if (token_is_rule_doc_path(tok)) {
@@ -512,7 +512,7 @@ def count_text_lines(text : string) : int {
 def run_doc_lines_pass(folders : array<string>) : int {
     var found = 0
     for (folder in folders) {
-        var docs : array<string>
+        var inscope docs : array<string>
         collect_folder_mds(folder, true, docs)
         docs |> sort
         for (md in docs) {
@@ -673,7 +673,7 @@ def is_valid_rule_code(code : string) : bool {
 // (caller emits error + exits); on success returns "" and dest is populated.
 def normalize_rule_list(raw : array<string>; var dest : table<string>) : string {
     for (entry in raw) {
-        let parts <- entry |> split(",")
+        var inscope parts <- entry |> split(",")
         for (p in parts) {
             let token = p |> strip |> to_upper
             continue if (empty(token))
@@ -975,7 +975,7 @@ def run_parallel_lint(files : array<string>; cfg : Config) : array<LintResult> {
             print("error: could not write chunk file {cp}\n")
             return <- results
         }
-        var argv <- build_worker_argv(spawn_prefix, cp, cfg)
+        var inscope argv <- build_worker_argv(spawn_prefix, cp, cfg)
         argvs |> emplace(argv)
     }
 
@@ -1102,7 +1102,7 @@ def stale_scan_at_end(stale_eligible : array<string>; cfg : Config; disabled_cod
         let src = fread(file)
         continue if (empty(src))
         var result = LintResult(file = file)
-        var stale : array<LintIssue>
+        var inscope stale : array<LintIssue>
         result.count = stale_nolint_collect(file, src, disabled_codes, enabled_codes, stale)
         result.issues <- stale
         if (!cfg.lint_excluded_paths) {

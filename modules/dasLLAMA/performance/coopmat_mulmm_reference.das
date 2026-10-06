@@ -197,7 +197,7 @@ def main {   // nolint:STYLE037,STYLE038 - linear Vulkan probe; every `var insco
         let n = N_TOK
         let nbk = k / 32
         // A: gguf block_q8_0 rows — d(f16) + 32 qs, 34B/block; crib's exact-in-f16 synthetic pattern
-        var a_bytes : array<uint8>
+        var inscope a_bytes : array<uint8>
         a_bytes |> resize(m * nbk * 34)
         for (r in range(m)) {
             for (b in range(nbk)) {
@@ -209,14 +209,14 @@ def main {   // nolint:STYLE037,STYLE038 - linear Vulkan probe; every `var insco
             }
         }
         // B: n rows x k f32, values exact in f16 (ints/32)
-        var b_bytes : array<uint8>
+        var inscope b_bytes : array<uint8>
         b_bytes |> resize(n * k * 4)
         for (r in range(n)) {
             for (j in range(k)) {
                 put_f32(b_bytes, r * k + j, float((r * 2 + j) % 7 - 2) * 0.03125)   // mean +0.14, same guard
             }
         }
-        var d_bytes : array<uint8>
+        var inscope d_bytes : array<uint8>
         d_bytes |> resize(m * n * 4)
 
         var da <- make_dev_buf(device, phys, length(a_bytes))

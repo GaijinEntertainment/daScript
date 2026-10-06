@@ -430,9 +430,9 @@ def emit_synth_all(kinds : array<string>; bases : table<string; string>; flds : 
         w |> write("            k = stmt ? rnd({length(emitted)}) : VALUE_IDX[rnd(length(VALUE_IDX))]\n")
         w |> write("        \}\n")
         for (k, ki in emitted, count()) {
-            let slots <- slots_of(k, bases, flds, renames)
+            var inscope slots <- slots_of(k, bases, flds, renames)
             var ctor = ""
-            var vecs : array<Fld>
+            var inscope vecs : array<Fld>
             for (f in slots) {
                 if (f.ty == "expr") {
                     let gen = stmt_slot(f.name) ? "gen_stmt" : "gen_expr"

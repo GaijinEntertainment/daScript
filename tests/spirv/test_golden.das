@@ -66,7 +66,7 @@ def private canon(s : string) : string {
                 wr |> write("{line}\n")
                 continue
             }
-            var toks <- split(line, " ")
+            var inscope toks <- split(line, " ")
             let opName = toks[0]
             for (ti in range(length(toks))) {
                 if (ti > 0) {

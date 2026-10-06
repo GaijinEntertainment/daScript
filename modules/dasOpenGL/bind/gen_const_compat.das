@@ -38,7 +38,7 @@ def main {
         fprint(f, "// desktop GL constants absent from GLES3, for boost-layer compile compat on web\n")
         for (line in split(fread("{root}/modules/dasOpenGL/opengl/opengl_const.das"), "\n")) {
             if (!starts_with(line, "let GL_")) { continue }
-            let toks <- nonempty(split_by_chars(strip(line), " =()"))
+            var inscope toks <- nonempty(split_by_chars(strip(line), " =()"))
             if (length(toks) < 3) { continue }
             // exactly `let NAME VALUE` or `let NAME TYPE VALUE` - anything longer (a trailing
             // comment, an expression) would silently mistype the constant, so fail loudly

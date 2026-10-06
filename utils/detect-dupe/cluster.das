@@ -59,7 +59,7 @@ def public exact_buckets(var records : array<FuncRecord>; min_tokens : int;
         if (key_exists(buckets, key)) {
             buckets[key] |> push(i)
         } else {
-            var lst : array<int>
+            var inscope lst : array<int>
             lst |> push(i)
             buckets[key] <- lst
         }

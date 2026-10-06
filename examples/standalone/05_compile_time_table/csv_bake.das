@@ -37,7 +37,7 @@ def private read_points(path : string) : array<CalPoint> {
         if (empty(trimmed) || starts_with(trimmed, "#")) {
             continue
         }
-        let cells <- split(trimmed, ",")
+        var inscope cells <- split(trimmed, ",")
         if (length(cells) != 2) {
             continue
         }

@@ -100,7 +100,7 @@ def test_signal_perlin_range(t : T?) {
     let pat <- signal_perlin()
     for (i in range(100)) {
         let tt = double(i) * 0.037lf
-        let haps <- pat(TimeSpan(start = tt, stop = tt + 0.001lf))
+        var inscope haps <- pat(TimeSpan(start = tt, stop = tt + 0.001lf))
         t |> success(haps[0].value.note >= 0.0)
         t |> success(haps[0].value.note <= 1.0)
     }

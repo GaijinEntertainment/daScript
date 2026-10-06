@@ -143,7 +143,7 @@ def private config_to_args(config : JsonValue?; cli : array<string>; source : st
     for (key, val in keys(config as _object), values(config as _object)) {
         if (key == "server_args") continue
         if (!(known |> key_exists(key))) {
-            var names <- [for (arg in info.args); arg.field_name]
+            var inscope names <- [for (arg in info.args); arg.field_name]
             names |> sort()
             return <- err("{source} has unknown key '{key}'; known keys: {join(names, ", ")}", type<array<string>>)
         }
@@ -644,7 +644,7 @@ def private reg_query_value(key, name : string; var value : string&) : bool {
     for (line in split(out, "\n")) {
         let trimmed = strip(line)
         if (!starts_with(trimmed, name)) continue
-        let parts <- split(trimmed, "    ")
+        var inscope parts <- split(trimmed, "    ")
         if (length(parts) >= 3) {
             value = strip(parts[length(parts) - 1])
             return true

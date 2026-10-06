@@ -200,7 +200,7 @@ def main {  // nolint:STYLE038 - flat semantics list: one feed + assert group pe
     let chunk_stream = "hello\r\n{esc}[1;34mblue{esc}[0m " + string(wide_bytes) + "\r\n{esc}]2;chunk test{esc}\\{esc}[?2004h{esc}[2;5H!"
     terminal_feed(complete, chunk_stream)
     for (byte in chunk_stream) {
-        var one : array<uint8>
+        var inscope one : array<uint8>
         one |> push(uint8(byte))
         terminal_feed_bytes(chunked, one)
     }

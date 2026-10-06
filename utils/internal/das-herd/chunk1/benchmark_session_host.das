@@ -80,7 +80,7 @@ def read_file(path : string; var error : string&) : string {
 def private parse_host_result(output : string; var sample : HostedSample) {
     for (line in split_by_chars(output, "\n")) {
         if (!starts_with(line, "DASHERD_HOST_RESULT\t")) continue
-        let fields <- split_by_chars(strip(line), "\t")
+        var inscope fields <- split_by_chars(strip(line), "\t")
         if (length(fields) != 10) {
             sample.error = "malformed host result: {line}"
             return

@@ -2755,7 +2755,7 @@ def public repository_parse_review_files(text : string; worktree_path : string;
             continue
         }
         let delimiter = find(line, GIT_FIELD_SEPARATOR) >= 0 ? GIT_FIELD_SEPARATOR : "\t"
-        let fields = split(line, delimiter)
+        var inscope fields = split(line, delimiter)
         if (length(fields) < 2) continue
         let code = fields[0]
         var path = fields[1]
@@ -2787,7 +2787,7 @@ def public repository_parse_commit_files(text : string; worktree_path : string;
                 stats_known = numstat.known, binary = numstat.binary))
             continue
         }
-        let fields = split(line, "\t")
+        var inscope fields = split(line, "\t")
         if (length(fields) < 2) continue
         let code = fields[0]
         var path = fields[1]
@@ -2809,7 +2809,7 @@ def public repository_parse_refs(text : string; worktree_path : string;
         let line = trim_cr(raw_line)
         if (empty(line)) continue
         let delimiter = find(line, GIT_FIELD_SEPARATOR) >= 0 ? GIT_FIELD_SEPARATOR : "\t"
-        let fields = split(line, delimiter)
+        var inscope fields = split(line, delimiter)
         if (length(fields) < 4
                 || (length(fields) >= 5 && !empty(fields[4]))) continue
         let full_name = fields[0]

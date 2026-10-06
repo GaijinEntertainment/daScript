@@ -173,7 +173,7 @@ def match_struct(what : TypeDeclPtr; wths : ExprMakeStruct?; access : Expression
         return false
     }
     for (i in range(wthsLength)) {
-        var fields : table<string>
+        var inscope fields : table<string>
         for (mf in *wths.structs[i]) {
             let mfname = string(mf.name)
             if (fields |> key_exists(mfname)) {

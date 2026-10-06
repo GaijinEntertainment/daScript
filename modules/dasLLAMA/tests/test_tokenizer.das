@@ -33,7 +33,7 @@ def private corpus_gate(t : T?; vocab_path : string) {
     var first_bad = ""
     var first_rt = ""
     for (inp, outl in inputs, outlines) {
-        var got <- encode(tk, inp, false)
+        var inscope got <- encode(tk, inp, false)
         if (ids_equal(got, parse_out_ids(outl))) {
             npass++
         } elif (empty(first_bad)) {

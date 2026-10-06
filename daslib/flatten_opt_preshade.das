@@ -335,9 +335,9 @@ def private cse_body(var blk : ExprBlock?; var counter : int&) : bool {   // nol
     var mutableVars <- collect_mutable(blk)
     while (guard < 4096) {
         guard ++
-        var counts : table<string; int>
+        var inscope counts : table<string; int>
         var sample : table<string; ExpressionPtr>
-        var firstStmt : table<string; int>
+        var inscope firstStmt : table<string; int>
         for (i in range(length(blk.list))) {
             var ct = new CseTally()
             ct.collectSample = true

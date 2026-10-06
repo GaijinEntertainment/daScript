@@ -313,14 +313,14 @@ def test_yarn_rope_freqs_band(tst : T?) {
         let band = Bar(abs_floor = bar, poison = ROPE_POISON)
         for (geom in [(rot = 64l, theta = 10000000.0, factor = 4.0, orig = 32768l), (rot = 64l, theta = 10000000.0, factor = 4.0, orig = 262144l),
                       (rot = 128l, theta = 150000.0, factor = 32.0, orig = 4096l), (rot = 20l, theta = 10000.0, factor = 2.5, orig = 512l)]) {
-            var ff <- yarn_rope_freqs(geom.rot, geom.theta, geom.factor, 32.0, 1.0, geom.orig)
-            var want <- ref_yarn_divisors(geom.rot, double(geom.theta), double(geom.factor), 32.0lf, 1.0lf, geom.orig)
+            var inscope ff <- yarn_rope_freqs(geom.rot, geom.theta, geom.factor, 32.0, 1.0, geom.orig)
+            var inscope want <- ref_yarn_divisors(geom.rot, double(geom.theta), double(geom.factor), 32.0lf, 1.0lf, geom.orig)
             t |> equal(long_length(ff), geom.rot / 2l, "one divisor a pair (rot {geom.rot})")
             check(t, "yarn_rope_freqs rot={int(geom.rot)} x{geom.factor} over {geom.orig}", ff, want, band, FLAT_SHAPE)
             t |> success(abs(ff[0] - 1.0) < 1.0e-6 && abs(ff[geom.rot / 2l - 1l] - geom.factor) < 1.0e-5,
                 "the highest pair keeps full frequency, the lowest interpolates by the factor ({ff[0]} .. {ff[geom.rot / 2l - 1l]})")
             // the poison: the band of a wider beta_fast sits elsewhere, so a ramp in the wrong units or at the wrong edge reads past the bar
-            var shifted <- ref_yarn_divisors(geom.rot, double(geom.theta), double(geom.factor), 4.0lf, 1.0lf, geom.orig)
+            var inscope shifted <- ref_yarn_divisors(geom.rot, double(geom.theta), double(geom.factor), 4.0lf, 1.0lf, geom.orig)
             t |> success(logits_maxdiff(ff, shifted) > bar, "a shifted band lands outside the bar (maxdiff {logits_maxdiff(ff, shifted)})")
             delete ff
             delete want
@@ -356,18 +356,18 @@ def test_rope_apply_dispatch(t : T?) {
         fill_vec(v, n)
         var ff <- ff_none()
         for (neox in [false, true]) {
-            var leaf : array<float>
+            var inscope leaf : array<float>
             copy_vec(v, leaf, n)
             if (neox) {
                 rope_scaled_neox(leaf, pos, hs, n, 10000.0, 1.0, ff, 1.19)
             } else {
                 rope_scaled(leaf, pos, hs, n, 10000.0, 1.0, ff, 1.19)
             }
-            var pform : array<float>
+            var inscope pform : array<float>
             copy_vec(v, pform, n)
             rope_apply(unsafe(addr(pform[0])), pos, hs, n, 10000.0, 1.0, false, null, neox, 1.19)
             rope_check(t, pform, leaf, hs, SAME, "rope_apply(ptr, neox={neox}) == the leaf")
-            var aform : array<float>
+            var inscope aform : array<float>
             copy_vec(v, aform, n)
             rope_apply(aform, pos, hs, n, 10000.0, 1.0, ff, neox, 1.19, true)
             rope_check(t, aform, leaf, hs, SAME, "rope_apply(array, neox={neox}) == the leaf")
@@ -391,14 +391,14 @@ def test_rope_apply_dispatch(t : T?) {
         }
         var none <- ff_none()
         for (neox in [false, true]) {
-            var off : array<float>
+            var inscope off : array<float>
             copy_vec(v, off, n)
             rope_apply(off, pos, hs, n, 10000.0, 1.0, ff, neox, 1.0, false)
-            var bare : array<float>
+            var inscope bare : array<float>
             copy_vec(v, bare, n)
             rope_apply(bare, pos, hs, n, 10000.0, 1.0, none, neox, 1.0, true)
             rope_check(t, off, bare, hs, SAME, "use_ff=false (neox={neox}) == the no-factors apply")
-            var on : array<float>
+            var inscope on : array<float>
             copy_vec(v, on, n)
             rope_apply(on, pos, hs, n, 10000.0, 1.0, ff, neox, 1.0, true)
             var moved = 0

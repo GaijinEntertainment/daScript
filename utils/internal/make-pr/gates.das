@@ -40,7 +40,7 @@ def public scopes_of(files : array<string>) : array<string> {
     var seen : table<string>
     var scopes : array<string>
     for (f in files) {
-        let parts <- split(to_generic_path(f), "/")
+        var inscope parts <- split(to_generic_path(f), "/")
         if (length(parts) < 2) {
             continue
         }

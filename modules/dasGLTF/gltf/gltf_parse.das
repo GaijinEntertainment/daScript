@@ -388,7 +388,7 @@ def private decode_buffers(gltf : JGltf; var glbBin : array<uint8>; baseDir : st
     var glbUsed = false
     buffers |> reserve(length(gltf.buffers))
     for (buf in gltf.buffers) {
-        var b : array<uint8>
+        var inscope b : array<uint8>
         if (empty(buf.uri)) {
             if (!glbUsed) {
                 b <- glbBin  // nolint:PERF030 - b is fresh this iteration
@@ -544,7 +544,7 @@ def private build_scene(gltf : JGltf; buffers : array<array<uint8>>; baseDir : s
         for (jsamp in ja.samplers) {
             var s = GltfAnimSampler()
             s.interp = parse_interp(jsamp.interpolation)
-            var inF <- decode_floats(gltf, buffers, jsamp.input)
+            var inscope inF <- decode_floats(gltf, buffers, jsamp.input)
             s.input |> resize(length(inF))
             for (i in range(length(inF))) {
                 s.input[i] = inF[i].x

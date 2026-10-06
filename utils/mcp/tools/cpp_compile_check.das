@@ -58,7 +58,7 @@ def cpp_locate_compile_db(build_dir : string) : string {
         if (fexist(c)) return c
     }
     for (pat in ["build*/compile_commands.json", "cmake-build-*/compile_commands.json"]) {
-        var hits : array<string>
+        var inscope hits : array<string>
         parse_file_list(path_join(root, pat), hits)
         for (h in hits) {
             if (fexist(h)) return h

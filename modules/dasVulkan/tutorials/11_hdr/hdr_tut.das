@@ -314,14 +314,14 @@ def public build_hdr_resources(device : Device; phys : VkPhysicalDevice; queue :
     fb_post_clear |> reserve(BLOOM_LEVELS)
     fb_post_load  |> reserve(BLOOM_LEVELS)
     for (i in range(BLOOM_LEVELS)) {
-        var ac <- [weak_copy(bloom[i].view)]
+        var inscope ac <- [weak_copy(bloom[i].view)]
         var inscope fbc <- create_framebuffer(device, FramebufferCreateInfo(
             renderPass = weak_copy(rp_post_clear),
             pAttachments <- ac,
             width = uint(BLOOM_W[i]), height = uint(BLOOM_H[i]), layers = 1u))
         fb_post_clear |> emplace(fbc)
 
-        var al <- [weak_copy(bloom[i].view)]
+        var inscope al <- [weak_copy(bloom[i].view)]
         var inscope fbl <- create_framebuffer(device, FramebufferCreateInfo(
             renderPass = weak_copy(rp_post_load),
             pAttachments <- al,
@@ -978,13 +978,13 @@ def public record_hdr_frame(res : HdrResources; cmd : CommandBuffer) {   // noli
 
     // ---- downsample chain : bloom[i] -> bloom[i+1] ----
     for (i in range(BLOOM_LEVELS - 1)) {
-        var clears <- [clear_color(0.0f, 0.0f, 0.0f, 1.0f)]
+        var inscope clears <- [clear_color(0.0f, 0.0f, 0.0f, 1.0f)]
         record_render_pass(cmd, res.rp_post_clear, res.fb_post_clear[i + 1],
                            full_area(BLOOM_W[i + 1], BLOOM_H[i + 1]), clears) {
             set_dyn_vp(cmd, BLOOM_W[i + 1], BLOOM_H[i + 1])
             cmd_bind_pipeline(cmd, res.down_pipeline)
-            let sets <- [vk_value_to_boost(res.down_set[i])]
-            var no_dyn : array<uint>
+            var inscope sets <- [vk_value_to_boost(res.down_set[i])]
+            var inscope no_dyn : array<uint>
             cmd_bind_descriptor_sets(cmd, VkPipelineBindPoint.GRAPHICS, res.post_pipe_layout, 1u, sets, no_dyn)
             set_pc(1.0f / float(BLOOM_W[i]), 1.0f / float(BLOOM_H[i]),
                    threshold, soft_knee, bloom_intensity)
@@ -999,13 +999,13 @@ def public record_hdr_frame(res : HdrResources; cmd : CommandBuffer) {   // noli
         let i = BLOOM_LEVELS - 2 - k       // iterate dst = 3, 2, 1, 0
         // record_render_pass requires N clears for N attachments even when loadOp=LOAD ignores
         // them; pass a single dummy clear so the pClearValues pointer is valid.
-        var up_clears <- [clear_color(0.0f, 0.0f, 0.0f, 1.0f)]
+        var inscope up_clears <- [clear_color(0.0f, 0.0f, 0.0f, 1.0f)]
         record_render_pass(cmd, res.rp_post_load, res.fb_post_load[i],
                            full_area(BLOOM_W[i], BLOOM_H[i]), up_clears) {
             set_dyn_vp(cmd, BLOOM_W[i], BLOOM_H[i])
             cmd_bind_pipeline(cmd, res.up_pipeline)
-            let sets <- [vk_value_to_boost(res.up_set[i])]
-            var no_dyn : array<uint>
+            var inscope sets <- [vk_value_to_boost(res.up_set[i])]
+            var inscope no_dyn : array<uint>
             cmd_bind_descriptor_sets(cmd, VkPipelineBindPoint.GRAPHICS, res.post_pipe_layout, 1u, sets, no_dyn)
             set_pc(1.0f / float(BLOOM_W[i + 1]), 1.0f / float(BLOOM_H[i + 1]),
                    threshold, soft_knee, bloom_intensity)

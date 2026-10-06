@@ -1813,7 +1813,7 @@ class private DAServer : Server {
             var setId = -1
             var hex = 0ul
             if (b.enabled) {
-                var parts <- b.dataId |> split(",")
+                var inscope parts <- b.dataId |> split(",")
                 let ctxHex = to_uint64(parts[0], true)
                 hex = to_uint64(parts[1], true)
                 let size = to_int(parts[2])

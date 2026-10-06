@@ -1142,7 +1142,7 @@ def normalize_text(text : string) : string {
         @@pass_units, @@pass_decades, @@pass_fractions, @@pass_ranges, @@pass_model_names, @@pass_numbers,
         @@pass_punctuation]
     for (step in passes) {
-        var next <- invoke(step, c)
+        var inscope next <- invoke(step, c)
         delete c
         c <- next
     }

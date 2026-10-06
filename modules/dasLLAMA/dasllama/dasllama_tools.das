@@ -122,7 +122,7 @@ def harmony_tools_namespace(tools_json : array<string>) : string {
                 w |> write("type {name} = () => any;\n\n")
             } else {
                 w |> write("type {name} = (_: \{\n")
-                var req : table<string>
+                var inscope req : table<string>
                 let rv = params?["required"]
                 if (rv != null && rv.value is _array) {
                     for (r in (rv.value as _array)) {

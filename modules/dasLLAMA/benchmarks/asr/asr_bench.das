@@ -110,7 +110,7 @@ def main() : int {
     // the ~10us/job fifo fork/join (2-7x on the jfk encoder stages)
     with_dasllama_jobque() {
         for (path in cfg.wav) {
-            var samples <- load_audio_16k_mono(path)
+            var inscope samples <- load_audio_16k_mono(path)
             if (empty(samples)) {
                 print("error: could not decode {path}\n")
                 rc = 1   // a measurement tool: a bad fixture is a failed run, never a 0.0 row

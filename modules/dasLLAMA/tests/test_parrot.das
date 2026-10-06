@@ -48,7 +48,7 @@ def test_vad_resampler(t : T?) {
             }
             fed += n
             chunk = (chunk * 7 + 11) % 900 + 1   // drains of every size the device might hand over
-            var piece : array<float>
+            var inscope piece : array<float>
             resample_step(drained, partial, piece)
             stream |> push_from(piece)
         }

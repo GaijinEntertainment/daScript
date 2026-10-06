@@ -183,7 +183,7 @@ def build_chunks(files : array<string>; worker_count : int; exe_path : string;
     while (idx < length(files)) {
         var item : JitWorkItem
         item.chunk_id = length(chunks)
-        var chunk_files : array<string>
+        var inscope chunk_files : array<string>
         var stop = idx + chunk_size
         if (stop > length(files)) {
             stop = length(files)

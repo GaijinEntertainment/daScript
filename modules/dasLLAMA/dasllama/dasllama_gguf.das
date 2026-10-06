@@ -441,7 +441,7 @@ def parse_gguf_meta_shards(bases : array<void?>; sizes : array<int64>) : GGUFMet
         // a head shard carries the nextn count the trunk file dropped (a split conversion writes the
         // trunk without the head, the head as its own file); shard-0 KVs otherwise rule, so promote it only when absent there
         unsafe {
-            let kb <- temp_array(reinterpret<uint8?>(bases[k]), sizes[k], type<uint8>)
+            var inscope kb <- temp_array(reinterpret<uint8?>(bases[k]), sizes[k], type<uint8>)
             let arch = gguf_has(mk, "general.architecture") ? gguf_str(mk, kb, "general.architecture") : ""
             let key = "{arch}.nextn_predict_layers"
             if (!empty(arch) && gguf_has(mk, key) && !gguf_has(m, key)) {

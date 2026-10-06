@@ -261,17 +261,17 @@ def test_gguf_f32_reader_superblock_types(t : T?) {
             let sbb = ggml_type_bytes(gtype, 256l)
             t |> success(sbb > 0l, "type {gtype} has a disk stride")
             let fmt = gguf_kq_fmt_of_type(gtype)
-            let data <- synth_sb_bytes(sbb, 7 + ti)
-            let gg <- synth_gguf(gtype, 512l, data)
+            var inscope data <- synth_sb_bytes(sbb, 7 + ti)
+            var inscope gg <- synth_gguf(gtype, 512l, data)
             var m <- parse_gguf_meta(gg)
-            var deq : array<float>
+            var inscope deq : array<float>
             deq |> resize(512)
             gguf_read_tensor_f32(m, gg, "t", deq, 0l, 512l)
             // the oracle: the native two-step over the same bytes
-            var kq, ks : array<uint8>
+            var inscope kq, ks : array<uint8>
             kq |> resize(int(kq_qsb(fmt)))
             ks |> resize(int(kq_ssb(fmt)))
-            var want : array<float>
+            var inscope want : array<float>
             want |> resize(512)
             let base = long_length(gg) - sbb * 2l
             for (blk in range64(2l)) {

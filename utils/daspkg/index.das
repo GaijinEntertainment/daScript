@@ -570,7 +570,7 @@ def private tag_index_lines(names : array<string>; entries : array<IndexEntry>) 
         for (t in entry.tags) {
             unsafe {
                 if (!(all_tags |> key_exists(t))) {
-                    var arr : array<string>
+                    var inscope arr : array<string>
                     arr |> push(name)
                     all_tags[t] <- arr
                 } else {
@@ -665,7 +665,7 @@ def generate_index_readme_from_index(index : table<string; IndexEntry>) : string
         for (name, entry in names, entries) {
             writer |> write("### {name}\n\n")
             writer |> write("{entry.description}\n\n")
-            var details <- entry_detail_lines(entry)
+            var inscope details <- entry_detail_lines(entry)
             for (d in details) {
                 writer |> write("- {d}\n")
             }

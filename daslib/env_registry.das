@@ -267,7 +267,7 @@ def public env_undocumented_rows(md : string) : array<string> {
     var undocumented : array<string>
     for (line in split(md, "\n")) {
         continue if (!starts_with(line, "| `"))
-        var cols <- split(line, "|")
+        var inscope cols <- split(line, "|")
         if (length(cols) >= 5 && empty(strip(cols[4]))) {
             undocumented |> push(strip(cols[1]))
         }

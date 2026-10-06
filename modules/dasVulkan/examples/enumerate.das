@@ -42,7 +42,7 @@ def main() : int {
 
         var qcount = 0u
         vkGetPhysicalDeviceQueueFamilyProperties(d, qcount, null)
-        var qprops : array<VkQueueFamilyProperties>
+        var inscope qprops : array<VkQueueFamilyProperties>
         qprops |> resize(int(qcount))
         vkGetPhysicalDeviceQueueFamilyProperties(d, qcount, unsafe(addr(qprops[0])))
         print("  queue families: {int(qcount)}\n")

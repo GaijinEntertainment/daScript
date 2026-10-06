@@ -292,8 +292,8 @@ def private wdec_fused_rq_shape(t : T?; d, rows, nch : int) {   // nolint:STYLE0
             }
             for (i in range(8)) {
                 if (i % 2 == 1) {
-                    var qr <- cp |> plane_as(qp[i], type<int8>, int(cp.bytes[qp[i]]))
-                    var sr <- cp |> plane_run(sp[i])
+                    var inscope qr <- cp |> plane_as(qp[i], type<int8>, int(cp.bytes[qp[i]]))
+                    var inscope sr <- cp |> plane_run(sp[i])
                     let moved = mismatch_q8(qr, sr, qs[i], ss[i], 0.0, 0)
                     t |> success(moved > 0, "{names[i / 2]} ({shape}): the poisoned input moves the fused bytes ({moved} differ)")
                     t |> equal(count(qr, $(v) => int(v) == -128), 0, "{names[i / 2]} ({shape}): the poisoned run rewrote every block over the sentinel")

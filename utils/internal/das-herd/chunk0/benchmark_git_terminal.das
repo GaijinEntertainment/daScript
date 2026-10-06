@@ -170,7 +170,7 @@ def main() : int {
     print("drain policy: 250000us quiet after root-process exit\n")
     var ok = true
     for (command in make_git_probe_commands(cfg.repository)) {
-        var summaries : array<LaneSummary>
+        var inscope summaries : array<LaneSummary>
         summaries |> reserve(3)
         for (lane in [GitProbeLane.direct_capture,
                       GitProbeLane.direct_logged,

@@ -71,7 +71,7 @@ def test_literal_longer_than_tail_stays_in_bounds(t : T?) {
     t |> run("case-sensitive literal scanned over short matching tails") @(t : T?) {
         var re <- regex_compile("abcdef")
         for (subject in ["zzzab", "za", "ab", "a", "abcde"]) {
-            let spans <- collect_spans(re, subject)
+            var inscope spans <- collect_spans(re, subject)
             t |> equal(length(spans), 0, "no match of `abcdef` scanning `{subject}`")
         }
         let hit <- collect_spans(re, "zabcdefz")
@@ -80,7 +80,7 @@ def test_literal_longer_than_tail_stays_in_bounds(t : T?) {
     t |> run("case-insensitive literal scanned over short matching tails") @(t : T?) {
         var re <- regex_compile("abcdef", true)
         for (subject in ["zzzAB", "zA", "AB", "A", "ABCDE"]) {
-            let spans <- collect_spans(re, subject)
+            var inscope spans <- collect_spans(re, subject)
             t |> equal(length(spans), 0, "no ci match of `abcdef` scanning `{subject}`")
         }
         let hit <- collect_spans(re, "zABCDEFz")

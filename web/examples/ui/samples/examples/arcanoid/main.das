@@ -160,7 +160,7 @@ def init_audio_samples() {
     let total_samples = int(float(AUDIO_RATE) * total_dur)
     snd_win |> resize(total_samples)
     for (ni in range(length(notes))) {
-        let note <- gen_sine_sweep(notes[ni], notes[ni], note_dur, 0.25)
+        var inscope note <- gen_sine_sweep(notes[ni], notes[ni], note_dur, 0.25)
         let offset = ni * int(float(AUDIO_RATE) * note_dur)
         for (i in range(length(note))) {
             if (offset + i < total_samples) {
@@ -175,7 +175,7 @@ def init_audio_samples() {
     let go_total_samples = int(float(AUDIO_RATE) * go_total_dur)
     snd_game_over |> resize(go_total_samples)
     for (ni in range(length(go_notes))) {
-        let note <- gen_sine_sweep(go_notes[ni], go_notes[ni] * 0.9, go_note_dur, 0.3)
+        var inscope note <- gen_sine_sweep(go_notes[ni], go_notes[ni] * 0.9, go_note_dur, 0.3)
         let offset = ni * int(float(AUDIO_RATE) * go_note_dur)
         for (i in range(length(note))) {
             if (offset + i < go_total_samples) {

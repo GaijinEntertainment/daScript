@@ -234,8 +234,8 @@ def test_hc_mixer_batched(t : T?) {
         var seed = HC_ROWS_SEED
         var res0 <- [for (_i in range64(NPOS * HCD)); lcg(seed) * 4.0]   // the seed walk hc_batch_run filled the rows with
         for (p in [0l, 1l, NPOS / 2l, NPOS - 1l]) {
-            var row <- [for (i in range64(HCD)); res0[p * HCD + i]]
-            var want_mixed, want_inject : array<float>
+            var inscope row <- [for (i in range64(HCD)); res0[p * HCD + i]]
+            var inscope want_mixed, want_inject : array<float>
             hc_mix_reference(m, row, want_mixed, want_inject)
             var dm = 0.0
             for (i in range64(DIM)) {
@@ -249,8 +249,8 @@ def test_hc_mixer_batched(t : T?) {
             t |> success(di < 1.0e-4, "row {p}: inject within 1e-4 of the reference (maxdiff {di})")
             // control: the reference row one position over must miss both bars
             if (p + 1l < NPOS) {
-                var next <- [for (i in range64(HCD)); res0[(p + 1l) * HCD + i]]
-                var off_mixed, off_inject : array<float>
+                var inscope next <- [for (i in range64(HCD)); res0[(p + 1l) * HCD + i]]
+                var inscope off_mixed, off_inject : array<float>
                 hc_mix_reference(m, next, off_mixed, off_inject)
                 var dc = 0.0
                 for (i in range64(DIM)) {

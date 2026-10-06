@@ -79,7 +79,7 @@ def private read_manifest() : array<tuple<sha : string; name : string>> {
         if (empty(s)) {
             continue
         }
-        var toks <- [for (tk in split(s, " ")); tk; where !empty(tk)]
+        var inscope toks <- [for (tk in split(s, " ")); tk; where !empty(tk)]
         if (length(toks) == 2) {
             out |> push((sha = toks[0], name = toks[1]))
         }

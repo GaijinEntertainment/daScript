@@ -310,9 +310,9 @@ def private walk_two_contexts(t : T?; fmt : int; n, d, ntok : int64; rounds : in
     var want : array<float>
     want |> resize(2l * ntok * d)
     for (lane in range(2)) {
-        var kq, ks : array<uint8>
+        var inscope kq, ks : array<uint8>
         var a <- walk_inputs(fmt, n, d, ntok, walk_seed(lane), kq, ks)
-        var y : array<float>
+        var inscope y : array<float>
         y |> resize(ntok * d)
         nan_fill(y)
         matmul_kq_batch(fmt, y, kq, ks, 0l, a.xq, a.xs, a.xbs, n, d, ntok)
@@ -859,7 +859,7 @@ def private requant_q8_gate(t : T?; par : bool; npos, n : int64) {
     var bad = 0
     var seen = 0
     for (p in range64(npos)) {
-        var row : array<float>
+        var inscope row : array<float>
         row |> resize(n)
         for (i in range64(n)) {
             row[i] = x[p * n + i]
@@ -909,9 +909,9 @@ def private requant_q8k_gate(t : T?; par : bool; npos, n : int64) {
     var bad = 0
     var seen = 0
     for (p in range64(npos)) {
-        var q : array<int8>
-        var sc : array<float>
-        var bs : array<int>
+        var inscope q : array<int8>
+        var inscope sc : array<float>
+        var inscope bs : array<int>
         ref_q8k_row(x, p * n, n, q, sc, bs)
         for (i in range64(n)) {
             if (xqb[p * n + i] != q[i]) {

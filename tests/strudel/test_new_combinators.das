@@ -389,7 +389,7 @@ def test_choose(t : T?) {
     // Each cycle should produce exactly 1 event
     for (cyc in range(10)) {
         let span = TimeSpan(start = double(cyc), stop = double(cyc) + 1.0lf)
-        let haps <- pat(span)
+        var inscope haps <- pat(span)
         t |> equal(length(haps), 1)
     }
 }
@@ -425,7 +425,7 @@ def test_wchoose(t : T?) {
     // With weight 100 vs 0, should always pick "bd"
     for (cyc in range(10)) {
         let span = TimeSpan(start = double(cyc), stop = double(cyc) + 1.0lf)
-        let haps <- pat(span)
+        var inscope haps <- pat(span)
         t |> equal(length(haps), 1)
         t |> equal(haps[0].value.s, "bd")
     }
@@ -444,7 +444,7 @@ def test_randcat(t : T?) {
     let pat <- randcat(pats)
     for (cyc in range(10)) {
         let span = TimeSpan(start = double(cyc), stop = double(cyc) + 1.0lf)
-        let haps <- pat(span)
+        var inscope haps <- pat(span)
         t |> equal(length(haps), 1)
     }
 }
@@ -462,7 +462,7 @@ def test_choose_cycles(t : T?) {
     let pat <- chooseCycles(pats)
     for (cyc in range(10)) {
         let span = TimeSpan(start = double(cyc), stop = double(cyc) + 1.0lf)
-        let haps <- pat(span)
+        var inscope haps <- pat(span)
         t |> equal(length(haps), 1)
     }
 }
@@ -551,7 +551,7 @@ def test_scramble_no_slot_correlation(t : T?) {
     let M = 100
     var always_equal = fixed_array(true, true, true, true, true, true, true)
     for (cyc in range(M)) {
-        var sorted <- pat(TimeSpan(start = double(cyc), stop = double(cyc) + 1.0lf))
+        var inscope sorted <- pat(TimeSpan(start = double(cyc), stop = double(cyc) + 1.0lf))
         for (i in range(1, length(sorted))) {
             var j = i
             while (j > 0 && sorted[j].whole.start < sorted[j - 1].whole.start) {
@@ -579,7 +579,7 @@ def test_scramble_allows_repeats_across_cycles(t : T?) {
     var counts : array<int>
     counts |> resize(4)
     for (cyc in range(16)) {
-        let haps <- pat(TimeSpan(start = double(cyc), stop = double(cyc) + 1.0lf))
+        var inscope haps <- pat(TimeSpan(start = double(cyc), stop = double(cyc) + 1.0lf))
         for (h in haps) {
             if (h.value.s == "bd") {
                 counts[0] ++

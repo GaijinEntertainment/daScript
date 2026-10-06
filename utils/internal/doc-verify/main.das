@@ -311,7 +311,7 @@ def type_decl_name_mods(line : string; var mods : string&) : string {
             continue if (!starts_with(d, kw))
             var pos = skip_white_space(d, length(kw))
             var again = true
-            var mod_list : array<string>
+            var inscope mod_list : array<string>
             while (again) {
                 again = false
                 for (m in TYPE_MODIFIERS) {
@@ -1014,7 +1014,7 @@ def emit_page(page : PageSource; cfg : Config) : EmittedPage {
             seed_renamer(ren, page.givens)
         }
         em.checked++
-        var body := blk.body
+        var inscope body := blk.body
         mark_elisions(body)
         let tag = "// --- {base_name(page.path)}:{blk.rst_line}"
         for (chunk in chunks_of(body)) {
@@ -1091,10 +1091,10 @@ struct SweepReport {
 
 def check_expects(em : EmittedPage; cfg : Config; base_file : string; var rep : PageReport) {
     for (ex in em.expects) {
-        var body := ex.body
+        var inscope body := ex.body
         mark_elisions(body)
         let ex_file = replace(base_file, ".das", "__expect_{ex.rst_line}.das")
-        var lines <- split(fread(base_file), "\n")
+        var inscope lines <- split(fread(base_file), "\n")
         for (chunk in chunks_of(body)) {
             if (chunk.kind == "decl" || chunk.kind == "hoist") {
                 lines |> push_from(chunk.lines)

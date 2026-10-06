@@ -999,7 +999,7 @@ def private parse_inline_table(var ts : TomlTokenStream&; var err : string&) : J
         return root
     }
     while (true) {
-        var path : array<string>
+        var inscope path : array<string>
         var pline, prow : int
         if (!parse_key_path(ts, path, err, pline, prow)) return null
         var tk : TomlTokenAt
@@ -1184,7 +1184,7 @@ def private apply_keyval(var state : TomlState&; var current : JsonValue?; path 
         }
         holder = ensure_table(holder, path[i], err, at_line, at_row)
         if (holder == null) return false
-        var prefix : array<string>
+        var inscope prefix : array<string>
         prefix |> reserve(length(state.current_path) + i + 1)
         prefix |> push_from(state.current_path)
         for (j in range(i + 1)) {
@@ -1236,7 +1236,7 @@ def public read_toml(text : string implicit; var error : string&) : JsonValue? {
                 is_aot = true
                 ts.has_ahead = false
             }
-            var path : array<string>
+            var inscope path : array<string>
             var pline, prow : int
             if (!parse_key_path(ts, path, error, pline, prow)) return null
             var tk : TomlTokenAt
@@ -1275,7 +1275,7 @@ def public read_toml(text : string implicit; var error : string&) : JsonValue? {
             }
             continue
         }
-        var path : array<string>
+        var inscope path : array<string>
         var pline, prow : int
         if (!parse_key_path(ts, path, error, pline, prow)) return null
         var tk : TomlTokenAt

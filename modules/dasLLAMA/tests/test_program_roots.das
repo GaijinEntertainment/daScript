@@ -55,7 +55,7 @@ def test_program_roots(t : T?) {
         var checked = 0
         for (d in ROOT_DIRS) {
             for (path in das_files_of(d)) {
-                let lines <- read_lines(path)
+                var inscope lines <- read_lines(path)
                 var requires_dasllama = false
                 var has_main = false
                 var has_export_c = false

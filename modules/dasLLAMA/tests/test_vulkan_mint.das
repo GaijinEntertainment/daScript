@@ -301,8 +301,8 @@ def test_vulkan_mint_kv_codecs(tst : T?) {
                         } else {
                             t |> success(st.size == minted_size && int64(st.mtime) == minted_at, "{kv}: the lane minted under {codecs[0]} mapped as it was - no re-mint ({st.size} bytes)")
                         }
-                        var ids : array<int64>
-                        var row : array<float>
+                        var inscope ids : array<int64>
+                        var inscope row : array<float>
                         mint_witness(m, ids, row, kv)   // a trimmed lane panics on a call passed to the CPU rails: generating is the served witness
                         log_gen_texts(m, "{kv}: the staged load / the trimmed lane", ids_want, ids)
                         t |> equal(mismatch_exact(ids, ids_want), 0, "{kv}: the trimmed lane's greedy tokens are the staged load's at that codec, token for token")

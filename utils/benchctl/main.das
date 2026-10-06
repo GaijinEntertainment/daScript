@@ -138,8 +138,8 @@ def run_insert_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
             print("{filename}: ignored\n")
             continue
         }
-        let stats_entries = parse_bench_output(data)
-        var rows : array<Benchmark>
+        var inscope stats_entries = parse_bench_output(data)
+        var inscope rows : array<Benchmark>
         rows |> reserve(length(stats_entries))
         for (e in stats_entries) {
             rows |> push(Benchmark(

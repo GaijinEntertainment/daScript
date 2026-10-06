@@ -163,9 +163,9 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
         }
         let ok = draw_frame(device, queue, swap, render_pass, pool, sync, clear, true) $(cmd) {
             cmd_bind_pipeline(cmd, pipeline)
-            var sets : array<DescriptorSet>
+            var inscope sets : array<DescriptorSet>
             sets |> push(vk_value_to_boost(raw_set))
-            var no_dyn : array<uint>
+            var inscope no_dyn : array<uint>
             cmd_bind_descriptor_sets(cmd, VkPipelineBindPoint.GRAPHICS, layout, 0u, sets, no_dyn)
             cmd_draw(cmd, 3u)
         }

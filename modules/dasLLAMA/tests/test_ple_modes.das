@@ -92,7 +92,7 @@ def test_ple_fp32_rail(t : T?) {
         var worst = 0.0lf
         for (r in [0l, 1l, c.vocab_size - 1l]) {
             dequant_q8_row(tr, tr.ple_emb_off + r * all, all, unsafe(addr(have[0])))
-            var want <- file_row(path, r, all)
+            var inscope want <- file_row(path, r, all)
             for (i in range64(all)) {
                 if (have[i] != want[i]) {
                     eq = false

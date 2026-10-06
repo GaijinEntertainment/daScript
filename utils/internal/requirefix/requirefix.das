@@ -277,7 +277,7 @@ def analyze_file(var ctx : RequirefixContext?; var mg : ModuleGroup; cop : CodeO
         // To properly map the symbols from B reachable from A to A,
         // we would need an extra mapping of symbol providers.
         for (req in required) {
-            var exported : table<string>
+            var inscope exported : table<string>
             collect_public_deps(req.mod, req.mod_name, exported)
             for (name in keys(exported)) {
                 ctx.providers[name] |> push(req.mod_name)

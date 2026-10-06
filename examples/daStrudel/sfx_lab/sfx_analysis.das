@@ -264,7 +264,7 @@ def public centroid_curve(buf : array<float>; rate, nframes : int) : array<float
     let last = max(n - 1, 0)
     for (f in range(nframes)) {
         let start = min(f * hop, last)
-        var mags : array<float>
+        var inscope mags : array<float>
         stft_mag(buf, start, STFT_N, mags)
         var num = 0.0
         var den = 0.0
@@ -291,7 +291,7 @@ def private log_spectro(buf : array<float>; win_len, rate, nframes, nbins : int;
     let hz_to_bin = float(STFT_N) / float(rate)
     for (f in range(nframes)) {
         let start = f * hop
-        var mags : array<float>
+        var inscope mags : array<float>
         stft_mag(buf, start, STFT_N, mags)
         let mlen = length(mags)
         for (r in range(nbins)) {
@@ -486,7 +486,7 @@ def public mean_flatness(buf : array<float>; rate : int) : float {
     for (fr in range(NF)) {
         let start = fr * hop
         break if (start >= n)
-        var mags : array<float>
+        var inscope mags : array<float>
         stft_mag(buf, start, STFT_N, mags)
         var sum_log = 0.0
         var sum_lin = 0.0

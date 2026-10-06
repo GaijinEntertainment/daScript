@@ -282,14 +282,14 @@ def private lattice_plane_cells(t : T?) {
     t |> run("q51 planes unpack the hand-packed Q5_1 blocks exactly") @(t : T?) {
         for (blk in range(4)) {
             var inscope p <- plane_row(KqFmt.q51, build_q51_block(blk))
-            let want <- formula_row(32) $(k) => q51_d(blk) * float(q5_pat(k + blk)) + q51_m(blk)
+            var inscope want <- formula_row(32) $(k) => q51_d(blk) * float(q5_pat(k + blk)) + q51_m(blk)
             check(t, "q51 block {blk} plane against the hand-packed values", p.w, want, BAR_EXACT, FLAT_SHAPE)
         }
     }
     t |> run("iq4nl32 planes unpack the hand-packed IQ4_NL blocks through the codebook exactly") @(t : T?) {
         for (blk in range(4)) {
             var inscope p <- plane_row(KqFmt.iq4nl32, build_iq4nl32_block(blk))
-            let want <- formula_row(32) $(k) => iq4nl32_w(blk, k)
+            var inscope want <- formula_row(32) $(k) => iq4nl32_w(blk, k)
             check(t, "iq4nl32 block {blk} plane against the hand-packed values", p.w, want, BAR_EXACT, FLAT_SHAPE)
         }
     }
@@ -360,7 +360,7 @@ def private p32_fill_planes(var kq : array<uint8>; var ks : array<uint8>; rows, 
     ks |> resize(rows * nb * sb)
     for (r in range64(rows)) {
         for (b in range64(nb)) {
-            let blkb <- p32_block(int(r * 31l + b), f)
+            var inscope blkb <- p32_block(int(r * 31l + b), f)
             kq_transcode_superblock(kf, blkb, 0l, kq, (r * nb + b) * qb, ks, (r * nb + b) * sb)
         }
     }
@@ -1257,8 +1257,8 @@ def private q40_repacked_cell(t : T?; tr : Model; path : string) {
     var upbad = 0.0
     var mustred = 0.0
     for (e in range64(4l)) {
-        var wg <- read_prefix(path, "blk.0.ffn_gate_up_exps.weight", rows * dim, gt, e * 2l * nfe * dim)
-        var wu <- read_prefix(path, "blk.0.ffn_gate_up_exps.weight", rows * dim, gt, (e * 2l * nfe + nfe) * dim)
+        var inscope wg <- read_prefix(path, "blk.0.ffn_gate_up_exps.weight", rows * dim, gt, e * 2l * nfe * dim)
+        var inscope wu <- read_prefix(path, "blk.0.ffn_gate_up_exps.weight", rows * dim, gt, (e * 2l * nfe + nfe) * dim)
         mm_f(y, tr, fmt_at(tr.we1_fmt, 0l), tr.we1_offs[0] + e * ege, x, xq, xs, xbs, dim, nfe)
         gatebad = max(gatebad, rows_dot_dev(wg, x, y, dim, rows))
         mustred = max(mustred, rows_dot_dev(wu, x, y, dim, rows))
@@ -1536,7 +1536,7 @@ def test_kq_plane_sb_metal_blob_form(t : T?) {
         for (gtype in gtypes) {
             let fmt = gguf_kq_fmt_of_type(gtype)
             let sbb = ggml_type_bytes(gtype, 256l)
-            var bytes : array<uint8>
+            var inscope bytes : array<uint8>
             bytes |> reserve(sbb * 3l)
             var x = uint(seed) * 2654435761u
             for (_i in range64(sbb * 3l)) {
@@ -1545,16 +1545,16 @@ def test_kq_plane_sb_metal_blob_form(t : T?) {
             }
             let qsb = kq_qsb(fmt)
             let ssb = kq_ssb(fmt)
-            var kq, ks : array<uint8>
+            var inscope kq, ks : array<uint8>
             kq |> resize(int(qsb * 3l))
             ks |> resize(int(ssb * 3l))
             for (sb in range64(3l)) {
                 kq_transcode_superblock(fmt, bytes, sb * sbb, kq, sb * qsb, ks, sb * ssb)
             }
-            var rowform, blobform : array<float>
+            var inscope rowform, blobform : array<float>
             rowform |> resize(768)
             blobform |> resize(768)
-            let split <- split_scale_plane(ks, ssb)
+            var inscope split <- split_scale_plane(ks, ssb)
             for (sb in range64(3l)) {
                 dequant_kq_plane_sb(fmt, kq, ks, sb, false, rowform, sb * 256l)
                 dequant_kq_plane_sb(fmt, kq, split, sb, true, blobform, sb * 256l)

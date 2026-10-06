@@ -59,7 +59,7 @@ def gen_arpeggio(notes : array<float>; note_dur : float; volume : float = 0.25) 
     var samples : array<float>
     samples |> resize(total_samples)
     for (ni in range(length(notes))) {
-        let note <- gen_sine_sweep(notes[ni], notes[ni], note_dur, volume)
+        var inscope note <- gen_sine_sweep(notes[ni], notes[ni], note_dur, volume)
         let offset = ni * int(float(AUDIO_RATE) * note_dur)
         for (i in range(length(note))) {
             if (offset + i < total_samples) {

@@ -232,8 +232,8 @@ def private load_ref_table(path : string; var tab : table<string; double>) {
         }
         let text = fread(f)
         for (ln in split(text, "\n")) {
-            let cols <- split_by_chars(strip(ln), " \t")
-            var vals <- [for (c in cols); c; where !empty(c)]
+            var inscope cols <- split_by_chars(strip(ln), " \t")
+            var inscope vals <- [for (c in cols); c; where !empty(c)]
             if (length(vals) >= 4) {
                 let us = try_to_double(vals[3]) ?? -1.0lf
                 if (us > 0.0lf) {

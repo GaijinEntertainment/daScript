@@ -1070,7 +1070,7 @@ def read_llm_baselines(suffix : string = "") : array<LlmBaseline> {
         if (empty(strip(line))) {
             continue
         }
-        let col <- split(line, "\t")
+        var inscope col <- split(line, "\t")
         if (length(col) < 5) {
             continue
         }
@@ -1458,7 +1458,7 @@ def parse_bench_best(out, wav_base : string; var audio_s : double&) : double {
     var best = -1.0lf
     audio_s = -1.0lf
     for (line in split(out, "\n")) {
-        let c <- split(line, "\t")
+        var inscope c <- split(line, "\t")
         if (length(c) < 6 || c[0] != "BENCH" || c[2] != wav_base) {
             continue
         }
@@ -1478,7 +1478,7 @@ def parse_mtmd_ms(out : string) : tuple<total : double; encode : double> {
         if (find(line, "MTMD_TIMING") < 0) {
             continue
         }
-        let toks <- [for (t in split(line, " ")); t; where !empty(t)]
+        var inscope toks <- [for (t in split(line, " ")); t; where !empty(t)]
         var enc = -1.0lf
         var tot = -1.0lf
         for (i in range(length(toks))) {
@@ -1534,7 +1534,7 @@ def parse_mtmd_image(out : string) : tuple<ok : bool; enc_ms : double; prefill_m
     for (line in split(out, "\n")) {
         let e = find(line, "mtmd batch encoding done in ")
         if (e >= 0) {
-            let tail_ <- split(slice(line, e + length("mtmd batch encoding done in ")), " ")
+            var inscope tail_ <- split(slice(line, e + length("mtmd batch encoding done in ")), " ")
             let v = empty(tail_) ? -1.0lf : to_double(tail_[0])
             if (v > 0.0lf) {   // to_double("") and garbage read 0 - a zero-ms encode is no encode
                 enc += v
@@ -1545,7 +1545,7 @@ def parse_mtmd_image(out : string) : tuple<ok : bool; enc_ms : double; prefill_m
         if (find(line, "MTMD_TIMING") < 0) {
             continue
         }
-        let toks <- [for (t in split(line, " ")); t; where !empty(t)]
+        var inscope toks <- [for (t in split(line, " ")); t; where !empty(t)]
         for (i in range(length(toks) - 1)) {
             if (toks[i] == "encode_prefill_ms") {
                 ep = to_double(toks[i + 1])
@@ -2276,7 +2276,7 @@ def llama_batched_bench_tg(raw : string; npl : int64) : double {
     var tg = 0.0lf
     for (ln in lines) {
         continue if (!(strip(ln) |> starts_with("|")))
-        var cells <- split(ln, "|")
+        var inscope cells <- split(ln, "|")
         if (length(cells) >= 10 && strip(cells[3]) == "{npl}") {
             let parsed = try_to_float(strip(cells[8]))
             if (parsed |> is_ok) {

@@ -73,7 +73,7 @@ def test_read_wav_bit_depths(t : T?) {
                 continue
             }
             let path = tmp as value
-            let bytes <- build_wav(bits, want, sr)
+            var inscope bytes <- build_wav(bits, want, sr)
             var wrote = false
             fopen(path, "wb") $(f) {
                 if (f != null) {
@@ -82,7 +82,7 @@ def test_read_wav_bit_depths(t : T?) {
                 }
             }
             t |> success(wrote, "wrote {bits}-bit wav")
-            var got : array<float>
+            var inscope got : array<float>
             var gsr = 0
             var gch = 0
             let ok = read_wav(path, got, gsr, gch)

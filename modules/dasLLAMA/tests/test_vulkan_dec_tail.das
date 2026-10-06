@@ -356,7 +356,7 @@ def private ffn_ref_sel(f : Ffn; fd : array<float>; idx : array<int64>; w : arra
     var acc : array<float>
     acc |> resize(N)
     for (j in range64(K)) {
-        let d <- expert_ffn_ref(f.w1, f.w3, f.w2, fd, idx[j], true)
+        var inscope d <- expert_ffn_ref(f.w1, f.w3, f.w2, fd, idx[j], true)
         for (i in range64(N)) {
             acc[i] += w[j] * d[i]
         }
@@ -552,7 +552,7 @@ def test_vulkan_dec_span(t : T?) {
         cossin |> resize(HS)
         for (pos in range64(2)) {
             var rows <- span_position(a, qa, sp, cossin, pos, kout, vout)
-            var kraw_a, kraw_b : array<float>
+            var inscope kraw_a, kraw_b : array<float>
             span_layer_ref(qa, f, sp.router, 0l, rows.x_ref, pos, cossin, kraw_a)
             span_layer_ref(qb, f, sp.router, 1l, rows.x_ref, pos, cossin, kraw_b)
             held_row(t, "span pos {pos} layer A raw k row", copy_span(kout, 0l, KVD), kraw_a)
@@ -598,20 +598,20 @@ def test_vulkan_dec_span_shexp(t : T?) {
             let tag = gated ? "gated" : "ungated"
             claim_hydrated(t, qa, qb, "dec span shexp ({tag})", false)
             var a <- span_args_sh(qa, qb, f, sh, gated)
-            var kout, vout : array<float>
+            var inscope kout, vout : array<float>
             kout |> resize(2l * KVD)
             vout |> resize(2l * KVD)
             a.shgate = unsafe(addr<float const?>(sh.gate[0]))
             for (pos in range64(2)) {
                 var rows <- span_position(a, qa, sp, cossin, pos, kout, vout)
-                var kraw_a, kraw_b : array<float>
+                var inscope kraw_a, kraw_b : array<float>
                 span_layer_ref_sh(qa, f, sh, sp.router, 0l, rows.x_ref, pos, cossin, kraw_a, gated)
                 span_layer_ref_sh(qb, f, sh, sp.router, 1l, rows.x_ref, pos, cossin, kraw_b, gated)
                 held_row(t, "span shexp ({tag}) pos {pos} residual row after both layers", rows.x, rows.x_ref)
                 if (pos == 0l) {
-                    var x_no : array<float>
+                    var inscope x_no : array<float>
                     fill_row(x_no, N, 0.5)
-                    var ka, kb : array<float>
+                    var inscope ka, kb : array<float>
                     span_layer_ref(qa, f, sp.router, 0l, x_no, 0l, cossin, ka)
                     span_layer_ref(qb, f, sp.router, 1l, x_no, 0l, cossin, kb)
                     t |> success(check_count(rows.x, x_no, ROW_BAR) > 0, "span shexp ({tag}): the reference without the shared expert misses the device row")

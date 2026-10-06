@@ -78,8 +78,8 @@ def test_deltanet_chunked_prefill(t : T?) {
             for (st in range64(8l)) {
                 forward(tr, s1, tok, n + st)
                 forward(tr, s2, tok, n + st)
-                var l1 <- [for (i in range64(c.vocab_size)); s1.logits[i]]
-                var l2 <- [for (i in range64(c.vocab_size)); s2.logits[i]]
+                var inscope l1 <- [for (i in range64(c.vocab_size)); s1.logits[i]]
+                var inscope l2 <- [for (i in range64(c.vocab_size)); s2.logits[i]]
                 let step_diff = logits_maxdiff(l2, l1)
                 let step_bar = DN_LOGIT_BAR_REL * logits_maxabs(l1)
                 let a1 = argmax_of(l1)

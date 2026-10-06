@@ -256,7 +256,7 @@ def main() {   // nolint:STYLE038 — bench driver: three numbered arms sharing 
             salt ++
             var sch <- create_scheduler(m, 2l, 4l, k, 64l)
             var b_us = 0l
-            var itl <- interference_run(m, sch, long_p, salt, b_us)
+            var inscope itl <- interference_run(m, sch, long_p, salt, b_us)
             print("K={k}: {length(itl)} gaps | p50 {ms(pct(itl, 0.5))}ms | p95 {ms(pct(itl, 0.95))}ms | max {ms(pct(itl, 1.0))}ms | the prompt's first token after {ms(b_us)}ms\n")
             delete itl
             delete sch

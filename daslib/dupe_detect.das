@@ -457,7 +457,7 @@ class private DupeIndexer : AstVisitor {
                 && n_defer == f.defer_calls && n_scoped == f.scoped && n_bind == f.binds
                 && n_unsafe_ops == f.unsafe_ops)
             while (length(by_block) <= f.blk_id) {
-                var fresh : array<int>
+                var inscope fresh : array<int>
                 by_block |> emplace(fresh)
             }
             stmt_pos_in_block |> push(length(by_block[f.blk_id]))

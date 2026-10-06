@@ -79,7 +79,7 @@ def test_release_needs_no_ordering(t : T?) {
         let before = count_jobque_leaks()
         with_audio_system() {
             for (_i in range(8)) {
-                var tone <- short_tone(30.0)
+                var inscope tone <- short_tone(30.0)
                 let sid = play_sound_from_pcm(MA_SAMPLE_RATE, 1, tone)
                 var box = seq_box_create()
                 set_status_update(sid, box)

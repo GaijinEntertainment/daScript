@@ -382,7 +382,7 @@ def test_gpu_resident_hybrid_mtp_carry_batched(t : T?) {
             let steps0 = rdec_nrow_steps()
             with_batch_rows(tr, sa, sb) $(var ws; var sess) {
                 for (st in range64(CARRY_STEPS)) {
-                    var toks <- [fa[st], fb[st]]
+                    var inscope toks <- [fa[st], fb[st]]
                     eval_batch(tr, ws, sess, toks)
                     delete toks
                     ga |> emplace <| carry_of(sa)

@@ -6553,7 +6553,7 @@ class SpirvEmit : AstVisitor {
                 }
                 if (broadcast && component_count(a._type.baseType) == 1) {
                     let sres = alloc_id(bm)
-                    var cons <- [rt, sres]
+                    var inscope cons <- [rt, sres]
                     cons |> reserve(2 + result_n)
                     for (_l in range(result_n)) {
                         cons |> push(aid)
@@ -7622,7 +7622,7 @@ def private emit_decode_vector_synth_body(var m : SpirvModule; ctx : EmitCtx; df
         let cib = alloc_id(m)
         emit(m, SEC_FUNCS, SpvOp.CompositeConstruct, arr2, cib, row, ci)
         let r = alloc_id(m)
-        var call <- [sdf.ret_type, r, sdf.fn_id, p0, coord_pids[0], cib]
+        var inscope call <- [sdf.ret_type, r, sdf.fn_id, p0, coord_pids[0], cib]
         emit_n(m, SEC_FUNCS, SpvOp.FunctionCall, call)
         delete call
         lanes |> push(r)
@@ -7978,7 +7978,7 @@ def private detect_recursion(var ctx : EmitCtx; entry : FunctionPtr; var errors 
     for (key in ctx.user_order) {
         let uf = ctx.user_funcs?[key] ?? UserFunc()
         if (!uf.valid) continue
-        var cs : table<uint64>
+        var inscope cs : table<uint64>
         scan_callees(ctx, uf.fn, cs)
         adj[key] <- [for (k in keys(cs)); k]
         delete cs

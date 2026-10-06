@@ -376,7 +376,7 @@ def private doc_root_licenses(owner : string) : array<tuple<source : string; nam
         continue if (length(args) < 3 || args[0] != "FILES")
         var dest = ""
         var rename = ""
-        var sources : array<string>
+        var inscope sources : array<string>
         var i = 1
         while (i < length(args)) {
             let a = args[i]

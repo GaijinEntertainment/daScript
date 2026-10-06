@@ -236,7 +236,7 @@ def window_step(var L : Layer; ids : array<int>; n, rows : int) {
     for (e in order) {
         break if (L.nfree == 0 && swaps == 0)
         let filling = L.nfree > 0
-        let none : array<int>
+        var inscope none : array<int>
         let slot = slot_for(L, e, none, 0)
         break if (slot < 0)
         place(L, e, slot)
@@ -291,7 +291,7 @@ def main : int {
         }
         if (int64(r.rows) < RDEC_HOT_WINDOW_MIN) {
             for (row in range(r.rows)) {
-                let ids <- [for (j in range(tr.k)); r.ids[row * tr.k + j]]
+                var inscope ids <- [for (j in range(tr.k)); r.ids[row * tr.k + j]]
                 decode_step(layers[r.layer], ids, tr.k)
                 if (first_routed < 0) {
                     first_routed = r.layer

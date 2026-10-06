@@ -1523,7 +1523,7 @@ def apply_edits_to_file(file : string; var records : array<EditRecord>; dry_run 
         let merged = "{prefix}{r.replacement}{suffix}"
         // Replace lines [s_idx .. e_idx] with the single merged line.
         // We rebuild via a fresh list.
-        var new_lines : array<string>
+        var inscope new_lines : array<string>
         new_lines |> reserve(length(lines) - (e_idx - s_idx))
         for (k in range(length(lines))) {
             if (k < s_idx || k > e_idx) {
@@ -1615,7 +1615,7 @@ def main() : int {
             print("SKIP {file} (expect-directive test fixture)\n") if (!cfg.quiet)
             continue
         }
-        var records : array<EditRecord>
+        var inscope records : array<EditRecord>
         let compiled = collect_edits(file, records)
         if (!compiled) {
             total_files_failed++

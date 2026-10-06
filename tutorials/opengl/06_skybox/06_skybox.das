@@ -249,7 +249,7 @@ def create_skybox_cubemap(dim : int) : uint {
     glGenTextures(1, safe_addr(tex))
     glBindTexture(GL_TEXTURE_CUBE_MAP, tex)
     for (face in range(N_FACES)) {
-        var pixels <- gen_sky_face(face, dim)
+        var inscope pixels <- gen_sky_face(face, dim)
         glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + uint(face), 0, int(GL_RGBA), dim, dim, 0,
             GL_RGBA, GL_UNSIGNED_BYTE, unsafe(addr(pixels[0])))
         delete pixels

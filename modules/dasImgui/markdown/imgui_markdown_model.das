@@ -349,7 +349,7 @@ def private split_plain_uris(doc : RichDocument const; var content : RichInlineC
                 continue
             }
             let value = slice(text_bytes, base.display.start_byte, base.display.end_byte)
-            let uris <- text_uris(value)
+            var inscope uris <- text_uris(value)
             if (empty(uris)) {
                 split_runs |> push(<- base)
                 continue

@@ -456,12 +456,12 @@ class CoveragePass : AstPassMacro {
             var blk = unsafe(reinterpret<ExprBlock?>(initFn.body))
             blk.list |> clear()
             for (file, values in keys(coverageData), values(coverageData)) {
-                let lineArr <- [for (line in keys(values.line_cov.lines)); line]
+                var inscope lineArr <- [for (line in keys(values.line_cov.lines)); line]
                 blk.list |> emplace_new <| qmacro(_::register_coverage_lines($v(file), $v(lineArr)))
             }
             for (file, reg_data in keys(registration_data), values(registration_data)) {
-                var nameArr : array<string>
-                var lineArr : array<uint>
+                var inscope nameArr : array<string>
+                var inscope lineArr : array<uint>
                 for (fname, fline in keys(reg_data.allFunctions), values(reg_data.allFunctions)) {
                     nameArr |> push(fname)
                     lineArr |> push(fline)
@@ -469,12 +469,12 @@ class CoveragePass : AstPassMacro {
                 blk.list |> emplace_new <| qmacro(coverage::register_coverage_functions($v(file), $v(nameArr), $v(lineArr)))
 
                 for (fname, flines in keys(reg_data.funcLines), values(reg_data.funcLines)) {
-                    let flineArr <- [for (fl in keys(flines)); fl]
+                    var inscope flineArr <- [for (fl in keys(flines)); fl]
                     blk.list |> emplace_new <| qmacro(coverage::register_coverage_func_lines($v(file), $v(fname), $v(flineArr)))
                 }
 
                 let nbranches = reg_data.allBranches |> length()
-                var blines, block_nums, branch_nums : array<uint>
+                var inscope blines, block_nums, branch_nums : array<uint>
                 blines |> reserve(nbranches)
                 block_nums |> reserve(nbranches)
                 branch_nums |> reserve(nbranches)

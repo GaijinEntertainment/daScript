@@ -86,10 +86,10 @@ def test_sometimesby(t : T?) {
     let pat_always <- sometimesby(s("bd"), 1.0, @(p) => fmap(p, @(e : Event) : Event { var r = e; r.s = "sd"; return r; }))
     for (cyc in range(5)) {
         let span = TimeSpan(start = double(cyc), stop = double(cyc) + 1.0lf)
-        let haps_never <- pat_never(span)
+        var inscope haps_never <- pat_never(span)
         t |> equal(length(haps_never), 1)
         t |> equal(haps_never[0].value.s, "bd")
-        let haps_always <- pat_always(span)
+        var inscope haps_always <- pat_always(span)
         t |> equal(length(haps_always), 1)
         t |> equal(haps_always[0].value.s, "sd")
     }
@@ -102,7 +102,7 @@ def test_sometimes_distribution(t : T?) {
     let cycles = 100
     for (cyc in range(cycles)) {
         let span = TimeSpan(start = double(cyc), stop = double(cyc) + 1.0lf)
-        let haps <- pat(span)
+        var inscope haps <- pat(span)
         total_haps += length(haps)
     }
     // 4 events/cycle normal, 8 events/cycle fast. With 50% per-event,

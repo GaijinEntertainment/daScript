@@ -70,7 +70,7 @@ def render_sound(layers : array<Layer>) : array<float> {
         if (!lyr.enabled) {
             continue
         }
-        var buf <- render_voice(lyr.voice)
+        var inscope buf <- render_voice(lyr.voice)
         let off = max(int(lyr.delay * float(SFX_SAMPLE_RATE)), 0)
         let need = off + length(buf)
         if (length(out) < need) {

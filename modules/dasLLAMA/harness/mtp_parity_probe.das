@@ -375,7 +375,7 @@ def main() {
             if (used >= cfg.nprompts) {
                 break
             }
-            var ids <- encode(tk, tx, false)
+            var inscope ids <- encode(tk, tx, false)
             if (long_length(ids) < plen) {
                 delete ids
                 continue

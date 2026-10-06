@@ -119,7 +119,7 @@ def private chunked_greedy(trp, trd : Model; c1, c2 : array<int64>; kdt : KVDtyp
         }
         for (_i in range(nsteps)) {
             ids |> push(cur)
-            var one <- [cur]
+            var inscope one <- [cur]
             eval_(trd, s, one)
             delete one
             cur = 0l
@@ -157,7 +157,7 @@ def private span_greedy(trp, trd : Model; head, tail : array<int64>; kdt : KVDty
         }
         for (_i in range(nsteps)) {
             ids |> push(cur)
-            var one <- [cur]
+            var inscope one <- [cur]
             eval_(trd, s, one)
             delete one
             cur = 0l
@@ -199,7 +199,7 @@ def private span_fused_greedy(trp, trd : Model; head, media, tail : array<int64>
         }
         for (_i in range(nsteps)) {
             ids |> push(cur)
-            var one <- [cur]
+            var inscope one <- [cur]
             eval_(trd, s, one)
             delete one
             cur = 0l
@@ -268,7 +268,7 @@ def private span_mrope_greedy(trp, trd : Model; head, media, tail : array<int64>
         }
         for (_i in range(nsteps)) {
             ids |> push(cur)
-            var one <- [cur]
+            var inscope one <- [cur]
             eval_(trd, s, one)
             delete one
             cur = 0l
@@ -348,7 +348,7 @@ def private span_ds_greedy(trp, trd : Model; head, media, tail : array<int64>; k
         }
         for (_i in range(nsteps)) {
             ids |> push(cur)
-            var one <- [cur]
+            var inscope one <- [cur]
             eval_(trd, s, one)
             delete one
             cur = 0l
@@ -421,7 +421,7 @@ def private continuation(trp, trd : Model; prompt : array<int64>; n_gen : int) :
         }
         for (_i in range(n_gen)) {
             got |> push(cur)
-            var one <- [cur]
+            var inscope one <- [cur]
             eval_(trd, s, one)
             delete one
             cur = 0l

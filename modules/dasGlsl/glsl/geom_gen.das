@@ -533,21 +533,21 @@ def load_obj_mesh(fname : string; canfail : bool = true) {
             if (st |> starts_with("#")) {
                 continue
             } elif (st |> starts_with("v ")) {
-                var xyz <- st |> split(" ")
+                var inscope xyz <- st |> split(" ")
                 v |> push(float3(float(xyz[1]), float(xyz[2]), float(xyz[3])))
                 delete xyz
             } elif (st |> starts_with("vt ")) {
-                var xy <- st |> split(" ")
+                var inscope xy <- st |> split(" ")
                 vt |> push(float2(float(xy[1]), float(xy[2])))
                 delete xy
             } elif (st |> starts_with("vn ")) {
-                var xyz <- st |> split(" ")
+                var inscope xyz <- st |> split(" ")
                 vn |> push(float3(float(xyz[1]), float(xyz[2]), float(xyz[3])))
                 delete xyz
             } elif (st |> starts_with("f ")) {
-                var f012 <- st |> split(" ")
-                var v012 <- [for (vv in range(1, length(f012))); split_sptn(f012[vv])]
-                var i012 : array<int>
+                var inscope f012 <- st |> split(" ")
+                var inscope v012 <- [for (vv in range(1, length(f012))); split_sptn(f012[vv])]
+                var inscope i012 : array<int>
                 for (pvi in v012) {
                     var vtx = GeometryPreviewVertex(
                         xyz = pvi.p == -1 ? float3() : v[pvi.p - 1],

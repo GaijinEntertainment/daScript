@@ -614,7 +614,7 @@ def select_areas(cfg : RunArgs) : tuple<status : int; areas : array<string>> {
             return <- (status = 2, areas <- none)
         }
         for (p in changed_paths(cfg.base)) {
-            let hit <- areas_for_path(p)
+            var inscope hit <- areas_for_path(p)
             if (empty(hit)) {
                 if ((p |> replace("\\", "/")) |> starts_with("modules/dasLLAMA/")) {
                     to_log(LOG_INFO, "CHANGED {p} -> a model suite file: run its suite with --arm scoped to the change\n")

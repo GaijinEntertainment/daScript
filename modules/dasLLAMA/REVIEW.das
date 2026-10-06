@@ -630,7 +630,7 @@ def private check_race_bind_numbers {
     }
     for (name in files) {
         let path = "modules/dasLLAMA/dasllama/{name}"
-        var pso_class : table<string; string>   // per-function psoVar -> class
+        var inscope pso_class : table<string; string>   // per-function psoVar -> class
         var target = ""
         var line_no = 0
         for (line in split(fread(path), "\n")) {
@@ -742,7 +742,7 @@ def private check_image_backing_release {
     for (p in files) {
         var fn = ""
         var opened = false
-        var closes : array<int>
+        var inscope closes : array<int>
         var line_no = 0
         for (line in split(strip_line_comments(fread(p)), "\n")) {
             line_no++
@@ -1658,7 +1658,7 @@ let private GEMM_GEN_FILES = [
     "modules/dasLLAMA/dasllama/dasllama_gemm_gen.das",
     "modules/dasLLAMA/dasllama/dasllama_gemm_schema.das"
 ]
-let private GEMM_GEN_STAMP_HASH = 0xb1c907a641171becul
+let private GEMM_GEN_STAMP_HASH = 0x90ebe425c98c9c04ul
 
 [arch(at = "ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers")]
 def private check_gemm_gen_stamp {

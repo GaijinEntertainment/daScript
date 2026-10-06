@@ -297,7 +297,7 @@ def public strudel_reset_memory_baseline() {
 def public strudel_debug_sample_peaks() {
     //! Log the peak amplitude of every loaded sample in the bank (debug helper).
     for (name in keys(g_bank.sounds)) {
-        var samples <- render_sample(g_bank, name, 0, 1.0)
+        var inscope samples <- render_sample(g_bank, name, 0, 1.0)
         var peak = 0.0
         for (s in samples) {
             peak = max(peak, abs(s))
@@ -371,7 +371,7 @@ def public strudel_add_track(var pat : Pattern; gain : float = 1.0) : int {
     init_track(track, 0.0lf)
     // ensure per-track PCM arrays are big enough
     while (length(g_track_pcm) <= idx) {
-        var empty : array<float>
+        var inscope empty : array<float>
         g_track_pcm |> emplace(empty)
     }
     g_vis_index ++
@@ -393,7 +393,7 @@ def public strudel_add_track_immediate(var pat : Pattern; gain : float = 1.0) : 
     init_track(track, alignedStart)
     // ensure per-track PCM arrays are big enough
     while (length(g_track_pcm) <= idx) {
-        var empty : array<float>
+        var inscope empty : array<float>
         g_track_pcm |> emplace(empty)
     }
     g_vis_index ++
@@ -429,7 +429,7 @@ def public strudel_one_shot(var pat : Pattern; gain : float = 1.0; quant_cycles 
     init_track(track, startWall)
     track.sched.lastQueryEnd = 0.0lf   // phrase begins at its own cycle 0 (= startWall), not the global phase
     while (length(g_track_pcm) <= idx) {
-        var empty : array<float>
+        var inscope empty : array<float>
         g_track_pcm |> emplace(empty)
     }
     g_vis_index ++
@@ -1108,7 +1108,7 @@ def private deserialize_bank(var arch : Archive; var bank : SampleBank) {
         arch |> serialize(name)
         var nv : int
         arch |> serialize(nv)
-        var variations : array<Sample>
+        var inscope variations : array<Sample>
         variations |> reserve(nv)
         for (_v in range(nv)) {
             var sample : Sample

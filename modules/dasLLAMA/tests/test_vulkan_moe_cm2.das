@@ -44,7 +44,7 @@ def private ref_chain(w1, w3, w2 : array<float>; x : array<float>; inv : array<u
     for (j in range64(npos * k)) {
         let p = j / k
         let e = expert_of_row[int(inv[j])]
-        var d <- ffn_expert_ref(w1, w3, w2, copy_span(x16, p * n, n), 1, kn, knfe, e * knfe, e * knfe, e * kn) $(var h) {
+        var inscope d <- ffn_expert_ref(w1, w3, w2, copy_span(x16, p * n, n), 1, kn, knfe, e * knfe, e * knfe, e * kn) $(var h) {
             for (v in h) {
                 v = f16r(v)
             }

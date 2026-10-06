@@ -92,7 +92,7 @@ def test_all_waveforms(t : T?) {
         s.base_freq = 0.5
         s.env_sustain = 0.3
         s.env_decay = 0.3
-        let buf <- render_sfxr(s)
+        var inscope buf <- render_sfxr(s)
         check_sound(t, buf, "wave {int(w)}")
     }
 }
@@ -140,7 +140,7 @@ def test_randomize_renderable(t : T?) {
     var seed = 0xABCDEFu
     for (i in range(8)) {
         let s = sfxr_randomize(seed)
-        let buf <- render_sfxr(s)
+        var inscope buf <- render_sfxr(s)
         t |> success(all_finite_in_range(buf), "randomize {i}: samples in [-1,1]")
     }
 }
@@ -151,7 +151,7 @@ def test_mutate_renderable(t : T?) {
     let base = sfxr_jump(seed)
     for (i in range(8)) {
         let s = sfxr_mutate(base, seed, 0.1)
-        let buf <- render_sfxr(s)
+        var inscope buf <- render_sfxr(s)
         t |> success(all_finite_in_range(buf), "mutate {i}: samples in [-1,1]")
     }
 }

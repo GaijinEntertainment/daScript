@@ -120,7 +120,7 @@ def private probe_time(fmt : KqFmt; ncols : int; p : ProbePlanes; b : tuple<wqd 
         if (g_cold) {   //! a region table a copy, each its own set, so a dispatch names one copy
             sets |> reserve(p.copies)
             for (i in range(p.copies)) {
-                var pair <- [uint(i * p.blocks), 0u]
+                var inscope pair <- [uint(i * p.blocks), 0u]
                 let rgd = make_device_buf(8l)
                 upload_region_at(rgd, 0l, addr<uint8 const?>(pair[0]), 8l)
                 let bufs = fixed_array(b.wqd, b.wsd, rgd, b.xqd, b.xsd, b.yd)

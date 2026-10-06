@@ -568,7 +568,7 @@ def private oracle_cell(gguf, be, tag, exe : string; accel : bool; stored : Benc
             if (r.engine != "das") {
                 continue
             }
-            var lines : array<string>
+            var inscope lines : array<string>
             verdict = oracle_compare(r, stored, double(cfg.oracle_warn), double(cfg.oracle_fail), lines)
             detail = join(lines, "; ")
             delete lines
@@ -619,7 +619,7 @@ def private oracle_asr_cell(spec : AsrModelSpec; stored : BenchRun; leg : string
             if (r.engine != "das" || empty(r.workload) || r.backend != stored.backend) {
                 continue
             }
-            var lines : array<string>
+            var inscope lines : array<string>
             verdict = oracle_compare(r, stored, double(cfg.oracle_warn), double(cfg.oracle_fail), lines)
             detail = join(lines, "; ")
             delete lines
@@ -671,7 +671,7 @@ def private oracle_image_cell(gguf, mm, pic : string; stored : BenchRun; leg : s
             if (r.engine != "das" || r.workload != "image-chat" || r.backend != stored.backend) {
                 continue
             }
-            var lines : array<string>
+            var inscope lines : array<string>
             verdict = oracle_compare(r, stored, double(cfg.oracle_warn), double(cfg.oracle_fail), lines)
             detail = join(lines, "; ")
             delete lines

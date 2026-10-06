@@ -458,7 +458,7 @@ class VkDispatch : AstStructureAnnotation {
             let params = find_arg(args, "params") ?as tString ?? ""
             if (!empty(strip(params))) {
                 for (p in split(params, ",")) {
-                    let nt <- split(p, ":")
+                    var inscope nt <- split(p, ":")
                     if (length(nt) != 2) {
                         errors := "[vk_dispatch] {base}: param '{strip(p)}' must be 'name : type'"
                         return false
@@ -484,7 +484,7 @@ class VkDispatch : AstStructureAnnotation {
                     }
                     var good = false
                     for (p in split(params, ",")) {
-                        let nt <- split(p, ":")
+                        var inscope nt <- split(p, ":")
                         if (length(nt) == 2 && strip(nt[0]) == gs && strip(nt[1]) == "int64") {
                             good = true
                         }

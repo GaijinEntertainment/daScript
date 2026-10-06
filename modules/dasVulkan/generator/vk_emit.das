@@ -179,7 +179,7 @@ def private build_bitfields(reg : VkRegistry; var em : EmitModel) {
                 for (i in range(max_bit + 1)) {
                     spec.bit_names[i] = "_b{i}"
                 }
-                var used : table<string>
+                var inscope used : table<string>
                 for (e in ed.entries) {
                     continue if (e.is_alias || e.bitpos < 0)
                     let short = enum_short_name(prefix, e.name)
@@ -276,7 +276,7 @@ def private compute_struct_set(reg : VkRegistry; var em : EmitModel) {
     var changed = true
     while (changed) {
         changed = false
-        var drop : array<string>
+        var inscope drop : array<string>
         for (s in reg.structs) {
             continue if (!key_exists(em.struct_emit, s.name))
             for (m in s.members) {
@@ -375,7 +375,7 @@ def public emit_enums(reg : VkRegistry; em : EmitModel; out_dir : string; var in
         fprint(f, "        external = true;\n        cppName = \"{e.name}\";\n")
         fprint(f, "        baseType = (Type) ToBasicType< underlying_type<{e.name}>::type >::type;\n")
         let prefix = enum_value_prefix(e.name, false, reg.vendor_tags)
-        var used : table<string>
+        var inscope used : table<string>
         for (en in e.entries) {
             let short = enum_short_name(prefix, en.name)
             if (key_exists(used, short)) {
@@ -984,7 +984,7 @@ def public emit_funcs(reg : VkRegistry; em : EmitModel; out_dir : string; var in
             panic("can't write gen_funcs_{chunk}") if (f == null)
             fprint(f, GEN_HEADER)
             fprint(f, "#include \"dasVULKAN.h\"\n\nnamespace das {OB}\n\n")
-            var reg_lines : array<string>
+            var inscope reg_lines : array<string>
             for (j in range(i, hi)) {
                 let c & = unsafe(reg.commands[work[j].cmd_idx])
                 let sig & = unsafe(reg.commands[work[j].sig_idx])
@@ -995,7 +995,7 @@ def public emit_funcs(reg : VkRegistry; em : EmitModel; out_dir : string; var in
                     skip_log |> push("{c.name}: {mr.reason}")
                     continue
                 }
-                var params : array<MappedParam>
+                var inscope params : array<MappedParam>
                 var all_ok = true
                 for (p in sig.params) {
                     var mp <- map_param(reg, em, p)

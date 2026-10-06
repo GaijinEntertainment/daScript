@@ -489,7 +489,7 @@ def public derive_views(reg : VkRegistry; em : EmitModel; var skip_log : array<s
     var views : array<ViewStruct>
     for (s, idx in reg.structs, range(length(reg.structs))) {
         continue if (!key_exists(mappable, s.name))
-        let counts = count_members_of(s)
+        var inscope counts = count_members_of(s)
         var vs = ViewStruct(s_index = idx, boost = boost_name(s.name))
         vs.fields |> reserve(length(s.members))
         for (m in s.members) {
@@ -694,7 +694,7 @@ def private emit_structs_boost(reg : VkRegistry; em : EmitModel; out_dir : strin
             for (bf in vs.fields) {
                 let cm = das_safe_name(bf.raw_name)
                 if (bf.kind == FieldKind.count_independent) {
-                    let arrs <- count_referencing_arrays(vs, bf.raw_name)
+                    var inscope arrs <- count_referencing_arrays(vs, bf.raw_name)
                     fprint(f, "    vk.{cm} = b.{bf.name} != 0u ? b.{bf.name} : {len_max_expr(arrs, bf.boost_type)}\n")
                 } elif (bf.kind == FieldKind.erase) {
                     let auth = count_authoritative_array(vs, bf.raw_name)
@@ -814,7 +814,7 @@ def private derive_creators(reg : VkRegistry; em : EmitModel; owners : array<Own
         var out_len = ""
         var ci_vk = ""
         var ci_has_len = false
-        var creator_params : array<ParentField>
+        var inscope creator_params : array<ParentField>
         for (p in c.params) {
             if (key_exists(em.handle_names, p.type_name) && p.num_ptrs >= 1) {
                 out_handle = p.type_name
@@ -1568,7 +1568,7 @@ def private is_array_field(bf : BoostField) : bool {
 // an array field is what makes a boost struct non-copyable, and das MOVES a non-copyable element out of an array literal
 def private collect_non_copyable(views : array<ViewStruct>; var out : array<string>) {
     for (vs in views) {
-        var reasons <- [for (bf in vs.fields); "{bf.name} : {bf.boost_type}"; where is_array_field(bf)]
+        var inscope reasons <- [for (bf in vs.fields); "{bf.name} : {bf.boost_type}"; where is_array_field(bf)]
         if (!empty(reasons)) {
             out |> push("{vs.boost}: {join(reasons, ", ")}")
         }

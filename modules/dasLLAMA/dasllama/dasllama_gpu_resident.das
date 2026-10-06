@@ -3405,8 +3405,8 @@ def private rdec_trace_write() {
             fwrite(f, g_rdec_trace_rows[i])
             let n = int64(g_rdec_trace_rows[i]) * k
             if (n > 0l) {
-                var ids <- [for (j in range64(n)); g_rdec_trace_idx[pos + j]]
-                var ws <- [for (j in range64(n)); g_rdec_trace_w[pos + j]]
+                var inscope ids <- [for (j in range64(n)); g_rdec_trace_idx[pos + j]]
+                var inscope ws <- [for (j in range64(n)); g_rdec_trace_w[pos + j]]
                 fwrite(f, ids)
                 fwrite(f, ws)
                 pos += n
@@ -4302,7 +4302,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         var dense_stop = false
         var dense_skips : WalkSkips
         for (l in range64(layers)) {
-            var uploads : array<tuple<f : KqFmt; woff : int64; n : int64; rows : int64>>
+            var inscope uploads : array<tuple<f : KqFmt; woff : int64; n : int64; rows : int64>>
             if (layer_is_recurrent(t.config, l)) {
                 // kq-tagged dn planes (CPU-rail loads) are not tier-servable — the dn chain reads q8
                 if (t.dnqkv_offs[l] < 0l || t.dngate_offs[l] < 0l || t.dnout_offs[l] < 0l) {
@@ -4360,7 +4360,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         let she = dim * nsh
         var sh_marked = 0l
         for (l in range64(layers)) {
-            var ups <- [plane_up(KqFmt.q8, t.wsh1_off + l * she, dim, nsh),
+            var inscope ups <- [plane_up(KqFmt.q8, t.wsh1_off + l * she, dim, nsh),
                         plane_up(KqFmt.q8, t.wsh3_off + l * she, dim, nsh),
                         plane_up(KqFmt.q8, t.wsh2_off + l * she, nsh, dim)]
             let ok = gather_upload_group(t, ups, mr, kgroup, wbias, wq, ws)
@@ -4402,7 +4402,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
             }
             let cd = dn_conv_dim(t.config)
             let di = t.config.ssm_d_inner
-            var ups <- [plane_up(KqFmt.q8, t.dnqkv_offs[l], dim, cd),
+            var inscope ups <- [plane_up(KqFmt.q8, t.dnqkv_offs[l], dim, cd),
                         plane_up(KqFmt.q8, t.dngate_offs[l], dim, di),
                         plane_up(KqFmt.q8, t.dnout_offs[l], di, dim)]
             let ok = gather_upload_group(t, ups, mr, kgroup, wbias, wq, ws)
@@ -4470,7 +4470,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
                 walk_skip(at_skips, l, "geometry outside the chain (hs {hs}, qd {qd}, kvd {kvd}, heads {c.n_heads}, rot {rot})")
                 continue
             }
-            var ups : array<PlaneUp>
+            var inscope ups : array<PlaneUp>
             if (!moe_gpu_dense_on_gpu(int(fq), t.wq_offs[l])) {
                 ups |> push(plane_up(fq, t.wq_offs[l], dim, c.q_gated ? 2l * qd : qd))
             }
@@ -4514,7 +4514,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
                 walk_skip(qkv_skips, l, "q/k/v formats {int(fq)}/{int(fk)}/{int(fv)} not tier-servable as one image")
                 continue
             }
-            var ups <- [plane_up(fq, t.wq_offs[l], dim, t.config.q_gated ? 2l * qd : qd),
+            var inscope ups <- [plane_up(fq, t.wq_offs[l], dim, t.config.q_gated ? 2l * qd : qd),
                         plane_up(fk, t.wk_offs[l], dim, kv),
                         plane_up(fv, t.wv_offs[l], dim, kv)]
             let ok = gather_upload_group(t, ups, mr, kgroup, wbias, wq, ws)
@@ -4537,7 +4537,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         // The Q4_K_M MoE recipe bumps ffn_down_exps to Q5_0/Q8_0, so k4/k4/q8 is the COMMON shape (glm4moe,
         // gemma). The walk stops on refusal so the resident set stays contiguous from the end.
         break if (l < t.config.n_layer_dense_lead || t.we1_offs[l] < 0l || tier_expert_walk_stops(t, l, "expert"))
-        var ups <- resident_expert_ups(t, l)
+        var inscope ups <- resident_expert_ups(t, l)
         let ok = gather_upload_group(t, ups, mr, kgroup, wbias, wq, ws)
         delete ups
         break if (!ok)   // VRAM budget hit — this and lower layers stay on CPU
@@ -4551,7 +4551,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     for (i in range64(has_experts ? max(nstream, 0l) : 0l)) {
         let l = from_l - 1l - i
         break if (l < t.config.n_layer_dense_lead || t.we1_offs[l] < 0l || tier_expert_walk_stops(t, l, "streamed"))
-        var ups <- resident_expert_ups(t, l)
+        var inscope ups <- resident_expert_ups(t, l)
         let ok = gather_upload_group(t, ups, mr, kgroup, wbias, wq, ws, [stream = true])
         delete ups
         break if (!ok)   // pinned-mirror budget hit — this and lower layers stay CPU-only

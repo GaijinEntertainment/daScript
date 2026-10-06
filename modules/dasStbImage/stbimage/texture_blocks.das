@@ -51,7 +51,7 @@ def compress_block_texture(pixels : array<uint8>; width, height, format : int; s
         if (w == 1 && h == 1){break}
         let nw = max(1, w / 2); let nh = max(1, h / 2)
         let smaller_size = int64(nw) * int64(nh) * 4l
-        var smaller : array<uint8>; smaller |> reserve(smaller_size); smaller |> resize(smaller_size)
+        var inscope smaller : array<uint8>; smaller |> reserve(smaller_size); smaller |> resize(smaller_size)
         unsafe{
             stbir_resize(addr(current[0]), w, h, 0, addr(smaller[0]), nw, nh, 0,
                 stbir_pixel_layout.STBIR_RGBA, srgb ? stbir_datatype.STBIR_TYPE_UINT8_SRGB : stbir_datatype.STBIR_TYPE_UINT8,

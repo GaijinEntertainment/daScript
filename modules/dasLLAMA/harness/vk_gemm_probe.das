@@ -611,8 +611,8 @@ def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measur
         let w_bytes = int64(ne * dim) * 2l
         let x_bytes = int64(dim) * 4l
         let o_bytes = 4096l
-        var wh : array<uint>
-        var xh : array<float>
+        var inscope wh : array<uint>
+        var inscope xh : array<float>
         wh |> resize(ne * dim / 2)
         xh |> resize(dim)
         for (i in range(length(wh))) {
@@ -649,9 +649,9 @@ def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measur
         let cd = 2 * kd + di
         let sm_n = int(DND_SMALLS_BYTES / 4l)
         let nblk = di / 32
-        var projh <- row_fill(cd + di, 23, 0, 0.03, 1.0, 71)
-        var sth <- row_fill(nvh * ds * ds, 13, 0, 0.02, 0.5, 53)
-        var smh <- row_fill(sm_n, 17, 0, 0.02, 0.4, 43)
+        var inscope projh <- row_fill(cd + di, 23, 0, 0.03, 1.0, 71)
+        var inscope sth <- row_fill(nvh * ds * ds, 13, 0, 0.02, 0.5, 53)
+        var inscope smh <- row_fill(sm_n, 17, 0, 0.02, 0.4, 43)
         for (i in range(nvh)) {
             smh[int(DN_SM_A) + i] = -0.4 - float(i) * 0.1
         }
@@ -1791,8 +1791,8 @@ def private khr_cpu_check(wqh, wsuh, xfh : array<uint>; y_gpu : array<float>; d,
     var max_abs = 0.0lf
     for (r0 in [0, (d / 2) & ~7, d - 8]) {
         for (t0 in [0, cnt - 16]) {
-            let recs = [uint(r0 * nsb), uint(t0), 16u, 0u]
-            var ys : array<float>
+            var inscope recs = [uint(r0 * nsb), uint(t0), 16u, 0u]
+            var inscope ys : array<float>
             ys |> resize((t0 + 16) * 8)
             k4f16_gemm_oracle(wqh, wsuh, xfh, recs, 1, n, 8, ys)
             for (r in range(16)) {
@@ -2803,7 +2803,7 @@ def private run_lastwg(dim : int) {   // nolint:STYLE038 — one linear measurem
         let xresd = make_device_buf(nb)
         let yd = make_device_buf(nb)
         let cntd = make_device_buf(16l)
-        var zero : array<uint>
+        var inscope zero : array<uint>
         zero |> resize(4)
         var host = make_host_buf(nb + 16l, true, [cached = true])
         unsafe {

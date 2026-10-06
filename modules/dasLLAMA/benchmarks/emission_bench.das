@@ -121,7 +121,7 @@ def main() {   // nolint:STYLE038 — flat bench driver: arg handling, then one 
         var ttft_ms, emit_tps : array<double>
         for (pi in range(np)) {
             var s <- make_run_state(c)
-            let prompt <- build_prompt(plen, int64(pi))
+            var inscope prompt <- build_prompt(plen, int64(pi))
             let t0 = ref_time_ticks()
             eval_(t, s, prompt)
             forward(t, s, prompt[plen - 1l], plen - 1l)

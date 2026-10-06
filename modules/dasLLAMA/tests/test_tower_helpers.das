@@ -316,7 +316,7 @@ def test_attention_bidir(t : T?) {
         with_dasllama_jobque_() {
             for (scale in [0.5, 1.0]) {
                 attention_bidir(out, qq, kk, vv, hp, att, tt, d, n_head, scale)
-                let ref <- attention_ref(qq, kk, vv, tt, d, n_head, scale)
+                var inscope ref <- attention_ref(qq, kk, vv, tt, d, n_head, scale)
                 var maxdiff = 0.0
                 for (i in range(int(tt * d))) {
                     maxdiff = max(maxdiff, abs(out[i] - ref[i]))

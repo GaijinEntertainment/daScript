@@ -249,7 +249,7 @@ def run_parallel_export(files : array<string>; cfg : Config) {
         }
         chunk_paths |> push(cp)
         shard_paths |> push(sp)
-        var argv <- child_argv_for_chunk(spawn_prefix, cp, sp, cfg)
+        var inscope argv <- child_argv_for_chunk(spawn_prefix, cp, sp, cfg)
         argvs |> emplace(argv)
     }
 

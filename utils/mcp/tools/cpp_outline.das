@@ -55,11 +55,11 @@ def do_cpp_outline(file, glob_filter, mode : string) : string {
             if (multi_file) {
                 w |> write("{fp}:\n")
             }
-            var nodes : array<CppOutlineNode>
-            var roots : array<int>
+            var inscope nodes : array<CppOutlineNode>
+            var inscope roots : array<int>
             cpp_build_forest(entries, by_file[fp], nodes, roots)
             let tree_mode = empty(mode) ? cpp_has_nesting(nodes) : mode == "tree"
-            var ancestors : array<int>
+            var inscope ancestors : array<int>
             for (root in roots) {
                 cpp_render_node(entries, nodes, root, tree_mode, ancestors, w)
             }

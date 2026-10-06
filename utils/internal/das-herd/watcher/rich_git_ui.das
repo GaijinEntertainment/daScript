@@ -812,7 +812,7 @@ def draw_git_file_group(repository : RepositorySnapshot const; // nolint:STYLE03
                 : (group == 0 ? "Stage the resolution" : "Stage this file"),
             action_clicked)
         if (action_clicked && g_client != null) {
-            var single <- [file.path]
+            var inscope single <- [file.path]
             g_client->changelist_action(repository.record.id, worktree.path,
                 group == 1 ? "unstage" : "stage", single)
         } elif (selected) {
@@ -1736,7 +1736,7 @@ def draw_git_changelist_window() {
                                 + worktree.untracked + worktree.conflicted)
                             g_changelist_view = dirt > 0 ? "changes" : "pr"
                         }
-                        let view_labels <- ["Changes", "PR result"]
+                        var inscope view_labels <- ["Changes", "PR result"]
                         let switched = view_switch(0, "changelist-view",
                             view_labels,
                             g_changelist_view == "changes" ? 0 : 1)
@@ -1785,7 +1785,7 @@ def draw_git_activity_window() {
                 for (worktree in repository.worktrees) {
                     if (worktree.path != g_selected_worktree_path) continue
                     found = true
-                    let perspective_labels <- ["PR", "History", "Tree", "Project"]
+                    var inscope perspective_labels <- ["PR", "History", "Tree", "Project"]
                     var active = 0
                     if (g_git_perspective == "history") {
                         active = 1

@@ -80,7 +80,7 @@ def public chunk_files(items : array<string>; n_chunks : int) : array<array<stri
         let start_idx = k * per_chunk
         break if (start_idx >= total)
         let end_excl = min((k + 1) * per_chunk, total)
-        var chunk : array<string>
+        var inscope chunk : array<string>
         chunk |> reserve(end_excl - start_idx)
         for (j in range(start_idx, end_excl)) {
             chunk |> push(items[j])
@@ -152,7 +152,7 @@ def public run_chunk_workers(argvs : array<array<string>>) : array<ChunkResult> 
     var inputs : array<InternalInput>
     inputs |> reserve(n)
     for (k in range(n)) {
-        var av : array<string>
+        var inscope av : array<string>
         av := argvs[k]
         inputs |> emplace(InternalInput(index = k, argv <- av))
     }

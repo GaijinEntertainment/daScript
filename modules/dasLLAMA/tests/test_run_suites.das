@@ -42,7 +42,7 @@ def private reaches_fixture_root(file : string) : bool {
     }
     for (line in split(text, "\n")) {
         continue if (!(line |> starts_with("require _")))
-        let name <- split_by_chars(slice(line, length("require ")), " \t/\r")
+        var inscope name <- split_by_chars(slice(line, length("require ")), " \t/\r")
         if (text_reaches_fixture_root(file_text(path_join(dir_name(file), "{name[0]}.das")))) {
             return true
         }

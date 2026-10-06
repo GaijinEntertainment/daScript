@@ -92,7 +92,7 @@ def main() : int {
         var cpu_ids, gpu_ids : array<int64>
         print("PROBE {base_name(path)} kv={kdt}: prompt {length(prompt)} tokens, {nsteps} forced steps\n")
         for (st in range64(nsteps)) {
-            var one <- [tok]
+            var inscope one <- [tok]
             eval_(tr, sc, one)
             eval_(trg, sg, one)
             var maxd = 0.0

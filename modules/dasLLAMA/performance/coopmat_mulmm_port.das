@@ -366,7 +366,7 @@ def main {   // nolint:STYLE038 - linear Vulkan probe; every `var inscope` handl
     for (m, k in ms, ks) {
         let nbk = k / 32
         // data: biased (non-cancelling) synthetic, f16-exact values
-        var a_bytes : array<uint8>
+        var inscope a_bytes : array<uint8>
         a_bytes |> resize(m * nbk * 34)
         for (r in range(m)) {
             for (b in range(nbk)) {
@@ -377,22 +377,22 @@ def main {   // nolint:STYLE038 - linear Vulkan probe; every `var inscope` handl
                 }
             }
         }
-        var b_bytes : array<uint8>
+        var inscope b_bytes : array<uint8>
         b_bytes |> resize(N * k * 4)
         for (r in range(N)) {
             for (j in range(k)) {
                 put_f32(b_bytes, r * k + j, float((r * 2 + j) % 7 - 2) * 0.03125)
             }
         }
-        var meta_bytes : array<uint8>
+        var inscope meta_bytes : array<uint8>
         meta_bytes |> resize(16)
         unsafe {
             var mp = addr<uint?>(meta_bytes[0])
             mp[0] = uint(m); mp[1] = uint(k); mp[2] = uint(nbk); mp[3] = 0u
         }
-        var d_theirs : array<uint8>
+        var inscope d_theirs : array<uint8>
         d_theirs |> resize(m * N * 4)
-        var d_ours : array<uint8>
+        var inscope d_ours : array<uint8>
         d_ours |> resize(m * N * 4)
 
         var da <- make_dev_buf(device, phys, length(a_bytes))

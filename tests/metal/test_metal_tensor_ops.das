@@ -887,9 +887,9 @@ def test_tmm2d_devab(t : T?) { // nolint:STYLE038 - both flavors x clean/poisone
         for (fl in range(2)) {
             let natural = fl == 1
             want |> emplace(devab_replay(oracle, natural))
-            var whp := oracle.wh
+            var inscope whp := oracle.wh
             whp[devab_poison_index(natural)] = float16(60.0)
-            var clean <- oracle.wh
+            var inscope clean <- oracle.wh
             oracle.wh <- whp
             want_poisoned |> emplace(devab_replay(oracle, natural))
             wh_poisoned |> emplace(oracle.wh)

@@ -184,7 +184,7 @@ def private render_prompts(model : string; texts : array<string>; ngen : int; gp
             var cs <- create_chat_renderer_(t, "", 0l)
             set_thinking_(cs, false)
             add_user_(cs, text)
-            var ids <- render_turn_(t, cs)
+            var inscope ids <- render_turn_(t, cs)
             finalize(cs)
             let sb = build_string() $(w) {
                 var first = true

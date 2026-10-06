@@ -557,15 +557,15 @@ def public imgui_vk_render(var r : ImguiVkRenderer; device : Device; phys : VkPh
             sc.offset.y = int(miny)
             sc.extent.width = uint(maxx - minx)
             sc.extent.height = uint(maxy - miny)
-            var scis : array<Rect2D>
+            var inscope scis : array<Rect2D>
             scis |> push(sc)
             cmd_set_scissor(cmd, 0u, scis)
             delete scis
 
             let tid = c.GetTexID()
             if (tid != 0ul) {
-                var sets <- [vk_value_to_boost(unsafe(reinterpret<VkDescriptorSet>(tid)))]
-                var no_dyn : array<uint>
+                var inscope sets <- [vk_value_to_boost(unsafe(reinterpret<VkDescriptorSet>(tid)))]
+                var inscope no_dyn : array<uint>
                 cmd_bind_descriptor_sets(cmd, VkPipelineBindPoint.GRAPHICS, r.pipe_layout, 0u, sets, no_dyn)
                 delete sets
                 delete no_dyn

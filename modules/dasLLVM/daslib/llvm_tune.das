@@ -1776,7 +1776,7 @@ def private fat_ship_set(baseline : string) : array<string> {
         break if (c == baseline)
         var k = ""
         var p = ""
-        var prof <- profile_kernels(k, p, c)
+        var inscope prof <- profile_kernels(k, p, c)
         delete prof
         if (!empty(p)) {
             ship |> push(c)
@@ -1930,7 +1930,7 @@ def private stamp_fat(var func : FunctionPtr; genKey : string; perms : array<Tun
             if (source == "profile") {
                 var pk = ""
                 var pp = ""
-                var prof <- profile_kernels(pk, pp, klass)
+                var inscope prof <- profile_kernels(pk, pp, klass)
                 own = prof?["{c.fnname}"] ?? ""
                 delete prof
                 var ownOk = false

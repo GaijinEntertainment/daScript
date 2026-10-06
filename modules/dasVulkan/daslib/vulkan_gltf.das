@@ -439,8 +439,8 @@ def public gltf_vk_upload(device : Device; phys : VkPhysicalDevice; queue : VkQu
         vkm.prims |> reserve(length(mesh.primitives))
         for (prim in mesh.primitives) {
             continue if (prim.mode != GltfPrimitiveMode.triangles || empty(prim.vertices) || empty(prim.indices))
-            var verts_copy := prim.vertices
-            var idx_copy := prim.indices
+            var inscope verts_copy := prim.vertices
+            var inscope idx_copy := prim.indices
             var vkp = GltfVkPrim(
                 vb <- create_host_buffer_from_bytes(device, phys, vb_usage, verts_copy),
                 ib <- create_host_buffer_from_bytes(device, phys, ib_usage, idx_copy),
@@ -472,7 +472,7 @@ def public gltf_vk_upload(device : Device; phys : VkPhysicalDevice; queue : VkQu
         if (img_idx >= 0 && img_idx < length(scene.images)) {
             let img & = unsafe(scene.images[img_idx])
             if (img.width > 0 && img.height > 0 && !empty(img.pixels)) {
-                var px_copy := img.pixels
+                var inscope px_copy := img.pixels
                 t <- upload_texture(device, phys, queue, pool, img.width, img.height,
                     srgb[ti] ? VkFormat.R8G8B8A8_SRGB : VkFormat.R8G8B8A8_UNORM, px_copy)
                 delete px_copy
@@ -781,7 +781,7 @@ def public gltf_vk_render(cmd : CommandBuffer; model : GltfVkModel; scene : Gltf
             cmd_bind_pipeline(cmd, model.pipelines[pidx])
             sets |> clear()
             sets |> push(vk_value_to_boost(unsafe(reinterpret<VkDescriptorSet>(raw_set))))
-            var no_dyn : array<uint>
+            var inscope no_dyn : array<uint>
             cmd_bind_descriptor_sets(cmd, VkPipelineBindPoint.GRAPHICS,
                 skinned ? model.pipe_layout_skinned : model.pipe_layout_rigid, 0u, sets, no_dyn)
             delete no_dyn

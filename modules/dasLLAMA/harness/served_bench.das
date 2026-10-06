@@ -744,7 +744,7 @@ def tts_rows(url, tag : string; models : array<string>; voice, text : string; re
             tally.refused++
             continue
         }
-        var spoken, rtfs : array<float>
+        var inscope spoken, rtfs : array<float>
         spoken |> reserve(reps)
         rtfs |> reserve(reps)
         var walls <- collect_reps(reps) $(_rep) {

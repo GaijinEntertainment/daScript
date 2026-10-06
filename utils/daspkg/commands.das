@@ -1030,7 +1030,7 @@ def upgrade_dependencies(root, pkg_name : string; var lf : LockFile; is_global :
             log("  Installing new dependency: {dep_name}...\n")
             let dep_source = resolve_dep_source(root, d.source)
             if (empty(dep_source)) continue
-            var visiting : table<string; bool>
+            var inscope visiting : table<string; bool>
             let drc = install_git(root, dep_name, dep_source, "", lf, visiting, [is_root = false, is_global = is_global, force = force])
             if (drc != 0) {
                 to_log(LOG_ERROR, "Error: failed to install new dependency '{dep_name}' (rc={drc})\n")

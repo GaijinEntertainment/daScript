@@ -528,7 +528,7 @@ def gate_hash_refs() : GateResult {
     for (sha in non_empty_lines(shas.out)) {
         let body = run_argv(["git", "log", "-1", "--format=%B", sha])
         continue if (body.rc != 0)
-        var hits : array<int64>
+        var inscope hits : array<int64>
         bare_hash_refs(body.out, hits)
         found_n |> push_from(hits)
         found_sha |> reserve(long_length(found_sha) + long_length(hits))
@@ -792,7 +792,7 @@ def private build_sweep_argvs(ctx : PreflightCtx; in_scope : array<string>) : tu
     var from_db = 0
     for (f in in_scope) {
         let abs = cc_key(path_join(cwd, f))
-        var flags : array<string>
+        var inscope flags : array<string>
         if (cc |> key_exists(abs)) {
             flags := cc[abs]
             from_db++
@@ -801,7 +801,7 @@ def private build_sweep_argvs(ctx : PreflightCtx; in_scope : array<string>) : tu
         }
         let key = join(flags, "\n")
         if (!(group_flags |> key_exists(key))) {
-            var gf : array<string>
+            var inscope gf : array<string>
             gf := flags
             group_flags[key] <- gf
             groups[key] |> reserve(length(in_scope))
@@ -814,9 +814,9 @@ def private build_sweep_argvs(ctx : PreflightCtx; in_scope : array<string>) : tu
     argvs |> reserve(workers + length(group_flags))
     for (key, files in keys(groups), values(groups)) {
         let share = max(1, (workers * length(files) + total - 1) / total)
-        let chunks <- chunk_files(files, share)
+        var inscope chunks <- chunk_files(files, share)
         for (chunk in chunks) {
-            var av : array<string>
+            var inscope av : array<string>
             av |> reserve(1 + length(group_flags[key]) + length(syntax_flags) + length(chunk))
             av |> push(ctx.clang)
             av |> push_from(group_flags[key], syntax_flags, chunk)
@@ -1104,12 +1104,12 @@ def gate_ci_das(ctx : PreflightCtx) : GateResult {
     for (raw_line in split(list_text, "\n")) {
         let line = strip(replace(raw_line, "\r", ""))
         continue if (empty(line) || starts_with(line, "#"))
-        let parts <- split(line, "|")
+        var inscope parts <- split(line, "|")
         continue if (length(parts) < 3)
         let pattern = strip(parts[0])
-        let allow_skip <- split_csv(parts[1])
+        var inscope allow_skip <- split_csv(parts[1])
         let hint = strip(parts[2])
-        var files : array<string>
+        var inscope files : array<string>
         expand_glob(pattern, files)
         if (empty(files)) {
             fail_parts |> push("{pattern}: no files matched (stale ci_only_das.txt entry?)\n")
@@ -1640,7 +1640,7 @@ def private run_lanes(ctx : PreflightCtx; cfg : Config; names : array<string>) :
     var argvs : array<array<string>>
     argvs |> reserve(length(names))
     for (name in names) {
-        var av <- [ctx.daslang, "utils/internal/preflight/main.das", "--", "--only", name, "--base", cfg.base,
+        var inscope av <- [ctx.daslang, "utils/internal/preflight/main.das", "--", "--only", name, "--base", cfg.base,
                    "--daslang", ctx.daslang, "--build-dir", cfg.build_dir]
         if (cfg.jobs > 0) {
             av |> push("-j")
@@ -1667,7 +1667,7 @@ def private run_lanes(ctx : PreflightCtx; cfg : Config; names : array<string>) :
     var results : array<GateResult>
     results |> reserve(length(names) + 8)   // the docs lane reports its seven gates
     for (name, child in names, children) {
-        let reports <- parse_gate_reports(child.stdout)
+        var inscope reports <- parse_gate_reports(child.stdout)
         if (empty(reports)) {
             results |> emplace(GateResult(name = name, status = GateStatus.Fail,
                 detail = "lane child exited {child.exit_code} without a verdict", output = child.stdout))
@@ -1822,7 +1822,7 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
         }
         to_log(LOG_INFO, "[RUN ] {info.name}\n")
         if (info.name == "docs") {
-            var doc_results : array<GateResult>
+            var inscope doc_results : array<GateResult>
             gate_docs(ctx, doc_results)
             for (r in doc_results) {
                 report_gate(r, cfg.verbose)

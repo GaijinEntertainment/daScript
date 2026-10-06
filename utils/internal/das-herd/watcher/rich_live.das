@@ -541,10 +541,10 @@ def herder_changelist_state(input : JsonValue?) : JsonValue? {
                             selection_key(comparison, file.path)))))
                 }
             }
-            var stage_paths, unstage_paths : array<string>
+            var inscope stage_paths, unstage_paths : array<string>
             changelist_selection_actions(repository, worktree, stage_paths,
                 unstage_paths)
-            var modified_paths, staged_paths, untracked_paths : array<string>
+            var inscope modified_paths, staged_paths, untracked_paths : array<string>
             var conflicted = 0
             changelist_selection_discards(repository, worktree,
                 modified_paths, staged_paths, untracked_paths, conflicted)
@@ -600,12 +600,12 @@ def herder_changelist_select(input : JsonValue?) : JsonValue? {
             selection_toggle_click(g_changelist_selection, args.repository_id,
                 args.worktree_path, args.group, key)
         } elif (args.mode == "range") {
-            let group_keys <- changelist_group_keys(repository,
+            var inscope group_keys <- changelist_group_keys(repository,
                 args.worktree_path, args.group)
             selection_range_click(g_changelist_selection, args.repository_id,
                 args.worktree_path, args.group, group_keys, key)
         } elif (args.mode == "group") {
-            let group_keys <- changelist_group_keys(repository,
+            var inscope group_keys <- changelist_group_keys(repository,
                 args.worktree_path, args.group)
             selection_set_group(g_changelist_selection, args.repository_id,
                 args.worktree_path, args.group, group_keys, args.selected)
@@ -633,7 +633,7 @@ def herder_changelist_action(input : JsonValue?) : JsonValue? { // nolint:STYLE0
             if (repository.record.id != args.repository_id) continue
             for (worktree in repository.worktrees) {
                 if (worktree.path != args.worktree_path) continue
-                var modified_paths, staged_paths, untracked_paths : array<string>
+                var inscope modified_paths, staged_paths, untracked_paths : array<string>
                 var conflicted = 0
                 changelist_selection_discards(repository, worktree,
                     modified_paths, staged_paths, untracked_paths, conflicted)
@@ -678,7 +678,7 @@ def herder_changelist_action(input : JsonValue?) : JsonValue? { // nolint:STYLE0
             if (repository.record.id != args.repository_id) continue
             for (worktree in repository.worktrees) {
                 if (worktree.path != args.worktree_path) continue
-                var stage_paths, unstage_paths : array<string>
+                var inscope stage_paths, unstage_paths : array<string>
                 changelist_selection_actions(repository, worktree,
                     stage_paths, unstage_paths)
                 if (args.action == "stage") {

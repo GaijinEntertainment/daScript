@@ -140,8 +140,8 @@ def cache_shape(b : B?; name : string; n, d : int64) {
 
     let NT <- [32l, 128l]
     for (ntok in NT) {
-        var xqb : array<int8>
-        var xsb : array<float>
+        var inscope xqb : array<int8>
+        var inscope xsb : array<float>
         xqb |> resize(ntok * n)
         xsb |> resize(ntok * nb)
         for (tk in range64(ntok)) {
@@ -152,7 +152,7 @@ def cache_shape(b : B?; name : string; n, d : int64) {
                 xsb[tk * nb + i] = xs[i]
             }
         }
-        var yf, yn, yt : array<float>
+        var inscope yf, yn, yt : array<float>
         yf |> resize(ntok * d)
         yn |> resize(ntok * d)
         yt |> resize(ntok * d)

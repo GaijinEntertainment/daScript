@@ -38,7 +38,7 @@ def private greedy_steps(tr : Model; var s : Session; n : int) : array<int64> {
     var cur = argmax_of(s.logits, vocab)
     for (_i in range(n)) {
         ids |> push(cur)
-        var one <- [cur]
+        var inscope one <- [cur]
         eval_(tr, s, one)
         delete one
         cur = argmax_of(s.logits, vocab)
@@ -176,7 +176,7 @@ def private paged_greedy(tr, trg : Model; prompt : array<int64>; page_rows : int
         var at = 0l
         while (at < np) {   // alternate page-sized chunks -> physically interleaved block tables
             let hi = min(at + page_rows, np)
-            var chunk <- [for (i in range64(at, hi)); prompt[i]]
+            var inscope chunk <- [for (i in range64(at, hi)); prompt[i]]
             eval_(tr, sa, chunk)
             eval_(tr, sb, chunk)
             delete chunk
@@ -464,7 +464,7 @@ def private paged_batch_greedy(tr, trg : Model; prompts : array<array<int64>>; p
                 let np = long_length(prompts[i])
                 let hi = min(at + page_rows, np)
                 if (at < hi) {
-                    var chunk <- [for (j in range64(at, hi)); prompts[i][j]]
+                    var inscope chunk <- [for (j in range64(at, hi)); prompts[i][j]]
                     eval_(tr, ss[i], chunk)
                     delete chunk
                 }
@@ -1191,7 +1191,7 @@ def private forced_maxd_pair(tr, trg : Model; prompt : array<int64>; nsteps : in
             for (a, b in sa.logits, sb.logits) {
                 maxd = max(maxd, abs(a - b))
             }
-            var one <- [tok]
+            var inscope one <- [tok]
             eval_(tr, sa, one)
             eval_(trg, sb, one)
             delete one

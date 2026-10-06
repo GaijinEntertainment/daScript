@@ -164,7 +164,7 @@ def load_pos_tagger(path : string) : PosTagger {
             o += int64(l)
             let n_parts = rd_u8(b, o)
             o++
-            var parts : array<string>
+            var inscope parts : array<string>
             for (_p in range(n_parts)) {
                 let pl = rd_u16(b, o)
                 o += 2l
@@ -304,7 +304,7 @@ def pos_tag_words(tg : PosTagger; words : array<string>) : array<string> {
     var inscope cps : array<array<int>>
     cps |> reserve(n)
     for (w in words) {
-        var c <- utf8_to_cpts(w)
+        var inscope c <- utf8_to_cpts(w)
         ctx |> push(norm_word(c))
         cps |> emplace(c)
     }

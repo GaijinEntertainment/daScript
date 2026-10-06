@@ -2497,7 +2497,7 @@ def public dump_pipeline_executables(device : Device; pipeline : Pipeline) : str
             write(writer, "== executable {ei}: {exec_cstr(execs[ei].name)} ==\n")
             write(writer, "  {exec_cstr(execs[ei].description)} (stages {uint(execs[ei].stages)}, subgroupSize {int(execs[ei].subgroupSize)})\n")
             let info = PipelineExecutableInfoKHR(pipeline = weak_copy(pipeline), executableIndex = uint(ei))
-            var stats <- get_pipeline_executable_statistics_k_h_r(device, info)
+            var inscope stats <- get_pipeline_executable_statistics_k_h_r(device, info)
             write(writer, "-- statistics ({length(stats)}) --\n")
             for (st in stats) {
                 var v = ""
@@ -2516,12 +2516,12 @@ def public dump_pipeline_executables(device : Device; pipeline : Pipeline) : str
             delete stats
             // two-call pattern round 2: the generated wrapper filled name/isText/dataSize with pData null;
             // allocate each pData at its reported dataSize and re-query to pull the actual bytes
-            var reps <- get_pipeline_executable_internal_representations_k_h_r(device, info)
+            var inscope reps <- get_pipeline_executable_internal_representations_k_h_r(device, info)
             write(writer, "-- internal representations ({length(reps)}) --\n")
-            var blobs : array<array<uint8>>
+            var inscope blobs : array<array<uint8>>
             blobs |> reserve(length(reps))
             for (r in reps) {
-                var b : array<uint8>
+                var inscope b : array<uint8>
                 if (r.dataSize > 0x7FFFFFF0ul) {
                     // int-overflow guard: can't resize() past INT_MAX — leave the blob empty so the fill call skips it
                     write(writer, "-- representation '{exec_cstr(r.name)}' too large ({int64(r.dataSize)} bytes), skipped --\n")

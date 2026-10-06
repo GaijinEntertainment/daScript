@@ -2797,7 +2797,7 @@ def test_ship_external_files(t : T?) {
     }
     fwrite(path_join(root, "victim.txt"), "untouched")
     for (entry in ["README.md@../victim.txt", "README.md@nested/../../victim.txt", "README.md@{root}/absolute.txt", "README.md@nested/quote\".txt", "README.md@nested\\..\\..\\victim.txt", "@empty.txt", "README.md", "missing-external-source@missing.txt"]) {
-        var rejected : array<string>
+        var inscope rejected : array<string>
         t |> equal(ship_external_files("pkg", bundle, [entry], rejected), 1, entry)
         t |> equal(length(rejected), 0, "rejected entry is not recorded as shipped")
     }

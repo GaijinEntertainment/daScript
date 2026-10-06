@@ -262,8 +262,8 @@ def private generate_push_constants(fnMain : FunctionPtr; var fn : FunctionPtr; 
     }
     for (vv in pc_globals) {
         let st = vv._type.structType
-        var errs : array<string>
-        var fields : array<BlockField>
+        var inscope errs : array<string>
+        var inscope fields : array<BlockField>
         let layout_info = compute_block_layout(string(vv.name), st, fields, errs)
         if (!layout_info.ok) {
             // Fail-closed: a silently skipped vkCmdPushConstants leaves stale push state and a corrupt frame.

@@ -47,7 +47,7 @@ def main() {
                 continue
             }
             if (!empty(mod.refs)) {  //
-                var proxy_requires : array<string>
+                var inscope proxy_requires : array<string>
                 for (ref in mod.refs) {
                     if (ref.kind != ModuleRefKind.pub_require) break
                     proxy_requires |> push(ref.key)

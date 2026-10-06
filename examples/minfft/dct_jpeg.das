@@ -180,7 +180,7 @@ def main {
     print("\n  quality   PSNR(dB)   coeffs zeroed\n")
     print("  -------   --------   -------------\n")
     for (quality in [90, 50, 20, 5]) {
-        var recon : array<float>
+        var inscope recon : array<float>
         let zfrac = compress_channel(original, w, h, quality, recon)
         let p = psnr(original, recon)
         print("  {quality}\t  {p}\t   {int(zfrac * 100.0f)}%\n")

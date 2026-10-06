@@ -485,7 +485,7 @@ def test_lsp_protocol(t : T?) {   // nolint:STYLE037,STYLE038 one ordered LSP se
 
     for (host in front_hosts()) {
       let front_name = host.name
-      let front_argv := host.argv
+      var inscope front_argv := host.argv
       t |> run("front protocol end-to-end through the {front_name}") @capture(:= front_argv) (t : T ?) {
         let rc = unsafe(popen_argv_pipe(front_argv) $(w, r) {
                 if (w == null || r == null) {

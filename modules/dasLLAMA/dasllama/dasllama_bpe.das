@@ -350,7 +350,7 @@ def private bpe_encode_spm_space(tk : BpeTokenizer; text : string) : array<int64
             }
         }
         if (!done) {
-            var syms : array<int64>
+            var inscope syms : array<int64>
             syms |> reserve(e - pos)
             for (i in range(pos, e)) {
                 let cid = tk.cpt_id?[cpts[i]] ?? -1l
@@ -396,7 +396,7 @@ def bpe_encode(tk : BpeTokenizer; text : string) : array<int64> {
     var cpb : array<uint8>   // one codepoint's UTF-8 bytes, reused across the walk (no string per codepoint)
     cpb |> reserve(4)
     for (off in offs) {
-        var syms : array<int64>
+        var inscope syms : array<int64>
         syms |> reserve(off)
         var has_unk = false
         for (i in range(pos, pos + off)) {

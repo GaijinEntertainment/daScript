@@ -362,7 +362,7 @@ def main {   // nolint:STYLE037,STYLE038 — flat probe driver: every basis arm 
         print("  basis     rel-mse(4b)      rel-mse(8/4)     blk0-energy  top8-var\n")
         for (basis in range64(int64(N_BASES))) {
             let a & = unsafe(acc[side * 4l + basis])
-            var vs : array<double>
+            var inscope vs : array<double>
             vs := a.vprof
             // top-8 coefficient variance share (sorted descending)
             vs |> sort() $(x, yy) => x > yy

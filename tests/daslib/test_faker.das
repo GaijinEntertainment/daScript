@@ -83,9 +83,9 @@ def test_faker_date_names_the_right_week_day(t : T?) {
         var mismatch = ""
         for (_i in range(200)) {
             let text = fake |> date
-            let parts <- split(text, ", ")
+            var inscope parts <- split(text, ", ")
             t |> equal(length(parts), 3)
-            let monthDay <- split(parts[1], " ")
+            var inscope monthDay <- split(parts[1], " ")
             t |> equal(length(monthDay), 2)
             let month = month_index(monthDay[0]) + 1
             let day = to_int(monthDay[1])

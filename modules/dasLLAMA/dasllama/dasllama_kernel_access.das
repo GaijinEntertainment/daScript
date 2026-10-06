@@ -642,7 +642,7 @@ def private classify_access(fn : Function?; mod : Module?; st : StructurePtr; tr
             continue
         }
         visited |> insert(name)
-        var next : table<string>
+        var inscope next : table<string>
         let mfn = fieldMode ? class_method(mod, st, name) : null
         if (mfn != null) {
             analyze_one(mfn, mod, st, tracked, fieldMode, res, next)

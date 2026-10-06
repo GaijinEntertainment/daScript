@@ -79,9 +79,9 @@ def private softmax_sink_ref(x : array<float>; sink : float) : tuple<array<float
 def private sweep_softmax_sink(sink : float; seed : uint) : Sweep {
     var r = Sweep()
     for (n in ACT_SWEEP) {
-        let x0 <- lcg_pm(n, opaque(seed) + uint(n), 0.25, 6.0)
+        var inscope x0 <- lcg_pm(n, opaque(seed) + uint(n), 0.25, 6.0)
         let want <- softmax_sink_ref(x0, sink)
-        var x := x0
+        var inscope x := x0
         softmax_sink(x, int64(n), sink)
         act_check(r, n, softmax_bar(n), x, want._0)
         var total = 0.0lf
@@ -98,12 +98,12 @@ def private sweep_softmax_sink(sink : float; seed : uint) : Sweep {
 def private sweep_softmax_sink_shift() : Sweep {
     var r = Sweep()
     for (n in ACT_SWEEP) {
-        let x0 <- lcg_pm(n, opaque(0x71a5u) + uint(n), 0.25, 6.0)
+        var inscope x0 <- lcg_pm(n, opaque(0x71a5u) + uint(n), 0.25, 6.0)
         let want <- softmax_sink_ref(x0, 1.5)
-        var plain := x0
+        var inscope plain := x0
         softmax_sink(plain, int64(n), 1.5)
         act_check(r, n, softmax_bar(n), plain, want._0)
-        var shifted : array<float>
+        var inscope shifted : array<float>
         shifted |> resize(n)
         for (s, v in shifted, x0) {
             s = v + 5.0
@@ -128,9 +128,9 @@ def private softcap_bar(cap : float) : float => 1.0e-6 + 1.0e-6 * cap
 def private sweep_softcap(cap : float; vec : bool) : Sweep {
     var r = Sweep()
     for (n in ACT_SWEEP) {
-        let x0 <- lcg_pm(n, opaque(vec ? 0x2c81u : 0x9b44u) + uint(n), 0.5, 200.0)
-        let want <- softcap_ref(x0, cap)
-        var x := x0
+        var inscope x0 <- lcg_pm(n, opaque(vec ? 0x2c81u : 0x9b44u) + uint(n), 0.5, 200.0)
+        var inscope want <- softcap_ref(x0, cap)
+        var inscope x := x0
         if (vec) {
             softcap4(x, int64(n), cap)
         } else {
@@ -159,10 +159,10 @@ def private sigmoid_gate_ref(x, g : array<float>) : array<float> {
 def private sweep_sigmoid_gate(vec : bool) : Sweep {
     var r = Sweep()
     for (n in ACT_SWEEP) {
-        let x0 <- lcg_pm(n, opaque(0x5ab3u) + uint(n), 0.25, XMAG)
-        let g <- lcg_pm(n, opaque(0x9d10u) + uint(n), 0.25, ZMAG)
-        let want <- sigmoid_gate_ref(x0, g)
-        var x := x0
+        var inscope x0 <- lcg_pm(n, opaque(0x5ab3u) + uint(n), 0.25, XMAG)
+        var inscope g <- lcg_pm(n, opaque(0x9d10u) + uint(n), 0.25, ZMAG)
+        var inscope want <- sigmoid_gate_ref(x0, g)
+        var inscope x := x0
         if (vec) {
             sigmoid_gate4(unsafe(addr(x[0])), unsafe(addr(g[0])), int64(n))
         } else {
@@ -188,10 +188,10 @@ def private swiglu_oai_ref(g, u : array<float>) : array<float> {
 def private sweep_swiglu_oai(vec : bool) : Sweep {
     var r = Sweep()
     for (n in ACT_SWEEP) {
-        let g0 <- lcg_pm(n, opaque(0x4411u) + uint(n), 0.25, 12.0)
-        let u <- lcg_pm(n, opaque(0x77c2u) + uint(n), 0.25, 12.0)
-        let want <- swiglu_oai_ref(g0, u)
-        var g := g0
+        var inscope g0 <- lcg_pm(n, opaque(0x4411u) + uint(n), 0.25, 12.0)
+        var inscope u <- lcg_pm(n, opaque(0x77c2u) + uint(n), 0.25, 12.0)
+        var inscope want <- swiglu_oai_ref(g0, u)
+        var inscope g := g0
         if (vec) {
             swiglu_oai4(unsafe(addr(g[0])), unsafe(addr(u[0])), int64(n))
         } else {
@@ -251,11 +251,11 @@ def private silu_mul_ref(a, z : array<float>) : array<float> {
 def private sweep_silu_mul4() : Sweep {
     var r = Sweep()
     for (n in ACT_SWEEP) {
-        let a <- lcg_pm(n, opaque(0x6e21u) + uint(n), 0.25, XMAG)
-        let z <- lcg_pm(n, opaque(0xf13cu) + uint(n), 0.25, ZMAG)
-        let want <- silu_mul_ref(a, z)
-        let before <- filled(n, SENTINEL)
-        var o := before
+        var inscope a <- lcg_pm(n, opaque(0x6e21u) + uint(n), 0.25, XMAG)
+        var inscope z <- lcg_pm(n, opaque(0xf13cu) + uint(n), 0.25, ZMAG)
+        var inscope want <- silu_mul_ref(a, z)
+        var inscope before <- filled(n, SENTINEL)
+        var inscope o := before
         silu_mul4(unsafe(addr(o[0])), unsafe(addr(a[0])), unsafe(addr(z[0])), int64(n))
         act_check(r, n, 1.0e-6 + 1.0e-6 * XMAG * ZMAG, o, want)
         sweep_inert(r, o, before)
@@ -324,9 +324,9 @@ def private sweep_l2_norm_rows() : Sweep {
     for (s in range(length(L2_SHAPES) / 2)) {
         let rows = L2_SHAPES[s * 2]
         let row_size = L2_SHAPES[s * 2 + 1]
-        let v0 <- lcg_pm(rows * row_size, opaque(0xa1b2u) + uint(s), 1.25, 3.0)
-        let want <- l2_ref(v0, rows, row_size, L2_EPS)
-        var v := v0
+        var inscope v0 <- lcg_pm(rows * row_size, opaque(0xa1b2u) + uint(s), 1.25, 3.0)
+        var inscope want <- l2_ref(v0, rows, row_size, L2_EPS)
+        var inscope v := v0
         l2_norm_rows(unsafe(addr(v[0])), int64(rows), int64(row_size), L2_EPS)
         act_check(r, row_size, l2_bar(row_size), v, want)
         sweep_inert(r, v, v0)
@@ -392,13 +392,13 @@ def private sweep_gemm() : GemmCase {
         let M = GEMM_SHAPES[s * 3]
         let K = GEMM_SHAPES[s * 3 + 1]
         let N = GEMM_SHAPES[s * 3 + 2]
-        let a <- lcg_pm(M * K, opaque(0x1717u) + uint(s), 0.25, 1.0)
-        let b <- lcg_pm(K * N, opaque(0x2828u) + uint(s), 0.25, 1.0)
-        let c0 <- lcg_pm(M * N, opaque(0x3939u) + uint(s), 0.25, 1.0)
-        let want <- gemm_ref(c0, a, b, M, K, N)
-        var c1 := c0
+        var inscope a <- lcg_pm(M * K, opaque(0x1717u) + uint(s), 0.25, 1.0)
+        var inscope b <- lcg_pm(K * N, opaque(0x2828u) + uint(s), 0.25, 1.0)
+        var inscope c0 <- lcg_pm(M * N, opaque(0x3939u) + uint(s), 0.25, 1.0)
+        var inscope want <- gemm_ref(c0, a, b, M, K, N)
+        var inscope c1 := c0
         gemm_f32(unsafe(addr(c1[0])), unsafe(addr(a[0])), unsafe(addr(b[0])), int64(M), int64(K), int64(N))
-        var c2 := c0
+        var inscope c2 := c0
         gemm_f32_jo(unsafe(addr(c2[0])), unsafe(addr(a[0])), unsafe(addr(b[0])), int64(M), int64(K), int64(N))
         r.cases++
         tally_gemm(r, K, c1, c2, want)

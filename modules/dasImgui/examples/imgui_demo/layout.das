@@ -809,7 +809,7 @@ def private ScrollingSection() {
                 for (i in range(5)) {
                     if (i > 0) same_line(LAYOUT_VS_SL[i])
                     group(LAYOUT_VS_GROUP[i]) {
-                        let names <- ["Top", "25%", "Center", "75%", "Bottom"]
+                        var inscope names <- ["Top", "25%", "Center", "75%", "Bottom"]
                         text_unformatted(LAYOUT_VS_MENU_LBL[i], (text = names[i]))
 
                         let child_flags = (LAYOUT_SCROLL_ENABLE_EXTRA_DECOR ?
@@ -892,7 +892,7 @@ def private ScrollingSection() {
                     if (hit_track) {}
                 }
                 same_line(LAYOUT_HS_SL[i])
-                let names <- ["Left", "25%", "Center", "75%", "Right"]
+                var inscope names <- ["Left", "25%", "Center", "75%", "Right"]
                 let sx = GetScrollX()
                 let smx = GetScrollMaxX()
                 text(LAYOUT_HS_LABEL[i], (text = "{names[i]}\n{fmt_0f(sx)}/{fmt_0f(smx)}"))

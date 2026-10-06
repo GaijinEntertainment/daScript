@@ -74,12 +74,12 @@ def test_spectrum_diff_reds_a_nan(t : T?) {
     let nan = NAN_SENTINEL
     t |> equal(spectrum_fails(ours, ref), 0, "control: the clean spectrum holds both bars")
     for (at in [1, 3, 5, 7]) {
-        var bad := ours
+        var inscope bad := ours
         bad[at] = nan
         t |> success(spectrum_fails(bad, ref) > 0, "a NaN in our {at < 4 ? "magnitude" : "phase"} element {at} reds the compare")
     }
     for (at in [1, 3]) {
-        var bad := ref
+        var inscope bad := ref
         bad[at] = nan
         t |> success(spectrum_fails(ours, bad) > 0, "a NaN in the reference magnitude element {at} reds the compare")
     }

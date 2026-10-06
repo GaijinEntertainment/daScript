@@ -423,7 +423,7 @@ def process_events(var state : MidiPlaybackState) {  // nolint:STYLE037,STYLE038
                     }
                 }
                 if (ch == 9) {
-                    var drum_stereo : array<float>
+                    var inscope drum_stereo : array<float>
                     if (state.bank != null) {
                         let drum_name = gm_drum_name(ev.data1)
                         if (!empty(drum_name) && key_exists(state.bank.sounds, drum_name)) {
@@ -431,7 +431,7 @@ def process_events(var state : MidiPlaybackState) {  // nolint:STYLE037,STYLE038
                         }
                     }
                     if (empty(drum_stereo)) {
-                        var drum_mono <- render_drum_hit(ev.data1, vel)
+                        var inscope drum_mono <- render_drum_hit(ev.data1, vel)
                         drum_stereo <- mono_to_stereo(drum_mono)  // nolint:PERF030 - the enclosing `empty(drum_stereo)` guard proves the target holds nothing
                     }
                     state.voices |> push(new MidiVoice(
@@ -447,7 +447,7 @@ def process_events(var state : MidiPlaybackState) {  // nolint:STYLE037,STYLE038
                     if (state.bank != null && state.channels[ch].program < 8) {
                         let pn = piano_sample_name(ev.data1)
                         if (key_exists(state.bank.sounds, pn.name)) {
-                            var sample_stereo <- render_sample(*state.bank, pn.name, ev.data2 % 3, pn.speed)
+                            var inscope sample_stereo <- render_sample(*state.bank, pn.name, ev.data2 % 3, pn.speed)
                             state.voices |> push(new MidiVoice(
                                 channel = ch,
                                 note = ev.data1,
@@ -941,7 +941,7 @@ def private midi_thread_main(sid : uint64; var cmd_stream : Stream?; var done_st
         var ii = length(tracks) - 1
         while (ii >= 0) {
             var track = tracks[ii]
-            var chunk <- midi_tick(*track, float(CHUNK_SEC))
+            var inscope chunk <- midi_tick(*track, float(CHUNK_SEC))
             if (!empty(chunk) && track.gain > 0.001) {
                 let n = min(length(chunk), length(output))
                 for (j in range(n)) {

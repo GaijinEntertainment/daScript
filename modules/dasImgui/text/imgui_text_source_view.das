@@ -438,7 +438,7 @@ def private rebuild_cells(document : TextSourceDocument const;
                     if (fragment.is_control) continue
                     let value = slice(source_bytes,
                         fragment.source.start_byte, fragment.source.end_byte)
-                    var graphemes <- text_graphemes(value)
+                    var inscope graphemes <- text_graphemes(value)
                     var x = fragment.rect.x
                     for (grapheme in graphemes) {
                         let start_byte = fragment.source.start_byte + grapheme.source.start_byte

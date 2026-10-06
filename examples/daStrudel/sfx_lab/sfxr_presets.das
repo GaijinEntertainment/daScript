@@ -32,7 +32,7 @@ def main() {
         for (idx in range(length(names))) {
             var seed = seeds[idx]
             let snd = build_preset(idx, seed)
-            var buf <- render_sfxr(snd)
+            var inscope buf <- render_sfxr(snd)
             let secs = float(length(buf)) / float(SFXR_SAMPLE_RATE)
             let path = "{outdir}/{names[idx]}.wav"
             write_wav(path, buf, uint(SFXR_SAMPLE_RATE), 1)

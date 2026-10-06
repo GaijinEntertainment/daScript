@@ -234,7 +234,7 @@ def expert_reuse_report(verbose : bool = true) {
         }
         toks = max(toks, r.tokens)
         // static top-C coverage: sort a frequency copy descending, prefix-sum at each capacity
-        var f := r.freq
+        var inscope f := r.freq
         f |> sort() $(a, b) => a > b
         var cov : int64[4]
         var acc = 0l

@@ -88,9 +88,9 @@ def test_dot_mx4q8(t : T?) {
     t |> run("TBL+SDOT dot vs scalar reference (block sums exact; same flush order)") @(t : T?) {
         // n = 96 is NOT a multiple of the u2-unrolled superblock, exercising the unroll tail too
         for (n in [96l, 128l, 256l]) {
-            var wn, we : array<uint8>
-            var xq : array<int8>
-            var xs : array<float>
+            var inscope wn, we : array<uint8>
+            var inscope xq : array<int8>
+            var inscope xs : array<float>
             fill_case(n, wn, we, xq, xs, int(n))
             var lut : int8[16]
             mxfp4_fill_lut(lut)
@@ -146,7 +146,7 @@ def test_matmul_mx4q8(t : T?) {
                 continue
             }
             pin_kernel_backend(name)
-            var y : array<float>
+            var inscope y : array<float>
             y |> resize(5)
             matmul_mx4q8(y, wn, we, xq, xs, 64l, 5l)
             for (i in range(5)) {

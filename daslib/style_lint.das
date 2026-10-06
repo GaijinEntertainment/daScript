@@ -1504,7 +1504,7 @@ class StyleLintVisitor : AstVisitor {
                 count++
             }
             if (count >= 2) {
-                var field_names : array<string>
+                var inscope field_names : array<string>
                 for (j in range(idx + 1, idx + 1 + count)) {
                     let name = field_name_of(blk.list[j])
                     if (!empty(name)) field_names |> push(name)

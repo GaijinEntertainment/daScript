@@ -543,7 +543,7 @@ def private push_span_units(var units : array<TextFlowUnit>; source : string;
                 is_control = true))
         }
         let span_text = slice(bytes, a, b)
-        var graphemes <- text_graphemes(span_text)
+        var inscope graphemes <- text_graphemes(span_text)
         for (g in graphemes) {
             let ga = a + g.source.start_byte
             let gb = a + g.source.end_byte
@@ -779,7 +779,7 @@ def public text_flow_hit_test_ranges(source : string;
         let a = clamp(fragment.source.start_byte, 0, length(source))
         let b = clamp(fragment.source.end_byte, a, length(source))
         let value = slice(source, a, b)
-        var graphemes <- text_graphemes(value)
+        var inscope graphemes <- text_graphemes(value)
         var x = fragment.rect.x
         var hit = TextFlowHit()
         for (g in graphemes) {

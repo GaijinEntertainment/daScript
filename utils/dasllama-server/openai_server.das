@@ -1736,7 +1736,7 @@ def private ram_gb_from_meminfo(text : string) : int {
         if (ln |> starts_with("MemTotal")) {
             let c = find(ln, ":")
             if (c >= 0) {
-                var toks <- split(strip(slice(ln, c + 1)), " ")
+                var inscope toks <- split(strip(slice(ln, c + 1)), " ")
                 let kb = empty(toks) ? 0.0 : to_float(toks[0])
                 delete toks
                 return int(kb / (1024.0 * 1024.0) + 0.5)
@@ -2596,9 +2596,9 @@ def private handle_embeddings(req : FrontReq; var resp : Reply) : http_status {
     var prompt_tokens = 0l
     var idx = 0
     for (text in inputs) {
-        let toks <- encode(cur_model(), text, true, false)
+        var inscope toks <- encode(cur_model(), text, true, false)
         prompt_tokens += long_length(toks)
-        var vec = embed(cur_model(), text)
+        var inscope vec = embed(cur_model(), text)
         out.data |> emplace(OaiEmbedding(_object = "embedding", embedding <- vec, index = idx))
         idx ++
     }
@@ -3063,7 +3063,7 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
             }
             pending = true
         } elif (role == "assistant") {
-            var calls : array<string>
+            var inscope calls : array<string>
             let tc = mv?["tool_calls"]
             if (tc != null && tc.value is _array) {
                 calls |> reserve(length(tc.value as _array))
@@ -3246,7 +3246,7 @@ def private encode_media_refs(rid : int64; var wire : MediaWire; force : bool; v
     for (r, ri in wire.refs, count()) {
         continue if (!empty(r.rows) || (!force && !r.want_rows && r.n_rows > 0l))
         r.want_rows = false
-        var file_bytes : array<uint8>
+        var inscope file_bytes : array<uint8>
         let decoded = (r.is_audio ? decode_base64_bytes(r.payload, file_bytes, why)
             : decode_data_uri_bytes(r.payload, file_bytes, why))
         if (!decoded) {
@@ -3748,7 +3748,7 @@ def private flush_events(srv : FrontLink) {   // nolint:STYLE037,STYLE038 — on
                 // Normalize the complete reply: reasoning first, then calls, in OpenAI framing.
                 let full = join(w.reply_parts, "")
                 var rsn = ""
-                var calls : array<OaiToolCall>
+                var inscope calls : array<OaiToolCall>
                 let content = parse_wire_tools(w, full, "call_{e.stream}", rsn, calls)
                 if (!empty(rsn)) {
                     send_chat_chunk(srv, w.writer, w.id, w.created, "", "", "", rsn)
@@ -3783,7 +3783,7 @@ def private flush_events(srv : FrontLink) {   // nolint:STYLE037,STYLE038 — on
             var rsn = ""
             var content = ""
             var finish = e.finish
-            var calls : array<OaiToolCall>
+            var inscope calls : array<OaiToolCall>
             if (w.has_tools) {
                 content = parse_wire_tools(w, full, "call_{e.stream}", rsn, calls)
                 if (!empty(calls)) {
@@ -4129,7 +4129,7 @@ def private handle_streams(var resp : Reply) : http_status {
                 ttft_ms = float(d.ttft_us) / 1000.0,
                 prompt_head = d.prompt_head, gen_tail = utf8_trim_partial_end(d.gen_tail)))
         }
-        var chains <- prefix_chain_list(sch.prefix)
+        var inscope chains <- prefix_chain_list(sch.prefix)
         out.cache |> reserve(length(out.cache) + length(chains))
         for (c in chains) {
             let age = age_seconds(c.born_at)

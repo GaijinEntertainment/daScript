@@ -268,7 +268,7 @@ def test_subgroup_gpu(t : T?) {
     var bufs : array<array<uint8>>
     bufs |> reserve(4)
     for (_bi in range(4)) {
-        var b : array<uint8>
+        var inscope b : array<uint8>
         b |> resize(n * 4)
         bufs |> emplace(b)
     }
@@ -302,7 +302,7 @@ def test_spec_constants_gpu(t : T?) {
     var bufs1 : array<array<uint8>>
     bufs1 |> reserve(2)
     for (_bi in range(2)) {
-        var b : array<uint8>
+        var inscope b : array<uint8>
         b |> resize(n * 4)
         bufs1 |> emplace(b)
     }
@@ -323,7 +323,7 @@ def test_spec_constants_gpu(t : T?) {
     var bufs2 : array<array<uint8>>
     bufs2 |> reserve(2)
     for (_bi in range(2)) {
-        var b : array<uint8>
+        var inscope b : array<uint8>
         b |> resize(n * 4)
         bufs2 |> emplace(b)
     }

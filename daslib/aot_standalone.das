@@ -31,7 +31,7 @@ def writeStandaloneContextMethods(var prog : ProgramPtr; var logs : StringBuilde
             write(logs, "    ");
         }
         write(logs, "auto {prefix}{c_ident(standalone_function_name(fn))} ( ");
-        var vars : array<string>
+        var inscope vars : array<string>
         vars |> reserve(length(fn.arguments))
         for (variable in fn.arguments) {
             let type_str = build_string() $(var wr) {
@@ -616,7 +616,7 @@ def private writeCApiBodies(var writer : StringBuilderWriter; var exports : arra
     for (e in exports) {
         var fn = e.fn
         write(writer, "{c_declaration(e, names)} \{\n")
-        var args : array<string>
+        var inscope args : array<string>
         args |> reserve(length(e.params) + 1)
         for (p, variable in e.params, fn.arguments) {
             let cpp = describeCppType(variable._type, DescribeConfig(skip_ref = true, cross_platform = cfg.cross_platform))

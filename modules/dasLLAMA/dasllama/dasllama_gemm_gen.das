@@ -1894,8 +1894,8 @@ def private emit_grid_rows_blk_vbmi(var te : TileEmit; var wbP, xb : LLVMOpaqueV
             } else {   // 24: u16 words - columns 2blk (l 0, 1) and 2blk+1 (l 2, 3), lane r*4+l takes word l's low then high byte
                 var ca = vbmi_col(te, wbP, 2 * blk, qd, "wa{blk}")
                 var cb = vbmi_col(te, wbP, 2 * blk + 1, qd, "wb{blk}")
-                let lo <- [for (k in range(w8)); (k % 4 < 2 ? 0 : w8) + (k / 4) * 4 + 2 * (k % 2)]
-                let hi <- [for (k in range(w8)); (k % 4 < 2 ? 0 : w8) + (k / 4) * 4 + 2 * (k % 2) + 1]
+                var inscope lo <- [for (k in range(w8)); (k % 4 < 2 ? 0 : w8) + (k / 4) * 4 + 2 * (k % 2)]
+                var inscope hi <- [for (k in range(w8)); (k % 4 < 2 ? 0 : w8) + (k / 4) * 4 + 2 * (k % 2) + 1]
                 idx = LLVMBuildShuffleVector(b, te.types, ca, cb, lo, "gi{blk}")
                 var hib = LLVMBuildShuffleVector(b, te.types, ca, cb, hi, "gh{blk}")
                 masks |> push(LLVMBuildICmp(b, LLVMIntPredicate.LLVMIntNE, LLVMBuildAnd(b, hib, splat_i8w(te, 1), ""), LLVMConstNull(te.vwi8), "qm{blk}"))
@@ -1921,19 +1921,19 @@ def private emit_grid_rows_blk_vbmi(var te : TileEmit; var wbP, xb : LLVMOpaqueV
                 let r0 = g * n
                 var q : LLVMOpaqueValue?
                 if (!iq3) {   // qword i <- row r0+i's low-plane byte, high-plane byte (the rest don't care)
-                    let sel <- [for (k in range(w8)); (k % 8 == 1 ? w8 : 0) + (r0 + k / 8) * 4 + l]
+                    var inscope sel <- [for (k in range(w8)); (k % 8 == 1 ? w8 : 0) + (r0 + k / 8) * 4 + l]
                     q = LLVMBuildShuffleVector(b, te.types, plo[0], phi[0], sel, "wq{blk}_{l}_{g}")
                     q = LLVMBuildAnd(b, vbmi_mshift(te, q, [0, 2, 4, 6, 8, 10, 12, 14], "ws{blk}_{l}_{g}"), splat_i8w(te, 3), "")
                 } else {      // qword i <- the two entries (h = 0, 1) of row r0+i, low then high plane each
                     let c = l / 2
                     let p0 = (2 * l) % 4
-                    let sel <- [for (k in range(w8)); (k % 8 == 1 || k % 8 == 3 ? w8 : 0) + (r0 + k / 8) * 4 + p0 + (k % 8 == 2 || k % 8 == 3 ? 1 : 0)]
+                    var inscope sel <- [for (k in range(w8)); (k % 8 == 1 || k % 8 == 3 ? w8 : 0) + (r0 + k / 8) * 4 + p0 + (k % 8 == 2 || k % 8 == 3 ? 1 : 0)]
                     q = LLVMBuildShuffleVector(b, te.types, plo[c], phi[c], sel, "wq{blk}_{l}_{g}")
                     q = LLVMBuildAnd(b, vbmi_mshift(te, q, [0, 3, 8, 11, 16, 19, 24, 27], "ws{blk}_{l}_{g}"), splat_i8w(te, 7), "")
                 }
                 var sargs <- [alpha, q]
                 var w = LLVMBuildCall2(b, te.shufb_ty, te.shufb_decl, sargs, "w{blk}_{l}_{g}")
-                let ssel <- [for (k in range(w8)); (r0 + k / 8) * 4 + l]
+                var inscope ssel <- [for (k in range(w8)); (r0 + k / 8) * 4 + l]
                 var sq = LLVMBuildShuffleVector(b, te.types, sgn, sgn, ssel, "sq{blk}_{l}_{g}")
                 sq = LLVMBuildAnd(b, vbmi_mshift(te, sq, [0, 1, 2, 3, 4, 5, 6, 7], "sb{blk}_{l}_{g}"), splat_i8w(te, 1), "")
                 var m = LLVMBuildSub(b, LLVMConstNull(te.vwi8), sq, "sm{blk}_{l}_{g}")
@@ -3511,7 +3511,7 @@ def private panel_emit_block(var te : TileEmit; var quads : LLVMOpaqueValue? [8]
     let hiMask <- [for (i in range(16)); 16 + i]
     for (q in range(8)) {
         for (tp in range(2)) {
-            var selMask : array<int>
+            var inscope selMask : array<int>
             selMask |> reserve(32)
             for (r in range(16)) {
                 selMask |> push(4 * r + 2 * tp)

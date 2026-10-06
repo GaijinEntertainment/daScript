@@ -62,7 +62,7 @@ def test_bc4_and_bc5_channels(t : T?){
     for (i in range(16)){pixels[i * 4] = uint8(i * 17); pixels[i * 4 + 1] = uint8(255 - i * 17); pixels[i * 4 + 3] = 255u8}
     for (format in [2, 3]){
         var image <- compress_block_texture(pixels, 4, 4, format, false)
-        var decoded <- decode_block_mip(image, 0)
+        var inscope decoded <- decode_block_mip(image, 0)
         for (i in range(16)){
             t |> success(abs(int(decoded[i * 4]) - i * 17) <= 20, "red channel survives")
             if (format == 3){t |> success(abs(int(decoded[i * 4 + 1]) - (255 - i * 17)) <= 20, "green channel survives")}

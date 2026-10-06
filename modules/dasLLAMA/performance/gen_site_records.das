@@ -106,7 +106,7 @@ def merge_site_records(var merged : array<BenchModel>) : bool {
         return false
     }
     for (path in stores) {
-        var models : array<BenchModel>
+        var inscope models : array<BenchModel>
         if (!read_bench_records(path, models)) {
             to_log(LOG_ERROR, "gen_site_records: cannot parse {path}\n")
             return false

@@ -144,7 +144,7 @@ def private project_child_before(a, b : int) : bool {
 def private project_sort_children() {
     for (node in g_project_nodes) {
         if (empty(node.children)) continue
-        var order := node.children
+        var inscope order := node.children
         sort(order) $(a, b) => project_child_before(a, b)
         node.children <- order
     }
@@ -360,7 +360,7 @@ def private populate_external_folder(node_index : int) {
         g_project_nodes[parent].stat_mtime = max(
             g_project_nodes[parent].stat_mtime, newest)
         if (parent != node_index && !empty(g_project_nodes[parent].children)) {
-            var sibling_order := g_project_nodes[parent].children
+            var inscope sibling_order := g_project_nodes[parent].children
             sort(sibling_order) $(a, b) => project_child_before(a, b)
             g_project_nodes[parent].children <- sibling_order
         }

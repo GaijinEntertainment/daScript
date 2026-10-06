@@ -248,7 +248,7 @@ def private measure_das(var m : AsrModel; samples : array<float>; reps : int; la
     encode_ms = 0.0lf
     for (_rep in range(reps)) {
         var s <- create_session(m, lang)
-        var parts : array<string>
+        var inscope parts : array<string>
         let t0 = ref_time_ticks()
         transcribe(m, s, samples) $(seg) {
             parts |> push(seg.text)
@@ -311,7 +311,7 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
     var clips = 0
     for (wav in spec.buckets) {
         clips++
-        var samples <- load_audio_or_panic("{asr_corpus_dir()}{wav}")
+        var inscope samples <- load_audio_or_panic("{asr_corpus_dir()}{wav}")
         let audio_s = double(length(samples)) / double(AUDIO_SAMPLE_RATE)
         var text = ""
         var enc_ms = 0.0lf
@@ -384,7 +384,7 @@ def private asr_measure_spec(spec : AsrModelSpec; reps, threads : int; var jsonM
             var lib_audio = 0.0lf
             run.files |> reserve(length(run.files) + length(lib))
             for (wav in lib) {
-                var samples <- load_audio_or_panic("{asr_corpus_dir()}{wav}")
+                var inscope samples <- load_audio_or_panic("{asr_corpus_dir()}{wav}")
                 lib_audio += double(length(samples)) / double(AUDIO_SAMPLE_RATE)
                 var ltext = ""
                 var lenc = 0.0lf
@@ -885,7 +885,7 @@ def private tok_enc_row(tk : Tokenizer; corpus, text : string; reps : int; fmt :
         for (_rep in range(reps)) {
             let tr = ref_time_ticks()
             for (_it in range(iters)) {
-                var ids <- encode(tk, text, false)
+                var inscope ids <- encode(tk, text, false)
                 delete ids   // freeing the result is part of the caller-visible cost
             }
             let us = max(int64(get_time_usec(tr)), 1l)
@@ -1578,7 +1578,7 @@ def main() : int {
         for (mpath in model_list) {
         continue if (empty(mpath))
         say(fmt, "loading {mpath}\n")
-        var results : array<BenchRow>
+        var inscope results : array<BenchRow>
         var modelArch = ""
         var activeB = 0.0lf
         var execFmt = ""
@@ -1615,11 +1615,11 @@ def main() : int {
         var inscope toks : array<array<int64>>
         if (real_row) {
             var tk <- load_tokenizer_auto(mpath)
-            var texts <- load_corpus(empty(cfg.prompts)
+            var inscope texts <- load_corpus(empty(cfg.prompts)
                 ? path_join(get_this_module_dir(), "data/wikitext2_prompts.txt") : cfg.prompts)
             var maxlen = 0l
             for (tx in texts) {
-                var ids <- corpus_ids(t, tk, tx, cfg.chat_prompts)
+                var inscope ids <- corpus_ids(t, tk, tx, cfg.chat_prompts)
                 maxlen = max(maxlen, long_length(ids))
                 toks |> emplace(ids)
             }
@@ -1671,7 +1671,7 @@ def main() : int {
             dispatch_census(t, fmt)
         }
         var s <- bench_session(t, flat_row_plen(plen, ngen, t.config.seq_len, real_row), ngen, cfg.kv, cfg.kv)   // the cap above already bounds t.config at the rows' size; nothing serves this model afterwards, so nothing restores it
-        var pp_off : array<double>
+        var inscope pp_off : array<double>
         pp_off |> resize(length(toks))
         for (arm in range(ab ? 2 : 1)) {
             var dtag = ""
@@ -1687,9 +1687,9 @@ def main() : int {
                 var drafted = 0l
                 var accepted = 0l
                 var parked = 0l   // rounds whose sampled walk parked the next draw: the --mtp-temp lever's engagement witness
-                var tps : array<double>
-                var pp_us : array<int64>      // per prompt across the reps: timed µs, tokens, drafts, accepts
-                var pp_gen, pp_dr, pp_ac : array<int64>
+                var inscope tps : array<double>
+                var inscope pp_us : array<int64>      // per prompt across the reps: timed µs, tokens, drafts, accepts
+                var inscope pp_gen, pp_dr, pp_ac : array<int64>
                 pp_us |> resize(length(toks))
                 pp_gen |> resize(length(toks))
                 pp_dr |> resize(length(toks))
@@ -1852,7 +1852,7 @@ def main() : int {
                 if (!bench_output_gate(t, s, fmt, "pp{plen}{dtag}")) {
                     panic("lcpp_bench: output sanity gate refused pp{plen}{dtag} - see the REFUSED line")
                 }
-                var tps <- [for (rep in range(reps)); bench_pp_rep(t, s, plen, int64(rep))]
+                var inscope tps <- [for (rep in range(reps)); bench_pp_rep(t, s, plen, int64(rep))]
                 if (cfg.accel) {
                     accel_pp_witness(fmt, "pp{plen}{dtag}")
                 }
@@ -1873,14 +1873,14 @@ def main() : int {
                 if (!bench_output_gate(t, s, fmt, "tg{ngen}{dtag}")) {
                     panic("lcpp_bench: output sanity gate refused tg{ngen}{dtag} - see the REFUSED line")
                 }
-                var tps <- [for (rep in range(reps)); bench_tg_rep(t, s, ngen, int64(rep))]
+                var inscope tps <- [for (rep in range(reps)); bench_tg_rep(t, s, ngen, int64(rep))]
                 say_row(fmt, "tg{ngen}{dtag}", "", tps, results)
             }
             if (ngen > 0l && cfg.npl > 1) {
                 let npl = int64(cfg.npl)
                 let flat_len = t.config.seq_len   //! the flat session's rows; the streams take the wider context the load was capped at
                 t.config.seq_len = sched_ctx
-                var tps : array<double>
+                var inscope tps : array<double>
                 tps |> reserve(breps)
                 var refused = ""
                 let prev_spec = get_mtp_spec()
@@ -1935,15 +1935,15 @@ def main() : int {
             break
         }
         // the reference runs AFTER our model is freed — one model in memory at a time
-        var refRows : array<LlamaBenchRow>
+        var inscope refRows : array<LlamaBenchRow>
         var refBatched = BenchTest()   //! the batched reference row; a 0 rate is none
         var refCmd = ""
         if (!empty(cfg.ref)) {
-            var refPin : array<string>   //! the CPU reference's affinity - the flat exe's and the batched exe's alike
+            var inscope refPin : array<string>   //! the CPU reference's affinity - the flat exe's and the batched exe's alike
             if (!gpu && !cfg.ref_no_affinity) {
                 refPin |> push_from(lcpp_affinity_argv(threads))
             }
-            var refArgs <- [cfg.ref, "-m", mpath, "-ngl", "{cfg.ngl}", "-t", "{threads}"]
+            var inscope refArgs <- [cfg.ref, "-m", mpath, "-ngl", "{cfg.ngl}", "-t", "{threads}"]
             refArgs |> push_from(refPin, ["-p", "{cfg.plen}", "-n", "{cfg.ngen}", "-r", "{reps}", "-o", "json"])
             refCmd = argv_line(refArgs)
             say(fmt, "ref: {refCmd}\n")
@@ -1984,17 +1984,17 @@ def main() : int {
         let gguf = base_name(mpath)
         if (fmt == OutFmt.md) {
             for (st in results) {
-                var row <- ["das", gguf, das_backend, "{cfg.ngl}", "{threads}", st.test, "{st.mean:.2f} ± {st.sd:.2f}"]
+                var inscope row <- ["das", gguf, das_backend, "{cfg.ngl}", "{threads}", st.test, "{st.mean:.2f} ± {st.sd:.2f}"]
                 mdRows |> emplace(row)
             }
             for (rr in refRows) {
                 let tag = rr.n_gen == 0 ? "pp{rr.n_prompt}" : "tg{rr.n_gen}"
                 let sd = rr.stddev_ts
-                var row <- ["llama.cpp", gguf, backend, "{cfg.ngl}", "{threads}", tag, "{rr.avg_ts:.2f} ± {sd:.2f}"]
+                var inscope row <- ["llama.cpp", gguf, backend, "{cfg.ngl}", "{threads}", tag, "{rr.avg_ts:.2f} ± {sd:.2f}"]
                 mdRows |> emplace(row)
             }
             if (refBatched.tok_s > 0.0lf) {
-                var row <- ["llama.cpp", gguf, backend, "{cfg.ngl}", "{threads}", "tg{ngen}@{cfg.npl}", "{refBatched.tok_s:.2f} ± {refBatched.stddev:.2f}"]
+                var inscope row <- ["llama.cpp", gguf, backend, "{cfg.ngl}", "{threads}", "tg{ngen}@{cfg.npl}", "{refBatched.tok_s:.2f} ± {refBatched.stddev:.2f}"]
                 mdRows |> emplace(row)
             }
             delete results

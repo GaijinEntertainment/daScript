@@ -14,7 +14,7 @@ def test_block_textures_reserve_large_outputs(t : T?){
     for (format in [0, 1]){
         var texture <- compress_block_texture(pixels, width, height, format, false)
         t |> success(block_texture_valid(texture), "large BC texture and mip chain")
-        var decoded <- decode_block_mip(texture, 0)
+        var inscope decoded <- decode_block_mip(texture, 0)
         t |> equal(length(decoded), width * height * 4, "large decoded RGBA output")
         delete texture; delete decoded
     }

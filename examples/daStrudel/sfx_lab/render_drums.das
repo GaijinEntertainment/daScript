@@ -142,12 +142,12 @@ def main {
     let out_dir = "{get_das_root()}/examples/daStrudel/sfx_lab/drum_refs"
     mkdir(out_dir)
     for (d in DRUMS) {
-        let stereo <- render_sf2_drum(*sf2, d.key, 127, d.dur)
+        var inscope stereo <- render_sf2_drum(*sf2, d.key, 127, d.dur)
         if (empty(stereo)) {
             to_log(LOG_WARNING, "  {d.name}: no zones for key {d.key} — skipped\n")
             continue
         }
-        let mono <- to_mono(stereo)
+        var inscope mono <- to_mono(stereo)
         let path = "{out_dir}/{d.name}.wav"
         write_wav(path, mono, 48000u, 1)
         to_log(LOG_INFO, "  {d.name}: {length(mono)} samples -> {path}\n")
