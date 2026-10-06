@@ -195,8 +195,7 @@ def test_deltanet_yarn_override(t : T?) {
         var want_ff <- yarn_rope_freqs(rot, c.rope_freq_base, 4.0, 32.0, 1.0, 32768l)
         t |> equal(logits_maxdiff(yarn.rope_freqs, want_ff), 0.0, "the divisors are the band over the OVERRIDE's original context, not the file's")
         // the row the decode drivers read, against the fold spelled out: cos(pos * theta^(-2j/rot) / ff_j) * mscale
-        var ct : array<float>
-        var st : array<float>
+        var ct, st : array<float>
         let pos = 777l
         build_decode_rope_row(yarn, pos, ct, st)
         var want_c <- [for (j in range64(rot / 2l)); float(cos(fold_angle(pos, rot, j, c.rope_freq_base, yarn.rope_freqs[j])) * double(mscale))]

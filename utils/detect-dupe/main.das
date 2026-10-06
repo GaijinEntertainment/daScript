@@ -550,8 +550,7 @@ def main() { // nolint:STYLE037,STYLE038 — flat CLI validation ladder plus one
     // --baseline-strict, which post-filters clusters whose canonical
     // already existed in baseline (so only "brand-new canonical"
     // clusters survive, not "existing canonical, new member" growth).
-    var baseline_canonicals : table<string; void?>
-    var baseline_members : table<string; void?>
+    var baseline_canonicals, baseline_members : table<string; void?>
     if (has_baseline) {
         var berr : string
         if (!load_baseline_canonicals(cfg.baseline, baseline_canonicals, baseline_members, berr)) {

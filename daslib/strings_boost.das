@@ -395,8 +395,7 @@ def public glob_match(pattern, text : string) : bool {
     unsafe {
         var pp = reinterpret<uint8?>(pattern)
         var tp = reinterpret<uint8?>(text)
-        var star_pp : uint8?
-        var star_tp : uint8?
+        var star_pp, star_tp : uint8?
         while (*tp != 0u8) {
             if (*pp == uint8('?')) {
                 pp++

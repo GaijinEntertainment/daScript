@@ -872,9 +872,7 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
     let wq_words = int(bb.wq / 4l)
     let nk = MOE_NE * S_ROWS
     let xrows = nk + READ_SLACK
-    var wqh : array<uint>
-    var wsuh : array<uint>
-    var xfh : array<uint>
+    var wqh, wsuh, xfh : array<uint>
     wqh |> reserve(totblk * wq_words)   //! the planes pass the unreserved-growth cap (128 expert planes)
     wqh |> resize(totblk * wq_words)
     for (i in range(totblk * wq_words)) {
@@ -963,8 +961,7 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
             fixed_array(wq_bytes, ws_bytes, ladder_s_bytes, xf_bytes, y_bytes), gbits)
         let us2 = timed_chain() $(raw2; var _h) {
             for (k in range(DISPATCHES)) {
-                var hz_m : VkHaz
-                var hz_s : VkHaz
+                var hz_m, hz_s : VkHaz
                 cm2_cls_enc(fmt, CM2_TC_E, raw2, hz_m, k % 2 == 0 ? s_ladder_m_a : s_ladder_m_b, pc, int64(bound_ladder_m))
                 cm2_cls_enc(fmt, 32l, raw2, hz_s, k % 2 == 0 ? s_ladder_s_a : s_ladder_s_b, pc, int64(bound_ladder_s))
             }
@@ -977,8 +974,7 @@ def private run_moe_fmt_shape(fmt : int; name : string; d, n : int; skew : bool)
             fixed_array(wq_bytes, ws_bytes, ladder_m_bytes, xf_bytes, y_bytes), gbits)
         let us3 = timed_chain() $(raw3; var _h) {
             for (k in range(DISPATCHES)) {
-                var hz_m : VkHaz
-                var hz_s : VkHaz
+                var hz_m, hz_s : VkHaz
                 cm2_cls_enc(fmt, 128l, raw3, hz_m, k % 2 == 0 ? s_ladder_dm_a : s_ladder_dm_b, pc, int64(bound_ladder_m))
                 cm2_cls_enc(fmt, 32l, raw3, hz_s, k % 2 == 0 ? s_ladder_s_a : s_ladder_s_b, pc, int64(bound_ladder_s))
             }
@@ -1576,8 +1572,7 @@ class KhrPxWg128 : KhrPxW4Base {
         let wrow = m0 + srow
         let wrow0 = (sg & 1u) * 64u
         let trow0 = (sg >> 1u) * 64u
-        var acc00, acc01, acc02, acc03, acc10, acc11, acc12, acc13 : coopmatAcc_f16_16x16
-        var acc20, acc21, acc22, acc23, acc30, acc31, acc32, acc33 : coopmatAcc_f16_16x16
+        var acc00, acc01, acc02, acc03, acc10, acc11, acc12, acc13, acc20, acc21, acc22, acc23, acc30, acc31, acc32, acc33 : coopmatAcc_f16_16x16
         var k = 0u
         while (k < pa.n) {
             let bcol = k >> 8u
@@ -2540,7 +2535,7 @@ def private run_shape(name : string; d, n, cnt : int; with_sdot4_mm : bool = tru
 }
 
 //! the cm2 l and m stamps - or, under `khr`, the KHR kq tile - under a split-k of `nsplit` (the GEMM alone: the partial planes land), then the reduce and the chained pair
-def private run_shape_split(name : string; d, n, cnt, nsplit : int; khr : bool = false) {   // nolint:STYLE038 — one linear measurement sweep, two arms
+def private run_shape_split(name : string; d, n, cnt, nsplit : int; khr : bool = false) {
     let nbb = n / 32
     let rows = cnt
     let totblk = d * nbb
@@ -2563,10 +2558,7 @@ def private run_shape_split(name : string; d, n, cnt, nsplit : int; khr : bool =
         delete b
         return
     }
-    var cm2l_us : double
-    var cm2m_us : double
-    var red_us : double
-    var chain_us : double
+    var cm2l_us, cm2m_us, red_us, chain_us : double
     unsafe {
         upload_region_at(wqd, 0l, addr<uint8 const?>(b.wq[0]), wq_bytes)
         upload_region_at(wsd, 0l, addr<uint8 const?>(b.ws[0]), ws_bytes)
@@ -2782,8 +2774,7 @@ def private run_lastwg(dim : int) {   // nolint:STYLE038 — one linear measurem
     let w_bytes = int64(dim) * int64(dim) * 4l
     let wd = make_device_buf(w_bytes)
     let wnd = make_device_buf(nb)
-    var wh : array<float>
-    var wnh : array<float>
+    var wh, wnh : array<float>
     var x0 <- row_fill(dim, 1, 0, 0.001, -0.5, 17)
     wh |> resize(dim * dim)
     wnh |> resize(dim)
@@ -2800,8 +2791,7 @@ def private run_lastwg(dim : int) {   // nolint:STYLE038 — one linear measurem
     let wgs = (int64(dim) + 4l * g_gpu.rows_per_wg - 1l) / (4l * g_gpu.rows_per_wg)
     var pc = PxLwArgs(n = uint(dim), d = uint(dim), eps = 1.0e-6)
     var pca = ArArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = 1.0e-6, ascale = 1.0)
-    var out_split : array<float>
-    var out_fused : array<float>
+    var out_split, out_fused : array<float>
     out_split |> resize(dim)
     out_fused |> resize(dim)
     var us_split = 0.0lf
@@ -2926,8 +2916,7 @@ def private probe_barrier(raw : VkCommandBuffer; form : int; buf : uint64; bytes
     if (form == 5) {
         return
     }
-    var sstage : VkPipelineStageFlags
-    var dstage : VkPipelineStageFlags
+    var sstage, dstage : VkPipelineStageFlags
     sstage.compute_shader = true
     dstage.compute_shader = true
     if (form == 0) {

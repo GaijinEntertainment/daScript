@@ -64,8 +64,7 @@ class SgMatRolledGpu {
 [test]
 def test_sgmat_rolled_gpu_vs_cpu(t : T?) {
     t |> run("rolled GEMM (matrix arrays + [unroll_full]): GPU == direct CPU matmul, bit-exact") <| @(t : T?) {
-        var a : array<float16>
-        var b : array<float16>
+        var a, b : array<float16>
         a |> resize(M * K)
         b |> resize(K * N)
         for (r in range(M)) {

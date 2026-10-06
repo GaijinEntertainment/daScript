@@ -24,10 +24,7 @@ def bench_matmul_par(b : B?) {   // nolint:STYLE038 — flat bench driver: one c
         to_log(LOG_WARNING, "skipped: interpreted (dasLLAMA benchmarks are JIT-only)\n")
         return
     }
-    var w : array<float>
-    var x : array<float>
-    var y : array<float>
-    var yref : array<float>
+    var w, x, y, yref : array<float>
     fill(w, 32000 * 288)
     fill(x, 288)
     y |> resize(32000)
@@ -39,10 +36,7 @@ def bench_matmul_par(b : B?) {   // nolint:STYLE038 — flat bench driver: one c
     let qt4 <- quantize_q4_0(w, 288l * 32000l)
 
     // small shapes, to find the threshold below which threading isn't worth it
-    var wp : array<float>
-    var yp : array<float>
-    var wf : array<float>
-    var yf : array<float>
+    var wp, yp, wf, yf : array<float>
     fill(wp, 288 * 288)
     yp |> resize(288)
     fill(wf, 768 * 288)

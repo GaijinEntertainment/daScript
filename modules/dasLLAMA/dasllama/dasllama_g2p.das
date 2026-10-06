@@ -1580,9 +1580,7 @@ def private group_prespace(text : string) : bool {
 //! the weaker half of a group's stressed pieces (by primary stress, weight, position) demotes
 //! to secondary stress when more than half carry a primary
 def private demote_weak_half(var toks : array<G2pToken>; a, b : int) {
-    var inscope idx : array<int>
-    var inscope prim : array<int>
-    var inscope weight : array<int>
+    var inscope idx, prim, weight : array<int>
     for (i in range(a, b)) {
         continue if (!toks[i].has_ps || empty(toks[i].phonemes))
         idx |> push(i)

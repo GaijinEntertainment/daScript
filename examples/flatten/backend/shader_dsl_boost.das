@@ -1495,8 +1495,7 @@ def shader_build_ir(var func : FunctionPtr; var group : ModuleGroup; var errors 
                 verify(node.inputs.length() == 1 && node.outputs.length() == 1)
                 let inPin = node.inputs[0]
                 let outPin = node.outputs[0]
-                var enters : array<IRPin?>
-                var exits : array<IRPin?>
+                var enters, exits : array<IRPin?>
                 for (link in astVisitor.links) {
                     if (link.toPin == inPin.id) {
                         enters.push(astVisitor.pins[link.fromPin])

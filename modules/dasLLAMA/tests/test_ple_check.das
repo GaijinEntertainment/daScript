@@ -80,8 +80,7 @@ def test_gemma4_router_rows(t : T?) {
         var batch : array<float>
         batch |> resize(npos * dim)
         gemma4_router(m, batch, src, 1l, dim, npos)
-        var row : array<float>
-        var one : array<float>
+        var row, one : array<float>
         row |> resize(dim)
         one |> resize(dim)
         var bad = 0

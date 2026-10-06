@@ -544,8 +544,7 @@ class template ArCombBase : ArBase {
         }
         let pk = p * pa.slots
         let nreg = min(pa.slots, 8u)
-        var rb : uint[8]
-        var bb : uint[8]
+        var rb, bb : uint[8]
         var sw : float[8]
         for (j in range(8)) {
             if (uint(j) < nreg) {
@@ -2417,8 +2416,7 @@ class DnConv {
         var x1 = xrow(int(p0) - 2, cch, taps)
         var x2 = xrow(int(p0) - 1, cch, taps)
         let normed = live && ch < 2u * pa.kd
-        var y : float[int(DN_CONV_PB)]
-        var s : float[int(DN_CONV_PB)]
+        var y, s : float[int(DN_CONV_PB)]
         for [unroll] (i in range(int(DN_CONV_PB))) {
             let p = p0 + uint(i)
             let x3 = p < pa.npos ? xrow(int(p), cch, taps) : 0.0
@@ -2815,8 +2813,7 @@ class DnScan {
             s[i] = state[sb + uint(i) * row_stride]
         }
         //! the last token re-reads its own row
-        var k_next : float[16]
-        var q_next : float[16]
+        var k_next, q_next : float[16]
         var v_next = conv[voff]
         for [unroll_full] (i in range(16)) {
             k_next[i] = conv[k_elem0 + uint(i) * lanes_per_col]
@@ -2829,8 +2826,7 @@ class DnScan {
             let eg = egs[t]
             let bt = bts[t]
             let v = v_next
-            var k : float[16]
-            var q : float[16]
+            var k, q : float[16]
             for [unroll_full] (i in range(16)) {
                 k[i] = k_next[i]
             }
@@ -3567,8 +3563,7 @@ class template FaT {
             coopmatScale(q, pa.scale)
             var qf : QA
             coopmatConvert(qf, q)
-            var mrow : SACC
-            var lrow : SACC
+            var mrow, lrow : SACC
             static_if (SINK) {
                 coopmatFill(mrow, sinks[pa.sinkoff + h])
                 coopmatFill(lrow, 1.0)
@@ -6199,22 +6194,7 @@ class template MmBatchT : MoeCmBase {
 
     def l_tile(wblk0, row0, cnt, gm0, gn0, nbb, warp_r, warp_c, lw, lr0 : uint) {   // nolint:STYLE038 — the verbatim tile pass, parity-locked to the shipped kernel
         static_if (BT == 128u) {
-        var acc00 : coopmatAcc_f16_16x16
-        var acc01 : coopmatAcc_f16_16x16
-        var acc02 : coopmatAcc_f16_16x16
-        var acc03 : coopmatAcc_f16_16x16
-        var acc10 : coopmatAcc_f16_16x16
-        var acc11 : coopmatAcc_f16_16x16
-        var acc12 : coopmatAcc_f16_16x16
-        var acc13 : coopmatAcc_f16_16x16
-        var acc20 : coopmatAcc_f16_16x16
-        var acc21 : coopmatAcc_f16_16x16
-        var acc22 : coopmatAcc_f16_16x16
-        var acc23 : coopmatAcc_f16_16x16
-        var acc30 : coopmatAcc_f16_16x16
-        var acc31 : coopmatAcc_f16_16x16
-        var acc32 : coopmatAcc_f16_16x16
-        var acc33 : coopmatAcc_f16_16x16
+        var acc00, acc01, acc02, acc03, acc10, acc11, acc12, acc13, acc20, acc21, acc22, acc23, acc30, acc31, acc32, acc33 : coopmatAcc_f16_16x16
         var kb = 0u
         while (kb < nbb) {
             stage_a(wblk0, gm0, nbb, kb, lw, lr0)
@@ -6354,10 +6334,7 @@ class template MmBatchT : MoeCmBase {
 
     def m_tile(wblk0, row0, cnt, gm0, gn0, nbb, warp_r, warp_c, lw, lr0 : uint) {
         static_if (BT == 64u) {
-        var acc00 : coopmatAcc_f16_16x16
-        var acc01 : coopmatAcc_f16_16x16
-        var acc10 : coopmatAcc_f16_16x16
-        var acc11 : coopmatAcc_f16_16x16
+        var acc00, acc01, acc10, acc11 : coopmatAcc_f16_16x16
         var kb = 0u
         while (kb < nbb) {
             stage_a(wblk0, gm0, nbb, kb, lw, lr0)
@@ -8883,10 +8860,8 @@ class F16GemmKhr {
         var acc : coopmatAcc_f32_16x16[4]
         var k = 0u
         while (k < pa.n) {
-            var a0 : coopmatA_f16_16x16
-            var a1 : coopmatA_f16_16x16
-            var b0 : coopmatB_f16_16x16
-            var b1 : coopmatB_f16_16x16
+            var a0, a1 : coopmatA_f16_16x16
+            var b0, b1 : coopmatB_f16_16x16
             if (sg_row0 < pa.rows) {
                 coopmatLoad(a0, xf16, sg_row0 * pa.n + k, int(pa.n), 0)
             }
@@ -10167,8 +10142,7 @@ class template TowerCnAttnRT {
         let d = pa.d
         let hoff = pa.hoff
         let hs = HS
-        var qu : float[128]
-        var acc : float[128]
+        var qu, acc : float[128]
         var n = 0u
         while (n < hs) {
             qu[n] = q[ii * d + hoff + n] + wn[pa.buoff + hoff + n]
@@ -11645,8 +11619,7 @@ class template Q8GemvNT {
             let xb0 = regions[r * 2u + 1u]
             let lane = gl_SubgroupInvocationID
             let bpp = gl_SubgroupSize / 2u
-            var acc0 : float[8]
-            var acc1 : float[8]
+            var acc0, acc1 : float[8]
             for [unroll] (c in range(NC)) {
                 acc0[c] = 0.0
                 acc1[c] = 0.0
@@ -11864,8 +11837,7 @@ class template Q8GemvGuNT {
         let ub0 = pa.ublk + row * nb
         let lane = gl_SubgroupInvocationID
         let bpp = gl_SubgroupSize / 2u
-        var accg : float[8]
-        var accu : float[8]
+        var accg, accu : float[8]
         for [unroll] (c in range(NC)) {
             accg[c] = 0.0
             accu[c] = 0.0

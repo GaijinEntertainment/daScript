@@ -309,12 +309,7 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     var srcAType = invoke_src_param_type(srcAExpr)
     var srcBType = invoke_src_param_type(srcBExpr)
     var elementType = clone_type(zipCall._type.firstType)
-    var whereCond : Expression?
-    var projection : Expression?
-    var skipExpr : Expression?
-    var takeExpr : Expression?
-    var skipWhileCond : Expression?
-    var takeWhileCond : Expression?
+    var whereCond, projection, skipExpr, takeExpr, skipWhileCond, takeWhileCond : Expression?
     var seenSelect = false
     let seenReverse = c.single |> key_exists("trailing_reverse")
     var allProjectionsPure = true

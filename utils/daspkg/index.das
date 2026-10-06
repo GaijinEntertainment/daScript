@@ -817,8 +817,7 @@ def private push_and_pr(cache_dir, branch_name, pr_title, pr_body : string) : in
 
 def cmd_introduce(root, source : string) : int {
     // step 1: determine package directory and URL
-    var pkg_dir : string
-    var pkg_url : string
+    var pkg_dir, pkg_url : string
     if (empty(source)) {
         pkg_dir = root
         pkg_url = get_git_remote_url(root)
@@ -1039,8 +1038,7 @@ def cmd_update_index(root : string; commit : bool = false; dry_run : bool = fals
     mkdir(tmp_base)
 
     // collect names first to avoid iterating locked table
-    var pkg_names : array<string>
-    var pkg_urls : array<string>
+    var pkg_names, pkg_urls : array<string>
     for (name, entry in keys(index), values(index)) {
         pkg_names |> push(name)
         pkg_urls |> push(entry.url)

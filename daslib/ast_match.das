@@ -428,8 +428,7 @@ def qm_convert_comprehension(var expr : Expression?) : Expression? {
     let src_for = blk.list[1] as ExprFor
     let for_body = src_for.body as ExprBlock
     if (for_body == null || empty(for_body.list)) return null
-    var comp_subexpr : Expression?
-    var comp_where : Expression?
+    var comp_subexpr, comp_where : Expression?
     if (for_body.list[0] is ExprIfThenElse) {
         let ite = for_body.list[0] as ExprIfThenElse
         comp_where = clone_expression(ite.cond)

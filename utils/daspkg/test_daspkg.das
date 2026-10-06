@@ -2198,8 +2198,7 @@ def test_cmd_release_ships_minted_scope_manifest(t : T?) {
         tt |> success(find(fread(shipped), "stub_kernel") >= 0, "the shipped winners are the stub mint's")
         // the ship contract: STRICTLY newer than the exe, or the runtime staleness rule drops
         // every kernel to its fallback and the artifact cannot name its winners
-        var exe_fs : FStat
-        var side_fs : FStat
+        var exe_fs, side_fs : FStat
         tt |> success(stat(bundle_exe_path(out_dir, "tunestub"), exe_fs), "exe stats")
         tt |> success(stat(shipped, side_fs), "shipped sidecar stats")
         tt |> success(int64(side_fs.mtime) > int64(exe_fs.mtime), "shipped sidecar mtime is strictly newer than the exe")

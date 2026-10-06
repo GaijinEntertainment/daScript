@@ -197,8 +197,7 @@ def private sg_try_push(tk : SpmTokenizer; var h : array<SpmBigram>; toks : arra
 def private spm_merge_heap(tk : SpmTokenizer; var toks : array<int64>) {
     let n = length(toks)
     return if (n < 2)
-    var nxt : array<int>
-    var prv : array<int>
+    var nxt, prv : array<int>
     nxt |> resize(n)
     prv |> resize(n)
     for (i in range(n)) {
@@ -401,8 +400,7 @@ def unigram_encode(tk : SpmTokenizer; text : string; unk_id : int64; byte_fallba
         unigram_lattice(tk, d, unk_id, reserved, best, back_len, back_id)
         // the pieces come off the lattice last first
         var inscope rev : array<int64>
-        var inscope rev_at : array<int>
-        var inscope rev_len : array<int>
+        var inscope rev_at, rev_len : array<int>
         var p = length(d)
         while (p > 0) {
             if (back_len[p] <= 0) {   // only a score that is not a number leaves a boundary unreached

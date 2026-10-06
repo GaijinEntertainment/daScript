@@ -93,8 +93,7 @@ def private to_int(v : JsonValue?) : int {
 [test]
 def test_initialize(t : T?) {
     t |> run("initialize returns result.serverInfo.name='daslang'") @(t : T?) {
-        var responses : array<string>
-        var reqs : array<string>
+        var responses, reqs : array<string>
         reqs |> push(MCP_INITIALIZE_REQ)
         let exit_code = run_mcp_session(reqs, responses)
         t |> equal(exit_code, 0, "MCP exit code")

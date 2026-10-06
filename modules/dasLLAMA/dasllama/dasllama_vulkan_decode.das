@@ -2187,8 +2187,7 @@ def private rd_announce_fuse_bisect {
         (bit = FUSE_BX_POST_ATT_RQ, name = "the post-attention requant stamp", live = true),
         (bit = FUSE_BX_POST_FFN_RQ, name = "the post-FFN requant stamp", live = true),
         (bit = FUSE_BX_QKN_ROPE, name = "the fused qk-norm+rope", live = g_rd.qk_norm && !g_rd.q_gated)]
-    var taken : array<string>
-    var inert : array<string>
+    var taken, inert : array<string>
     for (e in names) {
         continue if ((bx & e.bit) == 0l)
         if (e.live) {

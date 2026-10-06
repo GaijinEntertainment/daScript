@@ -23,8 +23,7 @@ require daslib/debugger public
 // debug-agent context, then calls the clone that carries the original body.
 def private emit_agent_entry(var func : FunctionPtr; contextName, ctxCloneFnName, ctxFnName, resName : string) {
   var ctxFnArguments : array<VariablePtr>
-  var ctxFnBlockList : array<ExpressionPtr>
-  var callInCtxArguments : array<ExpressionPtr>
+  var ctxFnBlockList, callInCtxArguments : array<ExpressionPtr>
   for (arg in func.arguments) {
     ctxFnArguments |> emplace_new <| clone_variable(arg)
     callInCtxArguments |> push(qmacro($i(arg.name)))

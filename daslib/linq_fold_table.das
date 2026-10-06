@@ -226,8 +226,7 @@ def try_table_point_lookup(var calls : array<tuple<ExprCall?; LinqCall?>>; var a
     let termName = calls[n - 1]._1.name
     let termArgs = length(termCall.arguments)
     var selCall : ExprCall?
-    var keyX : Expression?
-    var residual : Expression?
+    var keyX, residual : Expression?
     let kName = qn("plk_k", at)
     let dName = qn("plk_d", at)
     let pName = qn("plk_p", at)

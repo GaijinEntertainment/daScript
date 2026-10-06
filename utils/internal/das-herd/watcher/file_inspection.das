@@ -292,8 +292,7 @@ def private synthesized_context_row(source_lines : array<string>;
 }
 
 def private realign_patch_text(var patch : GitParsedPatch) {
-    var inscope old_aligned : array<string>
-    var inscope new_aligned : array<string>
+    var inscope old_aligned, new_aligned : array<string>
     old_aligned |> reserve(length(patch.rows))
     new_aligned |> reserve(length(patch.rows))
     for (row in patch.rows) {
@@ -405,11 +404,7 @@ def public git_patch_result_is_deleted(patch : string) : bool {
 
 def public git_parse_unified_patch(patch : string) : GitParsedPatch { // nolint:STYLE038
     var result = GitParsedPatch()
-    var inscope old_lines : array<string>
-    var inscope new_lines : array<string>
-    var inscope old_aligned : array<string>
-    var inscope new_aligned : array<string>
-    var inscope removed_text : array<string>
+    var inscope old_lines, new_lines, old_aligned, new_aligned, removed_text : array<string>
     var inscope removed_lines : array<int>
     var inscope added_text : array<string>
     var inscope added_lines : array<int>

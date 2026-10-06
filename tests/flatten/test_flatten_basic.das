@@ -112,8 +112,7 @@ def struct_guard(x : float; c : bool) : Pt {
 
 [flatten]
 def partial_vec(x : float) : float3 {
-    var a : float3
-    var b : float3
+    var a, b : float3
     if (x > 0.5) {
         a = float3(1.0, 0.0, 0.0)
     } else {

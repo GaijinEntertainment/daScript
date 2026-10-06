@@ -543,8 +543,7 @@ def public gltf_vk_upload(device : Device; phys : VkPhysicalDevice; queue : VkQu
 
     // walk the node instances once: which (material, skin) descriptor pairs and which pipeline
     // variants does this scene actually draw?
-    var pair_keys : table<int>
-    var variant_keys : table<int>
+    var pair_keys, variant_keys : table<int>
     for (node in scene.nodes) {
         continue if (node.mesh < 0 || node.mesh >= length(model.meshes))
         let skin_slot = (node.skin >= 0 && node.skin < length(model.skin_ubos)) ? node.skin : -1

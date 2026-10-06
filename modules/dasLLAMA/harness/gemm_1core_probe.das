@@ -114,8 +114,7 @@ def bench_shape(name : string; n, d : int64; reps : int) {   // nolint:STYLE038 
         }
     }
 
-    var y : array<float>
-    var yref : array<float>
+    var y, yref : array<float>
     y |> resize(NTOK * d)
     yref |> resize(NTOK * d)
 
@@ -139,8 +138,7 @@ def bench_shape(name : string; n, d : int64; reps : int) {   // nolint:STYLE038 
     }
 
     let gemv_reps = reps * int(NTOK) / 4
-    var best : array<double>
-    var bestv : array<double>
+    var best, bestv : array<double>
     best |> resize(nc)
     bestv |> resize(nc)
     for (ci in range(nc)) {

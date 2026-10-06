@@ -2284,8 +2284,7 @@ class StyleLintVisitor : AstVisitor {
             }
         }
         var keep : table<string; bool>
-        var verdict : table<string; string>
-        var members : table<string; string>
+        var verdict, members : table<string; string>
         prog |> for_each_require_declaration() $ [unused_argument(file)] (mod, req_name, file, pub, at) {
             if (mod == null || pub
                 || at.fileInfo == null || !key_exists(module_files, string(at.fileInfo.name))) return
@@ -2394,8 +2393,7 @@ class StyleLintVisitor : AstVisitor {
         if (mod == null) return
         var file_first_decl : table<string; uint>
         var fn_file : array<string>
-        var fn_starts : array<uint>
-        var fn_ends : array<uint>
+        var fn_starts, fn_ends : array<uint>
         var fn_private : array<bool>
         for_each_function(mod, "") $(var fn) {
             if (fn.body == null || fn.at.fileInfo == null || fn.at.line == 0u

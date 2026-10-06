@@ -508,8 +508,7 @@ def private subtree_equal(var ix : DupeIndexer?; a, b : int;
 }
 
 def private run_equal(var ix : DupeIndexer?; a_blk, a_pos, b_blk, b_pos, len : int) : bool {
-    var m_ab : table<int; int>
-    var m_ba : table<int; int>
+    var m_ab, m_ba : table<int; int>
     for (k in range(len)) {
         let sa = ix.stmt_node[ix.by_block[a_blk][a_pos + k]]
         let sb = ix.stmt_node[ix.by_block[b_blk][b_pos + k]]

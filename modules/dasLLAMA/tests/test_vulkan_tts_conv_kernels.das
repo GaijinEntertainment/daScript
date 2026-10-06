@@ -58,8 +58,7 @@ def private slab_rows(c : TtsConv1d; kdim : int) : array<float> {
 //! the CPU `conv1d` over x [cin][tin] (the conv prepared as the loader prepares it), transposed to the GEMM's [tout][cout] rows
 def private conv_ref(var c : TtsConv1d; x : array<float>; tin : int) : array<float> {
     conv1d_prepare(c)
-    var y_ct : array<float>
-    var y : array<float>
+    var y_ct, y : array<float>
     with_dasllama_jobque_() {
         conv1d(c, x, int64(tin), y_ct)
     }

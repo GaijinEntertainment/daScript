@@ -1837,14 +1837,8 @@ def test_group_by_inner_select_sum_fold_parity(t : T?) {
         let foldGot <- _fold(arr._group_by(_ % 4)._select((K = _._0, T = _._1 |> select(@(x : int) => x + 1) |> sum)))
         let refGot  <- (arr._group_by(_ % 4)._select((K = _._0, T = _._1 |> select(@(x : int) => x + 1) |> sum)))
         tt |> equal(length(refGot), length(foldGot))
-        var refMap : table<int; int>
-        var foldMap : table<int; int>
-        for (r in refGot) {
-            refMap[r.K] = r.T
-        }
-        for (f in foldGot) {
-            foldMap[f.K] = f.T
-        }
+        var refMap <- { for (r in refGot); r.K => r.T }
+        let foldMap <- { for (f in foldGot); f.K => f.T }
         // Use ?[k] (safe lookup, no auto-insert) to avoid locking refMap while iterating its keys.
         for (k in keys(refMap)) {
             tt |> equal(refMap?[k] ?? -1, foldMap?[k] ?? -1)
@@ -1949,14 +1943,8 @@ def test_group_by_min_max_first_fold_parity(t : T?) { // nolint:STYLE038 flat li
         let foldGot <- _fold(_common::people._group_by(_.name)._select((K = _._0, MinAge = _._1 |> select(@(p : _common::Person) => p.age) |> min)))
         let refGot  <- (_common::people._group_by(_.name)._select((K = _._0, MinAge = _._1 |> select(@(p : _common::Person) => p.age) |> min)))
         tt |> equal(length(refGot), length(foldGot))
-        var refMap  : table<string; int>
-        var foldMap : table<string; int>
-        for (r in refGot) {
-            refMap[r.K] = r.MinAge
-        }
-        for (f in foldGot) {
-            foldMap[f.K] = f.MinAge
-        }
+        var refMap <- { for (r in refGot); r.K => r.MinAge }
+        let foldMap <- { for (f in foldGot); f.K => f.MinAge }
         for (k in keys(refMap)) {
             tt |> equal(refMap?[k] ?? -1, foldMap?[k] ?? -1)
         }
@@ -1969,8 +1957,7 @@ def test_group_by_multi_reducer_fold_parity(t : T?) {
     t |> run("3-slot (K, N=length, S=sum): two reducers per bucket") @(tt : T?) {
         let got <- _fold([10, 20, 30, 11, 21, 31, 12]._group_by(_ % 3)._select((K = _._0, N = _._1 |> length, S = _._1 |> sum)))
         tt |> equal(3, length(got))
-        var perKeyN : table<int; int>
-        var perKeyS : table<int; int>
+        var perKeyN, perKeyS : table<int; int>
         for (item in got) {
             perKeyN[item.K] = item.N
             perKeyS[item.K] = item.S
@@ -2020,8 +2007,7 @@ def test_group_by_multi_reducer_fold_parity(t : T?) {
             (K = _._0, N = _._1 |> length, MinAge = _._1 |> select(@(p : _common::Person) => p.age) |> min, MaxAge = _._1 |> select(@(p : _common::Person) => p.age) |> max)))
         tt |> equal(length(refGot), length(foldGot))
         // Three separate tables — daslang tuples lack a default `==` operator.
-        var refN, refMin, refMax : table<string; int>
-        var foldN, foldMin, foldMax : table<string; int>
+        var refN, refMin, refMax, foldN, foldMin, foldMax : table<string; int>
         for (r in refGot) {
             refN[r.K] = r.N; refMin[r.K] = r.MinAge; refMax[r.K] = r.MaxAge
         }

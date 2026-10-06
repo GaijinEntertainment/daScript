@@ -1553,8 +1553,7 @@ def main : int {
     let box = box_name()
     let threads = cfg.threads > 0 ? cfg.threads : profile_threads()
     let cellPath = "modules/dasLLAMA/performance/records/_cell_{box}.json"
-    var failed : array<string>
-    var refSkipped : array<string>
+    var failed, refSkipped : array<string>
     var cat <- cfg.catalog == "all" ? full_catalog() : official_catalog()
     for (ent in cat) {
         if (!doLlm && !doImage) {

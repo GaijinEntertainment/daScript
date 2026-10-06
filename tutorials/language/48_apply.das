@@ -275,8 +275,7 @@ def demo_annotations() {
     let record = DbRecord(name = "Alice", email = "alice@example.com", id = 42, age = 30)
 
     // Build a pseudo-SQL insert using field annotations
-    var columns : array<string>
-    var values  : array<string>
+    var columns, values : array<string>
 
     apply(record) $(name : string; field; annotations) {
         var column_name = name

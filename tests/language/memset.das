@@ -83,8 +83,7 @@ def test_memmove(t : T?) {
         }
     }
     t |> run("memmove between distinct buffers") @(t : T?) {
-        var src : int[4]
-        var dst : int[4]
+        var src, dst : int[4]
         for (i in 0..4) {
             src[i] = i * 11
         }

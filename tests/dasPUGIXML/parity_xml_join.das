@@ -219,10 +219,8 @@ def parity_join_group_by_sum(t : T?) {
                        |> _select((c = _._0, total = _._1 |> _select(_.qty) |> sum()))
                        |> to_array())
         t |> equal(length(m5f), length(m3f))
-        var s5 : table<string; int>
-        var sf : table<string; int>
-        for (g in m5f) { s5[g.c] = g.total }
-        for (g in m3f) { sf[g.c] = g.total }
+        let s5 <- { for (g in m5f); g.c => g.total }
+        let sf <- { for (g in m3f); g.c => g.total }
         t |> success(tables_equal(s5, sf), "country→sum(qty) m5f == m3f")
         delete m5f; delete m3f
     }

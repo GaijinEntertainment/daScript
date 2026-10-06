@@ -376,8 +376,7 @@ def test_gpu_resident_hybrid_mtp_carry_batched(t : T?) {
             var sb <- create_session(tr, mirror_kv_dtype())
             eval(tr, sa, pa)   // `eval` advances `n_past`, the position a batched step reads
             eval(tr, sb, pb)
-            var ga : array<Carry>
-            var gb : array<Carry>
+            var ga, gb : array<Carry>
             ga |> emplace <| carry_of(sa)
             gb |> emplace <| carry_of(sb)
             let steps0 = rdec_nrow_steps()

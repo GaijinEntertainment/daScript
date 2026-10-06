@@ -443,8 +443,7 @@ def areas_for_path(path : string) : array<string> {
 //! --exclude: a file whose base name contains any comma-separated token is dropped. Non-private:
 //! test_run_suites.das gates it
 def exclude_files(files : array<string>; exclude : string) : tuple<kept : array<string>; dropped : array<string>> {
-    var kept : array<string>
-    var dropped : array<string>
+    var kept, dropped : array<string>
     let tokens <- [for (tok in split(exclude, ",")); strip(tok); where !empty(strip(tok))]
     for (file in files) {
         let name = base_name(file)

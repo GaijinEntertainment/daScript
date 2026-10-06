@@ -271,8 +271,7 @@ def test_repack_mx4(t : T?) {
     t |> run("mr=1 is the identity") @(t : T?) {
         let n = 64l
         let d = 8l
-        var n0 : array<uint8>
-        var e0 : array<uint8>
+        var n0, e0 : array<uint8>
         build_mx4(n, d, n0, e0)
         var np := n0
         var ep := e0
@@ -298,8 +297,7 @@ def test_repack_mx4(t : T?) {
         let nrow = n / 2l
         let nbb = n / 32l
         let mr = 4l
-        var n0 : array<uint8>
-        var e0 : array<uint8>
+        var n0, e0 : array<uint8>
         build_mx4(n, d, n0, e0)
         var np := n0
         var ep := e0
@@ -339,8 +337,7 @@ def test_repack_q51(t : T?) {
     t |> run("mr=1 is the identity (grp1 == disk order)") @(t : T?) {
         let n = 64l
         let d = 8l
-        var q0 : array<uint8>
-        var s0 : array<uint8>
+        var q0, s0 : array<uint8>
         build_q51(n, d, q0, s0)
         var q := q0
         var s := s0
@@ -365,8 +362,7 @@ def test_repack_q51(t : T?) {
         let d = 8l
         let nb = n / 32l
         let mr = 2l
-        var q0 : array<uint8>
-        var s0 : array<uint8>
+        var q0, s0 : array<uint8>
         build_q51(n, d, q0, s0)
         var q := q0
         var s := s0
@@ -411,8 +407,7 @@ def test_repack_iq4nl32(t : T?) {
     t |> run("mr=1 is the identity (grp1 == disk order)") @(t : T?) {
         let n = 64l
         let d = 8l
-        var q0 : array<uint8>
-        var s0 : array<uint8>
+        var q0, s0 : array<uint8>
         build_iq4nl32(n, d, q0, s0)
         var q := q0
         var s := s0
@@ -437,8 +432,7 @@ def test_repack_iq4nl32(t : T?) {
         let d = 8l
         let nb = n / 32l
         let mr = 2l
-        var q0 : array<uint8>
-        var s0 : array<uint8>
+        var q0, s0 : array<uint8>
         build_iq4nl32(n, d, q0, s0)
         var q := q0
         var s := s0
@@ -529,8 +523,7 @@ def private dequant_disk_row(fmt : int64; kq : array<uint8>; ks : array<uint8>; 
 
 def private check_kq_fmt(t : T?; fmt : int64; n, d, mr : int64) {
     var rng = Rng(state = uint64(fmt) * 0x9e3779b9ul + uint64(mr))
-    var kq0 : array<uint8>
-    var ks0 : array<uint8>
+    var kq0, ks0 : array<uint8>
     build_kq_disk(kq0, ks0, fmt, n, d, rng)
     var kq := kq0
     var ks := ks0
@@ -549,8 +542,7 @@ def private check_kq_fmt(t : T?; fmt : int64; n, d, mr : int64) {
     let qrow = nsb * kq_qsb(int(fmt))
     let srow = nsb * kq_ssb(int(fmt))
     let ng = d / mr
-    var got : array<float>
-    var want : array<float>
+    var got, want : array<float>
     got |> resize(n)
     want |> resize(n)
     var grp_ok = true
@@ -601,8 +593,7 @@ def test_repack_kq_cross_reader(t : T?) {
 
 def private check_unpack(t : T?; fmt : int64; n, d, mr : int64) {
     var rng = Rng(state = uint64(fmt) * 0xc0ffee11ul)
-    var kq0 : array<uint8>
-    var ks0 : array<uint8>
+    var kq0, ks0 : array<uint8>
     build_kq_disk(kq0, ks0, fmt, n, d, rng)
     var kq := kq0
     var ks := ks0

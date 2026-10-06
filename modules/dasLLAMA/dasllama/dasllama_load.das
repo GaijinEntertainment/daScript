@@ -1170,8 +1170,7 @@ def fill_devwf16_plane(m : GGUFMeta; bytes : array<uint8> | #; var t : Model;
     verify(length(mine) == length(t.devwf16_key))
     var temp_q8 : array<int8>
     var temp_sf : array<float>
-    var temp_kq : array<uint8>
-    var temp_ks : array<uint8>
+    var temp_kq, temp_ks : array<uint8>
     var scratch : array<float>
     var panel : array<float16>
     var ok = true

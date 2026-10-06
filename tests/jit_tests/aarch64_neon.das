@@ -128,8 +128,7 @@ var g_salt = 0u
 // intrinsic, so the four lane forms are spelled out
 def run_sdot4_family(salt : uint) : int {
     var g = Lcg(state = 0x9e3779b9u ^ salt)
-    var w : array<int8>
-    var x : array<int8>
+    var w, x : array<int8>
     w |> resize(16)
     x |> resize(16)
     var bad = 0
@@ -202,8 +201,7 @@ def run_tbl16(salt : uint) : int {
 
 def run_smmla(salt : uint) : int {
     var g = Lcg(state = 0x7f4a7c15u ^ salt)
-    var a : array<int8>
-    var b : array<int8>
+    var a, b : array<int8>
     a |> resize(16)
     b |> resize(16)
     var bad = 0

@@ -1108,12 +1108,7 @@ def public emit_init(out_dir : string; ordered_calls : array<string>) {
 
 //! returns the raw-command skip log so generate.das can fold it into the skip-ratchet report
 def public emit_all(reg : VkRegistry; em : EmitModel; out_dir : string) : array<string> {
-    var header_lines : array<string>
-    var enum_init_fns : array<string>
-    var struct_add_fns : array<string>
-    var struct_fill_fns : array<string>
-    var func_init_fns : array<string>
-    var skip_log : array<string>
+    var header_lines, enum_init_fns, struct_add_fns, struct_fill_fns, func_init_fns, skip_log : array<string>
     emit_consts(reg, out_dir)
     emit_enums(reg, em, out_dir, enum_init_fns, header_lines)
     emit_flags(reg, em, out_dir, header_lines)

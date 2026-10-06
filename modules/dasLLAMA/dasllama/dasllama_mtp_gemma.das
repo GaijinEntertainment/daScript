@@ -536,9 +536,7 @@ def gemma_draft_step_cpu(t : Model; var s : Session; dr : GemmaDrafter; tok : in
     kvrow |> reserve_resize(maxhs)
     var scores : array<float>
     scores |> reserve_resize(anchor + 1l)
-    var cosr : array<float>
-    var sinr : array<float>
-    var ff : array<float>
+    var cosr, sinr, ff : array<float>
 
     for (l in range64(dr.n_layers)) {
         let hs = dr.hs[l]

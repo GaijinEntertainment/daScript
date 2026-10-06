@@ -117,8 +117,7 @@ def test_parity_last_layer_slice(t : T?) {
             for (i in range(int(plen))) {
                 prompt[i] = 1000l + ((int64(i) * 17l + 999l * 131l) % 5000l)
             }
-            var want : array<float>
-            var got : array<float>
+            var want, got : array<float>
             var served_whole = false
             var served_slice = false
             let splitk_before = g_cm2_splitk

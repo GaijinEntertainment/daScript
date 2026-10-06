@@ -140,8 +140,7 @@ def private build_pruned_array_walk(srcName : string; elemType : TypeDeclPtr; bi
     let curName = qn("jcur", at)
     let defName = qn("jdef", at)
     var declT = strip_const_ref(clone_type(elemType))
-    var prelude : array<Expression?>
-    var inner : array<Expression?>
+    var prelude, inner : array<Expression?>
     build_json_materializer(body, bindName, declT, defName, curName, at, prelude, inner)
     var loop = build_json_array_walk(srcName, curName, inner, breakGuard)
     return hoist_prelude(prelude, loop, at)

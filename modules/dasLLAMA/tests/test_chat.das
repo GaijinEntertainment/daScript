@@ -1080,8 +1080,7 @@ def test_chat_inline_span(t : T?) {
             var c <- create_chat_renderer_(m)
             add_user(c, USR)
             c.n_audio_rows = 3l
-            var inscope head : array<int64>
-            var inscope tail : array<int64>
+            var inscope head, tail : array<int64>
             render_turn_audio_(m, c, head, tail, before)
             var inscope ids <- [for (r in range64(3l)); media_position_id(key, r)]
             var inscope want := head
@@ -1259,8 +1258,7 @@ def private audio_splice_cell(t : T?; m : Model; before : int) {
     var c <- create_chat_renderer_(m)
     add_user(c, USR)
     c.n_audio_rows = 3l
-    var inscope head : array<int64>
-    var inscope tail : array<int64>
+    var inscope head, tail : array<int64>
     render_prompt_audio(m, c, head, tail, before)
     let h = detok(m, head)
     let tl = detok(m, tail)
@@ -1287,8 +1285,7 @@ def test_chat_audio_markers(t : T?) {
         var c <- create_chat_renderer_(m)
         add_user(c, USR)
         c.n_audio_rows = 3l   // planted span: render only brackets it, the splice happens at eval
-        var head : array<int64>
-        var tail : array<int64>
+        var head, tail : array<int64>
         render_prompt_audio(m, c, head, tail)
         to_log(LOG_INFO, "voxtral audio-turn eyeball: '{detok(m, head)}' [audio x3] '{detok(m, tail)}'\n")
         let ba = special_id(m, "[BEGIN_AUDIO]")
@@ -1318,8 +1315,7 @@ def test_chat_audio_markers(t : T?) {
         var c <- create_chat_renderer_(m)
         add_user(c, USR)
         c.n_audio_rows = 3l
-        var head : array<int64>
-        var tail : array<int64>
+        var head, tail : array<int64>
         render_prompt_audio(m, c, head, tail)
         to_log(LOG_INFO, "qwen2audio audio-turn eyeball: '{detok(m, head)}' [audio x3] '{detok(m, tail)}'\n")
         let bos = special_id(m, "<|audio_bos|>")

@@ -51,8 +51,7 @@ def test_store_and_load_string(t : T?) {
     t |> run("multiple independent string keys") @(t : T?) {
         live_store_string("string_multi_a", "alpha")
         live_store_string("string_multi_b", "beta")
-        var la : string
-        var lb : string
+        var la, lb : string
         live_load_string("string_multi_a", la)
         live_load_string("string_multi_b", lb)
         t |> equal(la, "alpha")

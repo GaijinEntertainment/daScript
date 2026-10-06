@@ -338,8 +338,7 @@ def private pk_gemv_fixture(quad : bool) : PkGemvFix {
 def private pk_gemv_wants(f : PkGemvFix) : PkGemvRows {
     let nin = PG_NIN
     let nout = PG_NOUT
-    var d_plain : array<float>
-    var d_norm : array<float>
+    var d_plain, d_norm : array<float>
     with_dasllama_jobque_() {
         linear_vec(f.lin, f.x, d_plain)
         var xn := f.x
@@ -459,8 +458,7 @@ def test_vkt_pk_rope(t0 : T?) {
             let nk = PO_T * PO_D
             let half = PO_DH / 2
             let x <- row_fill(n, 41, 7, 0.05, 2.1)
-            var cos_tab : array<float>
-            var sin_tab : array<float>
+            var cos_tab, sin_tab : array<float>
             let no_freqs : array<float>
             build_rope_tabs(cos_tab, sin_tab, PO_THETA, 1.0, 1.0, no_freqs, false, 0l, int64(PO_CAP), int64(PO_DH))
             t |> equal(length(cos_tab), PO_CAP * half, "tts_pk_rope: the tables carry {PO_CAP} positions of {half} angles")
@@ -550,8 +548,7 @@ def private pk_fused_fixture() : PkFusedFix {
     f.lboff = put_run(f.slab, f.norm.b)
     f.aoff = put_run(f.slab, f.scale)
     f.slab |> push_from(poison_plane(SLAB_GAP))
-    var cos_tab : array<float>
-    var sin_tab : array<float>
+    var cos_tab, sin_tab : array<float>
     let no_freqs : array<float>
     build_rope_tabs(cos_tab, sin_tab, PO_THETA, 1.0, 1.0, no_freqs, false, 0l, int64(PF_CAP), int64(PF_DH))
     f.coff = put_run(f.tabs, cos_tab)
@@ -571,9 +568,7 @@ def test_vkt_pk_gemv_fused(t0 : T?) {
             let d = PF_D
             var inscope f <- pk_fused_fixture()
             var xn := f.x
-            var qkv_row : array<float>
-            var dp : array<float>
-            var dn : array<float>
+            var qkv_row, dp, dn : array<float>
             with_dasllama_jobque_() {
                 layernorm_rows(xn, 1l, int64(d), f.norm, PG_EPS)
                 linear_vec(f.qkv, xn, qkv_row)

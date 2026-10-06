@@ -25,10 +25,7 @@ def test_matmul_threaded(t : T?) {
     t |> run("threaded matmul matches scalar ground truth") @(t : T?) {
         let n = 288
         let d = 8192
-        var w : array<float>
-        var x : array<float>
-        var yref : array<float>
-        var ypar : array<float>
+        var w, x, yref, ypar : array<float>
         fill(w, n * d)
         fill(x, n)
         yref |> resize(d)
@@ -56,9 +53,7 @@ def test_matmul_q8q8_group3(t : T?) {
         let d0 = 96l
         let d1 = 32l
         let d2 = 32l
-        var wg0 : array<float>
-        var wg1 : array<float>
-        var wg2 : array<float>
+        var wg0, wg1, wg2 : array<float>
         fill(wg0, int(d0 * n))
         fill(wg1, int(d1 * n))
         fill(wg2, int(d2 * n))
@@ -84,12 +79,7 @@ def test_matmul_q8q8_group3(t : T?) {
         xq |> resize(int(n))
         xs |> resize(int(n / 32l))
         quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
-        var y0 : array<float>
-        var y1 : array<float>
-        var y2 : array<float>
-        var r0 : array<float>
-        var r1 : array<float>
-        var r2 : array<float>
+        var y0, y1, y2, r0, r1, r2 : array<float>
         y0 |> resize(int(d0)); y1 |> resize(int(d1)); y2 |> resize(int(d2))
         r0 |> resize(int(d0)); r1 |> resize(int(d1)); r2 |> resize(int(d2))
         with_dasllama_jobque_() {

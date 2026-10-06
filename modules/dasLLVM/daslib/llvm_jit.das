@@ -469,8 +469,7 @@ class public LlvmJitVisitor : AstVisitor {
 
 // Function
     def build_noalias_list(annotations : AnnotationList) : tuple<noalias : table<string>; nocapture : table<string>> {
-        var noalias : table<string>
-        var nocapture : table<string>
+        var noalias, nocapture : table<string>
         // Skip user hints entirely on wasm32 — host-LLVM wasm codegen has had
         // miscompiles around them. Tracked alongside the alwaysinline gotcha.
         if (g_target_is_wasm) return <- (noalias <- noalias, nocapture <- nocapture)
@@ -5517,8 +5516,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def override visitExprInvoke(expr : ExprInvoke?) : ExpressionPtr {
         assume blockT = expr.arguments[0]._type
-        var cmresEval : LLVMOpaqueValue?
-        var cmresEvalPtr : LLVMOpaqueValue?
+        var cmresEval, cmresEvalPtr : LLVMOpaqueValue?
         if (isCMRESType(expr._type)) {
             if (call2cmres |> key_exists(expr)) {
                 cmresEval = call2cmres[get_expr_ptr(expr)]
@@ -6721,8 +6719,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def make_block_function(blockExpr : ExpressionPtr; captured : array<CapturedVariable>; first_field_index : int; captureType : LLVMOpaqueType?) : tuple<func : LLVMOpaqueValue?; impl : LLVMOpaqueValue?> {
         var astVisitor = new LlvmJitVisitor(prog, jit_context, types, uid, flags, mode, g_di_builder, attributes)
-        var result : LLVMOpaqueValue?
-        var impl : LLVMOpaqueValue?
+        var result, impl : LLVMOpaqueValue?
         make_visitor(*astVisitor) $(mv_adapter) {
             astVisitor.adapter = mv_adapter
             let fmna = (*astVisitor)->pre_make_block(unsafe(reinterpret<ExprBlock?>(blockExpr)), thisFunc, captureType)
@@ -7740,8 +7737,7 @@ def private add_ctor_dtor_function(ctor_dtor : array<tuple<LLVMOpaqueValue?, LLV
     let dtorStructType = StructType(types, dtorTypes)
 
     let n_entries = length(ctor_dtor)
-    var ctorFields : array<LLVMOpaqueValue?>
-    var dtorFields : array<LLVMOpaqueValue?>
+    var ctorFields, dtorFields : array<LLVMOpaqueValue?>
     ctorFields |> reserve(n_entries * 3)
     dtorFields |> reserve(n_entries * 3)
 

@@ -1900,8 +1900,7 @@ def min(src : array<auto(TT)>; selector) : typedecl(selector(type<TT>)) - const 
 
 [unused_argument(tt)]
 def private min_max_impl(var src; tt : auto(TT)) : tuple<TT -& -const, TT -& -const> {
-    var minn : TT -& -const
-    var maxx : TT -& -const
+    var minn, maxx : TT -& -const
     var first : bool = true
     for (x in src) {
         if (first) {
@@ -1940,8 +1939,7 @@ def min_max(src : array<auto(TT)>) : tuple<TT -& -const, TT -& -const> {
 
 [unused_argument(tt)]
 def private min_max_by_impl(var src; tt : auto(TT); key) : tuple<TT -& -const, TT -& -const> {
-    var minn : TT -& -const
-    var maxx : TT -& -const
+    var minn, maxx : TT -& -const
     var first : bool = true
     for (x in src) {
         if (first) {
@@ -2140,9 +2138,7 @@ def average(src : array<auto(TT)>; selector) : double {
 
 [unused_argument(tt)]
 def private min_max_average_impl(var src; tt : auto(TT)) : tuple<TT -const -&, TT -const -&, TT -const -&> {
-    var minn : TT -const -&
-    var maxx : TT -const -&
-    var total : TT -const -&
+    var minn, maxx, total : TT -const -&
     var count : uint64
     var first : bool = true
     for (x in src) {
@@ -2187,9 +2183,7 @@ def min_max_average(src : array<auto(TT)>) : tuple<TT -const -&, TT -const -&, T
 
 [unused_argument(tt)]
 def private min_max_average_by_impl(var src; tt : auto(TT); key) : tuple<TT -const -&, TT -const -&, TT -const -&> {
-    var minn : TT -const -&
-    var maxx : TT -const -&
-    var total : TT -const -&
+    var minn, maxx, total : TT -const -&
     var count : uint64
     var first : bool = true
     for (x in src) {
@@ -3206,8 +3200,7 @@ def repeat(element : auto(TT); count : int) : iterator<TT -const -&> {
 [unused_argument(tt)]
 def private sequence_equal_impl(var first, second; tt : auto(TT)) : bool {
     static_if (typeinfo can_copy(type<TT -const -&>)) {
-        var f : TT -const -&
-        var s : TT -const -&
+        var f, s : TT -const -&
         while (true) {
             let has_f = next(first, f)
             let has_s = next(second, s)
@@ -3259,8 +3252,7 @@ def sequence_equal(first : array<TT>; var second : iterator<auto(TT) const>) : b
 [unused_argument(tt)]
 def private sequence_equal_by_impl(var first, second; tt : auto(TT); key : block<(arg : TT -&) : auto>) : bool {
     static_if (typeinfo can_copy(type<TT -const -&>)) {
-        var f : TT -const -&
-        var s : TT -const -&
+        var f, s : TT -const -&
         while (true) {
             let has_f = next(first, f)
             let has_s = next(second, s)

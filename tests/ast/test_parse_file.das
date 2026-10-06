@@ -73,8 +73,7 @@ def private check_make_nodes(t : T?; var fn : FunctionPtr; lines : array<string>
         return
     }
     var inits : array<ExpressionPtr>
-    var initEndLine : array<int>
-    var initEndColumn : array<int>
+    var initEndLine, initEndColumn : array<int>
     collect_inits(blk, inits, initEndLine, initEndColumn)
     t |> equal(length(inits), 4, "four initializers in make_them")
     if (length(inits) != 4) return

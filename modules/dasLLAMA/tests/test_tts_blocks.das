@@ -121,8 +121,7 @@ def private conv_case(t : T?; name : string; cin, cout, k, stride, pad, dil : in
     var inscope x_ct : array<float>
     rand_fill(r, x_ct, cin * t_in, 2.0)
     var inscope x_abs <- abs_of(x_ct)
-    var inscope want : array<float>
-    var inscope env : array<float>
+    var inscope want, env : array<float>
     conv1d(c, x_ct, t_in, want)
     conv1d(e, x_abs, t_in, env)
     var inscope x_rows : array<float>
@@ -235,10 +234,7 @@ def private pad_and_polar_case(tc : T?) {
             p_rows[f * 32l + b] = p_ct[b * t + f]
         }
     }
-    var inscope re : array<float>
-    var inscope im : array<float>
-    var inscope re2 : array<float>
-    var inscope im2 : array<float>
+    var inscope re, im, re2, im2 : array<float>
     polar_to_rect(p_ct, bins, t, re, im)
     polar_to_rect_rows(p_rows, 32l, bins, t, re2, im2)
     var inscope env2 : array<float>
@@ -262,8 +258,7 @@ def private linear_case(tc : T?; nin, nout : int64) {
     var inscope x : array<float>
     rand_fill(r, x, t * nin, 2.0)
     var inscope x_abs <- abs_of(x)
-    var inscope want : array<float>
-    var inscope env : array<float>
+    var inscope want, env : array<float>
     linear_rows(l, x, t, want)   // no wt yet: the dot form
     linear_rows(e, x_abs, t, env)
     linear_prepare(l)
@@ -290,8 +285,7 @@ def private pool_and_nearest_case(tc : T?) {
     var inscope x_ct : array<float>
     rand_fill(r, x_ct, c * t, 2.0)
     var inscope x_abs <- abs_of(x_ct)
-    var inscope want : array<float>
-    var inscope env : array<float>
+    var inscope want, env : array<float>
     conv1d(pool, x_ct, t, want)
     conv1d(e, x_abs, t, env)
     var inscope x_rows : array<float>
@@ -339,8 +333,7 @@ def private pad_case(tc : T?) {
         let j = i % cs
         xp[i] = j < cin ? x[(i / cs) * cin + j] : 0.0
     }
-    var inscope y : array<float>
-    var inscope yp : array<float>
+    var inscope y, yp : array<float>
     conv1d_rows(c, x, t, y)
     conv1d_rows(cp, xp, t, yp)
     var inscope env : array<float>
@@ -392,9 +385,7 @@ def private attention_case(tc : T?) {
     let heads = 4l
     let dh = 16l
     let hidden = heads * dh
-    var inscope q : array<float>
-    var inscope k : array<float>
-    var inscope v : array<float>
+    var inscope q, k, v : array<float>
     rand_fill(r, q, t * hidden, 1.0)
     rand_fill(r, k, t * hidden, 1.0)
     rand_fill(r, v, t * hidden, 2.0)
@@ -453,8 +444,7 @@ def private conv_case_q8(t : T?; name : string; cin, cout, k, pad, dil : int64) 
     var inscope x_ct : array<float>
     rand_fill(r, x_ct, cin * t_in, 2.0)
     var inscope x_abs <- abs_of(x_ct)
-    var inscope want : array<float>
-    var inscope env : array<float>
+    var inscope want, env : array<float>
     conv1d(c, x_ct, t_in, want)
     conv1d(e, x_abs, t_in, env)
     var inscope x_rows : array<float>
@@ -480,8 +470,7 @@ def private linear_case_q8(tc : T?; nin, nout : int64) {
     var inscope x : array<float>
     rand_fill(r, x, t * nin, 2.0)
     var inscope x_abs <- abs_of(x)
-    var inscope want : array<float>
-    var inscope env : array<float>
+    var inscope want, env : array<float>
     linear_rows(l, x, t, want)
     linear_rows(e, x_abs, t, env)
     var lq := l
@@ -516,8 +505,7 @@ def private linear_case_kq(t : T?; nin, nout : int64; decode, repack : bool) {
     let nt = decode ? 1l : T_ROWS
     var l = TtsLinear(nin = nin, nout = nout)
     rand_fill(r, l.b, nout, 0.5)
-    var kq : array<uint8>
-    var ks : array<uint8>
+    var kq, ks : array<uint8>
     build_kq_region(4, kq, ks, nout, nin, 0x51ED270Bu)
     var inscope x : array<float>
     rand_fill(r, x, nt * nin, 2.0)
@@ -548,8 +536,7 @@ def private kq_width_refusal(t : T?) {
     var why = "no panic"
     try {
         var l = TtsLinear(nin = 100l, nout = 8l)
-        var kq : array<uint8>
-        var ks : array<uint8>
+        var kq, ks : array<uint8>
         linear_take_kq(l, 4, kq, ks, false)
     } recover {
         why = this_context().last_exception |> rtrim
@@ -576,8 +563,7 @@ def private pad_case_q8(tc : T?) {
     var inscope x_ct : array<float>
     rand_fill(r, x_ct, cin * t, 2.0)
     var inscope x_abs <- abs_of(x_ct)
-    var inscope want : array<float>
-    var inscope env : array<float>
+    var inscope want, env : array<float>
     conv1d(c, x_ct, t, want)
     conv1d(e, x_abs, t, env)
     var inscope x_rows : array<float>
@@ -739,8 +725,7 @@ def private align_expand_case(tc : T?) {
     for (d in dur) {
         d = 1 + int(rng_uniform(r) * 4.0)
     }
-    var inscope want : array<float>
-    var inscope got : array<float>
+    var inscope want, got : array<float>
     let frames = align_expand_channels(x_ct, c, t, dur, want)
     let got_frames = align_expand_rows(x_rows, t, c, dur, got)
     tc |> equal(got_frames, frames, "align_expand_rows: the rows form's frame count")
@@ -839,8 +824,7 @@ def private split_conv_case(name : string; cin, cout, k, stride, pad, dil : int6
     rand_fill(r, x_ct, cin * t_in, 2.0)
     var inscope x_rows : array<float>
     transpose_ct(x_ct, cin, t_in, x_rows)
-    var inscope one : array<float>
-    var inscope many : array<float>
+    var inscope one, many : array<float>
     at_split(axis, true) {
         conv1d_rows(cr, x_rows, t_in, one)
     }
@@ -886,14 +870,11 @@ def private split_attention_case(axis : SplitAxis) : SplitCase {
     let t = 401l
     let heads = 4l
     let hidden = heads * 16l
-    var inscope q : array<float>
-    var inscope k : array<float>
-    var inscope v : array<float>
+    var inscope q, k, v : array<float>
     rand_fill(r, q, t * hidden, 1.0)
     rand_fill(r, k, t * hidden, 1.0)
     rand_fill(r, v, t * hidden, 2.0)
-    var inscope one : array<float>
-    var inscope many : array<float>
+    var inscope one, many : array<float>
     at_split(axis, true) {
         attention_rows(q, k, v, t, hidden, heads, one)
     }
@@ -913,8 +894,7 @@ def private split_linear_case(nin, nout : int64; axis : SplitAxis) : SplitCase {
     linear_prepare(l)
     var inscope x : array<float>
     rand_fill(r, x, t * nin, 2.0)
-    var inscope one : array<float>
-    var inscope many : array<float>
+    var inscope one, many : array<float>
     at_split(axis, true) {
         linear_rows(l, x, t, one)
     }
@@ -1070,8 +1050,7 @@ let CATT_HEADS = 4l
 // a cache filled with `n` random positions, plus the q rows of the last `t` of them
 def private catt_fixture(var r : TtsRng; n, t : int64; var kc : TtsKvCache; var q : array<float>) {
     kv_cache_init(kc, CATT_HEADS, CATT_HIDDEN / CATT_HEADS, n + 8l)
-    var inscope k : array<float>
-    var inscope v : array<float>
+    var inscope k, v : array<float>
     rand_fill(r, k, n * CATT_HIDDEN, 1.0)
     rand_fill(r, v, n * CATT_HIDDEN, 1.0)
     kv_cache_append(kc, k, v, n, CATT_HIDDEN)
@@ -1087,8 +1066,7 @@ def private catt_case(t : T?; name : string; n, nt, context : int64; seed : uint
     var inscope kc = TtsKvCache()
     var inscope q : array<float>
     catt_fixture(r, n, nt, kc, q)
-    var inscope want : array<float>
-    var inscope got : array<float>
+    var inscope want, got : array<float>
     attention_causal_ref(q, nt, CATT_HIDDEN, context, kc, want)
     attention_causal_rows(q, nt, CATT_HIDDEN, context, kc, got)
     var inscope env <- plane_of(length(want), 1.0)
@@ -1105,8 +1083,7 @@ def private catt_split_case(name : string; n, t : int64; axis : SplitAxis) : Spl
     var inscope kc = TtsKvCache()
     var inscope q : array<float>
     catt_fixture(r, n, t, kc, q)
-    var inscope one : array<float>
-    var inscope many : array<float>
+    var inscope one, many : array<float>
     at_split(axis, true) {
         attention_causal_rows(q, t, CATT_HIDDEN, 0l, kc, one)
     }
@@ -1254,8 +1231,7 @@ def test_elementwise_split_invariance(t : T?) {
         rng_seed(r, 23ul)
         for (axis in [SplitAxis.lane_cap, SplitAxis.worker_limit]) {
             t |> success(shaped_lanes(axis, true) < shaped_lanes(axis, false), "the {axis_name(axis)} axis moves the split")
-            var inscope e1 : array<float>
-            var inscope e2 : array<float>
+            var inscope e1, e2 : array<float>
             rand_fill(r, e1, 8192l, 6.0)
             e2 := e1
             at_split(axis, true) {
@@ -1266,8 +1242,7 @@ def test_elementwise_split_invariance(t : T?) {
             }
             let se = split_diff("elu_rows @ {axis_name(axis)}", e1, e2)
             t |> equal(se.diffs, 0, "{se.name}: elements that differ between the legs")
-            var inscope l1 : array<float>
-            var inscope l2 : array<float>
+            var inscope l1, l2 : array<float>
             rand_fill(r, l1, 64l * 128l, 1.0)
             l2 := l1
             var inscope ls : array<float>

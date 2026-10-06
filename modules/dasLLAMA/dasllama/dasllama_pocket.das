@@ -339,8 +339,7 @@ def private read_linear(m : GGUFMeta; bytes : array<uint8> | #; prefix : string;
     if (g_stage_native && gguf_tensor_type(m, wname) == GGML_TYPE_Q4_K) {
         // the kq lane: the file's own K-quant planes, straight into the layer (the width rule is the layer's own)
         let n = l.nout * l.nin
-        var inscope kq : array<uint8>
-        var inscope ks : array<uint8>
+        var inscope kq, ks : array<uint8>
         kq |> reserve_resize(n / 256l * kq_qsb(KqFmt.k4))
         ks |> reserve_resize(n / 256l * kq_ssb(KqFmt.k4))
         gguf_transcode_kq(m, bytes, wname, KqFmt.k4, kq, ks, 0l, n)
@@ -1158,8 +1157,7 @@ def private marker_ids(m : PocketModel; s : string) : array<int64> {
 
 // a boundary that sits right after a decimal point's period is no sentence end
 def private decimal_boundary(m : PocketModel; ids : array<int64>; at : int) : bool {
-    var inscope head : array<int64>
-    var inscope tail : array<int64>
+    var inscope head, tail : array<int64>
     head |> reserve(at)
     tail |> reserve(length(ids) - at)
     for (i, id in count(), ids) {

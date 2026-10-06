@@ -26,9 +26,7 @@ def fillf(var a : array<float>; cnt : int64) {
 
 // Bench one shape (W is [d rows x n cols], x is [n]) across kernels and num_jobs splits.
 def bench_shape(b : B?; name : string; n, d : int64; hw : int64) {
-    var w : array<float>
-    var x : array<float>
-    var y : array<float>
+    var w, x, y : array<float>
     fillf(w, n * d)
     fillf(x, n)
     y |> resize(d)
@@ -109,9 +107,7 @@ def bench_qkv(b : B?; hw : int64) {
     let dim = 2048l
     let kv = 256l
     let n = dim
-    var wQ : array<float>
-    var wK : array<float>
-    var wV : array<float>
+    var wQ, wK, wV : array<float>
     fillf(wQ, dim * n)
     fillf(wK, kv * n)
     fillf(wV, kv * n)
@@ -135,9 +131,7 @@ def bench_qkv(b : B?; hw : int64) {
     xq |> resize(n)
     xs |> resize(n / 32l)
     quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
-    var yQ : array<float>
-    var yK : array<float>
-    var yV : array<float>
+    var yQ, yK, yV : array<float>
     yQ |> resize(dim)
     yK |> resize(kv)
     yV |> resize(kv)

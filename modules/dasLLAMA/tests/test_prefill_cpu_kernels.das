@@ -57,8 +57,7 @@ def private alloc_row_scratch(var q1 : array<int8>; var s1 : array<float>; var b
 
 def private kq_batch_gate(t : T?; fmt : int; n, d, ntok : int64) {
     let nsb = n / 256l
-    var kq : array<uint8>
-    var ks : array<uint8>
+    var kq, ks : array<uint8>
     build_kq_region(fmt, kq, ks, d, n, 0x51ED270Bu)
     var a <- build_q8k_acts(ntok, n, ACTS_WAVE)
     var want : array<float>
@@ -222,10 +221,8 @@ def private xbf16_two_contexts(t : T?; n : int64; rounds : int) {
     for (i in range64(n)) {
         rowsDiffer += want[i] != want[n + i] ? 1 : 0
     }
-    var started : int[2]
-    var done : int[2]
-    var bad : int64[2]
-    var plane : int64[2]
+    var started, done : int[2]
+    var bad, plane : int64[2]
     with_job_que() {
         with_wait_group(2) $(wg) {
             unsafe {
@@ -266,8 +263,7 @@ def private walk_thread(lane : int; fmt : int; n, d, ntok : int64; rounds : int;
     new_thread() @() {
         set_single_thread_(true)
         pin_kernel_backend(gen_backend_name())
-        var kq : array<uint8>
-        var ks : array<uint8>
+        var kq, ks : array<uint8>
         var a <- walk_inputs(fmt, n, d, ntok, walk_seed(lane), kq, ks)
         var y : array<float>
         y |> resize(ntok * d)
@@ -314,8 +310,7 @@ def private walk_two_contexts(t : T?; fmt : int; n, d, ntok : int64; rounds : in
     var want : array<float>
     want |> resize(2l * ntok * d)
     for (lane in range(2)) {
-        var kq : array<uint8>
-        var ks : array<uint8>
+        var kq, ks : array<uint8>
         var a <- walk_inputs(fmt, n, d, ntok, walk_seed(lane), kq, ks)
         var y : array<float>
         y |> resize(ntok * d)
@@ -336,8 +331,7 @@ def private walk_two_contexts(t : T?; fmt : int; n, d, ntok : int64; rounds : in
         lanesDiffer += want[i] != want[ntok * d + i] ? 1 : 0
         finite += is_finite(want[i]) ? 1 : 0
     }
-    var started : int[2]
-    var done : int[2]
+    var started, done : int[2]
     var bad : int64[2]
     var first = fixed_array(-1l, -1l)
     with_job_que() {
@@ -416,8 +410,7 @@ def private walk_slots(t : T?; fmt : int; n, d, ntok : int64; rounds : int) {
         t |> skip("{gen_backend_name()} carries no kq batch kernel on this box")
         return
     }
-    var kq : array<uint8>
-    var ks : array<uint8>
+    var kq, ks : array<uint8>
     var a <- walk_inputs(fmt, n, d, ntok, walk_seed(0), kq, ks)
     slots_gate(t, "{fmt_tag(fmt)} batch walk (n={int(n)})", ntok, d, rounds) $(var y : array<float>) {
         matmul_kq_batch(fmt, y, kq, ks, 0l, a.xq, a.xs, a.xbs, n, d, ntok)
@@ -562,8 +555,7 @@ def private kq_batch_groupn_gate(t : T?; fmt : int; n, d : int64; longRuns : boo
         nk += c
     }
     let nsb = n / 256l
-    var kq : array<uint8>
-    var ks : array<uint8>
+    var kq, ks : array<uint8>
     build_kq_region(fmt, kq, ks, nreg * d, n, 0x7F4A7C15u)
     var a <- build_q8k_acts(nk, n, ACTS_WAVE)
     var offs : array<int64>
@@ -665,8 +657,7 @@ def private repack_seam(t : T?; fmt : int; kq : array<uint8>; ks : array<uint8>;
 
 def private repack_gate(t : T?; fmt : int; n, d : int64) {
     let nsb = n / 256l
-    var kq : array<uint8>
-    var ks : array<uint8>
+    var kq, ks : array<uint8>
     build_kq_region(fmt, kq, ks, d, n, 0x9E3779B9u)
     var a <- build_q8k_acts(1l, n, ACTS_WAVE)
     var want : array<float>

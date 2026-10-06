@@ -526,8 +526,7 @@ def test_integer_dot_gpu(t : T?) {
     let n = 256
     // packed 4x int8 words, both signs in every lane position; expected via the SAME sdot4
     // builtin's real CPU body (CPU == GPU exactly — integer math)
-    var wa : array<uint8>
-    var wb : array<uint8>
+    var wa, wb : array<uint8>
     wa |> resize(n * 4)
     wb |> resize(n * 4)
     var expected : array<int>

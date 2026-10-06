@@ -130,8 +130,7 @@ def test_move_operator(t : T?) {
         t |> equal(box.moves, 2)
     }
     t |> run("the raw move is the builtin move") @(t : T?) {
-        var a : Box
-        var b : Box
+        var a, b : Box
         b.moves = 5
         a !<- b // nolint:PERF030 a is fresh; the raw move has no declaration form to fold into
         t |> equal(a.moves, 5)
@@ -387,8 +386,7 @@ def with_finally_early_out(src : Counted; bail : bool) : int {
 [test]
 def test_more_compiler_made_copies(t : T?) {
     t |> run("the raw move skips a same-type operator <- that the plain move takes") @(t : T?) {
-        var a : Box
-        var b : Box
+        var a, b : Box
         b.moves = 5
         a !<- b // nolint:PERF030 a is fresh; the raw move has no declaration form to fold into
         t |> equal(a.moves, 5)

@@ -29,8 +29,7 @@ def main {   // nolint:STYLE038 — flat microbench driver: synthetic planes, th
     let ks_bytes = int64(D) * nsb * 32l
     print("mr={mr}, nsb={nsb}, planes: kq {kq_bytes / 1024l}KB + ks {ks_bytes / 1024l}KB\n")
 
-    var kq : array<uint8>
-    var ks : array<uint8>
+    var kq, ks : array<uint8>
     kq |> resize(kq_bytes)
     ks |> resize(ks_bytes)
     var seed = 0x1234u

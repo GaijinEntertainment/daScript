@@ -1747,8 +1747,7 @@ def private ts_pk_voice_rebuild(vs : PocketVoiceState; tf : PocketTransformer) :
     v.k |> reserve(length(vs.caches))
     v.v |> reserve(length(vs.caches))
     for (kc in vs.caches) {
-        var bk : TsRows
-        var bv : TsRows
+        var bk, bv : TsRows
         if (!ts_rows_alloc(bk, cap * d * 4l, TS_PK_KV_BIT) || !ts_rows_alloc(bv, cap * d * 4l, TS_PK_VV_BIT)) {
             ts_rows_release(bk)
             ts_pk_voice_drop()

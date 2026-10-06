@@ -80,9 +80,7 @@ def test_markdown_view_event_driven_interactions(t : T?) { // nolint:STYLE038
 
         // GFM column alignment is model data, but this verifies that the live
         // renderer actually converts it into per-line screen offsets.
-        var table_left : JsonValue?
-        var table_center : JsonValue?
-        var table_right : JsonValue?
+        var table_left, table_center, table_right : JsonValue?
         let table_aligned = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
             table_left = markdown_fragment(app, "Script")
             table_center = markdown_fragment(app, "Sample")

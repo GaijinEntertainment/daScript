@@ -227,8 +227,7 @@ def fft_in_place(var re, im : array<float>) {
 def analyze_spectrum(name : string; pcm : array<float>) {
     // mix stereo to mono, take first 4096 samples for FFT
     let fft_size = 4096
-    var re : array<float>
-    var im : array<float>
+    var re, im : array<float>
     re |> resize(fft_size)
     im |> resize(fft_size)
     let nframes = min(length(pcm) / 2, fft_size)

@@ -194,8 +194,7 @@ def private build_pruned_dom_walk(srcName : string; var nameArg : Expression?; e
     let curName = qn("xcur", at)
     let defName = qn("xdef", at)
     var declT = strip_const_ref(clone_type(elemType))
-    var prelude : array<Expression?>
-    var inner : array<Expression?>
+    var prelude, inner : array<Expression?>
     build_xml_materializer(body, bindName, declT, defName, curName, at, prelude, inner)
     var loop = build_xml_dom_walk(srcName, nameArg, curName, qn("xch", at), inner, breakGuard, false, at)
     return hoist_prelude(prelude, loop, at)

@@ -49,8 +49,7 @@ struct private RepackField {
 //! Runs `blk` over a copy of the two planes: the interleave rewrites every byte of a group region
 //! in place, so rows read from the copy while their slots are written.
 def private repack_in_place(var kq : uint8?; var ks : uint8?; qbytes, sbytes : int64; blk : block<(tqp : uint8 const?; tsp : uint8 const?) : void>) {
-    var tq : array<uint8>
-    var ts : array<uint8>
+    var tq, ts : array<uint8>
     tq |> reserve(qbytes)
     tq |> resize(qbytes)
     ts |> reserve(sbytes)

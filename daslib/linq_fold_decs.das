@@ -309,8 +309,7 @@ def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string
             return emit_counter_lane(adapter, accName, finalBind, names, null, null, null, loopBody, at, termName == "long_count")
         }
         if (chainInfo.selectCount == 0 || elementType == null) return null
-        var noBinds : array<Expression?>
-        var noPre : array<Expression?>
+        var noBinds, noPre : array<Expression?>
         return emit_accumulator_lane(termName, adapter, null, null, clone_expression(rangeInfo.postTakeWhereCond),
             noBinds, noPre, elementType, accName, finalBind, names, null, null, null, null, at)
     }
@@ -329,8 +328,7 @@ def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string
         var elementType = clone_type(chainInfo.finalType)
         let names <- make_range_names(at)
         var adapter = make_decs_term_adapter(bridge, chainInfo, rangeInfo, calls, rangeInfo.chainEnd)
-        var noBinds : array<Expression?>
-        var noPre : array<Expression?>
+        var noBinds, noPre : array<Expression?>
         return emit_early_exit_lane(termName, adapter, null, null, clone_expression(rangeInfo.postTakeWhereCond),
             noBinds, noPre, elementType, termCall, chainInfo.finalBind, names, null, null, null, null, at)
     }
@@ -344,10 +342,7 @@ def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string
         $i(bufName) |> push_clone($i(finalBind))
     }
     pushExpr = wrap_with_condition(pushExpr, clone_expression(rangeInfo.postTakeWhereCond))
-    var prologueStmts : array<Expression?>
-    var reserveStmts : array<Expression?>
-    var preCondStmts : array<Expression?>
-    var tailStmts : array<Expression?>
+    var prologueStmts, reserveStmts, preCondStmts, tailStmts : array<Expression?>
     tailStmts |> push <| qmacro_expr() {
         return <- $i(bufName)
     }

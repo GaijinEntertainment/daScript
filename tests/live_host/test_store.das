@@ -68,8 +68,7 @@ def test_store_and_load(t : T?) {
         var b : array<uint8>
         b |> push(uint8(22))
         live_store_bytes("multi_b", b)
-        var la : array<uint8>
-        var lb : array<uint8>
+        var la, lb : array<uint8>
         live_load_bytes("multi_a", la)
         live_load_bytes("multi_b", lb)
         t |> equal(int(la[0]), 11)

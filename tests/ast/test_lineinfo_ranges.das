@@ -181,8 +181,7 @@ def test_lineinfo_ranges_gen1_eof(t : T?) {
         let nlPath = unsafe(nlFile.value)
         let eofPath = unsafe(eofFile.value)
         t |> success(fwrite(nlPath, "{body}\n") && fwrite(eofPath, body), "temporary fixtures written")
-        var nlSpans : array<string>
-        var eofSpans : array<string>
+        var nlSpans, eofSpans : array<string>
         let nlOk = gen1_block_spans(nlPath, nlSpans)
         let eofOk = gen1_block_spans(eofPath, eofSpans)
         remove(nlPath)

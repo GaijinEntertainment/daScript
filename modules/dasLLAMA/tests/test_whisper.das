@@ -92,8 +92,7 @@ def test_gelu_lut_batch_exhaustive(t : T?) {
         // every f16 pattern as an input row; the batch (table) form must reproduce the
         // computed form bit-for-bit — the table entries ARE the computed middle branch,
         // this proves the branch structure and clamps line up too
-        var a : array<float>
-        var b : array<float>
+        var a, b : array<float>
         a |> resize(65536)
         for (h in range(65536)) {
             a[h] = f16_to_f32(uint(h))
@@ -125,8 +124,7 @@ def test_gelu_lut_batch_exhaustive(t : T?) {
         // (-10.5, 10.5) does, including the values that round UP to the +-10.0 boundary
         // patterns (the bug class: unbuilt table entry read through the v < 10.0 branch)
         let n = 200001
-        var a : array<float>
-        var b : array<float>
+        var a, b : array<float>
         a |> resize(n)
         b |> resize(n)
         for (i in range(n)) {
@@ -734,9 +732,7 @@ def test_whisper_vulkan_wdec_flush(t : T?) {
                 let batch <- [for (i in range(int(WD_ROW_CAP) + 1)); m.whisper.tok_sot + i]   // one past the step's cap, the first batch of a window
                 var batch_moved := batch
                 batch_moved[length(batch_moved) - 1]++
-                var cpu_logits : array<float>
-                var cpu_moved : array<float>
-                var dev_logits : array<float>
+                var cpu_logits, cpu_moved, dev_logits : array<float>
                 with_dasllama_jobque_() {
                     set_vulkan_wdec(false)
                     var inscope sc <- create_session(m)

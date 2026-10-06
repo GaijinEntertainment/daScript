@@ -80,8 +80,7 @@ def private kv_row_max_diff_one(cache_a, cache_b : array<uint8>; base_a, base_b 
             }
         } elif (dt == KVDtype.q8_0 || dt == KVDtype.tq4) {
             // block codecs compare dequantized (tq4: in the rotated basis both rows share)
-            var da : array<float>
-            var db : array<float>
+            var da, db : array<float>
             da |> resize(kv_dim)
             db |> resize(kv_dim)
             if (dt == KVDtype.q8_0) {

@@ -45,8 +45,7 @@ def bench_batch_shape(b : B?; name : string; n, d : int64) {
     for (ntok in NT) {
         var xb : array<float>
         var xqb : array<int8>
-        var xsb : array<float>
-        var yb : array<float>
+        var xsb, yb : array<float>
         xb |> resize(ntok * n)
         xqb |> resize(ntok * n)
         xsb |> resize(ntok * nb)

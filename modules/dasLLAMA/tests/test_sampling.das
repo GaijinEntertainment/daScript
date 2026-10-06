@@ -163,8 +163,7 @@ def test_sampler_units(t : T?) {   // nolint:STYLE038 — flat unit list, one t 
     }
     t |> run("seeded sampled draws reproduce") @(t : T?) {
         let params = SamplingParams(temp = 1.0, top_p = 0.95, min_p = 0.05, presence_penalty = 0.5)
-        var a : array<int64>
-        var b : array<int64>
+        var a, b : array<int64>
         for (pass_idx in range(2)) {
             var s = mk_sampler(16)
             set_seed(s, 777)
@@ -385,8 +384,7 @@ def test_sampling_deterministic(t : T?) {
         var m <- load_model_(path, QuantMode.q8)
         let params = SamplingParams(temp = 0.8, top_k = 40l)
         let n = 16l
-        var a : array<int64>
-        var b : array<int64>
+        var a, b : array<int64>
         with_dasllama_jobque() {
             var s1 = create_session(m)
             set_seed(s1, 12345)

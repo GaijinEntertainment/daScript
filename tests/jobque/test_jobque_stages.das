@@ -12,8 +12,7 @@ require daslib/jobque_boost
 def stages_pipeline_round(t : T?; nj0, nj1, total, rounds : int) {
     // stage 1 chunk j reads stage 0's MIRROR element — guaranteed cross-chunk for any split, so
     // a stage barrier violation (stale read) shows up as a wrong value after the join
-    var a : array<int>
-    var b : array<int>
+    var a, b : array<int>
     a |> resize(total)
     b |> resize(total)
     var pa = unsafe(addr(a[0]))
@@ -47,9 +46,7 @@ def stages_three_round(t : T?; total, rounds : int) {
     // 3-stage chain, each stage mirror-reads the previous — after two mirrors c[i] traces back to
     // a[i], so every element checks both barriers
     let lanes = get_total_hw_jobs() + 1
-    var a : array<int>
-    var b : array<int>
-    var c : array<int>
+    var a, b, c : array<int>
     a |> resize(total)
     b |> resize(total)
     c |> resize(total)
@@ -90,8 +87,7 @@ def stages_ragged_round(t : T?) {
     // ragged chain: wide stage, EMPTY stage (zero range — pure barrier), single-chunk stage,
     // clamped stage (more chunks than items) — all inside one chain
     let total = 96
-    var a : array<int>
-    var b : array<int>
+    var a, b : array<int>
     a |> resize(total)
     b |> resize(total)
     var pa = unsafe(addr(a[0]))
@@ -128,9 +124,7 @@ def stages_mixed_storm(t : T?; rounds : int) {
     // slots, so this is the cross-protocol straggler shape
     let lanes = get_total_hw_jobs() + 1
     let total = 4 * lanes
-    var hits : array<int>
-    var a : array<int>
-    var b : array<int>
+    var hits, a, b : array<int>
     hits |> resize(total)
     a |> resize(total)
     b |> resize(total)

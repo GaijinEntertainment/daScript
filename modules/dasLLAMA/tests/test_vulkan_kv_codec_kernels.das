@@ -319,8 +319,7 @@ def private shadow_arm(t : T?; kv : KVDtype; kvd : int) {
             }
             var got_k <- cp |> plane_as(planes[2], type<uint16>, halves)
             var got_v <- cp |> plane_as(planes[3], type<uint16>, halves)
-            var want_k : array<uint16>
-            var want_v : array<uint16>
+            var want_k, want_v : array<uint16>
             want_k |> resize(halves)
             want_v |> resize(halves)
             want_k |> fill(HALF_NAN)

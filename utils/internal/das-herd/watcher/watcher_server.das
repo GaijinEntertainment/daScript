@@ -1061,8 +1061,7 @@ class DasHerdWatcherServer : HvWebServer {
                 repository_id = pending.repository_id,
                 worktree_path = pending.new_worktree_path,
                 task_context = pending.task_context), create_error)
-            var launch_error : string
-            var pty_session_id : string
+            var launch_error, pty_session_id : string
             if (empty(herd_id)) {
                 launch_error = create_error
             } else {
@@ -1645,8 +1644,7 @@ class DasHerdWatcherServer : HvWebServer {
             }
             send_herd_sessions(client, true)
         } elif (incoming.op == "worktree_delete") {
-            var reason : string
-            var detail : string
+            var reason, detail : string
             var ok = false
             let herd_user = herd_worktree_user(incoming.worktree_path)
             let running_user = (empty(herd_user)

@@ -1689,9 +1689,7 @@ def main() : int {
                 var parked = 0l   // rounds whose sampled walk parked the next draw: the --mtp-temp lever's engagement witness
                 var tps : array<double>
                 var pp_us : array<int64>      // per prompt across the reps: timed µs, tokens, drafts, accepts
-                var pp_gen : array<int64>
-                var pp_dr : array<int64>
-                var pp_ac : array<int64>
+                var pp_gen, pp_dr, pp_ac : array<int64>
                 pp_us |> resize(length(toks))
                 pp_gen |> resize(length(toks))
                 pp_dr |> resize(length(toks))

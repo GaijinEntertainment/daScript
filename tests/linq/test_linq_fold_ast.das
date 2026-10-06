@@ -207,8 +207,7 @@ def target_zip_contains_proj_miss_fold() : bool =>
 // Empty-source average target. Verifies the 2-site emit_accumulator_lane.average + emit_decs_accumulator.average alignment with linq.das (double accumulator + cnt==0 guard → 0.0lf). See test_zip_average_empty_returns_zero below.
 [export, marker(no_coverage)]
 def target_zip_average_empty_fold() : double {
-    var emptyA : array<int>
-    var emptyB : array<int>
+    var emptyA, emptyB : array<int>
     return _fold(emptyA.zip(emptyB) |> select($(t : tuple<int; int>) => t._0 + t._1) |> average())
 }
 

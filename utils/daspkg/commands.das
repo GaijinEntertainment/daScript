@@ -3237,11 +3237,8 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
     }
 
     // 3. Gather wasm64 archives + per-module emcc args / embeds.
-    var archives : array<string>
-    var emcc_args : array<string>
-    var embeds : array<string>
-    var seen : table<string>
-    var built_external : table<string>
+    var archives, emcc_args, embeds : array<string>
+    var seen, built_external : table<string>
     for (e in deps.shared_modules) {
         if (empty(e.rel)) continue
         let arch = "{wasm_lib_dir}/{wasm_archive_name(e.rel)}"

@@ -70,9 +70,7 @@ def compress_channel(gray : array<float>; w, h : int; quality : int; var recon :
         print("compress_channel: failed to build DCT plan\n")
         return 0.0f   // recon already holds the original image
     }
-    var coeff : array<float>
-    var deq : array<float>
-    var blk : array<float>
+    var coeff, deq, blk : array<float>
     blk |> resize(BLOCK * BLOCK)
 
     var zeros = 0

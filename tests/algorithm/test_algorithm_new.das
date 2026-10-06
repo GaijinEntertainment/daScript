@@ -350,8 +350,7 @@ def test_symmetric_difference(t : T?) {
         t |> success(identical(c, a))
     }
     t |> run("both empty") @(t : T?) {
-        let a : table<int>
-        let b : table<int>
+        let a, b : table<int>
         let c <- symmetric_difference(a, b)
         t |> equal(length(c), 0)
     }
@@ -387,8 +386,7 @@ def test_is_subset(t : T?) {
         t |> equal(is_subset(a, b), true)
     }
     t |> run("empty is subset of empty") @(t : T?) {
-        let a : table<int>
-        let b : table<int>
+        let a, b : table<int>
         t |> equal(is_subset(a, b), true)
     }
     t |> run("non-empty is not subset of empty") @(t : T?) {

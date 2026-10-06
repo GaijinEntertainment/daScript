@@ -397,9 +397,7 @@ def test_vulkan_moe_heat_cache(t : T?) {
             moe_gpu_heat_advise(HLAYER, HWOFF, HWOFF + HSTRIDE, HWOFF + 2l * HSTRIDE, 0, 0, 0, N, NFE, ids, 2l)
             var idx <- [1l, 0l, 2l]
             var hit : array<int8>
-            var o1 : array<int64>
-            var o3 : array<int64>
-            var o2 : array<int64>
+            var o1, o3, o2 : array<int64>
             hit |> resize(3)
             o1 |> resize(3)
             o3 |> resize(3)
@@ -510,8 +508,7 @@ def test_vulkan_moe_ffn_kq(t : T?) {
             // k4 gate/up stacks + BOTH down formats in one down stack region set is not a real
             // shape — use two arms sharing the gate/up stacks: down = k6, then down = k5 at a
             // fresh offset (the 35B carries k5 downs on most layers, k6 on the last two)
-            var w1 : array<float>
-            var w3 : array<float>
+            var w1, w3 : array<float>
             if (!plane_up(1, NE * KNFE, KN, 21l, KWOFF1, w1)) {
                 t |> skip("no Vulkan device (or probe/budget refused the upload)")
                 return
@@ -576,9 +573,7 @@ def test_vulkan_moe_ffn_q40(t : T?) {
     t |> run("vulkan MoE q40 tier (all-Q4_0 triple) == CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_vk_moe_hooks()
-            var w1 : array<float>
-            var w3 : array<float>
-            var w2 : array<float>
+            var w1, w3, w2 : array<float>
             if (!plane_up(4, NE * KNFE, KN, 83l, QWOFF1, w1, false)) {
                 t |> skip("no Vulkan device (or probe/budget refused the upload)")
                 return
@@ -621,8 +616,7 @@ def test_vulkan_moe_ffn_mixed(t : T?) {
     t |> run("vulkan MoE mixed triple (k4 gate/up + q8 down) == CPU reference") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             install_vk_moe_hooks()
-            var w1 : array<float>
-            var w3 : array<float>
+            var w1, w3 : array<float>
             if (!plane_up(1, NE * KNFE, KN, 61l, MXOFF1, w1)) {
                 t |> skip("no Vulkan device (or probe/budget refused the upload)")
                 return
@@ -784,19 +778,7 @@ def private ref_dn_core(qkvy, zy : array<float>; bts, gts, tapsv, wnormv, av, dt
     let CS = 64l
     var o : array<float>
     o |> resize(npos * DNDI)
-    var p_qc : array<float>
-    var p_kc : array<float>
-    var p_kb : array<float>
-    var p_vb : array<float>
-    var p_w : array<float>
-    var p_vn : array<float>
-    var p_oc : array<float>
-    var p_tm : array<float>
-    var p_am : array<float>
-    var p_kq : array<float>
-    var gcum : array<float>
-    var egc : array<float>
-    var bv : array<float>
+    var p_qc, p_kc, p_kb, p_vb, p_w, p_vn, p_oc, p_tm, p_am, p_kq, gcum, egc, bv : array<float>
     p_qc |> resize(CS * DNDS); p_kc |> resize(CS * DNDS); p_kb |> resize(CS * DNDS)
     p_vb |> resize(CS * DNDS); p_w |> resize(CS * DNDS); p_vn |> resize(CS * DNDS)
     p_oc |> resize(CS * DNDS); p_tm |> resize(CS * CS); p_am |> resize(CS * CS)
@@ -1032,8 +1014,7 @@ def test_vulkan_deltanet(t : T?) {
                 var fx <- dn_fixture(npos)
                 var gstate := fx.state
                 var rstate := fx.state
-                var y : array<float>
-                var tail : array<float>
+                var y, tail : array<float>
                 y |> resize(int(npos * DND))
                 tail |> resize(int(DNTAPS * DNCD))
                 unsafe {
@@ -1043,12 +1024,10 @@ def test_vulkan_deltanet(t : T?) {
                         addr(gstate[0]), tail, addr<float const?>(fx.hist[0]),
                         npos, DND, DNCD, DNKD, DNDI, DNVH, DNKH, DNDS, DNCONV, DN_EPS)
                 }
-                var qkvy : array<float>
-                var zy : array<float>
+                var qkvy, zy : array<float>
                 ref_q8_gemm(st.wqkv, st.wsqkv, xq, xs, DND, DNCD, npos, qkvy)
                 ref_q8_gemm(st.wz, st.wsz, xq, xs, DND, DNDI, npos, zy)
-                var refy : array<float>
-                var refconv : array<float>
+                var refy, refconv : array<float>
                 ref_dn_core(qkvy, zy, fx.bts, fx.gts, fx.tapsv, fx.wnormv, fx.av, fx.dtv, rstate, fx.hist, npos, st.wo, st.wso, refy, refconv)
                 held_nontrivial(t, "npos={npos}: out rows", y, refy, DN_REL_TOL, DND)
                 held(t, "npos={npos}: final state", gstate, rstate, DN_REL_TOL, DNDS)
@@ -1105,24 +1084,20 @@ def test_vulkan_deltanet_step(t : T?) {
             fill_acts_of(xq, xs, DNSTEPS, DND, 32l, 13l, 5l, 2l)
             var fx <- dn_fixture(DNSTEPS)
             // references: the straight-through 8-token mirror and the 4-token prefix (flush point)
-            var qkvy : array<float>
-            var zy : array<float>
+            var qkvy, zy : array<float>
             ref_q8_gemm(st.wqkv, st.wsqkv, xq, xs, DND, DNCD, DNSTEPS, qkvy)
             ref_q8_gemm(st.wz, st.wsz, xq, xs, DND, DNDI, DNSTEPS, zy)
             var rstate := fx.state
             var rstate4 := fx.state
-            var refy : array<float>
-            var refconv : array<float>
+            var refy, refconv : array<float>
             ref_dn_core(qkvy, zy, fx.bts, fx.gts, fx.tapsv, fx.wnormv, fx.av, fx.dtv, rstate, fx.hist, DNSTEPS, st.wo, st.wso, refy, refconv)
             var qkvy4 <- copy_span(qkvy, 0l, 4l * DNCD)
             var zy4 <- copy_span(zy, 0l, 4l * DNDI)
             var bts4 <- copy_span(fx.bts, 0l, 4l * DNVH)
             var gts4 <- copy_span(fx.gts, 0l, 4l * DNVH)
-            var refy4 : array<float>
-            var refconv4 : array<float>
+            var refy4, refconv4 : array<float>
             ref_dn_core(qkvy4, zy4, bts4, gts4, fx.tapsv, fx.wnormv, fx.av, fx.dtv, rstate4, fx.hist, 4l, st.wo, st.wso, refy4, refconv4)
-            var reft : array<float>
-            var reft4 : array<float>
+            var reft, reft4 : array<float>
             reft |> resize(int(DNTAPS * DNCD))
             reft4 |> resize(int(DNTAPS * DNCD))
             for (k in range64(DNTAPS)) {   // ring references, CPU channel-major
@@ -1139,10 +1114,7 @@ def test_vulkan_deltanet_step(t : T?) {
             y |> resize(int(DNSTEPS * DND))
             var y1 : array<float>
             var xq1 : array<int8>
-            var xs1 : array<float>
-            var b1 : array<float>
-            var g1 : array<float>
-            var tail1 : array<float>
+            var xs1, b1, g1, tail1 : array<float>
             y1 |> resize(int(DND))
             xq1 |> resize(int(DND))
             xs1 |> resize(int(DND / 32l))
@@ -1353,17 +1325,14 @@ def test_vulkan_attention(t : T?) {
             t |> success(q8_upload(wo, wso, ATO_WOFF, ATQD, ATD), "wo stack uploaded")
             var wo4 : array<float>
             t |> success(plane_up(1, ATD, ATQD, 67l, ATO4_WOFF, wo4, false), "k4 wo stack uploaded")
-            var rmsq : array<float>
-            var rmsk : array<float>
+            var rmsq, rmsk : array<float>
             rmsq |> resize(int(ATHS))
             rmsk |> resize(int(ATHS))
             for (i in range(int(ATHS))) {
                 rmsq[i] = 1.0 + synth_f(int64(i), 71l, 0.3)
                 rmsk[i] = 1.0 + synth_f(int64(i), 73l, 0.3)
             }
-            var bq : array<float>
-            var bk : array<float>
-            var bv : array<float>
+            var bq, bk, bv : array<float>
             bq |> resize(int(ATQD))
             bk |> resize(int(ATKVD))
             bv |> resize(int(ATKVD))
@@ -1385,8 +1354,7 @@ def test_vulkan_attention(t : T?) {
                 var xq : array<int8>
                 var xs : array<float>
                 fill_acts_of(xq, xs, npos, ATD, 32l, 13l, 7l, 6l)
-                var cosr : array<float>
-                var sinr : array<float>
+                var cosr, sinr : array<float>
                 cosr |> resize(int(npos * half))
                 sinr |> resize(int(npos * half))
                 for (p in range64(npos)) {
@@ -1396,9 +1364,7 @@ def test_vulkan_attention(t : T?) {
                         sinr[int(p * half + j)] = sin(float(p) * freq)
                     }
                 }
-                var y : array<float>
-                var kout : array<float>
-                var vout : array<float>
+                var y, kout, vout : array<float>
                 y |> resize(int(npos * ATD))
                 kout |> resize(int(npos * ATKVD))
                 vout |> resize(int(npos * ATKVD))
@@ -1414,9 +1380,7 @@ def test_vulkan_attention(t : T?) {
                         1.0 / sqrt(float(ATHS)), AT_EPS, arm.gated, true)
                 }
                 // the CPU mirror: GEMMs (+ the projection bias), prep, attention, requant, wo
-                var qgy : array<float>
-                var ky : array<float>
-                var vy : array<float>
+                var qgy, ky, vy : array<float>
                 if (arm.gated) {
                     ref_q8_gemm(wqg, wsqg, xq, xs, ATD, 2l * ATQD, npos, qgy)
                 } else {
@@ -1435,10 +1399,7 @@ def test_vulkan_attention(t : T?) {
                         }
                     }
                 }
-                var qp : array<float>
-                var gatep : array<float>
-                var kp : array<float>
-                var kgate_unused : array<float>
+                var qp, gatep, kp, kgate_unused : array<float>
                 ref_at_prep(qgy, rmsq, cosr, sinr, npos, ATQD, rot, arm.gated, qp, gatep)
                 ref_at_prep(ky, rmsk, cosr, sinr, npos, ATKVD, rot, false, kp, kgate_unused)
                 var op : array<float>
@@ -1540,17 +1501,13 @@ def test_vulkan_rope_kv_store(t : T?) {
                 var cossin : array<float>
                 cossin |> resize(int(HS))
                 build_rope_row_packed(cossin, 0l, POS, HS, 10000.0, 1.0, 1.0, no_freqs)
-                var qout : array<float>
-                var krow : array<float>
-                var vrow : array<float>
+                var qout, krow, vrow : array<float>
                 qout |> resize(int(QD))
                 krow |> resize(int(KVD))
                 vrow |> resize(int(KVD))
                 vk_rope_kv_store(qkv, qout, krow, vrow, cossin, QD, KVD, HS, POS, neox)
                 // CPU reference
-                var rq : array<float>
-                var rk : array<float>
-                var rv : array<float>
+                var rq, rk, rv : array<float>
                 rq |> resize(int(QD))
                 rk |> resize(int(KVD))
                 rv |> resize(int(KVD))
@@ -1600,9 +1557,7 @@ def test_vulkan_decode_attn(t : T?) {
                 t |> skip("no Vulkan device; decode_attn untestable here")
                 return
             }
-            var no_freqs : array<float>
-            var cpuK : array<float>
-            var cpuV : array<float>
+            var no_freqs, cpuK, cpuV : array<float>
             cpuK |> resize(int(CNT * KVD))
             cpuV |> resize(int(CNT * KVD))
             // build the cache one position at a time via the real rope_kv_store producer
@@ -1615,9 +1570,7 @@ def test_vulkan_decode_attn(t : T?) {
                 var cossin : array<float>
                 cossin |> resize(int(HS))
                 build_rope_row_packed(cossin, 0l, int64(p), HS, 10000.0, 1.0, 1.0, no_freqs)
-                var qout : array<float>
-                var krow : array<float>
-                var vrow : array<float>
+                var qout, krow, vrow : array<float>
                 qout |> resize(int(QD))
                 krow |> resize(int(KVD))
                 vrow |> resize(int(KVD))
@@ -1668,8 +1621,7 @@ def private arena_place_q8(rows, n, seed : int64; small_scales : bool = false) :
     var a : ArenaQ8
     static_if (typeinfo builtin_module_exists(vulkan)) {
         fill_q8_quants(a.wq, a.ws, rows, n, seed, small_scales)
-        var pq : array<uint8>
-        var ps : array<uint8>
+        var pq, ps : array<uint8>
         pack_q8_wire(a.wq, a.ws, pq, ps)
         a.blk = vk_arena_place(pq, ps, n, rows, 0)
         delete pq
@@ -1780,10 +1732,7 @@ def test_vulkan_add_rms(t : T?) {
             let ASCALE = 0.75
             for (arm in range(2)) {
                 let add_on = arm == 0
-                var x : array<float>
-                var a : array<float>
-                var w : array<float>
-                var y : array<float>
+                var x, a, w, y : array<float>
                 x |> resize(int(AD))
                 a |> resize(int(AD))
                 w |> resize(int(AD))

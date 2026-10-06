@@ -244,8 +244,7 @@ def private harmony_header(s : array<uint8> const#; var pos : int&; var name : s
 //! at `<|end|>` (+ optional re-header); the terminal one at end-of-reply (stops never appear).
 def harmony_parse(reply : string) : ToolReply {
     var out = ToolReply()
-    var rparts : array<string>
-    var cparts : array<string>
+    var rparts, cparts : array<string>
     peek_data(reply) $(d) {
         var pos = 0
         let n = length(d)

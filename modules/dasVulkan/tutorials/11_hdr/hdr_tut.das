@@ -310,8 +310,7 @@ def public build_hdr_resources(device : Device; phys : VkPhysicalDevice; queue :
         pAttachments <- scene_attach,
         width = uint(HDR_W), height = uint(HDR_H), layers = 1u))
 
-    var inscope fb_post_clear : array<Framebuffer>
-    var inscope fb_post_load  : array<Framebuffer>
+    var inscope fb_post_clear, fb_post_load : array<Framebuffer>
     fb_post_clear |> reserve(BLOOM_LEVELS)
     fb_post_load  |> reserve(BLOOM_LEVELS)
     for (i in range(BLOOM_LEVELS)) {

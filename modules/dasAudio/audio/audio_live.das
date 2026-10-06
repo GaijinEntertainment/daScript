@@ -74,8 +74,7 @@ def private restore_audio_handles() {
     if (live_load_bytes(STORE_KEY, data) && !empty(data)) {
         var ser = new MemSerializer(data)
         var arch = Archive(reading = true, stream = ser)
-        var cmd_ch : uint64
-        var sid_ptr : uint64
+        var cmd_ch, sid_ptr : uint64
         arch |> serialize(cmd_ch)
         arch |> serialize(sid_ptr)
         unsafe {

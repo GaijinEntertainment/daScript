@@ -2287,8 +2287,7 @@ def private emit_sgmat_multiply(var ctx : MslCtx; ec : ExprCall?; indent : strin
         err(ctx, ec.at, "{cname} takes {want} simdgroup-matrix arguments")
         return
     }
-    var classes : array<string>
-    var parts : array<string>
+    var classes, parts : array<string>
     for (arg in ec.arguments) {
         let sgname = sgmat_type_name(arg._type)
         if (empty(sgname)) {

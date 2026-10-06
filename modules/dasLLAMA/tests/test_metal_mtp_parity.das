@@ -245,8 +245,7 @@ def private ff_cell(t : T?; tr, trg : Model; tag, pn : string; prompt : array<in
 }
 
 def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int64>; depth : int64; sampled : bool = false) {
-    var plain : array<int64>
-    var spec : array<int64>
+    var plain, spec : array<int64>
     var drafted = 0l
     var parked = 0l
     mtp_pos_reset()

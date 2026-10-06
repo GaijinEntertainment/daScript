@@ -63,9 +63,7 @@ struct private ProbePlanes {
 //! and scales over `xrows` rows, `blocks` weight blocks a plane copy (the region table's stride), the copies' regions;
 //! `yd2` is the second output plane the `cols` chain alternates with `yd`
 def private probe_fill(seed : uint; wq_words, ws_words, xq_words, xs_words, blocks : int; var p : ProbePlanes) : tuple<wqd : uint64; wsd : uint64; xqd : uint64; xsd : uint64; yd : uint64; yd2 : uint64; rgd : uint64> {
-    var wqh : array<uint>
-    var wsh : array<uint>
-    var xqh : array<uint>
+    var wqh, wsh, xqh : array<uint>
     var xsh <- row_fill(xs_words, 1, 0, 0.25, -0.5, 7)
     wqh |> reserve(wq_words)
     wqh |> resize(wq_words)

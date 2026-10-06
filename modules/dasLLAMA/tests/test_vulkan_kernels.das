@@ -274,8 +274,7 @@ def private fmt_tile_cell(t : T?; fmt : KqFmt) {
         var rows <- fmt_tile_rows()
         let at = find_index_if(rows) $(r : FmtTile) => r.fmt == fmt
         if (at < 0) panic("format {fmt} has no row in the tile table")
-        var wqh : array<uint>
-        var wsuh : array<uint>
+        var wqh, wsuh : array<uint>
         fmt_tile_planes(rows[at], wqh, wsuh)
         var f <- tile_fixture(rows[at].n, rows[at].blk_k, wqh, wsuh, 3u, rows[at].xf_add)
         let arms <- rows[at].per32 ? [ARM_CM2_S, ARM_CM2_E, ARM_KHR] : tile_arms_all()
@@ -305,8 +304,7 @@ def private q8_tile_cell(t : T?; arm, k : int; wq_seed, ws_seed, xf_mul, xf_add 
             t |> skip("no Vulkan device")
             return
         }
-        var wqh : array<uint>
-        var wsh : array<uint>
+        var wqh, wsh : array<uint>
         q8_planes(k, wq_seed, ws_seed, wqh, wsh)
         var f <- tile_fixture(k, 32, wqh, wsh, xf_mul, xf_add)
         var y_ref <- tile_cell_arms(t, "q8", int(KqFmt.q8), f, [arm], @@q8f16_gemm_oracle)
@@ -754,8 +752,7 @@ def private f16_gemm_cell(t : T?; tag : string; d, n, rows : int; khr : bool = f
             let ybase = 16   // the rows land past a header the kernels must leave alone
             let rows_alloc = khr ? ((rows + 15) / 16) * 16 : rows   //! the KHR tile loads and stores whole 16-row fragments: the x and y planes carry the spare rows, as the prefill's do
             let yn = ybase + rows_alloc * d + (khr ? 16 : 0)   //! a ragged d's last fragment may spill up to 15 elements past the plane on the KHR tile: the spare keeps the probe inside the buffer
-            var wh : array<float16>
-            var xh : array<float16>
+            var wh, xh : array<float16>
             wh |> resize(d * n)
             xh |> resize(rows_alloc * n)
             for (i in range(d * n)) {
@@ -1030,8 +1027,7 @@ def test_vkd_ar_class(t0 : T?) {
                 t |> success(bad_xb == 0, "biased partner: the residual stream is bit-exact vs that seam ({bad_xb} of {dim} diverge)")
                 t |> success(moved > 0, "biased partner control: the bias moves the residual off the unbiased step ({moved} of {dim})")
                 //! the CPU oracle beside the seam: x' = (x + a + b) * ascale, y = w * x' * rsqrt(mean(x'^2) + eps)
-                var x_cpu : array<float>
-                var y_cpu : array<float>
+                var x_cpu, y_cpu : array<float>
                 x_cpu |> resize(dim)
                 y_cpu |> resize(dim)
                 for (i in range(dim)) {
@@ -1131,8 +1127,7 @@ def private ar_rq_run(name : string; x, a, w : array<float>; pc; kform, storex :
 //! place, y under the -999.25 sentinel - a GPU-vs-GPU compare is vacuous-prone, two dead kernels leave two matching zeroed
 //! planes, and no real computation lands the sentinel; y and x come back
 def private cls_ar_run(x, a, w : array<float>; pc; nrows : int) : tuple<y : array<float>; x : array<float>> {
-    var y_out : array<float>
-    var x_out : array<float>
+    var y_out, x_out : array<float>
     static_if (typeinfo builtin_module_exists(vulkan)) {
         with_cell_planes() $(var cp : CellPlanes) {
             let px = cp |> io_(x)
@@ -1367,9 +1362,7 @@ def test_vkd_cls_ar_row0(t0 : T?) {
                 y2[i] = -999.25
             }
             for (r in range(row0, rows)) {
-                var xr : array<float>
-                var ar : array<float>
-                var yr : array<float>
+                var xr, ar, yr : array<float>
                 xr |> resize(dim)
                 ar |> resize(dim)
                 yr |> resize(dim)
@@ -1416,8 +1409,7 @@ def test_vkd_actf16_base(t0 : T?) {
             var gh <- row_fill(total, 29, 0, 0.06, 1.9, 61)
             var uh <- row_fill(total, 43, 0, 0.05, 2.1, 83)
             // arm 0: the second row's data at the front, base 0; arm 1: the plane as is, base nelem
-            var g0 : array<float>
-            var u0 : array<float>
+            var g0, u0 : array<float>
             g0 |> resize(total)
             u0 |> resize(total)
             for (i in range(nelem)) {
@@ -1952,8 +1944,7 @@ def test_vkd_act_family(t0 : T?) {
                 var rex <- [uint(2), uint(0), uint(5)]
                 var gb <- row_fill(ne * brow, 13, 0, 0.3, 4.5, 31)   //! biases past the 7 clamp on some elements: the clamps must engage
                 var ub <- row_fill(ne * brow, 17, 0, 0.4, 5.6, 29)
-                var gh2 : array<float>
-                var uh2 : array<float>
+                var gh2, uh2 : array<float>
                 gh2 |> resize(nb)
                 uh2 |> resize(nb)
                 for (e in range(nb)) {
@@ -1992,8 +1983,7 @@ def test_vkd_act_family(t0 : T?) {
                 actrq_oracle(gh2, uh2, nb, false, ACT_OAI, q_ref, s_ref)
                 check_qbytes(t, "the biased q8 actrq under the clamped swiglu", q_cls, q_ref)
                 check_rows(t, "the biased q8 actrq under the clamped swiglu, scales", s_cls, s_ref, BAR_APPROX_CTRL, FLAT_ROWS)
-                var h_ref : array<float>
-                var h_got : array<float>
+                var h_ref, h_got : array<float>
                 h_ref |> resize(nb)
                 h_got |> resize(nb)
                 for (e in range(nb)) {
@@ -2126,9 +2116,7 @@ def private qkn_rope_rows(q0h, kvh, bh, wnh, csh : array<float>; bpad, nh, nkvh,
     let qd = nh * hs
     let kvd = nkvh * hs
     var cs <- cossin_rows(csh, 0, hs)
-    var q : array<float>
-    var mk : array<float>
-    var mv : array<float>
+    var q, mk, mv : array<float>
     q |> resize(qd)
     mk |> resize(mirn)
     mv |> resize(mirn)
@@ -2247,8 +2235,7 @@ def test_vkd_rope_family(t0 : T?) {
                 var qh <- row_fill(rows * qd, 31, 0, 0.08, 2.5, 67)
                 var kh <- row_fill(rows * kvd, 43, 0, 0.06, 1.7, 59)
                 var wh <- [for (i in range(2 * hs)); 0.4 + float(i % 13) * 0.06]
-                var cls_q : array<float>
-                var cls_k : array<float>
+                var cls_q, cls_k : array<float>
                 with_cell_planes() $(var cp : CellPlanes) {
                     // the class kernel: q@0, k@1, weights@2
                     let pq = cp |> io_(qh)
@@ -2268,8 +2255,7 @@ def test_vkd_rope_family(t0 : T?) {
                 }
                 // oracle: per-head rms (1/sqrt(mean(v^2)+eps)) times the shared weight row —
                 // the device reduces sum-of-squares in tree order, so approx bars
-                var ref_q : array<float>
-                var ref_k : array<float>
+                var ref_q, ref_k : array<float>
                 ref_q |> resize(rows * qd)
                 ref_k |> resize(rows * kvd)
                 for (r in range(rows)) {
@@ -2515,8 +2501,7 @@ def test_vkd_q8_khr_batch(t0 : T?) {
                 t |> skip("the KHR kq tile needs KHR cooperative matrices at subgroup 32")
                 return
             }
-            var wqh : array<uint>
-            var wsh : array<uint>
+            var wqh, wsh : array<uint>
             q8_planes(576, 17u, 991u, wqh, wsh)   // K off the 256 lattice: the 32-deep k step runs a tail past the last superblock
             var f <- tile_fixture(576, 32, wqh, wsh, 3u, 5u)
             var y_ref <- tile_cell_arms(t, "q8", int(KqFmt.q8), f, [ARM_KHR], @@q8f16_gemm_oracle)
@@ -2580,8 +2565,7 @@ def test_vkd_cm2_decode_vector_pair(t0 : T?) {
             verify(ensure_toy_q8_cm2_strip_cls(), "the stripped toy stamp must engage")
             g_gpu.decvec_on = twin_device
             verify(ensure_toy_q8_cm2_twin_cls(), "the toy twin stamp must engage")
-            var wqh : array<uint>
-            var wsh : array<uint>
+            var wqh, wsh : array<uint>
             q8_planes(576, 17u, 991u, wqh, wsh)
             var f <- tile_fixture(576, 32, wqh, wsh, 3u, 5u)
             var y_ref <- tile_cell_arms(t, "cm2 decode pair ({twin_device ? "the four-wide twin" : "the twin stamp on a device without the callback"})", int(KqFmt.q8), f, [ARM_TOY_STRIP, ARM_TOY_TWIN], @@q8f16_gemm_oracle)
@@ -3005,8 +2989,7 @@ def private fa_tile_run(t : T?; khr : bool) {
                 vh[i] = 10000.0
             }
             var y_cls : array<float>
-            var y16_fused : array<float16>
-            var y16_split : array<float16>
+            var y16_fused, y16_split : array<float16>
             with_cell_planes() $(var cp : CellPlanes) {
                 let pq = cp |> in_(qh)
                 let pk = cp |> in_(kh)
@@ -3049,9 +3032,7 @@ def private fa_tile_run(t : T?; khr : bool) {
             // stays under the 2e-3 relative bar mismatch_approx holds against the f32 oracle, and the f16 O
             // twin against the f32 stamp pins the same bar - the bound is this fixture's magnitudes, not a proof.
             // The KHR kernel rounds P to f16 and sums each 64-key step in f16 before its f32 o row: the same bar.
-            var qh2 : array<float>
-            var kh2 : array<float>
-            var vh2 : array<float>
+            var qh2, kh2, vh2 : array<float>
             qh2 |> resize(rows * qd)
             kh2 |> resize(kpos * kvd)
             vh2 |> resize(kpos * kvd)
@@ -3206,8 +3187,7 @@ def private fa_h256_run(nheads, kv_mul, rows, w0 : int; gated : bool; cap : floa
         var qp2 <- [for (x in qp); float(float16(x * scale))]
         var kh2 <- [for (i in range(kpos * kvd)); float(float16(kh[i]))]
         var vh2 <- [for (i in range(kpos * kvd)); float(float16(vh[i]))]
-        var y_ref : array<float>
-        var y_plain : array<float>
+        var y_ref, y_plain : array<float>
         y_ref |> resize(rows * qd)
         y_plain |> resize(rows * qd)
         for (r in range(rows)) {
@@ -3646,8 +3626,7 @@ def test_vkd_requant_family(t0 : T?) {
                 delete r
                 // oracle: x' = (x+a)*ascale in place, rms over the row, y = w*(x'*inv), Q8_0 pack —
                 // the wg reduce reassociates the sum of squares, so quants ride the byte bar
-                var x_ref : array<float>
-                var y_ref : array<float>
+                var x_ref, y_ref : array<float>
                 x_ref |> resize(dim)
                 y_ref |> resize(dim)
                 for (i in range(dim)) {
@@ -3670,8 +3649,7 @@ def test_vkd_requant_family(t0 : T?) {
                     var sb_cls <- rb.s
                     var xb_cls <- rb.x
                     delete rb
-                    var xb_ref : array<float>
-                    var yb_ref : array<float>
+                    var xb_ref, yb_ref : array<float>
                     xb_ref |> resize(dim)
                     yb_ref |> resize(dim)
                     for (i in range(dim)) {
@@ -3859,8 +3837,7 @@ def private mx4_gemv_gu_run(t : T?; d, nreg : int; bias : bool) {
         var wqh <- hashed_words(totblk * 4, 5u, 977u)
         var xqh <- hashed_words(nb * 8, 29u, 11u)
         var xsh <- row_fill(nb, 1, 0, 0.125, -0.25, 5)
-        var gb : array<float>
-        var ub : array<float>
+        var gb, ub : array<float>
         var rex : array<uint>
         gb |> resize(ne * d)
         ub |> resize(ne * d)
@@ -3876,8 +3853,7 @@ def private mx4_gemv_gu_run(t : T?; d, nreg : int; bias : bool) {
         var gu <- gu_regions(nreg, d, nb)
         let act = bias ? ACT_OAI : ACT_SILU
         var oq : array<int8>
-        var os : array<float>
-        var y_cls : array<float>
+        var os, y_cls : array<float>
         var oq2 : array<int8>
         var os2 : array<float>
         with_cell_planes() $(var cp : CellPlanes) {
@@ -3928,8 +3904,7 @@ def private mx4_gemv_gu_run(t : T?; d, nreg : int; bias : bool) {
             oq2 <- cp |> plane_as(poq2, type<int8>, rows)
             os2 <- cp |> plane_run(pos2)
         }
-        var y_g : array<float>
-        var y_u : array<float>
+        var y_g, y_u : array<float>
         y_g |> resize(rows)
         y_u |> resize(rows)
         for (r in range(nreg)) {
@@ -4022,8 +3997,7 @@ def private q8_gemv_gu_run(t; n, hid : int; act : uint) {
     }
     // the oracle: the q8 GEMM oracle over one record with the x row as its one column, per plane, then the activation
     let one_row <- [0u, 0u, 1u, 0u]
-    var g_ref : array<float>
-    var u_ref : array<float>
+    var g_ref, u_ref : array<float>
     g_ref |> resize(hid)
     u_ref |> resize(hid)
     q8_gemm_oracle(gqh, gsh, xqh, xsh, one_row, 1, n, hid, g_ref)
@@ -4279,8 +4253,7 @@ def private q8_gemv_ar_twin_run(t; n, d : int; pre_on : bool; ascale : float) {
     let eps = 1.0e-6
     var xr_epi_h : array<float>
     var oq_epi_h : array<uint>
-    var os_epi_h : array<float>
-    var xr_row_h : array<float>
+    var os_epi_h, xr_row_h : array<float>
     var oq_row_h : array<uint>
     var os_row_h : array<float>
     with_cell_planes() $(var cp : CellPlanes) {
@@ -4444,8 +4417,7 @@ def private nform_cols_cell(t : T?; tag : string; counts : array<int>; ncol_max 
     static_if (typeinfo builtin_module_exists(vulkan)) {
         with_cell_planes() $(var cp : CellPlanes) {
             let np = length(planes)
-            var one_outs : NformOuts
-            var n_outs : NformOuts
+            var one_outs, n_outs : NformOuts
             for (pl in planes) {
                 let po = cp |> out_words(int64(pl.head + pl.words) * 4l, NAN_SENTINEL_BITS, bits)
                 let pn = cp |> out_words(int64(pl.head + pl.words * (ncol_max + 1)) * 4l, NAN_SENTINEL_BITS, bits)
@@ -4507,8 +4479,7 @@ def private q8_gemv_gu_oracle_cols(t; tag : string; oq_w, os_w : array<uint>; gq
         for (i in range(nb)) {
             xs_c[i] = xsh[c * nb + i]
         }
-        var g_ref : array<float>
-        var u_ref : array<float>
+        var g_ref, u_ref : array<float>
         g_ref |> resize(hid)
         u_ref |> resize(hid)
         q8_gemm_oracle(gqh, gsh, xq_c, xs_c, one_rec, 1, n, hid, g_ref)
@@ -4916,8 +4887,7 @@ def test_vkd_cvt_family(t0 : T?) {
                     }
                     // oracle in f32, compared through the f16 halves the kernels emit (the gelu
                     // arm carries transcendental ulps — approx absorbs both)
-                    var got : array<float>
-                    var want : array<float>
+                    var got, want : array<float>
                     got |> resize(nelem)
                     want |> resize(nelem)
                     for (i in range(nelem)) {
@@ -5008,9 +4978,7 @@ def private rope_kv_b_ref(q0h, kvh, bh, csh : array<float>; npos, pos0, layerbas
     let qd = nh * hs
     let kvd = nkvh * hs
     let mirn = layerbase + (pos0 + npos) * kvd
-    var q_ref : array<float>
-    var mk_ref : array<float>
-    var mv_ref : array<float>
+    var q_ref, mk_ref, mv_ref : array<float>
     q_ref |> resize(npos * qd)
     mk_ref |> resize(mirn)
     mv_ref |> resize(mirn)
@@ -5139,8 +5107,7 @@ def private qkn_rope_arm(t : T?; f16, biased : bool) {
             half = uint(half), neox = uint(neox), nh = uint(nh),
             layerbase = uint(krow), qwoff = 0u,
             kwoff = uint(hs), eps = eps, boff = uint(bpad), hasb = biased ? 1u : 0u)
-        var q_cls : array<float>
-        var m_cls : array<float>
+        var q_cls, m_cls : array<float>
         with_cell_planes() $(var cp : CellPlanes) {
             let pq = cp |> io_(q0h)
             let pkv = cp |> in_(kvh)
@@ -5206,9 +5173,7 @@ def private qkn_rope_n_rows(t : T?; q0h, kvh, csh, wnh, bh : array<float>; pc) {
     let krow = 192
     let wgs = nh + nkvh
     let kvrow = qd + 2 * kvd
-    var q2h : array<float>
-    var kv2h : array<float>
-    var cs2h : array<float>
+    var q2h, kv2h, cs2h : array<float>
     q2h |> resize(2 * qd)
     kv2h |> resize(2 * kvrow)
     cs2h |> resize(2 * hs)
@@ -5494,8 +5459,7 @@ def test_vkd_hc_seams(t0 : T?) {
                 let scales <- cp |> plane_run(sp)
                 check_rows(t, "hc_lo_rq block scales vs the CPU quantizer", scales, s_ref, BAR_APPROX, FLAT_ROWS)
                 let qbytes <- staged(cp.host.mapped, cp.host_off[qp], HCT_LR, type<int8>)
-                var deq : array<float>
-                var deq_ref : array<float>
+                var deq, deq_ref : array<float>
                 deq |> resize(HCT_LR)
                 deq_ref |> resize(HCT_LR)
                 for (i in range(HCT_LR)) {
@@ -5737,8 +5701,7 @@ def private ple_gate_row_ref(key, res, val, wn : array<float>; row_at, val_at : 
                              normed_at : int) : array<float> {
     let dim = HCT_DIM
     let hcd = HCT_HCD
-    var kn : array<float>
-    var qn : array<float>
+    var kn, qn : array<float>
     kn |> resize(hcd)
     qn |> resize(hcd)
     var svs : array<float>
@@ -5856,8 +5819,7 @@ def private ple_panel_case(t : T?; rows, pos0 : int; tok_pos : bool = false) {
         let val <- row_fill(rows * dim, 17, 3, 0.05, 1.4)
         let hist <- row_fill(PLT_NROWS * hcd, 19, 11, 0.04, 1.2)
         let wn <- row_fill(3 * hcd + hcd * PLT_KERN, 23, 9, 0.03, 1.1)
-        var gated_ref : array<float>
-        var panel_ref : array<float>
+        var gated_ref, panel_ref : array<float>
         var res_ref := res
         gated_ref |> resize(rows * hcd)
         panel_ref |> resize(rows * hcd)
@@ -5983,8 +5945,7 @@ def private dn_delta_ref(convh, sth, smh : array<float>; npos, nkh, nvh, ds, bet
     let cd = 2 * kd + di
     var ref : array<float>
     ref |> resize(npos * di + nvh * ds * ds)
-    var st_h : array<float>
-    var dvn : array<float>
+    var st_h, dvn : array<float>
     st_h |> resize(ds * ds)
     dvn |> resize(ds)
     for (hh in range(nvh)) {
@@ -6105,9 +6066,7 @@ def test_vkd_dn_family(t0 : T?) {
                 out_ref_sig |> resize(nvh * ds)
                 for (hh in range(nvh)) {
                     let kh = hh % nkh
-                    var dq : array<float>
-                    var dk : array<float>
-                    var dv : array<float>
+                    var dq, dk, dv : array<float>
                     dq |> resize(ds)
                     dk |> resize(ds)
                     dv |> resize(ds)
@@ -6139,8 +6098,7 @@ def test_vkd_dn_family(t0 : T?) {
                         qk += dq[j] * dk[j]
                     }
                     let sbase = hh * ds * ds
-                    var dvn : array<float>
-                    var dout : array<float>
+                    var dvn, dout : array<float>
                     dvn |> resize(ds)
                     dout |> resize(ds)
                     for (j in range(ds)) {
@@ -7041,8 +6999,7 @@ def test_vkd_emb_gather_pair(t0 : T?) {
             for (i in range(vocab * dim)) {
                 wfh[i] = float(i % 97) * 0.125 - 6.0
             }
-            var y_cls : array<float>
-            var yf_cls : array<float>
+            var y_cls, yf_cls : array<float>
             with_cell_planes() $(var cp : CellPlanes) {
                 let pwq = cp |> in_plain(wqh)
                 let pws = cp |> in_plain(wsh16)
@@ -7064,8 +7021,7 @@ def test_vkd_emb_gather_pair(t0 : T?) {
                 delete yf_cls
                 yf_cls <- cp |> plane_run(px)
             }
-            var y_ref : array<float>
-            var yf_ref : array<float>
+            var y_ref, yf_ref : array<float>
             y_ref |> resize(npos * dim)
             yf_ref |> resize(npos * dim)
             for (r in range(npos)) {
@@ -7122,8 +7078,7 @@ def test_vkd_hot_combine(t0 : T?) {
             for (i in range(nhit * n, k * n)) {
                 down[i] = nan   // a miss's row is stale: no hit chain wrote it
             }
-            var y : array<float>
-            var y0 : array<float>
+            var y, y0 : array<float>
             with_cell_planes() $(var cp : CellPlanes) {
                 let pa = cp |> io_(miss)
                 let pa0 = cp |> io_(miss)
@@ -7206,9 +7161,7 @@ def test_vkd_dec_combine_pair(t0 : T?) {
                 gate[i] = float(i) * 0.5 - 2.0   // gate[gidx] = 1.0: a sigmoid off 0.5, so an ungated arm reads apart
             }
             let wgs = int64((n + 255) / 256)
-            var y_r : array<float>
-            var y_s : array<float>
-            var y_u : array<float>
+            var y_r, y_s, y_u : array<float>
             with_cell_planes() $(var cp : CellPlanes) {
                 let px = cp |> in_(xin)
                 let pw = cp |> in_(w)
@@ -7236,9 +7189,7 @@ def test_vkd_dec_combine_pair(t0 : T?) {
                 delete y_u
                 y_u <- cp |> plane_run(pou)
             }
-            var r_ref : array<float>
-            var s_ref : array<float>
-            var u_ref : array<float>
+            var r_ref, s_ref, u_ref : array<float>
             r_ref |> resize(n)
             s_ref |> resize(n)
             u_ref |> resize(n)
@@ -7567,8 +7518,7 @@ def private topk_rows_compare(t : T?; tag : string; gidx : array<uint>; gw : arr
 def private moe_router_arm(t : T?; ner : int) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let nw = 2 * ner * MR_DIM
-        var wh : array<float>
-        var xh : array<float>
+        var wh, xh : array<float>
         wh |> resize(nw)
         xh |> resize(MR_NPOS * MR_DIM)
         for (i in range(nw)) {
@@ -7616,8 +7566,7 @@ def private moe_router_arm(t : T?; ner : int) {
 //! `gate` and `rbias` are the CPU select's own form (gpt-oss: softmax_weight, a router bias before the pick), which the kernel serves on its renormalized-softmax arm
 def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float; gate : MoeGate; rbias : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        var lh : array<float>
-        var rb : array<float>
+        var lh, rb : array<float>
         lh |> resize(MR_NPOS * MR_NER)
         rb |> resize(2 * MR_NE)   //! two layers' bias rows: the dispatch reads the second (rboff = MR_NE), the first is a decoy
         for (i in range(MR_NPOS * MR_NER)) {
@@ -7688,17 +7637,10 @@ def private moe_sched_arm(t : T?) {
             idx[r] = r < c0 ? 0u : (r < c0 + c1 ? 1u : (r < c0 + c1 + c2 ? 2u : (r < c0 + c1 + c2 + c3 ? 3u : 4u + hash_word(uint(r) + 55u) % uint(MR_NE - 7))))
         }
         let bases = fixed_array(1_000u, 96u, 2_000u, 96u, 3_000u, 48u)
-        var winv : array<uint>
-        var w1 : array<uint>
-        var w3 : array<uint>
-        var w2 : array<uint>
+        var winv, w1, w3, w2 : array<uint>
         sched_oracle(idx, MR_NE, wt_gu, wt_dn, sh, bases, winv, w1, w3, w2)
         let s_bytes = long_length(w1) * 4l
-        var ginv : array<uint>
-        var g1 : array<uint>
-        var g3 : array<uint>
-        var g2 : array<uint>
-        var gbex : array<uint>
+        var ginv, g1, g3, g2, gbex : array<uint>
         with_cell_planes() $(var cp : CellPlanes) {
             let pidx = cp |> in_plain(idx)
             let pinv = cp |> out_(nk)
@@ -7778,8 +7720,7 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
         let ne = 6
         let eps = 1.0e-6
         var fx <- ar_comb_fixture(n, k, npos)
-        var wn : array<float>
-        var lg : array<float>
+        var wn, lg : array<float>
         var sex : array<uint>
         var db : array<float>
         wn |> resize(n)
@@ -7799,8 +7740,7 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
         for (i in range(npos * MR_NER)) {
             lg[i] = hash_unit(uint(i) + 9u)
         }
-        var got_x : array<float>
-        var got_y : array<float>
+        var got_x, got_y : array<float>
         var got_h : array<uint>
         var got_q : array<int8>
         var got_s : array<float>
@@ -7848,8 +7788,7 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
             delete got_s
             got_s <- cp |> plane_run(pos)
         }
-        var want_x : array<float>
-        var want_y : array<float>
+        var want_x, want_y : array<float>
         want_x |> resize(npos * n)
         want_y |> resize(npos * n)
         for (p in range(npos)) {
@@ -7946,8 +7885,7 @@ def private moe_ar_comb_g4_arm(t : T?) {
         }
         let nblk = npos * n / 32
         let rq = ensure_cls_ar_comb_g4_rq()
-        var got_x : array<float>
-        var got_y : array<float>
+        var got_x, got_y : array<float>
         var got_h : array<uint>
         var oq : array<int8>
         var os : array<float>
@@ -7992,10 +7930,7 @@ def private moe_ar_comb_g4_arm(t : T?) {
                 os <- cp |> plane_run(pos)
             }
         }
-        var want_x : array<float>
-        var want_y : array<float>
-        var r : array<float>
-        var c : array<float>
+        var want_x, want_y, r, c : array<float>
         want_x |> resize(npos * n)
         want_y |> resize(npos * n)
         r |> resize(n)
@@ -8060,8 +7995,7 @@ def private topk_n_arm(t : T?; gptoss_router_bias : bool) {
         let lstride = 48
         let xnb1 = 7u
         let xnb2 = 5u
-        var lh : array<float>
-        var rb : array<float>
+        var lh, rb : array<float>
         lh |> resize(npos * lstride)
         rb |> resize(2 * ne)
         for (i in range(npos * lstride)) {

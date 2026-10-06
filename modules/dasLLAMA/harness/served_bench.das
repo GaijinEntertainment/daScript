@@ -341,13 +341,7 @@ def rate(turn : Turn; span_us : float) : float => span_us > 0.0 ? float(turn.com
 
 //! the three rows of one prompt size; false when a turn refused them
 def private size_rows(plan : Plan; base, run : string; size : int; chars_per_token : float) : bool {
-    var ttft_cold : array<float>
-    var ttft_warm : array<float>
-    var prefill : array<float>
-    var decode : array<float>
-    var own_cold : array<float>
-    var own_warm : array<float>
-    var own_decode : array<float>
+    var ttft_cold, ttft_warm, prefill, decode, own_cold, own_warm, own_decode : array<float>
     var prompt_tokens = 0l
     var warm_cached = -1l
     ttft_cold |> reserve(plan.reps)
@@ -750,8 +744,7 @@ def tts_rows(url, tag : string; models : array<string>; voice, text : string; re
             tally.refused++
             continue
         }
-        var spoken : array<float>
-        var rtfs : array<float>
+        var spoken, rtfs : array<float>
         spoken |> reserve(reps)
         rtfs |> reserve(reps)
         var walls <- collect_reps(reps) $(_rep) {

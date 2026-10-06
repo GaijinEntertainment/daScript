@@ -320,13 +320,7 @@ def run_attn_stage(rounds : int; tt : int64) {
     var blob : array<float>   // LN gamma at 0, beta at d
     blob |> resize(2l * d)
     fill_sin(blob, 1.0, 0.0173)
-    var x : array<float>
-    var xb : array<float>
-    var qq : array<float>
-    var kk : array<float>
-    var vv : array<float>
-    var posl : array<float>
-    var pos_emb : array<float>
+    var x, xb, qq, kk, vv, posl, pos_emb : array<float>
     x |> resize(tt * d)
     xb |> resize(tt * d)
     qq |> resize(tt * d)
@@ -397,9 +391,7 @@ def run_ffn_stage(rounds : int; tt : int64) {
     var blob : array<float>
     blob |> resize(2l * d)
     fill_sin(blob, 1.0, 0.0173)
-    var x : array<float>
-    var xb : array<float>
-    var h : array<float>
+    var x, xb, h : array<float>
     x |> resize(tt * d)
     xb |> resize(tt * d)
     h |> resize(tt * d4)

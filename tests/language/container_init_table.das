@@ -63,8 +63,7 @@ def test_table_index_store_forms(t : T?) {
         // `=` with a non-copyable RHS becomes `<-`, and that promotion CLONES the left
         // ExprAt (dropping noTableInit). preVisit re-derives the mark next pass, so the
         // slot must still not be initialized-then-overwritten - that would leak [1, 2].
-        var inscope tab : table<string; Bag>
-        var inscope other : table<string; Bag>
+        var inscope tab, other : table<string; Bag>
         let base = heap_bytes_allocated()
         var inscope src <- Bag(xs <- [9, 9, 9])
         other["k"] <- src                      // control: explicit move

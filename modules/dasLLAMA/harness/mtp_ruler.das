@@ -539,8 +539,7 @@ def main() : int {
     if (cfg.ngl == 0) {
         allow_cpu_prefill()   //! a CPU row prefills its control text on the CPU by design
     }
-    var rendered : array<string>
-    var ours : array<string>
+    var rendered, ours : array<string>
     render_prompts(cfg.model, texts, cfg.no_greedy ? 0 : cfg.ngen, cfg.ngl > 0, rendered, ours)
     rows |> reserve(length(rows) + length(ours))
     for (pi in range(length(ours))) {

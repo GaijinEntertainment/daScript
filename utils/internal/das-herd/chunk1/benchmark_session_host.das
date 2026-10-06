@@ -197,8 +197,7 @@ def private summarize(direct, terminal : array<GitProbeSample> const;
 
 def private run_command(command : GitProbeCommand const; cfg : BenchmarkOptions const;
                         root : string; var results : FILE const?) : bool {
-    var direct : array<GitProbeSample>
-    var terminal : array<GitProbeSample>
+    var direct, terminal : array<GitProbeSample>
     var hosted : array<HostedSample>
     direct |> reserve(cfg.rounds)
     terminal |> reserve(cfg.rounds)

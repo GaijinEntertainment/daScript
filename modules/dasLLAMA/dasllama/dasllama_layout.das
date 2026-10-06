@@ -300,8 +300,7 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
         var iq4qp : uint8? = null
         var iq4sp : uint8? = null
         // the lattice plane pairs' bases, by int(KqFmt); the lanes index them by the region's format
-        var kqp : array<uint8?>
-        var ksp : array<uint8?>
+        var kqp, ksp : array<uint8?>
         kqp |> resize(KQ_FMT_COUNT)
         ksp |> resize(KQ_FMT_COUNT)
         for (pl, i in t.kq, count()) {

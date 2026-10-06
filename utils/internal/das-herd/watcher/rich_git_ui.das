@@ -698,8 +698,7 @@ def draw_git_discard_popup() { // nolint:STYLE038
 def draw_changelist_row_menu(repository : RepositorySnapshot const;
                              worktree : WorktreeState const;
                              file_row : int; busy : bool) {
-    var stage_paths : array<string>
-    var unstage_paths : array<string>
+    var stage_paths, unstage_paths : array<string>
     changelist_selection_actions(repository, worktree, stage_paths,
         unstage_paths)
     let stage_count = length(stage_paths)
@@ -718,9 +717,7 @@ def draw_changelist_row_menu(repository : RepositorySnapshot const;
         g_client->changelist_action(repository.record.id, worktree.path,
             "unstage", unstage_paths)
     }
-    var modified_paths : array<string>
-    var staged_paths : array<string>
-    var untracked_paths : array<string>
+    var modified_paths, staged_paths, untracked_paths : array<string>
     var conflicted = 0
     changelist_selection_discards(repository, worktree, modified_paths,
         staged_paths, untracked_paths, conflicted)

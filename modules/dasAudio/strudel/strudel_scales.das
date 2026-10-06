@@ -115,8 +115,7 @@ def degree_to_note(degree : int; root_midi : int; intervals : array<int> const) 
     //! degrees wrap backwards: degree -1 in a 7-note scale is the 7th one octave down.
     let n = length(intervals)
     if (n == 0) return float(root_midi)
-    var oct : int
-    var step : int
+    var oct, step : int
     if (degree >= 0) {
         oct = degree / n
         step = degree % n

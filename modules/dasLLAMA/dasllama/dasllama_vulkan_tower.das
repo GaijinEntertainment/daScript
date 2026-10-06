@@ -851,8 +851,7 @@ def vt_sched_walk(@scratch var maps : array<uint>; meta : HostBuf; nrec : int64;
 //! halfword scales to `ws_dev`
 [cold_path]
 def vt_upload_regions(qblob : PlaneI8; qscales : PlaneF; regions : array<VtRegion>; lay : Q8RepackLayout; wq_dev, ws_dev : uint64; wq_bytes, ws_bytes : int64) {
-    var wq : array<uint8>
-    var ws : array<uint8>
+    var wq, ws : array<uint8>
     wq |> reserve_resize(wq_bytes)
     ws |> reserve_resize(ws_bytes)
     vt_gather_regions(qblob, qscales, regions, lay, wq, ws)

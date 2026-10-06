@@ -100,8 +100,7 @@ def section_by_hand(m : Model; decoder_mmproj : string; image_path : string; pro
     // the template half: the turn's tokens, split at the image marker
     var chat = create_chat_renderer(m, "", N_GEN)
     add_user(chat, prompt)
-    var head : array<int64>
-    var tail : array<int64>
+    var head, tail : array<int64>
     render_turn_image(m, chat, head, tail)
     let n_head = long_length(head)
     let n_tail = long_length(tail)
@@ -175,8 +174,7 @@ def section_mrope(m : Model; decoder_mmproj : string; image_path : string; promp
     let n_img = encode_image(emb, scratch, img, "tut14m", img_rows)
     var chat = create_chat_renderer(m, "", N_GEN)
     add_user(chat, prompt)
-    var head : array<int64>
-    var tail : array<int64>
+    var head, tail : array<int64>
     render_turn_image(m, chat, head, tail)
     let n_head = long_length(head)
     let np = n_head + n_img + long_length(tail)

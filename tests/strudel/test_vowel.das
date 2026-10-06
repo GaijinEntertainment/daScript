@@ -289,9 +289,7 @@ def test_osc_voice_vowel_renders(t : T?) {
     let chunkFrames = 480
     var output : array<float>
     output |> resize(chunkFrames * 2)
-    var reverb_buf : array<float>
-    var delay_buf : array<float>
-    var chorus_buf : array<float>
+    var reverb_buf, delay_buf, chorus_buf : array<float>
     osc_render_chunk(voice, output, reverb_buf, delay_buf, chorus_buf, chunkFrames)
     var maxAbs = 0.0
     for (sv in output) {
@@ -303,13 +301,10 @@ def test_osc_voice_vowel_renders(t : T?) {
 [test]
 def test_osc_voice_vowel_vs_no_vowel(t : T?) {
     let chunkFrames = 2400
-    var output_plain : array<float>
-    var output_vowel : array<float>
+    var output_plain, output_vowel : array<float>
     output_plain |> resize(chunkFrames * 2)
     output_vowel |> resize(chunkFrames * 2)
-    var reverb_buf : array<float>
-    var delay_buf : array<float>
-    var chorus_buf : array<float>
+    var reverb_buf, delay_buf, chorus_buf : array<float>
     var voice_plain = OscVoice(
         osc_type = OscType.osc_sawtooth,
         freq = 220.0,

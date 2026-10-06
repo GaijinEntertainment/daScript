@@ -151,8 +151,7 @@ def private vectorize(exprs : array<ExpressionPtr>; nameToRole : table<string; i
     if (exprs[0] is ExprOp2) {
         let l0 = exprs[0] as ExprOp2
         let op0 = "{l0.op}"
-        var lefts : array<ExpressionPtr>
-        var rights : array<ExpressionPtr>
+        var lefts, rights : array<ExpressionPtr>
         lefts |> reserve(N)
         rights |> reserve(N)
         var okk = true

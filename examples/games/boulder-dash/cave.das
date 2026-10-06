@@ -701,8 +701,7 @@ def replace_all(var c : Cave; from, to : Tile) {
 
 def grow_amoeba_at(var c : Cave; x, y : int) {
     var n = 0
-    var ox : int[4]
-    var oy : int[4]
+    var ox, oy : int[4]
     for (d in range(4)) {
         let nx = x + DIR_X[d]
         let ny = y + DIR_Y[d]

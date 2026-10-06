@@ -1140,8 +1140,7 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_bind_row_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
-        var with_pk_exprs : array<ExpressionPtr>
-        var no_pk_exprs : array<ExpressionPtr>
+        var with_pk_exprs, no_pk_exprs : array<ExpressionPtr>
         with_pk_exprs |> reserve(length(fields))
         no_pk_exprs |> reserve(length(fields))
 

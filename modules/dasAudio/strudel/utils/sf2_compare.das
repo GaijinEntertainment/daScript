@@ -261,8 +261,7 @@ def compute_envelope_correlation(ref_data, das_data : array<float>; n : int; sam
     if (window_size <= 0 || n < window_size) return 0.0
     let num_windows = n / window_size
 
-    var ref_env : array<float>
-    var das_env : array<float>
+    var ref_env, das_env : array<float>
     ref_env |> resize(num_windows)
     das_env |> resize(num_windows)
 

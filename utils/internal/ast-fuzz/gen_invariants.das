@@ -406,8 +406,7 @@ def emit_synth_all(kinds : array<string>; bases : table<string; string>; flds : 
         }
         w |> write("// GENERATED from gen_prelude.das.in by gen_invariants.das -- do not edit.\n")
         w |> write(tpl)
-        var emitted : array<string>
-        var values : array<string>
+        var emitted, values : array<string>
         for (k in kinds) {
             if (find_index(SKIP_KINDS, k) >= 0) {
                 continue
@@ -519,8 +518,7 @@ def collect_visit_derefs() : array<Row> {
     var res : array<Row>
     let src = read_text(VISIT_CPP)
     var cur = ""
-    var loopvars : array<string>
-    var guarded : array<string>
+    var loopvars, guarded : array<string>
     for (line in split(src, "\n")) {
         let t = strip(line)
         let vm = find(t, "::visit(Visitor & vis) \{")

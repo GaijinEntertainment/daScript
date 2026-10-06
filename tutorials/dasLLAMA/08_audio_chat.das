@@ -81,8 +81,7 @@ def section_splice(m : Model) {
 def section_render_spans(m : Model; prompt : string) {
     var rchat <- create_chat_renderer(m, "", 1l)
     add_user(rchat, prompt)
-    var head : array<int64>
-    var tail : array<int64>
+    var head, tail : array<int64>
     render_turn_audio(m, rchat, head, tail)
     print("render_turn_audio: head {long_length(head)} tokens | <audio rows splice here> | tail {long_length(tail)} tokens\n")
     delete head

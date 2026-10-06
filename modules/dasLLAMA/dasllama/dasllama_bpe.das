@@ -216,8 +216,7 @@ def private bigram_try_push(pair_merge : table<int64; int64>; var h : array<Bigr
 def private bigram_merge_heap(pair_merge : table<int64; int64>; var syms : array<int64>) {
     let n = length(syms)
     return if (n < 2)
-    var nxt : array<int>
-    var prv : array<int>
+    var nxt, prv : array<int>
     nxt |> resize(n)
     prv |> resize(n)
     for (i in range(n)) {

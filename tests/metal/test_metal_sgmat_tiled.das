@@ -43,8 +43,7 @@ class SgMatTiledGpu {
             tb[i0] = wb[(kk + (i0 / 8u)) * ndim + (tc * 8u + (i0 % 8u))]
             tb[i1] = wb[(kk + (i1 / 8u)) * ndim + (tc * 8u + (i1 % 8u))]
             barrier()
-            var ma : simdgroup_half8x8
-            var mb : simdgroup_half8x8
+            var ma, mb : simdgroup_half8x8
             simdgroup_load(ma, ta, 0u, 8u)
             simdgroup_load(mb, tb, 0u, 8u)
             simdgroup_multiply_accumulate(acc, ma, mb, acc)
@@ -58,8 +57,7 @@ class SgMatTiledGpu {
 [test]
 def test_sgmat_tiled_gpu_vs_cpu(t : T?) {
     t |> run("simdgroup_matrix tiled GEMM: GPU == direct CPU matmul, bit-exact") <| @(t : T?) {
-        var a : array<float16>
-        var b : array<float16>
+        var a, b : array<float16>
         a |> resize(M * K)
         b |> resize(K * N)
         for (r in range(M)) {

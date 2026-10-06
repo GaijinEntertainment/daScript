@@ -1452,8 +1452,7 @@ def resident_arm_floor(env_floor, pin : int64; strict : bool = false) : int64 {
 // instead of upload_stack.
 def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
                            mr, kgroup, wbias : int64; slice_rows : int64 = -1l) : int64 {
-    var wq : array<uint8>
-    var ws : array<uint8>
+    var wq, ws : array<uint8>
     moe_gpu_gather(t, f, woff, n, rows, slice_rows > 0l ? slice_rows : rows, mr, kgroup, wbias, wq, ws)
     let blk = rdec_place(wq, ws, n, rows, int(f))
     if (blk >= 0l) {
@@ -1498,8 +1497,7 @@ def private resident_upload_hc(t : Model; planes : array<ResidentPlane>; var cur
     let norm_rows <- fblob_rows(t, t.hc_norm_off, n_sites * hcd)
     let inject_rows <- fblob_rows(t, t.hc_inject_off, n_sites * hc * hcd)
     let head_norm <- fblob_rows(t, t.hc_head_norm_off, hcd)
-    var down_blks : array<int64>
-    var up_blks : array<int64>
+    var down_blks, up_blks : array<int64>
     down_blks |> reserve(n_sites)
     up_blks |> reserve(n_sites)
     for (site in range64(n_sites)) {
@@ -1940,8 +1938,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     var mir_base = 0l
     var rec_idx = 0l
     // per layer: its mirror base and slot (a shared-KV layer records its donor's), for the layers above it that share
-    var mir_bases : array<int64>
-    var mir_slots : array<int64>
+    var mir_bases, mir_slots : array<int64>
     mir_bases |> reserve_resize(c.n_layers)
     mir_slots |> reserve_resize(c.n_layers)
     let ple = has_ple(c) ? c.n_embd_per_layer : 0l
@@ -2251,10 +2248,7 @@ def private resident_prepare_moe(t : Model; n_moe : int64; sh_gated : bool) : bo
             di++
         }
     }
-    var rbias : array<float>
-    var gbias : array<float>
-    var ubias : array<float>
-    var dbias : array<float>
+    var rbias, gbias, ubias, dbias : array<float>
     let nfe = c.n_ff_exp
     if (c.moe_router_bias) {
         rbias |> reserve_resize(n_moe * ne)
@@ -4288,8 +4282,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     let kgroup = lay.kgroup
     let wbias = lay.wbias
     var from_l = layers
-    var wq : array<uint8>
-    var ws : array<uint8>
+    var wq, ws : array<uint8>
     // classifier plane first — the board's best ms-per-GB region (one whole-vocab GEMV serves
     // every token). One slice: the repack groups the plane globally, tail rows disk-order.
     // DASLLAMA_GPU_CLS=0 keeps it on the CPU (A/B lever).

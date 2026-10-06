@@ -48,8 +48,7 @@ def example_decode_and_play() {
     let path = "{get_das_root()}/examples/media/audio/music.wav"
     print("  Decoding: {path}\n")
 
-    var channels : int
-    var rate : int
+    var channels, rate : int
     var inscope samples : array<float>
     fopen(path, "rb") $(f) {
         if (f == null) {

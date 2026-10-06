@@ -152,9 +152,7 @@ def cache_shape(b : B?; name : string; n, d : int64) {
                 xsb[tk * nb + i] = xs[i]
             }
         }
-        var yf : array<float>
-        var yn : array<float>
-        var yt : array<float>
+        var yf, yn, yt : array<float>
         yf |> resize(ntok * d)
         yn |> resize(ntok * d)
         yt |> resize(ntok * d)

@@ -308,8 +308,7 @@ def private resolved_config_error(error : string; quiet : bool) : ResolvedConfig
 //! and crash bundles then resolve against `state_dir`, every other path against `cwd`. Everything after the first `--` goes to the child verbatim (the config's
 //! `server_args` when there is no `--`). `error` carries the text of a fatal configuration.
 def public resolve_config(args : array<string>; program_dir : string) : ResolvedConfig {
-    var head : array<string>
-    var tail : array<string>
+    var head, tail : array<string>
     var past_separator = false
     for (arg in args) {
         if (!past_separator && arg == "--") {
@@ -660,13 +659,11 @@ def public windows_local_dump_config(exe_name : string) : tuple<dump_type : int;
     if (get_platform_name() != "windows") return (dump_type = -1, folder = "")
     for (app_specific in [true, false]) {
         let key = app_specific ? "{WER_LOCAL_DUMPS}\\{exe_name}" : WER_LOCAL_DUMPS
-        var dump_type_text : string
-        var folder_text : string
+        var dump_type_text, folder_text : string
         let has_type = reg_query_value(key, "DumpType", dump_type_text)
         let has_folder = reg_query_value(key, "DumpFolder", folder_text)
         if (!app_specific) {
-            var dump_count : string
-            var flags : string
+            var dump_count, flags : string
             let has_policy = (has_type || has_folder
                 || reg_query_value(key, "DumpCount", dump_count) || reg_query_value(key, "CustomDumpFlags", flags))
             if (!has_policy) continue

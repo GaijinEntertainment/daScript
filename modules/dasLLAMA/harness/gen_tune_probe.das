@@ -989,9 +989,7 @@ def kq_tune_family(fmt : int64; var rows_out : table<string; JsonValue?>; var ge
         }
     }
     let nmr = length(kmrs)
-    var bbuf : array<KqBuf>
-    var gbuf : array<KqBuf>
-    var hbuf : array<KqBuf>
+    var bbuf, gbuf, hbuf : array<KqBuf>
     bbuf |> resize(nmr)
     gbuf |> resize(nmr)
     hbuf |> resize(nmr)
@@ -1572,15 +1570,11 @@ def private q8q8_tune_family : string { // nolint:STYLE037,STYLE038 - the q8q8 r
     delete wtab
     let nv = length(vs)
     // per-variant repacked buffers, built once outside the timing loop
-    var bufs : array<VBuf>
-    var gbufs : array<VBuf>
-    var hbufs : array<VBuf>
+    var bufs, gbufs, hbufs : array<VBuf>
     bufs |> resize(nv)
     gbufs |> resize(nv)
     hbufs |> resize(nv)
-    var vmr : array<int64>
-    var vts : array<int64>
-    var vgs : array<int64>
+    var vmr, vts, vgs : array<int64>
     var vform : array<int64>   // the tile form per variant: a bf16 variant runs the panel walk and holds the bf16 bar
     vmr |> resize(nv)
     vts |> resize(nv)

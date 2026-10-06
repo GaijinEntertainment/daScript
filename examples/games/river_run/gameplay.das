@@ -1382,8 +1382,7 @@ def player_vs_fuel_depots() {
 // Player vs bonuses — collect burst origins/colors and spawn AFTER the
 // query (create_entities can't run inside a decs query).
 def player_vs_bonuses() {
-    var burst_origins : array<float3>
-    var burst_colors : array<float3>
+    var burst_origins, burst_colors : array<float3>
     query() $(eid : EntityId; b : BonusPickup) {
         let r = PLAYER_SIZE + BONUS_PICKUP_RADIUS
         if (dist2d_sq(b.pos, player_pos) < r * r) {

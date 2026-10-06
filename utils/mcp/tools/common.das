@@ -328,9 +328,7 @@ def write_handled_type(var w : StringBuilderWriter; value : Annotation const) {
 
 def write_function_list(var writer : StringBuilderWriter; program : smart_ptr<Program>) {
     let thisMod = get_this_module(program)
-    var user_funcs : array<string>
-    var generic_instances : array<string>
-    var class_methods : array<string>
+    var user_funcs, generic_instances, class_methods : array<string>
     for_each_function(thisMod, "") $(func) {
         if (func.flags.builtIn) return
         var line = ""

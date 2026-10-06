@@ -617,8 +617,7 @@ def private rb_bound_var(line : string) : string {
 
 def private check_race_bind_numbers {
     var declared : table<string>
-    var class_base : table<string; string>
-    var kernel_class : table<string; string>
+    var class_base, kernel_class : table<string; string>
     var files : array<string>
     dir("modules/dasLLAMA/dasllama") $(name) {
         if (name |> ends_with(".das")) {
@@ -1370,8 +1369,7 @@ def private check_cm2_stamp_tile(path : string; st : VkStamp; d : StampDefaults)
 //! `let KQ_GRID_<FMT> = KQ_GRID_<PREV> + KQ_GRID_<PREV>_WORDS` chain the host fill (`kq_grid_dev`) reads
 def private check_kq_gemv_grid_literals {
     var inscope lines <- split(strip_line_comments(fread(VK_CLASSES)), "\n")
-    var words : table<string; int>
-    var offs : table<string; int>
+    var words, offs : table<string; int>
     var templates : array<string>
     for (line in lines) {
         if (line |> starts_with("let KQ_GRID_")) {
@@ -1660,7 +1658,7 @@ let private GEMM_GEN_FILES = [
     "modules/dasLLAMA/dasllama/dasllama_gemm_gen.das",
     "modules/dasLLAMA/dasllama/dasllama_gemm_schema.das"
 ]
-let private GEMM_GEN_STAMP_HASH = 0xd682989cb9f7bd0eul
+let private GEMM_GEN_STAMP_HASH = 0xb1c907a641171becul
 
 [arch(at = "ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers")]
 def private check_gemm_gen_stamp {
@@ -1746,8 +1744,7 @@ def private check_ple_gather_sites {
         let suffix = ident_prefix(rest)
         psos |> insert(empty(suffix) ? "q8" : slice(suffix, 1))
     }
-    var picks : table<string>
-    var encodes : table<string>
+    var picks, encodes : table<string>
     var inscope fns <- function_bodies(PREFILL_FILE) $(header) {
         return find(header, "ple_gather_pso_of(") >= 0 || find(header, "pf_enc_ple_gather_fmt(") >= 0
     }

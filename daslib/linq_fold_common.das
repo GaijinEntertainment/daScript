@@ -1525,8 +1525,7 @@ def emit_min_max_family_lane(
     let totName = qn("mmtot", at)
     let cntName = qn("mmcnt", at)
     let firstName = qn("mmfirst", at)
-    var minCmp : Expression?
-    var maxCmp : Expression?
+    var minCmp, maxCmp : Expression?
     if (isBy) {
         var keyVal = peel_lambda_replace_var(keyLam, qmacro($i(valName)))
         var keyMin = peel_lambda_replace_var(keyLam, qmacro($i(minName)))
@@ -1705,8 +1704,7 @@ def emit_early_exit_lane(
         }
         valueName = projBindName
     }
-    var preludeStmts : array<Expression?>
-    var tailStmts : array<Expression?>
+    var preludeStmts, tailStmts : array<Expression?>
     let directReturn = (adapter == null || adapter->supports_direct_return())
     var dispatch = directReturn ? LoopDispatch(Each = null) : adapter->effective_dispatch(LoopDispatch(Each = null))
     if (opName == "first") {
@@ -2214,11 +2212,8 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
     if (lane == LinqLane.UNKNOWN) return null
     let counting = lane == LinqLane.COUNTER || (lane == LinqLane.ACCUMULATOR && lastName == "long_count")
     if (top._type == null || top._type.firstType == null) return null
-    var whereCond : Expression?
-    var postTakeWhereCond : Expression?
-    var projection : Expression?
-    var intermediateBinds : array<Expression?>
-    var preCondStmts : array<Expression?>
+    var whereCond, postTakeWhereCond, projection : Expression?
+    var intermediateBinds, preCondStmts : array<Expression?>
     var seenSelect = false
     var allProjectionsPure = true
     var elementType = clone_type(top._type.firstType)
@@ -2274,10 +2269,7 @@ def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) 
     if (projection != null && has_sideeffects(projection)) {
         allProjectionsPure = false
     }
-    var skipExpr : Expression?
-    var skipWhileCond : Expression?
-    var takeWhileCond : Expression?
-    var takeExpr : Expression?
+    var skipExpr, skipWhileCond, takeWhileCond, takeExpr : Expression?
     if (c.single |> key_exists("skip")) {
         var skipArg = c.single["skip"].arguments[1]
         if (skipArg == null || skipArg._type == null || skipArg._type.baseType != Type.tInt) return null
@@ -2916,8 +2908,7 @@ def emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Exp
             var dRet = (oc.selectLam != null
                 ? peel_lambda_replace_var(oc.selectLam, qmacro($i(matItName)))
                 : qmacro($i(matItName)))
-            var dPrologue : array<Expression?>
-            var dTail : array<Expression?>
+            var dPrologue, dTail : array<Expression?>
             if (oc.firstName == "first") {
                 dPrologue |> push_from <| qmacro_block_to_array() {
                     var $i(bestKeyName) = default<$t(keyType)>
@@ -2977,8 +2968,7 @@ def emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Exp
         }
     }
     var outElemType = (oc.selectLam != null) ? oc.selectElemType : elemType
-    var prologue : array<Expression?>
-    var tailStmts : array<Expression?>
+    var prologue, tailStmts : array<Expression?>
     if (oc.firstName == "first") {
         var firstRetExpr : Expression?
         if (oc.selectLam != null) {
@@ -2996,8 +2986,7 @@ def emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Exp
         }
     } else {
         let dBindName = qn("order_d", at)
-        var bestRetExpr : Expression?
-        var dRetExpr : Expression?
+        var bestRetExpr, dRetExpr : Expression?
         if (oc.selectLam != null) {
             bestRetExpr = peel_lambda_replace_var(oc.selectLam, qmacro($i(bestName)))
             dRetExpr = peel_lambda_replace_var(oc.selectLam, qmacro($i(dBindName)))
@@ -3082,8 +3071,7 @@ def emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expr
     var rowType = clone_type(oc.orderElemType)
 
     var deferred = ctx.src->defers_materialization() && oc.hasKey
-    var keyType : TypeDeclPtr
-    var handleType : TypeDeclPtr
+    var keyType, handleType : TypeDeclPtr
     var keyBody : Expression?
     if (deferred) {
         keyType = (oc.orderKey != null && oc.orderKey._type != null) ? strip_const_ref(clone_type(oc.orderKey._type.firstType)) : null
@@ -3096,8 +3084,7 @@ def emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expr
 
     var laneBufType : TypeDeclPtr
     var perElementPush : Expression?
-    var postBufDeclStmts : array<Expression?>
-    var tailStmts : array<Expression?>
+    var postBufDeclStmts, tailStmts : array<Expression?>
 
     if (deferred) {
         laneBufType = build_surrogate_type(keyType, handleType, at)
@@ -3215,8 +3202,7 @@ def emit_buffer_helper_dispatch(var c : Captures; var ctx : EmitCtx; at : LineIn
     let topNName = order_top_n_call_name(oc.orderName)
     let minMaxName = order_min_call_name(oc.orderName, oc.hasKey)
     let needIterWrap = ctx.expr_is_iterator
-    var emission : Expression?
-    var firstCount : Expression?
+    var emission, firstCount : Expression?
     if (oc.firstName != "") {
         firstCount = oc.takeExpr != null ? qmacro(($e(oc.takeExpr) > 0 ? 1 : 0)) : qmacro(1)
     }
@@ -4926,10 +4912,8 @@ def plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;    // nol
     let dummyName  = qn("{prefix}dummy", at)
     let outName    = qn("{prefix}out", at)
     var segBinds : array<array<Expression?>>
-    var segWheres : array<Expression?>
-    var currentBinds : array<Expression?>
-    var currentWhere : Expression?
-    var projection : Expression?
+    var segWheres, currentBinds : array<Expression?>
+    var currentWhere, projection : Expression?
     var lastBindName = adapter->bind_name(at)
     var elemType = strip_const_ref(adapter->element_type())
     var totalBindCount = 0
@@ -5042,8 +5026,7 @@ def plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;    // nol
             var $i(dummyName) : tuple<typedecl(invoke($e(keyBlock), default<$t(elemType)>)) -const -&; $t(accType2)>
         }
     }
-    var missInitStmts : array<Expression?>
-    var hitUpdateStmts : array<Expression?>
+    var missInitStmts, hitUpdateStmts : array<Expression?>
     var reducerAdapter : SourceAdapter? = (adapter->defers_materialization() && itName == adapter->bind_name(at)) ? adapter : null
     for (s in specs) {
         let (mi, hu) = emit_reducer_branches(s, at, entryName, itName, reducerAdapter)
@@ -5556,8 +5539,7 @@ def build_join_pair_core(
     let cntName     = qn(namePrefix + "_cnt", at)
     let bufName     = qn(namePrefix + "_buf", at)
     let resBindName = qn(namePrefix + "_res", at)
-    var preludeStmts : array<Expression?>
-    var pairStmts : array<Expression?>
+    var preludeStmts, pairStmts : array<Expression?>
     var returnStmt : Expression?
     var invokeRetType : TypeDeclPtr
     if (countOnly) {
@@ -5659,8 +5641,7 @@ def build_join_standalone_pieces(
     let arrName     = qn(namePrefix + "_arr", at)
     let bufName     = qn(namePrefix + "_buf", at)
     let emptyArrName = qn(namePrefix + "_empty", at)
-    var preludeStmts : array<Expression?>
-    var probeInnerStmts : array<Expression?>
+    var preludeStmts, probeInnerStmts : array<Expression?>
     var returnStmt : Expression?
     var invokeRetType : TypeDeclPtr
     var groupEmptyExpr : Expression?

@@ -53,8 +53,7 @@ def test_clamp_rows(t : T?) {
 [test]
 def test_empty_inputs(t : T?) {
     t |> run("every row helper is a no-op on zero rows / zero elements") @(t : T?) {
-        var a : array<float>
-        var b : array<float>
+        var a, b : array<float>
         var w <- [1.0]
         var wp = PlaneF()
         wp.p = unsafe(addr(w[0]))
@@ -181,8 +180,7 @@ def test_rope_neox_2d_rows(t : T?) {
         let d = n_head * hs
         var pos_x <- [1l, 3l]
         var pos_y <- [2l, 0l]
-        var cx, sx, cy, sy : array<float>
-        var no_ff : array<float>
+        var cx, sx, cy, sy, no_ff : array<float>
         build_rope_tabs_rows(cx, sx, 100.0, 1.0, 1.0, no_ff, false, pos_x, npos, hs / 2l)
         build_rope_tabs_rows(cy, sy, 100.0, 1.0, 1.0, no_ff, false, pos_y, npos, hs / 2l)
         var v : array<float>

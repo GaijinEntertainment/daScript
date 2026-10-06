@@ -154,8 +154,7 @@ def test_combine(t : T?) {
         t |> equal(c[1], 2)
     }
     t |> run("both empty") @(t : T?) {
-        let a : array<int>
-        let b : array<int>
+        let a, b : array<int>
         let c <- combine(a, b)
         t |> equal(length(c), 0)
     }
@@ -374,8 +373,7 @@ def test_intersection(t : T?) {
         t |> equal(length(c), 0)
     }
     t |> run("both empty") @(t : T?) {
-        let a : table<int>
-        let b : table<int>
+        let a, b : table<int>
         let c <- intersection(a, b)
         t |> equal(length(c), 0)
     }
@@ -402,8 +400,7 @@ def test_union(t : T?) {
         t |> success(identical(c, a))
     }
     t |> run("both empty") @(t : T?) {
-        let a : table<int>
-        let b : table<int>
+        let a, b : table<int>
         let c <- union(a, b)
         t |> equal(length(c), 0)
     }
@@ -449,8 +446,7 @@ def test_identical(t : T?) {
         t |> equal(identical(a, b), false)
     }
     t |> run("both empty") @(t : T?) {
-        let a : table<int>
-        let b : table<int>
+        let a, b : table<int>
         t |> equal(identical(a, b), true)
     }
 }

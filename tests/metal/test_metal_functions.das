@@ -304,8 +304,7 @@ def test_threadgroup_param_gpu(t : T?) {
 def test_pointer_param_gpu(t : T?) {
     t |> run("device + threadgroup pointer parameters: advancing dot and slab max match") <| @(t : T?) {
         let W = N * 4
-        var pa : array<float>
-        var pb : array<float>
+        var pa, pb : array<float>
         pa |> resize(W)
         pb |> resize(W)
         for (k in range(W)) {

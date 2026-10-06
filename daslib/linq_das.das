@@ -464,8 +464,7 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
             return "(0)"
         }
     }
-    var preWheres : array<string>
-    var postWheres : array<string>
+    var preWheres, postWheres : array<string>
     var firstPostWhere = -1
     var wp = firstWhere
     var whereErr = ""

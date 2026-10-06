@@ -1148,8 +1148,7 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;   // nol
     // attachment since unmatched RHS becomes NULL regardless.
     let needsRhsWrapForPreservedSide = ((kind == JoinKind.Right || kind == JoinKind.FullOuter)
                                         && !empty(subQ.whereSql))
-    var rhsTableName : string
-    var rhsRightWhereSql : string
+    var rhsTableName, rhsRightWhereSql : string
     var rhsTableSqlIsRaw = false
     if (needsRhsWrapForPreservedSide) {
         // nolint:STYLE015 — explains why inner AS "t1" is required (alias-qualified refs in subQ.whereSql).
@@ -2054,8 +2053,7 @@ def private try_join_null_probe(var node : ExpressionPtr; q : SqlQuery;
     if (srcIdx < 0) return ""
     unsafe {
         let spec & = q.joins[length(q.joins) - 1]
-        var probeAlias : string
-        var sqlCol : string
+        var probeAlias, sqlCol : string
         if (spec.kind == JoinKind.Left && srcIdx == 1) {
             probeAlias = spec.alias
             sqlCol = field_to_column_name(spec.rootType, spec.rightCol)
@@ -3198,13 +3196,11 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
         }
     }
     {
-        var lhs : ExpressionPtr
-        var rhs : ExpressionPtr
+        var lhs, rhs : ExpressionPtr
         if (qmatch(node, $e(lhs) && $e(rhs)).matched) return "({pred_to_sql_boolctx(lhs, q, prog, at)}) AND ({pred_to_sql_boolctx(rhs, q, prog, at)})"
     }
     {
-        var lhs : ExpressionPtr
-        var rhs : ExpressionPtr
+        var lhs, rhs : ExpressionPtr
         if (qmatch(node, $e(lhs) || $e(rhs)).matched) return "({pred_to_sql_boolctx(lhs, q, prog, at)}) OR ({pred_to_sql_boolctx(rhs, q, prog, at)})"
     }
     {

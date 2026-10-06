@@ -48,18 +48,8 @@ def main() {
         let tf <- collect(mf, samples)
         // timestamps (>= tok_beg) flip on near-tie segment splits — compare word streams
         let beg = mq.whisper.tok_beg
-        var wq : array<int>
-        var wf : array<int>
-        for (tk in tq) {
-            if (tk < beg) {
-                wq |> push(tk)
-            }
-        }
-        for (tk in tf) {
-            if (tk < beg) {
-                wf |> push(tk)
-            }
-        }
+        var wq <- [for (tk in tq); tk; where tk < beg]
+        var wf <- [for (tk in tf); tk; where tk < beg]
         var word_flips = length(wq) != length(wf) ? max(length(wq), length(wf)) : 0
         if (word_flips == 0) {
             for (a, b in wq, wf) {

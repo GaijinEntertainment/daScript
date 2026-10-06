@@ -29,14 +29,10 @@ let BASE_NAMES = fixed_array("identity", "fwht    ", "dct     ", "dft     ")
 // pairs = sort RoPE pairs (2i, 2i+1) by pair RMS instead of single channels (the loader-bakeable
 // granularity for K — rope tables move pairwise).
 def measure_sorted(sL, sS : Session; c : Config; hs, npastL, npastS : int64; pairs : bool; tag : string) {   // nolint:STYLE037,STYLE038 — one measurement kernel over (layer, head, side); order-learning and scoring are loop-coupled
-    var e2 : double[2]
-    var e2mix : double[2]
-    var pw : double[2]
+    var e2, e2mix, pw : double[2]
     var chrms : array<double>
-    var order : array<int>
-    var porder : array<int>
-    var seg : array<float>
-    var dq : array<float>
+    var order, porder : array<int>
+    var seg, dq : array<float>
     var blk : array<uint8>
     chrms |> resize(hs)
     order |> resize(hs)
@@ -199,8 +195,7 @@ def main {   // nolint:STYLE037,STYLE038 — flat probe driver: every basis arm 
     let hs = layer_head_size(c, 0l)
     print("layers {c.n_layers}, kv_heads {layer_n_kv_heads(c, 0l)}, head_size {hs}, rows {npast}\n")
 
-    var dct : array<float>
-    var dft : array<float>
+    var dct, dft : array<float>
     build_dct(dct, hs)
     build_dft(dft, hs)
     var signs : array<float>
@@ -210,9 +205,7 @@ def main {   // nolint:STYLE037,STYLE038 — flat probe driver: every basis arm 
     for (a in acc) {
         a.vprof |> resize(hs)
     }
-    var seg : array<float>
-    var y : array<float>
-    var dq : array<float>
+    var seg, y, dq : array<float>
     var blk : array<uint8>
     seg |> resize(hs)
     y |> resize(hs)

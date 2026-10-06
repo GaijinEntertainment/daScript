@@ -89,8 +89,7 @@ def main() : int {
         eval_(tr, sg, prompt)   //! the CPU prefill on both sessions: the decode step alone is the question
         verify(select_decode_override("metal"), "metal decode override")
         var tok = greedy_top(sc.logits, vocab)
-        var cpu_ids : array<int64>
-        var gpu_ids : array<int64>
+        var cpu_ids, gpu_ids : array<int64>
         print("PROBE {base_name(path)} kv={kdt}: prompt {length(prompt)} tokens, {nsteps} forced steps\n")
         for (st in range64(nsteps)) {
             var one <- [tok]

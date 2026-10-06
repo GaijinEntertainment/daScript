@@ -393,8 +393,7 @@ def bench_tile_kq(var rows : int&; cfg : BenchArgs; name : string; f : KqFmt; va
     let perCall : table<string; int64>   // a kq / per-32 tile covers TILE_TOKENS a call
     var stats : array<RowStat>
     var fns : array<TileFn>
-    var mrOf : array<int64>
-    var stepOf : array<int64>
+    var mrOf, stepOf : array<int64>
     select_tile_rows(cfg, name, int64(cfg.d), regs.tile, mrs, perCall, stats, fns, mrOf, stepOf)
     unsafe {
         time_tile_rows(stats, cfg, fns, mrOf, stepOf, addr<uint8 const?>(p.arena[p.tileKq]), addr<uint8 const?>(p.arena[p.ks]), sh, p,
@@ -503,8 +502,7 @@ def bench_q8_flavor(var rows : int&; cfg : BenchArgs; name : string; var p : Pla
         if (ntok > 0l) {
             var stats : array<RowStat>
             var fns : array<TF>
-            var mrOf : array<int64>
-            var stepOf : array<int64>
+            var mrOf, stepOf : array<int64>
             select_tile_rows(cfg, name, d, tvs, mrs, steps, stats, fns, mrOf, stepOf)
             time_tile_rows(stats, cfg, fns, mrOf, stepOf, kqp, ksp, sh, p, type<WT>, type<ST>)
             for (s in stats) {

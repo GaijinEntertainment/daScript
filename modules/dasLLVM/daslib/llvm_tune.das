@@ -1263,8 +1263,7 @@ def private scope_status_row(prog : Program?; sc : TuneScope; mpath : string; co
     if (!empty(sc.versionKey)) {
         fnames |> push("{TUNE_VERSION_TOKEN}{sc.versionKey}={sc.versionExpected}")
     }
-    var fallbacks : array<string>
-    var unprofiled : array<string>
+    var fallbacks, unprofiled : array<string>
     let fat = tune_mode() == "fat"
     let baseline = jit_baseline_class()
     for (fname in fnames) {

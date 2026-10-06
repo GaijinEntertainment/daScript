@@ -426,8 +426,7 @@ def private vars_sorted(vars : array<ReTerm>) : bool {
 }
 
 def private regroup(that : ExprOp2?; var terms : array<ReTerm>; addOp, subOp : string) : ExpressionPtr {
-    var vars : array<ReTerm>
-    var consts : array<ReTerm>
+    var vars, consts : array<ReTerm>
     for (t in terms) {
         if (is_all_const(t.e)) {
             consts |> push(t)

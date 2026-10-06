@@ -271,8 +271,7 @@ def private pt_push_box(cx, cz : float; hx, height, hz : float; angle : float; m
     let sa = sin(angle)
     let lx = fixed_array(-hx, hx, hx, -hx)
     let lz = fixed_array(-hz, -hz, hz, hz)
-    var b : float3[4]
-    var tp : float3[4]
+    var b, tp : float3[4]
     for (i in range(4)) {
         let wx = cx + lx[i] * ca - lz[i] * sa
         let wz = cz + lx[i] * sa + lz[i] * ca

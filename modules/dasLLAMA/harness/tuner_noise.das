@@ -53,8 +53,7 @@ def private probe_dot(a : float const?; b : float const?; n : int) : float {
 }
 
 def private probe_once(settle_ms : int; var med_out : double&) : double {
-    var a : array<float>
-    var b : array<float>
+    var a, b : array<float>
     a |> resize(PROBE_N)
     b |> resize(PROBE_N)
     for (i in range(PROBE_N)) {

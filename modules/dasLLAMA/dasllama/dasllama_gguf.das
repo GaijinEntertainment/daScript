@@ -913,8 +913,7 @@ def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : strin
         }
         let sbb = ggml_type_bytes(gtype, 256l)
         let fmt = gguf_kq_fmt_of_type(gtype)
-        var kq : array<uint8>
-        var ks : array<uint8>
+        var kq, ks : array<uint8>
         kq |> resize(int(kq_qsb(fmt)))
         ks |> resize(int(kq_ssb(fmt)))
         let nb = expect_n / 256l

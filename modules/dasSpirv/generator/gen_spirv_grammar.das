@@ -80,8 +80,7 @@ def main {  // nolint:STYLE038 - one-shot generator: flat CLI handling then a si
         panic("cannot read grammar JSON under {root}/spirv_headers")
     }
 
-    var cerr : string
-    var eerr : string
+    var cerr, eerr : string
     var cj = read_json(core_text, cerr)
     var ej = read_json(ext_text, eerr)
     if (cj == null) {

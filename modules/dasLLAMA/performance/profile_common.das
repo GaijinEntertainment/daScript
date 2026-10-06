@@ -537,8 +537,7 @@ def private tune_gate_why(_) : string {
             why = "the exe's sidecar ({sc}) carries no kernels section - not a minted manifest"
         }
     } elif (!empty(mpath)) {
-        var mst : FStat
-        var bst : FStat
+        var mst, bst : FStat
         let args <- get_command_line_arguments()
         if (!stat(mpath, mst)) {
             why = "DAS_TUNE_MANIFEST='{mpath}' does not exist - every kernel runs its fallback"

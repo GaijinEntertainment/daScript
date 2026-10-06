@@ -453,9 +453,7 @@ def test_tensor_ops(t : T?) { // nolint:STYLE038 - flat list of generated-source
         fill_oracle(oracle)
         gl_LocalInvocationID = uint3(0u, 0u, 0u)
         gl_WorkGroupSize = uint3(1u, 1u, 1u)   // width-1 replay: staging strides cover whole tiles
-        var want_bf : array<float>
-        var want_q8 : array<float>
-        var want_q8h : array<float>
+        var want_bf, want_q8, want_q8h : array<float>
         oracle->tmm_bf16_k()
         want_bf := oracle.oc
         oracle->tmm_q8_k()
@@ -881,8 +879,7 @@ def test_tmm2d_devab(t : T?) { // nolint:STYLE038 - both flavors x clean/poisone
         fill_devab_oracle(oracle)
         gl_LocalInvocationID = uint3(0u, 0u, 0u)
         gl_WorkGroupSize = uint3(1u, 1u, 1u)
-        var want : array<array<float>>
-        var want_poisoned : array<array<float>>
+        var want, want_poisoned : array<array<float>>
         var wh_poisoned : array<array<float16>>
         want |> reserve(2)
         want_poisoned |> reserve(2)

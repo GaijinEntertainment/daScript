@@ -223,8 +223,7 @@ def expert_reuse_report(verbose : bool = true) {
             nl++
         }
     }
-    var sum_hits : int64[4]
-    var sum_cov : int64[4]
+    var sum_hits, sum_cov : int64[4]
     var sum_consec = 0l
     var sum_acc = 0l
     var toks = 0l

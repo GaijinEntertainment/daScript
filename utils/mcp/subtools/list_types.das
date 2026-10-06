@@ -26,10 +26,7 @@ def private write_type_body(var w : StringBuilderWriter; value : StructurePtr; s
 
 def write_type_list(var writer : StringBuilderWriter; program : smart_ptr<Program>) {
     let thisMod = get_this_module(program)
-    var structs : array<string>
-    var classes : array<string>
-    var enums : array<string>
-    var typedefs : array<string>
+    var structs, classes, enums, typedefs : array<string>
     for_each_structure(thisMod) $(value) {
         if (value.flags.privateStructure || value.flags.isLambda || value.flags.generated || value.flags._generator) return
         let entry = build_string() $(var w) {

@@ -156,8 +156,7 @@ def test_group_by(t : T?) {
         // regular pipeline.
         let src = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         var groups <- src._group_by(_ % 3)
-        var by_key : table<int; int>
-        var totals : table<int; int>
+        var by_key, totals : table<int; int>
         for (g in groups) {
             by_key[g._0] = g._1 |> length
             var s = 0

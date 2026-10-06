@@ -616,8 +616,7 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) : 
 //! its position ids. A text chunk breaks at a span, so no BPE merge crosses one; text a family folds ahead of the
 //! user text (a system prompt with no role of its own) rides ahead of the first span.
 def private render_user_spans(m : Model; c : ChatSession; user_content : string; var out : array<int64>) {
-    var inscope lead : array<ChatPart>
-    var inscope after : array<ChatPart>
+    var inscope lead, after : array<ChatPart>
     var seen = false
     for (p in c.tmpl.user.parts) {
         if (p.kind == ChatPartKind.content) {
@@ -732,8 +731,7 @@ def private render_prompt_media(m : Model; c : ChatSession; pre_parts, post_part
             user_content = "{fold}\n\n{c.pending}"
         }
     }
-    var before : array<ChatPart>
-    var after : array<ChatPart>
+    var before, after : array<ChatPart>
     var seen = false
     for (p in c.tmpl.user.parts) {
         if (p.kind == ChatPartKind.content) {
@@ -1556,8 +1554,7 @@ def private channel_content_arm(var ts : ThinkStream; d : array<uint8> const#; v
 def think_feed_(var ts : ThinkStream; piece : string; var reasoning, content : string&) {
     let work = empty(ts.hold) ? piece : "{ts.hold}{piece}"
     ts.hold = ""
-    var rp : array<string>
-    var cp : array<string>
+    var rp, cp : array<string>
     if (ts.mode == ThinkMode.channel_switch) {
         think_feed_channel(ts, work, rp, cp)
     } else {
@@ -1712,8 +1709,7 @@ def private respond_media_or_text_(m : Model; var c : ChatSession; params : Samp
     if (c.n_audio_rows > 0l || c.n_image_rows > 0l) {
         // media turn: spans around the splice; ONE kind per turn (the add_user_* pair enforces it)
         let is_image = c.n_image_rows > 0l
-        var inscope head : array<int64>
-        var inscope tail : array<int64>
+        var inscope head, tail : array<int64>
         if (is_image) {
             render_prompt_image(m, c, head, tail)
         } else {

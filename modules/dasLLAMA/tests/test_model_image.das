@@ -612,8 +612,7 @@ def test_image_mechanics(t : T?) {
 // configure clobbering serialized gguf overrides even when short gens can't (sliding_window
 // only bites past the window)
 def private config_diff_field(a, b : Config) : string {
-    var names : array<string>
-    var vals : array<string>
+    var names, vals : array<string>
     apply(a) $(name : string; field) {
         names |> push(name)
         vals |> push("{field}")

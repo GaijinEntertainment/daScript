@@ -507,8 +507,7 @@ def private quantize_k5_superblock_p(x : float const?; var kq : uint8?; kqo : in
         var lq : int[256]
         var lsub : int[32]
         var wt : float[32]
-        var scales : float[8]
-        var mins : float[8]
+        var scales, mins : float[8]
         var max_scale = 0.0
         var max_min = 0.0
         for (j in range64(8l)) {

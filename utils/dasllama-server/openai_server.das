@@ -2421,8 +2421,7 @@ def private message_parts(mv : JsonValue?; route : string; var images : array<st
 
 // `message_parts` for routes with no media path: image/audio parts warn and drop.
 def private message_text(mv : JsonValue?; route : string) : string {
-    var images : array<string>
-    var audios : array<string>
+    var images, audios : array<string>
     let s = message_parts(mv, route, images, audios)
     if (!empty(images)) {
         to_log(LOG_WARNING, "{route}: skipping {length(images)} image content part(s) — no vision arm on this path\n")
@@ -3038,8 +3037,7 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
     defer() { delete seen_images }
     var seen_audios : array<string>   // ditto for input_audio parts
     defer() { delete seen_audios }
-    var tool_results : array<string>
-    var tool_names : array<string>
+    var tool_results, tool_names : array<string>
     defer() {
         delete tool_results
         delete tool_names
@@ -3575,8 +3573,7 @@ def private handle_completion(srv : FrontLink; req : FrontReq; writer : WriterRe
     var toks <- encode(cur_model(), prompt, true, false)
     defer() { delete toks }
     // no stop ids and no close: raw completions run to the budget, matching bare generate()
-    var none_stop : array<int64>
-    var none_close : array<int64>
+    var none_stop, none_close : array<int64>
     var no_spans : array<MediaSpan>
     register_request(srv, writer, toks, none_stop, none_close, no_spans,
                      params, max_new, streaming, false, "cmpl",

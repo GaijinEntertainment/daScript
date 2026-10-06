@@ -861,8 +861,7 @@ def flush_segment(var seg : Segment; hoists : array<string>; givens : array<stri
 def append_member_block(var seg : Segment; var ren : Renamer; blk : RstBlock; var hoists : array<string>) {
     var body := blk.body
     mark_elisions(body)
-    var members : array<string>
-    var stmts : array<string>
+    var members, stmts : array<string>
     for (chunk in chunks_of(body)) {
         if (chunk.kind == "hoist") {
             for (h in chunk.lines) {

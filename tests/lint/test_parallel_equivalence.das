@@ -66,8 +66,7 @@ def test_parallel_matches_serial(t : T?) {
         let argv_serial <- build_argv(1, fixtures)
         let argv_parallel <- build_argv(4, fixtures)
 
-        var out_serial : string
-        var out_parallel : string
+        var out_serial, out_parallel : string
         let rc_serial = run_argv(argv_serial, out_serial)
         let rc_parallel = run_argv(argv_parallel, out_parallel)
 

@@ -37,8 +37,7 @@ def test_failed_moves(t : T?) {
         // this scenario is fine in the very safe context
         // when moving owning container, data is not duplicated
         // so array stays in the same memory location. all good
-        var a : array<array<int>>
-        var b : array<array<int>>
+        var a, b : array<array<int>>
         resize(a, 10)
         a[0] |> push(1)
         var failed = false
@@ -61,8 +60,7 @@ def test_failed_moves(t : T?) {
     }
     t |> run("function move it") @@(t : T?) {
         // same as scenario above
-        var a : array<array<int>>
-        var b : array<array<int>>
+        var a, b : array<array<int>>
         resize(a, 10)
         a[0] |> push(1)
         var failed = false

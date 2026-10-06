@@ -788,8 +788,7 @@ def private build_sweep_argvs(ctx : PreflightCtx; in_scope : array<string>) : tu
     // run_chunk_workers spawns one thread per argv, so per-TU flags must not become per-TU
     // argvs: group the sweep by identical flag set first (the whole tree collapses to a
     // handful of sets), then chunk inside each group
-    var groups : table<string; array<string>>
-    var group_flags : table<string; array<string>>
+    var groups, group_flags : table<string; array<string>>
     var from_db = 0
     for (f in in_scope) {
         let abs = cc_key(path_join(cwd, f))
@@ -838,8 +837,7 @@ def gate_cpp_syntax(ctx : PreflightCtx) : GateResult {
         return GateResult(name = "cpp-syntax", status = GateStatus.Skip, seconds = seconds_since(t0),
             detail = "clang not found — install the VS ClangCL component (CI-faithful) or LLVM clang-cl on PATH, or pass --clang <path>; the dasLLVM prebuilt's clang-cl has no resource headers and is skipped")
     }
-    var in_scope : array<string>
-    var skipped : array<string>
+    var in_scope, skipped : array<string>
     var sweep_note = ""
     if (ctx.changed_hdr > 0) {
         // a changed header can break template instantiation in any TU that
@@ -1200,8 +1198,7 @@ def collect_sweep_roots() : tuple<light : array<string>; heavy : array<string>> 
             }
         }
     }
-    var light : array<string>
-    var heavy : array<string>
+    var light, heavy : array<string>
     for (f in files) {
         continue if (sweep_excluded(f) || !is_sweep_root_path(f))
         let text = fread(f)

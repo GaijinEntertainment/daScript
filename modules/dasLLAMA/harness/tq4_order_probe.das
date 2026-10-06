@@ -155,12 +155,9 @@ def main {   // nolint:STYLE037,STYLE038 — two stats passes over (layer, head,
 
     // pass 2: per domain, per side: mixed 8/4 under GLOBAL (normalized-pooled) vs ORACLE order,
     // plus hot-set churn (of np/2 hot pairs)
-    var gsc : array<double>
-    var osc : array<double>
-    var gorder : array<int>
-    var oorder : array<int>
-    var seg : array<float>
-    var dq : array<float>
+    var gsc, osc : array<double>
+    var gorder, oorder : array<int>
+    var seg, dq : array<float>
     var blk : array<uint8>
     gsc |> resize(np)
     osc |> resize(np)
@@ -170,8 +167,7 @@ def main {   // nolint:STYLE037,STYLE038 — two stats passes over (layer, head,
     dq |> resize(hs)
     blk |> resize(hs / 32l * 18l)
     var ge2 : double[10]   // [d * 2 + side]
-    var oe2 : double[10]
-    var gpw : double[10]
+    var oe2, gpw : double[10]
     var churn : int[10]
     var nslots = 0
     unsafe {

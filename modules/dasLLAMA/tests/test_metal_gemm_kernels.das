@@ -87,8 +87,7 @@ def private kq_mulmm_gate(t : T?; var dev, queue; fmt : int; tensor : bool; m, k
         return if (!(tensor ? tensor_pso_or_skip(t, tag, pso, dev, err) : pso_ok(t, tag, pso, err)))
         let nb = kdim / 256
         let nsb = ndim * nb
-        var inscope kq : array<uint8>
-        var inscope ks : array<uint8>
+        var inscope kq, ks : array<uint8>
         kq_fill_planes(fmt, nsb, kq, ks)
         var inscope xf : array<float>
         xf |> resize(m * kdim)
@@ -327,8 +326,7 @@ def private kq_devw_gate(t : T?; var dev, queue; fmt : int; m, kdim, ndim : int)
         return if (!(mm_pso == null ? tensor_pso_or_skip(t, tag, mm_pso, dev, err) : pso_ok(t, tag, dq_pso, err)))
         let nb = kdim / 256
         let nsb = ndim * nb
-        var inscope kq : array<uint8>
-        var inscope ks : array<uint8>
+        var inscope kq, ks : array<uint8>
         kq_fill_planes(fmt, nsb, kq, ks)
         var inscope xf : array<float>
         xf |> resize(m * kdim)
@@ -443,8 +441,7 @@ def private kq_dbuf_gate(t : T?; var dev, queue; fmt : int; m, kdim, ndim : int)
         return if ((pso_a == null || pso_b == null) && !tensor_pso_or_skip(t, tag, null, dev, err))
         let nb = kdim / 256
         let nsb = ndim * nb
-        var inscope kq : array<uint8>
-        var inscope ks : array<uint8>
+        var inscope kq, ks : array<uint8>
         kq_fill_planes(fmt, nsb, kq, ks)
         var inscope xf : array<float>
         xf |> resize(m * kdim)
@@ -519,8 +516,7 @@ def private devw_bake_mirror_gate(t : T?; var dev, queue; fmt : int; ndim, kdim 
             }
         } else {
             let nsb = ndim * (kdim / 256)
-            var inscope kq : array<uint8>
-            var inscope ks : array<uint8>
+            var inscope kq, ks : array<uint8>
             kq_fill_planes(fmt, nsb, kq, ks)
             unsafe {
                 if (fmt == 6) {
@@ -733,10 +729,7 @@ def private q8_gemm_sk_gate(t : T?; var dev, queue; tensor : bool; kdim, ndim, k
         q8_blob_fill(ndim, kdim / 32, blob, wdeq)
         var inscope xf : array<float>
         q8_x_fill(mp * kdim, xf)
-        var inscope pwant : array<float>
-        var inscope penv : array<float>
-        var inscope ywant : array<float>
-        var inscope yenv : array<float>
+        var inscope pwant, penv, ywant, yenv : array<float>
         pwant |> resize(ksplit * mp * ndim)
         penv |> resize(ksplit * mp * ndim)
         ywant |> resize(mp * ndim)
@@ -914,8 +907,7 @@ def private moe_mulmm_kq_gate(t : T?; var dev, queue; fmt : int; kdim, ndim : in
         let nb = kdim / 256
         let eplane = ndim * nb
         let nsb = ne * eplane
-        var inscope kq : array<uint8>
-        var inscope ks : array<uint8>
+        var inscope kq, ks : array<uint8>
         kq_fill_planes(fmt, nsb, kq, ks)
         let nk = 2
         let nx = 24
@@ -937,9 +929,7 @@ def private moe_mulmm_kq_gate(t : T?; var dev, queue; fmt : int; kdim, ndim : in
                 }
             }
         }
-        var inscope wb : array<float>
-        var inscope want : array<float>
-        var inscope env : array<float>
+        var inscope wb, want, env : array<float>
         moe_mm_truth(fx, wdeq, xf, wb, kdim, ndim, false, want, env)
         var ka = MoeMmArgs(kdim = uint(kdim), ndim = uint(ndim), eplane = uint(eplane),
             nk = uint(nk), gather = gather ? 1u : 0u)
@@ -1068,8 +1058,7 @@ def private moe_mulmm_split_gate(t : T?; var dev, queue; fmt : int; kdim, ndim :
         let nb = kdim / 256
         let eplane = ndim * nb
         let nsb = ne * eplane
-        var inscope kq : array<uint8>
-        var inscope ks : array<uint8>
+        var inscope kq, ks : array<uint8>
         kq_fill_planes(fmt, nsb, kq, ks)
         let nk = 2
         var inscope fx <- moe_fix(counts, false, nk, 24)
@@ -1090,9 +1079,7 @@ def private moe_mulmm_split_gate(t : T?; var dev, queue; fmt : int; kdim, ndim :
                 }
             }
         }
-        var inscope wb : array<float>
-        var inscope want : array<float>
-        var inscope env : array<float>
+        var inscope wb, want, env : array<float>
         moe_mm_truth(fx, wdeq, xf, wb, kdim, ndim, false, want, env)
         var inscope xh <- [for (v in xf); float16(v)]
         let bks = mc |> in_plain(ks)
@@ -1159,9 +1146,7 @@ def private moe_mulmm_q8_gate(t : T?; var dev, queue; tensor : bool; kdim, ndim 
                 xv = float(hv)
             }
         }
-        var inscope wb : array<float>
-        var inscope want : array<float>
-        var inscope env : array<float>
+        var inscope wb, want, env : array<float>
         moe_mm_truth(fx, wdeq, xf, wb, kdim, ndim, false, want, env)
         var ka = MoeMmArgs(kdim = uint(kdim), ndim = uint(ndim), eplane = uint(ndim * nkb),
             nk = uint(nk), gather = gather ? 1u : 0u)
@@ -1244,8 +1229,7 @@ def private moe_mulmm_mx4_gate(t : T?; var dev, queue; tensor : bool; kdim, ndim
                 xv = float(hv)
             }
         }
-        var inscope want : array<float>
-        var inscope env : array<float>
+        var inscope want, env : array<float>
         moe_mm_truth(fx, wdeq, xf, wb, kdim, ndim, hasb, want, env)
         var ka = MoeMmArgs(kdim = uint(kdim), ndim = uint(ndim), eplane = uint(ndim * nkb),
             nk = uint(nk), gather = gather ? 1u : 0u, hasb = hasb ? 1u : 0u)
@@ -1313,8 +1297,7 @@ def private attn_qk_mm_gate(t : T?; var dev, queue; tensor : bool; heads, hs, kv
         for (i in range(np32 * kvd)) {
             kv[i] = float((i * 7 + 3) % 15 - 7) * 0.5
         }
-        var inscope want : array<float>
-        var inscope env : array<float>
+        var inscope want, env : array<float>
         want |> resize(heads * mp * np32)
         env |> resize(heads * mp * np32)
         for (i in range(heads * mp * np32)) {
@@ -1421,8 +1404,7 @@ def private attn_av_mm_gate(t : T?; var dev, queue; tensor : bool; heads, hs, kv
         for (i in range(np32 * kvd)) {
             vv[i] = i / kvd < npos ? float((i * 7 + 3) % 15 - 7) * 0.5 : 999.0   // garbage pads: the guard's proof
         }
-        var inscope want : array<float>
-        var inscope env : array<float>
+        var inscope want, env : array<float>
         want |> resize(mp * qd)
         env |> resize(mp * qd)
         for (h in range(heads)) {
@@ -1534,8 +1516,7 @@ def private attn_dev_pair_gate(t : T?; var dev, queue; mt, heads, hs, kv_mul, mp
         for (i in range(np32 * kvd)) {
             vv[i] = i / kvd < npos ? float((i * 7 + 3) % 15 - 7) * 0.5 : 999.0   // garbage pads: no tile's span reaches them
         }
-        var inscope want : array<float>
-        var inscope env : array<float>
+        var inscope want, env : array<float>
         var inscope pw : array<double>
         want |> resize(mp * qd)
         env |> resize(mp * qd)

@@ -55,8 +55,7 @@ class DecsTemplate : AstStructureAnnotation {
         }
         let ppref = decs_prefix(args)
         let prefix = (ppref is yes) ? (ppref as yes) : "{st.name}_"
-        var blkApply : array<ExpressionPtr>
-        var blkErase : array<ExpressionPtr>
+        var blkApply, blkErase : array<ExpressionPtr>
         for (fld in st.fields) {
             blkApply |> push(qmacro(decs::set(cmp, $v("{prefix}{fld.name}"), src.$f(fld.name))))
             blkErase |> push(qmacro(decs::remove(cmp, $v("{prefix}{fld.name}"))))
@@ -73,8 +72,7 @@ class DecsTemplate : AstStructureAnnotation {
         if (!(compiling_module() |> add_function(fnErase))) {
             panic("failed to add remove_decs_template, can't add function {fnErase.name}")
         }
-        var blkArchSetup : array<ExpressionPtr>
-        var blkArchWrite : array<ExpressionPtr>
+        var blkArchSetup, blkArchWrite : array<ExpressionPtr>
         blkArchSetup |> push(qmacro(cache |> push(decs::find_component_index(arch, "eid"))))
         blkArchWrite |> push(qmacro(decs::set_direct_at(arch, cache[0], eidx, eid)))
         for (fld_idx, fld in iter_range(st.fields), st.fields) {

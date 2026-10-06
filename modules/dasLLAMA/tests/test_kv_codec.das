@@ -327,8 +327,7 @@ def test_kv_codec_fwht(t : T?) {
         let hs = 64l
         var signs : array<float>
         tq4_fill_signs(signs, hs)
-        var x : array<float>
-        var y : array<float>
+        var x, y : array<float>
         fill_sin(x, hs, 1.0, 0.7, 0.3)
         fill_sin(y, hs, 1.0, 0.41, 1.57)
         var xr := x
@@ -454,8 +453,7 @@ def test_kv_codec_q8_axpy(t : T?) {
         fill_sin(src, n, 2.5, 0.61, 0.23)
         var row : array<uint8>
         row |> resize(int(n / 32l * 34l))
-        var dst : array<float>
-        var dref : array<float>
+        var dst, dref : array<float>
         dst |> resize(int(n))
         dref |> resize(int(n))
         for (i in range64(n)) {
@@ -525,8 +523,7 @@ def test_kv_codec_tq4_axpy(t : T?) {
         fill_sin(src, n, 1.4, 0.83, 0.51)
         var blk : array<uint8>
         blk |> resize(int(n / 32l * 18l))
-        var dst : array<float>
-        var dref : array<float>
+        var dst, dref : array<float>
         dst |> resize(int(n))
         dref |> resize(int(n))
         for (i in range64(n)) {
@@ -587,8 +584,7 @@ def test_kv_codec_f16(t : T?) {
             let got = dot_f16(addr<float const?>(a[0]), addr<uint16 const?>(h[0]), n)
             t |> success(abs(got - want) <= 1.0e-3 * max(abs(want), 1.0), "dot_f16 matches the reference")
             // axpy_f16: one mad per element — exact on any perm
-            var dst : array<float>
-            var dref : array<float>
+            var dst, dref : array<float>
             dst |> resize(int(n))
             dref |> resize(int(n))
             for (i in range64(n)) {
@@ -628,12 +624,8 @@ def test_kv_f16_decode(t : T?) {
         let prev_thresh = get_target_chunk_work()
         with_dasllama_jobque_() {
             set_target_chunk_work(1l)
-            var ids32 : array<int64>
-            var ids16 : array<int64>
-            var ids16f : array<int64>
-            var lg32 : array<float>
-            var lg16 : array<float>
-            var lg16f : array<float>
+            var ids32, ids16, ids16f : array<int64>
+            var lg32, lg16, lg16f : array<float>
             set_fused_decode(false)
             var s32 <- make_run_state(c)
             greedy_ids(tr, s32, N_STEPS, ids32, lg32)
@@ -787,10 +779,7 @@ def test_kv_q8_decode(t : T?) {
             pin_kernel_backend("portable")   // the rows core every host shares — the fused gate needs one
             var tr <- load_gguf(GGUF_PATH, QuantMode.q8)
             tr.config.seq_len = min(tr.config.seq_len, 128l)
-            var lg16 : array<float>
-            var lg8 : array<float>
-            var lg8m : array<float>
-            var lg8f : array<float>
+            var lg16, lg8, lg8m, lg8f : array<float>
             set_fused_decode(false)
             forced_logits(tr, KVDtype.f16, KVDtype.f16, lg16)
             forced_logits(tr, KVDtype.q8_0, KVDtype.q8_0, lg8)

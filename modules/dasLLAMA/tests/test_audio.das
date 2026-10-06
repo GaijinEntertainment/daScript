@@ -352,9 +352,7 @@ def private twin_regrow_legs(t : T?; tag : string; enc : auto(TW); var st : auto
                              encode : block<(e : TW; var s : ST; clip : array<float>; var out : array<float>) : int64>) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let head <- clip_head(samples)
-        var dev_head : array<float>
-        var dev_again : array<float>
-        var dev_fresh : array<float>
+        var dev_head, dev_again, dev_fresh : array<float>
         set_vulkan_tower(true)
         let e0 = vulkan_tower_stats().encodes
         with_dasllama_jobque_() {

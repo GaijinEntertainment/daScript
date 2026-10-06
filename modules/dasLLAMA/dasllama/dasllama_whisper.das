@@ -548,8 +548,7 @@ def stage_whisper_model(path : string; enc_q8, dec_q8 : bool) : WhisperStaging {
     }
     fmap(f) $(var bytes : array<uint8>#) {
         var recs : table<string; WTensorRec>
-        var encJobs : array<WFillJob>
-        var decJobs : array<WFillJob>
+        var encJobs, decJobs : array<WFillJob>
         let sz = whisper_index(bytes, int64(stat(path).size), st, recs, encJobs, decJobs)
         st.enc.fblob |> reserve_resize(sz.enc_len)
         for (j in encJobs) {
@@ -710,8 +709,7 @@ def private stream_whisper_model(path : string; enc_q8, dec_q8 : bool; img, tag 
     fmap(f) $(var bytes : array<uint8>#) {
         var st = WhisperStaging()
         var recs : table<string; WTensorRec>
-        var encJobs : array<WFillJob>
-        var decJobs : array<WFillJob>
+        var encJobs, decJobs : array<WFillJob>
         let sz = whisper_index(bytes, int64(stat(path).size), st, recs, encJobs, decJobs)
         // the streamed meta must carry the compact offsets the eager quantizers write
         if (enc_q8) {

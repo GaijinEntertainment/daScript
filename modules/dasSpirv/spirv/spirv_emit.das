@@ -385,8 +385,7 @@ def private build_block_struct(var m : SpirvModule; sname : string; st : Structu
         return (ok = false, type_id = 0u, size = 0, align = 0)
     }
     var members : array<uint>
-    var offsets : array<int>
-    var mat_strides : array<int>
+    var offsets, mat_strides : array<int>
     var fi = 0
     for (fld in st.fields) {
         let f = fields[fi]

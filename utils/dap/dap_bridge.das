@@ -1006,10 +1006,7 @@ class public DapBridge {
         if (proc == null) return failed("failed to launch debug session: cannot spawn {exe}")
         pid = unsafe(process_pid(proc))
         owned_command := command
-        var connection : JsonValue?
-        var initialized : JsonValue?
-        var launched : JsonValue?
-        var initialized_event : JsonValue?
+        var connection, initialized, launched, initialized_event : JsonValue?
         let failure = launch_session(args, host, port, connect_timeout, cwd, connection, initialized, launched, initialized_event)
         if (!empty(failure)) {
             dap->end_session("client_close")

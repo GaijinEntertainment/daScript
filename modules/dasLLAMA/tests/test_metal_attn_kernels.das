@@ -87,10 +87,8 @@ def private sq_codec_single_gate(t : T?; var dev, queue; codec : string; cnt : i
         let sq = codec == "q8" ? stamp_of(@@enc_attn_q8_c) : stamp_of(@@enc_attn_tq4_c)
         var pso = quant ? (mc |> keep_stamp(sq, err)) : (mc |> keep_stamp(sp, err))
         return if (!pso_ok(t, tag, pso, err))
-        var inscope kslab : array<uint8>
-        var inscope vslab : array<uint8>
-        var inscope kdeq : array<float>
-        var inscope vdeq : array<float>
+        var inscope kslab, vslab : array<uint8>
+        var inscope kdeq, vdeq : array<float>
         codec_rows(codec, 1, cnt, kslab, kdeq)
         codec_rows(codec, 2, cnt, vslab, vdeq)
         var inscope q <- attn_q_row(QD)
@@ -146,10 +144,8 @@ def private sq_codec_part_gate(t : T?; var dev, queue; codec : string; cnt, wind
         let part_ok = pso_ok(t, "{tag} part", pso_p, err)
         var pso_c = mc |> keep_stamp(sc, err)
         return if (!pso_ok(t, "{tag} comb", pso_c, err) || !part_ok)
-        var inscope kslab : array<uint8>
-        var inscope vslab : array<uint8>
-        var inscope kdeq : array<float>
-        var inscope vdeq : array<float>
+        var inscope kslab, vslab : array<uint8>
+        var inscope kdeq, vdeq : array<float>
         codec_rows(codec, 1, cnt, kslab, kdeq)
         codec_rows(codec, 2, cnt, vslab, vdeq)
         var inscope q <- attn_q_row(QD)

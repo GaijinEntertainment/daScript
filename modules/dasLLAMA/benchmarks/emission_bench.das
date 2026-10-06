@@ -118,8 +118,7 @@ def main() {   // nolint:STYLE038 — flat bench driver: arg handling, then one 
             forward(t, s, warm[plen - 1l], plen - 1l)
             delete s
         }
-        var ttft_ms : array<double>
-        var emit_tps : array<double>
+        var ttft_ms, emit_tps : array<double>
         for (pi in range(np)) {
             var s <- make_run_state(c)
             let prompt <- build_prompt(plen, int64(pi))

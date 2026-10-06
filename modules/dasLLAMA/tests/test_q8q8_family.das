@@ -192,16 +192,14 @@ def private q8q8_stamped_gate(t : T?; n : int64) {
     let gs = ts == 4l ? 1l : ts / 16l
     let ng = d / mr
     let ntok = 2l * ts + 3l
-    var wf : array<float>
-    var xf : array<float>
+    var wf, xf : array<float>
     fill_unit(wf, d * n, 0x51D0Au)
     fill_unit(xf, ntok * n, 0x51D0Bu)
     let wq0 <- quantize_q8_0(wf, d * n)
     var xq : array<int8>
     var xs : array<float>
     quantize_rows(xf, ntok, n, xq, xs)
-    var ref : array<float>
-    var bar : array<float>
+    var ref, bar : array<float>
     ref_image(wq0.q, wq0.scales, xq, xs, ntok, d, n, ref, bar)
     var xbs : array<int>
     activation_bsums(xq, ntok, n, xbs)
@@ -234,16 +232,14 @@ def private q8q8_stamped_gate(t : T?; n : int64) {
 def private q8q8_wrapper_gate(t : T?; n : int64; d : int64 = 64l; ntok_override : int64 = 0l) {
     let ts = int64(q8q8_tokstep_gen())
     let ntok = ntok_override > 0l ? ntok_override : 2l * ts + 3l
-    var wf : array<float>
-    var xf : array<float>
+    var wf, xf : array<float>
     fill_unit(wf, d * n, 0x51D1Au)
     fill_unit(xf, ntok * n, 0x51D1Bu)
     let wq0 <- quantize_q8_0(wf, d * n)
     var xq : array<int8>
     var xs : array<float>
     quantize_rows(xf, ntok, n, xq, xs)
-    var ref : array<float>
-    var bar : array<float>
+    var ref, bar : array<float>
     ref_image(wq0.q, wq0.scales, xq, xs, ntok, d, n, ref, bar)
     let seat = kernel_backend_seat()
     for (name in kernel_backend_names()) {
@@ -306,8 +302,7 @@ def private s16_kernel_gate(t : T?; n : int64) {
     let dreg = d / 2l
     let nb = n / 32l
     let ntok = 2l
-    var wf : array<float>
-    var xf : array<float>
+    var wf, xf : array<float>
     fill_unit(wf, d * n, 0x5F16Au)
     fill_unit(xf, ntok * n, 0x5F16Bu)
     let wq0 <- quantize_q8_0(wf, d * n)
@@ -317,18 +312,11 @@ def private s16_kernel_gate(t : T?; n : int64) {
     var xq : array<int8>
     var xs : array<float>
     quantize_rows(xf, ntok, n, xq, xs)
-    var ref : array<float>
-    var bar : array<float>
+    var ref, bar : array<float>
     ref_image(wq0.q, ws32, xq, xs, 1l, d, n, ref, bar)
-    var gref : array<float>
-    var gbar : array<float>
+    var gref, gbar : array<float>
     groupn_ref(wq0.q, ws32, xq, xs, 2l, dreg, n, gref, gbar)
-    var ydot : array<float>
-    var ydot16 : array<float>
-    var yrows : array<float>
-    var yrows16 : array<float>
-    var ygn : array<float>
-    var ygn16 : array<float>
+    var ydot, ydot16, yrows, yrows16, ygn, ygn16 : array<float>
     ydot |> resize(d)
     ydot16 |> resize(d)
     yrows |> resize(d)
@@ -375,8 +363,7 @@ def private s16_stamped_gate(t : T?; n : int64) {
     let gs = ts == 4l ? 1l : ts / 16l
     let ng = d / mr
     let ntok = 2l * ts + 3l
-    var wf : array<float>
-    var xf : array<float>
+    var wf, xf : array<float>
     fill_unit(wf, d * n, 0x5F17Au)
     fill_unit(xf, ntok * n, 0x5F17Bu)
     let wq0 <- quantize_q8_0(wf, d * n)
@@ -386,8 +373,7 @@ def private s16_stamped_gate(t : T?; n : int64) {
     var xq : array<int8>
     var xs : array<float>
     quantize_rows(xf, ntok, n, xq, xs)
-    var ref : array<float>
-    var bar : array<float>
+    var ref, bar : array<float>
     ref_image(wq0.q, ws32m, xq, xs, ntok, d, n, ref, bar)
     var xbs : array<int>
     activation_bsums(xq, ntok, n, xbs)
@@ -425,8 +411,7 @@ def private s16_wrapper_gate(t : T?; n : int64; ntok_override : int64 = 0l) {
     let nb = n / 32l
     let ts = int64(q8q8_tokstep_gen())
     let ntok = ntok_override > 0l ? ntok_override : 2l * ts + 3l
-    var wf : array<float>
-    var xf : array<float>
+    var wf, xf : array<float>
     fill_unit(wf, d * n, 0x5F18Au)
     fill_unit(xf, ntok * n, 0x5F18Bu)
     let wq0 <- quantize_q8_0(wf, d * n)
@@ -436,11 +421,9 @@ def private s16_wrapper_gate(t : T?; n : int64; ntok_override : int64 = 0l) {
     var xq : array<int8>
     var xs : array<float>
     quantize_rows(xf, ntok, n, xq, xs)
-    var ref : array<float>
-    var bar : array<float>
+    var ref, bar : array<float>
     ref_image(wq0.q, ws32m, xq, xs, ntok, d, n, ref, bar)
-    var gref : array<float>
-    var gbar : array<float>
+    var gref, gbar : array<float>
     groupn_ref(wq0.q, ws32m, xq, xs, 2l, dreg, n, gref, gbar)
     var offs <- [0l, 0l, dreg * n, n]
     let seat = kernel_backend_seat()
@@ -458,16 +441,14 @@ def private s16_wrapper_gate(t : T?; n : int64; ntok_override : int64 = 0l) {
         }
         var s16 : array<uint16>
         narrow_scales(s, d * nb, s16)
-        var ymm : array<float>
-        var ymm16 : array<float>
+        var ymm, ymm16 : array<float>
         gemv_image(ymm, q, s, xq, xs, ntok, d, n)
         gemv_image(ymm16, q, s16, xq, xs, ntok, d, n)
         var ybat16 : array<float>
         ybat16 |> resize(ntok * d)
         nan_fill(ybat16)
         matmul_q8q8_batch(ybat16, q, s16, 0l, xq, xs, n, d, ntok)
-        var ygn : array<float>
-        var ygn16 : array<float>
+        var ygn, ygn16 : array<float>
         ygn |> resize(d)
         ygn16 |> resize(d)
         nan_fill(ygn)
@@ -520,8 +501,7 @@ def private idot4_ps_gate(t : T?; n : int64) {
     let d = 64l
     let nb = n / 32l
     let ntok = 3l
-    var wf : array<float>
-    var xf : array<float>
+    var wf, xf : array<float>
     fill_unit(wf, d * n, 0x1D074u)
     fill_unit(xf, ntok * n, 0x1D075u)
     let wq0 <- quantize_q8_0(wf, d * n)
@@ -531,11 +511,9 @@ def private idot4_ps_gate(t : T?; n : int64) {
     var xq : array<int8>
     var xs : array<float>
     quantize_rows(xf, ntok, n, xq, xs)
-    var ref : array<float>
-    var bar : array<float>
+    var ref, bar : array<float>
     ref_image(wq0.q, ws32m, xq, xs, ntok, d, n, ref, bar)
-    var y : array<float>
-    var y16 : array<float>
+    var y, y16 : array<float>
     y |> resize(ntok * d)
     y16 |> resize(ntok * d)
     nan_fill(y)
@@ -575,8 +553,7 @@ def private group3_gate(t : T?; n : int64) {
     let woff0 = 0l
     let woff1 = d0 * n
     let woff2 = woff1 + d1 * n
-    var wf : array<float>
-    var xf : array<float>
+    var wf, xf : array<float>
     fill_unit(wf, dt * n, 0x63A0Au)
     fill_unit(xf, n, 0x63A0Bu)
     let wq0 <- quantize_q8_0(wf, dt * n)
@@ -586,8 +563,7 @@ def private group3_gate(t : T?; n : int64) {
     var xq : array<int8>
     var xs : array<float>
     quantize_rows(xf, 1l, n, xq, xs)
-    var ref : array<float>
-    var bar : array<float>
+    var ref, bar : array<float>
     ref_image(wq0.q, ws32m, xq, xs, 1l, dt, n, ref, bar)
     let seat = kernel_backend_seat()
     for (name in kernel_backend_names()) {
@@ -651,17 +627,13 @@ def test_q8q8_group3(t : T?) {
 def private q8_f32x_gate(t : T?; n : int64) {
     let d = 64l
     let nb = n / 32l
-    var wf : array<float>
-    var xf : array<float>
+    var wf, xf : array<float>
     fill_unit(wf, d * n, 0x8F00Au)
     fill_unit(xf, n, 0x8F00Bu)
     let wq0 <- quantize_q8_0(wf, d * n)
-    var ref : array<float>
-    var bar : array<float>
+    var ref, bar : array<float>
     ref_plane(ref, bar, 0l, 1l, d, nb, REF_ULP) $(_p, r) => ref_dot_q8f_f64(wq0.q, wq0.scales, r * n, xf, n)
-    var ymm : array<float>
-    var yoff : array<float>
-    var ydot : array<float>
+    var ymm, yoff, ydot : array<float>
     ymm |> resize(d)
     yoff |> resize(d)
     ydot |> resize(d)
@@ -716,8 +688,7 @@ def private mx4_ref_region(wn : array<uint8>; we : array<uint8>; woff : int64;
 def private mx4_leaf_gate(t : T?; wn0 : array<uint8>; we0 : array<uint8>;
                           xq : array<int8>; xs : array<float>; d, n : int64) {
     let nb = n / 32l
-    var yleaf : array<float>
-    var ymm : array<float>
+    var yleaf, ymm : array<float>
     yleaf |> resize(d)
     ymm |> resize(d)
     nan_fill(yleaf)
@@ -748,21 +719,18 @@ def private mx4_batch_gate(t : T?; n : int64) {
     let nreg = 2l
     let cnt0 = 4l
     let woff1 = d * n
-    var wn0 : array<uint8>
-    var we0 : array<uint8>
+    var wn0, we0 : array<uint8>
     mx4_planes(wn0, we0, nreg * d * n, nreg * d * nb)
     var xf : array<float>
     fill_unit(xf, ntok * n, 0x3A4Du)
     var xq : array<int8>
     var xs : array<float>
     quantize_rows(xf, ntok, n, xq, xs)
-    var bref : array<float>
-    var bbar : array<float>
+    var bref, bbar : array<float>
     bref |> resize(ntok * d)
     bbar |> resize(ntok * d)
     mx4_ref_region(wn0, we0, 0l, xq, xs, 0l, ntok, d, n, bref, bbar)
-    var gref : array<float>
-    var gbar : array<float>
+    var gref, gbar : array<float>
     gref |> resize(ntok * d)
     gbar |> resize(ntok * d)
     mx4_ref_region(wn0, we0, 0l, xq, xs, 0l, cnt0, d, n, gref, gbar)
@@ -779,8 +747,7 @@ def private mx4_batch_gate(t : T?; n : int64) {
     }
     for (nm in names) {
         pin_kernel_backend(nm)
-        var wn : array<uint8>
-        var we : array<uint8>
+        var wn, we : array<uint8>
         wn := wn0
         we := we0
         if (kernel_backend_needs_repack(nm)) {

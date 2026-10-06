@@ -187,8 +187,7 @@ def test_q5k_encoder(t : T?) {
     // The ceiling is a regression gate, not a spec: measured rel-rmse is ~0.036 on synthetic
     // gaussian and ~0.031 on GLM-4.5-Air's real ffn_down. A mis-packed scale strip lands near 1.0.
     t |> run("q5_k encode round-trip stays within the 5-bit budget") @(t : T?) {
-        var x : array<float>
-        var y : array<float>
+        var x, y : array<float>
         x |> resize(n)
         y |> resize(n)
         for (sb in range64(nsb)) {
@@ -196,8 +195,7 @@ def test_q5k_encoder(t : T?) {
                 x[sb * 256l + i] = k5_src(sb, i)
             }
         }
-        var kq : array<uint8>
-        var ks : array<uint8>
+        var kq, ks : array<uint8>
         kq |> resize(nsb * 160l)
         ks |> resize(nsb * 20l)
         quantize_k5_plane(x, n, kq, ks, 0l)
@@ -221,12 +219,10 @@ def test_q5k_encoder(t : T?) {
     }
     // All-zero input takes the d == 0 early-out; it must still emit a well-formed, zeroed block.
     t |> run("q5_k encode handles an all-zero superblock") @(t : T?) {
-        var x : array<float>
-        var y : array<float>
+        var x, y : array<float>
         x |> resize(256l)
         y |> resize(256l)
-        var kq : array<uint8>
-        var ks : array<uint8>
+        var kq, ks : array<uint8>
         kq |> resize(160l)
         ks |> resize(20l)
         quantize_k5_plane(x, 256l, kq, ks, 0l)
@@ -272,8 +268,7 @@ def test_gguf_f32_reader_superblock_types(t : T?) {
             deq |> resize(512)
             gguf_read_tensor_f32(m, gg, "t", deq, 0l, 512l)
             // the oracle: the native two-step over the same bytes
-            var kq : array<uint8>
-            var ks : array<uint8>
+            var kq, ks : array<uint8>
             kq |> resize(int(kq_qsb(fmt)))
             ks |> resize(int(kq_ssb(fmt)))
             var want : array<float>

@@ -586,8 +586,7 @@ def private ancestor_docs(roots : array<string>; seen : table<string; void?>) : 
 // daslib citer satisfies a module's anchor), each .md parsed once through the shared index.
 // A folder pass like LINT025 - once per invocation, not once per file.
 def run_arch_pass(roots : array<string>) : int {
-    var mds : array<string>
-    var dases : array<string>
+    var mds, dases : array<string>
     var seen : table<string; void?>
     for (root in roots) {
         scan_arch_folder(root, mds, dases, seen)
@@ -1140,8 +1139,7 @@ def run_folder_passes(docs_roots : array<string>; disabled_codes, enabled_codes 
     let want_doc_lines = rule_is_on("LINT027", disabled_codes, enabled_codes)
     let want_pos = rule_is_on("LINT032", disabled_codes, enabled_codes)
     let want_names = rule_is_on("LINT033", disabled_codes, enabled_codes)
-    var rule_docs_folders : array<string>
-    var line_folders : array<string>
+    var rule_docs_folders, line_folders : array<string>
     collect_docs_folders(docs_roots, want_rule_docs, want_doc_lines || want_pos || want_names, rule_docs_folders, line_folders)
     var found = 0
     if (want_rule_docs) {
@@ -1203,8 +1201,7 @@ def main() : int {
     let run_perf = !any_only || cfg.perf_only
     let run_style = !any_only || cfg.style_only
 
-    var disabled_codes : table<string>
-    var enabled_codes : table<string>
+    var disabled_codes, enabled_codes : table<string>
     if (!resolve_rule_filters(cfg, disabled_codes, enabled_codes)) return 1
 
     // Worker mode: lint a pre-resolved list from a paths-from file and emit
@@ -1220,8 +1217,7 @@ def main() : int {
     }
 
     // Driver mode: scan positional paths, collect file list.
-    var files : array<string>
-    var docs_roots : array<string>
+    var files, docs_roots : array<string>
     let collect_rc = collect_input_files(files, docs_roots)
     if (collect_rc >= 0) return collect_rc
 

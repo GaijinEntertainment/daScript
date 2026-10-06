@@ -77,8 +77,7 @@ def test_q8q8_groupn(t : T?) {
         let xq <- q8_rows()
         var offs <- build_offs()
         //! reference and bar built once off the row-major quants - a repack only permutes the same weights, so both are backend-free
-        var refy : array<float>
-        var refbar : array<float>
+        var refy, refbar : array<float>
         ref_plane(refy, refbar, 0l, NREG, D, N / 32l, REF_ULP_PER_BLOCK) $(r, row) => ref_dot_q8_f64(wq0.q, wq0.scales, r * D * N + row * N, xq.q, xq.scales, offs[r * 2l + 1l], N)
         let seat = kernel_backend_seat()
         for (name in kernel_backend_names()) {
@@ -127,8 +126,7 @@ def test_groupn_bias_fold(t : T?) {
     t |> run("biased groupN == unbiased + add-after, q8 and mx4, every backend") @(t : T?) {
         let wq0 <- q8_weights()
         let xq <- q8_rows()
-        var wn0 : array<uint8>
-        var we0 : array<uint8>
+        var wn0, we0 : array<uint8>
         mx4_weights(wn0, we0)
         // one bias vector per region, in a shared "fblob"-style buffer at per-region offsets
         var bias : array<float>
@@ -147,8 +145,7 @@ def test_groupn_bias_fold(t : T?) {
             pin_kernel_backend(name)
             var wq : array<int8>
             var ws : array<float>
-            var wn : array<uint8>
-            var we : array<uint8>
+            var wn, we : array<uint8>
             wq := wq0.q
             ws := wq0.scales
             wn := wn0
@@ -193,16 +190,14 @@ def test_groupn_bias_fold(t : T?) {
 [test]
 def test_mx4q8_groupn(t : T?) {
     t |> run("mx4 groupN == per-region GEMV under every backend (repack where needed)") @(t : T?) {
-        var wn0 : array<uint8>
-        var we0 : array<uint8>
+        var wn0, we0 : array<uint8>
         mx4_weights(wn0, we0)
         let xq <- q8_rows()
         var offs <- build_offs()
         let seat = kernel_backend_seat()
         for (name in kernel_backend_names()) {
             pin_kernel_backend(name)
-            var wn : array<uint8>
-            var we : array<uint8>
+            var wn, we : array<uint8>
             wn := wn0
             we := we0
             if (kernel_backend_needs_repack(name)) {

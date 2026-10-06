@@ -619,9 +619,7 @@ def private class_method(mod : Module?; st : StructurePtr; mname : string) : Fun
 
 def private classify_access(fn : Function?; mod : Module?; st : StructurePtr; tracked : table<string>; fieldMode : bool) : AccessResult {
     var res : AccessResult
-    var pending : table<string>
-    var visited : table<string>
-    var callees : table<string>
+    var pending, visited, callees : table<string>
     analyze_one(fn, mod, st, tracked, fieldMode, res, callees)
     visited |> insert(string(fn.name))
     // Field mode does not recurse into FREE callees — shader intrinsics have das shims whose

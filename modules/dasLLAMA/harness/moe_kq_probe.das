@@ -90,10 +90,7 @@ def main {   // nolint:STYLE038 — one flat cell ladder A->G; the cells share p
             panic("moe_kq_probe: tune_gate refused - tune first (or point DAS_TUNE_MANIFEST at a complete sidecar)")
         }
         print("lanes {get_dispatch_lanes()}  backend {active_kernel_backend()}\n")
-        var kqE : array<uint8>
-        var ksE : array<uint8>
-        var kqD : array<uint8>
-        var ksD : array<uint8>
+        var kqE, ksE, kqD, ksD : array<uint8>
         build_pool(NREG, DE, kqE, ksE)
         build_pool(NSETS_D, DD, kqD, ksD)
         print("pools built: expert {long_length(kqE) / 1048576l} MB  dense {long_length(kqD) / 1048576l} MB\n")

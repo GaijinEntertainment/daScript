@@ -71,8 +71,7 @@ def test_flatten_reentry(t : T?) {
                         checked ++
                         ast_gc_guard() {
                             var blk = func.body as ExprBlock
-                            var pres1 : array<string>
-                            var cses1 : array<string>
+                            var pres1, cses1 : array<string>
                             collect_class_names(blk, pres1, cses1)
                             // fixture sanity: the pipeline run must have left one name of each class
                             t |> success(!empty(pres1), "fixture twin must keep a _preshader_ let, got {pres1}")
@@ -86,8 +85,7 @@ def test_flatten_reentry(t : T?) {
                             blk.list |> emplace(injD2)
                             let nobarriers : table<string>
                             t |> success(flatten_optimize(func, nobarriers), "re-entered optimize must hoist the injected work")
-                            var pres2 : array<string>
-                            var cses2 : array<string>
+                            var pres2, cses2 : array<string>
                             collect_class_names(blk, pres2, cses2)
                             t |> success(length(pres2) > length(pres1), "new uniform compute must hoist a fresh _preshader_ let, got {pres2}")
                             t |> success(length(cses2) > length(cses1), "new varying dup must share into a fresh _cse_ let, got {cses2}")

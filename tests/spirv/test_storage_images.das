@@ -84,9 +84,7 @@ def private has_cap(words : array<uint>; cap : SpvCapability) : bool =>
 // reads (gl_WorkGroupID.x), so walk the type chain instead: OpTypeRuntimeArray -> the
 // UniformConstant OpTypePointer to it -> the OpVariable of that pointer type -> access chains on it.
 def private count_pool_access_chains(words : array<uint>) : int {
-    var runtime_arrays : table<uint>
-    var pool_ptrs : table<uint>
-    var pool_vars : table<uint>
+    var runtime_arrays, pool_ptrs, pool_vars : table<uint>
     var n = 0
     foreach_inst(words) $(opcode : uint; w : array<uint>; s, cnt : int) {
         if (opcode == uint(SpvOp.TypeRuntimeArray) && cnt >= 1) {

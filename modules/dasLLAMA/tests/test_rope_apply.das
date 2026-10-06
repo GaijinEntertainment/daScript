@@ -161,8 +161,7 @@ def private tab_gate(t : T?; pos, hs, nh : int64; theta, fscale, mscale : float;
     } else {
         rope_scaled(direct, pos, hs, n, theta, fscale, ff, mscale)
     }
-    var ct : array<float>
-    var st : array<float>
+    var ct, st : array<float>
     build_rope_tabs(ct, st, theta, fscale, mscale, ff, true, pos, 1l, hs)
     var got : array<float>
     copy_vec(v, got, n)
@@ -263,8 +262,7 @@ def private tab_part_gate(t : T?; pos, hs, rot, nh : int64; theta, fscale, mscal
     copy_vec(v, direct, n)
     rope_scaled_neox_part(unsafe(addr(direct[0])), pos, hs, rot, n, theta, fscale, has_ff, ff_ptr(ff), mscale)
     rope_check(t, direct, want, hs, ROPE, "rope_scaled_neox_part{tag} hs={int(hs)} rot={int(rot)} pos={int(pos)}")
-    var ct : array<float>
-    var st : array<float>
+    var ct, st : array<float>
     build_rope_tabs(ct, st, theta, fscale, mscale, ff, true, pos, 1l, rot)
     var got : array<float>
     copy_vec(v, got, n)
@@ -473,8 +471,7 @@ def test_rope_apply_freq_factors(t : T?) {
 def test_rope_tabs_no_rows(t : T?) {
     t |> run("a table over no positions is empty, and a table that held rows is cut to it") @(t : T?) {
         var ff <- ff_none()
-        var ct : array<float>
-        var st : array<float>
+        var ct, st : array<float>
         build_rope_tabs(ct, st, 10000.0, 1.0, 1.0, ff, false, 0l, 2l, 64l)
         t |> equal(length(ct), 64, "two positions fill two rows of half the head")
         build_rope_tabs(ct, st, 10000.0, 1.0, 1.0, ff, false, 0l, 0l, 64l)

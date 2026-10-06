@@ -244,8 +244,7 @@ def test_text_viewer_checkbox_save_reload_roundtrip(t : T?) { // nolint:STYLE038
         let opened = post_command(app, "text_viewer_open", JV((path = fixture)))
         t |> success(opened?["ok"] ?? false, "checkbox fixture opens")
 
-        var initial : JsonValue?
-        var checkbox : JsonValue?
+        var initial, checkbox : JsonValue?
         let ready = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
             initial = viewer_state(app)
             checkbox = post_command(app, "text_viewer_checkbox", JV((index = 0)))

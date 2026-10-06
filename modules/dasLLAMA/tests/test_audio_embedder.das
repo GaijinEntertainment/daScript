@@ -31,8 +31,7 @@ def test_audio_embedder_none(t : T?) {
         t |> equal(audio_proj_dim(e), 0l, "no soft-token width")
         t |> equal(audio_family(e), "", "no family")
         var st = AudioState()
-        var out : array<float>
-        var samples : array<float>
+        var out, samples : array<float>
         var tripped = false
         try {
             encode_audio_(e, st, samples, out)
@@ -272,8 +271,7 @@ def test_audio_rows_on_a_plain_chat(t : T?) {
             var rows_b := rows
             add_user_audio_rows(m, chat2, rows_b, n)
             add_user(chat2, "What did you hear?")
-            var head : array<int64>
-            var tail : array<int64>
+            var head, tail : array<int64>
             render_turn_audio(m, chat2, head, tail)   // render-only: the spans the prefill will carry around the rows
             var pieces = 0l
             respond(m, chat2, SamplingParams()) $(_piece) {

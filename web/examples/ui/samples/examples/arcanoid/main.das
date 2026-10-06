@@ -741,8 +741,7 @@ def spawn_bonus(pos : float3; always : bool) {
 def activate_bonus(btype : int) {
     if (btype == int(BonusType.triple_ball)) {
         // Spawn 2 extra balls from existing ball positions
-        var positions : array<float3>
-        var velocities : array<float3>
+        var positions, velocities : array<float3>
         query() $(b : Ball) {
             positions |> push(b.pos)
             velocities |> push(b.vel)

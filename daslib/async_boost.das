@@ -369,8 +369,7 @@ def public async_timeout(var a : iterator<auto>; max_frames : int) : bool {
 def public async_race(var a : iterator<auto>; var b : iterator<auto>) : int {
     //! This function runs two async functions concurrently and returns the
     //! index (0 or 1) of whichever finishes first. The other is abandoned.
-    var ta : bool
-    var tb : bool
+    var ta, tb : bool
     while (true) {
         if (!next(a, ta) || empty(a)) return 0
         if (!next(b, tb) || empty(b)) return 1

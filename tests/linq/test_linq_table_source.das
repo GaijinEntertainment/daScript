@@ -660,8 +660,7 @@ def test_table_group_by(t : T?) { // nolint:STYLE038 flat list of independent ru
                             ._group_by(_.key % 3)
                             ._select((K = _._0, N = _._1 |> count(), S = _._1 |> select($(kv : IKV) => kv.value) |> sum()))
                             .to_array())
-        var expN : table<int; int>
-        var expS : table<int; int>
+        var expN, expS : table<int; int>
         for (k, v in keys(tab), values(tab)) {
             expN[k % 3] ++
             expS[k % 3] += v

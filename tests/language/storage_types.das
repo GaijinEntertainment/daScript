@@ -11,8 +11,7 @@ struct StStorage {
 [test]
 def test_storage_types(t : T?) {
     t |> run("storage types sizeof and roundtrip") @(t : T?) {
-        var st : StStorage
-        var sq : StStorage
+        var st, sq : StStorage
         t |> equal(typeinfo sizeof(type<StStorage>), 6)
         st.i8 = int8(1)
         st.ui8 = uint8(2)

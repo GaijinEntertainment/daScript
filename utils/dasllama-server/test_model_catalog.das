@@ -22,8 +22,7 @@ def private tmp_models_dir(tag : string) : string {
 [test]
 def test_catalog_table(t : T?) {
     t |> run("entries are pinned, unique, and exactly one is the default") @(t : T?) {
-        var names : table<string>
-        var files : table<string>
+        var names, files : table<string>
         var defaults = 0
         var count = 0
         for (e in model_catalog()) {

@@ -616,8 +616,7 @@ def render_positional_usage_token(arg : CommandArgumentInfo) : string {
 }
 
 def public format_help(info : CommandInfo; prog_name : string) : string {
-    var positionals : array<CommandArgumentInfo>
-    var flags : array<CommandArgumentInfo>
+    var positionals, flags : array<CommandArgumentInfo>
     for (arg in info.args) {
         if (arg.is_positional) {
             positionals |> push_clone(arg)

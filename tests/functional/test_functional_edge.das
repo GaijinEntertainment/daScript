@@ -579,8 +579,7 @@ def test_enumerate(t : T?) {
     t |> run("enumerate basic") @(t : T?) {
         var src <- [iterator for(x in [10, 20, 30]); x]
         var en <- enumerate(src)
-        var result : array<int>
-        var indices : array<int>
+        var result, indices : array<int>
         for (v in en) {
             indices |> push(v._0)
             result |> push(v._1)

@@ -12,8 +12,7 @@ require dastest/testing_boost public
 def test_e_op2_children(t : T?) {
     ast_gc_guard() {
         var expr = qmacro(a + b)
-        var left : ExpressionPtr
-        var right : ExpressionPtr
+        var left, right : ExpressionPtr
         let r = qmatch(expr, $e(left) + $e(right))
         t |> success(r.matched, "should capture left and right")
         if (r.matched) {

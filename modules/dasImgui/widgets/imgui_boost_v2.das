@@ -348,9 +348,7 @@ class WidgetCallMacro : AstCallMacro {
         // Four call forms: 1 EXPLICIT kind(IDENT,(...)) drives the state global;
         // 2 AUTO-GEN kind((...)) and 3 POSITIONAL kind("str") synth the ident from
         // source location; 4 BARE kind() (all args defaulted). Read state ⇒ form 1.
-        var bareName : string
-        var widgetIdentOverride : string
-        var rawName : string
+        var bareName, widgetIdentOverride, rawName : string
         var flagsReversed : array<string>
         var indexExpr : ExpressionPtr
         var firstUserArg = 1

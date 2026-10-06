@@ -191,8 +191,7 @@ def testConstInArray {
 
 [sideeffects]
 def testMultiPush(t : T?) {
-    var a : array<Foo>
-    var b : array<Foo>
+    var a, b : array<Foo>
     push(b, a)
     t |> equal(length(a), 0)
     t |> equal(length(b), 0)

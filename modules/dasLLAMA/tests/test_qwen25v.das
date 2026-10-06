@@ -103,8 +103,7 @@ def private mint_tower(mm : string; nl : int64 = 0l; wa : int64 = -1l; zero_bloc
 def private twin_encode(tt : T?; tw : Qwen25vTower; var st : Qwen25vState; kind : string; w, h : int; mm : string; zero_block : int64 = -1l) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let planes <- make_planes(kind, w, h)
-        var cpu : array<float>
-        var dev : array<float>
+        var cpu, dev : array<float>
         var n_cpu = 0l
         var n_dev = 0l
         set_vulkan_tower(false)
