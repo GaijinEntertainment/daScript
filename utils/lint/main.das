@@ -562,6 +562,28 @@ def private scan_arch_folder(path : string; var mds, dases : array<string>; var 
     }
 }
 
+def private ancestor_docs(roots : array<string>; seen : table<string; void?>) : array<string> {
+    var docs : array<string>
+    var visited : table<string>
+    for (root in roots) {
+        var dir = dir_name(root)
+        while (!empty(dir) && dir != "." && !key_exists(visited, dir)) {
+            visited |> insert(dir)
+            if (!key_exists(seen, dir)) {
+                fio::dir(dir) $(name) {
+                    if (name |> ends_with(".md") && stat("{dir}/{name}").is_reg) {
+                        docs |> push("{dir}/{name}")
+                    }
+                }
+            }
+            let up = dir_name(dir)
+            break if (up == dir)
+            dir = up
+        }
+    }
+    return <- docs
+}
+
 // [arch] citation pass, both directions off one read of each file: forward reports every
 // citation that does not resolve and every .das citation that resolves but sits inside a
 // comment, reverse every anchor no citation names - an anchor is a
@@ -607,6 +629,15 @@ def run_arch_pass(roots : array<string>) : int {
                 continue
             }
             cited |> insert("{c.doc}#{c.anchor}")
+        }
+    }
+    for (md in ancestor_docs(roots, seen)) {
+        let text = fread(md)
+        continue if (empty(text) || find(text, ".md#") < 0)
+        for (c in collect_md_citations(md, text)) {
+            if (empty(citation_failure_reason(docs, c))) {
+                cited |> insert("{c.doc}#{c.anchor}")
+            }
         }
     }
     for (md in mds) {

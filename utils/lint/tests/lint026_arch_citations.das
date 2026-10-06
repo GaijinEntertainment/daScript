@@ -395,6 +395,19 @@ def test_arch_roots(t : T?) {
         t |> equal(count_of(out, "\{#alpha\}"), 0, "the subfolder's citer satisfies the parent's anchor\n{out}")
         t |> equal(rc, 2, "the two findings set the issue exit code\n{out}")
     }
+    t |> run("a document above the run root still cites into it - the changed-folder run sees its citer") @(t : T?) {
+        let root = path_join(tmp_root(), "above")
+        let child = path_join(root, "child")
+        mkdir_rec(child)
+        plant_doc(child, "ARCHITECTURE.md", ["alpha", "orphan"])
+        plant_code(child, "ok.das", [])
+        plant(root, "REVIEW.md", "# rules\n\nA rule leaning on `child/ARCHITECTURE.md#alpha`.\n")
+        var out : string
+        let rc = run_lint(child, out)
+        t |> equal(count_of(out, "\{#alpha\}"), 0, "the document above the root keeps alpha alive\n{out}")
+        t |> equal(count_of(out, "\{#orphan\}"), 1, "an anchor nothing cites is still the finding\n{out}")
+        t |> equal(rc, 2, "the finding sets the issue exit code\n{out}")
+    }
 }
 
 
