@@ -2298,7 +2298,7 @@ def private mtp_draft_rows(t : Model; i : int64) : bool {
         mtp_draft_prep(t, s, s.mtp_vbatch[i], g.pos)
     }
     let g0 = g_v_groups[0]
-    let nrows = max(ng, 3l)
+    let nrows = max(ng, 2l)
     var r = acquire_step(t, *g0.s, g0.pos, g0.koff, g0.voff, g0.cap, [draft = true, nrows = nrows, deepest = chain_pos])
     if (!r.gpu_logits) {
         release_step(r)

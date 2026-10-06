@@ -193,11 +193,13 @@ enorm/hnorm rows into the cat, one eh_proj pass, the draft layer through the row
 encoder at every row's own slab, the head norm and ONE classifier pass) - and the landing writes
 each row's draft-slab K/V row and carry hidden into its stream and takes the row's argmax as its
 next draft, so a k-deep round reads the draft layer and the classifier plane k times for the
-tick, never once per stream. The rows step always takes the four-row tile (`nrows = max(ng, 3)`,
-the rows past the streams cloning row 0's inputs and route), because the two-row tile sums in
-another order and a solo stream's drafts must round as they do beside others - the joint
-invariance cell's claim. A stream whose mirror cannot take the row (its watermark or capacity
-short) declines the whole rows step and every warm stream plain-steps.
+tick, never once per stream. The rows step carries at least two rows (`nrows = max(ng, 2)`,
+the row past a solo stream cloning row 0's inputs and route): the rows forms are keyed on
+`nrows > 1`, and a one-row step would take the single-row driver's branches of the shared layer
+encoder, whose drafts diverge from the rows form's on about one round in seven. The two-row and
+three-row tiles draft identically, so a solo stream's drafts round as they do beside others - the
+joint invariance cell's claim - at the two-row tile's cost. A stream whose mirror cannot take the
+row (its watermark or capacity short) declines the whole rows step and every warm stream plain-steps.
 
 ### The verify encodes on the serial encoder {#verify-serial-encoder}
 
