@@ -38,7 +38,7 @@ daslang utils/daspkg/main.das -- install --global dasImgui
 | `upgrade [name]` | Upgrade to latest version |
 | `list` | List installed packages |
 | `search <query>` | Search the package index |
-| `build` | Build all C/C++ packages (cmake) |
+| `build [name]` | Build all C/C++ packages (cmake), or only the named one |
 | `check` | Verify installed packages are present |
 | `doctor` | Check environment (git, cmake, gh) |
 | `release [--out <dir>] [--paranoid \| --quick \| --fat <class>]` | Bundle project as a redistributable standalone. A plain release mints the tune sidecar on the build box and ships it; `--quick` inherits a complete existing one instead of minting; `--fat <class>` builds a fat exe from the class profiles - no mint, no sidecar |
@@ -234,6 +234,30 @@ list as `platforms`, so `search` shows it and the nightly index sweep (`index_sw
 skips an entry whose list leaves out the sweep host instead of failing on it; an install that
 exits 3 under the sweep is also a skip, flagged as a stale index entry until the next
 `update-index`. A name outside the vocabulary fails the manifest outright, under `--force` too.
+
+### Moving a clone into modules/
+
+A git install clones into `modules/.daspkg_tmp/<name>` and then renames that directory into
+place. Windows refuses to rename a directory while any process holds a file under it - an
+editor's git watcher opening the new `.git`, antivirus, the search indexer - so the rename is
+retried, then the tree is copied and the clone left for the next install's stale-tmp cleanup.
+An existing `modules/<name>` that cannot be removed fails the install instead; that is the case
+where a running daslang holds the package's `.shared_module`. A copy that meets a symlink or
+junction fails rather than drop it. `update` and `upgrade` move the installed copy aside first
+and put it and its lock entry back when the reinstall fails; a local `update` gates the source's
+manifest before it removes anything.
+
+### Manifest checks against this daslang
+
+`install` runs the manifest's `package()` before anything lands in `modules/`. A manifest that
+does not compile or throws under this daslang fails the install (exit 1), under `--force` too: its
+build and dependencies are unknowable, and installing the files without them would report a
+package that is not there. The usual cause is a manifest written against a newer daslang, so
+the error says so. Inside the install, a `build()` that cannot run fails the install the same way.
+
+A `package_min_sdk` newer than this daslang's version refuses the install with exit 1; `--force`
+installs anyway with a warning. A floor that is not a version fails the manifest. A host the
+platform declaration leaves out is refused first, so the sweep still reads exit 3 as a skip.
 
 ### Wasm archive staging {#wasm-archive-staging}
 

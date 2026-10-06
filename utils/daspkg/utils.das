@@ -412,20 +412,27 @@ def private copy_file_bytes(src, dst : string) : bool {
     return ok
 }
 
-def copy_dir_rec(src, dst : string) : bool {
+//! Copy the package content of `src` into `dst`; `whole_tree` also copies `.git` and the build dirs.
+def copy_dir_rec(src, dst : string; whole_tree : bool = false) : bool {
     mkdir(dst)
     var ok = true
     dir(src) $(name) {
-        return if (!is_package_content(name))
+        return if (name == "." || name == ".." || (!whole_tree && !is_package_content(name)))
         let src_child = "{src}/{name}"
         let dst_child = "{dst}/{name}"
         // never follow a junction/symlink: one into the tree recurses forever, and one
         // out of it copies content that is not the package's
         var link_err : string
-        return if (is_reparse_point(src_child, link_err))
+        if (is_reparse_point(src_child, link_err)) {
+            if (whole_tree) {
+                to_log(LOG_ERROR, "Error: {src_child} is a link; a whole-tree copy does not reproduce links\n")
+                ok = false
+            }
+            return
+        }
         let st = stat(src_child)
         if (st.is_dir) {
-            if (!copy_dir_rec(src_child, dst_child)) {
+            if (!copy_dir_rec(src_child, dst_child, whole_tree)) {
                 ok = false
             }
         } elif (st.is_reg) {

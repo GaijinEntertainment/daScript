@@ -107,21 +107,49 @@ def platform_gate(pkg_name, platform : string; platforms : array<string>; force 
         return 1
     }
     if (find_index(platforms, platform) >= 0) return 0
-    if (force) {
-        log("Warning: '{pkg_name}' declares {join(platforms, ", ")} only; installing on {platform} because of --force\n")
-        return 0
-    }
-    to_log(LOG_ERROR, "Error: '{pkg_name}' supports {join(platforms, ", ")} only; this is {platform} (--force installs it anyway)\n")
-    return RC_UNSUPPORTED_PLATFORM
+    return refuse_unless_forced(force,
+        "Warning: '{pkg_name}' declares {join(platforms, ", ")} only; installing on {platform} because of --force\n",
+        "Error: '{pkg_name}' supports {join(platforms, ", ")} only; this is {platform} (--force installs it anyway)\n",
+        RC_UNSUPPORTED_PLATFORM)
 }
 
-//! `platform_gate` over the manifest in `pkg_dir`; a directory without one passes.
-def platform_gate(pkg_dir, pkg_name, platform : string; force : bool) : int {
+//! 0 with `warning` logged under `force`, else `rc` with `error` logged.
+def private refuse_unless_forced(force : bool; warning, error : string; rc : int) : int {
+    if (force) {
+        log(warning)
+        return 0
+    }
+    to_log(LOG_ERROR, error)
+    return rc
+}
+
+//! 1 when `package_min_sdk` is newer than `sdk` or is not a version; `force` turns only the too-new refusal into a warning.
+def sdk_gate(pkg_name, min_sdk, sdk : string; force : bool) : int {
+    if (empty(min_sdk)) return 0
+    let floor = parse_version(min_sdk)
+    if (!floor.valid) {
+        to_log(LOG_ERROR, "Error: '{pkg_name}' declares package_min_sdk(\"{min_sdk}\"), which is not a version\n")
+        return 1
+    }
+    if (compare_versions(parse_version(sdk), floor) >= 0) return 0
+    return refuse_unless_forced(force,
+        "Warning: '{pkg_name}' needs daslang {min_sdk} or newer; installing on {sdk} because of --force\n",
+        "Error: '{pkg_name}' needs daslang {min_sdk} or newer; this is {sdk} (--force installs it anyway)\n",
+        1)
+}
+
+//! Gate the manifest in `pkg_dir` against this daslang and `platform`: a directory without one passes; one this daslang cannot run fails, even under `force`.
+def manifest_gate(pkg_dir, pkg_name, platform : string; force : bool) : int {
     let das_package = "{pkg_dir}/.das_package"
     if (!fexist(das_package)) return 0
     var meta : PackageMeta
-    if (!run_das_package_meta(das_package, meta)) return 0
-    return platform_gate(pkg_name, platform, meta.platforms, force)
+    if (!run_das_package_meta(das_package, meta)) {
+        to_log(LOG_ERROR, "Error: daslang {get_das_version()} cannot run the .das_package of '{pkg_name}' - the package may need a newer daslang\n")
+        return 1
+    }
+    let platform_rc = platform_gate(pkg_name, platform, meta.platforms, force)
+    if (platform_rc != 0) return platform_rc
+    return sdk_gate(pkg_name, meta.min_sdk, get_das_version(), force)
 }
 
 // undo a failed install: drop the directory, then the lock entry it referred to (only if one
@@ -216,7 +244,7 @@ def install_local(root, pkg_name, source : string; var lf : LockFile; var visiti
         to_log(LOG_ERROR, "Error: local path '{full_source}' does not exist\n")
         return 1
     }
-    let gate_rc = platform_gate(full_source, pkg_name, get_platform_name(), force)
+    let gate_rc = manifest_gate(full_source, pkg_name, get_platform_name(), force)
     if (gate_rc != 0) return gate_rc
 
     mkdir(modules_dir)
@@ -224,6 +252,11 @@ def install_local(root, pkg_name, source : string; var lf : LockFile; var visiti
     if (fexist(target)) {
         log("Removing existing {target}...\n")
         force_rmdir(target)
+        if (fexist(target)) {
+            to_log(LOG_ERROR, "Error: cannot remove existing {target}\n")
+            log_rename_locked_hint()
+            return 1
+        }
     }
 
     log("Copying {full_source} -> {target}\n")
@@ -405,6 +438,52 @@ def private log_rename_locked_hint() {
     to_log(LOG_ERROR, "  hint: a running process is holding the package's .shared_module - close daslang/daslang-live and retry\n")
 }
 
+let private MOVE_RETRIES = 5
+let private MOVE_RETRY_MS = 200u
+
+//! Move `src` to `dst` (which must not exist), falling back to a copy; on success `src` may survive for the next install's stale-tmp cleanup.
+def move_into_place(src, dst : string) : bool {
+    var rerr : string
+    for (_ in range(MOVE_RETRIES)) {
+        return true if (rename(src, dst, rerr))
+        sleep(MOVE_RETRY_MS)
+    }
+    log("  rename failed ({rerr}); copying instead\n")
+    if (!copy_dir_rec(src, dst, true)) {
+        force_rmdir(dst)
+        to_log(LOG_ERROR, "Error: failed to move {src} to {dst}: {rerr}\n")
+        to_log(LOG_ERROR, "  hint: a process holds a file under {src} - an editor with this folder open, or antivirus - close it and retry\n")
+        return false
+    }
+    force_rmdir(src)
+    return true
+}
+
+//! Gate the fresh clone in `tmp_dir`, then replace `target_dir` with it; on failure `tmp_dir` is removed (best effort) and `target_dir` is not the clone.
+def land_clone(tmp_dir, target_dir, pkg_name : string; force : bool) : int {
+    let gate_rc = manifest_gate(tmp_dir, pkg_name, get_platform_name(), force)
+    if (gate_rc != 0) {
+        force_rmdir(tmp_dir)
+        return gate_rc
+    }
+    log_debug("moving {tmp_dir} -> {target_dir}")
+    if (fexist(target_dir)) {
+        log("Removing existing {target_dir}...\n")
+        force_rmdir(target_dir)
+        if (fexist(target_dir)) {
+            to_log(LOG_ERROR, "Error: cannot remove existing {target_dir}\n")
+            log_rename_locked_hint()
+            force_rmdir(tmp_dir)
+            return 1
+        }
+    }
+    if (!move_into_place(tmp_dir, target_dir)) {
+        force_rmdir(tmp_dir)
+        return 1
+    }
+    return 0
+}
+
 def install_git(root, pkg_name, source, version : string; var lf : LockFile; is_root : bool = true; is_global : bool = false; branch : string = ""; force : bool = false) {
     var visiting : table<string; bool>
     return install_git(root, pkg_name, source, version, lf, visiting, [is_root = is_root, is_global = is_global, branch = branch, force = force])
@@ -520,24 +599,9 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
         }
     }
 
-    // step 2b: the manifest's platform declaration, before anything lands in modules/
-    let gate_rc = platform_gate(tmp_dir, pkg_name, get_platform_name(), force)
-    if (gate_rc != 0) {
-        force_rmdir(tmp_dir)
-        return gate_rc
-    }
-
-    // step 3: move to final location
-    log_debug("moving {tmp_dir} -> {target_dir}")
-    if (fexist(target_dir)) {
-        log("Removing existing {target_dir}...\n")
-        force_rmdir(target_dir)
-    }
-    if (!rename(tmp_dir, target_dir)) {
-        to_log(LOG_ERROR, "Error: failed to move {tmp_dir} to {target_dir}\n")
-        log_rename_locked_hint()
-        return 1
-    }
+    // step 3: the manifest against this daslang and platform, then the move into modules/
+    let land_rc = land_clone(tmp_dir, target_dir, pkg_name, force)
+    if (land_rc != 0) return land_rc
 
     // step 4: install dependencies
     log_debug("checking dependencies for '{pkg_name}'")
@@ -785,7 +849,7 @@ def cmd_remove(root, name : string; is_global : bool = false) {
     return 0
 }
 
-def cmd_update(root, name : string; is_global : bool = false; force : bool = false) { // nolint:STYLE037,STYLE038 — flat per-entry update arms (root/dep/local/global) mirror the lock schema
+def cmd_update(root, name : string; is_global : bool = false; force : bool = false) {
     var lf : LockFile
     if (is_global) {
         if (!read_global_lock_file(lf)) {
@@ -814,6 +878,8 @@ def cmd_update(root, name : string; is_global : bool = false; force : bool = fal
             to_log(LOG_ERROR, "Error: local source '{source}' not found\n")
             return 1
         }
+        let gate_rc = manifest_gate(source, name, get_platform_name(), force)
+        if (gate_rc != 0) return gate_rc
         let modules_dir = is_global ? "{get_das_root()}/modules" : "{root}/modules"
         let target = "{modules_dir}/{name}"
         log("Updating '{name}' from {source}...\n")
@@ -828,14 +894,19 @@ def cmd_update(root, name : string; is_global : bool = false; force : bool = fal
         return try_build_package(target, name, is_global)
     }
     // re-install from source with same version — re-resolves via .das_package
-    let source = entry.source
-    let version = entry.version
-    let is_root = entry.root
+    log("Updating '{name}'{is_global ? " (global)" : ""}...\n")
+    return reinstall_with_backup(root, entry, lf, is_global) $(var into_lf : LockFile) {
+        var visiting : table<string; bool>
+        return install_git(root, name, entry.source, entry.version, into_lf, visiting, [is_root = entry.root, is_global = is_global, force = force])
+    }
+}
+
+//! Run `install` with the installed `entry` moved aside; when `install` leaves no lock entry for it, the copy and `entry` are restored and the result is 1.
+def reinstall_with_backup(root : string; entry : PackageEntry; var lf : LockFile; is_global : bool; install : block<(var into_lf : LockFile) : int>) : int {
+    let name = entry.name
     let modules_dir = is_global ? "{get_das_root()}/modules" : "{root}/modules"
     let pkg_dir = "{modules_dir}/{name}"
     let backup_dir = "{modules_dir}/.daspkg_backup/{name}"
-    log("Updating '{name}'{is_global ? " (global)" : ""}...\n")
-    // backup before deleting
     log_debug("backing up '{name}' to {backup_dir}")
     if (fexist(pkg_dir)) {
         mkdir("{modules_dir}/.daspkg_backup")
@@ -849,13 +920,12 @@ def cmd_update(root, name : string; is_global : bool = false; force : bool = fal
         }
     }
     remove_package(lf, name)
-    var visiting : table<string; bool>
-    let install_rc = install_git(root, name, source, version, lf, visiting, [is_root = is_root, is_global = is_global, force = force])
-    // check if install succeeded
+    let install_rc = invoke(install, lf)
     if (!has_package(lf, name)) {
         log_debug("install failed — restoring from {backup_dir}")
-        log("Update failed — restoring backup\n")
+        log("Reinstall failed — restoring backup\n")
         if (fexist(backup_dir)) {
+            force_rmdir(pkg_dir)
             rename(backup_dir, pkg_dir)
         }
         set_package(lf, entry)
@@ -866,7 +936,6 @@ def cmd_update(root, name : string; is_global : bool = false; force : bool = fal
         }
         return 1
     }
-    // cleanup backup
     if (fexist(backup_dir)) {
         force_rmdir(backup_dir)
     }
@@ -937,18 +1006,13 @@ def cmd_upgrade(root, name : string; is_global : bool = false; force : bool = fa
     }
     log("  {current_ref} -> {new_ref}\n")
     // re-install at the new version (empty version = unpinned)
-    let is_root = entry.root
-    let source = entry.source
-    let modules_dir = is_global ? "{get_das_root()}/modules" : "{root}/modules"
-    let pkg_dir = "{modules_dir}/{name}"
-    if (fexist(pkg_dir)) {
-        force_rmdir(pkg_dir)
+    let install_rc = reinstall_with_backup(root, entry, lf, is_global) $(var into_lf : LockFile) {
+        var visiting : table<string; bool>
+        return install_git(root, name, entry.source, "", into_lf, visiting, [is_root = entry.root, is_global = is_global, force = force])
     }
-    remove_package(lf, name)
-    var visiting : table<string; bool>
-    let install_rc = install_git(root, name, source, "", lf, visiting, [is_root = is_root, is_global = is_global, force = force])
-    // check if deps need upgrading
-    upgrade_dependencies(root, name, lf, is_global, force)
+    if (install_rc == 0) {
+        upgrade_dependencies(root, name, lf, is_global, force)
+    }
     return install_rc
 }
 
@@ -1063,8 +1127,23 @@ def build_package(pkg_dir : string) : bool {
     return true
 }
 
-def cmd_build(root : string; is_global : bool = false) {
+//! Build the package `pkg_name` under `modules_dir`; 1 when the name is not a bare package name or names no CMake package.
+def private build_one_package(modules_dir, pkg_name : string) : int {
+    let pkg_dir = "{modules_dir}/{pkg_name}"
+    if (!is_safe_pkg_name(pkg_name) || !fexist("{pkg_dir}/CMakeLists.txt")) {
+        to_log(LOG_ERROR, "Error: no package '{pkg_name}' with a CMakeLists.txt under {modules_dir}\n")
+        return 1
+    }
+    log("Building '{pkg_name}'...\n")
+    if (!build_package(pkg_dir)) return 1
+    print("Built '{pkg_name}'\n")
+    return 0
+}
+
+//! Build every package under `modules/` that has a CMakeLists.txt, or only `only_pkg`.
+def cmd_build(root : string; is_global : bool = false; only_pkg : string = "") {
     let modules_dir = is_global ? "{get_das_root()}/modules" : "{root}/modules"
+    if (!empty(only_pkg)) return build_one_package(modules_dir, only_pkg)
     if (!fexist(modules_dir)) {
         print("No modules directory found\n")
         return 0
@@ -1305,6 +1384,9 @@ def try_build_package(pkg_dir, name : string; is_global : bool = false) : int {
                     did_build = true
                 }
             }
+        } else {
+            to_log(LOG_ERROR, "Error: cannot run build() of '{name}'\n")
+            rc = 1
         }
     } else {
         // fallback: check for CMakeLists.txt directly
