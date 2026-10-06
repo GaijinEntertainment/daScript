@@ -232,7 +232,7 @@ Manifest functions
    - ``package_tag(tag)`` / ``package_tags(tags)`` -- index search tags
      (both append)
    - ``package_min_sdk(version)`` -- declared minimum daslang SDK
-     version (index metadata; not enforced at install time)
+     version (carried in the index; ``install`` refuses an older daslang)
    - ``package_platform(name)`` / ``package_platforms(names)`` -- a
      platform the package installs and releases on: ``windows``,
      ``darwin``, ``linux``, ``emscripten`` (``wasm`` and ``macos`` are
@@ -370,6 +370,11 @@ Install behavior
 - **Dependencies**: global packages' dependencies also install globally.
   Built-in SDK modules already in ``{das_root}/modules/`` are skipped
   automatically.
+- **Manifest this daslang cannot run**: a ``.das_package`` this daslang
+  cannot compile or run fails the install, under ``--force`` too -- it
+  usually means the package needs a newer daslang.
+- **SDK floor**: a ``package_min_sdk`` newer than the running daslang
+  refuses the install; ``--force`` installs anyway with a warning.
 
 Coexistence (local + global)
 ----------------------------
@@ -668,7 +673,8 @@ Three version axes:
 
 - **Package version** -- semver of the package itself.
 - **daslang version** -- which SDK release the package is compatible
-  with.  Declared with ``package_min_sdk()`` and carried in the index;
+  with.  Declared with ``package_min_sdk()``, carried in the index, and
+  checked by ``install`` against the running daslang;
   ``resolve()`` reserves an ``sdk_version`` parameter for branching on
   it, but daspkg passes an empty string there today.
 - **Dependencies** -- other packages with their own version

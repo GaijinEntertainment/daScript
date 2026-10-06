@@ -137,7 +137,7 @@ def package() {
     package_source("github.com/user/repo")
     package_license("MIT")
     package_tag("networking")
-    package_min_sdk("0.4")
+    package_min_sdk("0.4")          // install refuses an older SDK (--force overrides)
     package_platform("windows")     // optional, repeatable; or package_platforms([...]); none = every platform
 }
 
