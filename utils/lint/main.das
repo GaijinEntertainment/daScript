@@ -62,8 +62,8 @@ struct Config {
     fix : bool
 
     @clarg_short = "j"
-    @clarg_doc = "Parallel workers (0 = auto = physical cores, at most 16). 1 = serial. Below 16 files, stays serial regardless."
-    workers : int
+    @clarg_doc = "Parallel workers (default 1 = serial; 0 = auto = physical cores, at most 16). Below 16 files, stays serial regardless."
+    workers : int = 1
 
     @clarg_doc = "Worker mode: read newline-delimited file paths and emit one JSON-wrapped LintResult per file on stdout. Internal — used by parallel driver. Skips positional args, banner, summary."
     paths_from : string

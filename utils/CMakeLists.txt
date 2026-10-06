@@ -68,13 +68,23 @@ add_das_target(check_lint_changed
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     COMMENT "Linting the .das and .md files changed against origin/DAS_CI_BASE_REF"
 )
-add_custom_target(check_lint_tree
-    COMMAND $<TARGET_FILE:daslang> ./utils/lint/main.das -- daslib utils modules tutorials examples tests src
-            -q --silent -j 1
-    DEPENDS daslang
-    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    COMMENT "Linting the whole tree in one process"
-)
+# check_lint_tree lints DAS_CHUNKS of the tree in parallel. LINT019 needs every compile's nolint
+set(_lint_roots daslib utils modules tutorials examples tests src)
+list(TRANSFORM _lint_roots PREPEND "${PROJECT_SOURCE_DIR}/" OUTPUT_VARIABLE _lint_globs)
+list(TRANSFORM _lint_globs APPEND "/*.das")
+file(GLOB_RECURSE _lint_files RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS ${_lint_globs})
+list(FILTER _lint_files EXCLUDE REGEX "(^|/)(\\.[^/]*|node_modules|_[^/]*)(/|$)")
+list(LENGTH _lint_files _lint_count)
+math(EXPR _lint_size "(${_lint_count} + 127) / 128")
+DAS_CHUNKS(_lint_chunks ${_lint_size} ${_lint_files})
+set(_lint_targets)
+foreach(_n ${_lint_chunks})
+    add_custom_target(lint_tree_chunk_${_n}
+        COMMAND $<TARGET_FILE:daslang> ./utils/lint/main.das -- ${_lint_chunks_${_n}} -q --silent
+        DEPENDS daslang WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    list(APPEND _lint_targets lint_tree_chunk_${_n})
+endforeach()
+add_custom_target(check_lint_tree DEPENDS ${_lint_targets})
 
 set(_dupe_paths -p daslib -p utils -p src)
 file(GLOB _dupe_entries LIST_DIRECTORIES true RELATIVE ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/modules/*/*)

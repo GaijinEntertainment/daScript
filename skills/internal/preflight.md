@@ -122,7 +122,7 @@ install-layout gate - run it when touching CMake `install(...)` rules,
 
 ## nightly.yml - lint
 
-"Lint the whole tree" runs `check_lint_tree`, the whole tree in one process. Local mirror:
+"Lint the whole tree" runs `check_lint_tree`: 128 `DAS_CHUNKS` targets in parallel. Local mirror:
 `cmake --build build --config Release --target check_lint_tree`; `run_nightly` and `run_all`
 include it.
 
