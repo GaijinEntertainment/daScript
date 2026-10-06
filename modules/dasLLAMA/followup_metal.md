@@ -991,3 +991,13 @@ measured, and forcing the rows forms on for a one-row draft widened the gap. Wha
 differently: `mp = 1` buffers under a two-row tile, no `verify` row-total uniforms, the zero-copy logits
 (`acquire_step`). The work: find which of those the rows form reads wrong at one row, key every single-row
 branch on `SINGLE`, then race the one-row draft against the two-row form.
+
+## 45. The 4-bit expert GEMVs run at 60 % of the q8 GEMV's bytes a second
+
+On the M1 Max the q8 expert GEMV (`MetalQ8GemvT`, one simdgroup a row, four 32-weight chunks loaded ahead of the
+FMA chains) moves 250 GB/s on Qwen3.6-35B-A3B; the IQ4/Q4_0 and Q4_K templates (two rows a simdgroup, sixteen or
+eight lanes a superblock, two words a lane in flight before the arithmetic) move 160 GB/s on the same model
+(`PERF_LEDGER.md`'s 2026-10-06 equal-bytes entry). Four races on the codebook read and the grid staging moved nothing
+past noise, so the gap is the memory-level parallelism. The work: a row-a-simdgroup IQ4_XS form with the q8 kernel's
+chunk batching and the staged LUT kept, on the gathered site first (the routed experts carry the bytes), raced e2e on
+the pure IQ4_XS file; then the same shape for Q4_K, whose 5 % over Q4_0 at equal bytes is the same template.

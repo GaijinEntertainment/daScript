@@ -11,6 +11,40 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-06, `direction-grade`, `debug-jit`) - the 4-bit formats of Qwen3.6-35B-A3B at equal bytes, and
+  four races on their Metal expert GEMVs.** M1 Max (MacBookPro18,2, 64 GB), Metal, one stream, the sidecar
+  re-minted on the binary the same day (0 winner changes against the one the mtime rule had called stale);
+  `benchmarks/lcpp_bench.das` as the `-jit` script, `-m <gguf> --ngl 99 -n 64 -r 2 --mtp-ab --for-debug-purposes`
+  under `DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/m1.tune.json`, decode = the tg-real64 row, MTP off; perplexity
+  = 256 wikitext-2 positions teacher-forced after a 256-id prefill (a small sample: differences past the second decimal
+  are noise); tool call = Anton's house prompt (`bench_llm.py`, a random nonce a run, `control` well-formed), 12 runs.
+  The pure files are `llama-quantize --pure` from unsloth's BF16 shards; the two UD files are unsloth's. Decode rates
+  are tok/s; bpw is the file's bits a weight.
+
+  | file | bpw | tg | PPL | hits/256 | tool x12 |
+  |---|---|---|---|---|---|
+  | Q8_0 (reference) | 8.5 | 72.1 | 4.62 | 173 | 12 |
+  | UD-Q4_K_M (Q4_K/Q5_K experts, Q8_0 rest) | 5.4 | 71.6 | 4.83 | 173 | 12 |
+  | pure Q4_K | 4.52 | 81.1 | 4.93 | 174 | 11 |
+  | pure IQ4_XS | 4.27 | 84.4 | 4.95 | 169 | 12 |
+  | pure Q4_0 | 4.52 | 85.1 | 4.95 | 169 | 4 |
+  | UD-IQ4_XS (IQ3_S gate/up experts, IQ4_XS down) | 4.3 | 73.6 | 4.97 | 167 | 12 |
+
+  - Q8_0 is the one row near bandwidth: 3.5 GB a token at 72 tok/s is 250 GB/s. The 4-bit files move 1.9 GB a token
+    at 85 tok/s, 160 GB/s: the 4-bit expert GEMVs reach 60 % of the q8 GEMV's bytes a second, so a 4.5-bpw file at
+    the q8 kernel's rate would decode near 130 tok/s. The q8 kernel's shape - one simdgroup a row, four 32-weight
+    chunks loaded ahead of the FMA chains - is the difference (`followup_metal.md` 45).
+  - Pure Q4_0 slips the tool call on 8 of 12 runs, the same dropped `"arguments":` key every time, at the perplexity
+    of the asymmetric formats: the symmetric codebook lands that near-tie wrong. Pure IQ4_XS is the fewest bytes at
+    the K-quant files' quality, and the format to put against mlx's 4-bit group-64 affine weights (4.5 bpw, 19 GB).
+  - Four kernel races on the gathered (expert) GEMVs, each the e2e tg minutes apart on the same binary and sidecar:
+    the IQ3_S f4-slab twin on the gathered site, 73.6 -> 75.2 on the UD-IQ4_XS file (shipped, the dense twin's crown
+    gates it); the same twin at sixteen rows a threadgroup 74.2 (fewer threadgroups a 512-row expert cost more than
+    the halved staging saved); the grid read from constant memory instead of the staged float4 slab 69.8 (scattered
+    constant reads, four scalar loads a word - vector literals do not hoist); the q40 identity codebook folded to
+    arithmetic 85.3 +- 0.4 against 85.1 +- 0.5 (noise); the iq4 codebook held in registers as four packed words
+    61.4 against 84.4 (seven ALU ops a nibble lose to one threadgroup read). The codebook read and the staging are not
+    where a 4-bit expert GEMV's time goes.
 - **MEASURED (2026-10-06, `direction-grade`) - Pocket's text prompt on the device takes a third of its request on
   both boxes; the thirteen TTS kernels moved to templates both homes stamp read as before.** The prompt seat runs the
   chunk's text rows through the frames slab's layers at the voice's positions (`ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames`,
