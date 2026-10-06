@@ -560,6 +560,7 @@ namespace das {
         virtual ExpressionPtr visit(ExprYield *expr) override;
 
         // ExprBreak
+        void markEarlyOut();
         virtual ExpressionPtr visit(ExprBreak *expr) override;
         // ExprContinue
         virtual ExpressionPtr visit(ExprContinue *expr) override;

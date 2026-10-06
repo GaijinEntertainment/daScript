@@ -4675,11 +4675,7 @@ namespace das {
         }
         return Visitor::visit(expr);
     }
-    void InferTypes::preVisit(ExprReturn *expr) {
-        Visitor::preVisit(expr);
-        expr->block = nullptr;
-        expr->returnType = nullptr;
-        // ok, now lets mark early outs for the block chain
+    void InferTypes::markEarlyOut() {
         auto i = scopes.size();
         while (i > 0) {
             i--;
@@ -4687,6 +4683,13 @@ namespace das {
             if (scopes[i]->isClosure)
                 break;
         }
+    }
+    void InferTypes::preVisit(ExprReturn *expr) {
+        Visitor::preVisit(expr);
+        expr->block = nullptr;
+        expr->returnType = nullptr;
+        // ok, now lets mark early outs for the block chain
+        markEarlyOut();
         if (expr->subexpr) {
             markNoDiscard(expr->subexpr);
             // unnamed -> named tuple shorthand at return position:
@@ -4841,12 +4844,14 @@ namespace das {
         if (!loop.size())
             error("'break' without a loop", "", "",
                   expr->at, CompilationError::invalid_break);
+        markEarlyOut();
         return Visitor::visit(expr);
     }
     ExpressionPtr InferTypes::visit(ExprContinue *expr) {
         if (!loop.size())
             error("'continue' without a loop", "", "",
                   expr->at, CompilationError::invalid_continue);
+        markEarlyOut();
         return Visitor::visit(expr);
     }
     struct MarkNamedVariablesUsed : Visitor {
