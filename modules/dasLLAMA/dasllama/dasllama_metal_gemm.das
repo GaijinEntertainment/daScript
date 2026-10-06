@@ -9,6 +9,8 @@ require dasllama/dasllama_lint public
 require dasllama/dasllama_math
 require metal/msl_shader
 require metal/das_metal_boost
+require dasllama/dasllama_env        // the dump knob
+require dasllama/dasllama_gpu_tier   // kernel_dump_save
 
 // The Metal GPU prefill-GEMM backend (Phase-5 dasMetal offload experiment): a BATCH-ONLY donor —
 // decode GEMV is bandwidth-bound on the same unified memory and stays CPU. Registered at [init]
@@ -300,6 +302,8 @@ def private metal_gemm_init : bool {
     }
     g_queue = metal_new_command_queue(g_dev)
     var err : string
+    kernel_dump_save(g_env_metal.msl_dump, "{metal_q8_gemm_msl_entry}.metal", "DASLLAMA_METAL_MSL_DUMP", metal_q8_gemm_msl)
+    kernel_dump_save(g_env_metal.msl_dump, "{metal_q8_gemm64_msl_entry}.metal", "DASLLAMA_METAL_MSL_DUMP", metal_q8_gemm64_msl)
     g_pso = pipeline_from_source(g_dev, metal_q8_gemm_msl, metal_q8_gemm_msl_entry, metal_q8_gemm_msl_fastmath, err)
     if (g_pso != null) {
         g_pso64 = pipeline_from_source(g_dev, metal_q8_gemm64_msl, metal_q8_gemm64_msl_entry, metal_q8_gemm64_msl_fastmath, err)
@@ -329,9 +333,7 @@ def private upload_region(var tab : table<uint64; MetalBuffer?>; src : void?; by
         return tab[key]
     }
     var buf = metal_new_buffer(g_dev, bytes)
-    unsafe {
-        memcpy(metal_buffer_contents(buf), src, bytes)
-    }
+    unsafe(memcpy(metal_buffer_contents(buf), src, bytes))
     tab[key] = buf
     return buf
 }

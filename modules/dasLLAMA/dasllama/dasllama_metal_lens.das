@@ -408,6 +408,7 @@ class MetalDispatch : AstStructureAnnotation {
 
         // Collect @ssbo/@uniform buffer fields in @binding order. @workgroup + hidden/method
         // fields are skipped; field-annotation validity is msl_emit's job, not the lens's.
+        kargs_as(st, "uniform", true)
         var bufs : array<BufField>
         var has_wg = false
         bufs |> reserve(length(st.fields))

@@ -689,7 +689,7 @@ let private TS_MAX_DE_LSTMS = 8              //! the duration encoder's LSTM sta
 let private TS_MAX_RES_BLOCKS = 8            //! ... and a prosody branch's residual blocks
 
 //! o [rows][width] = cat(x [rows][c], the res rows, the f0 and n columns) zero-padded, as `pa` lays them (rs = 0 broadcasts one res row)
-def private ts_concat(raw : VkCommandBuffer; var h : VkHaz; x, res, f0, nd, o : TsRows; pa : TtsConcatArgs) {
+def private ts_concat(raw : VkCommandBuffer; var h : VkHaz; x, res, f0, nd, o : TsRows; pa : GkConcatArgs) {
     var s = set_tts_concat_cls(fixed_array(x.dev, res.dev, f0.dev, nd.dev, o.dev), fixed_array(x.bytes, res.bytes, f0.bytes, nd.bytes, o.bytes),
         fixed_array(x.bit, res.bit, f0.bit, nd.bit, o.bit))
     var pc = pa
@@ -840,7 +840,7 @@ def private vulkan_styletts2_dur_enc(p : St2Predictor; bert : array<float>; t : 
         return ts_decline("dur_enc", VulkanTtsDecline.memory)
     }
     ts_upload(r_bert, bert, t * hidden)
-    let pa_cat = TtsConcatArgs(c = uint(cc), rc = uint(sd), rs = 0u, f0s = 0u, ns = 0u, with_res = 1u, width = uint(width), rows = uint(t))
+    let pa_cat = GkConcatArgs(c = uint(cc), rc = uint(sd), rs = 0u, f0s = 0u, ns = 0u, with_res = 1u, width = uint(width), rows = uint(t))
     vt_chain_one_shot("dur_enc", int64(nl), t) $(raw : VkCommandBuffer; var h : VkHaz) {
         ts_lin(raw, h, slab, sl.bert_enc, hidden, cc, r_bert, r_den, t)
         ts_concat(raw, h, r_den, aux, aux, aux, r_x, pa_cat)
@@ -1315,7 +1315,7 @@ def private ts_block_style_rows(b : St2GenResBlock; s : array<float>; var at : i
 //! o += scale . y, or o = scale . y under `zero`
 def private ts_axpy(raw : VkCommandBuffer; var h : VkHaz; o, y : TsRows; n : int64; scale : float; zero : bool) {
     var s = set_tts_axpy_cls(fixed_array(o.dev, y.dev), fixed_array(o.bytes, y.bytes), fixed_array(o.bit, y.bit))
-    var pa = TtsAxpyArgs(nelem = uint(n), scale = scale, zero = zero ? 1u : 0u, ooff = 0u, yoff = 0u)
+    var pa = GkAxpyArgs(nelem = uint(n), scale = scale, zero = zero ? 1u : 0u)
     enc_tts_axpy_cls(raw, h, s, pa, n)
     vt_pt(raw, VtProfRole.tts_rows)
 }
@@ -1473,7 +1473,7 @@ def private ts_decoder_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows
     let r_nd = ts_rows(sc_, TS_D_ND)
     let r_cat = ts_rows(sc_, TS_D_CAT)
     let rc = uint(d.asr_res.cout)
-    let kc = TtsConcatArgs(c = uint(text_c), rc = rc, rs = rc, f0s = 1u, ns = 1u, with_res = 0u, width = uint(d.encode.dim_in_s), rows = uint(frames))
+    let kc = GkConcatArgs(c = uint(text_c), rc = rc, rs = rc, f0s = 1u, ns = 1u, with_res = 0u, width = uint(d.encode.dim_in_s), rows = uint(frames))
     ts_concat(raw, h, r_asr, r_res, r_f0d, r_nd, r_cat, kc)
     var tt = ts_res_blk(raw, h, slab, sc_, TS_D_BLK, d.encode, sl.encode, dhoff[0], dhoff[1], r_cat, frames, r_x)
     var cwr = d.encode.dim_out
@@ -1483,7 +1483,7 @@ def private ts_decoder_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows
         let src = in_x ? r_x : r_bo
         let dst = in_x ? r_bo : r_x
         if (blk.dim_in != cwr) {
-            let kc2 = TtsConcatArgs(c = uint(cwr), rc = rc, rs = rc, f0s = 1u, ns = 1u, with_res = 1u, width = uint(blk.dim_in_s), rows = uint(tt))
+            let kc2 = GkConcatArgs(c = uint(cwr), rc = rc, rs = rc, f0s = 1u, ns = 1u, with_res = 1u, width = uint(blk.dim_in_s), rows = uint(tt))
             ts_concat(raw, h, src, r_res, r_f0d, r_nd, r_cat, kc2)
             tt = ts_res_blk(raw, h, slab, sc_, TS_D_BLK, blk, sl.decode[i], dhoff[2 + 2 * i], dhoff[3 + 2 * i], r_cat, tt, dst)
         } else {

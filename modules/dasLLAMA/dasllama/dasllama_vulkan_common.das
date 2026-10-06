@@ -3344,30 +3344,13 @@ def private spv_override_load(kernel : string; var spv : array<uint>) {
     }
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-class-pipeline-build")]
-def private spv_dump_save(kernel : string; spv : array<uint>) {
-    let dir = g_env_vulkan.vk_spv_dump
-    if (empty(dir)) {
-        return
-    }
-    let path = path_join(dir, "{kernel}.spv")
-    fopen(path, "wb") $(f) {
-        if (f != null) {
-            f |> fwrite(spv)
-            to_log(LOG_INFO, "dasLLAMA vulkan tier: DASLLAMA_VK_SPV_DUMP wrote {path}\n")
-        } else {
-            to_log(LOG_WARNING, "dasLLAMA vulkan tier: DASLLAMA_VK_SPV_DUMP could not write {path}\n")
-        }
-    }
-}
-
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#vk-class-pipeline-build")]
 def vkd_class_pipe(var c : VkdClass; ord : int; var spv : array<uint>; rmask, wmask : uint; kernel : string) {
     if (length(c.pipes) <= ord) {
         c.pipes |> resize(ord + 1)   // empty slots hold null handles until their kernel ensures
         c.pipe_epochs |> resize(ord + 1)
     }
-    spv_dump_save(kernel, spv)   // the EMITTED words, before an override replaces them
+    kernel_dump_save(g_env_vulkan.vk_spv_dump, "{kernel}.spv", "DASLLAMA_VK_SPV_DUMP", spv)   // the EMITTED words, before an override replaces them
     if (g_vkd_spv_keep) {
         g_vkd_spv_kept[kernel] := spv
     }

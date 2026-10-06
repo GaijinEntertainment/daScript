@@ -355,6 +355,7 @@ let MODULE_AREAS <- {
     "dasllama_vulkan_tower" => "audio,vision,tts",   // the Vulkan TTS driver rides the tower's classes
     "dasllama_tts_slab" => "audio,vision,tts",   // the Metal tower requires it for every seat
     "dasllama_vulkan_tts" => "tts",
+    "dasllama_gpu_kernels_common" => "tts",   // the kernels both GPU homes stamp: the TTS chains' so far
     "dasllama_asr" => "audio", "dasllama_asr_types" => "audio", "dasllama_audio" => "audio",
     "dasllama_audio_embedder" => "audio", "dasllama_audio_io" => "audio", "dasllama_canary" => "audio",
     "dasllama_gemma4a" => "audio", "dasllama_metal_asr_dec" => "audio", "dasllama_vulkan_asr_dec" => "audio", "dasllama_parakeet" => "audio",

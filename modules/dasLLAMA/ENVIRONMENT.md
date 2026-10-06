@@ -83,6 +83,7 @@ Apple GPU backend. Absent on non-Apple builds, where setting them does nothing.
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
+| `DASLLAMA_METAL_MSL_DUMP` | path | unset | Directory to write each kernel's generated source as <entry>.metal when its pipeline is built - the SPIR-V dump's twin, for diffing a kernel across a change. |
 | `DASLLAMA_METAL_LOGITS` | flag | on | Produce logits on the GPU; 0 pulls the classifier back to the CPU. Blob-only models force it on. |
 | `DASLLAMA_METAL_ATTN` | flag | on | Tiled QK/AV prefill attention (~10x the trio GEMMs); 0 pins the trio. |
 | `DASLLAMA_METAL_SPAN` | flag | on | Serve the non-causal media span on the prefill driver (AttnArgs.uend); 0 declines it to the CPU arm, which then needs declared CPU intent. |

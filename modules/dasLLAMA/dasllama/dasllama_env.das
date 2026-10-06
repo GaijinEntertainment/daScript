@@ -220,6 +220,10 @@ struct public VisionEnv {
 
 [EnvConfig(env_prefix = "DASLLAMA_METAL")]
 struct public MetalEnv {
+    @clarg_path
+    @clarg_doc = "Directory to write each kernel's generated source as <entry>.metal when its pipeline is built - the SPIR-V dump's twin, for diffing a kernel across a change."
+    msl_dump : string = ""
+
     @clarg_doc = "Produce logits on the GPU; 0 pulls the classifier back to the CPU. Blob-only models force it on."
     logits : bool = true
 

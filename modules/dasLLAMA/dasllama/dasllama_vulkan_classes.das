@@ -13,6 +13,7 @@ require dasllama/dasllama_vulkan_dispatch
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_kv_dtype   // KVDtype: the K/V mirror codec the stamp picks key on
 require dasllama/dasllama_gpu_math
+require dasllama/dasllama_gpu_kernels_common public
 require dasllama/dasllama_math
 require daslib/typemacro_boost  // [template_struct_instance] — the KV-codec kernel templates
 require daslib/math_bits   // uint_bits_to_float: the KHR tile's f32 store bounce read back through its uint staging array
@@ -13664,48 +13665,12 @@ class TtsLstmDir {
     }
 }
 
-struct TtsConcatArgs {
-    c : uint          //! x's row width
-    rc : uint         //! the residual columns, read only under `with_res`
-    rs : uint         //! the residual rows' stride: 0 broadcasts one row to every position
-    f0s : uint        //! the F0 column's row stride
-    ns : uint         //! the noise column's row stride
-    with_res : uint   //! 1 = the residual columns follow x
-    width : uint      //! the output row width, the columns past the last input zero
-    rows : uint
-}
-
-//! o [rows][width] = cat(x [rows][c], res at stride rs under `with_res`, f0 at stride f0s, nd at stride ns), zero-padded to
-//! width - the CPU `concat_rows`; one element an invocation
+//! o [rows][width] = cat(x, res, f0, nd) - the CPU `concat_rows`
 [vk_dispatch(name = "tts_concat_cls", kernel = "run", grid = "total/256", params = "total : int64")]
-class TtsConcat {
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 res : array<float>
-    @ssbo @binding = 2 f0 : array<float>
-    @ssbo @binding = 3 nd : array<float>
-    @ssbo @binding = 4 o : array<float>
-    @push_constant pa : TtsConcatArgs
-
+class TtsConcat : GkConcat {
     [spirv_kernel(local_size_x = 256)]
     def run {
-        let gid = gl_GlobalInvocationID.x
-        if (gid < pa.rows * pa.width) {
-            let w = max(pa.width, 1u)
-            let r = gid / w
-            let j = gid % w
-            let rc = pa.with_res != 0u ? pa.rc : 0u
-            var v = 0.0
-            if (j < pa.c) {
-                v = x[r * pa.c + j]
-            } elif (j < pa.c + rc) {
-                v = res[r * pa.rs + (j - pa.c)]
-            } elif (j == pa.c + rc) {
-                v = f0[r * pa.f0s]
-            } elif (j == pa.c + rc + 1u) {
-                v = nd[r * pa.ns]
-            }
-            o[gid] = v
-        }
+        concat_body()
     }
 }
 
@@ -13923,29 +13888,12 @@ class TtsAddScale {
     }
 }
 
-struct TtsAxpyArgs {
-    nelem : uint
-    scale : float
-    zero : uint    //! 1 = o's old contents ignored
-    ooff : uint    //! each plane's element base
-    yoff : uint
-}
-
-//! o = (zero ? 0 : o) + scale * y over nelem elements - the generator stage's averaged residual-block sum; one element
-//! an invocation
+//! o = (zero ? 0 : o) + scale * y over nelem elements - the generator stage's averaged residual-block sum
 [vk_dispatch(name = "tts_axpy_cls", kernel = "run", grid = "nelem/256", params = "nelem : int64")]
-class TtsAxpy {
-    @ssbo @binding = 0 o : array<float>
-    @ssbo @binding = 1 y : array<float>
-    @push_constant pa : TtsAxpyArgs
-
+class TtsAxpy : GkAxpy {
     [spirv_kernel(local_size_x = 256)]
     def run {
-        let i = gl_GlobalInvocationID.x
-        if (i < pa.nelem) {
-            let base = pa.zero != 0u ? 0.0 : o[pa.ooff + i]
-            o[pa.ooff + i] = base + pa.scale * y[pa.yoff + i]
-        }
+        axpy_body()
     }
 }
 

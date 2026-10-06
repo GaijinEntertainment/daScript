@@ -1443,9 +1443,8 @@ def private st2_rows_gate(t : T?; var dev, queue) {
         }
         let po = mc |> out_words(n + c, -1.0e30)
         var bo = mc.buf[po]
-        var (bn, bslope, bscale, bc, bnrf) = (mc.buf[mc |> in_plain([uint(n)])], mc.buf[mc |> in_plain([0.1])], mc.buf[mc |> in_plain([0.25])],
+        var (bn, bslope, bc, bnrf) = (mc.buf[mc |> in_plain([uint(n)])], mc.buf[mc |> in_plain([0.1])],
             mc.buf[mc |> in_plain([uint(c)])], mc.buf[mc |> in_plain([uint(n + c)])])
-        var (bzero0, bzero1) = (mc.buf[mc |> in_plain([0u])], mc.buf[mc |> in_plain([1u])])
         var (bsc1, bscj) = (mc.buf[mc |> in_plain([1.0])], mc.buf[mc |> in_plain([0.70710678])])
         let run_leaky <- @(bxx : MetalBuffer?) : bool {
             return queue_record(t, queue, "{tag} leaky") $(enc : MetalComputeEncoder?) {
@@ -1455,10 +1454,9 @@ def private st2_rows_gate(t : T?; var dev, queue) {
             }
         }
         let run_axpy <- @(bax, bbx : MetalBuffer?; zero : uint) : bool {
-            let bz = zero == 0u ? bzero0 : bzero1
             return queue_record(t, queue, "{tag} axpy") $(enc : MetalComputeEncoder?) {
                 stamp_run(sax, pso_ax) {
-                    invoke(sax.enc, enc, bax, bbx, bscale, bz, bn, int64(n))
+                    invoke(sax.enc, enc, bax, bbx, GkAxpyArgs(nelem = uint(n), scale = 0.25, zero = zero), int64(n))
                 }
             }
         }
@@ -1633,8 +1631,8 @@ def private st2_concat_gate(t : T?; var dev, queue; with_res : bool) {
                     want[3 * width + c] += 2.0   //! the expectation moves off the true f0 column: the compare must red
                 }
             }
-            var ka = St2ConcatArgs(c = uint(c), rc = uint(rc), rs = uint(rs), f0s = uint(f0s), ns = uint(f0s), with_res = with_res ? 1u : 0u,
-                width = uint(width), total = uint(nrows * width))
+            var ka = GkConcatArgs(c = uint(c), rc = uint(rc), rs = uint(rs), f0s = uint(f0s), ns = uint(f0s), with_res = with_res ? 1u : 0u,
+                width = uint(width), rows = uint(nrows))
             let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
                 stamp_run(st, pso) {
                     invoke(st.enc, enc, mc.buf[px], mc.buf[pres], mc.buf[pf0], mc.buf[pnd], mc.buf[po], ka, int64(nrows * width))

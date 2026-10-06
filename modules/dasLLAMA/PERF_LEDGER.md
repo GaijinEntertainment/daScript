@@ -11,6 +11,22 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-05, `direction-grade`) - Axpy and Concat as kernels both GPU homes stamp read as before on
+  both.** The two kernels moved to one class template each (`dasllama_gpu_kernels_common.das`); on Metal their
+  arguments became one struct and Axpy lost two offsets no site passed, on Vulkan the body became a function the
+  entry calls (Concat's SPIR-V 52 bytes longer, Axpy's 196 shorter for the dropped offsets; 25 of the 27 TTS
+  stamps byte-identical). `dasllama-server` with the TTS model alone (`main.das -- --tts <gguf>`),
+  `harness/served_bench.das --no-chat --tts-url <server> --reps 8`, one sentence, master and the branch alternated
+  twice in one sitting on each box; the decoder stage is the engine's own stage clock and is the stage that runs
+  both kernels. The M5's tune sidecar predates the binary.
+  - M5 Max, Metal, ms a request, master / branch / master / branch: Kokoro-82M 73.7 / 73.8 / 73.6 / 73.8 for
+    5.68 s of speech (the last two void at cv 2.9% and 3.5%), its decoder 41.29 / 41.30 / 41.30 / 41.27; Kitten
+    mini 64.6 / 64.7 / 64.5 / 64.8 for 5.84 s (the third void at cv 3.9%), its decoder 29.44 / 29.37 / 29.38 / 29.27.
+  - RTX PRO 4500, Vulkan (driver 580.173), decoder stage ms, master / branch / master / branch: Kokoro-82M 14.14 /
+    14.04 / 13.91 / 13.97; Kitten mini 10.54 / 10.53 / 10.57 / 10.63. The request walls there read 46.3-52.4
+    (Kokoro) and 46.1-48.1 (Kitten mini) with seven of the eight rows void on spread - the round trip jitters on
+    that box, the stage clock does not.
+
 - **MEASURED (2026-10-04, `direction-grade`) - a served media turn's first token, and the speech rows beside
   mlx-audio.** M5 Max, Metal, `dasllama-server` with one model (`main.das -- -m <gguf> --image-mmproj <mmproj>` or
   `--audio-mmproj <mmproj>`, `-s 1 --ctx 16384`), the pinned llama-server as `-m <gguf> --mmproj <mmproj> -ngl 99

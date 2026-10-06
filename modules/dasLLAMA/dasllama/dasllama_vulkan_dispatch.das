@@ -188,6 +188,7 @@ class VkDispatch : AstStructureAnnotation {
             return false
         }
 
+        kargs_as(st, "push_constant")
         // Collect @ssbo members (binding order; same-binding VIEWS legal — access unions into the
         // slot) + the single @push_constant params struct. @workgroup/@private_global/methods skip.
         var bufs : array<VkBufField>

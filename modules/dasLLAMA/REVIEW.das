@@ -556,15 +556,16 @@ def private rb_trailing_int(line : string) : int {
 }
 
 // The per-function pipeline map: the calls that bind a local to a class's compiled source -
-// `pipeline_from_source` over a literal global, and the shared `race_pso_pair` shell in either
-// spelling - plus the local-to-local reads of one. True where the line is such a bind and no
-// later check reads it.
+// `pipeline_from_source` or its dumping shell `pso_from_source` over a literal global, and the
+// shared `race_pso_pair` shell in either spelling - plus the local-to-local reads of one. True
+// where the line is such a bind and no later check reads it.
 def private rb_track_pso(line : string; class_names : table<string>; kernel_class : table<string; string>;
                          var pso_class : table<string; string>) : bool {
-    let pf = find(line, "pipeline_from_source(")
+    let pfs = find(line, "pipeline_from_source(")
+    let pf = pfs >= 0 ? pfs : find(line, "pso_from_source(")
     if (pf >= 0) {
         let pvar = rb_bound_var(line)
-        let args = slice(line, pf + length("pipeline_from_source("))
+        let args = slice(line, find(line, "(", pf) + 1)
         let c1 = find(args, ",")
         let src = strip(slice(args, c1 + 1, find(args, ",", c1 + 1)))
         let cls = rb_resolve_class(src, class_names, kernel_class)

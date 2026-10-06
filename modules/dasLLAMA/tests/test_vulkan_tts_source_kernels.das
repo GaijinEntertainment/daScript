@@ -26,13 +26,11 @@ let private SLACK = 5      //! the elements past a run, left at their fill
 let private BAR_EXACT_POISON_PCT = Bar(exact = true, poison = 0.01, poison_scaled = true)   //! bit-exact, its poison a hundredth of the magnitude (floored at 1): outside every bar in this file
 
 let private AX_N = 1030        //! four whole workgroups and six more
-let private AX_OOFF = 3
-let private AX_YOFF = 7
 let private AX_SCALE = 0.25    //! a power of two: scale * y is exact, so the fused and the unfused form both round once, as the f32 form does
 
 [test]
 def test_vkt_axpy(t0 : T?) {
-    t0 |> run("the axpy == o + 0.25 y in f32, exact, accumulating (zero = 0) and overwriting (zero = 1), at offsets") <| @(t : T?) {
+    t0 |> run("the axpy == o + 0.25 y in f32, exact, accumulating (zero = 0) and overwriting (zero = 1)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init() || !ensure_tts_axpy_cls()) {
                 t |> skip("no Vulkan device")
@@ -42,12 +40,12 @@ def test_vkt_axpy(t0 : T?) {
             let ob <- f16_fill(n, 7, 0.05, -1.1)
             let yv <- f16_fill(n, 5, 0.04, -0.9)
             with_cell_planes() $(var cp : CellPlanes) {
-                let oap = cp |> io_(ob, AX_OOFF, SLACK)
-                let ozp = cp |> out_(n, AX_OOFF, SLACK)
-                let yp = cp |> in_(yv, AX_YOFF)
+                let oap = cp |> io_(ob, 0, SLACK)
+                let ozp = cp |> out_(n, 0, SLACK)
+                let yp = cp |> in_(yv, 0)
                 var s_a = cp |> cls_set(fixed_array(oap, yp), @@set_tts_axpy_cls)
                 var s_z = cp |> cls_set(fixed_array(ozp, yp), @@set_tts_axpy_cls)
-                var pa = TtsAxpyArgs(nelem = uint(n), scale = AX_SCALE, zero = 0u, ooff = uint(AX_OOFF), yoff = uint(AX_YOFF))
+                var pa = GkAxpyArgs(nelem = uint(n), scale = AX_SCALE, zero = 0u)
                 var pz = pa
                 pz.zero = 1u
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
@@ -59,8 +57,8 @@ def test_vkt_axpy(t0 : T?) {
                 check_rows(t, "tts_axpy zero = 0 vs o + 0.25 y", got_a, [for (i in range(n)); ob[i] + AX_SCALE * yv[i]], BAR_EXACT_POISON_PCT, FLAT_ROWS)
                 check_rows(t, "tts_axpy zero = 1 vs 0.25 y over a NaN-filled o", got_z, [for (i in range(n)); AX_SCALE * yv[i]], BAR_EXACT_POISON_PCT, FLAT_ROWS)
                 t |> success(ob[0] != 0.0 && got_a[0] != got_z[0], "tts_axpy control: the same dispatch at zero = 0 adds o's old contents")
-                t |> success(outside_run(cp |> plane_whole(oap), AX_OOFF, n, POISON), "tts_axpy zero = 0: the elements outside the run are untouched")
-                t |> success(outside_run(cp |> plane_whole(ozp), AX_OOFF, n, NAN_SENTINEL), "tts_axpy zero = 1: the elements outside the run keep their sentinel")
+                t |> success(outside_run(cp |> plane_whole(oap), 0, n, POISON), "tts_axpy zero = 0: the elements outside the run are untouched")
+                t |> success(outside_run(cp |> plane_whole(ozp), 0, n, NAN_SENTINEL), "tts_axpy zero = 1: the elements outside the run keep their sentinel")
             }
         } else {
             t |> skip("dasVulkan not present")

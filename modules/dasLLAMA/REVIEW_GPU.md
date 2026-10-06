@@ -35,7 +35,7 @@ or synthesis stage to the GPU), a drop hook, or a reload or weights-epoch listen
 that calls the hook such a function stores - applies `REVIEW_TOWER.md` too.**
 
 **A diff touching the Vulkan tier - `dasllama/dasllama_*vulkan*.das`,
-`dasllama/dasllama_gpu_math.das`, `dasllama/dasllama_gpu_resident.das`,
+`dasllama/dasllama_gpu_math.das`, `dasllama/dasllama_gpu_kernels_common.das`, `dasllama/dasllama_gpu_resident.das`,
 `dasllama/dasllama_gpu_tier.das`, a `[vk_dispatch]` class, a `[spirv_decode]` callback, or a
 cooperative-matrix GEMM class stamped per weight format and column width, on the NV
 cooperative-matrix-2 arm or the KHR cooperative-matrix arm, or a kernel cell or probe that fills
