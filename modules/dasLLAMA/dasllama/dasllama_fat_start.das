@@ -6,7 +6,7 @@ module dasllama_fat_start shared private
 
 require dasllama/dasllama_lint public
 require dasllama/dasllama_common
-require dasllama/dasllama_env   // nolint:STYLE030 - dasllama_home_dir, used only inside the llvm_tune static_if half
+require dasllama/dasllama_env   // nolint:STYLE030,LINT019 - dasllama_home_dir, used only inside the llvm_tune static_if half
 require daslib/fio
 require dasllama/dasllama_math   // the runtime knob getters the snapshot records
 require dasllama/dasllama_par    // get_total_hw_jobs - the advisory "threads" entry
