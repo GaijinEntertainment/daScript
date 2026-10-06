@@ -748,7 +748,7 @@ def private prompt_kv(vs : PocketVoiceState; n : int64) : PromptRows {
 }
 
 //! The prompt seat against the CPU chain over one case's text: every layer's K and V rows within `bar` with the bar's
-//! one-element control and the x3-scaled embedding rows as the compare's control, one hook call served, one encode,
+//! one-element control and the text rotated by one token as the compare's control, one hook call served, one encode,
 //! the knob-off leg bit-equal with its decline recorded; false where no device serves (the skip registered).
 [cold_path, unused_argument(t, m, k, tag, bar, sc)]   // off-Apple the gated body is empty
 def private prompt_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : string; bar : float; var sc : PocketScratch) : bool {
@@ -779,8 +779,8 @@ def private prompt_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : s
             return rel_l2(off.k, cpu.k) == 0.0 && rel_l2(off.v, cpu.v) == 0.0
         }
         set_serving_gpu_tower(true)
-        var inscope ids3 <- [for (i in range64(n)); k.ids[(i + 1l) % n]]
-        pocket_prompt_rows(m, ids3, k.vs, sc)
+        var inscope ids_rot <- [for (i in range64(n)); k.ids[(i + 1l) % n]]
+        pocket_prompt_rows(m, ids_rot, k.vs, sc)
         var inscope gx <- prompt_kv(k.vs, n)
         t |> success(rel_l2(gx.k, cpu.k) > bar && rel_l2(gx.v, cpu.v) > bar, "{tag}: the text rotated by one token reds the keys' and the values' bars (the compare's control)")
         return true
