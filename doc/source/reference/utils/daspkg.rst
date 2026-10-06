@@ -91,8 +91,8 @@ Commands
      - List installed packages.
    * - ``search [query]``
      - Search the package index.  An empty query lists every entry.
-   * - ``build``
-     - Build all C/C++ packages (cmake).  ``build --wasm`` builds the
+   * - ``build [name]``
+     - Build all C/C++ packages (cmake), or only the named one.  ``build --wasm`` builds the
        wasm64 runtime and module archives instead.
    * - ``check``
      - Verify installed packages are present and have ``.das_module``.

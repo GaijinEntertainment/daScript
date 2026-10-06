@@ -1127,8 +1127,23 @@ def build_package(pkg_dir : string) : bool {
     return true
 }
 
-def cmd_build(root : string; is_global : bool = false) {
+//! Build the package `pkg_name` under `modules_dir`; 1 when the name is not a bare package name or names no CMake package.
+def private build_one_package(modules_dir, pkg_name : string) : int {
+    let pkg_dir = "{modules_dir}/{pkg_name}"
+    if (!is_safe_pkg_name(pkg_name) || !fexist("{pkg_dir}/CMakeLists.txt")) {
+        to_log(LOG_ERROR, "Error: no package '{pkg_name}' with a CMakeLists.txt under {modules_dir}\n")
+        return 1
+    }
+    log("Building '{pkg_name}'...\n")
+    if (!build_package(pkg_dir)) return 1
+    print("Built '{pkg_name}'\n")
+    return 0
+}
+
+//! Build every package under `modules/` that has a CMakeLists.txt, or only `only_pkg`.
+def cmd_build(root : string; is_global : bool = false; only_pkg : string = "") {
     let modules_dir = is_global ? "{get_das_root()}/modules" : "{root}/modules"
+    if (!empty(only_pkg)) return build_one_package(modules_dir, only_pkg)
     if (!fexist(modules_dir)) {
         print("No modules directory found\n")
         return 0

@@ -38,7 +38,7 @@ daslang utils/daspkg/main.das -- install --global dasImgui
 | `upgrade [name]` | Upgrade to latest version |
 | `list` | List installed packages |
 | `search <query>` | Search the package index |
-| `build` | Build all C/C++ packages (cmake) |
+| `build [name]` | Build all C/C++ packages (cmake), or only the named one |
 | `check` | Verify installed packages are present |
 | `doctor` | Check environment (git, cmake, gh) |
 | `release [--out <dir>] [--paranoid \| --quick \| --fat <class>]` | Bundle project as a redistributable standalone. A plain release mints the tune sidecar on the build box and ships it; `--quick` inherits a complete existing one instead of minting; `--fat <class>` builds a fat exe from the class profiles - no mint, no sidecar |

@@ -27,7 +27,7 @@ def print_usage() {
     print("  introduce [url]                    Add a package to the index via PR\n")
     print("  withdraw <name>                    Remove a package from the index via PR\n")
     print("  update-index [--commit | --dry-run] Refresh all index metadata from repos\n")
-    print("  build                              Build C/C++ packages\n")
+    print("  build [name]                       Build C/C++ packages\n")
     print("  check                              Verify installed packages\n")
     print("  cleanup                            Remove modules/ and daspkg.lock for a fresh install\n")
     print("  doctor                             Check environment (git, cmake, gh)\n")
@@ -101,7 +101,7 @@ def main() { // nolint:STYLE037,STYLE038 — the subcommand dispatch table: one 
         if (parsed.wasm) {
             rc = cmd_build_wasm(root, parsed.wasm_lib_dir)
         } else {
-            rc = cmd_build(root, is_global)
+            rc = cmd_build(root, is_global, command_arg)
         }
     } elif (command == "check") {
         rc = cmd_check(root, parsed.json, is_global)

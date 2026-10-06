@@ -23,7 +23,7 @@ The `--root` flag sets the project root directory (default: current directory). 
 | `upgrade` | `upgrade [name] [--global]` | Upgrade to latest version. Without name, upgrades all |
 | `list` | `list [--json] [--global]` | List installed packages |
 | `check` | `check [--json] [--global]` | Verify installed packages match lockfile |
-| `build` | `build [--global]` | Build native (CMake) packages |
+| `build` | `build [name] [--global]` | Build native (CMake) packages, or only the named one |
 | `build --wasm` | `build --wasm [--wasm-lib-dir <dir>]` | Build the wasm64 runtime + module archives `release wasm` links against (see WebAssembly section) |
 | `cleanup` | `cleanup [--force] [--global]` | Remove `modules/` and `daspkg.lock` to reset a project |
 | `doctor` | `doctor` | Check environment (git, cmake, gh) |

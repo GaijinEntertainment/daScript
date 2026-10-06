@@ -3180,6 +3180,56 @@ def test_land_clone(t : T?) {
     }
 }
 
+[test]
+def test_cmd_build_only(t : T?) {
+    t |> run("a name with no CMake package fails") @(t : T?) {
+        let tmp_root = scratch_dir(t, "daspkg-build-only-")
+        mkdir_rec("{tmp_root}/modules/plain")
+        t |> equal(1, cmd_build(tmp_root, false, "absent"))
+        t |> equal(1, cmd_build(tmp_root, false, "plain"))
+        force_rmdir(tmp_root)
+    }
+    t |> run("a name that is not a bare package name fails") @(t : T?) {
+        let tmp_root = scratch_dir(t, "daspkg-build-only-")
+        mkdir_rec("{tmp_root}/modules/wanted")
+        fwrite("{tmp_root}/modules/wanted/CMakeLists.txt", "cmake_minimum_required(VERSION 3.16)\nproject(wanted NONE)\n")
+        t |> equal(1, cmd_build(tmp_root, false, "wanted/"))
+        t |> equal(1, cmd_build(tmp_root, false, "../modules/wanted"))
+        force_rmdir(tmp_root)
+    }
+    t |> run("only the named package builds") @(t : T?) {
+        let tmp_root = scratch_dir(t, "daspkg-build-only-")
+        mkdir_rec("{tmp_root}/modules/wanted")
+        mkdir_rec("{tmp_root}/modules/broken")
+        fwrite("{tmp_root}/modules/wanted/CMakeLists.txt", "cmake_minimum_required(VERSION 3.16)\nproject(wanted NONE)\n")
+        fwrite("{tmp_root}/modules/broken/CMakeLists.txt", "message(FATAL_ERROR \"built a package nobody named\")\n")
+        t |> equal(0, cmd_build(tmp_root, false, "wanted"))
+        t |> equal(1, cmd_build(tmp_root))
+        // the filesystem's case rule decides whether WANTED names it; build agrees with the lookup
+        let found = fexist("{tmp_root}/modules/WANTED/CMakeLists.txt")
+        t |> equal(found ? 0 : 1, cmd_build(tmp_root, false, "WANTED"))
+        force_rmdir(tmp_root)
+    }
+}
+
+[test]
+def test_main_build_takes_a_name(t : T?) {
+    t |> run("daspkg build <name> builds only that name, so an absent one fails") @(t : T?) {
+        let tmp = scratch_dir(t, "daspkg-main-build-")
+        mkdir("{tmp}/modules")
+        let args <- get_command_line_arguments()
+        var exe = replace(args[0], "\\", "/")
+        if (find(exe, ":") < 0 && first_character(exe) != '/') {
+            exe = "{get_das_root()}/{exe}"
+        }
+        var output : string
+        let main_das = "{get_das_root()}/utils/daspkg/main.das"
+        t |> equal(0, run_cmd("\"{exe}\" \"{main_das}\" -- build --root \"{tmp}\"", output), output)
+        t |> equal(1, run_cmd("\"{exe}\" \"{main_das}\" -- build absent --root \"{tmp}\"", output), output)
+        force_rmdir(tmp)
+    }
+}
+
 // Writes a releasable package (main.das + release_main) declaring `platform` as its only platform.
 def private write_release_platform_pkg(src_dir, pkg_name, platform : string) {
     mkdir(src_dir)
