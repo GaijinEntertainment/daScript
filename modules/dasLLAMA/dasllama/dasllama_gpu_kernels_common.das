@@ -376,3 +376,87 @@ class template GkAddScale {
         }
     }
 }
+
+//! the source's resample law - TORCH: torch's taps and mix, else onnxruntime's - the base of the source stamps; the taps'
+//! quotients divide through `tts_div`
+[ |> template_struct_instance]
+class template GkSrcLaw {
+    @template_constant TORCH : bool = false
+
+    def law_taps(n, to : uint; scale : float; var i0, i1 : uint&; var l0, l1 : float&) {
+        static_if (TORCH) {
+            tts_resize_taps_torch(n, to, tts_div(1.0, scale), i0, i1, l0, l1)
+        } else {
+            tts_resize_taps_onnx(n, tts_div(float(to) + 0.5, scale), i0, i1, l0, l1)
+        }
+    }
+
+    def law_mix(x0, x1, l0, l1 : float; last : bool) : float {
+        static_if (TORCH) {
+            return tts_resize_mix_torch(x0, x1, l0, l1)
+        } else {
+            return tts_resize_mix_onnx(x0, x1, l0, l1, last)
+        }
+    }
+}
+
+//! the low-rate phase increments low [nh][nlow] on the stamp's resample law, the first sample's initial phases folded in;
+//! one element an invocation
+[ |> template_struct_instance]
+class template GkSrcLow : GkSrcLaw {
+    @ssbo @binding = 0 @role = "read" f0 : array<float>
+    @ssbo @binding = 1 @role = "read" noise_u : array<float>
+    @ssbo @binding = 2 @role = "write" low : array<float>
+    @kargs pa : GkSourceArgs
+
+    def src_low_body {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.nh * pa.nlow) {
+            let nlow = max(pa.nlow, 1u)
+            let up = max(pa.up, 1u)
+            let h = gid / nlow
+            var i0 = 0u
+            var i1 = 0u
+            var l0 = 0.0
+            var l1 = 0.0
+            law_taps(pa.n, gid % nlow, tts_div(1.0, float(pa.up)), i0, i1, l0, l1)
+            let r0 = tts_src_rad(tts_div(f0[i0 / up] * float(h + 1u), pa.sr), noise_u[h], i0, h)
+            let r1 = tts_src_rad(tts_div(f0[i1 / up] * float(h + 1u), pa.sr), noise_u[h], i1, h)
+            low[gid] = law_mix(r0, r1, l0, l1, h + 1u == pa.nh)
+        }
+    }
+}
+
+//! the mixed source signal har [n] on the stamp's resample law: the harmonics' sines at the interpolated phases, the noise
+//! rows scaled by voicing, the source linear (its weight row [nh] at woff, its bias [1] at boff in wn) and its tanh; one
+//! sample an invocation
+[ |> template_struct_instance]
+class template GkSrcSines : GkSrcLaw {
+    @ssbo @binding = 0 @role = "read" f0 : array<float>
+    @ssbo @binding = 1 @role = "read" lowc : array<float>
+    @ssbo @binding = 2 @role = "read" noise_n : array<float>
+    @ssbo @binding = 3 @role = "read" wn : array<float>
+    @ssbo @binding = 4 @role = "write" har : array<float>
+    @kargs pa : GkSourceArgs
+
+    def src_sines_body {
+        let i = gl_GlobalInvocationID.x
+        if (i < pa.n) {
+            var i0 = 0u
+            var i1 = 0u
+            var l0 = 0.0
+            var l1 = 0.0
+            law_taps(pa.nlow, i, float(pa.up), i0, i1, l0, l1)
+            let uv = f0[i / max(pa.up, 1u)] > pa.voiced_thr ? 1.0 : 0.0
+            let noise_amp = tts_noise_amp(uv, pa.noise_std, pa.sine_amp)
+            var acc = wn[pa.boff]
+            var h = 0u
+            while (h < pa.nh) {
+                let phase = law_mix(lowc[h * pa.nlow + i0], lowc[h * pa.nlow + i1], l0, l1, h + 1u == pa.nh)
+                acc += tts_src_term(wn[pa.woff + h], tts_sin_big(phase) * pa.sine_amp, uv, noise_amp, noise_n[i * pa.nh + h])
+                h++
+            }
+            har[i] = tts_tanh(acc)
+        }
+    }
+}

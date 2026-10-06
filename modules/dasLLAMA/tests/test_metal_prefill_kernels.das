@@ -2493,19 +2493,19 @@ def private st2_source_gate(t : T?; var dev, queue; torch_math : bool) {
         let nlow = src.nlow
         var inscope f0 := src.f0
         let ka = GkSourceArgs(n = uint(n), nlow = uint(nlow), nh = uint(nh), up = uint(up), sr = TTS_SRC_SR, sine_amp = 0.1, noise_std = 0.003,
-            voiced_thr = 10.0, seed = 77u)
+            voiced_thr = 10.0, seed = 77u, woff = 0u, boff = uint(length(src.lin_w)))
         t |> equal(src.rows, int64(n), "{tag}: the CPU source mixes every sample")
         let pnu = mc |> in_(src.nu)
         let pnoise = mc |> in_(src.noise)
-        let plw = mc |> in_(src.lin_w)
-        let plb = mc |> in_(src.lin_b)
+        var inscope wn <- clone_to_move(src.lin_w)
+        wn |> push_from(src.lin_b)
+        let plw = mc |> in_(wn)
         let plow = mc |> out_words(nh * nlow, -1.0e30)
         let plowc = mc |> out_words(nh * nlow, -1.0e30)
         let phar = mc |> out_words(n, -1.0e30)
         var bnu = mc.buf[pnu]
         var bnoise = mc.buf[pnoise]
         var blw = mc.buf[plw]
-        var blb = mc.buf[plb]
         var blow = mc.buf[plow]
         var blowc = mc.buf[plowc]
         var bhar = mc.buf[phar]
@@ -2524,7 +2524,7 @@ def private st2_source_gate(t : T?; var dev, queue; torch_math : bool) {
                     invoke(scum.enc, enc, blow, blowc, kk, int64(nh))
                 }
                 stamp_run(ssin, pso_sin) {
-                    invoke(ssin.enc, enc, bf0, blowc, bnz, blw, 0ul, blb, 0ul, bhar, kk, int64(n))
+                    invoke(ssin.enc, enc, bf0, blowc, bnz, blw, bhar, kk, int64(n))
                 }
             }
         }

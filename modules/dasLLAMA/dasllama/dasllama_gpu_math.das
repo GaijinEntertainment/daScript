@@ -187,3 +187,11 @@ def tts_hash_normal(seed, idx : uint) : float {
     let u2 = float(b >> 8u) * (1.0 / 16777216.0)
     return sqrt(-2.0 * log(u1)) * cos(6.28318530717959 * u2)
 }
+
+//! a / b rounded as the CPU's IEEE divide: a SPIR-V divide sits up to 2.5 ulp off, which the phase sums carry; the correction lands the same quotient over Metal's IEEE divide
+def tts_div(a, b : float) : float {
+    var r = 1.0 / b
+    r = mad(mad(-b, r, 1.0), r, r)
+    let q = a * r
+    return mad(mad(-q, b, a), r, q)
+}

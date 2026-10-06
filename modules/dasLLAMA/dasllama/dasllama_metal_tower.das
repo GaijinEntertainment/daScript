@@ -3177,8 +3177,8 @@ struct private St2DecSlab : St2SlabBase {
     asr_res : St2ConvSlot
     encode : St2ResSlots
     decode : array<St2ResSlots>
-    src_w : uint64
-    src_b : uint64
+    src_w : int64        //!< the source linear's weight row and bias as element offsets - the sines kernel takes the slab whole
+    src_b : int64
     stft_re : int64      //!< the STFT and inverse STFT bases and the window as element offsets - their kernels take the slab whole
     stft_im : int64
     istft_re : int64
@@ -3306,8 +3306,8 @@ def private st2_dec_write(var w : TtsSlabWriter; d : St2Decoder; var s : St2DecS
     s.asr_res = st2_slot_of(w, t.asr_res)
     s.encode = st2_res_of(w, d.encode, t.encode)
     s.decode <- [for (b, r in d.decode, t.decode); st2_res_of(w, b, r)]
-    s.src_w = st2_byte_off(t.src_w)
-    s.src_b = st2_byte_off(t.src_b)
+    s.src_w = t.src_w
+    s.src_b = t.src_b
     s.stft_re = t.stft_re
     s.stft_im = t.stft_im
     s.istft_re = t.istft_re
@@ -3867,7 +3867,8 @@ def private st2_source_chain(enc : MetalComputeEncoder?; var c : St2GpuCtx; d : 
                              bf0, bnu, bnoise, blow, blowc, bhar, bspec : MetalBuffer?; captured : bool; seed : uint64) {
     let nh = cfg.n_harm
     var ka = GkSourceArgs(n = uint(ss.samples), nlow = uint(ss.nlow), nh = uint(nh), up = uint(cfg.upsample), sr = cfg.sample_rate,
-        sine_amp = cfg.sine_amp, noise_std = cfg.noise_std, voiced_thr = cfg.voiced_thr, seed = uint(seed ^ (seed >> 32ul)))
+        sine_amp = cfg.sine_amp, noise_std = cfg.noise_std, voiced_thr = cfg.voiced_thr, seed = uint(seed ^ (seed >> 32ul)),
+        woff = uint(g_tw_st2_dec.src_w), boff = uint(g_tw_st2_dec.src_b))
     let sl & = g_tw_st2_dec
     if (!captured) {
         enc_st2_src_noise(enc, bnoise, ka, ss.samples * nh)
@@ -3875,11 +3876,11 @@ def private st2_source_chain(enc : MetalComputeEncoder?; var c : St2GpuCtx; d : 
     if (cfg.torch_math) {
         enc_st2_src_low_torch(enc, bf0, bnu, blow, ka, nh * ss.nlow)
         enc_st2_src_cumsum_torch(enc, blow, blowc, ka, nh)
-        enc_st2_src_sines_torch(enc, bf0, blowc, bnoise, c.slab, sl.src_w, c.slab, sl.src_b, bhar, ka, ss.samples)
+        enc_st2_src_sines_torch(enc, bf0, blowc, bnoise, c.slab, bhar, ka, ss.samples)
     } else {
         enc_st2_src_low_onnx(enc, bf0, bnu, blow, ka, nh * ss.nlow)
         enc_st2_src_cumsum_onnx(enc, blow, blowc, ka, nh)
-        enc_st2_src_sines_onnx(enc, bf0, blowc, bnoise, c.slab, sl.src_w, c.slab, sl.src_b, bhar, ka, ss.samples)
+        enc_st2_src_sines_onnx(enc, bf0, blowc, bnoise, c.slab, bhar, ka, ss.samples)
     }
     let re & = unsafe(d.stft_fwd_re)
     var ks = GkStftArgs(n = uint(ss.samples), frames = uint(ss.spec_frames), bins = uint(d.bins), k = uint(re.k), hop = uint(re.stride),

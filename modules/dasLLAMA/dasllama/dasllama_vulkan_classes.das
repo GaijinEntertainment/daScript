@@ -13795,72 +13795,24 @@ class TtsAxpy : GkAxpy {
     }
 }
 
-//! a / b rounded as the CPU's IEEE divide: a SPIR-V divide sits up to 2.5 ulp off, which the phase sums carry (Metal's `/` is IEEE)
-def private tts_div(a, b : float) : float {
-    var r = 1.0 / b
-    r = mad(mad(-b, r, 1.0), r, r)
-    let q = a * r
-    return mad(mad(-q, b, a), r, q)
-}
-
-//! the source's resample law - TORCH: torch's taps and mix, else onnxruntime's - the base of the source stamps; the taps'
-//! quotients divide through `tts_div`
-[ |> template_struct_instance]
-class template TtsSrcLawT {
-    @template_constant TORCH : bool = false
-
-    def law_taps(n, to : uint; scale : float; var i0, i1 : uint&; var l0, l1 : float&) {
-        static_if (TORCH) {
-            tts_resize_taps_torch(n, to, tts_div(1.0, scale), i0, i1, l0, l1)
-        } else {
-            tts_resize_taps_onnx(n, tts_div(float(to) + 0.5, scale), i0, i1, l0, l1)
-        }
-    }
-
-    def law_mix(x0, x1, l0, l1 : float; last : bool) : float {
-        static_if (TORCH) {
-            return tts_resize_mix_torch(x0, x1, l0, l1)
-        } else {
-            return tts_resize_mix_onnx(x0, x1, l0, l1, last)
-        }
-    }
-}
-
-//! the low-rate phase increments low [nh][nlow] on the stamp's resample law, the first sample's initial phases folded in;
-//! one element an invocation
-[ |> template_struct_instance]
-class template TtsSrcLowT : TtsSrcLawT {
-    @ssbo @binding = 0 f0 : array<float>
-    @ssbo @binding = 1 noise_u : array<float>
-    @ssbo @binding = 2 low : array<float>
-    @push_constant pa : GkSourceArgs
+//! the low-rate phase increments on either resample law
+[vk_dispatch(name = "tts_src_low_torch_cls", kernel = "run", grid = "total/256", params = "total : int64")]
+class TtsSrcLowTorch : GkSrcLow {
+    override TORCH = true
 
     [spirv_kernel(local_size_x = 256)]
     def run {
-        let gid = gl_GlobalInvocationID.x
-        if (gid < pa.nh * pa.nlow) {
-            let nlow = max(pa.nlow, 1u)
-            let up = max(pa.up, 1u)
-            let h = gid / nlow
-            var i0 = 0u
-            var i1 = 0u
-            var l0 = 0.0
-            var l1 = 0.0
-            law_taps(pa.n, gid % nlow, tts_div(1.0, float(pa.up)), i0, i1, l0, l1)
-            let r0 = tts_src_rad(tts_div(f0[i0 / up] * float(h + 1u), pa.sr), noise_u[h], i0, h)
-            let r1 = tts_src_rad(tts_div(f0[i1 / up] * float(h + 1u), pa.sr), noise_u[h], i1, h)
-            low[gid] = law_mix(r0, r1, l0, l1, h + 1u == pa.nh)
-        }
+        src_low_body()
     }
 }
 
-[vk_dispatch(name = "tts_src_low_torch_cls", kernel = "run", grid = "total/256", params = "total : int64")]
-class TtsSrcLowTorch : TtsSrcLowT {
-    override TORCH = true
-}
-
 [vk_dispatch(name = "tts_src_low_onnx_cls", kernel = "run", grid = "total/256", params = "total : int64")]
-class TtsSrcLowOnnx : TtsSrcLowT {}
+class TtsSrcLowOnnx : GkSrcLow {
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        src_low_body()
+    }
+}
 
 //! the phase per frame on the torch law, wgs = 1; `precise` keeps the two-float sum's compensation
 [vk_dispatch(name = "tts_src_cumsum_torch_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -13890,47 +13842,24 @@ class TtsSrcNoise : GkSrcNoise {
     }
 }
 
-//! the mixed source signal har [n] on the stamp's resample law: the harmonics' sines at the interpolated phases, the noise
-//! rows scaled by voicing, the source linear (lw [nh] at woff, lb [1] at boff) and its tanh; one sample an invocation
-[ |> template_struct_instance]
-class template TtsSrcSinesT : TtsSrcLawT {
-    @ssbo @binding = 0 f0 : array<float>
-    @ssbo @binding = 1 lowc : array<float>
-    @ssbo @binding = 2 noise_n : array<float>
-    @ssbo @binding = 3 @role = "weight" wn : array<float>
-    @ssbo @binding = 4 har : array<float>
-    @push_constant pa : GkSourceArgs
+//! the mixed source signal on either resample law
+[vk_dispatch(name = "tts_src_sines_torch_cls", kernel = "run", grid = "n/256", params = "n : int64")]
+class TtsSrcSinesTorch : GkSrcSines {
+    override TORCH = true
 
     [spirv_kernel(local_size_x = 256)]
     def run {
-        let i = gl_GlobalInvocationID.x
-        if (i < pa.n) {
-            var i0 = 0u
-            var i1 = 0u
-            var l0 = 0.0
-            var l1 = 0.0
-            law_taps(pa.nlow, i, float(pa.up), i0, i1, l0, l1)
-            let uv = f0[i / max(pa.up, 1u)] > pa.voiced_thr ? 1.0 : 0.0
-            let noise_amp = tts_noise_amp(uv, pa.noise_std, pa.sine_amp)
-            var acc = wn[pa.boff]
-            var h = 0u
-            while (h < pa.nh) {
-                let phase = law_mix(lowc[h * pa.nlow + i0], lowc[h * pa.nlow + i1], l0, l1, h + 1u == pa.nh)
-                acc += tts_src_term(wn[pa.woff + h], tts_sin_big(phase) * pa.sine_amp, uv, noise_amp, noise_n[i * pa.nh + h])
-                h++
-            }
-            har[i] = tts_tanh(acc)
-        }
+        src_sines_body()
     }
 }
 
-[vk_dispatch(name = "tts_src_sines_torch_cls", kernel = "run", grid = "n/256", params = "n : int64")]
-class TtsSrcSinesTorch : TtsSrcSinesT {
-    override TORCH = true
-}
-
 [vk_dispatch(name = "tts_src_sines_onnx_cls", kernel = "run", grid = "n/256", params = "n : int64")]
-class TtsSrcSinesOnnx : TtsSrcSinesT {}
+class TtsSrcSinesOnnx : GkSrcSines {
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        src_sines_body()
+    }
+}
 
 //! the STFT on the reflect pad law
 [vk_dispatch(name = "tts_stft_reflect_cls", kernel = "run", grid = "total/256", params = "total : int64")]

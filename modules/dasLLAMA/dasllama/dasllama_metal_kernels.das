@@ -11130,58 +11130,21 @@ class MetalSt2SigSum : GkSigSum {
     }
 }
 
-//! The low-rate phase increments per harmonic on either resample law (TORCH: the torch taps and
-//! mix; else onnxruntime's), the first sample's initial phases folded in.
-[ |> template_struct_instance]
-class template MetalSt2SrcLowT {
-    @template_constant TORCH : bool = false
-    @ssbo @binding = 0 @role = "read" f0 : array<float>
-    @ssbo @binding = 1 @role = "read" noise_u : array<float>
-    @ssbo @binding = 2 @role = "write" low : array<float>    //!< [nh x nlow]
-    @uniform @binding = 3 ka : GkSourceArgs
-
-    def st2_src_low_body {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= ka.nh * ka.nlow) {
-            return
-        }
-        let h = gid / ka.nlow
-        let k = gid % ka.nlow
-        var i0 = 0u
-        var i1 = 0u
-        var l0 = 0.0
-        var l1 = 0.0
-        let scale = 1.0 / float(ka.up)
-        static_if (TORCH) {
-            tts_resize_taps_torch(ka.n, k, 1.0 / scale, i0, i1, l0, l1)
-        } else {
-            tts_resize_taps_onnx(ka.n, (float(k) + 0.5) / scale, i0, i1, l0, l1)
-        }
-        let r0 = tts_src_rad(f0[i0 / ka.up] * float(h + 1u) / ka.sr, noise_u[h], i0, h)
-        let r1 = tts_src_rad(f0[i1 / ka.up] * float(h + 1u) / ka.sr, noise_u[h], i1, h)
-        static_if (TORCH) {
-            low[gid] = tts_resize_mix_torch(r0, r1, l0, l1)
-        } else {
-            low[gid] = tts_resize_mix_onnx(r0, r1, l0, l1, h + 1u == ka.nh)
-        }
-    }
-}
-
 [metal_dispatch(name = "enc_st2_src_low_torch", pso = "g_pso_st2_src_low_torch", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2SrcLowTorch : MetalSt2SrcLowT {
+class MetalSt2SrcLowTorch : GkSrcLow {
     override TORCH = true
 
     [metal_kernel(name="metal_st2_src_low_torch_msl", fastmath=false)]
     def metal_st2_src_low_torch {
-        st2_src_low_body()
+        src_low_body()
     }
 }
 
 [metal_dispatch(name = "enc_st2_src_low_onnx", pso = "g_pso_st2_src_low_onnx", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2SrcLowOnnx : MetalSt2SrcLowT {
+class MetalSt2SrcLowOnnx : GkSrcLow {
     [metal_kernel(name="metal_st2_src_low_onnx_msl", fastmath=false)]
     def metal_st2_src_low_onnx {
-        st2_src_low_body()
+        src_low_body()
     }
 }
 
@@ -11212,66 +11175,21 @@ class MetalSt2SrcNoise : GkSrcNoise {
     }
 }
 
-//! The mixed source signal per sample on either resample law: the harmonics' sines at the
-//! interpolated phases, the noise rows scaled by voicing, the source linear and its tanh.
-[ |> template_struct_instance]
-class template MetalSt2SrcSinesT {
-    @template_constant TORCH : bool = false
-    @ssbo @binding = 0 @role = "read" f0 : array<float>
-    @ssbo @binding = 1 @role = "read" lowc : array<float>
-    @ssbo @binding = 2 @role = "read" noise_n : array<float>     //!< [n x nh]
-    @ssbo @binding = 3 @role = "weight" @off = "woff" lw : array<float>   //!< [nh] the source linear
-    @ssbo @binding = 4 @role = "weight" @off = "boff" lb : array<float>   //!< [1] its bias
-    @ssbo @binding = 5 @role = "write" har : array<float>
-    @uniform @binding = 6 ka : GkSourceArgs
-
-    def st2_src_sines_body {
-        let i = gl_GlobalInvocationID.x
-        if (i >= ka.n) {
-            return
-        }
-        var i0 = 0u
-        var i1 = 0u
-        var l0 = 0.0
-        var l1 = 0.0
-        static_if (TORCH) {
-            tts_resize_taps_torch(ka.nlow, i, 1.0 / float(ka.up), i0, i1, l0, l1)
-        } else {
-            tts_resize_taps_onnx(ka.nlow, (float(i) + 0.5) / float(ka.up), i0, i1, l0, l1)
-        }
-        let uv = f0[i / ka.up] > ka.voiced_thr ? 1.0 : 0.0
-        let noise_amp = tts_noise_amp(uv, ka.noise_std, ka.sine_amp)
-        var acc = lb[0]
-        var h = 0u
-        while (h < ka.nh) {
-            var phase = 0.0
-            static_if (TORCH) {
-                phase = tts_resize_mix_torch(lowc[h * ka.nlow + i0], lowc[h * ka.nlow + i1], l0, l1)
-            } else {
-                phase = tts_resize_mix_onnx(lowc[h * ka.nlow + i0], lowc[h * ka.nlow + i1], l0, l1, h + 1u == ka.nh)
-            }
-            acc += tts_src_term(lw[h], tts_sin_big(phase) * ka.sine_amp, uv, noise_amp, noise_n[i * ka.nh + h])
-            h++
-        }
-        har[i] = tts_tanh(acc)
-    }
-}
-
 [metal_dispatch(name = "enc_st2_src_sines_torch", pso = "g_pso_st2_src_sines_torch", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2SrcSinesTorch : MetalSt2SrcSinesT {
+class MetalSt2SrcSinesTorch : GkSrcSines {
     override TORCH = true
 
     [metal_kernel(name="metal_st2_src_sines_torch_msl", fastmath=false)]
     def metal_st2_src_sines_torch {
-        st2_src_sines_body()
+        src_sines_body()
     }
 }
 
 [metal_dispatch(name = "enc_st2_src_sines_onnx", pso = "g_pso_st2_src_sines_onnx", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSt2SrcSinesOnnx : MetalSt2SrcSinesT {
+class MetalSt2SrcSinesOnnx : GkSrcSines {
     [metal_kernel(name="metal_st2_src_sines_onnx_msl", fastmath=false)]
     def metal_st2_src_sines_onnx {
-        st2_src_sines_body()
+        src_sines_body()
     }
 }
 
