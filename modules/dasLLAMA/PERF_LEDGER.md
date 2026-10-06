@@ -24,11 +24,20 @@ what it costs today and what the fix would change.
     codec 8.8 / 8.6; Kokoro-82M 73.5 / 73.5 (a third branch life 73.5, two branch lives void at cv 3.3% and 3.4%),
     its stages the same to the tenth (decoder 41.22 / 41.29); Kitten mini 64.5 / 64.5 (one branch life void at cv
     4.1%), decoder 29.37 / 29.36.
-  - RTX PRO 4500, Vulkan (driver 580.159), ms a request, master / branch: Pocket q8 115.8 / 68.1 and 114.1 / 68.5
-    (the last void at cv 5.3%), its stages prompt 49.6 / 3.9, backbone 50.3 / 49.3, codec 8.7 / 8.8; Kokoro-82M
-    decoder stage 13.89 / 14.18 and 13.87 / 13.88 (the walls 47.9-48.4, two of four void), Kitten mini decoder
-    10.93 / 10.53 and 10.49 / 10.44 (the walls 46.2-50.6, every row void on spread - that box's round trip jitters,
-    its stage clock does not).
+  - RTX PRO 4500, Vulkan (driver 580.159), ms a request, master / branch: Pocket q8 114.7 / 68.1 and 114.2 / 67.9,
+    its stages prompt 50.0 / 3.8, backbone 50.2 / 49.2, codec 8.7 / 8.8; Kokoro-82M 48.3 / 48.1 and 48.3 / 47.9 (the
+    first master row void at cv 9.3%), its stages the same to the tenth (bert 4.29 / 4.29, decoder 13.9 / 13.9);
+    Kitten mini 48.6 / 46.4 and 52.5 / 47.8, every row void on spread (that box's round trip jitters), its stages the
+    same to the tenth (decoder 10.5 / 10.4). The shared reduce base the row kernels now derive puts one call under
+    every `WgReduceBase` reduce (eight audio-tower stamps and five TTS stamps moved by it, `harness/vk_spv_diff.das`):
+    the backbone and bert stages above ride it, and whisper large-v3-turbo q8 served (`main.das -- --asr <bin>`,
+    `served_bench.das --no-chat --asr-url <server> --clip jfk_ask_not.wav --reps 8`) reads 48.8 / 48.5 on the one
+    round both sides held under 3% (54.2 / 54.7 on the other, both void).
+  - Quality, `harness/tts_rig.py` on the 200-sentence corpus, flag-free on the M5 (the Metal seats serve), WER % /
+    UTMOS before -> after: Pocket f32 4.18 / 4.373 -> 3.95 / 4.368, q8 4.41 / 4.363 -> 4.23 / 4.354, kq 3.91 / 4.325 ->
+    3.77 / 4.314, stuart-kq 3.32 / 4.137 -> 3.27 / 4.139 (the device prompt moves an EOS frame here and there);
+    kitten-nano 3.09 / 3.980 -> 3.09 / 3.976, kitten-mini 2.77 / 4.331 -> 2.77 / 4.331, kokoro 2.73 / 4.501 ->
+    2.73 / 4.501.
 - **MEASURED (2026-10-05, `direction-grade`, `debug-jit`) - the depth-1 NextN round on the M1 Max: the draft at two
   rows, then chained into the verify's command buffer.** M1 Max (MacBookPro18,2, 64 GB), Metal,
   Qwen3.6-35B-A3B-MTP UD-Q4_K_M, `benchmarks/lcpp_bench.das` as the `-jit` script (`-no-module-cache`):
