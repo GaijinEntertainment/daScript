@@ -102,7 +102,8 @@ declares), a hand-written fold of one plain float sum or max (no compensation te
 carried alongside) over every lane of a Vulkan kernel's workgroup - a subgroup shuffle loop, a
 lane-0 loop over a `@workgroup` array, one `@workgroup` value that one lane writes and every lane
 reads - is a defect: derive `WgReduceBase` and call its `wg_sum`, `wg_max` or `wg_rms_inv`
-instead.** A fold into more than one result - separate sums over parts of the
+instead - a kernel both homes stamp derives `GkWgReduce` (the base `WgReduceBase` rides) and calls
+its `wg_sum_into` / `wg_max_into`.** A fold into more than one result - separate sums over parts of the
 workgroup - is not one value; `ARCHITECTURE_GPU.md#gpu-backends` names the bodies that fold that
 way.
 

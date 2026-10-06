@@ -979,17 +979,18 @@ def tts_pk_frames_ok(m : PocketModel; hs, max_nin : int64; lin_ok : block<(l : T
     return invoke(lin_ok, h.final_adaln) && h.final_adaln.nin == n && h.final_adaln.nout == 2l * n && invoke(lin_ok, h.final_linear) && h.final_linear.nin == n && h.final_linear.nout == ld
 }
 
-//! the voice's caches hold this frames call: a cache a layer, voice + text + frames within capacity, capacity within `max_keys`
-def tts_pk_frames_admit(m : PocketModel; vs : PocketVoiceState; n_txt, max_frames, max_keys : int64) : bool {
-    return (max_frames >= 1l && n_txt >= 0l && !empty(vs.caches) && length(vs.caches) == length(m.backbone.layers)
-        && vs.len + n_txt + max_frames <= vs.caches[0].cap && vs.caches[0].cap <= max_keys)
+//! the voice's caches hold `rows` more rows past the voice's: a cache a layer, the rows within capacity, capacity within `max_keys`
+def tts_pk_caches_admit(m : PocketModel; vs : PocketVoiceState; rows, max_keys : int64) : bool {
+    return (!empty(vs.caches) && length(vs.caches) == length(m.backbone.layers) && vs.len + rows <= vs.caches[0].cap && vs.caches[0].cap <= max_keys)
 }
 
-//! the voice's caches take this prompt: a cache a layer, one row or more, voice + text within capacity, capacity within `max_keys`
-def tts_pk_prompt_admit(m : PocketModel; vs : PocketVoiceState; n_txt, max_keys : int64) : bool {
-    return (n_txt >= 1l && !empty(vs.caches) && length(vs.caches) == length(m.backbone.layers)
-        && vs.len + n_txt <= vs.caches[0].cap && vs.caches[0].cap <= max_keys)
-}
+//! the frames call's admission: at least one frame, the text and the frames within the caches
+def tts_pk_frames_admit(m : PocketModel; vs : PocketVoiceState; n_txt, max_frames, max_keys : int64) : bool
+    => max_frames >= 1l && n_txt >= 0l && tts_pk_caches_admit(m, vs, n_txt + max_frames, max_keys)
+
+//! the prompt call's admission: one row or more, the text within the caches
+def tts_pk_prompt_admit(m : PocketModel; vs : PocketVoiceState; n_txt, max_keys : int64) : bool
+    => n_txt >= 1l && tts_pk_caches_admit(m, vs, n_txt, max_keys)
 
 //! the prompt rows a served prompt seat left in the voice slot for the frames call after it: the voice they belong
 //! to and the rows [len, len + n); a frames call over another voice, fill or prompt uploads every row itself

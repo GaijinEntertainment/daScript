@@ -2298,6 +2298,7 @@ def private ts_pk_frames_loop(m : PocketModel; sl : TtsPkFramesSlab; slab : TsRo
 def private vulkan_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_txt : int64; std : float; frames_after_eos : int;
                                  captured, forced : array<float>; max_frames : int64; var sc : PocketScratch) : tuple<frames : int64; eos_at : int64> {
     let none = (frames = -1l, eos_at = -1l)
+    let dev_rows = tts_pk_prompt_dev_take(g_ts_pk_prompt_dev, vs, n_txt)   //! spent on entry: a decline below must not leave it for a later chunk
     if (!vulkan_tower_on()) {
         ts_decline("frames", VulkanTtsDecline.knob)
         return none
@@ -2324,7 +2325,6 @@ def private vulkan_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_t
         ts_decline("frames", VulkanTtsDecline.memory)
         return none
     }
-    let dev_rows = tts_pk_prompt_dev_take(g_ts_pk_prompt_dev, vs, n_txt)
     for (li, kc in iter_range(vs.caches), vs.caches) {
         ts_pk_kv_upload(kc, g_ts_pk_voice.k[li], g_ts_pk_voice.v[li], vs.len + dev_rows, base)
     }

@@ -149,8 +149,8 @@ ratio the ELU (`TtsPkRowsElu`), the transposed upsample and the ELU-conv-ELU-con
 block, the last ELU, dec_out and the sample column copied out. The frames seat: the voice's
 K/V rows live on the device per backbone layer as [cap][d] rows under a key over the host
 caches, with the rope tables for every position they can hold; the chunk's text rows come up
-before the loop, but for the rows a served prompt seat left there (`TtsPkPromptDev`, spent by the
-frames call after it); each frame is the CPU's `frame_step` and `head_step` at t = 1 - the input
+before the loop, but for the rows a served prompt seat left there (`TtsPkPromptDev`, spent on entry
+by the frames call after it, served or declined); each frame is the CPU's `frame_step` and `head_step` at t = 1 - the input
 linear, per layer five dispatches (the qkv row off the residual's norm with its q span roped in
 place and its k and v spans roped and stored into the caches' row at the frame's position, the
 attention over the cache, the out projection added into the residual under its layer scale, the
@@ -173,7 +173,7 @@ positions after the voice's rows: the rope from the voice slot's tables at the f
 position (`TtsPkRope`, stamped from the `GkRopeTab` template both homes share), the keys and
 values into the voice slot's rows at those positions, the attention over the slot's rows below
 them, the last layer ending at its keys and values (only the caches are read after a prompt - the
-CPU chain's `cache_rows` makes the same cut); the rows come back to the host caches after the
+CPU chain's `transformer_rows` makes the same cut under `kv_only_last`); the rows come back to the host caches after the
 submit, so the CPU frame loop reads them as its own.
 
 The declines: `knob`, `shape` (a width off the 64 lattice, a head width other than 64 or 128,

@@ -695,16 +695,20 @@ def private proj(l : TtsLinear; x : array<float>; t : int64; @scratch @exact_siz
     }
 }
 
+//! `kv_only` ends the layer at its cache append - the last layer of a prompt, whose residual nothing reads
 def private layer_attention(l : PocketLayer; tf : PocketTransformer; var x : array<float>; t, pos0 : int64;
-                            var kc : TtsKvCache; var sc : PocketScratch) {
+                            var kc : TtsKvCache; var sc : PocketScratch; kv_only : bool = false) {
     let d = tf.d
     let dh = d / tf.heads
     layernorm_rows_into(x, sc.xb, t, d, l.norm1, tf.eps)
     proj(l.in_proj, sc.xb, t, sc.qkv)
     split_qkv(sc.qkv, t, d, sc.q, sc.k, sc.v)
-    rope_rows(sc.q, t, d, dh, pos0, tf.period)
+    if (!kv_only) {
+        rope_rows(sc.q, t, d, dh, pos0, tf.period)
+    }
     rope_rows(sc.k, t, d, dh, pos0, tf.period)
     kv_cache_append(kc, sc.k, sc.v, t, d)
+    return if (kv_only)
     attention_causal_rows(sc.q, t, d, tf.context, kc, sc.ctx)
     proj(l.out_proj, sc.ctx, t, sc.xb)
     if (!empty(l.scale1.a)) {
@@ -726,36 +730,16 @@ def private layer_ffn(l : PocketLayer; tf : PocketTransformer; var x : array<flo
 }
 
 //! `t` rows of x [t][d] through the transformer at positions pos0.., every layer's keys and
-//! values appended to its cache; x carries the residual out.
-def transformer_rows(tf : PocketTransformer; var x : array<float>; t, pos0 : int64; var caches : array<TtsKvCache>; var sc : PocketScratch) {
-    for (i, l in iter_range(tf.layers), tf.layers) {
-        layer_attention(l, tf, x, t, pos0, caches[i], sc)
-        layer_ffn(l, tf, x, t, sc)
-    }
-}
-
-//! The last layer's keys and values alone: its norm, projection, rope and append, none of the
-//! attention, projection and FFN that feed only the residual nobody reads.
-def private layer_kv_only(l : PocketLayer; tf : PocketTransformer; var x : array<float>; t, pos0 : int64;
-                          var kc : TtsKvCache; var sc : PocketScratch) {
-    let d = tf.d
-    layernorm_rows_into(x, sc.xb, t, d, l.norm1, tf.eps)
-    proj(l.in_proj, sc.xb, t, sc.qkv)
-    split_qkv(sc.qkv, t, d, sc.q, sc.k, sc.v)
-    rope_rows(sc.k, t, d, d / tf.heads, pos0, tf.period)
-    kv_cache_append(kc, sc.k, sc.v, t, d)
-}
-
-//! `transformer_rows` where only the caches are read after: the layers below the last whole, the last its keys and values.
-def cache_rows(tf : PocketTransformer; var x : array<float>; t, pos0 : int64; var caches : array<TtsKvCache>; var sc : PocketScratch) {
+//! values appended to its cache; x carries the residual out - unless `kv_only_last`, which ends
+//! the last layer at its cache append (a prompt, whose residual nothing reads).
+def transformer_rows(tf : PocketTransformer; var x : array<float>; t, pos0 : int64; var caches : array<TtsKvCache>; var sc : PocketScratch;
+                     kv_only_last : bool = false) {
     let last = length(tf.layers) - 1
     for (i, l in iter_range(tf.layers), tf.layers) {
-        if (i == last) {
-            layer_kv_only(l, tf, x, t, pos0, caches[i], sc)
-        } else {
-            layer_attention(l, tf, x, t, pos0, caches[i], sc)
-            layer_ffn(l, tf, x, t, sc)
-        }
+        let kv_only = kv_only_last && i == last
+        layer_attention(l, tf, x, t, pos0, caches[i], sc, kv_only)
+        continue if (kv_only)
+        layer_ffn(l, tf, x, t, sc)
     }
 }
 
@@ -1037,7 +1021,7 @@ def voice_state_from_latents(m : PocketModel; lat : array<float>; frames : int64
     }
     vs.len = frames + bos
     caches_init(vs.caches, m.backbone, vs.len + chunk_rows(int64(POCKET_MAX_TOKENS)))
-    cache_rows(m.backbone, rows, vs.len, 0l, vs.caches, sc)
+    transformer_rows(m.backbone, rows, vs.len, 0l, vs.caches, sc, kv_only_last = true)
     return <- vs
 }
 
@@ -1467,7 +1451,7 @@ def private prompt_rows(m : PocketModel; ids : array<int64>; var vs : PocketVoic
             return
         }
     }
-    cache_rows(m.backbone, sc.rows, n_txt, vs.len, vs.caches, sc)
+    transformer_rows(m.backbone, sc.rows, n_txt, vs.len, vs.caches, sc, kv_only_last = true)
 }
 
 //! The prompt's rows into the voice's caches alone, on whichever rail serves it - `pocket_synthesize`'s opening, the

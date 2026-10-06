@@ -36,7 +36,7 @@ The TTS block home, facade and phoneme families are `ARCHITECTURE_TTS.md`.
   either rail) and of the loop inside `pocket_synthesize` once those rows sit there, and the CPU form
   serves a decline; a served loop's wall reads as the backbone's timing, its head timing zero. A prompt's
   residual is read by nothing after its last layer's keys and values, so the CPU chain runs the prompt and
-  the voice state through `cache_rows` - every layer whole but the last, which ends at its cache append.
+  the voice state through `transformer_rows` under `kv_only_last` - every layer whole but the last, which ends at its cache append.
   Both drivers run the served loop's host side through `pocket_frames_batched` (the batch of
   frames a submit carries, the noise draws, the end-of-speech check) at the one batch knob
   `set_pocket_frame_batch` / `pocket_frame_batch()`.

@@ -4381,24 +4381,11 @@ def private metal_styletts2_text(te : St2TextEncoder; ids : array<int>; @scratch
     return true
 }
 
-struct private PkLayerSlots {
-    n1 : St2NormSlot
-    in_proj : St2ConvSlot
-    out_proj : St2ConvSlot
-    scale1_off : uint64          //!< the layer scale rows, 0 where the layer carries none
-    has_s1 : bool
-    n2 : St2NormSlot
-    ffn1 : St2ConvSlot
-    ffn2 : St2ConvSlot
-    scale2_off : uint64
-    has_s2 : bool
-}
-
 struct private PkCodecSlab : St2SlabBase {
     quant : St2ConvSlot
     up_w : uint64        //!< the depthwise upsample's taps [c][k] and bias
     up_b : uint64
-    layers : array<PkLayerSlots>
+    layers : array<PkFrLayer>   //!< the transformer's layers in the frames slab's form, every linear an f32 slot
     dec_in : St2ConvSlot
     ups : array<St2ConvSlot>
     res1 : array<St2ConvSlot>
@@ -4412,11 +4399,21 @@ var private g_tw_pk_codec : PkCodecSlab
 
 let private PK_CODEC_MAX_FRAMES = 512l   //!< the one-shot chain's row budget: past this the CPU's windows serve
 
+//! an f32 slot of the shared writer as a frame-slab linear: the GEMM slot, no blob region
+def private pk_lin_of(w : TtsSlabWriter; t : TtsConvSlot; nin, nout : int64) : PkLin {
+    var p = PkLin(nin = nin, nout = nout, q8 = false, f = st2_slot_of(w, t))
+    if (!w.measure) {
+        p.u_nin = uniform_u32(uint(nin))
+        p.u_nout = uniform_u32(uint(nout))
+    }
+    return p
+}
+
 //! the shared writer's layer slots as the Metal chain binds them: byte offsets, the linears' uniforms acquired
-def private pk_layer_of(w : TtsSlabWriter; t : TtsPkLayerSlots) : PkLayerSlots {
-    return PkLayerSlots(n1 = st2_norm_of(t.n1), in_proj = st2_slot_of(w, t.in_proj), out_proj = st2_slot_of(w, t.out_proj),
-        scale1_off = st2_byte_off(t.scale1_off), has_s1 = t.has_s1, n2 = st2_norm_of(t.n2), ffn1 = st2_slot_of(w, t.ffn1), ffn2 = st2_slot_of(w, t.ffn2),
-        scale2_off = st2_byte_off(t.scale2_off), has_s2 = t.has_s2)
+def private pk_layer_of(w : TtsSlabWriter; t : TtsPkLayerSlots; l : PocketLayer) : PkFrLayer {
+    return PkFrLayer(n1 = st2_norm_of(t.n1), in_proj = pk_lin_of(w, t.in_proj, l.in_proj.nin, l.in_proj.nout), out_proj = pk_lin_of(w, t.out_proj, l.out_proj.nin, l.out_proj.nout),
+        scale1_off = st2_byte_off(t.scale1_off), has_s1 = t.has_s1, n2 = st2_norm_of(t.n2), ffn1 = pk_lin_of(w, t.ffn1, l.ffn1.nin, l.ffn1.nout),
+        ffn2 = pk_lin_of(w, t.ffn2, l.ffn2.nin, l.ffn2.nout), scale2_off = st2_byte_off(t.scale2_off), has_s2 = t.has_s2)
 }
 
 //! the shared codec layout with no rope rows in the slab: this driver's rope tables ride their own buffers (`pk_rope_tables`)
@@ -4426,7 +4423,7 @@ def private pk_codec_write(var w : TtsSlabWriter; mm : PocketMimi; var s : PkCod
     s.quant = st2_slot_of(w, t.quant)
     s.up_w = st2_byte_off(t.up_w)
     s.up_b = st2_byte_off(t.up_b)
-    s.layers <- [for (l in t.layers); pk_layer_of(w, l)]
+    s.layers <- [for (tl, l in t.layers, mm.dec_tf.layers); pk_layer_of(w, tl, l)]
     s.dec_in = st2_slot_of(w, t.dec_in)
     s.ups <- [for (c in t.ups); st2_slot_of(w, c)]
     s.res1 <- [for (c in t.res1); st2_slot_of(w, c)]
@@ -4514,9 +4511,12 @@ struct private PkTfBufs {
 }
 
 //! The transformer's buffers a chunk; the per-layer K/V handles land in the scratch's bk / bv.
+//! a frame-slab linear's output row stride: the f32 slot's padded width, the q8 region's exact one
+def private pk_lin_stride(p : PkLin) : int64 => p.q8 ? p.nout : p.f.cout_p
+
 def private pk_tf_bufs(var c : St2GpuCtx; tf : PocketTransformer; sl : PkCodecSlab; t : int64) : PkTfBufs {
-    var b = PkTfBufs(bxb = st2_rows_buf(c, t, tf.d), bqkv = st2_rows_buf(c, t, sl.layers[0].in_proj.cout_p), bctx = st2_rows_buf(c, t, tf.d),
-        bh = st2_rows_buf(c, t, sl.layers[0].ffn1.cout_p))
+    var b = PkTfBufs(bxb = st2_rows_buf(c, t, tf.d), bqkv = st2_rows_buf(c, t, pk_lin_stride(sl.layers[0].in_proj)), bctx = st2_rows_buf(c, t, tf.d),
+        bh = st2_rows_buf(c, t, pk_lin_stride(sl.layers[0].ffn1)))
     g_tw_pk_sc.bk |> clear()
     g_tw_pk_sc.bv |> clear()
     g_tw_pk_sc.bk |> reserve(length(tf.layers))
@@ -4528,44 +4528,12 @@ def private pk_tf_bufs(var c : St2GpuCtx; tf : PocketTransformer; sl : PkCodecSl
     return <- b
 }
 
-//! The codec transformer over the residual rows bx [t][d] at positions 0..: the CPU's layer loop, dispatch for dispatch.
-def private pk_transformer(enc : MetalComputeEncoder?; var c : St2GpuCtx; tf : PocketTransformer; sl : PkCodecSlab; b : PkTfBufs; bx : MetalBuffer?; t : int64) {
-    let d = tf.d
-    let dh = uint(d / tf.heads)
-    let nd = t * d
-    let u_d = st2_u(c, uint(d))
-    let u_nd = st2_u(c, uint(nd))
-    for (i in range(length(tf.layers))) {
-        let s & = unsafe(sl.layers[i])
-        st2_ln(enc, c, bx, b.bxb, t, d, tf.eps, c.slab, s.n1.gwoff, s.n1.gboff)
-        st2_lin(enc, c, s.in_proj, b.bxb, t, b.bqkv)
-        let qs = uint(s.in_proj.cout_p)
-        let u_dh = st2_u(c, dh)
-        let u_np = st2_u(c, uint(t * (d / 2l)))
-        let u_neox = st2_u(c, 0u)
-        let u_qs = st2_u(c, qs)
-        enc_rope(enc, b.bqkv, 0ul, sl.bcos, sl.bsin, u_d, u_dh, u_np, u_neox, null, u_qs, t * (d / 2l))
-        enc_rope(enc, b.bqkv, uint64(d * 4l), sl.bcos, sl.bsin, u_d, u_dh, u_np, u_neox, null, u_qs, t * (d / 2l))
-        var kc = GkPkRowsArgs(rows = uint(t), width = uint(d), ss = qs, sc = uint(d), sr0 = 0u, ds = uint(d), dc = 0u, dr0 = 0u)
-        enc_pk_rows(enc, b.bqkv, g_tw_pk_sc.bk[i], kc, nd)
-        kc.sc = uint(2l * d)
-        enc_pk_rows(enc, b.bqkv, g_tw_pk_sc.bv[i], kc, nd)
-        var ka = GkPkAttnArgs(t = uint(t), qs = qs, qcol = 0u, d = uint(d), pos0 = 0u, ctx = uint(tf.context))
-        enc_pk_attn(enc, b.bqkv, g_tw_pk_sc.bk[i], g_tw_pk_sc.bv[i], b.bctx, ka, tf.heads * t)
-        st2_lin(enc, c, s.out_proj, b.bctx, t, b.bxb)
-        if (s.has_s1) {
-            enc_pk_row_scale(enc, b.bxb, 0ul, c.slab, s.scale1_off, u_d, u_nd, nd)
-        }
-        st2_add(enc, bx, b.bxb, bx, nd, 1.0)
-        st2_ln(enc, c, bx, b.bxb, t, d, tf.eps, c.slab, s.n2.gwoff, s.n2.gboff)
-        st2_lin(enc, c, s.ffn1, b.bxb, t, b.bh)
-        let nf = t * s.ffn1.cout_p
-        enc_st2_gelu_tanh(enc, b.bh, 0ul, st2_u(c, uint(nf)), nf)
-        st2_lin(enc, c, s.ffn2, b.bh, t, b.bxb)
-        if (s.has_s2) {
-            enc_pk_row_scale(enc, b.bxb, 0ul, c.slab, s.scale2_off, u_d, u_nd, nd)
-        }
-        st2_add(enc, bx, b.bxb, bx, nd, 1.0)
+//! The codec transformer over the residual rows bx [t][d] at positions 0..: the rows form over the codec slab's layers, its
+//! keys and values into the scratch's per-layer rows.
+def private pk_transformer(enc : MetalComputeEncoder?; var c : St2GpuCtx; tf : PocketTransformer; var sl : PkCodecSlab; b : PkTfBufs; bx : MetalBuffer?; t : int64) {
+    let f = PkRowsForm(pos0 = 0l, kv_row0 = 0l, bcos = sl.bcos, bsin = sl.bsin, kv_only_last = false)
+    pk_rows_tf(enc, c, tf, sl.layers, b, bx, null, t, f) $(li : int) {
+        return (bk = g_tw_pk_sc.bk[li], bv = g_tw_pk_sc.bv[li])
     }
 }
 
@@ -4580,7 +4548,7 @@ def private pk_res_block(enc : MetalComputeEncoder?; var c : St2GpuCtx; b : Pock
     st2_add(enc, by, bx, by, t * w, 1.0)
 }
 
-def private pk_codec_chain(enc : MetalComputeEncoder?; var c : St2GpuCtx; mm : PocketMimi; sl : PkCodecSlab; blat : MetalBuffer?;
+def private pk_codec_chain(enc : MetalComputeEncoder?; var c : St2GpuCtx; mm : PocketMimi; var sl : PkCodecSlab; blat : MetalBuffer?;
                            rows : array<int64>; bwave : MetalBuffer?) {
     let d = mm.dec_tf.d
     let frames = rows[0]
@@ -5137,6 +5105,7 @@ def private pk_frames_loop(m : PocketModel; var sl : PkFramesSlab; var c : St2Gp
 def private metal_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_txt : int64; std : float; frames_after_eos : int;
                                 captured, forced : array<float>; max_frames : int64; var sc : PocketScratch) : tuple<frames : int64; eos_at : int64> {
     let none = (frames = -1l, eos_at = -1l)
+    let dev_rows = tts_pk_prompt_dev_take(g_tw_pk_prompt_dev, vs, n_txt)   //! spent on entry: a decline below must not leave it for a later chunk
     if (!g_tw_env_tower) {
         tw_decline(MetalTowerDecline.knob)
         return none
@@ -5157,7 +5126,6 @@ def private metal_pocket_frames(m : PocketModel; var vs : PocketVoiceState; n_tx
     asr_prof_add("tts.pocket.gpu.slab", tc)
     tc = ref_time_ticks()
     residency_flush()
-    let dev_rows = tts_pk_prompt_dev_take(g_tw_pk_prompt_dev, vs, n_txt)
     for (li, kc in iter_range(vs.caches), vs.caches) {
         pk_kv_rows(kc, g_tw_pk_voice.bk[li], g_tw_pk_voice.bv[li], vs.len + dev_rows, base)
     }
@@ -5211,39 +5179,51 @@ def private pk_rows_lin(enc : MetalComputeEncoder?; var c : St2GpuCtx; p : PkLin
     }
 }
 
-//! The backbone over the prompt's rows x [t][d] at positions pos0.. - `pk_transformer`'s loop over the frames slab's
-//! layers, the keys and values into the voice slot's rows from pos0 (the slot's rope tables at that row), the last
-//! layer ending at them: only the caches are read after the prompt.
-def private pk_prompt_rows(enc : MetalComputeEncoder?; var c : St2GpuCtx; tf : PocketTransformer; sl : PkFramesSlab; b : PkTfBufs; bx, bxh : MetalBuffer?; t, pos0 : int64) {
+//! a transformer's rows form: every layer's keys and values written at row `kv_row0` of its cache rows, the rope tables'
+//! row of position 0 at the first prompt position's row, the queries at `pos0`; `kv_only_last` ends the last layer at its cache rows
+struct private PkRowsForm {
+    pos0 : int64
+    kv_row0 : int64
+    bcos : MetalBuffer?
+    bsin : MetalBuffer?
+    kv_only_last : bool
+}
+
+//! A transformer over the rows x [t][d] of the buffers `b`: the CPU's layer loop, dispatch for dispatch, over frame-slab
+//! layers (`pk_rows_lin` picks each linear's route; `bxh` the half twin the q8 route reads, null on an f32 slab); the
+//! keys and values of layer li into the buffers `kv` names for it - the codec's scratch rows, or the voice slot.
+def private pk_rows_tf(enc : MetalComputeEncoder?; var c : St2GpuCtx; tf : PocketTransformer; layers : array<PkFrLayer>; b : PkTfBufs; bx, bxh : MetalBuffer?;
+                       t : int64; f : PkRowsForm; kv : block<(li : int) : tuple<bk : MetalBuffer?; bv : MetalBuffer?>>) {
     let d = tf.d
     let dh = uint(d / tf.heads)
-    let tab0 = uint(pos0 * (d / tf.heads / 2l))   // the tables' row of the first prompt position
+    let tab0 = uint(f.pos0 * (d / tf.heads / 2l))   // the tables' row of the first position
     let nd = t * d
     let u_d = st2_u(c, uint(d))
     let u_nd = st2_u(c, uint(nd))
-    let v & = g_tw_pk_voice
-    let last = length(tf.layers) - 1
-    var kc = GkPkRowsArgs(rows = uint(t), width = uint(d), ss = uint(3l * d), sc = uint(d), sr0 = 0u, ds = uint(d), dc = 0u, dr0 = uint(pos0))
-    var ra = GkRopeTabArgs(rows = uint(t), qs = uint(3l * d), col = 0u, d = uint(d), dh = dh, coff = tab0, soff = tab0)
+    let last = length(layers) - 1
+    let qs = uint(pk_lin_stride(layers[0].in_proj))   // the qkv rows' stride
+    var kc = GkPkRowsArgs(rows = uint(t), width = uint(d), ss = qs, sc = uint(d), sr0 = 0u, ds = uint(d), dc = 0u, dr0 = uint(f.kv_row0))
+    var ra = GkRopeTabArgs(rows = uint(t), qs = qs, col = 0u, d = uint(d), dh = dh, coff = tab0, soff = tab0)
     let pairs = t * (d / 2l)
-    for (i in range(length(tf.layers))) {
-        let s & = unsafe(sl.layers[i])
-        let kv_only = i == last
+    for (i in range(length(layers))) {
+        let s & = unsafe(layers[i])
+        let cache = invoke(kv, i)
+        let kv_only = f.kv_only_last && i == last
         st2_ln(enc, c, bx, b.bxb, t, d, tf.eps, c.slab, s.n1.gwoff, s.n1.gboff)
         pk_rows_lin(enc, c, s.in_proj, b.bxb, bxh, b.bqkv, t)
         if (!kv_only) {
             ra.col = 0u
-            enc_pk_rope_tab(enc, b.bqkv, v.bcos, v.bsin, ra, pairs)
+            enc_pk_rope_tab(enc, b.bqkv, f.bcos, f.bsin, ra, pairs)
         }
         ra.col = uint(d)
-        enc_pk_rope_tab(enc, b.bqkv, v.bcos, v.bsin, ra, pairs)
+        enc_pk_rope_tab(enc, b.bqkv, f.bcos, f.bsin, ra, pairs)
         kc.sc = uint(d)
-        enc_pk_rows(enc, b.bqkv, v.bk[i], kc, nd)
+        enc_pk_rows(enc, b.bqkv, cache.bk, kc, nd)
         kc.sc = uint(2l * d)
-        enc_pk_rows(enc, b.bqkv, v.bv[i], kc, nd)
+        enc_pk_rows(enc, b.bqkv, cache.bv, kc, nd)
         continue if (kv_only)
-        var ka = GkPkAttnArgs(t = uint(t), qs = uint(3l * d), qcol = 0u, d = uint(d), pos0 = uint(pos0), ctx = uint(tf.context))
-        enc_pk_attn(enc, b.bqkv, v.bk[i], v.bv[i], b.bctx, ka, tf.heads * t)
+        var ka = GkPkAttnArgs(t = uint(t), qs = qs, qcol = 0u, d = uint(d), pos0 = uint(f.pos0), ctx = uint(tf.context))
+        enc_pk_attn(enc, b.bqkv, cache.bk, cache.bv, b.bctx, ka, tf.heads * t)
         pk_rows_lin(enc, c, s.out_proj, b.bctx, bxh, b.bxb, t)
         if (s.has_s1) {
             enc_pk_row_scale(enc, b.bxb, 0ul, c.slab, s.scale1_off, u_d, u_nd, nd)
@@ -5251,7 +5231,7 @@ def private pk_prompt_rows(enc : MetalComputeEncoder?; var c : St2GpuCtx; tf : P
         st2_add(enc, bx, b.bxb, bx, nd, 1.0)
         st2_ln(enc, c, bx, b.bxb, t, d, tf.eps, c.slab, s.n2.gwoff, s.n2.gboff)
         pk_rows_lin(enc, c, s.ffn1, b.bxb, bxh, b.bh, t)
-        let nf = t * tf.ffn
+        let nf = t * pk_lin_stride(s.ffn1)
         enc_st2_gelu_tanh(enc, b.bh, 0ul, st2_u(c, uint(nf)), nf)
         pk_rows_lin(enc, c, s.ffn2, b.bh, bxh, b.bxb, t)
         if (s.has_s2) {
@@ -5311,8 +5291,11 @@ def private metal_pocket_prompt(m : PocketModel; var vs : PocketVoiceState; n_tx
     asr_prof_add("tts.pocket.gpu.upload", tc)
     tc = ref_time_ticks()
     var err = ""
+    let f = PkRowsForm(pos0 = vs.len, kv_row0 = vs.len, bcos = g_tw_pk_voice.bcos, bsin = g_tw_pk_voice.bsin, kv_only_last = true)
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026,LINT019 — the error-text fetch runs only on the failure leg
-        pk_prompt_rows(enc, c, tf, sl, b, bx, bxh, n_txt, vs.len)
+        pk_rows_tf(enc, c, tf, sl.layers, b, bx, bxh, n_txt, f) $(li : int) {
+            return (bk = g_tw_pk_voice.bk[li], bv = g_tw_pk_voice.bv[li])
+        }
     }
     asr_prof_add("tts.pocket.gpu.prompt", tc)
     if (ran) {

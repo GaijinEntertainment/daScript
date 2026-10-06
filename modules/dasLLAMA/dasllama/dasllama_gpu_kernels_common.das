@@ -590,32 +590,11 @@ class template GkDwConvRows {
     }
 }
 
-let GK_PK_ATTN_HS = 64u            //! the head size the attention row is stamped for, the body's literal: another head size declines at the driver
-let GK_PK_ATTN_MAX_KEYS = 2048u    //! the scores a row stages, the body's literal: a longer key range declines at the driver
-
-struct GkPkAttnArgs {
-    t : uint      //! the query rows
-    qs : uint     //! q's row stride
-    qcol : uint   //! the query span's first column in q's rows
-    d : uint      //! the heads' width, the cache rows' and o's row stride
-    pos0 : uint   //! the first query's position
-    ctx : uint    //! the keys a query sees at most, 0 = every key up to itself
-}
-
-//! the causal cached attention of one query row over the caches' rows (the CPU `attention_causal_rows`): query i at
-//! position pos0 + i sees the keys up to itself, the last `ctx` of them when ctx is nonzero; the scaled query staged,
-//! the scores staged and softmaxed in two passes, the value sum in four parts of 64 columns; a workgroup of 256 a
-//! (head, row); the subgroup reductions ride `gk_subgroup_add` / `gk_subgroup_max`, each home's lane primitive, as statement methods
+//! the workgroup reductions every row kernel of either home shares: one barrier a reduce, every thread summing the subgroup
+//! partials in the same order, so every thread holds the same sum or max; the lane primitives are each home's
+//! `gk_subgroup_add` / `gk_subgroup_max`, and the result lands by reference, the statement form the MSL emitter splices
 [ |> template_struct_instance]
-class template GkPkAttn {
-    @ssbo @binding = 0 @role = "read" q : array<float>
-    @ssbo @binding = 1 @role = "read" k : array<float>
-    @ssbo @binding = 2 @role = "read" v : array<float>
-    @ssbo @binding = 3 @role = "write" o : array<float>
-    @kargs pa : GkPkAttnArgs
-    @workgroup qh : float[64]
-    @workgroup sc : float[2048]   //! == GK_PK_ATTN_MAX_KEYS, the array's literal
-    @workgroup po : float[256]
+class template GkWgReduce {
     @workgroup part : float[128]   //! two slots of 64 subgroup partials, one slot a reduce
 
     //! the workgroup sum every thread holds alike; `slot` alternates 0 / 1 between consecutive reduces; a statement with its
@@ -648,7 +627,34 @@ class template GkPkAttn {
             sgi++
         }
     }
+}
 
+let GK_PK_ATTN_HS = 64u            //! the head size the attention row is stamped for, the body's literal: another head size declines at the driver
+let GK_PK_ATTN_MAX_KEYS = 2048u    //! the scores a row stages, the body's literal: a longer key range declines at the driver
+
+struct GkPkAttnArgs {
+    t : uint      //! the query rows
+    qs : uint     //! q's row stride
+    qcol : uint   //! the query span's first column in q's rows
+    d : uint      //! the heads' width, the cache rows' and o's row stride
+    pos0 : uint   //! the first query's position
+    ctx : uint    //! the keys a query sees at most, 0 = every key up to itself
+}
+
+//! the causal cached attention of one query row over the caches' rows (the CPU `attention_causal_rows`): query i at
+//! position pos0 + i sees the keys up to itself, the last `ctx` of them when ctx is nonzero; the scaled query staged,
+//! the scores staged and softmaxed in two passes, the value sum in four parts of 64 columns; a workgroup of 256 a
+//! (head, row); the subgroup reductions ride `gk_subgroup_add` / `gk_subgroup_max`, each home's lane primitive, as statement methods
+[ |> template_struct_instance]
+class template GkPkAttn : GkWgReduce {
+    @ssbo @binding = 0 @role = "read" q : array<float>
+    @ssbo @binding = 1 @role = "read" k : array<float>
+    @ssbo @binding = 2 @role = "read" v : array<float>
+    @ssbo @binding = 3 @role = "write" o : array<float>
+    @kargs pa : GkPkAttnArgs
+    @workgroup qh : float[64]
+    @workgroup sc : float[2048]   //! == GK_PK_ATTN_MAX_KEYS, the array's literal
+    @workgroup po : float[256]
     //! a column's quarter of the value sum: the keys `quarter`, `quarter` + 4, ... in order, eight a step with their loads
     //! in flight together, the column at `vb` in the first key's row
     def value_sum_into(vb, quarter, nk : uint; var acc : float&) {

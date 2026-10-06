@@ -79,10 +79,11 @@ rope from the voice slot's tables at the first row's position (`MetalPkRopeTab`,
 rope both homes stamp from `GkRopeTab`), the keys and values into the voice slot's rows at those
 positions and the attention over the slot's rows below them. The last layer ends at its keys and
 values: a prompt's residual is read by nothing, so its attention, out projection and FFN are not run -
-the CPU chain's `cache_rows` makes the same cut for the prompt and for the voice state. The rows
+the CPU chain's `transformer_rows` makes the same cut under `kv_only_last` for the prompt and for the voice state. The rows
 come back to the host caches after the command buffer (`kv_cache_append_rows`), so the CPU frame loop
 and the frames seat's upload read the same cache either way; a served prompt also leaves
 `TtsPkPromptDev` naming the voice, the fill and the row count, which the frames call after it spends
-to skip uploading rows the device already holds - a frames call over another voice, fill or prompt
-finds the record stale and uploads every row. The prompt declines as the frames seat does (`knob`,
+on entry - served or declined, so no decline leaves it for a later chunk - to skip uploading rows the
+device already holds; a frames call over another voice, fill or prompt finds the record stale and
+uploads every row. The prompt declines as the frames seat does (`knob`,
 `shape` - the frames admission plus the GEMM widths on the 64 lattice - `device`, `gpu_error`).

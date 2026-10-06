@@ -160,7 +160,7 @@ def private q8k_amax5(m0 : float) : float {
 //! (a stamp off the gate carries no such binding and none of the text): eight consecutive lanes hold a block, `blk_pass` quantizing
 //! a row's blocks from `normed_at`, the stamp's value for a plane element under the row's statistics
 [ |> template_struct_instance]
-class template Q8BlockStoreT {
+class template Q8BlockStoreT : GkWgReduce {
     @template_constant OUT_Q8 : bool = false   //!< the stamp quantizes its rows into Q8_0 blocks: `outq` and the block scales `outs`
 
     [arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
@@ -220,44 +220,24 @@ class template Q8BlockStoreT {
     }
 }
 
-//! the workgroup reduces the row kernels share (one wg reduces one row): one barrier a reduce, every
-//! thread summing the subgroup partials in the same order, so every thread holds the same sum, max or inverse rms
+//! the row kernels' reduces in value form over the shared `GkWgReduce` (one wg reduces one row), and the inverse rms
 [ |> template_struct_instance]
 class template WgReduceBase : Q8BlockStoreT {
-    @workgroup part : float[128]   //! two slots of 64 partials, one per subgroup (subgroupSize >= 4 floor)
-
     //! `slot` alternates 0 / 1 between consecutive reduces of one kernel
     def wg_rms_inv(ss0 : float; n : uint; eps : float; slot : uint) : float => 1.0 / sqrt(wg_sum(ss0, slot) / float(n) + eps)   // the CPU rmsnorm's own form
 
-    //! the workgroup sum every thread holds alike (the layernorm's mean and variance ride it, and `wg_rms_inv`)
+    //! the workgroup sum every thread holds alike (the layernorm's mean and variance ride it, and `wg_rms_inv`) - the
+    //! shared base's reduce in value form, which the SPIR-V emitter takes
     def wg_sum(v0 : float; slot : uint) : float {
-        let ss = subgroupAdd(v0)
-        if (gl_SubgroupInvocationID == 0u) {
-            part[slot * 64u + gl_SubgroupID] = ss
-        }
-        barrier()
         var tot = 0.0
-        var sgi = 0u
-        while (sgi < gl_NumSubgroups) {
-            tot += part[slot * 64u + sgi]
-            sgi++
-        }
+        wg_sum_into(v0, slot, tot)
         return tot
     }
 
     //! the workgroup max every thread holds alike (the chunked attention's score max)
     def wg_max(v0 : float; slot : uint) : float {
-        let sm = subgroupMax(v0)
-        if (gl_SubgroupInvocationID == 0u) {
-            part[slot * 64u + gl_SubgroupID] = sm
-        }
-        barrier()
-        var m = -3.0e38
-        var sgi = 0u
-        while (sgi < gl_NumSubgroups) {
-            m = max(m, part[slot * 64u + sgi])
-            sgi++
-        }
+        var m = 0.0
+        wg_max_into(v0, slot, m)
         return m
     }
 }
