@@ -970,8 +970,9 @@ facade lint trips DASLLAMA001 (code 50503) on a direct engine require with no es
 guard trips on a path-require resolving into modules/dasLLAMA, name prefix or not.
 `test_dasllama_lint_escape.das` - model-free: `options _dasllama_internal = true` admits a
 direct engine require (the lint's escape hatch).
-`test_dasllama_lint_contracts.das` - model-free: the lint's ALLOWED set (a facade-only program
-with no escape compiles; an internal require does not) via spawned compiles,
+`test_dasllama_lint_contracts.das` - model-free: the lint's ALLOWED set (one program on the
+facade, scheduler, exchange-schema and bench entries with no escape compiles - one engine-wide
+spawn, since each costs the windows nightly runner two minutes; an internal require does not),
 `load_audio_16k_mono`'s empty-on-failure contract, `decode_audio_16k_mono`'s frame cap (a
 synthetic `sampleRate=1` WAV bomb is refused before decode, an uncapped call still works), and
 `gemma4a_probe_proj_dim`'s 0-not-panic contract on `.dlim` / missing / non-GGUF inputs.
