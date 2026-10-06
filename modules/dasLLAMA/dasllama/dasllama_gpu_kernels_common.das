@@ -518,10 +518,9 @@ struct GkDwConvRowsArgs {
     bnboff : uint  //! the centered stamp's folded BatchNorm shift row in wn
 }
 
-//! a depthwise conv on rows, y [t_out][c] from x [t_in][c] and w [c][k], one element an invocation; FORM is the source
-//! rule and the epilogue: 0 the transposed conv gathered, the bias row first and one mad a tap (the CPU
-//! `conv1d_rows_transposed_depthwise`); 1 the causal conv, a row reading the k - 1 rows before it (gemma4a's conv module);
-//! 2 the centered conv, the folded BatchNorm and silu after it (canary's conv module tail)
+//! a depthwise conv on rows, y [t_out][c] from x [t_in][c] and w [c][k], one element an invocation; FORM is the source rule
+//! and the epilogue: 0 the transposed conv gathered, bias first and one mad a tap (the CPU `conv1d_rows_transposed_depthwise`);
+//! 1 the causal conv, a row reading the k - 1 rows before it (gemma4a); 2 the centered conv, folded BatchNorm and silu after it (canary)
 [ |> template_struct_instance]
 class template GkDwConvRows {
     @template_constant FORM : int = 0   //!< spelled as its literal: a template constant folds only a literal
@@ -642,10 +641,9 @@ struct GkPkAttnArgs {
     ctx : uint    //! the keys a query sees at most, 0 = every key up to itself
 }
 
-//! the causal cached attention of one query row over the caches' rows (the CPU `attention_causal_rows`): query i at
-//! position pos0 + i sees the keys up to itself, the last `ctx` of them when ctx is nonzero; the scaled query staged,
-//! the scores staged and softmaxed in two passes, the value sum in four parts of 64 columns; a workgroup of 256 a
-//! (head, row); the subgroup reductions ride `gk_subgroup_add` / `gk_subgroup_max`, each home's lane primitive, as statement methods
+//! the causal cached attention of one query row over the caches' rows (the CPU `attention_causal_rows`): query i at position
+//! pos0 + i sees the keys up to itself, the last `ctx` of them when ctx is nonzero; the scaled query staged, the scores staged
+//! and softmaxed in two passes, the value sum in four parts of 64 columns; a workgroup of 256 a (head, row), reductions as statement methods
 [ |> template_struct_instance]
 class template GkPkAttn : GkWgReduce {
     @ssbo @binding = 0 @role = "read" q : array<float>

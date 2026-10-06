@@ -1936,7 +1936,7 @@ def private pk_rope_tab_gate(t : T?; var dev, queue) {
         t |> equal(length(tcos), cap * half, "{tag}: the tables carry {cap} positions of {half} angles")
         var inscope want <- [for (e in range(tt * d)); x[(e / d) * qs + d + e % d]]
         rope_rows(want, int64(tt), int64(d), int64(dh), int64(pos0), period)
-        var ka = GkRopeTabArgs(rows = uint(tt), qs = uint(qs), col = uint(d), d = uint(d), dh = uint(dh), coff = uint(pos0 * half), soff = uint(pos0 * half))
+        let ka = GkRopeTabArgs(rows = uint(tt), qs = uint(qs), col = uint(d), d = uint(d), dh = uint(dh), coff = uint(pos0 * half), soff = uint(pos0 * half))
         let pc = mc |> in_(tcos)
         let ps = mc |> in_(tsin)
         var bc = mc.buf[pc]

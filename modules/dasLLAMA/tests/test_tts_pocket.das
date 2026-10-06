@@ -700,7 +700,7 @@ def test_pocket_prompt_rules(t : T?) {
         t |> equal(tts_pk_prompt_dev_take(rec, vs, 7ul, rows, 2l, 8l), 0l, "another row count misses it")
         tts_pk_prompt_dev_set(rec, vs, 7ul, rows, 3l, 8l)
         var inscope other := rows
-        other[1] += 1.0
+        other[1]++
         t |> equal(tts_pk_prompt_dev_take(rec, vs, 7ul, other, 3l, 8l), 0l, "other embedding rows of the same length miss it")
         tts_pk_prompt_dev_set(rec, vs, 7ul, rows, 3l, 8l)
         vs.len = 6l
