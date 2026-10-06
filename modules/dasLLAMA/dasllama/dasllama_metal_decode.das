@@ -1436,7 +1436,7 @@ struct template LayerEncT {
                     let nsh = c.n_ff_shexp
                     let she = dim * nsh
                     let bwsh1 = blob_of(g_dev, t, t.wsh1_off + l * she)
-                    if (nr == 1l) {
+                    if (SINGLE) {   //! the single-row driver's form owns bh12s; a rows driver at one row keeps its rows form
                         enc_gemv_w13sw(enc, bwsh1.buf, bwsh1.boff, uint64(((t.wsh3_off + l * she) / 32l) * 34l),
                             r.bxb, r.bh12s, r.u_dim, r.u_moe_nsh, dim, nsh, r.u_zero32)
                         enc_site_gemv(enc, t, KqFmt.q8, t.wsh2_off + l * she, dim, nsh, r.bh12s, r.bxb2, r.u_moe_nsh, r.u_dim)

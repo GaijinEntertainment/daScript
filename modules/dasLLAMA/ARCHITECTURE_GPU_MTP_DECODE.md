@@ -195,7 +195,9 @@ expert args, rope plus store, attention, the recurrent layer, the fused gate+up 
 panels. Three stamps exist - `SingleLayerEnc` (one row), `VerifyLayerEnc` (the MTP verify's k+1 rows
 over one slab) and `BatchLayerEnc` (the batch step's B rows). `SINGLE` is the template's one
 `@template_constant`: the single row alone serves the fused QKV form, the QK-norm prepass skip on an
-f16 mirror, the fused pre-norm and PLE. What differs between row shapes is how a weight site
+f16 mirror, the fused pre-norm, PLE and the shared expert's single-row GEMV over its own `bh12s`
+panel - a rows driver at one row keeps the rows forms, since only the single-row step acquires that
+panel. What differs between row shapes is how a weight site
 dispatches and which kernel family serves a phase, never the phase order, so the order cannot drift
 between them.
 
