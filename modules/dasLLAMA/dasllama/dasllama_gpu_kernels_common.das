@@ -277,9 +277,10 @@ class template GkStft {
 
     def stft_body {
         let gid = gl_GlobalInvocationID.x
-        if (gid < pa.frames * pa.bins) {
-            let f = gid / pa.bins
-            let b = gid % pa.bins
+        let bins = max(pa.bins, 1u)
+        if (gid < pa.frames * bins) {
+            let f = gid / bins
+            let b = gid % bins
             var re = 0.0
             var im = 0.0
             var tap = 0u
