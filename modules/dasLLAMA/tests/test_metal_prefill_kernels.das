@@ -1445,7 +1445,6 @@ def private st2_rows_gate(t : T?; var dev, queue) {
         var bo = mc.buf[po]
         var (bn, bslope, bc, bnrf) = (mc.buf[mc |> in_plain([uint(n)])], mc.buf[mc |> in_plain([0.1])],
             mc.buf[mc |> in_plain([uint(c)])], mc.buf[mc |> in_plain([uint(n + c)])])
-        var (bsc1, bscj) = (mc.buf[mc |> in_plain([1.0])], mc.buf[mc |> in_plain([0.70710678])])
         let run_leaky <- @(bxx : MetalBuffer?) : bool {
             return queue_record(t, queue, "{tag} leaky") $(enc : MetalComputeEncoder?) {
                 stamp_run(slk, pso_lk) {
@@ -1461,10 +1460,9 @@ def private st2_rows_gate(t : T?; var dev, queue) {
             }
         }
         let run_add <- @(bax, bbx : MetalBuffer?; joined : bool) : bool {
-            let bs = joined ? bscj : bsc1
             return queue_record(t, queue, "{tag} add") $(enc : MetalComputeEncoder?) {
                 stamp_run(sad, pso_add) {
-                    invoke(sad.enc, enc, bax, 0ul, bbx, 0ul, bn, bs, bo, 0ul, int64(n))
+                    invoke(sad.enc, enc, bax, bbx, bo, GkAddScaleArgs(nelem = uint(n), scale = joined ? 0.70710678 : 1.0), int64(n))
                 }
             }
         }
@@ -1832,7 +1830,7 @@ def private pk_rows_gate(t : T?; var dev, queue; elu : bool) {
         return if (!pso_ok(t, tag, pso, err))
         let rows = 10
         let width = 40
-        let ka = PkRowsArgs(rows = uint(rows), width = uint(width), ss = 48u, sc = 8u, sr0 = 2u, ds = 64u, dc = 5u, dr0 = 3u)
+        let ka = GkPkRowsArgs(rows = uint(rows), width = uint(width), ss = 48u, sc = 8u, sr0 = 2u, ds = 64u, dc = 5u, dr0 = 3u)
         var inscope x <- f16_fill((2 + rows) * 48, 3, 0.5, -1.0)
         var inscope want : array<float>
         want |> resize((3 + rows) * 64)
@@ -2416,7 +2414,7 @@ def private st2_sigsum_gate(t : T?; var dev, queue) {
         }
         let praw = mc |> out_words(nrows, -1.0e30)
         let plg = mc |> in_(lg)
-        let (pnb, pls, pspeed, pt) = (mc |> in_plain([uint(nb)]), mc |> in_plain([uint(ls)]), mc |> in_plain([1.3]), mc |> in_plain([uint(nrows)]))
+        var ka = GkSigSumArgs(t = uint(nrows), nb = uint(nb), ls = uint(ls), speed = 1.3)
         for (leg in range(2)) {
             if (leg == 1) {
                 lg[5 * ls + 7] += 6.0
@@ -2424,7 +2422,7 @@ def private st2_sigsum_gate(t : T?; var dev, queue) {
             }
             let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
                 stamp_run(st, pso) {
-                    invoke(st.enc, enc, mc.buf[plg], mc.buf[praw], mc.buf[pnb], mc.buf[pls], mc.buf[pspeed], mc.buf[pt], int64(nrows))
+                    invoke(st.enc, enc, mc.buf[plg], mc.buf[praw], ka, int64(nrows))
                 }
             }
             continue if (!ran)
@@ -2494,7 +2492,7 @@ def private st2_source_gate(t : T?; var dev, queue; torch_math : bool) {
         let n = src.n
         let nlow = src.nlow
         var inscope f0 := src.f0
-        let ka = St2SourceArgs(n = uint(n), nlow = uint(nlow), nh = uint(nh), up = uint(up), sr = TTS_SRC_SR, sine_amp = 0.1, noise_std = 0.003,
+        let ka = GkSourceArgs(n = uint(n), nlow = uint(nlow), nh = uint(nh), up = uint(up), sr = TTS_SRC_SR, sine_amp = 0.1, noise_std = 0.003,
             voiced_thr = 10.0, seed = 77u)
         t |> equal(src.rows, int64(n), "{tag}: the CPU source mixes every sample")
         let pnu = mc |> in_(src.nu)
@@ -2511,7 +2509,7 @@ def private st2_source_gate(t : T?; var dev, queue; torch_math : bool) {
         var blow = mc.buf[plow]
         var blowc = mc.buf[plowc]
         var bhar = mc.buf[phar]
-        let run <- @(bf0 : MetalBuffer?; kax : St2SourceArgs; own : bool; bnz : MetalBuffer?; bhar : MetalBuffer?) : bool {
+        let run <- @(bf0 : MetalBuffer?; kax : GkSourceArgs; own : bool; bnz : MetalBuffer?; bhar : MetalBuffer?) : bool {
             var kk = kax
             return queue_record(t, queue, "{tag} dispatch") $(enc : MetalComputeEncoder?) {
                 if (own) {   // the driver's own draw: the noise rows hashed on the device before the sines read them
@@ -2614,8 +2612,9 @@ def private st2_stft_gate(t : T?; var dev, queue; reflect : bool) {
         var inscope wim <- f16_fill(bins * k, 3, 0.15, -0.5)
         wim[2 * k + 5] = 0.0
         var inscope want <- stft_ref(har, wre, wim, n, k, hop, pad, bins, reflect)
-        let pre = mc |> in_(wre)
-        let pim = mc |> in_(wim)
+        var inscope wn <- clone_to_move(wre)
+        wn |> push_from(wim)
+        let pwn = mc |> in_(wn)
         let pspec = mc |> out_words(frames * 2 * bins, -1.0e30)
         let ph = mc |> in_(har)
         for (leg in range(2)) {
@@ -2623,10 +2622,11 @@ def private st2_stft_gate(t : T?; var dev, queue; reflect : bool) {
                 har[1] += 2.0   //! the first frame's reflected tap reads it
                 mc |> plane_upload(ph, har)
             }
-            var ka = St2StftArgs(n = uint(n), frames = uint(frames), bins = uint(bins), k = uint(k), hop = uint(hop), pad = uint(pad), eps = 1e-9)
+            var ka = GkStftArgs(n = uint(n), frames = uint(frames), bins = uint(bins), k = uint(k), hop = uint(hop), pad = uint(pad), eps = 1e-9,
+                reoff = 0u, imoff = uint(bins * k))
             let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
                 stamp_run(st, pso) {
-                    invoke(st.enc, enc, mc.buf[ph], mc.buf[pre], 0ul, mc.buf[pim], 0ul, mc.buf[pspec], ka, int64(frames * bins))
+                    invoke(st.enc, enc, mc.buf[ph], mc.buf[pwn], mc.buf[pspec], ka, int64(frames * bins))
                 }
             }
             continue if (!ran)
@@ -2659,9 +2659,10 @@ def private st2_istft_gate(t : T?; var dev, queue; envelope : bool) {
         var inscope wim <- f16_fill(k * bins, 3, 0.15, -0.5)
         var inscope window <- f16_fill(k, 11, 0.1, 0.3)
         var inscope ref <- istft_ref(y, wre, wim, window, tt, stride, bins, k, hop, pad, envelope)
-        let pre = mc |> in_(wre)
-        let pim = mc |> in_(wim)
-        let pwn = mc |> in_(window)
+        var inscope wn <- clone_to_move(wre)
+        wn |> push_from(wim)
+        wn |> push_from(window)
+        let pwn = mc |> in_(wn)
         let pw = mc |> out_words(n, -1.0e30)
         let py = mc |> in_(y)
         for (leg in range(2)) {
@@ -2669,11 +2670,11 @@ def private st2_istft_gate(t : T?; var dev, queue; envelope : bool) {
                 y[4 * stride + 1] += 2.0   //! a log-magnitude: every sample its frame overlaps moves
                 mc |> plane_upload(py, y)
             }
-            var ka = St2IstftArgs(tt = uint(tt), stride = uint(stride), bins = uint(bins), k = uint(k), hop = uint(hop), pad = uint(pad),
-                envelope = envelope ? 1u : 0u, n = uint(n))
+            var ka = GkIstftArgs(tt = uint(tt), stride = uint(stride), bins = uint(bins), k = uint(k), hop = uint(hop), pad = uint(pad),
+                envelope = envelope ? 1u : 0u, n = uint(n), reoff = 0u, imoff = uint(k * bins), wnoff = uint(2 * k * bins))
             let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
                 stamp_run(st, pso) {
-                    invoke(st.enc, enc, mc.buf[py], mc.buf[pre], 0ul, mc.buf[pim], 0ul, mc.buf[pwn], 0ul, mc.buf[pw], ka, int64(n))
+                    invoke(st.enc, enc, mc.buf[py], mc.buf[pwn], mc.buf[pw], ka, int64(n))
                 }
             }
             continue if (!ran)

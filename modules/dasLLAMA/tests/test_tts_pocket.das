@@ -921,7 +921,7 @@ def test_pocket_frames_after_model_drop(t : T?) {
 }
 
 //! The served synthesis across the tower knob on the served lane: every chunk's codec and frame
-//! loop on the tower, one codec encode a chunk, the knob-off leg declining both seats per chunk,
+//! loop on the tower, one codec encode a chunk, the knob-off leg declining every seat per chunk,
 //! both legs speaking.
 [test]
 def test_pocket_synthesis_metal(t : T?) {

@@ -3179,11 +3179,11 @@ struct private St2DecSlab : St2SlabBase {
     decode : array<St2ResSlots>
     src_w : uint64
     src_b : uint64
-    stft_re : uint64
-    stft_im : uint64
-    istft_re : uint64
-    istft_im : uint64
-    window : uint64
+    stft_re : int64      //!< the STFT and inverse STFT bases and the window as element offsets - their kernels take the slab whole
+    stft_im : int64
+    istft_re : int64
+    istft_im : int64
+    window : int64
 }
 
 struct private St2PredSlab : St2SlabBase {
@@ -3308,11 +3308,11 @@ def private st2_dec_write(var w : TtsSlabWriter; d : St2Decoder; var s : St2DecS
     s.decode <- [for (b, r in d.decode, t.decode); st2_res_of(w, b, r)]
     s.src_w = st2_byte_off(t.src_w)
     s.src_b = st2_byte_off(t.src_b)
-    s.stft_re = st2_byte_off(t.stft_re)
-    s.stft_im = st2_byte_off(t.stft_im)
-    s.istft_re = st2_byte_off(t.istft_re)
-    s.istft_im = st2_byte_off(t.istft_im)
-    s.window = st2_byte_off(t.window)
+    s.stft_re = t.stft_re
+    s.stft_im = t.stft_im
+    s.istft_re = t.istft_re
+    s.istft_im = t.istft_im
+    s.window = t.window
 }
 
 
@@ -3605,13 +3605,7 @@ def private st2_adain(enc : MetalComputeEncoder?; var c : St2GpuCtx; bin, bout :
 
 //! o = (a + b) * scale: the in-place sum (o == a) is the residual add, another o the out-of-place stamp.
 def private st2_add(enc : MetalComputeEncoder?; var c : St2GpuCtx; ba, bb, bo : MetalBuffer?; n : int64; scale : float) {
-    let u_scale = st2_uf(c, scale)
-    let u_n = st2_u(c, uint(n))
-    if (bo == ba) {
-        enc_add_c(enc, ba, 0ul, bb, 0ul, u_n, u_scale, n)
-    } else {
-        enc_st2_add(enc, ba, 0ul, bb, 0ul, u_n, u_scale, bo, 0ul, n)
-    }
+    enc_st2_add(enc, ba, bb, bo, GkAddScaleArgs(nelem = uint(n), scale = scale), n)
 }
 
 def private st2_leaky(enc : MetalComputeEncoder?; var c : St2GpuCtx; bx : MetalBuffer?; n : int64; slope : float) {
@@ -3872,7 +3866,7 @@ let private ST2_MAX_DE_LSTMS = 8   //!< the duration encoder's LSTM stack the se
 def private st2_source_chain(enc : MetalComputeEncoder?; var c : St2GpuCtx; d : St2Decoder; cfg : SineSourceCfg; ss : TtsSourceShape;
                              bf0, bnu, bnoise, blow, blowc, bhar, bspec : MetalBuffer?; captured : bool; seed : uint64) {
     let nh = cfg.n_harm
-    var ka = St2SourceArgs(n = uint(ss.samples), nlow = uint(ss.nlow), nh = uint(nh), up = uint(cfg.upsample), sr = cfg.sample_rate,
+    var ka = GkSourceArgs(n = uint(ss.samples), nlow = uint(ss.nlow), nh = uint(nh), up = uint(cfg.upsample), sr = cfg.sample_rate,
         sine_amp = cfg.sine_amp, noise_std = cfg.noise_std, voiced_thr = cfg.voiced_thr, seed = uint(seed ^ (seed >> 32ul)))
     let sl & = g_tw_st2_dec
     if (!captured) {
@@ -3888,12 +3882,12 @@ def private st2_source_chain(enc : MetalComputeEncoder?; var c : St2GpuCtx; d : 
         enc_st2_src_sines_onnx(enc, bf0, blowc, bnoise, c.slab, sl.src_w, c.slab, sl.src_b, bhar, ka, ss.samples)
     }
     let re & = unsafe(d.stft_fwd_re)
-    var ks = St2StftArgs(n = uint(ss.samples), frames = uint(ss.spec_frames), bins = uint(d.bins), k = uint(re.k), hop = uint(re.stride),
-        pad = uint(ST2_STFT_PAD), eps = d.stft_eps)
+    var ks = GkStftArgs(n = uint(ss.samples), frames = uint(ss.spec_frames), bins = uint(d.bins), k = uint(re.k), hop = uint(re.stride),
+        pad = uint(ST2_STFT_PAD), eps = d.stft_eps, reoff = uint(sl.stft_re), imoff = uint(sl.stft_im))
     if (d.stft_pad_reflect) {
-        enc_st2_stft_reflect(enc, bhar, c.slab, sl.stft_re, c.slab, sl.stft_im, bspec, ks, ss.spec_frames * d.bins)
+        enc_st2_stft_reflect(enc, bhar, c.slab, bspec, ks, ss.spec_frames * d.bins)
     } else {
-        enc_st2_stft_edge(enc, bhar, c.slab, sl.stft_re, c.slab, sl.stft_im, bspec, ks, ss.spec_frames * d.bins)
+        enc_st2_stft_edge(enc, bhar, c.slab, bspec, ks, ss.spec_frames * d.bins)
     }
 }
 
@@ -4008,9 +4002,9 @@ def private metal_styletts2_decode(d : St2Decoder; text_c : int64; source : Sine
         st2_decoder_chain(enc, c, d, b, g, r, text_c, frames, s_ref)
         st2_source_chain(enc, c, d, source, sh.ss, b.bf0r, b.bnu, b.bnoise, b.blow, b.blowc, b.bhar, b.bspec, noise.captured, seed)
         st2_generator_chain(enc, c, d, g, b.bx, b.bspec, r.bc1, sh.dec_width, sh.dec_rows, sh.ss.spec_frames, s_ref)
-        var ki = St2IstftArgs(tt = uint(sh.t_post), stride = uint(ST2_POST_WIDTH), bins = uint(d.bins), k = uint(bwd.k), hop = uint(bwd.stride),
-            pad = uint(ST2_STFT_PAD), envelope = d.istft_envelope ? 1u : 0u, n = uint(sh.n_out))
-        enc_st2_istft(enc, r.bc1, c.slab, sl.istft_re, c.slab, sl.istft_im, c.slab, sl.window, b.bwave, ki, sh.n_out)
+        var ki = GkIstftArgs(tt = uint(sh.t_post), stride = uint(ST2_POST_WIDTH), bins = uint(d.bins), k = uint(bwd.k), hop = uint(bwd.stride),
+            pad = uint(ST2_STFT_PAD), envelope = d.istft_envelope ? 1u : 0u, n = uint(sh.n_out), reoff = uint(sl.istft_re), imoff = uint(sl.istft_im), wnoff = uint(sl.window))
+        enc_st2_istft(enc, r.bc1, c.slab, b.bwave, ki, sh.n_out)
     }
     asr_prof_add("tts.gen.gpu.chain", tc)
     if (ran) {
@@ -4219,11 +4213,7 @@ def private metal_styletts2_durations(p : St2Predictor; d : array<float>; t : in
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
         st2_bilstm(enc, c, p.lstm, sl.dur_lstm, bd, t, lb.xf, lb.xb, lb.y)
         st2_lin(enc, c, sl.dur_proj, lb.y, t, blog)
-        let u_nb = st2_u(c, uint(p.duration_proj.nout))
-        let u_ls = st2_u(c, uint(sl.dur_proj.cout_p))
-        let u_speed = st2_uf(c, speed)
-        let u_t = st2_u(c, uint(t))
-        enc_st2_sigsum(enc, blog, braw, u_nb, u_ls, u_speed, u_t, t)
+        enc_st2_sigsum(enc, blog, braw, GkSigSumArgs(t = uint(t), nb = uint(p.duration_proj.nout), ls = uint(sl.dur_proj.cout_p), speed = speed), t)
     }
     if (ran) {
         unsafe(scratch_resize(raw, t))
@@ -4487,7 +4477,7 @@ def private pk_conv(enc : MetalComputeEncoder?; var c : St2GpuCtx; slot : St2Con
 }
 
 def private pk_elu(enc : MetalComputeEncoder?; b : MetalBuffer?; rows, width : int64) {
-    var ka = PkRowsArgs(rows = uint(rows), width = uint(width), ss = uint(width), sc = 0u, sr0 = 0u, ds = uint(width), dc = 0u, dr0 = 0u)
+    var ka = GkPkRowsArgs(rows = uint(rows), width = uint(width), ss = uint(width), sc = 0u, sr0 = 0u, ds = uint(width), dc = 0u, dr0 = 0u)
     enc_pk_rows_elu(enc, b, b, ka, rows * width)
 }
 
@@ -4554,7 +4544,7 @@ def private pk_transformer(enc : MetalComputeEncoder?; var c : St2GpuCtx; tf : P
         let u_qs = st2_u(c, qs)
         enc_rope(enc, b.bqkv, 0ul, sl.bcos, sl.bsin, u_d, u_dh, u_np, u_neox, null, u_qs, t * (d / 2l))
         enc_rope(enc, b.bqkv, uint64(d * 4l), sl.bcos, sl.bsin, u_d, u_dh, u_np, u_neox, null, u_qs, t * (d / 2l))
-        var kc = PkRowsArgs(rows = uint(t), width = uint(d), ss = qs, sc = uint(d), sr0 = 0u, ds = uint(d), dc = 0u, dr0 = 0u)
+        var kc = GkPkRowsArgs(rows = uint(t), width = uint(d), ss = qs, sc = uint(d), sr0 = 0u, ds = uint(d), dc = 0u, dr0 = 0u)
         enc_pk_rows(enc, b.bqkv, g_tw_pk_sc.bk[i], kc, nd)
         kc.sc = uint(2l * d)
         enc_pk_rows(enc, b.bqkv, g_tw_pk_sc.bv[i], kc, nd)
@@ -4580,7 +4570,7 @@ def private pk_transformer(enc : MetalComputeEncoder?; var c : St2GpuCtx; tf : P
 //! One ELU-conv-ELU-conv residual block over x [t][w] (a stage's rows) into y, through cc and cp.
 def private pk_res_block(enc : MetalComputeEncoder?; var c : St2GpuCtx; b : PocketResConv; s1, s2 : St2ConvSlot;
                          bx, bcc, bcp, by : MetalBuffer?; t, w : int64) {
-    var ka = PkRowsArgs(rows = uint(t), width = uint(w), ss = uint(w), sc = 0u, sr0 = 0u, ds = uint(w), dc = 0u, dr0 = 0u)
+    var ka = GkPkRowsArgs(rows = uint(t), width = uint(w), ss = uint(w), sc = 0u, sr0 = 0u, ds = uint(w), dc = 0u, dr0 = 0u)
     enc_pk_rows_elu(enc, bx, bcc, ka, t * w)
     pk_conv(enc, c, s1, b.conv1, bcc, t, w, bcp)
     pk_elu(enc, bcp, t, s1.cout_p)
@@ -4623,7 +4613,7 @@ def private pk_codec_chain(enc : MetalComputeEncoder?; var c : St2GpuCtx; mm : P
     pk_elu(enc, bcur, t, w)
     var bo = st2_rows_buf(c, t, sl.dec_out.cout_p)
     pk_conv(enc, c, sl.dec_out, mm.dec_out, bcur, t, w, bo)
-    var kw = PkRowsArgs(rows = uint(t), width = 1u, ss = uint(sl.dec_out.cout_p), sc = 0u, sr0 = 0u, ds = 1u, dc = 0u, dr0 = 0u)
+    var kw = GkPkRowsArgs(rows = uint(t), width = 1u, ss = uint(sl.dec_out.cout_p), sc = 0u, sr0 = 0u, ds = 1u, dc = 0u, dr0 = 0u)
     enc_pk_rows(enc, bo, bwave, kw, t)
 }
 
@@ -5231,7 +5221,7 @@ def private pk_prompt_rows(enc : MetalComputeEncoder?; var c : St2GpuCtx; tf : P
     let u_nd = st2_u(c, uint(nd))
     let v & = g_tw_pk_voice
     let last = length(tf.layers) - 1
-    var kc = PkRowsArgs(rows = uint(t), width = uint(d), ss = uint(3l * d), sc = uint(d), sr0 = 0u, ds = uint(d), dc = 0u, dr0 = uint(pos0))
+    var kc = GkPkRowsArgs(rows = uint(t), width = uint(d), ss = uint(3l * d), sc = uint(d), sr0 = 0u, ds = uint(d), dc = 0u, dr0 = uint(pos0))
     var ra = GkRopeTabArgs(rows = uint(t), qs = uint(3l * d), col = 0u, d = uint(d), dh = dh, coff = tab0, soff = tab0)
     let pairs = t * (d / 2l)
     for (i in range(length(tf.layers))) {

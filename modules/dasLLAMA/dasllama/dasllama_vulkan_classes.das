@@ -13610,33 +13610,12 @@ class TtsConcat : GkConcat {
     }
 }
 
-struct TtsSigSumArgs {
-    t : uint       //! the rows
-    nb : uint      //! the logits summed a row
-    ls : uint      //! the logit rows' stride
-    speed : float  //! the divisor of each row's sum
-}
-
-//! raw[r] = (the sum of sigmoid(logits[r][j]) over j < nb, in j order) / speed - the CPU `styletts2_durations`' raw
-//! durations; one row an invocation
+//! the duration sigmoid sums - the CPU `styletts2_durations`' raw durations
 [vk_dispatch(name = "tts_sigsum_cls", kernel = "run", grid = "t/256", params = "t : int64")]
-class TtsSigSum {
-    @ssbo @binding = 0 logits : array<float>
-    @ssbo @binding = 1 raw : array<float>
-    @push_constant pa : TtsSigSumArgs
-
+class TtsSigSum : GkSigSum {
     [spirv_kernel(local_size_x = 256)]
     def run {
-        let r = gl_GlobalInvocationID.x
-        if (r < pa.t) {
-            var acc = 0.0
-            var j = 0u
-            while (j < pa.nb) {
-                acc += sigmoid_f32(logits[r * pa.ls + j])
-                j++
-            }
-            raw[r] = acc / pa.speed
-        }
+        sigsum_body()
     }
 }
 
@@ -13798,29 +13777,12 @@ class TtsAdainSnake : TtsAdainT {
 [vk_dispatch(name = "tts_pool_dw_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsPoolDw : DwConvRowsT {}
 
-struct TtsAddScaleArgs {
-    nelem : uint
-    scale : float
-    aoff : uint    //! each plane's element base
-    boff : uint
-    ooff : uint
-}
-
-//! o = (a + b) * scale over nelem elements - the residual join's 1 / sqrt(2) and the averaged stage sums; o may be a;
-//! one element an invocation
+//! the residual join's add-and-scale, in place where o is a
 [vk_dispatch(name = "tts_add_scale_cls", kernel = "run", grid = "nelem/256", params = "nelem : int64")]
-class TtsAddScale {
-    @ssbo @binding = 0 a : array<float>
-    @ssbo @binding = 1 b : array<float>
-    @ssbo @binding = 2 o : array<float>
-    @push_constant pa : TtsAddScaleArgs
-
+class TtsAddScale : GkAddScale {
     [spirv_kernel(local_size_x = 256)]
     def run {
-        let i = gl_GlobalInvocationID.x
-        if (i < pa.nelem) {
-            o[pa.ooff + i] = (a[pa.aoff + i] + b[pa.boff + i]) * pa.scale
-        }
+        add_scale_body()
     }
 }
 
@@ -13831,20 +13793,6 @@ class TtsAxpy : GkAxpy {
     def run {
         axpy_body()
     }
-}
-
-struct TtsSourceArgs {
-    n : uint            //! the samples, frames * up
-    nlow : uint         //! the phase frames, `resize_len(n, 1 / up)`
-    nh : uint           //! the harmonics
-    up : uint
-    sr : float
-    sine_amp : float
-    noise_std : float
-    voiced_thr : float
-    seed : uint         //! the own noise draw's key
-    woff : uint         //! the source linear's weight row [nh] in wn
-    boff : uint         //! its bias [1] in wn
 }
 
 //! a / b rounded as the CPU's IEEE divide: a SPIR-V divide sits up to 2.5 ulp off, which the phase sums carry (Metal's `/` is IEEE)
@@ -13885,7 +13833,7 @@ class template TtsSrcLowT : TtsSrcLawT {
     @ssbo @binding = 0 f0 : array<float>
     @ssbo @binding = 1 noise_u : array<float>
     @ssbo @binding = 2 low : array<float>
-    @push_constant pa : TtsSourceArgs
+    @push_constant pa : GkSourceArgs
 
     [spirv_kernel(local_size_x = 256)]
     def run {
@@ -13914,56 +13862,31 @@ class TtsSrcLowTorch : TtsSrcLowT {
 [vk_dispatch(name = "tts_src_low_onnx_cls", kernel = "run", grid = "total/256", params = "total : int64")]
 class TtsSrcLowOnnx : TtsSrcLowT {}
 
-//! the phase per frame lowc [nh][nlow] as the running sum of the increments - TORCH: the double accumulator as a two-float
-//! sum carrying its rounding error, else the plain float sum; one workgroup, invocation h < nh walks its harmonic, wgs = 1
-[ |> template_struct_instance]
-class template TtsSrcCumsumT : TtsSrcLawT {
-    @ssbo @binding = 0 low : array<float>
-    @ssbo @binding = 1 lowc : array<float>
-    @push_constant pa : TtsSourceArgs
+//! the phase per frame on the torch law, wgs = 1; `precise` keeps the two-float sum's compensation
+[vk_dispatch(name = "tts_src_cumsum_torch_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsSrcCumsumTorch : GkSrcCumsum {
+    override TORCH = true
 
     [spirv_kernel(local_size_x = 256, precise = true)]
     def run {
-        let h = gl_LocalInvocationID.x
-        if (h < pa.nh) {
-            var acc = 0.0
-            var lo = 0.0
-            var k = 0u
-            while (k < pa.nlow) {
-                let x = low[h * pa.nlow + k]
-                static_if (TORCH) {
-                    tts_two_sum_add(acc, lo, x)
-                } else {
-                    acc += x
-                }
-                lowc[h * pa.nlow + k] = tts_phase_rad(acc, pa.up)
-                k++
-            }
-        }
+        src_cumsum_body()
     }
 }
 
-[vk_dispatch(name = "tts_src_cumsum_torch_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TtsSrcCumsumTorch : TtsSrcCumsumT {
-    override TORCH = true
+[vk_dispatch(name = "tts_src_cumsum_onnx_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TtsSrcCumsumOnnx : GkSrcCumsum {
+    [spirv_kernel(local_size_x = 256, precise = true)]
+    def run {
+        src_cumsum_body()
+    }
 }
 
-[vk_dispatch(name = "tts_src_cumsum_onnx_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TtsSrcCumsumOnnx : TtsSrcCumsumT {}
-
-//! the source's own noise draw noise_n [n][nh], `tts_hash_normal` at the seed - the captured stream's seat when no stream
-//! was captured; one element an invocation
+//! the source's own noise draw
 [vk_dispatch(name = "tts_src_noise_cls", kernel = "run", grid = "total/256", params = "total : int64")]
-class TtsSrcNoise {
-    @ssbo @binding = 0 noise_n : array<float>
-    @push_constant pa : TtsSourceArgs
-
+class TtsSrcNoise : GkSrcNoise {
     [spirv_kernel(local_size_x = 256)]
     def run {
-        let gid = gl_GlobalInvocationID.x
-        if (gid < pa.n * pa.nh) {
-            noise_n[gid] = tts_hash_normal(pa.seed, gid)
-        }
+        src_noise_body()
     }
 }
 
@@ -13976,7 +13899,7 @@ class template TtsSrcSinesT : TtsSrcLawT {
     @ssbo @binding = 2 noise_n : array<float>
     @ssbo @binding = 3 @role = "weight" wn : array<float>
     @ssbo @binding = 4 har : array<float>
-    @push_constant pa : TtsSourceArgs
+    @push_constant pa : GkSourceArgs
 
     [spirv_kernel(local_size_x = 256)]
     def run {
@@ -14009,162 +13932,50 @@ class TtsSrcSinesTorch : TtsSrcSinesT {
 [vk_dispatch(name = "tts_src_sines_onnx_cls", kernel = "run", grid = "n/256", params = "n : int64")]
 class TtsSrcSinesOnnx : TtsSrcSinesT {}
 
-struct TtsStftArgs {
-    n : uint        //! the signal's samples
-    frames : uint
-    bins : uint
-    k : uint        //! the frame length, each basis row's taps
-    hop : uint
-    pad : uint      //! the samples padded on each side
-    eps : float
-    reoff : uint    //! the real basis wre [bins][k] in wn
-    imoff : uint    //! the imaginary basis, the same layout
-}
-
-//! the STFT as two convs over the padded signal - REFLECT mirrors the signal past its ends, else the edge sample repeats -
-//! into spec [frames][2 bins], the magnitudes sqrt(re^2 + im^2 + eps) then the phases, a zero imaginary part on the
-//! negative real axis reading +pi (the CPU `magnitude_phase`); one (frame, bin) an invocation
-[ |> template_struct_instance]
-class template TtsStftT {
-    @template_constant REFLECT : bool = false
-    @ssbo @binding = 0 har : array<float>
-    @ssbo @binding = 1 @role = "weight" wn : array<float>
-    @ssbo @binding = 2 spec : array<float>
-    @push_constant pa : TtsStftArgs
+//! the STFT on the reflect pad law
+[vk_dispatch(name = "tts_stft_reflect_cls", kernel = "run", grid = "total/256", params = "total : int64")]
+class TtsStftReflect : GkStft {
+    override REFLECT = true
 
     [spirv_kernel(local_size_x = 256)]
     def run {
-        let gid = gl_GlobalInvocationID.x
-        if (gid < pa.frames * pa.bins) {
-            let f = gid / pa.bins
-            let b = gid % pa.bins
-            var re = 0.0
-            var im = 0.0
-            var tap = 0u
-            while (tap < pa.k) {
-                let p = int(f * pa.hop + tap) - int(pa.pad)
-                var src = 0
-                static_if (REFLECT) {
-                    src = tts_pad_reflect(p, int(pa.n))
-                } else {
-                    src = clamp(p, 0, int(pa.n) - 1)
-                }
-                let v = har[uint(src)]
-                re += wn[pa.reoff + b * pa.k + tap] * v
-                im += wn[pa.imoff + b * pa.k + tap] * v
-                tap++
-            }
-            let row = f * 2u * pa.bins
-            spec[row + b] = tts_stft_mag(re, im, pa.eps)
-            spec[row + pa.bins + b] = tts_stft_phase(re, im)
-        }
+        stft_body()
     }
-}
-
-[vk_dispatch(name = "tts_stft_reflect_cls", kernel = "run", grid = "total/256", params = "total : int64")]
-class TtsStftReflect : TtsStftT {
-    override REFLECT = true
 }
 
 [vk_dispatch(name = "tts_stft_edge_cls", kernel = "run", grid = "total/256", params = "total : int64")]
-class TtsStftEdge : TtsStftT {}
-
-struct TtsIstftArgs {
-    tt : uint         //! the frames
-    stride : uint     //! y's row width
-    bins : uint
-    k : uint          //! the frame length
-    hop : uint
-    pad : uint        //! the samples trimmed from each end
-    envelope : uint   //! 1 = the summed squared window divided out where it is not negligible
-    n : uint          //! the samples out
-    reoff : uint      //! the real basis wre [k][bins] in wn - the transposed conv's operand layout
-    imoff : uint      //! the imaginary basis, the same layout
-    wnoff : uint      //! the window [k] in wn
-}
-
-//! the inverse STFT from conv_post's rows y [tt][stride] - a bin's log magnitude, then its phase - as the overlap-added
-//! transposed conv, a non-negligible envelope divided out under `envelope`; one sample an invocation
-[vk_dispatch(name = "tts_istft_cls", kernel = "run", grid = "n/256", params = "n : int64")]
-class TtsIstft {
-    @ssbo @binding = 0 y : array<float>
-    @ssbo @binding = 1 @role = "weight" wn : array<float>
-    @ssbo @binding = 2 wave : array<float>
-    @push_constant pa : TtsIstftArgs
-
+class TtsStftEdge : GkStft {
     [spirv_kernel(local_size_x = 256)]
     def run {
-        let i = gl_GlobalInvocationID.x
-        if (i < pa.n) {
-            let m = i + pa.pad
-            let hop = max(pa.hop, 1u)
-            var acc = 0.0
-            var env = 0.0
-            var tap = 0u
-            while (tap < pa.k) {
-                if (m >= tap && (m - tap) % hop == 0u) {
-                    let q = (m - tap) / hop
-                    if (q < pa.tt) {
-                        var b = 0u
-                        while (b < pa.bins) {
-                            let wa = tap * pa.bins + b
-                            acc += tts_istft_term(y[q * pa.stride + b], y[q * pa.stride + pa.bins + b], wn[pa.reoff + wa], wn[pa.imoff + wa])
-                            b++
-                        }
-                        let wv = wn[pa.wnoff + tap]
-                        env += wv * wv
-                    }
-                }
-                tap++
-            }
-            wave[i] = (pa.envelope != 0u && env > 1e-11) ? acc / env : acc
-        }
+        stft_body()
     }
 }
 
-struct TtsPkRowsArgs {
-    rows : uint
-    width : uint   //! the floats a row copies
-    ss : uint      //! src's row stride
-    sc : uint      //! src's first column
-    sr0 : uint     //! src's first row
-    ds : uint      //! dst's row stride
-    dc : uint      //! dst's first column
-    dr0 : uint     //! dst's first row
-}
-
-//! `rows` rows of `width` floats from src [.][ss] at column sc, rows sr0.., into dst [.][ds] at column dc, rows dr0.. - the
-//! codec stream's row copy (a conv's window behind its carry, a carry's tail to its head, the K and V columns into their
-//! caches); the ELU stamp maps each value on the way (the CPU `elu_rows` before a conv); one element an invocation
-[ |> template_struct_instance]
-class template TtsPkRowsT {
-    @template_constant ELU : bool = false
-    @ssbo @binding = 0 src : array<float>
-    @ssbo @binding = 1 dst : array<float>
-    @push_constant pa : TtsPkRowsArgs
-
+//! the inverse STFT from conv_post's rows
+[vk_dispatch(name = "tts_istft_cls", kernel = "run", grid = "n/256", params = "n : int64")]
+class TtsIstft : GkIstft {
     [spirv_kernel(local_size_x = 256)]
     def run {
-        let gid = gl_GlobalInvocationID.x
-        if (gid < pa.rows * pa.width) {
-            let w = max(pa.width, 1u)
-            let r = gid / w
-            let j = gid % w
-            var v = src[(pa.sr0 + r) * pa.ss + pa.sc + j]
-            static_if (ELU) {
-                v = max(v, 0.0) + min(exp(v) - 1.0, 0.0)
-            }
-            dst[(pa.dr0 + r) * pa.ds + pa.dc + j] = v
-        }
+        istft_body()
     }
 }
 
 [vk_dispatch(name = "tts_pk_rows_cls", kernel = "run", grid = "total/256", params = "total : int64")]
-class TtsPkRows : TtsPkRowsT {}
+class TtsPkRows : GkPkRows {
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        pk_rows_body()
+    }
+}
 
 [vk_dispatch(name = "tts_pk_rows_elu_cls", kernel = "run", grid = "total/256", params = "total : int64")]
-class TtsPkRowsElu : TtsPkRowsT {
+class TtsPkRowsElu : GkPkRows {
     override ELU = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        pk_rows_body()
+    }
 }
 
 //! x [rows][d] *= the scale row at boff in place - a transformer layer's per-channel layer scale (the CPU

@@ -2382,7 +2382,11 @@ pod) with the generator check, batches of three (the encode count within one of 
 the batch the EOS frame lands in may split the tail - the latents within the bar, a batch below
 one clamping to one), and the
 seats taken by an empty record and given back (`register_pocket_gpu` / `unregister_pocket_gpu`,
-the hook unreached then serving again); the frames seat after the LLM tier's model drop in the same
+the hook unreached then serving again); the prompt seat (`test_pocket_prompt_gpu`: every layer's K and V rows of one case's text, the
+seat against the CPU chain, within `GPU_PROMPT_BAR` on the f32 lane and `GPU_PROMPT_SERVED_BAR` on
+the q8 and kq files' served planes, each with the bar's one-element control, the text rotated by one
+token as the compare's control, one hook call and one encode served, the knob-off leg bit-equal with
+its decline); the frames seat after the LLM tier's model drop in the same
 process (`test_pocket_frames_after_model_drop`: one served leg on the q8 file, `moe_gpu_drop_model`,
 the same leg again serving and reading the same frame count - the slabs, the scratch and the voice
 slot rebuilt behind the drop); the served frames cell takes both oracle voices in turn
@@ -2390,8 +2394,8 @@ on each file, so the second voice's slot displaces the first's, within `GPU_FRAM
 with the x3-scaled noise as the compare's control; the seat record's refusal of a
 name no seat carries and its seat names in order (`test_pocket_seat_stats`, model-free); the
 long chunk's codec seat declining by shape; and the served synthesis across the knob, every
-chunk's codec and frame loop served, the encodes
-past one a chunk, the knob-off chunks declining at both seats - where no GPU device serves all
+chunk's prompt, codec and frame loop served, the encodes
+past one a chunk, the knob-off chunks declining at every seat - where no GPU device serves all
 three skip loudly, a present device that declines is a red; the parity, stream and frames cells
 pin the tower off, since the CPU chain is what they hold; the published Q8_0 file
 (`pocket-tts-en-q8.gguf`) against the f16 file's load-time quants - every backbone GEMM arrived

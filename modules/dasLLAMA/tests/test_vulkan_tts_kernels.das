@@ -375,7 +375,7 @@ def test_vkt_sigsum(t0 : T?) {
                 let lp = cp |> in_(logits)
                 let rp = cp |> out_(SG_T)
                 var s = cp |> cls_set(fixed_array(lp, rp), @@set_tts_sigsum_cls)
-                var pa = TtsSigSumArgs(t = uint(SG_T), nb = uint(SG_NB), ls = uint(SG_LS), speed = SG_SPEED)
+                var pa = GkSigSumArgs(t = uint(SG_T), nb = uint(SG_NB), ls = uint(SG_LS), speed = SG_SPEED)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_tts_sigsum_cls(raw, h, s, pa, int64(SG_T))
                 }
@@ -590,9 +590,6 @@ def test_vkt_adain(t0 : T?) {
 }
 
 let private AS_N = 1030     //! four whole workgroups and six more
-let private AS_AOFF = 3
-let private AS_BOFF = 7
-let private AS_OOFF = 11
 let private AS_SLACK = 5    //! elements past the run, left at the sentinel
 
 [test]
@@ -608,26 +605,24 @@ def test_vkt_add_scale(t0 : T?) {
             let a <- row_fill(n, 41, 7, 0.05, 2.1)
             let b <- row_fill(n, 17, 3, 0.04, 1.9)
             with_cell_planes() $(var cp : CellPlanes) {
-                let ap = cp |> in_(a, AS_AOFF)
-                let aip = cp |> io_(a, AS_AOFF)
-                let bp = cp |> in_(b, AS_BOFF)
-                let op = cp |> out_(n, AS_OOFF, AS_SLACK)
+                let ap = cp |> in_(a, 0)
+                let aip = cp |> io_(a, 0, AS_SLACK)
+                let bp = cp |> in_(b, 0)
+                let op = cp |> out_(n, 0, AS_SLACK)
                 var s_o = cp |> cls_set(fixed_array(ap, bp, op), @@set_tts_add_scale_cls)
                 var s_i = cp |> cls_set(fixed_array(aip, bp, aip), @@set_tts_add_scale_cls)
-                var po = TtsAddScaleArgs(nelem = uint(n), scale = scale, aoff = uint(AS_AOFF), boff = uint(AS_BOFF), ooff = uint(AS_OOFF))
-                var pi = po
-                pi.ooff = uint(AS_AOFF)
+                var po = GkAddScaleArgs(nelem = uint(n), scale = scale)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_tts_add_scale_cls(raw, h, s_o, po, int64(n))
-                    enc_tts_add_scale_cls(raw, h, s_i, pi, int64(n))
+                    enc_tts_add_scale_cls(raw, h, s_i, po, int64(n))
                 }
                 let got_i <- cp |> plane_run(aip)
                 let want <- [for (i in range(n)); (a[i] + b[i]) * scale]
                 check_rows(t, "tts_add_scale vs (a + b) * scale", cp |> plane_run(op), want, BAR_EXACT, FLAT_ROWS)
                 check_rows(t, "tts_add_scale in place vs (a + b) * scale", got_i, want, BAR_EXACT, FLAT_ROWS)
                 t |> success(got_i[0] != a[0], "tts_add_scale in place control: the input row is overwritten")
-                t |> success(outside_run(cp |> plane_whole(op), AS_OOFF, n, NAN_SENTINEL), "tts_add_scale: the elements outside the run keep their sentinel")
-                t |> success(outside_run(cp |> plane_whole(aip), AS_AOFF, n, POISON), "tts_add_scale in place: the prefix before aoff is untouched")
+                t |> success(outside_run(cp |> plane_whole(op), 0, n, NAN_SENTINEL), "tts_add_scale: the elements outside the run keep their sentinel")
+                t |> success(outside_run(cp |> plane_whole(aip), 0, n, POISON), "tts_add_scale in place: the elements past the run are untouched")
             }
         } else {
             t |> skip("dasVulkan not present")

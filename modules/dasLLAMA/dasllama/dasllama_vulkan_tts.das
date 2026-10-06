@@ -701,7 +701,7 @@ def private ts_concat(raw : VkCommandBuffer; var h : VkHaz; x, res, f0, nd, o : 
 //! raw[t] = the sigmoid sum of nb logits a row over speed
 def private ts_sigsum(raw : VkCommandBuffer; var h : VkHaz; logits, out : TsRows; t, nb : int64; speed : float) {
     var s = set_tts_sigsum_cls(fixed_array(logits.dev, out.dev), fixed_array(logits.bytes, out.bytes), fixed_array(logits.bit, out.bit))
-    var pa = TtsSigSumArgs(t = uint(t), nb = uint(nb), ls = uint(nb), speed = speed)
+    var pa = GkSigSumArgs(t = uint(t), nb = uint(nb), ls = uint(nb), speed = speed)
     enc_tts_sigsum_cls(raw, h, s, pa, t)
     vt_pt(raw, VtProfRole.tts_rows)
 }
@@ -760,7 +760,7 @@ def private ts_gather_rows(raw : VkCommandBuffer; var h : VkHaz; src, idx, out :
 //! o = (a + b) * scale over n elements (o may be a)
 def private ts_add_scale(raw : VkCommandBuffer; var h : VkHaz; a, b, o : TsRows; n : int64; scale : float) {
     var s = set_tts_add_scale_cls(fixed_array(a.dev, b.dev, o.dev), fixed_array(a.bytes, b.bytes, o.bytes), fixed_array(a.bit, b.bit, o.bit))
-    var pa = TtsAddScaleArgs(nelem = uint(n), scale = scale, aoff = 0u, boff = 0u, ooff = 0u)
+    var pa = GkAddScaleArgs(nelem = uint(n), scale = scale)
     enc_tts_add_scale_cls(raw, h, s, pa, n)
     vt_pt(raw, VtProfRole.tts_rows)
 }
@@ -1364,9 +1364,9 @@ def private ts_stage(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_ : 
     let n = t2 * c2
     if (last) {
         var s = set_tts_pk_rows_cls(fixed_array(r_bxt.dev, r_by.dev), fixed_array(r_bxt.bytes, r_by.bytes), fixed_array(r_bxt.bit, r_by.bit))
-        var shift = TtsPkRowsArgs(rows = uint(t2 - 1l), width = uint(c2), ss = uint(c2), sc = 0u, sr0 = 0u, ds = uint(c2), dc = 0u, dr0 = 1u)
+        var shift = GkPkRowsArgs(rows = uint(t2 - 1l), width = uint(c2), ss = uint(c2), sc = 0u, sr0 = 0u, ds = uint(c2), dc = 0u, dr0 = 1u)
         enc_tts_pk_rows_cls(raw, h, s, shift, n - c2)
-        var head = TtsPkRowsArgs(rows = 1u, width = uint(c2), ss = uint(c2), sc = 0u, sr0 = 1u, ds = uint(c2), dc = 0u, dr0 = 0u)
+        var head = GkPkRowsArgs(rows = 1u, width = uint(c2), ss = uint(c2), sc = 0u, sr0 = 1u, ds = uint(c2), dc = 0u, dr0 = 0u)
         enc_tts_pk_rows_cls(raw, h, s, head, c2)
         vt_pt(raw, VtProfRole.tts_rows)
     }
@@ -1414,7 +1414,7 @@ def private ts_source_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows;
     let r_lowc = ts_rows(sc_, TS_D_LOWC)
     let r_har = ts_rows(sc_, TS_D_HAR)
     let r_spec = ts_rows(sc_, TS_D_SPEC)
-    var ka = TtsSourceArgs(n = uint(sh.ss.samples), nlow = uint(sh.ss.nlow), nh = uint(nh), up = uint(cfg.upsample), sr = cfg.sample_rate, sine_amp = cfg.sine_amp,
+    var ka = GkSourceArgs(n = uint(sh.ss.samples), nlow = uint(sh.ss.nlow), nh = uint(nh), up = uint(cfg.upsample), sr = cfg.sample_rate, sine_amp = cfg.sine_amp,
         noise_std = cfg.noise_std, voiced_thr = cfg.voiced_thr, seed = uint(seed ^ (seed >> 32ul)), woff = uint(sl.src_w), boff = uint(sl.src_b))
     if (!captured) {
         var s0 = set_tts_src_noise_cls(fixed_array(r_noise.dev), fixed_array(r_noise.bytes), fixed_array(r_noise.bit))
@@ -1447,7 +1447,7 @@ def private ts_source_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows;
         vt_pt(raw, VtProfRole.tts_source)
     }
     let re & = unsafe(d.stft_fwd_re)
-    var ks = TtsStftArgs(n = uint(sh.ss.samples), frames = uint(sh.ss.spec_frames), bins = uint(d.bins), k = uint(re.k), hop = uint(re.stride), pad = uint(ST2_STFT_PAD),
+    var ks = GkStftArgs(n = uint(sh.ss.samples), frames = uint(sh.ss.spec_frames), bins = uint(d.bins), k = uint(re.k), hop = uint(re.stride), pad = uint(ST2_STFT_PAD),
         eps = d.stft_eps, reoff = uint(sl.stft_re), imoff = uint(sl.stft_im))
     let st_bufs = fixed_array(r_har.dev, slab.dev, r_spec.dev)
     let st_sizes = fixed_array(r_har.bytes, slab.bytes, r_spec.bytes)
@@ -1567,7 +1567,7 @@ def private vulkan_styletts2_decode(d : St2Decoder; text_c : int64; source : Sin
         ts_source_chain(raw, h, slab, sc_, d, source, sh, noise.captured, seed)
         ts_generator_chain(raw, h, slab, sc_, d, sh.dec_width, sh.dec_rows, sh.ss.spec_frames)
         let r_post = ts_rows(sc_, TS_D_POST)
-        var ki = TtsIstftArgs(tt = uint(sh.t_post), stride = uint(d.conv_post.cout), bins = uint(d.bins), k = uint(bwd.k), hop = uint(bwd.stride),
+        var ki = GkIstftArgs(tt = uint(sh.t_post), stride = uint(d.conv_post.cout), bins = uint(d.bins), k = uint(bwd.k), hop = uint(bwd.stride),
             pad = uint(ST2_STFT_PAD), envelope = d.istft_envelope ? 1u : 0u, n = uint(sh.n_out), reoff = uint(sl.istft_re), imoff = uint(sl.istft_im),
             wnoff = uint(sl.window))
         var s = set_tts_istft_cls(fixed_array(r_post.dev, slab.dev, r_wave.dev), fixed_array(r_post.bytes, slab.bytes, r_wave.bytes), fixed_array(r_post.bit, 0u, r_wave.bit))
@@ -1779,7 +1779,7 @@ def private ts_pk_conv(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; slot
 }
 
 //! a window of rows copied: `rows` x `width` from src [.][ss] at column sc, rows sr0.., into dst [.][ds] at column dc, rows dr0.., the ELU on the way where asked
-def private ts_pk_rows(raw : VkCommandBuffer; var h : VkHaz; src, dst : TsRows; pa : TtsPkRowsArgs; elu : bool) {
+def private ts_pk_rows(raw : VkCommandBuffer; var h : VkHaz; src, dst : TsRows; pa : GkPkRowsArgs; elu : bool) {
     var pc = pa
     let total = int64(pa.rows) * int64(pa.width)
     if (elu) {
@@ -1792,8 +1792,8 @@ def private ts_pk_rows(raw : VkCommandBuffer; var h : VkHaz; src, dst : TsRows; 
     vt_pt(raw, VtProfRole.tts_pk)
 }
 
-def private ts_pk_rows_args(rows, width : int64) : TtsPkRowsArgs
-    => TtsPkRowsArgs(rows = uint(rows), width = uint(width), ss = uint(width), sc = 0u, sr0 = 0u, ds = uint(width), dc = 0u, dr0 = 0u)
+def private ts_pk_rows_args(rows, width : int64) : GkPkRowsArgs
+    => GkPkRowsArgs(rows = uint(rows), width = uint(width), ss = uint(width), sc = 0u, sr0 = 0u, ds = uint(width), dc = 0u, dr0 = 0u)
 
 //! the ELU over x's first rows x width elements in place
 def private ts_pk_elu(raw : VkCommandBuffer; var h : VkHaz; x : TsRows; rows, width : int64) {
@@ -1989,7 +1989,7 @@ def private ts_pk_rows_tf(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; s
     let r_qkv = ts_rows(sc_, slot_qkv)
     let r_ctx = ts_rows(sc_, slot_ctx)
     let r_h = ts_rows(sc_, slot_h)
-    var kc = TtsPkRowsArgs(rows = uint(t), width = uint(d), ss = uint(3l * d), sc = uint(d), sr0 = 0u, ds = uint(d), dc = 0u, dr0 = uint(f.kv_row0))
+    var kc = GkPkRowsArgs(rows = uint(t), width = uint(d), ss = uint(3l * d), sc = uint(d), sr0 = 0u, ds = uint(d), dc = 0u, dr0 = uint(f.kv_row0))
     var pa_gelu = TtsElemArgs(nelem = uint(t * tf.ffn), off = 0u, slope = 0.0)
     var s_gelu = set_tts_gelu_tanh_cls(fixed_array(r_h.dev), fixed_array(r_h.bytes), fixed_array(r_h.bit))
     let coff = f.coff + f.pos0 * half
@@ -2083,7 +2083,7 @@ def private ts_pk_codec_chain(raw : VkCommandBuffer; var h : VkHaz; slab : TsRow
     ts_pk_elu(raw, h, cur, t, w)
     let r_o = ts_rows(sc_, TS_C_O)
     ts_pk_conv(raw, h, slab, sl.dec_out, mm.dec_out, t, cur, r_col, r_o)
-    let kw = TtsPkRowsArgs(rows = uint(t), width = 1u, ss = uint(mm.dec_out.cout), sc = 0u, sr0 = 0u, ds = 1u, dc = 0u, dr0 = 0u)
+    let kw = GkPkRowsArgs(rows = uint(t), width = 1u, ss = uint(mm.dec_out.cout), sc = 0u, sr0 = 0u, ds = 1u, dc = 0u, dr0 = 0u)
     ts_pk_rows(raw, h, r_o, ts_rows(sc_, TS_C_WAVE), kw, false)
 }
 
@@ -2234,7 +2234,7 @@ def private ts_pk_frame(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; sc_
     }
     ts_ln(raw, h, slab, sl.out_norm, r_x, r_xb, 1l, d, m.backbone.eps)
     let coff = f * d
-    let kc = TtsPkRowsArgs(rows = 1u, width = uint(d), ss = uint(d), sc = 0u, sr0 = 0u, ds = uint(d), dc = 0u, dr0 = uint(f))
+    let kc = GkPkRowsArgs(rows = 1u, width = uint(d), ss = uint(d), sc = 0u, sr0 = 0u, ds = uint(d), dc = 0u, dr0 = uint(f))
     ts_pk_rows(raw, h, r_xb, r_conds, kc, false)
     ts_pk_lin(raw, h, slab, sl.out_eos, d, 1l, r_conds, coff, ts_rows(sc_, TS_F_EOS), f)
     let noff = i * ld

@@ -63,7 +63,7 @@ def test_vkt_pk_rows(t0 : T?) {
                 let ep = cp |> out_(ndst)
                 var s_p = cp |> cls_set(fixed_array(sp, dp), @@set_tts_pk_rows_cls)
                 var s_e = cp |> cls_set(fixed_array(sp, ep), @@set_tts_pk_rows_elu_cls)
-                var pa = TtsPkRowsArgs(rows = uint(PR_ROWS), width = uint(PR_WIDTH), ss = uint(PR_SS), sc = uint(PR_SC), sr0 = uint(PR_SR0),
+                var pa = GkPkRowsArgs(rows = uint(PR_ROWS), width = uint(PR_WIDTH), ss = uint(PR_SS), sc = uint(PR_SC), sr0 = uint(PR_SR0),
                     ds = uint(PR_DS), dc = uint(PR_DC), dr0 = uint(PR_DR0))
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_tts_pk_rows_cls(raw, h, s_p, pa, int64(nwin))
