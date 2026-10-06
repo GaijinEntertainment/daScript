@@ -11,6 +11,7 @@ require dasllama/dasllama_tts
 require dasllama/dasllama_audio_io
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_tts_blocks
+require dasllama/dasllama_tts_slab   // the prompt's cache admission and residency record, model-free
 require dasllama/dasllama_math   // with_dasllama_jobque_
 require dasllama/dasllama   // moe_gpu_drop_model: the LLM tier's model drop between two syntheses
 require daslib/jobque_boost
@@ -658,6 +659,54 @@ def private frames_seat_leg(t : T?; m : PocketModel; var k : ForcedCase; tag : s
         r.fc = fc
     }
     return <- r
+}
+
+//! The prompt seat's two model-free rules on a bare voice state: the cache admission's four refusals, and the
+//! residency record - spent by one take, and held to the voice, the slot build, the fill, the row count and the
+//! embedding rows it was set under.
+[test]
+def test_pocket_prompt_rules(t : T?) {
+    t |> run("the prompt admission refuses an empty prompt, a cache count off the layers, rows past the capacity and a capacity past the keys") @(t : T?) {
+        var inscope m = PocketModel()
+        m.backbone.layers |> resize(2)
+        m.backbone.d = 8l
+        m.backbone.heads = 2l
+        var inscope vs = PocketVoiceState(len = 5l)
+        vs.caches |> resize(2)
+        for (kc in vs.caches) {
+            kv_cache_init(kc, 2l, 4l, 20l)
+        }
+        t |> success(tts_pk_prompt_admit(m, vs, 3l, 64l), "a three-row prompt over a 20-row cache of two layers is admitted")
+        t |> success(!tts_pk_prompt_admit(m, vs, 0l, 64l), "an empty prompt is refused")
+        t |> success(!tts_pk_prompt_admit(m, vs, 16l, 64l), "voice + text past the capacity is refused")
+        t |> success(tts_pk_prompt_admit(m, vs, 15l, 20l), "a capacity at the keys' cap is admitted")
+        t |> success(!tts_pk_prompt_admit(m, vs, 3l, 16l), "a capacity past the keys' cap is refused")
+        vs.caches |> resize(1)
+        t |> success(!tts_pk_prompt_admit(m, vs, 3l, 64l), "a cache count off the layers is refused")
+    }
+    t |> run("the residency record is spent by one take and held to what it was set under") @(t : T?) {
+        var inscope vs = PocketVoiceState(len = 5l)
+        vs.caches |> resize(1)
+        kv_cache_init(vs.caches[0], 2l, 4l, 20l)
+        var inscope rows <- [for (i in range(3 * 8)); float(i) * 0.25]
+        var rec : TtsPkPromptDev
+        t |> equal(tts_pk_prompt_dev_take(rec, vs, 7ul, rows, 3l, 8l), 0l, "an empty record holds no rows")
+        tts_pk_prompt_dev_set(rec, vs, 7ul, rows, 3l, 8l)
+        t |> equal(tts_pk_prompt_dev_take(rec, vs, 7ul, rows, 3l, 8l), 3l, "the record set under this voice, build, prompt and rows hands them back")
+        t |> equal(tts_pk_prompt_dev_take(rec, vs, 7ul, rows, 3l, 8l), 0l, "one take spends it")
+        tts_pk_prompt_dev_set(rec, vs, 7ul, rows, 3l, 8l)
+        t |> equal(tts_pk_prompt_dev_take(rec, vs, 8ul, rows, 3l, 8l), 0l, "another slot build misses it")
+        tts_pk_prompt_dev_set(rec, vs, 7ul, rows, 3l, 8l)
+        t |> equal(tts_pk_prompt_dev_take(rec, vs, 7ul, rows, 2l, 8l), 0l, "another row count misses it")
+        tts_pk_prompt_dev_set(rec, vs, 7ul, rows, 3l, 8l)
+        var inscope other := rows
+        other[1] += 1.0
+        t |> equal(tts_pk_prompt_dev_take(rec, vs, 7ul, other, 3l, 8l), 0l, "other embedding rows of the same length miss it")
+        tts_pk_prompt_dev_set(rec, vs, 7ul, rows, 3l, 8l)
+        vs.len = 6l
+        t |> equal(tts_pk_prompt_dev_take(rec, vs, 7ul, rows, 3l, 8l), 0l, "another fill misses it")
+        t |> equal(tts_pk_prompt_dev_take(rec, vs, 7ul, rows, 3l, 8l), 0l, "a miss spends it too")
+    }
 }
 
 [test]

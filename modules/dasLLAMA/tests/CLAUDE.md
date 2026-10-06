@@ -2384,7 +2384,9 @@ pod) with the generator check, batches of three (the encode count within one of 
 the batch the EOS frame lands in may split the tail - the latents within the bar, a batch below
 one clamping to one), and the
 seats taken by an empty record and given back (`register_pocket_gpu` / `unregister_pocket_gpu`,
-the hook unreached then serving again); the prompt seat (`test_pocket_prompt_gpu`: every layer's K and V rows of one case's text, the
+the hook unreached then serving again); the prompt seat's model-free rules (`test_pocket_prompt_rules`: the cache admission's four refusals on a
+bare voice state, and the residency record spent by one take and missing on another slot build, row
+count, fill or embedding rows); the prompt seat (`test_pocket_prompt_gpu`: every layer's K and V rows of one case's text, the
 seat against the CPU chain, within `GPU_PROMPT_BAR` on the f32 lane and `GPU_PROMPT_SERVED_BAR` on
 the q8 and kq files' served planes, each with the bar's one-element control, the text rotated by one
 token as the compare's control, one hook call and one encode served, the knob-off leg bit-equal with

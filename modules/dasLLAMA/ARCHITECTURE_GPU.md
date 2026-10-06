@@ -281,9 +281,7 @@ key it has on that home.
   stamps it, so a shared reduction calls `gk_subgroup_add` / `gk_subgroup_max`, and each kernel home
   defines the pair over its own primitive (`subgroupAdd` on Vulkan, `simd_sum` on Metal). A free function
   in the common module resolves in the common module and sees neither home, so a body that needs a
-  home's primitive keeps it in a method. A buffer a body hands whole to a free helper of the common
-  module takes the helper's parameter direction: the access classifier looks the callee up in the
-  compiling module first and in `dasllama_gpu_kernels_common` after it.
+  home's primitive keeps it in a method.
 - **What stays per home:** the GEMM and attention tiles, which each home builds on its own matrix
   primitives. A pair whose two forms differ in shape (the elementwise maps run one element a thread on
   Metal and four an invocation on Vulkan) folds onto one body when both homes profile the same on it, and
