@@ -1714,11 +1714,14 @@ module) is independent and can land any time - it is pure structure.
     are f32 K/V shadows on the full layers (four of 32) and an f32-x GEMM form for the late blocks'
     feed; the instrument is `test_qwen25v_vulkan_twin`'s whole-tower legs with the bar at what the
     lever reads.
-95. **The Vulkan vision tower's speed levers.** gemma3v rides the pre-LN chain (`vt_ln_chain`),
-    which already has the cm2 f16 feed and the row passes that store it (`ARCHITECTURE_GPU_TOWER_VULKAN.md`
-    2.2ar); gemma4v, qwen3v and qwen25v keep one dispatch per CPU loop step. The levers there: the
-    cm2 f16 feed in place of the Q8_0 requant and the q8 batch tile where the device has cm2;
-    fusing the per-row dispatches that sit between two GEMMs (a bias, an activation, a restride)
+95. **The Vulkan vision tower's speed levers.** gemma3v's q8 lane rides the pre-LN chain (`vt_ln_chain`),
+    which already has the cm2 f16 feed and the row passes that store it
+    (`ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains`); gemma4v's and qwen3v's q8 lanes keep
+    the Q8_0 requant feed and the q8 batch tile, and every family's exact lane rides the f32 tile
+    (`ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains`). The levers: the cm2 f16 feed on
+    gemma4v's and qwen3v's q8 lanes where the device has cm2; an f16 slab for the exact lane (the halfword
+    twin the family bakes, or the bf16 rows as halves) through the f16 GEMM class, as qwen25v's chain
+    rides; fusing the per-row dispatches that sit between two GEMMs (a bias, an activation, a restride)
     into the GEMM's epilogue or the next class; and, on every vision chain, the head restrides
     folded into the flash tile's load on the padded route and K and V staged in workgroup memory on
     the f32 window route (it reads them off the compact rows). The instrument is `lcpp_bench

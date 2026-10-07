@@ -677,7 +677,11 @@ classes at `ln_on = 0` (the seam alone, the pre-norm output proven untouched by 
 at `ascale = 0.5` (the branch at half weight, the CPU form weighted the same), the plain seam stamp
 (`TowerPostAddPlain` at `ascale = 0.5` and at `ln_on = 0`: the branch added at half weight with no
 post-norm, told apart from the post-norm stamp), the bias class at `act = BIAS_ACT_NONE` (the bias
-alone against `add_bias_rows`) and its relu arm against `max(x + b, 0)`; the biased-block classes (the layernorm, the bias with its tanh
+alone against `add_bias_rows`) and its relu arm against `max(x + b, 0)`; the vision stems' and tails' row
+classes (`test_vkt_tower_vision_rows`: the patch im2col under the [0, 1] -> [-1, 1] map against
+`im2col_rgb_patches` with its pad rows zero, the 2-axis position add, the merge-walk stem assemble, the
+grid pool against `avg_pool2d_rows`, and the standardize rows on both arms, each with its poisoned
+expectation); the biased-block classes (the layernorm, the bias with its tanh
 GELU, the seam with its next layernorm, the head restrides to the tile's 128 and the rope on a
 fused row's k slot) the same way, and their f16-feed twins (`test_vkt_tower_f16_feeds`: the
 layernorm and the seam storing half, the biased restrides (the bias row added as the pad reads),
@@ -2151,7 +2155,10 @@ measured maxdiff logged per fixture; plus the clamp knockout (every block clamp 
 the staging planes must miss the oracle - the sidecar scalars are load-bearing); plus the E4B rung
 - the same tower geometry at soft-token width 2560, gated on its mmproj's four-dump seam subset
 with one GPU-engage and one q8-lane fixture. Skips honestly without the mmprojs or dumps. Every
-CPU-lane claim pins BOTH GPU tower knobs off (`set_every_gpu_tower`). On a Vulkan build two more cells:
+CPU-lane claim pins BOTH GPU tower knobs off (`set_every_gpu_tower`). On Apple builds `test_gemma4v_tier1_gpu`
+gates the fixtures through the Metal chain - the stem, the blocks and the tail on the device - with the engage
+counters, the knob-off decline leg, and the q8 lane on the device: a q8 tower minted under the pin serves off
+its q8 planes on the q8 lane's bar, every block counted, no `quant_mode` decline. On a Vulkan build two more cells:
 `test_gemma4v_tier1_vulkan` runs four dumps through the Vulkan block loop over the q8 image (minted
 in memory under the lane pin, the pin restored) on the q8 lane's bar with the engage counters per
 fixture, then the input poison - a q8 tower with block 8's planes zeroed, served by the driver, must

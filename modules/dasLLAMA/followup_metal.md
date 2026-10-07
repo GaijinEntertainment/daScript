@@ -902,11 +902,6 @@ Each is a stage and the models it holds for, read off the drivers' own gates:
   the CPU spectrum.
 - **The whisper-class projector tail** runs on the CPU on a q8 tower - its projector planes are not
   on the device - and on a tower whose tail widths are off the f32 GEMM lattice.
-- **The vision towers' im2col** (gemma3v, gemma4v) runs on the CPU, and so does gemma4v's sum of its
-  two position-table rows a patch; the patch conv and the tail run on the device. The tail falls
-  back to the CPU where the patch grid does not pool whole or its widths are off the GEMM lattice.
-  The q8 lane's whole chain runs on the CPU. qwen3v and qwen25v have had no stage-by-stage check of
-  their merger tails.
 - **Qwen3-Omni** has had no stage-by-stage check.
 
 The work: each stage on the device, and a counter per stage a gate can read, so a served model's
@@ -944,9 +939,6 @@ Each pair below differs on the one axis named, and the fold is behavior-neutral 
   `dasllama_gemma4v.das`; the bench's `unseen_clip` temp path beside `create_temp_file`; the test helpers
   `with_tower_audio_server` / `with_audio_server`, `tail_gpu_cell` / `test_gemma3v_tail_gpu`'s body, and the
   two heap-flat legs.
-- **Not a fold.** gemma4v's position rows add as `x + (ex + ey)` on the device and `(x + ex) + ey` on the CPU; one
-  helper changes one side's sums. The CPU mel's power spectrum is shared by `log_mel_spectrum_cpu` and
-  `dasllama_qwen3a.das`, the mel sums behind it are not: each matches its own reference.
 
 ## 41. The projector tails run on the f32 tiles beside a resident halfword copy
 

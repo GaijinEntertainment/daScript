@@ -1760,7 +1760,6 @@ struct private G4vEnds {
     bplanes : MetalBuffer?  //!< the image planes, the im2col's input
     w : int64               //!< the canvas
     h : int64
-    bpos : MetalBuffer?     //!< each row's x + y position-table rows, summed
     bpool : MetalBuffer?    //!< the pooled rows [mpo x d]
     bclamp : MetalBuffer?   //!< their clamped copy, the projection's input
     bout : MetalBuffer?     //!< the soft tokens [mpo x proj_dim]
@@ -1769,32 +1768,19 @@ struct private G4vEnds {
     u_totpool : MetalBuffer?
     u_totout : MetalBuffer?
     bytes_x0 : uint64
-    bytes_pos : uint64
     bytes_pool : uint64
     bytes_out : uint64
 }
 
 //! The stem's operands up, and the tail's rows where the lever allows, its kernels are compiled, the grid pools whole and
 //! the projection sits on its GEMM's lattice.
-def private g4v_ends_make(t : Gemma4vTower; s : Gemma4vState; planes : array<float>; w, h, npos, mp : int64) : G4vEnds {
+def private g4v_ends_make(t : Gemma4vTower; s : Gemma4vState; planes : array<float>; w, h, mp : int64) : G4vEnds {
     let d = t.n_embd
     let n_cols = s.grid_w
-    var e = G4vEnds(n_cols = n_cols, w = w, h = h, bytes_x0 = uint64(mp * t.patch_dim * 4l), bytes_pos = uint64(mp * d * 4l))
+    var e = G4vEnds(n_cols = n_cols, w = w, h = h, bytes_x0 = uint64(mp * t.patch_dim * 4l))
     e.bx0 = pool_acquire_pinned(g_tw_pool, g_dev, e.bytes_x0)
     e.bplanes = tw_planes_up(planes, w, h)
-    e.bpos = pool_acquire_pinned(g_tw_pool, g_dev, e.bytes_pos)
     e.u_pd = uniform_u32(uint(t.patch_dim))
-    unsafe {
-        var pp = reinterpret<float?>(metal_buffer_contents(e.bpos))
-        let tbl = plane_at(t.blob, t.pos_w)
-        for (pi in range64(npos)) {
-            let ex = tbl + (pi % n_cols) * d
-            let ey = tbl + (t.pos_entries + pi / n_cols) * d
-            for (i in range64(d)) {
-                pp[pi * d + i] = ex[i] + ey[i]
-            }
-        }
-    }
     e.tail = (g_tw_tail && pf_tw_tail_ready() && n_cols % t.merge == 0l && s.grid_h % t.merge == 0l
         && d <= int64(TW_ONES_DIM) && t.proj_dim % 64l == 0l)
     return e if (!e.tail)
@@ -1837,11 +1823,12 @@ def private tw_patch_im2col(enc : MetalComputeEncoder?; bplanes, bx0 : MetalBuff
 //! The stem on the device: the patch conv over the columns, then each row's position rows.
 [arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
 def private g4v_stem_body(enc : MetalComputeEncoder?; t : Gemma4vTower; e : G4vEnds; bblob, bwblob, bx : MetalBuffer?;
-                          u_d, u_totd : MetalBuffer?; mp, npos : int64) {
+                          u_d : MetalBuffer?; mp, npos : int64) {
     let d = t.n_embd
     tw_patch_im2col(enc, e.bplanes, e.bx0, e.w, e.h, t.patch, t.patch_dim, npos, mp, 2.0, -1.0)   //! inp_raw_scaled: [0, 1] -> [-1, 1]
     tw_mm(enc, false, t.patch_bf16, bwblob, bblob, t.patch_w, e.bx0, null, bx, 0ul, e.u_pd, u_d, mp, d, t.patch_dim, false)
-    enc_add(enc, bx, 0ul, e.bpos, 0ul, u_totd, npos * d)
+    var pos2d = GkPosAdd2DArgs(dim = uint(d), ncols = uint(e.n_cols), pos_entries = uint(t.pos_entries), total = uint(npos * d), tboff = uint(t.pos_w))
+    enc_posadd2d(enc, bx, bblob, pos2d, npos * d)
 }
 
 //! The CPU tail's steps behind the blocks: the grid mean pool, the sqrt(d) scale and the standardize, the weightless
@@ -1867,7 +1854,6 @@ def private g4v_tail_body(enc : MetalComputeEncoder?; t : Gemma4vTower; e : G4vE
 def private g4v_ends_land(t : Gemma4vTower; var e : G4vEnds; ran : bool; var s : Gemma4vState) {
     pool_release(g_tw_pool, e.bx0, e.bytes_x0)
     pool_release(g_tw_pool, e.bplanes, tw_planes_bytes(e.w, e.h))
-    pool_release(g_tw_pool, e.bpos, e.bytes_pos)
     pool_release(g_upool, e.u_pd, 4ul)
     return if (!e.tail)
     if (ran) {
@@ -1931,18 +1917,17 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; planes 
     var batt = pool_acquire_pinned(g_tw_pool, g_dev, bytes_att)
     var bstat = pool_acquire_pinned(g_tw_pool, g_dev, bytes_stat)
     var btabs = pool_acquire_pinned(g_tw_pool, g_dev, bytes_tabs)
-    var ends = g4v_ends_make(t, s, planes, w, h, npos, mp)
+    var ends = g4v_ends_make(t, s, planes, w, h, mp)
     zero_rows(bk, npos, nk64, d)
     gemma4v_pack_rope_tabs(s, npos, pairs, unsafe(reinterpret<float?>(metal_buffer_contents(btabs))))
     var u_d = uniform_u32(uint(d))
     var u_ff = uniform_u32(uint(ff))
-    var u_totd = uniform_u32(uint(npos * d))
     var ka = AttnArgs(qd = uint(d), kv_dim = uint(d), head_size = uint(hs), kv_mul = 1u,
         npos = uint(npos), np32 = uint(nk64), scale = 1.0,
         qoff = 0u, qrows = uint(mp), window = 0u, softcap = 0.0, hass = 0u, uend = uint(npos))
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
-        g4v_stem_body(enc, t, ends, bblob, bwblob, bx, u_d, u_totd, mp, npos)
+        g4v_stem_body(enc, t, ends, bblob, bwblob, bx, u_d, mp, npos)
         if (t.n_layer > 0l) {   //! block 0's pre-norm; every later one rides its seam
             enc_tw_rms(enc, bx, bxb, bblob, gk_rms_args(uint(d), uint(npos), t.eps, uint(gemma4v_block_offs(t, 0l).ln1)), npos)
         }
@@ -2024,7 +2009,6 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; planes 
     pool_release(g_tw_pool, btabs, bytes_tabs)
     pool_release(g_upool, u_d, 4ul)
     pool_release(g_upool, u_ff, 4ul)
-    pool_release(g_upool, u_totd, 4ul)
     if (!served) {
         return tw_decline(MetalTowerDecline.gpu_error)
     }
