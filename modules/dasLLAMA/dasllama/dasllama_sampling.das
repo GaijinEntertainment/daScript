@@ -57,9 +57,9 @@ def private apply_penalties_(s : Session; params : SamplingParams; var row : arr
     }
 }
 
-//! Sample the next token from `s.logits` per `params`: penalties, then temp + top-k, softmax,
-//! top-p/min-p, and a CDF draw (or greedy argmax when temp <= 0). Consumes `s.logits` in place.
-//! A token the speculative round's accept walk already drew (s.mtp_pre_tok) is returned instead.
+//! Sample the next token from `s.logits` per `params`: penalties, temp + top-k, softmax, top-p/min-p, a CDF draw
+//! (the argmax at temp <= 0); under `s.constrain` the best admitted token, -1 + `constrain_dead` at a dead end.
+//! Consumes `s.logits` in place; a token the accept walk already drew (s.mtp_pre_tok) is returned instead.
 [hot_path]   // once per generated token
 def sample_(var s : Session; params : SamplingParams) : int64 {
     s.sampled = !sampler_is_argmax(params) || s.constrain != null   // any non-argmax draw (a temperature, or a penalty at temp 0) stands the greedy chain down: it predicts the raw argmax, the sampler picks something else
@@ -85,9 +85,20 @@ def sample_(var s : Session; params : SamplingParams) : int64 {
 //! The candidates a constrained draw probes before it walks the whole vocabulary.
 let CONSTRAINED_PROBE_K = 256l
 
+// the first candidate the constraint admits, in logit order, committed; -1 when it admits none
+def private first_admitted(var s : Session) : int64 {
+    sort(s.cand) $(x, y : SampleCand) : bool { return cand_precedes_(x, y) }
+    for (c in s.cand) {
+        if (s.constrain->admits(c.id)) {
+            s.constrain->commit(c.id)
+            return c.id
+        }
+    }
+    return -1l
+}
+
 // the best admitted token of the row: the argmax when it passes, else the row's k largest in logit order,
-// else every token in logit order; the winner is committed. The row's own argmax when nothing is admitted -
-// a dead end the grammar's construction rules out, so the stream's stop logic takes over.
+// else every token in logit order; the winner is committed. -1 and `constrain_dead` when nothing is admitted.
 def private constrained_pick(var s : Session; vocab : int64) : int64 {
     let best = argmax(s, vocab)
     if (s.constrain->admits(best)) {
@@ -95,30 +106,25 @@ def private constrained_pick(var s : Session; vocab : int64) : int64 {
         return best
     }
     select_top_k_(s, s.logits, 0l, vocab, min(CONSTRAINED_PROBE_K, vocab))
-    sort(s.cand) $(x, y : SampleCand) : bool { return cand_precedes_(x, y) }
-    for (c in s.cand) {
-        if (s.constrain->admits(c.id)) {
-            s.constrain->commit(c.id)
-            return c.id
-        }
+    let near = first_admitted(s)
+    if (near >= 0l) {
+        return near
     }
     s.cand |> clear()
     s.cand |> reserve(vocab)
     for (i in range64(vocab)) {
         s.cand |> push(SampleCand(id = i, v = s.logits[i]))
     }
-    sort(s.cand) $(x, y : SampleCand) : bool { return cand_precedes_(x, y) }
-    for (c in s.cand) {
-        if (s.constrain->admits(c.id)) {
-            s.constrain->commit(c.id)
-            return c.id
-        }
+    let far = first_admitted(s)
+    if (far < 0l) {
+        s.constrain_dead = true
     }
-    return best
+    return far
 }
 
 //! The widest top-k the candidate-list sampler serves; a wider (or absent) top-k takes the
-//! vocab-wide reference path.
+//! vocab-wide reference path - under a constraint it takes the candidate list at this cap instead,
+//! since every candidate is probed.
 let SAMPLE_TOPK_FAST_CAP = 1024l
 
 //! sample_'s row form over the `vocab`-wide logits row at `off` in `row` (the sampler's scratch
@@ -142,7 +148,8 @@ def sample_logits_row(var s : Session; params : SamplingParams; var row : array<
         if (kept == 0) {
             return constrained_pick(s, vocab)
         }
-        s.cand |> resize(kept)
+        s.cand |> reserve(kept)   // the list only shrinks here; the reserve is the exact-size contract's
+    s.cand |> resize(kept)
         let tok = sample_candidates_(s, params)
         s.constrain->commit(tok)
         return tok
@@ -365,7 +372,7 @@ def generate_(t : Model; var s : Session; prompt : array<int64>; params : Sampli
             s.stat_ttft_us = int64(get_time_usec(t_pre))
             got_first = true
         }
-        if (!invoke(blk, tok, piece_(t, tok))) {
+        if (tok < 0l || !invoke(blk, tok, piece_(t, tok))) {   // a constraint's dead end, or the caller's stop
             break
         }
         nout++
@@ -400,7 +407,7 @@ def generate_embd_(t : Model; var s : Session; embd : array<float>; npos : int64
             s.stat_ttft_us = int64(get_time_usec(t_pre))
             got_first = true
         }
-        if (!invoke(blk, tok, piece_(t, tok))) {
+        if (tok < 0l || !invoke(blk, tok, piece_(t, tok))) {   // a constraint's dead end, or the caller's stop
             break
         }
         nout++

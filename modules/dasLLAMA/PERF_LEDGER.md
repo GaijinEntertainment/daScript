@@ -11,6 +11,13 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **STATED (2026-10-07) - the token constraint's two vocabulary-sized allocations.** `Session.cand` (16 B an entry)
+  grows to the whole row only when a constraint refuses every candidate of the probe window: 16 x vocab bytes a
+  session, 2.4 MB at a 151936-entry vocabulary (Qwen), 4.2 MB at 262144 (gemma); it is `@scratch @exact_size` and
+  reused, so the growth is paid once a session. `utils/dasllama-server`'s token piece table holds one string a token
+  a served slot, built on the slot's first constrained request: about (24 + the piece's bytes) x vocab, 6 MB at
+  151936 and 10 MB at 262144, freed with the slot. Neither is measured; the formulas are the record.
+
 - **MEASURED (2026-10-06, `direction-grade`, `debug-jit`) - the 4-bit formats of Qwen3.6-35B-A3B at equal bytes, and
   four races on their Metal expert GEMVs.** M1 Max (MacBookPro18,2, 64 GB), Metal, one stream, the sidecar
   re-minted on the binary the same day (0 winner changes against the one the mtime rule had called stale);

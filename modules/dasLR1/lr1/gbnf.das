@@ -6,6 +6,7 @@ module gbnf shared public
 
 require lr1/lr1
 require daslib/strings_boost
+require daslib/utf8_utils
 require math
 
 // A reader for grammars in GBNF, the BNF dialect llama.cpp's grammar files use: `name ::= alternatives`,
@@ -87,7 +88,8 @@ def private read_name(var r : Reader) : string {
     }
 }
 
-def private hex_val(c : int) : int {
+//! The value of a hex digit (a code point), -1 for any other character.
+def hex_digit_value(c : int) : int {
     if (is_number(c)) {
         return c - '0'
     }
@@ -103,7 +105,7 @@ def private hex_val(c : int) : int {
 def private read_hex(var r : Reader; digits : int) : int {
     var v = 0
     for (_ in range(digits)) {
-        let h = hex_val(peek(r))
+        let h = hex_digit_value(peek(r))
         if (h < 0) {
             fail(r, "bad hex escape")
             return 0
@@ -172,25 +174,7 @@ struct private CpRange {
 
 def private utf8_len(cp : int) : int => cp < 128 ? 1 : (cp < 2048 ? 2 : (cp < 65536 ? 3 : 4))
 
-def private utf8_bytes(cp : int) : array<int> {
-    var out : array<int>
-    if (cp < 128) {
-        out |> push(cp)
-    } elif (cp < 2048) {
-        out |> push(192 | (cp >> 6))
-        out |> push(128 | (cp & 63))
-    } elif (cp < 65536) {
-        out |> push(224 | (cp >> 12))
-        out |> push(128 | ((cp >> 6) & 63))
-        out |> push(128 | (cp & 63))
-    } else {
-        out |> push(240 | (cp >> 18))
-        out |> push(128 | ((cp >> 12) & 63))
-        out |> push(128 | ((cp >> 6) & 63))
-        out |> push(128 | (cp & 63))
-    }
-    return <- out
-}
+def private utf8_bytes(cp : int) : array<int> => [for (b in utf8_encode(uint(cp))); int(b)]
 
 // the byte-sequence alternatives of one code point range as productions of rule `rule`: split at the
 // UTF-8 length boundaries, then recursively so every alternative is a sequence of independent byte ranges
@@ -337,6 +321,11 @@ def private read_literal(var r : Reader; var seq : array<GrammarSym>) {
     r.pos++   // closing quote
 }
 
+//! The largest bound a `{m,n}` repetition (or a schema's item, length or pattern count) may name: each
+//! copy past the minimum is a rule of its own, and the grammar text a request carries must not buy an
+//! unbounded build.
+let GBNF_REPEAT_CAP = 1024
+
 // the rule for `x` repeated: x* / x+ / x? / x{m,n}; `x` is a one-symbol sequence or a group rule
 def private repeat_symbol(var r : Reader; x : GrammarSym; lo, hi : int) : GrammarSym {
     // x{lo,hi}: lo copies, then a chain of up to (hi - lo) optional copies; hi < 0 = unbounded
@@ -417,6 +406,10 @@ def private read_repetition(var r : Reader; x : GrammarSym) : GrammarSym {
             return x
         }
         r.pos++
+        if (lo > GBNF_REPEAT_CAP || hi > GBNF_REPEAT_CAP) {
+            fail(r, "repetition bound {max(lo, hi)} is past the cap of {GBNF_REPEAT_CAP}")
+            return x
+        }
         return repeat_symbol(r, x, lo, hi)
     }
     return x

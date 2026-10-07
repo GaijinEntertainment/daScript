@@ -21,16 +21,10 @@ require strings
 //! Per served slot, every token's bytes: decoded once, on the first constrained request the slot serves.
 var private g_token_pieces : array<array<string>>
 
-//! Compiled grammars by their GBNF text: a schema the clients repeat compiles once.
+//! Compiled grammars by their GBNF text: a schema the clients repeat compiles once. Clients choose the
+//! keys, so the table is emptied once it holds `GRAMMAR_CACHE_MAX` grammars.
 var private g_grammar_cache : table<string; Grammar>
-
-// a token's bytes, free of the decoder's first-token treatment: the token decoded twice, minus the token
-// decoded once (a SentencePiece decoder drops the leading space of a sentence-initial piece)
-def private token_piece(m : Model; id : int64) : string {
-    let once = decode(m, [id])
-    let twice = decode(m, [id, id])
-    return length(twice) >= length(once) ? slice(twice, length(once)) : once
-}
+let GRAMMAR_CACHE_MAX = 64
 
 //! Build the piece table of `slot`'s model if it is not built yet.
 def token_pieces(m : Model; slot : int) {
@@ -41,7 +35,7 @@ def token_pieces(m : Model; slot : int) {
         let vocab = int(m.config.vocab_size)
         g_token_pieces[slot] |> resize(vocab)
         for (id in range(vocab)) {
-            g_token_pieces[slot][id] = token_piece(m, int64(id))
+            g_token_pieces[slot][id] = piece(m, int64(id))   // the stream's own text for the token
         }
     }
 }
@@ -77,6 +71,9 @@ def private grammar_for(gbnf : string; var err : string&) : Grammar {
     }
     var built <- gbnf_grammar(gbnf, err)
     if (empty(err)) {
+        if (length(g_grammar_cache) >= GRAMMAR_CACHE_MAX) {
+            delete g_grammar_cache
+        }
         var copy : Grammar
         copy := built
         g_grammar_cache[gbnf] <- copy
@@ -122,15 +119,8 @@ def grammar_constraint(m : Model; slot : int; var g : Grammar; var ends : table<
     return c
 }
 
-//! Whether the request asks for a constrained reply at all: a JSON `response_format`, or a forced `tool_choice`.
-def asks_constraint(js : JsonValue?) : bool {
-    let rf = js?["response_format"]
-    if (rf != null && rf.value is _object) {
-        let rtype = rf?["type"] ?? ""
-        if (rtype == "json_object" || rtype == "json_schema") {
-            return true
-        }
-    }
+// a `tool_choice` that forces a call: the object form, or "required"
+def private forces_tool(js : JsonValue?) : bool {
     let tcv = js?["tool_choice"]
     if (tcv != null && tcv.value is _object) {
         return true
@@ -139,17 +129,10 @@ def asks_constraint(js : JsonValue?) : bool {
 }
 
 //! Whether the request carries a constraint field at all - a `response_format` of any shape, or a
-//! `tool_choice` that is not auto/none - so its reader runs and refuses a malformed one.
+//! `tool_choice` that forces a call - so its reader runs and refuses a malformed one.
 def constraint_fields_present(js : JsonValue?) : bool {
     let rf = js?["response_format"]
-    if (rf != null && !(rf.value is _null)) {
-        return true
-    }
-    let tcv = js?["tool_choice"]
-    if (tcv != null && tcv.value is _object) {
-        return true
-    }
-    return tcv != null && tcv.value is _string && (tcv ?? "") == "required"
+    return (rf != null && !(rf.value is _null)) || forces_tool(js)
 }
 
 //! The verdict of reading a request's constraint fields.
@@ -222,16 +205,14 @@ def read_constraint_spec(js : JsonValue?; tools : array<string>; call_open, call
     }
     let tcv = js?["tool_choice"]
     var forced_name = ""
-    var required = false
     if (tcv != null && tcv.value is _object) {
         forced_name = tcv?["function"]?["name"] ?? ""
         if (empty(forced_name)) {
             spec.err = "'tool_choice' as an object names a function: \{\"type\":\"function\",\"function\":\{\"name\":...\}\}"
             return <- spec
         }
-    } elif (tcv != null && tcv.value is _string && (tcv ?? "") == "required") {
-        required = true
     }
+    let required = empty(forced_name) && forces_tool(js)
     if (!empty(forced_name) || required) {
         if (empty(tools)) {
             spec.err = "'tool_choice' forces a tool call but the request declares no tools"

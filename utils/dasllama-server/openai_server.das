@@ -425,6 +425,7 @@ def set_model(var m : Model; name : string) {
     unsafe {
         delete g_slots
     }
+    reset_token_pieces()
     g_default_slot = 0
     g_active = 0
     g_cur = 0
@@ -2964,11 +2965,17 @@ def private register_request(srv : FrontLink; writer : WriterRef;
                              include_usage : bool = false; resumed : bool = false;
                              var constraint : TokenConstraint? = null) {
     if (bench_hold_active()) {
+        unsafe {
+            delete constraint
+        }
         service_unavailable(srv, writer, ibench_hold_text())
         return
     }
     let np = long_length(prompt)   // media positions included: a span's ids stand in the prompt
     if (np + 1l > cur_model().config.seq_len) {
+        unsafe {
+            delete constraint
+        }
         bad_request(srv, writer, "the rendered prompt is {np} tokens; the model context is {cur_model().config.seq_len} — shorten the conversation or raise --ctx")
         return
     }
@@ -2985,7 +2992,7 @@ def private register_request(srv : FrontLink; writer : WriterRef;
     preq.nothink <- nothink
     preq.close_toks <- close_toks
     preq.spans <- spans
-    preq.constraint <- constraint
+    preq.constraint.constraint = constraint   // owned by the request from here: a refused submit frees it with preq
     if (!submit(cur_model(), cur_sched(), preq)) {
         delete preq
         to_log(LOG_WARNING, "dasllama-server: 503 queue full ({cur_sched().max_queue}) — rejected {prefix} request ({np} tok)\n")
@@ -3433,9 +3440,18 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
             }
         }
     }
-    // a constrained reply (a JSON format, or a forced tool call) is sampled through a grammar after the render,
-    // on the tokens the template's wire shape fixes; it carries no reasoning preamble, so thinking is off for it
-    let constrained = asks_constraint(js)
+    // a constrained reply (a JSON format, or a forced tool call) is sampled through a grammar; it carries no
+    // reasoning preamble, so thinking is off for it. The markers a forced call is wrapped in are the template's.
+    var spec : ConstraintSpec
+    if (constraint_fields_present(js)) {
+        let tmpl = chat_template(cur_model())
+        spec <- read_constraint_spec(js, tools, tmpl.tool_call_open, tmpl.tool_call_close)
+        if (!empty(spec.err)) {
+            bad_request(srv, writer, spec.err)
+            return
+        }
+    }
+    let constrained = !empty(spec.gbnf)
 
     // OpenAI is stateless — the client resends the whole transcript. Fold system turns, replay
     // prior user/assistant/tool turns through the renderer, then render the trailing turn + the
@@ -3516,21 +3532,14 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
         }
     }
     var constraint : TokenConstraint?
-    if (constraint_fields_present(js)) {
-        let spec <- read_constraint_spec(js, tools, call_open, call_close)
-        if (!empty(spec.err)) {
-            bad_request(srv, writer, spec.err)
+    if (constrained) {
+        var gerr = ""
+        constraint = constraint_of(spec, cur_model(), g_cur, stop_ids, gerr)
+        if (!empty(gerr)) {
+            bad_request(srv, writer, "the request's grammar does not build: {gerr}")
             return
         }
-        if (!empty(spec.gbnf)) {
-            var gerr = ""
-            constraint = constraint_of(spec, cur_model(), g_cur, stop_ids, gerr)
-            if (!empty(gerr)) {
-                bad_request(srv, writer, "the request's grammar does not build: {gerr}")
-                return
-            }
-            to_log(LOG_INFO, "/v1/chat/completions: {spec.kind} constraint armed\n")
-        }
+        to_log(LOG_INFO, "/v1/chat/completions: {spec.kind} constraint armed\n")
     }
     var spans <- media_spans(prompt, refs)
     register_request(srv, writer, prompt, stop_ids, close, spans, params, max_new,

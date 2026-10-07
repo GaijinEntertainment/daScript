@@ -9,6 +9,7 @@ module json_schema shared public
 require lr1/lr1
 require lr1/gbnf
 require daslib/strings_boost
+require daslib/utf8_utils
 require strings
 require math
 
@@ -109,15 +110,7 @@ def private sp_expect(var p : SParser; c : int) : bool {
 def private hex4(var p : SParser) : int {
     var v = 0
     for (_ in range(4)) {
-        let c = sp_peek(p)
-        var h = -1
-        if (is_number(c)) {
-            h = c - '0'
-        } elif (c >= 'a' && c <= 'f') {
-            h = c - 'a' + 10
-        } elif (c >= 'A' && c <= 'F') {
-            h = c - 'A' + 10
-        }
+        let h = hex_digit_value(sp_peek(p))
         if (h < 0) {
             sp_fail(p, "bad \\u escape")
             return 0
@@ -129,20 +122,8 @@ def private hex4(var p : SParser) : int {
 }
 
 def private write_cp(var w : StringBuilderWriter; cp : int) {
-    if (cp < 128) {
-        w |> write(to_char(cp))
-    } elif (cp < 2048) {
-        w |> write(to_char(192 | (cp >> 6)))
-        w |> write(to_char(128 | (cp & 63)))
-    } elif (cp < 65536) {
-        w |> write(to_char(224 | (cp >> 12)))
-        w |> write(to_char(128 | ((cp >> 6) & 63)))
-        w |> write(to_char(128 | (cp & 63)))
-    } else {
-        w |> write(to_char(240 | (cp >> 18)))
-        w |> write(to_char(128 | ((cp >> 12) & 63)))
-        w |> write(to_char(128 | ((cp >> 6) & 63)))
-        w |> write(to_char(128 | (cp & 63)))
+    for (b in utf8_encode(uint(cp))) {
+        w |> write(to_char(int(b)))
     }
 }
 
@@ -487,6 +468,15 @@ def gbnf_literal(s : string) : string {
     }
 }
 
+// a repetition's bounds against the engine's cap; `INT_MAX` is "no maximum"
+def private repeat_within_cap(var c : Conv; lo, hi : int) : bool {
+    if (lo > GBNF_REPEAT_CAP || (hi != INT_MAX && hi > GBNF_REPEAT_CAP)) {
+        conv_fail(c, "repetition bound {max(lo, hi == INT_MAX ? 0 : hi)} is past the cap of {GBNF_REPEAT_CAP}")
+        return false
+    }
+    return true
+}
+
 // `x`, `x?`, `x+`, `x*`, `x{m,n}`, with an optional separator between repeats
 def private build_repetition(item : string; min_items, max_items : int; separator : string = "") : string {
     let has_max = max_items != INT_MAX
@@ -827,21 +817,18 @@ def private add_primitive_named(var c : Conv; name : string) : string {
 
 def private join_name(name, tail : string) : string => empty(name) ? tail : "{name}-{tail}"
 
-def private generate_union_rule(var c : Conv; name : string; alts : array<SNode?>) : string {
+// one alternative per schema of `alts`; with `types` given, `single` read under each listed type instead
+def private generate_union_rule(var c : Conv; name : string; alts : array<SNode?>; single : SRef; types : array<SNode?>) : string {
+    let n = empty(types) ? length(alts) : length(types)
     var rules : array<string>
-    rules |> reserve(length(alts))
-    for (i, a in count(), alts) {
-        rules |> push(visit(c, a, empty(name) ? "alternative-{i}" : "{name}-{i}"))
-    }
-    return join(rules, " | ")
-}
-
-// the same schema under each listed type: one alternative per type
-def private generate_type_union(var c : Conv; name : string; schema : SRef; types : array<SNode?>) : string {
-    var rules : array<string>
-    rules |> reserve(length(types))
-    for (i, t in count(), types) {
-        rules |> push(visit(c, schema, empty(name) ? "alternative-{i}" : "{name}-{i}", t.kind == SKind.s_string ? t.str : "?"))
+    rules |> reserve(n)
+    for (i in range(n)) {
+        var a : SRef = single
+        if (empty(types)) {
+            a = alts[i]
+        }
+        let under = empty(types) ? "" : (types[i].kind == SKind.s_string ? types[i].str : "?")
+        rules |> push(visit(c, a, empty(name) ? "alternative-{i}" : "{name}-{i}", under))
     }
     return join(rules, " | ")
 }
@@ -1172,6 +1159,7 @@ def private pat_curly(var c : Conv; var ps : PatState; var seq : array<PatPiece>
         conv_fail(c, "a repetition with nothing before it")
         return
     }
+    return if (!repeat_within_cap(c, min_times, max_times))
     let last = seq[length(seq) - 1]
     var sub = last.text
     if (!last.is_literal) {
@@ -1330,7 +1318,7 @@ def private visit(var c : Conv; schema : SRef; name : string; type_override : st
     let has_type = !empty(tname)
     let schema_format = snode_str(schema, "format")
     let rule_name = is_reserved_name(name) ? "{name}-" : (empty(name) ? "root" : name)
-    if (schema.kind != SKind.s_object) {
+    if (schema.kind != SKind.s_object || (schema_type_node != null && schema_type_node.kind != SKind.s_string && schema_type_node.kind != SKind.s_array)) {
         conv_fail(c, "unrecognized schema: {dump(schema)}")
         return ""
     }
@@ -1341,11 +1329,13 @@ def private visit(var c : Conv; schema : SRef; name : string; type_override : st
     let any_of = snode_get(schema, "anyOf")
     if (one_of != null || any_of != null) {
         let alts = one_of != null ? one_of : any_of
-        return add_rule(c, rule_name, generate_union_rule(c, name, alts.items))
+        let no_types : array<SNode?>
+        return add_rule(c, rule_name, generate_union_rule(c, name, alts.items, null, no_types))
     }
     if (empty(type_override) && schema_type_node != null && schema_type_node.kind == SKind.s_array) {
         // one alternative per listed type: the same schema read under each
-        return add_rule(c, rule_name, generate_type_union(c, name, schema, schema_type_node.items))
+        let no_alts : array<SNode?>
+        return add_rule(c, rule_name, generate_union_rule(c, name, no_alts, schema, schema_type_node.items))
     }
     if (snode_has(schema, "const")) {
         return add_rule(c, rule_name, gbnf_literal(dump(snode_get(schema, "const"))))
@@ -1416,8 +1406,8 @@ def private visit(var c : Conv; schema : SRef; name : string; type_override : st
         }
         let item_rule = visit(c, items, join_name(name, "item"))
         let min_items = int(snode_int(schema, "minItems", 0l))
-        let mx = snode_get(schema, "maxItems")
-        let max_items = mx != null && mx.kind == SKind.s_number ? int(mx.num) : INT_MAX
+        let max_items = int(snode_int(schema, "maxItems", int64(INT_MAX)))
+        return "" if (!repeat_within_cap(c, min_items, max_items))
         return add_rule(c, rule_name, "\"[\" space {build_repetition(item_rule, min_items, max_items, "\",\" space")} space \"]\"")
     }
     if ((!has_type || tname == "string") && snode_has(schema, "pattern")) {
@@ -1436,8 +1426,8 @@ def private visit(var c : Conv; schema : SRef; name : string; type_override : st
     if (tname == "string" && (snode_has(schema, "minLength") || snode_has(schema, "maxLength"))) {
         let char_rule = add_primitive_named(c, "char")
         let min_len = int(snode_int(schema, "minLength", 0l))
-        let mx = snode_get(schema, "maxLength")
-        let max_len = mx != null && mx.kind == SKind.s_number ? int(mx.num) : INT_MAX
+        let max_len = int(snode_int(schema, "maxLength", int64(INT_MAX)))
+        return "" if (!repeat_within_cap(c, min_len, max_len))
         return add_rule(c, rule_name, "\"\\\"\" {build_repetition(char_rule, min_len, max_len)} \"\\\"\"")
     }
     if (tname == "integer" && (snode_has(schema, "minimum") || snode_has(schema, "exclusiveMinimum") || snode_has(schema, "maximum") || snode_has(schema, "exclusiveMaximum"))) {

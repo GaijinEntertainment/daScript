@@ -99,6 +99,40 @@ def test_gbnf_sample_grammars(t : T?) {
 }
 
 [test]
+def test_gbnf_any_character(t : T?) {
+    t |> run("`.` is any character but a newline, one whole UTF-8 character at a time") @(t : T?) {
+        var err = ""
+        let g <- gbnf_grammar("root ::= \"<\" . . \">\"", err)
+        t |> equal(err, "", "builds")
+        t |> success(lr_matches(g, "<ab>"), "two ASCII characters")
+        t |> success(lr_matches(g, "<é✓>"), "two multi-byte characters")   // nolint:STYLE039 - the non-ASCII bytes are the point
+        t |> success(!lr_matches(g, "<a>"), "one character is not two")
+        t |> success(!lr_matches(g, "<abc>"), "three are not two")
+        t |> success(lr_matches(g, "<a\n>"), "a newline is a character too, as in the reference")
+    }
+}
+
+[test]
+def test_gbnf_forms(t : T?) {
+    t |> run("the reader's forms the corpora only build: escapes, a continued rule, a repeated multi-byte literal, the next rule's head") @(t : T?) {
+        var err = ""
+        let esc <- gbnf_grammar("root ::= \"\\t\" \"\\r\" [\\]\\-\\^] \"\\u00e9\" \"\\U0001F600\"", err)
+        t |> equal(err, "", "every escape form reads")
+        t |> success(lr_matches(esc, "\t\r]é😀") && lr_matches(esc, "\t\r-é😀") && lr_matches(esc, "\t\r^é😀"), "... and spells the bytes it names")   // nolint:STYLE039 - the non-ASCII bytes are the point
+        t |> success(!lr_matches(esc, "\t\rxé😀"), "a byte outside the class")   // nolint:STYLE039 - the non-ASCII bytes are the point
+        let cont <- gbnf_grammar("root ::= \"a\"\n  | \"b\"\nnext ::= \"c\"\nroot ::= next", err)
+        t |> success(find(err, "defined twice") >= 0, "a rule defined twice is refused: {err}")
+        err = ""
+        let cont2 <- gbnf_grammar("root ::= \"a\"\n  | \"b\" next\nnext ::= \"c\"", err)
+        t |> equal(err, "", "a `|` on the next line continues the rule; `next ::=` starts another")
+        t |> success(lr_matches(cont2, "a") && lr_matches(cont2, "bc") && !lr_matches(cont2, "b") && !lr_matches(cont2, "ac"), "... with the alternatives split where the rule heads are")
+        let rep <- gbnf_grammar("root ::= \"ab\"? \"c\"", err)
+        t |> equal(err, "", "a repeated multi-byte literal reads")
+        t |> success(lr_matches(rep, "abc") && lr_matches(rep, "c") && !lr_matches(rep, "ac") && !lr_matches(rep, "bc"), "... as a group, never its last byte alone")
+    }
+}
+
+[test]
 def test_gbnf_reader_errors(t : T?) {
     t |> run("the reader names what is wrong") @(t : T?) {
         var err = ""
@@ -112,9 +146,34 @@ def test_gbnf_reader_errors(t : T?) {
         t |> success(find(err, "unterminated") >= 0, "an unterminated literal: {err}")
         err = ""
         gbnf_grammar("root ::= <[10]> \"x\"", err)
-        t |> success(find(err, "token") >= 0, "a token reference: {err}")
+        t |> success(find(err, "token") >= 0, "a token reference by id: {err}")
+        err = ""
+        gbnf_grammar("root ::= <bos> \"x\"", err)
+        t |> success(find(err, "token") >= 0, "a token reference by name: {err}")
+        err = ""
+        gbnf_grammar("root ::= !<eos> \"x\"", err)
+        t |> success(find(err, "token") >= 0, "a negated token reference: {err}")
+        err = ""
+        gbnf_grammar("root ::= \"x\"\{1,{GBNF_REPEAT_CAP + 1}\}", err)
+        t |> success(find(err, "past the cap") >= 0, "a repetition past the cap: {err}")
+        err = ""
+        gbnf_grammar("root ::= \"x\"\{{GBNF_REPEAT_CAP + 1}\}", err)
+        t |> success(find(err, "past the cap") >= 0, "an exact count past the cap: {err}")
+        err = ""
+        let capped <- gbnf_grammar("root ::= \"x\"\{0,{GBNF_REPEAT_CAP}\}", err)
+        t |> equal(err, "", "the cap itself builds")
+        t |> success(lr_matches(capped, "xxx") && !lr_matches(capped, "y"), "... and accepts its language")
         err = ""
         gbnf_grammar("root ::= root", err)
         t |> success(find(err, "derives no terminal") >= 0, "a rule that never bottoms out: {err}")
+        // every other refusal names its site
+        for (bad in ["root ::= \"\\q\"", "root ::= \"\\xZZ\"", "root ::= [abc", "root ::= \"a\"\{x\}", "root ::= \"a\"\{1,2", "root ::= (\"a\"", "root ::= \"a\" %", "::= \"a\"", "root \"a\""]) {
+            err = ""
+            gbnf_grammar(bad, err)
+            t |> success(!empty(err), "refused: {escape(bad)} - {err}")
+        }
+        err = ""
+        gbnf_grammar("root ::= \"\xC3\"", err)
+        t |> success(!empty(err), "malformed UTF-8 in a literal: {err}")
     }
 }

@@ -53,7 +53,7 @@ def test_schema_conversion_corpus(t : T?) {
         return if (js == null)
         var cases <- from_JV(js, type<array<ConversionCase>>)
         delete_json(js)
-        tt |> success(length(cases) >= 70, "{length(cases)} cases")
+        tt |> equal(length(cases), 73, "every case of the reference's conversion test")
         for (c in cases) {
             var err = ""
             let text = json_schema_to_gbnf(c.schema, err)
@@ -125,6 +125,69 @@ def test_schema_tool_call_shape(t : T?) {
     }
 }
 
+// the compiled grammar's verdict on `text`
+def private admits(schema : string; text : string) : bool {
+    var err = ""
+    let g <- json_schema_grammar(schema, err)
+    assert(empty(err))
+    return lr_matches(g, text)
+}
+
+[test]
+def test_schema_composed_keywords(t : T?) {
+    t |> run("oneOf, anyOf, allOf, $ref and prefixItems: the engine admits exactly the composed documents") @(t : T?) {
+        let one_of = "\{\"oneOf\":[\{\"type\":\"integer\"\},\{\"type\":\"boolean\"\}]\}"
+        t |> success(admits(one_of, "42") && admits(one_of, "true"), "oneOf: either alternative")
+        t |> success(!admits(one_of, "\"x\"") && !admits(one_of, "null"), "oneOf: nothing else")
+        let any_of = "\{\"anyOf\":[\{\"type\":\"string\"\},\{\"type\":\"null\"\}]\}"
+        t |> success(admits(any_of, "\"x\"") && admits(any_of, "null"), "anyOf: either alternative")
+        t |> success(!admits(any_of, "1"), "anyOf: nothing else")
+        let all_of = "\{\"allOf\":[\{\"type\":\"object\",\"properties\":\{\"a\":\{\"type\":\"integer\"\}\},\"required\":[\"a\"]\},\{\"properties\":\{\"b\":\{\"type\":\"boolean\"\}\},\"required\":[\"b\"]\}]\}"
+        t |> success(admits(all_of, "\{\"a\": 1, \"b\": true\}"), "allOf: both parts' keys")
+        t |> success(!admits(all_of, "\{\"a\": 1\}") && !admits(all_of, "\{\"b\": true\}"), "allOf: neither part alone")
+        let ref = "\{\"$ref\":\"#/$defs/pt\",\"$defs\":\{\"pt\":\{\"type\":\"object\",\"properties\":\{\"x\":\{\"type\":\"number\"\}\},\"required\":[\"x\"]\}\}\}"
+        t |> success(admits(ref, "\{\"x\": 1.5\}"), "$ref: the definition's shape")
+        t |> success(!admits(ref, "\{\"y\": 1\}") && !admits(ref, "1.5"), "$ref: nothing else")
+        let pair = "\{\"type\":\"array\",\"prefixItems\":[\{\"type\":\"integer\"\},\{\"type\":\"string\"\}]\}"
+        t |> success(admits(pair, "[1, \"a\"]"), "prefixItems: the typed positions")
+        t |> success(!admits(pair, "[\"a\", 1]") && !admits(pair, "[1]"), "prefixItems: the wrong order, a short tuple")
+    }
+}
+
+[test]
+def test_schema_parser_and_formats(t : T?) {
+    t |> run("the schema parser's escapes, the uuid and date formats, a recursive $ref, and the pattern forms") @(t : T?) {
+        // string escapes land as their bytes in the emitted literal
+        let esc = "\{\"const\":\"a\\tb\\bc\\fd\\/e\\u00e9\\ud83d\\ude00\"\}"
+        var err = ""
+        let eg <- json_schema_grammar(esc, err)
+        t |> equal(err, "", "the escapes parse")
+        t |> success(lr_matches(eg, "\"a\\tb\\bc\\fd/eé😀\""), "... and the constant spells them as JSON")   // nolint:STYLE039 - the non-ASCII bytes are the point
+        t |> success(admits("\{\"type\":\"string\",\"format\":\"uuid\"\}", "\"123e4567-e89b-12d3-a456-426614174000\""), "uuid: a well-formed one")
+        t |> success(!admits("\{\"type\":\"string\",\"format\":\"uuid\"\}", "\"123e4567-e89b-12d3-a456\""), "uuid: a short one")
+        t |> success(admits("\{\"type\":\"string\",\"format\":\"date-time\"\}", "\"2026-10-07T12:34:56Z\""), "date-time")
+        t |> success(!admits("\{\"type\":\"string\",\"format\":\"date\"\}", "\"2026-13-07\""), "date: month 13")
+        // a recursive definition builds once and refers to itself
+        let tree = "\{\"$ref\":\"#/$defs/node\",\"$defs\":\{\"node\":\{\"type\":\"object\",\"properties\":\{\"kids\":\{\"type\":\"array\",\"items\":\{\"$ref\":\"#/$defs/node\"\}\}\},\"required\":[\"kids\"],\"additionalProperties\":false\}\}\}"
+        t |> success(admits(tree, "\{\"kids\": [\{\"kids\": []\}, \{\"kids\": []\}]\}"), "a recursive schema's nested document")
+        t |> success(!admits(tree, "\{\"kids\": [1]\}"), "... and a leaf of the wrong shape")
+        // pattern forms: a non-capturing group, an open-ended count
+        let pat = "\{\"type\":\"string\",\"pattern\":\"^(?:ab)\{2,\}c?$\"\}"
+        t |> success(admits(pat, "\"ababab\"") && admits(pat, "\"ababc\""), "a non-capturing group repeated at least twice")
+        t |> success(!admits(pat, "\"ab\"") && !admits(pat, "\"abac\""), "... one copy, or a broken copy")
+        for (bad in ["^[a$", "^a\{1$", "^a\{1,2,3\}$", "^*a$", "^(?=a)$"]) {
+            err = ""
+            json_schema_to_gbnf("\{\"type\":\"string\",\"pattern\":\"{bad}\"\}", err)
+            t |> success(!empty(err), "pattern refused: {bad} - {err}")
+        }
+        for (bad in ["\{\"type\":\"string\",\"const\":\"unterminated\}", "\{\"a\":\"\\q\"\}", "\{\"a\":\"\\u12\"\}", "\{\"a\" 1\}", "\{\} trailing", "[1]", "\{\"$ref\":\"#/$defs/missing\"\}"]) {
+            err = ""
+            json_schema_to_gbnf(bad, err)
+            t |> success(!empty(err), "schema text refused: {escape(bad)} - {err}")
+        }
+    }
+}
+
 [test]
 def test_schema_refusals(t : T?) {
     t |> run("what the compiler refuses, by name") @(tt : T?) {
@@ -140,5 +203,20 @@ def test_schema_refusals(t : T?) {
         err = ""
         json_schema_to_gbnf("not json", err)
         tt |> success(find(err, "json schema:") >= 0, "malformed schema text: {err}")
+        err = ""
+        json_schema_to_gbnf("\{\"type\": 123\}", err)
+        tt |> success(find(err, "unrecognized schema") >= 0, "a type that is no name: {err}")
+        err = ""
+        json_schema_to_gbnf("\{\"type\": \"array\", \"items\": \{\"type\": \"integer\"\}, \"maxItems\": 1000000000\}", err)
+        tt |> success(find(err, "past the cap") >= 0, "an item count past the cap: {err}")
+        err = ""
+        json_schema_to_gbnf("\{\"type\": \"string\", \"minLength\": {GBNF_REPEAT_CAP + 1}\}", err)
+        tt |> success(find(err, "past the cap") >= 0, "a string length past the cap: {err}")
+        err = ""
+        json_schema_to_gbnf("\{\"type\": \"string\", \"pattern\": \"^a\{1,{GBNF_REPEAT_CAP + 1}\}$\"\}", err)
+        tt |> success(find(err, "past the cap") >= 0, "a pattern count past the cap: {err}")
+        err = ""
+        json_schema_to_gbnf("\{\"type\": \"array\", \"items\": \{\"type\": \"integer\"\}, \"maxItems\": {GBNF_REPEAT_CAP}\}", err)
+        tt |> equal(err, "", "the cap itself compiles")
     }
 }

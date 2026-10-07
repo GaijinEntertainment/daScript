@@ -157,6 +157,52 @@ def test_lr1_verdicts(t : T?) {
         let g3 <- build_grammar(gb3, root)
         t |> equal(g3.err, "", "an unreachable rule, productive or not, is ignored")
         t |> success(lr_matches(g3, "x") && !lr_matches(g3, "y"), "... and the language is the root's")
+        // lr_accepts answers without moving the state
+        var st <- lr_start(g3)
+        t |> success(lr_accepts(g3, st, uint8('x')) && !lr_accepts(g3, st, uint8('y')), "lr_accepts: the next byte's verdict")
+        t |> success(!lr_at_end(g3, st), "... with the state where it was")
+        t |> success(lr_step(g3, st, uint8('x')) && lr_at_end(g3, st) && !lr_accepts(g3, st, uint8('x')), "after the sentence: at end, nothing more admitted")
+    }
+}
+
+[test]
+def test_lr1_stack_cap(t : T?) {
+    t |> run("a grammar whose alternatives multiply past LR_MAX_STACKS has its byte refused, never a stack dropped") @(t : T?) {
+        // s ::= a s | b s | '!' ; a ::= 'x' ; b ::= 'x'  - right recursion keeps every reading of every x on the
+        // stack, so k x's are 2^k live stacks: the set passes the cap on the ninth
+        var gb : GrammarBuilder
+        let s = rule_id(gb, "s")
+        let a = rule_id(gb, "a")
+        let b = rule_id(gb, "b")
+        var via_a : array<GrammarSym>
+        seq(via_a, [sym_rule(a), sym_rule(s)])
+        add_production(gb, s, via_a)
+        var via_b : array<GrammarSym>
+        seq(via_b, [sym_rule(b), sym_rule(s)])
+        add_production(gb, s, via_b)
+        var bang : array<GrammarSym>
+        seq(bang, [sym_byte('!')])
+        add_production(gb, s, bang)
+        var xa : array<GrammarSym>
+        seq(xa, [sym_byte('x')])
+        add_production(gb, a, xa)
+        var xb : array<GrammarSym>
+        seq(xb, [sym_byte('x')])
+        add_production(gb, b, xb)
+        let g <- build_grammar(gb, s)
+        t |> equal(g.err, "", "the grammar builds")
+        t |> success(g.conflicts > 0, "... with conflicts")
+        var st <- lr_start(g)
+        var fed = 0
+        while (fed < 64 && lr_step(g, st, uint8('x'))) {
+            fed++
+        }
+        t |> success(fed > 0 && fed < 64, "the acceptor fed {fed} bytes before the set would pass the cap")
+        t |> success(length(st.stacks) <= LR_MAX_STACKS, "the set never holds more than the cap ({length(st.stacks)})")
+        t |> success(!lr_step(g, st, uint8('x')), "the refused byte stays refused")
+        t |> success(!lr_at_end(g, st), "... and the set stands where it was, mid-sentence")
+        var short <- lr_start(g)
+        t |> success(lr_step_bytes(g, short, "xxxxx!") && lr_at_end(g, short), "a sentence inside the cap completes")
     }
 }
 

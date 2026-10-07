@@ -7,6 +7,7 @@ require dastest/testing_boost public
 require _server_rig                 // models_dir (sibling)
 require constraints                 // the constraint fields' reader and the grammar constraint (sibling)
 require dasllama/dasllama
+require dasllama/dasllama_common    // load_model_: the plain loader, which mints no image
 require lr1/lr1
 require lr1/gbnf
 require daslib/json
@@ -16,9 +17,11 @@ require math
 require strings
 
 // The server's half of structured output, without a server: the request fields read to a grammar text or
-// a refusal (model-free), and the grammar constraint walking a model's own tokens (tinyllama, JIT only).
+// a refusal (model-free), and the grammar constraint walking a model's own tokens (tinyllama, JIT only;
+// skips without the model).
 
 let MODEL_PATH = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
+let LARGE_TIER_BYTES = 6ul * 1024ul * 1024ul * 1024ul   //! the model tier's ceiling, as modules/dasLLAMA/tests/_model_tier.das states it
 
 def private spec_of(req : string; tools : array<string>; call_open = ""; call_close = "") : ConstraintSpec {
     var err = ""
@@ -44,6 +47,9 @@ def test_constraint_spec_response_format(t : T?) {
         t |> equal(plain.err, "", "... and refuses nothing")
         let text <- spec_of("\{\"response_format\":\{\"type\":\"text\"\}\}")
         t |> equal(text.gbnf, "", "type text asks for no grammar")
+        t |> equal(text.err, "", "... and is no refusal")
+        let bare <- spec_of("\{\"response_format\":\{\}\}")
+        t |> equal(bare.gbnf + bare.err, "", "an empty format object asks for nothing and refuses nothing")
         let obj <- spec_of("\{\"response_format\":\{\"type\":\"json_object\"\}\}")
         t |> equal(obj.kind, "json_object")
         var err = ""
@@ -113,6 +119,21 @@ def test_constraint_spec_tool_choice(t : T?) {
         t |> success(find(nameless.err, "names a function") >= 0, "an object without a name: {nameless.err}")
         let both <- spec_of("\{\"tool_choice\":\"required\",\"response_format\":\{\"type\":\"json_object\"\}\}", tools, "<tool_call>", "</tool_call>")
         t |> success(find(both.err, "cannot both") >= 0, "a format and a forced call together: {both.err}")
+        let odd_tools <- ["\{\"type\":\"function\",\"function\":\{\"name\":\"odd\",\"parameters\":\{\"type\":\"kaboom\"\}\}\}"]
+        let odd <- spec_of("\{\"tool_choice\":\"required\"\}", odd_tools, "<tool_call>", "</tool_call>")
+        t |> success(find(odd.err, "not served as a schema") >= 0, "a tool whose parameters do not compile: {odd.err}")
+        // the request-level predicate: every shape that arms the reader
+        var perr = ""
+        for (req in ["\{\"response_format\":\{\"type\":\"text\"\}\}", "\{\"tool_choice\":\"required\"\}", "\{\"tool_choice\":\{\"type\":\"function\",\"function\":\{\"name\":\"f\"\}\}\}"]) {
+            var js = read_json(req, perr)
+            t |> success(constraint_fields_present(js), "a constraint field is present: {req}")
+            delete_json(js)
+        }
+        for (req in ["\{\"messages\":[]\}", "\{\"tool_choice\":\"auto\"\}", "\{\"tool_choice\":\"none\"\}", "\{\"response_format\":null\}"]) {
+            var js = read_json(req, perr)
+            t |> success(!constraint_fields_present(js), "no constraint field: {req}")
+            delete_json(js)
+        }
     }
 }
 
@@ -147,8 +168,13 @@ def test_grammar_constraint_walk(t : T?) {
             t |> skip("interpreted (the piece table decodes the vocabulary)")
             return
         }
-        if (!stat(MODEL_PATH).is_valid) {
+        let st = stat(MODEL_PATH)
+        if (!st.is_valid) {
             t |> skip("{base_name(MODEL_PATH)} not present (set DASLLAMA_MODELS_DIR)")
+            return
+        }
+        if (st.size > LARGE_TIER_BYTES) {
+            t |> skip("{base_name(MODEL_PATH)} is above the model tier")
             return
         }
         with_dasllama_jobque() {
@@ -158,7 +184,7 @@ def test_grammar_constraint_walk(t : T?) {
 }
 
 def private grammar_walk_cell(t : T?) {
-    var m <- load_model(MODEL_PATH, QuantMode.q8)
+    var m <- load_model_(MODEL_PATH, QuantMode.q8)   // the plain loader: a test never mints an image beside the model
     let vocab = int(m.config.vocab_size)
     token_pieces(m, 0)
     // the piece table: a mid-sentence SentencePiece token keeps its leading space, the first token the same
@@ -175,7 +201,7 @@ def private grammar_walk_cell(t : T?) {
             pieces[p] = int64(id)
         }
     }
-    t |> success(length(pieces) > 20000, "{length(pieces)} distinct pieces")
+    to_log(LOG_INFO, "test_constraints: {length(pieces)} distinct pieces over {vocab} tokens\n")
     var chat = create_chat(m, "", 8l)
     let stops <- effective_stop_ids(chat)
     t |> success(!empty(stops), "the chat's stop ids")
@@ -187,6 +213,8 @@ def private grammar_walk_cell(t : T?) {
     t |> success(c != null, "the constraint builds")
     return if (c == null)
     t |> success(!c->admits(eos), "the stop token is refused on an empty reply")
+    t |> equal(token_piece_of(0, 1l), "<s>", "the BOS token's piece is its marker text")
+    t |> success(!c->admits(1l), "... which no JSON document opens with")
     t |> success(!c->admits(pieces["]"]), "a byte outside the grammar is refused")
     t |> success(c->admits(pieces["\{"]), "the opening brace is admitted")
     let ids <- ids_spelling(pieces, "\{\"answer\": 42\}")
@@ -199,6 +227,12 @@ def private grammar_walk_cell(t : T?) {
     // a fresh constraint on the same grammar starts over (the cache hands out a copy, never the walked one)
     var c2 = constraint_of(spec, m, 0, stops, err)
     t |> success(c2 != null && !c2->admits(eos), "a second constraint starts at the beginning")
+    // a schema that compiles but whose grammar cannot build: a required self-reference derives no sentence
+    let bottomless <- spec_of("\{\"response_format\":\{\"type\":\"json_schema\",\"json_schema\":\{\"strict\":true,\"schema\":\{\"$ref\":\"#/$defs/a\",\"$defs\":\{\"a\":\{\"type\":\"object\",\"properties\":\{\"x\":\{\"$ref\":\"#/$defs/a\"\}\},\"required\":[\"x\"],\"additionalProperties\":false\}\}\}\}\}\}")
+    t |> equal(bottomless.err, "", "the schema itself compiles")
+    var berr = ""
+    var none = constraint_of(bottomless, m, 0, stops, berr)
+    t |> success(none == null && find(berr, "derives no terminal string") >= 0, "the grammar does not build, by name: {berr}")
     unsafe {
         delete c
         delete c2

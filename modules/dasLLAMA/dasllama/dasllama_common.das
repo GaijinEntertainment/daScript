@@ -2242,11 +2242,23 @@ struct SamplingParams {
 }
 
 //! The token admission a constrained stream carries: `admits` asks whether a token may come next, `commit`
-//! advances past the token the sampler emitted. A null pointer is an unconstrained stream; a constrained
-//! stream's pick can differ from the raw argmax, so it stands every greedy-chain shortcut down (`Session.sampled`).
+//! advances past the token the sampler emitted; null = unconstrained. A dead end (nothing admitted) returns -1
+//! from the sampler with `Session.constrain_dead` set; the mechanism is `ARCHITECTURE_ENGINE.md`'s sampler charter.
 class TokenConstraint {
     def abstract admits(tok : int64) : bool
     def abstract commit(tok : int64) : void
+}
+
+//! The owner of a constraint: a request, then the stream that admits it. Freed with its holder, so no
+//! holder's finalizer needs `unsafe` for the pointer; a `Session` only borrows the pointer.
+struct TokenConstraintBox {
+    @do_not_delete constraint : TokenConstraint?
+}
+
+def finalize(var b : TokenConstraintBox) {
+    unsafe {
+        delete b.constraint
+    }
 }
 
 //! One survivor of the sampler's top-k selection: the token and its logit, then its probability.
@@ -2293,8 +2305,8 @@ struct Session {
     rng : int4                // sampling RNG state (seeded in make_run_state; reseed via set_seed)
     recent : array<int64>     // recently generated tokens, for the repetition penalty
     sample_scratch : array<float>  // vocab-sized scratch for the reference sampler (top-k off)
-    @scratch cand : array<SampleCand>   //! the top-k sampler's candidate list, a reused buffer: the k largest logits (ties at the k-th kept), ascending by id after selection
-    sampled : bool            //! the last sample_'s pick can differ from the raw argmax (a temperature, or a penalty at temp 0 - not a bare argmax): the Metal driver's greedy chain stands down
+    @scratch @exact_size cand : array<SampleCand>   //! the top-k sampler's candidate list, a reused buffer: the k largest logits (ties at the k-th kept), ascending by id after selection; the whole row when a constraint refuses every candidate
+    sampled : bool            //! the last sample_'s pick can differ from the raw argmax (a temperature, a penalty at temp 0, or a constraint - not a bare argmax): the Metal driver's greedy chain stands down
     @do_not_delete spec_params : SamplingParams?   //! the caller's sampler, set before a speculative round for its accept walk to draw with; null or a bare argmax (temp <= 0, penalties off) keeps the argmax-match walk
     mtp_pre_drawn : bool           //! the accept walk drew this session's next token already: the next sample_ returns mtp_pre_tok and clears this
     mtp_pre_tok : int64
@@ -2302,6 +2314,7 @@ struct Session {
     pick_ready : bool              //! the driver landed the pick: the next sample_ returns pick_tok and clears this
     pick_tok : int64
     @do_not_delete constrain : TokenConstraint?   //! the stream's token admission (null = none); the stream owns it
+    constrain_dead : bool     //! the last sample_ found no token the constraint admits and returned -1
     // last-generation timing, filled by the streaming generate() and read by stats()
     stat_n_prefill : int64    // prompt tokens prefilled
     stat_prefill_us : int64   // wall time to prefill the prompt (microseconds)

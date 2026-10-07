@@ -87,7 +87,6 @@ if(NOT DAS_TOOLS_DISABLED)
             utils/dasllama-server/test_cli.das
         FILES
             utils/dasllama-server/test_cli_args.das
-            utils/dasllama-server/test_constraints.das
             utils/dasllama-server/test_exchange_client.das
             utils/dasllama-server/test_model_catalog.das
             utils/dasllama-server/test_setup_mode.das
@@ -95,7 +94,9 @@ if(NOT DAS_TOOLS_DISABLED)
             utils/dasllama-server/test_model_override.das
             utils/dasllama-server/test_slot_served.das
             utils/dasllama-server/test_server_flags.das
-        JIT_FILES utils/dasllama-server/test_worker_dispatch.das)
+        JIT_FILES
+            utils/dasllama-server/test_worker_dispatch.das
+            utils/dasllama-server/test_constraints.das)
     
     das_lane_dastest_target(run_tests_dasllama_env_registry COMMENT "Testing the dasLLAMA env-knob registry"
         FILES modules/dasLLAMA/tests/test_env_registry.das)

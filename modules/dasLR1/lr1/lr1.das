@@ -47,7 +47,7 @@ struct Grammar {
     root : int                  //!< the rule the augmented start produces
     conflicts : int
     first_conflict : string
-    err : string                //!< "" when the build succeeded, else why not (an unproductive or unreachable rule)
+    err : string                //!< "" when the build succeeded, else why not (a reachable rule that derives no terminal string)
 }
 
 let ACCEPT = 2147483647   //!< the EOF-column action that marks acceptance
@@ -164,7 +164,7 @@ struct private Item {
     dot : int
 }
 
-def private item_key(it : Item) : int => it.prod * 4096 + it.dot
+def private item_key(it : Item) : int64 => int64(it.prod) * 4096l + int64(it.dot)   // 64-bit: a grammar past 500k productions still keys apart
 
 struct private LrState {
     kernel : array<Item>
@@ -246,7 +246,7 @@ def private first_of_tail(b : Builder; syms : array<int>; from : int; la : int; 
 // LR(0) closure of a kernel: the kernel items plus every `B -> .gamma` for a rule B after a dot
 def private closure0(b : Builder; kernel : array<Item>) : array<Item> {
     var items := kernel
-    var seen : table<int>
+    var seen : table<int64>
     for (it in items) {
         seen |> insert(item_key(it))
     }
@@ -269,18 +269,13 @@ def private closure0(b : Builder; kernel : array<Item>) : array<Item> {
 }
 
 def private kernel_key(kernel : array<Item>) : string {
-    var keys : array<int>
+    var keys : array<int64>
     keys |> reserve(length(kernel))
     for (it in kernel) {
         keys |> push(item_key(it))
     }
     sort(keys)
-    return build_string() $(var w) {
-        for (k in keys) {
-            w |> write(k)
-            w |> write(",")
-        }
-    }
+    return join(keys, ",")
 }
 
 // the state reached from `kernel`'s closure on `sym`: its kernel items, or none
@@ -359,9 +354,9 @@ def private kernel_item_index(st : LrState; it : Item) : int {
 // LR(1) closure of one item with lookahead `la`: (item, lookahead) pairs
 def private closure1(b : Builder; it0 : Item; la0 : int) : array<tuple<it : Item; la : int>> {
     var items : array<tuple<it : Item; la : int>>
-    var seen : table<int>
+    var seen : table<int64>
     items |> push((it = it0, la = la0))
-    seen |> insert(item_key(it0) * 1024 + (la0 + 1))
+    seen |> insert(item_key(it0) * 1024l + int64(la0 + 1))
     var i = 0
     while (i < length(items)) {
         let cur = items[i]
@@ -371,7 +366,7 @@ def private closure1(b : Builder; it0 : Item; la0 : int) : array<tuple<it : Item
             first_of_tail(b, p.rhs, cur.it.dot + 1, cur.la, las)
             for (q in b.by_lhs[sym_rule_of(p.rhs[cur.it.dot])]) {
                 for (la in keys(las)) {
-                    let key = item_key(Item(prod = q, dot = 0)) * 1024 + (la + 1)
+                    let key = item_key(Item(prod = q, dot = 0)) * 1024l + int64(la + 1)
                     if (!(seen |> key_exists(key))) {
                         seen |> insert(key)
                         items |> push((it = Item(prod = q, dot = 0), la = la))
@@ -538,7 +533,8 @@ def private check_well_formed(b : Builder; var g : Grammar) {
 }
 
 //! Finalize `gb` with `root` as the start rule: byte classes, productions, LALR(1) tables. The
-//! result's `err` is non-empty on a conflict or an ill-formed grammar; such a grammar accepts nothing.
+//! result's `err` is non-empty for a grammar with a reachable rule that derives no terminal string; such a
+//! grammar accepts nothing. A table conflict is not an error: the acceptor forks its stack there.
 def build_grammar(var gb : GrammarBuilder; root : int) : Grammar {
     var g : Grammar
     g.rule_names := gb.rule_names
@@ -575,12 +571,7 @@ def build_grammar(var gb : GrammarBuilder; root : int) : Grammar {
                     p.rhs |> push(classes[0])
                 } else {
                     sort(classes)
-                    let key = build_string() $(var w) {
-                        for (c in classes) {
-                            w |> write(c)
-                            w |> write(",")
-                        }
-                    }
+                    let key = join(classes, ",")
                     if (!(set_rules |> key_exists(key))) {
                         let alt = length(g.rule_names)
                         g.rule_names |> push("<set{alt}>")
@@ -644,23 +635,18 @@ def private actions_at(g : Grammar; state, cls : int; var out : array<int>) {
     }
 }
 
-def private stack_key(st : array<int>) : string {
-    return build_string() $(var w) {
-        for (v in st) {
-            w |> write(v)
-            w |> write(",")
-        }
-    }
-}
+def private stack_key(st : array<int>) : string => join(st, ",")
 
 // follow every reduce chain of `st` on lookahead `cls`; each stack whose chain ends in a shift (or in
-// ACCEPT on the EOF column) lands in `out`, the shift target at its top for a terminal class
-def private resolve(g : Grammar; st : array<int>; cls : int; var out : array<array<int>>; var seen : table<string>) {
+// ACCEPT on the EOF column) lands in `out`, the shift target at its top for a terminal class; false when
+// the set would grow past LR_MAX_STACKS (the chains left unwalked)
+def private resolve(g : Grammar; st : array<int>; cls : int; var out : array<array<int>>; var seen : table<string>) : bool {
     var work : array<array<int>>
     var first := st
     work |> emplace(first)
     var acts : array<int>
-    while (!empty(work) && length(out) < LR_MAX_STACKS) {
+    while (!empty(work)) {
+        return false if (length(out) > LR_MAX_STACKS)
         var cur <- work[length(work) - 1]
         work |> pop()
         let key = stack_key(cur)
@@ -688,15 +674,20 @@ def private resolve(g : Grammar; st : array<int>; cls : int; var out : array<arr
             }
         }
     }
+    return length(out) <= LR_MAX_STACKS
 }
 
-// the stack set after consuming terminal class `cls`; empty when the class is refused
+// the stack set after consuming terminal class `cls`; empty when the class is refused - by the grammar, or
+// because the set would grow past LR_MAX_STACKS
 def private advance(g : Grammar; st : LrStack; cls : int) : LrStack {
     var next : LrStack
     next.stacks |> reserve(length(st.stacks))
     var seen : table<string>
     for (s in st.stacks) {
-        resolve(g, s, cls, next.stacks, seen)
+        if (!resolve(g, s, cls, next.stacks, seen)) {
+            next.stacks |> clear()
+            return <- next
+        }
     }
     // dedupe the survivors
     var uniq : table<string>

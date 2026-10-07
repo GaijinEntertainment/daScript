@@ -1022,10 +1022,13 @@ row a rejected draft wrote among it.
 every draft accepted plus the parked bonus draw, the first miss, RNG state equality (one draw
 per emitted token), the restored recent window, and the repetition penalty seeing the accepted
 drafts (a walk that forgot the window would accept the repeated draft).
-`test_constraint.das` - stocked suite, `-jit` only (tinyllama Q8 sizes the logits row; the cell writes the
-logits): the sampler under a `TokenConstraint` - the argmax when the constraint admits it, the best admitted
-token in logit order when it refuses the k largest (the whole row walked), only admitted survivors under a
-temperature, and one commit per emitted token; the constraint off, the argmax again.
+`test_constraint.das` - stocked suite, `-jit` only, skips without tinyllama Q8 (its session sizes the logits
+row; the cell writes the logits): the sampler under a `TokenConstraint` - the best admitted token when the
+constraint refuses the argmax, the whole row walked when it refuses the `CONSTRAINED_PROBE_K` largest (the
+candidate list asserted at the vocabulary's size), -1 and `constrain_dead` on both the greedy and the sampled
+path when it admits nothing, only admitted survivors under a temperature, one commit per emitted token, the
+argmax again with the constraint off; then a scheduler stream under a constraint that admits nothing finishes
+`constraint` with no piece emitted.
 `test_sampling.das` - stocked suite; the greedy oracle and the seeded-determinism cell on
 gemma-2-2b (skip without it, `-jit` only), and model-free: the sampler units (cutoffs, penalties,
 seeded draws on a bare session) plus the candidate-list fast path against the vocab-wide

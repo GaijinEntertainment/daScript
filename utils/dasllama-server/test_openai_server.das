@@ -385,25 +385,21 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                     }
                 }
             }
-            // response_format json_object: whatever the model says, it opens an object and, where it finishes, parses
+            // response_format json_object: the reply is one JSON object, closed within the budget
             POST("{base_url}/v1/chat/completions",
-                 "\{\"messages\":[\{\"role\":\"user\",\"content\":\"Describe a cat as JSON with one short field.\"}],\"max_tokens\":48,\"response_format\":\{\"type\":\"json_object\"}}") $(resp) {
+                 "\{\"messages\":[\{\"role\":\"user\",\"content\":\"Reply with the JSON object \{\\\"ok\\\": true\} and nothing else.\"}],\"max_tokens\":64,\"response_format\":\{\"type\":\"json_object\"}}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.OK))
                 var err : string
                 var js = read_json(string(resp.body), err)
                 t |> success(js != null, "json_object chat JSON parses")
                 if (js != null) {
                     let content = js?["choices"]?[0]?["message"]?["content"] ?? ""
-                    t |> success(starts_with(content, "\{"), "the reply opens an object: {content}")
-                    if ((js?["choices"]?[0]?["finish_reason"] ?? "") == "stop") {
-                        var cerr : string
-                        var cj = read_json(content, cerr)
-                        t |> success(cj != null && cj.value is _object, "a finished reply is a JSON object: {content}")
-                        unsafe {
-                            delete cj
-                        }
-                    }
+                    t |> equal(js?["choices"]?[0]?["finish_reason"] ?? "", "stop", "the object closes within the budget: {content}")
+                    var cerr : string
+                    var cj = read_json(content, cerr)
+                    t |> success(cj != null && cj.value is _object, "the reply is a JSON object: {content}")
                     unsafe {
+                        delete cj
                         delete js
                     }
                 }

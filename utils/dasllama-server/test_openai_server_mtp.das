@@ -115,6 +115,43 @@ def test_mtp_default_on_cpu(t : T?) {
             t |> success(drafted_after_chat(t, base_url) > 0l, "mtp = true drafts at four streams")
         }
     }
+    t |> run("explicit on: a constrained reply decodes plain beside the drafting streams") @(t : T?) {
+        with_mtp_server(t, MTP_PATH, TEST_PORT + 7, 2l, 1, false) $(base_url) {
+            let before = drafted_after_chat(t, base_url)
+            t |> success(before > 0l, "an unconstrained chat drafted")
+            POST("{base_url}/v1/chat/completions",
+                 "\{\"messages\":[\{\"role\":\"user\",\"content\":\"How many legs does a cat have? Answer in JSON.\"}],\"max_tokens\":24,\"temperature\":0," +
+                 "\"response_format\":\{\"type\":\"json_schema\",\"json_schema\":\{\"name\":\"legs\",\"strict\":true,\"schema\":" +
+                 "\{\"type\":\"object\",\"properties\":\{\"legs\":\{\"type\":\"integer\",\"minimum\":0,\"maximum\":9}},\"required\":[\"legs\"],\"additionalProperties\":false}}}}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK))
+                var perr = ""
+                var js = read_json(string(resp.body), perr)
+                t |> success(js != null, "the constrained chat answers")
+                if (js != null) {
+                    let content = js?["choices"]?[0]?["message"]?["content"] ?? ""
+                    var cerr = ""
+                    var cj = read_json(content, cerr)
+                    t |> success(cj != null && cj.value is _object && cj?["legs"] != null && !(cj?["legs"].value is _null), "the reply fits the schema: {content}")
+                    unsafe {
+                        delete cj
+                        delete js
+                    }
+                }
+            }
+            var after = -1l
+            GET("{base_url}/v1/stats") $(resp) {
+                var perr = ""
+                var js = read_json(string(resp.body), perr)
+                if (js != null) {
+                    after = int64(js?["mtp_drafted"] ?? -1.0lf)
+                    unsafe {
+                        delete js
+                    }
+                }
+            }
+            t |> equal(before, after, "the constrained stream drafted nothing")
+        }
+    }
 }
 
 [test]

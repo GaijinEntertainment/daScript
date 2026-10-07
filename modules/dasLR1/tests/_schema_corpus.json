@@ -1,422 +1,440 @@
 [
- {
-  "status": "SUCCESS",
-  "name": "min 0",
-  "schema": "{\n            \"type\": \"integer\",\n            \"minimum\": 0\n        }",
-  "grammar": "            root ::= ([0] | [1-9] [0-9]{0,15})\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "min 1",
-  "schema": "{\n            \"type\": \"integer\",\n            \"minimum\": 1\n        }",
-  "grammar": "            root ::= ([1-9] [0-9]{0,15})\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "min 3",
-  "schema": "{\n            \"type\": \"integer\",\n            \"minimum\": 3\n        }",
-  "grammar": "            root ::= ([1-2] [0-9]{1,15} | [3-9] [0-9]{0,15})\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "min 9",
-  "schema": "{\n            \"type\": \"integer\",\n            \"minimum\": 9\n        }",
-  "grammar": "            root ::= ([1-8] [0-9]{1,15} | [9] [0-9]{0,15})\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "min 10",
-  "schema": "{\n            \"type\": \"integer\",\n            \"minimum\": 10\n        }",
-  "grammar": "            root ::= ([1] ([0-9]{1,15}) | [2-9] [0-9]{1,15})\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "min 25",
-  "schema": "{\n            \"type\": \"integer\",\n            \"minimum\": 25\n        }",
-  "grammar": "            root ::= ([1] [0-9]{2,15} | [2] ([0-4] [0-9]{1,14} | [5-9] [0-9]{0,14}) | [3-9] [0-9]{1,15})\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "max 30",
-  "schema": "{\n            \"type\": \"integer\",\n            \"maximum\": 30\n        }",
-  "grammar": "            root ::= (\"-\" [1-9] [0-9]{0,15} | [0-9] | ([1-2] [0-9] | [3] \"0\"))\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "min -5",
-  "schema": "{\n            \"type\": \"integer\",\n            \"minimum\": -5\n        }",
-  "grammar": "            root ::= (\"-\" ([0-5]) | [0] | [1-9] [0-9]{0,15})\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "min -123",
-  "schema": "{\n            \"type\": \"integer\",\n            \"minimum\": -123\n        }",
-  "grammar": "            root ::= (\"-\" ([0-9] | ([1-8] [0-9] | [9] [0-9]) | \"1\" ([0-1] [0-9] | [2] [0-3])) | [0] | [1-9] [0-9]{0,15})\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "max -5",
-  "schema": "{\n            \"type\": \"integer\",\n            \"maximum\": -5\n        }",
-  "grammar": "            root ::= (\"-\" ([0-4] [0-9]{1,15} | [5-9] [0-9]{0,15}))\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "max 1",
-  "schema": "{\n            \"type\": \"integer\",\n            \"maximum\": 1\n        }",
-  "grammar": "            root ::= (\"-\" [1-9] [0-9]{0,15} | [0-1])\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "max 100",
-  "schema": "{\n            \"type\": \"integer\",\n            \"maximum\": 100\n        }",
-  "grammar": "            root ::= (\"-\" [1-9] [0-9]{0,15} | [0-9] | ([1-8] [0-9] | [9] [0-9]) | \"100\")\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "min 0 max 23",
-  "schema": "{\n            \"type\": \"integer\",\n            \"minimum\": 0,\n            \"maximum\": 23\n        }",
-  "grammar": "            root ::= ([0-9] | ([1] [0-9] | [2] [0-3]))\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "min 15 max 300",
-  "schema": "{\n            \"type\": \"integer\",\n            \"minimum\": 15,\n            \"maximum\": 300\n        }",
-  "grammar": "            root ::= (([1] ([5-9]) | [2-9] [0-9]) | ([1-2] [0-9]{2} | [3] \"00\"))\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "min 5 max 30",
-  "schema": "{\n            \"type\": \"integer\",\n            \"minimum\": 5,\n            \"maximum\": 30\n        }",
-  "grammar": "            root ::= ([5-9] | ([1-2] [0-9] | [3] \"0\"))\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "min -123 max 42",
-  "schema": "{\n            \"type\": \"integer\",\n            \"minimum\": -123,\n            \"maximum\": 42\n        }",
-  "grammar": "            root ::= (\"-\" ([0-9] | ([1-8] [0-9] | [9] [0-9]) | \"1\" ([0-1] [0-9] | [2] [0-3])) | [0-9] | ([1-3] [0-9] | [4] [0-2]))\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "min -10 max 10",
-  "schema": "{\n            \"type\": \"integer\",\n            \"minimum\": -10,\n            \"maximum\": 10\n        }",
-  "grammar": "            root ::= (\"-\" ([0-9] | \"10\") | [0-9] | \"10\")\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "FAILURE",
-  "name": "unknown type",
-  "schema": "{\n            \"type\": \"kaboom\"\n        })\"\"\",\n        \"\"\n    });\n\n    test({\n        FAILURE,\n        \"invalid type\",\n        R\"\"\"({\n            \"type\": 123\n        })\"\"\",\n        \"\"\n    });\n\n    test({\n        SUCCESS,\n        \"empty schema (object)\",\n        \"{}\",\n        R\"\"\"(\n            array ::= \"[\" space ( value (\",\" space value)* )? space \"]\"\n            boolean ::= (\"true\" | \"false\")\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            null ::= \"null\"\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            object ::= \"{\" space ( string \":\" space value (\",\" space string \":\" space value)* )? space \"}\"\n            root ::= object\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n            value ::= object | array | string | number | boolean | null\n        )\"\"\"\n    });\n\n    test({\n        SUCCESS,\n        \"exotic formats\",\n        R\"\"\"({\n            \"items\": [\n                { \"format\": \"date\" },\n                { \"format\": \"uuid\" },\n                { \"format\": \"time\" },\n                { \"format\": \"date-time\" }\n            ]\n        }",
-  "grammar": "            date ::= [0-9]{4} \"-\" ( \"0\" [1-9] | \"1\" [0-2] ) \"-\" ( \"0\" [1-9] | [1-2] [0-9] | \"3\" [0-1] )\n            date-string ::= \"\\\"\" date \"\\\"\"\n            date-time ::= date \"T\" time\n            date-time-string ::= \"\\\"\" date-time \"\\\"\"\n            root ::= \"[\" space tuple-0 \",\" space uuid \",\" space tuple-2 \",\" space tuple-3 space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            time ::= ([01] [0-9] | \"2\" [0-3]) \":\" [0-5] [0-9] \":\" [0-5] [0-9] ( \".\" [0-9]{3} )? ( \"Z\" | ( \"+\" | \"-\" ) ( [01] [0-9] | \"2\" [0-3] ) \":\" [0-5] [0-9] )\n            time-string ::= \"\\\"\" time \"\\\"\"\n            tuple-0 ::= date-string\n            tuple-2 ::= time-string\n            tuple-3 ::= date-time-string\n            uuid ::= \"\\\"\" [0-9a-fA-F]{8} \"-\" [0-9a-fA-F]{4} \"-\" [0-9a-fA-F]{4} \"-\" [0-9a-fA-F]{4} \"-\" [0-9a-fA-F]{12} \"\\\"\"\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "string",
-  "schema": "{\n            \"type\": \"string\"\n        }",
-  "grammar": "            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            root ::= \"\\\"\" char* \"\\\"\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "string w/ min length 1",
-  "schema": "{\n            \"type\": \"string\",\n            \"minLength\": 1\n        }",
-  "grammar": "            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            root ::= \"\\\"\" char+ \"\\\"\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "string w/ min length 3",
-  "schema": "{\n            \"type\": \"string\",\n            \"minLength\": 3\n        }",
-  "grammar": "            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            root ::= \"\\\"\" char{3,} \"\\\"\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "string w/ max length",
-  "schema": "{\n            \"type\": \"string\",\n            \"maxLength\": 3\n        }",
-  "grammar": "            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            root ::= \"\\\"\" char{0,3} \"\\\"\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "string w/ min & max length",
-  "schema": "{\n            \"type\": \"string\",\n            \"minLength\": 1,\n            \"maxLength\": 4\n        }",
-  "grammar": "            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            root ::= \"\\\"\" char{1,4} \"\\\"\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "boolean",
-  "schema": "{\n            \"type\": \"boolean\"\n        }",
-  "grammar": "            root ::= (\"true\" | \"false\")\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "integer",
-  "schema": "{\n            \"type\": \"integer\"\n        }",
-  "grammar": "            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            root ::= (\"-\"? integral-part)\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "string const",
-  "schema": "{\n            \"const\": \"foo\"\n        }",
-  "grammar": "            root ::= \"\\\"foo\\\"\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "non-string const",
-  "schema": "{\n            \"const\": 123\n        }",
-  "grammar": "            root ::= \"123\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "non-string enum",
-  "schema": "{\n            \"enum\": [\"red\", \"amber\", \"green\", null, 42, [\"foo\"]]\n        }",
-  "grammar": "            root ::= (\"\\\"red\\\"\" | \"\\\"amber\\\"\" | \"\\\"green\\\"\" | \"null\" | \"42\" | \"[\\\"foo\\\"]\")\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "string array",
-  "schema": "{\n            \"type\": \"array\",\n            \"prefixItems\": { \"type\": \"string\" }\n        }",
-  "grammar": "            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            root ::= \"[\" space (string (\",\" space string)*)? space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "nullable string array",
-  "schema": "{\n            \"type\": [\"array\", \"null\"],\n            \"prefixItems\": { \"type\": \"string\" }\n        }",
-  "grammar": "            alternative-0 ::= \"[\" space (string (\",\" space string)*)? space \"]\"\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            null ::= \"null\"\n            root ::= alternative-0 | null\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "tuple1",
-  "schema": "{\n            \"prefixItems\": [{ \"type\": \"string\" }]\n        }",
-  "grammar": "            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            root ::= \"[\" space string space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "tuple2",
-  "schema": "{\n            \"prefixItems\": [{ \"type\": \"string\" }, { \"type\": \"number\" }]\n        }",
-  "grammar": "            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            root ::= \"[\" space string \",\" space number space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "array with empty items",
-  "schema": "{\n            \"type\": \"array\",\n            \"items\": {}\n        }",
-  "grammar": "            array ::= \"[\" space ( value (\",\" space value)* )? space \"]\"\n            boolean ::= (\"true\" | \"false\")\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            item ::= object\n            null ::= \"null\"\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            object ::= \"{\" space ( string \":\" space value (\",\" space string \":\" space value)* )? space \"}\"\n            root ::= \"[\" space (item (\",\" space item)*)? space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n            value ::= object | array | string | number | boolean | null\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "array with empty items and prefixItems",
-  "schema": "{\n            \"type\": \"array\",\n            \"items\": {},\n            \"prefixItems\": { \"type\": \"string\" }\n        }",
-  "grammar": "            array ::= \"[\" space ( value (\",\" space value)* )? space \"]\"\n            boolean ::= (\"true\" | \"false\")\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            item ::= object\n            null ::= \"null\"\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            object ::= \"{\" space ( string \":\" space value (\",\" space string \":\" space value)* )? space \"}\"\n            root ::= \"[\" space (item (\",\" space item)*)? space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n            value ::= object | array | string | number | boolean | null\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "number",
-  "schema": "{\n            \"type\": \"number\"\n        }",
-  "grammar": "            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            root ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "minItems",
-  "schema": "{\n            \"items\": {\n                \"type\": \"boolean\"\n            },\n            \"minItems\": 2\n        }",
-  "grammar": "            boolean ::= (\"true\" | \"false\")\n            root ::= \"[\" space boolean (\",\" space boolean)+ space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "maxItems 0",
-  "schema": "{\n            \"items\": {\n                \"type\": \"boolean\"\n            },\n            \"maxItems\": 0\n        }",
-  "grammar": "            boolean ::= (\"true\" | \"false\")\n            root ::= \"[\" space  space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "maxItems 1",
-  "schema": "{\n            \"items\": {\n                \"type\": \"boolean\"\n            },\n            \"maxItems\": 1\n        }",
-  "grammar": "            boolean ::= (\"true\" | \"false\")\n            root ::= \"[\" space boolean? space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "maxItems 2",
-  "schema": "{\n            \"items\": {\n                \"type\": \"boolean\"\n            },\n            \"maxItems\": 2\n        }",
-  "grammar": "            boolean ::= (\"true\" | \"false\")\n            root ::= \"[\" space (boolean (\",\" space boolean)?)? space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "min + maxItems",
-  "schema": "{\n            \"items\": {\n                \"type\": [\"number\", \"integer\"]\n            },\n            \"minItems\": 3,\n            \"maxItems\": 5\n        }",
-  "grammar": "            decimal-part ::= [0-9]{1,16}\n            integer ::= (\"-\"? integral-part)\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            item ::= number | integer\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            root ::= \"[\" space item (\",\" space item){2,4} space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "min + max items with min + max values across zero",
-  "schema": "{\n            \"items\": {\n                \"type\": \"integer\",\n                \"minimum\": -12,\n                \"maximum\": 207\n            },\n            \"minItems\": 3,\n            \"maxItems\": 5\n        }",
-  "grammar": "            item ::= (\"-\" ([0-9] | \"1\" [0-2]) | [0-9] | ([1-8] [0-9] | [9] [0-9]) | ([1] [0-9]{2} | [2] \"0\" [0-7]))\n            root ::= \"[\" space item (\",\" space item){2,4} space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "min + max items with min + max values",
-  "schema": "{\n            \"items\": {\n                \"type\": \"integer\",\n                \"minimum\": 12,\n                \"maximum\": 207\n            },\n            \"minItems\": 3,\n            \"maxItems\": 5\n        }",
-  "grammar": "            item ::= (([1] ([2-9]) | [2-9] [0-9]) | ([1] [0-9]{2} | [2] \"0\" [0-7]))\n            root ::= \"[\" space item (\",\" space item){2,4} space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "simple regexp",
-  "schema": "{\n            \"type\": \"string\",\n            \"pattern\": \"^abc?d*efg+(hij)?kl$\"\n        }",
-  "grammar": "            root ::= \"\\\"\" (\"ab\" \"c\"? \"d\"* \"ef\" \"g\"+ (\"hij\")? \"kl\") \"\\\"\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "regexp escapes",
-  "schema": "{\n            \"type\": \"string\",\n            \"pattern\": \"^\\\\[\\\\]\\\\{\\\\}\\\\(\\\\)\\\\|\\\\+\\\\*\\\\?$\"\n        }",
-  "grammar": "            root ::= \"\\\"\" (\"[]{}()|+*?\") \"\\\"\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "regexp quote",
-  "schema": "{\n            \"type\": \"string\",\n            \"pattern\": \"^\\\"$\"\n        }",
-  "grammar": "            root ::= \"\\\"\" (\"\\\"\") \"\\\"\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "regexp with top-level alternation",
-  "schema": "{\n            \"type\": \"string\",\n            \"pattern\": \"^A|B|C|D$\"\n        }",
-  "grammar": "            root ::= \"\\\"\" (\"A\" | \"B\" | \"C\" | \"D\") \"\\\"\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "regexp",
-  "schema": "{\n            \"type\": \"string\",\n            \"pattern\": \"^(\\\\([0-9]{1,3}\\\\))?[0-9]{3}-[0-9]{4} a{3,5}nd...$\"\n        }",
-  "grammar": "            dot ::= [^\\x0A\\x0D]\n            root ::= \"\\\"\" ((\"(\" root-1{1,3} \")\")? root-1{3,3} \"-\" root-1{4,4} \" \" \"a\"{3,5} \"nd\" dot dot dot) \"\\\"\"\n            root-1 ::= [0-9]\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "required props in original order",
-  "schema": "{\n            \"type\": \"object\",\n            \"properties\": {\n                \"b\": {\"type\": \"string\"},\n                \"c\": {\"type\": \"string\"},\n                \"a\": {\"type\": \"string\"}\n            },\n            \"required\": [\n                \"a\",\n                \"b\",\n                \"c\"\n            ],\n            \"additionalProperties\": false,\n            \"definitions\": {}\n        }",
-  "grammar": "            a-kv ::= \"\\\"a\\\"\" space \":\" space string\n            b-kv ::= \"\\\"b\\\"\" space \":\" space string\n            c-kv ::= \"\\\"c\\\"\" space \":\" space string\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            root ::= \"{\" space b-kv \",\" space c-kv \",\" space a-kv space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "1 optional prop",
-  "schema": "{\n            \"properties\": {\n                \"a\": {\n                \"type\": \"string\"\n                }\n            },\n            \"additionalProperties\": false\n        }",
-  "grammar": "            a-kv ::= \"\\\"a\\\"\" space \":\" space string\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            root ::= \"{\" space  (a-kv )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "N optional props",
-  "schema": "{\n            \"properties\": {\n                \"a\": {\"type\": \"string\"},\n                \"b\": {\"type\": \"string\"},\n                \"c\": {\"type\": \"string\"}\n            },\n            \"additionalProperties\": false\n        }",
-  "grammar": "            a-kv ::= \"\\\"a\\\"\" space \":\" space string\n            a-rest ::= ( \",\" space b-kv )? b-rest\n            b-kv ::= \"\\\"b\\\"\" space \":\" space string\n            b-rest ::= ( \",\" space c-kv )?\n            c-kv ::= \"\\\"c\\\"\" space \":\" space string\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            root ::= \"{\" space  (a-kv a-rest | b-kv b-rest | c-kv )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "required + optional props each in original order",
-  "schema": "{\n            \"properties\": {\n                \"b\": {\"type\": \"string\"},\n                \"a\": {\"type\": \"string\"},\n                \"d\": {\"type\": \"string\"},\n                \"c\": {\"type\": \"string\"}\n            },\n            \"required\": [\"a\", \"b\"],\n            \"additionalProperties\": false\n        }",
-  "grammar": "            a-kv ::= \"\\\"a\\\"\" space \":\" space string\n            b-kv ::= \"\\\"b\\\"\" space \":\" space string\n            c-kv ::= \"\\\"c\\\"\" space \":\" space string\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            d-kv ::= \"\\\"d\\\"\" space \":\" space string\n            d-rest ::= ( \",\" space c-kv )?\n            root ::= \"{\" space b-kv \",\" space a-kv ( \",\" space ( d-kv d-rest | c-kv ) )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "additional props",
-  "schema": "{\n            \"type\": \"object\",\n            \"additionalProperties\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}}\n        }",
-  "grammar": "            additional-kv ::= string \":\" space additional-value\n            additional-value ::= \"[\" space (number (\",\" space number)*)? space \"]\"\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            root ::= \"{\" space  (additional-kv ( \",\" space additional-kv )* )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "additional props (true)",
-  "schema": "{\n            \"type\": \"object\",\n            \"additionalProperties\": true\n        }",
-  "grammar": "            array ::= \"[\" space ( value (\",\" space value)* )? space \"]\"\n            boolean ::= (\"true\" | \"false\")\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            null ::= \"null\"\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            object ::= \"{\" space ( string \":\" space value (\",\" space string \":\" space value)* )? space \"}\"\n            root ::= object\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n            value ::= object | array | string | number | boolean | null\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "additional props (implicit)",
-  "schema": "{\n            \"type\": \"object\"\n        }",
-  "grammar": "            array ::= \"[\" space ( value (\",\" space value)* )? space \"]\"\n            boolean ::= (\"true\" | \"false\")\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            null ::= \"null\"\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            object ::= \"{\" space ( string \":\" space value (\",\" space string \":\" space value)* )? space \"}\"\n            root ::= object\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n            value ::= object | array | string | number | boolean | null\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "empty w/o additional props",
-  "schema": "{\n            \"type\": \"object\",\n            \"additionalProperties\": false\n        }",
-  "grammar": "            root ::= \"{\" space  space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "required + additional props",
-  "schema": "{\n            \"type\": \"object\",\n            \"properties\": {\n                \"a\": {\"type\": \"number\"}\n            },\n            \"required\": [\"a\"],\n            \"additionalProperties\": {\"type\": \"string\"}\n        }",
-  "grammar": "            a-kv ::= \"\\\"a\\\"\" space \":\" space number\n            additional-k ::= [\"] ( [a] char+ | [^\"a] char* )? [\"]\n            additional-kv ::= additional-k \":\" space string\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            root ::= \"{\" space a-kv ( \",\" space ( additional-kv ( \",\" space additional-kv )* ) )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "optional + additional props",
-  "schema": "{\n            \"type\": \"object\",\n            \"properties\": {\n                \"a\": {\"type\": \"number\"}\n            },\n            \"additionalProperties\": {\"type\": \"number\"}\n        }",
-  "grammar": "            a-kv ::= \"\\\"a\\\"\" space \":\" space number\n            a-rest ::= ( \",\" space additional-kv )*\n            additional-k ::= [\"] ( [a] char+ | [^\"a] char* )? [\"]\n            additional-kv ::= additional-k \":\" space number\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            root ::= \"{\" space  (a-kv a-rest | additional-kv ( \",\" space additional-kv )* )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "required + optional + additional props",
-  "schema": "{\n            \"type\": \"object\",\n            \"properties\": {\n                \"and\": {\"type\": \"number\"},\n                \"also\": {\"type\": \"number\"}\n            },\n            \"required\": [\"and\"],\n            \"additionalProperties\": {\"type\": \"number\"}\n        }",
-  "grammar": "            additional-k ::= [\"] ( [a] ([l] ([s] ([o] char+ | [^\"o] char*) | [^\"s] char*) | [n] ([d] char+ | [^\"d] char*) | [^\"ln] char*) | [^\"a] char* )? [\"]\n            additional-kv ::= additional-k \":\" space number\n            also-kv ::= \"\\\"also\\\"\" space \":\" space number\n            also-rest ::= ( \",\" space additional-kv )*\n            and-kv ::= \"\\\"and\\\"\" space \":\" space number\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            root ::= \"{\" space and-kv ( \",\" space ( also-kv also-rest | additional-kv ( \",\" space additional-kv )* ) )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "optional props with empty name",
-  "schema": "{\n            \"properties\": {\n                \"\": {\"type\": \"integer\"},\n                \"a\": {\"type\": \"integer\"}\n            },\n            \"additionalProperties\": {\"type\": \"integer\"}\n        }",
-  "grammar": "            -kv ::= \"\\\"\\\"\" space \":\" space root\n            -rest ::= ( \",\" space a-kv )? a-rest\n            a-kv ::= \"\\\"a\\\"\" space \":\" space integer\n            a-rest ::= ( \",\" space additional-kv )*\n            additional-k ::= [\"] ( [a] char+ | [^\"a] char* ) [\"]\n            additional-kv ::= additional-k \":\" space integer\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            integer ::= (\"-\"? integral-part)\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            root ::= (\"-\"? integral-part)\n            root0 ::= \"{\" space  (-kv -rest | a-kv a-rest | additional-kv ( \",\" space additional-kv )* )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "optional props with nested names",
-  "schema": "{\n            \"properties\": {\n                \"a\": {\"type\": \"integer\"},\n                \"aa\": {\"type\": \"integer\"}\n            },\n            \"additionalProperties\": {\"type\": \"integer\"}\n        }",
-  "grammar": "            a-kv ::= \"\\\"a\\\"\" space \":\" space integer\n            a-rest ::= ( \",\" space aa-kv )? aa-rest\n            aa-kv ::= \"\\\"aa\\\"\" space \":\" space integer\n            aa-rest ::= ( \",\" space additional-kv )*\n            additional-k ::= [\"] ( [a] ([a] char+ | [^\"a] char*) | [^\"a] char* )? [\"]\n            additional-kv ::= additional-k \":\" space integer\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            integer ::= (\"-\"? integral-part)\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            root ::= \"{\" space  (a-kv a-rest | aa-kv aa-rest | additional-kv ( \",\" space additional-kv )* )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "optional props with common prefix",
-  "schema": "{\n            \"properties\": {\n                \"ab\": {\"type\": \"integer\"},\n                \"ac\": {\"type\": \"integer\"}\n            },\n            \"additionalProperties\": {\"type\": \"integer\"}\n        }",
-  "grammar": "            ab-kv ::= \"\\\"ab\\\"\" space \":\" space integer\n            ab-rest ::= ( \",\" space ac-kv )? ac-rest\n            ac-kv ::= \"\\\"ac\\\"\" space \":\" space integer\n            ac-rest ::= ( \",\" space additional-kv )*\n            additional-k ::= [\"] ( [a] ([b] char+ | [c] char+ | [^\"bc] char*) | [^\"a] char* )? [\"]\n            additional-kv ::= additional-k \":\" space integer\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            integer ::= (\"-\"? integral-part)\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            root ::= \"{\" space  (ab-kv ab-rest | ac-kv ac-rest | additional-kv ( \",\" space additional-kv )* )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "top-level $ref",
-  "schema": "{\n            \"$ref\": \"#/definitions/foo\",\n            \"definitions\": {\n                \"foo\": {\n                    \"type\": \"object\",\n                    \"properties\": {\n                        \"a\": {\n                            \"type\": \"string\"\n                        }\n                    },\n                    \"required\": [\n                        \"a\"\n                    ],\n                    \"additionalProperties\": false\n                }\n            }\n        }",
-  "grammar": "            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            ref-definitions-foo ::= \"{\" space ref-definitions-foo-a-kv space \"}\"\n            ref-definitions-foo-a-kv ::= \"\\\"a\\\"\" space \":\" space string\n            root ::= ref-definitions-foo\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "anyOf",
-  "schema": "{\n            \"anyOf\": [\n                {\"$ref\": \"#/definitions/foo\"},\n                {\"$ref\": \"#/definitions/bar\"}\n            ],\n            \"definitions\": {\n                \"foo\": {\n                    \"properties\": {\"a\": {\"type\": \"number\"}}\n                },\n                \"bar\": {\n                    \"properties\": {\"b\": {\"type\": \"number\"}}\n                }\n            },\n            \"type\": \"object\"\n        }",
-  "grammar": "            alternative-0 ::= ref-definitions-foo\n            alternative-1 ::= ref-definitions-bar\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            ref-definitions-bar ::= \"{\" space  (ref-definitions-bar-b-kv )? space \"}\"\n            ref-definitions-bar-b-kv ::= \"\\\"b\\\"\" space \":\" space number\n            ref-definitions-foo ::= \"{\" space  (ref-definitions-foo-a-kv )? space \"}\"\n            ref-definitions-foo-a-kv ::= \"\\\"a\\\"\" space \":\" space number\n            root ::= alternative-0 | alternative-1\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "anyOf $ref",
-  "schema": "{\n            \"properties\": {\n                \"a\": {\n                    \"anyOf\": [\n                        {\"type\": \"string\"},\n                        {\"type\": \"number\"}\n                    ]\n                },\n                \"b\": {\n                    \"anyOf\": [\n                        {\"$ref\": \"#/properties/a/anyOf/0\"},\n                        {\"type\": \"boolean\"}\n                    ]\n                }\n            },\n            \"type\": \"object\"\n        }",
-  "grammar": "            a ::= string | number\n            a-kv ::= \"\\\"a\\\"\" space \":\" space a\n            a-rest ::= ( \",\" space b-kv )?\n            b ::= b-0 | boolean\n            b-0 ::= string\n            b-kv ::= \"\\\"b\\\"\" space \":\" space b\n            boolean ::= (\"true\" | \"false\")\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            root ::= \"{\" space  (a-kv a-rest | b-kv )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "mix of allOf, anyOf and $ref (similar to https://json.schemastore.org/tsconfig.json)",
-  "schema": "{\n            \"allOf\": [\n                {\"$ref\": \"#/definitions/foo\"},\n                {\"$ref\": \"#/definitions/bar\"},\n                {\n                \"anyOf\": [\n                    {\"$ref\": \"#/definitions/baz\"},\n                    {\"$ref\": \"#/definitions/bam\"}\n                ]\n                }\n            ],\n            \"definitions\": {\n                \"foo\": {\n                    \"properties\": {\"a\": {\"type\": \"number\"}}\n                },\n                \"bar\": {\n                    \"properties\": {\"b\": {\"type\": \"number\"}}\n                },\n                \"bam\": {\n                    \"properties\": {\"c\": {\"type\": \"number\"}}\n                },\n                \"baz\": {\n                    \"properties\": {\"d\": {\"type\": \"number\"}}\n                }\n            },\n            \"type\": \"object\"\n        }",
-  "grammar": "            a-kv ::= \"\\\"a\\\"\" space \":\" space number\n            b-kv ::= \"\\\"b\\\"\" space \":\" space number\n            c-kv ::= \"\\\"c\\\"\" space \":\" space number\n            d-kv ::= \"\\\"d\\\"\" space \":\" space number\n            d-rest ::= ( \",\" space c-kv )?\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            root ::= \"{\" space a-kv \",\" space b-kv ( \",\" space ( d-kv d-rest | c-kv ) )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "allOf with enum schema",
-  "schema": "{\n            \"allOf\": [\n                {\"$ref\": \"#/definitions/foo\"}\n            ],\n            \"definitions\": {\n                \"foo\": {\n                    \"type\": \"string\",\n                    \"enum\": [\"a\", \"b\"]\n                }\n            }\n        }",
-  "grammar": "            root ::= (\"\\\"a\\\"\" | \"\\\"b\\\"\")\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "allOf with multiple enum schemas",
-  "schema": "{\n            \"allOf\": [\n                {\"$ref\": \"#/definitions/foo\"},\n                {\"$ref\": \"#/definitions/bar\"}\n            ],\n            \"definitions\": {\n                \"foo\": {\n                    \"type\": \"string\",\n                    \"enum\": [\"a\", \"b\", \"c\"]\n                },\n                \"bar\": {\n                    \"type\": \"string\",\n                    \"enum\": [\"b\", \"c\", \"d\"]\n                }\n            }\n        }",
-  "grammar": "            root ::= (\"\\\"b\\\"\" | \"\\\"c\\\"\")\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "conflicting names",
-  "schema": "{\n            \"type\": \"object\",\n            \"properties\": {\n                \"number\": {\n                \"type\": \"object\",\n                \"properties\": {\n                    \"number\": {\n                    \"type\": \"object\",\n                        \"properties\": {\n                            \"root\": {\n                                \"type\": \"number\"\n                            }\n                        },\n                        \"required\": [\n                            \"root\"\n                        ],\n                        \"additionalProperties\": false\n                    }\n                },\n                \"required\": [\n                    \"number\"\n                ],\n                \"additionalProperties\": false\n                }\n            },\n            \"required\": [\n                \"number\"\n            ],\n            \"additionalProperties\": false,\n            \"definitions\": {}\n        }",
-  "grammar": "            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            number- ::= \"{\" space number-number-kv space \"}\"\n            number-kv ::= \"\\\"number\\\"\" space \":\" space number-\n            number-number ::= \"{\" space number-number-root-kv space \"}\"\n            number-number-kv ::= \"\\\"number\\\"\" space \":\" space number-number\n            number-number-root-kv ::= \"\\\"root\\\"\" space \":\" space number\n            root ::= \"{\" space number-kv space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "description only (no type) treated as unconstrained",
-  "schema": "{\"description\": \"The 0-based index of the last line to be retrieved (inclusive). If None, read until the end of the file.\"}",
-  "grammar": "            array ::= \"[\" space ( value (\",\" space value)* )? space \"]\"\n            boolean ::= (\"true\" | \"false\")\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            null ::= \"null\"\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            object ::= \"{\" space ( string \":\" space value (\",\" space string \":\" space value)* )? space \"}\"\n            root ::= value\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n            value ::= object | array | string | number | boolean | null\n        "
- },
- {
-  "status": "SUCCESS",
-  "name": "literal string with escapes",
-  "schema": "{\n            \"properties\": {\n                \"code\": {\n                    \"const\": \" \\r \\n \\\" \\\\ \",\n                    \"description\": \"Generated code\",\n                    \"title\": \"Code\",\n                    \"type\": \"string\"\n                }\n            },\n            \"required\": [\n                \"code\"\n            ],\n            \"title\": \"DecoderResponse\",\n            \"type\": \"object\"\n        }",
-  "grammar": "            code ::= \"\\\" \\\\r \\\\n \\\\\\\" \\\\\\\\ \\\"\"\n            code-kv ::= \"\\\"code\\\"\" space \":\" space code\n            root ::= \"{\" space code-kv space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
- }
+	{
+		"status" : "SUCCESS",
+		"name" : "min 0",
+		"schema" : "{\n            \"type\": \"integer\",\n            \"minimum\": 0\n        }",
+		"grammar" : "\n            root ::= ([0] | [1-9] [0-9]{0,15})\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "min 1",
+		"schema" : "{\n            \"type\": \"integer\",\n            \"minimum\": 1\n        }",
+		"grammar" : "\n            root ::= ([1-9] [0-9]{0,15})\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "min 3",
+		"schema" : "{\n            \"type\": \"integer\",\n            \"minimum\": 3\n        }",
+		"grammar" : "\n            root ::= ([1-2] [0-9]{1,15} | [3-9] [0-9]{0,15})\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "min 9",
+		"schema" : "{\n            \"type\": \"integer\",\n            \"minimum\": 9\n        }",
+		"grammar" : "\n            root ::= ([1-8] [0-9]{1,15} | [9] [0-9]{0,15})\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "min 10",
+		"schema" : "{\n            \"type\": \"integer\",\n            \"minimum\": 10\n        }",
+		"grammar" : "\n            root ::= ([1] ([0-9]{1,15}) | [2-9] [0-9]{1,15})\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "min 25",
+		"schema" : "{\n            \"type\": \"integer\",\n            \"minimum\": 25\n        }",
+		"grammar" : "\n            root ::= ([1] [0-9]{2,15} | [2] ([0-4] [0-9]{1,14} | [5-9] [0-9]{0,14}) | [3-9] [0-9]{1,15})\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "max 30",
+		"schema" : "{\n            \"type\": \"integer\",\n            \"maximum\": 30\n        }",
+		"grammar" : "\n            root ::= (\"-\" [1-9] [0-9]{0,15} | [0-9] | ([1-2] [0-9] | [3] \"0\"))\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "min -5",
+		"schema" : "{\n            \"type\": \"integer\",\n            \"minimum\": -5\n        }",
+		"grammar" : "\n            root ::= (\"-\" ([0-5]) | [0] | [1-9] [0-9]{0,15})\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "min -123",
+		"schema" : "{\n            \"type\": \"integer\",\n            \"minimum\": -123\n        }",
+		"grammar" : "\n            root ::= (\"-\" ([0-9] | ([1-8] [0-9] | [9] [0-9]) | \"1\" ([0-1] [0-9] | [2] [0-3])) | [0] | [1-9] [0-9]{0,15})\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "max -5",
+		"schema" : "{\n            \"type\": \"integer\",\n            \"maximum\": -5\n        }",
+		"grammar" : "\n            root ::= (\"-\" ([0-4] [0-9]{1,15} | [5-9] [0-9]{0,15}))\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "max 1",
+		"schema" : "{\n            \"type\": \"integer\",\n            \"maximum\": 1\n        }",
+		"grammar" : "\n            root ::= (\"-\" [1-9] [0-9]{0,15} | [0-1])\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "max 100",
+		"schema" : "{\n            \"type\": \"integer\",\n            \"maximum\": 100\n        }",
+		"grammar" : "\n            root ::= (\"-\" [1-9] [0-9]{0,15} | [0-9] | ([1-8] [0-9] | [9] [0-9]) | \"100\")\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "min 0 max 23",
+		"schema" : "{\n            \"type\": \"integer\",\n            \"minimum\": 0,\n            \"maximum\": 23\n        }",
+		"grammar" : "\n            root ::= ([0-9] | ([1] [0-9] | [2] [0-3]))\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "min 15 max 300",
+		"schema" : "{\n            \"type\": \"integer\",\n            \"minimum\": 15,\n            \"maximum\": 300\n        }",
+		"grammar" : "\n            root ::= (([1] ([5-9]) | [2-9] [0-9]) | ([1-2] [0-9]{2} | [3] \"00\"))\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "min 5 max 30",
+		"schema" : "{\n            \"type\": \"integer\",\n            \"minimum\": 5,\n            \"maximum\": 30\n        }",
+		"grammar" : "\n            root ::= ([5-9] | ([1-2] [0-9] | [3] \"0\"))\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "min -123 max 42",
+		"schema" : "{\n            \"type\": \"integer\",\n            \"minimum\": -123,\n            \"maximum\": 42\n        }",
+		"grammar" : "\n            root ::= (\"-\" ([0-9] | ([1-8] [0-9] | [9] [0-9]) | \"1\" ([0-1] [0-9] | [2] [0-3])) | [0-9] | ([1-3] [0-9] | [4] [0-2]))\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "min -10 max 10",
+		"schema" : "{\n            \"type\": \"integer\",\n            \"minimum\": -10,\n            \"maximum\": 10\n        }",
+		"grammar" : "\n            root ::= (\"-\" ([0-9] | \"10\") | [0-9] | \"10\")\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "FAILURE",
+		"name" : "unknown type",
+		"schema" : "{\n            \"type\": \"kaboom\"\n        }",
+		"grammar" : ""
+	},
+	{
+		"status" : "FAILURE",
+		"name" : "invalid type",
+		"schema" : "{\n            \"type\": 123\n        }",
+		"grammar" : ""
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "empty schema (object)",
+		"schema" : "{}",
+		"grammar" : "\n            array ::= \"[\" space ( value (\",\" space value)* )? space \"]\"\n            boolean ::= (\"true\" | \"false\")\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            null ::= \"null\"\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            object ::= \"{\" space ( string \":\" space value (\",\" space string \":\" space value)* )? space \"}\"\n            root ::= object\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n            value ::= object | array | string | number | boolean | null\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "exotic formats",
+		"schema" : "{\n            \"items\": [\n                { \"format\": \"date\" },\n                { \"format\": \"uuid\" },\n                { \"format\": \"time\" },\n                { \"format\": \"date-time\" }\n            ]\n        }",
+		"grammar" : "\n            date ::= [0-9]{4} \"-\" ( \"0\" [1-9] | \"1\" [0-2] ) \"-\" ( \"0\" [1-9] | [1-2] [0-9] | \"3\" [0-1] )\n            date-string ::= \"\\\"\" date \"\\\"\"\n            date-time ::= date \"T\" time\n            date-time-string ::= \"\\\"\" date-time \"\\\"\"\n            root ::= \"[\" space tuple-0 \",\" space uuid \",\" space tuple-2 \",\" space tuple-3 space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            time ::= ([01] [0-9] | \"2\" [0-3]) \":\" [0-5] [0-9] \":\" [0-5] [0-9] ( \".\" [0-9]{3} )? ( \"Z\" | ( \"+\" | \"-\" ) ( [01] [0-9] | \"2\" [0-3] ) \":\" [0-5] [0-9] )\n            time-string ::= \"\\\"\" time \"\\\"\"\n            tuple-0 ::= date-string\n            tuple-2 ::= time-string\n            tuple-3 ::= date-time-string\n            uuid ::= \"\\\"\" [0-9a-fA-F]{8} \"-\" [0-9a-fA-F]{4} \"-\" [0-9a-fA-F]{4} \"-\" [0-9a-fA-F]{4} \"-\" [0-9a-fA-F]{12} \"\\\"\"\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "string",
+		"schema" : "{\n            \"type\": \"string\"\n        }",
+		"grammar" : "\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            root ::= \"\\\"\" char* \"\\\"\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "string w/ min length 1",
+		"schema" : "{\n            \"type\": \"string\",\n            \"minLength\": 1\n        }",
+		"grammar" : "\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            root ::= \"\\\"\" char+ \"\\\"\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "string w/ min length 3",
+		"schema" : "{\n            \"type\": \"string\",\n            \"minLength\": 3\n        }",
+		"grammar" : "\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            root ::= \"\\\"\" char{3,} \"\\\"\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "string w/ max length",
+		"schema" : "{\n            \"type\": \"string\",\n            \"maxLength\": 3\n        }",
+		"grammar" : "\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            root ::= \"\\\"\" char{0,3} \"\\\"\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "string w/ min & max length",
+		"schema" : "{\n            \"type\": \"string\",\n            \"minLength\": 1,\n            \"maxLength\": 4\n        }",
+		"grammar" : "\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            root ::= \"\\\"\" char{1,4} \"\\\"\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "boolean",
+		"schema" : "{\n            \"type\": \"boolean\"\n        }",
+		"grammar" : "\n            root ::= (\"true\" | \"false\")\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "integer",
+		"schema" : "{\n            \"type\": \"integer\"\n        }",
+		"grammar" : "\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            root ::= (\"-\"? integral-part)\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "string const",
+		"schema" : "{\n            \"const\": \"foo\"\n        }",
+		"grammar" : "\n            root ::= \"\\\"foo\\\"\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "non-string const",
+		"schema" : "{\n            \"const\": 123\n        }",
+		"grammar" : "\n            root ::= \"123\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "non-string enum",
+		"schema" : "{\n            \"enum\": [\"red\", \"amber\", \"green\", null, 42, [\"foo\"]]\n        }",
+		"grammar" : "\n            root ::= (\"\\\"red\\\"\" | \"\\\"amber\\\"\" | \"\\\"green\\\"\" | \"null\" | \"42\" | \"[\\\"foo\\\"]\")\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "string array",
+		"schema" : "{\n            \"type\": \"array\",\n            \"prefixItems\": { \"type\": \"string\" }\n        }",
+		"grammar" : "\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            root ::= \"[\" space (string (\",\" space string)*)? space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "nullable string array",
+		"schema" : "{\n            \"type\": [\"array\", \"null\"],\n            \"prefixItems\": { \"type\": \"string\" }\n        }",
+		"grammar" : "\n            alternative-0 ::= \"[\" space (string (\",\" space string)*)? space \"]\"\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            null ::= \"null\"\n            root ::= alternative-0 | null\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "tuple1",
+		"schema" : "{\n            \"prefixItems\": [{ \"type\": \"string\" }]\n        }",
+		"grammar" : "\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            root ::= \"[\" space string space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "tuple2",
+		"schema" : "{\n            \"prefixItems\": [{ \"type\": \"string\" }, { \"type\": \"number\" }]\n        }",
+		"grammar" : "\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            root ::= \"[\" space string \",\" space number space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "array with empty items",
+		"schema" : "{\n            \"type\": \"array\",\n            \"items\": {}\n        }",
+		"grammar" : "\n            array ::= \"[\" space ( value (\",\" space value)* )? space \"]\"\n            boolean ::= (\"true\" | \"false\")\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            item ::= object\n            null ::= \"null\"\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            object ::= \"{\" space ( string \":\" space value (\",\" space string \":\" space value)* )? space \"}\"\n            root ::= \"[\" space (item (\",\" space item)*)? space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n            value ::= object | array | string | number | boolean | null\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "array with empty items and prefixItems",
+		"schema" : "{\n            \"type\": \"array\",\n            \"items\": {},\n            \"prefixItems\": { \"type\": \"string\" }\n        }",
+		"grammar" : "\n            array ::= \"[\" space ( value (\",\" space value)* )? space \"]\"\n            boolean ::= (\"true\" | \"false\")\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            item ::= object\n            null ::= \"null\"\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            object ::= \"{\" space ( string \":\" space value (\",\" space string \":\" space value)* )? space \"}\"\n            root ::= \"[\" space (item (\",\" space item)*)? space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n            value ::= object | array | string | number | boolean | null\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "number",
+		"schema" : "{\n            \"type\": \"number\"\n        }",
+		"grammar" : "\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            root ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "minItems",
+		"schema" : "{\n            \"items\": {\n                \"type\": \"boolean\"\n            },\n            \"minItems\": 2\n        }",
+		"grammar" : "\n            boolean ::= (\"true\" | \"false\")\n            root ::= \"[\" space boolean (\",\" space boolean)+ space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "maxItems 0",
+		"schema" : "{\n            \"items\": {\n                \"type\": \"boolean\"\n            },\n            \"maxItems\": 0\n        }",
+		"grammar" : "\n            boolean ::= (\"true\" | \"false\")\n            root ::= \"[\" space  space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "maxItems 1",
+		"schema" : "{\n            \"items\": {\n                \"type\": \"boolean\"\n            },\n            \"maxItems\": 1\n        }",
+		"grammar" : "\n            boolean ::= (\"true\" | \"false\")\n            root ::= \"[\" space boolean? space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "maxItems 2",
+		"schema" : "{\n            \"items\": {\n                \"type\": \"boolean\"\n            },\n            \"maxItems\": 2\n        }",
+		"grammar" : "\n            boolean ::= (\"true\" | \"false\")\n            root ::= \"[\" space (boolean (\",\" space boolean)?)? space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "min + maxItems",
+		"schema" : "{\n            \"items\": {\n                \"type\": [\"number\", \"integer\"]\n            },\n            \"minItems\": 3,\n            \"maxItems\": 5\n        }",
+		"grammar" : "\n            decimal-part ::= [0-9]{1,16}\n            integer ::= (\"-\"? integral-part)\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            item ::= number | integer\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            root ::= \"[\" space item (\",\" space item){2,4} space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "min + max items with min + max values across zero",
+		"schema" : "{\n            \"items\": {\n                \"type\": \"integer\",\n                \"minimum\": -12,\n                \"maximum\": 207\n            },\n            \"minItems\": 3,\n            \"maxItems\": 5\n        }",
+		"grammar" : "\n            item ::= (\"-\" ([0-9] | \"1\" [0-2]) | [0-9] | ([1-8] [0-9] | [9] [0-9]) | ([1] [0-9]{2} | [2] \"0\" [0-7]))\n            root ::= \"[\" space item (\",\" space item){2,4} space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "min + max items with min + max values",
+		"schema" : "{\n            \"items\": {\n                \"type\": \"integer\",\n                \"minimum\": 12,\n                \"maximum\": 207\n            },\n            \"minItems\": 3,\n            \"maxItems\": 5\n        }",
+		"grammar" : "\n            item ::= (([1] ([2-9]) | [2-9] [0-9]) | ([1] [0-9]{2} | [2] \"0\" [0-7]))\n            root ::= \"[\" space item (\",\" space item){2,4} space \"]\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "simple regexp",
+		"schema" : "{\n            \"type\": \"string\",\n            \"pattern\": \"^abc?d*efg+(hij)?kl$\"\n        }",
+		"grammar" : "\n            root ::= \"\\\"\" (\"ab\" \"c\"? \"d\"* \"ef\" \"g\"+ (\"hij\")? \"kl\") \"\\\"\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "regexp escapes",
+		"schema" : "{\n            \"type\": \"string\",\n            \"pattern\": \"^\\\\[\\\\]\\\\{\\\\}\\\\(\\\\)\\\\|\\\\+\\\\*\\\\?$\"\n        }",
+		"grammar" : "\n            root ::= \"\\\"\" (\"[]{}()|+*?\") \"\\\"\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "regexp quote",
+		"schema" : "{\n            \"type\": \"string\",\n            \"pattern\": \"^\\\"$\"\n        }",
+		"grammar" : "\n            root ::= \"\\\"\" (\"\\\"\") \"\\\"\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "regexp with top-level alternation",
+		"schema" : "{\n            \"type\": \"string\",\n            \"pattern\": \"^A|B|C|D$\"\n        }",
+		"grammar" : "\n            root ::= \"\\\"\" (\"A\" | \"B\" | \"C\" | \"D\") \"\\\"\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "regexp",
+		"schema" : "{\n            \"type\": \"string\",\n            \"pattern\": \"^(\\\\([0-9]{1,3}\\\\))?[0-9]{3}-[0-9]{4} a{3,5}nd...$\"\n        }",
+		"grammar" : "\n            dot ::= [^\\x0A\\x0D]\n            root ::= \"\\\"\" ((\"(\" root-1{1,3} \")\")? root-1{3,3} \"-\" root-1{4,4} \" \" \"a\"{3,5} \"nd\" dot dot dot) \"\\\"\"\n            root-1 ::= [0-9]\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "required props in original order",
+		"schema" : "{\n            \"type\": \"object\",\n            \"properties\": {\n                \"b\": {\"type\": \"string\"},\n                \"c\": {\"type\": \"string\"},\n                \"a\": {\"type\": \"string\"}\n            },\n            \"required\": [\n                \"a\",\n                \"b\",\n                \"c\"\n            ],\n            \"additionalProperties\": false,\n            \"definitions\": {}\n        }",
+		"grammar" : "\n            a-kv ::= \"\\\"a\\\"\" space \":\" space string\n            b-kv ::= \"\\\"b\\\"\" space \":\" space string\n            c-kv ::= \"\\\"c\\\"\" space \":\" space string\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            root ::= \"{\" space b-kv \",\" space c-kv \",\" space a-kv space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "1 optional prop",
+		"schema" : "{\n            \"properties\": {\n                \"a\": {\n                \"type\": \"string\"\n                }\n            },\n            \"additionalProperties\": false\n        }",
+		"grammar" : "\n            a-kv ::= \"\\\"a\\\"\" space \":\" space string\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            root ::= \"{\" space  (a-kv )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "N optional props",
+		"schema" : "{\n            \"properties\": {\n                \"a\": {\"type\": \"string\"},\n                \"b\": {\"type\": \"string\"},\n                \"c\": {\"type\": \"string\"}\n            },\n            \"additionalProperties\": false\n        }",
+		"grammar" : "\n            a-kv ::= \"\\\"a\\\"\" space \":\" space string\n            a-rest ::= ( \",\" space b-kv )? b-rest\n            b-kv ::= \"\\\"b\\\"\" space \":\" space string\n            b-rest ::= ( \",\" space c-kv )?\n            c-kv ::= \"\\\"c\\\"\" space \":\" space string\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            root ::= \"{\" space  (a-kv a-rest | b-kv b-rest | c-kv )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "required + optional props each in original order",
+		"schema" : "{\n            \"properties\": {\n                \"b\": {\"type\": \"string\"},\n                \"a\": {\"type\": \"string\"},\n                \"d\": {\"type\": \"string\"},\n                \"c\": {\"type\": \"string\"}\n            },\n            \"required\": [\"a\", \"b\"],\n            \"additionalProperties\": false\n        }",
+		"grammar" : "\n            a-kv ::= \"\\\"a\\\"\" space \":\" space string\n            b-kv ::= \"\\\"b\\\"\" space \":\" space string\n            c-kv ::= \"\\\"c\\\"\" space \":\" space string\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            d-kv ::= \"\\\"d\\\"\" space \":\" space string\n            d-rest ::= ( \",\" space c-kv )?\n            root ::= \"{\" space b-kv \",\" space a-kv ( \",\" space ( d-kv d-rest | c-kv ) )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "additional props",
+		"schema" : "{\n            \"type\": \"object\",\n            \"additionalProperties\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}}\n        }",
+		"grammar" : "\n            additional-kv ::= string \":\" space additional-value\n            additional-value ::= \"[\" space (number (\",\" space number)*)? space \"]\"\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            root ::= \"{\" space  (additional-kv ( \",\" space additional-kv )* )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "additional props (true)",
+		"schema" : "{\n            \"type\": \"object\",\n            \"additionalProperties\": true\n        }",
+		"grammar" : "\n            array ::= \"[\" space ( value (\",\" space value)* )? space \"]\"\n            boolean ::= (\"true\" | \"false\")\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            null ::= \"null\"\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            object ::= \"{\" space ( string \":\" space value (\",\" space string \":\" space value)* )? space \"}\"\n            root ::= object\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n            value ::= object | array | string | number | boolean | null\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "additional props (implicit)",
+		"schema" : "{\n            \"type\": \"object\"\n        }",
+		"grammar" : "\n            array ::= \"[\" space ( value (\",\" space value)* )? space \"]\"\n            boolean ::= (\"true\" | \"false\")\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            null ::= \"null\"\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            object ::= \"{\" space ( string \":\" space value (\",\" space string \":\" space value)* )? space \"}\"\n            root ::= object\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n            value ::= object | array | string | number | boolean | null\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "empty w/o additional props",
+		"schema" : "{\n            \"type\": \"object\",\n            \"additionalProperties\": false\n        }",
+		"grammar" : "\n            root ::= \"{\" space  space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "required + additional props",
+		"schema" : "{\n            \"type\": \"object\",\n            \"properties\": {\n                \"a\": {\"type\": \"number\"}\n            },\n            \"required\": [\"a\"],\n            \"additionalProperties\": {\"type\": \"string\"}\n        }",
+		"grammar" : "\n            a-kv ::= \"\\\"a\\\"\" space \":\" space number\n            additional-k ::= [\"] ( [a] char+ | [^\"a] char* )? [\"]\n            additional-kv ::= additional-k \":\" space string\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            root ::= \"{\" space a-kv ( \",\" space ( additional-kv ( \",\" space additional-kv )* ) )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "optional + additional props",
+		"schema" : "{\n            \"type\": \"object\",\n            \"properties\": {\n                \"a\": {\"type\": \"number\"}\n            },\n            \"additionalProperties\": {\"type\": \"number\"}\n        }",
+		"grammar" : "\n            a-kv ::= \"\\\"a\\\"\" space \":\" space number\n            a-rest ::= ( \",\" space additional-kv )*\n            additional-k ::= [\"] ( [a] char+ | [^\"a] char* )? [\"]\n            additional-kv ::= additional-k \":\" space number\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            root ::= \"{\" space  (a-kv a-rest | additional-kv ( \",\" space additional-kv )* )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "required + optional + additional props",
+		"schema" : "{\n            \"type\": \"object\",\n            \"properties\": {\n                \"and\": {\"type\": \"number\"},\n                \"also\": {\"type\": \"number\"}\n            },\n            \"required\": [\"and\"],\n            \"additionalProperties\": {\"type\": \"number\"}\n        }",
+		"grammar" : "\n            additional-k ::= [\"] ( [a] ([l] ([s] ([o] char+ | [^\"o] char*) | [^\"s] char*) | [n] ([d] char+ | [^\"d] char*) | [^\"ln] char*) | [^\"a] char* )? [\"]\n            additional-kv ::= additional-k \":\" space number\n            also-kv ::= \"\\\"also\\\"\" space \":\" space number\n            also-rest ::= ( \",\" space additional-kv )*\n            and-kv ::= \"\\\"and\\\"\" space \":\" space number\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            root ::= \"{\" space and-kv ( \",\" space ( also-kv also-rest | additional-kv ( \",\" space additional-kv )* ) )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "optional props with empty name",
+		"schema" : "{\n            \"properties\": {\n                \"\": {\"type\": \"integer\"},\n                \"a\": {\"type\": \"integer\"}\n            },\n            \"additionalProperties\": {\"type\": \"integer\"}\n        }",
+		"grammar" : "\n            -kv ::= \"\\\"\\\"\" space \":\" space root\n            -rest ::= ( \",\" space a-kv )? a-rest\n            a-kv ::= \"\\\"a\\\"\" space \":\" space integer\n            a-rest ::= ( \",\" space additional-kv )*\n            additional-k ::= [\"] ( [a] char+ | [^\"a] char* ) [\"]\n            additional-kv ::= additional-k \":\" space integer\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            integer ::= (\"-\"? integral-part)\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            root ::= (\"-\"? integral-part)\n            root0 ::= \"{\" space  (-kv -rest | a-kv a-rest | additional-kv ( \",\" space additional-kv )* )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "optional props with nested names",
+		"schema" : "{\n            \"properties\": {\n                \"a\": {\"type\": \"integer\"},\n                \"aa\": {\"type\": \"integer\"}\n            },\n            \"additionalProperties\": {\"type\": \"integer\"}\n        }",
+		"grammar" : "\n            a-kv ::= \"\\\"a\\\"\" space \":\" space integer\n            a-rest ::= ( \",\" space aa-kv )? aa-rest\n            aa-kv ::= \"\\\"aa\\\"\" space \":\" space integer\n            aa-rest ::= ( \",\" space additional-kv )*\n            additional-k ::= [\"] ( [a] ([a] char+ | [^\"a] char*) | [^\"a] char* )? [\"]\n            additional-kv ::= additional-k \":\" space integer\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            integer ::= (\"-\"? integral-part)\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            root ::= \"{\" space  (a-kv a-rest | aa-kv aa-rest | additional-kv ( \",\" space additional-kv )* )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "optional props with common prefix",
+		"schema" : "{\n            \"properties\": {\n                \"ab\": {\"type\": \"integer\"},\n                \"ac\": {\"type\": \"integer\"}\n            },\n            \"additionalProperties\": {\"type\": \"integer\"}\n        }",
+		"grammar" : "\n            ab-kv ::= \"\\\"ab\\\"\" space \":\" space integer\n            ab-rest ::= ( \",\" space ac-kv )? ac-rest\n            ac-kv ::= \"\\\"ac\\\"\" space \":\" space integer\n            ac-rest ::= ( \",\" space additional-kv )*\n            additional-k ::= [\"] ( [a] ([b] char+ | [c] char+ | [^\"bc] char*) | [^\"a] char* )? [\"]\n            additional-kv ::= additional-k \":\" space integer\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            integer ::= (\"-\"? integral-part)\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            root ::= \"{\" space  (ab-kv ab-rest | ac-kv ac-rest | additional-kv ( \",\" space additional-kv )* )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "top-level $ref",
+		"schema" : "{\n            \"$ref\": \"#/definitions/foo\",\n            \"definitions\": {\n                \"foo\": {\n                    \"type\": \"object\",\n                    \"properties\": {\n                        \"a\": {\n                            \"type\": \"string\"\n                        }\n                    },\n                    \"required\": [\n                        \"a\"\n                    ],\n                    \"additionalProperties\": false\n                }\n            }\n        }",
+		"grammar" : "\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            ref-definitions-foo ::= \"{\" space ref-definitions-foo-a-kv space \"}\"\n            ref-definitions-foo-a-kv ::= \"\\\"a\\\"\" space \":\" space string\n            root ::= ref-definitions-foo\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "anyOf",
+		"schema" : "{\n            \"anyOf\": [\n                {\"$ref\": \"#/definitions/foo\"},\n                {\"$ref\": \"#/definitions/bar\"}\n            ],\n            \"definitions\": {\n                \"foo\": {\n                    \"properties\": {\"a\": {\"type\": \"number\"}}\n                },\n                \"bar\": {\n                    \"properties\": {\"b\": {\"type\": \"number\"}}\n                }\n            },\n            \"type\": \"object\"\n        }",
+		"grammar" : "\n            alternative-0 ::= ref-definitions-foo\n            alternative-1 ::= ref-definitions-bar\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            ref-definitions-bar ::= \"{\" space  (ref-definitions-bar-b-kv )? space \"}\"\n            ref-definitions-bar-b-kv ::= \"\\\"b\\\"\" space \":\" space number\n            ref-definitions-foo ::= \"{\" space  (ref-definitions-foo-a-kv )? space \"}\"\n            ref-definitions-foo-a-kv ::= \"\\\"a\\\"\" space \":\" space number\n            root ::= alternative-0 | alternative-1\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "anyOf $ref",
+		"schema" : "{\n            \"properties\": {\n                \"a\": {\n                    \"anyOf\": [\n                        {\"type\": \"string\"},\n                        {\"type\": \"number\"}\n                    ]\n                },\n                \"b\": {\n                    \"anyOf\": [\n                        {\"$ref\": \"#/properties/a/anyOf/0\"},\n                        {\"type\": \"boolean\"}\n                    ]\n                }\n            },\n            \"type\": \"object\"\n        }",
+		"grammar" : "\n            a ::= string | number\n            a-kv ::= \"\\\"a\\\"\" space \":\" space a\n            a-rest ::= ( \",\" space b-kv )?\n            b ::= b-0 | boolean\n            b-0 ::= string\n            b-kv ::= \"\\\"b\\\"\" space \":\" space b\n            boolean ::= (\"true\" | \"false\")\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            root ::= \"{\" space  (a-kv a-rest | b-kv )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "mix of allOf, anyOf and $ref (similar to https://json.schemastore.org/tsconfig.json)",
+		"schema" : "{\n            \"allOf\": [\n                {\"$ref\": \"#/definitions/foo\"},\n                {\"$ref\": \"#/definitions/bar\"},\n                {\n                \"anyOf\": [\n                    {\"$ref\": \"#/definitions/baz\"},\n                    {\"$ref\": \"#/definitions/bam\"}\n                ]\n                }\n            ],\n            \"definitions\": {\n                \"foo\": {\n                    \"properties\": {\"a\": {\"type\": \"number\"}}\n                },\n                \"bar\": {\n                    \"properties\": {\"b\": {\"type\": \"number\"}}\n                },\n                \"bam\": {\n                    \"properties\": {\"c\": {\"type\": \"number\"}}\n                },\n                \"baz\": {\n                    \"properties\": {\"d\": {\"type\": \"number\"}}\n                }\n            },\n            \"type\": \"object\"\n        }",
+		"grammar" : "\n            a-kv ::= \"\\\"a\\\"\" space \":\" space number\n            b-kv ::= \"\\\"b\\\"\" space \":\" space number\n            c-kv ::= \"\\\"c\\\"\" space \":\" space number\n            d-kv ::= \"\\\"d\\\"\" space \":\" space number\n            d-rest ::= ( \",\" space c-kv )?\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            root ::= \"{\" space a-kv \",\" space b-kv ( \",\" space ( d-kv d-rest | c-kv ) )? space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "allOf with enum schema",
+		"schema" : "{\n            \"allOf\": [\n                {\"$ref\": \"#/definitions/foo\"}\n            ],\n            \"definitions\": {\n                \"foo\": {\n                    \"type\": \"string\",\n                    \"enum\": [\"a\", \"b\"]\n                }\n            }\n        }",
+		"grammar" : "\n            root ::= (\"\\\"a\\\"\" | \"\\\"b\\\"\")\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "allOf with multiple enum schemas",
+		"schema" : "{\n            \"allOf\": [\n                {\"$ref\": \"#/definitions/foo\"},\n                {\"$ref\": \"#/definitions/bar\"}\n            ],\n            \"definitions\": {\n                \"foo\": {\n                    \"type\": \"string\",\n                    \"enum\": [\"a\", \"b\", \"c\"]\n                },\n                \"bar\": {\n                    \"type\": \"string\",\n                    \"enum\": [\"b\", \"c\", \"d\"]\n                }\n            }\n        }",
+		"grammar" : "\n            root ::= (\"\\\"b\\\"\" | \"\\\"c\\\"\")\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "conflicting names",
+		"schema" : "{\n            \"type\": \"object\",\n            \"properties\": {\n                \"number\": {\n                \"type\": \"object\",\n                \"properties\": {\n                    \"number\": {\n                    \"type\": \"object\",\n                        \"properties\": {\n                            \"root\": {\n                                \"type\": \"number\"\n                            }\n                        },\n                        \"required\": [\n                            \"root\"\n                        ],\n                        \"additionalProperties\": false\n                    }\n                },\n                \"required\": [\n                    \"number\"\n                ],\n                \"additionalProperties\": false\n                }\n            },\n            \"required\": [\n                \"number\"\n            ],\n            \"additionalProperties\": false,\n            \"definitions\": {}\n        }",
+		"grammar" : "\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            number- ::= \"{\" space number-number-kv space \"}\"\n            number-kv ::= \"\\\"number\\\"\" space \":\" space number-\n            number-number ::= \"{\" space number-number-root-kv space \"}\"\n            number-number-kv ::= \"\\\"number\\\"\" space \":\" space number-number\n            number-number-root-kv ::= \"\\\"root\\\"\" space \":\" space number\n            root ::= \"{\" space number-kv space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "description only (no type) treated as unconstrained",
+		"schema" : "{\"description\": \"The 0-based index of the last line to be retrieved (inclusive). If None, read until the end of the file.\"}",
+		"grammar" : "\n            array ::= \"[\" space ( value (\",\" space value)* )? space \"]\"\n            boolean ::= (\"true\" | \"false\")\n            char ::= [^\"\\\\\\x7F\\x00-\\x1F] | [\\\\] ([\"\\\\bfnrt] | \"u\" [0-9a-fA-F]{4})\n            decimal-part ::= [0-9]{1,16}\n            integral-part ::= [0] | [1-9] [0-9]{0,15}\n            null ::= \"null\"\n            number ::= (\"-\"? integral-part) (\".\" decimal-part)? ([eE] [-+]? integral-part)?\n            object ::= \"{\" space ( string \":\" space value (\",\" space string \":\" space value)* )? space \"}\"\n            root ::= value\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n            string ::= \"\\\"\" char* \"\\\"\"\n            value ::= object | array | string | number | boolean | null\n        "
+	},
+	{
+		"status" : "SUCCESS",
+		"name" : "literal string with escapes",
+		"schema" : "{\n            \"properties\": {\n                \"code\": {\n                    \"const\": \" \\r \\n \\\" \\\\ \",\n                    \"description\": \"Generated code\",\n                    \"title\": \"Code\",\n                    \"type\": \"string\"\n                }\n            },\n            \"required\": [\n                \"code\"\n            ],\n            \"title\": \"DecoderResponse\",\n            \"type\": \"object\"\n        }",
+		"grammar" : "\n            code ::= \"\\\" \\\\r \\\\n \\\\\\\" \\\\\\\\ \\\"\"\n            code-kv ::= \"\\\"code\\\"\" space \":\" space code\n            root ::= \"{\" space code-kv space \"}\"\n            space ::= | \" \" | \"\\n\"{1,2} [ \\t]{0,20}\n        "
+	}
 ]
