@@ -4901,10 +4901,10 @@ def dasllama_vulkan_tower_register {
     }
     register_vk_drop_hook(@@vt_forget)
     static_if (!typeinfo builtin_module_exists(das_metal)) {
-        register_gemma4v_gpu(@@vulkan_gemma4v_chain, @@vulkan_tower_on)
+        register_gemma4v_gpu(@@vulkan_gemma4v_chain, @@vulkan_tower_on, false)   //! the q8 lane stays the policy's default: the f32 tile reads three times the q8 tile's time on gemma3v
         register_gemma4uv_gpu(@@vulkan_gemma4uv_encode)
-        register_gemma3v_gpu(@@vulkan_gemma3v_chain, @@vulkan_tower_on)
-        register_qwen3v_gpu(@@vulkan_qwen3v_chain, @@vulkan_tower_on)
+        register_gemma3v_gpu(@@vulkan_gemma3v_chain, @@vulkan_tower_on, false)
+        register_qwen3v_gpu(@@vulkan_qwen3v_chain, @@vulkan_tower_on, false)
         register_qwen25v_gpu(@@vulkan_qwen25v_chain)
         register_tower_blocks_gpu(@@vulkan_audio_tower_blocks, @@vulkan_tower_serves_exact)
         register_tower_blocks_ln_post_gpu(@@vulkan_audio_tower_blocks_ln_post)

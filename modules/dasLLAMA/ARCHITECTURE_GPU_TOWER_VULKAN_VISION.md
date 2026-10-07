@@ -40,8 +40,11 @@ whole for the next site's own bounds) and the sites that read `att` or `hg` clam
 GEMM class (a bf16-sourced twin declines `quant_mode`); its gated hidden, silu(g + bg) . (u + bu),
 runs on the shared bias-gate stamp (`TowerBiasGate16`) storing the halves the down GEMM reads in one
 dispatch, and its window layers attend in f32 on the compact rows (`TowerWinAttn`). The three q8
-families register their f32 lane as served (`register_<family>_gpu`'s `f32_lane`), so the lane policy
-prefers the file's planes under the Vulkan tower as under Metal's; the audio towers keep the q8 lane.
+families register with the f32 lane NOT served (`register_<family>_gpu`'s `f32_lane`), so the lane
+policy keeps the q8 image as the default under the Vulkan tower - the f32 tile reads about three times
+the q8 tile's time on gemma3v's canvas - and a tower pinned exact serves on the f32 tile instead of
+falling to the CPU chain; Metal's chains register the f32 lane as served, its f32 tiles being the
+faster route there. The audio towers keep the q8 lane.
 
 **The tails.** gemma3v's grid pool (`TowerPool2d`), soft rms and projection behind the pre-LN chain
 (`vt_vis_tail_enc` over `VtVisTail`); gemma4v's pool, the sqrt(d) scale with the standardize in one row

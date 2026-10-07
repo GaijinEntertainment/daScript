@@ -71,7 +71,7 @@ that a question answered for one backend has an obvious address in the other. Th
   fronts, the Vulkan ASR-decoder driver the whisper decoder, and the Vulkan TTS driver the StyleTTS2
   and Pocket seats** (`ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-tts-chain`,
   `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md#vk-pocket-chain`); the audio towers serve their q8 lanes on the CPU chain and
-  on the driver alike (its `serves` answer to their lane policy is no); the vision chains serve both lanes and register the f32 lane as served, as Metal's do. Likewise the
+  on the driver alike (its `serves` answer to their lane policy is no); the vision chains serve both lanes with the q8 image as the policy's default (the f32 tile's cost), where Metal's prefer the file's planes. Likewise the
   non-causal media span: Metal serves it through `AttnArgs.uend` - including the FUSED image turn
   (head + media rows + tail as ONE eval, the per-query mask through `AttnArgs.ulo`); the Vulkan
   resident prefill declines span evals (`followup_general.md` #23's remaining half) and registers
