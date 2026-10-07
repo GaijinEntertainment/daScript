@@ -1,4 +1,4 @@
-# daslib architecture notes - emission: AOT C++, standalone contexts, shaders
+# daslib architecture notes - emission: AOT C++, standalone contexts
 
 Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across the family.
 
@@ -16,6 +16,12 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   nothing when its destructor fires during an unwind
   (`include/daScript/simulate/ARCHITECTURE.md#aot-finally-unwind`). The pair moves together;
   only `test_aot` on a `DAS_ENABLE_EXCEPTIONS` build fails on a mismatch.
+- **A `try`/`recover` restores what the interpreter's handler restores**: the emitter writes
+  the pair as `das_try_recover(__context__, [&](){...}, [&](){...})`, whose catch path puts
+  back `fastCallDepth` before the recover body runs, then `abiArg`, `abiCMRES` and the stack
+  watermark after it - the same state `SimNode_TryCatch` and `jit_try_recover` restore
+  (`include/daScript/simulate/ARCHITECTURE.md#fastcall-depth-guard`). The three move together;
+  only `test_aot` over a capped program whose recursion stays interpreted fails on a mismatch.
 - **C++ identifier mangling**: `aotSuffixNameEx` prepends `_S`/`_E`/`_V`/`_f_` when a das
   name is a C++ keyword, holds a non-alnum char, or is `DELETE` (winnt.h). Structs and
   enums share ONE C++ namespace while daslang keeps separate tables, so `struct X` +
@@ -69,11 +75,10 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   module constructors `Module::require` earlier ones by name (`fio_core` takes `strings`,
   dasHV takes `rtti_core`). A module missing from the daslib list still registers, only in
   the dependencies-first pass that follows; a module added to the C++ side joins the list.
-
 - **The AnnotationInfo table resets at the START of the debug-info dump, not its end.** The
   globals' `VarInfo`s are written after that dump and a handled global's info refers to an
-  `AnnotationInfo` by the name the dump minted, so clearing on the way out left `&` with nothing
-  after it. Only that walk reaches a global's annotation - `writeHandledAnnotations` iterates
+  `AnnotationInfo` by the name the dump minted, so clearing on the way out would leave `&` with
+  nothing after it. Only that walk reaches a global's annotation - `writeHandledAnnotations` iterates
   types, structs and functions.
 - **A member pointer is qualified with `aotModuleName`, never the raw module name.** The main
   module is unnamed, so `_module.name` is empty for every type a script declares itself, while
@@ -160,7 +165,7 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   `preVisitExprAddr` never asks. The dependency dump's second `CppAot` emits no expression
   and needs no table.
 - **Every used `[init]` is called from the ctor, whatever module declares it.** The TU holds
-  every used function of every module (below), so a required module's `[init]` has an AOT body
+  every used function of every module (above), so a required module's `[init]` has an AOT body
   like any other and needs no special case; the call order is the simulated context's own, read
   back through rtti. A `[no_aot]` one stays a collected emit error, because there is no body to
   call. An engine that registers itself from its modules - dasLLAMA's architecture registry is
@@ -191,7 +196,7 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   the set, because module constructors `Module::require` those by name (dasHV takes
   `rtti_core` this way). A default C++ module the program never reaches stays out, however
   the compiler loaded it: a macro module's `daslib/ast` brings `rtti_core` and `ast_core`
-  into the compiler, and a context that registered them ran two constructors and carried
+  into the compiler, and a context that registered them would run two constructors and carry
   their code for nothing. The pruned modules (`compile time only, not linked`) get no
   `aotRequire` include and no registration.
   `standaloneModuleRegistration` orders the C++ subset and ranks it: `DEFAULT_MODULE_ORDER`
@@ -228,72 +233,3 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   `#pragma once` and the required modules' `aotRequire` includes so it stands alone in
   an embedder TU; two DIFFERENT contexts' headers sharing a das dependency still cannot
   be included in one TU (the shared types have no per-type guards).
-
-## 7. flatten
-
-- **Predicated lowering carries one live-mask per exit flavor** - `__flat_live` for
-  return, a per-loop break mask (persists across unrolled copies) and continue mask
-  (re-minted per copy). A write's predicate ANDs every active mask plus the structural
-  predicate; a narrow term excludes its own mask so it self-cancels. An inlined callee
-  gets a fresh live mask and lowers with `ctx.loopMasks` moved OUT, so its break/continue
-  can never reach the caller's loops.
-- **`flatten_preshade_cse` is a joint fixpoint, not a pipeline** - extraction, regroup,
-  CSE and alias elimination mutually enable each other; the `_preshader_`/`_cse_` counters
-  are owned by that loop and re-seeded from surviving suffixes (per-call numbering
-  re-mints a live name).
-- **A CSE/regroup tally counts exactly the regions its rewrite can change** - a duplicate
-  counted where the rewrite cannot reach never drops below 2 and runs the fixpoint to its
-  iteration cap.
-- **`__flat_ret` carries `safeWhenUninitialized` only while every write is a
-  self-referential select** - a lowering change that makes the bare-decl read observable
-  turns the flag into a real uninitialized read.
-- **CSE is local value numbering over one converged basic block, and it is complete** -
-  pure subtrees keyed by `describe()`; value-stability = reads no reassigned name; a store
-  through index/field/swizzle destabilizes its base; an unrecognized node fails closed as
-  mutable-reading. Uniform duplicates route to the preshader.
-- **The copy-prop/CSE walks stay O(size)** - one name-to-statement index, one structural
-  walk. A `string` materialized per `ExprVar` in a visitor callback breaks that: each
-  `describe()` allocates a string that lives to the end of the pass, so the walk goes
-  quadratic in heap bytes, not only in time.
-- **`MutCollect` is what CSE trusts to say whether a name is stable, so it counts every
-  store spelling, not the one the lowering emits.** CSE treats a name outside its set as
-  constant for the whole block; a missed store is a shared subexpression across a mutation.
-  Copies are only the visible half - `<-` also zeroes its SOURCE, `:=` lowers to a
-  `builtin`clone`(dst, src)` CALL rather than an `ExprClone`, `++`/`+=` are their own
-  nodes, and a by-reference
-  argument writes with no assignment node anywhere. Hence the argument arm keys on the
-  callee's parameter type (non-const and `ref` or a ref type), not on a node kind.
-- **`delete` on a container of `ExpressionPtr` frees the BUFFER, never the nodes** -
-  `delete array<T?>` frees the pointees only for das-heap `T`, and `Expression` is a
-  handled C++ type whose instances are not heap chunks at all (the
-  measurement: an `array<S?>` of das structs returns its pointees to `heap_bytes_allocated`,
-  an `array<ExpressionPtr>` returns only the buffer and the nodes surface in the exit GC
-  report). That is why `make_float_ctor`'s const-fold early return may leave its lanes
-  un-consumed while the ctor path `emplace`s them away, why every `unsafe { delete args }`
-  after it is sound over borrowed tree nodes, and why a struct field holding a borrowed
-  node needs no `@do_not_delete`. Node lifetime belongs to the AST GC: a lane the const
-  fold drops is unreachable and collected at the enclosing `ast_gc_guard`.
-- **The whitelist admits value-returning primitives only.** `lower_stmt`'s fall-through arm
-  lowers an unrecognized statement for its lifted sub-lets and drops the statement itself,
-  which is correct exactly while every surviving call is pure - so `lift_expr` refuses a
-  whitelisted call that writes through a by-reference argument (`sincos`) rather than let
-  the drop delete the store. Predicating such a write would need per-out-param temps the
-  lowering does not own.
-
-## 28. shader_block_layout
-
-- **Two rails, deliberately separate** - the LAYOUT rail admits int64/uint64 as block
-  members (`compute_block_layout` special-cases them) while the ARITHMETIC rail rejects
-  64-bit INT (`arith_width_ok` allows width 64 only for floats); `cpu_only_lattice_width`
-  keys both emitters' fail-closed diagnostic.
-
-## 29. shader_lingua_franca {#shader-lingua-franca}
-
-- **Every symbol is either an exact CPU mirror of its GPU semantics or a `[sideeffects]`
-  dummy every rail lowers by name** - the dummies return zero on the host, so a CPU replay
-  reproduces GPU semantics only for the real-bodied set. Unsigned overloads never fold into
-  signed twins (glslang picks the unsigned opcode).
-- **A width-variant of a lowered-by-name symbol is one more overload here, never an emitter
-  arm.** `unpack8` carries `int16 -> byte2` and `uint16 -> ubyte2` beside the 32-bit pair; every
-  overload is the same `reinterpret` on the host and the same single `OpBitcast` on the SPIR-V
-  rail, so the emitter matches the name and reads the width off the operand type.

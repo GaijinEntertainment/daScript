@@ -703,7 +703,7 @@ extern "C" {
 
     DAS_API void WIN_EH_NO_ASAN jit_try_recover ( Block * try_block, Block * catch_block, void * lineInfo, Context * context ) {
         auto at = (LineInfoArg *) lineInfo;
-        auto aa = context->abiArg; auto acm = context->abiCMRES;
+        auto aa = context->abiArg; auto acm = context->abiCMRES; auto fcd = context->fastCallDepth;
         char * EP, * SP;
         context->stack.watermark(EP,SP);
         #if DAS_ENABLE_EXCEPTIONS
@@ -712,6 +712,7 @@ extern "C" {
             } catch ( const dasException & ) {
                 context->abiArg = aa;
                 context->abiCMRES = acm;
+                context->fastCallDepth = fcd;
                 context->stack.pop(EP,SP);
                 context->stopFlags = 0;
                 context->last_exception = context->exception;
@@ -728,6 +729,7 @@ extern "C" {
                 context->throwBuf = JB;
                 context->abiArg = aa;
                 context->abiCMRES = acm;
+                context->fastCallDepth = fcd;
                 context->stack.pop(EP,SP);
                 context->stopFlags = 0;
                 context->last_exception = context->exception;

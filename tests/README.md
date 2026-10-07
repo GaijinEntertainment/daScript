@@ -693,6 +693,8 @@ JIT compilation and code-generation tests. None have `expect` directives. The sl
 | invalid_type_ref_in_table_value.das | Ref type as table value | **expect** `30106` |
 | invalid_types.das | Oversized types and arguments - declarations, `new`, ascend, `default<T>` | **expect** `30500:3` `30508` `30510` `30512:3` `30513` |
 | failed_jit_abi.das | JIT ABI correctness - `test_abi_mad` for float2/3/4, function pointers | |
+| _fast_call_depth_recursers.das | *(helper)* `no_aot` module of `[no_jit]` fastcall recursers (one, two, any-left, any-right, nine arguments) and their framed entries for `fast_call_depth.das` | |
+| fast_call_depth.das | `options max_fast_call_depth` - the message names the option, the cap is exact per fused shape, a thousand recovered overflows leave no drift, a host policy caps a program with no options line and a host catch restores the counter | |
 | labels.das | Labels and goto - control flow, nested loops, labeled break | |
 | lambda_basic.das | Lambda capture, invoke, null check, addX returning lambda | |
 | lambda_capture.das | Lambda capturing const values, finalizer behavior | |

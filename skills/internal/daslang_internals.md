@@ -25,8 +25,11 @@ asymmetry is the design.
 ## Options that are not really options
 
 A `CodeOfPolicies` field is settable from `options` ONLY if its declaration in
-`include/daScript/ast/ast.h` carries the `/*option*/` marker. Without it the field exists, is
-bound to rtti, and reads plausibly in docs, but `options that_field = true` in a `.das` silently
+`include/daScript/simulate/code_of_policies.h` carries the `/*option*/` marker - the marker
+records that the C++ use site reads `options.get*Option("<field>", policies.<field>)`. Without
+it the field exists, is bound to rtti (which is what makes the option NAME valid:
+`getCodeOfPolicyOptions` in `src/builtin/module_builtin_rtti.cpp` lists every bound workhorse
+field), and reads plausibly in docs, but `options that_field = true` in a `.das` silently
 does nothing - only a C++ embedder setting the policy can reach it. Check the marker before
 believing an option is live: a policy-gated pass with no marker has effectively never run.
 

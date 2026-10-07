@@ -1361,6 +1361,7 @@ namespace das {
             flags = arr.flags; arr.flags = 0;
             keys = arr.keys; arr.keys = 0;
             hashes = arr.hashes; arr.hashes = 0;
+            tombstones = arr.tombstones; arr.tombstones = 0;
         }
         __forceinline TV & operator () ( const TK & key, Context * __context__ ) {
             TableHash<TK> thh(__context__,sizeof(TV));
@@ -1402,6 +1403,7 @@ namespace das {
             flags = arr.flags; arr.flags = 0;
             keys = arr.keys; arr.keys = 0;
             hashes = arr.hashes; arr.hashes = 0;
+            tombstones = arr.tombstones; arr.tombstones = 0;
         }
     };
 

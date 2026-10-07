@@ -1379,6 +1379,82 @@ SIM_NODE_AT_VECTOR(Float, float)
 #undef  EVAL_NODE
     };
 
+    // FUNCTION CALL via FASTCALL convention, checked
+
+    // include/daScript/simulate/ARCHITECTURE.md#fastcall-depth-guard
+    struct SimNode_FastCallCheckedAny : SimNode_CallBase {
+        SimNode_FastCallCheckedAny(const LineInfo& at) : SimNode_CallBase(at,"") {}
+        virtual SimNode* visit(SimVisitor& vis) override;
+    };
+
+    template <int argCount>
+    struct SimNode_FastCallChecked : SimNode_FastCallCheckedAny {
+        SimNode_FastCallChecked ( const LineInfo & at ) : SimNode_FastCallCheckedAny(at) {}
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            vec4f argValues[argCount ? argCount : 1];
+            EvalBlock<argCount>::eval(context, arguments, argValues);
+            context.enterCheckedFastCall(debugInfo, fnPtr);
+            auto aa = context.abiArg;
+            context.abiArg = argValues;
+            auto res = fnPtr->code->eval(context);
+            context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue);
+            context.abiArg = aa;
+            context.fastCallDepth --;
+            return res;
+        }
+#define EVAL_NODE(TYPE,CTYPE)\
+        virtual CTYPE eval##TYPE ( Context & context ) override {                               \
+                DAS_PROFILE_NODE                                                                \
+                vec4f argValues[argCount ? argCount : 1];                                       \
+                EvalBlock<argCount>::eval(context, arguments, argValues);                       \
+                context.enterCheckedFastCall(debugInfo, fnPtr);                                 \
+                auto aa = context.abiArg;                                                       \
+                context.abiArg = argValues;                                                     \
+                auto res = EvalTT<CTYPE>::eval(context, fnPtr->code);                           \
+                context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue); \
+                context.abiArg = aa;                                                            \
+                context.fastCallDepth --;                                                       \
+                return res;                                                                     \
+        }
+        DAS_EVAL_NODE
+#undef  EVAL_NODE
+    };
+
+    template <>
+    struct SimNode_FastCallChecked<-1> : SimNode_FastCallCheckedAny {
+        SimNode_FastCallChecked(const LineInfo& at) : SimNode_FastCallCheckedAny(at) {}
+        DAS_EVAL_ABI virtual vec4f eval(Context& context) override {
+            DAS_PROFILE_NODE
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
+            evalArgs(context, argValues);
+            context.enterCheckedFastCall(debugInfo, fnPtr);
+            auto aa = context.abiArg;
+            context.abiArg = argValues;
+            auto res = fnPtr->code->eval(context);
+            context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue);
+            context.abiArg = aa;
+            context.fastCallDepth --;
+            return res;
+        }
+#define EVAL_NODE(TYPE,CTYPE)\
+        virtual CTYPE eval##TYPE ( Context & context ) override { \
+                DAS_PROFILE_NODE \
+                vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS]; \
+                evalArgs(context, argValues); \
+                context.enterCheckedFastCall(debugInfo, fnPtr); \
+                auto aa = context.abiArg; \
+                context.abiArg = argValues; \
+                auto res = EvalTT<CTYPE>::eval(context, fnPtr->code);  \
+                context.stopFlags &= ~(EvalFlags::stopForReturn | EvalFlags::stopForBreak | EvalFlags::stopForContinue); \
+                context.abiArg = aa; \
+                context.fastCallDepth --; \
+                return res; \
+        }
+        DAS_EVAL_NODE
+#undef  EVAL_NODE
+    };
+
     // FUNCTION CALL
 
     struct SimNode_CallAny : SimNode_CallBase {
