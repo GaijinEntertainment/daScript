@@ -78,7 +78,7 @@ def encode(tk : Tokenizer; text : string; add_special = true; parse_special = fa
         }
         return <- ids
     }
-    return <- encode(tk.spm, text, add_special, false)
+    return <- encode(tk.spm, text, add_special, add_special && tk.spm.add_eos)
 }
 
 //! Decode a full id sequence back to text.

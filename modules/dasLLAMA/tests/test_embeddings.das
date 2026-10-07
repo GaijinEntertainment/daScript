@@ -92,7 +92,7 @@ def test_embeddings_chat_model_default_mean(t : T?) {
         return if (!jit_model_available(tt, path))
         var m <- load_model_(path, QuantMode.q8)
         tt |> equal(POOLING_MEAN, m.config.pooling, "no pooling_type in the file: the mean")
-        tt |> success(!m.tok.bpe.add_eos, "a chat model appends no EOS")
+        tt |> success(!m.tok.bpe.add_eos && !m.tok.spm.add_eos, "a chat model appends no EOS (tinyllama is SentencePiece, the other backend)")
         var dflt <- embed(m, EMB_DOCS[0])
         var mean <- embed(m, EMB_DOCS[0], POOLING_MEAN)
         var last <- embed(m, EMB_DOCS[0], POOLING_LAST)

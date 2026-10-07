@@ -298,6 +298,9 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
             POST("{base_url}/v1/embeddings", "\{\"input\":\"the quick brown fox\",\"pooling\":\"median\"}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "an unknown pooling is refused")
             }
+            POST("{base_url}/v1/embeddings", "\{\"input\":\"the quick brown fox\",\"dimensions\":0}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "an explicit zero dimensions is refused, not read as absent")
+            }
             delete mean_vec
             // /v1/chat/completions (non-streaming) — end-to-end generation smoke
             POST("{base_url}/v1/chat/completions",

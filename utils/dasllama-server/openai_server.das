@@ -2608,8 +2608,9 @@ def private handle_embeddings(req : FrontReq; var resp : Reply) : http_status {
     if (!empty(pool_name) && pooling < 0l) {
         return resp_error(resp, http_status.BAD_REQUEST, "'pooling' must be \"mean\", \"cls\" or \"last\" (got '{pool_name}'); unset, the model's own pooling_type applies")
     }
-    let dims = int64(js?["dimensions"] ?? 0)
-    if (dims < 0l || dims > cur_model().config.dim) {
+    let dv = js?["dimensions"]
+    let dims = int64(dv ?? 0)
+    if ((dv != null && !(dv.value is _null) && dims < 1l) || dims > cur_model().config.dim) {   //! `?[]` answers a missing key with a null-VALUED sentinel, never a null pointer
         return resp_error(resp, http_status.BAD_REQUEST, "'dimensions' must be 1..{cur_model().config.dim} (the model's hidden width)")
     }
 
@@ -6109,8 +6110,9 @@ def private front_main(port : int; host : string; var to_engine : Channel?&; var
     g_fto_speech = to_speech
     var server = new OpenAiFront()
     server->init(port)
-    server->set_bind_host(host)   //! the interface the front listens on: loopback unless the operator opens it
-    let rc = server->start()   // 0 on success; non-zero = bind/listen failed (e.g. port in use)
+    //! the interface the front listens on: loopback unless the operator opens it. A host the server refuses
+    //! (empty, or past its 63-byte field) must not fall through to libhv's every-interface default
+    let rc = server->set_bind_host(host) ? server->start() : FRONT_BIND_HOST_REFUSED
     to_engine |> push_clone(FrontReq(kind = FrontKind.ready, status = rc, port = rc == 0 ? server->bound_port() : 0))
     var stop = rc != 0
     var last_reap = ref_time_ticks()
@@ -6337,6 +6339,9 @@ def private start_front(port : int; host : string) : int {
                 to_log(LOG_INFO, "dasllama-server: listening on {host}:{ev.port}\n")
             }
         }
+    }
+    if (rc == FRONT_BIND_HOST_REFUSED) {
+        to_log(LOG_ERROR, "dasllama-server: cannot listen on '{host}' - a host is 1 to 63 bytes\n")
     }
     if (rc != 0) {
         stop_front()
@@ -6801,6 +6806,7 @@ def private init_slot_schedulers(max_streams, max_queue, chunk_tokens, idle_chun
 //! `asr_team`: -1 lets the slots decide whether the ASR workers publish to the worker team (`asr_auto_team`), 0 runs them inline, 1 puts them and the TTS worker on the team
 //! the interface the front binds when nobody names one: this machine alone - a server on the network is the operator's choice
 let DEFAULT_BIND_HOST = "127.0.0.1"
+let FRONT_BIND_HOST_REFUSED = -2   //! the ready `status` when the server refuses the host string itself, before any bind
 
 def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; chunk_tokens : int64 = 0l;
                 page_rows : int64 = 64l; prefix_groups : int64 = 0l; kv_dtype : KVDtype = KVDtype.f16;
