@@ -1262,6 +1262,91 @@ def private tw_rms_gate(t : T?; var dev, queue; d, rows : int) {
     }
 }
 
+//! the towers' residual seams on the layernorm template's three Metal stamps - the biased add with its next layernorm (kind 0),
+//! with its next rms (kind 1), and the gemma post-normed add with its next rms (kind 2) - against the CPU forms over rows past the
+//! 256-thread stride: the joined rows and the norm rows, the seam-alone leg (ln_on off) leaving the norm rows at their sentinel, and a
+//! poisoned branch element reddening both compares
+def private tw_seam_gate(t : T?; var dev, queue; kind, d, rows : int) {
+    let tag = "tw_seam kind={kind} d={d} rows={rows}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = kind == 0 ? stamp_of(@@enc_tw_add_ln) : kind == 1 ? stamp_of(@@enc_tw_add_rms) : stamp_of(@@enc_tw_add_post_rms)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let eps = 1e-6
+        let total = rows * d
+        var inscope x <- [for (i in range(total)); float((i * 37) % 101 - 50) * 0.043]
+        var inscope y <- [for (i in range(total)); float((i * 53) % 89 - 44) * 0.031]
+        var inscope wn <- [for (i in range(4 * d)); 0.5 + float((i * 5) % 11) * 0.17 - (i < d ? 0.9 : 0.0)]   //! the bias row, the norm weight, the norm bias, the post-norm weight
+        var inscope want_x : array<float>
+        want_x |> resize(total)
+        for (r in range(rows)) {
+            if (kind == 2) {
+                var inscope yn : array<float>
+                yn |> resize(d)
+                unsafe {
+                    rmsnorm(addr(yn[0]), addr<float const?>(y[r * d]), addr<float const?>(wn[3 * d]), int64(d), eps)
+                }
+                for (i in range(d)) {
+                    want_x[r * d + i] = x[r * d + i] + yn[i]
+                }
+            } else {
+                for (i in range(d)) {
+                    want_x[r * d + i] = x[r * d + i] + (y[r * d + i] + wn[i])
+                }
+            }
+        }
+        var inscope want_xb : array<float>
+        want_xb |> resize(total)
+        for (r in range(rows)) {
+            unsafe {
+                if (kind == 0) {
+                    layernorm(addr(want_xb[r * d]), addr<float const?>(want_x[r * d]), addr<float const?>(wn[d]), addr<float const?>(wn[2 * d]), int64(d), eps)
+                } else {
+                    rmsnorm(addr(want_xb[r * d]), addr<float const?>(want_x[r * d]), addr<float const?>(wn[d]), int64(d), eps)
+                }
+            }
+        }
+        var ka = (kind == 2 ? gk_add_post_rms_args(uint(d), uint(rows), eps, uint(3 * d), true, uint(d))
+                            : gk_add_ln_args(uint(d), uint(rows), eps, 0u, true, uint(d), uint(2 * d)))
+        let pwn = mc |> in_(wn)
+        var bwn = mc.buf[pwn]
+        let run <- @(bxx, byy, bxbb : MetalBuffer?; pa : GkPostAddLnArgs) : bool {
+            var pav = pa
+            return queue_record(t, queue, "{tag} dispatch") $(enc : MetalComputeEncoder?) {
+                stamp_run(st, pso) {
+                    invoke(st.enc, enc, bxx, byy, bxbb, bwn, pav, int64(rows))
+                }
+            }
+        }
+        let px = mc |> io_(x)
+        let py = mc |> in_(y)
+        let pxb = mc |> out_words(total, -7.0)
+        if (invoke(run, mc.buf[px], mc.buf[py], mc.buf[pxb], ka)) {
+            check_buf(t, "{tag} x", mc.buf[px], want_x, BAR_APPROX, Shape(row_width = d))
+            check_buf(t, "{tag} xb", mc.buf[pxb], want_xb, BAR_APPROX, Shape(row_width = d))
+        }
+        var ka0 = ka
+        ka0.ln_on = 0u
+        let px0 = mc |> io_(x)
+        let py0 = mc |> in_(y)
+        let pxb0 = mc |> out_words(total, -7.0)
+        if (invoke(run, mc.buf[px0], mc.buf[py0], mc.buf[pxb0], ka0)) {
+            check_buf(t, "{tag} seam alone x", mc.buf[px0], want_x, BAR_APPROX, Shape(row_width = d))
+            let untouched <- [for (_i in range(total)); -7.0]
+            check_buf(t, "{tag} seam alone xb", mc.buf[pxb0], untouched, BAR_EXACT, Shape(row_width = d))
+        }
+        y[d + d / 2] += 0.5
+        let px2 = mc |> io_(x)
+        let py2 = mc |> in_(y)
+        let pxb2 = mc |> out_words(total, -7.0)
+        if (invoke(run, mc.buf[px2], mc.buf[py2], mc.buf[pxb2], ka)) {
+            t |> success(mc |> rerun_mismatches(px2, want_x, 1e-6, 1e-6, "{tag} x poison (MUST mismatch)") > 0, "{tag}: a poisoned branch element reds the joined rows")
+            t |> success(mc |> rerun_mismatches(pxb2, want_xb, 1e-5, 1e-6, "{tag} xb poison (MUST mismatch)") > 0, "{tag}: a poisoned branch element reds the norm rows")
+        }
+    }
+}
+
 //! A vision tail's grid mean pool at a width off the 64-thread group: a 6 x 4 row grid pooled 2 x 2 into 3 x 2 rows
 //! against the host mean of each block; the pool along the other axis alone misses on most elements (asserted on the host).
 def private tw_pool2d_gate(t : T?; var dev, queue) {
@@ -3296,6 +3381,9 @@ def test_metal_prefill_kernels(t : T?) {
                 tw_affine_gate(t, dev, queue)
                 tw_rms_gate(t, dev, queue, 300, 5)   // the row past the 256-thread stride
                 tw_rms_gate(t, dev, queue, 70, 3)
+                for (kind in range(3)) {
+                    tw_seam_gate(t, dev, queue, kind, 300, 3)
+                }
                 bias_relu_rows_gate(t, dev, queue)
                 st2_conv_gate(t, dev, queue, false, false)
                 st2_conv_gate(t, dev, queue, true, false)

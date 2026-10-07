@@ -2168,6 +2168,14 @@ struct GkPostAddLnArgs {
 //! the rms rows alone (the ADD-off RMS stamps): `rows` of width `d` against the weight row at `woff` in the norms plane
 def gk_rms_args(d, rows : uint; eps : float; woff : uint) : GkPostAddLnArgs => gk_ln_args(d, rows, eps, woff, 0u)
 
+//! the biased residual seam: x += y + the bias row at `boff`, then under `ln_on` the next pre-norm against the rows at `lnoff` / `lnboff`
+def gk_add_ln_args(d, rows : uint; eps : float; boff : uint; ln_on : bool; lnoff, lnboff : uint) : GkPostAddLnArgs
+    => GkPostAddLnArgs(d = d, rows = rows, woff = 0u, boff = boff, eps = eps, ln_on = ln_on ? 1u : 0u, lnoff = lnoff, lnboff = lnboff, ascale = 1.0, xboff = 0u)
+
+//! the post-normed residual seam (the gemma towers): x += rms(y) . the post-norm row at `woff`, then under `ln_on` the next rms against the row at `lnoff`
+def gk_add_post_rms_args(d, rows : uint; eps : float; woff : uint; ln_on : bool; lnoff : uint) : GkPostAddLnArgs
+    => GkPostAddLnArgs(d = d, rows = rows, woff = woff, boff = 0u, eps = eps, ln_on = ln_on ? 1u : 0u, lnoff = lnoff, lnboff = 0u, ascale = 1.0, xboff = 0u)
+
 //! the layernorm alone (the ADD-off stamps): `rows` of width `d`, the weight row at `lnoff` and the bias row at `lnboff` in the norms plane
 def gk_ln_args(d, rows : uint; eps : float; lnoff, lnboff : uint; xboff : uint = 0u) : GkPostAddLnArgs
     => GkPostAddLnArgs(d = d, rows = rows, woff = 0u, boff = 0u, eps = eps, ln_on = 1u, lnoff = lnoff, lnboff = lnboff, ascale = 0.0, xboff = xboff)

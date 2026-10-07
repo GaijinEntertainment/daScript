@@ -276,6 +276,9 @@ var g_pso_pk_attn : MetalComputePipeline?
 var g_pso_pk_rope_tab : MetalComputePipeline?
 var g_pso_pk_add_ln : MetalComputePipeline?
 var g_pso_tw_rms : MetalComputePipeline?        //!< the towers' rms rows on the layernorm template's RMS arm
+var g_pso_tw_add_ln : MetalComputePipeline?     //!< the biased residual seam with its next layernorm
+var g_pso_tw_add_rms : MetalComputePipeline?    //!< ... with its next rms (qwen25v)
+var g_pso_tw_add_post_rms : MetalComputePipeline?   //!< the post-normed seam with its next rms (gemma4v)
 var g_pso_tw_rope_tab : MetalComputePipeline?   //!< the vision towers' NEOX table rope
 var g_pso_tw_bias_gate : MetalComputePipeline?  //!< a gated hidden with its bias rows (qwen25v)
 var g_pso_pk_gemv_f32 : MetalComputePipeline?

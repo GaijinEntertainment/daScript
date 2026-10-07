@@ -3724,6 +3724,9 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_pk_rope_tab = compile_stamp(metal_pk_rope_tab_msl, ok)
     g_pso_pk_add_ln = compile_stamp(metal_pk_add_ln_msl, ok)
     g_pso_tw_rms = compile_stamp(metal_tw_rms_msl, ok)
+    g_pso_tw_add_ln = compile_stamp(metal_tw_add_ln_msl, ok)
+    g_pso_tw_add_rms = compile_stamp(metal_tw_add_rms_msl, ok)
+    g_pso_tw_add_post_rms = compile_stamp(metal_tw_add_post_rms_msl, ok)
     g_pso_tw_rope_tab = compile_stamp(metal_tw_rope_tab_msl, ok)
     g_pso_tw_bias_gate = compile_stamp(metal_tw_bias_gate_msl, ok)
     g_pso_pk_gemv_f32 = compile_stamp(metal_pk_gemv_f32_msl, ok)
@@ -4695,7 +4698,7 @@ def metal_kernels_release {
     release_handles(g_pso_dn_gate_sig, g_pso_hc_norm, g_pso_hc_lo, g_pso_hc_init, g_pso_hc_mix, g_pso_hc_combine, g_pso_ple_gate, g_pso_ple_conv)
     release_handles(g_pso_st2_attn)
     release_handles(g_pso_pk_rows, g_pso_pk_rows_elu, g_pso_pk_row_scale, g_pso_pk_attn, g_pso_pk_rope_tab)
-    release_handles(g_pso_tw_rms, g_pso_tw_rope_tab, g_pso_tw_bias_gate)
+    release_handles(g_pso_tw_rms, g_pso_tw_rope_tab, g_pso_tw_bias_gate, g_pso_tw_add_ln, g_pso_tw_add_rms, g_pso_tw_add_post_rms)
     release_handles(g_pso_pk_add_ln, g_pso_pk_gemv_f32, g_pso_pk_gemv_f32_ln_silu, g_pso_pk_gemv_f32_gate, g_pso_pk_gemv_f32_add_silu)
     release_handles(g_pso_pk_gemv_f32_tail, g_pso_pk_gemv_q8_ln_silu, g_pso_pk_gemv_q8_gate, g_pso_pk_gemv_q8_add_silu, g_pso_pk_gemv_q8_tail)
     release_handles(g_pso_st2_adain_leaky, g_pso_row_gather, g_pso_st2_concat, g_pso_st2_pool_dw, g_pso_st2_lstm, g_pso_st2_sigsum, g_pso_st2_gelu_tanh,
@@ -10766,6 +10769,39 @@ class MetalTwRms : GkPostAddLn {
 
     [metal_kernel(name = "metal_tw_rms_msl")]
     def metal_tw_rms {
+        post_add_ln_body()
+    }
+}
+
+//! the towers' biased residual seam with the next layernorm in one pass: x += y + bias, xb = layernorm(x) under ln_on, a workgroup a row
+[metal_dispatch(name = "enc_tw_add_ln", pso = "g_pso_tw_add_ln", tgmem = "metal_tw_add_ln_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
+class MetalTwAddLn : GkPostAddLn {
+    [metal_kernel(name = "metal_tw_add_ln_msl")]
+    def metal_tw_add_ln {
+        post_add_ln_body()
+    }
+}
+
+//! the same seam with the next rms (the qwen25v blocks)
+[metal_dispatch(name = "enc_tw_add_rms", pso = "g_pso_tw_add_rms", tgmem = "metal_tw_add_rms_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
+class MetalTwAddRms : GkPostAddLn {
+    override RMS = true
+
+    [metal_kernel(name = "metal_tw_add_rms_msl")]
+    def metal_tw_add_rms {
+        post_add_ln_body()
+    }
+}
+
+//! the post-normed seam of the gemma towers: x += rms(y) . w_post, then the next rms
+[metal_dispatch(name = "enc_tw_add_post_rms", pso = "g_pso_tw_add_post_rms", tgmem = "metal_tw_add_post_rms_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
+class MetalTwAddPostRms : GkPostAddLn {
+    override RMS = true
+    override POST_NORM = true
+    override BIAS = false
+
+    [metal_kernel(name = "metal_tw_add_post_rms_msl")]
+    def metal_tw_add_post_rms {
         post_add_ln_body()
     }
 }
