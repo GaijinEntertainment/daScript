@@ -2557,17 +2557,6 @@ def private handle_models(var resp : Reply) : http_status {
 // ("mean" | "cls" | "last"); `dimensions` keeps the leading d components and renormalizes (the
 // Matryoshka read Qwen3-Embedding supports). `input` is a string or an array of strings; usage is
 // counted via the facade `encode` (cheap relative to the forward).
-def private l2_normalize(var v : array<float>) {
-    var ss = 0.0
-    for (x in v) {
-        ss += x * x
-    }
-    let rn = ss > 0.0 ? 1.0 / sqrt(ss) : 0.0
-    for (x in v) {
-        x *= rn
-    }
-}
-
 def private handle_embeddings(req : FrontReq; var resp : Reply) : http_status {
     var perr = ""
     var js = read_json(req.body, perr)
@@ -2621,11 +2610,7 @@ def private handle_embeddings(req : FrontReq; var resp : Reply) : http_status {
     for (text in inputs) {
         var inscope toks <- encode(cur_model(), text, true, false)
         prompt_tokens += long_length(toks)
-        var inscope vec = embed(cur_model(), text, pooling)
-        if (dims > 0l && dims < long_length(vec)) {   // the Matryoshka cut: the leading components, renormalized
-            vec |> resize(dims)
-            l2_normalize(vec)
-        }
+        var inscope vec = embed(cur_model(), text, pooling, dims)   // the engine cuts and renormalizes
         out.data |> emplace(OaiEmbedding(_object = "embedding", embedding <- vec, index = idx))
         idx ++
     }
@@ -4191,7 +4176,7 @@ let private CONFIG_KEY_KINDS <- {
     "affinity" => "i", "chunk" => "i", "chunk_idle" => "i", "page_rows" => "i", "prefix" => "i", "flat" => "b",
     "mtp" => "b", "rope_scaling" => "s", "rope_scale" => "f", "yarn_orig_ctx" => "i",
     "lcpp_bin" => "s", "models_dir" => "s", "image_mmproj" => "s", "audio_mmproj" => "s", "models" => "a",
-    "exchange_url" => "s", "exchange_accept" => "s", "exchange_submit" => "s"
+    "exchange_url" => "s", "exchange_accept" => "s", "exchange_submit" => "s", "host" => "s"
 }
 
 let private MODEL_KEY_KINDS <- {
@@ -6806,6 +6791,8 @@ def private init_slot_schedulers(max_streams, max_queue, chunk_tokens, idle_chun
 //! `asr_team`: -1 lets the slots decide whether the ASR workers publish to the worker team (`asr_auto_team`), 0 runs them inline, 1 puts them and the TTS worker on the team
 //! the interface the front binds when nobody names one: this machine alone - a server on the network is the operator's choice
 let DEFAULT_BIND_HOST = "127.0.0.1"
+//! the interface the front binds: loopback unless the operator names one (`--host` / config `host`)
+def bind_host(configured : string) : string => empty(configured) ? DEFAULT_BIND_HOST : configured
 let FRONT_BIND_HOST_REFUSED = -2   //! the ready `status` when the server refuses the host string itself, before any bind
 
 def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; chunk_tokens : int64 = 0l;
@@ -6860,7 +6847,7 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
     }
     // a resident prefill would strand device-only rows when host-cached sessions outnumber the driver's K/V regions; device-home streams prefill on the device regardless
     set_resident_prefill_allowed(false)
-    let rc = start_front(port, empty(host) ? DEFAULT_BIND_HOST : host)   // 0 on success; non-zero = bind/listen failed (e.g. port in use)
+    let rc = start_front(port, bind_host(host))   // 0 on success; non-zero = bind/listen failed (e.g. port in use)
     if (rc != 0) {
         to_log(LOG_ERROR, "dasllama-server: could not start on port {port} (start rc {rc}; is the port already in use?)\n")
         return false

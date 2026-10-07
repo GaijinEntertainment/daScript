@@ -285,7 +285,6 @@ def private from_cli(key : string) : bool
     => (g_cfg_sources?[key] ?? "") == "cli"
 
 //! the interface the front binds: the configured one, else loopback - a server that reaches the network is the operator's choice, never the default
-def bind_host(configured : string) : string => empty(configured) ? DEFAULT_BIND_HOST : configured
 
 def private toml_has(root : JsonValue?; key : string) : bool {
     if (root == null || !(root.value is _object)) {

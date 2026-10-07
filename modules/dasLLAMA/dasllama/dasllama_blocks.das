@@ -2430,13 +2430,13 @@ def private eval_embd_slice_mrope_(t : Model; var s : Session; whole : array<int
     s.mrope_pos |> clear()
 }
 
-//! Mean-pooled, L2-normalized sentence embedding for `tokens` into `out`: last-layer hidden state
-//! averaged over positions, unit-normalized. Runs one forward over `s` from position 0 — pass a
-//! FRESH session (no KV history assumed; cache is left filled).
+//! L2-normalized sentence embedding for `tokens` into `out`: the post-final-norm hidden rows `pooling` picks, averaged, cut to
+//! the leading `dims` components where `dims` is 1..dim-1 (the Matryoshka read), unit-normalized once. Runs one forward over
+//! `s` from position 0 - pass a FRESH session (no KV history assumed; cache is left filled).
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
 //! `pooling` picks the rows that make the vector: POOLING_MEAN averages every position's post-final-norm row, POOLING_LAST
 //! takes the last position's (the EOS the tokenizer appends - what Qwen3-Embedding is trained to be read at), POOLING_CLS the first's
-def embed_forward(t : Model; var s : Session; tokens : array<int64>; npos : int64; var out : array<float>; pooling : int64 = POOLING_MEAN) {
+def embed_forward(t : Model; var s : Session; tokens : array<int64>; npos : int64; var out : array<float>; pooling : int64 = POOLING_MEAN; dims : int64 = 0l) {
     let c = t.config
     let dim = c.dim
     out |> resize(dim)
@@ -2467,27 +2467,29 @@ def embed_forward(t : Model; var s : Session; tokens : array<int64>; npos : int6
         }
     }
     s.n_past = npos   // KV now holds npos positions (start_pos was 0) — keep the session cursor consistent
-    // the pooled rows' mean, then L2-normalize
+    // the pooled rows' mean, the cut, then L2-normalize: cutting before the normalize is the renormalized cut
+    let width = dims > 0l && dims < dim ? dims : dim
+    out |> resize(width)
     let inv = 1.0 / float(last - first)
     var ss = 0.0
-    for (i in range64(dim)) {
+    for (i in range64(width)) {
         out[i] *= inv
         ss += out[i] * out[i]
     }
     let rn = ss > 0.0 ? 1.0 / sqrt(ss) : 0.0
-    for (i in range64(dim)) {
+    for (i in range64(width)) {
         out[i] *= rn
     }
 }
 
-//! Mean-pooled, L2-normalized sentence embedding of `text` (`dim` floats): tokenize, run one forward,
-//! average the decoder's last-layer hidden state over positions, unit-normalize. Decoder-as-embedder
-//! yields RAG-grade vectors, not a substitute for a dedicated embedding model.
-def embed_(m : Model; text : string; pooling : int64 = POOLING_MEAN) : array<float> {
+//! L2-normalized sentence embedding of `text` (`dim` floats, or the leading `dims`): tokenize, run one forward, pool the
+//! decoder's last-layer hidden rows the way `pooling` asks (the mean for a chat model, the last row for an embedding model),
+//! cut, unit-normalize.
+def embed_(m : Model; text : string; pooling : int64 = POOLING_MEAN; dims : int64 = 0l) : array<float> {
     var s <- create_session_(m)
     let tokens = encode_(m, text)
     var out : array<float>
-    embed_forward(m, s, tokens, long_length(tokens), out, pooling)
+    embed_forward(m, s, tokens, long_length(tokens), out, pooling, dims)
     delete s
     return <- out
 }

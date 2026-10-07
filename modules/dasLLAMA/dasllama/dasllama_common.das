@@ -85,11 +85,12 @@ enum DnPrefillMode {
     chunked
 }
 
-//! Model hyperparameters (the 7-int checkpoint header plus derived sizes).
-//! GGUF `{arch}.pooling_type` values an embedding file names (llama.cpp's enum; 0 = none and 4 = rank read as mean here)
+//! GGUF `{arch}.pooling_type` values an embedding file names (0 = none and 4 = rank read as mean here)
 let POOLING_MEAN = 1l
 let POOLING_CLS = 2l
 let POOLING_LAST = 3l
+
+//! Model hyperparameters (the 7-int checkpoint header plus derived sizes).
 
 struct Config {
     dim : int64

@@ -674,8 +674,12 @@ through a catch-all that logs method + path + body head, and known routes warn p
 
 ### Embeddings
 
-`input` is a string or an array of strings. Each vector is `model.config.dim` floats,
-mean-pooled over the decoder's last-layer hidden state (post-final-norm) and L2-normalized.
+`input` is a string or an array of strings. Each vector is L2-normalized and `model.config.dim`
+floats long, or `dimensions` floats when the request cuts it (the leading components,
+renormalized). The pooling is the file's `pooling_type` - last token for Qwen3-Embedding, the
+mean over every position for a chat model that names none - unless `pooling` (`"mean"`, `"cls"`,
+`"last"`) overrides it; any other value is a 400. An instruction prefix (Qwen3-Embedding's
+`Instruct: ... Query: `) is the client's to add.
 
 ```sh
 curl http://127.0.0.1:8080/v1/embeddings -H 'Content-Type: application/json' -d '{

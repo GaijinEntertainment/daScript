@@ -46,6 +46,25 @@ multiplies the two vectors coordinate by coordinate and adds up the results.
 ``embed`` runs a forward pass, so — like ``generate`` — it must run inside
 ``with_job_que()``; model code outside one panics.
 
+The third argument overrides the file's pooling — ``POOLING_MEAN``, ``POOLING_CLS``
+(the first row) or ``POOLING_LAST`` (the last row). On a chat model the last row is a
+different, weaker vector than the mean; on Qwen3-Embedding it is the one the model was
+trained for, and the file already asks for it. The fourth keeps only the leading
+components, renormalized — the width a vector store is sized for; an embedding model
+trained for that Matryoshka read keeps its meaning in them, a chat model's cut is only
+the shape.
+
+.. code-block:: das
+
+   with_job_que() {
+       setup_dasllama_jobque()
+       let qv <- embed(m, "How do I sort a list in Python?")
+       let lv <- embed(m, "How do I sort a list in Python?", POOLING_LAST)
+       print("last-token read against the mean read: cosine {cosine(qv, lv)}\n")
+       let short <- embed(m, "How do I sort a list in Python?", POOLING_MEAN, 64l)
+       print("a 64-wide cut: {length(short)} floats\n")
+   }
+
 Semantic ranking
 ================
 

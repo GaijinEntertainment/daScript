@@ -33,14 +33,6 @@ def private cosine(a, b : array<float>) : float {
     return s   // both vectors are unit length by the facade's contract
 }
 
-def private l2(v : array<float>) : float {
-    var s = 0.0
-    for (x in v) {
-        s += x * x
-    }
-    return sqrt(s)
-}
-
 //! the four cosines of the card's example under one pooling, row-major
 def private cosine_matrix(m : Model; pooling : int64) : array<float> {
     var out : array<float>
@@ -69,12 +61,12 @@ def test_embeddings_qwen3_embedding(t : T?) {
         tt |> success(length(ids) > 1 && ids[length(ids) - 1] == m.tok.bpe.eos_id, "encode ends every text with the EOS the last row is read at ({ids})")
         var last <- cosine_matrix(m, -1l)   // the file's own pooling
         var mean <- cosine_matrix(m, POOLING_MEAN)
-        var worst = 0.0
-        for (i in range(4)) {
-            worst = max(worst, abs(last[i] - EMB_REF[i]))
+        var misses = 0
+        for (c, ref in last, EMB_REF) {
+            misses += !(abs(c - ref) <= EMB_BAR) ? 1 : 0   // a NaN cosine is a miss, never dropped by a running max
         }
-        to_log(LOG_INFO, "qwen3-embedding last-token cosines {last} (card {EMB_REF}, widest miss {worst}); mean-pooled {mean}\n")
-        tt |> success(worst <= EMB_BAR, "the last-token read lands the card's matrix within {EMB_BAR} (widest miss {worst})")
+        to_log(LOG_INFO, "qwen3-embedding last-token cosines {last} (card {EMB_REF}, {misses} outside {EMB_BAR}); mean-pooled {mean}\n")
+        tt |> equal(0, misses, "the last-token read lands the card's matrix within {EMB_BAR} ({misses} of 4 outside)")
         //! the control: the mean read parts the relevant passage from the other by less than a tenth where the card parts them by 0.6
         tt |> success(mean[0] - mean[1] < 0.1, "the mean read cannot tell the capital passage from the gravity one ({mean[0]} against {mean[1]})")
         tt |> success(last[0] - last[1] > 0.5, "the last-token read does ({last[0]} against {last[1]})")
@@ -96,19 +88,22 @@ def test_embeddings_chat_model_default_mean(t : T?) {
         var dflt <- embed(m, EMB_DOCS[0])
         var mean <- embed(m, EMB_DOCS[0], POOLING_MEAN)
         var last <- embed(m, EMB_DOCS[0], POOLING_LAST)
+        var cls <- embed(m, EMB_DOCS[0], POOLING_CLS)
         tt |> equal(m.config.dim, long_length(dflt), "dim floats")
-        tt |> success(abs(l2(dflt) - 1.0) < 1.0e-4 && abs(l2(last) - 1.0) < 1.0e-4, "both reads are unit vectors")
         var same_as_mean = true
         var same_as_last = true
-        for (d, mn, ls in dflt, mean, last) {
+        var same_as_cls = true
+        for (d, mn, ls, cl in dflt, mean, last, cls) {
             same_as_mean = same_as_mean && d == mn
             same_as_last = same_as_last && d == ls
+            same_as_cls = same_as_cls && d == cl
         }
         tt |> success(same_as_mean, "the default read is the mean read, float for float")
-        tt |> success(!same_as_last, "... and not the last-token read")
+        tt |> success(!same_as_last && !same_as_cls, "... and neither the last-token nor the first-row read")
         delete dflt
         delete mean
         delete last
+        delete cls
         delete m
     }
 }

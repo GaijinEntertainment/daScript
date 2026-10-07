@@ -53,30 +53,20 @@ def private l2(v : array<float>) : float {
     return sqrt(s)
 }
 
-//! two vectors within `tol` per component - the renormalized cut against the test's own renormalization of the same floats
+//! two vectors within `tol` per component; a NaN on either side, or two lengths, read as outside every tolerance
 def private vecs_close(a, b : array<float>; tol : float) : bool {
     if (length(a) != length(b)) {
         return false
     }
     for (x, y in a, b) {
-        if (abs(x - y) > tol) {
+        if (!(abs(x - y) <= tol)) {
             return false
         }
     }
     return true
 }
 
-def private vecs_equal(a, b : array<float>) : bool {
-    if (length(a) != length(b)) {
-        return false
-    }
-    for (x, y in a, b) {
-        if (x != y) {
-            return false
-        }
-    }
-    return true
-}
+def private vecs_equal(a, b : array<float>) : bool => vecs_close(a, b, 0.0)
 
 // Start the server on a dedicated thread (model loaded in-thread), wait until it answers /v1/models,
 // run the block, then POST /shutdown (flips the server context's stop flag) and join. `mode`
@@ -300,6 +290,23 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
             }
             POST("{base_url}/v1/embeddings", "\{\"input\":\"the quick brown fox\",\"dimensions\":0}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "an explicit zero dimensions is refused, not read as absent")
+            }
+            POST("{base_url}/v1/embeddings", "\{\"input\":\"the quick brown fox\",\"dimensions\":1000000}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "dimensions past the model's width is refused")
+            }
+            POST("{base_url}/v1/embeddings", "\{\"input\":\"the quick brown fox\",\"pooling\":\"cls\"}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK), "the first-row read is a pooling")
+                var err : string
+                var js = read_json(string(resp.body), err)
+                if (js != null) {
+                    let r = from_JV(js, type<EmbResp>)
+                    if (length(r.data) == 1) {
+                        t |> success(!vecs_close(r.data[0].embedding, mean_vec, 1.0e-6), "... and a different vector from the mean read")
+                    }
+                    unsafe {
+                        delete js
+                    }
+                }
             }
             delete mean_vec
             // /v1/chat/completions (non-streaming) — end-to-end generation smoke

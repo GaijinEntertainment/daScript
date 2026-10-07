@@ -131,7 +131,7 @@ def load_tokenizer_gguf(path : string) : SpmTokenizer {
         if (gguf_has(m, "tokenizer.ggml.eos_token_id")) {
             tk.eos_id = gguf_int(m, bytes, "tokenizer.ggml.eos_token_id")
         }
-        tk.add_eos = gguf_has(m, "tokenizer.ggml.add_eos_token") && gguf_int(m, bytes, "tokenizer.ggml.add_eos_token") != 0l
+        tk.add_eos = gguf_int_or(m, bytes, "tokenizer.ggml.add_eos_token", 0l) != 0l
     }
     fclose(f)
     build_spm_derived(tk)

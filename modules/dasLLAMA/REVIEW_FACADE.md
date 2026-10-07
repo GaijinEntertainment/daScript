@@ -5,7 +5,7 @@ docs: `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_RUNTIME.md`, `ARCHITECTURE_TTS.md`
 `followup_general.md`.
 
 **A non-private, non-operator def of a file `REVIEW.das`'s `FACADE_FILES` lists, and each new
-overload of one, is called in runnable code in a `tutorials/dasLLAMA/*.das` source - not a comment
+overload of one - a parameter a diff adds to an existing def included - is called in runnable code in a `tutorials/dasLLAMA/*.das` source - not a comment
 or a passing mention - with that overload's argument types, and narrated on a
 `doc/source/reference/tutorials/dasLLAMA_*.rst` page.**
 

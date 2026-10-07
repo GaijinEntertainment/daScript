@@ -11,7 +11,8 @@ makes its compile the assertion. A test file's header is its top comment block. 
 a function that writes an output buffer from operand buffers; one that answers a size, a block or
 a layout is not. A bound assert is an assert whose pass means two sides agree or a figure is good
 enough - a difference between two computed sides, a rate, an error, or a count the run decides,
-within a nonzero tolerance or past a floor or ceiling; a counter asserted to show a route ran is
+within a nonzero tolerance or past a floor or ceiling; a guard that keeps a later index or compare
+well-defined (a length past the index it reads) is not one, and a counter asserted to show a route ran is
 such a count. A kernel-unit cell is a cell in which a `[metal_dispatch]` or `[vk_dispatch]` class is dispatched, or a CPU
 kernel in `../dasllama/dasllama_math*.das` is called, by a statement in test code - the cell
 itself, or a helper in its own file or in a `_*.das` test-helper module; a kernel run that only
@@ -28,9 +29,9 @@ kept in step with something maintained outside the cell, or that a checked-in ta
 evidence, applies that checklist too.** An assert that compares against a `../dasllama/`
 constant by name, not against a literal copy of it, keeps nothing in step.
 
-**A cell that calls, directly or through helpers at any depth, a `set_*` / `pin_*` function in
-`../dasllama/` whose value a later load, route choice or kernel dispatch in the same process
-reads, passes a loader parameter that takes a family's lane, or whose claim depends on which
+**A cell that calls, in its own code or through a helper under this folder, a `set_*` / `pin_*`
+function in `../dasllama/` whose value a later load, route choice or kernel dispatch in the same
+process reads (a loader's own box-profile setters are the loader's, not the cell's), passes a loader parameter that takes a family's lane, or whose claim depends on which
 route or serving lane runs it - a lane pin, a driver hook, a CPU-vs-GPU compare - applies
 `REVIEW_LANE_PINS.md` (beside this file) too.**
 
