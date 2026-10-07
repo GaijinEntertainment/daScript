@@ -149,7 +149,7 @@ def sample_logits_row(var s : Session; params : SamplingParams; var row : array<
             return constrained_pick(s, vocab)
         }
         s.cand |> reserve(kept)   // the list only shrinks here; the reserve is the exact-size contract's
-    s.cand |> resize(kept)
+        s.cand |> resize(kept)
         let tok = sample_candidates_(s, params)
         s.constrain->commit(tok)
         return tok
