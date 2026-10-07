@@ -1632,8 +1632,6 @@ struct private G4vEnds {
     bpool : MetalBuffer?    //!< the pooled rows [mpo x d]
     bclamp : MetalBuffer?   //!< their clamped copy, the projection's input
     bout : MetalBuffer?     //!< the soft tokens [mpo x proj_dim]
-    bstd_b : MetalBuffer?   //!< the standardize bias row (zeros where the tower has none)
-    bstd_m : MetalBuffer?   //!< its scale row (ones)
     u_pd : MetalBuffer?
     u_proj : MetalBuffer?
     u_totpool : MetalBuffer?
@@ -1642,7 +1640,6 @@ struct private G4vEnds {
     bytes_pos : uint64
     bytes_pool : uint64
     bytes_out : uint64
-    bytes_std : uint64
 }
 
 //! The stem's operands up, and the tail's rows where the lever allows, its kernels are compiled, the grid pools whole and
@@ -1673,25 +1670,14 @@ def private g4v_ends_make(t : Gemma4vTower; s : Gemma4vState; planes : array<flo
     e.mpo = round_up(e.nout, 32l)
     e.bytes_pool = uint64(e.mpo * d * 4l)
     e.bytes_out = uint64(e.mpo * t.proj_dim * 4l)
-    e.bytes_std = uint64(d * 4l)
     e.bpool = pool_acquire_pinned(g_tw_pool, g_dev, e.bytes_pool)
     e.bclamp = pool_acquire_pinned(g_tw_pool, g_dev, e.bytes_pool)
     zero_rows(e.bpool, e.nout, e.mpo, d)   //! the pool and the clamp write the live rows alone and the projection reads the row pad: the buffers are pooled
     zero_rows(e.bclamp, e.nout, e.mpo, d)
     e.bout = pool_acquire_pinned(g_tw_pool, g_dev, e.bytes_out)
-    e.bstd_b = pool_acquire_pinned(g_tw_pool, g_dev, e.bytes_std)
-    e.bstd_m = pool_acquire_pinned(g_tw_pool, g_dev, e.bytes_std)
     e.u_proj = uniform_u32(uint(t.proj_dim))
     e.u_totpool = uniform_u32(uint(e.nout * d))
     e.u_totout = uniform_u32(uint(e.nout * t.proj_dim))
-    unsafe {
-        var bp = reinterpret<float?>(metal_buffer_contents(e.bstd_b))
-        var mp_ = reinterpret<float?>(metal_buffer_contents(e.bstd_m))
-        for (i in range64(d)) {
-            bp[i] = t.has_std ? plane_at(t.blob, t.std_bias)[i] : 0.0
-            mp_[i] = t.has_std ? plane_at(t.blob, t.std_scale)[i] : 1.0
-        }
-    }
     return e
 }
 
@@ -1736,8 +1722,9 @@ def private g4v_tail_body(enc : MetalComputeEncoder?; t : Gemma4vTower; e : G4vE
     let cl = gemma4v_clamp_at(t, t.proj_clamp)
     var pool = GkPool2dArgs(width = uint(d), gw = uint(e.n_cols), k = uint(t.merge), ow = uint(e.n_cols / t.merge), total = uint(nout * d))
     enc_tw_pool2d(enc, bx, e.bpool, pool, nout * d)
-    var affine = GkAffineRowsArgs(width = uint(d), total = uint(nout * d), scale = sqrt(float(d)))
-    enc_tw_affine_rows(enc, e.bpool, e.bstd_b, e.bstd_m, affine, nout * d)
+    var affine = GkAffineRowsArgs(width = uint(d), total = uint(nout * d), scale = sqrt(float(d)), boff = uint(t.has_std ? t.std_bias : 0l),
+        moff = uint(t.has_std ? t.std_scale : 0l), std = t.has_std ? 1u : 0u)
+    enc_tw_affine_rows(enc, e.bpool, bblob, bblob, affine, nout * d)
     enc_tw_rms(enc, e.bpool, e.bpool, g_tw_ones, gk_rms_args(uint(d), uint(nout), t.eps, 0u), nout)
     tw_clamp_copy(enc, e.bpool, e.bclamp, cl.imin, cl.imax, nout * d)
     tw_mm(enc, false, t.proj_bf16, bwblob, bblob, t.proj_w, e.bclamp, null, e.bout, 0ul, u_d, e.u_proj, e.mpo, t.proj_dim, d, false)
@@ -1762,8 +1749,6 @@ def private g4v_ends_land(t : Gemma4vTower; var e : G4vEnds; ran : bool; var s :
     pool_release(g_tw_pool, e.bpool, e.bytes_pool)
     pool_release(g_tw_pool, e.bclamp, e.bytes_pool)
     pool_release(g_tw_pool, e.bout, e.bytes_out)
-    pool_release(g_tw_pool, e.bstd_b, e.bytes_std)
-    pool_release(g_tw_pool, e.bstd_m, e.bytes_std)
     pool_release(g_upool, e.u_proj, 4ul)
     pool_release(g_upool, e.u_totpool, 4ul)
     pool_release(g_upool, e.u_totout, 4ul)

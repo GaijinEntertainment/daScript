@@ -2173,9 +2173,13 @@ struct GkAffineRowsArgs {
     width : uint   //! a row's width
     total : uint
     scale : float
+    boff : uint    //! the standardize bias row's element base in b, the scale row's in m
+    moff : uint
+    std : uint     //! 0: the rows take the scale alone (a tower with no standardize rows)
 }
 
-//! a vision tail's row standardize, in place: x = (x * scale - b[c]) * m[c] over rows of `width`, one element an invocation
+//! a vision tail's row standardize, in place: x = (x * scale - b[c]) * m[c] over rows of `width` (x * scale alone under `std` = 0),
+//! one element an invocation
 [ |> template_struct_instance]
 class template GkAffineRows {
     @ssbo @binding = 0 @role = "readwrite" x : array<float>
@@ -2187,7 +2191,8 @@ class template GkAffineRows {
         let gid = gl_GlobalInvocationID.x
         if (gid < pa.total) {
             let c = gid % pa.width
-            x[gid] = (x[gid] * pa.scale - b[c]) * m[c]
+            let v = x[gid] * pa.scale
+            x[gid] = pa.std != 0u ? (v - b[pa.boff + c]) * m[pa.moff + c] : v
         }
     }
 }

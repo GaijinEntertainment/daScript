@@ -1207,7 +1207,7 @@ def private tw_affine_gate(t : T?; var dev, queue) {
             apart += abs(want[i] - (x[i] - b[i % width]) * m[i % width]) > 1e-3 ? 1 : 0
         }
         t |> success(apart > total / 2, "{tag}: the fixture tells the scale apart ({apart} of {total})")
-        var ka = GkAffineRowsArgs(width = uint(width), total = uint(total), scale = scale)
+        var ka = GkAffineRowsArgs(width = uint(width), total = uint(total), scale = scale, boff = 0u, moff = 0u, std = 1u)
         let bx = mc |> io_(x)
         let bb = mc |> in_(b)
         let bm = mc |> in_(m)
