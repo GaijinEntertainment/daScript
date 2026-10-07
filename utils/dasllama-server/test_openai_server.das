@@ -14,6 +14,7 @@ require daslib/fio                                      // get_env_variable / st
 require daslib/toml                                     // read_toml: POST /config round-trip check
 require math                                            // sqrt
 require strings                                         // find (control-page content-type/body checks)
+require daslib/strings_boost                            // split: the SSE body into its data lines
 
 // End-to-end conformance for the OpenAI-compatible server: spin it up on its own thread (a separate
 // context — so the model loads INSIDE that thread, since g_model is a per-context module global),
@@ -72,7 +73,7 @@ def private vecs_equal(a, b : array<float>) : bool => vecs_close(a, b, 0.0)
 // run the block, then POST /shutdown (flips the server context's stop flag) and join. `mode`
 // arms the Metal pipeline in the server thread's context BEFORE the load (the --metal flag's
 // engine effect — the != off backend pin must precede load_model).
-def private with_llama_server(model_path : string; port : int; mode : MetalMode = MetalMode.off; blk : block<(base_url : string) : void>) {
+def private with_llama_server(model_path : string; port : int; mode : MetalMode = MetalMode.off; page_rows : int64 = 64l; blk : block<(base_url : string) : void>) {
     with_job_status(1) $(finished) {
         new_thread() @() {
             set_metal_mode(mode)
@@ -84,6 +85,7 @@ def private with_llama_server(model_path : string; port : int; mode : MetalMode 
             var m <- load_model(model_path, QuantMode.q8)
             set_model(m, "test-llm")
             set_default_max_tokens(4l)   // per-context global — exercised by the default-budget completion test
+            set_stream_keepalive_ms(0l)   // every tick an empty delta on a streaming wire - the keep-alive cell counts them
             // the /config surface as main.das registers it (per-context globals — set in-thread)
             var surf <- {
                 "config" => JV((port = port, model = model_path, streams = 4)),
@@ -322,6 +324,74 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                         delete js
                     }
                 }
+            }
+            // `stop`: the greedy counting reply read once, then a string cut from it at its second space ends the same
+            // request where it begins, finish_reason "stop"; a `stop` of the wrong shape is a 400
+            let count_msgs = "[\{\"role\":\"user\",\"content\":\"Count from one to ten in words.\"}]"
+            var count_reply = ""
+            POST("{base_url}/v1/chat/completions", "\{\"messages\":{count_msgs},\"max_tokens\":16}") $(resp) {
+                var err : string
+                var js = read_json(string(resp.body), err)
+                if (js != null) {
+                    count_reply = js?["choices"]?[0]?["message"]?["content"] ?? ""
+                    unsafe {
+                        delete js
+                    }
+                }
+            }
+            let cut = length(count_reply) / 2
+            if (cut > 0 && ascii_only(count_reply)) {
+                let stop_s = slice(count_reply, cut)
+                POST("{base_url}/v1/chat/completions", "\{\"messages\":{count_msgs},\"max_tokens\":16,\"stop\":[{json_str(stop_s)}]}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.OK))
+                    var err : string
+                    var js = read_json(string(resp.body), err)
+                    t |> success(js != null, "stop-string chat JSON parses")
+                    if (js != null) {
+                        t |> equal(slice(count_reply, 0, cut), js?["choices"]?[0]?["message"]?["content"] ?? "", "the reply ends where the stop string begins")
+                        t |> equal("stop", js?["choices"]?[0]?["finish_reason"] ?? "", "... as a stop")
+                        unsafe {
+                            delete js
+                        }
+                    }
+                }
+            } else {
+                t |> success(false, "the greedy counting reply gives no ASCII text to cut a stop string from: {count_reply}")
+            }
+            POST("{base_url}/v1/chat/completions",
+                 "\{\"messages\":[\{\"role\":\"user\",\"content\":\"Say hi.\"}],\"max_tokens\":4,\"stop\":5}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "a stop of the wrong shape is refused")
+            }
+            // a streaming reply gets an empty delta whenever it stays silent past the keep-alive window (0 here: one a
+            // tick), tools or no tools; a client with a no-bytes timeout survives a long prefill on them
+            POST("{base_url}/v1/chat/completions",
+                 "\{\"messages\":[\{\"role\":\"user\",\"content\":\"Say hi.\"}],\"max_tokens\":6,\"stream\":true}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK))
+                var keepalives = 0
+                var content_chunks = 0
+                var finished = false
+                for (line in split(string(resp.body), "\n")) {
+                    continue if (!starts_with(line, "data: ") || line == "data: [DONE]")
+                    var err : string
+                    var js = read_json(slice(line, 6), err)
+                    continue if (js == null)
+                    let finish = js?["choices"]?[0]?["finish_reason"] ?? ""
+                    let content = js?["choices"]?[0]?["delta"]?["content"] ?? ""
+                    let role = js?["choices"]?[0]?["delta"]?["role"] ?? ""
+                    if (!empty(finish)) {
+                        finished = true
+                    } elif (!empty(content)) {
+                        content_chunks ++
+                    } elif (empty(role)) {
+                        keepalives ++   // neither the opening role nor content nor a finish: the empty keep-alive delta
+                    }
+                    unsafe {
+                        delete js
+                    }
+                }
+                t |> success(content_chunks > 0, "the stream carried content ({content_chunks} chunks)")
+                t |> success(finished, "... and a finish")
+                t |> success(keepalives > 0, "a plain stream gets empty keep-alive deltas ({keepalives})")
             }
             // /v1/completions WITHOUT max_tokens — the configured default budget applies (4 in this
             // harness; llm-cli-style clients omit the field, raw completions run to the budget)
@@ -739,6 +809,87 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                 t |> equal(int(resp.status_code), int(http_status.OK))
                 t |> success(find(string(resp.body), "\"restarting\":true") >= 0, "restart response flags restarting")
             }
+        }
+    }
+}
+
+//! `s` as a quoted JSON string literal, every byte escaped as JSON wants it
+def private json_str(s : string) : string {
+    var sj = JV(s)
+    let lit = write_json_compact(sj)
+    unsafe {
+        delete sj
+    }
+    return lit
+}
+
+//! true when every byte of `s` is ASCII, so any byte index is a character boundary
+def private ascii_only(s : string) : bool {
+    var ascii = true
+    peek_data(s) $(d) {
+        for (b in d) {
+            ascii = ascii && int(b) < 128
+        }
+    }
+    return ascii
+}
+
+let TEST_PORT_PRESERVE = 18145   // 18140-18141 are the bench and catalog cells', 18150-18157 test_openai_server_mtp.das's
+let QWEN3_PATH = path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf")
+
+//! a buffered chat reply's content and `usage` counts: prompt tokens, completion tokens, the prefix-cache hit
+struct private ChatUsage {
+    reply : string
+    prompt : int = -1
+    completion : int = -1
+    cached : int = -1
+}
+
+def private chat_usage(base_url : string; body : string) : ChatUsage {
+    var u = ChatUsage()
+    POST("{base_url}/v1/chat/completions", body) $(resp) {
+        var err : string
+        var js = read_json(string(resp.body), err)
+        if (js != null) {
+            u.reply = js?["choices"]?[0]?["message"]?["content"] ?? ""
+            u.prompt = int(js?["usage"]?["prompt_tokens"] ?? -1l)
+            u.completion = int(js?["usage"]?["completion_tokens"] ?? -1l)
+            u.cached = int(js?["usage"]?["prompt_tokens_details"]?["cached_tokens"] ?? -1l)
+            unsafe {
+                delete js
+            }
+        }
+    }
+    return u
+}
+
+[test]
+def test_openai_server_preserve_thinking(t : T?) {
+    t |> run("preserve_thinking replays the think block, so the next turn attaches the whole first exchange off the prefix cache (needs Qwen3-0.6B q8)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA server test is JIT-only)")
+            return
+        }
+        if (!stat(QWEN3_PATH).is_valid) {
+            t |> skip("{base_name(QWEN3_PATH)} not present (set DASLLAMA_MODELS_DIR)")
+            return
+        }
+        // pages of 8 rows, so a divergence inside the first prompt and a match through the whole exchange land on different pages
+        with_llama_server(QWEN3_PATH, TEST_PORT_PRESERVE, MetalMode.off, 8l) $(base_url) {
+            let sys = "You are a terse assistant. Answer with the words asked for and nothing else."
+            let user1 = "Count from one to twelve in words, separated by commas."
+            let head = "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"{user1}\"}"
+            let first = chat_usage(base_url, "{head}],\"max_tokens\":24,\"chat_template_kwargs\":\{\"enable_thinking\":false}}")
+            t |> success(first.prompt > 0 && first.completion > 0, "the first turn answered ({first.prompt} prompt, {first.completion} completion tokens): {first.reply}")
+            // the same exchange replayed, then a second user turn: without preserve_thinking the replayed assistant turn
+            // lacks the empty think block the generation prompt carried, so the match stops inside the first prompt
+            let replay = "{head},\{\"role\":\"assistant\",\"content\":{json_str(first.reply)}},\{\"role\":\"user\",\"content\":\"And thirteen?\"}],\"max_tokens\":1"
+            let plain = chat_usage(base_url, "{replay},\"chat_template_kwargs\":\{\"enable_thinking\":false}}")
+            let kept = chat_usage(base_url, "{replay},\"chat_template_kwargs\":\{\"enable_thinking\":false,\"preserve_thinking\":true}}")
+            to_log(LOG_INFO, "preserve_thinking: first prompt {first.prompt} + {first.completion} generated; cached without {plain.cached}, with {kept.cached}\n")
+            t |> success(plain.cached >= 0 && plain.cached < first.prompt, "without preserve_thinking the cache hit stops inside the first prompt ({plain.cached} of {first.prompt})")
+            t |> success(kept.cached >= first.prompt - 8, "with it the first prompt attaches whole, think block included ({kept.cached} of {first.prompt})")
+            t |> success(kept.cached > plain.cached, "... more than the replay without it ({kept.cached} > {plain.cached})")
         }
     }
 }

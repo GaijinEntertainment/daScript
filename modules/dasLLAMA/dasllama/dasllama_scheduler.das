@@ -63,6 +63,7 @@ struct PendingReq {
     prompt : array<int64>                   // the full rendered prompt
     close_toks : array<int64>               // the turn-terminating tokens (render_close; evaled at donation so the next turn extends the cached prefix)
     stop_ids : array<int64>                 // sampling one of these finishes "stop" (the token is not emitted)
+    stop_strs : array<string>               //! a reply that reaches one of these finishes "stop" where it begins; the text that could still begin one is held back (`stop_scan`)
     nothink : NothinkStopGuard = NothinkStopGuard()   // the instruct-mode channel-marker guard (`make_nothink_guard`); unarmed = every token passes
     params : SamplingParams = SamplingParams()
     max_new : int64 = 256l                  // reply token budget (>= 1)
@@ -90,6 +91,8 @@ struct Stream {
     prompt : array<int64>
     close_toks : array<int64>
     stop_ids : array<int64>
+    stop_strs : array<string>
+    stop_hold : string = ""                 //! generated text not yet emitted: it could still begin a stop string
     nothink : NothinkStopGuard = NothinkStopGuard()
     n_prefilled : int64                     // prompt positions whose K/V stands: attached or evaled
     spans : array<MediaSpan>                // the prompt's media spans, in prompt order (see PendingReq)
@@ -376,7 +379,51 @@ def submit(model : Model; var sch : Scheduler; var req : PendingReq) : bool {
 }
 
 // Terminate a stream: mark done (reaped at step end) and append its finished event.
+//! The text a stop-string scan releases once `piece` joins `hold`: everything before the first stop string when one
+//! is complete (true), else everything that cannot still begin one, the rest staying in `hold` (false).
+def stop_scan(var hold : string&; piece : string; stops : array<string>; var emit : string&) : bool {
+    let whole = empty(hold) ? piece : "{hold}{piece}"
+    var at = -1
+    for (s in stops) {
+        let i = find(whole, s)
+        if (i >= 0 && (at < 0 || i < at)) {
+            at = i
+        }
+    }
+    if (at >= 0) {
+        emit = at > 0 ? slice(whole, 0, at) : ""
+        hold = ""
+        return true
+    }
+    var keep = 0
+    peek_data(whole) $(d) {
+        let n = length(d)
+        for (s in stops) {
+            var k = min(n, length(s) - 1)
+            while (k > keep) {
+                if (starts_with(d, n - k, s, uint(k))) {
+                    keep = k
+                    break
+                }
+                k --
+            }
+        }
+    }
+    if (keep == 0) {
+        emit = whole
+        hold = ""
+    } else {
+        emit = slice(whole, 0, length(whole) - keep)
+        hold = slice(whole, length(whole) - keep)
+    }
+    return false
+}
+
 def private finish_stream(var st : Stream; finish : string; var events : array<SchedEvent>) {
+    if (!empty(st.stop_hold)) {   //! held back for a stop string that never completed
+        events |> push(SchedEvent(stream = st.id, text = st.stop_hold))
+        st.stop_hold = ""
+    }
     st.state = StreamState.done
     st.finish = finish
     let gen_us = st.t_first != 0l ? int64(get_time_usec(st.t_first)) : 0l
@@ -442,6 +489,14 @@ def private advance_with(m : Model; var st : Stream; tok : int64; var events : a
         finish_stream(st, "stop", events)
         return false
     }
+    var emit = ptxt
+    if (!empty(st.stop_strs) && stop_scan(st.stop_hold, ptxt, st.stop_strs, emit)) {
+        if (!empty(emit)) {
+            events |> push(SchedEvent(stream = st.id, token = tok, text = emit))
+        }
+        finish_stream(st, "stop", events)
+        return false
+    }
     peek_data(ptxt) $(bytes) {
         for (b in bytes) {
             st.gen_tail_bytes |> push(b)
@@ -456,7 +511,7 @@ def private advance_with(m : Model; var st : Stream; tok : int64; var events : a
         }
         st.gen_tail_bytes |> erase(0, cut)
     }
-    events |> push(SchedEvent(stream = st.id, token = tok, text = ptxt))
+    events |> push(SchedEvent(stream = st.id, token = tok, text = emit))
     st.session.recent |> push(tok)
     st.n_gen ++
     st.cur_tok = tok
@@ -536,7 +591,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         var st <- Stream(id = sch.queue[0].id,
                          params = sch.queue[0].params, prompt <- sch.queue[0].prompt,
                          close_toks <- sch.queue[0].close_toks, stop_ids <- sch.queue[0].stop_ids,
-                         nothink <- sch.queue[0].nothink,
+                         stop_strs <- sch.queue[0].stop_strs, nothink <- sch.queue[0].nothink,
                          spans <- sch.queue[0].spans, constraint <- sch.queue[0].constraint,
                          max_new = sch.queue[0].max_new, t_admit = ref_time_ticks())
         if (sch.device_kv) {

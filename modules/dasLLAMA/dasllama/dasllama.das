@@ -422,11 +422,11 @@ def render_turn_audio(model : Model; chat : ChatSession; var head : array<int64>
     render_turn_audio_(model, chat, head, tail, text_before)
 }
 
-def render_assistant(model : Model; var chat : ChatSession; text : string; var out : array<int64>) {
-    //! ``add_assistant``'s render half: appends the exact token stream a known reply prefills to
-    //! ``out`` WITHOUT running the model, advancing the transcript like ``add_assistant``. Use on a
-    //! ``create_chat_renderer`` chat to replay history with no KV memory. Precondition: user message pending.
-    render_assistant_(model, chat, text, out)
+def render_assistant(model : Model; var chat : ChatSession; text : string; var out : array<int64>; reasoning : string = "") {
+    //! ``add_assistant``'s render half: appends the exact token stream a known reply prefills to ``out``
+    //! WITHOUT running the model, advancing the transcript like ``add_assistant`` (a ``create_chat_renderer``
+    //! chat replays history with no KV). ``reasoning`` renders in its think block under ``set_preserve_thinking``.
+    render_assistant_(model, chat, text, out, reasoning)
 }
 
 def render_close(model : Model; chat : ChatSession) : array<int64> {
@@ -469,10 +469,17 @@ def set_thinking(var chat : ChatSession; on : bool) {
     set_thinking_(chat, on)
 }
 
-def render_assistant_calls(model : Model; var chat : ChatSession; text : string; calls : array<string>; var out : array<int64>) {
+def set_preserve_thinking(var chat : ChatSession; on : bool) {
+    //! ``true`` makes every replayed assistant turn carry its think block - its ``reasoning`` between the
+    //! template's markers, the empty block when it had none - so a replayed transcript renders the tokens
+    //! the model generated and a prefix cache matches through it. No-op where ``set_thinking`` is; default off.
+    set_preserve_thinking_(chat, on)
+}
+
+def render_assistant_calls(model : Model; var chat : ChatSession; text : string; calls : array<string>; var out : array<int64>; reasoning : string = "") {
     //! ``render_assistant``'s tool-calling twin: replay an assistant turn that emitted tool calls
     //! (verbatim ``\{"name":…,"arguments":…}`` objects) plus any ``text`` alongside.
-    render_assistant_calls_(model, chat, text, calls, out)
+    render_assistant_calls_(model, chat, text, calls, out, reasoning)
 }
 
 def effective_stop_ids(chat : ChatSession) : array<int64> {

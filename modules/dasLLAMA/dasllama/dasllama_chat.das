@@ -54,6 +54,7 @@ struct ChatSession {
     first : bool = true             // first turn emits add_bos + the system turn
     max_new : int64 = 256l          // per-reply token budget
     enable_thinking : bool = true   // init from tmpl.think_default; off + a think_suppress form => instruct mode
+    preserve_thinking : bool = false   //! a replayed assistant turn renders its think block, the tokens the model generated there
     think_vocab : bool = false      // the vocab carries the reply-side reasoning markers (resolved at create)
     gate_ok : bool = false          // the think_gate specials resolve in the vocab (true when no gate declared)
     gate_rendered : bool = false    // a consumed turn actually rendered the gate — thinking is armed for the session
@@ -1054,15 +1055,29 @@ def render_close_(m : Model; c : ChatSession) : array<int64> {
 //! `add_assistant_`'s render half: appends the exact token stream a KNOWN reply prefills to
 //! `out` WITHOUT running the model, advancing the transcript like `add_assistant_`. Replays a
 //! stateless request's history on a `create_chat_renderer_` chat with no KV memory.
-def render_assistant_(m : Model; var c : ChatSession; text : string; var out : array<int64>) {
+def render_assistant_(m : Model; var c : ChatSession; text : string; var out : array<int64>; reasoning : string = "") {
     if (!c.has_pending) {
         return
     }
     render_prompt(m, c, out)
+    render_think_replay(m, c, reasoning, out)
     out |> push_from(encode_(m, text, false, false))
     consume_pending_(c)
     render_parts(m, c.close_parts, "", out)
     c.history |> push(Message(role = Role.assistant, content = text))
+}
+
+// The think block a replayed assistant turn carries under preserve_thinking: the turn's reasoning between the
+// template's markers, the empty block when it had none. Skips silently where the template has no suppress form
+// or the vocab lacks the markers - the same families set_thinking_ reaches.
+def private render_think_replay(m : Model; c : ChatSession; reasoning : string; var out : array<int64>) {
+    if (!c.preserve_thinking || c.tmpl.think_mode != ThinkMode.symmetric || empty(c.tmpl.think_suppress.parts) ||
+        special_id(m, c.tmpl.think_open) < 0l || special_id(m, c.tmpl.think_close) < 0l) {
+        return
+    }
+    var parts <- [chat_special(c.tmpl.think_open), chat_text("\n{reasoning}\n"), chat_special(c.tmpl.think_close), chat_text("\n\n")]
+    render_parts(m, parts, "", out)
+    delete parts
 }
 
 //! Toggle reasoning for a hybrid thinking model: `false` renders the template's think_suppress
@@ -1070,6 +1085,13 @@ def render_assistant_(m : Model; var c : ChatSession; text : string; var out : a
 //! with no suppress form or vocabs without the think specials.
 def set_thinking_(var c : ChatSession; on : bool) {
     c.enable_thinking = on
+}
+
+//! `true` makes every replayed assistant turn carry its think block (`render_assistant_`'s `reasoning`, the
+//! empty block when it is ""), so a replayed transcript renders the tokens the model generated; a no-op for
+//! the templates `set_thinking_` is a no-op for.
+def set_preserve_thinking_(var c : ChatSession; on : bool) {
+    c.preserve_thinking = on
 }
 
 //! Every stop id for the NEXT generation as one list: the template's stops plus the thinking-off
@@ -1178,11 +1200,12 @@ def add_tool_results_(var c : ChatSession; results : array<string>; names : arra
 //! `render_assistant_`'s tool-calling twin: replay an assistant turn that emitted tool calls.
 //! ``calls`` are verbatim ``\{"name":…,"arguments":…}`` JSON objects; ``text`` is any content
 //! alongside. Precondition: a pending user or tool turn; a no-op otherwise.
-def render_assistant_calls_(m : Model; var c : ChatSession; text : string; calls : array<string>; var out : array<int64>) {
+def render_assistant_calls_(m : Model; var c : ChatSession; text : string; calls : array<string>; var out : array<int64>; reasoning : string = "") {
     if (!c.has_pending) {
         return
     }
     render_prompt(m, c, out)
+    render_think_replay(m, c, reasoning, out)
     c.last_call_names |> clear()
     c.last_call_names |> reserve(length(calls))
     var tcs : array<ToolCall>

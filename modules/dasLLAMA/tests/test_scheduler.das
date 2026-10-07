@@ -255,6 +255,97 @@ def test_scheduler_matches_generate(t : T?) {   // nolint:STYLE038 — one model
     }
 }
 
+// ===== stop strings: the hold-back scan on its own, then the stream it ends =====
+
+[test]
+def test_scheduler_stop_scan(t : T?) {
+    t |> run("stop_scan releases what cannot begin a stop string, holds what can, cuts at the first match") @(t : T?) {
+        let stops <- ["</think", "STOP"]
+        var hold = ""
+        var emit = ""
+        t |> success(!stop_scan(hold, "hello <", stops, emit), "no match in the first piece")
+        t |> equal("hello ", emit, "the bytes that cannot begin a stop string are released")
+        t |> equal("<", hold, "... the one that can is held")
+        t |> success(!stop_scan(hold, "/thi", stops, emit), "still no match")
+        t |> equal("", emit, "a hold that is all partial match releases nothing")
+        t |> equal("</thi", hold, "the partial match grows")
+        t |> success(stop_scan(hold, "nk> and more", stops, emit), "the match completes across three pieces")
+        t |> equal("", emit, "nothing stood before it")
+        t |> equal("", hold, "the hold is spent")
+        t |> success(!stop_scan(hold, "a<b", stops, emit), "a false start")
+        t |> equal("a<b", emit, "released whole: no suffix begins a stop string")
+        t |> success(!stop_scan(hold, "xS", stops, emit), "the second stop string's first byte")
+        t |> equal("x", emit)
+        t |> equal("S", hold)
+        t |> success(stop_scan(hold, "TOPPED", stops, emit), "completed by the next piece")
+        t |> equal("", emit)
+        t |> success(stop_scan(hold, "say STOP now", stops, emit), "a match inside one piece")
+        t |> equal("say ", emit, "the text before the match")
+        let two <- ["TOP", "ST"]
+        t |> success(stop_scan(hold, "xSTOP", two, emit), "two stop strings match")
+        t |> equal("x", emit, "the earliest match cuts")
+    }
+}
+
+[test]
+def test_scheduler_stop_strings(t : T?) {
+    t |> run("a stop string ends the stream where it begins; text held for a stop that never comes flushes at the budget (needs SmolLM2-135M)") @(t : T?) {
+        if (model_missing(t)) {
+            return
+        }
+        with_dasllama_jobque() {
+            var m <- load_capped_cpu(128l)
+            var prompt <- encode(m, "Once upon a time", true, false)
+            var none : array<int64>
+            let greedy = SamplingParams()
+            var ref <- ref_generate(m, prompt, greedy, 10l, none)
+            let full = text_of(ref.pieces)
+            var sch <- create_scheduler(m, 1l, 4l, 512l)
+            var events : array<SchedEvent>
+            // the stop string spans pieces 3 and 4, so it completes only across a hold
+            let k = 3
+            if (length(ref.pieces) > k + 1 && !empty(ref.pieces[k]) && !empty(ref.pieces[k + 1])) {
+                let stop = "{ref.pieces[k]}{ref.pieces[k + 1]}"
+                var req <- make_req(1l, prompt, greedy, 10l, none)
+                req.stop_strs <- [stop]
+                t |> success(submit(m, sch, req), "the stop-string stream is queued")
+                drain(m, sch, events)
+                var got <- pieces_of(events, 1l)
+                let text = text_of(got)
+                to_log(LOG_INFO, "stop string {escape(stop)}: reference {escape(full)}, stream {escape(text)}\n")
+                t |> equal(slice(full, 0, find(full, stop)), text, "the text before the stop string, nothing of it")
+                let fin = finished_of(events, 1l)
+                t |> equal("stop", fin.finish)
+                t |> success(fin.n_gen < 10l, "the budget was not what ended it")
+                delete got
+            } else {
+                t |> success(true, "reference too short for a two-piece stop string - arm skipped")
+            }
+            // a stop string the last piece begins and nothing completes: the piece is held, the budget finish flushes it
+            if (!empty(ref.pieces[length(ref.pieces) - 1])) {
+                events |> clear()
+                var req2 <- make_req(2l, prompt, greedy, 10l, none)
+                req2.stop_strs <- ["{ref.pieces[length(ref.pieces) - 1]}\u0007never"]
+                t |> success(submit(m, sch, req2), "the held-tail stream is queued")
+                drain(m, sch, events)
+                var got2 <- pieces_of(events, 2l)
+                var toks2 <- toks_of(events, 2l)
+                t |> equal(full, text_of(got2), "the whole reference text, the held tail flushed")
+                t |> equal(-1l, toks2[length(toks2) - 1], "the flush rides a piece event of its own")
+                let fin2 = finished_of(events, 2l)
+                t |> equal("length", fin2.finish)
+                delete got2
+                delete toks2
+            }
+            delete ref
+            delete events
+            delete sch
+            delete prompt
+            delete m
+        }
+    }
+}
+
 // ===== chunked prefill: {1,3,17,64} produce the identical stream under classic prefill =====
 
 [test]

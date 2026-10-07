@@ -374,7 +374,7 @@ struct private StreamWire {
     reply_parts : array<string>     // non-streaming (or has_tools): pieces accumulate until the finished event
     utf8_tail : string              // streaming: held-back bytes of a multi-byte char split across tokens
     has_tools : bool                // chat request declared tools on a tool-capable template
-    last_keepalive_ticks : int64    // tool streams buffer native envelopes; empty deltas keep HTTP alive
+    last_keepalive_ticks : int64    // the last empty delta a silent stream got (flush_stream_keepalives)
     call_open : string              // the family's tool-call markers (copied from the chat template)
     call_close : string
     tool_mode : ToolMode = ToolMode.none   // the family's tool wire format — the finish parse dispatches on it
@@ -2352,10 +2352,10 @@ let CHAT_FIELDS : table<string> <- { "model", "messages", "stream", "temperature
                                      "presence_penalty", "frequency_penalty", "repeat_penalty", "seed",
                                      "max_tokens", "max_completion_tokens", "tools", "tool_choice",
                                      "enable_thinking", "chat_template_kwargs", "truncation", "stream_options",
-                                     "response_format" }
+                                     "response_format", "stop" }
 let COMPL_FIELDS : table<string> <- { "model", "prompt", "stream", "temperature", "top_k", "top_p", "min_p",
                                      "presence_penalty", "frequency_penalty", "repeat_penalty", "seed",
-                                     "max_tokens", "stream_options" }
+                                     "max_tokens", "stream_options", "stop" }
 let EMB_FIELDS : table<string> <- { "model", "input", "pooling", "dimensions" }
 
 // Sampling knobs shared by both completion routes — OpenAI names, plus the llama.cpp-style
@@ -2382,6 +2382,48 @@ def private warn_ignored_fields(js : JsonValue?; known : table<string>; route : 
         }
     }
 }
+
+//! The request's `stop` - one string or a list of up to STOP_MAX - sorted into the two stops the scheduler takes:
+//! a string that encodes to one token (a special such as `</think>`) is a stop id, every other a stop string the
+//! scheduler scans the reply text for. The 400's text on a malformed field, "" otherwise.
+def private read_stop_field(js : JsonValue?; var stop_ids : array<int64>; var stop_strs : array<string>) : string {
+    let sv = js?["stop"]
+    if (sv == null || sv.value is _null) {
+        return ""
+    }
+    var entries : array<string>
+    defer() { delete entries }
+    if (sv.value is _string) {
+        entries |> push(sv ?? "")
+    } elif (sv.value is _array) {
+        entries |> reserve(length(sv.value as _array))
+        for (e in (sv.value as _array)) {
+            if (!(e.value is _string)) {
+                return "'stop' must be a string or an array of strings"
+            }
+            entries |> push(e ?? "")
+        }
+    } else {
+        return "'stop' must be a string or an array of strings"
+    }
+    if (length(entries) > STOP_MAX) {
+        return "'stop' takes at most {STOP_MAX} entries"
+    }
+    for (s in entries) {
+        if (empty(s)) {
+            return "'stop' entries must be non-empty strings"
+        }
+        var inscope ids <- encode(cur_model(), s, false, true)
+        if (length(ids) == 1) {
+            stop_ids |> push(ids[0])
+        } else {
+            stop_strs |> push(s)
+        }
+    }
+    return ""
+}
+
+let STOP_MAX = 8   //! OpenAI's `stop` takes four; a lenient cap keeps a client's list from growing the per-token scan
 
 // A message's content: a plain string, or the OpenAI content-parts array (agents send
 // [\{type:"text", text:"..."}] even for pure text). Text parts concatenate into the return value;
@@ -2955,6 +2997,7 @@ def private resolve_stream_slot(srv : FrontLink; writer : WriterRef; js : JsonVa
 // would panic) and the 503 (queue full). Moves prompt/stop_ids/close_toks into the request.
 def private register_request(srv : FrontLink; writer : WriterRef;
                              var prompt, stop_ids, close_toks : array<int64>;
+                             var stop_strs : array<string>;
                              var spans : array<MediaSpan>;
                              params : SamplingParams; max_new : int64;
                              streaming, is_chat : bool; prefix : string;
@@ -2989,6 +3032,7 @@ def private register_request(srv : FrontLink; writer : WriterRef;
     }
     preq.prompt <- prompt
     preq.stop_ids <- stop_ids
+    preq.stop_strs <- stop_strs
     preq.nothink <- nothink
     preq.close_toks <- close_toks
     preq.spans <- spans
@@ -3021,7 +3065,7 @@ def private register_request(srv : FrontLink; writer : WriterRef;
 // Render a user-led suffix of the transcript. System messages are always retained (they were
 // folded into `system`); `start` applies only to conversational messages in the original array.
 def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : array<string>;   // nolint:STYLE037,STYLE038 — one arm per message role, each accumulating into the same renderer state
-                               max_new : int64; start : int; think_set, think_val : bool; refs : array<MediaRef>;
+                               max_new : int64; start : int; think_set, think_val, preserve_think : bool; refs : array<MediaRef>;
                                var prompt, stop_ids, close : array<int64>&;
                                var nothink_out : NothinkStopGuard&;
                                var call_open, call_close : string&; var think_out : ThinkStream&;
@@ -3031,6 +3075,7 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
     if (think_set) {   // absent from the request => the family's own default (gemma-4 E: off)
         set_thinking(chat, think_val)
     }
+    set_preserve_thinking(chat, preserve_think)
     if (!empty(tools)) {
         if (chat.tmpl.tool_mode == ToolMode.none) {
             return "'tools' is not supported: the {cur_name()} chat template declares no tool-call format"
@@ -3113,10 +3158,11 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
                 }
             }
             if (pending) {
+                let reasoning = mv?["reasoning_content"] ?? ""
                 if (!empty(calls)) {
-                    render_assistant_calls(cur_model(), chat, content, calls, rendered)
+                    render_assistant_calls(cur_model(), chat, content, calls, rendered, reasoning)
                 } else {
-                    render_assistant(cur_model(), chat, content, rendered)
+                    render_assistant(cur_model(), chat, content, rendered, reasoning)
                 }
                 pending = false
             }
@@ -3463,18 +3509,20 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
             system = empty(system) ? sc : "{system}\n{sc}"
         }
     }
-    // top-level enable_thinking, or the llama.cpp-server spelling chat_template_kwargs.enable_thinking;
-    // other kwargs keys warn like any unsupported field instead of vanishing
+    // top-level enable_thinking, or the llama.cpp-server spelling chat_template_kwargs.enable_thinking, and the
+    // kwargs' preserve_thinking (every replayed assistant turn renders its think block); other kwargs keys warn
+    // like any unsupported field instead of vanishing
     let ctk = js?["chat_template_kwargs"]
     if (ctk != null && ctk.value is _object) {
         for (k in keys(ctk.value as _object)) {
-            if (k != "enable_thinking") {
+            if (k != "enable_thinking" && k != "preserve_thinking") {
                 to_log(LOG_WARNING, "/v1/chat/completions: ignoring unsupported chat_template_kwargs key '{k}'\n")
             }
         }
     } elif (ctk != null && !(ctk.value is _null)) {
         to_log(LOG_WARNING, "/v1/chat/completions: 'chat_template_kwargs' must be an object — ignoring\n")
     }
+    let preserve_think = ctk?["preserve_thinking"] ?? false
     // tri-state: an ABSENT enable_thinking leaves the family's own default in force (qwen thinks,
     // gemma-4 E doesn't); a present bool — either spelling — overrides it
     let tv = js?["enable_thinking"]
@@ -3497,7 +3545,7 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
     var stable_at = 0l
     var start = 0
     while (true) {
-        let render_error = render_chat_suffix(msgs_v, system, tools, max_new, start, think_set, think_val,
+        let render_error = render_chat_suffix(msgs_v, system, tools, max_new, start, think_set, think_val, preserve_think,
                                               refs, prompt, stop_ids, close, nothink, call_open, call_close,
                                               think_stream, wire_tool_mode, stable_at)
         if (!empty(render_error)) {
@@ -3531,6 +3579,13 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
             return
         }
     }
+    var stop_strs : array<string>
+    defer() { delete stop_strs }
+    let stop_err = read_stop_field(js, stop_ids, stop_strs)
+    if (!empty(stop_err)) {
+        bad_request(srv, writer, stop_err)
+        return
+    }
     var constraint : TokenConstraint?
     if (constrained) {
         var gerr = ""
@@ -3542,7 +3597,7 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
         to_log(LOG_INFO, "/v1/chat/completions: {spec.kind} constraint armed\n")
     }
     var spans <- media_spans(prompt, refs)
-    register_request(srv, writer, prompt, stop_ids, close, spans, params, max_new,
+    register_request(srv, writer, prompt, stop_ids, close, stop_strs, spans, params, max_new,
                      streaming, true, "chatcmpl",
                      has_tools, call_open, call_close, seed, think_stream, wire_tool_mode, resume_rid,
                      nothink, stable_at, wants_usage(js), resumed, constraint)
@@ -3617,10 +3672,18 @@ def private handle_completion(srv : FrontLink; req : FrontReq; writer : WriterRe
     let max_new = clamp_max(js?["max_tokens"] ?? g_default_max_new)
     var toks <- encode(cur_model(), prompt, true, false)
     defer() { delete toks }
-    // no stop ids and no close: raw completions run to the budget, matching bare generate()
-    var none_stop, none_close : array<int64>
+    // no template stops and no close: a raw completion runs to the budget, matching bare generate(), unless
+    // the request's own `stop` ends it
+    var stop_ids, none_close : array<int64>
+    var stop_strs : array<string>
+    defer() { delete stop_strs }
+    let stop_err = read_stop_field(js, stop_ids, stop_strs)
+    if (!empty(stop_err)) {
+        bad_request(srv, writer, stop_err)
+        return
+    }
     var no_spans : array<MediaSpan>
-    register_request(srv, writer, toks, none_stop, none_close, no_spans,
+    register_request(srv, writer, toks, stop_ids, none_close, stop_strs, no_spans,
                      params, max_new, streaming, false, "cmpl",
                      [seed = seed, include_usage = wants_usage(js)])
 }
@@ -3670,17 +3733,29 @@ def private reap_disconnected(srv : FrontLink) {
     delete disconnected_vision
 }
 
-// Tool-capable streaming buffers the model's native envelope until it can be normalized into an
-// OpenAI tool_calls delta. Slow CPU inference can otherwise leave the socket silent beyond libhv's
-// keep-alive window during prefill or generation. Emit a valid empty delta at least every 10s;
-// scheduler steps may be long, so this is intentionally time-based rather than token-count-based.
-def private flush_tool_keepalives(srv : FrontLink) {
+var g_stream_keepalive_us = 10000000l
+
+def set_stream_keepalive_ms(ms : int64) {
+    //! How long a streaming reply may stay silent before the server sends an empty delta (default 10 s): a
+    //! long cold prefill, or a tool stream buffering its envelope, otherwise sends nothing until its first
+    //! token, past the window a client allows. 0 sends one every tick.
+    g_stream_keepalive_us = ms * 1000l
+}
+
+// A streaming reply silent past the keep-alive window gets a valid empty delta in its own framing: a cold prefill
+// sends no token for seconds, a tool-capable stream buffers the model's native envelope until finish, and a client
+// with a no-bytes timeout, or libhv's own keep-alive window, gives up on the silence. Time-based, since a scheduler
+// step may be long.
+def private flush_stream_keepalives(srv : FrontLink) {
     for (id in keys(g_wires)) {
         var w = unsafe(g_wires?[id])
-        if (w != null && w.streaming && w.has_tools &&
-            get_time_usec(w.last_keepalive_ticks) >= 10000000) {
+        if (w != null && w.streaming && int64(get_time_usec(w.last_keepalive_ticks)) >= g_stream_keepalive_us) {
             g_cur = w.slot
-            send_chat_chunk(srv, w.writer, w.id, w.created, "", "", "")
+            if (w.is_chat) {
+                send_chat_chunk(srv, w.writer, w.id, w.created, "", "", "")
+            } else {
+                send_compl_chunk(srv, w.writer, w.id, w.created, "", "")
+            }
             w.last_keepalive_ticks = ref_time_ticks()
         }
     }
@@ -3755,7 +3830,7 @@ def private flush_events(srv : FrontLink) {   // nolint:STYLE037,STYLE038 — on
             }
             if (w.streaming && w.has_tools) {
                 // Buffer all tool-capable output until finish so native model envelopes never leak
-                // onto the OpenAI wire. flush_tool_keepalives covers slow prefill and generation.
+                // onto the OpenAI wire. flush_stream_keepalives covers slow prefill and generation.
             } elif (w.streaming) {
                 // re-join any held-back partial character, then hold the new incomplete tail
                 // so every delta on the wire is valid UTF-8 by itself
@@ -7006,7 +7081,7 @@ def update_server() : bool {
     }
     let t_flush = ref_time_ticks()
     flush_events(g_link)
-    flush_tool_keepalives(g_link)
+    flush_stream_keepalives(g_link)
     if (g_tickprof) {
         g_prof_flush_us += int64(get_time_usec(t_flush))
         g_prof_ticks++

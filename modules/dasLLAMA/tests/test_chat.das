@@ -423,6 +423,70 @@ def test_chat_think_suppress(t : T?) {
     }
 }
 
+// ===== preserve_thinking: a replayed assistant turn renders the think block the model generated =====
+
+// one replay of "Four." after USR on a fresh renderer, preserve set as asked, the reasoning handed in
+def private replay_four(m : Model; preserve : bool; reasoning : string) : array<int64> {
+    var c = create_chat_renderer(m, "", 8l)
+    set_preserve_thinking(c, preserve)
+    add_user(c, USR)
+    var got : array<int64>
+    render_assistant(m, c, "Four.", got, reasoning)
+    delete c
+    return <- got
+}
+
+[test]
+def test_chat_preserve_thinking(t : T?) {
+    t |> run("preserve_thinking replays an assistant turn with its think block - empty, or around its reasoning (needs Qwen3-0.6B)") @(t : T?) {
+        let path = path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf")
+        if (!stat(path).is_valid) {
+            t |> skip("{path} not present")
+            return
+        }
+        var m <- load_capped(path)
+        var raw <- load_bpe_tokenizer_gguf(path)
+        let ims = special_id(raw, "<|im_start|>")
+        let ime = special_id(raw, "<|im_end|>")
+        let tho = special_id(m, "<think>")
+        let thc = special_id(m, "</think>")
+        // every replay opens with the user turn and the assistant header, and ends with the content and its close
+        var head : array<int64>
+        head |> push(ims)
+        head |> push_from(bpe_encode(raw, "user\n{USR}"))
+        head |> push(ime)
+        head |> push_from(bpe_encode(raw, "\n"))
+        head |> push(ims)
+        head |> push_from(bpe_encode(raw, "assistant\n"))
+        var tail := bpe_encode(raw, "Four.")
+        tail |> push(ime)
+        tail |> push_from(bpe_encode(raw, "\n"))
+        // off (the default): no think block, whatever reasoning the turn carried
+        let got <- replay_four(m, false, "Two and two.")
+        var want := head
+        want |> push_from(tail)
+        t |> success(ids_equal(got, want), "preserve off: header, content, close")
+        // on, no reasoning: the empty block, the tokens a thinking-off generation prompt put there
+        let got2 <- replay_four(m, true, "")
+        var want2 := head
+        want2 |> push(tho)
+        want2 |> push_from(bpe_encode(raw, "\n\n"))
+        want2 |> push(thc)
+        want2 |> push_from(bpe_encode(raw, "\n\n"), tail)
+        t |> success(ids_equal(got2, want2), "preserve on, no reasoning: <think>\\n\\n</think>\\n\\n ahead of the content")
+        // on, with reasoning: the reasoning between the markers
+        let got3 <- replay_four(m, true, "Two and two.")
+        var want3 := head
+        want3 |> push(tho)
+        want3 |> push_from(bpe_encode(raw, "\nTwo and two.\n"))
+        want3 |> push(thc)
+        want3 |> push_from(bpe_encode(raw, "\n\n"), tail)
+        t |> success(ids_equal(got3, want3), "preserve on, reasoning: <think>\\n...\\n</think>\\n\\n ahead of the content")
+        delete raw
+        delete m
+    }
+}
+
 // ===== gemma-4 E-series thinking (ON by default; instruct = the opt-out) =====
 
 // The instruct-mode TEXT turn through respond: the E-series rambles past its answer through a

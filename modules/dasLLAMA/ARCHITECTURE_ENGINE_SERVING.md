@@ -35,7 +35,11 @@ anchor.
   round and never asks the device for its pick: both would commit tokens the constraint has not
   seen. On a self-speculative scheduler the round skips such streams and they take one plain
   `eval_batch` step after it, in a batch of their own. A stream whose constraint admits no token
-  finishes `constraint` with nothing emitted for that step. Results flow out as `SchedEvent`s - no HTTP here.
+  finishes `constraint` with nothing emitted for that step. A request's stop strings (`PendingReq.stop_strs`)
+  end the stream where one's text begins, finish `stop`, through a hold on the piece stream: a token's text
+  that could still begin a stop string waits in `Stream.stop_hold` (`stop_scan`), rides the next piece event once
+  it cannot, and flushes as a piece of its own when the stream finishes another way - so no emitted byte is ever
+  taken back, and a stop string split across tokens still cuts. Results flow out as `SchedEvent`s - no HTTP here.
   `utils/dasllama-server` owns the writers; `tutorials/dasLLAMA/13_serving.das` is the
   teaching consumer; `tests/test_scheduler.das` gates it against `generate()` references.
   The step clears its gather arrays (`batch_rows`, `batch_toks`, `batch_idx`) before it reaps
