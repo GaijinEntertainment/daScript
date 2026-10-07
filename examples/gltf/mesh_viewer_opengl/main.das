@@ -257,7 +257,7 @@ def init {
     var io & = unsafe(GetIO())
     io.ConfigFlags |= ImGuiConfigFlags.DockingEnable
 
-    g_renderer <- gltf_pbr_create()
+    g_renderer <- gltf_pbr_create()   // nolint:PERF030 - module global, first and only write (init runs once)
     // equirect HDR environment for image-based ambient (metals reflect it); CC0, shared with tutorial 12
     let env = gltf_gl_load_hdr_env("{get_das_root()}/tutorials/_assets/hdri/cannon_2k.hdr")
     g_env_tex = env._0

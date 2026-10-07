@@ -79,10 +79,16 @@ gltf_pbr_render(renderer, model, scene, view, proj, camPos,
 
 ## Optional directional shadows
 
-`gltf_pbr_set_point_lights(renderer, lights)` configures up to eight unshadowed
-local lights (`GltfPbrPointLight`: position, linear color/radiance, radius).
+`gltf_pbr_set_point_lights(renderer, lights)` configures unshadowed local lights without
+a fixed shader-array limit (`GltfPbrPointLight`: position, linear color/radiance, radius).
 They use the same PBR material response with a smooth finite-radius falloff.
-An empty array clears them; existing callers default to no local lights.
+An empty array clears them; existing callers default to no local lights. The renderer
+owns an RGBA32F data texture on texture unit 12. Position/radius, color and optional
+shadow settings occupy three texels per light. Capacity grows up to the device's
+texture-size limit; an oversized set fails explicitly instead of losing lights.
+`gltf_pbr_render` takes a mutable renderer to cache uploads. Direct edits to
+`pointColor` or `pointShadow` are reflected on the next draw, while unchanged data
+reuses its upload. `gltf_pbr_set_point_lights` clears previous shadow settings.
 
 `gltf_pbr_render_depth(renderer, model, scene, root, light_vp)` renders the same
 skinned/rigid transforms into the caller's bound depth framebuffer. Alpha-masked

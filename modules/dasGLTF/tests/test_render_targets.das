@@ -8,6 +8,7 @@ require gltf/gltf_pbr
 require gltf/gltf_types
 require gltf/gltf_processed_gl
 require math
+require strings
 
 def private render_target(internal : int; format, attachment : uint) : uint {
     var texture : uint
@@ -90,6 +91,74 @@ def private check_surface_motion(t : T?; var renderer : GltfPbrRenderer; model :
 
 }
 
+def private check_point_light_rejections(t : T?; model : GltfGlModel; scene : GltfScene){
+    var renderer <- gltf_pbr_create()
+    defer(){delete renderer}
+    var inscope lights <- [GltfPbrPointLight(position = float3(0.0, 0.0, 1.0), radius = 8.0, color = float3(1.0))]
+    gltf_pbr_set_point_lights(renderer, lights)
+    renderer.pointPosition |> push(float4(0.0))
+    let shape_error = panic_text() $ { gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), GltfPbrLight()) }
+    t |> success(find(shape_error, "assert failed") >= 0, "a draw rejects a light array whose length differs from pointCount")
+    var maximum : int
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, safe_addr(maximum))
+    renderer.pointCount = min(256, maximum) * maximum / 3 + 1
+    resize(renderer.pointPosition, renderer.pointCount)
+    resize(renderer.pointColor, renderer.pointCount)
+    resize(renderer.pointShadow, renderer.pointCount)
+    var inscope empty_scene = GltfScene()
+    let capacity_error = panic_text() $ { gltf_pbr_render(renderer, model, empty_scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), GltfPbrLight()) }
+    t |> success(find(capacity_error, "Point light data exceeds GL texture capacity") >= 0, "a draw rejects a light set beyond the device texture capacity")
+    t |> equal(uint(GL_NO_ERROR), glGetError())
+}
+
+def private check_many_point_lights(t : T?; var renderer : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene){
+    var color_only = GL_COLOR_ATTACHMENT0; glDrawBuffers(1, safe_addr(color_only))
+    let dark = GltfPbrLight(direction = float3(0.0, 0.0, 1.0), color = float3(0.0), intensity = 0.0, ambient = float3(0.0), environment = 0.0)
+    var shadow_texture : uint
+    glGenTextures(1, safe_addr(shadow_texture))
+    defer(){renderer.localShadowTex = 0u; glDeleteTextures(1, safe_addr(shadow_texture))}
+    glBindTexture(GL_TEXTURE_2D, shadow_texture)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+    var depths : float[6]
+    glTexImage2D(GL_TEXTURE_2D, 0, int(GL_DEPTH_COMPONENT32F), 6, 1, 0, GL_DEPTH_COMPONENT, GL_FLOAT, safe_addr(depths[0]))
+    var inscope lights : array<GltfPbrPointLight>
+    for (count in fixed_array(9, 97, 1, 0)){
+        resize(lights, count)
+        for (light in lights){light = GltfPbrPointLight(position = float3(100.0), radius = 1.0)}
+        if (count > 0){lights[count - 1] = GltfPbrPointLight(position = float3(0.0, 0.0, 1.0), radius = 8.0, color = float3(4.0, 0.0, 0.0))}
+        gltf_pbr_set_point_lights(renderer, lights)
+        glClearColor(0.0, 0.0, 0.0, 0.0); glClear(GL_COLOR_BUFFER_BIT)
+        gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), dark)
+        let red = read_rgba(GL_COLOR_ATTACHMENT0)
+        t |> success(count == 0 ? length(red.xyz) < .01 : red.x > .1 && red.y < .01, "last point light illuminates the surface, including beyond eight and after resizing")
+        if (count > 0 && count <= renderer.pointCount){
+            renderer.pointColor[count - 1] = float4(0.0, 4.0, 0.0, 0.0)
+            glClear(GL_COLOR_BUFFER_BIT)
+            gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), dark)
+            let green = read_rgba(GL_COLOR_ATTACHMENT0)
+            t |> success(green.y > .1 && green.x < .01, "direct per-light edits reach the next rendered draw")
+            glClear(GL_COLOR_BUFFER_BIT)
+            gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), dark)
+            t |> equal(read_rgba(GL_COLOR_ATTACHMENT0), green, "unchanged light data reuses the same rendered result")
+            renderer.localShadowTex = shadow_texture; renderer.localShadowSize = float2(1.0, 1.0)
+            for (weight in fixed_array(.5, 1.0)){
+                renderer.pointShadow[count - 1] = float4(1.0, weight, .08, 8.0)
+                glClear(GL_COLOR_BUFFER_BIT)
+                gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), dark)
+                let shaded = read_rgba(GL_COLOR_ATTACHMENT0)
+                t |> success(weight == 1.0 ? length(shaded.xyz) < .01 : shaded.y > .01 && shaded.y < green.y, "late-index shadow settings support partial and full occlusion")
+            }
+            gltf_pbr_set_point_lights(renderer, lights)
+            glClear(GL_COLOR_BUFFER_BIT)
+            gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), dark)
+            let reset = read_rgba(GL_COLOR_ATTACHMENT0)
+            t |> success(reset.x > .1 && reset.y < .01, "replacing an equally sized light set clears its previous shadow settings")
+            renderer.localShadowTex = 0u
+        }
+    }
+    t |> equal(uint(GL_NO_ERROR), glGetError())
+}
+
 def private check_shadow_filters(t : T?; var renderer : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene){
     var color_only = GL_COLOR_ATTACHMENT0
     glDrawBuffers(1, safe_addr(color_only))
@@ -130,7 +199,7 @@ def private check_shadow_filters(t : T?; var renderer : GltfPbrRenderer; model :
     t |> equal(uint(GL_NO_ERROR), glGetError())
 }
 
-def private check_draw_opacity(t : T?; renderer : GltfPbrRenderer; var model : GltfGlModel; var scene : GltfScene){
+def private check_draw_opacity(t : T?; var renderer : GltfPbrRenderer; var model : GltfGlModel; var scene : GltfScene){
     var color_only = GL_COLOR_ATTACHMENT0; glDrawBuffers(1, safe_addr(color_only))
     scene.materials <- [GltfMaterial()]
     let light = GltfPbrLight(direction = float3(0.0, 0.0, 1.0), color = float3(0.0), intensity = 0.0, ambient = float3(1.0), environment = 0.0)
@@ -151,7 +220,7 @@ def private check_draw_opacity(t : T?; renderer : GltfPbrRenderer; var model : G
 }
 
 
-def private check_unlit_light_invariance(t : T?; renderer : GltfPbrRenderer; packed : bool) {
+def private check_unlit_light_invariance(t : T?; var renderer : GltfPbrRenderer; packed : bool) {
     var color_only = GL_COLOR_ATTACHMENT0; glDrawBuffers(1, safe_addr(color_only))
     var scene <- render_fixture_scene()
     scene.materials <- [GltfMaterial(unlit = true, baseColorFactor = float4(.8, .6, .4, 1.0))]
@@ -293,7 +362,9 @@ def gltf_surface_motion_and_shadow_fallback_render_on_gl(t : T?){
     glGetIntegerv(GL_TEXTURE_BINDING_2D, safe_addr(binding_before))
     var renderer <- gltf_pbr_create()
     defer(){
+        let point_texture = renderer.pointTexture
         delete renderer
+        if (point_texture != 0u){t |> success(!glIsTexture(point_texture), "renderer deletion releases its light data texture")}
         glDeleteTextures(1, safe_addr(scratch_texture))
     }
     var active_after, binding_after : int
@@ -322,6 +393,9 @@ def gltf_surface_motion_and_shadow_fallback_render_on_gl(t : T?){
 
     check_surface_motion(t, renderer, model, scene)
 
+    check_point_light_rejections(t, model, scene)
+    check_many_point_lights(t, renderer, model, scene)
+    t |> success(renderer.pointTexture != 0u, "rendering lights allocates the owned data texture")
     check_draw_opacity(t, renderer, model, scene)
     check_shadow_filters(t, renderer, model, scene)
     for (packed in fixed_array(false, true)){

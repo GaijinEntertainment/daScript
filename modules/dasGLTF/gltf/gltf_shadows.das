@@ -11,13 +11,16 @@ var @uniform u_shadow_vp : float4x4
 var @uniform u_shadow_texel : float2
 var @uniform u_shadow_bias : float
 var @uniform u_shadow_strength : float
-let GLTF_MAX_POINT_LIGHTS = 8
 var @uniform @stage = 9 u_local_shadow_tex : sampler2D
 var @uniform u_local_shadow_size : float2
-var @uniform u_point_shadow : float4[GLTF_MAX_POINT_LIGHTS]
 var @uniform u_point_count : int
-var @uniform u_point_position : float4[GLTF_MAX_POINT_LIGHTS]
-var @uniform u_point_color : float4[GLTF_MAX_POINT_LIGHTS]
+var @uniform @stage = 12 u_point_data : sampler2D
+var @uniform u_point_width : int
+
+def gltf_point_data(index, field : int) : float4 {
+    let offset = index * 3 + field
+    return texelFetch(u_point_data, int2(offset % u_point_width, offset / u_point_width), 0)
+}
 
 var @uniform @stage = 10 u_shadow_compare : sampler2DShadow
 var @uniform @stage = 11 u_local_shadow_compare : sampler2DShadow
@@ -104,9 +107,9 @@ def gltf_shadow_visibility(world : float3; normal, light_direction : float3) : f
 
 def gltf_point_shadow_visibility(index : int; world, normal : float3) : float {
     //! Evaluate one point light shadow in its six-face atlas region.
-    let settings = u_point_shadow[index]
+    let settings = gltf_point_data(index, 2)
     if (settings.x < 0.5 || settings.y <= 0.0){return 1.0}
-    let delta = world + normal * 0.008 - u_point_position[index].xyz
+    let delta = world + normal * 0.008 - gltf_point_data(index, 0).xyz
     let a = abs(delta); var face = 0; var xy = float2(0.0); var distance = a.x
     if (a.x >= a.y && a.x >= a.z){
         face = delta.x >= 0.0 ? 0 : 1; xy = float2(delta.x >= 0.0 ? -delta.z : delta.z, -delta.y)
