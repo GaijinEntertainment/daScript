@@ -20,6 +20,7 @@ require dasllama/dasllama_gemma4v
 require dasllama/dasllama_gemma3v
 require dasllama/dasllama_qwen3v
 require dasllama/dasllama_qwen25v
+require dasllama/dasllama_gemma4uv
 require dasllama/dasllama_audio
 require dasllama/dasllama_gemma4a
 require dasllama/dasllama_canary
@@ -416,6 +417,7 @@ struct private VtResident {
 
 var private g_vt_g4v : VtResident   //! the gemma4v family's resident tower (one a family: a second mmproj replaces it)
 var private g_vt_g3v : VtResident
+var private g_vt_uv : VtResident    //! the gemma4uv embedder: no blocks, the stem's three layernorms and two GEMMs over the slab
 var private g_vt_q3v : VtResident
 var private g_vt_q25v : VtResident
 var private g_vt_aud : VtResident   //! the whisper-class audio towers' resident (one seat: a second tower replaces it)
@@ -680,6 +682,7 @@ def private vt_each_resident(blk : block<(var r : VtResident; family : string) :
     invoke(blk, g_vt_g4v, "gemma4v")
     invoke(blk, g_vt_pk, "parakeet")
     invoke(blk, g_vt_g3v, "gemma3v")
+    invoke(blk, g_vt_uv, "gemma4uv")
     invoke(blk, g_vt_q3v, "qwen3v")
     invoke(blk, g_vt_q25v, "qwen25v")
     invoke(blk, g_vt_aud, "whisper-class")
@@ -3614,6 +3617,133 @@ def private vt_upload_g4v(var r : VtResident; key : uint64; t : Gemma4vTower; hs
     return ok
 }
 
+//! the gemma4uv embedder's resident: no GEMM image - the whole f32 blob in the norms plane with a ones row for the weightless rms
+[cold_path]
+def private vt_upload_uv(var r : VtResident; key : uint64; t : Gemma4uvEmbedder) : bool {
+    vt_upload_begin(r, key)
+    r.wq_bytes = VT_STUB_BYTES
+    r.ws_bytes = VT_STUB_BYTES
+    r.wq_dev = vt_dev_buf(r, VT_STUB_BYTES)
+    r.ws_dev = vt_dev_buf(r, VT_STUB_BYTES)
+    r.ones_off = t.blob.n
+    r.norms_bytes = (t.blob.n + t.n_embd) * 4l
+    r.norms_dev = vt_dev_buf(r, r.norms_bytes)
+    if (r.oom) {
+        vt_release(r)
+        return false
+    }
+    upload_float_ranges(r.norms_dev, [(p = plane_at(t.blob, 0l), n = t.blob.n)], t.n_embd)
+    r.cap_rows = 0l
+    vt_unbind_batch_sets(r)
+    return true
+}
+
+//! the patch and projection rows as f32 in the vision slab: the bf16 planes widened, the f32 ones copied
+[cold_path]
+def private vt_uv_slab(r : VtResident; t : Gemma4uvEmbedder; d, pd, proj_off : int64) {
+    var inscope patch_rows <- vt_rows_f32(t.blob, t.wblob, t.patch_bf16, t.patch_w, d * pd)
+    var inscope proj_rows <- vt_rows_f32(t.blob, t.wblob, t.proj_bf16, t.proj_w, t.proj_dim * d)
+    unsafe {
+        upload_region_at(r.vis_w_dev, 0l, addr<uint8 const?>(patch_rows[0]), d * pd * 4l)
+        upload_region_at(r.vis_w_dev, proj_off * 4l, addr<uint8 const?>(proj_rows[0]), t.proj_dim * d * 4l)
+    }
+}
+
+//! the gemma4uv embedder on the device off the planes, one command buffer: the patch im2col, the first layernorm over the raw rows,
+//! the patch linear with its bias (the f32 tile over the bf16 plane widened), the second layernorm, the 2-axis positions, the third
+//! layernorm, the weightless rms and the projection; `out` takes the soft tokens
+[hot_path, unused_argument(s), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+def private vulkan_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; planes : array<float>; w, h, npos, n_cols : int64; var out : array<float>) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
+    var r & = g_vt_uv
+    if (!vt_gate(r, true)) {
+        return false
+    }
+    let d = t.n_embd
+    let pd = t.patch_dim
+    let proj = t.proj_dim
+    if (d % 64l != 0l || npos > VT_MAX_ENCODE_ROWS || npos <= 0l || npos != n_cols * (h / t.patch) || n_cols != w / t.patch) {
+        return vt_decline(r, VulkanTowerDecline.shape)
+    }
+    let arm = vt_arm(r)
+    if (!arm.ok) {
+        return false
+    }
+    let vw_bytes = (d * pd + proj * d) * 4l
+    if (!vk_range_ok(t.blob.n * 4l) || !vk_range_ok(vw_bytes) || !vk_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, d, 0l, 0l, false, false))) {
+        return vt_decline(r, VulkanTowerDecline.shape)
+    }
+    if (!ensure_tower_patch_im2col_cls() || !ensure_tower_ln_cls() || !ensure_f32_gemm_b_cls() || !ensure_f32_gemm_cls() || !ensure_tower_pos_add_2d_cls()
+            || !ensure_tower_rms_cls()) {
+        return vt_decline(r, VulkanTowerDecline.device)
+    }
+    var key = vt_fold_addr(0x9E3779B97F4A7C15ul, unsafe(reinterpret<void?>(t.blob.p)))
+    key = vt_fold_int(key, t.blob.n)
+    key = vt_fold_addr(key, unsafe(reinterpret<void?>(t.wblob.p)))
+    key = vt_fold_words(key, unsafe(reinterpret<uint8 const?>(plane_at(t.blob, 0l))), t.blob.n * 4l)
+    let fresh_w = r.key != key
+    if (fresh_w && !vt_upload_uv(r, key, t)) {
+        return vt_decline(r, VulkanTowerDecline.memory)
+    }
+    let had_w = !fresh_w && r.vis_w_bytes == vw_bytes && r.vis_cap > 0l
+    if ((!vt_scratch_fits(r, npos, d, d, 0l, 0l, arm.khr, false, 0l) && !vt_scratch_build(r, npos, d, d, 64l, 0l, 0l, arm.khr, false, 0l))
+            || !vt_vis_bufs(r, w, h, pd, vw_bytes, 0l, 0l, proj)) {
+        return vt_decline(r, VulkanTowerDecline.memory)
+    }
+    let cap = r.cap_rows
+    let proj_off = d * pd
+    if (fresh_w || !had_w) {
+        vt_uv_slab(r, t, d, pd, proj_off)
+    }
+    if (r.vis_sets_gen != r.vis_gen) {
+        let bx = cap * d * 4l
+        let bp = cap * r.tail_dim * 4l
+        r.s_vis_im2col = set_tower_patch_im2col_cls(fixed_array(r.vis_planes_dev, r.vis_col_dev), fixed_array(r.vis_planes_bytes, r.vis_col_bytes), fixed_array(VT_STEM_MEL, VT_STEM_COL))
+        r.s_vis_pool = set_tower_ln_cls(fixed_array(r.vis_col_dev, r.vis_col_dev, r.norms_dev), fixed_array(r.vis_col_bytes, r.vis_col_bytes, r.norms_bytes), fixed_array(VT_STEM_COL, VT_STEM_COL, 0u))
+        r.s_vis_patch = set_f32_gemm_b_cls(fixed_array(r.vis_w_dev, r.vis_col_dev, r.x_dev, r.norms_dev), fixed_array(vw_bytes, r.vis_col_bytes, bx, r.norms_bytes), fixed_array(0u, VT_STEM_COL, VT_X, 0u))
+        r.s_vis_gemm[0] = set_tower_ln_cls(fixed_array(r.x_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_XB, 0u))
+        r.s_vis_pos = set_tower_pos_add_2d_cls(fixed_array(r.xb_dev, r.norms_dev), fixed_array(bx, r.norms_bytes), fixed_array(VT_XB, 0u))
+        r.s_vis_gemm[1] = set_tower_ln_cls(fixed_array(r.xb_dev, r.x_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_XB, VT_X, 0u))
+        r.s_vis_act[0] = set_tower_rms_cls(fixed_array(r.x_dev, r.xb_dev, r.norms_dev), fixed_array(bx, bx, r.norms_bytes), fixed_array(VT_X, VT_XB, 0u))
+        r.s_vis_proj = set_f32_gemm_cls(fixed_array(r.vis_w_dev, r.xb_dev, r.tail_proj_dev), fixed_array(vw_bytes, bx, bp), fixed_array(0u, VT_XB, VT_TAIL_PROJ))
+        r.vis_sets_gen = r.vis_gen
+    }
+    upload_region_at(r.vis_planes_dev, 0l, unsafe(addr<uint8 const?>(planes[0])), w * h * 3l * 4l)
+    let nd = npos * d
+    let bp_out = npos * proj * 4l
+    vt_chain_one_shot("gemma4uv", 0l, npos) $(raw : VkCommandBuffer; var hz : VkHaz) {
+        var pc_im = GkPatchIm2colArgs(w = uint(w), h = uint(h), p = uint(t.patch), n_cols = uint(n_cols), row_dim = uint(pd), npos = uint(npos),
+            total = uint(cap * pd), scale = 1.0, shift = 0.0)
+        enc_tower_patch_im2col_cls(raw, hz, r.s_vis_im2col, pc_im, (cap * pd + 255l) / 256l)
+        vt_pt(raw, VtProfRole.im2col)
+        var pc_ln1 = gk_ln_args(uint(pd), uint(npos), GEMMA4UV_LN_EPS, uint(t.ln1_w), uint(t.ln1_b))
+        enc_tower_ln_cls(raw, hz, r.s_vis_pool, pc_ln1, npos)
+        vt_pt(raw, VtProfRole.ln)
+        var pc_patch = F32GemmArgs(n = uint(pd), d = uint(d), rows = uint(npos), woff = 0u, wstride = uint(pd), boff = uint(t.patch_b), xoff = 0u, xstride = uint(pd),
+            yoff = 0u, ystride = uint(d))
+        enc_f32_gemm_b_cls(raw, hz, r.s_vis_patch, pc_patch, f32_gemm_wgs(npos, d))
+        vt_pt(raw, VtProfRole.gemm_pw)
+        var pc_ln2 = gk_ln_args(uint(d), uint(npos), GEMMA4UV_LN_EPS, uint(t.ln2_w), uint(t.ln2_b))
+        enc_tower_ln_cls(raw, hz, r.s_vis_gemm[0], pc_ln2, npos)
+        var pc_pos = GkPosAdd2DArgs(dim = uint(d), ncols = uint(n_cols), pos_entries = uint(t.pos_entries), total = uint(nd), tboff = uint(t.pos_w))
+        enc_tower_pos_add_2d_cls(raw, hz, r.s_vis_pos, pc_pos, (nd + 255l) / 256l)
+        vt_pt(raw, VtProfRole.post_add)
+        var pc_ln3 = gk_ln_args(uint(d), uint(npos), GEMMA4UV_LN_EPS, uint(t.ln3_w), uint(t.ln3_b))
+        enc_tower_ln_cls(raw, hz, r.s_vis_gemm[1], pc_ln3, npos)
+        var pc_rms = gk_rms_args(uint(d), uint(npos), t.rms_eps, uint(r.ones_off))
+        enc_tower_rms_cls(raw, hz, r.s_vis_act[0], pc_rms, npos)
+        vt_pt(raw, VtProfRole.rms)
+        var pc_proj = F32GemmArgs(n = uint(d), d = uint(proj), rows = uint(npos), woff = uint(proj_off), wstride = uint(d), boff = 0u, xoff = 0u, xstride = uint(d),
+            yoff = 0u, ystride = uint(proj))
+        enc_f32_gemm_cls(raw, hz, r.s_vis_proj, pc_proj, f32_gemm_wgs(npos, proj))
+        vt_pt(raw, VtProfRole.gemm_pw)
+        vhz_dep(raw, hz, VT_TAIL_PROJ, 0u, true)
+        cmd_copy_range(raw, r.tail_proj_dev, 0l, r.tail_host.buf, 0l, bp_out)
+        vt_pt(raw, VtProfRole.copy_out)
+    }
+    g_vt_convs++
+    return vt_served_from(r, r.tail_host, out, bp_out, npos, 0l)
+}
+
 //! the patch and projection rows as f32 in the vision slab: the bf16 planes widened, the f32 ones copied
 [cold_path]
 def private vt_g4v_slab(r : VtResident; t : Gemma4vTower; d, pd, proj_off : int64) {
@@ -4618,6 +4748,7 @@ def dasllama_vulkan_tower_register {
     register_vk_drop_hook(@@vt_forget)
     static_if (!typeinfo builtin_module_exists(das_metal)) {
         register_gemma4v_gpu(@@vulkan_gemma4v_chain, @@vulkan_tower_on, false)
+        register_gemma4uv_gpu(@@vulkan_gemma4uv_encode)
         register_gemma3v_gpu(@@vulkan_gemma3v_chain, @@vulkan_tower_on, false)
         register_qwen3v_gpu(@@vulkan_qwen3v_chain, @@vulkan_tower_on, false)
         register_qwen25v_gpu(@@vulkan_qwen25v_chain)

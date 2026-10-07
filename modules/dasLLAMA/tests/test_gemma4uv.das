@@ -12,6 +12,8 @@ require daslib/fio
 require _model_tier   // models_dir() + model_available() gate
 require _vision_oracle   // the mtmd dump parser, fixture generators, per-token compare
 require ?das_metal dasllama/dasllama_metal_tower   // the GPU tier-1 attempt; the CPU gate pins the knob off
+require ?vulkan dasllama/dasllama_vulkan_tower   // the Vulkan rung: the embedder whole on the device
+require _tower_twin   // vulkan_twin_seat
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown — the crown-pin cell drops the trio's cached flags
 
 // Tier-1 gemma4uv embedder parity vs llama-mtmd-debug -p encode (CPU, --no-mmproj-offload, dumps
@@ -124,6 +126,40 @@ def test_gemma4uv_tier1_gpu(t : T?) {
             metal_prefill_shutdown()
             delete st
             delete emb
+        }
+    }
+}
+
+// The Vulkan tier-1 gate: the same oracle dumps through the Vulkan driver, the embedder whole on the device off the planes -
+// the f32 tile GEMMs over the bf16 planes widened hold the CPU bar; engage evidence is the encodes counter, per fixture.
+[test]
+def test_gemma4uv_tier1_vulkan(t : T?) {
+    t |> run("tier-1 Vulkan encode vs the mtmd encode dumps") @(tt : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            let mm = path_join(models_dir(), "mmproj-gemma-4-12B-it-BF16.gguf")
+            if (!model_available(tt, mm) || !vulkan_twin_seat(tt)) {
+                return
+            }
+            var emb <- load_gemma4uv_embedder(mm)
+            var st = Gemma4uvState()
+            set_vulkan_tower(true)
+            let fixtures = [(kind = "gray", w = 480, h = 480, log = "encode.gray480.log"),
+                            (kind = "cb", w = 336, h = 336, log = "encode.cb336.log"),
+                            (kind = "red", w = 336, h = 336, log = "encode.red336.log"),
+                            (kind = "cb", w = 672, h = 336, log = "encode.cb672x336.log")]
+            for (fx in fixtures) {
+                let s0 = vulkan_tower_stats()
+                let ran = gate_encode(tt, emb, st, fx.kind, fx.w, fx.h, fx.log, false)
+                if (ran) {
+                    tt |> equal(vulkan_tower_stats().encodes - s0.encodes, 1l, "{fx.kind} {fx.w}x{fx.h}: device-served (encodes delta)")
+                    tt |> equal(vulkan_tower_stats().convs - s0.convs, 1l, "{fx.kind} {fx.w}x{fx.h}: the stem ran on the device (convs delta)")
+                }
+            }
+            vulkan_tower_shutdown()
+            delete st
+            delete emb
+        } else {
+            tt |> skip("dasVulkan not present")
         }
     }
 }
