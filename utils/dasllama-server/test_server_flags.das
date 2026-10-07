@@ -157,6 +157,15 @@ def test_ctx_clamp_to_device_room(t : T?) {
     delete m
 }
 
+//! The interface the front binds: unset reads loopback (this machine alone), a configured one stands as given.
+[test]
+def test_bind_host_defaults_to_loopback(t : T?) {
+    t |> equal("127.0.0.1", DEFAULT_BIND_HOST, "the default is loopback")
+    t |> equal(DEFAULT_BIND_HOST, bind_host(""), "an unset host binds loopback")
+    t |> equal("0.0.0.0", bind_host("0.0.0.0"), "a configured host binds as given")
+    t |> equal("192.168.1.20", bind_host("192.168.1.20"), "... whatever address it names")
+}
+
 //! The K/V codec a slot runs on, which the live-load clamp reads too: a slot that asked for none inherits the server default
 //! (never SlotOpts' f16 seed), one that asked keeps its own.
 [test]

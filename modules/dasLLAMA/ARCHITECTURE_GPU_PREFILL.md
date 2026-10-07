@@ -234,9 +234,9 @@ recurrent, MoE or PLE layer, a sandwich-norm or gated-query model, a deepstack-t
 and it engages only at `npos > 1` with `dim` and the layer's hidden width both %32 and every
 FFN weight on the q8 plane (the GEMV forms it narrows onto are q8); a Q4_K_M carrier never
 takes it. `DASLLAMA_METAL_LASTROW=0` pins the full-panel tail.
-A caller that consumes the whole `x_b` plane afterwards - embedding pooling, a plane-compare
-probe - sets `Session.keep_hidden` and the prefill keeps every row; the flag is zero-init, so
-narrowing is the default.
+A caller that reads `x_b` rows afterwards - embedding pooling, whichever rows its pooling picks, a
+plane-compare probe - sets `Session.keep_hidden` and the prefill keeps every row; the flag is
+zero-init, so narrowing is the default.
 
 ### The dense-KQ tensor mul_mm scaffold {#prefill-kq-tensor-scaffold}
 

@@ -1969,6 +1969,14 @@ through `load_tokenizer_auto` -> `encode` / `decode`, ids exact and the decode r
 lossless; reports SKIPPED where the vocab is not stocked. One cell is model-free: the BPE
 `add_bos` default a GGUF without the key takes (upstream's per-pre table), then the qwen35 vocab
 reading `add_bos == false` where that fixture is stocked.
+`test_embeddings.das` - stocked suite, `-jit` only; the embeddings read per model: on
+Qwen3-Embedding-0.6B Q8_0 (small tier) the file's `pooling_type` reads last-token and its
+`add_eos_token` on, `encode` ends a text with the EOS, and the model card's own example - two
+instruction-prefixed queries against two passages - lands the card's published cosine matrix
+within 0.02 under the file's pooling (reads 0.005 at most on the M1 Max), while the mean read
+parts the relevant passage from the other by under 0.1 where the last-token read parts them by
+over 0.5 (the control); on tinyllama Q8 (a chat model, no key) the default read is the mean,
+float for float, no EOS is appended, and the last-token override differs.
 `test_exe_smoke.das` - stocked suite; model-gated (SmolLM2-135M, small tier): the
 standalone-exe context gate. Builds `_exe_smoke_root.das` with `-jit -exe` and runs the
 artifact - the rail where globals restore as DATA, so a function-typed global with no

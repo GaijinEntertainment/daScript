@@ -56,6 +56,9 @@ struct ServerArgs {
     @clarg_doc = "Port to listen on (default 8080)"
     port : int
 
+    @clarg_doc = "Interface to listen on (default 127.0.0.1 - this machine only; 0.0.0.0 opens the server to the network)"
+    host : string
+
     @clarg_short = "q"
     @clarg_doc = "Weight serving mode: fp32 | q8 (default); file-format spellings q8_0 | q4_0 | q4_k | q5_k | q6_k | mxfp4 | f16 | bf16 select q8, where those planes serve natively; q4 = legacy requant tier"
     quant : string
@@ -273,13 +276,15 @@ def cli_has_flag(flag : string) : bool {
 var private g_cfg_sources : table<string; string>
 var private g_cfg_authoritative = false
 
-let CONFIG_KEYS = fixed_array("model", "port", "quant", "kv_dtype", "metal", "gpu", "gpu_layers",
+let CONFIG_KEYS = fixed_array("model", "port", "host", "quant", "kv_dtype", "metal", "gpu", "gpu_layers",
     "gpu_stream", "gpu_dn", "gpu_attn", "gpu_dense", "gpu_vram_mb", "asr", "mmproj", "image_mmproj", "audio_mmproj", "asr_workers", "tts", "tts_lane", "tts_voices_dir",
     "ctx", "max_tokens", "streams", "threads", "team_dispatch", "affinity", "chunk", "chunk_idle", "page_rows",
     "prefix", "flat", "mtp", "rope_scaling", "rope_scale", "yarn_orig_ctx", "lcpp_bin", "models_dir", "models")
 
 def private from_cli(key : string) : bool
     => (g_cfg_sources?[key] ?? "") == "cli"
+
+//! the interface the front binds: the configured one, else loopback - a server that reaches the network is the operator's choice, never the default
 
 def private toml_has(root : JsonValue?; key : string) : bool {
     if (root == null || !(root.value is _object)) {
@@ -446,6 +451,9 @@ def private mark_cli_sources(cfg : ServerArgs) {   // nolint:STYLE037,STYLE038 �
     if (cfg.port > 0) {
         g_cfg_sources["port"] = "cli"
     }
+    if (!empty(cfg.host)) {
+        g_cfg_sources["host"] = "cli"
+    }
     if (!empty(cfg.quant)) {
         g_cfg_sources["quant"] = "cli"
     }
@@ -593,6 +601,7 @@ def apply_config(var cfg : ServerArgs) : bool {
     g_cfg_authoritative = auth
     cfg_from_toml(root, "model", cfg.model, auth)
     cfg_from_toml(root, "port", cfg.port, auth)
+    cfg_from_toml(root, "host", cfg.host, auth)
     cfg_from_toml(root, "quant", cfg.quant, auth)
     cfg_from_toml(root, "kv_dtype", cfg.kv_dtype, auth)
     cfg_from_toml(root, "metal", cfg.metal, auth)
@@ -821,6 +830,7 @@ def private build_config_surface(cfg : ServerArgs; save_path : string) : string 
     var config = JV((
         model = cfg.model,
         port = cfg.port > 0 ? cfg.port : 8080,
+        host = bind_host(cfg.host),
         quant = empty(cfg.quant) ? "q8" : cfg.quant,
         kv_dtype = empty(cfg.kv_dtype) ? "f16" : cfg.kv_dtype,
         metal = empty(cfg.metal) ? "off" : cfg.metal,
@@ -1009,6 +1019,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         return
     }
     let port = g_cfg.port > 0 ? g_cfg.port : 8080     // non-positive (incl. a stray negative) -> default
+    let host = bind_host(g_cfg.host)
     let ctx = g_cfg.ctx > 0 ? int64(g_cfg.ctx) : 0l   // 0 = keep the model's trained context_length
     let streams = g_cfg.streams > 0 ? int64(g_cfg.streams) : 4l
     let chunk = g_cfg.chunk > 0 ? int64(g_cfg.chunk) : 0l
@@ -1282,7 +1293,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         [chunk_tokens = chunk, page_rows = page_rows, prefix_groups = prefix,
          kv_dtype = pick_kv_dtype(g_cfg.kv_dtype), team_dispatch = team_dispatch,
          asr_team = asr_team,
-         mtp = mtp_setting(cfg_sourced("mtp"), g_cfg.mtp), idle_chunk_tokens = chunk_idle])
+         mtp = mtp_setting(cfg_sourced("mtp"), g_cfg.mtp), idle_chunk_tokens = chunk_idle, host = host])
     if (!g_server_ready) {
         g_exit_code = 2
         request_exit()

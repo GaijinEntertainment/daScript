@@ -372,6 +372,11 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "Qwen3.5-0.8B-MTP-Q8_0.gguf",
             url = "{HF}/unsloth/Qwen3.5-0.8B-MTP-GGUF/resolve/main/Qwen3.5-0.8B-Q8_0.gguf",
             bytes = 833592736l, sha256 = "c54f8b67069c70085b98440de696b44da8250250ac69a961b41133def876e262"),
+        // the embedding model whose file names its read: `qwen3.pooling_type` last, `add_eos_token` on
+        // (tests/test_embeddings.das holds its model card's cosine matrix as the oracle)
+        ModelSpec(file = "Qwen3-Embedding-0.6B-Q8_0.gguf",
+            url = "{HF}/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/370f27d7550e0def9b39c1f16d3fbaa13aa67728/Qwen3-Embedding-0.6B-Q8_0.gguf",
+            bytes = 639150592l, sha256 = "06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439"),
         // the K-quant twin of the hybrid for the resident driver's native-plane cells
         // (tests/test_gpu_resident_hybrid.das): qkv q6_K, z q4_K, beta/alpha q4_K, the deltanet
         // out plane q4_K - the step leaves the o row f32 for the superblock out plane's requant

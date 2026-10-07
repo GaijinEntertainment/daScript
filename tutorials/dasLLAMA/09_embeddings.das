@@ -9,14 +9,16 @@ require strings
 // Tutorial dasLLAMA-09: Embeddings
 //
 // This tutorial covers:
-//   - embed(model, text): a mean-pooled, L2-normalized sentence vector
+//   - embed(model, text): an L2-normalized sentence vector, pooled the way the model's file asks
 //   - Cosine similarity as a plain dot product (the vectors are unit length)
 //   - Semantic ranking: order candidates by closeness to a query
 //   - What "RAG-grade" means — when a decoder-as-embedder is the right tool
 //
 // Any chat model dasLLAMA loads doubles as an embedder. embed() runs one forward
-// pass, mean-pools the decoder's last-layer hidden state (post-final-norm) over all
-// positions, and L2-normalizes the result to unit length. Because every vector is
+// pass, pools the decoder's last-layer hidden state (post-final-norm) - a chat model
+// names no pooling, so every position is averaged; an embedding model such as
+// Qwen3-Embedding names last-token pooling in its GGUF and is read at its appended
+// end token - and L2-normalizes the result to unit length. Because every vector is
 // unit length, cosine similarity is just the dot product — no dividing by norms.
 //
 // Prerequisites: a GGUF model file on disk (any of the tutorial models works).
@@ -86,7 +88,19 @@ def main() {   // nolint:STYLE038 - the tutorial is one linear read; the section
 
         let query = "How do I sort a list in Python?"
         let qv <- embed(m, query)
-        print("embed(query) -> {length(qv)} floats, self-similarity {cosine(qv, qv)} (== 1.0)\n\n")
+        print("embed(query) -> {length(qv)} floats, self-similarity {cosine(qv, qv)} (== 1.0)\n")
+
+        // The third argument overrides the file's pooling: POOLING_MEAN, POOLING_CLS (the first
+        // row) or POOLING_LAST (the last row). On a chat model the last row is a different,
+        // weaker vector than the mean; on Qwen3-Embedding it is the one the model was trained for.
+        let lv <- embed(m, query, POOLING_LAST)
+        print("last-token read against the mean read: cosine {cosine(qv, lv)}\n")
+
+        // A fourth argument keeps only the leading components, renormalized - the width a vector
+        // store is sized for. An embedding model trained for the Matryoshka read keeps its
+        // meaning in those leading components; a chat model's cut is only the shape.
+        let short <- embed(m, query, POOLING_MEAN, 64l)
+        print("a 64-wide cut: {length(short)} floats, self-similarity {cosine(short, short)}\n\n")
 
         // ──────────────────────────────────────────────────────────────────────
         // Section 3 — Semantic ranking

@@ -458,6 +458,9 @@ def parse_gguf_meta_shards(bases : array<void?>; sizes : array<int64>) : GGUFMet
 //! True if `key` is present in the metadata.
 def gguf_has(m : GGUFMeta; key : string) : bool => key_exists(m.kv, key)
 
+//! `gguf_int` where the key is present, `dflt` where the file omits it - the one spelling of has-then-read.
+def gguf_int_or(m : GGUFMeta; bytes : array<uint8> | #; key : string; dflt : int64) : int64 => key_exists(m.kv, key) ? gguf_int(m, bytes, key) : dflt
+
 //! Read an integer-typed value (any width / signedness) widened to int64.
 def gguf_int(m : GGUFMeta; bytes : array<uint8> | #; key : string) : int64 {
     if (!key_exists(m.kv, key)) {

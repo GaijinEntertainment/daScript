@@ -85,7 +85,13 @@ enum DnPrefillMode {
     chunked
 }
 
+//! GGUF `{arch}.pooling_type` values an embedding file names (0 = none and 4 = rank read as mean here)
+let POOLING_MEAN = 1l
+let POOLING_CLS = 2l
+let POOLING_LAST = 3l
+
 //! Model hyperparameters (the 7-int checkpoint header plus derived sizes).
+
 struct Config {
     dim : int64
     hidden_dim : int64          // dense FFN width; the MAX across layers when it varies per layer (scratch sizing)
@@ -180,6 +186,7 @@ struct Config {
     // MTP/NextN (qwen35 family -MTP files): block_count includes the appended draft block(s).
     // n_layers stays the TRUNK count everywhere; the MTP block lives at layer index n_layers.
     n_layer_nextn : int64 = 0          // 0 = no MTP block; 1 = single NextN head (only value supported)
+    pooling : int64 = POOLING_MEAN     //! how `embed` reads the hidden rows: the file's `{arch}.pooling_type` (GGUF: 1 mean, 2 cls, 3 last), mean where the file carries none
     // qwen4exp (Qwen3.8-Flash-Next): the residual is hc_count parallel streams, mixed into every block's input and
     // scattered back after it (hyper-connections); the mixers carry the norms (no attn_norm / ffn_norm / output_norm
     // tensors). The bools are arch opt-ins (configure); the geometry is loader-filled from {arch}.hyper_connection.*

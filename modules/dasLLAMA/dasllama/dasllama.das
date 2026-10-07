@@ -283,11 +283,11 @@ def generate_embd(model : Model; var session : Session; embd : array<float>; npo
 
 // ===== Embeddings =====
 
-def embed(model : Model; text : string) : array<float> {
-    //! Mean-pooled, L2-normalized sentence embedding of ``text`` (``model.config.dim`` floats): the
-    //! decoder's last-layer hidden state (post-final RMSNorm), averaged then unit-normalized. A
-    //! decoder-only model used this way yields RAG-grade vectors, not a dedicated embedder's.
-    return <- embed_(model, text)
+def embed(model : Model; text : string; pooling : int64 = -1l; dims : int64 = 0l) : array<float> {
+    //! L2-normalized sentence embedding of ``text`` (``model.config.dim`` floats, or the leading ``dims`` renormalized - the
+    //! Matryoshka read) from the decoder's post-final-norm hidden rows, pooled the way the file's ``pooling_type`` asks (mean; the
+    //! last row for Qwen3-Embedding) unless ``pooling`` names one (``POOLING_MEAN`` / ``POOLING_CLS`` / ``POOLING_LAST``; -1 = the file's).
+    return <- embed_(model, text, pooling < 0l ? model.config.pooling : pooling, dims)
 }
 
 // ===== Chat =====

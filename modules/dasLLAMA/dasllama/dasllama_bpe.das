@@ -34,6 +34,7 @@ struct BpeTokenizer {
     // newline-run pre-split. No field default — zero-init `var tk : BpeTokenizer` must stay legal.
     spm_space : bool
     add_bos : bool
+    add_eos : bool                  //! `tokenizer.ggml.add_eos_token`: an embedding model (Qwen3-Embedding) ends every text with EOS, the row its last-token pooling reads
 }
 
 //! Whether a BPE vocab whose GGUF omits `tokenizer.ggml.add_bos_token` prepends BOS - upstream's
@@ -76,6 +77,7 @@ def load_bpe_tokenizer_gguf(path : string) : BpeTokenizer {
         tk.add_bos = (gguf_has(m, "tokenizer.ggml.add_bos_token")
             ? gguf_int(m, bytes, "tokenizer.ggml.add_bos_token") != 0l
             : bpe_pre_adds_bos(tk.pre))
+        tk.add_eos = gguf_int_or(m, bytes, "tokenizer.ggml.add_eos_token", 0l) != 0l
         if (tk.pre == "gpt-4o") {
             // these gpt-oss control tokens force-render (attr -> USER_DEFINED) so channel
             // markers stay visible in decoded text (type 4 escapes the type-3 mute rule)

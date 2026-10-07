@@ -10,10 +10,14 @@ dasLLAMA-09 — Embeddings
     single: Tutorial; Semantic search
 
 Any chat model dasLLAMA loads doubles as an embedder. ``embed(model, text)``
-runs one forward pass, mean-pools the decoder's last-layer hidden state
-(post-final-norm) over every position, and L2-normalizes the result to unit
-length. No separate embedding model is needed — the vector width is
-``model.config.dim``, the decoder's own embedding dimension.
+runs one forward pass, pools the decoder's last-layer hidden state
+(post-final-norm) and L2-normalizes the result to unit length. The pooling
+is the file's: a chat model names none and is read by the mean over every
+position; an embedding model such as Qwen3-Embedding names last-token pooling
+(``pooling_type`` in its GGUF) and asks for an appended end token, and ``embed``
+reads the row at that token, the way the model was trained. A third argument
+overrides the file (``POOLING_MEAN``, ``POOLING_CLS``, ``POOLING_LAST``). The
+vector width is ``model.config.dim``, the decoder's own embedding dimension.
 
 Run::
 
@@ -41,6 +45,25 @@ multiplies the two vectors coordinate by coordinate and adds up the results.
 
 ``embed`` runs a forward pass, so — like ``generate`` — it must run inside
 ``with_job_que()``; model code outside one panics.
+
+The third argument overrides the file's pooling — ``POOLING_MEAN``, ``POOLING_CLS``
+(the first row) or ``POOLING_LAST`` (the last row). On a chat model the last row is a
+different, weaker vector than the mean; on Qwen3-Embedding it is the one the model was
+trained for, and the file already asks for it. The fourth keeps only the leading
+components, renormalized — the width a vector store is sized for; an embedding model
+trained for that Matryoshka read keeps its meaning in them, a chat model's cut is only
+the shape.
+
+.. code-block:: das
+
+   with_job_que() {
+       setup_dasllama_jobque()
+       let qv <- embed(m, "How do I sort a list in Python?")
+       let lv <- embed(m, "How do I sort a list in Python?", POOLING_LAST)
+       print("last-token read against the mean read: cosine {cosine(qv, lv)}\n")
+       let short <- embed(m, "How do I sort a list in Python?", POOLING_MEAN, 64l)
+       print("a 64-wide cut: {length(short)} floats\n")
+   }
 
 Semantic ranking
 ================

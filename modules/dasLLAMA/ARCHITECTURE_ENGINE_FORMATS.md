@@ -83,7 +83,10 @@ anchor.
   tekken, chameleon, a few smaller ones - prepend BOS, every other pre - qwen2, qwen35, gpt-2,
   gpt-4o among them - prepends none. The
   default matters: a Qwen hybrid fed a leading `<|endoftext|>` degenerates for the whole
-  generation, and the unsloth Qwen3.8 conversions omit the key.
+  generation, and the unsloth Qwen3.8 conversions omit the key. `tokenizer.ggml.add_eos_token` has
+  no per-family default and both backends read it: absent, no EOS is appended; present and set,
+  `encode` ends every text with the EOS - the row an embedding model's last-token pooling reads (Qwen3-Embedding ships the key on,
+  with `{arch}.pooling_type` = last, which `Config.pooling` carries for `embed`).
 - **`dasllama_pretok.das`** - the pre-tokenizer: one hand-compiled split function per family
   (llama3/qwen2/qwen35, gpt-2, gpt-4o, tekken), selected by the BPE `pre` name. Regex-port growth
   lands here, never in the merge engine - the two change for different reasons (new model family

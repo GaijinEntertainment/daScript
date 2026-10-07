@@ -106,6 +106,25 @@ def private check_tower_routes(t : T?; base_url, cat_dir, asr_file : string) {
     }
 }
 
+//! A host the server cannot hold (past its 63-byte field) stops the start: before the check, the refused
+//! string fell through to libhv's every-interface default while the log claimed the configured address
+[test]
+def test_refused_bind_host_stops_the_start(t : T?) {
+    t |> run("a refused bind host fails init_server instead of listening on every interface") @(t : T?) {
+        set_setup_mode(true)
+        let long_host = build_string() $(var wr) {
+            for (_ in range(64)) {
+                wr |> write("a")
+            }
+        }
+        t |> success(!init_server(0, host = long_host), "init_server refuses a 64-byte host")
+        shutdown_server()   // a failed init is torn down like a finished one - run_server's own shape
+        t |> success(init_server(0, host = DEFAULT_BIND_HOST), "... and the same context starts on loopback after the refusal")
+        shutdown_server()
+        set_setup_mode(false)
+    }
+}
+
 [test]
 def test_setup_mode(t : T?) {
     t |> run("a slotless boot serves setup stats, fail-closed inference, and the catalog") @(t : T?) {
