@@ -1,7 +1,7 @@
 .. _stdlib:
 
 #################################
-  Daslang Standard Library 0.6.4
+  Daslang Standard Library 0.6.5
 #################################
 
 Copyright (c) 2018-2026 Gaijin Entertainment
