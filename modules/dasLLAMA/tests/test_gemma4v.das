@@ -120,7 +120,7 @@ def test_gemma4v_tier1_gpu(t : T?) {
             tt |> success(!gemma4v_serves_q8(), "with the Metal tower armed the default lane is the file's planes")
             var tw <- load_gemma4v_tower(mm)
             var st = Gemma4vState()
-            tt |> success(!tw.q8, "exact-plane lane (the driver declines q8)")
+            tt |> success(!tw.q8, "exact-plane lane (the policy prefers the file's planes under the Metal tower)")
             let fixtures = [(kind = "cb", w = 96, h = 96, log = "e2b.encode.cb96.log"),
                             (kind = "cb", w = 336, h = 336, log = "e2b.encode.cb336.log"),
                             (kind = "green", w = 336, h = 336, log = "e2b.encode.green336.log"),
@@ -144,6 +144,21 @@ def test_gemma4v_tier1_gpu(t : T?) {
             set_metal_tower(true)
             delete st
             delete tw
+            // the q8 lane on the device: a q8 tower with the knob ARMED serves off its q8 planes, on the q8 lane's bar
+            set_gemma4v_q8(true)
+            var twq <- load_gemma4v_tower(mm)
+            reset_gemma4v_q8()
+            var stq = Gemma4vState()
+            tt |> success(twq.q8, "the q8 lane minted under the pin")
+            let sq0 = metal_tower_stats()
+            let dq0 = metal_tower_declines()?["quant_mode"] ?? 0l
+            if (gate_encode(tt, twq, stq, "cb", 336, 336, "e2b.encode.cb336.log", TIER1_REL_Q8)) {
+                tt |> equal(metal_tower_stats().encodes - sq0.encodes, 1l, "q8 tower: served on the device (encodes delta)")
+                tt |> equal(metal_tower_stats().blocks - sq0.blocks, twq.n_layer, "q8 tower: every block ran on the driver")
+                tt |> equal((metal_tower_declines()?["quant_mode"] ?? 0l) - dq0, 0l, "q8 tower: no quant_mode decline")
+            }
+            delete stq
+            delete twq
         } else {
             feint("das_metal is not built on this platform - the GPU rung is Apple-only\n")
         }

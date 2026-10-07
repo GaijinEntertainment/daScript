@@ -792,7 +792,7 @@ def gemma4v_encode(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>
     let n_rows = h / t.patch
     dispatch_phase_encode(n_cols * n_rows)
     var tp = ref_time_ticks()
-    let chain = g_g4v_gpu_set && invoke(g_g4v_gpu_serves)   //! the whole chain off the planes: no CPU im2col unless it declines
+    let chain = g_g4v_gpu_set   //! the whole chain off the planes (its knob and lane declines are its own): no CPU im2col unless it declines
     let npos = g4v_stem_cols(t, s, planes, w, h, !chain)
     g4v_rope_tables(t, s, n_cols, n_rows)
     asr_prof_add("g4v.stem", tp)

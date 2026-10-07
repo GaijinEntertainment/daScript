@@ -2237,6 +2237,9 @@ struct private VtVisTail {
 //! sets again over the new buffers
 [cold_path]
 def private vt_vis_bufs(var r : VtResident; w, h, pd, vw_bytes, idx_bytes, aux_bytes, tail_dim : int64) : bool {
+    if (!ensure_tower_clamp_rq_cls() || !ensure_tower_clamp_cvt_cls() || !ensure_tower_bias_act_cls() || !ensure_tower_rms_cls()) {   //! the tail's sets bind these stamps
+        return false
+    }
     let cap = r.cap_rows
     let bpl = w * h * 3l * 4l
     let bcol = cap * pd * 4l
@@ -3109,8 +3112,12 @@ def private vulkan_gemma3v_chain(t : Gemma3vTower; var s : Gemma3vState; planes 
     }
     let v = vt_tile(false, d, npos).v
     let vff = vt_tile(false, ff, npos).v
+    let cm2 = vt_cm2_feed()
+    let tc_d = cm2 ? cm2_tile_cols(d, npos) : 0l
+    let tc_ff = cm2 ? cm2_tile_cols(ff, npos) : 0l
     if (!vt_ln_chain_ensure(khr, hsp, v, vff) || !ensure_tower_patch_im2col_cls() || !ensure_f32_gemm_b_cls() || !ensure_f32_gemm_cls()
-            || !ensure_tower_pool_2d_cls() || !ensure_tower_rms_cls() || !ensure_tower_bias_act_cls()) {
+            || !ensure_tower_pool_2d_cls() || !ensure_tower_rms_cls() || !ensure_tower_bias_act_cls()
+            || (cm2 && (!cm2_cls_ensure(int(KqFmt.q8), tc_d) || !cm2_cls_ensure(int(KqFmt.q8), tc_ff)))) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
     g_vt_ln_offs |> reserve(t.n_layer)
@@ -3124,9 +3131,6 @@ def private vulkan_gemma3v_chain(t : Gemma3vTower; var s : Gemma3vState; planes 
     if (r.key != key && !vt_upload_ln(r, key, t.qblob, t.qscales, d, ff, t.blob, 0l, blob_n, lay, g_vt_ln_offs)) {
         return vt_decline(r, VulkanTowerDecline.memory)
     }
-    let cm2 = vt_cm2_feed()
-    let tc_d = cm2 ? cm2_tile_cols(d, npos) : 0l
-    let tc_ff = cm2 ? cm2_tile_cols(ff, npos) : 0l
     let g_d = cm2 ? cm2_tiles_at(d, npos, tc_d) : vt_gemm_groups(d, npos)
     let g_ff = cm2 ? cm2_tiles_at(ff, npos, tc_ff) : vt_gemm_groups(ff, npos)
     if (!vt_ln_scratch(r, t.n_layer, npos, d, ff, hs, dp, g_d, g_ff, khr, cm2, tc_d, tc_ff, v, vff, 0l) || !vt_vis_bufs(r, w, h, pd, 0l, 0l, 0l, max(d, t.proj_dim))) {

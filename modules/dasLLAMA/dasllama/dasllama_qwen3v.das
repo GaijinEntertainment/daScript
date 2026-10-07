@@ -922,7 +922,7 @@ def qwen3v_encode(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w
     dispatch_phase_encode(pw * ph)
     var tp = ref_time_ticks()
     q3v_rope_tables(t, s, pw, ph)
-    let chain = g_q3v_gpu_set && invoke(g_q3v_gpu_serves)   //! the whole chain off the planes: no CPU im2col unless it declines (the chain declines the lane it does not serve)
+    let chain = g_q3v_gpu_set   //! the whole chain off the planes (its knob and lane declines are its own): no CPU im2col unless it declines
     let npos = q3v_stem_cols(t, s, planes, w, h, pw, ph, !chain)
     asr_prof_add("q3v.stem", tp)
     let nds = t.n_deepstack

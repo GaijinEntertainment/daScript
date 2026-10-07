@@ -146,6 +146,27 @@ def test_qwen3v_tier1(t : T?) {
     }
 }
 
+//! the q8 lane on the Metal device: the deepstack tower minted q8 under the pin serves off its q8 planes, on the q8 lane's bar,
+//! every block on the driver and no quant_mode decline
+def private q3v_metal_q8_leg(tt : T?; mm4 : string) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        set_qwen3v_q8(true)
+        var twq <- load_qwen3v_tower(mm4)
+        reset_qwen3v_q8()
+        tt |> success(twq.q8, "the q8 lane minted under the pin")
+        var stq = Qwen3vState()
+        let sq0 = metal_tower_stats()
+        let dq0 = metal_tower_declines()?["quant_mode"] ?? 0l
+        if (tt |> gate_encode(twq, stq, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_Q8_DS)) {
+            tt |> equal(metal_tower_stats().encodes - sq0.encodes, 1l, "q8 tower: served on the device (encodes delta)")
+            tt |> equal(metal_tower_stats().blocks - sq0.blocks, 24l, "q8 tower: every block ran on the driver")
+            tt |> equal((metal_tower_declines()?["quant_mode"] ?? 0l) - dq0, 0l, "q8 tower: no quant_mode decline")
+        }
+        delete stq
+        delete twq
+    }
+}
+
 // The Metal tower arm: the SAME fixtures and bars, tower pinned ON — the GPU chain's parity
 // gate, with engage evidence (encode/block counter deltas), never "the model ran".
 [test]
@@ -166,24 +187,14 @@ def test_qwen3v_tier1_metal(t : T?) {
             let s0 = metal_tower_stats()
             var omni_gated = 0l
             var ds_gated = 0l
-            if (tt |> gate_encode(tw, st, "gray", 448, 448, "encode.gray448.log", TIER1_REL_GPU)) {
-                omni_gated++
-            }
-            if (tt |> gate_encode(tw, st, "cb", 448, 448, "encode.cb448.log", TIER1_REL_GPU)) {
-                omni_gated++
-            }
-            if (tt |> gate_encode(tw, st, "cb", 640, 320, "encode.cb640x320.log", TIER1_REL_GPU)) {
-                omni_gated++
+            for (fx in [(kind = "gray", w = 448, h = 448, log = "encode.gray448.log"), (kind = "cb", w = 448, h = 448, log = "encode.cb448.log"),
+                        (kind = "cb", w = 640, h = 320, log = "encode.cb640x320.log")]) {
+                omni_gated += (tt |> gate_encode(tw, st, fx.kind, fx.w, fx.h, fx.log, TIER1_REL_GPU)) ? 1l : 0l
             }
             var st4 = Qwen3vState()
-            if (tt |> gate_encode(tw4, st4, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_GPU_DS)) {
-                ds_gated++
-            }
-            if (tt |> gate_encode(tw4, st4, "cb", 640, 320, "encode4b.cb640x320.log", TIER1_REL_GPU_DS)) {
-                ds_gated++
-            }
-            if (tt |> gate_encode(tw4, st4, "cb", 96, 96, "encode4b.cb96.log", TIER1_REL_GPU_DS)) {
-                ds_gated++
+            for (fx in [(kind = "cb", w = 448, h = 448, log = "encode4b.cb448.log"), (kind = "cb", w = 640, h = 320, log = "encode4b.cb640x320.log"),
+                        (kind = "cb", w = 96, h = 96, log = "encode4b.cb96.log")]) {
+                ds_gated += (tt |> gate_encode(tw4, st4, fx.kind, fx.w, fx.h, fx.log, TIER1_REL_GPU_DS)) ? 1l : 0l
             }
             let s1 = metal_tower_stats()
             to_log(LOG_INFO, "qwen3v metal tier-1: +{s1.encodes - s0.encodes} encodes, +{s1.blocks - s0.blocks} blocks, +{s1.declines - s0.declines} declines ({omni_gated}+{ds_gated} fixtures gated)\n")
@@ -193,6 +204,7 @@ def test_qwen3v_tier1_metal(t : T?) {
                 tt |> success(s1.encodes - s0.encodes >= omni_gated + ds_gated, "every gated encode served on the Metal tower")
                 tt |> equal(s1.blocks - s0.blocks, omni_gated * 27l + ds_gated * 24l, "the block counters advanced per gated fixture")
             }
+            q3v_metal_q8_leg(tt, mm4)
             // negative control for the GPU bars: the same zero-layer-13 poison, GPU-served,
             // must red TIER1_REL_GPU (the loosened-bar rule wants the control ON THIS lane)
             var po = OracleEncode()

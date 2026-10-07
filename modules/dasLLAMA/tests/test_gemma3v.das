@@ -120,7 +120,7 @@ def test_gemma3v_tier1_gpu(t : T?) {
             }
             var tw <- load_gemma3v_tower(mm)   // metal armed: the policy default is the exact lane
             var st = Gemma3vState()
-            tt |> success(!tw.q8, "exact-plane lane (the driver declines q8)")
+            tt |> success(!tw.q8, "exact-plane lane (the policy prefers the file's planes under the Metal tower)")
             let fixtures = [(kind = "cb", log = "g3.encode.cb896.log"),
                             (kind = "green", log = "g3.encode.green896.log")]
             for (fx in fixtures) {
@@ -141,17 +141,19 @@ def test_gemma3v_tier1_gpu(t : T?) {
             set_metal_tower(true)
             delete st
             delete tw
-            // the q8-decline leg: a q8 tower with the knob ARMED must never dispatch (its planes
-            // are Q8_0 - a driver serve would read them as f32 garbage)
+            // the q8 lane on the device: a q8 tower with the knob ARMED serves off its q8 planes, on the q8 lane's bar
             set_gemma3v_q8(true)
             var twq <- load_gemma3v_tower(mm)
             reset_gemma3v_q8()
             var stq = Gemma3vState()
             let sq0 = metal_tower_stats()
-            tt |> gate_encode(twq, stq, "cb", "g3.encode.cb896.log", TIER1_REL_Q8)
-            let sq1 = metal_tower_stats()
-            tt |> equal(sq1.encodes, sq0.encodes, "q8 tower never dispatched")
-            tt |> success(sq1.declines - sq0.declines >= 1l, "q8 tower recorded the quant_mode decline")
+            let dq0 = metal_tower_declines()?["quant_mode"] ?? 0l
+            if (tt |> gate_encode(twq, stq, "cb", "g3.encode.cb896.log", TIER1_REL_Q8)) {
+                let sq1 = metal_tower_stats()
+                tt |> equal(sq1.encodes - sq0.encodes, 1l, "q8 tower: served on the device (encodes delta)")
+                tt |> equal(sq1.blocks - sq0.blocks, twq.n_layer, "q8 tower: every block ran on the driver")
+                tt |> equal((metal_tower_declines()?["quant_mode"] ?? 0l) - dq0, 0l, "q8 tower: no quant_mode decline")
+            }
             delete stq
             delete twq
             set_metal_tensor_crowns("mulmm_q8")
@@ -193,9 +195,7 @@ def test_gemma3v_tail_gpu(t : T?) {
             let tail_was = metal_tower_tail_knob()
             set_metal_tower(true)
             with_dasllama_jobque_() {
-                var inscope cpu_tail : array<float>
-                var inscope dev_tail : array<float>
-                var inscope other : array<float>
+                var inscope cpu_tail, dev_tail, other : array<float>
                 set_metal_tower_tail(false)
                 let e0 = metal_tower_stats().encodes
                 let t0 = metal_tower_tail_encodes()

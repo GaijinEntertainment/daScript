@@ -723,7 +723,7 @@ def gemma3v_encode(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>
         panic("dasLLAMA gemma3v: canvas {w}x{h} - this tower serves exactly {t.image_px}x{t.image_px} (letterbox first)")
     }
     var tp = ref_time_ticks()
-    let chain = g_g3v_gpu_set && invoke(g_g3v_gpu_serves)   //! the whole chain off the planes: no CPU im2col unless it declines
+    let chain = g_g3v_gpu_set   //! the whole chain off the planes (its knob and lane declines are its own): no CPU im2col unless it declines
     let npos = g3v_stem_cols(t, s, planes, w, h, !chain)
     dispatch_phase_encode(npos)
     asr_prof_add("g3v.stem", tp)
