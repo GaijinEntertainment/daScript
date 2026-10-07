@@ -667,7 +667,7 @@ kernel classes against their CPU oracles - the bidirectional flash tiles (h64 an
 on the cm2 and KHR arms) against `attn_row_oracle` over every key, the causal twin as the control
 that the mask switch moves the output while the last row agrees, sentinel slack rows past kvlen as
 the tail-mask control, and the poisoned-element control on the bar; and the tower row classes - the
-weighted rms, the in-place clamp, the clamp-and-f16 and clamp-and-Q8_0 feeds, the two-axis neox
+weighted rms, the in-place clamp and its copy into a second plane (the source left as found), the clamp-and-f16 and clamp-and-Q8_0 feeds, the two-axis neox
 rope, the post-add with its next pre-norm, and the clamped GEGLU-quick - each against the CPU tower
 helper it mirrors (`rms_rows`, `clamp_rows`, `requant_rows_q8_sized`, `rope_neox_2d_rows`,
 `add_inplace_rows`) or its closed form, over one command buffer, every written-only output under a
@@ -2163,7 +2163,10 @@ whole tower, every tower staged and minted in memory (never `load_gemma4v_tower`
 chain held within 1.5x the CPU q8 chain's own (the gate's reading: the device chain is the same or
 better), the residual rows logged per 64-row tile, the input poison on the one-block cb96 leg (a
 fresh q8 tower with its block zeroed through the device chain must EXCEED the bar the clean chains
-set), then the exact-lane tower's `quant_mode` decline; the E4B cell's q8 leg re-runs its dump
+set), then the exact lane served - the exact tower through the device chain at cb336 on the f32 tile over the
+bf16 block rows widened: one encode, every block, the grid's rows, no `quant_mode` decline, the device within the
+exact lane's rel_l2 bar (`TWIN_EXACT_REL_L2_VK`) of the exact CPU chain with the moved-expectation control, and a
+fresh exact tower with block 8 zeroed through the device chain EXCEEDING it; the E4B cell's q8 leg re-runs its dump
 through the driver and runs the same zeroed-block poison against it. All three skip without a
 Vulkan device under `DASLLAMA_GPU=1`, and on a build with das_metal, where the Metal driver owns
 the tower hooks.
@@ -2176,9 +2179,9 @@ q8 serving lane on its measured 3.2e-1*rms bar (27 blocks, ffn served at the lay
 sniff/exec_fmt cells. On Apple builds the CPU gate pins the tower knob off, and a GPU rung
 gates two fixtures through the Metal chain (the blocks and, behind them, the projector tail) on its measured 4e-2*rms bar - engage proven
 per fixture by the encodes/blocks counters, plus the knob-off decline leg (the 72-wide heads
-restride to the attention tiles' 128 on the driver), the q8-decline leg (a PINNED-q8 tower with
-the knob ARMED must never dispatch and must record the `quant_mode` decline - its Q8_0 planes
-would read as f32 garbage), and a third crowned encode on the twin-W route
+restride to the attention tiles' 128 on the driver), the q8-lane leg (a PINNED-q8 tower with
+the knob ARMED serves off its Q8_0 planes through the prefill ladder's q8 GEMM over the vision q8
+slab, on the q8 lane's bar: one encode and every block counted, no `quant_mode` decline), and a third crowned encode on the twin-W route
 (`set_metal_tensor_crowns("mulmm_q8")` + `set_metal_tower_f16(true)`, the lane pinned exact so
 the twin is baked), witnessed by the `metal_tower_f16_encodes` delta. Skips honestly without
 the mmproj or dumps. The CPU-lane claims pin both GPU tower knobs off (`set_every_gpu_tower`); on a
@@ -2189,8 +2192,11 @@ canvas three ways (the exact CPU chain, the CPU q8 chain, the device chain) on o
 truncated towers and the whole tower, every tower staged and minted in memory (never
 `load_gemma3v_tower`), the device's distance from the exact chain held within 1.5x the CPU q8
 chain's own, the input poison on the one-block leg (a fresh q8 tower with its block zeroed through
-the device chain must EXCEED the bar), then the exact-lane tower's `quant_mode` decline; one deep
-canvas only, since the exact chain at 4096 rows x 27 blocks is the cell's cost. The Vulkan rung and
+the device chain must EXCEED the bar), then the exact lane served on the fixed canvas - the exact tower
+through the device chain on the f32 tile over the blob: the counters, no `quant_mode` decline, the device
+within `TWIN_EXACT_REL_L2_VK` of the exact CPU chain with the moved-expectation control, and a fresh exact
+tower with block 13 zeroed through the device chain EXCEEDING it; one deep canvas only, since the exact chain
+at 4096 rows x 27 blocks is the cell's cost. The Vulkan rung and
 the twin skip without a Vulkan device under `DASLLAMA_GPU=1`, and on a build with das_metal, where
 the Metal driver owns the tower hooks.
 `test_gemma3v_tail_gpu` holds the device tail alone, dump-free: the soft tokens with the tail on the
@@ -2218,7 +2224,9 @@ exact lane's set, and the proof that the served slices still carry signal is the
 zeroed-slices decoder control in `test_vision_chat.das`; a METAL tower cell (both towers,
 tower pinned ON, its own GPU bars 4e-2 / 8e-2*rms per the gemma3v f16-tile precedent, gray
 off the GPU-ds set like the q8-ds cell, engage proven by encode/block counter deltas per
-GATED fixture, and its own GPU-lane zero-layer poison); an f16-W ROUTE cell (crowns pinned
+GATED fixture, its own GPU-lane zero-layer poison, and the q8 lane on the device - the deepstack
+tower minted q8 under the pin serves off its q8 planes at cb448 on the q8-ds bar, every block
+counted, no `quant_mode` decline); an f16-W ROUTE cell (crowns pinned
 via set_metal_tensor_crowns + prefill re-init so the half twins compile, the 4B fixtures on
 the same GPU bars, engage proven by the metal_tower_f16_encodes delta, plus the knob-off
 leg whose counter must not move, and the Omni-30B bf16 half - the same crowned route on the
@@ -2226,23 +2234,25 @@ bf16-sourced tower, one fixture, its own f16-encodes delta, which is what proves
 bake covers bf16 files and not just f16 ones); and a model-free lane-knob cell. The CPU-lane
 claims pin both GPU tower knobs off (`set_every_gpu_tower`). On a Vulkan build `test_qwen3v_vulkan_twin`
 (Qwen3-VL 4B, the deepstack carrier) is the dump-free instrument: the exact CPU chain, the CPU
-q8 chain and the Vulkan block loop over the q8 image (the tap mergers run on the CPU off the
-residuals the driver stashes after the tap blocks, so the wide rows' slices read the device's
-rows) on one-, two- and six-block truncated towers (the six-block one reaches the first tap) and
+q8 chain and the Vulkan chain over the q8 image (the stem, the blocks, every tap's merger and the
+tail on the device, the projected plane's slices read back) on one-, two- and six-block truncated towers (the six-block one reaches the first tap) and
 the whole tower, three canvases, every tower staged and minted in memory (never
 `load_qwen3v_tower`), the device's distance from the exact chain held within 1.5x the CPU q8
 chain's own, the input poison on the one-block cb96 leg (a fresh q8 tower with its block zeroed
-through the device chain must EXCEED the bar), then the exact-lane tower's `quant_mode` decline
-(the blocks seat is the driver's, which declines the exact planes once and leaves the encode to
-the CPU chain). Skips without the mmproj, without a Vulkan device under `DASLLAMA_GPU=1`, and on
+through the device chain must EXCEED the bar), then the exact lane served at cb448 - the exact tower
+through the device chain on the f32 tile over the blob, the taps' mergers on the device too: the counters,
+no `quant_mode` decline, the device within `TWIN_EXACT_REL_L2_VK` of the exact CPU chain with the
+moved-expectation control, and a fresh exact tower with block 13 zeroed through the device chain
+EXCEEDING it. Skips without the mmproj, without a Vulkan device under `DASLLAMA_GPU=1`, and on
 a build with das_metal, where the Metal driver owns the tower hooks. The vision and audio families'
 Vulkan twins share one instrument, `_tower_twin.das`: the seat guard (the tier's want and the device,
 `vulkan_tower_arms`) and the jfk cells' seat, the three-way encode with the family's counters and
 the bar by metric (rel_l2 wherever a CPU q8 chain is the control - the vision canvases and the
 audio towers alike, since a deep tower's worst element is one tail element - qwen25v's maxdiff
 against the exact chain), the input
-poison, the exact-lane decline, the vision canvas and dump-poison legs, and the staged tower's
-truncate-and-zero and in-memory mint. The GPU knobs it pins (both towers, the ASR decoder) are
+poison, the audio towers' exact-lane decline and the vision towers' exact lane served, the vision canvas
+and dump-poison legs, and the staged tower's truncate-and-zero (every plane that spans the block: a q8
+tower's qblob, an exact tower's blob and halfword plane) and in-memory mint. The GPU knobs it pins (both towers, the ASR decoder) are
 captured and put back through `_gpu_knobs.das`, the record the TTS rail shares.
 The model-gated cells skip honestly without the mmprojs or dumps (the metal cell counts its
 gated fixtures and skips when the dumps are absent).

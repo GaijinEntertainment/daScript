@@ -340,7 +340,7 @@ def private tw_q8_attach(t : AudioTower) : bool {
 //! one block GEMM of the whisper-class chain: region `site` of the device q8 blob on a q8 tower, tw_mm's forms on an f32 one
 def private wt_mm(enc : MetalComputeEncoder?; q8 : bool; site : int64; f16w, bf16w : bool; bwh, bblob : MetalBuffer?; welem : int64;
                   bx, bxh, by : MetalBuffer?; bk, bn : MetalBuffer?; rows, nd, kdim : int64; cvt : bool) {
-    wt_mm_at(enc, q8, g_tw_q8.buf, g_tw_q8_boffs[site], f16w, bf16w, bwh, bblob, welem, bx, bxh, by, bk, bn, rows, nd, kdim, cvt)
+    wt_mm_at(enc, q8, g_tw_q8.buf, q8 ? g_tw_q8_boffs[site] : 0ul, f16w, bf16w, bwh, bblob, welem, bx, bxh, by, bk, bn, rows, nd, kdim, cvt)
 }
 
 //! one block GEMM of a vision chain: region `site` of the vision q8 blob on a q8 tower, tw_mm's forms on an f32 one

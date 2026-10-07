@@ -814,7 +814,7 @@ def private vt_upload_f16(var r : VtResident; key : uint64; wblob : PlaneU16; w_
 
 //! the exact lane's upload: the f32 blob whole as the norms plane (every bias, norm and f32 GEMM row), the bf16 halfwords `wblob`
 //! carries for the block GEMMs widened behind it (`w_n` > 0: gemma4v's bf16 files; the ones row past both), the q8 seats stubs
-[cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+[cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def private vt_upload_f32(var r : VtResident; key : uint64; blob : PlaneF; rows_n : int64; wblob : PlaneU16; w_n, ones_n : int64) : bool {
     vt_upload_begin(r, key)
     r.wq_bytes = 0l
@@ -3210,7 +3210,7 @@ def private vulkan_audio_conv_front(t : AudioTower; var s : EncoderState; mel : 
 //! the gemma3v chain on the device off the planes: the patch im2col, the padded patch conv with its bias and the learned positions
 //! (the stem's own command buffer, its rows left in x), the blocks through `vt_ln_chain` with the post-norm on the last seam, then
 //! the tail - pool, soft rms, projection - and the soft tokens landed in `s.tail`
-[hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+[hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def private vulkan_gemma3v_chain(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>; w, h, npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     var r & = g_vt_g3v
     if (!vt_gate(r, true)) {
@@ -3299,7 +3299,7 @@ def private vulkan_gemma3v_chain(t : Gemma3vTower; var s : Gemma3vState; planes 
     return s.tail_ready
 }
 
-[arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+[arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def private vt_q3v_regions(t : Qwen3vTower; l : int64; var out : VtRegion[int(QWEN3V_GEMMS)]) {
     let d = t.n_embd
     let ff = t.ff_pad
@@ -3327,7 +3327,7 @@ def private vt_upload_q3v(var r : VtResident; key : uint64; t : Qwen3vTower; lay
 //! the qwen3v chain on the device off the planes, one command buffer: the patch im2col, the patch conv (the f32 tile over the blob)
 //! into the natural order, the merge-walk assemble (the conv bias, the learned or the resized positions), the blocks with each tap's
 //! merger over the live residual as [nout x 4d] into slice k + 1, the tail merger into slice 0; `s.ds_slice` / `s.ds_stash` take them
-[hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+[hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def private vulkan_qwen3v_chain(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w, h, npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     var r & = g_vt_q3v
     if (!vt_gate(r, true)) {
@@ -3560,7 +3560,7 @@ def private vulkan_qwen3v_chain(t : Qwen3vTower; var s : Qwen3vState; planes : a
 //! the qwen25v chain on the device off the planes, one command buffer: the patch im2col, the folded patch conv (the f32 tile over
 //! the blob) into the natural order, the window-sort gather into x, the blocks over the halfword twin with the post-rms on the last
 //! seam, then the merger tail (mm0 + bias, tanh GELU, mm2 + bias) over the rows as [nout x 4d]; `s.mout` takes the sorted soft tokens
-[hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+[hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def private vulkan_qwen25v_chain(t : Qwen25vTower; var s : Qwen25vState; planes : array<float>; w, h, npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape, its two attention arms the routing
     var r & = g_vt_q25v
     if (!vt_gate(r, t.wblob.n > 0l && !t.blk_bf16)) {
@@ -3747,7 +3747,7 @@ def private vulkan_qwen25v_chain(t : Qwen25vTower; var s : Qwen25vState; planes 
 
 
 [cold_path]
-def private vt_upload_g4v(var r : VtResident; key : uint64; t : Gemma4vTower; hs : int64; lay : Q8RepackLayout) : bool {
+def private vt_upload_g4v(var r : VtResident; key : uint64; t : Gemma4vTower; ones_n : int64; lay : Q8RepackLayout) : bool {
     let d = t.n_embd
     let ff = t.n_ff
     var regions : array<VtRegion>
@@ -3760,7 +3760,7 @@ def private vt_upload_g4v(var r : VtResident; key : uint64; t : Gemma4vTower; hs
             regions |> push(VtRegion(woff = o.w[g], n = n, rows = rows))
         }
     }
-    let ok = vt_upload(r, key, t.qblob, t.qscales, regions, t.blob, 0l, t.blob.n, hs, lay)   //! the whole f32 blob: the stem's and the tail's rows at their file offsets
+    let ok = vt_upload(r, key, t.qblob, t.qscales, regions, t.blob, 0l, t.blob.n, ones_n, lay)   //! the whole f32 blob: the stem's and the tail's rows at their file offsets
     delete regions
     return ok
 }
@@ -3800,7 +3800,7 @@ def private vt_uv_slab(r : VtResident; t : Gemma4uvEmbedder; d, pd, proj_off : i
 //! the gemma4uv embedder on the device off the planes, one command buffer: the patch im2col, the first layernorm over the raw rows,
 //! the patch linear with its bias (the f32 tile over the bf16 plane widened), the second layernorm, the 2-axis positions, the third
 //! layernorm, the weightless rms and the projection; `out` takes the soft tokens
-[hot_path, unused_argument(s), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+[hot_path, unused_argument(s), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def private vulkan_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; planes : array<float>; w, h, npos, n_cols : int64; var out : array<float>) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     var r & = g_vt_uv
     if (!vt_gate(r, true)) {
@@ -3903,7 +3903,7 @@ def private vt_g4v_slab(r : VtResident; t : Gemma4vTower; d, pd, proj_off : int6
 //! the gemma4v chain on the device off the planes, one command buffer: the patch im2col under the [0, 1] -> [-1, 1] map, the patch
 //! conv (the f32 tile over the bf16 plane widened), the 2-axis positions, the blocks, then the tail - the grid pool, the sqrt(d)
 //! scale and the standardize, the weightless rms, the projection between its clamps - and the soft tokens landed in `s.tail`
-[hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+[hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def private vulkan_gemma4v_chain(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>; w, h, npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     var r & = g_vt_g4v
     if (!vt_gate(r, true)) {
@@ -3947,7 +3947,8 @@ def private vulkan_gemma4v_chain(t : Gemma4vTower; var s : Gemma4vState; planes 
     let lay = active_q8_repack_layout(g_active_needs_repack)
     let key = f32w ? vt_key_f16(t.wblob, 0l, t.wblob.n, t.blob, 0l, t.blob.n, t.n_layer) : vt_key(t.qblob, t.qscales, t.blob, 0l, t.blob.n, hs, t.n_layer, lay.mr, lay.kgroup, lay.wbias)
     let fresh_w = r.key != key
-    if (fresh_w && !(f32w ? vt_upload_f32(r, key, t.blob, t.blob.n, t.wblob, t.blk_bf16 ? t.wblob.n : 0l, hs) : vt_upload_g4v(r, key, t, hs, lay))) {
+    let ones_n = max(hs, d)   //! the ones row serves the head rms (hs wide) and the tail's weightless rms (d wide)
+    if (fresh_w && !(f32w ? vt_upload_f32(r, key, t.blob, t.blob.n, t.wblob, t.blk_bf16 ? t.wblob.n : 0l, ones_n) : vt_upload_g4v(r, key, t, ones_n, lay))) {
         return vt_decline(r, VulkanTowerDecline.memory)
     }
     let wbase = (f32w && t.blk_bf16) ? t.blob.n : 0l   //! the exact lane's block rows: the bf16 halfwords widened behind the blob, else the blob's own

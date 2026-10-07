@@ -216,7 +216,7 @@ def private shallow_routing_cell(t : T?; mm, name, backend : string; wa : int64;
     delete tw
 }
 
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def test_qwen25v_vulkan_twin(t : T?) {
     t |> run("the Vulkan block loop vs the exact CPU chain, and the window routing") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {

@@ -552,6 +552,139 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
     }
 }
 
+let private VR_W = 96              //! the vision rows' canvas: 6 x 4 patches of 16 - an even grid for the merge-adjacent walk, 24 rows a 4-multiple
+let private VR_H = 64
+let private VR_P = 16
+let private VR_PW = VR_W / VR_P
+let private VR_PH = VR_H / VR_P
+let private VR_NPOS = VR_PW * VR_PH
+let private VR_PD = 3 * VR_P * VR_P   //! the im2col row: 768, the 64 lattice
+let private VR_POS_ENTRIES = 8       //! the 2-axis table's rows an axis: past the grid's 6 columns and 4 rows
+let private VR_POOL_GW = 6           //! the grid pool: a 6 x 3 row grid pooled 3 x 3 into 2 x 1
+let private VR_POOL_GH = 3
+let private VR_POOL_K = 3
+
+//! the vision chains' stem and tail stamps against the CPU forms: the patch im2col under the [0, 1] -> [-1, 1] map (the pad
+//! rows zero), the gemma4v 2-axis position add, the qwen3v merge-walk stem assemble, the grid mean pool and the standardize
+//! rows on both arms; every compare with its poisoned-expectation control
+[test]
+def test_vkt_tower_vision_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over the five vision row classes: the fixture, one command buffer, the oracles
+    t0 |> run("the vision stem and tail rows (patch im2col, pos add 2d, stem assemble, grid pool, affine rows) == the CPU forms") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_tower_patch_im2col_cls() || !ensure_tower_pos_add_2d_cls() || !ensure_tower_stem_asm_cls()
+                    || !ensure_tower_pool_2d_cls() || !ensure_tower_affine_rows_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let d = ROWS_D
+            let npos = VR_NPOS
+            let nd = npos * d
+            let npos_pad = npos + 2   //! two pad rows past the grid, which the im2col writes zero
+            let pool_rows = VR_POOL_GW * VR_POOL_GH
+            let nout = (VR_POOL_GW / VR_POOL_K) * (VR_POOL_GH / VR_POOL_K)
+            let planes <- row_fill(VR_W * VR_H * 3, 29, 11, 0.004, 0.37, 251)   // pixels off any patch symmetry: every patch its own
+            let x <- row_fill(nd, 41, 7, 0.05, 2.1)
+            let tbl <- row_fill(2 * VR_POS_ENTRIES * d, 13, 5, 0.03, -0.9)
+            let xn <- row_fill(nd, 17, 3, 0.04, 1.9)
+            let pos <- row_fill(nd, 23, 9, 0.02, 0.5)
+            let bias <- row_fill(2 * d, 7, 1, 0.01, -0.6)   // the stem bias at 0, the standardize bias at d
+            let mrow <- row_fill(d, 31, 2, 0.02, 0.97)      // the standardize scale
+            let gx <- row_fill(pool_rows * d, 37, 5, 0.043, 2.1)
+            let ax <- row_fill(nout * d, 19, 7, 0.06, 2.8)
+            let scale = sqrt(float(d))
+            with_cell_planes() $(var cp : CellPlanes) {
+                let plp = cp |> in_(planes)
+                let colp = cp |> out_(npos_pad * VR_PD)
+                let xp = cp |> io_(x)
+                let tp = cp |> in_(tbl)
+                let xnp = cp |> in_(xn)
+                let bp = cp |> in_(bias)
+                let pp = cp |> in_(pos)
+                let asmp = cp |> out_(nd)
+                let gxp = cp |> in_(gx)
+                let poolp = cp |> out_(nout * d)
+                let mp = cp |> in_(mrow)
+                let axp = cp |> io_(ax)      // the standardize arm
+                let ax0p = cp |> io_(ax)     // the scale-only arm
+                var s_im = cp |> cls_set(fixed_array(plp, colp), @@set_tower_patch_im2col_cls)
+                var s_pos = cp |> cls_set(fixed_array(xp, tp), @@set_tower_pos_add_2d_cls)
+                var s_asm = cp |> cls_set(fixed_array(xnp, bp, pp, asmp), @@set_tower_stem_asm_cls)
+                var s_pool = cp |> cls_set(fixed_array(gxp, poolp), @@set_tower_pool_2d_cls)
+                var s_aff = cp |> cls_set(fixed_array(axp, bp, mp), @@set_tower_affine_rows_cls)
+                var s_aff0 = cp |> cls_set(fixed_array(ax0p, bp, mp), @@set_tower_affine_rows_cls)
+                var pa_im = GkPatchIm2colArgs(w = uint(VR_W), h = uint(VR_H), p = uint(VR_P), n_cols = uint(VR_PW), row_dim = uint(VR_PD), npos = uint(npos),
+                    total = uint(npos_pad * VR_PD), scale = 2.0, shift = -1.0)
+                var pa_pos = GkPosAdd2DArgs(dim = uint(d), ncols = uint(VR_PW), pos_entries = uint(VR_POS_ENTRIES), total = uint(nd), tboff = 0u)
+                var pa_asm = GkStemAsmArgs(dim = uint(d), pw = uint(VR_PW), total = uint(nd), boff = 0u, poff = 0u)
+                var pa_pool = GkPool2dArgs(width = uint(d), gw = uint(VR_POOL_GW), k = uint(VR_POOL_K), ow = uint(VR_POOL_GW / VR_POOL_K), total = uint(nout * d))
+                var pa_aff = GkAffineRowsArgs(width = uint(d), total = uint(nout * d), scale = scale, boff = uint(d), moff = 0u, std = 1u)
+                var pa_aff0 = GkAffineRowsArgs(width = uint(d), total = uint(nout * d), scale = scale, boff = 0u, moff = 0u, std = 0u)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tower_patch_im2col_cls(raw, h, s_im, pa_im, int64((npos_pad * VR_PD + 255) / 256))
+                    enc_tower_pos_add_2d_cls(raw, h, s_pos, pa_pos, int64((nd + 255) / 256))
+                    enc_tower_stem_asm_cls(raw, h, s_asm, pa_asm, int64((nd + 255) / 256))
+                    enc_tower_pool_2d_cls(raw, h, s_pool, pa_pool, int64((nout * d + 255) / 256))
+                    enc_tower_affine_rows_cls(raw, h, s_aff, pa_aff, int64((nout * d + 255) / 256))
+                    enc_tower_affine_rows_cls(raw, h, s_aff0, pa_aff0, int64((nout * d + 255) / 256))
+                }
+                let col_dev <- cp |> plane_run(colp)
+                let x_dev <- cp |> plane_run(xp)
+                let asm_dev <- cp |> plane_run(asmp)
+                let pool_dev <- cp |> plane_run(poolp)
+                let ax_dev <- cp |> plane_run(axp)
+                let ax0_dev <- cp |> plane_run(ax0p)
+                var col_cpu : array<float>
+                let n_cpu = im2col_rgb_patches(planes, int64(VR_W), int64(VR_H), int64(VR_P), col_cpu)
+                t |> equal(n_cpu, int64(npos), "the CPU im2col's patch count is the grid")
+                var col_want : array<float>
+                col_want |> resize(npos_pad * VR_PD)
+                for (i in range(npos * VR_PD)) {
+                    col_want[i] = col_cpu[i] * 2.0 - 1.0
+                }
+                check_rows(t, "tower_patch_im2col the patch columns under the [0, 1] -> [-1, 1] map vs im2col_rgb_patches, the pad rows zero", col_dev, col_want, BAR_EXACT, VR_PD)
+                var x_want : array<float>
+                x_want |> resize(nd)
+                for (pi in range(npos)) {
+                    for (i in range(d)) {
+                        let ex = tbl[(pi % VR_PW) * d + i]
+                        let ey = tbl[(VR_POS_ENTRIES + pi / VR_PW) * d + i]
+                        x_want[pi * d + i] = (x[pi * d + i] + ex) + ey
+                    }
+                }
+                check_rows(t, "tower_pos_add_2d (row + x-table row) + y-table row vs the CPU form", x_dev, x_want, BAR_EXACT, d)
+                var asm_want : array<float>
+                asm_want |> resize(nd)
+                for (r in range(npos)) {
+                    let g = r / 4   // the merge-adjacent walk the CPU stem reads (`q3v_reorder_src`): 2 x 2 partners adjacent, groups row-major
+                    let sub = r % 4
+                    let src = ((g / (VR_PW / 2)) * 2 + sub / 2) * VR_PW + (g % (VR_PW / 2)) * 2 + sub % 2
+                    for (i in range(d)) {
+                        asm_want[r * d + i] = (xn[src * d + i] + bias[i]) + pos[src * d + i]
+                    }
+                }
+                check_rows(t, "tower_stem_asm the merge-walk gather (conv row + bias) + position row vs the CPU walk", asm_dev, asm_want, BAR_EXACT, d)
+                var pool_want : array<float>
+                avg_pool2d_rows(pool_want, gx, int64(VR_POOL_GW), int64(VR_POOL_GH), int64(d), int64(VR_POOL_K))
+                check_rows(t, "tower_pool_2d the k x k mean over the row grid vs avg_pool2d_rows", pool_dev, pool_want, BAR_APPROX, d)
+                var aff_want : array<float>
+                aff_want |> resize(nout * d)
+                var aff0_want : array<float>
+                aff0_want |> resize(nout * d)
+                for (i in range(nout * d)) {
+                    let c = i % d
+                    aff0_want[i] = ax[i] * scale
+                    aff_want[i] = (ax[i] * scale - bias[d + c]) * mrow[c]
+                }
+                check_rows(t, "tower_affine_rows (x . scale - b) . m vs the CPU form", ax_dev, aff_want, BAR_APPROX, d)
+                check_rows(t, "tower_affine_rows x . scale on the scale-only arm", ax0_dev, aff0_want, BAR_APPROX, d)
+                delete col_cpu
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
 //! the chat projector tails' row classes on the templates both homes stamp: the pair pool against the mean of each row pair, the
 //! swapped gate against the CPU `swiglu_swapped_rows` - the fixture's halves differ, so the gate with its halves swapped misses on
 //! most elements - at a width off every workgroup multiple

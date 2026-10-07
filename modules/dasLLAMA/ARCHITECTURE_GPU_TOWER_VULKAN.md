@@ -50,7 +50,7 @@ and 72 is off every fragment lattice. Per family, both drivers:
 
 ### The Vulkan tower driver's encode chains {#vk-tower-encode-chains}
 
-`dasllama_vulkan_tower.das` fills the gemma4v, gemma3v, qwen3v and qwen25v hook slots, the four
+`dasllama_vulkan_tower.das` fills the vision hook slots (gemma4v, gemma3v, qwen3v, qwen25v, the gemma4uv embedder), the four
 audio blocks seats - the whisper-class block loop (`register_tower_blocks_gpu`), gemma4a's
 (`register_gemma4a_gpu`), canary's (`register_canary_gpu`) and parakeet's (`register_parakeet_gpu`) - and the audio
 front seats (qwen3a's mel and conv front, gemma4a's whole chunk, canary's front, parakeet's whole encode;
@@ -62,18 +62,11 @@ from the CPU-windowed frames (`canary_window_frames`, gemma4a's and qwen3a's win
 one host phase every audio chain keeps) and runs the spectrum, the mel, the subsample convs and the
 input projection in one command buffer, so the blocks chain reads the residual rows the front wrote
 and the tail (the projector, the post-norm) stays on the CPU except where a bullet below says
-the chain runs it (the projector tails of gemma4a and of the chat towers). Where a chain and its family part on the seat:
+the chain runs it (the vision tails, the projector tails of gemma4a and of the chat towers). Where a chain and its family part on the seat:
 
-- **gemma4v** serves the hook after the CPU stem, whole. **gemma3v**'s hook fires before the CPU stem (the Metal
-  driver runs the stem itself), so `gemma3v_encode` finishes the stem on the CPU first when the tower is q8 and the
-  driver serves the blocks alone. **qwen3v**'s hook is exact-lane and whole-chain (Metal's), so the driver takes the
-  blocks-only q8 seat (`register_qwen3v_gpu_blocks`): after each deepstack tap block the residual is copied on the
-  device into a stash read back beside x, and the tap mergers run on the CPU off those rows, a tap past a truncated
-  tower's blocks skipped as the CPU loop skips it. **qwen25v** has no q8 lane, so its blocks-only seat
-  (`register_qwen25v_gpu_blocks`) runs after the CPU stem and before the CPU tail over the baked halfword twin
-  through the f16 GEMM class; a bf16-sourced twin declines. Its gated hidden, silu(g + bg) . (u + bu), runs on the
-  LLM's biased f16 act stamp (`ActF16B`) at a zero row map (`rex_dev`: every row the one expert), with the norms
-  plane bound as both bias planes, so the halves the down GEMM reads land in one dispatch.
+- **The vision chains** - gemma4v, gemma3v, qwen3v, qwen25v and the gemma4uv embedder - run whole off the image
+  planes on both weight lanes, their stems and tails on the device: `ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains`;
+  gemma3v's blocks ride the pre-LN chain below.
 - **The whisper-class towers** (whisper, qwen2audio, voxtral, ultravox, the Omni audio towers,
   Qwen3-ASR through its conv front) share one chain with gemma3v: the pre-LN block loop
   `vt_ln_chain` over one offsets record a block (`LayerOffs`; gemma3v's block offsets mapped onto

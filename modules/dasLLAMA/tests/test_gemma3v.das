@@ -309,7 +309,7 @@ def private twin_encode(tt : T?; tw : Gemma3vTower; var st : Gemma3vState; tw_ex
         $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb) }) $(t; var s; var out) => gemma3v_encode(t, s, planes, tw.image_px, tw.image_px, out)
 }
 
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def test_gemma3v_vulkan_twin(t : T?) {
     t |> run("the Vulkan chain vs the CPU q8 chain, and the exact lane served") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {

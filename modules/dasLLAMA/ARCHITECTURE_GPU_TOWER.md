@@ -91,7 +91,13 @@ The gemma4v chain takes the stem's columns and runs the patch conv and the posit
 handed the finished residual stream), then ends in its tail: the grid pool, the sqrt(d) scale and the
 standardize in one row pass (`MetalTwAffineRows`), the weightless rms, and the projection between its
 two clamps (`g4v_tail_body`). With the tail on the device the soft tokens alone come back; the block
-rows stay there.
+rows stay there. The vision chains serve both weight lanes: an exact tower's block GEMMs ride the f32
+tiles over the blob (the crowned halfword twin where the crown compiles it), a q8 tower's the prefill
+ladder's q8 GEMM over the vision q8 slab (`g_tw_q8_vis`: the family's block regions repacked once a
+tower beside the audio slab, `tw_q8_attach_g3v` / `_q3v` / `_g4v` over `tw_q8_regions_*`, keyed by the
+tower's q8 plane) with the half feed where the ladder reads one (`pf_q8_mm_half`), so a pinned q8 tower
+serves on the driver and declines nothing; the families register the f32 lane as served, so the policy
+prefers the file's planes under the tower.
 
 The gemma4a chain ends in the projector tail, in the blocks' command buffer: the out projection
 and its bias at the encoder's own output width (`gemma4a_mid_dim`, the length of the weightless
