@@ -165,9 +165,8 @@ def next_piece() : string {
 
 // ===== speech to text =====
 
-[export_c]
+[export_c(comment = "Load the speech-to-text model at `model_path` and open one transcription session over it.")]
 def asr_open(model_path : string) : bool {
-    //! Load the speech-to-text model at `model_path` and open one transcription session over it.
     if (g_asr_loaded) {
         return refuse("an ASR model is already open - call asr_close first")
     }
@@ -182,9 +181,8 @@ def asr_open(model_path : string) : bool {
     return true
 }
 
-[export_c]
+[export_c(comment = "Drop the transcription session and its model.")]
 def asr_close() {
-    //! Drop the transcription session and its model.
     return if (!g_asr_loaded)
     delete g_asr_session
     delete g_asr
@@ -192,9 +190,8 @@ def asr_close() {
     queue_release()
 }
 
-[export_c]
+[export_c(comment = "Decode `audio_path` and return its whole transcript, or \"\" with `reason` set.")]
 def asr_transcribe(audio_path : string) : string {
-    //! Decode `audio_path` and return its whole transcript, or "" with `reason` set.
     if (!g_asr_loaded) {
         refuse("no ASR model is open")
         return ""
@@ -216,18 +213,15 @@ def asr_transcribe(audio_path : string) : string {
     return text
 }
 
-[export_c]
+[export_c(comment = "Seconds of audio transcribed per second of wall clock, 0 before a transcript has run.")]
 def asr_speed() : double {
-    //! Seconds of audio transcribed per second of wall clock, 0 before a transcript has run.
     return g_asr_us > 0l ? g_audio_seconds * 1.0e6lf / double(g_asr_us) : 0.0lf
 }
 
 // ===== speech synthesis =====
 
-[export_c]
+[export_c(comment = "Load the text-to-speech model at `model_path` - a Pocket TTS, KittenTTS or Kokoro file -\nand take its last voice as the default.")]
 def tts_open(model_path : string) : bool {
-    //! Load the text-to-speech model at `model_path` - a Pocket TTS, KittenTTS or Kokoro file -
-    //! and take its last voice as the default.
     if (g_tts_loaded) {
         return refuse("a TTS model is already open - call tts_close first")
     }
@@ -247,24 +241,21 @@ def tts_open(model_path : string) : bool {
     return true
 }
 
-[export_c]
+[export_c(comment = "Drop the synthesis model.")]
 def tts_close() {
-    //! Drop the synthesis model.
     return if (!g_tts_loaded)
     delete g_tts
     g_tts_loaded = false
     queue_release()
 }
 
-[export_c]
+[export_c(comment = "The voice `tts_say` speaks in, or \"\" while no model is open.")]
 def tts_voice() : string {
-    //! The voice `tts_say` speaks in, or "" while no model is open.
     return g_tts_loaded ? g_tts_voice : ""
 }
 
-[export_c]
+[export_c(comment = "Pick a voice the model offers - \"\" keeps the current one - and a speech rate from 0.25 to 4.")]
 def tts_set_voice(name : string; rate : float) : bool {
-    //! Pick a voice the model offers - "" keeps the current one - and a speech rate from 0.25 to 4.
     if (!g_tts_loaded) {
         return refuse("no TTS model is open")
     }
@@ -281,10 +272,8 @@ def tts_set_voice(name : string; rate : float) : bool {
     return true
 }
 
-[export_c]
+[export_c(comment = "Synthesize `text` and write it to `out_wav` as PCM16.\nReturns the seconds of audio written, or 0 with `reason` set.")]
 def tts_say(text : string; out_wav : string) : double {
-    //! Synthesize `text` and write it to `out_wav` as PCM16. Returns the seconds of audio written,
-    //! or 0 with `reason` set.
     if (!g_tts_loaded) {
         refuse("no TTS model is open")
         return 0.0lf
@@ -305,9 +294,8 @@ def tts_say(text : string; out_wav : string) : double {
     return g_tts_seconds
 }
 
-[export_c]
+[export_c(comment = "Seconds of speech synthesized per second of wall clock, 0 before a say has run.")]
 def tts_speed() : double {
-    //! Seconds of speech synthesized per second of wall clock, 0 before a say has run.
     return g_tts_us > 0l ? g_tts_seconds * 1.0e6lf / double(g_tts_us) : 0.0lf
 }
 

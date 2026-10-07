@@ -153,6 +153,9 @@ def test_jit_lib_binds_into_a_daslang_host(t : T?) {
     report(lines, "build")
     t |> success(rc == 0, "the bind library builds")
     t |> success(fexist("{OUTPUT_DIR}/_bindlib_c.das"), "the daslang bindings are written")
+    let comment = "// Doubles n.\n// Raises on a negative n.\n"
+    t |> success(fread("{OUTPUT_DIR}/bindlib.h") |> find(comment) >= 0, "the C header carries the export_c comment")
+    t |> success(fread("{OUTPUT_DIR}/_bindlib_c.das") |> find(comment) >= 0, "the daslang bindings carry the export_c comment")
     var host_lines : array<string>
     let host_rc = run_host(bin, "_jit_lib_bind_host.das", host_lines)
     report(host_lines, "host")

@@ -49,12 +49,12 @@ struct HostArgs {
 }
 
 //! a panic lands in the generated last_error, a refusal in the library's own reason
-def private why(ctx : void?) : string {
+def private why(ctx : dasllama_lib_ctx?) : string {
     let panicked = dasllama_lib_last_error(ctx)
     return empty(panicked) ? dasllama_lib_reason(ctx) : panicked
 }
 
-def private transcribe_file(ctx : void?; model, audio : string) : int {
+def private transcribe_file(ctx : dasllama_lib_ctx?; model, audio : string) : int {
     if (!dasllama_lib_asr_open(ctx, model)) {
         print("asr_open failed: {why(ctx)}\n")
         return 1
@@ -70,7 +70,7 @@ def private transcribe_file(ctx : void?; model, audio : string) : int {
     return 0
 }
 
-def private continue_prompt(ctx : void?; model, prompt : string; want : int) : int {
+def private continue_prompt(ctx : dasllama_lib_ctx?; model, prompt : string; want : int) : int {
     if (!dasllama_lib_open(ctx, model)) {
         print("open failed: {why(ctx)}\n")
         return 1
@@ -99,7 +99,7 @@ def private continue_prompt(ctx : void?; model, prompt : string; want : int) : i
     return 0
 }
 
-def private say_to_wav(ctx : void?; model, text, out : string) : int {
+def private say_to_wav(ctx : dasllama_lib_ctx?; model, text, out : string) : int {
     if (!dasllama_lib_tts_open(ctx, model)) {
         print("tts_open failed: {why(ctx)}\n")
         return 1
