@@ -106,10 +106,10 @@ folds to the same key and a warm cache serves code where the wrong function carr
 
 Codegen writes each artifact under a temporary name and publishes it by renaming it to its final
 name: `publish_object` (`daslib/llvm_jit_run.das`) moves one file, `publish_link_set` every file
-the DLL link produced. The rename does not overwrite an existing file on Windows, so what an
-existing final holds decides the step. A content-addressed final - a DLL named by its key, a split
-partition object named by its partition key - holds the bytes this build made, so it stays: the
-temporary goes, and nothing is logged. A final named by position holds the previous build: the
+the DLL link produced. Rename replaces an existing writable file on both Windows and POSIX.
+If rename fails and a final still exists, the temporary is discarded without logging.
+A content-addressed final - a DLL named by its key, a split partition object named by its
+partition key - already holds the bytes this build made. A final named by position holds the previous build: the
 link set of a pinned `-output` (a plan with no DLL key), and, with the obj cache off, the split
 partition objects, named `<output>.p<N>_<tag>` by their place in the module order. Those publish
 with `replace`: the existing final is removed first. A final that survives the removal (a DLL
