@@ -63,9 +63,7 @@ def metal_tower_stats : tuple<encodes : int64; rows : int64; blocks : int64; con
 }
 
 //! The declines-by-reason table (a copy), keyed by `MetalTowerDecline` value names.
-def metal_tower_declines : table<string; int64> {
-    return <- clone_to_move(g_tower_declines.by_reason)
-}
+def metal_tower_declines : table<string; int64> => <- clone_to_move(g_tower_declines.by_reason)
 
 //! Test A/B seat: pin the tower driver on/off in-process (the env knob's setter twin).
 def set_metal_tower(on : bool) {
@@ -80,13 +78,9 @@ def set_metal_tower_f16(on : bool) {
     g_tw_env_tower_f16 = on
 }
 
-def get_metal_tower_f16 : bool {
-    return g_tw_env_tower_f16
-}
+def get_metal_tower_f16 : bool => g_tw_env_tower_f16
 
-def get_metal_tower_flash : bool {
-    return g_tw_env_tower_flash
-}
+def get_metal_tower_flash : bool => g_tw_env_tower_flash
 
 //! The tower-flash route's A/B seat (DASLLAMA_METAL_TOWER_FLASH's in-process twin).
 def set_metal_tower_flash(on : bool) {
@@ -180,9 +174,7 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
     var u_eps = uniform_f32(GEMMA4UV_LN_EPS)
     var u_rms_eps = uniform_f32(t.rms_eps)
     var u_nproj = uniform_u32(uint(t.proj_dim))
-    var u_ncols = uniform_u32(uint(n_cols))
-    var u_pe = uniform_u32(uint(t.pos_entries))
-    var u_tot = uniform_u32(uint(npos * d))
+    var pos2d = GkPosAdd2DArgs(dim = uint(d), ncols = uint(n_cols), pos_entries = uint(t.pos_entries), total = uint(npos * d), tboff = uint(t.pos_w))
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
         // ln1 over the im2col rows, in place
@@ -196,7 +188,7 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
         }
         tw_bias(enc, bx1, bblob, GkBiasActArgs(d = uint(d), nelem = uint(npos * d), boff = uint(t.patch_b), act = BIAS_ACT_NONE))
         enc_ln(enc, bx1, bx1, bblob, gk_ln_args(uint(d), uint(npos), GEMMA4UV_LN_EPS, uint(t.ln2_w), uint(t.ln2_b)), npos)
-        enc_posadd2d(enc, bx1, bblob, uint64(t.pos_w * 4l), u_d, u_ncols, u_pe, u_tot, npos * d)
+        enc_posadd2d(enc, bx1, bblob, pos2d, npos * d)
         enc_ln(enc, bx1, bx1, bblob, gk_ln_args(uint(d), uint(npos), GEMMA4UV_LN_EPS, uint(t.ln3_w), uint(t.ln3_b)), npos)
         pf_enc_rms(enc, bx1, 0ul, g_tw_ones, bx1, u_d, u_rms_eps, npos)
         if (t.proj_bf16) {
@@ -223,9 +215,6 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
     pool_release(g_upool, u_eps, 4ul)
     pool_release(g_upool, u_rms_eps, 4ul)
     pool_release(g_upool, u_nproj, 4ul)
-    pool_release(g_upool, u_ncols, 4ul)
-    pool_release(g_upool, u_pe, 4ul)
-    pool_release(g_upool, u_tot, 4ul)
     if (!served) {
         return tw_decline(MetalTowerDecline.gpu_error)
     }
@@ -1732,9 +1721,10 @@ def private g4v_tail_body(enc : MetalComputeEncoder?; t : Gemma4vTower; e : G4vE
     let d = t.n_embd
     let nout = e.nout
     let cl = gemma4v_clamp_at(t, t.proj_clamp)
-    enc_tw_pool2d(enc, bx, e.bpool, TwPool2dArgs(width = uint(d), gw = uint(e.n_cols), k = uint(t.merge),
-        ow = uint(e.n_cols / t.merge), total = uint(nout * d)), nout * d)
-    enc_tw_affine_rows(enc, e.bpool, e.bstd_b, e.bstd_m, TwAffineArgs(width = uint(d), total = uint(nout * d), scale = sqrt(float(d))), nout * d)
+    var pool = GkPool2dArgs(width = uint(d), gw = uint(e.n_cols), k = uint(t.merge), ow = uint(e.n_cols / t.merge), total = uint(nout * d))
+    enc_tw_pool2d(enc, bx, e.bpool, pool, nout * d)
+    var affine = GkAffineRowsArgs(width = uint(d), total = uint(nout * d), scale = sqrt(float(d)))
+    enc_tw_affine_rows(enc, e.bpool, e.bstd_b, e.bstd_m, affine, nout * d)
     pf_enc_rms(enc, e.bpool, 0ul, g_tw_ones, e.bpool, u_d, u_eps, nout)
     tw_clamp_copy(enc, e.bpool, e.bclamp, cl.imin, cl.imax, nout * d)
     tw_mm(enc, false, t.proj_bf16, bwblob, bblob, t.proj_w, e.bclamp, null, e.bout, 0ul, u_d, e.u_proj, e.mpo, t.proj_dim, d, false)
@@ -1963,8 +1953,8 @@ def private g3v_tail_body(enc : MetalComputeEncoder?; t : Gemma3vTower; tl : G3v
     return if (!tl.on)
     let d = t.n_embd
     enc_ln(enc, bx, bs, bblob, gk_ln_args(uint(d), uint(npos), t.eps, uint(t.post_ln_w), uint(t.post_ln_b)), npos)
-    enc_tw_pool2d(enc, bs, tl.bpool, TwPool2dArgs(width = uint(d), gw = uint(tl.n_side), k = uint(t.merge),
-        ow = uint(tl.n_side / t.merge), total = uint(tl.nout * d)), tl.nout * d)
+    var pool = GkPool2dArgs(width = uint(d), gw = uint(tl.n_side), k = uint(t.merge), ow = uint(tl.n_side / t.merge), total = uint(tl.nout * d))
+    enc_tw_pool2d(enc, bs, tl.bpool, pool, tl.nout * d)
     pf_enc_rms(enc, tl.bpool, 0ul, tl.bsoft, tl.bpool, u_d, u_eps, tl.nout)
     enc_f32_mm(enc, bblob, uint64(t.proj_w * 4l), tl.bpool, tl.bout, 0ul, u_d, tl.u_proj, tl.mpo, t.proj_dim)
 }
@@ -2266,7 +2256,6 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
     var u_np_rope = uniform_u32(uint(npos * d / 2l))           // rope pairs over a compact q/k buffer
     var u_neox = uniform_u32(1u)
     var u_pd = uniform_u32(uint(t.patch_dim))
-    var u_pw = uniform_u32(uint(s.grid_w))                     //! the stem assemble's merge-walk column count
     var ka = AttnArgs(qd = uint(dp), kv_dim = uint(dp), head_size = uint(hs_pad), kv_mul = 1u,
         npos = uint(npos), np32 = uint(nk64), scale = 1.0 / sqrt(float(hs)),
         qoff = 0u, qrows = uint(mp), window = 0u, softcap = 0.0, hass = 0u, uend = uint(npos))
@@ -2277,9 +2266,11 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
         enc_f32_mm(enc, bblob, uint64(t.patch_w * 4l), bx0, braw, 0ul, u_pd, u_d, mp, d)
         if (bposr != null) {
-            enc_q3v_stem(enc, braw, bblob, uint64(t.patch_b * 4l), bposr, 0ul, bx, u_d, u_pw, u_totd, npos * d)
+            var asm_r = GkStemAsmArgs(dim = uint(d), pw = uint(s.grid_w), total = uint(npos * d), boff = uint(t.patch_b), poff = 0u)
+            enc_q3v_stem(enc, braw, bblob, bposr, bx, asm_r, npos * d)
         } else {
-            enc_q3v_stem(enc, braw, bblob, uint64(t.patch_b * 4l), bblob, uint64(t.pos_w * 4l), bx, u_d, u_pw, u_totd, npos * d)
+            var asm_t = GkStemAsmArgs(dim = uint(d), pw = uint(s.grid_w), total = uint(npos * d), boff = uint(t.patch_b), poff = uint(t.pos_w))
+            enc_q3v_stem(enc, braw, bblob, bblob, bx, asm_t, npos * d)
         }
         for (l in range64(t.n_layer)) {
             let o = qwen3v_block_offs(t, l)
@@ -2366,7 +2357,6 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
         pool_release(g_tw_pool, bposr, uint64(npos * d * 4l))
     }
     pool_release(g_upool, u_pd, 4ul)
-    pool_release(g_upool, u_pw, 4ul)
     pool_release(g_upool, u_d, 4ul)
     pool_release(g_upool, u_d4, 4ul)
     pool_release(g_upool, u_ff, 4ul)
@@ -3912,9 +3902,8 @@ struct private St2LstmBufs {
     y : MetalBuffer?
 }
 
-def private st2_lstm_bufs(var c : St2GpuCtx; sl : St2LstmSlot; t, hd : int64) : St2LstmBufs {
-    return St2LstmBufs(xf = st2_rows_buf(c, t, sl.fx.cout_p), xb = st2_rows_buf(c, t, sl.bx.cout_p), y = st2_rows_buf(c, t, 2l * hd))
-}
+def private st2_lstm_bufs(var c : St2GpuCtx; sl : St2LstmSlot; t, hd : int64) : St2LstmBufs =>
+    St2LstmBufs(xf = st2_rows_buf(c, t, sl.fx.cout_p), xb = st2_rows_buf(c, t, sl.bx.cout_p), y = st2_rows_buf(c, t, 2l * hd))
 
 //! A prosody branch's blocks, then its single-channel projection into bout [t][ST2_POST_WIDTH].
 def private st2_branch(enc : MetalComputeEncoder?; var c : St2GpuCtx; blocks : array<St2AdainResBlk>; slots : array<St2ResSlots>; proj : TtsConv1d;
@@ -4691,9 +4680,8 @@ def private pk_voice_drop {
 }
 
 //! A GEMV-served linear: q8 quants 32-wide, a K-quant plane 256-wide, f32 rows as they are.
-def private pk_lin_gemv_ok(l : TtsLinear) : bool {
-    return l.nin >= 1l && l.nout >= 1l && (l.q8 ? (!empty(l.wq) && l.nin % Q8_BLOCK_ELEMS == 0l) : (l.kq_fmt != 0 ? (!empty(l.kq) && l.nin % KQ_SB_ELEMS == 0l) : (!empty(l.w) || !empty(l.wt))))
-}
+def private pk_lin_gemv_ok(l : TtsLinear) : bool =>
+    l.nin >= 1l && l.nout >= 1l && (l.q8 ? (!empty(l.wq) && l.nin % Q8_BLOCK_ELEMS == 0l) : (l.kq_fmt != 0 ? (!empty(l.kq) && l.nin % KQ_SB_ELEMS == 0l) : (!empty(l.w) || !empty(l.wt))))
 
 //! the shared frames admission over the decode GEMV's lanes, every q8 route's bias within the zero row
 def private pk_frames_ok(m : PocketModel) : bool {
@@ -4830,9 +4818,8 @@ struct private PkGemvSite {
     lat_off : uint64
 }
 
-def private pk_site(var c : St2GpuCtx; var bx : MetalBuffer?; xoff : uint64; var by : MetalBuffer?; yoff : uint64 = 0ul) : PkGemvSite {
-    return PkGemvSite(bx = bx, xoff = xoff, by = by, yoff = yoff, bmod = c.slab, ln_w_off = 0ul, ln_b_off = 0ul, aux_off = 0ul, bnoise = c.slab, blat = c.slab)
-}
+def private pk_site(var c : St2GpuCtx; var bx : MetalBuffer?; xoff : uint64; var by : MetalBuffer?; yoff : uint64 = 0ul) : PkGemvSite =>
+    PkGemvSite(bx = bx, xoff = xoff, by = by, yoff = yoff, bmod = c.slab, ln_w_off = 0ul, ln_b_off = 0ul, aux_off = 0ul, bnoise = c.slab, blat = c.slab)
 
 //! The row GEMV at a site under one of the five stamp kinds.
 [arch(at = "../ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames")]

@@ -1209,7 +1209,7 @@ def private tw_affine_gate(t : T?; var dev, queue) {
             apart += abs(want[i] - (x[i] - b[i % width]) * m[i % width]) > 1e-3 ? 1 : 0
         }
         t |> success(apart > total / 2, "{tag}: the fixture tells the scale apart ({apart} of {total})")
-        var ka = TwAffineArgs(width = uint(width), total = uint(total), scale = scale)
+        var ka = GkAffineRowsArgs(width = uint(width), total = uint(total), scale = scale)
         let bx = mc |> io_(x)
         let bb = mc |> in_(b)
         let bm = mc |> in_(m)
@@ -1258,7 +1258,7 @@ def private tw_pool2d_gate(t : T?; var dev, queue) {
             apart += abs(a - b) > 1e-3 ? 1 : 0
         }
         t |> success(apart > total / 2, "{tag}: the fixture tells a one-axis pool apart ({apart} of {total})")
-        var ka = TwPool2dArgs(width = uint(width), gw = uint(gw), k = uint(k), ow = uint(ow), total = uint(total))
+        var ka = GkPool2dArgs(width = uint(width), gw = uint(gw), k = uint(k), ow = uint(ow), total = uint(total))
         let bx = mc |> in_(x)
         let by = mc |> out_(total)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {

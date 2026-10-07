@@ -9699,6 +9699,39 @@ class TowerPkDw : GkDwConvRows {
 }
 
 //! GEGLU-quick with the gemma4v bounds on the template both homes stamp
+//! the vision stems' and tails' row kernels on the templates both homes stamp
+[vk_dispatch(name = "tower_pos_add_2d_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerPosAdd2d : GkPosAdd2D {
+    [spirv_kernel(local_size_x = 256, name = "tower_pos_add_2d_cls_spv")]
+    def run {
+        pos_add_2d_body()
+    }
+}
+
+[vk_dispatch(name = "tower_stem_asm_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerStemAsm : GkStemAsm {
+    [spirv_kernel(local_size_x = 256, name = "tower_stem_asm_cls_spv")]
+    def run {
+        stem_asm_body()
+    }
+}
+
+[vk_dispatch(name = "tower_pool_2d_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerPool2d : GkPool2d {
+    [spirv_kernel(local_size_x = 256, name = "tower_pool_2d_cls_spv")]
+    def run {
+        pool_2d_body()
+    }
+}
+
+[vk_dispatch(name = "tower_affine_rows_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerAffineRows : GkAffineRows {
+    [spirv_kernel(local_size_x = 256, name = "tower_affine_rows_cls_spv")]
+    def run {
+        affine_rows_body()
+    }
+}
+
 [vk_dispatch(name = "tower_geglu_cls", grid = "wgs", params = "wgs : int64")]
 class TowerGeglu : GkGeglu {
     [spirv_kernel(local_size_x = 256, name = "tower_geglu_cls_spv")]

@@ -1897,6 +1897,126 @@ class template GkRowGather {
     }
 }
 
+struct GkPosAdd2DArgs {
+    dim : uint
+    ncols : uint         //! the patch grid's width in rows
+    pos_entries : uint   //! the x rows of the table; the y rows follow them
+    total : uint
+    tboff : uint         //! the table's element base in tbl
+}
+
+//! the gemma4uv 2-axis position add: row p gains its x-table row (p % ncols) and its y-table row (pos_entries + p / ncols), one
+//! element an invocation, the CPU loop's (row + ex) + ey order
+[ |> template_struct_instance]
+class template GkPosAdd2D {
+    @ssbo @binding = 0 @role = "readwrite" x : array<float>
+    @ssbo @binding = 1 @role = "weight" tbl : array<float>
+    @kargs pa : GkPosAdd2DArgs
+
+    def pos_add_2d_body {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.total) {
+            let p = gid / pa.dim
+            let i = gid % pa.dim
+            let ex = tbl[pa.tboff + (p % pa.ncols) * pa.dim + i]
+            let ey = tbl[pa.tboff + (pa.pos_entries + p / pa.ncols) * pa.dim + i]
+            x[gid] = (x[gid] + ex) + ey
+        }
+    }
+}
+
+struct GkStemAsmArgs {
+    dim : uint
+    pw : uint      //! the patch grid's width
+    total : uint
+    boff : uint    //! the conv bias row's element base in b
+    poff : uint    //! the position rows' element base in pos
+}
+
+//! the qwen3v stem assemble: residual row r of the merge-adjacent walk (2x2 partners adjacent, groups row-major) gathers its
+//! natural-order conv row plus the conv bias plus that row's position, one element an invocation, the CPU stem's (crow + bp) + prow order
+[ |> template_struct_instance]
+class template GkStemAsm {
+    @ssbo @binding = 0 @role = "read" xn : array<float>
+    @ssbo @binding = 1 @role = "weight" b : array<float>
+    @ssbo @binding = 2 @role = "read" pos : array<float>
+    @ssbo @binding = 3 @role = "write" x : array<float>
+    @kargs pa : GkStemAsmArgs
+
+    def stem_asm_body {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.total) {
+            let r = gid / pa.dim
+            let i = gid % pa.dim
+            let g = r / 4u
+            let sub = r % 4u
+            let gcols = max(1u, pa.pw / 2u)
+            let src = ((g / gcols) * 2u + sub / 2u) * pa.pw + (g % gcols) * 2u + sub % 2u
+            x[gid] = (xn[src * pa.dim + i] + b[pa.boff + i]) + pos[pa.poff + src * pa.dim + i]
+        }
+    }
+}
+
+struct GkPool2dArgs {
+    width : uint   //! a row's width
+    gw : uint      //! the source grid's width, in rows
+    k : uint       //! the pool's side
+    ow : uint      //! the pooled grid's width
+    total : uint   //! output elements
+}
+
+//! a vision tail's mean pool: y [oh*ow x width] the mean of each k x k block of the row grid x [gh*gw x width], one element an invocation
+[ |> template_struct_instance]
+class template GkPool2d {
+    @ssbo @binding = 0 @role = "read" x : array<float>
+    @ssbo @binding = 1 @role = "write" y : array<float>
+    @kargs pa : GkPool2dArgs
+
+    def pool_2d_body {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.total) {
+            let o = gid / pa.width
+            let c = gid % pa.width
+            let oy = o / max(1u, pa.ow)
+            let ox = o % max(1u, pa.ow)
+            var sum = 0.0
+            var dy = 0u
+            while (dy < pa.k) {
+                var dx = 0u
+                while (dx < pa.k) {
+                    sum += x[((oy * pa.k + dy) * pa.gw + ox * pa.k + dx) * pa.width + c]
+                    dx++
+                }
+                dy++
+            }
+            y[gid] = sum / float(pa.k * pa.k)
+        }
+    }
+}
+
+struct GkAffineRowsArgs {
+    width : uint   //! a row's width
+    total : uint
+    scale : float
+}
+
+//! a vision tail's row standardize, in place: x = (x * scale - b[c]) * m[c] over rows of `width`, one element an invocation
+[ |> template_struct_instance]
+class template GkAffineRows {
+    @ssbo @binding = 0 @role = "readwrite" x : array<float>
+    @ssbo @binding = 1 @role = "read" b : array<float>
+    @ssbo @binding = 2 @role = "read" m : array<float>
+    @kargs pa : GkAffineRowsArgs
+
+    def affine_rows_body {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.total) {
+            let c = gid % pa.width
+            x[gid] = (x[gid] * pa.scale - b[c]) * m[c]
+        }
+    }
+}
+
 struct GkPostAddLnArgs {
     d : uint
     rows : uint

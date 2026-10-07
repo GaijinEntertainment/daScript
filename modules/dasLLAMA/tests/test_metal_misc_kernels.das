@@ -876,13 +876,55 @@ def private pos_add_gate(t : T?; var dev, queue; npos, dim, ncols, pos_entries :
         }
         let bx = mc |> io_(x)
         let btbl = mc |> in_(tbl)
-        let bdim = mc |> in_plain([uint(dim)])
-        let bcols = mc |> in_plain([uint(ncols)])
-        let bpe = mc |> in_plain([uint(pos_entries)])
-        let btot = mc |> in_plain([uint(total)])
+        var pa = GkPosAdd2DArgs(dim = uint(dim), ncols = uint(ncols), pos_entries = uint(pos_entries), total = uint(total), tboff = 0u)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bx], mc.buf[btbl], 0ul, mc.buf[bdim], mc.buf[bcols], mc.buf[bpe], mc.buf[btot], int64(total))
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[btbl], pa, int64(total))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bx], want, BAR_BITS, Shape(row_width = dim))
+    }
+}
+
+//! the qwen3v stem assemble on the shared stamp, bit-exact vs the CPU stem's (crow + bp) + prow order over a pw x ph patch grid
+//! (pw, ph even): residual row r of the merge-adjacent walk gathers conv row src, the walk told apart from the natural order
+def private q3v_stem_gate(t : T?; var dev, queue; pw, ph, dim : int) {
+    let tag = "q3v_stem pw={pw} ph={ph} dim={dim}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_q3v_stem)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let npos = pw * ph
+        let total = npos * dim
+        let boff = 5
+        let poff = 3
+        var inscope xn <- [for (i in range(total)); 1.0e3 + 0.37 * float(i % 29)]
+        var inscope b <- [for (i in range(boff + dim)); 1.0e-3 * float(i % 41 + 1)]
+        var inscope pos <- [for (i in range(poff + total)); 9.0e2 + 0.21 * float(i % 19)]
+        var inscope want : array<float>
+        want |> resize(total)
+        var moved = 0
+        for (r in range(npos)) {
+            let g = r / 4
+            let sub = r % 4
+            let gcols = pw / 2
+            let src = ((g / gcols) * 2 + sub / 2) * pw + (g % gcols) * 2 + sub % 2
+            moved += src != r ? 1 : 0
+            for (i in range(dim)) {
+                want[r * dim + i] = (xn[src * dim + i] + b[boff + i]) + pos[poff + src * dim + i]
+            }
+        }
+        t |> success(moved > npos / 2, "{tag}: the merge walk moves most rows off the natural order ({moved} of {npos})")
+        let bxn = mc |> in_(xn)
+        let bb = mc |> in_(b)
+        let bpos = mc |> in_(pos)
+        let bx = mc |> out_(total)
+        var pa = GkStemAsmArgs(dim = uint(dim), pw = uint(pw), total = uint(total), boff = uint(boff), poff = uint(poff))
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bxn], mc.buf[bb], mc.buf[bpos], mc.buf[bx], pa, int64(total))
             }
         }
         return if (!ran)
@@ -1802,7 +1844,9 @@ def test_metal_misc_kernels(t : T?) {
                 ew2_hx_gate(t, dev, queue, true, true, true, 40, 64, 96)
                 ew2_hx_gate(t, dev, queue, true, false, true, 40, 64, 96)
                 pos_add_gate(t, dev, queue, 98, 64, 14, 1120)   // 672x336 grid: NON-square, axis order visible
-                pos_add_gate(t, dev, queue, 49, 64, 7, 1120)    // square control
+                pos_add_gate(t, dev, queue, 49, 64, 7, 1120)
+                q3v_stem_gate(t, dev, queue, 6, 4, 70)   // a non-square grid at a width off the 64-thread group
+                q3v_stem_gate(t, dev, queue, 8, 8, 64)    // square control
                 clamp_gate(t, dev, queue, 1000, CLAMP_IN, false)    // separate dst, %64 tail
                 clamp_gate(t, dev, queue, 1000, CLAMP_OUT, true)    // in place
                 // the CPU's f16-table GEGLU-quick: the kernel's binary16 round trips land on its table values, so the approx bar (one f16 ulp of form slack)
