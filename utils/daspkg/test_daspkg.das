@@ -5,6 +5,7 @@ require dastest/testing_boost public
 
 require daslib/fio
 require daslib/clargs
+require daslib/defer
 require strings
 require daslib/strings_boost
 
@@ -3116,4 +3117,85 @@ def test_parse_args_update_index_flags(t : T?) {
 [test]
 def test_package_hook_failures(t : T?) {
     failing_package_hooks_do_not_publish_partial_metadata(t)
+}
+
+[test]
+def test_release_external_module_arguments(t : T?) {
+    let tmp = create_temp_directory_result("daspkg module path ")
+    if (!(tmp is value)){t |> failure("temporary module directory unavailable"); return }
+    let root = tmp as value
+    defer(){force_rmdir(root)}
+    let module_dir = path_join(root, get_platform_name() == "windows" ? "external module" : "external module's $(not-a-command)")
+    mkdir(module_dir)
+    fwrite(path_join(module_dir, ".das_module"), "options gen2\nrequire daslib/fio\n[export]\ndef initialize(root : string) \{ register_native_path(\"release_fixture\", \"value\", root + \"/value.das\") \}\n")
+    fwrite(path_join(module_dir, "value.das"), "options gen2\nlet RELEASE_FIXTURE_VALUE = 42\n")
+    let script = path_join(root, "main.das")
+    fwrite(script, "options gen2\nrequire release_fixture/value\n[export]\ndef main()\{print(\"mounted: \{RELEASE_FIXTURE_VALUE}\\n\")\}\n")
+    let exe = path_join(get_das_root(), get_platform_name() == "windows" ? "bin/daslang.exe" : "bin/daslang")
+    for (flag in ["-load_module", "-load-module", "--load_module", "--load-module"]) {
+        let args = release_module_args([exe, flag, module_dir, "main.das", "--", "-load_module", "must-not-load"])
+        var output : string
+        let rc = run_cmd("\"{exe}\"{args} \"{script}\"", output)
+        t |> equal(rc, 0, output)
+        t |> success(find(output, "mounted: 42") >= 0, output)
+    }
+    t |> equal(release_module_args([exe, "main.das", "--", "-load_module", module_dir]), "")
+    fwrite(path_join(root, "companion.das"), "options gen2\nrequire release_fixture/value\n[export]\ndef main()\{print(\"companion: \{RELEASE_FIXTURE_VALUE}\\n\")\}\n")
+    fwrite(path_join(root, ".das_package"), "options gen2\nrequire daslib/daspkg\n[export]\ndef package()\{package_name(\"mounted_app\")}\n[export]\ndef release()\{release_main(\"main.das\"); release_program(\"mounted_companion\", \"companion.das\")}\n")
+    let mounted = release_module_args([exe, "-load_module", module_dir])
+    let payload = "\{\"kernels\":\{\"mounted_stub\":\{\"suffix\":\"stub\"\}\},\"provenance\":\{\"mode\":\"stub\"\}\}"
+    fwrite(path_join(root, "stub_payload.json"), payload)
+    fwrite(path_join(root, "stub_tuner.das"), "options gen2\nrequire daslib/fio\nrequire release_fixture/value\n[export]\ndef main()\{\n    assert(RELEASE_FIXTURE_VALUE == 42)\n    fwrite(get_env_variable(\"DAS_TUNE_MANIFEST\"), fread(get_env_variable(\"DASPKG_MOUNT_PAYLOAD\")))\n    print(\"mounted tuner: \{RELEASE_FIXTURE_VALUE}\\n\")\n\}\n")
+    fwrite(script, "options gen2\nrequire release_fixture/value\nrequire daslib/tune\nrequire llvm/daslib/llvm_tune\n[tune_scope(name=\"mounted_scope\", tuner=\"stub_tuner.das\")]\nstruct MountedScope\{unused : int\}\n[export]\ndef main()\{print(\"mounted: \{RELEASE_FIXTURE_VALUE}\\n\")\}\n")
+    let old_payload = get_env_variable("DASPKG_MOUNT_PAYLOAD")
+    set_env_variable("DASPKG_MOUNT_PAYLOAD", path_join(root, "stub_payload.json"))
+    defer(){set_env_variable("DASPKG_MOUNT_PAYLOAD", old_payload)}
+    let out_dir = path_join(root, "out")
+    var output : string
+    let release_rc = run_cmd("\"{exe}\"{mounted} \"{get_das_root()}/utils/daspkg/main.das\" -- release --root \"{root}\" --out \"{out_dir}\"", output)
+    t |> equal(release_rc, 0, output)
+    if (release_rc == 0) {
+        let minted = path_join(root, "main.tune.json")
+        t |> success(fexist(minted), "the external-module tuner minted the sidecar")
+        t |> equal(fread(minted), payload)
+        let shipped = path_join(bundle_artifacts_dir(out_dir, "mounted_app"), "mounted_app.tune.json")
+        t |> equal(fread(shipped), payload, "the tuner payload ships with the main executable")
+        let companion = path_join(bundle_artifacts_dir(out_dir, "mounted_app"), get_platform_name() == "darwin" ? "mounted_companion" : "mounted_companion.exe")
+        let companion_rc = run_cmd("\"{companion}\"", output)
+        t |> equal(companion_rc, 0, output)
+        t |> success(find(output, "companion: 42") >= 0, output)
+        let app = bundle_exe_path(out_dir, "mounted_app")
+        let run_rc = run_cmd("\"{app}\"", output)
+        t |> equal(run_rc, 0, output)
+        t |> success(find(output, "mounted: 42") >= 0, output)
+    }
+    let wasm_lib_dir = get_env_variable("DASPKG_TEST_WASM_LIB_DIR")
+    if (!empty(wasm_lib_dir)) {
+        fwrite(script, "options gen2\nrequire release_fixture/value\n[export]\ndef main()\{print(\"mounted: \{RELEASE_FIXTURE_VALUE}\\n\")\}\n")
+        let wasm_out = path_join(root, "wasm_out")
+        let wasm_rc = run_cmd("\"{exe}\"{mounted} \"{get_das_root()}/utils/daspkg/main.das\" -- release wasm --root \"{root}\" --out \"{wasm_out}\" --wasm-lib-dir \"{wasm_lib_dir}\"", output)
+        t |> equal(wasm_rc, 0, output)
+        t |> success(fexist(path_join(wasm_out, "mounted_app/mounted_app.wasm")), "wasm cross-compiler resolves the mounted namespace")
+    }
+}
+
+[test]
+def test_release_external_module_argument_errors(t : T?) {
+    let missing = panic_text() {
+        release_module_args(["daslang", "-load_module"])
+    }
+    t |> success(find(missing, "requires a module directory") >= 0, missing)
+    if (get_platform_name() == "windows") {
+        for (path in ["C:/module%name", "C:/module!name", "C:/module\"name", "C:/module\nname", "C:/module\rname"]) {
+            let why = panic_text() {
+                release_module_args(["daslang", "-load_module", path])
+            }
+            t |> success(find(why, "Unsupported shell character") >= 0, why)
+            t |> success(find(why, path) >= 0, "the diagnostic identifies the rejected directory: {why}")
+        }
+        t |> equal(release_module_args(["daslang", "-load_module", "C:\\safe module\\path"]), " -load_module \"C:/safe module/path\"")
+    }
+    let repeated = release_module_args(["daslang", "-load_module", "first", "-load-module", "second", "--", "-load_module", "ignored"])
+    let expected = get_platform_name() == "windows" ? " -load_module \"first\" -load_module \"second\"" : " -load_module 'first' -load_module 'second'"
+    t |> equal(repeated, expected)
 }
