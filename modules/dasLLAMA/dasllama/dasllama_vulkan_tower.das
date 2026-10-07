@@ -364,6 +364,8 @@ struct private VtResident {
     vis_col_dev : uint64
     vis_w_dev : uint64        //! the stem's and tail's f32 GEMM rows the blob does not hold as f32 (the bf16 planes converted)
     vis_w_bytes : int64
+    vis_idx_dev : uint64      //! a stem's row map (qwen25v's window sort), uint32 a row
+    vis_idx_bytes : int64
     vis_gen : int64           //! bumped on every vision scratch rebuild: the family's sets are built again when it moves
     vis_sets_gen : int64
     s_vis_im2col : VkDescriptorSet
@@ -421,6 +423,7 @@ var private g_vt_q3a_front : VtResident   //! the qwen3a conv front's resident: 
 var private @scratch @exact_size g_vt_rope2d_tabs : array<float>   //! the packed rope tables staging, [row][cx | sx | cy | sy]
 var private @scratch @exact_size g_vt_maps : array<uint>           //! the encode's schedule map offsets, one a GEMM record
 var private @scratch @exact_size g_vt_wlo : array<uint>            //! the window table staging (nwin + 1)
+var private @scratch @exact_size g_vt_idx : array<uint>            //! the window-sort row map staging, one encode's rows
 var private @scratch @exact_size g_vt_ln_offs : array<LayerOffs>       //! the pre-LN chain's block offsets, one record a block
 
 [cold_path]
@@ -2225,16 +2228,17 @@ struct private VtVisTail {
 //! uploaded by the caller when the buffer is fresh), and the tail's rows; `vis_gen` moves on a rebuild, so the family builds its
 //! sets again over the new buffers
 [cold_path]
-def private vt_vis_bufs(var r : VtResident; w, h, pd, vw_bytes, tail_dim : int64) : bool {
+def private vt_vis_bufs(var r : VtResident; w, h, pd, vw_bytes, idx_bytes, tail_dim : int64) : bool {
     let cap = r.cap_rows
     let bpl = w * h * 3l * 4l
     let bcol = cap * pd * 4l
-    if (r.vis_cap != cap || r.vis_pd != pd || r.vis_planes_bytes < bpl || r.vis_w_bytes != vw_bytes) {
+    if (r.vis_cap != cap || r.vis_pd != pd || r.vis_planes_bytes < bpl || r.vis_w_bytes != vw_bytes || r.vis_idx_bytes != idx_bytes) {
         vt_vis_release(r)
         r.oom = false
         r.vis_planes_dev = vt_dev_buf(r, bpl)
         r.vis_col_dev = vt_dev_buf(r, bcol)
         r.vis_w_dev = vw_bytes > 0l ? vt_dev_buf(r, vw_bytes) : 0ul
+        r.vis_idx_dev = idx_bytes > 0l ? vt_dev_buf(r, idx_bytes) : 0ul
         if (r.oom) {
             vt_vis_release(r)
             return false
@@ -2244,6 +2248,7 @@ def private vt_vis_bufs(var r : VtResident; w, h, pd, vw_bytes, tail_dim : int64
         r.vis_planes_bytes = bpl
         r.vis_col_bytes = bcol
         r.vis_w_bytes = vw_bytes
+        r.vis_idx_bytes = idx_bytes
         r.vis_gen++
     }
     if (r.tail_cap != cap || r.tail_dim != tail_dim) {
@@ -2263,8 +2268,12 @@ def private vt_vis_release(var r : VtResident) {
         if (r.vis_w_bytes > 0l) {
             destroy_device_buf(r.vis_w_dev)
         }
+        if (r.vis_idx_bytes > 0l) {
+            destroy_device_buf(r.vis_idx_dev)
+        }
         r.vis_cap = 0l
         r.vis_w_bytes = 0l
+        r.vis_idx_bytes = 0l
         r.vis_gen++
     }
 }
@@ -3106,7 +3115,7 @@ def private vulkan_gemma3v_chain(t : Gemma3vTower; var s : Gemma3vState; planes 
     let tc_ff = cm2 ? cm2_tile_cols(ff, npos) : 0l
     let g_d = cm2 ? cm2_tiles_at(d, npos, tc_d) : vt_gemm_groups(d, npos)
     let g_ff = cm2 ? cm2_tiles_at(ff, npos, tc_ff) : vt_gemm_groups(ff, npos)
-    if (!vt_ln_scratch(r, t.n_layer, npos, d, ff, hs, dp, g_d, g_ff, khr, cm2, tc_d, tc_ff, v, vff, 0l) || !vt_vis_bufs(r, w, h, pd, 0l, max(d, t.proj_dim))) {
+    if (!vt_ln_scratch(r, t.n_layer, npos, d, ff, hs, dp, g_d, g_ff, khr, cm2, tc_d, tc_ff, v, vff, 0l) || !vt_vis_bufs(r, w, h, pd, 0l, 0l, max(d, t.proj_dim))) {
         return vt_decline(r, VulkanTowerDecline.memory)
     }
     let cap = r.cap_rows
@@ -3328,8 +3337,11 @@ def private vulkan_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : in
     return vt_served(r, s.x, bx, npos, t.n_layer)
 }
 
+//! the qwen25v chain on the device off the planes, one command buffer: the patch im2col, the folded patch conv (the f32 tile over
+//! the blob) into the natural order, the window-sort gather into x, the blocks over the halfword twin with the post-rms on the last
+//! seam, then the merger tail (mm0 + bias, tanh GELU, mm2 + bias) over the rows as [nout x 4d]; `s.mout` takes the sorted soft tokens
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape, its two attention arms the routing
+def private vulkan_qwen25v_chain(t : Qwen25vTower; var s : Qwen25vState; planes : array<float>; w, h, npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape, its two attention arms the routing
     var r & = g_vt_q25v
     if (!vt_gate(r, t.wblob.n > 0l && !t.blk_bf16)) {
         return false
@@ -3339,11 +3351,14 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
     let hs = d / t.n_head
     let hsp = hs <= 64l ? 64l : 128l
     let dp = t.n_head * hsp
+    let pd = q25v_patch_pad(t)
+    let d4 = 4l * d
+    let nout = npos / 4l
     let nwin = long_length(s.win_lo) - 1l
     let has_win = t.n_wa_pattern > 1l && t.n_layer > 0l   //! a window layer exists: block 0 attends per window whenever the pattern spares a block
     let wmax = has_win ? qwen25v_window_widest(s) : 0l
     if (hs > 128l || hsp != 128l || hs % 2l != 0l || d % 64l != 0l || ff % 64l != 0l || npos > VT_MAX_ENCODE_ROWS || npos <= 0l || nwin <= 0l
-            || (has_win && (wmax > 64l || hs != VT_WIN_HS))) {
+            || npos % 4l != 0l || npos != (w / t.patch) * (h / t.patch) || (has_win && (wmax > 64l || hs != VT_WIN_HS))) {
         return vt_decline(r, VulkanTowerDecline.shape)  //! the chain's sets are built at the 128 head alone (the family's 80-wide heads)
     }
     let arm = vt_arm(r, true)
@@ -3354,17 +3369,18 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
     let gemm_khr = arm.gemm_khr
     let w_off = t.layer_w
     let w_n = t.n_layer * t.layer_w_stride
-    if (!vk_range_ok(w_n * 2l) || !vk_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, dp, 0l, false, true))) {
+    if (!vk_range_ok(w_n * 2l) || !vk_range_ok(t.blob.n * 4l) || !vk_range_ok(vt_scratch_max_bytes(vt_cap_rows(npos), d, ff, dp, 0l, false, true))) {
         return vt_decline(r, VulkanTowerDecline.shape)
     }
     let fa_ok = fa_stamp_ensure(khr, hsp, false, false, false, false, true)
     if (!fa_ok || !f16_gemm_ensure(gemm_khr) || !ensure_tower_clamp_cvt_cls() || !ensure_tower_rms_cls() || !ensure_tower_bias_act_cls()
             || !ensure_tower_rope_tab_cls() || !ensure_tower_hpad_cls() || !ensure_tower_hpad16_cls() || !ensure_tower_hunpad_cls()
-            || !ensure_tower_win_attn_cls() || !ensure_tower_post_add_rms_cls() || !ensure_tower_bias_gate16_cls()) {
+            || !ensure_tower_win_attn_cls() || !ensure_tower_post_add_rms_cls() || !ensure_tower_bias_gate16_cls() || !ensure_tower_patch_im2col_cls()
+            || !ensure_f32_gemm_cls() || !ensure_f32_gemm_b_cls() || !ensure_tts_row_gather_cls() || !ensure_tower_act_cls()) {
         return vt_decline(r, VulkanTowerDecline.device)
     }
-    let key = vt_key_f16(t.wblob, w_off, w_n, t.blob, t.layer_f, t.n_layer * t.layer_f_stride, t.n_layer)
-    if (r.key != key && !vt_upload_f16(r, key, t.wblob, w_off, w_n, t.blob, t.layer_f, t.n_layer * t.layer_f_stride)) {
+    let key = vt_key_f16(t.wblob, w_off, w_n, t.blob, 0l, t.blob.n, t.n_layer)
+    if (r.key != key && !vt_upload_f16(r, key, t.wblob, w_off, w_n, t.blob, 0l, t.blob.n)) {
         return vt_decline(r, VulkanTowerDecline.memory)
     }
     if (!vt_scratch_f16_fits(r, npos, nwin, d, ff, dp, khr, gemm_khr)) {
@@ -3373,14 +3389,36 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
         }
         vt_sets_q25v(r)
     }
+    let cap = r.cap_rows
+    if (!vt_vis_bufs(r, w, h, pd, 0l, cap * 4l, max(d4, t.proj_dim))) {
+        return vt_decline(r, VulkanTowerDecline.memory)
+    }
+    if (r.vis_sets_gen != r.vis_gen) {   //! the sets over the fresh buffers: the patch GEMM off the blob into the natural-order plane, the gather into x, the merger over xb
+        let bx = cap * d * 4l
+        let bp = cap * r.tail_dim * 4l
+        r.s_vis_im2col = set_tower_patch_im2col_cls(fixed_array(r.vis_planes_dev, r.vis_col_dev), fixed_array(r.vis_planes_bytes, r.vis_col_bytes), fixed_array(VT_STEM_MEL, VT_STEM_COL))
+        r.s_vis_patch = set_f32_gemm_cls(fixed_array(r.norms_dev, r.vis_col_dev, r.yo_dev), fixed_array(r.norms_bytes, r.vis_col_bytes, bx), fixed_array(0u, VT_STEM_COL, VT_YO))
+        r.s_vis_pos = set_tts_row_gather_cls(fixed_array(r.yo_dev, r.vis_idx_dev, r.norms_dev, r.norms_dev, r.x_dev), fixed_array(bx, r.vis_idx_bytes, r.norms_bytes, r.norms_bytes, bx),
+            fixed_array(VT_YO, 0u, 0u, 0u, VT_X))
+        r.s_vis_pool = set_f32_gemm_b_cls(fixed_array(r.norms_dev, r.xb_dev, r.tail_out_dev, r.norms_dev), fixed_array(r.norms_bytes, bx, bp, r.norms_bytes), fixed_array(0u, VT_XB, VT_TAIL_OUT, 0u))
+        r.s_vis_affine = set_tower_act_cls(fixed_array(r.tail_out_dev), fixed_array(bp), fixed_array(VT_TAIL_OUT))
+        r.s_vis_proj = set_f32_gemm_b_cls(fixed_array(r.norms_dev, r.tail_out_dev, r.tail_proj_dev, r.norms_dev), fixed_array(r.norms_bytes, bp, bp, r.norms_bytes), fixed_array(0u, VT_TAIL_OUT, VT_TAIL_PROJ, 0u))
+        r.vis_sets_gen = r.vis_gen
+    }
     g_vt_wlo |> reserve(nwin + 1l)
     g_vt_wlo |> resize(nwin + 1l)
     qwen25v_window_table(s, unsafe(addr(g_vt_wlo[0])))
-    let bx = npos * d * 4l
+    g_vt_idx |> reserve(npos)
+    g_vt_idx |> resize(npos)
+    for (i in range64(npos)) {
+        g_vt_idx[i] = uint(s.src_of[i])
+    }
     let half = hs / 2l
     let btab = npos * half * 4l
+    let bp_out = nout * t.proj_dim * 4l
     unsafe {
-        upload_region_at(r.x_dev, 0l, addr<uint8 const?>(s.x[0]), bx)
+        upload_region_at(r.vis_planes_dev, 0l, addr<uint8 const?>(planes[0]), w * h * 3l * 4l)
+        upload_region_at(r.vis_idx_dev, 0l, addr<uint8 const?>(g_vt_idx[0]), npos * 4l)
         upload_region_at(r.cos_dev, 0l, addr<uint8 const?>(s.cos_t[0]), btab)
         upload_region_at(r.sin_dev, 0l, addr<uint8 const?>(s.sin_t[0]), btab)
         upload_region_at(r.wlo_dev, 0l, addr<uint8 const?>(g_vt_wlo[0]), (nwin + 1l) * 4l)
@@ -3394,7 +3432,6 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
     let wg_unpad = (npos * dp + 255l) / 256l
     let wg_rope = (npos * t.n_head * half + 255l) / 256l
     let wg_fa = fa_stamp_wgs(khr, t.n_head, npos)
-    let norms_base = t.layer_f
     let scale = 1.0 / sqrt(float(hs))
     var pc_fa = FaArgs(rows = uint(npos), w0 = 0u, qd = uint(dp), kvd = uint(dp), kv_mul = 1u, kvbase = 0u, scale = scale, window = 0u, sinkoff = 0u)
     var pc_rs = GkRestrideArgs(rows = uint(npos), rows_pad = uint(npos_pad), nheads = uint(t.n_head), hs = uint(hs), hsp = uint(hsp), sstride = uint(d), soff = 0u)
@@ -3405,67 +3442,89 @@ def private vulkan_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos :
     var pc_bias = GkBiasActArgs(d = uint(d), nelem = uint(nd), boff = 0u, act = BIAS_ACT_NONE)
     var pc_glu = GkBiasGateArgs(d = uint(ff), nelem = uint(nff), goff = 0u, uoff = 0u, act = BIAS_ACT_SILU)
     var pc_win = GkWinAttnArgs(nheads = uint(t.n_head), hs = uint(hs), scale = scale)
-    cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
+    vt_chain_one_shot("qwen25v", t.n_layer, npos) $(raw : VkCommandBuffer; var hz : VkHaz) {
+        var pc_im = GkPatchIm2colArgs(w = uint(w), h = uint(h), p = uint(t.patch), n_cols = uint(w / t.patch), row_dim = uint(pd), npos = uint(npos),
+            total = uint(cap * pd), scale = 1.0, shift = 0.0)
+        enc_tower_patch_im2col_cls(raw, hz, r.s_vis_im2col, pc_im, (cap * pd + 255l) / 256l)
+        vt_pt(raw, VtProfRole.im2col)
+        var pc_patch = F32GemmArgs(n = uint(pd), d = uint(d), rows = uint(npos), woff = uint(t.patch_w), wstride = uint(pd), boff = 0u, xoff = 0u, xstride = uint(pd),
+            yoff = 0u, ystride = uint(d))
+        enc_f32_gemm_cls(raw, hz, r.s_vis_patch, pc_patch, f32_gemm_wgs(npos, d))
+        vt_pt(raw, VtProfRole.gemm_pw)
+        var pc_g = GkRowGatherArgs(c = uint(d), rows = uint(npos), aoff = 0u, boff = 0u, coff = 0u, out_off = 0u, add_b = 0u, add_c = 0u, scale = 1.0)
+        enc_tts_row_gather_cls(raw, hz, r.s_vis_pos, pc_g, nd)
+        vt_pt(raw, VtProfRole.shuffle)
         for (l in range64(t.n_layer)) {
             let o = qwen25v_block_offs(t, l)
             let full = qwen25v_layer_full(t, l)
             if (l == 0l) {
-                var pc = gk_rms_args(uint(d), uint(npos), t.eps, uint(o.ln1_w - norms_base))
-                enc_tower_rms_cls(raw, h, r.s_rms, pc, npos)
+                var pc = gk_rms_args(uint(d), uint(npos), t.eps, uint(o.ln1_w))
+                enc_tower_rms_cls(raw, hz, r.s_rms, pc, npos)
             }
-            vt_cvt16(raw, h, r.s_cvt_xb, nd)
+            vt_cvt16(raw, hz, r.s_cvt_xb, nd)
             pc_gd.woff = uint(o.w[QWEN25V_GEMM_Q] - w_off)
-            f16_gemm_enc(gemm_khr, raw, h, r.s_q, pc_gd, npos, d)
-            pc_bias.boff = uint(o.b[QWEN25V_GEMM_Q] - norms_base)
-            enc_tower_bias_act_cls(raw, h, r.s_bias_q, pc_bias, wg_nd)
+            f16_gemm_enc(gemm_khr, raw, hz, r.s_q, pc_gd, npos, d)
+            pc_bias.boff = uint(o.b[QWEN25V_GEMM_Q])
+            enc_tower_bias_act_cls(raw, hz, r.s_bias_q, pc_bias, wg_nd)
             pc_gd.woff = uint(o.w[QWEN25V_GEMM_K] - w_off)
-            f16_gemm_enc(gemm_khr, raw, h, r.s_k, pc_gd, npos, d)
-            pc_bias.boff = uint(o.b[QWEN25V_GEMM_K] - norms_base)
-            enc_tower_bias_act_cls(raw, h, r.s_bias_k, pc_bias, wg_nd)
+            f16_gemm_enc(gemm_khr, raw, hz, r.s_k, pc_gd, npos, d)
+            pc_bias.boff = uint(o.b[QWEN25V_GEMM_K])
+            enc_tower_bias_act_cls(raw, hz, r.s_bias_k, pc_bias, wg_nd)
             pc_gd.woff = uint(o.w[QWEN25V_GEMM_V] - w_off)
-            f16_gemm_enc(gemm_khr, raw, h, r.s_v, pc_gd, npos, d)
-            pc_bias.boff = uint(o.b[QWEN25V_GEMM_V] - norms_base)
-            enc_tower_bias_act_cls(raw, h, r.s_bias_v, pc_bias, wg_nd)
-            enc_tower_rope_tab_cls(raw, h, r.s_rope_tq, pc_rope, wg_rope)
-            enc_tower_rope_tab_cls(raw, h, r.s_rope_tk, pc_rope, wg_rope)
+            f16_gemm_enc(gemm_khr, raw, hz, r.s_v, pc_gd, npos, d)
+            pc_bias.boff = uint(o.b[QWEN25V_GEMM_V])
+            enc_tower_bias_act_cls(raw, hz, r.s_bias_v, pc_bias, wg_nd)
+            enc_tower_rope_tab_cls(raw, hz, r.s_rope_tq, pc_rope, wg_rope)
+            enc_tower_rope_tab_cls(raw, hz, r.s_rope_tk, pc_rope, wg_rope)
             if (full) {
-                enc_tower_hpad_cls(raw, h, r.s_pad_q, pc_rs, wg_pad)
-                enc_tower_hpad16_cls(raw, h, r.s_pad_k, pc_rs, wg_pad)
-                enc_tower_hpad16_cls(raw, h, r.s_pad_v, pc_rs, wg_pad)
-                fa_stamp_enc(khr, hsp, false, false, false, false, raw, h, r.s_fa, pc_fa, wg_fa, true)
-                enc_tower_hunpad_cls(raw, h, r.s_unpad, pc_rs, wg_unpad)
+                enc_tower_hpad_cls(raw, hz, r.s_pad_q, pc_rs, wg_pad)
+                enc_tower_hpad16_cls(raw, hz, r.s_pad_k, pc_rs, wg_pad)
+                enc_tower_hpad16_cls(raw, hz, r.s_pad_v, pc_rs, wg_pad)
+                fa_stamp_enc(khr, hsp, false, false, false, false, raw, hz, r.s_fa, pc_fa, wg_fa, true)
+                enc_tower_hunpad_cls(raw, hz, r.s_unpad, pc_rs, wg_unpad)
             } else {
-                enc_tower_win_attn_cls(raw, h, r.s_win, pc_win, nwin * t.n_head)
+                enc_tower_win_attn_cls(raw, hz, r.s_win, pc_win, nwin * t.n_head)
             }
-            vt_cvt16(raw, h, r.s_cvt_att, nd)
+            vt_cvt16(raw, hz, r.s_cvt_att, nd)
             pc_gd.woff = uint(o.w[QWEN25V_GEMM_O] - w_off)
-            f16_gemm_enc(gemm_khr, raw, h, r.s_o, pc_gd, npos, d)
-            var pc_post = GkPostAddLnArgs(d = uint(d), rows = uint(npos), boff = uint(o.b[QWEN25V_GEMM_O] - norms_base), eps = t.eps, ln_on = 1u, lnoff = uint(o.ln2_w - norms_base), lnboff = 0u,
-                ascale = 1.0, xboff = 0u)
-            enc_tower_post_add_rms_cls(raw, h, r.s_post_o_ln, pc_post, npos)
-            vt_cvt16(raw, h, r.s_cvt_xb, nd)
+            f16_gemm_enc(gemm_khr, raw, hz, r.s_o, pc_gd, npos, d)
+            var pc_post = gk_add_ln_args(uint(d), uint(npos), t.eps, uint(o.b[QWEN25V_GEMM_O]), true, uint(o.ln2_w), 0u)
+            enc_tower_post_add_rms_cls(raw, hz, r.s_post_o_ln, pc_post, npos)
+            vt_cvt16(raw, hz, r.s_cvt_xb, nd)
             pc_gff.woff = uint(o.w[QWEN25V_GEMM_GATE] - w_off)
-            f16_gemm_enc(gemm_khr, raw, h, r.s_hg, pc_gff, npos, ff)
+            f16_gemm_enc(gemm_khr, raw, hz, r.s_hg, pc_gff, npos, ff)
             pc_gff.woff = uint(o.w[QWEN25V_GEMM_UP] - w_off)
-            f16_gemm_enc(gemm_khr, raw, h, r.s_hu, pc_gff, npos, ff)
-            pc_glu.goff = uint(o.b[QWEN25V_GEMM_GATE] - norms_base)
-            pc_glu.uoff = uint(o.b[QWEN25V_GEMM_UP] - norms_base)
-            enc_tower_bias_gate16_cls(raw, h, r.s_glu, pc_glu, wg_nff)
+            f16_gemm_enc(gemm_khr, raw, hz, r.s_hu, pc_gff, npos, ff)
+            pc_glu.goff = uint(o.b[QWEN25V_GEMM_GATE])
+            pc_glu.uoff = uint(o.b[QWEN25V_GEMM_UP])
+            enc_tower_bias_gate16_cls(raw, hz, r.s_glu, pc_glu, wg_nff)
             pc_dn.woff = uint(o.w[QWEN25V_GEMM_DOWN] - w_off)
-            f16_gemm_enc(gemm_khr, raw, h, r.s_down, pc_dn, npos, d)
+            f16_gemm_enc(gemm_khr, raw, hz, r.s_down, pc_dn, npos, d)
             let last = l + 1l == t.n_layer
-            pc_post.boff = uint(o.b[QWEN25V_GEMM_DOWN] - norms_base)
-            pc_post.ln_on = last ? 0u : 1u
-            if (!last) {
-                pc_post.lnoff = uint(qwen25v_block_offs(t, l + 1l).ln1_w - norms_base)
-            }
-            enc_tower_post_add_rms_cls(raw, h, r.s_post_d_ln, pc_post, npos)
+            pc_post = gk_add_ln_args(uint(d), uint(npos), t.eps, uint(o.b[QWEN25V_GEMM_DOWN]), true, uint(last ? t.post_ln_w : qwen25v_block_offs(t, l + 1l).ln1_w), 0u)
+            enc_tower_post_add_rms_cls(raw, hz, r.s_post_d_ln, pc_post, npos)
         }
-        vhz_dep(raw, h, VT_X, 0u, true)
-        cmd_copy_range(raw, r.x_dev, 0l, r.host.buf, 0l, bx)
+        var pc_mm0 = F32GemmArgs(n = uint(d4), d = uint(d4), rows = uint(nout), woff = uint(t.mm0_w), wstride = uint(d4), boff = uint(t.mm0_b), xoff = 0u, xstride = uint(d4),
+            yoff = 0u, ystride = uint(d4))
+        enc_f32_gemm_b_cls(raw, hz, r.s_vis_pool, pc_mm0, f32_gemm_wgs(nout, d4))
+        vt_pt(raw, VtProfRole.gemm_pw)
+        var pc_act = GkBiasActArgs(d = uint(d4), nelem = uint(nout * d4), boff = 0u, act = BIAS_ACT_GELU_TANH)
+        enc_tower_act_cls(raw, hz, r.s_vis_affine, pc_act, rq_wgs(false, nout * d4))
+        vt_pt(raw, VtProfRole.bias)
+        var pc_mm2 = F32GemmArgs(n = uint(d4), d = uint(t.proj_dim), rows = uint(nout), woff = uint(t.mm2_w), wstride = uint(d4), boff = uint(t.mm2_b), xoff = 0u, xstride = uint(d4),
+            yoff = 0u, ystride = uint(t.proj_dim))
+        enc_f32_gemm_b_cls(raw, hz, r.s_vis_proj, pc_mm2, f32_gemm_wgs(nout, t.proj_dim))
+        vt_pt(raw, VtProfRole.gemm_pw)
+        vhz_dep(raw, hz, VT_TAIL_PROJ, 0u, true)
+        cmd_copy_range(raw, r.tail_proj_dev, 0l, r.tail_host.buf, 0l, bp_out)
+        vt_pt(raw, VtProfRole.copy_out)
     }
-    return vt_served(r, s.x, bx, npos, t.n_layer)
+    g_vt_convs++
+    g_vt_tail_encodes++
+    ensure_length(s.mout, nout * t.proj_dim)
+    return vt_served_from(r, r.tail_host, s.mout, bp_out, npos, t.n_layer)
 }
+
 
 [cold_path]
 def private vt_upload_g4v(var r : VtResident; key : uint64; t : Gemma4vTower; hs : int64; lay : Q8RepackLayout) : bool {
@@ -3557,7 +3616,7 @@ def private vulkan_gemma4v_chain(t : Gemma4vTower; var s : Gemma4vState; planes 
     }
     vt_bind_tile_sets(r, VtTile(v = v, tc = 0l), VtTile(v = vff, tc = 0l))
     let had_w = r.vis_w_bytes == vw_bytes && r.vis_cap > 0l
-    if (!vt_vis_bufs(r, w, h, pd, vw_bytes, max(d, t.proj_dim))) {
+    if (!vt_vis_bufs(r, w, h, pd, vw_bytes, 0l, max(d, t.proj_dim))) {
         return vt_decline(r, VulkanTowerDecline.memory)
     }
     let cap = r.cap_rows
@@ -4492,7 +4551,7 @@ def dasllama_vulkan_tower_register {
         register_gemma4v_gpu(@@vulkan_gemma4v_chain, @@vulkan_tower_on, false)
         register_gemma3v_gpu(@@vulkan_gemma3v_chain, @@vulkan_tower_on, false)
         register_qwen3v_gpu_blocks(@@vulkan_qwen3v_blocks)
-        register_qwen25v_gpu_blocks(@@vulkan_qwen25v_blocks)
+        register_qwen25v_gpu(@@vulkan_qwen25v_chain)
         register_tower_blocks_gpu(@@vulkan_audio_tower_blocks, @@vulkan_tower_serves_exact)
         register_tower_blocks_ln_post_gpu(@@vulkan_audio_tower_blocks_ln_post)
         register_tower_blocks_tail_gpu(@@vulkan_audio_tower_blocks_tail)
