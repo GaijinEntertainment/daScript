@@ -190,7 +190,6 @@ def private register_gemma3v_image_tags {
 }
 
 typedef Gemma3vGpuChainFn = function<(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>; w, h, npos : int64) : bool>   //! the whole chain from the planes
-typedef Gemma3vGpuBlocksFn = function<(t : Gemma3vTower; var s : Gemma3vState; npos : int64) : bool>   //! the blocks alone over `s.x`
 typedef Gemma3vGpuServesFn = function<() : bool>
 var private g_g3v_gpu : Gemma3vGpuChainFn
 var private g_g3v_gpu_serves : Gemma3vGpuServesFn
@@ -206,19 +205,8 @@ def register_gemma3v_gpu(fn : Gemma3vGpuChainFn; serves : Gemma3vGpuServesFn; f3
     g_g3v_gpu_set = true
 }
 
-var private g_g3v_gpu_blocks : Gemma3vGpuBlocksFn
-var private g_g3v_gpu_blocks_set = false
-
-//! the blocks-only seat: the fn takes the residual stream after the CPU stem in `s.x` and leaves the blocks' result there;
-//! false = decline, the CPU loop serves
-def register_gemma3v_gpu_blocks(fn : Gemma3vGpuBlocksFn) {
-    g_g3v_gpu_blocks = fn
-    g_g3v_gpu_blocks_set = true
-}
-
-// The lane policy follows the fastest GEMM path on the box: a serving GPU blocks driver or the
-// armed accelerate float-batch tier both want f32 planes (the driver declines q8) and flip the
-// default to the exact lane; else q8. A pin overrides.
+// The lane policy follows the fastest GEMM path on the box: a serving GPU chain or the armed
+// accelerate float-batch tier prefers f32 planes and flips the default to the exact lane; else q8. A pin overrides.
 var private g_g3v_q8_pin = GemmLane.unset
 
 def private g3v_serve_q8() : bool => lane_serves_q8(g_g3v_q8_pin, !((g_g3v_gpu_set && g_g3v_f32_lane && invoke(g_g3v_gpu_serves)) || float_batch_override_active()))
@@ -663,12 +651,10 @@ def private g3v_block(t : Gemma3vTower; var s : Gemma3vState; l, npos : int64) {
     asr_prof_add("g3v.ffn_mm", tp)
 }
 
-//! the CPU im2col into `s.x0` at the padded stride; the device chain runs its own off the planes
 def private g3v_im2col(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>; w, h : int64) : int64
     => im2col_rgb_patches(planes, w, h, t.patch, s.x0, gemma3v_patch_pad(t))
 
-//! the stem's column half, both routes: the padded-stride im2col (the CPU route's) + scratch sizing
-//! (planes arrive already normalized - encode_image_ owns the mean/std step)
+//! scratch sized on both routes, the CPU im2col only under `im2col`; the planes arrive normalized (encode_image_ owns the mean/std step)
 def private g3v_stem_cols(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>; w, h : int64; im2col : bool) : int64 {
     let d = t.n_embd
     let npos = im2col ? g3v_im2col(t, s, planes, w, h) : (w / t.patch) * (h / t.patch)
@@ -723,7 +709,7 @@ def gemma3v_encode(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>
         panic("dasLLAMA gemma3v: canvas {w}x{h} - this tower serves exactly {t.image_px}x{t.image_px} (letterbox first)")
     }
     var tp = ref_time_ticks()
-    let chain = g_g3v_gpu_set   //! the whole chain off the planes (its knob and lane declines are its own): no CPU im2col unless it declines
+    let chain = g_g3v_gpu_set
     let npos = g3v_stem_cols(t, s, planes, w, h, !chain)
     dispatch_phase_encode(npos)
     asr_prof_add("g3v.stem", tp)
@@ -741,10 +727,8 @@ def gemma3v_encode(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>
         }
         g3v_stem_finish(t, s, npos)
         asr_prof_add("g3v.stem", tp)
-        if (!(g_g3v_gpu_blocks_set && invoke(g_g3v_gpu_blocks, t, s, npos))) {
-            for (l in range64(t.n_layer)) {
-                g3v_block(t, s, l, npos)
-            }
+        for (l in range64(t.n_layer)) {
+            g3v_block(t, s, l, npos)
         }
     }
     if (gpu_served && s.tail_ready) {   // the device chain ran the tail behind its blocks

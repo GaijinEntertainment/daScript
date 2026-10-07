@@ -12,8 +12,8 @@ require daslib/fio
 require _model_tier   // models_dir() + model_available() gate
 require _vision_oracle   // the mtmd dump parser, fixture generators, per-token compare
 require ?das_metal dasllama/dasllama_metal_tower   // the GPU tier-1 attempt; the CPU gate pins the knob off
-require ?vulkan dasllama/dasllama_vulkan_tower   // the Vulkan rung: the embedder whole on the device
-require _tower_twin   // vulkan_twin_seat
+require ?vulkan dasllama/dasllama_vulkan_tower
+require _tower_twin
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown — the crown-pin cell drops the trio's cached flags
 
 // Tier-1 gemma4uv embedder parity vs llama-mtmd-debug -p encode (CPU, --no-mmproj-offload, dumps
@@ -130,8 +130,7 @@ def test_gemma4uv_tier1_gpu(t : T?) {
     }
 }
 
-// The Vulkan tier-1 gate: the same oracle dumps through the Vulkan driver, the embedder whole on the device off the planes -
-// the f32 tile GEMMs over the bf16 planes widened hold the CPU bar; engage evidence is the encodes counter, per fixture.
+//! the embedder whole on the Vulkan device off the planes holds the CPU bar on the mtmd dumps; engage evidence: the encodes counter, per fixture
 [test]
 def test_gemma4uv_tier1_vulkan(t : T?) {
     t |> run("tier-1 Vulkan encode vs the mtmd encode dumps") @(tt : T?) {

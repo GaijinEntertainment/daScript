@@ -144,7 +144,6 @@ def test_gemma4v_tier1_gpu(t : T?) {
             set_metal_tower(true)
             delete st
             delete tw
-            // the q8 lane on the device: a q8 tower with the knob ARMED serves off its q8 planes, on the q8 lane's bar
             set_gemma4v_q8(true)
             var twq <- load_gemma4v_tower(mm)
             reset_gemma4v_q8()

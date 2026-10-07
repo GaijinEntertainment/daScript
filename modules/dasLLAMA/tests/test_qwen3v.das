@@ -146,8 +146,7 @@ def test_qwen3v_tier1(t : T?) {
     }
 }
 
-//! the q8 lane on the Metal device: the deepstack tower minted q8 under the pin serves off its q8 planes, on the q8 lane's bar,
-//! every block on the driver and no quant_mode decline
+//! the q8 lane on the Metal device: the deepstack tower minted q8 under the pin serves every block off its q8 planes on the q8 bar, no quant_mode decline
 def private q3v_metal_q8_leg(tt : T?; mm4 : string) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         set_qwen3v_q8(true)

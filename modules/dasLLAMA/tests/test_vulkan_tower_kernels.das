@@ -393,8 +393,8 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
             with_cell_planes() $(var cp : CellPlanes) {
                 let xp = cp |> io_(x)
                 let yp = cp |> io_(y)
-                let ysp = cp |> io_(y)    // the clamp copy's source, which it must leave as it found it
-                let ycp = cp |> out_(nd)   // ... and its destination
+                let cc_src_p = cp |> io_(y)    //! the clamp copy's source, which it must leave as it found it
+                let cc_dst_p = cp |> out_(nd)   // ... and its destination
                 let xbp = cp |> out_(nd)
                 let xb2p = cp |> out_(nd)
                 let qp = cp |> io_(q)
@@ -415,7 +415,7 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
                 let xb_half_p = cp |> out_(nd)
                 var s_rms = cp |> cls_set(fixed_array(xp, xbp, wp), @@set_tower_rms_cls)
                 var s_clamp = cp |> cls_set(fixed_array(yp), @@set_tower_clamp_cls)
-                var s_ccopy = cp |> cls_set(fixed_array(ysp, ycp), @@set_tower_clamp_copy_cls)
+                var s_ccopy = cp |> cls_set(fixed_array(cc_src_p, cc_dst_p), @@set_tower_clamp_copy_cls)
                 var s_cvt = cp |> cls_set(fixed_array(xp, xhp), @@set_tower_clamp_cvt_cls)
                 var s_rq = cp |> cls_set(fixed_array(xp, xqp, xsp), @@set_tower_clamp_rq_cls)
                 var s_rope = cp |> cls_set(fixed_array(qp, tp), @@set_tower_rope2d_cls)
@@ -453,8 +453,8 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
                 }
                 let xb_dev <- cp |> plane_run(xbp)
                 let y_dev <- cp |> plane_run(yp)
-                let ys_dev <- cp |> plane_run(ysp)
-                let yc_dev <- cp |> plane_run(ycp)
+                let ys_dev <- cp |> plane_run(cc_src_p)
+                let yc_dev <- cp |> plane_run(cc_dst_p)
                 let x_dev <- cp |> plane_run(xp)
                 let xb2_dev <- cp |> plane_run(xb2p)
                 let g_dev <- cp |> plane_run(gp)
@@ -582,13 +582,13 @@ def test_vkt_tower_vision_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate
             let npos_pad = npos + 2   //! two pad rows past the grid, which the im2col writes zero
             let pool_rows = VR_POOL_GW * VR_POOL_GH
             let nout = (VR_POOL_GW / VR_POOL_K) * (VR_POOL_GH / VR_POOL_K)
-            let planes <- row_fill(VR_W * VR_H * 3, 29, 11, 0.004, 0.37, 251)   // pixels off any patch symmetry: every patch its own
+            let planes <- row_fill(VR_W * VR_H * 3, 29, 11, 0.004, 0.37, 251)   //! pixels off any patch symmetry: every patch its own
             let x <- row_fill(nd, 41, 7, 0.05, 2.1)
             let tbl <- row_fill(2 * VR_POS_ENTRIES * d, 13, 5, 0.03, -0.9)
             let xn <- row_fill(nd, 17, 3, 0.04, 1.9)
             let pos <- row_fill(nd, 23, 9, 0.02, 0.5)
-            let bias <- row_fill(2 * d, 7, 1, 0.01, -0.6)   // the stem bias at 0, the standardize bias at d
-            let mrow <- row_fill(d, 31, 2, 0.02, 0.97)      // the standardize scale
+            let bias <- row_fill(2 * d, 7, 1, 0.01, -0.6)   //! the stem bias at 0, the standardize bias at d
+            let std_scale <- row_fill(d, 31, 2, 0.02, 0.97)      // the standardize scale
             let gx <- row_fill(pool_rows * d, 37, 5, 0.043, 2.1)
             let ax <- row_fill(nout * d, 19, 7, 0.06, 2.8)
             let scale = sqrt(float(d))
@@ -603,15 +603,15 @@ def test_vkt_tower_vision_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate
                 let asmp = cp |> out_(nd)
                 let gxp = cp |> in_(gx)
                 let poolp = cp |> out_(nout * d)
-                let mp = cp |> in_(mrow)
-                let axp = cp |> io_(ax)      // the standardize arm
-                let ax0p = cp |> io_(ax)     // the scale-only arm
+                let mp = cp |> in_(std_scale)
+                let ax_std_p = cp |> io_(ax)      // the standardize arm
+                let ax_scale_p = cp |> io_(ax)     // the scale-only arm
                 var s_im = cp |> cls_set(fixed_array(plp, colp), @@set_tower_patch_im2col_cls)
                 var s_pos = cp |> cls_set(fixed_array(xp, tp), @@set_tower_pos_add_2d_cls)
                 var s_asm = cp |> cls_set(fixed_array(xnp, bp, pp, asmp), @@set_tower_stem_asm_cls)
                 var s_pool = cp |> cls_set(fixed_array(gxp, poolp), @@set_tower_pool_2d_cls)
-                var s_aff = cp |> cls_set(fixed_array(axp, bp, mp), @@set_tower_affine_rows_cls)
-                var s_aff0 = cp |> cls_set(fixed_array(ax0p, bp, mp), @@set_tower_affine_rows_cls)
+                var s_aff = cp |> cls_set(fixed_array(ax_std_p, bp, mp), @@set_tower_affine_rows_cls)
+                var s_aff0 = cp |> cls_set(fixed_array(ax_scale_p, bp, mp), @@set_tower_affine_rows_cls)
                 var pa_im = GkPatchIm2colArgs(w = uint(VR_W), h = uint(VR_H), p = uint(VR_P), n_cols = uint(VR_PW), row_dim = uint(VR_PD), npos = uint(npos),
                     total = uint(npos_pad * VR_PD), scale = 2.0, shift = -1.0)
                 var pa_pos = GkPosAdd2DArgs(dim = uint(d), ncols = uint(VR_PW), pos_entries = uint(VR_POS_ENTRIES), total = uint(nd), tboff = 0u)
@@ -631,8 +631,8 @@ def test_vkt_tower_vision_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate
                 let x_dev <- cp |> plane_run(xp)
                 let asm_dev <- cp |> plane_run(asmp)
                 let pool_dev <- cp |> plane_run(poolp)
-                let ax_dev <- cp |> plane_run(axp)
-                let ax0_dev <- cp |> plane_run(ax0p)
+                let ax_dev <- cp |> plane_run(ax_std_p)
+                let ax0_dev <- cp |> plane_run(ax_scale_p)
                 var col_cpu : array<float>
                 let n_cpu = im2col_rgb_patches(planes, int64(VR_W), int64(VR_H), int64(VR_P), col_cpu)
                 t |> equal(n_cpu, int64(npos), "the CPU im2col's patch count is the grid")
@@ -655,7 +655,7 @@ def test_vkt_tower_vision_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate
                 var asm_want : array<float>
                 asm_want |> resize(nd)
                 for (r in range(npos)) {
-                    let g = r / 4   // the merge-adjacent walk the CPU stem reads (`q3v_reorder_src`): 2 x 2 partners adjacent, groups row-major
+                    let g = r / 4   //! the merge-adjacent walk the CPU stem reads (`q3v_reorder_src`): 2 x 2 partners adjacent, groups row-major
                     let sub = r % 4
                     let src = ((g / (VR_PW / 2)) * 2 + sub / 2) * VR_PW + (g % (VR_PW / 2)) * 2 + sub % 2
                     for (i in range(d)) {
@@ -673,7 +673,7 @@ def test_vkt_tower_vision_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate
                 for (i in range(nout * d)) {
                     let c = i % d
                     aff0_want[i] = ax[i] * scale
-                    aff_want[i] = (ax[i] * scale - bias[d + c]) * mrow[c]
+                    aff_want[i] = (ax[i] * scale - bias[d + c]) * std_scale[c]
                 }
                 check_rows(t, "tower_affine_rows (x . scale - b) . m vs the CPU form", ax_dev, aff_want, BAR_APPROX, d)
                 check_rows(t, "tower_affine_rows x . scale on the scale-only arm", ax0_dev, aff0_want, BAR_APPROX, d)

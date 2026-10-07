@@ -387,7 +387,7 @@ struct private VtResident {
     s_vis_im2col : VkDescriptorSet
     s_vis_patch : VkDescriptorSet   //! the patch conv (with its bias on gemma3v), into x
     s_vis_pos : VkDescriptorSet     //! the learned positions: one bias row the width of the plane, or the 2-axis add
-    s_vis_pool : VkDescriptorSet    //! the tail: the grid pool, the standardize, the clamps, the projection
+    s_vis_pool : VkDescriptorSet    //! the tail's first row pass: the grid pool (gemma3v, gemma4v), the layernorm ahead of a merger (qwen3v's taps, gemma4uv's patch rows)
     s_vis_affine : VkDescriptorSet
     s_vis_clamp_in : VkDescriptorSet
     s_vis_clamp_out : VkDescriptorSet
@@ -812,8 +812,7 @@ def private vt_upload_f16(var r : VtResident; key : uint64; wblob : PlaneU16; w_
     return true
 }
 
-//! the exact lane's upload: the f32 blob whole as the norms plane (every bias, norm and f32 GEMM row), the bf16 halfwords `wblob`
-//! carries for the block GEMMs widened behind it (`w_n` > 0: gemma4v's bf16 files; the ones row past both), the q8 seats stubs
+//! the norms plane's layout: the blob's `rows_n` rows, the `w_n` widened halfwords behind them, then the ones row; the q8 seats are stubs
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def private vt_upload_f32(var r : VtResident; key : uint64; blob : PlaneF; rows_n : int64; wblob : PlaneU16; w_n, ones_n : int64) : bool {
     vt_upload_begin(r, key)
@@ -1992,8 +1991,8 @@ def private vt_sets_g4v(var r : VtResident) {
         vt_sets_f32(r)
         r.s_cc_xb = set_tower_clamp_copy_cls(fixed_array(r.xb_dev, r.xc_dev), fixed_array(bx, bx), fixed_array(VT_XB, VT_XQ))
         r.s_clamp_att = set_tower_clamp_cls(fixed_array(r.att_dev), fixed_array(bx), fixed_array(VT_ATT))
-        r.s_clamp_hg = set_tower_clamp_cls(fixed_array(r.hg_dev), fixed_array(bff), fixed_array(VT_HG))   //! the down site's input bounds in place (the q8 lane reads it at its requant)
-        r.s32_q = set_f32_gemm_cls(fixed_array(r.norms_dev, r.xc_dev, r.q_dev), fixed_array(r.norms_bytes, bx, bx), fixed_array(0u, VT_XQ, VT_Q))   //! the clamped sites read the copy
+        r.s_clamp_hg = set_tower_clamp_cls(fixed_array(r.hg_dev), fixed_array(bff), fixed_array(VT_HG))
+        r.s32_q = set_f32_gemm_cls(fixed_array(r.norms_dev, r.xc_dev, r.q_dev), fixed_array(r.norms_bytes, bx, bx), fixed_array(0u, VT_XQ, VT_Q))
         r.s32_k = set_f32_gemm_cls(fixed_array(r.norms_dev, r.xc_dev, r.k_dev), fixed_array(r.norms_bytes, bx, bx), fixed_array(0u, VT_XQ, VT_K))
         r.s32_v = set_f32_gemm_cls(fixed_array(r.norms_dev, r.xc_dev, r.v_dev), fixed_array(r.norms_bytes, bx, bx), fixed_array(0u, VT_XQ, VT_V))
         r.s32_hg = set_f32_gemm_cls(fixed_array(r.norms_dev, r.xc_dev, r.hg_dev), fixed_array(r.norms_bytes, bx, bff), fixed_array(0u, VT_XQ, VT_HG))
@@ -2042,8 +2041,6 @@ def private vt_sets_ln(var r : VtResident) {
     }
 }
 
-//! the exact lane's GEMM sets: the f32 tile over the norms plane's rows, read straight off the f32 rows the seams and norms land
-//! (xb, att, hg) - the q, k, v, o, up (hg) and down sites every vision family has; the fused qkv row of qwen3v
 [cold_path]
 def private vt_sets_f32(var r : VtResident) {
     let bx = r.cap_rows * r.d * 4l
@@ -2083,8 +2080,7 @@ def private vt_mm_lane(raw : VkCommandBuffer; var h : VkHaz; f32w : bool; var s3
 def private vt_pc32(n, dout, rows : int64) : F32GemmArgs
     => F32GemmArgs(n = uint(n), d = uint(dout), rows = uint(rows), woff = 0u, wstride = uint(n), boff = 0u, xoff = 0u, xstride = uint(n), yoff = 0u, ystride = uint(dout))
 
-//! the exact lane's clamped GEMM (gemma4v): the input bounds applied into `xc` (`copy`, xb kept whole for the next site's own
-//! bounds) or in place, the f32 tile over the blob rows at `woff`, then the output bounds where the site has them (`out_cl`)
+//! gemma4v's exact-lane clamped site: the input bounds into xc under `copy` (else in place), the f32 tile at `woff`, the output bounds under `out_cl`
 def private vt_mm_clamped32(raw : VkCommandBuffer; var h : VkHaz; c : Clamp; copy : bool; var s_in : VkDescriptorSet; nin : int64;
                             var s32 : VkDescriptorSet; var pc32 : F32GemmArgs; woff : int64; wg32 : int64; out_cl : bool; var s_cl : VkDescriptorSet; nout : int64) {
     if (copy || c.active) {
@@ -2361,9 +2357,6 @@ struct private VtVisTail {
     eps : float         //! the soft rms's eps, the tower's
 }
 
-//! the vision stem's planes and im2col rows at the chain's capacity, the f32 GEMM rows the blob does not carry as f32 (`vw`,
-//! uploaded by the caller when the buffer is fresh), and the tail's rows; `vis_gen` moves on a rebuild, so the family builds its
-//! sets again over the new buffers
 [cold_path]
 def private vt_vis_bufs(var r : VtResident; w, h, pd, vw_bytes, idx_bytes, aux_bytes, tail_dim : int64) : bool {
     if (!ensure_tower_clamp_rq_cls() || !ensure_tower_clamp_cvt_cls() || !ensure_tower_bias_act_cls() || !ensure_tower_rms_cls()) {   //! the tail's sets bind these stamps
@@ -2425,7 +2418,6 @@ def private vt_vis_release(var r : VtResident) {
     }
 }
 
-//! `n` rows of `k` from a tower's plane as f32: the bf16 halfwords widened (exact), else the f32 blob's rows copied
 def private vt_rows_f32(blob : PlaneF; wblob : PlaneU16; bf16 : bool; off, n : int64) : array<float> {
     var rows : array<float>
     rows |> reserve_resize(n)
@@ -2442,7 +2434,6 @@ def private vt_rows_f32(blob : PlaneF; wblob : PlaneU16; bf16 : bool; off, n : i
     return <- rows
 }
 
-//! the gemma3v tail on the device behind the last seam's post-norm: pool, soft rms, projection
 def private vt_vis_tail_enc(raw : VkCommandBuffer; var h : VkHaz; var r : VtResident; vis : VtVisTail) {
     var pc_pool = GkPool2dArgs(width = uint(vis.d), gw = uint(vis.n_side), k = uint(vis.merge), ow = uint(vis.n_side / vis.merge), total = uint(vis.nout * vis.d))
     enc_tower_pool_2d_cls(raw, h, r.s_vis_pool, pc_pool, (vis.nout * vis.d + 255l) / 256l)
@@ -3207,9 +3198,6 @@ def private vulkan_audio_conv_front(t : AudioTower; var s : EncoderState; mel : 
     return true
 }
 
-//! the gemma3v chain on the device off the planes: the patch im2col, the padded patch conv with its bias and the learned positions
-//! (the stem's own command buffer, its rows left in x), the blocks through `vt_ln_chain` with the post-norm on the last seam, then
-//! the tail - pool, soft rms, projection - and the soft tokens landed in `s.tail`
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def private vulkan_gemma3v_chain(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>; w, h, npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     var r & = g_vt_g3v
@@ -3264,7 +3252,7 @@ def private vulkan_gemma3v_chain(t : Gemma3vTower; var s : Gemma3vState; planes 
         return vt_decline(r, VulkanTowerDecline.memory)
     }
     let cap = r.cap_rows
-    if (r.vis_sets_gen != r.vis_gen) {   //! the sets over the fresh buffers: the patch GEMM off the blob, the pool of xb
+    if (r.vis_sets_gen != r.vis_gen) {
         let bx = cap * d * 4l
         let bp = cap * r.tail_dim * 4l
         r.s_vis_im2col = set_tower_patch_im2col_cls(fixed_array(r.vis_planes_dev, r.vis_col_dev), fixed_array(r.vis_planes_bytes, r.vis_col_bytes), fixed_array(VT_STEM_MEL, VT_STEM_COL))
@@ -3324,9 +3312,6 @@ def private vt_upload_q3v(var r : VtResident; key : uint64; t : Qwen3vTower; lay
     return ok
 }
 
-//! the qwen3v chain on the device off the planes, one command buffer: the patch im2col, the patch conv (the f32 tile over the blob)
-//! into the natural order, the merge-walk assemble (the conv bias, the learned or the resized positions), the blocks with each tap's
-//! merger over the live residual as [nout x 4d] into slice k + 1, the tail merger into slice 0; `s.ds_slice` / `s.ds_stash` take them
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def private vulkan_qwen3v_chain(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w, h, npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     var r & = g_vt_q3v
@@ -3395,7 +3380,7 @@ def private vulkan_qwen3v_chain(t : Qwen3vTower; var s : Qwen3vState; planes : a
     if (!vt_vis_bufs(r, w, h, pd, 0l, 0l, bx, max(d4, (nds + 1l) * proj))) {
         return vt_decline(r, VulkanTowerDecline.memory)
     }
-    if (r.vis_sets_gen != r.vis_gen) {   //! the sets over the fresh buffers: the stem into the natural-order plane then x, the mergers over the rows as [nout x 4d]
+    if (r.vis_sets_gen != r.vis_gen) {
         let bff = cap * ff * 4l
         let bp = cap * r.tail_dim * 4l
         r.s_vis_im2col = set_tower_patch_im2col_cls(fixed_array(r.vis_planes_dev, r.vis_col_dev), fixed_array(r.vis_planes_bytes, r.vis_col_bytes), fixed_array(VT_STEM_MEL, VT_STEM_COL))
@@ -3522,7 +3507,7 @@ def private vulkan_qwen3v_chain(t : Qwen3vTower; var s : Qwen3vState; planes : a
             pc_post = gk_add_ln_args(uint(d), uint(npos), t.eps, uint(o.down_b), true, uint(last ? t.post_ln_w : nx.ln1_w), uint(last ? t.post_ln_b : nx.ln1_b))
             enc_tower_post_add_ln_cls(raw, hz, r.s_post_d_ln, pc_post, npos)
             let k = qwen3v_tap_of(t, l)
-            if (k >= 0l && k < nds) {   //! the tap merger over the live residual as [nout x 4d] into slice k + 1 of the projected plane
+            if (k >= 0l && k < nds) {
                 let fo = t.ds_f + k * t.ds_f_stride
                 let wo = t.ds_w + k * t.ds_w_stride
                 var pc_tln = gk_ln_args(uint(d4), uint(nout), t.eps, uint(fo), uint(fo + d4))
@@ -3557,9 +3542,6 @@ def private vulkan_qwen3v_chain(t : Qwen3vTower; var s : Qwen3vState; planes : a
     return vt_served_from(r, r.tail_host, s.ds_slice, bslice, npos, t.n_layer)
 }
 
-//! the qwen25v chain on the device off the planes, one command buffer: the patch im2col, the folded patch conv (the f32 tile over
-//! the blob) into the natural order, the window-sort gather into x, the blocks over the halfword twin with the post-rms on the last
-//! seam, then the merger tail (mm0 + bias, tanh GELU, mm2 + bias) over the rows as [nout x 4d]; `s.mout` takes the sorted soft tokens
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def private vulkan_qwen25v_chain(t : Qwen25vTower; var s : Qwen25vState; planes : array<float>; w, h, npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape, its two attention arms the routing
     var r & = g_vt_q25v
@@ -3613,7 +3595,7 @@ def private vulkan_qwen25v_chain(t : Qwen25vTower; var s : Qwen25vState; planes 
     if (!vt_vis_bufs(r, w, h, pd, 0l, cap * 4l, 0l, max(d4, t.proj_dim))) {
         return vt_decline(r, VulkanTowerDecline.memory)
     }
-    if (r.vis_sets_gen != r.vis_gen) {   //! the sets over the fresh buffers: the patch GEMM off the blob into the natural-order plane, the gather into x, the merger over xb
+    if (r.vis_sets_gen != r.vis_gen) {
         let bx = cap * d * 4l
         let bp = cap * r.tail_dim * 4l
         r.s_vis_im2col = set_tower_patch_im2col_cls(fixed_array(r.vis_planes_dev, r.vis_col_dev), fixed_array(r.vis_planes_bytes, r.vis_col_bytes), fixed_array(VT_STEM_MEL, VT_STEM_COL))
@@ -3786,7 +3768,6 @@ def private vt_upload_uv(var r : VtResident; key : uint64; t : Gemma4uvEmbedder)
     return true
 }
 
-//! the patch and projection rows as f32 in the vision slab: the bf16 planes widened, the f32 ones copied
 [cold_path]
 def private vt_uv_slab(r : VtResident; t : Gemma4uvEmbedder; d, pd, proj_off : int64) {
     var inscope patch_rows <- vt_rows_f32(t.blob, t.wblob, t.patch_bf16, t.patch_w, d * pd)
@@ -3835,7 +3816,7 @@ def private vulkan_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; 
     }
     let cap = r.cap_rows
     let proj_off = d * pd
-    if (fresh_w || r.vis_w_fresh) {   //! the slab again over a fresh tower or a rebuilt buffer (a grown canvas rebuilds every vision buffer)
+    if (fresh_w || r.vis_w_fresh) {
         vt_uv_slab(r, t, d, pd, proj_off)
         r.vis_w_fresh = false
     }
@@ -3889,7 +3870,6 @@ def private vulkan_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; 
     return vt_served_from(r, r.tail_host, out, bp_out, npos, 0l)
 }
 
-//! the patch and projection rows as f32 in the vision slab: the bf16 planes widened, the f32 ones copied
 [cold_path]
 def private vt_g4v_slab(r : VtResident; t : Gemma4vTower; d, pd, proj_off : int64) {
     var inscope patch_rows <- vt_rows_f32(t.blob, t.wblob, t.patch_bf16, t.patch_w, d * pd)
@@ -3900,9 +3880,6 @@ def private vt_g4v_slab(r : VtResident; t : Gemma4vTower; d, pd, proj_off : int6
     }
 }
 
-//! the gemma4v chain on the device off the planes, one command buffer: the patch im2col under the [0, 1] -> [-1, 1] map, the patch
-//! conv (the f32 tile over the bf16 plane widened), the 2-axis positions, the blocks, then the tail - the grid pool, the sqrt(d)
-//! scale and the standardize, the weightless rms, the projection between its clamps - and the soft tokens landed in `s.tail`
 [hot_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def private vulkan_gemma4v_chain(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>; w, h, npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     var r & = g_vt_g4v
@@ -3947,11 +3924,11 @@ def private vulkan_gemma4v_chain(t : Gemma4vTower; var s : Gemma4vState; planes 
     let lay = active_q8_repack_layout(g_active_needs_repack)
     let key = f32w ? vt_key_f16(t.wblob, 0l, t.wblob.n, t.blob, 0l, t.blob.n, t.n_layer) : vt_key(t.qblob, t.qscales, t.blob, 0l, t.blob.n, hs, t.n_layer, lay.mr, lay.kgroup, lay.wbias)
     let fresh_w = r.key != key
-    let ones_n = max(hs, d)   //! the ones row serves the head rms (hs wide) and the tail's weightless rms (d wide)
+    let ones_n = max(hs, d)
     if (fresh_w && !(f32w ? vt_upload_f32(r, key, t.blob, t.blob.n, t.wblob, t.blk_bf16 ? t.wblob.n : 0l, ones_n) : vt_upload_g4v(r, key, t, ones_n, lay))) {
         return vt_decline(r, VulkanTowerDecline.memory)
     }
-    let wbase = (f32w && t.blk_bf16) ? t.blob.n : 0l   //! the exact lane's block rows: the bf16 halfwords widened behind the blob, else the blob's own
+    let wbase = (f32w && t.blk_bf16) ? t.blob.n : 0l
     let g_d = vt_gemm_groups(d, npos)
     let g_ff = vt_gemm_groups(ff, npos)
     let nrec = t.n_layer * GEMMA4V_GEMMS
@@ -3970,7 +3947,7 @@ def private vulkan_gemma4v_chain(t : Gemma4vTower; var s : Gemma4vState; planes 
     }
     let cap = r.cap_rows
     let proj_off = d * pd
-    if (fresh_w || r.vis_w_fresh) {   //! the slab again over a fresh tower or a rebuilt buffer (a grown canvas rebuilds every vision buffer)
+    if (fresh_w || r.vis_w_fresh) {
         vt_g4v_slab(r, t, d, pd, proj_off)
         r.vis_w_fresh = false
     }

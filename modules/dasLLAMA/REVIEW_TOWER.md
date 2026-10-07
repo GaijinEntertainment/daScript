@@ -2,7 +2,7 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_GPU_TOWER.md`, `ARCHITECTURE_GPU_TOWER_VULKAN.md`,
-`ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md`, `ARCHITECTURE_MEDIA.md`. Planned work: `followup_metal.md`,
+`ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md`, `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md`, `ARCHITECTURE_MEDIA.md`. Planned work: `followup_metal.md`,
 `followup_vulkan.md`.
 
 A tower is the Metal or the Vulkan GPU driver set that runs a family's encoder or synthesis
@@ -109,3 +109,8 @@ loop then reads stale rows.
 class or builder that route dispatches in the route's ensure chain - the pipeline builds the
 route checks before it serves - so one absent pipeline keeps the CPU route.** A class outside the
 chain dispatches into a null pipeline when its build failed.
+
+**A diff that changes the order or the count of the regions a `tw_q8_regions_*` builder in
+`dasllama/dasllama_metal_tower.das` lists also changes, in the same change, every site index its chain
+passes to `wt_mm_vis` or `g4v_mm`.** A site index is the region's position in that list, `TW_Q8_VIS_SITES`
+or `GEMMA4V_GEMMS` a layer.

@@ -266,7 +266,7 @@ def private uv_check_planes(t : Gemma4uvEmbedder; src : string) {
 }
 
 // ===== the GPU tower hook (registered by dasllama_metal_tower at [init]; requires-back, so it
-// cannot be required from here). It consumes the im2col rows (s.x0) and fills `out` (already
+// cannot be required from here). It takes the planes and fills `out` (already
 // sized); false = declined, the CPU chain below stays the correct fallback.
 typedef Gemma4uvGpuEncodeFn = function<(t : Gemma4uvEmbedder; var s : Gemma4uvState; planes : array<float>; w, h, npos, n_cols : int64; var out : array<float>) : bool>   //! the whole embedder from the planes
 var private g_uv_gpu : Gemma4uvGpuEncodeFn
@@ -293,7 +293,7 @@ def gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; planes : array<
     let n_cols = w / t.patch
     let npos = n_cols * (h / t.patch)
     dispatch_phase_encode(npos)
-    if (g_uv_gpu_set) {   //! the whole embedder off the planes; the CPU im2col only on a decline
+    if (g_uv_gpu_set) {
         ensure_length(out, npos * t.proj_dim)
         if (invoke(g_uv_gpu, t, s, planes, w, h, npos, n_cols, out)) {
             return npos

@@ -215,11 +215,9 @@ def private register_gemma4v_image_tags {
     register_image_family_tag(GEMMA4V_TAG_Q8)
 }
 
-// the GPU blocks hook (dasllama_metal_tower or dasllama_vulkan_tower registers it at [init]; requires-back). It takes
-// s.x after the stem (rope tables built), runs every block, leaves the result in s.x; false = declined, the CPU loop is
-// the fallback. `serves` = would the driver serve (the lane policy asks)
+// the GPU chain hook (dasllama_metal_tower or dasllama_vulkan_tower registers it at [init]; requires-back): the whole chain
+// off the planes; false = declined, the CPU chain is the fallback. `serves` = would the driver serve (the lane policy asks)
 typedef Gemma4vGpuChainFn = function<(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>; w, h, npos : int64) : bool>   //! the whole chain from the planes
-typedef Gemma4vGpuBlocksFn = function<(t : Gemma4vTower; var s : Gemma4vState; npos : int64) : bool>   //! the blocks alone over `s.x`
 typedef Gemma4vGpuServesFn = function<() : bool>
 var private g_g4v_gpu : Gemma4vGpuChainFn
 var private g_g4v_gpu_serves : Gemma4vGpuServesFn
@@ -235,19 +233,8 @@ def register_gemma4v_gpu(fn : Gemma4vGpuChainFn; serves : Gemma4vGpuServesFn; f3
     g_g4v_gpu_set = true
 }
 
-var private g_g4v_gpu_blocks : Gemma4vGpuBlocksFn
-var private g_g4v_gpu_blocks_set = false
-
-//! the blocks-only seat: the fn takes the residual stream after the CPU stem in `s.x` and leaves the blocks' result there;
-//! false = decline, the CPU loop serves
-def register_gemma4v_gpu_blocks(fn : Gemma4vGpuBlocksFn) {
-    g_g4v_gpu_blocks = fn
-    g_g4v_gpu_blocks_set = true
-}
-
-// The lane policy follows the fastest GEMM path on the box: a serving GPU blocks driver or the
-// armed accelerate float-batch tier both want the file's planes (the driver declines q8, the tier
-// serves float planes only) and flip the default to the exact lane; else q8. A pin overrides.
+// The lane policy follows the fastest GEMM path on the box: a serving GPU chain or the armed
+// accelerate float-batch tier prefers the file's planes and flips the default to the exact lane; else q8. A pin overrides.
 var private g_g4v_q8_pin = GemmLane.unset
 
 def private g4v_serve_q8() : bool => lane_serves_q8(g_g4v_q8_pin, !((g_g4v_gpu_set && g_g4v_f32_lane && invoke(g_g4v_gpu_serves)) || float_batch_override_active()))
@@ -700,7 +687,6 @@ def private g4v_block(t : Gemma4vTower; var s : Gemma4vState; l, npos : int64) {
     asr_prof_add("g4v.norm", tp)
 }
 
-//! the CPU im2col with the x . 2 - 1 pixel map into `s.x0`; the device chain runs its own off the planes
 def private g4v_im2col(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>; w, h : int64) : int64 {
     let npos = im2col_rgb_patches(planes, w, h, t.patch, s.x0)
     // inp_raw_scaled: pixels [0, 1] -> [-1, 1] ahead of the conv
@@ -713,7 +699,7 @@ def private g4v_im2col(t : Gemma4vTower; var s : Gemma4vState; planes : array<fl
     return npos
 }
 
-// the stem's columns: the CPU route's im2col with the pixel map into s.x0 (npos rows); sizes every block buffer for this canvas
+//! sizes every block buffer for this canvas on both routes; the CPU im2col with the pixel map only under `im2col`
 def private g4v_stem_cols(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>; w, h : int64; im2col : bool) : int64 {
     let d = t.n_embd
     let npos = im2col ? g4v_im2col(t, s, planes, w, h) : (w / t.patch) * (h / t.patch)
@@ -792,7 +778,7 @@ def gemma4v_encode(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>
     let n_rows = h / t.patch
     dispatch_phase_encode(n_cols * n_rows)
     var tp = ref_time_ticks()
-    let chain = g_g4v_gpu_set   //! the whole chain off the planes (its knob and lane declines are its own): no CPU im2col unless it declines
+    let chain = g_g4v_gpu_set
     let npos = g4v_stem_cols(t, s, planes, w, h, !chain)
     g4v_rope_tables(t, s, n_cols, n_rows)
     asr_prof_add("g4v.stem", tp)
@@ -810,10 +796,8 @@ def gemma4v_encode(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>
         }
         g4v_stem_finish(t, s, npos, n_cols)
         asr_prof_add("g4v.stem", tp)
-        if (!(g_g4v_gpu_blocks_set && invoke(g_g4v_gpu_blocks, t, s, npos))) {
-            for (l in range64(t.n_layer)) {
-                g4v_block(t, s, l, npos)
-            }
+        for (l in range64(t.n_layer)) {
+            g4v_block(t, s, l, npos)
         }
     }
     if (gpu_served && s.tail_ready) {   // the device chain ran the tail behind its blocks

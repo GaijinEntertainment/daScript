@@ -633,9 +633,7 @@ def private q25v_tail(t : Qwen25vTower; var s : Qwen25vState; npos : int64) {
     add_bias_rows(s.mout, t.blob, t.mm2_b, t.proj_dim, nout)
 }
 
-//! the GPU hook: conv/gather + every block + the merger tail off s.x0, window-sorted rows into s.mout
 typedef Qwen25vGpuChainFn = function<(t : Qwen25vTower; var s : Qwen25vState; planes : array<float>; w, h, npos : int64) : bool>   //! the whole chain from the planes
-typedef Qwen25vGpuBlocksFn = function<(t : Qwen25vTower; var s : Qwen25vState; npos : int64) : bool>   //! the blocks alone over `s.x`
 var private g_q25v_gpu : Qwen25vGpuChainFn
 var private g_q25v_gpu_set = false
 
@@ -645,16 +643,6 @@ var private g_q25v_gpu_set = false
 def register_qwen25v_gpu(fn : Qwen25vGpuChainFn) {
     g_q25v_gpu = fn
     g_q25v_gpu_set = true
-}
-
-var private g_q25v_gpu_blocks : Qwen25vGpuBlocksFn
-var private g_q25v_gpu_blocks_set = false
-
-//! The blocks-only seat (the Vulkan tower over the baked halfword twin): the fn takes the window-sorted s.x after the CPU
-//! stem, runs every block, leaves the result in s.x; false = decline, the CPU loop serves; the merger tail stays on the CPU.
-def register_qwen25v_gpu_blocks(fn : Qwen25vGpuBlocksFn) {
-    g_q25v_gpu_blocks = fn
-    g_q25v_gpu_blocks_set = true
 }
 
 //! Encode a letterboxed, normalized canvas (``vision_normalize3`` planes, w×h) into ``out`` =
@@ -671,7 +659,7 @@ def qwen25v_encode(t : Qwen25vTower; var s : Qwen25vState; planes : array<float>
     dispatch_phase_encode(pw * ph)
     var tp = ref_time_ticks()
     q25v_grid_tables(t, s, pw, ph)
-    let npos = q25v_stem_cols(t, s, planes, w, h, !g_q25v_gpu_set)   //! the whole chain off the planes: no CPU im2col unless it declines
+    let npos = q25v_stem_cols(t, s, planes, w, h, !g_q25v_gpu_set)
     asr_prof_add("q25v.stem", tp)
     var gpu_served = false
     if (g_q25v_gpu_set) {
@@ -686,10 +674,8 @@ def qwen25v_encode(t : Qwen25vTower; var s : Qwen25vState; planes : array<float>
         }
         q25v_stem_finish(t, s, npos)
         asr_prof_add("q25v.stem", tp)
-        if (!(g_q25v_gpu_blocks_set && invoke(g_q25v_gpu_blocks, t, s, npos))) {
-            for (l in range64(t.n_layer)) {
-                q25v_block(t, s, l, npos)
-            }
+        for (l in range64(t.n_layer)) {
+            q25v_block(t, s, l, npos)
         }
         tp = ref_time_ticks()
         q25v_tail(t, s, npos)

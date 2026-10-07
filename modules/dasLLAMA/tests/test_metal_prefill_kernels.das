@@ -1219,9 +1219,7 @@ def private tw_affine_gate(t : T?; var dev, queue) {
     }
 }
 
-//! the towers' rms rows on the layernorm template's RMS arm with the add off: xb = rms(x) . w at a width past the 256-thread stride
-//! and at one under it, out of place and in place (the input overwritten), against the CPU rmsnorm, a poisoned input element
-//! reddening the compare; the stamp's weightless form (a row of ones) is the same body
+//! the RMS arm, add off, vs the CPU rmsnorm past and under the 256-thread stride, out of place and in place, a poisoned control; the weightless form is the same body
 def private tw_rms_gate(t : T?; var dev, queue; d, rows : int) {
     let tag = "tw_rms d={d} rows={rows}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
@@ -1262,15 +1260,19 @@ def private tw_rms_gate(t : T?; var dev, queue; d, rows : int) {
     }
 }
 
-//! the towers' residual seams on the layernorm template's three Metal stamps - the biased add with its next layernorm (kind 0),
-//! with its next rms (kind 1), and the gemma post-normed add with its next rms (kind 2) - against the CPU forms over rows past the
-//! 256-thread stride: the joined rows and the norm rows, the seam-alone leg (ln_on off) leaving the norm rows at their sentinel, and a
-//! poisoned branch element reddening both compares
-def private tw_seam_gate(t : T?; var dev, queue; kind, d, rows : int) {
-    let tag = "tw_seam kind={kind} d={d} rows={rows}"
+enum TwSeamStamp {
+    add_ln          //! the biased add + layernorm
+    add_rms         //! the biased add + rms
+    add_post_rms    //! the gemma post-normed add + rms
+}
+
+//! the residual seam stamps vs the CPU forms past the 256-thread stride; the ln_on-off leg leaves the norm rows at their
+//! sentinel, a poisoned branch element reds both compares
+def private tw_seam_gate(t : T?; var dev, queue; kind : TwSeamStamp; d, rows : int) {
+    let tag = "tw_seam {kind} d={d} rows={rows}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let st = kind == 0 ? stamp_of(@@enc_tw_add_ln) : kind == 1 ? stamp_of(@@enc_tw_add_rms) : stamp_of(@@enc_tw_add_post_rms)
+        let st = kind == TwSeamStamp.add_ln ? stamp_of(@@enc_tw_add_ln) : kind == TwSeamStamp.add_rms ? stamp_of(@@enc_tw_add_rms) : stamp_of(@@enc_tw_add_post_rms)
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
         let eps = 1e-6
@@ -1281,7 +1283,7 @@ def private tw_seam_gate(t : T?; var dev, queue; kind, d, rows : int) {
         var inscope want_x : array<float>
         want_x |> resize(total)
         for (r in range(rows)) {
-            if (kind == 2) {
+            if (kind == TwSeamStamp.add_post_rms) {
                 var inscope yn : array<float>
                 yn |> resize(d)
                 unsafe {
@@ -1300,14 +1302,14 @@ def private tw_seam_gate(t : T?; var dev, queue; kind, d, rows : int) {
         want_xb |> resize(total)
         for (r in range(rows)) {
             unsafe {
-                if (kind == 0) {
+                if (kind == TwSeamStamp.add_ln) {
                     layernorm(addr(want_xb[r * d]), addr<float const?>(want_x[r * d]), addr<float const?>(wn[d]), addr<float const?>(wn[2 * d]), int64(d), eps)
                 } else {
                     rmsnorm(addr(want_xb[r * d]), addr<float const?>(want_x[r * d]), addr<float const?>(wn[d]), int64(d), eps)
                 }
             }
         }
-        var ka = (kind == 2 ? gk_add_post_rms_args(uint(d), uint(rows), eps, uint(3 * d), true, uint(d))
+        var ka = (kind == TwSeamStamp.add_post_rms ? gk_add_post_rms_args(uint(d), uint(rows), eps, uint(3 * d), true, uint(d))
                             : gk_add_ln_args(uint(d), uint(rows), eps, 0u, true, uint(d), uint(2 * d)))
         let pwn = mc |> in_(wn)
         var bwn = mc.buf[pwn]
@@ -3379,9 +3381,9 @@ def test_metal_prefill_kernels(t : T?) {
                 tw_tail_rows_gate(t, dev, queue)
                 tw_pool2d_gate(t, dev, queue)
                 tw_affine_gate(t, dev, queue)
-                tw_rms_gate(t, dev, queue, 300, 5)   // the row past the 256-thread stride
+                tw_rms_gate(t, dev, queue, 300, 5)   //! the row past the 256-thread stride
                 tw_rms_gate(t, dev, queue, 70, 3)
-                for (kind in range(3)) {
+                for (kind in [TwSeamStamp.add_ln, TwSeamStamp.add_rms, TwSeamStamp.add_post_rms]) {
                     tw_seam_gate(t, dev, queue, kind, 300, 3)
                 }
                 bias_relu_rows_gate(t, dev, queue)

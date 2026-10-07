@@ -84,11 +84,19 @@ on the device - answering which it served (`TowerTailServed`), so the CPU tail r
 the device one did not. Its engage counter is `metal_tower_tail_encodes`, its lever
 `set_metal_tower_tail`.
 
-The vision chains run their ends on the device too. The gemma3v chain ends in its tail - the
-post-norm, the grid mean pool (`MetalTwPool2d`), the soft norm and the projection (`g3v_tail_body`).
-The gemma4v chain takes the stem's columns and runs the patch conv and the position adds itself
-(`g4v_stem_body`; the family registers its seat with `stem` set, and a chain registered without it is
-handed the finished residual stream), then ends in its tail: the grid pool, the sqrt(d) scale and the
+The vision chains run their ends on the device too. Every vision chain takes the image planes, not
+the stem's columns: the chain uploads them (`tw_planes_up`) and runs the patch im2col on the device
+(`tw_patch_im2col` on `MetalTwPatchIm2col`, the shared `GkPatchIm2col` template), which writes the pad
+rows and columns zero and applies gemma4v's [0, 1] -> [-1, 1] map as its scale and shift; the family
+skips its CPU im2col while a chain is registered and runs it only after a decline. Each block loop
+runs block 0's pre-norm alone, ahead of the loop, and folds every later pre-norm into the residual
+seam before it: the seam stamps (`MetalTwAddLn`, `MetalTwAddRms`, `MetalTwAddPostRms`, the Metal stamps
+of the shared `GkPostAddLn` template) add the branch and write the next block's pre-norm from the
+updated row in one pass, the last seam writing the tower's post-norm where the chain has one (the
+whisper-class `ln_post` form, qwen25v's post-rms) and no norm otherwise, and a tail reads the rows the
+last seam left. The gemma3v chain ends in its tail - the post-norm, the grid mean pool
+(`MetalTwPool2d`), the soft norm and the projection (`g3v_tail_body`). The gemma4v chain runs the
+patch conv and the 2-axis position add itself (`g4v_stem_body`), then ends in its tail: the grid pool, the sqrt(d) scale and the
 standardize in one row pass (`MetalTwAffineRows`), the weightless rms, and the projection between its
 two clamps (`g4v_tail_body`). With the tail on the device the soft tokens alone come back; the block
 rows stay there. The vision chains serve both weight lanes: an exact tower's block GEMMs ride the f32

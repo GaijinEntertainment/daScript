@@ -145,9 +145,7 @@ def private metal_tower_init : bool {
     return true
 }
 
-// The gemma4uv chain on the driver: the planes arrive and the patch im2col runs on the device, pad rows of
-// the GPU buffers stay zero so the GEMM pins their outputs at 0; LN/posadd grids cover the
-// LOGICAL rows only. One command buffer, one wait, one readback.
+//! the device buffers' pad rows stay zero so the GEMM pins their outputs at 0; the LN and posadd grids cover the logical rows alone
 [hot_path, unused_argument(s)]
 def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; planes : array<float>; w, h, npos, n_cols : int64; var out : array<float>) : bool {
     if (!g_tw_env_tower) {
@@ -223,6 +221,7 @@ var private g_tw_q8 : St2SlabBase            //!< the served whisper-class tower
 var private g_tw_q8_boffs : array<uint64>    //!< a layer's regions in that blob, TW_Q8_MATS a layer: q, k, v, o, fc1, fc2
 var private g_tw_q8_conv2 = 0ul              //!< the stem's second conv in that blob
 let private TW_Q8_MATS = 6l
+let private TW_Q8_VIS_SITES = 6l   //! a vision block's q8 regions a layer: q, k, v, o, up, down (qwen3v's fused qkv split in three)
 let private TW_Q8_BLOCK_BYTES = Q8_QPB + Q8_SPB
 
 //! one GEMM region out of the CPU backend's layout into the q8 blob's blocks at the 16-byte-aligned cursor; answers its byte offset
@@ -248,16 +247,13 @@ struct private TwQ8Region {
     rows : int64
 }
 
-//! a q8 vision tower's block GEMM planes on the device as one blob, uploaded once a tower (the key names the planes and the layout)
-//! the vision q8 slab's key: the tower's q8 planes under the layout the load repacked under (a pure read: selecting again here
-//! could name another)
+//! the vision q8 slab's key: the q8 planes under the layout the load repacked under - a pure read, since selecting again could name another
 def private tw_q8_vis_key(qblob : PlaneI8) : uint64 {
     let lay = active_q8_repack_layout(kernel_backend_needs_repack(active_kernel_backend()))
     let shape = hash_combine64(hash_combine64(uint64(lay.mr), uint64(lay.kgroup)), hash_combine64(uint64(lay.wbias), lay.repacked ? 1ul : 0ul))
     return hash_combine64(hash_combine64(intptr(plane_at(qblob, 0l)), uint64(qblob.n)), shape)
 }
 
-//! the vision q8 slab holds this tower's planes already (the hot path's check ahead of the cold attach)
 def private tw_q8_vis_current(qblob : PlaneI8) : bool => st2_slab_current(g_tw_q8_vis, tw_q8_vis_key(qblob))
 
 [cold_path]
@@ -362,7 +358,6 @@ def private wt_mm_at(enc : MetalComputeEncoder?; q8 : bool; bq8 : MetalBuffer?; 
     }
 }
 
-//! the q8 block regions of a vision tower, `n_layer` layers of `per` GEMMs: the region builders pin each family's layout
 def private tw_q8_regions_g3v(t : Gemma3vTower) : array<TwQ8Region> {
     var rg : array<TwQ8Region>
     rg |> reserve(t.n_layer * 6l)
@@ -626,7 +621,7 @@ def private metal_tower_blocks_form(t : AudioTower; var s : EncoderState; npos :
     var tl = form == TwForm.tail ? tw_tail_make(t, npos) : TwTail()
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
-        if (t.n_layer > 0l) {   //! block 0's pre-norm; every later one rides its seam
+        if (t.n_layer > 0l) {
             let lo0 = enc_layer_offsets(t, 0l)
             enc_ln(enc, bx, bxb, bblob, gk_ln_args(uint(d), uint(npos), t.eps, uint(lo0.ln1_w), uint(lo0.ln1_b)), npos)
         }
@@ -634,7 +629,7 @@ def private metal_tower_blocks_form(t : AudioTower; var s : EncoderState; npos :
             let lo = enc_layer_offsets(t, l)
             let last = l + 1l == t.n_layer
             let nx = last ? lo : enc_layer_offsets(t, l + 1l)
-            let post = last && form == TwForm.ln_post   //! the post-norm rides the last seam
+            let post = last && form == TwForm.ln_post
             wt_mm(enc, t.q8, l * TW_Q8_MATS, f16w, bf16w, bwh, bblob, lo.q_w, bxb, bxh, bq, u_d, u_d, mp, d, d, true)
             tw_bias(enc, bq, bblob, GkBiasActArgs(d = uint(d), nelem = uint(npos * d), boff = uint(lo.q_b), act = BIAS_ACT_NONE))
             wt_mm(enc, t.q8, l * TW_Q8_MATS + 1l, f16w, bf16w, bwh, bblob, lo.k_w, bxb, bxh, bk, u_d, u_d, mp, d, d, false)
@@ -1810,15 +1805,11 @@ def private tw_planes_up(planes : array<float>; w, h : int64) : MetalBuffer? {
 
 def private tw_planes_bytes(w, h : int64) : uint64 => uint64(w * h * 3l * 4l)
 
-//! the patch im2col on the device: `bx0`'s `mp` rows of `row_dim` from the planes, the pad rows and columns zero, the pixels
-//! mapped x . scale + shift ahead of the conv
 def private tw_patch_im2col(enc : MetalComputeEncoder?; bplanes, bx0 : MetalBuffer?; w, h, patch, row_dim, npos, mp : int64; scale, shift : float) {
     var pa = GkPatchIm2colArgs(w = uint(w), h = uint(h), p = uint(patch), n_cols = uint(w / patch), row_dim = uint(row_dim),
         npos = uint(npos), total = uint(mp * row_dim), scale = scale, shift = shift)
     enc_tw_patch_im2col(enc, bplanes, bx0, pa, mp * row_dim)
 }
-
-//! one GEMM off the tower's weights: the halfword twin where the tensor is stored bf16, the f32 blob otherwise
 
 //! The stem on the device: the patch conv over the columns, then each row's position rows.
 [arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
@@ -1874,7 +1865,7 @@ def private g4v_ends_land(t : Gemma4vTower; var e : G4vEnds; ran : bool; var s :
 
 // The gemma4v ViT block loop as ONE command buffer on the file's planes (bf16 GEMMs through the
 // bf16 mul_mm, f32 norms/clamps) — the CPU g4v_block chain dispatch for dispatch, the attention
-// trio at uend = npos / scale 1. The stem and the tail ride the same command buffer (`g4v_ends_make`); a q8-lane tower declines (quant_mode).
+// trio at uend = npos / scale 1. The stem and the tail ride the same command buffer (`g4v_ends_make`); both lanes serve.
 [hot_path]
 def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>; w, h, npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {
@@ -1883,7 +1874,7 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; planes 
     let d = t.n_embd
     let hs = d / t.n_head
     let ff = t.n_ff
-    // the block GEMMs bf16 or q8; hs 64 = one attention K-slab; bf16 GEMM regions bind as ushort4 views (8-aligned halfword offsets)
+    //! the block GEMMs bf16 or q8, the bf16 regions bound as ushort4 views (8-aligned halfword offsets); hs 64 = one attention K-slab
     if ((!t.q8 && (!t.blk_bf16 || t.layer_w % 8l != 0l || t.layer_w_stride % 8l != 0l)) || d % 64l != 0l || ff % 64l != 0l || hs != 64l
             || t.patch_dim % 32l != 0l || s.grid_w * s.grid_h != npos) {
         return tw_decline(MetalTowerDecline.shape)
@@ -1904,7 +1895,7 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; planes 
     let bytes_rowk = uint64(nk64 * d * 4l)   //! K panel: the QK grid walks nk64 key rows, past mp
     let bytes_stat = uint64(t.n_head * mp * 2l * 4l)
     let bytes_xh = uint64(mp * max(d, ff) * 2l)
-    var bxh = (t.q8 && pf_q8_mm_half()) ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_xh) : null   //! the q8 GEMMs' half feed where the ladder reads one
+    var bxh = (t.q8 && pf_q8_mm_half()) ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_xh) : null
     let bytes_tabs = uint64(npos * 4l * pairs * 4l)
     var bx = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
     var bxb = pool_acquire_pinned(g_tw_pool, g_dev, bytes_row)
@@ -1928,7 +1919,7 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; planes 
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
         g4v_stem_body(enc, t, ends, bblob, bwblob, bx, u_d, mp, npos)
-        if (t.n_layer > 0l) {   //! block 0's pre-norm; every later one rides its seam
+        if (t.n_layer > 0l) {
             enc_tw_rms(enc, bx, bxb, bblob, gk_rms_args(uint(d), uint(npos), t.eps, uint(gemma4v_block_offs(t, 0l).ln1)), npos)
         }
         for (l in range64(t.n_layer)) {
@@ -1966,7 +1957,6 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; planes 
             tw_clamp(enc, bxb, cl_o.omin, cl_o.omax, npos * d)
             var sm_o = gk_add_post_rms_args(uint(d), uint(npos), t.eps, uint(o.attn_post), true, uint(o.ln2))
             enc_tw_add_post_rms(enc, bx, bxb, bxb, bblob, sm_o, npos)
-            // ffn: gate / up (each its own input clamp) → GEGLU-quick → down → post-norm → residual with the next block's rms
             tw_clamp_copy(enc, bxb, bxb2, cl_gate.imin, cl_gate.imax, npos * d)
             g4v_mm(enc, t.q8, l * GEMMA4V_GEMMS + GEMMA4V_GEMM_GATE, bwblob, o.w[GEMMA4V_GEMM_GATE], bxb2, bxh, bhg, u_d, u_ff, mp, ff, d)
             tw_clamp_copy(enc, bxb, bxb2, cl_up.imin, cl_up.imax, npos * d)
@@ -2085,7 +2075,7 @@ def private g3v_tail_land(t : Gemma3vTower; var tl : G3vTail; ran : bool; var s 
 
 // The gemma3v SigLIP block loop as ONE command buffer on the f32 blob — LN(w,b), biased f32 GEMMs,
 // scaled attention, GELU. The 72-wide heads restride to the attention tiles' 128 (zero pads exact,
-// scale stays 1/sqrt(72)); ffn serves at the layout's ff_pad. The tail rides the same command buffer (`g3v_tail_make`), the patch im2col stays CPU; q8 declines.
+// scale stays 1/sqrt(72)); ffn serves at the layout's ff_pad. The stem and the tail ride the same command buffer (`g3v_tail_make`); both lanes serve.
 [hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-attn-routes")]
 def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>; w, h, npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {
@@ -2154,12 +2144,11 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; planes 
     var tl = g3v_tail_make(t, npos)
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
-        //! the stem: the patch im2col, the padded patch GEMM + conv bias + the learned positions (all row-aligned)
         tw_patch_im2col(enc, bplanes, bx0, w, h, t.patch, pd, npos, mp, 1.0, 0.0)
         enc_f32_mm(enc, bblob, uint64(t.patch_w * 4l), bx0, bx, 0ul, u_pd, u_d, mp, d)
         tw_bias(enc, bx, bblob, GkBiasActArgs(d = uint(d), nelem = uint(npos * d), boff = uint(t.patch_b), act = BIAS_ACT_NONE))
         enc_add(enc, bx, 0ul, bblob, uint64(t.pos_w * 4l), u_totd, npos * d)
-        if (t.n_layer > 0l) {   //! block 0's pre-norm; every later one rides its seam
+        if (t.n_layer > 0l) {
             let o0 = gemma3v_block_offs(t, 0l)
             enc_ln(enc, bx, bxb, bblob, gk_ln_args(uint(d), uint(npos), t.eps, uint(o0.ln1_w), uint(o0.ln1_b)), npos)
         }
@@ -2168,19 +2157,19 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; planes 
             let last = l + 1l == t.n_layer
             let nx = last ? o : gemma3v_block_offs(t, l + 1l)
             //! the flash reads Q compact, so its Q GEMM lands in bq directly (braw is reused by K/V)
-            wt_mm_vis(enc, t.q8, l * 6l + 0l, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_Q], bxb, bxh, flash ? bq : braw, u_d, u_d, mp, d, d, true)
+            wt_mm_vis(enc, t.q8, l * TW_Q8_VIS_SITES, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_Q], bxb, bxh, flash ? bq : braw, u_d, u_d, mp, d, d, true)
             tw_bias(enc, flash ? bq : braw, bblob, GkBiasActArgs(d = uint(d), nelem = uint(npos * d), boff = uint(o.b[GEMMA3V_GEMM_Q]), act = BIAS_ACT_NONE))
             if (!flash) {
                 enc_head_pad(enc, braw, bq, rs_args, npos * t.n_head * hs_pad)
             }
-            wt_mm_vis(enc, t.q8, l * 6l + 1l, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_K], bxb, bxh, braw, u_d, u_d, mp, d, d, false)
+            wt_mm_vis(enc, t.q8, l * TW_Q8_VIS_SITES + 1l, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_K], bxb, bxh, braw, u_d, u_d, mp, d, d, false)
             tw_bias(enc, braw, bblob, GkBiasActArgs(d = uint(d), nelem = uint(npos * d), boff = uint(o.b[GEMMA3V_GEMM_K]), act = BIAS_ACT_NONE))
             if (!flash) {
                 enc_head_pad(enc, braw, bk, rs_args, npos * t.n_head * hs_pad)
             } else {
                 enc_tower_kv_hc(enc, braw, bkhc, u_hs, u_d, u_np, u_totd, npos * d)
             }
-            wt_mm_vis(enc, t.q8, l * 6l + 2l, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_V], bxb, bxh, braw, u_d, u_d, mp, d, d, false)
+            wt_mm_vis(enc, t.q8, l * TW_Q8_VIS_SITES + 2l, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_V], bxb, bxh, braw, u_d, u_d, mp, d, d, false)
             tw_bias(enc, braw, bblob, GkBiasActArgs(d = uint(d), nelem = uint(npos * d), boff = uint(o.b[GEMMA3V_GEMM_V]), act = BIAS_ACT_NONE))
             if (!flash) {
                 enc_head_pad(enc, braw, bv, rs_args, npos * t.n_head * hs_pad)
@@ -2192,12 +2181,12 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; planes 
                 enc_tower_kv_hc(enc, braw, bvhc, u_hs, u_d, u_np, u_totd, npos * d)
                 enc_tower_flash(enc, bq, bkhc, bvhc, bxb2, kaf, mp, t.n_head)
             }
-            wt_mm_vis(enc, t.q8, l * 6l + 3l, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_O], bxb2, bxh, bxb, u_d, u_d, mp, d, d, true)
+            wt_mm_vis(enc, t.q8, l * TW_Q8_VIS_SITES + 3l, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_O], bxb2, bxh, bxb, u_d, u_d, mp, d, d, true)
             var sm_o = gk_add_ln_args(uint(d), uint(npos), t.eps, uint(o.b[GEMMA3V_GEMM_O]), true, uint(o.ln2_w), uint(o.ln2_b))
             enc_tw_add_ln(enc, bx, bxb, bxb, bblob, sm_o, npos)
-            wt_mm_vis(enc, t.q8, l * 6l + 4l, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_UP], bxb, bxh, bh, u_d, u_ff, mp, ff, d, true)
+            wt_mm_vis(enc, t.q8, l * TW_Q8_VIS_SITES + 4l, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_UP], bxb, bxh, bh, u_d, u_ff, mp, ff, d, true)
             tw_bias(enc, bh, bblob, GkBiasActArgs(d = uint(ff), nelem = uint(npos * ff), boff = uint(o.b[GEMMA3V_GEMM_UP]), act = BIAS_ACT_GELU_TANH))
-            wt_mm_vis(enc, t.q8, l * 6l + 5l, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_DOWN], bh, bxh, bxb2, u_ff, u_d, mp, d, ff, true)
+            wt_mm_vis(enc, t.q8, l * TW_Q8_VIS_SITES + 5l, f16w, false, bwh, bblob, o.w[GEMMA3V_GEMM_DOWN], bh, bxh, bxb2, u_ff, u_d, mp, d, ff, true)
             var sm_d = gk_add_ln_args(uint(d), uint(npos), t.eps, uint(o.b[GEMMA3V_GEMM_DOWN]), !last, uint(nx.ln1_w), uint(nx.ln1_b))
             enc_tw_add_ln(enc, bx, bxb2, bxb, bblob, sm_d, npos)
         }
@@ -2352,7 +2341,7 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; planes : a
     var u_d4 = uniform_u32(uint(4l * d))
     var u_ff = uniform_u32(uint(ff))
     var u_pr = uniform_u32(uint(proj))
-    var pc_rope = GkRopeTabArgs(rows = uint(npos), qs = uint(d), col = 0u, d = uint(d), dh = uint(hs), coff = 0u, soff = 0u)   //! the full-head NEOX rope over a compact q/k buffer
+    var pc_rope = GkRopeTabArgs(rows = uint(npos), qs = uint(d), col = 0u, d = uint(d), dh = uint(hs), coff = 0u, soff = 0u)
     var u_pd = uniform_u32(uint(t.patch_dim))
     var ka = AttnArgs(qd = uint(dp), kv_dim = uint(dp), head_size = uint(hs_pad), kv_mul = 1u,
         npos = uint(npos), np32 = uint(nk64), scale = 1.0 / sqrt(float(hs)),
@@ -2371,7 +2360,7 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; planes : a
             var asm_t = GkStemAsmArgs(dim = uint(d), pw = uint(s.grid_w), total = uint(npos * d), boff = uint(t.patch_b), poff = uint(t.pos_w))
             enc_q3v_stem(enc, braw, bblob, bblob, bx, asm_t, npos * d)
         }
-        if (t.n_layer > 0l) {   //! block 0's pre-norm; every later one rides its seam
+        if (t.n_layer > 0l) {
             let o0 = qwen3v_block_offs(t, 0l)
             enc_ln(enc, bx, bxb, bblob, gk_ln_args(uint(d), uint(npos), t.eps, uint(o0.ln1_w), uint(o0.ln1_b)), npos)
         }
@@ -2380,27 +2369,27 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; planes : a
             let last = l + 1l == t.n_layer
             let nx = last ? o : qwen3v_block_offs(t, l + 1l)
             let wqe = o.w[QWEN3V_GEMM_QKV]   //! the fused qkv rows: q, then k at d·d, v at 2d·d
-            wt_mm_vis(enc, t.q8, l * 6l, f16w, bf16w, bwh, bblob, wqe, bxb, bxh, braw, u_d, u_d, mp, d, d, true)
+            wt_mm_vis(enc, t.q8, l * TW_Q8_VIS_SITES, f16w, bf16w, bwh, bblob, wqe, bxb, bxh, braw, u_d, u_d, mp, d, d, true)
             tw_bias(enc, braw, bblob, GkBiasActArgs(d = uint(d), nelem = uint(npos * d), boff = uint(o.qkv_b), act = BIAS_ACT_NONE))
             enc_tw_rope_tab(enc, braw, bcos, bsin, pc_rope, npos * d / 2l)
             enc_head_pad(enc, braw, bq, rs_args, npos * t.n_head * hs_pad)
-            wt_mm_vis(enc, t.q8, l * 6l + 1l, f16w, bf16w, bwh, bblob, wqe + d * d, bxb, bxh, braw, u_d, u_d, mp, d, d, false)
+            wt_mm_vis(enc, t.q8, l * TW_Q8_VIS_SITES + 1l, f16w, bf16w, bwh, bblob, wqe + d * d, bxb, bxh, braw, u_d, u_d, mp, d, d, false)
             tw_bias(enc, braw, bblob, GkBiasActArgs(d = uint(d), nelem = uint(npos * d), boff = uint((o.qkv_b + d)), act = BIAS_ACT_NONE))
             enc_tw_rope_tab(enc, braw, bcos, bsin, pc_rope, npos * d / 2l)
             enc_head_pad(enc, braw, bk, rs_args, npos * t.n_head * hs_pad)
-            wt_mm_vis(enc, t.q8, l * 6l + 2l, f16w, bf16w, bwh, bblob, wqe + 2l * d * d, bxb, bxh, braw, u_d, u_d, mp, d, d, false)
+            wt_mm_vis(enc, t.q8, l * TW_Q8_VIS_SITES + 2l, f16w, bf16w, bwh, bblob, wqe + 2l * d * d, bxb, bxh, braw, u_d, u_d, mp, d, d, false)
             tw_bias(enc, braw, bblob, GkBiasActArgs(d = uint(d), nelem = uint(npos * d), boff = uint((o.qkv_b + 2l * d)), act = BIAS_ACT_NONE))
             enc_head_pad(enc, braw, bv, rs_args, npos * t.n_head * hs_pad)
             enc_qk_mm(enc, bq, bk, batt, ka, mp, nk64, t.n_head)
             enc_rowstat(enc, batt, ka, bstat, null, npos, t.n_head)
             enc_av_mm(enc, batt, bv, bo_p, ka, bstat, mp, t.n_head, hs_pad)
             enc_head_unpad(enc, bo_p, bxb2, rs_args, npos * t.n_head * hs_pad)
-            wt_mm_vis(enc, t.q8, l * 6l + 3l, f16w, bf16w, bwh, bblob, o.w[QWEN3V_GEMM_O], bxb2, bxh, bxb, u_d, u_d, mp, d, d, true)
+            wt_mm_vis(enc, t.q8, l * TW_Q8_VIS_SITES + 3l, f16w, bf16w, bwh, bblob, o.w[QWEN3V_GEMM_O], bxb2, bxh, bxb, u_d, u_d, mp, d, d, true)
             var sm_o = gk_add_ln_args(uint(d), uint(npos), t.eps, uint(o.out_b), true, uint(o.ln2_w), uint(o.ln2_b))
             enc_tw_add_ln(enc, bx, bxb, bxb, bblob, sm_o, npos)
-            wt_mm_vis(enc, t.q8, l * 6l + 4l, f16w, bf16w, bwh, bblob, o.w[QWEN3V_GEMM_UP], bxb, bxh, bh, u_d, u_ff, mp, ff, d, true)
+            wt_mm_vis(enc, t.q8, l * TW_Q8_VIS_SITES + 4l, f16w, bf16w, bwh, bblob, o.w[QWEN3V_GEMM_UP], bxb, bxh, bh, u_d, u_ff, mp, ff, d, true)
             tw_bias(enc, bh, bblob, GkBiasActArgs(d = uint(ff), nelem = uint(npos * ff), boff = uint(o.up_b), act = BIAS_ACT_GELU_TANH))
-            wt_mm_vis(enc, t.q8, l * 6l + 5l, f16w, bf16w, bwh, bblob, o.w[QWEN3V_GEMM_DOWN], bh, bxh, bxb2, u_ff, u_d, mp, d, ff, true)
+            wt_mm_vis(enc, t.q8, l * TW_Q8_VIS_SITES + 5l, f16w, bf16w, bwh, bblob, o.w[QWEN3V_GEMM_DOWN], bh, bxh, bxb2, u_ff, u_d, mp, d, ff, true)
             var sm_d = gk_add_ln_args(uint(d), uint(npos), t.eps, uint(o.down_b), !last, uint(nx.ln1_w), uint(nx.ln1_b))
             enc_tw_add_ln(enc, bx, bxb2, bxb, bblob, sm_d, npos)
             let k = qwen3v_tap_of(t, l)
@@ -2558,7 +2547,7 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; planes 
     var u_d4 = uniform_u32(uint(4l * d))
     var u_ff = uniform_u32(uint(ff))
     var u_pr = uniform_u32(uint(proj))
-    var pc_rope = GkRopeTabArgs(rows = uint(npos), qs = uint(d), col = 0u, d = uint(d), dh = uint(hs), coff = 0u, soff = 0u)   //! the full-head NEOX rope over a compact q/k buffer
+    var pc_rope = GkRopeTabArgs(rows = uint(npos), qs = uint(d), col = 0u, d = uint(d), dh = uint(hs), coff = 0u, soff = 0u)
     var u_pd = uniform_u32(uint(pd))
     var ka = AttnArgs(qd = uint(dp), kv_dim = uint(dp), head_size = uint(hs_pad), kv_mul = 1u,
         npos = uint(npos), np32 = uint(nk64), scale = 1.0 / sqrt(float(hs)),
@@ -2573,7 +2562,7 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; planes 
         enc_f32_mm(enc, bblob, uint64(t.patch_w * 4l), bx0, braw, 0ul, u_pd, u_d, mp, d)
         var kg = GkRowGatherArgs(c = uint(d), rows = uint(npos), aoff = 0u, boff = 0u, coff = 0u, out_off = 0u, add_b = 0u, add_c = 0u, scale = 1.0)
         enc_row_gather(enc, braw, bsrc, g_one, g_one, bx, kg, npos * d)
-        if (t.n_layer > 0l) {   //! block 0's pre-norm; every later one rides its seam, the post-norm the last
+        if (t.n_layer > 0l) {
             enc_tw_rms(enc, bx, bxb, bblob, gk_rms_args(uint(d), uint(npos), t.eps, uint(qwen25v_block_offs(t, 0l).ln1_w)), npos)
         } else {
             enc_tw_rms(enc, bx, bxb, bblob, gk_rms_args(uint(d), uint(npos), t.eps, uint(t.post_ln_w)), npos)
@@ -2618,7 +2607,6 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; planes 
             var sm_d = gk_add_ln_args(uint(d), uint(npos), t.eps, uint(o.b[QWEN25V_GEMM_DOWN]), true, uint(next_ln), 0u)
             enc_tw_add_rms(enc, bx, bxb2, bxb, bblob, sm_d, npos)
         }
-        //! the tail: the merger MLP over the [nout x 4d] view of the post-normed rows the last seam left in bxb
         tw_mm(enc, f16w, bf16w, bwh, bblob, t.mm0_w, bxb, bxh, bm4b, 0ul, u_d4, u_d4, mp4, 4l * d, 4l * d, true)
         tw_bias(enc, bm4b, bblob, GkBiasActArgs(d = uint(4l * d), nelem = uint(nout * 4l * d), boff = uint(t.mm0_b), act = BIAS_ACT_GELU_TANH))
         tw_mm(enc, f16w, bf16w, bwh, bblob, t.mm2_w, bm4b, bxh, btail, 0ul, u_d4, u_pr, mp4, proj, 4l * d, true)

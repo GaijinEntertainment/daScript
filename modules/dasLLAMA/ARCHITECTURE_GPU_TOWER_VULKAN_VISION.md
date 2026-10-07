@@ -49,7 +49,8 @@ pass (`TowerAffineRows`, the scale alone where the file has no standardize rows)
 off the norms plane's ones row - sized to the widest rms the chain runs, the tail's d, not the head's
 hs - and the projection between its clamps; qwen3v's and qwen25v's mergers over the rows as [nout x 4d]
 on the biased f32 tile with the tanh GELU, qwen3v's deepstack tap mergers inside the block loop into
-the slices of one projected plane; gemma4uv's pool, rms and projection. The tail rows ride
+the slices of one projected plane; gemma4uv's layernorms around the patch linear and the 2-axis add, then
+the weightless rms and the projection - no pool. The tail rows ride
 `tail_out` / `tail_proj` at the tail's widest width (`vt_tail_bufs`, rebuilt with the scratch).
 
 **The buffers.** `vt_vis_bufs` holds the planes at the canvas's bytes, the column plane, the stem

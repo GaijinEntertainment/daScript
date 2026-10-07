@@ -887,8 +887,7 @@ def private pos_add_gate(t : T?; var dev, queue; npos, dim, ncols, pos_entries :
     }
 }
 
-//! the vision stems' patch im2col on the shared stamp, bit-exact vs the CPU `im2col_rgb_patches` over a non-square canvas at a
-//! padded row stride (the pad columns zero over a sentinel fill) and under the pixel map; a shifted pixel reds the compare
+//! the patch im2col stamp bit-exact vs the CPU `im2col_rgb_patches`: a non-square canvas, a padded stride over a sentinel, the pixel map, a poisoned control
 def private patch_im2col_gate(t : T?; var dev, queue; w, h, p, pad : int; scale, shift : float) {
     let tag = "patch_im2col {w}x{h} p={p} pad={pad} scale={scale}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
@@ -905,7 +904,7 @@ def private patch_im2col_gate(t : T?; var dev, queue; w, h, p, pad : int; scale,
         var inscope want : array<float>
         let got_rows = im2col_rgb_patches(mapped, int64(w), int64(h), int64(p), want, int64(row_dim))
         t |> equal(got_rows, int64(npos), "{tag}: the CPU im2col's row count")
-        want |> resize(total)   //! the pad row reads zero
+        want |> resize(total)
         let bsrc = mc |> in_(planes)
         let bdst = mc |> out_words(total, -7.0)
         var pa = GkPatchIm2colArgs(w = uint(w), h = uint(h), p = uint(p), n_cols = uint(n_cols), row_dim = uint(row_dim), npos = uint(npos), total = uint(total), scale = scale, shift = shift)
@@ -919,8 +918,7 @@ def private patch_im2col_gate(t : T?; var dev, queue; w, h, p, pad : int; scale,
     }
 }
 
-//! the qwen3v stem assemble on the shared stamp, bit-exact vs the CPU stem's (crow + bp) + prow order over a pw x ph patch grid
-//! (pw, ph even): residual row r of the merge-adjacent walk gathers conv row src, the walk told apart from the natural order
+//! the qwen3v stem assemble stamp bit-exact vs the CPU (crow + bp) + prow order on an even pw x ph grid, the merge walk told apart from the natural order
 def private q3v_stem_gate(t : T?; var dev, queue; pw, ph, dim : int) {
     let tag = "q3v_stem pw={pw} ph={ph} dim={dim}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
@@ -1877,9 +1875,9 @@ def test_metal_misc_kernels(t : T?) {
                 ew2_hx_gate(t, dev, queue, true, false, true, 40, 64, 96)
                 pos_add_gate(t, dev, queue, 98, 64, 14, 1120)   // 672x336 grid: NON-square, axis order visible
                 pos_add_gate(t, dev, queue, 49, 64, 7, 1120)
-                q3v_stem_gate(t, dev, queue, 6, 4, 70)   // a non-square grid at a width off the 64-thread group
+                q3v_stem_gate(t, dev, queue, 6, 4, 70)   //! a non-square grid at a width off the 64-thread group
                 patch_im2col_gate(t, dev, queue, 24, 16, 4, 0, 1.0, 0.0)
-                patch_im2col_gate(t, dev, queue, 28, 14, 7, 13, 2.0, -1.0)   // the padded stride, gemma4v's pixel map
+                patch_im2col_gate(t, dev, queue, 28, 14, 7, 13, 2.0, -1.0)   //! the padded stride, gemma4v's pixel map
                 q3v_stem_gate(t, dev, queue, 8, 8, 64)    // square control
                 clamp_gate(t, dev, queue, 1000, CLAMP_IN, false)    // separate dst, %64 tail
                 clamp_gate(t, dev, queue, 1000, CLAMP_OUT, true)    // in place

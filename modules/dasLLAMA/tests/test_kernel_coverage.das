@@ -215,8 +215,8 @@ def private cov_model(t : T?; path, family : string; kdts : array<KVDtype>; nbs 
         let vocab = tr.config.vocab_size
         select_prefill_override("metal")
         select_decode_override("metal")
-        var ss : array<Session>       //! the batch's sessions, their handles and their picks, reused across the shapes
-        var sess : array<Session?>    //! borrowed handles into ss: cleared before ss goes, never deleted whole
+        var batch_sessions : array<Session>       //! the batch's sessions, their handles and their picks, reused across the shapes
+        var sess : array<Session?>    //! borrowed handles into batch_sessions: cleared before batch_sessions goes, never deleted whole
         var curs : array<int64>
         with_dasllama_jobque() {
             for (kdt in kdts) {
@@ -238,20 +238,20 @@ def private cov_model(t : T?; path, family : string; kdts : array<KVDtype>; nbs 
                 eval_(tr, s, p2)
                 delete s
                 for (nb in nbs) {
-                    ss |> reserve(nb)
+                    batch_sessions |> reserve(nb)
                     for (i in range(nb)) {
-                        ss |> emplace <| make_run_state(tr.config, kdt, kdt)
+                        batch_sessions |> emplace <| make_run_state(tr.config, kdt, kdt)
                         var inscope pb <- encode(tr, counting_prompt(3 + i, 44 + i), true, false)
-                        eval_(tr, ss[i], pb)
-                        sess |> push(unsafe(addr(ss[i])))
-                        curs |> push(argmax_of(ss[i].logits, vocab))
+                        eval_(tr, batch_sessions[i], pb)
+                        sess |> push(unsafe(addr(batch_sessions[i])))
+                        curs |> push(argmax_of(batch_sessions[i].logits, vocab))
                     }
                     var ws <- create_batch_workspace_(tr)
                     eval_batch_(tr, ws, sess, curs)
                     sess |> clear()   // borrowed handles — delete of array<T?> cascades to the pointees
                     curs |> clear()
                     delete ws
-                    delete ss
+                    delete batch_sessions
                 }
             }
         }

@@ -114,7 +114,6 @@ struct Qwen3vState {
     @scratch @exact_size pos_rs : array<float>   // the pos table resized to the grid [npos × d]
     @exact_size cos_t : array<float>; @exact_size sin_t : array<float>
     @exact_size ds_stash : array<float>  // GPU arm: each tap merger's proj output [n_ds × nout × proj]
-    @exact_size ds_xtaps : array<float>  //! the q8 GPU arm: the residual after each tap block [n_ds × npos × d], the CPU tap mergers read it
     @scratch @exact_size xqi : array<int8>    // q8 lane: the requantized GEMM input, grown per site
     @scratch @exact_size xsi : array<float>   // its per-32-block scales
     @scratch pos2 : array<int2>      // per reordered row: (patch row, patch column)
@@ -147,7 +146,6 @@ def finalize(var s : Qwen3vState) {
     delete s.ds_mid
     delete s.ds_slice
     delete s.ds_stash
-    delete s.ds_xtaps
     delete s.pos_rs
     delete s.cos_t
     delete s.sin_t
@@ -237,12 +235,11 @@ def private register_qwen3v_image_tags {
     register_image_family_tag(QWEN3V_TAG_Q8)
 }
 
-// the lane policy follows the fastest GEMM path on the box: the Metal tower or the armed
-// accelerate float-batch tier wants f32 planes; else q8. A pin overrides.
+// the lane policy follows the fastest GEMM path on the box: a serving GPU chain or the armed
+// accelerate float-batch tier prefers f32 planes; else q8. A pin overrides.
 var private g_q3v_q8_pin = GemmLane.unset
 
 typedef Qwen3vGpuChainFn = function<(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w, h, npos : int64) : bool>   //! the whole chain from the planes
-typedef Qwen3vGpuBlocksFn = function<(t : Qwen3vTower; var s : Qwen3vState; npos : int64) : bool>   //! the blocks alone over `s.x`
 typedef Qwen3vGpuServesFn = function<() : bool>
 var private g_q3v_gpu : Qwen3vGpuChainFn
 var private g_q3v_gpu_serves : Qwen3vGpuServesFn
@@ -257,17 +254,6 @@ def register_qwen3v_gpu(fn : Qwen3vGpuChainFn; serves : Qwen3vGpuServesFn; f32_l
     g_q3v_gpu_serves = serves
     g_q3v_f32_lane = f32_lane
     g_q3v_gpu_set = true
-}
-
-var private g_q3v_gpu_blocks : Qwen3vGpuBlocksFn
-var private g_q3v_gpu_blocks_set = false
-
-//! The blocks-only driver's seat (the Vulkan tower): the fn runs the BLOCKS alone over the q8 image - `s.x` in and out, the
-//! residual after each deepstack tap block into `s.ds_xtaps` (caller-sized) - false = decline (the driver's own `quant_mode`
-//! among them), the CPU loop serves; the tap mergers and the tail stay on the CPU, so the lane policy is untouched.
-def register_qwen3v_gpu_blocks(fn : Qwen3vGpuBlocksFn) {
-    g_q3v_gpu_blocks = fn
-    g_q3v_gpu_blocks_set = true
 }
 
 //! The deepstack tap index of block `l`, -1 off the taps.
@@ -882,30 +868,6 @@ def private q3v_tail(t : Qwen3vTower; var s : Qwen3vState; npos : int64; var out
     return nout
 }
 
-[arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
-def private q3v_blocks_gpu(t : Qwen3vTower; var s : Qwen3vState; npos : int64; var out : array<float>) : bool {
-    if (!g_q3v_gpu_blocks_set) {
-        return false
-    }
-    let nds = t.n_deepstack
-    if (nds > 0l) {
-        ensure_length(s.ds_xtaps, nds * npos * t.n_embd)
-    }
-    if (!invoke(g_q3v_gpu_blocks, t, s, npos)) {
-        return false
-    }
-    for (k in range64(nds)) {
-        let tl = k == 0l ? t.ds_l0 : (k == 1l ? t.ds_l1 : t.ds_l2)
-        if (tl < 0l || tl >= t.n_layer) {
-            continue
-        }
-        unsafe {
-            memcpy(addr(s.xb2[0]), addr(s.ds_xtaps[k * npos * t.n_embd]), npos * t.n_embd * 4l)
-        }
-        q3v_deepstack_tap(t, s, s.xb2, k, npos, out)
-    }
-    return true
-}
 
 //! Encode a letterboxed, normalized canvas (`vision_normalize(0.5, 0.5)` planes, w×h) into
 //! `out` = [nout × qwen3v_row_width] soft tokens (deepstack: slice 0 = the main merger,
@@ -922,7 +884,7 @@ def qwen3v_encode(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w
     dispatch_phase_encode(pw * ph)
     var tp = ref_time_ticks()
     q3v_rope_tables(t, s, pw, ph)
-    let chain = g_q3v_gpu_set   //! the whole chain off the planes (its knob and lane declines are its own): no CPU im2col unless it declines
+    let chain = g_q3v_gpu_set
     let npos = q3v_stem_cols(t, s, planes, w, h, pw, ph, !chain)
     asr_prof_add("q3v.stem", tp)
     let nds = t.n_deepstack
@@ -939,7 +901,7 @@ def qwen3v_encode(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w
             ensure_length(s.ds_stash, nds * nout4 * t.proj_dim)
         }
         //! the driver reads the planes and s.pos_rs, never s.x
-        gpu_served = invoke(g_q3v_gpu, t, s, planes, w, h, npos)   // stem + blocks + taps + tail on GPU: proj outputs land in ds_stash/ds_slice
+        gpu_served = invoke(g_q3v_gpu, t, s, planes, w, h, npos)
     }
     if (!gpu_served) {
         tp = ref_time_ticks()
@@ -964,7 +926,7 @@ def qwen3v_encode(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w
         }
         asr_prof_add("q3v.tail", tp)
         return nout4
-    } elif (!q3v_blocks_gpu(t, s, npos, out)) {
+    } else {
         for (l in range64(t.n_layer)) {
             q3v_block(t, s, l, npos)
             if (nds > 0l) {
