@@ -190,6 +190,11 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
      - ``-p``
      - ``8080``
      - Listen port
+   * - ``--host``
+     -
+     - ``127.0.0.1``
+     - Interface to listen on. The default serves this machine only; ``0.0.0.0`` opens the
+       server to every device on the network, which is the operator's choice, never the default
    * - ``--quant``
      - ``-q``
      - ``q8``
@@ -348,6 +353,7 @@ picks a different one:
 
    model = "D:/models/SmolLM2-135M-Instruct-Q8_0.gguf"
    port = 8080
+   host = "127.0.0.1"   # the interface: this machine only; "0.0.0.0" opens it to the network
    quant = "q8"
    kv_dtype = "tq4"   # rotated 4-bit KV - half the q8_0 cache bytes
    ctx = 4096
@@ -567,7 +573,9 @@ Endpoints
      - Raw completion; ``stream: true`` gives SSE, else buffered; the same ``stream_options.include_usage`` closing chunk as the chat route
    * - ``POST``
      - ``/v1/embeddings``
-     - Mean-pooled, L2-normalized sentence embeddings
+     - L2-normalized sentence embeddings, pooled the way the model's file asks (``pooling_type``:
+       last token for Qwen3-Embedding, mean for a chat model); ``pooling`` (``mean`` | ``cls`` |
+       ``last``) overrides, ``dimensions`` keeps the leading components and renormalizes
    * - ``POST``
      - ``/v1/audio/transcriptions``
      - Speech to text (multipart upload; needs ``--asr``). One ASR model takes every request, whatever ``model`` says; with several, ``model`` names one by its id (none, or the ``<default slot>-asr`` id: the first; any other name: 404); ``language`` defaults to English, and to detection on a model that only detects. ``response_format=verbose_json`` adds timed segments
@@ -769,10 +777,17 @@ Embeddings
 ----------
 
 ``input`` is a string or an array of strings. Each vector is ``model.config.dim``
-floats, mean-pooled over the decoder's last-layer hidden state (post-final-norm)
-and L2-normalized. A decoder-only LLM used as an embedder gives **RAG-grade**
-vectors (good for retrieval / similarity), not a substitute for a dedicated
-embedding model. See :ref:`tutorial_dasLLAMA_embeddings` for the facade side.
+floats from the decoder's last-layer hidden rows (post-final-norm), L2-normalized,
+pooled the way the model's file asks: its ``pooling_type`` key names last-token
+pooling for an embedding model such as Qwen3-Embedding (the row at the appended end
+token, the way it was trained to be read) and is absent on a chat model, which is
+read by the mean over positions. ``pooling`` (``"mean"`` | ``"cls"`` | ``"last"``)
+overrides the file; ``dimensions`` keeps the leading components and renormalizes,
+the Matryoshka read the Qwen3-Embedding family supports. An instruction prefix on
+the query side ("Instruct: ...\nQuery: ...") is the client's text, as the API has no
+field for it. A chat model used as an embedder gives **RAG-grade** vectors (good for
+retrieval / similarity), not a substitute for a dedicated embedding model. See
+:ref:`tutorial_dasLLAMA_embeddings` for the facade side.
 
 .. code-block:: sh
 

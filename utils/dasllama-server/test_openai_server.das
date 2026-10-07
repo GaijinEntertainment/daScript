@@ -53,6 +53,19 @@ def private l2(v : array<float>) : float {
     return sqrt(s)
 }
 
+//! two vectors within `tol` per component - the renormalized cut against the test's own renormalization of the same floats
+def private vecs_close(a, b : array<float>; tol : float) : bool {
+    if (length(a) != length(b)) {
+        return false
+    }
+    for (x, y in a, b) {
+        if (abs(x - y) > tol) {
+            return false
+        }
+    }
+    return true
+}
+
 def private vecs_equal(a, b : array<float>) : bool {
     if (length(a) != length(b)) {
         return false
@@ -222,6 +235,70 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                     }
                 }
             }
+            // /v1/embeddings - the pooling override and the Matryoshka cut: a chat model's file names no pooling, so
+            // the default is the mean; "last" reads one row, a unit vector that differs from the mean's; "dimensions"
+            // keeps the leading components, renormalized; a pooling nobody defines is refused
+            var mean_vec : array<float>
+            POST("{base_url}/v1/embeddings", "\{\"input\":\"the quick brown fox\",\"pooling\":\"mean\"}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK))
+                var err : string
+                var js = read_json(string(resp.body), err)
+                if (js != null) {
+                    let r = from_JV(js, type<EmbResp>)
+                    if (length(r.data) == 1) {
+                        mean_vec := r.data[0].embedding
+                    }
+                    unsafe {
+                        delete js
+                    }
+                }
+            }
+            POST("{base_url}/v1/embeddings", "\{\"input\":\"the quick brown fox\",\"pooling\":\"last\"}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK))
+                var err : string
+                var js = read_json(string(resp.body), err)
+                if (js != null) {
+                    let r = from_JV(js, type<EmbResp>)
+                    t |> success(length(r.data) == 1, "last-pooled: one embedding returned")
+                    if (length(r.data) == 1) {
+                        t |> success(abs(l2(r.data[0].embedding) - 1.0) < 1.0e-4, "last-pooled embedding is L2-normalized")
+                        t |> success(!vecs_equal(r.data[0].embedding, mean_vec), "the last row's vector differs from the mean's")
+                    }
+                    unsafe {
+                        delete js
+                    }
+                }
+            }
+            POST("{base_url}/v1/embeddings", "\{\"input\":\"the quick brown fox\",\"dimensions\":8}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK))
+                var err : string
+                var js = read_json(string(resp.body), err)
+                if (js != null) {
+                    let r = from_JV(js, type<EmbResp>)
+                    if (length(r.data) == 1) {
+                        t |> equal(8, length(r.data[0].embedding), "dimensions=8 keeps eight components")
+                        t |> success(abs(l2(r.data[0].embedding) - 1.0) < 1.0e-4, "the cut vector is renormalized")
+                        var lead <- [for (i in range(8)); mean_vec[i]]
+                        var ss = 0.0
+                        for (x in lead) {
+                            ss += x * x
+                        }
+                        let rn = 1.0 / sqrt(ss)
+                        for (x in lead) {
+                            x *= rn
+                        }
+                        t |> success(vecs_close(r.data[0].embedding, lead, 1.0e-5), "... and they are the full vector's leading components, renormalized")
+                        delete lead
+                    }
+                    unsafe {
+                        delete js
+                    }
+                }
+            }
+            POST("{base_url}/v1/embeddings", "\{\"input\":\"the quick brown fox\",\"pooling\":\"median\"}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "an unknown pooling is refused")
+            }
+            delete mean_vec
             // /v1/chat/completions (non-streaming) — end-to-end generation smoke
             POST("{base_url}/v1/chat/completions",
                  "\{\"messages\":[\{\"role\":\"user\",\"content\":\"Say hi.\"}],\"max_tokens\":8}") $(resp) {

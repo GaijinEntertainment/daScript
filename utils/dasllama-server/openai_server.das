@@ -2353,7 +2353,7 @@ let CHAT_FIELDS : table<string> <- { "model", "messages", "stream", "temperature
 let COMPL_FIELDS : table<string> <- { "model", "prompt", "stream", "temperature", "top_k", "top_p", "min_p",
                                      "presence_penalty", "frequency_penalty", "repeat_penalty", "seed",
                                      "max_tokens", "stream_options" }
-let EMB_FIELDS : table<string> <- { "model", "input" }
+let EMB_FIELDS : table<string> <- { "model", "input", "pooling", "dimensions" }
 
 // Sampling knobs shared by both completion routes — OpenAI names, plus the llama.cpp-style
 // extensions (top_k / min_p / repeat_penalty). Absent fields keep the greedy defaults.
@@ -2552,9 +2552,22 @@ def private handle_models(var resp : Reply) : http_status {
     return resp |> JSON(body, http_status.OK)
 }
 
-// /v1/embeddings: mean-pooled, L2-normalized sentence embeddings over the facade `embed` verb.
-// `input` is a string or an array of strings; usage is counted via the facade `encode` (cheap
-// relative to the forward). Decoder-only-as-embedder — RAG-grade vectors, not a dedicated model.
+// /v1/embeddings: L2-normalized sentence embeddings over the facade `embed` verb, pooled the way the
+// file asks (its `pooling_type`; a chat model means mean) unless the request's `pooling` names one
+// ("mean" | "cls" | "last"); `dimensions` keeps the leading d components and renormalizes (the
+// Matryoshka read Qwen3-Embedding supports). `input` is a string or an array of strings; usage is
+// counted via the facade `encode` (cheap relative to the forward).
+def private l2_normalize(var v : array<float>) {
+    var ss = 0.0
+    for (x in v) {
+        ss += x * x
+    }
+    let rn = ss > 0.0 ? 1.0 / sqrt(ss) : 0.0
+    for (x in v) {
+        x *= rn
+    }
+}
+
 def private handle_embeddings(req : FrontReq; var resp : Reply) : http_status {
     var perr = ""
     var js = read_json(req.body, perr)
@@ -2590,6 +2603,15 @@ def private handle_embeddings(req : FrontReq; var resp : Reply) : http_status {
     if (empty(inputs)) {
         return resp_error(resp, http_status.BAD_REQUEST, "'input' is empty")
     }
+    let pool_name = js?["pooling"] ?? ""
+    let pooling = pool_name == "mean" ? POOLING_MEAN : (pool_name == "cls" ? POOLING_CLS : (pool_name == "last" ? POOLING_LAST : -1l))
+    if (!empty(pool_name) && pooling < 0l) {
+        return resp_error(resp, http_status.BAD_REQUEST, "'pooling' must be \"mean\", \"cls\" or \"last\" (got '{pool_name}'); unset, the model's own pooling_type applies")
+    }
+    let dims = int64(js?["dimensions"] ?? 0)
+    if (dims < 0l || dims > cur_model().config.dim) {
+        return resp_error(resp, http_status.BAD_REQUEST, "'dimensions' must be 1..{cur_model().config.dim} (the model's hidden width)")
+    }
 
     var out = OaiEmbeddingList(_object = "list", model = cur_name())
     out.data |> reserve(length(inputs))
@@ -2598,7 +2620,11 @@ def private handle_embeddings(req : FrontReq; var resp : Reply) : http_status {
     for (text in inputs) {
         var inscope toks <- encode(cur_model(), text, true, false)
         prompt_tokens += long_length(toks)
-        var inscope vec = embed(cur_model(), text)
+        var inscope vec = embed(cur_model(), text, pooling)
+        if (dims > 0l && dims < long_length(vec)) {   // the Matryoshka cut: the leading components, renormalized
+            vec |> resize(dims)
+            l2_normalize(vec)
+        }
         out.data |> emplace(OaiEmbedding(_object = "embedding", embedding <- vec, index = idx))
         idx ++
     }
@@ -6077,12 +6103,13 @@ let private FRONT_OUT_BURST = 512           //! engine ops applied between two s
 
 //! The front thread: the HTTP server, its writers, and nothing else. It blocks on the engine's op channel for a
 //! millisecond at a time, so an op reaches its socket as it arrives and a new request waits a millisecond at most.
-def private front_main(port : int; var to_engine : Channel?&; var from_engine : Channel?&; var to_speech : Channel?&) {
+def private front_main(port : int; host : string; var to_engine : Channel?&; var from_engine : Channel?&; var to_speech : Channel?&) {
     this_context().name := "dasllama-front"
     g_fto_engine = to_engine
     g_fto_speech = to_speech
     var server = new OpenAiFront()
     server->init(port)
+    server->set_bind_host(host)   //! the interface the front listens on: loopback unless the operator opens it
     let rc = server->start()   // 0 on success; non-zero = bind/listen failed (e.g. port in use)
     to_engine |> push_clone(FrontReq(kind = FrontKind.ready, status = rc, port = rc == 0 ? server->bound_port() : 0))
     var stop = rc != 0
@@ -6285,19 +6312,20 @@ let private FRONT_START_WAIT_MS = 30000
 let private FRONT_STOP_WAIT_MS = 10000
 
 //! Start the front thread on `port` and wait for it to listen: its start rc, or -1 when it never answered.
-def private start_front(port : int) : int {
+def private start_front(port : int; host : string) : int {
     g_front_launched = true
     var to_engine = g_front_in
     var from_engine = g_link.out
+    let bind_host = clone_string(host)   //! the capture crosses a context: the string travels as its own bytes
     if (g_speech_up) {
         var to_speech = g_speech_in
-        new_thread() <| @capture(= port, = to_engine, = from_engine, = to_speech) {
-            front_main(port, to_engine, from_engine, to_speech)
+        new_thread() <| @capture(= port, = bind_host, = to_engine, = from_engine, = to_speech) {
+            front_main(port, bind_host, to_engine, from_engine, to_speech)
         }
     } else {   // a capture takes a reference, and there is no channel to take one of
-        new_thread() <| @capture(= port, = to_engine, = from_engine) {
+        new_thread() <| @capture(= port, = bind_host, = to_engine, = from_engine) {
             var no_speech : Channel?
-            front_main(port, to_engine, from_engine, no_speech)
+            front_main(port, bind_host, to_engine, from_engine, no_speech)
         }
     }
     g_front_up = true
@@ -6305,6 +6333,9 @@ def private start_front(port : int) : int {
     g_front_in |> pop_with_timeout_clone(FRONT_START_WAIT_MS) $(ev : FrontReq#) {
         if (ev.kind == FrontKind.ready) {
             rc = ev.status
+            if (rc == 0) {
+                to_log(LOG_INFO, "dasllama-server: listening on {host}:{ev.port}\n")
+            }
         }
     }
     if (rc != 0) {
@@ -6768,10 +6799,13 @@ def private init_slot_schedulers(max_streams, max_queue, chunk_tokens, idle_chun
 
 //! `mtp`: -1 lets each slot decide (self-speculation on when it runs one stream on a GPU, `mtp_auto_arms`), 0 / 1 set it
 //! `asr_team`: -1 lets the slots decide whether the ASR workers publish to the worker team (`asr_auto_team`), 0 runs them inline, 1 puts them and the TTS worker on the team
+//! the interface the front binds when nobody names one: this machine alone - a server on the network is the operator's choice
+let DEFAULT_BIND_HOST = "127.0.0.1"
+
 def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; chunk_tokens : int64 = 0l;
                 page_rows : int64 = 64l; prefix_groups : int64 = 0l; kv_dtype : KVDtype = KVDtype.f16;
                 team_dispatch : bool = true; asr_team : int = -1; mtp : int = -1;
-                idle_chunk_tokens : int64 = -1l) : bool {
+                idle_chunk_tokens : int64 = -1l; host : string = DEFAULT_BIND_HOST) : bool {
     if (g_front_up || g_jobque_owned) {
         to_log(LOG_ERROR, "dasllama-server: init_server called while already initialized\n")
         return false
@@ -6820,7 +6854,7 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
     }
     // a resident prefill would strand device-only rows when host-cached sessions outnumber the driver's K/V regions; device-home streams prefill on the device regardless
     set_resident_prefill_allowed(false)
-    let rc = start_front(port)   // 0 on success; non-zero = bind/listen failed (e.g. port in use)
+    let rc = start_front(port, empty(host) ? DEFAULT_BIND_HOST : host)   // 0 on success; non-zero = bind/listen failed (e.g. port in use)
     if (rc != 0) {
         to_log(LOG_ERROR, "dasllama-server: could not start on port {port} (start rc {rc}; is the port already in use?)\n")
         return false
@@ -7078,9 +7112,9 @@ def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers s
 def run_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; chunk_tokens : int64 = 0l;
                page_rows : int64 = 64l; prefix_groups : int64 = 0l; kv_dtype : KVDtype = KVDtype.f16;
                team_dispatch : bool = true; asr_team : int = -1; mtp : int = -1;
-               idle_chunk_tokens : int64 = -1l) {
+               idle_chunk_tokens : int64 = -1l; host : string = DEFAULT_BIND_HOST) {
     if (init_server(port, max_streams, max_queue, chunk_tokens, page_rows, prefix_groups, kv_dtype,
-            team_dispatch, asr_team, mtp, idle_chunk_tokens)) {
+            team_dispatch, asr_team, mtp, idle_chunk_tokens, host)) {
         while (update_server()) {
         }
     }
