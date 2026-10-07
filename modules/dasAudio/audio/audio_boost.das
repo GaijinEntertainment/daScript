@@ -1295,10 +1295,12 @@ def finalize_mixer {
     if (this_context().category.audio) {
         ma_limiter_uninit(unsafe(addr(g_limiter)))
         delete g_mix_buffer
-        let SPEED = g_mixer_total_time / double(g_mixer_total_samples)
-        let SPEED_OF_LIGHT = 1000.lf / 48000.lf
-        let UTILIZATION = int(SPEED / SPEED_OF_LIGHT * 1000.lf)
-        to_log(0, "mixer {UTILIZATION/10}.{UTILIZATION%10}% utilization\n")
+        if (g_mixer_total_samples > 0ul) {
+            let SPEED = g_mixer_total_time / double(g_mixer_total_samples)
+            let SPEED_OF_LIGHT = 1000.lf / 48000.lf
+            let UTILIZATION = int(SPEED / SPEED_OF_LIGHT * 1000.lf)
+            to_log(0, "mixer {UTILIZATION/10}.{UTILIZATION%10}% utilization\n")
+        }
     }
 }
 
