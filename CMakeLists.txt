@@ -1720,6 +1720,7 @@ SET(DAS_RELEASE_MISC_INCLUDE
     include/daScript/misc/arraytype.h
     include/daScript/misc/callable.h
     include/daScript/misc/crash_handler.h
+    include/daScript/misc/das_asan.h
     include/daScript/misc/das_common.h
     include/daScript/misc/debug_break.h
     include/daScript/misc/dep_recorder.h
