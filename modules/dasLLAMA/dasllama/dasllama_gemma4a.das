@@ -645,9 +645,8 @@ def register_gemma4a_chunk_gpu(fn : Gemma4aGpuChunkFn) {
 
 //! the attention scales as this chain rounds them - every rail and cell reads them here: the query scale ahead of the per-dim scale
 //! and the key scale, both into the log2-domain softmax
-def gemma4a_attn_scales(hs : int64) : tuple<qscale : float; kscale : float> {
-    return (qscale = (1.0 / sqrt(float(hs))) / log(2.0), kscale = log(1.0 + exp(1.0)) / log(2.0))
-}
+def gemma4a_attn_scales(hs : int64) : tuple<qscale : float; kscale : float> =>
+    (qscale = (1.0 / sqrt(float(hs))) / log(2.0), kscale = log(1.0 + exp(1.0)) / log(2.0))
 
 //! The causal attention horizon (window = self + past - 1 previous rows) — the GPU driver's
 //! kernel sizes its score window off this.

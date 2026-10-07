@@ -978,9 +978,8 @@ def tts_pk_frames_ok(m : PocketModel; hs, max_nin : int64; lin_ok : block<(l : T
 }
 
 //! the voice's caches hold `rows` more rows past the voice's: a cache a layer, the rows within capacity, capacity within `max_keys`
-def tts_pk_caches_admit(m : PocketModel; vs : PocketVoiceState; rows, max_keys : int64) : bool {
-    return (!empty(vs.caches) && length(vs.caches) == length(m.backbone.layers) && vs.len + rows <= vs.caches[0].cap && vs.caches[0].cap <= max_keys)
-}
+def tts_pk_caches_admit(m : PocketModel; vs : PocketVoiceState; rows, max_keys : int64) : bool =>
+    (!empty(vs.caches) && length(vs.caches) == length(m.backbone.layers) && vs.len + rows <= vs.caches[0].cap && vs.caches[0].cap <= max_keys)
 
 //! the frames call's admission: at least one frame, the text and the frames within the caches
 def tts_pk_frames_admit(m : PocketModel; vs : PocketVoiceState; n_txt, max_frames, max_keys : int64) : bool
