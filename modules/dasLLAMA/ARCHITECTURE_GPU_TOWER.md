@@ -64,7 +64,11 @@ one. The device blob is 34/32 of the q8 planes and no image carries it; it drops
 epoch and the tower shutdown. The stem's first conv reads the f32 blob on both lanes - its
 3 x n_mel columns are not quantized - and where those columns are off the GEMM's 32 lattice (80
 mels: 240) it reads a device copy of its rows zero-padded to the lattice (`tw_conv1_pad_attach`),
-the im2col pass padding its own rows with zeros to the same width.
+the im2col pass padding its own rows with zeros to the same width. A position plane adds through
+the shared bias rows stamp (`tw_bias` at `BIAS_ACT_NONE`) as one bias row as wide as the rows it
+covers, because the stamp repeats its bias row every `d` elements: the whisper stem's row is its
+whole plane, so each position row lands once; qwen3a's is one chunk's position rows, so every chunk
+takes them, in a second pass after the `conv_out` bias row - the CPU's order, (x + b) + pos.
 
 The whisper-class chain has three forms over one block loop (`TwForm`): the blocks alone, the
 blocks with the tower's post-norm (whisper's encoder output), and the blocks with the projector
@@ -99,10 +103,12 @@ The chain lands the soft tokens in `Gemma4aState.out` and says so (`out_ready`).
 Canary's front runs whole on the device ahead of its block seat (`metal_canary_front`, the front
 seat): off the CPU-windowed frames, the DFT as a GEMM over the transposed twiddles, the power
 spectrum, the mel sums, `MetalCnMelNorm` - the log and the per-feature normalization over the valid
-frames, one thread a feature - then the parakeet front's convs and the input projection. The front
-kernels read tap-major taps and canary's file keeps them channel-major, so the three conv panels
-ride a device copy (`tw_cn_front_attach`); and a stage's valid rows are its conv's image height, so
-a row past them reads as the zero the CPU chain masks it to and no mask pass is dispatched.
+frames, one thread a feature - then the parakeet front's convs and the input projection. The first
+conv is the im2col GEMM both homes run (the shared `GkIm2col2d` at one channel, the f16-staged GEMM
+over a `[ch][32]` tap panel kept once an encoder - `tw_conv0_panel`, canary's taps channel-major in
+its file, parakeet's tap-major - and the bias-and-ReLU rows); the two depthwise convs stamp the template both homes share
+(`GkDwConv2d`) over the file's taps, and a stage's valid rows ride the template's length mask
+(`ih_valid`), so a row past them adds nothing and no mask pass is dispatched.
 
 The FastConformer chain (canary and parakeet share it: one context, one block body over the
 canary offsets record, parakeet's offsets mapped onto it with no GEMM biases and its tap-major
@@ -144,12 +150,14 @@ lever and `metal_tower_fc_dev_encodes()` the engage counter.
 
 Parakeet's chain starts at the mel: its whole-encode seat (`metal_parakeet_encode`,
 `register_parakeet_gpu_encode`) runs the subsample front and the pre-projection ahead of the
-blocks in the same command buffer - the first conv off the one-channel mel with its bias and
-ReLU and the two depthwise stride-2 convs as one-thread-an-element kernels over the blob's
-tap-major taps (`MetalPkFrontConvT`), the two 1x1 convs and the pre-projection as weighted GEMMs
-of the chain with a bias-and-ReLU or a bias row pass behind them, the feature permute between
-(`MetalPkXf`, which also zeroes the pre-projection's row pad). The rel table is the session's
-(`parakeet_pos_table`, built once a frame count). The seat answers -1 with nothing counted on a
+blocks in the same command buffer - the first conv off the one-channel mel as the im2col GEMM
+with its bias-and-ReLU rows and the two depthwise stride-2 convs as one-thread-an-element kernels over
+the blob's tap-major taps (the shared `GkDwConv2d` under TAP_MAJOR), the two 1x1 convs and the
+pre-projection as weighted GEMMs of the chain with a bias-and-ReLU or a bias row pass behind them,
+the feature permute between (the shared `GkFeatShuffle`, which also zeroes the pre-projection's row
+pad). The rel table is built on the device at the head of every FastConformer command buffer
+(the shared `GkRelSinCos` into the context's zero-padded table, canary's and parakeet's alike), so
+no session table is uploaded. The seat answers -1 with nothing counted on a
 q8 model, a clip whose first conv output passes 1 GB (about five minutes of audio), a shape off
 the lattice or `set_metal_parakeet_front(false)`: the CPU front runs then and the block seat
 serves behind it. `metal_tower_stats().convs` counts the encodes whose front ran on the device.

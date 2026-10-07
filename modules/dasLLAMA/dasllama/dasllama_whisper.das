@@ -1084,6 +1084,9 @@ def register_whisper_decode_gpu(fn : WhisperDecodeGpuFn) {
     g_wh_decode_gpu_set = true
 }
 
+//! the decoder's key pre-scale as this chain rounds it, hs^-0.25 - every rail and cell reads it here
+def wdec_kscale(hs : int64) : float => 1.0 / sqrt(sqrt(float(hs)))
+
 //! Precompute the cross-attention memory for one encoded window (``enc_out`` =
 //! whisper_encode's ``s.xb``, ``n_ctx × d``): per layer K = W_k·enc (no bias, pre-scaled
 //! hs^-0.25), V = W_v·enc + b. Resets the sequence.
@@ -1097,7 +1100,7 @@ def whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc_out : array<fl
     let hh = w.n_text_head
     let hs = d / hh
     let ta = w.enc.n_ctx
-    let kscale = 1.0 / sqrt(sqrt(float(hs)))
+    let kscale = wdec_kscale(hs)
     wm_requant(w, enc_out, d, ta, ds.xqi, ds.xsi)   // every layer's ck & cv share this one requant
     for (l in range64(w.n_text_layer)) {
         let lo = dec_layer_offsets(w, l)

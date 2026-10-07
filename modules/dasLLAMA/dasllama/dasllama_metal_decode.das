@@ -2727,8 +2727,8 @@ def private encode_step(t : Model; var r : StepRes; commit_now : bool; var prev_
             enc_embed(enc, bemb.buf, bemb.boff, r.btok, r.bx, r.u_dim, r.u_embscale, dim)
         } elif (spec_emb_f32(t)) {
             let bemb = plane_of(g_dev, t, t.fblob, t.tok_emb_off)
-            var kg = RowGatherArgs(c = uint(dim), add_b = 0u, add_c = 0u, total = uint(dim), scale = c.embed_scale)
-            enc_row_gather(enc, bemb.buf, bemb.boff, r.btok, g_one, 0ul, g_one, 0ul, r.bx, kg, dim)
+            var kg = GkRowGatherArgs(c = uint(dim), rows = 1u, aoff = uint(bemb.boff / 4ul), boff = 0u, coff = 0u, out_off = 0u, add_b = 0u, add_c = 0u, scale = c.embed_scale)
+            enc_row_gather(enc, bemb.buf, r.btok, g_one, g_one, r.bx, kg, dim)
         } else {
             let bembq = kq_quants_of(g_dev, t, KqFmt.k6, t.wcls_off)
             let bembs = kq_scales_of(g_dev, t, KqFmt.k6, t.wcls_off)

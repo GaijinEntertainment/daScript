@@ -1,6 +1,6 @@
 // The Vulkan tower twins' shared instrument - the seat guard, the three-way encode (the exact chain, the CPU q8 chain,
-// the device chain) with the family's counters and the bar by metric (the vision canvases' maxdiff, the audio towers'
-// rel_l2), the input poison and the exact-lane decline, the vision canvas and dump-poison legs, the in-memory tower mint,
+// the device chain) with the family's counters and the bar by metric (rel_l2 wherever a CPU q8 chain is the control,
+// qwen25v's maxdiff against the exact chain), the input poison and the exact-lane decline, the vision canvas and dump-poison legs, the in-memory tower mint,
 // the GPU knobs' capture and restore (`_gpu_knobs`, re-exported) - one text the vision and audio families' test files call
 // with their own tower, state and encode; no fixture root beside it.
 
@@ -21,7 +21,7 @@ require _gpu_knobs public
 require ?vulkan dasllama/dasllama_vulkan_tower
 require ?vulkan dasllama/dasllama_audio_io
 
-let TWIN_SLACK_VK = 1.5   //! 1.5x: the q8 chain's activation quants plus f16 weight scales, the tiles' summation order, the closed-form GELU against the f16 LUT
+let TWIN_SLACK_VK = 1.5   //! 1.5x: the q8 chain's activation quants plus f16 weight scales, the tiles' summation order
 let TWIN_ABS_VK = 2e-4    //! the tier-1 dumps' absolute floor, the bar's other term
 let TWIN_REL_L2_FLOOR = 1e-4lf   //! the audio twins' absolute floor over rel_l2, a unit-free ratio
 
@@ -93,8 +93,9 @@ typedef VtStats = tuple<encodes : int64; rows : int64; blocks : int64; declines 
 
 //! how a twin reads its distances
 enum TwinMetric {
-    maxdiff   //! max |a - b|, read in the reference chain's rms; the bar `TWIN_SLACK_VK` x the CPU q8 chain's own plus `TWIN_ABS_VK` (the vision canvases)
-    rel_l2    //! `tower_parity_stats`' rel_l2; the bar `TWIN_SLACK_VK` x the CPU q8 chain's own plus `TWIN_REL_L2_FLOOR` (the audio towers)
+    maxdiff   //! max |a - b|, read in the reference chain's rms; the bar `TWIN_SLACK_VK` x the CPU q8 chain's own plus `TWIN_ABS_VK` (qwen25v's own bar rides the poison leg alone)
+    rel_l2    //! `tower_parity_stats`' rel_l2; the bar `TWIN_SLACK_VK` x the CPU q8 chain's own plus `TWIN_REL_L2_FLOOR` (every twin with a CPU q8 chain: a deep tower's worst
+              //! element is a tail of one deepstack tap row that reads the same at 18 and 24 blocks while the CPU q8 chain's own worst element and the rms shrink)
 }
 
 //! what a twin names and reads: the family and the input (every assert's and log line's tag), the tower's depth, the bar log's suffix
@@ -221,7 +222,7 @@ def twin_canvas(tt : T?; family, kind : string; w, h : int; patch : int64; log_s
                 tw_exact : TW; var st_exact : ST; zero_block : int64; mint_poisoned : block<(zb : int64) : TW>;
                 encode : block<(t : TW; var s : ST; var out : array<float>) : int64>) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let spec = TwinSpec(family = family, tag = "{kind} {w}x{h}", n_layer = tw.n_layer, log_suffix = log_suffix, metric = TwinMetric.maxdiff)
+        let spec = TwinSpec(family = family, tag = "{kind} {w}x{h}", n_layer = tw.n_layer, log_suffix = log_suffix, metric = TwinMetric.rel_l2)
         let npos = (int64(w) / patch) * (int64(h) / patch)
         let r <- twin_three_way(tt, spec, tw, st, tw_exact, st_exact, encode) $(legs) {
             twin_counters(tt, spec.tag, legs, spec.n_layer, npos)

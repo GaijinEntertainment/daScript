@@ -181,11 +181,6 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // serves and this one never does. Its coverage is ew2_hx_gate(geglu = true, bounded = true) in
     // test_metal_misc_kernels.das
     "MetalGegluB",
-    // the transposed im2col: only a transposed conv whose channel count is off the GEMM's 8-run
-    // lattice takes it, and every stocked StyleTTS2 and Pocket transposed conv sits on the lattice,
-    // so the gathering CONV stamp serves. Its coverage is st2_im2col_gate(transposed = true) in
-    // test_metal_prefill_kernels.das
-    "metal_st2_im2col_tr",
     // the hyper-connection mixer, its scatter, the n-gram side input and the σ(z) deltanet gate
     // (qwen4exp): the one carrier is Qwen3.8-Flash-Next (94 GB, the large tier), which no census
     // row loads. Their coverage is the hc_*/ple_* gates in test_metal_misc_kernels.das and the
@@ -873,6 +868,15 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     "tower_q3a_shuffle_cls_spv",
     // the LayerNorm + ReLU rows of the gemma4a subsample convs; its coverage is test_vkt_tower_front_movers
     "tower_ln_relu_cls_spv",
+    // the whisper-class projector tails' pair pool and swapped SwiGLU; their coverage is test_vkt_tower_tail_rows
+    "tower_pool_rows_cls_spv",
+    "tower_swiglu_swapped_cls_spv",
+    // parakeet's tap-major subsample depthwise conv2d; its coverage is test_vkt_tower_dw2d
+    "tower_pk_dw2d_cls_spv",
+    // the bias-less seam of parakeet's blocks; its coverage is test_vkt_tower_ln_rows
+    "tower_post_add_ln_nb_cls_spv",
+    // the whisper decoder's f16 K/V store; its coverage is test_vkt_wdec_classes
+    "tower_wdec_kv16_cls_spv",
     // canary's per-feature mel normalization; its coverage is test_vkt_tower_front_mel
     "tower_mel_norm_cls_spv",
     // canary's front depthwise conv; its coverage is test_vkt_tower_front_mel

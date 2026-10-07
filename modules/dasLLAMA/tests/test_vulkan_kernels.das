@@ -3006,11 +3006,11 @@ def private fa_tile_run(t : T?; khr : bool) {
                 var sfa = fa_cell_set(cp, khr, sink, fixed_array(pq, pk_shadow16, pv_shadow16, py), psink)
                 var sfa16 = fa_cell_set(cp, khr, sink, fixed_array(pq, pk_shadow16, pv_shadow16, py16f), psink)
                 var scy = cp |> cls_set(fixed_array(py, py16s), @@set_tower_clamp_cvt_cls)
-                var pcv = f16_rows_args(uint(kpad * kvd))
+                var pcv = gk_f16_rows_args(uint(kpad * kvd))
                 let cvtwgs = int64((kpad * kvd / 4 + 255) / 256)
                 var pcf = FaArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd),
                     kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u, scale = scale, window = uint(window), sinkoff = 0u)
-                var pcy = f16_rows_args(uint(rows * qd))
+                var pcy = gk_f16_rows_args(uint(rows * qd))
                 cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
                     enc_tower_clamp_cvt_cls(raw2, h2, sck, pcv, cvtwgs)
                     enc_tower_clamp_cvt_cls(raw2, h2, scv, pcv, cvtwgs)
@@ -3167,7 +3167,7 @@ def private fa_h256_run(nheads, kv_mul, rows, w0 : int; gated : bool; cap : floa
             var scv = cp |> cls_set(fixed_array(pv, pv_shadow16), @@set_tower_clamp_cvt_cls)
             var sfa = fa_cell_set(cp, khr, false, fixed_array(pq, pk_shadow16, pv_shadow16, py), -1)
             var sfa16 = fa_cell_set(cp, khr, false, fixed_array(pq, pk_shadow16, pv_shadow16, py16), -1)
-            var pcv = f16_rows_args(uint(kpad * kvd))
+            var pcv = gk_f16_rows_args(uint(kpad * kvd))
             let cvtwgs = int64((kpad * kvd / 4 + 255) / 256)
             var pcf = FaArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd), kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u,
                 scale = scale, cap = cap, qstride = gated ? uint(qrow) : 0u, qhs = gated ? uint(qhs) : 0u)
@@ -4878,7 +4878,7 @@ def test_vkd_cvt_family(t0 : T?) {
                                 enc_actf16_cls(raw2, h2, sc, pc, int64(wgs))
                             } else {
                                 var sc = cp |> cls_set(fixed_array(pu, ph), @@set_tower_clamp_cvt_cls)
-                                var pc = f16_rows_args(uint(nelem))
+                                var pc = gk_f16_rows_args(uint(nelem))
                                 enc_tower_clamp_cvt_cls(raw2, h2, sc, pc, int64(wgs))
                             }
                         }
@@ -7286,7 +7286,7 @@ def private ar_fused_arm(t : T?; rq : bool) {
             var scf = rq ? cp |> cls_set(fixed_array(pxf, paa, pwn, paf, pbf), @@set_cls_ar_rq_b) : cp |> cls_set(fixed_array(pxf, paa, pwn, paf), @@set_cls_ar_f16_b)
             var pca = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(woff), eps = 1e-5, ascale = 1.0)
             var pcr = RqArgs(inbase = 0u, nblk = uint(nblk))
-            var pcc = f16_rows_args(uint(nrows * dim))
+            var pcc = gk_f16_rows_args(uint(nrows * dim))
             let swgs = int64((nrows * dim / 4 + 255) / 256)
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_cls_ar(raw, h, sca, pca, int64(nrows))

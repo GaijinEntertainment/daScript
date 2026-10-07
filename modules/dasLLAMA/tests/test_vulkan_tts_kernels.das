@@ -8,6 +8,7 @@ require dastest/testing_boost public
 require ?vulkan vulkan
 require ?vulkan dasllama/dasllama_vulkan_common
 require ?vulkan dasllama/dasllama_vulkan_classes
+require dasllama/dasllama_gpu_math   // nolint:STYLE030,LINT019 - gelu_tanh_lut_f32, the GELU cell's oracle, inside the vulkan arm alone
 require ?vulkan _vkd_oracles
 require _compares   // nolint:STYLE030,LINT019 — the compares, inside the vulkan arms alone
 require _tts_kernel_oracles   // nolint:STYLE030,LINT019 — the in-test CPU forms the cells share, inside the vulkan arms alone
@@ -118,9 +119,8 @@ def test_vkt_row_gather(t0 : T?) {
                 let sp = cp |> in_(slab)
                 let ip = cp |> in_plain(ids)
                 let op = cp |> out_(total, GA_OUT)
-                var s = cp |> cls_set(fixed_array(sp, ip, op), @@set_tts_row_gather_cls)
-                var pa = TtsGatherArgs(c = uint(c), rows = uint(rows), word_off = uint(GA_WORD), pos_off = uint(pos_off), type_off = uint(type_off),
-                    out_off = uint(GA_OUT), adds = 1u)
+                var s = cp |> cls_set(fixed_array(sp, ip, sp, sp, op), @@set_tts_row_gather_cls)
+                var pa = GkRowGatherArgs(c = uint(c), rows = uint(rows), aoff = uint(GA_WORD), boff = uint(pos_off), coff = uint(type_off), out_off = uint(GA_OUT), add_b = 1u, add_c = 1u, scale = 1.0)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_tts_row_gather_cls(raw, h, s, pa, int64(total))
                 }
@@ -134,7 +134,8 @@ def test_vkt_row_gather(t0 : T?) {
                 t |> success(mismatch_exact(subarray(got, range(c)), subarray(got, range(c, 2 * c))) > 0, "tts_row_gather control: two positions on one word differ by their position rows")
                 t |> success(outside_run(cp |> plane_whole(op), GA_OUT, total, NAN_SENTINEL), "tts_row_gather: the prefix before out_off keeps its sentinel")
                 cp |> plane_refill(op)
-                pa.adds = 0u
+                pa.add_b = 0u
+                pa.add_c = 0u
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_tts_row_gather_cls(raw, h, s, pa, int64(total))
                 }
@@ -144,6 +145,18 @@ def test_vkt_row_gather(t0 : T?) {
                 gather_rows(want_plain, subarray(slab, range(GA_WORD, pos_off)), ids, int64(c))
                 check_rows(t, "tts_row_gather adds = 0 vs the word row alone", got_plain, want_plain, BAR_EXACT, c)
                 t |> success(mismatch_exact(got_plain, want) > 0, "tts_row_gather adds = 0 control: the position rows are out of the sum")
+                for (arm in range(2)) {   //! each add alone: the [rows x c] plane, then the [c] row
+                    cp |> plane_refill(op)
+                    pa.add_b = arm == 0 ? 1u : 0u
+                    pa.add_c = arm == 0 ? 0u : 1u
+                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        enc_tts_row_gather_cls(raw, h, s, pa, int64(total))
+                    }
+                    let got_one <- cp |> plane_run(op)
+                    let want_one <- [for (i in range(total)); want_plain[i] + (arm == 0 ? slab[pos_off + i] : slab[type_off + i % c])]
+                    check_rows(t, "tts_row_gather {arm == 0 ? "add_b" : "add_c"} alone vs the word row plus that add", got_one, want_one, BAR_EXACT, c)
+                    t |> success(mismatch_exact(got_one, want) > 0 && mismatch_exact(got_one, want_plain) > 0, "tts_row_gather control: one add alone lands between the plain and the full sums")
+                }
             }
         } else {
             t |> skip("dasVulkan not present")
@@ -187,7 +200,7 @@ def test_vkt_gelu_tanh(t0 : T?) {
                 t |> success(outside_run(got, EL_OFF, EL_N, x), "tts_gelu_tanh: the elements outside the run are untouched")
                 var lut_off = 0
                 for (i in range(EL_OFF, EL_OFF + EL_N)) {
-                    if (!bar_ok(tower_gelu_tanh(x[i]), want[i], TTS_REL)) {
+                    if (!bar_ok(gelu_tanh_lut_f32(x[i]), want[i], TTS_REL)) {
                         lut_off++
                     }
                 }

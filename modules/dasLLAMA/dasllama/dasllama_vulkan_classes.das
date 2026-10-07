@@ -68,9 +68,6 @@ def q40_d_of(w, blk : uint) : float {
 //! Q6_K / Q3_K: the signed int8 sub-block scale `i` (mod 4) of its scale word
 def k6_sc(w, i : uint) : int => int(w << ((3u - (i & 3u)) * 8u)) >> 24
 
-//! `v` stored as a half, saturated at the half's largest finite magnitude instead of overflowing to infinity
-def half_sat(v : float) : float16 => float16(clamp(v, -65504.0, 65504.0))
-
 // The Vulkan KERNEL home: every kernel is a [spirv_kernel]/[vk_dispatch] class — families are
 // one base class + per-format overrides, devirtualized at emission. Kernels carry clean
 // per-member bindings and push-constant params; region lists stay SSBO.
@@ -154,73 +151,9 @@ def private q8k_amax5(m0 : float) : float {
     return m
 }
 
-//! the Q8_0 block store every requant stamp shares - under OUT_Q8 the stamp binds `outq` and `outs`, and the store's text lives
-//! (a stamp off the gate carries no such binding and none of the text): eight consecutive lanes hold a block, `blk_pass` quantizing
-//! a row's blocks from `normed_at`, the stamp's value for a plane element under the row's statistics
-[ |> template_struct_instance]
-class template Q8BlockStoreT : GkWgReduce {
-    @template_constant OUT_Q8 : bool = false   //!< the stamp quantizes its rows into Q8_0 blocks: `outq` and the block scales `outs`
-
-    [arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
-    def blk_store(b, lane8 : uint; v : float4) {
-        static_if (OUT_Q8) {
-            let m = q8_amax3(max(max(abs(v.x), abs(v.y)), max(abs(v.z), abs(v.w))))
-            let d = m / 127.0
-            let id = d != 0.0 ? 1.0 / d : 0.0
-            if (lane8 == 0u) {
-                outs[b] = d
-            }
-            let qb = b * KQ_B32_ELEMS_U + lane8 * 4u
-            outq[qb] = q8_quant1(v.x, id)
-            outq[qb + 1u] = q8_quant1(v.y, id)
-            outq[qb + 2u] = q8_quant1(v.z, id)
-            outq[qb + 3u] = q8_quant1(v.w, id)
-        }
-    }
-
-    def normed_at(e : uint; mean, inv : float) : float => 0.0   //! the normed value at plane element `e` of the row whose statistics are `mean` and `inv`
-
-    //! the Q8_K superblock `b` from `normed_at` under `inv`: a 32-lane subgroup the superblock, lane `lane` its eight elements from `e0`, 32 apart
-    [arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
-    def sblk_store(b, lane, e0 : uint; inv : float) {
-        static_if (OUT_Q8) {
-            var vals : float[8]
-            var m = 0.0
-            for [unroll] (r in range(8)) {
-                let v = normed_at(e0 + uint(r) * 32u, 0.0, inv)
-                vals[r] = v
-                m = max(m, abs(v))
-            }
-            let d = q8k_amax5(m) / 127.0
-            if (lane == 0u) {
-                outs[b] = d
-            }
-            let id = d != 0.0 ? 1.0 / d : 0.0
-            for [unroll] (r in range(8)) {
-                outq[e0 + uint(r) * 32u] = q8_quant1(vals[r], id)
-            }
-        }
-    }
-
-    //! the row's `nblk` blocks from plane element `base` quantized from `normed_at` into the blocks from `qb0` (32 blocks a pass over 256 lanes)
-    def blk_pass(base, nblk, qb0 : uint; mean, inv : float) {
-        static_if (OUT_Q8) {
-            let tid = gl_LocalInvocationID.x
-            let lane = tid % 32u
-            var b = (tid / 32u) * 4u + lane / 8u
-            while (b < nblk) {
-                let e = base + b * KQ_B32_ELEMS_U + (lane % 8u) * 4u
-                let v = float4(normed_at(e, mean, inv), normed_at(e + 1u, mean, inv), normed_at(e + 2u, mean, inv), normed_at(e + 3u, mean, inv))
-                blk_store(qb0 + b, lane % 8u, v)
-                b += 32u
-            }
-        }
-    }
-}
-
 //! the row kernels' reduces in value form over the shared `GkWgReduce` (one wg reduces one row), and the inverse rms
 [ |> template_struct_instance]
-class template WgReduceBase : Q8BlockStoreT {
+class template WgReduceBase : GkQ8BlockStore {
     //! `slot` alternates 0 / 1 between consecutive reduces of one kernel
     def wg_rms_inv(ss0 : float; n : uint; eps : float; slot : uint) : float => 1.0 / sqrt(wg_sum(ss0, slot) / float(n) + eps)   // the CPU rmsnorm's own form
 
@@ -730,7 +663,7 @@ struct RqArgs {
 
 //! the Q8 requant of a plane's elements - Q8_0 32-blocks, or Q8_K superblocks under `KBLK` - over the stamp's element load (`load4` / `load1`)
 [ |> template_struct_instance]
-class template RqT : Q8BlockStoreT {
+class template RqT : GkQ8BlockStore {
     override OUT_Q8 = true
     @template_constant KBLK : bool = false   //!< Q8_K superblocks instead of Q8_0's 32-blocks
 
@@ -9092,35 +9025,12 @@ class F32GemmB : F32GemmT {
 //! the f32 tile's workgroup count over rows x d
 def f32_gemm_wgs(rows, d : int64) : int64 => ((rows + int64(F32G_TP) - 1l) / int64(F32G_TP)) * ((d + int64(F32G_TD) - 1l) / int64(F32G_TD))
 
-struct TtsGatherArgs {
-    c : uint          //! the row width
-    rows : uint       //! the positions
-    word_off : uint   //! the word-embedding rows' element base in slab
-    pos_off : uint    //! the position rows' element base in slab
-    type_off : uint   //! the token-type row's element base in slab
-    out_off : uint    //! the output rows' element base in out
-    adds : uint       //! 1 = the position and type rows added (PL-BERT), 0 = the word row alone (the text encoder)
-}
-
-//! out[t][j] = word[ids[t]][j] + pos[t][j] + type[j], added in that order - the PL-BERT embedding sum of the CPU
-//! `styletts2_albert` - or the word row alone under `adds = 0` (the CPU `gather_rows`), one element an invocation
+//! the PL-BERT embedding sum, the text encoder's word rows and the nearest-x2 upsample on the row gather both homes stamp
 [vk_dispatch(name = "tts_row_gather_cls", kernel = "run", grid = "total/256", params = "total : int64")]
-class TtsRowGather {
-    @ssbo @binding = 0 slab : array<float>
-    @ssbo @binding = 1 ids : array<int>
-    @ssbo @binding = 2 out : array<float>
-    @push_constant pa : TtsGatherArgs
-
-    [spirv_kernel(local_size_x = 256)]
+class TtsRowGather : GkRowGather {
+    [spirv_kernel(local_size_x = 256, name = "tts_row_gather_cls_spv")]
     def run {
-        let g = gl_GlobalInvocationID.x
-        if (g < pa.rows * pa.c) {
-            let c = max(pa.c, 1u)
-            let r = g / c
-            let j = g % c
-            let wv = slab[pa.word_off + uint(ids[r]) * pa.c + j]
-            out[pa.out_off + g] = pa.adds != 0u ? wv + slab[pa.pos_off + g] + slab[pa.type_off + j] : wv
-        }
+        row_gather_body()
     }
 }
 
@@ -9162,7 +9072,7 @@ class template TtsElemT {
     }
 }
 
-//! the CPU `gelu`'s tanh form in f32 (not the f16 LUT form `tower_act` spells - its roundings would move the front end's
+//! the CPU `gelu`'s tanh form in f32 (not the f16 LUT form `act_f32` spells - its roundings would move the front end's
 //! durations); the clamp keeps a device tanh off its exp overflow and changes no f32 result
 [vk_dispatch(name = "tts_gelu_tanh_cls", kernel = "run", grid = "nelem/1024", params = "nelem : int64")]
 class TtsGeluTanh : TtsElemT {
@@ -9348,53 +9258,26 @@ class QkRms : WgReduceBase {
     }
 }
 
-struct TowerClampArgs {
-    nelem : uint    //! a 4-multiple (every tower width is a 64-multiple)
-    lo : float
-    hi : float
-}
-
-//! rows clamped to [lo, hi] in place (a gemma4v ClippableLinear's output bounds), or under OUT16 stored as halves into `outh`
-//! with the bounds cut to the half range - the f16 feed of a clamped GEMM input, the input bounds applied on the way into the
-//! tile so the normed rows stay whole for the next GEMM's own bounds (at the half range's bounds, `f16_rows_args`: the plain f32 -> f16 rows)
-[ |> template_struct_instance]
-class template TowerClampT {
-    @template_constant OUT16 : bool = false
-    @ssbo @binding = 0 @template_gate = "!OUT16" x : array<float>
-    @ssbo @binding = 0 @template_gate = OUT16 src : array<float>
-    @ssbo @binding = 1 @template_gate = OUT16 outh : array<float16>
-    @push_constant pa : TowerClampArgs
-
-    def store_clamped(e : uint) : void {
-        static_if (OUT16) {
-            outh[e] = float16(clamp(src[e], max(pa.lo, -65504.0), min(pa.hi, 65504.0)))
-        } else {
-            x[e] = clamp(x[e], pa.lo, pa.hi)
-        }
-    }
-
-    [spirv_kernel(local_size_x = 256)]
-    def run {
-        let e = gl_GlobalInvocationID.x * 4u
-        if (e < pa.nelem) {
-            store_clamped(e)
-            store_clamped(e + 1u)
-            store_clamped(e + 2u)
-            store_clamped(e + 3u)
-        }
-    }
-}
-
+//! rows clamped in place (a gemma4v ClippableLinear's output bounds), on the template both homes stamp
 [vk_dispatch(name = "tower_clamp_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TowerClamp : TowerClampT {}
-
-[vk_dispatch(name = "tower_clamp_cvt_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TowerClampCvt : TowerClampT {
-    override OUT16 = true
+class TowerClamp : GkClampRows {
+    [spirv_kernel(local_size_x = 256, name = "tower_clamp_cls_spv")]
+    def run {
+        clamp_rows_body()
+    }
 }
 
-//! `tower_clamp_cvt_cls`'s push over `nelem` floats at the half range's bounds: the plain f32 -> f16 rows
-def f16_rows_args(nelem : uint) : TowerClampArgs => TowerClampArgs(nelem = nelem, lo = -65504.0, hi = 65504.0)
+//! the f16 feed of a clamped GEMM input: the input bounds applied on the way into the tile so the normed rows stay whole for
+//! the next GEMM's own bounds (at the half range's bounds, `f16_rows_args`: the plain f32 -> f16 rows)
+[vk_dispatch(name = "tower_clamp_cvt_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerClampCvt : GkClampRows {
+    override OUT16 = true
+
+    [spirv_kernel(local_size_x = 256, name = "tower_clamp_cvt_cls_spv")]
+    def run {
+        clamp_rows_body()
+    }
+}
 
 //! the Q8_0 feed of a clamped GEMM input: the requant over the clamped elements (the mm and KHR modes' tile feed)
 [vk_dispatch(name = "tower_clamp_rq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
@@ -9402,76 +9285,25 @@ class TowerClampRq : RqPlainT {
     override CLAMP = true
 }
 
-struct TowerIm2colArgs {
-    iw : uint         //! the source block's width (frames), height (mel rows / channels' rows) and channel count
-    ih : uint
-    cin : uint
-    kdp : uint        //! the column row's padded width, a 64-multiple; the columns past cin x 9 read zero
-    rows : uint       //! the output rows of every chunk: chunks x oh x ow
-}
-
-//! the im2col of a k3 s2 p1 conv2d over a window's chunks, as the f16 GEMM's feed: row r = (chunk, oy, ox), column
-//! k = (ic x 3 + kh) x 3 + kw - the file's weight order - so the weights need no permute; the source rows are [ih][iw][cin]
-[vk_dispatch(name = "tower_im2col_cls", grid = "wgs", params = "wgs : int64")]
-class TowerIm2col {
-    @ssbo @binding = 0 src : array<float>
-    @ssbo @binding = 1 col : array<float16>
-    @push_constant pa : TowerIm2colArgs
+//! the conv2d im2col over a window's chunks as the f16 GEMM's feed, on the template both homes stamp
+[vk_dispatch(name = "tower_im2col_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerIm2col : GkIm2col2d {
+    typedef OT = float16
 
     [spirv_kernel(local_size_x = 256, name = "tower_im2col_cls_spv")]
     def run {
-        let gid = gl_GlobalInvocationID.x
-        let kdp = max(1u, pa.kdp)
-        if (gid < pa.rows * kdp) {
-            let r = gid / kdp
-            let k = gid % kdp
-            var v = 0.0
-            if (k < pa.cin * 9u) {
-                let ow = (pa.iw - 1u) / 2u + 1u
-                let oh = (pa.ih - 1u) / 2u + 1u
-                let per_chunk = max(1u, oh * ow)
-                let ci = r / per_chunk
-                let rr = r % per_chunk
-                let ic = k / 9u
-                let kh = (k % 9u) / 3u
-                let kw = k % 3u
-                let iy = int((rr / ow) * 2u + kh) - 1
-                let ix = int((rr % ow) * 2u + kw) - 1
-                if (iy >= 0 && iy < int(pa.ih) && ix >= 0 && ix < int(pa.iw)) {
-                    v = src[ci * (pa.ih * pa.iw * pa.cin) + (uint(iy) * pa.iw + uint(ix)) * pa.cin + ic]
-                }
-            }
-            col[gid] = float16(v)
-        }
+        im2col2d_body()
     }
 }
 
-struct TowerQ3aShuffleArgs {
-    nch : uint     //! the conv channel count
-    npos : uint    //! the window's positions
-}
-
-//! the qwen3a feature rows off the third conv stage, as the conv_out GEMM's f16 feed: feat[ci][ow][h + 16 c] = y3[ci][(h x tok + ow) x nch + c]
-[vk_dispatch(name = "tower_q3a_shuffle_cls", grid = "wgs", params = "wgs : int64")]
-class TowerQ3aShuffle {
-    @ssbo @binding = 0 y3 : array<float>
-    @ssbo @binding = 1 feat : array<float16>
-    @push_constant pa : TowerQ3aShuffleArgs
+//! the qwen3a feature rows as the f16 tile's feed, on the template both homes stamp
+[vk_dispatch(name = "tower_q3a_shuffle_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerQ3aShuffle : GkQ3aShuffle {
+    typedef OT = float16
 
     [spirv_kernel(local_size_x = 256, name = "tower_q3a_shuffle_cls_spv")]
     def run {
-        let gid = gl_GlobalInvocationID.x
-        let feat_w = max(1u, 16u * pa.nch)
-        if (gid < pa.npos * feat_w) {
-            let tok = Q3A_TOK_PER_CHUNK
-            let row = gid / feat_w
-            let j = gid % feat_w
-            let h = j % 16u
-            let c = j / 16u
-            let ci = row / tok
-            let ow = row % tok
-            feat[gid] = float16(y3[ci * (16u * tok * pa.nch) + (h * tok + ow) * pa.nch + c])
-        }
+        q3a_shuffle_body()
     }
 }
 
@@ -9550,553 +9382,176 @@ class TowerMelLog {
     }
 }
 
-struct TowerMelNormArgs {
-    n_mel : uint
-    n_frames : uint
-    valid : uint    //! the real frames: the statistics run over them, the frames past them read zero
-}
-
-//! canary's per-feature normalization of a frame-major mel: one thread per mel column, the column's mean and unbiased
-//! deviation over the valid frames, every frame normalized, the tail frames masked to zero
-[vk_dispatch(name = "tower_mel_norm_cls", grid = "wgs", params = "wgs : int64")]
-class TowerMelNorm {
-    @ssbo @binding = 0 mel : array<float>
-    @push_constant pa : TowerMelNormArgs
-
+//! canary's per-feature mel normalization, on the template both homes stamp
+[vk_dispatch(name = "tower_mel_norm_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerMelNorm : GkMelNorm {
     [spirv_kernel(local_size_x = 64, name = "tower_mel_norm_cls_spv")]
     def run {
-        let j = gl_GlobalInvocationID.x
-        if (j < pa.n_mel) {
-            let nm = pa.n_mel
-            var sum = 0.0
-            for (i in urange(pa.valid)) {
-                sum += mel[i * nm + j]
-            }
-            let mean = sum / float(max(1u, pa.valid))
-            var sq = 0.0
-            for (i in urange(pa.valid)) {
-                let dv = mel[i * nm + j] - mean
-                sq += dv * dv
-            }
-            let denom = sqrt(sq / max(float(pa.valid) - 1.0, 1.0)) + 1e-5
-            for (i in urange(pa.valid)) {
-                mel[i * nm + j] = (mel[i * nm + j] - mean) / denom
-            }
-            for (i in urange(pa.valid, pa.n_frames)) {
-                mel[i * nm + j] = 0.0
-            }
-        }
+        mel_norm_body()
     }
 }
 
-struct TowerDwConvArgs {
-    iw : uint      //! the source block's width, height and channels ([ih x iw x ch], c fastest)
-    ih : uint
-    ch : uint
-    woff : uint    //! the taps [ch x 9] in wn, (kh 3 + kw)
-    boff : uint    //! the bias row [ch] in wn
-}
-
-//! a depthwise conv2d k3 s2 p1 with its bias (canary's subsample stack): one thread per output element
-[vk_dispatch(name = "tower_dw_conv_cls", grid = "wgs", params = "wgs : int64")]
-class TowerDwConv {
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 y : array<float>
-    @ssbo @binding = 2 @role = "weight" wn : array<float>
-    @push_constant pa : TowerDwConvArgs
-
+//! canary's subsample depthwise conv2d k3 s2 p1 with its bias, on the template both homes stamp
+[vk_dispatch(name = "tower_dw_conv_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerDwConv : GkDwConv2d {
     [spirv_kernel(local_size_x = 256, name = "tower_dw_conv_cls_spv")]
     def run {
-        let gid = gl_GlobalInvocationID.x
-        let ch = max(1u, pa.ch)
-        let ow = (pa.iw - 1u) / 2u + 1u
-        let oh = (pa.ih - 1u) / 2u + 1u
-        if (gid < oh * ow * pa.ch) {
-            let c = gid % ch
-            let o = gid / ch
-            let oy = o / ow
-            let ox = o % ow
-            var acc = wn[pa.boff + c]
-            var kh = 0u
-            while (kh < 3u) {
-                let iy = int(oy * 2u + kh) - 1
-                if (iy >= 0 && iy < int(pa.ih)) {
-                    var kw = 0u
-                    while (kw < 3u) {
-                        let ix = int(ox * 2u + kw) - 1
-                        if (ix >= 0 && ix < int(pa.iw)) {
-                            acc += wn[pa.woff + c * 9u + kh * 3u + kw] * x[(uint(iy) * pa.iw + uint(ix)) * ch + c]
-                        }
-                        kw++
-                    }
-                }
-                kh++
-            }
-            y[gid] = acc
-        }
+        dw_conv2d_body()
     }
 }
 
-struct TowerRelSinCosArgs {
-    d : uint       //! the row width, the (sin, cos) pairs interleaved
-    tt : uint      //! the encoder rows: the table's 2 tt - 1 rows, row w carrying the relative position tt - 1 - w
+//! parakeet's subsample depthwise conv2d: the same stamp over tap-major taps
+[vk_dispatch(name = "tower_pk_dw2d_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerPkDwConv2d : GkDwConv2d {
+    override TAP_MAJOR = true
+
+    [spirv_kernel(local_size_x = 256, name = "tower_pk_dw2d_cls_spv")]
+    def run {
+        dw_conv2d_body()
+    }
 }
 
-//! the Transformer-XL rel-position table [ww x d]: row w = the sinusoid of tt - 1 - w at the d / 2 frequencies, (sin, cos) interleaved - the CPU loop's form
-[vk_dispatch(name = "tower_rel_sincos_cls", grid = "wgs", params = "wgs : int64")]
-class TowerRelSinCos {
-    @ssbo @binding = 0 tab : array<float>
-    @push_constant pa : TowerRelSinCosArgs
-
+//! the Transformer-XL rel-position table, on the template both homes stamp
+[vk_dispatch(name = "tower_rel_sincos_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerRelSinCos : GkRelSinCos {
     [spirv_kernel(local_size_x = 256, name = "tower_rel_sincos_cls_spv")]
     def run {
-        let gid = gl_GlobalInvocationID.x
-        let d = max(1u, pa.d)
-        if (pa.tt > 0u && gid < (2u * pa.tt - 1u) * pa.d) {
-            let w = gid / d
-            let e = gid % d
-            let k = e / 2u
-            let rel = float(int(pa.tt) - 1 - int(w))
-            let freq = exp(-(float(k * 2u) * 9.210340371976184 / float(d)))
-            let theta = freq * rel
-            tab[gid] = (e & 1u) == 0u ? sin(theta) : cos(theta)
-        }
+        rel_sincos_body()
     }
 }
 
-struct TowerFeatShuffleArgs {
-    w : uint       //! the frequency rows a time step keeps
-    ch : uint      //! the channels
-    t : uint       //! the time steps
-}
-
-//! the subsample stack's feature rows: out[t][f + w c] = in[(t w + f) c + c'] - the [time][freq][ch] image as [time][ch][freq] rows
-[vk_dispatch(name = "tower_feat_shuffle_cls", grid = "wgs", params = "wgs : int64")]
-class TowerFeatShuffle {
-    @ssbo @binding = 0 src : array<float>
-    @ssbo @binding = 1 dst : array<float>
-    @push_constant pa : TowerFeatShuffleArgs
-
+//! the subsample stack's feature rows, on the template both homes stamp
+[vk_dispatch(name = "tower_feat_shuffle_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerFeatShuffle : GkFeatShuffle {
     [spirv_kernel(local_size_x = 256, name = "tower_feat_shuffle_cls_spv")]
     def run {
-        let gid = gl_GlobalInvocationID.x
-        if (gid < pa.t * pa.w * pa.ch) {
-            let wc = max(1u, pa.w * pa.ch)
-            let w = max(1u, pa.w)
-            let t = gid / wc
-            let rem = gid % wc
-            let c = rem / w
-            let f = rem % w
-            dst[gid] = src[(t * pa.w + f) * pa.ch + c]
-        }
+        feat_shuffle_body()
     }
 }
 
-let WDEC_KV_F16 = 0u   //! `TowerWdecKvArgs.mode`: the resident f16 store, [heads][tstride][hs] at `dst_off`
-let WDEC_KV_KX = 1u    //! ... the CPU chain's pre-scaled f32 keys, [heads][hs][tstride]
-let WDEC_KV_VX = 2u    //! ... the CPU chain's f32 values, [heads][tstride][hs]
-
-struct TowerWdecKvArgs {
-    rows : uint
-    sstride : uint   //! a source row's width (d, or 3 d off the fused [q | k | v] row)
-    soff : uint      //! the source column the head 0 starts at
-    nheads : uint
-    tstride : uint   //! the destination's positions a head
-    p0 : uint        //! the destination position of source row 0
-    dst_off : uint   //! the destination's element base (the layer's plane)
-    boff : uint      //! the bias row's base in wn; read under bias_on
-    bias_on : uint
-    mode : uint      //! WDEC_KV_*
-}
-
+//! the whisper decoder's K/V stores, on the template both homes stamp (the modes by push)
 [vk_dispatch(name = "tower_wdec_kv_cls", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-asr-decoder")]
-class TowerWdecKv {
-    @ssbo @binding = 0 src : array<float>
-    @ssbo @binding = 1 dsth : array<float16>
-    @ssbo @binding = 2 dstf : array<float>
-    @ssbo @binding = 3 @role = "weight" wn : array<float>
-    @push_constant pa : TowerWdecKvArgs
-
+class TowerWdecKv : GkWdecKv {
     [spirv_kernel(local_size_x = 256, name = "tower_wdec_kv_cls_spv")]
     def run {
-        let gid = gl_GlobalInvocationID.x
-        let hs = WDEC_HS
-        if (gid < pa.rows * pa.nheads * hs) {
-            let nh = max(1u, pa.nheads)
-            let j = gid % hs
-            let hr = gid / hs
-            let h = hr % nh
-            let r = hr / nh
-            var v = src[r * pa.sstride + pa.soff + h * hs + j]
-            if (pa.bias_on != 0u) {
-                v += wn[pa.boff + h * hs + j]
-            }
-            let t = pa.p0 + r
-            if (pa.mode == WDEC_KV_F16) {
-                dsth[pa.dst_off + (h * pa.tstride + t) * hs + j] = half_sat(v)
-            } elif (pa.mode == WDEC_KV_KX) {
-                dstf[pa.dst_off + (h * hs + j) * pa.tstride + t] = v * (1.0 / sqrt(sqrt(float(WDEC_HS))))   //! the CPU chain's hs^-0.25 pre-scale on the keys
-            } else {
-                dstf[pa.dst_off + (h * pa.tstride + t) * hs + j] = v
-            }
-        }
+        wdec_kv_body()
+    }
+}
+
+//! ... the resident f16 plane
+[vk_dispatch(name = "tower_wdec_kv16_cls", grid = "wgs", params = "wgs : int64")]
+class TowerWdecKv16 : GkWdecKv {
+    override OUT16 = true
+
+    [spirv_kernel(local_size_x = 256, name = "tower_wdec_kv16_cls_spv")]
+    def run {
+        wdec_kv_body()
     }
 }
 
 let WDEC_CHUNK = 256u   //! the keys a partial's workgroup covers (`TowerWdecAttnPart`) and the extent of its `scores` array
 let WDEC_HS = 64u       //! the whisper decoder's head width, every size of the family; the driver declines another
 let Q3A_TOK_PER_CHUNK = 13u   //! the qwen3a front's positions a chunk (the family's QWEN3A_TOK_PER_CHUNK; the driver verifies the two agree)
-let G4A_ATTN_PAST = 12u       //! gemma4a's causal window - self and eleven past rows (the family's gemma4a_attn_past(); the driver verifies)
-let G4A_ATTN_CAP = 50.0       //! gemma4a's score soft cap (the family's gemma4a_softcap(); the driver verifies)
 
-struct TowerWdecAttnArgs {
-    dim : uint       //! a q row's width
-    tstride : uint   //! the K/V planes' positions a head
-    len0 : uint      //! the keys row 0 attends; a causal dispatch adds the row index
-    causal : uint
-    nheads : uint
-    nrows : uint
-    koff : uint      //! the layer's element base in kk / vv
-    voff : uint
-    qboff : uint     //! the q bias row's base in wn, folded at the load
-}
-
-[vk_dispatch(name = "tower_wdec_attn_part_cls", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-asr-decoder")]
-class TowerWdecAttnPart : WgReduceBase {
-    @ssbo @binding = 0 q : array<float>
-    @ssbo @binding = 1 kk : array<float16>
-    @ssbo @binding = 2 vv : array<float16>
-    @ssbo @binding = 3 pms : array<float>     //! [nch][heads][rows][2]: the chunk's max and sum
-    @ssbo @binding = 4 py : array<float>      //! [nch][heads][rows][hs]
-    @ssbo @binding = 5 @role = "weight" wn : array<float>
-    @push_constant pa : TowerWdecAttnArgs
-    @workgroup scores : float[256]
+//! the whisper decoder's chunked attention partials, on the template both homes stamp
+[vk_dispatch(name = "tower_wdec_attn_part_cls", kernel = "run", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-asr-decoder")]
+class TowerWdecAttnPart : GkWdecAttnPart {
+    override HS = 64u
 
     [spirv_kernel(local_size_x = 128, name = "tower_wdec_attn_part_cls_spv")]
     def run {
-        let nhr = max(1u, pa.nheads * pa.nrows)
-        let nr = max(1u, pa.nrows)
-        let c = gl_WorkGroupID.x / nhr
-        let rem = gl_WorkGroupID.x % nhr
-        let h = rem / nr
-        let r = rem % nr
-        let lid = gl_LocalInvocationID.x
-        let len = pa.causal != 0u ? pa.len0 + r : pa.len0
-        let tb = c * WDEC_CHUNK
-        let te = min(tb + WDEC_CHUNK, len)
-        let nloc = te > tb ? te - tb : 0u
-        let slot = (c * pa.nheads + h) * pa.nrows + r
-        let qbase = r * pa.dim + h * WDEC_HS
-        let kbase = pa.koff + h * pa.tstride * WDEC_HS
-        let vbase = pa.voff + h * pa.tstride * WDEC_HS
-        var t = lid
-        while (t < nloc) {
-            var s = 0.0
-            var j = 0u
-            while (j < WDEC_HS) {
-                s += (q[qbase + j] + wn[pa.qboff + h * WDEC_HS + j]) * float(kk[kbase + (tb + t) * WDEC_HS + j])
-                s += (q[qbase + j + 1u] + wn[pa.qboff + h * WDEC_HS + j + 1u]) * float(kk[kbase + (tb + t) * WDEC_HS + j + 1u])
-                s += (q[qbase + j + 2u] + wn[pa.qboff + h * WDEC_HS + j + 2u]) * float(kk[kbase + (tb + t) * WDEC_HS + j + 2u])
-                s += (q[qbase + j + 3u] + wn[pa.qboff + h * WDEC_HS + j + 3u]) * float(kk[kbase + (tb + t) * WDEC_HS + j + 3u])
-                j += 4u
-            }
-            scores[t] = s * (1.0 / sqrt(float(WDEC_HS)))
-            t += 128u
-        }
-        barrier()
-        var mx = -3.0e38
-        t = lid
-        while (t < nloc) {
-            mx = max(mx, scores[t])
-            t += 128u
-        }
-        let m = wg_max(mx, 0u)
-        var ss = 0.0
-        t = lid
-        while (t < nloc) {
-            let e = exp(scores[t] - m)
-            scores[t] = e
-            ss += e
-            t += 128u
-        }
-        let tot = wg_sum(ss, 1u)   // its barrier also lands every lane's exponentials before the output loop reads them across lanes
-        if (lid == 0u) {
-            pms[slot * 2u] = nloc > 0u ? m : -3.0e38
-            pms[slot * 2u + 1u] = tot
-        }
-        var j = lid
-        while (j < WDEC_HS) {
-            var acc = 0.0
-            var tt = 0u
-            while (tt < nloc) {
-                acc += scores[tt] * float(vv[vbase + (tb + tt) * WDEC_HS + j])
-                tt++
-            }
-            py[slot * WDEC_HS + j] = acc
-            j += 128u
-        }
+        wdec_attn_part_body()
     }
 }
 
-struct TowerWdecCombArgs {
-    dim : uint
-    nchunks : uint
-    nheads : uint
-    nrows : uint
-}
-
-//! the chunked attention's combine over one row's head slice (the workgroup is one head slice wide, WDEC_HS lanes): the row's
-//! values stored as f32, or under OUT_Q8 quantized in place of stored - the 64 lanes' values gathered, then lanes 0..15 write
-//! the slice's two Q8_0 blocks
-[ |> template_struct_instance]
-class template TowerWdecAttnCombT : Q8BlockStoreT {
-    @template_constant OUT32 : bool = true
-    @ssbo @binding = 0 pms : array<float>
-    @ssbo @binding = 1 py : array<float>
-    @ssbo @binding = 2 @template_gate = OUT32 y : array<float>
-    @ssbo @binding = 6 @template_gate = OUT_Q8 outq : array<int8>
-    @ssbo @binding = 7 @template_gate = OUT_Q8 outs : array<float>
-    @push_constant pa : TowerWdecCombArgs
-    @workgroup slice : float[64]
-
-    [spirv_kernel(local_size_x = 64)]
-    def run {
-        let nr = max(1u, pa.nrows)
-        let h = gl_WorkGroupID.x / nr
-        let r = gl_WorkGroupID.x % nr
-        let lid = gl_LocalInvocationID.x
-        var mg = -3.0e38
-        var c = 0u
-        while (c < pa.nchunks) {
-            mg = max(mg, pms[((c * pa.nheads + h) * pa.nrows + r) * 2u])
-            c++
-        }
-        var tot = 0.0
-        c = 0u
-        while (c < pa.nchunks) {
-            let slot = (c * pa.nheads + h) * pa.nrows + r
-            tot += pms[slot * 2u + 1u] * exp(pms[slot * 2u] - mg)
-            c++
-        }
-        let inv = 1.0 / max(tot, 1.0e-30)
-        var acc = 0.0
-        c = 0u
-        while (c < pa.nchunks) {
-            let slot = (c * pa.nheads + h) * pa.nrows + r
-            acc += py[slot * WDEC_HS + lid] * exp(pms[slot * 2u] - mg)
-            c++
-        }
-        static_if (OUT_Q8) {
-            slice[lid] = acc * inv
-            barrier()
-            if (lid < WDEC_HS / 4u) {
-                let b0 = (r * pa.dim + h * WDEC_HS) / KQ_B32_ELEMS_U
-                let v = float4(slice[lid * 4u], slice[lid * 4u + 1u], slice[lid * 4u + 2u], slice[lid * 4u + 3u])
-                blk_store(b0 + lid / 8u, lid % 8u, v)
-            }
-        } else {
-            y[r * pa.dim + h * WDEC_HS + lid] = acc * inv
-        }
-    }
-}
-
+//! the whisper decoder's attention combine, the f32 store, on the template both homes stamp (GkWdecAttnComb)
 [vk_dispatch(name = "tower_wdec_attn_comb_cls", kernel = "run", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-asr-decoder")]
-class TowerWdecAttnComb : TowerWdecAttnCombT {}
+class TowerWdecAttnComb : GkWdecAttnComb {
+    override HS = 64u
+
+    [spirv_kernel(local_size_x = 64, name = "tower_wdec_attn_comb_cls_spv")]
+    def run {
+        wdec_attn_comb_body()
+    }
+}
 
 [vk_dispatch(name = "tower_wdec_attn_comb_rq_cls", kernel = "run", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-asr-decoder")]
-class TowerWdecAttnCombRq : TowerWdecAttnCombT {
+class TowerWdecAttnCombRq : GkWdecAttnComb {
+    override HS = 64u
     override OUT_Q8 = true
-    override OUT32 = false
+
+    [spirv_kernel(local_size_x = 64, name = "tower_wdec_attn_comb_rq_cls_spv")]
+    def run {
+        wdec_attn_comb_body()
+    }
 }
 
-struct TowerLnReluArgs {
-    cout : uint    //! the channels a row normalizes over
-    rows : uint
-    woff : uint    //! the weight row's base in wn
-    eps : float
-}
-
-//! the subsample convs' LayerNorm over a row's channels (weight only, biased variance) then ReLU, in place: one thread per row
-[vk_dispatch(name = "tower_ln_relu_cls", grid = "wgs", params = "wgs : int64")]
-class TowerLnRelu {
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 @role = "weight" wn : array<float>
-    @push_constant pa : TowerLnReluArgs
-
+//! the subsample convs' LayerNorm then ReLU, on the template both homes stamp - in place here, the rows bound to x and y both
+[vk_dispatch(name = "tower_ln_relu_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerLnRelu : GkLnReluRows {
     [spirv_kernel(local_size_x = 256, name = "tower_ln_relu_cls_spv")]
     def run {
-        let row = gl_GlobalInvocationID.x
-        if (row < pa.rows) {
-            let base = row * pa.cout
-            let inv_n = 1.0 / float(max(1u, pa.cout))
-            var mean = 0.0
-            for (c in urange(pa.cout)) {
-                mean += x[base + c]
-            }
-            mean *= inv_n
-            var vv = 0.0
-            for (c in urange(pa.cout)) {
-                let dv = x[base + c] - mean
-                vv += dv * dv
-            }
-            let inv = 1.0 / sqrt(vv * inv_n + pa.eps)
-            for (c in urange(pa.cout)) {
-                x[base + c] = max((x[base + c] - mean) * inv * wn[pa.woff + c], 0.0)
-            }
-        }
+        ln_relu_rows_body()
     }
 }
 
-struct TowerRopeArgs {
-    nheads : uint
-    hs : uint       //! the head width: the compact row is nheads x hs wide, the rotated pairs per axis hs / 4
-    rows : uint
-}
-
-//! the 2D neox rope over q or k rows in place, the CPU `rope_neox_2d_rows`'s form: per head the x axis rotates the
-//! pairs (j, j + pairs) of its first half against the row's x table, the y axis the same pairs of its second half
-//! against the y table (one packed table row is [cx | sx | cy | sy], `pairs` each) - one thread per (row, head, pair), both axes
-[vk_dispatch(name = "tower_rope2d_cls", grid = "wgs", params = "wgs : int64")]
-class TowerRope2d {
-    @ssbo @binding = 0 v : array<float>
-    @ssbo @binding = 1 tabs : array<float>
-    @push_constant pa : TowerRopeArgs
-
+//! the 2D neox rope over q or k rows in place, on the template both homes stamp
+[vk_dispatch(name = "tower_rope2d_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerRope2d : GkRope2d {
     [spirv_kernel(local_size_x = 256, name = "tower_rope2d_cls_spv")]
     def run {
-        let gid = gl_GlobalInvocationID.x
-        let pairs = pa.hs / 4u
-        let d = pa.nheads * pa.hs
-        let per_row = pa.nheads * pairs
-        if (gid < pa.rows * per_row) {
-            let row = gid / per_row
-            let hp = gid % per_row
-            let base = row * d + (hp / pairs) * pa.hs
-            let j = hp % pairs
-            let tb = row * 4u * pairs
-            let x0 = v[base + j]
-            let x1 = v[base + j + pairs]
-            let cx = tabs[tb + j]
-            let sx = tabs[tb + pairs + j]
-            v[base + j] = x0 * cx - x1 * sx
-            v[base + j + pairs] = x0 * sx + x1 * cx
-            let yb = base + pa.hs / 2u
-            let y0 = v[yb + j]
-            let y1 = v[yb + j + pairs]
-            let cy = tabs[tb + 2u * pairs + j]
-            let sy = tabs[tb + 3u * pairs + j]
-            v[yb + j] = y0 * cy - y1 * sy
-            v[yb + j + pairs] = y0 * sy + y1 * cy
-        }
+        rope2d_body()
     }
 }
 
-struct TowerG4aAttnArgs {
-    d : uint        //! the row width (compact [npos x d] rows)
-    npos : uint
-    pdsoff : uint   //! the per-dim query scale row's base in wn
-}
-
-//! gemma4a's causal sliding-window attention with the layer's projected RPE table: one invocation a (query row, head), the
-//! window sixteen rows at most (the score array; gemma4a's window is twelve), the head width the stamp's HS; the Metal
-//! chain's form, thread for thread
-[ |> template_struct_instance]
-class template TowerG4aAttnT {
-    @template_constant HS : uint = 128u   //! the head width served
-    @ssbo @binding = 0 q : array<float>
-    @ssbo @binding = 1 k : array<float>
-    @ssbo @binding = 2 v : array<float>
-    @ssbo @binding = 3 ao : array<float>
-    @ssbo @binding = 4 rpe : array<float>
-    @ssbo @binding = 5 @role = "weight" wn : array<float>
-    @push_constant pa : TowerG4aAttnArgs
+//! gemma4a's causal sliding-window attention with the projected RPE table, on the template both homes stamp, at the two head widths
+[vk_dispatch(name = "tower_g4a_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerG4aAttn : GkG4aAttn {
+    override HS = 128u
 
     [spirv_kernel(local_size_x = 64)]
     def run {
-        let gid = gl_GlobalInvocationID.x
-        let npos = max(1u, pa.npos)
-        let i = gid % npos
-        let h = gid / npos
-        if (h * HS >= pa.d) {
-            return
-        }
-        let d = pa.d
-        let hs = HS
-        let hoff = h * hs
-        let qscale = 1.0 / sqrt(float(HS)) / log(2.0)   //! the query scale ahead of the per-dim scale, and the key scale: the CPU chain's log2-domain softmax
-        let kscale = log(1.0 + exp(1.0)) / log(2.0)
-        let j0 = i >= G4A_ATTN_PAST - 1u ? i - (G4A_ATTN_PAST - 1u) : 0u
-        var sarr : float[16]
-        var m = -1.5e38
-        var j = j0
-        while (j <= i) {
-            let rr = (G4A_ATTN_PAST - (i - j)) * d
-            var cs = 0.0
-            var rs = 0.0
-            var n = 0u
-            while (n < hs) {
-                let qv = q[i * d + hoff + n] * qscale * wn[pa.pdsoff + n]
-                cs += qv * (k[j * d + hoff + n] * kscale)
-                rs += qv * rpe[rr + hoff + n]
-                n++
-            }
-            let sc = softcap_exp(cs + rs, G4A_ATTN_CAP)
-            sarr[j - j0] = sc
-            m = max(m, sc)
-            j++
-        }
-        var stot = 0.0
-        j = j0
-        while (j <= i) {
-            let p = exp(sarr[j - j0] - m)
-            sarr[j - j0] = p
-            stot += p
-            j++
-        }
-        let inv = 1.0 / stot
-        var n = 0u
-        while (n < hs) {
-            var acc = 0.0
-            j = j0
-            while (j <= i) {
-                acc += sarr[j - j0] * v[j * d + hoff + n]
-                j++
-            }
-            ao[i * d + hoff + n] = acc * inv
-            n++
-        }
+        g4a_attn_body()
     }
 }
 
-[vk_dispatch(name = "tower_g4a_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TowerG4aAttn : TowerG4aAttnT {}
-
+//! gemma4a's windowed attention at a head of 64, on the template both homes stamp (GkG4aAttn)
 [vk_dispatch(name = "tower_g4a_attn64_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TowerG4aAttn64 : TowerG4aAttnT {
+class TowerG4aAttn64 : GkG4aAttn {
     override HS = 64u
+
+    [spirv_kernel(local_size_x = 64)]
+    def run {
+        g4a_attn_body()
+    }
 }
 
-struct TowerConvModArgs {
-    d : uint        //! the output row width; the GLU's input rows are 2d wide
-    nelem : uint    //! npos x d
-}
-
-//! the conv module's GLU: y[t][c] = h[t][c] . sigmoid(h[t][d + c]) off the pointwise rows
-[vk_dispatch(name = "tower_glu_sig_cls", grid = "wgs", params = "wgs : int64")]
-class TowerGluSig {
-    @ssbo @binding = 0 h : array<float>
-    @ssbo @binding = 1 y : array<float>
-    @push_constant pa : TowerConvModArgs
-
+//! the conv module's GLU off the pointwise rows, on the gated-rows template both homes stamp
+[vk_dispatch(name = "tower_glu_sig_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerGluSig : GkGatedRows {
     [spirv_kernel(local_size_x = 256, name = "tower_glu_sig_cls_spv")]
     def run {
-        let e = gl_GlobalInvocationID.x
-        if (e < pa.nelem) {
-            let dd = max(1u, pa.d)
-            let t = e / dd
-            let c = e % dd
-            y[e] = sig_gate(h[t * 2u * pa.d + c], h[t * 2u * pa.d + pa.d + c])
-        }
+        gated_rows_body()
+    }
+}
+
+//! the ultravox projector's gate, silu(second half) . first half, on the same template at FORM 1
+[vk_dispatch(name = "tower_swiglu_swapped_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerSwigluSwapped : GkGatedRows {
+    override FORM = 1
+
+    [spirv_kernel(local_size_x = 256, name = "tower_swiglu_swapped_cls_spv")]
+    def run {
+        gated_rows_body()
+    }
+}
+
+//! the chat projector tails' pair pool ahead of the post-norm (qwen2a, voxtral), on the template both homes stamp
+[vk_dispatch(name = "tower_pool_rows_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerPoolRows : GkPoolRows {
+    [spirv_kernel(local_size_x = 256, name = "tower_pool_rows_cls_spv")]
+    def run {
+        pool_rows_body()
     }
 }
 
@@ -10231,187 +9686,44 @@ class TowerCnDw : GkDwConvRows {
     }
 }
 
-struct TowerGegluArgs {
-    nelem : uint    //! a 4-multiple
-    glo : float     //! the gate GEMM's output bounds
-    ghi : float
-    ulo : float     //! the up GEMM's
-    uhi : float
-    dlo : float     //! the down GEMM's input bounds
-    dhi : float
-}
-
-//! GEGLU-quick with the gemma4v bounds: g = clamp(gelu_quick(clamp(g)) * clamp(u)) in place over the gate rows -
-//! gelu_quick(x) = x . sigmoid(1.702 x), the CPU LUT's closed form (the LUT rounds through f16, so approx bars)
-[vk_dispatch(name = "tower_geglu_cls", grid = "wgs", params = "wgs : int64")]
-class TowerGeglu {
-    @ssbo @binding = 0 g : array<float>
-    @ssbo @binding = 1 u : array<float>
-    @push_constant pa : TowerGegluArgs
-
-    def geglu(gv0, uv0 : float) : float {
-        let gv = clamp(gv0, pa.glo, pa.ghi)
-        let uv = clamp(uv0, pa.ulo, pa.uhi)
-        let a = gv * (1.0 / (1.0 + exp(-1.702 * gv)))
-        return clamp(a * uv, pa.dlo, pa.dhi)
-    }
-
-    [spirv_kernel(local_size_x = 256, name = "tower_geglu_cls_spv")]
-    def run {
-        let e = gl_GlobalInvocationID.x * 4u
-        if (e < pa.nelem) {
-            g[e] = geglu(g[e], u[e])
-            g[e + 1u] = geglu(g[e + 1u], u[e + 1u])
-            g[e + 2u] = geglu(g[e + 2u], u[e + 2u])
-            g[e + 3u] = geglu(g[e + 3u], u[e + 3u])
-        }
-    }
-}
-
-struct TowerLnArgs {
-    d : uint
-    rows : uint
-    woff : uint     //! the branch's post-norm weight row's base in wn, its output bias row at boff
-    boff : uint
-    eps : float
-    ln_on : uint
-    lnoff : uint    //! the layernorm's weight row's base in wn, its bias row at lnboff
-    lnboff : uint
-    ascale : float  //! the post-add's residual weight (canary's macaron halves add 0.5 of the branch)
-}
-
-//! the residual seam of a block, one workgroup a row: x[r] += ascale . branch, where the branch is y[r] + b (BIAS: the branch's
-//! output bias at `boff`), rmsnorm(y[r]) . wpost (POST_NORM: the branch's post-norm at `woff`, the gemma towers) or y[r] as it is
-//! (the conv module's plain add); then under `ln_on` the next branch's pre-norm - xb[r] = layernorm(x[r]) . wln + bln at `lnoff` /
-//! `lnboff`, or rms(x[r]) . wln on an RMS stamp (POST_NORM implies RMS: the two reduces take slots 0 and 1); the OUT_Q8 stamp (the
-//! layernorm arm) quantizes the next norm into Q8_0 blocks in place of storing it; with ADD off the stamp is the layernorm alone -
-//! x left as it is, its rows normed under `ln_on` as the seam's next norm is
-[ |> template_struct_instance]
-class template TowerPostAddLnT : WgReduceBase {
-    @template_constant ADD : bool = true   //! the seam's add before the norm
-    @template_constant RMS : bool = false   //! the next pre-norm is the weighted rms (qwen25v, the gemma towers), not the layernorm
-    @template_constant POST_NORM : bool = false  //! the branch rows carry their post-norm before the add
-    @template_constant BIAS : bool = true   //! the branch rows carry their output bias before the add
-    @template_constant OUT16 : bool = false   //! the normed rows as f16 (the cm2 tile's feed), else f32
-    @template_constant OUT32 : bool = true
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 @template_gate = ADD y : array<float>
-    @ssbo @binding = 2 @template_gate = OUT32 xb : array<float>
-    @ssbo @binding = 3 @role = "weight" wn : array<float>
-    @ssbo @binding = 4 @template_gate = OUT16 xbh : array<float16>
-    @ssbo @binding = 6 @template_gate = OUT_Q8 outq : array<int8>
-    @ssbo @binding = 7 @template_gate = OUT_Q8 outs : array<float>
-    @push_constant pa : TowerLnArgs
-
-    def store(i : uint; v : float) : void {
-        static_if (OUT16) {
-            xbh[i] = half_sat(v)
-        } else {
-            static_if (OUT32) {
-                xb[i] = v
-            }
-        }
-    }
-
-    //! the branch's element `i` of the row at `base` as the add takes it
-    def branch(base, i : uint; inv_post : float) : float {
-        static_if (!ADD) {
-            return 0.0
-        } else {
-            static_if (POST_NORM) {
-                return (y[base + i] * inv_post) * wn[pa.woff + i]
-            } else {
-                static_if (BIAS) {
-                    return y[base + i] + wn[pa.boff + i]
-                } else {
-                    return y[base + i]
-                }
-            }
-        }
-    }
-
-    //! the branch's post-norm inverse over the row at `base` (slot 0), 1 on a stamp without the post-norm
-    def post_inv(base : uint) : float {
-        static_if (POST_NORM) {
-            var ss = 0.0
-            var i = gl_LocalInvocationID.x
-            while (i < pa.d) {
-                let v = y[base + i]
-                ss += v * v
-                i += 256u
-            }
-            return wg_rms_inv(ss, pa.d, pa.eps, 0u)
-        } else {
-            return 1.0
-        }
-    }
+//! parakeet's conv module tail: the same centered conv with the folded BatchNorm over tap-major taps
+[vk_dispatch(name = "tower_pk_dw_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerPkDw : GkDwConvRows {
+    override FORM = 2
+    override TAP_MAJOR = true
 
     [spirv_kernel(local_size_x = 256)]
     def run {
-        let base = gl_WorkGroupID.x * pa.d
-        let tid = gl_LocalInvocationID.x
-        let inv_post = post_inv(base)
-        var s1 = 0.0
-        var i = tid
-        static_if (ADD) {
-            while (i < pa.d) {
-                let xv = x[base + i] + pa.ascale * branch(base, i, inv_post)
-                x[base + i] = xv
-                static_if (RMS) {
-                    s1 += xv * xv
-                } else {
-                    s1 += xv
-                }
-                i += 256u
-            }
-        } else {
-            while (i < pa.d) {
-                s1 += x[base + i]
-                i += 256u
-            }
-        }
-        let ln_on = ADD ? pa.ln_on != 0u : true   //! the seam's norm is the caller's switch; the plain norm stamps (no add) always norm
-        if (ln_on) {
-            static_if (RMS) {
-                let inv = wg_rms_inv(s1, pa.d, pa.eps, POST_NORM ? 1u : 0u)
-                i = tid
-                while (i < pa.d) {
-                    store(base + i, (x[base + i] * inv) * wn[pa.lnoff + i])
-                    i += 256u
-                }
-            } else {
-                let s1w = wg_sum(s1, 0u)
-                let mean = s1w / float(pa.d)
-                var s2 = 0.0
-                i = tid
-                while (i < pa.d) {
-                    let dv = x[base + i] - mean
-                    s2 += dv * dv
-                    i += 256u
-                }
-                let inv = wg_rms_inv(s2, pa.d, pa.eps, 1u)
-                static_if (OUT_Q8) {
-                    static_if (ADD) {
-                        memoryBarrierBuffer()   // every lane's in-place x writes visible before the block pass reads the row across lanes
-                        barrier()
-                    }
-                    blk_pass(base, pa.d / KQ_B32_ELEMS_U, gl_WorkGroupID.x * (pa.d / KQ_B32_ELEMS_U), mean, inv)
-                } else {
-                    i = tid
-                    while (i < pa.d) {
-                        store(base + i, mad((x[base + i] - mean) * inv, wn[pa.lnoff + i], wn[pa.lnboff + i]))
-                        i += 256u
-                    }
-                }
-            }
-        }
+        dw_conv_rows_body()
     }
+}
 
-    def override normed_at(e : uint; mean, inv : float) : float => mad((x[e] - mean) * inv, wn[pa.lnoff + e % max(1u, pa.d)], wn[pa.lnboff + e % max(1u, pa.d)])
+//! GEGLU-quick with the gemma4v bounds on the template both homes stamp
+[vk_dispatch(name = "tower_geglu_cls", grid = "wgs", params = "wgs : int64")]
+class TowerGeglu : GkGeglu {
+    [spirv_kernel(local_size_x = 256, name = "tower_geglu_cls_spv")]
+    def run {
+        geglu_body()
+    }
+}
+
+//! the Vulkan shell of the residual seam and layernorm family both homes stamp
+[ |> template_struct_instance]
+class template TowerPostAddLnT : GkPostAddLn {
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        post_add_ln_body()
+    }
 }
 
 [vk_dispatch(name = "tower_post_add_ln_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TowerPostAddLn : TowerPostAddLnT {}
+
+//! the seam of a block whose GEMMs carry no bias row (parakeet): the branch added bare, the next layernorm behind it
+[vk_dispatch(name = "tower_post_add_ln_nb_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerPostAddLnNb : TowerPostAddLnT {
+    override BIAS = false
+}
 
 [vk_dispatch(name = "tower_post_add_ln16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TowerPostAddLn16 : TowerPostAddLnT {
@@ -10465,59 +9777,6 @@ class TowerLnRq : TowerPostAddLnT {
     override OUT32 = false
 }
 
-let BIAS_ACT_NONE = 0u        //! `TowerBiasArgs.act`: the bias row alone
-let BIAS_ACT_GELU_TANH = 1u   //! ... then the tanh-LUT GELU (the vision towers, the whisper family)
-let BIAS_ACT_GELU_ERF = 2u    //! ... then the erf GELU (qwen2audio, voxtral, ultravox, the Omni audio towers, Qwen3-ASR)
-let BIAS_ACT_SILU = 3u        //! ... then silu (the FastConformer's FFN)
-let BIAS_ACT_RELU = 4u        //! ... then relu (the FastConformer's subsample stack)
-
-struct TowerBiasArgs {
-    d : uint        //! the row width, a 4-multiple
-    nelem : uint
-    boff : uint     //! the bias row's base in wn
-    act : uint
-}
-
-//! the tanh-LUT GELU (the vision towers, the whisper family) in the CPU form: the input and the output rounded through f16
-def tower_gelu_tanh(v : float) : float {
-    if (v <= -10.0) {
-        return 0.0
-    }
-    if (v >= 10.0) {
-        return v
-    }
-    let xr = float(float16(v))
-    let g = 0.5 * xr * (1.0 + tanh(0.79788456080286535587989211986876 * xr * (1.0 + 0.044715 * xr * xr)))
-    return float(float16(g))
-}
-
-//! the erf GELU, the CPU `gelu_erf`'s rational erfc in f32
-def tower_gelu_erf(v : float) : float {
-    let z = abs(v) * 0.7071067811865476
-    let t = 1.0 / (1.0 + 0.5 * z)
-    let erfc = t * exp(-z * z - 1.26551223 + t * (1.00002368 + t * (0.37409196 + t * (0.09678418 +
-        t * (-0.18628806 + t * (0.27886807 + t * (-1.13520398 + t * (1.48851587 +
-        t * (-0.82215223 + t * 0.17087277)))))))))
-    let half_v_erfc = 0.5 * v * erfc
-    return v >= 0.0 ? v - half_v_erfc : half_v_erfc
-}
-
-//! the tower activations by `TowerBiasArgs.act` code
-def tower_act(v : float; act : uint) : float {
-    if (act == BIAS_ACT_NONE) {
-        return v
-    }
-    if (act == BIAS_ACT_GELU_ERF) {
-        return tower_gelu_erf(v)
-    }
-    if (act == BIAS_ACT_SILU) {
-        return silu_f32(v)
-    }
-    if (act == BIAS_ACT_RELU) {
-        return max(v, 0.0)
-    }
-    return tower_gelu_tanh(v)
-}
 
 struct TowerBiasRqArgs {
     d : uint        //! the row width, a 32-multiple
@@ -10535,161 +9794,98 @@ class TowerBiasActRq : RqT {
     @ssbo @binding = 3 outs : array<float>
     @push_constant pa : TowerBiasRqArgs
 
-    def override load1(e : uint) : float => tower_gelu_tanh(x[e] + wn[pa.boff + e % max(1u, pa.d)])
-}
-
-//! a GEMM output's bias row added in place, then the activation `pa.act` names (`tower_act`); a stamp overriding `biased`
-//! broadcasts the row another way (TtsPkRowScale's layer scale)
-[ |> template_struct_instance]
-class template TowerBiasActT {
-    @template_constant OUT16 : bool = false   //! the biased, activated rows stored as f16 into `outh` (the cm2 tile's feed), x read alone; else in place
-    @template_constant BIAS : bool = true     //! the bias row added ahead of the activation; false = the activation alone (the Conformer's silu rows)
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 @role = "weight" @template_gate = BIAS wn : array<float>
-    @ssbo @binding = 2 @template_gate = OUT16 outh : array<float16>
-    @push_constant pa : TowerBiasArgs
-
-    def biased(e : uint) : float {
-        var v = x[e]
-        static_if (BIAS) {
-            v += wn[pa.boff + e % max(1u, pa.d)]
-        }
-        return tower_act(v, pa.act)
-    }
-
-    def store(e : uint; v : float) : void {
-        static_if (OUT16) {
-            outh[e] = half_sat(v)
-        } else {
-            x[e] = v
-        }
-    }
-
-    [spirv_kernel(local_size_x = 256)]
-    def run {
-        let e = gl_GlobalInvocationID.x * 4u
-        if (e < pa.nelem) {
-            let v0 = biased(e)
-            let v1 = biased(e + 1u)
-            let v2 = biased(e + 2u)
-            let v3 = biased(e + 3u)
-            store(e, v0)
-            store(e + 1u, v1)
-            store(e + 2u, v2)
-            store(e + 3u, v3)
-        }
-    }
+    def override load1(e : uint) : float => gelu_tanh_lut_f32(x[e] + wn[pa.boff + e % max(1u, pa.d)])
 }
 
 [vk_dispatch(name = "tower_bias_act_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TowerBiasAct : TowerBiasActT {}
+class TowerBiasAct : GkBiasAct {
+    [spirv_kernel(local_size_x = 256, name = "tower_bias_act_cls_spv")]
+    def run {
+        bias_act_body()
+    }
+}
 
 [vk_dispatch(name = "tower_bias_act_cvt16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TowerBiasActCvt16 : TowerBiasActT {
+class TowerBiasActCvt16 : GkBiasAct {
     override OUT16 = true
+
+    [spirv_kernel(local_size_x = 256, name = "tower_bias_act_cvt16_cls_spv")]
+    def run {
+        bias_act_body()
+    }
 }
 
 [vk_dispatch(name = "tower_act_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TowerAct : TowerBiasActT {
+class TowerAct : GkBiasAct {
     override BIAS = false
-}
 
-struct TowerRestrideArgs {
-    rows : uint
-    rows_pad : uint //! the padded panel's row cap (the scratch's, a multiple of the l column - `vt_cap_rows`): PAD writes zero rows past `rows` up to it, the unpad reads `rows`
-    nheads : uint
-    hs : uint
-    hsp : uint
-    sstride : uint  //! the compact rows' stride and the column their heads start at (a fused [q | k | v] row: 3d and 0 / d / 2d)
-    soff : uint
-    boff : uint     //! the BIAS stamps: the projection's bias row in wn, added as the compact row is read
-}
-
-//! the head restride between the compact rows [rows x heads x hs] (at `sstride` / `soff`) and the flash tile's padded panel
-//! [rows_pad x heads x hsp]: PAD writes the padded panel with zero pads and zero rows past `rows` (f16 under OUT16 - the K/V
-//! shadows, clamped to the half range - else f32, the q panel; the BIAS stamps add the projection's bias row as they read),
-//! the other way reads the compact row back off the padded f32 output (f16 under OUT16: the o GEMM's feed) - one thread an
-//! element of the padded space
-[ |> template_struct_instance]
-class template TowerRestrideT {
-    @template_constant PAD : bool = true
-    @template_constant OUT16 : bool = false
-    @template_constant OUT32 : bool = true   //! the f32 destination's gate: the f16 stamp clears it as it sets OUT16
-    @template_constant BIAS : bool = false   //! the pad adds the bias row at `boff` (the whisper-class q / k / v biases fold into the restride)
-    @ssbo @binding = 0 src : array<float>
-    @ssbo @binding = 1 @template_gate = OUT32 dst : array<float>
-    @ssbo @binding = 2 @template_gate = OUT16 dsth : array<float16>
-    @ssbo @binding = 3 @role = "weight" @template_gate = BIAS wn : array<float>
-    @push_constant pa : TowerRestrideArgs
-
-    [spirv_kernel(local_size_x = 256)]
+    [spirv_kernel(local_size_x = 256, name = "tower_act_cls_spv")]
     def run {
-        let gid = gl_GlobalInvocationID.x
-        let per_row = pa.nheads * pa.hsp
-        let rows_out = PAD ? pa.rows_pad : pa.rows
-        if (gid < rows_out * per_row) {
-            let row = gid / per_row
-            let hp = gid % per_row
-            let head = hp / pa.hsp
-            let lane = hp % pa.hsp
-            let ci = row * pa.sstride + pa.soff + head * pa.hs + lane
-            static_if (PAD) {
-                var v = 0.0
-                if (lane < pa.hs && row < pa.rows) {
-                    v = src[ci]
-                    static_if (BIAS) {
-                        v += wn[pa.boff + head * pa.hs + lane]
-                    }
-                }
-                static_if (OUT16) {
-                    dsth[gid] = half_sat(v)
-                } else {
-                    dst[gid] = v
-                }
-            } else {
-                if (lane < pa.hs) {
-                    static_if (OUT16) {
-                        dsth[ci] = half_sat(src[gid])
-                    } else {
-                        dst[ci] = src[gid]
-                    }
-                }
-            }
-        }
+        bias_act_body()
     }
 }
 
 [vk_dispatch(name = "tower_hpad_cls", kernel = "run", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-routes")]
-class TowerHeadPad : TowerRestrideT {}
+class TowerHeadPad : GkRestride {
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        restride_body()
+    }
+}
 
 [vk_dispatch(name = "tower_hpad16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TowerHeadPad16 : TowerRestrideT {
+class TowerHeadPad16 : GkRestride {
     override OUT16 = true
     override OUT32 = false
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        restride_body()
+    }
 }
 
 [vk_dispatch(name = "tower_hpad_b_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TowerHeadPadB : TowerRestrideT {
+class TowerHeadPadB : GkRestride {
     override BIAS = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        restride_body()
+    }
 }
 
 [vk_dispatch(name = "tower_hpad16_b_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TowerHeadPad16B : TowerRestrideT {
+class TowerHeadPad16B : GkRestride {
     override OUT16 = true
     override OUT32 = false
     override BIAS = true
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        restride_body()
+    }
 }
 
 [vk_dispatch(name = "tower_hunpad_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TowerHeadUnpad : TowerRestrideT {
+class TowerHeadUnpad : GkRestride {
     override PAD = false
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        restride_body()
+    }
 }
 
 [vk_dispatch(name = "tower_hunpad16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
-class TowerHeadUnpad16 : TowerRestrideT {
+class TowerHeadUnpad16 : GkRestride {
     override PAD = false
     override OUT16 = true
     override OUT32 = false
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        restride_body()
+    }
 }
 
 struct TowerWinArgs {
@@ -13245,133 +12441,32 @@ def vt_tile_enc(raw : VkCommandBuffer; var h : VkHaz; t : VtTile; var s : VkDesc
 //! a GEMM input's feed off its f32 rows: the clamp + halfword store on the cm2 feed, the clamp + Q8_0 requant on the mul_mm tiles
 def vt_feed_enc(raw : VkCommandBuffer; var h : VkHaz; cm2 : bool; var s_rq : VkDescriptorSet; var pc_rq : RqArgs; nelem : int64) {
     if (cm2) {
-        var pc = TowerClampArgs(nelem = uint(nelem), lo = pc_rq.lo, hi = pc_rq.hi)
+        var pc = GkClampArgs(nelem = uint(nelem), lo = pc_rq.lo, hi = pc_rq.hi, scale = 1.0)
         enc_tower_clamp_cvt_cls(raw, h, s_rq, pc, (nelem / 4l + 255l) / 256l)
     } else {
         enc_tower_clamp_rq_cls(raw, h, s_rq, pc_rq, rq_wgs(false, nelem))
     }
 }
 
-struct TtsIm2colArgs {
-    cin : uint          //! the input channels
-    tin : uint          //! the input positions
-    tout : uint         //! the output positions, the column rows
-    k : uint            //! the taps
-    stride : uint
-    pad_l : uint        //! the forward conv's left pad; the transposed conv's cropped left edge
-    dilation : uint
-    transposed : uint   //! 1 = the transposed conv's source positions
-    kdim : uint         //! the column row's width: k * cin on the GEMM's 32 lattice, the columns past k * cin zero
-    xoff : uint         //! x's element base
-    coloff : uint       //! col's element base
-    rows : uint         //! 1 = x is row-major [tin][cin] (the tower's rows form), 0 = channel-major [cin][tin]
-}
-
-//! the 1-D conv's im2col, the GEMM's feed: col [tout][kdim] at coloff, column j = tap * cin + ci - the slab's weight-row
-//! order, so one weight row [cout][kdim] multiplies it - zero where the tap falls off x and in the columns past k * cin;
-//! a forward tap reads x at t * stride + tap * dilation - pad_l, a transposed one the input position whose stride lands
-//! the tap on t, (t + pad_l - tap * dilation) / stride where that divides exactly (the CPU `conv1d_transposed_dense`'s
-//! scatter read as a gather); one element an invocation, four under HALF. The HALF stamp stores the columns as
-//! f16 into `col16`, the f16 tile's feed (the decoder's and generator's convs); the plain stamp as f32, the f32 tile's feed
-[ |> template_struct_instance]
-class template TtsIm2colT {
-    @template_constant HALF : bool = false
-    @template_constant FULL : bool = true
-    @ssbo @binding = 0 x : array<float>
-    @ssbo @binding = 1 @template_gate = FULL col : array<float>
-    @ssbo @binding = 2 @template_gate = HALF col16 : array<float16>
-    @push_constant pa : TtsIm2colArgs
-
-    //! the input position tap `tap` reads for output row r, or -1 where it falls off x
-    def src_pos(r, tap : uint) : int {
-        if (pa.transposed != 0u) {
-            return conv_src_tr_row(r, tap, 0u, pa.pad_l, pa.dilation, max(pa.stride, 1u), pa.tin)
-        }
-        return conv_src_fwd_row(r, tap, 0u, pa.pad_l, pa.dilation, pa.stride, pa.tin)
-    }
-
-    //! column j of output row r
-    def elem(r, j : uint) : float {
-        var v = 0.0
-        if (j < pa.k * pa.cin) {
-            let cin = max(pa.cin, 1u)
-            let st = src_pos(r, j / cin)
-            if (st >= 0) {
-                let ci = j % cin
-                v = pa.rows != 0u ? x[pa.xoff + uint(st) * pa.cin + ci] : x[pa.xoff + ci * pa.tin + uint(st)]
-            }
-        }
-        return v
-    }
-
-    def put16(e : uint; v : float) {
-        static_if (HALF) {
-            col16[pa.coloff + e] = half_sat(v)
-        }
-    }
-
-    [spirv_kernel(local_size_x = 256)]
-    def run {
-        static_if (HALF) {
-            //! four columns an invocation: on a cin four-lattice they share one tap and source position, one 16-byte read
-            let e = gl_GlobalInvocationID.x * 4u
-            if (e < pa.tout * pa.kdim) {
-                let kdim = max(pa.kdim, 1u)
-                let cin = max(pa.cin, 1u)
-                let r = e / kdim
-                let j0 = e % kdim
-                var v0 = 0.0
-                var v1 = 0.0
-                var v2 = 0.0
-                var v3 = 0.0
-                if (pa.cin % 4u == 0u) {
-                    if (j0 < pa.k * pa.cin) {
-                        let st = src_pos(r, j0 / cin)
-                        if (st >= 0) {
-                            let ci0 = j0 % cin
-                            if (pa.rows != 0u) {
-                                let b = pa.xoff + uint(st) * pa.cin + ci0
-                                v0 = x[b]
-                                v1 = x[b + 1u]
-                                v2 = x[b + 2u]
-                                v3 = x[b + 3u]
-                            } else {
-                                let b = pa.xoff + ci0 * pa.tin + uint(st)
-                                v0 = x[b]
-                                v1 = x[b + pa.tin]
-                                v2 = x[b + 2u * pa.tin]
-                                v3 = x[b + 3u * pa.tin]
-                            }
-                        }
-                    }
-                } else {
-                    v0 = elem(r, j0)
-                    v1 = elem(r, j0 + 1u)
-                    v2 = elem(r, j0 + 2u)
-                    v3 = elem(r, j0 + 3u)
-                }
-                put16(e, v0)
-                put16(e + 1u, v1)
-                put16(e + 2u, v2)
-                put16(e + 3u, v3)
-            }
-        } else {
-            let gid = gl_GlobalInvocationID.x
-            if (gid < pa.tout * pa.kdim) {
-                let kdim = max(pa.kdim, 1u)
-                col[pa.coloff + gid] = elem(gid / kdim, gid % kdim)
-            }
-        }
-    }
-}
-
+//! the 1-D conv's im2col on the template both homes stamp: the f32 columns, the f32 tile's feed
 [vk_dispatch(name = "tts_im2col_cls", kernel = "run", grid = "total/256", params = "total : int64")]
-class TtsIm2col : TtsIm2colT {}
+class TtsIm2col : GkIm2col1d {
+    [spirv_kernel(local_size_x = 256, name = "tts_im2col_cls_spv")]
+    def run {
+        im2col1d_body()
+    }
+}
 
+//! ... the columns as halves, the f16 tile's feed (the decoder's and generator's convs, the whisper-class stem)
 [vk_dispatch(name = "tts_im2col16_cls", kernel = "run", grid = "total/1024", params = "total : int64")]
-class TtsIm2col16 : TtsIm2colT {
+class TtsIm2col16 : GkIm2col1d {
     override HALF = true
     override FULL = false
+
+    [spirv_kernel(local_size_x = 256, name = "tts_im2col16_cls_spv")]
+    def run {
+        im2col1d_body()
+    }
 }
 
 struct TtsLstmArgs {
@@ -13739,8 +12834,13 @@ class TtsPkRowsElu : GkPkRows {
 //! x [rows][d] *= the scale row at boff in place - a transformer layer's per-channel layer scale (the CPU
 //! `layer_scale_rows`) on the bias stamp's row-broadcast shell: four elements an invocation, d a 4-multiple, `act` unread
 [vk_dispatch(name = "tts_pk_row_scale_cls", kernel = "run", grid = "nelem/1024", params = "nelem : int64")]
-class TtsPkRowScale : TowerBiasActT {
-    def override biased(e : uint) : float => x[e] * wn[pa.boff + e % max(1u, pa.d)]
+class TtsPkRowScale : GkBiasAct {
+    override SCALE = true
+
+    [spirv_kernel(local_size_x = 256, name = "tts_pk_row_scale_cls_spv")]
+    def run {
+        bias_act_body()
+    }
 }
 
 let TTS_PK_ATTN_HS = GK_PK_ATTN_HS

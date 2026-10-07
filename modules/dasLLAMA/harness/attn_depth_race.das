@@ -18,6 +18,7 @@ require metal/das_metal_boost
 require ?das_metal das_metal
 require dasllama/dasllama_metal_common
 require dasllama/dasllama_metal_prefill
+require dasllama/dasllama_gpu_kernels_common   // gk_f16_rows_args - the half-rows stamp's record
 require _race_fixture
 
 let HEADS = 16
@@ -136,8 +137,8 @@ def main {   // nolint:STYLE038 — one-shot race harness; buffers + PSOs stay l
         var ka = AttnArgs(qd = uint(QD), kv_dim = uint(KVD), head_size = uint(HS), kv_mul = uint(KV_MUL),
             npos = uint(NK), np32 = uint(NK), scale = scale, qoff = uint(QOFF), qrows = uint(MP),
             window = 0u, softcap = 0.0, hass = 0u)
-        var tka = HalfRowsArgs(total = uint(NK * KVD), scale = scale)
-        var tva = HalfRowsArgs(total = uint(NK * KVD), scale = 1.0)
+        var tka = gk_f16_rows_args(uint(NK * KVD), scale)
+        var tva = gk_f16_rows_args(uint(NK * KVD))
         let gfma = double(MP) * double(NK) * double(HS) * double(HEADS) / 1.0e9lf
         print("attention at depth: {MP} queries at {QOFF}, {NK} keys, {HEADS} heads of {HS} over {HEADS / KV_MUL} KV heads - {gfma} G multiply-adds a GEMM\n")
         for (stage in range(4)) {
@@ -153,8 +154,8 @@ def main {   // nolint:STYLE038 — one-shot race harness; buffers + PSOs stay l
                 }
             }, $(enc) {
                 if (stage == 3) {
-                    enc_half_rows_pso(enc, tw_d, bk, bkh, 0ul, tka, int64(NK * KVD))
-                    enc_half_rows_pso(enc, tw_d, bv, bvh, 0ul, tva, int64(NK * KVD))
+                    enc_half_rows_pso(enc, tw_d, bk, bkh, tka, int64((NK * KVD + 3) / 4))
+                    enc_half_rows_pso(enc, tw_d, bv, bvh, tva, int64((NK * KVD + 3) / 4))
                 }
                 enc_qk_dev128_c_pso(enc, qk_d, bqh, bkh, 0ul, batt_b, ka, int64(MP), int64(NK), int64(HEADS))
                 if (stage >= 1) {

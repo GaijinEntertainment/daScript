@@ -7,6 +7,7 @@ require ?das_metal metal/das_metal_boost
 require ?das_metal dasllama/dasllama_metal_kernels    // production MetalAdd / MetalRmsNorm MSL
 require ?das_metal dasllama/dasllama_metal_prefill    // production MetalHalfRows MSL
 require ?das_metal dasllama/dasllama_metal_common     // scalar_buffer
+require dasllama/dasllama_gpu_kernels_common   // nolint:STYLE030,LINT019 — gk_f16_rows_args, read in the Apple half alone
 require math
 require strings
 
@@ -87,7 +88,7 @@ def main {
         let mb = 1.0lf / (1024.0lf * 1024.0lf)
         let add_bufs <- [bg, bu, u_total, u_one]           //! residual add: g += u in place - r 2 panels, w 1 (25.2MB)
         let rms_bufs <- [bg, bw, by, u_dim, u_eps]         //! rms norm: r 1 panel + weight, w 1 (16.8MB)
-        var u_half = upload(dev, HalfRowsArgs(total = uint(total), scale = 1.0))
+        var u_half = upload(dev, gk_f16_rows_args(uint(total)))   //! the four-wide stamp's record at its kargs binding
         let cvt_bufs <- [bg, bh, u_half]                //! f32->f16 convert: r 1 f32 panel, w 1 f16 (12.6MB)
         let tiny_bufs <- [bg, bu, u_64, u_one]             //! latency floor: total=64 add, one tg, dependent chain
         for (round in range(3)) {
@@ -95,7 +96,7 @@ def main {
             let add_gbs = double(total * 4l * 3l) * mb / 1024.0lf / (add_us / 1.0e6lf)
             let rms_us = time_reps(queue, pso_rms, rms_bufs, uint3(uint(rows), 1u, 1u), 256u, MetalRmsNorm_metal_rmsnorm_msl_tgmem, reps)
             let rms_gbs = double(total * 4l * 2l + dim * 4l) * mb / 1024.0lf / (rms_us / 1.0e6lf)
-            let cvt_us = time_reps(queue, pso_cvt, cvt_bufs, uint3(uint((total + 255l) / 256l), 1u, 1u), 256u, 0ul, reps)
+            let cvt_us = time_reps(queue, pso_cvt, cvt_bufs, uint3(uint((total / 4l + 255l) / 256l), 1u, 1u), 256u, 0ul, reps)
             let cvt_gbs = double(total * 4l + total * 2l) * mb / 1024.0lf / (cvt_us / 1.0e6lf)
             let tiny_us = time_reps(queue, pso_add, tiny_bufs, uint3(1u, 1u, 1u), 64u, 0ul, reps * 4)
             print("p0b round={round} add_us={add_us:.1f} add_gbs={add_gbs:.0f} rms_us={rms_us:.1f} rms_gbs={rms_gbs:.0f} cvt_us={cvt_us:.1f} cvt_gbs={cvt_gbs:.0f} tiny_add_us={tiny_us:.2f}\n")

@@ -128,6 +128,8 @@ struct private WdResident {
     s_comb_rq : VkDescriptorSet
     s_kvx_k : VkDescriptorSet
     s_kvx_v : VkDescriptorSet
+    s_kvx_k16 : VkDescriptorSet   //! the resident f16 twins of the cross stores
+    s_kvx_v16 : VkDescriptorSet
     oom : bool
     served_said : bool
     handoff_miss_said : bool   //! the host-upload arm of the cross-KV chain said once: the tower landed no device plane for this window's rows
@@ -315,8 +317,8 @@ def private wd_sets {
     let d = r.d
     let q8e = kq_elems(KqFmt.q8)
     let (bx, bq, bs, bh, bkc, bkx, bkxf, bt, bpms, bpy) = wd_sizes(r)
-    r.s_kv_k = set_tower_wdec_kv_cls(fixed_array(r.qkv_dev, r.kc_dev, r.kx_dev, r.norms_dev), fixed_array(3l * bx, bkc, bkxf, r.norms_bytes), fixed_array(WD_QKV, WD_KC, WD_KX, 0u))
-    r.s_kv_v = set_tower_wdec_kv_cls(fixed_array(r.qkv_dev, r.vc_dev, r.vx_dev, r.norms_dev), fixed_array(3l * bx, bkc, bkxf, r.norms_bytes), fixed_array(WD_QKV, WD_VC, WD_VX, 0u))
+    r.s_kv_k = set_tower_wdec_kv16_cls(fixed_array(r.qkv_dev, r.kc_dev, r.norms_dev), fixed_array(3l * bx, bkc, r.norms_bytes), fixed_array(WD_QKV, WD_KC, 0u))
+    r.s_kv_v = set_tower_wdec_kv16_cls(fixed_array(r.qkv_dev, r.vc_dev, r.norms_dev), fixed_array(3l * bx, bkc, r.norms_bytes), fixed_array(WD_QKV, WD_VC, 0u))
     r.s_attn_self = set_tower_wdec_attn_part_cls(fixed_array(r.qkv_dev, r.kc_dev, r.vc_dev, r.pms_dev, r.py_dev, r.norms_dev),
         fixed_array(3l * bx, bkc, bkc, bpms, bpy, r.norms_bytes), fixed_array(WD_QKV, WD_KC, WD_VC, WD_PARTIALS, WD_PARTIALS, 0u))
     r.s_attn_cross = set_tower_wdec_attn_part_cls(fixed_array(r.cq_dev, r.kxr_dev, r.vxr_dev, r.pms_dev, r.py_dev, r.norms_dev),
@@ -331,8 +333,10 @@ def private wd_sets {
         r.s_xfeed = set_tower_clamp_rq_cls(fixed_array(r.xin_dev, r.xkv_q_dev, r.xkv_s_dev), fixed_array(bt, r.ta * d, r.ta * d / q8e * 4l), fixed_array(WD_XIN, WD_XFEED, WD_XFEED))
     }
     r.s_xkv = wd_xkv_set()
-    r.s_kvx_k = set_tower_wdec_kv_cls(fixed_array(r.xkv_proj_dev, r.kxr_dev, r.kx_dev, r.norms_dev), fixed_array(bt, bkx, bkxf, r.norms_bytes), fixed_array(WD_TMP, WD_KXR, WD_KX, 0u))
-    r.s_kvx_v = set_tower_wdec_kv_cls(fixed_array(r.xkv_proj_dev, r.vxr_dev, r.vx_dev, r.norms_dev), fixed_array(bt, bkx, bkxf, r.norms_bytes), fixed_array(WD_TMP, WD_VXR, WD_VX, 0u))
+    r.s_kvx_k16 = set_tower_wdec_kv16_cls(fixed_array(r.xkv_proj_dev, r.kxr_dev, r.norms_dev), fixed_array(bt, bkx, r.norms_bytes), fixed_array(WD_TMP, WD_KXR, 0u))
+    r.s_kvx_k = set_tower_wdec_kv_cls(fixed_array(r.xkv_proj_dev, r.kx_dev, r.norms_dev), fixed_array(bt, bkxf, r.norms_bytes), fixed_array(WD_TMP, WD_KX, 0u))
+    r.s_kvx_v16 = set_tower_wdec_kv16_cls(fixed_array(r.xkv_proj_dev, r.vxr_dev, r.norms_dev), fixed_array(bt, bkx, r.norms_bytes), fixed_array(WD_TMP, WD_VXR, 0u))
+    r.s_kvx_v = set_tower_wdec_kv_cls(fixed_array(r.xkv_proj_dev, r.vx_dev, r.norms_dev), fixed_array(bt, bkxf, r.norms_bytes), fixed_array(WD_TMP, WD_VX, 0u))
     r.s_site |> reserve(r.nl * WD_LAYER_SITES + 1l)
     r.s_site |> resize(r.nl * WD_LAYER_SITES + 1l)
     for (l in range64(r.nl)) {
@@ -353,7 +357,7 @@ def private wd_sets {
 def private wd_ensure_classes(cm2 : bool; tile : VtTile) : bool {
     return (gemv_cls_ensure(int(KqFmt.q8)) && gemv_cls_ensure_n(int(KqFmt.q8), WD_ROW_CAP) && vt_tile_ensure(tile)
         && ensure_tower_ln_rq_cls() && ensure_tower_post_add_ln_rq_cls() && ensure_tower_bias_act_rq_cls() && ensure_tower_clamp_rq_cls()
-        && (!cm2 || ensure_tower_clamp_cvt_cls()) && ensure_tower_wdec_kv_cls() && ensure_tower_wdec_attn_part_cls()
+        && (!cm2 || ensure_tower_clamp_cvt_cls()) && ensure_tower_wdec_kv_cls() && ensure_tower_wdec_kv16_cls() && ensure_tower_wdec_attn_part_cls()
         && ensure_tower_wdec_attn_comb_rq_cls())
 }
 
@@ -503,7 +507,7 @@ def private wd_announce {
 
 //! one decoder attention pass: the chunk partials over the K/V rows at element `kvoff` (the query's bias row at `qboff`),
 //! then their combine with its requant
-def private wd_attn(raw : VkCommandBuffer; var h : VkHaz; var s_part : VkDescriptorSet; var pc : TowerWdecAttnArgs; var pc_comb : TowerWdecCombArgs;
+def private wd_attn(raw : VkCommandBuffer; var h : VkHaz; var s_part : VkDescriptorSet; var pc : GkWdecAttnArgs; var pc_comb : GkWdecCombArgs;
                     kvoff, qboff : uint; wg_part, wg_comb : int64) {
     pc.koff = kvoff
     pc.voff = kvoff
@@ -515,7 +519,7 @@ def private wd_attn(raw : VkCommandBuffer; var h : VkHaz; var s_part : VkDescrip
 
 //! a site's GEMV over `n` rows, then the residual seam that adds its bias row `boff` and norms the next block's input
 //! (the weight and bias rows at `lnoff` / `lnboff`)
-def private wd_gemv_post(raw : VkCommandBuffer; var h : VkHaz; site : int; n_in, d_out, n : int64; role : VtProfRole; var pc_post : TowerLnArgs;
+def private wd_gemv_post(raw : VkCommandBuffer; var h : VkHaz; site : int; n_in, d_out, n : int64; role : VtProfRole; var pc_post : GkPostAddLnArgs;
                          boff, lnoff, lnboff : uint) {
     wd_gemv(raw, h, site, n_in, d_out, 1l, n)
     vt_pt(raw, role)
@@ -529,16 +533,16 @@ def private wd_gemv_post(raw : VkCommandBuffer; var h : VkHaz; site : int; n_in,
 //! one side of a layer's cross K/V: its GEMM over the encoder rows (the schedule map at `map_off`), then its f16-plane and
 //! f32-row stores at element `off`, the bias row at `boff`
 def private wd_xkv_side(raw : VkCommandBuffer; var h : VkHaz; var pc_g : BatchArgs; map_off : uint; groups : int64; gemm_role : VtProfRole;
-                        var s_kv : VkDescriptorSet; var pc16, pcx : TowerWdecKvArgs; off, boff : uint; wg_kv : int64) {
+                        var s_kv16, s_kvx : VkDescriptorSet; var pc16, pcx : GkWdecKvArgs; off, boff : uint; wg_kv : int64) {
     pc_g.map_off = map_off
     vt_tile_enc(raw, h, g_wd.xkv_tile, g_wd.s_xkv, pc_g, groups)
     vt_pt(raw, gemm_role)
     pc16.dst_off = off
     pc16.boff = boff
-    enc_tower_wdec_kv_cls(raw, h, s_kv, pc16, wg_kv)
+    enc_tower_wdec_kv16_cls(raw, h, s_kv16, pc16, wg_kv)
     pcx.dst_off = off
     pcx.boff = boff
-    enc_tower_wdec_kv_cls(raw, h, s_kv, pcx, wg_kv)
+    enc_tower_wdec_kv_cls(raw, h, s_kvx, pcx, wg_kv)
     vt_pt(raw, VtProfRole.kv_store)
 }
 
@@ -595,8 +599,8 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
     var pc_g = BatchArgs(n = uint(d), d = uint(d), map_off = 0u)
     let total = ta * hh * hs
     let wg_kv = (total + 255l) / 256l
-    var pc_k16 = TowerWdecKvArgs(rows = uint(ta), sstride = uint(d), soff = 0u, nheads = uint(hh), tstride = uint(ta), p0 = 0u,
-        dst_off = 0u, boff = 0u, bias_on = 0u, mode = WDEC_KV_F16)
+    var pc_k16 = GkWdecKvArgs(rows = uint(ta), sstride = uint(d), soff = 0u, nheads = uint(hh), tstride = uint(ta), p0 = 0u,
+        dst_off = 0u, boff = 0u, bias_on = 0u, mode = WDEC_KV_F16, hs = uint(hs), kscale = wdec_kscale(hs))
     var pc_kx = pc_k16
     pc_kx.mode = WDEC_KV_KX
     var pc_v16 = pc_k16
@@ -614,8 +618,8 @@ def private vulkan_whisper_cross_kv(w : WhisperModel; var ds : DecoderState; enc
         for (l in range64(nl)) {
             let lo = dec_layer_offsets(w, l)
             let off = uint(l * d * ta)
-            wd_xkv_side(raw, h, pc_g, g_wd_maps[l * 2l], groups, VtProfRole.gemm_k, r.s_kvx_k, pc_k16, pc_kx, off, 0u, wg_kv)
-            wd_xkv_side(raw, h, pc_g, g_wd_maps[l * 2l + 1l], groups, VtProfRole.gemm_v, r.s_kvx_v, pc_v16, pc_vx, off, uint(lo.cv_b - r.norms_base), wg_kv)
+            wd_xkv_side(raw, h, pc_g, g_wd_maps[l * 2l], groups, VtProfRole.gemm_k, r.s_kvx_k16, r.s_kvx_k, pc_k16, pc_kx, off, 0u, wg_kv)
+            wd_xkv_side(raw, h, pc_g, g_wd_maps[l * 2l + 1l], groups, VtProfRole.gemm_v, r.s_kvx_v16, r.s_kvx_v, pc_v16, pc_vx, off, uint(lo.cv_b - r.norms_base), wg_kv)
         }
     }
     g_wd_pend_uid = uid
@@ -679,17 +683,18 @@ def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks 
     let wg_kv = (kvtotal + 255l) / 256l
     let nch_s = (p0 + n + int64(WDEC_CHUNK) - 1l) / int64(WDEC_CHUNK)
     let nch_c = (ta + int64(WDEC_CHUNK) - 1l) / int64(WDEC_CHUNK)
-    var pc_kv = TowerWdecKvArgs(rows = uint(n), sstride = uint(3l * d), soff = uint(d), nheads = uint(hh), tstride = uint(tmax), p0 = uint(p0),
-        dst_off = 0u, boff = 0u, bias_on = 0u, mode = WDEC_KV_F16)
-    var pc_as = TowerWdecAttnArgs(dim = uint(3l * d), tstride = uint(tmax), len0 = uint(p0 + 1l), causal = 1u, nheads = uint(hh),
-        nrows = uint(n), koff = 0u, voff = 0u, qboff = 0u)
-    var pc_ac = TowerWdecAttnArgs(dim = uint(d), tstride = uint(ta), len0 = uint(ta), causal = 0u, nheads = uint(hh),
-        nrows = uint(n), koff = 0u, voff = 0u, qboff = 0u)
-    var pc_cs = TowerWdecCombArgs(dim = uint(d), nchunks = uint(nch_s), nheads = uint(hh), nrows = uint(n))
+    var pc_kv = GkWdecKvArgs(rows = uint(n), sstride = uint(3l * d), soff = uint(d), nheads = uint(hh), tstride = uint(tmax), p0 = uint(p0),
+        dst_off = 0u, boff = 0u, bias_on = 0u, mode = WDEC_KV_F16, hs = uint(hs), kscale = wdec_kscale(hs))
+    let wd_scale = 1.0 / sqrt(float(WDEC_HS))
+    var pc_as = GkWdecAttnArgs(dim = uint(3l * d), tstride = uint(tmax), len0 = uint(p0 + 1l), causal = 1u, nheads = uint(hh),
+        nrows = uint(n), koff = 0u, voff = 0u, qboff = 0u, hs = WDEC_HS, scale = wd_scale)
+    var pc_ac = GkWdecAttnArgs(dim = uint(d), tstride = uint(ta), len0 = uint(ta), causal = 0u, nheads = uint(hh),
+        nrows = uint(n), koff = 0u, voff = 0u, qboff = 0u, hs = WDEC_HS, scale = wd_scale)
+    var pc_cs = GkWdecCombArgs(dim = uint(d), nchunks = uint(nch_s), nheads = uint(hh), nrows = uint(n), hs = WDEC_HS)
     var pc_cc = pc_cs
     pc_cc.nchunks = uint(nch_c)
     var pc_gelu = TowerBiasRqArgs(d = uint(4l * d), nblk = uint(nff / q8e), boff = 0u)
-    var pc_post = TowerLnArgs(d = uint(d), rows = uint(n), eps = w.eps, ln_on = 1u, ascale = 1.0)
+    var pc_post = GkPostAddLnArgs(d = uint(d), rows = uint(n), eps = w.eps, ln_on = 1u, ascale = 1.0, xboff = 0u)
     let wg_attn_s = nch_s * hh * n
     let wg_attn_c = nch_c * hh * n
     let wg_comb = hh * n
@@ -699,7 +704,7 @@ def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks 
             let lo = dec_layer_offsets(w, l)
             let site = int(l * WD_LAYER_SITES)
             if (l == 0l) {
-                var pc = TowerLnArgs(d = uint(d), rows = uint(n), eps = w.eps, ln_on = 1u, lnoff = uint(lo.ln1_w - r.norms_base), lnboff = uint(lo.ln1_b - r.norms_base))
+                var pc = gk_ln_args(uint(d), uint(n), w.eps, uint(lo.ln1_w - r.norms_base), uint(lo.ln1_b - r.norms_base))
                 enc_tower_ln_rq_cls(raw, h, r.s_ln_rq, pc, n)
                 vt_pt(raw, VtProfRole.ln)
             }
@@ -708,11 +713,11 @@ def private vulkan_whisper_decode(w : WhisperModel; var ds : DecoderState; toks 
             pc_kv.soff = uint(d)
             pc_kv.dst_off = uint(l * d * tmax)
             pc_kv.bias_on = 0u
-            enc_tower_wdec_kv_cls(raw, h, r.s_kv_k, pc_kv, wg_kv)
+            enc_tower_wdec_kv16_cls(raw, h, r.s_kv_k, pc_kv, wg_kv)
             pc_kv.soff = uint(2l * d)
             pc_kv.bias_on = 1u
             pc_kv.boff = uint(lo.v_b - r.norms_base)
-            enc_tower_wdec_kv_cls(raw, h, r.s_kv_v, pc_kv, wg_kv)
+            enc_tower_wdec_kv16_cls(raw, h, r.s_kv_v, pc_kv, wg_kv)
             vt_pt(raw, VtProfRole.kv_store)
             wd_attn(raw, h, r.s_attn_self, pc_as, pc_cs, uint(l * d * tmax), uint(lo.q_b - r.norms_base), wg_attn_s, wg_comb)
             wd_gemv_post(raw, h, site + int(WD_S_O), d, d, n, VtProfRole.gemm_o, pc_post,

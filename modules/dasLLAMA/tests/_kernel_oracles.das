@@ -223,3 +223,29 @@ def q8_blocks_off(oq : array<int8>; os : array<float>; a : array<float>; nblk : 
     }
     return off
 }
+
+//! The front convs' CPU form on an image odd along one axis and even along the other, so each edge drops its own taps:
+//! the first conv off one channel (FIRST) with its bias and ReLU (RELU), or the depthwise conv with its bias, the rows
+//! past `valid` masked off. Bar: nine f16-exact products summed in f32 against the same order.
+def dw_s2_front_ref(first, relu : bool; iw, ch, oh, ow, valid : int; xv, wv, bv : array<float>) : array<float> {
+    var want : array<float>
+    want |> resize(oh * ow * ch)
+    for (oy in range(oh)) {
+        for (ox in range(ow)) {
+            for (c in range(ch)) {
+                var acc = relu ? 0.0 : bv[c]
+                for (kh in range(3)) {
+                    for (kw in range(3)) {
+                        let iy = oy * 2 - 1 + kh
+                        let ix = ox * 2 - 1 + kw
+                        if (iy >= 0 && iy < valid && ix >= 0 && ix < iw) {
+                            acc += wv[(kh * 3 + kw) * ch + c] * xv[first ? iy * iw + ix : (iy * iw + ix) * ch + c]
+                        }
+                    }
+                }
+                want[(oy * ow + ox) * ch + c] = relu ? max(acc + bv[c], 0.0) : acc
+            }
+        }
+    }
+    return <- want
+}

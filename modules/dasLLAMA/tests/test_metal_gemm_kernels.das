@@ -1462,14 +1462,14 @@ def private half_rows_gate(t : T?; var dev, queue) {
             var inscope want <- [for (i in range(lead + total + slack)); i >= lead && i < lead + total ? float(float16(clamp(xv[i - lead] * scale, -65504.0, 65504.0))) : -77.0]
             let bx = mc |> in_(xv)
             let bh = mc |> out_words(lead + total + slack, float16(-77.0))
-            var ka = HalfRowsArgs(total = uint(total), scale = scale)
+            var ka = GkClampArgs(nelem = uint(total), lo = -65504.0, hi = 65504.0, scale = scale, hoff = uint(lead))
             for (leg in range(2)) {
                 if (leg == 1) {
                     mc |> plane_upload(bx, poisoned_copy(xv, 300, 2.0))
                     mc |> plane_refill(bh)   // the sentinel back before the run that must write the plane anew
                 }
                 let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-                    invoke(kh.enc, enc, pso, mc.buf[bx], mc.buf[bh], uint64(lead * 2), ka, int64(total + slack))
+                    invoke(kh.enc, enc, pso, mc.buf[bx], mc.buf[bh], ka, int64((total + slack + 3) / 4))
                 }
                 return if (!ran)
                 if (leg == 0) {

@@ -10,7 +10,6 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
 **This list is closed; a new asymmetry lands with its entry here:**
 
 - **The whisper-class block-hook pin is Vulkan-only** (`set_vulkan_audio_blocks`: the block hooks pinned off while the conv stem still serves, the stem-flush and lifetime cells' seat; the Metal tower serves stem and blocks as one chain, nothing to pin apart).
-- **The projector-tail lever and its counter are Metal-only** (`set_metal_tower_tail` / `metal_tower_tail_knob`, `metal_tower_tail_encodes`): the Metal tower runs the whisper-class, gemma3v and gemma4v projector tails behind the blocks in one command buffer, the lever off hands the blocks' rows to the CPU tail for an A/B, and the counter rises once an encode whose tail ran on the device. The Vulkan tower registers no tail seat and runs only gemma4a's tail, inside its own chain, so it has no tail form to pick or count. The callers outside the backend are the tail cells `test_encoder_tail_gpu` (`tests/test_audio.das`) and `test_gemma3v_tail_gpu` (`tests/test_gemma3v.das`).
 - **`metal_tower_mel_encodes` is Metal's mel counter, a function of its own**: it rises once a mel the device mel seat served (`register_whisper_mel_gpu`), the qwen3a mel and the chat towers' chunked mel alike. Vulkan counts the same seat as the `mels` field of `vulkan_tower_stats()`, where Metal's `metal_tower_stats()` carries no mel field. The caller outside the backend is `test_log_mel_chunks_gpu` (`tests/test_audio.das`).
 - **The streaming lane mint and the trimmed lane are Vulkan-only** (`vulkan_mint_begin` / `vulkan_mint_end`, the lever
   `set_vulkan_trim` / `vulkan_trim` with its `restore_vulkan_trim` form): the Vulkan lane carries a device twin the GPU
@@ -80,7 +79,7 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
 - **The window chain's form levers are Metal-only** (`set_metal_prefill_held` holding one crowned form off for an
   A/B on one loaded model, `set_metal_moe_gather_min` / `set_metal_moe_tall_avg` moving the routed block's two
   engage points, `metal_prefill_keep_moe_rows` / `metal_prefill_moe_rows` recording the rows a window routed, and the
-  tower's `set_metal_fc_attn_dev` / `set_metal_parakeet_front`): each picks between two forms the Metal prefill or
+  tower's `set_metal_fc_attn_dev`): each picks between two forms the Metal prefill or
   tower driver carries side by side, and the Vulkan chain has one form at each of those sites, so nothing to pick.
   The callers outside the backend are the probe `harness/p0_ko_probe.das` and the cells that hold both forms.
 - **The speculative round is Metal-only.** `register_mtp_round_override("metal", ...)` has one registrant, `gemma_mtp_spec_round`
