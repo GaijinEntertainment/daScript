@@ -421,7 +421,7 @@ def private fc_operands_gate(t : T?; var dev, queue; half : bool) {
         //! the oracle's five panels: the resize's zeros are the expected pad rows
         var inscope want : array<array<float>>
         for (rows in [f.mp, f.mp, f.nkp, f.nkp, f.wwpad]) {
-            var panel : array<float>
+            var inscope panel : array<float>
             panel |> resize(rows * w)
             want |> emplace(panel)
         }
@@ -1864,7 +1864,7 @@ def private st2_gather_gate(t : T?; var dev, queue) {
             check_buf(t, "{tag} with the row and column adds", bo, want, BAR_ZERO, Shape(row_width = c))
         }
         for (arm in range(2)) {   //! each add alone
-            let want_one <- [for (i in range(nrows * c)); a[int(idx[i / c]) * c + i % c] + (arm == 0 ? b[i] : cv[i % c])]
+            var inscope want_one <- [for (i in range(nrows * c)); a[int(idx[i / c]) * c + i % c] + (arm == 0 ? b[i] : cv[i % c])]
             if (invoke(run, mc.buf[pa], arm == 0 ? 1u : 0u, arm == 0 ? 0u : 1u)) {
                 check_buf(t, "{tag} {arm == 0 ? "add_b" : "add_c"} alone", bo, want_one, BAR_ZERO, Shape(row_width = c))
             }
