@@ -403,7 +403,7 @@ def private twin_encode(tt : T?; tw : Qwen3vTower; var st : Qwen3vState; tw_exac
 
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def test_qwen3v_vulkan_twin(t : T?) {
-    t |> run("the Vulkan block loop vs the CPU q8 chain (Qwen3-VL 4B, deepstack), and the exact-lane decline") @(tt : T?) {
+    t |> run("the Vulkan chain vs the CPU q8 chain (Qwen3-VL 4B, deepstack), and the exact lane served") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let mm = path_join(models_dir(), "mmproj-Qwen3VL-4B-Instruct-F16.gguf")
             if (!model_available(tt, mm) || !vulkan_twin_seat(tt)) {
@@ -433,8 +433,12 @@ def test_qwen3v_vulkan_twin(t : T?) {
             twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 640, 320, mm)   // non-square: the merge-reorder and the transposed grid; no gray canvas - the q8 lane is no instrument there (its own cells keep gray on the exact set)
             delete st
             delete tw
-            let planes <- make_planes("cb", 96, 96)
-            exact_lane_declines(tt, "qwen3v cb 96x96", tw_exact, st_exact, 9l * qwen3v_row_width(tw_exact)) $(t; var s; var out) => qwen3v_encode(t, s, planes, 96l, 96l, out)
+            let planes <- make_planes("cb", 448, 448)
+            var twxp <- mint_tower(mm, false, 0l, 13l)
+            var stxp = Qwen3vState()
+            exact_lane_served(tt, "qwen3v cb 448x448", tw_exact, st_exact, 784l, twxp, stxp) $(t; var s; var out) => qwen3v_encode(t, s, planes, 448l, 448l, out)
+            delete stxp
+            delete twxp
             delete st_exact
             delete tw_exact
             vulkan_tower_shutdown()

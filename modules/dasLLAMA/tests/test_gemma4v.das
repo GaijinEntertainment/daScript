@@ -405,7 +405,7 @@ def private twin_encode(tt : T?; tw : Gemma4vTower; var st : Gemma4vState; tw_ex
 
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def test_gemma4v_vulkan_twin(t : T?) {
-    t |> run("the Vulkan block loop vs the CPU q8 chain, and the exact-lane decline") @(tt : T?) {
+    t |> run("the Vulkan chain vs the CPU q8 chain, and the exact lane served") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
             if (!model_available(tt, mm) || !vulkan_twin_seat(tt)) {
@@ -437,8 +437,12 @@ def test_gemma4v_vulkan_twin(t : T?) {
             twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 768, 384, mm)   // 1152 rows, a 128-multiple: the aligned tile variant's canvas
             delete st
             delete tw
-            let planes <- make_planes("cb", 96, 96)
-            exact_lane_declines(tt, "gemma4v cb 96x96", tw_exact, st_exact, 4l * tw_exact.proj_dim) $(t; var s; var out) => gemma4v_encode(t, s, planes, 96l, 96l, out)
+            let planes <- make_planes("cb", 336, 336)
+            var twxp <- mint_tower(mm, false, 0l, POISON_BLOCK)
+            var stxp = Gemma4vState()
+            exact_lane_served(tt, "gemma4v cb 336x336", tw_exact, st_exact, 441l, twxp, stxp) $(t; var s; var out) => gemma4v_encode(t, s, planes, 336l, 336l, out)
+            delete stxp
+            delete twxp
             delete st_exact
             delete tw_exact
             vulkan_tower_shutdown()

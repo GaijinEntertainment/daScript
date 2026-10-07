@@ -363,9 +363,9 @@ let private ROWS_EPS = 1.0e-6
 
 [test]
 def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over the eight row classes: the fixture, one command buffer, eight oracles and their controls
-    t0 |> run("the tower row classes (rms, clamp, clamp+cvt, clamp+rq, rope2d, post-add, post-add plain, geglu) == the CPU tower helpers") <| @(t : T?) {
+    t0 |> run("the tower row classes (rms, clamp, clamp copy, clamp+cvt, clamp+rq, rope2d, post-add, post-add plain, geglu) == the CPU tower helpers") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init() || !ensure_tower_rms_cls() || !ensure_tower_clamp_cls() || !ensure_tower_clamp_cvt_cls()
+            if (!vk_moe_init() || !ensure_tower_rms_cls() || !ensure_tower_clamp_cls() || !ensure_tower_clamp_cvt_cls() || !ensure_tower_clamp_copy_cls()
                     || !ensure_tower_clamp_rq_cls() || !ensure_tower_rope2d_cls() || !ensure_tower_post_add_cls()
                     || !ensure_tower_post_add_plain_cls() || !ensure_tower_geglu_cls()) {
                 t |> skip("no Vulkan device")
@@ -393,6 +393,8 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
             with_cell_planes() $(var cp : CellPlanes) {
                 let xp = cp |> io_(x)
                 let yp = cp |> io_(y)
+                let ysp = cp |> io_(y)    // the clamp copy's source, which it must leave as it found it
+                let ycp = cp |> out_(nd)   // ... and its destination
                 let xbp = cp |> out_(nd)
                 let xb2p = cp |> out_(nd)
                 let qp = cp |> io_(q)
@@ -413,6 +415,7 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
                 let xb_half_p = cp |> out_(nd)
                 var s_rms = cp |> cls_set(fixed_array(xp, xbp, wp), @@set_tower_rms_cls)
                 var s_clamp = cp |> cls_set(fixed_array(yp), @@set_tower_clamp_cls)
+                var s_ccopy = cp |> cls_set(fixed_array(ysp, ycp), @@set_tower_clamp_copy_cls)
                 var s_cvt = cp |> cls_set(fixed_array(xp, xhp), @@set_tower_clamp_cvt_cls)
                 var s_rq = cp |> cls_set(fixed_array(xp, xqp, xsp), @@set_tower_clamp_rq_cls)
                 var s_rope = cp |> cls_set(fixed_array(qp, tp), @@set_tower_rope2d_cls)
@@ -441,6 +444,7 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
                     enc_tower_rope2d_cls(raw, h, s_rope, pa_rope, int64((rows * ROWS_HEADS * pairs + 255) / 256))
                     enc_tower_geglu_cls(raw, h, s_geglu, pa_geglu, int64((nff / 4 + 255) / 256))
                     enc_tower_clamp_cls(raw, h, s_clamp, pa_clamp, wg4)
+                    enc_tower_clamp_copy_cls(raw, h, s_ccopy, pa_clamp, wg4)
                     enc_tower_post_add_cls(raw, h, s_post0, pa_post0, int64(rows))
                     enc_tower_post_add_plain_cls(raw, h, s_post_plain, pa_post_plain, int64(rows))
                     enc_tower_post_add_plain_cls(raw, h, s_post_plain0, pa_post_plain0, int64(rows))
@@ -449,6 +453,8 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
                 }
                 let xb_dev <- cp |> plane_run(xbp)
                 let y_dev <- cp |> plane_run(yp)
+                let ys_dev <- cp |> plane_run(ysp)
+                let yc_dev <- cp |> plane_run(ycp)
                 let x_dev <- cp |> plane_run(xp)
                 let xb2_dev <- cp |> plane_run(xb2p)
                 let g_dev <- cp |> plane_run(gp)
@@ -472,6 +478,8 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
                 y_ref |> resize(nd)
                 clamp_rows(y_ref, y, int64(nd), lo, hi)
                 check_rows(t, "tower_clamp rows clamped in place vs clamp_rows", y_dev, y_ref, BAR_EXACT, d)
+                check_rows(t, "tower_clamp_copy rows clamped into the copy vs clamp_rows", yc_dev, y_ref, BAR_EXACT, d)
+                check_rows(t, "tower_clamp_copy leaves its source as it found it", ys_dev, y, BAR_EXACT, d)
                 var clamped_x : array<float>
                 clamped_x |> resize(nd)
                 clamp_rows(clamped_x, x, int64(nd), lo2, hi2)

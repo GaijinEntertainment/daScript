@@ -311,7 +311,7 @@ def private twin_encode(tt : T?; tw : Gemma3vTower; var st : Gemma3vState; tw_ex
 
 [test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def test_gemma3v_vulkan_twin(t : T?) {
-    t |> run("the Vulkan block loop vs the CPU q8 chain, and the exact-lane decline") @(tt : T?) {
+    t |> run("the Vulkan chain vs the CPU q8 chain, and the exact lane served") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let mm = path_join(models_dir(), "mmproj-gemma-3-4b-it-F16.gguf")
             if (!model_available(tt, mm) || !vulkan_twin_seat(tt)) {
@@ -339,8 +339,12 @@ def test_gemma3v_vulkan_twin(t : T?) {
             delete st
             delete tw
             let planes <- make_planes("cb", int(tw_exact.image_px), int(tw_exact.image_px))
-            let n_side = tw_exact.image_px / tw_exact.patch / tw_exact.merge
-            exact_lane_declines(tt, "gemma3v cb", tw_exact, st_exact, n_side * n_side * tw_exact.proj_dim) $(t; var s; var out) => gemma3v_encode(t, s, planes, tw_exact.image_px, tw_exact.image_px, out)
+            let n_grid = tw_exact.image_px / tw_exact.patch
+            var twxp <- mint_tower(mm, false, 0l, POISON_BLOCK)
+            var stxp = Gemma3vState()
+            exact_lane_served(tt, "gemma3v cb", tw_exact, st_exact, n_grid * n_grid, twxp, stxp) $(t; var s; var out) => gemma3v_encode(t, s, planes, tw_exact.image_px, tw_exact.image_px, out)
+            delete stxp
+            delete twxp
             delete st_exact
             delete tw_exact
             vulkan_tower_shutdown()

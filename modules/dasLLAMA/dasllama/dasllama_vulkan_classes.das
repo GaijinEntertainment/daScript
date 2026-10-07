@@ -9279,6 +9279,18 @@ class TowerClampCvt : GkClampRows {
     }
 }
 
+//! the f32 copy of a clamped GEMM input (the exact lane's f32 tile): the input bounds applied into `dst` so the normed rows stay
+//! whole for the next GEMM's own bounds
+[vk_dispatch(name = "tower_clamp_copy_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerClampCopy : GkClampRows {
+    override COPY = true
+
+    [spirv_kernel(local_size_x = 256, name = "tower_clamp_copy_cls_spv")]
+    def run {
+        clamp_rows_body()
+    }
+}
+
 //! the Q8_0 feed of a clamped GEMM input: the requant over the clamped elements (the mm and KHR modes' tile feed)
 [vk_dispatch(name = "tower_clamp_rq_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TowerClampRq : RqPlainT {
