@@ -370,19 +370,23 @@ foreach(util_path ${DAS_UTILS})
 endforeach()
 add_dependencies(all_utils_exe dastest_exe)
 
-# Single-config generators only: UTIL_BIN_DIR embeds CMAKE_CFG_INTDIR on
-# multi-config, which install() cannot resolve — and release bundles are cut on
-# single-config (Ninja) lanes. Each shipped tool's decision is recorded in that
-# tool's README.md, where utils/REVIEW.das reads it.
-if(NOT _DAS_UTILS_MULTI_CONFIG)
-    set(DAS_UTILS_SHIPPED_EXES lint daspkg dascov detect-dupe das-fmt dastest)
-    if(NOT DAS_SQLITE_DISABLED)
-        list(APPEND DAS_UTILS_SHIPPED_EXES benchctl)   # same gate on DAS_UTILS above
-    endif()
-    foreach(util ${DAS_UTILS_SHIPPED_EXES})
-        install(PROGRAMS ${UTIL_BIN_DIR}/${util}.exe DESTINATION ${DAS_INSTALL_BINDIR})
-    endforeach()
+# UTIL_BIN_DIR embeds CMAKE_CFG_INTDIR on multi-config generators, which install()
+# cannot resolve, so the install rule spells the configuration as $<CONFIG> there:
+# `cmake --install build --config Release` from a Visual Studio tree ships the same
+# exes the single-config (Ninja) release lanes do. Each shipped tool's decision is
+# recorded in that tool's README.md, where utils/REVIEW.das reads it.
+if(_DAS_UTILS_MULTI_CONFIG)
+    set(_DAS_UTILS_INSTALL_BIN_DIR ${PROJECT_SOURCE_DIR}/bin/$<CONFIG>)
+else()
+    set(_DAS_UTILS_INSTALL_BIN_DIR ${UTIL_BIN_DIR})
 endif()
+set(DAS_UTILS_SHIPPED_EXES lint daspkg dascov detect-dupe das-fmt dastest)
+if(NOT DAS_SQLITE_DISABLED)
+    list(APPEND DAS_UTILS_SHIPPED_EXES benchctl)   # same gate on DAS_UTILS above
+endif()
+foreach(util ${DAS_UTILS_SHIPPED_EXES})
+    install(PROGRAMS ${_DAS_UTILS_INSTALL_BIN_DIR}/${util}.exe DESTINATION ${DAS_INSTALL_BINDIR})
+endforeach()
 
 # Prewarm the JIT dll cache for the whole test tree, except module-gated folders and gc
 # (mirrors tests/.das_test: gc stays interp-only under -jit — heap_collect can't see

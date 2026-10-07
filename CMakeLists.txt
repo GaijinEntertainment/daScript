@@ -1,5 +1,5 @@
 cmake_minimum_required (VERSION 3.17)
-project (DAS VERSION 0.6.4)
+project (DAS VERSION 0.6.5)
 
 # Set build type to Debug by default. If not set it will break
 # dependencies for modules.
@@ -1720,6 +1720,7 @@ SET(DAS_RELEASE_MISC_INCLUDE
     include/daScript/misc/arraytype.h
     include/daScript/misc/callable.h
     include/daScript/misc/crash_handler.h
+    include/daScript/misc/das_asan.h
     include/daScript/misc/das_common.h
     include/daScript/misc/debug_break.h
     include/daScript/misc/dep_recorder.h

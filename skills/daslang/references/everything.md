@@ -3217,7 +3217,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 
 ### Embeddings
 
-- `embed` - Mean-pooled, L2-normalized sentence embedding of `text` (`model.config.dim` floats): the decoder's last-layer hidden state (post-final RMSNorm), averaged then unit-normalized.
+- `embed` - L2-normalized sentence embedding of `text` (`model.config.dim` floats, or the leading `dims` renormalized - the Matryoshka read) from the decoder's post-final-norm hidden rows, pooled the way the file's `pooling_type` asks (mean; the last row for Qwen3-Embedding) unless `pooling` names one (`POOLING_MEAN` / `POOLING_CLS` / `POOLING_LAST`; -1 = the file's).
 
 ### Vision and audio encoders
 
@@ -5557,6 +5557,7 @@ The DAS_SOURCE_FORMATTER module implements source code formatting for daslang. I
 
 - `format_source` - Formats daslang source code given as a byte array and returns the formatted result.
 - `format_source_string` - Formats a daslang source code string and returns the formatted result.
+- `wrap_long_lines`
 
 ## das_source_formatter_fio
 
@@ -6636,6 +6637,7 @@ The lint_config module loads `{get_das_root()}/.lint_config` (a TOML file with a
 
 - `FormatPolicy`
 - `FormatJob`
+- `LintFix`
 - `LintIssue`
 
 ### Configuration
@@ -6664,6 +6666,7 @@ The lint_config module loads `{get_das_root()}/.lint_config` (a TOML file with a
 
 ### Lint-surface predicates
 
+- `drop_skipped_file_issues`
 - `is_lint_fixture_name`
 - `is_user_authored_body`
 - `lint_file_skip_reason`
@@ -6671,6 +6674,11 @@ The lint_config module loads `{get_das_root()}/.lint_config` (a TOML file with a
 ### Structured findings
 
 - `make_lint_issue`
+
+### Fixes
+
+- `apply_lint_fixes`
+- `lint_source_line`
 
 ### Format policy
 

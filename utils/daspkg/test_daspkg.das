@@ -3475,7 +3475,7 @@ def test_release_external_module_arguments(t : T?) {
     fwrite(path_join(module_dir, "value.das"), "options gen2\nlet RELEASE_FIXTURE_VALUE = 42\n")
     let script = path_join(root, "main.das")
     fwrite(script, "options gen2\nrequire release_fixture/value\n[export]\ndef main()\{print(\"mounted: \{RELEASE_FIXTURE_VALUE}\\n\")\}\n")
-    let exe = path_join(get_das_root(), get_platform_name() == "windows" ? "bin/daslang.exe" : "bin/daslang")
+    let exe = get_host_binary()
     for (flag in ["-load_module", "-load-module", "--load_module", "--load-module"]) {
         let args = release_module_args([exe, flag, module_dir, "main.das", "--", "-load_module", "must-not-load"])
         var output : string

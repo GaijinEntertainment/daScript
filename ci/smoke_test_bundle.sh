@@ -107,8 +107,8 @@ COMPILE_TESTS=(
 
 # Prebuilt exes `cmake --install` drops into bin/. `cpp` rows are add_executable
 # targets (platform-natural suffix); `dasexe` rows are the DAS_UTILS_SHIPPED_EXES
-# set from utils/CMakeLists.txt (always `.exe`), installed on single-config
-# generators — which is every generator the release bundles are cut on.
+# set from utils/CMakeLists.txt (always `.exe`), installed from bin/ on single-config
+# generators and from bin/<config>/ on multi-config ones.
 # `cpp` rows are presence-checked; `dasexe` rows are also launched (`--help`, exit 0):
 # a `daslang -exe` binary resolves the runtime .so/.dylib through its embedded rpath,
 # and a bundle whose rpath points back at the build tree is present-but-dead on every
@@ -206,17 +206,26 @@ done
 echo
 echo "Shipped headers' includes:"
 # A shipped header that includes a file the install rule leaves out compiles in the tree and
-# fails in every SDK consumer; each pair below is a shipped header and a file it includes.
-for pair in "include/daScript/simulate/aot_builtin_ast.h:include/daScript/builtin/ast_gen.inc"; do
-    header="${pair%%:*}"; inc="${pair##*:}"
-    if [[ -f "$BUNDLE/$header" && -f "$BUNDLE/$inc" ]]; then
-        printf '  %-52s OK\n' "$inc"
-        PASS=$((PASS + 1))
-    else
-        printf '  %-52s MISSING (included by %s)\n' "$inc" "$header"
-        FAIL=$((FAIL + 1))
+# fails in every SDK consumer: every `#include "daScript/..."` / `<daScript/...>` written by a
+# shipped header or .inc must resolve inside the bundle's include/.
+include_misses=0
+include_count=0
+while IFS= read -r inc; do
+    include_count=$((include_count + 1))
+    if [[ ! -f "$BUNDLE/include/$inc" ]]; then
+        header="$(grep -rlE "#include[[:space:]]*[<\"]$inc[>\"]" "$BUNDLE/include/daScript" | head -1)"
+        printf '  %-52s MISSING (included by %s)\n' "include/$inc" "${header#"$BUNDLE/"}"
+        include_misses=$((include_misses + 1))
     fi
-done
+done < <(grep -rhoE '#include[[:space:]]*[<"]daScript/[^">]+[">]' "$BUNDLE/include/daScript" \
+         | sed -E 's/.*[<"](daScript[^">]+)[">].*/\1/' | sort -u)
+if [[ "$include_count" -gt 0 && "$include_misses" -eq 0 ]]; then
+    printf '  %-52s OK (%d distinct includes resolve)\n' "include/daScript/**" "$include_count"
+    PASS=$((PASS + 1))
+else
+    [[ "$include_count" -eq 0 ]] && printf '  %-52s MISSING (no shipped header found)\n' "include/daScript/**"
+    FAIL=$((FAIL + 1))
+fi
 
 echo
 echo "Runtime launch:"

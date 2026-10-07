@@ -6,6 +6,7 @@ require daslib/strings_boost
 require daslib/fio
 require daslib/clargs
 require ../../common/parallel_workers.das
+require ../../common/log_floor.das
 require classify
 require utils_phase
 
@@ -263,5 +264,6 @@ def main() : int {
         to_log(LOG_ERROR, "test-release: --bundle is required\n")
         return 1
     }
+    default_log_floor_to_info()
     return !empty(cfg.paths_from) ? run_worker(cfg) : run_parent(cfg)
 }
