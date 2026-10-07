@@ -8,6 +8,8 @@ require dastest/testing_boost
 require audio/audio_boost
 require audio/audio_record
 require strings
+require daslib/fio
+require daslib/defer
 
 // audio_system_create reads the user args through audio_user_args (`--null-audio`,
 // `--volume V`). The parse is pure and tested directly; the null-backend EFFECT is
@@ -65,4 +67,28 @@ def test_null_audio_flag_effect(t : T?) {
         // sticky process-wide flag: hand the next test a clean slate
         sound_set_null_device(false)
     }
+}
+
+[test]
+def test_audio_finalize_without_callbacks(t : T?) {
+    let tmp = test_temp_dir()
+    let child = path_join(tmp, "audio_finalize.das")
+    defer(){remove(child)}
+    let source = replace(replace(fread(path_join(get_das_root(), "modules/dasAudio/audio/audio_boost.das")), "module audio_boost shared private", ""), "audio_boost::", "")
+    fwrite(child, "{source}\n[export]\ndef main()\{\n    assert(g_mixer_total_time == 0.lf && g_mixer_total_samples == 0ul)\n    if (get_command_line_arguments()[length(get_command_line_arguments()) - 1] == \"sampled\")\{g_mixer_total_samples = 48000ul\}\n    this_context().category.audio = true\n    print(\"finalize armed\\n\")\n\}\n")
+    let args <- get_command_line_arguments()
+    let exe = args[0]
+    let env = get_platform_name() == "windows" ? "set \"DAS_LOG_LEVEL=trace\"&& " : "DAS_LOG_LEVEL=trace "
+    var output : string
+    let zero_rc = unsafe(popen_timeout("{env}\"{exe}\" -dasroot \"{get_das_root()}\" \"{child}\" 2>&1", 120.0) $(f) {
+        if (f != null){output = fread(f)}
+    })
+    t |> equal(zero_rc, 0, output)
+    t |> success(find(output, "finalize armed") >= 0, output)
+    t |> success(find(output, "mixer ") < 0, "no utilization exists before the first callback: {output}")
+    let sampled_rc = unsafe(popen_timeout("{env}\"{exe}\" -dasroot \"{get_das_root()}\" \"{child}\" -- sampled 2>&1", 120.0) $(f) {
+        if (f != null){output = fread(f)}
+    })
+    t |> equal(sampled_rc, 0, output)
+    t |> success(find(output, "mixer 0.0% utilization") >= 0, output)
 }

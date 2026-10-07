@@ -336,6 +336,23 @@ daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg_git.das
 - Shallow clones (`--depth 1`) for speed.
 - Local installs: filesystem copy, no git.
 
+### External module forwarding {#external-module-forwarding}
+
+When invoked through `daslang -load_module <directory>`, release compiler subprocesses
+inherit those explicit module mounts (native programs, companions, tuning harnesses, and WebAssembly).
+Repeat the option for multiple external modules; options after `--` belong to the
+packager and are not forwarded as compiler options.
+
+On Windows, module directory arguments reject percent signs and exclamation marks
+because `cmd` can expand them inside double quotes. They also reject double quotes
+and line breaks. On other platforms, single-quoted arguments escape embedded single
+quotes so the shell passes each directory as one literal argument.
+
+To exercise the external-mount WebAssembly release fixture on an emsdk host with
+built wasm64 archives, set `DASPKG_TEST_WASM_LIB_DIR` to the archive directory when
+running the daspkg unit suite. This opt-in requires the release to produce its wasm
+artifact; the ordinary suite does not require emsdk.
+
 ## Requirements
 
 - **git** - required for all remote operations

@@ -157,6 +157,28 @@ def test_mutations_utf8(t : T?) {
         t |> success(fexist(a), "rename(ec) should restore the name")
         drop_fixture(t, root)
     }
+    t |> run("rename replaces existing UTF-8 files, both arities") @(t : T?) {
+        let root = make_fixture(t)
+        return if (empty(root))
+        let source = path_join(root, UTF8_FILE)
+        let destination = path_join(root, "замена_替换.txt")
+        for (with_error in fixed_array(false, true)) {
+            t |> success(fwrite(source, "replacement"))
+            t |> success(fwrite(destination, "previous"))
+            var error = "stale error"
+            let moved = with_error ? rename(source, destination, error) : rename(source, destination)
+            t |> success(moved, "rename replaces the existing destination")
+            t |> success(!fexist(source), "successful rename consumes the source")
+            t |> equal(fread(destination), "replacement", "destination contains the replacement bytes")
+            if (with_error){t |> success(empty(error), "successful rename clears the error")}
+            error = ""
+            let missing = with_error ? rename(source, destination, error) : rename(source, destination)
+            t |> success(!missing, "missing source fails without deleting the destination")
+            t |> equal(fread(destination), "replacement", "failed rename preserves the destination")
+            if (with_error){t |> success(!empty(error), "failed rename reports the platform error")}
+        }
+        drop_fixture(t, root)
+    }
     t |> run("copy_file with UTF-8 names") @(t : T?) {
         let root = make_fixture(t)
         return if (empty(root))

@@ -91,3 +91,21 @@ def test_binary_save_reclaims_buffer_when_callback_panics(t : T?) {
     t |> equal(after, before, "callback exceptions release the temporary serialization buffer")
     delete source
 }
+
+struct BinaryEmptyStrings {
+    null_text : string
+    empty_text : string
+    following_text : string
+}
+
+[test]
+def test_binary_null_and_empty_strings(t : T?) {
+    let source = BinaryEmptyStrings(empty_text = "", following_text = "after empty")
+    var decoded : BinaryEmptyStrings
+    binary_save(source) $(data) {
+        binary_load(decoded, data)
+    }
+    t |> equal(decoded.null_text, source.null_text)
+    t |> equal(decoded.empty_text, source.empty_text)
+    t |> equal(decoded.following_text, source.following_text, "empty payloads preserve the following value")
+}

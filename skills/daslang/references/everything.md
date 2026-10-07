@@ -3019,7 +3019,7 @@ dasGLTF loads `glTF 2.0`_ models — `.glb` (binary), `.gltf` (JSON), external o
 - `GltfVertex`
 - `GltfPrimitive`
 - `GltfMesh`
-- `GltfMaterial`
+- `GltfMaterial` - Material factors, texture references, and rendering modes.
 - `GltfImage`
 - `GltfSampler`
 - `GltfTexture`

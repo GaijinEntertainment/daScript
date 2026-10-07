@@ -2235,7 +2235,7 @@ namespace das {
         auto wideOldPath = utf8_file_path_to_wide(old_path);
         auto wideNewPath = utf8_file_path_to_wide(new_path);
         return !wideOldPath.empty() && !wideNewPath.empty()
-            && _wrename(wideOldPath.c_str(), wideNewPath.c_str()) == 0;
+            && MoveFileExW(wideOldPath.c_str(), wideNewPath.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
 #else
         return rename(old_path, new_path) == 0;
 #endif
@@ -2327,6 +2327,11 @@ namespace das {
 #endif
     }
 
+    static char * ec_to_string ( const std::error_code & ec, Context * ctx, LineInfoArg * at ) {
+        auto msg = ec.message();
+        return ctx->allocateString(msg.data(), uint32_t(msg.size()), at);
+    }
+
     static char * errno_to_string ( Context * ctx, LineInfoArg * at ) {
         auto msg = strerror(errno);
         return ctx->allocateString(msg, uint32_t(strlen(msg)), at);
@@ -2354,8 +2359,11 @@ namespace das {
 #if defined(_WIN32)
         auto wideOld = utf8_file_path_to_wide(old_path);
         auto wideNew = utf8_file_path_to_wide(new_path);
-        if ( wideOld.empty() || wideNew.empty()
-            || _wrename(wideOld.c_str(), wideNew.c_str()) != 0 ) { error = errno_to_string(ctx, at); return false; }
+        if ( wideOld.empty() || wideNew.empty() ) { error = errno_to_string(ctx, at); return false; }
+        if ( !MoveFileExW(wideOld.c_str(), wideNew.c_str(), MOVEFILE_REPLACE_EXISTING) ) {
+            error = ec_to_string(std::error_code((int)GetLastError(), std::system_category()), ctx, at);
+            return false;
+        }
 #else
         if ( rename(old_path, new_path) != 0 ) { error = errno_to_string(ctx, at); return false; }
 #endif
@@ -2773,11 +2781,6 @@ namespace das {
     }
 
     // ---- filesystem operations (C++17 <filesystem>) ----
-
-    static char * ec_to_string ( const std::error_code & ec, Context * ctx, LineInfoArg * at ) {
-        auto msg = ec.message();
-        return ctx->allocateString(msg.data(), uint32_t(msg.size()), at);
-    }
 
     // path manipulation
 

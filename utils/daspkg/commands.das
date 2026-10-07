@@ -1683,7 +1683,8 @@ def private release_manifest_env(manifest : string) : string {
 //! `deps_file` is left for the caller to merge.
 def private release_build_program(daslang, main_path, bundle_dir, name, deps_file, fat, manifest, force_args : string; main_scopes : array<string>; is_mac_app : bool; var shipped : array<string>) : int {
     let exe_path = path_join(bundle_dir, name)
-    let cmd = "{release_fat_env(fat)}{release_manifest_env(manifest)}\"{daslang}\" -exe -output \"{exe_path}\" --list-shared-modules \"{deps_file}\"{force_args} \"{main_path}\""
+    let module_args = release_module_args(get_command_line_arguments())
+    let cmd = "{release_fat_env(fat)}{release_manifest_env(manifest)}\"{daslang}\" -exe -output \"{exe_path}\" --list-shared-modules \"{deps_file}\"{force_args}{module_args} \"{main_path}\""
     let mode_note = empty(fat) ? "" : " ({fat} class, fat)"
     log("  build: companion {name} from {base_name(main_path)}{mode_note}\n")
     let t0 = ref_time_ticks()
@@ -1788,7 +1789,8 @@ def private release_tuner_cmd(daslang : string; ts : TuneScopeDep; paranoid : bo
         "set \"DAS_TUNE_MODE=tune\"&& set \"DAS_TUNE_MANIFEST={ts.manifest}\"&& set \"DAS_TUNE_COMPILE_FALLBACKS={ts.fallbacks}\"&& " :
         "DAS_TUNE_MODE=tune DAS_TUNE_MANIFEST=\"{ts.manifest}\" DAS_TUNE_COMPILE_FALLBACKS=\"{ts.fallbacks}\" ")
     let tune_args = paranoid ? " -- --tune-paranoid" : ""
-    return "{envs}\"{daslang}\" -jit \"{ts.tuner}\" -dasroot \"{get_das_root()}\"{tune_args}"
+    let module_args = release_module_args(get_command_line_arguments())
+    return "{envs}\"{daslang}\"{module_args} -jit \"{ts.tuner}\" -dasroot \"{get_das_root()}\"{tune_args}"
 }
 
 def private release_elapsed(t0 : int64) : string =>
@@ -2454,6 +2456,30 @@ def private get_daslang_path() : string {
     return get_platform_name() == "windows" ? replace(joined, "/", "\\") : joined
 }
 
+[arch(at="README.md#external-module-forwarding")]
+def release_module_args(arguments : array<string>) : string {
+    return build_string() $(var writer) {
+        var i = 1
+        while (i < length(arguments) && arguments[i] != "--") {
+            let flag = arguments[i]
+            if (flag == "-load_module" || flag == "-load-module" || flag == "--load_module" || flag == "--load-module") {
+                i++
+                if (i >= length(arguments)){panic("-load_module requires a module directory")}
+                let path = arguments[i]
+                if (get_platform_name() == "windows") {
+                    if (find(path, "%") >= 0 || find(path, "!") >= 0 || find(path, "\"") >= 0 || find(path, "\n") >= 0 || find(path, "\r") >= 0){panic("Unsupported shell character in module directory: {path}")}
+                    let generic = replace(path, "\\", "/")
+                    write(writer, " -load_module \"{generic}\"")
+                } else {
+                    let quoted = replace(path, "'", "'\"'\"'")
+                    write(writer, " -load_module '{quoted}'")
+                }
+            }
+            i++
+        }
+    }
+}
+
 // remember the resolved scope manifest for the ship step; warn once on conflicting scopes
 def private release_note_ship_manifest(manifest : string; var ship_manifest : string&) {
     if (empty(manifest) || !fexist(manifest)) {
@@ -2646,7 +2672,8 @@ def private release_in_workspace(root, out_dir, workspace : string; paranoid, qu
         to_log(LOG_ERROR, "release --fat: '{fat}' is not a CPU class name (letters, digits, '-', '_' and '.' only)\n")
         return 1
     }
-    let cmd = "{release_fat_env(fat)}\"{daslang}\" -exe -output \"{exe_path}\" --list-shared-modules \"{deps_file}\"{force_args} \"{main_path}\""
+    let module_args = release_module_args(get_command_line_arguments())
+    let cmd = "{release_fat_env(fat)}\"{daslang}\" -exe -output \"{exe_path}\" --list-shared-modules \"{deps_file}\"{force_args}{module_args} \"{main_path}\""
     if (!empty(fat)) {
         log("  build: fat exe for the {fat} class (DAS_JIT_BASELINE={fat}, DAS_TUNE_MODE=fat)\n")
     }
@@ -3197,7 +3224,8 @@ def private release_one_wasm_app(root, out_dir, app_name, main_script : string; 
         }
     }
     let debug_args = include_symbols ? " --jit-debug --jit-stack" : ""
-    let xc_cmd = "\"{daslang}\" -exe -output \"{obj_path}\" --list-shared-modules \"{deps_file}\" -project-root \"{root}\" {disable_args} \"{main_path}\" -- --jit-target=wasm64-unknown-emscripten --jit-emit-object --jit-check-abi --jit-threads{debug_args} --jit-runtime-lib=\"{runtime_archive}\""
+    let module_args = release_module_args(get_command_line_arguments())
+    let xc_cmd = "\"{daslang}\" -exe -output \"{obj_path}\" --list-shared-modules \"{deps_file}\" -project-root \"{root}\" {disable_args}{module_args} \"{main_path}\" -- --jit-target=wasm64-unknown-emscripten --jit-emit-object --jit-check-abi --jit-threads{debug_args} --jit-runtime-lib=\"{runtime_archive}\""
     var xc_out : string
     let xc_rc = run_cmd(xc_cmd, xc_out)
     if (xc_rc != 0 || !fexist(obj_path)) {
