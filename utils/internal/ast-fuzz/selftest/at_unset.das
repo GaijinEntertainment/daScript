@@ -1,6 +1,6 @@
 options gen2
 require at_unset_breaker
-
+options _nolint = "STYLE042"
 // One function per guess the verify has to make for a node with no `at`; at_unset_breaker.das clears
 // the locations. Operands are arguments so `a + b` survives folding - the breaker needs a live op.
 

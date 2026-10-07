@@ -219,6 +219,31 @@ def private perf030_needs_release(td : TypeDeclPtr) : bool {
     return false
 }
 
+def private perf033_delete_frees_shared(td : TypeDeclPtr; var seen : table<Structure?>) : bool {
+    if (td == null) return false
+    let bt = td.baseType
+    if (bt == Type.tPointer) return !td.flags.smartPtr
+    if (bt == Type.tLambda || bt == Type.tIterator) return true
+    if (bt == Type.tArray || bt == Type.tTable || bt == Type.tFixedArray) {
+        return perf033_delete_frees_shared(td.firstType, seen) || perf033_delete_frees_shared(td.secondType, seen)
+    }
+    if (bt == Type.tStructure && td.structType != null) {
+        let st = td.structType
+        return false if (key_exists(seen, st))
+        seen |> insert(st)
+        for (fld in td.structType.fields) {
+            if (!fld.flags.doNotDelete && perf033_delete_frees_shared(fld._type, seen)) return true
+        }
+        return false
+    }
+    if (bt == Type.tTuple || bt == Type.tVariant) {
+        for (aft in td.argTypes) {
+            if (perf033_delete_frees_shared(aft, seen)) return true
+        }
+    }
+    return false
+}
+
 def private has_annotation(annotations; name : string) : bool {
     for (a in annotations) {
         if (a.name == name) return true
@@ -374,6 +399,7 @@ class PerfLintVisitor : AstVisitor {
     inline_block_entry_depth : array<int>
     in_deferred : int = 0
     inline_aware_loop_depth : int = 0
+    any_loop_depth : int = 0
     block_tail_exit : array<BlockTailExit>
     return_frames : array<Perf031Return>
     in_while_cond : bool = false
@@ -437,7 +463,7 @@ class PerfLintVisitor : AstVisitor {
         return is_lint_suppressed(at, code)
     }
 
-    def perf_warning(text : string; at : LineInfo) : void {
+    def perf_warning(text : string; at : LineInfo; fix : LintFix = LintFix()) : void {
         if (in_template
             || !is_user_authored_body(current_function)
             || is_suppressed(text, at)) return
@@ -459,7 +485,9 @@ class PerfLintVisitor : AstVisitor {
             compiling_program() |> macro_performance_warning(at, msg)
         } elif (collect_warnings) {
             warnings |> push("performance warning: {msg} at {describe(at)}")
-            issues |> push(make_lint_issue(msg, at))
+            var issue = make_lint_issue(msg, at)
+            issue.fix = fix
+            issues |> push(issue)
         } else {
             to_log(LOG_WARNING, "performance warning: {msg} at {describe(at)}\n")
         }
@@ -909,8 +937,38 @@ class PerfLintVisitor : AstVisitor {
         check_perf032_declaration(decl._type, decl.annotation, decl.at)
     }
 
+    def perf033_leaks(expr : ExprLet?; v : VariablePtr) : bool {
+        let origin = current_function != null ? current_function.fromGeneric : null
+        if (any_loop_depth == 0 || (origin != null && origin._module != current_function._module)
+                || expr.genFlags.generated || v.flags.generated || v.flags.inScope
+                || v.flags.pod_delete_gen || v._type == null || v._type.flags.ref
+                || !(v._type.baseType == Type.tArray || v._type.baseType == Type.tTable)) return false
+        var seen : table<Structure?>
+        return !perf033_delete_frees_shared(v._type, seen)
+    }
+
+    def perf033_fix(expr : ExprLet?; v : VariablePtr) : LintFix {
+        let first = expr.variables[0]
+        if (v != first) return LintFix()
+        for (other in expr.variables) {
+            if (other.flags.do_not_delete || !perf033_leaks(expr, other)) return LintFix()
+        }
+        let ln = int(v.at.line)
+        let col = int(v.at.column)
+        let head = slice(lint_source_line(v.at, ln), 0, col)
+        let kw = strip_right(head)
+        let kw_col = length(kw) - 3
+        if (kw_col < 0 || length(head) == length(kw) || (kw_col > 0 && !ends_with(slice(kw, 0, kw_col), " "))) return LintFix()
+        if (ends_with(kw, "var")) return LintFix(line = ln, column = col, last_line = ln, last_column = col, replacement = "inscope ")
+        if (ends_with(kw, "let")) return LintFix(line = ln, column = kw_col, last_line = ln, last_column = kw_col + 3, replacement = "var inscope")
+        return LintFix()
+    }
+
     def override preVisitExprLetVariable(expr : ExprLet?; var v : VariablePtr; last : bool) : void {
         check_perf032_declaration(v._type, v.annotation, v.at)
+        if (perf033_leaks(expr, v)) {
+            perf_warning("PERF033: {v._type.baseType == Type.tArray ? "array" : "table"} declared inside a loop is never freed - every iteration leaks its buffer until the heap resets; declare it 'var inscope'", v.at, perf033_fix(expr, v))
+        }
         if (in_deferred == 0) {
             var_stack |> push(VarStackEntry(v = v, depth = loop_depth, inline_aware_depth = inline_aware_loop_depth, is_iter = false))
         }
@@ -1007,6 +1065,7 @@ class PerfLintVisitor : AstVisitor {
         if (in_deferred == 0) {
             inline_aware_loop_depth++
         }
+        any_loop_depth++
     }
 
     def override preVisitExprForVariable(expr : ExprFor?; var v : VariablePtr; last : bool) : void {
@@ -1023,6 +1082,7 @@ class PerfLintVisitor : AstVisitor {
         if (in_deferred == 0) {
             inline_aware_loop_depth--
         }
+        any_loop_depth--
         if (in_closure == 0) {
             perf018_pop_and_check()
             perf022_pop_and_check()
@@ -1360,6 +1420,7 @@ class PerfLintVisitor : AstVisitor {
         if (in_deferred == 0) {
             inline_aware_loop_depth++
         }
+        any_loop_depth++
     }
 
     def override preVisitExprWhileBody(expr : ExprWhile?; body : ExpressionPtr) : void {
@@ -1383,6 +1444,7 @@ class PerfLintVisitor : AstVisitor {
         if (in_deferred == 0) {
             inline_aware_loop_depth--
         }
+        any_loop_depth--
         if (in_closure == 0) {
             loop_depth--
             pop_loop_scope()

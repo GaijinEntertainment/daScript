@@ -170,6 +170,11 @@ block of aliases computed long before their consumers is a list of promises the
 reader must carry. When the values live in a struct already in scope, reading them at
 the use site beats aliasing them at all.
 
+**A function sits above its first caller.** A file reads top to bottom with every helper
+already known: define the callee, then the code that calls it - a new helper goes above
+the function (or visitor override) that needs it, never below. Mutual recursion is the
+one order that cannot follow this.
+
 **Member-assembly is a constructor written inline.** `Thing t; t.x = ...; t.y = ...;`
 at every call site is a ctor the type refused to write - write it, and the null-checks
 on "optional" members usually die with it.

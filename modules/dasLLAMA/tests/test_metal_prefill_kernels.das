@@ -421,7 +421,7 @@ def private fc_operands_gate(t : T?; var dev, queue; half : bool) {
         //! the oracle's five panels: the resize's zeros are the expected pad rows
         var inscope want : array<array<float>>
         for (rows in [f.mp, f.mp, f.nkp, f.nkp, f.wwpad]) {
-            var panel : array<float>
+            var inscope panel : array<float>
             panel |> resize(rows * w)
             want |> emplace(panel)
         }
@@ -782,8 +782,7 @@ def private g4a_glu_gate(t : T?; var dev, queue) {
         let d = 70
         let total = rows * d
         var inscope h <- [for (i in range(2 * total)); float((i * 37) % 101 - 50) * 0.043]
-        var inscope want : array<float>
-        var inscope swapped : array<float>
+        var inscope want, swapped : array<float>
         for (i in range(total)) {
             let a = double(h[(i / d) * 2 * d + i % d])
             let g = double(h[(i / d) * 2 * d + d + i % d])
@@ -1865,7 +1864,7 @@ def private st2_gather_gate(t : T?; var dev, queue) {
             check_buf(t, "{tag} with the row and column adds", bo, want, BAR_ZERO, Shape(row_width = c))
         }
         for (arm in range(2)) {   //! each add alone
-            let want_one <- [for (i in range(nrows * c)); a[int(idx[i / c]) * c + i % c] + (arm == 0 ? b[i] : cv[i % c])]
+            var inscope want_one <- [for (i in range(nrows * c)); a[int(idx[i / c]) * c + i % c] + (arm == 0 ? b[i] : cv[i % c])]
             if (invoke(run, mc.buf[pa], arm == 0 ? 1u : 0u, arm == 0 ? 0u : 1u)) {
                 check_buf(t, "{tag} {arm == 0 ? "add_b" : "add_c"} alone", bo, want_one, BAR_ZERO, Shape(row_width = c))
             }
@@ -2209,8 +2208,7 @@ def private pk_rope_tab_gate(t : T?; var dev, queue) {
         let half = dh / 2
         let period = 10000.0
         var inscope x <- f16_fill(tt * qs, 41, 0.05, -2.1)
-        var inscope tcos : array<float>
-        var inscope tsin : array<float>
+        var inscope tcos, tsin : array<float>
         let none : array<float>
         build_rope_tabs(tcos, tsin, period, 1.0, 1.0, none, false, 0l, int64(cap), int64(dh))
         t |> equal(length(tcos), cap * half, "{tag}: the tables carry {cap} positions of {half} angles")
@@ -3338,8 +3336,7 @@ def test_metal_prefill_kernels(t : T?) {
                 // ===== swiglu + residual add =====
                 {
                     let total = NROWS * HIDDEN
-                    var inscope sg : array<float>
-                    var inscope su : array<float>
+                    var inscope sg, su : array<float>
                     sg |> resize(total)
                     su |> resize(total)
                     for (k in range(total)) {

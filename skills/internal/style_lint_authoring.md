@@ -30,6 +30,10 @@ each with an optional `comment_hygiene` flag. STYLE005 is gated by the shared po
    `preVisitExprField`, `preVisitExprIfThenElse`, or a source-line read (below).
 3. Report with `style_warning("STYLEnnn: what it is; the fix", expr.at)`. Call it **bare** -
    `self->style_warning(...)` trips STYLE028, this module's own rule.
+   When the rewrite is mechanical, pass a `LintFix` (`daslib/lint_config.das`) as the third
+   argument - one span plus its replacement, built from `lint_source_line()` text - so `--fix`
+   can apply it. Return `LintFix()` (no fix) whenever the span holds anything the replacement
+   would drop, a comment above all; the runner only proves the fixed file still compiles.
 4. Write `utils/lint/tests/styleNNN_<name>.das` with a bad example and a good one, using the
    fixture header from the PERF authoring skill (`expect 31209:N` here). A default-off rule needs
    `--enable <CODE>` or `options _enable_default_off_rules = true` in the fixture to fire at all.

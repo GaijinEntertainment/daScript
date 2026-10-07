@@ -56,6 +56,8 @@ require daslib/lint_config
 require math
 require strings
 
+let STYLE042_MAX_LINE = 100
+
 // STYLE033 arity caps — never suggest a call shape with no matching overload.
 let MAX_CONCAT_ARITY = 8
 let MAX_VARIADIC_PUSH_ARITY = 4
@@ -109,6 +111,44 @@ struct St041Candidate {
     msg : string
 }
 
+def private byte_at(s : string; i : int) : int {
+    var b = -1
+    peek_data(s) $(d) {
+        if (i >= 0 && i < length(d)) {
+            b = int(d[i])
+        }
+    }
+    return b
+}
+
+def private code_find(s, two : string) : int {
+    let first_ch = byte_at(two, 0)
+    let second_ch = byte_at(two, 1)
+    var found = -1
+    peek_data(s) $(d) {
+        var quote = 0
+        var escaped = false
+        for (c, i in d, count()) {
+            let ch = int(c)
+            if (quote != 0) {
+                if (escaped) {
+                    escaped = false
+                } elif (ch == '\\') {
+                    escaped = true
+                } elif (ch == quote) {
+                    quote = 0
+                }
+            } elif (ch == '"' || ch == '\'') {
+                quote = ch
+            } elif (ch == first_ch && i + 1 < length(d) && int(d[i + 1]) == second_ch) {
+                found = i
+                break
+            }
+        }
+    }
+    return found
+}
+
 class StyleLintVisitor : AstVisitor {
     compile_time_errors : bool
     comment_hygiene : bool = false
@@ -153,7 +193,7 @@ class StyleLintVisitor : AstVisitor {
         return is_lint_suppressed(at, code)
     }
 
-    def style_warning(text : string; at : LineInfo) : void {
+    def style_warning(text : string; at : LineInfo; fix : LintFix = LintFix()) : void {
         if (!is_user_authored_body(current_function) || is_suppressed(text, at)) return
         let key = report_key(at, extract_lint_code(text))
         if (key_exists(reported_locations, key)) return
@@ -173,7 +213,9 @@ class StyleLintVisitor : AstVisitor {
             compiling_program() |> macro_style_warning(at, msg)
         } elif (collect_warnings) {
             warnings |> push("style warning: {msg} at {describe(at)}")
-            issues |> push(make_lint_issue(msg, at))
+            var issue = make_lint_issue(msg, at)
+            issue.fix = fix
+            issues |> push(issue)
         } else {
             to_log(LOG_WARNING, "style warning: {msg} at {describe(at)}\n")
         }
@@ -191,12 +233,92 @@ class StyleLintVisitor : AstVisitor {
         return result
     }
 
+    def st042_written_body(fn : FunctionPtr) : ExprBlock? {
+        if (fn.flags.generated || fn.body == null || !(fn.body is ExprBlock) || foreign_module_code()) return null
+        var body = fn.body as ExprBlock
+        if (fn.flags.isClassMethod && length(body.list) == 1 && body.list[0] is ExprWith) {
+            let wbody = (body.list[0] as ExprWith).body
+            return null if (wbody == null || !(wbody is ExprBlock))
+            body = wbody as ExprBlock
+        }
+        return body
+    }
+
+    def st042_fix(body : ExprBlock?) : LintFix {
+        let first_ln = int(body.at.line)
+        let last_ln = int(body.at.last_line)
+        let first = lint_source_line(body.at, first_ln)
+        let last = lint_source_line(body.at, last_ln)
+        let open_col = int(body.at.column)
+        var close_col = int(body.at.last_column) - 1
+        if (byte_at(last, close_col) != '}') {
+            close_col++
+        }
+        if (byte_at(first, open_col) != '{' || byte_at(last, close_col) != '}') return LintFix()
+        let middle = last_ln - first_ln == 2 ? lint_source_line(body.at, first_ln + 1) : ""
+        let pieces <- (first_ln == last_ln ? [slice(first, open_col + 1, close_col)]
+            : [slice(first, open_col + 1), middle, slice(last, 0, close_col)])
+        var inner, comment : string
+        for (piece in pieces) {
+            let at = code_find(piece, "//")
+            let code = strip(at >= 0 ? slice(piece, 0, at) : piece)
+            if ((at >= 0 && !empty(comment)) || (!empty(code) && !empty(inner))) return LintFix()
+            if (at >= 0) {
+                comment = strip(slice(piece, at))
+            }
+            if (!empty(code)) {
+                inner = code
+            }
+        }
+        if (!starts_with(inner, "return ")) return LintFix()
+        var expr = strip(slice(inner, 7))
+        if (ends_with(expr, ";")) {
+            expr = strip(slice(expr, 0, length(expr) - 1))
+        }
+        let tail_text = slice(last, close_col + 1)
+        if (starts_with(expr, "\{") || starts_with(expr, "<- \{") || code_find(expr, "..") >= 0) {
+            return LintFix(line = -1)
+        }
+        if (empty(expr) || code_find(expr, "/*") >= 0 || (!empty(comment) && !empty(strip(tail_text)))) return LintFix()
+        if (!empty(comment)) {
+            expr = "{expr}  {comment}"
+        }
+        let tail = length(tail_text)
+        let indent = length(first) - length(strip_left(first))
+        let one_line = open_col + 3 + length(expr) + tail <= STYLE042_MAX_LINE
+        if (!one_line && code_find(pieces[0], "//") >= 0) return LintFix(line = -1)
+        let lead = byte_at(first, open_col - 1) == ' ' ? "" : " "
+        let replacement = one_line ? "{lead}=> {expr}" : "{lead}=>\n{repeat(" ", indent + 4)}{expr}"
+        return LintFix(line = first_ln, column = open_col, last_line = last_ln, last_column = close_col + 1, replacement = replacement)
+    }
+
+    def check_style042_expression_body(fn : FunctionPtr) : void {
+        let body = st042_written_body(fn)
+        if (body == null || body.genFlags.generated || length(body.list) != 1 || !empty(body.finalList)
+                || int(body.at.last_line) - int(body.at.line) > 2) return
+        let ret = body.list[0]
+        if (!(ret is ExprReturn) || ret.genFlags.generated) return
+        let r = ret as ExprReturn
+        if (r.subexpr == null) return
+        var root = fn
+        while (root.fromGeneric != null) {
+            root = root.fromGeneric
+        }
+        let full = string(root.name)
+        let name = fn.flags.isClassMethod ? slice(full, rfind(full, "`") + 1) : full
+        let fix = st042_fix(body)
+        return if (fix.line < 0)
+        let arrow = r.returnFlags.moveSemantics ? "=> <- EXPR" : "=> EXPR"
+        style_warning("STYLE042: function '{name}' body is a single 'return'; write it as an expression body - 'def {name}(...) {arrow}'", fn.at, fix)
+    }
+
     def override preVisitFunction(var fn : FunctionPtr) : void {
         current_function = fn
         unsafe_block_stack |> push(0)
         complexity_stack |> push(1)
         st041_candidates |> clear()
         check_defer_pipe(fn)
+        check_style042_expression_body(fn)
         if (analyze_requires && fn._module == this_module) {
             for (a in fn.annotations) {
                 if (a != null && a.annotation != null) st029_note_module(a.annotation._module)
@@ -943,6 +1065,56 @@ class StyleLintVisitor : AstVisitor {
         return (inner as ExprVar.variable)
     }
 
+    def st043_decl(e : ExpressionPtr) : ExprLet const? {
+        if (!(e is ExprLet) || e.genFlags.generated || code_find(lint_source_line(e.at, int(e.at.line)), "//") >= 0) return null
+        let decl = e as ExprLet
+        for (v in decl.variables) {
+            if (v.init != null || v.flags.generated || !empty(v.annotation) || find(string(v.name), "`") >= 0) return null
+        }
+        return decl
+    }
+
+    def st043_same(a, b : ExprLet const?) : bool {
+        let va = a.variables[0]
+        let vb = b.variables[0]
+        return va.flags.inScope == vb.flags.inScope && describe(va._type) == describe(vb._type)
+    }
+
+    def check_style043_declaration_runs(blk : ExprBlock?) : void {
+        if (current_function == null || foreign_module_code()) return
+        let n = length(blk.list)
+        var i = 0
+        while (i < n - 1) {
+            let first = st043_decl(blk.list[i])
+            var j = i + 1
+            while (first != null && j < n) {
+                let next = st043_decl(blk.list[j])
+                break if (next == null || !st043_same(first, next) || int(blk.list[j].at.line) != int(blk.list[j - 1].at.line) + 1)
+                j++
+            }
+            if (j - i >= 2) {
+                let names = build_string() $(var w) {
+                    for (k in range(i, j)) {
+                        for (v in st043_decl(blk.list[k]).variables) {
+                            w |> write(", {v.name}")
+                        }
+                    }
+                }
+                let first_names = build_string() $(var w) {
+                    for (v in first.variables) {
+                        w |> write(", {v.name}")
+                    }
+                }
+                let head = first.variables |> back()
+                let tail = st043_decl(blk.list[j - 1]).variables |> back()
+                style_warning("STYLE043: consecutive declarations share one type; declare them together - '{slice(names, 2)}'", blk.list[i].at,
+                    LintFix(line = int(head.at.line), column = int(head.at.column) + length(string(head.name)),
+                        last_line = int(tail.at.line), last_column = int(tail.at.column) + length(string(tail.name)), replacement = slice(names, length(first_names))))
+            }
+            i = j
+        }
+    }
+
     def override preVisitExprBlock(blk : ExprBlock?) : void {
         if (blk.blockFlags.isClosure) {
             unsafe_block_stack |> push(0)
@@ -951,6 +1123,7 @@ class StyleLintVisitor : AstVisitor {
         check_style012_chain_runs(blk)
         check_style033_existing_runs(blk)
         check_style033_existing_chain_runs(blk)
+        check_style043_declaration_runs(blk)
         let n = length(blk.list)
         for (i in range(n - 1)) {
             let cur = blk.list[i]

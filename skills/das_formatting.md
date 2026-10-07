@@ -9,6 +9,7 @@ After creating or modifying any `.das` file that is part of the project (daslib 
 **CLI fallback (when the MCP server is unavailable):** the formatter and linter also run as in-tree daslang scripts:
 
 - Format: `bin/daslang utils/das-fmt/dasfmt.das -- --path <dirOrFile>` - formats in place; add `--verify` for a dry-run check (changes nothing, fails on any unformatted file - same as CI).
+- Wrap long lines: add `--max-line-length 100` - breaks after `=>` and inside brackets only; a line it cannot fit stays as it is. Off by default.
 - Lint: `bin/daslang utils/lint/main.das -- <dirOrFile>` - STYLE/PERF/LINT rules; `0 issue(s), 0 error(s)` is clean.
 
 For a module under `modules/` whose files `require` sibling modules (e.g. `require openai/openai_chat`), pass `-load_module <moduleDir>` before `--` so cross-module requires resolve. The formatter only parses, so it works regardless; lint reports `SKIP ... missing prerequisite` for files it can't fully resolve (e.g. examples/tests before the module is registered/installed).

@@ -1,5 +1,6 @@
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
+options _nolint = "STYLE042"
 // STYLE012: array<T> variable initialized via push/emplace instead of literal
 //
 // Problem: Declaring an empty `array<T>` and then populating it with a

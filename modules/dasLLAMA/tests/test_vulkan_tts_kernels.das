@@ -152,8 +152,8 @@ def test_vkt_row_gather(t0 : T?) {
                     cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                         enc_tts_row_gather_cls(raw, h, s, pa, int64(total))
                     }
-                    let got_one <- cp |> plane_run(op)
-                    let want_one <- [for (i in range(total)); want_plain[i] + (arm == 0 ? slab[pos_off + i] : slab[type_off + i % c])]
+                    var inscope got_one <- cp |> plane_run(op)
+                    var inscope want_one <- [for (i in range(total)); want_plain[i] + (arm == 0 ? slab[pos_off + i] : slab[type_off + i % c])]
                     check_rows(t, "tts_row_gather {arm == 0 ? "add_b" : "add_c"} alone vs the word row plus that add", got_one, want_one, BAR_EXACT, c)
                     t |> success(mismatch_exact(got_one, want) > 0 && mismatch_exact(got_one, want_plain) > 0, "tts_row_gather control: one add alone lands between the plain and the full sums")
                 }

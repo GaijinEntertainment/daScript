@@ -4,15 +4,15 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
 
 ## 1. perf_lint
 
-- **Two parallel loop spaces.** `loop_depth`/`in_closure` (+ `VarStackEntry.depth`) is the
+- **Three loop spaces.** `loop_depth`/`in_closure` (+ `VarStackEntry.depth`) is the
   contract for every loop rule: any closure body is deferred, hence not "in" the loop.
-  PERF031 needs the opposite for inline block arguments (`peek_data(s) $(d) { ... }` runs
-  in place), so `inline_aware_loop_depth`/`in_deferred` (+ `inline_aware_depth`) count
-  loops inside inline block-argument bodies as real loop levels and defer only lambdas,
+  PERF031 needs inline block arguments (`peek_data(s) $(d) { ... }` runs in place) counted:
+  `inline_aware_loop_depth`/`in_deferred` (+ `inline_aware_depth`) defer only lambdas,
   local functions, generators, and generated blocks. `inline_block_entry_depth` records
   the loop depth at each inline-block entry because a `return` there unwinds only to that
   depth: loops at or below it keep re-invoking the block, so only barrier 0 proves the
-  body runs once.
+  body runs once. PERF033's `any_loop_depth` defers nothing: a leaked container repeats
+  with every enclosing loop, on either side of a closure boundary.
 - **Closure-guard placement is load-bearing, per rule.** Four idioms coexist -
   `in_closure > 0` early return, `in_closure == 0` gate, `in_deferred == 0` gate, no guard -
   and the guard's POSITION inside a visitor method encodes which rules are meaningful

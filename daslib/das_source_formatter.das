@@ -516,7 +516,6 @@ def mark_tokens_as_type(var ctx : FormatterCtx; i : int) {
 }
 
 
-
 def mark_tokens_as_type_inside_angle(var ctx : FormatterCtx; i : int) {
     var pc : ParenCounter
     for (j in range(i, length(ctx.tokens))) {
@@ -1185,6 +1184,91 @@ def do_format_parsed(var ctx : FormatterCtx) {
 }
 
 
+struct private WrapSpot {
+    col : int
+    depth : int
+    inner : int
+    group : int
+}
+
+def private break_line(var ctx : FormatterCtx; first : int; spots : array<WrapSpot>; width, max_line_length, cont : int) {
+    var breaks : array<int2>
+    var shift = 0
+    var start = 0
+    while (width - shift > max_line_length) {
+        var best = -1
+        for (i in range(start + 1, length(spots))) {
+            break if (spots[i].col - shift - ctx.tokens[first + i].spaces > max_line_length)
+            let inner = spots[i].inner
+            continue if (spots[i].depth < 0 || (spots[i].depth > 0 && inner >= 0 && spots[inner].group > 0 && spots[inner].group < 40))
+            if (best < 0 || spots[i].depth <= spots[best].depth) {
+                best = i
+            }
+            break if (spots[i].depth == 0)
+        }
+        return if (best < 0)
+        let align = spots[best].inner >= start ? spots[spots[best].inner].col + 1 - shift : -1
+        let to = (spots[best].depth > 0 && spots[best].inner < 0 ? ctx.tokens[first].spaces
+            : spots[best].depth == 0 || align < 0 || align > max_line_length - 30 ? cont : align)
+        breaks |> push(int2(first + best, to))
+        shift = spots[best].col - to
+        start = best
+    }
+    for (b in breaks) {
+        ctx.tokens[b.x].newLines = 1
+        ctx.tokens[b.x].spaces = b.y
+    }
+}
+
+def private wrap_tokens(var ctx : FormatterCtx; max_line_length : int) {
+    let step = ctx.indenting != 0 ? ctx.indenting : 4
+    var opens : array<int>
+    var first = 0
+    while (first < length(ctx.tokens)) {
+        var inscope spots : array<WrapSpot>
+        var col = 0
+        var skip = false
+        var k = first
+        while (k < length(ctx.tokens) && (k == first || ctx.tokens[k].newLines == 0)) {
+            assume t = ctx.tokens[k]
+            skip = skip || t.dontFormat || t.tokenType == TokenType.COMMENT || find(t.str, "\n") >= 0
+            col += t.spaces
+            let inner = empty(opens) ? -1 : back(opens)
+            let arrow = ctx |> eq(k - 1, "=>") && !(inner >= 0 && ctx |> eq(inner, "\{"))
+            let legal = arrow || (inner >= 0 && !(ctx |> eq(inner, "\{"))
+                && (ctx |> eq(k - 1, "(", "[", ",", ";") || ctx |> eq(k, "||", "&&")))
+            spots |> push(WrapSpot(col = col, depth = legal ? (arrow ? 0 : length(opens)) : -1, inner = inner >= first ? inner - first : -1))
+            col += length(t.str)
+            if (ctx |> eq(k, "(", "[", "\{")) {
+                opens |> push(k)
+            } elif (ctx |> eq(k, ")", "]", "\}") && !empty(opens)) {
+                if (back(opens) >= first) {
+                    spots[back(opens) - first].group = col - spots[back(opens) - first].col
+                }
+                opens |> pop()
+            }
+            k++
+        }
+        if (!skip && col > max_line_length) {
+            ctx |> break_line(first, spots, col, max_line_length, ctx.tokens[first].spaces + step)
+        }
+        first = k
+    }
+}
+
+def public wrap_long_lines(source : string; max_line_length : int) : string {
+    var inscope ctx : FormatterCtx
+    ctx.data <- [for (c in source); uint8(c)]
+    ctx.data |> push(uint8(0))
+    ctx |> parse_all_tokens()
+    ctx |> process_formatter_tokens()
+    return source if (max_line_length <= 0 || ctx |> have_formatter_token("ignore-file"))
+    ctx |> mark_token_context()
+    ctx |> wrap_tokens(max_line_length)
+    return generate_source(ctx)
+}
+
+
 def public format_source_string(file_data : string const& implicit) : string {
     //! Formats a daslang source code string and returns the formatted result.
     var inscope ctx : FormatterCtx
@@ -1277,7 +1361,7 @@ def private strip_comment_tokens(var ctx : FormatterCtx) {
 }
 
 
-def public format_source(file_data : array<uint8> const& implicit; strip_comments : bool) : string {
+def public format_source(file_data : array<uint8> const& implicit; strip_comments : bool; max_line_length : int = 0) : string {
     //! Formats daslang source; with ``strip_comments`` also removes every comment except the
     //! leading header block, `//!` docs, `//fmt:` directives, `nolint` suppressions, and license
     //! notices (Copyright / SPDX) — a kept full-line comment keeps its attached `//` continuations.
@@ -1290,6 +1374,9 @@ def public format_source(file_data : array<uint8> const& implicit; strip_comment
         ctx |> strip_comment_tokens()
     }
     ctx |> do_format_parsed()
+    if (max_line_length > 0 && !(ctx |> have_formatter_token("ignore-file"))) {
+        ctx |> wrap_tokens(max_line_length)
+    }
     return generate_source(ctx)
 }
 

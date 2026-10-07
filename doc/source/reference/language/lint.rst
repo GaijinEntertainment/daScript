@@ -1890,6 +1890,14 @@ a reserve reached through a different alias is not seen; ``// nolint:PERF032``
 with the reason is the answer when the capacity is provably established
 elsewhere.
 
+PERF033 — container declared inside a loop without ``inscope``
+==============================================================
+
+An ``array`` or ``table`` declared inside a loop body is never freed: every iteration
+leaks its buffer until the heap resets. Declare it ``var inscope``; ``--fix`` adds it.
+A container holding raw pointers, lambdas or iterators is not reported - ``inscope``
+would delete what they point at.
+
 PERF019 — ``int(T.a) | int(T.b)`` on bitfield/enum — collapse to one cast
 ==========================================================================
 
@@ -3404,6 +3412,20 @@ set site, and any reference the analysis cannot classify — a capture, a
 ``flag && other`` read, an argument pass — all keep the rule silent.
 Init-``true`` separator flags never match. Suppress a deliberate keep with
 ``// nolint:STYLE041`` on the declaration line.
+
+STYLE042 — single-``return`` function body
+==========================================
+
+A braced body that only returns a value, ``def f(a : int) : int { return a * 2 }``,
+is an expression body: ``def f(a : int) : int => a * 2`` (``=> <- EXPR`` for a move).
+``--fix`` rewrites it; past 100 columns the expression goes on the line after ``=>``.
+
+STYLE043 — consecutive declarations of one type
+===============================================
+
+Adjacent uninitialized declarations of one type, ``var kq : array<uint8>`` and then
+``var ks : array<uint8>``, are one declaration: ``var kq, ks : array<uint8>``.
+A declaration with a comment on its line never joins a run; ``--fix`` joins the names.
 
 -----
 Tests

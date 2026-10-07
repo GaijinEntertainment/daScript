@@ -1,6 +1,7 @@
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _ascii_strings = true   // fixture is not under daslib/ or modules/ - force the rule on
+options _nolint = "STYLE042"
 // STYLE039: non-ASCII byte in a string literal
 //
 // Problem: error messages and other emitted strings flow into logs and consoles

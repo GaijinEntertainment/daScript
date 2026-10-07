@@ -38,9 +38,9 @@ def private cosine_matrix(m : Model; pooling : int64) : array<float> {
     var out : array<float>
     out |> reserve(4)
     for (q in EMB_QUERIES) {
-        var qv <- embed(m, "{EMB_TASK}{q}", pooling)
+        var inscope qv <- embed(m, "{EMB_TASK}{q}", pooling)
         for (d in EMB_DOCS) {
-            var dv <- embed(m, d, pooling)
+            var inscope dv <- embed(m, d, pooling)
             out |> push(cosine(qv, dv))
             delete dv
         }

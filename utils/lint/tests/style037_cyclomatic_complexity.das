@@ -1,6 +1,7 @@
 options gen2
 options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; splices rewrite them
 options _cyclomatic_complexity = 5      // keep fixture functions small
+options _nolint = "STYLE042"
 // STYLE037: function or closure cyclomatic complexity exceeds the limit
 //
 // Problem: a function with too many independent decision points is hard to

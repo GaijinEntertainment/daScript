@@ -19,7 +19,7 @@ def duplicate_combo_rows_select_independently(t : T?) {
         io.BackendFlags |= ImGuiBackendFlags.RendererHasTextures
         var selected = 0
         var point = float2(0)
-        let items = ["Fence", "Fence", "Fence"]
+        var inscope items = ["Fence", "Fence", "Fence"]
         for (frame in range(12)) {
             if (frame == 2 || frame == 7) { io |> AddMousePosEvent(point.x, point.y); io |> AddMouseButtonEvent(0, true) }
             if (frame == 3 || frame == 8) { io |> AddMouseButtonEvent(0, false) }

@@ -26,7 +26,7 @@ variant Value {
     f : float
 }
 
-def add(a, b : int) : int {
+def add(a, b : int) : int {  // nolint:STYLE042
     return a + b
 }
 
