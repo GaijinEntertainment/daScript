@@ -10,10 +10,14 @@ dasLLAMA-09 — Embeddings
     single: Tutorial; Semantic search
 
 Any chat model dasLLAMA loads doubles as an embedder. ``embed(model, text)``
-runs one forward pass, mean-pools the decoder's last-layer hidden state
-(post-final-norm) over every position, and L2-normalizes the result to unit
-length. No separate embedding model is needed — the vector width is
-``model.config.dim``, the decoder's own embedding dimension.
+runs one forward pass, pools the decoder's last-layer hidden state
+(post-final-norm) and L2-normalizes the result to unit length. The pooling
+is the file's: a chat model names none and is read by the mean over every
+position; an embedding model such as Qwen3-Embedding names last-token pooling
+(``pooling_type`` in its GGUF) and asks for an appended end token, and ``embed``
+reads the row at that token, the way the model was trained. A third argument
+overrides the file (``POOLING_MEAN``, ``POOLING_CLS``, ``POOLING_LAST``). The
+vector width is ``model.config.dim``, the decoder's own embedding dimension.
 
 Run::
 

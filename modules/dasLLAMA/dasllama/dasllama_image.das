@@ -40,7 +40,7 @@ require dasllama/dasllama_gemm_schema   // the q8 block geometry the mint's zero
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 44   // the vulkan lane's device twin precedes the planar sections
+let IMAGE_VERSION = 45   // Config.pooling and the BPE tokenizer's add_eos flag ride the meta
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -737,6 +737,7 @@ def private serialize_tokenizer(var arch : Archive; var tk : Tokenizer) {
     arch |> serialize_raw(tk.bpe.eos_id)
     arch |> serialize_raw(tk.bpe.spm_space)
     arch |> serialize_raw(tk.bpe.add_bos)
+    arch |> serialize_raw(tk.bpe.add_eos)
     var merges : array<string>
     if (!arch.reading) {
         merges |> resize(length(tk.bpe.merge_rank))
@@ -857,11 +858,11 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
 let IMAGE_META_FIELDS = 81 + 4
 
 // the tokenizer's tripwires: the SentencePiece backend's five serialized meta fields + its three
-// derived tables (lookup, pair_merge, bkey_id); the BPE backend's seven (merge_rank rides as the
+// derived tables (lookup, pair_merge, bkey_id); the BPE backend's eight (merge_rank rides as the
 // merges array) + its three (lookup, pair_merge, cpt_id)
 let private TOKENIZER_META_FIELDS = 3
 let private SPM_META_FIELDS = 5 + 3
-let private BPE_META_FIELDS = 7 + 3
+let private BPE_META_FIELDS = 8 + 3
 
 //! Count of meta-carried fields of any struct: non-arrays plus string arrays (those cannot
 //! be raw planes — see serialize_strings). Pair with a per-type field-count constant to

@@ -58,17 +58,24 @@ def load_tokenizer_auto(path : string) : Tokenizer {
     return <- tk
 }
 
-//! Encode text to token ids. `add_special` prepends the model's BOS (SPM also adds its dummy-space
-//! prefix). `parse_special` (interpret control-token spellings in the text) is reserved for the chat
-//! layer and not yet honored.
+//! Encode text to token ids. `add_special` prepends the model's BOS (SPM also adds its dummy-space prefix) and, where
+//! the file's `add_eos_token` asks (an embedding model), appends its EOS. `parse_special` (interpret control-token
+//! spellings in the text) is reserved for the chat layer and not yet honored.
 def encode(tk : Tokenizer; text : string; add_special = true; parse_special = false) : array<int64> {
     if (tk.kind == TokKind.bpe) {
-        if (!add_special || !tk.bpe.add_bos || tk.bpe.bos_id < 0l) {
+        let bos = add_special && tk.bpe.add_bos && tk.bpe.bos_id >= 0l
+        let eos = add_special && tk.bpe.add_eos && tk.bpe.eos_id >= 0l
+        if (!bos && !eos) {
             return <- bpe_encode(tk.bpe, text)
         }
         var ids : array<int64>
-        ids |> push(tk.bpe.bos_id)
+        if (bos) {
+            ids |> push(tk.bpe.bos_id)
+        }
         ids |> push_from(bpe_encode(tk.bpe, text))
+        if (eos) {
+            ids |> push(tk.bpe.eos_id)
+        }
         return <- ids
     }
     return <- encode(tk.spm, text, add_special, false)

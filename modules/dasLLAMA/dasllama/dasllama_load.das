@@ -1822,6 +1822,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             panic("dasLLAMA: {arch}.block_count = {layers + nextn_in} with nextn_predict_layers = {nextn_in} leaves no trunk layers")
         }
         t.config.n_layer_nextn = nextn
+        //! an embedding model names its pooling (Qwen3-Embedding: last); a chat model used as an embedder keeps the mean
+        t.config.pooling = gguf_has(m, "{arch}.pooling_type") ? gguf_int(m, bytes, "{arch}.pooling_type") : POOLING_MEAN
         // FFN width: a scalar for uniform arches, or a per-layer array (gemma-4 E2B: the elastic
         // MatFormer sub-model, 6144 for layers 0-14 then 12288). ffn_w holds the per-layer widths;
         // hidden_dim is the MAX (scratch sizing). Set before layout_offsets so the offsets vary per layer.

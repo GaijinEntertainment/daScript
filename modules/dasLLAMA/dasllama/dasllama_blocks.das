@@ -2434,7 +2434,9 @@ def private eval_embd_slice_mrope_(t : Model; var s : Session; whole : array<int
 //! averaged over positions, unit-normalized. Runs one forward over `s` from position 0 — pass a
 //! FRESH session (no KV history assumed; cache is left filled).
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
-def embed_forward(t : Model; var s : Session; tokens : array<int64>; npos : int64; var out : array<float>) {
+//! `pooling` picks the rows that make the vector: POOLING_MEAN averages every position's post-final-norm row, POOLING_LAST
+//! takes the last position's (the EOS the tokenizer appends - what Qwen3-Embedding is trained to be read at), POOLING_CLS the first's
+def embed_forward(t : Model; var s : Session; tokens : array<int64>; npos : int64; var out : array<float>; pooling : int64 = POOLING_MEAN) {
     let c = t.config
     let dim = c.dim
     out |> resize(dim)
@@ -2444,12 +2446,14 @@ def embed_forward(t : Model; var s : Session; tokens : array<int64>; npos : int6
     if (npos <= 0l) {
         return
     }
+    let first = pooling == POOLING_CLS ? 0l : (pooling == POOLING_LAST ? npos - 1l : 0l)
+    let last = pooling == POOLING_CLS ? 1l : npos
     if (t.quant != QuantMode.q4_0 && npos > 1l) {
         // batched prefill fills s.x_b (npos × dim residual) and leaves it intact; the body norms only
-        // the last position, so re-apply the final RMSNorm to EVERY position and accumulate.
+        // the last position, so re-apply the final RMSNorm to the pooled positions and accumulate.
         s.keep_hidden = true
         forward_prefill(t, s, tokens, npos, 0l)
-        for (p in range64(npos)) {
+        for (p in range64(first, last)) {
             rms_at(s.xb, t, t.rms_final_off, s.x_b, p * dim, dim)
             add_inplace(unsafe(addr(out[0])), unsafe(addr(s.xb[0])), dim)
         }
@@ -2457,12 +2461,14 @@ def embed_forward(t : Model; var s : Session; tokens : array<int64>; npos : int6
         // q4_0 (no batched prefill) or a single token: per-token forward leaves s.xb = post-final-norm hidden.
         for (p in range64(npos)) {
             forward(t, s, tokens[p], p)
-            add_inplace(unsafe(addr(out[0])), unsafe(addr(s.xb[0])), dim)
+            if (p >= first && p < last) {
+                add_inplace(unsafe(addr(out[0])), unsafe(addr(s.xb[0])), dim)
+            }
         }
     }
     s.n_past = npos   // KV now holds npos positions (start_pos was 0) — keep the session cursor consistent
-    // mean over positions, then L2-normalize
-    let inv = 1.0 / float(npos)
+    // the pooled rows' mean, then L2-normalize
+    let inv = 1.0 / float(last - first)
     var ss = 0.0
     for (i in range64(dim)) {
         out[i] *= inv
@@ -2477,11 +2483,11 @@ def embed_forward(t : Model; var s : Session; tokens : array<int64>; npos : int6
 //! Mean-pooled, L2-normalized sentence embedding of `text` (`dim` floats): tokenize, run one forward,
 //! average the decoder's last-layer hidden state over positions, unit-normalize. Decoder-as-embedder
 //! yields RAG-grade vectors, not a substitute for a dedicated embedding model.
-def embed_(m : Model; text : string) : array<float> {
+def embed_(m : Model; text : string; pooling : int64 = POOLING_MEAN) : array<float> {
     var s <- create_session_(m)
     let tokens = encode_(m, text)
     var out : array<float>
-    embed_forward(m, s, tokens, long_length(tokens), out)
+    embed_forward(m, s, tokens, long_length(tokens), out, pooling)
     delete s
     return <- out
 }
