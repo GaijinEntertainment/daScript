@@ -3036,6 +3036,8 @@ namespace das {
             promoted = false;
         }
         ser << name << nameHash << moduleFlags << inlineTempIndex;
+        ser.serializeTemp(fileName);
+        ser.serializeTemp(promotedRequire);
         builtIn = selfBuiltIn;
         promoted = selfPromoted;
         ser << annotationData << requireModule;
@@ -3304,7 +3306,7 @@ namespace das {
     // src/builtin/ARCHITECTURE.md#module-cache-record-bytes
     void AstSerializer::serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept {
         try {
-            serializeProgramImpl(program, libGroup);
+            serializeProgramImpl(program, libGroup, &program->policies);
         } catch ( const dasException & r ) {
             if ( !quietCache ) LOG(LogLevel::warning) << "das: serialize: program " << (writing ? "write" : "read") << " failed: " << r.what() << "\n";
             failed = true;
@@ -3337,7 +3339,7 @@ namespace das {
         ~SerializerRecordScope () { ser.recordDepth --; }
     };
 
-    void AstSerializer::serializeProgramImpl ( ProgramPtr program, ModuleGroup & libGroup ) {
+    void AstSerializer::serializeProgramImpl ( ProgramPtr program, ModuleGroup & libGroup, const CodeOfPolicies * expected ) {
         auto & ser = *this;
         SerializerRecordScope record(ser);
         // version gate — the module-cache path (trySerializeProgramModule) checks only the
@@ -3370,7 +3372,9 @@ namespace das {
             ser << program->options;
             CodeOfPolicies stored = program->policies;
             ser << stored;
-            if ( !cachedPoliciesMatch(stored, program->policies) ) {
+            if ( !expected ) {
+                program->policies = stored;
+            } else if ( !cachedPoliciesMatch(stored, *expected) ) {
                 ser.policyMismatch = true;
                 ser.failed = true;
 #if DAS_SERIALIZE_PROFILE
@@ -3492,6 +3496,7 @@ namespace das {
                 bool isNew = false;
                 *this << isNew;
                 Module * existing = libGroup.findModule(name);
+                if ( !existing && promoted ) existing = Module::require(name);
                 if ( !isNew ) {
                     if ( existing ) {
                         program->library.addModule(existing);
@@ -3563,6 +3568,7 @@ namespace das {
             }
         }
 
+        ser << program->allRequireDecl;
         // the node table is per program
         clearNodeIds();
     }
@@ -3571,7 +3577,7 @@ namespace das {
     bool WIN_EH_NO_ASAN AstSerializer::serializeScript ( ProgramPtr program ) noexcept {
         try {
             program->serialize(*this);
-            return true;
+            return !program->failToCompile;
         } catch ( const dasException & r ) {
             program->failToCompile = true;
             LOG(LogLevel::warning) << "das: serialize:" << r.what();
@@ -3587,168 +3593,25 @@ namespace das {
 
     // Used in daNetGame currently
     void Program::serialize ( AstSerializer & ser ) {
-        SerializerRecordScope record(ser);
-        // version gate: any layout change shifts every subsequent field, so a stale stream must
-        // fail cleanly here — not misparse into a patch() throw thousands of fields later
-        uint32_t version = AstSerializer::getVersion();
-        ser << version;
-        if ( !ser.writing && version != AstSerializer::getVersion() ) {
-            LOG(LogLevel::warning) << "das: deserialize: stream version " << version
-                << " does not match serializer version " << AstSerializer::getVersion() << "\n";
-            failToCompile = true;
-            return;
-        }
-
-        ser.clearNodeIds();             // numbering restarts with every program, on both sides
-        ser << thisNamespace << thisModuleName;
-
-        ser << totalFunctions      << totalVariables << newLambdaIndex;
-        ser << globalInitStackSize << globalStringHeapSize;
-        ser << flags;
-
-        ser << options << policies;
-        ser.readJitEnabled = policies.jit_enabled;  // what finalizeModule hands the macro program a served module reinstantiates
-        ser.readOptions = options;
-
-    // serialize library
+        ModuleGroup noGroup;
+        ser.serializeProgramImpl(this, noGroup, nullptr);
         if ( ser.writing ) {
-            ser.moduleLibrary = &library;
-            TopSort ts(library.modules);
-            auto modules = ts.getDependecyOrderedEndingWith(thisModule.get());
-
-            vector<Module*> builtinModules;
-            for ( auto m : modules ) {
-                if ( m->builtIn && !m->promoted ) {
-                    builtinModules.push_back(m);
-                }
+            // one stream carries many programs - a module dying with this one must not match a later module at its address
+            for ( auto m : library.modules ) {
+                if ( !m->builtIn ) ser.writingReadyModules.erase(m);
             }
-
-            uint64_t size_builtin = builtinModules.size();
-            ser << size_builtin;
-
-            for ( auto m : builtinModules ) {
-                ser << m->name;
-            }
-
-            uint64_t size = modules.size();
-            ser << size;
-
-            for ( auto & m : modules ) {
-                bool builtin = m->builtIn, promoted = m->promoted;
-                ser << builtin << promoted;
-                ser << m->name << m->fileName << m->promotedRequire;
-
-                if ( m->builtIn && m->promoted ) {
-                    bool isNew = ser.writingReadyModules.count(m) == 0;
-                    ser << isNew;
-                    if ( isNew ) {
-                        ser.writingReadyModules.insert(m);
-                        ser << *m;
-                    }
-                } else if ( m->builtIn ) {
-                    continue;
-                } else {
-                    ser << *m;
-                }
-            }
-
-            ser << allRequireDecl;
             ser.buffer->flush();
             return;
         }
-
-        // parseDaScript runs with the placeholder thisModule's gc root as the
-        // thread-active root; library.reset() below deletes that module (and its
-        // root) - without repointing, every node deserialized after this line would
-        // gc_link through a dangling root pointer into freed memory
-        auto & activeRoot = gc_root::gc_get_active_root();
-        const bool activeWasThisModule = thisModule && activeRoot == thisModule->module_gc_root.get();
-        // throwaway already-exists reads park nodes here - they may be referenced
-        // through the patch maps until all modules are read, then sweep with scope
-        gc_root throwaway_root;
-        ActiveRootGuard throwaway_guard { &throwaway_root };
-        if ( activeWasThisModule ) activeRoot = &throwaway_root;
-        library.reset();
-        thisModule.release();
-        ser.moduleLibrary = &library;
-
-        uint64_t size_builtin = 0; ser << size_builtin;
-        for ( uint64_t i = 0; i < size_builtin; i++ ) {
-            string name; ser.serializeTemp(name);
-            Module * m = requireBuiltinModule(name);
-            library.addModule(m);
+        if ( failToCompile ) return;
+        // hosts take the program module as the library's last one: plain builtins first, then dependency order
+        TopSort ts(library.modules);
+        auto order = ts.getDependecyOrderedEndingWith(thisModule.get());
+        stable_partition(order.begin(), order.end(), [](Module * m) { return m->builtIn && !m->promoted; });
+        library.modules = das::move(order);
+        for ( auto m : library.modules ) {
+            if ( !m->builtIn && !m->promotedRequire.empty() ) m->promoteToBuiltin(nullptr, m->promotedRequire);
         }
-
-        uint64_t size = 0; ser << size;
-        for ( uint64_t i = 0; i < size; i++ ) {
-            bool builtin = false, promoted = false;
-            string name, fileName, promotedRequire;
-            ser << builtin << promoted;
-            ser.serializeTemp(name);
-            ser.serializeTemp(fileName);
-            ser.serializeTemp(promotedRequire);
-            if ( builtin && !promoted ) {
-                // pass
-            } else if ( builtin && promoted ) {
-                bool isNew = false; ser << isNew;
-                if ( isNew ) {
-                    Module *prev = Module::require(name);
-                    auto mod = new Module;
-                    mod->setModuleName(name);
-                    mod->fileName = fileName;
-                    if ( prev ) {
-                        library.addModule(prev);
-                        // throwaway read into a temp module — keep nodes off its root
-                        // (they may be referenced through the patch maps past `delete mod`)
-                        ser.serializeModule(*mod, /*already_exists*/true);
-                        mod->builtIn = false; // suppress assert
-                        delete mod;
-                    } else {
-                        library.addModule(mod);
-                        if ( activeWasThisModule ) activeRoot = mod->module_gc_root.get();
-                        // the active root points at mod's root while it is read; if the read
-                        // throws, mod dies with the replaced program, so drop the active root
-                        // back to the permanent thread root before the exception propagates
-                        // (the ActiveRootGuard only tracks throwaway_root, not this one)
-                        try {
-                            ser.serializeModule(*mod, /*already_exists*/false);
-                        } catch ( ... ) {
-                            if ( activeWasThisModule ) activeRoot = &gc_root::gc_get_thread_root();
-                            throw;
-                        }
-                        if ( activeWasThisModule ) activeRoot = &throwaway_root;
-                        mod->promoteToBuiltin(nullptr, promotedRequire);
-                    }
-                } else {
-                    Module * m = Module::require(name);
-                    library.addModule(m);
-                }
-            } else {
-                auto mod = new ModuleDas;
-                mod->setModuleName(name);
-                mod->fileName = fileName;
-                library.addModule(mod);
-                if ( activeWasThisModule ) activeRoot = mod->module_gc_root.get();
-                // see the promoted-new branch above: restore the thread root if the read
-                // throws, so a dangling mod->module_gc_root never stays the active root
-                try {
-                    ser << *mod;
-                } catch ( ... ) {
-                    if ( activeWasThisModule ) activeRoot = &gc_root::gc_get_thread_root();
-                    throw;
-                }
-                if ( activeWasThisModule ) activeRoot = &throwaway_root;
-            }
-        }
-
-        thisModule.reset(library.modules.back());
-        // the deserialized module is the program's module now — new nodes (allocateStack
-        // init script, etc.) and the ModuleGcFinalize collect belong on its root
-        if ( activeWasThisModule ) activeRoot = thisModule->module_gc_root.get();
-
-        ser << allRequireDecl;
-
-    // for the last module, mark symbols manually
         auto setup0 = ref_time_ticks();
         markExecutableSymbolUse();
         removeUnusedSymbols();

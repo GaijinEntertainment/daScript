@@ -365,11 +365,11 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 221;   // 221: max_fast_call_depth joins the module-cache policy stream
+            return 222;   // 222: Program::serialize writes the module-cache program payload
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
-        void serializeProgramImpl ( ProgramPtr program, ModuleGroup & libGroup ); // throws dasException; called via the noexcept wrapper above
+        void serializeProgramImpl ( ProgramPtr program, ModuleGroup & libGroup, const CodeOfPolicies * expected ); // throws dasException; expected == null adopts the stored policies
         bool serializeScript ( ProgramPtr program ) noexcept;
 
         template <uint64_t n>
