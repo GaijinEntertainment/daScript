@@ -87,6 +87,7 @@ if(NOT DAS_TOOLS_DISABLED)
             utils/dasllama-server/test_cli.das
         FILES
             utils/dasllama-server/test_cli_args.das
+            utils/dasllama-server/test_constraints.das
             utils/dasllama-server/test_exchange_client.das
             utils/dasllama-server/test_model_catalog.das
             utils/dasllama-server/test_setup_mode.das

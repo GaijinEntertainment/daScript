@@ -109,7 +109,14 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
   top-k off or past the cap takes the vocab-wide reference path, which is also the fast path's
   parity oracle in `tests/test_sampling.das`. It registers the accept walk's row sampler
   (`register_mtp_sample_row`) at init, and that registration is the only way the engine reaches
-  this file.
+  this file. A `Session` may carry a `TokenConstraint` (`dasllama_common`'s abstract class: `admits`
+  asks whether a token may come next, `commit` advances past the one emitted); the sampler never
+  emits a token it refuses - the greedy pick probes the argmax, then the `CONSTRAINED_PROBE_K`
+  largest, then the whole row in logit order, and the sampled path filters its candidate list
+  (capped at `SAMPLE_TOPK_FAST_CAP`) before the draw - and commits what it emits. A constrained
+  stream reads as sampled (`Session.sampled`), since its pick can differ from the raw argmax, so
+  every greedy-chain shortcut stands down for it. The engine knows only the class; the grammar
+  behind it is the server's (`utils/dasllama-server/constraints.das` over `modules/dasLR1`).
 - **`dasllama_ple.das`** - gemma-4 E-series per-layer embeddings and the gemma4 MoE FFN. The
   forward sequence reaches it only through the hooks it registers at init. The Metal token-table
   gather (`dasllama_metal_prefill.das`) carries one format list in three places - the compiled

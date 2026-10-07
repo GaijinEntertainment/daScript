@@ -463,8 +463,8 @@ def private is_reserved_name(name : string) : bool {
     return name == "root" || is_prim || is_fmt
 }
 
-// a GBNF literal: `"` and `\` escaped, newlines spelled
-def private format_literal(s : string) : string {
+//! `s` as a GBNF literal: quotes and backslashes escaped, newlines spelled.
+def gbnf_literal(s : string) : string {
     return build_string() $(var w) {
         w |> write("\"")
         peek_data(s) $(d : array<uint8> const#) {
@@ -1015,7 +1015,7 @@ def private build_object_rule(var c : Conv; prop_keys : array<string>; prop_vals
     var prop_names : array<string>
     for (i, pname in count(), prop_keys) {
         let prop_rule = visit(c, prop_vals[i], join_name(name, pname))
-        prop_kv[pname] = add_rule(c, "{join_name(name, pname)}-kv", "{format_literal(dump_str(pname))} space \":\" space {prop_rule}")
+        prop_kv[pname] = add_rule(c, "{join_name(name, pname)}-kv", "{gbnf_literal(dump_str(pname))} space \":\" space {prop_rule}")
         if (required |> key_exists(pname)) {
             required_props |> push(pname)
         } else {
@@ -1348,11 +1348,11 @@ def private visit(var c : Conv; schema : SRef; name : string; type_override : st
         return add_rule(c, rule_name, generate_type_union(c, name, schema, schema_type_node.items))
     }
     if (snode_has(schema, "const")) {
-        return add_rule(c, rule_name, format_literal(dump(snode_get(schema, "const"))))
+        return add_rule(c, rule_name, gbnf_literal(dump(snode_get(schema, "const"))))
     }
     let enum_v = snode_get(schema, "enum")
     if (enum_v != null) {
-        let vals <- [for (v in enum_v.items); format_literal(dump(v))]
+        let vals <- [for (v in enum_v.items); gbnf_literal(dump(v))]
         return add_rule(c, rule_name, "({join(vals, " | ")})")
     }
     let additional = snode_get(schema, "additionalProperties")
@@ -1495,7 +1495,7 @@ def private all_of_component(var c : Conv; comp : SRef; is_required : bool; var 
         }
     } elif (snode_has(comp, "enum")) {
         for (v in snode_get(comp, "enum").items) {
-            let rule = format_literal(dump(v))
+            let rule = gbnf_literal(dump(v))
             if (!(enum_counts |> key_exists(rule))) {
                 enum_counts[rule] = 0
                 enum_order |> push(rule)

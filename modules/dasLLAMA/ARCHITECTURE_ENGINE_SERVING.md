@@ -29,7 +29,10 @@ anchor.
   whole - a hit ending inside one counts as no hit - and a hit past a grid-roped span restores the span's
   rope advance on the session. A request may leave a span's rows out where it counts on the cache to hold
   the span (`prefix_match_len` is the probe for that); if the cache has lost it by admission the stream
-  finishes `media_lost` and its caller brings the rows. Results flow out as `SchedEvent`s - no HTTP here.
+  finishes `media_lost` and its caller brings the rows. A request may carry a `TokenConstraint`
+  (`PendingReq.constraint`); the stream takes it over at admission, points its session at it, and
+  frees it with the stream. A constrained stream never joins a speculative round and never asks the
+  device for its pick: both would commit tokens the constraint has not seen. Results flow out as `SchedEvent`s - no HTTP here.
   `utils/dasllama-server` owns the writers; `tutorials/dasLLAMA/13_serving.das` is the
   teaching consumer; `tests/test_scheduler.das` gates it against `generate()` references.
   The step clears its gather arrays (`batch_rows`, `batch_toks`, `batch_idx`) before it reaps

@@ -62,7 +62,7 @@ def private apply_penalties_(s : Session; params : SamplingParams; var row : arr
 //! A token the speculative round's accept walk already drew (s.mtp_pre_tok) is returned instead.
 [hot_path]   // once per generated token
 def sample_(var s : Session; params : SamplingParams) : int64 {
-    s.sampled = !sampler_is_argmax(params)   // any non-argmax draw (a temperature, or a penalty at temp 0) stands the greedy chain down: it predicts the raw argmax, the sampler picks something else
+    s.sampled = !sampler_is_argmax(params) || s.constrain != null   // any non-argmax draw (a temperature, or a penalty at temp 0) stands the greedy chain down: it predicts the raw argmax, the sampler picks something else
     if (s.mtp_pre_drawn) {
         s.mtp_pre_drawn = false
         return s.mtp_pre_tok
@@ -74,9 +74,47 @@ def sample_(var s : Session; params : SamplingParams) : int64 {
     let vocab = long_length(s.logits)
     if (params.temp <= 0.0) {
         apply_penalties_(s, params, s.logits, 0l)
+        if (s.constrain != null) {
+            return constrained_pick(s, vocab)
+        }
         return argmax(s, vocab)
     }
     return sample_logits_row(s, params, s.logits, 0l, vocab)
+}
+
+//! The candidates a constrained draw probes before it walks the whole vocabulary.
+let CONSTRAINED_PROBE_K = 256l
+
+// the best admitted token of the row: the argmax when it passes, else the row's k largest in logit order,
+// else every token in logit order; the winner is committed. The row's own argmax when nothing is admitted -
+// a dead end the grammar's construction rules out, so the stream's stop logic takes over.
+def private constrained_pick(var s : Session; vocab : int64) : int64 {
+    let best = argmax(s, vocab)
+    if (s.constrain->admits(best)) {
+        s.constrain->commit(best)
+        return best
+    }
+    select_top_k_(s, s.logits, 0l, vocab, min(CONSTRAINED_PROBE_K, vocab))
+    sort(s.cand) $(x, y : SampleCand) : bool { return cand_precedes_(x, y) }
+    for (c in s.cand) {
+        if (s.constrain->admits(c.id)) {
+            s.constrain->commit(c.id)
+            return c.id
+        }
+    }
+    s.cand |> clear()
+    s.cand |> reserve(vocab)
+    for (i in range64(vocab)) {
+        s.cand |> push(SampleCand(id = i, v = s.logits[i]))
+    }
+    sort(s.cand) $(x, y : SampleCand) : bool { return cand_precedes_(x, y) }
+    for (c in s.cand) {
+        if (s.constrain->admits(c.id)) {
+            s.constrain->commit(c.id)
+            return c.id
+        }
+    }
+    return best
 }
 
 //! The widest top-k the candidate-list sampler serves; a wider (or absent) top-k takes the
@@ -88,6 +126,27 @@ let SAMPLE_TOPK_FAST_CAP = 1024l
 //! SAMPLE_TOPK_FAST_CAP runs every cut and the draw over its k survivors alone.
 def sample_logits_row(var s : Session; params : SamplingParams; var row : array<float>; off, vocab : int64) : int64 {
     apply_penalties_(s, params, row, off)
+    if (s.constrain != null && params.temp > 0.0 && off == 0l) {
+        // a constrained draw runs over the k largest logits alone, the ones the constraint admits: a top-k
+        // wider than the cap, or none, reads as the cap; a round with no admitted survivor falls to the
+        // best admitted token
+        let k = params.top_k > 0l ? min(params.top_k, SAMPLE_TOPK_FAST_CAP) : SAMPLE_TOPK_FAST_CAP
+        select_top_k_(s, row, off, vocab, min(k, vocab))
+        var kept = 0
+        for (c in s.cand) {
+            if (s.constrain->admits(c.id)) {
+                s.cand[kept] = c
+                kept++
+            }
+        }
+        if (kept == 0) {
+            return constrained_pick(s, vocab)
+        }
+        s.cand |> resize(kept)
+        let tok = sample_candidates_(s, params)
+        s.constrain->commit(tok)
+        return tok
+    }
     if (params.temp > 0.0 && params.top_k > 0l && params.top_k < vocab && params.top_k <= SAMPLE_TOPK_FAST_CAP) {
         select_top_k_(s, row, off, vocab, params.top_k)
         return sample_candidates_(s, params)

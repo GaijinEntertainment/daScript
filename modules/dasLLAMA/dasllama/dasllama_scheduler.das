@@ -78,6 +78,7 @@ struct PendingReq {
     media_non_causal : bool                 // the rows attend each other in full (gemma vision); audio is causal
     media_grid : int2                       // qwen mrope: the merged image grid (nx, ny) roping the rows; (0,0) = sequential positions (gemma, audio)
     spans : array<MediaSpan>                //! media already INLINE in `prompt` as position ids (a transcript renderer's form); `submit` folds the splice fields above into one
+    @do_not_delete constraint : TokenConstraint?   //! the token admission the stream samples under (null = unconstrained); the stream takes it over at admission, an evicted request frees it
 }
 
 //! One active generation stream: the owned KV session plus its request state. Managed wholly by
@@ -98,6 +99,7 @@ struct Stream {
     cur_tok : int64 = -1l                   // sampled but not yet evaled — the next decode step's input
     state : StreamState = StreamState.prefilling
     finish : string = ""
+    @do_not_delete constraint : TokenConstraint?   //! owned here (freed with the stream); the session carries the pointer and never frees it
     n_cached : int64                        // prefix-cache hit length (set at admit; 0 in flat mode)
     ckpt_at : int64                         //! the prompt position the prefill stops at to leave a recurrent checkpoint (0 = none)
     t_admit : int64                         // ref_time_ticks at admit
@@ -479,6 +481,9 @@ def evict(var sch : Scheduler; id : int64; var events : array<SchedEvent>) : boo
         if (sch.queue[i].id == id) {
             events |> push(SchedEvent(stream = id, kind = SchedEventKind.finished, finish = "evicted",
                                       n_prompt = long_length(sch.queue[i].prompt)))
+            unsafe {
+                delete sch.queue[i].constraint
+            }
             delete sch.queue[i]   // erase is a raw memmove — finalize the owned arrays first
             sch.queue |> erase(i)
             sch.n_evicted ++
@@ -509,7 +514,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                          params = sch.queue[0].params, prompt <- sch.queue[0].prompt,
                          close_toks <- sch.queue[0].close_toks, stop_ids <- sch.queue[0].stop_ids,
                          nothink <- sch.queue[0].nothink,
-                         spans <- sch.queue[0].spans,
+                         spans <- sch.queue[0].spans, constraint <- sch.queue[0].constraint,
                          max_new = sch.queue[0].max_new, t_admit = ref_time_ticks())
         if (sch.device_kv) {
             st.session <- create_device_session(m, gpu_device_session_dtype())
@@ -543,6 +548,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         if (sch.queue[0].seed != 0) {
             set_seed(st.session, sch.queue[0].seed)
         }
+        st.session.constrain = st.constraint   // the sampler's view; a constrained stream never joins a speculative round or asks the device for its pick
         var lost = false
         for (sp in st.spans) {
             st.n_media += sp.n
@@ -584,7 +590,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             finish_stream(sch.streams[i], "length", events)
             continue
         }
-        if (sch.mtp) {
+        if (sch.mtp && sch.streams[i].constraint == null) {
             // self-spec tick: the stream trades its cross-stream batch row for up to two positions per
             // tick, every stream's round verified together below.
             sch.streams[i].session.spec_params = unsafe(addr(sch.streams[i].params))
@@ -630,7 +636,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
     } elif (!empty(sch.batch_rows)) {
         let ts_step = prof_ticks()
         for (si in sch.batch_idx) {
-            sch.streams[si].session.pick_asked = sampler_is_argmax(sch.streams[si].params)
+            sch.streams[si].session.pick_asked = sampler_is_argmax(sch.streams[si].params) && sch.streams[si].constraint == null
         }
         eval_batch(m, sch.ws, sch.batch_rows, sch.batch_toks)
         prof_add("sched_eval_batch", ts_step)
@@ -726,6 +732,9 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                     donate_stream(m, sch, sch.streams[i])
                 }
                 release_kv_pages(sch.streams[i].session)
+            }
+            unsafe {
+                delete sch.streams[i].constraint
             }
             delete sch.streams[i]   // erase is a raw memmove — finalize the owned session first
             sch.streams |> erase(i)

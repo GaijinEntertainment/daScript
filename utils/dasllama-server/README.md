@@ -652,7 +652,8 @@ request still returns 400. `finish_reason: "length"` means generation consumed i
 ### Tool / function calling
 
 `/v1/chat/completions` speaks the OpenAI function-calling protocol: pass `tools` (and optionally
-`tool_choice`; `"none"` disables, the forced-function object form is not honored), get back
+`tool_choice`; `"none"` disables, `"required"` and the forced-function object form sample the call
+through a grammar - see Structured output below), get back
 `finish_reason: "tool_calls"` with `message.tool_calls`, send the results as `role: "tool"`
 messages, repeat. Assistant `tool_calls` turns and `role: "tool"` results replay exactly through
 the chat template on each stateless resend, so agent loops (opencode, pi, ...) work end-to-end.
@@ -670,7 +671,23 @@ Streaming with tools buffers the native envelope and emits the parsed calls as o
 
 Requests the server does NOT fully understand are visible in the log: unknown endpoints 404
 through a catch-all that logs method + path + body head, and known routes warn per ignored field
-(`response_format`, `stop`, multimodal content parts, ...).
+(`stop`, multimodal content parts, ...).
+
+### Structured output
+
+`response_format` constrains the reply through a byte grammar the sampler consults token by token
+(`modules/dasLR1`: an LALR(1) acceptor over the model's token pieces, `constraints.das` here):
+`{"type":"json_object"}` admits any JSON object; `{"type":"json_schema","json_schema":{"schema":{...},
+"strict":true}}` admits exactly the documents the schema describes - object keys in order, `enum`/`const`,
+integer `minimum`/`maximum`, `minLength`/`maxItems`-style bounds, local `$ref`, `anyOf`/`allOf`, string
+`pattern`, the `date`/`time`/`uuid` formats. A schema the compiler cannot serve is a 400 under `strict`
+and a logged warning with an unconstrained reply without it. `tool_choice: "required"` or
+`{"type":"function","function":{"name":...}}` samples the tool call through the same machinery: the
+declared tools' schemas (one, or any of them) inside the family's call markers, so the name is one of the
+declared names and the arguments fit the parameters; a family with no tool-call markers answers 400. A
+constrained reply runs with thinking off, drafts nothing under MTP, and lands its logits on the CPU; the
+stop token is admitted only where the grammar's sentence is complete. The first constrained request a
+slot serves decodes its vocabulary once (the token piece table).
 
 ### Embeddings
 
@@ -790,5 +807,5 @@ and warm-vs-cold TTFT for the prefix cache.
 
 ## Not yet implemented
 
-The request's `stop` / `response_format` fields and the forced-function `tool_choice` object form
- - all logged when a request carries them. On the media path: remote `image_url` fetches.
+The request's `stop` field, logged when a request carries it; a raw grammar field beside
+`response_format`; a regular-expression `response_format`. On the media path: remote `image_url` fetches.

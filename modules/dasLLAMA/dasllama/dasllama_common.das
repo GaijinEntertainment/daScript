@@ -2241,6 +2241,14 @@ struct SamplingParams {
     penalty_last_n : int64 = 64l   // penalty window (most recent N generated tokens)
 }
 
+//! The token admission a constrained stream carries: `admits` asks whether a token may come next, `commit`
+//! advances past the token the sampler emitted. A null pointer is an unconstrained stream; a constrained
+//! stream's pick can differ from the raw argmax, so it stands every greedy-chain shortcut down (`Session.sampled`).
+class TokenConstraint {
+    def abstract admits(tok : int64) : bool
+    def abstract commit(tok : int64) : void
+}
+
 //! One survivor of the sampler's top-k selection: the token and its logit, then its probability.
 struct SampleCand {
     id : int64
@@ -2293,6 +2301,7 @@ struct Session {
     pick_asked : bool              //! the caller's sampler is a bare argmax: a device driver may land the row's pick alone and leave `logits` unwritten (the scheduler sets it a step)
     pick_ready : bool              //! the driver landed the pick: the next sample_ returns pick_tok and clears this
     pick_tok : int64
+    @do_not_delete constrain : TokenConstraint?   //! the stream's token admission (null = none); the stream owns it
     // last-generation timing, filled by the streaming generate() and read by stats()
     stat_n_prefill : int64    // prompt tokens prefilled
     stat_prefill_us : int64   // wall time to prefill the prompt (microseconds)

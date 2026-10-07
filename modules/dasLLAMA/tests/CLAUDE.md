@@ -1022,6 +1022,10 @@ row a rejected draft wrote among it.
 every draft accepted plus the parked bonus draw, the first miss, RNG state equality (one draw
 per emitted token), the restored recent window, and the repetition penalty seeing the accepted
 drafts (a walk that forgot the window would accept the repeated draft).
+`test_constraint.das` - stocked suite, `-jit` only (tinyllama Q8 sizes the logits row; the cell writes the
+logits): the sampler under a `TokenConstraint` - the argmax when the constraint admits it, the best admitted
+token in logit order when it refuses the k largest (the whole row walked), only admitted survivors under a
+temperature, and one commit per emitted token; the constraint off, the argmax again.
 `test_sampling.das` - stocked suite; the greedy oracle and the seeded-determinism cell on
 gemma-2-2b (skip without it, `-jit` only), and model-free: the sampler units (cutoffs, penalties,
 seeded draws on a bare session) plus the candidate-list fast path against the vocab-wide
@@ -2818,6 +2822,10 @@ Every `[test]` file requiring a `dasllama/*` module outside this folder, each wi
   `test_openai_server_audio_tower` serves an ultravox mmproj on a stock Llama-3.2-1B through the
   audio arm alone: no vision arm on stats, and a clip adding exactly its 187 rows to the text-only
   prompt count - no marker token - with the clip after the text and ahead of it, each reply logged.
+- `utils/dasllama-server/test_constraints.das` - requires the server's `constraints` module by bare
+  same-dir name: the chat request's `response_format` / `tool_choice` fields read to a grammar text
+  or a refusal (model-free), and the grammar constraint walking tinyllama's own token pieces along a
+  schema's sentence, the stop token admitted at its end alone (JIT, skips without the model).
 - `utils/dasllama-server/test_worker_dispatch.das` - requires the server (`openai_server`) by
   bare same-dir name, like the server suites beside it.
 - `utils/dasllama-server/test_server_flags.das` - requires the server's program root (`main`) and
