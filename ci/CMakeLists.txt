@@ -88,7 +88,7 @@ set(DAS_EXTENDED_MODULES
     run_tests_dasllama_facade_lint run_tests_boulder_dash
     run_tests_mcp_tools run_tests_dasweb_verify run_tests_dasllama_ladder
     run_tests_dasweb_buildd run_tests_dasweb_playground run_sequence_smoke run_example_main
-    run_tests_dasllama_server run_tests_serdeser run_tests_static)
+    run_tests_dasllama_server run_tests_serdeser run_tests_static run_tests_daslr1)
 if(TARGET run_tests_dasopenai)
     list(APPEND DAS_EXTENDED_MODULES run_tests_dasopenai)
 endif()
