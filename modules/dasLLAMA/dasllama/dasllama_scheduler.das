@@ -78,6 +78,7 @@ struct PendingReq {
     media_non_causal : bool                 // the rows attend each other in full (gemma vision); audio is causal
     media_grid : int2                       // qwen mrope: the merged image grid (nx, ny) roping the rows; (0,0) = sequential positions (gemma, audio)
     spans : array<MediaSpan>                //! media already INLINE in `prompt` as position ids (a transcript renderer's form); `submit` folds the splice fields above into one
+    constraint : TokenConstraintBox         //! the token admission the stream samples under (null = unconstrained); the stream takes it over at admission, an evicted request frees it
 }
 
 //! One active generation stream: the owned KV session plus its request state. Managed wholly by
@@ -98,6 +99,7 @@ struct Stream {
     cur_tok : int64 = -1l                   // sampled but not yet evaled — the next decode step's input
     state : StreamState = StreamState.prefilling
     finish : string = ""
+    constraint : TokenConstraintBox         //! owned here (freed with the stream); the session carries the pointer and never frees it
     n_cached : int64                        // prefix-cache hit length (set at admit; 0 in flat mode)
     ckpt_at : int64                         //! the prompt position the prefill stops at to leave a recurrent checkpoint (0 = none)
     t_admit : int64                         // ref_time_ticks at admit
@@ -420,6 +422,10 @@ def utf8_trim_partial_end(s : string) : string {
 }
 
 def private advance_with(m : Model; var st : Stream; tok : int64; var events : array<SchedEvent>) : bool {
+    if (tok < 0l) {   //! the constraint admits no token: the reply ends where the grammar left it
+        finish_stream(st, "constraint", events)
+        return false
+    }
     if (st.t_first == 0l) {
         st.t_first = ref_time_ticks()
         st.ttft_us = int64(get_time_usec(st.t_admit))
@@ -462,6 +468,28 @@ def private advance_with(m : Model; var st : Stream; tok : int64; var events : a
 
 def private sample_advance(m : Model; var st : Stream; var events : array<SchedEvent>) : bool =>
     advance_with(m, st, sample(st.session, st.params), events)
+
+// one plain decode step over the gathered batch arrays (nothing when they are empty): the device pick
+// asked for an argmax stream with no constraint, then every row sampled and advanced
+def private plain_batch_step(m : Model; var sch : Scheduler; var events : array<SchedEvent>) {
+    return if (empty(sch.batch_rows))
+    let ts_step = prof_ticks()
+    for (si in sch.batch_idx) {
+        sch.streams[si].session.pick_asked = sampler_is_argmax(sch.streams[si].params) && sch.streams[si].constraint.constraint == null
+    }
+    eval_batch(m, sch.ws, sch.batch_rows, sch.batch_toks)
+    prof_add("sched_eval_batch", ts_step)
+    sch.decode_steps ++
+    sch.sum_batch += long_length(sch.batch_rows)
+    let ts_sample = prof_ticks()
+    for (bi in range64(long_length(sch.batch_idx))) {
+        if (sample_advance(m, sch.streams[sch.batch_idx[bi]], events)) {
+            sch.gen_tokens ++
+        }
+        sch.streams[sch.batch_idx[bi]].session.pick_asked = false   //! the ask is a step's
+    }
+    prof_add("sched_sample", ts_sample)
+}
 
 //! Evict a stream (the client disconnected): an active stream finishes "evicted" (its finished
 //! event appends NOW; the session is reaped next step), a queued request is dropped with the same
@@ -509,7 +537,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                          params = sch.queue[0].params, prompt <- sch.queue[0].prompt,
                          close_toks <- sch.queue[0].close_toks, stop_ids <- sch.queue[0].stop_ids,
                          nothink <- sch.queue[0].nothink,
-                         spans <- sch.queue[0].spans,
+                         spans <- sch.queue[0].spans, constraint <- sch.queue[0].constraint,
                          max_new = sch.queue[0].max_new, t_admit = ref_time_ticks())
         if (sch.device_kv) {
             st.session <- create_device_session(m, gpu_device_session_dtype())
@@ -543,6 +571,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         if (sch.queue[0].seed != 0) {
             set_seed(st.session, sch.queue[0].seed)
         }
+        st.session.constrain = st.constraint.constraint   // the sampler's view; a constrained stream never joins a speculative round or asks the device for its pick
         var lost = false
         for (sp in st.spans) {
             st.n_media += sp.n
@@ -584,15 +613,14 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             finish_stream(sch.streams[i], "length", events)
             continue
         }
+        if (sch.mtp && sch.streams[i].constraint.constraint != null) {
+            continue   // a constrained stream decodes plain, after the speculative round (below)
+        }
         if (sch.mtp) {
             // self-spec tick: the stream trades its cross-stream batch row for up to two positions per
             // tick, every stream's round verified together below.
             sch.streams[i].session.spec_params = unsafe(addr(sch.streams[i].params))
             sch.streams[i].session.pick_asked = sampler_is_argmax(sch.streams[i].params)
-            sch.batch_rows |> push(unsafe(addr(sch.streams[i].session)))
-            sch.batch_toks |> push(sch.streams[i].cur_tok)
-            sch.batch_idx |> push(i)
-            continue
         }
         sch.batch_rows |> push(unsafe(addr(sch.streams[i].session)))
         sch.batch_toks |> push(sch.streams[i].cur_tok)
@@ -627,24 +655,20 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         sch.mtp_accepted += after.accepted - before.accepted
         sch.decode_steps ++
         sch.sum_batch += long_length(sch.batch_rows)
-    } elif (!empty(sch.batch_rows)) {
-        let ts_step = prof_ticks()
-        for (si in sch.batch_idx) {
-            sch.streams[si].session.pick_asked = sampler_is_argmax(sch.streams[si].params)
-        }
-        eval_batch(m, sch.ws, sch.batch_rows, sch.batch_toks)
-        prof_add("sched_eval_batch", ts_step)
-        sch.decode_steps ++
-        sch.sum_batch += long_length(sch.batch_rows)
-        let ts_sample = prof_ticks()
-        for (bi in range64(long_length(sch.batch_idx))) {
-            if (sample_advance(m, sch.streams[sch.batch_idx[bi]], events)) {
-                sch.gen_tokens ++
-            }
-            sch.streams[sch.batch_idx[bi]].session.pick_asked = false   //! the ask is a step's
-        }
-        prof_add("sched_sample", ts_sample)
+        sch.batch_rows |> clear()
+        sch.batch_toks |> clear()
+        sch.batch_idx |> clear()
     }
+    if (sch.mtp) {
+        for (i in range64(long_length(sch.streams))) {   // the constrained streams the round skipped: one plain step, round or no round
+            if (sch.streams[i].state == StreamState.decoding && sch.streams[i].constraint.constraint != null) {
+                sch.batch_rows |> push(unsafe(addr(sch.streams[i].session)))
+                sch.batch_toks |> push(sch.streams[i].cur_tok)
+                sch.batch_idx |> push(i)
+            }
+        }
+    }
+    plain_batch_step(m, sch, events)
     sch.batch_rows |> clear()
     sch.batch_toks |> clear()
     sch.batch_idx |> clear()

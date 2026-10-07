@@ -7,6 +7,7 @@ module openai_server
 require dasllama/dasllama       // the public facade — the main dasLLAMA surface this tool touches
 require dasllama/dasllama_scheduler   // continuous-batching scheduler (layer 3 over the facade)
 require dasllama/dasllama_bench       // the llama-bench rows the in-process /bench runs on the served model
+require constraints                   // response_format / tool_choice grammars - the sampler's token admission
 require user_state                    // write_config - the /config save
 require dashv/dashv_boost public
 require daslib/json_boost
@@ -424,6 +425,7 @@ def set_model(var m : Model; name : string) {
     unsafe {
         delete g_slots
     }
+    reset_token_pieces()
     g_default_slot = 0
     g_active = 0
     g_cur = 0
@@ -2349,7 +2351,8 @@ def private tmpdir() : string {
 let CHAT_FIELDS : table<string> <- { "model", "messages", "stream", "temperature", "top_k", "top_p", "min_p",
                                      "presence_penalty", "frequency_penalty", "repeat_penalty", "seed",
                                      "max_tokens", "max_completion_tokens", "tools", "tool_choice",
-                                     "enable_thinking", "chat_template_kwargs", "truncation", "stream_options" }
+                                     "enable_thinking", "chat_template_kwargs", "truncation", "stream_options",
+                                     "response_format" }
 let COMPL_FIELDS : table<string> <- { "model", "prompt", "stream", "temperature", "top_k", "top_p", "min_p",
                                      "presence_penalty", "frequency_penalty", "repeat_penalty", "seed",
                                      "max_tokens", "stream_options" }
@@ -2658,6 +2661,7 @@ def private unwind_failed_runtime_load(id : string; prev_owner : int) {
         uninstall_slot_marks()
         delete g_slots[ni]
         g_slots |> erase(ni)
+        erase_token_pieces(ni)
     }
     if (prev_owner >= 0) {
         bind_gpu_slot(prev_owner)
@@ -2853,6 +2857,7 @@ def private handle_model_unload(req : FrontReq; var resp : Reply) : http_status 
     let dead_name = g_slots[mi].name
     delete g_slots[mi]
     g_slots |> erase(mi)
+    erase_token_pieces(mi)
     // every slot index above mi shifted down one (the worker is immune: its tables key on names)
     if (g_default_slot > mi) {
         g_default_slot--
@@ -2957,13 +2962,20 @@ def private register_request(srv : FrontLink; writer : WriterRef;
                              seed : int = 0; think : ThinkStream = ThinkStream();
                              tool_mode : ToolMode = ToolMode.none; reuse_id : int64 = 0l;
                              var nothink : NothinkStopGuard = NothinkStopGuard(); stable_at : int64 = 0l;
-                             include_usage : bool = false; resumed : bool = false) {
+                             include_usage : bool = false; resumed : bool = false;
+                             var constraint : TokenConstraint? = null) {
     if (bench_hold_active()) {
+        unsafe {
+            delete constraint
+        }
         service_unavailable(srv, writer, ibench_hold_text())
         return
     }
     let np = long_length(prompt)   // media positions included: a span's ids stand in the prompt
     if (np + 1l > cur_model().config.seq_len) {
+        unsafe {
+            delete constraint
+        }
         bad_request(srv, writer, "the rendered prompt is {np} tokens; the model context is {cur_model().config.seq_len} — shorten the conversation or raise --ctx")
         return
     }
@@ -2980,6 +2992,7 @@ def private register_request(srv : FrontLink; writer : WriterRef;
     preq.nothink <- nothink
     preq.close_toks <- close_toks
     preq.spans <- spans
+    preq.constraint.constraint = constraint   // owned by the request from here: a refused submit frees it with preq
     if (!submit(cur_model(), cur_sched(), preq)) {
         delete preq
         to_log(LOG_WARNING, "dasllama-server: 503 queue full ({cur_sched().max_queue}) — rejected {prefix} request ({np} tok)\n")
@@ -3425,10 +3438,20 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
             } elif (choice != "auto" && choice != "required") {
                 to_log(LOG_WARNING, "/v1/chat/completions: unknown tool_choice '{choice}' — treating as auto\n")
             }
-        } else {
-            to_log(LOG_WARNING, "/v1/chat/completions: forced tool_choice is not honored — treating as auto\n")
         }
     }
+    // a constrained reply (a JSON format, or a forced tool call) is sampled through a grammar; it carries no
+    // reasoning preamble, so thinking is off for it. The markers a forced call is wrapped in are the template's.
+    var spec : ConstraintSpec
+    if (constraint_fields_present(js)) {
+        let tmpl = chat_template(cur_model())
+        spec <- read_constraint_spec(js, tools, tmpl.tool_call_open, tmpl.tool_call_close)
+        if (!empty(spec.err)) {
+            bad_request(srv, writer, spec.err)
+            return
+        }
+    }
+    let constrained = !empty(spec.gbnf)
 
     // OpenAI is stateless — the client resends the whole transcript. Fold system turns, replay
     // prior user/assistant/tool turns through the renderer, then render the trailing turn + the
@@ -3456,8 +3479,8 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
     // gemma-4 E doesn't); a present bool — either spelling — overrides it
     let tv = js?["enable_thinking"]
     let cv = ctk?["enable_thinking"]
-    let think_set = (tv != null && tv.value is _bool) || (cv != null && cv.value is _bool)
-    let think_val = (tv ?? true) && (cv ?? true)
+    let think_set = constrained || (tv != null && tv.value is _bool) || (cv != null && cv.value is _bool)
+    let think_val = !constrained && (tv ?? true) && (cv ?? true)
     let has_tools = !empty(tools)
     var prompt : array<int64>
     defer() { delete prompt }
@@ -3508,11 +3531,21 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
             return
         }
     }
+    var constraint : TokenConstraint?
+    if (constrained) {
+        var gerr = ""
+        constraint = constraint_of(spec, cur_model(), g_cur, stop_ids, gerr)
+        if (!empty(gerr)) {
+            bad_request(srv, writer, "the request's grammar does not build: {gerr}")
+            return
+        }
+        to_log(LOG_INFO, "/v1/chat/completions: {spec.kind} constraint armed\n")
+    }
     var spans <- media_spans(prompt, refs)
     register_request(srv, writer, prompt, stop_ids, close, spans, params, max_new,
                      streaming, true, "chatcmpl",
                      has_tools, call_open, call_close, seed, think_stream, wire_tool_mode, resume_rid,
-                     nothink, stable_at, wants_usage(js), resumed)
+                     nothink, stable_at, wants_usage(js), resumed, constraint)
 }
 
 //! Marks the refs that bring no rows and whose span the slot's prefix cache does not hold under `prompt`; true when
@@ -7038,6 +7071,7 @@ def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers s
     g_default_slot = 0
     g_active = 0
     g_cur = 0
+    reset_token_pieces()
     delete g_events
     delete g_wires
     release_speech_state()   // the engine's own: empty rails on a server whose speech thread ran them

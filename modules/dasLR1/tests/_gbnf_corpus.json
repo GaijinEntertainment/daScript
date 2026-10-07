@@ -1,0 +1,772 @@
+[
+	{
+		"kind" : "schema",
+		"name" : "min 0",
+		"text" : "{\n            \"type\": \"integer\",\n            \"minimum\": 0\n        }",
+		"passing" : [
+			"0",
+			"10",
+			"12",
+			"10000"
+		],
+		"failing" : [
+			"-1",
+			"-10",
+			"-10000",
+			"-100000000000000000000000000000000",
+			"100000000000000000000000000000000",
+			"00",
+			"01",
+			"-0"
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "min 2",
+		"text" : "{\n            \"type\": \"integer\",\n            \"minimum\": 2\n        }",
+		"passing" : [
+			"2",
+			"3",
+			"4",
+			"10",
+			"20",
+			"1234567890000000"
+		],
+		"failing" : [
+			"0",
+			"1",
+			"-1",
+			"-100",
+			"0",
+			"1",
+			"01",
+			"02",
+			"12345678900000000"
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "min 456",
+		"text" : "{\n            \"type\": \"integer\",\n            \"minimum\": 456\n        }",
+		"passing" : [
+			"456",
+			"4560",
+			"457",
+			"460",
+			"500"
+		],
+		"failing" : [
+			"455",
+			"356",
+			"50",
+			"050",
+			"-1",
+			"-456"
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "min -123",
+		"text" : "{\n            \"type\": \"integer\",\n            \"minimum\": -123\n        }",
+		"passing" : [
+			"-123",
+			"-122",
+			"-11",
+			"-1",
+			"0",
+			"1",
+			"123",
+			"1234",
+			"2345"
+		],
+		"failing" : [
+			"-1234",
+			"-124"
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "max 9999",
+		"text" : "{\n            \"type\": \"integer\",\n            \"maximum\": 9999\n        }",
+		"passing" : [
+			"-99999",
+			"0",
+			"9999"
+		],
+		"failing" : [
+			"10000",
+			"99991"
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "max -9999",
+		"text" : "{\n            \"type\": \"integer\",\n            \"maximum\": -9999\n        }",
+		"passing" : [
+			"-10000",
+			"-9999"
+		],
+		"failing" : [
+			"-9998",
+			"0",
+			"9999"
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "min 5 max 30",
+		"text" : "{\n            \"type\": \"integer\",\n            \"minimum\": 5,\n            \"maximum\": 30\n        }",
+		"passing" : [
+			"5",
+			"10",
+			"30"
+		],
+		"failing" : [
+			"05",
+			"4",
+			"-1",
+			"31",
+			"123",
+			"0123"
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "min 1 max 900719925474091",
+		"text" : "{\n            \"type\": \"integer\",\n            \"exclusiveMinimum\": 0,\n            \"maximum\": 900719925474091\n        }",
+		"passing" : [
+			"1",
+			"2",
+			"10",
+			"900719925474090",
+			"900719925474091"
+		],
+		"failing" : [
+			"0",
+			"01",
+			"900719925474092",
+			"9007199254740910"
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "min -1 max 1",
+		"text" : "{\n            \"type\": \"integer\",\n            \"minimum\": -1,\n            \"maximum\": 1\n        }",
+		"passing" : [
+			"-1",
+			"0",
+			"1"
+		],
+		"failing" : [
+			"-11",
+			"-10",
+			"-2",
+			"2",
+			"10",
+			"11"
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "min -123 max 42",
+		"text" : "{\n            \"type\": \"integer\",\n            \"minimum\": -123,\n            \"maximum\": 42\n        }",
+		"passing" : [
+			"-123",
+			"-122",
+			"-13",
+			"-11",
+			"-2",
+			"-1",
+			"0",
+			"1",
+			"5",
+			"10",
+			"39",
+			"40",
+			"42"
+		],
+		"failing" : [
+			"-0123",
+			"-124",
+			"-1123",
+			"-200",
+			"43",
+			"123",
+			"0123"
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "exclusive min / max",
+		"text" : "{\n            \"type\": \"integer\",\n            \"exclusiveMinimum\": 0,\n            \"exclusiveMaximum\": 10000\n        }",
+		"passing" : [
+			"1",
+			"9999"
+		],
+		"failing" : [
+			"0",
+			"01",
+			"10000",
+			"99999"
+		]
+	},
+	{
+		"kind" : "grammar",
+		"name" : "simple grammar",
+		"text" : "\n            root ::= expr\n            expr ::= term (\"+\" term)*\n            term ::= number\n            number ::= [0-9]+",
+		"passing" : [
+			"42",
+			"1+2+3+4+5",
+			"123+456"
+		],
+		"failing" : [
+			"+",
+			"/ 3",
+			"1+2+3+4+5+",
+			"12a45"
+		]
+	},
+	{
+		"kind" : "grammar",
+		"name" : "medium complexity grammar",
+		"text" : "\n            root ::= expression\n            expression ::= term ws ((\"+\"|\"-\") ws term)*\n            term ::= factor ws ((\"*\"|\"/\") ws factor)*\n            factor ::= number | variable | \"(\" expression \")\" | function-call\n            number ::= [0-9]+\n            variable ::= [a-zA-Z_][a-zA-Z0-9_]*\n            function-call ::= variable ws \"(\" (expression (\",\" ws expression)*)? \")\"\n            ws ::= [ \\t\\n\\r]?",
+		"passing" : [
+			"42",
+			"1*2*3*4*5",
+			"x",
+			"x+10",
+			"x1+y2",
+			"(a+b)*(c-d)",
+			"func()",
+			"func(x,y+2)",
+			"a*(b+c)-d/e",
+			"f(g(x),h(y,z))",
+			"x + 10",
+			"x1 + y2",
+			"(a + b) * (c - d)",
+			"func()",
+			"func(x, y + 2)",
+			"a * (b + c) - d / e",
+			"f(g(x), h(y, z))",
+			"123+456",
+			"123*456*789-123/456+789*123",
+			"123+456*789-123/456+789*123-456/789+123*456-789/123+456*789-123/456+789*123-456"
+		],
+		"failing" : [
+			"+",
+			"/ 3x",
+			"x + + y",
+			"a * / b",
+			"func(,)",
+			"func(x y)",
+			"(a + b",
+			"x + y)",
+			"a + b * (c - d",
+			"42 +",
+			"x +",
+			"x + 10 +",
+			"(a + b) * (c - d",
+			"func(",
+			"func(x, y + 2",
+			"a * (b + c) - d /",
+			"f(g(x), h(y, z)",
+			"123+456*789-123/456+789*123-456/789+123*456-789/123+456*789-123/456+789*123-456/"
+		]
+	},
+	{
+		"kind" : "grammar",
+		"name" : "special characters",
+		"text" : "\n            root ::= ... \"abc\" ...\n            ",
+		"passing" : [
+			"abcabcabc",
+			"aaaabcccc",
+			"🔵🟠✅abc❌🟠🔵"
+		],
+		"failing" : [
+			"aaabcccc",
+			"aaaaabcccc",
+			"aaaabccc",
+			"aaaabccccc",
+			"🔵🟠✅❌abc❌✅🟠🔵",
+			"🔵🟠abc🟠🔵"
+		]
+	},
+	{
+		"kind" : "grammar",
+		"name" : "* quantifier",
+		"text" : "root ::= \"a\"*",
+		"passing" : [
+			"",
+			"a",
+			"aaaaa",
+			"aaaaaaaaaaaaaaaaaa",
+			"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		],
+		"failing" : [
+			"b",
+			"ab",
+			"aab",
+			"ba",
+			"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab"
+		]
+	},
+	{
+		"kind" : "grammar",
+		"name" : "+ quantifier",
+		"text" : "root ::= \"a\"+",
+		"passing" : [
+			"a",
+			"aaaaa",
+			"aaaaaaaaaaaaaaaaaa",
+			"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		],
+		"failing" : [
+			"",
+			"b",
+			"ab",
+			"aab",
+			"ba",
+			"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab"
+		]
+	},
+	{
+		"kind" : "grammar",
+		"name" : "? quantifier",
+		"text" : "root ::= \"a\"?",
+		"passing" : [
+			"",
+			"a"
+		],
+		"failing" : [
+			"b",
+			"ab",
+			"aa",
+			"ba"
+		]
+	},
+	{
+		"kind" : "grammar",
+		"name" : "mixed quantifiers",
+		"text" : "\n            root ::= cons+ vowel* cons? (vowel cons)*\n            vowel ::= [aeiouy]\n            cons ::= [bcdfghjklmnpqrstvwxyz]\n            ",
+		"passing" : [
+			"yes",
+			"no",
+			"noyes",
+			"crwth",
+			"four",
+			"bryyyy"
+		],
+		"failing" : [
+			"yess",
+			"yesno",
+			"forty",
+			"catyyy"
+		]
+	},
+	{
+		"kind" : "grammar",
+		"name" : "simple exact repetition",
+		"text" : "\n            root ::= [ab]{4}\n        ",
+		"passing" : [
+			"aaaa",
+			"bbbb",
+			"abab"
+		],
+		"failing" : [
+			"a",
+			"b",
+			"aaaaa"
+		]
+	},
+	{
+		"kind" : "grammar",
+		"name" : "simple min repetition",
+		"text" : "\n            root ::= [ab]{4,}\n        ",
+		"passing" : [
+			"aaaa",
+			"aaaaab",
+			"bbbb",
+			"ababab"
+		],
+		"failing" : [
+			"",
+			"aba"
+		]
+	},
+	{
+		"kind" : "grammar",
+		"name" : "simple max repetition",
+		"text" : "\n            root ::= [ab]{0,4}\n        ",
+		"passing" : [
+			"",
+			"a",
+			"aa",
+			"aaa",
+			"aaab"
+		],
+		"failing" : [
+			"aaaaa"
+		]
+	},
+	{
+		"kind" : "grammar",
+		"name" : "min / max repetition",
+		"text" : "\n            root ::= (\"0x\" [A-F0-9]{2} \" \"?){3,5}\n        ",
+		"passing" : [
+			"0xFF 0x12 0xAB",
+			"0xFF 0x12 0xAB 0x00 0x00"
+		],
+		"failing" : [
+			"",
+			"0xFF",
+			"0xFF 0x12",
+			"0xFF 0x12 0xAB 0x00 0x00 0x00"
+		]
+	},
+	{
+		"kind" : "grammar",
+		"name" : "segfault",
+		"text" : "\n            root ::= ( [x]* )*\n        ",
+		"passing" : [
+			"",
+			"x",
+			"xx"
+		],
+		"failing" : [
+			"y",
+			"yy"
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "empty schema (object)",
+		"text" : "\n            {}\n        ",
+		"passing" : [
+			"{}",
+			"{\"foo\": \"bar\"}"
+		],
+		"failing" : [
+			"",
+			"[]",
+			"null",
+			"\"\"",
+			"true"
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "exotic formats (list)",
+		"text" : "{\n            \"items\": [\n                { \"format\": \"date\" },\n                { \"format\": \"uuid\" },\n                { \"format\": \"time\" },\n                { \"format\": \"date-time\" }\n            ]\n        }",
+		"passing" : [
+			"[\"2012-04-23\", \"12345678-1234-1234-1234-1234567890ab\", \"18:25:43.511Z\", \"2012-04-23T18:25:43.511Z\"]"
+		],
+		"failing" : [
+			"[\"foo\", \"bar\"]",
+			"[\"12345678-1234-1234-1234-1234567890ab\"]"
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "string",
+		"text" : "{\n            \"type\": \"string\"\n        }",
+		"passing" : [
+			"\"foo\"",
+			"\"bar\"",
+			"\"\""
+		],
+		"failing" : [
+			"{}",
+			"\"foo\": \"bar\""
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "string w/ min length 1",
+		"text" : "{\n            \"type\": \"string\",\n            \"minLength\": 1\n        }",
+		"passing" : [
+			"\"foo\"",
+			"\"bar\""
+		],
+		"failing" : [
+			"\"\"",
+			"{}",
+			"\"foo\": \"bar\""
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "string w/ min length 3",
+		"text" : "{\n                \"type\": \"string\",\n                \"minLength\": 3\n        }",
+		"passing" : [
+			"\"foo\"",
+			"\"bar\"",
+			"\"foobar\""
+		],
+		"failing" : [
+			"\"\"",
+			"\"f\"",
+			"\"fo\""
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "string w/ max length",
+		"text" : "{\n            \"type\": \"string\",\n            \"maxLength\": 3\n        }",
+		"passing" : [
+			"\"foo\"",
+			"\"bar\"",
+			"\"\"",
+			"\"f\"",
+			"\"fo\""
+		],
+		"failing" : [
+			"\"foobar\""
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "string w/ min & max length",
+		"text" : "{\n            \"type\": \"string\",\n            \"minLength\": 1,\n            \"maxLength\": 4\n        }",
+		"passing" : [
+			"\"foo\"",
+			"\"bar\"",
+			"\"f\"",
+			"\"barf\""
+		],
+		"failing" : [
+			"\"\"",
+			"\"barfo\"",
+			"\"foobar\""
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "boolean",
+		"text" : "{\n            \"type\": \"boolean\"\n        }",
+		"passing" : [
+			"true",
+			"false"
+		],
+		"failing" : [
+			"\"\"",
+			"\"true\"",
+			"True",
+			"FALSE"
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "integer",
+		"text" : "{\n            \"type\": \"integer\"\n        }",
+		"passing" : [
+			"0",
+			"12345",
+			"1234567890123456"
+		],
+		"failing" : [
+			"",
+			"01",
+			"007",
+			"12345678901234567  "
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "string const",
+		"text" : "{\n            \"const\": \"foo\"\n        }",
+		"passing" : [
+			"\"foo\""
+		],
+		"failing" : [
+			"foo",
+			"\"bar\""
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "non-string const",
+		"text" : "{\n            \"const\": true\n        }",
+		"passing" : [
+			"true"
+		],
+		"failing" : [
+			"",
+			"foo",
+			"\"true\""
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "non-string const",
+		"text" : "{\n            \"enum\": [\"red\", \"amber\", \"green\", null, 42, [\"foo\"]]\n        }",
+		"passing" : [
+			"\"red\"",
+			"null",
+			"42",
+			"[\"foo\"]"
+		],
+		"failing" : [
+			"",
+			"420",
+			"true",
+			"foo"
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "simple pattern",
+		"text" : "{\n            \"pattern\": \"^[a-zA-Z0-9_-]*$\"\n        }",
+		"passing" : [
+			"\"\"",
+			"\"He_llo-12\""
+		],
+		"failing" : [
+			"\"!\"",
+			"\"Hello World\""
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "pattern with escapes",
+		"text" : "{\n            \"pattern\": \"^a\\\\^\\\\$\\\\.\\\\[\\\\]\\\\(\\\\)\\\\|\\\\{\\\\}\\\\*\\\\+\\\\?b$\"\n        }",
+		"passing" : [
+			"\"a^$.[]()|{}*+?b\""
+		],
+		"failing" : [
+			"\"ab\""
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "",
+		"text" : "\n            {\n                \"type\": [\"array\", \"null\"],\n                \"items\": { \"type\": \"string\" }\n            }\n        ",
+		"passing" : [
+			"null",
+			"[]",
+			"[\"123\"]",
+			"[\"foo\", \"bar\"]"
+		],
+		"failing" : [
+			"",
+			"[123]",
+			"\"foo\"",
+			"[\"foo\", 42]"
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "min+max items",
+		"text" : "{\n            \"items\": {\n                \"type\": [\"number\", \"integer\"]\n            },\n            \"minItems\": 3,\n            \"maxItems\": 5\n        }",
+		"passing" : [
+			"[1, 2, 3]",
+			"[1, 2, 3, 4]",
+			"[1, 2, 3, 4, 5]"
+		],
+		"failing" : [
+			"[1, 2]",
+			"[1, 2, 3, 4, 5, 6]",
+			"1"
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "object properties",
+		"text" : "{\n            \"type\": \"object\",\n            \"properties\": {\n                \"number\": { \"type\": \"number\" },\n                \"street_name\": { \"type\": \"string\" },\n                \"street_type\": { \"enum\": [\"Street\", \"Avenue\", \"Boulevard\"] }\n            }\n        }",
+		"passing" : [
+			"{ \"number\": 1600, \"street_name\": \"Pennsylvania\", \"street_type\":\"Avenue\"}",
+			"{ \"street_name\": \"Pennsylvania\" }",
+			"{ \"number\": 1600, \"street_name\": \"Pennsylvania\" }",
+			"{}",
+			"{ \"number\": 1600, \"street_name\": \"Pennsylvania\", \"street_type\": \"Avenue\" }"
+		],
+		"failing" : [
+			"{ \"number\": \"1600\", \"street_name\": \"Pennsylvania\", \"street_type\":\"Avenue\"}",
+			"{ \"street_name\": \"Pennsylvania\", \"number\": 1600 }",
+			"{ \"number\": \"1600\", \"street_name\": \"Pennsylvania\", \"street_type\":\"Avenue\"}",
+			"{ \"number\": 1600, \"street_name\": \"Pennsylvania\", \"street_type\":\"Avenue\", \"direction\":\"NW\"}"
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "additional properties can't override other properties",
+		"text" : "{\n            \"properties\": {\n                \"a\": {\"type\": \"integer\"},\n                \"b\": {\"type\": \"integer\"}\n            },\n            \"additionalProperties\": true\n        }",
+		"passing" : [
+			"{\"a\": 42}",
+			"{\"c\": \"\"}",
+			"{\"a\": 42, \"c\": \"\"}",
+			"{\"a_\": \"\"}"
+		],
+		"failing" : [
+			"",
+			"{\"a\": \"\"}",
+			"{\"a\": \"\", \"b\": \"\"}"
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "object properties, additionalProperties: true",
+		"text" : "{\n            \"type\": \"object\",\n            \"properties\": {\n                \"number\": { \"type\": \"number\" },\n                \"street_name\": { \"type\": \"string\" },\n                \"street_type\": { \"enum\": [\"Street\", \"Avenue\", \"Boulevard\"] }\n            },\n            \"additionalProperties\": true\n        }",
+		"passing" : [
+			"{}",
+			"{\"number\":1600,\"street_name\":\"Pennsylvania\",\"street_type\":\"Avenue\"}",
+			"{ \"street_name\": \"Pennsylvania\" }",
+			"{ \"number\": 1600, \"street_name\": \"Pennsylvania\" }",
+			"{ \"number\": 1600, \"street_name\": \"Pennsylvania\", \"street_type\":\"Avenue\", \"direction\":\"NW\"}",
+			"{ \"number\": 1600, \"street_name\": \"Pennsylvania\", \"street_type\": \"Avenue\" }"
+		],
+		"failing" : [
+			"{ \"number\": \"1600\", \"street_name\": \"Pennsylvania\", \"street_type\":\"Avenue\"}",
+			"{ \"street_name\": \"Pennsylvania\", \"number\": 1600, \"street_type\":\"Avenue\"}"
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "required + optional props each in original order",
+		"text" : "{\n            \"type\": \"object\",\n            \"properties\": {\n                \"number\": { \"type\": \"number\" },\n                \"street_name\": { \"type\": \"string\" },\n                \"street_type\": { \"enum\": [\"Street\", \"Avenue\", \"Boulevard\"] }\n            },\n            \"additionalProperties\": false\n        }",
+		"passing" : [
+			"{ \"street_name\": \"Pennsylvania\" }",
+			"{ \"number\": 1600, \"street_type\":\"Avenue\"}",
+			"{ \"number\": 1600, \"street_name\": \"Pennsylvania\" }",
+			"{ \"number\": 1600, \"street_name\": \"Pennsylvania\", \"street_type\":\"Avenue\"}",
+			"{ \"number\": 1600, \"street_name\": \"Pennsylvania\", \"street_type\": \"Avenue\" }"
+		],
+		"failing" : [
+			"{ \"street_type\": \"Avenue\", \"number\": 1600 }",
+			"{ \"number\": 1600, \"street_name\": \"Pennsylvania\", \"street_type\": \"Avenue\", \"direction\": \"NW\" }"
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "required + optional props each in original order",
+		"text" : "{\n            \"properties\": {\n                \"b\": {\"type\": \"string\"},\n                \"a\": {\"type\": \"string\"},\n                \"d\": {\"type\": \"string\"},\n                \"c\": {\"type\": \"string\"}\n            },\n            \"required\": [\"a\", \"b\"],\n            \"additionalProperties\": false\n        }",
+		"passing" : [
+			"{\"b\": \"foo\", \"a\": \"bar\"}",
+			"{\"b\":\"foo\",\"a\":\"bar\",\"d\":\"qux\"}",
+			"{\"b\":\"foo\", \"a\":\"bar\", \"d\":\"qux\", \"c\":\"baz\"}"
+		],
+		"failing" : [
+			"{\"a\": \"foo\", \"b\": \"bar\"}",
+			"{\"b\": \"bar\"}",
+			"{\"a\": \"foo\", \"c\": \"baz\"}",
+			"{\"a\":\"foo\", \"b\":\"bar\", \"c\":\"baz\", \"d\":\"qux\"}"
+		]
+	},
+	{
+		"kind" : "schema",
+		"name" : "required props",
+		"text" : "{\n            \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n            \"$id\": \"https://example.com/product.schema.json\",\n            \"title\": \"Product\",\n            \"description\": \"A product from Acme's catalog\",\n            \"type\": \"object\",\n            \"properties\": {\n                \"productId\": {\n                \"description\": \"The unique identifier for a product\",\n                \"type\": \"integer\"\n                },\n                \"productName\": {\n                \"description\": \"Name of the product\",\n                \"type\": \"string\"\n                },\n                \"price\": {\n                \"description\": \"The price of the product\",\n                \"type\": \"number\",\n                \"exclusiveMinimum\": 0\n                },\n                \"tags\": {\n                \"description\": \"Tags for the product\",\n                \"type\": \"array\",\n                \"items\": {\n                    \"type\": \"string\"\n                },\n                \"minItems\": 1,\n                \"uniqueItems\": true\n                },\n                \"dimensions\": {\n                \"type\": \"object\",\n                \"properties\": {\n                    \"length\": {\n                    \"type\": \"number\"\n                    },\n                    \"width\": {\n                    \"type\": \"number\"\n                    },\n                    \"height\": {\n                    \"type\": \"number\"\n                    }\n                },\n                \"required\": [ \"length\", \"width\", \"height\" ]\n                }\n            },\n            \"required\": [ \"productId\", \"productName\", \"price\" ]\n        }",
+		"passing" : [
+			"{\"productId\": 1, \"productName\": \"A green door\", \"price\": 12.50}",
+			"{\"productId\": 1, \"productName\": \"A green door\", \"price\": 12.50, \"tags\": [\"home\", \"green\"]}",
+			"{\"productId\": 1, \"productName\": \"A green door\", \"price\": 12.50, \"tags\": [\"home\", \"green\"], \"dimensions\": {\"length\": 785, \"width\": 250.5, \"height\": -0.359}}"
+		],
+		"failing" : [
+			"{}",
+			"{\"productName\": \"A green door\", \"price\": 12.50, \"productId\": 1}",
+			"{\"productId\": 1, \"productName\": \"A green door\"}",
+			"{\"productName\": \"A green door\", \"price\": 12.50}",
+			"{\"productId\": 1, \"productName\": \"A green door\", \"price\": 12.50, \"tags\": []}",
+			"{\"productId\": 1, \"productName\": \"A green door\", \"price\": 12.50, \"dimensions\": {\"length\": 785, \"width\": 250.5, \"height\": -0.359}, \"tags\": [\"home\", \"green\"]}"
+		]
+	}
+]

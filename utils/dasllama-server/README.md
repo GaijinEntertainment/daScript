@@ -228,7 +228,7 @@ Run under `-jit` - the interpreter is refused, it is far too slow for inference.
 | `--page-rows` | - | `64` | KV page size in positions for paged serving |
 | `--prefix` | - | *auto* | Prefix-cache retention cap in pages (auto: one full context per stream; `-1` = unbounded) |
 | `--flat` | - | - | Flat preallocated KV sessions - disables paged serving and the prefix cache |
-| `--mtp` | - | *auto* | MTP/NextN self-speculative decode. Unset, a slot turns it on when it runs one stream (`streams = 1`) on a GPU - Metal, or the whole model resident on a Vulkan device with its routed experts on the card - and leaves it off otherwise: at one stream on Metal the draft-and-verify round cuts decode time on the dense Qwen3.5 MTP models (0.8B 1.20x, 4B 1.21x, 9B 1.10x - `modules/dasLLAMA/followup_metal.md` row 26), on a Vulkan device more (`modules/dasLLAMA/PERF_LEDGER.md`, the resident driver's NextN entries) unless the driver sums a MoE's routed experts on the host, where the verify rows' host sums cost more than a plain token (the same ledger's Qwen3.8-Flash-Next entry), on the CPU the round's second verify row costs a second decode step and the round is slower than plain decode (`modules/dasLLAMA/PERF_LEDGER.md`, the CPU self-speculation entry), and at several streams the plain batched step is faster (`modules/dasLLAMA/PERF_LEDGER.md`, the batched arcs). An armed round keeps every stream's cache on the host, so a drafting Vulkan slot serves host-cached sessions in place of device-home ones. `true` / `false` set it outright. It needs a model with an in-file NextN head (the `-MTP-` GGUFs), or an assistant drafter GGUF beside the model file (gemma-4: `mtp-<stem>-Q8_0.gguf`), which the load attaches; on any other model the server logs one line and serves plain. Greedy requests are output-invariant; a sampled request (`temperature` > 0, penalties included) draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. `/v1/stats` reports `mtp_drafted`/`mtp_accepted` |
+| `--mtp` | - | *auto* | MTP/NextN self-speculative decode. Unset, a slot turns it on when it runs one stream (`streams = 1`) on a GPU - Metal, or the whole model resident on a Vulkan device with its routed experts on the card - and leaves it off otherwise: at one stream on Metal the draft-and-verify round cuts decode time on the dense Qwen3.5 MTP models (0.8B 1.20x, 4B 1.21x, 9B 1.10x - `modules/dasLLAMA/followup_metal.md` row 26), on a Vulkan device more (`modules/dasLLAMA/PERF_LEDGER.md`, the resident driver's NextN entries) unless the driver sums a MoE's routed experts on the host, where the verify rows' host sums cost more than a plain token (the same ledger's Qwen3.8-Flash-Next entry), on the CPU the round's second verify row costs a second decode step and the round is slower than plain decode (`modules/dasLLAMA/PERF_LEDGER.md`, the CPU self-speculation entry), and at several streams the plain batched step is faster (`modules/dasLLAMA/PERF_LEDGER.md`, the batched arcs). An armed round keeps every stream's cache on the host, so a drafting Vulkan slot serves host-cached sessions in place of device-home ones. `true` / `false` set it outright. It needs a model with an in-file NextN head (the `-MTP-` GGUFs), or an assistant drafter GGUF beside the model file (gemma-4: `mtp-<stem>-Q8_0.gguf`), which the load attaches; on any other model the server logs one line and serves plain. Greedy requests are output-invariant; a sampled request (`temperature` > 0, penalties included) draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. `/v1/stats` reports `mtp_drafted`/`mtp_accepted`; a constrained reply (`response_format`, a forced `tool_choice`) decodes plain |
 | `--rope-scaling` | - | *file* | RoPE scaling override for the load: `yarn` \| `linear` \| `none`; unset keeps the model file's own `rope.scaling.*` keys, `none` drops them (a file's per-pair factor tensors, Llama-3.1's `rope_freqs`, stay, as llama.cpp keeps them). `yarn` folds the NTK-by-parts frequency ramp and the `1 + 0.1 ln(s)` magnitude into the rope tables the way llama.cpp's `--rope-scaling yarn` does. The Qwen families publish the recipe (Qwen2.5-Instruct 7B and up, Qwen3, Qwen3-Next / 3.5 / 3.8: factor 4 over the trained context) and ship no scaling keys because static YaRN costs a little on short texts - arm it when a conversation needs the length; no other vendor validates it, and a non-Qwen file logs a warning. The override is baked into the prepared image under its own lane (`model.gguf.metal-yarn4.dlim`), so the first load with it mints once. Per-model in a `[[models]]` roster: `rope_scaling = "yarn"` |
 | `--rope-scale` | - | *file* | The scaling factor `s` (the context multiplier) for the override; unset reads the file's `rope.scaling.factor`, and `yarn` needs one (config key `rope_scale`) |
 | `--yarn-orig-ctx` | - | *file* | YaRN: the original training context the factor extends; unset reads the file's `original_context_length`, else its `context_length` (config key `yarn_orig_ctx`; llama.cpp's `--yarn-orig-ctx`) |
@@ -468,7 +468,7 @@ DLLs; the config and the bundle's tune state live in `~/.dasllama` and survive t
 | `POST` | `/v1/models/activate` | `{"model": name}` loopback-only admin warm-switch: make `name` the DEFAULT + stepped slot (model-less page requests follow) and move the GPU tier to it now (instead of waiting for the owner to drain). `409` while any work is live, `404` on an unknown name; `200` reports `switch_ms` + `backend_effective` |
 | `POST` | `/v1/models/load` | `{"path", "id"?, "backend"?: "auto"\|"cpu", "quant"?, "ctx"?, "image_mmproj"?, "audio_mmproj"?, "activate"?: true}` loopback-only live load: a downloaded GGUF joins as a NEW serving slot with no restart and no JIT recompile (the load blocks the tick for its duration; a prepared `.dlim` image loads in well under a second). `"auto"` follows the boot GPU policy - same want + `--ctx` clamp every boot load got, the current owner's VRAM state drops first (boot-order semantics) and re-arms if the load fails or stays off the device; `"ctx"` in the body replaces the boot `--ctx`, and is asked whole the same way. An `image_mmproj` arms vision (and audio, when the file carries an audio tower too), an `audio_mmproj` arms audio alone, each with a media-worker bounce - a bad mmproj degrades to text-only with the reason in `tower_note`, and a load panic (corrupt GGUF, refused KV geometry) answers `400` with the slot unwound. `409` on a live stream set, a taken id, or a GGUF another slot already serves (one slot per file) |
 | `POST` | `/v1/models/unload` | `{"model": name}` loopback-only: free the slot's weights, KV pool, and (for the GPU owner) VRAM. The DEFAULT slot refuses (`400`) - activate another model first - which also keeps the last model serving. `409` while any work is live |
-| `POST` | `/v1/chat/completions` | Chat; `stream: true` -> SSE, else buffered; OpenAI function calling (`tools`); `image_url` content parts under `--image-mmproj`; `input_audio` content parts under `--audio-mmproj`, or when the image mmproj carries the audio tower (any user message may carry images and clips, up to 16 parts a request - each splices into the serving slot's prefill where the part sits among its message's text parts, so continuous batching covers audio too; a part is encoded and prefilled once: a continued chat, or the same request again, attaches its span off the prefix cache and never reaches the tower). A known part goes to the scheduler with no rows only where the prefix cache holds its span when the request is submitted; a span the cache drops before the stream's admission makes the server encode every part of the request and submit it again, once, and where that retry cannot be made the reply finishes with `finish_reason` `"media_lost"`. A stream sent with `stream_options: {"include_usage": true}` ends, before `[DONE]`, on one chunk with an empty `choices` list: `usage` (`prompt_tokens`, `completion_tokens`, `total_tokens`, and `prompt_tokens_details.cached_tokens` - the prompt tokens the prefix cache attached) and `timings` (`ttft_ms`, the scheduler's admit-to-first-token wall, and `gen_ms`, first token to finish); a stream that does not ask carries no such chunk |
+| `POST` | `/v1/chat/completions` | Chat; `stream: true` -> SSE, else buffered; OpenAI function calling (`tools`); `response_format` / a forced `tool_choice` sample the reply through a grammar (Structured output below: a malformed field, an undeclared forced tool, a schema past the engine's caps or one `strict` cannot serve is a `400`; `finish_reason: "constraint"` ends a reply the grammar cannot continue); `image_url` content parts under `--image-mmproj`; `input_audio` content parts under `--audio-mmproj`, or when the image mmproj carries the audio tower (any user message may carry images and clips, up to 16 parts a request - each splices into the serving slot's prefill where the part sits among its message's text parts, so continuous batching covers audio too; a part is encoded and prefilled once: a continued chat, or the same request again, attaches its span off the prefix cache and never reaches the tower). A known part goes to the scheduler with no rows only where the prefix cache holds its span when the request is submitted; a span the cache drops before the stream's admission makes the server encode every part of the request and submit it again, once, and where that retry cannot be made the reply finishes with `finish_reason` `"media_lost"`. A stream sent with `stream_options: {"include_usage": true}` ends, before `[DONE]`, on one chunk with an empty `choices` list: `usage` (`prompt_tokens`, `completion_tokens`, `total_tokens`, and `prompt_tokens_details.cached_tokens` - the prompt tokens the prefix cache attached) and `timings` (`ttft_ms`, the scheduler's admit-to-first-token wall, and `gen_ms`, first token to finish); a stream that does not ask carries no such chunk |
 | `POST` | `/v1/completions` | Raw completion; `stream: true` -> SSE, else buffered; the same `stream_options.include_usage` closing chunk as the chat route |
 | `POST` | `/v1/embeddings` | L2-normalized sentence embeddings, pooled the way the model's `pooling_type` asks (last token for Qwen3-Embedding, mean for a chat model); `pooling` overrides, `dimensions` cuts and renormalizes |
 | `POST` | `/v1/audio/transcriptions` | Speech->text (multipart upload; needs `--asr`). One ASR model takes every request, whatever `model` says; with several, `model` names one by its id (none, or the `<default slot>-asr` id `/v1/models` lists: the first; any other name: `404`); `language` defaults to English, and to detection on a model that only detects. `response_format=verbose_json` adds timed segments |
@@ -624,7 +624,9 @@ mode too. E.g. Qwen3.6's instruct-mode card settings: `"temperature": 0.7, "top_
 
 ### Thinking control and `reasoning_content`
 
-`enable_thinking` is tri-state: ABSENT leaves the model template's own default in force
+A constrained request - a `response_format` that compiles to a grammar, or a forced `tool_choice` -
+runs with thinking off whatever `enable_thinking` says: the grammar starts at the reply's first token.
+Otherwise `enable_thinking` is tri-state: ABSENT leaves the model template's own default in force
 (thinking-capable Qwen3/3.5/3.6, GLM, gemma-4, and gpt-oss templates default on; a bare Qwen
 Instruct generation branch such as Qwen3 Instruct-2507 defaults off), and a present bool -
 top-level or the llama.cpp spelling
@@ -652,7 +654,8 @@ request still returns 400. `finish_reason: "length"` means generation consumed i
 ### Tool / function calling
 
 `/v1/chat/completions` speaks the OpenAI function-calling protocol: pass `tools` (and optionally
-`tool_choice`; `"none"` disables, the forced-function object form is not honored), get back
+`tool_choice`; `"none"` disables, `"required"` and the forced-function object form sample the call
+through a grammar - see Structured output below), get back
 `finish_reason: "tool_calls"` with `message.tool_calls`, send the results as `role: "tool"`
 messages, repeat. Assistant `tool_calls` turns and `role: "tool"` results replay exactly through
 the chat template on each stateless resend, so agent loops (opencode, pi, ...) work end-to-end.
@@ -670,7 +673,26 @@ Streaming with tools buffers the native envelope and emits the parsed calls as o
 
 Requests the server does NOT fully understand are visible in the log: unknown endpoints 404
 through a catch-all that logs method + path + body head, and known routes warn per ignored field
-(`response_format`, `stop`, multimodal content parts, ...).
+(`stop`, multimodal content parts, ...).
+
+### Structured output
+
+`response_format` constrains the reply through a byte grammar the sampler consults token by token
+(`modules/dasLR1`: an LALR(1) acceptor over the model's token pieces, `constraints.das` here):
+`{"type":"json_object"}` admits any JSON object; `{"type":"json_schema","json_schema":{"schema":{...},
+"strict":true}}` admits exactly the documents the schema describes - object keys in order, `enum`/`const`,
+integer `minimum`/`maximum`, `minLength`/`maxItems`-style bounds, local `$ref`, `anyOf`/`allOf`, string
+`pattern`, the `date`/`time`/`uuid` formats. A schema the compiler cannot serve is a 400 under `strict`
+and a logged warning with an unconstrained reply without it; a repetition bound (`maxItems`, `maxLength`, a
+pattern count) past 1024 is refused either way, since each copy is a rule of the grammar. `tool_choice: "required"` or
+`{"type":"function","function":{"name":...}}` samples the tool call through the same machinery: the
+declared tools' schemas (one, or any of them) inside the family's call markers, so the name is one of the
+declared names and the arguments fit the parameters; a family with no tool-call markers answers 400. A
+constrained reply runs with thinking off, drafts nothing under `--mtp` (it decodes plain beside the drafting
+streams), and lands its logits on the CPU; the stop token is admitted only where the grammar's sentence is
+complete, and a reply the grammar cannot continue ends with `finish_reason: "constraint"`. The first
+constrained request a slot serves decodes its vocabulary once (the token piece table, freed with the slot);
+compiled grammars are cached by their text, 64 at a time.
 
 ### Embeddings
 
@@ -790,5 +812,5 @@ and warm-vs-cold TTFT for the prefix cache.
 
 ## Not yet implemented
 
-The request's `stop` / `response_format` fields and the forced-function `tool_choice` object form
- - all logged when a request carries them. On the media path: remote `image_url` fetches.
+The request's `stop` field, logged when a request carries it; a raw grammar field beside
+`response_format`; a regular-expression `response_format`. On the media path: remote `image_url` fetches.

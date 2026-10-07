@@ -357,6 +357,64 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                  "\{\"messages\":[\{\"role\":\"user\",\"content\":\"hi\"}],\"tools\":[\{\"type\":\"function\",\"function\":\{\"name\":\"f\"}}]}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
             }
+            // response_format json_schema + strict: the reply is sampled through the schema's grammar, so it
+            // parses and carries the required key whatever the model would have said
+            POST("{base_url}/v1/chat/completions",
+                 "\{\"messages\":[\{\"role\":\"user\",\"content\":\"How many legs does a dog have? Answer in JSON.\"}],\"max_tokens\":32," +
+                 "\"response_format\":\{\"type\":\"json_schema\",\"json_schema\":\{\"name\":\"legs\",\"strict\":true,\"schema\":" +
+                 "\{\"type\":\"object\",\"properties\":\{\"answer\":\{\"type\":\"integer\",\"minimum\":0,\"maximum\":99}},\"required\":[\"answer\"],\"additionalProperties\":false}}}}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK))
+                var err : string
+                var js = read_json(string(resp.body), err)
+                t |> success(js != null, "json_schema chat JSON parses")
+                if (js != null) {
+                    let content = js?["choices"]?[0]?["message"]?["content"] ?? ""
+                    t |> equal(js?["choices"]?[0]?["finish_reason"] ?? "", "stop", "the grammar completes the object within the budget: {content}")
+                    var cerr : string
+                    var cj = read_json(content, cerr)
+                    t |> success(cj != null && cj.value is _object, "the reply is a JSON object: {content}")
+                    if (cj != null) {
+                        let a = cj?["answer"]
+                        t |> success(a != null && (a.value is _longint || a.value is _number), "... with the required integer key: {content}")
+                        unsafe {
+                            delete cj
+                        }
+                    }
+                    unsafe {
+                        delete js
+                    }
+                }
+            }
+            // response_format json_object: the reply is one JSON object, closed within the budget
+            POST("{base_url}/v1/chat/completions",
+                 "\{\"messages\":[\{\"role\":\"user\",\"content\":\"Reply with the JSON object \{\\\"ok\\\": true\} and nothing else.\"}],\"max_tokens\":64,\"response_format\":\{\"type\":\"json_object\"}}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK))
+                var err : string
+                var js = read_json(string(resp.body), err)
+                t |> success(js != null, "json_object chat JSON parses")
+                if (js != null) {
+                    let content = js?["choices"]?[0]?["message"]?["content"] ?? ""
+                    t |> equal(js?["choices"]?[0]?["finish_reason"] ?? "", "stop", "the object closes within the budget: {content}")
+                    var cerr : string
+                    var cj = read_json(content, cerr)
+                    t |> success(cj != null && cj.value is _object, "the reply is a JSON object: {content}")
+                    unsafe {
+                        delete cj
+                        delete js
+                    }
+                }
+            }
+            // the constraint fields' refusals: an unknown response_format type, and a forced tool call with no tools
+            POST("{base_url}/v1/chat/completions",
+                 "\{\"messages\":[\{\"role\":\"user\",\"content\":\"hi\"}],\"response_format\":\{\"type\":\"xml\"}}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
+                t |> success(find(string(resp.body), "response_format.type") >= 0, "the refusal names the field")
+            }
+            POST("{base_url}/v1/chat/completions",
+                 "\{\"messages\":[\{\"role\":\"user\",\"content\":\"hi\"}],\"tool_choice\":\"required\"}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST))
+                t |> success(find(string(resp.body), "declares no tools") >= 0, "the refusal says why")
+            }
             // an image_url part on a slot with NO vision arm: a named 400, never a silent drop
             let one_img = "\{\"role\":\"user\",\"content\":[\{\"type\":\"image_url\",\"image_url\":\{\"url\":\"data:image/png;base64,AAAA\"}},\{\"type\":\"text\",\"text\":\"what is this\"}]}"
             POST("{base_url}/v1/chat/completions", "\{\"messages\":[{one_img}]}") $(resp) {
