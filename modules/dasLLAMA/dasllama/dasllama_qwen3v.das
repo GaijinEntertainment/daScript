@@ -247,13 +247,15 @@ typedef Qwen3vGpuServesFn = function<() : bool>
 var private g_q3v_gpu : Qwen3vGpuChainFn
 var private g_q3v_gpu_serves : Qwen3vGpuServesFn
 var private g_q3v_gpu_set = false
+var private g_q3v_f32_lane = true   //! the chain serves the f32 planes (the lane policy prefers them); false = it serves the q8 image
 
 //! The whole-chain seat ([init]): the fn runs the stem off the planes, the blocks, the tap mergers and the tail on the
 //! device, landing proj outputs in `s.ds_stash`/`s.ds_slice` (caller-sized) - false = decline, the CPU loop serves; `serves`
 //! answers the knob so the encode skips the CPU im2col and the lane policy can prefer f32 planes.
-def register_qwen3v_gpu(fn : Qwen3vGpuChainFn; serves : Qwen3vGpuServesFn) {
+def register_qwen3v_gpu(fn : Qwen3vGpuChainFn; serves : Qwen3vGpuServesFn; f32_lane : bool = true) {
     g_q3v_gpu = fn
     g_q3v_gpu_serves = serves
+    g_q3v_f32_lane = f32_lane
     g_q3v_gpu_set = true
 }
 
@@ -271,7 +273,7 @@ def register_qwen3v_gpu_blocks(fn : Qwen3vGpuBlocksFn) {
 //! The deepstack tap index of block `l`, -1 off the taps.
 def qwen3v_tap_of(t : Qwen3vTower; l : int64) : int64 => l == t.ds_l0 ? 0l : (l == t.ds_l1 ? 1l : (l == t.ds_l2 ? 2l : -1l))
 
-def private q3v_serve_q8() : bool => lane_serves_q8(g_q3v_q8_pin, !((g_q3v_gpu_set && invoke(g_q3v_gpu_serves)) || float_batch_override_active()))
+def private q3v_serve_q8() : bool => lane_serves_q8(g_q3v_q8_pin, !((g_q3v_gpu_set && g_q3v_f32_lane && invoke(g_q3v_gpu_serves)) || float_batch_override_active()))
 
 //! Pin the qwen3v tower's block-GEMM format for subsequent loads: q8 (the CPU serving default)
 //! vs the file's own planes (the parity rail). Each lane is its own prepared image.
@@ -920,7 +922,7 @@ def qwen3v_encode(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w
     dispatch_phase_encode(pw * ph)
     var tp = ref_time_ticks()
     q3v_rope_tables(t, s, pw, ph)
-    let chain = !t.q8 && g_q3v_gpu_set && invoke(g_q3v_gpu_serves)   //! the whole chain off the planes: no CPU im2col unless it declines
+    let chain = g_q3v_gpu_set && invoke(g_q3v_gpu_serves)   //! the whole chain off the planes: no CPU im2col unless it declines (the chain declines the lane it does not serve)
     let npos = q3v_stem_cols(t, s, planes, w, h, pw, ph, !chain)
     asr_prof_add("q3v.stem", tp)
     let nds = t.n_deepstack

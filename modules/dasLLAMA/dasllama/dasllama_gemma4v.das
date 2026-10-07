@@ -224,12 +224,14 @@ typedef Gemma4vGpuServesFn = function<() : bool>
 var private g_g4v_gpu : Gemma4vGpuChainFn
 var private g_g4v_gpu_serves : Gemma4vGpuServesFn
 var private g_g4v_gpu_set = false
+var private g_g4v_f32_lane = true   //! the chain serves the f32 planes (the lane policy prefers them); false = it serves the q8 image
 
 //! the whole-chain seat: the fn runs the stem, the blocks and the tail on the device off the planes; `serves` answers the knob so
 //! the encode skips the CPU im2col and the lane policy can prefer f32 planes
-def register_gemma4v_gpu(fn : Gemma4vGpuChainFn; serves : Gemma4vGpuServesFn) {
+def register_gemma4v_gpu(fn : Gemma4vGpuChainFn; serves : Gemma4vGpuServesFn; f32_lane : bool = true) {
     g_g4v_gpu = fn
     g_g4v_gpu_serves = serves
+    g_g4v_f32_lane = f32_lane
     g_g4v_gpu_set = true
 }
 
@@ -248,7 +250,7 @@ def register_gemma4v_gpu_blocks(fn : Gemma4vGpuBlocksFn) {
 // serves float planes only) and flip the default to the exact lane; else q8. A pin overrides.
 var private g_g4v_q8_pin = GemmLane.unset
 
-def private g4v_serve_q8() : bool => lane_serves_q8(g_g4v_q8_pin, !((g_g4v_gpu_set && invoke(g_g4v_gpu_serves)) || float_batch_override_active()))
+def private g4v_serve_q8() : bool => lane_serves_q8(g_g4v_q8_pin, !((g_g4v_gpu_set && g_g4v_f32_lane && invoke(g_g4v_gpu_serves)) || float_batch_override_active()))
 
 //! Pin the gemma4v tower's block-GEMM format for subsequent loads: q8 (the CPU serving default)
 //! vs the file's own planes (the parity rail, and what the Metal tower serves). Each lane is its
