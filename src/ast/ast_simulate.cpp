@@ -18,6 +18,7 @@
 
 #include "daScript/simulate/simulate_visit_op.h"
 #include "daScript/misc/gc_node.h"
+#include "daScript/simulate/aot_builtin.h"
 #include "daScript/simulate/standalone_ctx_utils.h"
 
 das::Context * get_context ( int stackSize=0 );//link time resolved dependencies
@@ -4119,6 +4120,13 @@ namespace das
         }
         if ( !options.getBoolOption("rtti",policies.rtti) ) {
             context.thisProgram = nullptr;
+            // a host may keep the program, so free its tables after the main simulate; the folder and the macro
+            // module simulate it mid-compile, AOT and JIT emitters read the tables later, hosts read usedVariables
+            if ( !folding && !isCompilingMacros && !is_in_aot() && !policies.jit_enabled ) {
+                usedFunctions = {};
+                functionIndices = {};
+                variableIndices = {};
+            }
         }
         if ( options.getBoolOption("log_total_compile_time",policies.log_total_compile_time)
              || options.getBoolOption("log_module_compile_time",policies.log_module_compile_time) ) {
