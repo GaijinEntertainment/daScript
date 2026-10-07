@@ -9752,6 +9752,25 @@ class template TowerPostAddLnT : GkPostAddLn {
 [vk_dispatch(name = "tower_post_add_ln_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TowerPostAddLn : TowerPostAddLnT {}
 
+//! the towers' rms rows alone: xb = rms(x) . w over the weight row at lnoff, a workgroup a row (the ADD-off RMS stamp)
+[vk_dispatch(name = "tower_rms_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerRms : TowerPostAddLnT {
+    override ADD = false
+    override RMS = true
+}
+
+//! the qwen25v hidden: the gate and up rows with their biases through the silu gate, as halves for the f16 tile
+[vk_dispatch(name = "tower_bias_gate16_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerBiasGate16 : GkBiasGate {
+    override OUT16 = true
+    override OUT32 = false
+
+    [spirv_kernel(local_size_x = 256, name = "tower_bias_gate16_cls_spv")]
+    def run {
+        bias_gate_body()
+    }
+}
+
 //! the seam of a block whose GEMMs carry no bias row (parakeet): the branch added bare, the next layernorm behind it
 [vk_dispatch(name = "tower_post_add_ln_nb_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TowerPostAddLnNb : TowerPostAddLnT {
@@ -9921,92 +9940,15 @@ class TowerHeadUnpad16 : GkRestride {
     }
 }
 
-struct TowerWinArgs {
-    nheads : uint
-    scale : float
-}
+[vk_dispatch(name = "tower_win_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-routes")]
+class TowerWinAttn : GkWinAttn {
+    override HS = 80u
 
-//! 256 threads = 64 query rows x 4 lanes: the lanes split the keys for the scores and the head's dims for the output; the
-//! head width is the stamp's HS and the compact row nheads x HS wide
-[ |> template_struct_instance]
-class template TowerWinAttnT {
-    @template_constant HS : uint = 80u   //! the head width served (the qwen25v family's 80)
-    @ssbo @binding = 0 q : array<float>
-    @ssbo @binding = 1 k : array<float>
-    @ssbo @binding = 2 v : array<float>
-    @ssbo @binding = 3 att : array<float>
-    @ssbo @binding = 4 wlo : array<uint>   //! window w's rows: wlo[w] .. wlo[w + 1] (64 at most)
-    @workgroup sc : float[4096]   //! the 64 x 64 score block, then the exponentials
-    @push_constant pa : TowerWinArgs
-
-    [spirv_kernel(local_size_x = 256)]
+    [spirv_kernel(local_size_x = 256, name = "tower_win_attn_cls_spv")]
     def run {
-        let wid = gl_WorkGroupID.x
-        let nheads = max(1u, pa.nheads)
-        let d = nheads * HS
-        let w = wid / nheads
-        let hh = wid - w * nheads
-        let lo = wlo[w]
-        let cnt = wlo[w + 1u] - lo
-        let tid = gl_LocalInvocationID.x
-        let r = tid >> 2u
-        let lane = tid & 3u
-        let live = r < cnt
-        let qb = (lo + r) * d + hh * HS
-        if (live) {
-            var j = lane
-            while (j < cnt) {
-                let kb = (lo + j) * d + hh * HS
-                var s = 0.0
-                var i = 0u
-                while (i < HS) {
-                    s += q[qb + i] * k[kb + i]
-                    i++
-                }
-                sc[r * 64u + j] = s * pa.scale
-                j += 4u
-            }
-        }
-        barrier()
-        if (live) {
-            var m = -3.4028235e38
-            var j = 0u
-            while (j < cnt) {
-                m = max(m, sc[r * 64u + j])
-                j++
-            }
-            j = lane
-            while (j < cnt) {
-                sc[r * 64u + j] = exp(sc[r * 64u + j] - m)
-                j += 4u
-            }
-        }
-        barrier()
-        if (live) {
-            var l = 0.0
-            var j = 0u
-            while (j < cnt) {
-                l += sc[r * 64u + j]
-                j++
-            }
-            let inv = 1.0 / l
-            var dd = lane
-            while (dd < HS) {
-                var acc = 0.0
-                j = 0u
-                while (j < cnt) {
-                    acc += sc[r * 64u + j] * v[(lo + j) * d + hh * HS + dd]
-                    j++
-                }
-                att[qb + dd] = acc * inv
-                dd += 4u
-            }
-        }
+        win_attn_body()
     }
 }
-
-[vk_dispatch(name = "tower_win_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-routes")]
-class TowerWinAttn : TowerWinAttnT {}
 
 //! the vision towers' full-head NEOX rope over q or k rows, one table row a position shared by every head
 [vk_dispatch(name = "tower_rope_tab_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]

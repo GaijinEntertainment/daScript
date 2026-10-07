@@ -3519,67 +3519,14 @@ class MetalTowerKvHc {
     }
 }
 
-//! The block-diagonal window attention of the qwen2.5 ViT: one threadgroup per (window, head),
-//! one thread per q row (windows cap at 64 rows), plain softmax, all f32 straight from device.
-//! Bidirectional, no mask.
-[metal_dispatch(name = "enc_tower_win_attn", pso = "g_pf_pso_twr_win", tg = 64, grid = "nwin, heads", params = "nwin : int64, heads : int64")]
-class MetalTowerWinAttn {
-    @ssbo @binding = 0 @role = "read" q : array<float>      //!< [npos x qd] compact, roped
-    @ssbo @binding = 1 @role = "read" k : array<float>      //!< [npos x qd] compact, roped
-    @ssbo @binding = 2 @role = "read" v : array<float>      //!< [npos x qd] compact
-    @ssbo @binding = 3 @role = "write" xb : array<float>    //!< [npos x qd] compact attention out
-    @ssbo @binding = 4 @role = "read" wlo : array<uint>     //!< [nwin + 1] window row starts + total sentinel
-    @uniform @binding = 5 ka : AttnArgs
+//! the block-diagonal window attention of the qwen2.5 ViT on the template both homes stamp, pinned to the family's head width
+[metal_dispatch(name = "enc_tower_win_attn", pso = "g_pf_pso_twr_win", tgmem = "metal_tower_win_msl_tgmem", tg = 256, grid = "wgs", params = "wgs : int64")]
+class MetalTowerWinAttn : GkWinAttn {
+    override HS = 80u
 
     [metal_kernel(name="metal_tower_win_msl"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-attn-routes")]
     def metal_tower_win {
-        let wi = gl_WorkGroupID.x
-        let h = gl_WorkGroupID.y
-        let t = gl_LocalInvocationID.x
-        let hs = ka.head_size
-        let qd = ka.qd
-        let r0 = wlo[wi]
-        let wr = wlo[wi + 1u] - r0
-        if (t >= wr) {
-            return
-        }
-        let qbase = (r0 + t) * qd + h * hs
-        var sarr : float[64]
-        var m = -1.5e38
-        var j = 0u
-        while (j < wr) {
-            let kbase = (r0 + j) * qd + h * hs
-            var acc = 0.0
-            var i = 0u
-            while (i < hs) {
-                acc += q[qbase + i] * k[kbase + i]
-                i++
-            }
-            acc *= ka.scale
-            sarr[j] = acc
-            m = max(m, acc)
-            j++
-        }
-        var stot = 0.0
-        j = 0u
-        while (j < wr) {
-            let p = exp(sarr[j] - m)
-            sarr[j] = p
-            stot += p
-            j++
-        }
-        let inv = 1.0 / stot
-        var i = 0u
-        while (i < hs) {
-            var acc = 0.0
-            j = 0u
-            while (j < wr) {
-                acc += sarr[j] * v[(r0 + j) * qd + h * hs + i]
-                j++
-            }
-            xb[qbase + i] = acc * inv
-            i++
-        }
+        win_attn_body()
     }
 }
 

@@ -3723,6 +3723,9 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_pk_attn = compile_stamp(metal_pk_attn_msl, ok)
     g_pso_pk_rope_tab = compile_stamp(metal_pk_rope_tab_msl, ok)
     g_pso_pk_add_ln = compile_stamp(metal_pk_add_ln_msl, ok)
+    g_pso_tw_rms = compile_stamp(metal_tw_rms_msl, ok)
+    g_pso_tw_rope_tab = compile_stamp(metal_tw_rope_tab_msl, ok)
+    g_pso_tw_bias_gate = compile_stamp(metal_tw_bias_gate_msl, ok)
     g_pso_pk_gemv_f32 = compile_stamp(metal_pk_gemv_f32_msl, ok)
     g_pso_pk_gemv_f32_ln_silu = compile_stamp(metal_pk_gemv_f32_ln_silu_msl, ok)
     g_pso_pk_gemv_f32_gate = compile_stamp(metal_pk_gemv_f32_gate_msl, ok)
@@ -4692,6 +4695,7 @@ def metal_kernels_release {
     release_handles(g_pso_dn_gate_sig, g_pso_hc_norm, g_pso_hc_lo, g_pso_hc_init, g_pso_hc_mix, g_pso_hc_combine, g_pso_ple_gate, g_pso_ple_conv)
     release_handles(g_pso_st2_attn)
     release_handles(g_pso_pk_rows, g_pso_pk_rows_elu, g_pso_pk_row_scale, g_pso_pk_attn, g_pso_pk_rope_tab)
+    release_handles(g_pso_tw_rms, g_pso_tw_rope_tab, g_pso_tw_bias_gate)
     release_handles(g_pso_pk_add_ln, g_pso_pk_gemv_f32, g_pso_pk_gemv_f32_ln_silu, g_pso_pk_gemv_f32_gate, g_pso_pk_gemv_f32_add_silu)
     release_handles(g_pso_pk_gemv_f32_tail, g_pso_pk_gemv_q8_ln_silu, g_pso_pk_gemv_q8_gate, g_pso_pk_gemv_q8_add_silu, g_pso_pk_gemv_q8_tail)
     release_handles(g_pso_st2_adain_leaky, g_pso_row_gather, g_pso_st2_concat, g_pso_st2_pool_dw, g_pso_st2_lstm, g_pso_st2_sigsum, g_pso_st2_gelu_tanh,
@@ -10751,6 +10755,38 @@ class MetalPkRopeTab : GkRopeTab {
     [metal_kernel(name="metal_pk_rope_tab_msl")]
     def metal_pk_rope_tab {
         rope_tab_body()
+    }
+}
+
+//! the towers' rms rows on the layernorm template's RMS arm (ADD off): xb = rms(x) . w, a workgroup a row, xb may alias x
+[metal_dispatch(name = "enc_tw_rms", pso = "g_pso_tw_rms", tgmem = "metal_tw_rms_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
+class MetalTwRms : GkPostAddLn {
+    override ADD = false
+    override RMS = true
+
+    [metal_kernel(name = "metal_tw_rms_msl")]
+    def metal_tw_rms {
+        post_add_ln_body()
+    }
+}
+
+//! the vision towers' full-head NEOX rope over compact q or k rows from per-position tables, one table row a position shared by every head
+[metal_dispatch(name = "enc_tw_rope_tab", pso = "g_pso_tw_rope_tab", tg = 64, grid = "pairs/64", params = "pairs : int64")]
+class MetalTwRopeTab : GkRopeTab {
+    override NEOX = true
+
+    [metal_kernel(name = "metal_tw_rope_tab_msl")]
+    def metal_tw_rope_tab {
+        rope_tab_body()
+    }
+}
+
+//! a gated hidden with its two bias rows in place over the gate rows (`total` = the elements over four)
+[metal_dispatch(name = "enc_tw_bias_gate", pso = "g_pso_tw_bias_gate", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalTwBiasGate : GkBiasGate {
+    [metal_kernel(name = "metal_tw_bias_gate_msl")]
+    def metal_tw_bias_gate {
+        bias_gate_body()
     }
 }
 

@@ -275,6 +275,9 @@ var g_pso_pk_row_scale : MetalComputePipeline?
 var g_pso_pk_attn : MetalComputePipeline?
 var g_pso_pk_rope_tab : MetalComputePipeline?
 var g_pso_pk_add_ln : MetalComputePipeline?
+var g_pso_tw_rms : MetalComputePipeline?        //!< the towers' rms rows on the layernorm template's RMS arm
+var g_pso_tw_rope_tab : MetalComputePipeline?   //!< the vision towers' NEOX table rope
+var g_pso_tw_bias_gate : MetalComputePipeline?  //!< a gated hidden with its bias rows (qwen25v)
 var g_pso_pk_gemv_f32 : MetalComputePipeline?
 var g_pso_pk_gemv_f32_ln_silu : MetalComputePipeline?
 var g_pso_pk_gemv_f32_gate : MetalComputePipeline?
@@ -534,25 +537,21 @@ def batch_decline(why : MetalDecodeDecline; missing : MetalNeed) {
 }
 
 //! (gpu decode steps served, declines to the CPU path) since load — diagnostics / tests.
-def public metal_decode_stats() : tuple<decodes : int64; declines : int64> {
-    return (decodes = g_decodes, declines = g_decode_declines.total)
-}
+def public metal_decode_stats() : tuple<decodes : int64; declines : int64> =>
+    (decodes = g_decodes, declines = g_decode_declines.total)
 
 //! Single-stream declines-by-reason since load — reason name -> count (the first failing gate
 //! clause per declined step). The support-matrix test asserts WHY a config declined.
-def public metal_decode_declines() : table<string; int64> {
-    return clone_to_move(g_decode_declines.by_reason)
-}
+def public metal_decode_declines() : table<string; int64> =>
+    clone_to_move(g_decode_declines.by_reason)
 
 //! (batched eval_batch steps served, total rows across them, batch declines) since load.
-def public metal_batch_decode_stats() : tuple<steps : int64; rows : int64; declines : int64> {
-    return (steps = g_batch_steps, rows = g_batch_rows, declines = g_batch_declines.total)
-}
+def public metal_batch_decode_stats() : tuple<steps : int64; rows : int64; declines : int64> =>
+    (steps = g_batch_steps, rows = g_batch_rows, declines = g_batch_declines.total)
 
 //! Batched-step declines-by-reason since load — reason name -> count.
-def public metal_batch_decode_declines() : table<string; int64> {
-    return clone_to_move(g_batch_declines.by_reason)
-}
+def public metal_batch_decode_declines() : table<string; int64> =>
+    clone_to_move(g_batch_declines.by_reason)
 
 // speculative-chain state: the pre-encoded next step may open with GPU argmax + embed gather off
 // the current step's logits (no CPU poke). A greedy caller never misses; forced/non-greedy
@@ -571,14 +570,11 @@ def public set_metal_decode_speculate(v : int) {
 }
 
 //! The chaining rail's current mode (-1 adaptive, 0 off, 1 forced) - a test captures it to restore.
-def public metal_decode_spec_mode() : int {
-    return g_spec_mode
-}
+def public metal_decode_spec_mode() : int => g_spec_mode
 
 //! (speculative steps verified correct, mispredicted-and-rerun) since load.
-def public metal_decode_spec_stats() : tuple<hits : int64; misses : int64> {
-    return (hits = g_spec_hits, misses = g_spec_misses)
-}
+def public metal_decode_spec_stats() : tuple<hits : int64; misses : int64> =>
+    (hits = g_spec_hits, misses = g_spec_misses)
 
 def spec_armed() : bool {
     if (g_spec_mode == 0) {
@@ -717,9 +713,8 @@ def public metal_decode_stage_stats() : tuple<steps : int64; setup_us : int64; e
 }
 
 //! (live KV mirrors, resident mirror bytes) — the churn / LRU-cap gates read this.
-def public metal_decode_mirror_stats() : tuple<mirrors : int64; bytes : uint64> {
-    return (mirrors = long_length(g_mirrors), bytes = g_mirror_bytes)
-}
+def public metal_decode_mirror_stats() : tuple<mirrors : int64; bytes : uint64> =>
+    (mirrors = long_length(g_mirrors), bytes = g_mirror_bytes)
 
 //! Arm the per-step single-stream decode trace for the next `cap` retired steps (0 disarms) — the
 //! bimodality diagnostic. Recording stops when full; batch/prefill steps are never recorded; a spec
@@ -1057,8 +1052,7 @@ def nc_logits_release {
 //! grp-repacked loads). Serves BOTH resident drivers (prefill passes its own device handle).
 def kq_quants_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tuple<buf : MetalBuffer?; qoff : uint64> {
     assert(t.metal_blob)
-    var kq : array<uint8> const?
-    var ks : array<uint8> const?
+    var kq, ks : array<uint8> const?
     kq_planes_of(t, fmt, kq, ks)
     unsafe {
         return (buf = plane_buffer(dev, addr<void?>((*kq)[0]), uint64(long_length(*kq)), t.image_map != null),
@@ -1073,8 +1067,7 @@ def kq_quants_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
 def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tuple<buf : MetalBuffer?; soff : uint64; doff : uint64> {
     assert(t.metal_blob)
     let sb0 = off / 256l
-    var kq : array<uint8> const?
-    var ks : array<uint8> const?
+    var kq, ks : array<uint8> const?
     kq_planes_of(t, fmt, kq, ks)
     let plane_sb = long_length(*ks) / (16l + kq_scale_d_tail(fmt))
     return (buf = plane_buffer(dev, unsafe(addr<void?>((*ks)[0])), uint64(long_length(*ks)), t.image_map != null),
@@ -1251,9 +1244,8 @@ def mirror_defrag(total : uint64) : bool {
 // Ensure s.uid's mirror exists, is big enough, and holds logical rows [0, pos) — the watermark
 // contract (module header). Returns arena byte offsets; caller writes row `pos` GPU-side and
 // advances the watermark only after the step + writeback complete. ok=false ⇒ decline to CPU.
-def mirror_prepare(t : Model; var s : Session; pos : int64) : tuple<ok : bool; koff : uint64; voff : uint64; cap : int64> {
-    return mirror_prepare_rows(t, s, pos, pos + 1l)
-}
+def mirror_prepare(t : Model; var s : Session; pos : int64) : tuple<ok : bool; koff : uint64; voff : uint64; cap : int64> =>
+    mirror_prepare_rows(t, s, pos, pos + 1l)
 
 //! A released paged session's mirror stays for the next session whose leading pages are the same groups:
 //! page i's allocation stamp, by the released session's uid.
@@ -2070,9 +2062,7 @@ def public metal_kernel_profile(on : bool) {
 
 //! GPU ms since `metal_kernel_profile(true)`, by MSL entry name and dispatch grid - one kernel's
 //! sites of different shapes read apart.
-def public metal_kernel_profile_ms() : table<string; double> {
-    return <- clone_to_move(g_kprof_ms)
-}
+def public metal_kernel_profile_ms() : table<string; double> => <- clone_to_move(g_kprof_ms)
 
 //! one captured node in a command buffer of its own on the driver's queue, committed and waited
 [cold_path]   // the profile replay only - a serving flush never reaches it
@@ -2131,9 +2121,8 @@ def hz_coverage_check(ndisp, ngated : int64; who : string = "decode") {
 
 //! (barriers issued, gated dispatches, conservative undeclared fallbacks) since load — read
 //! deltas around a window; the chase prints barriers/step next to disp/step.
-def public metal_hazard_stats() : tuple<barriers : int64; gated : int64; undeclared : int64> {
-    return (barriers = g_hz_barriers, gated = g_hz_gated, undeclared = g_hz_undeclared)
-}
+def public metal_hazard_stats() : tuple<barriers : int64; gated : int64; undeclared : int64> =>
+    (barriers = g_hz_barriers, gated = g_hz_gated, undeclared = g_hz_undeclared)
 
 //! Hazard-mode rails: `paranoid` barriers every dispatch on the concurrent encoder (isolates
 //! encoder-flip bugs from barrier-elision bugs); `strict` panics on an undeclared dispatch
@@ -2584,9 +2573,8 @@ def decline(why : MetalPrefillDecline; missing : MetalNeed) {
 //! Declines-by-reason since load — reason name -> count (the first failing gate clause per
 //! declined prefill). The support-matrix test asserts WHY a config declined; the stage report
 //! prints it alongside the decode tables.
-def public metal_prefill_declines() : table<string; int64> {
-    return clone_to_move(g_prefill_declines.by_reason)
-}
+def public metal_prefill_declines() : table<string; int64> =>
+    clone_to_move(g_prefill_declines.by_reason)
 
 //! The IQ4_XS codebook (kvalues_iq4nl) as four packed words, selected + byte-extracted - no
 //! table memory, the k6 sign trick widens the byte. Shared by the kernels file's GEMV/mv set

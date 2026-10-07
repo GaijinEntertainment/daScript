@@ -1897,6 +1897,141 @@ class template GkRowGather {
     }
 }
 
+struct GkBiasGateArgs {
+    d : uint        //! the row width
+    nelem : uint
+    goff : uint     //! the gate bias row's base in wn
+    uoff : uint     //! the up bias row's base in wn
+    act : uint      //! the gate's activation, a BIAS_ACT_* code
+}
+
+//! a gated hidden from two GEMM outputs with their bias rows: g = act(g + bg) . (u + bu), in place over g (OUT32) or as saturated
+//! halves (OUT16, the f16 tile's feed); four elements an invocation, each guarded against the count
+[ |> template_struct_instance]
+class template GkBiasGate {
+    @template_constant OUT16 : bool = false
+    @template_constant OUT32 : bool = true
+    @ssbo @binding = 0 @role = "readwrite" g : array<float>
+    @ssbo @binding = 1 @role = "read" u : array<float>
+    @ssbo @binding = 2 @role = "weight" wn : array<float>
+    @ssbo @binding = 3 @role = "write" @template_gate = OUT16 outh : array<float16>
+    @kargs pa : GkBiasGateArgs
+
+    def gate_at(e : uint) {
+        let c = e % max(1u, pa.d)
+        let v = act_f32(g[e] + wn[pa.goff + c], pa.act) * (u[e] + wn[pa.uoff + c])
+        static_if (OUT16) {
+            outh[e] = half_sat(v)
+        } else {
+            static_if (OUT32) {
+                g[e] = v
+            }
+        }
+    }
+
+    def bias_gate_body {
+        let e = gl_GlobalInvocationID.x * 4u
+        if (e < pa.nelem) {
+            gate_at(e)
+            if (e + 1u < pa.nelem) {
+                gate_at(e + 1u)
+            }
+            if (e + 2u < pa.nelem) {
+                gate_at(e + 2u)
+            }
+            if (e + 3u < pa.nelem) {
+                gate_at(e + 3u)
+            }
+        }
+    }
+}
+
+struct GkWinAttnArgs {
+    nheads : uint
+    hs : uint       //! the head width (read on a stamp whose HS is 0)
+    scale : float
+}
+
+//! the block-diagonal window attention of the qwen2.5 ViT over compact [npos x nheads . hs] rows, plain f32 softmax, no mask: one
+//! workgroup a (window, head), 256 threads = 64 query rows x 4 lanes - the lanes split the keys for the scores and the head's
+//! dims for the output; window w's rows are wlo[w] .. wlo[w + 1], 64 at most, the score block staged in workgroup memory
+[ |> template_struct_instance]
+class template GkWinAttn {
+    @template_constant HS : uint = 0u   //! the head width the stamp is pinned to; 0 reads it from the arguments
+    @ssbo @binding = 0 @role = "read" q : array<float>
+    @ssbo @binding = 1 @role = "read" k : array<float>
+    @ssbo @binding = 2 @role = "read" v : array<float>
+    @ssbo @binding = 3 @role = "write" att : array<float>
+    @ssbo @binding = 4 @role = "read" wlo : array<uint>
+    @workgroup sc : float[4096]
+    @kargs pa : GkWinAttnArgs
+
+    def win_attn_body {
+        let wid = gl_WorkGroupID.x
+        let hs = gk_fixed_or(HS, pa.hs)
+        let nheads = max(1u, pa.nheads)
+        let d = nheads * hs
+        let w = wid / nheads
+        let hh = wid - w * nheads
+        let lo = wlo[w]
+        let cnt = wlo[w + 1u] - lo
+        let tid = gl_LocalInvocationID.x
+        let r = tid >> 2u
+        let lane = tid & 3u
+        let live = r < cnt
+        let qb = (lo + r) * d + hh * hs
+        if (live) {
+            var j = lane
+            while (j < cnt) {
+                let kb = (lo + j) * d + hh * hs
+                var s = 0.0
+                var i = 0u
+                while (i < hs) {
+                    s += q[qb + i] * k[kb + i]
+                    i++
+                }
+                sc[r * 64u + j] = s * pa.scale
+                j += 4u
+            }
+        }
+        barrier()
+        if (live) {
+            var m = -3.4028235e38
+            var j = 0u
+            while (j < cnt) {
+                m = max(m, sc[r * 64u + j])
+                j++
+            }
+            j = lane
+            while (j < cnt) {
+                sc[r * 64u + j] = exp(sc[r * 64u + j] - m)
+                j += 4u
+            }
+        }
+        barrier()
+        if (live) {
+            var l = 0.0
+            var j = 0u
+            while (j < cnt) {
+                l += sc[r * 64u + j]
+                j++
+            }
+            let inv = 1.0 / l
+            var dd = lane
+            while (dd < hs) {
+                var acc = 0.0
+                j = 0u
+                while (j < cnt) {
+                    acc += sc[r * 64u + j] * v[(lo + j) * d + hh * hs + dd]
+                    j++
+                }
+                att[qb + dd] = acc * inv
+                dd += 4u
+            }
+        }
+    }
+}
+
 struct GkPosAdd2DArgs {
     dim : uint
     ncols : uint         //! the patch grid's width in rows
@@ -2030,6 +2165,9 @@ struct GkPostAddLnArgs {
     xboff : uint    //! the normed rows' element base in xb / xbh (a Metal site inside a larger buffer; 0 elsewhere)
 }
 
+//! the rms rows alone (the ADD-off RMS stamps): `rows` of width `d` against the weight row at `woff` in the norms plane
+def gk_rms_args(d, rows : uint; eps : float; woff : uint) : GkPostAddLnArgs => gk_ln_args(d, rows, eps, woff, 0u)
+
 //! the layernorm alone (the ADD-off stamps): `rows` of width `d`, the weight row at `lnoff` and the bias row at `lnboff` in the norms plane
 def gk_ln_args(d, rows : uint; eps : float; lnoff, lnboff : uint; xboff : uint = 0u) : GkPostAddLnArgs
     => GkPostAddLnArgs(d = d, rows = rows, woff = 0u, boff = 0u, eps = eps, ln_on = 1u, lnoff = lnoff, lnboff = lnboff, ascale = 0.0, xboff = xboff)
@@ -2119,7 +2257,12 @@ class template GkPostAddLn : GkQ8BlockStore {
             }
         } else {
             while (i < pa.d) {
-                s1 += x[base + i]
+                let xv = x[base + i]
+                static_if (RMS) {
+                    s1 += xv * xv
+                } else {
+                    s1 += xv
+                }
                 i += 256u
             }
         }

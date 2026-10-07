@@ -365,7 +365,7 @@ let private ROWS_EPS = 1.0e-6
 def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over the eight row classes: the fixture, one command buffer, eight oracles and their controls
     t0 |> run("the tower row classes (rms, clamp, clamp+cvt, clamp+rq, rope2d, post-add, post-add plain, geglu) == the CPU tower helpers") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init() || !ensure_hc_norm_cls() || !ensure_tower_clamp_cls() || !ensure_tower_clamp_cvt_cls()
+            if (!vk_moe_init() || !ensure_tower_rms_cls() || !ensure_tower_clamp_cls() || !ensure_tower_clamp_cvt_cls()
                     || !ensure_tower_clamp_rq_cls() || !ensure_tower_rope2d_cls() || !ensure_tower_post_add_cls()
                     || !ensure_tower_post_add_plain_cls() || !ensure_tower_geglu_cls()) {
                 t |> skip("no Vulkan device")
@@ -411,7 +411,7 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
                 let xb_plain0_p = cp |> out_(nd)   // ... and its pre-norm output, which must stay untouched
                 let x_half_p = cp |> io_(x)      // the post-norm stamp at ascale = 0.5, ln_on = 0
                 let xb_half_p = cp |> out_(nd)
-                var s_rms = cp |> cls_set(fixed_array(xp, xbp, wp), @@set_hc_norm_cls)
+                var s_rms = cp |> cls_set(fixed_array(xp, xbp, wp), @@set_tower_rms_cls)
                 var s_clamp = cp |> cls_set(fixed_array(yp), @@set_tower_clamp_cls)
                 var s_cvt = cp |> cls_set(fixed_array(xp, xhp), @@set_tower_clamp_cvt_cls)
                 var s_rq = cp |> cls_set(fixed_array(xp, xqp, xsp), @@set_tower_clamp_rq_cls)
@@ -422,7 +422,7 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
                 var s_post_plain0 = cp |> cls_set(fixed_array(x_plain0_p, yp, xb_plain0_p, wp), @@set_tower_post_add_plain_cls)
                 var s_post_half = cp |> cls_set(fixed_array(x_half_p, yp, xb_half_p, wp), @@set_tower_post_add_cls)
                 var s_geglu = cp |> cls_set(fixed_array(gp, up), @@set_tower_geglu_cls)
-                var pa_rms = tower_rms_args(uint(d), 0u, ROWS_EPS)
+                var pa_rms = gk_rms_args(uint(d), uint(rows), ROWS_EPS, 0u)
                 var pa_post = GkPostAddLnArgs(d = uint(d), rows = uint(rows), woff = uint(d), boff = 0u, eps = ROWS_EPS, ln_on = 1u, lnoff = 0u, lnboff = 0u, ascale = 1.0, xboff = 0u)
                 var pa_post0 = GkPostAddLnArgs(d = uint(d), rows = uint(rows), woff = uint(d), boff = 0u, eps = ROWS_EPS, ln_on = 0u, lnoff = 0u, lnboff = 0u, ascale = 1.0, xboff = 0u)
                 var pa_post_plain = GkPostAddLnArgs(d = uint(d), rows = uint(rows), woff = 0u, boff = 0u, eps = ROWS_EPS, ln_on = 1u, lnoff = 0u, lnboff = 0u, ascale = 0.5, xboff = 0u)
@@ -435,7 +435,7 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
                 var pa_geglu = GkGegluArgs(nelem = uint(nff), glo = -2.0, ghi = 2.5, ulo = -1.5, uhi = 1.75, dlo = -1.0, dhi = 1.2)
                 let wg4 = int64((nd / 4 + 255) / 256)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
-                    enc_hc_norm_cls(raw, h, s_rms, pa_rms, int64(rows))
+                    enc_tower_rms_cls(raw, h, s_rms, pa_rms, int64(rows))
                     enc_tower_clamp_cvt_cls(raw, h, s_cvt, pa_cvt, wg4)
                     enc_tower_clamp_rq_cls(raw, h, s_rq, pa_rq, int64((nd / 4 + 255) / 256))
                     enc_tower_rope2d_cls(raw, h, s_rope, pa_rope, int64((rows * ROWS_HEADS * pairs + 255) / 256))
@@ -1492,7 +1492,7 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
                 t |> skip("no Vulkan device")
                 return
             }
-            if (!ensure_tower_win_attn_cls() || !ensure_tower_post_add_rms_cls() || !ensure_actf16_b_cls()) {
+            if (!ensure_tower_win_attn_cls() || !ensure_tower_post_add_rms_cls() || !ensure_tower_bias_gate16_cls()) {
                 t |> skip("the window route's classes declined on this device")
                 return
             }
@@ -1522,8 +1522,6 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
             var g <- row_fill(nd, 13, 5, 0.09, 4.0)
             var u <- row_fill(nd, 23, 9, 0.07, 3.3)
             var wn <- row_fill(4 * d, 7, 1, 0.01, -0.6)   // rows: the o bias at 0, the rms weight at d, the gate bias at 2d, the up bias at 3d
-            var rex : array<uint>
-            rex |> resize(nrows)   // the row map: every row the one expert, so the bias rows are the layer's
             with_cell_planes() $(var cp : CellPlanes) {
                 let qp = cp |> in_(q)
                 let kp = cp |> in_(k)
@@ -1539,19 +1537,18 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
                 let up = cp |> in_(u)
                 let wp = cp |> in_(wn)
                 let gated_h16p = cp |> out_words(int64(nd) * 2l, F16_SENTINEL_BITS)
-                let rexp = cp |> in_plain(rex)
                 var s_win = cp |> cls_set(fixed_array(qp, kp, vp, attp, wlp), @@set_tower_win_attn_cls)
                 var s_post = cp |> cls_set(fixed_array(xp, yp, xbp, wp), @@set_tower_post_add_rms_cls)
                 var s_post0 = cp |> cls_set(fixed_array(x0p, yp, xb0p, wp), @@set_tower_post_add_rms_cls)
-                var s_glu = cp |> cls_set(fixed_array(gp, up, gated_h16p, wp, wp, rexp), @@set_actf16_b_cls)
-                var pa_win = TowerWinArgs(nheads = uint(WIN_HEADS), scale = scale)
+                var s_glu = cp |> cls_set(fixed_array(gp, up, wp, gated_h16p), @@set_tower_bias_gate16_cls)
+                var pa_win = GkWinAttnArgs(nheads = uint(WIN_HEADS), hs = uint(WIN_HS), scale = scale)
                 var pa_post = GkPostAddLnArgs(d = uint(d), rows = uint(nrows), boff = 0u, eps = ROWS_EPS, ln_on = 1u, lnoff = uint(d), lnboff = 0u, ascale = 1.0, xboff = 0u)
                 var pa_post0 = GkPostAddLnArgs(d = uint(d), rows = uint(nrows), boff = 0u, eps = ROWS_EPS, ln_on = 0u, lnoff = uint(d), lnboff = 0u, ascale = 1.0, xboff = 0u)
-                var pa_glu = ActArgs(nelem = uint(nd), act = ACT_SILU, gboff = uint(2 * d), uboff = uint(3 * d), brow = uint(d))
+                var pa_glu = GkBiasGateArgs(d = uint(d), nelem = uint(nd), goff = uint(2 * d), uoff = uint(3 * d), act = BIAS_ACT_SILU)
                 let wg4 = int64((nd / 4 + 255) / 256)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_tower_win_attn_cls(raw, h, s_win, pa_win, int64(nslot * WIN_HEADS))
-                    enc_actf16_b_cls(raw, h, s_glu, pa_glu, wg4)
+                    enc_tower_bias_gate16_cls(raw, h, s_glu, pa_glu, wg4)
                     enc_tower_post_add_rms_cls(raw, h, s_post0, pa_post0, int64(nrows))
                     enc_tower_post_add_rms_cls(raw, h, s_post, pa_post, int64(nrows))
                 }

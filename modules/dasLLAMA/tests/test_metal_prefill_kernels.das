@@ -336,16 +336,14 @@ def private tower_win_gate(t : T?; var dev, queue) {
         let bw = mc |> in_plain(wlo)
         let bo = mc |> out_words(np * qd, -1.0e30)
         let bv = mc |> in_(vv)
-        var ka = AttnArgs(qd = uint(qd), kv_dim = uint(qd), head_size = uint(hs), kv_mul = 1u,
-            npos = uint(np), np32 = uint(np), scale = scale,
-            qoff = 0u, qrows = uint(np), window = 0u, softcap = 0.0, hass = 0u, uend = uint(np))
+        var ka = GkWinAttnArgs(nheads = uint(heads), hs = uint(hs), scale = scale)
         for (leg in range(2)) {
             if (leg == 1) {
                 vv[80 * qd + hs / 2] += 3.0
                 mc |> plane_upload(bv, vv)
             }
             let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-                invoke(kw.enc, enc, pso, mc.buf[bq], mc.buf[bk], mc.buf[bv], mc.buf[bo], mc.buf[bw], ka, int64(nwin), int64(heads))
+                invoke(kw.enc, enc, pso, mc.buf[bq], mc.buf[bk], mc.buf[bv], mc.buf[bo], mc.buf[bw], ka, int64(nwin * heads))
             }
             return if (!ran)
             if (leg == 0) {
@@ -1218,6 +1216,49 @@ def private tw_affine_gate(t : T?; var dev, queue) {
         }
         return if (!ran)
         check_buf(t, tag, mc.buf[bx], want, BAR_APPROX, Shape(row_width = width))
+    }
+}
+
+//! the towers' rms rows on the layernorm template's RMS arm with the add off: xb = rms(x) . w at a width past the 256-thread stride
+//! and at one under it, out of place and in place (the input overwritten), against the CPU rmsnorm, a poisoned input element
+//! reddening the compare; the stamp's weightless form (a row of ones) is the same body
+def private tw_rms_gate(t : T?; var dev, queue; d, rows : int) {
+    let tag = "tw_rms d={d} rows={rows}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_tw_rms)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let eps = 1e-6
+        let total = rows * d
+        var inscope x <- [for (i in range(total)); float((i * 37) % 101 - 50) * 0.043]
+        var inscope w <- [for (i in range(d)); 0.5 + float((i * 5) % 11) * 0.17]
+        var inscope want : array<float>
+        want |> resize(total)
+        for (r in range(rows)) {
+            unsafe {
+                rmsnorm(addr(want[r * d]), addr<float const?>(x[r * d]), addr<float const?>(w[0]), int64(d), eps)
+            }
+        }
+        var ka = gk_rms_args(uint(d), uint(rows), eps, 0u)
+        let bw = mc |> in_(w)
+        let bx = mc |> in_(x)
+        let bxb = mc |> out_(total)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[bxb], mc.buf[bw], ka, int64(rows))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bxb], want, lead_poisoned(BAR_APPROX, want), Shape(row_width = d))
+        let bxi = mc |> io_(x)
+        let ran_in = mc |> cell_record(t, "{tag} in place") $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bxi], mc.buf[bxi], mc.buf[bw], ka, int64(rows))
+            }
+        }
+        return if (!ran_in)
+        check_buf(t, "{tag} in place", mc.buf[bxi], want, BAR_APPROX, Shape(row_width = d))
     }
 }
 
@@ -3253,6 +3294,8 @@ def test_metal_prefill_kernels(t : T?) {
                 tw_tail_rows_gate(t, dev, queue)
                 tw_pool2d_gate(t, dev, queue)
                 tw_affine_gate(t, dev, queue)
+                tw_rms_gate(t, dev, queue, 300, 5)   // the row past the 256-thread stride
+                tw_rms_gate(t, dev, queue, 70, 3)
                 bias_relu_rows_gate(t, dev, queue)
                 st2_conv_gate(t, dev, queue, false, false)
                 st2_conv_gate(t, dev, queue, true, false)
