@@ -276,6 +276,7 @@ var g_pso_pk_attn : MetalComputePipeline?
 var g_pso_pk_rope_tab : MetalComputePipeline?
 var g_pso_pk_add_ln : MetalComputePipeline?
 var g_pso_tw_rms : MetalComputePipeline?        //!< the towers' rms rows on the layernorm template's RMS arm
+var g_pso_tw_patch_im2col : MetalComputePipeline?   //!< the vision stems' patch im2col over the uploaded planes
 var g_pso_tw_add_ln : MetalComputePipeline?     //!< the biased residual seam with its next layernorm
 var g_pso_tw_add_rms : MetalComputePipeline?    //!< ... with its next rms (qwen25v)
 var g_pso_tw_add_post_rms : MetalComputePipeline?   //!< the post-normed seam with its next rms (gemma4v)

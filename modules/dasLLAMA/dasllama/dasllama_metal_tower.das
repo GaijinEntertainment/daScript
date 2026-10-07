@@ -145,11 +145,11 @@ def private metal_tower_init : bool {
     return true
 }
 
-// The gemma4uv chain on the driver: rows arrive as the CPU im2col output (s.x0), pad rows of
+// The gemma4uv chain on the driver: the planes arrive and the patch im2col runs on the device, pad rows of
 // the GPU buffers stay zero so the GEMM pins their outputs at 0; LN/posadd grids cover the
 // LOGICAL rows only. One command buffer, one wait, one readback.
-[hot_path]
-def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; npos, n_cols : int64; var out : array<float>) : bool {
+[hot_path, unused_argument(s)]
+def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; planes : array<float>; w, h, npos, n_cols : int64; var out : array<float>) : bool {
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
     }
@@ -168,13 +168,14 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
     var bx0 = pool_acquire_pinned(g_tw_pool, g_dev, uint64(mp * t.patch_dim * 4l))
     var bx1 = pool_acquire_pinned(g_tw_pool, g_dev, uint64(mp * d * 4l))
     var bout = pool_acquire_pinned(g_tw_pool, g_dev, uint64(mp * t.proj_dim * 4l))
-    upload_rows_padded(bx0, unsafe(addr(s.x0[0])), npos, mp, t.patch_dim)
+    var bplanes = tw_planes_up(planes, w, h)
     var u_pdim = uniform_u32(uint(t.patch_dim))   // also the patch GEMM's k
     var u_d = uniform_u32(uint(d))                // also the patch GEMM's n and the proj GEMM's k
     var u_nproj = uniform_u32(uint(t.proj_dim))
     var pos2d = GkPosAdd2DArgs(dim = uint(d), ncols = uint(n_cols), pos_entries = uint(t.pos_entries), total = uint(npos * d), tboff = uint(t.pos_w))
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+        tw_patch_im2col(enc, bplanes, bx0, w, h, t.patch, t.patch_dim, npos, mp, 1.0, 0.0)
         // ln1 over the im2col rows, in place
         enc_ln(enc, bx0, bx0, bblob, gk_ln_args(uint(t.patch_dim), uint(npos), GEMMA4UV_LN_EPS, uint(t.ln1_w), uint(t.ln1_b)), npos)
         // the patch GEMM: per-plane format (gemma-4's shipped mmproj is MIXED)
@@ -206,6 +207,7 @@ def private metal_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; n
         served = true
     }
     pool_release(g_tw_pool, bx0, uint64(mp * t.patch_dim * 4l))
+    pool_release(g_tw_pool, bplanes, tw_planes_bytes(w, h))
     pool_release(g_tw_pool, bx1, uint64(mp * d * 4l))
     pool_release(g_tw_pool, bout, uint64(mp * t.proj_dim * 4l))
     pool_release(g_upool, u_pdim, 4ul)
@@ -1622,7 +1624,10 @@ struct private G4vEnds {
     n_cols : int64          //!< the patch grid's width
     nout : int64            //!< soft tokens: the pooled grid's rows
     mpo : int64             //!< `nout` on the GEMM's 32-row lattice
-    bx0 : MetalBuffer?      //!< the stem's columns [mp x patch_dim]
+    bx0 : MetalBuffer?      //!< the stem's columns [mp x patch_dim], the im2col's output
+    bplanes : MetalBuffer?  //!< the image planes, the im2col's input
+    w : int64               //!< the canvas
+    h : int64
     bpos : MetalBuffer?     //!< each row's x + y position-table rows, summed
     bpool : MetalBuffer?    //!< the pooled rows [mpo x d]
     bclamp : MetalBuffer?   //!< their clamped copy, the projection's input
@@ -1642,15 +1647,15 @@ struct private G4vEnds {
 
 //! The stem's operands up, and the tail's rows where the lever allows, its kernels are compiled, the grid pools whole and
 //! the projection sits on its GEMM's lattice.
-def private g4v_ends_make(t : Gemma4vTower; s : Gemma4vState; npos, mp : int64) : G4vEnds {
+def private g4v_ends_make(t : Gemma4vTower; s : Gemma4vState; planes : array<float>; w, h, npos, mp : int64) : G4vEnds {
     let d = t.n_embd
     let n_cols = s.grid_w
-    var e = G4vEnds(n_cols = n_cols, bytes_x0 = uint64(mp * t.patch_dim * 4l), bytes_pos = uint64(mp * d * 4l))
+    var e = G4vEnds(n_cols = n_cols, w = w, h = h, bytes_x0 = uint64(mp * t.patch_dim * 4l), bytes_pos = uint64(mp * d * 4l))
     e.bx0 = pool_acquire_pinned(g_tw_pool, g_dev, e.bytes_x0)
+    e.bplanes = tw_planes_up(planes, w, h)
     e.bpos = pool_acquire_pinned(g_tw_pool, g_dev, e.bytes_pos)
     e.u_pd = uniform_u32(uint(t.patch_dim))
     unsafe {
-        upload_rows_padded(e.bx0, addr<float const?>(s.x0[0]), npos, mp, t.patch_dim)
         var pp = reinterpret<float?>(metal_buffer_contents(e.bpos))
         let tbl = plane_at(t.blob, t.pos_w)
         for (pi in range64(npos)) {
@@ -1690,6 +1695,25 @@ def private g4v_ends_make(t : Gemma4vTower; s : Gemma4vState; npos, mp : int64) 
     return e
 }
 
+//! the image planes [h][w][3] up for the stem's patch im2col; released by the chain with `tw_planes_bytes`
+def private tw_planes_up(planes : array<float>; w, h : int64) : MetalBuffer? {
+    var b = pool_acquire_pinned(g_tw_pool, g_dev, tw_planes_bytes(w, h))
+    unsafe {
+        memcpy(metal_buffer_contents(b), addr(planes[0]), w * h * 3l * 4l)
+    }
+    return b
+}
+
+def private tw_planes_bytes(w, h : int64) : uint64 => uint64(w * h * 3l * 4l)
+
+//! the patch im2col on the device: `bx0`'s `mp` rows of `row_dim` from the planes, the pad rows and columns zero, the pixels
+//! mapped x . scale + shift ahead of the conv
+def private tw_patch_im2col(enc : MetalComputeEncoder?; bplanes, bx0 : MetalBuffer?; w, h, patch, row_dim, npos, mp : int64; scale, shift : float) {
+    var pa = GkPatchIm2colArgs(w = uint(w), h = uint(h), p = uint(patch), n_cols = uint(w / patch), row_dim = uint(row_dim),
+        npos = uint(npos), total = uint(mp * row_dim), scale = scale, shift = shift)
+    enc_tw_patch_im2col(enc, bplanes, bx0, pa, mp * row_dim)
+}
+
 //! one GEMM off the tower's weights: the halfword twin where the tensor is stored bf16, the f32 blob otherwise
 
 //! The stem on the device: the patch conv over the columns, then each row's position rows.
@@ -1697,6 +1721,7 @@ def private g4v_ends_make(t : Gemma4vTower; s : Gemma4vState; npos, mp : int64) 
 def private g4v_stem_body(enc : MetalComputeEncoder?; t : Gemma4vTower; e : G4vEnds; bblob, bwblob, bx : MetalBuffer?;
                           u_d, u_totd : MetalBuffer?; mp, npos : int64) {
     let d = t.n_embd
+    tw_patch_im2col(enc, e.bplanes, e.bx0, e.w, e.h, t.patch, t.patch_dim, npos, mp, 2.0, -1.0)   //! inp_raw_scaled: [0, 1] -> [-1, 1]
     tw_mm(enc, false, t.patch_bf16, bwblob, bblob, t.patch_w, e.bx0, null, bx, 0ul, e.u_pd, u_d, mp, d, t.patch_dim, false)
     enc_add(enc, bx, 0ul, e.bpos, 0ul, u_totd, npos * d)
 }
@@ -1722,6 +1747,7 @@ def private g4v_tail_body(enc : MetalComputeEncoder?; t : Gemma4vTower; e : G4vE
 //! the tail's soft tokens into `s.tail` where the command buffer ran, the CPU tail told to stand down; the ends' buffers released
 def private g4v_ends_land(t : Gemma4vTower; var e : G4vEnds; ran : bool; var s : Gemma4vState) {
     pool_release(g_tw_pool, e.bx0, e.bytes_x0)
+    pool_release(g_tw_pool, e.bplanes, tw_planes_bytes(e.w, e.h))
     pool_release(g_tw_pool, e.bpos, e.bytes_pos)
     pool_release(g_upool, e.u_pd, 4ul)
     return if (!e.tail)
@@ -1747,7 +1773,7 @@ def private g4v_ends_land(t : Gemma4vTower; var e : G4vEnds; ran : bool; var s :
 // bf16 mul_mm, f32 norms/clamps) — the CPU g4v_block chain dispatch for dispatch, the attention
 // trio at uend = npos / scale 1. The stem and the tail ride the same command buffer (`g4v_ends_make`); a q8-lane tower declines (quant_mode).
 [hot_path]
-def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
+def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>; w, h, npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
     }
@@ -1789,7 +1815,7 @@ def private metal_gemma4v_blocks(t : Gemma4vTower; var s : Gemma4vState; npos : 
     var batt = pool_acquire_pinned(g_tw_pool, g_dev, bytes_att)
     var bstat = pool_acquire_pinned(g_tw_pool, g_dev, bytes_stat)
     var btabs = pool_acquire_pinned(g_tw_pool, g_dev, bytes_tabs)
-    var ends = g4v_ends_make(t, s, npos, mp)
+    var ends = g4v_ends_make(t, s, planes, w, h, npos, mp)
     zero_rows(bk, npos, nk64, d)
     gemma4v_pack_rope_tabs(s, npos, pairs, unsafe(reinterpret<float?>(metal_buffer_contents(btabs))))
     var u_d = uniform_u32(uint(d))
@@ -1958,7 +1984,7 @@ def private g3v_tail_land(t : Gemma3vTower; var tl : G3vTail; ran : bool; var s 
 // scaled attention, GELU. The 72-wide heads restride to the attention tiles' 128 (zero pads exact,
 // scale stays 1/sqrt(72)); ffn serves at the layout's ff_pad. The tail rides the same command buffer (`g3v_tail_make`), the patch im2col stays CPU; q8 declines.
 [hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-attn-routes")]
-def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
+def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>; w, h, npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
     }
@@ -2011,7 +2037,7 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     var bh = pool_acquire_pinned(g_tw_pool, g_dev, bytes_h)
     var batt = pool_acquire_pinned(g_tw_pool, g_dev, bytes_att)
     var bstat = pool_acquire_pinned(g_tw_pool, g_dev, bytes_stat)
-    upload_rows_padded(bx0, unsafe(addr(s.x0[0])), npos, mp, pd)
+    var bplanes = tw_planes_up(planes, w, h)
     zero_rows(bk, npos, nk64, dp)
     var u_d = uniform_u32(uint(d))
     var u_ff = uniform_u32(uint(ff))
@@ -2028,7 +2054,8 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
     var tl = g3v_tail_make(t, npos)
     var err = ""
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
-        //! the stem: padded patch GEMM + conv bias + the learned positions (all row-aligned)
+        //! the stem: the patch im2col, the padded patch GEMM + conv bias + the learned positions (all row-aligned)
+        tw_patch_im2col(enc, bplanes, bx0, w, h, t.patch, pd, npos, mp, 1.0, 0.0)
         enc_f32_mm(enc, bblob, uint64(t.patch_w * 4l), bx0, bx, 0ul, u_pd, u_d, mp, d)
         tw_bias(enc, bx, bblob, GkBiasActArgs(d = uint(d), nelem = uint(npos * d), boff = uint(t.patch_b), act = BIAS_ACT_NONE))
         enc_add(enc, bx, 0ul, bblob, uint64(t.pos_w * 4l), u_totd, npos * d)
@@ -2108,6 +2135,7 @@ def private metal_gemma3v_blocks(t : Gemma3vTower; var s : Gemma3vState; npos : 
         pool_release(g_tw_pool, bvhc, bytes_hc)
     }
     pool_release(g_tw_pool, bx0, bytes_x0)
+    pool_release(g_tw_pool, bplanes, tw_planes_bytes(w, h))
     pool_release(g_upool, u_pd, 4ul)
     pool_release(g_upool, u_hs, 4ul)
     pool_release(g_upool, u_np, 4ul)
@@ -2143,7 +2171,7 @@ def private tw_mm(enc : MetalComputeEncoder?; f16w, bf16w : bool; bwh, bblob : M
 // fused qkv as three weight-offset GEMMs; tap chains encode inline over the live residual
 // (hazard-ordered), the tail merger follows, ONE readback lands proj outputs for the scatter.
 [hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-attn-routes")]
-def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
+def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w, h, npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
     }
@@ -2213,8 +2241,8 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
     var bx0 = pool_acquire_pinned(g_tw_pool, g_dev, bytes_x0)   //! im2col rows - the GPU stem's input
     let pos_resized = qwen3v_pos_resized(t, s)
     var bposr = pos_resized ? pool_acquire_pinned(g_tw_pool, g_dev, uint64(npos * d * 4l)) : null
+    var bplanes = tw_planes_up(planes, w, h)
     unsafe {
-        upload_rows_padded(bx0, addr(s.x0[0]), npos, mp, t.patch_dim)
         zero_rows(bk, npos, nk64, dp)
         zero_rows(bx, npos, rows_ext, d)
         if (bposr != null) {
@@ -2237,6 +2265,7 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
     let f16w = f16_route && bwh != null && bxh != null
     let bf16w = bf16_route && bwh != null
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+        tw_patch_im2col(enc, bplanes, bx0, w, h, t.patch, t.patch_dim, npos, mp, 1.0, 0.0)
         enc_f32_mm(enc, bblob, uint64(t.patch_w * 4l), bx0, braw, 0ul, u_pd, u_d, mp, d)
         if (bposr != null) {
             var asm_r = GkStemAsmArgs(dim = uint(d), pw = uint(s.grid_w), total = uint(npos * d), boff = uint(t.patch_b), poff = 0u)
@@ -2330,6 +2359,7 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
         pool_release(g_tw_pool, bxh, bytes_xh)
     }
     pool_release(g_tw_pool, bx0, bytes_x0)
+    pool_release(g_tw_pool, bplanes, tw_planes_bytes(w, h))
     if (bposr != null) {
         pool_release(g_tw_pool, bposr, uint64(npos * d * 4l))
     }
@@ -2347,7 +2377,7 @@ def private metal_qwen3v_blocks(t : Qwen3vTower; var s : Qwen3vState; npos : int
 //! The qwen25v window ViT as ONE command buffer: conv + window-sort gather stem, RMS-normed
 //! blocks, swiglu FFN at ff_pad, the merger tail; ONE readback lands sorted proj rows in s.mout.
 [hot_path, arch(at="../ARCHITECTURE_IMAGE.md#image-tower-twin-plane"), arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-attn-routes")]
-def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
+def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; planes : array<float>; w, h, npos : int64) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
     if (!g_tw_env_tower) {
         return tw_decline(MetalTowerDecline.knob)
     }
@@ -2415,7 +2445,7 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : 
     let bytes_xh = uint64(max(mp * ff, mp4 * 4l * d) * 2l)
     var bxh = (f16_route || (bf16_route && pf_bf16_half_ready())) ? pool_acquire_pinned(g_tw_pool, g_dev, bytes_xh) : null
     var bwh = (f16_route || bf16_route) ? plane_buffer(g_dev, unsafe(reinterpret<void?>(plane_at(t.wblob, 0l))), uint64(length(t.wblob) * 2l), mapped) : null
-    upload_rows_padded(bx0, unsafe(addr(s.x0[0])), npos, mp, pd)
+    var bplanes = tw_planes_up(planes, w, h)
     zero_rows(bk, npos, nk64, dp)
     unsafe {
         memcpy(metal_buffer_contents(bcos), addr(s.cos_t[0]), npos * half * 4l)
@@ -2442,6 +2472,7 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : 
     let f16w = f16_route && bwh != null && bxh != null
     let bf16w = bf16_route && bwh != null
     let ran = with_compute_encoder(g_queue, err) $(enc : MetalComputeEncoder?) {   // nolint:PERF026 — the error-text fetch runs only on the failure leg
+        tw_patch_im2col(enc, bplanes, bx0, w, h, t.patch, pd, npos, mp, 1.0, 0.0)
         enc_f32_mm(enc, bblob, uint64(t.patch_w * 4l), bx0, braw, 0ul, u_pd, u_d, mp, d)
         var kg = GkRowGatherArgs(c = uint(d), rows = uint(npos), aoff = 0u, boff = 0u, coff = 0u, out_off = 0u, add_b = 0u, add_c = 0u, scale = 1.0)
         enc_row_gather(enc, braw, bsrc, g_one, g_one, bx, kg, npos * d)
@@ -2521,6 +2552,7 @@ def private metal_qwen25v_blocks(t : Qwen25vTower; var s : Qwen25vState; npos : 
     pool_release(g_tw_pool, bm4b, bytes_m4)
     pool_release(g_tw_pool, btail, bytes_pr)
     pool_release(g_tw_pool, bx0, bytes_x0)
+    pool_release(g_tw_pool, bplanes, tw_planes_bytes(w, h))
     pool_release(g_tw_pool, bsrc, bytes_idx)
     pool_release(g_tw_pool, bwlo, bytes_wlo)
     if (bxh != null) {
@@ -5176,7 +5208,7 @@ def dasllama_metal_tower_register {
         to_log(LOG_INFO, "dasLLAMA metal tower: DASLLAMA_METAL_TOWER_FLASH=0 - the dk72 one-pass attention stays off, the slab trio serves\n")
     }
     register_gemma4uv_gpu(@@metal_gemma4uv_encode)
-    register_gemma4v_gpu(@@metal_gemma4v_blocks, @@metal_tower_serves, true)
+    register_gemma4v_gpu(@@metal_gemma4v_blocks, @@metal_tower_serves)
     register_gemma3v_gpu(@@metal_gemma3v_blocks, @@metal_tower_serves)
     register_qwen3v_gpu(@@metal_qwen3v_blocks, @@metal_tower_serves)
     register_qwen25v_gpu(@@metal_qwen25v_blocks)

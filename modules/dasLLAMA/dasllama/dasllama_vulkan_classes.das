@@ -9700,6 +9700,14 @@ class TowerPkDw : GkDwConvRows {
 
 //! GEGLU-quick with the gemma4v bounds on the template both homes stamp
 //! the vision stems' and tails' row kernels on the templates both homes stamp
+[vk_dispatch(name = "tower_patch_im2col_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class TowerPatchIm2col : GkPatchIm2col {
+    [spirv_kernel(local_size_x = 256, name = "tower_patch_im2col_cls_spv")]
+    def run {
+        patch_im2col_body()
+    }
+}
+
 [vk_dispatch(name = "tower_pos_add_2d_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TowerPosAdd2d : GkPosAdd2D {
     [spirv_kernel(local_size_x = 256, name = "tower_pos_add_2d_cls_spv")]

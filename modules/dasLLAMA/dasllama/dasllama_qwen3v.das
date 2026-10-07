@@ -241,16 +241,17 @@ def private register_qwen3v_image_tags {
 // accelerate float-batch tier wants f32 planes; else q8. A pin overrides.
 var private g_q3v_q8_pin = GemmLane.unset
 
-typedef Qwen3vGpuBlocksFn = function<(t : Qwen3vTower; var s : Qwen3vState; npos : int64) : bool>
+typedef Qwen3vGpuChainFn = function<(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w, h, npos : int64) : bool>   //! the whole chain from the planes
+typedef Qwen3vGpuBlocksFn = function<(t : Qwen3vTower; var s : Qwen3vState; npos : int64) : bool>   //! the blocks alone over `s.x`
 typedef Qwen3vGpuServesFn = function<() : bool>
-var private g_q3v_gpu : Qwen3vGpuBlocksFn
+var private g_q3v_gpu : Qwen3vGpuChainFn
 var private g_q3v_gpu_serves : Qwen3vGpuServesFn
 var private g_q3v_gpu_set = false
 
-//! The Metal tower's qwen3v seat ([init]): the fn runs blocks + tap mergers + the tail on the
-//! GPU, landing proj outputs in `s.ds_stash`/`s.ds_slice` (caller-sized) — false = decline,
-//! the CPU loop serves; `serves` answers the knob so the lane policy can prefer f32 planes.
-def register_qwen3v_gpu(fn : Qwen3vGpuBlocksFn; serves : Qwen3vGpuServesFn) {
+//! The whole-chain seat ([init]): the fn runs the stem off the planes, the blocks, the tap mergers and the tail on the
+//! device, landing proj outputs in `s.ds_stash`/`s.ds_slice` (caller-sized) - false = decline, the CPU loop serves; `serves`
+//! answers the knob so the encode skips the CPU im2col and the lane policy can prefer f32 planes.
+def register_qwen3v_gpu(fn : Qwen3vGpuChainFn; serves : Qwen3vGpuServesFn) {
     g_q3v_gpu = fn
     g_q3v_gpu_serves = serves
     g_q3v_gpu_set = true
@@ -781,10 +782,10 @@ def private q3v_block(t : Qwen3vTower; var s : Qwen3vState; l, npos : int64) {
     asr_prof_add("q3v.ffn", tp)
 }
 
-//! the stem's column half, both routes: im2col + scratch sizing + the pos table resized off-grid
-def private q3v_stem_cols(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w, h, pw, ph : int64) : int64 {
+//! the stem's column half, both routes: the CPU route's im2col + scratch sizing + the pos table resized off-grid
+def private q3v_stem_cols(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w, h, pw, ph : int64; im2col : bool) : int64 {
     let d = t.n_embd
-    let npos = im2col_rgb_patches(planes, w, h, t.patch, s.x0)
+    let npos = im2col ? im2col_rgb_patches(planes, w, h, t.patch, s.x0) : pw * ph
     ensure_length(s.xn, npos * d)
     ensure_length(s.x, npos * d)
     ensure_length(s.xb, npos * d)
@@ -919,7 +920,8 @@ def qwen3v_encode(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w
     dispatch_phase_encode(pw * ph)
     var tp = ref_time_ticks()
     q3v_rope_tables(t, s, pw, ph)
-    let npos = q3v_stem_cols(t, s, planes, w, h, pw, ph)
+    let chain = !t.q8 && g_q3v_gpu_set && invoke(g_q3v_gpu_serves)   //! the whole chain off the planes: no CPU im2col unless it declines
+    let npos = q3v_stem_cols(t, s, planes, w, h, pw, ph, !chain)
     asr_prof_add("q3v.stem", tp)
     let nds = t.n_deepstack
     if (nds > 0l) {
@@ -928,17 +930,20 @@ def qwen3v_encode(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w
         ensure_length(s.ds_slice, (npos / 4l) * t.proj_dim)
     }
     var gpu_served = false
-    if (!t.q8 && g_q3v_gpu_set && invoke(g_q3v_gpu_serves)) {
+    if (chain) {
         let nout4 = npos / 4l
         ensure_length(s.ds_slice, nout4 * t.proj_dim)
         if (nds > 0l) {
             ensure_length(s.ds_stash, nds * nout4 * t.proj_dim)
         }
-        //! the driver reads s.x0/s.pos_rs, never s.x
-        gpu_served = invoke(g_q3v_gpu, t, s, npos)   // stem + blocks + taps + tail on GPU: proj outputs land in ds_stash/ds_slice
+        //! the driver reads the planes and s.pos_rs, never s.x
+        gpu_served = invoke(g_q3v_gpu, t, s, planes, w, h, npos)   // stem + blocks + taps + tail on GPU: proj outputs land in ds_stash/ds_slice
     }
     if (!gpu_served) {
         tp = ref_time_ticks()
+        if (chain) {
+            im2col_rgb_patches(planes, w, h, t.patch, s.x0)
+        }
         q3v_stem_finish(t, s, npos, pw, ph)
         asr_prof_add("q3v.stem", tp)
     }

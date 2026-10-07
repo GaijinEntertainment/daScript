@@ -218,20 +218,29 @@ def private register_gemma4v_image_tags {
 // the GPU blocks hook (dasllama_metal_tower or dasllama_vulkan_tower registers it at [init]; requires-back). It takes
 // s.x after the stem (rope tables built), runs every block, leaves the result in s.x; false = declined, the CPU loop is
 // the fallback. `serves` = would the driver serve (the lane policy asks)
-typedef Gemma4vGpuBlocksFn = function<(t : Gemma4vTower; var s : Gemma4vState; npos : int64) : bool>
+typedef Gemma4vGpuChainFn = function<(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>; w, h, npos : int64) : bool>   //! the whole chain from the planes
+typedef Gemma4vGpuBlocksFn = function<(t : Gemma4vTower; var s : Gemma4vState; npos : int64) : bool>   //! the blocks alone over `s.x`
 typedef Gemma4vGpuServesFn = function<() : bool>
-var private g_g4v_gpu : Gemma4vGpuBlocksFn
+var private g_g4v_gpu : Gemma4vGpuChainFn
 var private g_g4v_gpu_serves : Gemma4vGpuServesFn
 var private g_g4v_gpu_set = false
-var private g_g4v_gpu_stem = false   //! the registered chain runs the stem's patch conv and position adds itself, off `s.x0`
 
-//! `stem` says the chain takes the stem's columns (`s.x0`) and runs the patch conv and the position adds itself; a
-//! chain registered without it is handed the finished residual stream in `s.x`.
-def register_gemma4v_gpu(fn : Gemma4vGpuBlocksFn; serves : Gemma4vGpuServesFn; stem : bool = false) {
+//! the whole-chain seat: the fn runs the stem, the blocks and the tail on the device off the planes; `serves` answers the knob so
+//! the encode skips the CPU im2col and the lane policy can prefer f32 planes
+def register_gemma4v_gpu(fn : Gemma4vGpuChainFn; serves : Gemma4vGpuServesFn) {
     g_g4v_gpu = fn
     g_g4v_gpu_serves = serves
-    g_g4v_gpu_stem = stem
     g_g4v_gpu_set = true
+}
+
+var private g_g4v_gpu_blocks : Gemma4vGpuBlocksFn
+var private g_g4v_gpu_blocks_set = false
+
+//! the blocks-only seat: the fn takes the residual stream after the CPU stem in `s.x` and leaves the blocks' result there;
+//! false = decline, the CPU loop serves
+def register_gemma4v_gpu_blocks(fn : Gemma4vGpuBlocksFn) {
+    g_g4v_gpu_blocks = fn
+    g_g4v_gpu_blocks_set = true
 }
 
 // The lane policy follows the fastest GEMM path on the box: a serving GPU blocks driver or the
@@ -689,9 +698,8 @@ def private g4v_block(t : Gemma4vTower; var s : Gemma4vState; l, npos : int64) {
     asr_prof_add("g4v.norm", tp)
 }
 
-// the stem's columns: im2col → x·2−1 into s.x0 (npos rows); sizes every block buffer for this canvas
-def private g4v_stem_cols(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>; w, h : int64) : int64 {
-    let d = t.n_embd
+//! the CPU im2col with the x . 2 - 1 pixel map into `s.x0`; the device chain runs its own off the planes
+def private g4v_im2col(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>; w, h : int64) : int64 {
     let npos = im2col_rgb_patches(planes, w, h, t.patch, s.x0)
     // inp_raw_scaled: pixels [0, 1] -> [-1, 1] ahead of the conv
     unsafe {
@@ -700,6 +708,13 @@ def private g4v_stem_cols(t : Gemma4vTower; var s : Gemma4vState; planes : array
             xp[i] = xp[i] * 2.0 - 1.0
         }
     }
+    return npos
+}
+
+// the stem's columns: the CPU route's im2col with the pixel map into s.x0 (npos rows); sizes every block buffer for this canvas
+def private g4v_stem_cols(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>; w, h : int64; im2col : bool) : int64 {
+    let d = t.n_embd
+    let npos = im2col ? g4v_im2col(t, s, planes, w, h) : (w / t.patch) * (h / t.patch)
     ensure_length(s.x, npos * d)
     ensure_length(s.xb, npos * d)
     ensure_length(s.xb2, npos * d)
@@ -775,30 +790,28 @@ def gemma4v_encode(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>
     let n_rows = h / t.patch
     dispatch_phase_encode(n_cols * n_rows)
     var tp = ref_time_ticks()
-    let npos = g4v_stem_cols(t, s, planes, w, h)
+    let chain = g_g4v_gpu_set && invoke(g_g4v_gpu_serves)   //! the whole chain off the planes: no CPU im2col unless it declines
+    let npos = g4v_stem_cols(t, s, planes, w, h, !chain)
     g4v_rope_tables(t, s, n_cols, n_rows)
     asr_prof_add("g4v.stem", tp)
     var gpu_served = false
-    let finished = !g_g4v_gpu_set || !g_g4v_gpu_stem
-    if (finished) {
-        tp = ref_time_ticks()
-        g4v_stem_finish(t, s, npos, n_cols)
-        asr_prof_add("g4v.stem", tp)
-    }
     s.tail_ready = false
-    if (g_g4v_gpu_set) {
+    if (chain) {
         tp = ref_time_ticks()
-        gpu_served = invoke(g_g4v_gpu, t, s, npos)
+        gpu_served = invoke(g_g4v_gpu, t, s, planes, w, h, npos)
         asr_prof_add("g4v.gpu", tp)
     }
     if (!gpu_served) {
-        if (!finished) {
-            tp = ref_time_ticks()
-            g4v_stem_finish(t, s, npos, n_cols)
-            asr_prof_add("g4v.stem", tp)
+        tp = ref_time_ticks()
+        if (chain) {
+            g4v_im2col(t, s, planes, w, h)
         }
-        for (l in range64(t.n_layer)) {
-            g4v_block(t, s, l, npos)
+        g4v_stem_finish(t, s, npos, n_cols)
+        asr_prof_add("g4v.stem", tp)
+        if (!(g_g4v_gpu_blocks_set && invoke(g_g4v_gpu_blocks, t, s, npos))) {
+            for (l in range64(t.n_layer)) {
+                g4v_block(t, s, l, npos)
+            }
         }
     }
     if (gpu_served && s.tail_ready) {   // the device chain ran the tail behind its blocks

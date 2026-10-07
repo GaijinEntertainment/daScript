@@ -887,6 +887,38 @@ def private pos_add_gate(t : T?; var dev, queue; npos, dim, ncols, pos_entries :
     }
 }
 
+//! the vision stems' patch im2col on the shared stamp, bit-exact vs the CPU `im2col_rgb_patches` over a non-square canvas at a
+//! padded row stride (the pad columns zero over a sentinel fill) and under the pixel map; a shifted pixel reds the compare
+def private patch_im2col_gate(t : T?; var dev, queue; w, h, p, pad : int; scale, shift : float) {
+    let tag = "patch_im2col {w}x{h} p={p} pad={pad} scale={scale}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_tw_patch_im2col)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let n_cols = w / p
+        let npos = n_cols * (h / p)
+        let row_dim = 3 * p * p + pad
+        let total = (npos + 1) * row_dim   //! one pad row past the patches
+        var inscope planes <- [for (i in range(w * h * 3)); float((i * 37) % 251 - 125) * 0.007]
+        var inscope mapped <- [for (v in planes); v * scale + shift]
+        var inscope want : array<float>
+        let got_rows = im2col_rgb_patches(mapped, int64(w), int64(h), int64(p), want, int64(row_dim))
+        t |> equal(got_rows, int64(npos), "{tag}: the CPU im2col's row count")
+        want |> resize(total)   //! the pad row reads zero
+        let bsrc = mc |> in_(planes)
+        let bdst = mc |> out_words(total, -7.0)
+        var pa = GkPatchIm2colArgs(w = uint(w), h = uint(h), p = uint(p), n_cols = uint(n_cols), row_dim = uint(row_dim), npos = uint(npos), total = uint(total), scale = scale, shift = shift)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bsrc], mc.buf[bdst], pa, int64(total))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bdst], want, lead_poisoned(BAR_BITS, want), Shape(row_width = row_dim))
+    }
+}
+
 //! the qwen3v stem assemble on the shared stamp, bit-exact vs the CPU stem's (crow + bp) + prow order over a pw x ph patch grid
 //! (pw, ph even): residual row r of the merge-adjacent walk gathers conv row src, the walk told apart from the natural order
 def private q3v_stem_gate(t : T?; var dev, queue; pw, ph, dim : int) {
@@ -1846,6 +1878,8 @@ def test_metal_misc_kernels(t : T?) {
                 pos_add_gate(t, dev, queue, 98, 64, 14, 1120)   // 672x336 grid: NON-square, axis order visible
                 pos_add_gate(t, dev, queue, 49, 64, 7, 1120)
                 q3v_stem_gate(t, dev, queue, 6, 4, 70)   // a non-square grid at a width off the 64-thread group
+                patch_im2col_gate(t, dev, queue, 24, 16, 4, 0, 1.0, 0.0)
+                patch_im2col_gate(t, dev, queue, 28, 14, 7, 13, 2.0, -1.0)   // the padded stride, gemma4v's pixel map
                 q3v_stem_gate(t, dev, queue, 8, 8, 64)    // square control
                 clamp_gate(t, dev, queue, 1000, CLAMP_IN, false)    // separate dst, %64 tail
                 clamp_gate(t, dev, queue, 1000, CLAMP_OUT, true)    // in place

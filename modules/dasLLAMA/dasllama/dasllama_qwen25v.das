@@ -589,10 +589,10 @@ def private q25v_block(t : Qwen25vTower; var s : Qwen25vState; l, npos : int64) 
     asr_prof_add("q25v.ffn", tp)
 }
 
-//! the stem's column half, both routes: im2col at the padded stride, and s.x0/s.mout sized for the driver
-def private q25v_stem_cols(t : Qwen25vTower; var s : Qwen25vState; planes : array<float>; w, h : int64) : int64 {
+//! the stem's column half, both routes: the CPU route's im2col at the padded stride, and s.x0/s.mout sized for the driver
+def private q25v_stem_cols(t : Qwen25vTower; var s : Qwen25vState; planes : array<float>; w, h : int64; im2col : bool) : int64 {
     let d = t.n_embd
-    let npos = im2col_rgb_patches(planes, w, h, t.patch, s.x0, q25v_patch_pad(t))
+    let npos = im2col ? im2col_rgb_patches(planes, w, h, t.patch, s.x0, q25v_patch_pad(t)) : (w / t.patch) * (h / t.patch)
     ensure_length(s.xn, npos * d)
     ensure_length(s.x, npos * d)
     ensure_length(s.xb, npos * d)
@@ -634,12 +634,15 @@ def private q25v_tail(t : Qwen25vTower; var s : Qwen25vState; npos : int64) {
 }
 
 //! the GPU hook: conv/gather + every block + the merger tail off s.x0, window-sorted rows into s.mout
-typedef Qwen25vGpuBlocksFn = function<(t : Qwen25vTower; var s : Qwen25vState; npos : int64) : bool>
-var private g_q25v_gpu : Qwen25vGpuBlocksFn
+typedef Qwen25vGpuChainFn = function<(t : Qwen25vTower; var s : Qwen25vState; planes : array<float>; w, h, npos : int64) : bool>   //! the whole chain from the planes
+typedef Qwen25vGpuBlocksFn = function<(t : Qwen25vTower; var s : Qwen25vState; npos : int64) : bool>   //! the blocks alone over `s.x`
+var private g_q25v_gpu : Qwen25vGpuChainFn
 var private g_q25v_gpu_set = false
 
 [arch(at="../ARCHITECTURE_MEDIA.md#tower-gpu-hook")]
-def register_qwen25v_gpu(fn : Qwen25vGpuBlocksFn) {
+//! the whole-chain seat: the fn runs the stem off the planes, the blocks and the merger tail on the device, the window-sorted
+//! soft tokens in `s.mout`; false = decline, the CPU route serves
+def register_qwen25v_gpu(fn : Qwen25vGpuChainFn) {
     g_q25v_gpu = fn
     g_q25v_gpu_set = true
 }
@@ -668,16 +671,19 @@ def qwen25v_encode(t : Qwen25vTower; var s : Qwen25vState; planes : array<float>
     dispatch_phase_encode(pw * ph)
     var tp = ref_time_ticks()
     q25v_grid_tables(t, s, pw, ph)
-    let npos = q25v_stem_cols(t, s, planes, w, h)
+    let npos = q25v_stem_cols(t, s, planes, w, h, !g_q25v_gpu_set)   //! the whole chain off the planes: no CPU im2col unless it declines
     asr_prof_add("q25v.stem", tp)
     var gpu_served = false
     if (g_q25v_gpu_set) {
         tp = ref_time_ticks()
-        gpu_served = invoke(g_q25v_gpu, t, s, npos)
+        gpu_served = invoke(g_q25v_gpu, t, s, planes, w, h, npos)
         asr_prof_add("q25v.gpu", tp)
     }
     if (!gpu_served) {
         tp = ref_time_ticks()
+        if (g_q25v_gpu_set) {
+            im2col_rgb_patches(planes, w, h, t.patch, s.x0, q25v_patch_pad(t))
+        }
         q25v_stem_finish(t, s, npos)
         asr_prof_add("q25v.stem", tp)
         if (!(g_q25v_gpu_blocks_set && invoke(g_q25v_gpu_blocks, t, s, npos))) {

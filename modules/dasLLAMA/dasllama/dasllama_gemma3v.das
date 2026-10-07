@@ -189,16 +189,29 @@ def private register_gemma3v_image_tags {
     register_image_family_tag(GEMMA3V_TAG_Q8)
 }
 
-typedef Gemma3vGpuBlocksFn = function<(t : Gemma3vTower; var s : Gemma3vState; npos : int64) : bool>
+typedef Gemma3vGpuChainFn = function<(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>; w, h, npos : int64) : bool>   //! the whole chain from the planes
+typedef Gemma3vGpuBlocksFn = function<(t : Gemma3vTower; var s : Gemma3vState; npos : int64) : bool>   //! the blocks alone over `s.x`
 typedef Gemma3vGpuServesFn = function<() : bool>
-var private g_g3v_gpu : Gemma3vGpuBlocksFn
+var private g_g3v_gpu : Gemma3vGpuChainFn
 var private g_g3v_gpu_serves : Gemma3vGpuServesFn
 var private g_g3v_gpu_set = false
 
-def register_gemma3v_gpu(fn : Gemma3vGpuBlocksFn; serves : Gemma3vGpuServesFn) {
+//! the whole-chain seat: the fn runs the stem, the blocks and the tail on the device off the planes; `serves` answers the knob so
+//! the encode skips the CPU im2col and the lane policy can prefer f32 planes
+def register_gemma3v_gpu(fn : Gemma3vGpuChainFn; serves : Gemma3vGpuServesFn) {
     g_g3v_gpu = fn
     g_g3v_gpu_serves = serves
     g_g3v_gpu_set = true
+}
+
+var private g_g3v_gpu_blocks : Gemma3vGpuBlocksFn
+var private g_g3v_gpu_blocks_set = false
+
+//! the blocks-only seat: the fn takes the residual stream after the CPU stem in `s.x` and leaves the blocks' result there;
+//! false = decline, the CPU loop serves
+def register_gemma3v_gpu_blocks(fn : Gemma3vGpuBlocksFn) {
+    g_g3v_gpu_blocks = fn
+    g_g3v_gpu_blocks_set = true
 }
 
 // The lane policy follows the fastest GEMM path on the box: a serving GPU blocks driver or the
@@ -648,11 +661,15 @@ def private g3v_block(t : Gemma3vTower; var s : Gemma3vState; l, npos : int64) {
     asr_prof_add("g3v.ffn_mm", tp)
 }
 
-//! the stem's column half, both routes: the padded-stride im2col + scratch sizing
+//! the CPU im2col into `s.x0` at the padded stride; the device chain runs its own off the planes
+def private g3v_im2col(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>; w, h : int64) : int64
+    => im2col_rgb_patches(planes, w, h, t.patch, s.x0, gemma3v_patch_pad(t))
+
+//! the stem's column half, both routes: the padded-stride im2col (the CPU route's) + scratch sizing
 //! (planes arrive already normalized - encode_image_ owns the mean/std step)
-def private g3v_stem_cols(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>; w, h : int64) : int64 {
+def private g3v_stem_cols(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>; w, h : int64; im2col : bool) : int64 {
     let d = t.n_embd
-    let npos = im2col_rgb_patches(planes, w, h, t.patch, s.x0, gemma3v_patch_pad(t))
+    let npos = im2col ? g3v_im2col(t, s, planes, w, h) : (w / t.patch) * (h / t.patch)
     ensure_length(s.x, npos * d)
     ensure_length(s.xb, npos * d)
     ensure_length(s.xb2, npos * d)
@@ -704,29 +721,28 @@ def gemma3v_encode(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>
         panic("dasLLAMA gemma3v: canvas {w}x{h} - this tower serves exactly {t.image_px}x{t.image_px} (letterbox first)")
     }
     var tp = ref_time_ticks()
-    let npos = g3v_stem_cols(t, s, planes, w, h)
+    let chain = g_g3v_gpu_set && invoke(g_g3v_gpu_serves)   //! the whole chain off the planes: no CPU im2col unless it declines
+    let npos = g3v_stem_cols(t, s, planes, w, h, !chain)
     dispatch_phase_encode(npos)
     asr_prof_add("g3v.stem", tp)
-    if (t.q8) {
-        tp = ref_time_ticks()
-        g3v_stem_finish(t, s, npos)
-        asr_prof_add("g3v.stem", tp)
-    }
     var gpu_served = false
     s.tail_ready = false
-    if (g_g3v_gpu_set) {
+    if (chain) {
         tp = ref_time_ticks()
-        gpu_served = invoke(g_g3v_gpu, t, s, npos)
+        gpu_served = invoke(g_g3v_gpu, t, s, planes, w, h, npos)
         asr_prof_add("g3v.gpu", tp)
     }
     if (!gpu_served) {
-        if (!t.q8) {
-            tp = ref_time_ticks()
-            g3v_stem_finish(t, s, npos)
-            asr_prof_add("g3v.stem", tp)
+        tp = ref_time_ticks()
+        if (chain) {
+            g3v_im2col(t, s, planes, w, h)
         }
-        for (l in range64(t.n_layer)) {
-            g3v_block(t, s, l, npos)
+        g3v_stem_finish(t, s, npos)
+        asr_prof_add("g3v.stem", tp)
+        if (!(g_g3v_gpu_blocks_set && invoke(g_g3v_gpu_blocks, t, s, npos))) {
+            for (l in range64(t.n_layer)) {
+                g3v_block(t, s, l, npos)
+            }
         }
     }
     if (gpu_served && s.tail_ready) {   // the device chain ran the tail behind its blocks

@@ -1483,6 +1483,46 @@ class template GkQ3aShuffle {
     }
 }
 
+struct GkPatchIm2colArgs {
+    w : uint          //! the canvas in pixels
+    h : uint
+    p : uint          //! the patch side
+    n_cols : uint     //! the patch grid's width, w / p
+    row_dim : uint    //! a column row's padded width; the columns past 3 x p x p read zero
+    npos : uint       //! the patch rows; the rows past them up to `total` read zero (the GEMM's row pad)
+    total : uint      //! the rows written x row_dim
+    scale : float     //! the pixel map ahead of the conv: x . scale + shift (gemma4v's [0, 1] -> [-1, 1])
+    shift : float
+}
+
+//! the vision stems' patch im2col over interleaved RGB planes [h][w][3]: row pi = patch (pi / n_cols, pi % n_cols) in row-major
+//! order, column c x p x p + ky x p + kx = channel c's pixel (ky, kx) of the patch, the CPU `im2col_rgb_patches`' layout; one
+//! element an invocation, the pad columns and the pad rows written zero
+[ |> template_struct_instance]
+class template GkPatchIm2col {
+    @ssbo @binding = 0 @role = "read" src : array<float>
+    @ssbo @binding = 1 @role = "write" dst : array<float>
+    @kargs pa : GkPatchIm2colArgs
+
+    def patch_im2col_body {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.total) {
+            let pi = gid / pa.row_dim
+            let j = gid % pa.row_dim
+            let psq = pa.p * pa.p
+            var v = 0.0
+            if (pi < pa.npos && j < 3u * psq) {
+                let c = j / psq
+                let k = j % psq
+                let py = (pi / pa.n_cols) * pa.p + k / pa.p
+                let px = (pi % pa.n_cols) * pa.p + k % pa.p
+                v = src[(py * pa.w + px) * 3u + c] * pa.scale + pa.shift
+            }
+            dst[gid] = v
+        }
+    }
+}
+
 struct GkIm2col2dArgs {
     iw : uint         //! the source block's width (frames), height (mel rows / channels' rows) and channel count
     ih : uint
