@@ -11,6 +11,20 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-07, `direction-grade`, `debug-jit`) - the forced tool call under the grammar, on Anton's tool bench.**
+  M1 Max, Metal, one stream, the server run from the tree under `-jit` with the m1 tune manifest, Anton's `bench_llm.py`
+  tool part (the house prompt, a nonce a run, no-think, 256-token budget), 12 runs an arm; `auto` = `tools` alone,
+  `forced` = the same with `tool_choice: "required"`, which samples the call through the dasLR1 grammar.
+
+  | file | auto ok | forced ok | auto warm total | forced warm total | tokens |
+  |---|---|---|---|---|---|
+  | pure Q4_0 (4.52 bpw) | 6/12 | 12/12 | 1.29 s | 1.34 s | 40 |
+  | pure IQ4_XS (4.27 bpw) | 12/12 | 12/12 | 1.31 s | 1.35 s | 40 |
+
+  Q4_0's six misses were plain-text answers (`finish: stop`, no call), not malformed arguments; the grammar turns every
+  reply into a well-formed `control` call. The constraint adds about 40-50 ms to a 40-token call (3-4 %): the piece table
+  is built on the first constrained request (a second, folded into that request's time) and each token probes the
+  candidate list against the grammar.
 - **STATED (2026-10-07) - the token constraint's two vocabulary-sized allocations.** `Session.cand` (16 B an entry)
   grows to the whole row only when a constraint refuses every candidate of the probe window: 16 x vocab bytes a
   session, 2.4 MB at a 151936-entry vocabulary (Qwen), 4.2 MB at 262144 (gemma); it is `@scratch @exact_size` and
