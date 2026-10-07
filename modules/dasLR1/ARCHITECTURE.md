@@ -111,5 +111,5 @@ commit 98c4764b6):
   stripped.
 - `tests/_gbnf/*.gbnf` - llama.cpp's sample grammars, copied whole, each of which must build.
 
-Each is MIT-licensed by the ggml authors: the notice sits in the `.LICENSE` file beside each JSON corpus
-and in `tests/_gbnf/LICENSE` for the grammar files.
+The corpora, the sample grammars and the ported converter are MIT-licensed by the ggml authors; the notice is
+`LICENSE.LLAMA_CPP` at the module root (the installed SDK carries the same notice through dasLLAMA).

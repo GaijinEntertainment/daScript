@@ -18,8 +18,8 @@ what it costs today and what the fix would change.
 
   | file | auto ok | forced ok | auto warm total | forced warm total | tokens |
   |---|---|---|---|---|---|
-  | pure Q4_0 (4.52 bpw) | 6/12 | 12/12 | 1.29 s | 1.34 s | 40 |
-  | pure IQ4_XS (4.27 bpw) | 12/12 | 12/12 | 1.31 s | 1.35 s | 40 |
+  | pure Q4_0 (4.52 bpw, `Qwen3.6-35B-A3B-MTP-Q4_0-pure.gguf`) | 6/12 | 12/12 | 1.29 s | 1.34 s | 40 |
+  | pure IQ4_XS (4.27 bpw, `Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf`) | 12/12 | 12/12 | 1.31 s | 1.35 s | 40 |
 
   Q4_0's six misses were plain-text answers (`finish: stop`, no call), not malformed arguments; the grammar turns every
   reply into a well-formed `control` call. The constraint adds about 40-50 ms to a 40-token call (3-4 %): the piece table

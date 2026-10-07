@@ -39,8 +39,8 @@ against llama.cpp's own cases; a case of this module's own goes in a test file b
 **A diff that changes a file under `tests/_gbnf/` other than by copying llama.cpp's `grammars/` file of the
 same name whole is a defect.**
 
-**A diff that drops `tests/_gbnf/LICENSE`, `tests/_gbnf_corpus.json.LICENSE` or
-`tests/_schema_corpus.json.LICENSE` is a defect** - each carries the MIT notice of the files it covers.
+**A diff that drops `LICENSE.LLAMA_CPP` (the module root) is a defect** - it is the MIT notice for the
+corpora, the sample grammars and the ported converter.
 
 **A diff that makes `gbnf_grammar` accept a token reference - `<[id]>`, `<name>`, `!<...>` - is a defect** -
 the acceptor sees bytes; map a token to its bytes at the caller instead.
