@@ -13,6 +13,7 @@ def test_packed_geometry_preserves_skinning_for_every_skinned_mesh_instance(t : 
     let rigid = gltf_packed_primitive_attributes(scene, 1, -1)
     t |> success((skinned & VERTEX_SKIN) != 0)
     t |> success((skinned & VERTEX_TANGENT) != 0)
+    t |> success((skinned & VERTEX_COLOR) == 0, "ordinary packed materials omit vertex color")
     t |> success((rigid & VERTEX_SKIN) == 0)
 }
 

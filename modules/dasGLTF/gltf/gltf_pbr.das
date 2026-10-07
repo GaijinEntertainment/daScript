@@ -28,11 +28,12 @@ let GLTF_MAX_JOINTS = 64
 // the app never touches them, it drives everything through gltf_pbr_create / gltf_pbr_render.
 
 // ===== vertex stage =====
-// @location order is the contract with gltf_gl's GltfGlVertex (0..7); we consume 0..3 + 6..7 (skinning).
+// @location order is the contract with gltf_gl's GltfGlVertex (0..7); we consume 0..3 + 5 (color) + 6..7 (skinning).
 var @in @location = 0 a_position : float3
 var @in @location = 1 a_normal   : float3
 var @in @location = 2 a_tangent  : float4
 var @in @location = 3 a_uv0      : float2
+var @in @location = 5 a_color0   : float4
 var @in @location = 6 a_joints0  : float4   // joint indices (decoded to float at parse time)
 var @in @location = 7 a_weights0 : float4   // per-joint blend weights (sum to 1)
 
@@ -47,6 +48,7 @@ var @inout v_world_normal : float3
 var @inout v_world_tangent : float3
 var @inout v_tangent_w : float
 var @inout v_uv0 : float2
+var @inout v_color0 : float4
 var @uniform u_previous_model : float4x4
 var @uniform u_previous_vp : float4x4
 var @uniform u_previous_joints : float4x4[GLTF_MAX_JOINTS]
@@ -98,6 +100,7 @@ def private gltf_pbr_vertex {
     v_world_tangent = wtangent
     v_tangent_w = a_tangent.w
     v_uv0 = a_uv0
+    v_color0 = a_color0
     gl_Position = u_viewProj * world
 }
 [vertex_program]
@@ -131,6 +134,7 @@ var @uniform u_light_color : float3   // radiance (color * intensity)
 var @uniform u_ambient     : float3   // constant ambient irradiance
 
 var @uniform u_base_color_factor : float4
+var @uniform u_unlit : float
 var @uniform u_metallic_factor : float
 var @uniform u_material_scale : float2
 var @uniform u_material_wetness : float
@@ -160,7 +164,7 @@ var @out @location = 1 o_surface_material : float4
 [fragment_program]
 def gltf_pbr_depth_fs {
     if (u_alpha_mode > 0.5 && u_alpha_mode < 1.5 &&
-        texture(u_base_color_tex, v_uv0).w * u_base_color_factor.w < u_alpha_cutoff) { discard() }
+        texture(u_base_color_tex, v_uv0).w * u_base_color_factor.w * (u_unlit > 0.5 ? v_color0.w : 1.0) < u_alpha_cutoff) { discard() }
 }
 
 
@@ -179,7 +183,7 @@ def gltf_surface_roughness(mr : float4) : float {
 }
 [fragment_program]
 def gltf_pbr_normal_fs {
-    let base = texture(u_base_color_tex, v_uv0) * u_base_color_factor
+    let base = texture(u_base_color_tex, v_uv0) * u_base_color_factor * (u_unlit > 0.5 ? v_color0 : float4(1.0))
     if (u_alpha_mode > 0.5 && u_alpha_mode < 1.5 && base.w < u_alpha_cutoff){discard()}
     let roughness = gltf_surface_roughness(texture(u_metal_rough_tex, v_uv0))
     o_color = float4(shade_normal(v_uv0) * 0.5 + float3(0.5), u_normal_roughness > .5 ? roughness : 1.0)
@@ -188,7 +192,7 @@ def gltf_pbr_normal_fs {
 //! Combined opaque surface outputs: normals/roughness and albedo/metallic.
 [fragment_program]
 def gltf_pbr_surface_fs {
-    let base = texture(u_base_color_tex, v_uv0) * u_base_color_factor
+    let base = texture(u_base_color_tex, v_uv0) * u_base_color_factor * (u_unlit > 0.5 ? v_color0 : float4(1.0))
     if (u_alpha_mode > .5 && u_alpha_mode < 1.5 && base.w < u_alpha_cutoff){discard()}
     let mr = texture(u_metal_rough_tex, v_uv0)
     o_color = float4(shade_normal(v_uv0) * .5 + float3(.5), gltf_surface_roughness(mr))
@@ -198,7 +202,7 @@ var @out @location = 2 o_surface_motion : float2
 //! Surface MRT with previous-minus-current, unjittered UV motion (RG16F).
 [fragment_program]
 def gltf_pbr_surface_motion_fs {
-    let base = texture(u_base_color_tex, v_uv0) * u_base_color_factor
+    let base = texture(u_base_color_tex, v_uv0) * u_base_color_factor * (u_unlit > 0.5 ? v_color0 : float4(1.0))
     if (u_alpha_mode > .5 && u_alpha_mode < 1.5 && base.w < u_alpha_cutoff){discard()}
     let mr = texture(u_metal_rough_tex, v_uv0)
     o_color = float4(shade_normal(v_uv0) * .5 + float3(.5), u_normal_roughness > .5 ? gltf_surface_roughness(mr) : 1.0)
@@ -207,14 +211,14 @@ def gltf_pbr_surface_motion_fs {
 }
 [fragment_program]
 def gltf_pbr_material_fs {
-    let base = texture(u_base_color_tex, v_uv0) * u_base_color_factor
+    let base = texture(u_base_color_tex, v_uv0) * u_base_color_factor * (u_unlit > 0.5 ? v_color0 : float4(1.0))
     if (u_alpha_mode > .5 && u_alpha_mode < 1.5 && base.w < u_alpha_cutoff){discard()}
     o_color = float4(base.xyz, clamp(texture(u_metal_rough_tex, v_uv0).z * u_metallic_factor * u_material_scale.y, 0.0, 1.0))
 }
 [fragment_program]
 def gltf_pbr_fs {
     let uv = v_uv0
-    let base = texture(u_base_color_tex, uv) * u_base_color_factor
+    let base = texture(u_base_color_tex, uv) * u_base_color_factor * (u_unlit > 0.5 ? v_color0 : float4(1.0))
     // MASK: hard cutoff; BLEND leaves alpha for host-side blending; OPAQUE forces alpha 1.
     if (u_alpha_mode > 0.5 && u_alpha_mode < 1.5 && base.w < u_alpha_cutoff) {
         discard()
@@ -260,7 +264,7 @@ def gltf_pbr_fs {
         }
     }
     if (u_ssao_enabled > 0.5){ambient *= texture(u_ssao_tex, gl_FragCoord.xy * u_ssao_inverse_size).x}
-    let linear = ambient + direct * gltf_shadow_visibility(v_world_pos, n, u_light_dir) + local_light + emissive
+    let linear = u_unlit > 0.5 ? base.xyz : ambient + direct * gltf_shadow_visibility(v_world_pos, n, u_light_dir) + local_light + emissive
     // no sRGB default framebuffer -> encode linear -> sRGB (approximate 2.2 gamma)
     var out_rgb = gltf_srgb_encode(linear)
     let grey = dot(out_rgb, float3(0.299, 0.587, 0.114))
@@ -276,7 +280,7 @@ var @uniform u_silhouette_clip_plane : float4
 [fragment_program]
 def gltf_pbr_silhouette_fs {
     if (dot(float4(v_world_pos, 1.0), u_silhouette_clip_plane) < 0.0) { discard() }
-    let base = texture(u_base_color_tex, v_uv0) * u_base_color_factor
+    let base = texture(u_base_color_tex, v_uv0) * u_base_color_factor * (u_unlit > 0.5 ? v_color0 : float4(1.0))
     if (u_alpha_mode > 0.5 && base.w < u_alpha_cutoff){discard()}
     o_color = u_silhouette_color
 }
@@ -377,6 +381,7 @@ def private bind_material(model : GltfGlModel; mat : GltfMaterial; opacity : flo
     u_metallic_factor = mat.metallicFactor
     u_roughness_factor = mat.roughnessFactor
     u_emissive_factor = mat.emissiveFactor
+    u_unlit = mat.unlit ? 1.0 : 0.0
     u_normal_scale = mat.normalScale
     u_occlusion_strength = mat.occlusionStrength
     u_alpha_cutoff = mat.alphaCutoff

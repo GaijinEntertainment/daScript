@@ -211,9 +211,7 @@ def private attr(prim : JPrimitive; key : string) : int {
     return prim.attributes?[key] ?? -1
 }
 
-// dasGLTF implements no glTF extensions yet; when one lands, list its name here.
-[unused_argument(name)]
-def private extension_supported(name : string) : bool => false
+def private extension_supported(name : string) : bool => name == "KHR_materials_unlit"
 
 // ===== accessor decode =====
 // One float4 per element (missing lanes zero); handles interleaved byteStride,
@@ -722,6 +720,9 @@ def private parse_gltf_json(jsonText : string; var glbBin : array<uint8>; baseDi
     var buffers : array<array<uint8>>
     decode_buffers(doc, glbBin, baseDir, buffers)
     build_scene(doc, buffers, baseDir, scene)
+    for (material, i in scene.materials, count()) {
+        material.unlit = key_exists(js?["materials"]?[i]?["extensions"], "KHR_materials_unlit")
+    }
     update_world_transforms(scene)
     delete buffers
     return <- scene

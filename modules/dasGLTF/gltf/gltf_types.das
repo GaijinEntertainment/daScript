@@ -45,21 +45,23 @@ enum GltfAlphaMode {
 }
 
 struct GltfMaterial {
-    name              : string
-    baseColorFactor   : float4 = float4(1., 1., 1., 1.)
-    emissiveFactor    : float3
-    metallicFactor    : float = 1.
-    roughnessFactor   : float = 1.
-    baseColorTex      : int = -1     // GltfScene.textures index, -1 = none
-    metalRoughTex     : int = -1
-    normalTex         : int = -1
-    occlusionTex      : int = -1
-    emissiveTex       : int = -1
-    normalScale       : float = 1.
-    occlusionStrength : float = 1.
-    alphaMode         : GltfAlphaMode = GltfAlphaMode.opaque
-    alphaCutoff       : float = 0.5
-    doubleSided       : bool = false
+    //! Material factors, texture references, and rendering modes.
+    name              : string //! Material name.
+    baseColorFactor   : float4 = float4(1., 1., 1., 1.) //! Linear base color and opacity multiplier.
+    emissiveFactor    : float3 //! Linear emissive color multiplier.
+    metallicFactor    : float = 1. //! Metallic multiplier.
+    roughnessFactor   : float = 1. //! Roughness multiplier.
+    baseColorTex      : int = -1     //! Base color texture index; -1 uses white.
+    metalRoughTex     : int = -1 //! Metallic and roughness texture index; -1 uses white.
+    normalTex         : int = -1 //! Normal texture index; -1 uses a flat normal.
+    occlusionTex      : int = -1 //! Occlusion texture index; -1 disables occlusion.
+    emissiveTex       : int = -1 //! Emissive texture index; -1 uses white.
+    normalScale       : float = 1. //! Normal texture strength.
+    occlusionStrength : float = 1. //! Occlusion texture strength.
+    alphaMode         : GltfAlphaMode = GltfAlphaMode.opaque //! Opaque, masked, or blended alpha handling.
+    alphaCutoff       : float = 0.5 //! Masked alpha rejection threshold.
+    doubleSided       : bool = false //! Render both sides of the surface.
+    unlit             : bool = false //! KHR_materials_unlit: base color without lighting.
 }
 
 struct GltfImage {

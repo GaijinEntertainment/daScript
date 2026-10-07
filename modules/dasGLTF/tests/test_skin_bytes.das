@@ -12,8 +12,8 @@ def sorted_quantized_influences(t : T?) {
         if (dot(weights, float4(1)) > 0.0) { for (i in range(4)) { let original = weights[int(decoded.joints[i]) - 1] / dot(weights, float4(1)); t |> success(abs(original - decoded.weights[i]) < .006) } }
     }
     t |> equal(processed_stride(VERTEX_SKIN | VERTEX_UV), 28)
-    t |> equal(DAS_GLTF_VERSION, 2)
-    t |> equal(DAS_GLTF_PROCESSOR_VERSION, 3)
+    t |> equal(DAS_GLTF_VERSION, 3)
+    t |> equal(DAS_GLTF_PROCESSOR_VERSION, 4)
 }
 [test]
 def compact_skin_rejects_invalid_influences(t : T?) {

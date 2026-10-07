@@ -74,6 +74,7 @@ def gltf_packed_primitive_attributes(scene : GltfScene; mesh_index, material_ind
     var attributes = VERTEX_UV
     for (node in scene.nodes){if (node.mesh == mesh_index && node.skin >= 0){attributes |= VERTEX_SKIN}}
     if (material_index >= 0 && material_index < length(scene.materials) && scene.materials[material_index].normalTex >= 0){attributes |= VERTEX_TANGENT}
+    if (material_index >= 0 && material_index < length(scene.materials) && scene.materials[material_index].unlit){attributes |= VERTEX_COLOR}
     return attributes
 }
 def upload_processed_primitive(p : ProcessedPrimitive) : GltfGlPrimitive {

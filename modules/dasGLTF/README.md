@@ -116,10 +116,11 @@ mesh optimization, `KHR_draco_mesh_compression`, and the strip/fan/loop primitiv
 indexed `TRIANGLES`, which is what glTF exporters emit almost universally. The neutral scene format is
 designed to feed a separate mesh optimizer. A Vulkan backend (`gltf_vk`) is a planned parallel to `gltf_gl`.
 
-glTF extensions are not implemented. An asset whose `extensionsRequired` names any extension **fails
-closed** (empty scene + error log, per spec) instead of decoding to degenerate geometry - e.g. Draco-compressed
-assets; recompress with `gltf-transform` / `gltfpack` to plain glTF. Optional `extensionsUsed`-only
-extensions load with a warning and their features are ignored.
+`KHR_materials_unlit` is supported: base color and opacity are preserved without
+lighting. Other names in `extensionsRequired` fail closed (empty scene and an error
+log), including `KHR_draco_mesh_compression`; recompress unsupported compressed assets
+with `gltf-transform` or `gltfpack` to plain glTF. Unsupported optional extensions
+load with a warning and their features are ignored.
 
 The PBR adapter also offers `gltf_pbr_render_normals` for an opaque/masked depth-normal
 prepass. It shares the regular skinning, material-normal and alpha-cutoff paths. The

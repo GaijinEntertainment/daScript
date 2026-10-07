@@ -6,13 +6,14 @@ require daslib/safe_addr
 require glfw/glfw_boost
 require gltf/gltf_pbr
 require gltf/gltf_types
+require gltf/gltf_processed_gl
 require math
 
 def private render_target(internal : int; format, attachment : uint) : uint {
     var texture : uint
     glGenTextures(1, safe_addr(texture))
     glBindTexture(GL_TEXTURE_2D, texture)
-    glTexImage2D(GL_TEXTURE_2D, 0, internal, 4, 4, 0, format, GL_HALF_FLOAT, null)
+    glTexImage2D(GL_TEXTURE_2D, 0, internal, 4, 4, 0, format, format == GL_DEPTH_COMPONENT ? GL_FLOAT : GL_HALF_FLOAT, null)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
     glFramebufferTexture2D(GL_FRAMEBUFFER, attachment, GL_TEXTURE_2D, texture, 0)
@@ -149,6 +150,105 @@ def private check_draw_opacity(t : T?; renderer : GltfPbrRenderer; var model : G
     model.meshes[0].primitives[0].material = -1
 }
 
+
+def private check_unlit_light_invariance(t : T?; renderer : GltfPbrRenderer; packed : bool) {
+    var color_only = GL_COLOR_ATTACHMENT0; glDrawBuffers(1, safe_addr(color_only))
+    var scene <- render_fixture_scene()
+    scene.materials <- [GltfMaterial(unlit = true, baseColorFactor = float4(.8, .6, .4, 1.0))]
+    for (v in scene.meshes[0].primitives[0].vertices) { v.color0 = float4(.25, .5, 1.0, 1.0) }
+    scene.meshes[0].primitives[0].material = 0
+    var owner <- upload_gltf(scene)
+    var model <- packed ? upload_gltf_geometry_packed(scene, owner) : upload_gltf_geometry(scene, owner)
+    let dark = GltfPbrLight(direction = float3(0.0, 0.0, 1.0), color = float3(0.0), intensity = 0.0,
+        ambient = float3(0.0), environment = 0.0)
+    let bright = GltfPbrLight(direction = float3(0.0, 0.0, 1.0), color = float3(1.0), intensity = 5.0,
+        ambient = float3(3.0), environment = 0.0)
+    glClearColor(0.0, 0.0, 0.0, 0.0); glClear(GL_COLOR_BUFFER_BIT)
+    gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), dark)
+    let unlit_dark = read_rgba(GL_COLOR_ATTACHMENT0)
+    glClear(GL_COLOR_BUFFER_BIT)
+    gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), bright)
+    let unlit_bright = read_rgba(GL_COLOR_ATTACHMENT0)
+    t |> success(length(unlit_dark.xyz - unlit_bright.xyz) < .01, "unlit surface ignores direct and ambient light")
+    t |> success(unlit_dark.x > .2 && unlit_dark.y > .2 && unlit_dark.z > .2, "unlit base color remains visible in darkness")
+    t |> success(length(unlit_dark.xyz - float3(.4811565, .5785326, .6593533)) < .015, "unlit output includes vertex color times base color")
+    scene.materials[0].alphaMode = GltfAlphaMode.mask
+    scene.materials[0].alphaCutoff = .5
+    scene.materials[0].baseColorFactor.w = .25
+    glClear(GL_COLOR_BUFFER_BIT)
+    gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), bright)
+    t |> success(length(read_rgba(GL_COLOR_ATTACHMENT0)) < .01, "masked unlit fragment below cutoff is discarded")
+    scene.materials[0].baseColorFactor.w = 1.0
+    glClear(GL_COLOR_BUFFER_BIT)
+    gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), bright)
+    t |> success(length(read_rgba(GL_COLOR_ATTACHMENT0).xyz - unlit_dark.xyz) < .01, "masked unlit fragment above cutoff is retained")
+    scene.materials[0].alphaMode = GltfAlphaMode.opaque
+    scene.materials[0].unlit = false
+    glClear(GL_COLOR_BUFFER_BIT)
+    gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), dark)
+    let lit_dark = read_rgba(GL_COLOR_ATTACHMENT0)
+    glClear(GL_COLOR_BUFFER_BIT)
+    gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), bright)
+    let lit_bright = read_rgba(GL_COLOR_ATTACHMENT0)
+    t |> success(length(lit_dark.xyz - lit_bright.xyz) > .1, "ordinary material still responds to lighting")
+    delete model; delete owner; delete scene
+}
+
+
+def private check_vertex_alpha_passes(t : T?; var renderer : GltfPbrRenderer; packed : bool) {
+    var scene <- render_fixture_scene()
+    scene.materials <- [GltfMaterial(unlit = true, alphaMode = GltfAlphaMode.mask, alphaCutoff = .5)]
+    scene.meshes[0].primitives[0].material = 0
+    var owner <- upload_gltf(scene)
+    for (alpha in fixed_array(.25, 1.0)) {
+        for (v in scene.meshes[0].primitives[0].vertices){v.color0 = float4(.25, .5, 1.0, alpha)}
+        var model <- packed ? upload_gltf_geometry_packed(scene, owner) : upload_gltf_geometry(scene, owner)
+        for (unlit in fixed_array(true, false)) {
+            scene.materials[0].unlit = unlit
+            for (render_kind in range(7)) {
+                var mrt = fixed_array(GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2)
+                glDrawBuffers(3, safe_addr(mrt[0]))
+                glClearColor(0.0, 0.0, 0.0, 0.0); glClearDepth(double(1.0))
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+                glDisable(GL_DEPTH_TEST)
+                if (render_kind == 0){
+                    let light = GltfPbrLight(direction = float3(0.0, 0.0, 1.0), color = float3(0.0), intensity = 0.0, ambient = float3(1.0), environment = 0.0)
+                    gltf_pbr_render(renderer, model, scene, identity4x4(), identity4x4(), float3(0.0, 0.0, 1.0), light)
+                } elif (render_kind == 5){
+                    gltf_pbr_render_silhouette(renderer, model, scene, identity4x4(), identity4x4(), float4(1.0))
+                } elif (render_kind == 6){
+                    glEnable(GL_DEPTH_TEST)
+                    gltf_pbr_render_depth(renderer, model, scene, identity4x4(), identity4x4())
+                } else {
+                    gltf_pbr_render_normals(renderer, model, scene, identity4x4(), identity4x4(), false, render_kind == 2, render_kind == 3, render_kind == 4)
+                }
+                let discarded = unlit && alpha < .5
+                if (render_kind == 6){
+                    var depth : float
+                    glReadPixels(1, 1, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, unsafe(addr(depth)))
+                    t |> success(abs(depth - (discarded ? 1.0 : .5)) < .01, "vertex alpha controls unlit depth masking only")
+                } else {
+                    let pixel = read_rgba(GL_COLOR_ATTACHMENT0)
+                    t |> success(discarded ? length(pixel) < .01 : length(pixel) > .1, "vertex alpha controls unlit auxiliary masking only")
+                    if (!unlit && render_kind == 0){t |> success(length(pixel.xyz - float3(1.0)) < .01, "ordinary forward material ignores vertex tint")}
+                    if (!discarded && render_kind == 2){
+                        let expected = unlit ? float3(.25, .5, 1.0) : float3(1.0)
+                        t |> success(length(pixel.xyz - expected) < .01, "material pass applies vertex tint only to unlit")
+                    }
+                    if (render_kind == 3 || render_kind == 4){
+                        let expected = discarded ? float3(0.0) : (unlit ? float3(.25, .5, 1.0) : float3(1.0))
+                        t |> success(length(read_rgba(GL_COLOR_ATTACHMENT1).xyz - expected) < .01, "surface material attachment applies unlit color and mask")
+                    }
+                }
+            }
+        }
+        scene.materials[0].unlit = true
+        delete model
+    }
+    glDisable(GL_DEPTH_TEST)
+    delete owner; delete scene
+}
+
 def private check_silhouette_clip(t : T?; var renderer : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene){
     var color_only = GL_COLOR_ATTACHMENT0; glDrawBuffers(1, safe_addr(color_only))
     let color = float4(0.25, 0.5, 0.75, 1.0)
@@ -208,9 +308,10 @@ def gltf_surface_motion_and_shadow_fallback_render_on_gl(t : T?){
     let surface = render_target(int(GL_RGBA16F), GL_RGBA, GL_COLOR_ATTACHMENT0)
     let material = render_target(int(GL_RGBA16F), GL_RGBA, GL_COLOR_ATTACHMENT1)
     let motion = render_target(int(GL_RG16F), GL_RG, GL_COLOR_ATTACHMENT2)
+    let depth = render_target(int(GL_DEPTH_COMPONENT32F), GL_DEPTH_COMPONENT, GL_DEPTH_ATTACHMENT)
     defer(){
-        var a = surface; var b = material; var c = motion
-        glDeleteTextures(1, safe_addr(a)); glDeleteTextures(1, safe_addr(b)); glDeleteTextures(1, safe_addr(c))
+        var a = surface; var b = material; var c = motion; var d = depth
+        glDeleteTextures(1, safe_addr(a)); glDeleteTextures(1, safe_addr(b)); glDeleteTextures(1, safe_addr(c)); glDeleteTextures(1, safe_addr(d))
         glDeleteFramebuffers(1, safe_addr(fbo))
     }
     var mrt = fixed_array(GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2)
@@ -223,5 +324,9 @@ def gltf_surface_motion_and_shadow_fallback_render_on_gl(t : T?){
 
     check_draw_opacity(t, renderer, model, scene)
     check_shadow_filters(t, renderer, model, scene)
+    for (packed in fixed_array(false, true)){
+        check_unlit_light_invariance(t, renderer, packed)
+        check_vertex_alpha_passes(t, renderer, packed)
+    }
     check_silhouette_clip(t, renderer, model, scene)
 }

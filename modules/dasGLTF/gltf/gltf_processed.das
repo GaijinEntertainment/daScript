@@ -12,8 +12,8 @@ require daslib/json_boost
 require daslib/f16_cvt
 require strings
 
-let DAS_GLTF_VERSION = 2
-let DAS_GLTF_PROCESSOR_VERSION = 3
+let DAS_GLTF_VERSION = 3
+let DAS_GLTF_PROCESSOR_VERSION = 4
 let VERTEX_UV = 1
 let VERTEX_TANGENT = 2
 let VERTEX_SKIN = 4
@@ -194,6 +194,7 @@ def process_gltf(raw : GltfScene; source : string; profile : ProcessingProfile) 
                 let m = raw.materials[p.material]
                 if (m.baseColorTex >= 0 || m.metalRoughTex >= 0 || m.normalTex >= 0 || m.occlusionTex >= 0 || m.emissiveTex >= 0){flags |= VERTEX_UV}
                 if (m.normalTex >= 0){flags |= VERTEX_TANGENT}
+                if (m.unlit){flags |= VERTEX_COLOR}
             }
             let ordered = p.material >= 0 && p.material < length(raw.materials) && raw.materials[p.material].alphaMode == GltfAlphaMode.blend
             var processed <- process_primitive(p, flags, profile.compress_storage, !ordered)
