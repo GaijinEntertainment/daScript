@@ -25,7 +25,8 @@ The only enforced ordering is `module` before any type declaration; `options` / 
 `[export]` makes a function callable from the host by name, and `[export_c]` is an `[export]` that
 `daslang -lib` also surfaces as a C function in the header it generates (`-lib`/`-jit`/`-exe` carry
 the annotation; a non-JIT compile of that source needs `require daslib/export_c`) (`[export_c(name = "...")]`
-picks the C symbol, which is how two overloads both reach C); `[init]` / `[finalize]` run at context
+picks the C symbol, which is how two overloads both reach C; `comment = "..."` is written as `//`
+lines above the function in the C header and the daslang bindings); `[init]` / `[finalize]` run at context
 init / shutdown (no arguments, no return). `main` is a convention, not a keyword: it returns `void`
 unless declared `def main() : int`, whose return value is the process exit code (do not `panic` to
 force one).

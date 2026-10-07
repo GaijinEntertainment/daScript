@@ -26,7 +26,7 @@ def greet(who : string) : string {
     return "hola {who}"
 }
 
-[export_c(name = "double_or_raise")]
+[export_c(name = "double_or_raise", comment = "Doubles n.\nRaises on a negative n.")]
 def boom(n : int) : int {
     if (n < 0) {
         panic("negative: {n}")

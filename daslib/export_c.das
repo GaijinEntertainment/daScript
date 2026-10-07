@@ -34,8 +34,15 @@ class private ExportCAnnotation : AstFunctionAnnotation {
             }
         }
         for (arg in args) {
+            if (arg.name == "comment") {
+                if (arg.basicType != Type.tString) {
+                    errors := "[export_c] comment on `{func.name}` must be a string, got {arg.basicType}"
+                    return false
+                }
+                continue
+            }
             if (arg.name != "name") {
-                errors := "[export_c] unknown argument `{arg.name}`; the only argument is name=\"<c identifier>\""
+                errors := "[export_c] unknown argument `{arg.name}`; the arguments are name=\"<c identifier>\" and comment=\"<text>\""
                 return false
             }
             if (arg.basicType != Type.tString || !is_c_identifier(string(arg.sValue))) {

@@ -6,7 +6,7 @@ require _bindlib_c
 
 [export]
 def main() : int {
-    var ctx = bindlib_create()
+    var ctx : bindlib_ctx? = bindlib_create()
     if (ctx == null) {
         print("create failed: {bindlib_last_error(null)}\n")
         return 1

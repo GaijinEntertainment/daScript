@@ -111,6 +111,9 @@ Lifecycle
     through a trailing out pointer, so ``scale`` becomes
     ``void p_scale_by(p_ctx *, const p_Vec3 *, float, p_Vec3 *)``.
 
+    ``comment = "..."`` adds text above the entry point in the generated C header and daslang
+    bindings, one ``//`` line per line of the string.
+
 ``[init]``
     Marks a function to run automatically during context initialization. The function must
     take no arguments and return ``void``:
