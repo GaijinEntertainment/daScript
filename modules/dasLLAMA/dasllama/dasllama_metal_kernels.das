@@ -3822,6 +3822,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_kq_iq2xxs = compile_stamp(MetalKqGemvIq2xxs_metal_kq_gemv_iq2xxs_msl, ok)
     if (metal_tensor_crowned("kq_gemv_iq3s_f4")) {
         g_pso_kq_iq3s_f4 = compile_stamp(metal_kq_gemv_iq3s_f4_msl, ok)
+        g_pso_moe_kq_iq3s_f4 = compile_stamp(metal_moe_gemv_iq3s_f4_msl, ok)
     }
     if (metal_tensor_crowned("kq_gemv_iq3xxs_f4")) {
         g_pso_kq_iq3xxs_f4 = compile_stamp(metal_kq_gemv_iq3xxs_f4_msl, ok)
@@ -4315,7 +4316,11 @@ def enc_moe_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; stack_off, 
         } elif (fmt == KqFmt.k3) {
             enc_moe_gemv_k3_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, by, yoff, ka, bsel, rows, k, nst)
         } elif (fmt == KqFmt.iq3s) {
-            enc_moe_gemv_iq3s_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, by, yoff, ka, bsel, rows, k, nst)
+            if (g_pso_moe_kq_iq3s_f4 != null) {
+                enc_moe_gemv_iq3s_f4_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, by, yoff, ka, bsel, rows, k, nst)
+            } else {
+                enc_moe_gemv_iq3s_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, by, yoff, ka, bsel, rows, k, nst)
+            }
         } elif (fmt == KqFmt.iq3xxs) {
             enc_moe_gemv_iq3xxs_c(enc, bs.buf, bs.doff, bs.buf, bs.soff, bq.buf, bq.qoff, bx, by, yoff, ka, bsel, rows, k, nst)
         } elif (fmt == KqFmt.iq2s) {
@@ -4682,6 +4687,7 @@ def metal_kernels_release {
     release_handles(g_pso_rpst32, g_pso_argmax_rows, g_pso_argmax, g_pso_copy_row, g_pso_emb, g_pso_emb_k6)
     release_handles(g_pso_moe_router, g_pso_moe_select, g_pso_moe_select_512, g_pso_moe_gemv_q8, g_pso_moe_kq_k4, g_pso_moe_kq_k3)
     release_handles(g_pso_moe_kq_iq3s, g_pso_moe_kq_iq3xxs, g_pso_moe_kq_iq2s, g_pso_moe_kq_iq2xs, g_pso_moe_kq_iq2xxs, g_pso_moe_kq_iq4xs)
+    release_handles(g_pso_moe_kq_iq3s_f4)
     release_handles(g_pso_moe_kq_q40, g_pso_moe_kq_k5, g_pso_moe_kq_k6, g_pso_moe_combine, g_pso_g4rnorm, g_pso_moe_wscale)
     release_handles(g_pso_swiglu_oai, g_pso_moe_gemv_mx4, g_pso_moe_gemv_q51, g_pso_moe_gemv_iq4nl32, g_pso_dn_conv, g_pso_dn_hist, g_pso_dn_l2)
     release_handles(g_pso_dn_scan, g_pso_dn_gate, g_pso_dn_deint, g_pso_sigmul, g_pso_axpy_sig, g_mx4_vtab)
@@ -8456,18 +8462,22 @@ class MetalMoeGemvIq3xxs : MetalKqGemvIq3T {
 // inner loop reads one float4 and flips signs (no byte extracts); 4 rows per simdgroup - y loads
 // and grid gathers amortize x4. GRIDT sizes the stage to the format's grid (iq3s 512, iq3xxs 256).
 [ |> template_struct_instance]
-class template MetalKqGemvIq3F4T {
+class template MetalKqGemvIq3F4T : MetalGemvSiteT {
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16 (s0off = the caller's doff)
     @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B strips: 8 signed sub-scales (iq3xxs: 2ls+1) + 8 pad, byte view (same buffer at 0)
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>    // quant plane, uint view (iq3s: 16 qs, 2 qh, 8 signs per superblock; iq3xxs: 16 qs, 8 aux)
-    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
-    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
-    @uniform @binding = 5 ndim : uint
-    @uniform @binding = 6 ddim : uint
+    @uniform @binding = 5 @template_gate = "!GATHERED" ndim : uint
+    @uniform @binding = 6 @template_gate = "!GATHERED" ddim : uint
+    @uniform @binding = 5 @template_gate = GATHERED ka : MoeGemvArgs
+    @ssbo @binding = 7 @role = "read" @template_gate = GATHERED sel : array<uint>    // [streams x 2k] selection rows (idx section read)
     @workgroup gridf : GRIDT
     @template_constant XXS : bool = false
 
+    def x4_at(i : uint) : float4 => x[i]
+
     def gemv_body {
+        var g : uint[8]
+        site_setup(g)
         let lid = gl_LocalInvocationID.x
         static_if (XXS) {
             for [unroll_full] (k in range(4)) {
@@ -8488,18 +8498,21 @@ class template MetalKqGemvIq3F4T {
         let it = lane % 16u
         let bu = it / 2u
         let il = it % 2u
-        let nb = ndim / 256u
+        let nb = g[0] / 256u
+        let eb = g[1]
+        let xo4 = g[2] >> 2u
+        let yrow0 = g[3]
         let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 4u
         var sumf : float[4]
         var ib = ix
         while (ib < nb) {
-            let yb4 = ib * 64u + bu * 8u + il * 4u
-            let y0 = x[yb4]
-            let y1 = x[yb4 + 1u]
-            let y2 = x[yb4 + 2u]
-            let y3 = x[yb4 + 3u]
+            let yb4 = xo4 + ib * 64u + bu * 8u + il * 4u
+            let y0 = x4_at(yb4)
+            let y1 = x4_at(yb4 + 1u)
+            let y2 = x4_at(yb4 + 2u)
+            let y3 = x4_at(yb4 + 3u)
             for [unroll_full] (r in range(4)) {
-                let blk = (first_row + uint(r)) * nb + ib
+                let blk = eb + (first_row + uint(r)) * nb + ib
                 var accv = float4(0.0)
                 static_if (XXS) {
                     let qsw = kqu[blk * 24u + bu * 2u + il]
@@ -8533,8 +8546,8 @@ class template MetalKqGemvIq3F4T {
         }
         for [unroll_full] (r in range(4)) {
             let s = simd_sum(sumf[r])
-            if (lane == 0u && first_row + uint(r) < ddim) {
-                y[first_row + uint(r)] = s
+            if (lane == 0u && first_row + uint(r) < y_rows()) {
+                y_put(yrow0 + first_row + uint(r), s)
             }
         }
     }
@@ -8543,6 +8556,8 @@ class template MetalKqGemvIq3F4T {
 [metal_dispatch(name = "enc_kq_iq3s_f4_c", pso = "g_pso_kq_iq3s_f4", tgmem = "metal_kq_gemv_iq3s_f4_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64, n : int64")]
 class MetalKqGemvIq3sF4 : MetalKqGemvIq3F4T {
     typedef GRIDT = float4[512]
+    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
 
     [metal_kernel(name="metal_kq_gemv_iq3s_f4_msl")]
     def metal_kq_gemv_iq3s_f4 {
@@ -8550,9 +8565,25 @@ class MetalKqGemvIq3sF4 : MetalKqGemvIq3F4T {
     }
 }
 
+// the gathered site's twin: the staged grid amortizes over four rows of one expert a simdgroup, the dense twin's crown gates it
+[metal_dispatch(name = "enc_moe_gemv_iq3s_f4_c", pso = "g_pso_moe_kq_iq3s_f4", tgmem = "metal_moe_gemv_iq3s_f4_msl_tgmem", tg = 64, grid = "rows/8, k, nst", params = "rows : int64, k : int64, nst : int64")]
+class MetalMoeGemvIq3sF4 : MetalKqGemvIq3F4T {
+    typedef GRIDT = float4[512]
+    @ssbo @binding = 3 @role = "read" x : array<float4>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*k*nst*4" y : array<float>
+    override GATHERED = true
+
+    [metal_kernel(name="metal_moe_gemv_iq3s_f4_msl")]
+    def metal_moe_gemv_iq3s_f4 {
+        gemv_body()
+    }
+}
+
 [metal_dispatch(name = "enc_kq_iq3xxs_f4_c", pso = "g_pso_kq_iq3xxs_f4", tgmem = "metal_kq_gemv_iq3xxs_f4_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64, n : int64")]
 class MetalKqGemvIq3xxsF4 : MetalKqGemvIq3F4T {
     typedef GRIDT = float4[256]
+    @ssbo @binding = 3 @role = "read" @off = "xoff" @span = "n*4" x : array<float4>
+    @ssbo @binding = 4 @role = "write" @off = "yoff" @span = "rows*4" y : array<float>
     override XXS = true
 
     [metal_kernel(name="metal_kq_gemv_iq3xxs_f4_msl")]

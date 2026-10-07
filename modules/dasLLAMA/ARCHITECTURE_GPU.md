@@ -276,7 +276,11 @@ key it has on that home.
   reads, on Vulkan, as its old words plus one call. Because the MSL emitter splices, a template method of
   more than one statement cannot sit in value position: a helper that returns a value - a workgroup
   reduction, a partial sum - is written as a statement method that lands its result in a `var` reference
-  (`wg_max_into`, `wg_sum_into`, `value_sum_into` in `GkPkAttn`).
+  (`wg_max_into`, `wg_sum_into`, `value_sum_into` in `GkPkAttn`). The same splice names a parameter as
+  many times as the body does, so an argument that is a computed expression is refused where the body
+  names the parameter twice: the caller hoists it to a local first. A fixed-array local in a body hoists
+  to a program-scope constant table only when every element is a scalar integer or float literal; a
+  vector literal does not hoist, so a `float4` table is spelled as four scalars a word.
 - **A home's lane primitive is reached by one name.** A template method resolves in the module that
   stamps it, so a shared reduction calls `gk_subgroup_add` / `gk_subgroup_max`, and each kernel home
   defines the pair over its own primitive (`subgroupAdd` on Vulkan, `simd_sum` on Metal). A free function

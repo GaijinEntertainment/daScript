@@ -38,7 +38,12 @@ inner loop does no byte extraction. The twin is a PER-BOX CROWN, never a heurist
 default - it wins on M5-class GPUs and REGRESSES on M1/M4-class, which have less threadgroup
 bandwidth to trade for the byte work. Its PSO compiles only when the box's tune manifest
 carries the crown (`metal_tensor_crowned("kq_gemv_<fmt>_f4")`), and `enc_kq_gemv` picks the
-twin exactly when that PSO is non-null, so a box with no crown never compiles it.
+twin exactly when that PSO is non-null, so a box with no crown never compiles it. The iq3s twin
+also has a gathered form (`MetalMoeGemvIq3sF4`, the same template over the site axis of
+`#metal-gemv-site`): the routed experts of a model whose expert planes are IQ3_S read their
+GEMV through it, `enc_moe_gemv` picking it under the dense twin's crown, since the per-threadgroup
+work - eight rows of one expert against a staged grid - is the dense race's shape at a shorter
+row count.
 
 The `kq_gemv_iq3s_f4` and `kq_gemv_iq3xxs_f4` crowns are raced (`race_gemv_f4_twin`).
 `kq_gemv_iq2xxs_f4` cannot be settled by an isolated race at all and is minted from a serving

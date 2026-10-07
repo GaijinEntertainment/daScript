@@ -672,6 +672,13 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             // plain evidence only (verified per-file 40/40, 2026-08-18): the qwen35moe arm
             // coverage (chunked deltanet + reference MoE prefill) lives on the plain-stem twin
             parity <- ev_qwen_count()),
+        // the single-format IQ4_XS twin with the MTP head (4.27 bpw): the fewest bytes of the 4-bit
+        // ladder at the K-quant files' quality (PERF_LEDGER.md's 2026-10-06 equal-bytes entry); the
+        // recipe is deterministic (no imatrix) from unsloth's BF16 shards, the published file its output
+        ModelSpec(file = "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf",
+            url = "{HF}/borisbat/Qwen3.6-35B-A3B-MTP-IQ4_XS-pure-GGUF/resolve/6a1d560e64f8a9058773e5c1521534d9ef533bc8/Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf",
+            recipe = "llama-quantize --pure Qwen3.6-35B-A3B-BF16-00001-of-00002.gguf Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf IQ4_XS",
+            bytes = 18951018528l, sha256 = "8296de4b5b62724ae7eac1cf005a65a2936f227ef2cafcee8d9bad0a25c4806c"),
         ModelSpec(file = "Qwen3-Coder-30B-A3B-Instruct-Q8_0.gguf", display = "Qwen3-Coder-30B",
             parity <- ev_qwen_count([moe_reference = true])),
         ModelSpec(file = "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf", display = "Qwen3-Coder-30B-q4k", quant_label = "q4_k_m",

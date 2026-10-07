@@ -220,6 +220,7 @@ var g_pso_moe_gemv_q8 : MetalComputePipeline?  // expert-indexed GEMV twins (gri
 var g_pso_moe_kq_k4 : MetalComputePipeline?
 var g_pso_moe_kq_k3 : MetalComputePipeline?
 var g_pso_moe_kq_iq3s : MetalComputePipeline?
+var g_pso_moe_kq_iq3s_f4 : MetalComputePipeline?   //!< the gathered iq3s f4-slab twin, compiled only behind the crown "kq_gemv_iq3s_f4"
 var g_pso_moe_kq_iq3xxs : MetalComputePipeline?
 var g_pso_moe_kq_iq2s : MetalComputePipeline?
 var g_pso_moe_kq_iq2xs : MetalComputePipeline?

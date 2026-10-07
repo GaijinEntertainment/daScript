@@ -109,7 +109,7 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // and the tensor mul_mm T/TH stamps compile only behind a box crown and dispatch only on
     // planes the zoo does not stock. Their coverage is the same kernel-unit gates plus the
     // tensor-twins/iq2xxs matrix row and the mint's METAL_TWIN race rows
-    "metal_kq_gemv_iq3s_f4", "metal_kq_gemv_iq3xxs_f4", "MetalKqGemvIq2xxsF4",
+    "metal_kq_gemv_iq3s_f4", "metal_kq_gemv_iq3xxs_f4", "MetalKqGemvIq2xxsF4", "metal_moe_gemv_iq3s_f4",
     "MetalKqMulMmIq4xsT", "MetalKqMulMmIq4xsTH", "MetalKqMulMmIq4nlT", "MetalKqMulMmIq4nlTH",
     "MetalKqMulMmK3T", "MetalKqMulMmK3TH", "MetalKqMulMmK2T", "MetalKqMulMmK2TH",
     "MetalKqMulMmIq3sT", "MetalKqMulMmIq3sTH", "MetalKqMulMmIq3xxsT", "MetalKqMulMmIq3xxsTH",
@@ -698,6 +698,7 @@ def private cov_tower_gemma4uv(t : T?) {
 let private CENSUS_CROWN_CONDITIONAL : table<string; string> <- {
     "MetalKqMvB2K4R2" => "kq_mvb2_k4_r2",
     "metal_kq_gemv_iq3s_f4" => "kq_gemv_iq3s_f4",
+    "metal_moe_gemv_iq3s_f4" => "kq_gemv_iq3s_f4",
     "metal_kq_gemv_iq3xxs_f4" => "kq_gemv_iq3xxs_f4",
     "MetalKqGemvIq2xxsF4" => "kq_gemv_iq2xxs_f4",
     "MetalAttnQKDev128" => "attn_dev",
