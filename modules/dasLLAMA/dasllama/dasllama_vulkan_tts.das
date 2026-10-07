@@ -19,6 +19,7 @@ require dasllama/dasllama_convert
 require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_vulkan_tower
+require dasllama/dasllama_gpu_math   // the row stamps' activation codes
 
 //! The Vulkan TTS driver: the kitten and kokoro families' synthesis seats and the Pocket family's
 //! codec, frames and prompt seats on the tower's knob (`ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md`); the Metal
@@ -390,7 +391,7 @@ def private ts_ln(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; ns : TtsN
 //! layernorm rows from x into y (y may be x) against scale and shift rows at `woff` / `boff` of `wn` (the slab, or the aux rows fc(style) landed in)
 def private ts_ln_at(raw : VkCommandBuffer; var h : VkHaz; wn : TsRows; woff, boff : int64; x, y : TsRows; rows, d : int64; eps : float) {
     var s = set_tower_ln_cls(fixed_array(x.dev, y.dev, wn.dev), fixed_array(x.bytes, y.bytes, wn.bytes), fixed_array(x.bit, y.bit, wn.bit))
-    var pa = TowerLnArgs(d = uint(d), rows = uint(rows), eps = eps, ln_on = 1u, lnoff = uint(woff), lnboff = uint(boff))
+    var pa = gk_ln_args(uint(d), uint(rows), eps, uint(woff), uint(boff))
     enc_tower_ln_cls(raw, h, s, pa, rows)
     vt_pt(raw, VtProfRole.tts_ln)
 }
@@ -398,7 +399,7 @@ def private ts_ln_at(raw : VkCommandBuffer; var h : VkHaz; wn : TsRows; woff, bo
 //! the post-LN residual seam: x += y + b (the branch linear's bias row, `bslot`), then xb = layernorm(x) on the norm slot's rows
 def private ts_add_ln(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; bslot : TtsConvSlot; ns : TtsNormSlot; x, y, xb : TsRows; rows, d : int64; eps : float) {
     var s = set_tower_post_add_ln_cls(fixed_array(x.dev, y.dev, xb.dev, slab.dev), fixed_array(x.bytes, y.bytes, xb.bytes, slab.bytes), fixed_array(x.bit, y.bit, xb.bit, 0u))
-    var pa = TowerLnArgs(d = uint(d), rows = uint(rows), woff = 0u, boff = uint(bslot.boff), eps = eps, ln_on = 1u, lnoff = uint(ns.gwoff), lnboff = uint(ns.gboff), ascale = 1.0)
+    var pa = GkPostAddLnArgs(d = uint(d), rows = uint(rows), woff = 0u, boff = uint(bslot.boff), eps = eps, ln_on = 1u, lnoff = uint(ns.gwoff), lnboff = uint(ns.gboff), ascale = 1.0, xboff = 0u)
     enc_tower_post_add_ln_cls(raw, h, s, pa, rows)
     vt_pt(raw, VtProfRole.tts_ln)
 }
@@ -418,8 +419,8 @@ def private ts_conv(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; slot : 
 
 //! x [tin][cin] gathered into col [tout][kdim_p] under the left pad `pad_l`, the columns as halves under `half`
 def private ts_im2col(raw : VkCommandBuffer; var h : VkHaz; slot : TtsConvSlot; cv : TtsConv1d; tin, tout, pad_l : int64; x, col : TsRows; half : bool) {
-    var pc = TtsIm2colArgs(cin = uint(cv.cin), tin = uint(tin), tout = uint(tout), k = uint(cv.k), stride = uint(cv.stride), pad_l = uint(pad_l),
-        dilation = uint(cv.dilation), transposed = cv.transposed ? 1u : 0u, kdim = uint(slot.kdim_p), xoff = 0u, coloff = 0u, rows = 1u)
+    var pc = GkIm2col1dArgs(cin = uint(cv.cin), tin = uint(tin), tout = uint(tout), k = uint(cv.k), stride = uint(cv.stride), pad_l = uint(pad_l),
+        dilation = uint(cv.dilation), transposed = cv.transposed ? 1u : 0u, kdim = uint(slot.kdim_p), xoff = 0u, coloff = 0u, row_major = 1u, r0 = 0u, mp = uint(tout))
     if (half) {
         var sc = set_tts_im2col16_cls(fixed_array(x.dev, col.dev), fixed_array(x.bytes, col.bytes), fixed_array(x.bit, col.bit))
         enc_tts_im2col16_cls(raw, h, sc, pc, tout * slot.kdim_p)
@@ -553,12 +554,12 @@ def private vulkan_styletts2_albert(a : St2Albert; ids : array<int>; @scratch @e
     let r_ffn = ts_rows(sc_, TS_A_FFN)
     let r_f2 = ts_rows(sc_, TS_A_F2)
     ts_upload(r_ids, ids, t)
-    var s_gather = set_tts_row_gather_cls(fixed_array(slab.dev, r_ids.dev, r_e.dev), fixed_array(slab.bytes, r_ids.bytes, r_e.bytes), fixed_array(0u, r_ids.bit, r_e.bit))
+    var s_gather = set_tts_row_gather_cls(fixed_array(slab.dev, r_ids.dev, slab.dev, slab.dev, r_e.dev), fixed_array(slab.bytes, r_ids.bytes, slab.bytes, slab.bytes, r_e.bytes),
+        fixed_array(0u, r_ids.bit, 0u, 0u, r_e.bit))
     var s_attn = set_tts_attn_cls(fixed_array(r_q.dev, r_k.dev, r_v.dev, r_xb2.dev), fixed_array(r_q.bytes, r_k.bytes, r_v.bytes, r_xb2.bytes),
         fixed_array(r_q.bit, r_k.bit, r_v.bit, r_xb2.bit))
     var s_gelu = set_tts_gelu_tanh_cls(fixed_array(r_ffn.dev), fixed_array(r_ffn.bytes), fixed_array(r_ffn.bit))
-    var pa_gather = TtsGatherArgs(c = uint(a.emb_dim), rows = uint(t), word_off = uint(sl.word_emb), pos_off = uint(sl.pos_emb),
-        type_off = uint(sl.type_emb), out_off = 0u, adds = 1u)
+    var pa_gather = GkRowGatherArgs(c = uint(a.emb_dim), rows = uint(t), aoff = uint(sl.word_emb), boff = uint(sl.pos_emb), coff = uint(sl.type_emb), out_off = 0u, add_b = 1u, add_c = 1u, scale = 1.0)
     var pa_attn = TtsAttnArgs(t = uint(t), d = uint(d), hs = uint(hs), heads = uint(a.heads), scale = 1.0 / sqrt(float(hs)),
         qoff = 0u, koff = 0u, voff = 0u, ooff = 0u)
     var pa_gelu = TtsElemArgs(nelem = uint(t * ff), off = 0u, slope = 0.0)
@@ -661,8 +662,9 @@ def private vulkan_styletts2_text(te : St2TextEncoder; ids : array<int>; @scratc
     let r_gb = ts_rows(sc_, TS_T_GB)
     let r_y = ts_rows(sc_, TS_T_Y)
     ts_upload(r_ids, ids, t)
-    var s_gather = set_tts_row_gather_cls(fixed_array(slab.dev, r_ids.dev, r_a.dev), fixed_array(slab.bytes, r_ids.bytes, r_a.bytes), fixed_array(0u, r_ids.bit, r_a.bit))
-    var pa_gather = TtsGatherArgs(c = uint(cc), rows = uint(t), word_off = uint(sl.emb), pos_off = 0u, type_off = 0u, out_off = 0u, adds = 0u)
+    var s_gather = set_tts_row_gather_cls(fixed_array(slab.dev, r_ids.dev, slab.dev, slab.dev, r_a.dev), fixed_array(slab.bytes, r_ids.bytes, slab.bytes, slab.bytes, r_a.bytes),
+        fixed_array(0u, r_ids.bit, 0u, 0u, r_a.bit))
+    var pa_gather = GkRowGatherArgs(c = uint(cc), rows = uint(t), aoff = uint(sl.emb), boff = 0u, coff = 0u, out_off = 0u, add_b = 0u, add_c = 0u, scale = 1.0)
     let ncnn = length(te.cnn)
     vt_chain_one_shot("text", int64(ncnn), t) $(raw : VkCommandBuffer; var h : VkHaz) {
         enc_tts_row_gather_cls(raw, h, s_gather, pa_gather, t * cc)
@@ -751,8 +753,9 @@ def private ts_pool_dw(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; cv :
 
 //! out [rows][c] = src[idx[r]] - the nearest x2 upsample with idx = r / 2
 def private ts_gather_rows(raw : VkCommandBuffer; var h : VkHaz; src, idx, out : TsRows; rows, c : int64) {
-    var s = set_tts_row_gather_cls(fixed_array(src.dev, idx.dev, out.dev), fixed_array(src.bytes, idx.bytes, out.bytes), fixed_array(src.bit, idx.bit, out.bit))
-    var pa = TtsGatherArgs(c = uint(c), rows = uint(rows), word_off = 0u, pos_off = 0u, type_off = 0u, out_off = 0u, adds = 0u)
+    var s = set_tts_row_gather_cls(fixed_array(src.dev, idx.dev, src.dev, src.dev, out.dev), fixed_array(src.bytes, idx.bytes, src.bytes, src.bytes, out.bytes),
+        fixed_array(src.bit, idx.bit, src.bit, src.bit, out.bit))
+    var pa = GkRowGatherArgs(c = uint(c), rows = uint(rows), aoff = 0u, boff = 0u, coff = 0u, out_off = 0u, add_b = 0u, add_c = 0u, scale = 1.0)
     enc_tts_row_gather_cls(raw, h, s, pa, rows * c)
     vt_pt(raw, VtProfRole.tts_rows)
 }
@@ -1804,7 +1807,7 @@ def private ts_pk_elu(raw : VkCommandBuffer; var h : VkHaz; x : TsRows; rows, wi
 //! x [rows][c] *= the slab's scale row at `soff`
 def private ts_pk_row_scale(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; x : TsRows; rows, c, soff : int64) {
     var s = set_tts_pk_row_scale_cls(fixed_array(x.dev, slab.dev), fixed_array(x.bytes, slab.bytes), fixed_array(x.bit, 0u))
-    var pa = TowerBiasArgs(d = uint(c), nelem = uint(rows * c), boff = uint(soff))
+    var pa = GkBiasActArgs(d = uint(c), nelem = uint(rows * c), boff = uint(soff))
     enc_tts_pk_row_scale_cls(raw, h, s, pa, rows * c)
     vt_pt(raw, VtProfRole.tts_pk)
 }

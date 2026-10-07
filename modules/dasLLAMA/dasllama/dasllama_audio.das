@@ -666,6 +666,11 @@ def private register_tower_image_tags {
     register_image_family_tag("tower-f32")
 }
 
+let public ULTRAVOX_NORM_EPS = 1e-6   //! the ultravox projector norms' own eps, not the tower's
+
+//! the projector's second GEMM's K: ultravox's swapped SwiGLU halves the first GEMM's output, the other kinds pass it whole
+def audio_proj_mid_width(t : AudioTower) : int64 => t.proj_kind == AudioProjKind.ultravox ? t.mm1_out / 2l : t.mm1_out
+
 def audio_has_avgpool(t : AudioTower) : bool => (
     t.proj_kind == AudioProjKind.qwen2a || t.proj_kind == AudioProjKind.voxtral)
 
@@ -835,7 +840,7 @@ def tower_compact_offsets(var t : AudioTower) {
     t.lnp_b_off = of; of += d
     if (t.proj_dim > 0l) {
         let m1in = d * t.stack_factor
-        let m2in = t.proj_kind == AudioProjKind.ultravox ? t.mm1_out / 2l : t.mm1_out
+        let m2in = audio_proj_mid_width(t)
         if (t.proj_kind == AudioProjKind.qwen2a) {
             t.proj_w_off = og; og += t.proj_dim * d
             t.proj_b_off = of; of += t.proj_dim
@@ -869,7 +874,7 @@ def private tower_quantize_(var t : AudioTower; var fblob : array<float>; var qb
     }
     let has_conv = t.conv2_w_off != 0l   // a conv-less core (qwen3a: layers at 0) has no conv front end
     let m1in = d * t.stack_factor
-    let m2in = t.proj_kind == AudioProjKind.ultravox ? t.mm1_out / 2l : t.mm1_out
+    let m2in = audio_proj_mid_width(t)
     // a projector mat whose contraction is not a 32-multiple stays fp32 (tw_mm's own condition)
     let qlayer = 4l * d * d + 2l * ff * d
     var pq1 = false
@@ -1645,7 +1650,7 @@ def private encoder_blocks_cpu(t : AudioTower; var s : EncoderState; npos : int6
             diff_stage("after_block0", s.x, tt * d)
         }
     }
-    trace_tag(0)   // clear: dispatches after the encoder must not inherit the last stage's color
+    trace_tag(TRACE_TAG_NONE)
     diff_stage("after_blocks", s.x, tt * d)
 }
 
@@ -1663,7 +1668,7 @@ def private rms_rows_blob_at(var x : array<float>; wp : float const?; dim, rows 
     unsafe {
         var xp = addr(x[0])
         for (r in range64(rows)) {
-            rmsnorm(xp + r * dim, xp + r * dim, wp, dim, 1e-6)
+            rmsnorm(xp + r * dim, xp + r * dim, wp, dim, ULTRAVOX_NORM_EPS)
         }
     }
 }
@@ -1679,6 +1684,15 @@ def audio_encode(t : AudioTower; var s : EncoderState; mel : MelChunk) {
     }
     trace_tag(TRACE_TAG_ENC_PROJ)
     let t_tail = ref_time_ticks()
+    audio_projector_tail(t, s)
+    asr_prof_add("enc.tail", t_tail)
+    trace_tag(TRACE_TAG_NONE)
+    diff_stage("out", s.out, rows * t.proj_dim)
+}
+
+//! the projector tail over the blocks' rows in `s.x`, by kind, into `s.out` - the specification the GPU tails mirror
+def audio_projector_tail(t : AudioTower; var s : EncoderState) {
+    let rows = audio_tokens_per_chunk(t)
     let tt = t.n_ctx
     let d = t.d_model
 
@@ -1717,7 +1731,4 @@ def audio_encode(t : AudioTower; var s : EncoderState; mel : MelChunk) {
         gelu_erf(s.ph, rows * t.mm1_out)
         tw_mm_rq(t, s.out, t.mm2_w_off, s.ph, s.xqi, s.xsi, t.mm1_out, t.proj_dim, rows)
     }
-    asr_prof_add("enc.tail", t_tail)
-    trace_tag(0)   // clear: the decoder's dispatches must not inherit the projector's color
-    diff_stage("out", s.out, rows * t.proj_dim)
 }

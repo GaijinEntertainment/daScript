@@ -45,6 +45,22 @@ what it costs today and what the fix would change.
     arithmetic 85.3 +- 0.4 against 85.1 +- 0.5 (noise); the iq4 codebook held in registers as four packed words
     61.4 against 84.4 (seven ALU ops a nibble lose to one threadgroup read). The codebook read and the staging are not
     where a 4-bit expert GEMV's time goes.
+- **MEASURED (2026-10-06, `audio-shared-kernels`) - the audio chains' kernels moved to templates both homes stamp read as
+  before on both boxes.** whisper large-v3-turbo q8 served (`dasllama-server` with the ASR model alone, `main.das -- --asr
+  <bin>`; `harness/served_bench.das --no-chat --asr-url <server> --clip jfk_ask_not.wav --reps 8`), master and the branch
+  alternated twice in one sitting on each box, one life a server (the master lives first); the branch moves the Metal
+  layernorm, bias, clamp, GEGLU, im2col, row gather, K/V store and conv0 stamps and the Vulkan tower's seam, im2col, gather
+  and K/V classes onto the shared templates, so the served encode and decode ride every one of them.
+  - M5 Max, Metal, ms a request, master / branch: 229.6 / 228.8 (cv 0.5% / 0.7%); the second pair 242.5 / 243.0, both void
+    at cv 3.1% / 2.9% (the box warmed under the four lives).
+  - RTX PRO 4500, Vulkan, ms a request, master / branch: 51.3 / 51.7 and 50.8 / 49.5 (cv 1.9% / 2.4% / 1.8% / 0.8%); a
+    first sitting read every row void on that box's round-trip spread (cv 6-28%), with one master life refused at its
+    second rep because the transcript differed from the first - the Vulkan chain's text moved between reps on master.
+  - Long-lived device memory the branch adds, bytes: the Vulkan chat tail's rows `cap x (hid + gate + out) x 4` beside its
+    host copy `cap x out x 4` (the whisper-class projector widths, a few MB at the 1500-row cap), its projector q8 planes
+    beside the block records (`d x stack x mm1_out + mm2_in x proj_dim` bytes); parakeet's Vulkan resident (its q8 planes and
+    norms plane, as canary's); the Metal fronts' conv0 panel `nch x 32 x 4` once an encoder (32 KB at 256 channels).
+
 - **MEASURED (2026-10-06, `direction-grade`) - Pocket's text prompt on the device takes a third of its request on
   both boxes; the thirteen TTS kernels moved to templates both homes stamp read as before.** The prompt seat runs the
   chunk's text rows through the frames slab's layers at the voice's positions (`ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames`,

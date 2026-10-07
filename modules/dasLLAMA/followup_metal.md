@@ -69,7 +69,7 @@ slice: ~1.7 ms.
 **What already exists** - the producer-fused f16 twin family (`_hx`): `pf_enc_rms_hx`,
 `pf_enc_add_rms_bhx` (add+norm+half-emit in one), `enc_swiglu_hx`/`enc_geglu_hx`,
 `enc_qk_rope_hx`. On the dense path these cover the norm and activation producers; the
-standalone `enc_cvt_half` fires only through `pf_cvt_panel` fallbacks and at the sites below.
+standalone `tw_half` fires only through `pf_cvt_panel` fallbacks and at the sites below.
 Measured ceiling of ALL remaining converts (`DASLLAMA_METAL_PREFILL_SKIP=act_cvt` knockout on
 `benchmarks/lcpp_bench.das --for-debug-purposes --ngl 99 -p 512 -n 16 -r 3`, m5):
 **+0.65% pp512** (15334 vs 15235 tok/s) - the fusion rung is mostly banked already.
@@ -925,11 +925,6 @@ Each pair below differs on the one axis named, and the fold is behavior-neutral 
   over, so the probe equals the attach by construction. Proof: `test_kv_prefix.das`, `test_scheduler.das`.
 - **The pool kernels.** `MetalTwPool2` (a row pair) and `MetalTwPool2d` (a k x k block) differ on the window
   (`dasllama/dasllama_metal_prefill.das`); one kernel takes a window of its own width and height.
-- **The gated rows.** `MetalTwSwigluRows` and `MetalG4aGlu` walk a row's two halves alike and differ on the gate
-  (`silu(b) * a` against `a * sigmoid(b)`) and on their argument shape; a class template with the gate abstract
-  stamps both. `MetalG4aGlu` sits in gemma4a's block loop: the stamp's generated source is diffed against it.
-- **The subsample front.** `metal_canary_front` and `metal_parakeet_encode` run the same ten dispatches in the
-  same order and differ on the taps buffer, the valid-row clamps and the GEMM form; one body takes the three.
   Proof: the parakeet and canary `mtower` arms of `test_model_image.das`.
 - **The spectrum's tile.** `metal_canary_front` runs its DFT GEMM on the half-staged f32 tile and `metal_q3a_mel`
   on the exact f32 tile, where a quiet bin sits 80 dB under the loud ones. Folding the two picks one tile: the

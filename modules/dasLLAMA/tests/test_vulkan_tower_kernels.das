@@ -14,6 +14,7 @@ require dasllama/dasllama_convert
 require dasllama/dasllama_gemma4a   // gemma4a_attn_past: the Conformer cell's window
 require dasllama/dasllama_qwen3a   // nolint:STYLE030,LINT019 — QWEN3A_TOK_PER_CHUNK: the front movers' qwen3a fixture, inside the vulkan arm alone
 require dasllama/dasllama_audio   // nolint:STYLE030,LINT019 — build_dft_twiddles: the spectrum cell's twiddle table, inside the vulkan arm alone
+require dasllama/dasllama_whisper   // nolint:STYLE030,LINT019 — wdec_kscale, the decoder's key pre-scale the K/V store cell feeds
 require dasllama/dasllama_kqformat   // kq_elems: the Q8_0 block width that sizes the requant feed's scale plane
 require ?vulkan vulkan
 require ?vulkan dasllama/dasllama_vulkan_common
@@ -76,7 +77,7 @@ def private fa_bidir_arm(t : T?; khr : bool; hs : int) {
             let fc = fixed_array(qp, khp, vhp, ycp)
             var sfa = fa_stamp_set(khr, gather_planes(cp.dev, fa), gather_planes(cp.bytes, fa), gather_planes(cp.hazard_bit, fa))
             var sfc = fa_stamp_set(khr, gather_planes(cp.dev, fc), gather_planes(cp.bytes, fc), gather_planes(cp.hazard_bit, fc))
-            var pcv = f16_rows_args(uint(kpad * qd))
+            var pcv = gk_f16_rows_args(uint(kpad * qd))
             var pcf = FaArgs(rows = uint(rows), w0 = 0u, qd = uint(qd), kvd = uint(qd), kv_mul = 1u, kvbase = 0u,
                 scale = TOWER_SCALE, window = 0u, sinkoff = 0u)
             let cvtwgs = int64((kpad * qd / 4 + 255) / 256)
@@ -219,13 +220,13 @@ def private wdec_fused_rq_shape(t : T?; d, rows, nch : int) {   // nolint:STYLE0
             var s_comb = cp |> cls_set(fixed_array(pmsp, pyp, ycp), @@set_tower_wdec_attn_comb_cls)
             var s_rq4 = cp |> cls_set(fixed_array(ycp, qp[6], sp[6]), @@set_tower_clamp_rq_cls)
             var s_combrq = cp |> cls_set(fixed_array(pmsp, pyp, qp[7], sp[7]), @@set_tower_wdec_attn_comb_rq_cls)
-            var pa_ln = TowerLnArgs(d = uint(d), rows = uint(rows), eps = ROWS_EPS, ln_on = 1u, lnoff = 0u, lnboff = uint(d))   // nolint:LINT003 - the encoders take the push block by value, and the lambda below captures it
+            var pa_ln = GkPostAddLnArgs(d = uint(d), rows = uint(rows), eps = ROWS_EPS, ln_on = 1u, lnoff = 0u, lnboff = uint(d), xboff = 0u)   // nolint:LINT003 - the encoders take the push block by value, and the lambda below captures it
             var pa_rq = RqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = -3.0e38, hi = 3.0e38)   // nolint:LINT003 - the same
             var pa_rqh = RqArgs(inbase = 0u, nblk = uint(nff / q8e), lo = -3.0e38, hi = 3.0e38)   // nolint:LINT003 - the same
-            var pa_post = TowerLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 1u, lnoff = uint(3 * d), lnboff = uint(4 * d), ascale = 1.0)   // nolint:LINT003 - the same
-            var pa_bias = TowerBiasArgs(d = uint(ff), nelem = uint(nff), boff = uint(5 * d), act = BIAS_ACT_GELU_TANH)   // nolint:LINT003 - the same
+            var pa_post = GkPostAddLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 1u, lnoff = uint(3 * d), lnboff = uint(4 * d), ascale = 1.0, xboff = 0u)   // nolint:LINT003 - the same
+            var pa_bias = GkBiasActArgs(d = uint(ff), nelem = uint(nff), boff = uint(5 * d), act = BIAS_ACT_GELU_TANH)   // nolint:LINT003 - the same
             var pa_biasrq = TowerBiasRqArgs(d = uint(ff), nblk = uint(nff / q8e), boff = uint(5 * d))   // nolint:LINT003 - the same
-            var pa_c = TowerWdecCombArgs(dim = uint(d), nchunks = uint(nch), nheads = uint(heads), nrows = uint(rows))   // nolint:LINT003 - the same
+            var pa_c = GkWdecCombArgs(dim = uint(d), nchunks = uint(nch), nheads = uint(heads), nrows = uint(rows), hs = WDEC_HS)   // nolint:LINT003 - the same
             let wg4 = int64((nd / 4 + 255) / 256)
             let wg4h = int64((nff / 4 + 255) / 256)
             let wg_comb = int64(heads * rows)
@@ -359,7 +360,6 @@ let private ROWS_FF = 512
 let private ROWS_HEADS = 4
 let private ROWS_EPS = 1.0e-6
 
-def private gelu_quick_ref(x : float) : float => x * (1.0 / (1.0 + exp(-1.702 * x)))
 
 [test]
 def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over the eight row classes: the fixture, one command buffer, eight oracles and their controls
@@ -423,16 +423,16 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
                 var s_post_half = cp |> cls_set(fixed_array(x_half_p, yp, xb_half_p, wp), @@set_tower_post_add_cls)
                 var s_geglu = cp |> cls_set(fixed_array(gp, up), @@set_tower_geglu_cls)
                 var pa_rms = tower_rms_args(uint(d), 0u, ROWS_EPS)
-                var pa_post = TowerLnArgs(d = uint(d), rows = uint(rows), woff = uint(d), boff = 0u, eps = ROWS_EPS, ln_on = 1u, lnoff = 0u, lnboff = 0u, ascale = 1.0)
-                var pa_post0 = TowerLnArgs(d = uint(d), rows = uint(rows), woff = uint(d), boff = 0u, eps = ROWS_EPS, ln_on = 0u, lnoff = 0u, lnboff = 0u, ascale = 1.0)
-                var pa_post_plain = TowerLnArgs(d = uint(d), rows = uint(rows), woff = 0u, boff = 0u, eps = ROWS_EPS, ln_on = 1u, lnoff = 0u, lnboff = 0u, ascale = 0.5)
-                var pa_post_plain0 = TowerLnArgs(d = uint(d), rows = uint(rows), woff = 0u, boff = 0u, eps = ROWS_EPS, ln_on = 0u, lnoff = 0u, lnboff = 0u, ascale = 0.5)
-                var pa_post_half = TowerLnArgs(d = uint(d), rows = uint(rows), woff = uint(d), boff = 0u, eps = ROWS_EPS, ln_on = 0u, lnoff = 0u, lnboff = 0u, ascale = 0.5)
-                var pa_clamp = TowerClampArgs(nelem = uint(nd), lo = lo, hi = hi)
-                var pa_cvt = TowerClampArgs(nelem = uint(nd), lo = lo2, hi = hi2)
+                var pa_post = GkPostAddLnArgs(d = uint(d), rows = uint(rows), woff = uint(d), boff = 0u, eps = ROWS_EPS, ln_on = 1u, lnoff = 0u, lnboff = 0u, ascale = 1.0, xboff = 0u)
+                var pa_post0 = GkPostAddLnArgs(d = uint(d), rows = uint(rows), woff = uint(d), boff = 0u, eps = ROWS_EPS, ln_on = 0u, lnoff = 0u, lnboff = 0u, ascale = 1.0, xboff = 0u)
+                var pa_post_plain = GkPostAddLnArgs(d = uint(d), rows = uint(rows), woff = 0u, boff = 0u, eps = ROWS_EPS, ln_on = 1u, lnoff = 0u, lnboff = 0u, ascale = 0.5, xboff = 0u)
+                var pa_post_plain0 = GkPostAddLnArgs(d = uint(d), rows = uint(rows), woff = 0u, boff = 0u, eps = ROWS_EPS, ln_on = 0u, lnoff = 0u, lnboff = 0u, ascale = 0.5, xboff = 0u)
+                var pa_post_half = GkPostAddLnArgs(d = uint(d), rows = uint(rows), woff = uint(d), boff = 0u, eps = ROWS_EPS, ln_on = 0u, lnoff = 0u, lnboff = 0u, ascale = 0.5, xboff = 0u)
+                var pa_clamp = GkClampArgs(nelem = uint(nd), lo = lo, hi = hi, scale = 1.0)
+                var pa_cvt = GkClampArgs(nelem = uint(nd), lo = lo2, hi = hi2, scale = 1.0)
                 var pa_rq = RqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = lo2, hi = hi2)
-                var pa_rope = TowerRopeArgs(nheads = uint(ROWS_HEADS), hs = uint(hs), rows = uint(rows))
-                var pa_geglu = TowerGegluArgs(nelem = uint(nff), glo = -2.0, ghi = 2.5, ulo = -1.5, uhi = 1.75, dlo = -1.0, dhi = 1.2)
+                var pa_rope = GkRope2dArgs(nheads = uint(ROWS_HEADS), hs = uint(hs), rows = uint(rows))
+                var pa_geglu = GkGegluArgs(nelem = uint(nff), glo = -2.0, ghi = 2.5, ulo = -1.5, uhi = 1.75, dlo = -1.0, dhi = 1.2)
                 let wg4 = int64((nd / 4 + 255) / 256)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_hc_norm_cls(raw, h, s_rms, pa_rms, int64(rows))
@@ -534,9 +534,64 @@ def test_vkt_tower_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over t
                 for (i in range(nff)) {
                     let gv = clamp(g[i], -2.0, 2.5)
                     let uv = clamp(u[i], -1.5, 1.75)
-                    g_ref[i] = clamp(gelu_quick_ref(gv) * uv, -1.0, 1.2)
+                    g_ref[i] = clamp(gelu_quick_lut_f32(gv) * uv, -1.0, 1.2)
                 }
-                check_rows(t, "tower_geglu clamped GEGLU-quick vs its closed form", g_dev, g_ref, BAR_APPROX, ff)
+                check_rows(t, "tower_geglu clamped GEGLU-quick vs the CPU table form", g_dev, g_ref, BAR_APPROX, ff)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! the chat projector tails' row classes on the templates both homes stamp: the pair pool against the mean of each row pair, the
+//! swapped gate against the CPU `swiglu_swapped_rows` - the fixture's halves differ, so the gate with its halves swapped misses on
+//! most elements - at a width off every workgroup multiple
+[test]
+def test_vkt_tower_tail_rows(t0 : T?) {
+    t0 |> run("the pair pool and the swapped SwiGLU rows == the CPU forms") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_tower_pool_rows_cls() || !ensure_tower_swiglu_swapped_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let width = 70
+            let rows = 5
+            let total = rows * width
+            let x <- row_fill(2 * total, 37, 5, 0.043, 2.1)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let xp = cp |> in_(x)
+                let pp = cp |> out_(total)
+                let gp = cp |> out_(total)
+                var s_pool = cp |> cls_set(fixed_array(xp, pp), @@set_tower_pool_rows_cls)
+                var s_gate = cp |> cls_set(fixed_array(xp, gp), @@set_tower_swiglu_swapped_cls)
+                var pa_pool = GkPoolRowsArgs(width = uint(width), total = uint(total))
+                var pa_gate = GkGatedRowsArgs(d = uint(width), nelem = uint(total))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tower_pool_rows_cls(raw, h, s_pool, pa_pool, int64((total + 255) / 256))
+                    enc_tower_swiglu_swapped_cls(raw, h, s_gate, pa_gate, int64((total + 255) / 256))
+                }
+                let p_dev <- cp |> plane_run(pp)
+                let g_dev <- cp |> plane_run(gp)
+                var p_ref : array<float>
+                p_ref |> resize(total)
+                for (i in range(total)) {
+                    let at = (i / width) * 2 * width + i % width
+                    p_ref[i] = 0.5 * (x[at] + x[at + width])
+                }
+                check_rows(t, "tower_pool_rows the mean of each row pair", p_dev, p_ref, BAR_APPROX, width)
+                var g_ref : array<float>
+                g_ref |> resize(total)
+                swiglu_swapped_rows(g_ref, x, int64(width), int64(rows))
+                check_rows(t, "tower_swiglu_swapped silu(second half) . first half vs swiglu_swapped_rows", g_dev, g_ref, BAR_APPROX, width)
+                var swapped : array<float>
+                swapped |> resize(total)
+                for (i in range(total)) {
+                    let at = (i / width) * 2 * width + i % width
+                    swapped[i] = silu_f32(x[at]) * x[at + width]
+                }
+                let moved = mismatch_approx(g_dev, swapped)
+                t |> success(moved > total / 2, "tower_swiglu_swapped control: the gate with its halves swapped lands elsewhere ({moved} of {total} moved)")
             }
         } else {
             t |> skip("dasVulkan not present")
@@ -582,12 +637,13 @@ def test_vkt_tower_conformer(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                 var s_glu = cp |> cls_set(fixed_array(hp, gp), @@set_tower_glu_sig_cls)
                 var s_dw = cp |> cls_set(fixed_array(gp, cpl, wp), @@set_tower_dw_conv5_cls)
                 var s_attn = cp |> cls_set(fixed_array(qp, kp, vp, aop, rp, wp), @@set_tower_g4a_attn64_cls)
-                var pa_silu = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = 0u, act = BIAS_ACT_SILU)
-                var pa_convmod = TowerConvModArgs(d = uint(d), nelem = uint(nd))
+                var pa_silu = GkBiasActArgs(d = uint(d), nelem = uint(nd), boff = 0u, act = BIAS_ACT_SILU)
+                var pa_convmod = GkGatedRowsArgs(d = uint(d), nelem = uint(nd))
                 var pa_dw = GkDwConvRowsArgs(c = uint(d), t_in = uint(rows), t_out = uint(rows), woff = uint(hs))
-                let qscale = (1.0 / sqrt(float(hs))) / log(2.0)
-                let kscale = log(1.0 + exp(1.0)) / log(2.0)
-                var pa_attn = TowerG4aAttnArgs(d = uint(d), npos = uint(rows), pdsoff = 0u)
+                let sc = gemma4a_attn_scales(int64(hs))
+                let qscale = sc.qscale
+                let kscale = sc.kscale
+                var pa_attn = GkG4aAttnArgs(d = uint(d), npos = uint(rows), hs = uint(hs), pdsoff = 0u, cap = GK_G4A_ATTN_CAP, qscale = qscale, kscale = kscale)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_tower_act_cls(raw, h, s_silu, pa_silu, int64((nd / 4 + 255) / 256))
                     enc_tower_glu_sig_cls(raw, h, s_glu, pa_convmod, int64((nd + 255) / 256))
@@ -639,8 +695,8 @@ def test_vkt_tower_conformer(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                 cp |> plane_upload(qp, q_at_cap_knee)
                 cp |> plane_refill(aop)
                 var s_attn128 = cp |> cls_set(fixed_array(qp, kp, vp, aop, rp, wp), @@set_tower_g4a_attn_cls)
-                let qscale2 = (1.0 / sqrt(float(hs2))) / log(2.0)
-                var pa_attn128 = TowerG4aAttnArgs(d = uint(d), npos = uint(rows), pdsoff = 0u)
+                let qscale2 = gemma4a_attn_scales(int64(hs2)).qscale
+                var pa_attn128 = GkG4aAttnArgs(d = uint(d), npos = uint(rows), hs = uint(hs2), pdsoff = 0u, cap = GK_G4A_ATTN_CAP, qscale = qscale2, kscale = kscale)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_tower_g4a_attn_cls(raw, h, s_attn128, pa_attn128, int64((rows * heads2 + 63) / 64))
                 }
@@ -687,7 +743,7 @@ def private cn_attn_ref(q, k, v, posl, wn : array<float>; rows, d, heads, hs, bu
 def test_vkt_tower_fastconformer(t0 : T?) {
     t0 |> run("the FastConformer conv module tail (the centered depthwise conv + folded BN + silu) == the CPU form") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init() || !ensure_tower_cn_dw_cls()) {
+            if (!vk_moe_init() || !ensure_tower_cn_dw_cls() || !ensure_tower_pk_dw_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }
@@ -704,13 +760,24 @@ def test_vkt_tower_fastconformer(t0 : T?) {
                 let gp = cp |> in_(glu_out, 0, kpad * d)   // the rows past npos carry garbage: a tap past the source's end the bound lets through reads it
                 let cpl = cp |> out_(nd)
                 let wp = cp |> in_(wn)
+                var wn_tm := wn   //! parakeet's layout: the taps tap-major [k][c], the BatchNorm rows as they are
+                for (c in range(d)) {
+                    for (kk in range(CN_CONV_KERNEL)) {
+                        wn_tm[taps_off + kk * d + c] = wn[taps_off + c * CN_CONV_KERNEL + kk]
+                    }
+                }
+                let cpl_pk = cp |> out_(nd)
+                let wp_tm = cp |> in_(wn_tm)
                 var s_dw = cp |> cls_set(fixed_array(gp, cpl, wp), @@set_tower_cn_dw_cls)
+                var s_dw_pk = cp |> cls_set(fixed_array(gp, cpl_pk, wp_tm), @@set_tower_pk_dw_cls)
                 var pa_dw = GkDwConvRowsArgs(c = uint(d), k = uint(CN_CONV_KERNEL), t_in = uint(rows), t_out = uint(rows), woff = uint(taps_off), bnwoff = uint(bnw_off),
                     bnboff = uint(bnb_off))
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_tower_cn_dw_cls(raw, h, s_dw, pa_dw, int64((nd + 255) / 256))
+                    enc_tower_pk_dw_cls(raw, h, s_dw_pk, pa_dw, int64((nd + 255) / 256))
                 }
                 let c_dev <- cp |> plane_run(cpl)
+                let c_pk_dev <- cp |> plane_run(cpl_pk)
                 var c_ref : array<float>
                 c_ref |> resize(nd)
                 for (r in range(rows)) {
@@ -727,6 +794,70 @@ def test_vkt_tower_fastconformer(t0 : T?) {
                     }
                 }
                 check_rows(t, "tower_cn_dw centered taps, folded BatchNorm and silu vs the CPU loop", c_dev, c_ref, BAR_APPROX, d)
+                check_rows(t, "tower_pk_dw the same over tap-major taps vs the CPU loop", c_pk_dev, c_ref, BAR_APPROX, d)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test]
+def test_vkt_tower_dw2d(t0 : T?) {
+    t0 |> run("the subsample depthwise conv2d (k3 s2 p1) on both tap layouts == the CPU loop, the rows past the valid length masked") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_tower_pk_dw2d_cls() || !ensure_tower_dw_conv_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let ih = 11   //! odd along one axis, even along the other: each edge drops its own taps
+            let iw = 10
+            let ch = 8
+            let valid = 7
+            let oh = int(conv_s2_out(int64(ih)))
+            let ow = int(conv_s2_out(int64(iw)))
+            let total = oh * ow * ch
+            let xv <- [for (i in range(ih * iw * ch)); float(float16(0.11 * float((i * 5) % 37) - 2.0))]
+            let wv <- [for (i in range(9 * ch)); float(float16(0.07 * float((i * 7) % 29) - 1.0))]   //! tap-major [9][ch], parakeet's
+            let bv <- [for (i in range(ch)); float(float16(0.3 * float(i % 5) - 0.6))]
+            let want <- dw_s2_front_ref(false, false, iw, ch, oh, ow, ih, xv, wv, bv)
+            let masked <- dw_s2_front_ref(false, false, iw, ch, oh, ow, valid, xv, wv, bv)
+            var wn_pk := wv
+            wn_pk |> push_from(bv)
+            var wn_cn : array<float>   //! canary's [ch][9] taps
+            wn_cn |> resize(9 * ch)
+            for (c in range(ch)) {
+                for (k9 in range(9)) {
+                    wn_cn[c * 9 + k9] = wv[k9 * ch + c]
+                }
+            }
+            wn_cn |> push_from(bv)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let xp = cp |> in_(xv)
+                let wpk = cp |> in_(wn_pk)
+                let wcn = cp |> in_(wn_cn)
+                let ypk = cp |> out_(total)
+                let ycn = cp |> out_(total)
+                let ymask = cp |> out_(total)
+                var s_pk = cp |> cls_set(fixed_array(xp, ypk, wpk), @@set_tower_pk_dw2d_cls)
+                var s_cn = cp |> cls_set(fixed_array(xp, ycn, wcn), @@set_tower_dw_conv_cls)
+                var s_mask = cp |> cls_set(fixed_array(xp, ymask, wpk), @@set_tower_pk_dw2d_cls)
+                var pa = GkDwConv2dArgs(iw = uint(iw), ih = uint(ih), ih_valid = uint(ih), ch = uint(ch), woff = 0u, boff = uint(9 * ch))
+                var pa_mask = pa
+                pa_mask.ih_valid = uint(valid)
+                let wgs = int64((total + 255) / 256)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_tower_pk_dw2d_cls(raw, h, s_pk, pa, wgs)
+                    enc_tower_dw_conv_cls(raw, h, s_cn, pa, wgs)
+                    enc_tower_pk_dw2d_cls(raw, h, s_mask, pa_mask, wgs)
+                }
+                let pk_dev <- cp |> plane_run(ypk)
+                let cn_dev <- cp |> plane_run(ycn)
+                let mask_dev <- cp |> plane_run(ymask)
+                check_rows(t, "tower_pk_dw2d over tap-major taps vs the CPU loop", pk_dev, want, BAR_APPROX, ch)
+                check_rows(t, "tower_dw_conv over channel-major taps vs the CPU loop", cn_dev, want, BAR_APPROX, ch)
+                check_rows(t, "tower_pk_dw2d under the length mask vs the CPU loop over the valid rows", mask_dev, masked, BAR_APPROX, ch)
+                t |> success(mismatch_exact(want, masked) > 0, "tower_pk_dw2d control: the mask moves the rows past the valid length")
             }
         } else {
             t |> skip("dasVulkan not present")
@@ -741,7 +872,7 @@ let private LN_HSP = 128
 def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate over the biased-block classes: the fixture, one command buffer, the oracles and their controls
     t0 |> run("the biased-block row classes (layernorm, bias+act, post-add+ln, the head restrides) == the CPU tower helpers") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init() || !ensure_tower_ln_cls() || !ensure_tower_bias_act_cls() || !ensure_tower_post_add_ln_cls()
+            if (!vk_moe_init() || !ensure_tower_ln_cls() || !ensure_tower_bias_act_cls() || !ensure_tower_post_add_ln_cls() || !ensure_tower_post_add_ln_nb_cls()
                     || !ensure_tower_hpad_cls() || !ensure_tower_hpad16_cls() || !ensure_tower_hunpad_cls() || !ensure_tower_rope_tab_cls()) {
                 t |> skip("no Vulkan device")
                 return
@@ -772,6 +903,8 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
                 let xb0p = cp |> out_(nd)   // ... and its layernorm output, which must stay untouched
                 let x_half_p = cp |> io_(x)    // the seam at ascale = 0.5, ln_on = 0
                 let xb_half_p = cp |> out_(nd)
+                let x_nb_p = cp |> io_(x)    // the bias-less seam (parakeet's blocks): the branch added bare, the next layernorm behind it
+                let xb_nb_p = cp |> out_(nd)
                 let wp = cp |> in_(wn)
                 let qp = cp |> in_(q)
                 let qpp = cp |> out_(rows_pad * d_padded)
@@ -788,20 +921,21 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
                 var s_post = cp |> cls_set(fixed_array(xp, yp, xb2p, wp), @@set_tower_post_add_ln_cls)
                 var s_post0 = cp |> cls_set(fixed_array(x0p, yp, xb0p, wp), @@set_tower_post_add_ln_cls)
                 var s_post_half = cp |> cls_set(fixed_array(x_half_p, yp, xb_half_p, wp), @@set_tower_post_add_ln_cls)
+                var s_post_nb = cp |> cls_set(fixed_array(x_nb_p, yp, xb_nb_p, wp), @@set_tower_post_add_ln_nb_cls)
                 var s_pad = cp |> cls_set(fixed_array(qp, qpp), @@set_tower_hpad_cls)
                 var s_pad16 = cp |> cls_set(fixed_array(qp, qphp), @@set_tower_hpad16_cls)
                 var s_unpad = cp |> cls_set(fixed_array(qpp, qcp), @@set_tower_hunpad_cls)
-                var pa_ln = TowerLnArgs(d = uint(d), rows = uint(rows), eps = ROWS_EPS, ln_on = 1u, lnoff = 0u, lnboff = uint(d))
-                var pa_post = TowerLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 1u, lnoff = uint(3 * d), lnboff = uint(d), ascale = 1.0)
-                var pa_post0 = TowerLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 0u, lnoff = uint(3 * d), lnboff = uint(d), ascale = 1.0)
-                var pa_post_half = TowerLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 0u, lnoff = uint(3 * d), lnboff = uint(d), ascale = 0.5)
-                var pa_rs = TowerRestrideArgs(rows = uint(rows), rows_pad = uint(rows_pad), nheads = uint(ROWS_HEADS), hs = uint(LN_HS), hsp = uint(LN_HSP), sstride = uint(d_compact), soff = 0u)
+                var pa_ln = GkPostAddLnArgs(d = uint(d), rows = uint(rows), eps = ROWS_EPS, ln_on = 1u, lnoff = 0u, lnboff = uint(d), xboff = 0u)
+                var pa_post = GkPostAddLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 1u, lnoff = uint(3 * d), lnboff = uint(d), ascale = 1.0, xboff = 0u)
+                var pa_post0 = GkPostAddLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 0u, lnoff = uint(3 * d), lnboff = uint(d), ascale = 1.0, xboff = 0u)
+                var pa_post_half = GkPostAddLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 0u, lnoff = uint(3 * d), lnboff = uint(d), ascale = 0.5, xboff = 0u)
+                var pa_rs = GkRestrideArgs(rows = uint(rows), rows_pad = uint(rows_pad), nheads = uint(ROWS_HEADS), hs = uint(LN_HS), hsp = uint(LN_HSP), sstride = uint(d_compact), soff = 0u)
                 let wg4 = int64((nd / 4 + 255) / 256)
                 let wg_rs = int64((rows_pad * d_padded + 255) / 256)   // the pads cover the 64-aligned cap: the rows past `rows` come out zero
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_tower_ln_cls(raw, h, s_ln, pa_ln, int64(rows))
                     for (act, s_act in act_arms, s_acts) {
-                        var pa_act = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = act)
+                        var pa_act = GkBiasActArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = act)
                         enc_tower_bias_act_cls(raw, h, s_act, pa_act, wg4)
                     }
                     enc_tower_hpad_cls(raw, h, s_pad, pa_rs, wg_rs)
@@ -810,6 +944,7 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
                     enc_tower_rope_tab_cls(raw, h, s_rope, pa_rope, int64((rows * ROWS_HEADS * half + 255) / 256))
                     enc_tower_post_add_ln_cls(raw, h, s_post0, pa_post0, int64(rows))
                     enc_tower_post_add_ln_cls(raw, h, s_post_half, pa_post_half, int64(rows))
+                    enc_tower_post_add_ln_nb_cls(raw, h, s_post_nb, pa_post, int64(rows))
                     enc_tower_post_add_ln_cls(raw, h, s_post, pa_post, int64(rows))   // last: it rewrites x, which the layernorm reads whole
                 }
                 let xb_dev <- cp |> plane_run(xbp)
@@ -827,10 +962,19 @@ def test_vkt_tower_ln_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate ove
                 let gsilu_dev <- cp |> plane_run(act_p[3])
                 let grelu_dev <- cp |> plane_run(act_p[4])
                 let xhalf_dev <- cp |> plane_run(x_half_p)
+                let xnb_dev <- cp |> plane_run(x_nb_p)
+                let xbnb_dev <- cp |> plane_run(xb_nb_p)
                 var xb_ref : array<float>
                 xb_ref |> resize(nd)
                 layernorm_batch(xb_ref, x, wn, 0l, int64(d), int64(d), int64(rows), ROWS_EPS)
                 check_rows(t, "tower_ln layernorm rows vs layernorm_batch", xb_dev, xb_ref, BAR_APPROX, d)
+                let xnb_ref <- [for (xv, yv in x, y); xv + yv]   //! the bias-less seam: the branch bare
+                check_rows(t, "tower_post_add_ln_nb the seam without the bias row vs x + y", xnb_dev, xnb_ref, BAR_APPROX, d)
+                var xbnb_ref : array<float>
+                xbnb_ref |> resize(nd)
+                layernorm_batch(xbnb_ref, xnb_ref, wn, int64(3 * d), int64(d), int64(d), int64(rows), ROWS_EPS)
+                check_rows(t, "tower_post_add_ln_nb the next layernorm over the bare seam vs layernorm_batch", xbnb_dev, xbnb_ref, BAR_APPROX, d)
+                t |> success(mismatch_rel("tower_post_add_ln_nb control (MUST mismatch)", x_dev, xnb_ref, 1e-4) > 0, "tower_post_add_ln_nb control: the biased stamp's seam lands off the bare one (the bias row is live)")
                 var g_ref := g
                 add_bias_rows(g_ref, wn, int64(2 * d), int64(d), int64(rows))
                 check_rows(t, "tower_bias_act BIAS_ACT_NONE the bias alone vs add_bias_rows", g0_dev, g_ref, BAR_APPROX, d)
@@ -973,10 +1117,10 @@ def test_vkt_tower_f16_feeds(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                 var s_padb = cp |> cls_set(fixed_array(qp, qpp, wp), @@set_tower_hpad_b_cls)
                 var s_pad16b = cp |> cls_set(fixed_array(qp, qphp, wp), @@set_tower_hpad16_b_cls)
                 var s_unpad16 = cp |> cls_set(fixed_array(qpp, qchp), @@set_tower_hunpad16_cls)
-                var pa_ln = TowerLnArgs(d = uint(d), rows = uint(rows), eps = ROWS_EPS, ln_on = 1u, lnoff = 0u, lnboff = uint(d))
-                var pa_post = TowerLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 1u, lnoff = uint(3 * d), lnboff = uint(d), ascale = 1.0)
-                var pa_post0 = TowerLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 0u, lnoff = uint(3 * d), lnboff = uint(d), ascale = 1.0)
-                var pa_rs = TowerRestrideArgs(rows = uint(rows), rows_pad = uint(rows_pad), nheads = uint(ROWS_HEADS), hs = uint(LN_HS), hsp = uint(LN_HSP),
+                var pa_ln = GkPostAddLnArgs(d = uint(d), rows = uint(rows), eps = ROWS_EPS, ln_on = 1u, lnoff = 0u, lnboff = uint(d), xboff = 0u)
+                var pa_post = GkPostAddLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 1u, lnoff = uint(3 * d), lnboff = uint(d), ascale = 1.0, xboff = 0u)
+                var pa_post0 = GkPostAddLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 0u, lnoff = uint(3 * d), lnboff = uint(d), ascale = 1.0, xboff = 0u)
+                var pa_rs = GkRestrideArgs(rows = uint(rows), rows_pad = uint(rows_pad), nheads = uint(ROWS_HEADS), hs = uint(LN_HS), hsp = uint(LN_HSP),
                     sstride = uint(d_compact), soff = 0u, boff = uint(2 * d))
                 let wg4 = int64((nd / 4 + 255) / 256)
                 let wg_rs = int64((rows_pad * d_padded + 255) / 256)
@@ -984,7 +1128,7 @@ def test_vkt_tower_f16_feeds(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                     enc_tower_ln_cls(raw, h, s_ln, pa_ln, int64(rows))
                     enc_tower_ln16_cls(raw, h, s_ln16, pa_ln, int64(rows))
                     for (act, s_act, s_act16 in act_arms, s_acts, s_acts16) {
-                        var pa_act = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = act)
+                        var pa_act = GkBiasActArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = act)
                         enc_tower_bias_act_cvt16_cls(raw, h, s_act16, pa_act, wg4)   // reads the rows before the in-place stamp rewrites them
                         enc_tower_bias_act_cls(raw, h, s_act, pa_act, wg4)
                     }
@@ -1124,7 +1268,7 @@ def private wdec_tail_off(kh : array<uint16>; heads, tstride, hs, from_t : int) 
 def test_vkt_wdec_classes(t0 : T?) {   // nolint:STYLE038 — one flat gate over the three classes: the fixture, one command buffer, the oracles and their controls
     t0 |> run("the whisper decoder's K/V store and chunked attention pair == the CPU decoder forms") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!vk_moe_init() || !ensure_tower_wdec_kv_cls() || !ensure_tower_wdec_attn_part_cls() || !ensure_tower_wdec_attn_comb_cls()) {
+            if (!vk_moe_init() || !ensure_tower_wdec_kv_cls() || !ensure_tower_wdec_kv16_cls() || !ensure_tower_wdec_attn_part_cls() || !ensure_tower_wdec_attn_comb_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }
@@ -1136,7 +1280,7 @@ def test_vkt_wdec_classes(t0 : T?) {   // nolint:STYLE038 — one flat gate over
             let rows = WD_ROWS
             let p0 = WD_P0
             let scale = 1.0 / sqrt(float(hs))
-            let kscale = 1.0 / sqrt(sqrt(float(hs)))
+            let kscale = wdec_kscale(int64(hs))
             let src <- row_fill(rows * dim, 31, 5, 0.05, 2.3)         // the batch's fused [q | k | v] rows
             let hist <- row_fill(p0 * dim, 23, 7, 0.04, 1.7)          // the positions before the batch, the same row shape
             let wn <- row_fill(2 * d, 11, 3, 0.02, 0.9)               // the q bias row at 0, the v bias row at d
@@ -1154,15 +1298,17 @@ def test_vkt_wdec_classes(t0 : T?) {   // nolint:STYLE038 — one flat gate over
                 let pyp = cp |> out_(nch * heads * rows * hs)
                 let yp = cp |> out_(rows * d)
                 let ycp = cp |> out_(rows * d)
-                var s_kh = cp |> cls_set(fixed_array(histp, kp, kxp, wp), @@set_tower_wdec_kv_cls)
-                var s_vh = cp |> cls_set(fixed_array(histp, vp, vxp, wp), @@set_tower_wdec_kv_cls)
-                var s_kb = cp |> cls_set(fixed_array(srcp, kp, kxp, wp), @@set_tower_wdec_kv_cls)
-                var s_vb = cp |> cls_set(fixed_array(srcp, vp, vxp, wp), @@set_tower_wdec_kv_cls)
+                var s_kh = cp |> cls_set(fixed_array(histp, kp, wp), @@set_tower_wdec_kv16_cls)
+                var s_vh = cp |> cls_set(fixed_array(histp, vp, wp), @@set_tower_wdec_kv16_cls)
+                var s_kb = cp |> cls_set(fixed_array(srcp, kp, wp), @@set_tower_wdec_kv16_cls)
+                var s_vb = cp |> cls_set(fixed_array(srcp, vp, wp), @@set_tower_wdec_kv16_cls)
+                var s_kbx = cp |> cls_set(fixed_array(srcp, kxp, wp), @@set_tower_wdec_kv_cls)
+                var s_vbx = cp |> cls_set(fixed_array(srcp, vxp, wp), @@set_tower_wdec_kv_cls)
                 var s_attn = cp |> cls_set(fixed_array(srcp, kp, vp, pmsp, pyp, wp), @@set_tower_wdec_attn_part_cls)
                 var s_comb = cp |> cls_set(fixed_array(pmsp, pyp, yp), @@set_tower_wdec_attn_comb_cls)
                 var s_combc = cp |> cls_set(fixed_array(pmsp, pyp, ycp), @@set_tower_wdec_attn_comb_cls)
-                var pa_kh = TowerWdecKvArgs(rows = uint(p0), sstride = uint(dim), soff = uint(d), nheads = uint(heads), tstride = uint(tstride), p0 = 0u,
-                    dst_off = 0u, boff = 0u, bias_on = 0u, mode = WDEC_KV_F16)
+                var pa_kh = GkWdecKvArgs(rows = uint(p0), sstride = uint(dim), soff = uint(d), nheads = uint(heads), tstride = uint(tstride), p0 = 0u,
+                    dst_off = 0u, boff = 0u, bias_on = 0u, mode = WDEC_KV_F16, hs = uint(hs), kscale = wdec_kscale(int64(hs)))
                 var pa_vh = pa_kh
                 pa_vh.soff = uint(2 * d)
                 pa_vh.bias_on = 1u
@@ -1177,24 +1323,24 @@ def test_vkt_wdec_classes(t0 : T?) {   // nolint:STYLE038 — one flat gate over
                 pa_kx.mode = WDEC_KV_KX
                 var pa_vx = pa_vb
                 pa_vx.mode = WDEC_KV_VX
-                var pa_as = TowerWdecAttnArgs(dim = uint(dim), tstride = uint(tstride), len0 = uint(p0 + 1), causal = 1u, nheads = uint(heads),
-                    nrows = uint(rows), koff = 0u, voff = 0u, qboff = 0u)
+                var pa_as = GkWdecAttnArgs(dim = uint(dim), tstride = uint(tstride), len0 = uint(p0 + 1), causal = 1u, nheads = uint(heads),
+                    nrows = uint(rows), koff = 0u, voff = 0u, qboff = 0u, hs = uint(hs), scale = 1.0 / sqrt(float(hs)))
                 let len_cross = 150   // inside the first chunk, so the cross rows reach the combine with the second chunk's partial empty
                 var pa_ac = pa_as
                 pa_ac.len0 = uint(len_cross)
                 pa_ac.causal = 0u
-                var pa_c = TowerWdecCombArgs(dim = uint(d), nchunks = uint(nch), nheads = uint(heads), nrows = uint(rows))
+                var pa_c = GkWdecCombArgs(dim = uint(d), nchunks = uint(nch), nheads = uint(heads), nrows = uint(rows), hs = uint(hs))
                 let wg_h = int64((p0 * d + 255) / 256)
                 let wg_b = int64((rows * d + 255) / 256)
                 let wg_attn = int64(nch * heads * rows)
                 let wg_comb = int64(heads * rows)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
-                    enc_tower_wdec_kv_cls(raw, h, s_kh, pa_kh, wg_h)
-                    enc_tower_wdec_kv_cls(raw, h, s_vh, pa_vh, wg_h)
-                    enc_tower_wdec_kv_cls(raw, h, s_kb, pa_kb, wg_b)
-                    enc_tower_wdec_kv_cls(raw, h, s_vb, pa_vb, wg_b)
-                    enc_tower_wdec_kv_cls(raw, h, s_kb, pa_kx, wg_b)
-                    enc_tower_wdec_kv_cls(raw, h, s_vb, pa_vx, wg_b)
+                    enc_tower_wdec_kv16_cls(raw, h, s_kh, pa_kh, wg_h)
+                    enc_tower_wdec_kv16_cls(raw, h, s_vh, pa_vh, wg_h)
+                    enc_tower_wdec_kv16_cls(raw, h, s_kb, pa_kb, wg_b)
+                    enc_tower_wdec_kv16_cls(raw, h, s_vb, pa_vb, wg_b)
+                    enc_tower_wdec_kv_cls(raw, h, s_kbx, pa_kx, wg_b)
+                    enc_tower_wdec_kv_cls(raw, h, s_vbx, pa_vx, wg_b)
                     enc_tower_wdec_attn_part_cls(raw, h, s_attn, pa_as, wg_attn)
                     enc_tower_wdec_attn_comb_cls(raw, h, s_comb, pa_c, wg_comb)
                     enc_tower_wdec_attn_part_cls(raw, h, s_attn, pa_ac, wg_attn)
@@ -1308,7 +1454,7 @@ def test_vkt_tower_padded_attn(t0 : T?) {
                 let fa = fixed_array(qpp, kpp, vpp, attpp)
                 var s_fa = fa_stamp_set(khr, gather_planes(cp.dev, fa), gather_planes(cp.bytes, fa), gather_planes(cp.hazard_bit, fa))
                 var s_un = cp |> cls_set(fixed_array(attpp, attp), @@set_tower_hunpad_cls)
-                var pa_rs = TowerRestrideArgs(rows = uint(rows), rows_pad = uint(rows_pad), nheads = uint(PAT_HEADS), hs = uint(LN_HS), hsp = uint(LN_HSP), sstride = uint(dc), soff = 0u)
+                var pa_rs = GkRestrideArgs(rows = uint(rows), rows_pad = uint(rows_pad), nheads = uint(PAT_HEADS), hs = uint(LN_HS), hsp = uint(LN_HSP), sstride = uint(dc), soff = 0u)
                 var pa_fa = FaArgs(rows = uint(rows), w0 = 0u, qd = uint(dp), kvd = uint(dp), kv_mul = 1u, kvbase = 0u, scale = scale, window = 0u, sinkoff = 0u)
                 let wg_rs = int64((rows_pad * dp + 255) / 256)   // the pads cover the 64-aligned cap: the K/V shadows past `rows` are zero, not the sentinel
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
@@ -1399,8 +1545,8 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
                 var s_post0 = cp |> cls_set(fixed_array(x0p, yp, xb0p, wp), @@set_tower_post_add_rms_cls)
                 var s_glu = cp |> cls_set(fixed_array(gp, up, gated_h16p, wp, wp, rexp), @@set_actf16_b_cls)
                 var pa_win = TowerWinArgs(nheads = uint(WIN_HEADS), scale = scale)
-                var pa_post = TowerLnArgs(d = uint(d), rows = uint(nrows), boff = 0u, eps = ROWS_EPS, ln_on = 1u, lnoff = uint(d), lnboff = 0u, ascale = 1.0)
-                var pa_post0 = TowerLnArgs(d = uint(d), rows = uint(nrows), boff = 0u, eps = ROWS_EPS, ln_on = 0u, lnoff = uint(d), lnboff = 0u, ascale = 1.0)
+                var pa_post = GkPostAddLnArgs(d = uint(d), rows = uint(nrows), boff = 0u, eps = ROWS_EPS, ln_on = 1u, lnoff = uint(d), lnboff = 0u, ascale = 1.0, xboff = 0u)
+                var pa_post0 = GkPostAddLnArgs(d = uint(d), rows = uint(nrows), boff = 0u, eps = ROWS_EPS, ln_on = 0u, lnoff = uint(d), lnboff = 0u, ascale = 1.0, xboff = 0u)
                 var pa_glu = ActArgs(nelem = uint(nd), act = ACT_SILU, gboff = uint(2 * d), uboff = uint(3 * d), brow = uint(d))
                 let wg4 = int64((nd / 4 + 255) / 256)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
@@ -1538,23 +1684,23 @@ def test_vkt_tower_front_movers(t0 : T?) {   // nolint:STYLE038 — one flat gat
                 var s_cvt = cp |> cls_set(fixed_array(xp, cvtp), @@set_tower_clamp_cvt_cls)
                 var s_add = cp |> cls_set(fixed_array(addp, wp), @@set_tower_bias_act_cls)
                 var s_fin = cp |> cls_set(fixed_array(finp, wp), @@set_tower_bias_act_cls)
-                var s_ln = cp |> cls_set(fixed_array(lnp, wp), @@set_tower_ln_relu_cls)
-                var pa_im = TowerIm2colArgs(iw = uint(FM_IW), ih = uint(FM_IH), cin = uint(FM_CIN), kdp = uint(FM_KDP), rows = uint(FM_CHUNKS * FM_OH * FM_OW))
-                var pa_im1 = TtsIm2colArgs(cin = uint(nch1), tin = uint(len1), tout = uint(len1), k = 3u, stride = 1u, pad_l = 1u, dilation = 1u, kdim = uint(kdp1),
-                    rows = 0u)
-                var pa_im2 = TtsIm2colArgs(cin = uint(nch2), tin = uint(len1), tout = uint(rows2), k = 3u, stride = 2u, pad_l = 1u, dilation = 1u, kdim = uint(kdp2),
-                    rows = 1u)
-                var pa_sh = TowerQ3aShuffleArgs(nch = uint(q3_nch), npos = uint(q3_pos))
-                var pa_fs = TowerFeatShuffleArgs(w = uint(fs_w), ch = uint(fs_c), t = uint(fs_t))
-                var pa_gq = TowerRestrideArgs(rows = uint(rows), rows_pad = uint(rows), nheads = 1u, hs = uint(hs), hsp = uint(hs), sstride = uint(d),
+                var s_ln = cp |> cls_set(fixed_array(lnp, lnp, wp), @@set_tower_ln_relu_cls)
+                var pa_im = GkIm2col2dArgs(iw = uint(FM_IW), ih = uint(FM_IH), cin = uint(FM_CIN), sstride = uint(FM_CIN), kdp = uint(FM_KDP), rows = uint(FM_CHUNKS * FM_OH * FM_OW), soff = 0u)
+                var pa_im1 = GkIm2col1dArgs(cin = uint(nch1), tin = uint(len1), tout = uint(len1), k = 3u, stride = 1u, pad_l = 1u, dilation = 1u, kdim = uint(kdp1),
+                    row_major = 0u, r0 = 0u, mp = uint(len1))
+                var pa_im2 = GkIm2col1dArgs(cin = uint(nch2), tin = uint(len1), tout = uint(rows2), k = 3u, stride = 2u, pad_l = 1u, dilation = 1u, kdim = uint(kdp2),
+                    row_major = 1u, r0 = 0u, mp = uint(rows2))
+                var pa_sh = GkQ3aShuffleArgs(nch = uint(q3_nch), ncp = uint(q3_nch), chunk_stride = uint(16 * 13 * q3_nch), npos = uint(q3_pos))
+                var pa_fs = GkFeatShuffleArgs(w = uint(fs_w), ch = uint(fs_c), t = uint(fs_t), rows_pad = uint(fs_t))
+                var pa_gq = GkRestrideArgs(rows = uint(rows), rows_pad = uint(rows), nheads = 1u, hs = uint(hs), hsp = uint(hs), sstride = uint(d),
                     soff = uint(second_head_base), boff = uint(second_head_base))
-                var pa_gp = TowerRestrideArgs(rows = uint(rows), rows_pad = uint(rows), nheads = 1u, hs = uint(hs), hsp = uint(hs), sstride = uint(d),
+                var pa_gp = GkRestrideArgs(rows = uint(rows), rows_pad = uint(rows), nheads = 1u, hs = uint(hs), hsp = uint(hs), sstride = uint(d),
                     soff = uint(second_head_base))
-                var pa_cvt = TowerClampArgs(nelem = uint(nd), lo = -1.5, hi = 1.5)
-                var pa_add = TowerBiasArgs(d = uint(add_n), nelem = uint(add_n), boff = uint(d), act = BIAS_ACT_NONE)   // the stem's position plane: one bias row the width of the rows
-                var pa_fin_b = TowerBiasArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = BIAS_ACT_NONE)
-                var pa_fin_p = TowerBiasArgs(d = uint(q3_tok * d), nelem = uint(nd), boff = uint(3 * d), act = BIAS_ACT_NONE)
-                var pa_ln = TowerLnReluArgs(cout = uint(d), rows = uint(rows), woff = 0u, eps = ROWS_EPS)
+                var pa_cvt = GkClampArgs(nelem = uint(nd), lo = -1.5, hi = 1.5, scale = 1.0)
+                var pa_add = GkBiasActArgs(d = uint(add_n), nelem = uint(add_n), boff = uint(d), act = BIAS_ACT_NONE)
+                var pa_fin_b = GkBiasActArgs(d = uint(d), nelem = uint(nd), boff = uint(2 * d), act = BIAS_ACT_NONE)
+                var pa_fin_p = GkBiasActArgs(d = uint(q3_tok * d), nelem = uint(nd), boff = uint(3 * d), act = BIAS_ACT_NONE)
+                var pa_ln = GkLnReluRowsArgs(cout = uint(d), ldin = uint(d), ldout = uint(d), rows = uint(rows), woff = 0u, eps = ROWS_EPS)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_tower_im2col_cls(raw, h, s_im, pa_im, int64((n_col + 255) / 256))
                     enc_tts_im2col16_cls(raw, h, s_im1, pa_im1, int64(len1 * kdp1))
@@ -1782,9 +1928,9 @@ def test_vkt_tower_front_mel(t0 : T?) {   // nolint:STYLE038 — one flat gate o
                     floor = MEL_FLOOR_24, scale = 1.0, frame_major = 1u, add_floor = 1u)
                 var pa_wh = TowerMelLogArgs(n_bins = uint(MEL_NBINS), n_mel = uint(MEL_NMEL), n_frames = uint(MEL_NLEN),
                     floor = MEL_FLOOR_24, scale = MEL_LOG10_E, frame_major = 0u, add_floor = 0u)
-                var pa_norm = TowerMelNormArgs(n_mel = uint(MEL_NMEL), n_frames = uint(NORM_NLEN), valid = uint(NORM_VALID))
-                var pa_dw = TowerDwConvArgs(iw = uint(FM_IW), ih = uint(FM_IH), ch = uint(DW_CH), woff = 0u, boff = uint(DW_CH * 9))
-                var pa_rel = TowerRelSinCosArgs(d = uint(REL_D), tt = uint(tt))
+                var pa_norm = GkMelNormArgs(n_mel = uint(MEL_NMEL), n_frames = uint(NORM_NLEN), valid = uint(NORM_VALID))
+                var pa_dw = GkDwConv2dArgs(iw = uint(FM_IW), ih = uint(FM_IH), ih_valid = uint(FM_IH), ch = uint(DW_CH), woff = 0u, boff = uint(DW_CH * 9))
+                var pa_rel = GkRelSinCosArgs(d = uint(REL_D), tt = uint(tt), rows_pad = uint(2 * tt - 1))
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_tower_spec_dft_cls(raw, h, s_mag, pa_mag, int64((n_pw + 255) / 256))
                     enc_tower_spec_dft_cls(raw, h, s_pow, pa_pow, int64((n_pw + 255) / 256))

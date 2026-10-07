@@ -442,6 +442,22 @@ def tower_stage_f32_pad_row_stride(var blob : array<float>; src : PlaneF; src_of
     }
 }
 
+//! The fronts' first conv as the im2col GEMM's weight panel [nch][kdp]: the nine taps of each channel on the lattice, zero past
+//! them - the file's taps [ch][9] (canary), or [9][ch] under ``tap_major`` (parakeet).
+def tower_stage_conv0_panel(var slab : array<float>; blob : PlaneF; w_off, nch, kdp : int64; tap_major : bool) {
+    slab |> reserve_resize(nch * kdp)
+    if (tap_major) {
+        let src = plane_at(blob, w_off)
+        for (o in range64(nch)) {
+            for (k in range64(9l)) {
+                slab[o * kdp + k] = unsafe(src[k * nch + o])
+            }
+        }
+    } else {
+        tower_stage_f32_pad_row_stride(slab, blob, w_off, 0l, nch, 9l, kdp)
+    }
+}
+
 //! Zero ``n`` floats at ``at`` — pad tails of staged planes.
 def tower_zero_span(var a : array<float>; at, n : int64) {
     if (n <= 0l) {

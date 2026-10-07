@@ -1705,7 +1705,7 @@ module) is independent and can land any time - it is pure structure.
     Still open, each a fold only after its probe row reads flat: the 8-row / 4-row flash Q-tiles (`FaT`),
     `MmBatchT`'s two tile edges, the hand-unrolled `DnScan` / `DaAttnBH128T` register blocks, the batch
     tiles' `stage_w` lane helpers against `KqGemvLeafT.grid4`; and the Q8 byte store spelled by
-    `Q8BlockStoreT.blk_store` and `ResidualT.quant32` (a template fold, pinned by the codec stamps' dump).
+    `GkQ8BlockStore.blk_store` and `ResidualT.quant32` (a template fold, pinned by the codec stamps' dump).
 94. **The qwen25v Vulkan chain's remaining f16 sources.** The chain (`ARCHITECTURE_GPU_TOWER_VULKAN.md`
     2.2ar) holds the exact CPU chain within 1e-2 x rms through eight blocks and within 0.02 to 0.09
     x rms at 32 blocks (the Metal rung's order) with the window layers in f32; what re-rolls the
@@ -1909,9 +1909,8 @@ module) is independent and can land any time - it is pure structure.
     here, twice in the ASR decoder and eight times in the Metal driver (a `TowerEngage` in
     `dasllama_tower.das`); the three hand-rolled listener registries (`register_vk_drop_hook`,
     `register_weights_epoch_listener`, `register_reload_prep`) against daslib's `delegate` module; the
-    Vulkan dump rungs against their Metal twins; the two gelu-quick spellings (`x * (1/(1+exp(-1.702
-    x)))` and `x / (1+exp(-1.702 x))` round differently, so a fold moves one side's bits); and
-    `approx` in `test_metal_decode_kernels.das` against `_compares`.
+    Vulkan dump rungs against their Metal twins; and `approx` in `test_metal_decode_kernels.das` against
+    `_compares`.
 92. **The low-format N-row arc's review leftovers.** The kq kernel
     bodies write the per-format scale-row strides as literals (`wsb * 5u`, `* 8u`, `* 6u`, `* 10u`,
     `* 12u`, `* 40u + 32u`), which `REVIEW_KQ_FORMATS.md` wants read off `dasllama_kqformat.das`'s
@@ -1934,16 +1933,14 @@ module) is independent and can land any time - it is pure structure.
     homes run as one `class template` (`ARCHITECTURE_GPU.md#gpu-shared-kernels`) cover the Pocket
     row copy, rope and attention, the duration sums, the whole harmonic source, the STFT pair, AdaIN,
     the depthwise rows conv, the residual add-and-scale, Axpy and Concat. What stays twice, by kind:
-    (a) the same output under a different thread-to-work split - `TtsElemT` / `TtsPkRowScale` /
+    (a) the same output under a different thread-to-work split - `TtsElemT` /
     `TtsGeluTanh` (Vulkan four elements an invocation, Metal one a thread), the reflect pad (two
     `TtsPkRows` copies against `MetalSt2Reflect1`), the column statistics (four dispatches against
     one), the Pocket row GEMV (`TtsPkGemvT`'s float4 lane against `MetalPkGemvT`'s strided lane, five
     stamps) - each folds onto one body and is profiled on both boxes, two bodies kept only where the
     profile parts; (b) a different algorithm - the LSTM direction (each home's slab writer lays `w_hh`
     out its own way) and the ALBERT attention (a two-pass softmax against an online one) - which stay
-    two; (c) pairs whose Metal twin serves another family's chain and folds with that family's PR -
-    `TtsRowGather` (`MetalRowGather` is the decode greedy embed's and the whisper stem's) and
-    `TtsIm2colT` (`MetalSt2Im2colCm` is the whisper twin). Vulkan's four fused frame-loop GEMV stamps
+    two. Vulkan's four fused frame-loop GEMV stamps
     (`LnQkv`, `AddScale`, `Add`, `LnGelu`) have no Metal twin: once the GEMV template is shared, Metal
     gains them and the five-dispatch layer. The seat chains the two drivers write per backend are the
     other half of the same picture and a separate arc: the host flow of every TTS seat - the stage
@@ -2156,3 +2153,21 @@ module) is independent and can land any time - it is pure structure.
    (`gemma4a_mid_dim` against `proj_dim`), and the chain declines `shape`, so the CPU chain serves
    E4B audio. Done = the tail's regions, tiles and buffers at the two widths (the Metal chain's
    `g4a_tail_body` is the form), and `test_gemma4a_vulkan_twin` run on the E4B pair.
+
+145. **The audio kernel pairs that stay two.** The audio chains both homes run share their row kernels
+   through `dasllama/dasllama_gpu_kernels_common.das` - the bias-and-activation rows, the clamp and f16
+   feeds, the im2col of both ranks, the depthwise convs, the feature shuffles, the pools, the seam and
+   layernorm, the whisper decoder's K/V stores and attention, the FastConformer's GLU and taps, gemma4a's
+   attention. Two pairs compute the same thing by different algorithms and stay two: (a) the spectrum and
+   the log-mel - Vulkan's `TowerSpecDft` and `TowerMelLog` evaluate the DFT and the filterbank sums
+   directly, one invocation a bin or a mel, where Metal runs the DFT as the f32 GEMM over the transposed
+   twiddles, the power or magnitude as a row map (`enc_q3a_pow`, `enc_g4a_mag`), the filterbank as a
+   second GEMM and the log as a row map (`enc_g4a_logmel`); each is the form its home's GEMM builder makes
+   fast, and a fold waits on the two forms profiled on both boxes; (b) canary's rel-pos attention -
+   Vulkan's rel-plane kernels (`tower_cn_attn_r_cls`, `tower_cn_attn_r64_cls`) walk every key a row over
+   the planes the device built, Metal packs each head's (Q+u), (Q+v), K, V^T and pos panels and runs the
+   f32 GEMM builder (`enc_fc_pack`, `enc_fc_pexp`, `enc_fc_twin`), because the per-row walk is the
+   encode's cost past a minute of audio there (`ARCHITECTURE_GPU_TOWER.md#tower-encode-chains`); the
+   Vulkan form folds onto the Metal one only with a Vulkan f32 GEMM of the same shape. Done = each pair
+   profiled on both boxes under one clip, and the slower form folded onto the faster where the profile
+   parts by more than its noise.

@@ -118,7 +118,7 @@ def test_vkt_pk_row_scale(t0 : T?) {
                 let xp = cp |> io_(x, 0, SLACK)
                 let wp = cp |> in_(scale, RS_SOFF, SLACK)
                 var s = cp |> cls_set(fixed_array(xp, wp), @@set_tts_pk_row_scale_cls)
-                var pa = TowerBiasArgs(d = uint(RS_C), nelem = uint(n), boff = uint(RS_SOFF))
+                var pa = GkBiasActArgs(d = uint(RS_C), nelem = uint(n), boff = uint(RS_SOFF))
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_tts_pk_row_scale_cls(raw, h, s, pa, int64(n))
                 }

@@ -5,6 +5,7 @@ options _cyclomatic_complexity = 0  // same — the arm ladders follow the kerne
 options _dasllama_internal = true
 
 require dastest/testing_boost public
+require dasllama/dasllama_whisper   // nolint:STYLE030,LINT019 — wdec_kscale, read in the Apple half alone
 require dasllama/dasllama_math
 require dasllama/dasllama_tower     // layernorm + the shipped gelu flavors + the gemma4v pieces — the tower oracles
 require dasllama/dasllama_rope      // build_rope_tabs_rows — the rope2d gate's tables
@@ -20,6 +21,7 @@ require daslib/f16_cvt              // f32_to_f16 — packing the synthetic scal
 require math
 require strings
 require daslib/strings_boost
+require dasllama/dasllama_gpu_math   // nolint:STYLE030,LINT019 - the row stamps' activation codes, inside the device arms
 
 // The decode-side elementwise/misc corpus vs direct CPU oracles on synthetic data: copy_row,
 // argmax (the CPU sampler's exact lowest-index tie-break, exercised with deliberate exact
@@ -30,6 +32,7 @@ require daslib/strings_boost
 // build, or with no Metal device, every check skips.
 
 let private EPS = 1.0e-5
+let private PAD_SENTINEL = -1000.0   //! the fill of an output's pad slots: the compare holds it unmoved
 let private BAR_BITS = Bar(exact = true, poison_scaled = true)   //! bit-exact; the poisoned last element moves 0.5 of its magnitude floored at 1, so no magnitude absorbs it
 let private BAR_TIGHT = Bar(rel = 1e-4, poison_scaled = true)   //! the shared 1e-4 bar: simd_sum reassociation and the device transcendentals
 
@@ -48,10 +51,10 @@ def private copy_row_gate(t : T?; var dev, queue; n : int) {
         var inscope want : array<float>
         want |> resize(n + 16)
         for (i in range(n + 16)) {
-            want[i] = i < n ? src[i] : -1000.0   // the guard must leave the pad untouched
+            want[i] = i < n ? src[i] : PAD_SENTINEL   // the guard must leave the pad untouched
         }
         let bs = mc |> in_(src)
-        let bd = mc |> out_words(n + 16, -1000.0)
+        let bd = mc |> out_words(n + 16, PAD_SENTINEL)
         let bn = mc |> in_plain([uint(n)])
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
@@ -143,7 +146,7 @@ def private embed_q8_gate(t : T?; var dev, queue; dim, vocab, tok : int) {
         }
         let bblob = mc |> in_plain(blob)
         let btok = mc |> in_plain([uint(tok)])
-        let bxo = mc |> out_words(dim, -1000.0)
+        let bxo = mc |> out_words(dim, PAD_SENTINEL)
         let bdim = mc |> in_plain([uint(dim)])
         let besc = mc |> in_plain([escale])
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
@@ -170,12 +173,12 @@ def private embed_f32_gate(t : T?; var dev, queue; dim, vocab, tok, lead : int) 
         var inscope want <- [for (i in range(dim)); rows[lead + tok * dim + i] * escale]
         let btab = mc |> in_plain(rows)
         let btok = mc |> in_plain([uint(tok)])
-        let bxo = mc |> out_words(dim, -1000.0)
+        let bxo = mc |> out_words(dim, PAD_SENTINEL)
         let bnone = mc |> in_plain([1.0e9])   // the add planes, bound and never read
-        var ka = RowGatherArgs(c = uint(dim), add_b = 0u, add_c = 0u, total = uint(dim), scale = escale)
+        var ka = GkRowGatherArgs(c = uint(dim), rows = 1u, aoff = uint(lead), boff = 0u, coff = 0u, out_off = 0u, add_b = 0u, add_c = 0u, scale = escale)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[btab], uint64(lead * 4), mc.buf[btok], mc.buf[bnone], 0ul, mc.buf[bnone], 0ul, mc.buf[bxo], ka, int64(dim))
+                invoke(st.enc, enc, mc.buf[btab], mc.buf[btok], mc.buf[bnone], mc.buf[bnone], mc.buf[bxo], ka, int64(dim))
             }
         }
         return if (!ran)
@@ -204,7 +207,7 @@ def private embed_k6_gate(t : T?; var dev, queue; dim, vocab, tok : int) {
         let bks = mc |> in_plain(ks)
         let bkq = mc |> in_plain(kq)
         let btok = mc |> in_plain([uint(tok)])
-        let bxo = mc |> out_words(dim, -1000.0)
+        let bxo = mc |> out_words(dim, PAD_SENTINEL)
         let bdim = mc |> in_plain([uint(dim)])
         let besc = mc |> in_plain([escale])
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
@@ -252,7 +255,7 @@ def private add_rms_gate(t : T?; var dev, queue; batched : bool; dim, nrows : in
         let bx = mc |> io_(xv)
         let ba = mc |> in_(av)
         let bw = mc |> in_(w)
-        let by = mc |> out_words(total, -1000.0)
+        let by = mc |> out_words(total, PAD_SENTINEL)
         let bdim = mc |> in_plain([uint(dim)])
         let beps = mc |> in_plain([EPS])
         let basc = mc |> in_plain([ascale])
@@ -304,7 +307,7 @@ def private pre_add_rms_gate(t : T?; var dev, queue; dim : int) {
         let ba = mc |> in_(av)
         let bwpa = mc |> in_(wpa)
         let bwffn = mc |> in_(wffn)
-        let by = mc |> out_words(dim, -1000.0)
+        let by = mc |> out_words(dim, PAD_SENTINEL)
         let bdim = mc |> in_plain([uint(dim)])
         let beps = mc |> in_plain([EPS])
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
@@ -397,6 +400,53 @@ def private ew2_act_gate(t : T?; var dev, queue; name : string; st; total : int;
     }
 }
 
+//! The CPU's f16-table GEGLU-quick on the shared stamp with the gemma4v bounds fused: at open bounds the kernel's binary16 round
+//! trips land on the table values (BAR_TIGHT: the exp identity's rounding parts from the table's tanh by under a tenth of an f16 ulp);
+//! at tight bounds the output moves (the control).
+def private geglu_gate(t : T?; var dev, queue; total, ff : int) {
+    let tag = "geglu_quick total={total}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_geglu_quick)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope g <- [for (i in range(total)); 0.21 * float(i % 43) - 4.3]
+        var inscope u <- [for (i in range(total)); 0.17 * float(i % 23) - 1.9]
+        var inscope want := g
+        geglu_quick_lut_rows(want, g, u, int64(ff), int64(total / ff))
+        var inscope tight : array<float>
+        tight |> resize(total)
+        for (i in range(total)) {
+            tight[i] = clamp(gelu_quick_lut_f32(clamp(g[i], -1.0, 1.5)) * clamp(u[i], -0.5, 0.75), -0.3, 0.4)
+        }
+        let bg = mc |> io_(g)
+        let bu = mc |> in_(u)
+        var ka = GkGegluArgs(nelem = uint(total), glo = -1e30, ghi = 1e30, ulo = -1e30, uhi = 1e30, dlo = -1e30, dhi = 1e30)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bg], mc.buf[bu], ka, int64((total + 3) / 4))
+            }
+        }
+        return if (!ran)
+        t |> success(mismatch_exact(want, g) > 0, "{tag}: the reference moves off the input")
+        check_buf(t, tag, mc.buf[bg], want, BAR_TIGHT, FLAT_SHAPE)
+        mc |> plane_upload(bg, g)
+        var kt = GkGegluArgs(nelem = uint(total), glo = -1.0, ghi = 1.5, ulo = -0.5, uhi = 0.75, dlo = -0.3, dhi = 0.4)
+        let ran2 = mc |> cell_record(t, "{tag} bounds") $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bg], mc.buf[bu], kt, int64((total + 3) / 4))
+            }
+        }
+        return if (!ran2)
+        check_buf(t, "{tag} bounds", mc.buf[bg], tight, BAR_TIGHT, FLAT_SHAPE)
+        var apart = 0
+        for (a, b in tight, want) {
+            apart += abs(a - b) > 1e-4 ? 1 : 0
+        }
+        t |> success(apart > total / 4, "{tag}: the bounds move the rows ({apart} of {total}) - the control")
+    }
+}
+
 // ===== the gemma4v tower primitives =====
 
 // clamp: dst = clamp(src, lo, hi) with the bounds read off a clamp record in a blob-shaped buffer
@@ -408,8 +458,9 @@ def private clamp_gate(t : T?; var dev, queue; total : int; side : int; inplace 
     let tag = "clamp total={total} {side == CLAMP_IN ? "in" : "out"} inplace={inplace}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let st = stamp_of(@@enc_clamp)
-        var pso = mc |> keep_stamp(st, err)
+        let st = stamp_of(@@enc_clamp_rows)
+        let sc = stamp_of(@@enc_clamp_copy)
+        var pso = inplace ? (mc |> keep_stamp(st, err)) : (mc |> keep_stamp(sc, err))
         return if (!pso_ok(t, tag, pso, err))
         var inscope src : array<float>
         src |> resize(total)
@@ -423,64 +474,78 @@ def private clamp_gate(t : T?; var dev, queue; total : int; side : int; inplace 
         var inscope want : array<float>
         want |> resize(total + 16)
         for (i in range(total + 16)) {
-            want[i] = i < total ? clamp(src[i], lo, hi) : -1000.0
+            want[i] = i < total ? clamp(src[i], lo, hi) : PAD_SENTINEL
         }
         if (inplace) {
             want |> resize(total)
         }
         let bs = mc |> io_(src)
-        let bd = inplace ? bs : (mc |> out_words(total + 16, -1000.0))
-        let brec = mc |> in_(rec)
-        let bside = mc |> in_plain([uint(side)])
-        let btot = mc |> in_plain([uint(total)])
+        let bd = inplace ? bs : (mc |> out_words(total + 16, PAD_SENTINEL))
+        var ka = GkClampArgs(nelem = uint(total), lo = lo, hi = hi, scale = 1.0)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            stamp_run(st, pso) {   // the record starts 3 floats in
-                invoke(st.enc, enc, mc.buf[bs], 0ul, mc.buf[bd], 0ul, mc.buf[brec], 12ul, mc.buf[bside], mc.buf[btot], int64(total))
+            if (inplace) {
+                stamp_run(st, pso) {
+                    invoke(st.enc, enc, mc.buf[bs], ka, int64((total + 3) / 4))
+                }
+            } else {
+                stamp_run(sc, pso) {
+                    invoke(sc.enc, enc, mc.buf[bs], mc.buf[bd], ka, int64((total + 3) / 4))
+                }
             }
         }
         return if (!ran)
+        t |> success(mismatch_exact(subarray(want, range(total)), src) > 0, "{tag}: the reference moves off the input")
         check_buf(t, tag, mc.buf[bd], want, BAR_BITS, FLAT_SHAPE)
     }
 }
 
-// head restride (gemma3v): token-major rows repack [npos x n_head*hs_src] -> [npos x n_head*hs_dst]
-// with dst lanes past hs_src zeroed; exact both directions, the pad sentinel untouched.
-def private head_restride_gate(t : T?; var dev, queue; npos, n_head, hs_src, hs_dst : int) {
-    let total = npos * n_head * hs_dst
-    let tag = "head_restride npos={npos} heads={n_head} {hs_src}->{hs_dst}"
+//! The head restride on the shared template's two Metal stamps: the pad writes the tile panel [npos x heads x hsp] off the compact
+//! rows with zero lanes past hs and the output past the panel keeps its sentinel; the unpad reads the compact rows back off a
+//! padded panel. Both bit for bit against the host walk.
+def private head_restride_gate(t : T?; var dev, queue; npos, n_head, hs, hsp : int) {
+    let tag = "head_restride npos={npos} heads={n_head} {hs}->{hsp}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let st = stamp_of(@@enc_head_restride)
-        var pso = mc |> keep_stamp(st, err)
-        return if (!pso_ok(t, tag, pso, err))
+        let sp = stamp_of(@@enc_head_pad)
+        let su = stamp_of(@@enc_head_unpad)
+        var pso_p = mc |> keep_stamp(sp, err)
+        return if (!pso_ok(t, "{tag} pad", pso_p, err))
+        var pso_u = mc |> keep_stamp(su, err)
+        return if (!pso_ok(t, "{tag} unpad", pso_u, err))
+        let d = n_head * hs
+        let total_p = npos * n_head * hsp
         var inscope src : array<float>
-        src |> resize(npos * n_head * hs_src)
+        src |> resize(npos * d)
         for (i in range(length(src))) {
             src[i] = 0.31 * float(i % 89) - 13.0
         }
-        var inscope want : array<float>
-        want |> resize(total + 16)
-        for (i in range(total + 16)) {
-            if (i >= total) {
-                want[i] = -1000.0   // the pad sentinel
+        var inscope want_p : array<float>
+        want_p |> resize(total_p + 16)
+        for (i in range(total_p + 16)) {
+            if (i >= total_p) {
+                want_p[i] = PAD_SENTINEL   // the pad sentinel
             } else {
-                let lane = i % hs_dst
-                let hp = i / hs_dst
-                want[i] = lane < hs_src ? src[hp * hs_src + lane] : 0.0
+                let lane = i % hsp
+                let hp = i / hsp
+                want_p[i] = lane < hs ? src[hp * hs + lane] : 0.0
             }
         }
+        var ka = GkRestrideArgs(rows = uint(npos), rows_pad = uint(npos), nheads = uint(n_head), hs = uint(hs), hsp = uint(hsp), sstride = uint(d), soff = 0u, boff = 0u)
         let bs = mc |> in_(src)
-        let bd = mc |> out_words(total + 16, -1000.0)
-        let bsrc_hs = mc |> in_plain([uint(hs_src)])
-        let bdst_hs = mc |> in_plain([uint(hs_dst)])
-        let btot = mc |> in_plain([uint(total)])
+        let bp = mc |> out_words(total_p + 16, PAD_SENTINEL)
+        let bc = mc |> out_words(npos * d, PAD_SENTINEL)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bs], 0ul, mc.buf[bd], 0ul, mc.buf[bsrc_hs], mc.buf[bdst_hs], mc.buf[btot], int64(total))
+            stamp_run(sp, pso_p) {
+                invoke(sp.enc, enc, mc.buf[bs], mc.buf[bp], ka, int64(total_p))
+            }
+            metal_memory_barrier(enc)
+            stamp_run(su, pso_u) {
+                invoke(su.enc, enc, mc.buf[bp], mc.buf[bc], ka, int64(total_p))
             }
         }
         return if (!ran)
-        check_buf(t, tag, mc.buf[bd], want, BAR_BITS, Shape(row_width = hs_dst))
+        check_buf(t, "{tag} pad", mc.buf[bp], want_p, BAR_BITS, Shape(row_width = hsp))
+        check_buf(t, "{tag} unpad", mc.buf[bc], src, BAR_BITS, Shape(row_width = hs))
     }
 }
 
@@ -525,12 +590,10 @@ def private rope2d_gate(t : T?; var dev, queue; npos, n_head, hs : int) {
         let total = npos * n_head * pairs
         let bx = mc |> io_(x)
         let btabs = mc |> in_(tabs)
-        let bd = mc |> in_plain([uint(d)])
-        let bpairs = mc |> in_plain([uint(pairs)])
-        let btot = mc |> in_plain([uint(total)])
+        var ka = GkRope2dArgs(nheads = uint(n_head), hs = uint(hs), rows = uint(npos))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bx], mc.buf[btabs], mc.buf[bd], mc.buf[bpairs], mc.buf[btot], int64(total))
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[btabs], ka, int64(total))
             }
         }
         return if (!ran)
@@ -571,15 +634,15 @@ def private layernorm_gate(t : T?; var dev, queue; dim, nrows : int; eps : float
                     addr < float const? >(w[0]), addr < float const? >(b[0]), int64(dim), eps)
             }
         }
+        var inscope wn <- clone_to_move(w)
+        wn |> push_from(b)
         let bx = mc |> io_(x)
-        let bw = mc |> in_(w)
-        let bb = mc |> in_(b)
+        let bwn = mc |> in_(wn)
         let by = inplace ? bx : (mc |> out_(nrows * dim))
-        let bdim = mc |> in_plain([uint(dim)])
-        let beps = mc |> in_plain([eps])
+        var ka = GkPostAddLnArgs(d = uint(dim), rows = uint(nrows), woff = 0u, boff = 0u, eps = eps, ln_on = 1u, lnoff = 0u, lnboff = uint(dim), ascale = 0.0, xboff = 0u)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bx], mc.buf[bw], 0ul, mc.buf[bb], 0ul, mc.buf[by], 0ul, mc.buf[bdim], mc.buf[beps], int64(nrows))
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[by], mc.buf[bwn], ka, int64(nrows))
             }
         }
         return if (!ran)
@@ -595,7 +658,7 @@ def private gelu_flavor_gate(t : T?; var dev, queue; total : int; lut : bool) {
     let tag = "gelu_{lut ? "lut" : "erf"} total={total}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let st = lut ? stamp_of(@@enc_gelu_lut) : stamp_of(@@enc_gelu_erf)
+        let st = stamp_of(@@enc_act_rows)
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
         var inscope g : array<float>
@@ -603,7 +666,9 @@ def private gelu_flavor_gate(t : T?; var dev, queue; total : int; lut : bool) {
         for (i in range(total)) {
             g[i] = 0.21 * float(i % 43) - 4.3
         }
-        if (total >= 8) {   // the saturation + zero probes ride the tail slots
+        if (total >= 10) {   // the saturation + zero probes ride the tail slots; +-70000 reach the LUT form's +-10 clamps, where the
+            g[total - 8] = 70000.0      // unclamped tanh form overflows to inf and NaN
+            g[total - 9] = -70000.0
             g[total - 1] = 50.0
             g[total - 2] = -50.0
             g[total - 3] = 100.0
@@ -619,15 +684,15 @@ def private gelu_flavor_gate(t : T?; var dev, queue; total : int; lut : bool) {
             gelu_erf(want, int64(total))
         }
         let bg = mc |> io_(g)
-        let btot = mc |> in_plain([uint(total)])
+        var ka = GkBiasActArgs(d = 0u, nelem = uint(total), boff = 0u, act = lut ? BIAS_ACT_GELU_TANH : BIAS_ACT_GELU_ERF)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bg], 0ul, mc.buf[btot], int64(total))
+                invoke(st.enc, enc, mc.buf[bg], ka, int64((total + 3) / 4))
             }
         }
         return if (!ran || total < 8)
         // LUT: one f16 ulp at |g|~10 (RNE tie flips between the tanh and exp-identity evals);
-        // erf: two ~1.5e-7-accurate erf approximations (NR double vs A&S f32) plus f32 eval noise
+        // erf: the CPU's double-precision NR erfc against the same form in f32
         check_buf(t, "{tag}: form-matched inside the flavor bar", mc.buf[bg], want, Bar(abs_floor = lut ? 1e-2 : 1e-5), FLAT_SHAPE)
         var inscope back <- mc |> plane_run(bg)
         t |> success(back[total - 1] == 50.0 && back[total - 3] == 100.0, "{tag}: positive saturation exact")
@@ -701,7 +766,7 @@ def private rms_gate(t : T?; var dev, queue; dim, nrows : int; eps : float; weig
         let bx = mc |> in_(x)
         let bw = mc |> in_(w)
         let by = mc |> out_(nrows * dim)
-        let byh = mc |> out_words(nrows * dim, float16(-1000.0))
+        let byh = mc |> out_words(nrows * dim, float16(PAD_SENTINEL))
         let bdim = mc |> in_plain([uint(dim)])
         let beps = mc |> in_plain([eps])
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
@@ -752,7 +817,7 @@ def private ew2_hx_gate(t : T?; var dev, queue; geglu, hx, bounded : bool; rows,
         let bsg = mc |> io_(sg)
         let bsu = mc |> in_(su)
         let btot = mc |> in_plain([uint(total)])
-        let bgh = mc |> out_words(total, float16(-1000.0))
+        let bgh = mc |> out_words(total, float16(PAD_SENTINEL))
         // the row count sits at the bind offset, past a poison word - the basep[ne] shape
         let btb = mc |> in_plain([0xFFFFFFFFu, uint(rows)])
         let btm = mc |> in_plain([uint(row_elems)])
@@ -825,31 +890,20 @@ def private pos_add_gate(t : T?; var dev, queue; npos, dim, ncols, pos_entries :
     }
 }
 
-// The whisper cross-KV shuffles — pure scatter (+ one multiply for kx), bit-EXACT vs the CPU
-// walk. The offset leg writes the SECOND layer slot and proves the first stays untouched.
-// Negative controls recorded 2026-08-16: dropped kscale in the kx oracle and swapped t/j in
-// the vx oracle each redded with dumps (the kx mismatch ratio was exactly kscale).
-def private cross_kx_gate(t : T?; var dev, queue; ta, dim, hh : int; off_layer : bool) {
-    let tag = "cross_kx ta={ta} dim={dim} hh={hh} off={off_layer}"
+//! the whisper decoder's K/V stores on the shared stamps, bit-exact vs the CPU walk: the keys (KX), the values and append (VX), the f16 plane
+def private wdec_kx_gate(t : T?; var dev, queue; ta, dim, hh : int; off_layer : bool) {
+    let tag = "wdec_kv kx ta={ta} dim={dim} hh={hh} off={off_layer}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let st = stamp_of(@@enc_cross_kx)
+        let st = stamp_of(@@enc_wdec_kv)
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
         let hs = dim / hh
         let total = ta * dim
-        let kscale = 1.0 / sqrt(sqrt(float(hs)))
-        var inscope src : array<float>
-        src |> resize(total)
-        for (i in range(total)) {
-            src[i] = 0.25 * float(i % 97) - 3.0
-        }
+        let kscale = wdec_kscale(int64(hs))
+        var inscope src <- [for (i in range(total)); 0.25 * float(i % 97) - 3.0]
         let sentinel = -777.0
-        var inscope want : array<float>
-        want |> resize(2 * total)
-        for (i in range(2 * total)) {
-            want[i] = sentinel
-        }
+        var inscope want <- [for (_i in range(2 * total)); sentinel]
         let base = off_layer ? total : 0
         for (h in range(hh)) {
             for (j in range(hs)) {
@@ -860,14 +914,12 @@ def private cross_kx_gate(t : T?; var dev, queue; ta, dim, hh : int; off_layer :
         }
         let bsrc = mc |> in_(src)
         let bkx = mc |> out_words(2 * total, sentinel)
-        let bdim = mc |> in_plain([uint(dim)])
-        let bhs = mc |> in_plain([uint(hs)])
-        let bta = mc |> in_plain([uint(ta)])
-        let bks = mc |> in_plain([kscale])
-        let btot = mc |> in_plain([uint(total)])
+        let bw = mc |> in_plain([0.0])
+        var ka = GkWdecKvArgs(rows = uint(ta), sstride = uint(dim), soff = 0u, nheads = uint(hh), tstride = uint(ta), p0 = 0u,
+            dst_off = uint(base), boff = 0u, bias_on = 0u, mode = WDEC_KV_KX, hs = uint(hs), kscale = wdec_kscale(int64(hs)))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bsrc], mc.buf[bkx], uint64(base * 4), mc.buf[bdim], mc.buf[bhs], mc.buf[bta], mc.buf[bks], mc.buf[btot], int64(total))
+                invoke(st.enc, enc, mc.buf[bsrc], mc.buf[bkx], mc.buf[bw], ka, int64(total))
             }
         }
         return if (!ran)
@@ -875,62 +927,54 @@ def private cross_kx_gate(t : T?; var dev, queue; ta, dim, hh : int; off_layer :
     }
 }
 
-// The Vx form doubles as the KV APPEND: the offset leg writes n rows at t0 into a wider
-// tstride slab (sentinel-checked whole), the bias leg folds a per-column bias, and soff picks
-// a column block out of a fused-QKV row (src bound at a byte offset with the fused row stride).
-def private cross_vx_gate(t : T?; var dev, queue; ta, dim, hh : int; t0, tstride : int; hasb : bool; soff_cols : int = 0; src_stride : int = 0) {
-    let tag = "cross_vx ta={ta} dim={dim} hh={hh} t0={t0} hasb={hasb} soff={soff_cols}"
+//! the values (VX) and the f16 plane (`half`): n rows at p0 into a wider tstride slab, the bias folded, `soff` picking a column
+//! block out of a fused row
+def private wdec_vx_gate(t : T?; var dev, queue; ta, dim, hh : int; t0, tstride : int; hasb : bool; soff_cols : int = 0; src_stride : int = 0; half : bool = false) {
+    let tag = "wdec_kv {half ? "f16" : "vx"} ta={ta} dim={dim} hh={hh} t0={t0} hasb={hasb} soff={soff_cols}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let st = stamp_of(@@enc_cross_vx)
-        var pso = mc |> keep_stamp(st, err)
+        let st = stamp_of(@@enc_wdec_kv)
+        let sh = stamp_of(@@enc_wdec_kv_h)
+        var pso = half ? (mc |> keep_stamp(sh, err)) : (mc |> keep_stamp(st, err))
         return if (!pso_ok(t, tag, pso, err))
         let hs = dim / hh
         let sstride = src_stride > 0 ? src_stride : dim
         let total = ta * dim
         let sentinel = -555.0
-        var inscope src : array<float>
-        src |> resize(ta * sstride)
-        for (i in range(ta * sstride)) {
-            src[i] = 0.5 * float(i % 89) - 11.0
-        }
-        var inscope bias : array<float>
-        bias |> resize(dim)
-        for (i in range(dim)) {
-            bias[i] = 0.125 * float(i % 13) - 0.5
-        }
+        var inscope src <- [for (i in range(ta * sstride)); 0.5 * float(i % 89) - 11.0]
+        var inscope bias <- [for (i in range(dim)); 0.125 * float(i % 13) - 0.5]
         let slab = hh * tstride * hs
-        var inscope want : array<float>
-        want |> resize(slab)
-        for (i in range(slab)) {
-            want[i] = sentinel
-        }
+        var inscope want <- [for (_i in range(slab)); sentinel]
         for (h in range(hh)) {
             for (tt in range(ta)) {
                 for (j in range(hs)) {
                     let v = src[tt * sstride + soff_cols + h * hs + j] + (hasb ? bias[h * hs + j] : 0.0)
-                    want[h * tstride * hs + (t0 + tt) * hs + j] = v
+                    want[h * tstride * hs + (t0 + tt) * hs + j] = half ? float(float16(v)) : v
                 }
             }
         }
         let bsrc = mc |> in_(src)
-        let bvx = mc |> out_words(slab, sentinel)
+        let bvx = half ? (mc |> out_words(slab, float16(sentinel))) : (mc |> out_words(slab, sentinel))
         let bb = mc |> in_(bias)
-        let bdim = mc |> in_plain([uint(sstride)])
-        let bhs = mc |> in_plain([uint(hs)])
-        let bta = mc |> in_plain([uint(ta)])
-        let bt0 = mc |> in_plain([uint(t0)])
-        let bts = mc |> in_plain([uint(tstride)])
-        let bhb = mc |> in_plain([hasb ? 1u : 0u])
-        let btot = mc |> in_plain([uint(total)])
+        var ka = GkWdecKvArgs(rows = uint(ta), sstride = uint(sstride), soff = uint(soff_cols), nheads = uint(hh), tstride = uint(tstride), p0 = uint(t0),
+            dst_off = 0u, boff = 0u, bias_on = hasb ? 1u : 0u, mode = half ? WDEC_KV_F16 : WDEC_KV_VX, hs = uint(hs), kscale = wdec_kscale(int64(hs)))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bsrc], uint64(soff_cols * 4), mc.buf[bvx], 0ul, mc.buf[bb], 0ul, mc.buf[bdim], mc.buf[bhs], mc.buf[bta],
-                    mc.buf[bt0], mc.buf[bts], mc.buf[bhb], mc.buf[btot], int64(total))
+            if (half) {
+                stamp_run(sh, pso) {
+                    invoke(sh.enc, enc, mc.buf[bsrc], mc.buf[bvx], mc.buf[bb], ka, int64(total))
+                }
+            } else {
+                stamp_run(st, pso) {
+                    invoke(st.enc, enc, mc.buf[bsrc], mc.buf[bvx], mc.buf[bb], ka, int64(total))
+                }
             }
         }
         return if (!ran)
-        check_buf(t, tag, mc.buf[bvx], want, BAR_BITS, Shape(row_width = hs))
+        if (half) {
+            check_buf_h(t, tag, mc.buf[bvx], want, BAR_BITS, Shape(row_width = hs))
+        } else {
+            check_buf(t, tag, mc.buf[bvx], want, BAR_BITS, Shape(row_width = hs))
+        }
     }
 }
 
@@ -993,24 +1037,17 @@ def private wdec_attn_pc_gate(t : T?; var dev, queue; n, dim, hh, tstride, len0 
         let bpms = mc |> out_words(nch * hh * n * 2, -888.0)
         let bpy = mc |> out_words(nch * hh * n * hs, -888.0)
         let by = mc |> out_words(n * dim, -444.0)
-        let bdim = mc |> in_plain([uint(dim)])
-        let bhs = mc |> in_plain([uint(hs)])
-        let bts = mc |> in_plain([uint(tstride)])
-        let blen = mc |> in_plain([uint(len0)])
-        let bca = mc |> in_plain([causal ? 1u : 0u])
-        let bsc = mc |> in_plain([scale])
-        let bhh = mc |> in_plain([uint(hh)])
-        let bn = mc |> in_plain([uint(n)])
-        let bnch = mc |> in_plain([uint(nch)])
+        var kp_args = GkWdecAttnArgs(dim = uint(dim), tstride = uint(tstride), len0 = uint(len0), causal = causal ? 1u : 0u, nheads = uint(hh),
+            nrows = uint(n), koff = 0u, voff = 0u, qboff = 0u, hs = uint(hs), scale = scale)
+        var kc_args = GkWdecCombArgs(dim = uint(dim), nchunks = uint(nch), nheads = uint(hh), nrows = uint(n), hs = uint(hs))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            let (pms, py, dm, hsb, hhb, nb) = (mc.buf[bpms], mc.buf[bpy], mc.buf[bdim], mc.buf[bhs], mc.buf[bhh], mc.buf[bn])
+            let (pms, py) = (mc.buf[bpms], mc.buf[bpy])
             stamp_run(sp, pp) {
-                invoke(sp.enc, enc, mc.buf[bq], mc.buf[bk], 0ul, mc.buf[bv], 0ul, pms, py, mc.buf[bqb], 0ul, dm, hsb, mc.buf[bts], mc.buf[blen],
-                    mc.buf[bca], mc.buf[bsc], hhb, nb, int64(hh), int64(n), int64(nch))
+                invoke(sp.enc, enc, mc.buf[bq], mc.buf[bk], mc.buf[bv], pms, py, mc.buf[bqb], kp_args, int64(nch * hh * n))
             }
             metal_memory_barrier(enc)
             stamp_run(sc, pc) {
-                invoke(sc.enc, enc, pms, py, mc.buf[by], dm, hsb, mc.buf[bnch], hhb, nb, int64(hh), int64(n))
+                invoke(sc.enc, enc, pms, py, mc.buf[by], kc_args, int64(hh * n))
             }
         }
         return if (!ran)
@@ -1023,7 +1060,7 @@ def private bias_rows_gate(t : T?; var dev, queue; nrows, dim : int; gelu : bool
     let tag = "bias_{gelu ? "gelu_lut" : "add_res"} nrows={nrows} dim={dim}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let sg = stamp_of(@@enc_bias_gelu_lut)
+        let sg = stamp_of(@@enc_bias_act)
         let sr = stamp_of(@@enc_bias_add_res)
         var pso = gelu ? (mc |> keep_stamp(sg, err)) : (mc |> keep_stamp(sr, err))
         return if (!pso_ok(t, tag, pso, err))
@@ -1052,10 +1089,11 @@ def private bias_rows_gate(t : T?; var dev, queue; nrows, dim : int; gelu : bool
         let bb = mc |> in_(b)
         let bdim = mc |> in_plain([uint(dim)])
         let btot = mc |> in_plain([uint(total)])
+        var ka = GkBiasActArgs(d = uint(dim), nelem = uint(total), boff = 0u, act = BIAS_ACT_GELU_TANH)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             if (gelu) {
                 stamp_run(sg, pso) {
-                    invoke(sg.enc, enc, mc.buf[bx], 0ul, mc.buf[bb], 0ul, mc.buf[bdim], mc.buf[btot], int64(total))
+                    invoke(sg.enc, enc, mc.buf[bx], mc.buf[bb], ka, int64((total + 3) / 4))
                 }
             } else {
                 stamp_run(sr, pso) {
@@ -1064,18 +1102,19 @@ def private bias_rows_gate(t : T?; var dev, queue; nrows, dim : int; gelu : bool
             }
         }
         return if (!ran)
+        t |> success(mismatch_exact(want, x) > 0, "{tag}: the reference moves off the input")
         check_buf(t, tag, mc.buf[bx], want, BAR_TIGHT, Shape(row_width = dim))
     }
 }
 
 //! The conv-frontend im2col against the CPU walk - a bit-exact scatter with the "same"-pad zero edges, both source
-//! layouts (chmajor mel, row-major y1) and both strides: k=3 on the shared stamps (conv1 on CHMAJOR, conv2 row-major),
+//! layouts (chmajor mel, row-major y1) and both strides: k=3 on the shared stamp, the layout by push,
 //! the panel padded to the GEMM's 32 lattice with zeros; a poisoned source element must red the panel.
 def private im2col3_gate(t : T?; var dev, queue; rows, nch, srclen, stride : int; chmajor : bool) {
     let tag = "im2col3 rows={rows} nch={nch} stride={stride} chmajor={chmajor}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let st = chmajor ? stamp_of(@@enc_st2_im2col_cm) : stamp_of(@@enc_st2_im2col)
+        let st = stamp_of(@@enc_st2_im2col)
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
         let kdim = (3 * nch + 31) / 32 * 32
@@ -1098,7 +1137,8 @@ def private im2col3_gate(t : T?; var dev, queue; rows, nch, srclen, stride : int
                 }
             }
         }
-        var ka = St2ConvArgs(cin = uint(nch), k = 3u, stride = uint(stride), pad_l = 1u, dil = 1u, t_in = uint(srclen), r0 = 0u, rows = uint(rows), xs = uint(nch))
+        var ka = GkIm2col1dArgs(cin = uint(nch), tin = uint(srclen), tout = uint(rows), k = 3u, stride = uint(stride), pad_l = 1u, dilation = 1u, transposed = 0u,
+            kdim = uint(kdim), xoff = 0u, coloff = 0u, row_major = chmajor ? 0u : 1u, r0 = 0u, mp = uint(mp))
         let bsrc = mc |> in_(src)
         let bcol = mc |> out_words(total, -333.0)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
@@ -1165,17 +1205,10 @@ def private im2col2d_gate(t : T?; var dev, queue; iw, ih, cin, kd, sstride : int
         }
         let bsrc = mc |> in_(src)
         let bcol = mc |> out_words(total, -222.0)
-        let biw = mc |> in_plain([uint(iw)])
-        let bih = mc |> in_plain([uint(ih)])
-        let bcin = mc |> in_plain([uint(cin)])
-        let bow = mc |> in_plain([uint(ow)])
-        let bkd = mc |> in_plain([uint(kd)])
-        let bss = mc |> in_plain([uint(sstride)])
-        let btot = mc |> in_plain([uint(total)])
+        var ka = GkIm2col2dArgs(iw = uint(iw), ih = uint(ih), cin = uint(cin), sstride = uint(sstride), kdp = uint(kd), rows = uint(rows), soff = 0u)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bsrc], 0ul, mc.buf[bcol], mc.buf[biw], mc.buf[bih], mc.buf[bcin], mc.buf[bow], mc.buf[bkd], mc.buf[bss],
-                    mc.buf[btot], int64(total))
+                invoke(st.enc, enc, mc.buf[bsrc], mc.buf[bcol], ka, int64(total))
             }
         }
         return if (!ran)
@@ -1285,7 +1318,7 @@ def private hc_norm_gate(t : T?; var dev, queue; dim, hc, nrows : int) {
         }
         let bx = mc |> in_(x)
         let bw = mc |> in_(w)
-        let by = mc |> out_words(rows * dim, -1000.0)
+        let by = mc |> out_words(rows * dim, PAD_SENTINEL)
         let bdim = mc |> in_plain([uint(dim)])
         let beps = mc |> in_plain([EPS])
         let bhc = mc |> in_plain([uint(hc)])
@@ -1322,7 +1355,7 @@ def private hc_init_gate(t : T?; var dev, queue; dim, hc, nrows : int) {
             }
         }
         let bx = mc |> in_(x)
-        let bres = mc |> out_words(nrows * hcd, -1000.0)
+        let bres = mc |> out_words(nrows * hcd, PAD_SENTINEL)
         let bdim = mc |> in_plain([uint(dim)])
         let bhc = mc |> in_plain([uint(hc)])
         let btot = mc |> in_plain([uint(nrows * hcd)])
@@ -1396,7 +1429,7 @@ def private hc_mix_gate(t : T?; var dev, queue; dim, hc, nrows : int) {
         }
         let bxn = mc |> in_(xn)
         let bgt = mc |> in_(gt)
-        let by = mc |> out_words(nrows * dim, -1000.0)
+        let by = mc |> out_words(nrows * dim, PAD_SENTINEL)
         let bdim = mc |> in_plain([uint(dim)])
         let bhc = mc |> in_plain([uint(hc)])
         let bnr = mc |> in_plain([uint(nrows)])
@@ -1509,7 +1542,7 @@ def private ple_gate_gate(t : T?; var dev, queue; dim, hc, rows, pos0, roff_rows
         var inscope dst_want : array<float>
         dst_want |> resize((roff_rows + dst_rows) * hcd)
         for (i in range((roff_rows + dst_rows) * hcd)) {
-            dst_want[i] = -1000.0
+            dst_want[i] = PAD_SENTINEL
         }
         var gates : float[8]
         unsafe {
@@ -1544,8 +1577,8 @@ def private ple_gate_gate(t : T?; var dev, queue; dim, hc, rows, pos0, roff_rows
         let bwk = mc |> in_(wk)
         let bwq = mc |> in_(wq)
         let bwc = mc |> in_(wc)
-        let bg = mc |> out_words(nrows * hcd, -1000.0)
-        let bdst = mc |> out_words((roff_rows + dst_rows) * hcd, -1000.0)
+        let bg = mc |> out_words(nrows * hcd, PAD_SENTINEL)
+        let bdst = mc |> out_words((roff_rows + dst_rows) * hcd, PAD_SENTINEL)
         var ka = PleGateArgs(dim = uint(dim), hc = uint(hc), eps = EPS, pos0 = uint(pos0), rows = uint(rows), direct = direct ? 1u : 0u)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
@@ -1590,10 +1623,10 @@ def private ple_conv_gate(t : T?; var dev, queue; dim, hc, kern, dil, rows, pos0
             w[i] = 0.23 * float(i % 29) - 3.2
         }
         for (i in range((roff_rows + rows) * hcd)) {
-            ring[i] = i < roff_rows * hcd ? -1000.0 : 0.0   //! rows under the offset carry the sentinel, the ring itself is zero-filled
+            ring[i] = i < roff_rows * hcd ? PAD_SENTINEL : 0.0   //! rows under the offset carry the sentinel, the ring itself is zero-filled
         }
         for (i in range((coff_rows + nrows) * hcd)) {
-            panel[i] = i < coff_rows * hcd ? -1000.0 : 0.0
+            panel[i] = i < coff_rows * hcd ? PAD_SENTINEL : 0.0
         }
         // the rows the ring holds: every position before the window (direct), or every position through the row (decode)
         let ring_end = direct ? pos0 : pos0 + nrows
@@ -1682,10 +1715,10 @@ def private mtl_toy_lens_gate(t : T?; var dev, queue; n : int) {
         var inscope want : array<float>
         want |> resize(n + 16)
         for (i in range(n + 16)) {
-            want[i] = i < n ? xv[i] * gain + gain : -1000.0   // the ka.n guard must leave the pad untouched
+            want[i] = i < n ? xv[i] * gain + gain : PAD_SENTINEL   // the ka.n guard must leave the pad untouched
         }
         let bxs = mc |> in_(xv)
-        let bys = mc |> out_words(n + 16, -1000.0)
+        let bys = mc |> out_words(n + 16, PAD_SENTINEL)
         var ka = MtToyArgs(n = uint(n), gain = gain)
         let saved_hook = metal_requires_hook()
         set_metal_requires_hook(@@record_toy_trip)
@@ -1773,23 +1806,20 @@ def test_metal_misc_kernels(t : T?) {
                 clamp_gate(t, dev, queue, 1000, CLAMP_IN, false)    // separate dst, %64 tail
                 clamp_gate(t, dev, queue, 1000, CLAMP_OUT, true)    // in place
                 // the CPU's f16-table GEGLU-quick: the kernel's binary16 round trips land on its table values, so the approx bar (one f16 ulp of form slack)
-                ew2_act_gate(t, dev, queue, "geglu_quick", stamp_of(@@enc_geglu_quick), 3072 * 3) $(var want : array<float>; g, u : array<float>) {
-                    geglu_quick_lut_rows(want, g, u, 3072l, 3l)   // the E2B ffn width
-                }
-                ew2_act_gate(t, dev, queue, "geglu_quick", stamp_of(@@enc_geglu_quick), 100) $(var want : array<float>; g, u : array<float>) {
-                    geglu_quick_lut_rows(want, g, u, 100l, 1l)    // %64 tail
-                }
+                geglu_gate(t, dev, queue, 3072 * 3, 3072)   // the E2B ffn width
+                geglu_gate(t, dev, queue, 100, 100)         // %64 tail
                 rope2d_gate(t, dev, queue, 36, 12, 64)         // the E2B 96x96 grid shape (6x6 patches)
                 rope2d_gate(t, dev, queue, 5, 2, 8)            // tiny: one head pair, q = 2
-                head_restride_gate(t, dev, queue, 7, 16, 72, 128)   // the gemma3v pad direction
-                head_restride_gate(t, dev, queue, 7, 16, 128, 72)   // and the compact
+                head_restride_gate(t, dev, queue, 7, 16, 72, 128)   // the gemma3v pad and its compact back
                 head_restride_gate(t, dev, queue, 3, 2, 5, 5)       // identity at an odd width, %64 tail
-                cross_kx_gate(t, dev, queue, 96, 128, 2, false)   // whisper hs=64; exact total%64
-                cross_kx_gate(t, dev, queue, 12, 16, 2, true)     // ceil grid guard + the layer-offset slot
-                cross_vx_gate(t, dev, queue, 96, 128, 2, 0, 96, false)     // the cross_kv shape (t0=0, tstride=ta)
-                cross_vx_gate(t, dev, queue, 12, 16, 2, 0, 12, true)       // ceil grid + the folded bias
-                cross_vx_gate(t, dev, queue, 3, 16, 2, 5, 20, true)        // the KV APPEND shape: t0>0 into a wider slab
-                cross_vx_gate(t, dev, queue, 1, 16, 2, 0, 20, false, 16, 48)   // the fused-QKV column pick (soff, 3d row)
+                wdec_kx_gate(t, dev, queue, 96, 128, 2, false)   // whisper hs=64; exact total%64
+                wdec_kx_gate(t, dev, queue, 12, 16, 2, true)     // ceil grid guard + the layer-offset slot
+                wdec_vx_gate(t, dev, queue, 96, 128, 2, 0, 96, false)     // the cross_kv shape (t0=0, tstride=ta)
+                wdec_vx_gate(t, dev, queue, 12, 16, 2, 0, 12, true)       // ceil grid + the folded bias
+                wdec_vx_gate(t, dev, queue, 3, 16, 2, 5, 20, true)        // the KV APPEND shape: t0>0 into a wider slab
+                wdec_vx_gate(t, dev, queue, 1, 16, 2, 0, 20, false, 16, 48)   // the fused-QKV column pick (soff, 3d row)
+                wdec_vx_gate(t, dev, queue, 3, 16, 2, 5, 20, true, 0, 0, true)   // the append into the resident f16 plane
+                wdec_vx_gate(t, dev, queue, 3, 16, 2, 5, 20, false, 0, 0, true)  // ... with no bias row: the K store's form
                 wdec_attn_pc_gate(t, dev, queue, 1, 128, 2, 600, 600, false)   // 3 chunks, full last chunk boundary
                 wdec_attn_pc_gate(t, dev, queue, 3, 128, 2, 300, 259, true)    // causal rows crossing a chunk edge
                 wdec_attn_pc_gate(t, dev, queue, 1, 128, 2, 256, 256, false)   // exactly one chunk

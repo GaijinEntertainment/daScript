@@ -216,7 +216,7 @@ def private pf_f16g_enc(raw : VkCommandBuffer; var h : VkHaz; var gset, rset : V
 
 def private pf_feed_enc(raw : VkCommandBuffer; var h : VkHaz; var fset : VkDescriptorSet; f16, kq : bool; inbase, elems : int64) {
     if (f16) {
-        var pc = f16_rows_args(uint(elems))
+        var pc = gk_f16_rows_args(uint(elems))
         enc_tower_clamp_cvt_cls(raw, h, fset, pc, rq_wgs(false, elems))
     } else {
         rq_enc(raw, h, fset, kq, inbase, elems)
@@ -329,7 +329,7 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     let st & = unsafe(L.dn[g_rd.region])
     let hist_off = uint(st.hist_off)
     if (x6) {
-        var pcc0 = f16_rows_args(uint(wlen * dim))
+        var pcc0 = gk_f16_rows_args(uint(wlen * dim))
         enc_tower_clamp_cvt_cls(raw, h, L.pf_dn_cvt_set, pcc0, (wlen * dim / 4l + 255l) / 256l)
     }
     if (xq8k || !x6 || !g_rd.dn_ba_f32) {
@@ -576,7 +576,7 @@ def private pf_moe_router(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64)
         pfq_ts(raw)
     }
     if (pf_f16g_on() && !L.experts_host) {
-        var pcc = f16_rows_args(uint(wlen * dim))
+        var pcc = gk_f16_rows_args(uint(wlen * dim))
         enc_tower_clamp_cvt_cls(raw, h, L.pf_router_cvt_set, pcc, (wlen * dim / 4l + 255l) / 256l)
         pf_f16g_enc(raw, h, L.pf_f16g_router_set, L.pf_f16g_router_red_set, dim, ner, wlen, L.router_slot * ner * dim, 0l)
     } else {
@@ -1921,7 +1921,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             }
             if (ple_raw) {   //! the per-layer-embedding pre-step's finish: the projection of the scaled embedding rows, normed per slice and averaged into the gathered rows
                 let all = g_rd.n_layers * g_rd.ple
-                var pcc = f16_rows_args(uint(wlen * dim))
+                var pcc = gk_f16_rows_args(uint(wlen * dim))
                 enc_tower_clamp_cvt_cls(raw, h, g_rd.pf_ple_cvt_set, pcc, (wlen * dim / 4l + 255l) / 256l)
                 var pcg = F16GemmArgs(n = uint(dim), d = uint(all), rows = uint(wlen), woff = 0u, ybase = 0u, ystride = uint(all), ksplit = 0u)
                 let ple_khr = g_gpu.coopmat_mode != COOPMAT_CM2
@@ -3016,7 +3016,7 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
     vhz_dep(raw, h, VHB_VRAW, VHB_ATV, true)
     cmd_copy_range(raw, g_gpu.at_vraw_dev, 0l, g_gpu.at_v_dev, w0 * kv_dim * 4l, rows * kv_dim * 4l)
     if (fa) {
-        var pcv = f16_rows_args(uint((w0 + rows) * kv_dim))
+        var pcv = gk_f16_rows_args(uint((w0 + rows) * kv_dim))
         let cvtwgs = ((w0 + rows) * kv_dim / 4l + 255l) / 256l
         enc_tower_clamp_cvt_cls(raw, h, g_gpu.at_k16cvt_set, pcv, cvtwgs)
         enc_tower_clamp_cvt_cls(raw, h, g_gpu.at_v16cvt_set, pcv, cvtwgs)

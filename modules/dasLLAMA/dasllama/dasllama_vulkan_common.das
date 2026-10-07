@@ -3670,6 +3670,7 @@ enum VtProfRole {
     spectrum    //! the fronts' DFT
     mel         //! the fronts' log filterbank and canary's normalization
     shuffle     //! the fronts' feature-row shuffles
+    pool        //! the chat projector tails' pair pool
     tts_gemm    //! the TTS seats' f32 tile GEMMs (the linears, the convs' tiles, the LSTM input gates)
     tts_im2col  //! the TTS convs' column builder
     tts_lstm    //! the LSTM recurrence walks

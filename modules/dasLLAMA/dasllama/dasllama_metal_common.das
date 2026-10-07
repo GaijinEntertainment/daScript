@@ -168,23 +168,23 @@ var g_pso_geglu : MetalComputePipeline?
 var g_pso_geglu_hx : MetalComputePipeline?    // dual-store stamp
 // ===== tower primitives (compiled in the tower driver's init) =====
 var g_pso_ln : MetalComputePipeline?
-var g_pso_gelu_erf : MetalComputePipeline?
-var g_pso_gelu_lut : MetalComputePipeline?
+var g_pso_bias_act : MetalComputePipeline?   //! the bias + activation rows, the template both homes stamp
+var g_pso_act_rows : MetalComputePipeline?   //! the activation alone
 var g_pso_posadd : MetalComputePipeline?
 var g_pso_q3v_stem : MetalComputePipeline?   //!< the qwen3v stem assemble (reorder-gather + bias + pos)
-var g_pso_clamp : MetalComputePipeline?        // gemma4v: the ClippableLinear clamp
+var g_pso_clamp : MetalComputePipeline?
+var g_pso_clamp_copy : MetalComputePipeline?
 var g_pso_rope2d : MetalComputePipeline?       // gemma4v: the two-axis NEOX rope
-var g_pso_head_restride : MetalComputePipeline?   // gemma3v: head-width repack around the attention tiles
+var g_pso_head_pad : MetalComputePipeline?   //!< the vision towers' head pad onto the attention tiles' width
+var g_pso_head_unpad : MetalComputePipeline?   //!< and the compact rows back off it
 var g_pso_geglu_quick : MetalComputePipeline?  // gemma4v: GEGLU-quick, f16-table form
 var g_pso_f32mm : MetalComputePipeline?
-var g_pso_cross_kx : MetalComputePipeline?   // whisper cross-KV: K transpose+prescale shuffle
-var g_pso_cross_vx : MetalComputePipeline?   // whisper cross-KV: V head-major re-tile (+ the KV append)
-var g_pso_cross_vx_h : MetalComputePipeline?  // the f16-store twin — the resident K/V memory
+var g_pso_wdec_kv : MetalComputePipeline?    // the whisper decoder's K/V stores in the CPU chain's f32 layouts
+var g_pso_wdec_kv_h : MetalComputePipeline?  // ... into the resident f16 K/V memory (the decode step's append rides it)
 var g_pso_im2col2d : MetalComputePipeline?    // the qwen3a conv2d im2col (k=3, s=2, p=1)
 var g_pso_wdec_attn_part : MetalComputePipeline?  // the chunked online-softmax partial
 var g_pso_wdec_attn_comb : MetalComputePipeline?  // the log-sum-exp chunk merge
 var g_pso_bias_add_res : MetalComputePipeline?   // whisper decode: bias + residual add
-var g_pso_bias_gelu_lut : MetalComputePipeline?  // whisper decode: bias + LUT-form GELU
 var g_pso_softcap : MetalComputePipeline?
 var g_pso_suppress : MetalComputePipeline?
 var g_one : MetalBuffer?                    // persistent 1.0f — the rms oscale default bind
@@ -240,8 +240,6 @@ var g_mx4_vtab : MetalBuffer?                   // [16] signed doubled-e2m1 valu
 var g_pso_dn_conv : MetalComputePipeline?      // deltanet (Wave D): causal conv + SiLU
 var g_pso_dn_hist : MetalComputePipeline?      // conv-history advance
 var g_pso_st2_im2col : MetalComputePipeline?
-var g_pso_st2_im2col_tr : MetalComputePipeline?
-var g_pso_st2_im2col_cm : MetalComputePipeline?
 var g_pso_st2_conv_mm : MetalComputePipeline?
 var g_pso_st2_conv_tr_mm : MetalComputePipeline?
 var g_pso_f32_exact_mm : MetalComputePipeline?

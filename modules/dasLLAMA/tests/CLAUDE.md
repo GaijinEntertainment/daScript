@@ -416,11 +416,19 @@ accumulator where the two laws part by whole cycles, and the driver's own noise 
 fill kernel (finite, repeatable per seed, moving with it); the STFT on either pad law's stamp and
 the inverse STFT with and without the window envelope. Each carries a poisoned input. The census row is one synthesis each
 on kitten-nano (the ONNX law's stamps) and kokoro-82m (the torch law's) on the file's planes (`cov_tower_styletts2`). The parakeet
-front's cells (the same file): the first conv and the depthwise conv on an 11 x 10 image - odd
-along one axis, even along the other, so each edge drops its own taps - against the in-test
-loops, the sums asserted to take both signs so the first conv's ReLU and the depthwise conv's
-lack of one both show; the feature permute bit for bit with its row pad zero under a sentinel
-fill; the bias-and-ReLU row pass against max(x + b, 0) over sums of both signs. The whisper-class projector tail's
+front's cells (the same file): the first conv as the chain the fronts run - the shared im2col at one
+channel, the f16-staged GEMM over the [ch][32] tap panel, the bias-and-ReLU rows - on an 11 x 10 image - odd along one axis, even along
+the other, so each edge drops its own taps - against the in-test loop, the sums asserted to take
+both signs so the ReLU shows; the depthwise conv on the shared template's two Metal stamps
+(parakeet's tap-major taps, canary's channel-major ones) against the same loop, then under a length
+mask that must move the rows past it; the feature permute (the shared template) bit for bit with
+its row pad zero under a sentinel fill; the bias-and-ReLU row pass against max(x + b, 0) over sums
+of both signs. The shared templates' other Metal stamps (the same file): the conv module's GLU
+against the CPU form with the halves swapped as the control, the subsample LayerNorm + ReLU off
+padded rows against a double form with a scaled weight row as the control, gemma4a's subsample
+depthwise conv against the CPU loop, qwen3a's conv-out shuffle bit for bit, and the FastConformers'
+rel-position table against the CPU `rel_pos_table` with its zero pad rows and the table of one
+frame more as the control. The whisper-class projector tail's
 two row kernels (`tw_tail_rows_gate`): the pair pool and the row-split gate at a 70-wide row over
 five rows against their host forms, the gate's fixture asserted to tell its halves apart; the vision
 tails' row kernels - the grid mean pool (`tw_pool2d_gate`: a 6 x 4 row grid pooled 2 x 2 against the
@@ -720,7 +728,9 @@ GLU, the causal depthwise taps, the chunk-12 relative-position attention on both
 the 128-wide one over scaled queries with the oracle at four times the cap as the softcap's
 control) and the FastConformer conv module tail (`test_vkt_tower_fastconformer`: the centered
 depthwise conv with the folded BatchNorm and silu) against the CPU loops' forms, the attention
-controls scaling the keys (a uniform shift leaves a softmax alone). Every compare in the file
+controls scaling the keys (a uniform shift leaves a softmax alone); and the chat projector tails' row
+classes (`test_vkt_tower_tail_rows`: the pair pool against the mean of each row pair, the swapped SwiGLU
+against `swiglu_swapped_rows` with the halves-swapped form as the control). Every compare in the file
 carries its own poisoned-element control - a value added to the expected element that must red
 the bar - and every float compare runs through `check_rows`, which logs its measured max difference;
 the attention oracles share `_attn_oracle.das`'s softmax row, `attn_row_scored`, each spelling only
@@ -739,7 +749,7 @@ zeroed from the middle block on, through the device chain, must
 EXCEED the bar): `test_encoder_blocks_vulkan` (qwen2audio, voxtral, omni-3b over the synthetic mel
 of the Metal blocks cell), `test_gemma4a_vulkan_twin` (the E2B audio encoder over jfk through
 `gemma4a_encode_all`) and `test_canary_vulkan_twin` (the canary encoder over jfk's log-mel through
-`canary_encode`), the last two also holding the bar on a second, longer encode after a short one on
+`canary_encode`) and `test_parakeet_vulkan_twin` (parakeet over jfk through `parakeet_encode`), the canary and gemma4a ones also holding the bar on a second, longer encode after a short one on
 the same residency (the scratch regrown under it) and on a fresh residency after a shutdown, and
 both running their fronts on the device (gemma4a's whole chunk, canary's front) beside the blocks,
 so the bar covers the front chains too - the front counter (`convs`) asserted beside the block
@@ -754,7 +764,7 @@ exceed the bar). Every tower but the whisper twins' is
 staged and minted in memory (the qwen3a pair through `stage_qwen3a_tower`); the whisper cells mint
 the served model in memory behind the ASR facade (`mint_asr_whisper`), as do their rows compare
 and the f32-decoder leg. The three-way twins skip without their carriers, without a Vulkan device under
-`DASLLAMA_GPU=1` and on a das_metal build; the jfk-driven cells (gemma4a, canary, qwen3a, whisper)
+`DASLLAMA_GPU=1` and on a das_metal build; the jfk-driven cells (gemma4a, canary, parakeet, qwen3a, whisper)
 also skip without jfk.wav, and the whisper twin and the qwen3a front when interpreted. Off the f16
 GEMM feed (`DASLLAMA_COOPMAT=sdot4`) every front declines `device` by design while the block chains
 serve, so each twin's front witness follows the route (`front_served` in `_tower_twin.das` over
@@ -1808,12 +1818,20 @@ on the device on both, another mel's rows outside the bar as the control (reads 
 the chat towers' chunked mel on the device mel seat - a 128-mel clip's chunk within 1e-3 of the
 CPU mel (the seat's GEMMs on the exact f32 tiles: a half tile reads a quiet bin 0.085 off), the mel
 counter (`metal_tower_mel_encodes`) up by the device leg alone, an 80-mel call off the seat's
-lattice served by the CPU with the counter unmoved, another clip's mel outside the bar; and the Vulkan twins
+lattice served by the CPU with the counter unmoved, another clip's mel outside the bar; the Vulkan twins
 `test_encoder_blocks_vulkan`, `test_gemma4a_vulkan_twin`, `test_canary_vulkan_twin` and
 `test_qwen3a_vulkan_front` (the three-way cells described under `test_vulkan_tower_kernels.das`),
-which skip without their carriers (the qwen2audio / voxtral / omni-3b f32 mmprojs, the E2B bf16
-mmproj, the canary f32 encoder, the Qwen3-ASR bf16 mmproj), without jfk.wav, without a Vulkan
-device under `DASLLAMA_GPU=1`, and on a das_metal build.
+`test_parakeet_vulkan_twin` (parakeet-TDT 0.6B v2 over jfk through `parakeet_encode` - the front and the blocks on the
+device, the same three-way bar, counters and poison as the canary twin, the q8 and exact models minted in memory
+through `stage_parakeet_model`); and
+`test_encoder_tail_vulkan`, the projector tail alone on the Vulkan chain, one cell a projector kind, three ways
+over the SAME device block rows (the f32 tail of the exact tower over those rows the reference, the CPU q8
+tail with `set_vulkan_tower_tail` off and the device tail with it on, the lever put back; the device within
+`TWIN_SLACK_VK` x the CPU q8 tail's own distance plus the twin floor - the CPU tail quantizes the normed rows to
+Q8_0 blocks where the device feeds f16), the tail counter `vulkan_tower_tail_encodes` up on the device leg
+alone with the blocks on the device on both, another mel's rows outside the bar as the control, all of which skip without their carriers (the qwen2audio / voxtral / omni-3b f32 mmprojs, the E2B bf16
+mmproj, the canary f32 encoder, the parakeet f32 encoder, the ultravox f16 mmproj, the Qwen3-ASR bf16 mmproj), without
+jfk.wav, without a Vulkan device under `DASLLAMA_GPU=1`, and on a das_metal build.
 `test_whisper.das` - stocked suite; model-gated: the whisper/parakeet/canary/gemma4a/omni
 oracle cells (the parakeet v2 cell also runs the transcription with single-thread mode off and
 on: the team leg dispatches, the one-lane leg never does, and its tokens are the team leg's - the
@@ -2184,7 +2202,9 @@ the CPU chain). Skips without the mmproj, without a Vulkan device under `DASLLAM
 a build with das_metal, where the Metal driver owns the tower hooks. The vision and audio families'
 Vulkan twins share one instrument, `_tower_twin.das`: the seat guard (the tier's want and the device,
 `vulkan_tower_arms`) and the jfk cells' seat, the three-way encode with the family's counters and
-the bar by metric (the vision canvases' maxdiff in rms, the audio towers' rel_l2), the input
+the bar by metric (rel_l2 wherever a CPU q8 chain is the control - the vision canvases and the
+audio towers alike, since a deep tower's worst element is one tail element - qwen25v's maxdiff
+against the exact chain), the input
 poison, the exact-lane decline, the vision canvas and dump-poison legs, and the staged tower's
 truncate-and-zero and in-memory mint. The GPU knobs it pins (both towers, the ASR decoder) are
 captured and put back through `_gpu_knobs.das`, the record the TTS rail shares.

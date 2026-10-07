@@ -249,6 +249,7 @@ def public set_trace_tags(on : bool) {   // nolint:LINT012,LINT019 — on is onl
         }
     }
 }
+let public TRACE_TAG_NONE = 0   //! clears the tag: the dispatches after a stage carry no color
 let public TRACE_TAG_ATTN_CHAIN = 1
 let public TRACE_TAG_ATTN_STD = 2
 let public TRACE_TAG_FFN_CHAIN = 3
