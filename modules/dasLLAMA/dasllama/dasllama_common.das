@@ -2306,6 +2306,7 @@ struct Session {
     recent : array<int64>     // recently generated tokens, for the repetition penalty
     sample_scratch : array<float>  // vocab-sized scratch for the reference sampler (top-k off)
     @scratch @exact_size cand : array<SampleCand>   //! the top-k sampler's candidate list, a reused buffer: the k largest logits (ties at the k-th kept), ascending by id after selection; the whole row when a constraint refuses every candidate
+    @scratch @exact_size cand_full : array<SampleCand>   //! a constrained draw's copy of the candidates' logits: the draw runs unconstrained first, and a refused pick refilters from this copy
     sampled : bool            //! the last sample_'s pick can differ from the raw argmax (a temperature, a penalty at temp 0, or a constraint - not a bare argmax): the Metal driver's greedy chain stands down
     @do_not_delete spec_params : SamplingParams?   //! the caller's sampler, set before a speculative round for its accept walk to draw with; null or a bare argmax (temp <= 0, penalties off) keeps the argmax-match walk
     mtp_pre_drawn : bool           //! the accept walk drew this session's next token already: the next sample_ returns mtp_pre_tok and clears this
@@ -2799,6 +2800,7 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
     }
     s.sample_scratch |> resize(c.vocab_size)
     s.cand |> reserve(64)
+    s.cand_full |> reserve(64)
     s.rng = random_seed(1234)
     return <- s
 }

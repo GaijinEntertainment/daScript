@@ -18,12 +18,17 @@ require _model_tier
 // scheduler stream at a dead end finishes `constraint` with no token emitted. Model-gated on tinyllama
 // (its session sizes the logits row) and JIT only; the logits themselves are written by the cell.
 
-// a constraint admitting the ids `admit` and recording every commit
+// a constraint admitting the ids `admit` (every id when `all`), counting its probes and recording every commit
 class AdmitOnly : TokenConstraint {
     admit : table<int64>
+    all : bool = false
+    probes : int = 0
     committed : array<int64>
 
-    def override admits(tok : int64) : bool => admit |> key_exists(tok)
+    def override admits(tok : int64) : bool {
+        probes++
+        return all || admit |> key_exists(tok)
+    }
 
     def override commit(tok : int64) : void {
         committed |> push(tok)
@@ -132,6 +137,17 @@ def private sampled_draws_cell(tt : T?; m : Model; var s : Session; var far : Ad
     }
     tt |> success(all_admitted, "fifty sampled draws, every one admitted")
     tt |> equal(50, length(c3.committed), "fifty commits")
+    // the draw goes first: a constraint that admits everything is probed once a draw, never once a candidate
+    var nothing : table<int64>
+    var c4 = admit_only(nothing)
+    c4.all = true
+    s.constrain = c4
+    for (_ in range(50)) {
+        sample_(s, sampled)
+    }
+    tt |> equal(50, c4.probes, "fifty draws under an admit-all constraint: one probe each")
+    tt |> equal(50, length(c4.committed), "... and fifty commits")
+    s.constrain = c3
     // top-k off: the draw still filters, over the capped candidate list
     let no_topk = sample_(s, SamplingParams(temp = 1.0, top_k = 0l))
     tt |> success(no_topk == 12l || no_topk == 9l, "a draw with top-k off lands on an admitted token")
@@ -142,6 +158,7 @@ def private sampled_draws_cell(tt : T?; m : Model; var s : Session; var far : Ad
     tt |> equal(300l, outside, "an empty filtered list falls back to the best admitted token of the row")
     unsafe {
         delete c3
+        delete c4
     }
 }
 
