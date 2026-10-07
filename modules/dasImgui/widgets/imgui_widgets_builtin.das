@@ -1240,6 +1240,7 @@ def combo(var state : ComboState; text : string; items : array<string>;
     if (BeginCombo(text, preview, ImGuiComboFlags.None)) {
         for (i in range(n)) {
             let is_sel = i == state.value
+            PushID(i)
             if (Selectable(items[i], is_sel)) {
                 state.value = i
                 changed = true
@@ -1248,6 +1249,7 @@ def combo(var state : ComboState; text : string; items : array<string>;
                 SetItemDefaultFocus()
             }
             subs |> push(capture_current_item_rect())
+            PopID()
         }
         EndCombo()
     }
@@ -1514,6 +1516,7 @@ def combo_getter(var state : ComboState; text : string;
             var lbl : string
             if (invoke(getter, i, lbl)) {
                 let is_sel = i == state.value
+                PushID(i)
                 if (Selectable(lbl, is_sel)) {
                     state.value = i
                     changed = true
@@ -1522,6 +1525,7 @@ def combo_getter(var state : ComboState; text : string;
                     SetItemDefaultFocus()
                 }
                 subs |> push(capture_current_item_rect())
+                PopID()
             }
         }
         EndCombo()
@@ -2492,6 +2496,7 @@ def edit_combo(var ptr : int? implicit; text : string = "";
     if (BeginCombo(lbl, preview, ImGuiComboFlags.None)) {
         for (i in range(n)) {
             let is_sel = i == cur
+            PushID(i)
             if (Selectable(items[i], is_sel)) {
                 unsafe(*ptr) = i
                 changed = true
@@ -2500,6 +2505,7 @@ def edit_combo(var ptr : int? implicit; text : string = "";
                 SetItemDefaultFocus()
             }
             subs |> push(capture_current_item_rect())
+            PopID()
         }
         EndCombo()
     }
