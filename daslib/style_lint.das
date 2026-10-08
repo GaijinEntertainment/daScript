@@ -47,6 +47,7 @@ module style_lint shared private
 //!   STYLE038 — function exceeds the line-count limit (physical lines; override per module with 'options _function_length = N'; 0 disables) — split it into smaller functions
 //!   STYLE040 — a run of statements duplicated elsewhere in the module that a helper function could absorb (on by default under daslib/ and utils/, override per module with 'options _duplicate_regions'; thresholds via 'options _dupe_min_nodes' / '_dupe_min_statements'; suppress with '// nolint:STYLE040' on the reported line)
 //!   STYLE039 — non-ASCII byte in a string literal (on by default under daslib/ and modules/, override per module with 'options _ascii_strings'; suppress with '// nolint:STYLE039') — emitted strings and error messages must be ASCII unless intended
+//!   STYLE044 — 'match' block written with the deprecated 'if (pattern) { body }' arms — write 'pattern => $ { body }' arms ('$v(n)' becomes the bare name 'n'; a bare name that compared becomes 'match_expr(name)')
 //!   STYLE041 — bool flag initialized false, set true on terminal paths, then consumed by a single 'if (flag) return ...' — a return value in disguise; return directly at each set site (walk-abort callbacks, negative polarity, non-terminal sets, and init-true flags are exempt)
 
 require daslib/ast_boost
@@ -318,10 +319,42 @@ class StyleLintVisitor : AstVisitor {
         complexity_stack |> push(1)
         st041_candidates |> clear()
         check_defer_pipe(fn)
+        check_legacy_match_arms(fn)
         check_style042_expression_body(fn)
         if (analyze_requires && fn._module == this_module) {
             for (a in fn.annotations) {
                 if (a != null && a.annotation != null) st029_note_module(a.annotation._module)
+            }
+        }
+    }
+
+    def source_line(fn : FunctionPtr; ln : int) : string {
+        var src = ""
+        get_file_source_line(fn.at.fileInfo, uint(ln)) $(line) {
+            src := line
+        }
+        let comment_pos = find(src, "//")
+        return strip(comment_pos >= 0 ? slice(src, 0, comment_pos) : src)
+    }
+
+    def is_match_head(code : string) : bool => ends_with(code, "\{") && (starts_with(code, "match") || starts_with(code, "static_match"))
+
+    def check_legacy_match_arms(fn : FunctionPtr) : void {
+        if (fn.flags.generated || fn.body == null || fn.at.fileInfo == null || fn.at.line == 0u) return
+        let body_at = fn.body.at
+        let last = int(body_at.last_line)
+        for (ln in range(int(body_at.line), last + 1)) {
+            if (!is_match_head(source_line(fn, ln))) continue
+            for (next in range(ln + 1, last + 1)) {
+                let arm = source_line(fn, next)
+                if (empty(arm)) continue
+                if (starts_with(arm, "if (") || starts_with(arm, "if(")) {
+                    var at = fn.at
+                    at.line = uint(ln)
+                    at.last_line = uint(ln)
+                    style_warning("STYLE044: 'if (pattern)' match arms are deprecated; write 'pattern => $ \{ body \}' arms - '$v(n)' becomes the bare name 'n', and a bare name that compared becomes 'match_expr(name)'", at)
+                }
+                break
             }
         }
     }

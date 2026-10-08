@@ -3427,6 +3427,15 @@ Adjacent uninitialized declarations of one type, ``var kq : array<uint8>`` and t
 ``var ks : array<uint8>``, are one declaration: ``var kq, ks : array<uint8>``.
 A declaration with a comment on its line never joins a run; ``--fix`` joins the names.
 
+STYLE044 — deprecated ``if (pattern)`` match arms
+=================================================
+
+A ``match`` or ``static_match`` block whose arms are
+``if (pattern) { body }`` uses the deprecated arm form; write ``pattern => $ { body }``.
+``$v(n)`` becomes the bare name ``n``, and a bare name that compared against a variable becomes
+``match_expr(name)``, since in the ``=>`` form a bare name binds. No ``--fix``: which bare names
+compared is a judgement the rewrite must not guess.
+
 -----
 Tests
 -----
