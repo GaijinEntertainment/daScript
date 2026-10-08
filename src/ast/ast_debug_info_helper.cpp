@@ -452,7 +452,8 @@ namespace das {
             }
         }
         auto mangledName = type->getMangledName();
-        info->size = type->isAutoOrAlias() ? 0 : type->getSizeOf();
+        uint64_t sizeOf64 = type->isAutoOrAlias() ? 0 : type->getSizeOf64();
+        info->size = uint32_t(sizeOf64 <= 0x7fffffff ? sizeOf64 : 0x7fffffff);
         info->hash = hash_blockz64((uint8_t *)mangledName.c_str());
         debugInfo->lookup[info->hash] = info;
         return info;

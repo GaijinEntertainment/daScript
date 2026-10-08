@@ -30,6 +30,16 @@ def computed_goto_in_a_captured_block {
 // type - the very type the new sits in - and copied it into itself.
 def new_of_type_macro_in_option_result : auto(v) | int[(new<$T>())] => 1
 
+// A typedef over an option type. The typedef sets an alias on the option, which the
+// TypeDecl serializer refused to write and then asserted had never been there.
+typedef option_with_an_alias = int | float
+
+// A result type whose nested element is larger than INT_MAX. The type is legal - the
+// container is heap-allocated and never instantiates an element - but the debug-info walk
+// asked the element for a size that does not fit in TypeInfo::size.
+[export]
+def result_larger_than_int_max => new array<int[2000000000]>()
+
 [export]
 def main {
     new_of_type_macro_in_option_result()

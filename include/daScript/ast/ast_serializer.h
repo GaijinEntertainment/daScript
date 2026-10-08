@@ -365,7 +365,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 222;   // 222: Program::serialize writes the module-cache program payload
+            return 223;   // 223: TypeDecl::serialize writes the alias of an option type
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
