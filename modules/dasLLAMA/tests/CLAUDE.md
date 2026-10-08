@@ -1882,6 +1882,8 @@ canary: `gemm_f32` accumulates, so a reused state's `st.reim` must start zeroed 
 mels across calls); its ungated cells are the model-free half.
 `test_dasllama_core.das` - model-free: walks the module dependencies in-process; no module
 `dasllama_core` depends on is `audio` or `stbimage`, while `dasllama/dasllama` depends on both.
+`test_dasllama_lib.das` - model-free: the library example's stream and memory calls refuse
+cleanly with no model open.
 `test_asr_verbs.das` - model-free: the family-owned ASR facade verbs (`asr_exec_fmt` /
 `asr_encode_bucket`) over constructed structs, the audio families' lane knobs (qwen3a /
 gemma4a / canary / parakeet: the un-pinned default against the predicate the policy itself consults, both

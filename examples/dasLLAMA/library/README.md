@@ -2,13 +2,14 @@
 
 One daslang source, `dasllama_lib.das`, built by **both** standalone backends and driven from
 C, C++ and daslang. It carries three surfaces over the one engine - a text model that completes a
-prompt token by token, a speech-to-text model that turns an audio file into its transcript, and a
-text-to-speech model that writes a WAV.
+prompt token by token, a speech-to-text model that turns a live sample stream into the text of
+each utterance, and a text-to-speech model that speaks into memory. The library reads and writes
+no file but the models: the host owns the microphone, the speaker and any WAV.
 Nothing in it is dasLLAMA-specific machinery: it is the shape any daslang engine takes when a
 foreign host has to call into it.
 
 ```
-dasllama_lib.das   the library - [export_c] entry points over the dasllama facade
+dasllama_lib.das   the library - [export_c] entry points over dasllama/dasllama_core
 main.c             a C host          (both backends)
 main.cpp           a C++ host        (the -ctx backend only)
 main.das           a daslang host    (the -lib backend, through generated bindings)
@@ -49,9 +50,9 @@ bin/dasllama_host_cpp_ctx <model.gguf> "Once upon a time" 64
 cmake --build build --target dasllama_host_c_ctx   # the same context, through its C entry points
 bin/dasllama_host_c_ctx <model.gguf> "Once upon a time" 64
 
-# speech to text, on either backend
-bin/dasllama_host_c_ctx --asr <ggml-whisper.bin> modules/dasLLAMA/models/jfk_ask_not.wav
-bin/daslang examples/dasLLAMA/library/main.das -- --asr <ggml-whisper.bin> --audio <audio-file>
+# speech to text, on either backend: the host streams a PCM16 WAV in 10 ms chunks, like a microphone
+bin/dasllama_host_c_ctx --asr <ggml-whisper.bin> modules/dasLLAMA/models/silero_vad.bin modules/dasLLAMA/models/jfk_ask_not.wav
+bin/daslang examples/dasLLAMA/library/main.das -- --asr <ggml-whisper.bin> --audio <file.wav>
 
 # speech synthesis, on either backend
 bin/dasllama_host_cpp_ctx --tts <pocket-tts.gguf> "Hello from a daslang library." hello.wav
@@ -63,9 +64,9 @@ browser examples beside this folder name theirs in `models.json`.
 
 ## What crosses, and what does not
 
-The dasllama facade is das-shaped: blocks, arrays, moved structs. A C result has to be something
+The engine is das-shaped: blocks, arrays, moved structs. A C result has to be something
 `daslib/c_api_header.das` can spell - a scalar, a string, a pointer, an enum, a vector or a POD
-struct - so the library exposes a flat surface over the facade instead of re-exporting it:
+struct - so the library exposes a flat surface over it instead of re-exporting it:
 
 - `open` / `close` - load a model and open one session over it
 - `arch`, `n_layers`, `n_vocab`, `context_size` - what got loaded
@@ -73,17 +74,23 @@ struct - so the library exposes a flat surface over the facade instead of re-exp
 - `prefill` - encode a prompt and run it through the model
 - `next_piece` - one token's text, advancing the session
 - `prefill_tps`, `gen_tps`, `reason` - the numbers, and why a call said no
-- `asr_open` / `asr_close` / `asr_transcribe` / `asr_speed` - speech to text: an audio file in,
-  its whole transcript out
-- `tts_open` / `tts_close` / `tts_say` / `tts_voice` / `tts_set_voice` / `tts_speed` - speech
-  synthesis: text in, a PCM16 WAV out
+- `asr_open` / `asr_close` / `asr_speed` - load and drop a speech-to-text model
+- `asr_listen` / `asr_feed` / `asr_listen_end` - speech to text from a live stream: mono samples
+  in at any rate and chunk size, the text of each utterance the Silero VAD closes out
+- `tts_open` / `tts_close` / `tts_voice` / `tts_set_voice` / `tts_speed` - load and drop a
+  text-to-speech model, pick its voice
+- `tts_speak` / `tts_pcm` / `tts_pcm_rate` - speech synthesis into memory: mono f32 samples the
+  host plays or saves
+
+The library requires `dasllama/dasllama_core`, the engine without the file decoders, so it links
+neither the `audio` nor the `stbimage` module.
 
 Streaming is a **pull**, not a callback: a daslang `block` cannot cross a C ABI, so the caller
 loops on `next_piece` instead of handing the engine a sink. The raw completion path carries no
 stop token either - the caller decides when it has read enough, the way a chat program stops on
-its template's stop ids. The same constraint is why `asr_transcribe` answers with the whole
-transcript rather than a segment stream, and why `tts_say` writes a WAV instead of handing back
-PCM: the engine's streaming forms take a block, and an array does not cross as a result.
+its template's stop ids. The same constraint is why `asr_feed` returns the text it closed rather
+than calling back, and why `tts_pcm` is a pointer into the library: an array does not cross as a
+result.
 
 All three surfaces share one job queue. It is opened by whichever one opens first and destroyed
 when no model is open, so a host can hold all three at once.
