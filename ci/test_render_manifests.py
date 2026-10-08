@@ -70,6 +70,31 @@ class RenderManifestsTest(unittest.TestCase):
         self.assertEqual(rm.manifest_version("v0.6.5"), "0.6.5")
         self.assertEqual(rm.manifest_version("0.6.5-RC1"), "0.6.5-rc1")
         self.assertEqual(rm.manifest_version("V0.6.5"), "0.6.5")
+        self.assertEqual(rm.manifest_version("dasllama-v0.7.0-RC1"), "0.7.0-rc1")
+        self.assertEqual(rm.manifest_version("dasllama-v0.7.0"), "0.7.0")
+
+    def test_dasllama_own_tag_keeps_its_prefix_in_every_url(self):
+        self.stage(ASSETS["dasllama"])
+        rm.render_package("dasllama", "dasllama-v0.7.0-RC1", self.sha, self.out)
+        formula = self.read("homebrew-daslang/Formula/dasllama.rb")
+        cask = self.read("homebrew-daslang/Casks/dasllama.rb")
+        bucket = json.loads(self.read("scoop-daslang/bucket/dasllama.json"))
+        self.assertIn('version "0.7.0-rc1"', formula)
+        self.assertIn("/download/dasllama-v0.7.0-RC1/dasllama-linux-x86_64.tar.gz", formula)
+        self.assertIn("/download/dasllama-v0.7.0-RC1/dasllama-darwin-arm64.zip", cask)
+        self.assertEqual(bucket["version"], "0.7.0-rc1")
+        self.assertIn("/download/dasllama-v0.7.0-RC1/dasllama-windows-x64.zip", bucket["url"])
+        self.assertIn("/download/dasllama-v$version/", bucket["autoupdate"]["url"])
+        self.assertIn("dasllama-v", bucket["checkver"]["regex"], "the bucket's version check reads dasllama's tags, not daslang's")
+
+    def test_daslang_bucket_version_check_ignores_dasllama_tags(self):
+        self.stage(ASSETS["daslang"])
+        rm.render_package("daslang", "v0.6.5", self.sha, self.out)
+        bucket = json.loads(self.read("scoop-daslang/bucket/daslang.json"))
+        import re
+        rx = re.compile(bucket["checkver"]["regex"])
+        self.assertEqual(rx.search('href="/GaijinEntertainment/daScript/releases/tag/v0.6.5"').group(1), "0.6.5")
+        self.assertIsNone(rx.search('href="/GaijinEntertainment/daScript/releases/tag/dasllama-v0.7.0"'))
 
     def test_every_package_renders_every_manifest(self):
         for package, assets in ASSETS.items():

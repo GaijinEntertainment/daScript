@@ -1,6 +1,6 @@
 name: Build doc
 
-# Run only on tags and release publish
+# Run on master pushes, doc-touching PRs, and daslang prereleases (a dasllama-v* tag cuts no docs)
 on:
   release:
     types: prereleased
@@ -48,6 +48,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.event_name != 'release' || !startsWith(github.event.release.tag_name, 'dasllama-')
     runs-on: ubuntu-latest
     steps:
     - name: "SCM Checkout"

@@ -13,9 +13,10 @@
         ["watchdog.exe", "dasllama"]
     ],
     "checkver": {
-        "github": "https://github.com/GaijinEntertainment/daScript"
+        "url": "https://github.com/GaijinEntertainment/daScript/releases",
+        "regex": "/releases/tag/dasllama-v([\\d.]+)"
     },
     "autoupdate": {
-        "url": "https://github.com/GaijinEntertainment/daScript/releases/download/v$version/dasllama-windows-x64.zip"
+        "url": "https://github.com/GaijinEntertainment/daScript/releases/download/dasllama-v$version/dasllama-windows-x64.zip"
     }
 }

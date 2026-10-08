@@ -3,14 +3,16 @@ name: dasllama-server release
 # Builds the standalone dasllama bundle per platform - a fat exe (one clone of every [tune]
 # kernel per shipped CPU-class profile, picked from cpuid at start) with the watchdog beside it -
 # and packages it as the `dasllama` package: the archive, a .deb and an .rpm per linux arch, a
-# pip wheel per platform (ci/packaging/README.md). The archives go to the rolling
-# `dasllama-server` release and to the daslang release that triggered the run; the packages to
-# the daslang release, PyPI, and the Homebrew tap and scoop bucket.
+# pip wheel per platform (ci/packaging/README.md). dasllama releases on its own tags,
+# `dasllama-vX.Y.Z` and `dasllama-vX.Y.Z-RCn`, never on a daslang tag: the archives go to the
+# rolling `dasllama-server` release and to the dasllama release that triggered the run; the
+# packages to that release, PyPI, and the Homebrew tap and scoop bucket.
 #
 # Triggers:
-#   * release: prereleased - full matrix, uploads dasllama-<os>-<arch>.<ext> and the packages to
-#     the daslang release being cut, the archives to the rolling release (--clobber), the wheels
-#     to PyPI (TestPyPI for an RC), the manifests to the tap and bucket.
+#   * release: prereleased, tag dasllama-v* - full matrix, uploads dasllama-<os>-<arch>.<ext> and
+#     the packages to the dasllama release being cut, the archives to the rolling release
+#     (--clobber), the wheels to PyPI (TestPyPI for an RC), the manifests to the tap and bucket.
+#     A daslang tag (v*) runs nothing here.
 #   * workflow_dispatch - full matrix build + smoke; uploads to the rolling release only when
 #     the `publish` input is set. A dispatch without it is a build check, nothing moves.
 #   * push on a branch of this file or of what the bundle carries (the server, the watchdog,
@@ -63,6 +65,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.event_name != 'release' || startsWith(github.event.release.tag_name, 'dasllama-v')
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 150
     strategy:
@@ -348,7 +351,7 @@ jobs:
           path: artifacts/*
           if-no-files-found: error
 
-      - name: Upload to the daslang release being cut
+      - name: Upload to the dasllama release being cut
         if: github.event_name == 'release'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -372,14 +375,14 @@ jobs:
           gh release view dasllama-server --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 \
             || gh release create dasllama-server --repo "$GITHUB_REPOSITORY" --latest=false \
               --title "dasllama-server - standalone downloads (rolling)" \
-              --notes "The OpenAI-compatible dasLLAMA server as a standalone download per platform. Rolling: every asset is replaced in place when a daslang release is cut. Unpack, start watchdog (the .app on macOS), open http://127.0.0.1:8080/ - utils/dasllama-server/README.md." \
+              --notes "The OpenAI-compatible dasLLAMA server as a standalone download per platform. Rolling: every asset is replaced in place when a dasllama release is cut. Unpack, start watchdog (the .app on macOS), open http://127.0.0.1:8080/ - utils/dasllama-server/README.md." \
             || gh release view dasllama-server --repo "$GITHUB_REPOSITORY" > /dev/null
           gh release upload dasllama-server --repo "$GITHUB_REPOSITORY" rolling/* --clobber
 
   pypi_route:
     # Where a wheel set may go is decided by the tag's SHAPE, as release.yml does: exactly
-    # v<major>.<minor>.<patch> is a release and goes to PyPI; every other tag is a prerelease and
-    # goes to TestPyPI. Both PyPI environments key on this job's outputs.
+    # dasllama-v<major>.<minor>.<patch> is a release and goes to PyPI; every other tag is a
+    # prerelease and goes to TestPyPI. Both PyPI environments key on this job's outputs.
     needs: build
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
@@ -394,7 +397,7 @@ jobs:
           TAG: ${{ github.event.release.tag_name }}
         run: |
           set -eu
-          if [[ "$TAG" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if [[ "$TAG" =~ ^dasllama-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "environment=pypi" >> "$GITHUB_OUTPUT"
             echo "repository_url=https://upload.pypi.org/legacy/" >> "$GITHUB_OUTPUT"
             echo "project_url=https://pypi.org/p/dasllama" >> "$GITHUB_OUTPUT"

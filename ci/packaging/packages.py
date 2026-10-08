@@ -78,7 +78,9 @@ PROFILES = {
 # --- versions: one release tag, the spelling each package format wants ------------------------
 
 def bare_tag(tag):
-    """The tag without its leading v."""
+    """The tag's version: the leading v dropped, and before it the package prefix a product with
+    its own tags carries (dasllama-v0.7.0-RC1 -> 0.7.0-RC1, v0.6.5 -> 0.6.5)."""
+    tag = re.sub(r"^[A-Za-z][A-Za-z0-9]*-(?=[vV]\d)", "", tag)
     return tag[1:] if tag.startswith(("v", "V")) else tag
 
 

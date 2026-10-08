@@ -1,26 +1,35 @@
 # Packaging - release artifacts and package-manager manifests
 
-Two packages ship from one release cut, each described once in `packages.py` (commands, install
-prefix, dependencies, the tap and bucket files it publishes) and read by every builder here:
+Two packages, each on its own release tags and each described once in `packages.py` (commands,
+install prefix, dependencies, the tap and bucket files it publishes) and read by every builder
+here:
 
-- **daslang** - `release.yml`: four stable-named bundles
+- **daslang** - tags `vX.Y.Z` and `vX.Y.Z-RCn`, `release.yml`: four stable-named bundles
   (`daslang-bundle-{linux-x86_64,linux-arm64,darwin26-arm64,windows-x86_64}.zip`, unix modes
-  preserved), a `.deb` (x86_64), an `.rpm` per linux arch, a pip wheel per bundle.
-- **dasllama** - `dasllama_server_release.yml`: the fat server bundle as
+  preserved), a `.deb` (x86_64), an `.rpm` per linux arch, a pip wheel per bundle. The same
+  tag cuts the docs (`doc.yml`) and the cpp-mcp archives (`cpp_mcp_release.yml`).
+- **dasllama** - tags `dasllama-vX.Y.Z` and `dasllama-vX.Y.Z-RCn`,
+  `dasllama_server_release.yml`: the fat server bundle as
   `dasllama-{linux-x86_64,linux-arm64}.tar.gz`, `dasllama-darwin-arm64.zip` (the `.app`) and
   `dasllama-windows-x64.zip`, a `.deb` and an `.rpm` per linux arch, a pip wheel per platform.
   The archives also go to the rolling `dasllama-server` release, the one dasllama.io links.
+
+Every release workflow reads the tag's prefix and runs for its own product only: a daslang tag
+cuts no dasllama, a dasllama tag cuts no SDK, docs or cpp-mcp. `packages.py`'s `bare_tag` drops
+the prefix and the `v`, so every version spelling below (dpkg, rpm, PEP 440, the tap's) comes
+from the version alone; the asset URLs keep the whole tag.
 
 Every asset has a sibling `.sha256`, written by `checksum_assets.sh`. Every package manager below is a pointer at those assets,
 except pip, which the workflows publish themselves.
 
 ## The per-release ritual
 
-1. Cut the prerelease tag. `release.yml` and `dasllama_server_release.yml` upload the assets,
-   publish the wheels, and each ends with `publish_manifests`, which renders its package's
+1. Cut the prerelease tag - `vX.Y.Z-RCn` for daslang, `dasllama-vX.Y.Z-RCn` for dasllama; the
+   two are separate cuts on separate days or the same one. The product's workflow uploads the
+   assets, publishes the wheels, and ends with `publish_manifests`, which renders the package's
    Homebrew and scoop manifests from the release's `.sha256` assets and pushes them to the tap
    (`homebrew-daslang`) and the bucket (`scoop-daslang`) with the `PACKAGING_TOKEN` secret.
-   Check that the commits `daslang manifests @ <tag>` and `dasllama manifests @ <tag>` arrived.
+   Check that the commit `<package> manifests @ <tag>` arrived.
    `publish_manifests.sh <package> <tag>` without `--push` prints the same diff locally.
 2. **winget** (real releases ONLY, never an RC): render the manifest trio from
    `winget-daslang.yaml.template` and PR it to microsoft/winget-pkgs.

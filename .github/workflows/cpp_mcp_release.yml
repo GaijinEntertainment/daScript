@@ -9,7 +9,8 @@ name: cpp-mcp release
 #     is OFF in the normal build matrix, so nothing else compiles it).
 #   * workflow_dispatch — full matrix build + smoke, NO upload. Manual validation.
 #   * release: prereleased — full matrix, uploads cpp-mcp-<os>-<arch>.<ext>
-#     alongside the daslang SDK bundles.
+#     alongside the daslang SDK bundles. A dasllama-v* tag is dasllama's own
+#     release and cuts no cpp-mcp.
 #
 # The build is intentionally lean: cpp_main.das requires only daslib + builtin
 # modules, so every external module (dasHV/OpenSSL, GLFW, Audio, ...) is disabled
@@ -34,6 +35,7 @@ defaults:
 
 jobs:
   build:
+    if: github.event_name != 'release' || !startsWith(github.event.release.tag_name, 'dasllama-')
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false

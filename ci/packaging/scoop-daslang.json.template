@@ -10,7 +10,8 @@
 @SCOOP_BIN@
     ],
     "checkver": {
-        "github": "https://github.com/GaijinEntertainment/daScript"
+        "url": "https://github.com/GaijinEntertainment/daScript/releases",
+        "regex": "/releases/tag/v([\\d.]+)"
     },
     "autoupdate": {
         "url": "https://github.com/GaijinEntertainment/daScript/releases/download/v$version/daslang-bundle-windows-x86_64.zip"
