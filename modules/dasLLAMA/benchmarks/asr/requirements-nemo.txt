@@ -18,7 +18,7 @@ click==8.4.2
 cloudpickle==3.1.2
 colorama==0.4.6
 cytoolz==1.1.0
-datasets==5.0.0
+datasets==5.0.1
 decorator==5.3.1
 dill==0.4.1
 einops==0.8.2
