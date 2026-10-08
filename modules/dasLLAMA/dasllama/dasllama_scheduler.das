@@ -71,7 +71,7 @@ struct PendingReq {
     t_submit : int64 = 0l                   // ref_time_ticks at submit (queue-wait logging; 0 = unset)
     stable_at : int64 = 0l                  //! prompt tokens the request's own last turn does not reach (`render_turn_marked`); a recurrent model's prefill leaves a checkpoint there (0 = unknown)
     system_at : int64 = 0l                  //! prompt tokens of the conversation's opening every request on this system prompt and tool set shares (`ChatSession.first_opening`); a recurrent model's prefill leaves a second checkpoint there when it sits a page or more under `stable_at` (0 = unknown)
-    system_text_at : int64 = 0l             //! the opening's tokens shared whatever the tool set (`ChatSession.system_text_at`): a third checkpoint, a page or more under `system_at` (0 = unknown)
+    system_head_at : int64 = 0l             //! the opening's tokens shared beyond this system prompt and tool set - its system text or its tool block, whichever the template writes first (`ChatSession.system_head_at`): a third checkpoint, a page or more under `system_at` (0 = unknown)
     // MEDIA splice (images today; audio rides the same fields): `n_media` embedding rows that
     // prefill BETWEEN prompt[media_at-1] and prompt[media_at] — the render seam hands the two
     // token spans and the encoder hands the rows. Zero rows = an ordinary text request.
@@ -108,7 +108,7 @@ struct Stream {
     n_cached : int64                        // prefix-cache hit length (set at admit; 0 in flat mode)
     ckpt_at : int64                         //! the prompt position the prefill stops at to leave a recurrent checkpoint (0 = none)
     ckpt_sys_at : int64                     //! an earlier stop for the checkpoint at the shared system opening (0 = none; always under `ckpt_at`)
-    ckpt_text_at : int64                    //! an earlier stop still, at the system text before the tool block (0 = none; always under `ckpt_sys_at`)
+    ckpt_head_at : int64                    //! an earlier stop still, at the opening's shared head - the system text ahead of the tool block, or the tool block ahead of the text (0 = none; always under `ckpt_sys_at`)
     ckpt_at_tail : bool                     //! `ckpt_at` is the request's own stable opening and no shared stop: its checkpoint is a tail, which only this conversation's next turn extends
     t_admit : int64                         // ref_time_ticks at admit
     t_first : int64                         // ref_time_ticks at the first sampled token (0 until then)
@@ -386,7 +386,7 @@ def submit(model : Model; var sch : Scheduler; var req : PendingReq) : bool {
 // Terminate a stream: mark done (reaped at step end) and append its finished event.
 //! the nearest checkpoint stop past the rows prefilled so far, 0 when none is left: the system text, the system opening, the request's own
 def private next_checkpoint(st : Stream) : int64 {
-    for (at in fixed_array(st.ckpt_text_at, st.ckpt_sys_at, st.ckpt_at)) {
+    for (at in fixed_array(st.ckpt_head_at, st.ckpt_sys_at, st.ckpt_at)) {
         if (at > st.n_prefilled) {
             return at
         }
@@ -395,11 +395,11 @@ def private next_checkpoint(st : Stream) : int64 {
 }
 
 def private at_checkpoint(st : Stream) : bool =>
-    st.n_prefilled == st.ckpt_text_at || st.n_prefilled == st.ckpt_sys_at || st.n_prefilled == st.ckpt_at
+    st.n_prefilled == st.ckpt_head_at || st.n_prefilled == st.ckpt_sys_at || st.n_prefilled == st.ckpt_at
 
 //! a checkpoint stop inside the rows [lo, hi]: the span's one-call prefill cannot take them, since the stop needs the eval to end there
 def private checkpoint_within(st : Stream; lo, hi : int64) : bool {
-    for (at in fixed_array(st.ckpt_text_at, st.ckpt_sys_at, st.ckpt_at)) {
+    for (at in fixed_array(st.ckpt_head_at, st.ckpt_sys_at, st.ckpt_at)) {
         if (at > lo && at <= hi) {
             return true
         }
@@ -650,16 +650,16 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             if (st.ckpt_at > 0l && sys_at >= matched + pr && sys_at + pr <= st.ckpt_at) {
                 st.ckpt_sys_at = sys_at
             }
-            let text_at = sch.queue[0].system_text_at
+            let head_at = sch.queue[0].system_head_at
             let above = st.ckpt_sys_at > 0l ? st.ckpt_sys_at : st.ckpt_at
-            if (above > 0l && text_at >= matched + pr && text_at + pr <= above) {
-                st.ckpt_text_at = text_at
+            if (above > 0l && head_at >= matched + pr && head_at + pr <= above) {
+                st.ckpt_head_at = head_at
             }
-            st.ckpt_at_tail = st.ckpt_at > 0l && st.ckpt_at == sch.queue[0].stable_at && st.ckpt_at != sys_at && st.ckpt_at != text_at
+            st.ckpt_at_tail = st.ckpt_at > 0l && st.ckpt_at == sch.queue[0].stable_at && st.ckpt_at != sys_at && st.ckpt_at != head_at
             if (matched > 0l) {
-                to_log(LOG_INFO, "[stream {st.id}] prefix cache HIT: {matched}/{length(st.prompt)} tok attached, no prefill for them (checkpoints planned at {st.ckpt_text_at}, {st.ckpt_sys_at}, {st.ckpt_at}; stable {sch.queue[0].stable_at}, system {sys_at}, text {text_at})\n")
+                to_log(LOG_INFO, "[stream {st.id}] prefix cache HIT: {matched}/{length(st.prompt)} tok attached, no prefill for them (checkpoints planned at {st.ckpt_head_at}, {st.ckpt_sys_at}, {st.ckpt_at}; stable {sch.queue[0].stable_at}, system {sys_at}, head {head_at})\n")
             } else {
-                to_log(LOG_INFO, "[stream {st.id}] prefix cache MISS: full {length(st.prompt)}-tok prefill (checkpoints planned at {st.ckpt_text_at}, {st.ckpt_sys_at}, {st.ckpt_at}; stable {sch.queue[0].stable_at}, system {sys_at}, text {text_at})\n")
+                to_log(LOG_INFO, "[stream {st.id}] prefix cache MISS: full {length(st.prompt)}-tok prefill (checkpoints planned at {st.ckpt_head_at}, {st.ckpt_sys_at}, {st.ckpt_at}; stable {sch.queue[0].stable_at}, system {sys_at}, head {head_at})\n")
             }
         } else {
             st.session <- create_session(m, sch.kv_dtype)

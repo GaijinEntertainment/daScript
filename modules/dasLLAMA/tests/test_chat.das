@@ -545,6 +545,11 @@ def test_chat_xml_function(t : T?) {
         add_user(c, "Turn it off.")
         let first <- render_turn_marked(m, c)
         t |> equal(XMLF_FIRST, pieces_text(m, first.toks), "the first turn: the tool block ahead of the system text, the template's instruction, the closed think block")
+        // the opening's shared head: the tool block, which every request on these tools shares whatever its system text
+        t |> success(first.system_head > 16l && first.system_head < first.opening, "the shared head is a proper part of the opening ({first.system_head} of {first.opening} tokens)")
+        let head_toks <- [for (i in range64(first.system_head)); first.toks[i]]
+        let head = pieces_text(m, head_toks)
+        t |> success(find(head, "</tools>") >= 0 && find(head, "terse assistant") < 0, "... the tool block, none of the system text")
         var replay : array<int64>
         let calls <- ["\{\"name\": \"control\", \"arguments\": \{\"point\": \"light.1\", \"value\": \"false\"}}"]
         render_assistant_calls(m, c, "", calls, replay)

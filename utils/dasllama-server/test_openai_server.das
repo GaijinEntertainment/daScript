@@ -936,6 +936,8 @@ def test_openai_server_recurrent_checkpoints(t : T?) {
             t |> success(b1.cached < b1.prompt - 8, "... and not B's own turn ({b1.cached} of {b1.prompt})")
             let c1 = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"Name a color. One word.\"}],\"tools\":[{tool_b}],{kw}}")
             t |> equal(0, c1.cached, "conversation C, other tools, shares nothing past the turn's first tokens: the tools open the turn ({c1.cached} cached of {c1.prompt})")
+            let f1 = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"You are the assistant of a boat with a cabin lamp and a bilge pump. Answer in one short sentence and nothing else.\"},\{\"role\":\"user\",\"content\":\"Name a fruit. One word.\"}],\"tools\":[{tool_a}],{kw}}")
+            t |> success(f1.cached >= 16 && f1.cached < b1.cached, "conversation F, A's tools on another system prompt, attaches the tool block ahead of the text ({f1.cached} cached of {f1.prompt}, under the whole opening's {b1.cached})")
             // the second turns, interleaved, replayed with preserve_thinking (the think block the first prompt carried):
             // each attaches its own first exchange whole
             let kw2 = "\"max_tokens\":12,\"chat_template_kwargs\":\{\"enable_thinking\":false,\"preserve_thinking\":true}"
@@ -975,6 +977,16 @@ def test_openai_server_recurrent_checkpoints(t : T?) {
 }
 
 let TEST_PORT_CKPT_BUDGET = 18147   // beside 18146, the recurrent-checkpoints boot
+
+[test]
+def test_prefix_state_budget(t : T?) {
+    t |> run("the checkpoint byte budget: the MB asked for, else a quarter of the box's RAM, else 4 GB") @(t : T?) {
+        t |> equal(16384l, prefix_state_budget_mb(0l, 64l), "a 64 GB box")
+        t |> equal(4096l, prefix_state_budget_mb(0l, 16l), "a 16 GB box")
+        t |> equal(4096l, prefix_state_budget_mb(0l, 0l), "RAM unknown")
+        t |> equal(512l, prefix_state_budget_mb(512l, 64l), "an explicit budget stands")
+    }
+}
 
 let TEST_PORT_BENCH = 18140   // 18097/18098/18099/18101/18102/18120/18121/18131/18135-18139 are the other server suites'
 

@@ -169,7 +169,7 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
        [--asr <asr.bin>] [--asr-workers 2] [--mmproj <mmproj.gguf>] [--image-mmproj <mmproj.gguf>] \
        [--audio-mmproj <mmproj.gguf>] \
        [--ctx 4096] [--streams 4] [--chunk 512] [--chunk-idle 2048] [--page-rows 64] [--prefix N] \
-       [--prefix-states 16] [--prefix-state-mb 0] [--tune]
+       [--prefix-states 256] [--prefix-state-mb 0] [--tune]
 
 .. list-table::
    :header-rows: 1
@@ -310,12 +310,12 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
      - Prefix-cache retention cap in pages (auto: one full context per stream; ``-1`` = unbounded)
    * - ``--prefix-states``
      -
-     - ``16``
-     - Recurrent models (the Qwen3.5/3.6/3.8 hybrids) cache whole checkpoints instead of pages: how many a slot keeps (``0`` = none; config key ``prefix_states``). Every request leaves one at its system text, one at its opening with the tools, one at its finished turn; finished turns are dropped before shared openings
+     - ``256``
+     - Recurrent models (the Qwen3.5/3.6/3.8 hybrids) cache whole checkpoints instead of pages: the most a slot keeps (``0`` = none; config key ``prefix_states``); the byte budget binds first. Every request leaves one at its opening's shared head (the system text or the tool block, whichever its template writes first), one at its opening with the tools, one at its finished turn; finished turns are dropped before shared openings
    * - ``--prefix-state-mb``
      -
-     - ``0``
-     - The checkpoints' byte budget in MB, snapshots and held pages (``0`` = the count alone bounds them; config key ``prefix_state_mb``)
+     - *auto*
+     - The checkpoints' byte budget in MB, snapshots and held pages (auto: a quarter of the box's RAM; config key ``prefix_state_mb``)
    * - ``--flat``
      -
      - ---

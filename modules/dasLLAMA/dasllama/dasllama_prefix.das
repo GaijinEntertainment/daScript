@@ -119,7 +119,7 @@ def private page_tokens_match(entry : PrefixEntry; tokens : array<int64>; lo : i
 def create_prefix_cache_(max_groups : int64 = 0l; max_states : int64 = DEFAULT_PREFIX_STATES; max_state_bytes : int64 = 0l) : PrefixCache =>
     <- PrefixCache(max_groups = max_groups, max_states = max(max_states, 0l), max_state_bytes = max(max_state_bytes, 0l))
 
-let DEFAULT_PREFIX_STATES = 16l   //! a recurrent model's checkpoints kept: a request leaves two (its shared opening, its finished turn), so this holds several interleaved conversations
+let DEFAULT_PREFIX_STATES = 256l   //! the cap on a recurrent model's checkpoints; the byte budget (`max_state_bytes`, the server's quarter of RAM) is what binds first on any model worth caching
 
 //! what a checkpoint of `n` tokens costs: its snapshot's arrays, its token list, and the rows of the pages it holds
 def prefix_state_bytes_(pool : KVPool; snap : DnSnapshot; n : int64) : int64 {
