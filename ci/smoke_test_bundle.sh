@@ -97,8 +97,10 @@ COMPILE_TESTS=(
     # dasImgui merge shipped binaries + descriptor but zero .das for a while:
     # the descriptor resolved to files the bundle did not carry).
     "imgui-example|modules/dasImgui/examples/features/button_repeat.das"
-    "vulkan-example|modules/dasVulkan/examples/smoke.das"
-    "vulkan-tutorial|modules/dasVulkan/tutorials/01_triangle/triangle_tut.das"
+    # A third field names the module the row needs; a bundle without that module
+    # skips the row (dasVulkan is off by default on Apple: the root CMakeLists).
+    "vulkan-example|modules/dasVulkan/examples/smoke.das|dasVulkan"
+    "vulkan-tutorial|modules/dasVulkan/tutorials/01_triangle/triangle_tut.das|dasVulkan"
 )
 
 # Tools intentionally NOT in COMPILE_TESTS:
@@ -177,7 +179,14 @@ echo
 echo "Source compile (-compile-only):"
 for entry in "${COMPILE_TESTS[@]}"; do
     name="${entry%%|*}"
-    path="${entry#*|}"
+    rest="${entry#*|}"
+    path="${rest%%|*}"
+    mod=""
+    [[ "$rest" == *"|"* ]] && mod="${rest#*|}"
+    if [[ -n "$mod" && ! -d "$BUNDLE/modules/$mod" ]]; then
+        printf '  %-30s SKIP (modules/%s is not in this bundle)\n' "$name" "$mod"
+        continue
+    fi
     run_check "$name" "$DASLANG" -compile-only "$path"
 done
 
@@ -338,12 +347,15 @@ fi
 # mode that left shipped binaries without their notices.
 printf '  %-30s ' "third-party licenses present"
 MISSING_LICENSES=""
-for lic in URIPARSER DAG_NOISE VEC_MATH FMT FAST_FLOAT LUAU GLTF_SAMPLE_ASSETS \
-           HV OPENSSL LLVM Z3 MINIAUDIO OPENMPT CIPIC PUGIXML GLFW \
-           IMGUI FREETYPE MD4C JETBRAINS_MONO KHRONOS_GL \
-           VULKAN_HEADERS VOLK TREE_SITTER TREE_SITTER_ICU TREE_SITTER_C \
-           TREE_SITTER_CPP TREE_SITTER_MARKDOWN CLIP MINFFT SPIRV_HEADERS \
-           STB DROID_SANS_MONO MESHOPTIMIZER; do
+LICENSES=(URIPARSER DAG_NOISE VEC_MATH FMT FAST_FLOAT LUAU GLTF_SAMPLE_ASSETS
+          HV OPENSSL LLVM Z3 MINIAUDIO OPENMPT CIPIC PUGIXML GLFW
+          IMGUI FREETYPE MD4C JETBRAINS_MONO KHRONOS_GL
+          TREE_SITTER TREE_SITTER_ICU TREE_SITTER_C
+          TREE_SITTER_CPP TREE_SITTER_MARKDOWN CLIP MINFFT SPIRV_HEADERS
+          STB DROID_SANS_MONO MESHOPTIMIZER)
+# dasVulkan's notices ship with the module, and a bundle built without it carries neither.
+[[ -d "$BUNDLE/modules/dasVulkan" ]] && LICENSES+=(VULKAN_HEADERS VOLK)
+for lic in "${LICENSES[@]}"; do
     [[ -f "$BUNDLE/$lic.LICENSE" ]] || MISSING_LICENSES="$MISSING_LICENSES $lic"
 done
 [[ -f "$BUNDLE/LICENSE" ]] || MISSING_LICENSES="$MISSING_LICENSES <root>"
