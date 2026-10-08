@@ -1,5 +1,6 @@
 options gen2
 options persistent_heap
+options stack = 524288   // every dasLLAMA program root takes this budget: the past-the-context cell prefills 2048 rows
 options _dasllama_internal = true
 
 require dastest/testing_boost public
@@ -73,6 +74,33 @@ def test_embeddings_qwen3_embedding(t : T?) {
         delete last
         delete mean
         delete ids
+        delete m
+    }
+}
+
+[test]
+def test_embeddings_past_the_context(t : T?) {
+    t |> run("a text past the model's context embeds its leading seq_len tokens: a unit vector, no panic (tinyllama Q8)") <| @(tt : T?) {
+        let path = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
+        return if (!jit_model_available(tt, path))
+        var m <- load_model_(path, QuantMode.q8)
+        let long_text = build_string() $(var w) {
+            for (i in range(1200)) {
+                w |> write("word{i} ")
+            }
+        }
+        let n = long_length(encode(m, long_text, true, false))
+        tt |> success(n > m.config.seq_len, "the input runs past the context ({n} tokens, context {m.config.seq_len})")
+        var vec <- embed(m, long_text)
+        tt |> equal(m.config.dim, long_length(vec), "dim floats")
+        var ss = 0.0
+        var finite = true
+        for (v in vec) {
+            ss += v * v
+            finite = finite && v == v
+        }
+        tt |> success(finite && abs(ss - 1.0) < 1e-3, "a finite unit vector (|v|^2 = {ss})")
+        delete vec
         delete m
     }
 }

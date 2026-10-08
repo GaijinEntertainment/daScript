@@ -56,6 +56,7 @@ struct ChatSession {
     enable_thinking : bool = true   // init from tmpl.think_default; off + a think_suppress form => instruct mode
     preserve_thinking : bool = false   //! a replayed assistant turn renders its think block, the tokens the model generated there
     first_opening : int64 = 0l      //! the tokens of the conversation's opening (BOS, prelude, the system turn) a replayed first turn rendered; 0 until one did
+    system_text_at : int64 = 0l     //! the tokens of that opening every request on the same system text shares, the tool block left out (`system_text_opening_`); 0 until a first turn replayed
     think_vocab : bool = false      // the vocab carries the reply-side reasoning markers (resolved at create)
     gate_ok : bool = false          // the think_gate specials resolve in the vocab (true when no gate declared)
     gate_rendered : bool = false    // a consumed turn actually rendered the gate — thinking is armed for the session
@@ -449,10 +450,10 @@ def private render_assistant_open(m : Model; c : ChatSession; var out : array<in
 // The system-turn content on the first turn: the user system prompt, and — for the HERMES tool
 // mode — the tool block wrapping the verbatim tool JSONs (one per line, the Qwen shape). The
 // other modes place their definitions elsewhere (developer turn, <|tool> blocks, user prefix).
-def private system_content(c : ChatSession) : string {
+def private system_content(c : ChatSession; with_tools : bool = true) : string {
     let said = empty(c.system) ? c.tmpl.default_system : c.system
     let base = c.tmpl.system_dated ? dated_system(c, said) : said
-    if (empty(c.tools_json) || c.tmpl.tool_mode != ToolMode.hermes) {
+    if (empty(c.tools_json) || !with_tools || c.tmpl.tool_mode != ToolMode.hermes) {
         return base
     }
     var parts : array<string>
@@ -482,9 +483,9 @@ def private dated_system(c : ChatSession; said : string) : string {
 // The first-turn system block, shared by the text and audio prompt paths: the think gate spliced
 // before the content, tool markers split where declared. Returns the text to FOLD into the user
 // turn instead when the family has no system role (gemma-2/3); "" = rendered or nothing to do.
-def private render_system_turn(m : Model; c : ChatSession; var out : array<int64>) : string {
-    let tool_mode = empty(c.tools_json) ? ToolMode.none : c.tmpl.tool_mode
-    var sys = system_content(c)
+def private render_system_turn(m : Model; c : ChatSession; var out : array<int64>; with_tools : bool = true) : string {
+    let tool_mode = empty(c.tools_json) || !with_tools ? ToolMode.none : c.tmpl.tool_mode
+    var sys = system_content(c, with_tools)
     if (tool_mode == ToolMode.harmony) {
         sys = HARMONY_SYSTEM_BODY   // the user system prompt moves to the developer turn below
     }
@@ -545,17 +546,43 @@ def private hermes_results_text(c : ChatSession) : string {
 }
 
 //! Answers the opening's length (a first turn's BOS, prelude, system turn); CONST on `c`: render_turn_ re-renders, so renders match.
-def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) : int64 {
-    let base = long_length(out)
-    if (c.first && c.tmpl.add_bos) {
+// A conversation's opening: BOS, the prelude (glm4moe: [gMASK]<sop>) and the system turn, with or without the tool
+// block the template puts there. Answers the system text a template with no system role folds into the first user turn.
+def private render_opening(m : Model; c : ChatSession; var out : array<int64>; with_tools : bool = true) : string {
+    if (c.tmpl.add_bos) {
         out |> push(bos_id(m))
     }
-    if (c.first && !empty(c.tmpl.prelude.parts)) {   // conversation-start prelude (glm4moe: [gMASK]<sop>)
+    if (!empty(c.tmpl.prelude.parts)) {
         render_parts(m, c.tmpl.prelude.parts, "", out)
     }
+    return render_system_turn(m, c, out, with_tools)
+}
+
+//! The tokens of a first turn's opening every request on the same system text shares, tools or not: the opening
+//! rendered with and without the tool block, matched token by token (a tokenizer may merge at the junction). The
+//! whole opening when the template keeps no tools there; 0 after the first turn.
+def system_text_opening_(m : Model; c : ChatSession) : int64 {
+    if (!c.first) {
+        return 0l
+    }
+    var full, bare : array<int64>
+    render_opening(m, c, full, true)
+    if (empty(c.tools_json)) {
+        return long_length(full)
+    }
+    render_opening(m, c, bare, false)
+    var n = 0l
+    while (n < long_length(full) && n < long_length(bare) && full[n] == bare[n]) {
+        n ++
+    }
+    return n
+}
+
+def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) : int64 {
+    let base = long_length(out)
     var user_content = c.pending
     if (c.first) {
-        let fold = render_system_turn(m, c, out)
+        let fold = render_opening(m, c, out)
         if (!empty(fold)) {
             user_content = "{fold}\n\n{c.pending}"   // no system role (Gemma): fold into the first user turn
         }
@@ -1019,14 +1046,15 @@ def render_turn_(m : Model; c : ChatSession) : array<int64> {
 struct RenderedTurn {
     toks : array<int64>
     opening : int64
+    system_text : int64   //! the opening's tokens shared by every request on the same system text, the tool block left out (0 after the first turn)
 }
 
 //! `render_turn_` with the opening marked: BOS, prelude and the system turn on a conversation's first turn, nothing after it.
 def render_turn_marked_(m : Model; c : ChatSession) : RenderedTurn {
-    var turn : RenderedTurn
-    turn.opening = render_prompt(m, c, turn.toks)
-    render_think_suppress(m, c, turn.toks)
-    return <- turn
+    var toks : array<int64>
+    let opening = render_prompt(m, c, toks)
+    render_think_suppress(m, c, toks)
+    return <- RenderedTurn(toks <- toks, opening = opening, system_text = system_text_opening_(m, c))
 }
 
 //! `render_turn_`'s IMAGE twin: the turn's prefill as the two token spans that bracket the image
@@ -1059,6 +1087,9 @@ def render_close_(m : Model; c : ChatSession) : array<int64> {
 def render_assistant_(m : Model; var c : ChatSession; text : string; var out : array<int64>; reasoning : string = "") {
     if (!c.has_pending) {
         return
+    }
+    if (c.first) {
+        c.system_text_at = system_text_opening_(m, c)
     }
     note_opening(c, render_prompt(m, c, out))
     render_think_replay(m, c, reasoning, out)
@@ -1238,6 +1269,9 @@ def add_tool_results_(var c : ChatSession; results : array<string>; names : arra
 def render_assistant_calls_(m : Model; var c : ChatSession; text : string; calls : array<string>; var out : array<int64>; reasoning : string = "") {
     if (!c.has_pending) {
         return
+    }
+    if (c.first) {
+        c.system_text_at = system_text_opening_(m, c)
     }
     note_opening(c, render_prompt(m, c, out))
     render_think_replay(m, c, reasoning, out)

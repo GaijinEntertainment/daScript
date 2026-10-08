@@ -2484,12 +2484,17 @@ def embed_forward(t : Model; var s : Session; tokens : array<int64>; npos : int6
 
 //! L2-normalized sentence embedding of `text` (`dim` floats, or the leading `dims`): tokenize, run one forward, pool the
 //! decoder's last-layer hidden rows the way `pooling` asks (the mean for a chat model, the last row for an embedding model),
-//! cut, unit-normalize.
+//! cut, unit-normalize. A text past the model's context embeds its leading `seq_len` tokens: the session holds that many rows.
 def embed_(m : Model; text : string; pooling : int64 = POOLING_MEAN; dims : int64 = 0l) : array<float> {
     var s <- create_session_(m)
     let tokens = encode_(m, text)
+    var npos = long_length(tokens)
+    if (npos > m.config.seq_len) {
+        to_log(LOG_WARNING, "embed: {npos} tokens past the model context of {m.config.seq_len}; the leading {m.config.seq_len} are embedded\n")
+        npos = m.config.seq_len
+    }
     var out : array<float>
-    embed_forward(m, s, tokens, long_length(tokens), out, pooling, dims)
+    embed_forward(m, s, tokens, npos, out, pooling, dims)
     delete s
     return <- out
 }

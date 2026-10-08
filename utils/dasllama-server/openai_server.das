@@ -3006,7 +3006,7 @@ def private register_request(srv : FrontLink; writer : WriterRef;
                              tool_mode : ToolMode = ToolMode.none; reuse_id : int64 = 0l;
                              var nothink : NothinkStopGuard = NothinkStopGuard(); stable_at : int64 = 0l;
                              include_usage : bool = false; resumed : bool = false;
-                             var constraint : TokenConstraint? = null; system_at : int64 = 0l) {
+                             var constraint : TokenConstraint? = null; system_at : int64 = 0l; system_text_at : int64 = 0l) {
     if (bench_hold_active()) {
         unsafe {
             delete constraint
@@ -3025,7 +3025,7 @@ def private register_request(srv : FrontLink; writer : WriterRef;
     let rid = reuse_id != 0l ? reuse_id : next_id()   // a resumed image request keeps its park id, so one [req N] spans the request
     let cid = "{prefix}-{rid}"
     let created = created_ts()
-    var preq <- PendingReq(id = rid, params = params, max_new = max_new, seed = seed, stable_at = stable_at, system_at = system_at)
+    var preq <- PendingReq(id = rid, params = params, max_new = max_new, seed = seed, stable_at = stable_at, system_at = system_at, system_text_at = system_text_at)
     var encoded_rows = 0l
     for (sp in spans) {
         encoded_rows += empty(sp.rows) ? 0l : sp.n
@@ -3069,7 +3069,7 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
                                var prompt, stop_ids, close : array<int64>&;
                                var nothink_out : NothinkStopGuard&;
                                var call_open, call_close : string&; var think_out : ThinkStream&;
-                               var tool_mode_out : ToolMode&; var stable_at : int64&; var system_at : int64&) : string {
+                               var tool_mode_out : ToolMode&; var stable_at : int64&; var system_at : int64&; var system_text_at : int64&) : string {
     var chat <- create_chat_renderer(cur_model(), system, max_new)
     defer() { delete chat }
     if (think_set) {   // absent from the request => the family's own default (gemma-4 E: off)
@@ -3186,6 +3186,7 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
     var turn <- render_turn_marked(cur_model(), chat)
     stable_at = long_length(rendered) + turn.opening   //! every earlier turn, and the last turn's own opening
     system_at = chat.first_opening > 0l ? chat.first_opening : turn.opening   //! the conversation's opening, from the replayed first turn or this one
+    system_text_at = chat.system_text_at > 0l ? chat.system_text_at : turn.system_text   //! ... and its system text before the tool block
     rendered |> push_from(turn.toks)
     delete turn
     // out-params: the sole caller hands them in empty and deletes them before every re-render
@@ -3545,11 +3546,12 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
     var wire_tool_mode = ToolMode.none
     var stable_at = 0l
     var system_at = 0l
+    var system_text_at = 0l
     var start = 0
     while (true) {
         let render_error = render_chat_suffix(msgs_v, system, tools, max_new, start, think_set, think_val, preserve_think,
                                               refs, prompt, stop_ids, close, nothink, call_open, call_close,
-                                              think_stream, wire_tool_mode, stable_at, system_at)
+                                              think_stream, wire_tool_mode, stable_at, system_at, system_text_at)
         if (!empty(render_error)) {
             bad_request(srv, writer, render_error)
             return
@@ -3602,7 +3604,7 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
     register_request(srv, writer, prompt, stop_ids, close, stop_strs, spans, params, max_new,
                      streaming, true, "chatcmpl",
                      has_tools, call_open, call_close, seed, think_stream, wire_tool_mode, resume_rid,
-                     nothink, stable_at, wants_usage(js), resumed, constraint, system_at)
+                     nothink, stable_at, wants_usage(js), resumed, constraint, system_at, system_text_at)
 }
 
 //! Marks the refs that bring no rows and whose span the slot's prefix cache does not hold under `prompt`; true when

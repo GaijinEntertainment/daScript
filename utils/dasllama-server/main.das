@@ -151,7 +151,7 @@ struct ServerArgs {
     @clarg_doc = "Prefix-cache retention cap in pages (default: one full context per stream; -1 = unbounded)"
     prefix : int
 
-    @clarg_doc = "Recurrent models (Qwen3.5/3.6/3.8 hybrids) cache whole checkpoints instead of pages: how many a slot keeps (default 16; 0 = none). Every request leaves one at its shared system opening and one at its finished turn; finished turns are dropped before shared openings"
+    @clarg_doc = "Recurrent models (Qwen3.5/3.6/3.8 hybrids) cache whole checkpoints instead of pages: how many a slot keeps (default 16; 0 = none). Every request leaves one at its system text, one at its opening with the tools, one at its finished turn; finished turns are dropped before shared openings"
     prefix_states : int
 
     @clarg_doc = "The checkpoints' byte budget in MB (default 0 = the count alone bounds them)"
