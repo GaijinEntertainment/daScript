@@ -263,3 +263,102 @@ def test_value_takes_declared_result_type(t : T?) {
         delete s
     }
 }
+
+var private calls = 0
+var private picked = 0
+
+def private next_value() : int {
+    calls++
+    return 3
+}
+
+def private pick() : int {
+    picked++
+    return 1
+}
+
+[test]
+def test_scrutinee_is_evaluated_once(t : T?) {
+    calls = 0
+    let s = match (next_value()) {
+        1 => "one"
+        2 => "two"
+        _ => "other"
+    }
+    t |> equal(s, "other")
+    t |> equal(calls, 1)
+    calls = 0
+    var hits = 0
+    match (next_value()) {
+        1 => $ { hits = 1 }
+        2 => $ { hits = 2 }
+        _ => $ { hits = 3 }
+    }
+    t |> equal(hits, 3)
+    t |> equal(calls, 1)
+}
+
+[test]
+def test_lvalue_scrutinee_is_evaluated_once(t : T?) {
+    var values <- [10, 20, 30]
+    picked = 0
+    match (values[pick()]) {
+        20 => $ { values[pick()] = 0 }
+        _ => $ {}
+    }
+    t |> equal(values[1], 0)
+    t |> equal(picked, 2)
+}
+
+def private dir_name(d : Dir) : string {
+    return match (d) {
+        Dir.north => "n"
+        Dir.east | Dir.west => "side"
+        Dir.south => "s"
+    }
+}
+
+def private value_kind(v : IntOrStr) : string {
+    return match (v) {
+        IntOrStr(i = n) => "int {n}"
+        IntOrStr(s = _) => "string"
+    }
+}
+
+def private point_or_null(p : Point?) : string {
+    return match (p) {
+        null => "null"
+        Point(x = x, y = y) => "{x},{y}"
+    }
+}
+
+def private both(a, b : bool) : string {
+    return match (a, b) {
+        (true, true) => "tt"
+        (true, false) => "tf"
+        (false, _) => "f_"
+    }
+}
+
+def private tuple_columns(t : tuple<bool; Dir>) : string {
+    return match (t) {
+        (true, _) => "t"
+        (false, Dir.north | Dir.south) => "f vertical"
+        (false, Dir.east | Dir.west) => "f horizontal"
+    }
+}
+
+[test]
+def test_exhaustive_value_match_needs_no_catch_all(t : T?) {
+    t |> equal(dir_name(Dir.west), "side")
+    t |> equal(dir_name(Dir.south), "s")
+    t |> equal(value_kind(IntOrStr(i = 2)), "int 2")
+    t |> equal(value_kind(IntOrStr(s = "x")), "string")
+    var p = Point(x = 1, y = 2)
+    t |> equal(point_or_null(unsafe(addr(p))), "1,2")
+    t |> equal(point_or_null(null), "null")
+    t |> equal(both(true, false), "tf")
+    t |> equal(both(false, true), "f_")
+    t |> equal(tuple_columns((false, Dir.east)), "f horizontal")
+    t |> equal(tuple_columns((true, Dir.east)), "t")
+}

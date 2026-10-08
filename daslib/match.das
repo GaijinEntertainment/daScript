@@ -10,7 +10,9 @@ module match shared private
 //! that decompose values by structure, variant, tuple, array, or constant comparison.
 //! Each arm is ``pattern => body``: a bare name binds, ``_`` matches anything, ``&&`` adds a guard,
 //! ``|`` separates alternatives, and ``match (a, b)`` matches several values at once.
-//! In value position ``match`` is an expression. Also provides ``match_type`` and ``match_expr``.
+//! In value position ``match`` is an expression. Unreachable arms and a match over a finite type
+//! (enum, bool, variant, struct pointer) that misses a value are compile errors.
+//! Also provides ``match_type`` and ``match_expr``.
 //! The ``if (pattern)`` arm form with ``$v(name)`` capture still compiles.
 //! Structures annotated with ``[match_as_is]`` or ``[match_copy]`` enable custom matching.
 
@@ -19,6 +21,7 @@ require daslib/templates_boost
 require daslib/macro_boost
 require daslib/strings_boost
 require daslib/defer
+require daslib/option
 
 /*
 options debugger
@@ -183,6 +186,9 @@ def private is_rest(p : Expression const?) : bool {
 
 [macro_function]
 def is_arrow_arm(e : Expression?) => e is ExprMakeTuple && length((e as ExprMakeTuple).values) == 2
+
+[macro_function]
+def private is_binder(p : Expression?) : bool => p is ExprVar || (p is ExprTag && (p as ExprTag).name == "v")
 
 [macro_function]
 def match_struct(what : TypeDeclPtr; wths : ExprMakeStruct?; access : Expression?; var to : MatchTo) {
@@ -551,7 +557,7 @@ def match_tag(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
     let tag = wth as ExprTag
     if (tag.name != "v") {
         to.errors |> match_error("unsupported match tag ${tag.name}", tag.at)
-        return true
+        return false
     }
     if (!(tag.subexpr is ExprVar)) {
         to.errors |> match_error("invalid $v syntax", tag.at)
@@ -657,6 +663,9 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
         }
     } elif (wth.__rtti |> starts_with("ExprConst")) {
         return match_const(what, wth, access, to)
+    } elif (to.bind_names) {
+        to.errors |> match_error("`{describe_pattern(wth)}` is not a pattern; compare against a computed value with `match_expr({describe_pattern(wth)})`", wth.at)
+        return false
     } elif (wth._type != null && compatible(what, wth._type)) {
         log_m("\tadd condition {describe(access)} == {describe(wth)}\n")
         let ee = unsafe(reinterpret<Expression?>(copy_to_local(wth)))
@@ -665,7 +674,7 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
         to.conditions |> emplace(cond)
         return true
     } else {
-        to.errors |> match_error("usupported match syntax {wth.__rtti} in {describe(wth)}", wth.at)
+        to.errors |> match_error("unsupported match syntax {wth.__rtti} in {describe(wth)}", wth.at)
         to.failed = true
         return false
     }
@@ -897,6 +906,413 @@ def match_parent(expr : ExprCallMacro?) : MatchParent {
     return <- res
 }
 
+let private MATCH_ANY_OTHER = "_"
+let private MATCH_NON_NULL = "non-null"
+
+struct private MatchCell {
+    any : bool
+    opaque : bool
+    keys : array<string>
+}
+
+struct private MatchDomain {
+    finite : bool
+    values : array<string>
+}
+
+struct private PatternRow {
+    arm : int
+    @do_not_delete cells : array<Expression?>
+}
+
+struct private MatchTable {
+    columns : array<TypeDeclPtr>
+    labels : array<string>
+    rows : array<array<MatchCell>>
+    arm_rows : array<array<int>>
+    domains : array<MatchDomain>
+}
+
+struct private MatchCoverage {
+    unreachable : array<int>
+    dead_alternatives : array<tuple<arm : int; what : string>>
+    all_finite : bool
+    missing : Option<string>
+}
+
+
+[macro_function]
+def private bind_subject(var what : Expression?; idx : int; var prefix : array<Expression?>) : Expression? {
+    //! Evaluates the scrutinee once, into a temp: a reference to an lvalue, otherwise the value copied or moved.
+    let tname = make_unique_private_name("__`match`subject`{idx}", what.at)
+    let lvalue = what._type.flags.ref || match_peel_r2v(what) is ExprVar
+    var decl : Expression?
+    if (lvalue && what._type.flags.constant) {
+        decl = qmacro_expr() {
+            let $i(tname) & = unsafe($e(what))
+        }
+    } elif (lvalue) {
+        decl = qmacro_expr() {
+            var $i(tname) & = unsafe($e(what))
+        }
+    } elif (what._type.canCopy) {
+        decl = qmacro_expr() {
+            let $i(tname) = $e(what)
+        }
+    } else {
+        decl = qmacro_expr() {
+            let $i(tname) <- $e(what)
+        }
+    }
+    decl |> force_at(what.at)
+    var init = (decl as ExprLet).variables[0].init
+    init.genFlags.alwaysSafe = true
+    init.genFlags.userSaidItsSafe = true
+    prefix |> emplace(decl)
+    var access = qmacro($i(tname))
+    access |> force_at(what.at)
+    return access
+}
+
+
+[macro_function]
+def private constant_key(p : Expression?) : string {
+    if (p is ExprConstEnumeration) {
+        let ce = p as ExprConstEnumeration
+        return "{ce.enumType.name}.{ce.value}"
+    }
+    return p.__rtti |> starts_with("ExprConst") ? describe(p) : ""
+}
+
+[macro_function]
+def private variant_name(typ : TypeDeclPtr) : string {
+    //! The name a variant is declared with: its alias, or the ``aka`` name ``describe`` prints for a copied type.
+    return string(typ.alias) if (!empty(typ.alias))
+    let d = describe(typ)
+    let aka_pos = find(d, " aka ")
+    return "variant" if (aka_pos < 0)
+    let name = slice(d, aka_pos + 5)
+    let stop = find(name, " ")
+    return stop < 0 ? name : slice(name, 0, stop)
+}
+
+[macro_function]
+def private variant_key(typ : TypeDeclPtr; alt : das_string) : string => "{variant_name(typ)}({alt} = _)"
+
+[macro_function]
+def private is_struct_of(typ : TypeDeclPtr; p : Expression?) : bool {
+    //! ``p`` is a one-element struct pattern of exactly ``typ``.
+    return false if (typ == null || !typ.isStructure || !(p is ExprMakeStruct))
+    let ms = p as ExprMakeStruct
+    return (length(ms.structs) == 1 && ms.makeType != null && ms.makeType.isStructure
+        && is_same_type(typ, ms.makeType, RefMatters.no, ConstMatters.no, TemporaryMatters.no))
+}
+
+[macro_function]
+def private is_irrefutable(typ : TypeDeclPtr; var pat : Expression?) : bool {
+    //! Irrefutable: the pattern can not fail on any value of ``typ`` (on a pointer, any non-null one) - ``x``, ``_``, ``(a, _)``, ``Point(x = a, y = _)``. Such an arm covers its whole column.
+    var p = match_peel_r2v(pat)
+    return true if (is_binder(p))
+    if (p is ExprMakeTuple) {
+        for (v in (p as ExprMakeTuple).values) {
+            return false if (!is_rest(v) && !is_irrefutable(null, v))
+        }
+        return true
+    }
+    return false if (typ == null || !is_struct_of(typ.isPointer ? typ.firstType : typ, p))
+    for (mf in *(p as ExprMakeStruct).structs[0]) {
+        return false if (!is_irrefutable(null, mf.value))
+    }
+    return true
+}
+
+[macro_function]
+def private either(var l : MatchCell; var r : MatchCell) : MatchCell {
+    //! ``p1 | p2`` covers what either side covers.
+    l.any ||= r.any
+    l.opaque ||= r.opaque
+    l.keys |> push_from(r.keys)
+    return <- l
+}
+
+[macro_function]
+def private classify_cell(typ : TypeDeclPtr; var pat : Expression?) : MatchCell {
+    //! What one pattern covers of one column: everything, named values, or values the analysis can't name.
+    var p = match_peel_r2v(pat)
+    return <- MatchCell(any = true) if (is_binder(p))
+    if (p is ExprOp2) {
+        var op2 = p as ExprOp2
+        return <- either(classify_cell(typ, op2.left), classify_cell(typ, op2.right)) if (op2.op == "||")
+        return <- MatchCell(opaque = true)
+    }
+    let key = constant_key(p)
+    return <- MatchCell(keys <- [key]) if (!empty(key))
+    if (typ != null && typ.isVariant && p is ExprMakeVariant && length((p as ExprMakeVariant).variants) == 1
+            && is_irrefutable(null, (p as ExprMakeVariant).variants[0].value)) {
+        return <- MatchCell(keys <- [variant_key(typ, (p as ExprMakeVariant).variants[0].name)])
+    }
+    if (typ != null && typ.isVariant && p is ExprAsVariant && is_irrefutable(null, (p as ExprAsVariant).value)) {
+        return <- MatchCell(keys <- [variant_key(typ, (p as ExprAsVariant).name)])
+    }
+    return <- MatchCell(opaque = true) if (!is_irrefutable(typ, p))
+    return <- MatchCell(keys <- [MATCH_NON_NULL]) if (typ != null && typ.isPointer)
+    return <- MatchCell(any = true)
+}
+
+[macro_function]
+def private finite_domain(typ : TypeDeclPtr) : MatchDomain {
+    if (typ != null && typ.isEnum && typ.enumType != null) {
+        return <- MatchDomain(finite = true, values <- [for (e in typ.enumType.list); "{typ.enumType.name}.{e.name}"])
+    } elif (typ != null && typ.baseType == Type.tBool) {
+        return <- MatchDomain(finite = true, values <- ["true", "false"])
+    } elif (typ != null && typ.isVariant) {
+        return <- MatchDomain(finite = true, values <- [for (n in typ.argNames); variant_key(typ, n)])
+    } elif (typ != null && typ.isPointer && typ.firstType != null && typ.firstType.isStructure) {
+        return <- MatchDomain(finite = true, values <- ["null", MATCH_NON_NULL])
+    }
+    return <- MatchDomain()
+}
+
+[macro_function]
+def private column_domain(col : TypeDeclPtr; c : int; rows : array<array<MatchCell>>) : MatchDomain {
+    //! A finite type's values; for any other type, the values the arms name plus "anything else".
+    var dom <- finite_domain(col)
+    return <- dom if (dom.finite)
+    for (r in rows) {
+        for (k in r[c].keys) {
+            dom.values |> push(k) if (!has_value(dom.values, k))
+        }
+    }
+    dom.values |> push(MATCH_ANY_OTHER)
+    return <- dom
+}
+
+[macro_function]
+def private cell_covers(cell : MatchCell; value : string) : bool => cell.any || cell.keys |> has_value(value)
+
+[macro_function]
+def private is_useful(tab : MatchTable; live : array<int>; cand : array<MatchCell>; col : int) : bool {
+    //! True when ``cand`` matches some value none of the ``live`` rows matches.
+    return empty(live) if (col == length(cand))
+    assume cell = cand[col]
+    for (v in cell.any || cell.opaque ? tab.domains[col].values : cell.keys) {
+        var inscope sub <- [for (ri in live); ri; where cell_covers(tab.rows[ri][col], v)]
+        return true if (is_useful(tab, sub, cand, col + 1))
+    }
+    return false
+}
+
+[macro_function]
+def private format_witness(values : array<string>; labels : array<string>) : string {
+    //! One missing combination: positional ``(a, b)``, or ``(field = value, ...)`` once a column was split into parts.
+    if (!has_value([for (l in labels); empty(l)], false)) {
+        return length(values) == 1 ? values[0] : "({join(values, ", ")})"
+    }
+    let items <- [for (v, l in values, labels); empty(l) ? v : "{l} = {v}"; where v != MATCH_ANY_OTHER]
+    return empty(items) ? MATCH_ANY_OTHER : "({join(items, ", ")})"
+}
+
+[macro_function]
+def private missing_values(tab : MatchTable; live : array<int>; col : int; limit : int; var path : array<string>; var found : array<string>) : void {
+    //! Collects value combinations no ``live`` row matches - one more than are shown, so the message can say there are more.
+    return if (length(found) > limit)
+    if (col == length(tab.domains) || empty(live)) {
+        if (empty(live)) {
+            var inscope full := path
+            full |> push_from([for (_c in range(col, length(tab.domains))); MATCH_ANY_OTHER])
+            found |> push(format_witness(full, tab.labels))
+        }
+        return
+    }
+    if (!has_value([for (ri in live); tab.rows[ri][col].any], false)) {
+        path |> push(MATCH_ANY_OTHER)
+        missing_values(tab, live, col + 1, limit, path, found)
+        path |> pop()
+        return
+    }
+    path |> reserve(length(tab.domains))
+    for (v in tab.domains[col].values) {
+        var inscope sub <- [for (ri in live); ri; where cell_covers(tab.rows[ri][col], v)]
+        path |> push(v)
+        missing_values(tab, sub, col + 1, limit, path, found)
+        path |> pop()
+        return if (length(found) > limit)
+    }
+}
+
+[macro_function]
+def private pattern_part(var pat : Expression?) : Expression? {
+    //! The pattern of an arm without its top-level ``&&`` guard.
+    var p = match_peel_r2v(pat)
+    while (p is ExprOp2 && (p as ExprOp2).op == "&&") {
+        p = match_peel_r2v((p as ExprOp2).left)
+    }
+    return p
+}
+
+[macro_function]
+def private is_guarded(var pat : Expression?) : bool {
+    let p = match_peel_r2v(pat)
+    return p is ExprOp2 && (p as ExprOp2).op == "&&"
+}
+
+[macro_function]
+def private describe_row(row : array<MatchCell>) : string {
+    let cells <- [for (c in row); c.any || c.opaque || empty(c.keys) ? "_" : join(c.keys, " | ")]
+    return length(cells) == 1 ? cells[0] : "({join(cells, ", ")})"
+}
+
+[macro_function]
+def private dead_keys(tab : MatchTable; prev : array<int>; row : array<MatchCell>) : array<string> {
+    //! In a single-column row, the named alternatives an earlier arm already matches.
+    var dead : array<string>
+    return <- dead if (length(row) != 1 || row[0].any || row[0].opaque || length(row[0].keys) < 2)
+    dead <- [for (k in row[0].keys); k; where !is_useful(tab, prev, [MatchCell(keys <- [k])], 0)]
+    return <- dead
+}
+
+[macro_function]
+def private alternatives_of(var cell : Expression?) : array<Expression?> {
+    //! A cell's top-level ``|`` alternatives.
+    return <- [for (a in op_sides(match_peel_r2v(cell), "||")); match_peel_r2v(a)]
+}
+
+[macro_function]
+def private column_parts(var typ : TypeDeclPtr) : array<tuple<name : string; typ : TypeDeclPtr>> {
+    //! The parts a tuple column splits into; none for any other type.
+    var parts : array<tuple<name : string; typ : TypeDeclPtr>>
+    if (typ != null && typ.baseType == Type.tTuple) {
+        parts <- [for (t, i in typ.argTypes, count()); (name = "_{i}", typ = t)]
+    }
+    return <- parts
+}
+
+[macro_function]
+def private splits(typ : TypeDeclPtr; alt : Expression?) : bool {
+    //! The cell spells the whole value part by part: a full tuple.
+    return true if (alt == null)
+    return false if (!(alt is ExprMakeTuple) || typ.baseType != Type.tTuple || length((alt as ExprMakeTuple).values) != length(typ.argTypes))
+    return !has_value([for (v in (alt as ExprMakeTuple).values); is_rest(v)], true)
+}
+
+[macro_function]
+def private part_of(var alt : Expression?; idx : int) : Expression? => alt == null ? alt : (alt as ExprMakeTuple).values[idx]
+
+[macro_function]
+def private split_column(var tab : MatchTable; var rows : array<PatternRow>; c : int) : bool {
+    //! Splits column ``c`` into its parts when every arm spells it part by part; an alternative becomes one row each.
+    var parts <- column_parts(tab.columns[c])
+    return false if (empty(parts))
+    var alts <- [for (r in rows); alternatives_of(r.cells[c])]
+    for (ra in alts) {
+        return false if (has_value([for (a in ra); splits(tab.columns[c], a)], false))
+    }
+    var split : array<PatternRow>
+    split |> reserve(length(rows))
+    for (r, ra in rows, alts) {
+        for (a in ra) {
+            var nr <- PatternRow(arm = r.arm, cells := r.cells)
+            nr.cells |> erase(c)
+            nr.cells |> reserve(length(nr.cells) + length(parts))
+            for (i in range(length(parts))) {
+                nr.cells |> push(part_of(a, i), c + i)
+            }
+            split |> emplace(nr)
+        }
+    }
+    delete rows
+    rows <- split
+    let parent = tab.labels[c]
+    tab.columns |> erase(c)
+    tab.labels |> erase(c)
+    for (p, i in parts, count()) {
+        tab.columns |> push(p.typ, c + i)
+        tab.labels |> push(empty(parent) ? p.name : "{parent}.{p.name}", c + i)
+    }
+    return true
+}
+
+[macro_function]
+def private pattern_rows(var types : array<TypeDeclPtr>; var patterns : array<Expression?>) : array<PatternRow> {
+    //! One row of cells per arm, per top-level alternative of a several-value match; a dropped arm has none.
+    var rows : array<PatternRow>
+    rows |> reserve(length(patterns))
+    for (pat, ai in patterns, count()) {
+        continue if (pat == null)
+        var part = pattern_part(pat)
+        var alts <- length(types) > 1 ? alternatives_of(part) : [part]
+        for (a in alts) {
+            var r <- PatternRow(arm = ai)
+            if (length(types) > 1 && a != null && a is ExprMakeTuple && length((a as ExprMakeTuple).values) == length(types)) {
+                r.cells <- [for (v in (a as ExprMakeTuple).values); v]
+            } else {
+                r.cells <- [for (_t in types); a]
+            }
+            rows |> emplace(r)
+        }
+    }
+    return <- rows
+}
+
+[macro_function]
+def private match_table(var types : array<TypeDeclPtr>; var patterns : array<Expression?>) : MatchTable {
+    //! Columns (tuple columns split into their parts), the rows every arm contributes (by index), and each column's value domain.
+    var tab <- MatchTable(columns := types, labels <- [for (_t in types); ""])
+    var rows <- pattern_rows(types, patterns)
+    var c = 0
+    while (c < length(tab.columns)) {
+        c += split_column(tab, rows, c) ? 0 : 1
+    }
+    tab.arm_rows <- [for (ai in range(length(patterns))); [for (r, ri in rows, count()); ri; where r.arm == ai]]
+    tab.rows <- [for (r in rows); [for (cell, ci in r.cells, count()); cell == null ? MatchCell(any = true) : classify_cell(tab.columns[ci], cell)]]
+    tab.domains <- [for (col, ci in tab.columns, count()); column_domain(col, ci, tab.rows)]
+    return <- tab
+}
+
+[macro_function]
+def private match_coverage(var types : array<TypeDeclPtr>; var patterns : array<Expression?>) : MatchCoverage {
+    //! Which arms or alternatives no value can reach, and whether every value reaches some arm; ``patterns`` is in source order, null for an arm that was dropped.
+    var res : MatchCoverage
+    var tab <- match_table(types, patterns)
+    res.all_finite = !has_value([for (d in tab.domains); d.finite], false)
+    var inscope prev : array<int>
+    for (pat, ai in patterns, count()) {
+        continue if (pat == null)
+        var useful = false
+        var inscope dead : array<string>
+        for (ri in tab.arm_rows[ai]) {
+            if (is_useful(tab, prev, tab.rows[ri], 0)) {
+                useful = true
+                dead |> push_from(dead_keys(tab, prev, tab.rows[ri]))
+            } else {
+                dead |> push(describe_row(tab.rows[ri]))
+            }
+        }
+        if (useful) {
+            res.dead_alternatives |> push_from([for (d in dead); (arm = ai, what = d)])
+        } else {
+            res.unreachable |> push(ai)
+        }
+        prev |> push_from(tab.arm_rows[ai]) if (!is_guarded(pat))
+    }
+    var inscope path, found : array<string>
+    missing_values(tab, prev, 0, 0, path, found)
+    res.missing = empty(found) ? none(type<string>) : some(found[0])
+    return <- res
+}
+
+[macro_function]
+def private drop_last_condition(var chain : Expression?) : Expression? {
+    //! An exhaustive chain's last test is redundant: the last arm becomes the final ``else``, so every path returns. Coverage guarantees that arm is unguarded - a guarded arm after full coverage is unreachable.
+    var node = chain as ExprIfThenElse
+    return node.if_true if (node.if_false == null)
+    while ((node.if_false as ExprIfThenElse).if_false != null) {
+        node = node.if_false as ExprIfThenElse
+    }
+    node.if_false = (node.if_false as ExprIfThenElse).if_true
+    return chain
+}
+
 [macro_function]
 def private report_match_failure(prog : ProgramPtr; to : MatchTo; pattern : Expression?; typ : TypeDeclPtr) : void {
     for (e in to.errors) {
@@ -949,6 +1365,25 @@ class MatchMacro : AstCallMacro {
             iff = new_iff
         }
         prefix |> push_from(to.prefix)
+    }
+    def report_coverage(prog : ProgramPtr; expr : ExprCallMacro?; eblk : ExprBlock?; var types : array<TypeDeclPtr>; var arm_patterns : array<Expression?>;
+                        as_value, catch_all : bool) : bool {
+        //! Reports unreachable arms and alternatives, and values an exhaustive match misses; false when it reported any.
+        var cov <- match_coverage(types, arm_patterns)
+        for (ai in cov.unreachable) {
+            macro_error(prog, eblk.list[ai].at, "unreachable arm: the arms before it already match everything it matches")
+        }
+        for (da in cov.dead_alternatives) {
+            macro_error(prog, eblk.list[da.arm].at, "unreachable alternative `{da.what}`: an earlier arm already matches it")
+        }
+        return false if (!empty(cov.unreachable) || !empty(cov.dead_alternatives))
+        if (!catch_all && is_some(cov.missing) && (as_value || (report_match_errors && cov.all_finite))) {
+            macro_error(prog, expr.at, (cov.missing == MATCH_ANY_OTHER
+                ? "match is not exhaustive: values no arm names are not matched; add a `_ => ...` arm"
+                : "match is not exhaustive: no arm matches `{unwrap(cov.missing)}`; add an arm for it, or `_ => ...`"))
+            return false
+        }
+        return true
     }
     def assemble(var prefix : array<Expression?>; var iff : Expression?; as_value : bool; var parent : MatchParent; at : LineInfo) : Expression? {
         //! The match's code: the prefix, then the if-chain of the arms - inside an invoke when the match is a value.
@@ -1003,17 +1438,20 @@ class MatchMacro : AstCallMacro {
         var any_errors = false
         var prefix : array<Expression?>
         var types <- [for (i in range(nargs - 1)); expr.arguments[i]._type]
-        var accesses <- [for (i in range(nargs - 1)); clone_expression(expr.arguments[i])]
+        var accesses <- [for (i in range(nargs - 1)); bind_subject(expr.arguments[i], i, prefix)]
         let access = accesses[0]
+        var arm_patterns : array<Expression?>
+        arm_patterns |> resize(eli)
         for (ei in range(eli)) {
             {
                 let arm_index = eli - ei - 1
                 var arm = eblk.list[arm_index]
-                let pattern = arrows > 0 ? (arm as ExprMakeTuple).values[0] : (arm as ExprIfThenElse).cond
+                var pattern = arrows > 0 ? (arm as ExprMakeTuple).values[0] : (arm as ExprIfThenElse).cond
                 var to : MatchTo
                 to.bind_names = arrows > 0
                 let matched = match_multi(types, accesses, pattern, to)
                 if (matched) {
+                    arm_patterns[arm_index] = pattern
                     add_arm_branch(arm, to, as_value, access, iff, catch_all, prefix)
                 } elif (report_match_errors || to.failed) {
                     any_errors = true
@@ -1022,11 +1460,8 @@ class MatchMacro : AstCallMacro {
                 }
             }
         }
-        if (any_errors) return null
-        if (as_value && !catch_all) {
-            macro_error(prog, expr.at, "match used as a value needs a last arm that always matches, `_ => ...`")
-            return null
-        }
+        return null if (any_errors || (arrows > 0 && !report_coverage(prog, expr, eblk, types, arm_patterns, as_value, catch_all)))
+        iff = as_value && !catch_all ? drop_last_condition(iff) : iff
         return assemble(prefix, iff, as_value, parent, expr.at)
     }
 }
