@@ -312,7 +312,7 @@ def private read_literal(var r : Reader; var seq : array<GrammarSym>) {
         }
         let cp = read_codepoint(r)
         return if (!empty(r.err))
-        let bytes <- utf8_bytes(cp)
+        var inscope bytes <- utf8_bytes(cp)
         seq |> reserve(length(seq) + length(bytes))
         for (b in bytes) {
             seq |> push(sym_byte(b))
@@ -476,7 +476,7 @@ def private read_sequence(var r : Reader; var seq : array<GrammarSym>; nested : 
             seq |> push(read_repetition(r, sym_rule(grp)))
         } elif (c == '.') {
             r.pos++
-            var any : array<CpRange>
+            var inscope any : array<CpRange>
             any |> push(CpRange(lo = 0, hi = 1114111))
             seq |> push(read_repetition(r, class_symbol(r, any, false)))
         } elif (c == '<' || c == '!') {

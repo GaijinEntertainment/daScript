@@ -102,6 +102,13 @@ struct Perf024Candidate {
     disqualified : bool
 }
 
+struct Perf033Candidate {
+    //! PERF033 per-candidate state: a container declared inside a loop, reported at the function's end unless the walk sees it moved out - into a `var` parameter, as the right side of `<-`, by `return <-`, or into a struct or variant field
+    @do_not_delete v : Variable?
+    fix : LintFix
+    consumed : bool
+}
+
 struct Perf023Candidate {
     //! PERF023 per-candidate state. One entry per `var X = clone_expression(E)` decl seen in the current function. `safe_uses` counts ExprVar refs to X whose ancestor chain (within this function) includes an `add_ptr_ref(...)` call — the splice-wrapper installed by `apply_qrules` for every `$e(...)` tag. `disqualified` is set on any other use (assignment, call arg passed to a non-splice consumer, etc.); the pre-clone is then load-bearing. The `var` carries the decl `at` directly (v.at), so the warning location is derived without storing LineInfo in the array.
     @do_not_delete v : Variable?
@@ -388,6 +395,74 @@ class HotBodyScan : AstVisitor {
     }
 }
 
+//! the bodiless builtins that free an argument's buffer - what `delete` on an array or table lowers to, through daslib `finalize`
+def perf033_builtin_takes(fn : Function?; idx : int) : bool =>
+    idx == 0 && (fn.name == "__builtin_array_free" || fn.name == "__builtin_table_free")
+
+class Perf033MoveScan : AstVisitor {
+    //! answers whether a function body takes one of its parameters: moves it out (`<-`, `return <-`, a tuple, struct or variant literal it sits in, `emplace`), or deletes it
+    @do_not_delete param : Variable?
+    depth : int = 0
+    takes : bool = false
+
+    def is_param(e : ExpressionPtr) : bool {
+        var inner = e
+        if (inner != null && inner is ExprRef2Value) {
+            inner = (inner as ExprRef2Value).subexpr
+        }
+        return inner != null && inner is ExprVar && (inner as ExprVar).variable == param
+    }
+
+    def override preVisitExprMove(expr : ExprMove?) : void {
+        takes ||= is_param(expr.right)
+    }
+
+    def override preVisitExprReturn(expr : ExprReturn?) : void {
+        takes ||= expr.returnFlags.moveSemantics && is_param(expr.subexpr)
+    }
+
+    def override preVisitExprDelete(expr : ExprDelete?) : void {
+        takes ||= is_param(expr.subexpr)
+    }
+
+    def override preVisitExprMakeTupleIndex(_expr : ExprMakeTuple?; _index : int; init : ExpressionPtr; _last : bool) : void {
+        takes ||= is_param(init)
+    }
+
+    def override preVisitExprMakeStructField(_expr : ExprMakeStruct?; _index : int; decl : MakeFieldDeclPtr; _last : bool) : void {
+        takes ||= decl != null && is_param(decl.value)
+    }
+
+    def override preVisitExprMakeVariantField(_expr : ExprMakeVariant?; _index : int; decl : MakeFieldDeclPtr; _last : bool) : void {
+        takes ||= decl != null && is_param(decl.value)
+    }
+
+    def override preVisitExprCallArgument(var expr : ExprCall?; arg : ExpressionPtr; _last : bool) : void {
+        if (expr == null || expr.func == null || takes || !is_param(arg)) return
+        for (i in 0 .. length(expr.arguments)) {
+            if (intptr(expr.arguments[i]) != intptr(arg) || i >= length(expr.func.arguments)) continue
+            let pt = expr.func.arguments[i]._type
+            if (pt != null && !pt.flags.constant && perf033_param_taken(expr.func, i, depth + 1)) {
+                takes = true
+            }
+        }
+    }
+}
+
+//! whether `fn` takes its parameter `idx`: a bodiless builtin by name, a body by a scan that follows the parameter through `depth` levels of callees - daslib `finalize` and `emplace` are one level above the builtins they wrap
+def perf033_param_taken(var fn : Function?; idx : int; depth : int) : bool {
+    if (fn == null || idx < 0 || idx >= length(fn.arguments)) return false
+    if (fn.flags.builtIn || fn.body == null) return perf033_builtin_takes(fn, idx)
+    if (depth >= 4) return false
+    var scan = new Perf033MoveScan(param = fn.arguments[idx], depth = depth)
+    make_visitor(*scan) $(adapter) {
+        visit(fn, adapter)
+    }
+    let takes = scan.takes
+    unsafe { delete scan; }
+    return takes
+}
+
 class PerfLintVisitor : AstVisitor {
     compile_time_errors : bool
     perf032_reserved : table<string>
@@ -433,6 +508,8 @@ class PerfLintVisitor : AstVisitor {
     perf023_splice_depth : int = 0
     perf024_candidates : array<Perf024Candidate>
     perf024_skip_iptr : uint64 = 0ul
+    perf033_candidates : array<Perf033Candidate>
+    perf033_takes : table<uint64; bool>
     warning_count : int = 0
     collect_warnings : bool = false
     warnings : array<string>
@@ -817,6 +894,7 @@ class PerfLintVisitor : AstVisitor {
         perf023_splice_depth = 0
         perf024_candidates |> clear
         perf024_skip_iptr = 0ul
+        perf033_candidates |> clear
         perf030_released |> clear
         perf032_reserved |> clear
         pending_move_var = null
@@ -840,6 +918,12 @@ class PerfLintVisitor : AstVisitor {
                     c.v.at)
             }
         }
+        for (c in perf033_candidates) {
+            if (!c.consumed && c.v != null) {
+                perf_warning("PERF033: {c.v._type.baseType == Type.tArray ? "array" : "table"} declared inside a loop is never freed - every iteration leaks its buffer until the heap resets; declare it 'var inscope'", c.v.at, c.fix)
+            }
+        }
+        perf033_candidates |> clear
         perf023_candidates |> clear
         perf023_splice_depth = 0
         perf024_candidates |> clear
@@ -919,7 +1003,26 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def override preVisitExprReturn(expr : ExprReturn?) : void {
+        if (expr.returnFlags.moveSemantics) {
+            perf033_consume(expr.subexpr)
+        }
         return_frames |> push(Perf031Return(loop_depth_at_return = inline_aware_loop_depth, barrier = inline_barrier()))
+    }
+
+    def override preVisitExprMakeStructField(_expr : ExprMakeStruct?; _index : int; decl : MakeFieldDeclPtr; _last : bool) : void {
+        if (decl != null) {
+            perf033_consume(decl.value)
+        }
+    }
+
+    def override preVisitExprMakeVariantField(_expr : ExprMakeVariant?; _index : int; decl : MakeFieldDeclPtr; _last : bool) : void {
+        if (decl != null) {
+            perf033_consume(decl.value)
+        }
+    }
+
+    def override preVisitExprMakeTupleIndex(_expr : ExprMakeTuple?; _index : int; init : ExpressionPtr; _last : bool) : void {
+        perf033_consume(init)
     }
 
     def override visitExprReturn(var expr : ExprReturn?) : ExpressionPtr {
@@ -947,6 +1050,49 @@ class PerfLintVisitor : AstVisitor {
         return !perf033_delete_frees_shared(v._type, seen)
     }
 
+    //! marks the PERF033 candidate behind `e` consumed: the container left the loop body through a move, so the callee or the target frees it
+    def perf033_consume(e : ExpressionPtr) : void {
+        if (e == null || empty(perf033_candidates)) return
+        var inner = e
+        if (inner is ExprRef2Value) {
+            inner = (inner as ExprRef2Value).subexpr
+        }
+        if (inner == null || !(inner is ExprVar)) return
+        let vv = (inner as ExprVar).variable
+        if (vv == null) return
+        for (i in 0 .. length(perf033_candidates)) {
+            if (perf033_candidates[i].v == vv) {
+                perf033_candidates[i].consumed = true
+                return
+            }
+        }
+    }
+
+    //! perf033_param_taken, answered once per callee parameter
+    def perf033_callee_takes(var fn : Function?; idx : int) : bool {
+        if (fn == null || idx < 0 || idx >= length(fn.arguments)) return false
+        let key = intptr(fn) * 31ul + uint64(idx)
+        if (perf033_takes |> key_exists(key)) return perf033_takes[key]
+        let takes = perf033_param_taken(fn, idx, 0)
+        perf033_takes[key] = takes
+        return takes
+    }
+
+    //! an argument the callee takes (`add_production(gb, lhs, rhs)` moves `rhs` into a tuple) counts as consumed; a `var` parameter the callee only mutates does not
+    def perf033_consume_argument(var expr : ExprCall?; arg : ExpressionPtr) : void {
+        if (expr == null || expr.func == null || empty(perf033_candidates)) return
+        for (i in 0 .. length(expr.arguments)) {
+            if (intptr(expr.arguments[i]) != intptr(arg)) continue
+            if (i < length(expr.func.arguments)) {
+                let pt = expr.func.arguments[i]._type
+                if (pt != null && !pt.flags.constant && perf033_callee_takes(expr.func, i)) {
+                    perf033_consume(arg)
+                }
+            }
+            return
+        }
+    }
+
     def perf033_fix(expr : ExprLet?; v : VariablePtr) : LintFix {
         let first = expr.variables[0]
         if (v != first) return LintFix()
@@ -967,7 +1113,7 @@ class PerfLintVisitor : AstVisitor {
     def override preVisitExprLetVariable(expr : ExprLet?; var v : VariablePtr; last : bool) : void {
         check_perf032_declaration(v._type, v.annotation, v.at)
         if (perf033_leaks(expr, v)) {
-            perf_warning("PERF033: {v._type.baseType == Type.tArray ? "array" : "table"} declared inside a loop is never freed - every iteration leaks its buffer until the heap resets; declare it 'var inscope'", v.at, perf033_fix(expr, v))
+            perf033_candidates |> push(Perf033Candidate(v = v, fix = perf033_fix(expr, v), consumed = false))
         }
         if (in_deferred == 0) {
             var_stack |> push(VarStackEntry(v = v, depth = loop_depth, inline_aware_depth = inline_aware_loop_depth, is_iter = false))
@@ -1902,7 +2048,8 @@ class PerfLintVisitor : AstVisitor {
         }
     }
 
-    def override preVisitExprCallArgument(expr : ExprCall?; arg : ExpressionPtr; last : bool) : void {
+    def override preVisitExprCallArgument(var expr : ExprCall?; arg : ExpressionPtr; last : bool) : void {
+        perf033_consume_argument(expr, arg)
         if (expr == null || expr.func == null) return
         var indices : array<int>
         get_clone_param_indices(expr.func, indices)
@@ -2081,6 +2228,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def override preVisitExprMove(expr : ExprMove?) : void {
+        perf033_consume(expr.right)
         check_perf030_move_leak(expr)
         if (in_closure > 0 || loop_depth == 0) return
         var v = find_string_var_from_expr(expr.left)
