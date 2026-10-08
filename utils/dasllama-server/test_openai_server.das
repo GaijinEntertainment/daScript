@@ -73,7 +73,7 @@ def private vecs_equal(a, b : array<float>) : bool => vecs_close(a, b, 0.0)
 // run the block, then POST /shutdown (flips the server context's stop flag) and join. `mode`
 // arms the Metal pipeline in the server thread's context BEFORE the load (the --metal flag's
 // engine effect — the != off backend pin must precede load_model).
-def private with_llama_server(model_path : string; port : int; mode : MetalMode = MetalMode.off; page_rows : int64 = 64l; blk : block<(base_url : string) : void>) {
+def private with_llama_server(model_path : string; port : int; mode : MetalMode = MetalMode.off; page_rows : int64 = 64l; prefix_states : int64 = 32l; blk : block<(base_url : string) : void>) {
     with_job_status(1) $(finished) {
         new_thread() @() {
             set_metal_mode(mode)
@@ -102,10 +102,10 @@ def private with_llama_server(model_path : string; port : int; mode : MetalMode 
             // blocks (with_job_que + tick loop) until POST /shutdown. The default page size takes the bare call: with any
             // explicit argument here, the bench cell followed by the held-engine cell dies on a SIGSEGV in the second
             // boot's first embeddings request - same values, fresh JIT, 1 MB stack alike - an open item of its own
-            if (page_rows == 64l) {
+            if (page_rows == 64l && prefix_states == 32l) {
                 run_server(port)
             } else {
-                run_server(port, 4l, 32l, 0l, page_rows)
+                run_server(port, 4l, 32l, 0l, page_rows, 0l, KVDtype.f16, true, -1, -1, -1l, DEFAULT_BIND_HOST, prefix_states)
             }
             finished |> notify_and_release
         }
@@ -946,7 +946,35 @@ def test_openai_server_recurrent_checkpoints(t : T?) {
             to_log(LOG_INFO, "recurrent checkpoints: A1 {a1.prompt}/{a1.cached} B1 {b1.prompt}/{b1.cached} A2 {a2.prompt}/{a2.cached} B2 {b2.prompt}/{b2.cached}\n")
         }
     }
+    t |> run("a shared opening outlives a budget of other conversations' tails: the request's own stable stop is a tail, the system stop an opening (needs Qwen3.5-0.8B q8)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA server test is JIT-only)")
+            return
+        }
+        if (!stat(QWEN35_PATH).is_valid) {
+            t |> skip("{base_name(QWEN35_PATH)} not present (set DASLLAMA_MODELS_DIR)")
+            return
+        }
+        // three checkpoints fit. A's first turn leaves its opening, its stable stop (after the note) and its finished
+        // turn; D, on other tools, leaves three more. Tails go first, so A's opening stands for E - where a stable stop
+        // kinded as an opening makes A's opening the least recently used one and the budget drops it
+        with_llama_server(QWEN35_PATH, TEST_PORT_CKPT_BUDGET, MetalMode.off, 8l, 3l) $(base_url) {
+            let sys = "You are the assistant of a house with a kitchen, a bedroom and a garden. Devices: the kitchen ceiling light, the bedroom wall lights, the garden sprinkler. Answer in one short sentence and nothing else."
+            let tool_a = "\{\"type\":\"function\",\"function\":\{\"name\":\"control\",\"description\":\"Switch a device.\",\"parameters\":\{\"type\":\"object\",\"properties\":\{\"point\":\{\"type\":\"string\"},\"value\":\{\"type\":\"string\"}},\"required\":[\"point\",\"value\"]}}}"
+            let tool_b = "\{\"type\":\"function\",\"function\":\{\"name\":\"house_status\",\"description\":\"The state of the house.\",\"parameters\":\{\"type\":\"object\",\"properties\":\{\"query\":\{\"type\":\"string\"}},\"required\":[\"query\"]}}}"
+            let note = "House note: it is Friday evening, the kitchen light is on, the bedroom lights are off, the garden sprinkler is running. Answer in English."
+            let kw = "\"max_tokens\":12,\"chat_template_kwargs\":\{\"enable_thinking\":false}"
+            let a1 = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"{note}\"},\{\"role\":\"user\",\"content\":\"What is the capital of France? One word.\"}],\"tools\":[{tool_a}],{kw}}")
+            t |> success(a1.prompt > 32 && a1.cached == 0, "A's first turn prefills cold ({a1.prompt} prompt)")
+            let d1 = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"{note}\"},\{\"role\":\"user\",\"content\":\"Name a color. One word.\"}],\"tools\":[{tool_b}],{kw}}")
+            t |> equal(0, d1.cached, "D's first turn, other tools, prefills cold")
+            let e1 = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"House note: it is Saturday morning, every light is off.\"},\{\"role\":\"user\",\"content\":\"What is two plus two? One word.\"}],\"tools\":[{tool_a}],{kw}}")
+            t |> success(e1.cached >= 16, "E, A's tools, attaches A's opening after D's three checkpoints ({e1.cached} cached of {e1.prompt})")
+        }
+    }
 }
+
+let TEST_PORT_CKPT_BUDGET = 18147   // beside 18146, the recurrent-checkpoints boot
 
 let TEST_PORT_BENCH = 18140   // 18097/18098/18099/18101/18102/18120/18121/18131/18135-18139 are the other server suites'
 

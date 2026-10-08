@@ -109,6 +109,7 @@ struct Stream {
     ckpt_at : int64                         //! the prompt position the prefill stops at to leave a recurrent checkpoint (0 = none)
     ckpt_sys_at : int64                     //! an earlier stop for the checkpoint at the shared system opening (0 = none; always under `ckpt_at`)
     ckpt_text_at : int64                    //! an earlier stop still, at the system text before the tool block (0 = none; always under `ckpt_sys_at`)
+    ckpt_at_tail : bool                     //! `ckpt_at` is the request's own stable opening and no shared stop: its checkpoint is a tail, which only this conversation's next turn extends
     t_admit : int64                         // ref_time_ticks at admit
     t_first : int64                         // ref_time_ticks at the first sampled token (0 until then)
     ttft_us : int64
@@ -654,6 +655,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             if (above > 0l && text_at >= matched + pr && text_at + pr <= above) {
                 st.ckpt_text_at = text_at
             }
+            st.ckpt_at_tail = st.ckpt_at > 0l && st.ckpt_at == sch.queue[0].stable_at && st.ckpt_at != sys_at && st.ckpt_at != text_at
             if (matched > 0l) {
                 to_log(LOG_INFO, "[stream {st.id}] prefix cache HIT: {matched}/{length(st.prompt)} tok attached, no prefill for them (checkpoints planned at {st.ckpt_text_at}, {st.ckpt_sys_at}, {st.ckpt_at}; stable {sch.queue[0].stable_at}, system {sys_at}, text {text_at})\n")
             } else {
@@ -805,8 +807,9 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             sch.prefill_tokens += take
             sch.prefill_evals ++
             if (at_checkpoint(sch.streams[i])) {
-                prefix_insert(sch.prefix, sch.pool, sch.streams[i].session, sch.streams[i].prompt, "", true)
-                to_log(LOG_INFO, "[stream {sch.streams[i].id}] prefix checkpoint at {sch.streams[i].n_prefilled} tok: the next prompt on this opening attaches here ({length(sch.prefix.states)} checkpoints, {sch.prefix.state_bytes / 1048576l} MB)\n")
+                let tail = sch.streams[i].ckpt_at_tail && sch.streams[i].n_prefilled == sch.streams[i].ckpt_at
+                prefix_insert(sch.prefix, sch.pool, sch.streams[i].session, sch.streams[i].prompt, "", !tail)
+                to_log(LOG_INFO, "[stream {sch.streams[i].id}] prefix checkpoint at {sch.streams[i].n_prefilled} tok: {tail ? "this conversation's next turn" : "the next prompt on this opening"} attaches here ({length(sch.prefix.states)} checkpoints, {sch.prefix.state_bytes / 1048576l} MB)\n")
             }
         }
         if (sch.streams[i].n_prefilled >= np) {
