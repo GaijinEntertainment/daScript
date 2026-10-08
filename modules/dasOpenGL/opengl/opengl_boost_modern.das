@@ -1,0 +1,408 @@
+options gen2
+options indenting = 4
+options no_unused_block_arguments = false
+options no_unused_function_arguments = false
+
+module opengl_boost_modern shared
+
+require opengl/opengl public
+require opengl/gl_binding_cache public
+
+require daslib/safe_addr
+require daslib/contracts
+require daslib/array_boost
+require daslib/strings_boost
+
+require glsl/glsl_opengl public
+
+require opengl/opengl_state
+require opengl/opengl_boost_internal public
+
+require stbimage
+
+require math
+
+typedef GLenum = uint
+
+var ssbos : table<uint; void?>
+
+def glTexParameteri(target : uint; pname : uint; param : uint) {
+    glTexParameteri(target, pname, int(param))
+}
+
+def getTexture2DSize(tex : uint; mipLevel : int = 0) {
+    var w, h : int
+    glGetTextureLevelParameteriv(GL_TEXTURE_2D, mipLevel, GL_TEXTURE_WIDTH, safe_addr(w))
+    glGetTextureLevelParameteriv(GL_TEXTURE_2D, mipLevel, GL_TEXTURE_HEIGHT, safe_addr(h))
+    return int2(w, h)
+}
+
+def write_ssbo(ssbo : uint; data : auto(TT)) {
+    unsafe { // nolint:STYLE025 — expression-form unsafe loses the reinterpret in generic instances (31004)
+        *(reinterpret<TT -const?>(ssbos[ssbo])) = data
+    }
+
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0u, ssbo)
+}
+
+def read_ssbo(ssbo : uint; var data : auto(TT)) {
+    unsafe { // nolint:STYLE025 — expression-form unsafe loses the reinterpret in generic instances (31004)
+        data = *(reinterpret<TT?>(ssbos[ssbo]))
+    }
+}
+
+def bind_sampler_2d(unit : int; tex : uint) {gl_bind_texture_filtered(unit, GL_TEXTURE_2D, tex)}
+
+def bind_sampler_3d(unit : int; tex : uint) {gl_bind_texture_filtered(unit, GL_TEXTURE_3D, tex)}
+
+def bind_sampler_cube(unit : int; tex : uint) {gl_bind_texture_filtered(unit, GL_TEXTURE_CUBE_MAP, tex)}
+
+def bind_sampler_2d_array(unit : int; tex : uint) {gl_bind_texture_filtered(unit, GL_TEXTURE_2D_ARRAY, tex)}
+
+// sampler2DShadow binds an ordinary 2D depth texture; the GL_TEXTURE_COMPARE_MODE / depth format are
+// set when the texture is created (not at bind time), so the bind itself matches bind_sampler_2d.
+def bind_sampler_2d_shadow(unit : int; tex : uint) {gl_bind_texture_filtered(unit, GL_TEXTURE_2D, tex)}
+
+def bind_image_any(unit : int; tex : uint; format : uint; access : uint = GL_READ_WRITE) {
+    glBindImageTexture(uint(unit), tex, 0, false, 0, access, format)
+}
+
+//! Unbind drawing objects without mutating VAO-owned element or attribute state.
+def bind_ffp() {
+    glUseProgram(0u)
+    glBindFramebuffer(GL_FRAMEBUFFER, 0u)
+    glBindVertexArray(0u)
+    glActiveTexture(GL_TEXTURE0)
+    glBindTexture(GL_TEXTURE_2D, 0u)
+}
+
+def glUniformAny(location : int; value : int) {
+    glUniform1i(location, value)
+}
+
+def glUniformAny(location : int; value : int[]) {
+    glUniform1iv(location, length(value), unsafe(addr(value[0])))
+}
+
+def glUniformAny(location : int; value : float) {
+    glUniform1f(location, value)
+}
+
+def glUniformAny(location : int; value : float[]) {
+    glUniform1fv(location, length(value), unsafe(addr(value[0])))
+}
+
+def glUniformAny(location : int; value : float2) {
+    glUniform2fv(location, 1, unsafe(addr(value.x)))
+}
+
+def glUniformAny(location : int; value : float3) {
+    glUniform3fv(location, 1, unsafe(addr(value.x)))
+}
+
+def glUniformAny(location : int; value : float4) {
+    glUniform4fv(location, 1, unsafe(addr(value.x)))
+}
+
+def glUniformAny(location : int; value : float4[]) {
+    glUniform4fv(location, length(value), unsafe(addr(value[0].x)))
+}
+
+def glUniformAny(location : int; value : float4x4) {
+    glUniformMatrix4fv(location, value)
+}
+
+// Array of mat4 (e.g. a `uniform mat4 u[N]` joint palette). float4x4 is 16 tight column-major floats
+// (64 bytes, no std140 padding), so a float4x4[N] is N*64 contiguous bytes -> one glUniformMatrix4fv.
+def glUniformAny(location : int; value : float4x4[]) {
+    unsafe {
+        glUniformMatrix4fv(location, length(value), false, addr(value[0][0][0]))
+    }
+}
+
+// float3x3 is 36 bytes = 9 tight column-major floats (3x float3, no std140 padding), so it uploads
+// straight via glUniformMatrix3fv -- matches a `uniform mat3` shader field (e.g. a normal matrix).
+def glUniformAny(location : int; value : float3x3) {
+    glUniformMatrix3fv(location, value)
+}
+
+def glUniformAny(location : int; value : int2) {
+    glUniform2iv(location, 1, unsafe(addr(value.x)))
+}
+
+def glUniformAny(location : int; value : int3) {
+    glUniform3iv(location, 1, unsafe(addr(value.x)))
+}
+
+def glUniformAny(location : int; value : int4) {
+    glUniform4iv(location, 1, unsafe(addr(value.x)))
+}
+
+def glUniformMatrix4fv(location : int; value : float4x4) {
+    glUniformMatrix4fv(location, 1, false, unsafe(addr(value[0][0])))
+}
+
+def glUniformMatrix3fv(location : int; value : float3x3) {
+    glUniformMatrix3fv(location, 1, false, unsafe(addr(value[0][0])))
+}
+
+[expect_any_array(arr)]
+def glBufferData(target : GLenum; arr; usage : GLenum) {
+    unsafe {
+        assert(!empty(arr))
+        glBufferData(target, int64(length(arr) * typeinfo sizeof(arr[0])), addr<void?>(arr[0]), usage)
+    }
+}
+
+[expect_any_array(arr)]
+def glNamedBufferData(buffer : uint; arr; usage : GLenum) {
+    unsafe {
+        assert(!empty(arr))
+        glNamedBufferData(buffer, int64(length(arr) * typeinfo sizeof(arr[0])), addr<void?>(arr[0]), usage)
+    }
+}
+
+[expect_any_array(arr)]
+def glNamedBufferStorage(buffer : uint; arr; usage : uint) {
+    unsafe {
+        assert(!empty(arr))
+        glNamedBufferStorage(buffer, int64(length(arr) * typeinfo sizeof(arr[0])), addr<void?>(arr[0]), usage)
+    }
+}
+
+// ===== std140 UBO runtime (the GL analogue of dasVulkan's write_field / with_mapped_memory) =====
+// A struct @uniform packed as a std140 interface block binds through these three helpers, emitted by
+// glsl_opengl's bind-uniform macro: std140_reset sizes a per-(program, block) CPU staging buffer,
+// std140_set writes each field at its compile-time std140 offset, std140_flush uploads the bytes to a
+// per-(program, block) GL uniform buffer and binds blockName -> bindingPoint -> buffer. Keeping all
+// state in these tables lets the generated bind body stay a flat list of calls (no local buffer).
+// GL/WebGL2 blocks carry no layout(binding=), so the binding point is assigned host-side at flush.
+var private g_std140_staging : table<string; array<uint8>>
+var private g_std140_ubos : table<string; uint>
+
+// Resize the staging buffer for (program, blockName) to `size` bytes (the std140 block size, padded to
+// 16). Unwritten bytes are std140 padding the shader never reads, so they need no zeroing.
+def std140_reset(program : uint; blockName : string; size : int) {
+    let key = "{program}/{blockName}"
+    g_std140_staging[key] |> resize(size)
+}
+
+// memcpy a 32-bit scalar / vector / float4x4 field into the staging buffer at its std140 byte offset.
+// Mirrors dasVulkan's write_field; float3x3 / composites are repacked/recursed by the bind macro.
+def std140_set(program : uint; blockName : string; offset : uint; var value : auto(TT) const) {
+    let key = "{program}/{blockName}"
+    unsafe {
+        let dst = addr<void?>(g_std140_staging[key][int(offset)])
+        memcpy(dst, addr<void?>(value), typeinfo sizeof(type<TT>))
+    }
+}
+
+// Upload the staging buffer to a per-(program, block) GL uniform buffer (lazily created) and bind the
+// block to `bindingPoint`. glUniformBlockBinding wires the program's block to the point; glBindBufferRange
+// binds the buffer there.
+def std140_flush(program : uint; blockName : string; bindingPoint : int) {
+    let key = "{program}/{blockName}"
+    var ubo = g_std140_ubos?[key] ?? 0u
+    if (ubo == 0u) {
+        glCreateBuffers(1, safe_addr(ubo))
+        g_std140_ubos[key] = ubo
+    }
+    glNamedBufferData(ubo, g_std140_staging[key], GL_DYNAMIC_DRAW)
+    let blockIndex = glGetUniformBlockIndex(program, blockName)
+    if (blockIndex != GL_INVALID_INDEX) {
+        let nbytes = long_length(g_std140_staging[key])
+        glUniformBlockBinding(program, blockIndex, uint(bindingPoint))
+        glBindBufferRange(GL_UNIFORM_BUFFER, uint(bindingPoint), ubo, int64(0), nbytes)
+    }
+}
+
+// Delete the GL uniform buffer + CPU staging entry for every std140 block owned by `program`. Call
+// when a program is deleted (e.g. an app that recompiles shaders at runtime) so its per-(program,
+// block) UBO buffers don't leak. g_std140_* hold raw GL handles the GC can't see, so they must be
+// released explicitly, and from the SAME context that ran the bind (these tables are render-context
+// state, not the opengl_cache agent context). Block keys are "program/block", so an exact "program/"
+// prefix selects this program's entries without matching e.g. "12/" for program 1.
+def std140_release(program : uint) {
+    let prefix = "{program}/"
+    var stale <- [for (key in keys(g_std140_staging)); key; where key |> starts_with(prefix)]
+    for (key in stale) {
+        var ubo = g_std140_ubos?[key] ?? 0u
+        if (ubo != 0u) {
+            glDeleteBuffers(1, safe_addr(ubo))
+        }
+        g_std140_ubos |> erase(key)
+        g_std140_staging |> erase(key)
+    }
+    delete stale
+}
+
+// Delete ALL std140 UBO buffers + staging entries in the current context. Call on teardown or before
+// a live reload (glfw_live does, via [before_reload]): the render context is about to be destroyed,
+// which frees these tables but NOT the GL buffers they reference, so without this every reload
+// orphans one buffer set per (program, block). Safe to call when nothing was allocated (no-op).
+def std140_release_all() {
+    for (ubo in values(g_std140_ubos)) {
+        var b = ubo
+        glDeleteBuffers(1, safe_addr(b))
+    }
+    delete g_std140_ubos
+    delete g_std140_staging
+}
+
+def glVertexAttribPointer(index : uint; size : int; tp : GLenum; normalized : bool; stride : int; offset : int) {
+    glVertexAttribPointer(index, size, tp, normalized, stride, unsafe(reinterpret<void?>(offset)))
+}
+
+def glVertexAttribPointer(index : uint; size : int; tp : GLenum; normalized : bool; stride : int; ptrd : void?; offset : int) {
+    unsafe {
+        var poffset = reinterpret<int8?>(ptrd)
+        poffset += offset
+        glVertexAttribPointer(index, size, tp, normalized, stride, poffset)
+    }
+}
+
+def create_shader(src : string implicit; shaderType : uint; canfail : bool = false) {
+    if (src == "") {
+        panic("create_shaer with empty shader")
+    }
+    let s = glCreateShader(shaderType)
+    glShaderSource(s, 1, unsafe(addr(src)), null)
+    glCompileShader(s)
+    var status : int
+    glGetShaderiv(s, GL_COMPILE_STATUS, safe_addr(status))
+    if (status == 0) {
+        if (!canfail) {
+            unsafe {
+                var log : array<uint>
+                resize(log, 16384)
+                let slog = reinterpret<string>(addr(log[0]))
+                glGetShaderInfoLog(s, 16384, null, slog)
+                to_log(LOG_ERROR, "Shader source:\n{src}\n")
+                panic("{slog}\n\nFAILED TO CREATE SHADER ({status})\n")
+            }
+        }
+        return 0u
+    } else {
+        return s
+    }
+}
+
+def create_shader_program(vertex, fragment : uint) {
+    let program = glCreateProgram()
+    glAttachShader(program, vertex)
+    glAttachShader(program, fragment)
+    return program
+}
+
+def create_compute_shader_program(compute : uint) {
+    let program = glCreateProgram()
+    glAttachShader(program, compute)
+    return program
+}
+
+def link_shader(program : uint; canfail : bool = false) {
+    glLinkProgram(program)
+    var status : int
+    glGetProgramiv(program, GL_LINK_STATUS, safe_addr(status))
+    if (status == 0) {
+        if (!canfail) {
+            unsafe {
+                var log : uint8[512]
+                let slog = reinterpret<string>(addr(log[0]))
+                glGetProgramInfoLog(program, 512, null, slog)
+                panic("FAILED TO LINK SHADER PROGRAM ({status}):\n{slog}\n")
+            }
+        }
+        return false
+    } else {
+        return true
+    }
+}
+
+def create_shader_program(vsrc, fsrc : string implicit) {
+    let vertex = create_shader(vsrc, GL_VERTEX_SHADER)
+    let fragment = create_shader(fsrc, GL_FRAGMENT_SHADER)
+    let program = create_shader_program(vertex, fragment)
+    link_shader(program)
+    glDeleteShader(vertex)
+    glDeleteShader(fragment)
+    return program
+}
+
+def create_compute_shader_program(csrc : string implicit) {
+    let compute = create_shader(csrc, GL_COMPUTE_SHADER)
+    let program = create_compute_shader_program(compute)
+    link_shader(program)
+    glDeleteShader(compute)
+    return program
+}
+
+def create_ssbo(var value : auto(TT)&) {
+    var ssbo : uint
+    glCreateBuffers(1, safe_addr(ssbo))
+    glNamedBufferStorage(ssbo,  int64(typeinfo sizeof(type<TT>)), unsafe(addr(value)), GL_DYNAMIC_STORAGE_BIT | GL_MAP_READ_BIT | GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT)
+
+    var p_mat = glMapNamedBufferRange(ssbo, int64(0), int64(typeinfo sizeof(type<TT>)), GL_MAP_READ_BIT | GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT)
+    if (p_mat == null) {
+        panic("can't map ssbo")
+    }
+    unsafe {
+        ssbos[ssbo] = p_mat
+    }
+    return ssbo
+}
+
+def load_image_from_bytes(width, height : int; data : void?) {
+    var texture : uint
+    glCreateTextures(GL_TEXTURE_2D, 1, safe_addr(texture))
+    glTextureParameteri(texture, GL_TEXTURE_WRAP_S, int(GL_REPEAT))
+    glTextureParameteri(texture, GL_TEXTURE_WRAP_T, int(GL_REPEAT))
+    glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, int(GL_LINEAR))
+    glTextureParameteri(texture, GL_TEXTURE_MAG_FILTER, int(GL_LINEAR))
+
+    glTextureStorage2D(texture, 1, GL_RGBA8, width, height)
+    glTextureSubImage2D(texture, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, data)
+    return texture
+}
+
+def load_image_from_file(fname : string implicit; canfail : bool = false) {
+    var x, y, comp : int
+    let data = stbi_load(fname, safe_addr(x), safe_addr(y), safe_addr(comp), 4)
+    if (data == null) {
+        if (!canfail) {
+            let reason = stbi_failure_reason()
+            panic(reason)
+        }
+        return 0u
+    } else {
+        let texture_id = load_image_from_bytes(x, y, data)
+        stbi_image_free(data)
+        return texture_id
+    }
+}
+
+def load_image_from_file(fname : string implicit; dir1, dir2 : string; can_fail : bool = false) {
+    var img = load_image_from_file("{dir1}/{fname}", true)
+    if (img == 0u) {
+        img = load_image_from_file("{dir2}/{fname}", true)
+    }
+    if (!can_fail && img == 0u) {
+        let reason = stbi_failure_reason()
+        panic(reason)
+    }
+    return img
+}
+
+[arch(at="../ARCHITECTURE.md#binding-cache")]
+def glUniformBound(program : uint; name : string; value : auto(T) const implicit){
+    if (!gl_binding_filter_active){glUniformAny(glGetUniformLocation(program, name), value); return }
+    let decision = gl_binding_uniform(program, name, unsafe(addr<void?>(value)), typeinfo sizeof(type<T>))
+    if (decision.upload){glUniformAny(decision.location, value)}
+}
+[arch(at="../ARCHITECTURE.md#binding-cache")]
+def glUniformBound(program : uint; name : string; value : array<auto(T)> const implicit){
+    if (empty(value)){return }
+    if (!gl_binding_filter_active){glUniformAny(glGetUniformLocation(program, name), value); return }
+    let decision = gl_binding_uniform(program, name, unsafe(addr<void?>(value[0])), length(value) * typeinfo sizeof(type<T>))
+    if (decision.upload){glUniformAny(decision.location, value)}
+}

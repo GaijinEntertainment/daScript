@@ -9,6 +9,7 @@ def initialize(project_path : string) {
     register_native_path("opengl", "opengl_boost_internal", "{project_path}/opengl/opengl_boost_internal.das")
     register_native_path("opengl", "gl_binding_cache", "{project_path}/opengl/gl_binding_cache.das")
     register_native_path("opengl", "opengl_boost", "{project_path}/opengl/opengl_boost.das")
+    register_native_path("opengl", "opengl_boost_modern", "{project_path}/opengl/opengl_boost_modern.das")
     register_native_path("opengl", "opengl_state", "{project_path}/opengl/opengl_state.das")
     register_native_path("opengl", "opengl_ttf", "{project_path}/opengl/opengl_ttf.das")
     register_native_path("opengl", "opengl_gen", "{project_path}/opengl/opengl_gen.das")

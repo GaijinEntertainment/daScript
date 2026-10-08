@@ -167,3 +167,98 @@ class GlslVertexBuffer : AstStructureAnnotation {
 }
 
 
+[structure_macro(name="dsa_vertex_buffer")]
+class GlslDsaVertexBuffer : AstStructureAnnotation {
+    def override apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
+        // [template(self)] bind_dsa_vertex_buffer(vbo:uint; self:VertexType; vao:uint=1u; vindex:uint=0u)
+        var fn <- new Function(at = st.at, atDecl = st.at, name := "bind_dsa_vertex_buffer")
+        fn.flags.generated = true
+        fn.result = new TypeDecl(baseType = Type.tVoid, at = st.at)
+        fn.arguments |> emplace_new() <| new Variable(at = st.at,
+            name := "ptrd",
+            _type <- new TypeDecl(at = st.at, baseType = Type.tPointer,
+                flags = TypeDeclFlags._implicit | TypeDeclFlags.constant)
+        )
+        fn.arguments |> emplace_new() <| new Variable(at = st.at,
+            name := "self",
+            _type <- new TypeDecl(at = st.at,
+                baseType = Type.tStructure,
+                structType = st
+            )
+        )
+        fn.arguments |> emplace_new() <| new Variable(at = st.at,
+            name := "vao",
+            _type <- new TypeDecl(at = st.at, baseType = Type.tUInt),
+            init <- new ExprConstUInt(at = st.at, value = 1u)
+        )
+        fn.arguments |> emplace_new() <| new Variable(at = st.at,
+            name := "vindex",
+            _type <- new TypeDecl(at = st.at, baseType = Type.tUInt),
+            init <- new ExprConstUInt(at = st.at, value = 0u)
+        )
+
+        var blk <- new ExprBlock(at = st.at)
+        // for each field
+        var stype <- new TypeDecl(baseType = Type.tStructure, structType = st, at = st.at)
+        for (fld, attri in st.fields, count()) {
+            // attri+vindex
+            var vattr_i <- new ExprOp2(at = fld.at,
+                op := "+",
+                left <- new ExprConstUInt(at = fld.at, value = uint(attri)),
+                right <-  new ExprVar(at = fld.at, name := "vindex")
+            )
+            var vvao <- new ExprVar(at = fld.at, name := "vao")
+            // glEnableVertexArrayAttrib(vao, attri)
+            var cll_evaa <- new ExprCall(at = fld.at, name := "glEnableVertexArrayAttrib")
+            cll_evaa.arguments |> emplace_new() <| clone_expression(vvao)
+            cll_evaa.arguments |> emplace_new() <| clone_expression(vattr_i)
+            blk.list |> emplace(cll_evaa)
+            let dinfo = get_decl_info(fld._type, fld.annotation)
+            if (!dinfo.ok) {
+                errors := "field {fld.name} is missing type information"
+                return false
+            }
+            var ttype = 0u
+            if (dinfo.info.typet == Type.tFloat) {
+                ttype = GL_FLOAT
+            } elif (dinfo.info.typet == Type.tUInt) {
+                ttype = GL_UNSIGNED_BYTE
+            } elif (dinfo.info.typet == Type.tInt16) {
+                ttype = GL_SHORT
+            } else {
+                errors := "field {fld.name} type {dinfo.info.typet} is not supported"
+                return false
+            }
+            // glVertexArrayAttribFormat(vao, attri, num_attr, attr_type, is_norm, uint(offsetof(VertexType::fld)))
+            var offsetof_fld =  new ExprTypeInfo(at = fld.at, trait := "offsetof",
+                subtrait := fld.name, typeexpr <- clone_type(stype))
+            var casted_ofs = new ExprCall(at = fld.at, name := "uint")
+            casted_ofs.arguments |> emplace_new() <| offsetof_fld
+            var cll_vaaf <- new ExprCall(at = fld.at, name := "glVertexArrayAttribFormat")
+            cll_vaaf.arguments |> emplace_new() <| clone_expression(vvao)
+            cll_vaaf.arguments |> emplace_new() <| clone_expression(vattr_i)
+            cll_vaaf.arguments |> emplace_new() <| new ExprConstInt(at = fld.at, value = dinfo.info.sizei)
+            cll_vaaf.arguments |> emplace_new() <| new ExprConstUInt(at = fld.at, value = ttype)
+            cll_vaaf.arguments |> emplace_new() <| new ExprConstBool(at = fld.at, value = dinfo.info.normalized)
+            cll_vaaf.arguments |> emplace_new() <| casted_ofs
+            blk.list |> emplace(cll_vaaf)
+
+            // glVertexArrayAttribBinding(vao, attri, 0u)
+            var cll_vaab = new ExprCall(at = fld.at, name := "glVertexArrayAttribBinding")
+            cll_vaab.arguments |> emplace_new() <| clone_expression(vvao)
+            cll_vaab.arguments |> emplace_new() <| clone_expression(vattr_i)
+            cll_vaab.arguments |> emplace_new() <| new ExprConstUInt(at = fld.at, value = 0u)
+            blk.list |> emplace(cll_vaab)
+            vattr_i := null
+        }
+        stype := null
+        fn.body <- blk
+        append_annotation(fn, "templates", "template", [(
+            (argname = "self", argvalue = RttiValue(tBool=true))
+        )])
+        if (!(compiling_module() |> add_function(fn))) {
+            panic("can't setup")
+        }
+        return true
+    }
+}
