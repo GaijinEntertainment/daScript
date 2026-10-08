@@ -53,7 +53,7 @@ struct PrefixState {
     groups : array<int>         // ceil(tokens / page_rows) groups, the last one partial when the count is off a page
     snap : DnSnapshot
     kind : PrefixStateKind = PrefixStateKind.tail
-    nbytes : int64              //! the snapshot's and the held pages' bytes (`prefix_state_bytes_`)
+    nbytes : int64              //! the snapshot's and the held pages' bytes, alone (`prefix_state_bytes_`); the budget counts a page shared with another checkpoint once
     last_use : int64
     hits : int64
 }
@@ -76,7 +76,7 @@ struct PrefixCache {
     states : array<PrefixState> // a recurrent model's checkpoints
     max_states : int64          // checkpoint budget (LRU-drops past it); 0 = a recurrent model caches nothing
     max_state_bytes : int64     //! the checkpoints' byte budget (snapshots and held pages); 0 = unbounded, the count alone bounds them
-    state_bytes : int64         //! the standing checkpoints' bytes
+    state_bytes : int64         //! the standing checkpoints' bytes, each held page counted once (`prefix_states_bytes_`)
     n_state_hits : int64
     n_state_inserts : int64
     n_state_evicted : int64
@@ -121,15 +121,38 @@ def create_prefix_cache_(max_groups : int64 = 0l; max_states : int64 = DEFAULT_P
 
 let DEFAULT_PREFIX_STATES = 256l   //! the cap on a recurrent model's checkpoints; the byte budget (`max_state_bytes`, the server's quarter of RAM) is what binds first on any model worth caching
 
-//! what a checkpoint of `n` tokens costs: its snapshot's arrays, its token list, and the rows of the pages it holds
-def prefix_state_bytes_(pool : KVPool; snap : DnSnapshot; n : int64) : int64 {
+//! a snapshot's arrays and a token list of `n`
+def private snapshot_bytes_(snap : DnSnapshot; n : int64) : int64 =>
+    (4l * (long_length(snap.conv) + long_length(snap.state) + long_length(snap.ple_hist) + long_length(snap.mtp_h))
+        + 8l * (long_length(snap.ple_prev) + n))
+
+//! the bytes of one page group of `pool`
+def private page_bytes_(pool : KVPool) : int64 {
     var row_bytes = 0l
     for (k, v in pool.krow_bytes, pool.vrow_bytes) {
         row_bytes += k + v
     }
+    return pool.page_rows * row_bytes
+}
+
+//! what a checkpoint of `n` tokens costs alone: its snapshot's arrays, its token list, and the rows of the pages it holds
+def prefix_state_bytes_(pool : KVPool; snap : DnSnapshot; n : int64) : int64 {
     let held = (n + pool.page_rows - 1l) / pool.page_rows
-    return (4l * (long_length(snap.conv) + long_length(snap.state) + long_length(snap.ple_hist) + long_length(snap.mtp_h))
-        + 8l * (long_length(snap.ple_prev) + n) + held * pool.page_rows * row_bytes)
+    return snapshot_bytes_(snap, n) + held * page_bytes_(pool)
+}
+
+//! what the standing checkpoints cost together: every snapshot and token list, and each held page ONCE - the checkpoints
+//! of one conversation share every page under their fork, so their own figures summed would charge those pages twice
+def private prefix_states_bytes_(cache : PrefixCache; pool : KVPool) : int64 {
+    var held : table<int>
+    var total = 0l
+    for (st in cache.states) {
+        total += snapshot_bytes_(st.snap, long_length(st.tokens))
+        for (g in st.groups) {
+            held |> insert(g)
+        }
+    }
+    return total + long_length(held) * page_bytes_(pool)
 }
 
 //! how many of `a`'s leading tokens open `b`
@@ -166,10 +189,10 @@ def private prefix_state_drop(var cache : PrefixCache; var pool : KVPool; at : i
     for (g in cache.states[at].groups) {
         kv_pool_release_group(pool, g)
     }
-    cache.state_bytes -= cache.states[at].nbytes
     cache.n_state_evicted ++
     delete cache.states[at]   //! erase is a raw remove: the owned arrays go first
     cache.states |> erase(at)
+    cache.state_bytes = prefix_states_bytes_(cache, pool)
 }
 
 //! the checkpoint to drop first: the tail used longest ago, and only when no tail stands the opening used longest
@@ -248,7 +271,6 @@ def private prefix_insert_state(var cache : PrefixCache; var pool : KVPool; var 
     let pr = pool.page_rows
     let nbytes = prefix_state_bytes_(pool, snap, n)   // before the move below: a call's arguments evaluate in no fixed order
     var e <- PrefixState(snap <- snap, kind = kind, nbytes = nbytes, last_use = cache.tick)
-    cache.state_bytes += nbytes
     e.tokens <- [for (i in range64(n)); tokens[i]]
     let held = (n + pr - 1l) / pr
     e.groups |> reserve(held)
@@ -258,6 +280,7 @@ def private prefix_insert_state(var cache : PrefixCache; var pool : KVPool; var 
     }
     cache.states |> emplace(e)
     cache.n_state_inserts ++
+    cache.state_bytes = prefix_states_bytes_(cache, pool)
     while (long_length(cache.states) > cache.max_states ||
            (cache.max_state_bytes > 0l && cache.state_bytes > cache.max_state_bytes && length(cache.states) > 1)) {
         prefix_state_drop(cache, pool, prefix_state_victim(cache))   //! the newest stands even past the byte budget alone: a budget under one checkpoint caches the last one

@@ -537,6 +537,45 @@ def test_prefix_checkpoint_kinds_and_bytes(t : T?) {
 }
 
 [test]
+def test_prefix_checkpoint_shared_pages(t : T?) {
+    t |> run("the byte budget counts a page two checkpoints of one conversation share once, where their own figures count it twice") @(t : T?) {
+        let c = mk_config(2l, 4l, 2l, 16l, 32l)
+        var pool <- create_kv_pool_(c, 4l, KVDtype.f32, KVDtype.f32)
+        var page_bytes = 0l
+        for (k, v in pool.krow_bytes, pool.vrow_bytes) {
+            page_bytes += (k + v) * pool.page_rows
+        }
+        var cache <- create_prefix_cache_(0l, 8l)
+        var toks <- [for (i in range64(9l)); 100l + i]
+        var s <- mk_recurrent(c, pool, 6l)   // two pages at P=4: a whole one and the page of row 5
+        prefix_insert_(cache, pool, s, toks)
+        let alone = cache.states[0].nbytes
+        t |> equal(alone, cache.state_bytes, "one checkpoint: its own figure")
+        // the conversation goes on from the checkpoint: the whole page shared, the partial one copied, a third page of its own
+        var w <- mk_recurrent(c, pool, 0l)
+        t |> equal(6l, prefix_attach_(cache, pool, w, toks))
+        kv_ensure(w, 9l)
+        w.n_past = 9l
+        w.dn_pos = 9l
+        prefix_insert_(cache, pool, w, toks)
+        t |> equal(2, length(cache.states))
+        let own = cache.states[1].nbytes
+        t |> success(own > alone, "the deeper checkpoint's own figure counts its three pages: {own} over {alone}")
+        t |> equal(alone + own - page_bytes, cache.state_bytes, "the budget counts the shared first page once: {alone} + {own} - {page_bytes} = {cache.state_bytes}")
+        release_kv_pages_(s)
+        release_kv_pages_(w)
+        prefix_release_(cache, pool)
+        t |> equal(0l, cache.state_bytes, "released: none standing")
+        t |> equal(long_length(pool.free_groups), pool.capacity_groups, "every page back")
+        delete toks
+        delete w
+        delete s
+        delete cache
+        delete pool
+    }
+}
+
+[test]
 def test_prefix_checkpoint_at(t : T?) {
     t |> run("the prefill stops at the caller's stable opening, else at an opening an earlier checkpoint shares, and nowhere on a model with no recurrent state") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 64l)
