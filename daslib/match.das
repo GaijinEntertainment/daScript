@@ -23,6 +23,7 @@ require daslib/macro_boost
 require daslib/strings_boost
 require daslib/defer
 require daslib/option
+require daslib/result
 require daslib/match_solver
 
 /*
@@ -584,6 +585,42 @@ def is_to_array_move_call(wth : Expression?) {
 }
 
 [macro_function]
+def range_element_type(typ : TypeDeclPtr) : Type {
+    return (typ.baseType == Type.tRange ? Type.tInt : typ.baseType == Type.tURange ? Type.tUInt
+        : typ.baseType == Type.tRange64 ? Type.tInt64 : typ.baseType == Type.tURange64 ? Type.tUInt64 : Type.none)
+}
+
+[macro_function]
+def match_range(what : TypeDeclPtr; wth : Expression?; access : Expression?) : Result<Expression?; string> {
+    //! ``(lo..hi)`` matches ``lo <= value && value < hi`` - half-open, like a ``for`` range: the condition, or why the range does not apply.
+    if (wth._type == null) {
+        return err("range pattern `{describe_pattern(wth)}` failed to compile; its bounds must be constants or variables in scope", type<Expression?>)
+    }
+    let elem = range_element_type(wth._type)
+    if (what.baseType != elem || what.isPointer) {
+        return err("range pattern `{describe_pattern(wth)}` matches {das_to_string(elem)} values, not `{describe(what)}`", type<Expression?>)
+    }
+    let rng = unsafe(reinterpret<Expression?>(wth))
+    var cond = (is_range_call(wth)
+        ? qmacro($e(access) >= $e((wth as ExprCall).arguments[0]) && $e(access) < $e((wth as ExprCall).arguments[1]))
+        : qmacro($e(access) >= $e(rng).x && $e(access) < $e(rng).y))
+    cond |> force_at(wth.at)
+    return move_ok(cond, type<string>)
+}
+
+[macro_function]
+def private add_condition(var r : Result<Expression?; string>; wth : Expression?; var to : MatchTo) : bool {
+    //! A leaf pattern's condition joins the arm; its error is reported instead - a hard one when the pattern itself did not compile.
+    if (is_err(r)) {
+        to.errors |> match_error(unwrap_err(r), wth.at)
+        to.failed ||= wth._type == null
+        return false
+    }
+    to.conditions |> push(move_unwrap(r))
+    return true
+}
+
+[macro_function]
 def match_const(what : TypeDeclPtr; wth : Expression?; access : Expression?; var to : MatchTo) {
     //! ``42``, ``"text"``, ``true``: the value equals the constant.
     if (wth._type == null) {
@@ -656,6 +693,8 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
         return match_alternatives(wth as ExprOp2, to) $(side : Expression?; var sideTo : MatchTo) {
             return match_any(what, side, access, sideTo)
         }
+    } elif (is_range_const(wth) || is_range_call(wth)) {
+        return add_condition(match_range(what, wth, access), wth, to)
     } elif (wth.__rtti |> starts_with("ExprConst")) {
         return match_const(what, wth, access, to)
     } elif (to.bind_names && (wth is ExprOp2) && (wth as ExprOp2).op == "&") {
@@ -755,7 +794,7 @@ def prepare_sub_patterns(var pat : Expression?; bind_bare : bool) : array<string
         }
     } elif (pat is ExprAsVariant) {
         names <- prepare_pattern((pat as ExprAsVariant).value, bind_bare)
-    } elif (pat is ExprCall && !is_match_call(pat, "expr")) {
+    } elif (pat is ExprCall && !is_match_call(pat, "expr") && !is_range_call(pat)) {
         for (a in (pat as ExprCall).arguments) {
             names |> push_from(prepare_pattern(a, bind_bare))
         }

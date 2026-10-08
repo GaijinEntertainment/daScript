@@ -467,3 +467,34 @@ def test_struct_fields_are_checked_for_coverage(t : T?) {
     t |> equal(lamp_state(Lamp(light = Light(on = false), spare = true)), "off, has spare")
     t |> equal(lamp_state(Lamp(light = Light(on = false), spare = false)), "off, no spare")
 }
+
+def private size_class(n : int; limit : int) : string {
+    return match (n) {
+        (0..10) => "digit"
+        (10..100) | (1000..2000) => "some"
+        (100..limit) => "below limit"
+        _ => "other"
+    }
+}
+
+def private letter_case(c : int) : string {
+    return match (c, c) {
+        ('a'..'z' + 1, _) => "lower"
+        ('A'..'Z' + 1, _) => "upper"
+        _ => "other"
+    }
+}
+
+[test]
+def test_range_patterns_are_half_open(t : T?) {
+    t |> equal(size_class(0, 500), "digit")
+    t |> equal(size_class(9, 500), "digit")
+    t |> equal(size_class(10, 500), "some")
+    t |> equal(size_class(1500, 500), "some")
+    t |> equal(size_class(300, 500), "below limit")
+    t |> equal(size_class(500, 500), "other")
+    t |> equal(size_class(-1, 500), "other")
+    t |> equal(letter_case('q'), "lower")
+    t |> equal(letter_case('Z'), "upper")
+    t |> equal(letter_case('1'), "other")
+}

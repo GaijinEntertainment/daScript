@@ -228,6 +228,7 @@ it returns from the enclosing function; an assignment body always needs the bloc
 | `[a, b]`, `[..., 1, 2]` | dynamic array (element count is checked) |
 | `pattern && cond` | guard - extra condition using the bound names |
 | `whole & Foo(a = 0)` | both patterns; a bare name on one side binds the whole value |
+| `(0..10)` | `0 <= value && value < 10` - half-open; parentheses required outside a tuple; `int` for `range`, `uint` for `urange` |
 | `pattern \| pattern` | either; both sides must bind the same names |
 | `match_expr(limit)`, `match_expr(x + 1)` | equals an expression - an existing variable, or names bound earlier |
 | `match_type(type<int>, e)` | matches on the type of the value |

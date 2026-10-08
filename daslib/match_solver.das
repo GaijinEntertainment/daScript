@@ -11,7 +11,7 @@ module match_solver shared private
 //! one column per field. Every arm adds a row - an arm with alternatives adds one row per
 //! alternative - and each cell classifies what its pattern covers of the column: every value
 //! (``_``, a name, an irrefutable shape), a set of named values (constants, enum values, variant
-//! alternatives, ``non-null``), or values the analysis can not name.
+//! alternatives, range pieces, ``non-null``), or values the analysis can not name.
 //! A column of an enum, bool, variant or pointer has a finite domain of named values.
 //! A row is useful when some value reaches it that no earlier row covers; an arm with no useful row
 //! is unreachable. Values the rows leave uncovered are reported, at most three, as the missing
@@ -76,6 +76,12 @@ def public op_sides(var e : Expression?; op : string) : array<Expression?> {
     return <- sides
 }
 
+[macro_function]
+def public is_range_call(pat : Expression?) : bool => pat is ExprCall && (pat as ExprCall).name == "interval" && length((pat as ExprCall).arguments) == 2
+
+[macro_function]
+def public is_range_const(pat : Expression?) : bool => pat is ExprConstRange || pat is ExprConstURange || pat is ExprConstRange64 || pat is ExprConstURange64
+
 let public MATCH_ANY_OTHER = "_"
 let private MATCH_NON_NULL = "non-null"
 
@@ -117,7 +123,74 @@ def private constant_key(p : Expression?) : string {
         let ce = p as ExprConstEnumeration
         return "{ce.enumType.name}.{ce.value}"
     }
-    return p.__rtti |> starts_with("ExprConst") ? describe(p) : ""
+    return p.__rtti |> starts_with("ExprConst") && !is_range_const(p) ? describe(p) : ""
+}
+
+[macro_function]
+def private int_value(var e : Expression?) : Option<int64> {
+    let p = peel_r2v(e)
+    return some(int64((p as ExprConstInt).value)) if (p is ExprConstInt)
+    return some(int64((p as ExprConstUInt).value)) if (p is ExprConstUInt)
+    return some((p as ExprConstInt64).value) if (p is ExprConstInt64)
+    return none(type<int64>)
+}
+
+[macro_function]
+def private constant_span(var e : Expression?) : Option<range64> {
+    //! The half-open span of integers a constant range - or a single integer constant - matches.
+    var p = peel_r2v(e)
+    if (p is ExprConstRange) {
+        let r = (p as ExprConstRange).value
+        return some(interval(int64(r.x), int64(r.y)))
+    } elif (p is ExprConstURange) {
+        let r = (p as ExprConstURange).value
+        return some(interval(int64(r.x), int64(r.y)))
+    } elif (p is ExprConstRange64) {
+        return some((p as ExprConstRange64).value)
+    } elif (is_range_call(p)) {
+        let lo = int_value((p as ExprCall).arguments[0])
+        let hi = int_value((p as ExprCall).arguments[1])
+        return is_some(lo) && is_some(hi) ? some(interval(unwrap(lo), unwrap(hi))) : none(type<range64>)
+    }
+    let v = int_value(p)
+    return is_some(v) ? some(interval(unwrap(v), unwrap(v) + 1l)) : none(type<range64>)
+}
+
+[macro_function]
+def private cell_spans(var e : Expression?) : array<range64> {
+    //! The constant spans in a cell - a constant range or an integer constant each - through ``|`` and ``&``.
+    var p = peel_r2v(e)
+    if (p != null && p is ExprOp2 && ((p as ExprOp2).op == "||" || (p as ExprOp2).op == "&")) {
+        var spans <- cell_spans((p as ExprOp2).left)
+        spans |> push_from(cell_spans((p as ExprOp2).right))
+        return <- spans
+    }
+    let span = p == null ? none(type<range64>) : constant_span(p)
+    return <- [for (s in [span]); unwrap(s); where is_some(s)]
+}
+
+[macro_function]
+def private column_cuts(var rows : array<PatternRow>; c : int) : array<int64> {
+    //! A column with constant ranges splits the integers at every constant end, so a range and a constant name the same pieces; empty without ranges.
+    var spans : array<range64>
+    for (r in rows) {
+        spans |> push_from(cell_spans(r.cells[c]))
+    }
+    let ranged = has_value([for (s in spans); s.y - s.x != 1l], true)
+    var cuts : array<int64>
+    for (s in spans) {
+        cuts |> push_from([s.x, s.y])
+    }
+    sort(cuts)
+    return <- [for (v, i in cuts, count()); v; where ranged && (i == 0 || cuts[i - 1] != v)]
+}
+
+[macro_function]
+def private span_keys(var p : Expression?; cuts : array<int64>) : array<string> {
+    //! The pieces between ``cuts`` a constant span covers, named ``lo..hi`` (``v`` for one value).
+    let span = constant_span(p)
+    return <- [for (i in range(length(cuts) - 1)); cuts[i + 1] == cuts[i] + 1l ? "{cuts[i]}" : "{cuts[i]}..{cuts[i + 1]}";
+        where is_some(span) && cuts[i] >= unwrap(span).x && cuts[i + 1] <= unwrap(span).y]
 }
 
 [macro_function]
@@ -182,16 +255,17 @@ def private both(var l : MatchCell; var r : MatchCell) : MatchCell {
 }
 
 [macro_function]
-def private classify_cell(typ : TypeDeclPtr; var pat : Expression?) : MatchCell {
+def private classify_cell(typ : TypeDeclPtr; var pat : Expression?; cuts : array<int64>) : MatchCell {
     //! What one pattern covers of one column: everything, named values, or values the analysis can't name.
     var p = peel_r2v(pat)
     return <- MatchCell(any = true) if (is_binder(p))
     if (p is ExprOp2) {
         var op2 = p as ExprOp2
-        return <- either(classify_cell(typ, op2.left), classify_cell(typ, op2.right)) if (op2.op == "||")
-        return <- both(classify_cell(typ, op2.left), classify_cell(typ, op2.right)) if (op2.op == "&")
+        return <- either(classify_cell(typ, op2.left, cuts), classify_cell(typ, op2.right, cuts)) if (op2.op == "||")
+        return <- both(classify_cell(typ, op2.left, cuts), classify_cell(typ, op2.right, cuts)) if (op2.op == "&")
         return <- MatchCell(opaque = true)
     }
+    return <- MatchCell(keys <- span_keys(p, cuts)) if (!empty(cuts) && is_some(constant_span(p)))
     let key = constant_key(p)
     return <- MatchCell(keys <- [key]) if (!empty(key))
     if (typ != null && typ.isVariant && p is ExprMakeVariant && length((p as ExprMakeVariant).variants) == 1
@@ -413,7 +487,8 @@ def private coverage_table(var types : array<TypeDeclPtr>; var patterns : array<
         c += split_column(tab, rows, c) ? 0 : 1
     }
     tab.arm_rows <- [for (ai in range(length(patterns))); [for (r, ri in rows, count()); ri; where r.arm == ai]]
-    tab.rows <- [for (r in rows); [for (cell, ci in r.cells, count()); cell == null ? MatchCell(any = true) : classify_cell(tab.columns[ci], cell)]]
+    let cuts <- [for (ci in range(length(tab.columns))); column_cuts(rows, ci)]
+    tab.rows <- [for (r in rows); [for (cell, ci in r.cells, count()); cell == null ? MatchCell(any = true) : classify_cell(tab.columns[ci], cell, cuts[ci])]]
     tab.domains <- [for (col, ci in tab.columns, count()); column_domain(col, ci, tab.rows)]
     return <- tab
 }

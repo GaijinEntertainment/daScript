@@ -257,6 +257,27 @@ fields:
 
 Inside a guard and inside ``match_expr``, ``|`` stays the bitwise operator.
 
+Range patterns
+--------------
+
+``(lo..hi)`` matches ``lo <= value && value < hi`` - half-open, the same as a ``for`` range, so
+``(0..10)`` is 0 to 9. The parentheses are required, except inside a tuple pattern; the bounds are
+constants or variables in scope, and the value must have the range's element type (``int`` for
+``range``, ``uint`` for ``urange``, and the 64-bit types for ``range64`` and ``urange64``). Coverage
+cuts the integers at the ends of constant ranges: a value or a range that earlier constant ranges
+already cover is an unreachable arm, and so is the overlapping part of a range. A range with a
+variable bound names no values, so for coverage it counts like a guard:
+
+.. code-block:: das
+
+    def size_class ( n : int ) {
+        return match ( n ) {
+            (0..10) => "digit"
+            (10..100) | (1000..2000) => "some"
+            _ => "other"
+        }
+    }
+
 Both patterns with ``&``
 ------------------------
 
