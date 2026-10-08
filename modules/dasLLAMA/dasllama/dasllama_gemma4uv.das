@@ -252,9 +252,14 @@ def load_gemma4uv_embedder(path : string) : Gemma4uvEmbedder {
     // image-backed, so there is no second, array-owning shape of this struct to maintain
     var inscope st <- stage_gemma4uv_embedder(path)
     var built = Gemma4uvEmbedder()
-    cache_via_image_staged(st, built, "", tag)
-    uv_check_planes(built, path)
+    mint_gemma4uv_embedder(st, built)
     return <- built
+}
+
+//! the embedder minted in memory from its staging - no `.dlim` written, the served form image-backed all the same
+def mint_gemma4uv_embedder(var st : Gemma4uvStaging; var out : Gemma4uvEmbedder) {
+    cache_via_image_staged(st, out, "", GEMMA4UV_TAG)
+    uv_check_planes(out, "staged")
 }
 
 // the bind walk skips a missing section silently (a pure-fp32 image legitimately has no wblob),

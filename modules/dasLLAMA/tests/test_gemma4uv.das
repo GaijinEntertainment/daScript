@@ -20,7 +20,9 @@ require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown â
 // minted from the f32-widened 12B mmproj twin; the embedder has no attention, so the flash-attn
 // setting does not enter): pre-resized [0,1] float fixtures skip preprocessing entirely, so a diff
 // here isolates the embedder math. Oracle per-token lines live beside the models in gemma4-vision-oracle/
-// (mint.sh regenerates); both the mmproj and the dumps gate this test with explicit skips.
+// (mint.sh regenerates); both the mmproj and the dumps gate this test with explicit skips. On an Apple build the
+// GPU cell runs the same dumps through the Metal embedder, on a Vulkan build through the Vulkan one, each off the
+// planes with the stem on the device and engage proven per fixture by the encodes counter.
 
 // the tier-1 gate: encode a fixture, compare per-token mean/v0..v3 against the oracle dump.
 // %.6f print rounding is Â±5e-7 and the measured accumulation-order noise is ~2e-5 (logged per
@@ -139,19 +141,23 @@ def test_gemma4uv_tier1_vulkan(t : T?) {
             if (!model_available(tt, mm) || !vulkan_twin_seat(tt)) {
                 return
             }
-            var emb <- load_gemma4uv_embedder(mm)
+            var inscope stg <- stage_gemma4uv_embedder(mm)
+            var emb = Gemma4uvEmbedder()
+            mint_gemma4uv_embedder(stg, emb)   //! in memory: the loader would bake the image beside the model
             var st = Gemma4uvState()
-            set_vulkan_tower(true)
-            let fixtures = [(kind = "gray", w = 480, h = 480, log = "encode.gray480.log"),
-                            (kind = "cb", w = 336, h = 336, log = "encode.cb336.log"),
-                            (kind = "red", w = 336, h = 336, log = "encode.red336.log"),
-                            (kind = "cb", w = 672, h = 336, log = "encode.cb672x336.log")]
-            for (fx in fixtures) {
-                let s0 = vulkan_tower_stats()
-                let ran = gate_encode(tt, emb, st, fx.kind, fx.w, fx.h, fx.log, false)
-                if (ran) {
-                    tt |> equal(vulkan_tower_stats().encodes - s0.encodes, 1l, "{fx.kind} {fx.w}x{fx.h}: device-served (encodes delta)")
-                    tt |> equal(vulkan_tower_stats().convs - s0.convs, 1l, "{fx.kind} {fx.w}x{fx.h}: the stem ran on the device (convs delta)")
+            with_gpu_knobs() {
+                set_vulkan_tower(true)
+                let fixtures = [(kind = "gray", w = 480, h = 480, log = "encode.gray480.log"),
+                                (kind = "cb", w = 336, h = 336, log = "encode.cb336.log"),
+                                (kind = "red", w = 336, h = 336, log = "encode.red336.log"),
+                                (kind = "cb", w = 672, h = 336, log = "encode.cb672x336.log")]
+                for (fx in fixtures) {
+                    let s0 = vulkan_tower_stats()
+                    let ran = gate_encode(tt, emb, st, fx.kind, fx.w, fx.h, fx.log, false)
+                    if (ran) {
+                        tt |> equal(vulkan_tower_stats().encodes - s0.encodes, 1l, "{fx.kind} {fx.w}x{fx.h}: device-served (encodes delta)")
+                        tt |> equal(vulkan_tower_stats().convs - s0.convs, 1l, "{fx.kind} {fx.w}x{fx.h}: the stem ran on the device (convs delta)")
+                    }
                 }
             }
             vulkan_tower_shutdown()

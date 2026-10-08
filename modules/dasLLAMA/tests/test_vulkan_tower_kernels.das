@@ -612,11 +612,11 @@ def test_vkt_tower_vision_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate
                 var s_pool = cp |> cls_set(fixed_array(gxp, poolp), @@set_tower_pool_2d_cls)
                 var s_aff = cp |> cls_set(fixed_array(ax_std_p, bp, mp), @@set_tower_affine_rows_cls)
                 var s_aff0 = cp |> cls_set(fixed_array(ax_scale_p, bp, mp), @@set_tower_affine_rows_cls)
-                var pa_im = GkPatchIm2colArgs(w = uint(VR_W), h = uint(VR_H), p = uint(VR_P), n_cols = uint(VR_PW), row_dim = uint(VR_PD), npos = uint(npos),
+                var pa_im = GkPatchIm2colArgs(w = uint(VR_W), h = uint(VR_H), p = uint(VR_P), row_dim = uint(VR_PD), npos = uint(npos),
                     total = uint(npos_pad * VR_PD), scale = 2.0, shift = -1.0)
                 var pa_pos = GkPosAdd2DArgs(dim = uint(d), ncols = uint(VR_PW), pos_entries = uint(VR_POS_ENTRIES), total = uint(nd), tboff = 0u)
                 var pa_asm = GkStemAsmArgs(dim = uint(d), pw = uint(VR_PW), total = uint(nd), boff = 0u, poff = 0u)
-                var pa_pool = GkPool2dArgs(width = uint(d), gw = uint(VR_POOL_GW), k = uint(VR_POOL_K), ow = uint(VR_POOL_GW / VR_POOL_K), total = uint(nout * d))
+                var pa_pool = GkPool2dArgs(width = uint(d), gw = uint(VR_POOL_GW), k = uint(VR_POOL_K), total = uint(nout * d))
                 var pa_aff = GkAffineRowsArgs(width = uint(d), total = uint(nout * d), scale = scale, boff = uint(d), moff = 0u, std = 1u)
                 var pa_aff0 = GkAffineRowsArgs(width = uint(d), total = uint(nout * d), scale = scale, boff = 0u, moff = 0u, std = 0u)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
@@ -652,6 +652,7 @@ def test_vkt_tower_vision_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate
                     }
                 }
                 check_rows(t, "tower_pos_add_2d (row + x-table row) + y-table row vs the CPU form", x_dev, x_want, BAR_EXACT, d)
+                t |> success(x_want[0] != x[0], "tower_pos_add_2d: the rows moved off x")
                 var asm_want : array<float>
                 asm_want |> resize(nd)
                 for (r in range(npos)) {
@@ -676,6 +677,7 @@ def test_vkt_tower_vision_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate
                     aff_want[i] = (ax[i] * scale - bias[d + c]) * std_scale[c]
                 }
                 check_rows(t, "tower_affine_rows (x . scale - b) . m vs the CPU form", ax_dev, aff_want, BAR_APPROX, d)
+                t |> success(aff_want[0] != ax[0] && aff0_want[0] != ax[0], "tower_affine_rows: both arms moved off x")
                 check_rows(t, "tower_affine_rows x . scale on the scale-only arm", ax0_dev, aff0_want, BAR_APPROX, d)
                 delete col_cpu
             }
@@ -1685,7 +1687,7 @@ def test_vkt_tower_win_rows(t0 : T?) {   // nolint:STYLE038 — the window route
                 var pa_win = GkWinAttnArgs(nheads = uint(WIN_HEADS), hs = uint(WIN_HS), scale = scale)
                 var pa_post = GkPostAddLnArgs(d = uint(d), rows = uint(nrows), boff = 0u, eps = ROWS_EPS, ln_on = 1u, lnoff = uint(d), lnboff = 0u, ascale = 1.0, xboff = 0u)
                 var pa_post0 = GkPostAddLnArgs(d = uint(d), rows = uint(nrows), boff = 0u, eps = ROWS_EPS, ln_on = 0u, lnoff = uint(d), lnboff = 0u, ascale = 1.0, xboff = 0u)
-                var pa_glu = GkBiasGateArgs(d = uint(d), nelem = uint(nd), goff = uint(2 * d), uoff = uint(3 * d), act = BIAS_ACT_SILU)
+                var pa_glu = GkBiasGateArgs(d = uint(d), nelem = uint(nd), goff = uint(2 * d), uoff = uint(3 * d))
                 let wg4 = int64((nd / 4 + 255) / 256)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_tower_win_attn_cls(raw, h, s_win, pa_win, int64(nslot * WIN_HEADS))

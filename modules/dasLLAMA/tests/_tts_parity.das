@@ -55,18 +55,6 @@ def tower_served(t : T?; msg, declines : string) : bool {
     return false
 }
 
-//! the Metal tower's where das_metal is built in, else the Vulkan one's
-[unused_argument(on)]
-def set_serving_gpu_tower(on : bool) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        set_metal_tower(on)
-    } else {
-        static_if (typeinfo builtin_module_exists(vulkan)) {
-            set_vulkan_tower(on)
-        }
-    }
-}
-
 //! conv dispatches since the process started on the Metal tower; the Vulkan driver keeps no conv counter, so 0 there
 def gpu_convs() : int64 {
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -204,9 +192,8 @@ def spectrum_diff(t : T?; tag : string; ours, ref : array<float>; bins, frames :
     t |> success(ph_d <= PHASE_BAR, "{tag}: phase maxdiff {ph_d} rad <= {PHASE_BAR} where the magnitude carries signal")
 }
 
-def case_noise(dump : table<string; TtsDumpTensor>) : TtsNoise {
-    return <- TtsNoise(uniform <- dump_tensor(dump, type<float>, "noise_uniform"), normal <- dump_tensor(dump, type<float>, "noise_normal"), captured = true)
-}
+def case_noise(dump : table<string; TtsDumpTensor>) : TtsNoise
+    => <- TtsNoise(uniform <- dump_tensor(dump, type<float>, "noise_uniform"), normal <- dump_tensor(dump, type<float>, "noise_normal"), captured = true)
 
 // the generator fed the oracle's own F0 curve, source signal and decoder output: block
 // correctness at the seams, with the phase drift the predictor's rounding noise induces taken out
@@ -382,8 +369,7 @@ def private gpu_stage_checks(t : T?; m, m8 : StyleTts2Model; tag : string; dump 
         var inscope style_dec <- copy_span(style, 0l, hs)
         var inscope style_pro <- copy_span(style, hs, hs)
         let n_tok = long_length(ids)
-        var inscope bert_c : array<float>
-        var inscope ten_c : array<float>
+        var inscope bert_c, ten_c : array<float>
         return if (!gpu_front_checks(t, m, tag, ids, bert_c, ten_c, sc))
         var inscope d_c : array<float>
         let dur_served = seat_leg(t, TtsFamily.styletts2, tag, "dur_enc", GPU_PRED_BAR, d_c) $(leg : TowerLeg; var out : array<float>) {
@@ -534,13 +520,11 @@ def private gpu_served_lane(t : T?; path, text, voice : string) : bool {
     }
 }
 
-def private seat_stats(family : TtsFamily; seat : string) : tuple<calls : int; served : int> {
-    return family == TtsFamily.pocket ? pocket_gpu_stats(seat) : styletts2_gpu_stats(seat)
-}
+def private seat_stats(family : TtsFamily; seat : string) : tuple<calls : int; served : int>
+    => family == TtsFamily.pocket ? pocket_gpu_stats(seat) : styletts2_gpu_stats(seat)
 
-def private seat_counters(family : TtsFamily; seats : array<string>) : array<tuple<calls : int; served : int>> {
-    return <- [for (s in seats); seat_stats(family, s)]
-}
+def private seat_counters(family : TtsFamily; seats : array<string>) : array<tuple<calls : int; served : int>>
+    => <- [for (s in seats); seat_stats(family, s)]
 
 //! Knob off: each seat reached once a chunk, none served, one knob decline each; knob on: each but `unserved` served once a chunk; false where none served. The knob stays on.
 [unused_argument(t, m, text, voice, msg, unserved, extra)]   // off-Apple the gated body is empty

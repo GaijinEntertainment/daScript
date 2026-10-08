@@ -1822,7 +1822,7 @@ module) is independent and can land any time - it is pure structure.
     covered); the `sdot4` arm of every audio twin (the cm2-off feeds: `vt_tile`'s q8 variant, the
     requant steps, the decoder's non-cm2 buffers) as a standing run, not the one p22 leg.
 103. **The tower dedup pass's leftovers.** The folds the pass ruled out or left, each with its
-    reason. The tower's rms rows (now `HcNorm` at one stream) against `ClsArAddRms` at `add_on = 0`:
+    reason. The tower's rms rows (`TowerRms`) against `ClsArAddRms` at `add_on = 0`:
     the residual class reads a zero add partner, rewrites the row in place and stashes it in a 32 KB
     workgroup array where the norm class reads the row once, so the fold adds two plane passes and a
     workgroup array to a role that reads 1% of the gemma4a chain (176 us over 36 stamps at 275 rows

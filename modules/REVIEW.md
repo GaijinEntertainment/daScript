@@ -3,9 +3,9 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.**
 Architecture doc: `../CLAUDE.md`.
 
-Module subfolders also carry checklists. A module's bindings and script library follow
-that module's checklist even when placed outside its folder; tests follow its tests
-checklist when one exists.
+**A `.das` or `.cpp` placed outside `modules/<M>/` that binds or requires only module `<M>`'s
+modules answers to `modules/<M>/REVIEW.md`, and a `[test]` file under `modules/<M>/` to
+`modules/<M>/tests/REVIEW.md` where that checklist exists.**
 
 **Module folders under this folder carry their own `REVIEW.md` checklists - a diff applies the
 `REVIEW.md` of every folder between this one and each file it changes.**

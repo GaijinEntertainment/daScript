@@ -988,3 +988,13 @@ eight lanes a superblock, two words a lane in flight before the arithmetic) move
 past noise, so the gap is the memory-level parallelism. The work: a row-a-simdgroup IQ4_XS form with the q8 kernel's
 chunk batching and the staged LUT kept, on the gathered site first (the routed experts carry the bytes), raced e2e on
 the pure IQ4_XS file; then the same shape for Q4_K, whose 5 % over Q4_0 at equal bytes is the same template.
+
+## 46. The Metal vision chains decline a tower off their stamps' lattice whole
+
+The chain guards decide the whole encode (`metal_gemma3v_blocks`, `metal_gemma4v_blocks`, `metal_qwen3v_blocks`,
+`metal_qwen25v_blocks`): a width or FFN off the 64 lattice, a head off the stamp (64 for gemma4v, 80 for qwen25v,
+past 128 elsewhere), a patch dimension off the 32 or 64 lattice, a token count off the 4 lattice (qwen3v, qwen25v)
+or a window past 64 rows (qwen25v) is a `shape` decline, and the CPU chain serves the stem, the blocks and the tail.
+No stocked tower trips a guard; a family added at another geometry would run on the CPU with no outage. The work:
+the ragged stamps - a row tail on the tile GEMMs and the attention restride, a head-width parameter on the window
+attention - so the guards narrow to what the kernels cannot read.

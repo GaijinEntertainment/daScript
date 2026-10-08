@@ -76,3 +76,28 @@ def set_every_gpu_wdec(on : bool) {
         set_vulkan_wdec(on)
     }
 }
+
+//! the Metal tower's knob where das_metal is built in, else the Vulkan tower's
+[unused_argument(on)]
+def set_serving_gpu_tower(on : bool) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        set_metal_tower(on)
+    } else {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            set_vulkan_tower(on)
+        }
+    }
+}
+
+//! tower encodes served since the process started: the Metal tower's where das_metal is built in, else the Vulkan tower's
+def gpu_tower_encodes() : int64 {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return metal_tower_stats().encodes
+    } else {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            return vulkan_tower_stats().encodes
+        } else {
+            return 0l
+        }
+    }
+}

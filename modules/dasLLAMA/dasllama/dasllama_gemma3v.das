@@ -197,7 +197,7 @@ var private g_g3v_gpu_set = false
 var private g_g3v_f32_lane = true   //! the chain serves the f32 planes (the lane policy prefers them); false = it serves the q8 image
 
 //! the whole-chain seat: the fn runs the stem, the blocks and the tail on the device off the planes; `serves` answers the knob so
-//! the encode skips the CPU im2col and the lane policy can prefer f32 planes
+//! the encode skips the CPU im2col; `f32_lane` says whether the policy prefers the file's planes over the q8 image (true where the device's f32 tiles are its faster lane)
 def register_gemma3v_gpu(fn : Gemma3vGpuChainFn; serves : Gemma3vGpuServesFn; f32_lane : bool = true) {
     g_g3v_gpu = fn
     g_g3v_gpu_serves = serves
@@ -209,7 +209,10 @@ def register_gemma3v_gpu(fn : Gemma3vGpuChainFn; serves : Gemma3vGpuServesFn; f3
 // accelerate float-batch tier prefers f32 planes and flips the default to the exact lane; else q8. A pin overrides.
 var private g_g3v_q8_pin = GemmLane.unset
 
-def private g3v_serve_q8() : bool => lane_serves_q8(g_g3v_q8_pin, !((g_g3v_gpu_set && g_g3v_f32_lane && invoke(g_g3v_gpu_serves)) || float_batch_override_active()))
+//! the GPU tower would serve this encode on the file's planes - the lane policy's clause: with it false the policy's default is the q8 image
+def gemma3v_gpu_exact_serves() : bool => g_g3v_gpu_set && g_g3v_f32_lane && invoke(g_g3v_gpu_serves)
+
+def private g3v_serve_q8() : bool => lane_serves_q8(g_g3v_q8_pin, !(gemma3v_gpu_exact_serves() || float_batch_override_active()))
 
 //! Pin the gemma3v tower's block-GEMM format for subsequent loads: q8 (the CPU serving default)
 //! vs f32 planes (the parity rail). Each lane is its own prepared image. ``reset_gemma3v_q8``
@@ -229,11 +232,13 @@ def private g3v_tag() : string => g3v_serve_q8() ? GEMMA3V_TAG_Q8 : GEMMA3V_TAG
 
 // the lane changes what a load mints and serves, so the load says which and why, by knob spelling
 def private g3v_announce_lane() {
-    var why = "the CPU default (DASLLAMA_METAL_TOWER off / no accelerate tier)"
+    var why = "the CPU default (no GPU tower, no accelerate tier)"
     if (g_g3v_q8_pin != GemmLane.unset) {
         why = "pinned"
+    } elif (gemma3v_gpu_exact_serves()) {
+        why = "the GPU tower serves the file's planes (its f32 tiles are the faster lane)"
     } elif (g_g3v_gpu_set && invoke(g_g3v_gpu_serves)) {
-        why = "DASLLAMA_METAL_TOWER on: the Metal tower serves f32 planes"
+        why = "the GPU tower serves the q8 image (its q8 tiles are the faster lane)"
     } elif (float_batch_override_active()) {
         why = "DASLLAMA_ACCEL on: the float-batch tier serves f32 planes"
     }

@@ -144,9 +144,7 @@ def test_gemma4v_tier1_gpu(t : T?) {
             set_metal_tower(true)
             delete st
             delete tw
-            set_gemma4v_q8(true)
-            var twq <- load_gemma4v_tower(mm)
-            reset_gemma4v_q8()
+            var twq <- mint_tower(mm, true)   //! in memory: a load under the pin would bake the q8 image beside the serving one
             var stq = Gemma4vState()
             tt |> success(twq.q8, "the q8 lane minted under the pin")
             let sq0 = metal_tower_stats()
@@ -158,6 +156,7 @@ def test_gemma4v_tier1_gpu(t : T?) {
             }
             delete stq
             delete twq
+            dump_poison_leg(tt, mm, "cb", 336, 336, "e2b.encode.cb336.log", TIER1_REL_Q8)
         } else {
             feint("das_metal is not built on this platform - the GPU rung is Apple-only\n")
         }
@@ -487,10 +486,8 @@ def test_gemma4v_tier1_e4b(t : T?) {
         }
         delete st
         delete tw
-        set_gemma4v_q8(true)   // the serving lane on its own bar
         set_every_gpu_tower(false)
-        var twq <- load_gemma4v_tower(mm)
-        reset_gemma4v_q8()
+        var twq <- mint_tower(mm, true)   //! the serving lane on its own bar, minted in memory (a load under the pin bakes a q8 image)
         var stq = Gemma4vState()
         tt |> success(twq.q8, "q8 lane loaded")
         tt |> gate_encode(twq, stq, "cb", 336, 336, "e4b.encode.cb336.log", TIER1_REL_Q8)

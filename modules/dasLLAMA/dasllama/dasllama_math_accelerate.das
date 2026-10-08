@@ -282,9 +282,7 @@ def private accel_bf16_batch(var yp : float?; wp : uint16 const?; xp : float con
         var sp = addr(g_wf32_scratch[0])
         maybe_parallel_for(0, int(d), int(min(d, 32l))) $(rb, re) {
             unsafe {
-                for (i in range64(int64(rb) * n, int64(re) * n)) {
-                    sp[i] = reinterpret<float>(uint(wp[i]) << 16u)
-                }
+                widen_bf16(sp + int64(rb) * n, wp + int64(rb) * n, int64(re - rb) * n)
             }
         }
         accel_sgemm_strips(yp, addr<float const?>(g_wf32_scratch[0]), xp, n, d, ntok)

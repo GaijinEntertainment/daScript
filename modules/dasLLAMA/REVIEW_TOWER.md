@@ -33,9 +33,9 @@ run.** A family filter skips the other families' cells, and a shared path or bor
 reaches the ASR decoder with no line of its file touched.
 
 **A diff reaching the Vulkan tower runs, on a build without the Metal module,
-`test_gemma4v_vulkan_twin` in `tests/test_gemma4v.das`, `test_gemma3v_vulkan_twin` in
+`test_gemma4v_tier1_vulkan` and `test_gemma4v_vulkan_twin` in `tests/test_gemma4v.das`, `test_gemma3v_vulkan_twin` in
 `tests/test_gemma3v.das`, `test_qwen3v_vulkan_twin` in `tests/test_qwen3v.das`,
-`test_qwen25v_vulkan_twin` in `tests/test_qwen25v.das`, `test_whisper_vulkan_twin` in
+`test_qwen25v_vulkan_twin` in `tests/test_qwen25v.das`, `test_gemma4uv_tier1_vulkan` in `tests/test_gemma4uv.das`, `test_whisper_vulkan_twin` in
 `tests/test_whisper.das`,
 `test_encoder_blocks_vulkan`, `test_gemma4a_vulkan_twin`, `test_canary_vulkan_twin` and
 `test_qwen3a_vulkan_front` in `tests/test_audio.das`, `tests/test_vulkan_tower_kernels.das`, the
@@ -112,5 +112,5 @@ chain dispatches into a null pipeline when its build failed.
 
 **A diff that changes the order or the count of the regions a `tw_q8_regions_*` builder in
 `dasllama/dasllama_metal_tower.das` lists also changes, in the same change, every site index its chain
-passes to `wt_mm_vis` or `g4v_mm`.** A site index is the region's position in that list, `TW_Q8_VIS_SITES`
-or `GEMMA4V_GEMMS` a layer.
+passes to `wt_mm`.** A site index is the region's position in that list, `TW_Q8_VIS_SITES` or
+`GEMMA4V_GEMMS` a layer (`TW_Q8_MATS` on the whisper-class list, its stem conv last).

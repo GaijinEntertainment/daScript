@@ -9960,6 +9960,7 @@ class TowerHeadUnpad16 : GkRestride {
     }
 }
 
+//! the qwen25v window attention over the compact rows, one workgroup a window and head, the score block in workgroup memory
 [vk_dispatch(name = "tower_win_attn_cls", kernel = "run", grid = "wgs", params = "wgs : int64"), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-routes")]
 class TowerWinAttn : GkWinAttn {
     override HS = 80u

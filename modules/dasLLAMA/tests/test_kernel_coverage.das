@@ -903,17 +903,19 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // kernel coverage is test_vkt_tower_f16_feeds in test_vulkan_tower_kernels.das
     "tower_ln16_cls_spv", "tower_post_add_ln16_cls_spv", "tower_hpad_b_cls_spv", "tower_hpad16_b_cls_spv", "tower_hunpad16_cls_spv",
     "tower_bias_act_cvt16_cls_spv",
-    // the gemma4v tower's row classes (the clamps, feeds, the two-axis rope, the post-add and the GEGLU; its rms rows are hc_norm's): the stocked
-    // mmproj-gemma-4-E2B-it-bf16.gguf, dispatched by test_gemma4v_vulkan_twin in test_gemma4v.das - no zoo row; their kernel
-    // coverage is test_vkt_tower_rows in test_vulkan_tower_kernels.das (the clamp + halfword feed is no entry: it is the LLM
-    // prefill's f32 -> f16 rows too, which the zoo rows dispatch)
+    // the gemma4v tower's row classes (the clamps, feeds, the two-axis rope, the post-add, the GEGLU and the weighted rms the
+    // vision tails share): the stocked mmproj-gemma-4-E2B-it-bf16.gguf, dispatched by test_gemma4v_vulkan_twin in
+    // test_gemma4v.das - no zoo row; their kernel coverage is test_vkt_tower_rows in test_vulkan_tower_kernels.das (the clamp +
+    // halfword feed is no entry: it is the LLM prefill's f32 -> f16 rows too, which the zoo rows dispatch)
     "tower_clamp_cls_spv", "tower_clamp_rq_cls_spv", "tower_rope2d_cls_spv",
-    "tower_post_add_cls_spv", "tower_geglu_cls_spv",
+    "tower_post_add_cls_spv", "tower_geglu_cls_spv", "tower_rms_cls_spv",
     // the vision chains' stems and tails on the device (the patch im2col, the 2-axis position add, the qwen3v stem assemble, the
-    // grid pool, the standardize rows) and the exact lane's clamp copy ahead of the f32 tile (gemma4v): the stocked vision mmprojs
-    // through the families' Vulkan twins - no zoo row; their bodies are the templates both homes stamp, whose Metal cells are
+    // grid pool, the standardize rows) and the exact lane's clamp copy ahead of the f32 tile (gemma4v): the stocked
+    // mmproj-gemma-3-4b-it-F16.gguf, mmproj-gemma-4-E2B-it-bf16.gguf and mmproj-Qwen3VL-4B-Instruct-F16.gguf through the
+    // families' Vulkan twins - no zoo row; their kernel coverage is test_vkt_tower_vision_rows in test_vulkan_tower_kernels.das
+    // (the clamp copy's is test_vkt_tower_rows), their bodies the templates both homes stamp, whose Metal cells are
     // test_metal_misc_kernels.das' pos_add, q3v_stem and patch_im2col gates and test_metal_prefill_kernels.das' pool and affine
-    // gates; the clamp copy's Vulkan cell is test_vkt_tower_rows
+    // gates
     "tower_patch_im2col_cls_spv", "tower_pos_add_2d_cls_spv", "tower_stem_asm_cls_spv", "tower_pool_2d_cls_spv", "tower_affine_rows_cls_spv",
     "tower_clamp_copy_cls_spv",
     // the biased-block (SigLIP) row classes: the bias with its GELU, the head restrides to the flash tile's width (the
@@ -925,7 +927,7 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     "tower_hpad_cls_spv", "tower_hpad16_cls_spv",
     "tower_hunpad_cls_spv", "tower_rope_tab_cls_spv",
     // the window-attention ViT's classes (qwen25v): the f32 per-window attention over the compact rows and the rms seam (the
-    // gated hidden is the LLM's biased f16 act stamp at a zero row map; the stocked mmproj-Qwen2.5-Omni-3B-f16.gguf,
+    // gated hidden is the shared bias-gate stamp (`TowerBiasGate16`); the stocked mmproj-Qwen2.5-Omni-3B-f16.gguf,
     // dispatched by test_qwen25v_vulkan_twin in test_qwen25v.das); their kernel coverage is test_vkt_tower_win_rows
     "tower_win_attn_cls_spv", "tower_post_add_rms_cls_spv", "tower_bias_gate16_cls_spv",
     // the audio towers' classes - no zoo row runs an audio tower: the Conformer's silu rows (the bias class's unbiased stamp),

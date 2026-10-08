@@ -10800,7 +10800,6 @@ class MetalTwAddRms : GkPostAddLn {
 class MetalTwAddPostRms : GkPostAddLn {
     override RMS = true
     override POST_NORM = true
-    override BIAS = false
 
     [metal_kernel(name = "metal_tw_add_post_rms_msl")]
     def metal_tw_add_post_rms {

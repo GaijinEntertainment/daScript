@@ -1216,6 +1216,91 @@ def private tw_affine_gate(t : T?; var dev, queue) {
         }
         return if (!ran)
         check_buf(t, tag, mc.buf[bx], want, BAR_APPROX, Shape(row_width = width))
+        t |> success(want[0] != x[0], "{tag}: the rows moved off x")
+        var ka0 = ka
+        ka0.std = 0u
+        var inscope want0 <- [for (i in range(total)); x[i] * scale]
+        let bx0 = mc |> io_(x)
+        let ran0 = mc |> cell_record(t, "{tag} scale-only") $(enc : MetalComputeEncoder?) {
+            invoke(kd.enc, enc, pso, mc.buf[bx0], mc.buf[bb], mc.buf[bm], ka0, int64(total))
+        }
+        return if (!ran0)
+        check_buf(t, "{tag} scale-only", mc.buf[bx0], want0, lead_poisoned(BAR_APPROX, want0), Shape(row_width = width))
+    }
+}
+
+//! the NEOX table rope over a fused [q | k | v] row's k slot in place against the CPU `rope_neox_tab_rows` over the gathered k
+//! span: the q and v spans bit for bit as they were, the k span moved, a poisoned expectation reds the compare
+def private tw_rope_tab_gate(t : T?; var dev, queue) {
+    let tag = "tw_rope_tab"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_tw_rope_tab)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let npos = 5
+        let n_head = 3
+        let hs = 32
+        let d = n_head * hs
+        let qs = 3 * d
+        var inscope x <- [for (i in range(npos * qs)); float((i * 37) % 101 - 50) * 0.043]
+        var inscope cos_t <- [for (i in range(npos * hs / 2)); float((i * 7) % 13 - 6) * 0.15]
+        var inscope sin_t <- [for (i in range(npos * hs / 2)); float((i * 11) % 17 - 8) * 0.11]
+        var inscope k_flat <- [for (i in range(npos * d)); x[(i / d) * qs + d + i % d]]   //! the k spans gathered row-major
+        rope_neox_tab_rows(k_flat, int64(npos), int64(n_head), int64(hs), cos_t, sin_t)
+        var inscope want := x
+        for (r in range(npos)) {
+            for (i in range(d)) {
+                want[r * qs + d + i] = k_flat[r * d + i]
+            }
+        }
+        var ka = GkRopeTabArgs(rows = uint(npos), qs = uint(qs), col = uint(d), d = uint(d), dh = uint(hs), coff = 0u, soff = 0u)
+        let bx = mc |> io_(x)
+        let bc = mc |> in_(cos_t)
+        let bs = mc |> in_(sin_t)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[bc], mc.buf[bs], ka, int64(npos * d / 2))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bx], want, lead_poisoned(BAR_APPROX, want), Shape(row_width = qs))
+        t |> success(want[d] != x[d] && want[0] == x[0] && want[2 * d] == x[2 * d], "{tag}: the k span moved, the q and v spans stand")
+    }
+}
+
+//! the gated hidden stamp in place over g against silu(g + bg) . (u + bu) in double, the bias rows at offsets in one plane; a
+//! poisoned expectation reds the compare, the rows moved off g
+def private tw_bias_gate_gate(t : T?; var dev, queue) {
+    let tag = "tw_bias_gate"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_tw_bias_gate)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let ff = 70
+        let rows = 3
+        let total = rows * ff
+        var inscope g <- [for (i in range(total)); float((i * 37) % 101 - 50) * 0.043]
+        var inscope u <- [for (i in range(total)); float((i * 53) % 89 - 44) * 0.031]
+        var inscope wn <- [for (i in range(4 * ff)); float((i * 7) % 13 - 6) * 0.21]   //! the gate bias row at ff, the up bias row at 3 ff
+        var inscope want : array<float>
+        for (i in range(total)) {
+            let gb = double(g[i] + wn[ff + i % ff])
+            want |> push(float(gb / (1.0lf + exp(-gb)) * double(u[i] + wn[3 * ff + i % ff])))
+        }
+        var ka = GkBiasGateArgs(d = uint(ff), nelem = uint(total), goff = uint(ff), uoff = uint(3 * ff))
+        let bg = mc |> io_(g)
+        let bu = mc |> in_(u)
+        let bw = mc |> in_(wn)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bg], mc.buf[bu], mc.buf[bw], ka, int64((total + 3) / 4))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bg], want, lead_poisoned(BAR_APPROX, want), Shape(row_width = ff))
+        t |> success(want[0] != g[0], "{tag}: the rows moved off g")
     }
 }
 
@@ -1257,6 +1342,7 @@ def private tw_rms_gate(t : T?; var dev, queue; d, rows : int) {
         }
         return if (!ran_in)
         check_buf(t, "{tag} in place", mc.buf[bxi], want, BAR_APPROX, Shape(row_width = d))
+        t |> success(want[0] != x[0], "{tag} in place: the rows moved off x")
     }
 }
 
@@ -1327,6 +1413,7 @@ def private tw_seam_gate(t : T?; var dev, queue; kind : TwSeamStamp; d, rows : i
         if (invoke(run, mc.buf[px], mc.buf[py], mc.buf[pxb], ka)) {
             check_buf(t, "{tag} x", mc.buf[px], want_x, BAR_APPROX, Shape(row_width = d))
             check_buf(t, "{tag} xb", mc.buf[pxb], want_xb, BAR_APPROX, Shape(row_width = d))
+            t |> success(want_x[0] != x[0], "{tag}: the joined rows moved off x")
         }
         var ka0 = ka
         ka0.ln_on = 0u
@@ -1386,7 +1473,7 @@ def private tw_pool2d_gate(t : T?; var dev, queue) {
             apart += abs(a - b) > 1e-3 ? 1 : 0
         }
         t |> success(apart > total / 2, "{tag}: the fixture tells a one-axis pool apart ({apart} of {total})")
-        var ka = GkPool2dArgs(width = uint(width), gw = uint(gw), k = uint(k), ow = uint(ow), total = uint(total))
+        var ka = GkPool2dArgs(width = uint(width), gw = uint(gw), k = uint(k), total = uint(total))
         let bx = mc |> in_(x)
         let by = mc |> out_(total)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
@@ -3381,11 +3468,15 @@ def test_metal_prefill_kernels(t : T?) {
                 tw_tail_rows_gate(t, dev, queue)
                 tw_pool2d_gate(t, dev, queue)
                 tw_affine_gate(t, dev, queue)
+                tw_rope_tab_gate(t, dev, queue)
+                tw_bias_gate_gate(t, dev, queue)
                 tw_rms_gate(t, dev, queue, 300, 5)   //! the row past the 256-thread stride
                 tw_rms_gate(t, dev, queue, 70, 3)
+                tw_rms_gate(t, dev, queue, 512, 2)   //! two whole trips of the stride, no tail
                 for (kind in [TwSeamStamp.add_ln, TwSeamStamp.add_rms, TwSeamStamp.add_post_rms]) {
                     tw_seam_gate(t, dev, queue, kind, 300, 3)
                 }
+                tw_seam_gate(t, dev, queue, TwSeamStamp.add_rms, 512, 2)
                 bias_relu_rows_gate(t, dev, queue)
                 st2_conv_gate(t, dev, queue, false, false)
                 st2_conv_gate(t, dev, queue, true, false)

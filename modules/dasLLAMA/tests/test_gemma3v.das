@@ -141,9 +141,7 @@ def test_gemma3v_tier1_gpu(t : T?) {
             set_metal_tower(true)
             delete st
             delete tw
-            set_gemma3v_q8(true)
-            var twq <- load_gemma3v_tower(mm)
-            reset_gemma3v_q8()
+            var twq <- mint_tower(mm, true, 0l, -1l)   //! in memory: a load under the pin would bake the q8 image beside the serving one
             var stq = Gemma3vState()
             let sq0 = metal_tower_stats()
             let dq0 = metal_tower_declines()?["quant_mode"] ?? 0l
@@ -155,6 +153,7 @@ def test_gemma3v_tier1_gpu(t : T?) {
             }
             delete stq
             delete twq
+            dump_poison_leg(tt, mm, "cb", "g3.encode.cb896.log", TIER1_REL_Q8)
             set_metal_tensor_crowns("mulmm_q8")
             metal_prefill_shutdown()
             set_metal_tower_f16(true)   // the twin route's own knob - established, never inherited
@@ -282,7 +281,7 @@ def private mint_tower(mm : string; q8 : bool; nl : int64 = 0l; zero_block : int
 //! the input poison of a device-side dump bar: the q8 tower with `POISON_BLOCK` zeroed, served by the driver, must EXCEED the
 //! bar its dump holds - a bar the poison clears measures nothing
 def private dump_poison_leg(tt : T?; mm : string; kind : string; logname : string; bar_rms : float) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
+    {
         var o = OracleEncode()
         if (!load_oracle_encode(path_join(path_join(models_dir(), "gemma3-vision-oracle"), logname), o)) {
             tt |> skip("oracle dump {logname} not present/parseable - mint via gemma3-vision-oracle/mint_gemma3.sh")

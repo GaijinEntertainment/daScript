@@ -1487,7 +1487,6 @@ struct GkPatchIm2colArgs {
     w : uint          //! the canvas in pixels
     h : uint
     p : uint          //! the patch side
-    n_cols : uint     //! the patch grid's width, w / p
     row_dim : uint    //! a column row's padded width; the columns past 3 x p x p read zero
     npos : uint       //! the patch rows; the rows past them up to `total` read zero (the GEMM's row pad)
     total : uint      //! the rows written x row_dim
@@ -1514,8 +1513,9 @@ class template GkPatchIm2col {
             if (pi < pa.npos && j < 3u * psq) {
                 let c = j / psq
                 let k = j % psq
-                let py = (pi / pa.n_cols) * pa.p + k / pa.p
-                let px = (pi % pa.n_cols) * pa.p + k % pa.p
+                let n_cols = max(1u, pa.w / pa.p)
+                let py = (pi / n_cols) * pa.p + k / pa.p
+                let px = (pi % n_cols) * pa.p + k % pa.p
                 v = src[(py * pa.w + px) * 3u + c] * pa.scale + pa.shift
             }
             dst[gid] = v
@@ -1942,15 +1942,15 @@ struct GkBiasGateArgs {
     nelem : uint
     goff : uint     //! the gate bias row's base in wn
     uoff : uint     //! the up bias row's base in wn
-    act : uint      //! the gate's activation, a BIAS_ACT_* code
 }
 
-//! a gated hidden from two GEMM outputs with their bias rows: g = act(g + bg) . (u + bu), in place over g (OUT32) or as saturated
+//! a gated hidden from two GEMM outputs with their bias rows: g = silu(g + bg) . (u + bu), in place over g (OUT32) or as saturated
 //! halves (OUT16, the f16 tile's feed); four elements an invocation, each guarded against the count
 [ |> template_struct_instance]
 class template GkBiasGate {
     @template_constant OUT16 : bool = false
     @template_constant OUT32 : bool = true
+    @template_constant ACT : uint = 3u   //!< the gate's activation: `BIAS_ACT_SILU`, spelled as its literal - every tower this stamps for gates its hidden so
     @ssbo @binding = 0 @role = "readwrite" g : array<float>
     @ssbo @binding = 1 @role = "read" u : array<float>
     @ssbo @binding = 2 @role = "weight" wn : array<float>
@@ -1959,7 +1959,7 @@ class template GkBiasGate {
 
     def gate_at(e : uint) {
         let c = e % max(1u, pa.d)
-        let v = act_f32(g[e] + wn[pa.goff + c], pa.act) * (u[e] + wn[pa.uoff + c])
+        let v = act_f32(g[e] + wn[pa.goff + c], ACT) * (u[e] + wn[pa.uoff + c])
         static_if (OUT16) {
             outh[e] = half_sat(v)
         } else {
@@ -2136,7 +2136,6 @@ struct GkPool2dArgs {
     width : uint   //! a row's width
     gw : uint      //! the source grid's width, in rows
     k : uint       //! the pool's side
-    ow : uint      //! the pooled grid's width
     total : uint   //! output elements
 }
 
@@ -2152,8 +2151,9 @@ class template GkPool2d {
         if (gid < pa.total) {
             let o = gid / pa.width
             let c = gid % pa.width
-            let oy = o / max(1u, pa.ow)
-            let ox = o % max(1u, pa.ow)
+            let ow = max(1u, pa.gw / max(1u, pa.k))
+            let oy = o / ow
+            let ox = o % ow
             var sum = 0.0
             var dy = 0u
             while (dy < pa.k) {
@@ -2183,8 +2183,8 @@ struct GkAffineRowsArgs {
 [ |> template_struct_instance]
 class template GkAffineRows {
     @ssbo @binding = 0 @role = "readwrite" x : array<float>
-    @ssbo @binding = 1 @role = "read" b : array<float>
-    @ssbo @binding = 2 @role = "read" m : array<float>
+    @ssbo @binding = 1 @role = "weight" b : array<float>
+    @ssbo @binding = 2 @role = "weight" m : array<float>
     @kargs pa : GkAffineRowsArgs
 
     def affine_rows_body {

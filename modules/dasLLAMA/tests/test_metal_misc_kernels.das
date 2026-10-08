@@ -907,7 +907,7 @@ def private patch_im2col_gate(t : T?; var dev, queue; w, h, p, pad : int; scale,
         want |> resize(total)
         let bsrc = mc |> in_(planes)
         let bdst = mc |> out_words(total, -7.0)
-        var pa = GkPatchIm2colArgs(w = uint(w), h = uint(h), p = uint(p), n_cols = uint(n_cols), row_dim = uint(row_dim), npos = uint(npos), total = uint(total), scale = scale, shift = shift)
+        var pa = GkPatchIm2colArgs(w = uint(w), h = uint(h), p = uint(p), row_dim = uint(row_dim), npos = uint(npos), total = uint(total), scale = scale, shift = shift)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
                 invoke(st.enc, enc, mc.buf[bsrc], mc.buf[bdst], pa, int64(total))

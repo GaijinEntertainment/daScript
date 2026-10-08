@@ -432,8 +432,13 @@ frame more as the control. The whisper-class projector tail's
 two row kernels (`tw_tail_rows_gate`): the pair pool and the row-split gate at a 70-wide row over
 five rows against their host forms, the gate's fixture asserted to tell its halves apart; the vision
 tails' row kernels - the grid mean pool (`tw_pool2d_gate`: a 6 x 4 row grid pooled 2 x 2 against the
-host mean, a one-axis pool told apart) and the standardize (`tw_affine_gate`: in place against
-(x * scale - b) * m, two rows past the run kept, the form with no scale told apart). Canary's mel
+host mean, a one-axis pool told apart), the standardize (`tw_affine_gate`: in place against
+(x * scale - b) * m on the standardize arm and x * scale on the scale-only arm, two rows past the run
+kept, the form with no scale told apart), the NEOX table rope over a fused row's k slot
+(`tw_rope_tab_gate`: against `rope_neox_tab_rows` over the gathered span, the q and v slots
+untouched) and the gated hidden (`tw_bias_gate_gate`: silu(g + bg) . (u + bu) in place over g
+against a double form, the bias rows at offsets). The rms and seam gates run at 512 too - two whole
+trips of the 256-thread stride. Canary's mel
 normalization (`cn_melnorm`): the log and the per-feature normalization in place against a double
 form at 70 features (off the 64-thread group), 11 frames of which 7 are valid - the rest zero - and
 two rows past the mel left as they were. The FastConformer
@@ -722,8 +727,8 @@ u/v biases - the scaled keys and the scaled rel table as controls);
 the padded attention route end to end (pad, the h128 bidirectional tile, unpad over sixteen 72-wide
 heads) against `attention_bidir`; and the window classes - the f32 per-window attention over the
 compact rows on sixteen windows (one ragged) against `attention_bidir_windows` with full attention
-over the same rows as the leak control, the rms seam and the gated hidden (the LLM's biased f16 act
-stamp at a zero row map, the qwen25v hidden's stamp) against their CPU forms;
+over the same rows as the leak control, the rms seam and the gated hidden (the shared bias-gate stamp
+`TowerBiasGate16`, the qwen25v hidden's) against their CPU forms;
 the bias class's erf arm (the whisper-class towers' GELU) against `gelu_erf_batch` at 1e-5
 relative - the f32 evaluation of the CPU's double erfc - with the tanh arm missing that bar as the
 told-apart control, and its silu arm (canary's FFN) against `silu` with the tanh arm as its
@@ -2147,7 +2152,9 @@ mean/v0..v3 at 2e-4 with the measured maxdiff logged; skips honestly without the
 On Apple builds the CPU gate pins the tower knob off, and a second test gates the GPU tier-1
 encode against the same dumps on a scale-relative bar (2e-4 + 4e-3*token-rms) - exceeding it is a
 red, the bar each fixture actually held is logged either way, and engage is proven per fixture by
-the encodes counter.
+the encodes counter. On a Vulkan build `test_gemma4uv_tier1_vulkan` runs the same four dumps
+through the Vulkan embedder whole off the planes (the embedder minted in memory), the stem's
+im2col counted on the device beside the encode, the knobs put back through `with_gpu_knobs`.
 `test_gemma4v.das` - stocked suite; the gemma4v ViT tower (E-series) tier-1 parity vs the `-p
 encode` dumps minted on the f32-widened mmproj, CPU, `-fa off` (`mint_e2b.sh` / `mint_e4b.sh`):
 eight E2B fixtures (96^2 cb through 672x336) on the scale-relative bar 2e-4 + 4e-3*token-rms, the

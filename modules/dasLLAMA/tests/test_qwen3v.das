@@ -62,7 +62,6 @@ let private TIER1_REL_Q8 = 5.2e-1
 // proves the served slices still carry their signal
 let private TIER1_REL_Q8_DS = 6.5e-1
 
-[cold_path]
 def private gate_encode(t : T?; tw : Qwen3vTower; var st : Qwen3vState; kind : string; w, h : int; logname : string;
                         rel : float = TIER1_REL) : bool {
     return oracle_gate(t, path_join(models_dir(), "qwen3vl-vision-oracle"), logname, "qwen3vl-vision-oracle/mint.sh (encode.*) / mint_4b.sh (encode4b.*)", kind, w, h,
@@ -147,11 +146,10 @@ def test_qwen3v_tier1(t : T?) {
 }
 
 //! the q8 lane on the Metal device: the deepstack tower minted q8 under the pin serves every block off its q8 planes on the q8 bar, no quant_mode decline
+[cold_path]
 def private q3v_metal_q8_leg(tt : T?; mm4 : string) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        set_qwen3v_q8(true)
-        var twq <- load_qwen3v_tower(mm4)
-        reset_qwen3v_q8()
+        var twq <- mint_tower(mm4, true)   //! in memory: a load under the pin would bake the q8 image beside the serving one
         tt |> success(twq.q8, "the q8 lane minted under the pin")
         var stq = Qwen3vState()
         let sq0 = metal_tower_stats()
@@ -163,7 +161,26 @@ def private q3v_metal_q8_leg(tt : T?; mm4 : string) {
         }
         delete stq
         delete twq
+        dump_poison_leg(tt, mm4, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_Q8_DS)
     }
+}
+
+//! the input poison of a device-side dump bar: the deepstack q8 tower with block 13 zeroed, served by the driver, must EXCEED the
+//! bar its dump holds - a bar the poison clears measures nothing
+[cold_path]
+def private dump_poison_leg(tt : T?; mm : string; kind : string; w, h : int; logname : string; bar_rms : float) {
+    var o = OracleEncode()
+    if (!load_oracle_encode(path_join(path_join(models_dir(), "qwen3vl-vision-oracle"), logname), o)) {
+        tt |> skip("oracle dump {logname} not present/parseable - mint via qwen3vl-vision-oracle/mint_4b.sh")
+        return
+    }
+    var twp <- mint_tower(mm, true, 0l, 13l)
+    var stp = Qwen3vState()
+    let planes <- make_planes(kind, w, h)
+    dump_poison(tt, "qwen3v", "{kind} {w}x{h}", 13l, bar_rms, twp, stp,
+        $(t; var s; var out) => qwen3v_encode(t, s, planes, int64(w), int64(h), out)) $(out) => encode_excess(out, int(qwen3v_row_width(twp)), o, TIER1_ABS, bar_rms)
+    delete stp
+    delete twp
 }
 
 // The Metal tower arm: the SAME fixtures and bars, tower pinned ON — the GPU chain's parity
@@ -492,17 +509,17 @@ def test_qwen3v_tier1_q8_deepstack(t : T?) {
     }
 }
 
-// the lane policy itself - model-free: the default follows the box's accelerate tier (q8 when
-// the tier is off), the pin flips it either way, reset returns to the policy
+// the lane policy itself - model-free: the default follows the GPU tower's exact lane and the box's
+// accelerate tier (q8 when neither serves), the pin flips it either way, reset returns to the policy
 [test]
 def test_qwen3v_lane_knob(t : T?) {
     t |> run("the q8 lane pin and policy default") @(tt : T?) {
-        tt |> equal(qwen3v_serves_q8(), !(qwen3v_gpu_would_serve() || float_batch_override_active()), "the policy default follows the Metal tower and the accelerate tier")
+        tt |> equal(qwen3v_serves_q8(), !(qwen3v_gpu_exact_serves() || float_batch_override_active()), "the policy default follows the Metal tower and the accelerate tier")
         set_qwen3v_q8(true)
         tt |> success(qwen3v_serves_q8(), "pinned q8")
         set_qwen3v_q8(false)
         tt |> success(!qwen3v_serves_q8(), "pinned exact")
         reset_qwen3v_q8()   // from the EXACT pin, so a no-op reset cannot pass as the (q8) policy default
-        tt |> equal(qwen3v_serves_q8(), !(qwen3v_gpu_would_serve() || float_batch_override_active()), "reset returns to the policy default")
+        tt |> equal(qwen3v_serves_q8(), !(qwen3v_gpu_exact_serves() || float_batch_override_active()), "reset returns to the policy default")
     }
 }

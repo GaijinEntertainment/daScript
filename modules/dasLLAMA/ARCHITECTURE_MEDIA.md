@@ -217,10 +217,12 @@ the driver's seats survive the test.
 Every hook answers "declined" in its own return - `false` for the block hooks and the whisper mel and qwen3a's
 front hooks, `-1` for the hooks that return a row count (gemma4a's whole chunk, canary's front) -
 so a decline is a fallback, never an outage, and the CPU form stays the reference. A family calls
-its hook on either lane: the Metal driver declines the q8 encoder of every family but the
-whisper-class tower, whose chain reads both lanes (`ARCHITECTURE_GPU_TOWER.md#tower-encode-chains`),
-and the Vulkan driver the exact one, each as a counted non-policy `quant_mode` decline, which under
-the driver's required mode panics - a caller that pins a lane pins the one its driver serves. While the stage-diff witness is
+its hook on either lane: the vision towers' chains read both lanes on both drivers
+(`ARCHITECTURE_GPU_TOWER.md#tower-encode-chains`, `ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains`);
+of the audio towers the Metal driver serves the whisper-class tower on both lanes and declines the
+q8 encoder of the rest, the Vulkan driver the exact one, each as a counted non-policy `quant_mode`
+decline, which under the driver's required mode panics - a caller that pins a lane pins one its
+driver serves. While the stage-diff witness is
 armed (`set_audio_encode_ref_dir`), the whisper-class tower skips its conv and block hooks and runs
 the CPU forms: the witness diffs the CPU stages' rows against reference dumps, and a stage the
 device served leaves nothing to diff.
@@ -238,9 +240,11 @@ column buffer (`s.x0`, `st.xw`) and never the residual stream the CPU half would
 ### The tower weight lane is a policy, not a default {#tower-weight-lane}
 
 A tower serves its GEMMs on one of two lanes: q8 planes (the CPU serving format) or the file's
-exact f32 planes. Un-pinned, the lane follows the fastest GEMM path on the box - a serving Metal
-driver that reads the f32 blob and declines q8 makes `*_gpu_serves` answering true flip the default
-to exact, and every other box takes q8. Whisper carries no lane policy and serves q8 everywhere:
+exact f32 planes. Un-pinned, the lane follows the fastest GEMM path on the box: a GPU tower registered
+with the f32 lane served (`register_<family>_gpu`'s `f32_lane` - the Metal vision chains, whose f32
+tiles are the faster lane) and answering `*_gpu_serves` true flips the default to exact
+(`*_gpu_exact_serves`); the Vulkan vision chains register the q8 lane as the faster one, so a Vulkan
+box takes q8 and serves a pinned exact tower on its f32 tile; every other box takes q8. Whisper carries no lane policy and serves q8 everywhere:
 the Metal tower reads its q8 planes. Each family exposes the same trio over one `GemmLane` pin
 (`lane_serves_q8`, `dasllama_common.das`): `set_*_q8` pins a lane, `reset_*_q8` returns to the
 policy, `*_serves_q8` reports the lane the next load would take. The
@@ -249,8 +253,8 @@ lane picks the image tag, so the two lanes are separate images that coexist.
 Pins exist for the arms that must not follow the box: the parity legs, the CPU board rows, and the
 facade's fp32 rail.
 
-Every family load logs its GEMM lane and the reason at LOG_INFO - the pin, the serving Metal
-driver, or the CPU default - because the lane changes what the load mints and serves. Where the
+Every family load logs its GEMM lane and the reason at LOG_INFO - the pin, the serving GPU tower's
+lane, the accelerate tier, or the CPU default - because the lane changes what the load mints and serves. Where the
 caller hands the lane in (parakeet, canary), the line names the caller's pick beside the reason
 the policy gives, so a caller that overrides the policy shows as a pick its reason does not match.
 

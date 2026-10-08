@@ -207,12 +207,12 @@ def private queued_encode(tw : auto(TW); var st : auto(ST); var out : array<floa
 //! a poison's device leg: `encode` over the zeroed tower `twp` with the Vulkan tower knob on, one device encode asserted; the rows it wrote
 def private device_poison_leg(tt : T?; tag : string; twp : auto(TW); var stp : auto(ST); encode : block<(t : TW; var s : ST; var out : array<float>) : int64>) : array<float> {
     var inscope out : array<float>
-    let e0 = vulkan_tower_stats().encodes
+    let e0 = gpu_tower_encodes()
     with_gpu_knobs() {
-        set_vulkan_tower(true)
+        set_serving_gpu_tower(true)
         queued_encode(twp, stp, out, encode)
     }
-    tt |> equal(vulkan_tower_stats().encodes - e0, 1l, "{tag} poison: device-served (encodes delta)")
+    tt |> equal(gpu_tower_encodes() - e0, 1l, "{tag} poison: device-served (encodes delta)")
     return <- out
 }
 
@@ -237,16 +237,14 @@ def twin_canvas(tt : T?; family, kind : string; w, h : int; patch : int64; log_s
     }
 }
 
-//! the input poison of a device-side dump bar: `twp` - a q8 tower with `zero_block` zeroed - served by the driver must EXCEED the
-//! bar its dump holds (`bar_rms` x rms), a bar the poison clears measuring nothing; `excess` reads the encode over the dump's bar
+//! the input poison of a device-side dump bar on the serving home: `twp` - a q8 tower with `zero_block` zeroed - served by the driver
+//! must EXCEED the bar its dump holds (`bar_rms` x rms), a bar the poison clears measuring nothing; `excess` reads the encode over the dump's bar
 def dump_poison(tt : T?; family, tag : string; zero_block : int64; bar_rms : float; twp : auto(TW); var stp : auto(ST);
                 encode : block<(t : TW; var s : ST; var out : array<float>) : int64>; excess : block<(out : array<float>) : float>) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        var inscope out <- device_poison_leg(tt, tag, twp, stp, encode)
-        let ex = invoke(excess, out)
-        to_log(LOG_INFO, "{family} vulkan poison leg {tag}: block {zero_block} zeroed -> excess {ex} over the {bar_rms} x rms bar\n")
-        tt |> success(ex > 0.0, "{tag}: a zeroed block through the device chain reds the bar (excess {ex})")
-    }
+    var inscope out <- device_poison_leg(tt, tag, twp, stp, encode)
+    let ex = invoke(excess, out)
+    to_log(LOG_INFO, "{family} device poison leg {tag}: block {zero_block} zeroed -> excess {ex} over the {bar_rms} x rms bar\n")
+    tt |> success(ex > 0.0, "{tag}: a zeroed block through the device chain reds the bar (excess {ex})")
 }
 
 //! a tower minted in memory from `stg`: `truncate_and_poison` cuts it to `nl` blocks and zeroes `zero_block`'s planes, `mint`

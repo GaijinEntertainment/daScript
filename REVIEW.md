@@ -5,8 +5,8 @@ doc: `CLAUDE.md`.
 
 **Subfolders of this repository carry their own `REVIEW.md` checklists - a diff applies the
 `REVIEW.md` of every folder between this one and each file it changes.** A header under
-`include/daScript/<dir>/` also answers to `src/<dir>/REVIEW.md`; a `[test]` file, wherever the
-diff puts it, answers to `tests/REVIEW.md`; a doctest `.cpp` answers to
+`include/daScript/<dir>/` also answers to `src/<dir>/REVIEW.md`; a `[test]` file outside `modules/`,
+wherever the diff puts it, answers to `tests/REVIEW.md`; a doctest `.cpp` answers to
 `tests-cpp/small/REVIEW.md`.
 
 **Removing or weakening `REVIEW.das`'s check that no two git-tracked `.das` files declare the
