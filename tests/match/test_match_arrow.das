@@ -634,3 +634,26 @@ def test_view_patterns(t : T?) {
     t |> equal(clamped(9, 0, 5), "at 5")
     t |> equal(clamped(3, 0, 5), "else")
 }
+
+def private route(req : string) : string {
+    return match (req) {
+        "GET /static/" + _ => "static"
+        "GET " + path && path != "/" => "get {path} {path}"
+        "GET " + _ => "root"
+        "<" + inner + ">" => "tag {inner}"
+        name + ".das" => "script {name}"
+        _ => "other"
+    }
+}
+
+[test]
+def test_string_prefix_and_suffix_patterns(t : T?) {
+    t |> equal(route("GET /static/a.png"), "static")
+    t |> equal(route("GET /x"), "get /x /x")
+    t |> equal(route("GET /"), "root")
+    t |> equal(route("<b>"), "tag b")
+    t |> equal(route("<>"), "tag ")
+    t |> equal(route(">"), "other")
+    t |> equal(route("main.das"), "script main")
+    t |> equal(route("zz"), "other")
+}

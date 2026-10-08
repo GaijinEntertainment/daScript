@@ -368,6 +368,26 @@ The number of explicit elements in the pattern is checked against the array leng
         }
     }
 
+String Patterns
+---------------
+
+``"lit" + rest`` matches a string that starts with ``lit``, ``rest + "lit"`` one that ends with
+it, and ``"<" + inner + ">"`` both. ``rest`` matches the remainder: ``_`` ignores it, and a name
+binds it as a new string - one allocation, made when an arm first reads it and at most once per
+match. The prefix test reads only the prefix; the suffix test needs the string's length, as
+``ends_with`` does:
+
+.. code-block:: das
+
+    def route ( req : string ) {
+        return match ( req ) {
+            "GET /static/" + _ => "static"
+            "GET " + path => "get {path}"
+            name + ".das" => "script {name}"
+            _ => "other"
+        }
+    }
+
 View Patterns
 -------------
 

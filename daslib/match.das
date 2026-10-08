@@ -24,6 +24,7 @@ require daslib/strings_boost
 require daslib/defer
 require daslib/option
 require daslib/result
+require strings // starts_with, ends_with, slice - wrapped by match_string_has / match_string_rest: code this macro emits compiles in the caller's module, which sees match but not match's private requires
 
 /*
 options debugger
@@ -823,6 +824,43 @@ def match_view(var wth : ExprMakeTuple?; access : Expression?; var to : MatchTo)
     return match_any(rtype, sub, cached_value("{describe(access)} => {describe(head)}", compute, wth.at, to), to)
 }
 
+def public match_string_has(s, lit : string; suffix : bool) : bool {
+    //! The test behind a string pattern: ``"lit" + rest`` starts with ``lit``, ``rest + "lit"`` ends with it.
+    return suffix ? ends_with(s, lit) : starts_with(s, lit)
+}
+
+def public match_string_rest(s, lit : string; suffix : bool) : string {
+    //! The remainder a string pattern binds: ``s`` without ``lit`` at its start, or at its end.
+    return suffix ? slice(s, 0, length(s) - length(lit)) : slice(s, length(lit))
+}
+
+[macro_function]
+def is_string_pattern(wth : Expression?) : bool {
+    //! ``"lit" + rest`` or ``rest + "lit"``: a string pattern by its prefix or suffix.
+    return false if (!(wth is ExprOp2) || (wth as ExprOp2).op != "+")
+    let op2 = wth as ExprOp2
+    return match_peel_r2v(op2.left) is ExprConstString || match_peel_r2v(op2.right) is ExprConstString
+}
+
+[macro_function]
+def match_string(what : TypeDeclPtr; var wth : ExprOp2?; access : Expression?; var to : MatchTo) {
+    //! ``"lit" + rest`` matches a string that starts with ``lit``, ``rest + "lit"`` one that ends with it; ``rest`` matches the remainder, sliced lazily and at most once per match - with ``_`` it is never sliced.
+    if (what == null || what.baseType != Type.tString) {
+        to.errors |> match_error("string pattern `{describe_pattern(wth)}` matches only a string, not `{describe(what)}`", wth.at)
+        return false
+    }
+    let suffix = match_peel_r2v(wth.right) is ExprConstString
+    let lit = suffix ? wth.right : wth.left
+    let rest = suffix ? wth.left : wth.right
+    var test = qmacro(match_string_has($e(access), $e(lit), $v(suffix)))
+    test |> force_at(wth.at)
+    to.conditions |> emplace(test)
+    return true if (is_wildcard(rest))
+    var compute = qmacro(match_string_rest($e(access), $e(lit), $v(suffix)))
+    compute |> force_at(wth.at)
+    return match_any(what, rest, cached_value("{describe(access)} => {describe(lit)} {suffix}", compute, wth.at, to), to)
+}
+
 [macro_function]
 def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var to : MatchTo) {   // nolint:STYLE037 - exact-type `is` ladder over TypeDecl shapes
     if (LOG_MATCH) {
@@ -872,6 +910,8 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
             to.errors |> match_error("to_array_move expects array", cll.at)
             return false
         }
+    } elif (to.bind_names && is_string_pattern(wth)) {
+        return match_string(what, wth as ExprOp2, access, to)
     } elif ((wth is ExprOp2) && (wth as ExprOp2).op == "&&") {
         return match_guards(what, wth as ExprOp2, access, to)
     } elif ((wth is ExprOp2) && (wth as ExprOp2).op == "||") {
@@ -1007,7 +1047,7 @@ def prepare_pattern(var pat : Expression?; bind_bare : bool; var names : array<s
             op2.op := "||"
         }
         prepare_pattern(op2.left, bind_bare, names)
-        prepare_pattern(op2.right, bind_bare, names) if (op2.op == "||" || (bind_bare && op2.op == "&"))
+        prepare_pattern(op2.right, bind_bare, names) if (op2.op == "||" || (bind_bare && (op2.op == "&" || is_string_pattern(op2))))
     } elif (pat is ExprVar) {
         let vname = string((pat as ExprVar).name)
         names |> push(vname) if (bind_bare && vname != "_")

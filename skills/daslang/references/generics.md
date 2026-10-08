@@ -229,6 +229,7 @@ it returns from the enclosing function; an assignment body always needs the bloc
 | `pattern && cond` | guard - extra condition using the bound names |
 | `whole & Foo(a = 0)` | both patterns; a bare name on one side binds the whole value |
 | `({ "k" => v, "n" => 1 })` / `({ "a", "b" })` | a table with those keys, values matching (other keys allowed) / a set with those keys; reading never inserts |
+| `"GET " + path` / `name + ".das"` / `"<" + s + ">"` | string prefix / suffix / both; a named rest is a new string (one allocation per match), `_` slices nothing |
 | `(length(_) => (1..10))` | view: matches the pattern against `f(value)` (`_` is the value); computed lazily, at most once per match |
 | `(0..10)` | `0 <= value && value < 10` - half-open; parentheses required outside a tuple; `int` for `range`, `uint` for `urange` |
 | `pattern \| pattern` | either; both sides must bind the same names, possibly from different fields - `V(a = n) \| V(b = n)` takes `n` from the side that matched |
