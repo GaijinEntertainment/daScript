@@ -996,58 +996,63 @@ def arm_body(arm : Expression?; as_value : bool; binds : array<Expression?>) : E
 }
 
 [macro_function]
-def prepare_call_pattern(var call : ExprCall?; bind_bare : bool; var names : array<string>) : void {
+def prepare_call_pattern(var call : ExprCall?; bind_bare : bool) : array<string> {
     //! A table pattern binds in its values, never its keys; ``match_expr`` and range bounds bind nothing.
+    var names : array<string>
     if (is_call_to(call, "to_table_move", "builtin")) {
         for (kv in table_entries(call)) {
-            prepare_pattern((kv as ExprMakeTuple).values[1], bind_bare, names) if (is_arrow_arm(kv))
+            names |> push_from(prepare_pattern((kv as ExprMakeTuple).values[1], bind_bare)) if (is_arrow_arm(kv))
         }
     } elif (!is_call_to(call, "match_expr", "match") && !is_range_call(call)) {
         for (a in call.arguments) {
-            prepare_pattern(a, bind_bare, names)
+            names |> push_from(prepare_pattern(a, bind_bare))
         }
     }
+    return <- names
 }
 
 [macro_function]
-def prepare_sub_patterns(var pat : Expression?; bind_bare : bool; var names : array<string>) : void {
+def prepare_sub_patterns(var pat : Expression?; bind_bare : bool) : array<string> {
+    var names : array<string>
     if (bind_bare && is_view(pat)) {
-        prepare_pattern((pat as ExprMakeTuple).values[1], bind_bare, names)
+        names <- prepare_pattern((pat as ExprMakeTuple).values[1], bind_bare)
     } elif (pat is ExprMakeTuple) {
         for (v in (pat as ExprMakeTuple).values) {
-            prepare_pattern(v, bind_bare, names)
+            names |> push_from(prepare_pattern(v, bind_bare))
         }
     } elif (pat is ExprMakeArray) {
         for (v in (pat as ExprMakeArray).values) {
-            prepare_pattern(v, bind_bare, names)
+            names |> push_from(prepare_pattern(v, bind_bare))
         }
     } elif (pat is ExprMakeStruct) {
         for (st in (pat as ExprMakeStruct).structs) {
             for (mf in *st) {
-                prepare_pattern(mf.value, bind_bare, names)
+                names |> push_from(prepare_pattern(mf.value, bind_bare))
             }
         }
     } elif (pat is ExprMakeVariant) {
         for (mf in (pat as ExprMakeVariant).variants) {
-            prepare_pattern(mf.value, bind_bare, names)
+            names |> push_from(prepare_pattern(mf.value, bind_bare))
         }
     } elif (pat is ExprAsVariant) {
-        prepare_pattern((pat as ExprAsVariant).value, bind_bare, names)
+        names <- prepare_pattern((pat as ExprAsVariant).value, bind_bare)
     } elif (pat is ExprCall) {
-        prepare_call_pattern(pat as ExprCall, bind_bare, names)
+        names <- prepare_call_pattern(pat as ExprCall, bind_bare)
     }
+    return <- names
 }
 
 [macro_function]
-def prepare_pattern(var pat : Expression?; bind_bare : bool; var names : array<string>) : void {
-    //! Before infer: rewrites pattern-level ``|`` into ``||`` (infer would const-fold ``1 | 2`` into ``3``) and collects the names the pattern binds.
+def prepare_pattern(var pat : Expression?; bind_bare : bool) : array<string> {
+    //! Before infer: rewrites pattern-level ``|`` into ``||`` (infer would const-fold ``1 | 2`` into ``3``); the names the pattern binds.
+    var names : array<string>
     if (pat is ExprOp2) {
         var op2 = pat as ExprOp2
         if (op2.op == "|") {
             op2.op := "||"
         }
-        prepare_pattern(op2.left, bind_bare, names)
-        prepare_pattern(op2.right, bind_bare, names) if (op2.op == "||" || (bind_bare && (op2.op == "&" || is_string_pattern(op2))))
+        names <- prepare_pattern(op2.left, bind_bare)
+        names |> push_from(prepare_pattern(op2.right, bind_bare)) if (op2.op == "||" || (bind_bare && (op2.op == "&" || is_string_pattern(op2))))
     } elif (pat is ExprVar) {
         let vname = string((pat as ExprVar).name)
         names |> push(vname) if (bind_bare && vname != "_")
@@ -1055,8 +1060,9 @@ def prepare_pattern(var pat : Expression?; bind_bare : bool; var names : array<s
         let tag = pat as ExprTag
         names |> push(string((tag.subexpr as ExprVar).name)) if (tag.name == "v" && tag.subexpr is ExprVar)
     } else {
-        prepare_sub_patterns(pat, bind_bare, names)
+        names <- prepare_sub_patterns(pat, bind_bare)
     }
+    return <- names
 }
 
 class private MatchBindRenamer : AstVisitor {
@@ -1099,8 +1105,7 @@ class private MatchBindRenamer : AstVisitor {
 [macro_function]
 def hide_bound_names(arm : Expression?; var pattern : Expression?; bind_bare : bool) : void {
     //! Before infer: gives every name the arm binds a private spelling across the whole arm - qmacro tags included - so infer can not resolve (and const-fold) it as an outer variable of the same name.
-    var names : array<string>
-    prepare_pattern(pattern, bind_bare, names)
+    let names <- prepare_pattern(pattern, bind_bare)
     var renamer = new MatchBindRenamer()
     for (n in names) {
         renamer.names |> insert(n) if (!ends_with(n, MATCH_BIND_SUFFIX))
@@ -1218,8 +1223,8 @@ struct private MatchCoverage {
 
 
 [macro_function]
-def private bind_subject(var what : Expression?; idx : int; var prefix : array<Expression?>) : Expression? {
-    //! Evaluates the scrutinee once, into a temp: a reference to an lvalue, otherwise the value copied or moved.
+def private bind_subject(var what : Expression?; idx : int) : Expression? {
+    //! The ``let`` that evaluates the scrutinee once: a reference to an lvalue, otherwise the value copied or moved.
     let tname = make_unique_private_name("__`match`subject`{idx}", what.at)
     let lvalue = what._type.flags.ref || match_peel_r2v(what) is ExprVar
     var decl : Expression?
@@ -1244,9 +1249,14 @@ def private bind_subject(var what : Expression?; idx : int; var prefix : array<E
     var init = (decl as ExprLet).variables[0].init
     init.genFlags.alwaysSafe = true
     init.genFlags.userSaidItsSafe = true
-    prefix |> emplace(decl)
-    var access = qmacro($i(tname))
-    access |> force_at(what.at)
+    return decl
+}
+
+[macro_function]
+def private let_access(decl : Expression?) : Expression? {
+    //! Reads the variable a ``let`` declares.
+    var access = qmacro($i((decl as ExprLet).variables[0].name))
+    access |> force_at(decl.at)
     return access
 }
 
@@ -1468,31 +1478,24 @@ def private format_witness(values : array<string>; labels : array<string>) : str
 }
 
 [macro_function]
-def private missing_values(tab : MatchTable; live : array<int>; col : int; limit : int; var path : array<string>; var found : array<string>) : void {
-    //! Collects value combinations no ``live`` row matches - one more than are shown, so the message can say there are more.
-    return if (length(found) > limit)
-    if (col == length(tab.domains) || empty(live)) {
-        if (empty(live)) {
-            var inscope full := path
-            full |> push_from([for (_c in range(col, length(tab.domains))); MATCH_ANY_OTHER])
-            found |> push(format_witness(full, tab.labels))
-        }
-        return
+def private missing_values(tab : MatchTable; live : array<int>; col : int; limit : int; path : array<string>) : array<string> {
+    //! Value combinations no ``live`` row matches - one more than are shown, so the message can say there are more.
+    var found : array<string>
+    if (empty(live)) {
+        var full := path
+        full |> push_from([for (_c in range(col, length(tab.domains))); MATCH_ANY_OTHER])
+        found |> push(format_witness(full, tab.labels))
+        return <- found
     }
-    if (!has_value([for (ri in live); tab.rows[ri][col].any], false)) {
-        path |> push(MATCH_ANY_OTHER)
-        missing_values(tab, live, col + 1, limit, path, found)
-        path |> pop()
-        return
+    return <- found if (col == length(tab.domains))
+    let all_any = !has_value([for (ri in live); tab.rows[ri][col].any], false)
+    for (v in all_any ? [MATCH_ANY_OTHER] : tab.domains[col].values) {
+        var inscope next := path
+        next |> push(v)
+        found |> push_from(missing_values(tab, [for (ri in live); ri; where cell_covers(tab.rows[ri][col], v)], col + 1, limit, next))
+        break if (length(found) > limit)
     }
-    path |> reserve(length(tab.domains))
-    for (v in tab.domains[col].values) {
-        var inscope sub <- [for (ri in live); ri; where cell_covers(tab.rows[ri][col], v)]
-        path |> push(v)
-        missing_values(tab, sub, col + 1, limit, path, found)
-        path |> pop()
-        return if (length(found) > limit)
-    }
+    return <- found
 }
 
 [macro_function]
@@ -1757,9 +1760,8 @@ def private match_coverage(var types : array<TypeDeclPtr>; var patterns : array<
         }
         prev |> push_from(tab.arm_rows[ai]) if (!guarded || guards_complete(types, pat, guard_masks))
     }
-    var inscope path, found : array<string>
     let shown_limit = 3
-    missing_values(tab, prev, 0, shown_limit, path, found)
+    let found <- missing_values(tab, prev, 0, shown_limit, default<array<string>>)
     let shown <- [for (f in found); "`{f}`"; where f != MATCH_ANY_OTHER]
     res.missing = (empty(found) ? none(type<string>) : some(found[0] == MATCH_ANY_OTHER ? MATCH_ANY_OTHER
         : join([for (f, i in shown, count()); f; where i < shown_limit], ", ") + (length(found) > shown_limit ? " and more" : "")))
@@ -1780,8 +1782,10 @@ def private drop_last_condition(var chain : Expression?) : Expression? {
 
 [macro_function]
 def private match_arm(var types : array<TypeDeclPtr>; var accesses : array<Expression?>; pattern : Expression?; bind_names : bool;
-                      var views : table<string; tuple<slot : string; compute : Expression?>>; var results : array<MatchTo>; var failure : MatchTo) : bool {
-    //! Matches one arm's pattern; an alternation whose sides bind the same names at different places splits the arm, one result per side, in order.
+                      var views : table<string; tuple<slot : string; compute : Expression?>>) : Result<array<MatchTo>; MatchTo> {
+    //! Matches one arm's pattern: one result per side of an alternation whose sides bind the same names at different places, in order - or why it does not match.
+    var results : array<MatchTo>
+    var current := views
     var stack : array<table<uint64; int>>
     stack |> emplace(default<table<uint64; int>>)
     while (!empty(stack)) {
@@ -1790,9 +1794,9 @@ def private match_arm(var types : array<TypeDeclPtr>; var accesses : array<Expre
         var to : MatchTo
         to.bind_names = bind_names
         to.forced := forced
-        to.views := views
+        to.views := current
         if (match_multi(types, accesses, pattern, to)) {
-            views := to.views
+            current := to.views
             results |> emplace(to)
         } elif (to.split != null) {
             let nsides = length(op_sides(to.split, string(to.split.op)))
@@ -1803,11 +1807,10 @@ def private match_arm(var types : array<TypeDeclPtr>; var accesses : array<Expre
                 stack |> emplace(choice)
             }
         } else {
-            swap(failure, to)
-            return false
+            return <- move_err(to, type<array<MatchTo>>)
         }
     }
-    return true
+    return <- move_ok(results, type<MatchTo>)
 }
 
 [macro_function]
@@ -1841,9 +1844,8 @@ class MatchMacro : AstCallMacro {
             }
         }
     }
-    def add_arm_branch(var arm : Expression?; var to : MatchTo; as_value : bool; access : Expression?; var iff : Expression?&;
-                       var catch_all : bool&; var prefix : array<Expression?>) : void {
-        //! Adds one matched arm (or one alternative of a split arm) to the if-chain, innermost first.
+    def add_arm_branch(var arm : Expression?; var to : MatchTo; as_value : bool; access : Expression?; var iff : Expression?) : Expression? {
+        //! The if-chain with one matched arm (or one alternative of a split arm) in front of it; an unconditional first arm is the whole chain.
         let binds <- [for (dv, dn in keys(to.declarations), values(to.declarations)); bound_let(dv, dn); where to.bind_names && !key_exists(to.by_ref, dv)]
         var nblk = arm_body(arm, as_value, binds)
         apply_template(nblk) $(rules) {
@@ -1852,16 +1854,11 @@ class MatchMacro : AstCallMacro {
             }
             rules |> replaceVarTag("_") <| clone_expression(access)
         }
-        if (iff == null && empty(to.conditions)) {
-            catch_all = true
-            iff = nblk
-        } else {
-            var new_iff = new ExprIfThenElse(at = arm.at, cond = join_conditions(to.conditions, arm.at))
-            new_iff.if_true = nblk
-            new_iff.if_false = iff
-            iff = new_iff
-        }
-        prefix |> push_from(to.prefix)
+        return nblk if (iff == null && empty(to.conditions))
+        var new_iff = new ExprIfThenElse(at = arm.at, cond = join_conditions(to.conditions, arm.at))
+        new_iff.if_true = nblk
+        new_iff.if_false = iff
+        return new_iff
     }
     def report_coverage(prog : ProgramPtr; expr : ExprCallMacro?; eblk : ExprBlock?; var types : array<TypeDeclPtr>; var arm_patterns : array<Expression?>;
                         as_value, catch_all : bool) : bool {
@@ -1938,7 +1935,8 @@ class MatchMacro : AstCallMacro {
         var any_errors = false
         var prefix : array<Expression?>
         var types <- [for (i in range(nargs - 1)); expr.arguments[i]._type]
-        var accesses <- [for (i in range(nargs - 1)); bind_subject(expr.arguments[i], i, prefix)]
+        prefix |> push_from([for (i in range(nargs - 1)); bind_subject(expr.arguments[i], i)])
+        var accesses <- [for (decl in prefix); let_access(decl)]
         let access = accesses[0]
         var views : table<string; tuple<slot : string; compute : Expression?>>
         var arm_patterns : array<Expression?>
@@ -1948,14 +1946,21 @@ class MatchMacro : AstCallMacro {
                 let arm_index = eli - ei - 1
                 var arm = eblk.list[arm_index]
                 var pattern = arrows > 0 ? (arm as ExprMakeTuple).values[0] : (arm as ExprIfThenElse).cond
-                var results : array<MatchTo>
-                var failure : MatchTo
-                if (match_arm(types, accesses, pattern, arrows > 0, views, results, failure)) {
+                var arm_match <- match_arm(types, accesses, pattern, arrows > 0, views)
+                if (is_ok(arm_match)) {
+                    var results <- move_unwrap(arm_match)
                     arm_patterns[arm_index] = pattern
+                    views := results |> back().views
                     for (ri in range(length(results))) {
-                        add_arm_branch(arm, results[length(results) - 1 - ri], as_value, access, iff, catch_all, prefix)
+                        var to <- results[length(results) - 1 - ri]
+                        catch_all ||= iff == null && empty(to.conditions)
+                        prefix |> push_from(to.prefix)
+                        iff = add_arm_branch(arm, to, as_value, access, iff)
                     }
-                } elif (report_match_errors || failure.failed) {
+                    continue
+                }
+                let failure <- move_unwrap_err(arm_match)
+                if (report_match_errors || failure.failed) {
                     any_errors = true
                     report_match_failure(prog, failure, pattern, what._type)
                     break
