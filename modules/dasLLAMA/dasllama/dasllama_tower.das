@@ -17,6 +17,53 @@ require dasllama/dasllama_gguf   // read_clamp reads sidecar scalar tensors
 // that every audio AND vision tower composes (ARCHITECTURE_MEDIA.md §1.7). One home: a family
 // file that re-implements a shape found here is a defect; nothing here names a family type.
 
+// Per-layer tensor offsets inside fblob, in layout order. conv weights are stored PERMUTED
+// for the im2col column order (dk-major, then channel): W'[o][dk·C + c] = torch_w[o][c][dk].
+struct LayerOffs {
+    ln1_w : int64
+    ln1_b : int64
+    q_w : int64
+    q_b : int64
+    k_w : int64
+    k_b : int64   // whisper towers have no k bias — the slot stays zeroed and is skipped
+    v_w : int64
+    v_b : int64
+    o_w : int64
+    o_b : int64
+    ln2_w : int64
+    ln2_b : int64
+    fc1_w : int64
+    fc1_b : int64
+    fc2_w : int64
+    fc2_b : int64
+}
+
+//! one block GEMM's region in a tower's q8 planes: its element offset, its input width and its rows - the unit a GPU driver
+//! repacks and the site index its chain dispatches by
+struct Q8Region {
+    woff : int64
+    n : int64
+    rows : int64
+}
+
+let LN_BLOCK_GEMMS = 6l   //! a pre-LN block's GEMM regions, in the order below
+let LN_GEMM_Q = 0l
+let LN_GEMM_K = 1l
+let LN_GEMM_V = 2l
+let LN_GEMM_O = 3l
+let LN_GEMM_FC1 = 4l
+let LN_GEMM_FC2 = 5l
+
+//! a pre-LN block's GEMM regions in record order - the site order both tower drivers read
+def ln_block_regions(o : LayerOffs; d, ff : int64; var out : Q8Region[int(LN_BLOCK_GEMMS)]) {
+    out[LN_GEMM_Q] = Q8Region(woff = o.q_w, n = d, rows = d)
+    out[LN_GEMM_K] = Q8Region(woff = o.k_w, n = d, rows = d)
+    out[LN_GEMM_V] = Q8Region(woff = o.v_w, n = d, rows = d)
+    out[LN_GEMM_O] = Q8Region(woff = o.o_w, n = d, rows = d)
+    out[LN_GEMM_FC1] = Q8Region(woff = o.fc1_w, n = d, rows = ff)
+    out[LN_GEMM_FC2] = Q8Region(woff = o.fc2_w, n = ff, rows = d)
+}
+
 // erfc rational approximation (Numerical Recipes 6.2), |fractional error| < 1.2e-7 —
 // float-level agreement with the reference erff. Double internally.
 def private erf_nr(x : double) : double {

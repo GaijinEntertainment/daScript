@@ -155,8 +155,10 @@ set.** `DASLLAMA_PARITY_FULL=1` is a final pre-PR switch, not the iteration loop
 **A test - or a program a test builds or spawns - whose subject is not the `.dlim` image rail (a
 cell whose subject is a lane knob's effect on the image identity has the rail as its subject)
 never mints or maps a MODEL image: it either runs with `DASLLAMA_IMAGE=0` in its environment, or
-calls no loader that writes a `.dlim` beside the model when `DASLLAMA_IMAGE` is unset; such a
-test loads a media carrier in memory from the family's `stage_*` staging - its `mint_*` twin, or
+calls no loader that writes a `.dlim` beside the model when `DASLLAMA_IMAGE` is unset - every
+`load_<family>_tower` / `load_<family>_embedder` and `load_model_cached`, the callers of
+`cache_via_image` and `cache_via_image_staged` with an image path; such a test loads a media
+carrier in memory from the family's `stage_*` staging - its `mint_*` twin, or
 `cache_via_image_staged` with an empty image path.**
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
@@ -236,9 +238,9 @@ already read.
 **A cell whose claim depends on an environment-read knob its own process has already read names
 that knob's value in the text a red prints - the cell label or the assert.**
 
-**A diff that adds or loosens a bound assert in a cell that is not a kernel-unit cell ships in
-the same change, in each such cell holding the assert, a control that lands outside that
-bound.** A bound nothing has exceeded where it is applied is not known to discriminate there.
+**A diff that adds or loosens a bound assert in a cell that is not a kernel-unit cell, or moves
+one onto another route, lane or backend, ships in the same change, in each such cell holding the
+assert, a control that lands outside that bound on that route.** A bound nothing has exceeded where it is applied is not known to discriminate there.
 
 **A control for a bound assert in a cell that is not a kernel-unit cell changes an input the
 computation reads - a zeroed weight region, a poisoned input element, a mechanism disabled - and
@@ -256,9 +258,10 @@ overwrote, passes.
 change** - the wire-shape pins, the render pins, and a live server case gated on the family's
 smallest GGUF that sits under `LARGE_TIER_BYTES` (`_model_tier.das`).
 
-**A poison control on a tower the Metal driver serves - a run of the gate with the tower's
-weights zeroed, which must fail - zeroes every weight buffer the served route reads.** A poison
-the served route never reads passes on a broken kernel.
+**A poison control on a tower a GPU driver serves - a run of the gate with the tower's weights
+zeroed, which must fail - zeroes every weight plane the served route reads: a q8 tower's quant
+plane, an exact tower's f32 plane and its halfword twin.** A poison the served route never reads
+passes on a broken kernel.
 
 **A function in a file of this folder that requires a module behind an optional `require ?<mod>`
 never names that module's types in its signature - leave a parameter that would carry one

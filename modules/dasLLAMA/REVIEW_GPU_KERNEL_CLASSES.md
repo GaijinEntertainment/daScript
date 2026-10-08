@@ -37,7 +37,8 @@ a module `let` in the body - never a module `var`.**
 **A stamp sets only `@template_constant`s its own compiled body reads: a `static_if` arm, a
 `@template_gate`, an expression, a loop bound, an array extent.** A constant
 no such site reads is a defect - move it to the template whose body reads it, or make the body
-read it.
+read it. A read that sits only inside a `static_if` arm the stamp's own constants compile out is
+not a read.
 
 **A diff that changes a class body, a class template, a base shell, or a helper a stamp's body
 splices diffs, for every stamp built from what it changed, that stamp's generated source against
@@ -63,8 +64,11 @@ writes any field declared on it - fields in the stamp or in the shell may share 
 **A diff that moves a kernel class out of the class template its siblings stamp, or off the base
 shell they derive from, gives the class a `//!` line above its `[metal_dispatch]` /
 `[vk_dispatch]` declaration naming the body difference that keeps it out of that template or
-shell - or, for a move onto a template both homes stamp (`dasllama/dasllama_gpu_kernels_common.das`),
-the template it joined.**
+shell.**
+
+**A diff that moves a standalone kernel class onto a template both homes stamp
+(`dasllama/dasllama_gpu_kernels_common.das`) gives the class a `//!` line above its declaration
+naming the template it joined.**
 
 **A diff that adds or changes a `[metal_dispatch]` / `[vk_dispatch]` binding that no site writes
 after arming - a binding filled before the first encode and never written again - puts

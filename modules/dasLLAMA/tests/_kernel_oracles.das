@@ -31,19 +31,31 @@ def rope_tab_ref(var v : array<float>; base, hs, rot, n : int; neox : bool; tcos
     }
 }
 
+//! the vision stems' 2-axis position add over `npos` rows of `x`, `dim` wide, on a grid `ncols` wide: row p plus the x-table row
+//! p % ncols, then the y-table row p / ncols, the y rows `pos_entries` rows into `tbl` - the engine's (row + ex) + ey order
+def pos_add_2d_ref(x, tbl : array<float>; npos, dim, ncols, pos_entries : int) : array<float> {
+    var want : array<float>
+    want |> resize(npos * dim)
+    for (p in range(npos)) {
+        for (i in range(dim)) {
+            let ex = tbl[(p % ncols) * dim + i]
+            let ey = tbl[(pos_entries + p / ncols) * dim + i]
+            want[p * dim + i] = (x[p * dim + i] + ex) + ey
+        }
+    }
+    return <- want
+}
+
 //! the attention cells' query element `i`: (i * 5) % 11 - 5 eighths
 def attn_q_val(i : int) : float => float((i * 5) % 11 - 5) * 0.125
 
 //! `n` query elements, `attn_q_val` of 0 .. n - 1
-def attn_q_row(n : int) : array<float> {
-    return <- [for (i in range(n)); attn_q_val(i)]
-}
+def attn_q_row(n : int) : array<float> => <- [for (i in range(n)); attn_q_val(i)]
 
 //! The padded-CSR prefix of a MoE route: each expert's row count, its rows' base on the 32-row tile lattice, and `pad`, the
 //! padded total past the last expert.
 def padded_bases(counts : array<int>) : tuple<cnt : array<uint>; base : array<uint>; pad : int> {
-    var cnt : array<uint>
-    var base : array<uint>
+    var cnt, base : array<uint>
     cnt |> reserve(length(counts))
     base |> reserve(length(counts))
     var pad = 0
@@ -168,10 +180,9 @@ def ffn_expert_ref(w1, w3, w2, x : array<float>; m, n, nfe, r1, r3, r2 : int; ro
     var h : array<float>
     h |> reserve(m * nfe)
     for (r in range(m)) {
-        var hr <- [for (i in range(nfe)); silu_f32(g.want[r * nfe + i]) * u.want[r * nfe + i]]
+        var inscope hr <- [for (i in range(nfe)); silu_f32(g.want[r * nfe + i]) * u.want[r * nfe + i]]
         invoke(round_h, hr)
         h |> push_from(hr)
-        delete hr
     }
     var y <- plane_rows_ref(w2, h, m, nfe, n, r2)
     var out <- y.want

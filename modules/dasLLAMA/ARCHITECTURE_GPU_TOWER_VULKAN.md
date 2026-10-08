@@ -143,7 +143,8 @@ table, and the Conformer sets are bound per tile. The f16 feed (`xh_dev`) keeps 
 the encode's live count by design: the feed's rows past the live count reach no live row, because
 every restride reads `rows` and the GEMM output rows past npos those stale rows produce are dead.
 Each block family lists its GEMM regions once, in record order (`vt_g4a_regions`,
-`vt_cn_regions`, `vt_ln_regions`, `vt_q3v_regions`): the upload gathers the regions in that order,
+`vt_cn_regions`, and the lists both drivers read: `ln_block_regions`, `qwen3v_block_regions`,
+`gemma4v_block_regions`): the upload gathers the regions in that order,
 and the schedule walk maps its records in the same order beside a per-record tile or group list,
 so a record's index names one region in both walks.
 A GEMM record on the l column carries the encode's rows rounded up to 256 (`vt_tile_rows`), and

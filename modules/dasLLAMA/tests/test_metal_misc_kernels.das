@@ -9,6 +9,8 @@ require dasllama/dasllama_whisper   // nolint:STYLE030,LINT019 — wdec_kscale, 
 require dasllama/dasllama_math
 require dasllama/dasllama_tower     // layernorm + the shipped gelu flavors + the gemma4v pieces — the tower oracles
 require dasllama/dasllama_rope      // build_rope_tabs_rows — the rope2d gate's tables
+require dasllama/dasllama_qwen3v   // q3v_reorder_src - the stem assemble gate's merge walk
+require _kernel_oracles   // pos_add_2d_ref
 require ?das_metal dasllama/dasllama_metal_kernels  // the decode elementwise/misc kernel set (Apple builds)
 require ?das_metal dasllama/dasllama_metal_common   // the pipeline globals the generated builders read
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
@@ -736,13 +738,22 @@ def private gelu_form_delta(t : T?) {
 
 //! The HX twin's compare: `bh` holds the RNE narrow of each value the same thread stored to `bf`, the sentinel past `live`.
 //! `weighted` off: a ones vector against the weightless CPU norm (gemma4uv's idiom); `hx`: MetalRmsNormHX, its f16 twin the RNE narrow of the f32 store.
-def private rms_gate(t : T?; var dev, queue; dim, nrows : int; eps : float; weighted, hx : bool) {
-    let tag = "rms{hx ? "_hx" : ""}{weighted ? "" : "_weightless"} dim={dim} nrows={nrows}"
+enum RmsStamp {
+    rows   //! MetalRmsNorm, the rows form: one 256-lane threadgroup a row
+    hx     //! MetalRmsNormHX, its f16 twin the RNE narrow of the f32 store
+    tw     //! the tower seam's RMS arm (`MetalTwRms`, add off), out of place and in place
+}
+
+def private rms_gate(t : T?; var dev, queue; dim, nrows : int; eps : float; weighted : bool; stamp : RmsStamp) {
+    let hx = stamp == RmsStamp.hx
+    let tw = stamp == RmsStamp.tw
+    let tag = "rms{hx ? "_hx" : (tw ? "_tw" : "")}{weighted ? "" : "_weightless"} dim={dim} nrows={nrows}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let sh = stamp_of(@@pf_enc_rms_hx)
-        let sp = stamp_of(@@pf_enc_rms)   //! the rows form: one 256-lane threadgroup a row
-        var pso = hx ? (mc |> keep_stamp(sh, err)) : (mc |> keep_stamp(sp, err))
+        let sp = stamp_of(@@pf_enc_rms)
+        let st = stamp_of(@@enc_tw_rms)
+        var pso = hx ? (mc |> keep_stamp(sh, err)) : (tw ? (mc |> keep_stamp(st, err)) : (mc |> keep_stamp(sp, err)))
         return if (!pso_ok(t, tag, pso, err))
         var inscope x, w : array<float>
         x |> resize(nrows * dim)
@@ -769,11 +780,16 @@ def private rms_gate(t : T?; var dev, queue; dim, nrows : int; eps : float; weig
         let byh = mc |> out_words(nrows * dim, float16(PAD_SENTINEL))
         let bdim = mc |> in_plain([uint(dim)])
         let beps = mc |> in_plain([eps])
+        var ka = gk_rms_args(uint(dim), uint(nrows), eps, 0u)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             let (px, pw, py, pd, pe) = (mc.buf[bx], mc.buf[bw], mc.buf[by], mc.buf[bdim], mc.buf[beps])
             if (hx) {
                 stamp_run(sh, pso) {
                     invoke(sh.enc, enc, px, 0ul, pw, py, pd, pe, mc.buf[byh], int64(nrows))
+                }
+            } elif (tw) {
+                stamp_run(st, pso) {
+                    invoke(st.enc, enc, px, py, pw, ka, int64(nrows))
                 }
             } else {
                 stamp_run(sp, pso) {
@@ -782,9 +798,20 @@ def private rms_gate(t : T?; var dev, queue; dim, nrows : int; eps : float; weig
             }
         }
         return if (!ran)
-        check_buf(t, tag, mc.buf[by], want, BAR_TIGHT, Shape(row_width = dim))
+        check_buf(t, tag, mc.buf[by], want, tw ? lead_poisoned(BAR_APPROX, want) : BAR_TIGHT, Shape(row_width = dim))
         if (hx) {
             check_hx_narrow(t, "{tag} hx", mc.buf[byh], mc.buf[by], nrows * dim, nrows * dim)
+        }
+        if (tw) {
+            let bxi = mc |> io_(x)
+            let ran_in = mc |> cell_record(t, "{tag} in place") $(enc : MetalComputeEncoder?) {
+                stamp_run(st, pso) {
+                    invoke(st.enc, enc, mc.buf[bxi], mc.buf[bxi], mc.buf[bw], ka, int64(nrows))
+                }
+            }
+            return if (!ran_in)
+            check_buf(t, "{tag} in place", mc.buf[bxi], want, BAR_APPROX, Shape(row_width = dim))
+            t |> success(want[0] != x[0], "{tag} in place: the rows moved off x")
         }
     }
 }
@@ -865,15 +892,7 @@ def private pos_add_gate(t : T?; var dev, queue; npos, dim, ncols, pos_entries :
             tbl[i] = 1.0e-3 * float(i % 41 + 1)          // x-table rows: tiny exponent
             tbl[pos_entries * dim + i] = 9.0e2 + 0.21 * float(i % 19)   // y-table rows: large again
         }
-        var inscope want : array<float>
-        want |> resize(total)
-        for (p in range(npos)) {
-            for (i in range(dim)) {
-                let ex = tbl[(p % ncols) * dim + i]
-                let ey = tbl[(pos_entries + p / ncols) * dim + i]
-                want[p * dim + i] = (x[p * dim + i] + ex) + ey
-            }
-        }
+        var inscope want <- pos_add_2d_ref(x, tbl, npos, dim, ncols, pos_entries)
         let bx = mc |> io_(x)
         let btbl = mc |> in_(tbl)
         var pa = GkPosAdd2DArgs(dim = uint(dim), ncols = uint(ncols), pos_entries = uint(pos_entries), total = uint(total), tboff = 0u)
@@ -937,10 +956,7 @@ def private q3v_stem_gate(t : T?; var dev, queue; pw, ph, dim : int) {
         want |> resize(total)
         var moved = 0
         for (r in range(npos)) {
-            let g = r / 4
-            let sub = r % 4
-            let gcols = pw / 2
-            let src = ((g / gcols) * 2 + sub / 2) * pw + (g % gcols) * 2 + sub % 2
+            let src = int(q3v_reorder_src(int64(r), int64(pw)))
             moved += src != r ? 1 : 0
             for (i in range(dim)) {
                 want[r * dim + i] = (xn[src * dim + i] + b[boff + i]) + pos[poff + src * dim + i]
@@ -1864,8 +1880,11 @@ def test_metal_misc_kernels(t : T?) {
                 gelu_flavor_gate(t, dev, queue, 800, false)
                 gelu_flavor_gate(t, dev, queue, 5120, false)
                 gelu_form_delta(t)
-                rms_gate(t, dev, queue, 3840, 3, 1.0e-6, false, false)
-                rms_gate(t, dev, queue, 2048, 3, 1.0e-6, true, true)
+                rms_gate(t, dev, queue, 3840, 3, 1.0e-6, false, RmsStamp.rows)
+                rms_gate(t, dev, queue, 2048, 3, 1.0e-6, true, RmsStamp.hx)
+                rms_gate(t, dev, queue, 300, 5, 1.0e-6, true, RmsStamp.tw)   //! the row past the 256-thread stride
+                rms_gate(t, dev, queue, 70, 3, 1.0e-6, true, RmsStamp.tw)
+                rms_gate(t, dev, queue, 512, 2, 1.0e-6, true, RmsStamp.tw)   //! two whole trips of the stride, no tail
                 ew2_hx_gate(t, dev, queue, false, true, false, 3, 2048, 3)
                 ew2_hx_gate(t, dev, queue, true, true, false, 3, 2048, 3)
                 // the bound-total stamps: 40 live rows of 64 inside a 96-row launch, all four combine/twin arms

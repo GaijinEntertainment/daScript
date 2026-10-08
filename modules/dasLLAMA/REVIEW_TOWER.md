@@ -54,9 +54,9 @@ function it calls that another file defines runs `test_whisper_vulkan_wdec`
 (`tests/test_whisper.das`).** Its CPU-vs-GPU transcript cells are the Vulkan ASR-decoder driver's
 parity instrument, and a shared function reaches the driver with no line of its own file touched.
 
-**A hook that any `[init]` of a tower's driver files registers into a seat, and that no gate this
-checklist names covers, is a defect - add a test cell covering it and name it in this checklist,
-in the same change.** A gate covers a hook when it asserts a counter rising on a leg where that
+**A hook that any `[init]` of a tower's driver files registers into a seat, and that no gate in
+the run list of the tower whose driver registers it covers, is a defect - add a test cell covering
+it and name it in that run list, in the same change.** A gate covers a hook when it asserts a counter rising on a leg where that
 hook is the only hook reachable that raises the counter: `vulkan_tower_stats()`'s or
 `metal_tower_stats()`'s `encodes` and `blocks` for a blocks hook, `encodes` for an encode hook,
 `convs` for a front, conv or chunk hook, for the mel hook `mels` on Vulkan and `metal_tower_mel_encodes()` on
@@ -110,7 +110,12 @@ class or builder that route dispatches in the route's ensure chain - the pipelin
 route checks before it serves - so one absent pipeline keeps the CPU route.** A class outside the
 chain dispatches into a null pipeline when its build failed.
 
-**A diff that changes the order or the count of the regions a `tw_q8_regions_*` builder in
-`dasllama/dasllama_metal_tower.das` lists also changes, in the same change, every site index its chain
-passes to `wt_mm`.** A site index is the region's position in that list, `TW_Q8_VIS_SITES` or
-`GEMMA4V_GEMMS` a layer (`TW_Q8_MATS` on the whisper-class list, its stem conv last).
+**A diff that changes either side of a q8 slab's site order - the order or the count of the regions a
+family's block list names (`ln_block_regions` over the family's `LayerOffs`, `gemma4v_block_regions`,
+`qwen3v_block_regions`, or a driver's mapping of one, such as `dasllama/dasllama_metal_tower.das`
+splitting qwen3v's fused qkv region), or a site index a chain passes to `wt_mm` or a schedule walk's
+record index - changes the other side in the same change.** A site index is the region's position in
+the driver's list, `TW_Q8_VIS_SITES` or `GEMMA4V_GEMMS` a layer on Metal (`TW_Q8_MATS` on the
+whisper-class list, its stem conv last), the family's GEMM count a layer on Vulkan; the Metal q8-lane
+cells of `tests/test_gemma3v.das`, `tests/test_gemma4v.das` and `tests/test_qwen3v.das` red on a
+misindexed site, and weakening them is a defect.

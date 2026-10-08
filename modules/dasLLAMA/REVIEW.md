@@ -96,8 +96,8 @@ compiles - wherever the diff puts it, applies `modules/REVIEW_SHADER_EMITTERS.md
 
 **A change to the image rail - `dasllama/dasllama_image.das`, or, wherever the diff puts it, a
 `.dlim` mint (building a `.dlim` from a gguf), a `.dlim` load, an image identity, a flavor (the
-backend-and-layout variant an image is baked for, one part of its identity), or what
-`resident_would_serve` answers, or an environment variable or setter it or any function it calls
+backend-and-layout variant an image is baked for, one part of its identity), which prepared
+image (its tag, lane or flavor) a load requests or mints, or what `resident_would_serve` answers, or an environment variable or setter it or any function it calls
 reads - applies `REVIEW_IMAGE.md`.** The mint of a
 trimmed image - one written without the weight planes the GPU driver holds - reads that answer
 to decide whether to trim.

@@ -152,12 +152,8 @@ def private q3v_metal_q8_leg(tt : T?; mm4 : string) {
         var twq <- mint_tower(mm4, true)   //! in memory: a load under the pin would bake the q8 image beside the serving one
         tt |> success(twq.q8, "the q8 lane minted under the pin")
         var stq = Qwen3vState()
-        let sq0 = metal_tower_stats()
-        let dq0 = metal_tower_declines()?["quant_mode"] ?? 0l
-        if (tt |> gate_encode(twq, stq, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_Q8_DS)) {
-            tt |> equal(metal_tower_stats().encodes - sq0.encodes, 1l, "q8 tower: served on the device (encodes delta)")
-            tt |> equal(metal_tower_stats().blocks - sq0.blocks, 24l, "q8 tower: every block ran on the driver")
-            tt |> equal((metal_tower_declines()?["quant_mode"] ?? 0l) - dq0, 0l, "q8 tower: no quant_mode decline")
+        q8_lane_served(tt, "q8 tower", twq.n_layer) $() : bool {
+            return tt |> gate_encode(twq, stq, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_Q8_DS)
         }
         delete stq
         delete twq

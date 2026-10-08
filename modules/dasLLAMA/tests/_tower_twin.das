@@ -131,9 +131,28 @@ def twin_counters(tt : T?; tag : string; legs : TwinLegs; n_layer, npos : int64)
     tt |> equal(legs.n_cpu, legs.n_dev, "{tag}: token count on both chains")
     tt |> equal(legs.cpu.encodes - legs.exact.encodes, 0l, "{tag}: the knob-off leg never dispatched")
     tt |> equal(legs.cpu.declines - legs.exact.declines, 1l, "{tag}: the knob-off leg recorded the knob decline")
-    tt |> equal(legs.dev.encodes - legs.cpu.encodes, 1l, "{tag}: device-served (encodes delta)")
-    tt |> equal(legs.dev.blocks - legs.cpu.blocks, n_layer, "{tag}: every block ran on the driver (blocks delta)")
-    tt |> equal(legs.dev.rows - legs.cpu.rows, npos, "{tag}: the rows delta is the patch grid")
+    device_leg_served(tt, tag, legs.cpu, legs.dev, n_layer, npos)
+}
+
+//! a device leg's engage evidence against the driver's counters before it (`s0`) and after (`s1`): one encode, every block,
+//! and the patch grid's rows where `npos` is not negative
+def device_leg_served(tt : T?; tag : string; s0, s1 : auto; n_layer, npos : int64) {
+    tt |> equal(s1.encodes - s0.encodes, 1l, "{tag}: device-served (encodes delta)")
+    tt |> equal(s1.blocks - s0.blocks, n_layer, "{tag}: every block ran on the driver (blocks delta)")
+    if (npos >= 0l) {
+        tt |> equal(s1.rows - s0.rows, npos, "{tag}: the rows delta is the patch grid")
+    }
+}
+
+//! a q8-lane leg on the serving GPU tower: where `encode`'s gate ran (true), it served one encode and every block with no
+//! `quant_mode` decline
+def q8_lane_served(tt : T?; tag : string; n_layer : int64; encode : block<() : bool>) {
+    let s0 = gpu_tower_counters()
+    let dq0 = gpu_tower_quant_declines()
+    if (invoke(encode)) {
+        device_leg_served(tt, tag, s0, gpu_tower_counters(), n_layer, -1l)
+        tt |> equal(gpu_tower_quant_declines() - dq0, 0l, "{tag}: no quant_mode decline")
+    }
 }
 
 //! one input three ways - the exact chain, the CPU q8 chain (both knob off), the device chain - then `counters` over the legs and
@@ -321,25 +340,20 @@ def exact_lane_served(tt : T?; tag : string; tw_exact : auto(TW); var st_exact :
             to_log(LOG_INFO, "{tag} exact lane: the driver declined - {vulkan_tower_declines()}\n")
         }
         tt |> equal(n_cpu, n_dev, "{tag} exact lane: token count on both chains")
-        tt |> equal(s1.encodes - s0.encodes, 1l, "{tag} exact lane: device-served (encodes delta)")
-        tt |> equal(s1.blocks - s0.blocks, tw_exact.n_layer, "{tag} exact lane: every block ran on the driver (blocks delta)")
-        tt |> equal(s1.rows - s0.rows, npos, "{tag} exact lane: the rows delta is the patch grid")
+        device_leg_served(tt, "{tag} exact lane", s0, s1, tw_exact.n_layer, npos)
         tt |> equal(dq, 0l, "{tag} exact lane: no quant_mode decline")
-        var st = TowerParityStats()
-        if (tower_parity_stats(tt, "{tag} exact-lane vulkan vs exact cpu", cpu, dev, st)) {
-            tt |> success(st.rel_l2 <= TWIN_EXACT_REL_L2_VK, "{tag} exact lane: the device chain sits within the exact lane's bar ({st.rel_l2} vs {TWIN_EXACT_REL_L2_VK})")
-            var nsq = 0.0lf
-            for (v in cpu) {
-                nsq += double(v) * double(v)
-            }
-            var moved := cpu
-            moved[0] += float(2.0lf * TWIN_EXACT_REL_L2_VK * sqrt(nsq) + double(abs(dev[0] - cpu[0])) + 1.0lf)
-            var stm = TowerParityStats()
-            if (tower_parity_stats(tt, "{tag} exact-lane control", moved, dev, stm)) {
-                tt |> success(stm.rel_l2 > TWIN_EXACT_REL_L2_VK, "{tag} exact lane control: the expectation moved past the bar at one element reds it ({stm.rel_l2})")
-            }
-            delete moved
+        tower_twin_held(tt, "{tag} exact lane", cpu, dev, TWIN_EXACT_REL_L2_VK)
+        var nsq = 0.0lf
+        for (v in cpu) {
+            nsq += double(v) * double(v)
         }
+        var moved := cpu
+        moved[0] += float(2.0lf * TWIN_EXACT_REL_L2_VK * sqrt(nsq) + double(abs(dev[0] - cpu[0])) + 1.0lf)
+        var stm = TowerParityStats()
+        if (tower_parity_stats(tt, "{tag} exact-lane control", moved, dev, stm)) {
+            tt |> success(stm.rel_l2 > TWIN_EXACT_REL_L2_VK, "{tag} exact lane control: the expectation moved past the bar at one element reds it ({stm.rel_l2})")
+        }
+        delete moved
         var inscope poisoned <- device_poison_leg(tt, "{tag} exact lane", twp, stp, encode)
         tower_twin_poisoned(tt, "{tag} exact lane", cpu, poisoned, TWIN_EXACT_REL_L2_VK)
         delete cpu
@@ -379,7 +393,7 @@ def private tower_twin_verdict(t : T?; tag : string; exact, dev : array<float>; 
     if (must_exceed) {
         t |> success(st.rel_l2 > bar, "{tag}: a zeroed block through the device chain EXCEEDS the bar ({st.rel_l2} vs {bar})")
     } else {
-        t |> success(st.rel_l2 <= bar, "{tag}: the device chain sits within the bar the first encode set ({st.rel_l2} vs {bar})")
+        t |> success(st.rel_l2 <= bar, "{tag}: the device chain sits within the bar ({st.rel_l2} vs {bar})")
     }
 }
 

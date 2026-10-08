@@ -1304,52 +1304,11 @@ def private tw_bias_gate_gate(t : T?; var dev, queue) {
     }
 }
 
-//! the RMS arm, add off, vs the CPU rmsnorm past and under the 256-thread stride, out of place and in place, a poisoned control; the weightless form is the same body
-def private tw_rms_gate(t : T?; var dev, queue; d, rows : int) {
-    let tag = "tw_rms d={d} rows={rows}"
-    with_metal_cell(dev, queue) $(var mc : MetalCell) {
-        var err : string
-        let st = stamp_of(@@enc_tw_rms)
-        var pso = mc |> keep_stamp(st, err)
-        return if (!pso_ok(t, tag, pso, err))
-        let eps = 1e-6
-        let total = rows * d
-        var inscope x <- [for (i in range(total)); float((i * 37) % 101 - 50) * 0.043]
-        var inscope w <- [for (i in range(d)); 0.5 + float((i * 5) % 11) * 0.17]
-        var inscope want : array<float>
-        want |> resize(total)
-        for (r in range(rows)) {
-            unsafe {
-                rmsnorm(addr(want[r * d]), addr<float const?>(x[r * d]), addr<float const?>(w[0]), int64(d), eps)
-            }
-        }
-        var ka = gk_rms_args(uint(d), uint(rows), eps, 0u)
-        let bw = mc |> in_(w)
-        let bx = mc |> in_(x)
-        let bxb = mc |> out_(total)
-        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bx], mc.buf[bxb], mc.buf[bw], ka, int64(rows))
-            }
-        }
-        return if (!ran)
-        check_buf(t, tag, mc.buf[bxb], want, lead_poisoned(BAR_APPROX, want), Shape(row_width = d))
-        let bxi = mc |> io_(x)
-        let ran_in = mc |> cell_record(t, "{tag} in place") $(enc : MetalComputeEncoder?) {
-            stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bxi], mc.buf[bxi], mc.buf[bw], ka, int64(rows))
-            }
-        }
-        return if (!ran_in)
-        check_buf(t, "{tag} in place", mc.buf[bxi], want, BAR_APPROX, Shape(row_width = d))
-        t |> success(want[0] != x[0], "{tag} in place: the rows moved off x")
-    }
-}
-
 enum TwSeamStamp {
     add_ln          //! the biased add + layernorm
     add_rms         //! the biased add + rms
     add_post_rms    //! the gemma post-normed add + rms
+    pk_add_ln       //! the pocket seam: the unbiased add + layernorm, the normed rows at a 16-float offset of their buffer
 }
 
 //! the residual seam stamps vs the CPU forms past the 256-thread stride; the ln_on-off leg leaves the norm rows at their
@@ -1358,11 +1317,14 @@ def private tw_seam_gate(t : T?; var dev, queue; kind : TwSeamStamp; d, rows : i
     let tag = "tw_seam {kind} d={d} rows={rows}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let st = kind == TwSeamStamp.add_ln ? stamp_of(@@enc_tw_add_ln) : kind == TwSeamStamp.add_rms ? stamp_of(@@enc_tw_add_rms) : stamp_of(@@enc_tw_add_post_rms)
+        let st = kind == TwSeamStamp.add_ln ? stamp_of(@@enc_tw_add_ln) : (kind == TwSeamStamp.add_rms ? stamp_of(@@enc_tw_add_rms) : (kind == TwSeamStamp.add_post_rms ? stamp_of(@@enc_tw_add_post_rms) : stamp_of(@@enc_pk_add_ln)))
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
         let eps = 1e-6
         let total = rows * d
+        let ln = kind == TwSeamStamp.add_ln || kind == TwSeamStamp.pk_add_ln
+        let biased = kind != TwSeamStamp.pk_add_ln
+        let xboff = kind == TwSeamStamp.pk_add_ln ? 16 : 0   //! the pocket stamp lands the normed rows past a lead the sentinel must keep
         var inscope x <- [for (i in range(total)); float((i * 37) % 101 - 50) * 0.043]
         var inscope y <- [for (i in range(total)); float((i * 53) % 89 - 44) * 0.031]
         var inscope wn <- [for (i in range(4 * d)); 0.5 + float((i * 5) % 11) * 0.17 - (i < d ? 0.9 : 0.0)]   //! the bias row, the norm weight, the norm bias, the post-norm weight
@@ -1380,23 +1342,24 @@ def private tw_seam_gate(t : T?; var dev, queue; kind : TwSeamStamp; d, rows : i
                 }
             } else {
                 for (i in range(d)) {
-                    want_x[r * d + i] = x[r * d + i] + (y[r * d + i] + wn[i])
+                    want_x[r * d + i] = x[r * d + i] + (biased ? y[r * d + i] + wn[i] : y[r * d + i])
                 }
             }
         }
-        var inscope want_xb : array<float>
-        want_xb |> resize(total)
+        var inscope want_xb <- [for (_i in range(xboff)); -7.0]
+        want_xb |> resize(xboff + total)
         for (r in range(rows)) {
             unsafe {
-                if (kind == TwSeamStamp.add_ln) {
-                    layernorm(addr(want_xb[r * d]), addr<float const?>(want_x[r * d]), addr<float const?>(wn[d]), addr<float const?>(wn[2 * d]), int64(d), eps)
+                if (ln) {
+                    layernorm(addr(want_xb[xboff + r * d]), addr<float const?>(want_x[r * d]), addr<float const?>(wn[d]), addr<float const?>(wn[2 * d]), int64(d), eps)
                 } else {
-                    rmsnorm(addr(want_xb[r * d]), addr<float const?>(want_x[r * d]), addr<float const?>(wn[d]), int64(d), eps)
+                    rmsnorm(addr(want_xb[xboff + r * d]), addr<float const?>(want_x[r * d]), addr<float const?>(wn[d]), int64(d), eps)
                 }
             }
         }
         var ka = (kind == TwSeamStamp.add_post_rms ? gk_add_post_rms_args(uint(d), uint(rows), eps, uint(3 * d), true, uint(d))
                             : gk_add_ln_args(uint(d), uint(rows), eps, 0u, true, uint(d), uint(2 * d)))
+        ka.xboff = uint(xboff)
         let pwn = mc |> in_(wn)
         var bwn = mc.buf[pwn]
         let run <- @(bxx, byy, bxbb : MetalBuffer?; pa : GkPostAddLnArgs) : bool {
@@ -1409,26 +1372,26 @@ def private tw_seam_gate(t : T?; var dev, queue; kind : TwSeamStamp; d, rows : i
         }
         let px = mc |> io_(x)
         let py = mc |> in_(y)
-        let pxb = mc |> out_words(total, -7.0)
+        let pxb = mc |> out_words(xboff + total, -7.0)
         if (invoke(run, mc.buf[px], mc.buf[py], mc.buf[pxb], ka)) {
             check_buf(t, "{tag} x", mc.buf[px], want_x, BAR_APPROX, Shape(row_width = d))
-            check_buf(t, "{tag} xb", mc.buf[pxb], want_xb, BAR_APPROX, Shape(row_width = d))
+            check_buf(t, "{tag} xb", mc.buf[pxb], want_xb, BAR_APPROX, FLAT_SHAPE)
             t |> success(want_x[0] != x[0], "{tag}: the joined rows moved off x")
         }
         var ka0 = ka
         ka0.ln_on = 0u
         let px0 = mc |> io_(x)
         let py0 = mc |> in_(y)
-        let pxb0 = mc |> out_words(total, -7.0)
+        let pxb0 = mc |> out_words(xboff + total, -7.0)
         if (invoke(run, mc.buf[px0], mc.buf[py0], mc.buf[pxb0], ka0)) {
             check_buf(t, "{tag} seam alone x", mc.buf[px0], want_x, BAR_APPROX, Shape(row_width = d))
-            let untouched <- [for (_i in range(total)); -7.0]
-            check_buf(t, "{tag} seam alone xb", mc.buf[pxb0], untouched, BAR_EXACT, Shape(row_width = d))
+            let untouched <- [for (_i in range(xboff + total)); -7.0]
+            check_buf(t, "{tag} seam alone xb", mc.buf[pxb0], untouched, BAR_EXACT, FLAT_SHAPE)
         }
         y[d + d / 2] += 0.5
         let px2 = mc |> io_(x)
         let py2 = mc |> in_(y)
-        let pxb2 = mc |> out_words(total, -7.0)
+        let pxb2 = mc |> out_words(xboff + total, -7.0)
         if (invoke(run, mc.buf[px2], mc.buf[py2], mc.buf[pxb2], ka)) {
             t |> success(mc |> rerun_mismatches(px2, want_x, 1e-6, 1e-6, "{tag} x poison (MUST mismatch)") > 0, "{tag}: a poisoned branch element reds the joined rows")
             t |> success(mc |> rerun_mismatches(pxb2, want_xb, 1e-5, 1e-6, "{tag} xb poison (MUST mismatch)") > 0, "{tag}: a poisoned branch element reds the norm rows")
@@ -2698,81 +2661,6 @@ def private rope_store_pocket_gate(t : T?; var dev, queue) {
     }
 }
 
-//! x += a in place and the LayerNorm of the sum at a 16-float offset of y, at a width under the
-//! threadgroup and one past it
-def private pk_add_ln_gate(t : T?; var dev, queue; dim : int) {
-    let tag = "pk_add_ln dim{dim}"
-    with_metal_cell(dev, queue) $(var mc : MetalCell) {
-        var err : string
-        let st = stamp_of(@@enc_pk_add_ln)
-        var pso = mc |> keep_stamp(st, err)
-        return if (!pso_ok(t, tag, pso, err))
-        let eps = 1e-5
-        let yoff = 16
-        var inscope x <- f16_fill(dim, 7, 0.5, -0.3)
-        var inscope a <- f16_fill(dim, 11, 0.4, 0.2)
-        var inscope w <- f16_fill(dim, 5, 0.3, 0.9)
-        var inscope bb <- f16_fill(dim, 3, 0.2, -0.1)
-        var inscope want_x : array<float>
-        want_x |> resize(dim)
-        for (i in range(dim)) {
-            want_x[i] = x[i] + a[i]
-        }
-        var inscope yn : array<float>
-        yn |> resize(dim)
-        unsafe {
-            layernorm(addr(yn[0]), addr<float const?>(want_x[0]), addr<float const?>(w[0]), addr<float const?>(bb[0]), int64(dim), eps)
-        }
-        var inscope want_y : array<float>
-        want_y |> resize(yoff + dim)
-        for (i in range(yoff + dim)) {
-            want_y[i] = i < yoff ? -7.0 : yn[i - yoff]
-        }
-        var inscope wn <- clone_to_move(w)
-        wn |> push_from(bb)
-        let pwn = mc |> in_(wn)
-        var bwn = mc.buf[pwn]
-        var ka = GkPostAddLnArgs(d = uint(dim), rows = 1u, woff = 0u, boff = 0u, eps = eps, ln_on = 1u, lnoff = 0u, lnboff = uint(dim), ascale = 1.0, xboff = uint(yoff))   // nolint:LINT003 — the args seat takes a value
-        let run <- @(bxx : MetalBuffer?; baa : MetalBuffer?; byy : MetalBuffer?) : bool {
-            return queue_record(t, queue, "{tag} dispatch") $(enc : MetalComputeEncoder?) {
-                stamp_run(st, pso) {
-                    invoke(st.enc, enc, bxx, baa, byy, bwn, ka, 1l)
-                }
-            }
-        }
-        let px = mc |> io_(x)
-        let pa = mc |> in_(a)
-        let py = mc |> out_words(yoff + dim, -7.0)
-        if (invoke(run, mc.buf[px], mc.buf[pa], mc.buf[py])) {
-            check_buf(t, "{tag} x", mc.buf[px], want_x, Bar(rel = 1e-6, abs_floor = 1e-6, poison_scaled = true), FLAT_SHAPE)
-            check_buf(t, "{tag} y", mc.buf[py], want_y, Bar(rel = 1e-5, abs_floor = 1e-6, poison_scaled = true), FLAT_SHAPE)   //! f32 mean and variance over values under 1 against the CPU's double mean and variance: an error of a few f32 ulps (6e-8 each), the bar a hundred of them
-        }
-        var ka0 = ka   //! ln_on off: the seam alone, the norm output left at its sentinel
-        ka0.ln_on = 0u
-        let px0 = mc |> io_(x)
-        let pa0 = mc |> in_(a)
-        let py0 = mc |> out_words(yoff + dim, -7.0)
-        let ran0 = queue_record(t, queue, "{tag} seam alone") $(enc : MetalComputeEncoder?) {
-            stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[px0], mc.buf[pa0], mc.buf[py0], bwn, ka0, 1l)
-            }
-        }
-        if (ran0) {
-            check_buf(t, "{tag} seam alone x", mc.buf[px0], want_x, Bar(rel = 1e-6, abs_floor = 1e-6, poison_scaled = true), FLAT_SHAPE)
-            let y_untouched <- [for (_i in range(yoff + dim)); -7.0]
-            check_buf(t, "{tag} seam alone y", mc.buf[py0], y_untouched, BAR_EXACT, FLAT_SHAPE)
-        }
-        a[dim / 2] += 0.5
-        let px2 = mc |> io_(x)
-        let pa2 = mc |> in_(a)
-        let py2 = mc |> out_words(yoff + dim, -7.0)
-        if (invoke(run, mc.buf[px2], mc.buf[pa2], mc.buf[py2])) {
-            t |> success(mc |> rerun_mismatches(px2, want_x, 1e-6, 1e-6, "{tag} x poison (MUST mismatch)") > 0, "{tag}: a poisoned addend reds the joined x")
-            t |> success(mc |> rerun_mismatches(py2, want_y, 1e-5, 1e-6, "{tag} poison (MUST mismatch)") > 0, "{tag}: a poisoned addend reds the norm")
-        }
-    }
-}
-
 //! the row GEMV stamp's kernel of a weight form and epilogue kind: 0 the bare dot, 1 the normed SiLU, 2 the gated
 //! residual, 3 the SiLU over the slab vector, 4 the frame tail
 def private pk_gemv_kernel(q8; kind) {   //! generic, as the gates are: the Apple half alone instantiates it
@@ -3470,13 +3358,12 @@ def test_metal_prefill_kernels(t : T?) {
                 tw_affine_gate(t, dev, queue)
                 tw_rope_tab_gate(t, dev, queue)
                 tw_bias_gate_gate(t, dev, queue)
-                tw_rms_gate(t, dev, queue, 300, 5)   //! the row past the 256-thread stride
-                tw_rms_gate(t, dev, queue, 70, 3)
-                tw_rms_gate(t, dev, queue, 512, 2)   //! two whole trips of the stride, no tail
-                for (kind in [TwSeamStamp.add_ln, TwSeamStamp.add_rms, TwSeamStamp.add_post_rms]) {
+                for (kind in [TwSeamStamp.add_ln, TwSeamStamp.add_rms, TwSeamStamp.add_post_rms, TwSeamStamp.pk_add_ln]) {
                     tw_seam_gate(t, dev, queue, kind, 300, 3)
                 }
                 tw_seam_gate(t, dev, queue, TwSeamStamp.add_rms, 512, 2)
+                tw_seam_gate(t, dev, queue, TwSeamStamp.pk_add_ln, 100, 1)   //! under the stride, the pocket's one row
+                tw_seam_gate(t, dev, queue, TwSeamStamp.pk_add_ln, 512, 1)   //! two whole 256-lane strides
                 bias_relu_rows_gate(t, dev, queue)
                 st2_conv_gate(t, dev, queue, false, false)
                 st2_conv_gate(t, dev, queue, true, false)
@@ -3516,9 +3403,6 @@ def test_metal_prefill_kernels(t : T?) {
                 pk_attn_gate(t, dev, queue, 0, 300)   //! past one 256-key stride of the staged scores
                 pk_attn_gate(t, dev, queue, 8, 300)
                 rope_store_pocket_gate(t, dev, queue)
-                pk_add_ln_gate(t, dev, queue, 100)
-                pk_add_ln_gate(t, dev, queue, 300)
-                pk_add_ln_gate(t, dev, queue, 512)   //! two whole 256-lane strides
                 for (q8 in [false, true]) {
                     for (kind in range(q8 ? 1 : 0, 5)) {   //! the bare q8 dot rides the decode GEMV, gated in test_metal_gemv_kernels
                         pk_gemv_gate(t, dev, queue, q8, kind, 96)

@@ -128,10 +128,8 @@ def test_gemma4v_tier1_gpu(t : T?) {
                             (kind = "cb", w = 672, h = 336, log = "e2b.encode.cb672x336.log")]
             for (fx in fixtures) {
                 let s0 = metal_tower_stats()
-                let ran = gate_encode(tt, tw, st, fx.kind, fx.w, fx.h, fx.log, TIER1_REL_GPU)
-                if (ran) {
-                    tt |> equal(metal_tower_stats().encodes - s0.encodes, 1l, "{fx.kind} {fx.w}x{fx.h}: GPU-served (encodes delta)")
-                    tt |> equal(metal_tower_stats().blocks - s0.blocks, tw.n_layer, "{fx.kind} {fx.w}x{fx.h}: every block ran on the driver (blocks delta)")
+                if (gate_encode(tt, tw, st, fx.kind, fx.w, fx.h, fx.log, TIER1_REL_GPU)) {
+                    device_leg_served(tt, "{fx.kind} {fx.w}x{fx.h}", s0, metal_tower_stats(), tw.n_layer, -1l)
                 }
             }
             // the knob-off leg: the same tower, the CPU chain, no dispatch
@@ -147,12 +145,8 @@ def test_gemma4v_tier1_gpu(t : T?) {
             var twq <- mint_tower(mm, true)   //! in memory: a load under the pin would bake the q8 image beside the serving one
             var stq = Gemma4vState()
             tt |> success(twq.q8, "the q8 lane minted under the pin")
-            let sq0 = metal_tower_stats()
-            let dq0 = metal_tower_declines()?["quant_mode"] ?? 0l
-            if (gate_encode(tt, twq, stq, "cb", 336, 336, "e2b.encode.cb336.log", TIER1_REL_Q8)) {
-                tt |> equal(metal_tower_stats().encodes - sq0.encodes, 1l, "q8 tower: served on the device (encodes delta)")
-                tt |> equal(metal_tower_stats().blocks - sq0.blocks, twq.n_layer, "q8 tower: every block ran on the driver")
-                tt |> equal((metal_tower_declines()?["quant_mode"] ?? 0l) - dq0, 0l, "q8 tower: no quant_mode decline")
+            q8_lane_served(tt, "q8 tower", twq.n_layer) $() : bool {
+                return gate_encode(tt, twq, stq, "cb", 336, 336, "e2b.encode.cb336.log", TIER1_REL_Q8)
             }
             delete stq
             delete twq

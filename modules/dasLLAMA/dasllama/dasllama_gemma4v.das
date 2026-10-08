@@ -642,6 +642,15 @@ def gemma4v_block_offs(t : Gemma4vTower; l : int64) : Gemma4vBlockOffs {
     return o
 }
 
+//! the block's q8 GEMM regions in GEMM order - the site order both tower drivers read
+def gemma4v_block_regions(t : Gemma4vTower; l : int64; var out : Q8Region[int(GEMMA4V_GEMMS)]) {
+    let o = gemma4v_block_offs(t, l)
+    for (g in range64(GEMMA4V_GEMMS)) {
+        let wide = g == GEMMA4V_GEMM_GATE || g == GEMMA4V_GEMM_UP
+        out[g] = Q8Region(woff = o.w[g], n = g == GEMMA4V_GEMM_DOWN ? t.n_ff : t.n_embd, rows = wide ? t.n_ff : t.n_embd)
+    }
+}
+
 // one pre-norm block over the residual stream s.x (npos rows)
 def private g4v_block(t : Gemma4vTower; var s : Gemma4vState; l, npos : int64) {
     let d = t.n_embd

@@ -4884,25 +4884,34 @@ and pp512 is read against its own spread.
   past `ctrl_bars` bars, the widest miss and the tightest control logged with their rows. The cells it
   serves read the same verdicts before and after the fold (hybrid, moe, hc, the regions files 26/26 twice).
 
-### From the vision shared-kernels arc (2026-10-07, Apple M5 Max and the RunPod RTX PRO 4500 Blackwell)
+### From the vision shared-kernels arc (2026-10-08, Apple M5 Max and the RunPod RTX PRO 4500 Blackwell)
 
 The arc folds the vision towers' kernel pairs onto templates both homes stamp, runs every Vulkan
 vision chain whole off the image planes on both weight lanes, and gives the Metal vision chains the
-q8 lane. The lane readings below are the family's encode called thirteen times on one minted tower
-(three warm, the median of ten) with `DASLLAMA_IMAGE=0` and the tower knob on, from a probe over
-the family API (`gemma3v_encode`, `gemma4v_encode`, `qwen3v_encode`); the Vulkan box runs its cm2 arm
-(`DASLLAMA_COOPMAT` unset), the Metal box its f32 tiles with no crown. Encode ms, the exact lane
-then the q8 lane of the same file.
+q8 lane. The lane readings below come from `harness/vision_lane_probe.das`:
+`DASLLAMA_IMAGE=0 bin/daslang -jit modules/dasLLAMA/harness/vision_lane_probe.das -- <family> <q8 0|1> <mmproj> <w> <h>`
+with `DAS_TUNE_POLICY` unset - the tower staged and minted in memory under the lane pin, no `.dlim`,
+the family's encode (`gemma3v_encode`, `gemma4v_encode`, `qwen3v_encode`, `qwen25v_encode`) called
+thirteen times on a checkerboard canvas, the median of the last ten in ms. The Metal box ran the
+probe alone, no box profile applied; the Vulkan box ran it under `DASLLAMA_GPU=1` with
+`DASLLAMA_COOPMAT` unset (the cm2 arm). Each lane is its own process, so a lane pair is
+`direction-grade`. Encode ms, the exact lane then the q8 lane of the same file.
 
-- **The lane the policy keeps is the faster one on each home.** Metal (M5 Max): gemma3v at the fixed
-  896 canvas 340.6 / 507.3, gemma4v E2B at 672x336 29.1 / 30.1, qwen3v 4B at 448 26.2 / 55.1 - the
-  f32 tiles beat the q8 GEMM ladder with its half feed on every family, so the Metal chains keep the
-  file's planes as the default. Vulkan (RTX PRO 4500): gemma3v 280.4 / 87.2, gemma4v 26.3 / 23.1,
-  qwen3v 46.1 / 32.8 - the exact lane rides the f32 tile over the whole blob (no feed, no schedule)
-  and the q8 lane the cm2 tiles, so the Vulkan chains keep the q8 image as the default and serve a
-  pinned exact tower on the f32 tile; the f16 slab for the exact lane is `followup_vulkan.md` row 95's
-  lever.
-- **The qwen25v Metal chain's folds read 67.5 -> 52.8 -> 50.9 ms** on the 448 checkerboard (the
-  timing probe, the median of ten): the shared bias-gate stamp storing the halves the down GEMM reads in
-  one dispatch (52.8), then the seam stamps folding each block's pre-norm into the residual add
-  (50.9).
+- **The lane the policy keeps is the faster one on each home** (`direction-grade`). Metal (M5 Max):
+  gemma3v at the fixed 896 canvas 340.9 / 507.3, gemma4v E2B at 672x336 29.1 / 30.1, qwen3v 4B at
+  448 26.3 / 55.1 - the f32 tiles beat the q8 GEMM ladder with its half feed on every family, so the
+  Metal chains keep the file's planes as the default. Vulkan (RTX PRO 4500): gemma3v 280.4 / 87.2,
+  gemma4v 26.3 / 23.1, qwen3v 46.1 / 32.8 - the exact lane rides the f32 tile over the whole blob
+  (no feed, no schedule) and the q8 lane the cm2 tiles, so the Vulkan chains keep the q8 image as
+  the default and serve a pinned exact tower on the f32 tile; the f16 slab for the exact lane is
+  `followup_vulkan.md` row 95's lever.
+- **The qwen25v Metal chain's folds read 67.5 -> 52.8 -> 50.9 ms** on the 448 checkerboard
+  (`direction-grade`, the probe at three commits of the arc): the shared bias-gate stamp storing the
+  halves the down GEMM reads in one dispatch (52.8), then the seam stamps folding each block's
+  pre-norm into the residual add (50.9).
+- **A weight drop discharges the vision towers' device memory.** The Metal tower frees its q8
+  vision slab (`g_tw_q8_vis` - the block regions' q8 bytes and scales, one slab for the file, keyed
+  on the blob and the scales so a re-mint of the same file reuses it) on `tw_weights_drop` and at
+  shutdown; the Vulkan tower forgets its vision marks (`vt_vis_forget` - the planes, im2col, stem
+  weight and norm buffers' capacities and the stem-slab freshness) with its scratch, so the next
+  file's canvas grows them from zero instead of reading a stale key as fresh.

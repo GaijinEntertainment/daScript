@@ -22,6 +22,8 @@ require ?vulkan dasllama/dasllama_vulkan_classes
 require ?vulkan _vkd_oracles
 require _compares   // nolint:STYLE030,LINT019 — the compares, inside the vulkan arms alone
 require _attn_oracle   // attn_row_scored: the softmax row the attention oracles share
+require _kernel_oracles   // nolint:STYLE030,LINT019 — pos_add_2d_ref, inside the vulkan arms alone
+require dasllama/dasllama_qwen3v   // nolint:STYLE030,LINT019 — q3v_reorder_src, the same
 require _vk_kq_fixtures   // nolint:STYLE030,LINT019 — f16r, inside the vulkan arms alone
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_math   // nolint:STYLE030,LINT019 - the oracles' device-math twins, used only inside the vulkan static_if arms (a build without the module drops them)
@@ -642,23 +644,13 @@ def test_vkt_tower_vision_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate
                     col_want[i] = col_cpu[i] * 2.0 - 1.0
                 }
                 check_rows(t, "tower_patch_im2col the patch columns under the [0, 1] -> [-1, 1] map vs im2col_rgb_patches, the pad rows zero", col_dev, col_want, BAR_EXACT, VR_PD)
-                var x_want : array<float>
-                x_want |> resize(nd)
-                for (pi in range(npos)) {
-                    for (i in range(d)) {
-                        let ex = tbl[(pi % VR_PW) * d + i]
-                        let ey = tbl[(VR_POS_ENTRIES + pi / VR_PW) * d + i]
-                        x_want[pi * d + i] = (x[pi * d + i] + ex) + ey
-                    }
-                }
+                let x_want <- pos_add_2d_ref(x, tbl, npos, d, VR_PW, VR_POS_ENTRIES)
                 check_rows(t, "tower_pos_add_2d (row + x-table row) + y-table row vs the CPU form", x_dev, x_want, BAR_EXACT, d)
                 t |> success(x_want[0] != x[0], "tower_pos_add_2d: the rows moved off x")
                 var asm_want : array<float>
                 asm_want |> resize(nd)
                 for (r in range(npos)) {
-                    let g = r / 4   //! the merge-adjacent walk the CPU stem reads (`q3v_reorder_src`): 2 x 2 partners adjacent, groups row-major
-                    let sub = r % 4
-                    let src = ((g / (VR_PW / 2)) * 2 + sub / 2) * VR_PW + (g % (VR_PW / 2)) * 2 + sub % 2
+                    let src = int(q3v_reorder_src(int64(r), int64(VR_PW)))
                     for (i in range(d)) {
                         asm_want[r * d + i] = (xn[src * d + i] + bias[i]) + pos[src * d + i]
                     }

@@ -17,6 +17,7 @@ require dasllama/dasllama_whisper
 require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_vulkan_tower
+require dasllama/dasllama_tower
 
 //! The whisper ASR-decoder Vulkan driver, q8-native: the per-window cross-KV and the decode step
 //! (`ARCHITECTURE_GPU_TOWER_VULKAN.md`, the Vulkan ASR-decoder section); the Metal ASR-decoder driver fills the same hooks on an Apple build.
@@ -371,17 +372,17 @@ def private wd_upload_weights(w : WhisperModel) {
     r.wq_dev = wd_dev_buf(r.wq_bytes)
     r.ws_dev = wd_dev_buf(r.ws_bytes)
     let lay = active_q8_repack_layout(g_active_needs_repack)
-    var regions : array<VtRegion>
+    var regions : array<Q8Region>
     regions |> reserve(nl * 10l + 1l)
-    regions |> push(VtRegion(woff = w.d_te_q_off, n = d, rows = r.nvocab))
+    regions |> push(Q8Region(woff = w.d_te_q_off, n = d, rows = r.nvocab))
     r.site_meta |> reserve(nl * WD_LAYER_SITES + 1l)
     for (l in range64(nl)) {
         let lo = dec_layer_offsets(w, l)
         for (woff in fixed_array(lo.q_w, lo.k_w, lo.v_w, lo.o_w, lo.cq_w, lo.ck_w, lo.cv_w, lo.co_w)) {
-            regions |> push(VtRegion(woff = woff, n = d, rows = d))
+            regions |> push(Q8Region(woff = woff, n = d, rows = d))
         }
-        regions |> push(VtRegion(woff = lo.fc1_w, n = d, rows = 4l * d))
-        regions |> push(VtRegion(woff = lo.fc2_w, n = 4l * d, rows = d))
+        regions |> push(Q8Region(woff = lo.fc1_w, n = d, rows = 4l * d))
+        regions |> push(Q8Region(woff = lo.fc2_w, n = 4l * d, rows = d))
         r.site_meta |> push(wd_site_meta([lo.q_w, lo.k_w, lo.v_w]))   // nolint:STYLE012 - a layer's sites append to the previous layer's
         r.site_meta |> push(wd_site_meta([lo.o_w]))
         r.site_meta |> push(wd_site_meta([lo.cq_w]))

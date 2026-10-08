@@ -7,12 +7,10 @@ require dasllama/dasllama_gemma3v
 require dasllama/dasllama_gemma4v
 require dasllama/dasllama_qwen3v
 require dasllama/dasllama_qwen25v
-require dasllama/dasllama_tower
 require dasllama/dasllama_math
 require ?das_metal dasllama/dasllama_metal_tower
 require ?vulkan dasllama/dasllama_vulkan_tower
 require daslib/jobque_boost
-require daslib/algorithm
 require daslib/strings_convert
 
 let WARM = 3

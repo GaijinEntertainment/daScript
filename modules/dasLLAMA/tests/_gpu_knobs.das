@@ -89,13 +89,33 @@ def set_serving_gpu_tower(on : bool) {
     }
 }
 
-//! tower encodes served since the process started: the Metal tower's where das_metal is built in, else the Vulkan tower's
-def gpu_tower_encodes() : int64 {
+typedef GpuTowerCounters = tuple<encodes : int64; rows : int64; blocks : int64; declines : int64>   //! the serving tower's counters since the process started
+
+//! the serving tower's counters: the Metal tower's where das_metal is built in, else the Vulkan tower's, zeros with neither
+def gpu_tower_counters() : GpuTowerCounters {
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        return metal_tower_stats().encodes
+        let s = metal_tower_stats()
+        return (encodes = s.encodes, rows = s.rows, blocks = s.blocks, declines = s.declines)
     } else {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            return vulkan_tower_stats().encodes
+            let s = vulkan_tower_stats()
+            return (encodes = s.encodes, rows = s.rows, blocks = s.blocks, declines = s.declines)
+        } else {
+            return (encodes = 0l, rows = 0l, blocks = 0l, declines = 0l)
+        }
+    }
+}
+
+//! tower encodes served since the process started, on the serving tower
+def gpu_tower_encodes() : int64 => gpu_tower_counters().encodes
+
+//! the serving tower's `quant_mode` declines since the process started
+def gpu_tower_quant_declines() : int64 {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return metal_tower_declines()?["quant_mode"] ?? 0l
+    } else {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            return vulkan_tower_declines()?["quant_mode"] ?? 0l
         } else {
             return 0l
         }

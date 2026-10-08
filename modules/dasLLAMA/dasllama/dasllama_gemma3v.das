@@ -618,6 +618,15 @@ def gemma3v_block_offs(t : Gemma3vTower; l : int64) : Gemma3vBlockOffs {
     return o
 }
 
+//! the block as the pre-LN record the whisper-class chains read: its GEMM regions in `ln_block_regions`' order
+def gemma3v_ln_offs(t : Gemma3vTower; l : int64) : LayerOffs {
+    let o = gemma3v_block_offs(t, l)
+    return LayerOffs(ln1_w = o.ln1_w, ln1_b = o.ln1_b, ln2_w = o.ln2_w, ln2_b = o.ln2_b,
+        q_w = o.w[GEMMA3V_GEMM_Q], q_b = o.b[GEMMA3V_GEMM_Q], k_w = o.w[GEMMA3V_GEMM_K], k_b = o.b[GEMMA3V_GEMM_K],
+        v_w = o.w[GEMMA3V_GEMM_V], v_b = o.b[GEMMA3V_GEMM_V], o_w = o.w[GEMMA3V_GEMM_O], o_b = o.b[GEMMA3V_GEMM_O],
+        fc1_w = o.w[GEMMA3V_GEMM_UP], fc1_b = o.b[GEMMA3V_GEMM_UP], fc2_w = o.w[GEMMA3V_GEMM_DOWN], fc2_b = o.b[GEMMA3V_GEMM_DOWN])
+}
+
 // one pre-norm block over the residual stream s.x (npos rows)
 def private g3v_block(t : Gemma3vTower; var s : Gemma3vState; l, npos : int64) {
     let d = t.n_embd

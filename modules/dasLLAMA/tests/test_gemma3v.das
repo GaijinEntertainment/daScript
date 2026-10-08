@@ -125,10 +125,8 @@ def test_gemma3v_tier1_gpu(t : T?) {
                             (kind = "green", log = "g3.encode.green896.log")]
             for (fx in fixtures) {
                 let s0 = metal_tower_stats()
-                let ran = gate_encode(tt, tw, st, fx.kind, fx.log, TIER1_REL_GPU)
-                if (ran) {
-                    tt |> equal(metal_tower_stats().encodes - s0.encodes, 1l, "{fx.kind}: GPU-served (encodes delta)")
-                    tt |> equal(metal_tower_stats().blocks - s0.blocks, tw.n_layer, "{fx.kind}: every block ran on the driver (blocks delta)")
+                if (gate_encode(tt, tw, st, fx.kind, fx.log, TIER1_REL_GPU)) {
+                    device_leg_served(tt, fx.kind, s0, metal_tower_stats(), tw.n_layer, -1l)
                 }
             }
             // the knob-off leg: the same tower, the CPU chain, no dispatch
@@ -143,13 +141,9 @@ def test_gemma3v_tier1_gpu(t : T?) {
             delete tw
             var twq <- mint_tower(mm, true, 0l, -1l)   //! in memory: a load under the pin would bake the q8 image beside the serving one
             var stq = Gemma3vState()
-            let sq0 = metal_tower_stats()
-            let dq0 = metal_tower_declines()?["quant_mode"] ?? 0l
-            if (tt |> gate_encode(twq, stq, "cb", "g3.encode.cb896.log", TIER1_REL_Q8)) {
-                let sq1 = metal_tower_stats()
-                tt |> equal(sq1.encodes - sq0.encodes, 1l, "q8 tower: served on the device (encodes delta)")
-                tt |> equal(sq1.blocks - sq0.blocks, twq.n_layer, "q8 tower: every block ran on the driver")
-                tt |> equal((metal_tower_declines()?["quant_mode"] ?? 0l) - dq0, 0l, "q8 tower: no quant_mode decline")
+            tt |> success(twq.q8, "the q8 lane minted under the pin")
+            q8_lane_served(tt, "q8 tower", twq.n_layer) $() : bool {
+                return tt |> gate_encode(twq, stq, "cb", "g3.encode.cb896.log", TIER1_REL_Q8)
             }
             delete stq
             delete twq

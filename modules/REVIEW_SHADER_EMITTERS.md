@@ -45,16 +45,19 @@ is a shape constant.
 specialization path - one compiled variant per constant shape - or records the kernel as having
 none in an `ARCHITECTURE*.md` at the root of the module it ships in.**
 
-**A diff that claims, in a commit message, a PR body or a line of an `ARCHITECTURE*.md`, an emitted
-shape value or that a kernel's emitted output did not change reads the claim from the emitted
-artifact - the SPIR-V words `dasSpirv` builds or the MSL text `dasMetal` writes - never from the
-das source, and its PR body names the artifact read and the value read there, or, for a no-change
-claim, that the artifacts before and after the diff matched.** Emitted shape is the structure of the emitted kernel - its
-signature, its parameter attributes and binding numbers, its statement forms - and the constants
-that structure carries: a tile, an unroll width, a SPIR-V kernel's local size (the `LocalSize`
-execution mode the SPIR-V words carry), the extent of a local or `@workgroup` array. A grid is not
-one, and neither is a Metal threadgroup size - both are dispatch arguments, read at the encoder
-call site.
+**A diff that claims, in a commit message, a PR body or a line of an `ARCHITECTURE*.md`, a value
+of a kernel's emitted shape (a number stated as what `dasSpirv` or `dasMetal` emitted) or that a
+kernel's emitted output did not change reads the claim from the emitted artifact - the SPIR-V
+words `dasSpirv` builds or the MSL text `dasMetal` writes - never from the das source.** A
+description of what the das body declares - its tile, its lane count, where its scores sit - is
+not such a claim. Emitted shape is the structure of the emitted kernel - its signature, its
+parameter attributes and binding numbers, its statement forms - and the constants that structure
+carries: a tile, an unroll width, a SPIR-V kernel's local size (the `LocalSize` execution mode the
+SPIR-V words carry), the extent of a local or `@workgroup` array. A grid is not one, and neither
+is a Metal threadgroup size - both are dispatch arguments, read at the encoder call site.
+
+**A diff that makes such a claim names, in its PR body, the artifact read and the value read
+there, or, for a no-change claim, that the artifacts before and after the diff matched.**
 
 **A diff that adds a kernel-model capability to one emitter adds it to the other, or leaves the
 shared ledger (`dasMetal/ARCHITECTURE.md#kernel-model-asymmetry-ledger`) naming that
@@ -74,12 +77,17 @@ A float operand keeps the op off its native fast path.
 
 **A diff that adds a global-rooted-array read, moves one to a new index, past a condition that
 stopped it from running at an index outside the region, or into a compiled variant it was not
-in, or changes the bound a dispatch hands its kernel or the size its buffer is allocated at,
-keeps the read's index inside the region the code that allocates the buffer sizes for that
+in, keeps the read's index inside the region the code that allocates the buffer sizes for that
 dispatch - the dispatch's own bound is not that region - or inside slack, an allocation past the
 region's end that the kernel's module-root `ARCHITECTURE*.md` names.** A global-rooted-array read
 is a module global, a `@workgroup` array or a `self.<member>` resource read in a kernel body or a
 `def` it calls; a compiled variant is a `[spirv_kernel]`, `[compute_shader]` or `[metal_kernel]`
-variant, and a removed gate or a widened gate constant moves a read into one. A guard on the
-read, a clamp into the region, a guard on the store of a block the read loads whole, or a
-`static_if` or `@template_gate` that compiles the read out of a variant satisfies the rule.
+variant - each stamp of a template both emitters compile is its own variant, so a read moved
+onto a shared template enters the other emitter's variant - and a removed gate or a widened gate
+constant moves a read into one. A guard on the read, a clamp into the region, a guard on the
+store of a block the read loads whole, or a `static_if` or `@template_gate` that compiles the
+read out of a variant satisfies the rule.
+
+**A diff that changes the bound a dispatch hands its kernel, or the size a buffer a
+global-rooted-array read indexes is allocated at, keeps every such read's index inside the region
+the allocation sizes for that dispatch, or inside the named slack, as above.**

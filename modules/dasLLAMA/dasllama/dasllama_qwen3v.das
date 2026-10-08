@@ -650,7 +650,7 @@ def private q3v_check_planes(t : Qwen3vTower; src : string) {
 
 // the (h, w) walk order after the spatial merge: 2×2 partners adjacent, groups row-major -
 // the positions fill and the merge permute follow the same walk
-def private q3v_reorder_src(r, pw : int64) : int64 {
+def q3v_reorder_src(r, pw : int64) : int64 {
     let g = r / 4l
     let sub = r % 4l
     let gcols = pw / 2l
@@ -704,6 +704,16 @@ def qwen3v_block_offs(t : Qwen3vTower; l : int64) : Qwen3vBlockOffs {
         at += sizes[g]
     }
     return o
+}
+
+//! the block's q8 GEMM regions in GEMM order (the fused qkv rows one region) - the site order both tower drivers read
+def qwen3v_block_regions(t : Qwen3vTower; l : int64; var out : Q8Region[int(QWEN3V_GEMMS)]) {
+    let d = t.n_embd
+    let o = qwen3v_block_offs(t, l)
+    out[QWEN3V_GEMM_QKV] = Q8Region(woff = o.w[QWEN3V_GEMM_QKV], n = d, rows = 3l * d)
+    out[QWEN3V_GEMM_O] = Q8Region(woff = o.w[QWEN3V_GEMM_O], n = d, rows = d)
+    out[QWEN3V_GEMM_UP] = Q8Region(woff = o.w[QWEN3V_GEMM_UP], n = d, rows = t.ff_pad)
+    out[QWEN3V_GEMM_DOWN] = Q8Region(woff = o.w[QWEN3V_GEMM_DOWN], n = t.ff_pad, rows = d)
 }
 
 // one block GEMM on the lane the load picked: requant + the q8q8 batch kernel when q8, the

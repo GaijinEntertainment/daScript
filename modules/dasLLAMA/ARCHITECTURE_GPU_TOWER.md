@@ -102,8 +102,9 @@ two clamps (`g4v_tail_body`). With the tail on the device the soft tokens alone 
 rows stay there. The vision chains serve both weight lanes: an exact tower's block GEMMs ride the f32
 tiles over the blob (the crowned halfword twin where the crown compiles it), a q8 tower's the prefill
 ladder's q8 GEMM over the vision q8 slab (`g_tw_q8_vis`: the family's block regions repacked once a
-tower beside the audio slab, `tw_q8_attach_g3v` / `_q3v` / `_g4v` over `tw_q8_regions_*`, keyed by the
-tower's q8 plane) with the half feed where the ladder reads one (`pf_q8_mm_half`), so a pinned q8 tower
+tower beside the audio slab, `tw_q8_attach_vis` over the family's block list - `ln_block_regions` over
+`gemma3v_ln_offs`, `qwen3v_block_regions` with the fused qkv split three ways, `gemma4v_block_regions` -
+keyed by the tower's q8 planes and their scales) with the half feed where the ladder reads one (`pf_q8_mm_half`), so a pinned q8 tower
 serves on the driver and declines nothing; the families register the f32 lane as served, so the policy
 prefers the file's planes under the tower.
 

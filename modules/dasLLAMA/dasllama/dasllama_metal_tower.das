@@ -238,13 +238,6 @@ def private tw_q8_region_of(qblob : PlaneI8; qscales : PlaneF; off, n, rows : in
 var private g_tw_q8_vis : St2SlabBase            //!< the served vision tower's q8 block GEMM planes as one device blob, beside the audio one
 var private @exact_size g_tw_q8_vis_boffs : array<uint64>    //!< its regions' byte offsets, the family's count a layer
 
-//! a GEMM region's offset, width and rows in a tower's q8 planes
-struct private TwQ8Region {
-    off : int64
-    n : int64
-    rows : int64
-}
-
 //! a q8 slab's key: the q8 planes and their scales under the layout the load repacked under - a pure read, since selecting again could name another
 def private tw_q8_key(qblob : PlaneI8; qscales : PlaneF) : uint64 {
     let lay = active_q8_repack_layout(kernel_backend_needs_repack(active_kernel_backend()))
@@ -262,7 +255,7 @@ def private tw_q8_attach_vis(t : auto(TT)) : bool => tw_q8_attach_slab(g_tw_q8_v
 //! a tower's q8 block GEMM planes as one device blob, `regions` repacked out of the CPU backend's layout at a byte offset each in
 //! `boffs`, keyed by the planes under that layout; true where the slab already holds them, false where the buffer cannot be made
 [cold_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
-def private tw_q8_attach_slab(var slab : St2SlabBase; var boffs : array<uint64>; qblob : PlaneI8; qscales : PlaneF; regions : array<TwQ8Region>) : bool {
+def private tw_q8_attach_slab(var slab : St2SlabBase; var boffs : array<uint64>; qblob : PlaneI8; qscales : PlaneF; regions : array<Q8Region>) : bool {
     let lay = active_q8_repack_layout(kernel_backend_needs_repack(active_kernel_backend()))
     let key = tw_q8_key(qblob, qscales)
     return true if (st2_slab_current(slab, key))
@@ -276,7 +269,7 @@ def private tw_q8_attach_slab(var slab : St2SlabBase; var boffs : array<uint64>;
     boffs |> reserve_resize(long_length(regions))
     var cur = 0ul
     for (i, rg in range64(long_length(regions)), regions) {
-        boffs[i] = tw_q8_region_of(qblob, qscales, rg.off, rg.n, rg.rows, lay, staging, cur)
+        boffs[i] = tw_q8_region_of(qblob, qscales, rg.woff, rg.n, rg.rows, lay, staging, cur)
     }
     var blob = metal_new_buffer(g_dev, cur)
     if (blob != null) {
@@ -300,20 +293,16 @@ def private tw_q8_attach(t : AudioTower) : bool {
     return ok
 }
 
-def private tw_q8_regions(t : AudioTower) : array<TwQ8Region> {
-    var @exact_size rg : array<TwQ8Region>
+def private tw_q8_regions(t : AudioTower) : array<Q8Region> {
+    var @exact_size rg : array<Q8Region>
     let d = t.d_model
-    let ff = t.n_ff
     rg |> reserve(t.n_layer * TW_Q8_MATS + 1l)
+    var recs : Q8Region[int(LN_BLOCK_GEMMS)]
     for (l in range64(t.n_layer)) {
-        let lo = enc_layer_offsets(t, l)
-        for (woff in [lo.q_w, lo.k_w, lo.v_w, lo.o_w]) {
-            rg |> push(TwQ8Region(off = woff, n = d, rows = d))
-        }
-        rg |> push(TwQ8Region(off = lo.fc1_w, n = d, rows = ff))
-        rg |> push(TwQ8Region(off = lo.fc2_w, n = ff, rows = d))
+        ln_block_regions(enc_layer_offsets(t, l), d, t.n_ff, recs)
+        rg |> push_from(recs)
     }
-    rg |> push(TwQ8Region(off = t.conv2_w_off, n = 3l * d, rows = d))
+    rg |> push(Q8Region(woff = t.conv2_w_off, n = 3l * d, rows = d))
     return <- rg
 }
 
@@ -338,46 +327,45 @@ def private wt_mm_at(enc : MetalComputeEncoder?; q8 : bool; bq8 : MetalBuffer?; 
     }
 }
 
-def private tw_q8_regions(t : Gemma3vTower) : array<TwQ8Region> {
-    var @exact_size rg : array<TwQ8Region>
+def private tw_q8_regions(t : Gemma3vTower) : array<Q8Region> {
+    var @exact_size rg : array<Q8Region>
     rg |> reserve(t.n_layer * TW_Q8_VIS_SITES)
+    var recs : Q8Region[int(LN_BLOCK_GEMMS)]
     for (l in range64(t.n_layer)) {
-        let o = gemma3v_block_offs(t, l)
-        for (g in [GEMMA3V_GEMM_Q, GEMMA3V_GEMM_K, GEMMA3V_GEMM_V, GEMMA3V_GEMM_O]) {
-            rg |> push(TwQ8Region(off = o.w[g], n = t.n_embd, rows = t.n_embd))
-        }
-        rg |> push(TwQ8Region(off = o.w[GEMMA3V_GEMM_UP], n = t.n_embd, rows = t.ff_pad))
-        rg |> push(TwQ8Region(off = o.w[GEMMA3V_GEMM_DOWN], n = t.ff_pad, rows = t.n_embd))
+        ln_block_regions(gemma3v_ln_offs(t, l), t.n_embd, t.ff_pad, recs)
+        rg |> push_from(recs)
     }
     return <- rg
 }
 
-def private tw_q8_regions(t : Qwen3vTower) : array<TwQ8Region> {
-    var @exact_size rg : array<TwQ8Region>
+//! the family's list with the fused qkv region split three ways - q, then k at d x d, v at 2d x d - the chain's three GEMMs
+def private tw_q8_regions(t : Qwen3vTower) : array<Q8Region> {
+    var @exact_size rg : array<Q8Region>
     let d = t.n_embd
     rg |> reserve(t.n_layer * TW_Q8_VIS_SITES)
+    var recs : Q8Region[int(QWEN3V_GEMMS)]
     for (l in range64(t.n_layer)) {
-        let o = qwen3v_block_offs(t, l)
-        for (k in range64(3l)) {   //! the fused qkv rows as three regions: q, then k at d x d, v at 2d x d
-            rg |> push(TwQ8Region(off = o.w[QWEN3V_GEMM_QKV] + k * d * d, n = d, rows = d))
+        qwen3v_block_regions(t, l, recs)
+        for (g in range64(QWEN3V_GEMMS)) {
+            if (g == QWEN3V_GEMM_QKV) {
+                for (k in range64(3l)) {
+                    rg |> push(Q8Region(woff = recs[g].woff + k * d * d, n = d, rows = d))
+                }
+            } else {
+                rg |> push(recs[g])
+            }
         }
-        rg |> push(TwQ8Region(off = o.w[QWEN3V_GEMM_O], n = d, rows = d))
-        rg |> push(TwQ8Region(off = o.w[QWEN3V_GEMM_UP], n = d, rows = t.ff_pad))
-        rg |> push(TwQ8Region(off = o.w[QWEN3V_GEMM_DOWN], n = t.ff_pad, rows = d))
     }
     return <- rg
 }
 
-def private tw_q8_regions(t : Gemma4vTower) : array<TwQ8Region> {
-    var @exact_size rg : array<TwQ8Region>
+def private tw_q8_regions(t : Gemma4vTower) : array<Q8Region> {
+    var @exact_size rg : array<Q8Region>
     rg |> reserve(t.n_layer * GEMMA4V_GEMMS)
+    var recs : Q8Region[int(GEMMA4V_GEMMS)]
     for (l in range64(t.n_layer)) {
-        let o = gemma4v_block_offs(t, l)
-        for (g in range64(GEMMA4V_GEMMS)) {
-            let n = g == GEMMA4V_GEMM_DOWN ? t.n_ff : t.n_embd
-            let rows = g == GEMMA4V_GEMM_GATE || g == GEMMA4V_GEMM_UP ? t.n_ff : t.n_embd
-            rg |> push(TwQ8Region(off = o.w[g], n = n, rows = rows))
-        }
+        gemma4v_block_regions(t, l, recs)
+        rg |> push_from(recs)
     }
     return <- rg
 }

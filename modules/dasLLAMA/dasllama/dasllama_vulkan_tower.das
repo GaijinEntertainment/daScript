@@ -941,16 +941,9 @@ def private vt_sets_q25v(var r : VtResident) {
 def private vt_lo(c : Clamp; input : bool) : float => c.active ? (input ? c.imin : c.omin) : -VT_NO_CLAMP
 def private vt_hi(c : Clamp; input : bool) : float => c.active ? (input ? c.imax : c.omax) : VT_NO_CLAMP
 
-//! one block GEMM's region in the tower's q8 plane: its element offset, its input width and its rows - the repack unit
-struct VtRegion {
-    woff : int64
-    n : int64
-    rows : int64
-}
-
 //! the q8 planes' regions gathered into the device layout (`wq` the quants, `ws` the halfword scales)
 [cold_path]
-def vt_gather_regions(qblob : PlaneI8; qscales : PlaneF; regions : array<VtRegion>; lay : Q8RepackLayout; var wq, ws : array<uint8>) {
+def vt_gather_regions(qblob : PlaneI8; qscales : PlaneF; regions : array<Q8Region>; lay : Q8RepackLayout; var wq, ws : array<uint8>) {
     let q8e = kq_elems(KqFmt.q8)
     for (reg in regions) {
         q8_gather_rows(plane_at(qblob, reg.woff), null, plane_at(qscales, reg.woff / q8e), reg.n, reg.rows, q8_gather_slice(reg.rows, lay.mr), lay.mr, lay.kgroup, lay.wbias,
@@ -981,7 +974,7 @@ def vt_sched_walk(@scratch var maps : array<uint>; meta : HostBuf; nrec : int64;
 //! the q8 planes' regions gathered into the device layout and uploaded, `wq_bytes` of quants to `wq_dev` and `ws_bytes` of
 //! halfword scales to `ws_dev`
 [cold_path]
-def vt_upload_regions(qblob : PlaneI8; qscales : PlaneF; regions : array<VtRegion>; lay : Q8RepackLayout; wq_dev, ws_dev : uint64; wq_bytes, ws_bytes : int64) {
+def vt_upload_regions(qblob : PlaneI8; qscales : PlaneF; regions : array<Q8Region>; lay : Q8RepackLayout; wq_dev, ws_dev : uint64; wq_bytes, ws_bytes : int64) {
     var wq, ws : array<uint8>
     wq |> reserve_resize(wq_bytes)
     ws |> reserve_resize(ws_bytes)
@@ -995,7 +988,7 @@ def vt_upload_regions(qblob : PlaneI8; qscales : PlaneF; regions : array<VtRegio
 }
 
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def private vt_upload(var r : VtResident; key : uint64; qblob : PlaneI8; qscales : PlaneF; regions : array<VtRegion>;
+def private vt_upload(var r : VtResident; key : uint64; qblob : PlaneI8; qscales : PlaneF; regions : array<Q8Region>;
                       blob : PlaneF; rows_off, rows_n, ones_n : int64; lay : Q8RepackLayout) : bool {
     vt_upload_begin(r, key)
     r.wq_bytes = qblob.n
@@ -1106,18 +1099,18 @@ let private VT_G4A_FF_DOWN_1 = 10l
 let private VT_G4A_TAIL_GEMMS = 2l   //! the projector tail's records after the blocks': the out-proj, the mm-proj
 
 [arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def private vt_g4a_regions(lo : G4aLayer; d, ff : int64; var out : VtRegion[int(VT_G4A_GEMMS)]) {
-    out[VT_G4A_FF_UP] = VtRegion(woff = lo.ff_up, n = d, rows = ff)
-    out[VT_G4A_FF_DOWN] = VtRegion(woff = lo.ff_down, n = ff, rows = d)
-    out[VT_G4A_Q] = VtRegion(woff = lo.q, n = d, rows = d)
-    out[VT_G4A_K] = VtRegion(woff = lo.k, n = d, rows = d)
-    out[VT_G4A_V] = VtRegion(woff = lo.v, n = d, rows = d)
-    out[VT_G4A_O] = VtRegion(woff = lo.o, n = d, rows = d)
-    out[VT_G4A_REL] = VtRegion(woff = lo.attn_k_rel, n = d, rows = d)
-    out[VT_G4A_PW1] = VtRegion(woff = lo.conv_pw1, n = d, rows = 2l * d)
-    out[VT_G4A_PW2] = VtRegion(woff = lo.conv_pw2, n = d, rows = d)
-    out[VT_G4A_FF_UP_1] = VtRegion(woff = lo.ff_up_1, n = d, rows = ff)
-    out[VT_G4A_FF_DOWN_1] = VtRegion(woff = lo.ff_down_1, n = ff, rows = d)
+def private vt_g4a_regions(lo : G4aLayer; d, ff : int64; var out : Q8Region[int(VT_G4A_GEMMS)]) {
+    out[VT_G4A_FF_UP] = Q8Region(woff = lo.ff_up, n = d, rows = ff)
+    out[VT_G4A_FF_DOWN] = Q8Region(woff = lo.ff_down, n = ff, rows = d)
+    out[VT_G4A_Q] = Q8Region(woff = lo.q, n = d, rows = d)
+    out[VT_G4A_K] = Q8Region(woff = lo.k, n = d, rows = d)
+    out[VT_G4A_V] = Q8Region(woff = lo.v, n = d, rows = d)
+    out[VT_G4A_O] = Q8Region(woff = lo.o, n = d, rows = d)
+    out[VT_G4A_REL] = Q8Region(woff = lo.attn_k_rel, n = d, rows = d)
+    out[VT_G4A_PW1] = Q8Region(woff = lo.conv_pw1, n = d, rows = 2l * d)
+    out[VT_G4A_PW2] = Q8Region(woff = lo.conv_pw2, n = d, rows = d)
+    out[VT_G4A_FF_UP_1] = Q8Region(woff = lo.ff_up_1, n = d, rows = ff)
+    out[VT_G4A_FF_DOWN_1] = Q8Region(woff = lo.ff_down_1, n = ff, rows = d)
 }
 
 def private vt_g4a_key(t : Gemma4aEncoder; lay : Q8RepackLayout) : uint64 {
@@ -1129,16 +1122,16 @@ def private vt_g4a_key(t : Gemma4aEncoder; lay : Q8RepackLayout) : uint64 {
 def private vt_upload_g4a(var r : VtResident; key : uint64; t : Gemma4aEncoder; lay : Q8RepackLayout) : bool {
     let d = t.d_model
     let ff = t.n_ff
-    var regions : array<VtRegion>
+    var regions : array<Q8Region>
     regions |> reserve(t.n_layer * VT_G4A_GEMMS + 3l)
-    var recs : VtRegion[int(VT_G4A_GEMMS)]
+    var recs : Q8Region[int(VT_G4A_GEMMS)]
     for (l in range64(t.n_layer)) {
         vt_g4a_regions(t.layers[l], d, ff, recs)
         regions |> push_from(recs)
     }
-    regions |> push(VtRegion(woff = t.inproj_w, n = d, rows = d))
-    regions |> push(VtRegion(woff = t.outproj_w, n = d, rows = t.proj_dim))
-    regions |> push(VtRegion(woff = t.mmproj_w, n = t.proj_dim, rows = t.proj_dim))
+    regions |> push(Q8Region(woff = t.inproj_w, n = d, rows = d))
+    regions |> push(Q8Region(woff = t.outproj_w, n = d, rows = t.proj_dim))
+    regions |> push(Q8Region(woff = t.mmproj_w, n = t.proj_dim, rows = t.proj_dim))
     let ok = vt_upload(r, key, t.qblob, t.qscales, regions, t.blob, 0l, t.blob.n, t.proj_dim, lay)
     delete regions
     if (!ok) {
@@ -1348,7 +1341,7 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
     var s_rel = sets.s_rel
     var s_outproj = vt_tail_gemm_set(r, vp, false)
     var s_mmproj = vt_tail_gemm_set(r, vp, true)
-    var recs : VtRegion[int(VT_G4A_GEMMS)]
+    var recs : Q8Region[int(VT_G4A_GEMMS)]
     let rec_tiles = fixed_array(vff, v, v, v, v, v, v_rel, v2d, v, vff, v)
     vt_sched_walk(g_vt_maps, r.meta, nrec) $(rid : int64) : VtSchedRec {
         if (rid >= nrec - 2l) {
@@ -1582,36 +1575,36 @@ def private vt_fc_dw2d(raw : VkCommandBuffer; var h : VkHaz; tap_major : bool; v
     }
 }
 
-def private vt_cn_regions(lo : CanaryLayerOffs; d, ff : int64; var out : VtRegion[int(VT_CN_GEMMS)]) {
-    out[VT_CN_FF1A] = VtRegion(woff = lo.ff1a_w, n = d, rows = ff)
-    out[VT_CN_FF1B] = VtRegion(woff = lo.ff1b_w, n = ff, rows = d)
-    out[VT_CN_Q] = VtRegion(woff = lo.q_w, n = d, rows = d)
-    out[VT_CN_K] = VtRegion(woff = lo.k_w, n = d, rows = d)
-    out[VT_CN_V] = VtRegion(woff = lo.v_w, n = d, rows = d)
-    out[VT_CN_POS] = VtRegion(woff = lo.pos_w, n = d, rows = d)
-    out[VT_CN_O] = VtRegion(woff = lo.o_w, n = d, rows = d)
-    out[VT_CN_PW1] = VtRegion(woff = lo.pw1_w, n = d, rows = 2l * d)
-    out[VT_CN_PW2] = VtRegion(woff = lo.pw2_w, n = d, rows = d)
-    out[VT_CN_FF2A] = VtRegion(woff = lo.ff2a_w, n = d, rows = ff)
-    out[VT_CN_FF2B] = VtRegion(woff = lo.ff2b_w, n = ff, rows = d)
+def private vt_cn_regions(lo : CanaryLayerOffs; d, ff : int64; var out : Q8Region[int(VT_CN_GEMMS)]) {
+    out[VT_CN_FF1A] = Q8Region(woff = lo.ff1a_w, n = d, rows = ff)
+    out[VT_CN_FF1B] = Q8Region(woff = lo.ff1b_w, n = ff, rows = d)
+    out[VT_CN_Q] = Q8Region(woff = lo.q_w, n = d, rows = d)
+    out[VT_CN_K] = Q8Region(woff = lo.k_w, n = d, rows = d)
+    out[VT_CN_V] = Q8Region(woff = lo.v_w, n = d, rows = d)
+    out[VT_CN_POS] = Q8Region(woff = lo.pos_w, n = d, rows = d)
+    out[VT_CN_O] = Q8Region(woff = lo.o_w, n = d, rows = d)
+    out[VT_CN_PW1] = Q8Region(woff = lo.pw1_w, n = d, rows = 2l * d)
+    out[VT_CN_PW2] = Q8Region(woff = lo.pw2_w, n = d, rows = d)
+    out[VT_CN_FF2A] = Q8Region(woff = lo.ff2a_w, n = d, rows = ff)
+    out[VT_CN_FF2B] = Q8Region(woff = lo.ff2b_w, n = ff, rows = d)
 }
 
 [cold_path, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
 def private vt_upload_fc(var r : VtResident; key : uint64; fc : VtFc; lay : Q8RepackLayout) : bool {
     let d = fc.d
     let ff = fc.ff
-    var regions : array<VtRegion>
+    var regions : array<Q8Region>
     regions |> reserve(fc.n_layer * VT_CN_GEMMS + 3l)
-    var recs : VtRegion[int(VT_CN_GEMMS)]
+    var recs : Q8Region[int(VT_CN_GEMMS)]
     for (l in range64(fc.n_layer)) {
         vt_cn_regions(g_vt_fc_offs[l], d, ff, recs)
         regions |> push_from(recs)
     }
     let nch = fc.nch
     let w3 = conv_s2_out(conv_s2_out(conv_s2_out(fc.n_mel)))
-    regions |> push(VtRegion(woff = fc.c3_w, n = nch, rows = nch))
-    regions |> push(VtRegion(woff = fc.c6_w, n = nch, rows = nch))
-    regions |> push(VtRegion(woff = fc.pre_w, n = w3 * nch, rows = d))
+    regions |> push(Q8Region(woff = fc.c3_w, n = nch, rows = nch))
+    regions |> push(Q8Region(woff = fc.c6_w, n = nch, rows = nch))
+    regions |> push(Q8Region(woff = fc.pre_w, n = w3 * nch, rows = d))
     let ok = vt_upload(r, key, fc.qblob, fc.qscales, regions, fc.blob, 0l, fc.blob.n, 0l, lay)
     delete regions
     return ok
@@ -1769,7 +1762,7 @@ def private vt_fc_blocks(var r : VtResident; fc : VtFc; var x : array<float>; np
     var sets = vt_conformer_sets(r, v, vff, v2d, v_rel)
     var s_h2 = sets.s_h2
     var s_rel = sets.s_rel
-    var recs : VtRegion[int(VT_CN_GEMMS)]
+    var recs : Q8Region[int(VT_CN_GEMMS)]
     let rec_tiles = fixed_array(vff, v, v, v, v, v_rel, v, v2d, v, vff, v)
     vt_sched_walk(g_vt_maps, r.meta, nrec) $(rid : int64) : VtSchedRec {
         let g = rid % VT_CN_GEMMS
@@ -2260,37 +2253,19 @@ def private vt_served_from(var r : VtResident; hb : HostBuf; var x : array<float
     return true
 }
 
-let private VT_LN_GEMMS = 6l   //! a pre-LN block's GEMM records, in the order below
-let private VT_LN_Q = 0l
-let private VT_LN_K = 1l
-let private VT_LN_V = 2l
-let private VT_LN_O = 3l
-let private VT_LN_FC1 = 4l
-let private VT_LN_FC2 = 5l
-
-[arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
-def private vt_ln_regions(o : LayerOffs; d, ff : int64; var out : VtRegion[int(VT_LN_GEMMS)]) {
-    out[VT_LN_Q] = VtRegion(woff = o.q_w, n = d, rows = d)
-    out[VT_LN_K] = VtRegion(woff = o.k_w, n = d, rows = d)
-    out[VT_LN_V] = VtRegion(woff = o.v_w, n = d, rows = d)
-    out[VT_LN_O] = VtRegion(woff = o.o_w, n = d, rows = d)
-    out[VT_LN_FC1] = VtRegion(woff = o.fc1_w, n = d, rows = ff)
-    out[VT_LN_FC2] = VtRegion(woff = o.fc2_w, n = ff, rows = d)
-}
-
 [cold_path]
 def private vt_upload_ln(var r : VtResident; key : uint64; qblob : PlaneI8; qscales : PlaneF; d, ff : int64;
                          blob : PlaneF; rows_off, rows_n : int64; lay : Q8RepackLayout; offs : array<LayerOffs>; conv2_w : int64 = -1l;
-                         proj : array<VtRegion> = g_vt_no_regions) : bool {
-    var regions : array<VtRegion>
-    regions |> reserve(long_length(offs) * VT_LN_GEMMS + 1l + long_length(proj))
+                         proj : array<Q8Region> = g_vt_no_regions) : bool {
+    var regions : array<Q8Region>
+    regions |> reserve(long_length(offs) * LN_BLOCK_GEMMS + 1l + long_length(proj))
     regions |> push_from(proj)
     if (conv2_w >= 0l) {
-        regions |> push(VtRegion(woff = conv2_w, n = 3l * d, rows = d))
+        regions |> push(Q8Region(woff = conv2_w, n = 3l * d, rows = d))
     }
-    var recs : VtRegion[int(VT_LN_GEMMS)]
+    var recs : Q8Region[int(LN_BLOCK_GEMMS)]
     for (o in offs) {
-        vt_ln_regions(o, d, ff, recs)
+        ln_block_regions(o, d, ff, recs)
         regions |> push_from(recs)
     }
     let ok = vt_upload(r, key, qblob, qscales, regions, blob, rows_off, rows_n, 0l, lay)
@@ -2298,16 +2273,8 @@ def private vt_upload_ln(var r : VtResident; key : uint64; qblob : PlaneI8; qsca
     return ok
 }
 
-def private g3v_ln_offs(t : Gemma3vTower; l : int64) : LayerOffs {
-    let o = gemma3v_block_offs(t, l)
-    return LayerOffs(ln1_w = o.ln1_w, ln1_b = o.ln1_b, ln2_w = o.ln2_w, ln2_b = o.ln2_b,
-        q_w = o.w[GEMMA3V_GEMM_Q], q_b = o.b[GEMMA3V_GEMM_Q], k_w = o.w[GEMMA3V_GEMM_K], k_b = o.b[GEMMA3V_GEMM_K],
-        v_w = o.w[GEMMA3V_GEMM_V], v_b = o.b[GEMMA3V_GEMM_V], o_w = o.w[GEMMA3V_GEMM_O], o_b = o.b[GEMMA3V_GEMM_O],
-        fc1_w = o.w[GEMMA3V_GEMM_UP], fc1_b = o.b[GEMMA3V_GEMM_UP], fc2_w = o.w[GEMMA3V_GEMM_DOWN], fc2_b = o.b[GEMMA3V_GEMM_DOWN])
-}
-
 //! fc2's map words are counted apart from the d-wide GEMMs': under a split its map stacks every plane's tiles
-def private vt_ln_meta_bytes(nl, g_d, g_ff, g_fc2 : int64) : int64 => (nl * VT_LN_GEMMS * 4l + nl * (4l * g_d + g_ff + g_fc2)) * 4l
+def private vt_ln_meta_bytes(nl, g_d, g_ff, g_fc2 : int64) : int64 => (nl * LN_BLOCK_GEMMS * 4l + nl * (4l * g_d + g_ff + g_fc2)) * 4l
 
 def private vt_ln_fc2_pick(d, ff, npos, cap, tc_d : int64; cm2 : bool) : tuple<tc : int64; nsplit : int64; ksplit : int64> {
     if (!cm2 || npos < VT_SK_MIN_ROWS) {
@@ -2531,7 +2498,7 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
     }
     let g_d = cm2 ? cm2_tiles_at(d, npos, tc_d) : vt_gemm_groups(d, npos)
     let g_ff = cm2 ? cm2_tiles_at(ff, npos, tc_ff) : vt_gemm_groups(ff, npos)
-    let nrec_blocks = nl * VT_LN_GEMMS
+    let nrec_blocks = nl * LN_BLOCK_GEMMS
     let nrec = nrec_blocks + vt_ct_gemms(tl)
     var sk = vt_ln_fc2_pick(d, ff, npos, vt_cap_rows(npos), tc_d, cm2)
     if (!vt_ln_scratch(r, nl, npos, d, ff, hs, dp, g_d, g_ff, khr, cm2, tc_d, tc_ff, v, vff, vt_ct_meta_bytes(tl), f32w)) {
@@ -2549,19 +2516,19 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
     let tile_d = VtTile(v = v, tc = tc_d)
     let tile_ff = VtTile(v = vff, tc = tc_ff)
     let tile_fc2 = VtTile(v = v, tc = cm2 ? sk.tc : 0l)
-    var recs : VtRegion[int(VT_LN_GEMMS)]
+    var recs : Q8Region[int(LN_BLOCK_GEMMS)]
     if (!f32w) {
         vt_sched_walk(g_vt_maps, r.meta, nrec) $(rid : int64) : VtSchedRec {
             if (rid >= nrec_blocks) {
                 let second = rid > nrec_blocks
                 return VtSchedRec(wblk0 = (second ? tl.w2 : tl.w1) / q8e, rows = vt_tile_rows(second ? tl.tile2 : tl.tile1, tl.rows), groups = second ? tl.g2 : tl.g1)
             }
-            let g = rid % VT_LN_GEMMS
+            let g = rid % LN_BLOCK_GEMMS
             if (g == 0l) {
-                vt_ln_regions(offs[rid / VT_LN_GEMMS], d, ff, recs)
+                ln_block_regions(offs[rid / LN_BLOCK_GEMMS], d, ff, recs)
             }
-            let tile = g == VT_LN_FC1 ? tile_ff : (g == VT_LN_FC2 ? tile_fc2 : tile_d)
-            return VtSchedRec(wblk0 = recs[g].woff / q8e, rows = vt_tile_rows(tile, npos), groups = g == VT_LN_FC1 ? g_ff : (g == VT_LN_FC2 ? g_fc2 : g_d))
+            let tile = g == LN_GEMM_FC1 ? tile_ff : (g == LN_GEMM_FC2 ? tile_fc2 : tile_d)
+            return VtSchedRec(wblk0 = recs[g].woff / q8e, rows = vt_tile_rows(tile, npos), groups = g == LN_GEMM_FC1 ? g_ff : (g == LN_GEMM_FC2 ? g_fc2 : g_d))
         }
     }
     var pc32_d = vt_pc32(d, d, npos)
@@ -2596,7 +2563,7 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
     vt_chain_one_shot("whisper-class", nl, npos) $(raw : VkCommandBuffer; var h : VkHaz) {
         for (l in range64(nl)) {
             let o = offs[l]
-            let rb = l * VT_LN_GEMMS
+            let rb = l * LN_BLOCK_GEMMS
             if (l == 0l) {
                 var pc = gk_ln_args(uint(d), uint(npos), eps, uint(o.ln1_w - norms_base), uint(o.ln1_b - norms_base))
                 if (cm2) {
@@ -2607,11 +2574,11 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
                 vt_pt(raw, VtProfRole.ln)
             }
             vt_rq_feed(raw, h, cm2 || f32w, r.s_rq_xb, pc_rq, wg_nd)
-            vt_mm_lane(raw, h, f32w, r.s32_q, pc32_d, o.q_w - norms_base, wg32_d, tile_d, r.s_q, pc_gd, rb + VT_LN_Q, g_d)
+            vt_mm_lane(raw, h, f32w, r.s32_q, pc32_d, o.q_w - norms_base, wg32_d, tile_d, r.s_q, pc_gd, rb + LN_GEMM_Q, g_d)
             vt_pt(raw, VtProfRole.gemm_q)
-            vt_mm_lane(raw, h, f32w, r.s32_k, pc32_d, o.k_w - norms_base, wg32_d, tile_d, r.s_k, pc_gd, rb + VT_LN_K, g_d)
+            vt_mm_lane(raw, h, f32w, r.s32_k, pc32_d, o.k_w - norms_base, wg32_d, tile_d, r.s_k, pc_gd, rb + LN_GEMM_K, g_d)
             vt_pt(raw, VtProfRole.gemm_k)
-            vt_mm_lane(raw, h, f32w, r.s32_v, pc32_d, o.v_w - norms_base, wg32_d, tile_d, r.s_v, pc_gd, rb + VT_LN_V, g_d)
+            vt_mm_lane(raw, h, f32w, r.s32_v, pc32_d, o.v_w - norms_base, wg32_d, tile_d, r.s_v, pc_gd, rb + LN_GEMM_V, g_d)
             vt_pt(raw, VtProfRole.gemm_v)
             if (cm2) {
                 pc_rs.boff = uint(o.q_b - norms_base)
@@ -2656,7 +2623,7 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
                 vt_pt(raw, VtProfRole.hunpad)
                 vt_rq_feed(raw, h, f32w, r.s_rq_att, pc_rq, wg_nd)
             }
-            vt_mm_lane(raw, h, f32w, r.s32_o, pc32_d, o.o_w - norms_base, wg32_d, tile_d, r.s_o, pc_gd, rb + VT_LN_O, g_d)
+            vt_mm_lane(raw, h, f32w, r.s32_o, pc32_d, o.o_w - norms_base, wg32_d, tile_d, r.s_o, pc_gd, rb + LN_GEMM_O, g_d)
             vt_pt(raw, VtProfRole.gemm_o)
             var pc_post = GkPostAddLnArgs(d = uint(d), rows = uint(npos), boff = uint(o.o_b - norms_base), eps = eps,
                 ln_on = 1u, lnoff = uint(o.ln2_w - norms_base), lnboff = uint(o.ln2_b - norms_base), ascale = 1.0, xboff = 0u)
@@ -2667,7 +2634,7 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
                 vt_rq_feed(raw, h, f32w, r.s_rq_xb, pc_rq, wg_nd)
             }
             vt_pt(raw, VtProfRole.post_add)
-            vt_mm_lane(raw, h, f32w, r.s32_hg, pc32_ff, o.fc1_w - norms_base, wg32_ff, tile_ff, r.s_hg, pc_gff, rb + VT_LN_FC1, g_ff)
+            vt_mm_lane(raw, h, f32w, r.s32_hg, pc32_ff, o.fc1_w - norms_base, wg32_ff, tile_ff, r.s_hg, pc_gff, rb + LN_GEMM_FC1, g_ff)
             vt_pt(raw, VtProfRole.gemm_fc1)
             pc_gelu.boff = uint(o.fc1_b - norms_base)
             if (cm2) {
@@ -2678,7 +2645,7 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
                 vt_pt(raw, VtProfRole.bias)
                 vt_rq_feed(raw, h, f32w, r.s_rq_hg, pc_rqh, wg_nff)
             }
-            vt_mm_lane(raw, h, f32w, r.s32_down, pc32_dn, o.fc2_w - norms_base, wg32_d, tile_fc2, s_fc2, pc_dn, rb + VT_LN_FC2, g_fc2)
+            vt_mm_lane(raw, h, f32w, r.s32_down, pc32_dn, o.fc2_w - norms_base, wg32_d, tile_fc2, s_fc2, pc_dn, rb + LN_GEMM_FC2, g_fc2)
             vt_pt(raw, VtProfRole.gemm_fc2)
             if (split) {
                 splitk_reduce_enc(raw, h, r.s_splitk_reduce, nd_fc2, sk.nsplit)
@@ -2732,7 +2699,7 @@ def private vt_ln_chain(var r : VtResident; offs : array<LayerOffs>; k_bias : bo
 }
 
 var private g_vt_no_rows : array<float>   //! the chain's xb default where no post-norm lands, its out default where no tail
-var private g_vt_no_regions : array<VtRegion>   //! the upload's projector default where a tower has none
+var private g_vt_no_regions : array<Q8Region>   //! the upload's projector default where a tower has none
 var private g_vt_aud_out_ptr = 0ul   //! the encoder-output handoff: the served post-norm chain's `xb` rows still on the device (`bytes` = 0: none) - every audio hook entry clears it, so it names the encode in flight alone
 var private g_vt_aud_out_bytes = 0l
 var private g_vt_aud_out_dev = 0ul
@@ -2815,14 +2782,14 @@ def private vt_ct_shape_ok(t : AudioTower; npos : int64) : bool {
 
 //! the projector planes the upload gathers beside the block records, in the repack's (K, rows) shape
 [cold_path]
-def private vt_ct_regions(t : AudioTower; var regions : array<VtRegion>) {
+def private vt_ct_regions(t : AudioTower; var regions : array<Q8Region>) {
     return if (!vt_ct_planes_ok(t))
     if (t.proj_kind == AudioProjKind.qwen2a) {
-        regions |> push(VtRegion(woff = t.proj_w_off, n = t.d_model, rows = t.proj_dim))
+        regions |> push(Q8Region(woff = t.proj_w_off, n = t.d_model, rows = t.proj_dim))
         return
     }
-    regions |> push(VtRegion(woff = t.proj_w_off, n = t.d_model * t.stack_factor, rows = t.mm1_out))
-    regions |> push(VtRegion(woff = t.mm2_w_off, n = audio_proj_mid_width(t), rows = t.proj_dim))
+    regions |> push(Q8Region(woff = t.proj_w_off, n = t.d_model * t.stack_factor, rows = t.mm1_out))
+    regions |> push(Q8Region(woff = t.mm2_w_off, n = audio_proj_mid_width(t), rows = t.proj_dim))
 }
 
 //! this encode's tail record: the row counts, the GEMM tiles and groups, the norms-plane offsets; `on` false where a class refused
@@ -3095,7 +3062,7 @@ def private vt_aud_attach(var r : VtResident; t : AudioTower) : bool {
     if (r.key == key) {
         return true
     }
-    var proj : array<VtRegion>
+    var proj : array<Q8Region>
     vt_ct_regions(t, proj)
     return vt_upload_ln(r, key, t.qblob, t.qscales, t.d_model, t.n_ff, t.fblob, t.layers_off, norms_plane_n, lay, g_vt_ln_offs, vt_aud_has_conv(t) ? t.conv2_w_off : -1l, proj)
 }
@@ -3302,7 +3269,7 @@ def private vulkan_gemma3v_chain(t : Gemma3vTower; var s : Gemma3vState; planes 
     g_vt_ln_offs |> reserve(t.n_layer)
     g_vt_ln_offs |> resize(t.n_layer)
     for (l in range64(t.n_layer)) {
-        g_vt_ln_offs[l] = g3v_ln_offs(t, l)
+        g_vt_ln_offs[l] = gemma3v_ln_offs(t, l)
     }
     let lay = active_q8_repack_layout(g_active_needs_repack)
     let blob_n = t.blob.n
@@ -3346,24 +3313,13 @@ def private vulkan_gemma3v_chain(t : Gemma3vTower; var s : Gemma3vState; planes 
     return s.tail_ready
 }
 
-[arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
-def private vt_q3v_regions(t : Qwen3vTower; l : int64; var out : VtRegion[int(QWEN3V_GEMMS)]) {
-    let d = t.n_embd
-    let ff = t.ff_pad
-    let o = qwen3v_block_offs(t, l)
-    out[QWEN3V_GEMM_QKV] = VtRegion(woff = o.w[QWEN3V_GEMM_QKV], n = d, rows = 3l * d)
-    out[QWEN3V_GEMM_O] = VtRegion(woff = o.w[QWEN3V_GEMM_O], n = d, rows = d)
-    out[QWEN3V_GEMM_UP] = VtRegion(woff = o.w[QWEN3V_GEMM_UP], n = d, rows = ff)
-    out[QWEN3V_GEMM_DOWN] = VtRegion(woff = o.w[QWEN3V_GEMM_DOWN], n = ff, rows = d)
-}
-
 [cold_path]
 def private vt_upload_q3v(var r : VtResident; key : uint64; t : Qwen3vTower; lay : Q8RepackLayout) : bool {
-    var regions : array<VtRegion>
+    var regions : array<Q8Region>
     regions |> reserve(t.n_layer * QWEN3V_GEMMS)
-    var recs : VtRegion[int(QWEN3V_GEMMS)]
+    var recs : Q8Region[int(QWEN3V_GEMMS)]
     for (l in range64(t.n_layer)) {
-        vt_q3v_regions(t, l, recs)
+        qwen3v_block_regions(t, l, recs)
         regions |> push_from(recs)
     }
     let ok = vt_upload(r, key, t.qblob, t.qscales, regions, t.blob, 0l, t.blob.n, 0l, lay)   //! the whole f32 blob: the stem's, the mergers' and the tail's rows at their file offsets
@@ -3454,13 +3410,13 @@ def private vulkan_qwen3v_chain(t : Qwen3vTower; var s : Qwen3vState; planes : a
         r.s_vis_act[1] = set_tower_act_cls(fixed_array(r.tail_out_dev), fixed_array(bp), fixed_array(VT_TAIL_OUT))
         r.vis_sets_gen = r.vis_gen
     }
-    var recs : VtRegion[int(QWEN3V_GEMMS)]
+    var recs : Q8Region[int(QWEN3V_GEMMS)]
     let rec_groups = fixed_array(g_qkv, g_d, g_ff, g_d)
     if (!f32w) {
         vt_sched_walk(g_vt_maps, r.meta, nrec) $(rid : int64) : VtSchedRec {
             let g = rid % QWEN3V_GEMMS
             if (g == 0l) {
-                vt_q3v_regions(t, rid / QWEN3V_GEMMS, recs)
+                qwen3v_block_regions(t, rid / QWEN3V_GEMMS, recs)
             }
             return VtSchedRec(wblk0 = recs[g].woff / q8e, rows = npos, groups = rec_groups[g])
         }
@@ -3742,17 +3698,12 @@ def private vulkan_qwen25v_chain(t : Qwen25vTower; var s : Qwen25vState; planes 
 
 [cold_path]
 def private vt_upload_g4v(var r : VtResident; key : uint64; t : Gemma4vTower; ones_n : int64; lay : Q8RepackLayout) : bool {
-    let d = t.n_embd
-    let ff = t.n_ff
-    var regions : array<VtRegion>
+    var regions : array<Q8Region>
     regions |> reserve(t.n_layer * GEMMA4V_GEMMS)
+    var recs : Q8Region[int(GEMMA4V_GEMMS)]
     for (l in range64(t.n_layer)) {
-        let o = gemma4v_block_offs(t, l)
-        for (g in range64(GEMMA4V_GEMMS)) {
-            let n = g == GEMMA4V_GEMM_DOWN ? ff : d
-            let rows = g == GEMMA4V_GEMM_GATE || g == GEMMA4V_GEMM_UP ? ff : d
-            regions |> push(VtRegion(woff = o.w[g], n = n, rows = rows))
-        }
+        gemma4v_block_regions(t, l, recs)
+        regions |> push_from(recs)
     }
     let ok = vt_upload(r, key, t.qblob, t.qscales, regions, t.blob, 0l, t.blob.n, ones_n, lay)   //! the whole f32 blob: the stem's and the tail's rows at their file offsets
     delete regions
@@ -4141,8 +4092,8 @@ def private vt_q3a_slab(var r : VtResident; t : Qwen3aTower; key : uint64; lay :
     var slab16 <- cvt_f32_to_f16_sat_array(slab)
     delete slab
     let span = vt_q3a_norm_span(t)
-    var regions : array<VtRegion>
-    regions |> push(VtRegion(woff = t.cout_w_off, n = 16l * nch, rows = t.core.d_model))
+    var regions : array<Q8Region>
+    regions |> push(Q8Region(woff = t.cout_w_off, n = 16l * nch, rows = t.core.d_model))
     let ok = vt_upload(r, key, t.qcblob, t.qcscales, regions, t.cblob, span.lo, span.hi - span.lo, 0l, lay)
     delete regions
     if (!ok) {
