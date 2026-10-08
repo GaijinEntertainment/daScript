@@ -4899,12 +4899,13 @@ probe alone, no box profile applied; the Vulkan box ran it under `DASLLAMA_GPU=1
 
 - **The lane the policy keeps is the faster one on each home** (`direction-grade`). Metal (M5 Max):
   gemma3v at the fixed 896 canvas 340.9 / 507.3, gemma4v E2B at 672x336 29.1 / 30.1, qwen3v 4B at
-  448 26.3 / 55.1 - the f32 tiles beat the q8 GEMM ladder with its half feed on every family, so the
-  Metal chains keep the file's planes as the default. Vulkan (RTX PRO 4500): gemma3v 280.4 / 87.2,
-  gemma4v 26.3 / 23.1, qwen3v 46.1 / 32.8 - the exact lane rides the f32 tile over the whole blob
-  (no feed, no schedule) and the q8 lane the cm2 tiles, so the Vulkan chains keep the q8 image as
-  the default and serve a pinned exact tower on the f32 tile; the f16 slab for the exact lane is
-  `followup_vulkan.md` row 95's lever.
+  448 26.2 / 55.2 - the f32 tiles beat the q8 GEMM ladder with its half feed on every family, so the
+  Metal chains keep the file's planes as the default. Vulkan (RTX PRO 4500): gemma3v 281.5 / 88.2,
+  gemma4v 26.5 / 23.3, qwen3v 48.0 / (no figure: the q8 encode alternates 34 and 66 ms on
+  consecutive calls, the pre-arc driver the same, `followup_vulkan.md` row 146), qwen25v 30.8 -
+  the exact lane rides the f32 tile over the whole blob (no feed, no schedule) and the q8 lane the
+  cm2 tiles, so the Vulkan chains keep the q8 image as the default and serve a pinned exact tower on
+  the f32 tile; the f16 slab for the exact lane is `followup_vulkan.md` row 95's lever.
 - **The qwen25v Metal chain's folds read 67.5 -> 52.8 -> 50.9 ms** on the 448 checkerboard
   (`direction-grade`, the probe at three commits of the arc): the shared bias-gate stamp storing the
   halves the down GEMM reads in one dispatch (52.8), then the seam stamps folding each block's

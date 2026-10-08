@@ -2174,3 +2174,13 @@ module) is independent and can land any time - it is pure structure.
    Vulkan form folds onto the Metal one only with a Vulkan f32 GEMM of the same shape. Done = each pair
    profiled on both boxes under one clip, and the slower form folded onto the faster where the profile
    parts by more than its noise.
+
+146. **The qwen3v q8 chain's encode alternates two walls on the RTX PRO 4500.** The lane probe
+    (`harness/vision_lane_probe.das`, 448 canvas, `DASLLAMA_IMAGE=0`, the cm2 arm) reads consecutive
+    encodes at 34 and 66 ms in strict alternation, with the driver sources from before the vision
+    shared-kernels arc the same; every host-side rebuild (the scratch, the vision buffers, the sets,
+    the upload) fires once, and the alternation sits inside the one-shot chain's submit-and-wait.
+    gemma3v, gemma4v and qwen25v read flat. The lever: the per-role GPU timestamp ledger
+    (`DASLLAMA_GPU_PROF=1`) over two consecutive encodes, read role by role, to name the stage that
+    doubles - the deepstack mergers, the split-k down planes or the Q8_0 feed are the stages the other
+    chains do not run.
