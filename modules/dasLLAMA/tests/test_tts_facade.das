@@ -7,6 +7,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_tts
 require dasllama/dasllama_tts_types
 require dasllama/dasllama_audio_io
+require dasllama/dasllama_wav
 require dasllama/dasllama_kitten   // kitten_token_ids: the symbol table's drop rule, model-free
 require dasllama/dasllama_styletts2   // the voices table: a hand-built model whose pack names no language; the source's stream
 require dasllama/dasllama_tts_blocks   // TtsRng, TtsLinear, SineSourceCfg: the source's noise stream held to its own layout
