@@ -57,7 +57,7 @@ more-itertools==11.1.0
 mpmath==1.3.0
 msgpack==1.2.1
 msgspec==0.21.1
-multidict==6.7.1
+multidict==6.9.1
 multiprocess==0.70.19
 narwhals==2.23.0
 nemo-toolkit @ git+https://github.com/NVIDIA/NeMo.git@06312c963ce69c308d67ec7f129800ba594d9565
