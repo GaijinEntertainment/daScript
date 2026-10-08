@@ -2,7 +2,7 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_GPU_TOWER.md`, `ARCHITECTURE_GPU_TOWER_VULKAN.md`,
-`ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md`, `ARCHITECTURE_MEDIA.md`. Planned work: `followup_metal.md`,
+`ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md`, `ARCHITECTURE_GPU_TOWER_VULKAN_TTS.md`, `ARCHITECTURE_MEDIA.md`. Planned work: `followup_metal.md`,
 `followup_vulkan.md`.
 
 A tower is the Metal or the Vulkan GPU driver set that runs a family's encoder or synthesis
@@ -33,9 +33,9 @@ run.** A family filter skips the other families' cells, and a shared path or bor
 reaches the ASR decoder with no line of its file touched.
 
 **A diff reaching the Vulkan tower runs, on a build without the Metal module,
-`test_gemma4v_vulkan_twin` in `tests/test_gemma4v.das`, `test_gemma3v_vulkan_twin` in
+`test_gemma4v_tier1_vulkan` and `test_gemma4v_vulkan_twin` in `tests/test_gemma4v.das`, `test_gemma3v_vulkan_twin` in
 `tests/test_gemma3v.das`, `test_qwen3v_vulkan_twin` in `tests/test_qwen3v.das`,
-`test_qwen25v_vulkan_twin` in `tests/test_qwen25v.das`, `test_whisper_vulkan_twin` in
+`test_qwen25v_vulkan_twin` in `tests/test_qwen25v.das`, `test_gemma4uv_tier1_vulkan` in `tests/test_gemma4uv.das`, `test_whisper_vulkan_twin` in
 `tests/test_whisper.das`,
 `test_encoder_blocks_vulkan`, `test_gemma4a_vulkan_twin`, `test_canary_vulkan_twin` and
 `test_qwen3a_vulkan_front` in `tests/test_audio.das`, `tests/test_vulkan_tower_kernels.das`, the
@@ -54,14 +54,11 @@ function it calls that another file defines runs `test_whisper_vulkan_wdec`
 (`tests/test_whisper.das`).** Its CPU-vs-GPU transcript cells are the Vulkan ASR-decoder driver's
 parity instrument, and a shared function reaches the driver with no line of its own file touched.
 
-**A hook that any `[init]` of a tower's driver files registers into a seat, and that no gate this
-checklist names covers, is a defect - add a test cell covering it and name it in this checklist,
-in the same change.** A gate covers a hook when it asserts a counter rising on a leg where that
-hook is the only hook reachable that raises the counter: `vulkan_tower_stats()`'s or
-`metal_tower_stats()`'s `encodes` and `blocks` for a blocks hook, `encodes` for an encode hook,
-`convs` for a front, conv or chunk hook, for the mel hook `mels` on Vulkan and `metal_tower_mel_encodes()` on
-Metal, for the whisper-class tail hook `metal_tower_tail_encodes()`; on either
-tower, `styletts2_gpu_stats(<seat>)`'s or `pocket_gpu_stats(<seat>)`'s `served` for a TTS seat.
+**A diff that registers a hook into a tower seat from a driver's `[init]`, or changes which hook
+a seat reaches, names in the run list of the tower whose driver registers it a gate that asserts
+the hook's counter rising on a leg where that hook is the only reachable hook raising it, adding
+the cell in the same change.** The counter each hook kind raises:
+`ARCHITECTURE_GPU_TOWER.md#tower-reach`.
 
 **A diff that adds a tower kernel (a kernel class a tower driver dispatches), widens the rows an
 existing one reads, or changes the upload or class that fills a padded buffer leaves every row
@@ -87,9 +84,10 @@ compute changes that CPU code the same way, in the same diff.**
 **A diff that adds or changes a family's chain in the Metal tower or in the Metal ASR-decoder
 driver (`dasllama/dasllama_metal_asr_dec.das`) leaves every stage of that family's served chain -
 the mel, the front, the blocks, the tail, the cross-KV and the decode step - on the device, for
-every model and every weight lane the family serves: a stage that runs on the CPU, and a decline
-other than the knob's, the device's or a failed command buffer's, is a defect - moved to the
-device in the same change, or filed in `followup_metal.md` with the stage and the model named.**
+every model and every weight lane the family serves: a stage that runs on the CPU, or a decline
+other than the knob's, the device's or a failed command buffer's, that a stocked model or lane
+reaches, is a defect - moved to the device in the same change, or filed in `followup_metal.md`
+with the stage and the model named.**
 A stage on the CPU behind a Metal chain reads as served and sets the whole chain's rate.
 
 **A diff that changes what a TTS seat's chain computes in a tower driver applies `REVIEW_TTS.md`
@@ -109,3 +107,12 @@ loop then reads stale rows.
 class or builder that route dispatches in the route's ensure chain - the pipeline builds the
 route checks before it serves - so one absent pipeline keeps the CPU route.** A class outside the
 chain dispatches into a null pipeline when its build failed.
+
+**A diff that changes a block region list (`ln_block_regions`, `gemma4v_block_regions`,
+`qwen3v_block_regions`, a `vt_*_regions` list) or a driver's mapping of one (the `tw_q8_regions`
+overloads) changes, in the same change, every site index a Metal chain passes to `wt_mm` and every
+record index a Vulkan chain passes to `vt_mm_lane`; weakening the cells that red on a misindexed
+site - the Metal q8-lane cells of `tests/test_gemma3v.das`, `tests/test_gemma4v.das` and
+`tests/test_qwen3v.das`, the families' Vulkan twins - is a defect.** A Metal site index is the
+region's position in the driver's list; a Vulkan record index is its position in the family's list,
+a layer.

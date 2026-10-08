@@ -37,7 +37,8 @@ call returns adds a call returning each such value, in `../dasllama/`, in the sa
 
 **A cell asserting the unpinned default lane of a family that has a `*_serves_q8` accessor
 compares against the predicates that accessor reads for its unpinned default (whatever its body
-calls), never against a hardcoded lane.** The default lane differs per box.
+calls), or against the accessor's own answer read before the load, never against a hardcoded
+lane.** The default lane differs per box.
 
 **An image-suite cell whose subject IS the lane knob loads through the `.dlim`-baking loader,
 never around it.** The pin is part of what the image identity records.

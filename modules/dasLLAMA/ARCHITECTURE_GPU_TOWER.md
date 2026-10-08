@@ -22,6 +22,14 @@ Metal tower), `dasllama_vulkan_tower_register` (the Vulkan tower) and
 `dasllama_vulkan_tts_register` (the Vulkan TTS driver, the Vulkan tower's TTS seats), so the
 hooks a function can reach are the ones those three register.
 
+A gate covers a hook when it asserts the hook's counter rising on a leg where that hook is the
+only reachable hook raising it. The counters: `vulkan_tower_stats()`'s or `metal_tower_stats()`'s
+`encodes` and `blocks` for a blocks hook (the whole-chain vision seats included), `encodes` for an
+encode hook, `convs` for a front, conv or chunk hook; for the mel hook `mels` on Vulkan and
+`metal_tower_mel_encodes()` on Metal; for the whisper-class tail hook `metal_tower_tail_encodes()`;
+on either tower, `styletts2_gpu_stats(<seat>)`'s or `pocket_gpu_stats(<seat>)`'s `served` for a
+TTS seat.
+
 ### The tower attention routes {#tower-attn-routes}
 
 A tower head width is padded to `hs_pad = max(64, ceil32(hs))` - 72 and 80 both land on 96 -
@@ -84,14 +92,29 @@ on the device - answering which it served (`TowerTailServed`), so the CPU tail r
 the device one did not. Its engage counter is `metal_tower_tail_encodes`, its lever
 `set_metal_tower_tail`.
 
-The vision chains run their ends on the device too. The gemma3v chain ends in its tail - the
-post-norm, the grid mean pool (`MetalTwPool2d`), the soft norm and the projection (`g3v_tail_body`).
-The gemma4v chain takes the stem's columns and runs the patch conv and the position adds itself
-(`g4v_stem_body`; the family registers its seat with `stem` set, and a chain registered without it is
-handed the finished residual stream), then ends in its tail: the grid pool, the sqrt(d) scale and the
+The vision chains run their ends on the device too. Every vision chain takes the image planes, not
+the stem's columns: the chain uploads them (`tw_planes_up`) and runs the patch im2col on the device
+(`tw_patch_im2col` on `MetalTwPatchIm2col`, the shared `GkPatchIm2col` template), which writes the pad
+rows and columns zero and applies gemma4v's [0, 1] -> [-1, 1] map as its scale and shift; the family
+skips its CPU im2col while a chain is registered and runs it only after a decline. Each block loop
+runs block 0's pre-norm alone, ahead of the loop, and folds every later pre-norm into the residual
+seam before it: the seam stamps (`MetalTwAddLn`, `MetalTwAddRms`, `MetalTwAddPostRms`, the Metal stamps
+of the shared `GkPostAddLn` template) add the branch and write the next block's pre-norm from the
+updated row in one pass, the last seam writing the tower's post-norm where the chain has one (the
+whisper-class `ln_post` form, qwen25v's post-rms) and no norm otherwise, and a tail reads the rows the
+last seam left. The gemma3v chain ends in its tail - the post-norm, the grid mean pool
+(`MetalTwPool2d`), the soft norm and the projection (`g3v_tail_body`). The gemma4v chain runs the
+patch conv and the 2-axis position add itself (`g4v_stem_body`), then ends in its tail: the grid pool, the sqrt(d) scale and the
 standardize in one row pass (`MetalTwAffineRows`), the weightless rms, and the projection between its
 two clamps (`g4v_tail_body`). With the tail on the device the soft tokens alone come back; the block
-rows stay there.
+rows stay there. The vision chains serve both weight lanes: an exact tower's block GEMMs ride the f32
+tiles over the blob (the crowned halfword twin where the crown compiles it), a q8 tower's the prefill
+ladder's q8 GEMM over the vision q8 slab (`g_tw_q8_vis`: the family's block regions repacked once a
+tower beside the audio slab, `tw_q8_attach_vis` over the family's block list - `ln_block_regions` over
+`gemma3v_ln_offs`, `qwen3v_block_regions` with the fused qkv split three ways, `gemma4v_block_regions` -
+keyed by the tower's q8 planes and their scales) with the half feed where the ladder reads one (`pf_q8_mm_half`), so a pinned q8 tower
+serves on the driver and declines nothing; the families register the f32 lane as served, so the policy
+prefers the file's planes under the tower.
 
 The gemma4a chain ends in the projector tail, in the blocks' command buffer: the out projection
 and its bias at the encoder's own output width (`gemma4a_mid_dim`, the length of the weightless

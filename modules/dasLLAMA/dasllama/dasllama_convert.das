@@ -1185,6 +1185,15 @@ def guard_dst(name : string; what : string; off, need, have : int64) {
 // Dual-use and HOT: the f16 KV-cache codec's store/read (per token), the weight-scale plane
 // convert and gguf's bulk f16 dequant (load), and the Accelerate batch prep (per prefill chunk).
 
+//! bf16 halfwords widened to f32 - each the top halfword of its float, so the shift is exact
+def widen_bf16(var dst : float?; src : uint16 const?; n : int64) {
+    unsafe {
+        for (i in range64(n)) {
+            dst[i] = reinterpret<float>(uint(src[i]) << 16u)
+        }
+    }
+}
+
 //! f32 -> f16 row convert. Clamps to ±65504 so inf can NEVER enter a cache/plane —
 //! O(kv_dim) per token at the KV store seam, free next to the reads.
 [hint(unsafe_range_check, noalias = d, noalias = s)]

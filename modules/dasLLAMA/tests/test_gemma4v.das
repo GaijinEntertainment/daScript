@@ -118,9 +118,10 @@ def test_gemma4v_tier1_gpu(t : T?) {
             tt |> success(gemma4v_serves_q8(), "with the Metal tower off (and no accelerate tier) the default lane is q8")
             set_metal_tower(true)
             tt |> success(!gemma4v_serves_q8(), "with the Metal tower armed the default lane is the file's planes")
+            let policy_q8 = gemma4v_serves_q8()
             var tw <- load_gemma4v_tower(mm)
             var st = Gemma4vState()
-            tt |> success(!tw.q8, "exact-plane lane (the driver declines q8)")
+            tt |> equal(tw.q8, policy_q8, "the load took the policy's unpinned lane under the Metal tower (q8 = {policy_q8})")
             let fixtures = [(kind = "cb", w = 96, h = 96, log = "e2b.encode.cb96.log"),
                             (kind = "cb", w = 336, h = 336, log = "e2b.encode.cb336.log"),
                             (kind = "green", w = 336, h = 336, log = "e2b.encode.green336.log"),
@@ -128,10 +129,8 @@ def test_gemma4v_tier1_gpu(t : T?) {
                             (kind = "cb", w = 672, h = 336, log = "e2b.encode.cb672x336.log")]
             for (fx in fixtures) {
                 let s0 = metal_tower_stats()
-                let ran = gate_encode(tt, tw, st, fx.kind, fx.w, fx.h, fx.log, TIER1_REL_GPU)
-                if (ran) {
-                    tt |> equal(metal_tower_stats().encodes - s0.encodes, 1l, "{fx.kind} {fx.w}x{fx.h}: GPU-served (encodes delta)")
-                    tt |> equal(metal_tower_stats().blocks - s0.blocks, tw.n_layer, "{fx.kind} {fx.w}x{fx.h}: every block ran on the driver (blocks delta)")
+                if (gate_encode(tt, tw, st, fx.kind, fx.w, fx.h, fx.log, TIER1_REL_GPU)) {
+                    device_leg_served(tt, "{fx.kind} {fx.w}x{fx.h}", s0, metal_tower_stats(), tw.n_layer, -1l)
                 }
             }
             // the knob-off leg: the same tower, the CPU chain, no dispatch
@@ -144,6 +143,15 @@ def test_gemma4v_tier1_gpu(t : T?) {
             set_metal_tower(true)
             delete st
             delete tw
+            var twq <- mint_tower(mm, true)   //! in memory: a load under the pin would bake the q8 image beside the serving one
+            var stq = Gemma4vState()
+            tt |> success(twq.q8, "the q8 lane minted under the pin")
+            q8_lane_served(tt, "q8 tower", twq.n_layer) $() : bool {
+                return gate_encode(tt, twq, stq, "cb", 336, 336, "e2b.encode.cb336.log", TIER1_REL_Q8)
+            }
+            delete stq
+            delete twq
+            g4v_poison_leg(tt, mm, "cb", 336, 336, "e2b.encode.cb336.log", TIER1_REL_Q8)
         } else {
             feint("das_metal is not built on this platform - the GPU rung is Apple-only\n")
         }
@@ -328,23 +336,15 @@ let private POISON_BLOCK = 8l   //! the whole-tower input poison's block: mid-st
 def private mint_tower(mm : string; q8 : bool; nl : int64 = 0l; zero_block : int64 = -1l) : Gemma4vTower
     => mint_twin_tower(mm, q8, nl, zero_block, @@set_gemma4v_q8, @@reset_gemma4v_q8, @@stage_gemma4v_tower, @@mint_gemma4v_tower)
 
-//! the input poison of a device-side dump bar: the q8 tower with `POISON_BLOCK` zeroed, served by the driver, must EXCEED the
-//! bar its dump holds - a bar the poison clears measures nothing
-def private dump_poison_leg(tt : T?; mm : string; kind : string; w, h : int; logname : string; bar_rms : float) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        var o = OracleEncode()
-        if (!load_oracle_encode(path_join(path_join(models_dir(), "gemma4-vision-oracle"), logname), o)) {
-            tt |> skip("oracle dump {logname} not present/parseable - mint via its gemma4-vision-oracle mint script")
-            return
-        }
-        var twp <- mint_tower(mm, true, 0l, POISON_BLOCK)
-        var stp = Gemma4vState()
-        let planes <- make_planes(kind, w, h)
-        dump_poison(tt, "gemma4v", "{kind} {w}x{h}", POISON_BLOCK, bar_rms, twp, stp,
-            $(t; var s; var out) => gemma4v_encode(t, s, planes, int64(w), int64(h), out)) $(out) => encode_excess(out, int(twp.proj_dim), o, TIER1_ABS, bar_rms)
-        delete stp
-        delete twp
-    }
+//! a canvas's device-side dump bar poisoned: the q8 tower with `POISON_BLOCK` zeroed must exceed the bar `logname` holds
+def private g4v_poison_leg(tt : T?; mm : string; kind : string; w, h : int; logname : string; bar_rms : float) {
+    var o = OracleEncode()
+    return if (!oracle_dump(tt, "gemma4-vision-oracle", logname, "its gemma4-vision-oracle mint script", o))
+    var twp <- mint_tower(mm, true, 0l, POISON_BLOCK)
+    var stp = Gemma4vState()
+    dump_poison_leg(tt, "gemma4v", kind, w, h, o, bar_rms, POISON_BLOCK, int(twp.proj_dim), TIER1_ABS, twp, stp) $(t; var s; planes; var out) => gemma4v_encode(t, s, planes, int64(w), int64(h), out)
+    delete stp
+    delete twp
 }
 
 //! the q8 lane's bar: the device runs the q8 chain's arithmetic with f16 weight scales and its own summation order
@@ -367,13 +367,12 @@ def test_gemma4v_tier1_vulkan(t : T?) {
                 let s0 = vulkan_tower_stats()
                 let ran = gate_encode(tt, tw, st, fx.kind, fx.w, fx.h, fx.log, TIER1_REL_Q8)
                 if (ran) {
-                    tt |> equal(vulkan_tower_stats().encodes - s0.encodes, 1l, "{fx.kind} {fx.w}x{fx.h}: device-served (encodes delta)")
-                    tt |> equal(vulkan_tower_stats().blocks - s0.blocks, tw.n_layer, "{fx.kind} {fx.w}x{fx.h}: every block ran on the driver (blocks delta)")
+                    device_leg_served(tt, "{fx.kind} {fx.w}x{fx.h}", s0, vulkan_tower_stats(), tw.n_layer, -1l)
                 }
             }
             delete st
             delete tw
-            dump_poison_leg(tt, mm, "cb", 336, 336, "e2b.encode.cb336.log", TIER1_REL_Q8)
+            g4v_poison_leg(tt, mm, "cb", 336, 336, "e2b.encode.cb336.log", TIER1_REL_Q8)
         } else {
             tt |> skip("dasVulkan not present")
         }
@@ -388,9 +387,9 @@ def private twin_encode(tt : T?; tw : Gemma4vTower; var st : Gemma4vState; tw_ex
         $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb) }) $(t; var s; var out) => gemma4v_encode(t, s, planes, int64(w), int64(h), out)
 }
 
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def test_gemma4v_vulkan_twin(t : T?) {
-    t |> run("the Vulkan block loop vs the CPU q8 chain, and the exact-lane decline") @(tt : T?) {
+    t |> run("the Vulkan chain vs the CPU q8 chain, and the exact lane served") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let mm = path_join(models_dir(), "mmproj-gemma-4-E2B-it-bf16.gguf")
             if (!model_available(tt, mm) || !vulkan_twin_seat(tt)) {
@@ -422,8 +421,12 @@ def test_gemma4v_vulkan_twin(t : T?) {
             twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 768, 384, mm)   // 1152 rows, a 128-multiple: the aligned tile variant's canvas
             delete st
             delete tw
-            let planes <- make_planes("cb", 96, 96)
-            exact_lane_declines(tt, "gemma4v cb 96x96", tw_exact, st_exact, 4l * tw_exact.proj_dim) $(t; var s; var out) => gemma4v_encode(t, s, planes, 96l, 96l, out)
+            let planes <- make_planes("cb", 336, 336)
+            var twxp <- mint_tower(mm, false, 0l, POISON_BLOCK)
+            var stxp = Gemma4vState()
+            exact_lane_served(tt, "gemma4v cb 336x336", tw_exact, st_exact, 441l, twxp, stxp) $(t; var s; var out) => gemma4v_encode(t, s, planes, 336l, 336l, out)
+            delete stxp
+            delete twxp
             delete st_exact
             delete tw_exact
             vulkan_tower_shutdown()
@@ -463,16 +466,13 @@ def test_gemma4v_tier1_e4b(t : T?) {
             let s0 = metal_tower_stats()
             let ran = gate_encode(tt, tw, st, "cb", 336, 336, "e4b.encode.cb336.log", TIER1_REL_GPU)
             if (ran) {
-                tt |> equal(metal_tower_stats().encodes - s0.encodes, 1l, "GPU-served (encodes delta)")
-                tt |> equal(metal_tower_stats().blocks - s0.blocks, tw.n_layer, "every block ran on the driver (blocks delta)")
+                device_leg_served(tt, "GPU", s0, metal_tower_stats(), tw.n_layer, -1l)
             }
         }
         delete st
         delete tw
-        set_gemma4v_q8(true)   // the serving lane on its own bar
         set_every_gpu_tower(false)
-        var twq <- load_gemma4v_tower(mm)
-        reset_gemma4v_q8()
+        var twq <- mint_tower(mm, true)   //! the serving lane on its own bar, minted in memory (a load under the pin bakes a q8 image)
         var stq = Gemma4vState()
         tt |> success(twq.q8, "q8 lane loaded")
         tt |> gate_encode(twq, stq, "cb", 336, 336, "e4b.encode.cb336.log", TIER1_REL_Q8)
@@ -485,10 +485,9 @@ def test_gemma4v_tier1_e4b(t : T?) {
                     let v0 = vulkan_tower_stats()
                     let ran = gate_encode(tt, twq, stq, "cb", 336, 336, "e4b.encode.cb336.log", TIER1_REL_Q8)
                     if (ran) {
-                        tt |> equal(vulkan_tower_stats().encodes - v0.encodes, 1l, "E4B q8: device-served (encodes delta)")
-                        tt |> equal(vulkan_tower_stats().blocks - v0.blocks, twq.n_layer, "E4B q8: every block ran on the driver (blocks delta)")
+                        device_leg_served(tt, "E4B q8", v0, vulkan_tower_stats(), twq.n_layer, -1l)
                     }
-                    dump_poison_leg(tt, mm, "cb", 336, 336, "e4b.encode.cb336.log", TIER1_REL_Q8)
+                    g4v_poison_leg(tt, mm, "cb", 336, 336, "e4b.encode.cb336.log", TIER1_REL_Q8)
                 }
             }
         }

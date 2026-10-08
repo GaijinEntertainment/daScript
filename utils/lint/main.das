@@ -138,7 +138,7 @@ def write_deduped(var writer : StringBuilderWriter; issues : array<LintIssue>; p
 
 def is_skip_file(name : string) : bool => name == "builtin.das"
 
-def is_skip_dir(name : string) : bool => name |> starts_with(".") || name == "node_modules"
+def is_skip_dir(name : string) : bool => name |> starts_with(".") || name == "node_modules" || name == "logs"   //! `logs/` is the gitignored run and audit log tree: a report quotes anchors it never cites
 
 // A CMake build tree is not source, whatever it is named: FetchContent checkouts under it
 // carry .das and .md the tree never wrote. Neither is another repository's checkout inside this

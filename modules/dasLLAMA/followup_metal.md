@@ -902,11 +902,6 @@ Each is a stage and the models it holds for, read off the drivers' own gates:
   the CPU spectrum.
 - **The whisper-class projector tail** runs on the CPU on a q8 tower - its projector planes are not
   on the device - and on a tower whose tail widths are off the f32 GEMM lattice.
-- **The vision towers' im2col** (gemma3v, gemma4v) runs on the CPU, and so does gemma4v's sum of its
-  two position-table rows a patch; the patch conv and the tail run on the device. The tail falls
-  back to the CPU where the patch grid does not pool whole or its widths are off the GEMM lattice.
-  The q8 lane's whole chain runs on the CPU. qwen3v and qwen25v have had no stage-by-stage check of
-  their merger tails.
 - **Qwen3-Omni** has had no stage-by-stage check.
 
 The work: each stage on the device, and a counter per stage a gate can read, so a served model's
@@ -944,9 +939,6 @@ Each pair below differs on the one axis named, and the fold is behavior-neutral 
   `dasllama_gemma4v.das`; the bench's `unseen_clip` temp path beside `create_temp_file`; the test helpers
   `with_tower_audio_server` / `with_audio_server`, `tail_gpu_cell` / `test_gemma3v_tail_gpu`'s body, and the
   two heap-flat legs.
-- **Not a fold.** gemma4v's position rows add as `x + (ex + ey)` on the device and `(x + ex) + ey` on the CPU; one
-  helper changes one side's sums. The CPU mel's power spectrum is shared by `log_mel_spectrum_cpu` and
-  `dasllama_qwen3a.das`, the mel sums behind it are not: each matches its own reference.
 
 ## 41. The projector tails run on the f32 tiles beside a resident halfword copy
 
@@ -996,3 +988,13 @@ eight lanes a superblock, two words a lane in flight before the arithmetic) move
 past noise, so the gap is the memory-level parallelism. The work: a row-a-simdgroup IQ4_XS form with the q8 kernel's
 chunk batching and the staged LUT kept, on the gathered site first (the routed experts carry the bytes), raced e2e on
 the pure IQ4_XS file; then the same shape for Q4_K, whose 5 % over Q4_0 at equal bytes is the same template.
+
+## 46. The Metal vision chains decline a tower off their stamps' lattice whole
+
+The chain guards decide the whole encode (`metal_gemma3v_blocks`, `metal_gemma4v_blocks`, `metal_qwen3v_blocks`,
+`metal_qwen25v_blocks`): a width or FFN off the 64 lattice, a head off the stamp (64 for gemma4v, 80 for qwen25v,
+past 128 elsewhere), a patch dimension off the 32 or 64 lattice, a token count off the 4 lattice (qwen3v, qwen25v)
+or a window past 64 rows (qwen25v) is a `shape` decline, and the CPU chain serves the stem, the blocks and the tail.
+No stocked tower trips a guard; a family added at another geometry would run on the CPU with no outage. The work:
+the ragged stamps - a row tail on the tile GEMMs and the attention restride, a head-width parameter on the window
+attention - so the guards narrow to what the kernels cannot read.

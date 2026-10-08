@@ -688,27 +688,6 @@ def audio_tokens_per_chunk(t : AudioTower) : int64 {
     return n
 }
 
-// Per-layer tensor offsets inside fblob, in layout order. conv weights are stored PERMUTED
-// for the im2col column order (dk-major, then channel): W'[o][dk·C + c] = torch_w[o][c][dk].
-struct LayerOffs {
-    ln1_w : int64
-    ln1_b : int64
-    q_w : int64
-    q_b : int64
-    k_w : int64
-    k_b : int64   // whisper towers have no k bias — the slot stays zeroed and is skipped
-    v_w : int64
-    v_b : int64
-    o_w : int64
-    o_b : int64
-    ln2_w : int64
-    ln2_b : int64
-    fc1_w : int64
-    fc1_b : int64
-    fc2_w : int64
-    fc2_b : int64
-}
-
 def enc_layer_offsets(t : AudioTower; l : int64) : LayerOffs {
     let d = t.d_model
     let ff = t.n_ff

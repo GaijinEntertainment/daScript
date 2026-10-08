@@ -2054,9 +2054,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         var w : array<float>
         w |> reserve_resize(all * dim)   // E4B: 27.5M floats - the guard wants the final size reserved first
         if (t.ple_model_bf16) {
-            for (i in range64(all * dim)) {
-                w[i] = unsafe(reinterpret<float>(uint(t.bf16blob[t.ple_model_off + i]) << 16u))
-            }
+            widen_bf16(unsafe(addr(w[0])), unsafe(addr<uint16 const?>(t.bf16blob[t.ple_model_off])), all * dim)
         } else {
             copy_floats(t.fblob, t.ple_model_off, w, 0l, all * dim)
         }

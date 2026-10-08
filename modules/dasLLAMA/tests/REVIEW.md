@@ -96,13 +96,14 @@ a run of skips is not the coverage the suite owes.
 **A diff that registers a test file in this folder in a `CMakeLists.txt` is a defect - a
 `run.das` suite listing is the only registration these files get.**
 
-**A diff that adds a test file here, or adds, removes, moves or renames a cell, or changes its
-suite, its skip condition, or what it claims - a shape, a length, a format or a lane the cell
-sweeps, or a tolerance it holds - corrects or adds, in the same change, the `CLAUDE.md` entry of
-every test file running the cell, counts and skip clauses included.** A file's entry is the
-clause that describes the file, named with or without its `.das` suffix; a `{a,b}` shorthand or
-a suite roster needs no update, and an input row that adds no new shape, length, format or lane
-changes no claim.
+**A diff that adds a test file here, or adds, removes, moves or renames a cell or a gate a
+kernel file's one cell runs, or changes a cell's suite, its skip condition, or any fact its
+`CLAUDE.md` entry states about it - the class it dispatches, the shapes, lengths, formats or
+lanes it sweeps, the predicate an assert reads, the bar it holds, its controls - corrects that
+entry in the same change, for every test file running the cell, counts and skip clauses
+included.** A file's entry is the clause that describes the file, named with or without its
+`.das` suffix; a `{a,b}` shorthand or a suite roster needs no update, and an input row that adds
+no fact the entry states changes no claim.
 
 **A `CLAUDE.md` entry that describes a class of cells in one clause - the cells of one helper,
 the arms of one name pattern (`mtp-ff-<tag>`) - keeps that clause's counts and skip clauses true
@@ -155,9 +156,10 @@ set.** `DASLLAMA_PARITY_FULL=1` is a final pre-PR switch, not the iteration loop
 **A test - or a program a test builds or spawns - whose subject is not the `.dlim` image rail (a
 cell whose subject is a lane knob's effect on the image identity has the rail as its subject)
 never mints or maps a MODEL image: it either runs with `DASLLAMA_IMAGE=0` in its environment, or
-calls no loader that writes a `.dlim` beside the model when `DASLLAMA_IMAGE` is unset; such a
-test loads a media carrier in memory from the family's `stage_*` staging - its `mint_*` twin, or
-`cache_via_image_staged` with an empty image path.**
+calls no baking loader - `load_<family>_tower`, `load_<family>_embedder`, `load_model_cached`,
+`load_tts_model`, each of which writes a `.dlim` beside the model when `DASLLAMA_IMAGE` is
+unset.** Such a test loads a media carrier in memory from the family's `stage_*` staging - its
+`mint_*` twin, or `cache_via_image_staged` with an empty image path.
 
 **A predicate whose value the BOX decides (a device capability, a policy default) and that
 therefore cannot differ between two runs on one machine is never tested through its own
@@ -236,9 +238,10 @@ already read.
 **A cell whose claim depends on an environment-read knob its own process has already read names
 that knob's value in the text a red prints - the cell label or the assert.**
 
-**A diff that adds or loosens a bound assert in a cell that is not a kernel-unit cell ships in
-the same change, in each such cell holding the assert, a control that lands outside that
-bound.** A bound nothing has exceeded where it is applied is not known to discriminate there.
+**A diff that adds or loosens a bound assert in a cell that is not a kernel-unit cell, or moves
+one onto another route, lane or backend, ships in the same change, in each such cell holding the
+assert, a control that lands outside that bound on that route.** A bound nothing has exceeded
+where it is applied is not known to discriminate there.
 
 **A control for a bound assert in a cell that is not a kernel-unit cell changes an input the
 computation reads - a zeroed weight region, a poisoned input element, a mechanism disabled - and
@@ -256,9 +259,9 @@ overwrote, passes.
 change** - the wire-shape pins, the render pins, and a live server case gated on the family's
 smallest GGUF that sits under `LARGE_TIER_BYTES` (`_model_tier.das`).
 
-**A poison control on a tower the Metal driver serves - a run of the gate with the tower's
-weights zeroed, which must fail - zeroes every weight buffer the served route reads.** A poison
-the served route never reads passes on a broken kernel.
+**A poison control on a tower a GPU driver serves - a run of the gate with a block's weights
+zeroed, which must fail - zeroes that block's GEMM weights in every plane the served route reads
+them from.** A poison the served route never reads passes on a broken kernel.
 
 **A function in a file of this folder that requires a module behind an optional `require ?<mod>`
 never names that module's types in its signature - leave a parameter that would carry one

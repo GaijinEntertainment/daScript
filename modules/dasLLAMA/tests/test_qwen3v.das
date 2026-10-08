@@ -62,7 +62,6 @@ let private TIER1_REL_Q8 = 5.2e-1
 // proves the served slices still carry their signal
 let private TIER1_REL_Q8_DS = 6.5e-1
 
-[cold_path]
 def private gate_encode(t : T?; tw : Qwen3vTower; var st : Qwen3vState; kind : string; w, h : int; logname : string;
                         rel : float = TIER1_REL) : bool {
     return oracle_gate(t, path_join(models_dir(), "qwen3vl-vision-oracle"), logname, "qwen3vl-vision-oracle/mint.sh (encode.*) / mint_4b.sh (encode4b.*)", kind, w, h,
@@ -146,6 +145,35 @@ def test_qwen3v_tier1(t : T?) {
     }
 }
 
+//! the q8 lane on the Metal device: the deepstack tower minted q8 under the pin serves every block off its q8 planes on the q8 bar, no quant_mode decline
+[cold_path]
+def private q3v_metal_q8_leg(tt : T?; mm4 : string) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var twq <- mint_tower(mm4, true)   //! in memory: a load under the pin would bake the q8 image beside the serving one
+        tt |> success(twq.q8, "the q8 lane minted under the pin")
+        var stq = Qwen3vState()
+        q8_lane_served(tt, "q8 tower", twq.n_layer) $() : bool {
+            return tt |> gate_encode(twq, stq, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_Q8_DS)
+        }
+        delete stq
+        delete twq
+        q3v_poison_leg(tt, mm4, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_Q8_DS)
+    }
+}
+
+let private POISON_BLOCK = 13l   //! the whole-tower input poison's block: a mid-stack block past the first deepstack tap
+
+//! a canvas's device-side dump bar poisoned: the deepstack q8 tower with `POISON_BLOCK` zeroed must exceed the bar `logname` holds
+def private q3v_poison_leg(tt : T?; mm : string; kind : string; w, h : int; logname : string; bar_rms : float) {
+    var o = OracleEncode()
+    return if (!oracle_dump(tt, "qwen3vl-vision-oracle", logname, "qwen3vl-vision-oracle/mint_4b.sh", o))
+    var twp <- mint_tower(mm, true, 0l, POISON_BLOCK)
+    var stp = Qwen3vState()
+    dump_poison_leg(tt, "qwen3v", kind, w, h, o, bar_rms, POISON_BLOCK, int(qwen3v_row_width(twp)), TIER1_ABS, twp, stp) $(t; var s; planes; var out) => qwen3v_encode(t, s, planes, int64(w), int64(h), out)
+    delete stp
+    delete twp
+}
+
 // The Metal tower arm: the SAME fixtures and bars, tower pinned ON — the GPU chain's parity
 // gate, with engage evidence (encode/block counter deltas), never "the model ran".
 [test]
@@ -166,24 +194,14 @@ def test_qwen3v_tier1_metal(t : T?) {
             let s0 = metal_tower_stats()
             var omni_gated = 0l
             var ds_gated = 0l
-            if (tt |> gate_encode(tw, st, "gray", 448, 448, "encode.gray448.log", TIER1_REL_GPU)) {
-                omni_gated++
-            }
-            if (tt |> gate_encode(tw, st, "cb", 448, 448, "encode.cb448.log", TIER1_REL_GPU)) {
-                omni_gated++
-            }
-            if (tt |> gate_encode(tw, st, "cb", 640, 320, "encode.cb640x320.log", TIER1_REL_GPU)) {
-                omni_gated++
+            for (fx in [(kind = "gray", w = 448, h = 448, log = "encode.gray448.log"), (kind = "cb", w = 448, h = 448, log = "encode.cb448.log"),
+                        (kind = "cb", w = 640, h = 320, log = "encode.cb640x320.log")]) {
+                omni_gated += (tt |> gate_encode(tw, st, fx.kind, fx.w, fx.h, fx.log, TIER1_REL_GPU)) ? 1l : 0l
             }
             var st4 = Qwen3vState()
-            if (tt |> gate_encode(tw4, st4, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_GPU_DS)) {
-                ds_gated++
-            }
-            if (tt |> gate_encode(tw4, st4, "cb", 640, 320, "encode4b.cb640x320.log", TIER1_REL_GPU_DS)) {
-                ds_gated++
-            }
-            if (tt |> gate_encode(tw4, st4, "cb", 96, 96, "encode4b.cb96.log", TIER1_REL_GPU_DS)) {
-                ds_gated++
+            for (fx in [(kind = "cb", w = 448, h = 448, log = "encode4b.cb448.log"), (kind = "cb", w = 640, h = 320, log = "encode4b.cb640x320.log"),
+                        (kind = "cb", w = 96, h = 96, log = "encode4b.cb96.log")]) {
+                ds_gated += (tt |> gate_encode(tw4, st4, fx.kind, fx.w, fx.h, fx.log, TIER1_REL_GPU_DS)) ? 1l : 0l
             }
             let s1 = metal_tower_stats()
             to_log(LOG_INFO, "qwen3v metal tier-1: +{s1.encodes - s0.encodes} encodes, +{s1.blocks - s0.blocks} blocks, +{s1.declines - s0.declines} declines ({omni_gated}+{ds_gated} fixtures gated)\n")
@@ -193,6 +211,7 @@ def test_qwen3v_tier1_metal(t : T?) {
                 tt |> success(s1.encodes - s0.encodes >= omni_gated + ds_gated, "every gated encode served on the Metal tower")
                 tt |> equal(s1.blocks - s0.blocks, omni_gated * 27l + ds_gated * 24l, "the block counters advanced per gated fixture")
             }
+            q3v_metal_q8_leg(tt, mm4)
             // negative control for the GPU bars: the same zero-layer-13 poison, GPU-served,
             // must red TIER1_REL_GPU (the loosened-bar rule wants the control ON THIS lane)
             var po = OracleEncode()
@@ -389,9 +408,9 @@ def private twin_encode(tt : T?; tw : Qwen3vTower; var st : Qwen3vState; tw_exac
         $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb) }) $(t; var s; var out) => qwen3v_encode(t, s, planes, int64(w), int64(h), out)
 }
 
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def test_qwen3v_vulkan_twin(t : T?) {
-    t |> run("the Vulkan block loop vs the CPU q8 chain (Qwen3-VL 4B, deepstack), and the exact-lane decline") @(tt : T?) {
+    t |> run("the Vulkan chain vs the CPU q8 chain (Qwen3-VL 4B, deepstack), and the exact lane served") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let mm = path_join(models_dir(), "mmproj-Qwen3VL-4B-Instruct-F16.gguf")
             if (!model_available(tt, mm) || !vulkan_twin_seat(tt)) {
@@ -421,8 +440,12 @@ def test_qwen3v_vulkan_twin(t : T?) {
             twin_encode(tt, tw, st, tw_exact, st_exact, "cb", 640, 320, mm)   // non-square: the merge-reorder and the transposed grid; no gray canvas - the q8 lane is no instrument there (its own cells keep gray on the exact set)
             delete st
             delete tw
-            let planes <- make_planes("cb", 96, 96)
-            exact_lane_declines(tt, "qwen3v cb 96x96", tw_exact, st_exact, 9l * qwen3v_row_width(tw_exact)) $(t; var s; var out) => qwen3v_encode(t, s, planes, 96l, 96l, out)
+            let planes <- make_planes("cb", 448, 448)
+            var twxp <- mint_tower(mm, false, 0l, 13l)
+            var stxp = Qwen3vState()
+            exact_lane_served(tt, "qwen3v cb 448x448", tw_exact, st_exact, 784l, twxp, stxp) $(t; var s; var out) => qwen3v_encode(t, s, planes, 448l, 448l, out)
+            delete stxp
+            delete twxp
             delete st_exact
             delete tw_exact
             vulkan_tower_shutdown()
@@ -477,17 +500,17 @@ def test_qwen3v_tier1_q8_deepstack(t : T?) {
     }
 }
 
-// the lane policy itself - model-free: the default follows the box's accelerate tier (q8 when
-// the tier is off), the pin flips it either way, reset returns to the policy
+// the lane policy itself - model-free: the default follows the GPU tower's exact lane and the box's
+// accelerate tier (q8 when neither serves), the pin flips it either way, reset returns to the policy
 [test]
 def test_qwen3v_lane_knob(t : T?) {
     t |> run("the q8 lane pin and policy default") @(tt : T?) {
-        tt |> equal(qwen3v_serves_q8(), !(qwen3v_gpu_would_serve() || float_batch_override_active()), "the policy default follows the Metal tower and the accelerate tier")
+        tt |> equal(qwen3v_serves_q8(), !(qwen3v_gpu_exact_serves() || float_batch_override_active()), "the policy default follows the Metal tower and the accelerate tier")
         set_qwen3v_q8(true)
         tt |> success(qwen3v_serves_q8(), "pinned q8")
         set_qwen3v_q8(false)
         tt |> success(!qwen3v_serves_q8(), "pinned exact")
         reset_qwen3v_q8()   // from the EXACT pin, so a no-op reset cannot pass as the (q8) policy default
-        tt |> equal(qwen3v_serves_q8(), !(qwen3v_gpu_would_serve() || float_batch_override_active()), "reset returns to the policy default")
+        tt |> equal(qwen3v_serves_q8(), !(qwen3v_gpu_exact_serves() || float_batch_override_active()), "reset returns to the policy default")
     }
 }

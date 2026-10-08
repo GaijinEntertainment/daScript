@@ -126,7 +126,8 @@ var private AUDIO_SEAM_EXEMPT <- {
 
 var private VISION_SEAM_EXEMPT <- {
     "modules/dasLLAMA/dasllama/dasllama_metal_tower.das",
-    "modules/dasLLAMA/dasllama/dasllama_vulkan_tower.das"
+    "modules/dasLLAMA/dasllama/dasllama_vulkan_tower.das",
+    "modules/dasLLAMA/harness/vision_lane_probe.das"   //! the lane probe pins a family's lane and mints its tower in memory - neither reaches the carrier
 }
 
 def private carried_families(carrier, kind_enum : string) : array<string> {

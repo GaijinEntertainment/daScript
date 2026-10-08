@@ -118,17 +118,16 @@ def test_gemma3v_tier1_gpu(t : T?) {
             if (!model_available(tt, mm)) {
                 return
             }
+            let policy_q8 = gemma3v_serves_q8()
             var tw <- load_gemma3v_tower(mm)   // metal armed: the policy default is the exact lane
             var st = Gemma3vState()
-            tt |> success(!tw.q8, "exact-plane lane (the driver declines q8)")
+            tt |> equal(tw.q8, policy_q8, "the load took the policy's unpinned lane under the Metal tower (q8 = {policy_q8})")
             let fixtures = [(kind = "cb", log = "g3.encode.cb896.log"),
                             (kind = "green", log = "g3.encode.green896.log")]
             for (fx in fixtures) {
                 let s0 = metal_tower_stats()
-                let ran = gate_encode(tt, tw, st, fx.kind, fx.log, TIER1_REL_GPU)
-                if (ran) {
-                    tt |> equal(metal_tower_stats().encodes - s0.encodes, 1l, "{fx.kind}: GPU-served (encodes delta)")
-                    tt |> equal(metal_tower_stats().blocks - s0.blocks, tw.n_layer, "{fx.kind}: every block ran on the driver (blocks delta)")
+                if (gate_encode(tt, tw, st, fx.kind, fx.log, TIER1_REL_GPU)) {
+                    device_leg_served(tt, fx.kind, s0, metal_tower_stats(), tw.n_layer, -1l)
                 }
             }
             // the knob-off leg: the same tower, the CPU chain, no dispatch
@@ -141,19 +140,18 @@ def test_gemma3v_tier1_gpu(t : T?) {
             set_metal_tower(true)
             delete st
             delete tw
-            // the q8-decline leg: a q8 tower with the knob ARMED must never dispatch (its planes
-            // are Q8_0 - a driver serve would read them as f32 garbage)
-            set_gemma3v_q8(true)
-            var twq <- load_gemma3v_tower(mm)
-            reset_gemma3v_q8()
+            var twq <- mint_tower(mm, true, 0l, -1l)   //! in memory: a load under the pin would bake the q8 image beside the serving one
             var stq = Gemma3vState()
-            let sq0 = metal_tower_stats()
-            tt |> gate_encode(twq, stq, "cb", "g3.encode.cb896.log", TIER1_REL_Q8)
-            let sq1 = metal_tower_stats()
-            tt |> equal(sq1.encodes, sq0.encodes, "q8 tower never dispatched")
-            tt |> success(sq1.declines - sq0.declines >= 1l, "q8 tower recorded the quant_mode decline")
+            tt |> success(twq.q8, "the q8 lane minted under the pin")
+            q8_lane_served(tt, "q8 tower", twq.n_layer) $() : bool {
+                return tt |> gate_encode(twq, stq, "cb", "g3.encode.cb896.log", TIER1_REL_Q8)
+            }
             delete stq
             delete twq
+            tt |> success(metal_tower_vis_slab_live(), "the q8 lane attached the vision slab")
+            g3v_poison_leg(tt, mm, "cb", "g3.encode.cb896.log", TIER1_REL_Q8)
+            metal_tower_shutdown()
+            tt |> success(!metal_tower_vis_slab_live(), "the shutdown freed the vision slab")
             set_metal_tensor_crowns("mulmm_q8")
             metal_prefill_shutdown()
             set_metal_tower_f16(true)   // the twin route's own knob - established, never inherited
@@ -193,9 +191,7 @@ def test_gemma3v_tail_gpu(t : T?) {
             let tail_was = metal_tower_tail_knob()
             set_metal_tower(true)
             with_dasllama_jobque_() {
-                var inscope cpu_tail : array<float>
-                var inscope dev_tail : array<float>
-                var inscope other : array<float>
+                var inscope cpu_tail, dev_tail, other : array<float>
                 set_metal_tower_tail(false)
                 let e0 = metal_tower_stats().encodes
                 let t0 = metal_tower_tail_encodes()
@@ -258,11 +254,10 @@ def test_gemma3v_tier1_q8(t : T?) {
                         let v0 = vulkan_tower_stats()
                         let ran = gate_encode(tt, tw, st, fx.kind, fx.log, TIER1_REL_Q8)
                         if (ran) {
-                            tt |> equal(vulkan_tower_stats().encodes - v0.encodes, 1l, "{fx.kind}: device-served (encodes delta)")
-                            tt |> equal(vulkan_tower_stats().blocks - v0.blocks, tw.n_layer, "{fx.kind}: every block ran on the driver (blocks delta)")
+                            device_leg_served(tt, fx.kind, v0, vulkan_tower_stats(), tw.n_layer, -1l)
                         }
                     }
-                    dump_poison_leg(tt, mm, "cb", "g3.encode.cb896.log", TIER1_REL_Q8)
+                    g3v_poison_leg(tt, mm, "cb", "g3.encode.cb896.log", TIER1_REL_Q8)
                 }
             }
         }
@@ -280,24 +275,16 @@ let private POISON_BLOCK = 13l   //! the whole-tower input poison's block: mid-s
 def private mint_tower(mm : string; q8 : bool; nl : int64 = 0l; zero_block : int64 = -1l) : Gemma3vTower
     => mint_twin_tower(mm, q8, nl, zero_block, @@set_gemma3v_q8, @@reset_gemma3v_q8, @@stage_gemma3v_tower, @@mint_gemma3v_tower)
 
-//! the input poison of a device-side dump bar: the q8 tower with `POISON_BLOCK` zeroed, served by the driver, must EXCEED the
-//! bar its dump holds - a bar the poison clears measures nothing
-def private dump_poison_leg(tt : T?; mm : string; kind : string; logname : string; bar_rms : float) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        var o = OracleEncode()
-        if (!load_oracle_encode(path_join(path_join(models_dir(), "gemma3-vision-oracle"), logname), o)) {
-            tt |> skip("oracle dump {logname} not present/parseable - mint via gemma3-vision-oracle/mint_gemma3.sh")
-            return
-        }
-        var twp <- mint_tower(mm, true, 0l, POISON_BLOCK)
-        var stp = Gemma3vState()
-        let px = int(twp.image_px)
-        let planes <- make_planes(kind, px, px)
-        dump_poison(tt, "gemma3v", kind, POISON_BLOCK, bar_rms, twp, stp,
-            $(t; var s; var out) => gemma3v_encode(t, s, planes, t.image_px, t.image_px, out)) $(out) => encode_excess(out, int(twp.proj_dim), o, TIER1_ABS, bar_rms)
-        delete stp
-        delete twp
-    }
+//! the fixed canvas's device-side dump bar poisoned: the q8 tower with `POISON_BLOCK` zeroed must exceed the bar `logname` holds
+def private g3v_poison_leg(tt : T?; mm : string; kind : string; logname : string; bar_rms : float) {
+    var o = OracleEncode()
+    return if (!oracle_dump(tt, "gemma3-vision-oracle", logname, "gemma3-vision-oracle/mint_gemma3.sh", o))
+    var twp <- mint_tower(mm, true, 0l, POISON_BLOCK)
+    var stp = Gemma3vState()
+    let px = int(twp.image_px)
+    dump_poison_leg(tt, "gemma3v", kind, px, px, o, bar_rms, POISON_BLOCK, int(twp.proj_dim), TIER1_ABS, twp, stp) $(t; var s; planes; var out) => gemma3v_encode(t, s, planes, t.image_px, t.image_px, out)
+    delete stp
+    delete twp
 }
 
 //! the fixed canvas three ways on the shared instrument; `zero_block` >= 0 adds the input poison over a fresh q8 tower
@@ -309,9 +296,9 @@ def private twin_encode(tt : T?; tw : Gemma3vTower; var st : Gemma3vState; tw_ex
         $(zb) { return <- mint_tower(mm, true, tw.n_layer, zb) }) $(t; var s; var out) => gemma3v_encode(t, s, planes, tw.image_px, tw.image_px, out)
 }
 
-[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN.md#vk-tower-encode-chains")]
+[test, arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
 def test_gemma3v_vulkan_twin(t : T?) {
-    t |> run("the Vulkan block loop vs the CPU q8 chain, and the exact-lane decline") @(tt : T?) {
+    t |> run("the Vulkan chain vs the CPU q8 chain, and the exact lane served") @(tt : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             let mm = path_join(models_dir(), "mmproj-gemma-3-4b-it-F16.gguf")
             if (!model_available(tt, mm) || !vulkan_twin_seat(tt)) {
@@ -339,8 +326,12 @@ def test_gemma3v_vulkan_twin(t : T?) {
             delete st
             delete tw
             let planes <- make_planes("cb", int(tw_exact.image_px), int(tw_exact.image_px))
-            let n_side = tw_exact.image_px / tw_exact.patch / tw_exact.merge
-            exact_lane_declines(tt, "gemma3v cb", tw_exact, st_exact, n_side * n_side * tw_exact.proj_dim) $(t; var s; var out) => gemma3v_encode(t, s, planes, tw_exact.image_px, tw_exact.image_px, out)
+            let n_grid = tw_exact.image_px / tw_exact.patch
+            var twxp <- mint_tower(mm, false, 0l, POISON_BLOCK)
+            var stxp = Gemma3vState()
+            exact_lane_served(tt, "gemma3v cb", tw_exact, st_exact, n_grid * n_grid, twxp, stxp) $(t; var s; var out) => gemma3v_encode(t, s, planes, tw_exact.image_px, tw_exact.image_px, out)
+            delete stxp
+            delete twxp
             delete st_exact
             delete tw_exact
             vulkan_tower_shutdown()

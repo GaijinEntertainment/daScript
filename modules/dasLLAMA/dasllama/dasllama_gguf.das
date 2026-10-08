@@ -804,12 +804,8 @@ def gguf_read_tensor_f32(m : GGUFMeta; srcbytes : array<uint8> | #; name : strin
             }
         }
     } elif (gtype == GGML_TYPE_BF16) {
-        // bf16 is the top 16 bits of an f32 — the shift-up conversion is exact
         unsafe {
-            let src = temp_array(addr<uint16?>(bytes[base + src_off * 2l]), expect_n, type<uint16>)
-            for (i in range64(expect_n)) {
-                dst[dst_off + i] = reinterpret<float>(uint(src[i]) << 16u)
-            }
+            widen_bf16(addr(dst[dst_off]), addr<uint16 const?>(bytes[base + src_off * 2l]), expect_n)
         }
     } elif (gtype == GGML_TYPE_Q8_0) {
         // block of 32: fp16 scale d (2 bytes) + 32 int8 quants; x[i] = q[i] * d

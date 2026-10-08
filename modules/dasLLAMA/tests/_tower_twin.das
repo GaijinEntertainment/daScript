@@ -16,6 +16,7 @@ require daslib/jobque_boost
 require daslib/defer
 require daslib/fio   // nolint:STYLE030,LINT019 — path_join: the twin cells' jfk.wav, inside the GPU arms alone
 require _compares   // logits_maxdiff
+require _vision_oracle   // the mtmd dump parser and the canvas fixtures the poison legs read
 require _model_tier   // tower_parity_stats - the rel_l2 statistic the audio twins' bar reads
 require _gpu_knobs public
 require ?vulkan dasllama/dasllama_vulkan_tower
@@ -24,6 +25,7 @@ require ?vulkan dasllama/dasllama_audio_io
 let TWIN_SLACK_VK = 1.5   //! 1.5x: the q8 chain's activation quants plus f16 weight scales, the tiles' summation order
 let TWIN_ABS_VK = 2e-4    //! the tier-1 dumps' absolute floor, the bar's other term
 let TWIN_REL_L2_FLOOR = 1e-4lf   //! the audio twins' absolute floor over rel_l2, a unit-free ratio
+let TWIN_EXACT_REL_L2_VK = 2e-2lf   //! the exact lane's bar over rel_l2 from the exact CPU chain: the f32 tile over the f32 rows, the attention's f16 panels and the tiles' order the distance
 
 //! a front's witness follows its route: on the f16 GEMM feed (cm2 or KHR) the front served every dispatch, off it
 //! (DASLLAMA_COOPMAT=sdot4) the driver declined `device` and served none while the blocks served either way; `declines_delta` is
@@ -130,9 +132,28 @@ def twin_counters(tt : T?; tag : string; legs : TwinLegs; n_layer, npos : int64)
     tt |> equal(legs.n_cpu, legs.n_dev, "{tag}: token count on both chains")
     tt |> equal(legs.cpu.encodes - legs.exact.encodes, 0l, "{tag}: the knob-off leg never dispatched")
     tt |> equal(legs.cpu.declines - legs.exact.declines, 1l, "{tag}: the knob-off leg recorded the knob decline")
-    tt |> equal(legs.dev.encodes - legs.cpu.encodes, 1l, "{tag}: device-served (encodes delta)")
-    tt |> equal(legs.dev.blocks - legs.cpu.blocks, n_layer, "{tag}: every block ran on the driver (blocks delta)")
-    tt |> equal(legs.dev.rows - legs.cpu.rows, npos, "{tag}: the rows delta is the patch grid")
+    device_leg_served(tt, tag, legs.cpu, legs.dev, n_layer, npos)
+}
+
+//! a device leg's engage evidence against the driver's counters before it (`s0`) and after (`s1`): one encode, every block,
+//! and the patch grid's rows where `npos` is not negative
+def device_leg_served(tt : T?; tag : string; s0, s1 : auto; n_layer, npos : int64) {
+    tt |> equal(s1.encodes - s0.encodes, 1l, "{tag}: device-served (encodes delta)")
+    tt |> equal(s1.blocks - s0.blocks, n_layer, "{tag}: every block ran on the driver (blocks delta)")
+    if (npos >= 0l) {
+        tt |> equal(s1.rows - s0.rows, npos, "{tag}: the rows delta is the patch grid")
+    }
+}
+
+//! a q8-lane leg on the serving GPU tower: where `encode`'s gate ran (true), it served one encode and every block with no
+//! `quant_mode` decline
+def q8_lane_served(tt : T?; tag : string; n_layer : int64; encode : block<() : bool>) {
+    let s0 = gpu_tower_counters()
+    let dq0 = gpu_tower_quant_declines()
+    if (invoke(encode)) {
+        device_leg_served(tt, tag, s0, gpu_tower_counters(), n_layer, -1l)
+        tt |> equal(gpu_tower_quant_declines() - dq0, 0l, "{tag}: no quant_mode decline")
+    }
 }
 
 //! one input three ways - the exact chain, the CPU q8 chain (both knob off), the device chain - then `counters` over the legs and
@@ -143,8 +164,7 @@ def twin_three_way(tt : T?; spec : TwinSpec; tw : auto(TW); var st : auto(ST); t
                    counters : block<(legs : TwinLegs) : void>) : TwinResult {
     var r = TwinResult(spec = spec)
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        var cpu : array<float>
-        var dev : array<float>
+        var cpu, dev : array<float>
         var legs = TwinLegs()
         with_gpu_knobs() {
             set_vulkan_tower(false)
@@ -207,12 +227,12 @@ def private queued_encode(tw : auto(TW); var st : auto(ST); var out : array<floa
 //! a poison's device leg: `encode` over the zeroed tower `twp` with the Vulkan tower knob on, one device encode asserted; the rows it wrote
 def private device_poison_leg(tt : T?; tag : string; twp : auto(TW); var stp : auto(ST); encode : block<(t : TW; var s : ST; var out : array<float>) : int64>) : array<float> {
     var inscope out : array<float>
-    let e0 = vulkan_tower_stats().encodes
+    let e0 = gpu_tower_encodes()
     with_gpu_knobs() {
-        set_vulkan_tower(true)
+        set_serving_gpu_tower(true)
         queued_encode(twp, stp, out, encode)
     }
-    tt |> equal(vulkan_tower_stats().encodes - e0, 1l, "{tag} poison: device-served (encodes delta)")
+    tt |> equal(gpu_tower_encodes() - e0, 1l, "{tag} poison: device-served (encodes delta)")
     return <- out
 }
 
@@ -237,16 +257,34 @@ def twin_canvas(tt : T?; family, kind : string; w, h : int; patch : int64; log_s
     }
 }
 
-//! the input poison of a device-side dump bar: `twp` - a q8 tower with `zero_block` zeroed - served by the driver must EXCEED the
-//! bar its dump holds (`bar_rms` x rms), a bar the poison clears measuring nothing; `excess` reads the encode over the dump's bar
+//! the input poison of a device-side dump bar on the serving home: `twp` - a q8 tower with `zero_block` zeroed - served by the driver
+//! must EXCEED the bar its dump holds (`bar_rms` x rms), a bar the poison clears measuring nothing; `excess` reads the encode over the dump's bar
 def dump_poison(tt : T?; family, tag : string; zero_block : int64; bar_rms : float; twp : auto(TW); var stp : auto(ST);
                 encode : block<(t : TW; var s : ST; var out : array<float>) : int64>; excess : block<(out : array<float>) : float>) {
-    static_if (typeinfo builtin_module_exists(vulkan)) {
-        var inscope out <- device_poison_leg(tt, tag, twp, stp, encode)
-        let ex = invoke(excess, out)
-        to_log(LOG_INFO, "{family} vulkan poison leg {tag}: block {zero_block} zeroed -> excess {ex} over the {bar_rms} x rms bar\n")
-        tt |> success(ex > 0.0, "{tag}: a zeroed block through the device chain reds the bar (excess {ex})")
+    var inscope out <- device_poison_leg(tt, tag, twp, stp, encode)
+    let ex = invoke(excess, out)
+    to_log(LOG_INFO, "{family} device poison leg {tag}: block {zero_block} zeroed -> excess {ex} over the {bar_rms} x rms bar\n")
+    tt |> success(ex > 0.0, "{tag}: a zeroed block through the device chain reds the bar (excess {ex})")
+}
+
+//! `logname`'s mtmd dump under `oracle_dir` beside the models, or the loud skip naming `mint_hint`; false on the skip
+def oracle_dump(tt : T?; oracle_dir, logname, mint_hint : string; var o : OracleEncode) : bool {
+    if (!load_oracle_encode(path_join(path_join(models_dir(), oracle_dir), logname), o)) {
+        tt |> skip("oracle dump {logname} not present/parseable - mint via {mint_hint}")
+        return false
     }
+    return true
+}
+
+//! the input poison of a device-side dump bar: `twp`, the family's tower with block `zero_block` zeroed, served by the driver on
+//! the `kind` canvas at w x h must EXCEED the bar (`bar_rms` x rms past `abs_tol`) the dump `o` holds - a bar the poison clears
+//! measures nothing; `encode` is the family's encode of the planes, `row_width` the dump's row
+def dump_poison_leg(tt : T?; family, kind : string; w, h : int; o : OracleEncode; bar_rms : float; zero_block : int64; row_width : int;
+                    abs_tol : float; twp : auto(TW); var stp : auto(ST);
+                    encode : block<(t : TW; var s : ST; planes : array<float>; var out : array<float>) : int64>) {
+    let planes <- make_planes(kind, w, h)
+    dump_poison(tt, family, "{kind} {w}x{h}", zero_block, bar_rms, twp, stp,
+        $(t; var s; var out) => invoke(encode, t, s, planes, out)) $(out) => encode_excess(out, row_width, o, abs_tol, bar_rms)
 }
 
 //! a tower minted in memory from `stg`: `truncate_and_poison` cuts it to `nl` blocks and zeroes `zero_block`'s planes, `mint`
@@ -296,15 +334,52 @@ def exact_lane_declines(tt : T?; tag : string; expected_len : int64; one_seat : 
     }
 }
 
-//! `exact_lane_declines` over a vision tower, whose blocks seat is its one: `encode` writes the family's encode into `out`
-def exact_lane_declines(tt : T?; tag : string; tw_exact : auto(TW); var st_exact : auto(ST); expected_len : int64;
-                        encode : block<(t : TW; var s : ST; var out : array<float>) : int64>) {
-    var outx : array<float>
-    exact_lane_declines(tt, tag, expected_len, true) $() : int64 {
-        invoke(encode, tw_exact, st_exact, outx)
-        return long_length(outx)
+//! a vision tower's exact lane served on the device: the knob on, one encode, every block, the grid's rows, no `quant_mode`
+//! decline, and the device's rel_l2 from the exact CPU chain (the knob off) within `TWIN_EXACT_REL_L2_VK` - the expectation moved
+//! past the bar at one element as the compare's control; then the input poison: `twp`, the exact tower with a block zeroed,
+//! through the device chain must EXCEED the bar
+def exact_lane_served(tt : T?; tag : string; tw_exact : auto(TW); var st_exact : auto(ST); npos : int64; twp : TW; var stp : ST;
+                      encode : block<(t : TW; var s : ST; var out : array<float>) : int64>) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        var cpu, dev : array<float>
+        var n_cpu = 0l
+        var n_dev = 0l
+        var s0 = VtStats()
+        var s1 = VtStats()
+        var dq = 0l
+        with_gpu_knobs() {
+            set_vulkan_tower(false)
+            n_cpu = queued_encode(tw_exact, st_exact, cpu, encode)
+            set_vulkan_tower(true)
+            s0 = vulkan_tower_stats()
+            let dq0 = vulkan_tower_declines()?["quant_mode"] ?? 0l
+            n_dev = queued_encode(tw_exact, st_exact, dev, encode)
+            s1 = vulkan_tower_stats()
+            dq = (vulkan_tower_declines()?["quant_mode"] ?? 0l) - dq0
+        }
+        if (s1.encodes == s0.encodes) {
+            to_log(LOG_INFO, "{tag} exact lane: the driver declined - {vulkan_tower_declines()}\n")
+        }
+        tt |> equal(n_cpu, n_dev, "{tag} exact lane: token count on both chains")
+        device_leg_served(tt, "{tag} exact lane", s0, s1, tw_exact.n_layer, npos)
+        tt |> equal(dq, 0l, "{tag} exact lane: no quant_mode decline")
+        tower_twin_held(tt, "{tag} exact lane", cpu, dev, TWIN_EXACT_REL_L2_VK)
+        var nsq = 0.0lf
+        for (v in cpu) {
+            nsq += double(v) * double(v)
+        }
+        var moved := cpu
+        moved[0] += float(2.0lf * TWIN_EXACT_REL_L2_VK * sqrt(nsq) + double(abs(dev[0] - cpu[0])) + 1.0lf)
+        var stm = TowerParityStats()
+        if (tower_parity_stats(tt, "{tag} exact-lane control", moved, dev, stm)) {
+            tt |> success(stm.rel_l2 > TWIN_EXACT_REL_L2_VK, "{tag} exact lane control: the expectation moved past the bar at one element reds it ({stm.rel_l2})")
+        }
+        delete moved
+        var inscope poisoned <- device_poison_leg(tt, "{tag} exact lane", twp, stp, encode)
+        tower_twin_poisoned(tt, "{tag} exact lane", cpu, poisoned, TWIN_EXACT_REL_L2_VK)
+        delete cpu
+        delete dev
     }
-    delete outx
 }
 
 //! the device chain's rel_l2 from the exact chain held within `slack` x the CPU q8 chain's own plus `floor`; returns the bar, 0 when a compare could not run
@@ -339,28 +414,35 @@ def private tower_twin_verdict(t : T?; tag : string; exact, dev : array<float>; 
     if (must_exceed) {
         t |> success(st.rel_l2 > bar, "{tag}: a zeroed block through the device chain EXCEEDS the bar ({st.rel_l2} vs {bar})")
     } else {
-        t |> success(st.rel_l2 <= bar, "{tag}: the device chain sits within the bar the first encode set ({st.rel_l2} vs {bar})")
+        t |> success(st.rel_l2 <= bar, "{tag}: the device chain sits within the bar ({st.rel_l2} vs {bar})")
     }
 }
 
 //! a staged tower truncated to `nl` blocks (0 = the file's count) with `zero_block`'s GEMM planes zeroed when >= 0 - the
-//! input poison of the device-side bars, through every plane the driver reads (a q8 family's qblob; the halfword twin
-//! beside the blob where the family bakes one)
+//! input poison of the device-side bars, through every plane the driver reads: a q8 tower's qblob; an exact tower's blob and
+//! its halfword plane (the twin a family bakes beside the blob, or the bf16 rows the file holds) wherever the plane spans the block
 def truncate_and_poison(var stg : auto; nl, zero_block : int64) {
     if (nl > 0l) {
         stg.t.n_layer = nl
     }
     if (zero_block >= 0l) {
         let base = stg.t.layer_w + zero_block * stg.t.layer_w_stride
-        static_if (typeinfo has_field<qblob>(stg)) {
-            for (i in range64(stg.t.layer_w_stride)) {
-                stg.qblob[base + i] = int8(0)
+        let stride = stg.t.layer_w_stride
+        var q8 = false
+        static_if (typeinfo has_field<q8>(stg.t)) {
+            q8 = stg.t.q8
+        }
+        if (q8) {
+            static_if (typeinfo has_field<qblob>(stg)) {
+                for (i in range64(stride)) {
+                    stg.qblob[base + i] = int8(0)
+                }
             }
         } else {
-            for (i in range64(stg.t.layer_w_stride)) {
+            for (i in range64(long_length(stg.blob) >= base + stride ? stride : 0l)) {
                 stg.blob[base + i] = 0.0
             }
-            for (i in range64(long_length(stg.wblob) > 0l ? stg.t.layer_w_stride : 0l)) {
+            for (i in range64(long_length(stg.wblob) >= base + stride ? stride : 0l)) {
                 stg.wblob[base + i] = uint16(0)
             }
         }

@@ -1483,6 +1483,46 @@ class template GkQ3aShuffle {
     }
 }
 
+struct GkPatchIm2colArgs {
+    w : uint          //! the canvas in pixels
+    h : uint
+    p : uint          //! the patch side
+    row_dim : uint    //! a column row's padded width; the columns past 3 x p x p read zero
+    npos : uint       //! the patch rows; the rows past them up to `total` read zero (the GEMM's row pad)
+    total : uint      //! the rows written x row_dim
+    scale : float     //! the pixel map ahead of the conv: x . scale + shift (gemma4v's [0, 1] -> [-1, 1])
+    shift : float
+}
+
+//! the vision stems' patch im2col over interleaved RGB planes [h][w][3]: row pi = patch (pi / n_cols, pi % n_cols) in row-major
+//! order, column c x p x p + ky x p + kx = channel c's pixel (ky, kx) of the patch, the CPU `im2col_rgb_patches`' layout; one
+//! element an invocation, the pad columns and the pad rows written zero
+[ |> template_struct_instance]
+class template GkPatchIm2col {
+    @ssbo @binding = 0 @role = "read" src : array<float>
+    @ssbo @binding = 1 @role = "write" dst : array<float>
+    @kargs pa : GkPatchIm2colArgs
+
+    def patch_im2col_body {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.total) {
+            let pi = gid / pa.row_dim
+            let j = gid % pa.row_dim
+            let psq = pa.p * pa.p
+            var v = 0.0
+            if (pi < pa.npos && j < 3u * psq) {
+                let c = j / psq
+                let k = j % psq
+                let n_cols = max(1u, pa.w / pa.p)
+                let py = (pi / n_cols) * pa.p + k / pa.p
+                let px = (pi % n_cols) * pa.p + k % pa.p
+                v = src[(py * pa.w + px) * 3u + c] * pa.scale + pa.shift
+            }
+            dst[gid] = v
+        }
+    }
+}
+
 struct GkIm2col2dArgs {
     iw : uint         //! the source block's width (frames), height (mel rows / channels' rows) and channel count
     ih : uint
@@ -1897,6 +1937,266 @@ class template GkRowGather {
     }
 }
 
+struct GkBiasGateArgs {
+    d : uint        //! the row width
+    nelem : uint
+    goff : uint     //! the gate bias row's base in wn
+    uoff : uint     //! the up bias row's base in wn
+}
+
+//! a gated hidden from two GEMM outputs with their bias rows: g = silu(g + bg) . (u + bu), in place over g (OUT32) or as saturated
+//! halves (OUT16, the f16 tile's feed); four elements an invocation, each guarded against the count
+[ |> template_struct_instance]
+class template GkBiasGate {
+    @template_constant OUT16 : bool = false
+    @template_constant OUT32 : bool = true
+    @template_constant ACT : uint = 3u   //!< the gate's activation: `BIAS_ACT_SILU`, spelled as its literal - every tower this stamps for gates its hidden so
+    @ssbo @binding = 0 @role = "readwrite" g : array<float>
+    @ssbo @binding = 1 @role = "read" u : array<float>
+    @ssbo @binding = 2 @role = "weight" wn : array<float>
+    @ssbo @binding = 3 @role = "write" @template_gate = OUT16 outh : array<float16>
+    @kargs pa : GkBiasGateArgs
+
+    def gate_at(e : uint) {
+        let c = e % max(1u, pa.d)
+        let v = act_f32(g[e] + wn[pa.goff + c], ACT) * (u[e] + wn[pa.uoff + c])
+        static_if (OUT16) {
+            outh[e] = half_sat(v)
+        } else {
+            static_if (OUT32) {
+                g[e] = v
+            }
+        }
+    }
+
+    def bias_gate_body {
+        let e = gl_GlobalInvocationID.x * 4u
+        if (e < pa.nelem) {
+            gate_at(e)
+            if (e + 1u < pa.nelem) {
+                gate_at(e + 1u)
+            }
+            if (e + 2u < pa.nelem) {
+                gate_at(e + 2u)
+            }
+            if (e + 3u < pa.nelem) {
+                gate_at(e + 3u)
+            }
+        }
+    }
+}
+
+struct GkWinAttnArgs {
+    nheads : uint
+    hs : uint       //! the head width (read on a stamp whose HS is 0)
+    scale : float
+}
+
+//! the block-diagonal window attention of the qwen2.5 ViT over compact [npos x nheads . hs] rows, plain f32 softmax, no mask: one
+//! workgroup a (window, head), 256 threads = 64 query rows x 4 lanes - the lanes split the keys for the scores and the head's
+//! dims for the output; window w's rows are wlo[w] .. wlo[w + 1], 64 at most, the score block staged in workgroup memory
+[ |> template_struct_instance]
+class template GkWinAttn {
+    @template_constant HS : uint = 0u   //! the head width the stamp is pinned to; 0 reads it from the arguments
+    @ssbo @binding = 0 @role = "read" q : array<float>
+    @ssbo @binding = 1 @role = "read" k : array<float>
+    @ssbo @binding = 2 @role = "read" v : array<float>
+    @ssbo @binding = 3 @role = "write" att : array<float>
+    @ssbo @binding = 4 @role = "read" wlo : array<uint>
+    @workgroup sc : float[4096]
+    @kargs pa : GkWinAttnArgs
+
+    def win_attn_body {
+        let wid = gl_WorkGroupID.x
+        let hs = gk_fixed_or(HS, pa.hs)
+        let nheads = max(1u, pa.nheads)
+        let d = nheads * hs
+        let w = wid / nheads
+        let hh = wid - w * nheads
+        let lo = wlo[w]
+        let cnt = wlo[w + 1u] - lo
+        let tid = gl_LocalInvocationID.x
+        let r = tid >> 2u
+        let lane = tid & 3u
+        let live = r < cnt
+        let qb = (lo + r) * d + hh * hs
+        if (live) {
+            var j = lane
+            while (j < cnt) {
+                let kb = (lo + j) * d + hh * hs
+                var s = 0.0
+                var i = 0u
+                while (i < hs) {
+                    s += q[qb + i] * k[kb + i]
+                    i++
+                }
+                sc[r * 64u + j] = s * pa.scale
+                j += 4u
+            }
+        }
+        barrier()
+        if (live) {
+            var m = -3.4028235e38
+            var j = 0u
+            while (j < cnt) {
+                m = max(m, sc[r * 64u + j])
+                j++
+            }
+            j = lane
+            while (j < cnt) {
+                sc[r * 64u + j] = exp(sc[r * 64u + j] - m)
+                j += 4u
+            }
+        }
+        barrier()
+        if (live) {
+            var l = 0.0
+            var j = 0u
+            while (j < cnt) {
+                l += sc[r * 64u + j]
+                j++
+            }
+            let inv = 1.0 / l
+            var dd = lane
+            while (dd < hs) {
+                var acc = 0.0
+                j = 0u
+                while (j < cnt) {
+                    acc += sc[r * 64u + j] * v[(lo + j) * d + hh * hs + dd]
+                    j++
+                }
+                att[qb + dd] = acc * inv
+                dd += 4u
+            }
+        }
+    }
+}
+
+struct GkPosAdd2DArgs {
+    dim : uint
+    ncols : uint         //! the patch grid's width in rows
+    pos_entries : uint   //! the x rows of the table; the y rows follow them
+    total : uint
+    tboff : uint         //! the table's element base in tbl
+}
+
+//! the gemma4uv 2-axis position add: row p gains its x-table row (p % ncols) and its y-table row (pos_entries + p / ncols), one
+//! element an invocation, the CPU loop's (row + ex) + ey order
+[ |> template_struct_instance]
+class template GkPosAdd2D {
+    @ssbo @binding = 0 @role = "readwrite" x : array<float>
+    @ssbo @binding = 1 @role = "weight" tbl : array<float>
+    @kargs pa : GkPosAdd2DArgs
+
+    def pos_add_2d_body {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.total) {
+            let p = gid / pa.dim
+            let i = gid % pa.dim
+            let ex = tbl[pa.tboff + (p % pa.ncols) * pa.dim + i]
+            let ey = tbl[pa.tboff + (pa.pos_entries + p / pa.ncols) * pa.dim + i]
+            x[gid] = (x[gid] + ex) + ey
+        }
+    }
+}
+
+struct GkStemAsmArgs {
+    dim : uint
+    pw : uint      //! the patch grid's width
+    total : uint
+    boff : uint    //! the conv bias row's element base in b
+    poff : uint    //! the position rows' element base in pos
+}
+
+//! the qwen3v stem assemble: residual row r of the merge-adjacent walk (2x2 partners adjacent, groups row-major) gathers its
+//! natural-order conv row plus the conv bias plus that row's position, one element an invocation, the CPU stem's (crow + bp) + prow order
+[ |> template_struct_instance]
+class template GkStemAsm {
+    @ssbo @binding = 0 @role = "read" xn : array<float>
+    @ssbo @binding = 1 @role = "weight" b : array<float>
+    @ssbo @binding = 2 @role = "read" pos : array<float>
+    @ssbo @binding = 3 @role = "write" x : array<float>
+    @kargs pa : GkStemAsmArgs
+
+    def stem_asm_body {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.total) {
+            let r = gid / pa.dim
+            let i = gid % pa.dim
+            let g = r / 4u
+            let sub = r % 4u
+            let gcols = max(1u, pa.pw / 2u)
+            let src = ((g / gcols) * 2u + sub / 2u) * pa.pw + (g % gcols) * 2u + sub % 2u
+            x[gid] = (xn[src * pa.dim + i] + b[pa.boff + i]) + pos[pa.poff + src * pa.dim + i]
+        }
+    }
+}
+
+struct GkPool2dArgs {
+    width : uint   //! a row's width
+    gw : uint      //! the source grid's width, in rows
+    k : uint       //! the pool's side
+    total : uint   //! output elements
+}
+
+//! a vision tail's mean pool: y [oh*ow x width] the mean of each k x k block of the row grid x [gh*gw x width], one element an invocation
+[ |> template_struct_instance]
+class template GkPool2d {
+    @ssbo @binding = 0 @role = "read" x : array<float>
+    @ssbo @binding = 1 @role = "write" y : array<float>
+    @kargs pa : GkPool2dArgs
+
+    def pool_2d_body {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.total) {
+            let o = gid / pa.width
+            let c = gid % pa.width
+            let ow = max(1u, pa.gw / max(1u, pa.k))
+            let oy = o / ow
+            let ox = o % ow
+            var sum = 0.0
+            var dy = 0u
+            while (dy < pa.k) {
+                var dx = 0u
+                while (dx < pa.k) {
+                    sum += x[((oy * pa.k + dy) * pa.gw + ox * pa.k + dx) * pa.width + c]
+                    dx++
+                }
+                dy++
+            }
+            y[gid] = sum / float(pa.k * pa.k)
+        }
+    }
+}
+
+struct GkAffineRowsArgs {
+    width : uint   //! a row's width
+    total : uint
+    scale : float
+    boff : uint    //! the standardize bias row's element base in b, the scale row's in m
+    moff : uint
+    std : uint     //! 0: the rows take the scale alone (a tower with no standardize rows)
+}
+
+//! a vision tail's row standardize, in place: x = (x * scale - b[c]) * m[c] over rows of `width` (x * scale alone under `std` = 0),
+//! one element an invocation
+[ |> template_struct_instance]
+class template GkAffineRows {
+    @ssbo @binding = 0 @role = "readwrite" x : array<float>
+    @ssbo @binding = 1 @role = "weight" b : array<float>
+    @ssbo @binding = 2 @role = "weight" m : array<float>
+    @kargs pa : GkAffineRowsArgs
+
+    def affine_rows_body {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.total) {
+            let c = gid % pa.width
+            let v = x[gid] * pa.scale
+            x[gid] = pa.std != 0u ? (v - b[pa.boff + c]) * m[pa.moff + c] : v
+        }
+    }
+}
+
 struct GkPostAddLnArgs {
     d : uint
     rows : uint
@@ -1909,6 +2209,17 @@ struct GkPostAddLnArgs {
     ascale : float  //! the post-add's residual weight (canary's macaron halves add 0.5 of the branch)
     xboff : uint    //! the normed rows' element base in xb / xbh (a Metal site inside a larger buffer; 0 elsewhere)
 }
+
+//! the rms rows alone (the ADD-off RMS stamps): `rows` of width `d` against the weight row at `woff` in the norms plane
+def gk_rms_args(d, rows : uint; eps : float; woff : uint) : GkPostAddLnArgs => gk_ln_args(d, rows, eps, woff, 0u)
+
+//! the biased residual seam: x += y + the bias row at `boff`, then under `ln_on` the next pre-norm against the rows at `lnoff` / `lnboff`
+def gk_add_ln_args(d, rows : uint; eps : float; boff : uint; ln_on : bool; lnoff, lnboff : uint) : GkPostAddLnArgs
+    => GkPostAddLnArgs(d = d, rows = rows, woff = 0u, boff = boff, eps = eps, ln_on = ln_on ? 1u : 0u, lnoff = lnoff, lnboff = lnboff, ascale = 1.0, xboff = 0u)
+
+//! the post-normed residual seam (the gemma towers): x += rms(y) . the post-norm row at `woff`, then under `ln_on` the next rms against the row at `lnoff`
+def gk_add_post_rms_args(d, rows : uint; eps : float; woff : uint; ln_on : bool; lnoff : uint) : GkPostAddLnArgs
+    => GkPostAddLnArgs(d = d, rows = rows, woff = woff, boff = 0u, eps = eps, ln_on = ln_on ? 1u : 0u, lnoff = lnoff, lnboff = 0u, ascale = 1.0, xboff = 0u)
 
 //! the layernorm alone (the ADD-off stamps): `rows` of width `d`, the weight row at `lnoff` and the bias row at `lnboff` in the norms plane
 def gk_ln_args(d, rows : uint; eps : float; lnoff, lnboff : uint; xboff : uint = 0u) : GkPostAddLnArgs
@@ -1999,7 +2310,12 @@ class template GkPostAddLn : GkQ8BlockStore {
             }
         } else {
             while (i < pa.d) {
-                s1 += x[base + i]
+                let xv = x[base + i]
+                static_if (RMS) {
+                    s1 += xv * xv
+                } else {
+                    s1 += xv
+                }
                 i += 256u
             }
         }

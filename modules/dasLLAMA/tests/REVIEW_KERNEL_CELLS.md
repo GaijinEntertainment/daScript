@@ -5,27 +5,21 @@ docs: `../ARCHITECTURE_GPU.md` for a `[vk_dispatch]` or `[metal_dispatch]` kerne
 `../ARCHITECTURE_CPU_KERNELS.md` for a CPU kernel in `../dasllama/dasllama_math*.das`. Planned
 work: `../followup_general.md`, `../followup_vulkan.md`, `../followup_metal.md`.
 
-A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's asserts
-belong to every cell that calls it. A CPU kernel is a function that writes an output buffer from
-operand buffers; one that answers a size, a block or a layout is not. A kernel run is a dispatch
-or a CPU kernel call. A kernel-unit cell is a cell in which a `[metal_dispatch]` or
-`[vk_dispatch]` class is dispatched, or a CPU kernel in `../dasllama/dasllama_math*.das` is
-called, by a statement in test code - the cell itself, or a helper in its own file or in a
-`_*.das` test-helper module; a kernel run that only happens inside a function in `../dasllama/`
-does not make a cell a kernel-unit cell. A gate is
+A cell, a CPU kernel, a kernel-unit cell and a loosened assert are what `REVIEW.md` defines. A
+kernel run is a dispatch or a CPU kernel call. A gate is
 any call site that supplies a kernel's dispatch count or fills its kargs (kernel-argument)
 struct itself, other than a serving call in `../dasllama/` the kernel exists for - a cell, a
 probe, a harness. A stamp is a `[vk_dispatch]` or `[metal_dispatch]` class that
 compiles to its own shader module - a class no other class derives from; every rule here treats
 each stamp as its own class. A CPU oracle is the same computation written in plain code and run on
 the CPU. A path of a class is each kargs-selected branch, each branch a sentinel value in a bound
-buffer selects, and each trip-count regime of each loop whose trip count a kargs value sets - zero
-trips, one trip, a whole number of workgroup strides, or a partial tail. A branch or loop inside a
-function the class's methods call, other than a method of the class, is not a path of the class -
-covering it is the job of that function's cells, never the class's. A trip-count regime is a path
-only where a serving call in `../dasllama/` can reach it on some model the engine serves. To
-loosen an assert is to
-let pass an input the old assert failed: a wider bar, a shorter domain, a dropped length check. A
+buffer selects, and each trip-count regime of each loop whose bound a kargs value sets, the
+regimes read from that value against the loop's stride: the value zero, a value under one stride,
+a whole number of strides, and a value past a whole number of strides (the tail). A branch or loop
+inside a function the class's methods call, other than a method of the class, is not a path of
+the class - covering it is the job of that function's cells, never the class's. A branch or
+regime is a path only where a serving call in `../dasllama/` can reach it on some model the
+engine serves. A
 control is an extra assert in the same cell proving a compare can fail - a poisoned input, or a
 poisoned expectation (the expected value with a known amount added), that must land outside the
 bar, a mechanism unhooked whose result must miss, or a second, independent computation the
