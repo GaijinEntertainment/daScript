@@ -103,11 +103,11 @@ def release_kv_pages(var session : Session) {
     release_kv_pages_(session)
 }
 
-def create_prefix_cache(max_groups : int64 = 0l; max_states : int64 = DEFAULT_PREFIX_STATES) : PrefixCache {
-    //! Create a prefix cache for the paged sessions of one ``create_kv_pool`` pool: streams donate KV pages
-    //! (``prefix_insert``), later requests with the same prefix attach them (``prefix_attach``). ``max_groups`` caps
-    //! retained groups (0 = unbounded); a recurrent model keeps at most ``max_states`` whole checkpoints instead.
-    return <- create_prefix_cache_(max_groups, max_states)
+def create_prefix_cache(max_groups : int64 = 0l; max_states : int64 = DEFAULT_PREFIX_STATES; max_state_bytes : int64 = 0l) : PrefixCache {
+    //! A prefix cache for one ``create_kv_pool`` pool: streams donate KV pages (``prefix_insert``), later requests
+    //! with the same prefix attach them (``prefix_attach``); ``max_groups`` caps the pages (0 = unbounded). A recurrent
+    //! model keeps whole checkpoints instead: ``max_states`` within ``max_state_bytes`` (0 = the count alone).
+    return <- create_prefix_cache_(max_groups, max_states, max_state_bytes)
 }
 
 def prefix_checkpoint_at(cache : PrefixCache; pool : KVPool; session : Session; prompt : array<int64>; matched : int64; stable_at : int64 = 0l) : int64 {
@@ -130,11 +130,11 @@ def prefix_attach(var cache : PrefixCache; var pool : KVPool; var session : Sess
     return prefix_attach_(cache, pool, session, prompt)
 }
 
-def prefix_insert(var cache : PrefixCache; var pool : KVPool; var session : Session; tokens : array<int64>; preview : string = "") {
-    //! Donate a session's KV pages to the cache. ``tokens`` is its EVALED history (the first ``n_past`` rows exist);
-    //! every full page not already cached survives ``release_kv_pages``, ``preview`` labels the chain. On a
-    //! recurrent model the donation is one checkpoint at ``n_past``, and may be taken between two prefill calls.
-    prefix_insert_(cache, pool, session, tokens, preview)
+def prefix_insert(var cache : PrefixCache; var pool : KVPool; var session : Session; tokens : array<int64>; preview : string = ""; opening : bool = false) {
+    //! Donate a session's KV pages to the cache: ``tokens`` is its EVALED history (the first ``n_past`` rows exist), every
+    //! full page not already cached survives ``release_kv_pages``, ``preview`` labels the chain. A recurrent model donates
+    //! one checkpoint at ``n_past``: ``opening`` marks one taken between prefill calls, kept ahead of finished turns' tails.
+    prefix_insert_(cache, pool, session, tokens, preview, opening)
 }
 
 def prefix_chain_list(cache : PrefixCache) : array<PrefixChain> {
@@ -422,11 +422,18 @@ def render_turn_audio(model : Model; chat : ChatSession; var head : array<int64>
     render_turn_audio_(model, chat, head, tail, text_before)
 }
 
-def render_assistant(model : Model; var chat : ChatSession; text : string; var out : array<int64>) {
-    //! ``add_assistant``'s render half: appends the exact token stream a known reply prefills to
-    //! ``out`` WITHOUT running the model, advancing the transcript like ``add_assistant``. Use on a
-    //! ``create_chat_renderer`` chat to replay history with no KV memory. Precondition: user message pending.
-    render_assistant_(model, chat, text, out)
+def render_assistant(model : Model; var chat : ChatSession; text : string; var out : array<int64>; reasoning : string = "") {
+    //! ``add_assistant``'s render half: appends the exact token stream a known reply prefills to ``out``
+    //! WITHOUT running the model, advancing the transcript like ``add_assistant`` (a ``create_chat_renderer``
+    //! chat replays history with no KV). ``reasoning`` renders in its think block under ``set_preserve_thinking``.
+    render_assistant_(model, chat, text, out, reasoning)
+}
+
+def render_user(model : Model; var chat : ChatSession; var out : array<int64>) {
+    //! Render the pending user turn alone and consume it, with no generation prompt: the turn a user message
+    //! that follows another user message makes, as every template writes them one after the other. Precondition:
+    //! a user message pending; a no-op otherwise.
+    render_user_(model, chat, out)
 }
 
 def render_close(model : Model; chat : ChatSession) : array<int64> {
@@ -469,10 +476,17 @@ def set_thinking(var chat : ChatSession; on : bool) {
     set_thinking_(chat, on)
 }
 
-def render_assistant_calls(model : Model; var chat : ChatSession; text : string; calls : array<string>; var out : array<int64>) {
+def set_preserve_thinking(var chat : ChatSession; on : bool) {
+    //! ``true`` makes every replayed assistant turn carry its think block - its ``reasoning`` between the
+    //! template's markers, the empty block when it had none - so a replayed transcript renders the tokens
+    //! the model generated and a prefix cache matches through it. No-op where ``set_thinking`` is; default off.
+    set_preserve_thinking_(chat, on)
+}
+
+def render_assistant_calls(model : Model; var chat : ChatSession; text : string; calls : array<string>; var out : array<int64>; reasoning : string = "") {
     //! ``render_assistant``'s tool-calling twin: replay an assistant turn that emitted tool calls
     //! (verbatim ``\{"name":…,"arguments":…}`` objects) plus any ``text`` alongside.
-    render_assistant_calls_(model, chat, text, calls, out)
+    render_assistant_calls_(model, chat, text, calls, out, reasoning)
 }
 
 def effective_stop_ids(chat : ChatSession) : array<int64> {
@@ -506,7 +520,7 @@ def split_reasoning(chat : ChatSession; reply : string) : ThinkSplit {
     //! Split a complete reply at its reasoning boundary per the model family's reply format
     //! (``<think>`` pair, Harmony channels, gemma-4's thought channel). Both halves come back
     //! stripped when a reasoning span is found; a reply with no reasoning passes through untouched.
-    return split_reasoning_(chat.tmpl, reply)
+    return split_reasoning_(chat, reply)
 }
 
 def make_think_stream(chat : ChatSession) : ThinkStream {

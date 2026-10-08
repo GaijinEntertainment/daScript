@@ -168,7 +168,8 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    bin/daslang -jit utils/dasllama-server/main.das -- --model <model.gguf> [--port 8080] [--quant q8] \
        [--asr <asr.bin>] [--asr-workers 2] [--mmproj <mmproj.gguf>] [--image-mmproj <mmproj.gguf>] \
        [--audio-mmproj <mmproj.gguf>] \
-       [--ctx 4096] [--streams 4] [--chunk 512] [--chunk-idle 2048] [--page-rows 64] [--prefix N] [--tune]
+       [--ctx 4096] [--streams 4] [--chunk 512] [--chunk-idle 2048] [--page-rows 64] [--prefix N] \
+       [--prefix-states 256] [--prefix-state-mb 0] [--tune]
 
 .. list-table::
    :header-rows: 1
@@ -307,6 +308,14 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
      -
      - *auto*
      - Prefix-cache retention cap in pages (auto: one full context per stream; ``-1`` = unbounded)
+   * - ``--prefix-states``
+     -
+     - ``256``
+     - Recurrent models (the Qwen3.5/3.6/3.8 hybrids) cache whole checkpoints instead of pages: the most a slot keeps (``0`` = none; config key ``prefix_states``); the byte budget binds first. Every request leaves one at its opening's shared head (the system text or the tool block, whichever its template writes first), one at its opening with the tools, one where its last message starts, one a token short of its prompt's end, one at its finished turn; a conversation's own stops are dropped before shared openings
+   * - ``--prefix-state-mb``
+     -
+     - *auto*
+     - The checkpoints' byte budget in MB, snapshots and held pages (auto: a quarter of the box's RAM; config key ``prefix_state_mb``)
    * - ``--flat``
      -
      - ---
@@ -745,8 +754,10 @@ developer-turn TypeScript namespace defs, commentary-channel recipient calls),
 (v0.3+ - ``[AVAILABLE_TOOLS]`` defs, a ``[TOOL_CALLS]`` array) and
 **llama_json** (llama-3.x - the whole reply is one ``{"name","parameters"}``
 object, results on the ``ipython`` role). A model whose chat template declares
-no tool format gets a 400. Streaming with tools buffers the native envelope and
-emits the parsed calls as one ``delta.tool_calls`` chunk at finish.
+no tool format gets a 400. Streaming with tools puts the reply's text on the wire
+as it comes and holds back only the family's call marker; the parsed calls arrive
+as one ``delta.tool_calls`` chunk at finish. A family whose calls ride channels
+rather than a marker (harmony) is framed whole at the finish.
 
 
 Images
@@ -892,7 +903,5 @@ prefix cache.
 Not yet implemented
 ===================
 
-The request's ``stop`` and ``response_format`` fields and the forced-function
-``tool_choice`` object form - each logged when a request carries it. On the
-media path: more than one media clip per request, media on earlier turns of a
-conversation, and remote ``image_url`` fetches.
+On the media path: more than one media clip per request, media on earlier
+turns of a conversation, and remote ``image_url`` fetches.

@@ -37,7 +37,7 @@ every full page of it. The preview string is only a label for dashboards:
 .. code-block:: das
 
    var pool <- create_kv_pool(m, 16l)
-   var cache <- create_prefix_cache()
+   var cache <- create_prefix_cache(0l, DEFAULT_PREFIX_STATES, 1024l * 1048576l)   // a recurrent model's checkpoints: up to 16 within 1 GB
 
    let p1 <- encode(m, "{SYSTEM}{Q1}")
    var s1 = create_session(m, pool)
@@ -99,13 +99,17 @@ no such state it is always 0 - the pages are already the cache:
    if (stop > 0l) {
        let head <- [for (i in range64(matched, stop)); turn.toks[i]]
        eval(m, s, head)
-       prefix_insert(cache, pool, s, turn.toks)   // a checkpoint at `stop`
+       prefix_insert(cache, pool, s, turn.toks, "", true)   // a checkpoint at `stop`: an opening
    }
    // eval() the rest of turn.toks from s.n_past on
 
 ``prefix_insert`` on such a model records where the session stands, so we call
-it between two ``eval`` calls. Tutorial 13's scheduler does the same when a
-request carries ``stable_at`` - set it from ``turn.opening``.
+it between two ``eval`` calls; ``opening = true`` marks the checkpoint as one every
+conversation on this system prompt shares, which the budget drops after any
+conversation's own. The server's scheduler stops the same way, at up to four
+places a request names (the opening's shared head, the system opening, the
+request's own stable stop, the prompt's end), within a byte budget - a quarter
+of the box's RAM unless ``--prefix-state-mb`` says otherwise.
 
 What the cache holds, and giving it back
 ========================================

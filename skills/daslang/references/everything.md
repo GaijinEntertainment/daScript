@@ -3182,12 +3182,12 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 
 ### Prefix cache
 
-- `create_prefix_cache` - Create a prefix cache for the paged sessions of one `create_kv_pool` pool: streams donate KV pages (`prefix_insert`), later requests with the same prefix attach them (`prefix_attach`).
+- `create_prefix_cache` - A prefix cache for one `create_kv_pool` pool: streams donate KV pages (`prefix_insert`), later requests with the same prefix attach them (`prefix_attach`); `max_groups` caps the pages (0 = unbounded).
 - `prefix_attach` - Attach the longest cached prefix of `prompt` to a FRESH paged `session` of `pool`: matched pages join the session's block table and `n_past` advances past them, so the caller prefills only the tail.
 - `prefix_chain_list` - Snapshot of the cache's donated chains for dashboards: per donation — page-covered token count, live pages, hit count, born/last-hit ticks, and the caller-provided preview.
 - `prefix_checkpoint_at` - Where a recurrent `session`'s prefill of `prompt` should stop for a `prefix_insert`, after `prefix_attach` matched `matched` tokens: `stable_at` (`render_turn_marked`'s opening) when the caller knows it, else the longest opening an earlier checkpoint shares.
 - `prefix_held_groups` - Pages the cache currently holds (== pool groups retained for reuse).
-- `prefix_insert` - Donate a session's KV pages to the cache.
+- `prefix_insert` - Donate a session's KV pages to the cache: `tokens` is its EVALED history (the first `n_past` rows exist), every full page not already cached survives `release_kv_pages`, `preview` labels the chain.
 - `prefix_match_len` - How many leading positions of `prompt` a `prefix_attach` would attach right now, attaching nothing: a probe for a caller deciding what a request must bring (a media span's rows).
 - `prefix_release` - Release every cached page back to `pool` and clear the cache (pages still used by live sessions stay alive until those sessions release them).
 
@@ -3235,12 +3235,13 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `add_user_span` - Mark the pending user turn as carrying a media span inline: `render_turn` and `render_assistant` then lay `n_rows` position ids (`media_position_id` over the media's content `key`) where the media sits, `text_before` bytes into the turn's text.
 - `create_chat` - Start a conversation over `model`: resolves the chat template (GGUF-embedded, falling back to the arch registry) and creates the session.
 - `create_chat_renderer` - `create_chat`'s RENDER-ONLY twin: resolves the template/stop ids/turn close but creates NO KV session — a queued request can render its whole prompt holding tokens only, no cache memory.
-- `render_assistant` - `add_assistant`'s render half: appends the exact token stream a known reply prefills to `out` WITHOUT running the model, advancing the transcript like `add_assistant`.
+- `render_assistant` - `add_assistant`'s render half: appends the exact token stream a known reply prefills to `out` WITHOUT running the model, advancing the transcript like `add_assistant` (a `create_chat_renderer` chat replays history with no KV).
 - `render_close` - The tokens that TERMINATE an assistant turn (what `respond` evals after the reply) — for schedulers that close a finished stream's turn themselves.
 - `render_turn` - Render the next turn's prefill token ids — BOS + system on the first turn, then the user turn and the generation prompt — WITHOUT running the model.
 - `render_turn_audio` - `render_turn`'s AUDIO twin: the same two-span contract around the audio soft-token splice (the template's audio span markers).
 - `render_turn_image` - `render_turn`'s IMAGE twin: the two token spans that bracket the image soft-token splice — `head` before the rows, `tail` after.
 - `render_turn_marked` - `render_turn` with its opening marked: `opening` leading tokens - BOS, prelude and the system turn of a conversation's first turn - are the same for any user text, so a prefix cache can checkpoint there.
+- `render_user` - Render the pending user turn alone and consume it, with no generation prompt: the turn a user message that follows another user message makes, as every template writes them one after the other.
 - `respond` - Generate the assistant's reply to the queued user message, streaming pieces through the trailing block (return `false` to stop early).
 - `set_chat_date` - Pin the date a Llama-3.1+ system turn states (`"26 Jul 2024"`); `""` returns it to the day the turn renders.
 - `set_thinking` - Toggle reasoning for a hybrid thinking model (Qwen3 family): `false` appends the template's empty think block so the model answers directly.
@@ -3258,6 +3259,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `make_nothink_guard` - The instruct-mode stop guard for `chat`'s next turn over the family's channel markers (gemma-4): unarmed on a thinking turn.
 - `make_think_stream` - The incremental reasoning/content splitter for `chat`'s next turn (`think_feed` per piece, `think_finish` at the end).
 - `nothink_stop_here` - true = `id` ends the turn: a guarded channel marker sampled after the reply's first content piece.
+- `set_preserve_thinking` - `true` makes every replayed assistant turn carry its think block - its `reasoning` between the template's markers, the empty block when it had none - so a replayed transcript renders the tokens the model generated and a prefix cache matches through it.
 - `split_reasoning` - Split a complete reply at its reasoning boundary per the model family's reply format (`<think>` pair, Harmony channels, gemma-4's thought channel).
 - `think_drain` - Drain a COMPLETE reply through the splitter in one call: feed + finish + the strip rule (both halves strip when a reasoning span was consumed).
 - `think_feed` - Feed one streamed piece through the splitter; the out-strings are OVERWRITTEN with this piece's reasoning/content deltas (either may be empty while a partial marker is held).

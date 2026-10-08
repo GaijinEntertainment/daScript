@@ -33,7 +33,7 @@ enum SchedEventKind {
 struct SchedEvent {
     stream : int64                          // Stream/PendingReq id
     kind : SchedEventKind = SchedEventKind.piece
-    token : int64 = -1l                     // piece: the sampled token id
+    token : int64 = -1l                     // piece: the sampled token id; -1 on the text a stop-string hold releases at the finish, which no one token made
     text : string = ""                      // piece: its decoded text
     finish : string = ""                    // finished: "stop" | "length" | "evicted"
     n_prompt : int64 = 0l                   // finished: prompt tokens prefilled
@@ -63,12 +63,15 @@ struct PendingReq {
     prompt : array<int64>                   // the full rendered prompt
     close_toks : array<int64>               // the turn-terminating tokens (render_close; evaled at donation so the next turn extends the cached prefix)
     stop_ids : array<int64>                 // sampling one of these finishes "stop" (the token is not emitted)
+    stop_strs : array<string>               //! a reply that reaches one of these finishes "stop" where it begins; the text that could still begin one is held back (`stop_scan`)
     nothink : NothinkStopGuard = NothinkStopGuard()   // the instruct-mode channel-marker guard (`make_nothink_guard`); unarmed = every token passes
     params : SamplingParams = SamplingParams()
     max_new : int64 = 256l                  // reply token budget (>= 1)
     seed : int = 0                          // != 0 => set_seed at admit (reproducible sampling)
     t_submit : int64 = 0l                   // ref_time_ticks at submit (queue-wait logging; 0 = unset)
-    stable_at : int64 = 0l                  //! prompt tokens the request's own last turn does not reach (`render_turn_marked`); a recurrent model's prefill leaves a checkpoint there (0 = unknown)
+    stable_at : int64 = 0l                  //! prompt tokens the request's own last turn does not reach (`render_turn_marked`): where the requests sharing this history part; a recurrent model's prefill leaves a checkpoint there (0 = unknown)
+    system_at : int64 = 0l                  //! prompt tokens of the conversation's opening every request on this system prompt and tool set shares (`ChatSession.first_opening`); a recurrent model's prefill leaves a second checkpoint there when it sits a page or more under `stable_at` (0 = unknown)
+    system_head_at : int64 = 0l             //! the opening's tokens shared beyond this system prompt and tool set - its system text or its tool block, whichever the template writes first (`ChatSession.system_head_at`): a third checkpoint, a page or more under `system_at` (0 = unknown)
     // MEDIA splice (images today; audio rides the same fields): `n_media` embedding rows that
     // prefill BETWEEN prompt[media_at-1] and prompt[media_at] — the render seam hands the two
     // token spans and the encoder hands the rows. Zero rows = an ordinary text request.
@@ -90,6 +93,8 @@ struct Stream {
     prompt : array<int64>
     close_toks : array<int64>
     stop_ids : array<int64>
+    stop_strs : array<string>
+    stop_hold : string = ""                 //! generated text not yet emitted: it could still begin a stop string
     nothink : NothinkStopGuard = NothinkStopGuard()
     n_prefilled : int64                     // prompt positions whose K/V stands: attached or evaled
     spans : array<MediaSpan>                // the prompt's media spans, in prompt order (see PendingReq)
@@ -102,6 +107,10 @@ struct Stream {
     constraint : TokenConstraintBox         //! owned here (freed with the stream); the session carries the pointer and never frees it
     n_cached : int64                        // prefix-cache hit length (set at admit; 0 in flat mode)
     ckpt_at : int64                         //! the prompt position the prefill stops at to leave a recurrent checkpoint (0 = none)
+    ckpt_sys_at : int64                     //! an earlier stop for the checkpoint at the shared system opening (0 = none; always under `ckpt_at`)
+    ckpt_head_at : int64                    //! an earlier stop still, at the opening's shared head - the system text ahead of the tool block, or the tool block ahead of the text (0 = none; always under `ckpt_sys_at`)
+    ckpt_at_tail : bool                     //! `ckpt_at` is the request's own stable opening and no shared stop: its checkpoint is a tail, which only this conversation's next turn extends
+    ckpt_end_at : int64                     //! the last stop, one token short of the prompt, so the same prompt asked again attaches whole (0 = none; a page or more past `ckpt_at`)
     t_admit : int64                         // ref_time_ticks at admit
     t_first : int64                         // ref_time_ticks at the first sampled token (0 until then)
     ttft_us : int64
@@ -215,14 +224,14 @@ struct Scheduler {
 //! `idle_chunk_tokens` takes the backend's default (`chunk_defaults`). `page_rows` > 0 switches to PAGED serving — KV
 //! pages allocate on demand (memory tracks actual context, not seq_len × streams) and a prefix
 //! cache reuses completed streams' pages across requests (`prefix_groups` caps its retention;
-//! 0 = unbounded; a recurrent model keeps `prefix_states` checkpoints instead, 0 = none); 0 keeps
-//! today's flat preallocated sessions. Free with `unsafe(delete sch)` —
-//! live sessions, the pool, and the workspace go with it.
+//! 0 = unbounded; a recurrent model keeps `prefix_states` checkpoints instead, 0 = none, within
+//! `prefix_state_bytes`, 0 = the count alone); 0 keeps today's flat preallocated sessions. Free with
+//! `unsafe(delete sch)` — live sessions, the pool, and the workspace go with it.
 def create_scheduler(model : Model; max_streams : int64 = 4l; max_queue : int64 = 32l;
                      chunk_tokens : int64 = 0l; page_rows : int64 = 0l;
                      prefix_groups : int64 = 0l; kv_dtype : KVDtype = KVDtype.f16;
                      mtp : bool = false; idle_chunk_tokens : int64 = -1l;
-                     prefix_states : int64 = DEFAULT_PREFIX_STATES) : Scheduler {
+                     prefix_states : int64 = DEFAULT_PREFIX_STATES; prefix_state_bytes : int64 = 0l) : Scheduler {
     let dflt = chunk_defaults(model)
     var sch <- Scheduler(ws <- create_batch_workspace(model), max_streams = max(1l, max_streams),
                          max_queue = max(1l, max_queue), chunk_tokens = chunk_tokens > 0l ? chunk_tokens : dflt.chunk,
@@ -233,7 +242,7 @@ def create_scheduler(model : Model; max_streams : int64 = 4l; max_queue : int64 
         sch.paged = true
         sch.pool <- create_kv_pool(model, page_rows, kv_dtype)
         kv_pool_reserve(sch.pool, sch.max_streams * (model.config.seq_len + page_rows) + prefix_groups * page_rows)
-        sch.prefix <- create_prefix_cache(prefix_groups, prefix_states)
+        sch.prefix <- create_prefix_cache(prefix_groups, prefix_states, prefix_state_bytes)
     }
     return <- sch
 }
@@ -376,7 +385,74 @@ def submit(model : Model; var sch : Scheduler; var req : PendingReq) : bool {
 }
 
 // Terminate a stream: mark done (reaped at step end) and append its finished event.
+//! the nearest checkpoint stop past the rows prefilled so far, 0 when none is left: the system text, the system opening, the request's own
+def private next_checkpoint(st : Stream) : int64 {
+    for (at in fixed_array(st.ckpt_head_at, st.ckpt_sys_at, st.ckpt_at, st.ckpt_end_at)) {
+        if (at > st.n_prefilled) {
+            return at
+        }
+    }
+    return 0l
+}
+
+def private at_checkpoint(st : Stream) : bool =>
+    st.n_prefilled == st.ckpt_head_at || st.n_prefilled == st.ckpt_sys_at || st.n_prefilled == st.ckpt_at || st.n_prefilled == st.ckpt_end_at
+
+//! a checkpoint stop inside the rows [lo, hi]: the span's one-call prefill cannot take them, since the stop needs the eval to end there
+def private checkpoint_within(st : Stream; lo, hi : int64) : bool {
+    for (at in fixed_array(st.ckpt_head_at, st.ckpt_sys_at, st.ckpt_at, st.ckpt_end_at)) {
+        if (at > lo && at <= hi) {
+            return true
+        }
+    }
+    return false
+}
+
+//! The text a stop-string scan releases once `piece` joins `hold`: everything before the first stop string when one
+//! is complete (true), else everything that cannot still begin one, the rest staying in `hold` (false).
+def stop_scan(var hold : string&; piece : string; stops : array<string>; var emit : string&) : bool {
+    let whole = empty(hold) ? piece : "{hold}{piece}"
+    var at = -1
+    for (s in stops) {
+        let i = find(whole, s)
+        if (i >= 0 && (at < 0 || i < at)) {
+            at = i
+        }
+    }
+    if (at >= 0) {
+        emit = at > 0 ? slice(whole, 0, at) : ""
+        hold = ""
+        return true
+    }
+    var keep = 0
+    peek_data(whole) $(d) {
+        let n = length(d)
+        for (s in stops) {
+            var k = min(n, length(s) - 1)
+            while (k > keep) {
+                if (starts_with(d, n - k, s, uint(k))) {
+                    keep = k
+                    break
+                }
+                k --
+            }
+        }
+    }
+    if (keep == 0) {
+        emit = whole
+        hold = ""
+    } else {
+        emit = slice(whole, 0, length(whole) - keep)
+        hold = slice(whole, length(whole) - keep)
+    }
+    return false
+}
+
 def private finish_stream(var st : Stream; finish : string; var events : array<SchedEvent>) {
+    if (!empty(st.stop_hold)) {   //! held back for a stop string that never completed
+        events |> push(SchedEvent(stream = st.id, text = st.stop_hold))
+        st.stop_hold = ""
+    }
     st.state = StreamState.done
     st.finish = finish
     let gen_us = st.t_first != 0l ? int64(get_time_usec(st.t_first)) : 0l
@@ -442,6 +518,14 @@ def private advance_with(m : Model; var st : Stream; tok : int64; var events : a
         finish_stream(st, "stop", events)
         return false
     }
+    var emit = ptxt
+    if (!empty(st.stop_strs) && stop_scan(st.stop_hold, ptxt, st.stop_strs, emit)) {
+        if (!empty(emit)) {
+            events |> push(SchedEvent(stream = st.id, token = tok, text = emit))
+        }
+        finish_stream(st, "stop", events)
+        return false
+    }
     peek_data(ptxt) $(bytes) {
         for (b in bytes) {
             st.gen_tail_bytes |> push(b)
@@ -456,7 +540,7 @@ def private advance_with(m : Model; var st : Stream; tok : int64; var events : a
         }
         st.gen_tail_bytes |> erase(0, cut)
     }
-    events |> push(SchedEvent(stream = st.id, token = tok, text = ptxt))
+    events |> push(SchedEvent(stream = st.id, token = tok, text = emit))
     st.session.recent |> push(tok)
     st.n_gen ++
     st.cur_tok = tok
@@ -536,7 +620,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         var st <- Stream(id = sch.queue[0].id,
                          params = sch.queue[0].params, prompt <- sch.queue[0].prompt,
                          close_toks <- sch.queue[0].close_toks, stop_ids <- sch.queue[0].stop_ids,
-                         nothink <- sch.queue[0].nothink,
+                         stop_strs <- sch.queue[0].stop_strs, nothink <- sch.queue[0].nothink,
                          spans <- sch.queue[0].spans, constraint <- sch.queue[0].constraint,
                          max_new = sch.queue[0].max_new, t_admit = ref_time_ticks())
         if (sch.device_kv) {
@@ -560,10 +644,33 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             st.n_cached = matched
             sch.cached_tokens += matched
             st.ckpt_at = prefix_checkpoint_at(sch.prefix, sch.pool, st.session, st.prompt, matched, sch.queue[0].stable_at)
+            //! the shared system opening gets its own stop when it sits a page or more past the hit and under the request's
+            //! own stop - a request's own stop under a page past the opening yields to it instead, since the opening serves
+            //! every request on it - and the opening's shared head one more, a page or more under the opening's
+            let pr = sch.pool.page_rows
+            let sys_at = sch.queue[0].system_at
+            if (st.ckpt_at > 0l && sys_at >= matched + pr) {
+                if (sys_at + pr <= st.ckpt_at) {
+                    st.ckpt_sys_at = sys_at
+                } elif (sys_at <= st.ckpt_at) {
+                    st.ckpt_at = sys_at
+                }
+            }
+            let head_at = sch.queue[0].system_head_at
+            let above = st.ckpt_sys_at > 0l ? st.ckpt_sys_at : st.ckpt_at
+            if (above > 0l && head_at >= matched + pr && head_at + pr <= above) {
+                st.ckpt_head_at = head_at
+            }
+            st.ckpt_at_tail = st.ckpt_at > 0l && st.ckpt_at == sch.queue[0].stable_at && st.ckpt_at != sys_at && st.ckpt_at != head_at
+            //! the prompt's own end, one token short so a token is left to eval: a page or more past the last stop, else that stop stands for it
+            let end_at = long_length(st.prompt) - 1l
+            if (sch.prefix.max_states > 0l && !empty(st.session.dn_state_prefix) && end_at >= max(st.ckpt_at, matched) + pr) {
+                st.ckpt_end_at = end_at
+            }
             if (matched > 0l) {
-                to_log(LOG_INFO, "[stream {st.id}] prefix cache HIT: {matched}/{length(st.prompt)} tok attached, no prefill for them\n")
+                to_log(LOG_INFO, "[stream {st.id}] prefix cache HIT: {matched}/{length(st.prompt)} tok attached, no prefill for them (checkpoints planned at {st.ckpt_head_at}, {st.ckpt_sys_at}, {st.ckpt_at}, {st.ckpt_end_at}; stable {sch.queue[0].stable_at}, system {sys_at}, head {head_at})\n")
             } else {
-                to_log(LOG_INFO, "[stream {st.id}] prefix cache MISS: full {length(st.prompt)}-tok prefill\n")
+                to_log(LOG_INFO, "[stream {st.id}] prefix cache MISS: full {length(st.prompt)}-tok prefill (checkpoints planned at {st.ckpt_head_at}, {st.ckpt_sys_at}, {st.ckpt_at}, {st.ckpt_end_at}; stable {sch.queue[0].stable_at}, system {sys_at}, head {head_at})\n")
             }
         } else {
             st.session <- create_session(m, sch.kv_dtype)
@@ -698,9 +805,10 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         } else {
             let head_end = si >= 0 ? sch.streams[i].spans[si].at : np
             let chunk = prefill_chunk(m, sch, head_end)
-            let to_ckpt = sch.streams[i].ckpt_at - sch.streams[i].n_prefilled
+            let next_ckpt = next_checkpoint(sch.streams[i])
+            let to_ckpt = next_ckpt - sch.streams[i].n_prefilled
             //! a checkpoint within a chunk and a half ends this chunk: stopping a chunk short of it would add a window, and a window's cost is mostly fixed
-            let take = to_ckpt > 0l && to_ckpt <= chunk + chunk / 2l ? to_ckpt : min(chunk, head_end - sch.streams[i].n_prefilled)
+            let take = min(to_ckpt > 0l && to_ckpt <= chunk + chunk / 2l ? to_ckpt : chunk, head_end - sch.streams[i].n_prefilled)   //! never past the next media span's start: a stop inside or past a span waits for the span's own eval
             sch.chunk |> resize(take)
             for (k in range64(take)) {
                 sch.chunk[k] = sch.streams[i].prompt[sch.streams[i].n_prefilled + k]
@@ -709,9 +817,10 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             sch.streams[i].n_prefilled += take
             sch.prefill_tokens += take
             sch.prefill_evals ++
-            if (sch.streams[i].n_prefilled == sch.streams[i].ckpt_at) {
-                prefix_insert(sch.prefix, sch.pool, sch.streams[i].session, sch.streams[i].prompt)
-                to_log(LOG_INFO, "[stream {sch.streams[i].id}] prefix checkpoint at {sch.streams[i].ckpt_at} tok: the next prompt on this opening attaches here\n")
+            if (at_checkpoint(sch.streams[i])) {
+                let tail = (sch.streams[i].ckpt_at_tail && sch.streams[i].n_prefilled == sch.streams[i].ckpt_at) || sch.streams[i].n_prefilled == sch.streams[i].ckpt_end_at
+                prefix_insert(sch.prefix, sch.pool, sch.streams[i].session, sch.streams[i].prompt, "", !tail)
+                to_log(LOG_INFO, "[stream {sch.streams[i].id}] prefix checkpoint at {sch.streams[i].n_prefilled} tok: {tail ? "this conversation's next turn" : "the next prompt on this opening"} attaches here ({length(sch.prefix.states)} checkpoints, {sch.prefix.state_bytes / 1048576l} MB)\n")
             }
         }
         if (sch.streams[i].n_prefilled >= np) {
@@ -773,7 +882,7 @@ def private prefill_media_body(m : Model; var sch : Scheduler; var st : Stream; 
     return false if (head > room)
     let stop = si + 1 < length(st.spans) ? st.spans[si + 1].at : long_length(st.prompt)
     let hi = min(stop, at + sn + room - head)
-    return false if (hi - lo == sn || (st.ckpt_at > lo && st.ckpt_at <= hi))
+    return false if (hi - lo == sn || checkpoint_within(st, lo, hi))
     sch.chunk |> resize(head)
     for (k in range64(head)) {
         sch.chunk[k] = st.prompt[lo + k]

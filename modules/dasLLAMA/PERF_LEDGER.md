@@ -11,8 +11,8 @@ what it costs today and what the fix would change.
 
 ## Entries
 
-- **MEASURED (2026-10-07, `direction-grade`, `debug-jit`) - the forced tool call under the grammar, on Anton's tool bench.**
-  M1 Max, Metal, one stream, the server run from the tree under `-jit` with the m1 tune manifest, Anton's `bench_llm.py`
+- **MEASURED (2026-10-07, `direction-grade`, `debug-jit`) - the forced tool call under the grammar, on the house assistant's tool bench.**
+  M1 Max, Metal, one stream, the server run from the tree under `-jit` with the m1 tune manifest, the house assistant's `bench_llm.py`
   tool part (the house prompt, a nonce a run, no-think, 256-token budget), 12 runs an arm; `auto` = `tools` alone,
   `forced` = the same with `tool_choice: "required"`, which samples the call through the dasLR1 grammar.
 
@@ -25,6 +25,10 @@ what it costs today and what the fix would change.
   reply into a well-formed `control` call. The constraint adds about 40-50 ms to a 40-token call (3-4 %): the piece table
   is built on the first constrained request (a second, folded into that request's time) and each token probes the
   candidate list against the grammar.
+- **STATED (2026-10-07) - the constrained sampled draw's candidate copy.** `Session.cand_full` (16 B an entry) holds the
+  candidate list a sampled constrained draw starts from - the top-k, at most `SAMPLE_TOPK_FAST_CAP` (1024) entries plus
+  ties at the k-th logit - so a refused first pick refilters from the logits the draw consumed: 16 KB a session at the
+  cap, `@scratch @exact_size`, reserved once at `make_run_state`. Not measured; the formula is the record.
 - **STATED (2026-10-07) - the token constraint's two vocabulary-sized allocations.** `Session.cand` (16 B an entry)
   grows to the whole row only when a constraint refuses every candidate of the probe window: 16 x vocab bytes a
   session, 2.4 MB at a 151936-entry vocabulary (Qwen), 4.2 MB at 262144 (gemma); it is `@scratch @exact_size` and
@@ -38,7 +42,7 @@ what it costs today and what the fix would change.
   `benchmarks/lcpp_bench.das` as the `-jit` script, `-m <gguf> --ngl 99 -n 64 -r 2 --mtp-ab --for-debug-purposes`
   under `DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/m1.tune.json`, decode = the tg-real64 row, MTP off; perplexity
   = 256 wikitext-2 positions teacher-forced after a 256-id prefill (a small sample: differences past the second decimal
-  are noise); tool call = Anton's house prompt (`bench_llm.py`, a random nonce a run, `control` well-formed), 12 runs.
+  are noise); tool call = the house assistant's prompt (`bench_llm.py`, a random nonce a run, `control` well-formed), 12 runs.
   The pure files are `llama-quantize --pure` from unsloth's BF16 shards; the two UD files are unsloth's. Decode rates
   are tok/s; bpw is the file's bits a weight.
 

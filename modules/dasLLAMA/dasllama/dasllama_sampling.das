@@ -124,7 +124,7 @@ def private constrained_pick(var s : Session; vocab : int64) : int64 {
 
 //! The widest top-k the candidate-list sampler serves; a wider (or absent) top-k takes the
 //! vocab-wide reference path - under a constraint it takes the candidate list at this cap instead,
-//! since every candidate is probed.
+//! since a refused pick probes every candidate.
 let SAMPLE_TOPK_FAST_CAP = 1024l
 
 //! sample_'s row form over the `vocab`-wide logits row at `off` in `row` (the sampler's scratch
@@ -133,14 +133,28 @@ let SAMPLE_TOPK_FAST_CAP = 1024l
 def sample_logits_row(var s : Session; params : SamplingParams; var row : array<float>; off, vocab : int64) : int64 {
     apply_penalties_(s, params, row, off)
     if (s.constrain != null && params.temp > 0.0 && off == 0l) {
-        // a constrained draw runs over the k largest logits alone, the ones the constraint admits: a top-k
-        // wider than the cap, or none, reads as the cap; a round with no admitted survivor falls to the
-        // best admitted token
+        //! a constrained draw over the k largest logits (a wider or absent top-k reads as the cap). With no nucleus or min-p cut the
+        //! draw goes first and a refused pick redraws over the admitted candidates - rejection sampling, the filtered draw's own
+        //! distribution at one probe a token; a cut must see the admitted set alone, so under one every candidate is probed first
         let k = params.top_k > 0l ? min(params.top_k, SAMPLE_TOPK_FAST_CAP) : SAMPLE_TOPK_FAST_CAP
         select_top_k_(s, row, off, vocab, min(k, vocab))
+        let no_cut = params.top_p >= 1.0 && params.min_p <= 0.0
+        var first = -1l
+        if (no_cut) {
+            s.cand_full |> reserve(length(s.cand))
+            s.cand_full |> resize(length(s.cand))
+            for (c, i in s.cand, count()) {
+                s.cand_full[i] = c
+            }
+            first = sample_candidates_(s, params)
+            if (s.constrain->admits(first)) {
+                s.constrain->commit(first)
+                return first
+            }
+        }
         var kept = 0
-        for (c in s.cand) {
-            if (s.constrain->admits(c.id)) {
+        for (c in no_cut ? s.cand_full : s.cand) {
+            if (c.id != first && s.constrain->admits(c.id)) {
                 s.cand[kept] = c
                 kept++
             }

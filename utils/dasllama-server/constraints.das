@@ -164,10 +164,75 @@ def private wrap_tool_grammar(schema_gbnf : string; call_open, call_close : stri
     return "{body}\nroot ::= {gbnf_literal(call_open)} space tool-call space {gbnf_literal(call_close)} space\n"
 }
 
+// the Qwen3.5/3.6 call shape as a grammar over the forced tools: `<tool_call>` + one `<function=NAME>` block whose
+// `<parameter=K>` blocks name that tool's declared parameters - every required one present, in the schema's order, the
+// optional ones anywhere between - each value any text short of a `</`
+def private xml_function_tool_grammar(tools : array<string>; forced_name : string; required : bool) : string {
+    var rules, fns : array<string>
+    var idx = 0
+    for (tv in tools) {
+        var perr = ""
+        var tool = read_json(tv, perr)
+        continue if (tool == null)
+        let name = tool?["function"]?["name"] ?? ""
+        if (!empty(name) && (required || name == forced_name)) {
+            var inscope req_names : array<string>
+            let reqv = tool?["function"]?["parameters"]?["required"]
+            if (reqv != null && reqv.value is _array) {
+                req_names |> reserve(length(reqv.value as _array))
+                for (r in reqv.value as _array) {
+                    req_names |> push(r ?? "")
+                }
+            }
+            var inscope optional, mandatory : array<string>
+            let props = tool?["function"]?["parameters"]?["properties"]
+            let close_lit = gbnf_literal("\n</parameter>\n")
+            if (props != null && props.value is _object) {
+                for (k in keys(props.value as _object)) {
+                    if (find_index(req_names, k) < 0) {
+                        let open_lit = gbnf_literal("<parameter={k}>\n")
+                        optional |> push("{open_lit} value {close_lit}")
+                    }
+                }
+                for (r in req_names) {
+                    if (key_exists(props.value as _object, r)) {
+                        let open_lit = gbnf_literal("<parameter={r}>\n")
+                        mandatory |> push("{open_lit} value {close_lit}")
+                    }
+                }
+            }
+            let opt = empty(optional) ? "" : " ({join(optional, " | ")})*"
+            let fn_open = gbnf_literal("<function={name}>\n")
+            let fn_close = gbnf_literal("</function>")
+            let shape = build_string() $(var w) {
+                w |> write("fn-{idx} ::= {fn_open}{opt}")
+                for (m in mandatory) {
+                    w |> write(" {m}{opt}")
+                }
+                w |> write(" {fn_close}")
+            }
+            rules |> push(shape)
+            fns |> push("fn-{idx}")
+            idx ++
+        }
+        delete_json(tool)
+    }
+    if (empty(fns)) {
+        return ""
+    }
+    let body = join(rules, "\n")
+    delete rules
+    let alts = join(fns, " | ")
+    delete fns
+    let call_open = gbnf_literal("<tool_call>\n")
+    let call_close = gbnf_literal("\n</tool_call>")
+    return "{body}\nfn ::= {alts}\nvalue ::= ([^<] | \"<\" [^/])*\nspace ::= [ \\t\\n]*\nroot ::= {call_open} fn {call_close} space\n"
+}
+
 //! Read `response_format` and `tool_choice` off a chat request: the grammar text they ask for, or why the
 //! request is refused. `tools` are the declared tool definitions as compact JSON; `call_open`/`call_close`
-//! the model's tool-call markers ("" = the family carries no marker format).
-def read_constraint_spec(js : JsonValue?; tools : array<string>; call_open, call_close : string) : ConstraintSpec {   // nolint:STYLE037,STYLE038 - one arm per request field shape, each a refusal or a grammar
+//! the model's tool-call markers ("" = the family carries no marker format); `xml_calls` = the Qwen3.6 call shape.
+def read_constraint_spec(js : JsonValue?; tools : array<string>; call_open, call_close : string; xml_calls : bool = false) : ConstraintSpec {   // nolint:STYLE037,STYLE038 - one arm per request field shape, each a refusal or a grammar
     var spec : ConstraintSpec
     let rf = js?["response_format"]
     if (rf != null && rf.value is _object) {
@@ -224,6 +289,16 @@ def read_constraint_spec(js : JsonValue?; tools : array<string>; call_open, call
         }
         if (empty(call_open)) {
             spec.err = "a forced 'tool_choice' is not served for this model's tool-call format"
+            return <- spec
+        }
+        if (xml_calls) {
+            let g = xml_function_tool_grammar(tools, forced_name, required)
+            if (empty(g)) {
+                spec.err = "'tool_choice' names '{forced_name}', which is not among the declared tools"
+                return <- spec
+            }
+            spec.kind = "tool"
+            spec.gbnf = g
             return <- spec
         }
         var alts : array<string>

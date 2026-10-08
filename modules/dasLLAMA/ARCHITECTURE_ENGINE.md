@@ -114,9 +114,10 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
   this file. A `Session` may carry a `TokenConstraint` (`dasllama_common`'s abstract class: `admits`
   asks whether a token may come next, `commit` advances past the one emitted); the sampler never
   emits a token it refuses - the greedy pick probes the argmax, then the `CONSTRAINED_PROBE_K`
-  largest, then the whole row in logit order, and the sampled path filters its candidate list
+  largest, then the whole row in logit order, and the sampled path draws over its candidate list
   (capped at `SAMPLE_TOPK_FAST_CAP`, where an unconstrained draw past the cap takes the vocab-wide
-  path) before the draw - and commits what it emits. A state no token extends is a dead end: the
+  path) unconstrained first, one probe when the pick is admitted, and on a refused pick filters the
+  list to the admitted candidates and draws again over them alone - and commits what it emits. A state no token extends is a dead end: the
   sampler returns -1, sets `Session.constrain_dead` and commits nothing, and every caller that
   feeds tokens back (the generation drivers, the scheduler) stops there instead of feeding -1. A
   constrained stream reads as sampled (`Session.sampled`), since its pick can differ from the raw
@@ -133,7 +134,7 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
   belong here; a knob that does and is missing is an image-aliasing bug.
 - **`dasllama_tools.das`** - the per-ToolMode tool wire codecs (definition serializers,
   replay/result text builders, reply parsers; Harmony namespace/channels, gemma-4 DSL, mistral
-  control tokens, llama JSON). Every byte of tool wire text is produced here - pure string+JSON
+  control tokens, llama JSON, the `<function=NAME>` blocks of Qwen3.5 and 3.6). Every byte of tool wire text is produced here - pure string+JSON
   functions, model-free testable; the chat layer assembles the output into ChatParts and the
   server parses through the parsers.
 - **`dasllama_chat.das`** - conversation turns and chat-template application. Per-arch template

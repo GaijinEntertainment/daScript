@@ -377,3 +377,64 @@ def test_string_arguments_passthrough(t : T?) {
         t |> equal(tool_call_of_json("\{\"name\": \"a\", \"arguments\": \"\"}").args, "\{}")
     }
 }
+
+// ===== Qwen3.6 — <function=NAME> blocks: the template's own text is the fixture =====
+
+[test]
+def test_xml_function_format(t : T?) {
+    t |> run("a replayed call renders the template's block: string values verbatim, others as one-line JSON") @(t : T?) {
+        t |> equal("<tool_call>\n<function=control>\n<parameter=point>\nlight.1\n</parameter>\n<parameter=value>\nfalse\n</parameter>\n</function>\n</tool_call>",
+            xml_function_call_text("control", "\{\"point\":\"light.1\",\"value\":\"false\"}"))
+        t |> equal("<tool_call>\n<function=remind>\n<parameter=when>\n\{\"h\": 8, \"m\": 30}\n</parameter>\n<parameter=n>\n3\n</parameter>\n</function>\n</tool_call>",
+            xml_function_call_text("remind", "\{\"when\":\{\"h\":8,\"m\":30},\"n\":3}"))
+        t |> equal("<tool_call>\n<function=not_for_me>\n</function>\n</tool_call>", xml_function_call_text("not_for_me", "\{}"))
+    }
+    t |> run("a reply parses: content before the first block, each block a call, values strings unless they are JSON objects or arrays") @(t : T?) {
+        var tr <- xml_function_parse("Switching it off.\n\n<tool_call>\n<function=control>\n<parameter=point>\nlight.1\n</parameter>\n<parameter=value>\nfalse\n</parameter>\n</function>\n</tool_call>\n<tool_call>\n<function=remind>\n<parameter=when>\n\{\"h\": 8\}\n</parameter>\n<parameter=text>\nline one\nline two\n</parameter>\n</function>\n</tool_call>")
+        t |> equal("Switching it off.", tr.content)
+        t |> equal(2, length(tr.calls))
+        t |> equal("control", tr.calls[0].name)
+        t |> equal("\{\"point\": \"light.1\", \"value\": \"false\"}", tr.calls[0].args, "a value that reads as a bool stays the string the template wrote")
+        t |> equal("remind", tr.calls[1].name)
+        t |> equal("\{\"when\": \{\"h\": 8}, \"text\": \"line one\\nline two\"}", tr.calls[1].args, "an object value stays JSON, a multi-line value keeps its inner newline")
+        delete tr
+        var none <- xml_function_parse("Nothing to do here.")
+        t |> equal("Nothing to do here.", none.content)
+        t |> equal(0, length(none.calls))
+        delete none
+        var bare <- xml_function_parse("<tool_call>\n<function=not_for_me>\n</function>\n</tool_call>")
+        t |> equal("", bare.content)
+        t |> equal(1, length(bare.calls))
+        t |> equal("\{}", bare.calls[0].args, "a parameterless call is the empty object")
+        delete bare
+        var cut <- xml_function_parse("Hold on.\n<tool_call>\n<function=control>\n<parameter=point>\nlight")
+        t |> equal(0, length(cut.calls), "an unterminated block is no call")
+        t |> equal("Hold on.\n<tool_call>\n<function=control>\n<parameter=point>\nlight", cut.content, "... and the reply stays whole as content")
+        delete cut
+        var nameless <- xml_function_parse("<tool_call>\n<function=>\n</function>\n</tool_call>\n<tool_call>\n<function=remind>\n</function>\n</tool_call>")
+        t |> equal(1, length(nameless.calls), "a nameless block is skipped")
+        t |> equal("remind", nameless.calls[0].name)
+        delete nameless
+        var odd <- xml_function_parse("<tool_call>\n<function=f>\n<parameter=a</parameter>\n<parameter=b>\n\{not json\n</parameter>\n<parameter=c>\n1\n</parameter>\n<parameter=c>\n2\n</parameter>\n</function>\n</tool_call>")
+        t |> equal(1, length(odd.calls))
+        t |> equal("\{\"b\": \"\{not json\", \"c\": \"2\"}", odd.calls[0].args, "an opener with no `>` of its own is skipped, a `\{` that is no JSON stays a string, a key written twice keeps its last value")
+        delete odd
+    }
+    t |> run("a reply's values are typed by the declared parameters: a string stays a string whatever it looks like, a declared number or boolean goes bare") @(t : T?) {
+        var tools <- ["\{\"type\":\"function\",\"function\":\{\"name\":\"write\",\"parameters\":\{\"type\":\"object\",\"properties\":\{\"content\":\{\"type\":\"string\"},\"n\":\{\"type\":\"integer\"},\"ok\":\{\"type\":\"boolean\"},\"when\":\{\"type\":\"object\"}}}}}"]
+        var types <- tool_param_types(tools)
+        t |> equal("string", types?["write"]?["content"] ?? "")
+        let reply = "<tool_call>\n<function=write>\n<parameter=content>\n\{\"a\": 1}\n</parameter>\n<parameter=n>\n5\n</parameter>\n<parameter=ok>\ntrue\n</parameter>\n<parameter=when>\n\{\"h\": 8}\n</parameter>\n<parameter=free>\n7\n</parameter>\n</function>\n</tool_call>"
+        var typed <- xml_function_parse(reply, types)
+        t |> equal("\{\"content\": \"\{\\\"a\\\": 1}\", \"n\": 5, \"ok\": true, \"when\": \{\"h\": 8}, \"free\": \"7\"}", typed.calls[0].args, "the declared string keeps its braces as text, the number and the boolean go bare, the object parses, an undeclared number stays text")
+        delete typed
+        var untyped <- xml_function_parse(reply)
+        t |> equal("\{\"content\": \{\"a\": 1}, \"n\": \"5\", \"ok\": \"true\", \"when\": \{\"h\": 8}, \"free\": \"7\"}", untyped.calls[0].args, "with no declarations a value is typed by its own text alone")
+        delete untyped
+        var bad <- xml_function_parse("<tool_call>\n<function=write>\n<parameter=n>\nfive\n</parameter>\n</function>\n</tool_call>", types)
+        t |> equal("\{\"n\": \"five\"}", bad.calls[0].args, "a declared number whose text is no number stays a string")
+        delete bad
+        delete types
+        delete tools
+    }
+}

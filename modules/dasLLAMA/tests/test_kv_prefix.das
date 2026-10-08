@@ -456,6 +456,175 @@ def test_prefix_checkpoint_budget(t : T?) {
 }
 
 [test]
+def test_prefix_checkpoint_kinds_and_bytes(t : T?) {
+    t |> run("the byte budget drops checkpoints, tails before openings; a tail a prefill stops at becomes an opening") @(t : T?) {
+        let c = mk_config(2l, 4l, 2l, 16l, 32l)
+        var pool <- create_kv_pool_(c, 4l, KVDtype.f32, KVDtype.f32)
+        // one checkpoint's bytes, read off a cache of one
+        var probe <- create_prefix_cache_(0l, 8l)
+        var s0 <- mk_recurrent(c, pool, 5l)
+        let toks0 <- [for (i in range64(8l)); 100l + i]
+        prefix_insert_(probe, pool, s0, toks0)
+        t |> equal(1, length(probe.states))
+        let one = probe.states[0].nbytes
+        t |> success(one > 0l, "a checkpoint costs bytes: {one}")
+        t |> equal(one, probe.state_bytes, "the cache sums them")
+        release_kv_pages_(s0)
+        prefix_release_(probe, pool)
+        t |> equal(0l, probe.state_bytes, "released: none standing")
+        // room for two: the third insert drops one - the TAIL used longest ago, not the older opening
+        var cache <- create_prefix_cache_(0l, 8l, 2l * one + one / 2l)
+        var opening <- mk_recurrent(c, pool, 5l)
+        let toks_open <- [for (i in range64(8l)); 200l + i]
+        prefix_insert_(cache, pool, opening, toks_open, "", true)
+        release_kv_pages_(opening)
+        var tail1 <- mk_recurrent(c, pool, 5l)
+        let toks_t1 <- [for (i in range64(8l)); 300l + i]
+        prefix_insert_(cache, pool, tail1, toks_t1)
+        release_kv_pages_(tail1)
+        t |> equal(2, length(cache.states), "two stand within the budget")
+        var tail2 <- mk_recurrent(c, pool, 5l)
+        let toks_t2 <- [for (i in range64(8l)); 400l + i]
+        prefix_insert_(cache, pool, tail2, toks_t2)
+        release_kv_pages_(tail2)
+        t |> equal(2, length(cache.states), "the third insert evicts one")
+        t |> equal(1l, cache.n_state_evicted)
+        var w <- mk_recurrent(c, pool, 0l)
+        t |> equal(5l, prefix_attach_(cache, pool, w, toks_open), "the opening stands, though it is the oldest")
+        release_kv_pages_(w)
+        var w1 <- mk_recurrent(c, pool, 0l)
+        t |> equal(0l, prefix_attach_(cache, pool, w1, toks_t1), "the older tail went")
+        release_kv_pages_(w1)
+        var w2 <- mk_recurrent(c, pool, 0l)
+        t |> equal(5l, prefix_attach_(cache, pool, w2, toks_t2), "the newer tail stands")
+        release_kv_pages_(w2)
+        // a prefill that stops at the newer tail's tokens makes it an opening: the next tail goes before it
+        var again <- mk_recurrent(c, pool, 5l)
+        prefix_insert_(cache, pool, again, toks_t2, "", true)
+        release_kv_pages_(again)
+        t |> equal(2, length(cache.states), "the same tokens are one checkpoint")
+        var tail3 <- mk_recurrent(c, pool, 5l)
+        let toks_t3 <- [for (i in range64(8l)); 500l + i]
+        prefix_insert_(cache, pool, tail3, toks_t3)
+        release_kv_pages_(tail3)
+        var w3 <- mk_recurrent(c, pool, 0l)
+        t |> equal(5l, prefix_attach_(cache, pool, w3, toks_t2), "the promoted opening stands: it was used after the first")
+        release_kv_pages_(w3)
+        var w4 <- mk_recurrent(c, pool, 0l)
+        t |> equal(0l, prefix_attach_(cache, pool, w4, toks_open), "the first opening went: with no other tail standing, the opening used longest ago is the victim")
+        release_kv_pages_(w4)
+        var w5 <- mk_recurrent(c, pool, 0l)
+        t |> equal(5l, prefix_attach_(cache, pool, w5, toks_t3), "the new tail stands: the checkpoint just inserted is never the victim")
+        release_kv_pages_(w5)
+        prefix_release_(cache, pool)
+        t |> equal(long_length(pool.free_groups), pool.capacity_groups, "every page back")
+        delete w5
+        delete w4
+        delete w3
+        delete tail3
+        delete again
+        delete w2
+        delete w1
+        delete w
+        delete tail2
+        delete tail1
+        delete opening
+        delete s0
+        delete probe
+        delete cache
+        delete pool
+    }
+}
+
+[test]
+def test_prefix_checkpoint_newest_stands(t : T?) {
+    t |> run("the checkpoint just inserted is never the victim: among openings alone the opening used longest ago goes, and a budget under one checkpoint keeps the newest alone") @(t : T?) {
+        let c = mk_config(2l, 4l, 2l, 16l, 32l)
+        var pool <- create_kv_pool_(c, 4l, KVDtype.f32, KVDtype.f32)
+        var cache <- create_prefix_cache_(0l, 2l)
+        var lists : array<array<int64>>
+        lists |> reserve(3)
+        for (k in range64(3l)) {
+            var s <- mk_recurrent(c, pool, 5l)
+            var inscope toks <- [for (i in range64(8l)); 100l * (k + 1l) + i]
+            prefix_insert_(cache, pool, s, toks, "", k < 2l)   // two openings fill the cap; the third is a tail
+            release_kv_pages_(s)
+            lists |> emplace(toks)
+            delete s
+        }
+        t |> equal(2, length(cache.states))
+        var w0 <- mk_recurrent(c, pool, 0l)
+        t |> equal(0l, prefix_attach_(cache, pool, w0, lists[0]), "the opening used longest ago went")
+        release_kv_pages_(w0)
+        var w2 <- mk_recurrent(c, pool, 0l)
+        t |> equal(5l, prefix_attach_(cache, pool, w2, lists[2]), "the tail just inserted stands, though tails go first")
+        release_kv_pages_(w2)
+        prefix_release_(cache, pool)
+        var tiny <- create_prefix_cache_(0l, 8l, 1l)   // a byte budget no checkpoint fits
+        var s0 <- mk_recurrent(c, pool, 5l)
+        prefix_insert_(tiny, pool, s0, lists[0])
+        release_kv_pages_(s0)
+        var s1 <- mk_recurrent(c, pool, 5l)
+        prefix_insert_(tiny, pool, s1, lists[1])
+        release_kv_pages_(s1)
+        t |> equal(1, length(tiny.states), "past a budget under one checkpoint the newest stands alone")
+        var w1 <- mk_recurrent(c, pool, 0l)
+        t |> equal(5l, prefix_attach_(cache, pool, w1, lists[1]) + prefix_attach_(tiny, pool, w1, lists[1]), "... and it is the newest")
+        release_kv_pages_(w1)
+        prefix_release_(tiny, pool)
+        t |> equal(long_length(pool.free_groups), pool.capacity_groups, "every page back")
+        delete w1
+        delete s1
+        delete s0
+        delete tiny
+        delete w2
+        delete w0
+        delete lists
+        delete cache
+        delete pool
+    }
+}
+
+[test]
+def test_prefix_checkpoint_shared_pages(t : T?) {
+    t |> run("the byte budget counts a page two checkpoints of one conversation share once, where their own figures count it twice") @(t : T?) {
+        let c = mk_config(2l, 4l, 2l, 16l, 32l)
+        var pool <- create_kv_pool_(c, 4l, KVDtype.f32, KVDtype.f32)
+        var page_bytes = 0l
+        for (k, v in pool.krow_bytes, pool.vrow_bytes) {
+            page_bytes += (k + v) * pool.page_rows
+        }
+        var cache <- create_prefix_cache_(0l, 8l)
+        var toks <- [for (i in range64(9l)); 100l + i]
+        var s <- mk_recurrent(c, pool, 6l)   // two pages at P=4: a whole one and the page of row 5
+        prefix_insert_(cache, pool, s, toks)
+        let alone = cache.states[0].nbytes
+        t |> equal(alone, cache.state_bytes, "one checkpoint: its own figure")
+        // the conversation goes on from the checkpoint: the whole page shared, the partial one copied, a third page of its own
+        var w <- mk_recurrent(c, pool, 0l)
+        t |> equal(6l, prefix_attach_(cache, pool, w, toks))
+        kv_ensure(w, 9l)
+        w.n_past = 9l
+        w.dn_pos = 9l
+        prefix_insert_(cache, pool, w, toks)
+        t |> equal(2, length(cache.states))
+        let own = cache.states[1].nbytes
+        t |> success(own > alone, "the deeper checkpoint's own figure counts its three pages: {own} over {alone}")
+        t |> equal(alone + own - page_bytes, cache.state_bytes, "the budget counts the shared first page once: {alone} + {own} - {page_bytes} = {cache.state_bytes}")
+        release_kv_pages_(s)
+        release_kv_pages_(w)
+        prefix_release_(cache, pool)
+        t |> equal(0l, cache.state_bytes, "released: none standing")
+        t |> equal(long_length(pool.free_groups), pool.capacity_groups, "every page back")
+        delete toks
+        delete w
+        delete s
+        delete cache
+        delete pool
+    }
+}
+
+[test]
 def test_prefix_checkpoint_at(t : T?) {
     t |> run("the prefill stops at the caller's stable opening, else at an opening an earlier checkpoint shares, and nowhere on a model with no recurrent state") @(t : T?) {
         let c = mk_config(2l, 4l, 2l, 16l, 64l)

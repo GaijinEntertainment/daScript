@@ -1503,6 +1503,7 @@ enum ToolMode {
     gemma4      // gemma-4: asymmetric <|tool_call> ... <tool_call|> pair
     mistral     // Mistral v0.3+: [AVAILABLE_TOOLS] defs, [TOOL_CALLS] + JSON array, [TOOL_RESULTS]
     llama_json  // Llama-3.x custom functions: the whole reply is one JSON object; results on the ipython role
+    xml_function   // Qwen3.5/3.6: the tool block AHEAD of the system text, <function=NAME><parameter=K> calls inside <tool_call>, results ride user turns
 }
 
 //! Per-arch chat template. `user` frames a user message; `assistant_open` is the generation prompt;
@@ -2306,6 +2307,7 @@ struct Session {
     recent : array<int64>     // recently generated tokens, for the repetition penalty
     sample_scratch : array<float>  // vocab-sized scratch for the reference sampler (top-k off)
     @scratch @exact_size cand : array<SampleCand>   //! the top-k sampler's candidate list, a reused buffer: the k largest logits (ties at the k-th kept), ascending by id after selection; the whole row when a constraint refuses every candidate
+    @scratch @exact_size cand_full : array<SampleCand>   //! a constrained draw's copy of the candidates' logits: the draw runs unconstrained first, and a refused pick refilters from this copy
     sampled : bool            //! the last sample_'s pick can differ from the raw argmax (a temperature, a penalty at temp 0, or a constraint - not a bare argmax): the Metal driver's greedy chain stands down
     @do_not_delete spec_params : SamplingParams?   //! the caller's sampler, set before a speculative round for its accept walk to draw with; null or a bare argmax (temp <= 0, penalties off) keeps the argmax-match walk
     mtp_pre_drawn : bool           //! the accept walk drew this session's next token already: the next sample_ returns mtp_pre_tok and clears this
@@ -2799,6 +2801,7 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
     }
     s.sample_scratch |> resize(c.vocab_size)
     s.cand |> reserve(64)
+    s.cand_full |> reserve(64)
     s.rng = random_seed(1234)
     return <- s
 }
@@ -5959,6 +5962,27 @@ def hermes_tools(var ct : ChatTemplate) {
     ct.tool_call_close = "</tool_call>"
     ct.tool_resp_open = "<tool_response>"
     ct.tool_resp_close = "</tool_response>"
+}
+
+//! how many leading elements `a` and `b` share
+def common_prefix_len(a, b : array<int64>) : int64 {
+    let cap = min(long_length(a), long_length(b))
+    var n = 0l
+    while (n < cap && a[n] == b[n]) {
+        n ++
+    }
+    return n
+}
+
+//! Install the Qwen3.5/3.6 tool format: the ``<tools>`` JSON definitions open the system turn AHEAD of the system text
+//! under a fixed instruction, a call is ``<tool_call>\n<function=NAME>\n<parameter=K>\nvalue\n</parameter>\n</function>\n</tool_call>``,
+//! results ride user turns as with Hermes, and a thinking turn's generation prompt ends in an open ``<think>`` line.
+def xml_function_tools(var ct : ChatTemplate) {
+    hermes_tools(ct)   // the same four markers; the mode, the instruction text and the opener differ
+    ct.tool_mode = ToolMode.xml_function
+    ct.tool_sys_prelude = "# Tools\n\nYou have access to the following functions:\n\n<tools>"
+    ct.tool_sys_epilogue = "</tools>\n\nIf you choose to call a function ONLY reply in the following format with NO suffix:\n\n<tool_call>\n<function=example_function_name>\n<parameter=example_parameter_1>\nvalue_1\n</parameter>\n<parameter=example_parameter_2>\nThis is the value for the second parameter\nthat can span\nmultiple lines\n</parameter>\n</function>\n</tool_call>\n\n<IMPORTANT>\nReminder:\n- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags\n- Required parameters MUST be specified\n- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after\n- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls\n</IMPORTANT>"
+    ct.assistant_open_think.parts <- [chat_special("<|im_start|>"), chat_text("assistant\n"), chat_special("<think>"), chat_text("\n")]
 }
 
 // ===== forward drivers (prefill, batched) =====

@@ -1,5 +1,6 @@
 options gen2
 options persistent_heap
+options stack = 524288   // every dasLLAMA program root takes this budget: the past-the-context cell prefills 2048 rows
 options _dasllama_internal = true
 
 require dastest/testing_boost public
@@ -73,6 +74,63 @@ def test_embeddings_qwen3_embedding(t : T?) {
         delete last
         delete mean
         delete ids
+        delete m
+    }
+}
+
+[test]
+def test_embeddings_past_the_context(t : T?) {
+    t |> run("a text past the model's context embeds its leading seq_len tokens: a unit vector, no panic (tinyllama Q8)") <| @(tt : T?) {
+        let path = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
+        return if (!jit_model_available(tt, path))
+        var m <- load_model_(path, QuantMode.q8)
+        // one token a word: a text of exactly the context's token count, then the same text with a thousand other words past it
+        let cut_text = strip(build_string() $(var w) {
+            for (_i in range64(m.config.seq_len - 1l)) {   // BOS takes the first slot; the trailing space is stripped below
+                w |> write("a ")
+            }
+        })
+        let long_text = build_string() $(var w) {
+            w |> write(cut_text)
+            for (_i in range(1000)) {
+                w |> write(" zebra")
+            }
+        }
+        let n = long_length(encode(m, long_text, true, false))
+        tt |> success(n > m.config.seq_len, "the input runs past the context ({n} tokens, context {m.config.seq_len})")
+        var vec <- embed(m, long_text)
+        tt |> equal(m.config.dim, long_length(vec), "dim floats")
+        var ss = 0.0
+        var finite = true
+        for (v in vec) {
+            ss += v * v
+            finite = finite && v == v
+        }
+        tt |> success(finite && abs(ss - 1.0) < 1e-3, "a finite unit vector (|v|^2 = {ss})")
+        // the vector is the one the leading seq_len tokens give: the text cut at that token embeds to the same floats (an
+        // uncut read would embed the zebras too and differ)
+        tt |> equal(m.config.seq_len, long_length(encode(m, cut_text, true, false)), "the cut text encodes to the context's token count")
+        var head <- embed(m, cut_text)
+        var same = 0.0
+        for (a, b in vec, head) {
+            same += a * b
+        }
+        tt |> success(same > 0.9999, "the long text embeds as its first seq_len tokens: unit vectors at cosine {same} (the kernels' threaded sums move an element by 1e-4 between two reads)")
+        // the control: the zebras alone embed elsewhere, so a read that took them in would miss the bar
+        let zebras = build_string() $(var w) {
+            for (_i in range(1000)) {
+                w |> write(" zebra")
+            }
+        }
+        var tail <- embed(m, zebras)
+        var other = 0.0
+        for (a, b in vec, tail) {
+            other += a * b
+        }
+        tt |> success(other < 0.999, "... where the text past the cut embeds at cosine {other}")
+        delete tail
+        delete head
+        delete vec
         delete m
     }
 }
