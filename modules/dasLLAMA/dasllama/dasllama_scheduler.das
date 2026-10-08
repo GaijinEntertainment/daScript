@@ -72,6 +72,7 @@ struct PendingReq {
     stable_at : int64 = 0l                  //! prompt tokens the request's own last turn does not reach (`render_turn_marked`): where the requests sharing this history part; a recurrent model's prefill leaves a checkpoint there (0 = unknown)
     system_at : int64 = 0l                  //! prompt tokens of the conversation's opening every request on this system prompt and tool set shares (`ChatSession.first_opening`); a recurrent model's prefill leaves a second checkpoint there when it sits a page or more under `stable_at` (0 = unknown)
     system_head_at : int64 = 0l             //! the opening's tokens shared beyond this system prompt and tool set - its system text or its tool block, whichever the template writes first (`ChatSession.system_head_at`): a third checkpoint, a page or more under `system_at` (0 = unknown)
+    messages_end_at : int64 = 0l            //! prompt tokens through the last message's close, ahead of the generation prompt (`RenderedTurn.messages_end`): the last checkpoint sits there, where the conversation's next turn still matches whatever its replayed assistant turn renders (0 = unknown; the prompt's end less one token stands in)
     // MEDIA splice (images today; audio rides the same fields): `n_media` embedding rows that
     // prefill BETWEEN prompt[media_at-1] and prompt[media_at] — the render seam hands the two
     // token spans and the encoder hands the rows. Zero rows = an ordinary text request.
@@ -110,7 +111,7 @@ struct Stream {
     ckpt_sys_at : int64                     //! an earlier stop for the checkpoint at the shared system opening (0 = none; always under `ckpt_at`)
     ckpt_head_at : int64                    //! an earlier stop still, at the opening's shared head - the system text ahead of the tool block, or the tool block ahead of the text (0 = none; always under `ckpt_sys_at`)
     ckpt_at_tail : bool                     //! `ckpt_at` is the request's own stable opening and no shared stop: its checkpoint is a tail, which only this conversation's next turn extends
-    ckpt_end_at : int64                     //! the last stop, one token short of the prompt, so the same prompt asked again attaches whole (0 = none; a page or more past `ckpt_at`)
+    ckpt_end_at : int64                     //! the last stop - the last message's close when the request names it, else one token short of the prompt - so the same prompt asked again and the conversation's next turn attach there (0 = none; a page or more past `ckpt_at`)
     t_admit : int64                         // ref_time_ticks at admit
     t_first : int64                         // ref_time_ticks at the first sampled token (0 until then)
     ttft_us : int64
@@ -662,8 +663,12 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                 st.ckpt_head_at = head_at
             }
             st.ckpt_at_tail = st.ckpt_at > 0l && st.ckpt_at == sch.queue[0].stable_at && st.ckpt_at != sys_at && st.ckpt_at != head_at
-            //! the prompt's own end, one token short so a token is left to eval: a page or more past the last stop, else that stop stands for it
-            let end_at = long_length(st.prompt) - 1l
+            //! the prompt's own end: the last message's close when the request names it - a generation prompt a client replays
+            //! otherwise, the think block a thinking-off turn opens, ends the match a few tokens short of a stop past it, and a
+            //! checkpoint needs its every token - else one token short of the prompt so a token is left to eval; a page or more
+            //! past the last stop, else that stop stands for it
+            let msg_end = sch.queue[0].messages_end_at
+            let end_at = msg_end > 0l && msg_end < long_length(st.prompt) ? msg_end : long_length(st.prompt) - 1l
             if (sch.prefix.max_states > 0l && !empty(st.session.dn_state_prefix) && end_at >= max(st.ckpt_at, matched) + pr) {
                 st.ckpt_end_at = end_at
             }

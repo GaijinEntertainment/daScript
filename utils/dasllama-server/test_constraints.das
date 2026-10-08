@@ -23,11 +23,11 @@ require strings
 let MODEL_PATH = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
 let LARGE_TIER_BYTES = 6ul * 1024ul * 1024ul * 1024ul   //! the model tier's ceiling, as modules/dasLLAMA/tests/_model_tier.das states it
 
-def private spec_of(req : string; tools : array<string>; call_open = ""; call_close = ""; xml_calls = false) : ConstraintSpec {
+def private spec_of(req : string; tools : array<string>; call_open = ""; call_close = ""; mode = ToolMode.hermes) : ConstraintSpec {
     var err = ""
     var js = read_json(req, err)
     assert(js != null, "the request text is JSON")
-    var spec <- read_constraint_spec(js, tools, call_open, call_close, xml_calls)
+    var spec <- read_constraint_spec(js, tools, call_open, call_close, mode)
     delete_json(js)
     return <- spec
 }
@@ -42,7 +42,7 @@ def test_constraint_spec_xml_function_tool(t : T?) {
     t |> run("a forced tool_choice on the Qwen3.6 format reads to the <function=NAME> block grammar") @(t : T?) {
         let tools <- ["\{\"type\":\"function\",\"function\":\{\"name\":\"get_weather\",\"parameters\":\{\"type\":\"object\",\"properties\":\{\"city\":\{\"type\":\"string\"},\"unit\":\{\"type\":\"string\"}},\"required\":[\"city\"]}}}",
                       "\{\"type\":\"function\",\"function\":\{\"name\":\"get_time\",\"parameters\":\{\"type\":\"object\",\"properties\":\{}}}}"]
-        let forced <- spec_of("\{\"tools\":[],\"tool_choice\":\{\"type\":\"function\",\"function\":\{\"name\":\"get_weather\"}}}", tools, "<tool_call>", "</tool_call>", true)
+        let forced <- spec_of("\{\"tools\":[],\"tool_choice\":\{\"type\":\"function\",\"function\":\{\"name\":\"get_weather\"}}}", tools, "<tool_call>", "</tool_call>", ToolMode.xml_function)
         t |> equal("", forced.err)
         t |> equal("tool", forced.kind)
         var err = ""
@@ -56,11 +56,11 @@ def test_constraint_spec_xml_function_tool(t : T?) {
         t |> success(!lr_matches(fg, "<tool_call>\n<function=get_weather>\n<parameter=unit>\ncelsius\n</parameter>\n</function>\n</tool_call>"), "a call without the required parameter is refused")
         t |> success(lr_matches(fg, "<tool_call>\n<function=get_weather>\n<parameter=unit>\ncelsius\n</parameter>\n<parameter=city>\nOslo\n</parameter>\n</function>\n</tool_call>"), "an optional parameter ahead of the required one passes")
         t |> success(lr_matches(fg, "<tool_call>\n<function=get_weather>\n<parameter=city>\nOslo <3 Bergen\n</parameter>\n</function>\n</tool_call>"), "a value may carry a `<` that opens no closer")
-        let required <- spec_of("\{\"tools\":[],\"tool_choice\":\"required\"}", tools, "<tool_call>", "</tool_call>", true)
+        let required <- spec_of("\{\"tools\":[],\"tool_choice\":\"required\"}", tools, "<tool_call>", "</tool_call>", ToolMode.xml_function)
         t |> equal("", required.err)
         let rg <- gbnf_grammar(required.gbnf, err)
         t |> success(lr_matches(rg, "<tool_call>\n<function=get_time>\n</function>\n</tool_call>"), "a parameterless tool under required")
-        let unknown <- spec_of("\{\"tools\":[],\"tool_choice\":\{\"type\":\"function\",\"function\":\{\"name\":\"nope\"}}}", tools, "<tool_call>", "</tool_call>", true)
+        let unknown <- spec_of("\{\"tools\":[],\"tool_choice\":\{\"type\":\"function\",\"function\":\{\"name\":\"nope\"}}}", tools, "<tool_call>", "</tool_call>", ToolMode.xml_function)
         t |> success(find(unknown.err, "not among the declared tools") >= 0, "an undeclared forced name is refused: {unknown.err}")
     }
 }
@@ -141,6 +141,8 @@ def test_constraint_spec_tool_choice(t : T?) {
         t |> success(find(orphan.err, "declares no tools") >= 0, "no tools: {orphan.err}")
         let unmarked <- spec_of("\{\"tool_choice\":\"required\"\}", tools)
         t |> success(find(unmarked.err, "tool-call format") >= 0, "a family without markers: {unmarked.err}")
+        let dsl <- spec_of("\{\"tool_choice\":\"required\"\}", tools, "<|tool_call>", "<tool_call|>", ToolMode.gemma4)
+        t |> success(find(dsl.err, "tool-call format") >= 0, "a family with markers whose call shape the builder does not write (gemma-4's DSL): {dsl.err}")
         let unknown <- spec_of("\{\"tool_choice\":\{\"type\":\"function\",\"function\":\{\"name\":\"fly\"\}\}\}", tools, "<tool_call>", "</tool_call>")
         t |> success(find(unknown.err, "not among the declared tools") >= 0, "an undeclared name: {unknown.err}")
         let nameless <- spec_of("\{\"tool_choice\":\{\"type\":\"function\"\}\}", tools, "<tool_call>", "</tool_call>")

@@ -445,7 +445,7 @@ def render_close(model : Model; chat : ChatSession) : array<int64> {
 def set_tools(var chat : ChatSession; var tools : array<string>) {
     //! Declare the conversation's tools (verbatim OpenAI ``tools[]`` JSON objects, moved in)
     //! BEFORE the first turn renders — the system turn carries the family's tool block. Families
-    //! with no tool format (``tmpl.tool_call_open`` empty) ignore them.
+    //! with no tool format (``tmpl.tool_mode`` none) ignore them.
     set_tools_(chat, tools)
 }
 
@@ -481,6 +481,13 @@ def set_preserve_thinking(var chat : ChatSession; on : bool) {
     //! template's markers, the empty block when it had none - so a replayed transcript renders the tokens
     //! the model generated and a prefix cache matches through it. No-op where ``set_thinking`` is; default off.
     set_preserve_thinking_(chat, on)
+}
+
+def set_reasoning_effort(var chat : ChatSession; effort : string) {
+    //! The reasoning level a harmony (gpt-oss) system turn asks for: ``low``, ``medium`` or ``high``. Unset, the
+    //! level follows ``set_thinking``: ``medium`` on, ``low`` off - the template has no off, and ``low`` is the
+    //! shortest analysis it writes. No-op on every other family.
+    set_reasoning_effort_(chat, effort)
 }
 
 def render_assistant_calls(model : Model; var chat : ChatSession; text : string; calls : array<string>; var out : array<int64>; reasoning : string = "") {

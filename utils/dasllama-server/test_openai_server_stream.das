@@ -58,13 +58,6 @@ def private with_stream_server(t : T?; model_path : string; port : int; blk : bl
     }
 }
 
-// Every `data: <payload>` line of an SSE body, in order ("[DONE]" included).
-def private sse_datas(body : string) : array<string> {
-    var lines <- split(body, "\n")
-    var out <- [for (ln in lines); trim_prefix(ln, "data: "); where starts_with(ln, "data: ")]
-    delete lines
-    return <- out
-}
 
 // chat.completion.chunk mirror shapes (from_JV defaults the fields a chunk omits)
 struct private ChunkDelta {

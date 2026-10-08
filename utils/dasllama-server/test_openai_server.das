@@ -949,46 +949,6 @@ def test_openai_server_preserve_thinking(t : T?) {
     }
 }
 
-//! what a streaming chat request put on the wire: the content deltas counted and joined, the reasoning deltas counted,
-//! the tool_calls chunks counted
-struct StreamTally {
-    n_content : int
-    n_reasoning : int
-    n_tool_calls : int
-    content : string
-}
-
-def private stream_tally(base_url, body : string) : StreamTally {
-    var tally = StreamTally()
-    var parts : array<string>
-    POST("{base_url}/v1/chat/completions", body) $(resp) {
-        for (line in split(string(resp.body), "\n")) {
-            continue if (!starts_with(line, "data: ") || line == "data: [DONE]")
-            var err : string
-            var js = read_json(slice(line, 6), err)
-            continue if (js == null)
-            let cnt = js?["choices"]?[0]?["delta"]?["content"] ?? ""
-            if (!empty(cnt)) {
-                tally.n_content ++
-                parts |> push(cnt)
-            }
-            if (!empty(js?["choices"]?[0]?["delta"]?["reasoning_content"] ?? "")) {
-                tally.n_reasoning ++
-            }
-            let tc = js?["choices"]?[0]?["delta"]?["tool_calls"]
-            if (tc != null && tc.value is _array) {
-                tally.n_tool_calls ++
-            }
-            unsafe {
-                delete js
-            }
-        }
-    }
-    tally.content = join(parts, "")
-    delete parts
-    return tally
-}
-
 //! how many content deltas a streaming chat request puts on the wire
 def private stream_content_chunks(base_url, body : string) : int =>
     stream_tally(base_url, body).n_content
@@ -1038,6 +998,24 @@ def private compl_text(base_url, body : string) : string {
     return text
 }
 
+//! a buffered completion's usage counts: prompt tokens and the prefix-cache hit
+def private compl_usage(base_url, body : string) : tuple<prompt : int; cached : int> {
+    var prompt = -1
+    var cached = -1
+    POST("{base_url}/v1/completions", body) $(resp) {
+        var err : string
+        var js = read_json(string(resp.body), err)
+        if (js != null) {
+            prompt = int(js?["usage"]?["prompt_tokens"] ?? -1l)
+            cached = int(js?["usage"]?["prompt_tokens_details"]?["cached_tokens"] ?? -1l)
+            unsafe {
+                delete js
+            }
+        }
+    }
+    return (prompt = prompt, cached = cached)
+}
+
 let TEST_PORT_CKPT = 18191   // beside 18190, the preserve_thinking boot
 let QWEN35_PATH = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
 
@@ -1063,7 +1041,15 @@ def test_openai_server_recurrent_checkpoints(t : T?) {   // nolint:STYLE038 - on
             let a1 = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"What is the capital of France? One word.\"}],\"tools\":[{tool_a}],{kw}}")
             t |> success(a1.prompt > 16 && a1.cached == 0, "conversation A's first turn prefills cold ({a1.prompt} prompt, {a1.cached} cached): {a1.reply}")
             let a1_again = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"What is the capital of France? One word.\"}],\"tools\":[{tool_a}],{kw}}")
-            t |> equal(a1.prompt - 1, a1_again.cached, "the same prompt asked again attaches everything but its last token: the prefill stopped a token short of the end")
+            t |> success(a1_again.cached >= a1.prompt - 16 && a1_again.cached < a1.prompt - 1, "the same prompt asked again attaches through its last message's close, the generation prompt alone left to eval - more than the one token the prompt's end would leave ({a1_again.cached} of {a1.prompt})")
+            // a raw completion names no message end: its last stop is the prompt's end less one token, so the same prompt
+            // again attaches everything but that token
+            let raw = "\{\"prompt\":\"{sys} The kitchen light is on, the bedroom lights are off, the sprinkler runs at seven. Name the device that runs on a schedule:\",\"max_tokens\":4}"
+            let raw1 = compl_usage(base_url, raw)
+            let raw2 = compl_usage(base_url, raw)
+            t |> success(raw1.prompt > 16 && raw2.cached == raw1.prompt - 1, "a completion repeated attaches everything but its last token ({raw2.cached} of {raw1.prompt}; first {raw1.cached})")
+            let a_next = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"What is the capital of France? One word.\"},\{\"role\":\"assistant\",\"content\":{json_str(a1.reply)}},\{\"role\":\"user\",\"content\":\"And its river? One word.\"}],\"tools\":[{tool_a}],{kw}}")
+            t |> success(a_next.cached >= a1.prompt - 16, "A's follow-up, no preserve_thinking, attaches the earlier exchange through its last message's close - the replayed turn renders no think block and the checkpoint sits ahead of where that divides ({a_next.cached} cached of {a_next.prompt}, the first prompt {a1.prompt})")
             let b1 = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"What is two plus two? One word.\"}],\"tools\":[{tool_a}],{kw}}")
             t |> success(b1.cached >= 16, "conversation B's first turn, A's tools, attaches A's opening ({b1.cached} cached of {b1.prompt})")
             t |> success(b1.cached < b1.prompt - 8, "... and not B's own turn ({b1.cached} of {b1.prompt})")
@@ -1083,7 +1069,7 @@ def test_openai_server_recurrent_checkpoints(t : T?) {   // nolint:STYLE038 - on
             // a forced call streams no content: the marker is held from the first byte, the call arrives framed at the finish
             let forced = stream_tally(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"Switch the kitchen light off.\"}],\"tools\":[{tool_a}],\"tool_choice\":\"required\",\"stream\":true,\"max_tokens\":64,\"chat_template_kwargs\":\{\"enable_thinking\":false}}")
             t |> equal(0, forced.n_content, "a forced call puts no content on the wire: {forced.content}")
-            t |> equal(1, forced.n_tool_calls, "... one tool_calls chunk")
+            t |> equal(1, forced.n_calls, "... one tool_calls chunk")
             // a tool message followed by a user message renders (the tool turn is no pending user turn)
             let after_tool = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"Switch the kitchen light off.\"},\{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[\{\"id\":\"c1\",\"type\":\"function\",\"function\":\{\"name\":\"control\",\"arguments\":\"\{\\\"point\\\":\\\"light.1\\\",\\\"value\\\":\\\"false\\\"}\"}}]},\{\"role\":\"tool\",\"tool_call_id\":\"c1\",\"content\":\"ok\"},\{\"role\":\"user\",\"content\":\"Thanks. Anything else on?\"}],\"tools\":[{tool_a}],{kw}}")
             t |> success(after_tool.prompt > a1.prompt, "a user message after a tool result renders after it ({after_tool.prompt} prompt tokens)")

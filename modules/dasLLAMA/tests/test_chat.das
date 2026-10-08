@@ -4,6 +4,7 @@ options persistent_heap   // + explicit deletes below: each test frees its model
 options _dasllama_internal = true
 
 require dastest/testing_boost public
+require dasllama/dasllama_chat   // harmony_reasoning_level / set_reasoning_effort_: the reasoning-level rule on a bare session
 require dasllama/dasllama   // the public facade — public-path tests exercise the API through it (engine + arch registrations + chat)
 
 [init]
@@ -876,6 +877,36 @@ def test_chat_tool_modes(t : T?) {
         m.chat_template_str = "bos [INST] u [/INST] eos"
         let ct <- chat_template(m)
         t |> success(ct.tool_mode == ToolMode.mistral, "[INST] detection declares the mistral mode")
+        var m7 = Model()
+        m7.arch = "llama"
+        m7.chat_template_str = "bos [SYSTEM_PROMPT]s[/SYSTEM_PROMPT][INST]u[/INST] eos"
+        let ct7 <- chat_template(m7)
+        t |> success(ct7.tool_mode == ToolMode.mistral, "the v7-tekken shape (Mistral-Small 3.x) declares the mistral mode too")
+        var m3 <- arch_chat("mistral3")
+        t |> success(m3.tool_mode == ToolMode.mistral, "the mistral3 arch declares it")
+        delete m3
+    }
+    t |> run("harmony's Reasoning level: the one set, else medium on a thinking turn and low off it (model-free)") @(t : T?) {
+        var c = ChatSession(tmpl <- arch_chat("gpt-oss"))
+        c.enable_thinking = c.tmpl.think_default
+        c.think_vocab = true
+        t |> equal(harmony_reasoning_level(c), "medium", "thinking on, nothing set")
+        set_thinking_(c, false)
+        t |> equal(harmony_reasoning_level(c), "low", "thinking off, nothing set")
+        set_reasoning_effort_(c, "high")
+        t |> equal(harmony_reasoning_level(c), "high", "the level set wins over the flag")
+        set_reasoning_effort_(c, "minimal")
+        t |> equal(harmony_reasoning_level(c), "low", "minimal reads as low")
+        set_reasoning_effort_(c, "")
+        t |> equal(harmony_reasoning_level(c), "low", "unset returns to the flag")
+        var tripped = false
+        try {
+            set_reasoning_effort_(c, "max")
+        } recover {
+            tripped = true
+        }
+        t |> success(tripped, "a level that is not one of the three panics")
+        delete c
     }
     t |> run("a declared mode without its control specials demotes to none at create") @(t : T?) {
         // an [INST] template over a vocab with NO [TOOL_CALLS] family (v0.1/v0.2-class): the
@@ -977,7 +1008,9 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         t |> success(ids_equal(toks, want2), "call replay token-for-token, turn left open")
         t |> success(c2.turn_open, "the model turn is recorded open")
 
-        // the result continues the OPEN turn in-turn — no user frame, no close before it
+        // the result continues the OPEN turn in-turn — no user frame, no close before it; with thinking off the turn then
+        // closes and a new model turn opens (off the canonical template, which leaves the model nothing to continue and
+        // an E-series model ends the turn at once)
         var results : array<string>
         results |> push("\{\"temp\": 21}")
         var names : array<string>
@@ -988,8 +1021,35 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
         want3 |> push(tro)
         want3 |> push_from(encode(m, "response:get_weather\{temp:21}", false, false))
         want3 |> push(trr)
-        t |> success(ids_equal(got3, want3), "result turn token-for-token (in-turn, named)")
+        want3 |> push(trc)
+        want3 |> push_from(encode(m, "\n", false, false))
+        want3 |> push(trn)
+        want3 |> push_from(encode(m, "model\n", false, false))
+        t |> success(ids_equal(got3, want3), "result turn token-for-token (in-turn, named), then the closed and reopened model turn")
+        let marked3 <- render_turn_marked(m, c2)
+        let gen_prompt = 2l + long_length(encode(m, "\n", false, false)) + long_length(encode(m, "model\n", false, false))
+        t |> equal(marked3.messages_end, long_length(want3) - gen_prompt, "the last message closes at the response block's end; the turn close and the new opening are the generation prompt")
         delete c2
+        // a thinking conversation (decided at its first turn): the thought channel re-opens in the open turn after the
+        // results, and the reply splits as one that begins inside it
+        var c3 = create_chat_renderer(m, "", 8l)
+        set_thinking(c3, true)
+        add_user(c3, USR)
+        var toks3 : array<int64>
+        render_assistant_calls(m, c3, "", calls, toks3)
+        add_tool_results(c3, results, names)
+        let got4 <- render_turn(m, c3)
+        var want4 : array<int64>
+        want4 |> push(tro)
+        want4 |> push_from(encode(m, "response:get_weather\{temp:21}", false, false))
+        want4 |> push(trr)
+        want4 |> push(special_id(m, "<|channel>"))
+        want4 |> push_from(encode(m, "thought\n", false, false))
+        t |> success(ids_equal(got4, want4), "a thinking turn re-opens the thought channel in the open turn ({length(got4)} vs {length(want4)} tokens)")
+        let sp4 = split_reasoning(c3, "The result says 21 degrees.<channel|>It is 21 degrees in Paris.")
+        t |> equal(sp4.reasoning, "The result says 21 degrees.", "the reply's head is the thought the prompt opened")
+        t |> equal(sp4.content, "It is 21 degrees in Paris.", "... and the content follows the channel close")
+        delete c3
         delete m
     }
     t |> run("displaced results + leaked open turn both heal on the next render (needs gemma-4-E2B)") @(t : T?) {

@@ -97,13 +97,6 @@ struct private Chunk {
 
 // Every `data: <payload>` line of an SSE body, in order ("[DONE]" included). Sibling copy of
 // test_openai_server_stream's — the server test files stay self-contained by dir convention.
-def private sse_datas(body : string) : array<string> {
-    var lines <- split(body, "\n")
-    var out <- [for (ln in lines); trim_prefix(ln, "data: "); where starts_with(ln, "data: ")]
-    delete lines
-    return <- out
-}
-
 // POST a chat request and hand the parsed ChatResp to the block (fails the test on a non-200 or
 // unparseable body). Greedy requests are deterministic per box, so content asserts are stable.
 def private chat_resp(t : T?; base_url, body : string; blk : block<(r : ChatResp) : void>) {
@@ -385,8 +378,24 @@ def test_tools_llama(t : T?) {
         t |> run("llama_json: the whole-reply call object parses to tool_calls") @(t : T?) {
             assert_tool_call(t, base_url, 128)
         }
+        t |> run("llama_json: a stream with tools carries a text reply as it comes and a call as one tool_calls chunk at the finish") @(t : T?) {
+            // the model may answer the counting prompt with text or, as the 3B does, with a call anyway: text streams
+            // in pieces, a call arrives framed whole with no brace in the content - never a buffered single chunk of text
+            let talk = stream_tally(base_url,
+                "\{\"messages\":[\{\"role\":\"user\",\"content\":\"Count from one to eight in words, no tools.\"}]," +
+                TOOLS_BODY + ",\"stream\":true,\"max_tokens\":48,\"temperature\":0}")
+            t |> success(talk.n_calls == 1 || talk.n_content >= 2, "a text reply streams piece by piece, or the reply is a call ({talk.n_content} content deltas, {talk.n_calls} calls): {talk.content}")
+            t |> success(find(talk.content, "\{") < 0, "no call object in the content deltas: {talk.content}")
+            let call = stream_tally(base_url,
+                "\{\"messages\":[\{\"role\":\"user\",\"content\":\"What is the weather in Paris right now? Use the get_weather tool.\"}]," +
+                TOOLS_BODY + ",\"stream\":true,\"max_tokens\":128,\"temperature\":0}")
+            t |> equal(call.n_calls, 1, "the call arrives as one tool_calls chunk ({call.n_calls}); content: {call.content}")
+            t |> equal(call.finish, "tool_calls")
+            t |> success(find(call.content, "\{") < 0, "the call's object never reaches the content deltas: {call.content}")
+        }
     }
 }
+
 
 [test]
 def test_tools_mistral(t : T?) {
@@ -396,6 +405,19 @@ def test_tools_mistral(t : T?) {
     with_think_server(t, path_join(models_dir(), "Mistral-7B-Instruct-v0.3-Q4_K_M.gguf"), TEST_PORT + 5, 120) $(base_url) {
         t |> run("mistral: [TOOL_CALLS] + JSON array parses to tool_calls") @(t : T?) {
             assert_tool_call(t, base_url, 128)
+        }
+        t |> run("mistral: a stream with tools carries text as it comes and a call as one tool_calls chunk at the finish") @(t : T?) {
+            let talk = stream_tally(base_url,
+                "\{\"messages\":[\{\"role\":\"user\",\"content\":\"Count from one to eight in words, no tools.\"}]," +
+                TOOLS_BODY + ",\"stream\":true,\"max_tokens\":48,\"temperature\":0}")
+            t |> success(talk.n_calls == 1 || talk.n_content >= 2, "a text reply streams piece by piece, or the reply is a call ({talk.n_content} content deltas, {talk.n_calls} calls): {talk.content}")
+            t |> success(find(talk.content, "[\{") < 0, "no call array in the content deltas: {talk.content}")
+            let call = stream_tally(base_url,
+                "\{\"messages\":[\{\"role\":\"user\",\"content\":\"What is the weather in Paris right now? Use the get_weather tool.\"}]," +
+                TOOLS_BODY + ",\"stream\":true,\"max_tokens\":128,\"temperature\":0}")
+            t |> equal(call.n_calls, 1, "the call arrives as one tool_calls chunk ({call.n_calls}); content: {call.content}")
+            t |> equal(call.finish, "tool_calls")
+            t |> success(find(call.content, "[\{") < 0, "the call array never reaches the content deltas: {call.content}")
         }
     }
 }
@@ -408,6 +430,19 @@ def test_tools_gemma4(t : T?) {
     with_think_server(t, GEMMA4_PATH, TEST_PORT + 6, 180) $(base_url) {
         t |> run("gemma4: the DSL call block parses to tool_calls") @(t : T?) {
             assert_tool_call(t, base_url, 256)
+        }
+        t |> run("gemma4: a stream with tools carries its text as it comes and a call as one tool_calls chunk at the finish") @(t : T?) {
+            let talk = stream_tally(base_url,
+                "\{\"messages\":[\{\"role\":\"user\",\"content\":\"Count from one to eight in words. Do not call any tool.\"}]," +
+                TOOLS_BODY + ",\"stream\":true,\"max_tokens\":48,\"temperature\":0,\"chat_template_kwargs\":\{\"enable_thinking\":false}}")
+            t |> success(talk.n_content >= 2, "the text reply streams piece by piece ({talk.n_content} content deltas, {talk.n_calls} calls): {talk.content}")
+            t |> success(find(talk.content, "<|tool_call>") < 0, "no call marker in the content deltas: {talk.content}")
+            let call = stream_tally(base_url,
+                "\{\"messages\":[\{\"role\":\"user\",\"content\":\"What is the weather in Paris right now? Use the get_weather tool.\"}]," +
+                TOOLS_BODY + ",\"stream\":true,\"max_tokens\":256,\"temperature\":0,\"chat_template_kwargs\":\{\"enable_thinking\":false}}")
+            t |> equal(call.n_calls, 1, "the call arrives as one tool_calls chunk ({call.n_calls}); content: {call.content}")
+            t |> equal(call.finish, "tool_calls")
+            t |> success(find(call.content, "<|tool_call>") < 0, "the call block never reaches the content deltas: {call.content}")
         }
         t |> run("gemma4: the tool round-trip replays (call + result -> answer)") @(t : T?) {
             chat_resp(t, base_url,

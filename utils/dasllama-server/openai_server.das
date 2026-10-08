@@ -2178,6 +2178,9 @@ def private call_hold_pass(var w : StreamWire; cnt : string) : string {
     }
     if (empty(w.call_stops)) {
         w.call_stops |> push(w.call_open)
+        if (w.tool_mode == ToolMode.mistral) {
+            w.call_stops |> push("\{")   //! a mistral call the model writes as one bare object, which the finish parse frames as a call too
+        }
     }
     var emit = ""
     w.call_seen = stop_scan(w.call_hold, cnt, w.call_stops, emit)
@@ -2383,7 +2386,7 @@ let CHAT_FIELDS : table<string> <- { "model", "messages", "stream", "temperature
                                      "presence_penalty", "frequency_penalty", "repeat_penalty", "seed",
                                      "max_tokens", "max_completion_tokens", "tools", "tool_choice",
                                      "enable_thinking", "chat_template_kwargs", "truncation", "stream_options",
-                                     "response_format", "stop" }
+                                     "response_format", "stop", "reasoning_effort" }
 let COMPL_FIELDS : table<string> <- { "model", "prompt", "stream", "temperature", "top_k", "top_p", "min_p",
                                      "presence_penalty", "frequency_penalty", "repeat_penalty", "seed",
                                      "max_tokens", "stream_options", "stop" }
@@ -3048,11 +3051,12 @@ def private register_request(srv : FrontLink; writer : WriterRef;
                              tool_mode : ToolMode = ToolMode.none; reuse_id : int64 = 0l;
                              var nothink : NothinkStopGuard = NothinkStopGuard(); stable_at : int64 = 0l;
                              include_usage : bool = false; resumed : bool = false;
-                             var constraint : TokenConstraint? = null; system_at : int64 = 0l; system_head_at : int64 = 0l) {
+                             var constraint : TokenConstraint? = null; system_at : int64 = 0l; system_head_at : int64 = 0l;
+                             messages_end_at : int64 = 0l) {
     var no_types : table<string; table<string; string>>
     register_request(srv, writer, prompt, stop_ids, close_toks, stop_strs, spans, params, max_new, streaming, is_chat, prefix,
                      tools_declared, call_open, call_close, seed, think, tool_mode, reuse_id, nothink, stable_at, include_usage,
-                     resumed, constraint, system_at, system_head_at, no_types)
+                     resumed, constraint, system_at, system_head_at, messages_end_at, no_types)
 }
 
 //! `register_request` with the declared tools' parameter types, what a Qwen3.5/3.6 reply's values are typed by
@@ -3067,7 +3071,7 @@ def private register_request(srv : FrontLink; writer : WriterRef;
                              tool_mode : ToolMode; reuse_id : int64;
                              var nothink : NothinkStopGuard; stable_at : int64;
                              include_usage : bool; resumed : bool;
-                             var constraint : TokenConstraint?; system_at : int64; system_head_at : int64;
+                             var constraint : TokenConstraint?; system_at : int64; system_head_at : int64; messages_end_at : int64;
                              var tool_types : table<string; table<string; string>>) {
     if (bench_hold_active()) {
         unsafe {
@@ -3087,7 +3091,8 @@ def private register_request(srv : FrontLink; writer : WriterRef;
     let rid = reuse_id != 0l ? reuse_id : next_id()   // a resumed image request keeps its park id, so one [req N] spans the request
     let cid = "{prefix}-{rid}"
     let created = created_ts()
-    var preq <- PendingReq(id = rid, params = params, max_new = max_new, seed = seed, stable_at = stable_at, system_at = system_at, system_head_at = system_head_at)
+    var preq <- PendingReq(id = rid, params = params, max_new = max_new, seed = seed, stable_at = stable_at, system_at = system_at, system_head_at = system_head_at,
+                           messages_end_at = messages_end_at)
     var encoded_rows = 0l
     for (sp in spans) {
         encoded_rows += empty(sp.rows) ? 0l : sp.n
@@ -3128,17 +3133,19 @@ def private register_request(srv : FrontLink; writer : WriterRef;
 // Render a user-led suffix of the transcript. System messages are always retained (they were
 // folded into `system`); `start` applies only to conversational messages in the original array.
 def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : array<string>;   // nolint:STYLE037,STYLE038 — one arm per message role, each accumulating into the same renderer state
-                               max_new : int64; start : int; think_set, think_val, preserve_think : bool; refs : array<MediaRef>;
+                               max_new : int64; start : int; think_set, think_val, preserve_think : bool; effort : string; refs : array<MediaRef>;
                                var prompt, stop_ids, close : array<int64>&;
                                var nothink_out : NothinkStopGuard&;
                                var call_open, call_close : string&; var think_out : ThinkStream&;
-                               var tool_mode_out : ToolMode&; var stable_at : int64&; var system_at : int64&; var system_head_at : int64&) : string {
+                               var tool_mode_out : ToolMode&; var stable_at : int64&; var system_at : int64&; var system_head_at : int64&;
+                               var messages_end_at : int64&) : string {
     var chat <- create_chat_renderer(cur_model(), system, max_new)
     defer() { delete chat }
     if (think_set) {   // absent from the request => the family's own default (gemma-4 E: off)
         set_thinking(chat, think_val)
     }
     set_preserve_thinking(chat, preserve_think)
+    set_reasoning_effort(chat, effort)
     if (!empty(tools)) {
         if (chat.tmpl.tool_mode == ToolMode.none) {
             return "'tools' is not supported: the {cur_name()} chat template declares no tool-call format"
@@ -3253,6 +3260,7 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
     stable_at = long_length(rendered) + turn.opening   //! every earlier turn and the last turn's own opening: where the requests that share this history part
     system_at = chat.first_opening > 0l ? chat.first_opening : turn.opening   //! the conversation's opening, from the replayed first turn or this one
     system_head_at = chat.system_head_at > 0l ? chat.system_head_at : turn.system_head   //! ... and its system text before the tool block
+    messages_end_at = long_length(rendered) + turn.messages_end   //! the last message's close, ahead of the generation prompt: where the conversation's next request still matches
     rendered |> push_from(turn.toks)
     delete turn
     // out-params: the sole caller hands them in empty and deletes them before every re-render
@@ -3559,7 +3567,7 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
     var spec : ConstraintSpec
     if (constraint_fields_present(js)) {
         let tmpl = chat_template(cur_model())
-        spec <- read_constraint_spec(js, tools, tmpl.tool_call_open, tmpl.tool_call_close, tmpl.tool_mode == ToolMode.xml_function)
+        spec <- read_constraint_spec(js, tools, tmpl.tool_call_open, tmpl.tool_call_close, tmpl.tool_mode)
         if (!empty(spec.err)) {
             bad_request(srv, writer, spec.err)
             return
@@ -3591,6 +3599,11 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
         to_log(LOG_WARNING, "/v1/chat/completions: 'chat_template_kwargs' must be an object — ignoring\n")
     }
     let preserve_think = ctk?["preserve_thinking"] ?? false
+    let effort = js?["reasoning_effort"] ?? ""   //! OpenAI's field: harmony's `Reasoning:` line (`minimal` and `none` read as `low`); other families render nothing for it
+    if (!empty(effort) && effort != "low" && effort != "medium" && effort != "high" && effort != "minimal" && effort != "none") {
+        bad_request(srv, writer, "'reasoning_effort' is one of none, minimal, low, medium, high")
+        return
+    }
     // tri-state: an ABSENT enable_thinking leaves the family's own default in force (qwen thinks,
     // gemma-4 E doesn't); a present bool — either spelling — overrides it
     let tv = js?["enable_thinking"]
@@ -3613,11 +3626,12 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
     var stable_at = 0l
     var system_at = 0l
     var system_head_at = 0l
+    var messages_end_at = 0l
     var start = 0
     while (true) {
-        let render_error = render_chat_suffix(msgs_v, system, tools, max_new, start, think_set, think_val, preserve_think,
+        let render_error = render_chat_suffix(msgs_v, system, tools, max_new, start, think_set, think_val, preserve_think, effort,
                                               refs, prompt, stop_ids, close, nothink, call_open, call_close,
-                                              think_stream, wire_tool_mode, stable_at, system_at, system_head_at)
+                                              think_stream, wire_tool_mode, stable_at, system_at, system_head_at, messages_end_at)
         if (!empty(render_error)) {
             bad_request(srv, writer, render_error)
             return
@@ -3671,7 +3685,7 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
     register_request(srv, writer, prompt, stop_ids, close, stop_strs, spans, params, max_new,
                      streaming, true, "chatcmpl",
                      has_tools, call_open, call_close, seed, think_stream, wire_tool_mode, resume_rid,
-                     nothink, stable_at, wants_usage(js), resumed, constraint, system_at, system_head_at,
+                     nothink, stable_at, wants_usage(js), resumed, constraint, system_at, system_head_at, messages_end_at,
                      tool_param_types(tools))
 }
 

@@ -121,12 +121,17 @@ Two user messages in a row are two user turns, as every template writes them:
 generation prompt. A replayed assistant turn can carry the reasoning the model
 wrote - ``set_preserve_thinking(rchat, true)``, then ``render_assistant``'s last
 argument - so a thinking model's next turn attaches the whole earlier exchange
-off the prefix cache instead of re-reading it.
+off the prefix cache instead of re-reading it. A harmony model (gpt-oss) cannot
+skip its analysis channel; its system turn asks for a reasoning level instead -
+``set_reasoning_effort(rchat, "low")``, ``"medium"`` or ``"high"`` - and unset,
+the level follows ``set_thinking``: ``medium`` on, ``low`` off. On every other
+family the call is a no-op.
 
 .. code-block:: das
 
    var rchat2 = create_chat_renderer(m, SYSTEM)
    set_preserve_thinking(rchat2, true)
+   set_reasoning_effort(rchat2, "low")                   // harmony's Reasoning: line; a no-op elsewhere
    add_user(rchat2, "A note for the assistant: answer in one word.")
    var two_toks : array<int64>
    render_user(m, rchat2, two_toks)                      // the note, a user turn of its own

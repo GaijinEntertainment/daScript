@@ -311,7 +311,7 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--prefix-states``
      -
      - ``256``
-     - Recurrent models (the Qwen3.5/3.6/3.8 hybrids) cache whole checkpoints instead of pages: the most a slot keeps (``0`` = none; config key ``prefix_states``); the byte budget binds first. Every request leaves one at its opening's shared head (the system text or the tool block, whichever its template writes first), one at its opening with the tools, one where its last message starts, one a token short of its prompt's end, one at its finished turn; a conversation's own stops are dropped before shared openings
+     - Recurrent models (the Qwen3.5/3.6/3.8 hybrids) cache whole checkpoints instead of pages: the most a slot keeps (``0`` = none; config key ``prefix_states``); the byte budget binds first. Every request leaves one at its opening's shared head (the system text or the tool block, whichever its template writes first), one at its opening with the tools, one where its last message starts, one where it ends (ahead of the generation prompt), one at its finished turn; a conversation's own stops are dropped before shared openings
    * - ``--prefix-state-mb``
      -
      - *auto*
@@ -751,13 +751,16 @@ The wire format follows the model family: **hermes** (Qwen2.5 / Qwen3 family -
 a ``<tools>`` system block, ``<tool_call>`` JSON), **harmony** (gpt-oss -
 developer-turn TypeScript namespace defs, commentary-channel recipient calls),
 **gemma4** (gemma-4 - the declaration / call / response DSL), **mistral**
-(v0.3+ - ``[AVAILABLE_TOOLS]`` defs, a ``[TOOL_CALLS]`` array) and
+(v0.3 and the tekken templates - Mistral-Small 3.x, Magistral, Devstral:
+``[AVAILABLE_TOOLS]`` defs, a ``[TOOL_CALLS]`` array) and
 **llama_json** (llama-3.x - the whole reply is one ``{"name","parameters"}``
 object, results on the ``ipython`` role). A model whose chat template declares
 no tool format gets a 400. Streaming with tools puts the reply's text on the wire
 as it comes and holds back only the family's call marker; the parsed calls arrive
-as one ``delta.tool_calls`` chunk at finish. A family whose calls ride channels
-rather than a marker (harmony) is framed whole at the finish.
+as one ``delta.tool_calls`` chunk at finish; hermes, xml_function and gemma4 hold
+at their call marker, llama_json at the call object's opening brace, mistral at the
+call array's bracket. A family whose calls ride channels rather than a marker
+(harmony) is framed whole at the finish.
 
 
 Images

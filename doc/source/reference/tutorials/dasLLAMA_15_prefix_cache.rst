@@ -108,7 +108,7 @@ it between two ``eval`` calls; ``opening = true`` marks the checkpoint as one ev
 conversation on this system prompt shares, which the budget drops after any
 conversation's own. The server's scheduler stops the same way, at up to four
 places a request names (the opening's shared head, the system opening, the
-request's own stable stop, the prompt's end), within a byte budget - a quarter
+request's own stable stop, its last message's close), within a byte budget - a quarter
 of the box's RAM unless ``--prefix-state-mb`` says otherwise.
 
 What the cache holds, and giving it back

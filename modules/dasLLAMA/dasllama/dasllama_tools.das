@@ -150,14 +150,15 @@ def harmony_tools_namespace(tools_json : array<string>) : string {
     }
 }
 
-//! The canonical Harmony system body when tools are declared: identity + reasoning effort + the
-//! channel declaration + the commentary routing line. No live date line — a cache-stable deviation
-//! from the canonical template, noted in tool_formats_plan.md.
-let HARMONY_SYSTEM_BODY = ("You are ChatGPT, a large language model trained by OpenAI.\n" +
-    "Knowledge cutoff: 2024-06\n\n" +
-    "Reasoning: medium\n\n" +
-    "# Valid channels: analysis, commentary, final. Channel must be included for every message.\n" +
-    "Calls to these tools must go to the commentary channel: 'functions'.")
+//! The canonical Harmony system body: identity + the reasoning effort (`low`, `medium` or `high`, the template's own
+//! knob) + the channel declaration, and the commentary routing line when tools are declared. No live date line - a
+//! cache-stable deviation from the canonical template.
+def harmony_system_body(effort : string; with_tools : bool = true) : string =>
+    ("You are ChatGPT, a large language model trained by OpenAI.\n" +
+     "Knowledge cutoff: 2024-06\n\n" +
+     "Reasoning: {effort}\n\n" +
+     "# Valid channels: analysis, commentary, final. Channel must be included for every message." +
+     (with_tools ? "\nCalls to these tools must go to the commentary channel: 'functions'." : ""))
 
 //! The role-header recipient text of one replayed Harmony CALL turn (before its <|channel|>).
 def harmony_call_header(name : string) : string => " to=functions.{name}"
