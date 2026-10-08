@@ -9,7 +9,8 @@ module match shared private
 //! Provides ``match`` and ``static_match`` macros
 //! that decompose values by structure, variant, tuple, array, or constant comparison.
 //! Each arm is ``pattern => body``: a bare name binds, ``_`` matches anything, ``&&`` adds a guard,
-//! ``|`` separates alternatives, and ``match (a, b)`` matches several values at once.
+//! ``|`` separates alternatives, ``&`` requires both patterns, and ``match (a, b)`` matches several
+//! values at once.
 //! In value position ``match`` is an expression. Unreachable arms and a match over a finite type
 //! (enum, bool, variant, struct pointer) that misses a value are compile errors.
 //! Also provides ``match_type`` and ``match_expr``.
@@ -663,6 +664,8 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
         }
     } elif (wth.__rtti |> starts_with("ExprConst")) {
         return match_const(what, wth, access, to)
+    } elif (to.bind_names && (wth is ExprOp2) && (wth as ExprOp2).op == "&") {
+        return match_any(what, (wth as ExprOp2).left, access, to) && match_any(what, (wth as ExprOp2).right, access, to)
     } elif (to.bind_names) {
         to.errors |> match_error("`{describe_pattern(wth)}` is not a pattern; compare against a computed value with `match_expr({describe_pattern(wth)})`", wth.at)
         return false
@@ -772,7 +775,7 @@ def prepare_pattern(var pat : Expression?; bind_bare : bool; var names : array<s
             op2.op := "||"
         }
         prepare_pattern(op2.left, bind_bare, names)
-        prepare_pattern(op2.right, bind_bare, names) if (op2.op == "||")
+        prepare_pattern(op2.right, bind_bare, names) if (op2.op == "||" || (bind_bare && op2.op == "&"))
     } elif (pat is ExprVar) {
         let vname = string((pat as ExprVar).name)
         names |> push(vname) if (bind_bare && vname != "_")
@@ -1014,6 +1017,7 @@ def private is_irrefutable(typ : TypeDeclPtr; var pat : Expression?) : bool {
     //! Irrefutable: the pattern can not fail on any value of ``typ`` (on a pointer, any non-null one) - ``x``, ``_``, ``(a, _)``, ``Point(x = a, y = _)``. Such an arm covers its whole column.
     var p = match_peel_r2v(pat)
     return true if (is_binder(p))
+    if (p is ExprOp2 && (p as ExprOp2).op == "&") return is_irrefutable(typ, (p as ExprOp2).left) && is_irrefutable(typ, (p as ExprOp2).right)
     if (p is ExprMakeTuple) {
         for (v in (p as ExprMakeTuple).values) {
             return false if (!is_rest(v) && !is_irrefutable(null, v))
@@ -1037,6 +1041,15 @@ def private either(var l : MatchCell; var r : MatchCell) : MatchCell {
 }
 
 [macro_function]
+def private both(var l : MatchCell; var r : MatchCell) : MatchCell {
+    //! ``p1 & p2`` covers what both sides cover.
+    return <- r if (l.any)
+    return <- l if (r.any)
+    return <- MatchCell(opaque = true) if (l.opaque || r.opaque)
+    return <- MatchCell(keys <- [for (k in l.keys); k; where has_value(r.keys, k)])
+}
+
+[macro_function]
 def private classify_cell(typ : TypeDeclPtr; var pat : Expression?) : MatchCell {
     //! What one pattern covers of one column: everything, named values, or values the analysis can't name.
     var p = match_peel_r2v(pat)
@@ -1044,6 +1057,7 @@ def private classify_cell(typ : TypeDeclPtr; var pat : Expression?) : MatchCell 
     if (p is ExprOp2) {
         var op2 = p as ExprOp2
         return <- either(classify_cell(typ, op2.left), classify_cell(typ, op2.right)) if (op2.op == "||")
+        return <- both(classify_cell(typ, op2.left), classify_cell(typ, op2.right)) if (op2.op == "&")
         return <- MatchCell(opaque = true)
     }
     let key = constant_key(p)

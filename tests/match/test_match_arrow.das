@@ -407,3 +407,27 @@ def test_complementary_guards_cover_their_pattern(t : T?) {
     t |> equal(bool_guard(1, true), "flag 1")
     t |> equal(bool_guard(1, false), "no flag 1")
 }
+
+def private whole_and_parts(p : Point) : string {
+    return match (p) {
+        q & Point(x = 0) => "y-axis {q.y}"
+        q & Point(y = 0) && q.x > 0 => "positive x {q.x}"
+        _ => "elsewhere"
+    }
+}
+
+def private warmth(d : Dir) : string {
+    return match (d) {
+        n & (Dir.north | Dir.east) => "warm {n}"
+        n & (Dir.south | Dir.west) => "cold {n}"
+    }
+}
+
+[test]
+def test_and_pattern_binds_the_whole_value(t : T?) {
+    t |> equal(whole_and_parts(Point(x = 0, y = 3)), "y-axis 3")
+    t |> equal(whole_and_parts(Point(x = 4, y = 0)), "positive x 4")
+    t |> equal(whole_and_parts(Point(x = -4, y = 0)), "elsewhere")
+    t |> equal(warmth(Dir.east), "warm east")
+    t |> equal(warmth(Dir.west), "cold west")
+}

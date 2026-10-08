@@ -255,6 +255,22 @@ fields:
 
 Inside a guard and inside ``match_expr``, ``|`` stays the bitwise operator.
 
+Both patterns with ``&``
+------------------------
+
+``p1 & p2`` matches when both patterns match the same value. With a bare name on one side it binds
+the whole value while the other side destructures it:
+
+.. code-block:: das
+
+    def on_axis ( p : AB ) {
+        return match ( p ) {
+            whole & AB(a = 0) => "on the b axis: {whole.b}"
+            _ => "off axis"
+        }
+    }
+
+
 Matching Several Values
 -----------------------
 
