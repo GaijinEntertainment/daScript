@@ -368,6 +368,26 @@ The number of explicit elements in the pattern is checked against the array leng
         }
     }
 
+View Patterns
+-------------
+
+``(f(_) => pattern)`` computes ``f`` from the value being matched - ``_`` stands for it - and
+matches ``pattern`` against the result, as Haskell's view patterns and F#'s active patterns do. A
+view is computed when an arm first needs it and at most once per match, however many arms read
+it; an arm that never reaches it never runs it. Other names in the view are values in scope. The
+result is matched as the type its pattern spells (a constant, a range, a struct or a variant
+pattern), or bound by name; a view covers nothing for exhaustiveness:
+
+.. code-block:: das
+
+    def array_size ( a : array<int> ) {
+        return match ( a ) {
+            (length(_) => 0) => "empty"
+            (length(_) => (1..10)) => "small"
+            _ => "big"
+        }
+    }
+
 Table Matching
 --------------
 

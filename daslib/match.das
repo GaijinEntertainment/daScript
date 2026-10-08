@@ -49,6 +49,7 @@ struct MatchTo {
     by_ref       : table<string>                    //! bound names the body reads through the access itself, not a `let` copy: pointers and types that can't be copied
     forced       : table<uint64; int>               //! alternation node -> the one side to match (an arm split per alternative)
     @do_not_delete split : ExprOp2?                 //! alternation whose sides bind the same names at different places
+    views        : table<string; tuple<slot : string; compute : Expression?>> //! value computed once per match (a view) -> its slot and how to compute it
 }
 
 [macro_function, unused_argument(msg)]
@@ -497,6 +498,7 @@ def match_alternatives(var wth : ExprOp2?; var to : MatchTo; matcher : block<(si
         sideTo.bind_names = to.bind_names
         sideTo.declarations := to.declarations
         sideTo.forced := to.forced
+        sideTo.views := to.views
         if (!invoke(matcher, side, sideTo)) {
             to.errors |> push_from(sideTo.errors)
             to.failed ||= sideTo.failed
@@ -509,6 +511,8 @@ def match_alternatives(var wth : ExprOp2?; var to : MatchTo; matcher : block<(si
         for (k in keys(sideTo.by_ref)) {
             to.by_ref |> insert(k)
         }
+        to.views := sideTo.views
+        to.prefix |> push_from(sideTo.prefix)
         if (si == 0) {
             firstDecl := sideTo.declarations
         } elif (!same_names(firstDecl, sideTo.declarations, wth, to) || !same_names(sideTo.declarations, firstDecl, wth, to)) {
@@ -714,6 +718,112 @@ def match_const(what : TypeDeclPtr; wth : Expression?; access : Expression?; var
 }
 
 [macro_function]
+class private PlaceholderFinder : AstVisitor {
+    found : bool
+    def override preVisitExprVar(expr : ExprVar?) : void {
+        found ||= expr.name == "_"
+    }
+}
+
+[macro_function]
+def private mentions_placeholder(e : Expression?) : bool {
+    //! The expression reads ``_`` somewhere inside it.
+    var finder = new PlaceholderFinder()
+    make_visitor(*finder) $(adapter) {
+        visit(e, adapter)
+    }
+    let found = finder.found
+    unsafe {
+        delete finder
+    }
+    return found
+}
+
+[macro_function]
+def is_view(var pat : Expression?) : bool {
+    //! ``(f(_) => pattern)``: a pair whose first element computes from ``_``; as a tuple pattern that shape is no pattern at all.
+    var p = match_peel_r2v(pat)
+    return false if (p == null || !is_arrow_arm(p))
+    let head = match_peel_r2v((p as ExprMakeTuple).values[0])
+    return false if (head == null || is_binder(head) || head is ExprMakeTuple || head is ExprMakeStruct || head is ExprMakeVariant
+        || is_call_to(head, "match_expr", "match") || is_call_to(head, "match_type", "match")
+        || is_call_to(head, "to_table_move", "builtin") || is_call_to(head, "to_array_move", "builtin"))
+    return mentions_placeholder(head)
+}
+
+[macro_function]
+def view_result_type(var sub : Expression?) : TypeDeclPtr {
+    //! The type a view's result is matched as: what the sub-pattern itself spells; null when it binds or ignores the value.
+    var p = shape_part(sub)
+    return null if (p == null)
+    if (is_range_const(p) || is_range_call(p)) {
+        let elem = range_element_type(p._type)
+        return null if (elem == Type.none)
+        return new TypeDecl(baseType = elem, at = p.at)
+    }
+    return (p as ExprMakeStruct).makeType if (p is ExprMakeStruct)
+    return (p as ExprMakeVariant).makeType if (p is ExprMakeVariant)
+    if (p is ExprOp2 && (p as ExprOp2).op == "||") return view_result_type((p as ExprOp2).left)
+    return p._type
+}
+
+def public match_view_once(var ready : bool&; var slot : auto(T)&; compute : block<() : T>) : T& {
+    //! A view pattern's value: computed by ``compute`` the first time an arm reads it, then reused - a view runs at most once per match.
+    if (!ready) {
+        static_if (typeinfo can_copy(slot)) {
+            slot = invoke(compute)
+        } else {
+            slot <- invoke(compute)
+        }
+        ready = true
+    }
+    unsafe {
+        return slot
+    }
+}
+
+[macro_function]
+def cached_value(key : string; var compute : Expression?; at : LineInfo; var to : MatchTo) : Expression? {
+    //! A value computed when an arm first reads it and at most once per match: a slot and a ready flag before the arms, read through ``match_view_once``.
+    if (!key_exists(to.views, key)) {
+        let slot = make_unique_private_name("__`match`view", at)
+        to.views[key] = (slot = slot, compute = compute)
+        var ready_decl = qmacro_expr() {
+            var $i("{slot}`ready") = false
+        }
+        var slot_decl = qmacro_expr() {
+            var $i(slot) : typedecl($e(compute))
+        }
+        ready_decl |> force_at(at)
+        slot_decl |> force_at(at)
+        to.prefix |> push_from([ready_decl, slot_decl])
+    }
+    let view = to.views |> get_value(key)
+    var value = qmacro(match_view_once($i("{view.slot}`ready"), $i(view.slot), $() {
+        return $e(view.compute)
+    }))
+    value |> force_at(at)
+    return value
+}
+
+[macro_function]
+def match_view(var wth : ExprMakeTuple?; access : Expression?; var to : MatchTo) {
+    //! ``(f(_) => pattern)`` matches ``pattern`` against ``f(value)``, computed lazily and at most once per match.
+    let head = wth.values[0]
+    var sub = wth.values[1]
+    let rtype = view_result_type(sub)
+    if (rtype == null && shape_part(sub) != null) {
+        to.errors |> match_error("can't tell the type `{describe_pattern(head)}` produces; match its result with a constant, range, struct or variant pattern, or bind it and use a guard", wth.at)
+        return false
+    }
+    var compute = clone_expression(head)
+    compute = apply_template(compute) $(rules) {
+        rules |> replaceVariable("_") <| clone_expression(access)
+    }
+    return match_any(rtype, sub, cached_value("{describe(access)} => {describe(head)}", compute, wth.at, to), to)
+}
+
+[macro_function]
 def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var to : MatchTo) {   // nolint:STYLE037 - exact-type `is` ladder over TypeDecl shapes
     if (LOG_MATCH) {
         log_m("match {describe(what)} {debug_expression(wth)}:\n")
@@ -729,6 +839,8 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
         return true
     } elif (wth is ExprMakeStruct) {
         return match_struct(what, wth as ExprMakeStruct, access, to)
+    } elif (to.bind_names && wth is ExprMakeTuple && is_view(wth as ExprMakeTuple)) {
+        return match_view(wth as ExprMakeTuple, access, to)
     } elif (wth is ExprMakeTuple) {
         return match_tuple(what, wth as ExprMakeTuple, access, to)
     } elif (wth is ExprMakeArray) {
@@ -859,7 +971,9 @@ def prepare_call_pattern(var call : ExprCall?; bind_bare : bool; var names : arr
 
 [macro_function]
 def prepare_sub_patterns(var pat : Expression?; bind_bare : bool; var names : array<string>) : void {
-    if (pat is ExprMakeTuple) {
+    if (bind_bare && is_view(pat)) {
+        prepare_pattern((pat as ExprMakeTuple).values[1], bind_bare, names)
+    } elif (pat is ExprMakeTuple) {
         for (v in (pat as ExprMakeTuple).values) {
             prepare_pattern(v, bind_bare, names)
         }
@@ -1391,10 +1505,10 @@ def private column_parts(var typ : TypeDeclPtr) : array<tuple<name : string; typ
 }
 
 [macro_function]
-def private splits(typ : TypeDeclPtr; alt : Expression?) : bool {
+def private splits(typ : TypeDeclPtr; var alt : Expression?) : bool {
     //! The cell spells the whole value part by part: a struct pattern of exactly the column type, or a full tuple.
     return true if (alt == null || is_struct_of(typ, alt))
-    return false if (!(alt is ExprMakeTuple) || typ.baseType != Type.tTuple || length((alt as ExprMakeTuple).values) != length(typ.argTypes))
+    return false if (!(alt is ExprMakeTuple) || typ.baseType != Type.tTuple || is_view(alt) || length((alt as ExprMakeTuple).values) != length(typ.argTypes))
     return !has_value([for (v in (alt as ExprMakeTuple).values); is_rest(v)], true)
 }
 
@@ -1626,7 +1740,7 @@ def private drop_last_condition(var chain : Expression?) : Expression? {
 
 [macro_function]
 def private match_arm(var types : array<TypeDeclPtr>; var accesses : array<Expression?>; pattern : Expression?; bind_names : bool;
-                      var results : array<MatchTo>; var failure : MatchTo) : bool {
+                      var views : table<string; tuple<slot : string; compute : Expression?>>; var results : array<MatchTo>; var failure : MatchTo) : bool {
     //! Matches one arm's pattern; an alternation whose sides bind the same names at different places splits the arm, one result per side, in order.
     var stack : array<table<uint64; int>>
     stack |> emplace(default<table<uint64; int>>)
@@ -1636,7 +1750,9 @@ def private match_arm(var types : array<TypeDeclPtr>; var accesses : array<Expre
         var to : MatchTo
         to.bind_names = bind_names
         to.forced := forced
+        to.views := views
         if (match_multi(types, accesses, pattern, to)) {
+            views := to.views
             results |> emplace(to)
         } elif (to.split != null) {
             let nsides = length(op_sides(to.split, string(to.split.op)))
@@ -1784,6 +1900,7 @@ class MatchMacro : AstCallMacro {
         var types <- [for (i in range(nargs - 1)); expr.arguments[i]._type]
         var accesses <- [for (i in range(nargs - 1)); bind_subject(expr.arguments[i], i, prefix)]
         let access = accesses[0]
+        var views : table<string; tuple<slot : string; compute : Expression?>>
         var arm_patterns : array<Expression?>
         arm_patterns |> resize(eli)
         for (ei in range(eli)) {
@@ -1793,7 +1910,7 @@ class MatchMacro : AstCallMacro {
                 var pattern = arrows > 0 ? (arm as ExprMakeTuple).values[0] : (arm as ExprIfThenElse).cond
                 var results : array<MatchTo>
                 var failure : MatchTo
-                if (match_arm(types, accesses, pattern, arrows > 0, results, failure)) {
+                if (match_arm(types, accesses, pattern, arrows > 0, views, results, failure)) {
                     arm_patterns[arm_index] = pattern
                     for (ri in range(length(results))) {
                         add_arm_branch(arm, results[length(results) - 1 - ri], as_value, access, iff, catch_all, prefix)

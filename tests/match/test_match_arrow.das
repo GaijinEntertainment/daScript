@@ -3,6 +3,7 @@ options no_unused_function_arguments = false
 
 require dastest/testing_boost public
 require daslib/match
+require math
 
 struct Point {
     x : int
@@ -570,4 +571,66 @@ def test_table_patterns(t : T?) {
     var other <- { "m" => 1 }
     bump_counter(other)
     t |> equal(length(other), 1)
+}
+
+var private view_calls = 0
+
+def private counted_length(a : array<int>) : int {
+    view_calls++
+    return length(a)
+}
+
+def private array_size(a : array<int>) : string {
+    return match (a) {
+        (counted_length(_) => 0) => "empty"
+        (counted_length(_) => (1..10)) => "small"
+        _ => "big"
+    }
+}
+
+def private first_or_empty(a : array<int>) : string {
+    return match (a) {
+        (length(_) => 0) => "empty"
+        (_[0] => 1) => "starts with 1"
+        _ => "other"
+    }
+}
+
+struct Bag {
+    items : array<int>
+    name : string
+}
+
+def private bag_kind(b : Bag; lo : int) : string {
+    return match (b) {
+        Bag(items = (length(_) => n) && n > lo, name = (length(_) => 3)) => "long {n}"
+        _ => "other"
+    }
+}
+
+def private clamped(x, lo, hi : int) : string {
+    return match (x) {
+        (clamp(_, lo, hi) => 5) => "at 5"
+        _ => "else"
+    }
+}
+
+[test]
+def test_view_patterns(t : T?) {
+    let empty : array<int>
+    let small <- [1, 2, 3]
+    view_calls = 0
+    t |> equal(array_size(empty), "empty")
+    t |> equal(view_calls, 1)
+    view_calls = 0
+    t |> equal(array_size(small), "small")
+    t |> equal(view_calls, 1)
+    t |> equal(first_or_empty(empty), "empty")
+    t |> equal(first_or_empty(small), "starts with 1")
+    var b = Bag(name = "abc")
+    b.items <- [1, 2, 3, 4]
+    t |> equal(bag_kind(b, 2), "long 4")
+    t |> equal(bag_kind(b, 9), "other")
+    t |> equal(clamped(9, 0, 5), "at 5")
+    t |> equal(clamped(3, 0, 5), "else")
 }

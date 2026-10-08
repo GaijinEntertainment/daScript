@@ -1214,7 +1214,7 @@ def document_module_fuzzer(_root : string) {
 def document_module_match(_root : string) {
     var mod = find_module("match")
     var groups <- array<DocGroup>(
-        hide_group(group_by_regex("Implementation details", mod, %regex~(match_type|match_expr|match_peel_r2v)$%%))
+        hide_group(group_by_regex("Implementation details", mod, %regex~(match_type|match_expr|match_peel_r2v|match_view_once)$%%))
     )
     document("Pattern matching", mod, "match.rst", groups)
 }
