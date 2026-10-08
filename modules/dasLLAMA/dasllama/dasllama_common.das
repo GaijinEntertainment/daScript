@@ -1503,6 +1503,7 @@ enum ToolMode {
     gemma4      // gemma-4: asymmetric <|tool_call> ... <tool_call|> pair
     mistral     // Mistral v0.3+: [AVAILABLE_TOOLS] defs, [TOOL_CALLS] + JSON array, [TOOL_RESULTS]
     llama_json  // Llama-3.x custom functions: the whole reply is one JSON object; results on the ipython role
+    xml_function   // Qwen3.6: the tool block AHEAD of the system text, <function=NAME><parameter=K> calls inside <tool_call>, results ride user turns
 }
 
 //! Per-arch chat template. `user` frames a user message; `assistant_open` is the generation prompt;
@@ -5961,6 +5962,20 @@ def hermes_tools(var ct : ChatTemplate) {
     ct.tool_call_close = "</tool_call>"
     ct.tool_resp_open = "<tool_response>"
     ct.tool_resp_close = "</tool_response>"
+}
+
+//! Install the Qwen3.6 tool format: the ``<tools>`` JSON definitions open the system turn AHEAD of the system text
+//! under a fixed instruction, a call is ``<tool_call>\n<function=NAME>\n<parameter=K>\nvalue\n</parameter>\n</function>\n</tool_call>``,
+//! results ride user turns as with Hermes, and a thinking turn's generation prompt ends in an open ``<think>`` line.
+def xml_function_tools(var ct : ChatTemplate) {
+    ct.tool_mode = ToolMode.xml_function
+    ct.tool_sys_prelude = "# Tools\n\nYou have access to the following functions:\n\n<tools>"
+    ct.tool_sys_epilogue = "</tools>\n\nIf you choose to call a function ONLY reply in the following format with NO suffix:\n\n<tool_call>\n<function=example_function_name>\n<parameter=example_parameter_1>\nvalue_1\n</parameter>\n<parameter=example_parameter_2>\nThis is the value for the second parameter\nthat can span\nmultiple lines\n</parameter>\n</function>\n</tool_call>\n\n<IMPORTANT>\nReminder:\n- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags\n- Required parameters MUST be specified\n- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after\n- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls\n</IMPORTANT>"
+    ct.tool_call_open = "<tool_call>"
+    ct.tool_call_close = "</tool_call>"
+    ct.tool_resp_open = "<tool_response>"
+    ct.tool_resp_close = "</tool_response>"
+    ct.assistant_open_think.parts <- [chat_special("<|im_start|>"), chat_text("assistant\n"), chat_special("<think>"), chat_text("\n")]
 }
 
 // ===== forward drivers (prefill, batched) =====

@@ -487,6 +487,80 @@ def test_chat_preserve_thinking(t : T?) {
     }
 }
 
+// ===== Qwen3.6's tool format: sniffed off the template, rendered as the template's own text =====
+
+//! the Qwen3.6 chat template's text for two tools, a system line and a user line, thinking off (its own Jinja rendering)
+let private XMLF_FIRST = "<|im_start|>system\n# Tools\n\nYou have access to the following functions:\n\n<tools>\n\{\"type\": \"function\", \"function\": \{\"name\": \"control\", \"description\": \"Switch a device.\", \"parameters\": \{\"type\": \"object\", \"properties\": \{\"point\": \{\"type\": \"string\", \"description\": \"the device id\"}, \"value\": \{\"type\": \"string\"}}, \"required\": [\"point\"]}}}\n\{\"type\": \"function\", \"function\": \{\"name\": \"not_for_me\", \"description\": \"The phrase was not addressed to the assistant.\", \"parameters\": \{\"type\": \"object\", \"properties\": \{}, \"required\": []}}}\n</tools>\n\nIf you choose to call a function ONLY reply in the following format with NO suffix:\n\n<tool_call>\n<function=example_function_name>\n<parameter=example_parameter_1>\nvalue_1\n</parameter>\n<parameter=example_parameter_2>\nThis is the value for the second parameter\nthat can span\nmultiple lines\n</parameter>\n</function>\n</tool_call>\n\n<IMPORTANT>\nReminder:\n- Function calls MUST follow the specified format: an inner <function=...></function> block must be nested within <tool_call></tool_call> XML tags\n- Required parameters MUST be specified\n- You may provide optional reasoning for your function call in natural language BEFORE the function call, but NOT after\n- If there is no function call available, answer the question like normal with your current knowledge and do not tell the user about function calls\n</IMPORTANT>\n\nYou are a terse assistant.<|im_end|>\n<|im_start|>user\nTurn it off.<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+//! ... and the same conversation continued: the call turn replayed, two results, a user line, thinking off
+let private XMLF_REPLAY = "<|im_start|>assistant\n<think>\n\n</think>\n\n<tool_call>\n<function=control>\n<parameter=point>\nlight.1\n</parameter>\n<parameter=value>\nfalse\n</parameter>\n</function>\n</tool_call><|im_end|>\n<|im_start|>user\n<tool_response>\nok\n</tool_response>\n<tool_response>\ndone\n</tool_response><|im_end|>\n<|im_start|>user\nThanks.<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+
+// the rendered tokens as the template's text: piece by piece, the template's markers by their spelling, since
+// decode drops the specials
+def private pieces_text(m : Model; toks : array<int64>) : string {
+    var marks : table<int64; string>
+    for (s in fixed_array("<|im_start|>", "<|im_end|>", "<think>", "</think>", "<tool_call>", "</tool_call>", "<tool_response>", "</tool_response>")) {
+        let id = special_id(m, s)
+        if (id >= 0l) {
+            marks[id] = s
+        }
+    }
+    return build_string() $(var w) {
+        for (id in toks) {
+            w |> write(marks?[id] ?? piece(m, id))
+        }
+    }
+}
+
+[test]
+def test_chat_xml_function(t : T?) {
+    t |> run("a template with <parameter= blocks installs the Qwen3.6 tool format (model-free)") @(t : T?) {
+        var m = Model()
+        m.chat_template_str = "xx <|im_start|> role xx <|im_end|> xx <tool_call>\n<function=example_function_name>\n<parameter=example_parameter_1>\nvalue_1 xx"
+        let ct <- chat_template(m)
+        t |> success(ct.tool_mode == ToolMode.xml_function, "the Qwen3.6 format")
+        t |> equal("<tool_call>", ct.tool_call_open)
+        t |> success(starts_with(ct.tool_sys_prelude, "# Tools\n\nYou have access"), "its tool block opener")
+        t |> equal(4, length(ct.assistant_open_think.parts), "a thinking turn's generation prompt ends in an open think line")
+        var m2 = Model()
+        m2.chat_template_str = "xx <|im_start|> role xx <|im_end|> xx <tool_call> xx"
+        let ct2 <- chat_template(m2)
+        t |> success(ct2.tool_mode == ToolMode.hermes, "the ChatML template without them keeps Hermes")
+    }
+    t |> run("the first turn and a replayed call turn render the template's own text (needs Qwen3.5-0.8B)") @(t : T?) {
+        let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
+        if (!stat(path).is_valid) {
+            t |> skip("{path} not present")
+            return
+        }
+        var m <- load_capped(path)
+        // the definitions as the server hands them over: `write_json_compact`'s one-line `tojson` shape
+        var tools <- ["\{\"type\": \"function\", \"function\": \{\"name\": \"control\", \"description\": \"Switch a device.\", \"parameters\": \{\"type\": \"object\", \"properties\": \{\"point\": \{\"type\": \"string\", \"description\": \"the device id\"}, \"value\": \{\"type\": \"string\"}}, \"required\": [\"point\"]}}}",
+                      "\{\"type\": \"function\", \"function\": \{\"name\": \"not_for_me\", \"description\": \"The phrase was not addressed to the assistant.\", \"parameters\": \{\"type\": \"object\", \"properties\": \{}, \"required\": []}}}"]
+        var c = create_chat_renderer(m, "You are a terse assistant.", 8l)
+        xml_function_tools(c.tmpl)   // the 0.8B's own template is Qwen3.5's; the vocab is the same ChatML
+        set_thinking(c, false)
+        set_preserve_thinking(c, true)
+        var tools_copy := tools
+        set_tools(c, tools_copy)
+        add_user(c, "Turn it off.")
+        let first <- render_turn_marked(m, c)
+        t |> equal(XMLF_FIRST, pieces_text(m, first.toks), "the first turn: the tool block ahead of the system text, the template's instruction, the closed think block")
+        var replay : array<int64>
+        let calls <- ["\{\"name\": \"control\", \"arguments\": \{\"point\": \"light.1\", \"value\": \"false\"}}"]
+        render_assistant_calls(m, c, "", calls, replay)
+        let results <- ["ok", "done"]
+        add_tool_results(c, results)
+        add_user(c, "Thanks.")
+        let next <- render_turn_marked(m, c)
+        replay |> push_from(next.toks)
+        // the replay re-renders the first turn's prompt, then the call turn, the results and the next turn
+        let gen = "<|im_start|>assistant\n<think>\n\n</think>\n\n"
+        t |> equal("{XMLF_FIRST}{slice(XMLF_REPLAY, length(gen))}", pieces_text(m, replay), "the call turn as <function=> blocks, the results in one user turn, the next turn")
+        delete c
+        delete m
+    }
+}
+
 // ===== gemma-4 E-series thinking (ON by default; instruct = the opt-out) =====
 
 // The instruct-mode TEXT turn through respond: the E-series rambles past its answer through a

@@ -377,3 +377,38 @@ def test_string_arguments_passthrough(t : T?) {
         t |> equal(tool_call_of_json("\{\"name\": \"a\", \"arguments\": \"\"}").args, "\{}")
     }
 }
+
+// ===== Qwen3.6 — <function=NAME> blocks: the template's own text is the fixture =====
+
+[test]
+def test_xml_function_format(t : T?) {
+    t |> run("a replayed call renders the template's block: string values verbatim, others as one-line JSON") @(t : T?) {
+        t |> equal("<tool_call>\n<function=control>\n<parameter=point>\nlight.1\n</parameter>\n<parameter=value>\nfalse\n</parameter>\n</function>\n</tool_call>",
+            xml_function_call_text("control", "\{\"point\":\"light.1\",\"value\":\"false\"}"))
+        t |> equal("<tool_call>\n<function=remind>\n<parameter=when>\n\{\"h\": 8, \"m\": 30}\n</parameter>\n<parameter=n>\n3\n</parameter>\n</function>\n</tool_call>",
+            xml_function_call_text("remind", "\{\"when\":\{\"h\":8,\"m\":30},\"n\":3}"))
+        t |> equal("<tool_call>\n<function=not_for_me>\n</function>\n</tool_call>", xml_function_call_text("not_for_me", "\{}"))
+    }
+    t |> run("a reply parses: content before the first block, each block a call, values strings unless they are JSON objects or arrays") @(t : T?) {
+        var tr <- xml_function_parse("Switching it off.\n\n<tool_call>\n<function=control>\n<parameter=point>\nlight.1\n</parameter>\n<parameter=value>\nfalse\n</parameter>\n</function>\n</tool_call>\n<tool_call>\n<function=remind>\n<parameter=when>\n\{\"h\": 8\}\n</parameter>\n<parameter=text>\nline one\nline two\n</parameter>\n</function>\n</tool_call>")
+        t |> equal("Switching it off.", tr.content)
+        t |> equal(2, length(tr.calls))
+        t |> equal("control", tr.calls[0].name)
+        t |> equal("\{\"point\": \"light.1\", \"value\": \"false\"}", tr.calls[0].args, "a value that reads as a bool stays the string the template wrote")
+        t |> equal("remind", tr.calls[1].name)
+        t |> equal("\{\"when\": \{\"h\": 8}, \"text\": \"line one\\nline two\"}", tr.calls[1].args, "an object value stays JSON, a multi-line value keeps its inner newline")
+        delete tr
+        var none <- xml_function_parse("Nothing to do here.")
+        t |> equal("Nothing to do here.", none.content)
+        t |> equal(0, length(none.calls))
+        delete none
+        var bare <- xml_function_parse("<tool_call>\n<function=not_for_me>\n</function>\n</tool_call>")
+        t |> equal("", bare.content)
+        t |> equal(1, length(bare.calls))
+        t |> equal("\{}", bare.calls[0].args, "a parameterless call is the empty object")
+        delete bare
+        var cut <- xml_function_parse("<tool_call>\n<function=control>\n<parameter=point>\nlight")
+        t |> equal(0, length(cut.calls), "an unterminated block is no call")
+        delete cut
+    }
+}

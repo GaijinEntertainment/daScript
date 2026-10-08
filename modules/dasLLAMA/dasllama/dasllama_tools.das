@@ -533,6 +533,127 @@ def marker_parse(reply : string; open_mark, close_mark : string) : ToolReply {
     return <- out
 }
 
+// ===== Qwen3.6 — <function=NAME><parameter=K> call blocks inside <tool_call> =====
+
+//! One Qwen3.6 call block: the arguments object's entries as `<parameter=K>` blocks, a string value verbatim, any
+//! other JSON value as its one-line JSON text (`write_json_compact` writes the template's `tojson` shape).
+def xml_function_call_text(name : string; args : string) : string {
+    var perr = ""
+    var js = read_json(args, perr)
+    let params = build_string() $(var w) {
+        if (js != null && js.value is _object) {
+            for (k, v in keys(js.value as _object), values(js.value as _object)) {
+                w |> write("<parameter={k}>\n")
+                if (v != null && v.value is _string) {
+                    w |> write(v ?? "")
+                } elif (v != null) {
+                    w |> write(write_json_compact(v))
+                }
+                w |> write("\n</parameter>\n")
+            }
+        }
+    }
+    if (js != null) {
+        unsafe {
+            delete js
+        }
+    }
+    return "<tool_call>\n<function={name}>\n{params}</function>\n</tool_call>"
+}
+
+//! The replayed call blocks of one assistant turn, one under the other
+def xml_function_calls_text(calls : array<ToolCall>) : string {
+    var parts <- [for (tc in calls); xml_function_call_text(tc.name, tc.args)]
+    let s = join(parts, "\n")
+    delete parts
+    return s
+}
+
+// a `<parameter=K>` value as a JSON value: an object or array that parses stays JSON, everything else is a string
+def private xml_function_value_json(v : string) : string {
+    if (starts_with(v, "\{") || starts_with(v, "[")) {
+        var perr = ""
+        var js = read_json(v, perr)
+        if (js != null) {
+            let out = write_json_compact(js)
+            unsafe {
+                delete js
+            }
+            return out
+        }
+    }
+    return json_quoted(v)
+}
+
+// one `<function=NAME> ... </function>` body -> the call, nameless when malformed
+def private xml_function_call_of(body : string) : ToolCall {
+    var c = ToolCall()
+    var fields : array<string>
+    peek_data(body) $(d) {
+        let fo = find(d, "<function=")
+        return if (fo < 0)
+        let name_end = find(d, ">", fo)
+        return if (name_end < 0)
+        c.name = strip(slice(d, fo + length("<function="), name_end))
+        var pos = name_end + 1
+        while (true) {
+            let po = find(d, "<parameter=", pos)
+            break if (po < 0)
+            let pe = find(d, ">", po)
+            let pc = find(d, "</parameter>", po)
+            break if (pe < 0 || pc < 0)
+            let key = strip(slice(d, po + length("<parameter="), pe))
+            var lo = pe + 1
+            var hi = pc
+            if (lo < hi && d[lo] == uint8('\n')) {   // the template's own newline after the opener and before the closer
+                lo ++
+            }
+            if (hi > lo && d[hi - 1] == uint8('\n')) {
+                hi --
+            }
+            fields |> push("{json_quoted(key)}: {xml_function_value_json(slice(d, lo, hi))}")
+            pos = pc + length("</parameter>")
+        }
+    }
+    if (!empty(c.name)) {
+        c.args = "\{{join(fields, ", ")}}"   // the `write_json_compact` shape every other mode's args carry
+    }
+    delete fields
+    return c
+}
+
+//! Parse a Qwen3.6 reply: content is the text before the first `<tool_call>`, each `<tool_call>` .. `</tool_call>` span
+//! holds one `<function=NAME>` block whose `<parameter=K>` blocks become the arguments object; an unterminated
+//! span ends the scan, a nameless block is skipped, and a reply with no call is all content.
+def xml_function_parse(reply : string) : ToolReply {
+    var out = ToolReply()
+    var content_end = -1
+    peek_data(reply) $(d) {
+        var pos = 0
+        while (true) {
+            let o = find(d, "<tool_call>", pos)
+            if (o < 0) {
+                break
+            }
+            if (content_end < 0) {
+                content_end = o
+            }
+            let bstart = o + length("<tool_call>")
+            let cl = find(d, "</tool_call>", bstart)
+            if (cl < 0) {
+                break
+            }
+            let c = xml_function_call_of(slice(d, bstart, cl))
+            if (!empty(c.name)) {
+                out.calls |> push(c)
+            }
+            pos = cl + length("</tool_call>")
+        }
+    }
+    out.content = (content_end < 0 || empty(out.calls)) ? reply : strip(slice(reply, 0, content_end))
+    return <- out
+}
+
 // ===== gemma-4 — the bracketed DSL (unquoted keys, <|"|> string-quote token, dictsorted) =====
 
 let private G4Q = "<|\"|>"   // the family's string-quote TOKEN — DSL strings need no escaping

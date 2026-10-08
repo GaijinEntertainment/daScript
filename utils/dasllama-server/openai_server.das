@@ -3493,7 +3493,7 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
     var spec : ConstraintSpec
     if (constraint_fields_present(js)) {
         let tmpl = chat_template(cur_model())
-        spec <- read_constraint_spec(js, tools, tmpl.tool_call_open, tmpl.tool_call_close)
+        spec <- read_constraint_spec(js, tools, tmpl.tool_call_open, tmpl.tool_call_close, tmpl.tool_mode == ToolMode.xml_function)
         if (!empty(spec.err)) {
             bad_request(srv, writer, spec.err)
             return
@@ -3800,9 +3800,10 @@ def private parse_wire_tools(var w : StreamWire?; full, id_base : string;
         return content
     }
     let body = split_wire_reasoning(w, full, reasoning)
-    if (w.tool_mode == ToolMode.gemma4 || w.tool_mode == ToolMode.mistral || w.tool_mode == ToolMode.llama_json) {
+    if (w.tool_mode == ToolMode.gemma4 || w.tool_mode == ToolMode.mistral || w.tool_mode == ToolMode.llama_json || w.tool_mode == ToolMode.xml_function) {
         var tr <- (w.tool_mode == ToolMode.gemma4 ? gemma4_parse(body)
-            : (w.tool_mode == ToolMode.mistral ? mistral_parse(body) : llama_json_parse(body)))
+            : (w.tool_mode == ToolMode.mistral ? mistral_parse(body)
+            : (w.tool_mode == ToolMode.xml_function ? xml_function_parse(body) : llama_json_parse(body))))
         oai_calls_of(tr.calls, id_base, calls)
         let content = tr.content
         delete tr

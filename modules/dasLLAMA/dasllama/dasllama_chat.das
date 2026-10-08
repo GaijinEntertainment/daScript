@@ -247,6 +247,9 @@ def chat_template(m : Model) : ChatTemplate {
         }
         if (kind == "qwen2") {
             ct.default_system = chatml_default_system(m.chat_template_str)
+            if (contains(m.chat_template_str, "<parameter=")) {   // the Qwen3.6 template: <function=NAME> call blocks, the tools ahead of the system text
+                xml_function_tools(ct)
+            }
             let gen = rfind(m.chat_template_str, "add_generation_prompt")
             if (gen >= 0) {
                 let tail = slice(m.chat_template_str, gen)
@@ -453,13 +456,22 @@ def private render_assistant_open(m : Model; c : ChatSession; var out : array<in
 def private system_content(c : ChatSession; with_tools : bool = true) : string {
     let said = empty(c.system) ? c.tmpl.default_system : c.system
     let base = c.tmpl.system_dated ? dated_system(c, said) : said
-    if (empty(c.tools_json) || !with_tools || c.tmpl.tool_mode != ToolMode.hermes) {
+    let mode = c.tmpl.tool_mode
+    if (empty(c.tools_json) || !with_tools || (mode != ToolMode.hermes && mode != ToolMode.xml_function)) {
         return base
     }
     var parts : array<string>
-    parts |> push(empty(base) ? c.tmpl.tool_sys_prelude : "{base}\n\n{c.tmpl.tool_sys_prelude}")
-    parts |> push_from(c.tools_json)
-    parts |> push(c.tmpl.tool_sys_epilogue)
+    if (mode == ToolMode.xml_function) {
+        // the tool block opens the turn, a definition a line in the template's `tojson` shape, the system text after it
+        parts |> reserve(length(c.tools_json) + 2)
+        parts |> push(c.tmpl.tool_sys_prelude)
+        parts |> push_from(c.tools_json)
+        parts |> push(empty(base) ? c.tmpl.tool_sys_epilogue : "{c.tmpl.tool_sys_epilogue}\n\n{base}")
+    } else {
+        parts |> push(empty(base) ? c.tmpl.tool_sys_prelude : "{base}\n\n{c.tmpl.tool_sys_prelude}")
+        parts |> push_from(c.tools_json)
+        parts |> push(c.tmpl.tool_sys_epilogue)
+    }
     let s = join(parts, "\n")
     delete parts
     return s
@@ -498,8 +510,8 @@ def private render_system_turn(m : Model; c : ChatSession; var out : array<int64
     if (gate) {
         sp := c.tmpl.think_gate.parts
     }
-    if (tool_mode == ToolMode.hermes) {
-        // the hermes block quotes the call markers (format instructions) — marker-split
+    if (tool_mode == ToolMode.hermes || tool_mode == ToolMode.xml_function) {
+        // the tool block quotes the call markers (format instructions) — marker-split
         split_on_tool_markers(m, c, sys, sp)
     } else {
         if (!empty(sys)) {
@@ -602,7 +614,7 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) : 
     let mode = c.tmpl.tool_mode
     // results a later add_user displaced ([…, tool, user]): their turn renders first, in transcript order
     if (!empty(c.pending_results) && !c.pending_is_tool) {
-        if (mode == ToolMode.hermes || mode == ToolMode.none) {
+        if (mode == ToolMode.hermes || mode == ToolMode.xml_function || mode == ToolMode.none) {
             var rp : array<ChatPart>
             split_on_tool_markers(m, c, hermes_results_text(c), rp)
             render_parts_spliced(m, c.tmpl.user.parts, rp, out)
@@ -615,10 +627,10 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) : 
     if (c.turn_open && !c.pending_is_tool) {
         render_parts(m, c.close_parts, "", out)
     }
-    if (c.pending_is_tool && mode != ToolMode.hermes && mode != ToolMode.none) {
+    if (c.pending_is_tool && mode != ToolMode.hermes && mode != ToolMode.xml_function && mode != ToolMode.none) {
         render_tool_results(m, c, out)   // these modes frame their own results turn, no user frame
     } elif (c.pending_is_tool) {
-        // hermes/none results ride the user turn frames, marker-split (none: empty markers = plain text)
+        // hermes/xml_function/none results ride the user turn frames, marker-split (none: empty markers = plain text)
         var tp : array<ChatPart>
         split_on_tool_markers(m, c, user_content, tp)
         render_parts_spliced(m, c.tmpl.user.parts, tp, out)
@@ -1266,7 +1278,7 @@ def add_tool_results_(var c : ChatSession; results : array<string>; names : arra
 //! `render_assistant_`'s tool-calling twin: replay an assistant turn that emitted tool calls.
 //! ``calls`` are verbatim ``\{"name":…,"arguments":…}`` JSON objects; ``text`` is any content
 //! alongside. Precondition: a pending user or tool turn; a no-op otherwise.
-def render_assistant_calls_(m : Model; var c : ChatSession; text : string; calls : array<string>; var out : array<int64>; reasoning : string = "") {
+def render_assistant_calls_(m : Model; var c : ChatSession; text : string; calls : array<string>; var out : array<int64>; reasoning : string = "") {   // nolint:STYLE038 — one arm per tool wire format, each a few parts; splitting hides the menu
     if (!c.has_pending) {
         return
     }
@@ -1315,6 +1327,10 @@ def render_assistant_calls_(m : Model; var c : ChatSession; text : string; calls
         if (!empty(tcs)) {
             bp |> push(chat_text(llama_json_call_text(tcs[0].name, tcs[0].args)))
         }
+    } elif (mode == ToolMode.xml_function) {
+        // the <function=NAME> blocks, two newlines under any content
+        let blocks = xml_function_calls_text(tcs)
+        split_on_tool_markers(m, c, empty(text) ? blocks : "{text}\n\n{blocks}", bp)
     } else {
         // hermes: marker-wrapped verbatim call JSONs, content alongside
         var parts : array<string>
@@ -1731,6 +1747,11 @@ def parse_calls_(c : ChatSession; reply : string) : ToolReply {
         tr.reasoning = sp.reasoning
         return <- tr
     }
+    if (mode == ToolMode.xml_function) {
+        var tr <- xml_function_parse(sp.content)
+        tr.reasoning = sp.reasoning
+        return <- tr
+    }
     // hermes + none: the marker scan (none's empty markers = everything is content)
     var tr <- marker_parse(sp.content, c.tmpl.tool_call_open, c.tmpl.tool_call_close)
     tr.reasoning = sp.reasoning
@@ -1742,7 +1763,7 @@ def parse_calls_(c : ChatSession; reply : string) : ToolReply {
 // stays open awaiting the responses. Hermes results ride user turns: no name pairing needed.
 def private track_reply_calls_(var c : ChatSession; reply : string) : bool {
     let mode = c.tmpl.tool_mode
-    if (mode == ToolMode.none || mode == ToolMode.hermes) {
+    if (mode == ToolMode.none || mode == ToolMode.hermes || mode == ToolMode.xml_function) {
         return false
     }
     var tr <- parse_calls_(c, reply)

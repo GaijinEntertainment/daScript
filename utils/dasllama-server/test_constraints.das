@@ -23,11 +23,11 @@ require strings
 let MODEL_PATH = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
 let LARGE_TIER_BYTES = 6ul * 1024ul * 1024ul * 1024ul   //! the model tier's ceiling, as modules/dasLLAMA/tests/_model_tier.das states it
 
-def private spec_of(req : string; tools : array<string>; call_open = ""; call_close = "") : ConstraintSpec {
+def private spec_of(req : string; tools : array<string>; call_open = ""; call_close = ""; xml_calls = false) : ConstraintSpec {
     var err = ""
     var js = read_json(req, err)
     assert(js != null, "the request text is JSON")
-    var spec <- read_constraint_spec(js, tools, call_open, call_close)
+    var spec <- read_constraint_spec(js, tools, call_open, call_close, xml_calls)
     delete_json(js)
     return <- spec
 }
@@ -35,6 +35,31 @@ def private spec_of(req : string; tools : array<string>; call_open = ""; call_cl
 def private spec_of(req : string) : ConstraintSpec {
     let no_tools : array<string>
     return <- spec_of(req, no_tools)
+}
+
+[test]
+def test_constraint_spec_xml_function_tool(t : T?) {
+    t |> run("a forced tool_choice on the Qwen3.6 format reads to the <function=NAME> block grammar") @(t : T?) {
+        let tools <- ["\{\"type\":\"function\",\"function\":\{\"name\":\"get_weather\",\"parameters\":\{\"type\":\"object\",\"properties\":\{\"city\":\{\"type\":\"string\"},\"unit\":\{\"type\":\"string\"}},\"required\":[\"city\"]}}}",
+                      "\{\"type\":\"function\",\"function\":\{\"name\":\"get_time\",\"parameters\":\{\"type\":\"object\",\"properties\":\{}}}}"]
+        let forced <- spec_of("\{\"tools\":[],\"tool_choice\":\{\"type\":\"function\",\"function\":\{\"name\":\"get_weather\"}}}", tools, "<tool_call>", "</tool_call>", true)
+        t |> equal("", forced.err)
+        t |> equal("tool", forced.kind)
+        var err = ""
+        let fg <- gbnf_grammar(forced.gbnf, err)
+        t |> equal("", err, "the grammar builds")
+        t |> success(lr_matches(fg, "<tool_call>\n<function=get_weather>\n<parameter=city>\nOslo\n</parameter>\n</function>\n</tool_call>"), "the block call passes")
+        t |> success(lr_matches(fg, "<tool_call>\n<function=get_weather>\n<parameter=city>\nOslo\n</parameter>\n<parameter=unit>\ncelsius\n</parameter>\n</function>\n</tool_call>"), "two parameters pass")
+        t |> success(!lr_matches(fg, "<tool_call>\n\{\"name\": \"get_weather\", \"arguments\": \{\"city\": \"Oslo\"\}\}\n</tool_call>"), "the JSON call is not this format")
+        t |> success(!lr_matches(fg, "<tool_call>\n<function=get_time>\n</function>\n</tool_call>"), "the other tool is refused under a forced name")
+        t |> success(!lr_matches(fg, "<tool_call>\n<function=get_weather>\n<parameter=day>\nMonday\n</parameter>\n</function>\n</tool_call>"), "an undeclared parameter is refused")
+        let required <- spec_of("\{\"tools\":[],\"tool_choice\":\"required\"}", tools, "<tool_call>", "</tool_call>", true)
+        t |> equal("", required.err)
+        let rg <- gbnf_grammar(required.gbnf, err)
+        t |> success(lr_matches(rg, "<tool_call>\n<function=get_time>\n</function>\n</tool_call>"), "a parameterless tool under required")
+        let unknown <- spec_of("\{\"tools\":[],\"tool_choice\":\{\"type\":\"function\",\"function\":\{\"name\":\"nope\"}}}", tools, "<tool_call>", "</tool_call>", true)
+        t |> success(find(unknown.err, "not among the declared tools") >= 0, "an undeclared forced name is refused: {unknown.err}")
+    }
 }
 
 let SCHEMA_LEGS = "\{\"type\":\"object\",\"properties\":\{\"answer\":\{\"type\":\"integer\"\}\},\"required\":[\"answer\"],\"additionalProperties\":false\}"
