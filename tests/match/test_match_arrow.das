@@ -362,3 +362,48 @@ def test_exhaustive_value_match_needs_no_catch_all(t : T?) {
     t |> equal(tuple_columns((false, Dir.east)), "f horizontal")
     t |> equal(tuple_columns((true, Dir.east)), "t")
 }
+
+var private guard_limit = 2
+
+def private compare_pair(a, b : int) : string {
+    return match (a, b) {
+        (x, y) && x > y => "gt"
+        (x, y) && x <= y => "le"
+    }
+}
+
+def private three_way(a, b : int) : string {
+    return match (a, b) {
+        (x, y) && x < y => "lt"
+        (x, y) && x == y => "eq"
+        (x, y) && y < x => "gt"
+    }
+}
+
+def private against_outer(a : int) : string {
+    return match (a) {
+        n && n > guard_limit => "above"
+        n && n <= guard_limit => "not above"
+    }
+}
+
+def private bool_guard(a : int; flag : bool) : string {
+    return match (a) {
+        n && flag => "flag {n}"
+        n && !flag => "no flag {n}"
+    }
+}
+
+[test]
+def test_complementary_guards_cover_their_pattern(t : T?) {
+    t |> equal(compare_pair(3, 1), "gt")
+    t |> equal(compare_pair(1, 3), "le")
+    t |> equal(compare_pair(2, 2), "le")
+    t |> equal(three_way(1, 3), "lt")
+    t |> equal(three_way(2, 2), "eq")
+    t |> equal(three_way(3, 1), "gt")
+    t |> equal(against_outer(5), "above")
+    t |> equal(against_outer(2), "not above")
+    t |> equal(bool_guard(1, true), "flag 1")
+    t |> equal(bool_guard(1, false), "no flag 1")
+}

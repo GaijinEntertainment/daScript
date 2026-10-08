@@ -937,6 +937,7 @@ struct private MatchCoverage {
     unreachable : array<int>
     dead_alternatives : array<tuple<arm : int; what : string>>
     all_finite : bool
+    has_guards : bool
     missing : Option<string>
 }
 
@@ -1269,6 +1270,100 @@ def private match_table(var types : array<TypeDeclPtr>; var patterns : array<Exp
     return <- tab
 }
 
+bitfield private GuardCover {
+    //! The outcomes a guard covers: of a comparison between two values, or of a bool.
+    less
+    equal
+    greater
+    holds
+    fails
+}
+
+struct private GuardFact {
+    key : string
+    mask : GuardCover
+}
+
+[macro_function]
+def private is_ordered_type(typ : TypeDeclPtr) : bool {
+    //! Comparisons over these types are total: exactly one of ``<``, ``==``, ``>`` holds. Floats are not (NaN).
+    return false if (typ == null)
+    return (typ.isEnum || typ.baseType == Type.tString || typ.baseType == Type.tInt || typ.baseType == Type.tUInt
+        || typ.baseType == Type.tInt8 || typ.baseType == Type.tUInt8 || typ.baseType == Type.tInt16
+        || typ.baseType == Type.tUInt16 || typ.baseType == Type.tInt64 || typ.baseType == Type.tUInt64)
+}
+
+[macro_function]
+def private operand_type(var e : Expression?; var names : table<string; TypeDeclPtr>) : TypeDeclPtr {
+    //! The type of a guard operand: a name the pattern binds at a column, or an already typed variable or constant.
+    var x = match_peel_r2v(e)
+    return null if (x == null || !(x is ExprVar || x.__rtti |> starts_with("ExprConst")))
+    if (x is ExprVar) {
+        let n = string((x as ExprVar).name)
+        return names[n] if (names |> key_exists(n))
+    }
+    return x._type
+}
+
+[macro_function]
+def private guard_fact(var guard : Expression?; pattern_key : string; var names : table<string; TypeDeclPtr>) : Option<GuardFact> {
+    //! What a single comparison guard covers of the relation between its two operands; none when it can't tell.
+    var g = match_peel_r2v(guard)
+    let negated = g is ExprOp1 && (g as ExprOp1).op == "!"
+    g = negated ? match_peel_r2v((g as ExprOp1).subexpr) : g
+    if (g is ExprOp2) {
+        var op2 = g as ExprOp2
+        let masks <- { "<" => GuardCover.less, "<=" => GuardCover.less | GuardCover.equal, "==" => GuardCover.equal,
+            "!=" => GuardCover.less | GuardCover.greater, ">=" => GuardCover.greater | GuardCover.equal, ">" => GuardCover.greater }
+        var mask = masks?[string(op2.op)] ?? default<GuardCover>
+        if (mask != default<GuardCover> && is_ordered_type(operand_type(op2.left, names)) && is_ordered_type(operand_type(op2.right, names))) {
+            var l = describe(match_peel_r2v(op2.left))
+            var r = describe(match_peel_r2v(op2.right))
+            if (l > r) {
+                swap(l, r)
+                let less = mask.less
+                mask.less = mask.greater
+                mask.greater = less
+            }
+            let full = GuardCover.less | GuardCover.equal | GuardCover.greater
+            return some(GuardFact(key = "{pattern_key} | {l} ? {r}", mask = negated ? full & ~mask : mask))
+        }
+    }
+    let gt = operand_type(g, names)
+    return some(GuardFact(key = "{pattern_key} | {describe(g)}", mask = negated ? GuardCover.fails : GuardCover.holds)) if (gt != null && gt.baseType == Type.tBool)
+    return none(type<GuardFact>)
+}
+
+[macro_function]
+def private bound_column_types(var columns : array<TypeDeclPtr>; var pat : Expression?) : table<string; TypeDeclPtr> {
+    //! Names the pattern binds directly at a column, with that column's type; a single tuple column binds per element.
+    var names : table<string; TypeDeclPtr>
+    var p = match_peel_r2v(pat)
+    if (length(columns) == 1 && p is ExprVar) {
+        names[string((p as ExprVar).name)] = columns[0]
+    }
+    let per_element = length(columns) == 1 && columns[0].baseType == Type.tTuple
+    var cols <- per_element ? [for (t in columns[0].argTypes); t] : [for (t in columns); t]
+    return <- names if (!(p is ExprMakeTuple) || length((p as ExprMakeTuple).values) != length(cols))
+    var vars <- [for (v in (p as ExprMakeTuple).values); match_peel_r2v(v)]
+    return <- {for (v, col in vars, cols); string((v as ExprVar).name) => col; where v is ExprVar}
+}
+
+[macro_function]
+def private guards_complete(var types : array<TypeDeclPtr>; var pat : Expression?; var guard_masks : table<string; GuardCover>) : bool {
+    //! Arms with one pattern and comparison guards over the same operands cover that pattern once their guards cover every outcome.
+    var p = match_peel_r2v(pat)
+    return false if (is_guarded((p as ExprOp2).left))
+    var part = pattern_part(p)
+    var names <- bound_column_types(types, part)
+    let found = guard_fact((p as ExprOp2).right, describe(part), names)
+    return false if (is_none(found))
+    let fact = unwrap(found)
+    let mask = (guard_masks?[fact.key] ?? default<GuardCover>) | fact.mask
+    guard_masks[fact.key] = mask
+    return mask == (fact.mask.holds || fact.mask.fails ? GuardCover.holds | GuardCover.fails : GuardCover.less | GuardCover.equal | GuardCover.greater)
+}
+
 [macro_function]
 def private match_coverage(var types : array<TypeDeclPtr>; var patterns : array<Expression?>) : MatchCoverage {
     //! Which arms or alternatives no value can reach, and whether every value reaches some arm; ``patterns`` is in source order, null for an arm that was dropped.
@@ -1276,8 +1371,11 @@ def private match_coverage(var types : array<TypeDeclPtr>; var patterns : array<
     var tab <- match_table(types, patterns)
     res.all_finite = !has_value([for (d in tab.domains); d.finite], false)
     var inscope prev : array<int>
+    var inscope guard_masks : table<string; GuardCover>
     for (pat, ai in patterns, count()) {
         continue if (pat == null)
+        let guarded = is_guarded(pat)
+        res.has_guards ||= guarded
         var useful = false
         var inscope dead : array<string>
         for (ri in tab.arm_rows[ai]) {
@@ -1293,7 +1391,7 @@ def private match_coverage(var types : array<TypeDeclPtr>; var patterns : array<
         } else {
             res.unreachable |> push(ai)
         }
-        prev |> push_from(tab.arm_rows[ai]) if (!is_guarded(pat))
+        prev |> push_from(tab.arm_rows[ai]) if (!guarded || guards_complete(types, pat, guard_masks))
     }
     var inscope path, found : array<string>
     missing_values(tab, prev, 0, 0, path, found)
@@ -1378,9 +1476,12 @@ class MatchMacro : AstCallMacro {
         }
         return false if (!empty(cov.unreachable) || !empty(cov.dead_alternatives))
         if (!catch_all && is_some(cov.missing) && (as_value || (report_match_errors && cov.all_finite))) {
+            let guard_note = (cov.has_guards
+                ? " (a guarded arm covers nothing, unless arms with the same pattern guard by comparing the same two int, enum, string or bool values and cover every outcome)"
+                : "")
             macro_error(prog, expr.at, (cov.missing == MATCH_ANY_OTHER
-                ? "match is not exhaustive: values no arm names are not matched; add a `_ => ...` arm"
-                : "match is not exhaustive: no arm matches `{unwrap(cov.missing)}`; add an arm for it, or `_ => ...`"))
+                ? "match is not exhaustive: values no arm names are not matched; add a `_ => ...` arm{guard_note}"
+                : "match is not exhaustive: no arm matches `{unwrap(cov.missing)}`; add an arm for it, or `_ => ...`{guard_note}"))
             return false
         }
         return true

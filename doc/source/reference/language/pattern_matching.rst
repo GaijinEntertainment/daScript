@@ -85,8 +85,22 @@ The compiler checks the arms of a ``pattern => body`` match against each other:
   must also cover the other types (``int``, ``string``, structs...), which in practice means a ``_``
   arm; a statement match over them may end without one, and then no arm runs.
 
-A guarded arm covers nothing, since its guard can fail, but it can still be unreachable. When the
-arms cover every value, a value match needs no ``_``:
+A guarded arm covers nothing on its own, since its guard can fail, but it can still be unreachable.
+Arms with the same pattern whose guards compare the same two values - ``int``, enumeration or
+``string`` operands that are bound names, variables, constants or fields of variables - cover that pattern
+once their comparisons together cover every outcome; so do a ``bool`` value and its negation.
+Floats do not combine (with a NaN no comparison holds), and neither do guards that call a function:
+
+.. code-block:: das
+
+    def compare ( a, b : int ) {
+        return match ( a, b ) {
+            (x, y) && x > y => "greater"
+            (x, y) && x <= y => "not greater"
+        }
+    }
+
+When the arms cover every value, a value match needs no ``_``:
 
 .. code-block:: das
 

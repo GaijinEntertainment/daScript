@@ -22,6 +22,8 @@ def reify_bound(v : IntOrStr) : string {
 
 [test]
 def test_bound_name_inside_reification_tag(t : T?) {
-    t |> equal(reify_bound(IntOrStr(i = 41)), "(41 + 1)")
-    t |> equal(reify_bound(IntOrStr(s = "x")), "string")
+    ast_gc_guard() {
+        t |> equal(reify_bound(IntOrStr(i = 41)), "(41 + 1)")
+        t |> equal(reify_bound(IntOrStr(s = "x")), "string")
+    }
 }

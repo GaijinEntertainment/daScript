@@ -237,7 +237,10 @@ In value position `match` is an expression: every body is an expression and the 
 every value. Coverage is checked at compile time: an arm an earlier one already covers (a repeated
 value, anything after `_`, a `_` after every enum value) is an error, and so is a match over an
 enum, `bool`, variant or struct pointer that misses a value - statement or value. A match used as a
-value over any other type needs a `_` arm. The value being matched is evaluated once; a bound name is a
+value over any other type needs a `_` arm. A guarded arm covers nothing, except that arms with the
+same pattern whose guards compare the same two int / enum / string values (or test a bool and its
+negation) cover that pattern once together they cover every outcome - `(x, y) && x > y` plus
+`(x, y) && x <= y`; float comparisons never combine (NaN). The value being matched is evaluated once; a bound name is a
 read-only copy of the part it names (a part that does not copy is read in place). A field read or call in a pattern is
 an error - compare against it with `match_expr(...)`.
 
