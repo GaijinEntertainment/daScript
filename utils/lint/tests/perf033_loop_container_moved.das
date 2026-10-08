@@ -5,7 +5,7 @@ options _nolint = "STYLE042,PERF006,PERF022"
 // inscope - or moved out, in which case the taker frees it. The rule reports at the function's
 // end, after the walk has seen every use.
 
-expect 31208:3
+expect 31208:4
 
 require daslib/perf_lint
 
@@ -50,6 +50,16 @@ def bad_passed_by_const() : int {
         total += peek(items)
     }
     return total
+}
+
+def bad_struct_field_clone() {
+    var bags : array<Bag>
+    for (i in range(3)) {
+        var items : array<int>                  // PERF033 - the field is a clone, the source stays alive
+        items |> push(i)
+        bags |> emplace(Bag(items := items))
+    }
+    delete bags
 }
 
 // --- Good patterns (no warnings) ---

@@ -430,11 +430,11 @@ class Perf033MoveScan : AstVisitor {
     }
 
     def override preVisitExprMakeStructField(_expr : ExprMakeStruct?; _index : int; decl : MakeFieldDeclPtr; _last : bool) : void {
-        takes ||= decl != null && is_param(decl.value)
+        takes ||= decl != null && decl.flags.moveSemantics && is_param(decl.value)
     }
 
     def override preVisitExprMakeVariantField(_expr : ExprMakeVariant?; _index : int; decl : MakeFieldDeclPtr; _last : bool) : void {
-        takes ||= decl != null && is_param(decl.value)
+        takes ||= decl != null && decl.flags.moveSemantics && is_param(decl.value)
     }
 
     def override preVisitExprCallArgument(var expr : ExprCall?; arg : ExpressionPtr; _last : bool) : void {
@@ -1010,17 +1010,18 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def override preVisitExprMakeStructField(_expr : ExprMakeStruct?; _index : int; decl : MakeFieldDeclPtr; _last : bool) : void {
-        if (decl != null) {
+        if (decl != null && decl.flags.moveSemantics) {
             perf033_consume(decl.value)
         }
     }
 
     def override preVisitExprMakeVariantField(_expr : ExprMakeVariant?; _index : int; decl : MakeFieldDeclPtr; _last : bool) : void {
-        if (decl != null) {
+        if (decl != null && decl.flags.moveSemantics) {
             perf033_consume(decl.value)
         }
     }
 
+    //! a tuple literal keeps no per-element move flag, and a container element cannot be copied, so the element is taken
     def override preVisitExprMakeTupleIndex(_expr : ExprMakeTuple?; _index : int; init : ExpressionPtr; _last : bool) : void {
         perf033_consume(init)
     }
