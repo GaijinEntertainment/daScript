@@ -528,3 +528,46 @@ def test_alternatives_may_bind_different_places(t : T?) {
     t |> equal(axis_distance(Point(x = 7, y = 0)), "axis 7")
     t |> equal(axis_distance(Point(x = 1, y = 1)), "elsewhere")
 }
+
+def private request_kind(req : table<string; string>) : string {
+    return match (req) {
+        ({ "method" => "GET", "path" => p }) => "get {p}"
+        ({ "method" => m }) => "method {m}"
+        _ => "no method"
+    }
+}
+
+def private has_a_and_b(s : table<string>) : bool {
+    return match (s) {
+        ({ "a", "b" }) => true
+        _ => false
+    }
+}
+
+def private bump_counter(var t : table<string; int>) {
+    match (t) {
+        ({ "n" => n }) => $ { t["n"] = n + 1 }
+        _ => $ {}
+    }
+}
+
+[test]
+def test_table_patterns(t : T?) {
+    let get <- { "method" => "GET", "path" => "/x" }
+    let post <- { "method" => "POST" }
+    let none <- { "path" => "/y" }
+    t |> equal(request_kind(get), "get /x")
+    t |> equal(request_kind(post), "method POST")
+    t |> equal(request_kind(none), "no method")
+    t |> equal(length(none), 1)
+    let abc <- { "a", "b", "c" }
+    let a <- { "a" }
+    t |> equal(has_a_and_b(abc), true)
+    t |> equal(has_a_and_b(a), false)
+    var counter <- { "n" => 1 }
+    bump_counter(counter)
+    t |> equal(counter["n"], 2)
+    var other <- { "m" => 1 }
+    bump_counter(other)
+    t |> equal(length(other), 1)
+}

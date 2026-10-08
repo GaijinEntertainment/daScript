@@ -572,27 +572,49 @@ def match_tag(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
 }
 
 [macro_function]
-def is_match_call(wth : Expression?; name : string) {
-    if (!(wth is ExprCall)) return false
-    let ecall = wth as ExprCall
-    if (ecall.name == "match_{name}" || ecall.name == "match::match_{name}") return true
-    var res = false
-    peek(ecall.name) $(call_name) {
-        res = call_name |> starts_with("__::match`match_{name}")
+def table_entries(var call : ExprCall?) : array<Expression?> {
+    //! The entries of a table literal: an array of them, or the single one the parser leaves bare.
+    var entries : array<Expression?>
+    return <- entries if (length(call.arguments) != 1)
+    var arg = match_peel_r2v(call.arguments[0])
+    if (arg is ExprMakeArray) {
+        entries <- [for (v in (arg as ExprMakeArray).values); v]
+    } else {
+        entries |> push(arg)
     }
-    return res
+    return <- entries
 }
 
 [macro_function]
-def is_to_array_move_call(wth : Expression?) {
-    if (!(wth is ExprCall)) return false
-    let ecall = wth as ExprCall
-    if (ecall.name == "to_array_move") return true
-    var res = false
-    peek(ecall.name) $(call_name) {
-        res = call_name |> starts_with("__::builtin`to_array_move")
+def match_table(what : TypeDeclPtr; var wth : ExprCall?; access : Expression?; var to : MatchTo) {
+    //! ``({ k => pattern, ... })`` matches a table that has every key, each value matching its pattern; other keys are allowed. A set literal ``({ k, ... })`` checks the keys only.
+    if (what.baseType != Type.tTable || what.firstType == null) {
+        to.errors |> match_error("a table pattern does not match `{describe(what)}`", wth.at)
+        return false
     }
-    return res
+    var entries <- table_entries(wth)
+    to.conditions |> reserve(length(to.conditions) + length(entries))
+    for (kv in entries) {
+        let pair = is_arrow_arm(kv)
+        var key = pair ? (kv as ExprMakeTuple).values[0] : kv
+        if (key._type == null) {
+            to.errors |> match_error("table pattern key `{describe_pattern(key)}` must be a constant or a value in scope", key.at)
+            return false
+        }
+        var has_key = qmacro(key_exists($e(access), $e(key)))
+        has_key |> force_at(key.at)
+        to.conditions |> emplace(has_key)
+        continue if (!pair)
+        let value = (kv as ExprMakeTuple).values[1]
+        if (what.secondType == null || what.secondType.baseType == Type.tVoid) {
+            to.errors |> match_error("`{describe(what)}` is a set; its pattern lists keys only", value.at)
+            return false
+        }
+        var slot = new ExprSafeAt(at = key.at, subexpr = clone_expression(access), index = clone_expression(key))
+        slot.genFlags.alwaysSafe = true
+        return false if (!match_any(what.secondType, value, new ExprPtr2Ref(at = key.at, subexpr = slot), to))
+    }
+    return true
 }
 
 [macro_function]
@@ -682,11 +704,13 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
         return match_variant(what, wth as ExprMakeVariant, access, to)
     } elif (wth is ExprAsVariant) {
         return match_as_variant(what, wth as ExprAsVariant, access, to)
-    } elif (wth |> is_match_call("type")) {
+    } elif (is_call_to(wth, "match_type", "match")) {
         return match_type(what, wth as ExprCall, access, to)
-    } elif (wth |> is_match_call("expr")) {
+    } elif (is_call_to(wth, "match_expr", "match")) {
         return match_expr(what, wth as ExprCall, access, to)
-    } elif (wth |> is_to_array_move_call) {
+    } elif (is_call_to(wth, "to_table_move", "builtin")) {
+        return match_table(what, wth as ExprCall, access, to)
+    } elif (is_call_to(wth, "to_array_move", "builtin")) {
         let cll = wth as ExprCall
         if (length(cll.arguments) != 1) {
             to.errors |> match_error("to_array_move expects 1 argument", cll.at)
@@ -783,6 +807,22 @@ def arm_body(arm : Expression?; as_value : bool; binds : array<Expression?>) : E
 }
 
 [macro_function]
+def prepare_call_pattern(var call : ExprCall?; bind_bare : bool) : array<string> {
+    //! A table pattern binds in its values, never its keys; ``match_expr`` and range bounds bind nothing.
+    var names : array<string>
+    if (is_call_to(call, "to_table_move", "builtin")) {
+        for (kv in table_entries(call)) {
+            names |> push_from(prepare_pattern((kv as ExprMakeTuple).values[1], bind_bare)) if (is_arrow_arm(kv))
+        }
+    } elif (!is_call_to(call, "match_expr", "match") && !is_range_call(call)) {
+        for (a in call.arguments) {
+            names |> push_from(prepare_pattern(a, bind_bare))
+        }
+    }
+    return <- names
+}
+
+[macro_function]
 def prepare_sub_patterns(var pat : Expression?; bind_bare : bool) : array<string> {
     var names : array<string>
     if (pat is ExprMakeTuple) {
@@ -805,10 +845,8 @@ def prepare_sub_patterns(var pat : Expression?; bind_bare : bool) : array<string
         }
     } elif (pat is ExprAsVariant) {
         names <- prepare_pattern((pat as ExprAsVariant).value, bind_bare)
-    } elif (pat is ExprCall && !is_match_call(pat, "expr") && !is_range_call(pat)) {
-        for (a in (pat as ExprCall).arguments) {
-            names |> push_from(prepare_pattern(a, bind_bare))
-        }
+    } elif (pat is ExprCall) {
+        names <- prepare_call_pattern(pat as ExprCall, bind_bare)
     }
     return <- names
 }

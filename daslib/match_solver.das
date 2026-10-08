@@ -77,6 +77,19 @@ def public op_sides(var e : Expression?; op : string) : array<Expression?> {
 }
 
 [macro_function]
+def public is_call_to(wth : Expression?; name, mod : string) {
+    //! A call to ``mod::name`` - spelled plain, module-qualified, or as the generic instance infer made of it.
+    if (!(wth is ExprCall)) return false
+    let ecall = wth as ExprCall
+    if (ecall.name == name || ecall.name == "{mod}::{name}") return true
+    var res = false
+    peek(ecall.name) $(call_name) {
+        res = call_name |> starts_with("__::{mod}`{name}")
+    }
+    return res
+}
+
+[macro_function]
 def public is_range_call(pat : Expression?) : bool => pat is ExprCall && (pat as ExprCall).name == "interval" && length((pat as ExprCall).arguments) == 2
 
 [macro_function]

@@ -368,6 +368,23 @@ The number of explicit elements in the pattern is checked against the array leng
         }
     }
 
+Table Matching
+--------------
+
+A table literal in parentheses matches a table that has every listed key, each value matching its
+pattern; other keys are allowed. Keys are constants or values in scope; values are patterns. A set
+literal checks the keys only. Reading a missing key never inserts it:
+
+.. code-block:: das
+
+    def request_kind ( req : table<string; string> ) {
+        return match ( req ) {
+            ({ "method" => "GET", "path" => p }) => "get {p}"
+            ({ "method" => m }) => "method {m}"
+            _ => "no method"
+        }
+    }
+
 Match Expressions
 -----------------
 
