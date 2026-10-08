@@ -16,6 +16,7 @@ require daslib/jobque_boost
 require daslib/defer
 require daslib/fio   // nolint:STYLE030,LINT019 — path_join: the twin cells' jfk.wav, inside the GPU arms alone
 require _compares   // logits_maxdiff
+require _vision_oracle   // the mtmd dump parser and the canvas fixtures the poison legs read
 require _model_tier   // tower_parity_stats - the rel_l2 statistic the audio twins' bar reads
 require _gpu_knobs public
 require ?vulkan dasllama/dasllama_vulkan_tower
@@ -264,6 +265,26 @@ def dump_poison(tt : T?; family, tag : string; zero_block : int64; bar_rms : flo
     let ex = invoke(excess, out)
     to_log(LOG_INFO, "{family} device poison leg {tag}: block {zero_block} zeroed -> excess {ex} over the {bar_rms} x rms bar\n")
     tt |> success(ex > 0.0, "{tag}: a zeroed block through the device chain reds the bar (excess {ex})")
+}
+
+//! `logname`'s mtmd dump under `oracle_dir` beside the models, or the loud skip naming `mint_hint`; false on the skip
+def oracle_dump(tt : T?; oracle_dir, logname, mint_hint : string; var o : OracleEncode) : bool {
+    if (!load_oracle_encode(path_join(path_join(models_dir(), oracle_dir), logname), o)) {
+        tt |> skip("oracle dump {logname} not present/parseable - mint via {mint_hint}")
+        return false
+    }
+    return true
+}
+
+//! the input poison of a device-side dump bar: `twp`, the family's tower with block `zero_block` zeroed, served by the driver on
+//! the `kind` canvas at w x h must EXCEED the bar (`bar_rms` x rms past `abs_tol`) the dump `o` holds - a bar the poison clears
+//! measures nothing; `encode` is the family's encode of the planes, `row_width` the dump's row
+def dump_poison_leg(tt : T?; family, kind : string; w, h : int; o : OracleEncode; bar_rms : float; zero_block : int64; row_width : int;
+                    abs_tol : float; twp : auto(TW); var stp : auto(ST);
+                    encode : block<(t : TW; var s : ST; planes : array<float>; var out : array<float>) : int64>) {
+    let planes <- make_planes(kind, w, h)
+    dump_poison(tt, family, "{kind} {w}x{h}", zero_block, bar_rms, twp, stp,
+        $(t; var s; var out) => invoke(encode, t, s, planes, out)) $(out) => encode_excess(out, row_width, o, abs_tol, bar_rms)
 }
 
 //! a tower minted in memory from `stg`: `truncate_and_poison` cuts it to `nl` blocks and zeroes `zero_block`'s planes, `mint`

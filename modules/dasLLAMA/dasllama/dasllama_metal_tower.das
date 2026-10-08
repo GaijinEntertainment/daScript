@@ -104,6 +104,9 @@ def metal_tower_mel_encodes() : int64 => g_tower_mels
 //! whisper-class encodes whose projector tail ran on the device behind the blocks
 def metal_tower_tail_encodes() : int64 => g_tower_tail_encodes
 
+//! the vision q8 slab sits on the device (a q8 vision tower attached it; a weight drop or the shutdown frees it)
+def metal_tower_vis_slab_live() : bool => g_tw_q8_vis.buf != null
+
 [cold_path]   // the decline leg IS the fall-off-the-GPU path; its bookkeeping is not hot
 def private tw_decline(why : MetalTowerDecline) : bool {
     note_decline(g_tower_declines, "tower", "{why}", policy = why == MetalTowerDecline.knob)
@@ -310,18 +313,11 @@ def private tw_q8_regions(t : AudioTower) : array<Q8Region> {
 //! tower, tw_mm's forms on an f32 one
 def private wt_mm(enc : MetalComputeEncoder?; vis, q8 : bool; site : int64; f16w, bf16w : bool; bwh, bblob : MetalBuffer?; welem : int64;
                   bx, bxh, by : MetalBuffer?; bk, bn : MetalBuffer?; rows, nd, kdim : int64; cvt : bool) {
-    let boff = !q8 ? 0ul : (vis ? g_tw_q8_vis_boffs[site] : g_tw_q8_boffs[site])
-    wt_mm_at(enc, q8, vis ? g_tw_q8_vis.buf : g_tw_q8.buf, boff, f16w, bf16w, bwh, bblob, welem, bx, bxh, by, bk, bn, rows, nd, kdim, cvt)
-}
-
-//! the q8 GEMM over the blob region at `boff` (the half twin of `bx` converted first where the GEMM reads one), else tw_mm's forms
-def private wt_mm_at(enc : MetalComputeEncoder?; q8 : bool; bq8 : MetalBuffer?; boff : uint64; f16w, bf16w : bool; bwh, bblob : MetalBuffer?; welem : int64;
-                     bx, bxh, by : MetalBuffer?; bk, bn : MetalBuffer?; rows, nd, kdim : int64; cvt : bool) {
     if (q8) {
         if (bxh != null && cvt) {
             tw_half(enc, bx, bxh, rows * kdim)
         }
-        pf_enc_q8_mm(enc, bq8, boff, bx, bxh, by, bk, bn, rows, nd, kdim)
+        pf_enc_q8_mm(enc, vis ? g_tw_q8_vis.buf : g_tw_q8.buf, vis ? g_tw_q8_vis_boffs[site] : g_tw_q8_boffs[site], bx, bxh, by, bk, bn, rows, nd, kdim)
     } else {
         tw_mm(enc, f16w, bf16w, bwh, bblob, welem, bx, bxh, by, 0ul, bk, bn, rows, nd, kdim, cvt)
     }

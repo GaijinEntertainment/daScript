@@ -373,7 +373,11 @@ A class whose pipeline global is private to `dasllama_metal_prefill` compiles th
 `kernel_of(@@<builder>)` (the pipeline, tgmem, and the builder's `_pso` form, which takes the
 pipeline as its second argument) and dispatches through that form. Only a gate that dispatches a
 grid or bind the builder cannot express binds by number, the reason at the site. The hand-bound-gate sync
-obligation is `REVIEW_KERNEL_CELLS.md`'s. The misc file also
+obligation is `REVIEW_KERNEL_CELLS.md`'s. The misc file's vision stem gates run the templates both
+homes stamp against `_kernel_oracles.das` and the engine's own walks: `pos_add_gate` (the 2-axis
+position add on a non-square grid, bit-exact in the CPU's order), `q3v_stem_gate` (the merge-walk
+gather over `q3v_reorder_src` at a width off the 64-thread group) and `patch_im2col_gate` (the
+patch columns under the pixel map, the padded stride). The misc file also
 carries `test_lens_tgmem_gate` - not a CPU-oracle unit: it spawns two `daslang -compile-only`
 child builds (up to 120 s each) proving the lens refuses a `[metal_dispatch]` class with
 `@workgroup` members and no `tgmem=`, twin fixture as the must-compile control; its siblings
@@ -435,10 +439,12 @@ tails' row kernels - the grid mean pool (`tw_pool2d_gate`: a 6 x 4 row grid pool
 host mean, a one-axis pool told apart), the standardize (`tw_affine_gate`: in place against
 (x * scale - b) * m on the standardize arm and x * scale on the scale-only arm, two rows past the run
 kept, the form with no scale told apart), the NEOX table rope over a fused row's k slot
-(`tw_rope_tab_gate`: against `rope_neox_tab_rows` over the gathered span, the q and v slots
-untouched) and the gated hidden (`tw_bias_gate_gate`: silu(g + bg) . (u + bu) in place over g
-against a double form, the bias rows at offsets). The rms and seam gates run at 512 too - two whole
-trips of the 256-thread stride. Canary's mel
+(`rope_tab_gate` over the `RopeTabStamp` enum: the tower's NEOX stamp from position 0 and the pocket
+prompt's interleaved stamp from a position base, each against `rope_tab_ref`, the q and v slots
+untouched, a poisoned k element) and the gated hidden (`tw_bias_gate_gate`: silu(g + bg) . (u + bu) in
+place over g against a double form, the bias rows at offsets, at 210 and at 209 elements - the last
+lane's guard). Every seam kind runs at 512 too - two whole trips of the 256-thread stride; the tower
+rms stamp is the misc file's `rms_gate` third arm (`RmsStamp.tw`, at 300, 70 and 512, in place too). Canary's mel
 normalization (`cn_melnorm`): the log and the per-feature normalization in place against a double
 form at 70 features (off the 64-thread group), 11 frames of which 7 are valid - the rest zero - and
 two rows past the mel left as they were. The FastConformer
@@ -2227,7 +2233,7 @@ merged-patch-grid panic gate; and the Qwen3-VL 4B DEEPSTACK leg (taps 5/11/17, w
 fields - the compare applies them when the dump has them - hitting each concatenated
 slice's first element (a skipped-tap poison lands at 6.9-9.7 on them, 600x; mean+v0..v3
 alone are BLIND to a zeroed slice). The q8 serving lane (the CPU policy default when neither
-the Metal tower nor the accelerate float-batch tier serves - `qwen3v_gpu_would_serve()` is the
+the Metal tower nor the accelerate float-batch tier serves - `qwen3v_gpu_exact_serves()` is the
 driver clause) gets its own cells, each bar carrying its own
 must-EXCEED poison leg - a block's qblob region zeroed through the staging planes, scored
 by `encode_excess`: the Omni leg on gray448 + cb448 + cb96 at its measured 5.2e-1*rms bar,

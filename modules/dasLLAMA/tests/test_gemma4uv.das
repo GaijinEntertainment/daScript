@@ -13,6 +13,7 @@ require _model_tier   // models_dir() + model_available() gate
 require _vision_oracle   // the mtmd dump parser, fixture generators, per-token compare
 require ?das_metal dasllama/dasllama_metal_tower   // the GPU tier-1 attempt; the CPU gate pins the knob off
 require ?vulkan dasllama/dasllama_vulkan_tower
+require ?vulkan dasllama/dasllama_vulkan_common   // vk_drop_model_state: the drop-and-encode leg
 require _tower_twin
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown — the crown-pin cell drops the trio's cached flags
 
@@ -22,7 +23,9 @@ require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_shutdown �
 // here isolates the embedder math. Oracle per-token lines live beside the models in gemma4-vision-oracle/
 // (mint.sh regenerates); both the mmproj and the dumps gate this test with explicit skips. On an Apple build the
 // GPU cell runs the same dumps through the Metal embedder, on a Vulkan build through the Vulkan one, each off the
-// planes with the stem on the device and engage proven per fixture by the encodes counter.
+// planes with the stem on the device and engage proven per fixture by the encodes counter. The Vulkan cell skips on
+// a das_metal build (its tower hooks own the seats) and without a Vulkan device under DASLLAMA_GPU=1; its control
+// zeroes the patch weights and must miss the bar.
 
 // the tier-1 gate: encode a fixture, compare per-token mean/v0..v3 against the oracle dump.
 // %.6f print rounding is ±5e-7 and the measured accumulation-order noise is ~2e-5 (logged per
@@ -158,6 +161,28 @@ def test_gemma4uv_tier1_vulkan(t : T?) {
                         tt |> equal(vulkan_tower_stats().encodes - s0.encodes, 1l, "{fx.kind} {fx.w}x{fx.h}: device-served (encodes delta)")
                         tt |> equal(vulkan_tower_stats().convs - s0.convs, 1l, "{fx.kind} {fx.w}x{fx.h}: the stem ran on the device (convs delta)")
                     }
+                }
+                var o = OracleEncode()
+                if (oracle_dump(tt, "gemma4-vision-oracle", "encode.cb336.log", "gemma4-vision-oracle/mint.sh", o)) {
+                    var inscope stgp <- stage_gemma4uv_embedder(mm)   //! the control: the patch weights zeroed in every plane the chain reads them from
+                    let n = stgp.e.n_embd * stgp.e.patch_dim
+                    for (i in range64(long_length(stgp.blob) >= stgp.e.patch_w + n ? n : 0l)) {
+                        stgp.blob[stgp.e.patch_w + i] = 0.0
+                    }
+                    for (i in range64(long_length(stgp.wblob) >= stgp.e.patch_w + n ? n : 0l)) {
+                        stgp.wblob[stgp.e.patch_w + i] = uint16(0)
+                    }
+                    var embp = Gemma4uvEmbedder()
+                    mint_gemma4uv_embedder(stgp, embp)
+                    var stp = Gemma4uvState()
+                    dump_poison_leg(tt, "gemma4uv", "cb", 336, 336, o, 0.0, 0l, int(embp.proj_dim), TIER1_TOL, embp, stp) $(t; var s; planes; var out) => gemma4uv_encode(t, s, planes, 336l, 336l, out)
+                    delete stp
+                    delete embp
+                }
+                vk_drop_model_state()   //! the drop forgets the vision marks: the next encode regrows its buffers and uploads the stem off a fresh key
+                let sd = vulkan_tower_stats()
+                if (gate_encode(tt, emb, st, "cb", 336, 336, "encode.cb336.log", false)) {
+                    tt |> equal(vulkan_tower_stats().encodes - sd.encodes, 1l, "after the model drop: device-served again (encodes delta)")
                 }
             }
             vulkan_tower_shutdown()

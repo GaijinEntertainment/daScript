@@ -646,7 +646,7 @@ def test_vkt_tower_vision_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate
                 check_rows(t, "tower_patch_im2col the patch columns under the [0, 1] -> [-1, 1] map vs im2col_rgb_patches, the pad rows zero", col_dev, col_want, BAR_EXACT, VR_PD)
                 let x_want <- pos_add_2d_ref(x, tbl, npos, d, VR_PW, VR_POS_ENTRIES)
                 check_rows(t, "tower_pos_add_2d (row + x-table row) + y-table row vs the CPU form", x_dev, x_want, BAR_EXACT, d)
-                t |> success(x_want[0] != x[0], "tower_pos_add_2d: the rows moved off x")
+                t |> success(moved_off(x_want, x, 0, BAR_EXACT), "tower_pos_add_2d: the rows moved off x")
                 var asm_want : array<float>
                 asm_want |> resize(nd)
                 for (r in range(npos)) {
@@ -669,7 +669,7 @@ def test_vkt_tower_vision_rows(t0 : T?) {   // nolint:STYLE038 — one flat gate
                     aff_want[i] = (ax[i] * scale - bias[d + c]) * std_scale[c]
                 }
                 check_rows(t, "tower_affine_rows (x . scale - b) . m vs the CPU form", ax_dev, aff_want, BAR_APPROX, d)
-                t |> success(aff_want[0] != ax[0] && aff0_want[0] != ax[0], "tower_affine_rows: both arms moved off x")
+                t |> success(moved_off(aff_want, ax, 0, BAR_APPROX) && moved_off(aff0_want, ax, 0, BAR_APPROX), "tower_affine_rows: both arms moved off x")
                 check_rows(t, "tower_affine_rows x . scale on the scale-only arm", ax0_dev, aff0_want, BAR_APPROX, d)
                 delete col_cpu
             }

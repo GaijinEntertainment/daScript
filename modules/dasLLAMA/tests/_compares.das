@@ -109,9 +109,7 @@ def outside_run(whole : array<float>; lo, n : int; kept : array<float>) : bool {
     return true
 }
 
-def scaled_copy(a : array<float>; k : float) : array<float> {
-    return <- [for (v in a); v * k]
-}
+def scaled_copy(a : array<float>; k : float) : array<float> => <- [for (v in a); v * k]
 
 //! the index of the largest |got - want| (0 when every element agrees; a NaN on either side is the largest)
 def maxdiff_at(got, want : array<float>) : int => span_maxdiff(got, want, 0, 0, length(got)).at
@@ -222,6 +220,10 @@ struct Bar {
 }
 
 let BAR_EXACT = Bar(exact = true)
+
+//! `a[k]` sits past `bar` from `b[k]`: an in-place kernel's output moved off its input, or an expectation off it
+def moved_off(a, b : array<float>; k : int; bar : Bar) : bool
+    => bar.exact ? a[k] != b[k] : abs(a[k] - b[k]) > bar.rel * abs(b[k]) + bar.abs_floor
 let BAR_APPROX = Bar(rel = APPROX_REL)
 
 //! The coopmat tiles' bar over the expectation `want`: 2e-2 of the larger magnitude floored at 1, or 4e-3 of `want`'s largest

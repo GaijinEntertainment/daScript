@@ -811,7 +811,7 @@ def private rms_gate(t : T?; var dev, queue; dim, nrows : int; eps : float; weig
             }
             return if (!ran_in)
             check_buf(t, "{tag} in place", mc.buf[bxi], want, BAR_APPROX, Shape(row_width = dim))
-            t |> success(want[0] != x[0], "{tag} in place: the rows moved off x")
+            t |> success(moved_off(want, x, 0, BAR_APPROX), "{tag} in place: the rows moved off x")
         }
     }
 }

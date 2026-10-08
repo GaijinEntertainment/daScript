@@ -240,27 +240,22 @@ def private register_qwen3v_image_tags {
 var private g_q3v_q8_pin = GemmLane.unset
 
 typedef Qwen3vGpuChainFn = function<(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w, h, npos : int64) : bool>   //! the whole chain from the planes
-typedef Qwen3vGpuServesFn = function<() : bool>
 var private g_q3v_gpu : Qwen3vGpuChainFn
-var private g_q3v_gpu_serves : Qwen3vGpuServesFn
-var private g_q3v_gpu_set = false
-var private g_q3v_f32_lane = true   //! the chain serves the f32 planes (the lane policy prefers them); false = it serves the q8 image
+var private g_q3v_seat = GpuLaneSeat()
 
 //! The whole-chain seat ([init]): the fn runs the stem off the planes, the blocks, the tap mergers and the tail on the
 //! device, landing proj outputs in `s.ds_stash`/`s.ds_slice` (caller-sized) - false = decline, the CPU loop serves; `serves`
 //! answers the knob so the encode skips the CPU im2col; `f32_lane` says whether the policy prefers the file's planes over the q8 image (true where the device's f32 tiles are its faster lane).
-def register_qwen3v_gpu(fn : Qwen3vGpuChainFn; serves : Qwen3vGpuServesFn; f32_lane : bool = true) {
+def register_qwen3v_gpu(fn : Qwen3vGpuChainFn; serves : function<() : bool>; f32_lane : bool = true) {
     g_q3v_gpu = fn
-    g_q3v_gpu_serves = serves
-    g_q3v_f32_lane = f32_lane
-    g_q3v_gpu_set = true
+    g_q3v_seat = GpuLaneSeat(set = true, f32_lane = f32_lane, serves = serves)
 }
 
 //! The deepstack tap index of block `l`, -1 off the taps.
 def qwen3v_tap_of(t : Qwen3vTower; l : int64) : int64 => l == t.ds_l0 ? 0l : (l == t.ds_l1 ? 1l : (l == t.ds_l2 ? 2l : -1l))
 
 //! the GPU tower would serve this encode on the file's planes - the lane policy's clause: with it false the policy's default is the q8 image
-def qwen3v_gpu_exact_serves() : bool => g_q3v_gpu_set && g_q3v_f32_lane && invoke(g_q3v_gpu_serves)
+def qwen3v_gpu_exact_serves() : bool => gpu_exact_serves(g_q3v_seat)
 
 def private q3v_serve_q8() : bool => lane_serves_q8(g_q3v_q8_pin, !(qwen3v_gpu_exact_serves() || float_batch_override_active()))
 
@@ -278,24 +273,12 @@ def reset_qwen3v_q8() {
 //! Would the next load serve the block GEMMs as q8 — the pin when set, the policy otherwise.
 def qwen3v_serves_q8() : bool => q3v_serve_q8()
 
-//! Would the registered GPU tower take the f32 lane — the policy's driver clause, for tests.
-def qwen3v_gpu_would_serve() : bool => g_q3v_gpu_set && invoke(g_q3v_gpu_serves)
 
 def private q3v_tag() : string => q3v_serve_q8() ? QWEN3V_TAG_Q8 : QWEN3V_TAG
 
 // the lane changes what a load mints and serves, so the load says which and why
 def private q3v_announce_lane() {
-    var why = "the CPU default (no GPU tower, no accelerate tier)"
-    if (g_q3v_q8_pin != GemmLane.unset) {
-        why = "pinned via set_qwen3v_q8"
-    } elif (qwen3v_gpu_exact_serves()) {
-        why = "the GPU tower serves the file's planes (its f32 tiles are the faster lane)"
-    } elif (g_q3v_gpu_set && invoke(g_q3v_gpu_serves)) {
-        why = "the GPU tower serves the q8 image (its q8 tiles are the faster lane)"
-    } elif (float_batch_override_active()) {
-        why = "DASLLAMA_ACCEL on: the float-batch tier serves f32 planes"
-    }
-    to_log(LOG_INFO, "dasLLAMA qwen3v: block GEMM lane {q3v_serve_q8() ? "q8" : "f32 planes"} - {why}\n")
+    to_log(LOG_INFO, "dasLLAMA qwen3v: block GEMM lane {q3v_serve_q8() ? "q8" : "exact planes"} - {lane_why(g_q3v_seat, g_q3v_q8_pin != GemmLane.unset)}\n")
 }
 
 // the block GEMM tensors in QWEN3V_GEMM_* order; every per-GEMM list follows it
@@ -899,7 +882,7 @@ def qwen3v_encode(t : Qwen3vTower; var s : Qwen3vState; planes : array<float>; w
     dispatch_phase_encode(pw * ph)
     var tp = ref_time_ticks()
     q3v_rope_tables(t, s, pw, ph)
-    let chain = g_q3v_gpu_set
+    let chain = g_q3v_seat.set
     let npos = q3v_stem_cols(t, s, planes, w, h, pw, ph, !chain)
     asr_prof_add("q3v.stem", tp)
     let nds = t.n_deepstack

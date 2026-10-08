@@ -218,19 +218,14 @@ def private register_gemma4v_image_tags {
 // the GPU chain hook (dasllama_metal_tower or dasllama_vulkan_tower registers it at [init]; requires-back): the whole chain
 // off the planes; false = declined, the CPU chain is the fallback. `serves` = would the driver serve (the lane policy asks)
 typedef Gemma4vGpuChainFn = function<(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>; w, h, npos : int64) : bool>   //! the whole chain from the planes
-typedef Gemma4vGpuServesFn = function<() : bool>
 var private g_g4v_gpu : Gemma4vGpuChainFn
-var private g_g4v_gpu_serves : Gemma4vGpuServesFn
-var private g_g4v_gpu_set = false
-var private g_g4v_f32_lane = true   //! the chain serves the f32 planes (the lane policy prefers them); false = it serves the q8 image
+var private g_g4v_seat = GpuLaneSeat()
 
 //! the whole-chain seat: the fn runs the stem, the blocks and the tail on the device off the planes; `serves` answers the knob so
 //! the encode skips the CPU im2col; `f32_lane` says whether the policy prefers the file's planes over the q8 image (true where the device's f32 tiles are its faster lane)
-def register_gemma4v_gpu(fn : Gemma4vGpuChainFn; serves : Gemma4vGpuServesFn; f32_lane : bool = true) {
+def register_gemma4v_gpu(fn : Gemma4vGpuChainFn; serves : function<() : bool>; f32_lane : bool = true) {
     g_g4v_gpu = fn
-    g_g4v_gpu_serves = serves
-    g_g4v_f32_lane = f32_lane
-    g_g4v_gpu_set = true
+    g_g4v_seat = GpuLaneSeat(set = true, f32_lane = f32_lane, serves = serves)
 }
 
 // The lane policy follows the fastest GEMM path on the box: a serving GPU chain or the armed
@@ -238,7 +233,7 @@ def register_gemma4v_gpu(fn : Gemma4vGpuChainFn; serves : Gemma4vGpuServesFn; f3
 var private g_g4v_q8_pin = GemmLane.unset
 
 //! the GPU tower would serve this encode on the file's planes - the lane policy's clause: with it false the policy's default is the q8 image
-def gemma4v_gpu_exact_serves() : bool => g_g4v_gpu_set && g_g4v_f32_lane && invoke(g_g4v_gpu_serves)
+def gemma4v_gpu_exact_serves() : bool => gpu_exact_serves(g_g4v_seat)
 
 def private g4v_serve_q8() : bool => lane_serves_q8(g_g4v_q8_pin, !(gemma4v_gpu_exact_serves() || float_batch_override_active()))
 
@@ -260,17 +255,7 @@ def private g4v_tag() : string => g4v_serve_q8() ? GEMMA4V_TAG_Q8 : GEMMA4V_TAG
 
 // the lane changes what a load mints and serves, so the load says which and why, by knob spelling
 def private g4v_announce_lane() {
-    var why = "the CPU default (no GPU tower, no accelerate tier)"
-    if (g_g4v_q8_pin != GemmLane.unset) {
-        why = "pinned"
-    } elif (gemma4v_gpu_exact_serves()) {
-        why = "the GPU tower serves the file's planes (its f32 tiles are the faster lane)"
-    } elif (g_g4v_gpu_set && invoke(g_g4v_gpu_serves)) {
-        why = "the GPU tower serves the q8 image (its q8 tiles are the faster lane)"
-    } elif (float_batch_override_active()) {
-        why = "DASLLAMA_ACCEL on: the float-batch tier serves the file's planes"
-    }
-    to_log(LOG_INFO, "dasLLAMA gemma4v: block GEMM lane {g4v_serve_q8() ? "q8" : "exact planes"} - {why}\n")
+    to_log(LOG_INFO, "dasLLAMA gemma4v: block GEMM lane {g4v_serve_q8() ? "q8" : "exact planes"} - {lane_why(g_g4v_seat, g_g4v_q8_pin != GemmLane.unset)}\n")
 }
 
 // the clamp's five floats into the f32 blob at `off` (read back by g4v_clamp_at)
@@ -792,7 +777,7 @@ def gemma4v_encode(t : Gemma4vTower; var s : Gemma4vState; planes : array<float>
     let n_rows = h / t.patch
     dispatch_phase_encode(n_cols * n_rows)
     var tp = ref_time_ticks()
-    let chain = g_g4v_gpu_set
+    let chain = g_g4v_seat.set
     let npos = g4v_stem_cols(t, s, planes, w, h, !chain)
     g4v_rope_tables(t, s, n_cols, n_rows)
     asr_prof_add("g4v.stem", tp)

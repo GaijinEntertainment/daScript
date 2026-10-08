@@ -13,6 +13,7 @@ require ?vulkan dasllama/dasllama_vulkan_tower
 require daslib/jobque_boost
 require daslib/strings_convert
 require daslib/strings_boost
+require _row_stats
 
 let WARM = 3
 let TIMED = 10
@@ -32,18 +33,18 @@ def planes_of(w, h : int64) : array<float> {
 }
 
 def timed(tag : string; encode : block<() : void>) {
-    var times : array<double>
+    var times : array<float>
     for (i in range(WARM + TIMED)) {
         let t0 = ref_time_ticks()
         invoke(encode)
-        let ms = double(get_time_usec(t0)) / 1000.0lf
+        let ms = float(get_time_usec(t0)) / 1000.0
         if (i >= WARM) {
             times |> push(ms)
         }
     }
     let samples : string = join([for (ms in times); "{ms}"], " ")
-    sort(times)
-    print("{tag}: median {times[TIMED / 2]} ms, min {times[0]} ms, max {times[TIMED - 1]} ms; samples {samples}\n")
+    let sp = spread_of(times)
+    print("{tag}: median {sp.median} ms, min {sp.best} ms, max {times[TIMED - 1]} ms, cv {sp.cv}%; samples {samples}\n")
 }
 
 [export]

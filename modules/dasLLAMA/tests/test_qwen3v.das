@@ -157,24 +157,19 @@ def private q3v_metal_q8_leg(tt : T?; mm4 : string) {
         }
         delete stq
         delete twq
-        dump_poison_leg(tt, mm4, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_Q8_DS)
+        q3v_poison_leg(tt, mm4, "cb", 448, 448, "encode4b.cb448.log", TIER1_REL_Q8_DS)
     }
 }
 
-//! the input poison of a device-side dump bar: the deepstack q8 tower with block 13 zeroed, served by the driver, must EXCEED the
-//! bar its dump holds - a bar the poison clears measures nothing
-[cold_path]
-def private dump_poison_leg(tt : T?; mm : string; kind : string; w, h : int; logname : string; bar_rms : float) {
+let private POISON_BLOCK = 13l   //! the whole-tower input poison's block: a mid-stack block past the first deepstack tap
+
+//! a canvas's device-side dump bar poisoned: the deepstack q8 tower with `POISON_BLOCK` zeroed must exceed the bar `logname` holds
+def private q3v_poison_leg(tt : T?; mm : string; kind : string; w, h : int; logname : string; bar_rms : float) {
     var o = OracleEncode()
-    if (!load_oracle_encode(path_join(path_join(models_dir(), "qwen3vl-vision-oracle"), logname), o)) {
-        tt |> skip("oracle dump {logname} not present/parseable - mint via qwen3vl-vision-oracle/mint_4b.sh")
-        return
-    }
-    var twp <- mint_tower(mm, true, 0l, 13l)
+    return if (!oracle_dump(tt, "qwen3vl-vision-oracle", logname, "qwen3vl-vision-oracle/mint_4b.sh", o))
+    var twp <- mint_tower(mm, true, 0l, POISON_BLOCK)
     var stp = Qwen3vState()
-    let planes <- make_planes(kind, w, h)
-    dump_poison(tt, "qwen3v", "{kind} {w}x{h}", 13l, bar_rms, twp, stp,
-        $(t; var s; var out) => qwen3v_encode(t, s, planes, int64(w), int64(h), out)) $(out) => encode_excess(out, int(qwen3v_row_width(twp)), o, TIER1_ABS, bar_rms)
+    dump_poison_leg(tt, "qwen3v", kind, w, h, o, bar_rms, POISON_BLOCK, int(qwen3v_row_width(twp)), TIER1_ABS, twp, stp) $(t; var s; planes; var out) => qwen3v_encode(t, s, planes, int64(w), int64(h), out)
     delete stp
     delete twp
 }

@@ -1459,9 +1459,7 @@ def private vulkan_gemma4a_blocks(t : Gemma4aEncoder; var s : Gemma4aState; npos
         vt_pt(raw, VtProfRole.rms)
         vt_mm_clamped(raw, h, Clamp(), r.s_feed_pt, npos * tail_dim, s_mmproj, vp, tail_dim, tail_dim, g_vt_maps[nrec - 1l], g_p, r.s_clamp_yd, 0l)
         vt_pt(raw, VtProfRole.gemm_o)
-        vhz_dep(raw, h, VT_TAIL_PROJ, 0u, true)
-        cmd_copy_range(raw, r.tail_proj_dev, 0l, r.tail_host.buf, 0l, bo)
-        vt_pt(raw, VtProfRole.copy_out)
+        vt_tail_copy_out(raw, h, r, bo)
     }
     ensure_length(s.out, npos * tail_dim)
     s.out_ready = true
@@ -3900,14 +3898,14 @@ def private vulkan_gemma4v_chain(t : Gemma4vTower; var s : Gemma4vState; planes 
         r.s_vis_clamp_out = set_tower_clamp_cls(fixed_array(r.tail_proj_dev), fixed_array(bp), fixed_array(VT_TAIL_PROJ))
         r.vis_sets_gen = r.vis_gen
     }
-    var sched_o = gemma4v_block_offs(t, 0l)
+    var recs : Q8Region[int(GEMMA4V_GEMMS)]
     if (!f32w) {
         vt_sched_walk(g_vt_maps, r.meta, nrec) $(rid : int64) : VtSchedRec {
             let g = rid % GEMMA4V_GEMMS
             if (g == 0l) {
-                sched_o = gemma4v_block_offs(t, rid / GEMMA4V_GEMMS)
+                gemma4v_block_regions(t, rid / GEMMA4V_GEMMS, recs)
             }
-            return VtSchedRec(wblk0 = sched_o.w[g] / q8e, rows = npos, groups = g == GEMMA4V_GEMM_GATE || g == GEMMA4V_GEMM_UP ? g_ff : g_d)
+            return VtSchedRec(wblk0 = recs[g].woff / q8e, rows = npos, groups = g == GEMMA4V_GEMM_GATE || g == GEMMA4V_GEMM_UP ? g_ff : g_d)
         }
     }
     let pairs = hs / 4l

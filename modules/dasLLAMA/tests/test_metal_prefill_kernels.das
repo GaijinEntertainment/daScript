@@ -1216,7 +1216,7 @@ def private tw_affine_gate(t : T?; var dev, queue) {
         }
         return if (!ran)
         check_buf(t, tag, mc.buf[bx], want, BAR_APPROX, Shape(row_width = width))
-        t |> success(want[0] != x[0], "{tag}: the rows moved off x")
+        t |> success(moved_off(want, x, 0, BAR_APPROX), "{tag}: the rows moved off x")
         var ka0 = ka
         ka0.std = 0u
         var inscope want0 <- [for (i in range(total)); x[i] * scale]
@@ -1226,60 +1226,71 @@ def private tw_affine_gate(t : T?; var dev, queue) {
         }
         return if (!ran0)
         check_buf(t, "{tag} scale-only", mc.buf[bx0], want0, lead_poisoned(BAR_APPROX, want0), Shape(row_width = width))
+        t |> success(moved_off(want0, x, 0, BAR_APPROX), "{tag} scale-only: the rows moved off x")
     }
 }
 
-//! the NEOX table rope over a fused [q | k | v] row's k slot in place against the CPU `rope_neox_tab_rows` over the gathered k
-//! span: the q and v spans bit for bit as they were, the k span moved, a poisoned expectation reds the compare
-def private tw_rope_tab_gate(t : T?; var dev, queue) {
-    let tag = "tw_rope_tab"
+enum RopeTabStamp {
+    tw   //! the tower's NEOX rope over a fused row's k slot (`MetalTwRopeTab`), the tables read at the token's row
+    pk   //! the pocket prompt's interleaved rope from a position base (`MetalPkRopeTab`), the tables bound whole
+}
+
+//! the position-based table rope both homes stamp (`GkRopeTab`) over the k span of fused [q | k | v] rows in place from
+//! position `pos0`: the rows against `rope_tab_ref`, the q and v spans as they were, the k span moved off the input, a poisoned
+//! k element reds the compare
+def private rope_tab_gate(t : T?; var dev, queue; stamp : RopeTabStamp; rows, d, dh, pos0 : int) {
+    let tag = "rope_tab {stamp} rows={rows} d={d} pos0={pos0}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let st = stamp_of(@@enc_tw_rope_tab)
+        let st = stamp == RopeTabStamp.tw ? stamp_of(@@enc_tw_rope_tab) : stamp_of(@@enc_pk_rope_tab)
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
-        let npos = 5
-        let n_head = 3
-        let hs = 32
-        let d = n_head * hs
         let qs = 3 * d
-        var inscope x <- [for (i in range(npos * qs)); float((i * 37) % 101 - 50) * 0.043]
-        var inscope cos_t <- [for (i in range(npos * hs / 2)); float((i * 7) % 13 - 6) * 0.15]
-        var inscope sin_t <- [for (i in range(npos * hs / 2)); float((i * 11) % 17 - 8) * 0.11]
-        var inscope k_flat <- [for (i in range(npos * d)); x[(i / d) * qs + d + i % d]]   //! the k spans gathered row-major
-        rope_neox_tab_rows(k_flat, int64(npos), int64(n_head), int64(hs), cos_t, sin_t)
+        let half = dh / 2
+        var inscope x <- f16_fill(rows * qs, 41, 0.05, -2.1)
+        var inscope tcos, tsin : array<float>
+        let none : array<float>
+        build_rope_tabs(tcos, tsin, 10000.0, 1.0, 1.0, none, false, 0l, int64(pos0 + rows), int64(dh))
         var inscope want := x
-        for (r in range(npos)) {
-            for (i in range(d)) {
-                want[r * qs + d + i] = k_flat[r * d + i]
+        for (r in range(rows)) {
+            rope_tab_ref(want, r * qs + d, dh, 0, d, stamp == RopeTabStamp.tw, tcos, tsin, (pos0 + r) * half)
+        }
+        let ka = GkRopeTabArgs(rows = uint(rows), qs = uint(qs), col = uint(d), d = uint(d), dh = uint(dh), coff = uint(pos0 * half), soff = uint(pos0 * half))
+        let pc = mc |> in_(tcos)
+        let ps = mc |> in_(tsin)
+        var bc = mc.buf[pc]
+        var bs = mc.buf[ps]
+        let run <- @(bxx : MetalBuffer?) : bool {
+            var kl = ka
+            return queue_record(t, queue, tag) $(enc : MetalComputeEncoder?) {
+                stamp_run(st, pso) {
+                    invoke(st.enc, enc, bxx, bc, bs, kl, int64(rows * d / 2))
+                }
             }
         }
-        var ka = GkRopeTabArgs(rows = uint(npos), qs = uint(qs), col = uint(d), d = uint(d), dh = uint(hs), coff = 0u, soff = 0u)
-        let bx = mc |> io_(x)
-        let bc = mc |> in_(cos_t)
-        let bs = mc |> in_(sin_t)
-        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bx], mc.buf[bc], mc.buf[bs], ka, int64(npos * d / 2))
-            }
+        let bar = Bar(rel = 1e-5, abs_floor = 1e-6, poison_scaled = true)
+        let px = mc |> io_(x)
+        if (invoke(run, mc.buf[px])) {
+            check_buf(t, tag, mc.buf[px], want, lead_poisoned(bar, want), Shape(row_width = qs))
+            t |> success(moved_off(want, x, d + 2, bar), "{tag}: a k pair at a nonzero angle turned off its input")
         }
-        return if (!ran)
-        check_buf(t, tag, mc.buf[bx], want, lead_poisoned(BAR_APPROX, want), Shape(row_width = qs))
-        t |> success(want[d] != x[d] && want[0] == x[0] && want[2 * d] == x[2 * d], "{tag}: the k span moved, the q and v spans stand")
+        x[d + 5] += 1.5
+        let px2 = mc |> io_(x)
+        if (invoke(run, mc.buf[px2])) {
+            t |> success(mc |> rerun_mismatches(px2, want, 1e-5, 1e-6, "{tag} poison (MUST mismatch)") > 0, "{tag}: a poisoned k element reds the compare")
+        }
     }
 }
 
 //! the gated hidden stamp in place over g against silu(g + bg) . (u + bu) in double, the bias rows at offsets in one plane; a
 //! poisoned expectation reds the compare, the rows moved off g
-def private tw_bias_gate_gate(t : T?; var dev, queue) {
-    let tag = "tw_bias_gate"
+def private tw_bias_gate_gate(t : T?; var dev, queue; ff, rows : int) {
+    let tag = "tw_bias_gate ff={ff} rows={rows}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let st = stamp_of(@@enc_tw_bias_gate)
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
-        let ff = 70
-        let rows = 3
         let total = rows * ff
         var inscope g <- [for (i in range(total)); float((i * 37) % 101 - 50) * 0.043]
         var inscope u <- [for (i in range(total)); float((i * 53) % 89 - 44) * 0.031]
@@ -1300,7 +1311,7 @@ def private tw_bias_gate_gate(t : T?; var dev, queue) {
         }
         return if (!ran)
         check_buf(t, tag, mc.buf[bg], want, lead_poisoned(BAR_APPROX, want), Shape(row_width = ff))
-        t |> success(want[0] != g[0], "{tag}: the rows moved off g")
+        t |> success(moved_off(want, g, 0, BAR_APPROX), "{tag}: the rows moved off g")
     }
 }
 
@@ -1360,6 +1371,9 @@ def private tw_seam_gate(t : T?; var dev, queue; kind : TwSeamStamp; d, rows : i
         var ka = (kind == TwSeamStamp.add_post_rms ? gk_add_post_rms_args(uint(d), uint(rows), eps, uint(3 * d), true, uint(d))
                             : gk_add_ln_args(uint(d), uint(rows), eps, 0u, true, uint(d), uint(2 * d)))
         ka.xboff = uint(xboff)
+        let pocket = kind == TwSeamStamp.pk_add_ln   //! the pocket's rows hold the tight bars its own gate held
+        let bar_x = pocket ? Bar(rel = 1e-6, abs_floor = 1e-6, poison_scaled = true) : BAR_APPROX
+        let bar_xb = pocket ? Bar(rel = 1e-5, abs_floor = 1e-6, poison_scaled = true) : BAR_APPROX
         let pwn = mc |> in_(wn)
         var bwn = mc.buf[pwn]
         let run <- @(bxx, byy, bxbb : MetalBuffer?; pa : GkPostAddLnArgs) : bool {
@@ -1374,9 +1388,9 @@ def private tw_seam_gate(t : T?; var dev, queue; kind : TwSeamStamp; d, rows : i
         let py = mc |> in_(y)
         let pxb = mc |> out_words(xboff + total, -7.0)
         if (invoke(run, mc.buf[px], mc.buf[py], mc.buf[pxb], ka)) {
-            check_buf(t, "{tag} x", mc.buf[px], want_x, BAR_APPROX, Shape(row_width = d))
-            check_buf(t, "{tag} xb", mc.buf[pxb], want_xb, BAR_APPROX, FLAT_SHAPE)
-            t |> success(want_x[0] != x[0], "{tag}: the joined rows moved off x")
+            check_buf(t, "{tag} x", mc.buf[px], want_x, bar_x, Shape(row_width = d))
+            check_buf(t, "{tag} xb", mc.buf[pxb], want_xb, bar_xb, FLAT_SHAPE)
+            t |> success(moved_off(want_x, x, 0, bar_x), "{tag}: the joined rows moved off x")
         }
         var ka0 = ka
         ka0.ln_on = 0u
@@ -1384,17 +1398,17 @@ def private tw_seam_gate(t : T?; var dev, queue; kind : TwSeamStamp; d, rows : i
         let py0 = mc |> in_(y)
         let pxb0 = mc |> out_words(xboff + total, -7.0)
         if (invoke(run, mc.buf[px0], mc.buf[py0], mc.buf[pxb0], ka0)) {
-            check_buf(t, "{tag} seam alone x", mc.buf[px0], want_x, BAR_APPROX, Shape(row_width = d))
+            check_buf(t, "{tag} seam alone x", mc.buf[px0], want_x, bar_x, Shape(row_width = d))
             let untouched <- [for (_i in range(xboff + total)); -7.0]
             check_buf(t, "{tag} seam alone xb", mc.buf[pxb0], untouched, BAR_EXACT, FLAT_SHAPE)
         }
-        y[d + d / 2] += 0.5
+        y[(rows / 2) * d + d / 2] += 0.5
         let px2 = mc |> io_(x)
         let py2 = mc |> in_(y)
         let pxb2 = mc |> out_words(xboff + total, -7.0)
         if (invoke(run, mc.buf[px2], mc.buf[py2], mc.buf[pxb2], ka)) {
-            t |> success(mc |> rerun_mismatches(px2, want_x, 1e-6, 1e-6, "{tag} x poison (MUST mismatch)") > 0, "{tag}: a poisoned branch element reds the joined rows")
-            t |> success(mc |> rerun_mismatches(pxb2, want_xb, 1e-5, 1e-6, "{tag} xb poison (MUST mismatch)") > 0, "{tag}: a poisoned branch element reds the norm rows")
+            t |> success(mc |> rerun_mismatches(px2, want_x, bar_x.rel, 1e-6, "{tag} x poison (MUST mismatch)") > 0, "{tag}: a poisoned branch element reds the joined rows")
+            t |> success(mc |> rerun_mismatches(pxb2, want_xb, bar_xb.rel, 1e-6, "{tag} xb poison (MUST mismatch)") > 0, "{tag}: a poisoned branch element reds the norm rows")
         }
     }
 }
@@ -2367,70 +2381,6 @@ def private pk_row_scale_gate(t : T?; var dev, queue) {
 }
 
 //! rows [7][96] rotated over 64 columns from column 16 (two heads of 32) at positions 5..: the CPU's `rope_rows` on the same columns
-//! The codec's rope: MetalRope over rows at a stride from a column, the tables' first row position 0
-//! the Pocket prompt's rope over the k span of t rows from a position base, the tables bound whole and read at that
-//! position's row - the position-based rope both homes stamp (`GkRopeTab`); the q and v spans untouched
-def private pk_rope_tab_gate(t : T?; var dev, queue) {
-    let tag = "pk_rope_tab"
-    with_metal_cell(dev, queue) $(var mc : MetalCell) {
-        var err : string
-        let st = stamp_of(@@enc_pk_rope_tab)
-        var pso = mc |> keep_stamp(st, err)
-        return if (!pso_ok(t, tag, pso, err))
-        let tt = 23
-        let d = 128
-        let dh = 64
-        let qs = 3 * d
-        let pos0 = 37
-        let cap = 64
-        let half = dh / 2
-        let period = 10000.0
-        var inscope x <- f16_fill(tt * qs, 41, 0.05, -2.1)
-        var inscope tcos, tsin : array<float>
-        let none : array<float>
-        build_rope_tabs(tcos, tsin, period, 1.0, 1.0, none, false, 0l, int64(cap), int64(dh))
-        t |> equal(length(tcos), cap * half, "{tag}: the tables carry {cap} positions of {half} angles")
-        var inscope want <- [for (e in range(tt * d)); x[(e / d) * qs + d + e % d]]
-        rope_rows(want, int64(tt), int64(d), int64(dh), int64(pos0), period)
-        let ka = GkRopeTabArgs(rows = uint(tt), qs = uint(qs), col = uint(d), d = uint(d), dh = uint(dh), coff = uint(pos0 * half), soff = uint(pos0 * half))
-        let pc = mc |> in_(tcos)
-        let ps = mc |> in_(tsin)
-        var bc = mc.buf[pc]
-        var bs = mc.buf[ps]
-        let run <- @(bxx : MetalBuffer?) : bool {
-            var kl = ka
-            return queue_record(t, queue, tag) $(enc : MetalComputeEncoder?) {
-                stamp_run(st, pso) {
-                    invoke(st.enc, enc, bxx, bc, bs, kl, int64(tt * d / 2))
-                }
-            }
-        }
-        let px = mc |> in_(x)
-        if (invoke(run, mc.buf[px])) {
-            var inscope rows <- mc |> plane_whole(px)
-            var inscope got <- [for (e in range(tt * d)); rows[(e / d) * qs + d + e % d]]
-            check_rows(t, "{tag} k span vs the CPU rope_rows", got, want, Bar(rel = 1e-5, abs_floor = 1e-6, poison_scaled = true), d, dh)
-            t |> success(got[2] != x[d + 2], "{tag} in place control: a pair at a nonzero angle is turned off its input")
-            var kept = 0
-            for (r in range(tt)) {
-                for (j in range(qs)) {
-                    if ((j < d || j >= 2 * d) && rows[r * qs + j] == x[r * qs + j]) {
-                        kept++
-                    }
-                }
-            }
-            t |> equal(kept, tt * 2 * d, "{tag}: the q and v spans are untouched")
-        }
-        x[3 * qs + d + 5] += 1.5
-        let px2 = mc |> in_(x)
-        if (invoke(run, mc.buf[px2])) {
-            var inscope rows2 <- mc |> plane_whole(px2)
-            var inscope got2 <- [for (e in range(tt * d)); rows2[(e / d) * qs + d + e % d]]
-            t |> success(mismatch_rel("{tag} poison (MUST mismatch)", got2, want, 1e-5, 1e-6) > 0, "{tag}: a poisoned k element reds the compare")
-        }
-    }
-}
-
 def private rope_stride_gate(t : T?; var dev, queue) {
     let tag = "rope stride"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
@@ -3356,14 +3306,14 @@ def test_metal_prefill_kernels(t : T?) {
                 tw_tail_rows_gate(t, dev, queue)
                 tw_pool2d_gate(t, dev, queue)
                 tw_affine_gate(t, dev, queue)
-                tw_rope_tab_gate(t, dev, queue)
-                tw_bias_gate_gate(t, dev, queue)
+                rope_tab_gate(t, dev, queue, RopeTabStamp.tw, 5, 96, 32, 0)
+                tw_bias_gate_gate(t, dev, queue, 70, 3)
+                tw_bias_gate_gate(t, dev, queue, 209, 1)   //! a row count off the 4-lane stride: the last lane's guard
                 for (kind in [TwSeamStamp.add_ln, TwSeamStamp.add_rms, TwSeamStamp.add_post_rms, TwSeamStamp.pk_add_ln]) {
-                    tw_seam_gate(t, dev, queue, kind, 300, 3)
+                    tw_seam_gate(t, dev, queue, kind, 300, 3)   //! the row past the 256-thread stride
+                    tw_seam_gate(t, dev, queue, kind, 512, 2)   //! two whole trips of the stride, no tail
                 }
-                tw_seam_gate(t, dev, queue, TwSeamStamp.add_rms, 512, 2)
                 tw_seam_gate(t, dev, queue, TwSeamStamp.pk_add_ln, 100, 1)   //! under the stride, the pocket's one row
-                tw_seam_gate(t, dev, queue, TwSeamStamp.pk_add_ln, 512, 1)   //! two whole 256-lane strides
                 bias_relu_rows_gate(t, dev, queue)
                 st2_conv_gate(t, dev, queue, false, false)
                 st2_conv_gate(t, dev, queue, true, false)
@@ -3397,7 +3347,7 @@ def test_metal_prefill_kernels(t : T?) {
                 pk_rows_gate(t, dev, queue, true)
                 pk_row_scale_gate(t, dev, queue)
                 rope_stride_gate(t, dev, queue)
-                pk_rope_tab_gate(t, dev, queue)
+                rope_tab_gate(t, dev, queue, RopeTabStamp.pk, 23, 128, 64, 37)
                 pk_attn_gate(t, dev, queue, 0, 10)
                 pk_attn_gate(t, dev, queue, 8, 10)
                 pk_attn_gate(t, dev, queue, 0, 300)   //! past one 256-key stride of the staged scores

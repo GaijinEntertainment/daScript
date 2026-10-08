@@ -190,19 +190,14 @@ def private register_gemma3v_image_tags {
 }
 
 typedef Gemma3vGpuChainFn = function<(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>; w, h, npos : int64) : bool>   //! the whole chain from the planes
-typedef Gemma3vGpuServesFn = function<() : bool>
 var private g_g3v_gpu : Gemma3vGpuChainFn
-var private g_g3v_gpu_serves : Gemma3vGpuServesFn
-var private g_g3v_gpu_set = false
-var private g_g3v_f32_lane = true   //! the chain serves the f32 planes (the lane policy prefers them); false = it serves the q8 image
+var private g_g3v_seat = GpuLaneSeat()
 
 //! the whole-chain seat: the fn runs the stem, the blocks and the tail on the device off the planes; `serves` answers the knob so
 //! the encode skips the CPU im2col; `f32_lane` says whether the policy prefers the file's planes over the q8 image (true where the device's f32 tiles are its faster lane)
-def register_gemma3v_gpu(fn : Gemma3vGpuChainFn; serves : Gemma3vGpuServesFn; f32_lane : bool = true) {
+def register_gemma3v_gpu(fn : Gemma3vGpuChainFn; serves : function<() : bool>; f32_lane : bool = true) {
     g_g3v_gpu = fn
-    g_g3v_gpu_serves = serves
-    g_g3v_f32_lane = f32_lane
-    g_g3v_gpu_set = true
+    g_g3v_seat = GpuLaneSeat(set = true, f32_lane = f32_lane, serves = serves)
 }
 
 // The lane policy follows the fastest GEMM path on the box: a serving GPU chain or the armed
@@ -210,7 +205,7 @@ def register_gemma3v_gpu(fn : Gemma3vGpuChainFn; serves : Gemma3vGpuServesFn; f3
 var private g_g3v_q8_pin = GemmLane.unset
 
 //! the GPU tower would serve this encode on the file's planes - the lane policy's clause: with it false the policy's default is the q8 image
-def gemma3v_gpu_exact_serves() : bool => g_g3v_gpu_set && g_g3v_f32_lane && invoke(g_g3v_gpu_serves)
+def gemma3v_gpu_exact_serves() : bool => gpu_exact_serves(g_g3v_seat)
 
 def private g3v_serve_q8() : bool => lane_serves_q8(g_g3v_q8_pin, !(gemma3v_gpu_exact_serves() || float_batch_override_active()))
 
@@ -232,17 +227,7 @@ def private g3v_tag() : string => g3v_serve_q8() ? GEMMA3V_TAG_Q8 : GEMMA3V_TAG
 
 // the lane changes what a load mints and serves, so the load says which and why, by knob spelling
 def private g3v_announce_lane() {
-    var why = "the CPU default (no GPU tower, no accelerate tier)"
-    if (g_g3v_q8_pin != GemmLane.unset) {
-        why = "pinned"
-    } elif (gemma3v_gpu_exact_serves()) {
-        why = "the GPU tower serves the file's planes (its f32 tiles are the faster lane)"
-    } elif (g_g3v_gpu_set && invoke(g_g3v_gpu_serves)) {
-        why = "the GPU tower serves the q8 image (its q8 tiles are the faster lane)"
-    } elif (float_batch_override_active()) {
-        why = "DASLLAMA_ACCEL on: the float-batch tier serves f32 planes"
-    }
-    to_log(LOG_INFO, "dasLLAMA gemma3v: block GEMM lane {g3v_serve_q8() ? "q8" : "exact planes"} - {why}\n")
+    to_log(LOG_INFO, "dasLLAMA gemma3v: block GEMM lane {g3v_serve_q8() ? "q8" : "exact planes"} - {lane_why(g_g3v_seat, g_g3v_q8_pin != GemmLane.unset)}\n")
 }
 
 // the block GEMM tensors in GEMMA3V_GEMM_* order (q k v o up down). The shipped mmproj carries
@@ -723,7 +708,7 @@ def gemma3v_encode(t : Gemma3vTower; var s : Gemma3vState; planes : array<float>
         panic("dasLLAMA gemma3v: canvas {w}x{h} - this tower serves exactly {t.image_px}x{t.image_px} (letterbox first)")
     }
     var tp = ref_time_ticks()
-    let chain = g_g3v_gpu_set
+    let chain = g_g3v_seat.set
     let npos = g3v_stem_cols(t, s, planes, w, h, !chain)
     dispatch_phase_encode(npos)
     asr_prof_add("g3v.stem", tp)

@@ -46,6 +46,31 @@ struct Q8Region {
     rows : int64
 }
 
+//! a family's GPU tower seat as the lane policy reads it: registered, whether the driver's f32 tiles are its faster lane (the
+//! policy then prefers the file's planes over the q8 image), and whether it serves on this box
+struct GpuLaneSeat {
+    set : bool
+    f32_lane : bool = true
+    serves : function<() : bool>
+}
+
+//! the GPU tower would serve this encode on the file's planes - the lane policy's clause: with it false the policy's default is the q8 image
+def gpu_exact_serves(seat : GpuLaneSeat) : bool => seat.set && seat.f32_lane && invoke(seat.serves)
+
+//! the lane policy's reason under `seat` and the pin, the load's announce line
+def lane_why(seat : GpuLaneSeat; pinned : bool) : string {
+    if (pinned) {
+        return "pinned"
+    } elif (gpu_exact_serves(seat)) {
+        return "the GPU tower serves the file's planes (its f32 tiles are the faster lane)"
+    } elif (seat.set && invoke(seat.serves)) {
+        return "the GPU tower serves the q8 image (its q8 tiles are the faster lane)"
+    } elif (float_batch_override_active()) {
+        return "DASLLAMA_ACCEL on: the float-batch tier serves the file's planes"
+    }
+    return "the CPU default (no GPU tower, no accelerate tier)"
+}
+
 let LN_BLOCK_GEMMS = 6l   //! a pre-LN block's GEMM regions, in the order below
 let LN_GEMM_Q = 0l
 let LN_GEMM_K = 1l
