@@ -121,12 +121,10 @@ def good_length_three(s : string) : bool {
 }
 
 def good_match_length_test(a : array<int>) : bool {
-    match (a) {
-        if (array<int>(1, ...)) {                 // the length test the match macro emits is generated — NOT flagged
-            return true
-        }
+    return match (a) {
+        array<int>(1, ...) => true             // the length test the match macro emits is generated — NOT flagged
+        _ => false
     }
-    return false
 }
 
 // --- Bad: user code has a method literally named `empty` ---

@@ -1,16 +1,20 @@
 // Tutorial 24: Pattern Matching
 //
 // This tutorial covers:
-//   - match macro for structured matching
+//   - match macro: `pattern => body` arms
 //   - Matching integers, enums, structs
-//   - Variable binding with $v(name)
+//   - Variable binding: a bare name in a pattern binds
 //   - Wildcards (_) and guards (&&)
-//   - OR patterns (||)
+//   - OR patterns (|)
 //   - Tuple and array matching
 //   - Variant matching
 //   - Null/pointer matching
 //   - match_expr for computed patterns
 //   - Bool matching
+//   - Matching several values at once: match (x, y)
+//   - Both patterns (&): bind the whole value and destructure it
+//   - Range patterns: (lo..hi), half-open
+//   - match as a value: let s = match (x) { ... }
 //   - static_match (generic-safe)
 //
 // Run: daslang.exe tutorials/language/24_pattern_matching.das
@@ -45,112 +49,132 @@ variant Value {
 }
 
 // === Basic integer matching ===
+// Each arm is `pattern => body`. A body of several statements is a `$ { }` block;
+// `return` inside it returns from the enclosing function.
 
 def describe_number(n : int) : string {
     match (n) {
-        if (0) return "zero"
-        if (1) return "one"
-        if (2) return "two"
-        if (_) {                // wildcard — matches anything
+        0 => $ { return "zero" }
+        1 => $ { return "one" }
+        2 => $ { return "two" }
+        _ => $ {                // wildcard — matches anything
             return "other"
         }
     }
     return "unreachable"
 }
 
-// === Enum matching ===
+// === match as a value ===
+// In value position each arm body is an expression, and the arms must cover
+// every value - here the `_` arm - so every path produces a value. A match over
+// an enum, bool or variant must name every value or end with `_`, and an arm an
+// earlier one already covers is a compile error.
 
 def color_code(c : Color) : int {
-    match (c) {
-        if (Color.red) {        // gen2 dot syntax for enum values
-            return 1
-        }
-        if (Color.green) return 2
-        if (Color.blue) return 3
-        if (_) return 0
+    return match (c) {
+        Color.red => 1          // gen2 dot syntax for enum values
+        Color.green => 2
+        Color.blue => 3
+        _ => 0
     }
-    return -1
 }
 
 // === Struct matching + variable binding ===
+// A bare name in a pattern binds the matched value; it never compares
+// against an existing variable (use match_expr(var) for that).
 
 def describe_point(p : Point) : string {
-    match (p) {
-        if (Point(x = 0, y = 0)) {                 // exact values
-            return "origin"
-        }
-        if (Point(x = 0, y = $v(y))) {             // bind y, x must be 0
-            return "on y-axis at {y}"
-        }
-        if (Point(x = $v(x), y = 0)) {             // bind x, y must be 0
-            return "on x-axis at {x}"
-        }
-        if (Point(x = $v(x), y = $v(y))) {         // bind both
-            return "at ({x}, {y})"
-        }
+    return match (p) {
+        Point(x = 0, y = 0) => "origin"             // exact values
+        Point(x = 0, y = y) => "on y-axis at {y}"   // bind y, x must be 0
+        Point(x = x, y = 0) => "on x-axis at {x}"   // bind x, y must be 0
+        Point(x = x, y = y) => "at ({x}, {y})"      // bind both
     }
-    return "unreachable"
 }
 
 // === Guards ===
 
 def classify_shape(s : Shape) : string {
-    match (s) {
-        if (Shape(kind = "circle", size = $v(sz)) && sz > 100) return "large circle ({sz})"
-        if (Shape(kind = "circle", size = $v(sz))) return "small circle ({sz})"
-        if (Shape(kind = $v(k), size = $v(sz))) return "{k} of size {sz}"
+    return match (s) {
+        Shape(kind = "circle", size = sz) && sz > 100 => "large circle ({sz})"
+        Shape(kind = "circle", size = sz) => "small circle ({sz})"
+        Shape(kind = k, size = sz) => "{k} of size {sz}"
     }
-    return "unknown"
 }
 
 // === OR patterns ===
 
 def is_primary(c : Color) : bool {
-    match (c) {
-        if (Color.red || Color.green || Color.blue) return true  // nolint:STYLE017 — match arm, not a guard chain
-        if (_) return false  // nolint:STYLE005 — last arm of match block
+    return match (c) {
+        Color.red | Color.green | Color.blue => true
+        _ => false
     }
-    return false
 }
 
 // === Tuple matching ===
 
 def classify_pair(t : tuple<int; string>) : string {
-    match (t) {
-        if ((0, "zero")) {                  // exact match
-            return "zero-zero"
-        }
-        if ((1, _)) {                       // _ matches any one element
-            return "starts with one"
-        }
-        if (($v(n), "hello")) {             // bind first, match second
-            return "hello #{n}"
-        }
-        if (_) return "other"
+    return match (t) {
+        (0, "zero") => "zero-zero"          // exact match
+        (1, _) => "starts with one"         // _ matches any one element
+        (n, "hello") => "hello #{n}"        // bind first, match second
+        _ => "other"
     }
-    return "unreachable"
+}
+
+// === Matching several values ===
+// match (a, b) takes one tuple-shaped pattern per arm, one element per value.
+
+def quadrant(x, y : int) : string {
+    return match (x, y) {
+        (0, 0) => "origin"
+        (0, _) | (_, 0) => "on an axis"
+        (a, b) && a > 0 && b > 0 => "first"
+        (a, _) && a < 0 => "left half"
+        _ => "fourth"
+    }
+}
+
+// === Both patterns with & ===
+// A bare name on one side of & binds the whole value; the other side destructures it.
+
+def describe_on_axis(p : Point) : string {
+    return match (p) {
+        whole & Point(x = 0) => "on the y-axis: ({whole.x}, {whole.y})"
+        _ => "off the y-axis"
+    }
+}
+
+// === Range patterns ===
+// (lo..hi) matches lo <= n && n < hi - half-open, like a for range.
+
+def size_class(n : int) : string {
+    return match (n) {
+        (0..10) => "digit"
+        (10..100) | (1000..2000) => "some"
+        _ => "other"
+    }
 }
 
 // === Variant matching ===
+// A variant pattern is spelled like the variant constructor.
 
 def describe_value(v : Value) : string {
-    match (v) {
-        if ($v(i) as i) return "integer: {i}"   // match variant alternative by name
-        if ($v(f) as f) return "float: {f}"
-        if ($v(s) as s) return "string: {s}"  // nolint:STYLE005 — last arm of match block
+    return match (v) {
+        Value(i = i) => "integer: {i}"
+        Value(f = f) => "float: {f}"
+        Value(s = s) => "string: {s}"
     }
-    return "unknown"
 }
 
 // === Null / pointer matching ===
 
 def describe_point_ptr(p : Point?) : string {
-    match (p) {
-        if (null) return "null"                                     // null check
-        if (Point(x = 0, y = 0)) return "origin"                    // auto-dereferences
-        if (Point(x = $v(x), y = $v(y))) return "({x}, {y})"  // nolint:STYLE005 — last arm of match block
+    return match (p) {
+        null => "null"                          // null check
+        Point(x = 0, y = 0) => "origin"         // auto-dereferences
+        Point(x = x, y = y) => "({x}, {y})"
     }
-    return "unreachable"
 }
 
 
@@ -159,13 +183,12 @@ def describe_point_ptr(p : Point?) : string {
 // so this function works regardless of argument type.
 
 def static_type_name(what) : string {
-    static_match(what) {
-        if (match_type(type<int>, $v(v))) return "int({v})"
-        if (match_type(type<float>, $v(v))) return "float({v})"
-        if (match_type(type<string>, $v(v))) return "string({v})"
-        if (_) return "unknown"
+    return static_match (what) {
+        match_type(type<int>, v) => "int({v})"
+        match_type(type<float>, v) => "float({v})"
+        match_type(type<string>, v) => "string({v})"
+        _ => "unknown"
     }
-    return "unreachable"
 }
 
 // === Array matching ===
@@ -173,29 +196,19 @@ def static_type_name(what) : string {
 // Dynamic arrays match head elements; tail is ignored.
 
 def classify_static_arr(a : int[3]) : string {
-    match (a) {
-        if (fixed_array<int>(0, 0, 0)) {        // all zeros
-            return "zeros"
-        }
-        if (fixed_array<int>(1, $v(b), $v(c))) { // first is 1, bind rest
-            return "1,{b},{c}"
-        }
-        if (_) return "other"
+    return match (a) {
+        fixed_array<int>(0, 0, 0) => "zeros"
+        fixed_array<int>(1, b, c) => "1,{b},{c}"    // first is 1, bind rest
+        _ => "other"
     }
-    return "unreachable"
 }
 
 def classify_dynamic_arr(a : array<int>) : string {
-    match (a) {
-        if (array<int>(0, 0, ...)) {             // starts with 0, 0
-            return "starts with 0,0"
-        }
-        if (array<int>($v(x), $v(y), ...)) {     // bind first two (any length)
-            return "starts with {x},{y}"
-        }
-        if (_) return "other"
+    return match (a) {
+        array<int>(0, 0, ...) => "starts with 0,0"
+        array<int>(x, y, ...) => "starts with {x},{y}"  // bind first two (any length)
+        _ => "other"
     }
-    return "unreachable"
 }
 
 // === match_expr — computed patterns ===
@@ -203,21 +216,19 @@ def classify_dynamic_arr(a : array<int>) : string {
 // Useful when the expected value depends on captured variables.
 
 def is_consecutive_triple(t : tuple<int; int; int>) : bool {
-    match (t) {
-        if (($v(a), match_expr(a + 1), match_expr(a + 2))) return true  // nolint:STYLE017 — match arm, not a guard chain
-        if (_) return false  // nolint:STYLE005 — last arm of match block
+    return match (t) {
+        (a, match_expr(a + 1), match_expr(a + 2)) => true
+        _ => false
     }
-    return false
 }
 
 // === Bool matching ===
 
 def describe_bool(b : bool) : string {
-    match (b) {
-        if (true) return "yes"  // nolint:STYLE018 — match arm, not a comparison
-        if (false) return "no"  // nolint:STYLE005,STYLE018 — last arm of match block; literal-bool is pattern not comparison
+    return match (b) {
+        true => "yes"
+        _ => "no"
     }
-    return "unreachable"
 }
 
 // === Main ===
@@ -269,6 +280,26 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
     t0 = (9, "bye")
     print("  (9,bye) -> {classify_pair(t0)}\n")
 
+    // Several values
+    print("several values:\n")
+    print("  (0,0) -> {quadrant(0, 0)}\n")
+    print("  (0,4) -> {quadrant(0, 4)}\n")
+    print("  (2,3) -> {quadrant(2, 3)}\n")
+    print("  (-1,3) -> {quadrant(-1, 3)}\n")
+    print("  (2,-3) -> {quadrant(2, -3)}\n")
+
+    // Both patterns
+    print("both patterns:\n")
+    print("  (0,4) -> {describe_on_axis(Point(x=0, y=4))}\n")
+    print("  (1,4) -> {describe_on_axis(Point(x=1, y=4))}\n")
+
+    // Range patterns
+    print("range patterns:\n")
+    print("  9 -> {size_class(9)}\n")
+    print("  10 -> {size_class(10)}\n")
+    print("  1500 -> {size_class(1500)}\n")
+    print("  500 -> {size_class(500)}\n")
+
     // Variant matching
     print("variant matching:\n")
     var v : Value = Value(i = 42)
@@ -317,20 +348,22 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
 
     // === Summary ===
     // - require daslib/match
-    // - match(expr) { if (pattern) { body } }
-    // - match works on functions that return values
-    // - $v(name) — bind matched value to a variable
-    // - _ — wildcard, matches anything
-    // - Guards: if (pattern && condition) { ... }
-    // - OR: if (pattern1 || pattern2) { ... }
-    // - Structs: if (Type(field = value_or_binding)) { ... }
-    // - Enums: if (Enum.value) { ... }
-    // - Variants: if ($v(x) as alternative_name) { ... }
-    // - Tuples: if ((val, _, $v(x))) { ... }
-    // - Arrays: if (fixed_array<int>(1, $v(b), $v(c))) { ... }
-    // - match_expr: if (($v(a), match_expr(a+1))) — computed patterns
-    // - Bool: if (true) / if (false)
-    // - Null: if (null) { ... } for pointer types
+    // - match (expr) { pattern => $ { statements } }
+    // - let v = match (expr) { pattern => expression ... _ => expression }
+    // - match (a, b) { (pa, pb) => ... } — several values at once
+    // - a bare name binds the matched value; _ matches anything
+    // - Guards: pattern && condition => ...
+    // - OR: pattern1 | pattern2 => ...
+    // - Both: whole & Type(field = v) => ... binds the whole value too
+    // - Ranges: (0..10) => ... is 0 to 9
+    // - Structs: Type(field = value_or_binding) => ...
+    // - Enums: Enum.value => ...
+    // - Variants: Variant(alternative = binding) => ...
+    // - Tuples: (val, _, x) => ...
+    // - Arrays: fixed_array<int>(1, b, c) => ...
+    // - match_expr: (a, match_expr(a + 1)) — computed patterns
+    // - Bool: true / false
+    // - Null: null => ... for pointer types
     // - static_match — silently drops type-mismatched arms (generics)
 
     print("done\n")
@@ -362,6 +395,20 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
 //   (1,xyz) -> starts with one
 //   (5,hello) -> hello #5
 //   (9,bye) -> other
+// several values:
+//   (0,0) -> origin
+//   (0,4) -> on an axis
+//   (2,3) -> first
+//   (-1,3) -> left half
+//   (2,-3) -> fourth
+// both patterns:
+//   (0,4) -> on the y-axis: (0, 4)
+//   (1,4) -> off the y-axis
+// range patterns:
+//   9 -> digit
+//   10 -> some
+//   1500 -> some
+//   500 -> other
 // variant matching:
 //   int -> integer: 42
 //   float -> float: 3.14

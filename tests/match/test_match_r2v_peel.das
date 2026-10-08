@@ -12,40 +12,26 @@ require daslib/ast_boost
 
 [sideeffects]
 def match_field_of_var(E : ExpressionPtr) : string {
-    match (E) {
-        if (ExprField(name = $v(fname), value = ExprVar(name = $v(vname)))) {
-            return "{vname}.{fname}"
-        }
-        if (_) {
-            return "other"
-        }
+    return match (E) {
+        ExprField(name = fname, value = ExprVar(name = vname)) => "{vname}.{fname}"
+        _ => "other"
     }
 }
 
 [sideeffects]
 def match_wrapper_explicitly(E : ExpressionPtr) : string {
-    match (E) {
-        if (ExprRef2Value(subexpr = ExprVar(name = $v(vname)))) {
-            return "wrapped {vname}"
-        }
-        if (ExprVar(name = $v(vname))) {
-            return "bare {vname}"
-        }
-        if (_) {
-            return "other"
-        }
+    return match (E) {
+        ExprRef2Value(subexpr = ExprVar(name = vname)) => "wrapped {vname}"
+        ExprVar(name = vname) => "bare {vname}"
+        _ => "other"
     }
 }
 
 [sideeffects]
 def capture_field_value(E : ExpressionPtr) : string {
-    match (E) {
-        if (ExprField(value = $v(base))) {
-            return "{base.__rtti}"
-        }
-        if (_) {
-            return "other"
-        }
+    return match (E) {
+        ExprField(value = base) => "{base.__rtti}"
+        _ => "other"
     }
 }
 

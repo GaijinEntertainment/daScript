@@ -15,64 +15,92 @@ macro from ``daslib/match``.
 Basic match
 ===========
 
-``match(expr) { ... }`` dispatches on values. Each arm is an ``if``::
+``match (expr) { ... }`` dispatches on values. Each arm is
+``pattern => body``; a body of several statements is a ``$ { }`` block,
+and ``return`` inside it returns from the enclosing function::
 
   require daslib/match
 
   def describe(n : int) : string {
       match (n) {
-          if (0) { return "zero" }
-          if (1) { return "one" }
-          if (_) { return "other" }
+          0 => $ { return "zero" }
+          1 => $ { return "one" }
+          _ => $ { return "other" }
       }
       return "unreachable"
   }
 
-.. note::
+match as a value
+================
 
-   ``match`` works on functions that return values.
+In value position each arm body is an expression, and the arms must
+cover every value. A match over an enum, ``bool`` or variant must name
+every value or end with ``_``; an arm an earlier one already covers is
+a compile error::
+
+  def color_code(c : Color) : int {
+      return match (c) {
+          Color.red => 1
+          Color.green => 2
+          _ => 0
+      }
+  }
 
 Wildcards and binding
 =====================
 
 - ``_`` — wildcard, matches anything
-- ``$v(name)`` — bind matched value to a variable::
+- a bare name — binds the matched value to a new variable::
 
-    match (point) {
-        if (Point(x = 0, y = 0)) { return "origin" }
-        if (Point(x = $v(x), y = $v(y))) { return "({x}, {y})" }
+    return match (point) {
+        Point(x = 0, y = 0) => "origin"
+        Point(x = x, y = y) => "({x}, {y})"
     }
+
+A bare name never compares against an existing variable; use
+``match_expr(name)`` for that.
 
 Guards
 ======
 
 Add ``&&`` after a pattern for extra conditions::
 
-  match (shape) {
-      if (Shape(size = $v(sz)) && sz > 100) {
-          return "large"
-      }
+  return match (shape) {
+      Shape(size = sz) && sz > 100 => "large"
+      _ => "small"
   }
 
 OR patterns
 ===========
 
-Match multiple alternatives with ``||``::
+Match multiple alternatives with ``|``::
 
-  match (color) {
-      if (Color.red || Color.green || Color.blue) {
-          return true
-      }
+  return match (color) {
+      Color.red | Color.green | Color.blue => true
+      _ => false
+  }
+
+Several values
+==============
+
+``match (a, b)`` takes one tuple-shaped pattern per arm::
+
+  return match (x, y) {
+      (0, 0) => "origin"
+      (0, _) | (_, 0) => "on an axis"
+      (a, b) && a > 0 && b > 0 => "first"
+      _ => "elsewhere"
   }
 
 Variant matching
 ================
 
-Use ``$v(name) as alternative`` to match variant alternatives::
+A variant pattern is spelled like the variant constructor::
 
-  match (value) {
-      if ($v(i) as i) { return "int" }
-      if ($v(f) as f) { return "float" }
+  return match (value) {
+      Value(i = i) => "int {i}"
+      Value(f = f) => "float {f}"
+      _ => "other"
   }
 
 Tuple matching
@@ -80,10 +108,11 @@ Tuple matching
 
 Match tuple elements positionally::
 
-  match (pair) {
-      if ((0, "zero")) { return "exact" }
-      if ((1, _)) { return "starts with one" }
-      if (($v(n), "hello")) { return "hello #{n}" }
+  return match (pair) {
+      (0, "zero") => "exact"
+      (1, _) => "starts with one"
+      (n, "hello") => "hello #{n}"
+      _ => "other"
   }
 
 Array matching
@@ -92,26 +121,27 @@ Array matching
 Static arrays match element-by-element. Dynamic arrays match head
 elements; use ``...`` to ignore the tail::
 
-  match (sa) {
-      if (fixed_array<int>(0, 0, 0)) { return "zeros" }
-      if (fixed_array<int>(1, $v(b), $v(c))) { return "1,{b},{c}" }
+  return match (sa) {
+      fixed_array<int>(0, 0, 0) => "zeros"
+      fixed_array<int>(1, b, c) => "1,{b},{c}"
+      _ => "other"
   }
 
-  match (da) {
-      if (array<int>(0, 0, ...)) { return "starts with 0,0" }
-      if (array<int>($v(x), $v(y), ...)) { return "starts with {x},{y}" }
+  return match (da) {
+      array<int>(0, 0, ...) => "starts with 0,0"
+      array<int>(x, y, ...) => "starts with {x},{y}"
+      _ => "other"
   }
 
 match_expr — computed patterns
 ===============================
 
 ``match_expr(expression)`` evaluates at runtime instead of matching
-literally. Useful when the expected value depends on a captured variable::
+literally. Useful when the expected value depends on a bound name::
 
-  match (t) {
-      if (($v(a), match_expr(a + 1), match_expr(a + 2))) {
-          return true   // matches consecutive triples
-      }
+  return match (t) {
+      (a, match_expr(a + 1), match_expr(a + 2)) => true   // consecutive triples
+      _ => false
   }
 
 Bool matching
@@ -119,9 +149,9 @@ Bool matching
 
 ``match`` works on booleans::
 
-  match (b) {
-      if (true) { return "yes" }
-      if (false) { return "no" }
+  return match (b) {
+      true => "yes"
+      _ => "no"
   }
 
 static_match

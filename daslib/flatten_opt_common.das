@@ -328,30 +328,30 @@ def public is_bool_val(e : ExpressionPtr; want : bool) : bool {
 def public negate(var e : ExpressionPtr) : ExpressionPtr =>
     new ExprOp1(at = e.at, op := "-", subexpr = e)
 
-def public zero_const_of(t : TypeDeclPtr; at : LineInfo) : ExpressionPtr {   // nolint:STYLE037 — one match arm per numeric baseType
+def public zero_const_of(t : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
     if (t == null) return null
-    match (t.baseType) {
-        if (Type.tInt) { return new ExprConstInt(at = at, value = 0) }
-        if (Type.tInt8) { return new ExprConstInt8(at = at, value = int8(0)) }
-        if (Type.tInt16) { return new ExprConstInt16(at = at, value = int16(0)) }
-        if (Type.tInt64) { return new ExprConstInt64(at = at, value = 0l) }
-        if (Type.tUInt) { return new ExprConstUInt(at = at, value = 0u) }
-        if (Type.tUInt8) { return new ExprConstUInt8(at = at, value = uint8(0)) }
-        if (Type.tUInt16) { return new ExprConstUInt16(at = at, value = uint16(0)) }
-        if (Type.tUInt64) { return new ExprConstUInt64(at = at, value = 0ul) }
-        if (Type.tFloat) { return new ExprConstFloat(at = at, value = 0.0f) }
-        if (Type.tDouble) { return new ExprConstDouble(at = at, value = 0.0lf) }
-        if (Type.tFloat2) { return new ExprConstFloat2(at = at, value = float2(0.0)) }
-        if (Type.tFloat3) { return new ExprConstFloat3(at = at, value = float3(0.0)) }
-        if (Type.tFloat4) { return new ExprConstFloat4(at = at, value = float4(0.0)) }
-        if (Type.tInt2) { return new ExprConstInt2(at = at, value = int2(0)) }
-        if (Type.tInt3) { return new ExprConstInt3(at = at, value = int3(0)) }
-        if (Type.tInt4) { return new ExprConstInt4(at = at, value = int4(0)) }
-        if (Type.tUInt2) { return new ExprConstUInt2(at = at, value = uint2(0u)) }
-        if (Type.tUInt3) { return new ExprConstUInt3(at = at, value = uint3(0u)) }
-        if (Type.tUInt4) { return new ExprConstUInt4(at = at, value = uint4(0u)) }
+    return match (t.baseType) {
+        Type.tInt => new ExprConstInt(at = at, value = 0)
+        Type.tInt8 => new ExprConstInt8(at = at, value = int8(0))
+        Type.tInt16 => new ExprConstInt16(at = at, value = int16(0))
+        Type.tInt64 => new ExprConstInt64(at = at, value = 0l)
+        Type.tUInt => new ExprConstUInt(at = at, value = 0u)
+        Type.tUInt8 => new ExprConstUInt8(at = at, value = uint8(0))
+        Type.tUInt16 => new ExprConstUInt16(at = at, value = uint16(0))
+        Type.tUInt64 => new ExprConstUInt64(at = at, value = 0ul)
+        Type.tFloat => new ExprConstFloat(at = at, value = 0.0f)
+        Type.tDouble => new ExprConstDouble(at = at, value = 0.0lf)
+        Type.tFloat2 => new ExprConstFloat2(at = at, value = float2(0.0))
+        Type.tFloat3 => new ExprConstFloat3(at = at, value = float3(0.0))
+        Type.tFloat4 => new ExprConstFloat4(at = at, value = float4(0.0))
+        Type.tInt2 => new ExprConstInt2(at = at, value = int2(0))
+        Type.tInt3 => new ExprConstInt3(at = at, value = int3(0))
+        Type.tInt4 => new ExprConstInt4(at = at, value = int4(0))
+        Type.tUInt2 => new ExprConstUInt2(at = at, value = uint2(0u))
+        Type.tUInt3 => new ExprConstUInt3(at = at, value = uint3(0u))
+        Type.tUInt4 => new ExprConstUInt4(at = at, value = uint4(0u))
+        _ => null
     }
-    return null
 }
 
 def public expr_bt(e : ExpressionPtr) : Type =>
@@ -704,11 +704,11 @@ def public component_read_of(var e : ExpressionPtr; var baseKey : string&; var b
     var v : ExpressionPtr
     var nm = ""
     match (e) {
-        if (ExprSwizzle(mask = $v(swMask), value = $v(swValue))) {
+        ExprSwizzle(mask = swMask, value = swValue) => $ {
             nm = "{swMask}"
             v = swValue
         }
-        if (ExprField(name = $v(flName), value = $v(flValue))) {
+        ExprField(name = flName, value = flValue) => $ {
             nm = "{flName}"
             v = flValue
         }

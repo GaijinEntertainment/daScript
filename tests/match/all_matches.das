@@ -32,53 +32,37 @@ struct AB {
 
 [sideeffects]
 def enum_match(color : Color) {
-    match (color) {
-        if (Color.black) {
-            return 0
-        }
-        if (Color.red) {
-            return 1
-        }
-        if (_) {
-            return -1
-        }
+    return match (color) {
+        Color.black => 0
+        Color.red => 1
+        _ => -1
     }
 }
 
 [sideeffects]
 def enum_static_match(color, blah) {
-    static_match(color) {
-        if (Color.black) {
-            return 0
-        }
-        if (match_expr(blah)) {
-            return 1
-        }
-        if (_) {
-            return -1
-        }
+    return static_match (color) {
+        Color.black => 0
+        match_expr(blah) => 1
+        _ => -1
     }
 }
 
 [sideeffects]
 def static_match_by_type(what) {
-    static_match(what) {
-        if (match_type(type<int>, $v(expr))) {
-            return expr
-        }
-        if (_) {
-            return -1
-        }
+    return static_match (what) {
+        match_type(type<int>, expr) => expr
+        _ => -1
     }
 }
 
 [sideeffects]
 def struct_match(f : Foo) {
     match (f) {
-        if (Foo(a = 13)) {
+        Foo(a = 13) => $ {
             return 0
         }
-        if (Foo(a = $v(anyA))) {
+        Foo(a = anyA) => $ {
             return anyA
         }
     }
@@ -86,26 +70,20 @@ def struct_match(f : Foo) {
 
 [sideeffects]
 def struct_match(b : Bar) {
-    match (b) {
-        if (Bar(a = 13)) {
-            return 0
-        }
-        if (Bar(a = $v(anyA), b = 13.0)) {
-            return anyA
-        }
-        if (_) {
-            return -1
-        }
+    return match (b) {
+        Bar(a = 13) => 0
+        Bar(a = anyA, b = 13.0) => anyA
+        _ => -1
     }
 }
 
 [sideeffects]
 def guards_match(ab : AB) {
     match (ab) {
-        if (AB(a = $v(a), b = $v(b)) && (b > a)) {
+        AB(a = a, b = b) && (b > a) => $ {
             return "{b} > {a}"
         }
-        if (AB(a = $v(a), b = $v(b))) {
+        AB(a = a, b = b) => $ {
             return "{b} <= {a}"
         }
     }
@@ -113,251 +91,146 @@ def guards_match(ab : AB) {
 
 [sideeffects]
 def variant_as_match(v : IF) {
-    match (v) {
-        if ($v(i) as i) {
-            return "int"
-        }
-        if ($v(f) as f) {
-            return "float"
-        }
-        if (_) {
-            return "anything"
-        }
+    return match (v) {
+        i as i => "int"
+        f as f => "float"
     }
 }
 
 [sideeffects]
 def nested_struct_match(v : Foo) {
-    match (v) {
-        if (Foo(a = 1, v = $v(i) as i)) {
-            return 1
-        }
-        if (Foo(v = $v(f) as f)) {
-            return 2
-        }
-        if (_) {
-            return 0
-        }
+    return match (v) {
+        Foo(a = 1, v = i as i) => 1
+        Foo(v = f as f) => 2
+        _ => 0
     }
 }
 
 [sideeffects]
 def variant_match(v : IF) {
-    match (v) {
-        if (IF(i = $v(i))) {
-            return 1
-        }
-        if (IF(f = $v(f))) {
-            return 2
-        }
-        if (_) {
-            return 0
-        }
+    return match (v) {
+        IF(i = i) => 1
+        IF(f = f) => 2
     }
 }
 
 [sideeffects]
 def static_array_match(A : int[3]) {
-    match (A) {
-        if (fixed_array($v(a), $v(b), $v(c)) && (a + b + c) == 6) { // total of 3 elements, sum is 6
-            return 1
-        }
-        if (fixed_array<int>(0, ...)) { // starts with 0
-            return 0
-        }
-        if (fixed_array<int>(..., 13)) { // ends with 13
-            return 2
-        }
-        if (fixed_array<int>(12, ..., 12)) { // starts and ends with 12
-            return 3
-        }
-        if (_) {
-            return -1
-        }
+    return match (A) {
+        fixed_array(a, b, c) && (a + b + c) == 6 => 1  // total of 3 elements, sum is 6
+        fixed_array<int>(0, ...) => 0  // starts with 0
+        fixed_array<int>(..., 13) => 2  // ends with 13
+        fixed_array<int>(12, ..., 12) => 3  // starts and ends with 12
+        _ => -1
     }
 }
 
 [sideeffects]
 def dynamic_array_match(A : array<int>) {
-    match (A) {
-        if ([ $v(a), $v(b), $v(c)] && (a + b + c) == 6) {// total of 3 elements, sum is 6
-            return 1
-        }
-        if (array<int>(0, 0, 0, ...)) { // first 3 are 0
-            return 0
-        }
-        if (array<int>(..., 1, 2)) { // ends with 1,2
-            return 2
-        }
-        if (array<int>(0, 1, ..., 2, 3)) { // starts with 0,1, ends with 2,3
-            return 3
-        }
-        if (_) {
-            return -1
-        }
+    return match (A) {
+        [ a, b, c] && (a + b + c) == 6 => 1  // total of 3 elements, sum is 6
+        array<int>(0, 0, 0, ...) => 0  // first 3 are 0
+        array<int>(..., 1, 2) => 2  // ends with 1,2
+        array<int>(0, 1, ..., 2, 3) => 3  // starts with 0,1, ends with 2,3
+        _ => -1
     }
 }
 
 
 [sideeffects]
 def ascending_array_match(A : int[3]) {
-    match (A) {
-        if (fixed_array<int>($v(x), match_expr(x + 1), match_expr(x + 2))) {  // nolint:STYLE017 (match macro expansion)
-            return true
-        }
-        if (_) {
-            return false
-        }
+    return match (A) {
+        fixed_array<int>(x, match_expr(x + 1), match_expr(x + 2)) => true
+        _ => false
     }
 }
 
 [sideeffects]
 def tuple_match(A : tuple<int; float; string>) {
-    match (A) {
-        if ((1, _, "3")) {
-            return 1
-        }
-        if ((13, ...)) { // starts with 13
-            return 2
-        }
-        if ((..., "13")) { // ends with "13"
-            return 3
-        }
-        if ((2, ..., "2")) { // starts with 2, ends with "2"
-            return 4
-        }
-        if (_) {
-            return 0
-        }
+    return match (A) {
+        (1, _, "3") => 1
+        (13, ...) => 2  // starts with 13
+        (..., "13") => 3  // ends with "13"
+        (2, ..., "2") => 4  // starts with 2, ends with "2"
+        _ => 0
     }
 }
 
 [sideeffects]
 def or_match(i : int) {
-    match (i) {
-        if (1 || 2) {  // nolint:STYLE017 (match macro expansion)
-            return true
-        }
-        if (_) {
-            return false
-        }
+    return match (i) {
+        1 | 2 => true
+        _ => false
     }
 }
 
 [sideeffects]
 def or_match_v(B : Bar) {
-    match (B) {
-        if (Bar(a = 1, b = $v(b)) || Bar(a = 2, b = $v(b))) {
-            return b
-        }
-        if (_) {
-            return 0.0
-        }
+    return match (B) {
+        Bar(a = 1, b = b) | Bar(a = 2, b = b) => b
+        _ => 0.0
     }
 }
 
 [sideeffects]
 def or_match_prior_capture(ab : AB) {
-    match (ab) {
-        if (AB(a = $v(a), b = 1 || 2)) {
-            return a
-        }
-        if (_) {
-            return -1
-        }
+    return match (ab) {
+        AB(a = a, b = 1 | 2) => a
+        _ => -1
     }
 }
 
 [sideeffects]
 def or_capture_both_branches(ab : AB) {
-    match (ab) {
-        if (AB(a = $v(a), b = ($v(b) && (b > 5)) || ($v(b) && (b < 5)))) {
-            return a * 100 + b
-        }
-        if (_) {
-            return -1
-        }
+    return match (ab) {
+        AB(a = a, b = (b && (b > 5)) | (b && (b < 5))) => a * 100 + b
+        _ => -1
     }
 }
 
 [sideeffects]
 def struct_ptr_match(f : Foo?) {
-    match (f) {
-        if (null) {
-            return -1
-        }
-        if (Foo(a = 13)) {
-            return 0
-        }
-        if (Foo(a = $v(anyA))) {
-            return anyA
-        }
-        if (_) {
-            return -2
-        }
+    return match (f) {
+        null => -1
+        Foo(a = 13) => 0
+        Foo(a = anyA) => anyA
     }
 }
 
 [sideeffects]
 def match_handle_ptr(T : TypeDeclPtr) {
-    match (T) {
-        if (null) {
-            return "null"
-        }
-        if (TypeDecl(baseType = Type.tPointer)) {
-            return "pointer"
-        }
-        if (_) {
-            return "anything"
-        }
+    return match (T) {
+        null => "null"
+        TypeDecl(baseType = Type.tPointer) => "pointer"
+        _ => "anything"
     }
 }
 
 [sideeffects]
 def match_ast_expr_ptr(E : ExpressionPtr) {
-    match (E) {
-        if (null) {
-            return "null"
-        }
-        if (ExprConstInt(value = $v(v))) {
-            return "int {v}"
-        }
-        if (_) {
-            return "anything"
-        }
+    return match (E) {
+        null => "null"
+        ExprConstInt(value = v) => "int {v}"
+        _ => "anything"
     }
 }
 
 [sideeffects]
 def match_ast_op2_shape(E : ExpressionPtr) {
-    match (E) {
-        if (ExprOp2(op = "+", left = ExprOp2(op = "*", left = $v(a), right = $v(b)), right = $v(c))) {
-            return "mad {a.__rtti} {b.__rtti} {c.__rtti}"
-        }
-        if (ExprOp2(op = "+" || "-", left = $v(l))) {
-            return "addsub {l.__rtti}"
-        }
-        if (ExprSwizzle(mask = "xy", value = $v(v))) {
-            return "swizzle-xy {v.__rtti}"
-        }
-        if (_) {
-            return "other"
-        }
+    return match (E) {
+        ExprOp2(op = "+", left = ExprOp2(op = "*", left = a, right = b), right = c) => "mad {a.__rtti} {b.__rtti} {c.__rtti}"
+        ExprOp2(op = "+" | "-", left = l) => "addsub {l.__rtti}"
+        ExprSwizzle(mask = "xy", value = v) => "swizzle-xy {v.__rtti}"
+        _ => "other"
     }
 }
 
 [sideeffects]
 def match_op_string(o : das_string) {
-    match (o) {
-        if ("+") {
-            return "plus"
-        }
-        if ("-") {
-            return "minus"
-        }
-        if (_) {
-            return "other"
-        }
+    return match (o) {
+        "+" => "plus"
+        "-" => "minus"
+        _ => "other"
     }
 }
 
@@ -397,25 +270,17 @@ def operator as CmdMove(anything) {
 
 [sideeffects]
 def matching_as_and_is(cmd : Cmd) {
-    match (cmd) {
-        if (CmdMove(x = $v(x), y = $v(y))) {
-            return x + y
-        }
-        if (_) {
-            return 0.
-        }
+    return match (cmd) {
+        CmdMove(x = x, y = y) => x + y
+        _ => 0.
     }
 }
 
 [sideeffects]
 def matching_type_as_is(cmd : Cmd) {
-    match (cmd) {
-        if (match_type(type<CmdMove>, $v(cmdm))) {
-            return cmdm.x + cmdm.y
-        }
-        if (_) {
-            return 0.
-        }
+    return match (cmd) {
+        match_type(type<CmdMove>, cmdm) => cmdm.x + cmdm.y
+        _ => 0.
     }
 }
 
@@ -437,25 +302,17 @@ def match_copy(var cmdm : CmdLocate; cmd : Cmd) {
 
 [sideeffects]
 def matching_copy(cmd : Cmd) {
-    match (cmd) {
-        if (CmdLocate(x = $v(x), y = $v(y), z = $v(z))) {
-            return x + y + z
-        }
-        if (_) {
-            return 0.
-        }
+    return match (cmd) {
+        CmdLocate(x = x, y = y, z = z) => x + y + z
+        _ => 0.
     }
 }
 
 [sideeffects]
 def matching_type_copy(cmd : Cmd) {
-    match (cmd) {
-        if (match_type(type<CmdLocate>, $v(cmdl))) {
-            return cmdl.x + cmdl.y + cmdl.z
-        }
-        if (_) {
-            return 0.
-        }
+    return match (cmd) {
+        match_type(type<CmdLocate>, cmdl) => cmdl.x + cmdl.y + cmdl.z
+        _ => 0.
     }
 }
 
