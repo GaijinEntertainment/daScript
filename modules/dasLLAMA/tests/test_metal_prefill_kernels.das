@@ -1272,7 +1272,8 @@ def private rope_tab_gate(t : T?; var dev, queue; stamp : RopeTabStamp; rows, d,
         let px = mc |> io_(x)
         if (invoke(run, mc.buf[px])) {
             check_buf(t, tag, mc.buf[px], want, lead_poisoned(bar, want), Shape(row_width = qs))
-            t |> success(moved_off(want, x, d + 2, bar), "{tag}: a k pair at a nonzero angle turned off its input")
+            let kz = (pos0 > 0 ? 0 : qs) + d + 2   //! a row at a nonzero position: position 0 turns nothing
+            t |> success(moved_off(want, x, kz, bar), "{tag}: a k pair at a nonzero angle turned off its input")
         }
         x[d + 5] += 1.5
         let px2 = mc |> io_(x)
