@@ -214,9 +214,7 @@ def asr_transcribe(audio_path : string) : string {
 }
 
 [export_c(comment = "Seconds of audio transcribed per second of wall clock, 0 before a transcript has run.")]
-def asr_speed() : double {
-    return g_asr_us > 0l ? g_audio_seconds * 1.0e6lf / double(g_asr_us) : 0.0lf
-}
+def asr_speed() : double => g_asr_us > 0l ? g_audio_seconds * 1.0e6lf / double(g_asr_us) : 0.0lf
 
 // ===== speech synthesis =====
 
@@ -250,9 +248,7 @@ def tts_close() {
 }
 
 [export_c(comment = "The voice `tts_say` speaks in, or \"\" while no model is open.")]
-def tts_voice() : string {
-    return g_tts_loaded ? g_tts_voice : ""
-}
+def tts_voice() : string => g_tts_loaded ? g_tts_voice : ""
 
 [export_c(comment = "Pick a voice the model offers - \"\" keeps the current one - and a speech rate from 0.25 to 4.")]
 def tts_set_voice(name : string; rate : float) : bool {
@@ -295,9 +291,7 @@ def tts_say(text : string; out_wav : string) : double {
 }
 
 [export_c(comment = "Seconds of speech synthesized per second of wall clock, 0 before a say has run.")]
-def tts_speed() : double {
-    return g_tts_us > 0l ? g_tts_seconds * 1.0e6lf / double(g_tts_us) : 0.0lf
-}
+def tts_speed() : double => g_tts_us > 0l ? g_tts_seconds * 1.0e6lf / double(g_tts_us) : 0.0lf
 
 //! the engine's own stats counters are filled by the one-call generate, which a pull loop never runs
 def private per_second(tokens, elapsed_us : int64) : double =>

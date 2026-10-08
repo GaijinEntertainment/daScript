@@ -26,13 +26,14 @@ def main {
         for (t in TEXES) {
             hi += t.w
         }
-        var bx : array<int>
-        var by : array<int>
+        var bx, by : array<int>
         while (lo < hi) {
             let mid = (lo + hi) / 2
             s |> push()
             s |> add(side <= mid)
             if ((s |> check()) == SmtResult.SAT) {
+                delete bx
+                delete by
                 bx <- [for (x in xs); s |> model_int(x)]
                 by <- [for (y in ys); s |> model_int(y)]
                 hi = mid
@@ -45,7 +46,7 @@ def main {
         s |> add(side < lo)
         verify((s |> check()) == SmtResult.UNSAT)   // the minimality proof
         s |> pop()
-        print("minimal atlas side = {lo}  ({lo - 1} is UNSAT — no smaller square fits)\n")
+        print("minimal atlas side = {lo}  ({lo - 1} is UNSAT - no smaller square fits)\n")
         assert(lo == 10)
 
         for (r in range(lo)) {

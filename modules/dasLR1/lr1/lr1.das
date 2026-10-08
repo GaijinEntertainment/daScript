@@ -122,7 +122,7 @@ def private byte_classes(gb : GrammarBuilder; var cls : array<int>) : int {
         for (s in p.rhs) {
             continue if (s.is_rule)
             // every class split by this set: members inside keep a fresh id per old class
-            var remap : table<int; int>
+            var inscope remap : table<int; int>
             for (b in range(256)) {
                 continue if (!s.bytes[b])
                 let old = cls[b]
@@ -310,10 +310,10 @@ def private build_lr0(var b : Builder) {
     state_of(b, start)
     var i = 0
     while (i < length(b.states)) {
-        var closure <- closure0(b, b.states[i].kernel)
+        var inscope closure <- closure0(b, b.states[i].kernel)
         // every symbol after a dot, each once, in closure order
-        var syms : array<int>
-        var seen : table<int>
+        var inscope syms : array<int>
+        var inscope seen : table<int>
         for (it in closure) {
             let p & = unsafe(b.prods[it.prod])
             if (it.dot < length(p.rhs)) {
@@ -362,7 +362,7 @@ def private closure1(b : Builder; it0 : Item; la0 : int) : array<tuple<it : Item
         let cur = items[i]
         let p & = unsafe(b.prods[cur.it.prod])
         if (cur.it.dot < length(p.rhs) && sym_is_rule(p.rhs[cur.it.dot])) {
-            var las : table<int>
+            var inscope las : table<int>
             first_of_tail(b, p.rhs, cur.it.dot + 1, cur.la, las)
             for (q in b.by_lhs[sym_rule_of(p.rhs[cur.it.dot])]) {
                 for (la in keys(las)) {
@@ -387,7 +387,7 @@ def private compute_lookaheads(var b : Builder) {
     b.states[0].la[0] |> insert(eof)
     for (si in range(length(b.states))) {
         for (ki in range(length(b.states[si].kernel))) {
-            var cl <- closure1(b, b.states[si].kernel[ki], HASH_LA)
+            var inscope cl <- closure1(b, b.states[si].kernel[ki], HASH_LA)
             for (c in cl) {
                 let p & = unsafe(b.prods[c.it.prod])
                 continue if (c.it.dot >= length(p.rhs))
@@ -453,7 +453,7 @@ def private build_tables(var b : Builder; var g : Grammar) {
         // reductions: every completed item of the LR(1) closure of the kernel with its lookaheads
         for (ki in range(length(b.states[si].kernel))) {
             for (la0 in keys(b.states[si].la[ki])) {
-                var cl <- closure1(b, b.states[si].kernel[ki], la0)
+                var inscope cl <- closure1(b, b.states[si].kernel[ki], la0)
                 for (c in cl) {
                     let p & = unsafe(b.prods[c.it.prod])
                     continue if (c.it.dot < length(p.rhs))
@@ -559,8 +559,8 @@ def build_grammar(var gb : GrammarBuilder; root : int) : Grammar {
             } else {
                 // the set is a union of whole classes: one class is a terminal in place, several a fresh
                 // rule with one production per class
-                var classes : array<int>
-                var seen : table<int>
+                var inscope classes : array<int>
+                var inscope seen : table<int>
                 for (bt in range(256)) {
                     if (s.bytes[bt] && !(seen |> key_exists(g.byte_class[bt]))) {
                         seen |> insert(g.byte_class[bt])
@@ -647,7 +647,7 @@ def private resolve(g : Grammar; st : array<int>; cls : int; var out : array<arr
     var acts : array<int>
     while (!empty(work)) {
         return false if (length(out) > LR_MAX_STACKS)
-        var cur <- work[length(work) - 1]
+        var inscope cur <- work[length(work) - 1]
         work |> pop()
         let key = stack_key(cur)
         continue if (seen |> key_exists(key))

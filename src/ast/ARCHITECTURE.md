@@ -1,8 +1,8 @@
 # src/ast - the front end's AST
 
-Contract: `ARCHITECTURE_COMMON.md` (repo root). This document carries the mechanisms of this
-folder that a rule cites; `ARCHITECTURE_INFER.md` carries the inference mechanisms code cites,
-`ARCHITECTURE_BUILT.md` the programs a host builds from AST nodes, `ARCHITECTURE_GC.md` gc roots.
+Contract: `ARCHITECTURE_COMMON.md` (repo root). This document carries the mechanisms of this folder
+that a rule cites; `ARCHITECTURE_INFER.md` the inference mechanisms code cites, `ARCHITECTURE_BUILT.md`
+host-built programs, `ARCHITECTURE_GC.md` gc roots, `ARCHITECTURE_SHARED.md` shared-module promotion.
 The rest of inference, with parsing and simulation, is in `skills/internal/cpp_codebase_notes.md` (repo-only).
 
 ## 1. The module-cache read in `trySerializeProgramModule` (`ast_parse.cpp`) {#module-cache-read}

@@ -9,14 +9,10 @@ require smt/daslib/smt_macro
 // Same technique — the difference is entirely what Z3 can decide.
 
 [smt_fn]
-def is_right(a, b, c : int) : bool {
-    return a * a + b * b == c * c
-}
+def is_right(a, b, c : int) : bool => a * a + b * b == c * c
 
 [smt_fn]
-def is_fermat3(a, b, c : int) : bool {
-    return a * a * a + b * b * b == c * c * c
-}
+def is_fermat3(a, b, c : int) : bool => a * a * a + b * b * b == c * c * c
 
 def set_timeout(s : Solver; ms : uint) {
     let p = Z3_mk_params(s.ctx)
@@ -59,11 +55,11 @@ def decide_fermat() {
         s |> constrain(a > 0 && b > 0 && c > 0)
         let r = s |> check()
         if (r == SmtResult.UNKNOWN) {
-            print("UNDECIDED: Z3 can neither find a^3+b^3=c^3 nor rule it out — FLT is beyond SMT.\n")
+            print("UNDECIDED: Z3 can neither find a^3+b^3=c^3 nor rule it out - FLT is beyond SMT.\n")
         } elif (r == SmtResult.SAT) {
-            print("UNDECIDED: solution found — this would DISPROVE Fermat: {s |> model_int(a)}^3+{s |> model_int(b)}^3={s |> model_int(c)}^3\n")
+            print("UNDECIDED: solution found - this would DISPROVE Fermat: {s |> model_int(a)}^3+{s |> model_int(b)}^3={s |> model_int(c)}^3\n")
         } else {
-            print("UNDECIDED: proven impossible — Z3 just did what took mathematics 350 years.\n")
+            print("UNDECIDED: proven impossible - Z3 just did what took mathematics 350 years.\n")
         }
     }
 }

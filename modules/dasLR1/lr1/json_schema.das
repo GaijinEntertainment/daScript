@@ -508,13 +508,10 @@ def private build_repetition(item : string; min_items, max_items : int; separato
 let private INT64_MIN = -9223372036854775807l - 1l
 let private INT64_MAX = 9223372036854775807l
 
-def private repeat_digit(d : int; n : int) : array<int> {
-    return <- [for (_ in range(n)); d]
-}
+def private repeat_digit(d : int; n : int) : array<int> => <- [for (_ in range(n)); d]
 
-def private one_then_zeros(digits : int) : array<int> {
-    return <- [for (k in range(digits)); k == 0 ? '1' : '0']
-}
+def private one_then_zeros(digits : int) : array<int> =>
+    <- [for (k in range(digits)); k == 0 ? '1' : '0']
 
 def private digits_of(v : int64) : array<int> {
     var out : array<int>
@@ -561,9 +558,8 @@ def private more_digits(var w : StringBuilderWriter; min_digits, max_digits : in
     w |> write("\}")
 }
 
-def private tail_of(ds : array<int>; from : int) : array<int> {
-    return <- [for (i in range(from, length(ds))); ds[i]]
-}
+def private tail_of(ds : array<int>; from : int) : array<int> =>
+    <- [for (i in range(from, length(ds))); ds[i]]
 
 def private same_digits(a, b : array<int>) : bool {
     return false if (length(a) != length(b))
@@ -662,8 +658,8 @@ def private build_min_max_int(min_value, max_value : int64; var w : StringBuilde
         let max_digits = length(max_s)
         for (digits in range(min_digits, max_digits)) {
             // the first band starts at lo, every wider one at 1 followed by zeros
-            let band_lo <- digits == min_digits ? digits_of(lo) : one_then_zeros(digits)
-            let nines <- repeat_digit('9', digits)
+            var inscope band_lo <- digits == min_digits ? digits_of(lo) : one_then_zeros(digits)
+            var inscope nines <- repeat_digit('9', digits)
             uniform_range(w, band_lo, nines)
             w |> write(" | ")
         }
@@ -996,8 +992,7 @@ def private collect_refs(var c : Conv; root : SRef; n : SRef) {
 }
 
 def private build_object_rule(var c : Conv; prop_keys : array<string>; prop_vals : array<SRef>; required : table<string>; name : string; additional : SRef; has_additional : bool) : string {
-    var required_props : array<string>
-    var optional_props : array<string>
+    var required_props, optional_props : array<string>
     var prop_kv : table<string; string>
     var prop_names : array<string>
     for (i, pname in count(), prop_keys) {
