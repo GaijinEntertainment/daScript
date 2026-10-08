@@ -498,3 +498,33 @@ def test_range_patterns_are_half_open(t : T?) {
     t |> equal(letter_case('Z'), "upper")
     t |> equal(letter_case('1'), "other")
 }
+
+variant Figure {
+    circle : float
+    square : float
+    tag : string
+}
+
+def private figure_size(f : Figure) : string {
+    return match (f) {
+        Figure(circle = r) | Figure(square = r) => "size {r}"
+        Figure(tag = _) => "tag"
+    }
+}
+
+def private axis_distance(p : Point) : string {
+    return match (p) {
+        Point(x = 0, y = d) | Point(y = 0, x = d) => "axis {d}"
+        _ => "elsewhere"
+    }
+}
+
+[test]
+def test_alternatives_may_bind_different_places(t : T?) {
+    t |> equal(figure_size(Figure(circle = 2.0)), "size 2")
+    t |> equal(figure_size(Figure(square = 3.0)), "size 3")
+    t |> equal(figure_size(Figure(tag = "x")), "tag")
+    t |> equal(axis_distance(Point(x = 0, y = 5)), "axis 5")
+    t |> equal(axis_distance(Point(x = 7, y = 0)), "axis 7")
+    t |> equal(axis_distance(Point(x = 1, y = 1)), "elsewhere")
+}

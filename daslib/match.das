@@ -47,6 +47,8 @@ struct MatchTo {
     failed       : bool                             //! true if a hard error occurred (unresolved types etc.)
     bind_names   : bool                             //! a `=>` arm, where a bare `x` in the pattern binds; an `if (pattern)` arm binds only `$v(x)`
     by_ref       : table<string>                    //! bound names the body reads through the access itself, not a `let` copy: pointers and types that can't be copied
+    forced       : table<uint64; int>               //! alternation node -> the one side to match (an arm split per alternative)
+    @do_not_delete split : ExprOp2?                 //! alternation whose sides bind the same names at different places
 }
 
 [macro_function, unused_argument(msg)]
@@ -484,6 +486,9 @@ def private same_names(a, b : table<string; Expression?>; wth : ExprOp2?; var to
 [macro_function]
 def match_alternatives(var wth : ExprOp2?; var to : MatchTo; matcher : block<(side : Expression?; var sideTo : MatchTo) : bool>) {
     var sides <- op_sides(wth, string(wth.op))
+    let key = intptr(wth)
+    let chosen = to.forced?[key] ?? -1
+    return invoke(matcher, sides[chosen], to) if (chosen >= 0)
     var firstDecl : table<string; Expression?>
     var conds : array<Expression?>
     var split = false
@@ -491,9 +496,11 @@ def match_alternatives(var wth : ExprOp2?; var to : MatchTo; matcher : block<(si
         var sideTo : MatchTo
         sideTo.bind_names = to.bind_names
         sideTo.declarations := to.declarations
+        sideTo.forced := to.forced
         if (!invoke(matcher, side, sideTo)) {
             to.errors |> push_from(sideTo.errors)
             to.failed ||= sideTo.failed
+            to.split = sideTo.split
             return false
         }
         for (k in keys(to.declarations)) {
@@ -512,6 +519,10 @@ def match_alternatives(var wth : ExprOp2?; var to : MatchTo; matcher : block<(si
             }
         }
         conds |> push(join_conditions(sideTo.conditions, side.at))
+    }
+    if (split && to.bind_names) {
+        to.split = wth
+        return false
     }
     if (split) {
         to.errors |> match_error("mismatching variable declarations in {wth.op}", wth.at)
@@ -1565,6 +1576,36 @@ def private drop_last_condition(var chain : Expression?) : Expression? {
 }
 
 [macro_function]
+def private match_arm(var types : array<TypeDeclPtr>; var accesses : array<Expression?>; pattern : Expression?; bind_names : bool;
+                      var results : array<MatchTo>; var failure : MatchTo) : bool {
+    //! Matches one arm's pattern; an alternation whose sides bind the same names at different places splits the arm, one result per side, in order.
+    var stack : array<table<uint64; int>>
+    stack |> emplace(default<table<uint64; int>>)
+    while (!empty(stack)) {
+        var inscope forced <- stack |> back()
+        stack |> pop()
+        var to : MatchTo
+        to.bind_names = bind_names
+        to.forced := forced
+        if (match_multi(types, accesses, pattern, to)) {
+            results |> emplace(to)
+        } elif (to.split != null) {
+            let nsides = length(op_sides(to.split, string(to.split.op)))
+            stack |> reserve(length(stack) + nsides)
+            for (i in range(nsides)) {
+                var inscope choice := forced
+                choice[intptr(to.split)] = nsides - 1 - i
+                stack |> emplace(choice)
+            }
+        } else {
+            swap(failure, to)
+            return false
+        }
+    }
+    return true
+}
+
+[macro_function]
 def private report_match_failure(prog : ProgramPtr; to : MatchTo; pattern : Expression?; typ : TypeDeclPtr) : void {
     for (e in to.errors) {
         macro_error(prog, *e.at, e.msg)
@@ -1701,15 +1742,16 @@ class MatchMacro : AstCallMacro {
                 let arm_index = eli - ei - 1
                 var arm = eblk.list[arm_index]
                 var pattern = arrows > 0 ? (arm as ExprMakeTuple).values[0] : (arm as ExprIfThenElse).cond
-                var to : MatchTo
-                to.bind_names = arrows > 0
-                let matched = match_multi(types, accesses, pattern, to)
-                if (matched) {
+                var results : array<MatchTo>
+                var failure : MatchTo
+                if (match_arm(types, accesses, pattern, arrows > 0, results, failure)) {
                     arm_patterns[arm_index] = pattern
-                    add_arm_branch(arm, to, as_value, access, iff, catch_all, prefix)
-                } elif (report_match_errors || to.failed) {
+                    for (ri in range(length(results))) {
+                        add_arm_branch(arm, results[length(results) - 1 - ri], as_value, access, iff, catch_all, prefix)
+                    }
+                } elif (report_match_errors || failure.failed) {
                     any_errors = true
-                    report_match_failure(prog, to, pattern, what._type)
+                    report_match_failure(prog, failure, pattern, what._type)
                     break
                 }
             }
