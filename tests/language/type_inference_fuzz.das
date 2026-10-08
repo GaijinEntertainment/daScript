@@ -30,6 +30,10 @@ def computed_goto_in_a_captured_block {
 // type - the very type the new sits in - and copied it into itself.
 def new_of_type_macro_in_option_result : auto(v) | int[(new<$T>())] => 1
 
+// A typedef over an option type. The typedef sets an alias on the option, which the
+// TypeDecl serializer refused to write and then asserted had never been there.
+typedef option_with_an_alias = int | float
+
 [export]
 def main {
     new_of_type_macro_in_option_result()

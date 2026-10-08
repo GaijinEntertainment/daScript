@@ -1589,9 +1589,9 @@ namespace das {
                                 !alias.empty(), argTypes.empty(), argNames.empty());
                 break;
             case option:
-                ser << argTypes;
+                ser << alias << argTypes;
                 DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !firstType, !secondType,
-                                alias.empty(), !argTypes.empty(), argNames.empty());
+                                !argTypes.empty(), argNames.empty());
                 break;
             case autoinfer:
                 ser << alias;
