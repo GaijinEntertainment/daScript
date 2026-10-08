@@ -55,6 +55,7 @@ struct ChatSession {
     max_new : int64 = 256l          // per-reply token budget
     enable_thinking : bool = true   // init from tmpl.think_default; off + a think_suppress form => instruct mode
     preserve_thinking : bool = false   //! a replayed assistant turn renders its think block, the tokens the model generated there
+    first_opening : int64 = 0l      //! the tokens of the conversation's opening (BOS, prelude, the system turn) a replayed first turn rendered; 0 until one did
     think_vocab : bool = false      // the vocab carries the reply-side reasoning markers (resolved at create)
     gate_ok : bool = false          // the think_gate specials resolve in the vocab (true when no gate declared)
     gate_rendered : bool = false    // a consumed turn actually rendered the gate — thinking is armed for the session
@@ -1059,12 +1060,20 @@ def render_assistant_(m : Model; var c : ChatSession; text : string; var out : a
     if (!c.has_pending) {
         return
     }
-    render_prompt(m, c, out)
+    note_opening(c, render_prompt(m, c, out))
     render_think_replay(m, c, reasoning, out)
     out |> push_from(encode_(m, text, false, false))
     consume_pending_(c)
     render_parts(m, c.close_parts, "", out)
     c.history |> push(Message(role = Role.assistant, content = text))
+}
+
+// a replayed first turn's opening (render_prompt's count on a first turn, 0 after) kept for the caller: the shared
+// prefix a prefill checkpoints at
+def private note_opening(var c : ChatSession; opening : int64) {
+    if (opening > 0l) {
+        c.first_opening = opening
+    }
 }
 
 // The think block a replayed assistant turn carries under preserve_thinking: the turn's reasoning between the
@@ -1204,7 +1213,7 @@ def render_assistant_calls_(m : Model; var c : ChatSession; text : string; calls
     if (!c.has_pending) {
         return
     }
-    render_prompt(m, c, out)
+    note_opening(c, render_prompt(m, c, out))
     render_think_replay(m, c, reasoning, out)
     c.last_call_names |> clear()
     c.last_call_names |> reserve(length(calls))

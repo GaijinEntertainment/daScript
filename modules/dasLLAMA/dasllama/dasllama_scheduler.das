@@ -70,6 +70,7 @@ struct PendingReq {
     seed : int = 0                          // != 0 => set_seed at admit (reproducible sampling)
     t_submit : int64 = 0l                   // ref_time_ticks at submit (queue-wait logging; 0 = unset)
     stable_at : int64 = 0l                  //! prompt tokens the request's own last turn does not reach (`render_turn_marked`); a recurrent model's prefill leaves a checkpoint there (0 = unknown)
+    system_at : int64 = 0l                  //! prompt tokens of the conversation's opening every request on this system prompt shares (`ChatSession.first_opening`); a recurrent model's prefill leaves a second checkpoint there when it sits a page or more under `stable_at` (0 = unknown)
     // MEDIA splice (images today; audio rides the same fields): `n_media` embedding rows that
     // prefill BETWEEN prompt[media_at-1] and prompt[media_at] — the render seam hands the two
     // token spans and the encoder hands the rows. Zero rows = an ordinary text request.
@@ -105,6 +106,7 @@ struct Stream {
     constraint : TokenConstraintBox         //! owned here (freed with the stream); the session carries the pointer and never frees it
     n_cached : int64                        // prefix-cache hit length (set at admit; 0 in flat mode)
     ckpt_at : int64                         //! the prompt position the prefill stops at to leave a recurrent checkpoint (0 = none)
+    ckpt_sys_at : int64                     //! an earlier stop for the checkpoint at the shared system opening (0 = none; always under `ckpt_at`)
     t_admit : int64                         // ref_time_ticks at admit
     t_first : int64                         // ref_time_ticks at the first sampled token (0 until then)
     ttft_us : int64
@@ -218,14 +220,14 @@ struct Scheduler {
 //! `idle_chunk_tokens` takes the backend's default (`chunk_defaults`). `page_rows` > 0 switches to PAGED serving — KV
 //! pages allocate on demand (memory tracks actual context, not seq_len × streams) and a prefix
 //! cache reuses completed streams' pages across requests (`prefix_groups` caps its retention;
-//! 0 = unbounded; a recurrent model keeps `prefix_states` checkpoints instead, 0 = none); 0 keeps
-//! today's flat preallocated sessions. Free with `unsafe(delete sch)` —
-//! live sessions, the pool, and the workspace go with it.
+//! 0 = unbounded; a recurrent model keeps `prefix_states` checkpoints instead, 0 = none, within
+//! `prefix_state_bytes`, 0 = the count alone); 0 keeps today's flat preallocated sessions. Free with
+//! `unsafe(delete sch)` — live sessions, the pool, and the workspace go with it.
 def create_scheduler(model : Model; max_streams : int64 = 4l; max_queue : int64 = 32l;
                      chunk_tokens : int64 = 0l; page_rows : int64 = 0l;
                      prefix_groups : int64 = 0l; kv_dtype : KVDtype = KVDtype.f16;
                      mtp : bool = false; idle_chunk_tokens : int64 = -1l;
-                     prefix_states : int64 = DEFAULT_PREFIX_STATES) : Scheduler {
+                     prefix_states : int64 = DEFAULT_PREFIX_STATES; prefix_state_bytes : int64 = 0l) : Scheduler {
     let dflt = chunk_defaults(model)
     var sch <- Scheduler(ws <- create_batch_workspace(model), max_streams = max(1l, max_streams),
                          max_queue = max(1l, max_queue), chunk_tokens = chunk_tokens > 0l ? chunk_tokens : dflt.chunk,
@@ -236,7 +238,7 @@ def create_scheduler(model : Model; max_streams : int64 = 4l; max_queue : int64 
         sch.paged = true
         sch.pool <- create_kv_pool(model, page_rows, kv_dtype)
         kv_pool_reserve(sch.pool, sch.max_streams * (model.config.seq_len + page_rows) + prefix_groups * page_rows)
-        sch.prefix <- create_prefix_cache(prefix_groups, prefix_states)
+        sch.prefix <- create_prefix_cache(prefix_groups, prefix_states, prefix_state_bytes)
     }
     return <- sch
 }
@@ -615,10 +617,15 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             st.n_cached = matched
             sch.cached_tokens += matched
             st.ckpt_at = prefix_checkpoint_at(sch.prefix, sch.pool, st.session, st.prompt, matched, sch.queue[0].stable_at)
+            //! the shared system opening gets its own stop when it sits a page or more past the hit and under the request's own stop
+            let sys_at = sch.queue[0].system_at
+            if (st.ckpt_at > 0l && sys_at >= matched + sch.pool.page_rows && sys_at + sch.pool.page_rows <= st.ckpt_at) {
+                st.ckpt_sys_at = sys_at
+            }
             if (matched > 0l) {
-                to_log(LOG_INFO, "[stream {st.id}] prefix cache HIT: {matched}/{length(st.prompt)} tok attached, no prefill for them\n")
+                to_log(LOG_INFO, "[stream {st.id}] prefix cache HIT: {matched}/{length(st.prompt)} tok attached, no prefill for them (checkpoints planned at {st.ckpt_sys_at}, {st.ckpt_at}; stable {sch.queue[0].stable_at}, system {sys_at})\n")
             } else {
-                to_log(LOG_INFO, "[stream {st.id}] prefix cache MISS: full {length(st.prompt)}-tok prefill\n")
+                to_log(LOG_INFO, "[stream {st.id}] prefix cache MISS: full {length(st.prompt)}-tok prefill (checkpoints planned at {st.ckpt_sys_at}, {st.ckpt_at}; stable {sch.queue[0].stable_at}, system {sys_at})\n")
             }
         } else {
             st.session <- create_session(m, sch.kv_dtype)
@@ -753,7 +760,8 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         } else {
             let head_end = si >= 0 ? sch.streams[i].spans[si].at : np
             let chunk = prefill_chunk(m, sch, head_end)
-            let to_ckpt = sch.streams[i].ckpt_at - sch.streams[i].n_prefilled
+            let next_ckpt = sch.streams[i].ckpt_sys_at > sch.streams[i].n_prefilled ? sch.streams[i].ckpt_sys_at : sch.streams[i].ckpt_at
+            let to_ckpt = next_ckpt - sch.streams[i].n_prefilled
             //! a checkpoint within a chunk and a half ends this chunk: stopping a chunk short of it would add a window, and a window's cost is mostly fixed
             let take = to_ckpt > 0l && to_ckpt <= chunk + chunk / 2l ? to_ckpt : min(chunk, head_end - sch.streams[i].n_prefilled)
             sch.chunk |> resize(take)
@@ -764,9 +772,9 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             sch.streams[i].n_prefilled += take
             sch.prefill_tokens += take
             sch.prefill_evals ++
-            if (sch.streams[i].n_prefilled == sch.streams[i].ckpt_at) {
-                prefix_insert(sch.prefix, sch.pool, sch.streams[i].session, sch.streams[i].prompt)
-                to_log(LOG_INFO, "[stream {sch.streams[i].id}] prefix checkpoint at {sch.streams[i].ckpt_at} tok: the next prompt on this opening attaches here\n")
+            if (sch.streams[i].n_prefilled == sch.streams[i].ckpt_at || sch.streams[i].n_prefilled == sch.streams[i].ckpt_sys_at) {
+                prefix_insert(sch.prefix, sch.pool, sch.streams[i].session, sch.streams[i].prompt, "", true)
+                to_log(LOG_INFO, "[stream {sch.streams[i].id}] prefix checkpoint at {sch.streams[i].n_prefilled} tok: the next prompt on this opening attaches here ({length(sch.prefix.states)} checkpoints, {sch.prefix.state_bytes / 1048576l} MB)\n")
             }
         }
         if (sch.streams[i].n_prefilled >= np) {
@@ -828,7 +836,7 @@ def private prefill_media_body(m : Model; var sch : Scheduler; var st : Stream; 
     return false if (head > room)
     let stop = si + 1 < length(st.spans) ? st.spans[si + 1].at : long_length(st.prompt)
     let hi = min(stop, at + sn + room - head)
-    return false if (hi - lo == sn || (st.ckpt_at > lo && st.ckpt_at <= hi))
+    return false if (hi - lo == sn || (st.ckpt_at > lo && st.ckpt_at <= hi) || (st.ckpt_sys_at > lo && st.ckpt_sys_at <= hi))
     sch.chunk |> resize(head)
     for (k in range64(head)) {
         sch.chunk[k] = st.prompt[lo + k]

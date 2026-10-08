@@ -99,7 +99,14 @@ def private with_llama_server(model_path : string; port : int; mode : MetalMode 
             unsafe {
                 delete sdoc
             }
-            run_server(port)   // blocks (with_job_que + tick loop) until POST /shutdown
+            // blocks (with_job_que + tick loop) until POST /shutdown. The default page size takes the bare call: with any
+            // explicit argument here, the bench cell followed by the held-engine cell dies on a SIGSEGV in the second
+            // boot's first embeddings request - same values, fresh JIT, 1 MB stack alike - an open item of its own
+            if (page_rows == 64l) {
+                run_server(port)
+            } else {
+                run_server(port, 4l, 32l, 0l, page_rows)
+            }
             finished |> notify_and_release
         }
         let ready = serve_clients(port, 300, "/v1/models", blk)   // up to ~30s for load + JIT
@@ -890,6 +897,41 @@ def test_openai_server_preserve_thinking(t : T?) {
             t |> success(plain.cached >= 0 && plain.cached < first.prompt, "without preserve_thinking the cache hit stops inside the first prompt ({plain.cached} of {first.prompt})")
             t |> success(kept.cached >= first.prompt - 8, "with it the first prompt attaches whole, think block included ({kept.cached} of {first.prompt})")
             t |> success(kept.cached > plain.cached, "... more than the replay without it ({kept.cached} > {plain.cached})")
+        }
+    }
+}
+
+let TEST_PORT_CKPT = 18146   // beside 18145, the preserve_thinking boot
+let QWEN35_PATH = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
+
+[test]
+def test_openai_server_recurrent_checkpoints(t : T?) {
+    t |> run("a recurrent model: two conversations on one system prompt each attach its shared opening, then each attaches its own earlier turn (needs Qwen3.5-0.8B q8)") @(t : T?) {
+        if (!jit_enabled()) {
+            t |> skip("interpreted (dasLLAMA server test is JIT-only)")
+            return
+        }
+        if (!stat(QWEN35_PATH).is_valid) {
+            t |> skip("{base_name(QWEN35_PATH)} not present (set DASLLAMA_MODELS_DIR)")
+            return
+        }
+        // pages of 8 rows: the system block and the per-conversation tails land on pages of their own
+        with_llama_server(QWEN35_PATH, TEST_PORT_CKPT, MetalMode.off, 8l) $(base_url) {
+            let sys = "You are the assistant of a house with a kitchen, a bedroom and a garden. Devices: the kitchen ceiling light, the bedroom wall lights, the garden sprinkler. Answer in one short sentence and nothing else."
+            let kw = "\"max_tokens\":12,\"chat_template_kwargs\":\{\"enable_thinking\":false}"
+            let a1 = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"Turn on the kitchen light.\"}],{kw}}")
+            t |> success(a1.prompt > 16 && a1.cached == 0, "conversation A's first turn prefills cold ({a1.prompt} prompt, {a1.cached} cached): {a1.reply}")
+            let b1 = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"Is the sprinkler running?\"}],{kw}}")
+            t |> success(b1.cached >= 16, "conversation B's first turn attaches A's system opening ({b1.cached} cached of {b1.prompt})")
+            t |> success(b1.cached < b1.prompt - 8, "... and not B's own turn ({b1.cached} of {b1.prompt})")
+            // the second turns, interleaved, replayed with preserve_thinking (the think block the first prompt carried):
+            // each attaches its own first exchange whole
+            let kw2 = "\"max_tokens\":12,\"chat_template_kwargs\":\{\"enable_thinking\":false,\"preserve_thinking\":true}"
+            let a2 = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"Turn on the kitchen light.\"},\{\"role\":\"assistant\",\"content\":{json_str(a1.reply)}},\{\"role\":\"user\",\"content\":\"And the bedroom.\"}],{kw2}}")
+            t |> success(a2.cached >= a1.prompt, "A's second turn attaches A's whole first exchange ({a2.cached} cached, first prompt {a1.prompt})")
+            let b2 = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"Is the sprinkler running?\"},\{\"role\":\"assistant\",\"content\":{json_str(b1.reply)}},\{\"role\":\"user\",\"content\":\"Stop it.\"}],{kw2}}")
+            t |> success(b2.cached >= b1.prompt, "B's second turn attaches B's whole first exchange after A's ran ({b2.cached} cached, first prompt {b1.prompt})")
+            to_log(LOG_INFO, "recurrent checkpoints: A1 {a1.prompt}/{a1.cached} B1 {b1.prompt}/{b1.cached} A2 {a2.prompt}/{a2.cached} B2 {b2.prompt}/{b2.cached}\n")
         }
     }
 }

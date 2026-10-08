@@ -151,6 +151,12 @@ struct ServerArgs {
     @clarg_doc = "Prefix-cache retention cap in pages (default: one full context per stream; -1 = unbounded)"
     prefix : int
 
+    @clarg_doc = "Recurrent models (Qwen3.5/3.6/3.8 hybrids) cache whole checkpoints instead of pages: how many a slot keeps (default 16; 0 = none). Every request leaves one at its shared system opening and one at its finished turn; finished turns are dropped before shared openings"
+    prefix_states : int
+
+    @clarg_doc = "The checkpoints' byte budget in MB (default 0 = the count alone bounds them)"
+    prefix_state_mb : int
+
     @clarg_doc = "Flat preallocated KV sessions — disables paged serving and the prefix cache"
     flat : bool
 
@@ -279,7 +285,7 @@ var private g_cfg_authoritative = false
 let CONFIG_KEYS = fixed_array("model", "port", "host", "quant", "kv_dtype", "metal", "gpu", "gpu_layers",
     "gpu_stream", "gpu_dn", "gpu_attn", "gpu_dense", "gpu_vram_mb", "asr", "mmproj", "image_mmproj", "audio_mmproj", "asr_workers", "tts", "tts_lane", "tts_voices_dir",
     "ctx", "max_tokens", "streams", "threads", "team_dispatch", "affinity", "chunk", "chunk_idle", "page_rows",
-    "prefix", "flat", "mtp", "rope_scaling", "rope_scale", "yarn_orig_ctx", "lcpp_bin", "models_dir", "models")
+    "prefix", "prefix_states", "prefix_state_mb", "flat", "mtp", "rope_scaling", "rope_scale", "yarn_orig_ctx", "lcpp_bin", "models_dir", "models")
 
 def private from_cli(key : string) : bool
     => (g_cfg_sources?[key] ?? "") == "cli"
@@ -540,6 +546,12 @@ def private mark_cli_sources(cfg : ServerArgs) {   // nolint:STYLE037,STYLE038 �
     if (cfg.prefix != 0 || cli_has_flag("--prefix")) {
         g_cfg_sources["prefix"] = "cli"
     }
+    if (cli_has_flag("--prefix-states")) {
+        g_cfg_sources["prefix_states"] = "cli"
+    }
+    if (cfg.prefix_state_mb > 0) {
+        g_cfg_sources["prefix_state_mb"] = "cli"
+    }
     if (cli_has_flag("--flat")) {
         g_cfg_sources["flat"] = "cli"
     }
@@ -575,6 +587,8 @@ def private apply_session_keys(root : JsonValue?; var cfg : ServerArgs; auth : b
     cfg_from_toml(root, "chunk_idle", cfg.chunk_idle, auth)
     cfg_from_toml(root, "page_rows", cfg.page_rows, auth)
     cfg_from_toml(root, "prefix", cfg.prefix, auth)
+    cfg_from_toml(root, "prefix_states", cfg.prefix_states, auth)
+    cfg_from_toml(root, "prefix_state_mb", cfg.prefix_state_mb, auth)
     cfg_from_toml(root, "flat", cfg.flat, auth)
     cfg_from_toml(root, "mtp", cfg.mtp, auth)
     cfg_from_toml(root, "rope_scaling", cfg.rope_scaling, auth)
@@ -1026,6 +1040,8 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     let chunk_idle = g_cfg.chunk_idle > 0 ? int64(g_cfg.chunk_idle) : -1l
     let page_rows = g_cfg.flat ? 0l : (g_cfg.page_rows > 0 ? int64(g_cfg.page_rows) : 64l)
     let prefix = int64(g_cfg.prefix)   // 0 = auto (init_server sizes it), < 0 = unbounded
+    let prefix_states = cfg_sourced("prefix_states") ? int64(max(g_cfg.prefix_states, 0)) : DEFAULT_PREFIX_STATES   // 0 set by hand = no checkpoints
+    let prefix_state_mb = int64(max(g_cfg.prefix_state_mb, 0))
     let dispatch_mode = to_lower(g_cfg.team_dispatch)
     if (!empty(dispatch_mode) && dispatch_mode != "hybrid"
         && dispatch_mode != "team" && dispatch_mode != "inline") {
@@ -1293,7 +1309,8 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
         [chunk_tokens = chunk, page_rows = page_rows, prefix_groups = prefix,
          kv_dtype = pick_kv_dtype(g_cfg.kv_dtype), team_dispatch = team_dispatch,
          asr_team = asr_team,
-         mtp = mtp_setting(cfg_sourced("mtp"), g_cfg.mtp), idle_chunk_tokens = chunk_idle, host = host])
+         mtp = mtp_setting(cfg_sourced("mtp"), g_cfg.mtp), idle_chunk_tokens = chunk_idle, host = host,
+         prefix_states = prefix_states, prefix_state_mb = prefix_state_mb])
     if (!g_server_ready) {
         g_exit_code = 2
         request_exit()

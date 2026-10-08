@@ -3006,7 +3006,7 @@ def private register_request(srv : FrontLink; writer : WriterRef;
                              tool_mode : ToolMode = ToolMode.none; reuse_id : int64 = 0l;
                              var nothink : NothinkStopGuard = NothinkStopGuard(); stable_at : int64 = 0l;
                              include_usage : bool = false; resumed : bool = false;
-                             var constraint : TokenConstraint? = null) {
+                             var constraint : TokenConstraint? = null; system_at : int64 = 0l) {
     if (bench_hold_active()) {
         unsafe {
             delete constraint
@@ -3025,7 +3025,7 @@ def private register_request(srv : FrontLink; writer : WriterRef;
     let rid = reuse_id != 0l ? reuse_id : next_id()   // a resumed image request keeps its park id, so one [req N] spans the request
     let cid = "{prefix}-{rid}"
     let created = created_ts()
-    var preq <- PendingReq(id = rid, params = params, max_new = max_new, seed = seed, stable_at = stable_at)
+    var preq <- PendingReq(id = rid, params = params, max_new = max_new, seed = seed, stable_at = stable_at, system_at = system_at)
     var encoded_rows = 0l
     for (sp in spans) {
         encoded_rows += empty(sp.rows) ? 0l : sp.n
@@ -3069,7 +3069,7 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
                                var prompt, stop_ids, close : array<int64>&;
                                var nothink_out : NothinkStopGuard&;
                                var call_open, call_close : string&; var think_out : ThinkStream&;
-                               var tool_mode_out : ToolMode&; var stable_at : int64&) : string {
+                               var tool_mode_out : ToolMode&; var stable_at : int64&; var system_at : int64&) : string {
     var chat <- create_chat_renderer(cur_model(), system, max_new)
     defer() { delete chat }
     if (think_set) {   // absent from the request => the family's own default (gemma-4 E: off)
@@ -3185,6 +3185,7 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
     }
     var turn <- render_turn_marked(cur_model(), chat)
     stable_at = long_length(rendered) + turn.opening   //! every earlier turn, and the last turn's own opening
+    system_at = chat.first_opening > 0l ? chat.first_opening : turn.opening   //! the conversation's opening, from the replayed first turn or this one
     rendered |> push_from(turn.toks)
     delete turn
     // out-params: the sole caller hands them in empty and deletes them before every re-render
@@ -3543,11 +3544,12 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
     var think_stream = ThinkStream()
     var wire_tool_mode = ToolMode.none
     var stable_at = 0l
+    var system_at = 0l
     var start = 0
     while (true) {
         let render_error = render_chat_suffix(msgs_v, system, tools, max_new, start, think_set, think_val, preserve_think,
                                               refs, prompt, stop_ids, close, nothink, call_open, call_close,
-                                              think_stream, wire_tool_mode, stable_at)
+                                              think_stream, wire_tool_mode, stable_at, system_at)
         if (!empty(render_error)) {
             bad_request(srv, writer, render_error)
             return
@@ -3600,7 +3602,7 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
     register_request(srv, writer, prompt, stop_ids, close, stop_strs, spans, params, max_new,
                      streaming, true, "chatcmpl",
                      has_tools, call_open, call_close, seed, think_stream, wire_tool_mode, resume_rid,
-                     nothink, stable_at, wants_usage(js), resumed, constraint)
+                     nothink, stable_at, wants_usage(js), resumed, constraint, system_at)
 }
 
 //! Marks the refs that bring no rows and whose span the slot's prefix cache does not hold under `prompt`; true when
@@ -4281,7 +4283,7 @@ let private CONFIG_KEY_KINDS <- {
     "gpu_dense" => "b", "gpu_vram_mb" => "i", "asr" => "s", "mmproj" => "s", "asr_workers" => "i",
     "tts" => "s", "tts_lane" => "s", "tts_voices_dir" => "s",
     "ctx" => "i", "max_tokens" => "i", "streams" => "i", "threads" => "i", "team_dispatch" => "s",
-    "affinity" => "i", "chunk" => "i", "chunk_idle" => "i", "page_rows" => "i", "prefix" => "i", "flat" => "b",
+    "affinity" => "i", "chunk" => "i", "chunk_idle" => "i", "page_rows" => "i", "prefix" => "i", "prefix_states" => "i", "prefix_state_mb" => "i", "flat" => "b",
     "mtp" => "b", "rope_scaling" => "s", "rope_scale" => "f", "yarn_orig_ctx" => "i",
     "lcpp_bin" => "s", "models_dir" => "s", "image_mmproj" => "s", "audio_mmproj" => "s", "models" => "a",
     "exchange_url" => "s", "exchange_accept" => "s", "exchange_submit" => "s", "host" => "s"
@@ -4289,7 +4291,7 @@ let private CONFIG_KEY_KINDS <- {
 
 let private MODEL_KEY_KINDS <- {
     "name" => "s", "path" => "s", "backend" => "s", "ctx" => "i", "quant" => "s",
-    "kv_dtype" => "s", "streams" => "i", "chunk" => "i", "chunk_idle" => "i", "page_rows" => "i", "prefix" => "i",
+    "kv_dtype" => "s", "streams" => "i", "chunk" => "i", "chunk_idle" => "i", "page_rows" => "i", "prefix" => "i", "prefix_states" => "i", "prefix_state_mb" => "i",
     "mtp" => "b", "default" => "b", "image_mmproj" => "s", "audio_mmproj" => "s",
     "rope_scaling" => "s", "rope_scale" => "f", "yarn_orig_ctx" => "i"
 }
@@ -6791,6 +6793,8 @@ struct private SchedDefaults {
     idle_chunk_tokens : int64
     page_rows : int64
     prefix_groups : int64
+    prefix_states : int64        //! a recurrent model's checkpoint count budget
+    prefix_state_bytes : int64   //! ... and byte budget (0 = the count alone)
     kv_dtype : KVDtype
     mtp : int   //! -1 auto (`mtp_auto_arms`) | 0 off | 1 on
 }
@@ -6868,7 +6872,8 @@ def private init_one_scheduler(var s : ModelSlot) {
             spec = false
         }
     }
-    s.sched <- create_scheduler(s.model, s_streams, g_sched_defaults.max_queue, s_chunk, s_pages, pfx, s_kv, spec, s_idle)
+    s.sched <- create_scheduler(s.model, s_streams, g_sched_defaults.max_queue, s_chunk, s_pages, pfx, s_kv, spec, s_idle,
+                                g_sched_defaults.prefix_states, g_sched_defaults.prefix_state_bytes)
     slot_default_chunk(s)
 }
 
@@ -6886,10 +6891,11 @@ def private slot_default_chunk(var s : ModelSlot) {
 }
 
 // one scheduler per slot: the init args are the defaults, SlotOpts sentinels override per slot
-def private init_slot_schedulers(max_streams, max_queue, chunk_tokens, idle_chunk_tokens, page_rows, prefix_groups : int64; kv_dtype : KVDtype; mtp : int) {
+def private init_slot_schedulers(max_streams, max_queue, chunk_tokens, idle_chunk_tokens, page_rows, prefix_groups, prefix_states, prefix_state_bytes : int64; kv_dtype : KVDtype; mtp : int) {
     g_sched_defaults = SchedDefaults(max_streams = max_streams, max_queue = max_queue,
                                      chunk_tokens = chunk_tokens, idle_chunk_tokens = idle_chunk_tokens, page_rows = page_rows,
-                                     prefix_groups = prefix_groups, kv_dtype = kv_dtype, mtp = mtp)
+                                     prefix_groups = prefix_groups, prefix_states = prefix_states, prefix_state_bytes = prefix_state_bytes,
+                                     kv_dtype = kv_dtype, mtp = mtp)
     for (s in g_slots) {
         init_one_scheduler(s)
     }
@@ -6906,7 +6912,8 @@ let FRONT_BIND_HOST_REFUSED = -2   //! the ready `status` when the server refuse
 def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; chunk_tokens : int64 = 0l;
                 page_rows : int64 = 64l; prefix_groups : int64 = 0l; kv_dtype : KVDtype = KVDtype.f16;
                 team_dispatch : bool = true; asr_team : int = -1; mtp : int = -1;
-                idle_chunk_tokens : int64 = -1l; host : string = DEFAULT_BIND_HOST) : bool {
+                idle_chunk_tokens : int64 = -1l; host : string = DEFAULT_BIND_HOST;
+                prefix_states : int64 = DEFAULT_PREFIX_STATES; prefix_state_mb : int64 = 0l) : bool {
     if (g_front_up || g_jobque_owned) {
         to_log(LOG_ERROR, "dasllama-server: init_server called while already initialized\n")
         return false
@@ -6943,7 +6950,8 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
         }
         to_log(LOG_INFO, g_setup_mode ? "dasllama-server: setup mode - serving the catalog/config page only\n" : "dasllama-server: no LLM slot - serving the speech route and the catalog only\n")
     }
-    init_slot_schedulers(max_streams, max_queue, chunk_tokens, idle_chunk_tokens, page_rows, prefix_groups, kv_dtype, mtp)
+    init_slot_schedulers(max_streams, max_queue, chunk_tokens, idle_chunk_tokens, page_rows, prefix_groups,
+                         prefix_states, prefix_state_mb * 1048576l, kv_dtype, mtp)
     g_active = g_default_slot
     g_cur = g_default_slot
     g_prev_mtp_spec = get_mtp_spec()
@@ -7214,9 +7222,10 @@ def shutdown_server() {   // nolint:STYLE038 — one ordered teardown: workers s
 def run_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; chunk_tokens : int64 = 0l;
                page_rows : int64 = 64l; prefix_groups : int64 = 0l; kv_dtype : KVDtype = KVDtype.f16;
                team_dispatch : bool = true; asr_team : int = -1; mtp : int = -1;
-               idle_chunk_tokens : int64 = -1l; host : string = DEFAULT_BIND_HOST) {
+               idle_chunk_tokens : int64 = -1l; host : string = DEFAULT_BIND_HOST;
+               prefix_states : int64 = DEFAULT_PREFIX_STATES; prefix_state_mb : int64 = 0l) {
     if (init_server(port, max_streams, max_queue, chunk_tokens, page_rows, prefix_groups, kv_dtype,
-            team_dispatch, asr_team, mtp, idle_chunk_tokens, host)) {
+            team_dispatch, asr_team, mtp, idle_chunk_tokens, host, prefix_states, prefix_state_mb)) {
         while (update_server()) {
         }
     }

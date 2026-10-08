@@ -39,12 +39,21 @@ struct PrefixChain {
     preview : string            // caller-provided detokenized head ("" when not given)
 }
 
+//! What a checkpoint stands at: a prompt's opening a prefill stopped at (a system block, a conversation's earlier
+//! turns), which other requests share, or a finished turn's tail, which only that conversation's next turn extends.
+enum PrefixStateKind {
+    opening
+    tail
+}
+
 //! One recurrent checkpoint: the tokens a session had evaled, the page groups holding their rows
 //! (each held), and the recurrent state after the last of them.
 struct PrefixState {
     tokens : array<int64>
     groups : array<int>         // ceil(tokens / page_rows) groups, the last one partial when the count is off a page
     snap : DnSnapshot
+    kind : PrefixStateKind = PrefixStateKind.tail
+    nbytes : int64              //! the snapshot's and the held pages' bytes (`prefix_state_bytes_`)
     last_use : int64
     hits : int64
 }
@@ -66,8 +75,11 @@ struct PrefixCache {
     roots : array<uint64>       //! the keys of the first pages donated: a prompt no whole page serves copies the one it shares the most leading rows with
     states : array<PrefixState> // a recurrent model's checkpoints
     max_states : int64          // checkpoint budget (LRU-drops past it); 0 = a recurrent model caches nothing
+    max_state_bytes : int64     //! the checkpoints' byte budget (snapshots and held pages); 0 = unbounded, the count alone bounds them
+    state_bytes : int64         //! the standing checkpoints' bytes
     n_state_hits : int64
     n_state_inserts : int64
+    n_state_evicted : int64
 }
 
 // FNV-1a 64 over the 8 bytes of v, continuing h.
@@ -104,10 +116,21 @@ def private page_tokens_match(entry : PrefixEntry; tokens : array<int64>; lo : i
 //! Create a prefix cache for the sessions of one pool. ``max_groups`` caps how many page groups
 //! the cache retains (LRU-dropped past it; a dropped page a session still uses stays alive — only
 //! the cache's hold is released); 0 = unbounded.
-def create_prefix_cache_(max_groups : int64 = 0l; max_states : int64 = DEFAULT_PREFIX_STATES) : PrefixCache =>
-    <- PrefixCache(max_groups = max_groups, max_states = max(max_states, 0l))
+def create_prefix_cache_(max_groups : int64 = 0l; max_states : int64 = DEFAULT_PREFIX_STATES; max_state_bytes : int64 = 0l) : PrefixCache =>
+    <- PrefixCache(max_groups = max_groups, max_states = max(max_states, 0l), max_state_bytes = max(max_state_bytes, 0l))
 
-let DEFAULT_PREFIX_STATES = 4l   //! a recurrent model's checkpoints kept: a reused opening, a conversation's last turn, and two to spare
+let DEFAULT_PREFIX_STATES = 16l   //! a recurrent model's checkpoints kept: a request leaves two (its shared opening, its finished turn), so this holds several interleaved conversations
+
+//! what a checkpoint of `n` tokens costs: its snapshot's arrays, its token list, and the rows of the pages it holds
+def prefix_state_bytes_(pool : KVPool; snap : DnSnapshot; n : int64) : int64 {
+    var row_bytes = 0l
+    for (k, v in pool.krow_bytes, pool.vrow_bytes) {
+        row_bytes += k + v
+    }
+    let held = (n + pool.page_rows - 1l) / pool.page_rows
+    return (4l * (long_length(snap.conv) + long_length(snap.state) + long_length(snap.ple_hist) + long_length(snap.mtp_h))
+        + 8l * (long_length(snap.ple_prev) + n) + held * pool.page_rows * row_bytes)
+}
 
 //! how many of `a`'s leading tokens open `b`
 def private shared_opening(a, b : array<int64>) : int64 {
@@ -143,8 +166,29 @@ def private prefix_state_drop(var cache : PrefixCache; var pool : KVPool; at : i
     for (g in cache.states[at].groups) {
         kv_pool_release_group(pool, g)
     }
+    cache.state_bytes -= cache.states[at].nbytes
+    cache.n_state_evicted ++
     delete cache.states[at]   //! erase is a raw remove: the owned arrays go first
     cache.states |> erase(at)
+}
+
+//! the checkpoint to drop first: the tail used longest ago, and only when no tail stands the opening used longest
+//! ago - a tail serves one conversation's next turn, an opening every request that shares it
+def private prefix_state_victim(cache : PrefixCache) : int {
+    var lru = -1
+    for (st, i in cache.states, count()) {
+        if (st.kind == PrefixStateKind.tail && (lru < 0 || st.last_use < cache.states[lru].last_use)) {
+            lru = i
+        }
+    }
+    if (lru >= 0) {
+        return lru
+    }
+    lru = 0
+    for (st, i in cache.states, count()) {
+        lru = st.last_use < cache.states[lru].last_use ? i : lru
+    }
+    return lru
 }
 
 //! the deepest checkpoint whose every token opens `prompt`, short of the prompt's last token: its
@@ -181,7 +225,7 @@ def private prefix_attach_state(var cache : PrefixCache; var pool : KVPool; var 
 
 //! a checkpoint of the session where it stands: its first `n_past` tokens, their pages, the
 //! recurrent state. Nothing is kept when the state does not stand at that position.
-def private prefix_insert_state(var cache : PrefixCache; var pool : KVPool; var s : Session; tokens : array<int64>) {
+def private prefix_insert_state(var cache : PrefixCache; var pool : KVPool; var s : Session; tokens : array<int64>; kind : PrefixStateKind) {
     let n = min(long_length(tokens), s.n_past)
     if (n <= 0l || cache.max_states <= 0l) {
         return
@@ -190,6 +234,9 @@ def private prefix_insert_state(var cache : PrefixCache; var pool : KVPool; var 
     for (st in cache.states) {
         if (long_length(st.tokens) == n && shared_opening(st.tokens, tokens) == n) {
             st.last_use = cache.tick
+            if (kind == PrefixStateKind.opening) {   //! a tail another request stops at is an opening from here on
+                st.kind = kind
+            }
             return
         }
     }
@@ -199,7 +246,9 @@ def private prefix_insert_state(var cache : PrefixCache; var pool : KVPool; var 
         return
     }
     let pr = pool.page_rows
-    var e <- PrefixState(snap <- snap, last_use = cache.tick)
+    let nbytes = prefix_state_bytes_(pool, snap, n)   // before the move below: a call's arguments evaluate in no fixed order
+    var e <- PrefixState(snap <- snap, kind = kind, nbytes = nbytes, last_use = cache.tick)
+    cache.state_bytes += nbytes
     e.tokens <- [for (i in range64(n)); tokens[i]]
     let held = (n + pr - 1l) / pr
     e.groups |> reserve(held)
@@ -209,12 +258,9 @@ def private prefix_insert_state(var cache : PrefixCache; var pool : KVPool; var 
     }
     cache.states |> emplace(e)
     cache.n_state_inserts ++
-    while (long_length(cache.states) > cache.max_states) {
-        var lru = 0
-        for (st, i in cache.states, count()) {
-            lru = st.last_use < cache.states[lru].last_use ? i : lru
-        }
-        prefix_state_drop(cache, pool, lru)
+    while (long_length(cache.states) > cache.max_states ||
+           (cache.max_state_bytes > 0l && cache.state_bytes > cache.max_state_bytes && length(cache.states) > 1)) {
+        prefix_state_drop(cache, pool, prefix_state_victim(cache))   //! the newest stands even past the byte budget alone: a budget under one checkpoint caches the last one
     }
 }
 
@@ -388,12 +434,12 @@ def private prefix_evict_lru(var cache : PrefixCache; var pool : KVPool) {
 //! only tokens up to ``n_past`` are eligible, and pages past the budget LRU-drop. Call right before
 //! ``release_kv_pages``. ``preview`` labels the donation's chain on the dashboard surface.
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#prefix-tail-page")]
-def prefix_insert_(var cache : PrefixCache; var pool : KVPool; var s : Session; tokens : array<int64>; preview : string = "") {
+def prefix_insert_(var cache : PrefixCache; var pool : KVPool; var s : Session; tokens : array<int64>; preview : string = ""; opening : bool = false) {
     if (s.kv_pool == null || s.kv_pool != unsafe(addr(pool))) {
         panic("prefix_insert: the session is not paged out of this pool")
     }
     if (!empty(s.dn_state_prefix)) {
-        prefix_insert_state(cache, pool, s, tokens)
+        prefix_insert_state(cache, pool, s, tokens, opening ? PrefixStateKind.opening : PrefixStateKind.tail)
         return
     }
     let pr = pool.page_rows

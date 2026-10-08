@@ -103,11 +103,11 @@ def release_kv_pages(var session : Session) {
     release_kv_pages_(session)
 }
 
-def create_prefix_cache(max_groups : int64 = 0l; max_states : int64 = DEFAULT_PREFIX_STATES) : PrefixCache {
-    //! Create a prefix cache for the paged sessions of one ``create_kv_pool`` pool: streams donate KV pages
-    //! (``prefix_insert``), later requests with the same prefix attach them (``prefix_attach``). ``max_groups`` caps
-    //! retained groups (0 = unbounded); a recurrent model keeps at most ``max_states`` whole checkpoints instead.
-    return <- create_prefix_cache_(max_groups, max_states)
+def create_prefix_cache(max_groups : int64 = 0l; max_states : int64 = DEFAULT_PREFIX_STATES; max_state_bytes : int64 = 0l) : PrefixCache {
+    //! A prefix cache for one ``create_kv_pool`` pool: streams donate KV pages (``prefix_insert``), later requests
+    //! with the same prefix attach them (``prefix_attach``); ``max_groups`` caps the pages (0 = unbounded). A recurrent
+    //! model keeps whole checkpoints instead: ``max_states`` within ``max_state_bytes`` (0 = the count alone).
+    return <- create_prefix_cache_(max_groups, max_states, max_state_bytes)
 }
 
 def prefix_checkpoint_at(cache : PrefixCache; pool : KVPool; session : Session; prompt : array<int64>; matched : int64; stable_at : int64 = 0l) : int64 {
@@ -130,11 +130,11 @@ def prefix_attach(var cache : PrefixCache; var pool : KVPool; var session : Sess
     return prefix_attach_(cache, pool, session, prompt)
 }
 
-def prefix_insert(var cache : PrefixCache; var pool : KVPool; var session : Session; tokens : array<int64>; preview : string = "") {
-    //! Donate a session's KV pages to the cache. ``tokens`` is its EVALED history (the first ``n_past`` rows exist);
-    //! every full page not already cached survives ``release_kv_pages``, ``preview`` labels the chain. On a
-    //! recurrent model the donation is one checkpoint at ``n_past``, and may be taken between two prefill calls.
-    prefix_insert_(cache, pool, session, tokens, preview)
+def prefix_insert(var cache : PrefixCache; var pool : KVPool; var session : Session; tokens : array<int64>; preview : string = ""; opening : bool = false) {
+    //! Donate a session's KV pages to the cache: ``tokens`` is its EVALED history (the first ``n_past`` rows exist), every
+    //! full page not already cached survives ``release_kv_pages``, ``preview`` labels the chain. A recurrent model donates
+    //! one checkpoint at ``n_past``: ``opening`` marks one taken between prefill calls, kept ahead of finished turns' tails.
+    prefix_insert_(cache, pool, session, tokens, preview, opening)
 }
 
 def prefix_chain_list(cache : PrefixCache) : array<PrefixChain> {

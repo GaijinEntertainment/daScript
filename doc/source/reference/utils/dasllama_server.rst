@@ -168,7 +168,8 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    bin/daslang -jit utils/dasllama-server/main.das -- --model <model.gguf> [--port 8080] [--quant q8] \
        [--asr <asr.bin>] [--asr-workers 2] [--mmproj <mmproj.gguf>] [--image-mmproj <mmproj.gguf>] \
        [--audio-mmproj <mmproj.gguf>] \
-       [--ctx 4096] [--streams 4] [--chunk 512] [--chunk-idle 2048] [--page-rows 64] [--prefix N] [--tune]
+       [--ctx 4096] [--streams 4] [--chunk 512] [--chunk-idle 2048] [--page-rows 64] [--prefix N] \
+       [--prefix-states 16] [--prefix-state-mb 0] [--tune]
 
 .. list-table::
    :header-rows: 1
@@ -307,6 +308,14 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
      -
      - *auto*
      - Prefix-cache retention cap in pages (auto: one full context per stream; ``-1`` = unbounded)
+   * - ``--prefix-states``
+     -
+     - ``16``
+     - Recurrent models (the Qwen3.5/3.6/3.8 hybrids) cache whole checkpoints instead of pages: how many a slot keeps (``0`` = none; config key ``prefix_states``). Every request leaves one at its shared system opening and one at its finished turn; finished turns are dropped before shared openings
+   * - ``--prefix-state-mb``
+     -
+     - ``0``
+     - The checkpoints' byte budget in MB, snapshots and held pages (``0`` = the count alone bounds them; config key ``prefix_state_mb``)
    * - ``--flat``
      -
      - ---

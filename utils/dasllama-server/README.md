@@ -188,7 +188,8 @@ tree it keeps its own tune sidecar beside `cli.das`.
 bin/daslang -jit utils/dasllama-server/main.das -- --model <model.gguf> [--port 8080] [--quant q8] \
                                                     [--asr <asr.bin>] [--asr-workers 2] [--mmproj <mmproj.gguf>] \
                                                     [--image-mmproj <mmproj.gguf>] [--audio-mmproj <mmproj.gguf>] [--ctx 4096] \
-                                                    [--streams 4] [--chunk 512] [--chunk-idle 2048] [--page-rows 64] [--prefix N]
+                                                    [--streams 4] [--chunk 512] [--chunk-idle 2048] [--page-rows 64] [--prefix N] \
+                                                    [--prefix-states 16] [--prefix-state-mb 0]
 ```
 
 Run under `-jit` - the interpreter is refused, it is far too slow for inference. Flags:
@@ -227,6 +228,8 @@ Run under `-jit` - the interpreter is refused, it is far too slow for inference.
 | `--chunk-idle` | - | *backend* | Prefill quantum in tokens while no stream is decoding (never under `--chunk`): nothing waits on the tick, so the window can be wide. Default: 2048 on Metal, 512 on the other backends |
 | `--page-rows` | - | `64` | KV page size in positions for paged serving |
 | `--prefix` | - | *auto* | Prefix-cache retention cap in pages (auto: one full context per stream; `-1` = unbounded) |
+| `--prefix-states` | - | `16` | Recurrent models (the Qwen3.5/3.6/3.8 hybrids) cache whole checkpoints instead of pages: how many a slot keeps (`0` = none; config key `prefix_states`). Every request leaves one at its shared system opening and one at its finished turn; finished turns are dropped before shared openings |
+| `--prefix-state-mb` | - | `0` | The checkpoints' byte budget in MB, snapshots and held pages (`0` = the count alone bounds them; config key `prefix_state_mb`). The server log's checkpoint line carries the standing count and MB |
 | `--flat` | - | - | Flat preallocated KV sessions - disables paged serving and the prefix cache |
 | `--mtp` | - | *auto* | MTP/NextN self-speculative decode. Unset, a slot turns it on when it runs one stream (`streams = 1`) on a GPU - Metal, or the whole model resident on a Vulkan device with its routed experts on the card - and leaves it off otherwise: at one stream on Metal the draft-and-verify round cuts decode time on the dense Qwen3.5 MTP models (0.8B 1.20x, 4B 1.21x, 9B 1.10x - `modules/dasLLAMA/followup_metal.md` row 26), on a Vulkan device more (`modules/dasLLAMA/PERF_LEDGER.md`, the resident driver's NextN entries) unless the driver sums a MoE's routed experts on the host, where the verify rows' host sums cost more than a plain token (the same ledger's Qwen3.8-Flash-Next entry), on the CPU the round's second verify row costs a second decode step and the round is slower than plain decode (`modules/dasLLAMA/PERF_LEDGER.md`, the CPU self-speculation entry), and at several streams the plain batched step is faster (`modules/dasLLAMA/PERF_LEDGER.md`, the batched arcs). An armed round keeps every stream's cache on the host, so a drafting Vulkan slot serves host-cached sessions in place of device-home ones. `true` / `false` set it outright. It needs a model with an in-file NextN head (the `-MTP-` GGUFs), or an assistant drafter GGUF beside the model file (gemma-4: `mtp-<stem>-Q8_0.gguf`), which the load attaches; on any other model the server logs one line and serves plain. Greedy requests are output-invariant; a sampled request (`temperature` > 0, penalties included) draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. `/v1/stats` reports `mtp_drafted`/`mtp_accepted`; a constrained reply (`response_format`, a forced `tool_choice`) decodes plain |
 | `--rope-scaling` | - | *file* | RoPE scaling override for the load: `yarn` \| `linear` \| `none`; unset keeps the model file's own `rope.scaling.*` keys, `none` drops them (a file's per-pair factor tensors, Llama-3.1's `rope_freqs`, stay, as llama.cpp keeps them). `yarn` folds the NTK-by-parts frequency ramp and the `1 + 0.1 ln(s)` magnitude into the rope tables the way llama.cpp's `--rope-scaling yarn` does. The Qwen families publish the recipe (Qwen2.5-Instruct 7B and up, Qwen3, Qwen3-Next / 3.5 / 3.8: factor 4 over the trained context) and ship no scaling keys because static YaRN costs a little on short texts - arm it when a conversation needs the length; no other vendor validates it, and a non-Qwen file logs a warning. The override is baked into the prepared image under its own lane (`model.gguf.metal-yarn4.dlim`), so the first load with it mints once. Per-model in a `[[models]]` roster: `rope_scaling = "yarn"` |
@@ -371,7 +374,11 @@ cache memory tracks each stream's actual context, and finished streams donate th
 conversation) attaches instead of re-prefilling - time-to-first-token collapses on warm prompts.
 The match is the longest common prefix at any length: a request that repeats an earlier one's
 opening and changes a word reuses every token before the word (`usage.prompt_tokens_details.cached_tokens`
-says how many).
+says how many). A recurrent model (the Qwen3.5/3.6/3.8 hybrids) has a state at one position only, so its
+cache holds whole checkpoints instead of pages: every request leaves one at the opening every request on
+its system prompt shares and one at its finished turn, `--prefix-states` of them within `--prefix-state-mb`,
+finished turns dropped before shared openings, and a prompt attaches the deepest one that is its exact
+prefix - the shared system block for a new conversation, the whole earlier exchange for the next turn.
 Clients whose connection drops mid-generation are evicted within a tick. Audio uploads queue to
 long-lived `new_thread` ASR workers and do not block chat generation; `--asr-workers 2` permits two
 transcriptions at once. Each worker owns its model/context and reuses language-specific session
