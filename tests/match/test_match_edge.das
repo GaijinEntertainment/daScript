@@ -41,16 +41,9 @@ variant ABC {
 
 [sideeffects]
 def nested_match(n : Nested) {
-    match (n) {
-        if (Nested(inner = Point(x = 0, y = 0), tag = "origin")) {
-            return "origin labeled"
-        }
-        if (Nested(inner = Point(x = $v(x), y = $v(y)))) {
-            return "({x},{y})"
-        }
-        if (_) {
-            return "other"
-        }
+    return match (n) {
+        Nested(inner = Point(x = 0, y = 0), tag = "origin") => "origin labeled"
+        Nested(inner = Point(x = x, y = y)) => "({x},{y})"
     }
 }
 
@@ -60,13 +53,8 @@ def nested_match(n : Nested) {
 
 [sideeffects, unused_argument(e)]
 def empty_struct_match(e : Empty) {
-    match (e) {
-        if (Empty()) {
-            return "empty"
-        }
-        if (_) {
-            return "wildcard"
-        }
+    return match (e) {
+        Empty() => "empty"
     }
 }
 
@@ -76,16 +64,10 @@ def empty_struct_match(e : Empty) {
 
 [sideeffects]
 def string_match(s : string) {
-    match (s) {
-        if ("hello") {
-            return 1
-        }
-        if ("world") {
-            return 2
-        }
-        if (_) {
-            return 0
-        }
+    return match (s) {
+        "hello" => 1
+        "world" => 2
+        _ => 0
     }
 }
 
@@ -96,15 +78,10 @@ def string_match(s : string) {
 
 [sideeffects]
 def bool_match(b : bool) {
-    match (b) {
-        if (true) {   // nolint:STYLE018 - match arm pattern, not a boolean comparison
-            return "yes"
-        }
-        if (false) {   // nolint:STYLE018 - match arm pattern, not a boolean comparison
-            return "no"
-        }
+    return match (b) {
+        true => "yes"
+        false => "no"
     }
-    return "unreachable"
 }
 
 // ===========================
@@ -113,18 +90,11 @@ def bool_match(b : bool) {
 
 [sideeffects]
 def three_variant_match(v : ABC) {
-    match (v) {
-        if ($v(a) as a) {
-            return "a={a}"
-        }
-        if ($v(b) as b) {
-            return "b={b}"
-        }
-        if ($v(c) as c) {
-            return "c={c}"
-        }
+    return match (v) {
+        a as a => "a={a}"
+        b as b => "b={b}"
+        c as c => "c={c}"
     }
-    return "unreachable"
 }
 
 // ===========================
@@ -133,18 +103,11 @@ def three_variant_match(v : ABC) {
 
 [sideeffects]
 def variant_guard_match(v : IntOrStr) {
-    match (v) {
-        if ($v(i) as i && i > 0) {
-            return "positive int"
-        }
-        if ($v(i) as i) {
-            return "non-positive int"
-        }
-        if ($v(s) as s) {
-            return "string: {s}"
-        }
+    return match (v) {
+        i as i && i > 0 => "positive int"
+        i as i => "non-positive int"
+        s as s => "string: {s}"
     }
-    return "unreachable"
 }
 
 // ===========================
@@ -153,19 +116,11 @@ def variant_guard_match(v : IntOrStr) {
 
 [sideeffects]
 def tuple4_match(t : tuple<int; int; int; int>) {
-    match (t) {
-        if ((1, ...)) {
-            return "starts with 1"
-        }
-        if ((..., 9)) {
-            return "ends with 9"
-        }
-        if ((0, ..., 0)) {
-            return "bookends 0"
-        }
-        if (_) {
-            return "other"
-        }
+    return match (t) {
+        (1, ...) => "starts with 1"
+        (..., 9) => "ends with 9"
+        (0, ..., 0) => "bookends 0"
+        _ => "other"
     }
 }
 
@@ -175,16 +130,10 @@ def tuple4_match(t : tuple<int; int; int; int>) {
 
 [sideeffects]
 def match_expr_captured(p : Point) {
-    match (p) {
-        if (Point(x = $v(x), y = match_expr(x))) {   // y == x
-            return "diagonal"
-        }
-        if (Point(x = $v(x), y = match_expr(x * 2))) { // y == x*2
-            return "double"
-        }
-        if (_) {
-            return "other"
-        }
+    return match (p) {
+        Point(x = x, y = match_expr(x)) => "diagonal"  // y == x
+        Point(x = x, y = match_expr(x * 2)) => "double"  // y == x*2
+        _ => "other"
     }
 }
 
@@ -194,16 +143,10 @@ def match_expr_captured(p : Point) {
 
 [sideeffects]
 def dynamic_array_tail_literal(A : array<int>) {
-    match (A) {
-        if (array<int>(..., 42)) {
-            return "ends with 42"
-        }
-        if (array<int>(1, ...)) {
-            return "starts with 1"
-        }
-        if (_) {
-            return "other"
-        }
+    return match (A) {
+        array<int>(..., 42) => "ends with 42"
+        array<int>(1, ...) => "starts with 1"
+        _ => "other"
     }
 }
 
@@ -213,16 +156,10 @@ def dynamic_array_tail_literal(A : array<int>) {
 
 [sideeffects]
 def or_pattern_simple(i : int) {
-    match (i) {
-        if (1 || 2 || 3) {
-            return "low"
-        }
-        if (10 || 20) {
-            return "round"
-        }
-        if (_) {
-            return "other"
-        }
+    return match (i) {
+        1 | 2 | 3 => "low"
+        10 | 20 => "round"
+        _ => "other"
     }
 }
 
@@ -233,10 +170,10 @@ def or_pattern_simple(i : int) {
 [sideeffects]
 def struct_all_wildcard(p : Point) {
     match (p) {
-        if (Point(x = 0, y = 0)) {
+        Point(x = 0, y = 0) => $ {
             return "origin"
         }
-        if (Point()) {
+        Point() => $ {
             return "any point"
         }
     }
@@ -248,13 +185,9 @@ def struct_all_wildcard(p : Point) {
 
 [sideeffects]
 def struct_field_order(p : Point) {
-    match (p) {
-        if (Point(y = 0, x = $v(x))) {
-            return x
-        }
-        if (_) {
-            return -1
-        }
+    return match (p) {
+        Point(y = 0, x = x) => x
+        _ => -1
     }
 }
 
@@ -264,19 +197,10 @@ def struct_field_order(p : Point) {
 
 [sideeffects]
 def variant_field_syntax(v : IntOrStr) {
-    match (v) {
-        if (IntOrStr(i = 42)) {
-            return "the answer"
-        }
-        if (IntOrStr(i = $v(i))) {
-            return "int {i}"
-        }
-        if (IntOrStr(s = $v(s))) {
-            return "str {s}"
-        }
-        if (_) {
-            return "?"
-        }
+    return match (v) {
+        IntOrStr(i = 42) => "the answer"
+        IntOrStr(i = i) => "int {i}"
+        IntOrStr(s = s) => "str {s}"
     }
 }
 
@@ -286,16 +210,10 @@ def variant_field_syntax(v : IntOrStr) {
 
 [sideeffects]
 def static_array_exact(A : int[3]) {
-    match (A) {
-        if (fixed_array<int>(1, 2, 3)) {
-            return "123"
-        }
-        if (fixed_array<int>(0, ...)) {
-            return "starts 0"
-        }
-        if (_) {
-            return "other"
-        }
+    return match (A) {
+        fixed_array<int>(1, 2, 3) => "123"
+        fixed_array<int>(0, ...) => "starts 0"
+        _ => "other"
     }
 }
 
@@ -310,16 +228,10 @@ struct HasVariant {
 
 [sideeffects]
 def nested_variant_in_struct(h : HasVariant) {
-    match (h) {
-        if (HasVariant(name = "x", value = $v(i) as i)) {
-            return "x int {i}"
-        }
-        if (HasVariant(value = $v(s) as s)) {
-            return "string {s}"
-        }
-        if (_) {
-            return "other"
-        }
+    return match (h) {
+        HasVariant(name = "x", value = i as i) => "x int {i}"
+        HasVariant(value = s as s) => "string {s}"
+        _ => "other"
     }
 }
 
@@ -329,16 +241,10 @@ def nested_variant_in_struct(h : HasVariant) {
 
 [sideeffects]
 def static_match_int_or_float(what) {
-    static_match(what) {
-        if (match_type(type<int>, $v(v))) {
-            return "int:{v}"
-        }
-        if (match_type(type<float>, $v(v))) {
-            return "float:{v}"
-        }
-        if (_) {
-            return "other"
-        }
+    return static_match (what) {
+        match_type(type<int>, v) => "int:{v}"
+        match_type(type<float>, v) => "float:{v}"
+        _ => "other"
     }
 }
 
@@ -349,10 +255,10 @@ def static_match_int_or_float(what) {
 [sideeffects]
 def tuple_capture(t : tuple<int; string>) {
     match (t) {
-        if (($v(n), "hello")) {
+        (n, "hello") => $ {
             return n * 10
         }
-        if (($v(n), _)) {
+        (n, _) => $ {
             return n
         }
     }
@@ -369,16 +275,9 @@ struct Outer {
 
 [sideeffects]
 def deep_nested_match(o : Outer) {
-    match (o) {
-        if (Outer(mid = Nested(inner = Point(x = 0, y = 0), tag = "root"), id = 1)) {
-            return "root-1"
-        }
-        if (Outer(mid = Nested(inner = Point(x = $v(x))))) {
-            return "x={x}"
-        }
-        if (_) {
-            return "?"
-        }
+    return match (o) {
+        Outer(mid = Nested(inner = Point(x = 0, y = 0), tag = "root"), id = 1) => "root-1"
+        Outer(mid = Nested(inner = Point(x = x))) => "x={x}"
     }
 }
 
@@ -389,16 +288,10 @@ def deep_nested_match(o : Outer) {
 
 [sideeffects]
 def match_expr_struct_capture(p : Point) {
-    match (p) {
-        if (Point(x = $v(x), y = match_expr(x))) {
-            return "diagonal x={x}"
-        }
-        if (Point(x = $v(x), y = match_expr(x * 2))) {
-            return "double x={x}"
-        }
-        if (_) {
-            return "other"
-        }
+    return match (p) {
+        Point(x = x, y = match_expr(x)) => "diagonal x={x}"
+        Point(x = x, y = match_expr(x * 2)) => "double x={x}"
+        _ => "other"
     }
 }
 
@@ -408,13 +301,9 @@ def match_expr_struct_capture(p : Point) {
 
 [sideeffects]
 def match_expr_tuple_capture(t : tuple<int; int>) {
-    match (t) {
-        if (($v(a), match_expr(a))) {
-            return "equal={a}"
-        }
-        if (_) {
-            return "different"
-        }
+    return match (t) {
+        (a, match_expr(a)) => "equal={a}"
+        _ => "different"
     }
 }
 
@@ -424,18 +313,11 @@ def match_expr_tuple_capture(t : tuple<int; int>) {
 
 [sideeffects]
 def null_ptr_match(p : Point?) {
-    match (p) {
-        if (null) {
-            return "null"
-        }
-        if (Point(x = 0, y = 0)) {
-            return "origin"
-        }
-        if (Point(x = $v(x))) {
-            return "x={x}"
-        }
+    return match (p) {
+        null => "null"
+        Point(x = 0, y = 0) => "origin"
+        Point(x = x) => "x={x}"
     }
-    return "unreachable"
 }
 
 // ===========================
@@ -444,16 +326,10 @@ def null_ptr_match(p : Point?) {
 
 [sideeffects]
 def guard_nested(n : Nested) {
-    match (n) {
-        if (Nested(inner = Point(x = $v(x), y = $v(y))) && x == y) {
-            return "diagonal {x}"
-        }
-        if (Nested(inner = Point(x = $v(x))) && x > 10) {
-            return "big x={x}"
-        }
-        if (_) {
-            return "other"
-        }
+    return match (n) {
+        Nested(inner = Point(x = x, y = y)) && x == y => "diagonal {x}"
+        Nested(inner = Point(x = x)) && x > 10 => "big x={x}"
+        _ => "other"
     }
 }
 
@@ -466,13 +342,9 @@ def guard_nested(n : Nested) {
 // so using wildcards instead of captures when patterns access different fields
 [sideeffects]
 def or_variant_match(v : ABC) {
-    match (v) {
-        if ((_ as a) || (_ as c)) {
-            return "a or c"
-        }
-        if (_) {
-            return "b"
-        }
+    return match (v) {
+        (_ as a) | (_ as c) => "a or c"
+        _ => "b"
     }
 }
 
@@ -488,16 +360,10 @@ enum Color {
 
 [sideeffects]
 def enum_match(c : Color) {
-    match (c) {
-        if (Color.Red) {
-            return "red"
-        }
-        if (Color.Blue) {
-            return "blue"
-        }
-        if (_) {
-            return "other"
-        }
+    return match (c) {
+        Color.Red => "red"
+        Color.Blue => "blue"
+        _ => "other"
     }
 }
 
@@ -507,19 +373,11 @@ def enum_match(c : Color) {
 
 [sideeffects]
 def int_literal_match(n : int) {
-    match (n) {
-        if (0) {
-            return "zero"
-        }
-        if (1) {
-            return "one"
-        }
-        if (42) {
-            return "answer"
-        }
-        if (_) {
-            return "other"
-        }
+    return match (n) {
+        0 => "zero"
+        1 => "one"
+        42 => "answer"
+        _ => "other"
     }
 }
 
@@ -529,16 +387,10 @@ def int_literal_match(n : int) {
 
 [sideeffects]
 def float_match(f : float) {
-    match (f) {
-        if (0.0) {
-            return "zero"
-        }
-        if (1.0) {
-            return "one"
-        }
-        if (_) {
-            return "other"
-        }
+    return match (f) {
+        0.0 => "zero"
+        1.0 => "one"
+        _ => "other"
     }
 }
 

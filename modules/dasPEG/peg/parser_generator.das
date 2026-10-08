@@ -84,60 +84,33 @@ def accept_option(var gen : ParserGenerator; opt : string) {
 }
 
 
-def rule_left_recursive(name : string; rule : Rule) : bool {
-    match (rule) {
-        if (Rule(alt = $v(alts))) {
-            for (a in alts) {
-                return true if (rule_left_recursive(name, a.rule.rule))
-            }
-        }
-
-        if (Rule(seq = $v(seq))) {
-            return true if (rule_left_recursive(name, seq[0].rule))
-        }
-
-        if (Rule(maybe_repeat = $v(rule_))) {
-            return true if (rule_left_recursive(name, rule_.rule))
-        }
-
-        if (Rule(repeat = $v(rule_))) {
-            return true if (rule_left_recursive(name, rule_.rule))
-        }
-
-        if (Rule(not_rule = $v(rule_))) {
-            return true if (rule_left_recursive(name, rule_.rule))
-        }
-
-        if (Rule(and_rule = $v(rule_))) {
-            return true if (rule_left_recursive(name, rule_.rule))
-        }
-
-        if (Rule(option = $v(rule_))) {
-            return true if (rule_left_recursive(name, rule_.rule))
-        }
-
-        if (Rule(nonterminal = $v(name_))) {
-            return true if (name == name_)
-        }
-
-        if (Rule(bound_nonterminal = $v(tup))) {
-            return true if (tup._0 == name)
-        }
-
-        if (Rule(terminal = _)) {
-            return false
-        }
-
-        if (Rule(text_extraction = $v(rule_))) {
-            return true if (rule_left_recursive(name, rule_.rule))
-        }
-
-        if (_) {
-            abort("TODO: rule_left_recursive")
-        }
+def alternatives_left_recursive(name : string; alts : array<Alternative>) : bool {
+    for (a in alts) {
+        return true if (rule_left_recursive(name, a.rule.rule))
     }
-
     return false
+}
+
+def abort_left_recursive : bool {
+    abort("TODO: rule_left_recursive")
+    return false
+}
+
+def rule_left_recursive(name : string; rule : Rule) : bool {
+    return match (rule) {
+        Rule(alt = alts) => alternatives_left_recursive(name, alts)
+        Rule(seq = seq) => rule_left_recursive(name, seq[0].rule)
+        Rule(maybe_repeat = rule_) => rule_left_recursive(name, rule_.rule)
+        Rule(repeat = rule_) => rule_left_recursive(name, rule_.rule)
+        Rule(not_rule = rule_) => rule_left_recursive(name, rule_.rule)
+        Rule(and_rule = rule_) => rule_left_recursive(name, rule_.rule)
+        Rule(option = rule_) => rule_left_recursive(name, rule_.rule)
+        Rule(text_extraction = rule_) => rule_left_recursive(name, rule_.rule)
+        Rule(nonterminal = name_) => name == name_
+        Rule(bound_nonterminal = tup) => tup._0 == name
+        Rule(terminal = _) => false
+        _ => abort_left_recursive()
+    }
 }
 
 def generate_wrapper(var gen : ParserGenerator) {
@@ -396,17 +369,19 @@ def generate_grammar(var gen : ParserGenerator; var gram : array<Definition>; na
 
 def get_rule_type(var gen : ParserGenerator; rule : Rule) : TypeDeclPtr {
     match (rule) {
-        if (Rule(nonterminal = $v(nonterm))) {
+        Rule(nonterminal = nonterm) => $ {
             return <- gen.rule_types |> get_value_and_clone_type(nonterm)
         }
 
-        if (Rule(bound_nonterminal = $v(nonterm))) {
+        Rule(bound_nonterminal = nonterm) => $ {
             return <- gen.rule_types |> get_value_and_clone_type(nonterm._0)
         }
 
-        if (Rule(subrule = $v(subrule))) {
+        Rule(subrule = subrule) => $ {
             abort("Infer subrule type")
         }
+
+        _ => $ {}
     }
 
     unreachable("Unreachable `get_rule_type`")
@@ -428,7 +403,7 @@ def set_rule_handle(var subrule_ : Rule_?; handle : string) {
     assume subrule_variant = subrule_.rule
 
     match (subrule_variant) {
-        if (Rule(nonterminal = $v(nonterm))) {
+        Rule(nonterminal = nonterm) => $ {
             // Moving values that contain smart pointers is generally unsafe
             // But here we know that the contained variant is nonterminal (string) and cannot
             // possibly contain valid smart pointer. Therefore it should be safe to overwrite it.
@@ -436,49 +411,47 @@ def set_rule_handle(var subrule_ : Rule_?; handle : string) {
             return
         }
 
-        if (Rule(terminal = $v(term))) {
+        Rule(terminal = term) => $ {
             match (term) {
-                if (Terminal(lit = $v(l))) {
+                Terminal(lit = l) => $ {
                     // Something like (*"123" as foo)
                     abort("Matching repeated literals is not allowed")
                 }
 
-                if (Terminal(charset = $v(r))) {
+                Terminal(charset = r) => $ {
                     // *[1-9] as numbers
                     abort("Matching repeated charsets is not allowed -- use text extraction")
                 }
 
-                if (Terminal(number = $v(name))) {
-                    name = handle
-                }
+                Terminal(number = _) => $ { subrule_.rule <- Rule(terminal = Terminal(number = handle)) }
 
-                if (Terminal(whitespace = _)) {
+                Terminal(whitespace = _) => $ {
                     abort("Matching repeated whitespace is not allowed")
                 }
 
-                if (Terminal(taborspace = _)) {
+                Terminal(taborspace = _) => $ {
                     abort("Matching repeated tab or space is not allowed")
                 }
 
-                if (Terminal(EOF = _)) {
+                Terminal(EOL = _) => $ {
                     abort("Matching repeated EOL is not allowed")
                 }
 
-                if (Terminal(EOF = _)) {
+                Terminal(EOF = _) => $ {
                     abort("Matching repeated EOF is not allowed")
                 }
 
-                if (Terminal(string_ = $v(name))) {
-                    name = handle
-                }
+                Terminal(string_ = _) => $ { subrule_.rule <- Rule(terminal = Terminal(string_ = handle)) }
 
-                if (Terminal(double_ = $v(name))) {
-                    name = handle
-                }
+                Terminal(double_ = _) => $ { subrule_.rule <- Rule(terminal = Terminal(double_ = handle)) }
+
+                _ => $ {}
             }
 
             return
         }
+
+        _ => $ {}
     }
 
     abort("Cannot bind this rule with 'as': `{subrule_ |> describe_rule()}`\n
@@ -498,12 +471,12 @@ def flatten_block(var blk : ExprBlock?) {
 
 def generate(var gen : ParserGenerator; var rule_ : Rule) : array<ExpressionPtr> {
     match (rule_) {
-        if (Rule(terminal = $v(term))) {
-            var termb = gen |> generate_terminal(term)
+        Rule(terminal = term) => $ {
+            let termb = gen |> generate_terminal(term)
             return flatten_block(termb as ExprBlock)
         }
 
-        if (Rule(nonterminal = $v(nonterm))) {
+        Rule(nonterminal = nonterm) => $ {
             let name = nonterm
             let count = "{gen.rule_counter[name]++}"
 
@@ -525,7 +498,7 @@ def generate(var gen : ParserGenerator; var rule_ : Rule) : array<ExpressionPtr>
             return flatten_block(t as ExprBlock)
         }
 
-        if (Rule(bound_nonterminal = $v(nonterm))) {
+        Rule(bound_nonterminal = nonterm) => $ {
             let name = nonterm._0
             let result_name = nonterm._1
 
@@ -546,7 +519,7 @@ def generate(var gen : ParserGenerator; var rule_ : Rule) : array<ExpressionPtr>
             return flatten_block(t as ExprBlock)
         }
 
-        if (Rule(text_extraction = $v(subrule))) {
+        Rule(text_extraction = subrule) => $ {
             let result_handle = subrule.name
             let i = gen.rule_counter["extract"]++
             var subrule_ <- gen |> generate(subrule.rule)
@@ -565,7 +538,7 @@ def generate(var gen : ParserGenerator; var rule_ : Rule) : array<ExpressionPtr>
             return flatten_block(t as ExprBlock)
         }
 
-        if (Rule(seq = $v(rules))) {
+        Rule(seq = rules) => $ {
             var result : array<ExpressionPtr>
             for (rule in rules) {
                 result |> push_from(gen |> generate(rule.rule))
@@ -573,22 +546,22 @@ def generate(var gen : ParserGenerator; var rule_ : Rule) : array<ExpressionPtr>
             return <- result
         }
 
-        if (Rule(alt = $v(alts))) {
+        Rule(alt = alts) => $ {
             var results <- [for (alt, i in alts, iota()); generate_one_alternative(gen, alt, i, alts |> length == 1)]
             return <- results
         }
 
-        if (Rule(maybe_repeat = $v(rule_))) return <- gen |> generate_maybe_repeat(rule_)
+        Rule(maybe_repeat = rule_) => $ { return <- gen |> generate_maybe_repeat(rule_) }
 
-        if (Rule(not_rule = $v(rule_))) return <- gen |> generate_not(rule_)
+        Rule(not_rule = rule_) => $ { return <- gen |> generate_not(rule_) }
 
-        if (Rule(and_rule = $v(rule_))) return <- gen |> generate_and(rule_)
+        Rule(and_rule = rule_) => $ { return <- gen |> generate_and(rule_) }
 
-        if (Rule(repeat = $v(rule_))) return <- gen |> generate_repeat(rule_)
+        Rule(repeat = rule_) => $ { return <- gen |> generate_repeat(rule_) }
 
-        if (Rule(subrule = $v(subrule))) abort("TODO: Subrule")
+        Rule(subrule = subrule) => $ { abort("TODO: Subrule") }
 
-        if (Rule(option = $v(rule_))) return <- gen |> generate_option(rule_)  // nolint:STYLE005 — last arm of match block
+        Rule(option = rule_) => $ { return <- gen |> generate_option(rule_) }
     }
 
     unreachable()
@@ -838,101 +811,61 @@ def generate_repeat(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expre
 }
 
 
-def describe_terminal(term : Terminal) : string {
-    match (term) {
-        if (Terminal(lit = $v(l))) {
-            return "{l}"
-        }
+def describe_charset(ranges : tuple<chars : bool[256]; intervals : array<tuple<int; int>>>) : string {
+    return build_string() $(writer) {
+        for (i in range() <| min(ranges.intervals |> length, 3)) {// Don't print too many
+            let range_ = ranges.intervals[i]
 
-        if (Terminal(charset = $v(ranges))) {
-            let sb = build_string() $(writer) {
-                for (i in range() <| min(ranges.intervals |> length, 3)) {// Don't print too many
-                    let range_ = ranges.intervals[i]
-
-                    if (range_._0 == range_._1) {
-                        writer |> write <| " '{range_._0}' "
-                    } else {
-                        writer |> write <| " '{range_._0}'-'{range_._1}' "
-                    }
-                }
+            if (range_._0 == range_._1) {
+                writer |> write <| " '{range_._0}' "
+            } else {
+                writer |> write <| " '{range_._0}'-'{range_._1}' "
             }
-
-            return "set({sb})"
         }
-
-        if (Terminal(log_msg = $v(message))) {
-            return "log"
-        }
-
-        if (Terminal(number = $v(handle))) {
-            return "number"
-        }
-
-        if (Terminal(whitespace = _)) {
-            return "whitespace"
-        }
-
-        if (Terminal(taborspace = _)) {
-            return "taborspace"
-        }
-
-        if (Terminal(EOF = _)) {
-            return "EOF"
-        }
-
-        if (Terminal(EOL = _)) {
-            return "EOL"
-        }
-
-        if (Terminal(any = _)) {
-            return "any"
-        }
-
-        if (Terminal(string_ = $v(handle))) return "string_"
-
-        if (Terminal(double_ = $v(handle))) return "double_"  // nolint:STYLE005 — last arm of match block
     }
+}
 
+def unreachable_description : string {
     unreachable()
     return ""
 }
 
+def describe_terminal(term : Terminal) : string {
+    return match (term) {
+        Terminal(lit = l) => "{l}"
+        Terminal(charset = ranges) => "set({describe_charset(ranges)})"
+        Terminal(log_msg = _) => "log"
+        Terminal(number = _) => "number"
+        Terminal(whitespace = _) => "whitespace"
+        Terminal(taborspace = _) => "taborspace"
+        Terminal(EOF = _) => "EOF"
+        Terminal(EOL = _) => "EOL"
+        Terminal(any = _) => "any"
+        Terminal(string_ = _) => "string_"
+        Terminal(double_ = _) => "double_"
+        _ => unreachable_description()
+    }
+}
+
+
+def abort_description : string {
+    abort("Don't need this")
+    return unreachable_description()
+}
 
 def describe_rule(r : Rule_?) : string {
-    match (r.rule) {
-        if (Rule(terminal = $v(term))) return describe_terminal(term)
-
-        if (Rule(nonterminal = $v(nonterm))) {
-            let name = nonterm
-            return "{name}"
-        }
-
-        if (Rule(bound_nonterminal = $v(nonterm))) {
-            let name = nonterm._0
-            return "{name}"
-        }
-
-        if (Rule(text_extraction = $v(subrule))) return describe_rule(subrule)
-
-        if (Rule(seq = $v(rules))) abort("Don't need this")
-
-        if (Rule(alt = $v(alts))) abort("Don't need this")
-
-        if (Rule(maybe_repeat = $v(rule_))) return "*{describe_rule(rule_)}"
-
-        if (Rule(not_rule = $v(rule_))) return "!{describe_rule(rule_)}"
-
-        if (Rule(and_rule = $v(rule_))) return "PEEK({describe_rule(rule_)})"
-
-        if (Rule(repeat = $v(rule_))) return "+{describe_rule(rule_)}"
-
-        if (Rule(subrule = $v(subrule))) abort("Don't need this")
-
-        if (Rule(option = $v(rule_))) return "?{describe_rule(rule_)}"  // nolint:STYLE005 — last arm of match block
+    return match (r.rule) {
+        Rule(terminal = term) => describe_terminal(term)
+        Rule(nonterminal = nonterm) => "{nonterm}"
+        Rule(bound_nonterminal = nonterm) => "{nonterm._0}"
+        Rule(text_extraction = subrule) => describe_rule(subrule)
+        Rule(maybe_repeat = rule_) => "*{describe_rule(rule_)}"
+        Rule(not_rule = rule_) => "!{describe_rule(rule_)}"
+        Rule(and_rule = rule_) => "PEEK({describe_rule(rule_)})"
+        Rule(repeat = rule_) => "+{describe_rule(rule_)}"
+        Rule(option = rule_) => "?{describe_rule(rule_)}"
+        _ => abort_description()
     }
-
-    unreachable()
-    return ""
 }
 
 
@@ -1091,7 +1024,7 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
     var return_type = gen.return_types |> get_value_and_clone_type(gen.current_context)
 
     match (terminal) {
-        if (Terminal(lit = $v(l))) {
+        Terminal(lit = l) => $ {
             let precomputed_length = l |> length
 
             return <- qmacro_block() {
@@ -1123,7 +1056,7 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
             }
         }
 
-        if (Terminal(charset = $v(ranges))) {
+        Terminal(charset = ranges) => $ {
 
             // Get the currect charachter from the stream
             var rule_code : array<ExpressionPtr>
@@ -1160,7 +1093,7 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
             }
         }
 
-        if (Terminal(log_msg = $v(message))) {
+        Terminal(log_msg = message) => $ {
 
             return <- qmacro_block() {
                 if ($v(gen.tracing)) {
@@ -1172,7 +1105,7 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
             }
         }
 
-        if (Terminal(number = $v(handle))) {
+        Terminal(number = handle) => $ {
 
             return <- qmacro_block() {
                 let $i(name) : tuple<success : bool; value : int; endpos : int> = parser |> match_decimal_literal
@@ -1198,21 +1131,21 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
             }
         }
 
-        if (Terminal(whitespace = _)) {
+        Terminal(whitespace = _) => $ {
 
             return <- qmacro_block() {
                 parser |> skip_whitespace
             }
         }
 
-        if (Terminal(taborspace = _)) {
+        Terminal(taborspace = _) => $ {
 
             return <- qmacro_block() {
                 parser |> skip_taborspace
             }
         }
 
-        if (Terminal(EOF = _)) {
+        Terminal(EOF = _) => $ {
 
             return <- qmacro_block() {
                 if (!parser |> reached_EOF) {
@@ -1230,7 +1163,7 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
             }
         }
 
-        if (Terminal(EOL = _)) {
+        Terminal(EOL = _) => $ {
 
             return <- qmacro_block() {
                 if (!parser |> reached_EOL) {
@@ -1248,7 +1181,7 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
             }
         }
 
-        if (Terminal(any = _)) {
+        Terminal(any = _) => $ {
 
             return <- qmacro_block() {
                 if (parser |> reached_EOF) {
@@ -1272,14 +1205,14 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
             }
         }
 
-        if (Terminal(commit = _)) {
+        Terminal(commit = _) => $ {
             return <- qmacro_block() {
                 // Now every failure that checks cut operator will report an error and quit
                 cut = true
             }
         }
 
-        if (Terminal(string_ = $v(handle))) {
+        Terminal(string_ = handle) => $ {
 
             return <- qmacro_block() {
                 let $i(name) <- parser |> match_string_literal
@@ -1304,7 +1237,7 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
             }
         }
 
-        if (Terminal(double_ = $v(handle))) {  // nolint:STYLE005 — last arm of match block; body is multi-line qmacro_block
+        Terminal(double_ = handle) => $ {
 
             return <- qmacro_block() {
                 let $i(name) <- parser |> match_double_literal

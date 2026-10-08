@@ -70,149 +70,98 @@ def isSequencialMask(fields : dasvector`uint8) {
 }
 
 
-def das_to_cppString(t : Type) {   // nolint:STYLE037 - one match arm per Type enum value
-    match (t) {
-        if (Type.anyArgument) { return "vec4f"; }
-        if (Type.tVoid) { return "void"; }
-        if (Type.tBool) { return "bool"; }
-        if (Type.tInt8) { return "int8_t"; }
-        if (Type.tUInt8) { return "uint8_t"; }
-        if (Type.tInt16) { return "int16_t"; }
-        if (Type.tUInt16) { return "uint16_t"; }
-        if (Type.tInt64) { return "int64_t"; }
-        if (Type.tUInt64) { return "uint64_t"; }
-        if (Type.tBitfield) { return "Bitfield"; }
-        if (Type.tBitfield8) { return "Bitfield8"; }
-        if (Type.tBitfield16) { return "Bitfield16"; }
-        if (Type.tBitfield64) { return "Bitfield64"; }
-        if (Type.tString) { return "char *"; }
-        if (Type.tInt) { return "int32_t"; }
-        if (Type.tInt2) { return "int2"; }
-        if (Type.tInt3) { return "int3"; }
-        if (Type.tInt4) { return "int4"; }
-        if (Type.tUInt) { return "uint32_t"; }
-        if (Type.tUInt2) { return "uint2"; }
-        if (Type.tUInt3) { return "uint3"; }
-        if (Type.tUInt4) { return "uint4"; }
-        if (Type.tFloat) { return "float"; }
-        if (Type.tFloat2) { return "float2"; }
-        if (Type.tFloat3) { return "float3"; }
-        if (Type.tFloat4) { return "float4"; }
-        if (Type.tFloat16) { return "float16_t"; }
-        if (Type.tHalf2) { return "half2"; }
-        if (Type.tHalf3) { return "half3"; }
-        if (Type.tHalf4) { return "half4"; }
-        if (Type.tHalf8) { return "half8"; }
-        if (Type.tShort2) { return "short2"; }
-        if (Type.tShort3) { return "short3"; }
-        if (Type.tShort4) { return "short4"; }
-        if (Type.tShort8) { return "short8"; }
-        if (Type.tUShort2) { return "ushort2"; }
-        if (Type.tUShort3) { return "ushort3"; }
-        if (Type.tUShort4) { return "ushort4"; }
-        if (Type.tUShort8) { return "ushort8"; }
-        if (Type.tByte2) { return "byte2"; }
-        if (Type.tByte3) { return "byte3"; }
-        if (Type.tByte4) { return "byte4"; }
-        if (Type.tByte8) { return "byte8"; }
-        if (Type.tByte16) { return "byte16"; }
-        if (Type.tUByte2) { return "ubyte2"; }
-        if (Type.tUByte3) { return "ubyte3"; }
-        if (Type.tUByte4) { return "ubyte4"; }
-        if (Type.tUByte8) { return "ubyte8"; }
-        if (Type.tUByte16) { return "ubyte16"; }
-        if (Type.tDouble) { return "double"; }
-        if (Type.tRange) { return "range"; }
-        if (Type.tURange) { return "urange"; }
-        if (Type.tRange64) { return "range64"; }
-        if (Type.tURange64) { return "urange64"; }
-        if (Type.tBlock) { return "Block"; }
-        if (Type.tFunction) { return "Func"; }
-        if (Type.tLambda) { return "Lambda"; }
-        if (Type.tTuple) { return "Tuple"; }
-        if (Type.tVariant) { return "Variant"; }
+def private type_cpp_names(t : Type) : tuple<cpp : string; ctype : string> {
+    //! A Type's spelling in emitted C++ and its Type:: enumerator name; "" where the emitter has none.
+    return match (t) {
+        Type.autoinfer => (cpp = "", ctype = "autoinfer")
+        Type.alias => (cpp = "", ctype = "alias")
+        Type.anyArgument => (cpp = "vec4f", ctype = "anyArgument")
+        Type.tVoid => (cpp = "void", ctype = "tVoid")
+        Type.tStructure => (cpp = "", ctype = "tStructure")
+        Type.tPointer => (cpp = "", ctype = "tPointer")
+        Type.tBool => (cpp = "bool", ctype = "tBool")
+        Type.tInt8 => (cpp = "int8_t", ctype = "tInt8")
+        Type.tUInt8 => (cpp = "uint8_t", ctype = "tUInt8")
+        Type.tInt16 => (cpp = "int16_t", ctype = "tInt16")
+        Type.tUInt16 => (cpp = "uint16_t", ctype = "tUInt16")
+        Type.tInt64 => (cpp = "int64_t", ctype = "tInt64")
+        Type.tUInt64 => (cpp = "uint64_t", ctype = "tUInt64")
+        Type.tString => (cpp = "char *", ctype = "tString")
+        Type.tEnumeration => (cpp = "", ctype = "tEnumeration")
+        Type.tEnumeration8 => (cpp = "", ctype = "tEnumeration8")
+        Type.tEnumeration16 => (cpp = "", ctype = "tEnumeration16")
+        Type.tEnumeration64 => (cpp = "", ctype = "tEnumeration64")
+        Type.tBitfield => (cpp = "Bitfield", ctype = "tBitfield")
+        Type.tBitfield8 => (cpp = "Bitfield8", ctype = "tBitfield8")
+        Type.tBitfield16 => (cpp = "Bitfield16", ctype = "tBitfield16")
+        Type.tBitfield64 => (cpp = "Bitfield64", ctype = "tBitfield64")
+        Type.tIterator => (cpp = "", ctype = "tIterator")
+        Type.tArray => (cpp = "", ctype = "tArray")
+        Type.tTable => (cpp = "", ctype = "tTable")
+        Type.tInt => (cpp = "int32_t", ctype = "tInt")
+        Type.tInt2 => (cpp = "int2", ctype = "tInt2")
+        Type.tInt3 => (cpp = "int3", ctype = "tInt3")
+        Type.tInt4 => (cpp = "int4", ctype = "tInt4")
+        Type.tUInt => (cpp = "uint32_t", ctype = "tUInt")
+        Type.tUInt2 => (cpp = "uint2", ctype = "tUInt2")
+        Type.tUInt3 => (cpp = "uint3", ctype = "tUInt3")
+        Type.tUInt4 => (cpp = "uint4", ctype = "tUInt4")
+        Type.tFloat => (cpp = "float", ctype = "tFloat")
+        Type.tFloat2 => (cpp = "float2", ctype = "tFloat2")
+        Type.tFloat3 => (cpp = "float3", ctype = "tFloat3")
+        Type.tFloat4 => (cpp = "float4", ctype = "tFloat4")
+        Type.tFloat16 => (cpp = "float16_t", ctype = "tFloat16")
+        Type.tHalf2 => (cpp = "half2", ctype = "tHalf2")
+        Type.tHalf3 => (cpp = "half3", ctype = "tHalf3")
+        Type.tHalf4 => (cpp = "half4", ctype = "tHalf4")
+        Type.tHalf8 => (cpp = "half8", ctype = "tHalf8")
+        Type.tShort2 => (cpp = "short2", ctype = "tShort2")
+        Type.tShort3 => (cpp = "short3", ctype = "tShort3")
+        Type.tShort4 => (cpp = "short4", ctype = "tShort4")
+        Type.tShort8 => (cpp = "short8", ctype = "tShort8")
+        Type.tUShort2 => (cpp = "ushort2", ctype = "tUShort2")
+        Type.tUShort3 => (cpp = "ushort3", ctype = "tUShort3")
+        Type.tUShort4 => (cpp = "ushort4", ctype = "tUShort4")
+        Type.tUShort8 => (cpp = "ushort8", ctype = "tUShort8")
+        Type.tByte2 => (cpp = "byte2", ctype = "tByte2")
+        Type.tByte3 => (cpp = "byte3", ctype = "tByte3")
+        Type.tByte4 => (cpp = "byte4", ctype = "tByte4")
+        Type.tByte8 => (cpp = "byte8", ctype = "tByte8")
+        Type.tByte16 => (cpp = "byte16", ctype = "tByte16")
+        Type.tUByte2 => (cpp = "ubyte2", ctype = "tUByte2")
+        Type.tUByte3 => (cpp = "ubyte3", ctype = "tUByte3")
+        Type.tUByte4 => (cpp = "ubyte4", ctype = "tUByte4")
+        Type.tUByte8 => (cpp = "ubyte8", ctype = "tUByte8")
+        Type.tUByte16 => (cpp = "ubyte16", ctype = "tUByte16")
+        Type.tDouble => (cpp = "double", ctype = "tDouble")
+        Type.tRange => (cpp = "range", ctype = "tRange")
+        Type.tURange => (cpp = "urange", ctype = "tURange")
+        Type.tRange64 => (cpp = "range64", ctype = "tRange64")
+        Type.tURange64 => (cpp = "urange64", ctype = "tURange64")
+        Type.tBlock => (cpp = "Block", ctype = "tBlock")
+        Type.tFunction => (cpp = "Func", ctype = "tFunction")
+        Type.tLambda => (cpp = "Lambda", ctype = "tLambda")
+        Type.tTuple => (cpp = "Tuple", ctype = "tTuple")
+        Type.tVariant => (cpp = "Variant", ctype = "tVariant")
+        Type.tHandle => (cpp = "", ctype = "tHandle")
+        _ => (cpp = "", ctype = "")
     }
-    panic("Missed type {t}")
-    return ""
 }
 
-def das_to_cppCTypeString(t : Type) {   // nolint:STYLE037 - one match arm per Type enum value
-    match (t) {
-        if (Type.autoinfer) { return "autoinfer"; }
-        if (Type.alias) { return "alias"; }
-        if (Type.anyArgument) { return "anyArgument"; }
-        if (Type.tVoid) { return "tVoid"; }
-        if (Type.tStructure) { return "tStructure"; }
-        if (Type.tPointer) { return "tPointer"; }
-        if (Type.tBool) { return "tBool"; }
-        if (Type.tInt8) { return "tInt8"; }
-        if (Type.tUInt8) { return "tUInt8"; }
-        if (Type.tInt16) { return "tInt16"; }
-        if (Type.tUInt16) { return "tUInt16"; }
-        if (Type.tInt64) { return "tInt64"; }
-        if (Type.tUInt64) { return "tUInt64"; }
-        if (Type.tString) { return "tString"; }
-        if (Type.tPointer) { return "tPointer"; }
-        if (Type.tEnumeration) { return "tEnumeration"; }
-        if (Type.tEnumeration8) { return "tEnumeration8"; }
-        if (Type.tEnumeration16) { return "tEnumeration16"; }
-        if (Type.tEnumeration64) { return "tEnumeration64"; }
-        if (Type.tBitfield) { return "tBitfield"; }
-        if (Type.tBitfield8) { return "tBitfield8"; }
-        if (Type.tBitfield16) { return "tBitfield16"; }
-        if (Type.tBitfield64) { return "tBitfield64"; }
-        if (Type.tIterator) { return "tIterator"; }
-        if (Type.tArray) { return "tArray"; }
-        if (Type.tTable) { return "tTable"; }
-        if (Type.tInt) { return "tInt"; }
-        if (Type.tInt2) { return "tInt2"; }
-        if (Type.tInt3) { return "tInt3"; }
-        if (Type.tInt4) { return "tInt4"; }
-        if (Type.tUInt) { return "tUInt"; }
-        if (Type.tUInt2) { return "tUInt2"; }
-        if (Type.tUInt3) { return "tUInt3"; }
-        if (Type.tUInt4) { return "tUInt4"; }
-        if (Type.tFloat) { return "tFloat"; }
-        if (Type.tFloat2) { return "tFloat2"; }
-        if (Type.tFloat3) { return "tFloat3"; }
-        if (Type.tFloat4) { return "tFloat4"; }
-        if (Type.tFloat16) { return "tFloat16"; }
-        if (Type.tHalf2) { return "tHalf2"; }
-        if (Type.tHalf3) { return "tHalf3"; }
-        if (Type.tHalf4) { return "tHalf4"; }
-        if (Type.tHalf8) { return "tHalf8"; }
-        if (Type.tShort2) { return "tShort2"; }
-        if (Type.tShort3) { return "tShort3"; }
-        if (Type.tShort4) { return "tShort4"; }
-        if (Type.tShort8) { return "tShort8"; }
-        if (Type.tUShort2) { return "tUShort2"; }
-        if (Type.tUShort3) { return "tUShort3"; }
-        if (Type.tUShort4) { return "tUShort4"; }
-        if (Type.tUShort8) { return "tUShort8"; }
-        if (Type.tByte2) { return "tByte2"; }
-        if (Type.tByte3) { return "tByte3"; }
-        if (Type.tByte4) { return "tByte4"; }
-        if (Type.tByte8) { return "tByte8"; }
-        if (Type.tByte16) { return "tByte16"; }
-        if (Type.tUByte2) { return "tUByte2"; }
-        if (Type.tUByte3) { return "tUByte3"; }
-        if (Type.tUByte4) { return "tUByte4"; }
-        if (Type.tUByte8) { return "tUByte8"; }
-        if (Type.tUByte16) { return "tUByte16"; }
-        if (Type.tDouble) { return "tDouble"; }
-        if (Type.tRange) { return "tRange"; }
-        if (Type.tURange) { return "tURange"; }
-        if (Type.tRange64) { return "tRange64"; }
-        if (Type.tURange64) { return "tURange64"; }
-        if (Type.tBlock) { return "tBlock"; }
-        if (Type.tFunction) { return "tFunction"; }
-        if (Type.tLambda) { return "tLambda"; }
-        if (Type.tTuple) { return "tTuple"; }
-        if (Type.tVariant) { return "tVariant"; }
-        if (Type.tHandle) { return "tHandle"; }
+def das_to_cppString(t : Type) : string {
+    let names = type_cpp_names(t)
+    if (empty(names.cpp)) {
+        panic("Missed type {t}")
     }
-    panic("Missed type {t}")
-    return ""
+    return names.cpp
+}
+
+def das_to_cppCTypeString(t : Type) : string {
+    let names = type_cpp_names(t)
+    if (empty(names.ctype)) {
+        panic("Missed type {t}")
+    }
+    return names.ctype
 }
 
 
@@ -220,16 +169,14 @@ def das_to_cppCTypeString(t : Type) {   // nolint:STYLE037 - one match arm per T
 def isConstRedundantForCpp(typeDecl : TypeDeclPtr) {
     if (typeDecl.baseType == Type.tFixedArray) return false;
     if (typeDecl.isVectorType) return true;
-    match (typeDecl.baseType) {
-        if (Type.tBool || Type.tInt8 || Type.tUInt8 || Type.tInt16 || Type.tUInt16 ||
-            Type.tInt64 || Type.tUInt64 || Type.tInt || Type.tUInt ||
-            Type.tFloat || Type.tDouble ||
-            Type.tEnumeration || Type.tEnumeration8 || Type.tEnumeration16 || Type.tEnumeration64 ||
-            Type.tBitfield || Type.tBitfield8 || Type.tBitfield16 || Type.tBitfield64) {
-            return true
-        }
+    return match (typeDecl.baseType) {
+        (Type.tBool | Type.tInt8 | Type.tUInt8 | Type.tInt16 | Type.tUInt16 |
+            Type.tInt64 | Type.tUInt64 | Type.tInt | Type.tUInt |
+            Type.tFloat | Type.tDouble |
+            Type.tEnumeration | Type.tEnumeration8 | Type.tEnumeration16 | Type.tEnumeration64 |
+            Type.tBitfield | Type.tBitfield8 | Type.tBitfield16 | Type.tBitfield64) => true
+        _ => false
     }
-    return false
 }
 
 
@@ -275,42 +222,35 @@ def aotSuffixNameEx(funcName : das_string; suffix : string; force : bool = false
 def aotSuffixNameEx(funcName : string; suffix : string; force : bool = false) {
     var prefix = force || is_cpp_keyword(funcName);
 
-    let name = build_string() $(var writer) {   // nolint:STYLE037 - one match arm per C++-illegal identifier character
+    let name = build_string() $(var writer) {
         for (ch in funcName) {
             if (is_alnum(ch) || ch == '_') {
                 writer |> write_char(ch);
             } else {
                 prefix = true;
-                var t_ch : string;
-                match (ch) {
-                    if ('=') { t_ch = "Equ"; }
-                    if ('+') { t_ch = "Add"; }
-                    if ('-') { t_ch = "Sub"; }
-                    if ('*') { t_ch = "Mul"; }
-                    if ('/') { t_ch = "Div"; }
-                    if ('%') { t_ch = "Mod"; }
-                    if ('&') { t_ch = "And"; }
-                    if ('|') { t_ch = "Or"; }
-                    if ('^') { t_ch = "Xor"; }
-                    if ('?') { t_ch = "Qmark"; }
-                    if ('~') { t_ch = "Tilda"; }
-                    if ('!') { t_ch = "Excl"; }
-                    if ('>') { t_ch = "Greater"; }
-                    if ('<') { t_ch = "Less"; }
-                    if ('[') { t_ch = "Sqbl"; }
-                    if (']') { t_ch = "Sqbr"; }
-                    if ('.') { t_ch = "Dot"; }
-                    if ('`') { t_ch = "Tick"; }
-                    if (',') { t_ch = "Comma"; }
-                    if (_) {
-                        let repr = build_string() $(ss) {
-                            ss |> write_char(hex_char(ch >> 4))
-                            ss |> write_char(hex_char(ch));
-                        }
-                        t_ch = "_0x{repr}_"
-                    }
+                let t_ch = match (ch) {
+                    '=' => "Equ"
+                    '+' => "Add"
+                    '-' => "Sub"
+                    '*' => "Mul"
+                    '/' => "Div"
+                    '%' => "Mod"
+                    '&' => "And"
+                    '|' => "Or"
+                    '^' => "Xor"
+                    '?' => "Qmark"
+                    '~' => "Tilda"
+                    '!' => "Excl"
+                    '>' => "Greater"
+                    '<' => "Less"
+                    '[' => "Sqbl"
+                    ']' => "Sqbr"
+                    '.' => "Dot"
+                    '`' => "Tick"
+                    ',' => "Comma"
+                    _ => "_0x{to_char(hex_char(ch >> 4))}{to_char(hex_char(ch))}_"
                 }
-                write(writer, "{t_ch}")
+                write(writer, t_ch)
             }
         }
 
@@ -2095,10 +2035,11 @@ class public CppAot : AstVisitor {
     def plainOp2Text(that : ExprOp2?) : string {
         if (that._type.baseType == Type.tBool) {
             let that_op = string(that.op)
-            match (that_op) {
-                if ("&") { return "&&"; }
-                if ("|") { return "||"; }
-                if ("^" || "^^") { return "!="; }
+            return match (that_op) {
+                "&" => "&&"
+                "|" => "||"
+                "^" | "^^" => "!="
+                _ => that_op
             }
         }
         return string(that.op);
@@ -3021,13 +2962,14 @@ class public CppAot : AstVisitor {
         }
         write(*ss, " /*");
         for (f in expr.fields) {
-            match (int(f)) {
-                if (0) { write(*ss, "x"); }
-                if (1) { write(*ss, "y"); }
-                if (2) { write(*ss, "z"); }
-                if (3) { write(*ss, "w"); }
-                if (_) { write(*ss, "?"); }
+            let component = match (int(f)) {
+                0 => "x"
+                1 => "y"
+                2 => "z"
+                3 => "w"
+                _ => "?"
             }
+            write(*ss, component)
         }
         write(*ss, "*/");
         return expr;

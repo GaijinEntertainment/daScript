@@ -50,18 +50,10 @@ def add_alternative(var rules : array<MacroRule>; var expr : ExprCall?; _prog : 
 [macro_function]
 def add_name(var rule : Rule; var name : string) {
     match (rule) {
-        if (Rule(repeat = $v(rep))) {
-            rep.name <- name
-        }
-        if (Rule(option = $v(opt))) {
-            opt.name <- name
-        }
-        if (Rule(maybe_repeat = $v(rep))) {
-            rep.name <- name
-        }
-        if (_) {
-            abort("Unreachable")
-        }
+        Rule(repeat = rep) => $ { rep.name <- name }
+        Rule(option = opt) => $ { opt.name <- name }
+        Rule(maybe_repeat = rep) => $ { rep.name <- name }
+        _ => $ { abort("Unreachable") }
     }
 }
 

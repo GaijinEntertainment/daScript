@@ -5749,18 +5749,11 @@ def join_srcb_table_call(var joinCall : ExprCall?) : ExprCall? {
 
 [macro_function]
 def is_bare_key_ref(keyBody : Expression?; bindName : string; kvLane : bool) : bool {
-    match (keyBody) {
-        if (ExprField(name = "key", value = ExprVar(name = match_expr(bindName)))) {
-            return kvLane
-        }
-        if (ExprVar(name = match_expr(bindName))) {
-            return !kvLane
-        }
-        if (_) {
-            return false
-        }
+    return match (keyBody) {
+        ExprField(name = "key", value = ExprVar(name = match_expr(bindName))) => kvLane
+        ExprVar(name = match_expr(bindName)) => !kvLane
+        _ => false
     }
-    return false
 }
 
 [macro_function]
