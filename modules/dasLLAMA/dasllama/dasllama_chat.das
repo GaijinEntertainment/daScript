@@ -590,7 +590,7 @@ def system_text_opening_(m : Model; c : ChatSession) : int64 {
     return n
 }
 
-def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) : int64 {
+def private render_prompt(m : Model; c : ChatSession; var out : array<int64>; with_assistant_open : bool = true) : int64 {
     let base = long_length(out)
     var user_content = c.pending
     if (c.first) {
@@ -647,7 +647,7 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>) : 
             render_parts(m, gp, "", out)
             delete gp
         }
-    } else {
+    } elif (with_assistant_open) {
         render_assistant_open(m, c, out)
     }
     return opening
@@ -1109,6 +1109,20 @@ def render_assistant_(m : Model; var c : ChatSession; text : string; var out : a
     consume_pending_(c)
     render_parts(m, c.close_parts, "", out)
     c.history |> push(Message(role = Role.assistant, content = text))
+}
+
+//! Render the pending user turn ALONE - the opening on a first turn, the turn, no generation prompt - and consume
+//! it, so a user message that follows another renders as its own turn, as every template writes consecutive user
+//! messages. A no-op with nothing pending.
+def render_user_(m : Model; var c : ChatSession; var out : array<int64>) {
+    if (!c.has_pending) {
+        return
+    }
+    if (c.first) {
+        c.system_text_at = system_text_opening_(m, c)
+    }
+    note_opening(c, render_prompt(m, c, out, false))
+    consume_pending_(c)
 }
 
 // a replayed first turn's opening (render_prompt's count on a first turn, 0 after) kept for the caller: the shared

@@ -1503,7 +1503,7 @@ enum ToolMode {
     gemma4      // gemma-4: asymmetric <|tool_call> ... <tool_call|> pair
     mistral     // Mistral v0.3+: [AVAILABLE_TOOLS] defs, [TOOL_CALLS] + JSON array, [TOOL_RESULTS]
     llama_json  // Llama-3.x custom functions: the whole reply is one JSON object; results on the ipython role
-    xml_function   // Qwen3.6: the tool block AHEAD of the system text, <function=NAME><parameter=K> calls inside <tool_call>, results ride user turns
+    xml_function   // Qwen3.5/3.6: the tool block AHEAD of the system text, <function=NAME><parameter=K> calls inside <tool_call>, results ride user turns
 }
 
 //! Per-arch chat template. `user` frames a user message; `assistant_open` is the generation prompt;
@@ -5964,7 +5964,7 @@ def hermes_tools(var ct : ChatTemplate) {
     ct.tool_resp_close = "</tool_response>"
 }
 
-//! Install the Qwen3.6 tool format: the ``<tools>`` JSON definitions open the system turn AHEAD of the system text
+//! Install the Qwen3.5/3.6 tool format: the ``<tools>`` JSON definitions open the system turn AHEAD of the system text
 //! under a fixed instruction, a call is ``<tool_call>\n<function=NAME>\n<parameter=K>\nvalue\n</parameter>\n</function>\n</tool_call>``,
 //! results ride user turns as with Hermes, and a thinking turn's generation prompt ends in an open ``<think>`` line.
 def xml_function_tools(var ct : ChatTemplate) {

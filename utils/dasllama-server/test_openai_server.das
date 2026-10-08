@@ -369,6 +369,12 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                  "\{\"messages\":[\{\"role\":\"user\",\"content\":\"Say hi.\"}],\"max_tokens\":4,\"stop\":5}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "a stop of the wrong shape is refused")
             }
+            // two user messages in a row are two user turns: the prompt grows by the first one's tokens, where a renderer
+            // that kept one pending user turn dropped it
+            let note = "The house note: it is Friday, the kitchen light is on, the bedroom lights are off, the garden sprinkler is running, and the guests arrive at seven."
+            let lone = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"user\",\"content\":\"Say hi.\"}],\"max_tokens\":1}")
+            let pair = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"user\",\"content\":\"{note}\"},\{\"role\":\"user\",\"content\":\"Say hi.\"}],\"max_tokens\":1}")
+            t |> success(pair.prompt >= lone.prompt + 24, "a user message ahead of the last one renders as its own turn ({pair.prompt} prompt tokens against {lone.prompt} alone)")
             // a streaming reply gets an empty delta whenever it stays silent past the keep-alive window (0 here: one a
             // tick), tools or no tools; a client with a no-bytes timeout survives a long prefill on them
             POST("{base_url}/v1/chat/completions",
@@ -918,24 +924,24 @@ def test_openai_server_recurrent_checkpoints(t : T?) {
         // pages of 8 rows: the system block and the per-conversation tails land on pages of their own
         with_llama_server(QWEN35_PATH, TEST_PORT_CKPT, MetalMode.off, 8l) $(base_url) {
             let sys = "You are the assistant of a house with a kitchen, a bedroom and a garden. Devices: the kitchen ceiling light, the bedroom wall lights, the garden sprinkler. Answer in one short sentence and nothing else."
-            // the two conversations declare DIFFERENT tool sets: the hermes template puts the tool block inside the system
-            // turn, so only the system text ahead of it is shared
+            // Qwen3.5's template puts the tool block AHEAD of the system text, so two conversations share their opening
+            // only under the same tool set: B declares A's tools, C another set
             let tool_a = "\{\"type\":\"function\",\"function\":\{\"name\":\"control\",\"description\":\"Switch a device.\",\"parameters\":\{\"type\":\"object\",\"properties\":\{\"point\":\{\"type\":\"string\"},\"value\":\{\"type\":\"string\"}},\"required\":[\"point\",\"value\"]}}}"
             let tool_b = "\{\"type\":\"function\",\"function\":\{\"name\":\"house_status\",\"description\":\"The state of the house.\",\"parameters\":\{\"type\":\"object\",\"properties\":\{\"query\":\{\"type\":\"string\"}},\"required\":[\"query\"]}}}"
             let kw = "\"max_tokens\":12,\"chat_template_kwargs\":\{\"enable_thinking\":false}"
             let a1 = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"What is the capital of France? One word.\"}],\"tools\":[{tool_a}],{kw}}")
             t |> success(a1.prompt > 16 && a1.cached == 0, "conversation A's first turn prefills cold ({a1.prompt} prompt, {a1.cached} cached): {a1.reply}")
-            let b1 = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"What is two plus two? One word.\"}],\"tools\":[{tool_b}],{kw}}")
-            t |> success(b1.cached >= 16, "conversation B's first turn, other tools, attaches A's system text ({b1.cached} cached of {b1.prompt})")
+            let b1 = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"What is two plus two? One word.\"}],\"tools\":[{tool_a}],{kw}}")
+            t |> success(b1.cached >= 16, "conversation B's first turn, A's tools, attaches A's opening ({b1.cached} cached of {b1.prompt})")
             t |> success(b1.cached < b1.prompt - 8, "... and not B's own turn ({b1.cached} of {b1.prompt})")
-            let c1 = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"Name a color. One word.\"}],\"tools\":[{tool_a}],{kw}}")
-            t |> success(c1.cached > b1.cached, "conversation C, A's tools, attaches A's whole opening, tools included ({c1.cached} cached of {c1.prompt}, past the text's {b1.cached})")
+            let c1 = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"Name a color. One word.\"}],\"tools\":[{tool_b}],{kw}}")
+            t |> equal(0, c1.cached, "conversation C, other tools, shares nothing past the turn's first tokens: the tools open the turn ({c1.cached} cached of {c1.prompt})")
             // the second turns, interleaved, replayed with preserve_thinking (the think block the first prompt carried):
             // each attaches its own first exchange whole
             let kw2 = "\"max_tokens\":12,\"chat_template_kwargs\":\{\"enable_thinking\":false,\"preserve_thinking\":true}"
             let a2 = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"What is the capital of France? One word.\"},\{\"role\":\"assistant\",\"content\":{json_str(a1.reply)}},\{\"role\":\"user\",\"content\":\"And the bedroom.\"}],\"tools\":[{tool_a}],{kw2}}")
             t |> success(a2.cached >= a1.prompt, "A's second turn attaches A's whole first exchange ({a2.cached} cached, first prompt {a1.prompt})")
-            let b2 = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"What is two plus two? One word.\"},\{\"role\":\"assistant\",\"content\":{json_str(b1.reply)}},\{\"role\":\"user\",\"content\":\"Stop it.\"}],\"tools\":[{tool_b}],{kw2}}")
+            let b2 = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"What is two plus two? One word.\"},\{\"role\":\"assistant\",\"content\":{json_str(b1.reply)}},\{\"role\":\"user\",\"content\":\"Stop it.\"}],\"tools\":[{tool_a}],{kw2}}")
             t |> success(b2.cached >= b1.prompt, "B's second turn attaches B's whole first exchange after A's ran ({b2.cached} cached, first prompt {b1.prompt})")
             to_log(LOG_INFO, "recurrent checkpoints: A1 {a1.prompt}/{a1.cached} B1 {b1.prompt}/{b1.cached} A2 {a2.prompt}/{a2.cached} B2 {b2.prompt}/{b2.cached}\n")
         }

@@ -134,7 +134,7 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
   belong here; a knob that does and is missing is an image-aliasing bug.
 - **`dasllama_tools.das`** - the per-ToolMode tool wire codecs (definition serializers,
   replay/result text builders, reply parsers; Harmony namespace/channels, gemma-4 DSL, mistral
-  control tokens, llama JSON). Every byte of tool wire text is produced here - pure string+JSON
+  control tokens, llama JSON, the `<function=NAME>` blocks of Qwen3.5 and 3.6). Every byte of tool wire text is produced here - pure string+JSON
   functions, model-free testable; the chat layer assembles the output into ChatParts and the
   server parses through the parsers.
 - **`dasllama_chat.das`** - conversation turns and chat-template application. Per-arch template

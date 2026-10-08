@@ -3126,6 +3126,9 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
             pending = true
         }
         if (role == "user") {
+            if (chat.has_pending && !chat.pending_is_tool) {   //! a user message after a user message: the earlier one is its own turn
+                render_user(cur_model(), chat, rendered)
+            }
             add_user(chat, content)
             for (r in refs) {   // the message's media, inline where its parts sit among the text
                 continue if (r.msg != i)

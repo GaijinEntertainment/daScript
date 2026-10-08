@@ -676,7 +676,10 @@ messages, repeat. Assistant `tool_calls` turns and `role: "tool"` results replay
 the chat template on each stateless resend, so agent loops (opencode, pi, ...) work end-to-end.
 
 The wire format is per model family (`ToolMode`, `dasllama_tools.das`): **hermes** (Qwen2.5 /
-Qwen3 family - `<tools>` system block, `<tool_call>` JSON), **harmony** (gpt-oss - developer-turn
+Qwen3 - `<tools>` system block, `<tool_call>` JSON), **xml_function** (Qwen3.5 and Qwen3.6, sniffed off their
+templates - the `<tools>` block opens the system turn ahead of the system text, a call is a
+`<tool_call>` holding one `<function=NAME>` block of `<parameter=K>` values, results ride user turns as
+with hermes), **harmony** (gpt-oss - developer-turn
 TypeScript namespace defs, commentary-channel recipient calls; reasoning and calls come from one
 channel walk), **gemma4** (gemma-4 - declaration/call/response DSL with the `<|"|>` quote token),
 **mistral** (v0.3+ - `[AVAILABLE_TOOLS]` defs, `[TOOL_CALLS]` array, bare-array replies
@@ -702,7 +705,9 @@ and a logged warning with an unconstrained reply without it; a repetition bound 
 pattern count) past 1024 is refused either way, since each copy is a rule of the grammar. `tool_choice: "required"` or
 `{"type":"function","function":{"name":...}}` samples the tool call through the same machinery: the
 declared tools' schemas (one, or any of them) inside the family's call markers, so the name is one of the
-declared names and the arguments fit the parameters; a family with no tool-call markers answers 400. A
+declared names and the arguments fit the parameters - on the Qwen3.6 format the grammar is the block shape
+instead, a `<function=NAME>` of that tool's declared `<parameter=K>` names with any text short of a `<` as a
+value; a family with no tool-call markers answers 400. A
 constrained reply runs with thinking off, drafts nothing under `--mtp` (it decodes plain beside the drafting
 streams), and lands its logits on the CPU; the stop token is admitted only where the grammar's sentence is
 complete, and a reply the grammar cannot continue ends with `finish_reason: "constraint"`. The first

@@ -537,7 +537,7 @@ def test_chat_xml_function(t : T?) {
         var tools <- ["\{\"type\": \"function\", \"function\": \{\"name\": \"control\", \"description\": \"Switch a device.\", \"parameters\": \{\"type\": \"object\", \"properties\": \{\"point\": \{\"type\": \"string\", \"description\": \"the device id\"}, \"value\": \{\"type\": \"string\"}}, \"required\": [\"point\"]}}}",
                       "\{\"type\": \"function\", \"function\": \{\"name\": \"not_for_me\", \"description\": \"The phrase was not addressed to the assistant.\", \"parameters\": \{\"type\": \"object\", \"properties\": \{}, \"required\": []}}}"]
         var c = create_chat_renderer(m, "You are a terse assistant.", 8l)
-        xml_function_tools(c.tmpl)   // the 0.8B's own template is Qwen3.5's; the vocab is the same ChatML
+        xml_function_tools(c.tmpl)   // what the 0.8B's own template sniffs to, pinned here so the cell holds the format, not the sniff
         set_thinking(c, false)
         set_preserve_thinking(c, true)
         var tools_copy := tools
@@ -556,6 +556,18 @@ def test_chat_xml_function(t : T?) {
         // the replay re-renders the first turn's prompt, then the call turn, the results and the next turn
         let gen = "<|im_start|>assistant\n<think>\n\n</think>\n\n"
         t |> equal("{XMLF_FIRST}{slice(XMLF_REPLAY, length(gen))}", pieces_text(m, replay), "the call turn as <function=> blocks, the results in one user turn, the next turn")
+        // two user messages in a row: the earlier renders as its own turn (render_user), the later gets the generation prompt
+        var c2 = create_chat_renderer(m, "You are a terse assistant.", 8l)
+        set_thinking(c2, false)
+        add_user(c2, "A house note.")
+        var two : array<int64>
+        render_user(m, c2, two)
+        add_user(c2, "Turn it off.")
+        let last <- render_turn_marked(m, c2)
+        two |> push_from(last.toks)
+        t |> equal("<|im_start|>system\nYou are a terse assistant.<|im_end|>\n<|im_start|>user\nA house note.<|im_end|>\n<|im_start|>user\nTurn it off.<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+            pieces_text(m, two), "two user turns, the system turn once, the generation prompt after the last")
+        delete c2
         delete c
         delete m
     }

@@ -429,6 +429,13 @@ def render_assistant(model : Model; var chat : ChatSession; text : string; var o
     render_assistant_(model, chat, text, out, reasoning)
 }
 
+def render_user(model : Model; var chat : ChatSession; var out : array<int64>) {
+    //! Render the pending user turn alone and consume it, with no generation prompt: the turn a user message
+    //! that follows another user message makes, as every template writes them one after the other. Precondition:
+    //! a user message pending; a no-op otherwise.
+    render_user_(model, chat, out)
+}
+
 def render_close(model : Model; chat : ChatSession) : array<int64> {
     //! The tokens that TERMINATE an assistant turn (what ``respond`` evals after the reply) — for
     //! schedulers that close a finished stream's turn themselves.
