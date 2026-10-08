@@ -25,9 +25,7 @@ let private QUANT_NAMES <- {
 }
 
 class private BoolOpRewriter : AstVisitor {
-    def override canVisitCall(expr : ExprCall?) : bool {
-        return key_exists(QUANT_NAMES, "{expr.name}")
-    }
+    def override canVisitCall(expr : ExprCall?) : bool => key_exists(QUANT_NAMES, "{expr.name}")
     def override visitExprOp2(var expr : ExprOp2?) : ExpressionPtr {
         if (expr.op == "&&") {
             return qmacro(s_and($e(expr.left), $e(expr.right)))
@@ -168,9 +166,7 @@ class private ConstrainMacro : AstCallMacro {
 //! reusable across solvers sharing that context.
 [call_macro(name="smt_formula")]
 class private SmtFormulaMacro : AstCallMacro {
-    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
-        return argIndex == 0
-    }
+    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool => argIndex == 0
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         macro_verify(call.arguments |> length == 2 && call.arguments[1] is ExprMakeBlock, prog, call.at,
             "expecting solver |> smt_formula() with a block argument")
@@ -360,7 +356,7 @@ class private SmtFnEmitter {
                 }
                 return false
             }
-            stmts |> push <| qmacro_block() { // nolint:PERF006 — trip count is macro-time data, not worth a reserve
+            stmts |> push <| qmacro_block() { // nolint:PERF006,LINT019 - trip count is macro-time data, not worth a reserve; PERF006 fires in the expanding compile
                 $b(inner.stmts)
             }
             unsafe {

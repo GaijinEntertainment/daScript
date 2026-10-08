@@ -99,48 +99,33 @@ def public check_error(s : Solver) {
 
 // ===== constants (unknowns) =====
 
-def public int_const(s : Solver; name : string) : SInt {
-    return int_const(s.ctx, name)
-}
+def public int_const(s : Solver; name : string) : SInt => int_const(s.ctx, name)
 
-def public int_const(ctx : Z3_context; name : string) : SInt {
-    return SInt(ast = Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, name), Z3_mk_int_sort(ctx)), ctx = ctx)
-}
+def public int_const(ctx : Z3_context; name : string) : SInt =>
+    SInt(ast = Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, name), Z3_mk_int_sort(ctx)), ctx = ctx)
 
 //! Batch form: `int_consts(s, "x y z")` (Z3py `Ints`).
-def public int_consts(s : Solver; names : string) : array<SInt> {
-    return <- [for (n in split(names, " ")); int_const(s.ctx, n)]
-}
+def public int_consts(s : Solver; names : string) : array<SInt> =>
+    <- [for (n in split(names, " ")); int_const(s.ctx, n)]
 
-def public bool_const(s : Solver; name : string) : SBool {
-    return bool_const(s.ctx, name)
-}
+def public bool_const(s : Solver; name : string) : SBool => bool_const(s.ctx, name)
 
-def public bool_const(ctx : Z3_context; name : string) : SBool {
-    return SBool(ast = Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, name), Z3_mk_bool_sort(ctx)), ctx = ctx)
-}
+def public bool_const(ctx : Z3_context; name : string) : SBool =>
+    SBool(ast = Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, name), Z3_mk_bool_sort(ctx)), ctx = ctx)
 
-def public real_const(s : Solver; name : string) : SReal {
-    return real_const(s.ctx, name)
-}
+def public real_const(s : Solver; name : string) : SReal => real_const(s.ctx, name)
 
-def public real_const(ctx : Z3_context; name : string) : SReal {
-    return SReal(ast = Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, name), Z3_mk_real_sort(ctx)), ctx = ctx)
-}
+def public real_const(ctx : Z3_context; name : string) : SReal =>
+    SReal(ast = Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, name), Z3_mk_real_sort(ctx)), ctx = ctx)
 
-def public string_const(s : Solver; name : string) : SString {
-    return string_const(s.ctx, name)
-}
+def public string_const(s : Solver; name : string) : SString => string_const(s.ctx, name)
 
-def public string_const(ctx : Z3_context; name : string) : SString {
-    return SString(ast = Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, name), Z3_mk_string_sort(ctx)), ctx = ctx)
-}
+def public string_const(ctx : Z3_context; name : string) : SString =>
+    SString(ast = Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, name), Z3_mk_string_sort(ctx)), ctx = ctx)
 
 // ===== values (numerals & literals) =====
 
-def public int_val(ctx : Z3_context; v : int) : SInt {
-    return SInt(ast = z3_int(ctx, v), ctx = ctx)
-}
+def public int_val(ctx : Z3_context; v : int) : SInt => SInt(ast = z3_int(ctx, v), ctx = ctx)
 
 def public real_val(ctx : Z3_context; v : double) : SReal {
     // exact when v is integral; fractional doubles go through a scaled rational
@@ -148,20 +133,16 @@ def public real_val(ctx : Z3_context; v : double) : SReal {
     return SReal(ast = Z3_mk_real_int64(ctx, num, 1000000l), ctx = ctx)
 }
 
-def public bool_val(ctx : Z3_context; v : bool) : SBool {
-    return SBool(ast = v ? Z3_mk_true(ctx) : Z3_mk_false(ctx), ctx = ctx)
-}
+def public bool_val(ctx : Z3_context; v : bool) : SBool =>
+    SBool(ast = v ? Z3_mk_true(ctx) : Z3_mk_false(ctx), ctx = ctx)
 
-def public string_val(ctx : Z3_context; v : string) : SString {
-    return SString(ast = Z3_mk_string(ctx, v), ctx = ctx)
-}
+def public string_val(ctx : Z3_context; v : string) : SString =>
+    SString(ast = Z3_mk_string(ctx, v), ctx = ctx)
 
 // handle-const laundering for array literals (das arrays can't hold const
 // pointers); the pointees are opaque to das — never dereferenced, so the
 // const strip cannot license a miscompile
-def private dc(p : Z3_ast const) : Z3_ast {
-    return unsafe(reinterpret<Z3_ast -const>(p))
-}
+def private dc(p : Z3_ast const) : Z3_ast => unsafe(reinterpret<Z3_ast>(p))
 
 // ===== SInt arithmetic =====
 
@@ -170,306 +151,189 @@ def public operator +(a, b : SInt) : SInt {
     return SInt(ast = Z3_mk_add(a.ctx, args), ctx = a.ctx)
 }
 
-def public operator +(a : SInt; b : int) : SInt {
-    return a + int_val(a.ctx, b)
-}
+def public operator +(a : SInt; b : int) : SInt => a + int_val(a.ctx, b)
 
-def public operator +(a : int; b : SInt) : SInt {
-    return int_val(b.ctx, a) + b
-}
+def public operator +(a : int; b : SInt) : SInt => int_val(b.ctx, a) + b
 
 def public operator -(a, b : SInt) : SInt {
     var args <- [dc(a.ast), dc(b.ast)]
     return SInt(ast = Z3_mk_sub(a.ctx, args), ctx = a.ctx)
 }
 
-def public operator -(a : SInt; b : int) : SInt {
-    return a - int_val(a.ctx, b)
-}
+def public operator -(a : SInt; b : int) : SInt => a - int_val(a.ctx, b)
 
-def public operator -(a : int; b : SInt) : SInt {
-    return int_val(b.ctx, a) - b
-}
+def public operator -(a : int; b : SInt) : SInt => int_val(b.ctx, a) - b
 
 def public operator *(a, b : SInt) : SInt {
     var args <- [dc(a.ast), dc(b.ast)]
     return SInt(ast = Z3_mk_mul(a.ctx, args), ctx = a.ctx)
 }
 
-def public operator *(a : SInt; b : int) : SInt {
-    return a * int_val(a.ctx, b)
-}
+def public operator *(a : SInt; b : int) : SInt => a * int_val(a.ctx, b)
 
-def public operator *(a : int; b : SInt) : SInt {
-    return int_val(b.ctx, a) * b
-}
+def public operator *(a : int; b : SInt) : SInt => int_val(b.ctx, a) * b
 
-def public operator /(a, b : SInt) : SInt {
-    return SInt(ast = Z3_mk_div(a.ctx, a.ast, b.ast), ctx = a.ctx)
-}
+def public operator /(a, b : SInt) : SInt => SInt(ast = Z3_mk_div(a.ctx, a.ast, b.ast), ctx = a.ctx)
 
-def public operator /(a : SInt; b : int) : SInt {
-    return a / int_val(a.ctx, b)
-}
+def public operator /(a : SInt; b : int) : SInt => a / int_val(a.ctx, b)
 
-def public operator %(a, b : SInt) : SInt {
-    return SInt(ast = Z3_mk_mod(a.ctx, a.ast, b.ast), ctx = a.ctx)
-}
+def public operator %(a, b : SInt) : SInt => SInt(ast = Z3_mk_mod(a.ctx, a.ast, b.ast), ctx = a.ctx)
 
-def public operator %(a : SInt; b : int) : SInt {
-    return a % int_val(a.ctx, b)
-}
+def public operator %(a : SInt; b : int) : SInt => a % int_val(a.ctx, b)
 
-def public operator -(a : SInt) : SInt {
-    return SInt(ast = Z3_mk_unary_minus(a.ctx, a.ast), ctx = a.ctx)
-}
+def public operator -(a : SInt) : SInt => SInt(ast = Z3_mk_unary_minus(a.ctx, a.ast), ctx = a.ctx)
 
 // ===== SInt comparisons =====
 
-def public operator ==(a, b : SInt) : SBool {
-    return SBool(ast = Z3_mk_eq(a.ctx, a.ast, b.ast), ctx = a.ctx)
-}
+def public operator ==(a, b : SInt) : SBool =>
+    SBool(ast = Z3_mk_eq(a.ctx, a.ast, b.ast), ctx = a.ctx)
 
-def public operator ==(a : SInt; b : int) : SBool {
-    return a == int_val(a.ctx, b)
-}
+def public operator ==(a : SInt; b : int) : SBool => a == int_val(a.ctx, b)
 
-def public operator ==(a : int; b : SInt) : SBool {
-    return int_val(b.ctx, a) == b
-}
+def public operator ==(a : int; b : SInt) : SBool => int_val(b.ctx, a) == b
 
-def public operator !=(a, b : SInt) : SBool {
-    return s_not(a == b)
-}
+def public operator !=(a, b : SInt) : SBool => s_not(a == b)
 
-def public operator !=(a : SInt; b : int) : SBool {
-    return s_not(a == b)
-}
+def public operator !=(a : SInt; b : int) : SBool => s_not(a == b)
 
-def public operator !=(a : int; b : SInt) : SBool {
-    return s_not(a == b)
-}
+def public operator !=(a : int; b : SInt) : SBool => s_not(a == b)
 
-def public operator <(a, b : SInt) : SBool {
-    return SBool(ast = Z3_mk_lt(a.ctx, a.ast, b.ast), ctx = a.ctx)
-}
+def public operator <(a, b : SInt) : SBool =>
+    SBool(ast = Z3_mk_lt(a.ctx, a.ast, b.ast), ctx = a.ctx)
 
-def public operator <(a : SInt; b : int) : SBool {
-    return a < int_val(a.ctx, b)
-}
+def public operator <(a : SInt; b : int) : SBool => a < int_val(a.ctx, b)
 
-def public operator <(a : int; b : SInt) : SBool {
-    return int_val(b.ctx, a) < b
-}
+def public operator <(a : int; b : SInt) : SBool => int_val(b.ctx, a) < b
 
-def public operator <=(a, b : SInt) : SBool {
-    return SBool(ast = Z3_mk_le(a.ctx, a.ast, b.ast), ctx = a.ctx)
-}
+def public operator <=(a, b : SInt) : SBool =>
+    SBool(ast = Z3_mk_le(a.ctx, a.ast, b.ast), ctx = a.ctx)
 
-def public operator <=(a : SInt; b : int) : SBool {
-    return a <= int_val(a.ctx, b)
-}
+def public operator <=(a : SInt; b : int) : SBool => a <= int_val(a.ctx, b)
 
-def public operator <=(a : int; b : SInt) : SBool {
-    return int_val(b.ctx, a) <= b
-}
+def public operator <=(a : int; b : SInt) : SBool => int_val(b.ctx, a) <= b
 
-def public operator >(a, b : SInt) : SBool {
-    return SBool(ast = Z3_mk_gt(a.ctx, a.ast, b.ast), ctx = a.ctx)
-}
+def public operator >(a, b : SInt) : SBool =>
+    SBool(ast = Z3_mk_gt(a.ctx, a.ast, b.ast), ctx = a.ctx)
 
-def public operator >(a : SInt; b : int) : SBool {
-    return a > int_val(a.ctx, b)
-}
+def public operator >(a : SInt; b : int) : SBool => a > int_val(a.ctx, b)
 
-def public operator >(a : int; b : SInt) : SBool {
-    return int_val(b.ctx, a) > b
-}
+def public operator >(a : int; b : SInt) : SBool => int_val(b.ctx, a) > b
 
-def public operator >=(a, b : SInt) : SBool {
-    return SBool(ast = Z3_mk_ge(a.ctx, a.ast, b.ast), ctx = a.ctx)
-}
+def public operator >=(a, b : SInt) : SBool =>
+    SBool(ast = Z3_mk_ge(a.ctx, a.ast, b.ast), ctx = a.ctx)
 
-def public operator >=(a : SInt; b : int) : SBool {
-    return a >= int_val(a.ctx, b)
-}
+def public operator >=(a : SInt; b : int) : SBool => a >= int_val(a.ctx, b)
 
-def public operator >=(a : int; b : SInt) : SBool {
-    return int_val(b.ctx, a) >= b
-}
+def public operator >=(a : int; b : SInt) : SBool => int_val(b.ctx, a) >= b
 
 // ===== SReal arithmetic & comparisons =====
 
-def public to_real(a : SInt) : SReal {
-    return SReal(ast = Z3_mk_int2real(a.ctx, a.ast), ctx = a.ctx)
-}
+def public to_real(a : SInt) : SReal => SReal(ast = Z3_mk_int2real(a.ctx, a.ast), ctx = a.ctx)
 
 def public operator +(a, b : SReal) : SReal {
     var args <- [dc(a.ast), dc(b.ast)]
     return SReal(ast = Z3_mk_add(a.ctx, args), ctx = a.ctx)
 }
 
-def public operator +(a : SReal; b : double) : SReal {
-    return a + real_val(a.ctx, b)
-}
+def public operator +(a : SReal; b : double) : SReal => a + real_val(a.ctx, b)
 
-def public operator +(a : double; b : SReal) : SReal {
-    return real_val(b.ctx, a) + b
-}
+def public operator +(a : double; b : SReal) : SReal => real_val(b.ctx, a) + b
 
 def public operator -(a, b : SReal) : SReal {
     var args <- [dc(a.ast), dc(b.ast)]
     return SReal(ast = Z3_mk_sub(a.ctx, args), ctx = a.ctx)
 }
 
-def public operator -(a : SReal; b : double) : SReal {
-    return a - real_val(a.ctx, b)
-}
+def public operator -(a : SReal; b : double) : SReal => a - real_val(a.ctx, b)
 
-def public operator -(a : double; b : SReal) : SReal {
-    return real_val(b.ctx, a) - b
-}
+def public operator -(a : double; b : SReal) : SReal => real_val(b.ctx, a) - b
 
 def public operator *(a, b : SReal) : SReal {
     var args <- [dc(a.ast), dc(b.ast)]
     return SReal(ast = Z3_mk_mul(a.ctx, args), ctx = a.ctx)
 }
 
-def public operator *(a : SReal; b : double) : SReal {
-    return a * real_val(a.ctx, b)
-}
+def public operator *(a : SReal; b : double) : SReal => a * real_val(a.ctx, b)
 
-def public operator *(a : double; b : SReal) : SReal {
-    return real_val(b.ctx, a) * b
-}
+def public operator *(a : double; b : SReal) : SReal => real_val(b.ctx, a) * b
 
-def public operator /(a, b : SReal) : SReal {
-    return SReal(ast = Z3_mk_div(a.ctx, a.ast, b.ast), ctx = a.ctx)
-}
+def public operator /(a, b : SReal) : SReal =>
+    SReal(ast = Z3_mk_div(a.ctx, a.ast, b.ast), ctx = a.ctx)
 
-def public operator -(a : SReal) : SReal {
-    return SReal(ast = Z3_mk_unary_minus(a.ctx, a.ast), ctx = a.ctx)
-}
+def public operator -(a : SReal) : SReal =>
+    SReal(ast = Z3_mk_unary_minus(a.ctx, a.ast), ctx = a.ctx)
 
-def public operator ==(a, b : SReal) : SBool {
-    return SBool(ast = Z3_mk_eq(a.ctx, a.ast, b.ast), ctx = a.ctx)
-}
+def public operator ==(a, b : SReal) : SBool =>
+    SBool(ast = Z3_mk_eq(a.ctx, a.ast, b.ast), ctx = a.ctx)
 
-def public operator ==(a : SReal; b : double) : SBool {
-    return a == real_val(a.ctx, b)
-}
+def public operator ==(a : SReal; b : double) : SBool => a == real_val(a.ctx, b)
 
-def public operator <(a, b : SReal) : SBool {
-    return SBool(ast = Z3_mk_lt(a.ctx, a.ast, b.ast), ctx = a.ctx)
-}
+def public operator <(a, b : SReal) : SBool =>
+    SBool(ast = Z3_mk_lt(a.ctx, a.ast, b.ast), ctx = a.ctx)
 
-def public operator <(a : SReal; b : double) : SBool {
-    return a < real_val(a.ctx, b)
-}
+def public operator <(a : SReal; b : double) : SBool => a < real_val(a.ctx, b)
 
-def public operator <(a : double; b : SReal) : SBool {
-    return real_val(b.ctx, a) < b
-}
+def public operator <(a : double; b : SReal) : SBool => real_val(b.ctx, a) < b
 
-def public operator <=(a, b : SReal) : SBool {
-    return SBool(ast = Z3_mk_le(a.ctx, a.ast, b.ast), ctx = a.ctx)
-}
+def public operator <=(a, b : SReal) : SBool =>
+    SBool(ast = Z3_mk_le(a.ctx, a.ast, b.ast), ctx = a.ctx)
 
-def public operator <=(a : SReal; b : double) : SBool {
-    return a <= real_val(a.ctx, b)
-}
+def public operator <=(a : SReal; b : double) : SBool => a <= real_val(a.ctx, b)
 
-def public operator >(a, b : SReal) : SBool {
-    return SBool(ast = Z3_mk_gt(a.ctx, a.ast, b.ast), ctx = a.ctx)
-}
+def public operator >(a, b : SReal) : SBool =>
+    SBool(ast = Z3_mk_gt(a.ctx, a.ast, b.ast), ctx = a.ctx)
 
-def public operator >(a : SReal; b : double) : SBool {
-    return a > real_val(a.ctx, b)
-}
+def public operator >(a : SReal; b : double) : SBool => a > real_val(a.ctx, b)
 
-def public operator >=(a, b : SReal) : SBool {
-    return SBool(ast = Z3_mk_ge(a.ctx, a.ast, b.ast), ctx = a.ctx)
-}
+def public operator >=(a, b : SReal) : SBool =>
+    SBool(ast = Z3_mk_ge(a.ctx, a.ast, b.ast), ctx = a.ctx)
 
-def public operator >=(a : SReal; b : double) : SBool {
-    return a >= real_val(a.ctx, b)
-}
+def public operator >=(a : SReal; b : double) : SBool => a >= real_val(a.ctx, b)
 
 // mixed SInt ⊗ SReal — int side promoted via Z3_mk_int2real
-def public operator <(a : SInt; b : SReal) : SBool {
-    return to_real(a) < b
-}
+def public operator <(a : SInt; b : SReal) : SBool => to_real(a) < b
 
-def public operator <(a : SReal; b : SInt) : SBool {
-    return a < to_real(b)
-}
+def public operator <(a : SReal; b : SInt) : SBool => a < to_real(b)
 
-def public operator <=(a : SInt; b : SReal) : SBool {
-    return to_real(a) <= b
-}
+def public operator <=(a : SInt; b : SReal) : SBool => to_real(a) <= b
 
-def public operator <=(a : SReal; b : SInt) : SBool {
-    return a <= to_real(b)
-}
+def public operator <=(a : SReal; b : SInt) : SBool => a <= to_real(b)
 
-def public operator >(a : SInt; b : SReal) : SBool {
-    return to_real(a) > b
-}
+def public operator >(a : SInt; b : SReal) : SBool => to_real(a) > b
 
-def public operator >(a : SReal; b : SInt) : SBool {
-    return a > to_real(b)
-}
+def public operator >(a : SReal; b : SInt) : SBool => a > to_real(b)
 
-def public operator ==(a : SInt; b : SReal) : SBool {
-    return to_real(a) == b
-}
+def public operator ==(a : SInt; b : SReal) : SBool => to_real(a) == b
 
-def public operator ==(a : SReal; b : SInt) : SBool {
-    return a == to_real(b)
-}
+def public operator ==(a : SReal; b : SInt) : SBool => a == to_real(b)
 
 // ===== SString =====
 
-def public operator ==(a, b : SString) : SBool {
-    return SBool(ast = Z3_mk_eq(a.ctx, a.ast, b.ast), ctx = a.ctx)
-}
+def public operator ==(a, b : SString) : SBool =>
+    SBool(ast = Z3_mk_eq(a.ctx, a.ast, b.ast), ctx = a.ctx)
 
-def public operator ==(a : SString; b : string) : SBool {
-    return a == string_val(a.ctx, b)
-}
+def public operator ==(a : SString; b : string) : SBool => a == string_val(a.ctx, b)
 
-def public operator ==(a : string; b : SString) : SBool {
-    return string_val(b.ctx, a) == b
-}
+def public operator ==(a : string; b : SString) : SBool => string_val(b.ctx, a) == b
 
 def public operator +(a, b : SString) : SString {
     var args <- [dc(a.ast), dc(b.ast)]
     return SString(ast = Z3_mk_seq_concat(a.ctx, uint(length(args)), array_data_ptr(args)), ctx = a.ctx)
 }
 
-def public operator +(a : SString; b : string) : SString {
-    return a + string_val(a.ctx, b)
-}
+def public operator +(a : SString; b : string) : SString => a + string_val(a.ctx, b)
 
-def public length(a : SString) : SInt {
-    return SInt(ast = Z3_mk_seq_length(a.ctx, a.ast), ctx = a.ctx)
-}
+def public length(a : SString) : SInt => SInt(ast = Z3_mk_seq_length(a.ctx, a.ast), ctx = a.ctx)
 
-def public contains(a : SString; b : SString) : SBool {
-    return SBool(ast = Z3_mk_seq_contains(a.ctx, a.ast, b.ast), ctx = a.ctx)
-}
+def public contains(a : SString; b : SString) : SBool =>
+    SBool(ast = Z3_mk_seq_contains(a.ctx, a.ast, b.ast), ctx = a.ctx)
 
-def public contains(a : SString; b : string) : SBool {
-    return contains(a, string_val(a.ctx, b))
-}
+def public contains(a : SString; b : string) : SBool => contains(a, string_val(a.ctx, b))
 
-def public starts_with(a : SString; b : SString) : SBool {
-    return SBool(ast = Z3_mk_seq_prefix(a.ctx, b.ast, a.ast), ctx = a.ctx)
-}
+def public starts_with(a : SString; b : SString) : SBool =>
+    SBool(ast = Z3_mk_seq_prefix(a.ctx, b.ast, a.ast), ctx = a.ctx)
 
-def public starts_with(a : SString; b : string) : SBool {
-    return starts_with(a, string_val(a.ctx, b))
-}
+def public starts_with(a : SString; b : string) : SBool => starts_with(a, string_val(a.ctx, b))
 
 // ===== boolean connectives (das can't overload && / || / !) =====
 
@@ -478,42 +342,27 @@ def public s_and(a, b : SBool) : SBool {
     return SBool(ast = Z3_mk_and(a.ctx, args), ctx = a.ctx)
 }
 
-def public s_and(a : SBool; b : bool) : SBool {
-    return s_and(a, bool_val(a.ctx, b))
-}
+def public s_and(a : SBool; b : bool) : SBool => s_and(a, bool_val(a.ctx, b))
 
-def public s_and(a : bool; b : SBool) : SBool {
-    return s_and(bool_val(b.ctx, a), b)
-}
+def public s_and(a : bool; b : SBool) : SBool => s_and(bool_val(b.ctx, a), b)
 
 def public s_or(a, b : SBool) : SBool {
     var args <- [dc(a.ast), dc(b.ast)]
     return SBool(ast = Z3_mk_or(a.ctx, args), ctx = a.ctx)
 }
 
-def public s_or(a : SBool; b : bool) : SBool {
-    return s_or(a, bool_val(a.ctx, b))
-}
+def public s_or(a : SBool; b : bool) : SBool => s_or(a, bool_val(a.ctx, b))
 
-def public s_or(a : bool; b : SBool) : SBool {
-    return s_or(bool_val(b.ctx, a), b)
-}
+def public s_or(a : bool; b : SBool) : SBool => s_or(bool_val(b.ctx, a), b)
 
-def public s_not(a : SBool) : SBool {
-    return SBool(ast = Z3_mk_not(a.ctx, a.ast), ctx = a.ctx)
-}
+def public s_not(a : SBool) : SBool => SBool(ast = Z3_mk_not(a.ctx, a.ast), ctx = a.ctx)
 
-def public implies(a, b : SBool) : SBool {
-    return SBool(ast = Z3_mk_implies(a.ctx, a.ast, b.ast), ctx = a.ctx)
-}
+def public implies(a, b : SBool) : SBool =>
+    SBool(ast = Z3_mk_implies(a.ctx, a.ast, b.ast), ctx = a.ctx)
 
-def public iff(a, b : SBool) : SBool {
-    return SBool(ast = Z3_mk_iff(a.ctx, a.ast, b.ast), ctx = a.ctx)
-}
+def public iff(a, b : SBool) : SBool => SBool(ast = Z3_mk_iff(a.ctx, a.ast, b.ast), ctx = a.ctx)
 
-def public operator ==(a, b : SBool) : SBool {
-    return iff(a, b)
-}
+def public operator ==(a, b : SBool) : SBool => iff(a, b)
 
 def public s_all(var conds : array<SBool>) : SBool {
     assert(!empty(conds))
@@ -535,48 +384,31 @@ def public distinct(var vals : array<SInt>) : SBool {
 
 // ===== ite & the symbolic-generics enablers =====
 
-def public ite(c : SBool; t, f : SInt) : SInt {
-    return SInt(ast = Z3_mk_ite(c.ctx, c.ast, t.ast, f.ast), ctx = c.ctx)
-}
+def public ite(c : SBool; t, f : SInt) : SInt =>
+    SInt(ast = Z3_mk_ite(c.ctx, c.ast, t.ast, f.ast), ctx = c.ctx)
 
-def public ite(c : SBool; t : SInt; f : int) : SInt {
-    return ite(c, t, int_val(c.ctx, f))
-}
+def public ite(c : SBool; t : SInt; f : int) : SInt => ite(c, t, int_val(c.ctx, f))
 
-def public ite(c : SBool; t : int; f : SInt) : SInt {
-    return ite(c, int_val(c.ctx, t), f)
-}
+def public ite(c : SBool; t : int; f : SInt) : SInt => ite(c, int_val(c.ctx, t), f)
 
-def public ite(c : SBool; t, f : SReal) : SReal {
-    return SReal(ast = Z3_mk_ite(c.ctx, c.ast, t.ast, f.ast), ctx = c.ctx)
-}
+def public ite(c : SBool; t, f : SReal) : SReal =>
+    SReal(ast = Z3_mk_ite(c.ctx, c.ast, t.ast, f.ast), ctx = c.ctx)
 
-def public ite(c : SBool; t, f : SBool) : SBool {
-    return SBool(ast = Z3_mk_ite(c.ctx, c.ast, t.ast, f.ast), ctx = c.ctx)
-}
+def public ite(c : SBool; t, f : SBool) : SBool =>
+    SBool(ast = Z3_mk_ite(c.ctx, c.ast, t.ast, f.ast), ctx = c.ctx)
 
 //! `abs`/`min`/`max` let ordinary generic das functions instantiate with
 //! symbolic arguments — `def chebyshev(ax, ay, bx, by) => max(abs(ax - bx), abs(ay - by))`
 //! builds a formula when called with SInt.
-def public abs(a : SInt) : SInt {
-    return ite(a >= 0, a, -a)
-}
+def public abs(a : SInt) : SInt => ite(a >= 0, a, -a)
 
-def public min(a, b : SInt) : SInt {
-    return ite(a <= b, a, b)
-}
+def public min(a, b : SInt) : SInt => ite(a <= b, a, b)
 
-def public max(a, b : SInt) : SInt {
-    return ite(a >= b, a, b)
-}
+def public max(a, b : SInt) : SInt => ite(a >= b, a, b)
 
-// ===== SBv8/SBv16/SBv32/SBv64 — bitvectors (wrap-around machine arithmetic) =====
-// width is part of the das TYPE; the operator families are written ONCE over
-// the OR-type of all widths, with a static width-mismatch guard: das OR-params
-// bind independently, so `concept_assert` turns SBv32 ⊗ SBv64 into a
-// compile-time error at the call site. Comparisons are UNSIGNED, matching das
-// uint semantics; s_lt/s_le/s_gt/s_ge are the signed forms, sar the
-// arithmetic shift.
+// ===== SBv8/SBv16/SBv32/SBv64 - bitvectors (wrap-around machine arithmetic) =====
+// width is part of the das type: each operator family is written once over the OR-type of all widths, and
+// `concept_assert` rejects a width mismatch at the call site; comparisons are unsigned (s_lt/s_le/s_gt/s_ge signed, sar the arithmetic shift)
 
 //! A symbolic 8-bit bitvector.
 struct public SBv8 {
@@ -602,74 +434,53 @@ struct public SBv64 {
     ctx : Z3_context const
 }
 
-def public bv8_const(s : Solver; name : string) : SBv8 {
-    return bv8_const(s.ctx, name)
-}
+def public bv8_const(s : Solver; name : string) : SBv8 => bv8_const(s.ctx, name)
 
-def public bv8_const(ctx : Z3_context; name : string) : SBv8 {
-    return SBv8(ast = Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, name), Z3_mk_bv_sort(ctx, 8u)), ctx = ctx)
-}
+def public bv8_const(ctx : Z3_context; name : string) : SBv8 =>
+    SBv8(ast = Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, name), Z3_mk_bv_sort(ctx, 8u)), ctx = ctx)
 
-def public bv8_val(ctx : Z3_context; v : uint) : SBv8 {
-    return SBv8(ast = Z3_mk_unsigned_int64(ctx, uint64(v), Z3_mk_bv_sort(ctx, 8u)), ctx = ctx)
-}
+def public bv8_val(ctx : Z3_context; v : uint) : SBv8 =>
+    SBv8(ast = Z3_mk_unsigned_int64(ctx, uint64(v), Z3_mk_bv_sort(ctx, 8u)), ctx = ctx)
 
-def private mk_bv(_sample : SBv8; ast : Z3_ast; ctx : Z3_context) : SBv8 {
-    return SBv8(ast = ast, ctx = ctx)
-}
+def private mk_bv(_sample : SBv8; ast : Z3_ast; ctx : Z3_context) : SBv8 =>
+    SBv8(ast = ast, ctx = ctx)
 
-def public bv16_const(s : Solver; name : string) : SBv16 {
-    return bv16_const(s.ctx, name)
-}
+def public bv16_const(s : Solver; name : string) : SBv16 => bv16_const(s.ctx, name)
 
-def public bv16_const(ctx : Z3_context; name : string) : SBv16 {
-    return SBv16(ast = Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, name), Z3_mk_bv_sort(ctx, 16u)), ctx = ctx)
-}
+def public bv16_const(ctx : Z3_context; name : string) : SBv16 =>
+    SBv16(ast = Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, name), Z3_mk_bv_sort(ctx, 16u)), ctx = ctx)
 
-def public bv16_val(ctx : Z3_context; v : uint) : SBv16 {
-    return SBv16(ast = Z3_mk_unsigned_int64(ctx, uint64(v), Z3_mk_bv_sort(ctx, 16u)), ctx = ctx)
-}
+def public bv16_val(ctx : Z3_context; v : uint) : SBv16 =>
+    SBv16(ast = Z3_mk_unsigned_int64(ctx, uint64(v), Z3_mk_bv_sort(ctx, 16u)), ctx = ctx)
 
-def private mk_bv(_sample : SBv16; ast : Z3_ast; ctx : Z3_context) : SBv16 {
-    return SBv16(ast = ast, ctx = ctx)
-}
+def private mk_bv(_sample : SBv16; ast : Z3_ast; ctx : Z3_context) : SBv16 =>
+    SBv16(ast = ast, ctx = ctx)
 
-def public bv32_const(s : Solver; name : string) : SBv32 {
-    return bv32_const(s.ctx, name)
-}
+def public bv32_const(s : Solver; name : string) : SBv32 => bv32_const(s.ctx, name)
 
-def public bv32_const(ctx : Z3_context; name : string) : SBv32 {
-    return SBv32(ast = Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, name), Z3_mk_bv_sort(ctx, 32u)), ctx = ctx)
-}
+def public bv32_const(ctx : Z3_context; name : string) : SBv32 =>
+    SBv32(ast = Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, name), Z3_mk_bv_sort(ctx, 32u)), ctx = ctx)
 
-def public bv32_val(ctx : Z3_context; v : uint) : SBv32 {
-    return SBv32(ast = Z3_mk_unsigned_int64(ctx, uint64(v), Z3_mk_bv_sort(ctx, 32u)), ctx = ctx)
-}
+def public bv32_val(ctx : Z3_context; v : uint) : SBv32 =>
+    SBv32(ast = Z3_mk_unsigned_int64(ctx, uint64(v), Z3_mk_bv_sort(ctx, 32u)), ctx = ctx)
 
-def private mk_bv(_sample : SBv32; ast : Z3_ast; ctx : Z3_context) : SBv32 {
-    return SBv32(ast = ast, ctx = ctx)
-}
+def private mk_bv(_sample : SBv32; ast : Z3_ast; ctx : Z3_context) : SBv32 =>
+    SBv32(ast = ast, ctx = ctx)
 
-def public bv64_const(s : Solver; name : string) : SBv64 {
-    return bv64_const(s.ctx, name)
-}
+def public bv64_const(s : Solver; name : string) : SBv64 => bv64_const(s.ctx, name)
 
-def public bv64_const(ctx : Z3_context; name : string) : SBv64 {
-    return SBv64(ast = Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, name), Z3_mk_bv_sort(ctx, 64u)), ctx = ctx)
-}
+def public bv64_const(ctx : Z3_context; name : string) : SBv64 =>
+    SBv64(ast = Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, name), Z3_mk_bv_sort(ctx, 64u)), ctx = ctx)
 
-def public bv64_val(ctx : Z3_context; v : uint64) : SBv64 {
-    return SBv64(ast = Z3_mk_unsigned_int64(ctx, v, Z3_mk_bv_sort(ctx, 64u)), ctx = ctx)
-}
+def public bv64_val(ctx : Z3_context; v : uint64) : SBv64 =>
+    SBv64(ast = Z3_mk_unsigned_int64(ctx, v, Z3_mk_bv_sort(ctx, 64u)), ctx = ctx)
 
-def private mk_bv(_sample : SBv64; ast : Z3_ast; ctx : Z3_context) : SBv64 {
-    return SBv64(ast = ast, ctx = ctx)
-}
+def private mk_bv(_sample : SBv64; ast : Z3_ast; ctx : Z3_context) : SBv64 =>
+    SBv64(ast = ast, ctx = ctx)
 
 // numeral of the same width as `a` — width read from the Z3 sort, so this is generic
-def private bv_num(a : SBv8 | SBv16 | SBv32 | SBv64; v : uint64) {
-    return mk_bv(a, Z3_mk_unsigned_int64(a.ctx, v, Z3_get_sort(a.ctx, a.ast)), a.ctx)
-}
+def private bv_num(a : SBv8 | SBv16 | SBv32 | SBv64; v : uint64) =>
+    mk_bv(a, Z3_mk_unsigned_int64(a.ctx, v, Z3_get_sort(a.ctx, a.ast)), a.ctx)
 
 def public operator +(a, b : SBv8 | SBv16 | SBv32 | SBv64) {
     static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
@@ -680,13 +491,9 @@ def public operator +(a, b : SBv8 | SBv16 | SBv32 | SBv64) {
     }
 }
 
-def public operator +(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) {
-    return a + bv_num(a, uint64(b))
-}
+def public operator +(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) => a + bv_num(a, uint64(b))
 
-def public operator +(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) {
-    return a + bv_num(a, b)
-}
+def public operator +(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) => a + bv_num(a, b)
 
 def public operator -(a, b : SBv8 | SBv16 | SBv32 | SBv64) {
     static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
@@ -697,13 +504,9 @@ def public operator -(a, b : SBv8 | SBv16 | SBv32 | SBv64) {
     }
 }
 
-def public operator -(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) {
-    return a - bv_num(a, uint64(b))
-}
+def public operator -(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) => a - bv_num(a, uint64(b))
 
-def public operator -(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) {
-    return a - bv_num(a, b)
-}
+def public operator -(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) => a - bv_num(a, b)
 
 def public operator *(a, b : SBv8 | SBv16 | SBv32 | SBv64) {
     static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
@@ -714,13 +517,9 @@ def public operator *(a, b : SBv8 | SBv16 | SBv32 | SBv64) {
     }
 }
 
-def public operator *(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) {
-    return a * bv_num(a, uint64(b))
-}
+def public operator *(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) => a * bv_num(a, uint64(b))
 
-def public operator *(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) {
-    return a * bv_num(a, b)
-}
+def public operator *(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) => a * bv_num(a, b)
 
 def public operator &(a, b : SBv8 | SBv16 | SBv32 | SBv64) {
     static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
@@ -731,13 +530,9 @@ def public operator &(a, b : SBv8 | SBv16 | SBv32 | SBv64) {
     }
 }
 
-def public operator &(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) {
-    return a & bv_num(a, uint64(b))
-}
+def public operator &(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) => a & bv_num(a, uint64(b))
 
-def public operator &(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) {
-    return a & bv_num(a, b)
-}
+def public operator &(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) => a & bv_num(a, b)
 
 def public operator |(a, b : SBv8 | SBv16 | SBv32 | SBv64) {
     static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
@@ -748,13 +543,9 @@ def public operator |(a, b : SBv8 | SBv16 | SBv32 | SBv64) {
     }
 }
 
-def public operator |(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) {
-    return a | bv_num(a, uint64(b))
-}
+def public operator |(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) => a | bv_num(a, uint64(b))
 
-def public operator |(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) {
-    return a | bv_num(a, b)
-}
+def public operator |(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) => a | bv_num(a, b)
 
 def public operator ^(a, b : SBv8 | SBv16 | SBv32 | SBv64) {
     static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
@@ -765,13 +556,9 @@ def public operator ^(a, b : SBv8 | SBv16 | SBv32 | SBv64) {
     }
 }
 
-def public operator ^(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) {
-    return a ^ bv_num(a, uint64(b))
-}
+def public operator ^(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) => a ^ bv_num(a, uint64(b))
 
-def public operator ^(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) {
-    return a ^ bv_num(a, b)
-}
+def public operator ^(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) => a ^ bv_num(a, b)
 
 def public operator <<(a, b : SBv8 | SBv16 | SBv32 | SBv64) {
     static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
@@ -782,13 +569,9 @@ def public operator <<(a, b : SBv8 | SBv16 | SBv32 | SBv64) {
     }
 }
 
-def public operator <<(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) {
-    return a << bv_num(a, uint64(b))
-}
+def public operator <<(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) => a << bv_num(a, uint64(b))
 
-def public operator <<(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) {
-    return a << bv_num(a, b)
-}
+def public operator <<(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) => a << bv_num(a, b)
 
 def public operator >>(a, b : SBv8 | SBv16 | SBv32 | SBv64) {
     static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
@@ -799,21 +582,15 @@ def public operator >>(a, b : SBv8 | SBv16 | SBv32 | SBv64) {
     }
 }
 
-def public operator >>(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) {
-    return a >> bv_num(a, uint64(b))
-}
+def public operator >>(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) => a >> bv_num(a, uint64(b))
 
-def public operator >>(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) {
-    return a >> bv_num(a, b)
-}
+def public operator >>(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) => a >> bv_num(a, b)
 
-def public operator -(a : SBv8 | SBv16 | SBv32 | SBv64) {
-    return mk_bv(a, Z3_mk_bvneg(a.ctx, a.ast), a.ctx)
-}
+def public operator -(a : SBv8 | SBv16 | SBv32 | SBv64) =>
+    mk_bv(a, Z3_mk_bvneg(a.ctx, a.ast), a.ctx)
 
-def public operator ~(a : SBv8 | SBv16 | SBv32 | SBv64) {
-    return mk_bv(a, Z3_mk_bvnot(a.ctx, a.ast), a.ctx)
-}
+def public operator ~(a : SBv8 | SBv16 | SBv32 | SBv64) =>
+    mk_bv(a, Z3_mk_bvnot(a.ctx, a.ast), a.ctx)
 
 //! arithmetic (sign-preserving) right shift; `>>` is the logical one
 def public sar(a, b : SBv8 | SBv16 | SBv32 | SBv64) {
@@ -834,13 +611,10 @@ def public operator ==(a, b : SBv8 | SBv16 | SBv32 | SBv64) : SBool {
     }
 }
 
-def public operator ==(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) : SBool {
-    return a == bv_num(a, uint64(b))
-}
+def public operator ==(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) : SBool =>
+    a == bv_num(a, uint64(b))
 
-def public operator ==(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) : SBool {
-    return a == bv_num(a, b)
-}
+def public operator ==(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) : SBool => a == bv_num(a, b)
 
 def public operator <(a, b : SBv8 | SBv16 | SBv32 | SBv64) : SBool {
     static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
@@ -851,13 +625,10 @@ def public operator <(a, b : SBv8 | SBv16 | SBv32 | SBv64) : SBool {
     }
 }
 
-def public operator <(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) : SBool {
-    return a < bv_num(a, uint64(b))
-}
+def public operator <(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) : SBool =>
+    a < bv_num(a, uint64(b))
 
-def public operator <(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) : SBool {
-    return a < bv_num(a, b)
-}
+def public operator <(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) : SBool => a < bv_num(a, b)
 
 def public operator <=(a, b : SBv8 | SBv16 | SBv32 | SBv64) : SBool {
     static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
@@ -868,13 +639,10 @@ def public operator <=(a, b : SBv8 | SBv16 | SBv32 | SBv64) : SBool {
     }
 }
 
-def public operator <=(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) : SBool {
-    return a <= bv_num(a, uint64(b))
-}
+def public operator <=(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) : SBool =>
+    a <= bv_num(a, uint64(b))
 
-def public operator <=(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) : SBool {
-    return a <= bv_num(a, b)
-}
+def public operator <=(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) : SBool => a <= bv_num(a, b)
 
 def public operator >(a, b : SBv8 | SBv16 | SBv32 | SBv64) : SBool {
     static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
@@ -885,13 +653,10 @@ def public operator >(a, b : SBv8 | SBv16 | SBv32 | SBv64) : SBool {
     }
 }
 
-def public operator >(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) : SBool {
-    return a > bv_num(a, uint64(b))
-}
+def public operator >(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) : SBool =>
+    a > bv_num(a, uint64(b))
 
-def public operator >(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) : SBool {
-    return a > bv_num(a, b)
-}
+def public operator >(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) : SBool => a > bv_num(a, b)
 
 def public operator >=(a, b : SBv8 | SBv16 | SBv32 | SBv64) : SBool {
     static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
@@ -902,25 +667,16 @@ def public operator >=(a, b : SBv8 | SBv16 | SBv32 | SBv64) : SBool {
     }
 }
 
-def public operator >=(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) : SBool {
-    return a >= bv_num(a, uint64(b))
-}
+def public operator >=(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) : SBool =>
+    a >= bv_num(a, uint64(b))
 
-def public operator >=(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) : SBool {
-    return a >= bv_num(a, b)
-}
+def public operator >=(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) : SBool => a >= bv_num(a, b)
 
-def public operator !=(a, b : SBv8 | SBv16 | SBv32 | SBv64) : SBool {
-    return s_not(a == b)
-}
+def public operator !=(a, b : SBv8 | SBv16 | SBv32 | SBv64) : SBool => s_not(a == b)
 
-def public operator !=(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) : SBool {
-    return s_not(a == b)
-}
+def public operator !=(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint) : SBool => s_not(a == b)
 
-def public operator !=(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) : SBool {
-    return s_not(a == b)
-}
+def public operator !=(a : SBv8 | SBv16 | SBv32 | SBv64; b : uint64) : SBool => s_not(a == b)
 
 def public s_lt(a, b : SBv8 | SBv16 | SBv32 | SBv64) : SBool {
     static_if (typeinfo stripped_typename(a) != typeinfo stripped_typename(b)) {
@@ -969,68 +725,39 @@ def public ite(c : SBool; t, f : SBv8 | SBv16 | SBv32 | SBv64) {
 
 //! `s_lift` — value-or-symbolic normalizer used by generated code ([smt_fn],
 //! constrain blocks): concrete das values become numerals, symbolic pass through.
-def public s_lift(ctx : Z3_context; v : int) : SInt {
-    return int_val(ctx, v)
-}
+def public s_lift(ctx : Z3_context; v : int) : SInt => int_val(ctx, v)
 
-def public s_lift(_ctx : Z3_context; v : SInt) : SInt {
-    return SInt(ast = v.ast, ctx = v.ctx)
-}
+def public s_lift(_ctx : Z3_context; v : SInt) : SInt => SInt(ast = v.ast, ctx = v.ctx)
 
-def public s_lift(ctx : Z3_context; v : bool) : SBool {
-    return bool_val(ctx, v)
-}
+def public s_lift(ctx : Z3_context; v : bool) : SBool => bool_val(ctx, v)
 
-def public s_lift(_ctx : Z3_context; v : SBool) : SBool {
-    return SBool(ast = v.ast, ctx = v.ctx)
-}
+def public s_lift(_ctx : Z3_context; v : SBool) : SBool => SBool(ast = v.ast, ctx = v.ctx)
 
-def public s_lift(ctx : Z3_context; v : double) : SReal {
-    return real_val(ctx, v)
-}
+def public s_lift(ctx : Z3_context; v : double) : SReal => real_val(ctx, v)
 
-def public s_lift(_ctx : Z3_context; v : SReal) : SReal {
-    return SReal(ast = v.ast, ctx = v.ctx)
-}
+def public s_lift(_ctx : Z3_context; v : SReal) : SReal => SReal(ast = v.ast, ctx = v.ctx)
 
-def public s_lift(ctx : Z3_context; v : uint8) : SBv8 {
-    return bv8_val(ctx, uint(v))
-}
+def public s_lift(ctx : Z3_context; v : uint8) : SBv8 => bv8_val(ctx, uint(v))
 
-def public s_lift(ctx : Z3_context; v : uint16) : SBv16 {
-    return bv16_val(ctx, uint(v))
-}
+def public s_lift(ctx : Z3_context; v : uint16) : SBv16 => bv16_val(ctx, uint(v))
 
-def public s_lift(ctx : Z3_context; v : uint) : SBv32 {
-    return bv32_val(ctx, v)
-}
+def public s_lift(ctx : Z3_context; v : uint) : SBv32 => bv32_val(ctx, v)
 
-def public s_lift(ctx : Z3_context; v : uint64) : SBv64 {
-    return bv64_val(ctx, v)
-}
+def public s_lift(ctx : Z3_context; v : uint64) : SBv64 => bv64_val(ctx, v)
 
-def public s_lift(_ctx : Z3_context; v : SBv8) : SBv8 {
-    return SBv8(ast = v.ast, ctx = v.ctx)
-}
+def public s_lift(_ctx : Z3_context; v : SBv8) : SBv8 => SBv8(ast = v.ast, ctx = v.ctx)
 
-def public s_lift(_ctx : Z3_context; v : SBv16) : SBv16 {
-    return SBv16(ast = v.ast, ctx = v.ctx)
-}
+def public s_lift(_ctx : Z3_context; v : SBv16) : SBv16 => SBv16(ast = v.ast, ctx = v.ctx)
 
-def public s_lift(_ctx : Z3_context; v : SBv32) : SBv32 {
-    return SBv32(ast = v.ast, ctx = v.ctx)
-}
+def public s_lift(_ctx : Z3_context; v : SBv32) : SBv32 => SBv32(ast = v.ast, ctx = v.ctx)
 
-def public s_lift(_ctx : Z3_context; v : SBv64) : SBv64 {
-    return SBv64(ast = v.ast, ctx = v.ctx)
-}
+def public s_lift(_ctx : Z3_context; v : SBv64) : SBv64 => SBv64(ast = v.ast, ctx = v.ctx)
 
 // ===== quantifiers =====
 
-//! Bounded combinators — expand a predicate over concrete indices into one
-//! conjunction/disjunction AT FORMULA-BUILD TIME. These are NOT SMT
-//! quantifiers (see `smt_forall`/`smt_exists` below for the real thing);
-//! for fixed small n the expansion is the encoding solvers handle best.
+//! Bounded combinators: expand a predicate over concrete indices into one conjunction/disjunction at
+//! formula-build time. Not SMT quantifiers (`smt_forall`/`smt_exists` below are); for a fixed small n
+//! the expansion is the encoding solvers handle best.
 def public all_of(n : int; blk : block<(i : int) : SBool>) : SBool {
     assert(n > 0)
     var conds <- [for (i in range(n)); invoke(blk, i)]
@@ -1057,21 +784,17 @@ def public all_pairs(n : int; blk : block<(i, j : int) : SBool>) : SBool {
 }
 
 //! TRUE SMT quantifiers over symbolic bound variables (Z3_mk_forall_const).
-def public smt_forall(ctx : Z3_context; blk : block<(q : SInt) : SBool>) : SBool {
-    return quant1(ctx, blk, true)
-}
+def public smt_forall(ctx : Z3_context; blk : block<(q : SInt) : SBool>) : SBool =>
+    quant1(ctx, blk, true)
 
-def public smt_exists(ctx : Z3_context; blk : block<(q : SInt) : SBool>) : SBool {
-    return quant1(ctx, blk, false)
-}
+def public smt_exists(ctx : Z3_context; blk : block<(q : SInt) : SBool>) : SBool =>
+    quant1(ctx, blk, false)
 
-def public smt_forall(s : Solver; blk : block<(q : SInt) : SBool>) : SBool {
-    return quant1(s.ctx, blk, true)
-}
+def public smt_forall(s : Solver; blk : block<(q : SInt) : SBool>) : SBool =>
+    quant1(s.ctx, blk, true)
 
-def public smt_exists(s : Solver; blk : block<(q : SInt) : SBool>) : SBool {
-    return quant1(s.ctx, blk, false)
-}
+def public smt_exists(s : Solver; blk : block<(q : SInt) : SBool>) : SBool =>
+    quant1(s.ctx, blk, false)
 
 def private quant1(ctx : Z3_context; blk : block<(q : SInt) : SBool>; isForall : bool) : SBool {
     let q = SInt(ast = Z3_mk_fresh_const(ctx, "q", Z3_mk_int_sort(ctx)), ctx = ctx)
@@ -1082,21 +805,17 @@ def private quant1(ctx : Z3_context; blk : block<(q : SInt) : SBool>; isForall :
     return SBool(ast = ast, ctx = ctx)
 }
 
-def public smt_forall(ctx : Z3_context; blk : block<(a, b : SInt) : SBool>) : SBool {
-    return quant2(ctx, blk, true)
-}
+def public smt_forall(ctx : Z3_context; blk : block<(a, b : SInt) : SBool>) : SBool =>
+    quant2(ctx, blk, true)
 
-def public smt_exists(ctx : Z3_context; blk : block<(a, b : SInt) : SBool>) : SBool {
-    return quant2(ctx, blk, false)
-}
+def public smt_exists(ctx : Z3_context; blk : block<(a, b : SInt) : SBool>) : SBool =>
+    quant2(ctx, blk, false)
 
-def public smt_forall(s : Solver; blk : block<(a, b : SInt) : SBool>) : SBool {
-    return quant2(s.ctx, blk, true)
-}
+def public smt_forall(s : Solver; blk : block<(a, b : SInt) : SBool>) : SBool =>
+    quant2(s.ctx, blk, true)
 
-def public smt_exists(s : Solver; blk : block<(a, b : SInt) : SBool>) : SBool {
-    return quant2(s.ctx, blk, false)
-}
+def public smt_exists(s : Solver; blk : block<(a, b : SInt) : SBool>) : SBool =>
+    quant2(s.ctx, blk, false)
 
 def private quant2(ctx : Z3_context; blk : block<(a, b : SInt) : SBool>; isForall : bool) : SBool {
     let qa = SInt(ast = Z3_mk_fresh_const(ctx, "qa", Z3_mk_int_sort(ctx)), ctx = ctx)
@@ -1147,21 +866,16 @@ def private eval_ast(m : Model; e : Z3_ast) : Z3_ast {
     return val
 }
 
-def public eval_int(m : Model; x : SInt) : int {
-    return to_int(Z3_get_numeral_string(m.ctx, eval_ast(m, x.ast)))
-}
+def public eval_int(m : Model; x : SInt) : int =>
+    to_int(Z3_get_numeral_string(m.ctx, eval_ast(m, x.ast)))
 
-def public eval_bool(m : Model; x : SBool) : bool {
-    return Z3_get_bool_value(m.ctx, eval_ast(m, x.ast)) == Z3_lbool.Z3_L_TRUE
-}
+def public eval_bool(m : Model; x : SBool) : bool =>
+    Z3_get_bool_value(m.ctx, eval_ast(m, x.ast)) == Z3_lbool.Z3_L_TRUE
 
-def public eval_real(m : Model; x : SReal) : double {
-    return Z3_get_numeral_double(m.ctx, eval_ast(m, x.ast))
-}
+def public eval_real(m : Model; x : SReal) : double =>
+    Z3_get_numeral_double(m.ctx, eval_ast(m, x.ast))
 
-def public eval_string(m : Model; x : SString) : string {
-    return Z3_get_string(m.ctx, eval_ast(m, x.ast))
-}
+def public eval_string(m : Model; x : SString) : string => Z3_get_string(m.ctx, eval_ast(m, x.ast))
 
 def public eval_bv(m : Model; x : SBv8 | SBv16 | SBv32 | SBv64) : uint64 {
     var v = 0ul
@@ -1281,22 +995,12 @@ def public model_bv(s : Solver; name : string) : uint64 {
 // ===== debug =====
 
 //! Full solver state as SMT-LIB2 text — the exact formula Z3 sees.
-def public to_smtlib(s : Solver) : string {
-    return Z3_solver_to_string(s.ctx, s.solver)
-}
+def public to_smtlib(s : Solver) : string => Z3_solver_to_string(s.ctx, s.solver)
 
-def public to_string(e : SBool) : string {
-    return Z3_ast_to_string(e.ctx, e.ast)
-}
+def public to_string(e : SBool) : string => Z3_ast_to_string(e.ctx, e.ast)
 
-def public to_string(e : SInt) : string {
-    return Z3_ast_to_string(e.ctx, e.ast)
-}
+def public to_string(e : SInt) : string => Z3_ast_to_string(e.ctx, e.ast)
 
-def public to_string(e : SReal) : string {
-    return Z3_ast_to_string(e.ctx, e.ast)
-}
+def public to_string(e : SReal) : string => Z3_ast_to_string(e.ctx, e.ast)
 
-def public to_string(e : SString) : string {
-    return Z3_ast_to_string(e.ctx, e.ast)
-}
+def public to_string(e : SString) : string => Z3_ast_to_string(e.ctx, e.ast)

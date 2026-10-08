@@ -71,6 +71,14 @@ def good_inscope() {
     }
 }
 
+def good_deleted() {
+    for (i in range(3)) {
+        var items : array<int>
+        items |> push(i)
+        delete items
+    }
+}
+
 def good_moved_into_var_parameter() : int {
     var total = 0
     for (i in range(3)) {

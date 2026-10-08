@@ -49,9 +49,7 @@ def public with_model(ctx : Z3_context; s : Z3_solver; blk : block<(m : Z3_model
     Z3_model_dec_ref(ctx, m)
 }
 
-def public array_data_ptr(var arr : auto(T)[]) : T? {
-    return unsafe(addr(arr[0]))
-}
+def public array_data_ptr(var arr : auto(T)[]) : T? => unsafe(addr(arr[0]))
 
 def public array_data_ptr(var arr : array<auto(T)>) : T? {
     if (arr |> empty()) {
@@ -62,68 +60,52 @@ def public array_data_ptr(var arr : array<auto(T)>) : T? {
 }
 
 //! `array<Z3_ast>` overloads for the `(unsigned num_args, Z3_ast const args[])` builders.
-def public Z3_mk_and(ctx : Z3_context; var args : array<Z3_ast>) {
-    return Z3_mk_and(ctx, uint(length(args)), array_data_ptr(args))
-}
+def public Z3_mk_and(ctx : Z3_context; var args : array<Z3_ast>) =>
+    Z3_mk_and(ctx, uint(length(args)), array_data_ptr(args))
 
-def public Z3_mk_and(ctx : Z3_context; var args : Z3_ast[]) {
-    return Z3_mk_and(ctx, uint(length(args)), array_data_ptr(args))
-}
+def public Z3_mk_and(ctx : Z3_context; var args : Z3_ast[]) =>
+    Z3_mk_and(ctx, uint(length(args)), array_data_ptr(args))
 
-def public Z3_mk_or(ctx : Z3_context; var args : array<Z3_ast>) {
-    return Z3_mk_or(ctx, uint(length(args)), array_data_ptr(args))
-}
+def public Z3_mk_or(ctx : Z3_context; var args : array<Z3_ast>) =>
+    Z3_mk_or(ctx, uint(length(args)), array_data_ptr(args))
 
-def public Z3_mk_or(ctx : Z3_context; var args : Z3_ast[]) {
-    return Z3_mk_or(ctx, uint(length(args)), array_data_ptr(args))
-}
+def public Z3_mk_or(ctx : Z3_context; var args : Z3_ast[]) =>
+    Z3_mk_or(ctx, uint(length(args)), array_data_ptr(args))
 
-def public Z3_mk_add(ctx : Z3_context; var args : array<Z3_ast>) {
-    return Z3_mk_add(ctx, uint(length(args)), array_data_ptr(args))
-}
+def public Z3_mk_add(ctx : Z3_context; var args : array<Z3_ast>) =>
+    Z3_mk_add(ctx, uint(length(args)), array_data_ptr(args))
 
-def public Z3_mk_add(ctx : Z3_context; var args : Z3_ast[]) {
-    return Z3_mk_add(ctx, uint(length(args)), array_data_ptr(args))
-}
+def public Z3_mk_add(ctx : Z3_context; var args : Z3_ast[]) =>
+    Z3_mk_add(ctx, uint(length(args)), array_data_ptr(args))
 
-def public Z3_mk_mul(ctx : Z3_context; var args : array<Z3_ast>) {
-    return Z3_mk_mul(ctx, uint(length(args)), array_data_ptr(args))
-}
+def public Z3_mk_mul(ctx : Z3_context; var args : array<Z3_ast>) =>
+    Z3_mk_mul(ctx, uint(length(args)), array_data_ptr(args))
 
-def public Z3_mk_mul(ctx : Z3_context; var args : Z3_ast[]) {
-    return Z3_mk_mul(ctx, uint(length(args)), array_data_ptr(args))
-}
+def public Z3_mk_mul(ctx : Z3_context; var args : Z3_ast[]) =>
+    Z3_mk_mul(ctx, uint(length(args)), array_data_ptr(args))
 
-def public Z3_mk_sub(ctx : Z3_context; var args : array<Z3_ast>) {
-    return Z3_mk_sub(ctx, uint(length(args)), array_data_ptr(args))
-}
+def public Z3_mk_sub(ctx : Z3_context; var args : array<Z3_ast>) =>
+    Z3_mk_sub(ctx, uint(length(args)), array_data_ptr(args))
 
-def public Z3_mk_sub(ctx : Z3_context; var args : Z3_ast[]) {
-    return Z3_mk_sub(ctx, uint(length(args)), array_data_ptr(args))
-}
+def public Z3_mk_sub(ctx : Z3_context; var args : Z3_ast[]) =>
+    Z3_mk_sub(ctx, uint(length(args)), array_data_ptr(args))
 
-def public Z3_mk_distinct(ctx : Z3_context; var args : array<Z3_ast>) {
-    return Z3_mk_distinct(ctx, uint(length(args)), array_data_ptr(args))
-}
+def public Z3_mk_distinct(ctx : Z3_context; var args : array<Z3_ast>) =>
+    Z3_mk_distinct(ctx, uint(length(args)), array_data_ptr(args))
 
-def public Z3_mk_distinct(ctx : Z3_context; var args : Z3_ast[]) {
-    return Z3_mk_distinct(ctx, uint(length(args)), array_data_ptr(args))
-}
+def public Z3_mk_distinct(ctx : Z3_context; var args : Z3_ast[]) =>
+    Z3_mk_distinct(ctx, uint(length(args)), array_data_ptr(args))
 
 //! Integer constant (unknown) named `name`.
-def public z3_int_const(ctx : Z3_context; name : string) {
-    return Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, name), Z3_mk_int_sort(ctx))
-}
+def public z3_int_const(ctx : Z3_context; name : string) =>
+    Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, name), Z3_mk_int_sort(ctx))
 
 //! Boolean constant (unknown) named `name`.
-def public z3_bool_const(ctx : Z3_context; name : string) {
-    return Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, name), Z3_mk_bool_sort(ctx))
-}
+def public z3_bool_const(ctx : Z3_context; name : string) =>
+    Z3_mk_const(ctx, Z3_mk_string_symbol(ctx, name), Z3_mk_bool_sort(ctx))
 
 //! Integer numeral.
-def public z3_int(ctx : Z3_context; v : int) {
-    return Z3_mk_int(ctx, v, Z3_mk_int_sort(ctx))
-}
+def public z3_int(ctx : Z3_context; v : int) => Z3_mk_int(ctx, v, Z3_mk_int_sort(ctx))
 
 //! Version of the loaded libz3.
 def public z3_version : string {
