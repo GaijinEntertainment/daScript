@@ -131,7 +131,8 @@ carriers name, and no TTS family file (`dasllama_kitten`, `dasllama_kokoro`, `da
   family's own file, a family type is named only here, in the two tower drivers' family hooks
   (`dasllama_metal_tower.das`, `dasllama_vulkan_tower.das`), and in files under `tests/` - the
   set `REVIEW.das`'s `check_family_seams` enforces, its licensed namers (`VISION_SEAM_EXEMPT`)
-  being exactly those two driver files.
+  being those two driver files and `harness/vision_lane_probe.das`, the lane probe, which pins a
+  family's lane and mints its tower in memory - the carrier exposes neither.
 - **`dasllama_audio_embedder.das`** - the audio carrier: `AudioEmbedder` / `AudioState`, the
   vision carrier's audio twin - one union through every seam (server media worker, facade
   `encode_audio`, tutorials), the family probed from the mmproj's audio tensor (or a `.dlim`'s
