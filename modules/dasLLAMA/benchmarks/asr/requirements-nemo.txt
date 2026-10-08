@@ -125,7 +125,7 @@ typing_extensions==4.16.0
 urllib3==2.7.0
 wandb==0.28.0
 webdataset==1.0.2
-Werkzeug==3.1.8
+Werkzeug==3.1.9
 whisper_normalizer==0.1.12
 wrapt==2.2.2
 xxhash==3.8.1
