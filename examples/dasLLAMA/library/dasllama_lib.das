@@ -1,12 +1,13 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
-require dasllama/dasllama
+require dasllama/dasllama_core
 require daslib/export_c
 require daslib/jobque_boost
 require daslib/fio
 require daslib/strings_boost
 require jobque
+require math
 
 // dasLLAMA behind a C ABI - text completion, speech to text and speech synthesis. Both backends build
 // this one file; README.md says how. A C caller reads each entry point as
@@ -34,6 +35,17 @@ var g_tts_voice : string = ""
 var g_tts_rate = 1.0
 var g_tts_us = 0l
 var g_tts_seconds = 0.0lf
+var g_tts_pcm : array<float>
+var g_tts_pcm_rate = 0
+var g_vad = VadModel()
+var g_vad_loaded = false
+var g_listening = false
+var g_vad_iter = VadIter()
+var g_take : array<float>       // the live stream at 16 kHz, from stream sample g_take_base on
+var g_take_base = 0l
+var g_utterance_start = -1l     // the stream sample the open utterance starts at, -1 when none is open
+var g_rs_pos = 0.0lf            // the resampler's read position, relative to the next chunk
+var g_rs_prev = 0.0             // the previous chunk's last sample, read at position -1
 
 def private refuse(why : string) : bool {
     g_reason = why
@@ -186,35 +198,122 @@ def asr_close() {
     return if (!g_asr_loaded)
     delete g_asr_session
     delete g_asr
+    if (g_vad_loaded) {
+        delete g_vad
+        g_vad_loaded = false
+    }
+    g_listening = false
+    delete g_take
     g_asr_loaded = false
     queue_release()
 }
 
-[export_c(comment = "Decode `audio_path` and return its whole transcript, or \"\" with `reason` set.")]
-def asr_transcribe(audio_path : string) : string {
+[export_c(comment = "Seconds of audio transcribed per second of wall clock, 0 before a transcript has run.")]
+def asr_speed() : double => g_asr_us > 0l ? g_audio_seconds * 1.0e6lf / double(g_asr_us) : 0.0lf
+
+// ===== speech to text from a live stream =====
+
+[export_c(comment = "Start a live stream on the open ASR model; `vad_path` is the Silero VAD that cuts it into\nutterances (modules/dasLLAMA/models/silero_vad.bin). Then pass the audio to asr_feed as it arrives.")]
+def asr_listen(vad_path : string) : bool {
     if (!g_asr_loaded) {
-        refuse("no ASR model is open")
-        return ""
+        return refuse("no ASR model is open")
     }
-    if (!stat(audio_path).is_valid) {
-        refuse("no such file: {audio_path}")
-        return ""
+    if (!g_vad_loaded) {
+        if (!stat(vad_path).is_valid) {
+            return refuse("no such file: {vad_path}")
+        }
+        g_vad <- load_vad_model(vad_path)   // nolint:PERF030 - loaded once, deleted by asr_close
+        g_vad_loaded = true
     }
-    let samples <- load_audio_16k_mono(audio_path)
-    if (empty(samples)) {
-        refuse("nothing decodable in {audio_path}")
-        return ""
-    }
-    g_audio_seconds = double(length(samples)) / double(AUDIO_SAMPLE_RATE)
-    let started = ref_time_ticks()
-    let text = transcribe(g_asr, g_asr_session, samples)
-    g_asr_us = int64(get_time_usec(started))
+    var opts = default_vad_opts()
+    opts.min_silence_ms = 500   // an utterance ends at a half-second pause, not at every breath in a sentence
+    opts.speech_pad_ms = 200    // keep the quiet ends of words: ASR reads a cut-off syllable badly
+    vad_iter_reset(g_vad_iter, opts)
+    g_take |> clear()
+    g_take_base = 0l
+    g_utterance_start = -1l
+    g_rs_pos = 0.0lf
+    g_rs_prev = 0.0
+    g_listening = true
     g_reason = ""
+    return true
+}
+
+//! `count` samples at `rate` Hz as 16 kHz samples, linearly interpolated across chunks
+def private resample_to_16k(pcm : float const?; count, rate : int) : array<float> {
+    var out : array<float>
+    let step = double(rate) / double(AUDIO_SAMPLE_RATE)
+    out |> reserve(int(double(count) / step) + 2)
+    var pos = g_rs_pos
+    while (pos < double(count - 1)) {
+        let i = int(floor(pos))
+        let a = i < 0 ? g_rs_prev : unsafe(pcm[i])
+        out |> push(lerp(a, unsafe(pcm[i + 1]), float(pos - double(i))))
+        pos += step
+    }
+    g_rs_pos = pos - double(count)
+    g_rs_prev = unsafe(pcm[count - 1])
+    return <- out
+}
+
+//! transcribes the open utterance up to stream sample `end`, and drops the audio before `end`
+def private close_utterance(end : int64) : string {
+    let s = clamp(g_utterance_start - g_take_base, 0l, long_length(g_take))
+    let e = clamp(end - g_take_base, s, long_length(g_take))
+    var utterance : array<float>
+    utterance |> resize(e - s)
+    for (i in range64(e - s)) {
+        utterance[i] = g_take[s + i]
+    }
+    g_take |> erase(0l, e)
+    g_take_base += e
+    g_utterance_start = -1l
+    if (empty(utterance)) {
+        return ""
+    }
+    g_audio_seconds = double(length(utterance)) / double(AUDIO_SAMPLE_RATE)
+    let started = ref_time_ticks()
+    let text = strip(transcribe(g_asr, g_asr_session, utterance))
+    g_asr_us = int64(get_time_usec(started))
     return text
 }
 
-[export_c(comment = "Seconds of audio transcribed per second of wall clock, 0 before a transcript has run.")]
-def asr_speed() : double => g_asr_us > 0l ? g_audio_seconds * 1.0e6lf / double(g_asr_us) : 0.0lf
+[export_c(comment = "Feed `count` mono samples at `rate` Hz, in chunks of any size - straight from a capture callback.\nReturns the text of every utterance the VAD closed in this call, \"\" while speech goes on; the\ntranscription runs inside the call, so feed it from a worker thread.")]
+def asr_feed(pcm : float const?; count : int; rate : int) : string {
+    if (!g_listening) {
+        refuse("not listening - call asr_listen first")
+        return ""
+    }
+    if (pcm == null || count <= 0 || rate <= 0) {
+        return ""
+    }
+    let fresh <- resample_to_16k(pcm, count, rate)
+    g_take |> push_from(fresh)
+    var heard = ""
+    vad_iter_feed(g_vad, g_vad_iter, fresh) $(ev : VadEvent) {
+        if (ev.kind == VadEventKind.speech_start) {
+            g_utterance_start = ev.sample
+        } else {
+            let text = close_utterance(ev.sample)
+            heard = empty(heard) ? text : "{heard} {text}"
+        }
+    }
+    // between utterances keep one second, enough for the padded start of the next one
+    if (g_utterance_start < 0l && long_length(g_take) > 2l * AUDIO_SAMPLE_RATE) {
+        let drop = long_length(g_take) - AUDIO_SAMPLE_RATE
+        g_take |> erase(0l, drop)
+        g_take_base += drop
+    }
+    g_reason = ""
+    return heard
+}
+
+[export_c(comment = "End the live stream: returns the text of the utterance still open, or \"\".")]
+def asr_listen_end() : string {
+    let text = g_listening && g_utterance_start >= 0l ? close_utterance(g_take_base + long_length(g_take)) : ""
+    g_listening = false
+    return text
+}
 
 // ===== speech synthesis =====
 
@@ -243,11 +342,13 @@ def tts_open(model_path : string) : bool {
 def tts_close() {
     return if (!g_tts_loaded)
     delete g_tts
+    delete g_tts_pcm
+    g_tts_pcm_rate = 0
     g_tts_loaded = false
     queue_release()
 }
 
-[export_c(comment = "The voice `tts_say` speaks in, or \"\" while no model is open.")]
+[export_c(comment = "The voice `tts_speak` speaks in, or \"\" while no model is open.")]
 def tts_voice() : string => g_tts_loaded ? g_tts_voice : ""
 
 [export_c(comment = "Pick a voice the model offers - \"\" keeps the current one - and a speech rate from 0.25 to 4.")]
@@ -268,29 +369,37 @@ def tts_set_voice(name : string; rate : float) : bool {
     return true
 }
 
-[export_c(comment = "Synthesize `text` and write it to `out_wav` as PCM16.\nReturns the seconds of audio written, or 0 with `reason` set.")]
-def tts_say(text : string; out_wav : string) : double {
+[export_c(comment = "Synthesize `text` into memory: returns the sample count, or 0 with `reason` set.\nRead the samples with tts_pcm.")]
+def tts_speak(text : string) : int {
     if (!g_tts_loaded) {
         refuse("no TTS model is open")
-        return 0.0lf
+        return 0
     }
     let started = ref_time_ticks()
-    let audio <- synthesize(g_tts, text, g_tts_voice, g_tts_rate)
+    var audio <- synthesize(g_tts, text, g_tts_voice, g_tts_rate)
     g_tts_us = int64(get_time_usec(started))
     if (empty(audio.pcm)) {
         refuse("{text} synthesized to no audio")
-        return 0.0lf
+        return 0
     }
     g_tts_seconds = double(length(audio.pcm)) / double(audio.sample_rate)
-    if (!write_wav_pcm16(out_wav, audio.pcm, audio.sample_rate)) {
-        refuse("cannot write {out_wav}")
-        return 0.0lf
-    }
+    delete g_tts_pcm
+    g_tts_pcm <- audio.pcm
+    g_tts_pcm_rate = audio.sample_rate
     g_reason = ""
-    return g_tts_seconds
+    return length(g_tts_pcm)
 }
 
-[export_c(comment = "Seconds of speech synthesized per second of wall clock, 0 before a say has run.")]
+[export_c(comment = "The mono samples of the last tts_speak, in [-1, 1]; valid until the next tts_speak or tts_close.")]
+def tts_pcm() : float const? {
+    return null if (empty(g_tts_pcm))
+    return unsafe(addr<float const?>(g_tts_pcm[0]))
+}
+
+[export_c(comment = "The sample rate of tts_pcm, 0 before a tts_speak.")]
+def tts_pcm_rate() : int => g_tts_pcm_rate
+
+[export_c(comment = "Seconds of speech synthesized per second of wall clock, 0 before a tts_speak has run.")]
 def tts_speed() : double => g_tts_us > 0l ? g_tts_seconds * 1.0e6lf / double(g_tts_us) : 0.0lf
 
 //! the engine's own stats counters are filled by the one-call generate, which a pull loop never runs
