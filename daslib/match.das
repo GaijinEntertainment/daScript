@@ -23,6 +23,7 @@ require daslib/macro_boost
 require daslib/strings_boost
 require daslib/defer
 require daslib/option
+require daslib/result
 
 /*
 options debugger
@@ -605,6 +606,48 @@ def is_to_array_move_call(wth : Expression?) {
 }
 
 [macro_function]
+def is_range_call(pat : Expression?) : bool => pat is ExprCall && (pat as ExprCall).name == "interval" && length((pat as ExprCall).arguments) == 2
+
+[macro_function]
+def is_range_const(pat : Expression?) : bool => pat is ExprConstRange || pat is ExprConstURange || pat is ExprConstRange64 || pat is ExprConstURange64
+
+[macro_function]
+def range_element_type(typ : TypeDeclPtr) : Type {
+    return (typ.baseType == Type.tRange ? Type.tInt : typ.baseType == Type.tURange ? Type.tUInt
+        : typ.baseType == Type.tRange64 ? Type.tInt64 : typ.baseType == Type.tURange64 ? Type.tUInt64 : Type.none)
+}
+
+[macro_function]
+def match_range(what : TypeDeclPtr; wth : Expression?; access : Expression?) : Result<Expression?; string> {
+    //! ``(lo..hi)`` matches ``lo <= value && value < hi`` - half-open, like a ``for`` range: the condition, or why the range does not apply.
+    if (wth._type == null) {
+        return err("range pattern `{describe_pattern(wth)}` failed to compile; its bounds must be constants or variables in scope", type<Expression?>)
+    }
+    let elem = range_element_type(wth._type)
+    if (what.baseType != elem || what.isPointer) {
+        return err("range pattern `{describe_pattern(wth)}` matches {das_to_string(elem)} values, not `{describe(what)}`", type<Expression?>)
+    }
+    let rng = unsafe(reinterpret<Expression?>(wth))
+    var cond = (is_range_call(wth)
+        ? qmacro($e(access) >= $e((wth as ExprCall).arguments[0]) && $e(access) < $e((wth as ExprCall).arguments[1]))
+        : qmacro($e(access) >= $e(rng).x && $e(access) < $e(rng).y))
+    cond |> force_at(wth.at)
+    return move_ok(cond, type<string>)
+}
+
+[macro_function]
+def private add_condition(var r : Result<Expression?; string>; wth : Expression?; var to : MatchTo) : bool {
+    //! A leaf pattern's condition joins the arm; its error is reported instead - a hard one when the pattern itself did not compile.
+    if (is_err(r)) {
+        to.errors |> match_error(unwrap_err(r), wth.at)
+        to.failed ||= wth._type == null
+        return false
+    }
+    to.conditions |> push(move_unwrap(r))
+    return true
+}
+
+[macro_function]
 def match_const(what : TypeDeclPtr; wth : Expression?; access : Expression?; var to : MatchTo) {
     if (wth._type == null) {
         to.errors |> match_error("unresolved constant type", wth.at)
@@ -675,6 +718,8 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
         return match_alternatives(wth as ExprOp2, to) $(side : Expression?; var sideTo : MatchTo) {
             return match_any(what, side, access, sideTo)
         }
+    } elif (is_range_const(wth) || is_range_call(wth)) {
+        return add_condition(match_range(what, wth, access), wth, to)
     } elif (wth.__rtti |> starts_with("ExprConst")) {
         return match_const(what, wth, access, to)
     } elif (to.bind_names && (wth is ExprOp2) && (wth as ExprOp2).op == "&") {
@@ -772,7 +817,7 @@ def prepare_sub_patterns(var pat : Expression?; bind_bare : bool; var names : ar
         }
     } elif (pat is ExprAsVariant) {
         prepare_pattern((pat as ExprAsVariant).value, bind_bare, names)
-    } elif (pat is ExprCall && !is_match_call(pat, "expr")) {
+    } elif (pat is ExprCall && !is_match_call(pat, "expr") && !is_range_call(pat)) {
         for (a in (pat as ExprCall).arguments) {
             prepare_pattern(a, bind_bare, names)
         }
@@ -998,7 +1043,74 @@ def private constant_key(p : Expression?) : string {
         let ce = p as ExprConstEnumeration
         return "{ce.enumType.name}.{ce.value}"
     }
-    return p.__rtti |> starts_with("ExprConst") ? describe(p) : ""
+    return p.__rtti |> starts_with("ExprConst") && !is_range_const(p) ? describe(p) : ""
+}
+
+[macro_function]
+def private int_value(var e : Expression?) : Option<int64> {
+    let p = match_peel_r2v(e)
+    return some(int64((p as ExprConstInt).value)) if (p is ExprConstInt)
+    return some(int64((p as ExprConstUInt).value)) if (p is ExprConstUInt)
+    return some((p as ExprConstInt64).value) if (p is ExprConstInt64)
+    return none(type<int64>)
+}
+
+[macro_function]
+def private constant_span(var e : Expression?) : Option<range64> {
+    //! The half-open span of integers a constant range - or a single integer constant - matches.
+    var p = match_peel_r2v(e)
+    if (p is ExprConstRange) {
+        let r = (p as ExprConstRange).value
+        return some(interval(int64(r.x), int64(r.y)))
+    } elif (p is ExprConstURange) {
+        let r = (p as ExprConstURange).value
+        return some(interval(int64(r.x), int64(r.y)))
+    } elif (p is ExprConstRange64) {
+        return some((p as ExprConstRange64).value)
+    } elif (is_range_call(p)) {
+        let lo = int_value((p as ExprCall).arguments[0])
+        let hi = int_value((p as ExprCall).arguments[1])
+        return is_some(lo) && is_some(hi) ? some(interval(unwrap(lo), unwrap(hi))) : none(type<range64>)
+    }
+    let v = int_value(p)
+    return is_some(v) ? some(interval(unwrap(v), unwrap(v) + 1l)) : none(type<range64>)
+}
+
+[macro_function]
+def private cell_spans(var e : Expression?) : array<range64> {
+    //! The constant spans in a cell - a constant range or an integer constant each - through ``|`` and ``&``.
+    var p = match_peel_r2v(e)
+    if (p != null && p is ExprOp2 && ((p as ExprOp2).op == "||" || (p as ExprOp2).op == "&")) {
+        var spans <- cell_spans((p as ExprOp2).left)
+        spans |> push_from(cell_spans((p as ExprOp2).right))
+        return <- spans
+    }
+    let span = p == null ? none(type<range64>) : constant_span(p)
+    return <- [for (s in [span]); unwrap(s); where is_some(s)]
+}
+
+[macro_function]
+def private column_cuts(var rows : array<PatternRow>; c : int) : array<int64> {
+    //! A column with constant ranges splits the integers at every constant end, so a range and a constant name the same pieces; empty without ranges.
+    var spans : array<range64>
+    for (r in rows) {
+        spans |> push_from(cell_spans(r.cells[c]))
+    }
+    let ranged = has_value([for (s in spans); s.y - s.x != 1l], true)
+    var cuts : array<int64>
+    for (s in spans) {
+        cuts |> push_from([s.x, s.y])
+    }
+    sort(cuts)
+    return <- [for (v, i in cuts, count()); v; where ranged && (i == 0 || cuts[i - 1] != v)]
+}
+
+[macro_function]
+def private span_keys(var p : Expression?; cuts : array<int64>) : array<string> {
+    //! The pieces between ``cuts`` a constant span covers, named ``lo..hi`` (``v`` for one value).
+    let span = constant_span(p)
+    return <- [for (i in range(length(cuts) - 1)); cuts[i + 1] == cuts[i] + 1l ? "{cuts[i]}" : "{cuts[i]}..{cuts[i + 1]}";
+        where is_some(span) && cuts[i] >= unwrap(span).x && cuts[i + 1] <= unwrap(span).y]
 }
 
 [macro_function]
@@ -1063,16 +1175,17 @@ def private both(var l : MatchCell; var r : MatchCell) : MatchCell {
 }
 
 [macro_function]
-def private classify_cell(typ : TypeDeclPtr; var pat : Expression?) : MatchCell {
+def private classify_cell(typ : TypeDeclPtr; var pat : Expression?; cuts : array<int64>) : MatchCell {
     //! What one pattern covers of one column: everything, named values, or values the analysis can't name.
     var p = match_peel_r2v(pat)
     return <- MatchCell(any = true) if (is_binder(p))
     if (p is ExprOp2) {
         var op2 = p as ExprOp2
-        return <- either(classify_cell(typ, op2.left), classify_cell(typ, op2.right)) if (op2.op == "||")
-        return <- both(classify_cell(typ, op2.left), classify_cell(typ, op2.right)) if (op2.op == "&")
+        return <- either(classify_cell(typ, op2.left, cuts), classify_cell(typ, op2.right, cuts)) if (op2.op == "||")
+        return <- both(classify_cell(typ, op2.left, cuts), classify_cell(typ, op2.right, cuts)) if (op2.op == "&")
         return <- MatchCell(opaque = true)
     }
+    return <- MatchCell(keys <- span_keys(p, cuts)) if (!empty(cuts) && is_some(constant_span(p)))
     let key = constant_key(p)
     return <- MatchCell(keys <- [key]) if (!empty(key))
     if (typ != null && typ.isVariant && p is ExprMakeVariant && length((p as ExprMakeVariant).variants) == 1
@@ -1301,7 +1414,8 @@ def private match_table(var types : array<TypeDeclPtr>; var patterns : array<Exp
         c += split_column(tab, rows, c) ? 0 : 1
     }
     tab.arm_rows <- [for (ai in range(length(patterns))); [for (r, ri in rows, count()); ri; where r.arm == ai]]
-    tab.rows <- [for (r in rows); [for (cell, ci in r.cells, count()); cell == null ? MatchCell(any = true) : classify_cell(tab.columns[ci], cell)]]
+    let cuts <- [for (ci in range(length(tab.columns))); column_cuts(rows, ci)]
+    tab.rows <- [for (r in rows); [for (cell, ci in r.cells, count()); cell == null ? MatchCell(any = true) : classify_cell(tab.columns[ci], cell, cuts[ci])]]
     tab.domains <- [for (col, ci in tab.columns, count()); column_domain(col, ci, tab.rows)]
     return <- tab
 }
