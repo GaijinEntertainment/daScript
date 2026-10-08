@@ -231,8 +231,9 @@ def private xml_function_tool_grammar(tools : array<string>; forced_name : strin
 
 //! Read `response_format` and `tool_choice` off a chat request: the grammar text they ask for, or why the
 //! request is refused. `tools` are the declared tool definitions as compact JSON; `call_open`/`call_close`
-//! the model's tool-call markers ("" = the family carries no marker format); `xml_calls` = the Qwen3.6 call shape.
-def read_constraint_spec(js : JsonValue?; tools : array<string>; call_open, call_close : string; xml_calls : bool = false) : ConstraintSpec {   // nolint:STYLE037,STYLE038 - one arm per request field shape, each a refusal or a grammar
+//! the model's tool-call markers ("" = the family carries no marker format) and its call shape (`mode`): a forced call is
+//! written as a grammar for the JSON shapes (hermes) and the Qwen3.5/3.6 block shape; the other shapes are refused.
+def read_constraint_spec(js : JsonValue?; tools : array<string>; call_open, call_close : string; mode : ToolMode = ToolMode.hermes) : ConstraintSpec {   // nolint:STYLE037,STYLE038 - one arm per request field shape, each a refusal or a grammar
     var spec : ConstraintSpec
     let rf = js?["response_format"]
     if (rf != null && rf.value is _object) {
@@ -287,11 +288,11 @@ def read_constraint_spec(js : JsonValue?; tools : array<string>; call_open, call
             spec.err = "'response_format' and a forced 'tool_choice' cannot both constrain one reply"
             return <- spec
         }
-        if (empty(call_open)) {
+        if (empty(call_open) || (mode != ToolMode.hermes && mode != ToolMode.xml_function)) {
             spec.err = "a forced 'tool_choice' is not served for this model's tool-call format"
             return <- spec
         }
-        if (xml_calls) {
+        if (mode == ToolMode.xml_function) {
             let g = xml_function_tool_grammar(tools, forced_name, required)
             if (empty(g)) {
                 spec.err = "'tool_choice' names '{forced_name}', which is not among the declared tools"

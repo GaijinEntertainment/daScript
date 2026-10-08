@@ -229,7 +229,7 @@ Run under `-jit` - the interpreter is refused, it is far too slow for inference.
 | `--chunk-idle` | - | *backend* | Prefill quantum in tokens while no stream is decoding (never under `--chunk`): nothing waits on the tick, so the window can be wide. Default: 2048 on Metal, 512 on the other backends |
 | `--page-rows` | - | `64` | KV page size in positions for paged serving |
 | `--prefix` | - | *auto* | Prefix-cache retention cap in pages (auto: one full context per stream; `-1` = unbounded) |
-| `--prefix-states` | - | `256` | Recurrent models (the Qwen3.5/3.6/3.8 hybrids) cache whole checkpoints instead of pages: the most a slot keeps (`0` = none; config key `prefix_states`); the byte budget binds first. Every request leaves one at its opening's shared head (the system text or the tool block, whichever its template writes first), one at its opening with the tools, one where its last message starts, one a token short of its prompt's end, one at its finished turn; a conversation's own stops are dropped before shared openings |
+| `--prefix-states` | - | `256` | Recurrent models (the Qwen3.5/3.6/3.8 hybrids) cache whole checkpoints instead of pages: the most a slot keeps (`0` = none; config key `prefix_states`); the byte budget binds first. Every request leaves one at its opening's shared head (the system text or the tool block, whichever its template writes first), one at its opening with the tools, one where its last message starts, one where it ends (ahead of the generation prompt), one at its finished turn; a conversation's own stops are dropped before shared openings |
 | `--prefix-state-mb` | - | *auto* | The checkpoints' byte budget in MB, snapshots and held pages (auto: a quarter of the box's RAM; config key `prefix_state_mb`). A 35B hybrid's checkpoint is about 160 MB. The server log's checkpoint line carries the standing count and MB |
 | `--flat` | - | - | Flat preallocated KV sessions - disables paged serving and the prefix cache |
 | `--mtp` | - | *auto* | MTP/NextN self-speculative decode. Unset, a slot turns it on when it runs one stream (`streams = 1`) on a GPU - Metal, or the whole model resident on a Vulkan device with its routed experts on the card - and leaves it off otherwise: at one stream on Metal the draft-and-verify round cuts decode time on the dense Qwen3.5 MTP models (0.8B 1.20x, 4B 1.21x, 9B 1.10x - `modules/dasLLAMA/followup_metal.md` row 26), on a Vulkan device more (`modules/dasLLAMA/PERF_LEDGER.md`, the resident driver's NextN entries) unless the driver sums a MoE's routed experts on the host, where the verify rows' host sums cost more than a plain token (the same ledger's Qwen3.8-Flash-Next entry), on the CPU the round's second verify row costs a second decode step and the round is slower than plain decode (`modules/dasLLAMA/PERF_LEDGER.md`, the CPU self-speculation entry), and at several streams the plain batched step is faster (`modules/dasLLAMA/PERF_LEDGER.md`, the batched arcs). An armed round keeps every stream's cache on the host, so a drafting Vulkan slot serves host-cached sessions in place of device-home ones. `true` / `false` set it outright. It needs a model with an in-file NextN head (the `-MTP-` GGUFs), or an assistant drafter GGUF beside the model file (gemma-4: `mtp-<stem>-Q8_0.gguf`), which the load attaches; on any other model the server logs one line and serves plain. Greedy requests are output-invariant; a sampled request (`temperature` > 0, penalties included) draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. `/v1/stats` reports `mtp_drafted`/`mtp_accepted`; a constrained reply (`response_format`, a forced `tool_choice`) decodes plain |
@@ -379,11 +379,13 @@ says how many). A recurrent model (the Qwen3.5/3.6/3.8 hybrids) has a state at o
 cache holds whole checkpoints instead of pages: every request leaves one at its opening's shared head (the system
 text ahead of a Hermes tool block, the tool block ahead of a Qwen3.5/3.6 system text), one at the opening every
 request on its system prompt and tool set shares, one where its last message starts (the history the requests of
-a conversation share), one a token short of its own prompt's end (so the same prompt asked again attaches whole)
-and one at its finished turn, within `--prefix-state-mb` (a
-quarter of RAM unless set, per served slot) and at most `--prefix-states` of them, a conversation's own stops (its
-last message's start, its prompt's end, its finished turn) dropped before shared openings, and a prompt attaches the deepest one that is its exact
-prefix - the shared system block for a new conversation, the whole earlier exchange for the next turn.
+a conversation share), one at its last message's close, ahead of the generation prompt (so the same prompt asked
+again and the conversation's follow-up attach everything up to it, whatever the replayed assistant turn renders -
+a thinking-off turn's generation prompt opens a think block the replay does not), and one at its finished turn,
+within `--prefix-state-mb` (a quarter of RAM unless set, per served slot) and at most `--prefix-states` of them, a
+conversation's own stops (its last message's start, its last message's close, its finished turn) dropped before
+shared openings, and a prompt attaches the deepest one that is its exact prefix - the shared system block for a new
+conversation, the whole earlier exchange for the next turn.
 Clients whose connection drops mid-generation are evicted within a tick. Audio uploads queue to
 long-lived `new_thread` ASR workers and do not block chat generation; `--asr-workers 2` permits two
 transcriptions at once. Each worker owns its model/context and reuses language-specific session
@@ -480,7 +482,7 @@ DLLs; the config and the bundle's tune state live in `~/.dasllama` and survive t
 | `POST` | `/v1/models/activate` | `{"model": name}` loopback-only admin warm-switch: make `name` the DEFAULT + stepped slot (model-less page requests follow) and move the GPU tier to it now (instead of waiting for the owner to drain). `409` while any work is live, `404` on an unknown name; `200` reports `switch_ms` + `backend_effective` |
 | `POST` | `/v1/models/load` | `{"path", "id"?, "backend"?: "auto"\|"cpu", "quant"?, "ctx"?, "image_mmproj"?, "audio_mmproj"?, "activate"?: true}` loopback-only live load: a downloaded GGUF joins as a NEW serving slot with no restart and no JIT recompile (the load blocks the tick for its duration; a prepared `.dlim` image loads in well under a second). `"auto"` follows the boot GPU policy - same want + `--ctx` clamp every boot load got, the current owner's VRAM state drops first (boot-order semantics) and re-arms if the load fails or stays off the device; `"ctx"` in the body replaces the boot `--ctx`, and is asked whole the same way. An `image_mmproj` arms vision (and audio, when the file carries an audio tower too), an `audio_mmproj` arms audio alone, each with a media-worker bounce - a bad mmproj degrades to text-only with the reason in `tower_note`, and a load panic (corrupt GGUF, refused KV geometry) answers `400` with the slot unwound. `409` on a live stream set, a taken id, or a GGUF another slot already serves (one slot per file) |
 | `POST` | `/v1/models/unload` | `{"model": name}` loopback-only: free the slot's weights, KV pool, and (for the GPU owner) VRAM. The DEFAULT slot refuses (`400`) - activate another model first - which also keeps the last model serving. `409` while any work is live |
-| `POST` | `/v1/chat/completions` | Chat; `stream: true` -> SSE, else buffered; the request's `stop` (a string or up to 8) ends the reply where a stop begins, `finish_reason: "stop"`; a silent stream gets an empty delta every 10 s; OpenAI function calling (`tools`; a stream sends its text as it comes and the parsed calls at the finish - Tool calling below); `response_format` / a forced `tool_choice` sample the reply through a grammar (Structured output below: a malformed field, an undeclared forced tool, a schema past the engine's caps or one `strict` cannot serve is a `400`; `finish_reason: "constraint"` ends a reply the grammar cannot continue); `stop` (a string or a list of up to 8) ends the reply where its text begins, `finish_reason: "stop"`, the stop text never emitted - an entry that is one token (a special such as `</think>`) is a stop token, every other a text the scheduler scans the reply for, holding back what could still begin one; a streaming reply silent for 10 s gets an empty `delta` (its framing's) so a client's no-bytes timeout survives a long prefill; `image_url` content parts under `--image-mmproj`; `input_audio` content parts under `--audio-mmproj`, or when the image mmproj carries the audio tower (any user message may carry images and clips, up to 16 parts a request - each splices into the serving slot's prefill where the part sits among its message's text parts, so continuous batching covers audio too; a part is encoded and prefilled once: a continued chat, or the same request again, attaches its span off the prefix cache and never reaches the tower). A known part goes to the scheduler with no rows only where the prefix cache holds its span when the request is submitted; a span the cache drops before the stream's admission makes the server encode every part of the request and submit it again, once, and where that retry cannot be made the reply finishes with `finish_reason` `"media_lost"`. A stream sent with `stream_options: {"include_usage": true}` ends, before `[DONE]`, on one chunk with an empty `choices` list: `usage` (`prompt_tokens`, `completion_tokens`, `total_tokens`, and `prompt_tokens_details.cached_tokens` - the prompt tokens the prefix cache attached) and `timings` (`ttft_ms`, the scheduler's admit-to-first-token wall, and `gen_ms`, first token to finish); a stream that does not ask carries no such chunk |
+| `POST` | `/v1/chat/completions` | Chat; `stream: true` -> SSE, else buffered; the request's `stop` (a string or up to 8) ends the reply where a stop begins, `finish_reason: "stop"`; a silent stream gets an empty delta every 10 s; OpenAI function calling (`tools`; a stream sends its text as it comes and the parsed calls at the finish - Tool calling below); `response_format` / a forced `tool_choice` sample the reply through a grammar (Structured output below: a malformed field, an undeclared forced tool, a forced `tool_choice` on a call shape the grammar builder does not write, a schema past the engine's caps or one `strict` cannot serve is a `400`; a `reasoning_effort` other than none, minimal, low, medium, high is a `400` too; `finish_reason: "constraint"` ends a reply the grammar cannot continue); `stop` (a string or a list of up to 8) ends the reply where its text begins, `finish_reason: "stop"`, the stop text never emitted - an entry that is one token (a special such as `</think>`) is a stop token, every other a text the scheduler scans the reply for, holding back what could still begin one; a streaming reply silent for 10 s gets an empty `delta` (its framing's) so a client's no-bytes timeout survives a long prefill; `image_url` content parts under `--image-mmproj`; `input_audio` content parts under `--audio-mmproj`, or when the image mmproj carries the audio tower (any user message may carry images and clips, up to 16 parts a request - each splices into the serving slot's prefill where the part sits among its message's text parts, so continuous batching covers audio too; a part is encoded and prefilled once: a continued chat, or the same request again, attaches its span off the prefix cache and never reaches the tower). A known part goes to the scheduler with no rows only where the prefix cache holds its span when the request is submitted; a span the cache drops before the stream's admission makes the server encode every part of the request and submit it again, once, and where that retry cannot be made the reply finishes with `finish_reason` `"media_lost"`. A stream sent with `stream_options: {"include_usage": true}` ends, before `[DONE]`, on one chunk with an empty `choices` list: `usage` (`prompt_tokens`, `completion_tokens`, `total_tokens`, and `prompt_tokens_details.cached_tokens` - the prompt tokens the prefix cache attached) and `timings` (`ttft_ms`, the scheduler's admit-to-first-token wall, and `gen_ms`, first token to finish); a stream that does not ask carries no such chunk |
 | `POST` | `/v1/completions` | Raw completion; `stream: true` -> SSE, else buffered; the request's `stop` (a string or up to 8) cuts the text where a stop begins and ends it `finish_reason: "stop"`; a silent stream gets an empty chunk every 10 s; the same `stream_options.include_usage` closing chunk as the chat route |
 | `POST` | `/v1/embeddings` | L2-normalized sentence embeddings, pooled the way the model's `pooling_type` asks (last token for Qwen3-Embedding, mean for a chat model); `pooling` overrides, `dimensions` cuts and renormalizes |
 | `POST` | `/v1/audio/transcriptions` | Speech->text (multipart upload; needs `--asr`). One ASR model takes every request, whatever `model` says; with several, `model` names one by its id (none, or the `<default slot>-asr` id `/v1/models` lists: the first; any other name: `404`); `language` defaults to English, and to detection on a model that only detects. `response_format=verbose_json` adds timed segments |
@@ -647,7 +649,10 @@ top-level or the llama.cpp spelling
 `false` on gemma-4 prefills the closed empty thought channel (the instruct opt-out); a gemma-4
 that opens its reply with a thought block anyway (the E-series does on a media turn) still
 answers, the block coming back as `reasoning_content`, and a channel marker after the answer
-ends the turn. A no-op for models whose vocab has no think tokens.
+ends the turn. A no-op for models whose vocab has no think tokens. gpt-oss cannot skip its analysis
+channel: there `enable_thinking: false` writes `Reasoning: low` in the harmony system turn (the shortest
+analysis the model writes) where a thinking turn writes `medium`, and the OpenAI `reasoning_effort` field
+(`low`, `medium`, `high`) sets the line outright; other families render nothing for it.
 
 A thinking reply's reasoning span comes back as **`reasoning_content`** (the
 DeepSeek/llama.cpp framing) with `content` clean of the family's markers: on the
@@ -686,14 +691,16 @@ templates - the `<tools>` block opens the system turn ahead of the system text, 
 with hermes), **harmony** (gpt-oss - developer-turn
 TypeScript namespace defs, commentary-channel recipient calls; reasoning and calls come from one
 channel walk), **gemma4** (gemma-4 - declaration/call/response DSL with the `<|"|>` quote token),
-**mistral** (v0.3+ - `[AVAILABLE_TOOLS]` defs, `[TOOL_CALLS]` array, bare-array replies
+**mistral** (v0.3 and the tekken templates - Mistral-Small 3.x, Magistral, Devstral: `[AVAILABLE_TOOLS]` defs, `[TOOL_CALLS]` array, bare-array replies
 tolerated since the SPM stream suppresses control-token pieces), and **llama_json** (llama-3.x -
 the whole reply is one `{"name","parameters"}` object, results on the `ipython` role). A model
 whose chat template declares no tool format (GLM until its zen2 leg) gets an honest 400.
 Streaming with tools puts the reply's text on the wire as it comes - reasoning and content deltas as on a plain
 stream - and holds back only the family's call marker: a content tail that could still begin it waits, and from
-the marker on nothing goes out until the finish, when the parsed calls arrive as one `delta.tool_calls` chunk. A
-family whose calls ride channels rather than a marker (harmony) is framed whole at the finish.
+the marker on nothing goes out until the finish, when the parsed calls arrive as one `delta.tool_calls` chunk; hermes,
+xml_function and gemma4 hold at their call marker, llama_json at the call object's opening brace, mistral at the call
+array's bracket (its `[TOOL_CALLS]` control token never reaches the decoded text). A family whose calls ride channels
+rather than a marker (harmony) is framed whole at the finish.
 
 Requests the server does NOT fully understand are visible in the log: unknown endpoints 404
 through a catch-all that logs method + path + body head, and known routes warn per ignored field
@@ -713,7 +720,8 @@ pattern count) past 1024 is refused either way, since each copy is a rule of the
 declared tools' schemas (one, or any of them) inside the family's call markers, so the name is one of the
 declared names and the arguments fit the parameters - on the Qwen3.6 format the grammar is the block shape
 instead, a `<function=NAME>` of that tool's declared `<parameter=K>` names with any text short of a `<` as a
-value; a family with no tool-call markers answers 400. A
+value; a family whose call shape the grammar builder does not write - gemma-4's DSL, harmony's channels, mistral's
+array, llama's bare object - answers 400. A
 constrained reply runs with thinking off, drafts nothing under `--mtp` (it decodes plain beside the drafting
 streams), and lands its logits on the CPU; the stop token is admitted only where the grammar's sentence is
 complete, and a reply the grammar cannot continue ends with `finish_reason: "constraint"`. The first
@@ -817,6 +825,10 @@ absent; set `DASLLAMA_MODELS_DIR`):
 - `test_setup_mode.das` - model-free, runs end to end even interpreted (setup mode never
   infers): a slotless boot serves setup stats and the catalog while every inference route
   fails closed.
+- `test_cache_probe.das` - model-free: the cache probe's cycle (the sixteen bodies, their kinds and
+  conversations, the replayed first replies, the byte-identical repeat) and its summary off a
+  fixed table of answers (shares by kind, the cold start, the openings attached, the medians, a
+  refused request counted as failed).
 - `test_server_flags.das` - model-free: the flag-presence test behind the config surface's
   provenance - a flag the process was given reads present, bare or as `flag=value`, and an
   absent one or a prefix of a given one reads absent; and the self-speculation default's rule
@@ -835,6 +847,24 @@ bin/daslang -jit dastest/dastest.das -- --test utils/dasllama-server/test_openai
 `server_bench.das` (same directory) measures the serving latencies directly through the scheduler
 seam: tok/s + TTFT + inter-token percentiles vs batch size, decode stall per prefill chunk size,
 and warm-vs-cold TTFT for the prefix cache.
+
+`cache_probe.das` (same directory) reads the prefix cache on any model in a minute or two: sixteen
+chat requests of about a thousand tokens in a fixed cycle over the HTTP route, sent twice. The
+cycle: eight conversations opening on one system prompt and tool set, each with a house note of
+its own in the user turn, six of them continued with their first reply and a follow-up, one on
+another system prompt with the same tools, and the first request repeated. The second sweep sends
+the same sixteen bodies byte for byte, so everything is warm: every request should attach at least
+its prompt minus one page (a dense model's cache ends at a page boundary; a hybrid's end checkpoint
+sits at the last message's close). One line per request with its `cached_tokens` of `prompt_tokens` and its
+wall time, then the first sweep's shares by kind, the cold first rounds, the later rounds that
+attached their own earlier exchange, what the other-system and repeated requests attached, and the
+second sweep's warm share with the count of requests short of it. Against a running server,
+`-- --url http://127.0.0.1:8911`; with `-- -m <model.gguf>` it boots a CPU server of its own on
+`--port` (18199) with the server's default knobs. `--preserve-thinking` sends the kwarg a client
+that keeps `reasoning_content` sends, so the replayed assistant turns render the think block the
+generation prompt carried; a hybrid's follow-up attaches its earlier exchange either way, since the
+checkpoint sits at the last message's close, ahead of the generation prompt. `test_cache_probe.das`
+holds the model-free half: the bodies the cycle builds and the figures off a table of answers.
 
 ## Not yet implemented
 

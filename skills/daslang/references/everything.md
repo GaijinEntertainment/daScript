@@ -3260,6 +3260,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `make_think_stream` - The incremental reasoning/content splitter for `chat`'s next turn (`think_feed` per piece, `think_finish` at the end).
 - `nothink_stop_here` - true = `id` ends the turn: a guarded channel marker sampled after the reply's first content piece.
 - `set_preserve_thinking` - `true` makes every replayed assistant turn carry its think block - its `reasoning` between the template's markers, the empty block when it had none - so a replayed transcript renders the tokens the model generated and a prefix cache matches through it.
+- `set_reasoning_effort` - The reasoning level a harmony (gpt-oss) system turn asks for: `low`, `medium` or `high`.
 - `split_reasoning` - Split a complete reply at its reasoning boundary per the model family's reply format (`<think>` pair, Harmony channels, gemma-4's thought channel).
 - `think_drain` - Drain a COMPLETE reply through the splitter in one call: feed + finish + the strip rule (both halves strip when a reasoning span was consumed).
 - `think_feed` - Feed one streamed piece through the splitter; the out-strings are OVERWRITTEN with this piece's reasoning/content deltas (either may be empty while a partial marker is held).

@@ -41,6 +41,22 @@ def test_harmony_namespace(t : T?) {
 }
 
 [test]
+def test_harmony_system_body(t : T?) {
+    t |> run("the harmony system body carries the reasoning level it is asked for, and the channel lines around it") @(t : T?) {
+        for (level in ["low", "medium", "high"]) {
+            let body = harmony_system_body(level)
+            t |> success(find(body, "\nReasoning: {level}\n") >= 0, "the Reasoning line reads {level}: {body}")
+            t |> success(find(body, "# Valid channels: analysis, commentary, final.") >= 0, "the channel declaration stands")
+            t |> success(find(body, "commentary channel: 'functions'") >= 0, "... and the routing line")
+        }
+        t |> success(find(harmony_system_body("low"), "medium") < 0, "one level, not two")
+        let bare = harmony_system_body("medium", false)
+        t |> success(find(bare, "commentary channel: 'functions'") < 0, "without tools the routing line is absent: {bare}")
+        t |> success(find(bare, "# Valid channels: analysis, commentary, final. Channel must be included for every message.") >= 0, "... and the channel declaration ends the body")
+    }
+}
+
+[test]
 def test_harmony_parse(t : T?) {
     t |> run("analysis -> final splits into reasoning + content") @(t : T?) {
         var r <- harmony_parse("<|channel|>analysis<|message|>THINK<|end|><|start|>assistant<|channel|>final<|message|>ANSWER")

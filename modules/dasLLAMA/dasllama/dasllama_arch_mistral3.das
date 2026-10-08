@@ -26,6 +26,8 @@ def register_arch_mistral3() {
     d.chat.system.parts <- [chat_special("[SYSTEM_PROMPT]"), chat_content(), chat_special("[/SYSTEM_PROMPT]")]
     d.chat.user.parts <- [chat_special("[INST]"), chat_content(), chat_special("[/INST]")]
     d.chat.assistant_close.parts <- [chat_special("</s>")]
+    d.chat.tool_mode = ToolMode.mistral   // [AVAILABLE_TOOLS] defs, [TOOL_CALLS] array - the v0.3 family's control tokens
+    d.chat.tool_call_open = "["   // the array's bracket is what a live stream holds back from
     d.chat.stop <- ["</s>"]
     register_arch("mistral3", d)
 }

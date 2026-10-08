@@ -1047,7 +1047,10 @@ streams (each cell skips without its carrier; the Qwen2.5 cell also holds `rende
 opening - the system turn on a first turn, none on a later one, its tokens the pinned ChatML
 prefill stream), the tool wires (the Qwen2.5 hermes cell holding the system turn a ChatML template
 states for a conversation that opens with none - its text read off the template's escaped string
-literal, its tokens ahead of the first user turn), the audio marker cells (voxtral's opening
+literal, its tokens ahead of the first user turn), the ToolMode declarations (model-free: gpt-oss harmony, gemma-4's
+DSL, llama's whole-reply JSON, the qwen family's hermes, the `[INST]` and v7-tekken template shapes and the mistral3
+arch declaring mistral, and a declared mode over a vocab without its control specials demoting to none at create), the
+audio marker cells (voxtral's opening
 marker, qwen2audio's pair, and the splice at the text offset the message gives - ahead of the text,
 inside it, after it - the head and tail carrying exactly the text on their side), the inline-span cell
 (`test_chat_inline_span`: a turn marked with `add_user_span_` renders the splice pair's head, the span's
@@ -1059,7 +1062,10 @@ thinking renderer pins (the instruct prefill token for token, the gate + bare op
 thinking-off extras on `effective_stop_ids`, a mid-conversation toggle staying instruct) and
 the instruct-mode TEXT turn through `respond` (greedy "2+2": the answer, no channel marker in
 the content half, the turn ending on a stop - red when the guard does not end the turn on the
-stray `<channel|>` the E2B emits after its answer), and `test_gemma4_e_media_body`: one fused media
+stray `<channel|>` the E2B emits after its answer), the gemma-4 tool wire (`test_chat_gemma4_tool_wire`: the
+declaration turn, the call replay leaving the turn open, the result block in that turn followed - thinking off - by
+the turn's close and a new model turn, the thought channel re-opened instead with thinking on and the reply split
+as one that begins inside it), and `test_gemma4_e_media_body`: one fused media
 body (text, the span's own text embeddings as rows, text - one prefill through `media_body_rows`
 and `eval_embd_body`) reads the last row's logits within a quarter of their peak of the same
 prompt as text / rows / text in three calls, and the same body with its ids cleared - the text
@@ -1081,7 +1087,9 @@ instruct-mode stop guard (`nothink_stop_here_`): a channel marker before the rep
 content piece passes as a leading thought, whitespace is not content, the first marker after
 content stops, an unarmed guard never stops.
 `test_tool_formats.das` - the per-ToolMode wire codecs (dasllama_tools), model-free: defs
-serializers and call parsers for harmony/gemma4/mistral/llama_json against verbatim fixtures, and the
+serializers and call parsers for harmony/gemma4/mistral/llama_json against verbatim fixtures, the harmony system
+body (`harmony_system_body`: the `Reasoning:` line at each level, the channel declaration, the routing line only with
+tools), and the
 Qwen3.5/3.6 `xml_function` codec - a replayed call's block, a reply's parse (content before the first block,
 an unterminated block, a nameless block, a malformed opener, a key written twice), and the values typed by the
 declared parameters (`tool_param_types`: a declared string stays text, a declared number or boolean goes bare).

@@ -164,6 +164,8 @@ def section_replay(m : Model; chat : ChatSession) {
     // so a thinking model's next turn attaches the whole earlier exchange.
     var rchat2 = create_chat_renderer(m, SYSTEM)
     set_preserve_thinking(rchat2, true)
+    // a harmony (gpt-oss) system turn asks for a reasoning level; on every other family this is a no-op
+    set_reasoning_effort(rchat2, "low")
     add_user(rchat2, "A note for the assistant: answer in one word.")
     var two_toks : array<int64>
     render_user(m, rchat2, two_toks)

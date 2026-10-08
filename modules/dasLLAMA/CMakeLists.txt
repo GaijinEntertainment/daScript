@@ -94,6 +94,7 @@ if(NOT DAS_TOOLS_DISABLED)
             utils/dasllama-server/test_model_override.das
             utils/dasllama-server/test_slot_served.das
             utils/dasllama-server/test_server_flags.das
+            utils/dasllama-server/test_cache_probe.das
         JIT_FILES
             utils/dasllama-server/test_worker_dispatch.das
             utils/dasllama-server/test_constraints.das)

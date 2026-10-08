@@ -52,6 +52,8 @@ def register_arch_gemma4() {
     d.chat.audio_pre.parts <- [chat_special("<|audio>")]
     d.chat.audio_post.parts <- [chat_special("<audio|>")]
     d.chat.tool_mode = ToolMode.gemma4   // <|tool>declaration DSL defs, <|tool_call> DSL calls
+    d.chat.tool_call_open = "<|tool_call>"   // the markers a live stream holds back from; the DSL parse is the mode's own
+    d.chat.tool_call_close = "<tool_call|>"
     d.chat.think_mode = ThinkMode.asymmetric
     d.chat.think_open = "<|channel>thought"
     d.chat.think_close = "<channel|>"

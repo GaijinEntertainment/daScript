@@ -12,6 +12,8 @@ require daslib/jobque_boost   // hold_engine: the holding request and its contro
 require strings
 require dashv/dashv_boost   // GET / POST: serve_clients polls and shuts the server down
 require dasllama/dasllama_env
+require daslib/json_boost   // stream_tally: the SSE chunks' deltas
+require daslib/strings_boost   // sse_datas: split / trim_prefix
 
 //! The server suites' model roots: ONE resolution - `DASLLAMA_MODELS_DIR`, else the rig default -
 //! so a test file never spells a second one.
@@ -151,4 +153,58 @@ def held_engine_bars(t : T?; read : EngineHold) : bool {
     t |> success(read.engine_ms * 2 >= read.hold_ms, "the control: a route the engine answers waited out the hold ({read.engine_ms} of {read.hold_ms} ms)")
     t |> success(read.worst_ms * 4 < read.engine_ms, "every probe in under a quarter of what the engine's own route waited (the slowest {read.worst_ms} ms against {read.engine_ms} ms)")
     return true
+}
+
+//! Every `data: <payload>` line of an SSE body, in order ("[DONE]" included).
+def sse_datas(body : string) : array<string> {
+    var lines <- split(body, "\n")
+    var out <- [for (ln in lines); trim_prefix(ln, "data: "); where starts_with(ln, "data: ")]
+    delete lines
+    return <- out
+}
+
+//! what a streaming chat request put on the wire: the content deltas counted and joined, the reasoning deltas counted,
+//! the tool_calls chunks that carried a call counted, the finish reason
+struct StreamTally {
+    n_content : int
+    n_reasoning : int
+    n_calls : int
+    content : string
+    finish : string
+}
+
+def stream_tally(base_url, body : string) : StreamTally {
+    var tally = StreamTally()
+    var parts : array<string>
+    POST("{base_url}/v1/chat/completions", body) $(resp) {
+        var datas <- sse_datas(string(resp.body))
+        for (d in datas) {
+            continue if (d == "[DONE]")
+            var err : string
+            var js = read_json(d, err)
+            continue if (js == null)
+            let delta = js?["choices"]?[0]?["delta"]
+            let cnt = delta?["content"] ?? ""
+            if (!empty(cnt)) {
+                tally.n_content ++
+                parts |> push(cnt)
+            }
+            if (!empty(delta?["reasoning_content"] ?? "")) {
+                tally.n_reasoning ++
+            }
+            let tc = delta?["tool_calls"]
+            if (tc != null && tc.value is _array && !empty(tc.value as _array)) {
+                tally.n_calls ++
+            }
+            let fin = js?["choices"]?[0]?["finish_reason"] ?? ""
+            if (!empty(fin)) {
+                tally.finish = fin
+            }
+            delete_json(js)
+        }
+        delete datas
+    }
+    tally.content = join(parts, "")
+    delete parts
+    return tally
 }
