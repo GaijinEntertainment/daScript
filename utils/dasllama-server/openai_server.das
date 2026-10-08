@@ -377,6 +377,10 @@ struct private StreamWire {
     last_keepalive_ticks : int64    // the last empty delta a silent stream got (flush_stream_keepalives)
     call_open : string              // the family's tool-call markers (copied from the chat template)
     call_close : string
+    call_hold : string              //! streaming with tools: a content tail that could still begin `call_open`, held back (`stop_scan`)
+    call_seen : bool                //! ... the marker has shown: no more content goes out, the finish-time parse frames the call
+    call_stops : array<string>      //! ... `call_open` as the stop list the hold scans for
+    content_streamed : string       //! ... the content put on the wire so far, so the finish-time parse adds only what follows it
     tool_mode : ToolMode = ToolMode.none   // the family's tool wire format — the finish parse dispatches on it
     think : ThinkStream = ThinkStream()   // the reply-side reasoning splitter (pass-through when unarmed)
 }
@@ -2162,6 +2166,21 @@ def private send_chat_chunk(srv : FrontLink; writer : WriterRef;
     delete chunk
 }
 
+//! the content a tool-capable stream puts on the wire now: the text ahead of the family's call marker, a tail that could
+//! still begin the marker held back, and nothing once the marker has shown - the finish-time parse frames the call
+def private call_hold_pass(var w : StreamWire; cnt : string) : string {
+    if (w.call_seen || empty(cnt)) {
+        return ""
+    }
+    if (empty(w.call_stops)) {
+        w.call_stops |> push(w.call_open)
+    }
+    var emit = ""
+    w.call_seen = stop_scan(w.call_hold, cnt, w.call_stops, emit)
+    w.content_streamed += emit
+    return emit
+}
+
 //! a chat piece's two halves, each a chunk of its own when it carries text: the reasoning, then the content
 def private send_chat_halves(srv : FrontLink; w : StreamWire; rsn, cnt : string) {
     if (!empty(rsn)) {
@@ -3844,9 +3863,9 @@ def private flush_events(srv : FrontLink) {   // nolint:STYLE037,STYLE038 — on
             if (!w.streaming || w.has_tools) {
                 w.reply_parts |> push(e.text)   // buffered reply, and/or the finish-time tool-call parse
             }
-            if (w.streaming && w.has_tools) {
-                // Buffer all tool-capable output until finish so native model envelopes never leak
-                // onto the OpenAI wire. flush_stream_keepalives covers slow prefill and generation.
+            if (w.streaming && w.has_tools && empty(w.call_open)) {
+                // a family with no call marker (its calls ride channels): the whole reply is framed at finish, so no
+                // native envelope leaks onto the OpenAI wire. flush_stream_keepalives covers the silence.
             } elif (w.streaming) {
                 // re-join any held-back partial character, then hold the new incomplete tail
                 // so every delta on the wire is valid UTF-8 by itself
@@ -3862,6 +3881,9 @@ def private flush_events(srv : FrontLink) {   // nolint:STYLE037,STYLE038 — on
                         var rsn = ""
                         var cnt = ""
                         think_feed(w.think, emit_now, rsn, cnt)
+                        if (w.has_tools) {
+                            cnt = call_hold_pass(*w, cnt)
+                        }
                         send_chat_halves(srv, *w, rsn, cnt)
                     } else {
                         send_compl_chunk(srv, w.writer, w.id, w.created, emit_now, "")
@@ -3886,11 +3908,24 @@ def private flush_events(srv : FrontLink) {   // nolint:STYLE037,STYLE038 — on
                 var rsn = ""
                 var inscope calls : array<OaiToolCall>
                 let content = parse_wire_tools(w, full, "call_{e.stream}", rsn, calls)
-                if (!empty(rsn)) {
-                    send_chat_chunk(srv, w.writer, w.id, w.created, "", "", "", rsn)
-                }
-                if (!empty(content)) {
-                    send_chat_chunk(srv, w.writer, w.id, w.created, "", content, "")
+                if (empty(w.call_open)) {
+                    if (!empty(rsn)) {
+                        send_chat_chunk(srv, w.writer, w.id, w.created, "", "", "", rsn)
+                    }
+                    if (!empty(content)) {
+                        send_chat_chunk(srv, w.writer, w.id, w.created, "", content, "")
+                    }
+                } else {
+                    // the text went out as it came; now the splitter's reasoning tail, and the content the parse frames
+                    // past what the wire carries - a held marker tail that never completed, nothing when the parse
+                    // normalized the text another way
+                    var rsn_tail = ""
+                    var cnt_tail = ""
+                    think_finish(w.think, rsn_tail, cnt_tail)
+                    send_chat_halves(srv, *w, rsn_tail, "")
+                    if (length(content) > length(w.content_streamed) && starts_with(content, w.content_streamed)) {
+                        send_chat_chunk(srv, w.writer, w.id, w.created, "", slice(content, length(w.content_streamed)), "")
+                    }
                 }
                 if (!empty(calls)) {
                     send_chat_tool_calls_chunk(srv, w.writer, w.id, w.created, calls)

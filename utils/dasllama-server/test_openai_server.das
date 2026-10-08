@@ -907,6 +907,26 @@ def test_openai_server_preserve_thinking(t : T?) {
     }
 }
 
+//! how many content deltas a streaming chat request puts on the wire
+def private stream_content_chunks(base_url, body : string) : int {
+    var n = 0
+    POST("{base_url}/v1/chat/completions", body) $(resp) {
+        for (line in split(string(resp.body), "\n")) {
+            continue if (!starts_with(line, "data: ") || line == "data: [DONE]")
+            var err : string
+            var js = read_json(slice(line, 6), err)
+            continue if (js == null)
+            if (!empty(js?["choices"]?[0]?["delta"]?["content"] ?? "")) {
+                n ++
+            }
+            unsafe {
+                delete js
+            }
+        }
+    }
+    return n
+}
+
 let TEST_PORT_CKPT = 18146   // beside 18145, the preserve_thinking boot
 let QWEN35_PATH = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
 
@@ -938,6 +958,10 @@ def test_openai_server_recurrent_checkpoints(t : T?) {
             t |> success(b1.cached < b1.prompt - 8, "... and not B's own turn ({b1.cached} of {b1.prompt})")
             let c1 = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"Name a color. One word.\"}],\"tools\":[{tool_b}],{kw}}")
             t |> equal(0, c1.cached, "conversation C, other tools, shares nothing past the turn's first tokens: the tools open the turn ({c1.cached} cached of {c1.prompt})")
+            // a stream with tools declared puts its text on the wire as it comes - several content deltas, not one at the
+            // finish - the family's call marker the only thing held back
+            let live = stream_content_chunks(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"{sys}\"},\{\"role\":\"user\",\"content\":\"Count from one to six in words.\"}],\"tools\":[{tool_a}],\"stream\":true,{kw}}")
+            t |> success(live >= 2, "a tool-capable stream carries its text piece by piece ({live} content deltas)")
             let f1 = chat_usage(base_url, "\{\"messages\":[\{\"role\":\"system\",\"content\":\"You are the assistant of a boat with a cabin lamp and a bilge pump. Answer in one short sentence and nothing else.\"},\{\"role\":\"user\",\"content\":\"Name a fruit. One word.\"}],\"tools\":[{tool_a}],{kw}}")
             t |> success(f1.cached >= 16 && f1.cached < b1.cached, "conversation F, A's tools on another system prompt, attaches the tool block ahead of the text ({f1.cached} cached of {f1.prompt}, under the whole opening's {b1.cached})")
             // the second turns, interleaved, replayed with preserve_thinking (the think block the first prompt carried):
