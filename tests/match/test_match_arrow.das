@@ -21,7 +21,40 @@ enum Dir {
     west
 }
 
+[sideeffects]
+def pair_kind(x, y : int) {
+    return match (x, y) {
+        (0, 0) => "origin"
+        (0, _) | (_, 0) => "axis"
+        (a, b) && a == b => "diagonal {a}"
+        (a, b) => "{a}:{b}"
+    }
+}
 
+[test]
+def test_several_values(t : T?) {
+    t |> equal(pair_kind(0, 0), "origin")
+    t |> equal(pair_kind(0, 5), "axis")
+    t |> equal(pair_kind(5, 0), "axis")
+    t |> equal(pair_kind(3, 3), "diagonal 3")
+    t |> equal(pair_kind(3, 4), "3:4")
+}
+
+[sideeffects]
+def mixed_kinds(p : Point; d : Dir; v : IntOrStr) {
+    return match (p, d, v) {
+        (Point(x = 0, y = y), Dir.north | Dir.south, IntOrStr(i = n)) => "vertical {y} {n}"
+        (Point(x = x, y = 0), Dir.east | Dir.west, IntOrStr(s = s)) => "horizontal {x} {s}"
+        _ => "other"
+    }
+}
+
+[test]
+def test_several_values_of_different_types(t : T?) {
+    t |> equal(mixed_kinds(Point(x = 0, y = 7), Dir.south, IntOrStr(i = 3)), "vertical 7 3")
+    t |> equal(mixed_kinds(Point(x = 2, y = 0), Dir.west, IntOrStr(s = "w")), "horizontal 2 w")
+    t |> equal(mixed_kinds(Point(x = 2, y = 0), Dir.north, IntOrStr(s = "w")), "other")
+}
 
 [sideeffects]
 def int_alternation(n : int) {
@@ -83,6 +116,22 @@ def test_match_expr_compares_a_variable(t : T?) {
     t |> equal(pinned(6, 7), "not at limit")
 }
 
+[sideeffects]
+def bool_pair(a, b : bool) {
+    return match (a, b) {
+        (true, true) => "both"
+        (true, false) | (false, true) => "one"
+        _ => "none"
+    }
+}
+
+[test]
+def test_bool_patterns(t : T?) {
+    t |> equal(bool_pair(true, true), "both")
+    t |> equal(bool_pair(false, true), "one")
+    t |> equal(bool_pair(true, false), "one")
+    t |> equal(bool_pair(false, false), "none")
+}
 
 [sideeffects]
 def value_in_let(n : int) {

@@ -1,7 +1,7 @@
 The MATCH module implements pattern matching on variants, structs, tuples,
 arrays, and scalar values. Each arm is ``pattern => body``. A bare name in a
 pattern binds the matched value, ``_`` matches anything, ``&&`` adds a guard,
-and ``|`` separates alternatives.
+and ``|`` separates alternatives. ``match (a, b)`` matches several values at once.
 
 As a statement, a multi-statement body is a ``$ { }`` block whose ``return``
 leaves the enclosing function. In value position ``match`` is an expression:
