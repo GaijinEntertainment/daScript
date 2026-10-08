@@ -689,8 +689,10 @@ channel walk), **gemma4** (gemma-4 - declaration/call/response DSL with the `<|"
 tolerated since the SPM stream suppresses control-token pieces), and **llama_json** (llama-3.x -
 the whole reply is one `{"name","parameters"}` object, results on the `ipython` role). A model
 whose chat template declares no tool format (GLM until its zen2 leg) gets an honest 400.
-Streaming with tools buffers the native envelope and emits the parsed calls as one
-`delta.tool_calls` chunk at finish.
+Streaming with tools puts the reply's text on the wire as it comes - reasoning and content deltas as on a plain
+stream - and holds back only the family's call marker: a content tail that could still begin it waits, and from
+the marker on nothing goes out until the finish, when the parsed calls arrive as one `delta.tool_calls` chunk. A
+family whose calls ride channels rather than a marker (harmony) is framed whole at the finish.
 
 Requests the server does NOT fully understand are visible in the log: unknown endpoints 404
 through a catch-all that logs method + path + body head, and known routes warn per ignored field

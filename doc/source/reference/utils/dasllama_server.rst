@@ -754,8 +754,10 @@ developer-turn TypeScript namespace defs, commentary-channel recipient calls),
 (v0.3+ - ``[AVAILABLE_TOOLS]`` defs, a ``[TOOL_CALLS]`` array) and
 **llama_json** (llama-3.x - the whole reply is one ``{"name","parameters"}``
 object, results on the ``ipython`` role). A model whose chat template declares
-no tool format gets a 400. Streaming with tools buffers the native envelope and
-emits the parsed calls as one ``delta.tool_calls`` chunk at finish.
+no tool format gets a 400. Streaming with tools puts the reply's text on the wire
+as it comes and holds back only the family's call marker; the parsed calls arrive
+as one ``delta.tool_calls`` chunk at finish. A family whose calls ride channels
+rather than a marker (harmony) is framed whole at the finish.
 
 
 Images
