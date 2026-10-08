@@ -3,7 +3,6 @@ options gen2
 
 require dastest/testing_boost public
 require llvm/daslib/llvm_jit_common
-require llvm/daslib/llvm_boost
 
 struct Gates {
     avx2 : bool
@@ -18,7 +17,6 @@ struct Gates {
     dotprod : bool
     i8mm : bool
     fullfp16 : bool
-    lattice : bool
 }
 
 def read_gates() : Gates {
@@ -26,7 +24,7 @@ def read_gates() : Gates {
         avx512bw = g_target_x64_avx512bw, avx512vnni = g_target_x64_avx512vnni,
         avx512vbmi = g_target_x64_avx512vbmi, vnniint8 = g_target_x64_vnniint8,
         amx = g_target_x64_amx, amx_bf16 = g_target_x64_amx_bf16, dotprod = g_target_arm64_dotprod,
-        i8mm = g_target_arm64_i8mm, fullfp16 = g_target_arm64_fullfp16, lattice = g_lattice_fp16_ops_native)
+        i8mm = g_target_arm64_i8mm, fullfp16 = g_target_arm64_fullfp16)
 }
 
 def write_gates(g : Gates) {
@@ -42,13 +40,12 @@ def write_gates(g : Gates) {
     g_target_arm64_dotprod = g.dotprod
     g_target_arm64_i8mm = g.i8mm
     g_target_arm64_fullfp16 = g.fullfp16
-    g_lattice_fp16_ops_native = g.lattice
 }
 
 def count_set(g : Gates) : int {
     var n = 0
     for (v in [g.avx2, g.f16c, g.vnni256, g.avx512bw, g.avx512vnni, g.avx512vbmi, g.vnniint8,
-            g.amx, g.amx_bf16, g.dotprod, g.i8mm, g.fullfp16, g.lattice]) {
+            g.amx, g.amx_bf16, g.dotprod, g.i8mm, g.fullfp16]) {
         n += v ? 1 : 0
     }
     return n
@@ -64,7 +61,7 @@ def test_class_target_gates(t : T?) {
         g_target_is_aarch64 = false
         write_gates(Gates(avx2 = true, f16c = true, vnni256 = true, avx512bw = true, avx512vnni = true,
             avx512vbmi = true, vnniint8 = true, amx = true, amx_bf16 = true, dotprod = true,
-            i8mm = true, fullfp16 = true, lattice = true))
+            i8mm = true, fullfp16 = true))
         var inside : Gates
         with_class_target_gates("x86-avx2") $ {
             inside = read_gates()
@@ -73,7 +70,7 @@ def test_class_target_gates(t : T?) {
         g_target_is_x64 = is_x64
         g_target_is_aarch64 = is_aarch64
         write_gates(saved)
-        t |> equal(count_set(after), 13, "all thirteen gates read set after the block")
+        t |> equal(count_set(after), 12, "all twelve gates read set after the block")
         t |> success(after.amx_bf16, "the amx-bf16 gate reads set after the block")
         t |> success(!inside.amx_bf16 && !inside.amx && !inside.avx512bw,
             "inside the block the x86-avx2 class has no amx and no avx512 gate")

@@ -2,7 +2,7 @@ options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options _jit_fast_math = true   // ggml-parity FP laxity (non-bit-exact, ~+10%); tests stay bit-exact
 
-require dasllama/dasllama   // the public facade: engine + every arch registration + chat layer
+require dasllama/dasllama_core   // the engine + every arch registration + chat layer, no file decoders
 require daslib/jobque_boost
 require daslib/fio
 require strings

@@ -402,6 +402,9 @@ var public g_target_x64_avx2 = false
 // libcalls the JIT can't link; aarch64 needs no gate, scalar fp16 convert is ARMv8.0 baseline.
 var public g_target_x64_f16c = false
 
+//! the target converts half <-> float in hardware: any aarch64, x86-64 with F16C
+def public target_has_half_converts() => g_target_is_aarch64 || g_target_x64_f16c
+
 // Kernel-matrix tiers (x64_avx dot32_vnni / dot64_acc16 / mx4_dequant64), each guarding its own
 // lookup table: vnni256 = 256-bit VPDPBUSD (VEX AVX-VNNI or EVEX AVX512-VNNI+VL), avx512bw = zmm
 // byte ops (BW, not just F), avx512vnni = zmm VPDPBUSD (needs bw — the sign trick around it is BW).
@@ -688,10 +691,6 @@ def public init_jit_target_flags(target_triple : string = ""; host_features_aske
     // Generic-exe builds stay off — the promote/narrow path is ARMv8.0-legal, fullfp16 is not.
     g_target_arm64_fullfp16 = g_target_is_aarch64 && (arm64_forced_feature("fullfp16")
         || (empty(target_triple) && host_features && (host_llvm_feature("fullfp16") || cpu_supports("fullfp16") || get_platform_name() == "darwin")))
-    // fp16 operators lower as promote-compute-narrow IR wherever half converts are hardware
-    // (routing truth for isExprOp2/Op1_Func — lives in llvm_boost). aarch64 needs no feature
-    // gate: f16<->f32 converts are ARMv8.0 baseline, so even generic-exe aarch64 stays native.
-    g_lattice_fp16_ops_native = g_target_is_aarch64 || g_target_x64_f16c
 }
 
 // The tier gates as one CPU class's set, for the span of `blk` - a fat-mode clone's generator
@@ -710,7 +709,6 @@ def public with_class_target_gates(klass : string; blk : block<void>) {
     let s_dotprod = g_target_arm64_dotprod
     let s_i8mm = g_target_arm64_i8mm
     let s_fullfp16 = g_target_arm64_fullfp16
-    let s_lattice = g_lattice_fp16_ops_native
     g_target_x64_avx2 = g_target_is_x64 && jit_class_has(klass, "avx2")
     g_target_x64_f16c = g_target_is_x64 && jit_class_has(klass, "f16c")
     g_target_x64_vnni256 = g_target_x64_avx2 && (jit_class_has(klass, "avxvnni")
@@ -725,7 +723,6 @@ def public with_class_target_gates(klass : string; blk : block<void>) {
     g_target_arm64_dotprod = g_target_is_aarch64 && jit_class_has(klass, "dotprod")
     g_target_arm64_i8mm = g_target_is_aarch64 && jit_class_has(klass, "i8mm")
     g_target_arm64_fullfp16 = g_target_is_aarch64 && jit_class_has(klass, "fullfp16")
-    g_lattice_fp16_ops_native = g_target_is_aarch64 || g_target_x64_f16c
     invoke(blk)
     g_target_x64_avx2 = s_avx2
     g_target_x64_f16c = s_f16c
@@ -739,7 +736,6 @@ def public with_class_target_gates(klass : string; blk : block<void>) {
     g_target_arm64_dotprod = s_dotprod
     g_target_arm64_i8mm = s_i8mm
     g_target_arm64_fullfp16 = s_fullfp16
-    g_lattice_fp16_ops_native = s_lattice
 }
 
 [macro_function]

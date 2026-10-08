@@ -2941,6 +2941,8 @@ class public LlvmJitVisitor : AstVisitor {
             name == "<<<=" || name == ">>>=" || name == "&&=" || name == "||=" || name == "^^=")
     }
 
+    def isCompareOp2(name : das_string) => name == "==" || name == "!=" || name == "<" || name == "<=" || name == ">" || name == ">="
+
     def get_bool_compare_op(e : ExpressionPtr; op : string) {
         return LLVMIntPredicate.LLVMIntEQ   if (op == "==")
         return LLVMIntPredicate.LLVMIntNE   if (op == "!=")
@@ -2979,6 +2981,16 @@ class public LlvmJitVisitor : AstVisitor {
         return LLVMRealPredicate.LLVMRealOGE    if (op == ">=")
         failed_E(e, "unsupported float compare operator {op}")
         return LLVMRealPredicate.LLVMRealOEQ
+    }
+
+    //! the float opcode of an arithmetic operator or its compound assignment
+    def get_float_arith_op(e : ExpressionPtr; op : string) {
+        return LLVMOpcode.LLVMFAdd  if (op == "+" || op == "+=")
+        return LLVMOpcode.LLVMFSub  if (op == "-" || op == "-=")
+        return LLVMOpcode.LLVMFMul  if (op == "*" || op == "*=")
+        return LLVMOpcode.LLVMFDiv  if (op == "/" || op == "/=")
+        failed_E(e, "unsupported float operator {op}")
+        return LLVMOpcode.LLVMFAdd
     }
 
     def check_divide_by_0(right : LLVMOpaqueValue?; at : LineInfo; opType : TypeDeclPtr, op : string) {
@@ -3133,8 +3145,7 @@ class public LlvmJitVisitor : AstVisitor {
             // f32 -> compute -> round-back (RNE), which is exactly fpext -> fop -> fptrunc.
             // With native fullfp16 (arm64) the ops run directly on half — bit-identical for
             // single ops, since f32 carries 2p+2 precision bits of f16 (the double-rounding
-            // safety bound for + - * /). Compares are exact either way. Only routed here
-            // when g_lattice_fp16_ops_native (aarch64 || x64-F16C).
+            // safety bound for + - * /). Compares are exact either way.
             let native = g_target_arm64_fullfp16
             let halfT = (opType.isVectorType
                 ? LLVMVectorType(types.t_half, uint(opType.vectorDim))
@@ -3146,10 +3157,10 @@ class public LlvmJitVisitor : AstVisitor {
             var lf = rmw ? r2v_left : left
             var rf = right
             if (!native) {
-                lf = LLVMBuildFPExt(g_builder, lf, promoteT, "")
-                rf = LLVMBuildFPExt(g_builder, rf, promoteT, "")
+                lf = build_fp_convert(g_builder, lf, promoteT, "")
+                rf = build_fp_convert(g_builder, rf, promoteT, "")
             }
-            if (expr.op == "==" || expr.op == "!=" || expr.op == "<" || expr.op == "<=" || expr.op == ">" || expr.op == ">=") {
+            if (isCompareOp2(expr.op)) {
                 var opR = LLVMBuildFCmp(g_builder, get_float_compare_op(expr, string(expr.op)), lf, rf, "")
                 if (opType.isVectorType) {
                     opR = reduce_bit_vector(opR, opType.vectorDim, string(expr.op))
@@ -3157,21 +3168,9 @@ class public LlvmJitVisitor : AstVisitor {
                 setE(expr, opR)
                 return
             }
-            var res : LLVMOpaqueValue?
-            if (expr.op == "+" || expr.op == "+=") {
-                res = LLVMBuildFAdd(g_builder, lf, rf, "")
-            } elif (expr.op == "-" || expr.op == "-=") {
-                res = LLVMBuildFSub(g_builder, lf, rf, "")
-            } elif (expr.op == "*" || expr.op == "*=") {
-                res = LLVMBuildFMul(g_builder, lf, rf, "")
-            } elif (expr.op == "/" || expr.op == "/=") {
-                res = LLVMBuildFDiv(g_builder, lf, rf, "")
-            } else {
-                failed_E(expr, "unsupported fp16 operator {expr.op}")
-                return
-            }
+            var res = LLVMBuildBinOp(g_builder, get_float_arith_op(expr, string(expr.op)), lf, rf, "")
             if (!native) {
-                res = LLVMBuildFPTrunc(g_builder, res, halfT, "")
+                res = build_fp_convert(g_builder, res, halfT, "")
             }
             if (rmw) {
                 setE(expr, LLVMBuildStoreAligned(g_builder, res, left, uint(expr.left._type.alignOf)))
@@ -3290,7 +3289,7 @@ class public LlvmJitVisitor : AstVisitor {
             } else {
                 failed_E(expr, "unsupported division type operator {expr.op}")
             }
-        } elif (expr.op == "<" || expr.op == ">" || expr.op == "<=" || expr.op == ">=" || expr.op == "==" || expr.op == "!=") {
+        } elif (isCompareOp2(expr.op)) {
             var opR : LLVMOpaqueValue?
             if (expr.left._type.isSignedInteger || (expr.left._type.isVectorType && (expr.left._type.vectorBaseType == Type.tInt || expr.left._type.vectorBaseType == Type.tInt64 || expr.left._type.vectorBaseType == Type.tInt16 || expr.left._type.vectorBaseType == Type.tInt8)) || expr.left._type.isEnum) {
                 opR = LLVMBuildICmp(g_builder, get_int_compare_op(expr, string(expr.op)), left, right, "")

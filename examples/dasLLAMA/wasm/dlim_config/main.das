@@ -1,7 +1,7 @@
 options gen2
 options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 
-require dasllama/dasllama          // the facade: the DlimConfiguration contract, and the tiers that register its sources at [init]
+require dasllama/dasllama_core     // the engine: the DlimConfiguration contract, and the tiers that register its sources at [init]
 
 // Prints the running build's DlimConfiguration as JSON - the input `dasllama-convert --config`
 // bakes a .dlim against. Cross-compiled to wasm64 (`daspkg release wasm --root examples/dasLLAMA/wasm/dlim_config`)
