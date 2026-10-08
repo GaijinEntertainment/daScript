@@ -205,6 +205,25 @@ fields:
 
 Inside a guard and inside ``match_expr``, ``|`` stays the bitwise operator.
 
+Matching Several Values
+-----------------------
+
+``match ( a, b )`` matches several values at once. Each arm is a tuple-shaped pattern with one
+element per value, and ``_`` alone matches every combination:
+
+.. code-block:: das
+
+    def quadrant ( x, y : int ) {
+        return match ( x, y ) {
+            (0, 0) => "origin"
+            (0, _) | (_, 0) => "on an axis"
+            (a, b) && a > 0 && b > 0 => "first"
+            _ => "elsewhere"
+        }
+    }
+
+The values need not share a type; no tuple is built, each element pattern matches its value directly.
+
 Tuple Matching
 --------------
 

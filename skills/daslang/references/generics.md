@@ -231,17 +231,18 @@ it returns from the enclosing function; an assignment body always needs the bloc
 | `match_expr(limit)`, `match_expr(x + 1)` | equals an expression - an existing variable, or names bound earlier |
 | `match_type(type<int>, e)` | matches on the type of the value |
 
+`match (a, b) { (pa, pb) => ... }` matches several values at once, one tuple element per value.
 
 In value position `match` is an expression: every body is an expression and the last arm must
 always match.
 
 ```das
-def describe_number(n : int) : string {
-    return match (n) {
-        0 => "zero"
-        1 | 2 => "small"
-        k && k < 0 => "negative"
-        _ => "many"
+def quadrant(x, y : int) : string {
+    return match (x, y) {
+        (0, 0) => "origin"
+        (0, _) | (_, 0) => "on an axis"
+        (a, b) && a > 0 && b > 0 => "first"
+        _ => "elsewhere"
     }
 }
 ```

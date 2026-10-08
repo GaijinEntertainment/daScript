@@ -9,7 +9,7 @@ module match shared private
 //! Provides ``match`` and ``static_match`` macros
 //! that decompose values by structure, variant, tuple, array, or constant comparison.
 //! Each arm is ``pattern => body``: a bare name binds, ``_`` matches anything, ``&&`` adds a guard,
-//! ``|`` separates alternatives.
+//! ``|`` separates alternatives, and ``match (a, b)`` matches several values at once.
 //! In value position ``match`` is an expression. Also provides ``match_type`` and ``match_expr``.
 //! The ``if (pattern)`` arm form with ``$v(name)`` capture still compiles.
 //! Structures annotated with ``[match_as_is]`` or ``[match_copy]`` enable custom matching.
@@ -423,23 +423,22 @@ def private bind_match_rules(var rules : Template; var to : MatchTo; access : Ex
     for (dv, dn in keys(to.declarations), values(to.declarations)) {
         rules |> replaceVariable(dv) <| clone_expression(dn)
     }
-    rules |> replaceVarTag("_") <| clone_expression(access)
+    rules |> replaceVarTag("_") <| clone_expression(access) if (access != null)
 }
 
 [macro_function]
-def match_guards(what : TypeDeclPtr; wth : ExprOp2?; access : Expression?; var to : MatchTo) {
-    if (match_any(what, wth.left, access, to)) {
-        log_m("\tguards {describe(wth.right)} at {wth.right.at}\n")
-        var guards = clone_expression(wth.right)
-        guards = apply_template(guards) $(rules) {
-            bind_match_rules(rules, to, access)
-        }
-        to.conditions |> emplace(guards)
-        return true
-    } else {
-        return false
+def private add_guard(guard : Expression?; var to : MatchTo; access : Expression?) : bool {
+    var g = clone_expression(guard)
+    g = apply_template(g) $(rules) {
+        bind_match_rules(rules, to, access)
     }
+    to.conditions |> emplace(g)
+    return true
 }
+
+[macro_function]
+def match_guards(what : TypeDeclPtr; wth : ExprOp2?; access : Expression?; var to : MatchTo) : bool =>
+    match_any(what, wth.left, access, to) && add_guard(wth.right, to, access)
 
 [macro_function]
 def private op_sides(var e : Expression?; op : string) : array<Expression?> {
@@ -502,6 +501,30 @@ def match_alternatives(var wth : ExprOp2?; var to : MatchTo; matcher : block<(si
     }
     to.conditions |> push(join_conditions(conds, wth.at, "||"))
     log_m("\tmatch alternatives passed\n")
+    return true
+}
+
+[macro_function]
+def match_multi(types : array<TypeDeclPtr>; accesses : array<Expression?>; wth : Expression?; var to : MatchTo) : bool {
+    //! Matches one arm against the values: a single value takes the pattern as written, several values take one element of the arm's tuple each.
+    return true if (is_wildcard(wth))
+    let nwhat = length(types)
+    return match_any(types[0], wth, accesses[0], to) if (nwhat == 1)
+    var op2 = wth is ExprOp2 ? wth as ExprOp2 : null
+    if (op2 != null && op2.op == "&&") return match_multi(types, accesses, op2.left, to) && add_guard(op2.right, to, null)
+    if (op2 != null && op2.op == "||") {
+        return match_alternatives(op2, to) $(side : Expression?; var sideTo : MatchTo) {
+            return match_multi(types, accesses, side, sideTo)
+        }
+    }
+    if (!(wth is ExprMakeTuple) || length((wth as ExprMakeTuple).values) != nwhat) {
+        to.errors |> match_error("match on {nwhat} values expects a {nwhat}-element pattern `(p1, ..., p{nwhat})`", wth.at)
+        return false
+    }
+    let mkt = wth as ExprMakeTuple
+    for (i in range(nwhat)) {
+        return false if (!match_any(types[i], mkt.values[i], accesses[i], to))
+    }
     return true
 }
 
@@ -892,8 +915,8 @@ class MatchMacro : AstCallMacro {
         !is_reporting_compilation_errors()
     def override canFoldReturnResult(expr : ExprCallMacro?) : bool => false
     def override preVisit(prog : ProgramPtr; mod : Module?; expr : ExprCallMacro?) : void {
-        return if (length(expr.arguments) != 2)
-        assume blk = expr.arguments[1]
+        return if (length(expr.arguments) < 2)
+        assume blk = expr.arguments[length(expr.arguments) - 1]
         return if (!(blk is ExprMakeBlock))
         var eblk = ((blk as ExprMakeBlock)._block as ExprBlock)
         for (ee in eblk.list) {
@@ -938,10 +961,14 @@ class MatchMacro : AstCallMacro {
         return res
     }
     def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : Expression? {   // nolint:STYLE037 - exact-type `is` ladder over pattern node classes
-        macro_verify(length(expr.arguments) == 2, prog, expr.at, "expecting match (what) <| block")
+        let nargs = length(expr.arguments)
+        macro_verify(nargs >= 2, prog, expr.at, "expecting match (what) <| block")
+        for (i in range(nargs - 1)) {
+            assume what = expr.arguments[i]
+            macro_verify(what._type != null && !what._type.isAutoOrAlias, prog, what.at, "match argument {what.describe()} failed to compile")
+        }
         assume what = expr.arguments[0]
-        assume blk = expr.arguments[1]
-        macro_verify(what._type != null && !what._type.isAutoOrAlias, prog, what.at, "match argument {what.describe()} failed to compile")
+        assume blk = expr.arguments[nargs - 1]
         macro_verify(blk._type.isGoodBlockType, prog, expr.at, "match `block` argument did not resolve")
         macro_verify(blk is ExprMakeBlock, prog, expr.at, "match `block` argument must be immediate block declaration")
         var eblk = ((blk as ExprMakeBlock)._block as ExprBlock)
@@ -959,6 +986,7 @@ class MatchMacro : AstCallMacro {
             }
         }
         macro_verify(arrows == 0 || arrows == length(eblk.list), prog, expr.at, "match can't mix `if (pattern)` and `pattern => body` arms")
+        macro_verify(nargs == 2 || arrows > 0, prog, expr.at, "match on several values needs `pattern => body` arms")
         var parent <- match_parent(expr)
         let as_value = arrows > 0 && !parent.is_statement
         if (as_value) {
@@ -970,11 +998,13 @@ class MatchMacro : AstCallMacro {
             }
         }
         var catch_all = false
-        let access = clone_expression(what)
         var iff : Expression?
         let eli = length(eblk.list)
         var any_errors = false
         var prefix : array<Expression?>
+        var types <- [for (i in range(nargs - 1)); expr.arguments[i]._type]
+        var accesses <- [for (i in range(nargs - 1)); clone_expression(expr.arguments[i])]
+        let access = accesses[0]
         for (ei in range(eli)) {
             {
                 let arm_index = eli - ei - 1
@@ -982,7 +1012,7 @@ class MatchMacro : AstCallMacro {
                 let pattern = arrows > 0 ? (arm as ExprMakeTuple).values[0] : (arm as ExprIfThenElse).cond
                 var to : MatchTo
                 to.bind_names = arrows > 0
-                let matched = match_any(what._type, pattern, access, to)
+                let matched = match_multi(types, accesses, pattern, to)
                 if (matched) {
                     add_arm_branch(arm, to, as_value, access, iff, catch_all, prefix)
                 } elif (report_match_errors || to.failed) {
