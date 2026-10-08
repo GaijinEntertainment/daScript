@@ -52,8 +52,8 @@ match as a value
 ----------------
 
 In value position - an initializer, a ``return``, an operand - ``match`` produces the value of the
-arm that matched. Every body is then an expression, and the last arm must always match
-(``_`` or a bare name), so every path yields a value:
+arm that matched. Every body is then an expression, and the arms must cover every value (see
+`Coverage`_), so every path yields a value:
 
 .. code-block:: das
 
@@ -70,12 +70,66 @@ the statement form. When arms produce different types - ``Square?`` and ``Rect?`
 result - the match takes the declared result type of the function it returns from, or the declared
 type of the variable it initializes.
 
+Coverage
+--------
+
+The compiler checks the arms of a ``pattern => body`` match against each other:
+
+- **An arm that cannot be reached is an error** - a value already matched by an earlier arm
+  (``1 => ...`` then ``2 | 1 => ...``), any arm after one that matches everything, and a ``_`` after
+  arms that already cover every value of the type.
+- **A match must be exhaustive.** For a type with a fixed set of values - an enumeration, ``bool``,
+  a variant, a pointer to a struct (``null`` or not) - every value must be matched, in a statement
+  as well as in a value; the error names up to three values no arm matches. A match on several
+  values, on a tuple, or on a struct whose arms spell struct patterns, is checked field by field and
+  combination by combination: ``Light(color = Color.red)``, ``Light(color = Color.green, on = true)``
+  misses ``(color = Color.green, on = false)``. A match used as a value
+  must also cover the other types (``int``, ``string``, structs...), which in practice means a ``_``
+  arm; a statement match over them may end without one, and then no arm runs.
+
+A guarded arm covers nothing on its own, since its guard can fail, but it can still be unreachable.
+Arms with the same pattern whose guards compare the same two values - ``int``, enumeration or
+``string`` operands that are bound names, variables, constants or fields of variables - cover that pattern
+once their comparisons together cover every outcome; so do a ``bool`` value and its negation.
+Floats do not combine (with a NaN no comparison holds), and neither do guards that call a function:
+
+.. code-block:: das
+
+    def compare ( a, b : int ) {
+        return match ( a, b ) {
+            (x, y) && x > y => "greater"
+            (x, y) && x <= y => "not greater"
+        }
+    }
+
+When the arms cover every value, a value match needs no ``_``:
+
+.. code-block:: das
+
+    enum Light {
+        Red
+        Yellow
+        Green
+    }
+
+    def can_go ( light : Light ) {
+        return match ( light ) {
+            Light.Green => true
+            Light.Red | Light.Yellow => false
+        }
+    }
+
+The value being matched is evaluated once, whatever the number of arms. A bound name is a read-only
+copy of the part it names; to change the matched value, assign to it directly. A part whose type does
+not copy (an array, a table, a variant holding one) is not copied: the name reads that part itself.
+
 Binding names
 -------------
 
 A bare name in a pattern binds the matched value to a new variable, visible in the guard and the
 body. It never compares against an existing variable of the same name - it shadows it. ``_`` matches
-anything and binds nothing. To compare against the value of an existing variable, wrap it in
+anything and binds nothing. Any other expression that is not a pattern - a field read, a call - is
+an error; to compare against the value of an existing variable or a computed value, wrap it in
 ``match_expr`` (see `Match Expressions`_):
 
 .. code-block:: das
@@ -126,7 +180,6 @@ A variant pattern is spelled like the variant constructor; the field value is it
             IF(i = 0) => "int zero"
             IF(i = n) => "int {n}"
             IF(f = x) => "float {x}"
-            _ => "anything"
         }
     }
 
@@ -138,7 +191,6 @@ The ``as`` form tests the alternative by name, with the pattern on its left:
         return match ( v ) {
             as_int as i => as_int
             as_float as f => int(as_float)
-            _ => -1
         }
     }
 

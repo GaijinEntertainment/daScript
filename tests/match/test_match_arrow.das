@@ -263,3 +263,183 @@ def test_value_takes_declared_result_type(t : T?) {
         delete s
     }
 }
+
+var private calls = 0
+var private picked = 0
+
+def private next_value() : int {
+    calls++
+    return 3
+}
+
+def private pick() : int {
+    picked++
+    return 1
+}
+
+[test]
+def test_scrutinee_is_evaluated_once(t : T?) {
+    calls = 0
+    let s = match (next_value()) {
+        1 => "one"
+        2 => "two"
+        _ => "other"
+    }
+    t |> equal(s, "other")
+    t |> equal(calls, 1)
+    calls = 0
+    var hits = 0
+    match (next_value()) {
+        1 => $ { hits = 1 }
+        2 => $ { hits = 2 }
+        _ => $ { hits = 3 }
+    }
+    t |> equal(hits, 3)
+    t |> equal(calls, 1)
+}
+
+[test]
+def test_lvalue_scrutinee_is_evaluated_once(t : T?) {
+    var values <- [10, 20, 30]
+    picked = 0
+    match (values[pick()]) {
+        20 => $ { values[pick()] = 0 }
+        _ => $ {}
+    }
+    t |> equal(values[1], 0)
+    t |> equal(picked, 2)
+}
+
+def private dir_name(d : Dir) : string {
+    return match (d) {
+        Dir.north => "n"
+        Dir.east | Dir.west => "side"
+        Dir.south => "s"
+    }
+}
+
+def private value_kind(v : IntOrStr) : string {
+    return match (v) {
+        IntOrStr(i = n) => "int {n}"
+        IntOrStr(s = _) => "string"
+    }
+}
+
+def private point_or_null(p : Point?) : string {
+    return match (p) {
+        null => "null"
+        Point(x = x, y = y) => "{x},{y}"
+    }
+}
+
+def private both(a, b : bool) : string {
+    return match (a, b) {
+        (true, true) => "tt"
+        (true, false) => "tf"
+        (false, _) => "f_"
+    }
+}
+
+def private tuple_columns(t : tuple<bool; Dir>) : string {
+    return match (t) {
+        (true, _) => "t"
+        (false, Dir.north | Dir.south) => "f vertical"
+        (false, Dir.east | Dir.west) => "f horizontal"
+    }
+}
+
+[test]
+def test_exhaustive_value_match_needs_no_catch_all(t : T?) {
+    t |> equal(dir_name(Dir.west), "side")
+    t |> equal(dir_name(Dir.south), "s")
+    t |> equal(value_kind(IntOrStr(i = 2)), "int 2")
+    t |> equal(value_kind(IntOrStr(s = "x")), "string")
+    var p = Point(x = 1, y = 2)
+    t |> equal(point_or_null(unsafe(addr(p))), "1,2")
+    t |> equal(point_or_null(null), "null")
+    t |> equal(both(true, false), "tf")
+    t |> equal(both(false, true), "f_")
+    t |> equal(tuple_columns((false, Dir.east)), "f horizontal")
+    t |> equal(tuple_columns((true, Dir.east)), "t")
+}
+
+var private guard_limit = 2
+
+def private compare_pair(a, b : int) : string {
+    return match (a, b) {
+        (x, y) && x > y => "gt"
+        (x, y) && x <= y => "le"
+    }
+}
+
+def private three_way(a, b : int) : string {
+    return match (a, b) {
+        (x, y) && x < y => "lt"
+        (x, y) && x == y => "eq"
+        (x, y) && y < x => "gt"
+    }
+}
+
+def private against_outer(a : int) : string {
+    return match (a) {
+        n && n > guard_limit => "above"
+        n && n <= guard_limit => "not above"
+    }
+}
+
+def private bool_guard(a : int; flag : bool) : string {
+    return match (a) {
+        n && flag => "flag {n}"
+        n && !flag => "no flag {n}"
+    }
+}
+
+[test]
+def test_complementary_guards_cover_their_pattern(t : T?) {
+    t |> equal(compare_pair(3, 1), "gt")
+    t |> equal(compare_pair(1, 3), "le")
+    t |> equal(compare_pair(2, 2), "le")
+    t |> equal(three_way(1, 3), "lt")
+    t |> equal(three_way(2, 2), "eq")
+    t |> equal(three_way(3, 1), "gt")
+    t |> equal(against_outer(5), "above")
+    t |> equal(against_outer(2), "not above")
+    t |> equal(bool_guard(1, true), "flag 1")
+    t |> equal(bool_guard(1, false), "no flag 1")
+}
+
+struct Light {
+    dir : Dir
+    on : bool
+}
+
+struct Lamp {
+    light : Light
+    spare : bool
+}
+
+def private light_state(l : Light) : string {
+    return match (l) {
+        Light(dir = Dir.north, on = true) => "north on"
+        Light(dir = Dir.south | Dir.east | Dir.west, on = true) => "other on"
+        Light(on = false) => "off"
+    }
+}
+
+def private lamp_state(l : Lamp) : string {
+    return match (l) {
+        Lamp(light = Light(on = true), spare = s) => "on, spare {s}"
+        Lamp(light = Light(on = false), spare = true) => "off, has spare"
+        Lamp(spare = false) => "off, no spare"
+    }
+}
+
+[test]
+def test_struct_fields_are_checked_for_coverage(t : T?) {
+    t |> equal(light_state(Light(dir = Dir.north, on = true)), "north on")
+    t |> equal(light_state(Light(dir = Dir.west, on = true)), "other on")
+    t |> equal(light_state(Light(dir = Dir.west, on = false)), "off")
+    t |> equal(lamp_state(Lamp(light = Light(on = true), spare = false)), "on, spare false")
+    t |> equal(lamp_state(Lamp(light = Light(on = false), spare = true)), "off, has spare")
+    t |> equal(lamp_state(Lamp(light = Light(on = false), spare = false)), "off, no spare")
+}

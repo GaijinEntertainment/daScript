@@ -5,7 +5,9 @@ and ``|`` separates alternatives. ``match (a, b)`` matches several values at onc
 
 As a statement, a multi-statement body is a ``$ { }`` block whose ``return``
 leaves the enclosing function. In value position ``match`` is an expression:
-every body is an expression and the last arm must always match.
+every body is an expression and the arms must cover every value. An
+unreachable arm is a compile error, and so is a match over an enum, ``bool``,
+variant or struct pointer that misses a value.
 Arms are tried in source order and the first one that matches wins; a pattern
 that cannot apply to the subject type is a compile error. ``static_match``
 drops such arms silently instead of erroring, which is what makes it usable in

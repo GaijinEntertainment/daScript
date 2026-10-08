@@ -10,7 +10,9 @@ module match shared private
 //! that decompose values by structure, variant, tuple, array, or constant comparison.
 //! Each arm is ``pattern => body``: a bare name binds, ``_`` matches anything, ``&&`` adds a guard,
 //! ``|`` separates alternatives, and ``match (a, b)`` matches several values at once.
-//! In value position ``match`` is an expression. Also provides ``match_type`` and ``match_expr``.
+//! In value position ``match`` is an expression. Unreachable arms and a match over a finite type
+//! (enum, bool, variant, struct pointer) that misses a value are compile errors.
+//! Also provides ``match_type`` and ``match_expr``.
 //! The ``if (pattern)`` arm form with ``$v(name)`` capture still compiles.
 //! Structures annotated with ``[match_as_is]`` or ``[match_copy]`` enable custom matching.
 
@@ -19,6 +21,7 @@ require daslib/templates_boost
 require daslib/macro_boost
 require daslib/strings_boost
 require daslib/defer
+require daslib/option
 require daslib/match_solver
 
 /*
@@ -546,7 +549,7 @@ def match_tag(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
     let tag = wth as ExprTag
     if (tag.name != "v") {
         to.errors |> match_error("unsupported match tag ${tag.name}", tag.at)
-        return true
+        return false
     }
     if (!(tag.subexpr is ExprVar)) {
         to.errors |> match_error("invalid $v syntax", tag.at)
@@ -654,6 +657,9 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
         }
     } elif (wth.__rtti |> starts_with("ExprConst")) {
         return match_const(what, wth, access, to)
+    } elif (to.bind_names) {
+        to.errors |> match_error("`{describe_pattern(wth)}` is not a pattern; compare against a computed value with `match_expr({describe_pattern(wth)})`", wth.at)
+        return false
     } elif (wth._type != null && compatible(what, wth._type)) {
         log_m("\tadd condition {describe(access)} == {describe(wth)}\n")
         let ee = unsafe(reinterpret<Expression?>(copy_to_local(wth)))
@@ -662,7 +668,7 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
         to.conditions |> emplace(cond)
         return true
     } else {
-        to.errors |> match_error("usupported match syntax {wth.__rtti} in {describe(wth)}", wth.at)
+        to.errors |> match_error("unsupported match syntax {wth.__rtti} in {describe(wth)}", wth.at)
         to.failed = true
         return false
     }
@@ -958,6 +964,56 @@ def match_parent(var expr : ExprCallMacro?) : MatchParent {
 }
 
 [macro_function]
+def private bind_subject(var what : Expression?; idx : int) : Expression? {
+    //! The ``let`` that evaluates the scrutinee once: a reference to an lvalue, otherwise the value copied or moved.
+    let tname = make_unique_private_name("__`match`subject`{idx}", what.at)
+    let lvalue = what._type.flags.ref || match_peel_r2v(what) is ExprVar
+    var decl : Expression?
+    if (lvalue && what._type.flags.constant) {
+        decl = qmacro_expr() {
+            let $i(tname) & = unsafe($e(what))
+        }
+    } elif (lvalue) {
+        decl = qmacro_expr() {
+            var $i(tname) & = unsafe($e(what))
+        }
+    } elif (what._type.canCopy) {
+        decl = qmacro_expr() {
+            let $i(tname) = $e(what)
+        }
+    } else {
+        decl = qmacro_expr() {
+            let $i(tname) <- $e(what)
+        }
+    }
+    decl |> force_at(what.at)
+    var init = (decl as ExprLet).variables[0].init
+    init.genFlags.alwaysSafe = true
+    init.genFlags.userSaidItsSafe = true
+    return decl
+}
+
+[macro_function]
+def private let_access(decl : Expression?) : Expression? {
+    //! Reads the variable a ``let`` declares.
+    var access = qmacro($i((decl as ExprLet).variables[0].name))
+    access |> force_at(decl.at)
+    return access
+}
+
+[macro_function]
+def private drop_last_condition(var chain : Expression?) : Expression? {
+    //! An exhaustive chain's last test is redundant: coverage proved every value reaches some arm, so the last arm becomes the final ``else`` and every path returns. That arm is guarded only when its guard completes complementary comparisons over its pattern (``guards_complete`` in the solver) - the one guard coverage counts as total.
+    var node = chain as ExprIfThenElse
+    return node.if_true if (node.if_false == null)
+    while ((node.if_false as ExprIfThenElse).if_false != null) {
+        node = node.if_false as ExprIfThenElse
+    }
+    node.if_false = (node.if_false as ExprIfThenElse).if_true
+    return chain
+}
+
+[macro_function]
 def private report_match_failure(prog : ProgramPtr; to : MatchTo; pattern : Expression?; typ : TypeDeclPtr) : void {
     for (e in to.errors) {
         macro_error(prog, *e.at, e.msg)
@@ -1004,7 +1060,30 @@ class MatchMacro : AstCallMacro {
         new_iff.if_false = iff
         return new_iff
     }
-
+    def report_coverage(prog : ProgramPtr; expr : ExprCallMacro?; eblk : ExprBlock?; var types : array<TypeDeclPtr>; var arm_patterns : array<Expression?>;
+                        as_value, catch_all : bool) : bool {
+        //! Reports unreachable arms and alternatives - not for ``static_match``, whose arms may apply to other instances of a generic - and values an exhaustive match misses; false when it reported any.
+        var cov <- match_coverage(types, arm_patterns)
+        if (report_match_errors) {
+            for (ai in cov.unreachable) {
+                macro_error(prog, eblk.list[ai].at, "unreachable arm: the arms before it already match everything it matches")
+            }
+            for (da in cov.dead_alternatives) {
+                macro_error(prog, eblk.list[da.arm].at, "unreachable alternative `{da.what}`: an earlier arm already matches it")
+            }
+            return false if (!empty(cov.unreachable) || !empty(cov.dead_alternatives))
+        }
+        if (!catch_all && is_some(cov.missing) && (as_value || (report_match_errors && cov.all_finite))) {
+            let guard_note = (cov.has_guards
+                ? " (a guarded arm covers nothing, unless arms with the same pattern guard by comparing the same two int, enum, string or bool values and cover every outcome)"
+                : "")
+            macro_error(prog, expr.at, (cov.missing == MATCH_ANY_OTHER
+                ? "match is not exhaustive: values no arm names are not matched; add a `_ => ...` arm{guard_note}"
+                : "match is not exhaustive: no arm matches {unwrap(cov.missing)}; add arms for them, or `_ => ...`{guard_note}"))
+            return false
+        }
+        return true
+    }
     def assemble(var prefix : array<Expression?>; var iff : Expression?; as_value : bool; var parent : MatchParent; at : LineInfo) : Expression? {
         //! The match's code: the prefix, then the if-chain of the arms - inside an invoke when the match is a value.
         prefix |> emplace(iff)
@@ -1058,17 +1137,21 @@ class MatchMacro : AstCallMacro {
         var any_errors = false
         var prefix : array<Expression?>
         var types <- [for (i in range(nargs - 1)); expr.arguments[i]._type]
-        var accesses <- [for (i in range(nargs - 1)); clone_expression(expr.arguments[i])]
+        prefix |> push_from([for (i in range(nargs - 1)); bind_subject(expr.arguments[i], i)])
+        var accesses <- [for (decl in prefix); let_access(decl)]
         let access = accesses[0]
+        var arm_patterns : array<Expression?>
+        arm_patterns |> resize(eli)
         for (ei in range(eli)) {
             {
                 let arm_index = eli - ei - 1
                 var arm = eblk.list[arm_index]
-                let pattern = arrows > 0 ? (arm as ExprMakeTuple).values[0] : (arm as ExprIfThenElse).cond
+                var pattern = arrows > 0 ? (arm as ExprMakeTuple).values[0] : (arm as ExprIfThenElse).cond
                 var to : MatchTo
                 to.bind_names = arrows > 0
                 let matched = match_multi(types, accesses, pattern, to)
                 if (matched) {
+                    arm_patterns[arm_index] = pattern
                     catch_all ||= iff == null && empty(to.conditions)
                     prefix |> push_from(to.prefix)
                     iff = add_arm_branch(arm, to, as_value, access, iff)
@@ -1079,11 +1162,8 @@ class MatchMacro : AstCallMacro {
                 }
             }
         }
-        if (any_errors) return null
-        if (as_value && !catch_all) {
-            macro_error(prog, expr.at, "match used as a value needs a last arm that always matches, `_ => ...`")
-            return null
-        }
+        return null if (any_errors || (arrows > 0 && !report_coverage(prog, expr, eblk, types, arm_patterns, as_value, catch_all)))
+        iff = as_value && !catch_all ? drop_last_condition(iff) : iff
         return assemble(prefix, iff, as_value, parent, expr.at)
     }
 }
