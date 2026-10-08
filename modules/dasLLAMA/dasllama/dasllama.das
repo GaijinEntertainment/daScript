@@ -112,8 +112,8 @@ def create_prefix_cache(max_groups : int64 = 0l; max_states : int64 = DEFAULT_PR
 
 def prefix_checkpoint_at(cache : PrefixCache; pool : KVPool; session : Session; prompt : array<int64>; matched : int64; stable_at : int64 = 0l) : int64 {
     //! Where a recurrent ``session``'s prefill of ``prompt`` should stop for a ``prefix_insert``, after ``prefix_attach``
-    //! matched ``matched`` tokens: ``stable_at`` (the caller's own stop; the server's is the prompt's end less one token) when
-    //! the caller knows it, else the longest opening an earlier checkpoint shares. 0 = nowhere - always with no recurrent state.
+    //! matched ``matched`` tokens: ``stable_at`` (``render_turn_marked``'s opening) when the caller knows it, else the
+    //! longest opening an earlier checkpoint shares. 0 = nowhere - always on a model with no recurrent state.
     return prefix_checkpoint_at_(cache, pool, session, prompt, matched, stable_at)
 }
 

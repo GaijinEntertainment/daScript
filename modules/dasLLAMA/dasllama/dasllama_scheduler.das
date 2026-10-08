@@ -69,7 +69,7 @@ struct PendingReq {
     max_new : int64 = 256l                  // reply token budget (>= 1)
     seed : int = 0                          // != 0 => set_seed at admit (reproducible sampling)
     t_submit : int64 = 0l                   // ref_time_ticks at submit (queue-wait logging; 0 = unset)
-    stable_at : int64 = 0l                  //! the prompt position the caller wants a recurrent model's prefill to leave a checkpoint at - the server's is the prompt's end less one token, so the same prompt asked again attaches whole (0 = unknown)
+    stable_at : int64 = 0l                  //! prompt tokens the request's own last turn does not reach (`render_turn_marked`): where the requests sharing this history part; a recurrent model's prefill leaves a checkpoint there (0 = unknown)
     system_at : int64 = 0l                  //! prompt tokens of the conversation's opening every request on this system prompt and tool set shares (`ChatSession.first_opening`); a recurrent model's prefill leaves a second checkpoint there when it sits a page or more under `stable_at` (0 = unknown)
     system_head_at : int64 = 0l             //! the opening's tokens shared beyond this system prompt and tool set - its system text or its tool block, whichever the template writes first (`ChatSession.system_head_at`): a third checkpoint, a page or more under `system_at` (0 = unknown)
     // MEDIA splice (images today; audio rides the same fields): `n_media` embedding rows that
@@ -110,6 +110,7 @@ struct Stream {
     ckpt_sys_at : int64                     //! an earlier stop for the checkpoint at the shared system opening (0 = none; always under `ckpt_at`)
     ckpt_head_at : int64                    //! an earlier stop still, at the opening's shared head - the system text ahead of the tool block, or the tool block ahead of the text (0 = none; always under `ckpt_sys_at`)
     ckpt_at_tail : bool                     //! `ckpt_at` is the request's own stable opening and no shared stop: its checkpoint is a tail, which only this conversation's next turn extends
+    ckpt_end_at : int64                     //! the last stop, one token short of the prompt, so the same prompt asked again attaches whole (0 = none; a page or more past `ckpt_at`)
     t_admit : int64                         // ref_time_ticks at admit
     t_first : int64                         // ref_time_ticks at the first sampled token (0 until then)
     ttft_us : int64
@@ -386,7 +387,7 @@ def submit(model : Model; var sch : Scheduler; var req : PendingReq) : bool {
 // Terminate a stream: mark done (reaped at step end) and append its finished event.
 //! the nearest checkpoint stop past the rows prefilled so far, 0 when none is left: the system text, the system opening, the request's own
 def private next_checkpoint(st : Stream) : int64 {
-    for (at in fixed_array(st.ckpt_head_at, st.ckpt_sys_at, st.ckpt_at)) {
+    for (at in fixed_array(st.ckpt_head_at, st.ckpt_sys_at, st.ckpt_at, st.ckpt_end_at)) {
         if (at > st.n_prefilled) {
             return at
         }
@@ -395,11 +396,11 @@ def private next_checkpoint(st : Stream) : int64 {
 }
 
 def private at_checkpoint(st : Stream) : bool =>
-    st.n_prefilled == st.ckpt_head_at || st.n_prefilled == st.ckpt_sys_at || st.n_prefilled == st.ckpt_at
+    st.n_prefilled == st.ckpt_head_at || st.n_prefilled == st.ckpt_sys_at || st.n_prefilled == st.ckpt_at || st.n_prefilled == st.ckpt_end_at
 
 //! a checkpoint stop inside the rows [lo, hi]: the span's one-call prefill cannot take them, since the stop needs the eval to end there
 def private checkpoint_within(st : Stream; lo, hi : int64) : bool {
-    for (at in fixed_array(st.ckpt_head_at, st.ckpt_sys_at, st.ckpt_at)) {
+    for (at in fixed_array(st.ckpt_head_at, st.ckpt_sys_at, st.ckpt_at, st.ckpt_end_at)) {
         if (at > lo && at <= hi) {
             return true
         }
@@ -663,10 +664,15 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                 st.ckpt_head_at = head_at
             }
             st.ckpt_at_tail = st.ckpt_at > 0l && st.ckpt_at == sch.queue[0].stable_at && st.ckpt_at != sys_at && st.ckpt_at != head_at
+            //! the prompt's own end, one token short so a token is left to eval: a page or more past the last stop, else that stop stands for it
+            let end_at = long_length(st.prompt) - 1l
+            if (sch.prefix.max_states > 0l && !empty(st.session.dn_state_prefix) && end_at >= max(st.ckpt_at, matched) + pr) {
+                st.ckpt_end_at = end_at
+            }
             if (matched > 0l) {
-                to_log(LOG_INFO, "[stream {st.id}] prefix cache HIT: {matched}/{length(st.prompt)} tok attached in {attach_ms} ms, no prefill for them (checkpoints planned at {st.ckpt_head_at}, {st.ckpt_sys_at}, {st.ckpt_at}; stable {sch.queue[0].stable_at}, system {sys_at}, head {head_at})\n")
+                to_log(LOG_INFO, "[stream {st.id}] prefix cache HIT: {matched}/{length(st.prompt)} tok attached in {attach_ms} ms, no prefill for them (checkpoints planned at {st.ckpt_head_at}, {st.ckpt_sys_at}, {st.ckpt_at}, {st.ckpt_end_at}; stable {sch.queue[0].stable_at}, system {sys_at}, head {head_at})\n")
             } else {
-                to_log(LOG_INFO, "[stream {st.id}] prefix cache MISS: full {length(st.prompt)}-tok prefill (checkpoints planned at {st.ckpt_head_at}, {st.ckpt_sys_at}, {st.ckpt_at}; stable {sch.queue[0].stable_at}, system {sys_at}, head {head_at})\n")
+                to_log(LOG_INFO, "[stream {st.id}] prefix cache MISS: full {length(st.prompt)}-tok prefill (checkpoints planned at {st.ckpt_head_at}, {st.ckpt_sys_at}, {st.ckpt_at}, {st.ckpt_end_at}; stable {sch.queue[0].stable_at}, system {sys_at}, head {head_at})\n")
             }
         } else {
             st.session <- create_session(m, sch.kv_dtype)
@@ -816,7 +822,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             sch.prefill_tokens += take
             sch.prefill_evals ++
             if (at_checkpoint(sch.streams[i])) {
-                let tail = sch.streams[i].ckpt_at_tail && sch.streams[i].n_prefilled == sch.streams[i].ckpt_at
+                let tail = (sch.streams[i].ckpt_at_tail && sch.streams[i].n_prefilled == sch.streams[i].ckpt_at) || sch.streams[i].n_prefilled == sch.streams[i].ckpt_end_at
                 prefix_insert(sch.prefix, sch.pool, sch.streams[i].session, sch.streams[i].prompt, "", !tail)
                 to_log(LOG_INFO, "[stream {sch.streams[i].id}] prefix checkpoint at {sch.streams[i].n_prefilled} tok: {tail ? "this conversation's next turn" : "the next prompt on this opening"} attaches here ({length(sch.prefix.states)} checkpoints, {sch.prefix.state_bytes / 1048576l} MB)\n")
             }

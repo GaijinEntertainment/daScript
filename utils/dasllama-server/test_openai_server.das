@@ -959,9 +959,9 @@ def test_openai_server_recurrent_checkpoints(t : T?) {
             t |> skip("{base_name(QWEN35_PATH)} not present (set DASLLAMA_MODELS_DIR)")
             return
         }
-        // three checkpoints fit. A's first turn leaves its opening, its own end stop and its finished turn; D, on other
-        // tools, leaves three more. Tails go first, so A's opening stands for E - where the end stop kinded as an opening
-        // makes A's opening the least recently used one and the budget drops it
+        // three checkpoints fit. A's first turn leaves its opening, its stable stop (after the note), its end stop and its
+        // finished turn; D, on other tools, leaves as many. Tails go first, so A's opening stands for E - where a stable
+        // stop kinded as an opening makes A's opening the least recently used one and the budget drops it
         with_llama_server(QWEN35_PATH, TEST_PORT_CKPT_BUDGET, MetalMode.off, 8l, 3l) $(base_url) {
             let sys = "You are the assistant of a house with a kitchen, a bedroom and a garden. Devices: the kitchen ceiling light, the bedroom wall lights, the garden sprinkler. Answer in one short sentence and nothing else."
             let tool_a = "\{\"type\":\"function\",\"function\":\{\"name\":\"control\",\"description\":\"Switch a device.\",\"parameters\":\{\"type\":\"object\",\"properties\":\{\"point\":\{\"type\":\"string\"},\"value\":\{\"type\":\"string\"}},\"required\":[\"point\",\"value\"]}}}"
