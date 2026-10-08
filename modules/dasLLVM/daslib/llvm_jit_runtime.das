@@ -25,6 +25,8 @@ enum public JitRuntime {
     jit_table_unlock
     jit_prologue
     jit_epilogue
+    jit_half_to_float
+    jit_float_to_half
 }
 
 //! calls runtime helper `fn`, defining its body into g_mod on the module's first call
@@ -44,6 +46,8 @@ def private define_jit_runtime_helper(fn : JitRuntime) : LLVMOpaqueValue? {
     if (fn == JitRuntime.jit_array_unlock) return define_unlock(name, "array")
     if (fn == JitRuntime.jit_table_unlock) return define_unlock(name, "table")
     if (fn == JitRuntime.jit_prologue) return define_prologue(name)
+    if (fn == JitRuntime.jit_half_to_float) return define_half_to_float(name)
+    if (fn == JitRuntime.jit_float_to_half) return define_float_to_half(name)
     return define_epilogue(name)
 }
 
@@ -133,4 +137,83 @@ def private define_epilogue(name : string) : LLVMOpaqueValue? {
         store(evalTopP, load_ptr(field(arg(0), g_t_stack_state, 0)))
         store(ptr_slot(evalTopP, 1), load_ptr(field(arg(0), g_t_stack_state, 1)))
     }
+}
+
+//! das_float16_to_float (vectypes.h); inlined, so a vector convert vectorizes
+def private define_half_to_float(name : string) : LLVMOpaqueValue? {
+    let fn = ir_function(name, LLVMFunctionType(g_prim_t.t_float, [g_prim_t.t_half]), -1, -1) {
+        let h = zext32(ir(LLVMBuildBitCast(ir_builder(), arg(0).v, g_prim_t.t_int16, "")))
+        let sign = (h & ir(0x8000u)) << ir(16u)
+        let em = h & ir(0x7fffu)
+        // a subnormal half is its mantissa times 2^-24, exact in float
+        let subnormal = as_bits(to_float(em)) - ir(24u << 23u)
+        let normal = (em + ir((127u - 15u) << 10u)) << ir(13u)
+        let inf_nan = ir(0x7f800000u) | ((em & ir(0x3ffu)) << ir(13u))
+        let r = select(at_least(em, ir(31u << 10u)), inf_nan,
+            select(at_least(em, ir(1u << 10u)), normal, select(em != ir(0u), subnormal, ir(0u))))
+        ret(as_float(sign | r))
+    }
+    LLVMAddAttributeToFunction(fn, LLVMGetEnumAttribute(g_ctx, "alwaysinline"))
+    return fn
+}
+
+//! das_float_to_float16 (vectypes.h): round to nearest even; inlined, so a vector convert vectorizes
+def private define_float_to_half(name : string) : LLVMOpaqueValue? {
+    let fn = ir_function(name, LLVMFunctionType(g_prim_t.t_half, [g_prim_t.t_float]), -1, -1) {
+        let x = as_bits(arg(0))
+        let sign = (x >> ir(16u)) & ir(0x8000u)
+        let em = x & ir(0x7fffffffu)
+        let nan_mant = select(above(em, ir(0x7f800000u)), ((em >> ir(13u)) & ir(0x3ffu)) | ir(1u), ir(0u))
+        let to_subnormal = below(em, ir((127u - 14u) << 23u))
+        let sh = select(to_subnormal, ir(126u) - (em >> ir(23u)), ir(13u))
+        let base = select(to_subnormal, (em & ir(0x7fffffu)) | ir(0x800000u), em - ir((127u - 15u) << 23u))
+        let rem = base & ((ir(1u) << sh) - ir(1u))
+        let q = base >> sh
+        let halfway = ir(1u) << (sh - ir(1u))
+        let up = above(rem, halfway) | ((rem == halfway) & ((q & ir(1u)) != ir(0u)))
+        let r = select(at_least(em, ir(0x7f800000u)), ir(31u << 10u) | nan_mant,
+            select(at_least(em, ir((127u + 16u) << 23u)), ir(31u << 10u),
+            select(below(em, ir((127u - 25u) << 23u)), ir(0u), q + zext32(up))))
+        let bits = LLVMBuildTrunc(ir_builder(), (sign | r).v, g_prim_t.t_int16, "")
+        ret(ir(LLVMBuildBitCast(ir_builder(), bits, g_prim_t.t_half, "")))
+    }
+    LLVMAddAttributeToFunction(fn, LLVMGetEnumAttribute(g_ctx, "alwaysinline"))
+    return fn
+}
+
+def private fp_lane_bits(t : LLVMOpaqueType?) : int {
+    let lane = LLVMGetTypeKind(t) == LLVMTypeKind.LLVMVectorTypeKind ? LLVMGetElementType(t) : t
+    let kind = LLVMGetTypeKind(lane)
+    return kind == LLVMTypeKind.LLVMHalfTypeKind ? 16 : (kind == LLVMTypeKind.LLVMFloatTypeKind ? 32 : 64)
+}
+
+//! one scalar lane between half and float or double, through the helpers
+def private soft_fp_lane(b : LLVMBuilderRef; val : LLVMOpaqueValue?; dstType : LLVMOpaqueType?) : LLVMOpaqueValue? {
+    if (fp_lane_bits(LLVMTypeOf(val)) == 16) {
+        let f = build_jit_runtime_call(b, JitRuntime.jit_half_to_float, fixed_array(val))
+        return fp_lane_bits(dstType) == 32 ? f : LLVMBuildFPExt(b, f, dstType, "")
+    }
+    let f = fp_lane_bits(LLVMTypeOf(val)) == 32 ? val : LLVMBuildFPTrunc(b, val, g_prim_t.t_float, "")
+    return build_jit_runtime_call(b, JitRuntime.jit_float_to_half, fixed_array(f))
+}
+
+//! fpext / fptrunc between half, float and double, scalar or vector. Without hardware half converts
+//! (x86-64 without F16C) LLVM would lower a half convert to a compiler-rt call the JIT does not link,
+//! so there each half lane converts through jit_half_to_float / jit_float_to_half.
+def public build_fp_convert(b : LLVMBuilderRef; val : LLVMOpaqueValue?; dstType : LLVMOpaqueType?; name : string) : LLVMOpaqueValue? {
+    let srcType = LLVMTypeOf(val)
+    let srcBits = fp_lane_bits(srcType)
+    let dstBits = fp_lane_bits(dstType)
+    if (srcBits == dstBits) return val
+    if (target_has_half_converts() || (srcBits != 16 && dstBits != 16)) {
+        return srcBits < dstBits ? LLVMBuildFPExt(b, val, dstType, name) : LLVMBuildFPTrunc(b, val, dstType, name)
+    }
+    if (LLVMGetTypeKind(srcType) != LLVMTypeKind.LLVMVectorTypeKind) return soft_fp_lane(b, val, dstType)
+    let dstLane = LLVMGetElementType(dstType)
+    var res = LLVMGetUndef(dstType)
+    for (i in range(int(LLVMGetVectorSize(srcType)))) {
+        let lane = LLVMBuildExtractElement(b, val, g_prim_t.ConstI32(uint64(i)), "")
+        res = LLVMBuildInsertElement(b, res, soft_fp_lane(b, lane, dstLane), g_prim_t.ConstI32(uint64(i)), "")
+    }
+    return res
 }

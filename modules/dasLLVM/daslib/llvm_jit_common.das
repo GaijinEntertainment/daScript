@@ -402,6 +402,9 @@ var public g_target_x64_avx2 = false
 // libcalls the JIT can't link; aarch64 needs no gate, scalar fp16 convert is ARMv8.0 baseline.
 var public g_target_x64_f16c = false
 
+//! the target converts half <-> float in hardware: any aarch64, x86-64 with F16C
+def public target_has_half_converts() => g_target_is_aarch64 || g_target_x64_f16c
+
 // Kernel-matrix tiers (x64_avx dot32_vnni / dot64_acc16 / mx4_dequant64), each guarding its own
 // lookup table: vnni256 = 256-bit VPDPBUSD (VEX AVX-VNNI or EVEX AVX512-VNNI+VL), avx512bw = zmm
 // byte ops (BW, not just F), avx512vnni = zmm VPDPBUSD (needs bw — the sign trick around it is BW).
