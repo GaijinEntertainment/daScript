@@ -38,7 +38,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0xeeb4fc13791c4dddul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0x14e7f1a1dadbffb7ul
 
 [arch(at = "../ARCHITECTURE_FAST_MATH.md#never-fast-math")]
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {

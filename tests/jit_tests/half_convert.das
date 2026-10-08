@@ -1,7 +1,7 @@
 options gen2
 require dastest/testing_boost
 
-// Each [jit] function and its [no_jit] twin run the same half converts; the results must match.
+// Each [jit] function and its [no_jit] twin run the same half code; the results must match.
 // Run under DAS_JIT_BASELINE=x86-base, the JIT converts in IR (no F16C). A NaN counts as NaN:
 // hardware converts quiet a signaling NaN, so a payload is not part of the contract.
 // The helpers only move bits, so every convert happens in the twins.
@@ -86,6 +86,32 @@ def half4_round_trip_interp() : uint64 {
     return h
 }
 
+[jit]
+def fp16_ops_jit() : uint64 {
+    var h = 14695981039346656037ul
+    for (i in urange(261u)) {
+        let a = half_of(i * 251u)
+        let c = half_of((i * 251u) ^ 0x3c55u)
+        h = mix(h, hbits(a + c) ^ (hbits(a - c) << 16u))
+        h = mix(h, hbits(a * c) ^ (hbits(a / c) << 16u))
+        h = mix(h, hbits(-a) ^ ((a < c) ? 0x10000u : 0u) ^ ((a == c) ? 0x20000u : 0u))
+    }
+    return h
+}
+
+[no_jit]
+def fp16_ops_interp() : uint64 {
+    var h = 14695981039346656037ul
+    for (i in urange(261u)) {
+        let a = half_of(i * 251u)
+        let c = half_of((i * 251u) ^ 0x3c55u)
+        h = mix(h, hbits(a + c) ^ (hbits(a - c) << 16u))
+        h = mix(h, hbits(a * c) ^ (hbits(a / c) << 16u))
+        h = mix(h, hbits(-a) ^ ((a < c) ? 0x10000u : 0u) ^ ((a == c) ? 0x20000u : 0u))
+    }
+    return h
+}
+
 [test]
 def test_half_converts(t : T?) {
     t |> equal(half_to_float_interp(), half_to_float_jit(), "every half -> float")
@@ -93,4 +119,10 @@ def test_half_converts(t : T?) {
     t |> equal(half4_round_trip_interp(), half4_round_trip_jit(), "half4 <-> float4 round trips")
     t |> success(!jit_enabled() || (is_jit_function(@@half_to_float_jit) && is_jit_function(@@float_to_half_jit)
         && is_jit_function(@@half4_round_trip_jit)), "no converting function falls back to the interpreter")
+}
+
+[test]
+def test_fp16_operators(t : T?) {
+    t |> equal(fp16_ops_interp(), fp16_ops_jit(), "+ - * /, unary -, < and == on half")
+    t |> success(!jit_enabled() || is_jit_function(@@fp16_ops_jit), "the operators do not fall back to the interpreter")
 }
