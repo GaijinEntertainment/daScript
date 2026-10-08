@@ -80,8 +80,10 @@ The compiler checks the arms of a ``pattern => body`` match against each other:
   arms that already cover every value of the type.
 - **A match must be exhaustive.** For a type with a fixed set of values - an enumeration, ``bool``,
   a variant, a pointer to a struct (``null`` or not) - every value must be matched, in a statement
-  as well as in a value; the error names one value no arm matches. A match on several values, or on
-  a tuple spelled element by element, is checked combination by combination. A match used as a value
+  as well as in a value; the error names up to three values no arm matches. A match on several
+  values, on a tuple, or on a struct whose arms spell struct patterns, is checked field by field and
+  combination by combination: ``Light(color = Color.red)``, ``Light(color = Color.green, on = true)``
+  misses ``(color = Color.green, on = false)``. A match used as a value
   must also cover the other types (``int``, ``string``, structs...), which in practice means a ``_``
   arm; a statement match over them may end without one, and then no arm runs.
 

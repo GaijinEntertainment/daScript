@@ -431,3 +431,39 @@ def test_and_pattern_binds_the_whole_value(t : T?) {
     t |> equal(warmth(Dir.east), "warm east")
     t |> equal(warmth(Dir.west), "cold west")
 }
+
+struct Light {
+    dir : Dir
+    on : bool
+}
+
+struct Lamp {
+    light : Light
+    spare : bool
+}
+
+def private light_state(l : Light) : string {
+    return match (l) {
+        Light(dir = Dir.north, on = true) => "north on"
+        Light(dir = Dir.south | Dir.east | Dir.west, on = true) => "other on"
+        Light(on = false) => "off"
+    }
+}
+
+def private lamp_state(l : Lamp) : string {
+    return match (l) {
+        Lamp(light = Light(on = true), spare = s) => "on, spare {s}"
+        Lamp(light = Light(on = false), spare = true) => "off, has spare"
+        Lamp(spare = false) => "off, no spare"
+    }
+}
+
+[test]
+def test_struct_fields_are_checked_for_coverage(t : T?) {
+    t |> equal(light_state(Light(dir = Dir.north, on = true)), "north on")
+    t |> equal(light_state(Light(dir = Dir.west, on = true)), "other on")
+    t |> equal(light_state(Light(dir = Dir.west, on = false)), "off")
+    t |> equal(lamp_state(Lamp(light = Light(on = true), spare = false)), "on, spare false")
+    t |> equal(lamp_state(Lamp(light = Light(on = false), spare = true)), "off, has spare")
+    t |> equal(lamp_state(Lamp(light = Light(on = false), spare = false)), "off, no spare")
+}

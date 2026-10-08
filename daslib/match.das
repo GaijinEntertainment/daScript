@@ -192,6 +192,19 @@ def is_arrow_arm(e : Expression?) => e is ExprMakeTuple && length((e as ExprMake
 def private is_binder(p : Expression?) : bool => p is ExprVar || (p is ExprTag && (p as ExprTag).name == "v")
 
 [macro_function]
+def private shape_part(var cell : Expression?) : Expression? {
+    //! The destructuring side of a cell: ``n & Point(...)`` is ``Point(...)``; a binder or ``_`` is null (matches anything).
+    var p = match_peel_r2v(cell)
+    return null if (p == null || is_binder(p))
+    if (p is ExprOp2 && (p as ExprOp2).op == "&") {
+        var op2 = p as ExprOp2
+        return shape_part(op2.right) if (is_binder(match_peel_r2v(op2.left)))
+        return shape_part(op2.left) if (is_binder(match_peel_r2v(op2.right)))
+    }
+    return p
+}
+
+[macro_function]
 def match_struct(what : TypeDeclPtr; wths : ExprMakeStruct?; access : Expression?; var to : MatchTo) {
     if (wths.makeType.isHandle && isExpression(wths.makeType) && is_expression_ptr(what)) {
         let subject = (wths.makeType.annotation.name != "ExprRef2Value" ? qmacro(match_peel_r2v($e(access))) : clone_expression(access))
@@ -1188,30 +1201,39 @@ def private dead_keys(tab : MatchTable; prev : array<int>; row : array<MatchCell
 
 [macro_function]
 def private alternatives_of(var cell : Expression?) : array<Expression?> {
-    //! A cell's top-level ``|`` alternatives.
-    return <- [for (a in op_sides(match_peel_r2v(cell), "||")); match_peel_r2v(a)]
+    //! A cell's top-level ``|`` alternatives, each without a binding ``n &``; null for one that matches anything.
+    return <- [for (a in op_sides(shape_part(cell), "||")); shape_part(a)]
 }
 
 [macro_function]
 def private column_parts(var typ : TypeDeclPtr) : array<tuple<name : string; typ : TypeDeclPtr>> {
-    //! The parts a tuple column splits into; none for any other type.
+    //! The parts a tuple or struct column splits into; none for any other type.
     var parts : array<tuple<name : string; typ : TypeDeclPtr>>
     if (typ != null && typ.baseType == Type.tTuple) {
         parts <- [for (t, i in typ.argTypes, count()); (name = "_{i}", typ = t)]
+    } elif (typ != null && typ.isStructure && !typ.isPointer && typ.structType != null) {
+        parts <- [for (f in typ.structType.fields); (name = string(f.name), typ = f._type)]
     }
     return <- parts
 }
 
 [macro_function]
 def private splits(typ : TypeDeclPtr; alt : Expression?) : bool {
-    //! The cell spells the whole value part by part: a full tuple.
-    return true if (alt == null)
+    //! The cell spells the whole value part by part: a struct pattern of exactly the column type, or a full tuple.
+    return true if (alt == null || is_struct_of(typ, alt))
     return false if (!(alt is ExprMakeTuple) || typ.baseType != Type.tTuple || length((alt as ExprMakeTuple).values) != length(typ.argTypes))
     return !has_value([for (v in (alt as ExprMakeTuple).values); is_rest(v)], true)
 }
 
 [macro_function]
-def private part_of(var alt : Expression?; idx : int) : Expression? => alt == null ? alt : (alt as ExprMakeTuple).values[idx]
+def private part_of(var alt : Expression?; idx : int; name : string) : Expression? {
+    return null if (alt == null)
+    return (alt as ExprMakeTuple).values[idx] if (alt is ExprMakeTuple)
+    for (mf in *(alt as ExprMakeStruct).structs[0]) {
+        return mf.value if (mf.name == name)
+    }
+    return null
+}
 
 [macro_function]
 def private split_column(var tab : MatchTable; var rows : array<PatternRow>; c : int) : bool {
@@ -1229,8 +1251,8 @@ def private split_column(var tab : MatchTable; var rows : array<PatternRow>; c :
             var nr <- PatternRow(arm = r.arm, cells := r.cells)
             nr.cells |> erase(c)
             nr.cells |> reserve(length(nr.cells) + length(parts))
-            for (i in range(length(parts))) {
-                nr.cells |> push(part_of(a, i), c + i)
+            for (p, i in parts, count()) {
+                nr.cells |> push(part_of(a, i, p.name), c + i)
             }
             split |> emplace(nr)
         }
@@ -1271,7 +1293,7 @@ def private pattern_rows(var types : array<TypeDeclPtr>; var patterns : array<Ex
 
 [macro_function]
 def private match_table(var types : array<TypeDeclPtr>; var patterns : array<Expression?>) : MatchTable {
-    //! Columns (tuple columns split into their parts), the rows every arm contributes (by index), and each column's value domain.
+    //! Columns (struct and tuple columns split into their parts), the rows every arm contributes (by index), and each column's value domain.
     var tab <- MatchTable(columns := types, labels <- [for (_t in types); ""])
     var rows <- pattern_rows(types, patterns)
     var c = 0
@@ -1408,8 +1430,11 @@ def private match_coverage(var types : array<TypeDeclPtr>; var patterns : array<
         prev |> push_from(tab.arm_rows[ai]) if (!guarded || guards_complete(types, pat, guard_masks))
     }
     var inscope path, found : array<string>
-    missing_values(tab, prev, 0, 0, path, found)
-    res.missing = empty(found) ? none(type<string>) : some(found[0])
+    let shown_limit = 3
+    missing_values(tab, prev, 0, shown_limit, path, found)
+    let shown <- [for (f in found); "`{f}`"; where f != MATCH_ANY_OTHER]
+    res.missing = (empty(found) ? none(type<string>) : some(found[0] == MATCH_ANY_OTHER ? MATCH_ANY_OTHER
+        : join([for (f, i in shown, count()); f; where i < shown_limit], ", ") + (length(found) > shown_limit ? " and more" : "")))
     return <- res
 }
 
@@ -1495,7 +1520,7 @@ class MatchMacro : AstCallMacro {
                 : "")
             macro_error(prog, expr.at, (cov.missing == MATCH_ANY_OTHER
                 ? "match is not exhaustive: values no arm names are not matched; add a `_ => ...` arm{guard_note}"
-                : "match is not exhaustive: no arm matches `{unwrap(cov.missing)}`; add an arm for it, or `_ => ...`{guard_note}"))
+                : "match is not exhaustive: no arm matches {unwrap(cov.missing)}; add arms for them, or `_ => ...`{guard_note}"))
             return false
         }
         return true

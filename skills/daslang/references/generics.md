@@ -237,7 +237,8 @@ it returns from the enclosing function; an assignment body always needs the bloc
 In value position `match` is an expression: every body is an expression and the arms must cover
 every value. Coverage is checked at compile time: an arm an earlier one already covers (a repeated
 value, anything after `_`, a `_` after every enum value) is an error, and so is a match over an
-enum, `bool`, variant or struct pointer that misses a value - statement or value. A match used as a
+enum, `bool`, variant or struct pointer that misses a value - statement or value. Tuples and
+struct patterns are checked field by field, and the error names up to three missing combinations. A match used as a
 value over any other type needs a `_` arm. A guarded arm covers nothing, except that arms with the
 same pattern whose guards compare the same two int / enum / string values (or test a bool and its
 negation) cover that pattern once together they cover every outcome - `(x, y) && x > y` plus
