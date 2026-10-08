@@ -115,9 +115,13 @@ class DasllamaRpmSpecTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp)
 
-    def spec(self):
-        return subprocess.run(["bash", SCRIPT, "--spec-only", "--package", "dasllama", self.bundle, "v0.6.5"],
+    def spec(self, tag="v0.6.5"):
+        return subprocess.run(["bash", SCRIPT, "--spec-only", "--package", "dasllama", self.bundle, tag],
                               check=True, capture_output=True, text=True).stdout
+
+    def test_own_tag_bares_to_its_version(self):
+        spec = self.spec("dasllama-v0.7.0-RC1")
+        self.assertIn("Version: 0.7.0~rc1\n", spec)
 
     def test_name_prefix_and_requirements(self):
         spec = self.spec()

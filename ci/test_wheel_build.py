@@ -70,6 +70,8 @@ class WheelBuildTest(BundleFixture):
         self.assertEqual(wb.pep440("v0.6.4"), "0.6.4")
         self.assertEqual(wb.pep440("0.6.4"), "0.6.4")
         self.assertEqual(wb.pep440("0.0.0-dev"), "0.0.0.dev0")
+        self.assertEqual(wb.pep440("dasllama-v0.7.0-RC1"), "0.7.0rc1")
+        self.assertEqual(wb.pep440("dasllama-v0.7.0"), "0.7.0")
 
     def test_pep440_rejects_garbage_and_unhandled_prerelease_shapes(self):
         for tag in ("nightly-2026-08-18", "v0.6.4-beta1", "v0.6.4-RC", "v0.6"):

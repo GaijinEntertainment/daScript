@@ -12,7 +12,8 @@ reach into engine internals, the facade is complete.
 
 ## Get it
 
-The server ships as the `dasllama` package, refreshed with every daslang release:
+The server ships as the `dasllama` package, cut on its own release tags (`dasllama-vX.Y.Z`,
+`dasllama-vX.Y.Z-RCn` for a candidate), independent of the daslang SDK's:
 
 | Platform | Install |
 |---|---|

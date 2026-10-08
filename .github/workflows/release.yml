@@ -41,7 +41,8 @@ jobs:
   build:
     ###########################################################
     needs: pre_job
-    if: needs.pre_job.outputs.should_skip != 'true'
+    # a dasllama-v* tag is dasllama's own release (dasllama_server_release.yml) and cuts no SDK
+    if: needs.pre_job.outputs.should_skip != 'true' && (github.event_name != 'release' || !startsWith(github.event.release.tag_name, 'dasllama-'))
     runs-on: ${{ matrix.runner }}
     env:
       das_dll_build: ${{ github.event_name == 'release' && 'YES' || 'NO' }}

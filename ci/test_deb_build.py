@@ -60,6 +60,11 @@ class DebControlTest(unittest.TestCase):
         self.assertEqual(r.returncode, 2)
         self.assertIn("usage:", r.stderr)
 
+    def test_dasllama_own_tag_bares_to_its_version(self):
+        bundle = self.stage(["dasllama-server.exe", "watchdog"])
+        out = self.control(bundle, "dasllama-v0.7.0-RC1", "--package", "dasllama")
+        self.assertEqual(self.field(out, "Version"), "0.7.0~rc1")
+
     def test_dasllama_depends_and_links(self):
         bundle = self.stage(["dasllama-server.exe", "dasllama-cli.exe", "dasllama-bench.exe", "watchdog"])
         out = self.control(bundle, "v0.6.5", "--package", "dasllama")
