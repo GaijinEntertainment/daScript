@@ -937,8 +937,11 @@ def gate_docs(ctx : PreflightCtx; var results : array<GateResult>&) { // nolint:
             "--", "--digest", unique_temp_path("everything", ".md")])
         : run_argv(["cmake", "--build", ctx.build_dir, "--config", ctx.config,
             "--target", "check_docs_generated"]))
-    if (r1.rc != 0 && find(r1.out, "missing prerequisite") >= 0) {
-        docs_skip_all("daslang lacks HV/PUGIXML — rebuild with -DDAS_HV_DISABLED=OFF -DDAS_PUGIXML_DISABLED=OFF", results)
+    let missing_at = find(r1.out, "missing prerequisite '")
+    if (r1.rc != 0 && missing_at >= 0) {
+        let name_at = missing_at + length("missing prerequisite '")
+        let missing = slice(r1.out, name_at, find(r1.out, "'", name_at))
+        docs_skip_all("daslang lacks the module '{missing}' the generator requires — rebuild with it enabled (its DAS_*_DISABLED=OFF; HV, PUGIXML and CRYPTO are the usual ones)", results)
         return
     }
     let tuned_docs = find(r1.out, "llvm_tune:") >= 0
