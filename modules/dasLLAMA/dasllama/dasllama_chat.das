@@ -1076,15 +1076,41 @@ def private note_opening(var c : ChatSession; opening : int64) {
     }
 }
 
-// The think block a replayed assistant turn carries under preserve_thinking: the turn's reasoning between the
-// template's markers, the empty block when it had none. Skips silently where the template has no suppress form
-// or the vocab lacks the markers - the same families set_thinking_ reaches.
+// The think block a replayed assistant turn carries under preserve_thinking: the template's empty-block form with the
+// turn's reasoning between its markers - inside the text the form keeps there (ChatML's "\n\n" splits around it), bare
+// where it keeps none (GLM). Skips where the template has no suppress form or the vocab lacks the markers.
 def private render_think_replay(m : Model; c : ChatSession; reasoning : string; var out : array<int64>) {
     if (!c.preserve_thinking || c.tmpl.think_mode != ThinkMode.symmetric || empty(c.tmpl.think_suppress.parts) ||
         special_id(m, c.tmpl.think_open) < 0l || special_id(m, c.tmpl.think_close) < 0l) {
         return
     }
-    var parts <- [chat_special(c.tmpl.think_open), chat_text("\n{reasoning}\n"), chat_special(c.tmpl.think_close), chat_text("\n\n")]
+    if (empty(reasoning)) {
+        render_parts(m, c.tmpl.think_suppress.parts, "", out)
+        return
+    }
+    var parts : array<ChatPart>
+    parts |> reserve(length(c.tmpl.think_suppress.parts) + 2)
+    var inside = false
+    var placed = false
+    for (p in c.tmpl.think_suppress.parts) {
+        if (p.kind == ChatPartKind.special && p.s == c.tmpl.think_open) {
+            parts |> push(p)
+            inside = true
+        } elif (p.kind == ChatPartKind.special && p.s == c.tmpl.think_close) {
+            if (!placed) {
+                parts |> push(chat_text(reasoning))
+                placed = true
+            }
+            parts |> push(p)
+            inside = false
+        } elif (inside && p.kind == ChatPartKind.text) {
+            let half = length(p.s) / 2
+            parts |> push(chat_text("{slice(p.s, 0, half)}{reasoning}{slice(p.s, half)}"))
+            placed = true
+        } else {
+            parts |> push(p)
+        }
+    }
     render_parts(m, parts, "", out)
     delete parts
 }
